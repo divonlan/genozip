@@ -73,7 +73,7 @@ void codec_longr_segconf_calculate_bins (VBlockP vb, ContextP ctx,
     if (callback)
         for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {
             uint8_t *values; uint32_t values_len;
-            callback (vb, ctx, line_i, (char **)pSTRa(values), vb->txt_data.len, NULL);
+            callback (vb, ctx, line_i, (char **)pSTRa(values), Ltxt, NULL);
             add_to_histogram (histogram, STRa(values));
 
             num_values += values_len;
@@ -149,7 +149,7 @@ COMPRESS (codec_longr_compress)
     ASSERTISNULL (uncompressed);
     ASSERT (soft_fail, "%s: second entry not expected, ctx=%s", VB_NAME, TAG_NAME);
 
-    ContextP lens_ctx   = ECTX (((SectionHeaderCtx *)header)->dict_id);
+    ContextP lens_ctx   = ECTX (((SectionHeaderCtxP)header)->dict_id);
     ContextP values_ctx = lens_ctx + 1;
     
     LocalGetLineCB *seq_callback = (VB_DT(FASTQ) ? fastq_zip_seq : sam_zip_seq);
@@ -170,7 +170,7 @@ COMPRESS (codec_longr_compress)
     for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {
 
         seq_callback (vb, ctx, line_i,  pSTRa(seq), 0, &is_rev);
-        get_line_cb (vb, ctx, line_i, pSTRa(qual), vb->txt_data.len, NULL);
+        get_line_cb (vb, ctx, line_i, pSTRa(qual), Ltxt, NULL);
 
         if (!qual_len) continue; // this can happen, for example, if a SAM DEPN line is compressed against SA Group
 
@@ -199,7 +199,7 @@ COMPRESS (codec_longr_compress)
 
     uint32_t base_i=0;
     for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {
-        get_line_cb (vb, ctx, line_i, pSTRa(qual), vb->txt_data.len, &is_rev);
+        get_line_cb (vb, ctx, line_i, pSTRa(qual), Ltxt, &is_rev);
 
         // we create a sorted_qual array, which contains LONGR_NUM_CHANNELS segments, one for each channel,
         // containing all the bases of that belong to that channel
@@ -338,7 +338,7 @@ CODEC_RECONSTRUCT (codec_longr_reconstruct)
                                                       : last_txtx (vb, seq_ctx); 
 
     codec_longr_recon_one_read (state, seq, vb->seq_len, is_rev, sorted_qual, next_of_chan, BAFTtxt);
-    vb->txt_data.len32 += vb->seq_len;
+    Ltxt += vb->seq_len;
 
     COPY_TIMER(codec_longr_reconstruct);
 }

@@ -40,7 +40,7 @@ void sam_piz_xtra_line_data (VBlockP vb_)
     }
 }
 
-void sam_piz_genozip_header (const SectionHeaderGenozipHeader *header)
+void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
 {
     if (VER(14)) {
         segconf.sam_seq_len           = BGEN32 (header->sam.segconf_seq_len); 
@@ -56,12 +56,22 @@ void sam_piz_genozip_header (const SectionHeaderGenozipHeader *header)
         segconf.SA_HtoS               = header->sam.segconf_SA_HtoS;
         segconf.is_sorted             = header->sam.segconf_is_sorted;
         segconf.is_collated           = header->sam.segconf_is_collated;
-        segconf.seq_len_dict_id = header->sam.segconf_seq_len_dict_id; 
+        segconf.seq_len_dict_id       = header->sam.segconf_seq_len_dict_id; 
         segconf.MD_NM_by_unconverted  = header->sam.segconf_MD_NM_by_un;
         segconf.sam_predict_meth_call = header->sam.segconf_predict_meth;
+    }
+
+    if (VER(15)) {
         segconf.deep_no_qname         = header->sam.segconf_deep_no_qname;
         segconf.deep_no_qual          = header->sam.segconf_deep_no_qual;
     }
+}
+
+bool sam_piz_initialize (void)
+{
+    if (flag.deep) sam_piz_deep_initialize();
+
+    return true;
 }
 
 // main thread: is it possible that genocat of this file will re-order lines
@@ -70,7 +80,7 @@ bool sam_piz_maybe_reorder_lines (void)
     return z_file->z_flags.has_gencomp; // has PRIM or DEPN components
 }
 
-bool sam_piz_init_vb (VBlockP vb, const SectionHeaderVbHeader *header, uint32_t *txt_data_so_far_single_0_increment)
+bool sam_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment)
 {
     if (vb->comp_i == SAM_COMP_PRIM)
         VB_SAM->plsg_i = sam_piz_get_plsg_i (vb->vblock_i);
@@ -98,7 +108,7 @@ void sam_piz_after_recon (VBlockP vb)
 {
 }
 
-// PIZ: piz_process_recon callback: called by the main thread, in the order of VBs
+// PIZ: main thread: piz_process_recon callback: usually called in order of VBs, but out-of-order if --test with no writer
 void sam_piz_process_recon (VBlockP vb)
 {
     if (flag.collect_coverage)    
@@ -108,9 +118,23 @@ void sam_piz_process_recon (VBlockP vb)
         sam_piz_deep_grab_deep_ents (VB_SAM);
 }
 
+// PIZ: called by main thread after each SAM/BAM txt file reconstruction is done. Note: not called if
+// txt_file is filtered out with --fastq, --R1 etc
 void sam_piz_finalize (void)
 {
     sam_header_finalize();
+
+    // if next, we're going to reconstruct deep FASTQ components we can free some memory now
+    if (flag.deep) {
+        buf_destroy (z_file->sag_grps);
+        buf_destroy (z_file->sag_grps_index);
+        buf_destroy (z_file->sag_alns);
+        buf_destroy (z_file->sag_qnames);
+        buf_destroy (z_file->sag_depn_index);
+        buf_destroy (z_file->sag_cigars);
+        buf_destroy (z_file->sag_seq);
+        buf_destroy (z_file->sag_qual);
+    }
 }
 
 // returns true if section is to be skipped reading / uncompressing
@@ -124,41 +148,50 @@ IS_SKIP (sam_piz_is_skip_section)
     #define KEEPIFF(cond) ({ if (cond) KEEP; else SKIP;})
 
     if (comp_i >= SAM_COMP_FQ00 && comp_i != COMP_NONE)
-        return fastq_piz_is_skip_section (st, comp_i, dict_id, purpose);
+        return fastq_piz_is_skip_section (st, comp_i, dict_id, f8, purpose);
 
     // if this is a mux channel of an OPTION - consider its parent instead. Eg. "M0C:Z0", "M1C:Z1" -> "MC:Z"
     if (dict_id.id[3]==':' && dict_id.id[1] == dict_id.id[5]&& !dict_id.id[6])
         dict_id = (DictId){ .id = { dict_id.id[0], dict_id.id[2], ':', dict_id.id[4] } };
 
+    SectionFlags f = { .flags = f8 };
+    bool is_dict = (st == SEC_DICT);
+    
     uint64_t dnum = dict_id.num;
     bool preproc = (purpose == SKIP_PURPOSE_PREPROC) && (st == SEC_B250 || st == SEC_LOCAL); // when loading SA, don't skip the needed B250/LOCAL
-    bool dict_needed_for_preproc = (st == SEC_DICT && z_file->z_flags.has_gencomp);  // when loading a SEC_DICT in a file that has gencomp, don't skip dicts needed for loading SA
+    bool dict_needed_for_preproc = (is_dict && z_file->z_flags.has_gencomp);  // when loading a SEC_DICT in a file that has gencomp, don't skip dicts needed for loading SA
 
     if (dict_id_is_qname_sf(dict_id)) dnum = _SAM_Q1NAME; // treat all QNAME subfields as _SAM_Q1NAME
     bool is_prim = (comp_i == SAM_COMP_PRIM) && !preproc;
     bool is_main = (comp_i == SAM_COMP_MAIN);
     bool cov  = flag.collect_coverage;
     bool cnt  = flag.count && !flag.grep; // we skip if we're only counting, but not also if based on --count, but not if --grep, because grepping requires full reconstruction
-    
+    bool deep_fq = flag.deep && (comp_i <= SAM_COMP_DEPN) && (flag.one_component-1 >= SAM_COMP_FQ00); // deep: --R1 or --R2
+    #define has_sa (ZCTX(OPTION_SA_Z)->z_data_exists > 0)
+    #define is_aux dict_id_is_aux_sf(dict_id) /* #define so calculated only when (rarely) needed*/
+
     switch (dnum) {
         case _SAM_SQBITMAP : 
-            SKIPIFF ((cov || cnt) && !flag.bases);
-            //KEEPIFF (st == SEC_B250);
+            SKIPIFF ((cov || cnt) && !flag.bases && 
+                     !has_sa); // if this file has SA:Z: needed by MD:Z which is needed by NM:i which is needed by SA:Z
             
         case _SAM_NONREF   : case _SAM_NONREF_X : case _SAM_GPOS     : case _SAM_STRAND :
         case _SAM_SEQMIS_A : case _SAM_SEQMIS_C : case _SAM_SEQMIS_G : case _SAM_SEQMIS_T : 
             SKIPIF (is_prim); // in PRIM, we skip sections that we used for loading the SA Groups in sam_piz_load_sags, but not needed for reconstruction
                            // (during PRIM SA Group loading, skip function is temporarily changed to sam_plsg_only). see also: sam_load_groups_add_grps
-            SKIPIFF ((cov || cnt) && !flag.bases);
+            SKIPIFF ((cov || cnt) && !flag.bases && !has_sa);
 
         case _SAM_QUAL : case _SAM_DOMQRUNS : case _SAM_QUALMPLX : case _SAM_DIVRQUAL :
             SKIPIF (is_prim);                                         
             SKIPIFF (cov || cnt);
         
-        case _SAM_QUALSA  :
         case _SAM_TLEN    :
-        case _SAM_EOL     :
         case _SAM_BAM_BIN :
+        case _SAM_EOL     :
+            SKIPIF (deep_fq);
+            // fallthrough
+
+        case _SAM_QUALSA  :
             SKIPIFF (preproc || cov || (cnt && !(flag.bases && flag.out_dt == DT_BAM)));
 
         case _SAM_Q1NAME : case _SAM_QNAMESA :
@@ -174,12 +207,13 @@ IS_SKIP (sam_piz_is_skip_section)
         case _OPTION_SA_RNAME  : case _OPTION_SA_POS : case _OPTION_SA_NM : case _OPTION_SA_CIGAR :
         case _OPTION_SA_STRAND : case _OPTION_SA_MAPQ : 
             KEEPIF (IS_SAG_SA && (preproc || dict_needed_for_preproc));
-            KEEPIF (is_main || st == SEC_DICT); // need to reconstruct from prim line
+            KEEPIF (is_main || is_dict); // need to reconstruct from prim line
             SKIPIFF (IS_SAG_SA && is_prim);    
             
         case _OPTION_AS_i  : // we don't skip AS in preprocessing unless it is entirely skipped
             SKIPIF (preproc && !segconf.sag_has_AS);
-            SKIPIFF ((cov || cnt) && dict_id_is_aux_sf(dict_id));
+            SKIPIF (deep_fq);
+            SKIPIFF ((cov || cnt) && is_aux);
   
         // data stored in SAGs - needed for reconstruction, and also for preproccessing
         case _OPTION_NH_i: 
@@ -189,7 +223,7 @@ IS_SKIP (sam_piz_is_skip_section)
         case _OPTION_CY_Z: case _OPTION_CY_ARR: case _OPTION_CY_DIVRQUAL: case _OPTION_CY_DOMQRUNS: case _OPTION_CY_QUALMPLX:
         case _OPTION_QT_Z: case _OPTION_QT_ARR: case _OPTION_QT_DIVRQUAL: case _OPTION_QT_DOMQRUNS: case _OPTION_QT_QUALMPLX:
         case _OPTION_QX_Z:                      case _OPTION_QX_DIVRQUAL: case _OPTION_QX_DOMQRUNS: case _OPTION_QX_QUALMPLX:
-            SKIPIFF (cov || cnt);
+            SKIPIFF (deep_fq || cov || cnt);
 
         case _SAM_FQ_AUX   : KEEPIFF (flag.out_dt == DT_FASTQ || flag.collect_coverage);
         
@@ -202,21 +236,29 @@ IS_SKIP (sam_piz_is_skip_section)
         case _SAM_AUX      : KEEP; // needed in preproc for container_peek_get_idxs
 
         case _OPTION_MQ_i  :       // needed for MAPQ reconstruction (mate copy)
-        case _SAM_MAPQ     : SKIPIFF (preproc); // required for SA:Z reconstruction, which is required for RNAME, POS etc if segged against saggy
-
+        case _SAM_MAPQ     : // required for SA:Z reconstruction, which is required for RNAME, POS etc if segged against saggy
+        case _OPTION_NM_i  : // required for SA:Z reconstruction
+        case _OPTION_MD_Z  : // required NM:i reconstruction
+            if (!has_sa) goto other; // not needed if this file has no SA:Z
+            SKIPIFF (preproc); 
+            
         case _OPTION_MC_Z  : case _OPTION_MC0_Z : case _OPTION_MC1_Z :         
         case _SAM_CIGAR    : SKIPIFF (preproc && IS_SAG_SA);
         case _SAM_RNEXT    : // Required by RNAME and PNEXT
         case _SAM_PNEXT    : case _SAM_P0NEXT : case _SAM_P1NEXT : case _SAM_P2NEXT : case _SAM_P3NEXT : // PNEXT is required by POS
         case _SAM_POS      : SKIPIFF (preproc && IS_SAG_SA);
-        case _SAM_TOPLEVEL : SKIPIFF (preproc || flag.out_dt == DT_BAM || flag.out_dt == DT_FASTQ);
+        case _SAM_TOPLEVEL : KEEPIF (flag.deep && is_dict); // needed to reconstruct the FASTQ components
+                             SKIPIFF (preproc || flag.out_dt == DT_BAM || flag.out_dt == DT_FASTQ);
         case _SAM_TOP2BAM  : SKIPIFF (preproc || flag.out_dt == DT_SAM || flag.out_dt == DT_FASTQ);
         case _SAM_TOP2FQ   : SKIPIFF (preproc || flag.out_dt == DT_SAM || flag.out_dt == DT_BAM || flag.extended_translation);
         case _SAM_TOP2FQEX : SKIPIFF (preproc || flag.out_dt == DT_SAM || flag.out_dt == DT_BAM || !flag.extended_translation);
         case 0             : KEEPIFF (st == SEC_VB_HEADER || !preproc);
         
-        default            : 
-            SKIPIF ((cov || cnt) && dict_id_is_aux_sf(dict_id));
+        default            : other :
+            SKIPIF ((cov || cnt) && is_aux);
+            SKIPIF (deep_fq && is_aux && !is_dict); // Dictionaries might be needed for FASTQ AUX fields
+            SKIPIF (deep_fq && is_dict && is_aux && !f.dictionary.deep_fastq); // Deep --R1/2: we don't need SAM-only AUX dicts
+            SKIPIF (is_dict && !flag.deep && is_aux && f.dictionary.deep_fastq && !f.dictionary.deep_sam);   // Deep file, but we are not reconstructed FQ (hence !flag.deep) - we don't need FASTQ-only AUX dicts
             SKIPIFF (preproc);
     }
 
@@ -300,26 +342,32 @@ SPECIAL_RECONSTRUCTOR (bam_piz_special_BIN)
 }
 
 // note of float reconstruction:
-// When compressing SAM, floats are stored as a textual string, reconstruced natively for SAM and via sam_piz_sam2bam_FLOAT for BAM.
-//    Done this way so when reconstructing SAM, the correct number of textual digits is reconstructed.
-// When compressing BAM, floats are stored as 32-bit binaries, encoded as uint32, and stringified to a snip. They are reconstructed,
-//    either as textual for SAM or binary for BAM via bam_piz_special_FLOAT. Done this way so BAM binary float is reconstructed precisely.
+// When compressing SAM, floats are stored with seg_float_or_not (or a a textual string in earlier version), reconstruced 
+//    natively for SAM and via sam_piz_sam2bam_FLOAT for BAM. This way, the correct (as in the SAM file) number of textual digits is reconstructed.
+// When compressing BAM, floats are stored as 32-bit binaries (in local since v15 and encoded as uint32 in the snip up to v14), 
+//    They are reconstructed, either as textual for SAM or binary for BAM via bam_piz_special_FLOAT. This way, the BAM binary float is reconstructed precisely.
 SPECIAL_RECONSTRUCTOR (bam_piz_special_FLOAT)
 {
-    int64_t n;
-    ASSERT (str_get_int (snip, snip_len, &n), "failed to read integer in %s", ctx->tag_name);
+    union { uint32_t i; float f; } machine_en; // number in machine endianity
+
+    // case: since v15, float is stored in local
+    if (!snip_len) 
+        machine_en.f = NEXTLOCAL(float, ctx);
     
-    union {
-        uint32_t i;
-        float f;
-    } machine_en = { .i = (uint32_t)n };
+    // case: up to v14, float was stored in the snip, as a binary-identical uint32_t
+    else {
+        int64_t n;
+        ASSERT (str_get_int (snip, snip_len, &n), "failed to read integer in %s", ctx->tag_name);
+        
+        machine_en.i = (uint32_t)n;
+    }
 
     if (!reconstruct) goto finish;
 
     // binary reconstruction in little endian - BAM format
     if (flag.out_dt == DT_BAM) {
-        uint32_t n32_lten = LTEN32 (machine_en.i); // little endian (BAM format)
-        RECONSTRUCT (&n32_lten, sizeof (uint32_t)); // in binary - the float and uint32 are the same
+        uint32_t n32_lten = LTEN32 (machine_en.i); // little endian (per BAM format spec)
+        RECONSTRUCT (&n32_lten, sizeof (uint32_t)); // in binary - float and uint32 are the same
     }
 
     // textual reconstruction - SAM format 
@@ -334,18 +382,18 @@ SPECIAL_RECONSTRUCTOR (bam_piz_special_FLOAT)
         // reconstruct number with exactly NUM_SIGNIFICANT_DIGITS digits
         sprintf (BAFTtxt, "%.*f", dec_digits, machine_en.f); 
         unsigned len = strlen (BAFTtxt); 
-        vb->txt_data.len += len;
+        Ltxt += len;
 
         // remove trailing decimal zeros:  "5.500"->"5.5" ; "5.0000"->"5" ; "50"->"50"
         if (dec_digits) {
             unsigned trailing_zeros=0;
-            for (int i=vb->txt_data.len-1; i >= vb->txt_data.len-dec_digits; i--)
+            for (int i=Ltxt-1; i >= Ltxt-dec_digits; i--)
                 if (*Bc (vb->txt_data, i) == '0') 
                     trailing_zeros++;
                 else
                     break;
             
-            vb->txt_data.len -= (dec_digits==trailing_zeros) ? dec_digits+1 : trailing_zeros;
+            Ltxt -= (dec_digits==trailing_zeros) ? dec_digits+1 : trailing_zeros;
         }
     }
 
@@ -366,7 +414,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_RNAME)
     ctx_get_snip_by_word_index (ctx, ctx->last_value.i, snip);
 
     // if it is '*', reconstruct -1
-    if (snip_len == 1 && *snip == '*') 
+    if (str_is_1char (snip, '*'))
         RECONSTRUCT_BIN32 (-1);
 
     // if its RNEXT and =, emit the last index of RNAME
@@ -478,14 +526,14 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
     if (is_top_level) {
 
         if (flag.add_line_numbers && TXT_DT(SAM)) {
-            vb->txt_data.len32 -= 1 + (*(BLSTtxt-1) == '\r'); // remove \n or \r\n
-            vb->txt_data.len32 += sprintf (BAFTtxt, "\tVB:Z:%s\n", LN_NAME);
+            Ltxt -= 1 + (*(BLSTtxt-1) == '\r'); // remove \n or \r\n
+            Ltxt += sprintf (BAFTtxt, "\tVB:Z:%s\n", LN_NAME);
         }
 
         // case SAM to BAM translation: set alignment.block_size (was in sam_piz_sam2bam_AUX until v11)
         if (dict_id.num == _SAM_TOP2BAM) { 
             BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)Bc (vb->txt_data, vb->line_start);
-            alignment->block_size = vb->txt_data.len - vb->line_start - sizeof (uint32_t); // block_size doesn't include the block_size field itself
+            alignment->block_size = Ltxt - vb->line_start - sizeof (uint32_t); // block_size doesn't include the block_size field itself
             alignment->block_size = LTEN32 (alignment->block_size);
         }
         
@@ -631,7 +679,7 @@ TRANSLATOR_FUNC (sam_piz_sam2fastq_FLAG)
         memmove (recon+2, recon, recon_len + item_prefix_len + 1); // make room for /1 or /2 
         recon[0] = '/';
         recon[1] = (sam_flag & SAM_FLAG_IS_FIRST) ? '1' : '2';
-        vb->txt_data.len += 2; 
+        Ltxt += 2; 
     }
 
     return 0;
@@ -835,7 +883,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_COPY_BUDDY)
     }
 }
 
-// invoked from TOP2FQ (but not TOP2FQEX, bc it reconstructs AUX) to consume some AUX fields if they exists 
+// invoked from TOP2FQ and TOP2NONE (but not TOP2FQEX, bc it reconstructs AUX) to consume some AUX fields if they exists 
 // in this line, in case this line - AUX fields that might be needed to reconstruct required fields in 
 // subsequent lines 
 SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_FASTQ_CONSUME_AUX)

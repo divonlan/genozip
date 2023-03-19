@@ -25,10 +25,11 @@ typedef struct RefStruct {
 
     // file 
     rom filename; // filename of external reference file
-    rom cache_fn;
-    Digest file_md5;
+    Digest genome_digest; // v15: digest of genome as it is loaded to memory. Up to v14: MD5 of original FASTA file (buggy)
+    bool is_adler;        // true if genome_digest is Adler32, false if it MD5
     uint8_t genozip_version;
     bool is_primary;
+    bool is_filename_allocated;
     
     // features
     RefChromeStyle chrom_style;
@@ -37,7 +38,7 @@ typedef struct RefStruct {
     Buffer ranges; 
     #define rtype param
     
-    Buffer genome_buf, emoneg_buf, genome_is_set_buf, genome_cache;
+    Buffer genome_buf, emoneg_buf, genome_is_set_buf;
     Bits *genome, *emoneg/*reverse compliment*/, *genome_is_set;
 
     PosType64 genome_nbases;
@@ -76,11 +77,9 @@ extern void ref_lock_initialize (Reference ref);
 extern void ref_lock_free (Reference ref);
 
 // contigs stuff
-extern rom ref_contigs_get_name_by_ref_index (Reference ref, WordIndex chrom_index, rom *snip, uint32_t *snip_len);
+extern rom ref_contigs_get_name_by_ref_index (Reference ref, WordIndex chrom_index, pSTRp(snip), PosType64 *gpos);
 extern const Contig *ref_contigs_get_contig_by_ref_index (Reference ref, WordIndex chrom_index, FailType soft_fail);
 extern WordIndex ref_seg_get_alt_chrom (VBlockP vb);
 extern void ref_contigs_compress_ref_make (Reference ref);
 extern void ref_contigs_compress_stored (Reference ref);
-
-
-
+extern void ref_make_calculate_digest (void);

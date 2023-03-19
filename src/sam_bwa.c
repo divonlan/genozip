@@ -38,7 +38,7 @@ static void sam_seg_BWA_XA_initialize (VBlockSAMP vb)
     pos_ctx->ltype       = LT_DYN_INT;
     pos_ctx->flags.store = STORE_INT;
 
-    if (segconf.is_sorted && !segconf.running) {
+    if (!segconf.running && segconf.is_sorted) {
 
         // note: we need to allocate lookback even if reps_per_line=0, lest an XA shows up despite not being in segconf
         rname_ctx->no_stons         = true;  // as we store by index
@@ -84,8 +84,13 @@ static bool sam_seg_verify_BWA_XA (VBlockSAMP vb, STRp(xa))
     else { // test first repeat
         str_split (reps[0], rep_lens[0], 4, ',', item, true);
 
-        // verify 4 items, and POS is a -/+ followed by an integer. note: GEM3 XA format will be a "not". TO DO: recognize GEM3 format 
-        if (n_items != 4 || item_lens[1] < 2 || (items[1][0] != '+' && items[1][0] != '-') || !str_is_int (&items[1][1], item_lens[1]-1)) 
+        // verify 4 items, and POS is a -/+ followed by an integer. note: GEM3 XA format will be a "no". TO DO: recognize GEM3 format 
+        if (n_items != 4 || item_lens[1] < 2           || // 4 items, item [1] has at least 2 characters
+            (items[1][0] != '+' && items[1][0] != '-') || // item [1] must start with a + or -
+            !str_is_int (&items[1][1], item_lens[1]-1) || // rest of item [1] must be an integer (POS)
+            !sam_is_cigar (STRi(item,2), false)        || // item [2] must be a valid textual CIGAR
+            !str_is_int (STRi(item,3)))                   // item [3] must be an integer (NM)
+            
             SET_XA(no);
         else
             SET_XA(yes);
@@ -161,7 +166,7 @@ static bool sam_seg_BWA_XA_pos_cb (VBlockP vb, ContextP ctx, STRp(pos_str), uint
     if (!lookback) 
         seg_integer_or_not (vb, pos_ctx, STRa(pos_str), pos_str_len);
 
-    seg_add_to_local_resizable (vb, CTX(OPTION_XA_LOOKBACK), lookback, 0);
+    seg_add_to_local_resizable (vb, lb_ctx, lookback, 0);
 
     lookback_insert (vb, OPTION_XA_LOOKBACK, OPTION_XA_RNAME,  false, (int64_t)rname_index);
     lookback_insert (vb, OPTION_XA_LOOKBACK, OPTION_XA_POS,    false, (int64_t)pos);
@@ -203,8 +208,8 @@ void sam_seg_BWA_XA_Z (VBlockSAMP vb, STRp(xa), unsigned add_bytes)
                           { .dict_id = { _OPTION_XA_CIGAR      }, .separator = { ','}                          },
                           { .dict_id = { _OPTION_XA_NM         },                                              } }  };
 
-    // case: for a collated (or otherwise unsorted) file, we just seg without lookback, because XA:Z in near lines 
-    // are not expected to be similar (also: in segconf.running)
+    // case: for a collated (or otherwise unsorted) file, we can lookup against our mate, but if we have no
+    // mate, we just seg without lookback, because XA:Z in near lines are not expected to be similar (also: in segconf.running)
     bool use_lb = segconf.is_sorted && !segconf.running;
 
     SegCallback callbacks_no_lb[6] = { sam_seg_SA_no_lookback_cb, chrom_seg_cb, 0, seg_integer_or_not_cb, sam_seg_0A_cigar_cb, 0 };

@@ -26,7 +26,8 @@ void tip_print (void)
 {
     #define E(dt) dt_encountered[DT_##dt]
 
-    if (flag.no_tip) return; // protect from spamming the user with more than one tip
+    if (flag.no_tip || // protect from spamming the user with more than one tip
+        !license_allow_tip()) return; 
 
     StrNotice notice = license_print_default_notice ();
 

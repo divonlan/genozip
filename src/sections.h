@@ -124,6 +124,12 @@ typedef union SectionFlags {
         uint8_t store_per_line   : 1;  // v12.0.41: store value or text for each line - in context->history        
     } ctx;
 
+    struct FlagsDict {
+        uint8_t deep_sam         : 1;  // v15: Deep: dictionary used by a SAM   
+        uint8_t deep_fastq       : 1;  // v15: Deep: dictionary used by a FASTQ 
+        uint8_t unused           : 6;
+    } dictionary;
+
     struct FlagsRandomAccess {
         uint8_t luft             : 1;  // this section is for reconstructing the file in the Luft coordinates (introduced v12)
         uint8_t unused           : 7;
@@ -159,7 +165,7 @@ typedef struct SectionHeader {
     Codec        codec;                // 1 byte - primary codec in which this section is compressed
     Codec        sub_codec;            // 1 byte - sub codec, in case primary codec invokes another codec
     SectionFlags flags;                // 1 byte
-} SectionHeader; 
+} SectionHeader, *SectionHeaderP; 
 
 typedef struct {
     SectionHeader;
@@ -181,7 +187,8 @@ typedef struct {
         uint32_t v13_num_components;
     };
     union { // 16 bytes
-        Digest REF_fasta_md5;          // DT_REF: MD5 of original FASTA file (v14)
+        Digest genome_digest;          // DT_REF: Digest of genome as loaded to memory (algorithm determined by genozip_header.adler) (v15)
+        Digest v14_REF_fasta_md5;      // DT_REF: MD5 of original FASTA file (v14, buggy)
         Digest FASTQ_v13_digest_bound; // DT_FASTQ: up to v13 "digest_bound": digest of concatenated pair of FQ (regarding other bound files in v13 - DVCF has digest 0, and other bound files are not reconstructable with v14+)    
     };
     uint8_t  password_test[16];        // short encrypted block - used to test the validy of a password
@@ -190,11 +197,11 @@ typedef struct {
     Digest   license_hash;             // MD5(license_num)
 #define REF_FILENAME_LEN 256
     char     ref_filename[REF_FILENAME_LEN]; // external reference filename, nul-terimated. ref_filename[0]=0 if there is no external reference. DT_CHAIN: LUFT reference filename.
-    Digest   ref_file_md5;             // SectionHeaderGenozipHeader.REF_fasta_md5 of the reference FASTA genozip file
+    Digest   ref_genome_digest;        // SectionHeaderGenozipHeader.genome_digest of the reference file
     union { // 272 bytes - data-type specific
         struct {
             char prim_filename[REF_FILENAME_LEN]; // external primary coordinates reference file, nul-terimated. added v12.
-            Digest prim_file_md5;      // SectionHeaderGenozipHeader.REF_fasta_md5 of the primary reference file. added v12.
+            Digest prim_genome_digest; // SectionHeaderGenozipHeader.genome_digest of the primary reference file. added v12.
             char unused[0];
         } chain;
         struct {
@@ -231,13 +238,14 @@ typedef struct {
             uint8_t unused[271];
         } vcf;
     };    
-} SectionHeaderGenozipHeader;
+} SectionHeaderGenozipHeader, *SectionHeaderGenozipHeaderP;
+typedef const SectionHeaderGenozipHeader *ConstSectionHeaderGenozipHeaderP;
 
 // this footer appears AFTER the genozip header data, facilitating reading the genozip header in reverse from the end of the file
 typedef struct {
     uint64_t genozip_header_offset;
     uint32_t magic;
-} SectionFooterGenozipHeader;
+} SectionFooterGenozipHeader, *SectionFooterGenozipHeaderP;
 
 // The text file header section appears once in the file (or multiple times in case of bound file), and includes the txt file header 
 typedef struct {
@@ -252,7 +260,7 @@ typedef struct {
 #define TXT_FILENAME_LEN 256
     char     txt_filename[TXT_FILENAME_LEN]; // filename of this single component. without path, 0-terminated. always in base form like .vcf or .sam, even if the original is compressed .vcf.gz or .bam
     uint64_t txt_header_size;          // size of header in original txt file (likely different than reconstructed size if dual-coordinates)  (v12)
-} SectionHeaderTxtHeader; 
+} SectionHeaderTxtHeader, *SectionHeaderTxtHeaderP; 
 
 typedef struct {
     SectionHeader;     
@@ -288,19 +296,20 @@ typedef struct {
         uint32_t sam_prim_solo_data_len;   // SAM PRIM SAG_BY_SOLO: size of solo_data
     };
     uint32_t sam_longest_seq_len;      // SAM: largest seq_len in this VB (v15)
-} SectionHeaderVbHeader; 
+} SectionHeaderVbHeader, *SectionHeaderVbHeaderP; 
+typedef const SectionHeaderVbHeader *ConstSectionHeaderVbHeaderP;
 
 typedef struct {
     SectionHeader;           
     uint32_t num_snips;                // number of items in dictionary
     DictId   dict_id;           
-} SectionHeaderDictionary;    
+} SectionHeaderDictionary, *SectionHeaderDictionaryP;
 
 typedef struct {
     SectionHeader;           
     int64_t  nodes_param;              // an extra piece of data transferred to/from Context.counts_extra
     DictId   dict_id;           
-} SectionHeaderCounts;     
+} SectionHeaderCounts, *SectionHeaderCountsP;     
 
 // LT_* values are consistent with BAM optional 'B' types (and extend them)
 typedef enum __attribute__ ((__packed__)) { // 1 byte
@@ -396,7 +405,7 @@ typedef struct {
     uint8_t unused2    : 6;
     uint8_t unused;
     DictId dict_id;           
-} SectionHeaderCtx;         
+} SectionHeaderCtx, *SectionHeaderCtxP;         
 
 // two ways of storing a range:
 // uncompacted - we will have one section, SEC_REFERENCE, containing the data, and first/last_pos containing the coordinates of this range
@@ -407,11 +416,11 @@ typedef struct {
 // SEC_REFERENCE (in both cases) contains 2 bits per base, and SEC_REF_IS_SET contains 1 bit per location.
 typedef struct {
     SectionHeader;
-    PosType64 pos;               // first pos within chrom (1-based) of this range         
-    PosType64 gpos;              // first pos within genome (0-based) of this range
+    PosType64 pos;             // first pos within chrom (1-based) of this range         
+    PosType64 gpos;            // first pos within genome (0-based) of this range
     uint32_t num_bases;        // number of bases (nucleotides) in this range
     uint32_t chrom_word_index; // index in contexts[CHROM].word_list of the chrom of this reference range    
-} SectionHeaderReference;
+} SectionHeaderReference, *SectionHeaderReferenceP;
 
 typedef struct {
     SectionHeader;
@@ -420,14 +429,14 @@ typedef struct {
     uint8_t layer_bits;        // number of bits in layer
     uint8_t ffu;
     uint32_t start_in_layer;   // start index within layer
-} SectionHeaderRefHash;
+} SectionHeaderRefHash, *SectionHeaderRefHashP;
 
 // SEC_RECON_PLAN, contains ar array of ReconPlanItem
 typedef struct SectionHeaderReconPlan {
     SectionHeader;
     VBIType conc_writing_vbs;  // max number of concurrent VBs in possesion of the writer thread needed to execute this plan    
     uint32_t vblock_mb;        // size of vblock in MB
-} SectionHeaderReconPlan;
+} SectionHeaderReconPlan, *SectionHeaderReconPlanP;
 
 // plan flavors (3 bit)
 typedef enum { PLAN_RANGE=0, PLAN_FULL_VB=2, PLAN_INTERLEAVE=3/*PIZ-only*/, PLAN_TXTHEADER=4/*PIZ-only*/,
@@ -443,7 +452,7 @@ typedef struct {
     }; 
     uint32_t num_lines : 29;   // used by RANGE, FULL_VB (writer only, not file), INTERLEAVE, DOWNSAMPLE. note: in v12/13 END_OF_VB, this field was all 1s.
     PlanFlavor flavor  : 3;  
-} ReconPlanItem;
+} ReconPlanItem, *ReconPlanItemP;
 
 // the data of SEC_SECTION_LIST is an array of the following type, as is the z_file->section_list_buf
 typedef struct SectionEntFileFormat {
@@ -461,14 +470,14 @@ typedef struct SectionEntFileFormat {
     SectionFlags flags;        // same flags as in section header (since v12, previously "unused")
     CompIType comp_i;          // used for component-related sections, 0-based (v15: 8 bits, COMP_NONE is 255. v14: 2 bits - COMP_NONE was 0. up to v13: "unused")
     uint8_t unused2;         
-} SectionEntFileFormat;
+} SectionEntFileFormat, SectionEntFileFormatP;
 
 // the data of SEC_RANDOM_ACCESS is an array of the following type, as is the z_file->ra_buf and vb->ra_buf
 // we maintain one RA entry per vb per every chrom in the the VB
 typedef struct RAEntry {
     VBIType vblock_i;          // the vb_i in which this range appears
     WordIndex chrom_index;     // before merge: node index into chrom context nodes, after merge - word index in CHROM dictionary
-    PosType64 min_pos, max_pos;  // POS field value of smallest and largest POS value of this chrom in this VB (regardless of whether the VB is sorted)
+    PosType64 min_pos, max_pos;// POS field value of smallest and largest POS value of this chrom in this VB (regardless of whether the VB is sorted)
 } RAEntry; 
 
 // the data of SEC_REF_IUPACS (added v12)
@@ -492,16 +501,16 @@ typedef union {
 } SectionHeaderUnion;
 
 typedef union {
-    SectionHeader *common;
-    SectionHeaderGenozipHeader *genozip_header;
-    SectionHeaderTxtHeader *txt_header;
-    SectionHeaderVbHeader *vb_header;
-    SectionHeaderDictionary *dict;
-    SectionHeaderCounts *counts;
-    SectionHeaderCtx *ctx;
-    SectionHeaderReference *reference;
-    SectionHeaderRefHash *ref_hash;
-    SectionHeaderReconPlan *recon_plan;
+    SectionHeaderP common;
+    SectionHeaderGenozipHeaderP genozip_header;
+    SectionHeaderTxtHeaderP txt_header;
+    SectionHeaderVbHeaderP vb_header;
+    SectionHeaderDictionaryP dict;
+    SectionHeaderCountsP counts;
+    SectionHeaderCtxP ctx;
+    SectionHeaderReferenceP reference;
+    SectionHeaderRefHashP ref_hash;
+    SectionHeaderReconPlanP recon_plan;
 } SectionHeaderUnionP __attribute__((__transparent_union__));
 
 #pragma pack()
@@ -540,8 +549,10 @@ extern Section section_next (Section sec);
 
 extern Section sections_first_sec (SectionType st, FailType soft_fail);
 extern Section sections_last_sec (SectionType st, FailType soft_fail);
-extern bool sections_next_sec2 (Section *sl_ent, SectionType st1, SectionType st2);
-#define sections_next_sec(sl_ent,st) sections_next_sec2((sl_ent),(st),SEC_NONE)
+extern bool sections_next_sec3 (Section *sl_ent, SectionType st1, SectionType st2, SectionType st3);
+#define sections_next_sec(sl_ent,st)       sections_next_sec3((sl_ent),(st),SEC_NONE,SEC_NONE)
+#define sections_next_sec2(sl_ent,st1,st2) sections_next_sec3((sl_ent),(st1),(st2),SEC_NONE)
+
 extern bool sections_prev_sec2 (Section *sl_ent, SectionType st1, SectionType st2);
 #define sections_prev_sec(sl_ent,st) sections_prev_sec2((sl_ent),(st),SEC_NONE)
 
@@ -554,7 +565,7 @@ static inline uint32_t sections_count_sections (SectionType st) { return section
 extern Section sections_vb_header (VBIType vb_i, FailType soft_fail);
 extern Section sections_vb_last (VBIType vb_i);
 
-extern CompIType sections_get_num_comps (void);
+extern CompIType sections_get_num_comps (bool force_create_index);
 extern VBIType sections_get_num_vbs (CompIType comp_i);
 extern VBIType sections_get_first_vb_i (CompIType comp_i);
 extern Section sections_get_comp_txt_header_sec (CompIType comp_i);
@@ -562,6 +573,7 @@ extern Section sections_get_comp_recon_plan_sec (CompIType comp_i, bool is_luft_
 extern Section sections_get_next_vb_of_comp_sec (CompIType comp_i, Section *vb_sec);
 extern Section sections_one_before (Section sec);
 
+// API for writer to create modified section list
 extern void sections_new_list_add_vb (BufferP new_list, VBIType vb_i);
 extern void sections_new_list_add_txt_header (BufferP new_list, CompIType comp_i);
 extern void sections_new_list_add_bgzf (BufferP new_list);
@@ -569,20 +581,17 @@ extern void sections_new_list_add_global_sections (BufferP new_list);
 extern void sections_commit_new_list (BufferP new_list);
 
 extern void sections_list_memory_to_file_format (bool in_place);
-extern void sections_list_file_to_memory_format (SectionHeaderGenozipHeader *genozip_header);
-//xxx extern void sections_list_revert (void);
+extern void sections_list_file_to_memory_format (SectionHeaderGenozipHeaderP genozip_header);
 
 #define sections_has_dict_id(st) ((st) == SEC_B250 || (st) == SEC_LOCAL || (st) == SEC_DICT || (st) == SEC_COUNTS)
 extern SectionType sections_st_by_name (char *name);
 extern uint32_t st_header_size (SectionType sec_type);
 
-extern void sections_get_refhash_details (uint32_t *num_layers, uint32_t *base_layer_bits);
-
 // display functions
 #define sections_read_prefix (vb->preprocessing ? 'P' : flag_loading_auxiliary ? 'L' : 'R')
 extern void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if output to buffer */, uint64_t offset, char rw);
 extern void genocat_show_headers (rom z_filename);
-extern void sections_show_gheader (const SectionHeaderGenozipHeader *header);
+extern void sections_show_gheader (ConstSectionHeaderGenozipHeaderP header);
 extern void sections_show_section_list (DataType dt);
 extern rom st_name (SectionType sec_type);
 extern rom lt_name (LocalType lt);

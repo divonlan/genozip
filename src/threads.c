@@ -16,7 +16,6 @@
 #include <execinfo.h>
 #include <signal.h>
 #ifdef __APPLE__
-#include "compatibility/mac_gettime.h"
 #include <sys/sysctl.h>
 #else // LINUX
 #include <sched.h>
@@ -33,11 +32,13 @@
 #include "vblock.h"
 #include "piz.h"
 #include "sections.h"
+#include "arch.h"
 
 static Buffer threads = EMPTY_BUFFER;
 static Mutex threads_mutex = { .name = "threads_mutex-not-initialized" };
 static pthread_t main_thread, writer_thread;
 static bool writer_thread_is_set = false;
+static pthread_t signal_handler_thread;
 
 static Buffer log = EMPTY_BUFFER; // for debugging thread issues, activated with --debug-threads
 static Mutex log_mutex = {};
@@ -62,44 +63,54 @@ void threads_print_call_stack (void)
 #endif
 }
 
-#ifdef __linux__
+// #ifdef __linux__
 
-static void threads_sigsegv_handler (void) 
-{
-    iprintf ("Segmentation fault, exiting. Time: %s\n", str_time().s);
-    threads_print_call_stack(); // this works ok on mac, but seems to not print function names on Linux
-    threads_cancel_other_threads();
-    exit (EXIT_SIGSEGV); // dumps core
-}
+// static void threads_sigsegv_handler (void) 
+// {
+//     iprintf ("Segmentation fault, exiting. Time: %s\n", str_time().s);
+//     threads_print_call_stack(); // this works ok on mac, but seems to not print function names on Linux
+//     threads_cancel_other_threads();
+//     exit (EXIT_SIGSEGV); // dumps core
+// }
 
-static void threads_sighup_handler (void) 
-{
-    iprintf ("Process %u received SIGHUP, ignoring. Use 'kill -9' to kill the process. Time: %s\n", getpid(), str_time().s);
-}
+// static void threads_sighup_handler (void) 
+// {
+//     iprintf ("Process %u received SIGHUP, ignoring. Use 'kill -9' to kill the process. Time: %s\n", getpid(), str_time().s);
+// }
 
-// explicitly catch signals, that we otherwise blocked
-static void *threads_signal_handler (void *sigset)
-{    
-    while (1) {
-        int sig=0, err=0;
-        ASSERT (!(err = sigwait ((sigset_t *)sigset, &sig)), "sigwait failed: %s", strerror (err));
+// // explicitly catch signals, that we otherwise blocked
+// static void *threads_signal_handler (void *unused)
+// {    
+//     // block some signals - we will wait for them explicitly in threads_signal_handler(). this is inherited by all threads
+//     sigset_t sigset = {}; 
+//     sigemptyset (&sigset);
+//     sigaddset (&sigset, SIGSEGV);
+//     sigaddset (&sigset, SIGHUP);
+//     sigaddset (&sigset, SIGUSR1);
+//     sigaddset (&sigset, SIGUSR2);
+//     int err = pthread_sigmask(SIG_BLOCK, &sigset, NULL);
+//     ASSERT (!err, "pthread_sigmask failed: %s", strerror (err));
 
-        switch (sig) {
-            case SIGSEGV  : threads_sigsegv_handler(); break;
-            case SIGHUP   : threads_sighup_handler();  break;
-            case SIGUSR1  : fprintf (stderr, "Caught signal SIGUSR1, showing memory\n");
-                            buf_show_memory_handler(); break;
-            case SIGUSR2  : fprintf (stderr, "Caught signal SIGUSR2, writing threads log\n");
-                            threads_write_log (false); break;
-            case SIGCHLD  : break; // Child process has stopped or exited
-            case SIGCONT  : break; // Continue executing, if stopped
-            default       : ABORT ("Unexpected signal %s", strsignal (sig));
-        }
-    }
-    return 0; // never reaches here
-}
+//     while (1) {
+//         int sig=0, err=0;
+//         ASSERT (!(err = sigwait (&sigset, &sig)), "sigwait failed: %s", strerror (err));
+    
+//         switch (sig) {
+//             case SIGSEGV  : threads_sigsegv_handler(); break;
+//             case SIGHUP   : threads_sighup_handler();  break;
+//             case SIGUSR1  : fprintf (stderr, "Caught signal SIGUSR1, showing memory\n");
+//                             buf_show_memory_handler(); break;
+//             case SIGUSR2  : fprintf (stderr, "Caught signal SIGUSR2, writing threads log\n");
+//                             threads_write_log (false); break;
+//             case SIGCHLD  : break; // Child process has stopped or exited
+//             case SIGCONT  : break; // Continue executing, if stopped
+//             default       : ABORT ("Unexpected signal %s", strsignal (sig));
+//         }
+//     }
+//     return 0; // never reaches here
+// }
 
-#endif
+// #endif
 
 // called by main thread at system initialization
 void threads_initialize (void)
@@ -111,23 +122,24 @@ void threads_initialize (void)
     buf_alloc (evb, &log, 500, 1000000, char, 2, "log");
     buf_alloc (evb, &threads, 0, global_max_threads + 3, ThreadEnt, 2, "threads");
 
-// only Linux, as in Mac sigwait sometimes returns "invalid argument" - TODO solve this
-#ifdef __linux__
+// // only Linux, as in Mac sigwait sometimes returns "invalid argument" - TODO solve this
+// #ifdef __linux__
+//     int err = pthread_create (&signal_handler_thread, NULL, threads_signal_handler, 0); 
+//     ASSERT (!err, "failed to create signal_handler_thread: %s", strerror(err));
+// #endif
+}
 
-    // block some signals - we will wait for them explicitly in threads_signal_handler(). this is inherited by all threads
-    sigset_t sigset;
-    sigemptyset (&sigset);
-    sigaddset (&sigset, SIGSEGV);
-    sigaddset (&sigset, SIGHUP);
-    sigaddset (&sigset, SIGUSR1);
-    sigaddset (&sigset, SIGUSR2);
-    int err = pthread_sigmask(SIG_BLOCK, &sigset, NULL);
-    ASSERT (!err, "pthread_sigmask failed: %s", strerror (err));
+void threads_finalize (void)
+{
+    // normally, we intentionally leak the signal handler thread, letting it cancel implicitly when
+    // the process exits. Under valgrind, we cancel it explicitly so that we only display unintentional leaks, not this intentional one 
+    if (arch_is_valgrind()) {
+        buf_destroy (log);
+        buf_destroy (threads);
 
-    pthread_t signal_handler_thread;
-    err = pthread_create (&signal_handler_thread, NULL, threads_signal_handler, &sigset); 
-    ASSERT (!err, "failed to create signal_handler_thread: %s", strerror(err));
-#endif
+        if (!pthread_cancel (signal_handler_thread))  // success
+            pthread_join (signal_handler_thread, NULL);
+    }
 }
 
 bool threads_am_i_main_thread (void)

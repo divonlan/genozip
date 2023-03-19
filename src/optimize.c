@@ -51,10 +51,10 @@ bool optimize_float_2_sig_dig (rom snip, unsigned len, float cap_value_at /* 0 i
             }
             if (negative) *(writer++) = '-';
 
-            if (e >= 2) {
-                memcpy (writer, prefix, e);
-                writer += e;
-            }
+            if (e >= 2) 
+                //xxx memcpy (writer, prefix, e);
+                // writer += e;
+                writer = mempcpy (writer, prefix, e);
 
             *(writer++) = twodigits / 10 + '0';
             unsigned second_digit = twodigits % 10;

@@ -3,16 +3,16 @@
         {
             "name": "Win32",
             "includePath": [
-                "C:\\Users\\USER\\projects\\genozip\\**"
+                "C:\\Users\\divon\\projects\\genozip\\src\\"
             ],
             "defines": [
                 "_DEBUG",
                 "UNICODE",
                 "_UNICODE"
             ],
-            "compilerPath": "C:/mingw-w64/x86_64-8.1.0-posix-seh-rt_v6-rev0/mingw64/bin/gcc.exe",
-            "cStandard": "c99",
-            "intelliSenseMode": "gcc-x64",
+            "compilerPath": "C:/msys64/mingw64/bin/gcc.exe",
+            "cStandard": "gnu11",
+            "intelliSenseMode": "windows-gcc-x64",
             "configurationProvider": "ms-vscode.makefile-tools"
         }
     ],

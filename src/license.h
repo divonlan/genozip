@@ -18,6 +18,7 @@ extern uint32_t license_get_number (void);
 extern rom license_get_one_line (void);
 extern void license_display (void);
 extern bool license_allow_stats (void);
+extern bool license_allow_tip (void);
 extern void license_one_file_compressed (DataType dt);
 extern void license_show_deep_notice (void);
 extern bool license_is_eval (void);

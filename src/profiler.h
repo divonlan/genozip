@@ -10,13 +10,10 @@
 
 #include "genozip.h"
 #include <time.h>
-#ifdef __APPLE__ 
-#include "compatibility/mac_gettime.h"
-#endif
 
 typedef struct {
     int64_t file_open, file_close, buf_low_level_free, buf_remove_from_buffer_list,
-        read, compute, compressor_bz2, compressor_lzma, compressor_bsc, 
+    read, compute, compressor_bz2, compressor_lzma, compressor_bsc, 
         write, piz_read_one_vb, codec_hapmat_piz_get_one_line, vb_get_vb, buf_mmap_do,
         compressor_domq, compressor_actg, bgzf_io_thread, bgzf_compute_thread, bgzf_writer_thread,
         piz_get_line_subfields, zip_generate_b250, zip_generate_local, zip_compress_ctxs, ctx_merge_in_vb_ctx,
@@ -39,7 +36,7 @@ typedef struct {
         sam_deep_merge,
         refhash_calc_one_range, refhash_compress_one_vb, refhash_compress_refhash, refhash_load, refhash_uncompress_one_vb, refhash_read_one_vb,
         txtheader_zip_read_and_compress, txtheader_compress, txtheader_compress_one_fragment, txtheader_piz_read_and_reconstruct,
-        digest, digest_txt_header,
+        digest, digest_txt_header, ref_make_calculate_digest,
         dict_io_compress_dictionaries, dict_io_assign_codecs, dict_io_compress_one_fragment, 
         aligner_best_match, aligner_get_word_from_seq, aligner_get_match_len, 
         generate_rev_complement_genome, ref_contigs_compress,

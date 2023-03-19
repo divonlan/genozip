@@ -75,6 +75,7 @@ typedef struct {
     int64_t lines_first, lines_last, tail;  // set by --head, --tail, --lines 
     rom grep; int grepw; unsigned grep_len; // set by --grep and --grep-w
     uint32_t one_vb, downsample, shard ;
+    CompIType one_vb_comp_i; // PIZ: COMP_NONE is --one-vb is
     enum { SAM_FLAG_INCLUDE_IF_ALL=1, SAM_FLAG_INCLUDE_IF_NONE, SAM_FLAG_EXCLUDE_IF_ALL } sam_flag_filter;
     enum { SAM_MAPQ_INCLUDE_IF_AT_LEAST=1, SAM_MAPQ_EXCLUDE_IF_AT_LEAST } sam_mapq_filter;
     enum { INTERLEAVE_NONE, INTERLEAVE_EITHER, INTERLEAVE_BOTH } interleaved;
@@ -87,7 +88,7 @@ typedef struct {
     int bytes;
 
     // options affecting the software interaction (but not the file contents)
-    int force, quiet, explicit_quiet, no_tip, show_filename,
+    int force, quiet, explicit_quiet, noisy, no_tip, show_filename,
         to_stdout,   // set implicitly if genocat without --output
         replace, 
         lic_width,   // width of license output, 0=dynamic (undocumented parameter of --license)
@@ -121,17 +122,17 @@ typedef struct {
         show_reference, show_ref_hash, show_ref_index, show_chrom2ref, show_ref_iupacs, show_chain, show_ranges,
         show_codec, 
         show_alleles, show_bgzf, show_txt_contigs, show_lines,
-        show_vblocks, show_threads, show_uncompress, biopsy, show_data_type,
+        show_threads, show_uncompress, biopsy, show_data_type,
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
         debug_LONG, show_qual, debug_qname, debug_read_ctxs, debug_sag, debug_gencomp, debug_lines, debug_latest,
-        debug_peek, submit_stats, debug_submit, debug_deep, show_segconf_has,
+        debug_peek, submit_stats, debug_submit, show_deep, show_segconf_has, debug_huffman,
         debug_debug, // ad-hoc debug printing in prod
         no_gencomp, force_gencomp, no_domqual, verify_codec, seg_only, show_bam, xthreads, show_flags, show_rename_tags,
         #define SHOW_CONTAINERS_ALL_VBs (-1)
         show_containers, show_aligner, show_buddy,
         echo,         // show the command line in case of an error
         show_headers; // (1 + SectionType to display) or 0=flag off or -1=all sections
-    rom help, dump_section, show_is_set, show_time, show_mutex;
+    rom help, dump_section, show_is_set, show_time, show_mutex, show_vblocks;
     struct biopsy_line { VBIType vb_i; int32_t line_i/*within vb*/; } biopsy_line; // argument of --biopsy-line (line_i=-1 means: not used)
     DeepHash debug_deep_hash; // qname, seq, qual hashes
     
@@ -173,7 +174,8 @@ typedef struct {
          data_modified,      // PIZ: output is NOT precisely identical to the compressed source, and hence we cannot use its BZGF blocks
                              // ZIP: txt data is modified during Seg
          explicit_ref,       // ref->filename was set by --reference or --REFERENCE (as opposed to being read from the genozip header)
-         collect_coverage;   // PIZ: collect coverage data for show_sex/show_coverage/idxstats
+         collect_coverage,   // PIZ: collect coverage data for show_sex/show_coverage/idxstats
+         deep_fq_only;       // PIZ: SAM data is reconstructed by not written, only FASTQ data is written
 
     int only_headers,        // genocat --show_headers (not genounzip) show only headers
         recon_per_line_overhead, // genocat - additional per-line reconstruction txt_data space needed, due to flags
@@ -203,6 +205,11 @@ extern Flags flag;
 
 // save and reset flags that are intended to operate on the compressed file rather than the reference file
 #define SAVE_FLAGS_AUX Flags save_flag = flag; \
+    if (flag.xthreads) { /* we assume user is interested only in PIZ/ZIP traffic */\
+        WARN_ONCE0 ("FYI: xthreads: Turning off show_vblocks, show_threads, debug_memory while loading reference\n"); \
+        flag.show_threads = flag.debug_memory = false; \
+        flag.show_vblocks = NULL; \
+    } \
     flag.test = flag.md5 = flag.show_memory = flag.show_stats = flag.no_header = flag.show_bgzf =\
     flag.header_one = flag.header_only = flag.regions = flag.show_index = flag.show_dict =  \
     flag.show_b250 = flag.show_ref_contigs = flag.list_chroms = flag.count = \
@@ -224,6 +231,7 @@ extern bool option_is_short[];
 #define OT(l,s) option_is_short[(int)s[0]] ? "-"s : "--"l
 
 extern void flags_init_from_command_line (int argc, char **argv);
+extern void flags_finalize (void);
 extern void flags_update (unsigned num_files, rom *filenames);
 extern void flags_update_zip_one_file (void);
 extern void flags_update_piz_one_file (int z_file_i);
@@ -234,3 +242,8 @@ extern rom flags_pipe_in_process_name (void);
 extern unsigned flags_pipe_in_pid (void);
 extern bool flags_pipe_in_process_died (void);
 extern bool flags_is_genocat_global_area_only (void);
+
+static inline bool flag_is_show_vblocks (rom task)
+{
+    return flag.show_vblocks && (!task || !flag.show_vblocks[0] || !strcmp (flag.show_vblocks, task));
+}

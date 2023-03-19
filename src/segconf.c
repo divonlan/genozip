@@ -38,13 +38,6 @@ void segconf_test_sorted (VBlockP vb, WordIndex prev_line_chrom, PosType32 pos, 
         segconf.evidence_of_sorted = true;
 }
 
-void segconf_finalize_is_sorted (void)
-{
-    // case: if we haven't found any pair of consecutive lines with the same CHROM and non-descreasing POS, this is not a sorted file, despite no evidence of "not sorted". eg could be unique CHROMs.
-    if (!segconf.evidence_of_sorted)
-        segconf.is_sorted = false;
-}
-
 // mark contexts as used, for calculation of vb_size
 void segconf_mark_as_used (VBlockP vb, unsigned num_ctxs, ...)
 {
@@ -61,14 +54,14 @@ void segconf_mark_as_used (VBlockP vb, unsigned num_ctxs, ...)
     va_end (args);
 }
 
-static void segconf_set_vb_size (ConstVBlockP vb, uint64_t curr_vb_size)
+static void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
 {
-    #define VBLOCK_MEMORY_MIN_DYN   (16  << 20) // VB memory - min/max when set in segconf_calculate
-    #define VBLOCK_MEMORY_MAX_DYN   (512 << 20) 
-    #define VBLOCK_MEMORY_BEST      (512 << 20) // VB memory with --best 
-    #define VBLOCK_MEMORY_MAKE_REF  (1   << 20) // VB memory with --make-reference - reference data 
-    #define VBLOCK_MEMORY_GENERIC   (16  << 20) // VB memory for the generic data type
-    #define VBLOCK_MEMORY_MIN_SMALL (4   << 20) // minimum VB memory for small files
+    #define VBLOCK_MEMORY_MIN_DYN   (16  MB) // VB memory - min/max when set in segconf_calculate
+    #define VBLOCK_MEMORY_MAX_DYN   (512 MB) 
+    #define VBLOCK_MEMORY_BEST      (512 MB) // VB memory with --best 
+    #define VBLOCK_MEMORY_MAKE_REF  (1   MB) // VB memory with --make-reference - reference data 
+    #define VBLOCK_MEMORY_GENERIC   (16  MB) // VB memory for the generic data type
+    #define VBLOCK_MEMORY_MIN_SMALL (4   MB) // minimum VB memory for small files
 
     unsigned num_used_contexts=0;
 
@@ -81,7 +74,7 @@ static void segconf_set_vb_size (ConstVBlockP vb, uint64_t curr_vb_size)
 
     // if user requested explicit vblock - use it
     else if (flag.vblock) {
-        int vblock_len = strlen(flag.vblock);
+        int vblock_len = strlen (flag.vblock);
         
         // case: normal usage - specifying megabytes within the permitted range
         if (vblock_len < 2 || flag.vblock[vblock_len-1] != 'B') { 
@@ -90,7 +83,7 @@ static void segconf_set_vb_size (ConstVBlockP vb, uint64_t curr_vb_size)
                     "invalid argument of --vblock: \"%s\". Expecting an integer between 1 and %u. The file will be read and processed in blocks of this number of megabytes.",
                     flag.vblock, MAX_VBLOCK_MEMORY);
 
-            segconf.vb_size = (uint64_t)mem_size_mb << 20;
+            segconf.vb_size = (uint64_t)mem_size_mb MB;
         }
 
         // case: developer option - a number of bytes eg "100000B"
@@ -117,20 +110,19 @@ static void segconf_set_vb_size (ConstVBlockP vb, uint64_t curr_vb_size)
 
     else { 
         // count number of contexts used
-        for (Did did_i=0; did_i < vb->num_contexts ; did_i++)
-            if (CTX(did_i)->b250.len || CTX(did_i)->local.len)
-                num_used_contexts++;
+        for_ctx_that (ctx->b250.len || ctx->local.len)
+            num_used_contexts++;
             
         uint32_t vcf_samples = (TXT_DT(VCF) || TXT_DT(BCF)) ? vcf_header_get_num_samples() : 0;
         
         // formula - 1MB for each contexts, 128K for each VCF sample
-        uint64_t bytes = ((uint64_t)num_used_contexts << 20) + (vcf_samples << 17);
+        uint64_t bytes = ((uint64_t)num_used_contexts MB) + (vcf_samples << 17);
 
         uint64_t min_memory = !segconf.is_sorted         ? VBLOCK_MEMORY_MIN_DYN
                             : !segconf.is_long_reads     ? VBLOCK_MEMORY_MIN_DYN
                             : arch_get_num_cores() <= 8  ? VBLOCK_MEMORY_MIN_DYN // eg a personal computer
-                            : arch_get_num_cores() <= 20 ? (128 << 20)           // higher minimum memory for long reads in sorted SAM - enables CPU scaling
-                            :                              (256 << 20);
+                            : arch_get_num_cores() <= 20 ? 128 MB           // higher minimum memory for long reads in sorted SAM - enables CPU scaling
+                            :                              256 MB;
 
         // actual memory setting VBLOCK_MEMORY_MIN_DYN to VBLOCK_MEMORY_MAX_DYN
         segconf.vb_size = MIN_(MAX_(bytes, min_memory), VBLOCK_MEMORY_MAX_DYN);
@@ -154,7 +146,7 @@ static void segconf_set_vb_size (ConstVBlockP vb, uint64_t curr_vb_size)
         // on Windows (inc. WSL) and Mac - which tend to have less memory in typical configurations, warn if we need a lot
         // (note: if user sets --vblock, we won't get here)
         if (flag.is_windows || flag.is_mac || flag.is_wsl) {
-            segconf.vb_size = MIN_(segconf.vb_size, 32 << 20); // limit to 32MB per VB unless users says otherwise to protect OS UI interactivity 
+            segconf.vb_size = MIN_(segconf.vb_size, 32 MB); // limit to 32MB per VB unless users says otherwise to protect OS UI interactivity 
 
             int concurrent_vbs = 1 + (est_seggable_size ? MIN_(1+ est_seggable_size / segconf.vb_size, global_max_threads) : global_max_threads);
 
@@ -233,15 +225,14 @@ static void segconf_show_has (void)
     iprint0 ("Fields recorded in segconf.has:\n");
 
     bool found = false;
-    for_zctx 
-        if (segconf.has[zctx->did_i]) {
-            if (TXT_DT(VCF) || TXT_DT(BCF))
-                iprintf ("%s/%s ", dict_id_display_type (txt_file->data_type, zctx->dict_id), zctx->tag_name);
-            else
-                iprintf ("%s ", zctx->tag_name);
-            
-            found = true;
-        }
+    for_zctx_that (segconf.has[zctx->did_i]) {
+        if (TXT_DT(VCF) || TXT_DT(BCF))
+            iprintf ("%s/%s ", dict_id_display_type (txt_file->data_type, zctx->dict_id), zctx->tag_name);
+        else
+            iprintf ("%s ", zctx->tag_name);
+        
+        found = true;
+    }
 
     iprint0 (found ? "\n" : "None\n");
 
@@ -266,13 +257,13 @@ void segconf_calculate (void)
     // note: in case of BZ2, needs to be big enough to overcome the block nature of BZ2 (64K block -> 200-800K text) to get a reasonable size estimate
     uint32_t vb_sizes[] = { 300000, 1500000, 5000000 };
     
-    for (int s = (txt_file->codec == CODEC_BZ2); s < ARRAY_LEN(vb_sizes) && !vb->txt_data.len; s++) {
+    for (int s = (txt_file->codec == CODEC_BZ2); s < ARRAY_LEN(vb_sizes) && !Ltxt; s++) {
         segconf.vb_size = vb_sizes[s];
         txtfile_read_vblock (vb);
         if (txt_file->header_only) break;
     }
 
-    if (!vb->txt_data.len) {
+    if (!Ltxt) {
         ASSERTW (txt_file->header_only, "FYI: Segconf didn't run because either there is not even one full line, OR first line is larger than %u", vb_sizes[ARRAY_LEN(vb_sizes)-1]);
     
         segconf_set_vb_size (vb, save_vb_size);
@@ -289,9 +280,9 @@ void segconf_calculate (void)
     int32_t save_luft_reject_bytes = Z_DT(VCF) ? vcf_vb_get_reject_bytes (vb) : 0;
 
     SAVE_FLAGS;
-    flag.show_alleles = flag.show_digest = flag.show_codec = flag.show_hash =
-    flag.show_reference = flag.show_vblocks = false;
+    flag.show_alleles = flag.show_digest = flag.show_codec = flag.show_hash = flag.show_reference = false;
     flag.quiet = true;
+    flag.show_vblocks = NULL;
 
     seg_all_data_lines (vb);      
     SAVE_FLAG (aligner_available); // might have been set in sam_seg_finalize_segconf

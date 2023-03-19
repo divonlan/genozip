@@ -104,7 +104,7 @@ void txtheader_compress (BufferP txt_header,
     txt_header_buf->next = 0;
     txt_header_comp_i = comp_i;
 
-    dispatcher_fan_out_task ("compress_txt_header", NULL, 0, "Writing txt header...", false, false, false, 0, 20000,
+    dispatcher_fan_out_task ("compress_txt_header", NULL, 0, "Writing txt header...", false, false, false, 0, 20000, true,
                              txtheader_prepare_for_compress, 
                              txtheader_compress_one_fragment, 
                              zfile_output_processed_vb);
@@ -194,7 +194,7 @@ static void txtheader_read_one_vb (VBlockP vb)
     if (!is_new_header && !is_old_header) return; // this is not a TXT_HEADER section at all, or not one that belongs to this component
     
     zfile_read_section (z_file, vb, txtheader_sec->vblock_i, &vb->z_data, "z_data", SEC_TXT_HEADER, txtheader_sec);    
-    SectionHeaderTxtHeader *header = B1ST (SectionHeaderTxtHeader, vb->z_data);
+    SectionHeaderTxtHeaderP header = B1ST (SectionHeaderTxtHeader, vb->z_data);
 
     vb->fragment_len   = BGEN32 (header->data_uncompressed_len);
     vb->fragment_start = Bc (txt_header_vb->txt_data, txt_header_vb->txt_data.next);
@@ -211,7 +211,7 @@ static void txtheader_read_one_vb (VBlockP vb)
 // entry point of compute thread of dictionary decompression
 static void txtheader_uncompress_one_vb (VBlockP vb)
 {
-    SectionHeaderTxtHeader *header = B1ST (SectionHeaderTxtHeader, vb->z_data);
+    SectionHeaderTxtHeaderP header = B1ST (SectionHeaderTxtHeader, vb->z_data);
     zfile_uncompress_section_into_buf (vb, header, BGEN32 (header->vblock_i), SEC_TXT_HEADER, &txt_header_vb->txt_data, vb->fragment_start);
 
     vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.
@@ -247,7 +247,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
     buf_alloc (txt_header_vb, &txt_header_vb->txt_data, 0, txt_header_vb->txt_data.len, char, 0, "txt_data");
     txt_header_vb->txt_data.next = 0;
 
-    dispatcher_fan_out_task ("read_txt_header", NULL, 0, 0, true, flag.test, false, 0, 1000,
+    dispatcher_fan_out_task ("read_txt_header", NULL, 0, 0, true, flag.test, false, 0, 1000, true,
                              txtheader_read_one_vb, 
                              txtheader_uncompress_one_vb,
                              NO_CALLBACK);
@@ -261,6 +261,10 @@ void txtheader_piz_read_and_reconstruct (Section sec)
         txt_file = file_open (filename, WRITE, TXT_FILE, flag.out_dt != DT_NONE ? flag.out_dt : z_file->data_type);
         if (flag.unbind) FREE (filename); // file_open copies the names
         
+        // note: this is reset for each component:
+        // since v14 it is used for the commulative component-scope MD5 used for both VBs and txt file verification
+        // up to v13 it is for commulative digest of both MD5 and Adler, but used only for txt file verification,
+        // while VB verification relies on v13_commulative_digest_ctx which is commulative across components.
         z_file->digest_ctx = DIGEST_CONTEXT_NONE; // reset digest
     }
 
@@ -316,7 +320,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
     ASSERT (txt_file->bgzf_flags.library >= 0 && txt_file->bgzf_flags.library < NUM_BGZF_LIBRARIES, "txt_file->bgzf_flags.library=%u out of range [0,%u]", 
             txt_file->bgzf_flags.level, NUM_BGZF_LIBRARIES-1);
 
-    bool needs_write = writer_does_txtheader_need_write (sec);
+    bool needs_write = writer_does_txtheader_need_write (sec->comp_i);
 
     // count header-lines (for --lines etc): before data-modifying inspect_txt_header
     if (needs_write) {
@@ -356,9 +360,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
     // accounting for data as in original source file - affects vb->vb_position_txt_file of next VB
     txt_file->txt_data_so_far_single_0 = !VER(12) ? BGEN32 (header.data_uncompressed_len) : BGEN64 (header.txt_header_size); 
 
-    if (needs_write) 
-        writer_handover_txtheader (&txt_header_vb);    // handover data to writer thread (even if the header is empty, as the writer thread is waiting for it)
-    else
+    if (!writer_handover_txtheader (&txt_header_vb))   // handover data to writer thread (even if the header is empty, as the writer thread is waiting for it)
         vb_release_vb (&txt_header_vb, PIZ_TASK_NAME); // not handing over, so release here  
     
     if (!flag.reading_chain && !flag.reading_reference)

@@ -363,9 +363,9 @@ static inline void vcf_seg_FORMAT_transposed (VBlockVCFP vb, ContextP ctx, STRp(
     
     buf_alloc (vb, &ctx->local, 1, vb->lines.len * vcf_num_samples, uint32_t, 1, "contexts->local");
 
-    if (cell_len == 1 && cell[0] == '.') {
+    if (str_is_1char (cell, '.')) 
         BNXT32 (ctx->local) = 0xffffffff;
-    }
+    
     else {
         ASSSEG (str_get_int (STRa(cell), &ctx->last_value.i) && ctx->last_value.i >= 0 && ctx->last_value.i <= 0xfffffffe, 
                 cell, "While compressing %s expecting an integer in the range [0, 0xfffffffe] or a '.', but found: %.*s", 
@@ -922,7 +922,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_PGT)
         reconstruct_peek (vb, CTX(FORMAT_PID), pSTRa(pid)); // note: we can't use last_txt, because PS might be reconstructed before PID, as its peeked by GT
         
         // case: if this SPECIAL was used with PID='.'
-        if (pid_len == 1 && *pid == '.') 
+        if (str_is_1char (pid, '.')) 
             RECONSTRUCT1 ('.');
 
         // case: ht0 and ht1 are the same as in GT
@@ -960,7 +960,7 @@ static int32_t vcf_piz_luft_trans_complement_to_max_value (VBlockP vb, ContextP 
     
     if (validate_only) return true; 
 
-    vb->txt_data.len -= recon_len;
+    Ltxt -= recon_len;
     char f_str[50];
     sprintf (f_str, format, max_value - f);
     RECONSTRUCT (f_str, strlen (f_str)); // careful not to use bufprintf as it adds a \0 and we are required to translate in-place for all FORMAT fields
@@ -1290,7 +1290,7 @@ static bool vcf_piz_luft_switch_first_last (VBlockP vb, ContextP ctx, char *reco
 
     if (validate_only) return true;
     
-    vb->txt_data.len32 -= recon_len;
+    Ltxt -= recon_len;
     
     if (num_items==2 || num_items == 3) {
         RECONSTRUCT_SEP (items[n_items-1], item_lens[n_items-1], ',');

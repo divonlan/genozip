@@ -157,7 +157,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_PROBE_A)
             probe[probe_len - i - 1] = COMPLEM[(uint8_t)REFp (probe_pos + i)];
     }
 
-    vb->txt_data.len32 += probe_len;
+    Ltxt += probe_len;
 
     done:
     return NO_NEW_VALUE;

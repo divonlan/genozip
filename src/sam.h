@@ -130,9 +130,10 @@
 #pragma GENDICT SAM_TOP2BAM=DTYPE_FIELD=TOP2BAM
 #pragma GENDICT SAM_TOP2FQ=DTYPE_FIELD=TOP2FQ
 #pragma GENDICT SAM_TOP2FQEX=DTYPE_FIELD=TOP2FQEX
+#pragma GENDICT SAM_TOP2NONE=DTYPE_FIELD=TOP2NONE
 #pragma GENDICT SAM_SAG=DTYPE_FIELD=SAG      // PRIM and DEPN: the sag from which to copy data
 #pragma GENDICT SAM_SAALN=DTYPE_FIELD=SAALN  // DEPN: sags: the alignment within sag which is this line (not needed for PRIM, as the aln_i is always 0)
-#pragma GENDICT SAM_FQ_AUX=DTYPE_FIELD=MC_Z  // used for consuming some AUX fields in case of translation to FASTQ (name is "MC_Z" for as up to 14.0.25 it was called SAM_MC_Z)
+#pragma GENDICT SAM_FQ_AUX=DTYPE_FIELD=FQAUX // used for consuming some AUX fields in case of translation to FASTQ (name is "MC_Z" for as up to 14.0.25 it was called SAM_MC_Z)
 
 // Standard AUX fields - section 1.1 here: https://samtools.github.io/hts-specs/SAMtags.pdf
 #pragma GENDICT OPTION_AM_i=DTYPE_2=AM:i     // The smallest template-independent mapping quality in the template
@@ -519,12 +520,15 @@
 #pragma GENDICT OPTION_de_f=DTYPE_2=de:f     // Gap-compressed per-base sequence divergence
 #pragma GENDICT OPTION_rl_i=DTYPE_2=rl:i     // Length of query regions harboring repetitive seeds
 
+// RSEM tags (RNA-Seq transcript quantification program developed in 2009): https://github.com/bli25/RSEM_tutorial
+#pragma GENDICT OPTION_ZW_f=DTYPE_2=ZW:f     // posterior probability that this alignment is true
+
 #pragma GENDICT OPTION_tx_i=DTYPE_2=tx:i     // Genozip tag for taxonomy ID
 
 // backward compatability for decompressing files compressed with older versions that had aliases to these destinations (used by ctx_initialize_predefined_ctxs)
 #pragma GENDICT OPTION_CIGAR=DTYPE_2=@CIGAR  // For files compressed with 12.0.37 or older which had aliases MC:Z, OC:Z -> @CIGAR
-#pragma GENDICT SAM_E2_Z=DTYPE_FIELD=E2:Z    // This used to be the destination alias from OPTION_E2_Z 
-#pragma GENDICT SAM_U2_Z=DTYPE_FIELD=U2:Z    // This used to be the destination alias from OPTION_U2_Z 
+#pragma GENDICT SAM_E2_Z=DTYPE_FIELD=E2:Z    // This used to be the destination alias from OPTION_E2_Z (need to keep for back comp)
+#pragma GENDICT SAM_U2_Z=DTYPE_FIELD=U2:Z    // This used to be the destination alias from OPTION_U2_Z (need to keep for back comp)
 
 // Note: 32 bit to save memory (we haven't seen a scenario in which there are more than 4B primary alignments), but can trivially extend to 64b if needed.
 // if we ever want to extend to 64 bits, consider than number of PRIM groups is also limited to 1B unique CIGARs - see sam_seg_prim_add_sag_SA
@@ -550,7 +554,7 @@ extern void sam_zip_finalize (bool is_last_user_txt_file);
 extern bool sam_zip_dts_flag (int dts);
 extern void sam_zip_after_compute (VBlockP vb);
 extern void sam_zip_after_vbs (void);
-extern void sam_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeader *vb_header);
+extern void sam_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeaderP vb_header);
 extern void sam_sa_prim_finalize_ingest (void);
 
 // HEADER stuff
@@ -575,15 +579,16 @@ extern void sam_zip_generate_recon_plan (void);
 extern void sam_zip_init_vb (VBlockP vb);
 extern void sam_zip_after_compress (VBlockP vb);
 extern void sam_stats_reallocate (void);
-extern void sam_zip_genozip_header (SectionHeaderGenozipHeader *header);
+extern void sam_zip_genozip_header (SectionHeaderGenozipHeaderP header);
 extern void sam_deep_merge (VBlockP vb);
 
 // PIZ Stuff
-extern void sam_piz_genozip_header (const SectionHeaderGenozipHeader *header);
+extern void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header);
+extern bool sam_piz_initialize (void);
 extern void sam_piz_finalize (void);
 extern IS_SKIP (sam_piz_is_skip_section);
 extern bool sam_piz_maybe_reorder_lines (void);
-extern bool sam_piz_init_vb (VBlockP vb, const SectionHeaderVbHeader *header, uint32_t *txt_data_so_far_single_0_increment);
+extern bool sam_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment);
 extern void sam_piz_recon_init (VBlockP vb);
 extern void sam_piz_after_recon (VBlockP vb);
 extern void sam_piz_process_recon (VBlockP vb);
@@ -732,14 +737,13 @@ TRANSLATOR (SAM, BAM,   15, AUX_SELF,   sam_piz_sam2bam_AUX_SELF)   // transform
 TRANSLATOR (SAM, FASTQ, 16, SEQ,        sam_piz_sam2fastq_SEQ)      // reverse-complement the sequence if needed, and drop if "*"
 TRANSLATOR (SAM, FASTQ, 17, QUAL,       sam_piz_sam2fastq_QUAL)     // reverse the QUAL if reverse-complemented and drop fastq records with QUAL="*"
 TRANSLATOR (SAM, FASTQ, 18, FLAG,       sam_piz_sam2fastq_FLAG)     // emit 1 if (FLAGS & 0x40) or 2 of (FLAGS & 0x80)
-TRANSLATOR (SAM, BAM,   19, QNAME,      sam_piz_sam2bam_QNAME)      // v15: if --deep: add QNAME to vb->deep_ents in case of BAM
-#define NUM_SAM_TRANS   20 // including "none"
+#define NUM_SAM_TRANS   19 // including "none"
 
 #define SAM_TRANSLATORS { NULL /* none */, container_translate_I8, container_translate_U8, container_translate_LTEN_I16, \
                           container_translate_LTEN_U16, container_translate_LTEN_I32, container_translate_LTEN_U32, \
                           sam_piz_sam2bam_FLOAT, sam_piz_sam2bam_ARRAY_SELF, sam_piz_sam2bam_RNAME, sam_piz_sam2bam_POS, sam_piz_sam2bam_SEQ, \
                           sam_piz_sam2bam_QUAL, sam_piz_sam2bam_TLEN, sam_piz_sam2bam_AUX, sam_piz_sam2bam_AUX_SELF, \
-                          sam_piz_sam2fastq_SEQ, sam_piz_sam2fastq_QUAL, sam_piz_sam2fastq_FLAG, sam_piz_sam2bam_QNAME }
+                          sam_piz_sam2fastq_SEQ, sam_piz_sam2fastq_QUAL, sam_piz_sam2fastq_FLAG }
 
 TXTHEADER_TRANSLATOR (sam_header_bam2sam);
 TXTHEADER_TRANSLATOR (sam_header_sam2bam);

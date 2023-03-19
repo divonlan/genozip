@@ -16,6 +16,7 @@
 #include "seg.h"
 #include "gencomp.h"
 #include "digest.h"
+#include "deep.h"
 
 #define DTYPE_QNAME   DTYPE_1
 #define DTYPE_SAM_AUX DTYPE_2
@@ -70,6 +71,10 @@ typedef enum __attribute__ ((__packed__)) {
 } BamCigarOpType;
 
 #define BAM_CIGAR_OP_NONE ((BamCigarOp){ .op=BC_NONE })
+
+// In initial SAM specification verions, the max QNAME length was 255, and reduced to 254 in Aug 2015. 
+// We support 255 to support old SAM/BAM files too.
+#define SAM_MAX_QNAME_LEN 255 // also defined in file.h (compiler will shout if definitions disagree)
 
 extern const char cigar_op_to_char[16]; // BAM to SAM cigar op
 
@@ -143,6 +148,18 @@ typedef struct {
     uint32_t count;
 } QnameCount;
 
+// number of alignments that are non-deepable for each of these reasons
+typedef enum {      RSN_DEEPABLE, RSN_SECONDARY, RSN_SUPPLEMENTARY, RSN_NO_SEQ, RSN_MONOCHAR, NUM_DEEP_STATS_ZIP } DeepStatsZip; 
+#define RSN_NAMES { "Deepable",   "Secondary",   "Supplementary",   "No_SEQ",   "Monochar" }
+
+// number of bytes consumed by QNAME/SEQ/QUAL in z_file->deep_ents
+typedef enum {           QNAME_BYTES, SEQ_BYTES, QUAL_BYTES, NUM_DEEP_STATS_PIZ } DeepStatsPiz;
+#define DEEP_ENT_NAMES { "QNAME",     "SEQ",     "QUAL" }
+
+#if (NUM_DEEP_STATS_ZIP > NUM_DEEP_STATS) || (NUM_DEEP_STATS_PIZ > NUM_DEEP_STATS)
+#error NUM_DEEP_STATS is too small
+#endif
+
 typedef struct {
     // we use this construction so that the same fields (eg UR) are in same memory location and can be 
     // accessed through either mated_z_fields or solo_z_fields
@@ -177,7 +194,7 @@ typedef struct {
     uint8_t NM_len;                
     uint8_t MAPQ, MQ;              // MAPQ is 8 bit by BAM specification, and MQ is mate MAPQ by SAMtags specification
     bool no_seq             : 1;   // SEQ is missing for this line
-    bool monochar_seq       : 1;   // SEQ is entirely a single character ("base") 
+    bool is_deepable        : 1;   // True if this line is deepable: Not SEC/DUPP and SEQ exists and is not mono-char.
     bool no_qual            : 1;   // QUAL is missing this line
     bool dont_compress_QUAL : 1;   // don't compress QUAL in this line
     bool dont_compress_OQ   : 1;   // don't compress OQ in this line
@@ -195,7 +212,7 @@ typedef struct VBlockSAM {
 
     Buffer textual_seq;            // ZIP/PIZ: BAM: contains the textual SEQ (PIZ: used only in some cases)
     uint32_t longest_seq_len;      // ZIP/PIZ: largest seq_len of textual SEQ in this VB. Transmitted through SectionHeaderVbHeader.sam_longest_seq_len
-    uint32_t rans_compress_bound_longest_seq_len; // PIZ
+    uint32_t arith_compress_bound_longest_seq_len; // PIZ
 
     // current line
     bool seq_missing;              // ZIP/PIZ: current line: SAM "*" BAM: l_seq=0
@@ -203,7 +220,9 @@ typedef struct VBlockSAM {
     bool cigar_missing;            // ZIP/PIZ: current line: SAM "*" BAM: n cigar op=0
     bool qual_missing;             // ZIP/PIZ: current line: SAM "*" BAM: l_seq=0 or QUAL all 0xff (of if segconf.pysam_qual: 0xff followed by 0s
     bool RNEXT_is_equal;           // RNEXT represents the same contig as RNAME (though the word index may differ in SAM, or RNEXT might be "=")
-    
+    bool line_not_deepable;        // PIZ only
+    PizDeepSeq deep_seq;              // PIZ Deep: reconstruction instructions of SEQ, used only if cigar is perfect (eg 151M) and there is at most one mismatch vs reference
+
     uint32_t n_auxs;               // ZIP: AUX data of this line
     rom *auxs;                     
     uint32_t *aux_lens;
@@ -311,6 +330,9 @@ typedef struct VBlockSAM {
     // QUAL stuff
     bool qual_codec_no_longr;      // true if we can compress qual with CODEC_LONGR
     bool has_qual;                 // Seg: This VB has at least one line with non-missing qual
+
+    // stats
+    uint32_t deep_stats[NUM_DEEP_STATS]; // ZIP/PIZ: stats collection regarding Deep - one entry for each in DeepStatsZip/DeepStatsPiz
 } VBlockSAM;
 
 #define VB_SAM ((VBlockSAMP)vb)
@@ -526,6 +548,7 @@ extern void sam_cigar_analyze (VBlockSAMP vb, STRp(cigar), bool cigar_is_in_text
 extern void bam_seg_cigar_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, uint32_t *seq_consumed);
 extern void sam_cigar_binary_to_textual (VBlockSAMP vb, uint16_t n_cigar_op, const BamCigarOp *cigar, BufferP textual_cigar);
 extern bool sam_cigar_textual_to_binary (VBlockSAMP vb, STRp(cigar), BufferP binary_cigar);
+extern bool sam_is_cigar (STRp(cigar), bool allow_empty);
 extern void sam_seg_CIGAR (VBlockSAMP vb, ZipDataLineSAM *dl, uint32_t last_cigar_len, STRp(seq_data), STRp(qual_data), uint32_t add_bytes);
 extern void sam_cigar_seg_binary (VBlockSAMP vb, ZipDataLineSAM *dl, uint32_t l_seq, BamCigarOp *cigar, uint32_t n_cigar_op);
 extern void sam_cigar_seg_MC_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(mc), uint32_t add_bytes);
@@ -594,9 +617,8 @@ extern void sam_deep_zip_finalize (void);
 extern void sam_deep_set_QNAME_hash (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qname));
 extern void sam_deep_set_SEQ_hash (VBlockSAMP vb,ZipDataLineSAM *dl, STRp(textual_seq));
 extern void sam_deep_set_QUAL_hash (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual));
-extern void sam_piz_deep_init_vb (VBlockSAMP vb, const SectionHeaderVbHeader *header);
-extern void sam_piz_deep_add_seq (VBlockSAMP vb, STRp(seq));
-extern void sam_piz_deep_add_qual (VBlockSAMP vb, STRp(qual));
+extern void sam_piz_deep_initialize (void);
+extern void sam_piz_deep_init_vb (VBlockSAMP vb, ConstSectionHeaderVbHeaderP header);
 extern void sam_piz_deep_grab_deep_ents (VBlockSAMP vb);
 
 #define SA_QUAL_DISPLAY_LEN 12
@@ -699,8 +721,6 @@ extern void sam_seg_mc_i (VBlockSAMP vb, int64_t mc, unsigned add_bytes);
 // -----------------------------------
 static inline bool sam_seg_has_sag_by_SA (VBlockSAMP vb)    { return  IS_SAG_SA && ((sam_is_depn_vb && vb->sa_aln) || sam_is_prim_vb); }
 static inline bool sam_seg_has_sag_by_nonSA (VBlockSAMP vb) { return !IS_SAG_SA && ((sam_is_depn_vb && vb->sag)    || sam_is_prim_vb); }
-
-//#define QNAME_HASH(qname,qname_len,is_last) ((crc32 (0, (qname), (qname_len)) & 0xfffffffe) | is_last) // note: adler32 is not good for qnames - since qnames in a SAM tend to be similar, many can end of up with the same hash and adler32 will use only a tiny bit of its 32b space
 
 extern void sam_sag_zip_init_vb (VBlockP vb);
 extern void sam_seg_gc_initialize (VBlockSAMP vb);

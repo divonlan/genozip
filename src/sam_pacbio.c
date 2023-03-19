@@ -45,7 +45,7 @@ bool sam_seg_pacbio_qual (VBlockSAMP vb, STRp(qual)/*textual*/, unsigned add_byt
 
     if (dq_len != qual_len || iq_len != qual_len || sq_len != qual_len) return false;
 
-    buf_alloc (VB, &diff_ctx->local, qual_len, MIN_(vb->lines.len * qual_len, vb->txt_data.len / 5/*SEQ+QUAL+dq+iq+sq*/), 
+    buf_alloc (VB, &diff_ctx->local, qual_len, MIN_(vb->lines.len * qual_len, Ltxt / 5/*SEQ+QUAL+dq+iq+sq*/), 
                char, CTX_GROWTH, "local");
 
     char *next = BAFTc(diff_ctx->local);
@@ -94,7 +94,7 @@ void sam_recon_pacbio_qual (VBlockSAMP vb, ContextP ctx, bool reconstruct)
         il += 3;
     }
 
-    vb->txt_data.len32 += vb->seq_len;
+    Ltxt += vb->seq_len;
     diff_ctx->next_local += vb->seq_len;
 }
 
@@ -177,7 +177,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_iq_sq_dq)
         for (uint32_t i=0; i < seq_len; i++, src+=3, dst++) 
             *dst = -src[2];
 
-    vb->txt_data.len += vb->seq_len;    
+    Ltxt += vb->seq_len;    
     ctx->next_local  += vb->seq_len;
 
 done:

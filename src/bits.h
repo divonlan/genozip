@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-//   bits.c
+//   bits.h
 //   Copyright (C) 2020-2023 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
@@ -7,7 +7,7 @@
 //   and subject to penalties specified in the license.
 //   Copyright claimed on additions and modifications vs public domain.
 //
-// a module for handling arrays of 2-bit elements, partially based on Bits, a public domain code located in https://github.com/noporpoise/Bits/. 
+// a module for handling arrays of 2-bit elements, partially based on Bits, a public domain code located in https://github.com/noporpoise/BitArray/. 
 // The unmodified license of Bits is as follows:
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> 
 // Statement of Purpose
@@ -159,7 +159,7 @@ typedef uint8_t word_offset_t; // Offset within a 64 bit word
 //
 
 typedef enum __attribute__ ((__packed__)) { 
-    BITARR_UNALLOCATED=0, BITARR_REGULAR, BITARR_OVERLAY, BITARR_MMAP, BITARR_STANDALONE 
+    BITS_UNALLOCATED=0, BITS_REGULAR, BITS_OVERLAY, BITS_MMAP, BITS_STANDALONE 
 } BitsType; // must be identical to BufferType
 
 typedef struct Bits
@@ -169,7 +169,7 @@ typedef struct Bits
     uint64_t nbits;      // maps to Buffer->nbits
     uint64_t nwords;     // maps to Buffer->len  ; round_up (nbits / 64)
     uint64_t type  : 3;  // maps to Buffer->type
-    uint64_t other : 61; // actually used if this is a Buffer
+    uint64_t other : 61; // used only if this is a Buffer
 } Bits;
 
 #define bits_in_top_word(nbits) ((nbits) ? bitset64_idx((nbits) - 1) + 1 : 0)
@@ -261,12 +261,16 @@ extern void bits_clear_bits(BitsP bits, size_t n, ...);
 // Note: variable args are of type unsigned int
 extern void bits_toggle_bits(BitsP bits, size_t n, ...);
 
+// Reverse the whole array or part of it
+extern void bits_reverse (BitsP bits);
+extern void bits_reverse_region (BitsP bits, uint64_t start, uint64_t len);
+
 //
 // Set, clear and toggle all bits in a region
 //
 
 // Set all the bits in a region
-extern void bits_set_region(BitsP bits, uint64_t start, uint64_t len);
+extern void bits_set_region (BitsP bits, uint64_t start, uint64_t len);
 
 // Clear all the bits in a region
 #define bits_clear_region(bits,start,len) bits_clear_region_do (bits, start, len, __FUNCLINE)
@@ -328,11 +332,11 @@ extern uint64_t bits_get_wordn(ConstBitsP bits, uint64_t start, int n);
 // Set 64 bits at once from a particular start position
 // Doesn't extend bit array. However it is safe to TRY to set bits beyond the
 // end of the array, as long as: `start` is < `bits_length(arr)`
-extern void bits_set_word64(BitsP bits, uint64_t start, uint64_t word);
-extern void bits_set_word32(BitsP bits, uint64_t start, uint32_t word);
-extern void bits_set_word16(BitsP bits, uint64_t start, uint16_t word);
-extern void bits_set_word8(BitsP bits, uint64_t start, uint8_t byte);
-extern void bits_set_wordn(BitsP bits, uint64_t start, uint64_t word, int n);
+extern void bits_set_word64 (BitsP bits, uint64_t start, uint64_t word);
+extern void bits_set_word32 (BitsP bits, uint64_t start, uint32_t word);
+extern void bits_set_word16 (BitsP bits, uint64_t start, uint16_t word);
+extern void bits_set_word8 (BitsP bits, uint64_t start, uint8_t byte);
+extern void bits_set_wordn (BitsP bits, uint64_t start, uint64_t word, int n);
 
 //
 // Number of bits set
@@ -341,11 +345,11 @@ extern void bits_set_wordn(BitsP bits, uint64_t start, uint64_t word, int n);
 // Get the number of bits set (hamming weight)
 extern bool bits_is_fully_set (ConstBitsP bits);
 extern bool bits_is_fully_clear (ConstBitsP bits);
-extern uint64_t bits_num_set_bits(ConstBitsP bits);
-extern uint64_t bits_num_set_bits_region(ConstBitsP bits, uint64_t start, uint64_t length); // added by divon
+extern uint64_t bits_num_set_bits (ConstBitsP bits);
+extern uint64_t bits_num_set_bits_region (ConstBitsP bits, uint64_t start, uint64_t length); // added by divon
 
 // Get the number of bits not set (length - hamming weight)
-extern uint64_t bits_num_clear_bits(ConstBitsP bits);
+extern uint64_t bits_num_clear_bits (ConstBitsP bits);
 
 //
 // Find indices of set/clear bits
@@ -370,15 +374,15 @@ extern bool bits_find_last_clear_bit (ConstBitsP bits, uint64_t *result);
 //
 
 // Construct a Bits from a string.
-extern void bits_from_str(BitsP bits, rom bitstr);
+extern void bits_from_str (BitsP bits, rom bitstr);
 
 // Construct a Bits from a substring with given on and off characters.
-extern void bits_from_substr(BitsP bits, uint64_t offset, rom str, size_t len, rom on, rom off, char left_to_right);
+extern void bits_from_substr (BitsP bits, uint64_t offset, rom str, size_t len, rom on, rom off, char left_to_right);
 
 // Takes a char array to write to.  `str` must be bits->nbits+1 in
 // length. Terminates string with '\0'
-extern char* bits_to_str(ConstBitsP bits, char* str);
-extern char* bits_to_str_rev(ConstBitsP bits, char* str);
+extern char* bits_to_str (ConstBitsP bits, char* str);
+extern char* bits_to_str_rev (ConstBitsP bits, char* str);
 
 // Get a string representations for a given region, using given on/off characters.
 extern char *bits_to_substr (ConstBitsP bits, uint64_t start, uint64_t length, char *str);

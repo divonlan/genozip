@@ -177,7 +177,7 @@ uint32_t str_int_ex (int64_t n, char *str /* out */, bool add_nul_terminator)
     }
 
     if (add_nul_terminator) str[len] = '\0'; // string terminator
-    return len;
+    return len; // excluding the \0
 }
 
 StrText str_int_s (int64_t n)

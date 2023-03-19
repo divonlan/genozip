@@ -65,6 +65,14 @@ void vcf_header_piz_init (void)
     // note: we don't re-initialize vcf_num_displayed_samples - this is calculated only once
 }
 
+void vcf_header_finalize (void)
+{
+    vcf_num_samples = 0;
+
+    buf_destroy (vcf_field_name_line);
+    buf_destroy (vcf_header_liftover_dst_contigs);
+}
+
 static void vcf_header_subset_samples (BufferP vcf_header);
 static bool vcf_header_set_globals (rom filename, BufferP vcf_header, FailType soft_fail);
 static void vcf_header_trim_field_name_line (BufferP vcf_header);
@@ -515,7 +523,7 @@ static void vcf_header_zip_add_missing_tags (BufferP txt_header)
     }
 
     // add back the field name (#CHROM) line
-    buf_add_more (evb, txt_header, STRb(vcf_field_name_line), "txt_data");
+    buf_add_buf (evb, txt_header, &vcf_field_name_line, char, "txt_data");
 }
 
 // ZIP with --chain: add liftover_contig, liftover_reference, chain, dual_coordinates keys
@@ -633,7 +641,7 @@ static void vcf_header_add_FORMAT_lines (BufferP txt_header)
     }
 
     // add back the field name (#CHROM) line
-    buf_add_more (evb, txt_header, STRb(vcf_field_name_line), "txt_data");
+    buf_add_buf (evb, txt_header, &vcf_field_name_line, char, "txt_data");
 }
 
 static void vcf_add_all_ref_contigs_to_header (BufferP txt_header)
@@ -651,7 +659,7 @@ static void vcf_add_all_ref_contigs_to_header (BufferP txt_header)
     }
 
     // add back the field name (#CHROM) line
-    buf_add_more (evb, txt_header, STRb(vcf_field_name_line), "txt_data");
+    buf_add_buf (evb, txt_header, &vcf_field_name_line, char, "txt_data");
 }
 
 static bool vcf_header_build_stats_programs (STRp(line), void *unused1, void *unused2, unsigned unused3)
@@ -739,7 +747,7 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
         // write both PRIM_ONLY and LUFT_ONLY txt headers (they are the same)
         ASSERTNOTINUSE (evb->scratch);
         buf_add_more (evb, &evb->scratch, B1STc(*txt_header), fileformat_line_len, "scratch"); // add the ##fileformat line, if there is one
-        buf_add_more (evb, &evb->scratch, STRa(chrom_line), "scratch"); // add the #CHROM line
+        buf_add_moreS (evb, &evb->scratch, chrom_line, "scratch"); // add the #CHROM line
  
         txtheader_compress (&evb->scratch, evb->scratch.len, DIGEST_NONE, false, VCF_COMP_PRIM_ONLY); 
         txtheader_compress (&evb->scratch, evb->scratch.len, DIGEST_NONE, false, VCF_COMP_LUFT_ONLY);

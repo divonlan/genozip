@@ -22,6 +22,7 @@
 #include "fastq.h"
 #include "aligner.h"
 #include "profiler.h"
+#include "contigs.h"
 
 #define COMPLIMENT(b) (3-(b))
 
@@ -82,7 +83,7 @@ Bits aligner_seq_to_bitmap (rom seq, uint64_t seq_len,
     Bits seq_bits = { .nbits  = seq_len * 2, 
                       .nwords = roundup_bits2words64(seq_len * 2), 
                       .words  = bitmap_words,
-                      .type   = BITARR_REGULAR };
+                      .type   = BITS_REGULAR };
 
     if (seq_is_all_actg) *seq_is_all_actg = true; // starting optimistic
 
@@ -106,8 +107,8 @@ Bits aligner_seq_to_bitmap (rom seq, uint64_t seq_len,
 // returns false if no match found.
 // note: matches that imply a negative GPOS (i.e. their beginning is aligned to before the start of the genome), aren't consisdered
 static inline PosType64 aligner_best_match (VBlockP vb, STRp(seq), PosType64 pair_gpos,
-                                          ConstBitsP genome, ConstBitsP emoneg, PosType64 genome_nbases,
-                                          bool *is_forward, bool *is_all_ref) // out
+                                            ConstBitsP genome, ConstBitsP emoneg, PosType64 genome_nbases,
+                                            bool *is_forward, bool *is_all_ref) // out
 {
     START_TIMER;
 
@@ -282,10 +283,13 @@ MappingType aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq), bool no
         BNXT32 (gpos_ctx->local) = (uint32_t)gpos;
 
     // lock region of reference to protect is_set
-    RefLock lock = (IS_REF_EXT_STORE) ? ref_lock (gref, gpos, seq_len) : REFLOCK_NONE;
-
-    if (IS_REF_EXT_STORE) 
+    if (IS_REF_EXT_STORE) {
+        RefLock lock = ref_lock (gref, gpos, seq_len);
+     
         ref_set_genome_is_used (gref, gpos, seq_len); // this region of the reference is used (in case we want to store it with REF_EXT_STORE)
+     
+        ref_unlock (gref, &lock);
+    }
 
     // shortcut if we have a full reference match
     if (is_all_ref) {
@@ -302,15 +306,15 @@ MappingType aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq), bool no
 
     uint64_t next_bit = bitmap_ctx->next_local; // copy to automatic variable (optimized to a register) for performace
     for (uint32_t i=0; i < seq_len; i++) {
-                
-        // case our seq is identical to the reference at this site
-        char seq_base = is_forward ? seq[i] : complement[(uint8_t)seq[i]];
+
+        char seq_base = is_forward?seq[i] : seq[i]=='A'?'T' : seq[i]=='T'?'A' : seq[i]=='C'?'G' : seq[i]=='G'?'C' : 0;  
         
         PosType64 ref_i = gpos + (is_forward ? i : seq_len-1-i);
         
         uint8_t ref_base_2bit = bits_get2 (genome, ref_i * 2);
         char ref_base = acgt_decode(ref_base_2bit);
 
+        // case our seq is identical to the reference at this site
         if (seq_base == ref_base) 
             bits_set (bitmap, next_bit++); 
 
@@ -323,14 +327,15 @@ MappingType aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq), bool no
     bitmap_ctx->next_local = next_bit;
 
 done:
-    ref_unlock (gref, &lock);
-
     COPY_TIMER (aligner_seg_seq);
     return is_all_ref ? MAPPING_PERFECT : MAPPING_ALIGNED; // successful
 }
 
 // PIZ: SEQ reconstruction - only for reads compressed with the aligner
-void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len, bool is_pair_2, bool is_perfect_alignment, ReconType reconstruct)
+void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len, bool is_pair_2, bool is_perfect_alignment, ReconType reconstruct,
+                              char *first_mismatch_base,       // optional out: caller should initialize to 0
+                              uint32_t *first_mismatch_offset, // optional out
+                              uint32_t *num_mismatches)        // optional out: caller should initialize to 0
 {
     START_TIMER;
 
@@ -348,7 +353,7 @@ void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len,
 
         // first file of a pair ("pair 1") or a non-pair fastq or sam
         if (!is_pair_2) {
-            gpos = NEXTLOCAL (uint32_t, gpos_ctx);
+            gpos = gpos_ctx->last_value.i = NEXTLOCAL (uint32_t, gpos_ctx);
             is_forward = NEXTLOCALBIT (strand_ctx);        
         }
 
@@ -389,7 +394,7 @@ void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len,
                 for (uint32_t i=0; i < seq_len; i++) 
                     *next++ = acgt_decode(BASE_NEXT);                    
                 
-                vb->txt_data.len32 += seq_len;
+                Ltxt += seq_len;
             }
         }
 
@@ -403,6 +408,14 @@ void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len,
                     ContextP ctx = VER(14) ? (seqmis_ctx + (is_forward ? base : (3 - base))) // if is_forward, ref is revcomped - we complement ref[i] back to its original
                                            : nonref_ctx;
                     RECONSTRUCT_NEXT (ctx, 1); 
+
+                    if (first_mismatch_base) {
+                        if (! *first_mismatch_base) {
+                            *first_mismatch_base   = *BLSTtxt;
+                            *first_mismatch_offset = i;
+                        }
+                        (*num_mismatches)++;
+                    }
                 }
             }
         }

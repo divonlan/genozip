@@ -20,7 +20,7 @@ extern bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additio
 extern void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname));
 
 extern void qname_zip_initialize (void);
-extern void qname_seg_initialize (VBlockP vb, QType q,  int pairing);
+extern void qname_seg_initialize (VBlockP vb, QType q, Did st_did_i, int pairing);
 
 typedef enum { QTR_SUCCESS, QTR_QNAME_LEN_0, QTR_FIXED_LEN_MISMATCH, QTR_WRONG_Q, QTR_CONTAINER_MISMATCH, QTR_BAD_INTEGER, QTR_BAD_CHARS, QTR_BAD_NUMERIC, QTR_BAD_HEX, QTR_TECH_MISMATCH, NUM_QTRs } QnameTestResult;
 #define QTR_NAME             { "SUCCESS",   "QNAME_LEN=0",   "FIXED_LEN_MISMATCH",   "WRONG_Q",   "CONTAINER_MISMATCH",   "BAD_INTEGER",   "BAD_CHARS",   "BAD_NUMERIC",   "BAD_HEX",   "TECH_MISMATCH" }

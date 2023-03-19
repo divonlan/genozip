@@ -59,13 +59,13 @@ void fastq_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(seq), bool deep)
     if (vb->comp_i == FQ_COMP_R2) // note: cannot happen in --deep
         fastq_get_pair_1_gpos_strand (vb, &pair_gpos, &pair_is_forward); // advance iterators even if we don't need the pair data
 
-    // note: monobase reads don't work well with deep - too much contention. In illumina, we observe many monobase N reads,
-    // and in for R2, also many monobase G reads. These seem to be an artifact of the technology rather than true sequence values.
-    if (dl->monobase) {
+    // note: monochar reads don't work well with deep - too much contention. In illumina, we observe many monochar N reads,
+    // and in for R2, also many monochar G reads. These seem to be an artifact of the technology rather than true sequence values.
+    if (dl->monochar) {
         SNIPi3 (SNIP_SPECIAL, FASTQ_SPECIAL_unaligned_SEQ, seq[0], seq_len_by_qname (vb, seq_len) ? 0 : seq_len);
         seg_by_ctx (VB, STRa(snip), bitmap_ctx, 0); 
         nonref_ctx->txt_len += seq_len; // account for the txt data in NONREF        
-// printf ("xxx ZIP: monobase: %s %c\n", LN_NAME, seq[0]);
+// printf ("xxx ZIP: monochar: %s %c\n", LN_NAME, seq[0]);
         goto done;
     }
             
@@ -87,7 +87,7 @@ void fastq_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(seq), bool deep)
     else {
         if (flag.show_aligner && !segconf.running) iprintf ("%s: unaligned\n", LN_NAME);
 
-        buf_alloc (VB, &nonref_ctx->local, seq_len + 3, vb->txt_data.len / 64, char, CTX_GROWTH, "contexts->local"); 
+        buf_alloc (VB, &nonref_ctx->local, seq_len + 3, Ltxt / 64, char, CTX_GROWTH, "contexts->local"); 
         buf_add (&nonref_ctx->local, seq, seq_len);
 
         // case: we don't need to consume pair-1 gpos (bc we are pair-1, or pair-1 was not aligned): look up from NONREF
@@ -210,7 +210,7 @@ static void fastq_update_coverage_aligned (VBlockFASTQP vb)
     
     ASSPIZ0 (gpos != NO_GPOS, "expecting a GPOS, because sequence is aligned");
 
-    WordIndex ref_index = ref_contig_get_by_gpos (gref, gpos, NULL);
+    WordIndex ref_index = ref_contig_get_by_gpos (gref, gpos, 0, NULL);
     ASSPIZ0 (ref_index != WORD_INDEX_NONE, "expecting ref_index, because sequence is aligned");
 
     if (flag.show_coverage || flag.show_sex)
@@ -245,7 +245,7 @@ void fastq_recon_aligned_SEQ (VBlockP vb_, ContextP bitmap_ctx, STRp(seq_len_str
 
     // normal reconstruction
     else 
-        aligner_reconstruct_seq (vb_, bitmap_ctx, vb->seq_len, vb->comp_i == FQ_COMP_R2, perfect_alignment, reconstruct);
+        aligner_reconstruct_seq (vb_, bitmap_ctx, vb->seq_len, vb->comp_i == FQ_COMP_R2, perfect_alignment, reconstruct, NULL, NULL, NULL);
 }
 
 // PIZ: SEQ reconstruction - in case of unaligned sequence 
@@ -270,9 +270,9 @@ SPECIAL_RECONSTRUCTOR (fastq_special_unaligned_SEQ)
     else {
         if (flag.show_aligner) iprintf ("%s: unaligned\n", LN_NAME);
         
-        char monobase = 0;
+        char monochar = 0;
         if (VER(15)) { 
-            if (snip[0] != ' ') monobase = snip[0];
+            if (snip[0] != ' ') monochar = snip[0];
             STRinc (snip);
         }
         
@@ -285,12 +285,12 @@ SPECIAL_RECONSTRUCTOR (fastq_special_unaligned_SEQ)
         if (flag.qual_only) {}
 
         // case: take seq_len from DESC item with length=
-        else if (!monobase) 
+        else if (!monochar) 
             reconstruct_from_local_sequence (vb, nonref_ctx, 0, 0, reconstruct);
 
         else {
-            memset (BAFTtxt, monobase, vb->seq_len);
-            vb->txt_data.len32 += vb->seq_len;
+            memset (BAFTtxt, monochar, vb->seq_len);
+            Ltxt += vb->seq_len;
         }
     }
 

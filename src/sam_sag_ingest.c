@@ -44,10 +44,10 @@ static void sam_sa_create_group_index (void)
     // Note: if SAGroup is 32 bit, verify grp_len 
     ASSERT (sizeof(SAGroup)==8 || grp_len <= 0xffffffffULL, "sag_grps.len=%"PRIu64" exceeds 32 bits - need to extend index to be 64 bits", z_file->sag_grps.len);
     
-    buf_alloc (evb, &z_file->sag_gps_index, grp_len, 0, sizeof (SAGroupIndexEntry), 1, "z_file->sag_gps_index");
-    z_file->sag_gps_index.len = grp_len;
+    buf_alloc (evb, &z_file->sag_grps_index, grp_len, 0, sizeof (SAGroupIndexEntry), 1, "z_file->sag_grps_index");
+    z_file->sag_grps_index.len = grp_len;
 
-    ARRAY (SAGroupIndexEntry, index, z_file->sag_gps_index);
+    ARRAY (SAGroupIndexEntry, index, z_file->sag_grps_index);
     for (uint64_t i=0; i < grp_len; i++) {
         rom grp_qname = GRP_QNAME(&grp[i]);
         index[i] = (SAGroupIndexEntry){ .grp_i = i, .qname_hash = QNAME_HASH (grp_qname, grp[i].qname_len, grp[i].is_last) };
@@ -183,8 +183,9 @@ static inline ZWord copy_solo (VBlockSAMP vb, char **next, TxtWord txtw, bool ch
         return (ZWord){ .index = start - txtw.len, .len = txtw.len };
     
     else {
-        memcpy (*next, Btxt(txtw.index), txtw.len); 
-        *next += txtw.len; 
+        //xxx memcpy (*next, Btxt(txtw.index), txtw.len); 
+        // *next += txtw.len; 
+        *next = mempcpy (*next, Btxt(txtw.index), txtw.len); 
         return (ZWord){ .index = start, .len = txtw.len };
     }
 }

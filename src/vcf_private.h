@@ -335,7 +335,7 @@ extern void vcf_info_zip_initialize (void);
 extern void vcf_info_seg_initialize (VBlockVCFP vb);
 extern void vcf_piz_finalize_DP_by_DP (VBlockVCFP vb);
 
-extern void vcf_seg_info_subfields (VBlockVCFP vb, rom info_str, unsigned info_len);
+extern void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info));
 extern void vcf_finalize_seg_info (VBlockVCFP vb);
 
 // Refalt stuff
@@ -400,7 +400,6 @@ extern unsigned vcf_tags_rename (VBlockVCFP vb, unsigned num_tags, const Context
 extern void vcf_tags_finalize_tags_from_vcf_header (void);
 extern bool vcf_tags_add_attr_from_header (DictIdType dtype, STRp(tag_name), RenameAttr attr, STRp(number), STRp (type), STRp (rendalg), pSTRp(dest), bool recursive);
 extern Tag *vcf_tags_get_next_missing_tag (Tag *tag);
-extern void vcf_header_finalize (void);
 
 // Liftover Zip
 extern void vcf_lo_zip_initialize (void);

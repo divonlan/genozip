@@ -228,7 +228,7 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual_data)/*always te
     if (flag.optimize_QUAL && !vb->qual_missing) 
         optimize_phred_quality_string ((char*)STRa(qual_data));
 
-    if ((flag.deep || flag.debug_deep == 2) && !segconf.running)
+    if ((flag.deep || flag.show_deep == 2) && !segconf.running)
         sam_deep_set_QUAL_hash (vb, dl, STRa(qual_data));
 
     // note: if prim (of either type) has no QUAL, we don't attempt to diff - bc piz wouldn't be able to know whether 
@@ -383,7 +383,7 @@ static void sam_piz_QUAL_undiff_vs_primary (VBlockSAMP vb, STRp (prim_qual), boo
         for (uint32_t i=0; i < overlap_len; i++) 
             qual[i] = prim_qual[i] + diff[i] + bam_bump;
 
-        vb->txt_data.len32 += overlap_len;
+        Ltxt += overlap_len;
     }
 
     else if (overlap_len && xstrand && reconstruct) {
@@ -397,7 +397,7 @@ static void sam_piz_QUAL_undiff_vs_primary (VBlockSAMP vb, STRp (prim_qual), boo
         for (int32_t/*signed*/ i=0; i < overlap_len; i++) 
             qual[i] = prim_qual[-i] + diff[i] + bam_bump;
 
-        vb->txt_data.len32 += overlap_len;
+        Ltxt += overlap_len;
     }
 
     if (flank[1]) {
@@ -529,8 +529,8 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_QUAL)
     START_TIMER;
 
     // before translating - add to Deep if needed
-    if (flag.deep && IS_DEEPABLE (last_flags))
-        sam_piz_deep_add_qual (VB_SAM, STRa(recon));
+    if (flag.deep) 
+        sam_piz_con_item_cb (vb, &(ContainerItem){ .dict_id = ctx->dict_id }, STRa(recon));
 
     // if QUAL is "*" there are two options:
     // 1. If l_seq is 0, the QUAL is empty
@@ -540,17 +540,17 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_QUAL)
         uint32_t l_seq = LTEN32 (alignment->l_seq);
         
         if (!l_seq) // option 1
-            vb->txt_data.len--;
+            Ltxt--;
         
         else if (VB_SAM->qual_missing && !segconf.pysam_qual) {  // option 2 - missing QUAL according to SAM spec
             memset (BLSTtxt, 0xff, l_seq); // override the '*' and l_seq-1 more
-            vb->txt_data.len += l_seq - 1;
+            Ltxt += l_seq - 1;
         }
 
         else {  // option 3 - missing QUAL as created by pysam (non-compliant with SAM spec)
             *BLSTtxt = 0xff;
             memset (BAFTtxt, 0, l_seq-1); // filler is 0 instead of 0xff as in SAM SPEC
-            vb->txt_data.len += l_seq - 1;
+            Ltxt += l_seq - 1;
         }
     }
     

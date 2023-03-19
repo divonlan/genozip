@@ -108,6 +108,7 @@ extern void fastq_zip_initialize (void);
 extern void fastq_segconf_set_r1_or_r2 (void);
 extern void fastq_zip_finalize (bool is_last_user_txt_file);
 extern void fastq_zip_init_vb (VBlockP vb);
+extern void fastq_zip_after_compute (VBlockP vb);
 extern bool fastq_zip_dts_flag (int dts);
 COMPRESSOR_CALLBACK (fastq_zip_seq);
 COMPRESSOR_CALLBACK(fastq_zip_qual); // used by codec_longr_compress
@@ -124,7 +125,7 @@ extern void fastq_seg_pair2_gpos (VBlockP vb, PosType64 pair1_pos, PosType64 pai
 extern void fastq_piz_process_recon (VBlockP vb);
 extern bool fastq_piz_is_paired (void);
 extern bool fastq_piz_maybe_reorder_lines (void);
-extern bool fastq_piz_init_vb (VBlockP vb, const SectionHeaderVbHeader *header, uint32_t *txt_data_so_far_single_0_increment);
+extern bool fastq_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment);
 CONTAINER_FILTER_FUNC (fastq_piz_filter);
 extern IS_SKIP (fastq_piz_is_skip_section);
 extern void fastq_recon_aligned_SEQ (VBlockP vb, ContextP bitmap_ctx, STRp(seq_len_str), ReconType reconstruct);
@@ -141,8 +142,8 @@ extern void fastq_reset_line (VBlockP vb);
 extern bool fastq_read_pair_1_data (VBlockP vb, uint32_t pair_vb_i, bool must_have);
 
 // FASTQ-specific fields in genozip header
-extern void fastq_zip_genozip_header (SectionHeaderGenozipHeader *header);
-extern void fastq_piz_genozip_header (const SectionHeaderGenozipHeader *header);
+extern void fastq_zip_genozip_header (SectionHeaderGenozipHeaderP header);
+extern void fastq_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header);
 
 #define FASTQ_LOCAL_GET_LINE_CALLBACKS           \
     { DT_FASTQ, _FASTQ_QUAL,   fastq_zip_qual }, 

@@ -67,8 +67,9 @@ static SRes codec_lzma_data_in_callback (const ISeqInStream *p, void *buf, size_
             
     uint32_t bytes_served_1 = MIN_(instream->avail_in_1, *size);
     if (bytes_served_1) {
-        memcpy (buf, instream->next_in_1, bytes_served_1);
-        instream->next_in_1  += bytes_served_1;
+        //xxx memcpy (buf, instream->next_in_1, bytes_served_1);
+        // instream->next_in_1  += bytes_served_1;
+        instream->next_in_1 = mempcpy (buf, instream->next_in_1, bytes_served_1);
         instream->avail_in_1 -= bytes_served_1;
     }
 
@@ -83,10 +84,11 @@ static size_t codec_lzma_data_out_callback (const ISeqOutStream *p, const void *
     ISeqOutStream *outstream = (ISeqOutStream *)p; // discard the const
 
     uint32_t bytes_written = MIN_(outstream->avail_out, (uint32_t)size);
-    memcpy (outstream->next_out, buf, bytes_written);
-
+    
+    //xxx memcpy (outstream->next_out, buf, bytes_written);
+    // outstream->next_out  += bytes_written;
+    outstream->next_out = mempcpy (outstream->next_out, buf, bytes_written);
     outstream->avail_out -= bytes_written;
-    outstream->next_out  += bytes_written;
 
     return (size_t)bytes_written;
 }

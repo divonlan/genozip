@@ -27,20 +27,21 @@ const DtTranslation dt_get_translation (VBlockP vb) // vb=NULL relates to the tx
 
     // exception: no SAM->FASTQ translation if deep
     for (unsigned i=0; i < ARRAY_LEN (translations); i++) {
-/*if (i==ARRAY_LEN (translations)-1) { printf ("translations[i].src_z_non_bin_dt=%u z_dt=%u " 
-            "translations[i].src_z_is_binary=%u i_am_binary=%u "
-            "translations[i].dst_txt_dt=%u  flag.out_dt=%u "
-            "translations[i].is_translation=%u *translations[i].is_translation=%u\n", 
-            translations[i].src_z_non_bin_dt , z_dt ,
-            translations[i].src_z_is_binary  , i_am_binary ,
-            translations[i].dst_txt_dt       , flag.out_dt ,
-            translations[i].is_translation , *translations[i].is_translation); exit_ok();}
-*/
+        // if (vb->vblock_i == 1)
+        //     printf ("translations[i].src_z_non_bin_dt=%u z_dt=%u " 
+        //             "translations[i].src_z_is_binary=%u i_am_binary=%u "
+        //             "translations[i].dst_txt_dt=%u  flag.out_dt=%u "
+        //             "translations[i].is_translation=%u *translations[i].is_translation=%u\n", 
+        //             translations[i].src_z_non_bin_dt , z_dt ,
+        //             translations[i].src_z_is_binary  , i_am_binary ,
+        //             translations[i].dst_txt_dt       , flag.out_dt ,
+        //             translations[i].is_translation , *translations[i].is_translation); 
+
         if (translations[i].src_z_non_bin_dt == z_dt &&
-            translations[i].src_z_is_binary  == i_am_binary &&
+            (translations[i].src_z_is_binary == i_am_binary || translations[i].src_z_is_binary == unknown) &&
             translations[i].dst_txt_dt       == flag.out_dt &&
             (!translations[i].is_translation || translations[i].is_translation (vb))) // if non-NULL, this flag determines if it is a translation
-            return translations[i + flag.extended_translation]; // get next one if extended
+            return translations[i + flag.extended_translation]; // get one of the following entries if extended
     }
 
     // translation not found - return a non-translation "translation"

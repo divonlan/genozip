@@ -206,6 +206,8 @@ static inline ContextP ctx_get_existing_ctx_do (VBlockP vb, DictId dict_id)  // 
 }
 #define ECTX(dict_id) ctx_get_existing_ctx_do ((VBlockP)(vb), (dict_id))
 
+extern ContextP ctx_get_existing_zctx (DictId dict_id);
+
 extern ContextP ctx_get_zctx_from_vctx (ConstContextP vctx, bool create_if_missing);
 
 extern ContextP ctx_add_new_zf_ctx_from_txtheader (STRp(tag_name), DictId dict_id, TranslatorId luft_translator);
@@ -235,8 +237,11 @@ extern rom ctx_snip_from_zf_nodes (ConstContextP zctx, WordIndex node_index, pST
 extern WordIndex ctx_get_ol_node_index_by_snip (VBlockP vb, ContextP ctx, STRp(snip)); 
 
 extern void ctx_initialize_predefined_ctxs (ContextArray contexts, DataType dt, DictIdtoDidMap d2d_map, Did *num_contexts);
+extern void ctx_zip_init_promiscuous (ContextP ctx);
+extern void ctx_zip_z_data_exist (ContextP ctx);
 
 extern void ctx_shorten_unused_dict_words (Did did_i);
+extern void ctx_piz_initialize_zctxs (void);
 extern void ctx_read_all_counts (void);
 extern void ctx_compress_counts (void);
 extern rom ctx_get_snip_with_largest_count (Did did_i, int64_t *count);
@@ -379,10 +384,11 @@ extern void ctx_consolidate_stats_(VBlockP vb, Did parent, unsigned num_deps, Co
 
 extern rom dyn_type_name (DynType dyn_type);
 
-extern void ctx_foreach_buffer(ContextP ctx, bool set_name, void (*func)(BufferP buf, FUNCLINE));
-
 extern SORTER (sort_by_dict_id);
 
 #define for_zctx for (ContextP zctx=ZCTX(0); zctx < ZCTX(z_file->num_contexts); zctx++) 
 #define for_vctx for (ContextP vctx=CTX(0);  vctx < CTX(vb->num_contexts);      vctx++) 
 #define for_ctx  for (ContextP ctx=CTX(0);   ctx  < CTX(vb->num_contexts);      ctx++) 
+#define for_zctx_that for (ContextP zctx=ZCTX(0); zctx < ZCTX(z_file->num_contexts); zctx++) if /* for each context for which the condition is true */
+#define for_vctx_that for (ContextP vctx=CTX(0);  vctx < CTX(vb->num_contexts);      vctx++) if 
+#define for_ctx_that  for (ContextP ctx=CTX(0);   ctx  < CTX(vb->num_contexts);      ctx++)  if 

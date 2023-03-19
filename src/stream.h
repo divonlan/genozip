@@ -13,7 +13,7 @@
 
 typedef struct stream_ *StreamP;
 
-#define MAX_ARGC 50 // maximum number of arguments including exec_name
+#define MAX_ARGC 64 // maximum number of arguments including exec_name
 
 #define DEFAULT_PIPE_SIZE 65536
 #define SKIP_ARG ((rom )-1)

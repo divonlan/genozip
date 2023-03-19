@@ -17,9 +17,9 @@ IS_CONDA=1
 endif
 
 LDFLAGS    += -lpthread -lm 
-CFLAGS     += -Wall -D_LARGEFILE64_SOURCE=1 -D_7ZIP_ST -std=gnu11 -fms-extensions 
+CFLAGS     += -Wall -D_LARGEFILE64_SOURCE=1 -D_7ZIP_ST -D_GNU_SOURCE -std=gnu11 -fms-extensions 
 OPTFLAGS   += -Ofast 
-DEBUGFLAGS += -DDEBUG -g -O0 
+DEBUGFLAGS += -DDEBUG -ggdb3 -O0 
 
 ifdef IS_CONDA 
 	CFLAGS += -DDISTRIBUTION=\"conda\" # note: matches the name in version.c -DIS_CONDA
@@ -79,7 +79,7 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c lice
 		  codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c codec_normq.c    							\
 	      txtfile.c profiler.c file.c filename.c dispatcher.c crypt.c aes.c md5.c segconf.c biopsy.c gencomp.c	\
 		  vblock.c regions.c  optimize.c dict_id.c hash.c stream.c url.c bases_filter.c dict_io.c 				\
-		  recon_plan_io.c version.c
+		  recon_plan_io.c version.c huffman.c
 
 CONDA_COMPATIBILITY_SRCS =  compatibility/mac_gettime.c
 
@@ -101,7 +101,7 @@ CONDA_DEVS = Makefile ../.gitignore
 CONDA_DOCS = ../LICENSE.txt ../AUTHORS ../README.md
 
 CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h bits.h progress.h website.h \
-             endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h \
+             endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h huffman.h \
              buffer.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h codec.h stats.h \
              crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h qname.h qname_flavors.h \
 			 lookback.h tokenizer.h codec_longr_alg.c gencomp.h dict_io.h recon_plan_io.h tip.h deep.h filename.h \
@@ -109,7 +109,7 @@ CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h tx
 			 arch.h license.h file_types.h data_types.h base64.h txtheader.h writer.h bases_filter.h genols.h contigs.h chrom.h \
 			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h gff.h bed.h phylip.h chain.h kraken.h locs.h generic.h \
 			 fastq.h fastq_private.h \
-             compatibility/mac_gettime.h  \
+             mac_compat.h  \
 			 zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h \
 			 zlib/deflate.h zlib/trees.h \
 			 zlib/zlib.h zlib/zutil.h \
@@ -155,7 +155,7 @@ else
 	endif
 
     ifeq ($(uname),Darwin) # Mac
-		MY_SRCS += compatibility/mac_gettime.c
+		MY_SRCS += mac_compat.c
     	OBJDIR=$(OBJDIR_MAC)
     endif
 endif
@@ -178,7 +178,7 @@ all   : $(OBJDIR) $(EXECUTABLES)
 debug : CFLAGS += $(DEBUGFLAGS) -DDISTRIBUTION=\"debug\"
 debug : $(OBJDIR) $(DEBUG_EXECUTABLES)
 
-opt   : CFLAGS += -g $(OPTFLAGS) -DDEBUG -DDISTRIBUTION=\"opt\"
+opt   : CFLAGS += -ggdb3 $(OPTFLAGS) -DDEBUG -DDISTRIBUTION=\"opt\"
 opt   : $(OBJDIR) $(OPT_EXECUTABLES)
 
 docker : CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"Docker\"
@@ -265,7 +265,7 @@ genounzip-opt$(EXE) genocat-opt$(EXE) genols-opt$(EXE): genozip-opt$(EXE)
 # For this to work, first "sudo chmod u+s /usr/sbin/hwclock"
 ifneq ($(OS),Windows_NT)
 sync_wsl_clock:
-	@if `uname -a | grep microsoft-standard > /dev/null`; then hwclock -s > /dev/null 2>&1; fi || echo -n 
+#	@if `uname -a | grep microsoft-standard > /dev/null`; then hwclock -s > /dev/null 2>&1; echo Syncing WSL clock; fi || echo -n 
 else
 sync_wsl_clock:
 endif

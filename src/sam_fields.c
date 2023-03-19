@@ -52,8 +52,6 @@ const char aux_sep_by_type[2][256] = { { // compressing from SAM
     ['B']=CI0_NATIVE_NEXT                                                         // reconstruct array and then \t separator if SAM and no separator for BAM
 } };
 
-#define DICT_ID_ARRAY(dict_id) (DictId){ .id = { (dict_id).id[0], (dict_id).id[1], '_','A','R','R','A','Y' } } // DTYPE_2
-
 // gets integer field value - may appear before or after this field. 
 // return false if not found or not integer or out of [min_value,max_value]
 bool sam_seg_peek_int_field (VBlockSAMP vb, Did did_i, int16_t idx, int32_t min_value, int32_t max_value, 
@@ -290,8 +288,8 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_BD_BI)
     else
         for (uint32_t i=0; i < seq_len; i++, src+=2, dst++) *dst = *src + *(src+1);
     
-    vb->txt_data.len += vb->seq_len;    
-    ctx->next_local  += vb->seq_len;
+    Ltxt += vb->seq_len;    
+    ctx->next_local += vb->seq_len;
 
 done:
     return NO_NEW_VALUE;
@@ -1076,11 +1074,24 @@ static inline unsigned sam_seg_aux_add_bytes (char type, unsigned value_len, boo
     // note: this will return 0 for 'B'
 }
 
-static inline SmallContainer *sam_seg_array_field_get_con (VBlockSAMP vb, Context *con_ctx, uint8_t type, bool has_callback,
+static void sam_seg_initialize_for_float (VBlockSAMP vb, ContextP ctx)
+{
+    ctx->flags.store = STORE_FLOAT; // needs this be reconstructable as BAM
+    ctx->ltype = LT_FLOAT32;
+    ctx->is_initialized = true;
+
+    // case BAM: add all-the-same special (note: since we have local, we must seg one b250, its not enough to just add it to dict)
+    if (IS_BAM_ZIP)
+        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_FLOAT }, 2, ctx, 0); 
+
+    buf_alloc (VB, &ctx->local, 0, 16384, float, 0, "local"); // initial allocation, so we can use buf_append_one
+} 
+
+static inline SmallContainer *sam_seg_array_field_get_con (VBlockSAMP vb, Context *con_ctx, uint8_t type, bool has_callback, bool is_bam,
                                                            ContextP *elem_ctx) // out
 {
     // case: cached with correct type
-    if (con_ctx->con_cache.param == type) {
+    if (con_ctx->con_cache.param == type) { // already initialized
         SmallContainer *con = B1ST (SmallContainer, con_ctx->con_cache);
         *elem_ctx = ctx_get_ctx (vb, con->items[1].dict_id);
         return con; // note: we return a pointer into con_cache- sam_seg_array_field may modify the number of repeats. that's ok.
@@ -1097,24 +1108,29 @@ static inline SmallContainer *sam_seg_array_field_get_con (VBlockSAMP vb, Contex
                            };            
     
     // prepare context where array elements will go in
+    #define DICT_ID_ARRAY(dict_id) (DictId){ .id = { (dict_id).id[0], (dict_id).id[1], type,  '_','A','R','R' } } // DTYPE_2
     con->items[1].dict_id      = DICT_ID_ARRAY (con_ctx->dict_id);
+    
     con->items[1].translator   = aux_field_translator (type); // instructions on how to transform array items if reconstructing as BAM (array[0] is the subtype of the array)
     con->items[1].separator[0] = aux_sep_by_type[IS_BAM_ZIP][type];
     
     *elem_ctx = ctx_get_ctx (vb, con->items[1].dict_id);
-    (*elem_ctx)->st_did_i = con_ctx->did_i;
     
     StoreType store_type = aux_field_store_flag[type];
-    (*elem_ctx)->flags.store = store_type;
-
     ASSERT (store_type, "%s: Invalid type \"%c\" in array of %s", LN_NAME, type, con_ctx->tag_name);
 
-    if (store_type == STORE_INT) {
+    (*elem_ctx)->st_did_i = con_ctx->did_i;
+    (*elem_ctx)->flags.store = store_type;
+
+    if (store_type == STORE_INT || is_bam) {
         (*elem_ctx)->ltype = aux_field_to_ltype[type];
         (*elem_ctx)->local_is_lten = true; // we store in local in LTEN (as in BAM) and *not* in machine endianity
     }
 
-    con_ctx->con_cache.param = type;
+    if (store_type == STORE_FLOAT)
+        sam_seg_initialize_for_float (vb, *elem_ctx);
+
+    con_ctx->con_cache.param = type; // this also used as "is_initialized"
 
     return con;
 }
@@ -1126,11 +1142,11 @@ static void sam_seg_array_field (VBlockSAMP vb, DictId dict_id, uint8_t type,
                                  ArrayItemCallback callback, void *cb_param) // optional - call back for each item to seg the item
 {   
     // prepare array container - a single item, with number of repeats of array element. array type is stored as a prefix
+    bool is_bam = IS_BAM_ZIP;
     Context *con_ctx = ctx_get_ctx (vb, dict_id), *elem_ctx;
-    SmallContainer *con = sam_seg_array_field_get_con (vb, con_ctx, type, !!callback, &elem_ctx);
+    SmallContainer *con = sam_seg_array_field_get_con (vb, con_ctx, type, !!callback, is_bam, &elem_ctx);
 
     int width = aux_width[type];
-    bool is_bam = IS_BAM_ZIP;
 
     int array_bytes = is_bam ? (width * array_len) : array_len;
     elem_ctx->txt_len += array_bytes;
@@ -1139,28 +1155,18 @@ static void sam_seg_array_field (VBlockSAMP vb, DictId dict_id, uint8_t type,
     ASSERT (con->repeats < CONTAINER_MAX_REPEATS, "%s: array has too many elements, more than %u", LN_NAME, CONTAINER_MAX_REPEATS);
 
     bool is_int = (elem_ctx->flags.store == STORE_INT);
-    if (is_int) {
+    if (is_int || is_bam) {
         elem_ctx->local.len *= width; // len will be calculated in bytes in this function
-        buf_alloc (vb, &elem_ctx->local, con->repeats * width, con->repeats * width * 50, char, CTX_GROWTH, "contexts->local"); // careful not * line.len - we can get OOM
+        buf_alloc (vb, &elem_ctx->local, con->repeats * width, con->repeats * width * 256, char, CTX_GROWTH, "contexts->local"); // careful not * line.len - we can get OOM
     }
-
+     
     ASSERT (is_int || (type=='f' && !callback), "%s: Type not supported for SAM/BAM arrays '%c'(%u) in ctx=%s",
             LN_NAME, type, type, con_ctx->tag_name);
 
     char *local_start = BAFTc (elem_ctx->local);
 
-    if (is_bam) {        
-
-        if (is_int) 
-            buf_add (&elem_ctx->local, array, array_bytes); // LTEN, not machine endianity (local_is_lten is set)
-
-        else // FLOAT
-            // TO DO: we can use SNIP_LOOKUP like seg_float_or_not and store the data in local (bug 500)
-            for (uint32_t i=0; i < array_len; i++, array += width) {
-                SNIPi2 (SNIP_SPECIAL, SAM_SPECIAL_FLOAT, GET_UINT32(array));
-                seg_by_ctx (VB, STRa(snip), elem_ctx, 0); // TODO: seg in local and update SPECIAL to get from local if no snip
-            }
-    }
+    if (is_bam)    
+        buf_add (&elem_ctx->local, array, array_bytes); // LTEN, not machine endianity (local_is_lten is set)
 
     else { // SAM
         // note: we're not using str_split on array, because the number of elements can be very large (eg one per base in PacBio ip:B) - possibly stack overflow
@@ -1191,7 +1197,7 @@ static void sam_seg_array_field (VBlockSAMP vb, DictId dict_id, uint8_t type,
     if (callback)
         callback (vb, elem_ctx, cb_param, local_start, con->repeats);
 
-    if (is_int)
+    if (is_int || is_bam)
        elem_ctx->local.len /= width; // return len back to counting in units of ltype
  
     // add bytes here in case of BAM - all to main field
@@ -1400,14 +1406,12 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
             else if (sam_type == 'f') {
                 ContextP ctx = ctx_get_ctx (vb, dict_id);
 
-                if (!ctx->is_initialized) {
-                    ctx->flags.store = STORE_FLOAT; // needs this be reconstructable as BAM
-                    ctx->is_initialized = true;
-                }
+                if (!ctx->is_initialized) 
+                    sam_seg_initialize_for_float (vb, ctx);
 
                 if (is_bam) {
-                    SNIPi2 (SNIP_SPECIAL, SAM_SPECIAL_FLOAT, numeric.i);
-                    seg_by_ctx (VB, STRa(snip), ctx, add_bytes); 
+                    uint32_t f = numeric.i; // bam_get_one_aux stores float values as binary-identical 32bit integer
+                    seg_add_to_local_fixed (VB, ctx, &f, sizeof(f), LOOKUP_NONE, add_bytes);
                 }
                 else
                     seg_float_or_not (VB, ctx, STRa(value), add_bytes);

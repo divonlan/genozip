@@ -106,7 +106,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_DP_by_DP)
 
     if (reconstruct) {
         if (!flag.drop_genotypes && !flag.gt_only && !flag.samples) {
-            vb->txt_data.len32   += atoi (items[0]); // number of characters needed to reconstruct the INFO/DP integer
+            Ltxt += atoi (items[0]); // number of characters needed to reconstruct the INFO/DP integer
             ctx->sum_dp_this_line = atoi (items[1]); // initialize with delta
             ctx->is_initialized = true;              // needs to be finalized
         }
@@ -162,7 +162,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_DP_by_DP_v13)
 static int vcf_INFO_ALLELE_get_allele (VBlockVCFP vb, STRp (value))
 {
     // check for '.'
-    if (value_len == 1 && *value == '.') return -2;
+    if (str_is_1char (value, '.')) return -2;
 
     // check if its equal main REF (which can by REF or oREF)
     if (value_len == vb->main_ref_len && !memcmp (value, vb->main_ref, value_len))
@@ -362,7 +362,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_XREV)
     str_split_enforce (recon_copy, recon_len, 0, ',', item, true, "vcf_piz_luft_XREV");
 
     // re-reconstruct in reverse order
-    vb->txt_data.len -= recon_len;
+    Ltxt -= recon_len;
     for (int i=n_items-1; i >= 1; i--)
         RECONSTRUCT_SEP (items[i], item_lens[i], ',');
         
@@ -427,7 +427,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_A_AN)
     }
 
     // re-reconstruct: AN-AC
-    vb->txt_data.len32 -= recon_len;
+    Ltxt -= recon_len;
     RECONSTRUCT_INT (an - ac);
 
     return true;    
@@ -512,7 +512,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_END)
     }
 
     // re-reconstruct END
-    vb->txt_data.len -= recon_len; 
+    Ltxt -= recon_len; 
     RECONSTRUCT_INT (translated_end);
     
     return true;    
@@ -872,7 +872,7 @@ static void vcf_piz_special_INFO_HGVS_INDEL_PAYLOAD (VBlockP vb, HgvsType t)
                         : /* DELINS */ (after - alt);
 
     memmove (BAFTtxt, payload, payload_len);
-    vb->txt_data.len += payload_len;
+    Ltxt += payload_len;
 }
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_DEL_PAYLOAD)    { vcf_piz_special_INFO_HGVS_INDEL_PAYLOAD (vb, DEL);    return false; }
@@ -1280,6 +1280,10 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_RAW_MQandDP:
             CALL (vcf_seg_INFO_RAW_MQandDP (vb, ctx, STRa(value)));
 
+        // ##INFO=<ID=HaplotypeScore,Number=1,Type=Float,Description="Consistency of the site with at most two segregating haplotypes">
+        case _INFO_HaplotypeScore:
+            CALL (seg_float_or_not (VB, ctx, STRa(value), value_len));
+
         // Illumina genotyping
         case _INFO_PROBE_A:         CALL_IF (segconf.vcf_illum_gtyping, vcf_seg_PROBE_A      (vb, ctx, STRa(value)));
         case _INFO_PROBE_B:         CALL_IF (segconf.vcf_illum_gtyping, vcf_seg_PROBE_B      (vb, ctx, STRa(value)));
@@ -1319,18 +1323,18 @@ static SORTER (sort_by_subfield_name)
     return strncmp (ina->name, inb->name, MIN_(ina->name_len, inb->name_len));
 }
 
-void vcf_seg_info_subfields (VBlockVCFP vb, rom info_str, unsigned info_len)
+void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
 {
     vb->info_items.len = 0; // reset from previous line
 
     // case: INFO field is '.' (empty) (but not in DVCF as we will need to deal with DVCF items)
-    if (!z_is_dvcf && info_len == 1 && *info_str == '.') {
+    if (!z_is_dvcf && str_is_1char (info, '.')) {
         seg_by_did (VB, ".", 1, VCF_INFO, 2); // + 1 for \t or \n
         return;
     }
 
     // parse the info string
-    str_split (info_str, info_len, MAX_FIELDS-2, ';', pair, false); // -2 - leave room for LUFT + PRIM
+    str_split (info, info_len, MAX_FIELDS-2, ';', pair, false); // -2 - leave room for LUFT + PRIM
     ASSVCF (n_pairs, "Too many INFO subfields, Genozip supports up to %u", MAX_FIELDS-2);
 
     buf_alloc (vb, &vb->info_items, 0, n_pairs + 2, InfoItem, CTX_GROWTH, "info_items");

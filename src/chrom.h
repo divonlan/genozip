@@ -36,3 +36,4 @@ extern void chrom_2ref_load (Reference ref);
 static inline WordIndex chrom_2ref_piz_get (WordIndex chrom_index) 
     { return z_file->chrom2ref_map.len ? *B(WordIndex, z_file->chrom2ref_map, chrom_index) : chrom_index; }
 
+extern void chrom_finalize (void);

@@ -126,7 +126,7 @@ ValueType reconstruct_peek (VBlockP vb, ContextP ctx,
     // one context - eg items of a container, muxed contexts, "other" contexts (SNIP_OTHER etc). We freeze them by 
     // pushing their state on to a stack in vb->frozen_state when reconstruct_from_ctx is called for this ctx.
     
-    uint32_t save_txt_data_len = vb->txt_data.len32;
+    uint32_t save_txt_data_len = Ltxt;
     uint32_t save_stack_pointer = stack_pointer;
     uint8_t save_level = vb->peek_stack_level;
 
@@ -141,6 +141,7 @@ ValueType reconstruct_peek (VBlockP vb, ContextP ctx,
 
     // since we are reconstructing unaccounted for data, make sure we didn't go beyond the end of txt_data (this can happen if we are close to the end
     // of the VB, and reconstructed more than OVERFLOW_SIZE allocated in piz_reconstruct_one_vb)
+    // note: leave txt_data.len 64bit to detect bugs
     ASSPIZ (vb->txt_data.len <= vb->txt_data.size, "txt_data overflow while peeking %s: len=%"PRIu64" size=%"PRIu64" last_txt_len=%u", 
             ctx->tag_name, vb->txt_data.len, (uint64_t)vb->txt_data.size, ctx->last_txt.len);
 
@@ -154,9 +155,9 @@ ValueType reconstruct_peek (VBlockP vb, ContextP ctx,
     
     // capture data reconstructed for peeking, and "delete" it
     if (txt) *txt = Btxt (save_txt_data_len);
-    if (txt_len) *txt_len = vb->txt_data.len32 - save_txt_data_len;
+    if (txt_len) *txt_len = Ltxt - save_txt_data_len;
 
-    vb->txt_data.len32 = save_txt_data_len; 
+    Ltxt = save_txt_data_len; 
 
     return last_value;
 }

@@ -124,7 +124,7 @@ void serializer_initialize_do (SerializerP ser, rom name, rom func)
     }
 
     else
-        buf_add_to_buffer_list_(evb, &ser->skips, "Serializer.skips"); // so that it can be later alloced in compute threads
+        buf_init_promiscuous_(evb, &ser->skips, "Serializer.skips"); // so that it can be later alloced in compute threads
 }
 
 void serializer_destroy_do (SerializerP ser, rom func)

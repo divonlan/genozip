@@ -208,15 +208,34 @@ finish:
 
 static rom display_binary_cigar (VBlockSAMP vb)
 {
+    buf_free (vb->textual_cigar); // we might destroy needed data, but its ok as this is only called in an error condition
     sam_cigar_binary_to_textual (vb, vb->binary_cigar.len32, B1ST(BamCigarOp, vb->binary_cigar), &vb->textual_cigar);
     return B1STc (vb->textual_cigar);
+}
+
+// return true if string is a valid textual cigar
+bool sam_is_cigar (STRp(cigar), bool allow_empty)
+{
+    if (str_is_1char(cigar, '*')) return allow_empty; 
+
+    rom after = cigar + cigar_len;
+
+    while (cigar < after) {
+        if (!IS_DIGIT(*cigar)) return false; // expecting at least one digit
+
+        while (IS_DIGIT(*cigar) && (cigar < after-1)) cigar++; 
+        
+        if (cigar_char_to_op[(uint8_t)*cigar++] == 255) return false; // invalid op
+    }
+
+    return true;
 }
 
 bool sam_cigar_textual_to_binary (VBlockSAMP vb, STRp(cigar), BufferP binary_cigar)
 {
     ASSERTNOTINUSE (*binary_cigar);
 
-    if (cigar_len==1 && *cigar == '*') return true; // empty binary cigar
+    if (str_is_1char(cigar, '*')) return true; // empty binary cigar
 
     uint32_t n_ops = 0;
     for (int i=0; i < cigar_len; i++)
@@ -224,9 +243,17 @@ bool sam_cigar_textual_to_binary (VBlockSAMP vb, STRp(cigar), BufferP binary_cig
 
     ARRAY_alloc (BamCigarOp, ops, n_ops, false, *binary_cigar, vb, NULL); // buffer must be already named by caller
 
+    rom after = cigar + cigar_len;
+
     for (int op_i=0; op_i < n_ops; op_i++) {
-        uint32_t n=0; // do arith on proper integer, not bit field
-        while (IS_DIGIT(*cigar)) { n = 10*n + *cigar - '0' ; cigar++; }
+        if (!IS_DIGIT(*cigar)) return false; // at least one digit (may be 0)
+
+        uint32_t n=0; 
+        while (IS_DIGIT(*cigar) && (cigar < after-1)) { 
+            n = 10*n + *cigar - '0'; 
+            cigar++; 
+        }
+        
         ops[op_i] = (BamCigarOp) { .op = cigar_char_to_op[(uint8_t)*cigar++], .n = n } ;
         
         if (ops[op_i].op == 255) { // invalid op
@@ -274,7 +301,7 @@ void sam_cigar_analyze (VBlockSAMP vb, STRp(cigar)/* textual */, bool cigar_is_i
 
         // store original textual CIGAR for use of sam_piz_special_MD, as in BAM it will be translated ; also cigar might point to mate data in ctx->per_line - ctx->per_line might be realloced as we store this line's CIGAR in it 
         if (!cigar_is_in_textual_cigar) {
-            buf_add_more (VB, &vb->textual_cigar, STRa(cigar), "textual_cigar");
+            buf_add_moreS (VB, &vb->textual_cigar, cigar, "textual_cigar");
             *BAFTc (vb->textual_cigar) = 0; // nul-terminate (buf_add_more allocated space for it)
         }
     }
@@ -714,9 +741,12 @@ void sam_seg_CIGAR (VBlockSAMP vb, ZipDataLineSAM *dl, uint32_t last_cigar_len, 
 
     // case: DEPN or PRIM line.
     // Note: in DEPN, cigar already verified in sam_sa_seg_depn_find_sagroup to be the same as in SA alignment
-    if (sam_seg_has_sag_by_SA (vb)) {
+    // Note: in DEPN, if cigar has soft/hard clips, we can only seg this cigar against against sag if soft/hard clips is consistent wtih SA_HtoS
+    if (sam_seg_has_sag_by_SA (vb) && 
+        !(sam_is_depn_vb && segconf.SA_HtoS==yes && (vb->soft_clip[0] || vb->soft_clip[1])) && 
+        !(sam_is_depn_vb && segconf.SA_HtoS==no  && (vb->hard_clip[0] || vb->hard_clip[1]))) {
 
-        sam_seg_against_sa_group (vb, ctx, add_bytes); // +1 for \t
+        sam_seg_against_sa_group (vb, ctx, add_bytes); 
 
         // in PRIM, we also seg it as the first SA alignment (used for PIZ to load alignments to memory, not used for reconstructing SA)
         if (sam_is_prim_vb) 
@@ -922,7 +952,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_cigar_special_CIGAR)
     }
     
     // store now (instead of in reconstruct_from_ctx_do) in history if we are not reconstructing (e.g., in --fastq)
-    if (!reconstruct && ctx->flags.store_per_line && vb->txt_data.len32 != BNUMtxt(txt)) 
+    if (!reconstruct && ctx->flags.store_per_line && Ltxt != BNUMtxt(txt)) 
         reconstruct_store_history_rollback_recon (VB, ctx, txt);
 
     sam_cigar_restore_S (stoh);
@@ -1025,7 +1055,7 @@ void sam_reconstruct_SA_cigar_from_SA_Group (VBlockSAMP vb, SAAln *a)
             ASSPIZ (success && uncomp_len == cigar_len, "rans_uncompress_to_4x16 failed to decompress an SA Aln CIGAR data: grp_i=%u aln_i=%"PRIu64" success=%u comp_len=%u uncomp_len=%u expected_uncomp_len=%u cigar_index=%"PRIu64,
                     ZGRP_I(vb->sag), ZALN_I(a), !!success, (uint32_t)a->cigar.piz.comp_len, uncomp_len, cigar_len, (uint64_t)a->cigar.piz.index);
 
-            vb->txt_data.len += cigar_len;
+            Ltxt += cigar_len;
         }
 
         else  // not compressed

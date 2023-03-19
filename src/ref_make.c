@@ -22,6 +22,7 @@
 #include "contigs.h"
 #include "stream.h"
 #include "arch.h"
+#include "digest.h"
 
 SPINLOCK (make_ref_spin);
 #define MAKE_REF_NUM_RANGES 1000000 // should be more than enough (in GRCh38 we have 6389)
@@ -29,6 +30,12 @@ SPINLOCK (make_ref_spin);
 static Buffer contig_metadata = {}; // contig header of each contig, except for chrom name
 
 Serializer make_ref_merge_serializer = {};
+
+bool is_ref (STRp(data), bool *need_more/*optional*/)
+{
+    // this file can be segged into DT_REF only if --make-reference is specified and it is FASTA
+    return flag.make_reference && is_fasta (STRa(data), need_more);
+}
 
 void ref_make_seg_initialize (VBlockP vb)
 {
@@ -58,7 +65,7 @@ static Range *ref_make_ref_get_range (VBIType vblock_i)
     return B(Range, gref->ranges, vblock_i-1);
 }
 
-// called during REF ZIP compute thread, from zip_compress_one_vb (as "compress" defined in data_types.h)
+// called during REF ZIP compute thread, from zip_compress_one_vb (as "zip_after_compress" defined in data_types.h)
 // converts the vb sequence into a range
 void ref_make_create_range (VBlockP vb)
 {
@@ -100,35 +107,56 @@ void ref_make_ref_init (void)
     
     buf_zero (&gref->ranges);
 
-    refhash_initialize();
+    refhash_initialize_for_make();
 
     spin_initialize (make_ref_spin);
 
     serializer_initialize (make_ref_merge_serializer);
 }
 
-
 // the "read" part of reference-compressing dispatcher, called from ref_compress_ref
 void ref_make_prepare_range_for_compress (VBlockP vb)
 {
-    if (vb->vblock_i-1 == gref->ranges.len) return; // we're done
+    if (vb->vblock_i-1 == gref->ranges.len32) return; // we're done
 
     Range *r = B(Range, gref->ranges, vb->vblock_i-1); // vb_i=1 goes to ranges[0] etc
 
     // we have exactly one contig for each VB (but possibly multiple VBs with the same contig), one one RAEntry for that contig
     // during seg we didn't know the chrom,first,last_pos, so we add them now, from the RA
     random_access_get_ra_info (vb->vblock_i, &r->chrom, &r->first_pos, &r->last_pos);
-    
-    // set gpos "global pos" - a single 0-based coordinate spanning all ranges in order
-    r->gpos = vb->vblock_i > 1 ? (r-1)->gpos + ref_size (r-1) : 0;
 
-    // each chrom's gpos must start on a 64bit aligned word
-    if (r->gpos % 64 && r->chrom != (r-1)->chrom) // each new chrom needs to have a GPOS aligned to 64, so that we can overload is_set bits between the whole genome and individual chroms
-        r->gpos = ROUNDUP64 (r->gpos);
+    // set gpos "global pos" - a single 0-based coordinate spanning all ranges in order        
+    // each chrom's gpos be 64-base aligned (so that is_set, which has 1 bit per base, can be word-aligned for each chrom) 
+    r->gpos = (vb->vblock_i == 1)        ? 0                                         // first range
+            : (r->chrom != (r-1)->chrom) ? ROUNDUP64 ((r-1)->gpos + ref_size (r-1))  // first range of a contig
+            :                              (r-1)->gpos + ref_size (r-1);             // 2nd+ range of contig
 
     vb->range          = r; // range to compress
     vb->range->num_set = r->ref.nbits / 2;
-    vb->dispatch = READY_TO_COMPUTE;
+    vb->dispatch       = READY_TO_COMPUTE;
+}
+
+// ZIP main thread: mimic the logic of loading a reference, and calculate the digest
+void ref_make_calculate_digest (void)
+{
+    START_TIMER;
+
+    // mirrors the logic in ref_initialize_ranges
+    Range *last_r = BLST(Range, gref->ranges);
+    gref->genome_nbases = ROUNDUP64 (last_r->gpos + ref_size (last_r)) + 64;
+
+    gref->genome_buf.can_be_big = true; // supress warning in case of an extra large genome (eg plant genomes)
+    gref->genome = buf_alloc_bits (evb, &gref->genome_buf, gref->genome_nbases * 2, "ref->genome_buf");
+    buf_zero (&gref->genome_buf); 
+
+    for_buf (Range, r, gref->ranges) 
+        bits_copy (gref->genome, r->gpos * 2, &r->ref, 0, ref_size(r) * 2);
+
+    z_file->digest = digest_do (STRb(gref->genome_buf), !flag.md5, "genome");
+    
+    buf_free (gref->genome_buf);
+
+    COPY_TIMER_VB (evb, ref_make_calculate_digest);
 }
 
 // zip_after_compute callback: make-refernece called by main thread after completing compute thread of VB.
@@ -154,9 +182,9 @@ ConstBufferP ref_make_get_contig_metadata (void)
 }
 
 // callback from zfile_compress_genozip_header
-void ref_make_genozip_header (SectionHeaderGenozipHeader *header)
+void ref_make_genozip_header (SectionHeaderGenozipHeaderP header)
 {
-    header->REF_fasta_md5 = digest_snapshot (&z_file->digest_ctx, "file"); // MD5 of FASTA file
+    header->genome_digest = z_file->digest;
 }
 
 // zip_finalize callback
@@ -177,7 +205,7 @@ void ref_fasta_to_ref (FileP file)
 
         WARN ("FYI: cannot find reference file %s: generating it now from %s", ref_filename, file->name);
 
-        rom exec_path = arch_get_executable();
+        rom exec_path = arch_get_executable(HARD_FAIL);
 
         StreamP make_ref = stream_create (NULL, 0, 0, 0, 0, 0, 0, "Make reference",
                                           exec_path, "--make-reference", file->name, 

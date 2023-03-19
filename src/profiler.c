@@ -30,7 +30,7 @@ void profiler_add (ConstVBlockP vb)
     
     mutex_lock (profile_mutex);
 
-    if (vb->txt_data.len) {
+    if (Ltxt) {
         profile.num_vbs++;
         profile.max_vb_size_mb = MAX_(profile.max_vb_size_mb, segconf.vb_size >> 20);
     }
@@ -100,6 +100,7 @@ void profiler_add (ConstVBlockP vb)
     ADD (txtheader_compress_one_fragment);
     ADD (txtheader_piz_read_and_reconstruct);
     ADD (digest_txt_header);
+    ADD (ref_make_calculate_digest);
     ADD (scan_index_qnames_preprocessing);
     ADD (aligner_seg_seq);
     ADD (aligner_reconstruct_seq);    
@@ -313,6 +314,7 @@ void profiler_print_report (void)
         PRINT (read, 2);
         PRINT (write, 1);
         PRINT (bgzf_io_thread, 1);
+        PRINT (ref_make_calculate_digest, 1);
         PRINT (ref_contigs_compress, 1);
         PRINT (generate_recon_plan, 1);
         PRINT (vcf_linesort_compress_qsort, 2);

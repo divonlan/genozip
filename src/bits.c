@@ -67,10 +67,10 @@ static inline WordStr _print_word (uint64_t word)
 }
 
 #define DEBUG_VALIDATE(a) validate_bits((a), __FUNCLINE)
-static inline void validate_bits (ConstBitsP arr, rom file, int lineno)
+static void validate_bits (ConstBitsP arr, rom file, int lineno)
 {
     // Verify that its allocated
-    ASSERT (arr->type != BITARR_UNALLOCATED, "[%s:%i] Bits is not allocated", file, lineno);
+    ASSERT (arr->type != BITS_UNALLOCATED, "[%s:%i] Bits is not allocated", file, lineno);
 
     // Check num of words is correct
     uint64_t num_words = roundup_bits2words64(arr->nbits);
@@ -78,7 +78,7 @@ static inline void validate_bits (ConstBitsP arr, rom file, int lineno)
             file, lineno, (int)arr->nbits, (int)num_words, (int)arr->nwords);
 
     // Check top word is masked (only if not overlayed - the unused bits of top word don't belong to this bit array and might be used eg by another bit array in genome.ref/genome.is_set)
-    if (arr->type == BITARR_REGULAR) {
+    if (arr->type == BITS_REGULAR) {
       uint64_t tw = arr->nwords == 0 ? 0 : arr->nwords - 1;
       uint64_t top_bits = bits_in_top_word(arr->nbits);
 
@@ -267,7 +267,7 @@ Bits bits_init_do (uint64_t nbits, uint8_t *data, uint64_t data_len/*in bytes*/,
 
     ASSERT (!((uint64_t)data % sizeof (uint64_t)), "called from %s:%u: data=%p is not word-aligned", func, code_line, data);
 
-    Bits bits = { .type   = BITARR_STANDALONE, // standalone Bits that is not part of a Buffer
+    Bits bits = { .type   = BITS_STANDALONE, // standalone Bits that is not part of a Buffer
                   .nbits  = nbits,
                   .nwords = roundup_bits2words64(nbits),
                   .words  = (uint64_t *)data };
@@ -284,7 +284,7 @@ Bits bits_init_do (uint64_t nbits, uint8_t *data, uint64_t data_len/*in bytes*/,
 // allocates a STANDALONE bit array
 Bits bits_alloc_do (uint64_t nbits, bool clear, FUNCLINE)
 {
-    Bits bits = { .type   = BITARR_STANDALONE, // standalone Bits that is not part of a Buffer
+    Bits bits = { .type   = BITS_STANDALONE, // standalone Bits that is not part of a Buffer
                   .nbits  = nbits,
                   .nwords = roundup_bits2words64(nbits),
                   .words  = buf_low_level_malloc (roundup_bits2bytes64(nbits), clear, func, code_line) };
@@ -300,15 +300,15 @@ void bits_realloc_do (BitsP bits, uint64_t nbits,
                       uint64_t low_level_nbits, // if not 0, we over-allocated in anticipation of further reallocs (improves performance)
                       bool clear, FUNCLINE)
 {
-    ASSERT0 (bits->type == BITARR_UNALLOCATED || bits->type == BITARR_REGULAR || bits->type == BITARR_STANDALONE, 
-             "bit array needs to be BITARR_UNALLOCATED or BITARR_REGULAR or BITARR_STANDALONE for realloc");
+    ASSERT0 (bits->type == BITS_UNALLOCATED || bits->type == BITS_REGULAR || bits->type == BITS_STANDALONE, 
+             "bit array needs to be BITS_UNALLOCATED or BITS_REGULAR or BITS_STANDALONE for realloc");
 
     uint64_t old_nbits = bits->nbits;
 
     if (!low_level_nbits) low_level_nbits = nbits;
     uint64_t nwords = roundup_bits2words64 (low_level_nbits);
 
-    if (bits->type == BITARR_STANDALONE)
+    if (bits->type == BITS_STANDALONE)
         bits->words = buf_low_level_realloc (bits->words, nwords * sizeof(uint64_t), "", func, code_line);
 
     else {
@@ -933,7 +933,7 @@ void bits_concat_do (BitsP base, ConstBitsP add, unsigned additional_concats_exp
 {
     uint64_t index = base->nbits;
 
-    // IMPORTANT: if calling with a Bits that is embedded in a buffer, buf_add_to_buffer_list must be 
+    // IMPORTANT: if calling with a Bits that is embedded in a buffer, buf_init_promiscuous must be 
     // called first (eg in seg_initialize), as bits_realloc_do performs an anonymous realloc 
     bits_realloc_do (base, 
                      base->nbits + add->nbits, 
@@ -959,7 +959,7 @@ void bits_overlay (BitsP overlaid_bits, BitsP regular_bits, uint64_t start, uint
             start, nbits, regular_bits->nbits);
 
     uint64_t word_i = start / 64;
-    *overlaid_bits = (Bits){ .type   = BITARR_OVERLAY,
+    *overlaid_bits = (Bits){ .type   = BITS_OVERLAY,
                              .words  = &regular_bits->words[word_i],
                              .nwords = roundup_bits2words64 (nbits),
                              .nbits  = nbits };
@@ -1326,6 +1326,22 @@ static void _reverse_region (BitsP bits, uint64_t start, uint64_t length)
     _set_word_cyclic (bits, left, word);
 }
 
+void bits_reverse_region (BitsP bits, uint64_t start, uint64_t len)
+{
+    assert (start + len <= bits->nbits);
+    
+    if (len) _reverse_region (bits, start, len);
+  
+    DEBUG_VALIDATE(bits);
+}
+
+void bits_reverse (BitsP bits)
+{
+    if (bits->nbits) _reverse_region (bits, 0, bits->nbits);
+    
+    DEBUG_VALIDATE(bits);
+}
+
 // for each 2 bits in the src array, the dst array will contain those 2 bits in the reverse
 // position, as well as transform them 00->11 11->00 01->10 10->01
 // src_start_base and max_num_bases must be multiplies of 32 and src != dst: one can call this function piecemiel - eg divide it to threads
@@ -1459,18 +1475,22 @@ uint32_t bits_hamming_distance (ConstBitsP bits_1, uint64_t index_1,
 {
     const uint64_t *words_1 = &bits_1->words[index_1 >> 6];
     uint8_t shift_1 = index_1 & bitmask64(6); // word 1 contributes (64-shift) most-significant bits, word 2 contribute (shift) least significant bits
+    uint64_t *after_1 = bits_1->words + bits_1->nwords;
 
     const uint64_t *words_2 = &bits_2->words[index_2 >> 6];
     uint8_t shift_2 = index_2 & bitmask64(6); // word 1 contributes (64-shift) most-significant bits, word 2 contribute (shift) least significant bits
+    uint64_t *after_2 = bits_2->words + bits_2->nwords;
 
     uint64_t word=0;
     uint32_t nonmatches=0; 
     uint32_t nwords = roundup_bits2words64 (len);
 
     for (uint32_t i=0; i < nwords; i++) {
+        //xxx uint64_t word_1 = shift_1 ? _bits_combined_word (words_1[i], words_1[i+1], shift_1) : words_1[i];
+        // uint64_t word_2 = shift_2 ? _bits_combined_word (words_2[i], words_2[i+1], shift_2) : words_2[i];
 
-        uint64_t word_1 = shift_1 ? _bits_combined_word (words_1[i], words_1[i+1], shift_1) : words_1[i];
-        uint64_t word_2 = shift_2 ? _bits_combined_word (words_2[i], words_2[i+1], shift_2) : words_2[i];
+        uint64_t word_1 = shift_1 ? _bits_combined_word (words_1[i], (&words_1[i+1] < after_1 ? words_1[i+1] : 0), shift_1) : words_1[i];
+        uint64_t word_2 = shift_2 ? _bits_combined_word (words_2[i], (&words_2[i+1] < after_2 ? words_2[i+1] : 0), shift_2) : words_2[i];
         
         word = word_1 ^ word_2; // xor the words - resulting in 1 in each position they differ and 0 where they're equal
 

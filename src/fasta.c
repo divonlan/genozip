@@ -65,7 +65,7 @@ void fasta_get_data_line (VBlockP vb, uint32_t line_i, uint32_t *seq_data_start,
 // detect if a generic file is actually a FASTA - 
 // we call based on first character being '>', and subsequent lines being equal-length nuke or amino characters
 // note: we accept comment lines starting with ; but every sequence must start with >
-bool is_fasta (STRp(data), bool *need_more/*optonal*/)
+bool is_fasta (STRp(data), bool *need_more/*optional*/)
 {
     // characters that may appear in a FASTA seqience
     static bool seq_char[256] = { ['E']=true, ['F']=true, ['I']=true, ['L']=true, ['P']=true, ['Q']=true, ['X']=true, ['Z']=true,
@@ -131,7 +131,7 @@ static inline int fasta_is_end_of_contig (VBlockP vb, uint32_t first_i,
     ARRAY (char, txt, vb->txt_data);
 
     // if we're not at the end of the data - we can just look at the next character
-    if (txt_i < vb->txt_data.len-1)
+    if (txt_i < Ltxt-1)
         return txt[txt_i+1] == '>';
 
     // if we're at the end of the line, we scan back to the previous \n and check if it NOT the >
@@ -150,9 +150,9 @@ static inline int fasta_is_end_of_contig (VBlockP vb, uint32_t first_i,
 // returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
 int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *last_i)
 {
-    bool is_entire_vb = (first_i == 0 && *last_i == vb->txt_data.len-1);
+    bool is_entire_vb = (first_i == 0 && *last_i == Ltxt-1);
 
-    ASSERT (*last_i >= 0 && *last_i < vb->txt_data.len, "*last_i=%d is out of range [0,%"PRIu64"]", *last_i, vb->txt_data.len);
+    ASSERT (*last_i >= 0 && *last_i < Ltxt, "*last_i=%d is out of range [0,%u]", *last_i, Ltxt);
 
     ARRAY (char, txt, vb->txt_data);
 
@@ -160,14 +160,14 @@ int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *last_i)
     // (note: first_i=0 when flag.make_reference)
     if (flag.make_reference) {
         bool data_found = false;
-        for (uint32_t i=0; i < vb->txt_data.len32; i++) {
+        for (uint32_t i=0; i < Ltxt; i++) {
             // just don't allow now-obsolete ';' rather than trying to disentangle comments from descriptions
             ASSINP (txt[i] != ';', "Error: %s contains a ';' character - this is not supported for reference files. Contig descriptions must begin with a >", txt_name);
         
             // if we've encountered a new DESC line after already seeing sequence data, move this DESC line and
             // everything following to the next VB
             if (data_found && txt[i]=='>' && txt[i-1]=='\n') 
-                return vb->txt_data.len - i;
+                return Ltxt - i;
 
             if (!data_found && (txt[i] != '\n' && txt[i] != '\r')) data_found = true; // anything, except for empty lines, is considered data
         }
@@ -193,14 +193,14 @@ int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *last_i)
             }
 
             // otherwise - tolerate a VB that ends part way through a SEQ
-            else if (is_entire_vb && i+1 < vb->txt_data.len &&
+            else if (is_entire_vb && i+1 < Ltxt &&
                      txt[i+1] != ';' && txt[i+1] != '>') { // partial line isn't a Description or a Comment, hence its a Sequence
                 ((VBlockFASTAP)vb)->vb_has_no_newline = true;
                 return 0;                
             }
                 
             *last_i = i;
-            return vb->txt_data.len-1 - i;
+            return Ltxt-1 - i;
         }
     }
 
@@ -225,7 +225,7 @@ void fasta_zip_initialize (void)
 {
 }
 
-void fasta_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeader *vb_header)
+void fasta_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeaderP vb_header)
 {
     if (Z_DT(GFF))
         vb_header->flags.vb_header.gff.embedded_fasta = true;
@@ -306,7 +306,7 @@ void fasta_seg_finalize (VBlockP vb)
         uint64_t num_contigs_this_vb = CTX(FASTA_CONTIG)->nodes.len;
         ASSINP0 (num_contigs_this_vb, "Invalid FASTA file: no sequence description line");
 
-        uint64_t avg_contig_size_this_vb = vb->txt_data.len / num_contigs_this_vb;
+        uint64_t avg_contig_size_this_vb = Ltxt / num_contigs_this_vb;
         uint64_t est_num_contigs_in_file = txtfile_get_seggable_size() / avg_contig_size_this_vb;
 
         // case: we've seen only characters that are both nucleotide and protein (as are A,C,G,T,N) - call it as nucleotide
@@ -607,7 +607,7 @@ IS_SKIP (fasta_piz_is_skip_section)
 static inline void fasta_piz_unreconstruct_trailing_newlines (VBlockFASTAP vb)
 {
     while (*BLSTtxt == '\n' || *BLSTtxt == '\r') 
-        vb->txt_data.len32--;
+        Ltxt--;
 
     // update final entries vb->lines to reflect the removal of the final newlines
     uint32_t line_index = BAFTtxt - B1STtxt;
@@ -669,7 +669,7 @@ SPECIAL_RECONSTRUCTOR_DT (fasta_piz_special_COMMENT)
     return NO_NEW_VALUE;
 }
 
-bool fasta_piz_init_vb (VBlockP vb, const SectionHeaderVbHeader *header, uint32_t *txt_data_so_far_single_0_increment)
+bool fasta_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment)
 {
     VB_FASTA->contig_grepped_out = writer_get_fasta_contig_grepped_out (vb->vblock_i);
     return true;
@@ -705,7 +705,7 @@ bool fasta_piz_is_vb_needed (VBIType vb_i)
     // iterate on all DESCs of this VB
     bool grepped_in = false, last_contig_grepped_in = false;
     for (uint32_t desc_i=0; desc_i < num_descs; desc_i++) { 
-        vb->txt_data.len = 0; // reset
+        Ltxt = 0; // reset
         reconstruct_from_ctx (vb, FASTA_DESC, 0, true);
 
         bool match = flag.grep && piz_grep_match (B1STtxt, BAFTtxt);
@@ -744,8 +744,8 @@ static inline void fasta_piz_translate_desc_to_phylip (VBlockFASTAP vb, char *de
     memmove (desc_start, chrom_name, MIN_(chrom_name_len, 10));
     if (chrom_name_len < 10) memcpy (desc_start + chrom_name_len, "          ", 10-chrom_name_len); // pad with spaces
 
-    if (recon_len > 10) vb->txt_data.len -= recon_len - 10; // we do it this way to avoid signed problems
-    else                vb->txt_data.len += 10 - recon_len;
+    if (recon_len > 10) Ltxt -= recon_len - 10; // we do it this way to avoid signed problems
+    else                Ltxt += 10 - recon_len;
 }
 
 // shorten DESC to the first white space
@@ -755,7 +755,7 @@ static inline void fasta_piz_desc_header_one (VBlockFASTAP vb, char *desc_start)
     *BAFTtxt = 0; // nul-terminate
     unsigned chrom_name_len = strcspn (desc_start + 1, " \t\r\n");
     
-    vb->txt_data.len -= recon_len - chrom_name_len -1;
+    Ltxt -= recon_len - chrom_name_len -1;
 }
 
 SPECIAL_RECONSTRUCTOR_DT (fasta_piz_special_DESC)
@@ -821,7 +821,7 @@ TRANSLATOR_FUNC (fasta_piz_fa2phy_EOL)
     ||  recon == vb->txt_data.data     // initial EOL - not allowed in Phylip)
     ||  recon[-1] == '\n')             // previous item was an EOL - remove this one then
     
-        vb->txt_data.len -= recon_len;
+        Ltxt -= recon_len;
     
     return 0;
 }

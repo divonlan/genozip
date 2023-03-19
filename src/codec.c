@@ -21,10 +21,10 @@
 
 // memory management for codecs - tesing shows that compress allocates 4 times, and decompress 2 times. Allocations are the same set of sizes
 // every call to compress/decompress with the same parameters, independent on the contents or size of the compressed/decompressed data.
-void *codec_alloc_do (VBlockP vb, uint64_t size, float grow_at_least_factor, rom func, uint32_t code_line)
+void *codec_alloc_do (VBlockP vb, uint64_t size, float grow_at_least_factor, FUNCLINE)
 {
     rom names[NUM_CODEC_BUFS] = { "codec_bufs[0]", "codec_bufs[1]", "codec_bufs[2]", "codec_bufs[3]",
-                                          "codec_bufs[4]", "codec_bufs[5]", "codec_bufs[6]" };
+                                  "codec_bufs[4]", "codec_bufs[5]", "codec_bufs[6]" };
 
     // get the next buffer - allocations are always in the same order in bzlib and lzma -
     // so subsequent VBs will allocate roughly the same amount of memory for each buffer
@@ -38,7 +38,7 @@ void *codec_alloc_do (VBlockP vb, uint64_t size, float grow_at_least_factor, rom
     ABORT_R ("%s: called from %s:%u codec_alloc could not find a free buffer", VB_NAME, func, code_line);
 }
 
-void codec_free_do (void *vb_, void *addr, rom func, uint32_t code_line)
+void codec_free_do (void *vb_, void *addr, FUNCLINE)
 {
     VBlockP vb = (VBlockP)vb_;
 

@@ -57,9 +57,11 @@ typedef struct Buffer { // 64 bytes
     //------------------------------------------------------------------------------------------------------
     uint64_t overlayable : 1;  // this buffer may be fully overlaid by one or more overlay buffers
     uint64_t can_be_big  : 1;  // do not display warning if buffer grows very big
+    uint64_t promiscuous : 1;  // used only in evb buffers: if true, any thread may allocate the buffer (not just the main thread as with usual evb buffers), 
+                               // but it needs to be first buf_init_promiscuous by the main thread, and also buffer.c cannot buf_verify_integrity as it would normally do.
     uint64_t code_line   : 12; // the allocating line number in source code file (up to 4095)
-    #define MAX_BUFFER_SIZE ((1ULL<<47)-1) // according to bits of "size" (64 TB)
-    uint64_t size        : 47; // number of bytes available to the user (i.e. not including the allocated overhead). 
+    #define MAX_BUFFER_SIZE ((1ULL<<46)-1) // according to bits of "size" (64 TB)
+    uint64_t size        : 46; // number of bytes available to the user (i.e. not including the allocated overhead). 
 
     VBlockP vb;                // vb that owns this buffer, and which this buffer is in its buf_list
 
@@ -79,7 +81,7 @@ extern void buf_set_cleanup_on_exit (void);
 #define ASSERTNOTINUSE(buf) ASSERT (!buf_is_alloc (&(buf)) && !(buf).len && !(buf).param, "expecting "#buf" to be free, but it's not: %s", buf_desc (&(buf)).s)
 #define ASSERTISALLOCED(buf) ASSERT0 (buf_is_alloc (&(buf)), #buf" is not allocated")
 #define ASSERTISEMPTY(buf) ASSERT (buf_is_alloc (&(buf)) && !(buf).len, "expecting "#buf" to be be allocated an empty, but it isn't: %s", buf_desc (&(buf)).s)
-#define ASSERTNOTEMPTY(buf) ASSERT (buf_is_alloc (&(buf)) && (buf).len, "expecting "#buf" to be contain some data, but it doesn't: %s", buf_desc (&(buf)).s)
+#define ASSERTNOTEMPTY(buf) ASSERT ((buf).len, "expecting "#buf" to be contain some data, but it doesn't: %s", buf_desc (&(buf)).s)
 
 extern uint64_t buf_alloc_do (VBlockP vb,
                               BufferP buf, 
@@ -143,6 +145,7 @@ extern uint64_t buf_alloc_do (VBlockP vb,
 #define B32(buf, index)     B(uint32_t, (buf), (index))
 #define B64(buf, index)     B(uint64_t, (buf), (index))
 #define Btxt(index)         Bc (vb->txt_data, index)
+#define Ltxt                (vb->txt_data.len32)
 
 // first entry in Buffer
 #define B1ST(type, buf)     ((type     *)(buf).data)
@@ -160,7 +163,7 @@ extern uint64_t buf_alloc_do (VBlockP vb,
 #define BLST16(buf)         BLST(uint16_t,(buf))
 #define BLST32(buf)         BLST(uint32_t,(buf))
 #define BLST64(buf)         BLST(uint64_t,(buf))
-#define BLSTtxt             (&vb->txt_data.data[(vb->txt_data.len-1)])
+#define BLSTtxt             (&vb->txt_data.data[(Ltxt-1)])
 
 // entry after the end of the Buffer 
 #define BAFT(type, buf)     ((type *)(&(buf).data[((buf).len) * sizeof(type)]))
@@ -169,7 +172,7 @@ extern uint64_t buf_alloc_do (VBlockP vb,
 #define BAFT16(buf)         BAFT(uint16_t,(buf))
 #define BAFT32(buf)         BAFT(uint32_t,(buf))
 #define BAFT64(buf)         BAFT(uint64_t,(buf))
-#define BAFTtxt             (&vb->txt_data.data[vb->txt_data.len])
+#define BAFTtxt             (&vb->txt_data.data[Ltxt])
 
 #define for_buf(element_type, iterator, buf)  \
     for (element_type *iterator=B1ST(element_type, (buf)); iterator < BAFT(element_type, (buf)); iterator++)
@@ -185,6 +188,17 @@ extern uint64_t buf_alloc_do (VBlockP vb,
 #define for_buf2_back(element_type, iter_p, iter_i, buf) \
     for (int32_t iter_i=(buf).len32-1; iter_i >= 0;)  \
         for (element_type *iter_p=BLST(element_type, (buf)); iter_p >= B1ST(element_type, (buf)); iter_p--, iter_i--)
+
+// remove entries from buffer that fail to meet the condition: entry->field == must_be
+#define buf_remove_items_except(type, buf, field, must_be)\
+    type *new_e = B1ST(type, (buf)); \
+    for_buf (type, ent, buf) { \
+        if (ent->field == (must_be)) { \
+            if (new_e != ent) *new_e = *ent; \
+            new_e++; \
+        } \
+    }\
+    (buf).len = BNUM((buf), new_e);
 
 typedef struct { char s[300]; } BufDescType;
 extern const BufDescType buf_desc (ConstBufferP buf);
@@ -204,6 +218,7 @@ static inline uint64_t BNXT_get_index (BufferP buf, size_t size, FUNCLINE)
 #define BNXT16(buf)         BNXT(uint16_t, (buf))
 #define BNXT32(buf)         BNXT(uint32_t, (buf))
 #define BNXT64(buf)         BNXT(uint64_t, (buf))
+#define BNXTf(buf)          BNXT(float, (buf))
 #define BNUM(buf, ent)      ((int32_t)((((char*)(ent)) - ((buf).data)) / (int32_t)sizeof (*(ent)))) // signed integer
 #define BNUM64(buf, ent)    ((int64_t)((((char*)(ent)) - ((buf).data)) / (int64_t)sizeof (*(ent)))) // signed integer
 #define BNUMtxt(ent)        BNUM(vb->txt_data, (ent))
@@ -239,7 +254,7 @@ extern void buf_copy_do (VBlockP dst_vb, BufferP dst, ConstBufferP src, uint64_t
                          FUNCLINE,
                          rom name);
 #define buf_copy(dst_vb,dst,src,type,src_start_entry,max_entries,dst_name) \
-  buf_copy_do ((VBlockP)(dst_vb),(dst),(src),sizeof(type),(src_start_entry),(max_entries),__FUNCTION__,__LINE__,(dst_name))
+  buf_copy_do ((VBlockP)(dst_vb),(dst),(src),sizeof(type),(src_start_entry),(max_entries),__FUNCLINE,(dst_name))
 
 extern void buf_move (VBlockP dst_vb, BufferP dst, VBlockP src_vb, BufferP src);
 extern void buf_grab_do (VBlockP dst_vb, BufferP dst_buf, rom dst_name, BufferP src_buf, FUNCLINE);
@@ -248,7 +263,7 @@ extern void buf_grab_do (VBlockP dst_vb, BufferP dst_buf, rom dst_name, BufferP 
 extern void buf_remove_do (BufferP buf, unsigned sizeof_item, uint64_t remove_start, uint64_t remove_len);
 #define buf_remove(buf, type, remove_start, remove_len) buf_remove_do (&(buf), sizeof(type), (remove_start), (remove_len))
 
-extern void buf_insert_do (VBlockP vb, BufferP buf, unsigned width, uint64_t insert_at, const void *new_data, uint64_t new_data_len, rom name);
+extern void buf_insert_do (VBlockP vb, BufferP buf, unsigned width, uint64_t insert_at, const void *new_data, uint64_t new_data_len, rom name, FUNCLINE);
 
 #define buf_has_space(buf, new_len) ((buf)->len + (new_len) <= (buf)->size)
 
@@ -260,19 +275,19 @@ extern void buf_insert_do (VBlockP vb, BufferP buf, unsigned width, uint64_t ins
        memcpy (&(buf)->data[(buf)->len], (new_data), new_len);   \
        (buf)->len += new_len; })
 
-static inline void buf_add_more (VBlockP vb, BufferP buf, STRp(new_data), rom name) 
-{   buf_insert_do (vb, buf, 1, buf->len, STRa(new_data), name); }
+#define buf_add_more(vb, buf, new_data, new_data_len, name) \
+    buf_insert_do ((VBlockP)(vb), (buf), 1, (buf)->len, (new_data), (new_data_len), (name), __FUNCLINE)
 
 #define buf_append(vb, buf, type, new_data, new_data_len, name) \
-    buf_insert_do ((VBlockP)(vb), &(buf), sizeof(type), (buf).len, (new_data), (new_data_len), (name))
+    buf_insert_do ((VBlockP)(vb), &(buf), sizeof(type), (buf).len, (new_data), (new_data_len), (name), __FUNCLINE)
 
 #define buf_append_one(buf, item) ({ \
     typeof(item) item_ = (item); /* evaluate once */\
-    buf_insert_do (NULL, &(buf), sizeof(typeof(item)), (buf).len, &item_, 1, NULL);\
+    buf_insert_do (NULL, &(buf), sizeof(typeof(item)), (buf).len, &item_, 1, NULL, __FUNCLINE);\
 })
 
 #define buf_insert(vb, buf, type, insert_at, new_data, new_data_len, name) \
-    buf_insert_do ((VBlockP)(vb), &(buf), sizeof(type), (insert_at), (new_data), (new_data_len), (name))
+    buf_insert_do ((VBlockP)(vb), &(buf), sizeof(type), (insert_at), (new_data), (new_data_len), (name), __FUNCLINE)
 
 #define buf_add_moreC(vb_, buf, literal_str, name) buf_add_more ((VBlockP)(vb_), (buf), literal_str, sizeof literal_str-1, (name))
 #define buf_add_moreS(vb_, buf, str, name) buf_add_more ((VBlockP)(vb_), (buf), str, str##_len, (name))
@@ -320,7 +335,8 @@ static inline unsigned buf_add_hex_as_text (BufferP buf, int64_t n, bool upperca
 
 extern void buf_print (BufferP buf, bool add_newline);
 
-extern void buf_test_overflows (void *vb, rom msg);
+extern void buf_verify (ConstBufferP buf, rom msg);
+extern bool buf_test_overflows (void *vb, rom msg);
 extern void buf_test_overflows_all_vbs (rom msg);
 
 typedef struct {
@@ -337,15 +353,17 @@ extern void buf_show_memory_handler (void);
 #define buf_zero(buf_p) buf_set(buf_p, 0)
 
 extern void buf_add_to_buffer_list_do (VBlockP vb, BufferP buf, FUNCLINE);
-#define buf_add_to_buffer_list(vb,buf) buf_add_to_buffer_list_do ((VBlockP)(vb), (buf), __FUNCLINE)
-#define buf_add_to_buffer_list_(vb,buf,buf_name) ({ buf_add_to_buffer_list_do ((VBlockP)(vb), (buf), __FUNCLINE); (buf)->name = (buf_name); })
+
+// macros for evb to initialize promiscuous buffers
+#define buf_init_promiscuous(vb,buf)           ({ buf_add_to_buffer_list_do ((VBlockP)(vb), (buf), __FUNCLINE); (buf)->promiscuous = true; })
+#define buf_init_promiscuous_(vb,buf,buf_name) ({ buf_add_to_buffer_list_do ((VBlockP)(vb), (buf), __FUNCLINE); (buf)->promiscuous = true; (buf)->name = (buf_name); })
 
 extern void buf_update_buf_list_vb_addr_change (VBlockP new_vb, VBlockP old_vb);
 
 extern void buf_compact_buf_list (VBlockP vb);
 
 extern void buf_low_level_free (void *p, FUNCLINE);
-#define FREE(p) ({ if (p) { buf_low_level_free (((void*)(p)), __FUNCLINE); p=NULL; } })
+#define FREE(p) ({ if (p) { buf_low_level_free (((void*)(p)), __FUNCLINE); (p)=NULL; } })
 
 extern void *buf_low_level_malloc (size_t size, bool zero, FUNCLINE);
 #define MALLOC(size) buf_low_level_malloc (size, false, __FUNCLINE)

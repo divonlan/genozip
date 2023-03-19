@@ -20,21 +20,20 @@ void reconstruct_copy_dropped_line_history (VBlockP vb)
 {
     HistoryWord *hw;
 
-    for_ctx 
-        if ((ctx->flags.store_per_line || ctx->flags.spl_custom) && // note: we can't test history.len as the buffer might be used for other purposes if not storing history
-            ctx->flags.store != STORE_INT && ctx->flags.store != STORE_INDEX &&  // store textual
-            ctx->history.len32 && // 0 if context is skipped
-            (hw = B(HistoryWord, ctx->history, vb->line_i))->lookup == LookupTxtData) {
+    for_ctx_that ((ctx->flags.store_per_line || ctx->flags.spl_custom) && // note: we can't test history.len as the buffer might be used for other purposes if not storing history
+                  ctx->flags.store != STORE_INT && ctx->flags.store != STORE_INDEX &&  // store textual
+                  ctx->history.len32 && // 0 if context is skipped
+                  (hw = B(HistoryWord, ctx->history, vb->line_i))->lookup == LookupTxtData) {
 
-            uint32_t per_line_start = ctx->per_line.len32;
-            if (ctx->last_txt.len && hw->len) {
-                buf_add_more (vb, &ctx->per_line, STRtxtw(*hw), "per_line");
-                BNXTc (ctx->per_line) = 0; // nul-terminate
-            }
-
-            hw->lookup = LookupPerLine;
-            hw->index  = per_line_start;
+        uint32_t per_line_start = ctx->per_line.len32;
+        if (ctx->last_txt.len && hw->len) {
+            buf_add_more (vb, &ctx->per_line, Btxt (hw->index), hw->len, "per_line");
+            BNXTc (ctx->per_line) = 0; // nul-terminate
         }
+
+        hw->lookup = LookupPerLine;
+        hw->index  = per_line_start;
+    }
 }
 
 // store last_value in context history - for copying by buddy line
@@ -70,7 +69,7 @@ void reconstruct_store_history_rollback_recon (VBlockP vb, ContextP ctx, rom rec
 
     buf_add_more (VB, &ctx->per_line, recon_start, hw->len, "per_line");
     BNXTc (ctx->per_line) = 0;         // nul-terminate
-    vb->txt_data.len32 = BNUMtxt(recon_start); // remove reconstructed text from txt_data
+    Ltxt = BNUMtxt(recon_start); // remove reconstructed text from txt_data
 }
 
 // consume and store in history the next value in the context without reconstructing it to txt_data
@@ -97,9 +96,9 @@ void reconstruct_to_history (VBlockP vb, ContextP ctx)
             
             *hw = (HistoryWord){ .index = ctx->per_line.len32, .len = (BAFTtxt - txt), .lookup = LookupPerLine };
 
-            buf_add_more (vb, &ctx->per_line, txt, hw->len, "per_line");
+        buf_add_more (vb, &ctx->per_line, txt, hw->len, "per_line");
             BNXTc (ctx->per_line) = 0;         // nul-terminate
-            vb->txt_data.len32 = BNUMtxt(txt); // remove reconstructed text from txt_data
+            Ltxt = BNUMtxt(txt); // remove reconstructed text from txt_data
         } 
     }
     

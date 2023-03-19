@@ -12,9 +12,6 @@
 
 #include "libdeflate/libdeflate.h"
 #include <time.h>
-#if defined __APPLE__ 
-#include "compatibility/mac_gettime.h"
-#endif
 #include "sam_private.h"
 #include "file.h"
 #include "random_access.h"
@@ -320,7 +317,7 @@ static void sam_header_zip_build_hdr_PGs (rom hdr, rom after)
             else if (EQ3(flds[i], "PN:")) {
                 PN_i = i;
                 if (added) BNXTc (stats_programs) = '\t';
-                buf_add_more (evb, &stats_programs, STRi(fld,i), "stats_programs");
+                buf_add_more (evb, &stats_programs, flds[i], fld_lens[i], "stats_programs");
                 added = true;
             }
 
@@ -373,10 +370,9 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
     ASSERT0 (ARRAY_LEN(map_sigs) == NUM_MAPPERS, "Invalid SAM_MAPPER_SIGNATURE array length - perhaps missing commas between strings?");
 
     for (int i=1; i < ARRAY_LEN(map_sigs); i++) // skip 0=unknown
-        if (strstr (hdr, map_sigs[i])) { // scans header starting first PG line
+        if (strstr (hdr, map_sigs[i]) &&  // scans header starting first PG line
+            (!segconf.sam_mapper || strlen (map_sigs[i]) > strlen(map_sigs[segconf.sam_mapper]))) // first match or better match (eg "bwa-mem2" is a better match than "bwa")
             segconf.sam_mapper = i;
-            break;
-        }
 
     if (MP(bwa)) segconf.sam_mapper = MP_BWA; // we consider "bwa" to be "BWA"
 
@@ -385,7 +381,7 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
     // note: this file *might* be of bisulfite-treated reads. 
     // This variable might be reset after segconf if it fails additonal conditions 
     segconf.sam_bisulfite     = MP(BISMARK) || MP(BSSEEKER2) || MP(DRAGEN) || MP(BSBOLT) || MP(GEM3);
-    segconf.is_bwa            = MP(BWA) || MP(BSBOLT) || MP (CPU);            // aligners based on bwa
+    segconf.is_bwa            = MP(BWA) || MP(BSBOLT) || MP (CPU) || MP(BWA_MEM2) || MP(PARABRICKS); // aligners based on bwa
     segconf.is_minimap2       = MP(MINIMAP2) || MP(WINNOWMAP) || MP(PBMM2);   // aligners based on minimap2
     segconf.is_bowtie2        = MP(BOWTIE2) || MP(HISAT2) || MP(TOPHAT) || MP(BISMARK) || MP(BSSEEKER2); // aligners based on bowtie2
 
@@ -410,6 +406,8 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
         segconf.is_biobambam2_sort = SCAN("bamsormadup") || SCAN("bamsort") || SCAN("bamtagconversion");
 
         segconf.has_bqsr = SCAN("ApplyBQSR");
+
+        segconf.has_RSEM = SCAN("RSEM") || SCAN("rsem");
     }
 
 done:
@@ -472,6 +470,9 @@ void sam_header_finalize (void)
     }
     else
         sam_hdr_contigs = NULL; // memory will be freed when we destroy gref
+
+    sam_hd_so = HD_SO_UNKNOWN;
+    sam_hd_go = HD_GO_UNKNOWN;
 }
 
 // ZIP
@@ -607,14 +608,9 @@ static inline void sam_header_add_PG (BufferP txtheader_buf)
 {
     if (flag.no_pg) return; // user specified --no-PG
 
-    TimeSpecType tb;
-    clock_gettime (CLOCK_REALTIME, &tb);
-
-    uint32_t unique_id = crc32 (0, &tb, sizeof (tb));
-
     // the command line length is unbound, careful not to put it in a bufprintf
     bufprintf (txtheader_buf->vb, txtheader_buf, "@PG\tID:genozip-%u\tPN:genozip\tDS:%s\tVN:%s\tCL:", 
-               unique_id, GENOZIP_URL, GENOZIP_CODE_VERSION);
+               getpid(), GENOZIP_URL, GENOZIP_CODE_VERSION);
     buf_append_string (txtheader_buf->vb, txtheader_buf, flags_command_line());
     buf_append_string (txtheader_buf->vb, txtheader_buf, "\n");
 }

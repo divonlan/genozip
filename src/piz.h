@@ -17,10 +17,12 @@
 #define PREPROCESSING_TASK_NAME "preprocessing"
 
 extern bool piz_default_skip_section (SectionType st, DictId dict_id);
-#define piz_is_skip_section(st,comp_i,dict_id,preprocessing) \
-    (z_file->data_type != DT_NONE && (piz_default_skip_section ((st), (dict_id)) || \
-    (DTPZ(is_skip_section) && DTPZ(is_skip_section)((st), (comp_i), (dict_id), (preprocessing)))))
-#define piz_is_skip_undicted_section(st) (z_file->data_type != DT_NONE && DTPZ(is_skip_section) && DTPZ(is_skip_section)((st), COMP_NONE, DICT_ID_NONE, false))
+
+#define piz_is_skip_section(dt,st,comp_i,dict_id,f,preprocessing) \
+    (vb->data_type != DT_NONE && (piz_default_skip_section ((st), (dict_id)) || \
+    (dt_props[dt].is_skip_section && dt_props[dt].is_skip_section ((st), (comp_i), (dict_id), (f), (preprocessing)))))
+
+#define piz_is_skip_undicted_section(st) (z_file->data_type != DT_NONE && DTPZ(is_skip_section) && DTPZ(is_skip_section)((st), COMP_NONE, DICT_ID_NONE, 0, false))
 
 extern Dispatcher piz_z_file_initialize (void);
 extern DataType piz_read_global_area (Reference ref);
@@ -28,6 +30,8 @@ extern bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool 
 extern void piz_read_all_ctxs (VBlockP vb, Section *sec, bool is_pair_data);
 extern uint32_t piz_uncompress_all_ctxs (VBlockP vb);
 extern bool piz_read_one_vb (VBlockP vb, bool for_reconstruction);
+extern void piz_set_main_dispatcher (Dispatcher dispatcher);
+extern void piz_allow_out_of_order (void);
 
 extern bool piz_grep_match (rom start, rom after);
 

@@ -12,10 +12,6 @@ unset GENOZIP_REFERENCE   # initialize
 
 ulimit -c unlimited # enable core dumps
 
-TESTDIR=private/test
-OUTDIR=$TESTDIR/tmp
-REFDIR=../genozip/data
-
 cleanup() { 
     rm -fR $OUTDIR/* $TESTDIR/*.bad $TESTDIR/*.rejects.* 
 }
@@ -1175,7 +1171,7 @@ batch_real_world_with_ref_md5() # $1 extra genozip argument
 
     local files37=( test.IonXpress.sam.gz \
                     test.human.fq.gz test.human2.bam test.pacbio.clr.bam \
-                    test.human2-R1.100K.fq.bz2 test.pacbio.ccs.10k.bam test.unmapped.sam.gz \
+                    test.human2-R1.fq.bz2 test.pacbio.ccs.10k.bam test.unmapped.sam.gz \
                     test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq test.pacbio-blasr.bam \
                     test.human2.filtered.snp.vcf test.solexa-headerless.sam test.cigar-no-seq-qual.bam )
 
@@ -1202,7 +1198,7 @@ batch_real_world_with_ref_md5() # $1 extra genozip argument
 #     # with a reference
 #     local files37=( test.IonXpress.sam.gz \
 #                     test.human.fq.gz test.human2.bam test.pacbio.clr.bam \
-#                     test.human2-R1.100K.fq.bz2 test.pacbio.ccs.10k.bam \
+#                     test.human2-R1.fq.bz2 test.pacbio.ccs.10k.bam \
 #                     test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq  \
 #                     test.human2.filtered.snp.vcf test.solexa-headerless.sam )
 
@@ -1281,7 +1277,7 @@ batch_real_world_small_vbs()
     # lots of small VBs
     local files=( test.IonXpress.sam.gz                                 \
                   test.human.fq.gz test.human2.bam                      \
-                  test.human2-R1.100K.fq.bz2 test.pacbio.ccs.10k.bam    \
+                  test.human2-R1.fq.bz2 test.pacbio.ccs.10k.bam    \
                   test.pacbio.clr.bam `# multiple PRIM and DEPN vbs`    \
                   test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq     \
                   test.sequential.fa.gz )
@@ -1340,7 +1336,7 @@ batch_reference_fastq()
     batch_print_header
 
     echo "paired FASTQ with --reference, --password (BZ2), --md5, -B1"
-    test_standard "CONCAT -e$GRCh38 -p 123 --pair -mB1" "-p123" test.human2-R1.100K.fq.bz2 test.human2-R2.100K.fq.bz2
+    test_standard "CONCAT -e$GRCh38 -p 123 --pair -mB1" "-p123" test.human2-R1.fq.bz2 test.human2-R2.fq.bz2
 
     # test --grep (regression test for bug 788)
     local n=`$genocat --grep "@A00910:85:HYGWJDSXX:1:1101:9028:1000" -p 123 $output --count || exit 1`
@@ -1352,7 +1348,7 @@ batch_reference_fastq()
     # test single-line --head (only pair-1 is expressed) - note: cannot use --count with --head
     local n=`$genocat --head=1 -p 123 $output | wc -l`
     if (( n != 4 )); then
-        echo "Expecting 1 read to be counted with --head=1 in paired FASTQ"
+        echo "Expecting 1 read to be counted with --head=1 in paired FASTQ but lines=$n"
         exit 1
     fi
 
@@ -1371,7 +1367,7 @@ batch_reference_fastq()
     fi
 
     echo "4 paired FASTQ with --REFERENCE (BGZF, decompress concatenated, password)"
-    test_standard "COPY -E$GRCh38 -2 -p 123" " " test.human2-R1.100K.fq.gz test.human2-R2.100K.fq.gz
+    test_standard "COPY -E$GRCh38 -2 -p 123" " " test.human2-R1.fq.gz test.human2-R2.fq.gz
     
     # solexa read style
     test_standard "-e$GRCh38 --pair" "" special.solexa-R1.fq special.solexa-R2.fq
@@ -1434,11 +1430,19 @@ batch_make_reference()
 
     cleanup
 
-    # Making a reference
-    echo "Making a reference"
     local fa_file=$REFDIR/GRCh38_full_analysis_set_plus_decoy_hla.fa.gz 
     local ref_file=$OUTDIR/output.ref.genozip
-    test_header "$genozip --make-reference $fa_file"
+
+    # test making from a URL
+    echo "Making a reference from a URL: $genozip --make-reference file://$path$fa_file"
+    $genozip --make-reference file://$path$fa_file --force -o $ref_file || exit 1
+
+    # test making from stdin
+    test_header "Making a reference from stdin: $genozip --make-reference -fo $ref_file - < $fa_file"
+    $genozip --make-reference -fo $ref_file - < $fa_file || exit 1
+
+    # Making a reference from a local file
+    test_header "Making a reference for a local file: $genozip --make-reference $fa_file"
     $genozip --make-reference $fa_file --force -o $ref_file || exit 1
 
     local ref="--reference $ref_file"
@@ -1619,6 +1623,26 @@ batch_gencomp_depn_methods() # note: use --debug-gencomp for detailed tracking
     cleanup
 }
 
+batch_deep() # note: use --debug-deep for detailed tracking
+{
+    batch_print_header
+
+    # btest contains a variety of scenarios
+    local T=$TESTDIR/special.basic.deep
+    $genozip $T.sam $T.R1.fq $T.R2.fq -fe $GRCh38 -3t --best || exit 1 # --best causes aligner use on unmapped alignments
+    $genozip $T.sam $T.R1.fq $T.R2.fq -fe $GRCh38 -3t --no-gencomp || exit 1 # --no-gencomp causes in-VB segging against saggy 
+
+    local T=$TESTDIR/special.10K.deep
+    $genozip $T.sam $T.R1.fq $T.R2.fq -fe $GRCh38 -3t --best || exit 1
+    $genozip $T.sam $T.R1.fq $T.R2.fq -fe $GRCh38 -3t --no-gencomp || exit 1
+
+    cleanup
+}
+
+TESTDIR=private/test
+OUTDIR=$TESTDIR/tmp
+REFDIR=../genozip/data
+
 output=${OUTDIR}/output.genozip
 output2=${OUTDIR}/output2.genozip
 recon=${OUTDIR}/recon.txt
@@ -1629,11 +1653,11 @@ is_windows="`uname|grep -i mingw``uname|grep -i MSYS`"
 is_mac=`uname|grep -i Darwin`
 
 # reference and chain files
-hg19=$REFDIR/hg19.p13.plusMT.full_analysis_set.ref.genozip
-hs37d5=$REFDIR/hs37d5.ref.genozip
-GRCh38=$REFDIR/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
-T2T1_1=$REFDIR/chm13.draft_v1.1.ref.genozip
-chinese_spring=$REFDIR/161010_Chinese_Spring_v1.0_pseudomolecules_parts.ref.genozip
+hg19=$REFDIR/hg19.v15.ref.genozip
+hs37d5=$REFDIR/hs37d5.v15.ref.genozip
+GRCh38=$REFDIR/GRCh38.v15.ref.genozip
+T2T1_1=$REFDIR/chm13.v15.ref.genozip
+chinese_spring=$REFDIR/Chinese_Spring.v15.ref.genozip
 chain37_38=$REFDIR/GRCh37_to_GRCh38.chain.genozip
 
 if (( $# < 1 )); then
@@ -1767,32 +1791,34 @@ if (( $1 <= 33 )) ; then  batch_iupac                  ; fi
 if (( $1 <= 34 )) ; then  batch_genols                 ; fi
 if (( $1 <= 35 )) ; then  batch_tar_files_from         ; fi
 if (( $1 <= 36 )) ; then  batch_gencomp_depn_methods   ; fi 
-if (( $1 <= 37 )) ; then  batch_real_world_small_vbs   ; fi 
-if (( $1 <= 38 )) ; then  batch_real_world_1_adler32   ; fi 
-if (( $1 <= 39 )) ; then  batch_real_world_genounzip_single_process ; fi 
-if (( $1 <= 40 )) ; then  batch_real_world_genounzip_compare_file   ; fi 
-if (( $1 <= 41 )) ; then  batch_real_world_1_adler32 "--best -f" ; fi 
-if (( $1 <= 42 )) ; then  batch_real_world_1_adler32 --fast    ; fi 
-if (( $1 <= 43 )) ; then  batch_real_world_with_ref_md5; fi 
-if (( $1 <= 44 )) ; then  batch_real_world_with_ref_md5 --best ; fi 
-if (( $1 <= 45 )) ; then  batch_multiseq               ; fi
-if (( $1 <= 46 )) ; then  batch_external_cram          ; fi
-if (( $1 <= 47 )) ; then  batch_external_bcf           ; fi
-if (( $1 <= 48 )) ; then  batch_external_unzip         ; fi
-if (( $1 <= 49 )) ; then  batch_reference_fastq        ; fi
-if (( $1 <= 50 )) ; then  batch_reference_sam          ; fi
-if (( $1 <= 51 )) ; then  batch_reference_vcf          ; fi
-if (( $1 <= 52 )) ; then  batch_many_small_files       ; fi
-if (( $1 <= 53 )) ; then  batch_make_reference         ; fi
-if (( $1 <= 54 )) ; then  batch_headerless_wrong_ref   ; fi
-if (( $1 <= 55 )) ; then  batch_replace                ; fi
-if (( $1 <= 56 )) ; then  batch_coverage_idxstats_sex  ; fi
-if (( $1 <= 57 )) ; then  batch_qname_flavors          ; fi
-if (( $1 <= 58 )) ; then  batch_reference_backcomp     ; fi
-if (( $1 <= 59 )) ; then  batch_real_world_backcomp 12.0.42 ; fi # note: versions must match VERSIONS in test/Makefile
-if (( $1 <= 60 )) ; then  batch_real_world_backcomp 13.0.21 ; fi 
-if (( $1 <= 61 )) ; then  batch_real_world_backcomp latest  ; fi 
-next=61
+if (( $1 <= 37 )) ; then  batch_deep                   ; fi 
+if (( $1 <= 38 )) ; then  batch_real_world_small_vbs   ; fi 
+if (( $1 <= 39 )) ; then  batch_real_world_1_adler32   ; fi 
+if (( $1 <= 40 )) ; then  batch_real_world_genounzip_single_process ; fi 
+if (( $1 <= 41 )) ; then  batch_real_world_genounzip_compare_file   ; fi 
+if (( $1 <= 42 )) ; then  batch_real_world_1_adler32 "--best -f" ; fi 
+if (( $1 <= 43 )) ; then  batch_real_world_1_adler32 --fast    ; fi 
+if (( $1 <= 44 )) ; then  batch_real_world_with_ref_md5; fi 
+if (( $1 <= 45 )) ; then  batch_real_world_with_ref_md5 --best ; fi 
+if (( $1 <= 46 )) ; then  batch_multiseq               ; fi
+if (( $1 <= 47 )) ; then  batch_external_cram          ; fi
+if (( $1 <= 48 )) ; then  batch_external_bcf           ; fi
+if (( $1 <= 49 )) ; then  batch_external_unzip         ; fi
+if (( $1 <= 50 )) ; then  batch_reference_fastq        ; fi
+if (( $1 <= 51 )) ; then  batch_reference_sam          ; fi
+if (( $1 <= 52 )) ; then  batch_reference_vcf          ; fi
+if (( $1 <= 53 )) ; then  batch_many_small_files       ; fi
+if (( $1 <= 54 )) ; then  batch_make_reference         ; fi
+if (( $1 <= 55 )) ; then  batch_headerless_wrong_ref   ; fi
+if (( $1 <= 56 )) ; then  batch_replace                ; fi
+if (( $1 <= 57 )) ; then  batch_coverage_idxstats_sex  ; fi
+if (( $1 <= 58 )) ; then  batch_qname_flavors          ; fi
+if (( $1 <= 59 )) ; then  batch_reference_backcomp     ; fi
+if (( $1 <= 60 )) ; then  batch_real_world_backcomp 12.0.42 ; fi # note: versions must match VERSIONS in test/Makefile
+if (( $1 <= 61 )) ; then  batch_real_world_backcomp 13.0.21 ; fi 
+if (( $1 <= 62 )) ; then  batch_real_world_backcomp 14.0.33 ; fi 
+if (( $1 <= 63 )) ; then  batch_real_world_backcomp latest  ; fi 
+next=63
 if (( $1 <= $next + $num_batch_prod_compatability_tests )) ; then batch_prod_compatability $1 $next ; fi
 
 printf "\nALL GOOD! \nstart: $start_date\nend:   `date`\n"

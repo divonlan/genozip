@@ -1,8 +1,6 @@
-// Source: https://gist.github.com/alfwatt/3588c5aa1f7a1ef7a3bb
-
 #if defined __APPLE__ 
 
-#include "mac_gettime.h"
+#include "mac_compat.h"
 #include <mach/mach_time.h>
 
 #ifdef mach_time_h
@@ -14,6 +12,9 @@
 static double mt_timebase = 0.0;
 static uint64_t mt_timestart = 0;
 
+// the clock_gettime function:
+// Source: https://gist.github.com/alfwatt/3588c5aa1f7a1ef7a3bb
+// Copyright (c) 2015-2018 Alf Watt - Open Source - https://opensource.org/licenses/MIT 
 int clock_gettime(clockid_t clk_id, struct timespec *tp)
 {
     kern_return_t retval = KERN_SUCCESS;

@@ -60,5 +60,4 @@ extern void gencomp_sam_prim_vb_has_been_ingested (VBlockP vb);
 extern bool gencomp_comp_eligible_for_digest (VBlockP vb);
 extern bool gencomp_am_i_expecting_more_txt_data (void);
 
-extern int64_t gencomp_get_num_lines (CompIType comp_i);
 extern void gencomp_reread_lines_as_prescribed (VBlockP vb);

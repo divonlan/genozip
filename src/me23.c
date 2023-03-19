@@ -116,7 +116,7 @@ rom me23_seg_txt_line (VBlockP vb, rom field_start_line, uint32_t remaining_txt_
     unsigned field_len=0;
     char separator;
 
-    int32_t len = &vb->txt_data.data[vb->txt_data.len] - field_start_line;
+    int32_t len = BAFTtxt - field_start_line;
 
     GET_NEXT_ITEM (ME23_ID);
     seg_id_field (vb, CTX(ME23_ID), field_start, field_len, true);
@@ -250,7 +250,7 @@ TRANSLATOR_FUNC (sam_piz_m232vcf_GENOTYPE)
     // get GENOTYPE from txt_data
     char b1 = recon[0];
     char b2 = (recon_len==2) ? recon[1] : 0;
-    vb->txt_data.len -= recon_len; // rollback - we will reconstruct it differently
+    Ltxt -= recon_len; // rollback - we will reconstruct it differently
 
     
     if (b1 == '-' || b2 == '-' || // filter out variants if the genotype is not fully called

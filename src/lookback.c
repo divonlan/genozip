@@ -72,8 +72,8 @@ const void *lookback_get_do (VBlockP vb, ContextP lb_ctx, ContextP ctx,
 {
     uint32_t lb_size = lookback_size (lb_ctx);
 
-    ASSERT (lookback <= lookback_len (ctx, lb_size), "expecting lookback=%u <= lookback_len=%u for ctx=%s vb=%d line_i=%d%s%s lb_size=%u", 
-            lookback, lookback_len(ctx, lb_size), ctx->tag_name, vb->vblock_i, vb->line_i, ((VB_DT(VCF) || VB_DT(BCF)) ? " sample_i=" : ""), ((VB_DT(VCF) || VB_DT(BCF)) ? str_int_s (vb->sample_i).s : ""), lb_size);
+    ASSERT (lookback <= lookback_len (ctx, lb_size), "%s: expecting lookback=%u <= lookback_len=%u for ctx=%s %s%s lb_size=%u", 
+            LN_NAME, lookback, lookback_len(ctx, lb_size), ctx->tag_name, ((VB_DT(VCF) || VB_DT(BCF)) ? " sample_i=" : ""), ((VB_DT(VCF) || VB_DT(BCF)) ? str_int_s (vb->sample_i).s : ""), lb_size);
             
     BufferP buf = lookback_buf(ctx);
     unsigned index = RR(buf->newest_index + lookback - 1, lb_size);
@@ -84,8 +84,8 @@ const void *lookback_get_do (VBlockP vb, ContextP lb_ctx, ContextP ctx,
         return &dummy_value;
     }
 
-    ASSERT (lookback > 0 && lookback < lb_size, "Expecting lookback=%d in ctx=%s vb=%d line_i=%d%s%s to be in the range [1,%u]", 
-            lookback, ctx->tag_name, vb->vblock_i, vb->line_i, ((VB_DT(VCF) || VB_DT(BCF)) ? " sample_i=" : ""), ((VB_DT(VCF) || VB_DT(BCF)) ? str_int_s (vb->sample_i).s : ""), lb_size-1);
+    ASSERT (lookback > 0 && lookback < lb_size, "%s: Expecting lookback=%d in ctx=%s %s%s to be in the range [1,%u]", 
+            LN_NAME, lookback, ctx->tag_name, ((VB_DT(VCF) || VB_DT(BCF)) ? " sample_i=" : ""), ((VB_DT(VCF) || VB_DT(BCF)) ? str_int_s (vb->sample_i).s : ""), lb_size-1);
 
     return (ctx->flags.store == STORE_INDEX) ? (void *)B(WordIndex, *buf, index) 
                                              : (void *)B(ValueType, *buf, index);

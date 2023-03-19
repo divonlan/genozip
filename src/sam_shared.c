@@ -38,12 +38,12 @@ void sam_vb_release_vb (VBlockSAMP vb)
     vb->last_cigar = NULL;
     vb->ref_consumed = vb->ref_and_seq_consumed = vb->soft_clip[0] = vb->soft_clip[1] = 0;
     vb->mismatch_bases_by_SEQ = vb->mismatch_bases_by_MD = vb->hard_clip[0] = vb->hard_clip[1] = vb->deletions = vb->insertions = 0;
-    vb->longest_seq_len = vb->rans_compress_bound_longest_seq_len = 0;
+    vb->longest_seq_len = vb->arith_compress_bound_longest_seq_len = 0;
     vb->a_bases = vb->x_bases = vb->y_bases = 0;
     vb->a_index = vb->x_index = vb->y_index = 0;
     vb->md_verified = 0;
     vb->qual_codec_no_longr = vb->has_qual = vb->saggy_is_prim = false;
-    vb->qual_missing = vb->seq_missing = vb->seq_is_monochar = vb->cigar_missing = vb->check_for_gc = vb->RNEXT_is_equal = 0;
+    vb->qual_missing = vb->seq_missing = vb->seq_is_monochar = vb->cigar_missing = vb->check_for_gc = vb->RNEXT_is_equal = vb->line_not_deepable = 0;
     vb->sag = 0;
     vb->sa_aln = 0;
     vb->comp_qual_len = vb->comp_cigars_len = 0;
@@ -60,9 +60,10 @@ void sam_vb_release_vb (VBlockSAMP vb)
     vb->seg_found_prim_line = vb->seg_found_depn_line = 0;
     vb->consec_is_set_chrom = 0;
     vb->consec_is_set_pos = vb->consec_is_set_len = 0;
-    
+    vb->deep_seq = (PizDeepSeq){}; 
     memset (&vb->first_idx, 0, (char*)&vb->after_idx - (char*)&vb->first_idx); // all idx's 
     memset (&vb->first_mux, 0, (char*)&vb->after_mux - (char*)&vb->first_mux); // all mux's 
+    memset (vb->deep_stats, 0, sizeof (vb->deep_stats));
     
     buf_free (vb->interlaced);
     buf_free (vb->XG);
@@ -103,8 +104,10 @@ void sam_reset_line (VBlockP vb_)
 {
     VBlockSAMP vb = (VBlockSAMP)vb_;
 
+    ASSERT (VB_DT(SAM) || VB_DT(BAM), "VB has wrong data type: %s", dt_name (vb->data_type));
+    
     vb->textual_cigar.len = vb->binary_cigar.len = vb->binary_cigar.next = 0;
-    vb->qual_missing = vb->seq_missing = vb->seq_is_monochar = vb->cigar_missing = false;
+    vb->qual_missing = vb->seq_missing = vb->seq_is_monochar = vb->cigar_missing = vb->line_not_deepable = false;
     vb->XG.len = 0;
     vb->seq_len = 0;
     vb->ref_consumed = vb->ref_and_seq_consumed = 0;
@@ -122,6 +125,7 @@ void sam_reset_line (VBlockP vb_)
         vb->chrom_name = "";
         vb->chrom_name_len = 0;
         vb->range = NULL;
+        vb->deep_seq = (PizDeepSeq){}; 
         CTX(SAM_SQBITMAP)->line_sqbitmap.len = 0;
 
         // make sure we have enough room for this line if translating. 

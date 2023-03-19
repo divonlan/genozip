@@ -67,7 +67,7 @@ void dict_io_assign_codecs (void)
             zctx->dcodec = CODEC_ARITH8;
     }
 
-    dispatcher_fan_out_task ("assign_dict_codecs", NULL, 0, "Writing dictionaries...", true, false, false, 0, 20000,
+    dispatcher_fan_out_task ("assign_dict_codecs", NULL, 0, "Writing dictionaries...", true, false, false, 0, 20000, true,
                              dict_io_prepare_for_assign_codec, 
                              dict_io_assign_codec_one_dict, 
                              NO_CALLBACK);
@@ -114,6 +114,8 @@ static void dict_io_prepare_for_compress (VBlockP vb)
         vb->fragment_ctx   = frag_ctx;
         vb->fragment_start = Bc (frag_ctx->dict, frag_next_node->char_index);
 
+        ctx_zip_z_data_exist (frag_ctx);
+
         while (frag_next_node < BAFT (CtxNode, frag_ctx->nodes) && 
                vb->fragment_len + frag_next_node->snip_len + 1 < frag_size) {
 
@@ -147,7 +149,8 @@ static void dict_io_compress_one_fragment (VBlockP vb)
         .codec                 = vb->fragment_ctx->dcodec,
         .vblock_i              = BGEN32 (vb->vblock_i),
         .num_snips             = BGEN32 (vb->fragment_num_words),
-        .dict_id               = vb->fragment_ctx->dict_id
+        .dict_id               = vb->fragment_ctx->dict_id,
+        .flags                 = { .dictionary = vb->fragment_ctx->dict_flags } // v15
     };
 
     if (flag.show_dict) 
@@ -179,7 +182,7 @@ void dict_io_compress_dictionaries (void)
 
     dict_io_assign_codecs(); // assign codecs to all contexts' dicts
 
-    dispatcher_fan_out_task ("compress_dicts", NULL, 0, "Writing dictionaries...", false, false, false, 0, 20000,
+    dispatcher_fan_out_task ("compress_dicts", NULL, 0, "Writing dictionaries...", false, false, false, 0, 20000, true,
                              dict_io_prepare_for_compress, 
                              dict_io_compress_one_fragment, 
                              zfile_output_processed_vb);
@@ -191,7 +194,7 @@ void dict_io_compress_dictionaries (void)
 // PIZ: Read and decompress dictionaries
 // -------------------------------------
 static Section dict_sec = NULL; 
-static Context *dict_ctx;
+static ContextP dict_ctx = NULL;
 
 static void dict_io_read_one_vb (VBlockP vb)
 {
@@ -204,22 +207,22 @@ static void dict_io_read_one_vb (VBlockP vb)
     // while we could easily read non-consecutive sections, this is not expected to happen and may indicate multiple calls to zip_write_global_area
     ASSERT0 (!old_dict_sec || (old_dict_sec+1 == dict_sec), "Unexpectedly, not all SEC_DICT sections are consecutive in the Genozip file");
 
-    // create context if if section is skipped, for containters to work (skipping a section should be mirror in 
-    // a container filter)
     bool new_ctx = (!dict_ctx || dict_sec->dict_id.num != dict_ctx->dict_id.num);
     if (new_ctx)
         dict_ctx = ctx_get_ctx_do (z_file->contexts, z_file->data_type, z_file->d2d_map, &z_file->num_contexts, dict_sec->dict_id, 0, 0);
 
-    if (piz_is_skip_section (SEC_DICT, COMP_NONE, dict_sec->dict_id, SKIP_PURPOSE_RECON)) {
+    // note: skipping a section should be mirrored in a container filter
+    if (piz_is_skip_section (z_file->data_type, SEC_DICT, COMP_NONE, dict_sec->dict_id, dict_sec->flags.flags, SKIP_PURPOSE_RECON)) {
         if (flag.debug_read_ctxs)
             iprintf ("%c Skipped loading DICT/%u %s.dict\n", sections_read_prefix, vb->vblock_i, dict_ctx->tag_name);
         goto done;
     }
     dict_ctx->is_loaded = true; // not skipped
-    
+    dict_ctx->dict_flags = dict_sec->flags.dictionary; // v15
+
     int32_t offset = zfile_read_section (z_file, vb, dict_sec->vblock_i, &vb->z_data, "z_data", SEC_DICT, dict_sec);    
-    SectionHeaderDictionary *header = 
-        (offset != SECTION_SKIPPED) ? (SectionHeaderDictionary *)vb->z_data.data : NULL;
+    SectionHeaderDictionaryP header = 
+        (offset != SECTION_SKIPPED) ? (SectionHeaderDictionaryP)vb->z_data.data : NULL;
 
     vb->fragment_len = header ? BGEN32 (header->data_uncompressed_len) : 0;
 
@@ -272,7 +275,7 @@ done:
 static void dict_io_uncompress_one_vb (VBlockP vb)
 {
     if (!vb->fragment_ctx || flag.only_headers) goto done; // nothing to do in this thread
-    SectionHeaderDictionary *header = (SectionHeaderDictionary *)vb->z_data.data;
+    SectionHeaderDictionaryP header = (SectionHeaderDictionaryP)vb->z_data.data;
 
     ASSERT (vb->fragment_start + BGEN32 (header->data_uncompressed_len) <= BAFTc (vb->fragment_ctx->dict), 
             "Buffer overflow when uncompressing dict=%s", vb->fragment_ctx->tag_name);
@@ -302,7 +305,7 @@ static void dict_io_dict_build_word_list_one (ContextP zctx)
         uint64_t index = BNUM64 (zctx->dict, word_start); 
         uint64_t len   = c - word_start;
 
-        if (index > ZWORD_MAX_INDEX || len > ZWORD_MAX_LEN) {
+        if (index > Z_MAX_DICT_LEN || len > Z_MAX_WORD_LEN) {
             ASSERT (!VER(14), "A word was found in zctx=%s with index=%"PRIu64" amd len=%"PRIu64". This index/len is beyond current limits of Genozip. Use Genozip v13 to decompress this file.",
                     zctx->tag_name, (uint64_t)index, (uint64_t)len);
 
@@ -336,8 +339,6 @@ void dict_io_read_all_dictionaries (void)
 {
     START_TIMER;
 
-    ctx_initialize_predefined_ctxs (z_file->contexts, z_file->data_type, z_file->d2d_map, &z_file->num_contexts);
-
     dict_sec = NULL;
     dict_ctx = NULL;
 
@@ -350,6 +351,7 @@ void dict_io_read_all_dictionaries (void)
                              !VER(9), // For v8 files, we read all fragments in the main thread as was the case in v8. This is because they are very small, and also we can't easily calculate the totel size of each dictionary.
                              0, 
                              10, // must be short - many dictionaries are just a few bytes
+                             true,
                              dict_io_read_one_vb, 
                              dict_io_uncompress_one_vb,
                              NO_CALLBACK);

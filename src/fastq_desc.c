@@ -129,7 +129,8 @@ static void fastq_seg_aux_container (VBlockFASTQP vb, STRps(tag), uint32_t total
 
         con.items[tag_i] = (ContainerItem){ .dict_id = dict_id_make (STRi(tag, tag_i), DTYPE_2), .separator  = " " };
     
-        memcpy (&prefixes[prefixes_len], tags[tag_i], tag_lens[tag_i]); prefixes_len += tag_lens[tag_i]; // including '='
+        mempcpy (&prefixes[prefixes_len], tags[tag_i], tag_lens[tag_i]); 
+        prefixes_len += tag_lens[tag_i]; // including '='
         prefixes[prefixes_len++] = '=';
         prefixes[prefixes_len++] = CON_PX_SEP;
     }
@@ -234,8 +235,8 @@ void fastq_seg_DESC (VBlockFASTQP vb, STRp(desc))
 
 SPECIAL_RECONSTRUCTOR (fastq_special_backspace)
 {
-    ASSERTNOTZERO (vb->txt_data.len, "");
-    vb->txt_data.len--;
+    ASSERTNOTZERO (Ltxt, "");
+    Ltxt--;
 
     return NO_NEW_VALUE;
 }

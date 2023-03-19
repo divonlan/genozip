@@ -906,14 +906,14 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_other_REFALT)
 void vcf_refalt_seg_convert_to_primary (VBlockVCFP vb, LiftOverStatus ostatus)
 {
     // "reconstruct" to vb->txt_data, overwriting current REF\tALT
-    uint64_t save_txt_len = vb->txt_data.len;
-    vb->txt_data.len = BNUMtxt (vb->main_ref);
+    uint32_t save_txt_len = Ltxt;
+    Ltxt = BNUMtxt (vb->main_ref);
 
     vcf_reconstruct_other_REFALT_do (VB, CTX(VCF_REFALT)->last_snip + 2, CTX(VCF_REFALT)->last_snip_len - 2, 
                                      *CTX(VCF_oXSTRAND)->last_snip, 
                                      vb->main_ref, vb->main_ref_len+1+vb->main_alt_len, CTX(VCF_oREFALT)->tag_name);
 
-    vb->txt_data.len = save_txt_len; // restore
+    Ltxt = save_txt_len; // restore
 }
 
 // called for reconstructing the REF field of the INFO/LIFTOVER and INFO/LIFTBACK fields. It reconstructs the full REFALT and then discards the ALT.
@@ -929,7 +929,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_LIFT_REF)
     ASSPIZ (after_ref, "expected a \\t in the %s snip: \"%.*s\" ostatus=%s", 
             refalt_ctx->tag_name, STRf(snip), last_ostatus_name_piz);
 
-    vb->txt_data.len = BNUMtxt (reconstruct ? after_ref : snip);
+    Ltxt = BNUMtxt (reconstruct ? after_ref : snip);
 
     return NO_NEW_VALUE;
 }

@@ -20,7 +20,6 @@
 #ifdef __APPLE__
 #include <sys/sysctl.h>
 #include <mach-o/dyld.h>
-#include "compatibility/mac_gettime.h"
 #else // LINUX
 #include <sched.h>
 #include <sys/sysinfo.h>
@@ -127,7 +126,7 @@ void arch_initialize (rom argv0)
              "Unsupported C type lengths, check compiler options");
     
     // verify endianity is as expected
-    arch_get_endianity();
+    ASSERT0 (!strcmp (arch_get_endianity(), "little"), "Genozip is currently not supported on big endian architectures");
 
 // Verify that this Windows is 64 bit
 #ifdef _WIN32
@@ -142,7 +141,7 @@ void arch_initialize (rom argv0)
     ASSERT0 (sizeof (LocalType)     == 1,  "expecting sizeof (LocalType)==1");
     ASSERT0 (sizeof (uint128_t)     == 16, "expecting sizeof (uint128_t)==16");
     ASSERT0 (sizeof (ReconPlanItem) == 12, "expecting sizeof (ReconPlanItem)==12");
-    ASSERT0 (sizeof (void *)        <= 8,  "expecting sizeof (void *)<=8"); // important bc void* is a member of ValueType
+    ASSERT0 (sizeof (void *)        <= 8,  "expecting sizeof (void *)<=8"); // important bc void* is a member of ValueType, and also counting on it in huffman_decompress
     ASSERT0 (sizeof (ValueType)     == 8,  "expecting sizeof (ValueType)==8");
 
     // Note: __builtin_clzl is inconsistent between Windows and Linux, even on the same host, so we don't use it
@@ -233,7 +232,7 @@ double arch_get_physical_mem_size (void)
     file_get_file (evb, "/proc/meminfo", &meminfo, "meminfo", 100, false, true);
 
     int num_start = strcspn (B1STc(meminfo), "0123456789");
-    mem_size = (double)atoi(Bc(meminfo, num_start)) / (1024.0*1024.0);
+    mem_size = (double)atoll(Bc(meminfo, num_start)) / (1024.0*1024.0);
     buf_destroy (meminfo);
 
 #elif defined _WIN32
@@ -316,35 +315,44 @@ rom arch_get_user_host (void)
 }
 
 // good summary here: https://stackoverflow.com/questions/1023306/finding-current-executables-path-without-proc-self-exe/1024937#1024937
-rom arch_get_executable (void) // caller should free
+rom arch_get_executable (FailType soft_fail) // caller should free
 {
 #ifdef __linux__    
-    char *path = malloc (PATH_MAX + 1);
+    char *path = MALLOC (PATH_MAX + 1);
     ssize_t path_len = readlink ("/proc/self/exe", path, PATH_MAX); // doesn't nul-terminate
-    ASSRET (path_len > 0, argv0, "Warning: readlink() failed to get executable path from /proc/self/exe: %s", strerror(errno));
-    path[path_len] = 0;
-    return path;
+    ASSRET (path_len > 0 || soft_fail, argv0, "readlink() failed to get executable path from /proc/self/exe: %s", strerror(errno));
 
 #elif defined _WIN32
-    char *path = malloc (MAX_PATH + 1);
+    char *path = MALLOC (MAX_PATH + 1);
     DWORD path_len = GetModuleFileNameA (NULL, path, MAX_PATH); // nul-terminates
-    ASSRET (path_len/*error*/ && GetLastError() != ERROR_INSUFFICIENT_BUFFER,  argv0,
-            "Warning: GetModuleFileNameA() failed to get executable path from /proc/self/exe: %s", str_win_error());
-    return path;
+    if (GetLastError() == ERROR_INSUFFICIENT_BUFFER) path_len = 0; // this is also an error
+
+    ASSRET (path_len || soft_fail,  argv0,
+            "GetModuleFileNameA() failed to get executable path from /proc/self/exe: %s", str_win_error());
 
 #elif defined __APPLE__
     // see: https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/dyld.3.html
     uint32_t path_len = 0;
     _NSGetExecutablePath (NULL, &path_len); // get path len - possibly more than MAXPATHLEN if has symlinks
-    char *path = malloc (path_len + 1);  
+    char *path = MALLOC (path_len + 1);  
 
-    ASSRET0 (!_NSGetExecutablePath (path, &path_len), argv0, "Warning: _NSGetExecutablePath() failed");
-    path[path_len] = 0;
-    return path;
+    ASSRET0 (!_NSGetExecutablePath (path, &path_len), argv0, "_NSGetExecutablePath() failed"); // this should never fail was we have the correct path_len
 
 #else // another OS
-    return argv0;
+    uint32_t path_len = strlen (argv0);
+    char *path = MALLOC (path_len + 1);
+    strcpy (path, argv0);
+
 #endif
+
+    if (path_len) {
+        path[path_len] = 0;
+        return path;
+    }
+    else { // soft fail
+        FREE (path);
+        return NULL;
+    }
 }
 
 #ifndef DISTRIBUTION
@@ -366,4 +374,17 @@ rom arch_get_run_time (void)
     str_human_time (seconds_so_far, true, time_str);
 
     return time_str;
+}
+
+// true if running under valgrind
+bool arch_is_valgrind (void)
+{
+    static thool is_valgrind = unknown;
+
+    if (is_valgrind == unknown) {
+        rom p = getenv ("LD_PRELOAD");
+        is_valgrind = (p && (strstr (p, "/valgrind/") || strstr (p, "/vgpreload")));
+    }
+
+    return is_valgrind;
 }

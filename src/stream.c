@@ -330,11 +330,9 @@ StreamP stream_create (StreamP parent_stream, uint32_t from_stream_stdout, uint3
 void stream_close_pipes (Stream *stream)
 {
     // fclose and fail silently (pipes might be gone already after we killed the counter part process?)
-    
-    // issue here: fclose fails in Windows, core-dumps in Linux - unclear why - replaced with low-level close.
-    if (stream->from_stream_stdout) close (fileno (stream->from_stream_stdout));
+    if (stream->from_stream_stdout) FCLOSE (stream->from_stream_stdout, "stream->from_stream_stdout");
     if (stream->from_stream_stderr) FCLOSE (stream->from_stream_stderr, "stream->from_stream_stderr");
-    if (stream->to_stream_stdin)    FCLOSE (stream->to_stream_stdin,    "stream->from_stream_stderr");
+    if (stream->to_stream_stdin)    FCLOSE (stream->to_stream_stdin,    "stream->to_stream_stdin");
 }
 
 int stream_close (Stream **stream, StreamCloseMode close_mode)

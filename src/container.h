@@ -59,13 +59,15 @@ typedef struct ContainerItem {
 // by a prefix for each item. Every prefix, if provided, is terminated by CON_PX_SEP.
 // Only the container-wide prefix may alternatively be terminated by CON_PX_SEP_SHOW_REPEATS.
 
+#define CON_REPEATS_BITS            24
+#define CON_MAX_REPEATS             ((1 << CON_REPEATS_BITS) - 1)
 #define CONTAINER_FIELDS(nitems)        \
     uint32_t nitems_hi            : 3;  /* nitems_lo+hi=11 bits, matches CONTAINER_MAX_DICTS. MSB of num_items (until 9.0.22 it was MSB of repeats (after BGEN)), until 12.0.27 nitems_hi was 8 bits */ \
     /* container flags set during reconstruction */ \
     uint32_t unused               : 4;  /* can be used to enlarge nitems_hi or to add flags */ \
     uint32_t no_translation       : 1;  /* Cancel translation for this container and all of its items */\
     \
-    uint32_t repeats              : 24; /* number of "repeats" (array elements) */ \
+    uint32_t repeats              : CON_REPEATS_BITS; /* number of "repeats" (array elements) */ \
     uint8_t nitems_lo;                  /* LSB of num_items */  \
     /* container flags set during Seg */               \
     uint8_t drop_final_item_sep_of_final_repeat : 1; /* Deprecated - should not be used in new code. drop separator of final item of FINAL repeat */  \

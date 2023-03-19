@@ -421,14 +421,14 @@ CODEC_RECONSTRUCT (codec_pbwt_reconstruct)
         RECONSTRUCT1 (ht);
     
     else if (ht == '-') 
-        vb->txt_data.len--; // ploidy padding (starting 10.0.2) - appears as the 2nd+ HT - counted in GT.repeats: don't reconstruct anything, just remove previous phase character
+        Ltxt--; // ploidy padding (starting 10.0.2) - appears as the 2nd+ HT - counted in GT.repeats: don't reconstruct anything, just remove previous phase character
 
     // % means "replace the previous phase and insert .". this is meant to reduce entroy for the GT.b250
     // in the case we have phased data, but missing samples appear as "./.". With this, we seg ".|%" instead of "./."
     // and hence the repsep and hence the entire GT container are the same beteen "./." and eg "1|0" samples.
     else if (ht == '%') {
         if (*BLSTtxt == '|' || *BLSTtxt == '/') { // second % in "%|%" 
-            vb->txt_data.len -= 1;  // remove | or /
+            Ltxt -= 1;  // remove | or /
             RECONSTRUCT ("/.", 2);
         }
         else

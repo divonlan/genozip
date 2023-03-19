@@ -59,7 +59,7 @@ rom filename_z_normal (rom txt_filename, DataType dt, FileType txt_ft)
 
 // rules for pair filename: two filenames need to differ by exactly one character, which is '1' and '2',
 // if test_only we validate the rule
-// if !test_only, only fn1 needs to be provided, we assume the rule is valid, and we create the output file with "1+2"
+// if !test_only, only fn1 needs to be provided, we assume the rule is valid, and we create the output file with "1+2" (caller should free)
 char *filename_z_pair (rom fn1, rom fn2, bool test_only)
 {
     FileType ft1, ft2;
@@ -177,12 +177,12 @@ rom filename_base (rom filename, bool remove_exe, rom default_basename,
             break;
         }
 
-    len = len - (start-filename);
+    len -= (start-filename);
 
     if (!basename) 
         basename = (char *)MALLOC (len + 1); // +1 for \0
-    else
-        len = MIN_(len, basename_size-1);
+    else 
+        ASSERT (len < basename_size, "actual basename_len=%u but memory allocated=%u", len+1, basename_size);
 
     sprintf (basename, "%.*s", (int)len, start);
 

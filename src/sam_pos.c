@@ -78,7 +78,7 @@ void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(pnext_str)/* option 
                 "PNEXT=\"%.*s\" out of range [0,%d] (pnext_str=%p)", pnext_str_len, pnext_str, (int)MAX_POS_SAM, pnext_str);
 
     if (pnext && segconf.running) 
-        segconf.has[SAM_PNEXT] = true; // "has" means we found evidence of non-zero PNEXT
+        segconf.has[SAM_PNEXT]++; // "has" means we found evidence of non-zero PNEXT
 
     if (segconf.has[SAM_PNEXT]) {
         int channel_i = sam_PNEXT_get_mux_channel (vb, vb->RNEXT_is_equal);

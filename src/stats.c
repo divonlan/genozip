@@ -51,7 +51,7 @@ static void stats_submit_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
     int need_sep=0;
 
     for (uint32_t i=0; i < num_stats; i++) 
-        if (sbl[i].pc_hash_occupancy > 60) { // > 60%
+        if (sbl[i].pc_hash_occupancy > 75) { // > 75%
             ContextP zctx = ZCTX(sbl[i].my_did_i);
              
             // in case of an over-populated hash table, we send the first 3 and last 3 words in the dictionary, which will help debugging the issue
@@ -68,7 +68,7 @@ static void stats_submit_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
 
     // we send the first 6 qnames in case of unrecognized QNAME flavor or in case of existing by unrecognized QNAME2 flavor
     for (QType q=QNAME1; q < NUM_QTYPES; q++) {
-        if (!segconf.qname_flavor && segconf.unknown_flavor_qnames[q][0][0]) { // at least 1 instance of QNAME2 exists
+        if (!segconf.qname_flavor[q] && segconf.unknown_flavor_qnames[q][0][0]) { // at least 1 instance of QNAME2 exists
 
             bufprintf (evb, &hash_occ, "%s%s%%2C%%2C%%2C", need_sep++ ? "%3B" : "", qtype_name(q));
 
@@ -181,6 +181,7 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
     F(show_stats) ; F(show_threads) ; F(debug_threads) ; F(show_vblocks) ; F(show_codec) ;
     F(show_headers) ; F(show_dict) ; F(show_b250) ; F(show_gheader) ; F(show_recon_plan) ;
     F(show_ref_contigs) ; F(show_digest) ; F(debug_gencomp) ; F(quiet) ; F(explicitly_generic);
+    F(submit_stats) ; F(debug_submit) ;
     #undef F
 
     #define F(name,fmt,none_value) if (flag.name != (none_value)) bufprintf (evb, &url_buf, #name "=" fmt "%%3B", flag.name);
@@ -302,16 +303,25 @@ static void stats_output_file_metadata (void)
                    (int)z_file->bound_txt_names.len, z_file->bound_txt_names.data);
     
     if (IS_REF_MAKE_CHAIN) {
-        bufprintf (evb, &stats, "PRIM reference: %s MD5=%s reference_version=%u\n", ref_get_filename (prim_ref), digest_display (ref_get_file_md5 (prim_ref)).s, ref_get_genozip_version (prim_ref));
-        bufprintf (evb, &stats, "LUFT reference: %s MD5=%s reference_version=%u\n", ref_get_filename (gref), digest_display (ref_get_file_md5 (gref)).s, ref_get_genozip_version (gref));
+        bufprintf (evb, &stats, "PRIM reference: %s %s=%s ref_genozip_version=%u\n", 
+                   ref_get_filename (prim_ref), ref_get_digest_name (prim_ref), 
+                   digest_display_(ref_get_genome_digest (prim_ref), ref_get_genozip_version (prim_ref)).s, 
+                   ref_get_genozip_version (prim_ref));
+
+        bufprintf (evb, &stats, "LUFT reference: %s %s=%s ref_genozip_version=%u\n", 
+                   ref_get_filename (gref), ref_get_digest_name (gref), 
+                   digest_display_(ref_get_genome_digest (gref), ref_get_genozip_version (gref)).s, 
+                   ref_get_genozip_version (gref));
     }
 
     else if (IS_REF_EXTERNAL || IS_REF_EXT_STORE || IS_REF_LIFTOVER) 
-        bufprintf (evb, &stats, "Reference: %s MD5=%s reference_version=%u\n", ref_get_filename (gref), digest_display (ref_get_file_md5 (gref)).s, ref_get_genozip_version (gref));
+        bufprintf (evb, &stats, "Reference: %s %s=%s ref_genozip_version=%u\n", 
+                   ref_get_filename (gref),  ref_get_digest_name (gref), 
+                   digest_display_(ref_get_genome_digest (gref), ref_is_digest_adler (gref)).s, 
+                   ref_get_genozip_version (gref));
 
     uint32_t num_used_ctxs=0;
-    for_zctx 
-        if (zctx->nodes.len || zctx->txt_len) num_used_ctxs++;
+    for_zctx_that (zctx->nodes.len || zctx->txt_len) num_used_ctxs++;
 
     #define REPORT_VBs ({ \
         bufprintf (evb, &stats, "%ss: %s   Contexts: %u   Vblocks: %u x %s   Sections: %u\n",  \
@@ -329,21 +339,37 @@ static void stats_output_file_metadata (void)
     switch (z_file->data_type) {
 
         case DT_SAM:
-        case DT_BAM:
-            if (z_has_gencomp) {
+        case DT_BAM: {
+            uint64_t num_alignments = z_file->comp_num_lines[SAM_COMP_MAIN] + z_file->comp_num_lines[SAM_COMP_PRIM] + z_file->comp_num_lines[SAM_COMP_DEPN]; // excluding Deep FQ components
+            unsigned num_fq_files = MAX_(0, (int)sections_get_num_comps (true) - SAM_COMP_FQ00); // also re-create index to include FASTQ components
+            double deep_pc    = (double)100.0 * (double)z_file->deep_stats[NDP_DEEPABLE] / (double)z_file->deep_stats[NDP_FQ_READS];
+
+            if (z_has_gencomp) 
                 bufprintf (evb, &stats, "%ss: %s (in Prim VBs: %s in Depn VBs: %s)  Contexts: %u   Vblocks: %u x %u MB  Sections: %u\n", 
-                        DTPZ (line_name), str_int_commas (z_file->num_lines).s, str_int_commas (gencomp_get_num_lines (SAM_COMP_PRIM)).s, 
-                        str_int_commas (gencomp_get_num_lines (SAM_COMP_DEPN)).s, num_used_ctxs, 
+                        DTPZ (line_name), str_int_commas (num_alignments).s, str_int_commas (z_file->comp_num_lines[SAM_COMP_PRIM]).s, 
+                        str_int_commas (z_file->comp_num_lines[SAM_COMP_DEPN]).s, num_used_ctxs, 
                         z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), z_file->section_list_buf.len32);
 
-                bufprintf (evb, &stats, "Main VBs: %u Prim VBs: %u Depn VBs: %u\n", 
+            if (flag.deep)
+                bufprintf (evb, &stats, "FASTQ reads: %"PRIu64" in %u FASTQ files (deep=%.1f%%)\n", z_file->deep_stats[NDP_FQ_READS], num_fq_files, deep_pc);
+
+            if (z_has_gencomp) {
+                bufprintf (evb, &stats, "Main VBs: %u Prim VBs: %u Depn VBs: %u", 
                         sections_get_num_vbs(SAM_COMP_MAIN), sections_get_num_vbs(SAM_COMP_PRIM), sections_get_num_vbs(SAM_COMP_DEPN));
+
+                if (flag.deep)
+                    bufprintf (evb, &stats, " FASTQ VBs: %u", sections_get_num_vbs(SAM_COMP_FQ00) + sections_get_num_vbs(SAM_COMP_FQ01));
+
+                bufprint0 (evb, &stats, "\n");
             }
-            REPORT_VBs;
+            
+            if (!z_has_gencomp)
+                REPORT_VBs;
 
             bufprintf (evb, &features, "num_hdr_contigs=%u;", sam_num_header_contigs());
+            bufprintf (evb, &features, "deep=%.1f%%;", deep_pc);
             
-            if (z_file->num_lines) {
+            if (num_alignments) {
                 FEATURE0 (segconf.is_sorted && !segconf.sam_is_unmapped, "Sorting: Sorted by POS", "Sorted");        
                 FEATURE0 (segconf.is_sorted && segconf.sam_is_unmapped, "Sorting: Unmapped", "Unmapped");        
                 FEATURE0 (segconf.is_collated, "Sorting: Collated by QNAME", "Collated");
@@ -364,10 +390,10 @@ static void stats_output_file_metadata (void)
             if (segconf.sam_XG_inc_S != unknown) 
                 bufprintf (evb, &features, "XG_include_S=%s;", TF(segconf.sam_XG_inc_S));
 
-            if (z_file->num_lines) {
-                double mate_line_pc  = 100.0 * (double)z_file->mate_line_count  / (double)z_file->num_lines;
-                double saggy_near_pc = 100.0 * (double)z_file->saggy_near_count / (double)z_file->num_lines;
-                double prim_far_pc   = 100.0 * (double)z_file->prim_far_count   / (double)z_file->num_lines;
+            if (num_alignments) {
+                double mate_line_pc  = 100.0 * (double)z_file->mate_line_count  / (double)num_alignments;
+                double saggy_near_pc = 100.0 * (double)z_file->saggy_near_count / (double)num_alignments;
+                double prim_far_pc   = 100.0 * (double)z_file->prim_far_count   / (double)num_alignments;
                 #define PREC(f) ((f && f<10) ? (1 + ((f)<1)) : 0)
                 FEATURE(true, "Buddying: sag_type=%s mate=%.*f%% saggy_near=%.*f%% prim_far=%.*f%%",
                         "sag_type=%s;mate=%.*f%%;saggy_near=%.*f%%;prim_far=%.*f%%",
@@ -376,6 +402,7 @@ static void stats_output_file_metadata (void)
                 REPORT_QNAME;
             }            
             break;
+        }
 
         case DT_VCF:
         case DT_BCF:
@@ -384,8 +411,8 @@ static void stats_output_file_metadata (void)
 
             if (z_is_dvcf)
                 bufprintf (evb, &stats, "%ss: %s (Prim-only: %s Luft-only: %s)  Contexts: %u   Vblocks: %u x %u MB  Sections: %u\n", 
-                        DTPZ (line_name), str_int_commas (z_file->num_lines).s, str_int_commas (gencomp_get_num_lines (VCF_COMP_PRIM_ONLY)).s, 
-                        str_int_commas (gencomp_get_num_lines (VCF_COMP_LUFT_ONLY)).s, num_used_ctxs, 
+                        DTPZ (line_name), str_int_commas (z_file->num_lines).s, str_int_commas (z_file->comp_num_lines[VCF_COMP_PRIM_ONLY]).s, 
+                        str_int_commas (z_file->comp_num_lines[VCF_COMP_LUFT_ONLY]).s, num_used_ctxs, 
                         z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), z_file->section_list_buf.len32);
            
             REPORT_VBs;
@@ -428,7 +455,7 @@ static void stats_output_file_metadata (void)
         case DT_FASTQ:
             REPORT_VBs;
             REPORT_QNAME;
-            if (flag.optimize_DESC) FEATURE (z_file->num_lines, "Sequencer: %s", "Sequencer=%s", segconf_tech_name());\
+            FEATURE (flag.optimize_DESC && z_file->num_lines, "Sequencer: %s", "Sequencer=%s", segconf_tech_name());\
 
             REPORT_KRAKEN;
             if (segconf.r1_or_r2) bufprintf (evb, &features, "R1_or_R2=R%d;", (segconf.r1_or_r2 == PAIR_READ_1) ? 1 : 2);
@@ -457,6 +484,7 @@ static void stats_output_file_metadata (void)
             break;
             
         case DT_REF: 
+            bufprintf (evb, &stats, "%s of genome (in-memory): %s\n", digest_name(), digest_display (z_file->digest).s); 
             FEATURE (true, "Contigs: %u", "num_contigs=%u", ref_contigs_get_num_contigs(gref));
             FEATURE (true, "Bases: %"PRIu64, "num_bases=%"PRIu64, ref_contigs_get_genome_nbases(gref));
             break;
@@ -785,7 +813,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
                                ST_NAME (SEC_REF_IUPACS));
 
     stats_consolidate_non_ctx (sbl, num_stats, "Other", 21 + (DTPZ(txt_header_required) == HDR_NONE), "E1L", "E2L", "EOL", 
-                               "SAMPLES", "AUX", TOPLEVEL, "ToPLUFT", "TOP2BAM", "TOP2FQ", "TOP2FQEX", "TOP2VCF", "TOP2HASH", 
+                               "SAMPLES", "AUX", TOPLEVEL, "ToPLUFT", "TOP2BAM", "TOP2FQ", "TOP2NONE", "TOP2FQEX", "TOP2VCF", "TOP2HASH", 
                                "LINEMETA", "CONTIG", "COORDS", "SAG", "SAALN",
                                ST_NAME (SEC_DICT_ID_ALIASES), ST_NAME (SEC_RECON_PLAN),
                                ST_NAME (SEC_VB_HEADER), ST_NAME (SEC_BGZF), ST_NAME(SEC_TXT_HEADER)/*must be last*/);
@@ -837,7 +865,16 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
     if (flag.submit_stats || flag.debug_submit || (license_allow_stats() && !flag.debug_or_test))
         stats_submit (sbl, num_stats, all_txt_len, src_comp_ratio, all_comp_ratio); 
 
-    buf_free (sbl_buf);
+    buf_destroy (sbl_buf);
+    buf_destroy (features);
+    buf_destroy (hash_occ);
+    buf_destroy (internals);
+    buf_destroy (stats_programs);
+
+    if (!(flag.show_stats && z_file->z_closes_after_me)) { // case: we're not going to display these stats - free now
+        buf_destroy (stats);
+        buf_destroy (STATS);
+    }
 }
 
 void stats_display (void)
@@ -853,6 +890,9 @@ void stats_display (void)
         iprintf ("\nNote: ZIP total file size excludes overhead of %s\n", str_size (stats.count).s);
 
     iprint0 ("\n");
+
+    buf_destroy (stats);
+    buf_destroy (STATS);
 }
 
 void stats_read_and_display (void)

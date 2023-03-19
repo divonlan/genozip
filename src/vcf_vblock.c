@@ -68,12 +68,6 @@ void vcf_vb_destroy_vb (VBlockVCFP vb)
     buf_destroy (vb->last_format);
 }
 
-// free memory allocations that assume subsequent files will have the same number of samples.
-void vcf_vb_cleanup_memory (VBlockP vb_)
-{
-    vcf_num_samples = 0;
-}
-
 // this is also used to determine whether we should reconstruct this VB in LUFT coordinates - the is_translation callback defined in TRANSLATIONS
 bool vcf_vb_is_luft    (VBlockP vb) { return vb && VB_VCF->vb_coords == DC_LUFT; }
 bool vcf_vb_is_primary (VBlockP vb) { return vb && VB_VCF->vb_coords == DC_PRIMARY; }

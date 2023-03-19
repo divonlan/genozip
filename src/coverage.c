@@ -29,6 +29,7 @@ void coverage_initialize (VBlockP vb)
     buf_zero (&vb->unmapped_read_count); // zero every VB even if already allocated from prev VB
 }
 
+// PIZ: main thread: piz_process_recon callback: called in order of VBs (bc can't be called with --test)
 void coverage_add_one_vb (VBlockP vb)
 {
     buf_add_vector (evb, uint64_t, txt_file->coverage, vb->coverage, "txt_file->coverage");

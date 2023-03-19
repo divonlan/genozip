@@ -191,7 +191,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_BISMARK_XM)
             }
 
             ctx->next_local = BNUM (ctx->local, diff);
-            vb->txt_data.len32 += meth_call_len;
+            Ltxt += meth_call_len;
     
             break;
         }

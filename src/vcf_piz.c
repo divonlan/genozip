@@ -20,7 +20,12 @@
 #include "reconstruct.h"
 #include "piz.h"
 
-void vcf_piz_genozip_header (const SectionHeaderGenozipHeader *header)
+void vcf_piz_finalize (void)
+{
+    vcf_header_finalize();
+}
+
+void vcf_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
 {
     if (VER(14)) {
         segconf.has[FORMAT_RGQ] = header->vcf.segconf_has_RGQ;
@@ -33,7 +38,7 @@ bool vcf_piz_maybe_reorder_lines (void)
     return z_file->z_flags.has_gencomp || sections_get_comp_recon_plan_sec (VCF_COMP_MAIN, 0); // DVCF or being sorted
 }
 
-bool vcf_piz_init_vb (VBlockP vb_, const SectionHeaderVbHeader *header, uint32_t *txt_data_so_far_single_0_increment)
+bool vcf_piz_init_vb (VBlockP vb_, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment)
 { 
     VBlockVCFP vb = (VBlockVCFP)vb_;
 
@@ -94,8 +99,9 @@ void vcf_piz_insert_field (VBlockVCFP vb, Did did, STRp(value))
     memmove (addr + value_len, addr, BAFTtxt - addr); // make room
     memcpy (addr, value, value_len); // copy
 
-    vb->txt_data.len += value_len;
+    Ltxt += value_len;
 
+    // note: keep txt_data.len 64b to detect bugs
     ASSERT (vb->txt_data.len <= vb->txt_data.size, "txt_data overflow: len=%"PRIu64" > size=%"PRIu64, vb->txt_data.len, (uint64_t)vb->txt_data.size);
     
     // adjust lookback addresses that might be affected by this insertion
@@ -125,7 +131,7 @@ static void vcf_piz_replace_pos_with_gpos (VBlockVCFP vb)
     Range *r = ref_get_range_by_ref_index (VB, gref, ref_chrom_index); // possibly NULL
 
     // remove CHROM and POS and two \t
-    vb->txt_data.len -= pos_ctx->last_txt.len + vb->last_txt_len (chrom_did_i) + 2; // remove main CHROM\tPOS\t
+    Ltxt -= pos_ctx->last_txt.len + vb->last_txt_len (chrom_did_i) + 2; // remove main CHROM\tPOS\t
 
     PosType64 pos = pos_ctx->last_value.i;
     PosType64 gpos = (r && pos >= r->first_pos && pos <= r->last_pos) ? r->gpos + (pos - r->first_pos) : 0; 
@@ -159,7 +165,7 @@ CONTAINER_FILTER_FUNC (vcf_piz_filter)
             if (flag.drop_genotypes) {
                 // --drop-genotypes: remove the two tabs at the end of the line
                 if (dnum == _VCF_EOL)
-                    vb->txt_data.len -= 2;
+                    Ltxt -= 2;
 
                 // --drop-genotypes: drop SAMPLES (might be loaded if has[RGQ], as needed for vcf_piz_special_main_REFALT)
                 else if (dnum == _VCF_SAMPLES)
@@ -229,7 +235,7 @@ CONTAINER_FILTER_FUNC (vcf_piz_filter)
 static void inline vcf_piz_SAMPLES_subset_samples (VBlockVCFP vb, unsigned rep, unsigned num_reps, int32_t recon_len)
 {
     if (!samples_am_i_included (rep))
-        vb->txt_data.len -= recon_len + (rep == num_reps - 1); // if last sample, we also remove the preceeding \t (recon_len includes the sample's separator \t, except for the last sample that doesn't have a separator)
+        Ltxt -= recon_len + (rep == num_reps - 1); // if last sample, we also remove the preceeding \t (recon_len includes the sample's separator \t, except for the last sample that doesn't have a separator)
 }
 
 static void inline vcf_piz_append_ostatus_to_INFO (VBlockP vb)

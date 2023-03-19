@@ -57,17 +57,17 @@ TRANSLATOR_FUNC (vcf_piz_luft_NEG)
     // case: negative to positive
     if (recon[0] == '-') { 
         memmove (recon, recon+1, recon_len-1); // delete '-'
-        if (!validate_only) vb->txt_data.len32--;
+        if (!validate_only) Ltxt--;
     }
 
-    else if (recon_len == 1 && (recon[0] == '0' || recon[0] == '.')) {
+    else if (str_is_1char (recon, '0') || str_is_1char (recon, '.')) {
     } // "0" and "." are unchanged
 
     // case: positive to negative
     else {
         memmove (recon+1, recon, recon_len); 
         *recon = '-'; // insert '-'
-        vb->txt_data.len32++;
+        Ltxt++;
     }
 
     return true; // translation successful

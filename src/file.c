@@ -35,6 +35,8 @@
 #include "writer.h"
 #include "version.h"
 #include "filename.h"
+#include "huffman.h"
+#include "arch.h"
 
 // globals
 FileP z_file   = NULL;
@@ -358,8 +360,6 @@ static bool file_open_txt_read_test_valid_dt (ConstFileP file)
         }
     }
 
-    ASSINP0 (!flag.make_reference || file->data_type == DT_REF, "--make-reference can only be used with FASTA files");
-
     return false; // all good - no need to skip this file
 }
 
@@ -379,6 +379,7 @@ static bool file_open_txt_read (FileP file)
 
     switch (file->codec) { 
         case CODEC_CRAM: {
+            rom samtools_T_option = ref_get_cram_ref(gref);
             input_decompressor = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 
                                                 file->is_remote ? file->name : NULL,      // url                                        
                                                 file->redirected,
@@ -386,9 +387,10 @@ static bool file_open_txt_read (FileP file)
                                                 "samtools", "view", "-bu", "--threads", "10", "-h", // in practice, samtools is able to consume ~4 cores
                                                 file_samtools_no_PG() ? "--no-PG" : "-h", // don't add a PG line to the header (just repeat -h if this is an older samtools without --no-PG - no harm)
                                                 file->is_remote ? SKIP_ARG : file->name,  // local file name 
-                                                ref_get_cram_ref(gref), NULL);
+                                                samtools_T_option, NULL);
             file->file = stream_from_stream_stdout (input_decompressor);
             file->redirected = true;
+            FREE(samtools_T_option);
             goto fallthrough_from_cram;
         }
 
@@ -455,7 +457,11 @@ fallthrough_from_cram: {}
                 ASSERT0 (!file->redirected, "genozip can't read gzip data from a pipe - piped data must be either plain or in BGZF format - i.e. compressed with bgzip, htslib etc");
 
                 file->codec = file->source_codec = CODEC_GZ;
-                file->file  = gzdopen (fileno((FILE *)file->file), READ); // we're abandoning the FILE structure (and leaking it, if libc implementation dynamically allocates it) and working only with the fd
+                
+                int fd = dup (fileno((FILE *)file->file));
+                FCLOSE (file->file, file_printname (file));
+                
+                file->file  = gzdopen (fd, READ); // we're abandoning the FILE structure (and leaking it, if libc implementation dynamically allocates it) and working only with the fd
                 gzinject (file->file, block, block_size); // a hack - adds a 18 bytes of compressed data to the in stream, which will be consumed next, instead of reading from disk
             } 
 
@@ -575,7 +581,7 @@ static bool file_open_txt_write (FileP file)
         // case: not .gz and not BAM - use the default plain file format
         else { 
             file->type = txt_out_ft_by_dt[file->data_type][0];  
-            ASSINP0 (flag.bgzf == 0 || flag.to_stdout, "using --output in combination with --bgzf, requires the output filename to end with .gz or .bgz");
+            ASSINP0 (flag.bgzf == BGZF_NOT_INITIALIZED || flag.to_stdout, "using --output in combination with --bgzf, requires the output filename to end with .gz or .bgz");
         }
     }
 
@@ -666,73 +672,40 @@ static bool file_open_txt_write (FileP file)
     return file->file != 0;
 }
 
-// we add all buffers to evb's buf_list in advance, to avoid thread issues of accessing buf_lists when using
-// these in VBs other than evb
-static void file_initialize_bufs (FileP file)
-{
-#define INIT(buf) ({ buf_add_to_buffer_list_(evb, &file->buf, "file->" #buf); })
-    
-    INIT (ra_buf);
-    INIT (ra_buf_luft);
-    INIT (chrom2ref_map);
-    INIT (ref2chrom_map);
-    INIT (section_list_buf);
-    INIT (section_list_save);
-    INIT (bound_txt_names);
-    INIT (recon_plan);
-    INIT (recon_plan_index);
-    INIT (txt_header_info);
-    INIT (vb_info[0]);
-    INIT (vb_info[1]);
-    INIT (line_info[0]);
-    INIT (line_info[1]);
-    INIT (sag_alns);
-    INIT (sag_grps);
-    INIT (sag_gps_index);
-    INIT (sag_qnames);
-    INIT (sag_depn_index);
-    INIT (sag_cigars);
-    INIT (sag_seq);
-    INIT (sag_qual);
-    INIT (rejects_report);
-    INIT (apriori_tags);
-    INIT (vb_sections_index);
-    INIT (comp_sections_index);
-    INIT (unconsumed_txt);
-    INIT (unconsumed_bgzf_blocks);
-    INIT (bgzf_isizes);
-    INIT (bgzf_starts);
-    INIT (coverage);
-    INIT (read_count);
-    INIT (unmapped_read_count);
-    INIT (vb_start_deep_line);
-    INIT (deep_hash);
-    INIT (deep_ents);    
-}
 
-// we insert all the z_file buffers into the buffer list in advance, to avoid this 
-// thread satety issue:
-// without our pre-allocation, some of these buffers will be first allocated by a compute threads 
-// when the first vb containing a certain did_i is merged in (for the contexts buffers) or
-// ra is merged (for ra_buf). while these operations 
-// are done while holding a mutex, so that compute threads don't run over each over, buf_alloc 
-// may change buf_lists in evb buffers, while the main thread might be doing so concurrently
-// resulting in data corruption in evb.buf_list. If evb.buf_list gets corrupted this might result in termination 
-// of the execution.
-// with these buf_add_to_buffer_list() the buffers will already be in evb's buf_list before any compute thread is run.
-static void file_initialize_z_add_to_buf_list (BufferP buf, FUNCLINE)
-{
-    buf_add_to_buffer_list_do (evb, buf, func, code_line);
-}
+// note: we insert all the z_file buffers into the buffer list in advance and mark them as promiscuous, to avoid this 
+// thread satety issue: without this pre-allocation, some of these buffers will be first allocated by the first 
+// compute thread to use it, causing buf_alloc to modify evb's buf_list - this is not permitted as the main 
+// thread might be doing so concurrently resulting in a corrupted evb.buf_list.
 
 static void file_initialize_z_file_data (FileP file)
 {
     init_dict_id_to_did_map (file->d2d_map); 
+        
+    #define Z_INIT(buf) ({ buf_init_promiscuous_(evb, &file->buf, "z_file->" #buf); })
 
-    for (unsigned i=0; i < MAX_DICTS; i++) 
-        ctx_foreach_buffer (&file->contexts[i], true, file_initialize_z_add_to_buf_list);
+    if (IS_ZIP) {
+        for (Did did_i=0; did_i < MAX_DICTS; did_i++) 
+           ctx_zip_init_promiscuous (&file->contexts[did_i]);
 
-    file_initialize_bufs (file);
+        // initialize evb "promiscuous" buffers - i.e. buffers that can be allocated by any thread (obviously protected by eg a mutex)
+        // promiscuous buffers must be initialized by the main thread, and buffer.c does not verify their integrity.
+        Z_INIT (ra_buf);
+        Z_INIT (ra_buf_luft);
+        Z_INIT (sag_grps);
+        Z_INIT (sag_alns);
+        Z_INIT (sag_qnames);
+        Z_INIT (sag_cigars);
+        Z_INIT (sag_seq);
+        Z_INIT (sag_qual);
+        Z_INIT (chrom2ref_map);
+        Z_INIT (deep_hash);
+        Z_INIT (deep_ents);
+    }
+    else {
+        Z_INIT (sag_qual);
+        Z_INIT (sag_cigars);
+    }
 
     if (flag.biopsy_line.line_i == NO_LINE) // no need to initialize in --biopsy-line (as destroying it later will error)
         serializer_initialize (file->digest_serializer); 
@@ -740,13 +713,23 @@ static void file_initialize_z_file_data (FileP file)
 
 static void file_initialize_txt_file_data (FileP file)
 {
-    mutex_initialize (file->recon_plan_mutex[0]);
-    mutex_initialize (file->recon_plan_mutex[1]);
+    #define TXT_INIT(buf) ({ buf_init_promiscuous_(evb, &file->buf, "txt_file->" #buf); })
 
-    file_initialize_bufs (file);
+    if (IS_ZIP) {
+        mutex_initialize (file->recon_plan_mutex[0]);
+        mutex_initialize (file->recon_plan_mutex[1]);
+
+        // initialize evb "promiscuous" buffers - i.e. buffers that can be allocated by any thread
+        // promiscuous buffers must be initialized by the main thread, and buffer.c does not verify their integrity.
+        TXT_INIT(line_info[0]);
+        TXT_INIT(line_info[1]);
+        TXT_INIT(vb_info[0]);
+        TXT_INIT(vb_info[1]);
+    }
+    else {
+
+    }
 }
-
-#undef INIT
 
 // returns true if successful
 static bool file_open_z (FileP file)
@@ -892,7 +875,7 @@ FileP file_open (rom filename, FileMode mode, FileSupertype supertype, DataType 
 {
     START_TIMER;
 
-    FileP file = (FileP )CALLOC (sizeof(File));
+    FileP file = (FileP)CALLOC (sizeof(File));
 
     file->supertype   = supertype;
     file->is_remote   = filename && url_is_url (filename);
@@ -969,7 +952,9 @@ FileP file_open (rom filename, FileMode mode, FileSupertype supertype, DataType 
         file->type = txt_out_ft_by_dt[data_type][flag.bgzf >= 1]; // plain file or .gz file
     }
 
-    file->basename = filename_base (file->name, false, mode==READ ? FILENAME_STDIN : FILENAME_STDOUT, NULL, 0);
+    file->basename = filename_base (file->name, false, 
+                                    flag.reading_reference ? "(reference)" : mode==READ ? FILENAME_STDIN : FILENAME_STDOUT, 
+                                    NULL, 0);
 
     bool success=false;
     switch (supertype) {
@@ -1058,6 +1043,10 @@ void file_close (FileP *file_p,
 
     else if (file->file && file->supertype == Z_FILE) {
 
+        // ZIP note: we need to destory all even if unused, because they were initialized in file_initialize_z_file_data
+        for (Did did_i=0; did_i < (IS_ZIP ? MAX_DICTS : file->num_contexts); did_i++) 
+            ctx_destroy_context (&file->contexts[did_i], did_i);
+
         if (tar_is_tar() && file->mode != READ)
             tar_close_file (&file->file);
         else
@@ -1072,17 +1061,23 @@ void file_close (FileP *file_p,
     // free resources if we are NOT near the end of the execution. If we are at the end of the execution
     // it is faster to just let the process die
 
-    if (cleanup_memory) {
+    if (cleanup_memory || 
+        arch_is_valgrind()) { // free everything if testing with valgrind, so that we can find true memory leaks
 
         mutex_destroy (file->dicts_mutex);
+        mutex_destroy (file->custom_merge_mutex);
+        mutex_destroy (file->qname_huf_mutex);
         mutex_destroy (file->recon_plan_mutex[0]);
         mutex_destroy (file->recon_plan_mutex[1]);
-        mutex_destroy (file->custom_merge_mutex);
-            
-        // always destroy all buffers even if unused - for saftey
-        for (unsigned i=0; i < MAX_DICTS; i++) // we need to destory all even if unused, because they were initialized in file_initialize_z_file_data
-            ctx_destroy_context (&file->contexts[i], i);
 
+        if (IS_PIZ && flag.deep) { // in this case, deep_index and deep_ents are Buffers containing arrays of Buffers
+            for_buf (Buffer, buf, file->deep_index) buf_destroy (*buf);
+            for_buf (Buffer, buf, file->deep_ents)  buf_destroy (*buf);  
+            huffman_destroy (&file->qname_huf);          
+        }
+
+        buf_destroy (file->vb_sections_index);
+        buf_destroy (file->comp_sections_index);
         buf_destroy (file->ra_buf);
         buf_destroy (file->ra_buf_luft);
         buf_destroy (file->chrom2ref_map);
@@ -1096,35 +1091,28 @@ void file_close (FileP *file_p,
         buf_destroy (file->coverage);
         buf_destroy (file->read_count);
         buf_destroy (file->unmapped_read_count);
-        buf_destroy (file->bound_txt_names);
-        buf_destroy (file->line_info[0]);
-        buf_destroy (file->line_info[1]);
-        buf_destroy (file->vb_info[0]);
-        buf_destroy (file->vb_info[1]);
-        buf_destroy (file->recon_plan);
-        buf_destroy (file->recon_plan_index);
-        buf_destroy (file->txt_header_info);
         buf_destroy (file->sag_grps);
-        buf_destroy (file->sag_gps_index);
+        buf_destroy (file->sag_grps_index);
         buf_destroy (file->sag_alns);
         buf_destroy (file->sag_qnames);
         buf_destroy (file->sag_depn_index);
         buf_destroy (file->sag_cigars);
         buf_destroy (file->sag_seq);
         buf_destroy (file->sag_qual);
+        buf_destroy (file->vb_start_deep_line);
+        buf_destroy (file->deep_ents);
+        buf_destroy (file->deep_hash); // union with deep_index
         buf_destroy (file->rejects_report);
         buf_destroy (file->apriori_tags);
-        buf_destroy (file->vb_sections_index);
-        buf_destroy (file->comp_sections_index);
-        buf_destroy (file->vb_start_deep_line);
+        buf_destroy (file->vb_info[0]);
+        buf_destroy (file->vb_info[1]);
+        buf_destroy (file->line_info[0]);
+        buf_destroy (file->line_info[1]);
+        buf_destroy (file->recon_plan);
+        buf_destroy (file->recon_plan_index);
+        buf_destroy (file->txt_header_info);
+        buf_destroy (file->bound_txt_names);
         
-        if (IS_PIZ && flag.deep) { // in this case, deep_index and deep_ents are Buffers containing arrays of Buffers
-            for_buf (Buffer, buf, file->deep_index) buf_destroy (*buf);
-            for_buf (Buffer, buf, file->deep_ents)  buf_destroy (*buf);            
-        }
-        buf_destroy (file->deep_hash);
-        buf_destroy (file->deep_ents);
-
         FREE (file->name);
         FREE (file->basename);
         FREE (file);
@@ -1488,7 +1476,7 @@ char *file_make_unix_filename (char *filename)
         !getcwd (path, sizeof (path))) // path too long
         path[0] = 0;  // don't store path
 
-    char *full_fn = malloc (strlen (z_name) + strlen (path) + 2);
+    char *full_fn = MALLOC (strlen (z_name) + strlen (path) + 2);
     sprintf (full_fn, "%s%s%s", path, *path ? "/" : "", z_name);
 
 #ifdef _WIN32 // convert to Unix-style filename

@@ -112,7 +112,7 @@ void genols (rom z_filename, bool finalize, rom subdir, bool recursive)
     Digest digest = DIGEST_NONE;
     Section txt_header_sec;
     if (Z_DT(REF))
-        digest = header.REF_fasta_md5;
+        digest = header.genome_digest;
     
     else if (header.genozip_version <= 13 && Z_DT(FASTQ) && z_file->z_flags.dts_paired)
         digest = header.FASTQ_v13_digest_bound;
@@ -123,7 +123,7 @@ void genols (rom z_filename, bool finalize, rom subdir, bool recursive)
 
     float ratio = z_file->disk_size ? ((float)z_file->txt_data_so_far_bind / (float)z_file->disk_size) : 0;
     
-    // TODO: have an option to print ref_file_name and ref_file_md5
+    // TODO: have an option to print ref_file_name and ref_genome_digest
 
     DataType dt = z_file->z_flags.txt_is_bin ? DTPZ (bin_type) : z_file->data_type;
 

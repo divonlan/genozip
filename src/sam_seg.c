@@ -29,6 +29,7 @@
 #include "gencomp.h"
 #include "tip.h"
 #include "deep.h"
+#include "arch.h"
 #include "libdeflate/libdeflate.h"
 
 typedef enum { QNAME, FLAG, RNAME, POS, MAPQ, CIGAR, RNEXT, PNEXT, TLEN, SEQ, QUAL, AUX } SamFields __attribute__((unused)); // quick way to define constants
@@ -143,19 +144,21 @@ void sam_zip_initialize (void)
     }
 }
 
-// called after each file
+// called after each txt file (including after the SAM component in Deep)
 void sam_zip_finalize (bool is_last_user_txt_file)
 {
-    if (is_last_user_txt_file) return; // no need to waste time freeing if this is the last file - the process will die momentarily
+    if (!is_last_user_txt_file || // no need to waste time freeing if this is the last file - the process will die momentarily
+        arch_is_valgrind()) {     // ...unless we're testing with valgrind: free the memory we would normally intentionally leak, so we can find true leaks
 
-    if (IS_REF_INTERNAL || IS_REF_EXT_STORE) 
-        ref_destroy_reference (gref);
+        if (IS_REF_INTERNAL || IS_REF_EXT_STORE) 
+            ref_destroy_reference (gref);
 
-    if (segconf.sag_type) 
-        gencomp_destroy();
+        if (segconf.sag_type) 
+            gencomp_destroy();
 
-    if (flag.deep)
-        sam_deep_zip_finalize();
+        if (flag.deep)
+            sam_deep_zip_finalize();
+    }
 }
 
 // called by main thread after reading txt of one vb into vb->txt_data
@@ -191,7 +194,7 @@ void sam_zip_after_compute (VBlockP vb)
 }
 
 // main thread: writing data-type specific fields to genozip header
-void sam_zip_genozip_header (SectionHeaderGenozipHeader *header)
+void sam_zip_genozip_header (SectionHeaderGenozipHeaderP header)
 {
     header->sam.segconf_seq_len         = BGEN32(segconf.sam_seq_len);   // v14
     header->sam.segconf_seq_len_cm      = segconf.seq_len_to_cm;         // v14
@@ -206,7 +209,7 @@ void sam_zip_genozip_header (SectionHeaderGenozipHeader *header)
     header->sam.segconf_is_collated     = segconf.is_collated;           // v14
     header->sam.segconf_pysam_qual      = segconf.pysam_qual;            // v14
     header->sam.segconf_cellranger      = segconf.has_cellranger;        // v14
-    header->sam.segconf_seq_len_dict_id = segconf.seq_len_dict_id; // v14
+    header->sam.segconf_seq_len_dict_id = segconf.seq_len_dict_id;       // v14
     header->sam.segconf_MD_NM_by_un     = segconf.MD_NM_by_unconverted;  // v14
     header->sam.segconf_predict_meth    = segconf.sam_predict_meth_call; // v14
     header->sam.segconf_deep_no_qname   = segconf.deep_no_qname;         // v15
@@ -227,7 +230,7 @@ static void sam_seg_QNAME_initialize (VBlockSAMP vb)
     CTX(SAM_QNAME)->no_stons = true;             // no singletons, bc sam_piz_special_SET_BUDDY uses PEEK_SNIP
     CTX(SAM_QNAME)->flags.store_per_line = true; // 12.0.41
 
-    qname_seg_initialize (VB, QNAME1, 0); 
+    qname_seg_initialize (VB, QNAME1, SAM_QNAME, 0); 
 
     if (segconf.running)
         segconf.qname_flavor[0] = 0; // unknown
@@ -364,8 +367,7 @@ void sam_seg_initialize (VBlockP vb_)
     ctx_consolidate_stats (VB, OPTION_CR_Z, OPTION_CR_Z_X, DID_EOL);
     ctx_consolidate_stats (VB, OPTION_GR_Z, OPTION_GR_Z_X, DID_EOL);
     ctx_consolidate_stats (VB, OPTION_GY_Z, OPTION_GY_Z_X, DID_EOL);
-    ctx_consolidate_stats (VB, SAM_AUX, SAM_FQ_AUX, DID_EOL); // note: this is *not* OPTION_MC_Z
-    ctx_consolidate_stats (VB, SAM_QNAME, SAM_BUDDY, SAM_QNAMESA, DID_EOL);
+    ctx_consolidate_stats (VB, SAM_QNAME, SAM_BUDDY, SAM_QNAMESA, SAM_FQ_AUX, DID_EOL);
     ctx_consolidate_stats (VB, OPTION_BD_BI, OPTION_BI_Z, OPTION_BD_Z, DID_EOL);
 
     if (segconf.has[OPTION_HI_i] && !segconf.has[OPTION_SA_Z])
@@ -457,7 +459,7 @@ static void sam_seg_toplevel (VBlockP vb)
         .filter_items = true,
         .nitems_lo    = 14,
         .items = { { .dict_id = { _SAM_BUDDY    }                                 },
-                   { .dict_id = { qname_dict_id }, .separator = { '\t', deep_cb } },
+                   { .dict_id = { qname_dict_id }, .separator = "\t"              },
                    { .dict_id = { _SAM_FLAG     }, .separator = "\t"              },
                    { .dict_id = { _SAM_RNAME    }, .separator = "\t"              },
                    { .dict_id = { _SAM_POS      }, .separator = "\t"              },
@@ -472,6 +474,27 @@ static void sam_seg_toplevel (VBlockP vb)
                    { .dict_id = { _SAM_EOL      }                                 }}};
                    
     container_seg (vb, CTX(SAM_TOPLEVEL), (ContainerP)&top_level_sam, 0, 0, 0);
+
+    // Deep: top level snip - reconstruction as SAM when genocat --R1 --R2 - reconstruct only what's needed for FASTQ 
+    SmallContainer top_level_deep_fq = {
+        .repeats      = vb->lines.len32,
+        .is_toplevel  = true,
+        .callback     = true,
+        .filter_items = true,
+        .nitems_lo    = 11,
+        .items = { { .dict_id = { _SAM_BUDDY    }                                 },
+                   { .dict_id = { qname_dict_id }, .separator = "\t"              },
+                   { .dict_id = { _SAM_FLAG     }, .separator = { CI0_INVISIBLE } },
+                   { .dict_id = { _SAM_RNAME    }, .separator = { CI0_INVISIBLE } }, // needed for reconstructing seq
+                   { .dict_id = { _SAM_POS      }, .separator = { CI0_INVISIBLE } }, // needed for reconstructing seq
+                   { .dict_id = { _SAM_CIGAR    }, .separator = { CI0_INVISIBLE } }, // needed for reconstructing seq
+                   { .dict_id = { _SAM_RNEXT    }, .separator = { CI0_INVISIBLE } }, // needed for reconstructing RNAME
+                   { .dict_id = { _SAM_PNEXT    }, .separator = { CI0_INVISIBLE } }, // needed for reconstructing POS
+                   { .dict_id = { _SAM_SQBITMAP }, .separator = { '\t', deep_cb } },
+                   { .dict_id = { qual_dict_id  }, .separator = { '\t', deep_cb } },
+                   { .dict_id = { _SAM_FQ_AUX   }, .separator = { CI0_INVISIBLE } }}}; // consumes OPTION_MC_Z (needed for mate CIGAR), OPTION_SA_Z (need for saggy RNAME, POS, CIGAR, NM, MAPQ)
+                   
+    container_seg (vb, CTX(SAM_TOP2NONE), (ContainerP)&top_level_deep_fq, 0, 0, 0);
 
     // top level snip - reconstruction as BAM
     // strategy: we start by reconstructing the variable-length fields first (after a prefix that sets them in place)
@@ -491,7 +514,7 @@ static void sam_seg_toplevel (VBlockP vb)
                           { .dict_id = { _SAM_FLAG     }, .separator = { CI0_TRANS_NOR | CI0_TRANS_MOVE, 4 }, SAM2BAM_LTEN_U16 }, // Translate - textual to binary number
                           { .dict_id = { _SAM_RNEXT    }, .separator = { CI0_TRANS_NOR                     }, SAM2BAM_RNAME    }, // Translate - output word_index instead of string
                           { .dict_id = { _SAM_PNEXT    }, .separator = { CI0_TRANS_NOR | CI0_TRANS_MOVE, 4 }, SAM2BAM_POS      }, // Translate - output little endian POS-1
-                          { .dict_id = { qname_dict_id }, .separator = { CI0_TRANS_NUL                     }, (flag.deep ? SAM2BAM_QNAME : 0) }, 
+                          { .dict_id = { qname_dict_id }, .separator = { CI0_TRANS_NUL                     },                  }, 
                           { .dict_id = { _SAM_CIGAR    }, .separator = ""                                                      }, // handle in special reconstructor - translate textual to BAM CIGAR format + reconstruct l_read_name, n_cigar_op, l_seq
                           { .dict_id = { _SAM_TLEN     }, .separator = { CI0_TRANS_NOR                     }, SAM2BAM_TLEN     }, // must be after CIGAR bc sam_piz_special_TLEN_old needs vb->seq_num
                           { .dict_id = { _SAM_SQBITMAP }, .separator = "",                                    SAM2BAM_SEQ      }, // Translate - textual format to BAM format ; if --deep, store in deep_ents
@@ -522,7 +545,7 @@ static void sam_seg_toplevel (VBlockP vb)
                          { .dict_id = { _SAM_PNEXT    }, .separator = { CI0_INVISIBLE }                  },// needed for reconstructing POS (in case of BUDDY)
                          { .dict_id = { _SAM_FLAG     }, .separator = { CI0_INVISIBLE }, .translator = SAM2FASTQ_FLAG }, // need to know if seq is reverse complemented & if it is R2 ; reconstructs "1" for R1 and "2" for R2
                          { .dict_id = { _SAM_CIGAR    }, .separator = { CI0_INVISIBLE }                  },// needed for reconstructing seq and also of SA_CIGAR (need vb->hard_clips[] for de-squanking)
-                         { .dict_id = { _SAM_FQ_AUX   }, .separator = { CI0_INVISIBLE }                  },// consumes OPTION_MC_Z, OPTION_SA_Z if its on this line, might be needed for mate CIGAR
+                         { .dict_id = { _SAM_FQ_AUX   }, .separator = { CI0_INVISIBLE }                  },// consumes OPTION_MC_Z (needed for mate CIGAR), OPTION_SA_Z (need for saggy RNAME, POS, CIGAR, NM, MAPQ)
                          { .dict_id = { _SAM_SQBITMAP }, .separator = { CI0_TRANS_ALWAYS, '\n' }, .translator = SAM2FASTQ_SEQ  },
                          { .dict_id = { qual_dict_id  }, .separator = { CI0_TRANS_ALWAYS, '\n' }, .translator = SAM2FASTQ_QUAL }, // also moves fastq "line" to R2 (paired file) if needed
                       }
@@ -595,7 +618,7 @@ static void sam_seg_finalize_segconf (VBlockP vb)
 
     // evidence of STARsolo or cellranger (this is also detected in the SAM header)
     if ((MP(STAR) || MP(UNKNOWN)) &&
-        ((segconf.has[OPTION_UB_Z] + segconf.has[OPTION_UR_Z] + segconf.has[OPTION_UY_Z] >= 2) ||
+        (((segconf.has[OPTION_UB_Z] > 0) + (segconf.has[OPTION_UR_Z] > 0) + (segconf.has[OPTION_UY_Z] > 0) >= 2) ||
          (segconf.has[OPTION_gn_Z] && segconf.has[OPTION_gx_Z]) ||
          (segconf.has[OPTION_GN_Z] && segconf.has[OPTION_GX_Z]) ||
          (segconf.has[OPTION_2R_Z] && segconf.has[OPTION_2Y_Z]) ||
@@ -643,14 +666,17 @@ static void sam_seg_finalize_segconf (VBlockP vb)
     }
 
     else {
-        segconf_finalize_is_sorted();
+        // case: if we haven't found any pair of consecutive lines with the same CHROM and non-descreasing POS, this is not a sorted file, despite no evidence of "not sorted". eg could be unique CHROMs.
+        if (!segconf.evidence_of_sorted)
+            segconf.is_sorted = false;
         
         // we have at leaest one pair of lines with the same QNAME, and the file is not sorted
         if (!segconf.is_sorted && segconf.evidence_of_collated)
             segconf.is_collated = true;
     }
 
-    segconf.has_barcodes = segconf.has[OPTION_CB_Z] || segconf.has[OPTION_CR_Z] || segconf.has[OPTION_CY_Z] || segconf.has[OPTION_BX_Z] || segconf.has[OPTION_RX_Z] || segconf.has[OPTION_QX_Z] || segconf.has[OPTION_BC_Z] || segconf.has[OPTION_QT_Z];
+    segconf.has_barcodes = segconf.has[OPTION_CB_Z] || segconf.has[OPTION_CR_Z] || segconf.has[OPTION_CY_Z] || segconf.has[OPTION_BX_Z] || 
+                           segconf.has[OPTION_RX_Z] || segconf.has[OPTION_QX_Z] || segconf.has[OPTION_BC_Z] || segconf.has[OPTION_QT_Z];
 
     // second is_paired test: PNEXT is not 0 for all lines (first test is in sam_seg_FLAG)
     if (segconf.has[SAM_PNEXT])
@@ -1220,7 +1246,7 @@ static inline void sam_seg_QNAME_segconf (VBlockSAMP vb, ContextP ctx, STRp (qna
         ctx->last_is_new = is_new;
     }
 
-    if (vb->line_i == 0)
+    if (vb->line_i == 0) 
         qname_segconf_discover_flavor (VB, QNAME1, STRa (qname));
 }
 
@@ -1234,11 +1260,11 @@ void sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAM *dl, STRp (qname), unsigned ad
         goto normal_seg;
     }
 
-    uint32_t qname_hash = QNAME_HASH(qname, qname_len, dl->FLAG.is_last);
+    uint32_t qname_hash = QNAME_HASH (qname, qname_len, dl->FLAG.is_last);
     uint32_t my_hash = qname_hash & MAXB(vb->qname_hash.prm8[0]);
     bool insert_to_hash = false;
 
-    if (flag.deep || flag.debug_deep == 2) 
+    if (flag.deep || flag.show_deep == 2) 
         sam_deep_set_QNAME_hash (vb, dl, STRa(qname));
 
     BuddyType bt = sam_seg_mate (vb, dl->FLAG, STRa (qname), my_hash, &insert_to_hash) | // bitwise or

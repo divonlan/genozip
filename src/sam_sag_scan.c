@@ -100,7 +100,7 @@ static void scan_read_one_vb (VBlockP vb)
 {
     txtfile_read_vblock (vb);
 
-    if (vb->txt_data.len) {
+    if (Ltxt) {
         vb->preprocessing = true;
         vb->dispatch = READY_TO_COMPUTE;
         txt_file->num_vbs_dispatched++;
@@ -183,7 +183,7 @@ static void scan_index_qnames_preprocessing (VBlockP vb)
 
 static void scan_append_index (VBlockP vb)
 {
-    buf_add_buf (real_evb, &z_file->sag_depn_index, &vb_depn_index, uint32_t, "z_file->sag_depn_index");
+    buf_add_buf (real_evb, &z_file->sag_depn_index, &vb_depn_index, uint32_t, NULL);
     buf_add_buf (evb, &z_qname_index, &VB_SAM->qname_count, QnameIndexEnt, "z_qname_index");
 }
 
@@ -213,6 +213,8 @@ void sam_sag_by_flag_scan_for_depn (void)
 {
     const rom task_name = "scan_for_depn";
 
+    buf_alloc (evb, &z_file->sag_depn_index, 0, 100, uint32_t, 0, "z_file->sag_depn_index");
+
     VBlockP scan_vb = vb_initialize_nonpool_vb (VB_ID_DEPN_SCAN, DT_BAM, task_name);
     VBlockP real_evb = evb;
     evb = scan_vb;
@@ -225,7 +227,7 @@ void sam_sag_by_flag_scan_for_depn (void)
     
     dispatcher_fan_out_task (task_name, txt_file->basename, 
                              0, "Preprocessing...", // this is not the same as the preprocessing that happens in PIZ - loading sags'
-                             false, false, flag.xthreads, 0, 5000,
+                             false, false, flag.xthreads, 0, 5000, true,
                              scan_read_one_vb, 
                              scan_index_qnames_preprocessing, 
                              scan_append_index);

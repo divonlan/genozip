@@ -20,6 +20,7 @@
 #include "dispatcher.h"
 #include "piz.h"
 #include "compressor.h"
+#include "tip.h"
 
 #define MIN_FRAG_LEN_BITS 17 // part of the file format and cannot be changed
 #define FRAG_SIZE_BITS 20    // ZIP. fragment size in log2(bytes). valid values: 17-32. transfered to piz via FlagsReconPlan.frag_len_bits. Not part of the file format - can be changed.
@@ -34,24 +35,32 @@ void recon_plan_show (FileP file, bool is_luft, uint32_t conc_writing_vbs, uint3
              file->recon_plan.len, conc_writing_vbs, vblock_mb);
 
     for (uint32_t i=0; i < file->recon_plan.len32; i++) {
-        ReconPlanItem *p = B(ReconPlanItem, file->recon_plan, i);
+        ReconPlanItemP p = B(ReconPlanItem, file->recon_plan, i);
         rom comp = p->vb_i ? comp_name(sections_vb_header(p->vb_i, HARD_FAIL)->comp_i) : NULL;
         rom flav = recon_plan_flavors[p->flavor];
+        rom no_write = IS_ZIP                                                                         ? ""
+                     : (p->vb_i && !writer_does_vb_need_write (p->vb_i))                              ? " no_write"
+                     : (p->flavor == PLAN_TXTHEADER && !writer_does_txtheader_need_write (p->comp_i)) ? " no_write" 
+                     :                                                                                  "";
 
         switch (p->flavor) {
-            case PLAN_RANGE      : iprintf ("%-10s vb=%s/%u\tstart_line=%u\tnum_lines=%u\n", flav, comp, p->vb_i, p->start_line, p->num_lines); break;
-            case PLAN_FULL_VB    : iprintf ("%-10s vb=%s/%u\n", flav, comp, p->vb_i); break;
-            case PLAN_TXTHEADER  : iprintf ("%-10s %s\n", flav, comp_name(p->comp_i)); break;
+            case PLAN_RANGE      : iprintf ("%-10s vb=%s/%u\tstart_line=%u\tnum_lines=%u%s\n", flav, comp, p->vb_i, p->start_line, p->num_lines, no_write); break;
+            case PLAN_FULL_VB    : iprintf ("%-10s vb=%s/%u%s\n", flav, comp, p->vb_i, no_write); break;
+            case PLAN_TXTHEADER  : iprintf ("%-10s %s%s\n", flav, comp_name(p->comp_i), no_write); break;
             case PLAN_REMOVE_ME  : iprintf ("%-10s\n", flav); break;
-            case PLAN_DOWNSAMPLE : iprintf ("%-10s vb=%s/%u\tnum_lines=%u\n", flav, comp, p->vb_i, p->num_lines); break;
-            case PLAN_END_OF_VB  : iprintf ("%-10s vb=%s/%u\n", flav, comp, p->vb_i); break;
+            case PLAN_DOWNSAMPLE : iprintf ("%-10s vb=%s/%u\tnum_lines=%u%s\n", flav, comp, p->vb_i, p->num_lines, no_write); break;
+            case PLAN_END_OF_VB  : iprintf ("%-10s vb=%s/%u%s\n", flav, comp, p->vb_i, no_write); break;
             case PLAN_INTERLEAVE : iprintf ("%-10s vb1=%s/%u\tvb2=%s/%u", flav, comp, p->vb_i,
                                             comp_name(sections_vb_header(p->vb2_i, HARD_FAIL)->comp_i), p->vb2_i); 
-                                   iprintf (command==PIZ ? "\tnum_lines=%u\n" : "\n", p->num_lines); // num_lines populated by writer in PIZ
+                                   iprintf (command==PIZ ? "\tnum_lines=%u%s\n" : "\n", p->num_lines, no_write); // num_lines populated by writer in PIZ
                                    break;
             default              : ABORT ("Unknown flavor %u", p->flavor);
         }
     }               
+
+    if (IS_PIZ && flag.to_stdout)
+        TIP0 ("This is the reconstruction plan with flag.no_writer=true because decompressing to stdout is suppressed\n"
+              "by --show-plan. To see the recon plan actually used for reconstruction, use --output to send file elsewhere.\n");
 }
 
 void recon_plan_sort_by_vb (FileP file)
@@ -71,14 +80,15 @@ void recon_plan_sort_by_vb (FileP file)
     // copy the plan to scratch, and the copy it back to file->recon_plan in order of VBs
     buf_copy (evb, &evb->scratch, &file->recon_plan, ReconPlanItem, 0, 0, "scratch");
     ARRAY (ReconPlanItem, src, evb->scratch);
-    ReconPlanItem *dst = B1ST (ReconPlanItem, file->recon_plan);
+    ReconPlanItemP  dst = B1ST (ReconPlanItem, file->recon_plan);
 
     for (VBIType vb_i=0; vb_i < recon_plan_index_len; vb_i++) { // vb_i may contain a txt_header item
         uint32_t len = recon_plan_index[vb_i].len;
         if (!len) continue;
 
-        memcpy (dst, &src[recon_plan_index[vb_i].index], len * sizeof (ReconPlanItem));
-        dst += len;
+        dst = mempcpy (dst, &src[recon_plan_index[vb_i].index], len * sizeof (ReconPlanItem));
+        //xxx memcpy (dst, &src[recon_plan_index[vb_i].index], len * sizeof (ReconPlanItem));
+        // dst += len;
     }
 
     buf_free (evb->scratch);
@@ -211,7 +221,7 @@ void recon_plan_compress (uint32_t my_conc_writing_vbs,
     is_luft = my_is_luft;
 
     // divvy up recon_plan to fragments of about ~1MB and compress in parallel
-    dispatcher_fan_out_task ("compress_recon_plan", NULL, 0, "Writing reconstruction plan...", false, false, false, 0, 20000,
+    dispatcher_fan_out_task ("compress_recon_plan", NULL, 0, "Writing reconstruction plan...", false, false, false, 0, 20000, true,
                              recon_plan_prepare_for_compress, 
                              recon_plan_compress_one_fragment, 
                              zfile_output_processed_vb);
@@ -233,7 +243,7 @@ static void recon_plan_read_one_vb (VBlockP vb)
         return; // we're done - no more SEC_RECON_PLAN sections of the requested luft
     
     zfile_read_section (z_file, vb, next_sec->vblock_i, &vb->z_data, "z_data", SEC_RECON_PLAN, next_sec);    
-    SectionHeaderReconPlan *header =  B1ST(SectionHeaderReconPlan, vb->z_data);
+    SectionHeaderReconPlanP header =  B1ST(SectionHeaderReconPlan, vb->z_data);
 
     uint64_t max_frag_size = frag_len(header->flags.recon_plan.frag_len_bits + MIN_FRAG_LEN_BITS) * sizeof (ReconPlanItem); // in bytes
 
@@ -272,7 +282,7 @@ static void recon_plan_read_one_vb (VBlockP vb)
 // entry point of compute thread of recon_plan decompression
 static void recon_plan_uncompress_one_vb (VBlockP vb)
 {
-    SectionHeaderDictionary *header = (SectionHeaderDictionary *)vb->z_data.data;
+    SectionHeaderDictionaryP header = (SectionHeaderDictionaryP)vb->z_data.data;
     uint32_t uncomp_len = BGEN32 (header->data_uncompressed_len); // in bytes
 
     ASSERT (vb->fragment_start + uncomp_len <= evb->scratch.data + evb->scratch.size, 
@@ -296,7 +306,7 @@ void recon_plan_uncompress (Section sec, uint32_t *out_conc_writing_vbs, uint32_
     next_sec = sec;
     is_luft = sec->flags.recon_plan.luft;
 
-    dispatcher_fan_out_task ("uncompress_recon_plan", NULL, 0, 0, true, flag.test, false, 0, 1000, 
+    dispatcher_fan_out_task ("uncompress_recon_plan", NULL, 0, 0, true, flag.test, false, 0, 1000, true,
                              recon_plan_read_one_vb, recon_plan_uncompress_one_vb, NO_CALLBACK);
  
     // assign outs

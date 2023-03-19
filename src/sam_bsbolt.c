@@ -210,7 +210,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_BSBOLT_XB)
             *next++ = bismark_to_bsbolt[(uint8_t)*recon++];
     }
 
-    vb->txt_data.len32 = BNUMtxt (next);
+    Ltxt = BNUMtxt (next);
 
 done:
     return NO_NEW_VALUE;

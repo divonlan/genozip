@@ -280,7 +280,7 @@ void tar_copy_file (rom z_fn)
 
     FILE *src_file = fopen (z_fn, "rb");
 
-    #define BLOCK_SIZE (1 << 20)
+    #define BLOCK_SIZE (1 MB)
     char *data = MALLOC (BLOCK_SIZE);
 
     int64_t size;

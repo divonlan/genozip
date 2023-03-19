@@ -94,7 +94,7 @@ void random_access_update_chrom (VBlockP vb, int ra_i, WordIndex chrom_node_inde
     ASSERT (chrom_node_index >= -1, "chrom_node_index=%d in vb_i=%u", chrom_node_index, vb->vblock_i);
 
     // if this is an "unavailable" chrom ("*" in SAM, "." in VCF) we don't store it and signal not to store POS either
-    if (chrom_name_len == 1 && (*chrom_name == '*' || *chrom_name == '.')) {
+    if (str_is_1char (chrom_name, '*') || str_is_1char (chrom_name, '.')) {
         vb->ra_buf[ra_i].param = RA_UNKNOWN_CHROM_SKIP_POS;
         vb->chrom_name       = chrom_name;
         vb->chrom_name_len   = chrom_name_len;
@@ -445,7 +445,6 @@ void random_access_load_ra_section (SectionType sec_type, Did chrom_did_i, Buffe
     }
 }
 
-// returns true if successful
 void random_access_get_ra_info (VBIType vblock_i, WordIndex *chrom_index, PosType64 *min_pos, PosType64 *max_pos)
 {
     const RAEntry *ra = random_access_get_first_ra_of_vb (vblock_i);

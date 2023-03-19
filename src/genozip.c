@@ -11,7 +11,9 @@
 #include <dirent.h>
 #include <errno.h>
 #include <sys/types.h>
-
+#ifdef __APPLE__ 
+#include "mac_compat.h"
+#endif
 #include "genozip.h"
 #include "text_help.h"
 #include "version.h" // automatically incremented by the make when we create a new distribution
@@ -38,9 +40,10 @@
 #include "genols.h"
 #include "tar.h"
 #include "gencomp.h"
+#include "chrom.h"
 
 // globals - set it main() and never change
-rom global_cmd = NULL; 
+char global_cmd[256]; 
 ExeType exe_type;
 
 // primary_command vs command: primary_command is what the user typed on the command line. command is what is 
@@ -69,7 +72,9 @@ rom command_name (void) // see CommandType
 
 void main_exit (bool show_stack, bool is_error) 
 {
-    buf_set_cleanup_on_exit();  
+    // case: skip free buffers since we're exiting any, UNLESS run under valgrind - free, so we can detect true memory leaks
+    if (!arch_is_valgrind())
+        buf_set_cleanup_on_exit();  
 
     if (!is_error) {
         version_print_notice_if_has_newer();
@@ -105,7 +110,7 @@ void main_exit (bool show_stack, bool is_error)
         // cancel all other threads before closing z_file, so other threads don't attempt to access it 
         // (eg. z_file->data_type) and get a segmentation fault.
         threads_cancel_other_threads();
-}
+    }
 
     // if we're in ZIP - rename failed genozip file (but not in PIZ - as its not expected to change the file)
     if (primary_command == ZIP && z_file && z_file->name && !flag_loading_auxiliary) {
@@ -129,6 +134,19 @@ void main_exit (bool show_stack, bool is_error)
     fflush (stderr);
     
     if (!is_error) MAIN0 ("Exiting : Success"); 
+
+    threads_finalize();
+
+    // we normally intentionally leak the VBs at process termination, but if we're running valgrind we free so to not display intentional leaks
+    if (arch_is_valgrind()) {
+        ref_finalize();
+        refhash_destroy (true);
+        kraken_destroy();
+        chain_destroy();
+        vb_destroy_pool_vbs (POOL_MAIN);
+        vb_destroy_pool_vbs (POOL_BGZF);
+        vb_destroy_vb (&evb);
+    }
 
     exit (is_error ? EXIT_GENERAL_ERROR : EXIT_OK);
 } 
@@ -225,8 +243,11 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, unsi
     flags_update_piz_one_file (z_file_i);
    
     // set txt_filename from genozip file name (inc. extensions if translating or --bgzf)
-    if (!txt_filename && !flag.to_stdout && !flag.unbind) 
+    bool txt_filename_alloced = false; 
+    if (!txt_filename && !flag.to_stdout && !flag.unbind) { 
         txt_filename = txtfile_piz_get_filename (z_filename, "", true);
+        txt_filename_alloced = true;
+    }
 
     // open output txt file (except if unbinding - see comment below)
     // note: we need the txt_file object for recontructing, even if not writing (the disk file won't be opened if flag.no_writer)
@@ -240,10 +261,15 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, unsi
     else 
         ABORT0 ("Error: unrecognized configuration for the txt_file");
 
+    if (txt_filename_alloced) FREE (txt_filename); // name copied by file_open
+
     Dispatcher dispatcher = piz_z_file_initialize();  
 
     // generate txt_file(s)
     if (dispatcher) {
+
+        piz_set_main_dispatcher (dispatcher);
+        
         if (!flag.unbind) {    // single txt_file
             piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, COMP_NONE, COMP_NONE);
             file_close (&txt_file, flag.index_txt, !is_last_z_file); 
@@ -281,7 +307,8 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, unsi
     if (digest_piz_has_it_failed()) exit_on_error (false); // error message already displayed in piz_verify_digest_one_txt_file
     
     // case --replace: now that the file was reconstructed, we can remove the genozip file
-    if (flag.replace && (txt_filename || flag.unbind) && z_filename) file_remove (z_filename, true); 
+    if (flag.replace && (txt_filename || flag.unbind) && z_filename) 
+        file_remove (z_filename, false); 
 
 done:
     RESTORE_FLAGS;
@@ -304,7 +331,7 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
         vb_destroy_pool_vbs (POOL_MAIN);
     }
 
-    rom exec_path = arch_get_executable();
+    rom exec_path = arch_get_executable(HARD_FAIL);
 
     if (!is_last_txt_file || flag.is_windows) {
 
@@ -334,6 +361,7 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
                                       flag.show_buddy    ? "--show-buddy"    : SKIP_ARG,
                                       flag.no_tip        ? "--no-tip"        : SKIP_ARG,
                                       flag.debug_latest  ? "--debug-latest"  : SKIP_ARG,
+                                      flag.show_deep    ? "--show-deep"    : SKIP_ARG,
                                       flag.license_filename           ? "--licfile"            : SKIP_ARG,
                                       flag.license_filename           ? flag.license_filename  : SKIP_ARG,
                                       is_last_txt_file && !flag.debug ? "--check-latest"       : SKIP_ARG,
@@ -358,7 +386,7 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
     // note: in Windows, we can't use execv because it creates a new process with a new pid, while the current process exits
     // and returns an exit code to the shell.
     else {
-      rom argv[32]; 
+        rom argv[MAX_ARGC]; 
         int argc = 0;
                                 argv[argc++] = exec_path;
                                 argv[argc++] = "--decompress";
@@ -383,6 +411,7 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
         if (flag.show_buddy)    argv[argc++] = "--show-buddy";
         if (flag.no_tip)        argv[argc++] = "--no-tip";
         if (flag.debug_latest)  argv[argc++] = "--debug-latest";
+        if (flag.show_deep)    argv[argc++] = "--show-deep";
         if (flag.license_filename) { argv[argc++] = "--licfile"; argv[argc++] = flag.license_filename; }
         if (is_last_txt_file && !flag.debug) 
                                 argv[argc++] = "--check-latest";
@@ -447,6 +476,7 @@ static void main_genozip (rom txt_filename,
                        :                                     filename_z_normal (txt_file->name, txt_file->data_type, txt_file->type);
 
         z_file = file_open (z_filename, flag.pair ? WRITEREAD : WRITE, Z_FILE, txt_file->data_type);
+        FREE(z_filename); // file_open copies the name
     }
 
     if (flag.zip_comp_i == COMP_MAIN) {
@@ -511,7 +541,7 @@ static void main_genozip (rom txt_filename,
             str_split (remove_list.data, remove_list.len-1, remove_list.count, '\0', rm_file, true); // -1 to remove last \0
 
             for (unsigned i=0; i < n_rm_files; i++)
-                file_remove (rm_files[i], true); 
+                file_remove (rm_files[i], false); 
             
             buf_free (remove_list);
         }
@@ -640,8 +670,8 @@ static void main_load_reference (rom filename, bool is_first_file, bool is_last_
     int old_aligner_available = flag.aligner_available;
     DataType dt = main_get_file_dt (filename);
     flag.aligner_available = primary_command == ZIP && 
-                            (old_aligner_available || dt == DT_FASTQ || dt == DT_FASTA ||
-                             ((dt==DT_SAM || dt==DT_BAM) && flag.best)); // load refhash only in --best
+                            (old_aligner_available || dt == DT_FASTQ || 
+                             ((dt==DT_SAM || dt==DT_BAM) && (flag.best || flag.deep))); // load refhash only in --best
 
     // no need to load the reference if not needed (unless its genocat of the refernece file itself)
     if (flag.genocat_no_ref_file && dt != DT_REF) return;
@@ -692,16 +722,17 @@ static void set_exe_type (rom argv0)
 int main (int argc, char **argv)
 {    
     MAIN0 ("Starting main");
+    flag.debug_or_test = flag.debug || getenv ("GENOZIP_TEST");
+    buf_initialize(); 
 
     // When debugging with Visual Studio Code, its debugger wrapper adds 3 args: "2>CON", "1>CON", "<CON". We remove them.
     if (argc >= 4 && !strcmp (argv[argc-1], "<CON")) argc -= 3;
 
-    global_cmd = filename_base (argv[0], true, "(executable)", NULL, 0); // global var
+    filename_base (argv[0], true, "(executable)", global_cmd, sizeof(global_cmd)); // global var
 
     set_exe_type(argv[0]);
     info_stream = stdout; // may be changed during intialization
     profiler_initialize();
-    buf_initialize(); 
     arch_initialize (argv[0]);
     evb = vb_initialize_nonpool_vb(VB_ID_EVB, DT_NONE, "main_thread");
     threads_initialize(); // requires evb
@@ -731,6 +762,7 @@ int main (int argc, char **argv)
             // case: --register
             if (flag.do_register) {
                 license_register();
+                threads_finalize();
                 exit (EXIT_OK);
             }
 
@@ -875,6 +907,13 @@ int main (int argc, char **argv)
 
     ASSINP0 (!flag.biopsy, "biopsy VB not found, try a lower number");
     ASSINP0 (flag.biopsy_line.line_i == NO_LINE, "biopsy line not found, try a lower number");
+
+    if (arch_is_valgrind()) { // when testing with valgrind, release memory we normally intentionally leak, to expose true leaks
+        ref_finalize();
+        buf_destroy (input_files_buf);
+        flags_finalize();
+        chrom_finalize();
+    }
 
     exit_ok();
     return 0;

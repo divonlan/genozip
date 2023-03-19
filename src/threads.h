@@ -9,6 +9,7 @@
 #pragma once
 
 extern void threads_initialize (void);
+extern void threads_finalize (void);
 
 extern ThreadId threads_create (void (*func)(VBlockP), VBlockP vb);
 extern void threads_join_do (ThreadId *thread_id, rom expected_task, rom expected_task2, rom func);

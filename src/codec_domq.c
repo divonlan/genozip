@@ -346,7 +346,7 @@ COMPRESS (codec_domq_compress)
 {
     START_TIMER;
     
-    ContextP declare_domq_contexts (ECTX (((SectionHeaderCtx *)header)->dict_id));
+    ContextP declare_domq_contexts (ECTX (((SectionHeaderCtxP)header)->dict_id));
 
     codec_domq_normalize_qual (qual_ctx);
 
@@ -445,7 +445,7 @@ COMPRESS (codec_domq_compress)
     
     // all diverse - compress 1 byte in local anyway, just so codec_domq_reconstruct gets called
     if (!qual_ctx->local.len32) {
-        qual_ctx->local.len32 = 1;
+        BNXTc(qual_ctx->local) = 'X';
         header->sub_codec = CODEC_NONE;
     }
 
@@ -529,7 +529,7 @@ static inline uint32_t codec_domq_reconstruct_dom_run (VBlockP vb, ContextP domq
 
     if (reconstruct) {
         memset (BAFTtxt, dom, runlen);
-        vb->txt_data.len32 += runlen;
+        Ltxt += runlen;
     }
 
     COPY_TIMER (codec_domq_reconstruct_dom_run);
@@ -623,7 +623,7 @@ static inline void codec_domq_reconstruct_do (VBlockP vb, ContextP qual_ctx, Con
     if (!domqruns_ctx->local.len32) {
         if (reconstruct) {
             memset (BAFTtxt, dom, expected_qual_len);
-            vb->txt_data.len32 += expected_qual_len;
+            Ltxt += expected_qual_len;
         }
 
         qual_len = expected_qual_len;
@@ -659,7 +659,7 @@ static inline void codec_domq_reconstruct_do (VBlockP vb, ContextP qual_ctx, Con
     }
 
     if (missing_qual) { 
-        if (reconstruct) vb->txt_data.len32--; // undo
+        if (reconstruct) Ltxt--; // undo
         sam_reconstruct_missing_quality (vb, reconstruct);
     }
     

@@ -139,6 +139,7 @@
 #pragma GENDICT INFO_SOR=DTYPE_1=SOR                // <ID=SOR,Number=1,Type=Float,Description="Symmetric Odds Ratio of 2x2 contingency table to detect strand bias">. See: https://gatk.broadinstitute.org/hc/en-us/articles/360036361772-StrandOddsRatio
 #pragma GENDICT INFO_QD=DTYPE_1=QD                  // <ID=QD,Number=1,Type=Float,Description="Variant Confidence/Quality by Depth">. See: https://gatk.broadinstitute.org/hc/en-us/articles/360041414572-QualByDepth
 
+#pragma GENDICT INFO_HaplotypeScore=DTYPE_1=HaplotypeScore // <ID=HaplotypeScore,Number=1,Type=Float,Description="Consistency of the site with at most two segregating haplotypes">
 #pragma GENDICT INFO_RAW_MQandDP=DTYPE_1=RAW_MQandDP// <ID=RAW_MQandDP,Number=2,Type=Integer,Description="Raw data (sum of squared MQ and total depth) for improved RMS Mapping Quality calculation. Incompatible with deprecated RAW_MQ formulation.">
 #pragma GENDICT INFO_RAW_MQandDP_MQ=DTYPE_1=R0AW_MQandDP
 #pragma GENDICT INFO_RAW_MQandDP_DP=DTYPE_1=R1AW_MQandDP
@@ -252,6 +253,13 @@
 #pragma GENDICT INFO_SHADOWED=DTYPE_1=SHADOWED      // <ID=SHADOWED,Number=0,Type=Flag,Description="CNV overlaps with or is encapsulated by deletion">
 #pragma GENDICT FORMAT_CN=DTYPE_2=CN                // <ID=CN,Number=1,Type=Integer,Description="Copy number genotype for imprecise events">
 
+// bcftools call
+#pragma GENDICT INFO_PV4=DTYPE_1=PV4                // <ID=PV4,Number=4,Type=Float,Description="P-values for strand bias, baseQ bias, mapQ bias and tail distance bias">
+#pragma GENDICT INFO_RPB=DTYPE_1=RPB                // <ID=RPB,Number=1,Type=Float,Description="Mann-Whitney U test of Read Position Bias (bigger is better)">
+#pragma GENDICT INFO_MQB=DTYPE_1=MQB                // <ID=MQB,Number=1,Type=Float,Description="Mann-Whitney U test of Mapping Quality Bias (bigger is better)">
+#pragma GENDICT INFO_BQB=DTYPE_1=BQB                // <ID=BQB,Number=1,Type=Float,Description="Mann-Whitney U test of Base Quality Bias (bigger is better)">
+#pragma GENDICT INFO_MQSB=DTYPE_1=MQSB              // <ID=MQSB,Number=1,Type=Float,Description="Mann-Whitney U test of Mapping Quality vs Strand Bias (bigger is better)”>
+
 // VarScan FORMAT and INFO fields: http://varscan.sourceforge.net/using-varscan.html
 #pragma GENDICT FORMAT_RDF=DTYPE_2=RDF              // <ID=RDF,Number=1,Type=Integer,Description="Depth of reference-supporting bases on forward strand (reads1plus)">
 #pragma GENDICT FORMAT_RDR=DTYPE_2=RDR              // <ID=RDR,Number=1,Type=Integer,Description="Depth of reference-supporting bases on reverse strand (reads1minus)">
@@ -357,13 +365,13 @@ typedef uint8_t Allele; // elements of ht_matrix: values 48->147 for allele 0 to
 // ZIP stuff
 extern void vcf_zip_initialize (void);
 extern void vcf_zip_finalize (bool is_last_user_txt_file);
-extern void vcf_zip_genozip_header (SectionHeaderGenozipHeader *header);
+extern void vcf_zip_genozip_header (SectionHeaderGenozipHeaderP header);
 extern void vcf_zip_init_vb (VBlockP vb);
 extern void vcf_liftover_display_lift_report (void);
 extern void vcf_zip_after_compress (VBlockP vb);
 extern void vcf_zip_after_vbs (void);
-extern void vcf_zip_set_txt_header_specific (SectionHeaderTxtHeader *txt_header);
-extern void vcf_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeader *vb_header);
+extern void vcf_zip_set_txt_header_specific (SectionHeaderTxtHeaderP txt_header);
+extern void vcf_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeaderP vb_header);
 extern bool vcf_zip_vb_has_count (VBlockP vb);
 extern void vcf_zip_generate_recon_plan (void);
 extern void vcf_zip_update_txt_counters (VBlockP vb);
@@ -380,9 +388,9 @@ extern TranslatorId vcf_lo_luft_trans_id (DictId dict_id, char number);
 extern uint32_t vcf_seg_get_vb_recon_size (VBlockP vb);
 
 // PIZ stuff
-extern void vcf_piz_genozip_header (const SectionHeaderGenozipHeader *header);
+extern void vcf_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header);
 extern bool vcf_piz_maybe_reorder_lines (void);
-extern bool vcf_piz_init_vb (VBlockP vb, const SectionHeaderVbHeader *header, uint32_t *txt_data_so_far_single_0_increment);
+extern bool vcf_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment);
 extern void vcf_piz_recon_init (VBlockP vb);
 extern IS_SKIP (vcf_piz_is_skip_section);
 extern CONTAINER_FILTER_FUNC (vcf_piz_filter);
@@ -399,7 +407,7 @@ extern void vcf_piz_finalize (void);
 // VBlock stuff
 extern void vcf_vb_release_vb();
 extern void vcf_vb_destroy_vb();
-extern void vcf_vb_cleanup_memory();
+extern void vcf_header_finalize(void);
 extern unsigned vcf_vb_size (DataType dt);
 extern unsigned vcf_vb_zip_dl_size (void);
 extern void vcf_reset_line (VBlockP vb);

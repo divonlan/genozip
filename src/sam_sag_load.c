@@ -158,15 +158,15 @@ static inline void sam_load_groups_add_qname (VBlockSAMP vb, PlsgVbInfo *plsg, S
     buf_set_overlayable (&z_file->sag_qnames);
     buf_overlay_partial (vb, &vb->txt_data, &z_file->sag_qnames, plsg->qname_start, "txt_data");
     
-    vb->txt_data.len = 0;
+    Ltxt = 0;
     for (vb->line_i=0; vb->line_i < plsg->num_grps ; vb->line_i++) {
         sam_reset_line (VB);
 
         reconstruct_from_ctx (vb, SAM_BUDDY, 0, RECON_OFF); // set buddy (false = don't consume QNAME)
 
-        vb_grps[vb->line_i].qname = plsg->qname_start + vb->txt_data.len;
+        vb_grps[vb->line_i].qname = plsg->qname_start + Ltxt;
         reconstruct_from_ctx (vb, SAM_QNAME, 0, RECON_ON); // reconstructs into vb->txt_data, sets vb->buddy_line_i if SNIP_COPY_BUDDY
-        vb_grps[vb->line_i].qname_len = vb->txt_data.len - (vb_grps[vb->line_i].qname - plsg->qname_start); // 64 bit arithmetic
+        vb_grps[vb->line_i].qname_len = Ltxt - (vb_grps[vb->line_i].qname - plsg->qname_start); // 64 bit arithmetic
     }
 
     buf_free (vb->txt_data);
@@ -260,7 +260,7 @@ static inline void sam_load_groups_add_seq (VBlockSAMP vb, PlsgVbInfo *plsg, Sag
     buf_overlay (vb, &vb->txt_data, &vb->textual_seq, "txt_data");
 
     reconstruct_from_ctx (vb, SAM_SQBITMAP, 0, RECON_ON);
-    vb->textual_seq.len32 = vb->txt_data.len32;
+    vb->textual_seq.len32 = Ltxt;
     buf_free (vb->txt_data); // un-overlay
     vb->txt_data = save_txt_data;
 
@@ -286,14 +286,14 @@ static inline void sam_load_groups_add_qual (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
 
     // Reconstruct QUAL of one line into txt_data which is overlaid on codec_bufs[0]
     reconstruct_from_ctx (vb, SAM_QUAL, 0, RECON_ON); // reconstructs into vb->txt_data
-    vb->codec_bufs[0].len = vb->txt_data.len;
+    vb->codec_bufs[0].len = Ltxt;
     g->no_qual = vb->qual_missing;
     buf_free (vb->txt_data); // un-overlay
     vb->txt_data = save_txt_data;
 
     if (g->no_qual) goto done; // no quality data for this group - we're done
 
-    ASSERT (vb->codec_bufs[0].len == vb->seq_len, "Expecting vb->txt_data.len=%"PRIu64" == vb->seq_len=%u", vb->txt_data.len, vb->seq_len);
+    ASSERT (vb->codec_bufs[0].len == vb->seq_len, "Expecting Ltxt=%u == vb->seq_len=%u", Ltxt, vb->seq_len);
 
     // Compress QUAL, or keep it as is - which ever is better
     uint32_t comp_len = rans_compress_bound_4x16 (g->seq_len, X_NOSZ); // maximum 
@@ -415,14 +415,14 @@ static inline ZWord reconstruct_to_solo_aln (VBlockSAMP vb, Did did_i, uint64_t 
 
     if (!ctx->is_loaded) return (ZWord){};
 
-    uint64_t recon_start = vb->txt_data.len;
+    uint32_t recon_start = Ltxt;
     reconstruct_from_ctx (VB, did_i, 0, RECON_ON); 
-    uint64_t recon_len = vb->txt_data.len - recon_start;
+    uint32_t recon_len = Ltxt - recon_start;
 
     // if identical, UR and UB, CR and CB, point to the same data in solo_data
     if (check_copy && recon_start >= recon_len && !memcmp (Btxt(recon_start), Btxt(recon_start-recon_len), recon_len)) {
-        recon_start      -= recon_len;
-        vb->txt_data.len -= recon_len;
+        recon_start -= recon_len;
+        Ltxt -= recon_len;
 
         // update history if needed
         HistoryWord *hword = B(HistoryWord, ctx->history, vb->line_i);
@@ -446,7 +446,7 @@ static inline void sam_load_groups_add_solo_data (VBlockSAMP vb, PlsgVbInfo *pls
     Buffer save_txt_data = vb->txt_data;
     vb->txt_data = (Buffer){};
     buf_overlay_partial (vb, &vb->txt_data, &z_file->solo_data, solo_data_start, "txt_data");
-    vb->txt_data.len = 0;
+    Ltxt = 0;
 
     for (vb->line_i=0; vb->line_i < plsg->num_grps ; vb->line_i++) {
         sam_reset_line (VB);
@@ -708,7 +708,8 @@ static void sam_load_groups_add_one_prim_vb (VBlockP vb_)
 // PIZ main thread - dispatches compute compute thread do read SA Groups from one PRIM VB. returns true if dispatched
 bool sam_piz_dispatch_one_load_sag_vb (Dispatcher dispatcher)
 {
-    if (!VER(14) || flag.genocat_no_reconstruct || flag.header_only) {
+    if (!VER(14) || flag.genocat_no_reconstruct || flag.header_only
+        || (flag.one_vb && sections_vb_header (flag.one_vb, HARD_FAIL)->comp_i == SAM_COMP_MAIN)) { // --one-vb of a MAIN VB - no need for PRIM/DEPN
         flag.preprocessing = false;
         return false; // no need to load sags
     }
@@ -747,7 +748,7 @@ void sam_piz_after_preproc (VBlockP vb)
         if (is_genocat) exit(0);
     }
 
-    if (flag.show_vblocks) 
+    if (flag_is_show_vblocks (PREPROCESSING_TASK_NAME) || flag_is_show_vblocks (PIZ_TASK_NAME))
         iprintf ("LOADED_SA(id=%d) vb=%s\n", vb->id, VB_NAME);
 }
 
@@ -756,11 +757,10 @@ void sam_piz_load_sags (void)
 {
     next_plsg_i = num_prim_vbs_loaded = 0; // reset for new z_file
 
-    if (sections_get_num_comps() == 1 || // no PRIM/DEPN in this z_file
-        flag.genocat_no_reconstruct) return; 
+    if (flag.genocat_no_reconstruct) return; 
 
     uint32_t num_prim_vbs = sections_get_num_vbs (SAM_COMP_PRIM);
-    if (!num_prim_vbs) return; // no actual PRIM lines (only DEPN)
+    if (!num_prim_vbs) return; // no actual PRIM lines (either not gencomp file, or only DEPN lines)
 
     ARRAY_alloc (PlsgVbInfo, plsg, num_prim_vbs, false, plsg_info, evb, "z_file->plsg");
 

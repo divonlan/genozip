@@ -96,6 +96,11 @@
 #define FAS_BZ2_       ".fas.bz2"
 #define FAS_XZ_        ".fas.xz"
 #define FAS_GENOZIP_   ".fas" GENOZIP_EXT
+#define FSA_           ".fsa"
+#define FSA_GZ_        ".fsa.gz"
+#define FSA_BZ2_       ".fsa.bz2"
+#define FSA_XZ_        ".fsa.xz"
+#define FSA_GENOZIP_   ".fsa" GENOZIP_EXT
 
 // GFF2 / GFF3 file variations (including GVF, which is a subtype of GFF3 and GTF which is a subtype of GFF2)
 #define GFF3_          ".gff3"
@@ -190,6 +195,7 @@ typedef enum FileType { UNKNOWN_FILE_TYPE,
                         FNA,   FNA_GZ,   FNA_BZ2,   FNA_XZ,       FNA_GENOZIP,
                         FRN,   FRN_GZ,   FRN_BZ2,   FRN_XZ,       FRN_GENOZIP,
                         FAS,   FAS_GZ,   FAS_BZ2,   FAS_XZ,       FAS_GENOZIP,
+                        FSA,   FSA_GZ,   FSA_BZ2,   FSA_XZ,       FSA_GENOZIP,
                         GFF3,  GFF3_GZ,  GFF3_BZ2,  GFF3_XZ,      GFF3_GENOZIP,
                         GFF,   GFF_GZ,   GFF_BZ2,   GFF_XZ,       GFF_GENOZIP,
                         GVF,   GVF_GZ,   GVF_BZ2,   GVF_XZ,       GVF_GENOZIP,
@@ -221,6 +227,7 @@ typedef enum FileType { UNKNOWN_FILE_TYPE,
                    FNA_,      FNA_GZ_,            FNA_BZ2_,    FNA_XZ_,                 FNA_GENOZIP_,           \
                    FRN_,      FRN_GZ_,            FRN_BZ2_,    FRN_XZ_,                 FRN_GENOZIP_,           \
                    FAS_,      FAS_GZ_,            FAS_BZ2_,    FAS_XZ_,                 FAS_GENOZIP_,           \
+                   FSA_,      FSA_GZ_,            FSA_BZ2_,    FSA_XZ_,                 FSA_GENOZIP_,           \
                    GFF3_,     GFF3_GZ_,           GFF3_BZ2_,   GFF3_XZ_,                GFF3_GENOZIP_,          \
                    GFF_,      GFF_GZ_,            GFF_BZ2_,    GFF_XZ_,                 GFF_GENOZIP_,           \
                    GVF_,      GVF_GZ_,            GVF_BZ2_,    GVF_XZ_,                 GVF_GENOZIP_,           \
@@ -247,6 +254,8 @@ extern rom file_exts[];
                              { FNA_BZ2,    CODEC_BZ2,  REF_GENOZIP    }, { FNA_XZ,    CODEC_XZ,  REF_GENOZIP    },\
                              { FAS,        CODEC_NONE, REF_GENOZIP    }, { FAS_GZ,    CODEC_GZ,  REF_GENOZIP    },\
                              { FAS_BZ2,    CODEC_BZ2,  REF_GENOZIP    }, { FAS_XZ,    CODEC_XZ,  REF_GENOZIP    },\
+                             { FSA,        CODEC_NONE, REF_GENOZIP    }, { FSA_GZ,    CODEC_GZ,  REF_GENOZIP    },\
+                             { FSA_BZ2,    CODEC_BZ2,  REF_GENOZIP    }, { FSA_XZ,    CODEC_XZ,  REF_GENOZIP    },\
                              { FA,         CODEC_NONE, REF_GENOZIP    }, { FA_GZ,     CODEC_GZ,  REF_GENOZIP    },\
                              { FA_BZ2,     CODEC_BZ2,  REF_GENOZIP    }, { FA_XZ,     CODEC_XZ,  REF_GENOZIP    }, { } }, \
                            { { VCF,        CODEC_NONE, VCF_GENOZIP    }, { VCF_GZ,    CODEC_GZ,  VCF_GENOZIP    }, { VCF_BGZF, CODEC_GZ,  VCF_GENOZIP  },\
@@ -271,6 +280,8 @@ extern rom file_exts[];
                              { FRN_BZ2,    CODEC_BZ2,  FRN_GENOZIP    }, { FRN_XZ,    CODEC_XZ,  FRN_GENOZIP    },\
                              { FAS,        CODEC_NONE, FAS_GENOZIP    }, { FAS_GZ,    CODEC_GZ,  FAS_GENOZIP    },\
                              { FAS_BZ2,    CODEC_BZ2,  FAS_GENOZIP    }, { FAS_XZ,    CODEC_XZ,  FAS_GENOZIP    },\
+                             { FSA,        CODEC_NONE, FSA_GENOZIP    }, { FSA_GZ,    CODEC_GZ,  FSA_GENOZIP    },\
+                             { FSA_BZ2,    CODEC_BZ2,  FSA_GENOZIP    }, { FSA_XZ,    CODEC_XZ,  FSA_GENOZIP    },\
                              { FA,         CODEC_NONE, FA_GENOZIP     }, { FA_GZ,     CODEC_GZ,  FA_GENOZIP     },\
                              { FA_BZ2,     CODEC_BZ2,  FA_GENOZIP     }, { FA_XZ,     CODEC_XZ,  FA_GENOZIP     }, { } },\
                            { { GFF3,       CODEC_NONE, GFF3_GENOZIP   }, { GFF3_GZ,   CODEC_GZ,  GFF3_GENOZIP   },\
@@ -308,7 +319,7 @@ extern rom file_exts[];
                            { VCF, VCF_GZ, VCF_BGZF, BCF, 0 },       \
                            { SAM, SAM_GZ, BAM, 0 },                 \
                            { FASTQ, FASTQ_GZ, FQ, FQ_GZ, 0 },       \
-                           { FASTA, FASTA_GZ, FA, FA_GZ, FAA, FAA_GZ, FFN, FFN_GZ, FNN, FNN_GZ, FNA, FNA_GZ, FRN, FRN_GZ, FAS, FAS_GZ, 0 },\
+                           { FASTA, FASTA_GZ, FA, FA_GZ, FAA, FAA_GZ, FFN, FFN_GZ, FNN, FNN_GZ, FNA, FNA_GZ, FRN, FRN_GZ, FAS, FAS_GZ, FSA, FSA_GZ, 0 },\
                            { GFF3, GFF3_GZ, GFF, GFF_GZ, GVF, GVF_GZ, GTF, GTF_GZ, 0 }, \
                            { ME23, ME23 /* no GZ */, ME23_ZIP, 0 }, \
                            { BAM }, /* There are no data_type=DT_BAM genozip files - .bam.genozip have data_type=DT_SAM */ \
@@ -326,7 +337,7 @@ extern rom file_exts[];
                      { VCF_GENOZIP, 0  },                   \
                      { SAM_GENOZIP, BAM_GENOZIP, 0 },       \
                      { FASTQ_GENOZIP, FQ_GENOZIP, 0 },      \
-                     { FASTA_GENOZIP, FA_GENOZIP, FAA_GENOZIP, FFN_GENOZIP, FNN_GENOZIP, FNA_GENOZIP, FRN_GENOZIP, FAS_GENOZIP, 0 }, \
+                     { FASTA_GENOZIP, FA_GENOZIP, FAA_GENOZIP, FFN_GENOZIP, FNN_GENOZIP, FNA_GENOZIP, FRN_GENOZIP, FAS_GENOZIP, FSA_GENOZIP, 0 }, \
                      { GFF3_GENOZIP, GFF_GENOZIP, GVF_GENOZIP, GTF_GENOZIP, 0  }, \
                      { ME23_GENOZIP, 0 },                   \
                      { 0 }, /* There are no data_type=DT_BAM genozip files - .bam.genozip have data_type=DT_SAM */ \

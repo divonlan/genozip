@@ -85,6 +85,19 @@
 #pragma GENDICT ATTR_exon_id=DTYPE_1=exon_id
 #pragma GENDICT ATTR_exon_number=DTYPE_1=exon_number
 
+// MGKit (Metagenomics): https://mgkit.readthedocs.io/en/latest/gff.html#gff-specs
+#pragma GENDICT ATTR_db=DTYPE_1=db                 // identifies the database used to make the gene_id prediction: any string, like UNIPROT-SP, UNIPROT-TR, NCBI-NT
+#pragma GENDICT ATTR_taxon_db=DTYPE_1=taxon_db     // identifies the database used to make the taxon_id prediction: any string, like UNIPROT-SP, UNIPROT-TR, NCBI-NT
+#pragma GENDICT ATTR_dbq=DTYPE_1=dbq               // identifies the quality of the database, used when filtering annotations: integer
+#pragma GENDICT ATTR_taxon_id=DTYPE_1=taxon_id     // identifies the annotation taxon, NCBI taxonomy is used: integer
+#pragma GENDICT ATTR_uid=DTYPE_1=uid               // unique identifier for the annotation, any string is accepted but a value is assigned by using uuid.uuid4(): string
+#pragma GENDICT ATTR_cov=DTYPE_1=cov               // coverage for the annotation over all samples, keys ending with _cov indicates coverage for each sample : integer
+#pragma GENDICT ATTR_exp_syn=DTYPE_1=exp_syn       // expected number of synonymous changes for the annotation
+#pragma GENDICT ATTR_exp_nonsyn=DTYPE_1=exp_nonsyn // expected number of non-synonymous changes for the annotation
+#pragma GENDICT ATTR_taxon_name=DTYPE_1=taxon_name // name of the taxon : string
+#pragma GENDICT ATTR_lineage=DTYPE_1=lineage       // taxon lineage : string
+#pragma GENDICT ATTR_EC=DTYPE_1=EC                 // list of EC numbers associated to the annotation : comma separated values
+
 // other fields
 #pragma GENDICT ATTR_chr=DTYPE_1=chr
 
@@ -106,7 +119,7 @@ extern void gff_vb_destroy_vb();
 extern unsigned gff_vb_size (DataType dt);
 
 // PIZ stuff
-extern bool gff_piz_init_vb (VBlockP vb, const SectionHeaderVbHeader *header, uint32_t *txt_data_so_far_single_0_increment);
+extern bool gff_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment);
 extern CONTAINER_FILTER_FUNC (gff_piz_filter);
 extern CONTAINER_CALLBACK (gff_piz_container_cb);
 

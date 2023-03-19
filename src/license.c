@@ -7,7 +7,12 @@
 //   and subject to penalties specified in the license.
 
 #ifdef _WIN32
+#include <windows.h>
 #include <direct.h>
+#else 
+#include <sys/ipc.h>
+#include <sys/sem.h>
+#include <fcntl.h>
 #endif
 #include <errno.h>
 #include <sys/types.h>
@@ -37,17 +42,13 @@
 #define LIC_FIELD_NUMBER       "License number"
 #define LIC_FIELD_ALLOW_STATS  "Allow_stats"
 
-#ifndef DEBUG
-    #define EVAL_NUM_FILES 100 // if updating, also update the web page get-genozip 
-    #define EVAL_NUM_FILES_STR "100"
-#else
-    #define EVAL_NUM_FILES 2 
-    #define EVAL_NUM_FILES_STR "2"
-#endif
+#define EVAL_NUM_FILES 100 // if updating, also update the web page get-genozip 
+#define EVAL_NUM_FILES_STR "100"
 
 #include "text_license.h"
 
-typedef enum __attribute__ ((__packed__))/*1 byte*/ { LIC_TYPE_NONE, LIC_TYPE_ACADEMIC, LIC_TYPE_EVAL, LIC_TYPE_STANDARD, LIC_TYPE_DEEP, NUM_LIC_TYPES } LicenseType; 
+// note: value of lic_type is written to license file, so types might be added, but existing types should not change values
+typedef enum __attribute__ ((__packed__))/*1 byte*/ { LIC_TYPE_NONE, LIC_TYPE_ACADEMIC, LIC_TYPE_EVAL, LIC_TYPE_STANDARD, LIC_TYPE_DEEP, LIC_TYPE_FIRST, NUM_LIC_TYPES } LicenseType; 
 
 static struct {
     bool initialized;
@@ -126,7 +127,8 @@ static rom license_get_filename (bool create_folder_if_needed)
     ASSINP0 (folder, "cannot calculate license file name, because $HOME env var is not defined");
 #endif    
 
-    char *filename = MALLOC (strlen(folder) + 50);
+    static char filename[1024]; // avoid MALLOC so we don't need to leak memory
+    ASSERT (strlen (folder) + STRLEN("/.genozip_license") + 1 < sizeof (filename), "Directory name %s too long for license file", folder);
     sprintf (filename, "%s/.genozip_license", folder);
 
     return filename;
@@ -154,6 +156,55 @@ bool license_is_eval (void)
     return rec.lic_type == LIC_TYPE_EVAL;
 }
 
+// IF YOU'RE CONSIDERING MANIPULATING SEMAPHORES TO BYPASS THE REGISTRTION, DON'T! It would be a violation of the license,
+// and might put you personally as well as your organization at legal and financial risk - see "Severly unauthorized use of Genozip"
+// section of the license. Rather, please contact sales@genozip.com to discuss which license would be appropriate for your case.
+static bool license_is_first (void)
+{
+#ifndef _WIN32
+    rom home = getenv ("HOME");
+    if (!home) return false;
+
+    key_t key = ftok (home, 20010802);
+    int sem = semget (key, 1, IPC_CREAT | IPC_EXCL | 0600); // note: in Linux, a new semaphone is initialized to 0. This is not guaranteed to be true on other platforms.
+    if (sem >= 0) {
+        rec.lic_type = LIC_TYPE_FIRST;
+        rec.initialized = true;
+        return true;
+    }
+
+    else if (errno == EEXIST) 
+        return false;
+
+    else {
+        ASSERT (!flag.debug, "Error in semget: %s", strerror (errno));
+        return false; 
+    }
+    
+    return true;
+
+#else
+    rom exec_path = arch_get_executable (SOFT_FAIL);
+    struct stat st;
+
+    if (exec_path && !stat (exec_path, &st) && (time(NULL) - st.st_ctime > 1000000)) 
+        return false;
+
+    rom lic_filename = license_get_filename(true);
+    
+    char first_fn[strlen(lic_filename) + 10];
+    sprintf (first_fn, "%s.first", lic_filename);
+
+    if (file_exists (first_fn)) return false;
+
+    FILE *fp = fopen (first_fn, "w");
+    fclose (fp);
+
+    return file_exists (first_fn);
+
+#endif
+}
+
 // IF YOU'RE CONSIDERING TAMPERING WITH THIS CODE TO BYPASS THE REGISTRTION, DON'T! It would be a violation of the license,
 // and might put you personally as well as your organization at legal and financial risk - see "Severly unauthorized use of Genozip"
 // section of the license. Rather, please contact sales@genozip.com to discuss which license would be appropriate for your case.
@@ -162,9 +213,11 @@ void license_load (void)
     if (rec.initialized) return;
 
     rom filename = license_get_filename (true);
-    
+ 
     if (!file_exists (filename)) {
-        license_register ();
+        if (IS_ZIP && !license_is_first()) 
+            license_register ();
+
         return;
     }
 
@@ -224,7 +277,7 @@ reregister:
     license_register();
 }
 
-static bool license_submit (rom os, unsigned cores, rom endianity, rom user_host, rom dist)
+static bool license_submit (rom os, unsigned cores, bool is_script, rom user_host, rom dist)
 {
     // reference: https://stackoverflow.com/questions/18073971/http-post-to-a-google-form/47444396#47444396
 
@@ -266,7 +319,7 @@ static bool license_submit (rom os, unsigned cores, rom endianity, rom user_host
     char *user_hostE   = url_esc_non_valid_chars (user_host);
 
     char url[sizeof (rec)*3 + 200];
-    sprintf (url, url_format, institutionE, nameE, emailE, lic_typeE, rec.allow_stats, osE, cores, rec.ip, user_hostE, rec.license_num, rec.version, dist, endianity);
+    sprintf (url, url_format, institutionE, nameE, emailE, lic_typeE, rec.allow_stats, osE, cores, rec.ip, user_hostE, rec.license_num, rec.version, dist, is_script ? "script" : "");
 
     bool success = url_read_string (url, NULL, 0) >= 0;
     
@@ -379,8 +432,9 @@ static void license_exit_if_not_confirmed (rom query, DefAnswerType def_answer)
 void license_register (void)
 {
     char lic_type[100];
-    rom os, dist, endianity, user_host;
+    rom os, dist, user_host;
     unsigned cores;
+    bool is_script;
 
     if (!flag.do_register) flag.do_register = "";
 
@@ -397,7 +451,8 @@ void license_register (void)
 
         fprintf (stderr, "Welcome to Genozip!\n\n"
                          "- Genozip is a commercial product, however it is free for academic research use with some limitations.\n"
-                         "  To check eligibility see: " WEBSITE_GET_GENOZIP "\n\n");
+                         "  To check eligibility see: " WEBSITE_GET_GENOZIP "\n\n"
+                         "- For non-academic use, you may use Genozip for free for a 30 days evaluation period.\n\n");
 
         if (file_exists (filename)) 
             license_exit_if_not_confirmed ("You are already registered. Are you sure you want to re-register again?", QDEF_NONE);
@@ -416,9 +471,9 @@ void license_register (void)
         strncpy (rec.allow_stats, fields[5], sizeof(rec.allow_stats)-1);
         os        = fields[6];
         dist      = fields[7]; 
-        endianity = fields[8];
         user_host = fields[9];
         cores     = atoi(fields[10]);
+        is_script = true;
     }
     else {
         fprintf (stderr, "\nLicense details -\n");
@@ -466,8 +521,8 @@ void license_register (void)
         os           = arch_get_os();          
         dist         = arch_get_distribution();
         cores        = arch_get_num_cores();
-        endianity    = arch_get_endianity();
         user_host    = arch_get_user_host();
+        is_script    = false;
         memcpy (rec.ip, arch_get_ip_addr ("Failed to register the license"), ARCH_IP_LEN);  
     }
 
@@ -487,7 +542,7 @@ void license_register (void)
         fprintf (stderr, LIC_FIELD_INSTITUTION": %s\n", rec.institution);
         fprintf (stderr, LIC_FIELD_NAME       ": %s\n", rec.name);
         fprintf (stderr, LIC_FIELD_EMAIL      ": %s\n", rec.email);
-        fprintf (stderr, "System info: OS=%s cores=%u endianity=%s IP=%s\n", os, cores, endianity, rec.ip);
+        fprintf (stderr, "System info: OS=%s cores=%u IP=%s\n", os, cores, rec.ip);
         fprintf (stderr, "Username: %s\n", user_host);
         fprintf (stderr, "Genozip info: version=%s distribution=%s\n", GENOZIP_CODE_VERSION, dist);
         fprintf (stderr, "Genozip license number: %u\n", rec.license_num);
@@ -498,17 +553,19 @@ void license_register (void)
         // license_exit_if_not_confirmed ("Proceed with completing the registration?", QDEF_YES);
     }
         
-    bool submitted = license_submit (os, cores, endianity, user_host, dist);
+    bool submitted = license_submit (os, cores, is_script, user_host, dist);
 
     ASSINP0 (submitted,
              "Failed to register the license, possibly because the Internet is not accessible or the registration server "
              "(which is hosted on a Google server) is not accessible. If this problem persists, you can register manually by "
              "sending an email to register@genozip.com - copy & paste the lines between the \"======\" into the email message.\n");
 
-    if (!flag.do_register[0]) {
+    if (!is_script) {
         char query[sizeof(rec.email)+64];
         char code[7] = "";
-        sprintf (query, "\nA 6-digit verification code was emailed to %s. Please enter it: ", rec.email);
+        sprintf (query, "\nA 6-digit verification code was emailed to %s.\n\n"
+                        "(If you did not receive it within 2 minutes, please contact register@genozip.com)\n\n"
+                        "Please enter it: ", rec.email);
         str_query_user (query, code, sizeof(code), false, license_verify_code, NULL);
     }
     
@@ -545,7 +602,14 @@ uint32_t license_get_number (void)
 
 bool license_allow_stats (void)
 {
-    return (rec.lic_type == LIC_TYPE_STANDARD) ? !strcmp (rec.allow_stats, "Yes") : true;
+    return (rec.lic_type == LIC_TYPE_STANDARD) ? !strcmp (rec.allow_stats, "Yes") 
+         : (rec.lic_type == LIC_TYPE_FIRST   ) ? false // no consent yet
+         :                                       true;
+}
+
+bool license_allow_tip (void)
+{
+    return rec.lic_type != LIC_TYPE_FIRST;
 }
 
 rom license_get_one_line (void)

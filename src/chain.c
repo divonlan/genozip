@@ -51,10 +51,10 @@ typedef struct {
     int32_t overlap_aln_i; // the luft range overlaps with with luft range
 } ChainAlignment;
 
-static Buffer chain = EMPTY_BUFFER;   // immutable after loaded
-static Mutex chain_mutex = {};        // protect chain while PIZ: loading, SEG: accessing seg_alns_so_far
+static Buffer chain = { .promiscuous = true };   // immutable after loaded
+static Mutex chain_mutex = {}; // protect chain while PIZ: loading, SEG: accessing seg_alns_so_far
 
-static Buffer seg_alns_so_far = EMPTY_BUFFER; // Seg: alignments encountered so far - used for de-dupping in --match
+static Buffer seg_alns_so_far = { .promiscuous = true }; // Seg: alignments encountered so far - used for de-dupping in --match
 
 // 1) When pizzing a chain as a result of genozip --chain: chain_piz_initialize: prim_contig and luft_contig are generated 
 //    from z_file->contexts of a chain file 
@@ -131,11 +131,11 @@ int32_t chain_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i /* in/out */)
 //-----------------------
 
 // main thread: writing data-type specific fields to genozip header
-void chain_zip_genozip_header (SectionHeaderGenozipHeader *header)
+void chain_zip_genozip_header (SectionHeaderGenozipHeaderP header)
 {
     if (IS_REF_MAKE_CHAIN) {
         strncpy (header->chain.prim_filename, ref_get_filename (prim_ref), REF_FILENAME_LEN-1);
-        header->chain.prim_file_md5 = ref_get_file_md5 (prim_ref);
+        header->chain.prim_genome_digest = ref_get_genome_digest (prim_ref);
     }
 }
 
@@ -163,7 +163,7 @@ void chain_zip_initialize (void)
 // Tests lengths of prim/luft contigs of first line in chain file vs the two references. Error if they don't match, but swapping them matches.
 static void chain_verify_references_not_reversed (VBlockP vb)
 {
-    rom newline = memchr (vb->txt_data.data, '\n', vb->txt_data.len);
+    rom newline = memchr (vb->txt_data.data, '\n', Ltxt);
     if (!newline) return;
 
     str_split (vb->txt_data.data, newline - vb->txt_data.data, 13, ' ', item, true);
@@ -526,8 +526,8 @@ bool chain_piz_initialize (void)
 
 SPECIAL_RECONSTRUCTOR (chain_piz_special_BACKSPACE)
 {
-    ASSERTNOTZERO (vb->txt_data.len, "");
-    vb->txt_data.len--;
+    ASSERTNOTZERO (Ltxt, "");
+    Ltxt--;
 
     Context *gaps_ctx = CTX(CHAIN_GAPS); // note: we can't rely on the constants CHAIN_* in PIZ
     gaps_ctx->last_value.i = gaps_ctx->local.param = 0; // no prim_gap and luft_gap
@@ -683,12 +683,12 @@ static inline void chain_piz_filter_verify_alignment_set (VBlockCHAIN *vb)
 {
     ASSINP (vb->next_prim_0pos == vb->last_int(CHAIN_ENDPRIM),
             "%.*s\nBad data ^^^ in chain file %s: Expecting alignments to add up to ENDPRIM=%s, but they add up to %s",
-            (int)(vb->txt_data.len - vb->line_start), Bc (vb->txt_data, vb->line_start),
+            (int)(Ltxt - vb->line_start), Bc (vb->txt_data, vb->line_start),
             z_name, str_int_commas (vb->last_int(CHAIN_ENDPRIM)).s, str_int_commas (vb->next_prim_0pos).s);
 
     ASSINP (vb->next_luft_0pos == vb->last_int(CHAIN_ENDLUFT),
             "%.*sBad data ^^^ in chain file %s: Expecting alignments to add up to ENDLUFT=%s, but they add up to %s",
-            (int)(vb->txt_data.len - vb->line_start), Bc (vb->txt_data, vb->line_start),
+            (int)(Ltxt - vb->line_start), Bc (vb->txt_data, vb->line_start),
             z_name, str_int_commas (vb->last_int(CHAIN_ENDLUFT)).s, str_int_commas (vb->next_luft_0pos).s);
 }
 
@@ -810,8 +810,8 @@ void chain_load (void)
     RESTORE_VALUE (z_file);
 
     // test for matching MD5 between external references and reference in the chain file header (doing it here, because reference is read after chain file, if its explicitly specified)
-    digest_verify_ref_is_equal (gref, header.ref_filename, header.ref_file_md5);
-    digest_verify_ref_is_equal (prim_ref, header.chain.prim_filename, header.chain.prim_file_md5);
+    digest_verify_ref_is_equal (gref, header.ref_filename, header.ref_genome_digest);
+    digest_verify_ref_is_equal (prim_ref, header.chain.prim_filename, header.chain.prim_genome_digest);
 
     flag.quiet = true; // don't show progress indicator for the chain file - it is very fast 
     flag.maybe_vb_modified_by_reconstructor = true; // we drop all the lines

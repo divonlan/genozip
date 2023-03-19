@@ -101,7 +101,7 @@ bool gff_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
 // search for last newline, and also search for embedded FASTA
 int32_t gff_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 {
-    ASSERT (*i >= 0 && *i < vb->txt_data.len, "*i=%d is out of range [0,%"PRIu64"]", *i, vb->txt_data.len);
+    ASSERT (*i >= 0 && *i < Ltxt, "*i=%d is out of range [0,%u]", *i, Ltxt);
 
     int32_t final_i = *i;
     int32_t last_newline = -1;
@@ -122,7 +122,7 @@ int32_t gff_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 
     if (last_newline != -1) {
         *i = last_newline;
-        return vb->txt_data.len32-1 - last_newline;
+        return Ltxt-1 - last_newline;
     }
 
     else { // no newline found
@@ -399,13 +399,11 @@ static inline DictId gff_seg_attr_subfield (VBlockP vb, STRp(tag), STRp(value))
     // Optimize Variant_freq
     case _ATTR_Variant_freq:
         if (flag.optimize_Vf) {
-            unsigned optimized_snip_len = value_len + 20;
-            char optimized_snip[optimized_snip_len]; // used for 1. fields that are optimized 2. fields translated luft->primary
+            STRli (optimized_snip, value_len + 20); // used for 1. fields that are optimized 2. fields translated luft->primary
 
-            if (optimize_float_2_sig_dig (STRa(value), 0, optimized_snip, &optimized_snip_len)) {        
+            if (optimize_float_2_sig_dig (STRa(value), 0, qSTRa(optimized_snip))) {        
                 vb->recon_size -= (int)(value_len) - (int)optimized_snip_len;
-                value = optimized_snip;
-                value_len = optimized_snip_len;
+                STRset (value, optimized_snip);
             }            
         }
         goto plain_seg; // proceed with adding to dictionary/b250
@@ -459,7 +457,7 @@ static void gff_segconf_set_gff_version (VBlockP vb, STRp(attr))
 static void gff_seg_gff2_attrs_field (VBlockP vb, STRp(attribute))
 {
     // case: "." attribute
-    if (attribute_len == 1 && *attribute == '.') {
+    if (str_is_1char (attribute, '.')) {
         seg_by_did (VB, ".", 1, GFF_ATTRS, 2);
         return;
     }
@@ -562,7 +560,7 @@ static void gff_seg_gff2_attrs_field (VBlockP vb, STRp(attribute))
 static void gff_seg_gff3_attrs_field (VBlockP vb, STRp(field))
 {
     // case: "." field
-    if (field_len == 1 && *field == '.') {
+    if (str_is_1char (field, '.')) {
         seg_by_did (VB, ".", 1, GFF_ATTRS, 2);
         return;
     }
@@ -673,7 +671,7 @@ eol:
 // PIZ stuff
 //----------
 
-bool gff_piz_init_vb (VBlockP vb, const SectionHeaderVbHeader *header, uint32_t *txt_data_so_far_single_0_increment)
+bool gff_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment)
 {
     if (VER(15) && vb->flags.gff.embedded_fasta) 
         vb->data_type = DT_FASTA;

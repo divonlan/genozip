@@ -51,30 +51,73 @@ static uint32_t make_ref_vb_size = 0; // max bytes in a refhash vb
 
 // each rehash_buf entry is a Buffer containing a hash layer containing 256M gpos values (4B each) = 1GB
 unsigned num_layers=0;
-bool bits_per_hash_is_odd=0; // true bits_per_hash is odd
-uint32_t bits_per_hash=0;    // = layer_bits[0]
-uint32_t nukes_per_hash=0;   // = layer_bits[0] / 2
-uint32_t layer_bits[64];     // number of bits in each layer - layer_bits[0] is the base (widest) layer
-uint32_t layer_size[64];     // size (in bytes) of each layer - layer_size[0] is the base (biggest) layer
-uint32_t layer_bitmask[64];  // 1s in the layer_bits[] LSbs
-static Buffer refhash_buf = {}; // One buffer that includes all layers
-uint32_t **refhashs = NULL;  // array of pointers to into refhash_buf.data - beginning of each layer 
-
-static Section sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
+bool bits_per_hash_is_odd=0;     // true bits_per_hash is odd
+static uint32_t bits_per_hash=0; // = layer_bits[0]
+uint32_t nukes_per_hash=0;       // = layer_bits[0] / 2
+uint32_t layer_bits[64];         // number of bits in each layer - layer_bits[0] is the base (widest) layer
+uint32_t layer_size[64];         // size (in bytes) of each layer - layer_size[0] is the base (biggest) layer
+uint32_t layer_bitmask[64];      // 1s in the layer_bits[] LSbs
+static Buffer refhash_buf = {};  // One buffer that includes all layers
+uint32_t **refhashs = NULL;      // array of pointers to into refhash_buf.data - beginning of each layer 
 
 // used for parallelizing read / write of the refhash
 static uint32_t next_task_layer = 0;
 static uint32_t next_task_start_within_layer = 0;
 
-// lookup table for base complement
-const char complement[256] =  { ['A']='T', ['C']='G', ['G']='C', ['T']='A',  // complement A,C,G,T, others are 4
-                                [0 ...'@']=4, ['B']=4, ['D'...'F']=4, ['U'...255]=0 };
+// -------------------------------------------
+// shared logic (make refhash + use refhash)
+// -------------------------------------------
+
+static void refhash_initialize_refhashs_array (void)
+{
+    refhashs = CALLOC (num_layers * sizeof (uint32_t *)); // array of pointers
+
+    // set layer pointers
+    uint64_t offset=0;
+    for (unsigned layer_i=0; layer_i < num_layers; layer_i++) {
+        refhashs[layer_i] = (uint32_t*)B8 (refhash_buf, offset);
+        offset += layer_size[layer_i];
+    }
+}
+
+static uint64_t refhash_initialize_layers (uint32_t base_layer_bits)
+{
+    uint64_t refhash_size = 0;
+    for (unsigned layer_i=0; layer_i < num_layers; layer_i++) {
+        layer_bits[layer_i]    = base_layer_bits - layer_i;
+        layer_bitmask[layer_i] = bitmask32 (layer_bits[layer_i]);
+        layer_size[layer_i]    = ((1 << layer_bits[layer_i]) * sizeof (uint32_t));
+        refhash_size          += layer_size[layer_i];
+    }
+
+    bits_per_hash  = layer_bits[0];
+    bits_per_hash_is_odd = bits_per_hash % 2;
+    nukes_per_hash = (1 + bits_per_hash) / 2; // round up
+
+    return refhash_size;
+}
 
 // ------------------------------------------------------
 // stuff related to creating the refhash
 // ------------------------------------------------------
 
-static inline uint32_t refhash_get_word (const Range *r, int64_t base_i)
+// called from ref_make_ref_init - initialize for making a reference file
+void refhash_initialize_for_make (void)
+{
+    num_layers = MAKE_REF_NUM_LAYERS;
+
+    #define VBLOCK_MEMORY_REFHASH (16 MB) // VB memory with --make-reference - refhash data (overridable with --vblock)
+    make_ref_vb_size = flag.vblock ? segconf.vb_size : VBLOCK_MEMORY_REFHASH;
+
+    uint64_t refhash_size = refhash_initialize_layers (MAKE_REF_BASE_LAYER_BITS);
+
+    // allocate, and set all entries to NO_GPOS. 
+    buf_alloc_exact_255 (evb, refhash_buf, refhash_size, uint8_t, "refhash_buf"); 
+    
+    refhash_initialize_refhashs_array();
+}
+
+static inline uint32_t refhash_get_word (ConstRangeP r, int64_t base_i)
 {
     // num_bits_this_range will be:
     // * 0 if HOOK is in this range, but all bits in next range
@@ -97,14 +140,17 @@ static inline uint32_t refhash_get_word (const Range *r, int64_t base_i)
 }
 
 // get base - might be in this range or next range
-#define GET_BASE(idx) (idx           < num_bases        ? ref_base_by_idx (r, idx)                : \
-                       idx-num_bases < ref_size(next_r) ? ref_base_by_idx (next_r, idx-num_bases) : \
+#define GET_BASE(idx) ((idx)           < num_bases        ? ref_base_by_idx (r, (idx))              : \
+                       (idx)-num_bases < ref_size(next_r) ? ref_base_by_idx (next_r, idx-num_bases) : \
                        /* else */                         'X' /* no more bases */)
+
+// "random" number 0..3, treating the reference itself as a random number generator (but mod 13, to break the uneven frequencies of nucleotides in the reference)
+#define RANDOM4(idx) ((bits_get4 (&r->ref, (idx)) % 13) & 3) // a *lot* faster than rand(). note: idx, not 2*idx, so never goes beyond num_bases*2
 
 // make-reference: generate the refhash data for one range of the reference. called by ref_compress_one_range (compute thread)
 // towards the end of the range, we might have hash values that start in this range and end in the next range.
 void refhash_calc_one_range (VBlockP vb, // VB of reference compression dispatcher
-                             const Range *r, const Range *next_r /* NULL if r is the last range */)
+                             ConstRangeP r, ConstRangeP next_r /* NULL if r is the last range */)
 {
     START_TIMER;
 
@@ -120,27 +166,25 @@ void refhash_calc_one_range (VBlockP vb, // VB of reference compression dispatch
     // end of this one (note: we only look at one next range - even if it is very short, we will not overflow to the next one after)
     PosType64 num_bases = this_range_size - (nukes_per_hash - MIN_(next_range_size, nukes_per_hash) ); // take up to NUKES_PER_HASH bases from the next range, if available
 
+    // since our refhash entries are 32 bit, we cannot use the reference data beyond the first 4Gbp for creating the refhash
+    // TO DO: make the hash entries 40bit (or 64 bit?) if genome size > 4Gbp (bug 150)
+    if (r->gpos + num_bases >= MAX_ALIGNER_GPOS) {
+        WARN_ONCE ("FYI: %s contains more than %s bases. When compressing a FASTQ or unaligned (i.e. missing RNAME, POS) SAM/BAM file using the reference being generated, only the first %s bases of the reference will be used, possibly affecting the compression ratio. This limitation doesn't apply to aligned SAM/BAM files and VCF files. If you need to use reference files with > 4 billion bases, let us know at support@genozip.com.", 
+                    txt_name, str_int_commas (MAX_ALIGNER_GPOS).s, str_int_commas (MAX_ALIGNER_GPOS).s);
+        return;
+    }
+
     for (PosType64 base_i=0; base_i < num_bases; base_i++)
 
         // take only the final hook in a polymer string of hooks (i.e. the last G in a e.g. GGGGG)
         if (GET_BASE(base_i) == HOOK && GET_BASE(base_i+1) != HOOK) {
-            
             uint32_t refhash_word = refhash_get_word (r, base_i+1); // +1 so not to include the hook
-
-            // since our refhash entries are 32 bit, we cannot use the reference data beyond the first 4Gbp for creating the refhash
-            // TO DO: make the hash entries 40bit (or 64 bit?) if genome size > 4Gbp (bug 150)
-            if (r->gpos + base_i > MAX_ALIGNER_GPOS) {
-                WARN_ONCE ("FYI: %s contains more than %s bases. When compressing a FASTQ or unaligned (i.e. missing RNAME, POS) SAM/BAM file using the reference being generated, only the first %s bases of the reference will be used (no such limitation when compressing other file types). This might affect the compression ratio.", 
-                            txt_name, str_int_commas (MAX_ALIGNER_GPOS).s, str_int_commas (MAX_ALIGNER_GPOS).s);
-                return;
-            }
 
             // we enter our own gpos to the hash table at refhash_word - we place it in the first empty layer.
             // if all the layers are full - then with probability 50%, we replace one of the layer in random.
             // (unlikely edge case: an entry with gpos=0 will always be replaced)
             bool set=false;
-            for (unsigned layer_i=0; layer_i < num_layers; layer_i++) {
-                
+            for (unsigned layer_i=0; layer_i < num_layers; layer_i++) {    
                 uint32_t idx = refhash_word & layer_bitmask[layer_i];
 
                 if (refhashs[layer_i][idx] == NO_GPOS) {
@@ -150,10 +194,9 @@ void refhash_calc_one_range (VBlockP vb, // VB of reference compression dispatch
                 }
             }
 
-            // if all layers are already set, and we are on the lucky side of a 25% chance we 
-            // overwrite one of the layers
-            if (!set && ((rand() & 3) == 0)) { 
-                uint32_t layer_i = rand() % num_layers;
+            // if all layers are already set, and we are on the lucky side of a 25% chance, we overwrite one of the layers
+            if (!set && (RANDOM4(base_i+2) == 0)) { 
+                uint32_t layer_i = RANDOM4(base_i+3); // choose layer to overwrite. RANDOM4 bc MAKE_REF_NUM_LAYERS=4
                 uint32_t idx = refhash_word & layer_bitmask[layer_i];
                 refhashs[layer_i][idx] = BGEN32 (r->gpos + base_i); // replace one layer in random
             }
@@ -225,7 +268,7 @@ void refhash_compress_refhash (void)
     next_task_start_within_layer = 0;
 
     dispatcher_fan_out_task ("compress_refhash", NULL, 0, "Writing hash table (this can take several minutes)...", 
-                             false, false, false, 0, 100,
+                             false, false, false, 0, 100, true,
                              refhash_prepare_for_compress, 
                              refhash_compress_one_vb, 
                              zfile_output_processed_vb);
@@ -242,7 +285,7 @@ static void refhash_uncompress_one_vb (VBlockP vb)
 {
     START_TIMER;
 
-    SectionHeaderRefHash *header = (SectionHeaderRefHash *)vb->z_data.data;
+    SectionHeaderRefHashP header = (SectionHeaderRefHashP )vb->z_data.data;
     uint32_t start = BGEN32 (header->start_in_layer);
     uint32_t size  = BGEN32 (header->data_uncompressed_len);
     uint32_t layer_i = header->layer_i;
@@ -275,19 +318,55 @@ static void refhash_read_one_vb (VBlockP vb)
 
     buf_alloc (vb, &vb->z_section_headers, 0, 1, int32_t, 0, "z_section_headers"); // room for 1 section header
 
-    if (!sections_next_sec (&sl_ent, SEC_REF_HASH))
+    static Section sec;    
+    if (vb->vblock_i == 1) sec = NULL; // reset for each file
+
+    if (!sections_next_sec (&sec, SEC_REF_HASH))
         return; // no more refhash sections
 
-    int32_t section_offset = zfile_read_section (z_file, vb, sl_ent->vblock_i, &vb->z_data, "z_data", sl_ent->st, sl_ent);
+    int32_t section_offset = zfile_read_section (z_file, vb, sec->vblock_i, &vb->z_data, "z_data", sec->st, sec);
 
-    if (((SectionHeaderRefHash *)vb->z_data.data)->layer_i >= num_layers)
-        return; // don't read the high layers if beyond the requested num_layers
+    // TO DO: if refhash_load sets num_layers to a value other than header.num_layers, we don't need
+    // to even read this section (currently never happens) (bug 348)
+    if (((SectionHeaderRefHashP)vb->z_data.data)->layer_i >= num_layers)
+        return; 
 
     BNXT (int32_t, vb->z_section_headers) = section_offset;
 
     vb->dispatch = READY_TO_COMPUTE;
 
+    if (flag.debug_or_test) buf_test_overflows(vb, __FUNCTION__); 
+
     COPY_TIMER (refhash_read_one_vb);
+}
+
+void refhash_load (void)
+{
+    START_TIMER;
+
+    if (refhash_buf.len) return; // already loaded for a previous file
+
+    Section sec = sections_last_sec (SEC_REF_HASH, HARD_FAIL);
+
+    SectionHeaderRefHash header = zfile_read_section_header (evb, sec->offset, sec->vblock_i, SEC_REF_HASH).ref_hash;
+    num_layers = header.num_layers;
+
+    uint32_t base_layer_bits = header.layer_bits + header.layer_i; // layer_i=0 is the base layer, layer_i=1 has 1 bit less etc
+
+    uint64_t refhash_size = refhash_initialize_layers (base_layer_bits);
+
+    // allocate memory - base layer size is 1GB, and every layer is half the size of its predecessor, so total less than 2GB
+    buf_alloc_exact (evb, refhash_buf, refhash_size, uint8_t, "refhash_buf"); 
+    refhash_initialize_refhashs_array();
+
+    dispatcher_fan_out_task ("load_refhash", ref_get_filename (gref),
+                             0, "Reading reference file", // same message as in ref_load_stored_reference
+                             true, flag.test, false, 0, 100, true,
+                             refhash_read_one_vb, 
+                             refhash_uncompress_one_vb, 
+                             NO_CALLBACK);
+    
+    COPY_TIMER_VB (evb, refhash_load);
 }
 
 void refhash_load_standalone (void)
@@ -300,11 +379,10 @@ void refhash_load_standalone (void)
     CLEAR_FLAG (test);
 
     z_file = file_open (ref_get_filename (gref), READ, Z_FILE, DT_FASTA);    
-    z_file->basename = filename_base (ref_get_filename (gref), false, "(reference)", NULL, 0);
 
     zfile_read_genozip_header (0);
 
-    refhash_initialize();
+    refhash_load();
 
     file_close (&z_file, false, false);
     file_close (&txt_file, false, false); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open called from txtheader_piz_read_and_reconstruct.
@@ -315,88 +393,6 @@ void refhash_load_standalone (void)
     RESTORE_VALUE (txt_file);
     
     flag.reading_reference = NULL;
-}
-
-// ----------------------------
-// general stuff
-// ----------------------------
-
-static void refhash_initialize_refhashs_array (void)
-{
-    refhashs = CALLOC (num_layers * sizeof (uint32_t *)); // array of pointers
-
-    // set layer pointers
-    uint64_t offset=0;
-    for (unsigned layer_i=0; layer_i < num_layers; layer_i++) {
-        refhashs[layer_i] = (uint32_t*)B8 (refhash_buf, offset);
-        offset += layer_size[layer_i];
-    }
-}
-
-static void refhash_load (uint64_t refhash_size)
-{
-    START_TIMER;
-
-    // allocate memory - base layer size is 1GB, and every layer is half the size of its predecessor, so total less than 2GB
-    buf_alloc (evb, &refhash_buf, 0, refhash_size, uint8_t, 1, "refhash_buf"); 
-    refhash_initialize_refhashs_array();
-
-    sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
-    dispatcher_fan_out_task ("load_refhash", ref_get_filename (gref),
-                             0, 0, true, flag.test, false, 0, 100,
-                             refhash_read_one_vb, 
-                             refhash_uncompress_one_vb, 
-                             NO_CALLBACK);
-    
-    COPY_TIMER_VB (evb, refhash_load);
-}
-
-// called by the main thread - piz_read_global_area when reading the reference file, ahead of compressing a fasta or fastq file. 
-void refhash_initialize (void)
-{
-    uint32_t base_layer_bits;
-    
-    if (buf_is_alloc (&refhash_buf)) return; // already loaded from a previous file
-
-    // case 1: called from ref_make_ref_init - initialize for making a reference file
-    if (flag.make_reference) {
-        #define VBLOCK_MEMORY_REFHASH  (16 << 20) // VB memory with --make-reference - refhash data (overridable with --vblock)
-        num_layers       = MAKE_REF_NUM_LAYERS;
-        base_layer_bits  = MAKE_REF_BASE_LAYER_BITS;
-        // we use the default vb size (16MB) not the reduced make-ref size (1MB), unless user overrides with --vblock
-        make_ref_vb_size = flag.vblock ? segconf.vb_size : VBLOCK_MEMORY_REFHASH;
-    }
-
-    // case 2: piz_read_global_area from piz_read_global_area -> refhash_load - initialize when reading an external reference for ZIP of fasta or fastq
-    else 
-        sections_get_refhash_details (num_layers ? NULL : &num_layers, &base_layer_bits);
-
-    uint64_t refhash_size = 0;
-    for (unsigned layer_i=0; layer_i < num_layers; layer_i++) {
-        layer_bits[layer_i]    = base_layer_bits - layer_i;
-        layer_bitmask[layer_i] = bitmask32 (layer_bits[layer_i]);
-        layer_size[layer_i]    = ((1 << layer_bits[layer_i]) * sizeof (uint32_t));
-        refhash_size          += layer_size[layer_i];
-    }
-
-    bits_per_hash  = layer_bits[0];
-    bits_per_hash_is_odd = bits_per_hash % 2;
-    nukes_per_hash = (1 + bits_per_hash) / 2; // round up
-
-    if (!flag.make_reference) 
-        refhash_load (refhash_size);
-
-    else { // make_reference
-        // set all entries to NO_GPOS. note: no need to set in ZIP, as we will be reading the data from the refernce file
-        // NOTE: setting NO_GPOS to 0xff rather than 0x00 causes make-ref to take ~8 min on my PC instead of < 1 min
-        // due to a different LZMA internal mode when compressing the hash. However, the resulting file is MUCH smaller,
-        // and loading of refhash during zip is MUCH faster
-        buf_alloc (evb, &refhash_buf, 0, refhash_size, uint8_t, 1, "refhash_buf"); 
-        buf_set (&refhash_buf, 0xff); 
-    }
-
-    // if we haven't prepared refhashs yet, do it now.
-    if (!refhashs) refhash_initialize_refhashs_array();
 }
 
 void refhash_destroy (bool destroy_only_if_not_mmap)
@@ -410,13 +406,3 @@ void refhash_destroy (bool destroy_only_if_not_mmap)
     flag.aligner_available = false;
 }
 
-void refhash_verify_before_exit (void)
-{
-    // verify read-only mmap'ed reference integrity before existing process
-    buf_destroy (refhash_buf); // also verifies loaded mmap
-}
-
-bool refhash_has_refhash (void)
-{
-    return buf_is_alloc (&refhash_buf);
-}

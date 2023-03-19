@@ -44,14 +44,14 @@ const SoloProp solo_props[NUM_SOLO_TAGS] = SOLO_PROPS;
 // called by main thread after reading a VB - callback of zip_init_vb
 void sam_sag_zip_init_vb (VBlockP vb)
 {
-    if (vb->comp_i == SAM_COMP_MAIN || !vb->txt_data.len) return;
+    if (vb->comp_i == SAM_COMP_MAIN || !Ltxt) return;
 
     // PRIM or DEPN - add to vb_info
     buf_alloc (evb, &z_file->vb_info[vb->comp_i-1], 1, 20, SamGcVbInfo, 2, "z_file->vb_info");
     BNXT (SamGcVbInfo, z_file->vb_info[vb->comp_i-1]) = (SamGcVbInfo){
         .vb_i      = vb->vblock_i,
         .num_lines = vb->lines.len,
-        .txt_len   = vb->txt_data.len
+        .txt_len   = Ltxt
     };
 }
 
@@ -319,9 +319,12 @@ bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(alignment), boo
         dl->FLAG.unmapped || vb->cigar_missing || !dl->POS)
             goto done; 
 
+    bool has_hards = (vb->hard_clip[0] > 0 || vb->hard_clip[1] > 0);
+    bool has_softs = (vb->soft_clip[0] > 0 || vb->soft_clip[1] > 0);
+    
     switch (segconf.sag_type) {
         case SAG_BY_SA:
-            if ((vb->hard_clip[0]>0 || vb->hard_clip[1]>0) && (vb->soft_clip[0]>0 || vb->soft_clip[1]>0))
+            if (has_hards && has_softs)
                 goto done; // we don't support adding an alignment with both soft and hard clips to an SA-based sag
 
             if (has(SA_Z) && sam_line_is_depn(dl)) {
@@ -330,7 +333,7 @@ bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(alignment), boo
                 if (vb->qname_count.len32)
                     n_alns = str_count_char (STRauxZ (SA_Z, is_bam), ';') + 1; // +1 for this aln
             
-                if (dl->hard_clip[0] || dl->hard_clip[1])
+                if (has_hards)
                    segconf.depn_CIGAR_can_have_H = true; // no worries about thread safety, this just gets set to true while segging MAIN and is inspected only when segging MAIN is over
             }
             
@@ -362,7 +365,7 @@ bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(alignment), boo
                 if (has(CC_Z) && has(CP_i))
                     comp_i = SAM_COMP_DEPN;
 
-                else if (!has(CC_Z) && !has(CP_i) && !has(SA_Z) && !has(HI_i) && !dl->hard_clip[0] && !dl->hard_clip[1] && 
+                else if (!has(CC_Z) && !has(CP_i) && !has(SA_Z) && !has(HI_i) && !has_hards && 
                          sam_seg_prim_add_sag (vb, dl, n_alns, is_bam)) // testing to see if we can successfully add a sag based on NH
                     comp_i = SAM_COMP_PRIM;
                 }
@@ -434,18 +437,18 @@ static Sag *sam_sa_get_first_group_by_qname_hash (VBlockSAMP vb, STRp(this_qname
 {
     // search for a group with qname in z_file->sa_qname
     *this_qname_hash = QNAME_HASH (this_qname, this_qname_len, is_last);
-    *grp_index_i = sam_sa_binary_search_for_qname_hash (B1ST (SAGroupIndexEntry, z_file->sag_gps_index), *this_qname_hash, 0, z_file->sag_gps_index.len-1);
+    *grp_index_i = sam_sa_binary_search_for_qname_hash (B1ST (SAGroupIndexEntry, z_file->sag_grps_index), *this_qname_hash, 0, z_file->sag_grps_index.len-1);
 
-    const SAGroupIndexEntry *index_ent = B(SAGroupIndexEntry, z_file->sag_gps_index, *grp_index_i); // invalid pointer if grp_index_i==-1, that's ok    
+    const SAGroupIndexEntry *index_ent = B(SAGroupIndexEntry, z_file->sag_grps_index, *grp_index_i); // invalid pointer if grp_index_i==-1, that's ok    
     return (*grp_index_i >= 0) ? B(Sag, z_file->sag_grps, index_ent->grp_i) : NULL; 
 }
 
 // ZIP DEPN: if there are more groups in z_file->sag_grps with the qname adlers, return the next group index
 static Sag *sam_sa_get_next_group_by_qname_hash (VBlockSAMP vb, int64_t *grp_index_i)
 {
-    const SAGroupIndexEntry *index_ent = B(SAGroupIndexEntry, z_file->sag_gps_index, *grp_index_i);
+    const SAGroupIndexEntry *index_ent = B(SAGroupIndexEntry, z_file->sag_grps_index, *grp_index_i);
 
-    if (*grp_index_i < z_file->sag_gps_index.len-1 && index_ent->qname_hash == (index_ent+1)->qname_hash) {
+    if (*grp_index_i < z_file->sag_grps_index.len-1 && index_ent->qname_hash == (index_ent+1)->qname_hash) {
         (*grp_index_i)++;
         return B(Sag, z_file->sag_grps, (index_ent+1)->grp_i);
     }
@@ -846,7 +849,7 @@ void sam_zip_gc_after_compute_main (VBlockSAMP vb)
 //-------------------
 
 // Main thread, PRIM VB. Set sam_prim fields of VB_HEADER. Callback from zfile_compress_vb_header
-void sam_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeader *vb_header)
+void sam_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeaderP vb_header)
 {
     vb_header->sam_longest_seq_len = BGEN32 (VB_SAM->longest_seq_len); // since v15
 
@@ -930,11 +933,11 @@ static uint32_t sam_zip_recon_plan_add_gc_lines (void)
 
     // byte-map of set when a VB is accessed
     ASSERTNOTINUSE (evb->scratch);
-    ARRAY_alloc (bool, vb_in_use, z_file->num_vbs, true, evb->scratch, evb, "scratch");
+    ARRAY_alloc (bool, vb_in_use, z_file->num_vbs+1, true, evb->scratch, evb, "scratch");
 
     for (uint64_t i=0; i < txt_file->recon_plan.len; i++) { // note: recon_plan may get extended within the loop with INSERBtxtAFTER
 
-        ReconPlanItem *pi = B(ReconPlanItem, txt_file->recon_plan, i);
+        ReconPlanItemP  pi = B(ReconPlanItem, txt_file->recon_plan, i);
         VBIType vb_i = pi->vb_i;
 
         // case: not a depn or prim plan item

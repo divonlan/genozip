@@ -6,10 +6,6 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
-#if defined __APPLE__ 
-#include "compatibility/mac_gettime.h"
-#endif
-
 #include "genozip.h"
 #include "dispatcher.h"
 #include "vblock.h"
@@ -19,6 +15,7 @@
 #include "threads.h"
 #include "segconf.h"
 #include "piz.h"
+#include "arch.h"
 
 #define RR(x) ((x) % d->max_threads)
 
@@ -123,6 +120,12 @@ Dispatcher dispatcher_init (rom task_name,
     return d;
 }
 
+// allow out of order joining of VBs (normally set in dispatcher_init)
+void dispatcher_allow_out_of_order (Dispatcher d)
+{
+    d->out_of_order = (d->max_threads > 1);  // max_threads=1 implies processing in order
+}
+
 void dispatcher_pause (Dispatcher d)
 {
     d->paused = true;
@@ -157,15 +160,19 @@ void dispatcher_finish (Dispatcher *dd_p, uint32_t *last_vb_i, bool cleanup_afte
 
     DispatcherData *d = *dd_p;
 
-    // must be before vb_cleanup_memory() (in ZIP - show in final component of final file)
+    // must be before memory release (in ZIP - show in final component of final file)
     if (show_memory) 
         buf_show_memory (false, d->max_threads, d->max_vb_id_so_far);    
 
     // free memory allocations between files, when compressing multiple non-bound files or 
     // decompressing multiple files. 
     // don't bother freeing (=save time) if this is the last file, unless we're going to test and need the memory
-    if (cleanup_after_me) {
-        vb_cleanup_memory(); 
+    if (cleanup_after_me || 
+        arch_is_valgrind()) { // free everything if testing with valgrind, so that we can find true memory leaks
+        if ((IS_ZIP && (IS_REF_INTERNAL || IS_REF_EXT_STORE)) ||
+            (IS_PIZ && IS_REF_STORED_PIZ))
+            ref_unload_reference (gref);
+
         vb_release_vb (&evb, d->task_name); // reset memory 
     }
     
@@ -354,7 +361,6 @@ bool dispatcher_is_input_exhausted (Dispatcher d)
     return d->input_exhausted;
 }
 
-// returns the number of VBs successfully outputted
 Dispatcher dispatcher_fan_out_task (rom task_name,
                                     rom filename,   // NULL to continue with previous filename
                                     uint32_t target_progress, // used if progress_type=PROGRESS_PERCENT 
@@ -364,6 +370,7 @@ Dispatcher dispatcher_fan_out_task (rom task_name,
                                     bool force_single_thread, 
                                     uint32_t previous_vb_i, // used if binding file
                                     uint32_t idle_sleep_microsec,
+                                    bool free_when_done,
                                     DispatcherFunc prepare, DispatcherFunc compute, DispatcherFunc output)
 {
     Dispatcher d = dispatcher_init (task_name, NULL, POOL_MAIN, force_single_thread ? 1 : global_max_threads, 
@@ -415,5 +422,7 @@ Dispatcher dispatcher_fan_out_task (rom task_name,
 
     } while (!dispatcher_is_done (d));
 
+    if (free_when_done) FREE(d);
+    
     return d;
 }

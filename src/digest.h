@@ -28,6 +28,7 @@ typedef union {
 #pragma pack()
 
 typedef struct {
+    bool is_adler; // always false
     bool initialized;
     bool log;
     uint64_t bytes_digested;
@@ -40,6 +41,7 @@ typedef struct {
 } Md5Context;
 
 typedef struct {
+    bool is_adler; // always true
     bool initialized;
     bool log;
     uint64_t bytes_digested;
@@ -48,10 +50,11 @@ typedef struct {
 
 typedef union {
     struct {
+        bool is_adler;
         bool initialized;
         bool log;
         uint64_t bytes_digested; 
-    } common;
+    };
     Md5Context md5_ctx;
     AdlerContext adler_ctx;
 } DigestContext;
@@ -64,12 +67,17 @@ extern bool digest_one_vb (VBlockP vb, bool is_compute_thread, BufferP data);
 extern void digest_piz_verify_one_txt_file (unsigned txt_file_i);
 extern bool digest_piz_has_it_failed (void);
 
-typedef struct { char s[34]; } DigestDisplay;
+extern Digest digest_do (STRp(data), bool is_adler, rom show_digest_msg);
+
+typedef struct { char s[64]; } DigestDisplay;
 extern DigestDisplay digest_display (Digest digest);
+extern DigestDisplay digest_display_(Digest digest, bool is_adler);
 
 typedef enum { DD_NORMAL, DD_MD5, DD_MD5_IF_MD5, DD_SHORT } DigestDisplayMode;
+extern DigestDisplay digest_display_ex_(const Digest digest, DigestDisplayMode mode, thool is_adler, bool show_alg);
 extern DigestDisplay digest_display_ex (const Digest digest, DigestDisplayMode mode);
 extern rom digest_name (void);
+extern rom digest_name_(bool is_adler);
 
 #define digest_is_equal(digest1,digest2) ((digest1).w128 == (digest2).w128)
 extern void digest_verify_ref_is_equal (const Reference ref, rom header_ref_filename, const Digest header_md5);

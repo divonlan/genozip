@@ -175,8 +175,8 @@ TXTHEADER_TRANSLATOR (txtheader_phy2fa)
 // Translating PHYLIP->FASTA: remove redundant terminating spaces from ID (FASTA's DESC)
 TRANSLATOR_FUNC (phy_piz_phy2fasta_ID)
 {
-    while (vb->txt_data.len && *BLSTtxt==' ')
-        vb->txt_data.len--;
+    while (Ltxt && *BLSTtxt==' ')
+        Ltxt--;
 
     return 0;
 }

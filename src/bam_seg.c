@@ -69,7 +69,7 @@ static int32_t bam_unconsumed_scan_forwards (VBlockP vb)
 
 static int32_t bam_unconsumed_scan_backwards (VBlockP vb, uint32_t first_i, int32_t *i)
 {
-    *i = MIN_(*i, vb->txt_data.len - sizeof(BAMAlignmentFixed));
+    *i = MIN_(*i, Ltxt - sizeof(BAMAlignmentFixed));
 
     // find the first alignment in the data (going backwards) that is entirely in the data - 
     // we identify and alignment by l_read_name and read_name
@@ -124,7 +124,7 @@ static int32_t bam_unconsumed_scan_backwards (VBlockP vb, uint32_t first_i, int3
         // agree with our formula. see comment in bam_reg2bin
 
         // all tests passed - this is indeed an alignment
-        return vb->txt_data.len - (*i + LTEN32 (aln->block_size) + 4); // everything after this alignment is "unconsumed"
+        return Ltxt - (*i + LTEN32 (aln->block_size) + 4); // everything after this alignment is "unconsumed"
     }
 
     return -1; // we can't find any alignment - need more data (lower first_i)    
@@ -134,7 +134,7 @@ static int32_t bam_unconsumed_scan_backwards (VBlockP vb, uint32_t first_i, int3
 // if first_i > 0, we attempt to heuristically detect the start of a BAM alignment.
 int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 {
-    ASSERT (*i >= 0 && *i < vb->txt_data.len, "*i=%d is out of range [0,%"PRIu64"]", *i, vb->txt_data.len);
+    ASSERT (*i >= 0 && *i < Ltxt, "*i=%d is out of range [0,%u]", *i, Ltxt);
 
     int32_t result;
 
@@ -485,7 +485,7 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
         sam_seg_QUAL (vb, dl, qual, l_seq, l_seq /* account for qual field */ );
 
     else { // cases 1. were both SEQ and QUAL are '*' (seq_len=0) and 2. SEQ exists, QUAL not (bam_rewrite_qual returns false)
-        dl->QUAL = (TxtWord){ .index=vb->txt_data.len32, .len = 1 }; // a '*' was placed after txt_data in bam_seg_initialize 
+        dl->QUAL = (TxtWord){ .index=Ltxt, .len = 1 }; // a '*' was placed after txt_data in bam_seg_initialize 
 
         sam_seg_QUAL (vb, dl, alignment, 1, l_seq /* account of l_seq 0xff */);
         

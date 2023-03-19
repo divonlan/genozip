@@ -44,7 +44,7 @@ extern void zfile_output_processed_vb (VBlockP vb);
 // PIZ side
 // --------
 
-extern bool zfile_read_genozip_header (SectionHeaderGenozipHeader *header);
+extern bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP header);
 
 extern SectionHeaderUnion zfile_read_section_header (VBlockP vb, uint64_t offset, uint32_t original_vb_i, SectionType expected_sec_type);
 
@@ -60,7 +60,7 @@ extern void zfile_uncompress_section (VBlockP vb, SectionHeaderUnionP section_he
 extern void zfile_uncompress_section_into_buf (VBlockP vb, SectionHeaderUnionP section_header_p, uint32_t expected_vb_i, SectionType expected_section_type, BufferP dst_buf, char *dst);
 
 #define zfile_get_global_section(HeaderType, sec,out_buf,out_buf_name) \
-    bool skipped = SECTION_SKIPPED == zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", (sec)->st, (sec)); \
+    bool skipped = (SECTION_SKIPPED == zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", (sec)->st, (sec))); \
     if (!skipped && (!flag.only_headers || (sec)->st == SEC_RANDOM_ACCESS)) \
         zfile_uncompress_section (evb, B1ST(SectionHeader, evb->z_data), (out_buf), (out_buf_name), 0, (sec)->st); \
     HeaderType header __attribute__((unused)) = !skipped ? *(HeaderType *)evb->z_data.data : (HeaderType){}; /* make a copy of the header */ \

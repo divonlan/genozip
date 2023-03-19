@@ -128,7 +128,7 @@ void kraken_seg_initialize (VBlockP vb)
     
     ctx_consolidate_stats (vb, KRAKEN_KMERS, KRAKEN_KMERTAX, KRAKEN_KMERLEN, DID_EOL);
 
-    qname_seg_initialize (VB, QNAME1, 0); 
+    qname_seg_initialize (VB, QNAME1, KRAKEN_QNAME, 0); 
 }
 
 void kraken_seg_finalize (VBlockP vb)
@@ -245,7 +245,7 @@ rom kraken_seg_txt_line (VBlockP vb, rom field_start_line, uint32_t remaining_tx
     unsigned field_len=0;
     char separator;
 
-    int32_t len = &vb->txt_data.data[vb->txt_data.len] - field_start_line;
+    int32_t len = BAFTtxt - field_start_line;
 
     SEG_NEXT_ITEM (KRAKEN_CU);
 
@@ -269,7 +269,7 @@ rom kraken_seg_txt_line (VBlockP vb, rom field_start_line, uint32_t remaining_tx
             // struct and not array, bc SEQLEN_2 is often a lot more random than SEQLEN_1 so better use different contexts
             static const MediumContainer con_SEQLEN = { .nitems_lo = 2,      
                                                         .items     = { { .dict_id = { _KRAKEN_SEQLEN_1 }, .separator = {'|'} },  
-                                                                    { .dict_id = { _KRAKEN_SEQLEN_2 },                    } } };
+                                                                       { .dict_id = { _KRAKEN_SEQLEN_2 },                    } } };
 
             seg_array_of_struct (VB, CTX(KRAKEN_SEQLEN), con_SEQLEN, field_start, field_len, (SegCallback[]){seg_pos_field_cb, 0}, field_len); // first element is good to delta, second is not
         }
@@ -319,7 +319,8 @@ IS_SKIP (kraken_piz_is_skip_section)
     return false;
 }
 
-// PIZ: piz_process_recon callback: called by the main thread, in the order of VBs
+// PIZ: piz_process_recon callback: called by the main thread, and if reading_kraken, the call is in the order of VBs 
+// (note: out of order is only possible with genounzip --test, but --kraken is not available in genounzip)
 void kraken_piz_process_recon (VBlockP vb)
 {
     if (!flag.reading_kraken) return;
@@ -476,7 +477,7 @@ static void kraken_get_genozip_file (void)
 
         WARN ("FYI: cannot find kraken file %s: generating it now from %s", z_filename, flag.reading_kraken);
 
-        rom exec_path = arch_get_executable();
+        rom exec_path = arch_get_executable(HARD_FAIL);
 
         StreamP generate = stream_create (NULL, 0, 0, 0, 0, 0, 0, "Generating kraken",
                                           exec_path, flag.reading_kraken, 

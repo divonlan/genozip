@@ -923,11 +923,11 @@ unsigned char *rans_uncompress_O1_4x16(unsigned char *in, unsigned int in_size,
 
     uint8_t *sfb_ = pthread_getspecific(rans_key);
     if (!sfb_) {
-	sfb_ = calloc(256*(TOTFREQ_O1+MAGIC2), sizeof(*sfb_));
+	sfb_ = CALLOC(256*(TOTFREQ_O1+MAGIC2) * sizeof(*sfb_));
 	pthread_setspecific(rans_key, sfb_);
     }
 #else
-    uint8_t *sfb_ = calloc(256*(TOTFREQ_O1+MAGIC2), sizeof(*sfb_));
+    uint8_t *sfb_ = CALLOC(256*(TOTFREQ_O1+MAGIC2) * sizeof(*sfb_));
 #endif
 
     if (!sfb_)

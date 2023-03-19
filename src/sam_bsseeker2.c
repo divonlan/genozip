@@ -217,7 +217,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_BSSEEKER2_XG)
     for (uint32_t i=0; i < recon_len; i++)
         recon[i] = REF (idx + i);
 
-    vb->txt_data.len += recon_len;
+    Ltxt += recon_len;
 
     // 2 right-flanking bases
     RECONSTRUCT1 ('_');
@@ -371,7 +371,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_BSSEEKER2_XM)
         if (op.op != BC_D) seq++;
     }
 
-    vb->txt_data.len += xm_len;
+    Ltxt += xm_len;
 
     done: return NO_NEW_VALUE;
 }

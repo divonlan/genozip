@@ -37,6 +37,7 @@
 #include "buffer.h"
 #include "version.h"
 #include "qname.h"
+#include "threads.h"
 
 #define INITIAL_NUM_NODES 10000
 
@@ -44,7 +45,7 @@
 #define COUNT_PROTECTED_FROM_REMOVAL64 0x8000000000000000ULL 
 #define COUNT_PROTECTED_FROM_REMOVAL32 0x80000000
 
-#define EXCESSIVE_DICT_SIZE (512 << 20) // warn if dict size goes beyond 512M
+#define EXCESSIVE_DICT_SIZE (512 MB) // warn if dict size goes beyond 512M
 
 // inserts dict_id->did_i to the map, if one of the two entries is available
 static inline void set_d2d_map (DictIdtoDidMap d2d_map, DictId dict_id, Did did_i)
@@ -75,11 +76,11 @@ static inline CharIndex ctx_insert_to_dict (VBlockP vb_of_dict, ContextP ctx, Di
     if (type == DICT_ZF) {
         buf_set_overlayable (dict); // during merge
 
-        ASSERT (snip_len <= ZWORD_MAX_LEN, "ctx=%s has a snip with len=%u which is too big to fit in a dictionary. First 100 chars=\"%.*s\"",
+        ASSERT (snip_len <= Z_MAX_WORD_LEN, "ctx=%s has a snip with len=%u which is too big to fit in a dictionary. First 100 chars=\"%.*s\"",
                 ctx->tag_name, snip_len, MIN_(100, snip_len), snip);
 
-        ASSERT (dict->len  <= ZWORD_MAX_INDEX, "ctx=%s has a dictionary beyond maximum size of %"PRIu64". Example of a snip (first 100 chars)=\"%.*s\"",
-                ctx->tag_name, (uint64_t)ZWORD_MAX_INDEX, MIN_(100, snip_len), snip);
+        ASSERT (dict->len  <= Z_MAX_DICT_LEN, "ctx=%s has a dictionary beyond maximum size of %"PRIu64". Example of a snip (first 100 chars)=\"%.*s\"",
+                ctx->tag_name, (uint64_t)Z_MAX_DICT_LEN, MIN_(100, snip_len), snip);
     }
     
     CharIndex char_index = dict->len;
@@ -622,8 +623,7 @@ void ctx_clone (VBlockP vb)
             if (!mutex_trylock (zctx->mutex))
                 continue;
 
-            if (buf_is_alloc (&zctx->dict)) {  // something already for this dict_id
-
+            if (zctx->dict.len) {  // something already in this dict
                 // overlay the global dict and nodes - these will be treated as read-only by the VB
                 buf_overlay (vb, &vctx->ol_dict,  &zctx->dict,  "contexts->ol_dict");   
                 buf_overlay (vb, &vctx->ol_nodes, &zctx->nodes, "contexts->ol_nodes");   
@@ -632,6 +632,7 @@ void ctx_clone (VBlockP vb)
                 // entries that are up to this merge_num
                 buf_overlay (vb, &vctx->global_hash, &zctx->global_hash, "contexts->global_hash");
                 buf_overlay (vb, &vctx->global_ents, &zctx->global_ents, "contexts->global_ents");
+
                 vctx->merge_num = zctx->merge_num;
                 vctx->global_hash_prime = zctx->global_hash_prime; // can never change
                 vctx->num_new_entries_prev_merged_vb = zctx->num_new_entries_prev_merged_vb;
@@ -672,11 +673,11 @@ void ctx_clone (VBlockP vb)
             num_cloned++;
         }
 
-        if (!achieved_something) sched_yield(); // all the contexts we still need to clone are locked - context switch.
+        if (!achieved_something) sched_yield(); // all the contexts we still need to clone are locked - allow context switch.
     }
 
     vb->num_contexts = z_num_contexts;
-    
+       
     COPY_TIMER (ctx_clone);
 }
 
@@ -702,12 +703,12 @@ static void ctx_initialize_ctx (ContextP ctx, Did did_i, DictId dict_id, DictIdt
     
     set_d2d_map (d2d_map, dict_id, did_i);
 
-    bool is_zf_ctx = z_file && (ctx - z_file->contexts) >= 0 && (ctx - z_file->contexts) <= ARRAY_LEN(z_file->contexts);
-
     // add a user-requested SEC_COUNTS section
     if (IS_ZIP) {
         if (flag.show_one_counts.num == dict_id_typeless (ctx->dict_id).num) 
             ctx->counts_section = ctx->no_stons = true;
+
+        bool is_zf_ctx = z_file && (ctx - z_file->contexts) >= 0 && (ctx - z_file->contexts) <= MAX_DICTS;
 
         if (is_zf_ctx) mutex_initialize (ctx->mutex);
 
@@ -789,17 +790,24 @@ void ctx_populate_zf_ctx_from_contigs (Reference ref, Did dst_did_i, ConstContig
     }
 }
 
-// find the z_file context that corresponds to dict_id. It could be possibly a different did_i
-// than in the vb - in case this dict_id is new to this vb, but another vb already inserted
-// it to z_file
-static ContextP ctx_get_zctx (DictId dict_id, bool check_predefined)
+// Find the z_file context that corresponds to dict_id, or return NULL if there is none.
+// ZIP note: It could be possibly a different did_ithan in the vb - in case this dict_id is new to this vb, but another 
+// vb already inserted it to z_file
+ContextP ctx_get_existing_zctx (DictId dict_id)
 {
-    Did z_num_contexts = __atomic_load_n (&z_file->num_contexts, __ATOMIC_RELAXED);
+    Did did_i = get_matching_did_i_from_map (z_file->contexts, z_file->d2d_map, dict_id);
+    
+    if (did_i != DID_NONE)
+        return &z_file->contexts[did_i];
+    
+    else {
+        Did z_num_contexts = __atomic_load_n (&z_file->num_contexts, __ATOMIC_RELAXED);
 
-    for (ContextP zctx=ZCTX(check_predefined ? 0 : DTFZ(num_fields)); zctx < ZCTX(z_num_contexts); zctx++)
-        if (dict_id.num == zctx->dict_id.num) 
-            return zctx;
-
+        for (ContextP zctx=&z_file->contexts[0]; zctx < &z_file->contexts[z_num_contexts]; zctx++)
+            if (dict_id.num == zctx->dict_id.num) 
+                return zctx;
+    }
+    
     return NULL;
 }
 
@@ -868,7 +876,7 @@ ContextP ctx_add_new_zf_ctx_from_txtheader (STRp(tag_name), DictId dict_id, Tran
     mutex_lock (z_file->dicts_mutex); // note: mutex needed bc VBs of a previous component might still be merging
 
     // possibly a tag is duplicate in the header, OR two tag names map to the same dict_id
-    ContextP zctx = ctx_get_zctx (dict_id, true);
+    ContextP zctx = ctx_get_existing_zctx (dict_id);
     if (zctx) {
         zctx = NULL; // not new
         goto finish;
@@ -974,7 +982,7 @@ static inline void ctx_drop_all_the_same (VBlockP vb, ContextP zctx, ContextP vc
 
     if (*snip == SNIP_SELF_DELTA) NO_DROP ("snip is SNIP_SELF_DELTA");
 
-    bool is_simple_lookup = (*snip == SNIP_LOOKUP) && (snip_len == 1);
+    bool is_simple_lookup = str_is_1char (snip, SNIP_LOOKUP);
 
     // we can't drop b250 if we have local data (as reconstructor will reconstruct from local rather than dict), unless it is a simple SNIP_LOOKUP
     if (vctx->local.len && !is_simple_lookup) NO_DROP ("ctx has local, but snip is not SNIP_LOOKUP"); 
@@ -1116,6 +1124,11 @@ static bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx)
         str_print_dict (stderr, zctx->dict.data, 1000, false, false);
     }
 
+    if (flag.deep) {
+        if (VB_DT(BAM) || VB_DT(SAM)) zctx->dict_flags.deep_sam = true;
+        else if (VB_DT(FASTQ))        zctx->dict_flags.deep_fastq = true;
+    }
+
 finish:
     // just update counts for ol_node (i.e. known to be existing) snips
     if (has_count) {
@@ -1190,12 +1203,11 @@ void ctx_merge_in_vb_ctx (VBlockP vb)
 // ZIP / PIZ : called from main thread
 void ctx_add_compressor_time_to_zf_ctx (VBlockP vb)
 {
-    for_vctx
-        if (vctx->compressor_time) {
-            ContextP zctx = vctx->st_did_i != DID_NONE ? ctx_get_zctx_from_vctx (CTX(vctx->st_did_i), false) // we accumulate at stats parent context if there is one
-                                                       : ctx_get_zctx_from_vctx (vctx, false);
-            zctx->compressor_time += vctx->compressor_time;
-        }
+    for_vctx_that (vctx->compressor_time) {
+        ContextP zctx = vctx->st_did_i != DID_NONE ? ctx_get_zctx_from_vctx (CTX(vctx->st_did_i), false) // we accumulate at stats parent context if there is one
+                                                    : ctx_get_zctx_from_vctx (vctx, false);
+        zctx->compressor_time += vctx->compressor_time;
+    }
 }
 
 static Did ctx_did_i_search (const ContextIndex *ctx_index, Did num_contexts, DictId dict_id, Did first, Did last)
@@ -1228,21 +1240,7 @@ Did ctx_get_unmapped_existing_did_i (const ContextArray contexts, const ContextI
 
     else // linear search if not
         for (did_i=num_contexts-1; did_i >= 0 ; did_i--)  // Search backwards as unmapped ctxs are more likely to be towards the end.
-            if (dict_id.num == contexts[did_i].dict_id.num) return did_i;
-
-    // PIZ only: check if its an alias that's not mapped in ctx_initialize_predefined_ctxs (due to contention)
-    if (command != ZIP && dict_id_aliases) {
-        for (uint32_t alias_i=0; alias_i < dict_id_num_aliases; alias_i++)
-            if (dict_id.num == dict_id_aliases[alias_i].alias.num) { // yes! its an alias
-
-                if (ctx_index)
-                    return ctx_did_i_search (ctx_index, num_contexts, dict_id_aliases[alias_i].dst, 0, num_contexts-1);
-
-                else 
-                    for (did_i=0; did_i < num_contexts; did_i++) 
-                        if (dict_id_aliases[alias_i].dst.num == contexts[did_i].dict_id.num) return did_i;
-            }
-    }
+            if (dict_id.num == contexts[did_i].dict_id.num) return contexts[did_i].did_i; // note: in case of an alias, contexts[did_i].did_i is the dst_did_i
 
     return DID_NONE; // not found
 }
@@ -1272,41 +1270,65 @@ ContextP ctx_get_unmapped_ctx (ContextArray contexts, DataType dt, DictIdtoDidMa
     return ctx;
 }
 
-// called from seg_all_data_lines (ZIP) and dict_io_read_all_dictionaries (PIZ) to initialize all
+// called from seg_all_data_lines (ZIP) and ctx_piz_initialize_zctxs (PIZ) to initialize all
 // primary field ctx's. these are not always used (e.g. when some are not read from disk due to genocat options)
 // but we maintain their fixed positions anyway as the code relies on it
-// Note: Context Buffers are already initialized in file_initialize_z_file_data
+// Note: z_file Context Buffers are already initialized in file_initialize_z_file_data
 void ctx_initialize_predefined_ctxs (ContextArray contexts, 
                                      DataType dt,
                                      DictIdtoDidMap d2d_map,
                                      Did *num_contexts)
 {
+    ASSERT0 (!IS_PIZ || contexts == z_file->contexts, "In PIZ, call only for z_file contexts");
+
     *num_contexts = MAX_(dt_fields[dt].num_fields, *num_contexts);
 
     init_dict_id_to_did_map (d2d_map); // reset, in case data_type changed
 
-    for (int did_i=0; did_i < dt_fields[dt].num_fields; did_i++) {
+    BufferP aliases = IS_PIZ ? dict_id_read_aliases() : NULL; // may be NULL in PIZ too, if file has no aliases
+    Did alias_dids[aliases ? aliases->len : 0];
+
+    for (Did did_i=0; did_i < dt_fields[dt].num_fields; did_i++) {
         DictId dict_id = dt_fields[dt].predefined[did_i].dict_id;
         ASSERT (dict_id.num, "No did_i->dict_id mapping is defined for predefined did_i=%u in dt=%s", did_i, dt_name (dt));
 
-        // check if its an alias (PIZ only)
-        ContextP dst_ctx = NULL;
-        if (command != ZIP && dict_id_aliases) 
-            for (uint32_t alias_i=0; alias_i < dict_id_num_aliases; alias_i++)
-                if (dict_id.num == dict_id_aliases[alias_i].alias.num) 
-                    // note: all alias destinations that ever existed previous versions of Genozip must be defined in #pragma GENDICT for this to work
-                    dst_ctx = ctx_get_zctx (dict_id_aliases[alias_i].dst, true); 
+        // skip if its an alias (PIZ only)
+        if (aliases) {
+            bool is_alias = false;
 
-        if (!dst_ctx) // normal field, not an alias
-            ctx_initialize_ctx (&contexts[did_i], did_i, dict_id, d2d_map, 
-                                dt_fields[dt].predefined[did_i].tag_name, dt_fields[dt].predefined[did_i].tag_name_len);
-
-        else { // an alias
-            contexts[did_i].did_i = dst_ctx->did_i;
-            contexts[did_i].dict_id = DICT_ID_NONE; // this is how reconstruct_from_ctx_do identifies it is an alias
-            
-            set_d2d_map (d2d_map, dict_id, dst_ctx->did_i);
+            for_buf2 (DictIdAlias, alias, alias_i, *aliases)
+                if (dict_id.num == alias->alias.num) {
+                    alias_dids[alias_i] = did_i;
+                    is_alias = true;
+                    // note: can't break out of a for_buf2
+                }
+        
+            if (is_alias) continue; // skip aliases, we will handle them next
         }
+
+        // normal field, not an alias
+        ctx_initialize_ctx (&contexts[did_i], did_i, dict_id, d2d_map, 
+                            dt_fields[dt].predefined[did_i].tag_name, dt_fields[dt].predefined[did_i].tag_name_len);
+    }
+
+    // initialize alias contexts (note: all aliases and their destinations are predefined)
+    // note: all alias destinations that ever existed in previous versions of Genozip must be defined in #pragma GENDICT for this to work
+    if (aliases) {
+        for_buf2 (DictIdAlias, alias, alias_i, *aliases) {
+            ContextP alias_ctx  = &z_file->contexts[alias_dids[alias_i]];
+            ContextP dst_ctx    = ctx_get_existing_zctx (alias->dst); 
+            ASSERT (dst_ctx, "destination %s of alias %s->%s is missing a #pragma GENDICT", 
+                    dis_dict_id (alias->dst).s, dis_dict_id (alias->alias).s, dis_dict_id (alias->dst).s);
+
+            alias_ctx->did_i    = dst_ctx->did_i;
+            alias_ctx->dict_id  = alias->alias;
+            alias_ctx->is_alias = true;
+            strcpy ((char*)alias_ctx->tag_name, dis_dict_id (alias_ctx->dict_id).s);
+            
+            set_d2d_map (d2d_map, alias->alias, dst_ctx->did_i);
+        }
+
+        buf_free (*aliases);
     }
 }
 
@@ -1319,16 +1341,18 @@ void ctx_initialize_predefined_ctxs (ContextArray contexts,
 // while starting a larger dict/word_list on a fresh memory allocation.
 void ctx_overlay_dictionaries_to_vb (VBlockP vb)
 {
-    for (Did did_i=0; did_i < MAX_DICTS; did_i++) {
+    for (Did did_i=0; did_i < z_file->num_contexts; did_i++) {
         ContextP zctx = ZCTX(did_i);
         ContextP vctx = CTX(did_i);
 
         if (!zctx->dict_id.num) continue;
 
-        // we create a VB contexts even if there are now dicts (perhaps skipped due to flag) - needed for containers to work
-        vctx->did_i       = did_i;
+        // we create a VB contexts even if there are no dicts (perhaps skipped due to flag) - needed for containers to work
+        vctx->did_i       = zctx->did_i;      // note: in case of an alias, this will be did_i != zctx->did_i
         vctx->dict_id     = zctx->dict_id;
         vctx->is_loaded   = zctx->is_loaded;  // dictionary loaded - this will be updated in piz_read_all_ctxs
+        vctx->is_alias    = zctx->is_alias;
+        vctx->other_did_i = DID_NONE;
         vctx->last_line_i = LAST_LINE_I_INIT;
         memcpy ((char*)vctx->tag_name, zctx->tag_name, sizeof (vctx->tag_name));
 
@@ -1466,10 +1490,14 @@ void ctx_sort_dictionaries_vb_1 (VBlockP vb)
             if (node->node_index == WORD_INDEX_NONE) continue; // node was canceled in ctx_rollback
 
             rom snip = Bc (unsorted_dict, node->char_index); 
-            memcpy (next, snip, node->snip_len + 1 /* +1 for SNIP_SEP */);
+
+            //xxx memcpy (next, snip, node->snip_len + 1 /* +1 for SNIP_SEP */);
+            // node->char_index = BNUM64 (ctx->dict, next);
+            // node->node_index = i;
+            // next += node->snip_len + 1;
             node->char_index = BNUM64 (ctx->dict, next);
             node->node_index = i;
-            next += node->snip_len + 1;
+            next = mempcpy (next, snip, node->snip_len + 1 /* +1 for SNIP_SEP */);
 
             if (HAS_DEBUG_SEG(ctx)) {
                 char printable_snip[node->snip_len+20];
@@ -1503,16 +1531,36 @@ void ctx_update_stats (VBlockP vb)
     }
 }
 
+static void ctx_foreach_buffer (ContextP ctx, void (*func)(BufferP buf, rom func, unsigned line)) 
+{
+    func (&(ctx)->dict,        __FUNCLINE);
+    func (&(ctx)->b250,        __FUNCLINE);
+    func (&(ctx)->local,       __FUNCLINE);
+    func (&(ctx)->pair,        __FUNCLINE);
+    func (&(ctx)->ol_dict,     __FUNCLINE);
+    func (&(ctx)->ol_nodes,    __FUNCLINE);
+    func (&(ctx)->nodes,       __FUNCLINE);
+    func (&(ctx)->counts,      __FUNCLINE);
+    func (&(ctx)->local_hash,  __FUNCLINE);
+    func (&(ctx)->local_ents,  __FUNCLINE);
+    func (&(ctx)->global_hash, __FUNCLINE);
+    func (&(ctx)->global_ents, __FUNCLINE);
+    func (&(ctx)->word_list,   __FUNCLINE);
+    func (&(ctx)->con_cache,   __FUNCLINE);
+    func (&(ctx)->con_index,   __FUNCLINE);
+    func (&(ctx)->con_len,     __FUNCLINE);
+}
+
 void ctx_free_context (ContextP ctx, Did did_i)
 {
-    ctx_foreach_buffer (ctx, false, buf_free_do);
+    ctx_foreach_buffer (ctx, buf_free_do);
 
     memset ((char*)ctx->tag_name, 0, sizeof(ctx->tag_name));
     ctx->did_i = 0; 
     ctx->st_did_i = 0;
     ctx->ltype = 0;
-    ctx->flags = (struct FlagsCtx){};
-    ctx->pair_flags = (struct FlagsCtx){};
+    ctx->flags = ctx->pair_flags = (struct FlagsCtx){};
+    ctx->dict_flags = (struct FlagsDict){};
     ctx->dict_id.num = 0;
     ctx->pair_b250_iter = (SnipIterator){};
     ctx->lcodec = ctx->bcodec = ctx->dcodec = ctx->lcodec_non_inherited = ctx->lsubcodec_piz = 0;
@@ -1520,7 +1568,8 @@ void ctx_free_context (ContextP ctx, Did did_i)
     ctx->no_stons = ctx->pair_local = ctx->pair_b250 = ctx->no_callback = ctx->line_is_luft_trans = ctx->lcodec_hard_coded =
     ctx->local_param = ctx->no_vb1_sort = ctx->local_always = ctx->counts_section = ctx->no_drop_b250 = 
     ctx->value_is_missing = ctx->please_remove_dict = ctx->local_is_lten = ctx->dict_len_excessive = 0;
-    ctx->is_stats_parent = ctx->is_initialized = ctx->local_compressed = ctx->b250_compressed = ctx->dict_merged = ctx->is_loaded = 0;
+    ctx->is_stats_parent = ctx->is_initialized = ctx->local_compressed = ctx->b250_compressed = ctx->dict_merged = 
+    ctx->is_loaded = ctx->z_data_exists = 0;
     ctx->local_dep = 0;
     ctx->local_hash_prime = 0;
     ctx->num_new_entries_prev_merged_vb = 0;
@@ -1562,7 +1611,7 @@ void ctx_free_context (ContextP ctx, Did did_i)
 // Called by file_close ahead of freeing File memory containing contexts
 void ctx_destroy_context (ContextP ctx, Did did_i)
 {
-    ctx_foreach_buffer (ctx, false, buf_destroy_do);
+    ctx_foreach_buffer (ctx, buf_destroy_do);
     mutex_destroy (ctx->mutex);
 
     // test that ctx_free_context indeed frees everything
@@ -1759,6 +1808,30 @@ void ctx_compress_counts (void)
     COPY_TIMER_VB (evb, ctx_compress_counts);
 }
 
+// PIZ: called by main thread after reading GENOZIP_HEADER - create predefined contexts as well as all
+// contexts that exist in the file, and mark those with data in the file as "z_data_exists". 
+// z_data_exists can be relied on in flags_update_piz_one_file and IS_SKIP functions.
+void ctx_piz_initialize_zctxs (void)
+{
+    if (z_file->num_contexts) return; // already initialized (this happens, bc zfile_read_genozip_header is called multiple times)
+
+    ctx_initialize_predefined_ctxs (z_file->contexts, z_file->data_type, z_file->d2d_map, &z_file->num_contexts);
+
+    Section sec = NULL;
+    while (sections_next_sec3 (&sec, SEC_B250, SEC_LOCAL, SEC_DICT)) {
+        ContextP zctx = ctx_get_existing_zctx (sec->dict_id);
+
+        // case: first encounter in z_file with this non-predefined dict_id - initialize a ctx for it
+        if (!zctx) { 
+            zctx = &z_file->contexts[z_file->num_contexts++];
+            ctx_initialize_ctx (zctx, z_file->num_contexts-1, sec->dict_id, z_file->d2d_map, 0, 0);
+        }
+
+        if (!zctx->z_data_exists) // predefined not encountered before, or non-predefined just initialized
+            zctx->z_data_exists = true; // store to memory only in rare cases of new encounter
+    }
+}
+
 // PIZ: called by the main threads from piz_read_global_area
 void ctx_read_all_counts (void)
 {
@@ -1766,7 +1839,7 @@ void ctx_read_all_counts (void)
     bool counts_shown=false;
     while (sections_next_sec (&sec, SEC_COUNTS))  {
 
-        ContextP zctx = ctx_get_zctx (sec->dict_id, true);
+        ContextP zctx = ctx_get_existing_zctx (sec->dict_id);
         
         zfile_get_global_section (SectionHeaderCounts, sec, &zctx->counts, "counts");
         if (flag.only_headers || !zctx->counts.len) continue; // only show headers, or section skipped
@@ -1848,9 +1921,8 @@ uint64_t ctx_get_ctx_group_z_len (VBlockP vb, Did group_did_i)
     CTX(group_did_i)->st_did_i = group_did_i; // so parent is also included in the loop
 
     uint64_t z_len = 0;
-    for_ctx
-        if (ctx->st_did_i == group_did_i) 
-            z_len += ctx->local_in_z_len + ctx->b250_in_z_len; 
+    for_ctx_that (ctx->st_did_i == group_did_i) 
+        z_len += ctx->local_in_z_len + ctx->b250_in_z_len; 
 
     CTX(group_did_i)->st_did_i = save;
 
@@ -1875,24 +1947,30 @@ void ctx_declare_winning_group (Did winning_group_did_i, Did losing_group_did_i,
     ZCTX(new_st_did_i)->is_stats_parent = true; // assuming it is predefined - no need for mutex - set once and never reset
 }
 
-void ctx_foreach_buffer (ContextP ctx, bool set_name, void (*func)(BufferP buf, rom func, unsigned line)) 
+// initialize "promisuous" buffers - evb buffers that might be allocated by compute threads
+// promiscuous buffers must be initialized by the main thread, and buffer.c does not verify their integrity.
+void ctx_zip_init_promiscuous (ContextP ctx)
 {
-    { BufferP buf = &(ctx)->dict;        if (set_name) buf->name = "contexts->dict"        ; func (buf, __FUNCLINE); }  
-    { BufferP buf = &(ctx)->b250;        if (set_name) buf->name = "contexts->b250"        ; func (buf, __FUNCLINE); }  
-    { BufferP buf = &(ctx)->local;       if (set_name) buf->name = "contexts->local"       ; func (buf, __FUNCLINE); }  
-    { BufferP buf = &(ctx)->pair;        if (set_name) buf->name = "contexts->pair"        ; func (buf, __FUNCLINE); }  
-    { BufferP buf = &(ctx)->ol_dict;     if (set_name) buf->name = "contexts->ol_dict"     ; func (buf, __FUNCLINE); }  
-    { BufferP buf = &(ctx)->ol_nodes;    if (set_name) buf->name = "contexts->ol_nodes"    ; func (buf, __FUNCLINE); }  
-    { BufferP buf = &(ctx)->nodes;       if (set_name) buf->name = "contexts->nodes"       ; func (buf, __FUNCLINE); }  
-    { BufferP buf = &(ctx)->counts;      if (set_name) buf->name = "contexts->counts"      ; func (buf, __FUNCLINE); }  
-    { BufferP buf = &(ctx)->local_hash;  if (set_name) buf->name = "contexts->local_hash"  ; func (buf, __FUNCLINE); }  
-    { BufferP buf = &(ctx)->local_ents;  if (set_name) buf->name = "contexts->local_ents"  ; func (buf, __FUNCLINE); }  
-    { BufferP buf = &(ctx)->global_hash; if (set_name) buf->name = "contexts->global_hash" ; func (buf, __FUNCLINE); }  
-    { BufferP buf = &(ctx)->global_ents; if (set_name) buf->name = "contexts->global_ents" ; func (buf, __FUNCLINE); }  
-    { BufferP buf = &(ctx)->word_list;   if (set_name) buf->name = "contexts->word_list"   ; func (buf, __FUNCLINE); }  
-    { BufferP buf = &(ctx)->con_cache;   if (set_name) buf->name = "contexts->con_cache"   ; func (buf, __FUNCLINE); }  
-    { BufferP buf = &(ctx)->con_index;   if (set_name) buf->name = "contexts->con_index"   ; func (buf, __FUNCLINE); }  
-    { BufferP buf = &(ctx)->con_len;     if (set_name) buf->name = "contexts->con_len"     ; func (buf, __FUNCLINE); }  
+    ASSERTMAINTHREAD;
+
+    #define INIT(buf) ({ buf_init_promiscuous_(evb, &ctx->buf, "contexts->" #buf);  })
+
+    INIT(global_hash);
+    INIT(global_ents);
+    INIT(dict);
+    INIT(nodes);
+    INIT(counts);
+    INIT(stons);
+    INIT(ston_nodes);
+}
+
+// ZIP: called from compute thread or main thread: for predefined contexts only (i.e. ctx->did_i==zctx->did_i): 
+// if we create any B250, LOCAL or DICT sections of this did_i, zctx->z_data_exists is set to true.
+// Used to filter aliases written to the file.
+void ctx_zip_z_data_exist (ContextP ctx)
+{
+    if (ctx->did_i < DTFZ(num_fields)) // case: ctx is a predefined context
+        ZCTX(ctx->did_i)->z_data_exists = true;
 }
 
 // qsort comparison function

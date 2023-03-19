@@ -398,4 +398,7 @@ WordIndex chrom_get_by_name (STRp (chrom_name))
     return wi;
 }
 
-
+void chrom_finalize (void)
+{
+    buf_destroy (chrom_sorter);
+}

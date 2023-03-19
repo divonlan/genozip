@@ -35,7 +35,7 @@ void biopsy_init (rom optarg)
             buf_add_int (evb, biopsy_vb_i, ((uint32_t)atoi (items[i]))); 
     }
 
-    biopsy_fn = malloc (strlen(optarg)+50);
+    biopsy_fn = MALLOC (strlen(optarg)+50);
     sprintf (biopsy_fn, "%s.biopsy", optarg);
 
     flag.biopsy   = true;
@@ -62,7 +62,7 @@ void biopsy_take (VBlockP vb)
 
 start_biopsy:
     
-    buf_add_more (evb, &biopsy_data, STRb(vb->txt_data), "biopsy_data");
+    buf_add_buf (evb, &biopsy_data, &vb->txt_data, char, "biopsy_data");
     
     DO_ONCE sprintf (&biopsy_fn[strlen(biopsy_fn)], "%s", file_plain_ext_by_dt (txt_file->data_type));
 

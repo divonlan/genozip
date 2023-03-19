@@ -56,7 +56,9 @@ typedef int32_t TaxonomyId;
 
 #define NO_CALLBACK NULL
 
-typedef enum { POOL_MAIN,  // used for all VBs, except non-pool VBs and BGZF VBs
+typedef enum __attribute__ ((__packed__)) { 
+               NO_POOL=-1, 
+               POOL_MAIN,  // used for all VBs, except non-pool VBs and BGZF VBs
                POOL_BGZF,  // PIZ only: used for BGZF-compression dispatcher
                NUM_POOL_TYPES } VBlockPoolType;
 #define POOL_NAMES { "MAIN", "BGZF" };
@@ -103,6 +105,7 @@ typedef struct ContigPkg *ContigPkgP;
 typedef const struct ContigPkg *ConstContigPkgP;
 typedef const struct QnameFlavorStruct *QnameFlavor; 
 typedef struct DispatcherData *Dispatcher;
+typedef struct Huffman *HuffmanP;
 
 typedef struct { char s[80]; } StrText;
 
@@ -177,9 +180,11 @@ typedef struct __attribute__ ((__packed__)) { uint32_t index, len; } TxtWord; //
 typedef struct __attribute__ ((__packed__)) { uint64_t index; uint32_t len; } BufWord; // see also ZWord
 
 // a reference into data in z_file 
-#define ZWORD_MAX_INDEX ((1ULL << 40) - 1ULL) // 1 TB
-#define ZWORD_MAX_LEN   ((1ULL << 24) - 1ULL) // 16 MB
-typedef struct __attribute__ ((__packed__)) { uint64_t index : 40;  uint64_t len : 24; } ZWord; 
+#define Z_MAX_DICT_LEN (1 TB - 1ULL)  // maximum length of a context.dict (v14)
+#define Z_MAX_WORD_LEN (16 MB - 1ULL) // maximum length of any word in a context.dict (excluding its \0 separator) (v14)
+typedef struct __attribute__ ((__packed__)) { uint64_t index : 40; // up to Z_MAX_DICT_LEN
+                                              uint64_t len   : 24; // up to Z_MAX_WORD_LEN
+                                            } ZWord; 
 #define ZWORDtxt(snip) ((ZWord){ .index = BNUMtxt (snip), .len = snip##_len }) // get coordinates in txt_data
 
 typedef union { // 64 bit
@@ -194,7 +199,7 @@ typedef union { // 64 bit
 extern uint32_t global_max_threads;
 #define MAX_GLOBAL_MAX_THREADS 10000
 
-extern rom global_cmd;            // set once in main()
+extern char global_cmd[];            // set once in main()
 extern ExeType exe_type;
 
 // global files (declared in file.c)
@@ -260,7 +265,7 @@ typedef BgEnBufFunc (*BgEnBuf);
 typedef enum { SKIP_PURPOSE_RECON,    // true if this section should be skipped when reading VB data for reconstruction
                SKIP_PURPOSE_PREPROC   // true if this section should be skipped when reading data for preprocessing (SAM: SA Loading FASTA: grep)
 } SkipPurpose;
-#define IS_SKIP(func) bool func (SectionType st, CompIType comp_i, DictId dict_id, SkipPurpose purpose)
+#define IS_SKIP(func) bool func (SectionType st, CompIType comp_i, DictId dict_id, uint8_t f8/*not SectionFlags due to #include dependencies*/, SkipPurpose purpose)
 typedef IS_SKIP ((*Skip));
 
 // PIZ / ZIP inspired by "We don't sell Duff. We sell Fudd"
@@ -298,10 +303,10 @@ typedef          __int128 int128_t;
 #define ROUNDUP2(x)    (((x) + 1)       & ~(typeof(x))0x1) 
 #define ROUNDUP4(x)    (((x) + 3)       & ~(typeof(x))0x3)
 #define ROUNDUP8(x)    (((x) + 7)       & ~(typeof(x))0x7)
+#define ROUNDDOWN8(x)  ((x)             & ~(typeof(x))0x7)
 #define ROUNDUP16(x)   (((x) + 0xf)     & ~(typeof(x))0xf)
 #define ROUNDUP32(x)   (((x) + 0x1f)    & ~(typeof(x))0x1f)    
 #define ROUNDDOWN32(x) ((x)             & ~(typeof(x))0x1f)
-
 #define ROUNDUP64(x)   (((x) + 0x3f)    & ~(typeof(x))0x3f)
 #define ROUNDDOWN64(x) ((x)             & ~(typeof(x))0x3f)
 #define ROUNDUP512(x)  (((x) + 0x1ff)   & ~(typeof(x))0x1ff)    
@@ -327,6 +332,21 @@ typedef SORTER ((*Sorter));
 
 #define DESCENDING_SORTER(func_name,struct_type,struct_field) \
     SORTER (func_name) { return DESCENDING (struct_type, struct_field); }
+
+/* xxx BINARY_SEARCHER is NEW - not tested yet */
+// declaration of binary search recursive function
+#define BINARY_SEARCHER(func, type, buf, type_field, field) \
+    type *func (type *first, type *last, type_field value) \
+    { \
+        if (first > last) return NULL; /* not found */ \
+        type *mid = first + (last - first) / 2; \
+        if (mid->field == value) return mid; \
+        else if (mid->field > value) return func (first, last-1, value); \
+        else                         return func (mid+1, last, value); \
+    }
+
+// actually do a binary search. buf is required to be sorted in an ascending order of field
+#define binary_search(func, type, buf, value) func (B1ST(type,(buf)), BLST(type,(buf)), value);
 
 #define DO_ONCE static uint64_t do_once=0; if (!__atomic_test_and_set (&do_once, __ATOMIC_RELAXED))  
 

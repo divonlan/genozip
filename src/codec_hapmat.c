@@ -136,14 +136,14 @@ CODEC_RECONSTRUCT (codec_hapmat_reconstruct)
             RECONSTRUCT_INT (ht - '0'); break;
         
         case '-': // ploidy padding (starting 10.0.2) - appears as the 2nd+ HT - unlike '*', these are counted in GT.repeats
-            vb->txt_data.len--; // remove previous phase character;
+            Ltxt--; // remove previous phase character;
             break;
 
         // "%|%" is used instead of "./." in case the previous sample had a | phase. This is meant to reduce entroy of GT.b250
         // in the case we have phased data, but missing samples appear as "./.".
         case '%': 
             if (*BLSTtxt == '|' || *BLSTtxt == '/') { // second % in "%|%" and act on the 2nd
-                vb->txt_data.len -= 1;  // remove | or /
+                Ltxt -= 1;  // remove | or /
                 RECONSTRUCT ("/.", 2);
             }
             else

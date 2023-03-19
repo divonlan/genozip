@@ -56,7 +56,7 @@ WordIndex seg_known_node_index (VBlockP vb, ContextP ctx, WordIndex node_index, 
     ctx_append_b250 (vb, ctx, node_index);
     ctx->txt_len += add_bytes;
     
-    (*B32 (ctx->counts, node_index))++;
+    ctx_increment_count (vb, ctx, node_index);
 
     return node_index;
 }
@@ -380,7 +380,7 @@ PosType64 seg_pos_field (VBlockP vb,
 
     SegError err = ERR_SEG_NO_ERROR;
     if (pos_str) { // option 1
-        if (pos_str_len == 1 && *pos_str == missing) 
+        if (str_is_1char (pos_str, missing)) 
             err = ERR_SEG_NOT_INTEGER; // not an error, just so that we seg this as SNIP_DONT_STORE
         
         else {
@@ -1031,7 +1031,7 @@ bool seg_by_container (VBlockP vb, ContextP ctx, ContainerP con, STRp(value),
 }
 
 
-void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, STRp(data), bool add_nul, Lookup lookup_type, bool is_singleton, unsigned add_bytes) 
+void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, const void *const data, uint32_t data_len, bool add_nul, Lookup lookup_type, bool is_singleton, unsigned add_bytes) 
 {
 #ifdef DEBUG
     ASSERT (is_singleton || ctx->no_stons || ctx->ltype != LT_TEXT || segconf.running, 
@@ -1188,14 +1188,14 @@ void seg_all_data_lines (VBlockP vb)
 {
     START_TIMER;
 
-    // sanity
+    // sanity (leave 64b to detect bugs)
     ASSERT (vb->lines.len <= vb->txt_data.len, "%s: Expecting lines.len=%"PRIu64" < txt_data.len=%"PRIu64, 
             VB_NAME, vb->lines.len, vb->txt_data.len); // 64 bit test in case of memory corruption
 
     // note: empty VB is possible, for example empty SAM generated component
     // note: if re-reading, data is not loaded yet (it will be in *_seg_initialize)
-    ASSERT (!vb->txt_data.len || vb->reread_prescription.len || *BLSTtxt == '\n' || !DTP(vb_end_nl), "%s: %s txt_data unexpectedly doesn't end with a newline. Last 10 chars: \"%10s\"", 
-            VB_NAME, dt_name(vb->data_type), Btxt (vb->txt_data.len32 - MIN_(10,vb->txt_data.len32)));
+    ASSERT (!Ltxt || vb->reread_prescription.len || *BLSTtxt == '\n' || !DTP(vb_end_nl), "%s: %s txt_data unexpectedly doesn't end with a newline. Last 10 chars: \"%10s\"", 
+            VB_NAME, dt_name(vb->data_type), Btxt (Ltxt - MIN_(10,Ltxt)));
 
     ctx_initialize_predefined_ctxs (vb->contexts, vb->data_type, vb->d2d_map, &vb->num_contexts); // Create ctx for the fields in the correct order 
  
@@ -1207,7 +1207,7 @@ void seg_all_data_lines (VBlockP vb)
     // set estimated number of lines
     vb->lines.len32 = vb->lines.len32  ? vb->lines.len32 // already set? don't change (eg 2nd pair FASTQ, bcl_unconsumed)
                     : segconf.running  ? 10              // low number of avoid memory overallocation for PacBio arrays etc 
-                    : segconf.line_len ? MAX_(1, vb->txt_data.len32 / segconf.line_len)
+                    : segconf.line_len ? MAX_(1, Ltxt / segconf.line_len)
                     :                    1;              // eg DT_GENERIC
 
     vb->scratch.name = "scratch"; // initialize so we don't need to worry about it later
@@ -1280,17 +1280,17 @@ void seg_all_data_lines (VBlockP vb)
             bgzf_zip_advance_index (vb, line_len);
         
         // if our estimate number of lines was too small, increase it
-        if (vb->line_i == vb->lines.len-1 && field_start - vb->txt_data.data != vb->txt_data.len)         
+        if (vb->line_i == vb->lines.len32-1 && field_start - vb->txt_data.data != vb->txt_data.len)         
             seg_more_lines (vb, sizeof_line);
         
         // collect stats at the approximate 1/3 or 2/3s marks of the file, to help hash_alloc_global create a hash
         // table. note: we do this for every vb, not just 1, because hash_alloc_global runs in the first
         // vb a new field/subfield is introduced
-        if (!hash_hints_set_1_3 && BNUMtxt (field_start) > vb->txt_data.len32 / 3) {
+        if (!hash_hints_set_1_3 && BNUMtxt (field_start) > Ltxt / 3) {
             seg_set_hash_hints (vb, 1);
             hash_hints_set_1_3 = true;
         }
-        else if (!hash_hints_set_2_3 && BNUMtxt (field_start) > 2 * vb->txt_data.len32 / 3) {
+        else if (!hash_hints_set_2_3 && BNUMtxt (field_start) > 2 * Ltxt / 3) {
             seg_set_hash_hints (vb, 2);
             hash_hints_set_2_3 = true;
         }
@@ -1304,13 +1304,22 @@ void seg_all_data_lines (VBlockP vb)
     }
 
     if (segconf.running) {
-        segconf.line_len = (vb->lines.len32 ? ((double)vb->txt_data.len32 / (double)vb->lines.len32) : 500) + 0.999; // get average line length (rounded up ; arbitrary 500 if the segconf data ended up not having any lines (example: all lines were non-matching lines dropped by --match in a chain file))
+        segconf.line_len = (vb->lines.len32 ? ((double)Ltxt / (double)vb->lines.len32) : 500) + 0.999; // get average line length (rounded up ; arbitrary 500 if the segconf data ended up not having any lines (example: all lines were non-matching lines dropped by --match in a chain file))
 
         // limitations: only pre-defined field, not local
         for (Did did_i=0; did_i < DTF(num_fields); did_i++)
             if (CTX(did_i)->b250.len32) 
                 segconf.b250_per_line[did_i] = (float)CTX(did_i)->b250.len32 / (float)vb->lines.len32;
     }
+
+    if (!segconf.running) 
+        __atomic_fetch_add (&z_file->comp_num_lines[vb->comp_i], vb->lines.len, __ATOMIC_RELAXED); 
+
+    ASSINP (vb->lines.len32 <= CON_MAX_REPEATS, // because top_level.repeats = vb->lines.len
+            "Genozip works by dividing the file to \"VBlocks\". Unfortuantely, the VBlocks for this file are too big\n"
+            "and have have too many %ss (= over the Genozip's maximum of %u). Current VBlock size is %s.\n"
+            "Solution: use --vblock to set a lower value (value is in MB)",
+            DTP(line_name), CON_MAX_REPEATS, str_size (segconf.vb_size).s);
 
     DT_FUNC (vb, seg_finalize)(vb); // data-type specific finalization
 

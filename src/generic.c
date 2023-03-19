@@ -61,6 +61,8 @@ int32_t generic_is_header_done (bool is_eof)
     if (new_dt != DT_NONE) {
         txt_file->data_type = z_file->data_type = new_dt;
 
+        z_file->z_flags.txt_is_bin = DTPT (is_binary); // update
+
         // recreate predefined contexts
         ctx_initialize_predefined_ctxs (z_file->contexts, new_dt, z_file->d2d_map, &z_file->num_contexts);
         
@@ -90,7 +92,7 @@ void generic_seg_initialize (VBlockP vb)
     // capture the first MAGIC_SIZE bytes and the extension to be reported in stats
     if (vb->vblock_i == 1) {
         memset (magic, 0, MAGIC_SIZE);
-        memcpy (magic, B1STtxt, MIN_(MAGIC_SIZE, vb->txt_data.len32));
+        memcpy (magic, B1STtxt, MIN_(MAGIC_SIZE, Ltxt));
 
         // copy return last component if it is not the whole filename, and short (we want the extension that indicates the file type, not the part of the filename that indicates the data)
         memset (ext, 0, sizeof (ext));

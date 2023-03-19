@@ -21,6 +21,7 @@
 #include "compressor.h"
 #include "codec.h"
 #include "piz.h"
+#include "zip.h"
 #include "license.h"
 #include "mutex.h"
 #include "strings.h"
@@ -32,6 +33,7 @@
 #include "flags.h"
 #include "website.h"
 #include "gencomp.h"
+#include "threads.h"
 #include "libdeflate/libdeflate.h"
 
 static rom password_test_string = "WhenIThinkBackOnAllTheCrapIlearntInHighschool";
@@ -40,7 +42,7 @@ static void zfile_show_b250_section (SectionHeaderUnionP section_header_p, Const
 {
     static Mutex show_b250_mutex = {}; // protect so compute thread's outputs don't get mix
 
-    SectionHeaderCtx *header = section_header_p.ctx;
+    SectionHeaderCtxP header = section_header_p.ctx;
 
     if (!flag.show_b250 && dict_id_typeless (header->dict_id).num != flag.dict_id_show_one_b250.num) return;
 
@@ -237,6 +239,8 @@ uint32_t zfile_compress_b250_data (VBlockP vb, ContextP ctx)
 
     ctx->b250_in_z_len = vb->z_data.len32 - ctx->b250_in_z;
 
+    ctx_zip_z_data_exist (ctx);
+
     return compressed_size;
 }
 
@@ -289,6 +293,8 @@ uint32_t zfile_compress_local_data (VBlockP vb, ContextP ctx, uint32_t sample_si
 
     ctx->local_in_z_len = vb->z_data.len32 - ctx->local_in_z;
 
+    ctx_zip_z_data_exist (ctx);
+
     return compressed_size;
 }
 
@@ -337,20 +343,19 @@ void zfile_remove_ctx_group_from_z_data (VBlockP vb, Did remove_did_i)
 
     // remove all contexts in the group
     CTX(remove_did_i)->st_did_i = remove_did_i; // so the loop catches it too
-    for_ctx
-        if (ctx->st_did_i == remove_did_i) {
-            if (ctx->b250_in_z_len) 
-                rm[num_rms++] = (RemovedSection){.start = ctx->b250_in_z, .len = ctx->b250_in_z_len };
+    for_ctx_that (ctx->st_did_i == remove_did_i) {
+        if (ctx->b250_in_z_len) 
+            rm[num_rms++] = (RemovedSection){.start = ctx->b250_in_z, .len = ctx->b250_in_z_len };
 
-            if (ctx->local_in_z_len) 
-                rm[num_rms++] = (RemovedSection){.start = ctx->local_in_z, .len = ctx->local_in_z_len};
+        if (ctx->local_in_z_len) 
+            rm[num_rms++] = (RemovedSection){.start = ctx->local_in_z, .len = ctx->local_in_z_len};
 
-            vb->recon_size -= ctx->txt_len; // it won't be reconstructed after all
+        vb->recon_size -= ctx->txt_len; // it won't be reconstructed after all
 
-            ctx_substract_txt_len (vb, ctx); // substract txt_len added to zctx during merge
+        ctx_substract_txt_len (vb, ctx); // substract txt_len added to zctx during merge
 
-            ctx_free_context (ctx, ctx->did_i);
-        }
+        ctx_free_context (ctx, ctx->did_i);
+    }
 
     // update VB Header (always first in z_data) with reduced recon_size (re-encrypting it if encrypting)
     uint64_t save = vb->z_data.len;
@@ -409,12 +414,15 @@ int32_t zfile_read_section_do (FileP file,
                                uint32_t header_size,   
                                FUNCLINE)
 {
+    ASSERTMAINTHREAD;
+
     ASSERT (!sec || expected_sec_type == sec->st, "called from %s:%u: expected_sec_type=%s but encountered sec->st=%s. vb_i=%u",
             func, code_line, st_name (expected_sec_type), st_name(sec->st), vb->vblock_i);
 
     // skip if this section is not needed according to flags
     if (sec && file == z_file && 
-        piz_is_skip_section (sec->st, (vb ? vb->comp_i : COMP_NONE), (IS_DICTED_SEC (sec->st) ? sec->dict_id : DICT_ID_NONE), 
+        piz_is_skip_section ((vb ? vb->data_type : z_file->data_type), sec->st, (vb ? vb->comp_i : COMP_NONE), (IS_DICTED_SEC (sec->st) ? sec->dict_id : DICT_ID_NONE), 
+                             sec->flags.flags,
                              (vb && vb->preprocessing) ? SKIP_PURPOSE_PREPROC : SKIP_PURPOSE_RECON)) 
         return SECTION_SKIPPED; 
 
@@ -558,7 +566,7 @@ SectionHeaderUnion zfile_read_section_header (VBlockP vb, uint64_t offset,
 
 // up to v14, we had no explicit "has_digest" flag - we calculate it here by searching for proof of digest.
 // since a digest might be 0 by chance, a 0 is not a proof of non-digest, however several 0s are strong enough evidence.
-static bool zfile_get_has_digest_up_to_v14 (SectionHeaderGenozipHeader *header)
+static bool zfile_get_has_digest_up_to_v14 (SectionHeaderGenozipHeaderP header)
 {
     // proof: a file was compressed with --md5 (zip verifies --md5 conflicts)
     if (VER(9) && !header->flags.genozip_header.adler) return true;
@@ -608,15 +616,15 @@ static rom zfile_read_genozip_header_get_ref_filename (rom header_fn)
 }
 
 // reference data when NOT reading a reference file
-static void zfile_read_genozip_header_handle_ref_info (const SectionHeaderGenozipHeader *header)
+static void zfile_read_genozip_header_handle_ref_info (ConstSectionHeaderGenozipHeaderP header)
 {
     ASSERT0 (!flag.reading_reference, "we should not be here");
 
-    if (digest_is_zero (header->ref_file_md5)) return; // no reference info in header - we're done
+    if (digest_is_zero (header->ref_genome_digest)) return; // no reference info in header - we're done
 
     if (flag.show_reference) {
         iprintf ("%s was compressed using the reference file:\nName: %s\nMD5: %s\n",
-                    z_name, header->ref_filename, digest_display (header->ref_file_md5).s);
+                    z_name, header->ref_filename, digest_display (header->ref_genome_digest).s);
         if (is_genocat) exit_ok(); // in genocat --show-reference, we only show the reference, not the data
     }
 
@@ -664,7 +672,7 @@ static void zfile_read_genozip_header_handle_ref_info (const SectionHeaderGenozi
         // test for matching MD5 between specified external reference and reference in the header
         // note: for --chain, we haven't read the reference yet, so we will check this separately in chain_load
         if (flag.explicit_ref && !flag.reading_chain) 
-            digest_verify_ref_is_equal (gref, header->ref_filename, header->ref_file_md5);
+            digest_verify_ref_is_equal (gref, header->ref_filename, header->ref_genome_digest);
     }
 }
 
@@ -717,8 +725,10 @@ static uint64_t zfile_read_genozip_header_get_offset (void)
 }
 
 // returns false if file should be skipped
-bool zfile_read_genozip_header (SectionHeaderGenozipHeader *out_header) // optional outs
+bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header) // optional outs
 {
+    if (z_file->section_list_buf.len) return true; // header already read
+
     SectionEnt sec = { .st     = SEC_GENOZIP_HEADER, 
                        .offset = zfile_read_genozip_header_get_offset() };
     
@@ -726,7 +736,7 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeader *out_header) // optio
 
     zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", SEC_GENOZIP_HEADER, &sec);
 
-    SectionHeaderGenozipHeader *header = (SectionHeaderGenozipHeader *)evb->z_data.data;
+    SectionHeaderGenozipHeaderP header = (SectionHeaderGenozipHeaderP)evb->z_data.data;
     if (out_header) *out_header = *header;
 
     DataType data_type = (DataType)(BGEN16 (header->data_type)); 
@@ -776,7 +786,7 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeader *out_header) // optio
     z_file->z_flags.dt_specific |= dts; 
     z_file->num_lines = BGEN64 (header->num_lines_bound);
     z_file->txt_data_so_far_bind = BGEN64 (header->recon_size_prim);
-    segconf.vb_size = (uint64_t)BGEN16 (header->vb_size) << 20;
+    segconf.vb_size = (uint64_t)BGEN16 (header->vb_size) MB;
 
     DT_FUNC (z_file, piz_genozip_header)(header); // data-type specific processing of the Genozip Header
 
@@ -804,7 +814,10 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeader *out_header) // optio
                 ref_get_filename(gref));
 
         // note: in the reference file itself, header->ref_filename is the original fasta used to create this reference
-        ref_set_ref_file_info (flag.reading_reference, header->REF_fasta_md5, header->ref_filename, header->genozip_version); 
+        ref_set_ref_file_info (flag.reading_reference, header->genome_digest, header->flags.genozip_header.adler, 
+                               header->ref_filename, header->genozip_version); 
+
+        buf_free (evb->z_data);
     }
 
     // case: we are reading a file that is not expected to be a reference file
@@ -816,9 +829,14 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeader *out_header) // optio
         // handle reference file info
         if (!flag.genocat_no_ref_file)
             zfile_read_genozip_header_handle_ref_info (header);
+
+        buf_free (evb->z_data); // free before ctx_piz_initialize_zctxs that might read aliases - header not valid after freeing
+
+        // create all contexts for B250/LOCAL/DICT data in the z_file (or predefined) - 
+        // flags_update_piz_one_file and IS_SKIP functions may rely on Context.z_data_exists
+        ctx_piz_initialize_zctxs();
     }
      
-    buf_free (evb->z_data);
     return true;
 
 error:
@@ -837,7 +855,7 @@ void zfile_compress_genozip_header (void)
     header.section_type = SEC_GENOZIP_HEADER;
 
     header.flags.genozip_header  = (struct FlagsGenozipHeader) {
-        .txt_is_bin   = DTPT (is_binary),
+        .txt_is_bin   = z_file->z_flags.txt_is_bin, // set it flags_update_zip_one_file
         .dt_specific  = (DT_FUNC (z_file, zip_dts_flag)(1)),
         .dt_specific2 = (DT_FUNC (z_file, zip_dts_flag)(2)),
         .aligner      = (flag.aligner_available > 0),
@@ -880,21 +898,28 @@ void zfile_compress_genozip_header (void)
     // when decompressing will require an external reference, we set header.ref_filename to the name of the genozip reference file
     if (IS_REF_EXTERNAL || IS_REF_MAKE_CHAIN) {   
         strncpy (header.ref_filename, ref_get_filename (gref), REF_FILENAME_LEN-1);
-        header.ref_file_md5 = ref_get_file_md5 (gref);
+        header.ref_genome_digest = ref_get_genome_digest (gref);
     }
 
     // in --make-ref, we set header.ref_filename to the original fasta file, to be used later in ref_get_cram_ref
     // (unless the fasta is piped from stdin, or its name is too long)
     else if (flag.make_reference && strcmp (txt_name, FILENAME_STDIN) && strlen (txt_name) <= REF_FILENAME_LEN-1) {
-#ifndef WIN32
-        char *ref_filename = realpath (txt_name, NULL); // allocates memory
-        ASSERT (ref_filename, "realpath() failed: %s", strerror (errno));
 
-        strncpy (header.ref_filename, ref_filename, REF_FILENAME_LEN-1);
-        FREE (ref_filename);
+        if (!txt_file->is_remote) {
+#ifndef WIN32
+            char *ref_filename = realpath (txt_name, NULL); // allocates memory
+            if (!ref_filename) goto fallback;
+
+            strncpy (header.ref_filename, ref_filename, REF_FILENAME_LEN-1);
+            FREE (ref_filename);
 #else
-        ASSERT0 (_fullpath (header.ref_filename, txt_name, REF_FILENAME_LEN), "_fullpath() failed");
+            if (!_fullpath (header.ref_filename, txt_name, REF_FILENAME_LEN)) 
+                goto fallback;
 #endif
+        }
+        
+        else fallback: // compressing URL or other issue with realpath/_fullpath
+            strncpy (header.ref_filename, txt_name, REF_FILENAME_LEN-1);
     }
 
     uint32_t license_num_bgen = BGEN32 (license_get_number());
@@ -947,7 +972,7 @@ bool zfile_update_txt_header_section_header (uint64_t offset_in_z_file, uint32_t
     ASSERT (txt_file->txt_data_so_far_single > 0, "Expecting txt_file->txt_data_so_far_single=%"PRId64" > 0", txt_file->txt_data_so_far_single);
     
     // update the first txt_header fragment of the single (current) txt file. 
-    SectionHeaderTxtHeader *curr_header = &z_file->txt_header_single;
+    SectionHeaderTxtHeaderP curr_header = &z_file->txt_header_single;
     curr_header->txt_data_size    = BGEN64 (txt_file->txt_data_so_far_single);
     curr_header->txt_num_lines    = BGEN64 (txt_file->num_lines);
     curr_header->max_lines_per_vb = BGEN32 (max_lines_per_vb);
@@ -1000,10 +1025,10 @@ void zfile_update_compressed_vb_header (VBlockP vb)
 {
     if (flag.biopsy) return; // we have no z_data in biopsy mode
 
-    SectionHeaderVbHeader *vb_header = (SectionHeaderVbHeader *)vb->z_data.data;
+    SectionHeaderVbHeaderP vb_header = (SectionHeaderVbHeaderP)vb->z_data.data;
     vb_header->z_data_bytes = BGEN32 (vb->z_data.len32);
 
-    if (flag.show_vblocks) 
+    if (flag_is_show_vblocks (ZIP_TASK_NAME)) 
         iprintf ("UPDATE_VB_HEADER(id=%d) vb_i=%u comp_i=%u recon_size_prim=%u recon_size_luft=%u genozip_size=%u longest_line_len=%u\n",
                  vb->id, vb->vblock_i, vb->comp_i, 
                  BGEN32 (vb_header->recon_size_prim), BGEN32 (vb_header->dvcf_recon_size_luft), 

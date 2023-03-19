@@ -96,7 +96,9 @@ static inline rom sam_md_consume_M (VBlockSAMP vb, bool is_depn, char **md_in_ou
 
         // case: MD number is bigger than needed by current CIGAR op (perhaps partially covering the next CIGAR op) - update MD in-place
         if (match_len > M_bases || (match_len == M_bases && *md && *md != '^')) {
-            sprintf (*md_in_out, "%u%s", match_len - M_bases, md);
+            int int_len = str_int (match_len - M_bases, *md_in_out);
+            memmove (*md_in_out + int_len, md, strlen(md) + 1/*\0*/); // note: memmove and not sprintf, bc moving to overlapping memory
+            //xxx sprintf (*md_in_out, "%u%s", match_len - M_bases, md); // ^ changed to this to avoid sprintf's internal memcpy of md to overlapping memory
             md = *md_in_out;
             match_len = M_bases;
         }
@@ -106,6 +108,8 @@ static inline rom sam_md_consume_M (VBlockSAMP vb, bool is_depn, char **md_in_ou
         *pos        += match_len;
         *M_is_ref_i += match_len;              
         
+        ASSERT (M_bases >= 0, "Expecting M_bases=%d >= 0", M_bases);
+
         // if we still need more M_bases, the next one should be a mismatch nucleotide. Note that the SAM standard permits IUPAC
         // "bases" (eg N), but we apply the MD special alg only for ACGT.
         if (M_bases) {
@@ -158,9 +162,8 @@ void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(md), PosType3
 
     // copy of MD as we are going to modify it (but we still need the original intact for sam_seg_MD_Z)
     char md_data[md_len+1];
-    memcpy (md_data, md, md_len);
+    md = memcpy (md_data, md, md_len);
     md_data[md_len] = 0;
-    md = md_data;
 
     if (!pos) not_verified ("No POS")
     if (IS_ASTERISK (vb->chrom_name)) not_verified ("No RNAME");
@@ -173,6 +176,7 @@ void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(md), PosType3
 
     buf_alloc_bits (vb, &vb->md_M_is_ref, vb->ref_and_seq_consumed, "md_M_is_ref"); 
     BitsP M_is_ref = (BitsP)&vb->md_M_is_ref;
+    
     bits_set_all (M_is_ref); // start by marking all as matching, and clear the SNPs later
     uint64_t M_is_ref_i=0;
     
@@ -232,7 +236,7 @@ done:
 // MD's logical length is normally the same as seq_len, we use this to optimize it.
 // In the common case that it is just a number equal the seq_len, we replace it with an empty string.
 // if MD value can be derived from the seq_len, we don't need to store - store just an empty string
-void sam_seg_MD_Z (VBlockSAMP vb,  ZipDataLineSAM *dl, STRp(md), unsigned add_bytes)
+void sam_seg_MD_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(md), unsigned add_bytes)
 {
     ctx_set_encountered (VB, CTX(OPTION_MD_Z));
 

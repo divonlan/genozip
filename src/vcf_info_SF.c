@@ -139,7 +139,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_SF)
         vcf_vb->sf_txt.len = 0;
 
         // copy snip to sf_snip (note: the SNIP_SPECIAL+code are already removed)
-        buf_add_more (vb, &vcf_vb->sf_snip, STRa(snip), "sf_snip");
+        buf_add_moreS (vb, &vcf_vb->sf_snip, snip, "sf_snip");
     }
 
     return NO_NEW_VALUE;

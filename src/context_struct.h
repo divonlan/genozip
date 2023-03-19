@@ -34,6 +34,7 @@ typedef struct Context {
     LocalType ltype;           // LT_* - type of local data - included in the section header
     struct FlagsCtx flags;     // flags to be included in section header
     struct FlagsCtx pair_flags;// Used if this file is a PAIR_2 - contains ctx->flags of the PAIR_1
+    struct FlagsDict dict_flags; // ZIP: zctx only ; PIZ: flags included in Dictionary section header (v15)
     B250Size b250_size;        // Max size of element in b250 data (PIZ and ZIP after generation) v14
     B250Size pair_b250_size;
     DictId dict_id;            // which dict_id is this MTF dealing with
@@ -99,7 +100,10 @@ typedef struct Context {
     Codec lcodec_non_inherited;// ZIP z_file: non-inherited lcodec - used only for submitting stats
     
     // ZIP-only instructions NOT written to the genozip file
+    union {
     bool no_stons;             // ZIP: don't attempt to move singletons to local (singletons are never moved anyway if ltype!=LT_TEXT)
+    bool is_alias;             // PIZ: context is an alias            
+    };
     bool pair_local;           // ZIP: this is the 2nd file of a pair - compare vs the first file, and set flags.paired in the header of SEC_LOCAL
                                // PIZ: pair local data is loaded to context.pair
     bool pair_b250;            // ZIP: this is the 2nd file of a pair - compare vs the first file, and set flags.paired in the header of SEC_B250
@@ -108,7 +112,8 @@ typedef struct Context {
     bool local_is_lten;        // if true local data is LTEN, otherwise it is the machine (native) endianity
     bool local_param;          // copy local.param to SectionHeaderCtx
     bool no_vb1_sort;          // don't sort the dictionary in ctx_sort_dictionaries_vb_1
-    bool no_drop_b250;         // the b250 section cannot be optimized away in zip_generate_b250_section (eg if we need section header to carry a param)
+    bool no_drop_b250;         // ZIP: the b250 section cannot be optimized away in zip_generate_b250_section (eg if we need section header to carry a param)
+    bool z_data_exists;        // ZIP/PIZ: z_file has SEC_DICT, SEC_B250 and/or SEC_LOCAL sections of this context (not necessarily loaded)
     bool local_always;         // always create a local section in zfile, even if it is empty 
     bool is_stats_parent;      // other contexts have this context in st_did_i
     bool counts_section;       // output a SEC_COUNTS section for this context

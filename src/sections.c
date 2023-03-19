@@ -19,6 +19,7 @@
 #include "endianness.h"
 #include "codec.h"
 #include "bgzf.h"
+#include "threads.h"
 
 typedef struct SectionEnt SectionEntModifiable;
 
@@ -51,7 +52,7 @@ void sections_add_to_list (VBlockP vb, ConstSectionHeaderP header)
 
     if (IS_DICTED_SEC(st)) {
         switch (st) {
-            case SEC_DICT   : dict_id = ((SectionHeaderDictionary *)header)->dict_id; break;
+            case SEC_DICT   : dict_id = ((SectionHeaderDictionaryP)header)->dict_id; break;
             case SEC_B250   : dict_id = ((SectionHeaderCtx        *)header)->dict_id; break;
             case SEC_LOCAL  : dict_id = ((SectionHeaderCtx        *)header)->dict_id; break;
             case SEC_COUNTS : dict_id = ((SectionHeaderCounts     *)header)->dict_id; break;
@@ -93,6 +94,8 @@ void sections_remove_from_list (VBlockP vb, uint64_t offset, uint64_t len)
 // writing those sections to the disk. we use the current disk position to update the offset
 void sections_list_concat (VBlockP vb)
 {
+    ASSERTMAINTHREAD;
+
     ARRAY (SectionEntModifiable, vb_sec, vb->section_list_buf);
 
     // update the offset
@@ -101,24 +104,26 @@ void sections_list_concat (VBlockP vb)
 
     // copy all entries
     buf_add_buf (evb, &z_file->section_list_buf, &vb->section_list_buf, SectionEntModifiable, "z_file->section_list_buf");
-
     buf_free (vb->section_list_buf);
 }
 
 // section iterator. returns true if a section of this type was found.
-bool sections_next_sec2 (Section *sl_ent,   // optional in/out. if NULL - search entire list
-                         SectionType st1, SectionType st2) // check only next section, not entire remaining list
+bool sections_next_sec3 (Section *sl_ent,   // optional in/out. if NULL - search entire list
+                         SectionType st1, SectionType st2, SectionType st3) // check only next section, not entire remaining list
 {
+    ASSERTNOTEMPTY (z_file->section_list_buf);
+    
     Section sec = sl_ent ? *sl_ent : NULL; 
     bool found = false;
 
-    ASSERT (!sec || BISVALID (z_file->section_list_buf, sec), "Invalid sec: st1=%s st2=%s", st_name (st1), st_name (st2));
+    ASSERT (!sec || BISVALID (z_file->section_list_buf, sec), "Invalid sec: st1=%s st2=%s st3=%s", 
+            st_name (st1), st_name (st2), st_name (st3));
 
     while (sec < BAFT (SectionEnt, z_file->section_list_buf) - 1) {
 
         sec = sec ? (sec + 1) : B1ST (SectionEnt, z_file->section_list_buf); 
 
-        if (sec->st == st1 || sec->st == st2) {
+        if (sec->st == st1 || sec->st == st2 || sec->st == st3) {
             found = true;
             break;
         }
@@ -156,7 +161,7 @@ Section sections_last_sec4 (Section sec, SectionType st1, SectionType st2, Secti
     ASSERT (!sec || (sec >= B1ST(SectionEnt, z_file->section_list_buf) && sec <= BLST(SectionEnt, z_file->section_list_buf)),
            "Invalid sec: st1=%s st2=%s st3=%s st4=%s", st_name (st1), st_name (st2), st_name (st3), st_name (st4));
 
-    while (sec < BAFT (SectionEnt, z_file->section_list_buf)) {
+    while (sec < BLST (SectionEnt, z_file->section_list_buf)) {
 
         sec = sec ? (sec + 1) : B1ST (SectionEnt, z_file->section_list_buf); 
 
@@ -166,7 +171,7 @@ Section sections_last_sec4 (Section sec, SectionType st1, SectionType st2, Secti
               (st4 != SEC_NONE && sec->st == st4))) break;
     } 
     
-    return sec - 1; // sec is either on the first section that is NOT st1 or st2, or we are after the section list - so we decrement it
+    return sec - 1; // sec is either on the first section that is NOT st*, or all sections are st* we are now after the section list - so we decrement it
 }
 
 // count how many sections we have of a certain type
@@ -209,18 +214,22 @@ static CompIType sections_calculate_num_comps (void)
 // from the section list by the recon_plan (eg in DVCF we remove the unneeded component for the rendition) 
 static void sections_create_index (bool force)
 {
+    ASSERTMAINTHREAD;
+
     // case: section_list_buf has been realloced: re-create the index
-    if (z_file->comp_sections_index.len && z_file->section_list_buf.data != z_file->comp_sections_index.pointer) 
-        z_file->comp_sections_index.len = z_file->vb_sections_index.len = 0; // un=create indices
+    if (z_file->comp_sections_index.len && z_file->section_list_buf.data != z_file->comp_sections_index.pointer) {
+        buf_free (z_file->comp_sections_index); 
+        buf_free (z_file->vb_sections_index);
+    }
 
     if (!force && z_file->comp_sections_index.len) return; // already created
 
-    if (!z_file->num_vbs)
+    if (IS_PIZ && !z_file->num_vbs)
         z_file->num_vbs = sections_count_sections (SEC_VB_HEADER);
 
     CompIType num_comps = sections_calculate_num_comps(); 
 
-    ARRAY_alloc (SectionsVbIndexEnt, vb_index, z_file->num_vbs + 1, true, z_file->vb_sections_index, evb, "z_file->vb_sections_index");
+    ARRAY_alloc (SectionsVbIndexEnt, vb_index, z_file->num_vbs + 1, true, z_file->vb_sections_index, evb, "z_file->vb_sections_index"); // +2: +1 bc vb_i is 1-based
     ARRAY_alloc (SectionsCompIndexEnt, comp_index, num_comps, true, z_file->comp_sections_index, evb, "z_file->comp_sections_index");
     ARRAY (SectionEnt, sec, z_file->section_list_buf);
 
@@ -247,10 +256,11 @@ static void sections_create_index (bool force)
                 break;
             }
 
+            // note: in ZIP, VBs are written out-of-order, so some VBs might still not be written and hence their index entry will remain empty
             case SEC_VB_HEADER : {
                 VBIType vb_i = sec[sec_i].vblock_i;
                 
-                ASSERT (IS_ZIP || (vb_i>=1 && vb_i <= z_file->num_vbs), "Bad vb_i=%u, max is %u", vb_i, z_file->num_vbs);
+                ASSERT (vb_i>=1 && vb_i < z_file->vb_sections_index.len32, "Bad vb_i=%u, z_file->vb_sections_index.len=%u", vb_i, z_file->vb_sections_index.len32);
                 
                 vb_index[vb_i] = (SectionsVbIndexEnt){
                     .first_sec = &sec[sec_i],
@@ -288,7 +298,7 @@ Section sections_vb_header (VBIType vb_i, FailType soft_fail)
     
     if (vb_i <= z_file->num_vbs) {
         Section sec = B(SectionsVbIndexEnt, z_file->vb_sections_index, vb_i)->first_sec;
-        if (!sec) goto fail;
+        if (!sec) goto fail; // this can happen in ZIP, as VBs are written to the z_file out of order 
 
         return sec;
     }
@@ -310,25 +320,6 @@ Section sections_vb_last (VBIType vb_i)
 {
     ASSERT (vb_i <= z_file->num_vbs, "Bad vb_i=%u, max is %u", vb_i, z_file->num_vbs);
     return B(SectionsVbIndexEnt, z_file->vb_sections_index, vb_i)->last_sec;
-}
-
-// main thread: called by refhash_initialize - get details of the refhash ahead of loading it from the reference file 
-void sections_get_refhash_details (uint32_t *num_layers, uint32_t *base_layer_bits) // optional outs
-{
-    ASSERT0 (flag.reading_reference || flag.show_ref_hash, "can only be called while reading reference");
-
-    for_buf_back (SectionEnt, sec, z_file->section_list_buf)  // search backwards as the refhash sections are near the end
-        if (sec->st == SEC_REF_HASH) {
-            SectionHeaderRefHash header = zfile_read_section_header (evb, sec->offset, sec->vblock_i, SEC_REF_HASH).ref_hash;
-            if (num_layers) *num_layers = header.num_layers;
-            if (base_layer_bits) *base_layer_bits = header.layer_bits + header.layer_i; // layer_i=0 is the base layer, layer_i=1 has 1 bit less etc
-            return;
-        }
-
-        else if (sec->st == SEC_REFERENCE)
-            break; // we arrived at a SEC_REFERENCE - there won't be any more SEC_REF_HASH sections
-
-    ABORT ("can't find SEC_REF_HASH sections in %s", z_name);
 }
 
 //---------------------------------------------
@@ -429,7 +420,7 @@ void sections_list_memory_to_file_format (bool in_place) // in place, or to evb-
 }
 
 // PIZ: create in-memory format of the section list - copy from z_file section, BGEN, and add sizes
-void sections_list_file_to_memory_format (SectionHeaderGenozipHeader *genozip_header)
+void sections_list_file_to_memory_format (SectionHeaderGenozipHeaderP genozip_header)
 {
     struct FlagsGenozipHeader f = genozip_header->flags.genozip_header;
     DataType dt = BGEN16 (genozip_header->data_type);
@@ -472,7 +463,9 @@ void sections_list_file_to_memory_format (SectionHeaderGenozipHeader *genozip_he
 
         if (mem_sec[i].st == SEC_VB_HEADER) {
             mem_sec[i].num_lines      = BGEN32 (mem_sec[i].num_lines);        
-            mem_sec[i].num_deep_lines = BGEN32 (mem_sec[i].num_deep_lines);  
+            mem_sec[i].num_deep_lines = BGEN32 (mem_sec[i].num_deep_lines);
+            z_file->comp_num_lines[mem_sec[i].comp_i] += mem_sec[i].num_lines;
+            z_file->num_vbs = MAX_(z_file->num_vbs, mem_sec[i].vblock_i);
         }      
 
         if (i < file_sec_len-1)
@@ -520,14 +513,6 @@ void sections_list_file_to_memory_format (SectionHeaderGenozipHeader *genozip_he
     else
         z_file->section_list_save.param = 0;
 }
-
-// PIZ unbinding: revert back to saved list (becofe recon_plan modifications)
-//xxx void sections_list_revert (void)
-// {
-//     buf_copy (evb, &z_file->section_list_buf, &z_file->section_list_save, SectionEnt, 0, 0, NULL);
-//     buf_free (z_file->vb_sections_index);
-//     buf_free (z_file->comp_sections_index);
-// }
 
 rom st_name (SectionType sec_type)
 {
@@ -666,9 +651,9 @@ Section sections_last_sec (SectionType st, FailType soft_fail)
     return NULL;
 }
 
-CompIType sections_get_num_comps (void)
+CompIType sections_get_num_comps (bool force_create_index)
 {
-    sections_create_index (false);
+    sections_create_index (force_create_index);
 
     return z_file->comp_sections_index.len;
 }
@@ -715,7 +700,8 @@ Section sections_get_next_vb_of_comp_sec (CompIType comp_i, Section *vb_sec)
     const SectionsCompIndexEnt *comp_index_ent = sections_get_comp_index_ent (comp_i);
 
     if (! *vb_sec)
-        *vb_sec = comp_index_ent->first_vb_index_ent->first_sec;
+        *vb_sec = comp_index_ent->first_vb_index_ent ? comp_index_ent->first_vb_index_ent->first_sec 
+                                                     : NULL; // component has no VBs
     
     else 
         *vb_sec = B(SectionsVbIndexEnt, z_file->vb_sections_index, (*vb_sec)->vblock_i)->next_vb_same_comp_sec;
@@ -795,6 +781,10 @@ static FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt)
             sprintf (str.s, "is_luft=%u", f.recon_plan.luft);
             break;
 
+        case SEC_DICT:
+            sprintf (str.s, "deep_sam=%u deep_fq=%u", f.dictionary.deep_sam, f.dictionary.deep_fastq);
+            break;
+
         default: 
             str.s[0] = 0;
     }
@@ -814,6 +804,7 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
     bool is_dict_offset = (header->section_type == SEC_DICT && rw == 'W'); // at the point calling this function in zip, SEC_DICT offsets are not finalized yet and are relative to the beginning of the dictionary area in the genozip file
     bool v12 = (IS_ZIP || VER(12));
     bool v14 = (IS_ZIP || VER(14));
+    bool v15 = (IS_ZIP || VER(15));
 
     char str[2048];
     #define PRINT { if (vb) buf_append_string (vb, &vb->show_headers_buf, str); else iprintf ("%s", str); } 
@@ -840,25 +831,27 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
     switch (st) {
 
     case SEC_GENOZIP_HEADER: {
-        SectionHeaderGenozipHeader *h = (SectionHeaderGenozipHeader *)header;
+        SectionHeaderGenozipHeaderP h = (SectionHeaderGenozipHeaderP)header;
         z_file->z_flags.adler = h->flags.genozip_header.adler; // needed by digest_display_ex
         char dt_specific[REF_FILENAME_LEN + 200] = "";
 
         if (dt == DT_CHAIN)
             sprintf (dt_specific, "%sprim=\"%.*s\" md5=%s\n", 
                      SEC_TAB, REF_FILENAME_LEN, h->chain.prim_filename, 
-                     digest_display_ex (h->chain.prim_file_md5, DD_MD5).s);
+                     digest_display_ex (h->chain.prim_genome_digest, DD_MD5).s);
 
         else if ((dt == DT_SAM || dt == DT_BAM) && v14)
-            sprintf (dt_specific, "%2segconf=(sorted=%u,collated=%u,seq_len=%u,seq_len_to_cm=%u,ms_type=%u,has_MD_or_NM=%u,bisulfite=%u,MD_NM_by_unconverted=%u,predict_meth=%u,is_paired=%u,sag_type=%s,sag_has_AS=%u,pysam_qual=%u,cellranger=%u,SA_HtoS=%u,seq_len_dict_id=%s,deep_no_qname=%u,deep_no_qual=%u)\n", 
+            sprintf (dt_specific, "%sssegconf=(sorted=%u,collated=%u,seq_len=%u,seq_len_to_cm=%u,ms_type=%u,has_MD_or_NM=%u,bisulfite=%u,MD_NM_by_unconverted=%u,predict_meth=%u,is_paired=%u,sag_type=%s,sag_has_AS=%u,pysam_qual=%u,cellranger=%u,SA_HtoS=%u,seq_len_dict_id=%s,deep_no_qname=%u,deep_no_qual=%u)\n", 
                      SEC_TAB, h->sam.segconf_is_sorted, h->sam.segconf_is_collated, BGEN32 (h->sam.segconf_seq_len), h->sam.segconf_seq_len_cm, h->sam.segconf_ms_type, h->sam.segconf_has_MD_or_NM, 
                      h->sam.segconf_bisulfite, h->sam.segconf_MD_NM_by_un, h->sam.segconf_predict_meth, 
                      h->sam.segconf_is_paired, sag_type_name(h->sam.segconf_sag_type), h->sam.segconf_sag_has_AS, 
                      h->sam.segconf_pysam_qual, h->sam.segconf_cellranger, h->sam.segconf_SA_HtoS, dis_dict_id(h->sam.segconf_seq_len_dict_id).s,
                      h->sam.segconf_deep_no_qname, h->sam.segconf_deep_no_qual);
 
-        else if (dt == DT_REF)
-            sprintf (dt_specific, "%sfast_md5=%s\n", SEC_TAB, digest_display (h->REF_fasta_md5).s);
+        else if (dt == DT_REF) {
+            if (v15) sprintf (dt_specific, "%sgenome_digest=%s\n", SEC_TAB, digest_display (h->genome_digest).s);
+            else     sprintf (dt_specific, "%sfasta_md5=%s\n", SEC_TAB, digest_display (h->v14_REF_fasta_md5).s);
+        }
 
         else if (dt == DT_FASTQ && v14) 
             sprintf (dt_specific, "%sFASTQ_v13_digest_bound=%s segconf_seq_len_dict_id=%s\n", 
@@ -872,14 +865,14 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
                  BGEN64 (h->recon_size_prim), BGEN64 (h->num_lines_bound), BGEN32 (h->num_sections), h->num_txt_files,
                  BGEN16(h->vb_size), 
                  SEC_TAB, sections_dis_flags (f, st, dt).s,
-                 REF_FILENAME_LEN, h->ref_filename, digest_display_ex (h->ref_file_md5, DD_MD5).s,
+                 REF_FILENAME_LEN, h->ref_filename, digest_display_ex (h->ref_genome_digest, DD_MD5).s,
                  dt_specific, 
                  SEC_TAB, FILE_METADATA_LEN, h->created);
         break;
     }
 
     case SEC_TXT_HEADER: {
-        SectionHeaderTxtHeader *h = (SectionHeaderTxtHeader *)header;
+        SectionHeaderTxtHeaderP h = (SectionHeaderTxtHeaderP)header;
         sprintf (str, "\n%stxt_data_size=%"PRIu64" txt_header_size=%"PRIu64" lines=%"PRIu64" max_lines_per_vb=%u digest=%s digest_header=%s\n" 
                  "%stxt_codec=%s (args=0x%02X.%02X.%02X) %s txt_filename=\"%.*s\"\n",
                  SEC_TAB, BGEN64 (h->txt_data_size), v12 ? BGEN64 (h->txt_header_size) : 0, BGEN64 (h->txt_num_lines), BGEN32 (h->max_lines_per_vb), 
@@ -890,7 +883,7 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
     }
 
     case SEC_VB_HEADER: {
-        SectionHeaderVbHeader *h = (SectionHeaderVbHeader *)header;
+        SectionHeaderVbHeaderP h = (SectionHeaderVbHeaderP)header;
         if (Z_DT(VCF) || Z_DT(BCF)) 
             sprintf (str, 
                     "\n%srecon_size=(PRIM:%u, LUFT:%u) longest_line=%u z_data_bytes=%u digest=%s %s\n",
@@ -921,14 +914,14 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
 
     case SEC_REFERENCE:
     case SEC_REF_IS_SET: {
-        SectionHeaderReference *h = (SectionHeaderReference *)header;
+        SectionHeaderReferenceP h = (SectionHeaderReferenceP)header;
         sprintf (str, "pos=%-9"PRIu64" gpos=%-9"PRIu64" num_bases=%-6u chrom_word_index=%-4d\n",
                  BGEN64 (h->pos), BGEN64 (h->gpos), BGEN32 (h->num_bases), BGEN32 (h->chrom_word_index)); 
         break;
     }
     
     case SEC_REF_HASH: {
-        SectionHeaderRefHash *h = (SectionHeaderRefHash *)header;
+        SectionHeaderRefHashP h = (SectionHeaderRefHashP)header;
         sprintf (str, "num_layers=%u layer_i=%u layer_bits=%u start_in_layer=%u\n",
                  h->num_layers, h->layer_i, h->layer_bits, BGEN32 (h->start_in_layer)); 
         break;
@@ -940,7 +933,7 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
     }
     
     case SEC_RECON_PLAN: {
-        SectionHeaderReconPlan *h = (SectionHeaderReconPlan *)header;
+        SectionHeaderReconPlanP h = (SectionHeaderReconPlanP)header;
         sprintf (str, "conc_writing_vbs=%u %s\n", BGEN32 (h->conc_writing_vbs), sections_dis_flags (f, st, dt).s); 
         break;
     }
@@ -952,7 +945,7 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
     }
     
     case SEC_B250: {
-        SectionHeaderCtx *h = (SectionHeaderCtx *)header;
+        SectionHeaderCtxP h = (SectionHeaderCtxP)header;
         sprintf (str, "%s/%-8s\tltype=%s b250_size=%u param=%u %s\n",
                  dtype_name_z (h->dict_id), dis_dict_id (h->dict_id).s, lt_name (h->ltype), 
                  h->b250_size==B250_BYTES_1?1 : h->b250_size==B250_BYTES_2?2 : h->b250_size==B250_BYTES_3?3 : 4,
@@ -961,20 +954,21 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
     }
 
     case SEC_LOCAL: {
-        SectionHeaderCtx *h = (SectionHeaderCtx *)header;
+        SectionHeaderCtxP h = (SectionHeaderCtxP)header;
         sprintf (str, "%s/%-8s\tltype=%s param=%u %s\n",
                  dtype_name_z (h->dict_id), dis_dict_id (h->dict_id).s, lt_name (h->ltype), h->param, sections_dis_flags (f, st, dt).s);
         break;
     }
 
     case SEC_DICT: {
-        SectionHeaderDictionary *h = (SectionHeaderDictionary *)header;
-        sprintf (str, "%s/%-8s\tnum_snips=%u\n", dtype_name_z (h->dict_id), dis_dict_id (h->dict_id).s, BGEN32 (h->num_snips)); 
+        SectionHeaderDictionaryP h = (SectionHeaderDictionaryP)header;
+        sprintf (str, "%s/%-8s\tnum_snips=%u %s\n", dtype_name_z (h->dict_id), dis_dict_id (h->dict_id).s, BGEN32 (h->num_snips), 
+                 sections_dis_flags (f, st, dt).s); 
         break;
     }
 
     case SEC_COUNTS: {
-        SectionHeaderCounts *h = (SectionHeaderCounts *)header;
+        SectionHeaderCountsP h = (SectionHeaderCountsP)header;
         sprintf (str, "  %s/%-8s\t\n", dtype_name_z (h->dict_id), dis_dict_id (h->dict_id).s); 
         break;
     }
@@ -1010,7 +1004,7 @@ void genocat_show_headers (rom z_filename)
 
 void sections_show_section_list (DataType dt) // optional - take data from z_data
 {    
-    for (Section s=B1ST (SectionEnt, z_file->section_list_buf); s < BAFT (SectionEnt, z_file->section_list_buf); s++)
+    for_buf (SectionEnt, s, z_file->section_list_buf)
         if (s->st == SEC_B250 || s->st == SEC_LOCAL || s->st == SEC_DICT)
             iprintf ("%5u %-20.20s %s%s%-8.8s\tvb=%s/%-4u offset=%-8"PRIu64"  size=%-6u  %s\n", 
                      BNUM(z_file->section_list_buf, s), st_name(s->st), 
@@ -1036,8 +1030,10 @@ void sections_show_section_list (DataType dt) // optional - take data from z_dat
                      s->offset, s->size, sections_dis_flags (s->flags, s->st, dt).s);
 }
 
-void sections_show_gheader (const SectionHeaderGenozipHeader *header)
+void sections_show_gheader (ConstSectionHeaderGenozipHeaderP header)
 {
+    bool v15 = (IS_ZIP || VER(15));
+
     if (flag_loading_auxiliary) return; // don't show gheaders of an auxiliary file
     
     DataType dt = BGEN16 (header->data_type);
@@ -1053,19 +1049,19 @@ void sections_show_gheader (const SectionHeaderGenozipHeader *header)
         iprintf ("  num_sections: %u\n",            z_file->section_list_buf.len32);
         iprintf ("  num_txt_files: %u\n",           header->num_txt_files);
         if (dt == DT_REF)
-            iprintf ("  REF_fasta_md5: %s\n",           digest_display (header->REF_fasta_md5).s);
+            iprintf ("  %s: %s\n", (v15 ? "genome_digest" : "REF_fasta_md5"), digest_display (header->genome_digest).s);
         iprintf ("  created: %*s\n",                -FILE_METADATA_LEN, header->created);
         iprintf ("  license_hash: %s\n",            digest_display (header->license_hash).s);
         if (header->ref_filename[0]) {
             iprintf ("  reference filename: %s\n",  header->ref_filename);
-            iprintf ("  reference file hash: %s\n", digest_display (header->ref_file_md5).s);
+            iprintf ("  reference file hash: %s\n", digest_display (header->ref_genome_digest).s);
         }
         iprintf ("  flags: %s\n",                   sections_dis_flags (header->flags, SEC_GENOZIP_HEADER, dt).s);
 
         switch (dt) {
             case DT_CHAIN:
                 iprintf ("  primary-coordinates reference filename: %s\n", header->chain.prim_filename);
-                iprintf ("  primary-coordinates reference file hash: %s\n", digest_display (header->chain.prim_file_md5).s);
+                iprintf ("  primary-coordinates reference file hash: %s\n", digest_display (header->chain.prim_genome_digest).s);
                 break;
 
             default: break;

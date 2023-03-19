@@ -20,6 +20,6 @@ extern rom arch_get_host (void);
 extern rom arch_get_user_host (void);
 extern rom arch_get_os (void);
 extern rom arch_get_distribution (void);
-extern rom arch_get_executable (void);
+extern rom arch_get_executable (FailType soft_fail);
 extern rom arch_get_run_time (void);
-
+extern bool arch_is_valgrind (void);

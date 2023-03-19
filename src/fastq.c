@@ -36,6 +36,7 @@ void fastq_vb_release_vb (VBlockFASTQP vb)
     vb->first_line = 0;
     vb->has_extra = 0;
     memset (vb->item_filter, 0, sizeof(vb->item_filter));
+    memset (vb->deep_stats,  0, sizeof(vb->deep_stats));
     FREE (vb->optimized_desc);
 }
 
@@ -75,7 +76,7 @@ static inline int fastq_is_end_of_line (VBlockP vb, uint32_t first_i, int32_t tx
     ARRAY (char, txt, vb->txt_data);
 
     // if we are not at the EOF and the next char is not '@', then this is for sure not the end of the FASTQ record
-    if (txt_i < vb->txt_data.len-1 && txt[txt_i+1] != '@') return false; 
+    if (txt_i < Ltxt-1 && txt[txt_i+1] != '@') return false; 
 
     // if at the end of the data or at the end of a line where the next char is '@'. Verify that the previous line
     // is the '+' line, to prevent the '@' we're seeing actually the first quality score in QUAL, or the file not ending after the quality line
@@ -93,13 +94,13 @@ static inline int fastq_is_end_of_line (VBlockP vb, uint32_t first_i, int32_t tx
 // returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
 int32_t fastq_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i /* in/out */)
 {    
-    ASSERT (*i >= 0 && *i < vb->txt_data.len, "*i=%d is out of range [0,%"PRIu64"]", *i, vb->txt_data.len);
+    ASSERT (*i >= 0 && *i < Ltxt, "*i=%d is out of range [0,%u]", *i, Ltxt);
 
     for (; *i >= (int32_t)first_i; (*i)--) {
         // in FASTQ - an "end of line" is one that the next character is @, or it is the end of the file
         if (vb->txt_data.data[*i] == '\n')
             switch (fastq_is_end_of_line (vb, first_i, *i)) {
-                case true  : return vb->txt_data.len-1 - *i; // end of line
+                case true  : return Ltxt-1 - *i; // end of line
                 case false : continue;                       // not end of line, continue searching
                 default    : goto out_of_data;  
             }
@@ -116,14 +117,14 @@ out_of_data:
 bool fastq_txtfile_have_enough_lines (VBlockP vb_, uint32_t *unconsumed_len, 
                                       uint32_t *my_lines, uint32_t *her_lines) // out - only set in case of failure
 {
-    VBlockFASTQP vb = (VBlockFASTQP )vb_;
+    VBlockFASTQ *vb = (VBlockFASTQ *)vb_;
     ASSERTNOTZERO (vb->pair_num_lines, "");
 
     rom next  = B1STtxt;
     rom after = BAFTtxt;
 
     uint32_t line_i; for (line_i=0; line_i < vb->pair_num_lines * 4; line_i++) {
-        while (*next != '\n' && next < after) next++; 
+        while (next < after && *next != '\n') next++; 
         if (next >= after) {
             *my_lines  = line_i;
             *her_lines = vb->pair_num_lines * 4;
@@ -132,7 +133,7 @@ bool fastq_txtfile_have_enough_lines (VBlockP vb_, uint32_t *unconsumed_len,
         next++; // skip newline
     }
 
-    vb->lines.len = line_i / 4;
+    vb->lines.len32 = line_i / 4;
     *unconsumed_len = after - next;
     return true;
 }
@@ -151,6 +152,13 @@ void fastq_zip_init_vb (VBlockP vb)
         VB_FASTQ->first_line = txt_file->num_lines + 1;
         txt_file->num_lines += num_lines / 4;     // update here instead of in zip_update_txt_counters;
     }
+}
+
+// called by main thread, as VBs complete (might be out-of-order)
+void fastq_zip_after_compute (VBlockP vb)
+{
+    if (flag.deep)
+        fastq_deep_zip_after_compute (VB_FASTQ);
 }
 
 // case of --optimize-DESC: generate the prefix of the read name from the txt file name
@@ -240,7 +248,7 @@ void fastq_zip_initialize (void)
 
     // with REF_EXTERNAL, we don't know which chroms are seen (bc unlike REF_EXT_STORE, we don't use is_set), so
     // we just copy all reference contigs. this are not needed for decompression, just for --coverage/--sex/--idxstats
-    if (IS_REF_EXTERNAL && z_file->num_txts_so_far == 1 && !flag.deep) // first file
+    if (IS_REF_EXTERNAL && z_file->num_txts_so_far == 1) // single file, or first of pair (and never Deep)
         ctx_populate_zf_ctx_from_contigs (gref, FASTQ_CONTIG, ref_get_ctgs (gref)); 
 
     qname_zip_initialize();
@@ -249,8 +257,8 @@ void fastq_zip_initialize (void)
 // called by main thread after each txt file compressing is done
 void fastq_zip_finalize (bool is_last_user_txt_file)
 {
-    if (is_last_user_txt_file && flag.deep && flag.debug_deep)
-        fastq_deep_show_entries_stats();
+    if (is_last_user_txt_file && flag.deep && flag.show_deep)
+        fastq_zip_deep_show_entries_stats();
 }
 
 // called by zfile_compress_genozip_header to set FlagsGenozipHeader.dt_specific
@@ -297,11 +305,11 @@ void fastq_seg_initialize (VBlockFASTQP vb)
         if (vb->comp_i == FQ_COMP_R1)
             sqbitmap_ctx->no_drop_b250 = true; 
 
-        buf_alloc (vb, &sqbitmap_ctx->local, 1, vb->txt_data.len / 4, uint8_t, 0, "contexts->local"); 
+        buf_alloc (vb, &sqbitmap_ctx->local, 1, Ltxt / 4, uint8_t, 0, "contexts->local"); 
         buf_alloc (vb, &strand_ctx->local, 0, roundup_bits2bytes64 (vb->lines.len), uint8_t, 0, "contexts->local"); 
 
         for (int i=0; i < 4; i++)
-            buf_alloc (vb, &seqmis_ctx[i].local, 1, vb->txt_data.len / 128, char, 0, "contexts->local"); 
+            buf_alloc (vb, &seqmis_ctx[i].local, 1, Ltxt / 128, char, 0, "contexts->local"); 
 
         buf_alloc (vb, &gpos_ctx->local, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->local"); 
     }
@@ -312,6 +320,7 @@ void fastq_seg_initialize (VBlockFASTQP vb)
     // initialize QUAL to LT_SEQUENCE, it might be changed later to LT_CODEC (eg domq, longr)
     ctx_set_ltype (VB, LT_SEQUENCE, FASTQ_QUAL, DID_EOL);
 
+    // if we're pair-2, decompress all of pair-1's contexts needed for pairing
     if (flag.pair == PAIR_READ_2) {
 
         ASSERT (vb->lines.len32 == vb->pair_num_lines, "in vb=%s (PAIR_READ_2): pair_num_lines=%u but lines.len=%u",
@@ -324,9 +333,12 @@ void fastq_seg_initialize (VBlockFASTQP vb)
         vb->z_data.len32 = 0; // we've finished reading the pair file z_data, next, we're going to write to z_data our compressed output
     }
 
-    if (!segconf.running)  // note: if segconf.running, we initialize in qname_segconf_discover_flavor
-        for (QType q=QNAME1; q < NUM_QTYPES; q++)
-            qname_seg_initialize (VB, q, flag.pair); 
+    if (!segconf.running) { // note: if segconf.running, we initialize in qname_segconf_discover_flavor
+        qname_seg_initialize (VB, QNAME1, FASTQ_QNAME, flag.pair); 
+        qname_seg_initialize (VB, QNAME2, (segconf.desc_is_l3 ? FASTQ_LINE3 : FASTQ_QNAME), flag.pair); 
+        qname_seg_initialize (VB, QLINE3, FASTQ_LINE3, flag.pair); 
+        ctx_consolidate_stats (VB, (segconf.desc_is_l3 ? FASTQ_LINE3 : FASTQ_QNAME), FASTQ_AUX, FASTQ_EXTRA, DID_EOL);
+    }
 
     if (vb->comp_i == FQ_COMP_R2)
         ctx_create_node (VB, FASTQ_SQBITMAP, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_mate_lookup }, 2); // required by ctx_convert_generated_b250_to_mate_lookup
@@ -341,7 +353,7 @@ void fastq_seg_initialize (VBlockFASTQP vb)
     }
 
     if (flag.deep)
-        fastq_deep_seg_initialize (VB);
+        fastq_deep_seg_initialize (vb);
 
     if (segconf.seq_len_dict_id.num)
         ctx_set_store (VB, STORE_INT, ECTX(segconf.seq_len_dict_id)->did_i, DID_EOL);
@@ -460,16 +472,17 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i, bool must_have)
     vb->pair_vb_i = pair_vb_i;
 
     Section sec = sections_vb_header (pair_vb_i, SOFT_FAIL);
-    ASSERT (!must_have || sec, "Cannot find VB_HEADER of vb_i=%u section for pair 1", pair_vb_i);
+    ASSERT (!must_have || sec, "Cannot find VB_HEADER section of vb_i=%u of pair 1", pair_vb_i);
     if (!sec) return false;
 
     vb->pair_num_lines = sec->num_lines;
 
-    // read into ctx->pair the data we need from our pair: QNAME,QNAME2,LINE3 and its components, EXTRA, GPOS and STRAND
-    buf_alloc (vb, &vb->z_section_headers, MAX_FIELDS + 10, MAX_DICTS * 2 + 50, uint32_t, 0, "z_section_headers"); // room for section headers  
-
-    sec++;
+    // read into ctx->pair the data we need from our pair: QNAME,QNAME2,LINE3 and its components, GPOS and STRAND
+    buf_alloc (vb, &vb->z_section_headers, MAX_DICTS * 2, 0, uint32_t, 0, "z_section_headers"); // indices into vb->z_data of section headers
+    
+    vb->preprocessing = true; // consumed by fastq_piz_is_skip_section
     piz_read_all_ctxs (VB, &sec, true);
+    vb->preprocessing = false;
 
     file_seek (z_file, 0, SEEK_END, false); // restore
     z_file->disk_so_far = save_disk_so_far;
@@ -480,11 +493,11 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i, bool must_have)
 // main thread: is it possible that genocat of this file will re-order lines
 bool fastq_piz_maybe_reorder_lines (void)
 {
-    return sections_get_num_comps() == 2; // genocat always interleaves (= reorders lines) of paired FASTQs
+    return sections_get_num_comps(false) == 2; // genocat always interleaves (= reorders lines) of paired FASTQs
 }
 
 // main thread: called from piz_read_one_vb as DTPZ(piz_read_one_vb)
-bool fastq_piz_init_vb (VBlockP vb_, const SectionHeaderVbHeader *header, uint32_t *txt_data_so_far_single_0_increment)
+bool fastq_piz_init_vb (VBlockP vb_, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment)
 {
     VBlockFASTQP vb = (VBlockFASTQP )vb_;
     uint32_t pair_vb_i=0;
@@ -635,12 +648,12 @@ rom fastq_seg_txt_line (VBlockFASTQP vb, rom line_start, uint32_t remaining, boo
     // case --optimize_QUAL: optimize in place, must be done before fastq_seg_deep calculates a hash
     if (flag.optimize_QUAL) optimize_phred_quality_string ((char *)STRa(qual));
 
-    dl->monobase = str_is_monochar (STRa(seq)); // set dl->monobase
+    dl->monochar = str_is_monochar (STRa(seq)); // set dl->monochar
 
     // case --deep: compare DESC, SEQ and QUAL to the SAM/BAM data
     bool deep_qname=false, deep_seq=false, deep_qual=false;
-    if (flag.deep || flag.debug_deep == 2)
-        fastq_seg_deep (vb, dl, desc, qname_len, STRa(seq), STRa(qual), &deep_qname, &deep_seq, &deep_qual);
+    if (flag.deep || flag.show_deep == 2)
+        fastq_seg_deep (vb, dl, STRa(qname), STRa(seq), STRa(qual), &deep_qname, &deep_seq, &deep_qual);
 
     fastq_seg_QNAME (vb, STRa(qname), line1_len, deep_qname);
 
@@ -671,7 +684,7 @@ rom fastq_seg_txt_line (VBlockFASTQP vb, rom line_start, uint32_t remaining, boo
 // PIZ stuff
 //-----------------
 
-// PIZ: piz_process_recon callback: called by the main thread, in the order of VBs
+// PIZ: main thread: piz_process_recon callback: usually called in order of VBs, but out-of-order if --test with no writer
 void fastq_piz_process_recon (VBlockP vb)
 {
     if (flag.collect_coverage)    
@@ -738,9 +751,7 @@ IS_SKIP (fastq_piz_is_skip_section)
 // inspects z_file flags and if needed reads additional data, and returns true if the z_file consists of FASTQs compressed with --pair
 bool fastq_piz_is_paired (void)
 {
-    if (z_file->data_type != DT_FASTQ || 
-        (VER(15) && flag.deep)        ||          // --deep files are not paired
-        z_file->num_txt_files == 1) return false; // note: %2 and not ==1 for back-comp for concatenated files up to v13
+    if (!Z_DT(FASTQ) || z_file->num_txt_files == 1) return false; // note: %2 and not ==1 for back-comp for concatenated files up to v13
 
     // this is a FASTQ genozip file. Now we can check dts_paired
     if (z_file->z_flags.dts_paired) return true;  
@@ -799,9 +810,13 @@ CONTAINER_FILTER_FUNC (fastq_piz_filter)
     if (dict_id.num == _FASTQ_TOPLEVEL) {
         
         // initialize item filter
-        if (item == -1 && rep == 0)
+        if (item == -1 && rep == 0) {
             fastq_piz_initialize_item_filter (VB_FASTQ, con);
-        
+
+            if (flag.deep) // Deep, since v15
+                fastq_deep_piz_wait_for_deep_data();
+        }
+
         // keep or drop toplevel item based on item filter
         else if (item >= 0) 
             return VB_FASTQ->item_filter[item];
@@ -873,7 +888,7 @@ void fastq_zip_genozip_header (SectionHeaderGenozipHeader *header)
     header->fastq.segconf_seq_len_dict_id = segconf.seq_len_dict_id; // v14
 }
 
-void fastq_piz_genozip_header (const SectionHeaderGenozipHeader *header)
+void fastq_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
 {
     if (VER(14)) segconf.seq_len_dict_id = header->fastq.segconf_seq_len_dict_id; 
 }

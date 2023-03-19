@@ -220,14 +220,14 @@ bool vcf_lo_seg_cross_render_to_primary (VBlockVCFP vb, ContextP ctx, STRp(this_
                                          bool validate_only)
 {
     // save original value (and TXTFILE_READ_VB_PADDING extra bytes) and txt_data.len
-    uint64_t save_txt_data_len = vb->txt_data.len;
+    uint32_t save_txt_data_len = Ltxt;
     char save[this_value_len + TXTFILE_READ_VB_PADDING];
     
     if (primary_snip) 
         memcpy (save, this_value, this_value_len + TXTFILE_READ_VB_PADDING);
 
     // set txt_data as if we just reconsturcted value - len ending after value
-    uint64_t len_before = vb->txt_data.len = BNUMtxt (this_value + this_value_len);
+    uint32_t len_before = Ltxt = BNUMtxt (this_value + this_value_len);
 
     // convert Primary->Luft in place. Note: if untranslatable (because it was an untranslatable Primary value
     // to be begin with), this function will do nothing.
@@ -235,7 +235,7 @@ bool vcf_lo_seg_cross_render_to_primary (VBlockVCFP vb, ContextP ctx, STRp(this_
 
         // case: we're translating into primary_snip 
         if (primary_snip) {
-            int growth = (int)vb->txt_data.len - (int)len_before;
+            int growth = (int)Ltxt - (int)len_before;
             
             // length only changes for AC and END - and since they are 32 bit ints in the VCF spec - they change by at most 9 
             // characters (1 character -> 10 characters)
@@ -254,15 +254,15 @@ bool vcf_lo_seg_cross_render_to_primary (VBlockVCFP vb, ContextP ctx, STRp(this_
 
         // case: translated in place
         else if (!validate_only) 
-            ASSERT (vb->txt_data.len == len_before, "When translating luft->primary of %s \"in-place\", length incorrectly changed",
+            ASSERT (Ltxt == len_before, "When translating luft->primary of %s \"in-place\", length incorrectly changed",
                     ctx->tag_name);
 
-        vb->txt_data.len = save_txt_data_len;
+        Ltxt = save_txt_data_len;
         return true;
     }
     else { // failed lift over
         vcf_lo_seg_rollback_and_reject (vb, dict_id_is_vcf_format_sf (ctx->dict_id) ? LO_FORMAT : LO_INFO, ctx);
-        vb->txt_data.len = save_txt_data_len;
+        Ltxt = save_txt_data_len;
         return false;
     }
 }

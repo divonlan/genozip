@@ -40,7 +40,7 @@ extern void chain_vb_release_vb();
 // zip of a chain file - txtfile
 extern void chain_zip_initialize (void);
 extern int32_t chain_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i /* in/out */);
-extern void chain_zip_genozip_header (SectionHeaderGenozipHeader *header);
+extern void chain_zip_genozip_header (SectionHeaderGenozipHeaderP header);
 
 // seg of a chain file
 extern void chain_seg_initialize (VBlockP vb);

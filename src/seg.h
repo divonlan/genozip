@@ -67,7 +67,7 @@ extern bool seg_id_field_cb (VBlockP vb, ContextP ctx, STRp(id), uint32_t repeat
 extern bool seg_id_field2_cb (VBlockP vb, ContextP ctx, STRp(id), uint32_t repeat);
 
 typedef enum { LOOKUP_NONE, LOOKUP_SIMPLE, LOOKUP_WITH_LENGTH } Lookup;
-extern void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, STRp(data), bool add_nul, Lookup lookup_type, bool is_singleton, unsigned add_bytes);
+extern void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, const void *const data, uint32_t data_len, bool add_nul, Lookup lookup_type, bool is_singleton, unsigned add_bytes);
 
 static inline void seg_add_to_local_text (VBlockP vb, ContextP ctx, STRp(snip), Lookup lookup_type, unsigned add_bytes) 
 { 
@@ -77,7 +77,7 @@ static inline void seg_add_to_local_text (VBlockP vb, ContextP ctx, STRp(snip), 
     seg_add_to_local_fixed_do (vb, ctx, STRa(snip), lookup_type != LOOKUP_WITH_LENGTH, lookup_type, false, add_bytes); 
 }
 
-static inline void seg_add_to_local_fixed (VBlockP vb, ContextP ctx, STRp(data), Lookup lookup_type, unsigned add_bytes)
+static inline void seg_add_to_local_fixed (VBlockP vb, ContextP ctx, const void *data, uint32_t data_len, Lookup lookup_type, unsigned add_bytes)
     { seg_add_to_local_fixed_do (vb, ctx, STRa(data), false, lookup_type, false, add_bytes); }
 
 extern void seg_integer_fixed (VBlockP vb, Context *ctx, void *number, bool with_lookup, unsigned add_bytes);
@@ -298,14 +298,14 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux
                          "\n%d characters before to %d characters after (in quotes): \"%.*s\""                      \
                          "\nTo get vblock: genozip --biopsy %u %s",                                                 \
                                      str_time().s, txt_name, LN_NAME, __VA_ARGS__,                                  \
-            /* pos_in_vb:         */ (PosType64)(p_into_txt ? ((rom)p_into_txt - vb->txt_data.data) : -1),            \
-            /* pos_in_file:       */ (PosType64)(p_into_txt ? (vb->vb_position_txt_file + ((rom)p_into_txt - vb->txt_data.data)) : -1),\
+            /* pos_in_vb:         */ (PosType64)(p_into_txt ? ((rom)p_into_txt - B1STtxt) : -1),            \
+            /* pos_in_file:       */ (PosType64)(p_into_txt ? (vb->vb_position_txt_file + ((rom)p_into_txt - B1STtxt)) : -1),\
             /* +- 10 char snip    */                                                                                \
-            /* chars before:      */ p_into_txt ? MIN_(10, (unsigned)((rom)p_into_txt - vb->txt_data.data)) : -1,   \
-            /* chars after:       */ p_into_txt ? MIN_(10, (unsigned)(vb->txt_data.data + vb->txt_data.len - (rom)p_into_txt)) : -1,\
-            /* snip len:          */ p_into_txt ? (unsigned)(MIN_((rom)p_into_txt+11, vb->txt_data.data + vb->txt_data.len) /* end pos */ - MAX_((rom)p_into_txt-10, vb->txt_data.data) /* start_pos */) : -1,\
-            /* condition for snip */ (vb->txt_data.data && p_into_txt && ((rom)p_into_txt >= vb->txt_data.data) && ((rom)p_into_txt <= /* = too */ vb->txt_data.data + vb->txt_data.len) ? \
-            /* snip start:        */    MAX_((rom)p_into_txt-30, vb->txt_data.data) : "(inaccessible)"),            \
+            /* chars before:      */ p_into_txt ? MIN_(10, (unsigned)((rom)p_into_txt - B1STtxt)) : -1,   \
+            /* chars after:       */ p_into_txt ? MIN_(10, (unsigned)(BAFTtxt - (rom)p_into_txt)) : -1,\
+            /* snip len:          */ p_into_txt ? (unsigned)(MIN_((rom)p_into_txt+11, BAFTtxt) /* end pos */ - MAX_((rom)p_into_txt-10, vb->txt_data.data) /* start_pos */) : -1,\
+            /* condition for snip */ (vb->txt_data.data && p_into_txt && ((rom)p_into_txt >= B1STtxt) && ((rom)p_into_txt <=/*= too*/ BAFTtxt) ? \
+            /* snip start:        */    MAX_((rom)p_into_txt-30, B1STtxt) : "(inaccessible)"),            \
             /* biopsy parameters: */ vb->vblock_i, txt_name)
 
 #define ASSSEG0(condition, p_into_txt, err_str) ASSSEG (condition, p_into_txt, err_str "%s", "")

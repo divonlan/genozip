@@ -84,6 +84,7 @@ static bool inline str_issame_revcomp_(STRp(str1), STRp(str2)) // true if the sa
 }
 #define str_issame_revcomp(str1,str2) str_issame_revcomp_ (str1, str1##_len, str2, str2##_len)
 
+#define str_is_1char(str,char) (str##_len==1 && *str==(char))
 
 extern bool str_case_compare (rom str1, rom str2, bool *identical); // similar to stricmp that doesn't exist on all platforms
 
@@ -297,3 +298,11 @@ static inline char base32(uint32_t n) { return (n) < 26 ? ('a' + (n))     // 97-
                                              :            '@';          } // 64.      5bits: 0
 
 extern uint64_t p10[];
+
+#ifdef __APPLE__
+static inline void *mempcpy(void *restrict dest, const void *restrict src, size_t n)
+{
+    memcpy (dest, src, n);
+    return dest + n;
+}
+#endif

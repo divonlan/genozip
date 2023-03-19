@@ -549,9 +549,8 @@ static void zip_compress_all_contexts_local (VBlockP vb)
         // initialize list of contexts at this dependency level that need compression
         ContextP ctxs[vb->num_contexts];
         unsigned num_ctxs=0;
-        for_ctx
-            if ((ctx->local.len || ctx->local_always) && ctx->local_dep == dep_level && !ctx->local_compressed)
-                ctxs[num_ctxs++] = ctx;
+        for_ctx_that ((ctx->local.len || ctx->local_always) && ctx->local_dep == dep_level && !ctx->local_compressed)
+            ctxs[num_ctxs++] = ctx;
 
         while (num_ctxs) {
             // pick a context at "random" and remove it from the list (not random if single thread)
@@ -586,8 +585,8 @@ static void zip_compress_all_contexts_local (VBlockP vb)
 
 void zip_init_vb (VBlockP vb)
 {
-    vb->recon_size = vb->txt_data.len; // initial value. it may change if --optimize / --chain are used, or if dual coordintes - for the other coordinate
-    vb->txt_size   = vb->txt_data.len; // this copy doesn't change with --optimize / --chain.
+    vb->recon_size = Ltxt; // initial value. it may change if --optimize / --chain are used, or if dual coordintes - for the other coordinate
+    vb->txt_size   = Ltxt; // this copy doesn't change with --optimize / --chain.
 
     if (DTPT(zip_init_vb)) DTPT(zip_init_vb)(vb); // data-type specific initialization of the VB    
 }
@@ -621,7 +620,7 @@ static void zip_update_txt_counters (VBlockP vb)
     // note: in case of SAM gencomp, MAIN, we add recon_size - assuming the discrepency vs txt_data.len
     // is only due to lines being deported to gencomp 
     z_file->txt_data_so_far_bind_comp[vb->comp_i] += 
-        (z_sam_gencomp && vb->comp_i==SAM_COMP_MAIN) ? vb->recon_size : vb->txt_data.len;
+        (z_sam_gencomp && vb->comp_i==SAM_COMP_MAIN) ? vb->recon_size : Ltxt;
 
     // add up context compress time
     if (flag.show_time)
@@ -660,9 +659,8 @@ static void zip_write_global_area (void)
         refhash_compress_refhash();
     }
 
-    // add dict_id aliases list, if we have one
-    BufferP dict_id_aliases_buf = dict_id_create_aliases_buf();
-    if (dict_id_aliases_buf->len) zfile_compress_section_data (evb, SEC_DICT_ID_ALIASES, dict_id_aliases_buf);
+    // compress alias list, if this data_type has any aliases defined
+    dict_id_compress_aliases();
 
     // SAM/BAM: we don't compress RANDOM_ACCESS for non-sorted in --best (it can be very big, and we want to minimize file size in --best), 
     if (!flag.best || !(Z_DT(BAM) || Z_DT(SAM)) || segconf.is_sorted) {
@@ -704,8 +702,7 @@ static void zip_compress_one_vb (VBlockP vb)
     buf_alloc (vb, &vb->z_data, 0, vb->txt_size / 3, char, CTX_GROWTH, "z_data");
 
     // clone global dictionaries while granted exclusive access to the global dictionaries
-    if (flag.pair != PAIR_READ_2) // in case of PAIR_READ_2, we already cloned in zip_one_file
-        ctx_clone (vb);
+    ctx_clone (vb);
 
     // split each line in this VB to its components
     threads_log_by_vb (vb, "zip", "START SEG", 0);
@@ -789,10 +786,6 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
     // and copy the data we need for this vb. note: we need to do this before txtfile_read_vblock as
     // we need the num_lines of the pair file
     if (flag.pair == PAIR_READ_2) {
-        // note: normally we clone in the compute thread, because it might wait on mutex, but in this
-        // case we need to clone (i.e. create all contexts before we can read the pair file data)
-        ctx_clone (vb); 
-    
         uint32_t pair_vb_i = prev_file_first_vb_i + (vb->vblock_i-1 - prev_file_last_vb_i);
         
         if (pair_vb_i > prev_file_last_vb_i || // false if there is no vb with vb_i in the previous file
@@ -824,7 +817,7 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
             return;
         }
 
-        if (vb->txt_data.len) 
+        if (Ltxt) 
             goto dispatch;
 
         else if (gencomp_am_i_expecting_more_txt_data()) // more data might be coming from MAIN VBs currently computing
@@ -867,7 +860,7 @@ static void zip_complete_processing_one_vb (VBlockP vb)
 
     dispatcher_increment_progress ("z_write", vb->txt_size); // writing done.
 
-    z_file->num_vbs++;
+    z_file->num_vbs = MAX_(z_file->num_vbs, vb->vblock_i); // note: VBs are written out of order, so this can increase by more than 1, or not increase at all (a correct intermediate number is needed for sections_create_index when using --pair)
     txt_file->num_vbs++;
 }
 
@@ -925,12 +918,12 @@ void zip_one_file (rom txt_basename,
     }
 
     dispatcher = 
-        dispatcher_fan_out_task ("zip", txt_basename, 
+        dispatcher_fan_out_task (ZIP_TASK_NAME, txt_basename, 
                                  target_progress, // target progress: 1 for each read, compute, write
-                                 target_progress ? NULL : "Compressing...",
+                                 target_progress ? NULL : txt_file->is_remote ? "Downloading & compressing..." : "Compressing...",
                                  !flag.make_reference && !z_is_dvcf,   // allow callbacks to zip_complete_processing_one_vb not in order of VBs (not allowed for make-reference as contigs need to be in consistent order; not supported yet for DVCF)
                                  false,           // not test mode
-                                 flag.xthreads, prev_file_last_vb_i, 5000,
+                                 flag.xthreads, prev_file_last_vb_i, 5000, false,
                                  zip_prepare_one_vb_for_dispatching, 
                                  zip_compress_one_vb, 
                                  zip_complete_processing_one_vb);

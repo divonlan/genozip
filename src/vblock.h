@@ -24,8 +24,8 @@
     VBIType vblock_i;             /* number of VB within VCF file */\
     CompIType comp_i;             /* ZIP/PIZ: txt component within z_file that this VB belongs to  */ \
     bool is_eof;                  /* encountered EOF when reading this VB data from file */ \
+    VBlockPoolType pool;          /* the VB pool to which this VB belongs */ \
     int32_t id;                   /* id of vb within the vb pool (-1 is the external vb) */\
-    VBlockPoolP pool;             /* the VB pool to which this VB belongs */ \
     \
     /* compute thread stuff */ \
     ThreadId compute_thread_id;   /* id of compute thread currently processing this VB */ \
@@ -44,7 +44,7 @@
     volatile bool in_use;         /* this vb is in use */\
     \
     /* tracking lines */\
-    Buffer lines;                 /* ZIP: An array of *DataLine* - the lines in this VB */\
+    Buffer lines;                 /* ZIP: An array of *DataLine* - the lines in this VB; in Deep: .count counts deepable lines in VB */\
                                   /* PIZ: array of (num_lines+1) x (char *) - pointer to within txt_data - start of each line. last item is BAFT(txt_data). */\
     BitsP is_dropped;             /* PIZ: a bitarray with a bit set is the line is marked for dropping by container_reconstruct_do */ \
     uint32_t num_lines_at_1_3, num_lines_at_2_3; /* ZIP VB=1 the number of lines segmented when 1/3 + 2/3 of estimate was reached  */\
@@ -183,7 +183,6 @@ typedef struct VBlock {
 #define in_assign_codec vb->z_data_test.prm8[0] // vb is currently in codec_assign_best_codec
 #define peek_stack_level frozen_state.prm8[0]
 
-extern void vb_cleanup_memory(void);
 extern bool vb_is_valid (VBlockP vb);
 
 extern void vb_destroy_vb_do (VBlockP *vb_p, rom func);
@@ -191,11 +190,9 @@ extern void vb_destroy_vb_do (VBlockP *vb_p, rom func);
 
 #define VB_ID_EVB           -1 // ID of VB used by main thread 
 #define VB_ID_SEGCONF       -2 // ID of VB used by segconf_calculate
-#define VB_ID_GCACHE_CREATE -3 
-#define VB_ID_HCACHE_CREATE -4 
-#define VB_ID_DEPN_SCAN     -5
-#define VB_ID_COMPRESS_DEPN -6
-#define NUM_NONPOOL_VBs      6
+#define VB_ID_DEPN_SCAN     -3
+#define VB_ID_COMPRESS_DEPN -4
+#define NUM_NONPOOL_VBs      4
 extern VBlockP vb_initialize_nonpool_vb(int vb_id, DataType dt, rom task);
 
 extern void vb_release_vb_do (VBlockP *vb_p, rom task_name, rom func);

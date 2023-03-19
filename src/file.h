@@ -18,8 +18,14 @@
 
 #define MAX_GEN_COMP 2
 
+#define SAM_MAX_QNAME_LEN 255 // also defined in sam_private.h (compiler will shout if definitions disagree)
+
 typedef rom FileMode;
 extern FileMode READ, WRITE, WRITEREAD;// this are pointers to static strings - so they can be compared eg "if (mode==READ)"
+
+// number of alignments that are non-deepable for each of these reasons
+typedef enum {          NDP_FQ_READS, NDP_DEEPABLE, NDP_NO_ENTS, NDP_MONOCHAR, NDP_MULTI_MATCH, NDP_NO_MATCH , NUM_DEEP_STATS } DeepStatsFastq; 
+#define NO_DEEP_NAMES { "FQ_reads",   "Deepable",   "No_ents",   "Monochar",   "Multi_match",   "No_match" }
 
 typedef struct File {
     void *file;
@@ -62,8 +68,9 @@ typedef struct File {
 
     // Digest stuff - stored in z_file (ZIP & PIZ)
     Serializer digest_serializer;      // ZIP/PIZ: used for serializing VBs so they are MD5ed in order (not used for Adler32)
-    DigestContext digest_ctx;          // ZIP/PIZ: z_file: digest context of txt file being compressed / reconstructed (used for MD5 and, in v9-13, for Adler32)
-    Digest digest;                     // ZIP: z_file: digest of txt data read from input file  PIZ: z_file: as read from TxtHeader section (used for MD5 and, in v9-13, for Adler32)
+    DigestContext digest_ctx;          // ZIP/PIZ: z_file: digest context of txt file being compressed / reconstructed (used for MD5 and, in v9-13, for Adler32, starting v15 also for make-reference)
+    DigestContext v13_commulative_digest_ctx; // PIZ: z_file: used for multi-component up-to-v13 files - VB digests (adler and md5) are commulative since the beginning of the data, while txt file digest are commulative only with in the component.
+    Digest digest;                     // ZIP: z_file: digest of txt data read from input file (make-ref since v15: digest of in-memory genome)  PIZ: z_file: as read from TxtHeader section (used for MD5 and, in v9-13, for Adler32)
     bool vb_digest_failed;             // PIZ: txt_file: At least one VB has an unexpected digest when decompressing
     
     // Used for READING & WRITING txt files - but stored in the z_file structure for zip to support bindenation (and in the txt_file structure for piz)
@@ -99,7 +106,7 @@ typedef struct File {
     Did num_contexts;                  // length of populated subfield_ids and mtx_ctx;
     
     DictIdtoDidMap d2d_map; // map for quick look up of did_i from dict_id : 64K for key_map, 64K for alt_map 
-    ContextArray contexts;             // a merge of dictionaries of all VBs
+    ContextArray contexts;             // Z_FILE ZIP/PIZ: a merge of dictionaries of all VBs
     Buffer ra_buf;                     // ZIP/PIZ:  RAEntry records: ZIP: of DC_PRIMARY ; PIZ - PRIMARY or LUFT depending on flag.luft
     Buffer ra_buf_luft;                // ZIP only: RAEntry records of DC_LUFT
     
@@ -109,9 +116,8 @@ typedef struct File {
     // section list - used for READING and WRITING genozip files
     Buffer section_list_buf;           // section list to be written as the payload of the genotype header section
     Buffer section_list_save;          // a copy of the section_list in case it is modified due to recon plan.
-    CompIType num_txts_so_far;         // ZIP z_file: number of txt files compressed into this z_file - each becomes a component
+    uint8_t num_txts_so_far;           // ZIP z_file: number of txt files compressed into this z_file - each becomes one or more components
                                        // PIZ z_file: number of txt files written from this z_file - each generated from one or more components 
-
     // TXT file: reading
     Buffer unconsumed_txt;             // ZIP: excess data read from the txt file - moved to the next VB
 
@@ -129,7 +135,7 @@ typedef struct File {
     
     // Z_FILE: SAM/BAM SA stuff
     Buffer sag_grps;                   // Z_FILE: an SA group is a group of alignments, including the primary aligngment
-    Buffer sag_gps_index;              // Z_FILE: index z_file->sag_grps by adler32(qname)
+    Buffer sag_grps_index;             // Z_FILE: index z_file->sag_grps by adler32(qname)
     Buffer sag_alns;                   // Z_FILE: array of {RNAME, STRAND, POS, CIGAR, NM, MAPQ} of the alignment
     Buffer sag_qnames;                 // Z_FILE
     Buffer sag_depn_index;             // Z_FILE: SAG_BY_FLAG: uniq-sorted hash(QNAME) of all depn alignments in the file
@@ -141,8 +147,6 @@ typedef struct File {
     Buffer sag_seq;                    // Z_FILE: bitmap of seqs in ACGT 2bit format
     Buffer sag_qual;                   // Z_FILE: compressed QUAL
     
-    uint64_t saggy_near_count, mate_line_count, prim_far_count; // Z_FILE ZIP: SAM: for stats
-
     // Z_FILE: Deep
     Buffer vb_start_deep_line;         // Z_FILE: ZIP/PIZ: for each SAM VB, the first deepable_line_i of that VB (0-based, uint64_t)
     Buffer deep_ents;                  // Z_FILE: ZIP: entries of type ZipZDeep
@@ -153,6 +157,11 @@ typedef struct File {
     };
     Mutex custom_merge_mutex;          // Z_FILE: ZIP: used to merge deep, but in the future could be used for other custom merges
 
+    Mutex qname_huf_mutex;             // Z_FILE: PIZ: Deep: mutex to protect qname_huf
+    HuffmanP qname_huf;                // Z_FILE: PIZ: Deep: Used for compressing QNAME in deep_ents
+    char master_qname[SAM_MAX_QNAME_LEN+1]; // Z_FILE: PIZ: Deep: one of the QNAMEs in the SAM file, to which we compare all others
+    int qnames_sampled;                // Z_FILE: PIZ: Deep: Number of QNAMEs sampled for producing the huffman compressor
+
     // Z_FILE: DVCF stuff
     Buffer rejects_report;             // Z_FILE ZIP --chain: human readable report about rejects
     Buffer apriori_tags;               // Z_FILE ZIP DVCF: used for INFO/FORMAT tag renaming. Data from command line options if --chain, or VCF header if DVCF
@@ -160,9 +169,6 @@ typedef struct File {
     // TXT_FILE: DVCF stuff
     uint8_t coords;                    // TXT_FILE ZIP: DVCF: Set from ##dual_coordinates and immutable thereafter
     uint64_t reject_bytes;             // ZIP DVCF: number of bytes in lines originating from ##primary_only/##luft_only, not yet assigned to a VB
-
-    // Z_FILE: FASTA
-    uint64_t num_sequences;            // ZIP: for stats
 
     // Reconstruction plan, for reconstructing in sorted order if --sort: [0] is primary coords, [1] is luft coords
     Mutex recon_plan_mutex[2];         // TXT_FILE ZIP: VCF: protect vb_info and line_info during merging of VB data
@@ -181,11 +187,15 @@ typedef struct File {
     // Z_FILE 
     Buffer bound_txt_names;            // ZIP: Stats data: a concatenation of all bound txt_names that contributed to this genozip file
     
-    // Information content stats - how many bytes and how many sections does this file have in each section type
+    // Information content stats 
     uint32_t num_vbs;                  // ZIP: z_file/txt_file PIZ: txt_file: number of VBs processed z_file: total VBs in file
     uint32_t num_vbs_dispatched;       // ZIP: txt_file
-    uint32_t num_preproc_vbs_joined;   // PIZ: z_file
-    uint32_t max_conc_writing_vbs;     // PIZ z_file: the maximal value conc_writing_vbs across all SEC_RECON_PLAN sections in this z_file
+    uint32_t num_preproc_vbs_joined;   // Z_FILE: PIZ
+    uint32_t max_conc_writing_vbs;     // Z_FILE: PIZ: the maximal value conc_writing_vbs across all SEC_RECON_PLAN sections in this z_file
+    uint64_t deep_stats[NUM_DEEP_STATS]; // Z_FILE: ZIP/PIZ: SAM: stats collection on Deep performance
+    uint64_t comp_num_lines[MAX_NUM_COMPS]; // Z_FILE: PIZ/ZIP: number of lines in each component
+    uint64_t saggy_near_count, mate_line_count, prim_far_count; // Z_FILE ZIP: SAM: for stats
+    uint64_t num_sequences;            // Z_FILE: ZIP: FASTA: for stats
 } File;
 
 #define z_has_gencomp (z_file && z_file->z_flags.has_gencomp)

@@ -117,11 +117,11 @@ typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, Did did_i, DictI
 #define RECONSTRUCT(s,s_len)                                                    \
     ({ uint32_t new_len = (uint32_t)(s_len); /* copy in case caller uses ++ */  \
        ASSPIZ (vb->txt_data.len + new_len <= vb->txt_data.size, "RECONSTRUCT: txt_data overflow: txt_data.len=%"PRIu64" str_len=%u vb->txt_data.size=%u", \
-               vb->txt_data.len, new_len, (uint32_t)vb->txt_data.size);       \
-       memcpy (&vb->txt_data.data[vb->txt_data.len32], s, new_len);             \
-       vb->txt_data.len32 += new_len; })
+               vb->txt_data.len, new_len, (uint32_t)vb->txt_data.size);  /* leave vb->txt_data.len 64b to detect bugs */     \
+       memcpy (&vb->txt_data.data[Ltxt], (s), new_len);             \
+       Ltxt += new_len; })
 
-#define RECONSTRUCT1(c) vb->txt_data.data[vb->txt_data.len32++] = (c) // we don't use BNXTc bc it is too expensive
+#define RECONSTRUCT1(c) vb->txt_data.data[Ltxt++] = (c) // we don't use BNXTc bc it is too expensive
 #define RECONSTRUCT_snip RECONSTRUCT (snip, snip_len)
 #define RECONSTRUCT_SEP(s,len,sep) ({ RECONSTRUCT((s), (len)); RECONSTRUCT1 (sep); })
 #define RECONSTRUCT_TABBED(s,len) RECONSTRUCT_SEP (s, len, '\t')
@@ -138,7 +138,7 @@ typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, Did did_i, DictI
     ({ ASSPIZ ((ctx)->next_local + (recon_len) <= (ctx)->local.len32, NEXT_ERRFMT, "RECONSTRUCT_NEXT_REV", (ctx)->tag_name, (ctx)->next_local, (recon_len), (ctx)->local.len32); \
        if (reconstruct) {                                                           \
            str_reverse (BAFTtxt, Bc((ctx)->local, (ctx)->next_local), (recon_len)); \
-           vb->txt_data.len += (recon_len);                                         \
+           Ltxt += (recon_len);                                         \
        }                                                                            \
        (ctx)->next_local += (recon_len); })
 

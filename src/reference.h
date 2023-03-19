@@ -59,13 +59,14 @@ typedef enum { RT_NONE,     // value of ranges.param if ranges is unallocated
              } RangesType;
               
 extern void ref_initialize_ranges (Reference ref, RangesType type);
+extern void ref_finalize (void);
 extern void ref_load_external_reference (Reference ref, ContextP chrom_ctx);
 extern void ref_load_stored_reference (Reference ref);
 extern bool ref_is_loaded (const Reference ref);
 extern bool ref_is_external_loaded (const Reference ref);
 extern void ref_diff_ref (void);
 extern void ref_set_reference (Reference ref, rom filename, ReferenceType ref_type, bool is_explicit);
-extern void ref_set_ref_file_info (Reference ref, Digest md5, rom fasta_name, uint8_t genozip_version);
+extern void ref_set_ref_file_info (Reference ref, Digest genome_digest, bool is_adler, rom fasta_name, uint8_t genozip_version);
 extern void ref_unload_reference (Reference ref);
 extern void ref_destroy_reference (Reference ref);
 extern ConstRangeP ref_piz_get_range (VBlockP vb, Reference ref, FailType soft_fail);
@@ -75,21 +76,24 @@ extern void ref_generate_reverse_complement_genome (Reference ref);
 extern rom ref_get_filename (const Reference ref);
 extern uint8_t ref_get_genozip_version (const Reference ref);
 extern BufferP ref_get_stored_ra (Reference ref);
-extern Digest ref_get_file_md5 (const Reference ref);
+extern Digest ref_get_genome_digest (const Reference ref);
+extern rom ref_get_digest_name (const Reference ref);
 extern void ref_get_genome (Reference ref, const Bits **genome, const Bits **emoneg, PosType64 *genome_nbases);
 extern void ref_set_genome_is_used (Reference ref, PosType64 gpos, uint32_t len);
+extern bool ref_is_digest_adler (const Reference ref);
 
 // ZIPping a reference
 extern void ref_compress_ref (void);
 
 // make-reference stuff
+extern bool is_ref (STRp(data), bool *need_more);
 extern void ref_make_ref_init (void);
 extern void ref_make_seg_initialize (VBlockP vb);
 extern void ref_consume_ref_fasta_global_area (void);
 extern void ref_make_create_range (VBlockP vb);
 extern void ref_make_after_compute (VBlockP vb);
 extern ConstBufferP ref_make_get_contig_metadata (void);
-extern void ref_make_genozip_header (SectionHeaderGenozipHeader *header);
+extern void ref_make_genozip_header (SectionHeaderGenozipHeaderP header);
 extern void ref_make_finalize (bool unused);
 extern void ref_fasta_to_ref (FileP file);
 
@@ -107,7 +111,7 @@ extern void ref_contigs_load_contigs (Reference ref);
 extern uint32_t ref_contigs_get_num_contigs (Reference ref);
 extern PosType64 ref_contigs_get_genome_nbases (Reference ref);
 
-extern WordIndex ref_contig_get_by_gpos (const Reference ref, PosType64 gpos, PosType64 *pos);
+extern WordIndex ref_contig_get_by_gpos (const Reference ref, PosType64 gpos, int32_t seq_len, PosType32 *pos);
 
 extern const uint8_t acgt_encode[256];
 extern const uint8_t acgt_encode_comp[256];

@@ -82,8 +82,9 @@ void bed_seg_initialize (VBlockP vb)
 
 void bed_seg_finalize (VBlockP vb)
 {
-    if (segconf.running)
-        segconf_finalize_is_sorted();
+    // case: if we haven't found any pair of consecutive lines with the same CHROM and non-descreasing POS, this is not a sorted file, despite no evidence of "not sorted". eg could be unique CHROMs.
+    if (segconf.running && !segconf.evidence_of_sorted)
+        segconf.is_sorted = false;
 
     // top level snip
     SmallContainer top_level = { 

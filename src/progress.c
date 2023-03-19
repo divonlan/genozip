@@ -90,7 +90,8 @@ char *progress_new_component (rom new_component_name,
                 sprintf (prefix, "testing: %s %s : ", genounzip_str, component_name);
             }
             else if (flag.make_reference)
-                sprintf (prefix, "making refernece file: %s %s : ", global_cmd, component_name);
+                sprintf (prefix, "%saking refernece file: %s %s : ", 
+                         txt_file->is_remote ? "Downloading & m" : "M", global_cmd, component_name);
             
             else
                 sprintf (prefix, "%s %s : ", global_cmd, component_name); 
@@ -135,7 +136,6 @@ void progress_update (char **prefix, uint64_t sofar, uint64_t total, bool done)
     else if (!done && percent && (last_seconds_so_far < seconds_so_far)) { 
 
         if (!done) { 
-
             // time remaining
             unsigned secs = (100.0 - percent) * ((double)seconds_so_far / (double)percent);
             str_human_time (secs, false, time_str);

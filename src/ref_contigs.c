@@ -358,13 +358,14 @@ rom ref_contigs_get_name (Reference ref, WordIndex ref_index, unsigned *contig_n
     return contigs_get_name (&ref->ctgs, ref_index, contig_name_len);
 }
 
-rom ref_contigs_get_name_by_ref_index (Reference ref, WordIndex ref_index, rom *snip, uint32_t *snip_len)
+rom ref_contigs_get_name_by_ref_index (Reference ref, WordIndex ref_index, pSTRp(snip), PosType64 *gpos)
 {
     const Contig *contig = ref_contigs_get_contig_by_ref_index (ref, ref_index, HARD_FAIL);
     rom my_snip = B(const char, ref->ctgs.dict, contig->char_index);
     
     if (snip) *snip = my_snip;
     if (snip_len) *snip_len = contig->snip_len;
+    if (gpos) *gpos = contig->gpos;
 
     return my_snip; 
 }
@@ -466,7 +467,8 @@ PosType64 ref_contigs_get_genome_nbases (const Reference ref)
 
     if (!ref->ctgs.contigs.len) return 0;
 
-    // note: contigs are sorted by chrom and then pos within chrom, NOT by gpos! (chroms might have been added out of order during reference creation)
+    // note: contigs are sorted by chrom and then pos within chrom, NOT by gpos! 
+    // (up to 13.0.20, chroms might have been added out of order during reference creation)
     const Contig *rc_with_largest_gpos = NULL;
     for_buf (const Contig, rc, ref->ctgs.contigs)  {
         if (!rc->min_pos && !rc->max_pos) continue; // not a real contig, eg "*" in SAM
@@ -480,20 +482,55 @@ PosType64 ref_contigs_get_genome_nbases (const Reference ref)
     return rc_with_largest_gpos->gpos + (rc_with_largest_gpos->max_pos - rc_with_largest_gpos->min_pos + 1);
 }
 
-WordIndex ref_contig_get_by_gpos (const Reference ref, PosType64 gpos,
-                                  PosType64 *pos) // optional out, POS within the CHROM matching gpos
+// up to 13.0.20, chroms might have been added out of order during reference creation, resulting in 
+// contigs, which are sorted by chrom, being NOT necessarily sorted by gpos 
+static ContigP ref_contig_search_by_gpos_v13 (const Reference ref, PosType64 gpos)
 {
     // note: contigs are sorted by chrom and then pos within chrom, NOT by gpos! (chroms might have been added out of order during reference creation)
-    for_buf2 (Contig, rc, ref_index, ref->ctgs.contigs) 
-        if (gpos >= rc->gpos && gpos <= rc->gpos + (rc->max_pos - rc->min_pos)) {
-            if (pos) {
-                ASSERT (ref_index < ref->ranges.len, "Unexpected ref_index=%d >= ref->ranges.len=%"PRIu64, ref_index, ref->ranges.len);  
-                const Range *r = B(Range, ref->ranges, ref_index);
-                
-                *pos = r->first_pos + gpos - r->gpos;
-            }
-            return ref_index;
-        }
+    for_buf (Contig, rc, ref->ctgs.contigs) 
+        if (gpos >= rc->gpos && gpos <= rc->gpos + (rc->max_pos - rc->min_pos)) 
+            return rc;
 
-    return WORD_INDEX_NONE; // not found
+    return NULL; // not found
+}
+
+static ContigP ref_contig_search_by_gpos (const Reference ref, PosType64 gpos, WordIndex first_ctg_i, WordIndex last_ctg_i)
+{
+    if (first_ctg_i > last_ctg_i) return NULL; // gpos is after all contigs, or in the gaps between contigs
+
+    WordIndex mid_ctg_i = (first_ctg_i + last_ctg_i) / 2;
+    ContigP rc = B(Contig, ref->ctgs.contigs, mid_ctg_i);
+
+    if (gpos >= rc->gpos && gpos <= rc->gpos + (rc->max_pos - rc->min_pos))     
+        return rc;
+
+    else if (gpos < rc->gpos)
+        return ref_contig_search_by_gpos (ref, gpos, first_ctg_i, mid_ctg_i - 1);
+
+    else
+        return ref_contig_search_by_gpos (ref, gpos, mid_ctg_i + 1, last_ctg_i);
+}
+
+WordIndex ref_contig_get_by_gpos (const Reference ref, PosType64 gpos,
+                                  int32_t seq_len, // if non-0 succeed only if range is entirely with the contig (may be positive or negative number)
+                                  PosType32 *pos)  // optional out, POS within the CHROM matching gpos
+{
+    ContigP rc = VER(14) ? ref_contig_search_by_gpos (ref, gpos, 0, ref->ctgs.contigs.len32 - 1)
+                         : ref_contig_search_by_gpos_v13 (ref, gpos);
+    
+    if (!rc) 
+        return WORD_INDEX_NONE; // gpos is after all contigs, or in the gaps between contigs
+        
+    WordIndex ref_index = BNUM (ref->ctgs.contigs, rc);
+    ASSERT (ref_index < ref->ranges.len, "Unexpected ref_index=%d >= ref->ranges.len=%"PRIu64, ref_index, ref->ranges.len);  
+
+    if (pos) 
+        *pos = rc->min_pos + gpos - rc->gpos;
+
+    // case: gpos itself is not in gap, but the sequence starting a gpos, of length seq_len, is not entirely on the contig
+    if ((seq_len > 0 && *pos + seq_len - 1 > rc->max_pos) || // beyond end of contig
+        (seq_len < 0 && *pos + seq_len + 1 < rc->max_pos))   // before the start of the contig 
+        return WORD_INDEX_NONE;
+
+    return ref_index;
 }

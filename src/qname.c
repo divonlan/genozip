@@ -208,7 +208,7 @@ void qname_zip_initialize (void)
     }
 }
 
-void qname_seg_initialize (VBlockP vb, QType q, int pairing)
+void qname_seg_initialize (VBlockP vb, QType q, Did st_did_i, int pairing)
 {
     QnameFlavor qfs = segconf.qname_flavor[q];
     if (!qfs) return;
@@ -221,7 +221,8 @@ void qname_seg_initialize (VBlockP vb, QType q, int pairing)
             fastq_initialize_ctx_for_pairing (vb, did_q + i);
 
     // consolidate all items under did_q in --stats
-    ctx_consolidate_statsN (vb, did_q, did_q + 1, MAX_QNAME_ITEMS); 
+    if (st_did_i != DID_NONE)
+        ctx_consolidate_statsN (vb, st_did_i, did_q, MAX_QNAME_ITEMS + 1); 
 
     // set STORE_INT as appropriate
     int ctx_delta = did_q - SAM_QNAME;
@@ -249,7 +250,7 @@ QnameTestResult qname_test_flavor (STRp(qname), QType q, QnameFlavor qfs, bool q
 {
     // return embedded qname2, eg "82a6ce63-eb2d-4812-ad19-136092a95f3d" in "@ERR3278978.1 82a6ce63-eb2d-4812-ad19-136092a95f3d/1"
     if (q != QANY && qfs->only_q != QANY && qfs->only_q != q
-        && !(qfs->only_q == Q1or3 && (q == QNAME1 || QLINE3))) return QTR_WRONG_Q; 
+        && !(qfs->only_q == Q1or3 && (q == QNAME1 || q == QLINE3))) return QTR_WRONG_Q; 
 
     if (q==QNAME2 && segconf.tech != qfs->qname1_tech) 
         return QTR_TECH_MISMATCH;
@@ -299,7 +300,7 @@ void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
             if (qfs->seq_len_item != -1) 
                 segconf.seq_len_dict_id = qfs->con.items[qfs->seq_len_item].dict_id;
             
-            qname_seg_initialize (vb, q, 0); // so the rest of segconf.running can seg fast using the discovered container
+            qname_seg_initialize (vb, q, DID_NONE, 0); // so the rest of segconf.running can seg fast using the discovered container
 
             if (flag.debug_qname) 
                 iprintf ("%.*s is DISCOVERED as %s - for %s\n", STRf(qname), qfs->name, qtype_name(q));

@@ -7,9 +7,6 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
-#if defined __APPLE__ 
-#include "compatibility/mac_gettime.h"
-#endif
 #include "genozip.h"
 #include "container.h"
 #include "vblock.h"
@@ -142,7 +139,7 @@ uint32_t container_peek_repeats (VBlockP vb, ContextP ctx, char repsep)
         return container_retrieve (vb, ctx, wi, snip+1, snip_len-1, 0, 0)->repeats;
 
     // lookup snip: count repsep in local string
-    else if (snip_len == 1 && *snip == SNIP_LOOKUP) {
+    else if (str_is_1char (snip, SNIP_LOOKUP)) {
         snip = Bc(ctx->local, ctx->next_local);
         return count_repsep (snip, strlen (snip), repsep);
     }
@@ -235,7 +232,7 @@ static inline void container_verify_line_integrity (VBlockP vb, ContextP debug_l
                 z_file->txt_header_single.txt_filename);
 
         // show data-type-specific information about defective line
-        DT_FUNC (z_file, piz_xtra_line_data)(vb);
+        DT_FUNC (vb, piz_xtra_line_data)(vb);
         exit_on_error(false);
    }
 }
@@ -296,7 +293,7 @@ static inline void container_toplevel_filter (VBlockP vb, uint32_t rep_i, rom re
         // remove reconstructed text (to save memory and allow writer_flush_vb()), except if...
         if (!flag.interleaved &&               // if --interleave, as we might un-drop the line 
             !(VB_DT(SAM) && sam_is_prim_vb)) // if SAM:PRIM line, we still need it to reconstruct its DEPNs
-            vb->txt_data.len = vb->line_start;
+            Ltxt = vb->line_start;
 
         bits_set (vb->is_dropped, rep_i);
 
@@ -362,7 +359,7 @@ static inline unsigned container_reconstruct_item_seperator (VBlockP vb, const C
         if (pad > 0) {
             memmove (reconstruction_start + pad, reconstruction_start, recon_len);
             memset (reconstruction_start, '0', pad);
-            vb->txt_data.len += pad;
+            Ltxt += pad;
         }
         return 0; // no seperators to delete if needed
     }
@@ -387,10 +384,11 @@ static inline unsigned container_reconstruct_item_seperator (VBlockP vb, const C
 
 static void container_set_lines (VBlockP vb, uint32_t line_i)
 {
+    // note: keep txt_data.len 64b to detect bugs 
     ASSINP (vb->txt_data.len < 2 GB, "%s: Reconstructed VB exceeds the maximum permitted 2GB%s (len=%"PRIu64")", LN_NAME,
             !vb->translation.is_src_dt ? ". Use genounzip instead": "", vb->txt_data.len);
 
-    *B32(vb->lines, line_i) = vb->txt_data.len32;
+    *B32(vb->lines, line_i) = Ltxt;
 }
 
 // is "toplevel level field" (i.e. as defined in the data type's file format)
@@ -455,12 +453,12 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
         // case this is the top-level snip: initialize line
         if (is_toplevel) {
             vb->line_i         = rep_i;
-            vb->line_start     = vb->txt_data.len;
+            vb->line_start     = Ltxt;
             vb->drop_curr_line = NULL;    
             
             container_set_lines (vb, rep_i);
 
-            DT_FUNC (z_file, piz_init_line)(vb);
+            DT_FUNC (vb, piz_init_line)(vb);
         }
 
         if (con->filter_repeats && !(DT_FUNC (vb, container_filter) (vb, ctx->dict_id, con, rep_i, -1, NULL))) 
@@ -512,7 +510,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
                          vb->peek_stack_level ? "peeking " : "",
                          vb->vblock_i, vb->line_i, rep_i, ctx->tag_name, ctx->did_i, item_ctx->tag_name, item_ctx->did_i,
                          trans_item ? item->translator : 0, 
-                         vb->vb_position_txt_file + vb->txt_data.len, vb->vb_position_txt_file + vb->txt_data.len,
+                         vb->vb_position_txt_file + Ltxt, vb->vb_position_txt_file + Ltxt,
                          reconstruct, reconstruct && !trans_nor);
 
             uint32_t item_prefix_len = 
@@ -544,7 +542,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
 
             // case: WORD_INDEX_MISSING - delete previous item's separator if it has one (used by SAM_AUX - sam_seg_aux_all)
             if (recon_len == -1 && i > 0 && !con->keep_empty_item_sep && !CI0_ITEM_HAS_FLAG(item-1))  
-                vb->txt_data.len -= num_preceding_seps;
+                Ltxt -= num_preceding_seps;
 
             // reconstruct separator(s) as needed
             if (reconstruct) 
@@ -552,7 +550,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
 
             // after all reconstruction and translation is done - move if needed
             if (trans_item && IS_CI0_SET (CI0_TRANS_MOVE))
-                vb->txt_data.len += (uint8_t)item->separator[1];
+                Ltxt += (uint8_t)item->separator[1];
 
             // display 10 first reconstructed characters, but all characters if just this ctx was requested 
             if (show_item)
@@ -568,8 +566,8 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
     if (con->drop_final_item_sep && last_non_filtered_item_i >= 0) {
             const ContainerItem *item = &con->items[last_non_filtered_item_i]; // last_non_filtered_item_i is the last item that survived the filter, of the last repeat
 
-            vb->txt_data.len -= CI0_ITEM_HAS_FLAG(item) ? (translating ? 0 : !!IS_CI0_SET (CI0_NATIVE_NEXT))
-                                                       : ((item->separator[0] >= '\t') + (item->separator[1] >= '\t'));
+            Ltxt -= CI0_ITEM_HAS_FLAG(item) ? (translating ? 0 : !!IS_CI0_SET (CI0_NATIVE_NEXT))
+                                            : ((item->separator[0] >= '\t') + (item->separator[1] >= '\t'));
         }
 
         // reconstruct repeats separator, if neeeded
@@ -591,6 +589,10 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
             if (debug_lines_ctx) 
                 container_verify_line_integrity (vb, debug_lines_ctx, rep_reconstruction_start);
 
+            // we allocate txt_data to be OVERFLOW_SIZE (=1MB) beyond needed, if we get 16KB near the edge
+            // of that we error here. These is to prevent actual overflowing which will manifest as difficult to trace memory issues
+            ASSPIZ (vb->txt_data.size - Ltxt > 16 KB, "txt_data overflow: Ltxt=%u", Ltxt);
+
             container_toplevel_filter (vb, rep_i, rep_reconstruction_start, show_non_item);
         }
     } // repeats loop
@@ -607,8 +609,8 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
     if (con->drop_final_item_sep_of_final_repeat && last_non_filtered_item_i >= 0) {
         const ContainerItem *item = &con->items[last_non_filtered_item_i]; // last_non_filtered_item_i is the last item that survived the filter, of the last repeat
 
-        vb->txt_data.len -= CI0_ITEM_HAS_FLAG(item) ? (translating ? 0 : !!IS_CI0_SET (CI0_NATIVE_NEXT))
-                                                    : (!!item->separator[0] + !!item->separator[1]);
+        Ltxt -= CI0_ITEM_HAS_FLAG(item) ? (translating ? 0 : !!IS_CI0_SET (CI0_NATIVE_NEXT))
+                                        : (!!item->separator[0] + !!item->separator[1]);
     }
      
     if (is_toplevel)   
@@ -714,10 +716,8 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
             *B16 (ctx->con_len, word_index) = (uint16_t)(st_size + prefixes_len);
     }
 
-    if (out_prefixes) {
-        *out_prefixes = prefixes;
-        *out_prefixes_len = prefixes_len;
-    }
+    if (out_prefixes) 
+        STRset (*out_prefixes, prefixes);
 
     ctx->last_con_wi = word_index;
     return con_p;

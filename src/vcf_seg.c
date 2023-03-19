@@ -76,9 +76,9 @@ bool is_vcf (STRp(header), bool *need_more)
 }
 
 // main thread: writing data-type specific fields to genozip header
-void vcf_zip_genozip_header (SectionHeaderGenozipHeader *header)
+void vcf_zip_genozip_header (SectionHeaderGenozipHeaderP header)
 {
-    header->vcf.segconf_has_RGQ = segconf.has[FORMAT_RGQ] > 0; // introduced in v14
+    header->vcf.segconf_has_RGQ = (segconf.has[FORMAT_RGQ] > 0); // introduced in v14
 }
 
 void vcf_zip_init_vb (VBlockP vb_)
@@ -89,7 +89,7 @@ void vcf_zip_init_vb (VBlockP vb_)
     vb->reject_bytes = MIN_(vb->recon_size, txt_file->reject_bytes);
     txt_file->reject_bytes -= vb->reject_bytes;
 
-    vb->recon_size_luft = vb->txt_data.len; // initial value. it may change if --optimize / --chain are used, or if dual coordintes - for the other coordinate
+    vb->recon_size_luft = Ltxt; // initial value. it may change if --optimize / --chain are used, or if dual coordintes - for the other coordinate
 
     // set vcf_version in VB, since the the vcf_version in vcf_header might change as we might be reading the next txt file
     vb->vcf_version = vcf_header_get_version();
@@ -136,12 +136,12 @@ void vcf_zip_update_txt_counters (VBlockP vb)
         z_file->txt_data_so_far_bind += VB_VCF->recon_size_luft - vb->recon_size; // add recon_size_luft instead of (already added) recon_size
 }
 
-void vcf_zip_set_txt_header_specific (SectionHeaderTxtHeader *txt_header)
+void vcf_zip_set_txt_header_specific (SectionHeaderTxtHeaderP txt_header)
 {
     txt_header->flags.txt_header.is_txt_luft = (txt_file->coords == DC_LUFT);
 }
 
-void vcf_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeader *vb_header)
+void vcf_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeaderP vb_header)
 {
     vb_header->dvcf_recon_size_luft = BGEN32 (VB_VCF->recon_size_luft);
 }
