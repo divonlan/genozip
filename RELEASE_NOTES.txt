@@ -14,6 +14,9 @@ Note on versioning:
 - Reference files: Genozip no longer generates or uses reference cache files (.gcache, .hcache).
 - genozip --vblock option: maximum value is now 1024 (down from 2048)
 
+14.0.33 15/March/2023
+- Incremental improvements and minor bug fixes.
+
 14.0.32 17/Feb/2023
 - FASTQ: Fixed bug in genocat of FASTQ files compressed with --pair which sometimes caused skipping displaying 
   the beginning of the file. The bug was introduced in 14.0.3.

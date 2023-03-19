@@ -1273,6 +1273,8 @@ void ref_load_external_reference (Reference ref, ContextP chrom_ctx)
 
 static void overlay_ranges_on_loaded_genome (Reference ref, RangesType type)
 {
+    uint32_t total_dirty=0; 
+
     // overlay all chromosomes (range[i] goes to chrom_index=i) - note some chroms might not have a contig in 
     // which case their range is not initialized
     for_buf (Range, r, ref->ranges) {
@@ -1300,10 +1302,20 @@ static void overlay_ranges_on_loaded_genome (Reference ref, RangesType type)
 
             bits_overlay (&r->ref, ref->genome, r->gpos*2, nbases*2);
 
+            uint32_t gap = ROUNDUP64(r->gpos + nbases) - (r->gpos + nbases);
+            uint32_t dirty_bits = bits_num_set_bits_region (ref->genome, r->gpos*2 + nbases*2, gap*2);
+            total_dirty += dirty_bits;
+            //if (dirty_bits) printf ("xxx bits after %.*s: %u dirty=%u\n", STRf(r->chrom_name), gap*2, dirty_bits);
+
             if (ref_has_is_set()) 
                 bits_overlay (&r->is_set, ref->genome_is_set, r->gpos, nbases);
         }
     }
+
+    // test for "defect 2023-03-10"
+    ASSERTW (!total_dirty, "WARNING: %s has %u dirty gap bits due to a bug in an earlier version of Genozip. Files compressed with this gcache must also be decompressed with it, and this gcache"
+             " file should never be deleted - it can not be re-created. Contact support@genozip.com for more details.",
+             ref->cache_fn, total_dirty);
 }
 
 static ASCENDING_SORTER (sort_by_vb_i, SectionEnt, vblock_i);
