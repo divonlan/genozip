@@ -208,6 +208,7 @@ finish:
 
 static rom display_binary_cigar (VBlockSAMP vb)
 {
+    buf_free (vb->textual_cigar); // we might destroy needed data, but its ok as this is only called in an error condition
     sam_cigar_binary_to_textual (vb, vb->binary_cigar.len32, B1ST(BamCigarOp, vb->binary_cigar), &vb->textual_cigar);
     return B1STc (vb->textual_cigar);
 }

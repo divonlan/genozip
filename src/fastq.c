@@ -119,24 +119,46 @@ static inline int fastq_is_end_of_line (VBlockP vb, uint32_t first_i, int32_t tx
     return -1; 
 }
 
-// returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
-int32_t fastq_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i /* in/out */)
-{    
-    ASSERT (*i >= 0 && *i < vb->txt_data.len, "*i=%d is out of range [0,%"PRIu64"]", *i, vb->txt_data.len);
-
-    for (; *i >= (int32_t)first_i; (*i)--) {
-        // in FASTQ - an "end of line" is one that the next character is @, or it is the end of the file
-        if (vb->txt_data.data[*i] == '\n')
-            switch (fastq_is_end_of_line (vb, first_i, *i)) {
-                case true  : return vb->txt_data.len-1 - *i; // end of line
-                case false : continue;                       // not end of line, continue searching
-                default    : goto out_of_data;  
-            }
-    }
-
-out_of_data:
-    return -1; // cannot find end-of-line in the data starting first_i
+static inline bool is_valid_read (rom t[4],      // for textual lines
+                                  uint32_t l[4]) // their lengths, excluding \r and \n
+{
+   return l[0] >= 2 && t[0][0] == '@' &&  // DESC line starts with a '@' and is of length at least 2
+          l[1] >= 1 && l[1] == l[3]   && // QUAL and SEQ have the same length, which is at least 1
+          l[2] >= 1 && t[2][0] == '+';   // THIRD line starts with '+'
 }
+
+// returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
+int32_t fastq_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i_out /* in/out */)
+{    
+    ASSERT (*i_out >= 0 && *i_out < vb->txt_data.len32, "*i=%d is out of range [0,%u]", *i_out, vb->txt_data.len32);
+
+    rom nl[8];     // newline pointers: nl[0] is the first from the end
+    uint32_t l[8]; // lengths of segments excluding \n and \r: l[1] is the segment that starts at nl[1]+1 until nl[0]-1 (or nl[0]-2 if there is a \r). l[0] is not used.
+
+    // search backwards for up to 8 newlines (best case: \nD\nS\nT\nQ\n ; worst case: \nD1\nS1\nT1\nQ1\nD2\nS2\nT2\nq2 (q2 is partial Q2))
+    int n=0;
+    for (rom c=Btxt(*i_out), first_c=Btxt(first_i) ; c >= first_c-1/*one beyond*/ && n < 8; c--) 
+        if (c == (first_c-1) || *c == '\n') { // we consider character before the start to also be a "virtual newline"
+            nl[n] = c;
+            if (n) l[n] = ((nl[n-1]) - (nl[n-1][-1] == '\r')) - (nl[n] + 1);
+
+            // 5th+ newline - test for valid read
+            if (n >= 4 && is_valid_read ((rom[]){ nl[n]+1, nl[n-1]+1, nl[n-2]+1, nl[n-3]+1 }, (uint32_t[]){ l[n], l[n-1], l[n-2], l[n-3]})) {
+                *i_out = BNUMtxt (nl[n-4]); // the final newline of this read (everything beyond is "unconsumed" and moved to the next VB) 
+                return BLSTtxt - nl[n-4];   // number of "unconsumed" characters remaining in txt_data after the last \n of this read
+            }
+        
+            n++;
+        }
+
+    ASSINP (n < 8, "Examined 7 textual lines and could not find a valid FASTQ read, it appears that this is not a valid FASTQ file. Data examined:\n%.*s",
+            (int)(nl[0] - nl[7]), nl[7] + 1); // 7 lines and their newlines
+
+    // case: the data provided has less than 8 newlines, and within it we didn't find a read. need more data.
+    *i_out = (int32_t)first_i - 1; // next index to test - one before first_i
+    return -1;
+}
+
 // called by txtfile_read_vblock when reading the 2nd file in a fastq pair - counts the number of fastq "lines" (each being 4 textual lines),
 // comparing to the number of lines in the first file of the pair
 // returns true if we have at least as much as needed, and sets unconsumed_len to the amount of excess characters read
