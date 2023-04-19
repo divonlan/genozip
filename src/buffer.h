@@ -16,11 +16,9 @@
 #include "strings.h"
 #include "endianness.h"
 
-typedef enum __attribute__ ((__packed__)) { // 1 byte 
-    BUF_UNALLOCATED=0, BUF_REGULAR, BUF_OVERLAY, BUF_OVERLAY_RO, BUF_MMAP, BUF_MMAP_RO, BUF_STANDALONE_BITARRAY, BUF_NUM_TYPES 
-} BufferType; // BUF_UNALLOCATED must be 0, must be identical to BitsType
-
-#define BUFTYPE_NAMES { "UNALLOCATED", "REGULAR", "OVERLAY", "MMAP" }
+// Notes: 1 byte. BUF_UNALLOCATED must be 0. all values must be identical to BitsType
+typedef enum __attribute__ ((__packed__)) { BUF_UNALLOCATED=0, BUF_REGULAR, BUF_OVERLAY, BUF_STANDALONE_BITS, BUF_SHM, BUF_NUM_TYPES } BufferType; 
+#define BUFTYPE_NAMES {                        "UNALLOCATED",     "REGULAR",   "OVERLAY",   "STANDALONE_BITS",   "SHM" }
 
 typedef struct Buffer { // 64 bytes
     //------------------------------------------------------------------------------------------------------
@@ -38,9 +36,6 @@ typedef struct Buffer { // 64 bytes
         uint16_t prm16[4];
         uint8_t  prm8 [8];
         void *pointer;
-#ifdef _WIN32
-        void *mmap_handle;     // handle to memory mmaped object, used by BUF_MMAP and BUF_MMAP_RO (Windows)
-#endif        
     };
     union {
         uint64_t len;          // used by the buffer user according to its internal logic. not modified by malloc/realloc, zeroed by buf_free (in Bits - nwords)
@@ -237,15 +232,24 @@ static inline uint64_t BNXT_get_index (BufferP buf, size_t size, FUNCLINE)
     B(type, (buf), (index)+1);                          \
 })
 
-extern bool buf_mmap_do (VBlockP vb, BufferP buf, rom filename, bool read_only_buffer, FUNCLINE, rom name);
-#define buf_mmap(vb, buf, filename, read_only_buffer, name) \
-    buf_mmap_do((VBlockP)(vb), (buf), (filename), (read_only_buffer), __FUNCLINE, (name))
+extern void buf_attach_to_shm_do (VBlockP vb, BufferP buf, void *data, uint64_t size, uint64_t start, FUNCLINE, rom name);
+#define buf_attach_to_shm(vb, buf, data, size, name) \
+    buf_attach_to_shm_do ((VBlockP)(vb), (buf), (data), (size), 0, __FUNCLINE, (name))
 
 extern void buf_free_do (BufferP buf, FUNCLINE);
 #define buf_free(buf) buf_free_do (&(buf), __FUNCLINE)
 
+extern void buf_sort_buffer_list (VBlockP vb); // ahead of destroying
+
 extern void buf_destroy_do (BufferP buf, FUNCLINE);
 #define buf_destroy(buf) buf_destroy_do (&(buf), __FUNCLINE)
+
+extern void buf_destroy_vb_bufs (VBlockP vb);
+extern void buf_destroy_file_bufs (FileP file);
+extern void buf_destroy_by_name (rom name, bool compact_after_destroying);
+
+extern void buf_erase_do (BufferP buf, FUNCLINE);
+#define buf_erase(buf) buf_erase_do (&(buf), __FUNCLINE)
 
 #define buf_is_large_enough(buf_p, requested_size) (buf_is_alloc ((buf_p)) && (buf_p)->size >= requested_size)
 
@@ -333,6 +337,11 @@ static inline unsigned buf_add_hex_as_text (BufferP buf, int64_t n, bool upperca
                                             buf_append_string ((VBlockP)(vb), (buf), __s); })
 #define bufprint0 buf_append_string  // note: the string isn't a printf format, so escaping works differently (eg % doesn't need to be %%)
 
+static inline bool buf_issame (BufferP a, BufferP b, unsigned width)
+{
+    return a->len == b->len && !memcmp (a->data, b->data, a->len * width);
+}
+
 extern void buf_print (BufferP buf, bool add_newline);
 
 extern void buf_verify (ConstBufferP buf, rom msg);
@@ -391,7 +400,7 @@ extern BitsP buf_overlay_bitarr_do (VBlockP vb, BufferP overlaid_buf, BufferP re
 #define buf_overlay_bitarr(vb, overlaid_buf, regular_buf, start_byte_in_regular_buf, nbits, name) \
     buf_overlay_bitarr_do((VBlockP)(vb), (overlaid_buf), (regular_buf), (start_byte_in_regular_buf), (nbits), __FUNCLINE, (name))
 
-#define buf_set_overlayable(buf) (buf)->overlayable = true
+#define buf_set_overlayable(buf) /*xxx ({ if ((buf)->type == BUF_REGULAR) (buf)->overlayable = true; })*/
 
 extern void buf_overlay_do (VBlockP vb, BufferP overlaid_buf, BufferP regular_buf,  uint64_t start_in_regular,  
                             FUNCLINE, rom name);
@@ -407,7 +416,7 @@ extern BitsP buf_zfile_buf_to_bitarray (BufferP buf, uint64_t nbits);
 #define buf_add_set_bit(buf)   buf_add_bit (buf, 1)
 #define buf_add_clear_bit(buf) buf_add_bit (buf, 0)
 
-#define buf_get_buffer_from_bits(bitarr) ((BufferP)(bitarr))
+#define buf_get_buffer_from_bits(bits) ((BufferP)(bits))
 
 extern char *buf_display (ConstBufferP buf);
 

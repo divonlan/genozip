@@ -30,7 +30,7 @@ typedef struct Mutex {
 } Mutex;
 
 extern void mutex_initialize_do (MutexP mutex, rom name, rom func);
-#define mutex_initialize(mutex)    mutex_initialize_do (&(mutex), #mutex, __FUNCTION__)
+#define mutex_initialize(mutex) mutex_initialize_do (&(mutex), #mutex, __FUNCTION__)
 
 extern void mutex_destroy_do (MutexP mutex, rom func);
 #define mutex_destroy(mutex) mutex_destroy_do (&(mutex), __FUNCTION__)
@@ -40,7 +40,7 @@ extern bool mutex_lock_do (MutexP mutex, bool blocking, FUNCLINE);
 #define mutex_trylock(mutex) mutex_lock_do (&(mutex), false, __FUNCLINE)
 
 extern void mutex_unlock_do (MutexP mutex, FUNCLINE);
-#define mutex_unlock(mutex)    mutex_unlock_do (&(mutex), __FUNCLINE)
+#define mutex_unlock(mutex) mutex_unlock_do (&(mutex), __FUNCLINE)
 
 extern bool mutex_wait_do (MutexP mutex, bool blocking, FUNCLINE);
 #define mutex_wait(mutex, blocking) mutex_wait_do (&(mutex), (blocking), __FUNCLINE)

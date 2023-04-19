@@ -38,7 +38,7 @@ uint32_t deep_seq_hash (VBlockP vb, STRp(seq), bool is_revcomp)
     }
 
     uint32_t hash = crc32 (0, seq, seq_len);
-    
+
     if (is_revcomp && seq_len > MAX_AUTO_READ_LEN)
         buf_free (vb->scratch);
 

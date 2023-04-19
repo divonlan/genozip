@@ -46,20 +46,22 @@ extern void zfile_output_processed_vb (VBlockP vb);
 
 extern bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP header);
 
-extern SectionHeaderUnion zfile_read_section_header (VBlockP vb, uint64_t offset, uint32_t original_vb_i, SectionType expected_sec_type);
+extern SectionHeaderUnion zfile_read_section_header_do (VBlockP vb, Section sec, SectionType expected_sec_type, FUNCLINE);
+#define zfile_read_section_header(vb, sec, expected_sec_type) \
+    zfile_read_section_header_do ((VBlockP)(vb), (sec), (expected_sec_type), __FUNCLINE)
 
 #define SECTION_SKIPPED ((int32_t)-1)
 extern int32_t zfile_read_section_do (FileP file, VBlockP vb, uint32_t original_vb_i, 
                                       BufferP data /* buffer to append */, rom buf_name,
                                       SectionType expected_sec_type, 
-                                      Section sl, uint32_t header_size, FUNCLINE); 
+                                      Section sl, FUNCLINE); 
 #define zfile_read_section(file,vb,original_vb_i,data,buf_name,expected_sec_type,sl) \
-    zfile_read_section_do ((file),(VBlockP)(vb),(original_vb_i),(data),(buf_name),(expected_sec_type),(sl), st_header_size (expected_sec_type), __FUNCLINE)
+    zfile_read_section_do ((file),(VBlockP)(vb),(original_vb_i),(data),(buf_name),(expected_sec_type),(sl), __FUNCLINE)
 
 extern void zfile_uncompress_section (VBlockP vb, SectionHeaderUnionP section_header, BufferP uncompressed_data, rom uncompressed_data_buf_name, uint32_t expected_vb_i, SectionType expected_section_type);
 extern void zfile_uncompress_section_into_buf (VBlockP vb, SectionHeaderUnionP section_header_p, uint32_t expected_vb_i, SectionType expected_section_type, BufferP dst_buf, char *dst);
 
-#define zfile_get_global_section(HeaderType, sec,out_buf,out_buf_name) \
+#define zfile_get_global_section(HeaderType, sec, out_buf, out_buf_name) \
     bool skipped = (SECTION_SKIPPED == zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", (sec)->st, (sec))); \
     if (!skipped && (!flag.only_headers || (sec)->st == SEC_RANDOM_ACCESS)) \
         zfile_uncompress_section (evb, B1ST(SectionHeader, evb->z_data), (out_buf), (out_buf_name), 0, (sec)->st); \

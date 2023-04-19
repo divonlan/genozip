@@ -11,7 +11,6 @@
 #include "genozip.h"
 #include "digest.h"
 
-extern rom txtfile_piz_get_filename (rom orig_name, rom prefix, bool is_orig_name_genozip);
 extern rom txtfile_dump_vb (VBlockP vb, rom base_name);
 extern void txtfile_read_header (bool is_first_txt);
 

@@ -27,11 +27,6 @@ extern bool dict_id_is_in (DictId dict_id, ...);
 
 #define DICT_ID_NONE ((DictId)(uint64_t)0)
 
-// Aliases
-typedef struct { DictId alias, dst; } DictIdAlias;
-extern void dict_id_compress_aliases (void);
-extern BufferP dict_id_read_aliases (void) ;
-
 // template can be 0 - anything OR a type - must 2 MSb of id[0] are used OR a specific dict_id
 // candidate is a specific dict_id that we test for its matching of the template
 extern bool dict_id_is_match (DictId template, DictId candidate);

@@ -136,6 +136,7 @@ void sam_seg_bsseeker2_XG_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XG)
     if (!range) FAIL("no_range"); // either hash contention in REF_INTERNAL or this chromosome is missing in the reference file 
     if (range->last_pos < after_pos-1) FAIL("multi_range"); // sequence spans two ranges - can only happen in REF_INTERNAL
 
+    decl_acgt_decode;
     for (PosType32 pos = start_pos ; pos < after_pos; pos++, xg++) {
         uint32_t pos_index = pos - range->first_pos; // index within range
 
@@ -189,6 +190,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_BSSEEKER2_XG)
 {
     VBlockSAMP vb = (VBlockSAMP)vb_;
     if (!reconstruct) goto done;
+    decl_acgt_decode;
 
     // case: XG already reconstructed in sam_piz_special_BSSEEKER2_XM and held in vb->XM
     if (vb->XG.len) { // note: XG.len is initialized for every line in sam_reset_line
@@ -346,7 +348,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_BSSEEKER2_XM)
     xg_len = vb->XG.len;
     int32_t xg_i=0;
 
-    rom seq = IS_RECON_BAM ? vb->textual_seq.data : last_txt(VB, SAM_SQBITMAP);
+    rom seq = OUT_DT(BAM) ? vb->textual_seq.data : last_txt(VB, SAM_SQBITMAP);
     char *recon = BAFTtxt;
     ARRAY (BamCigarOp, cigar, vb->binary_cigar);
     int op_i = (!XG_inc_S && cigar[0].op == BC_S);

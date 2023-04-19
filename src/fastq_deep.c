@@ -19,6 +19,10 @@
 // ZIP
 //----------------
 
+void fastq_deep_zip_initialize (void)
+{
+}
+
 void fastq_deep_zip_after_compute (VBlockFASTQP vb)
 {
     for (int i=0; i < NUM_DEEP_STATS; i++)
@@ -27,10 +31,16 @@ void fastq_deep_zip_after_compute (VBlockFASTQP vb)
 
 void fastq_deep_seg_initialize (VBlockFASTQP vb)
 {
-    // all-the-same for FASTQ_DEEP
-    seg_by_did (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_set_deep }, 2, FASTQ_DEEP, 0);
-    ctx_set_ltype (VB, LT_DYN_INT, FASTQ_DEEP, DID_EOL);
     ctx_set_store (VB, STORE_INT, FASTQ_DEEP, DID_EOL); // actually, we store a pointer into one of the Buffers in z_file->deep_ents, but we treat it as an int
+    ctx_set_ltype (VB, LT_DYN_INT, FASTQ_DEEP, DID_EOL); 
+
+    if (flag.pair == PAIR_R1 || flag.pair == NOT_PAIRED_END) 
+        seg_by_did (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_set_deep, '0' }, 3, FASTQ_DEEP, 0);  // all-the-same for FASTQ_DEEP
+
+    else { // pair-2
+        ctx_set_ltype (VB, LT_INT8, FASTQ_DEEP_DELTA, DID_EOL); 
+        ctx_consolidate_stats (VB, FASTQ_DEEP, FASTQ_DEEP_DELTA, DID_EOL);
+    }
 }
 
 void fastq_zip_deep_show_entries_stats (void) 
@@ -113,7 +123,7 @@ void fastq_deep_seg_finalize_segconf (uint32_t n_lines)
     unsigned n_mch = n_lines - segconf.n_no_mch; // exclude lines that don't match any SAM line - perhaps they were filtered out and excluded from the SAM file 
     unsigned threashold = MAX_(n_mch/2, 1);      // at least half of the lines need this level of matching
 
-    // test: at least have of the reads (excluding reads that had no matching SEQ in the SAM) have a matching QNAME
+    // test: at least half of the reads (excluding reads that had no matching SEQ in the SAM) have a matching QNAME
     if (segconf.n_seq_qname_mch + segconf.n_full_mch < threashold) 
         segconf.deep_no_qname= true;
 
@@ -166,8 +176,8 @@ static void fastq_deep_seg_segconf (VBlockFASTQP vb, STRp(qname), STRp(seq), STR
     else                        segconf.n_no_mch++;        // no match - likely bc this read was filtered out in the SAM file
 }
 
-static inline int64_t fastq_seg_deep_consume_unique_matching_ent (VBlockFASTQP vb, ZipZDeep *ent, DeepHash deep_hash,
-                                                                  STRp(qname), STRp(seq), STRp(qual)) 
+static inline uint64_t fastq_seg_deep_consume_unique_matching_ent (VBlockFASTQP vb, ZipZDeep *ent, DeepHash deep_hash,
+                                                                   STRp(qname), STRp(seq), STRp(qual)) 
 {
     // copy current place (other threads might consume it in the mean time)
     union ZipZDeepPlace sam_place = { .place = ent->place };
@@ -180,7 +190,7 @@ static inline int64_t fastq_seg_deep_consume_unique_matching_ent (VBlockFASTQP v
 
     union ZipZDeepPlace my_place = { .consumed = true,
                                      .vb_i     = vb->vblock_i,
-                                     .line_i   = vb->line_i  };
+                                     .line_i   = vb->line_i };
 
     // consume: atomicly set and verify that no other thread beat us to it. note: we will NOT modify if already consumed.
     bool i_consumed = __atomic_compare_exchange_n (&ent->place,      // set value at this pointer
@@ -197,7 +207,16 @@ static inline int64_t fastq_seg_deep_consume_unique_matching_ent (VBlockFASTQP v
 
     // translate vb_i/line_i to a single, 0-based, file-wide number. This is a sequential counter of deepable lines - 
     // i.e. that are not SUPP/SEC, not monochar, and SEQ.len>0
-    uint64_t txt_deep_line_i = *B64(z_file->vb_start_deep_line, sam_place.vb_i) + sam_place.line_i; // note: in ZIP, vb_start_deep_line is indexed by vb_i
+
+    // MAX is max_uint64-1 bc we +1 this number before storing it. note: uint64_t despite DYN_INT limited to int64: we will interpret the number as uint
+    #define MAX_DEEP_LINE (uint64_t)0xfffffffffffffffeULL  
+    uint64_t vb_start_deep_line = *B64(z_file->vb_start_deep_line, sam_place.vb_i);
+    uint64_t txt_deep_line_i = vb_start_deep_line + sam_place.line_i; // note: in ZIP, vb_start_deep_line is indexed by vb_i
+
+    ASSERT (vb_start_deep_line <= MAX_DEEP_LINE && txt_deep_line_i <= MAX_DEEP_LINE &&
+            txt_deep_line_i >= vb_start_deep_line, // txt_deep_line_i didn't overflow beyond the MAX of uint64_t
+            "txt_deep_line_i=%"PRIu64" beyond MAX_DEEP_LINE=%"PRIu64": vb_start_deep_line=%"PRIu64" sam_place.line_i=%u", 
+            txt_deep_line_i, MAX_DEEP_LINE, vb_start_deep_line, sam_place.line_i);
 
     return txt_deep_line_i;
 
@@ -219,9 +238,26 @@ ent_consumed_by_another_thread:
     return 0;
 }
 
+static int64_t fastq_get_pair_deep_value (VBlockFASTQP vb, ContextP ctx)
+{
+    ASSERT (ctx->localR1.next < ctx->localR1.len32, "%s: not enough data DEEP.localR1 (len=%u)", LN_NAME, ctx->localR1.len32); 
+
+    switch (ctx->pair_ltype) {
+        case LT_INT64:  // note: if UINT64 will appear as INT64 is it was DYN_INT. we treat it as UINT64.
+        case LT_UINT64: return *B64(ctx->localR1, ctx->localR1.next++); 
+        case LT_UINT32: return *B32(ctx->localR1, ctx->localR1.next++); 
+        case LT_UINT16: return *B16(ctx->localR1, ctx->localR1.next++); 
+        case LT_UINT8:  return *B8 (ctx->localR1, ctx->localR1.next++); 
+        default:   
+            ABORT_R ("Unexpected pair_ltype=%u", ctx->pair_ltype);
+    }
+}
+
 void fastq_seg_deep (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qname), STRp(seq), STRp(qual), 
                      bool *deep_desc, bool *deep_seq, bool *deep_qual) // out - set to true, or left unchanged
 {
+    decl_ctx (FASTQ_DEEP);
+
     ARRAY (uint32_t, hash_table, z_file->deep_hash);
     ARRAY (ZipZDeep, deep_ents, z_file->deep_ents);
 
@@ -294,10 +330,9 @@ void fastq_seg_deep (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qname), STRp(se
     }
 
     // single match ent
+    uint64_t deep_value;
     if (matching_ent) {
-        int64_t txt_deep_line_i = fastq_seg_deep_consume_unique_matching_ent (vb, matching_ent, deep_hash, STRa(qname), STRa(seq), STRa(qual));
-        seg_add_to_local_resizable (VB, CTX(FASTQ_DEEP), 1 + txt_deep_line_i, 0); // +1 as 0 means "no match"
-
+        deep_value = 1 + fastq_seg_deep_consume_unique_matching_ent (vb, matching_ent, deep_hash, STRa(qname), STRa(seq), STRa(qual)); // +1 as 0 means "no match"
         vb->deep_stats[NDP_DEEPABLE]++;
     }
 
@@ -318,8 +353,29 @@ void fastq_seg_deep (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qname), STRp(se
         }
 
         no_match: 
-        seg_add_to_local_resizable (VB, CTX(FASTQ_DEEP), 0, 0);
+        deep_value = 0;
         *deep_seq = *deep_qual = *deep_desc = false; // reset
+    }
+
+    if (flag.pair == NOT_PAIRED_END || flag.pair == PAIR_R1)
+        seg_add_to_local_resizable (VB, ctx, deep_value, 0);
+
+    else { // PAIR_R2
+        uint64_t pair_1_deep_value = fastq_get_pair_deep_value (vb, ctx); // consume whether or not used
+
+        // delta carefully to avoid overflow if values are large uint64's
+        uint64_t abs_delta = (pair_1_deep_value > deep_value) ? (pair_1_deep_value - deep_value)
+                                                              : (deep_value - pair_1_deep_value);                                       
+        if (abs_delta > 127) { 
+            seg_add_to_local_resizable (VB, ctx, deep_value, 0);
+            seg_by_did (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_set_deep, '0' }, 3, FASTQ_DEEP, 0);
+        }   
+
+        else {
+            int8_t delta8 = (pair_1_deep_value > deep_value) ? -(int8_t)abs_delta : (int8_t)abs_delta;
+            seg_integer_fixed (VB, CTX(FASTQ_DEEP_DELTA), &delta8, false, 0);
+            seg_by_did (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_set_deep, '1' }, 3, FASTQ_DEEP, 0);
+        }
     }
 }
 
@@ -364,11 +420,26 @@ static void txt_line_to_vb_line (uint64_t txt_deepable_line_i,
         txt_line_to_vb_line (txt_deepable_line_i, mid_vb_idx+1, last_vb_idx, vb_idx, vb_deepable_line_i);
 }
 
-SPECIAL_RECONSTRUCTOR (fastq_special_set_deep)
+SPECIAL_RECONSTRUCTOR_DT (fastq_special_set_deep)
 {
-    ASSERTNOTEMPTY (z_file->vb_start_deep_line);
-    uint64_t txt_deepable_line_i = reconstruct_from_local_int (vb, ctx, 0, RECON_OFF);
+    START_TIMER;
 
+    VBlockFASTQP vb = (VBlockFASTQP)vb_;
+
+    ASSERTNOTEMPTY (z_file->vb_start_deep_line);
+    uint64_t txt_deepable_line_i;
+
+    uint64_t pair_1_deep_value = vb->pair_vb_i ? fastq_get_pair_deep_value (vb, ctx) : 0; // consume whether or not used
+
+    if (snip[0] == '0') // no delta
+        txt_deepable_line_i = reconstruct_from_local_int (VB, ctx, 0, RECON_OFF);
+
+    else {
+        int8_t delta = reconstruct_from_local_int (VB, CTX(FASTQ_DEEP_DELTA), 0, RECON_OFF);
+
+        txt_deepable_line_i = (delta > 0) ? (pair_1_deep_value + delta) : (pair_1_deep_value - (-delta)); // careful with type coverstions and very large uint64 overflow 
+    }
+    
     // case: this FQ line doesn't match any SAM line - txt_deepable_line_i==0 and we didn't seg against it
     if (!txt_deepable_line_i)
         return NO_NEW_VALUE;
@@ -388,16 +459,21 @@ SPECIAL_RECONSTRUCTOR (fastq_special_set_deep)
 
     new_value->p = B8 (*deep_ents, ents_index);
 
+    COPY_TIMER (fastq_special_set_deep);
     return HAS_NEW_VALUE; 
 }
 
 SPECIAL_RECONSTRUCTOR (fastq_special_deep_copy_QNAME)
 {
+    START_TIMER;
+
     uint8_t *deep_ent = CTX(FASTQ_DEEP)->last_value.p;
 
     PizZDeepFlags f = *(PizZDeepFlags *)deep_ent;
     int qname_len = deep_ent[1];
     int prfx_len  = deep_ent[2];
+    ASSPIZ (qname_len >= prfx_len, "Expecting qname_len=%d >= prfx_len=%d", qname_len, prfx_len);
+
     STRli (suffix, qname_len - prfx_len);
 
     RECONSTRUCT (z_file->master_qname, prfx_len);
@@ -416,11 +492,14 @@ SPECIAL_RECONSTRUCTOR (fastq_special_deep_copy_QNAME)
     // update qual_len to be entire amount of data consumed - inc "prfx_len" and compressed (or not) suffix
     deep_ent[1] = 1/*prfx_len*/ + (f.is_qname_comp ? comp_len : suffix_len);
 
+    COPY_TIMER (fastq_special_deep_copy_QNAME);
     return NO_NEW_VALUE;    
 }
 
 SPECIAL_RECONSTRUCTOR (fastq_special_deep_copy_SEQ)
 {
+    START_TIMER;
+
     if (!reconstruct) return NO_NEW_VALUE;
 
     uint8_t *deep_ent = CTX(FASTQ_DEEP)->last_value.p;
@@ -469,7 +548,7 @@ SPECIAL_RECONSTRUCTOR (fastq_special_deep_copy_SEQ)
     }
 
     else { // ZDEEP_SEQ_PERFECT, ZDEEP_SEQ_PERFECT_REV, ZDEEP_SEQ_MIS_1, ZDEEP_SEQ_MIS_1_REV      
-        PizDeepSeq ds = *(PizDeepSeq *)deep_ent; // not nessesarily aligned, but I think its ok, since this is just a memcpy, not loading integers
+        PizDeepSeq ds = *(PizDeepSeq *)deep_ent; // not nessesarily word-aligned, but I think its ok, since this is just a memcpy, not loading integers
         deep_ent += (ENCODING(PERFECT) || ENCODING(PERFECT_REV)) ? 4 : 6;
 
         const Bits *genome=NULL;
@@ -478,6 +557,7 @@ SPECIAL_RECONSTRUCTOR (fastq_special_deep_copy_SEQ)
         BASE_ITER_INIT (genome, ds.gpos, vb->seq_len, (ENCODING(PERFECT) || ENCODING(MIS_1)));
 
         char *next = BAFTtxt;
+        decl_acgt_decode;
         for (uint32_t i=0; i < vb->seq_len; i++) 
             *next++ = acgt_decode(BASE_NEXT);                    
 
@@ -490,11 +570,18 @@ SPECIAL_RECONSTRUCTOR (fastq_special_deep_copy_SEQ)
 
     Ltxt += vb->seq_len;
 
+    // case we are pair-2: advance pair-1 SQBITMAP iterator, and if pair-1 is aligned - also its GPOS iterator
+    if (VB_FASTQ->pair_vb_i/*we are R2*/ && fastq_piz_R1_test_aligned (VB_FASTQ))
+        CTX(FASTQ_GPOS)->localR1.next++; // gpos_ctx->localR1.next is an iterator for both gpos and strand
+
+    COPY_TIMER (fastq_special_deep_copy_SEQ);
     return NO_NEW_VALUE;    
 }
 
 SPECIAL_RECONSTRUCTOR (fastq_special_deep_copy_QUAL)
 {
+    START_TIMER;
+
     if (!reconstruct) return NO_NEW_VALUE;
 
     uint8_t *deep_ent = CTX(FASTQ_DEEP)->last_value.p;
@@ -528,5 +615,6 @@ SPECIAL_RECONSTRUCTOR (fastq_special_deep_copy_QUAL)
 
     Ltxt += out_len;
 
+    COPY_TIMER (fastq_special_deep_copy_QUAL);
     return NO_NEW_VALUE;
 }

@@ -46,7 +46,7 @@ extern void seg_lookup_with_length (VBlockP vb, ContextP ctx, int32_t length, un
 extern bool seg_integer_or_not (VBlockP vb, ContextP ctx, STRp(this_value), unsigned add_bytes); // segs integer in local if possible
 extern bool seg_integer_or_not_cb (VBlockP vb, ContextP ctx, STRp(int_str), uint32_t repeat);
 extern bool seg_float_or_not (VBlockP vb, ContextP ctx, STRp(this_value), unsigned add_bytes);
-extern void seg_numeric_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned field_width, unsigned add_bytes);
+extern void seg_numeric_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_bytes);
 
 #define MAX_POS_DELTA   16384  // the max delta (in either direction) that we will put in a dictionary - above this it goes to local. This number can be changed at any time without affecting backward compatability - it is used only by ZIP, not PIZ
 #define SPF_BAD_SNIPS_TOO   1  // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it

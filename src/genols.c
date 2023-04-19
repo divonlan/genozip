@@ -103,7 +103,7 @@ void genols (rom z_filename, bool finalize, rom subdir, bool recursive)
 
     bool is_subdir = subdir && (subdir[0] != '.' || subdir[1] != '\0');
 
-    z_file = file_open (z_filename, READ, Z_FILE, 0); // open global z_file
+    z_file = file_open_z_read (z_filename); // open global z_file
 
     SectionHeaderGenozipHeader header;
     if (!zfile_read_genozip_header (&header))
@@ -114,12 +114,12 @@ void genols (rom z_filename, bool finalize, rom subdir, bool recursive)
     if (Z_DT(REF))
         digest = header.genome_digest;
     
-    else if (header.genozip_version <= 13 && Z_DT(FASTQ) && z_file->z_flags.dts_paired)
+    else if (header.genozip_version <= 13 && Z_DT(FASTQ) && z_file->z_flags.v14_dts_paired)
         digest = header.FASTQ_v13_digest_bound;
 
-    else if (!(Z_DT(FASTQ) && z_file->z_flags.dts_paired) // digest for bound fastqs will be shown only with --list 
+    else if (!sections_is_paired() && !z_file->z_flags.dts2_deep // digest for paired FASTQs and Deep will be shown only with --list 
         && (txt_header_sec = sections_first_sec (SEC_TXT_HEADER, SOFT_FAIL))) 
-        digest = zfile_read_section_header (evb, txt_header_sec->offset, txt_header_sec->vblock_i, SEC_TXT_HEADER).txt_header.digest;
+        digest = zfile_read_section_header (evb, txt_header_sec, SEC_TXT_HEADER).txt_header.digest;
 
     float ratio = z_file->disk_size ? ((float)z_file->txt_data_so_far_bind / (float)z_file->disk_size) : 0;
     
@@ -152,7 +152,7 @@ void genols (rom z_filename, bool finalize, rom subdir, bool recursive)
         Section sl_ent = NULL;
         uint64_t num_lines_count=0;
         while (sections_next_sec (&sl_ent, SEC_TXT_HEADER)) {
-            SectionHeaderTxtHeader header = zfile_read_section_header (evb, sl_ent->offset, sl_ent->vblock_i, SEC_TXT_HEADER).txt_header;
+            SectionHeaderTxtHeader header = zfile_read_section_header (evb, sl_ent, SEC_TXT_HEADER).txt_header;
 
             num_lines_count += BGEN64 (header.txt_num_lines);
             bufprintf (evb, &str_buf, item_format, "", str_int_commas (BGEN64 (header.txt_num_lines)).s, "", 

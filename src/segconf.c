@@ -20,6 +20,7 @@
 #include "tip.h"
 
 SegConf segconf = {}; // system-wide global
+VBlockP segconf_vb = NULL;
 
 // figure out if file is sorted or not
 void segconf_test_sorted (VBlockP vb, WordIndex prev_line_chrom, PosType32 pos, PosType32 prev_line_pos)
@@ -138,7 +139,7 @@ static void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
 
             // in case of drastic reduction of large-sample VCF file, provide tip
             if (vcf_samples > 10 && new_vb_size < segconf.vb_size / 2) 
-                TIP0 ("Tip: using --best can significantly improve compression for this particular file");
+                TIP0 ("Using --best can significantly improve compression for this particular file");
 
             segconf.vb_size = MIN_(segconf.vb_size, new_vb_size);
         }
@@ -180,13 +181,13 @@ static void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
 bool segconf_is_long_reads(void) 
 { 
     return TECH(PACBIO) || TECH(ONP) || 
-           segconf.longest_seq_len > 2000 ||
+           segconf.longest_seq_len > MAX_SHORT_READ_LEN ||
            flag.debug_LONG;
 }
 
 static bool segconf_no_calculate (void)
 {
-    return (Z_DT(FASTQ) && flag.pair == PAIR_READ_2) || // FASTQ: no recalculating for 2nd pair 
+    return (Z_DT(FASTQ) && flag.pair == PAIR_R2) || // FASTQ: no recalculating for 2nd pair 
            ((Z_DT(SAM) || Z_DT(BAM)) && flag.deep && flag.zip_comp_i >= SAM_COMP_FQ01); // --deep: no recalculating for second (or more) FASTQ file
 }
 
@@ -252,7 +253,8 @@ void segconf_calculate (void)
     segconf.running = true;
 
     uint64_t save_vb_size = segconf.vb_size;
-    VBlockP vb = vb_initialize_nonpool_vb (VB_ID_SEGCONF, txt_file->data_type, "segconf");
+    segconf_vb = vb_initialize_nonpool_vb (VB_ID_SEGCONF, txt_file->data_type, "segconf");
+    #define vb segconf_vb
 
     // note: in case of BZ2, needs to be big enough to overcome the block nature of BZ2 (64K block -> 200-800K text) to get a reasonable size estimate
     uint32_t vb_sizes[] = { 300000, 1500000, 5000000 };
@@ -333,6 +335,7 @@ done:
     // restore (used for --optimize-DESC / --add-line-numbers)
     txt_file->num_lines = 0;
     segconf.running = false;
+    #undef vb
 }
 
 void segconf_update_qual (STRp (qual))

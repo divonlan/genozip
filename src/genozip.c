@@ -42,9 +42,10 @@
 #include "gencomp.h"
 #include "chrom.h"
 
-// globals - set it main() and never change
+// globals - set in main() and immutable thereafter
 char global_cmd[256]; 
 ExeType exe_type;
+unsigned n_files; // number of input files in the execution
 
 // primary_command vs command: primary_command is what the user typed on the command line. command is what is 
 // running now - for example, when ZIP is unzipping a reference, primary_command=ZIP and command=PIZ
@@ -79,10 +80,8 @@ void main_exit (bool show_stack, bool is_error)
     if (!is_error) {
         version_print_notice_if_has_newer();
 
-        if (flag.show_time && !flag.show_time[0]) { // show-time without the optional parameter 
-            profiler_add (evb);
-            profiler_print_report();
-        }
+        if (flag.show_time_comp_i == COMP_ALL && !flag.show_time[0])  // show-time without the optional parameter 
+            profiler_add_evb_and_print_report();
 
         else if (IS_ZIP || flag.check_latest/*PIZ - test after compress*/)
             tip_print();
@@ -104,7 +103,7 @@ void main_exit (bool show_stack, bool is_error)
     if (is_error) {
         close (1);   // prevent other threads from outputting to terminal (including buffered output), obscuring our error message
         close (2);
-        url_kill_curl();  /* <--- BREAKPOINT BRK */
+        url_kill_curl (NULL);  /* <--- BREAKPOINT BRK */
         file_kill_external_compressors(); 
     
         // cancel all other threads before closing z_file, so other threads don't attempt to access it 
@@ -140,7 +139,7 @@ void main_exit (bool show_stack, bool is_error)
     // we normally intentionally leak the VBs at process termination, but if we're running valgrind we free so to not display intentional leaks
     if (arch_is_valgrind()) {
         ref_finalize();
-        refhash_destroy (true);
+        refhash_destroy();
         kraken_destroy();
         chain_destroy();
         vb_destroy_pool_vbs (POOL_MAIN);
@@ -192,10 +191,10 @@ static void main_print_version()
     iprintf ("version=%s distribution=%s\n", GENOZIP_CODE_VERSION, arch_get_distribution());  
 }
 
-static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, unsigned n_z_files, bool is_last_z_file)
+static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool is_last_z_file)
 {
-    if (n_z_files > 1) MAIN ("main_genounzip (%u/%u): %s", z_file_i+1, n_z_files, z_filename);
-    else               MAIN ("main_genounzip: %s", z_filename);
+    if (n_files > 1) MAIN ("main_genounzip (%u/%u): %s", z_file_i+1, n_files, z_filename);
+    else             MAIN ("main_genounzip: %s", z_filename);
 
     // save flag as it might be modified - so that next file has the same flags
     SAVE_FLAGS;
@@ -212,7 +211,7 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, unsi
     ASSINP (!txt_filename || !url_is_url (txt_filename), 
             "output files must be regular files, they cannot be a URL: %s", txt_filename);
 
-    z_file = file_open (z_filename, READ, Z_FILE, DT_NONE);    
+    z_file = file_open_z_read (z_filename);    
 
     if (flag.validate) {
         file_close (&z_file, false, false);
@@ -224,12 +223,12 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, unsi
     // 2) if an external reference is not specified, check if the file needs one, and if it does - set it from the header
     // 3) identify skip cases (DT_NONE returned) - empty file, unzip of a reference
     // 4) reset flag.unbind if file contains only one component
-    TEMP_FLAG (genocat_no_reconstruct, true); // so zfile_read_genozip_header doesn't fail on a reference file before flags_update_piz_one_file is run
+    TEMP_FLAG (genocat_no_reconstruct, true); // so zfile_read_genozip_header doesn't fail on a reference file before flags_update_piz_one_z_file is run
     if (!z_file->file || !zfile_read_genozip_header (0)) goto done; 
     RESTORE_FLAG(genocat_no_reconstruct);
 
     // case: reference not loaded yet bc --reference wasn't specified, and we got the ref name from zfile_read_genozip_header()   
-    if (IS_REF_EXTERNAL && !ref_is_external_loaded(gref)) {
+    if (IS_REF_EXTERNAL && !flag.genocat_no_ref_file && !ref_is_external_loaded(gref)) {
         ASSINP0 (!IS_REF_EXTERNAL || !flag.show_ref_seq, "--show-ref-seq cannot be used on a file that requires a reference file: use genocat --show-ref-seq on the reference file itself instead");
 
         if (!flag.genocat_no_reconstruct || 
@@ -240,29 +239,8 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, unsi
         }
     }
 
-    flags_update_piz_one_file (z_file_i);
+    flags_update_piz_one_z_file (z_file_i); // must be before piz_z_file_initialize
    
-    // set txt_filename from genozip file name (inc. extensions if translating or --bgzf)
-    bool txt_filename_alloced = false; 
-    if (!txt_filename && !flag.to_stdout && !flag.unbind) { 
-        txt_filename = txtfile_piz_get_filename (z_filename, "", true);
-        txt_filename_alloced = true;
-    }
-
-    // open output txt file (except if unbinding - see comment below)
-    // note: we need the txt_file object for recontructing, even if not writing (the disk file won't be opened if flag.no_writer)
-    if ((txt_filename && !flag.unbind) || (flag.to_stdout && !flag.genocat_no_reconstruct)) {
-        ASSERT0 (!txt_file, "txt_file is unexpectedly already open"); // note: in bound mode, we expect it to be open for 2nd+ file
-        txt_file = file_open (txt_filename, WRITE, TXT_FILE, flag.out_dt);
-    }
-    else if (flag.unbind || flag.no_writer || (txt_filename && flag.one_component >= 2)) {
-        // do nothing - in unbind, the component files will be opened by txtheader_piz_read_and_reconstruct()
-    }
-    else 
-        ABORT0 ("Error: unrecognized configuration for the txt_file");
-
-    if (txt_filename_alloced) FREE (txt_filename); // name copied by file_open
-
     Dispatcher dispatcher = piz_z_file_initialize();  
 
     // generate txt_file(s)
@@ -270,30 +248,24 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, unsi
 
         piz_set_main_dispatcher (dispatcher);
         
-        if (!flag.unbind) {    // single txt_file
-            piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, COMP_NONE, COMP_NONE);
-            file_close (&txt_file, flag.index_txt, !is_last_z_file); 
+        if (flag.interleaved && Z_DT(FASTQ))
+            piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, FQ_COMP_R1, FQ_COMP_R2, true);
+        
+        else if (!flag.unbind)  // single txt_file
+            piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, COMP_NONE, COMP_NONE, true);
+
+        else if (Z_DT(FASTQ)) { // paired FASTQ
+            piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, FQ_COMP_R1, FQ_COMP_R1, false);
+            piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, FQ_COMP_R2, FQ_COMP_R2, true);
         }
 
-        else if (Z_DT(FASTQ))  // paired FASTQ
-            for (CompIType comp_i=FQ_COMP_R1; comp_i <= FQ_COMP_R2; comp_i++) {
-                piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, comp_i, comp_i);
-                file_close (&txt_file, flag.index_txt, comp_i==FQ_COMP_R1 || !is_last_z_file); 
-            }
+        else if (Z_DT(SAM) && flag.deep) {   // Deep: one SAM/BAM and one or more FASTQ
+            piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, SAM_COMP_MAIN, SAM_COMP_DEPN, false);
 
-        else if (Z_DT(SAM) && flag.deep)    // Deep: one SAM/BAM and one or more FASTQ
-            for (CompIType comp_i=SAM_COMP_MAIN; comp_i < z_file->num_txt_files + 2; comp_i++) {
-                if (comp_i==SAM_COMP_MAIN) {
-                    piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, SAM_COMP_MAIN, SAM_COMP_DEPN);
-                    comp_i += 2;
-                }
-                else {
-                    flag.out_dt = DT_FASTQ;
-                    piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, comp_i, comp_i);
-                }
-
-                file_close (&txt_file, flag.index_txt, comp_i < z_file->num_txt_files + 1 || !is_last_z_file); // skip cleanup in final component, except if there are more z_files
-            }
+            flag.out_dt = DT_FASTQ;
+            for (CompIType comp_i=SAM_COMP_FQ00; comp_i < z_file->num_txt_files + 2; comp_i++) 
+                piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, comp_i, comp_i, comp_i == z_file->num_txt_files + 1);
+        }
 
         else
             ABORT0 ("Invalid unbinding mode");
@@ -316,24 +288,35 @@ done:
 
 // run the test genounzip after genozip - for the most reliable testing that is nearly-perfectly indicative of actually 
 // genounzipping, we create a new genounzip process
-static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last_txt_file, bool is_chain)
+static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last_txt_file, bool is_chain,
+                                     int64_t t_offset, int64_t t_size) // offset and size of z_file with in tar (0 if not tar)
 {
     rom password = crypt_get_password();
 
     // On Windows and Mac that usually have limited memory, if ZIP consumed more than 2GB, free memory before PIZ. 
     // Note: on Windows, freeing memory takes considerable time.
     if ((flag.is_windows || flag.is_mac || flag.is_wsl) && buf_get_memory_usage () > (1ULL<<31)) {
-        ref_destroy_reference (gref); // on Windows I observed a race condition: if we unmap mapped memory here, and remap it in the test process, and the system is very slow due to low memory, then "MapViewOfFile" in the test processs will get "Access is Denied". That's why destroy_only_if_not_mmap=true.
+        ref_destroy_reference (gref); 
         ref_destroy_reference (prim_ref); 
-        refhash_destroy (true);
+        refhash_destroy();
         kraken_destroy();
         chain_destroy();
         vb_destroy_pool_vbs (POOL_MAIN);
     }
 
-    rom exec_path = arch_get_executable(HARD_FAIL);
+    rom exec_path = arch_get_executable (HARD_FAIL);
 
-    if (!is_last_txt_file || flag.is_windows) {
+    // case: we need to execute logic after the test - run in a separate process and wait for its completion
+    if (!is_last_txt_file || // come back - we have more files to compress
+        flag.is_windows   || // Windows API has no execv 
+        flag.replace      || // come back to delete files
+        t_size) {            // come back to close the tar file
+
+        char t_offset_str[24]={}, t_size_str[24]={};
+        if (t_size) {
+            sprintf (t_offset_str, "%"PRId64, t_offset);
+            sprintf (t_size_str,   "%"PRId64, t_size);
+        }
 
         StreamP test = stream_create (NULL, 0, 0, 0, 0, 0, 0,
                                       "To use the --test option",
@@ -341,30 +324,38 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
                                       "--decompress", 
                                       "--test", 
                                       z_filename,
-                                      flag.quiet         ? "--quiet"         : SKIP_ARG,
-                                      password           ? "--password"      : SKIP_ARG,
-                                      password           ? password          : SKIP_ARG,
-                                      flag.show_digest   ? "--show-digest"   : SKIP_ARG,
-                                      flag.log_digest    ? "--log-digest"    : SKIP_ARG,
-                                      flag.show_memory   ? "--show-memory"   : SKIP_ARG,
-                                      flag.show_time     ? "--show-time"     : SKIP_ARG,
-                                      flag.threads_str   ? "--threads"       : SKIP_ARG,
-                                      flag.threads_str   ? flag.threads_str  : SKIP_ARG,
-                                      flag.xthreads      ? "--xthreads"      : SKIP_ARG,
-                                      flag.show_alleles  ? "--show-alleles"  : SKIP_ARG,
-                                      flag.show_aligner  ? "--show-aligner"  : SKIP_ARG,
-                                      flag.show_threads  ? "--show-threads"  : SKIP_ARG,
-                                      flag.debug_threads ? "--debug-threads" : SKIP_ARG,
-                                      flag.echo          ? "--echo"          : SKIP_ARG,
-                                      flag.verify_codec  ? "--verify-codec"  : SKIP_ARG,
-                                      flag.debug_lines   ? "--debug-lines"   : SKIP_ARG,
-                                      flag.show_buddy    ? "--show-buddy"    : SKIP_ARG,
-                                      flag.no_tip        ? "--no-tip"        : SKIP_ARG,
-                                      flag.debug_latest  ? "--debug-latest"  : SKIP_ARG,
-                                      flag.show_deep    ? "--show-deep"    : SKIP_ARG,
+                                      flag.quiet         ? "--quiet"          : SKIP_ARG,
+                                      password           ? "--password"       : SKIP_ARG,
+                                      password           ? password           : SKIP_ARG,
+                                      flag.show_digest   ? "--show-digest"    : SKIP_ARG,
+                                      flag.log_digest    ? "--log-digest"     : SKIP_ARG,
+                                      flag.show_memory   ? "--show-memory"    : SKIP_ARG,
+                                      flag.show_time     ? "--show-time"      : SKIP_ARG,
+                                      flag.threads_str   ? "--threads"        : SKIP_ARG,
+                                      flag.threads_str   ? flag.threads_str   : SKIP_ARG,
+                                      t_size             ? "--tar"            : SKIP_ARG,
+                                      t_size             ? tar_get_tar_name() : SKIP_ARG,
+                                      t_size             ? "--t_offset"       : SKIP_ARG,
+                                      t_size             ? t_offset_str       : SKIP_ARG,
+                                      t_size             ? "--t_size"         : SKIP_ARG,
+                                      t_size             ? t_size_str         : SKIP_ARG,
+                                      flag.xthreads      ? "--xthreads"       : SKIP_ARG,
+                                      flag.show_alleles  ? "--show-alleles"   : SKIP_ARG,
+                                      flag.show_aligner  ? "--show-aligner"   : SKIP_ARG,
+                                      flag.show_threads  ? "--show-threads"   : SKIP_ARG,
+                                      flag.debug_threads ? "--debug-threads"  : SKIP_ARG,
+                                      flag.echo          ? "--echo"           : SKIP_ARG,
+                                      flag.verify_codec  ? "--verify-codec"   : SKIP_ARG,
+                                      flag.debug_lines   ? "--debug-lines"    : SKIP_ARG,
+                                      flag.show_buddy    ? "--show-buddy"     : SKIP_ARG,
+                                      flag.no_tip        ? "--no-tip"         : SKIP_ARG,
+                                      flag.debug_latest  ? "--debug-latest"   : SKIP_ARG,
+                                      flag.show_deep     ? "--show-deep"      : SKIP_ARG,
+                                      flag.no_cache      ? "--no-cache"       : SKIP_ARG,
+                                      (flag.debug_top==0 && (flag.echo || getenv ("GENOZIP_TEST"))) ? "--no-debug-top"   : SKIP_ARG,
                                       flag.license_filename           ? "--licfile"            : SKIP_ARG,
                                       flag.license_filename           ? flag.license_filename  : SKIP_ARG,
-                                      is_last_txt_file && !flag.debug ? "--check-latest"       : SKIP_ARG,
+                                      is_last_txt_file && !flag.debug && !flag.replace ? "--check-latest"       : SKIP_ARG,
                                       IS_REF_EXTERNAL && !is_chain    ? "--reference"          : SKIP_ARG, // normal pizzing of a chain file doesn't require a reference
                                       IS_REF_EXTERNAL && !is_chain    ? ref_get_filename(gref) : SKIP_ARG, 
                                       NULL);
@@ -391,7 +382,6 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
                                 argv[argc++] = exec_path;
                                 argv[argc++] = "--decompress";
                                 argv[argc++] = "--test";
-                                argv[argc++] = "--check-latest";
                                 argv[argc++] = z_filename;
         if (flag.quiet)         argv[argc++] = "--quiet";
         if (password)         { argv[argc++] = "--password"; 
@@ -411,7 +401,10 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
         if (flag.show_buddy)    argv[argc++] = "--show-buddy";
         if (flag.no_tip)        argv[argc++] = "--no-tip";
         if (flag.debug_latest)  argv[argc++] = "--debug-latest";
-        if (flag.show_deep)    argv[argc++] = "--show-deep";
+        if (flag.show_deep)     argv[argc++] = "--show-deep";
+        if (flag.no_cache)      argv[argc++] = "--no-cache";
+        if ((flag.debug_top==0 && (flag.echo || getenv ("GENOZIP_TEST")))) argv[argc++] = "--no-debug-top";
+
         if (flag.license_filename) { argv[argc++] = "--licfile"; argv[argc++] = flag.license_filename; }
         if (is_last_txt_file && !flag.debug) 
                                 argv[argc++] = "--check-latest";
@@ -421,10 +414,8 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
         argv[argc] = NULL;
                                 // ↑↑↑ Don't forget to add above too ↑↑↑
 
-        if (flag.show_time && !flag.show_time[0]) { // show-time without the optional parameter 
-            profiler_add (evb);
-            profiler_print_report();
-        }
+        if (flag.show_time_comp_i == COMP_ALL && !flag.show_time[0]) // show-time without the optional parameter 
+            profiler_add_evb_and_print_report();
 
         execv (exec_path, (char **)argv);
         ABORT ("Failed to run the executable \"%s\" for testing the compression: %s", exec_path, strerror (errno));
@@ -434,11 +425,10 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
 static void main_genozip (rom txt_filename, 
                           rom next_txt_filename,      // ignored unless we are of pair_1 in a --pair
                           unsigned txt_file_i,        // 0-based
-                          unsigned n_txt_files,
                           bool is_last_user_txt_file) // very last file in this execution 
 {
-    if (n_txt_files > 1) MAIN ("main_genozip (%u/%u): %s", txt_file_i+1, n_txt_files, txt_filename ? txt_filename : "stdin");
-    else                 MAIN ("main_genozip: %s", txt_filename ? txt_filename : "stdin");
+    if (n_files > 1) MAIN ("main_genozip (%u/%u): %s", txt_file_i+1, n_files, txt_filename ? txt_filename : "stdin");
+    else             MAIN ("main_genozip: %s", txt_filename ? txt_filename : "stdin");
     
     SAVE_FLAGS;
 
@@ -447,11 +437,11 @@ static void main_genozip (rom txt_filename,
 
     // get input file
     if (!txt_file)  // open the file - possibly already open from main_load_reference
-        txt_file = file_open (txt_filename, READ, TXT_FILE, DT_NONE); 
+       txt_file = file_open_txt_read (txt_filename);
 
     // skip this file if its size is 0
     if (!txt_file) {
-        if (tar_is_tar()) {
+        if (tar_zip_is_tar()) {
             tar_copy_file (txt_filename);
             WARN ("Copied %s to the tar file", txt_filename);
         }    
@@ -471,24 +461,26 @@ static void main_genozip (rom txt_filename,
     if (!z_file) { // skip if we're the second file onwards in bind mode, or pair_2 in unbound list of pairs - nothing to do        
         
         rom z_filename = flag.out_filename                 ? filename_z_by_flag() // given with --output
-                       : (flag.pair && !flag.out_filename) ? filename_z_pair (txt_filename, next_txt_filename, false) // first file in a FASTQ pair
                        : (flag.deep && !flag.out_filename) ? filename_z_deep (txt_file->name) // SAM/BAM file in --deep
+                       : (flag.pair && !flag.out_filename) ? filename_z_pair (txt_filename, next_txt_filename, false) // first file in a FASTQ pair
                        :                                     filename_z_normal (txt_file->name, txt_file->data_type, txt_file->type);
 
-        z_file = file_open (z_filename, flag.pair ? WRITEREAD : WRITE, Z_FILE, txt_file->data_type);
-        FREE(z_filename); // file_open copies the name
+        z_file = file_open_z_write (z_filename, flag.pair ? WRITEREAD : WRITE, txt_file->data_type);
+        FREE(z_filename); // file_open_z copies the name
     }
 
-    if (flag.zip_comp_i == COMP_MAIN) {
-        stats_add_txt_name (txt_name); // add txt_name (inluding stdin) to stats data stored in z_file
+    stats_add_txt_name (txt_name); // add txt_name (inluding stdin) to stats data stored in z_file
+
+    if (flag.zip_comp_i == COMP_MAIN) 
         flags_update_zip_one_file();
-    }
     
     ASSERT0 (flag.bind || !has_zfile, "Unexpectedly, z_file was already open despite BIND_NONE");
 
     z_file->z_closes_after_me = (flag.bind == BIND_FQ_PAIR) ? (flag.zip_comp_i == FQ_COMP_R2)
                               : (flag.bind == BIND_DEEP)    ? is_last_user_txt_file
                               :                               true;
+
+    int64_t t_offset = z_file->is_in_tar ? tar_file_offset() : 0; // if tar: offset of beginning of z_file in tar (after tar header block)
 
     zip_one_file (txt_file->basename, is_last_user_txt_file);
 
@@ -516,13 +508,15 @@ static void main_genozip (rom txt_filename,
         z_file->name = NULL;
         DataType z_dt = z_file->data_type; 
 
+        int64_t t_size = z_file->is_in_tar ? z_file->disk_size : 0; 
+
         file_close (&z_file, false, !is_last_user_txt_file); 
 
         license_one_file_compressed(z_dt);
 
         // test the compression, if the user requested --test
         if (flag.test) 
-            main_test_after_genozip (z_filename, z_dt, is_last_user_txt_file, is_chain);
+            main_test_after_genozip (z_filename, z_dt, is_last_user_txt_file, is_chain, t_offset, t_size);
 
         FREE (z_filename); // allocated in filename_z_*
     }
@@ -671,7 +665,7 @@ static void main_load_reference (rom filename, bool is_first_file, bool is_last_
     DataType dt = main_get_file_dt (filename);
     flag.aligner_available = primary_command == ZIP && 
                             (old_aligner_available || dt == DT_FASTQ || 
-                             ((dt==DT_SAM || dt==DT_BAM) && (flag.best || flag.deep))); // load refhash only in --best
+                             ((dt==DT_SAM || dt==DT_BAM) && (flag.best || flag.deep))); // SAM/BAM: load refhash only in --best or --deep
 
     // no need to load the reference if not needed (unless its genocat of the refernece file itself)
     if (flag.genocat_no_ref_file && dt != DT_REF) return;
@@ -721,7 +715,6 @@ static void set_exe_type (rom argv0)
 
 int main (int argc, char **argv)
 {    
-    MAIN0 ("Starting main");
     flag.debug_or_test = flag.debug || getenv ("GENOZIP_TEST");
     buf_initialize(); 
 
@@ -740,6 +733,9 @@ int main (int argc, char **argv)
     codec_initialize();
 
     flags_init_from_command_line (argc, argv);
+
+    MAIN0 ("Starting main"); // after top_debug is set
+
     if (is_genozip && IS_PIZ) exe_type = EXE_GENOUNZIP; // treat "genozip -d" as genounzip
 
     // --make-reference might be called by genocat or genounzip from ref_fasta_to_ref - we treat it as genozip
@@ -773,6 +769,10 @@ int main (int argc, char **argv)
 
                 if (flag.show_ref_diff) 
                     ref_diff_ref();                    
+                
+                else if (flag.no_cache)
+                    ref_cache_remove (gref);
+
                 else
                     ref_display_ref (gref);
             }
@@ -848,9 +848,9 @@ int main (int argc, char **argv)
     }
 
     // if we're genozipping with tar, initialize tar file
-    if (tar_is_tar()) tar_initialize();
+    if (IS_ZIP && tar_zip_is_tar()) tar_initialize();
 
-    unsigned n_files = MAX_(input_files_len, 1);
+    n_files = MAX_(input_files_len, 1);
     for (unsigned file_i=0, z_file_i=0; file_i < n_files; file_i++) {
 
         // get file name
@@ -878,10 +878,10 @@ int main (int argc, char **argv)
         switch (command) {
             case ZIP  : main_genozip (next_input_file, 
                                       (next_input_file && file_i < input_files_len-1) ? input_files[file_i+1] : NULL, // file name of next file, if there is one
-                                      file_i, n_files, !next_input_file || is_last_txt_file); 
+                                      file_i, !next_input_file || is_last_txt_file); 
                         break;
 
-            case PIZ  : main_genounzip (next_input_file, flag.out_filename, file_i, n_files, is_last_z_file); 
+            case PIZ  : main_genounzip (next_input_file, flag.out_filename, file_i, is_last_z_file); 
                         break;           
 
             case SHOW_HEADERS : genocat_show_headers(next_input_file); break;
@@ -891,8 +891,6 @@ int main (int argc, char **argv)
             default   : ABORTINP ("unrecognized command %c", command);
         }
 
-        if (flag.pair) flag.pair = 3 - flag.pair; // alternate between PAIR_READ_1 and PAIR_READ_2
-
         if (!z_file) z_file_i++; // z_file was closed, meaning we're done with it
     }
 
@@ -900,7 +898,7 @@ int main (int argc, char **argv)
     if (command == LIST) genols (NULL, true, NULL, false);
 
     // if we're genozipping with tar, finalize tar file
-    if (tar_is_tar()) tar_finalize();
+    if (IS_ZIP && tar_zip_is_tar()) tar_finalize();
 
     if (flag.multiple_files && flag.validate==VLD_REPORT_INVALID /* reporting invalid files, and none found */) 
         WARN0 ("All files are valid genozip files");

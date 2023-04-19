@@ -167,7 +167,7 @@ void ref_contigs_compress_ref_make (Reference ref)
         prev_r = r;
     }
     
-    COPY_TIMER_VB (evb, ref_contigs_compress); // we don't count the compression itself and the disk writing
+    COPY_TIMER_EVB (ref_contigs_compress); // we don't count the compression itself and the disk writing
 
     if (flag.show_ref_contigs) ref_contigs_show (&created_contigs, true);
 
@@ -244,7 +244,7 @@ void ref_contigs_compress_stored (Reference ref)
     if (has_some_contigs) // Could be false, e.g. in FASTQ if no read was successfully aligned to the reference
         ref_contigs_compress_do (&created_contigs, true, is_compacted); // note: sequential_ref_index introduced v14.0.0, is_compacted introduce v14.0.10.
 
-    COPY_TIMER_VB (evb, ref_contigs_compress); 
+    COPY_TIMER_EVB (ref_contigs_compress); 
 }
 
 static void ref_contigs_load_set_contig_names (Reference ref)
@@ -380,7 +380,7 @@ WordIndex ref_contigs_ref_chrom_from_header_chrom (Reference ref, STRp(chrom_nam
     // if its not found, we ignore it. sequences that have this chromosome will just be non-ref
     if (ref_contig_index == WORD_INDEX_NONE) {
         if (IS_ZIP)
-            WARN_ONCE ("FYI: header of %s has contig '%.*s' (and maybe others, too), missing in %s. If the file contains many variants with this contig, the compression might be negatively impacted.",
+            WARN_ONCE ("FYI: header of %s has contig '%.*s' (and maybe others, too), missing in %s. If the file contains many variants with this contig, it might compress a bit less than when using a reference file that contains all contigs.",
                         txt_file->basename, STRf(chrom_name), ref->filename);
         return WORD_INDEX_NONE;
     }

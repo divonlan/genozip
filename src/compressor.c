@@ -47,8 +47,8 @@ uint32_t comp_compress (VBlockP vb,
     bool is_encrypted = false;
     uint32_t encryption_padding_reserve = 0;
 
-    if (header->section_type != SEC_GENOZIP_HEADER &&  // genozip header is never encrypted
-        !(header->section_type == SEC_REFERENCE && IS_REF_EXT_STORE)) { // external reference copied over is never encrypted
+    if (!HEADER_IS(GENOZIP_HEADER) &&  // genozip header is never encrypted
+        !(HEADER_IS(REFERENCE) && IS_REF_EXT_STORE)) { // external reference copied over is never encrypted
         is_encrypted = crypt_get_encrypted_len (&compressed_offset, &header_padding); // set to 0 if no encryption
         encryption_padding_reserve = crypt_max_padding_len(); // padding for the body
     }
@@ -129,27 +129,27 @@ uint32_t comp_compress (VBlockP vb,
     header->compressed_offset   = BGEN32 (compressed_offset);  // updated value to include header padding
     header->data_compressed_len = BGEN32 (data_compressed_len);   
     header->data_encrypted_len  = BGEN32 (data_encrypted_len); 
-    memcpy (BAFT(uint8_t, *z_data), header, compressed_offset);
+    memcpy (BAFT8(*z_data), header, compressed_offset);
 
     // encrypt if needed - header & body separately
     unsigned total_z_len;
     if (is_encrypted) { // create good padding (just padding with 0 exposes a cryptographic vulnerability)
-        crypt_pad (BAFT(uint8_t, *z_data), compressed_offset, header_padding);
+        crypt_pad (BAFT8(*z_data), compressed_offset, header_padding);
         
         if (data_uncompressed_len) 
-            crypt_pad (BAFT(uint8_t, *z_data) + compressed_offset, data_encrypted_len, data_padding);
+            crypt_pad (BAFT8(*z_data) + compressed_offset, data_encrypted_len, data_padding);
 
         // encrypt the header - we use vb_i, section_type and is_header to generate a different AES key for each section
         VBIType vb_i = BGEN32 (header->vblock_i);
 
         // note: for SEC_VB_HEADER we will encrypt at the end of calculating this VB in zfile_update_compressed_vb_header() 
         // and we will then update z_data in memory prior to writing the encrypted data to disk
-        if (header->section_type != SEC_VB_HEADER || header->vblock_i == 0 /* terminator vb header */)
-            crypt_do (vb, BAFT(uint8_t, *z_data), compressed_offset, vb_i, header->section_type, true);
+        if (!HEADER_IS(VB_HEADER) || header->vblock_i == 0 /* terminator vb header */)
+            crypt_do (vb, BAFT8(*z_data), compressed_offset, vb_i, header->section_type, true);
 
         // encrypt the data body 
         if (data_uncompressed_len) 
-            crypt_do (vb, BAFT(uint8_t, *z_data) + compressed_offset, data_encrypted_len, vb_i, header->section_type, false);
+            crypt_do (vb, BAFT8(*z_data) + compressed_offset, data_encrypted_len, vb_i, header->section_type, false);
         
         total_z_len = compressed_offset + data_encrypted_len;
     }
@@ -157,7 +157,7 @@ uint32_t comp_compress (VBlockP vb,
         total_z_len = compressed_offset + data_compressed_len;
 
     // add section to the section list
-    if (header->section_type != SEC_GENOZIP_HEADER && // the section list is part of the genozip header section currently being compressed, so can't add to it
+    if (!HEADER_IS(GENOZIP_HEADER) && // the section list is part of the genozip header section currently being compressed, so can't add to it
         !in_assign_codec)
         sections_add_to_list (vb, header);
 

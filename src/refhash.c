@@ -25,6 +25,7 @@
 #include "threads.h"
 #include "segconf.h"
 #include "strings.h"
+#include "buffer.h"
 
 // ref_hash logic:
 // we use the 28 bits (14 nucleotides) following a "G" hook, as the hash value, to index into a hash table with multiple
@@ -50,7 +51,7 @@
 static uint32_t make_ref_vb_size = 0; // max bytes in a refhash vb
 
 // each rehash_buf entry is a Buffer containing a hash layer containing 256M gpos values (4B each) = 1GB
-unsigned num_layers=0;
+uint32_t num_layers=0;
 bool bits_per_hash_is_odd=0;     // true bits_per_hash is odd
 static uint32_t bits_per_hash=0; // = layer_bits[0]
 uint32_t nukes_per_hash=0;       // = layer_bits[0] / 2
@@ -68,18 +69,6 @@ static uint32_t next_task_start_within_layer = 0;
 // shared logic (make refhash + use refhash)
 // -------------------------------------------
 
-static void refhash_initialize_refhashs_array (void)
-{
-    refhashs = CALLOC (num_layers * sizeof (uint32_t *)); // array of pointers
-
-    // set layer pointers
-    uint64_t offset=0;
-    for (unsigned layer_i=0; layer_i < num_layers; layer_i++) {
-        refhashs[layer_i] = (uint32_t*)B8 (refhash_buf, offset);
-        offset += layer_size[layer_i];
-    }
-}
-
 static uint64_t refhash_initialize_layers (uint32_t base_layer_bits)
 {
     uint64_t refhash_size = 0;
@@ -93,6 +82,21 @@ static uint64_t refhash_initialize_layers (uint32_t base_layer_bits)
     bits_per_hash  = layer_bits[0];
     bits_per_hash_is_odd = bits_per_hash % 2;
     nukes_per_hash = (1 + bits_per_hash) / 2; // round up
+
+    // note: base layer size is 1GB, and every layer is half the size of its predecessor, so total less than 2GB
+    if (refhash_buf.type != BUF_SHM) {
+        buf_alloc_exact (evb, refhash_buf, refhash_size, uint8_t, "refhash_buf"); 
+        if (flag.make_reference) memset (refhash_buf.data, refhash_size, 255); // set all entries to NO_GPOS. 
+    }
+
+    refhashs = CALLOC (num_layers * sizeof (uint32_t *)); // array of pointers
+
+    // set layer pointers
+    uint64_t offset=0;
+    for (unsigned layer_i=0; layer_i < num_layers; layer_i++) {
+        refhashs[layer_i] = (uint32_t*)B8 (refhash_buf, offset);
+        offset += layer_size[layer_i];
+    }
 
     return refhash_size;
 }
@@ -109,12 +113,7 @@ void refhash_initialize_for_make (void)
     #define VBLOCK_MEMORY_REFHASH (16 MB) // VB memory with --make-reference - refhash data (overridable with --vblock)
     make_ref_vb_size = flag.vblock ? segconf.vb_size : VBLOCK_MEMORY_REFHASH;
 
-    uint64_t refhash_size = refhash_initialize_layers (MAKE_REF_BASE_LAYER_BITS);
-
-    // allocate, and set all entries to NO_GPOS. 
-    buf_alloc_exact_255 (evb, refhash_buf, refhash_size, uint8_t, "refhash_buf"); 
-    
-    refhash_initialize_refhashs_array();
+    refhash_initialize_layers (MAKE_REF_BASE_LAYER_BITS);
 }
 
 static inline uint32_t refhash_get_word (ConstRangeP r, int64_t base_i)
@@ -174,6 +173,7 @@ void refhash_calc_one_range (VBlockP vb, // VB of reference compression dispatch
         return;
     }
 
+    decl_acgt_decode;
     for (PosType64 base_i=0; base_i < num_bases; base_i++)
 
         // take only the final hook in a polymer string of hooks (i.e. the last G in a e.g. GGGGG)
@@ -273,7 +273,7 @@ void refhash_compress_refhash (void)
                              refhash_compress_one_vb, 
                              zfile_output_processed_vb);
 
-    COPY_TIMER_VB (evb, refhash_compress_refhash);
+    COPY_TIMER_EVB (refhash_compress_refhash);
 }
 
 // ----------------------------------------------------------------------------------------------
@@ -340,33 +340,56 @@ static void refhash_read_one_vb (VBlockP vb)
     COPY_TIMER (refhash_read_one_vb);
 }
 
+uint64_t refhash_load_init (uint8_t *out_base_layer_bits/*optional*/)
+{
+    uint32_t base_layer_bits;
+
+    if (ref_cache_is_cached (gref)) {
+        void *cache_refhash_data; 
+        uint64_t cache_refhash_size;
+        ref_cache_get_refhash (gref, &cache_refhash_data, &cache_refhash_size, &base_layer_bits);
+        
+        buf_attach_to_shm (evb, &refhash_buf, cache_refhash_data, cache_refhash_size, "refhash_buf");
+    }
+
+    else {
+        Section sec = sections_last_sec (SEC_REF_HASH, HARD_FAIL);
+
+        SectionHeaderRefHash header = zfile_read_section_header (evb, sec, SEC_REF_HASH).ref_hash;
+        num_layers = header.num_layers;
+
+        base_layer_bits = header.layer_bits + header.layer_i; // layer_i=0 is the base layer, layer_i=1 has 1 bit less etc
+    }
+
+    if (out_base_layer_bits) *out_base_layer_bits = base_layer_bits;
+
+    return refhash_initialize_layers (base_layer_bits);
+}
+
+// ZIP: needed before using aligner
 void refhash_load (void)
 {
     START_TIMER;
 
+    // in ZIP, emoneg is needed IFF aligner is used, i.e. IFF refhash is loaded
+    if (!ref_has_emoneg (gref)) 
+        ref_generate_reverse_complement_genome (gref);
+
     if (refhash_buf.len) return; // already loaded for a previous file
 
-    Section sec = sections_last_sec (SEC_REF_HASH, HARD_FAIL);
+    if (!ref_cache_is_loading (gref)) // note: if CACHE_LOADING, already initialized from ref_cache_initialize_genome
+        refhash_load_init (NULL);
 
-    SectionHeaderRefHash header = zfile_read_section_header (evb, sec->offset, sec->vblock_i, SEC_REF_HASH).ref_hash;
-    num_layers = header.num_layers;
-
-    uint32_t base_layer_bits = header.layer_bits + header.layer_i; // layer_i=0 is the base layer, layer_i=1 has 1 bit less etc
-
-    uint64_t refhash_size = refhash_initialize_layers (base_layer_bits);
-
-    // allocate memory - base layer size is 1GB, and every layer is half the size of its predecessor, so total less than 2GB
-    buf_alloc_exact (evb, refhash_buf, refhash_size, uint8_t, "refhash_buf"); 
-    refhash_initialize_refhashs_array();
-
-    dispatcher_fan_out_task ("load_refhash", ref_get_filename (gref),
-                             0, "Reading reference file", // same message as in ref_load_stored_reference
-                             true, flag.test, false, 0, 100, true,
-                             refhash_read_one_vb, 
-                             refhash_uncompress_one_vb, 
-                             NO_CALLBACK);
+    if (!ref_cache_is_cached (gref)) // no cache, or loading to cache, but not already cached
+        dispatcher_fan_out_task ("load_refhash", ref_get_filename (gref),
+                                0, "Reading reference file", // same message as in ref_load_stored_reference
+                                true, flag.test, false, 0, 100, true,
+                                refhash_read_one_vb, 
+                                refhash_uncompress_one_vb, 
+                                NO_CALLBACK);
     
-    COPY_TIMER_VB (evb, refhash_load);
+
+    COPY_TIMER_EVB (refhash_load);
 }
 
 void refhash_load_standalone (void)
@@ -378,14 +401,14 @@ void refhash_load_standalone (void)
     TEMP_VALUE (txt_file, NULL);
     CLEAR_FLAG (test);
 
-    z_file = file_open (ref_get_filename (gref), READ, Z_FILE, DT_FASTA);    
+    z_file = file_open_z_read (ref_get_filename (gref));    
 
     zfile_read_genozip_header (0);
 
     refhash_load();
 
     file_close (&z_file, false, false);
-    file_close (&txt_file, false, false); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open called from txtheader_piz_read_and_reconstruct.
+    file_close (&txt_file, false, true); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open_z called from txtheader_piz_read_and_reconstruct.
     
     RESTORE_FLAG (test);
     RESTORE_VALUE (command);
@@ -395,12 +418,15 @@ void refhash_load_standalone (void)
     flag.reading_reference = NULL;
 }
 
-void refhash_destroy (bool destroy_only_if_not_mmap)
+void refhash_destroy (void)
 {
-    if (refhash_buf.type == BUF_UNALLOCATED || 
-        (refhash_buf.type == BUF_MMAP_RO && destroy_only_if_not_mmap)) return;
+    if (refhash_buf.type == BUF_UNALLOCATED) return;
 
     buf_destroy (refhash_buf);
+
+    if (ref_cache_is_cached (gref)) // just in case, expecting it to be already detached when destroying gret
+        ref_cache_detach (gref);
+
     FREE (refhashs);
 
     flag.aligner_available = false;

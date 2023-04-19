@@ -36,23 +36,29 @@ void recon_plan_show (FileP file, bool is_luft, uint32_t conc_writing_vbs, uint3
 
     for (uint32_t i=0; i < file->recon_plan.len32; i++) {
         ReconPlanItemP p = B(ReconPlanItem, file->recon_plan, i);
-        rom comp = p->vb_i ? comp_name(sections_vb_header(p->vb_i, HARD_FAIL)->comp_i) : NULL;
+        rom comp = p->vb_i ? comp_name(sections_vb_header(p->vb_i)->comp_i) : NULL;
         rom flav = recon_plan_flavors[p->flavor];
+
+        rom no_recon = IS_ZIP                                                                         ? ""
+                     : (p->vb_i && !writer_does_vb_need_recon (p->vb_i))                              ? " no_recon"
+                     : (p->flavor == PLAN_TXTHEADER && !writer_does_txtheader_need_recon (p->comp_i)) ? " no_recon" 
+                     :                                                                                  "";
+
         rom no_write = IS_ZIP                                                                         ? ""
                      : (p->vb_i && !writer_does_vb_need_write (p->vb_i))                              ? " no_write"
                      : (p->flavor == PLAN_TXTHEADER && !writer_does_txtheader_need_write (p->comp_i)) ? " no_write" 
                      :                                                                                  "";
 
         switch (p->flavor) {
-            case PLAN_RANGE      : iprintf ("%-10s vb=%s/%u\tstart_line=%u\tnum_lines=%u%s\n", flav, comp, p->vb_i, p->start_line, p->num_lines, no_write); break;
-            case PLAN_FULL_VB    : iprintf ("%-10s vb=%s/%u%s\n", flav, comp, p->vb_i, no_write); break;
-            case PLAN_TXTHEADER  : iprintf ("%-10s %s%s\n", flav, comp_name(p->comp_i), no_write); break;
+            case PLAN_RANGE      : iprintf ("%-10s vb=%s/%u\tstart_line=%u\tnum_lines=%u%s%s\n", flav, comp, p->vb_i, p->start_line, p->num_lines, no_recon, no_write); break;
+            case PLAN_FULL_VB    : iprintf ("%-10s vb=%s/%u%s%s\n", flav, comp, p->vb_i, no_recon, no_write); break;
+            case PLAN_TXTHEADER  : iprintf ("%-10s %s%s%s\n", flav, comp_name(p->comp_i), no_recon, no_write); break;
             case PLAN_REMOVE_ME  : iprintf ("%-10s\n", flav); break;
-            case PLAN_DOWNSAMPLE : iprintf ("%-10s vb=%s/%u\tnum_lines=%u%s\n", flav, comp, p->vb_i, p->num_lines, no_write); break;
-            case PLAN_END_OF_VB  : iprintf ("%-10s vb=%s/%u%s\n", flav, comp, p->vb_i, no_write); break;
+            case PLAN_DOWNSAMPLE : iprintf ("%-10s vb=%s/%u\tnum_lines=%u%s%s\n", flav, comp, p->vb_i, p->num_lines, no_recon, no_write); break;
+            case PLAN_END_OF_VB  : iprintf ("%-10s vb=%s/%u%s%s\n", flav, comp, p->vb_i, no_recon, no_write); break;
             case PLAN_INTERLEAVE : iprintf ("%-10s vb1=%s/%u\tvb2=%s/%u", flav, comp, p->vb_i,
-                                            comp_name(sections_vb_header(p->vb2_i, HARD_FAIL)->comp_i), p->vb2_i); 
-                                   iprintf (command==PIZ ? "\tnum_lines=%u%s\n" : "\n", p->num_lines, no_write); // num_lines populated by writer in PIZ
+                                            comp_name(sections_vb_header(p->vb2_i)->comp_i), p->vb2_i); 
+                                   iprintf (command==PIZ ? "\tnum_lines=%u%s%s\n" : "\n", p->num_lines, no_recon, no_write); // num_lines populated by writer in PIZ
                                    break;
             default              : ABORT ("Unknown flavor %u", p->flavor);
         }
@@ -87,8 +93,6 @@ void recon_plan_sort_by_vb (FileP file)
         if (!len) continue;
 
         dst = mempcpy (dst, &src[recon_plan_index[vb_i].index], len * sizeof (ReconPlanItem));
-        //xxx memcpy (dst, &src[recon_plan_index[vb_i].index], len * sizeof (ReconPlanItem));
-        // dst += len;
     }
 
     buf_free (evb->scratch);
@@ -228,7 +232,7 @@ void recon_plan_compress (uint32_t my_conc_writing_vbs,
 
     buf_free (txt_file->recon_plan);
 
-    COPY_TIMER_VB (evb, recon_plan_compress);
+    COPY_TIMER_EVB (recon_plan_compress);
 }
 
 // -------------------------------------

@@ -29,7 +29,7 @@ typedef struct {
 
     union ZipZDeepPlace {
         struct { 
-            uint32_t line_i;        // conusmed=0: SAM line_i within vb_i of this entry. 
+            uint32_t line_i;        // consumed=0: SAM line_i within vb_i of this entry. 
             uint32_t vb_i     : 31; // consumed=1: FASTQ line_i and vb_i of the consuming line
             uint32_t consumed : 1;
         }; // 64 bit
@@ -97,5 +97,4 @@ typedef struct {
     uint8_t is_qname_comp     : 1; // QNAME suffix is compressed
     uint8_t unused            : 2;
 } PizZDeepFlags;
-#pragma pack() 
-
+#pragma pack()

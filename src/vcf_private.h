@@ -403,6 +403,7 @@ extern Tag *vcf_tags_get_next_missing_tag (Tag *tag);
 
 // Liftover Zip
 extern void vcf_lo_zip_initialize (void);
+extern TranslatorId vcf_lo_luft_trans_id (DictId dict_id, char number);
 extern void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl);
 extern void vcf_lo_set_rollback_point (VBlockVCFP vb);
 extern void vcf_lo_seg_rollback_and_reject (VBlockVCFP vb, LiftOverStatus ostatus, Context *ctx);

@@ -72,7 +72,7 @@ void dict_io_assign_codecs (void)
                              dict_io_assign_codec_one_dict, 
                              NO_CALLBACK);
 
-    COPY_TIMER_VB (evb, dict_io_assign_codecs);
+    COPY_TIMER_EVB (dict_io_assign_codecs);
 }
 
 // -------------------------------------
@@ -187,7 +187,7 @@ void dict_io_compress_dictionaries (void)
                              dict_io_compress_one_fragment, 
                              zfile_output_processed_vb);
 
-    COPY_TIMER_VB (evb, dict_io_compress_dictionaries);
+    COPY_TIMER_EVB (dict_io_compress_dictionaries);
 }
 
 // -------------------------------------
@@ -198,8 +198,6 @@ static ContextP dict_ctx = NULL;
 
 static void dict_io_read_one_vb (VBlockP vb)
 {
-    vb->preprocessing = flag.preprocessing; // for debug_read_ctxs printing
-
     Section old_dict_sec = dict_sec;
     if (!sections_next_sec (&dict_sec, SEC_DICT)) 
         return; // we're done - no more SEC_DICT sections
@@ -214,7 +212,7 @@ static void dict_io_read_one_vb (VBlockP vb)
     // note: skipping a section should be mirrored in a container filter
     if (piz_is_skip_section (z_file->data_type, SEC_DICT, COMP_NONE, dict_sec->dict_id, dict_sec->flags.flags, SKIP_PURPOSE_RECON)) {
         if (flag.debug_read_ctxs)
-            iprintf ("%c Skipped loading DICT/%u %s.dict\n", sections_read_prefix, vb->vblock_i, dict_ctx->tag_name);
+            iprintf ("%c Skipped loading DICT/%u %s.dict\n", sections_read_prefix (flag.preprocessing), vb->vblock_i, dict_ctx->tag_name);
         goto done;
     }
     dict_ctx->is_loaded = true; // not skipped
@@ -230,8 +228,8 @@ static void dict_io_read_one_vb (VBlockP vb)
             dis_dict_id (dict_sec->dict_id).s, dis_dict_id (header->dict_id).s);
 
     // new context
-    // note: in v9+ same-dict fragments are consecutive in the file, and all but the last are frag_size or a bit less, allowing pre-allocation
-    if (header && new_ctx && VER(9)) {
+    // same-dict fragments are consecutive in the file, and all but the last are frag_size or a bit less, allowing pre-allocation
+    if (header && new_ctx) {
         unsigned num_fragments=0; 
         for (Section sec=dict_sec; sec->dict_id.num == dict_ctx->dict_id.num; sec++) num_fragments++;
 
@@ -246,12 +244,6 @@ static void dict_io_read_one_vb (VBlockP vb)
         buf_set_overlayable (&dict_ctx->dict);
     }
 
-    // when pizzing a v8 file, we run in single-thread since we need to do the following dictionary enlargement with which fragment
-    if (!VER(9)) {
-        buf_alloc (evb, &dict_ctx->dict, vb->fragment_len, 0, char, 0, "contexts->dict");
-        buf_set_overlayable (&dict_ctx->dict);
-    }
-
     if (header) {
         vb->fragment_ctx         = dict_ctx;
         vb->fragment_start       = Bc (dict_ctx->dict, dict_ctx->dict.len);
@@ -262,7 +254,7 @@ static void dict_io_read_one_vb (VBlockP vb)
                 dict_ctx->tag_name, dict_ctx->dict.len, (uint64_t)dict_ctx->dict.size, dict_ctx->dict.prm32[0], dict_ctx->dict.prm32[1]);
 
         if (flag.debug_read_ctxs)
-            sections_show_header ((SectionHeaderP)header, NULL, dict_sec->offset, sections_read_prefix);
+            sections_show_header ((SectionHeaderP)header, NULL, dict_sec->offset, sections_read_prefix (flag.preprocessing));
     }
 
 done: 
@@ -331,7 +323,7 @@ static void dict_io_build_word_lists (void)
     for (Context *zctx=z_file->contexts; zctx <= last; zctx++) 
         dict_io_dict_build_word_list_one (zctx);
 
-    COPY_TIMER_VB (evb, dict_io_build_word_lists);
+    COPY_TIMER_EVB (dict_io_build_word_lists);
 }
 
 // PIZ main thread
@@ -348,7 +340,7 @@ void dict_io_read_all_dictionaries (void)
                             :                         "read_dicts",
                              NULL, 0, 0, 
                              true, flag.test,
-                             !VER(9), // For v8 files, we read all fragments in the main thread as was the case in v8. This is because they are very small, and also we can't easily calculate the totel size of each dictionary.
+                             false,
                              0, 
                              10, // must be short - many dictionaries are just a few bytes
                              true,
@@ -381,5 +373,5 @@ void dict_io_read_all_dictionaries (void)
         if (is_genocat) exit_ok(); // if this is genocat - we're done
     }
 
-    COPY_TIMER_VB (evb, dict_io_read_all_dictionaries);
+    COPY_TIMER_EVB (dict_io_read_all_dictionaries);
 }

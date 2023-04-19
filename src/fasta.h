@@ -46,7 +46,7 @@ extern void fasta_seg_initialize(VBlockP vb);
 extern void fasta_seg_finalize (VBlockP vb);
 extern bool fasta_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern rom fasta_seg_txt_line();
-extern bool fasta_seg_is_big (ConstVBlockP vb, DictId dict_id);
+extern bool fasta_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id);
 
 // PIZ Stuff
 extern void fasta_piz_process_recon (VBlockP vb);
@@ -58,7 +58,6 @@ extern bool fastq_piz_get_pair2_is_forward (VBlockP vb);
 
 // VBlock stuff
 extern void fasta_vb_release_vb();
-extern void fasta_vb_destroy_vb();
 extern unsigned fasta_vb_size (DataType dt);
 extern unsigned fasta_vb_zip_dl_size (void);
 extern void fasta_get_data_line (VBlockP vb_, uint32_t line_i, uint32_t *seq_data_start, uint32_t *seq_len);

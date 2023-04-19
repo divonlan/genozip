@@ -37,11 +37,12 @@
     DataType data_type_alloced;   /* type of this VB was allocated as. could be different that data_type, see vb_get_vb */\
     \
     /* memory management  */\
-    Buffer buffer_list;           /* a buffer containing an array of pointers to all buffers allocated for this VB (either by the main thread or its compute thread). param=is_sorted */\
+    Buffer buffer_list;           /* a buffer containing an array of pointers to all buffers allocated or overlayed in this VB (either by the main thread or its compute thread). */\
     \
     volatile DispatchStatus dispatch; /* line data is read, and dispatcher can dispatch this VB to a compute thread */\
     volatile bool is_processed;   /* thread completed processing this VB - it is ready for outputting */\
     volatile bool in_use;         /* this vb is in use */\
+    Timestamp start_compute_timestamp; \
     \
     /* tracking lines */\
     Buffer lines;                 /* ZIP: An array of *DataLine* - the lines in this VB; in Deep: .count counts deepable lines in VB */\
@@ -131,15 +132,14 @@
     /* dictionaries stuff - we use them for 1. subfields with genotype data, 2. fields 1-9 of the VCF file 3. infos within the info field */\
     Did num_contexts;             /* total number of dictionaries of all types */\
     ContextArray contexts;    \
-    DictIdtoDidMap d2d_map; /* map for quick look up of did_i from dict_id : 64K for key_map, 64K for alt_map */\
+    DictIdtoDidMap d2d_map;       /* map for quick look up of did_i from dict_id : 64K for key_map, 64K for alt_map */\
     \
     bool has_ctx_index; \
     ContextIndex ctx_index[MAX_DICTS]; /* PIZ VB: sorted index into contexts for binary-search lookup if d2d_map fails */\
     \
     /* reference stuff */ \
     Reference ref;                /* used by VBs created by dispatchers for uncompressing / compressing internal or external references. NOT used by VBs of the data type itself. */ \
-    Buffer chrom2ref_map;         /* ZIP: mapping from user file chrom to alternate chrom in reference file (new chroms in this VB) - incides much vb->contexts[CHROM].nodes */\
-    Buffer ol_chrom2ref_map;      /* ZIP: mapping from user file chrom to alternate chrom in reference file (chroms cloned) - incides much vb->contexts[CHROM].ol_nodes */\
+    Buffer ol_chrom2ref_map;      /* ZIP: mapping from user file chrom to alternate chrom in reference file (chroms cloned) - incides match vb->contexts[CHROM].ol_nodes. New nodes are stored in ctx->chrom2ref_map, where ctx is CHROM and dict-aliases to it. */\
     \
     /* reference range lookup caching */ \
     RangeP prev_range[2];         /* previous range returned by ref_seg_get_range */ \
@@ -216,7 +216,7 @@ extern VBlockPool *vb_get_pool (VBlockPoolType type, FailType soft_fail);
 extern VBlockP vb_get_from_pool (VBlockPoolP pool, int32_t vb_id);
 extern VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompIType comp_i);
 extern void vb_destroy_pool_vbs (VBlockPoolType type);
-extern uint32_t vb_pool_get_num_in_use (VBlockPoolType type);
+extern uint32_t vb_pool_get_num_in_use (VBlockPoolType type, int32_t *id_in_use);
 extern bool vb_pool_is_full (VBlockPoolType type);
 extern bool vb_pool_is_empty (VBlockPoolType type);
 
@@ -229,3 +229,5 @@ extern void vb_set_is_processed (VBlockP vb);
 
 // NOT thread safe, use only in execution-terminating messages
 extern rom err_vb_pos (void *vb);
+extern rom pool_name (VBlockPoolType pool_type);
+extern bool vb_buf_locate (VBlockP vb, ConstBufferP buf);

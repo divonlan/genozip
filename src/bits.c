@@ -841,14 +841,16 @@ void bits_print_substr (rom msg, ConstBitsP bits,uint64_t start, uint64_t length
 }
 
 // prints a 2bit bases array - A,C,G,T bases
-void bits_print_substr_bases (rom msg, ConstBitsP bits, uint64_t start, uint64_t length/*in bases*/, FILE *file)
+void bits_print_substr_bases (rom msg, ConstBitsP bits, uint64_t start_base, uint64_t n_bases, FILE *file)
 {
-    start *= 2; // now it is in bits
-    length = MIN_(length * 2, bits->nbits - start);
+    if (!file) file = info_stream;
+
+    uint64_t start_bit = start_base * 2;
+    uint64_t n_bits = MIN_(n_bases * 2, bits->nbits - start_bit);
 
     if (msg) fprintf (file, "%s: ", msg);
-    for (uint64_t i=0; i < length; i += 2) { 
-        char b = bits_get2 (bits, start + i);
+    for (uint64_t i=0; i < n_bits; i += 2) { 
+        char b = bits_get2 (bits, start_bit + i);
         fputc (b==0 ? 'A' : b==1 ? 'C' : b==2 ? 'G' : 'T' , file);
     }
 

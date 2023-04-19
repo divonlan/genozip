@@ -83,10 +83,10 @@ void codec_longr_segconf_calculate_bins (VBlockP vb, ContextP ctx,
         num_values = ctx->local.len;
     }
 
-    // create value_to_bin mapper in zctx->con_cache (note: ctx is be predefinded, so zctx has the same did_i)
-    buf_alloc (evb, &zctx->con_cache, 0, 256, uint8_t, 0, "value_to_bin");
-    uint8_t *value_to_bin = B1ST8 (zctx->con_cache);
-    zctx->con_cache.len = NUM_BINS;
+    // create value_to_bin mapper in zctx->value_to_bin (note: ctx is be predefinded, so zctx has the same did_i)
+    buf_alloc (evb, &zctx->value_to_bin, 0, 256, uint8_t, 0, "value_to_bin");
+    uint8_t *value_to_bin = B1ST8 (zctx->value_to_bin);
+    zctx->value_to_bin.len = NUM_BINS;
     
     uint8_t fixed = 11;
 
@@ -158,7 +158,7 @@ COMPRESS (codec_longr_compress)
     memset (state, 0, sizeof (LongrState));
 
     state->base_chan  = codec_alloc (vb, *uncompressed_len * sizeof (uint16_t), 0);
-    state->value_to_bin = B1ST8 (ZCTX(values_ctx->did_i)->con_cache);
+    state->value_to_bin = B1ST8 (ZCTX(values_ctx->did_i)->value_to_bin);
     codec_longr_alg_init (state);
 
     STRw(seq); STRw (qual); 
@@ -293,23 +293,23 @@ static void codec_longr_reconstruct_init (VBlockP vb, Context *lens_ctx, Context
         next += len;
     }
     
-    // retrieve the global value-to-bin mapper from SEC_COUNTS and store it in lens_ctx.con_cache
-    buf_alloc (vb, &values_ctx->con_cache, 0, 256, uint8_t, 0, "value_to_bin");
-    values_ctx->con_cache.len = 256;
+    // retrieve the global value-to-bin mapper from SEC_COUNTS and store it in values_ctx.value_to_bin
+    buf_alloc (vb, &values_ctx->value_to_bin, 0, 256, uint8_t, 0, "value_to_bin");
+    values_ctx->value_to_bin.len = 256;
 
     // until 13.0.11, stored in SEC_COUNTS of lens_ctx, and after in values_ctx
     BufferP value_to_bin = ZCTX(values_ctx->did_i)->counts.len ? &ZCTX(values_ctx->did_i)->counts 
                                                                : &ZCTX(lens_ctx->did_i)->counts;
 
     ARRAY (uint64_t, value_to_bin_src, *value_to_bin); 
-    ARRAY (uint8_t,  value_to_bin_dst, values_ctx->con_cache);
+    ARRAY (uint8_t,  value_to_bin_dst, values_ctx->value_to_bin);
 
     for (int i=0; i < 256; i++) 
         value_to_bin_dst[i] = value_to_bin_src[i]; // uint64 -> uint8
 
-    // initialize longr state - stored in lens_ctx.con_cache
-    buf_alloc_zero (vb, &lens_ctx->con_cache, 1, 0, LongrState, 0, "contexts->local"); 
-    codec_longr_alg_init (B1ST (LongrState, lens_ctx->con_cache));
+    // initialize longr state - stored in lens_ctx.longr_state
+    buf_alloc_zero (vb, &lens_ctx->longr_state, 1, 0, LongrState, 0, "contexts->local"); 
+    codec_longr_alg_init (B1ST (LongrState, lens_ctx->longr_state));
 
     lens_ctx->is_initialized = true;
 }
@@ -331,8 +331,8 @@ CODEC_RECONSTRUCT (codec_longr_reconstruct)
 
     ARRAY (uint8_t, sorted_qual, values_ctx->local);
     ARRAY (uint32_t, next_of_chan, lens_ctx->local);
-    LongrState *state = B1ST (LongrState, lens_ctx->con_cache);
-    state->value_to_bin = B1ST8 (values_ctx->con_cache);
+    LongrState *state = B1ST (LongrState, lens_ctx->longr_state);
+    state->value_to_bin = B1ST8 (values_ctx->value_to_bin);
 
     rom seq = (VB_DT(SAM) && VB_SAM->textual_seq.len) ? B1STc (VB_SAM->textual_seq) // note: textual_seq is prepared in sam_piz_sam2bam_SEQ and sam_piz_prim_add_Grps_and_CIGAR
                                                       : last_txtx (vb, seq_ctx); 

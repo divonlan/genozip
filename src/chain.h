@@ -50,7 +50,7 @@ extern bool chain_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern bool chain_zip_dts_flag (int dts);
 
 // piz of a chain file
-extern bool chain_piz_initialize (void);
+extern bool chain_piz_initialize (CompIType comp_i);
 extern CONTAINER_FILTER_FUNC (chain_piz_filter);
 
 // using the chain data in genozip --chain

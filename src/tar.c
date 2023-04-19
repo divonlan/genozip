@@ -58,12 +58,17 @@ typedef struct __attribute__ ((packed)){
 
 static FILE *tar_file = NULL;
 static rom tar_name = NULL;
-static int64_t file_offset = 0; // after tar_open_file: file start offset within tar (after the file tar header)
+static int64_t t_offset = 0; // after tar_open_file: file start offset within tar (after the file tar header)
 static HeaderPosixUstar hdr = {};
 
 void tar_set_tar_name (rom tar_filename)
 {
     tar_name = tar_filename;
+}
+
+rom tar_get_tar_name (void)
+{
+    return tar_name;
 }
 
 void tar_initialize (void)
@@ -165,7 +170,7 @@ static void tar_write_gnu_long_filename (const char *z_fn, unsigned z_fn_len/* i
         ASSERT (fwrite (padding, ROUNDUP512(z_fn_len) - z_fn_len, 1, tar_file) == 1, "failed to write long filename padding of %s to %s", z_fn, tar_name); 
     }
 
-    file_offset += 512 + ROUNDUP512(z_fn_len);
+    t_offset += 512 + ROUNDUP512(z_fn_len);
 }
 
 // open z_file within tar, for writing
@@ -210,31 +215,29 @@ FILE *tar_open_file (rom z_fn)
     else           tar_copy_metadata_from_file (txt_name); // case: zipping a txt_file on disk - take from that txt file
 
     ASSERT (fwrite (&hdr, 512, 1, tar_file) == 1, "failed to write header of %s to %s", z_fn, tar_name); // place holder - we will update this upon close
-    file_offset += 512; // past tar header
+    t_offset += 512; // past tar header
 
     return tar_file;
 }
 
-bool tar_is_tar (void)
+bool tar_zip_is_tar (void)
 {
-    return !!tar_name;
+    return IS_ZIP && !!tar_name;
 }
 
 int64_t tar_file_offset (void) 
 {
-    return file_offset; // 0 if not using tar
+    return t_offset; // 0 if not using tar
 }
 
 void tar_close_file (void **file)
 {
     ASSERTNOTNULL (tar_file);
 
-    if (flag.replace) fflush (tar_file); // flush z_file before deleting txt file
-
     int64_t tar_size = ftello64 (tar_file);
     ASSERT (tar_size >= 0, "ftello64 failed for %s", tar_name);
 
-    int64_t z_size = tar_size - file_offset;
+    int64_t z_size = tar_size - t_offset;
 
     // file consist of full 512-byte records. pad it to make it so:
     int64_t padding_len = ROUNDUP512(tar_size) - tar_size;
@@ -263,11 +266,15 @@ void tar_close_file (void **file)
     sprintf (hdr.checksum, "%06o", checksum);
     
     // update header
-    ASSERT (!fseeko64 (tar_file, file_offset-512, SEEK_SET), "fseek(%"PRId64") of %s failed (1): %s", file_offset-512, tar_name, strerror (errno));
+    ASSERT (!fseeko64 (tar_file, t_offset-512, SEEK_SET), "fseek(%"PRId64") of %s failed (1): %s", t_offset-512, tar_name, strerror (errno));
     ASSERT (fwrite (&hdr, 512, 1, tar_file) == 1, "failed to write file header to %s", tar_name);
     ASSERT (!fseeko64 (tar_file, 0, SEEK_END), "fseek(END) of %s failed (2): %s", tar_name, strerror (errno));
 
-    file_offset = tar_size; // next file start offset
+    // flush to finalize z_file within tar file, before deleting txt file, and also before spawning a process to test it
+    if (flag.replace || flag.test) 
+        fflush (tar_file); 
+
+    t_offset = tar_size; // next file start offset
 
     if (file) *file = NULL;
 }
@@ -308,5 +315,5 @@ void tar_finalize (void)
     ASSERT (fwrite (s, 1024, 1, tar_file) == 1, "failed to EOF tar blocks to %s", tar_name);
 
     FCLOSE (tar_file, "tar_file");
-    file_offset = 0;
+    t_offset = 0;
 }

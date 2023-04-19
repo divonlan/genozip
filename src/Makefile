@@ -40,6 +40,7 @@ else
 	else
 		ifeq ($(uname),Linux)
 			CFLAGS += -march=nocona # similar to conda - relatively low optimization, since different hosts in a cluster might have different capabilities
+			CFLAGS += -mtune=intel  # see https://gcc.gnu.org/onlinedocs/gcc/x86-Options.html
 		endif
 
 		ifeq ($(uname),Darwin) # Mac
@@ -61,9 +62,9 @@ PROD_SRC = ../../genozip-prod/src
 SRC_DIRS = zlib bzlib lzma bsc libdeflate htscodecs compatibility
 
 MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c license.c tip.c      				\
-		  data_types.c bits.c progress.c writer.c tar.c chrom.c qname.c tokenizer.c 							\
+		  data_types.c bits.c progress.c writer.c tar.c chrom.c qname.c tokenizer.c mutex.c threads.c			\
           zip.c piz.c reconstruct.c recon_history.c recon_peek.c seg.c zfile.c aligner.c flags.c digest.c    	\
-		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c mutex.c threads.c	\
+		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c ref_cache.c     	 	\
 		  vcf_piz.c vcf_seg.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c          		\
 		  vcf_format_GT.c vcf_format_PS_PID.c vcf_info_QD.c vcf_info_SF.c vcf_dbsnp.c                           \
 		  vcf_refalt.c vcf_tags.c vcf_linesort.c vcf_format.c vcf_illum_gtyping.c vcf_gwas.c             		\
@@ -78,7 +79,7 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c lice
 		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c	\
 		  codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c codec_normq.c    							\
 	      txtfile.c profiler.c file.c filename.c dispatcher.c crypt.c aes.c md5.c segconf.c biopsy.c gencomp.c	\
-		  vblock.c regions.c  optimize.c dict_id.c hash.c stream.c url.c bases_filter.c dict_io.c 				\
+		  vblock.c regions.c  optimize.c dict_id.c aliases.c hash.c stream.c url.c bases_filter.c dict_io.c		\
 		  recon_plan_io.c version.c huffman.c
 
 CONDA_COMPATIBILITY_SRCS =  compatibility/mac_gettime.c
@@ -100,7 +101,7 @@ CONDA_DEVS = Makefile ../.gitignore
 
 CONDA_DOCS = ../LICENSE.txt ../AUTHORS ../README.md
 
-CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h bits.h progress.h website.h \
+CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h aliases.h txtfile.h zip.h bits.h progress.h website.h \
              endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h huffman.h \
              buffer.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h codec.h stats.h \
              crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h qname.h qname_flavors.h \
@@ -150,13 +151,17 @@ ifeq ($(OS),Windows_NT)
 	WSL=wsl
 else
     ifeq ($(uname),Linux)
-        LDFLAGS += -lrt # required by pthreads
+        LDFLAGS += -lrt -fuse-ld=gold # rt is required by pthreads
     	OBJDIR=$(OBJDIR_LINUX)
 	endif
 
     ifeq ($(uname),Darwin) # Mac
 		MY_SRCS += mac_compat.c
     	OBJDIR=$(OBJDIR_MAC)
+
+		ifeq ($(CC),gcc) 
+	        LDFLAGS += -fuse-ld=gold
+		endif
     endif
 endif
 
@@ -231,35 +236,36 @@ endif # ugly hack to avoid conda failure due to bash issues in dict_id_gen.sh - 
 genozip$(EXE): sync_wsl_clock dict_id_gen.h $(OBJS)
 	@echo Linking $@
 	@$(CC) -o $@ $(OBJS) $(CFLAGS) $(LDFLAGS)
-	@ln -f $@ ../$@
+	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi  # hard linking not possible on some filesystems
  
 genozip-debug$(EXE): sync_wsl_clock dict_id_gen.h $(DEBUG_OBJS)
 	@echo Linking $@
 	@$(CC) -o $@ $(DEBUG_OBJS) $(CFLAGS) $(LDFLAGS) 
-	@ln -f $@ ../$@
+	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
 
 genozip-opt$(EXE): sync_wsl_clock dict_id_gen.h $(OPT_OBJS)
 	@echo Linking $@
 	@$(CC) -o $@ $(OPT_OBJS) $(CFLAGS) $(LDFLAGS)
-	@ln -f $@ ../$@
+	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
 
 genounzip$(EXE) genocat$(EXE) genols$(EXE): genozip$(EXE)
 	@echo Hard linking $@
 	@rm -f $@ 
 	@ln -f $^ $@
-	@ln -f $@ ../$@
+	@if ! ln -f $^ $@; then ln -fs $^ $@; fi
+	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
 
 genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE): genozip-debug$(EXE)
 	@echo Hard linking $@
 	@rm -f $@ 
-	@ln -f $^ $@
-	@ln -f $@ ../$@
+	@if ! ln -f $^ $@; then ln -fs $^ $@; fi
+	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
 
 genounzip-opt$(EXE) genocat-opt$(EXE) genols-opt$(EXE): genozip-opt$(EXE)
 	@echo Hard linking $@
 	@rm -f $@ 
-	@ln -f $^ $@
-	@ln -f $@ ../$@
+	@if ! ln -f $^ $@; then ln -fs $^ $@; fi
+	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
 
 # WSL2 clock is out of sync with Windows (and hence the NTFS filesystem) every time the computer sleeps
 # For this to work, first "sudo chmod u+s /usr/sbin/hwclock"
@@ -323,7 +329,7 @@ clean-test:
 clean: clean-installers clean-test
 	@echo Cleaning up
 	@rm -f $(DEPS) $(filter-out LICENSE.txt,$(WINDOWS_INSTALLER_OBJS)) *.d .archive.tar.gz *.stackdump $(EXECUTABLES) $(OPT_EXECUTABLES) $(DEBUG_EXECUTABLES) 
-	@rm -f *.S *.good *.bad $(DATA)/*.good $(DATA)/*.bad *.local genozip.threads-log.* *.b250 
+	@rm -f *.S *.good *.bad $(DATA)/*.good $(DATA)/*.bad *.local genozip.threads-log.* *.b250 vgcore.*
 	@rm -R $(OBJDIR)
 	@mkdir $(OBJDIR) $(addprefix $(OBJDIR)/, $(SRC_DIRS))
 

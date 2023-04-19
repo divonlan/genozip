@@ -124,9 +124,9 @@ static inline PosType32 sam_piz_predict_TLEN (VBlockSAMP vb, bool has_mc)
     unsigned last_rname_len = vb->last_txt_len(SAM_RNAME);
     unsigned last_rnext_len = vb->last_txt_len(SAM_RNEXT);
     
-    if (flag.out_dt == DT_BAM && *(int32_t*)last_rname != *(int32_t*)last_rnext) return 0;
+    if (OUT_DT(BAM) && *(int32_t*)last_rname != *(int32_t*)last_rnext) return 0;
 
-    if (flag.out_dt == DT_SAM && !IS_EQUAL_SIGN (last_rnext) &&
+    if (OUT_DT(SAM) && !IS_EQUAL_SIGN (last_rnext) &&
         (last_rname_len != last_rnext_len || memcmp (last_rname, last_rnext, last_rnext_len))) return 0;
 
     PosType32 pnext_pos_delta = (PosType32)CTX(SAM_PNEXT)->last_value.i - (PosType32)CTX(SAM_POS)->last_value.i;
@@ -200,7 +200,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_COPY_MATE_TLEN_old)
 // place value in correct location in alignment
 TRANSLATOR_FUNC (sam_piz_sam2bam_TLEN)
 {
-    BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)Bc (vb->txt_data, vb->line_start);
+    BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)Btxt (vb->line_start);
     alignment->tlen = LTEN32 (ctx->last_value.i);
     return 0;
 }

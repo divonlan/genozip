@@ -46,6 +46,9 @@ typedef struct DispatcherData {
     char *progress_prefix;
     uint64_t progress;        // progress towards target_progress
     uint64_t target_progress; // progress reaches this, it is at 100%
+
+    Timestamp init_timestamp;
+    uint32_t total_compute_time; // in msec
 } DispatcherData;
 
 // variables that persist across multiple dispatchers run sequentially
@@ -100,6 +103,7 @@ Dispatcher dispatcher_init (rom task_name,
     d->last_joined     = (d->max_threads > 1) ? -1 /* none joined yet */ : 0;
     d->last_dispatched = -1; // none dispatched yet
     d->next_dispatched = -1; // none generated yet
+    d->init_timestamp  = arch_timestamp();
 
     if (d->progress_type == PROGRESS_PERCENT)
         main_dispatcher = d;
@@ -115,7 +119,7 @@ Dispatcher dispatcher_init (rom task_name,
     if (!flag.unbind && filename) // note: for flag.unbind (in main file), we print this in dispatcher_resume() 
         d->progress_prefix = progress_new_component (filename, prog_msg, test_mode); 
 
-    d->pool_in_use_at_init = vb_pool_get_num_in_use (pool_type); // we need to return the pool after dispatcher in the condition we received it...
+    d->pool_in_use_at_init = vb_pool_get_num_in_use (pool_type, NULL); // we need to return the pool after dispatcher in the condition we received it...
 
     return d;
 }
@@ -153,6 +157,14 @@ void dispatcher_set_task_name (Dispatcher d, rom task_name)
     d->task_name = task_name;
 }
 
+void dispatcher_calc_avg_compute_vbs (Dispatcher d)
+{
+    uint32_t dispatcher_lifetime = arch_time_lap (d->init_timestamp);
+
+    z_file->avg_compute_vbs = dispatcher_lifetime ? ((double)d->total_compute_time / (double)dispatcher_lifetime) : 0;
+    profiler_set_avg_compute_vbs (z_file->avg_compute_vbs);
+}
+
 void dispatcher_finish (Dispatcher *dd_p, uint32_t *last_vb_i, bool cleanup_after_me,
                         bool show_memory)
 {
@@ -181,9 +193,10 @@ void dispatcher_finish (Dispatcher *dd_p, uint32_t *last_vb_i, bool cleanup_afte
 
     if (main_dispatcher == *dd_p) main_dispatcher = 0;
 
-    uint32_t pool_in_use_at_finish = vb_pool_get_num_in_use (d->pool_type);
-    ASSERT (pool_in_use_at_finish == d->pool_in_use_at_init, "Dispatcher \"%s\" leaked VBs: pool_in_use_at_init=%u pool_in_use_at_finish=%u",
-            d->task_name, d->pool_in_use_at_init, pool_in_use_at_finish);
+    int32_t id_in_use;
+    uint32_t pool_in_use_at_finish = vb_pool_get_num_in_use (d->pool_type, &id_in_use);
+    ASSERT (pool_in_use_at_finish == d->pool_in_use_at_init, "Dispatcher \"%s\" leaked VBs: pool_in_use_at_init=%u pool_in_use_at_finish=%u (one VB in use is vb_id=%u)",
+            d->task_name, d->pool_in_use_at_init, pool_in_use_at_finish, id_in_use);
 
     FREE (d->progress_prefix);
     FREE (*dd_p);
@@ -216,10 +229,12 @@ void dispatcher_compute (Dispatcher d, void (*func)(VBlockP))
     ASSERTNOTNULL (vb);
     ASSERT0 (vb->vblock_i, "dispatcher_compute: cannot compute a VB because vb->vblock_i=0");
 
+    vb->start_compute_timestamp = arch_timestamp();
+
     if (d->max_threads > 1) 
         threads_create (func, vb);
     else  
-        func(vb); // single thread
+        func (vb); // single thread
 
     d->last_dispatched = d->next_dispatched;
     d->next_dispatched = -1;
@@ -293,7 +308,8 @@ VBlockP dispatcher_get_processed_vb (Dispatcher d, bool *is_final, bool blocking
     d->processed_vb = d->vbs[d->last_joined];
     d->vbs[d->last_joined] = NULL;
     d->num_running_compute_threads--;
-    
+    d->total_compute_time += arch_time_lap (d->processed_vb->start_compute_timestamp);
+
     return d->processed_vb; 
 }
 
@@ -332,7 +348,7 @@ void dispatcher_recycle_vbs (Dispatcher d, bool release_vb)
     if (d->progress_type == PROGRESS_PERCENT)
         dispatcher_increment_progress (0, 0);
 
-    COPY_TIMER_VB (evb, dispatcher_recycle_vbs);
+    COPY_TIMER_EVB (dispatcher_recycle_vbs);
 }                           
 
 void dispatcher_set_no_data_available (Dispatcher d, bool abandon_next_vb, DispatchStatus dispatch_status)

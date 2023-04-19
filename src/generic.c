@@ -75,7 +75,7 @@ int32_t generic_is_header_done (bool is_eof)
     if (flag.explicitly_generic)
         {} // no message
 
-    else if (tar_is_tar() || !txt_file->redirected) 
+    else if (tar_zip_is_tar() || !txt_file->redirected) 
         WARN_ONCE ("FYI: genozip doesn't recognize %s file's type, so it will be compressed as GENERIC. In the future, you may specify the type with \"--input <type>\". To suppress this warning, use \"--input generic\".", txt_name);
 
     else if (!is_cram)

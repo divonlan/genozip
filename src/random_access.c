@@ -287,7 +287,7 @@ void random_access_finalize_entries (BufferP ra_buf)
                 ra->max_pos    += (ra-1)->max_pos;
             } 
 
-    COPY_TIMER_VB (evb, random_access_finalize_entries);
+    COPY_TIMER_EVB (random_access_finalize_entries);
 }
 
 Codec random_access_compress (ConstBufferP ra_buf_, SectionType sec_type, Codec codec, int ra_i, rom msg)
@@ -318,7 +318,7 @@ Codec random_access_compress (ConstBufferP ra_buf_, SectionType sec_type, Codec 
     BGEN_random_access (ra_buf); // make ra_buf into big endian
 
 done:
-    COPY_TIMER_VB (evb, random_access_compress);
+    COPY_TIMER_EVB (random_access_compress);
     return codec;
 }
 

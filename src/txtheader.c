@@ -90,15 +90,15 @@ void txtheader_compress (BufferP txt_header,
         .txt_header_size   = BGEN64 (unmodified_txt_header_len),
     };
 
-    // data type specific fields
-    if (DTPZ(zip_set_txt_header_specific)) DTPZ(zip_set_txt_header_specific)(&section_header);
+    // data type (of txt file!) specific fields
+    if (DTPT(zip_set_txt_header_flags)) DTPT(zip_set_txt_header_flags)(&section_header.flags.txt_header);
 
     // In BGZF, we store the 3 least significant bytes of the file size, so check if the reconstructed BGZF file is likely the same
     if (txt_file->codec == CODEC_BGZF) 
         bgzf_sign (txt_file->disk_size, section_header.codec_info);
         
     filename_base (txt_file->name, false, FILENAME_STDIN, section_header.txt_filename, TXT_FILENAME_LEN);
-    file_remove_codec_ext (section_header.txt_filename, txt_file->type); // eg "xx.fastq.gz -> xx.fastq"
+    filename_remove_codec_ext (section_header.txt_filename, txt_file->type); // eg "xx.fastq.gz -> xx.fastq"
 
     txt_header_buf = txt_header;
     txt_header_buf->next = 0;
@@ -120,7 +120,7 @@ void txtheader_compress (BufferP txt_header,
     z_file->txt_data_so_far_bind_comp[comp_i] += txt_header->len;
     z_file->txt_data_so_far_bind_0_comp[comp_i] += unmodified_txt_header_len;
 
-    COPY_TIMER_VB (evb, txtheader_compress);
+    COPY_TIMER_EVB (txtheader_compress);
 }
 
 // ZIP: reads txt header and writes its compressed form to the GENOZIP file
@@ -159,7 +159,7 @@ int64_t txtheader_zip_read_and_compress (int64_t *txt_header_offset, CompIType c
     }
     else 
         *txt_header_offset = -1; // no SEC_TXT_HEADER section written
-
+    
     if (flag.show_lines)
         iprintf ("txtheader bytes=%"PRIu64"\n", txt_header_size);
     
@@ -174,7 +174,7 @@ int64_t txtheader_zip_read_and_compress (int64_t *txt_header_offset, CompIType c
     
     is_first_txt = false;
 
-    COPY_TIMER_VB (evb, txtheader_zip_read_and_compress);
+    COPY_TIMER_EVB (txtheader_zip_read_and_compress);
 
     return txt_header_size; // all good
 }
@@ -217,6 +217,52 @@ static void txtheader_uncompress_one_vb (VBlockP vb)
     vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.
 }
 
+// get filename of output txt file in genounzip if user didn't specific it with --output
+// case 1: outputing a single file - generate txt_filename based on the z_file's name
+// case 2: unbinding a genozip into multiple txt files - generate txt_filename of a component file from the
+//         component name in SEC_TXT_HEADER 
+static rom txtheader_piz_get_filename (rom orig_name, rom prefix, bool is_orig_name_genozip, bool with_bgzf)
+{
+    unsigned fn_len = strlen (orig_name);
+    unsigned dn_len = flag.out_dirname ? strlen (flag.out_dirname) : 0;
+    unsigned genozip_ext_len = is_orig_name_genozip ? (sizeof GENOZIP_EXT - 1) : 0;
+    char *txt_filename = (char *)CALLOC(fn_len + dn_len + 10);
+
+    #define EXT2_MATCHES_TRANSLATE(from,to,ext)  \
+        ((z_file->data_type==(from) && flag.out_dt==(to) && \
+         fn_len >= genozip_ext_len+strlen(ext) && \
+         !strcmp (&txt_filename[fn_len-genozip_ext_len- (sizeof ext - 1)], (ext))) ? (int)(sizeof ext - 1) : 0) 
+
+    // length of extension to remove if translating, eg remove ".sam" if .sam.genozip->.bam */
+    int old_ext_removed_len = EXT2_MATCHES_TRANSLATE (DT_SAM,   DT_BAM,    ".sam") +
+                              EXT2_MATCHES_TRANSLATE (DT_SAM,   DT_SAM,    ".bam") +
+                              EXT2_MATCHES_TRANSLATE (DT_SAM,   DT_FASTQ,  ".sam") +
+                              EXT2_MATCHES_TRANSLATE (DT_SAM,   DT_FASTQ,  ".bam") +
+                              EXT2_MATCHES_TRANSLATE (DT_VCF,   DT_BCF,    ".vcf") +
+                              EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".fa" ) +
+                              EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".faa") +
+                              EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".ffn") +
+                              EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".fna") +
+                              EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".frn") +
+                              EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".fas") +
+                              EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".fsa") +
+                              EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".fasta") +
+                              EXT2_MATCHES_TRANSLATE (DT_ME23,  DT_VCF,    ".txt");
+
+    // case: new directory - take only the basename
+    if (dn_len) orig_name = filename_base (orig_name, 0,0,0,0); 
+    
+    sprintf ((char *)txt_filename, "%s%s%s%.*s%s%s", prefix ? prefix : "",
+             (dn_len ? flag.out_dirname : ""), (dn_len ? "/" : ""), 
+             fn_len - genozip_ext_len - old_ext_removed_len, orig_name,
+             old_ext_removed_len ? file_plain_ext_by_dt (flag.out_dt) : "", // add translated extension if needed
+             (with_bgzf && !OUT_DT(BAM) && !OUT_DT(BCF)) ? ".gz" : ""); // add .gz if --bgzf (except in BAM and BCF where it is implicit)
+
+    if (dn_len) FREE (orig_name); // allocated by filename_base
+
+    return txt_filename;
+}
+
 // PIZ main thread: reads the txt header from the genozip file and outputs it to the reconstructed txt file
 void txtheader_piz_read_and_reconstruct (Section sec)
 {
@@ -232,7 +278,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
     Section my_sec = sec;
     SectionHeaderTxtHeader header = {};
     for (VBIType vb_i=1; my_sec->st == SEC_TXT_HEADER && (my_sec->vblock_i==vb_i || (!my_sec->vblock_i && vb_i==1 /* up to 14.0.8 */)); vb_i++, my_sec++) {
-        SectionHeaderTxtHeader frag_header = zfile_read_section_header (txt_header_vb, my_sec->offset, my_sec->vblock_i, SEC_TXT_HEADER).txt_header;
+        SectionHeaderTxtHeader frag_header = zfile_read_section_header (txt_header_vb, my_sec, SEC_TXT_HEADER).txt_header;
         txt_header_vb->txt_data.len += BGEN32 (frag_header.data_uncompressed_len);
 
         if (vb_i == 1 && sec->comp_i == COMP_MAIN) 
@@ -247,26 +293,41 @@ void txtheader_piz_read_and_reconstruct (Section sec)
     buf_alloc (txt_header_vb, &txt_header_vb->txt_data, 0, txt_header_vb->txt_data.len, char, 0, "txt_data");
     txt_header_vb->txt_data.next = 0;
 
-    dispatcher_fan_out_task ("read_txt_header", NULL, 0, 0, true, flag.test, false, 0, 1000, true,
-                             txtheader_read_one_vb, 
-                             txtheader_uncompress_one_vb,
-                             NO_CALLBACK);
-        
-    // 1. if flag.unbind (genounzip) - we open the output txt file of the component
-    // 2. if flag.one_component (genocat) - output to stdout or --output
-    // 3. when reading an auxiliary file or no_writer- we create txt_file here (but don't actually open the physical file)
-    if (!txt_file) { 
-        rom filename = flag.unbind ? txtfile_piz_get_filename (header.txt_filename, flag.unbind, false) 
-                                   : flag.out_filename;
-        txt_file = file_open (filename, WRITE, TXT_FILE, flag.out_dt != DT_NONE ? flag.out_dt : z_file->data_type);
-        if (flag.unbind) FREE (filename); // file_open copies the names
-        
-        // note: this is reset for each component:
-        // since v14 it is used for the commulative component-scope MD5 used for both VBs and txt file verification
-        // up to v13 it is for commulative digest of both MD5 and Adler, but used only for txt file verification,
-        // while VB verification relies on v13_commulative_digest_ctx which is commulative across components.
-        z_file->digest_ctx = DIGEST_CONTEXT_NONE; // reset digest
+    // read actual txt header data only if we need to reconstruct the header
+    bool needs_recon = writer_does_txtheader_need_recon (sec->comp_i);
+    FlagsBgzf bgzf_flags = {};
+    rom filename = NULL;
+
+    if (needs_recon) {
+        dispatcher_fan_out_task ("read_txt_header", NULL, 0, 0, true, flag.test, false, 0, 1000, true,
+                                 txtheader_read_one_vb, 
+                                 txtheader_uncompress_one_vb,
+                                 NO_CALLBACK);
+
+        bgzf_flags = bgzf_piz_calculate_bgzf_flags (sec->comp_i, header.src_codec);
+
+        filename = flag.to_stdout    ? NULL 
+                 : flag.out_filename ? flag.out_filename
+                 : flag.unbind       ? txtheader_piz_get_filename (header.txt_filename, flag.unbind, false, bgzf_flags.level >= 1)
+                 :                     txtheader_piz_get_filename (z_name,              "",          true,  bgzf_flags.level >= 1); // use genozip filename as a base regardless of original name
     }
+
+    // note: when reading an auxiliary file or no_writer - we still create txt_file (but don't actually open the physical file)
+    // note: if there are several components contributing to a single txt_file (DVCF, SAM w/gencomp) - we only open it once
+    if (!txt_file)
+        txt_file = file_open_txt_write (filename, flag_loading_auxiliary ? z_file->data_type : flag.out_dt, bgzf_flags.level);
+    
+    if (!flag.to_stdout && !flag.out_filename) FREE (filename); // file_open_z copies the names
+
+    // set BGZF info in txt_file - either that originates from SEC_BGZF, or constructed based on bgzf_flags
+    if (needs_recon && txt_file->codec == CODEC_BGZF)
+        bgzf_piz_set_txt_file_bgzf_info (bgzf_flags, header.codec_info);
+
+    // note: this is reset for each component:
+    // since v14 it is used for the commulative component-scope MD5 used for both VBs and txt file verification
+    // up to v13 it is for commulative digest of both MD5 and Adler, but used only for txt file verification,
+    // while VB verification relies on v13_commulative_digest_ctx which is commulative across components.
+    z_file->digest_ctx = DIGEST_CONTEXT_NONE; // reset digest
 
     // initialize if needed - but only once per outputted txt file 
     //i.e. if we have rejects+normal, or concatenated, we will only init in the first)
@@ -276,49 +337,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
     evb->comp_i                = !VER(14) ? header.flags.txt_header.v13_dvcf_comp_i/*v12,13*/ : sec->comp_i/*since v14*/;
     txt_file->max_lines_per_vb = BGEN32 (header.max_lines_per_vb);
     txt_file->txt_flags        = header.flags.txt_header;
-    txt_file->num_vbs          = sections_count_sections_until (SEC_VB_HEADER, sec, SEC_TXT_HEADER);
-    
-    if (txt_file->codec == CODEC_BGZF)
-        memcpy (txt_file->bgzf_signature, header.codec_info, 3);
-        
-    // case: we need to reconstruct (or not) the BGZF following the instructions from the z_file
-    if (flag.bgzf == BGZF_BY_ZFILE) {
-
-        // load the source file isize if we have it and we are attempting to reconstruct an unmodifed file identical to the source
-        bool loaded = false;
-        if (!flag.data_modified)     
-//xxx        && (z_file->num_components == 1 || flag.unbind))  // not concatenating multiple files
-            loaded = bgzf_load_isizes (sec); // also sets txt_file->bgzf_flags
-
-        // case: user wants to see this section header, despite not needing BGZF data
-        else if (flag.only_headers == SEC_BGZF+1 || flag.only_headers == -1) {
-            bgzf_load_isizes (sec); 
-            buf_free (txt_file->bgzf_isizes);
-        }
-
-        // case: we need to reconstruct back to BGZF, but we don't have a SEC_BGZF to guide us - we'll creating our own BGZF blocks
-        if (!loaded && (txt_file->codec == CODEC_BGZF))
-            txt_file->bgzf_flags = (struct FlagsBgzf){ // case: we're creating our own BGZF blocks
-                .has_eof_block = true, // add an EOF block at the end
-                .library       = BGZF_LIBDEFLATE, // default - libdeflate level 6
-                .level         = BGZF_COMP_LEVEL_DEFAULT 
-            };
-    }
-
-    // case: the user wants us to reconstruct (or not) the BGZF blocks in a particular way, this overrides the z_file instructions 
-    else 
-        txt_file->bgzf_flags = (struct FlagsBgzf){ // case: we're creating our own BGZF blocks
-            .has_eof_block = true, // add an EOF block at the end
-            .library       = BGZF_LIBDEFLATE, 
-            .level         = flag.bgzf 
-        };
-
-    // sanity        
-    ASSERT (txt_file->bgzf_flags.level >= 0 && txt_file->bgzf_flags.level <= 12, "txt_file->bgzf_flags.level=%u out of range [0,12]", 
-            txt_file->bgzf_flags.level);
-
-    ASSERT (txt_file->bgzf_flags.library >= 0 && txt_file->bgzf_flags.library < NUM_BGZF_LIBRARIES, "txt_file->bgzf_flags.library=%u out of range [0,%u]", 
-            txt_file->bgzf_flags.level, NUM_BGZF_LIBRARIES-1);
+    txt_file->num_vbs          = sections_count_sections_until (SEC_VB_HEADER, sec, SEC_TXT_HEADER);    
 
     bool needs_write = writer_does_txtheader_need_write (sec->comp_i);
 
@@ -366,5 +385,5 @@ void txtheader_piz_read_and_reconstruct (Section sec)
     if (!flag.reading_chain && !flag.reading_reference)
         is_first_txt = false;
 
-    COPY_TIMER_VB (evb, txtheader_piz_read_and_reconstruct);
+    COPY_TIMER_EVB (txtheader_piz_read_and_reconstruct);
 }

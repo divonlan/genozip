@@ -138,14 +138,19 @@
 #pragma GENDICT INFO_MLEAF=DTYPE_1=MLEAF            // <ID=MLEAF,Number=A,Type=Float,Description="Maximum likelihood expectation (MLE) for the allele frequency (not necessarily the same as the AF), for each ALT allele, in the same order as listed">
 #pragma GENDICT INFO_SOR=DTYPE_1=SOR                // <ID=SOR,Number=1,Type=Float,Description="Symmetric Odds Ratio of 2x2 contingency table to detect strand bias">. See: https://gatk.broadinstitute.org/hc/en-us/articles/360036361772-StrandOddsRatio
 #pragma GENDICT INFO_QD=DTYPE_1=QD                  // <ID=QD,Number=1,Type=Float,Description="Variant Confidence/Quality by Depth">. See: https://gatk.broadinstitute.org/hc/en-us/articles/360041414572-QualByDepth
-
 #pragma GENDICT INFO_HaplotypeScore=DTYPE_1=HaplotypeScore // <ID=HaplotypeScore,Number=1,Type=Float,Description="Consistency of the site with at most two segregating haplotypes">
+#pragma GENDICT INFO_RAW_MQ=DTYPE_1=RAW_MQ          // <ID=RAW_MQ,Number=1,Type=Float,Description="Raw data for RMS Mapping Quality">
+
 #pragma GENDICT INFO_RAW_MQandDP=DTYPE_1=RAW_MQandDP// <ID=RAW_MQandDP,Number=2,Type=Integer,Description="Raw data (sum of squared MQ and total depth) for improved RMS Mapping Quality calculation. Incompatible with deprecated RAW_MQ formulation.">
 #pragma GENDICT INFO_RAW_MQandDP_MQ=DTYPE_1=R0AW_MQandDP
 #pragma GENDICT INFO_RAW_MQandDP_DP=DTYPE_1=R1AW_MQandDP
 
 #pragma GENDICT FORMAT_RGQ=DTYPE_2=RGQ              // <ID=RGQ,Number=1,Type=Integer,Description="Unconditional reference genotype confidence, encoded as a phred quality -10*log10 p(genotype call is wrong)">
 #pragma GENDICT FORMAT_MIN_DP=DTYPE_2=MIN_DP        // <ID=MIN_DP,Number=1,Type=Integer,Description="Minimum DP observed within the GVCF block">
+
+// DRAGEN gVCF, see: https://support.illumina.com/content/dam/illumina-support/help/Illumina_DRAGEN_Bio_IT_Platform_v3_7_1000000141465/Content/SW/Informatics/Dragen/Homeref_Blocks_Format_fDG.htm
+#pragma GENDICT FORMAT_SPL=DTYPE_2=SPL              // <ID=SPL,Number=.,Type=Integer,Description="Normalized, Phred-scaled likelihoods for SNPs based on the reference confidence model">
+#pragma GENDICT FORMAT_ICNT=DTYPE_2=ICNT            // <ID=ICNT,Number=2,Type=Integer,Description="Counts of INDEL informative reads based on the reference confidence model">
 
 // 10xGenomics: https://support.10xgenomics.com/genome-exome/software/pipelines/latest/output/vcf
 #pragma GENDICT FORMAT_BX=DTYPE_2=BX                // <ID=BX,Number=.,Type=String,Description="Barcodes and Associated Qual-Scores Supporting Alleles">
@@ -370,7 +375,7 @@ extern void vcf_zip_init_vb (VBlockP vb);
 extern void vcf_liftover_display_lift_report (void);
 extern void vcf_zip_after_compress (VBlockP vb);
 extern void vcf_zip_after_vbs (void);
-extern void vcf_zip_set_txt_header_specific (SectionHeaderTxtHeaderP txt_header);
+extern void vcf_zip_set_txt_header_flags (struct FlagsTxtHeader *f);
 extern void vcf_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeaderP vb_header);
 extern bool vcf_zip_vb_has_count (VBlockP vb);
 extern void vcf_zip_generate_recon_plan (void);
@@ -383,13 +388,11 @@ extern void vcf_seg_initialize (VBlockP vb_);
 extern void vcf_zip_after_compute (VBlockP vb);
 extern void vcf_seg_finalize (VBlockP vb_);
 extern bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id);
-extern bool vcf_seg_is_big (ConstVBlockP vb, DictId dict_id);
-extern TranslatorId vcf_lo_luft_trans_id (DictId dict_id, char number);
+extern bool vcf_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id);
 extern uint32_t vcf_seg_get_vb_recon_size (VBlockP vb);
 
 // PIZ stuff
 extern void vcf_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header);
-extern bool vcf_piz_maybe_reorder_lines (void);
 extern bool vcf_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment);
 extern void vcf_piz_recon_init (VBlockP vb);
 extern IS_SKIP (vcf_piz_is_skip_section);
@@ -406,7 +409,8 @@ extern void vcf_piz_finalize (void);
 
 // VBlock stuff
 extern void vcf_vb_release_vb();
-extern void vcf_vb_destroy_vb();
+extern void vcf_destroy_vb();
+extern void vcf_erase_vb_bufs();
 extern void vcf_header_finalize(void);
 extern unsigned vcf_vb_size (DataType dt);
 extern unsigned vcf_vb_zip_dl_size (void);
@@ -446,7 +450,7 @@ extern void vcf_samples_add  (rom samples_str);
                       vcf_piz_special_RGQ, vcf_piz_special_MUX_BY_HAS_RGQ, vcf_piz_special_SVTYPE, \
                       vcf_piz_special_ALLELE_A, vcf_piz_special_ALLELE_B, vcf_piz_special_MUX_BY_ADJ_DOSAGE,\
                       vcf_piz_special_PROBE_A, vcf_piz_special_PROBE_B, vcf_piz_special_QD, \
-                      vcf_piz_special_MUX_BY_VARTYPE }
+                      vcf_piz_special_MUX_BY_VARTYPE, vcf_piz_special_ICNT, vcf_piz_special_SPL }
 
 SPECIAL (VCF, 0,  main_REFALT,         vcf_piz_special_main_REFALT);
 SPECIAL (VCF, 1,  FORMAT,              vcf_piz_special_FORMAT)
@@ -489,7 +493,9 @@ SPECIAL (VCF, 37, PROBE_A,             vcf_piz_special_PROBE_A);                
 SPECIAL (VCF, 38, PROBE_B,             vcf_piz_special_PROBE_B);                  // added v14.0.12
 SPECIAL (VCF, 39, QD,                  vcf_piz_special_QD);                       // added v14.0.17
 SPECIAL (VCF, 40, MUX_BY_VARTYPE,      vcf_piz_special_MUX_BY_VARTYPE);           // added v15.0.0
-#define NUM_VCF_SPECIAL 41
+SPECIAL (VCF, 41, ICNT,                vcf_piz_special_ICNT);                     // added v15.0.0
+SPECIAL (VCF, 42, SPL,                 vcf_piz_special_SPL);                      // added v15.0.0
+#define NUM_VCF_SPECIAL 43
 
 // Translators for Luft (=secondary coordinates)
 TRANSLATOR (VCF, VCF,   1,  G,      vcf_piz_luft_G)       // same order as LiftOverStatus starting LO_CANT_G
@@ -535,10 +541,10 @@ extern const LuftTransLateProp ltrans_props[NUM_VCF_TRANS];
      (ltrans_props[(ctx)->luft_trans].upon == TW_ALWAYS         && LO_IS_OK (last_ostatus))        || \
      (ltrans_props[(ctx)->luft_trans].upon == TW_XSTRAND        && LO_IS_OK (last_ostatus) && *CTX(VCF_oXSTRAND)->last_snip != '-')))
 
-#define VCF_DICT_ID_ALIASES                 \
-    /*         alias        maps to     */  \
-    { DT_VCF,  _INFO_END,   _VCF_POS    },  \
-    { DT_VCF,  _INFO_CIEND, _INFO_CIPOS },  \
+#define VCF_DICT_ID_ALIASES                           \
+    /*        type       alias        maps to     */  \
+    { DT_VCF, ALIAS_CTX, _INFO_END,   _VCF_POS    },  \
+    { DT_VCF, ALIAS_CTX, _INFO_CIEND, _INFO_CIPOS },  \
 
 #define dict_id_is_vcf_info_sf   dict_id_is_type_1
 #define dict_id_is_vcf_format_sf dict_id_is_type_2

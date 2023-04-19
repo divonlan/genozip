@@ -25,18 +25,18 @@
 SPECIAL_RECONSTRUCTOR (piz_special_MINUS)
 {
     // decode and store the the contexts in the first call for ctx (only one MINUS snip allowed per ctx)
-    if (!ctx->con_cache.len32) {
-        buf_alloc_zero (vb, &ctx->con_cache, 0, 2, ContextP, 1, "con_cache");
+    if (!ctx->ctx_cache.len32) {
+        buf_alloc_zero (vb, &ctx->ctx_cache, 0, 2, ContextP, 1, "ctx_cache");
 
         DictId two_dicts[2];
         base64_decode (snip, &snip_len, (uint8_t *)two_dicts);
 
-        *B(ContextP, ctx->con_cache, 0) = ECTX (two_dicts[0]);
-        *B(ContextP, ctx->con_cache, 1) = ECTX (two_dicts[1]);
+        *B(ContextP, ctx->ctx_cache, 0) = ECTX (two_dicts[0]);
+        *B(ContextP, ctx->ctx_cache, 1) = ECTX (two_dicts[1]);
     }
 
-    new_value->i = (*B(ContextP, ctx->con_cache, 0))->last_value.i - 
-                   (*B(ContextP, ctx->con_cache, 1))->last_value.i;
+    new_value->i = (*B(ContextP, ctx->ctx_cache, 0))->last_value.i - 
+                   (*B(ContextP, ctx->ctx_cache, 1))->last_value.i;
 
     if (reconstruct)
         RECONSTRUCT_INT (new_value->i); 
@@ -312,19 +312,19 @@ ContextP reconstruct_get_other_ctx_from_snip (VBlockP vb, ContextP ctx, pSTRp (s
 // so that we don't do a full search of vb->contexts[] for a channel that was not segged and hence has no context
 ContextP recon_multi_dict_id_get_ctx_first_time (VBlockP vb, ContextP ctx, STRp(snip), unsigned ctx_i)
 {
-    if (!ctx->con_cache.len) {
-        ctx->con_cache.len = str_count_char (STRa(snip), '\t') + 1;
-        buf_alloc_zero (vb, &ctx->con_cache, 0, ctx->con_cache.len, ContextP, 1, "con_cache");
+    if (!ctx->ctx_cache.len) {
+        ctx->ctx_cache.len = str_count_char (STRa(snip), '\t') + 1;
+        buf_alloc_zero (vb, &ctx->ctx_cache, 0, ctx->ctx_cache.len, ContextP, 1, "ctx_cache");
     }
 
     // note: we get past this point only once per VB, per ctx_i
-    str_split (snip, snip_len, ctx->con_cache.len32, '\t', item, true);
+    str_split (snip, snip_len, ctx->ctx_cache.len32, '\t', item, true);
     ASSPIZ (n_items, "Unable to decoded multi-dict-id snip for %s. snip=\"%.*s\"", ctx->tag_name, STRf(snip));
 
     DictId item_dict_id;
     base64_decode (items[ctx_i], &item_lens[ctx_i], item_dict_id.id);
 
-    return (*B(ContextP, ctx->con_cache, ctx_i) = ECTX (item_dict_id)); // NULL if no data was segged to this channel    
+    return (*B(ContextP, ctx->ctx_cache, ctx_i) = ECTX (item_dict_id)); // NULL if no data was segged to this channel    
 }
 
 static ValueType reconstruct_from_lookback (VBlockP vb, ContextP ctx, STRp(snip), ReconType reconstruct)
@@ -465,7 +465,7 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
                 
             case LT_BITMAP:
                 ASSERT_DT_FUNC (vb, reconstruct_seq);
-                DT_FUNC (vb, reconstruct_seq) (vb, base_ctx, STRa(snip), reconstruct);
+                DT_FUNC (vb, reconstruct_seq) (vb, STRa(snip), reconstruct);
                 break;
 
             default: ABORT ("%s: while reconstructing %s: Unsupported lt_type=%s (%u) for SNIP_LOOKUP or SNIP_OTHER_LOOKUP. Please upgrade to the latest version of Genozip.", 
@@ -626,8 +626,8 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i,
     ASSPIZ0 (ctx->dict_id.num || ctx->did_i != DID_NONE, "ctx not initialized (dict_id=0)");
 
     // update ctx, if its an alias (only for primary field aliases as they have contexts, other alias don't have ctx)
-    if (ctx->is_alias) 
-        ctx = CTX(ctx->did_i); // ctx->did_i is different than did_i if its an alias
+    if (ctx->is_ctx_alias) 
+        ctx = CTX(ctx->did_i); // ctx->did_i is different than did_i if its an ALIAS_CTX
 
     uint32_t last_txt_index = Ltxt;
 
@@ -679,7 +679,7 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i,
                 
         case LT_BITMAP:
             ASSERT_DT_FUNC (vb, reconstruct_seq);
-            DT_FUNC (vb, reconstruct_seq) (vb, ctx, NULL, 0, reconstruct);
+            DT_FUNC (vb, reconstruct_seq) (vb, NULL, 0, reconstruct);
             break;
         
         case LT_TEXT:
@@ -693,7 +693,7 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i,
     // in case of LT_BITMAP, it is it is ok if the bitmap is empty and all the data is in NONREF (e.g. unaligned SAM)
     else if (ctx->ltype == LT_BITMAP && (ctx+1)->local.len32) {
         ASSERT_DT_FUNC (vb, reconstruct_seq);
-        DT_FUNC (vb, reconstruct_seq) (vb, ctx, NULL, 0, reconstruct);
+        DT_FUNC (vb, reconstruct_seq) (vb, NULL, 0, reconstruct);
     }
 
     // case: the entire VB was just \n - so seg dropped the ctx

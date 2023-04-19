@@ -113,7 +113,7 @@ done:
 bool piz_default_skip_section (SectionType st, DictId dict_id)
 {
     // --show-dict=DICT - read only the one dictionary
-    if (st == SEC_DICT && flag.show_one_dict && is_genocat && !dict_id_is_show (dict_id)) return true; // skip
+    if (ST(DICT) && flag.show_one_dict && is_genocat && !dict_id_is_show (dict_id)) return true; // skip
 
     // B250, LOCAL, COUNT sections
     bool skip = is_genocat && dict_id.num 
@@ -131,7 +131,7 @@ bool piz_default_skip_section (SectionType st, DictId dict_id)
     ||  (flag.count && !DTPZ(is_skip_section) && dict_id.num != DTFZ(toplevel).num) 
     );
 
-    skip |= flag.genocat_no_ref_file && (st == SEC_REFERENCE || st == SEC_REF_HASH || st == SEC_REF_IS_SET);
+    skip |= flag.genocat_no_ref_file && (ST(REFERENCE) || st == SEC_REF_HASH || ST(REF_IS_SET));
 
     if (skip && (is_genocat) && dict_id.num && dict_id.num == flag.dump_one_local_dict_id.num)
         skip = false;
@@ -139,55 +139,60 @@ bool piz_default_skip_section (SectionType st, DictId dict_id)
     return skip;
 }
 
-static inline void piz_adjust_one_local (ContextP ctx, BufferP local_buf, uint8_t num_bits) 
+static inline void piz_adjust_one_local (ContextP ctx, BufferP local_buf, LocalType *ltype, uint8_t num_bits, bool uncompress_to_pair) 
 { 
-    const LocalTypeDesc *ltd = &lt_desc[ctx->ltype];
+    const LocalTypeDesc *ltd = &lt_desc[*ltype];
 
     ASSERT (local_buf->len % ltd->width == 0, "%s.local has %u bytes - but expecting the number of bytes to be a multiple of %u since ltype=%s",
             ctx->tag_name, local_buf->len32, ltd->width, ltd->name);
 
     local_buf->len /= ltd->width; 
 
-    if (ctx->ltype == LT_BITMAP) { 
-        local_buf->nbits = local_buf->len * 64 - num_bits ; 
-        LTEN_bits ((BitsP)local_buf); 
-    } 
-    else if (ltd->file_to_native)   
-        ltd->file_to_native (local_buf, &ctx->ltype); // BGEN, transpose etc - updates ltype in case of Transpose, after untransposing
+    // note: in ZIP, if we're loading R1.local to localR1 just to verify identicality, then we should 
+    // keep it in "file format" for zip_generate_local(), not "native fomrat"
+    if (!uncompress_to_pair || IS_PIZ || !fastq_zip_use_pair_identical (ctx->dict_id)) {
+        
+        if (*ltype == LT_BITMAP) { 
+            local_buf->nbits = local_buf->len * 64 - num_bits ; 
+            LTEN_bits ((BitsP)local_buf); 
+        } 
+        
+        else if (ltd->file_to_native)   
+            ltd->file_to_native (local_buf, ltype); // BGEN, transpose etc - updates ltype in case of Transpose, after untransposing
+    }
 }
 
 // PIZ compute thread: decompress all contexts (in pair-2 of paired FASTQ: z_data contains contexts of both pairs)
 // ZIP compute thread in FASTQ: decompress pair_1 contexts when compressing pair_2
-uint32_t piz_uncompress_all_ctxs (VBlockP vb)
+void piz_uncompress_all_ctxs (VBlockP vb)
 {
-    ARRAY (const uint32_t, section_index, vb->z_section_headers);
-    
-    uint32_t section_i = (IS_ZIP) ? 0 : 1; // normally, we skip the VB header (starting from 1), but when uncompressing paired sections there is no VB header
-    for ( ; section_i < vb->z_section_headers.len32; section_i++) {
+    bool vb_is_pair_2 = is_fastq_pair_2(vb); // is this VB a pair-2 FASTQ VB (either in a FASTQ or SAM z_file)
 
-        SectionHeaderCtxP header = (SectionHeaderCtxP)Bc (vb->z_data, section_index[section_i]);
+    for_buf (uint32_t, header_offset, vb->z_section_headers) {
+        SectionHeaderCtxP header = (SectionHeaderCtxP)Bc(vb->z_data, *header_offset);
 
-        bool is_local = (header->section_type == SEC_LOCAL);
-        bool is_b250  = (header->section_type == SEC_B250);
-        if (!is_b250 && !is_local) break;
+        bool is_local = HEADER_IS(LOCAL);
+        bool is_b250  = HEADER_IS(B250);
+        if (!is_b250 && !is_local) continue;
 
         ContextP ctx = ctx_get_ctx (vb, header->dict_id); // gets the context (creating it if it doesn't already exist)
         
         // back comp: bug observed with E2:Z in v11.0.10: OPTION_E2_Z has LOCAL section despite being an alias to SAM_E2_Z
-        if (ctx->is_alias && !VER(12)) { 
+        if (ctx->is_ctx_alias && !VER(12)) { 
             ctx = CTX(ctx->did_i); 
             header->dict_id = ctx->dict_id; 
         }
 
-        bool is_pair_section = (BGEN32 (header->vblock_i) != vb->vblock_i); // is this a section of "pair 1" 
+        bool is_pair_section = vb_is_pair_2 && (BGEN32 (header->vblock_i) != vb->vblock_i); // is this a section of R1 read into an R2 vb 
+        bool uncompress_to_pair = is_pair_section && (!header->flags.ctx.paired/*not pair-identical*/ || IS_ZIP); // ZIP: always; PIZ: if pair-assisted
 
-        if (!is_pair_section) {
+        // PIZ only: load normal section, or a pair-identical section of from the R1 VB
+        if (!uncompress_to_pair) {
             
-            // case: buffer has already been decompressed during pre-processing, no need to decompress again
+            // case: buffer has already been decompressed  - either during pre-processing, or 
+            // R2 section was decompressed so no need for the pair-identical R1 section
             if ((is_local && ctx->local_uncompressed) || (is_b250 && ctx->b250_uncompressed))
                 continue;
-
-            ctx->flags = header->flags.ctx; // overrides default inherited from vb_i=1 (assigned in piz_read_all_ctxs)
             
             if (is_local || !ctx->ltype) // a b250 can set ltype if its not already set by an earlier SEC_LOCAL section  
                 ctx->ltype = header->ltype; // in case of b250
@@ -201,32 +206,25 @@ uint32_t piz_uncompress_all_ctxs (VBlockP vb)
             }
         }
 
-        // initialize pair stuff (happens in FASTQ only)
+        // A pair section (but only pair-assisted in PIZ)
         else {
-            // overcome bug in ZIP --pair (in some versions <= 13, lost track of which) - local sections with junk data 
-            // created in addition to the expected b250. we ignore these local sections (or allow b250 to overwrite them)    
-            if (is_local && ctx->pair_b250) continue;
-
-            ctx->pair_flags = header->flags.ctx;            
-            ctx->pair_b250  = is_b250;                
-            ctx->pair_local = is_local;
-
             if (is_b250) {
-                ctx->pair_b250_iter = (SnipIterator){ .next_b250 = B1ST8 (ctx->pair), .prev_word_index = WORD_INDEX_NONE };
+                ctx->pair_b250_iter = (SnipIterator){ .next_b250 = B1ST8 (ctx->b250R1), .prev_word_index = WORD_INDEX_NONE };
                 ctx->pair_b250_size = header->b250_size;
             }
+            else 
+                ctx->pair_ltype = header->ltype;
         }
 
-        BufferP target_buf = is_local ? &ctx->local : &ctx->b250;
+        BufferP target_buf = uncompress_to_pair ? (is_local ? &ctx->localR1 : &ctx->b250R1)
+                                                : (is_local ? &ctx->local   : &ctx->b250);
+        
+        rom target_buf_name = uncompress_to_pair ? (is_local ? "contexts->localR1" : "contexts->b250R1")
+                                                 : (is_local ? "contexts->local"   : "contexts->b250"  );
 
         START_TIMER;
 
-        if (is_pair_section) vb->preprocessing = true; // inform fastq_piz_is_skip_section
-        zfile_uncompress_section (vb, header, 
-                                  is_pair_section ? &ctx->pair      : target_buf, 
-                                  is_pair_section ? "context->pair" : is_local ? "contexts->local" : "contexts->b250", 
-                                  BGEN32 (header->vblock_i),
-                                  header->section_type); 
+        zfile_uncompress_section (vb, header, target_buf, target_buf_name, BGEN32 (header->vblock_i), header->section_type); 
 
         if (flag.show_time && !is_genozip)
             ctx->compressor_time = CHECK_TIMER;
@@ -240,42 +238,42 @@ uint32_t piz_uncompress_all_ctxs (VBlockP vb)
             ctx_dump_binary (vb, ctx, false);
 
         // BGEN32, transpose, fix len
-        if (is_local) {
-            if (is_pair_section) piz_adjust_one_local (ctx, &ctx->pair, header->param);
-            else {
-                piz_adjust_one_local (ctx, &ctx->local, header->param);
-                ctx->local_uncompressed = true;
-            }
-        }
-        else if (!is_pair_section) // b250
+        if (is_local && uncompress_to_pair) 
+            piz_adjust_one_local (ctx, &ctx->localR1, &ctx->pair_ltype, header->param, true);
+        
+        else if (is_local && !uncompress_to_pair)  
+            piz_adjust_one_local (ctx, &ctx->local, &ctx->ltype, header->param, false);
+
+        if (is_local && !is_pair_section) 
+            ctx->local_uncompressed = true;
+
+        else if (!is_local && !is_pair_section) // b250
             ctx->b250_uncompressed = true;
 
-        if ((VER(14) && ctx->ltype != LT_BITMAP) ||               // starting v14: assign to all except LT_BITMAP (in which param is used to determine nbits)
-            (!VER(14) && header->flags.ctx.v13_copy_local_param)) // up to v13: copy if v13_copy_local_param is set
+        if (!uncompress_to_pair/*added this condition in v15*/ && 
+            ((VER(14) && ctx->ltype != LT_BITMAP) ||                // starting v14: assign to all except LT_BITMAP (in which param is used to determine nbits)
+             (!VER(14) && header->flags.ctx.v13_copy_local_param))) // up to v13: copy if v13_copy_local_param is set
             target_buf->prm8[0] = header->param;
 
-        if (flag.debug_read_ctxs)
-            iprintf ("%c Uncompressed %s: %s[%u].%s.len=%"PRIu64"\n", sections_read_prefix, 
-                     VB_NAME, ctx->tag_name, ctx->did_i, is_local ? "local" : "b250", 
-                     (is_pair_section ? &ctx->pair : target_buf)->len);
-
-        if (is_pair_section) vb->preprocessing = false;
+        if (flag.debug_read_ctxs) 
+            iprintf ("%c Uncompressed %s: %s[%u].len=%u into %s\n", sections_read_prefix (is_pair_section || vb->preprocessing), 
+                     VB_NAME, ctx->tag_name, ctx->did_i, target_buf->len32, target_buf_name);
     }
 
-    // initialize history buffer (eg for SAM buddy)
-    for_ctx_that (ctx->flags.store_per_line || ctx->flags.spl_custom) 
-        switch (ctx->flags.store) {
-            // we zero the history, bc when seg compares to a dl value for a field that didn't existed,
-            // it sees 0. It might seg against that 0. So we need history to be 0 too.
-            case STORE_INT   : buf_alloc_exact_zero (vb, ctx->history, vb->lines.len, int64_t,     "history"); break;
-            case STORE_INDEX : buf_alloc_exact_zero (vb, ctx->history, vb->lines.len, WordIndex,   "history"); break;
-            default          : buf_alloc_exact_zero (vb, ctx->history, vb->lines.len, HistoryWord, "history"); break;
-        }
-
-    // prepare context index
     if (IS_PIZ) {
-        for (Did did_i=0; did_i < vb->num_contexts; did_i++)
-            vb->ctx_index[did_i] = (ContextIndex){ .did_i = did_i, .dict_id = CTX(did_i)->dict_id };
+        // initialize history buffer (eg for SAM buddy)
+        for_ctx_that (ctx->flags.store_per_line || ctx->flags.spl_custom) 
+            switch (ctx->flags.store) {
+                // we zero the history, bc when seg compares to a dl value for a field that didn't exist,
+                // it sees 0. It might seg against that 0. So we need history to be 0 too.
+                case STORE_INT   : buf_alloc_exact_zero (vb, ctx->history, vb->lines.len, int64_t,     "history"); break;
+                case STORE_INDEX : buf_alloc_exact_zero (vb, ctx->history, vb->lines.len, WordIndex,   "history"); break;
+                default          : buf_alloc_exact_zero (vb, ctx->history, vb->lines.len, HistoryWord, "history"); break;
+            }
+
+        // prepare context index
+        for_ctx
+            vb->ctx_index[ctx->did_i] = (ContextIndex){ .did_i = ctx->did_i, .dict_id = ctx->dict_id };
     
         qsort (vb->ctx_index, vb->num_contexts, sizeof (ContextIndex), sort_by_dict_id);
 
@@ -283,8 +281,6 @@ uint32_t piz_uncompress_all_ctxs (VBlockP vb)
     }
 
     if (flag.debug_or_test) buf_test_overflows(vb, __FUNCTION__); 
-
-    return section_i;
 }
 
 // PIZ compute thread entry point
@@ -319,7 +315,7 @@ static void piz_reconstruct_one_vb (VBlockP vb)
     // calculate the digest contribution of this VB, and the digest snapshot of this VB
     // note: if we have generated components from which lines might be inserted into the VB - we verify in writer instead 
     // note: for Deep with gencomp - the SAM components are verified in writer, while the FASTQ components are verified here.
-    if (piz_need_digest && (!z_has_gencomp || VB_DT(FASTQ)))
+    if (piz_need_digest && (!z_has_gencomp || VB_DT(FASTQ)) && !(flag.deep_fq_only && !VB_DT(FASTQ)))
         digest_one_vb (vb, true, NULL); // LOOKING FOR A DEADLOCK BUG? CHECK HERE
 
     if (DTP(piz_after_recon)) DTP(piz_after_recon)(vb);
@@ -331,52 +327,99 @@ static void piz_reconstruct_one_vb (VBlockP vb)
     COPY_TIMER (compute);
 }
 
-void piz_read_all_ctxs (VBlockP vb, Section *sec/* VB_HEADER section */, bool is_pair_data) 
+static void piz_initialize_ctx_flags_from_vb_1 (VBlockP vb)
 {
-    // note: if reading PAIR-2 during ZIP, contexts are already initialized, so no need to initialize again
-    if (!is_pair_data) {
-        // ctx.flags defaults to vb_i=1 flags, overridden if a b250 or local section is read. this will not be overridden if all_the_same, i.e. no b250/local sections.
-        // note: we use section_list_save and not section_list_buf, because the latter might not contain vb=1, if removed by writer_create_plan
-        Section vb_1_first_sec = B(SectionEnt, z_file->section_list_save, z_file->section_list_save.prm32[0]);
-        Section vb_1_last_sec  = B(SectionEnt, z_file->section_list_save, z_file->section_list_save.prm32[1]);
+    // ctx.flags defaults to vb_i=1 flags, overridden if a b250 or local section is read. this will not be overridden if all_the_same, i.e. no b250/local sections.
+    // note: we use section_list_save and not section_list_buf, because the latter might not contain vb=1, if removed by writer_create_plan
+    Section vb_1_first_sec = B(SectionEnt, z_file->section_list_save, z_file->section_list_save.prm32[0]);
+    Section vb_1_last_sec  = B(SectionEnt, z_file->section_list_save, z_file->section_list_save.prm32[1]);
 
-        for (Section sec = vb_1_first_sec+1; sec <= vb_1_last_sec; sec++) {
-            ContextP ctx = ECTX (sec->dict_id); // will exist if it has a dict (all_the_same sections always have a dict)
-            if (ctx) ctx->flags = sec->flags.ctx;
+    for (Section sec = vb_1_first_sec+1; sec <= vb_1_last_sec; sec++) {
+        ContextP ctx = ECTX (sec->dict_id); // will exist if it has a dict (all_the_same sections always have a dict)
+        if (ctx) {
+            ctx->flags = sec->flags.ctx;
+            ctx->flags.paired = false; // flags.paired is VB-specific and is not inherited
         }
     }
+}
+
+void piz_read_all_ctxs (VBlockP vb, Section *sec/* VB_HEADER section */, bool is_pair_data) 
+{
+    START_TIMER;
 
     for ((*sec)++; (*sec)->st == SEC_B250 || (*sec)->st == SEC_LOCAL; (*sec)++) {
-        ASSERT (is_pair_data || vb->vblock_i == (*sec)->vblock_i, "expecting vb->vblock_i=%u == sec->vblock_i=%u", vb->vblock_i, (*sec)->vblock_i); // sanity
+        ASSERT (is_pair_data || vb->vblock_i == (*sec)->vblock_i, "expecting vb->vblock_i=%u == sec->vblock_i=%u", 
+                vb->vblock_i, (*sec)->vblock_i); // sanity
 
         // create a context even if section is skipped, for containers to work (skipping a section should be mirrored in a container filter)
         ContextP zctx = ctx_get_existing_zctx ((*sec)->dict_id); 
-        ContextP vctx = CTX(zctx->did_i); // in PIZ, z and vb contexts have same did_i
+        ContextP vctx = CTX(zctx->did_i); // in PIZ z and vb contexts always have same did_i. This is also true for ZIP of R2, bc context was created by R1 and overlayed on this R2 VB.
+        bool is_local = ((*sec)->st == SEC_LOCAL);
         
         // don't assert for <=v11 due to bug (see comment in piz_uncompress_all_ctxs)
-        ASSERT (!zctx->is_alias || !VER(12), "Found a %s section of %s, this is unexpected because %s is an alias (of %s)",
+        ASSERT (!zctx->is_ctx_alias || !VER(12), "Found a %s section of %s, this is unexpected because %s is an alias (of %s)",
                 st_name((*sec)->st), zctx->tag_name, zctx->tag_name, ZCTX(zctx->did_i)->tag_name);
 
+        // if we're a R2 VB loading R1 data, decide if we need to load this section
+        bool pair_assisted=false, pair_identical=false, skip_R1=false;
+        if (is_pair_data) {
+            // note: pair_assisted available since early versions. when loading old versions, flags are fixed in sections_list_file_to_memory_format to be consistent with current version. 
+            pair_assisted  = (IS_ZIP && fastq_zip_use_pair_assisted ((*sec)->dict_id, (*sec)->st))    ||
+                             (IS_PIZ && is_local  && vctx->pair_assist_type == SEC_LOCAL) ||  // R2 section indicated that recon requires assistence of R1 data
+                             (IS_PIZ && !is_local && vctx->pair_assist_type == SEC_B250);
+
+            // note: pair_identical was introduced in v15
+            pair_identical = (IS_ZIP && fastq_zip_use_pair_identical ((*sec)->dict_id)) ||
+                             (IS_PIZ && is_local && !vctx->local_in_z && ((*sec)->flags.ctx.paired)) || // R2 section is missing and R1 is willing to take its stead
+                             (IS_PIZ && !is_local && !vctx->b250_in_z && ((*sec)->flags.ctx.paired));
+
+            if (!pair_assisted && !pair_identical) skip_R1 = true; // this R1 section is not needed by R2
+
+            ASSERT (!pair_assisted || !pair_identical, "%s: %s.%s is invalidly both pair_assisted and pair_identical",
+                    VB_NAME, vctx->tag_name, is_local ? "local" : "b250");
+        }     
+
         uint32_t section_start = vb->z_data.len32;
-        int32_t offset = zfile_read_section (z_file, vb, (*sec)->vblock_i, &vb->z_data, "z_data", (*sec)->st, *sec); // returns 0 if section is skipped
-        bool is_loaded = (offset != SECTION_SKIPPED);
+        int32_t offset = skip_R1 ? SECTION_SKIPPED 
+                                 : zfile_read_section (z_file, vb, (*sec)->vblock_i, &vb->z_data, "z_data", (*sec)->st, *sec); // returns 0 if section is skipped
+        
+        bool section_read = (offset != SECTION_SKIPPED); // section could be skipped either bc of skip_R1 or piz_is_skip_section() called from zfile_read_section 
 
-        if (!is_pair_data) 
-            vctx->is_loaded = is_loaded; // not skipped. note: possibly already true if it has a dictionary - set in ctx_overlay_dictionaries_to_vb
-
-        if (is_loaded) 
+        if (section_read) {
             BNXT32 (vb->z_section_headers) = section_start; 
-            
+
+            if  (!is_pair_data) {
+                if (is_local) vctx->local_in_z = true;
+                else          vctx->b250_in_z  = true;
+
+                // note: |= (instead of =) to overcome bug in ZIP --pair in some versions <= 13 (lost track of which): 
+                // local sections with junk data created in addition to the expected b250: if both b250 and local indicate pair_assist, we take the b250.
+                if ((*sec)->flags.ctx.paired && is_fastq_pair_2(vb))
+                    vctx->pair_assist_type = (*sec)->st; // set when reading R2 sections, consumed when reading pair R1 sections 
+            }
+
+            if (pair_assisted || (pair_identical && IS_ZIP)) 
+                vctx->pair_flags = (*sec)->flags.ctx;
+            else 
+                vctx->flags = (*sec)->flags.ctx; // override flags inherited from vb=1 and possibly the other B250/LOCAL section
+        } 
+
+        // note: vctx->is_loaded possibly already true if it has a dictionary - set in ctx_overlay_dictionaries_to_vb - and now sets to false if section is skipped
+        if (IS_PIZ && !pair_assisted && !skip_R1) 
+            vctx->is_loaded = section_read; 
+
         if (flag.debug_read_ctxs) {
-            if (is_loaded)
-                sections_show_header ((SectionHeaderP)Bc (vb->z_data, section_start), NULL, (*sec)->offset, sections_read_prefix);
+            if (section_read)
+                sections_show_header ((SectionHeaderP)Bc (vb->z_data, section_start), NULL, (*sec)->offset, sections_read_prefix (is_pair_data || vb->preprocessing));
             else
-                iprintf ("%c Skipped loading %s/%u %s.%s\n", sections_read_prefix, 
+                iprintf ("%c Skipped loading %s/%u %s.%s\n", sections_read_prefix (is_pair_data || vb->preprocessing), 
                          comp_name((*sec)->comp_i), vb->vblock_i, zctx->tag_name, st_name ((*sec)->st));
         }
     }
 
     if (flag.debug_or_test) buf_test_overflows(vb, __FUNCTION__); 
+
+    COPY_TIMER (piz_read_all_ctxs);
 }
 
 // Called by PIZ main thread: read all the sections at the end of the file, before starting to process VBs
@@ -389,6 +432,8 @@ DataType piz_read_global_area (Reference ref)
     if (flag.show_stats) stats_read_and_display();
 
     if (!success) return DT_NONE;
+
+    if (flags_writer_counts()) goto done;
 
     // check if the genozip file includes a reference
     bool has_ref_sections = !!sections_last_sec (SEC_REFERENCE, SOFT_FAIL);
@@ -447,26 +492,21 @@ DataType piz_read_global_area (Reference ref)
             if (is_genocat && (flag.show_sex || flag.show_coverage || flag.idxstats)) 
                 goto done;  
 
-            bool showing_dispatcher_progress = false;
-            if (!flag.genocat_no_ref_file) {
-                ref_load_stored_reference (ref);
-                ref_generate_reverse_complement_genome (ref);
-
-                showing_dispatcher_progress = true;
-            }
+            bool ref_loaded_from_disk = !flag.genocat_no_ref_file && ref_load_stored_reference (ref);
 
             // load the IUPACs list of the reference (rare non-ACGT "bases")
             ref_iupacs_load (ref);
 
             // load the refhash, if we are compressing FASTA or FASTQ, or if user requested to see it
             if (  (primary_command == ZIP && flag.aligner_available) ||
-                  (flag.show_ref_hash && is_genocat))
+                  (flag.show_ref_hash && is_genocat) ||
+                  ref_cache_is_loading(ref))
                 refhash_load();
 
             // exit now if all we wanted was just to see the reference (we've already shown it)
             if ((flag.show_reference || flag.show_is_set || flag.show_ref_hash) && is_genocat) exit_ok();
 
-            if (showing_dispatcher_progress) progress_finalize_component ("Done");
+            if (ref_loaded_from_disk) progress_finalize_component ("Done");
         }
 
         // case: non-reference file has stored reference sections
@@ -478,12 +518,13 @@ DataType piz_read_global_area (Reference ref)
                 if ((flag.show_reference || flag.show_is_set || flag.show_ref_hash) && is_genocat) exit_ok();
             }
         }
+    
+        if (flag.reference && z_file->z_flags.aligner && !flag.genocat_no_ref_file) 
+            ref_generate_reverse_complement_genome (ref);
     }
     
 done:
-    file_seek (z_file, 0, SEEK_SET, false);
-
-    COPY_TIMER_VB (evb, piz_read_global_area);
+    COPY_TIMER_EVB (piz_read_global_area);
 
     return z_file->data_type;
 }
@@ -493,7 +534,7 @@ bool piz_read_one_vb (VBlockP vb, bool for_reconstruction)
 {
     START_TIMER; 
    
-    Section sec = sections_vb_header (vb->vblock_i, HARD_FAIL); 
+    Section sec = sections_vb_header (vb->vblock_i); 
     
     int32_t vb_header_offset = zfile_read_section (z_file, vb, vb->vblock_i, &vb->z_data, "z_data", SEC_VB_HEADER, sec); 
     ASSERT0 (vb_header_offset >= 0, "Unexpectedly VB_HEADER section was skipped");
@@ -525,16 +566,20 @@ bool piz_read_one_vb (VBlockP vb, bool for_reconstruction)
         iprintf ("READING(id=%d) vb=%s num_lines=%u recon_size=%u genozip_size=%u longest_line_len=%u\n",
                  vb->id, VB_NAME, vb->lines.len32, vb->recon_size, BGEN32 (header.z_data_bytes), vb->longest_line_len);
 
-    ctx_overlay_dictionaries_to_vb (VB); /* overlay all dictionaries (not just those that have fragments in this vblock) to the vb */ 
+    ctx_overlay_dictionaries_to_vb (VB); // overlay all dictionaries to the vb 
 
     buf_alloc (vb, &vb->z_section_headers, MAX_DICTS * 2, 0, uint32_t, 0, "z_section_headers"); // room for section headers  
 
     BNXT32 (vb->z_section_headers) = vb_header_offset; // vb_header_offset is always 0 for VB header
 
+    piz_initialize_ctx_flags_from_vb_1 (vb);
+
+    DT_FUNC (vb, piz_before_read)(vb);
+
     // read all b250 and local of all fields and subfields
     piz_read_all_ctxs (vb, &sec, false);
 
-    bool ok_to_compute = DTP(piz_init_vb) ? DTP(piz_init_vb)(vb, &header, &txt_data_so_far_single_0_increment) : true;
+    bool ok_to_compute = DT_FUNC_OPTIONAL (vb, piz_init_vb, true)(vb, &header, &txt_data_so_far_single_0_increment);
 
     vb->translation = dt_get_translation (vb); // must be after piz_init_vb, as in VCF we set vb->vb_chords there, needed for dt_get_translation
 
@@ -559,11 +604,8 @@ static void piz_handover_or_discard_vb (Dispatcher dispatcher, VBlockP *vb)
 
     if ((*vb)->preprocessing) 
         DT_FUNC (z_file, piz_after_preproc)(*vb);
-
-    else if (flag.no_writer_thread)
-        writer_destroy_is_vb_info ((*vb)->vblock_i);
     
-    else  // note: in SAM with gencomp - writer does the digest calculation
+    else if (!flag.no_writer_thread)  // note: in SAM with gencomp - writer does the digest calculation
         is_handed_over = writer_handover_data (vb);
 
     dispatcher_recycle_vbs (dispatcher, !is_handed_over); // don't release VB if handed over - it will be released in writer_release_vb when writing is completed
@@ -599,14 +641,15 @@ static void piz_dispatch_one_vb (Dispatcher dispatcher, Section sec)
 // main thread: usually called in order of VBs, but out-of-order if --test with no writer
 static void piz_handle_reconstructed_vb (Dispatcher dispatcher, VBlockP vb, uint64_t *num_nondrop_lines)
 {
-    ASSERTW (Ltxt == vb->recon_size || flag.data_modified, // files are the same size, unless we intended to modify the data
+    // verify that files are the same size, unless we intended to modify the data
+    ASSERTW (Ltxt == vb->recon_size || flag.data_modified || (flag.deep_fq_only && !VB_DT(FASTQ)),
             "Warning: vblock_i=%s/%u (num_lines=%u) had %s bytes in the original %s file but %s bytes in the reconstructed file (diff=%d)", 
             comp_name (vb->comp_i), vb->vblock_i, vb->lines.len32, str_int_commas (vb->recon_size).s, dt_name (txt_file->data_type), 
             str_int_commas (Ltxt).s, 
             (int32_t)Ltxt - (int32_t)vb->recon_size);
 
     *num_nondrop_lines += vb->num_nondrop_lines;
-    if (flag.count == COUNT_VBs)
+    if (flag.count == CNT_VBs)
         iprintf ("vb=%s lines=%u nondropped_lines=%u txt_data.len=%u\n", 
                  VB_NAME, vb->lines.len32, vb->num_nondrop_lines, Ltxt);
 
@@ -643,7 +686,8 @@ Dispatcher piz_z_file_initialize (void)
     if (!flag_loading_auxiliary && DTPZ(piz_after_global_area)) // must be before writer_create_plan messes up the section list
         DTPZ(piz_after_global_area)();
 
-    writer_create_plan();
+    if (!writer_create_plan())
+        return NULL; // --count, and it was reported already
 
     if (flag.test || flag.md5) 
         ASSINP0 (dt_get_translation(NULL).is_src_dt, "Error: --test or --md5 cannot be used when converting a file to another format"); 
@@ -666,16 +710,17 @@ Dispatcher piz_z_file_initialize (void)
     return dispatcher;
 }
 
-// main thread: called once per txt_file created: i.e. once, except if unbinding a paired FASTQ.
+// main thread: called once per txt_file created: i.e. once, except if unbinding a paired FASTQ, or a Deep file.
 // returns true if piz completed, false if piz aborted by piz_initialize
 bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last_z_file,
-                       CompIType first_comp_i, CompIType last_comp_i) // COMP_NONE unless flag.unbind
+                       CompIType first_comp_i, CompIType last_comp_i, // COMP_NONE unless flag.unbind
+                       bool allow_skip_cleaning)
 {
     dispatcher_start_wallclock();
     
     recon_stack_initialize();
     
-    if (DTPZ(piz_initialize) && !DTPZ(piz_initialize)())
+    if (DTPZ(piz_initialize) && !DTPZ(piz_initialize)(first_comp_i))
         return false; // abort PIZ if piz_initialize says so
       
     bool header_only_file = true; // initialize - true until we encounter a VB header
@@ -704,9 +749,6 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
 
             // case SEC_TXT_HEADER
             if (found_header && sec->st == SEC_TXT_HEADER && is_sec_in_comp) { 
-
-                if (!writer_does_txtheader_need_recon (sec)) continue;
-
                 if (sec->vblock_i >= 2) continue; // fragments >= 2 were already handled together with the first fragment
                 
                 // note: also starts writer, and if unbinding, also opens the txt file and hands data over to the writer
@@ -744,24 +786,30 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
         }
 
         // if the next thread (usually in order or VBs in recon_plan, but out-of-order if --test with no writer) is ready, handle the reconstructed VB
-        VBlockP recon_vb = dispatcher_get_processed_vb (dispatcher, NULL, false);  // non-blocking
-        if (recon_vb) {    
+        VBlockP vb = dispatcher_get_processed_vb (dispatcher, NULL, false);  // non-blocking
+        if (vb) {    
             if (flag_is_show_vblocks (PIZ_TASK_NAME)) 
                 iprintf ("AFTER_COMPUTE(task=piz id=%d) vb=%s/%u num_running_compute_threads(after)=%u\n", 
-                         recon_vb->id, comp_name(recon_vb->comp_i), recon_vb->vblock_i, dispatcher_get_num_running_compute_threads(dispatcher));
+                         vb->id, comp_name(vb->comp_i), vb->vblock_i, dispatcher_get_num_running_compute_threads(dispatcher));
             
-            dispatcher_increment_progress ("preproc_or_recon", 1 + (!recon_vb->preprocessing && flag.no_writer_thread)); // done preprocessing or reconstructing (+1 if skipping writing)
-            if (!recon_vb->preprocessing) 
-                piz_handle_reconstructed_vb (dispatcher, recon_vb, &num_nondrop_lines);
+            dispatcher_increment_progress ("preproc_or_recon", 1 + (!vb->preprocessing && flag.no_writer_thread)); // done preprocessing or reconstructing (+1 if skipping writing)
+            if (!vb->preprocessing) 
+                piz_handle_reconstructed_vb (dispatcher, vb, &num_nondrop_lines);
             else
-                piz_handover_or_discard_vb (dispatcher, &recon_vb);
+                piz_handover_or_discard_vb (dispatcher, &vb);
         }
 
-        if (!achieved_something) usleep (30000); // nothing for us to do right now - wait 30ms
+        if (!achieved_something) {
+            START_TIMER;
+            usleep (30000); // nothing for us to do right now - wait 30ms
+            COPY_TIMER_EVB (piz_main_loop_idle);
+        }
     }
 
     if (flag_is_show_vblocks (PIZ_TASK_NAME)) 
         iprintf ("DISPATCHER is done for txt_file_i=%u: %s\n", z_file->num_txts_so_far, txt_file ? txt_file->name : "(no filename)");                
+
+    dispatcher_calc_avg_compute_vbs (dispatcher);
 
     z_file->num_txts_so_far++;
 
@@ -794,6 +842,12 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
 
     if (flag_is_show_vblocks (PIZ_TASK_NAME)) 
         iprintf ("Finished PIZ of %s\n", txt_file ? txt_file->name : "(no filename)");                
+
+    file_close (&txt_file, flag.index_txt && !flag_loading_auxiliary, !is_last_z_file || !allow_skip_cleaning); 
+
+    if (flag.show_time && ((flag.show_time_comp_i >= first_comp_i && flag.show_time_comp_i <= last_comp_i) || 
+                           (first_comp_i == COMP_NONE && flag.show_time_comp_i != COMP_ALL)))
+        profiler_add_evb_and_print_report();
 
     return true;
 }

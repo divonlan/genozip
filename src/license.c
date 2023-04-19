@@ -42,13 +42,19 @@
 #define LIC_FIELD_NUMBER       "License number"
 #define LIC_FIELD_ALLOW_STATS  "Allow_stats"
 
+// IF YOU'RE CONSIDERING MODIFYING THIS CODE TO BYPASS LICENSE LIMITATIONS, DON'T! It would be a violation of the license,
+// and might put you personally as well as your organization at legal and financial risk - see "Severly unauthorized use of Genozip"
+// section of the license. Rather, please contact sales@genozip.com to discuss which license would be appropriate for your case.
 #define EVAL_NUM_FILES 100 // if updating, also update the web page get-genozip 
 #define EVAL_NUM_FILES_STR "100"
+#define DEEP_or_PAIR_NUM_FILES 10
 
 #include "text_license.h"
 
 // note: value of lic_type is written to license file, so types might be added, but existing types should not change values
-typedef enum __attribute__ ((__packed__))/*1 byte*/ { LIC_TYPE_NONE, LIC_TYPE_ACADEMIC, LIC_TYPE_EVAL, LIC_TYPE_STANDARD, LIC_TYPE_DEEP, LIC_TYPE_FIRST, NUM_LIC_TYPES } LicenseType; 
+typedef enum __attribute__ ((__packed__))/*1 byte*/ { LIC_TYPE_NONE, LIC_TYPE_ACADEMIC, LIC_TYPE_EVAL,       LIC_TYPE_STANDARD_LEGACY/*to v14*/, LIC_TYPE_STANDARD/*since v15*/, LIC_TYPE_ENTERPRISE, LIC_TYPE_FIRST, NUM_LIC_TYPES } LicenseType; 
+static rom lic_types[NUM_LIC_TYPES] =               { "",            "Academic",        "30-day evaluation", "Standard(Legacy)",                 "Standard",                     "Enterprise",        "First"                       }; 
+// note: these strings ^ are referred to in register.sh
 
 static struct {
     bool initialized;
@@ -59,11 +65,77 @@ static struct {
     uint32_t license_num;
 } rec = {};
 
-static rom lic_types[NUM_LIC_TYPES] = { "", "Academic", "30-day evaluation", "Standard", "Deep" }; // these strings are referred to in register.sh
+// returns new counter value, or 0 if counter doesn't work
+static int counter_increment (rom filename, int inc /*may be negative*/) 
+{
+    #define MAX_COUNTER 0xfff  // 12 bit counter
 
-static void counter_reset (rom filename);
-static bool counter_increment (rom filename, long inc);
-static bool counter_has_exceeded (rom filename, uint32_t exceeded_this);
+#ifdef __linux__
+    #define COUNTER_MAGIC 270512 // 20 bit magic
+    #define IS_MAGICAL(st) ((st.st_mtim.tv_nsec & 0xfffff) == COUNTER_MAGIC)
+    #define COUNTST(st) (st.st_mtim.tv_nsec >> 20)
+    #define NSEC(counter) (((counter) << 20) | COUNTER_MAGIC)
+
+    struct stat st;
+    if (stat (filename, &st)) return 0; // fail silently 
+
+    int old_count = IS_MAGICAL(st) ? COUNTST(st) : 0;
+
+    int new_count = MIN_(MAX_(old_count + inc, 0), MAX_COUNTER);
+    
+    int ret = utimensat (0/*ignored*/, filename, (const struct timespec[]){ { .tv_nsec = UTIME_OMIT         }, 
+                                                                            { .tv_sec  = st.st_mtim.tv_sec,
+                                                                              .tv_nsec = NSEC(new_count)    } }, 0); 
+    // verify that it worked, before returning new_count
+    return (ret == 0 && !stat (filename, &st) && IS_MAGICAL(st) && COUNTST(st) == new_count) ? new_count : 0;
+
+#elif _WIN32
+    #define COUNTER_MAGIC 0x125 // 11 bit magic
+    #define IS_MAGICAL(mtime) ((mtime.dwLowDateTime & 0x7ff) == COUNTER_MAGIC)
+    #define COUNTST(mtime) ((mtime.dwLowDateTime >> 11) & 0xfff)
+
+    HANDLE h = CreateFileA (filename, GENERIC_READ | FILE_WRITE_ATTRIBUTES, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE) { // very unlikely, but might legitimately happen if two genozip processes are in here concurrently
+        ASSERT (!flag.debug, "CreateFileA failed: %s", str_win_error());
+        return 0;
+    }
+
+    FILETIME mtime; // 64 bits, in 100ns granularity. We use the 23 LSb.
+    if (!GetFileTime (h, NULL, NULL, &mtime)) {
+        ASSERT (!flag.debug, "GetFileTime failed: %s", str_win_error());
+        goto fail;
+    }
+
+    int old_count = IS_MAGICAL(mtime) ? COUNTST(mtime) : 0;
+
+    int new_count = MIN_(MAX_(old_count + inc, 0), MAX_COUNTER);
+
+    mtime.dwLowDateTime = (mtime.dwLowDateTime & 0xff800000/*9 MSb*/) | (new_count << 11) | COUNTER_MAGIC;
+    if (!SetFileTime (h, NULL, NULL, &mtime)) {
+        ASSERT (!flag.debug, "SetFileTime failed: %s", str_win_error());
+        goto fail;
+    }
+
+    // verify that it worked, before returning new_count
+    if (GetFileTime (h, NULL, NULL, &mtime) && IS_MAGICAL(mtime) && COUNTST(mtime) == new_count) {
+        CloseHandle (h);
+        return new_count;
+    }
+
+fail:
+    CloseHandle (h);
+    return 0;
+
+#else
+    // TO DO: Support for MacOS (bug 810)
+    return 0;
+#endif
+}
+
+static bool counter_has_reached (rom filename, uint32_t reached_this)
+{
+    return counter_increment (filename, 0) >= reached_this;
+}
 
 static uint32_t license_calc_number (ConstBufferP license_data)
 {
@@ -226,10 +298,11 @@ void license_load (void)
     char license_num_str[30] = "", lic_type_str[16]="", machine_time_str[24]="";
     #define COPY_FIELD(var,field) strncpy (var, license_load_field (field, STRas(line)), sizeof (var)-1)
 
-    COPY_FIELD (lic_type_str,    LIC_FIELD_TYPE);  // added v14
+    COPY_FIELD (lic_type_str, LIC_FIELD_TYPE);  // added v14
 
-    // licenses prior to v14 don't have this field, requiring re-registration
-    if (!str_get_int_range8 (lic_type_str, strlen (lic_type_str), 1, NUM_LIC_TYPES-1, &rec.lic_type)) goto reregister;
+    // note: licenses prior to v14 don't have this field
+    if (!str_get_int_range8 (lic_type_str, strlen (lic_type_str), 1, NUM_LIC_TYPES-1, &rec.lic_type)) 
+        rec.lic_type = LIC_TYPE_ACADEMIC; // fallback 
 
     COPY_FIELD (rec.version,      LIC_FIELD_VERSION);
     COPY_FIELD (rec.institution,  LIC_FIELD_INSTITUTION);
@@ -241,26 +314,40 @@ void license_load (void)
     COPY_FIELD (rec.allow_stats,  LIC_FIELD_ALLOW_STATS);
     COPY_FIELD (license_num_str,  LIC_FIELD_NUMBER);
 
-    if (!str_get_uint32 (license_num_str, strlen (license_num_str), &rec.license_num)) goto reregister;
-    if (!str_get_int (machine_time_str, strlen (machine_time_str), &rec.machine_time)) goto reregister;
-    
+    if (!str_get_uint32 (license_num_str, strlen (license_num_str), &rec.license_num)) {
+        WARN0 ("old format license");
+        goto reregister;
+    }
+
+    if (!str_get_int (machine_time_str, strlen (machine_time_str), &rec.machine_time)) {
+        WARN0 ("no machine time");
+        goto reregister;
+    }
+
     data.len -= line_lens[n_lines-1] + 2;
-    if (rec.license_num != license_calc_number (&data)) goto reregister;
+    if (rec.license_num != license_calc_number (&data)) {
+        WARN ("license verification failed (%u, %u)", rec.license_num, license_calc_number (&data));
+        goto reregister;
+    }
 
     if (rec.lic_type == LIC_TYPE_EVAL) {
-        #define BUY "To purchase a Standard or Deep License: " WEBSITE_BUY " or contact " EMAIL_SALES "\n"
+        #define BUY "To purchase a Standard or Enterprise License: " WEBSITE_BUY " or contact " EMAIL_SALES "\n"
         ASSINP0 (time(0) - rec.machine_time < (30*24*60*60),
                  "You reached the end of the 30 evaluation period of Evaluation License.\n" BUY);
 
-        ASSINP (!counter_has_exceeded (filename, EVAL_NUM_FILES),
+        ASSINP (!counter_has_reached (filename, EVAL_NUM_FILES),
                 "You reached the maximum number of files (%u) compressible with the Evaluation License.\n" BUY, EVAL_NUM_FILES);
     }
 
-    else if (rec.lic_type == LIC_TYPE_ACADEMIC || rec.lic_type == LIC_TYPE_STANDARD) {
-        ASSINP (!flag.deep || !counter_has_exceeded (filename, EVAL_NUM_FILES),
+    else if (rec.lic_type == LIC_TYPE_STANDARD_LEGACY) 
+        ASSINP (!flag.deep || !counter_has_reached (filename, DEEP_or_PAIR_NUM_FILES),
                 "You reached %u --deep compressions, which is the maximum number granted with the %s License.\n"
-                "To upgrade to a Deep License: " WEBSITE_BUY " or contact " EMAIL_SALES "\n", EVAL_NUM_FILES, lic_types[rec.lic_type]);
-    }
+                "To upgrade to a Enterprise License: " WEBSITE_BUY " or contact " EMAIL_SALES "\n", DEEP_or_PAIR_NUM_FILES, lic_types[rec.lic_type]);
+
+    else if (rec.lic_type == LIC_TYPE_STANDARD) 
+        ASSINP ((!flag.deep && !flag.pair) || !counter_has_reached (filename, DEEP_or_PAIR_NUM_FILES),
+                "You reached %u --deep / --pair compressions, which is the maximum number granted with the %s License.\n"
+                "To upgrade to a Enterprise License: " WEBSITE_BUY " or contact " EMAIL_SALES "\n", DEEP_or_PAIR_NUM_FILES, lic_types[rec.lic_type]);
 
     rec.initialized = true;
 
@@ -343,7 +430,7 @@ static bool license_verify_email (STRc(response), rom unused)
         "reallymymail.com", "reconmail.com", "safetymail.info", "sendspamhere.com", "sogetthis.com",
         "spambooger.com", "spamherelots.com", "spamhereplease.com", "spamthisplease.com",
         "streetwisemail.com", "suremail.info", "thisisnotmyrealemail.com", "tradermail.info",
-        "veryrealemail.com", "zippymail.info", "keshitv.com"
+        "veryrealemail.com", "zippymail.info", "keshitv.com", "jollyfree.com", "bbitj.com"
     };
 
     for (int i=0; i < ARRAY_LEN(disposable_email_domains); i++)
@@ -496,14 +583,15 @@ void license_register (void)
                         "1. Academic License (free): Free for officially recognized research institutions (excluding data obtained commercially)\n\n"
                         "2. Evaluation License (free): Free use for 30-day (limited to " EVAL_NUM_FILES_STR " files)\n\n"
                         "3. Standard License (paid): I have already paid for a Standard License\n\n"
-                        "4. Deep License (paid): I have already paid for a Deep License\n\n"
+                        "4. Enterprise License (paid): I have already paid for a Enterprise License\n\n"
                         "Remember your Mom taught you to be honest!\n\n"
                         "Please enter 1, 2, 3 or 4: ",
                         lic_type, sizeof(lic_type), false, license_verify_license, NULL);
     
-        rec.lic_type = lic_type[0] - '0';
+        int n = lic_type[0] - '0';
+        rec.lic_type = n==1?LIC_TYPE_ACADEMIC : n==2?LIC_TYPE_EVAL : n==3?LIC_TYPE_STANDARD : LIC_TYPE_ENTERPRISE;  
     
-        if (rec.lic_type == LIC_TYPE_STANDARD) {
+        if (rec.lic_type == LIC_TYPE_STANDARD || rec.lic_type == LIC_TYPE_ENTERPRISE) {
             bool stats_consent = str_query_user_yn ("\nGenozip optionally logs aggregate statistics and metadata on the Genozip server,\n"
                                                     "helping us provide you with technical support if needed, and also improve our compression algorithms\n"
                                                     "(see "WEBSITE_LOGS"). May we have your permission for this? ", QDEF_NONE);
@@ -546,7 +634,7 @@ void license_register (void)
         fprintf (stderr, "Username: %s\n", user_host);
         fprintf (stderr, "Genozip info: version=%s distribution=%s\n", GENOZIP_CODE_VERSION, dist);
         fprintf (stderr, "Genozip license number: %u\n", rec.license_num);
-        if (rec.lic_type == LIC_TYPE_STANDARD) fprintf (stderr, "Send statistics: %s\n", rec.allow_stats);
+        if (rec.lic_type == LIC_TYPE_STANDARD || rec.lic_type == LIC_TYPE_ENTERPRISE) fprintf (stderr, "Send statistics: %s\n", rec.allow_stats);
         fprintf (stderr, "I accept the terms and conditions of the Genozip license\n");
         fprintf (stderr, "=====================================================================\n\n");
         
@@ -561,7 +649,7 @@ void license_register (void)
              "sending an email to register@genozip.com - copy & paste the lines between the \"======\" into the email message.\n");
 
     if (!is_script) {
-        char query[sizeof(rec.email)+64];
+        char query[sizeof(rec.email)+256];
         char code[7] = "";
         sprintf (query, "\nA 6-digit verification code was emailed to %s.\n\n"
                         "(If you did not receive it within 2 minutes, please contact register@genozip.com)\n\n"
@@ -571,8 +659,6 @@ void license_register (void)
     
     ASSINP (file_put_data (filename, STRb(license_data), S_IRUSR | S_IRGRP), 
             "Failed to write license file %s: %s. If this is unexpected, email "EMAIL_SUPPORT" for help.", filename, strerror (errno));
-
-    counter_reset (filename);
 
     if (!n_fields) {
         fprintf (stderr, "\nA Genozip %s License has been granted.\n\n"
@@ -592,7 +678,7 @@ void license_register (void)
     buf_destroy (license_data);
 }
 
-// IF YOU'RE CONSIDERING TAMPERING WITH THIS CODE TO BYPASS THE REGISTRTION, DON'T! It would be a violation of the license,
+// IF YOU'RE CONSIDERING TAMPERING WITH THIS CODE TO BYPASS THE REGISTRTION OR STATS SUBMISSION, DON'T! It would be a violation of the license,
 // and might put you personally as well as your organization at legal and financial risk - see "Severly unauthorized use of Genozip"
 // section of the license. Rather, please contact sales@genozip.com to discuss which license would be appropriate for your case.
 uint32_t license_get_number (void)
@@ -602,9 +688,22 @@ uint32_t license_get_number (void)
 
 bool license_allow_stats (void)
 {
-    return (rec.lic_type == LIC_TYPE_STANDARD) ? !strcmp (rec.allow_stats, "Yes") 
-         : (rec.lic_type == LIC_TYPE_FIRST   ) ? false // no consent yet
-         :                                       true;
+    switch (rec.lic_type) {
+        case LIC_TYPE_STANDARD:
+        case LIC_TYPE_STANDARD_LEGACY:
+        case LIC_TYPE_ENTERPRISE: 
+            return !strcmp (rec.allow_stats, "Yes");
+
+        case LIC_TYPE_FIRST: 
+            return false; // no consent yet
+
+        case LIC_TYPE_ACADEMIC:
+        case LIC_TYPE_EVAL:
+            return true;
+        
+        default:
+            ABORT_R ("Invalid license_type=%d", rec.lic_type);
+    }
 }
 
 bool license_allow_tip (void)
@@ -670,78 +769,15 @@ StrNotice license_print_default_notice (void)
 void license_show_deep_notice (void)
 {
     if (flag.deep && (rec.lic_type == LIC_TYPE_STANDARD || rec.lic_type == LIC_TYPE_ACADEMIC))
-        iprintf ("Note: using --deep requires a Genozip Deep License. It is provided to you on an evaluation basis, limited to compressing %u files\n"
-                 "To upgrade to a Deep License: " WEBSITE_BUY " or contact " EMAIL_SALES "\n", EVAL_NUM_FILES);
+        iprintf ("Note: using --deep requires a Genozip Enterprise License. It is provided to you on an evaluation basis, limited to compressing %u files\n"
+                 "To upgrade to a Enterprise License: " WEBSITE_BUY " or contact " EMAIL_SALES "\n", EVAL_NUM_FILES);
 }
 
 void license_one_file_compressed (DataType dt)
 {    
-    if (rec.lic_type == LIC_TYPE_EVAL || 
-        ((rec.lic_type == LIC_TYPE_ACADEMIC || rec.lic_type == LIC_TYPE_STANDARD) && flag.deep && (dt==DT_BAM || dt==DT_SAM)))
+    if (rec.lic_type  == LIC_TYPE_EVAL || 
+        (rec.lic_type == LIC_TYPE_STANDARD_LEGACY && flag.deep) || 
+        (rec.lic_type == LIC_TYPE_STANDARD && (flag.deep || flag.pair)))
         counter_increment (license_get_filename (false), 1);
-}
-
-#define COUNTER_MAGIC 27
-#define IS_MAGICAL(st) ((st.st_mtim.tv_nsec % 100) == COUNTER_MAGIC)
-#define COUNTER(n) ((n) / 100)
-#define COUNTST(st) COUNTER(st.st_mtim.tv_nsec)
-#define NSEC(counter) ((counter) * 100)
-
-static void counter_reset (rom filename) // must be absolute filename
-{
-#ifdef __linux__
-    if (flag.is_wsl) return; // not supported for WSL as this doesn't work well on NTFS
-
-    struct stat st;
-    if (stat (filename, &st)) return; // fail silently
-
-    utimensat (0/*ignored*/, filename, (const struct timespec[]){ { .tv_nsec = UTIME_OMIT }, 
-                                                                  { .tv_sec  = st.st_mtim.tv_sec,
-                                                                    .tv_nsec = COUNTER_MAGIC  } }, 0); // ignore errors
-#endif
-}
-
-static bool counter_increment (rom filename, long inc /* may be negative*/) // true if successful
-{
-#ifdef __linux__
-    if (flag.is_wsl) return false; // not supported for WSL as this doesn't work well on NTFS
-
-    struct stat st;
-    if (stat (filename, &st) || !IS_MAGICAL(st)) 
-        return false; // fail silently if can't stat or not magical
-
-    if (COUNTST(st) + inc >= COUNTER(1000000000) ||
-        COUNTST(st) + inc < 0) return false; // out of range
-
-    // set nanosecond of mtime to count, ignoring errors
-    int ret = utimensat (0/*ignored*/, filename, (const struct timespec[]){ { .tv_nsec = UTIME_OMIT }, 
-                                                                            { .tv_sec  = st.st_mtim.tv_sec,
-                                                                              .tv_nsec = st.st_mtim.tv_nsec + NSEC(inc) } }, 0); 
-    return ret == 0;
-
-#else
-    return false;
-#endif
-}
-
-static bool counter_has_exceeded (rom filename, uint32_t exceeded_this)
-{
-#ifdef __linux__
-    if (flag.is_wsl) return false; // not supported for WSL as this doesn't work well on NTFS
-
-    struct stat st, st_inc;
-
-    if (stat (filename, &st) || !IS_MAGICAL(st) ||
-        !counter_increment (filename, 1) ||  // increment and decrement to make sure counter works and magic correctness is not just a fluke
-        stat (filename, &st_inc) || !IS_MAGICAL(st_inc) ||
-        COUNTST (st) + 1 != COUNTST (st_inc) ||
-        !counter_increment (filename, -1))
-        return false; // counter doesn't work
-
-    return COUNTST(st) > exceeded_this;
-
-#else
-    return false;
-#endif
 }
 

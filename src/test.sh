@@ -158,10 +158,15 @@ test_stdout()
     local ext=${file#*.}
     local arg;
 
-    if [ "$ext" = "bam" ]; then arg='--bam -z0'; fi
+    if [ "$ext" = "bam" ]; then 
+        local arg='--bam -z0'
+        local cmd='cat'
+    else
+        local cmd='tr -d \r'
+    fi
 
     $genozip ${file} -fo $output || exit 1
-    ($genocat --no-pg $output $arg || exit 1) | tr -d "\r" > $OUTDIR/unix-nl.$1 
+    ($genocat --no-pg $output $arg || exit 1) | $cmd > $OUTDIR/unix-nl.$1 
 
     cmp_2_files $file $OUTDIR/unix-nl.$1
     cleanup
@@ -436,6 +441,9 @@ batch_special_algs()
         test_standard "COPY" " " $file       # multiple files unbound
         test_optimize $file                  # optimize - only compress to see that it doesn't error
     done
+
+    test_header "FASTQ QUAL with + regression test"
+    $genozip ${TESTDIR}/special.has-+-qual.fq -B16 -fX || exit # regression test for bug of parsing FASTQ that has QUAL lines that start with a +
 }
 
 batch_dvcf()
@@ -778,6 +786,22 @@ batch_qname_flavors()
     cleanup
 }
 
+batch_piz_no_license()
+{
+    batch_print_header
+
+    if [ -n "$is_windows" ]; then
+        local licfile=$APPDATA/genozip/.genozip_license
+    else
+        local licfile=$HOME/.genozip_license
+    fi
+
+    $genozip private/test/minimal.vcf -fX || exit 1
+    mv $licfile ${licfile}.test
+    $genounzip -t private/test/minimal.vcf.genozip || exit 1
+    mv ${licfile}.test $licfile 
+}
+
 # Test 23andMe translations
 # note: only runs it to see that it doesn't crash, doesn't validate results
 batch_23andMe_translations()
@@ -843,7 +867,7 @@ batch_genocat_tests()
     test_count_genocat_lines $file "--fasta" 9
 
     # FASTQ genocat tests
-    file=$TESTDIR/basic.fq
+    local file=$TESTDIR/basic.fq
     local num_lines=`grep + $file | wc -l`
     test_count_genocat_lines $file "--header-only" $num_lines 
     test_count_genocat_lines $file "--seq-only" $num_lines 
@@ -864,7 +888,7 @@ batch_genocat_tests()
     test_count_genocat_lines $file "--grep line5 --header-only" 1
 
     # BED genocat tests
-    file=$TESTDIR/basic.bed
+    local file=$TESTDIR/basic.bed
     test_count_genocat_lines $file "--header-only" 3
     test_count_genocat_lines $file "--no-header" 7
     test_count_genocat_lines $file "--grep UBXN11 --no-header" 2
@@ -872,6 +896,16 @@ batch_genocat_tests()
     test_count_genocat_lines $file "--head=2 --no-header" 2
     test_count_genocat_lines $file "--tail=2 --no-header" 2
 
+    # SAM genocat tests
+    local filter=$TESTDIR/basic.sam.qname-filter
+    local file=$TESTDIR/basic.sam
+    test_count_genocat_lines $file "-H --qnames-file $filter" 4
+    test_count_genocat_lines $file "-H --qnames-file ^$filter" 13
+    
+    # BAM genocat tests
+    local file=$TESTDIR/basic.bam
+    test_count_genocat_lines $file "-H --qnames-file $filter" 4
+    test_count_genocat_lines $file "-H --qnames-file ^$filter" 13
 }
 
 # test --grep, --count, --lines
@@ -1243,6 +1277,8 @@ batch_real_world_backcomp()
         made_versions=1
     fi
 
+    private/scripts/link_license.sh $1
+    
     local files=( $TESTDIR/$1/*.genozip )
     
     # remove reference file from list
@@ -1289,7 +1325,11 @@ batch_real_world_small_vbs()
     echo "subsets of real world files (lots of small VBs -B1)"
     test_standard "-mf $1 -B1 --show-filename" " " ${files[*]}
 
-    for f in ${files[@]}; do rm -f ${f}.genozip; done
+    for f in ${files[@]}; do rm -f $TESTDIR/${f}.genozip; done
+
+    # test --pair and --deep with small VBs
+    $genozip -B1 -2tfe $GRCh38 $TESTDIR/test.human2-R1.fq.gz $TESTDIR/test.human2-R2.fq.gz || exit 1
+    $genozip -B1 -3tfe $GRCh38 $TESTDIR/special.10K.deep.R1.fq.gz $TESTDIR/special.10K.deep.R2.fq.gz $TESTDIR/special.10K.deep.sam || exit 1
 }
 
 batch_multiseq()
@@ -1475,7 +1515,7 @@ update_latest()
 {
     pushd ../genozip-latest
     git pull
-    make genozip$exe
+    make -j
     popd
 }
 
@@ -1505,12 +1545,19 @@ batch_reference_backcomp()
     local files38=( test.human.fq.gz test.human-collated-headerless.sam test.1KG-38.vcf.gz )
 
     for f in ${files38[@]}; do 
-        # old file, old reference, new genounzip
         test_header "$f - reference file backward compatability with prod"
-        $genozip_latest $TESTDIR/$f -mf -e $prod_ref_file -o $output || exit 1
-        $genounzip -t $output -e $ref_file || exit 1
 
-        # new file, old reference, new genounzip
+        echo "old file, old reference, new genounzip"
+        $genozip_latest $TESTDIR/$f -mf -e $prod_ref_file -o $output || exit 1
+        $genounzip -t $output -e $prod_ref_file || exit 1
+
+        local latest_version=`$genozip_latest -V|cut -c9-10`
+        if (( latest_version >= 15 )); then # prior to v15 we didn't in have the in-memory digest
+            echo "old file, old reference, new genounzip with new reference"
+            $genounzip -t $output -e $ref_file || exit 1
+        fi
+
+        echo "new file, old reference, new genounzip"
         $genozip $TESTDIR/$f -mft -e $prod_ref_file -o $output || exit 1
     done
 
@@ -1544,24 +1591,38 @@ batch_replace()
 
     local f1=${OUTDIR}/f1.fq
     local f2=${OUTDIR}/f2.fq
+    local f3=${OUTDIR}/f3.sam
 
     # single file
     cp ${TESTDIR}/basic.fq $f1
-    $genozip $f1 -f || exit 1
+    $genozip $f1 -fX || exit 1
     test_exists $f1
 
-    $genozip $f1 -f --replace || exit 1
+    $genozip $f1 -fX --replace || exit 1
+    test_not_exists $f1
+
+    # single file with --test (i.e. creating sub-processing and returning from it)
+    cp ${TESTDIR}/basic.fq $f1
+    $genozip $f1 -ft --replace || exit 1
     test_not_exists $f1
 
     # multiple files
     cp ${TESTDIR}/basic.fq $f1
     cp ${TESTDIR}/basic.fq $f2
     
-    $genozip -f $f1 $f2 || exit 1
+    $genozip -fX $f1 $f2 || exit 1
     test_exists $f1
     test_exists $f2
 
-    $genozip $f1 $f2 -f -^ || exit 1
+    $genozip $f1 $f2 -fX -^ || exit 1
+    test_not_exists $f1
+    test_not_exists $f2
+
+    # multiple files with --test
+    cp ${TESTDIR}/basic.fq $f1
+    cp ${TESTDIR}/basic.fq $f2
+
+    $genozip $f1 $f2 -ft -^ || exit 1
     test_not_exists $f1
     test_not_exists $f2
 
@@ -1569,13 +1630,46 @@ batch_replace()
     cp ${TESTDIR}/basic.fq $f1
     cp ${TESTDIR}/basic.fq $f2
     
-    $genozip -f $f1 $f2 -2e $hs37d5 || exit 1
+    $genozip -fX $f1 $f2 -2e $hs37d5 || exit 1
     test_exists $f1
     test_exists $f2
 
-    $genozip $f1 $f2 -f^2e $hs37d5 || exit 1
+    $genozip $f1 $f2 -fX^2e $hs37d5 || exit 1
     test_not_exists $f1
     test_not_exists $f2
+
+    # paired with --test
+    cp ${TESTDIR}/basic.fq $f1
+    cp ${TESTDIR}/basic.fq $f2
+
+    $genozip $f1 $f2 -ft^2e $hs37d5 || exit 1
+    test_not_exists $f1
+    test_not_exists $f2
+
+    # deep
+    cp ${TESTDIR}/special.basic.deep.R1.fq $f1
+    cp ${TESTDIR}/special.basic.deep.R2.fq $f2
+    cp ${TESTDIR}/special.basic.deep.sam   $f3
+
+    $genozip $f1 $f2 $f3 -fX3e $GRCh38 || exit 1
+    test_exists $f1
+    test_exists $f2
+    test_exists $f3
+
+    $genozip $f1 $f2 $f3 -^fX3e $GRCh38 || exit 1
+    test_not_exists $f1
+    test_not_exists $f2
+    test_not_exists $f3
+
+    # deep with --test
+    cp ${TESTDIR}/special.basic.deep.R1.fq $f1
+    cp ${TESTDIR}/special.basic.deep.R2.fq $f2
+    cp ${TESTDIR}/special.basic.deep.sam   $f3
+
+    $genozip $f1 $f2 $f3 --test -^f3e $GRCh38 || exit 1
+    test_not_exists $f1
+    test_not_exists $f2
+    test_not_exists $f3
 }
 
 batch_genols()
@@ -1628,13 +1722,16 @@ batch_deep() # note: use --debug-deep for detailed tracking
     batch_print_header
 
     # btest contains a variety of scenarios
+    test_header special.basic.deep
     local T=$TESTDIR/special.basic.deep
     $genozip $T.sam $T.R1.fq $T.R2.fq -fe $GRCh38 -3t --best || exit 1 # --best causes aligner use on unmapped alignments
     $genozip $T.sam $T.R1.fq $T.R2.fq -fe $GRCh38 -3t --no-gencomp || exit 1 # --no-gencomp causes in-VB segging against saggy 
+    $genozip $T.sam $T.R1.fq $T.R2.fq -fe $GRCh38 -3t --md5 || exit 1 # --md5 uses a differt code path for verifying digest
 
+    test_header special.10K.deep
     local T=$TESTDIR/special.10K.deep
-    $genozip $T.sam $T.R1.fq $T.R2.fq -fe $GRCh38 -3t --best || exit 1
-    $genozip $T.sam $T.R1.fq $T.R2.fq -fe $GRCh38 -3t --no-gencomp || exit 1
+    $genozip $T.sam $T.R1.fq.gz $T.R2.fq.gz -fe $GRCh38 -3t --best || exit 1
+    $genozip $T.sam $T.R1.fq.gz $T.R2.fq.gz -fe $GRCh38 -3t --no-gencomp || exit 1
 
     cleanup
 }
@@ -1813,12 +1910,16 @@ if (( $1 <= 55 )) ; then  batch_headerless_wrong_ref   ; fi
 if (( $1 <= 56 )) ; then  batch_replace                ; fi
 if (( $1 <= 57 )) ; then  batch_coverage_idxstats_sex  ; fi
 if (( $1 <= 58 )) ; then  batch_qname_flavors          ; fi
-if (( $1 <= 59 )) ; then  batch_reference_backcomp     ; fi
-if (( $1 <= 60 )) ; then  batch_real_world_backcomp 12.0.42 ; fi # note: versions must match VERSIONS in test/Makefile
-if (( $1 <= 61 )) ; then  batch_real_world_backcomp 13.0.21 ; fi 
-if (( $1 <= 62 )) ; then  batch_real_world_backcomp 14.0.33 ; fi 
-if (( $1 <= 63 )) ; then  batch_real_world_backcomp latest  ; fi 
-next=63
+if (( $1 <= 59 )) ; then  batch_piz_no_license         ; fi
+if (( $1 <= 60 )) ; then  batch_reference_backcomp     ; fi
+if (( $1 <= 61 )) ; then  batch_real_world_backcomp 11.0.11 ; fi # note: versions must match VERSIONS in test/Makefile
+if (( $1 <= 62 )) ; then  batch_real_world_backcomp 12.0.42 ; fi 
+if (( $1 <= 63 )) ; then  batch_real_world_backcomp 13.0.21 ; fi 
+if (( $1 <= 64 )) ; then  batch_real_world_backcomp 14.0.33 ; fi 
+if (( $1 <= 65 )) ; then  batch_real_world_backcomp latest  ; fi 
+next=65
 if (( $1 <= $next + $num_batch_prod_compatability_tests )) ; then batch_prod_compatability $1 $next ; fi
+
+private/scripts/link_license.sh latest # restore
 
 printf "\nALL GOOD! \nstart: $start_date\nend:   `date`\n"

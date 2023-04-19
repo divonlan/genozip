@@ -23,15 +23,13 @@ extern uint32_t nukes_per_hash;    // = layer_bits[0] / 2
 extern uint32_t layer_bitmask[64]; // 1s in the layer_bits[] LSbs
 extern uint32_t **refhashs;
 
-extern void refhash_load (void);
-extern void refhash_destroy (bool destroy_only_if_not_mmap);
-
 // make-reference stuff
 extern void refhash_initialize_for_make (void);
 extern void refhash_compress_refhash (void);
 extern void refhash_calc_one_range (VBlockP vb, ConstRangeP r, ConstRangeP next_r);
 
-// stuff for loading and using refhash when ZIPping a fastq or fasta file
+// stuff for loading and using refhash when ZIPping a fastq or sam/bam file
+extern uint64_t refhash_load_init (uint8_t *out_base_layer_bits);
+extern void refhash_load (void);
 extern void refhash_load_standalone (void);
-extern void refhash_create_cache_join (bool free_mem);
-extern void refhash_remove_cache (void);
+extern void refhash_destroy (void);

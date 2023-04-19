@@ -35,6 +35,11 @@ typedef enum __attribute__ ((__packed__)) { HARD_FAIL, SOFT_FAIL } FailType;
 
 typedef enum __attribute__ ((__packed__)) { RECON_OFF, RECON_ON } ReconType;
 
+typedef unsigned __int128 uint128_t;
+typedef          __int128 int128_t;
+
+typedef uint128_t Timestamp;
+
 typedef int32_t TaxonomyId;
 
 // -----------------
@@ -125,6 +130,7 @@ typedef enum { DT_NONE=-1, // used in the code logic, never written to the file
 #define Z_DT(dt)   (z_file->data_type   == (DT_##dt))
 #define TXT_DT(dt) (txt_file->data_type == (DT_##dt))
 #define VB_DT(dt)  (vb->data_type       == (DT_##dt))
+#define OUT_DT(dt) (flag.out_dt         == (DT_##dt))
 
 typedef enum { DTYPE_FIELD, DTYPE_1, DTYPE_2 } DictIdType;
 
@@ -156,6 +162,7 @@ typedef uint16_t Did;    // index of a context in vb->contexts or z_file->contex
 
 typedef uint8_t CompIType;    // comp_i 
 #define COMP_MAIN ((CompIType)0)
+#define COMP_ALL  ((CompIType)254)
 #define COMP_NONE ((CompIType)255)
 #define MAX_NUM_COMPS 5       // can be increased if needed
 
@@ -281,10 +288,8 @@ extern VBlockP evb;
 typedef int ThreadId;
 #define THREAD_ID_NONE ((ThreadId)-1)
 
-typedef unsigned __int128 uint128_t;
-typedef          __int128 int128_t;
-
 #define VER(n) (z_file->genozip_version >= (n))
+#define EXACT_VER(n) (z_file->genozip_version == (n))
 
 #define KB *((uint64_t)1<<10)
 #define MB *((uint64_t)1<<20)
@@ -333,20 +338,34 @@ typedef SORTER ((*Sorter));
 #define DESCENDING_SORTER(func_name,struct_type,struct_field) \
     SORTER (func_name) { return DESCENDING (struct_type, struct_field); }
 
-/* xxx BINARY_SEARCHER is NEW - not tested yet */
-// declaration of binary search recursive function
-#define BINARY_SEARCHER(func, type, buf, type_field, field) \
-    type *func (type *first, type *last, type_field value) \
-    { \
-        if (first > last) return NULL; /* not found */ \
-        type *mid = first + (last - first) / 2; \
-        if (mid->field == value) return mid; \
-        else if (mid->field > value) return func (first, last-1, value); \
-        else                         return func (mid+1, last, value); \
+// declaration of binary search recursive function - array of struct, must be sorted ascending by field
+#define BINARY_SEARCHER(func, type, type_field, field, is_unique/*if false, we return the first entry of requested value*/) \
+    type *func (type *first, type *last, type_field value, int level)   \
+    {                                                                   \
+        if (first > last) return NULL; /* not found */                  \
+        type *mid = first + (last - first) / 2, *ret;                   \
+        if (mid->field == value) return mid;                            \
+        ret = (mid->field > value) ? func (first, last-1, value, level+1) : func (mid+1, last, value, level+1); \
+        if (!(is_unique) && level==0 && ret)  /* possibly multiple entries with value - move back to the first (note: we can only do this when back in level=0 where "first" is the true first entry) */\
+            while (ret > first && (ret-1)->field == value) ret--;       \
+        return ret;                                                     \
+    }
+
+// declaration of binary search recursive function - array of values, must be sorted ascending
+#define BINARY_SEARCHER_BY_VALUE(func, type, is_unique/*if false, we return the first entry of requested value*/) \
+    type *func (type *first, type *last, type value, int level)         \
+    {                                                                   \
+        if (first > last) return NULL; /* not found */                  \
+        type *mid = first + (last - first) / 2, *ret;                   \
+        if (*mid == value) return mid;                                  \
+        ret = (*mid > value) ? func (first, last-1, value, level+1) : func (mid+1, last, value, level+1); \
+        if (!(is_unique) && level==0 && ret)  /* possibly multiple entries with value - move back to the first (note: we can only do this when back in level=0 where "first" is the true first entry) */\
+            while (ret > first && *(ret-1) == value) ret--;             \
+        return ret;                                                     \
     }
 
 // actually do a binary search. buf is required to be sorted in an ascending order of field
-#define binary_search(func, type, buf, value) func (B1ST(type,(buf)), BLST(type,(buf)), value);
+#define binary_search(func, type, buf, value) func (B1ST(type,(buf)), BLST(type,(buf)), value, 0);
 
 #define DO_ONCE static uint64_t do_once=0; if (!__atomic_test_and_set (&do_once, __ATOMIC_RELAXED))  
 
@@ -405,6 +424,7 @@ typedef SORTER ((*Sorter));
 #define pSTRa(x)    &x, &x##_len                      
 #define qSTRa(x)    x, &x##_len                      
 #define cSTR(x)     x, sizeof x-1                 // a use with a string literal
+#define STRlst(did_i) last_txt (VB, (did_i)), vb->last_txt_len (did_i)
 
 // for printf %.*s argument list
 #define STRf(x)    ((int)x##_len), x          
@@ -416,7 +436,7 @@ typedef SORTER ((*Sorter));
 #define STRcpy(dst,src)    ({ if (src##_len) { memcpy(dst,src,src##_len) ; dst##_len = src##_len; } })
 #define STRcpyi(dst,i,src) ({ if (src##_len) { memcpy(dst##s[i],src,src##_len) ; dst##_lens[i] = src##_len; } })
 #define STRset(dst,src)    ({ dst=src; dst##_len=src##_len; })
-#define STRtxtset(dst,src)    ({ dst=Btxt((src).index); dst##_len=(src).len; })
+#define STRtxtset(dst,src)    ({ dst=Btxt ((src).index); dst##_len=(src).len; })
 #define STRinc(x) ({ x++; x##_len--; })
 #define STRLEN(string_literal) (sizeof string_literal - 1)
 #define STRtxt(x) Btxt (x), x##_len
@@ -574,6 +594,7 @@ extern StrTime str_time (void);
 #define WARN_ONCE0(string)                   WARN_ONCE (string "%s", "")
 
 #define ASSERTGOTO(condition, format, ...)   ( { if (!(condition)) { progress_newline(); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); goto error; }} )
+#define ASSERTGOTO0(condition, string)       ASSERTGOTO ((condition), string "%s", "")
 
 // exit codes
 #define EXIT_OK                   0

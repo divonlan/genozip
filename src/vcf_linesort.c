@@ -291,7 +291,7 @@ static uint32_t vcf_linesort_plan_reconstruction (bool is_luft)
     START_TIMER
     qsort (STRb(*index_buf), sizeof (uint32_t), vcf_linesort_line_cmp);
     ARRAY (uint32_t, index, *index_buf);
-    COPY_TIMER_VB (evb, vcf_linesort_compress_qsort);
+    COPY_TIMER_EVB (vcf_linesort_compress_qsort);
 
     // detect cases where distinct variants in Primary got mapped to the same coordinates in Luft
     if (is_luft) line_sorter_detect_duplicates(index_buf);
@@ -386,6 +386,6 @@ void vcf_zip_generate_recon_plan (void)
     if (txt_file->vb_info[0].len) vcf_zip_generate_recon_plan_do (false);
     if (txt_file->vb_info[1].len) vcf_zip_generate_recon_plan_do (true);
 
-    COPY_TIMER_VB (evb, generate_recon_plan);
+    COPY_TIMER_EVB (generate_recon_plan);
 }
 

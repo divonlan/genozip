@@ -86,7 +86,7 @@
 #define FNA_BZ2_       ".fna.bz2"
 #define FNA_XZ_        ".fna.xz"
 #define FNA_GENOZIP_   ".fna" GENOZIP_EXT
-#define FRN_           ".frn"
+#define FRN_           ".fna"
 #define FRN_GZ_        ".frn.gz"
 #define FRN_BZ2_       ".frn.bz2"
 #define FRN_XZ_        ".frn.xz"
@@ -100,7 +100,7 @@
 #define FSA_GZ_        ".fsa.gz"
 #define FSA_BZ2_       ".fsa.bz2"
 #define FSA_XZ_        ".fsa.xz"
-#define FSA_GENOZIP_   ".fsa" GENOZIP_EXT
+#define FSA_GENOZIP_   ".fsa" GENOZIP_EXT // adding more FASTA extensions? also update txtheader_piz_get_filename()
 
 // GFF2 / GFF3 file variations (including GVF, which is a subtype of GFF3 and GTF which is a subtype of GFF2)
 #define GFF3_          ".gff3"
@@ -249,7 +249,7 @@ extern rom file_exts[];
 // first entry of each data type MUST be the default plain file
 //                           { in          codec       out            }
 #define TXT_IN_FT_BY_DT  { { { FASTA,      CODEC_NONE, REF_GENOZIP    }, { FASTA_GZ,  CODEC_GZ,  REF_GENOZIP    }, /* fasta for generating reference files */\
-                             { FASTA_BZ2,  CODEC_BZ2,  REF_GENOZIP    }, { FASTA_XZ,  CODEC_XZ,  REF_GENOZIP    },\
+      /*txt_in_ft_by_dt*/    { FASTA_BZ2,  CODEC_BZ2,  REF_GENOZIP    }, { FASTA_XZ,  CODEC_XZ,  REF_GENOZIP    },\
                              { FNA,        CODEC_NONE, REF_GENOZIP    }, { FNA_GZ,    CODEC_GZ,  REF_GENOZIP    },\
                              { FNA_BZ2,    CODEC_BZ2,  REF_GENOZIP    }, { FNA_XZ,    CODEC_XZ,  REF_GENOZIP    },\
                              { FAS,        CODEC_NONE, REF_GENOZIP    }, { FAS_GZ,    CODEC_GZ,  REF_GENOZIP    },\
@@ -316,7 +316,7 @@ extern rom file_exts[];
 // plain file MUST appear first on the list - this will be the default output when redirecting 
 // GZ file, if it is supported MUST be 2nd on the list - we use this type if the user outputs to eg xx.gz instead of xx.vcf.gz (see file_open_txt_write)
 #define TXT_OUT_FT_BY_DT { { 0 }, /* a reference file cannot be uncompressed */  \
-                           { VCF, VCF_GZ, VCF_BGZF, BCF, 0 },       \
+      /*txt_out_ft_by_dt*/ { VCF, VCF_GZ, VCF_BGZF, BCF, 0 },       \
                            { SAM, SAM_GZ, BAM, 0 },                 \
                            { FASTQ, FASTQ_GZ, FQ, FQ_GZ, 0 },       \
                            { FASTA, FASTA_GZ, FA, FA_GZ, FAA, FAA_GZ, FFN, FFN_GZ, FNN, FNN_GZ, FNA, FNA_GZ, FRN, FRN_GZ, FAS, FAS_GZ, FSA, FSA_GZ, 0 },\

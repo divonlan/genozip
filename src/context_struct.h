@@ -26,18 +26,21 @@ typedef struct Context {
     // ----------------------------
     #define MAX_TAG_LEN 64     // including terminating nul (must be divisible by 8 for Tag struct)
     char tag_name[MAX_TAG_LEN];// nul-terminated tag name 
-    Did did_i;                 // the index of this ctx within the array vb->contexts
+    Did did_i;                 // the index of this ctx within the array vb->contexts. PIZ: if this context is an ALIAS_CTX, did_i contains the destination context did_i
     union {
     Did st_did_i;              // ZIP: in --stats, consolidate this context into st_did_i
     Did other_did_i;           // PIZ: cache the other context needed for reconstructing this one
     };
+    Did dict_did_i;            // ZIP/PIZ: zctx only: normally ==did_i, but if context is a ALIAS_DICT, did_i of its destination (shared dictionary between otherwise independent contexts)
     LocalType ltype;           // LT_* - type of local data - included in the section header
+    LocalType pair_ltype;      // LT_* - Used if this file is a PAIR_2 - type of local data of PAIR_1
     struct FlagsCtx flags;     // flags to be included in section header
     struct FlagsCtx pair_flags;// Used if this file is a PAIR_2 - contains ctx->flags of the PAIR_1
-    struct FlagsDict dict_flags; // ZIP: zctx only ; PIZ: flags included in Dictionary section header (v15)
+    struct FlagsDict dict_flags;  // ZIP: zctx only ; PIZ: flags included in Dictionary section header (v15)
+    SectionType pair_assist_type; // PIZ FASTQ R2: SEC_LOCAL, SEC_B250 is pair-assist, SEC_NONE if not.
     B250Size b250_size;        // Max size of element in b250 data (PIZ and ZIP after generation) v14
     B250Size pair_b250_size;
-    DictId dict_id;            // which dict_id is this MTF dealing with
+    DictId dict_id;            // the dict_id of this context
     Buffer dict;               // tab-delimited list of all unique snips - in this VB that don't exist in ol_dict
     Buffer b250;               // ZIP: During Seg, .data contains 32b indices into context->nodes. In zip_generate_b250_section, 
                                //      the "node indices" are converted into "word indices" - indices into the future 
@@ -45,7 +48,7 @@ typedef struct Context {
                                // PIZ: .data contains the word indices (i.e. indices into word_list) in base-250
     Buffer local;              // VB: Data private to this VB that is not in the dictionary
                                // ZIP Z_FILE .len  # fields of this type segged in the file (for stats)
-    Buffer pair;               // Used if this file is a PAIR_2 - contains a copy of either b250 or local of the PAIR_1 (if pair_b250 or pair_local is set)
+    Buffer b250R1;             // ZIP/PIZ: used by PAIR_2 FASTQ VBs (inc. in Deep SAM), for paired contexts: PAIR_1 b250 data from corresponding VB (in PIZ: only if CTX_PAIR_LOAD)
     
     int64_t compressor_time;   // Used when --show-time - time for compressing / decompressing this context
 
@@ -102,12 +105,9 @@ typedef struct Context {
     // ZIP-only instructions NOT written to the genozip file
     union {
     bool no_stons;             // ZIP: don't attempt to move singletons to local (singletons are never moved anyway if ltype!=LT_TEXT)
-    bool is_alias;             // PIZ: context is an alias            
+    bool is_ctx_alias;         // PIZ: context is an alias            
     };
-    bool pair_local;           // ZIP: this is the 2nd file of a pair - compare vs the first file, and set flags.paired in the header of SEC_LOCAL
-                               // PIZ: pair local data is loaded to context.pair
-    bool pair_b250;            // ZIP: this is the 2nd file of a pair - compare vs the first file, and set flags.paired in the header of SEC_B250
-                               // PIZ: pair b250 data is loaded to context.pair
+
     bool no_callback;          // don't use callback for compressing, despite it being defined
     bool local_is_lten;        // if true local data is LTEN, otherwise it is the machine (native) endianity
     bool local_param;          // copy local.param to SectionHeaderCtx
@@ -143,8 +143,10 @@ typedef struct Context {
     int16_t sf_i;              // ZIP VCF FORMAT fields: 0-based index of this context within the FORMAT of this line (only for fields defined in vcf.h); -1 if not context present in this line
 
     uint32_t local_in_z;       // ZIP: index and len into z_data where local compressed data is
+                               // PIZ: local section of this VB found in file (used to determined if pair-identical R1 section should be loaded)
     uint32_t local_in_z_len;   
     uint32_t b250_in_z;        // ZIP: index and len into z_data where b250 compressed data is
+                               // PIZ: b250 section of this VB found in file (used to determined if pair-identical R1 section should be loaded)
     uint32_t b250_in_z_len;    
 
     union {
@@ -192,7 +194,6 @@ typedef struct Context {
     // ZIP in z_file only
     // ----------------------------
     uint32_t num_failed_singletons;// (for stats) Words that we wrote into local in one VB only to discover later that they're not a singleton, and wrote into the global dict too
-    Mutex mutex;               // Context in z_file (only) is protected by a mutex 
     
     // ------------------------------------------------------------------------------------------------
     // START: RECONSTRUCT STATE : copied in reconstruct_peek 
@@ -238,14 +239,23 @@ typedef struct Context {
     // END: RECONSTRUCT STATE 
     // ----------------------------------------------------------------------------------------
 
-    // Container cache 
-    Buffer con_cache;          // PIZ: Handled by container_reconstruct - an array of Container which includes the did_i. Each struct is truncated to used items, followed by prefixes. 
-                               //      also used to cached Multiplexers in vcf_piz_special_MUX_BY_DOSAGE , piz_special_MINUS, recon_multi_dict_id_get_ctx_first_time
-                               // ZIP: Each context is free to use it on its own
-    Buffer con_index;          // Array of uint32_t - PIZ: index into con_cache - Each item corresponds to word_index. 
-                               // ZIP: used by: 1. seg_array_of_struct
-    Buffer con_len;            // Array of uint16_t - length of item in cache
+    union {
+    Buffer con_cache;          // PIZ: use by contexts that might have containers: Handled by container_reconstruct - an array of Container which includes the did_i. 
+                               //      Each struct is truncated to used items, followed by prefixes. 
+                               // ZIP: seg_array, sam_seg_array_field_get_con cache a container.
+    Buffer ctx_cache;          // PIZ: used to cached Contexts of Multiplexers and other dict_id look ups
     
+    // ZIP: context specific
+    Buffer value_to_bin;       // ZIP: Used by LONGR codec on *_DOMQRUNS contexts
+    Buffer longr_state;        // ZIP: Used by LONGR codec on QUAL contexts
+    Buffer chrom2ref_map;      // ZIP: Used by CHROM and contexts with a dict alias to it. Mapping from user file chrom to alternate chrom in reference file (new chroms in this VB) - incides match ctx->nodes
+    };
+    Buffer con_index;          // PIZ: use by contexts that might have containers: Array of uint32_t - index into con_cache - Each item corresponds to word_index. 
+                               // ZIP: used by: 1. seg_array_of_struct
+    union {
+    Buffer con_len;            // PIZ: use by contexts that might have containers: Array of uint16_t - length of item in cache
+    Buffer localR1;            // ZIP/PIZ: used by PAIR_2 FASTQ VBs (inc. in Deep SAM), for paired contexts: PAIR_1 local data from corresponding VB (in PIZ: only if fastq_use_pair_assisted).
+    };                         // Note: contexts with containers are always no_stons, so they have no local - therefore no issue with union conflict.
 } Context;
 
 typedef struct {

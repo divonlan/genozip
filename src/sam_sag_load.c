@@ -299,8 +299,8 @@ static inline void sam_load_groups_add_qual (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
     uint32_t comp_len = rans_compress_bound_4x16 (g->seq_len, X_NOSZ); // maximum 
     buf_alloc (vb, &vb_qual_buf, comp_len, 0, uint8_t, 1, NULL); // likely already allocated in sam_load_groups_add_grps
 
-    // uncompressed qual is is codec_bufs[0]; append compressed qual to vb_qual_buf
-    ASSERT (rans_compress_to_4x16 (VB, B1ST8 (vb->codec_bufs[0]), g->seq_len, BAFT(uint8_t, vb_qual_buf), &comp_len, X_NOSZ) && comp_len,
+    // uncompressed qual is in codec_bufs[0]; append compressed qual to vb_qual_buf
+    ASSERT (rans_compress_to_4x16 (VB, B1ST8 (vb->codec_bufs[0]), g->seq_len, BAFT8(vb_qual_buf), &comp_len, X_NOSZ) && comp_len,
             "Failed to compress PRIM qual of vb=%u grp_i=%u qual_len=%u", plsg->vblock_i, ZGRP_I(g), g->seq_len);
 
     g->qual = vb_qual_buf.len; // relative to the VB. we will update later to be relative to z_file->sag_qual.
@@ -361,14 +361,14 @@ static void sam_load_groups_add_aln_cigar (VBlockSAMP vb, PlsgVbInfo *plsg, Sag 
             buf_alloc (vb, &vb_cigars_buf, comp_len, 0, uint8_t, 1, NULL);
 
             // append compressed cigars to vb_cigars_buf
-            ASSERT (rans_compress_to_4x16 (VB, (uint8_t*)STRa(snip), BAFT(uint8_t, vb_cigars_buf), &comp_len, X_NOSZ) && comp_len,
+            ASSERT (rans_compress_to_4x16 (VB, (uint8_t*)STRa(snip), BAFT8(vb_cigars_buf), &comp_len, X_NOSZ) && comp_len,
                     "Failed to compress cigar of vb=%u grp_i=%u aln=%"PRId64" cigar_len=%u cigar=\"%.*s\"", 
                     plsg->vblock_i, ZGRP_I(g), ZALN_I(a), snip_len, STRf(snip));
         }
                 
         // case: compression doesn't compress - abandon compression and store uncompressed - set comp_len to 0.
         if (comp_len >= snip_len) {
-            memcpy (BAFT(uint8_t, vb_cigars_buf), snip, snip_len);
+            memcpy (BAFT8(vb_cigars_buf), snip, snip_len);
             comp_len = 0;
         }
 
@@ -420,7 +420,7 @@ static inline ZWord reconstruct_to_solo_aln (VBlockSAMP vb, Did did_i, uint64_t 
     uint32_t recon_len = Ltxt - recon_start;
 
     // if identical, UR and UB, CR and CB, point to the same data in solo_data
-    if (check_copy && recon_start >= recon_len && !memcmp (Btxt(recon_start), Btxt(recon_start-recon_len), recon_len)) {
+    if (check_copy && recon_start >= recon_len && !memcmp (Btxt (recon_start), Btxt (recon_start-recon_len), recon_len)) {
         recon_start -= recon_len;
         Ltxt -= recon_len;
 
@@ -528,10 +528,17 @@ static inline void sam_load_groups_add_grps (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
                     "rname=%d out of range: OPTION_SA_RNAME.word_len.len=%u. primary alignment of grp_i=%u: QNAME=(%"PRIu64",%u)=%.*s, CIGAR[12]=%*.*s",
                     prim_aln->rname, sa_rname_len, grp_i, (uint64_t)g->qname, (int)g->qname_len, (int)g->qname_len, Bc(z_file->sag_qnames, g->qname), MIN_(prim_aln_cigar_len,12),MIN_(prim_aln_cigar_len,12), prim_aln_cigar);
 
-            ctx_get_snip_by_word_index (CTX(OPTION_SA_RNAME), prim_aln->rname, vb->chrom_name);
-            
-            vb->chrom_node_index = ctx_get_word_index_by_snip (VB, CTX(SAM_RNAME), STRa(vb->chrom_name)); // convert OPTION_SA_RNAME word_index to RNAME word_index
-            ASSERT (vb->chrom_node_index != WORD_INDEX_NONE, "Cannot find rname=%u in context RNAME", prim_aln->rname);
+            // case: since v15, OPTION_SA_RNAME is an dict alias of SAM_RNAME
+            if (VER(15))
+                vb->chrom_node_index = prim_aln->rname; 
+        
+            // case: in v14, SAM_RNAME and OPTION_SA_RNAME are independent, so we lookup by name
+            else {
+                ctx_get_snip_by_word_index (CTX(OPTION_SA_RNAME), prim_aln->rname, vb->chrom_name);
+                
+                vb->chrom_node_index = ctx_get_word_index_by_snip (VB, CTX(SAM_RNAME), STRa(vb->chrom_name)); // convert OPTION_SA_RNAME word_index to RNAME word_index
+                ASSERT (vb->chrom_node_index != WORD_INDEX_NONE, "Cannot find rname=%u in context RNAME", prim_aln->rname);
+            }
         }
 
         // non-SAG_SA 
@@ -702,14 +709,14 @@ static void sam_load_groups_add_one_prim_vb (VBlockP vb_)
 
     vb_set_is_processed (VB); // tell dispatcher this thread is done and can be joined.
 
-    COPY_TIMER_VB (evb, sam_load_groups_add_one_prim_vb);                          
+    COPY_TIMER_EVB (sam_load_groups_add_one_prim_vb);                          
 }
 
 // PIZ main thread - dispatches compute compute thread do read SA Groups from one PRIM VB. returns true if dispatched
 bool sam_piz_dispatch_one_load_sag_vb (Dispatcher dispatcher)
 {
     if (!VER(14) || flag.genocat_no_reconstruct || flag.header_only
-        || (flag.one_vb && sections_vb_header (flag.one_vb, HARD_FAIL)->comp_i == SAM_COMP_MAIN)) { // --one-vb of a MAIN VB - no need for PRIM/DEPN
+        || (flag.one_vb && sections_vb_header (flag.one_vb)->comp_i == SAM_COMP_MAIN)) { // --one-vb of a MAIN VB - no need for PRIM/DEPN
         flag.preprocessing = false;
         return false; // no need to load sags
     }
@@ -771,11 +778,11 @@ void sam_piz_load_sags (void)
     Section vb_header_sec = NULL;
     for (uint32_t i=0; i < num_prim_vbs; i++) {
         
-        sections_get_next_vb_of_comp_sec (SAM_COMP_PRIM, &vb_header_sec);
+        sections_get_next_vb_header_sec (SAM_COMP_PRIM, &vb_header_sec);
 
         ASSERT0 (vb_header_sec->st==SEC_VB_HEADER && vb_header_sec->comp_i==SAM_COMP_PRIM, "expecting a PRIM VB Header");
 
-        SectionHeaderVbHeader header = zfile_read_section_header (evb, vb_header_sec->offset, vb_header_sec->vblock_i, SEC_VB_HEADER).vb_header;
+        SectionHeaderVbHeader header = zfile_read_section_header (evb, vb_header_sec, SEC_VB_HEADER).vb_header;
 
         plsg[i] = (PlsgVbInfo){ .vblock_i        = vb_header_sec->vblock_i,
                                 .first_grp_i     = BGEN32 (header.sam_prim_first_grp_i),

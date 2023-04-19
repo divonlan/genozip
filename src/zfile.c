@@ -113,11 +113,11 @@ void zfile_uncompress_section (VBlockP vb,
     ContextP ctx = NULL;
     if (IS_DICTED_SEC (expected_section_type)) { 
         ctx = ECTX(dict_id); 
-        if (ctx && (!ctx->is_loaded && flag.pair!=2)) // pair=2 happens in ZIP of paired FASTQ when reading pair 1 z_file data 
+        if (ctx && !ctx->is_loaded && IS_PIZ)  // note: never skip in ZIP (when an R2 VB uncompressed R1 sections)
             return;  // section was skipped 
     }
     else 
-        if (piz_is_skip_undicted_section (expected_section_type)) return; // section was skipped 
+        if (piz_is_skip_undicted_section (expected_section_type)) return; // undicted section was skipped 
 
     SectionHeaderP section_header  = section_header_p.common;
     uint32_t compressed_offset     = BGEN32 (section_header->compressed_offset);
@@ -142,6 +142,7 @@ void zfile_uncompress_section (VBlockP vb,
         crypt_do (vb, (uint8_t*)section_header + compressed_offset, data_encrypted_len, vblock_i, section_header->section_type, false);
  
     bool bad_compression = false;
+
     if (data_uncompressed_len > 0) { // FORMAT, for example, can be missing in a sample-less file
 
         if (uncompressed_data_buf_name) {
@@ -218,7 +219,8 @@ uint32_t zfile_compress_b250_data (VBlockP vb, ContextP ctx)
     struct FlagsCtx flags = ctx->flags; // make a copy
     
     if (VB_DT(FASTQ))
-        flags.paired = ctx->pair_b250;
+        flags.paired = (flag.pair == PAIR_R1 && fastq_zip_use_pair_identical (ctx->dict_id)) ||        // "paired" flag in R1 means: "In R2, reconstruct R1 data IFF R2 data is absent" (v15)
+                       (flag.pair == PAIR_R2 && fastq_zip_use_pair_assisted (ctx->dict_id, SEC_B250)); // "paired" flag in R2 means: "Reconstruction of R2 requires R2 data as well as R1 data"
 
     SectionHeaderCtx header = (SectionHeaderCtx) { 
         .magic                 = BGEN32 (GENOZIP_MAGIC),
@@ -262,9 +264,10 @@ uint32_t zfile_compress_local_data (VBlockP vb, ContextP ctx, uint32_t sample_si
     struct FlagsCtx flags = ctx->flags; // make a copy
 
     if (VB_DT(FASTQ))
-        flags.paired = ctx->pair_local;
+        flags.paired = (flag.pair == PAIR_R1 && fastq_zip_use_pair_identical (ctx->dict_id)) ||         // "paired" flag in R1 means: "Load R1 data in R2, if R2 data is absent" (v15)
+                       (flag.pair == PAIR_R2 && fastq_zip_use_pair_assisted (ctx->dict_id, SEC_LOCAL)); // "paired" flag in R2 means: "Reconstruction of R2 requires R2 data as well as R1 data"
 
-    uint32_t uncompressed_len = ctx->local.len32 * lt_desc[ctx->ltype].width;
+    uint32_t uncompressed_len = ctx->local.len32 * lt_width(ctx);
     
     // case: we're just testing a small sample
     if (sample_size && uncompressed_len > sample_size) 
@@ -286,7 +289,7 @@ uint32_t zfile_compress_local_data (VBlockP vb, ContextP ctx, uint32_t sample_si
 
     LocalGetLineCB *callback = zfile_get_local_data_callback (vb->data_type, ctx);
 
-    ctx->local_in_z = vb->z_data.len;
+    ctx->local_in_z = vb->z_data.len32;
 
     uint32_t compressed_size = comp_compress (vb, ctx, &vb->z_data, (SectionHeader*)&header, 
                                               callback ? NULL : ctx->local.data, callback, ctx->tag_name);
@@ -411,7 +414,6 @@ int32_t zfile_read_section_do (FileP file,
                                BufferP data, rom buf_name, // buffer to append 
                                SectionType expected_sec_type,
                                Section sec, // NULL for no seeking
-                               uint32_t header_size,   
                                FUNCLINE)
 {
     ASSERTMAINTHREAD;
@@ -426,6 +428,7 @@ int32_t zfile_read_section_do (FileP file,
                              (vb && vb->preprocessing) ? SKIP_PURPOSE_PREPROC : SKIP_PURPOSE_RECON)) 
         return SECTION_SKIPPED; 
 
+    uint32_t header_size = st_header_size (expected_sec_type);
     uint32_t unencrypted_header_size = header_size;
 
     // note: for an encrypted file, while reading the reference, we don't yet know until getting the header whether it
@@ -450,7 +453,7 @@ int32_t zfile_read_section_do (FileP file,
     bool is_magical = BGEN32 (header->magic) == GENOZIP_MAGIC;
 
     // SEC_REFERENCE is never encrypted when originating from a reference file, it is encrypted (if the file is encrypted) if it originates from REF_INTERNAL 
-    if (is_encrypted && header->section_type == SEC_REFERENCE && !header->data_encrypted_len) {
+    if (is_encrypted && HEADER_IS(REFERENCE) && !header->data_encrypted_len) {
         is_encrypted = false;
         header_size  = unencrypted_header_size;
     }
@@ -488,8 +491,8 @@ int32_t zfile_read_section_do (FileP file,
     int32_t remaining_data_len = (int32_t)data_len - (int32_t)(bytes_read - header_size); 
     
     // check that we received the section type we expect, 
-    ASSERT (expected_sec_type == header->section_type || 
-            (expected_sec_type == SEC_GENOZIP_HEADER && (SectionType)header->sub_codec == SEC_GENOZIP_HEADER), // in v2-5, the section_type field was located where sub_codec is now
+    ASSERT (expected_sec_type == header->section_type,
+            //xxx || (expected_sec_type == SEC_GENOZIP_HEADER && (SectionType)header->sub_codec == SEC_GENOZIP_HEADER), // in v2-5, the section_type field was located where sub_codec is now
             "called from %s:%u: Unexpected section type when reading %s: expecting %s, found %s sec(expecting)=(offset=%s, dict_id=%s)",
             func, code_line, z_name, st_name(expected_sec_type), st_name(header->section_type), 
             sec ? str_int_commas (sec->offset).s : "N/A", sec ? dis_dict_id (sec->dict_id).s : "N/A");
@@ -498,9 +501,9 @@ int32_t zfile_read_section_do (FileP file,
             "Requested to read %s with vb_i=%u, but actual section has vb_i=%u",
             st_name(expected_sec_type), original_vb_i, BGEN32 (header->vblock_i));
 
-    ASSERT (compressed_offset == header_size || expected_sec_type == SEC_GENOZIP_HEADER, // we allow SEC_GENOZIP_HEADER of other sizes, for older versions
-            "called from %s:%u: invalid header when reading %s - expecting compressed_offset to be %u but found %u. section_type=%s", 
-            func, code_line, z_name, header_size, compressed_offset, st_name(header->section_type));
+    ASSERT (compressed_offset == header_size, //xxx || expected_sec_type == SEC_GENOZIP_HEADER, // we allow SEC_GENOZIP_HEADER of other sizes, for older versions
+            "called from %s:%u: invalid header when reading %s - expecting compressed_offset to be %u but found %u. genozip_version=%u section_type=%s", 
+            func, code_line, z_name, header_size, compressed_offset, z_file->genozip_version/*set from footer*/, st_name(header->section_type));
 
     // allocate more memory for the rest of the header + data 
     buf_alloc (vb, data, 0, header_offset + compressed_offset + data_len, uint8_t, 2, "zfile_read_section");
@@ -515,25 +518,28 @@ int32_t zfile_read_section_do (FileP file,
 }
 
 // Read one section header - returns the header in vb->scratch - caller needs to free vb->scratch
-SectionHeaderUnion zfile_read_section_header (VBlockP vb, uint64_t offset, 
-                                              uint32_t original_vb_i, // the vblock_i used for compressing. this is part of the encryption key. dictionaries are compressed by the compute thread/vb, but uncompressed by the main thread (vb=0)
-                                              SectionType expected_sec_type)
+SectionHeaderUnion zfile_read_section_header_do (VBlockP vb, Section sec, 
+                                                 SectionType expected_sec_type, // optional: if not SEC_NONE, also verifies section is of expected type
+                                                 FUNCLINE)
 {
-    uint32_t header_size = st_header_size (expected_sec_type);
+    ASSERT (expected_sec_type == SEC_NONE || sec->st == expected_sec_type, 
+            "called from %s:%u: expecting sec.st=%s to be %s", func, code_line, st_name (sec->st), st_name (expected_sec_type));
+
+    uint32_t header_size = st_header_size (sec->st);
     uint32_t unencrypted_header_size = header_size;
 
     // get the uncompressed size from one of the headers - they are all the same size, and the reference file is never encrypted
-    file_seek (z_file, offset, SEEK_SET, false);
+    file_seek (z_file, sec->offset, SEEK_SET, false);
 
-    bool is_encrypted = (z_file->data_type != DT_REF)             && 
-                        (expected_sec_type != SEC_GENOZIP_HEADER) &&
+    bool is_encrypted = (z_file->data_type != DT_REF)   && 
+                        (sec->st != SEC_GENOZIP_HEADER) &&
                         crypt_get_encrypted_len (&header_size, NULL); // update header size if encrypted
     
     SectionHeaderUnion header;
     uint32_t bytes = fread (&header, 1, header_size, (FILE *)z_file->file);
     
-    ASSERT (bytes == header_size, "Failed to read header of section type %s from file %s: %s", 
-            st_name(expected_sec_type), z_name, strerror (errno));
+    ASSERT (bytes == header_size, "called from %s:%u: Failed to read header of section type %s from file %s: %s (bytes=%u header_size=%u)", 
+            func, code_line, st_name(sec->st), z_name, strerror (errno), bytes, header_size);
 
     bool is_magical = BGEN32 (header.common.magic) == GENOZIP_MAGIC;
 
@@ -546,20 +552,20 @@ SectionHeaderUnion zfile_read_section_header (VBlockP vb, uint64_t offset,
     // decrypt header 
     if (is_encrypted) {
         ASSERT (BGEN32 (header.common.magic) != GENOZIP_MAGIC, 
-                "password provided, but file %s is not encrypted (sec_type=%s)", z_name, st_name (header.common.section_type));
+                "called from %s:%u: password provided, but file %s is not encrypted (sec_type=%s)", func, code_line, z_name, st_name (header.common.section_type));
 
-        crypt_do (vb, (uint8_t*)&header, header_size, original_vb_i, expected_sec_type, true); 
+        crypt_do (vb, (uint8_t*)&header, header_size, sec->vblock_i, sec->st, true); 
     
         is_magical = BGEN32 (header.common.magic) == GENOZIP_MAGIC; // update after decryption
     }
 
-    ASSERT (is_magical, "corrupt data (magic is wrong) when attempting to read header of section %s in file %s", 
-            st_name (expected_sec_type), z_name);
+    ASSERT (is_magical, "called from %s:%u: corrupt data (magic is wrong) when attempting to read header of section %s in file %s", 
+            func, code_line, st_name (sec->st), z_name);
 
-    ASSERT ((BGEN32 (header.common.vblock_i) == original_vb_i && header.common.section_type == expected_sec_type) ||
-            (!VER(14) && expected_sec_type == SEC_REF_HASH), // in V<=13, REF_HASH didn't have a vb_i in the section list
-            "Requested to read %s with vb_i=%u, but actual section is %s with vb_i=%u",
-            st_name(expected_sec_type), original_vb_i, st_name(header.common.section_type), BGEN32 (header.common.vblock_i));
+    ASSERT ((BGEN32 (header.common.vblock_i) == sec->vblock_i && header.common.section_type == sec->st) ||
+            (!VER(14) && sec->st == SEC_REF_HASH), // in V<=13, REF_HASH didn't have a vb_i in the section list
+            "called from %s:%u: Requested to read %s with vb_i=%u, but actual section is %s with vb_i=%u",
+            func, code_line, st_name(sec->st), sec->vblock_i, st_name(header.common.section_type), BGEN32 (header.common.vblock_i));
 
     return header;
 }
@@ -569,7 +575,7 @@ SectionHeaderUnion zfile_read_section_header (VBlockP vb, uint64_t offset,
 static bool zfile_get_has_digest_up_to_v14 (SectionHeaderGenozipHeaderP header)
 {
     // proof: a file was compressed with --md5 (zip verifies --md5 conflicts)
-    if (VER(9) && !header->flags.genozip_header.adler) return true;
+    if (!header->flags.genozip_header.adler) return true;
 
     // proof: a file is up to v13 with digest_bound 
     if (!VER(14) && !digest_is_zero (header->FASTQ_v13_digest_bound)) return true;
@@ -577,14 +583,12 @@ static bool zfile_get_has_digest_up_to_v14 (SectionHeaderGenozipHeaderP header)
     // search for a non-0 digest in the first 3 TXT/VB headers
     Section sec = NULL;
     for (int i=0 ; i < 3 && sections_next_sec2 (&sec, SEC_TXT_HEADER, SEC_VB_HEADER); i++) {
-        SectionHeaderUnion header = zfile_read_section_header (evb, sec->offset, sec->vblock_i, sec->st);
+        SectionHeaderUnion header = zfile_read_section_header (evb, sec, SEC_NONE);
         
         // proof: a TXT_HEADER has a digest of the txt_header (0 if file has no header) or 
         // digest of the entire file. 
         if (sec->st == SEC_TXT_HEADER &&              
-               (!digest_is_zero (header.txt_header.digest) || 
-                // backward compatability note: in v8 we had a bug in which header.txt_header.digest had junk data if they user didn't --md5 or --test, so we can't use it as evidence
-                (VER(9) && !digest_is_zero (header.txt_header.digest_header)))) 
+               (!digest_is_zero (header.txt_header.digest) || !digest_is_zero (header.txt_header.digest_header)))
             return true; 
     
         // proof: a VB has a digest
@@ -680,7 +684,7 @@ static void zfile_read_genozip_header_handle_ref_info (ConstSectionHeaderGenozip
 static uint64_t zfile_read_genozip_header_get_offset (void)
 {
     // read the footer from the end of the file
-    if (file_get_size (z_file->name) < sizeof(SectionFooterGenozipHeader) ||
+    if (z_file->disk_size < sizeof(SectionFooterGenozipHeader) ||
         !z_file->file ||
         !file_seek (z_file, -sizeof(SectionFooterGenozipHeader), SEEK_END, 2))
         return 0; // failed
@@ -720,6 +724,10 @@ static uint64_t zfile_read_genozip_header_get_offset (void)
     // in version 8, we canceled backward compatability with v7
     ASSRET (VER(8), 0, "Skipping %s: it was compressed with version 7 of genozip. It may be uncompressed with genozip version 7",
                 z_name);
+
+    // in version 15, we canceled backward compatability with v8,9,10 (except reference files)
+    ASSRET (VER(11) || flag.reading_reference, 0, "Skipping %s: it was compressed with version %u of genozip. It may be uncompressed with genozip versions %u to 14",
+                z_name, z_file->genozip_version, z_file->genozip_version);
 
     return offset;
 }
@@ -780,7 +788,7 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header) // optio
     z_file->num_txt_files = header->num_txt_files;
     if (z_file->num_txt_files < 2) flag.unbind = 0; // override user's prefix if file has only 1 component (bug 326)
 
-    int dts = z_file->z_flags.dt_specific; // save in case its set already (eg dts_paired is set in fastq_piz_is_paired)
+    int dts = z_file->z_flags.dt_specific; // save in case its set already (eg dts_paired is set in sections_is_paired)
     z_file->z_flags = header->flags.genozip_header;
 
     z_file->z_flags.dt_specific |= dts; 
@@ -803,10 +811,8 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header) // optio
         z_file->section_list_buf.param = 1;
     }
 
-    if (VER(15)) 
-        z_file->z_flags_ext = header->flags_ext; // flags_ext field introduced v15
-    else
-        z_file->z_flags_ext.has_digest = zfile_get_has_digest_up_to_v14 (header);
+    if (!VER(15)) 
+        z_file->z_flags.has_digest = zfile_get_has_digest_up_to_v14 (header); // overwrites v14_bgzf that is no longer used for PIZ
 
     // case: we are reading a file expected to be the reference file itself
     if (flag.reading_reference) {
@@ -827,13 +833,15 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header) // optio
                     "%s is a reference file - it cannot be decompressed - skipping it. Did you intend to use --reference?.", z_name);
 
         // handle reference file info
+        flags_update_piz_no_ref_file();
+        
         if (!flag.genocat_no_ref_file)
             zfile_read_genozip_header_handle_ref_info (header);
 
         buf_free (evb->z_data); // free before ctx_piz_initialize_zctxs that might read aliases - header not valid after freeing
 
         // create all contexts for B250/LOCAL/DICT data in the z_file (or predefined) - 
-        // flags_update_piz_one_file and IS_SKIP functions may rely on Context.z_data_exists
+        // flags_update_piz_one_z_file and IS_SKIP functions may rely on Context.z_data_exists
         ctx_piz_initialize_zctxs();
     }
      
@@ -859,14 +867,10 @@ void zfile_compress_genozip_header (void)
         .dt_specific  = (DT_FUNC (z_file, zip_dts_flag)(1)),
         .dt_specific2 = (DT_FUNC (z_file, zip_dts_flag)(2)),
         .aligner      = (flag.aligner_available > 0),
-        .bgzf         = (txt_file->codec == CODEC_BGZF || txt_file->codec == CODEC_GZ), // note: if txt file is compressed with GZ, we will reconstruct it with BGZF
         .adler        = !flag.md5,
         .has_gencomp  = z_file->z_flags.has_gencomp,
         .has_taxid    = kraken_is_loaded,
-    };
-
-    header.flags_ext = (struct FlagsGenozipHeaderExt){
-        .has_digest   = zip_need_digest,
+        .has_digest   = zip_need_digest // v15
     };
 
     // "manually" add the genozip section to the section list - normally it is added in comp_compress()
@@ -878,10 +882,12 @@ void zfile_compress_genozip_header (void)
 
     uint32_t num_sections = z_file->section_list_buf.len32;
 
-    sections_list_memory_to_file_format (false); // into evb->scratch, just up to CODEC_ASSIGN_SAMPLE_SIZE
-    Codec codec = codec_assign_best_codec (evb, NULL, &evb->scratch, SEC_GENOZIP_HEADER);
-    buf_free (evb->scratch);
-
+    Codec codec = flag.fast ? CODEC_ARITH8 : CODEC_BZ2; // BZ2 is 2x better but 5x slower for section list data
+    // if (!flag.fast) {
+    //     sections_list_memory_to_file_format (false); // into evb->scratch, just up to CODEC_ASSIGN_SAMPLE_SIZE
+    //     codec = codec_assign_best_codec (evb, NULL, &evb->scratch, SEC_GENOZIP_HEADER);
+    //     buf_free (evb->scratch);
+    // }
     header.magic                 = BGEN32 (GENOZIP_MAGIC);
     header.compressed_offset     = BGEN32 (sizeof (SectionHeaderGenozipHeader));
     header.data_uncompressed_len = BGEN32 (z_file->section_list_buf.len * sizeof (SectionEntFileFormat));
@@ -952,7 +958,7 @@ void zfile_compress_genozip_header (void)
                                           .genozip_header_offset = BGEN64 (genozip_header_offset) };
     buf_add_more (evb, z_data, (char*)&footer, sizeof(SectionFooterGenozipHeader), "z_data");
 
-    COPY_TIMER_VB (evb, zfile_compress_genozip_header);
+    COPY_TIMER_EVB (zfile_compress_genozip_header);
 
     zfile_output_processed_vb (evb); // write footer
 }
@@ -977,7 +983,7 @@ bool zfile_update_txt_header_section_header (uint64_t offset_in_z_file, uint32_t
     curr_header->txt_num_lines    = BGEN64 (txt_file->num_lines);
     curr_header->max_lines_per_vb = BGEN32 (max_lines_per_vb);
 
-    if (!flag.data_modified && gencomp_comp_eligible_for_digest(NULL))
+    if (flag.md5 && !flag.data_modified && gencomp_comp_eligible_for_digest(NULL))
         curr_header->digest = digest_snapshot (&z_file->digest_ctx, "file");
 
     if (flag.show_headers)
@@ -1053,7 +1059,7 @@ void zfile_output_processed_vb (VBlockP vb)
     COPY_TIMER (write);
 
     z_file->disk_so_far += vb->z_data.len;
-    z_file->disk_so_far_comp[vb->comp_i] += vb->z_data.len;
+    if (vb->comp_i != COMP_NONE) z_file->disk_so_far_comp[vb->comp_i] += vb->z_data.len;
     vb->z_data.len = 0;
 
     ctx_update_stats (vb);
@@ -1070,7 +1076,7 @@ DataType zfile_get_file_dt (rom filename)
 
     // case: we don't know yet what file type this is - we need to read the genozip header to determine
     if (dt == DT_NONE && filename) {
-        if (!(file = file_open (filename, READ, Z_FILE, DT_NONE)) || !file->file)
+        if (!(file = file_open_z_read (filename)) || !file->file)
             goto done; // not a genozip file
 
         // read the footer from the end of the file

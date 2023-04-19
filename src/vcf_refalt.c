@@ -35,6 +35,7 @@
 static inline void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char ref, char alt)
 {
     char new_ref=0, new_alt=0;
+    decl_acgt_decode;
 
     // if we have a reference, we use it (we treat the reference as PRIMARY)
     // except: if --match-chrom, we assume the user just wants to match, and we don't burden him with needing the reference to decompress
@@ -164,6 +165,7 @@ static inline bool is_same_base (VBlockVCFP vb, const Range *luft_range, PosType
 
     if (is_xstrand) vcf_base = COMPLEM[(int)vcf_base];
 
+    decl_acgt_decode;
     char ref_base = ref_base_by_pos (luft_range, opos); // counting on compiler optimizer to avoid re-calculating if already calculated
 
     bool is_same = vcf_base == ref_base ||
@@ -179,6 +181,8 @@ static inline bool is_same_base (VBlockVCFP vb, const Range *luft_range, PosType
 // false is not the same or if either goes beyond the end of the range 
 static inline bool is_same_seq (Reference ref, VBlockVCFP vb, const Range *range, PosType32 pos, rom seq, PosType32 seq_len, bool is_xstrand)
 {
+    decl_acgt_decode;
+
     if (!is_xstrand) {
         if (pos + seq_len - 1 > range->last_pos) return false; // seq goes beyond the end of range
 
@@ -206,6 +210,8 @@ static inline bool is_same_refs (const Range *prim_range, PosType32 prim_pos,
                                  const Range *luft_range, PosType32 luft_pos, 
                                  unsigned seq_len, bool is_xstrand) 
 {
+    decl_acgt_decode;
+
     if (prim_pos + seq_len - 1 > prim_range->last_pos) return false; // seq goes beyond the end of range
 
     if (!is_xstrand) {
@@ -228,6 +234,8 @@ static inline bool is_same_refs (const Range *prim_range, PosType32 prim_pos,
 static unsigned vcf_refalt_lift_get_repeats (const Range *range, rom payload, PosType32 payload_len, PosType32 pos, bool revcomp)
 {
     unsigned num_reps = 0;
+    decl_acgt_decode;
+
     if (!revcomp) {
         for (PosType32 p=pos; p <= range->last_pos; p++, num_reps++) 
             if (ref_base_by_pos (range, p) != payload[num_reps % payload_len]) break;
@@ -271,6 +279,7 @@ static inline LiftOverStatus
               ".\tNew left-anchor base (after reverse-complementing) is before beginning of the chromosome: luft_new_left_anchor=%d", luft_new_left_anchor);
               
     // new anchor - the base to the left of the oREF
+    decl_acgt_decode;
     vb->new_ref = ref_base_by_pos (luft_range, luft_new_left_anchor); 
     
     return LO_OK;                
@@ -346,6 +355,7 @@ static bool vcf_refalt_is_REF_same_in_luft (VBlockVCFP vb, STRp(ref), bool is_xs
 {
     // if LUFT and PRIMARY is not the same for ref_len bases: example: "GAC G" Primary: "GAC" 
     // Luft=GTT: REF⇄ALT switch: "G GAC"
+    decl_acgt_decode;
     char anchor = is_xstrand ? ref_base_by_pos (prim_range, pos + ref_len) : ref[0]; // if is_xstrand, we re-anchor REF to be right-anchored
     PosType32 anchor_opos = is_xstrand ? opos - ref_len : opos; 
 
@@ -565,7 +575,7 @@ static LiftOverStatus vcf_refalt_lift_complex (VBlockVCFP vb, STRp(ref),
 static double vcf_refalt_get_INFO (VBlockVCFP vb, rom tag)
 {
     // split the VCF line into fields
-    rom line = Bc (vb->txt_data, vb->line_start);
+    rom line = Btxt (vb->line_start);
     str_split (line, strcspn (line, "\n\r"), 8 + (vcf_num_samples>0) + vcf_num_samples, '\t', field, false);
     if (n_fields < 8) return -1; // no INFO field (we will deal with this error in vcf_seg_txt_line)
 
@@ -593,6 +603,7 @@ static LiftOverStatus vcf_refalt_lift_snp (VBlockVCFP vb, STRp(ref)/* must be 1 
                                            const Range *prim_range, PosType32 pos, 
                                            const Range *luft_range, PosType32 opos)
 {
+    decl_acgt_decode;
     char oref = ref_base_by_pos (luft_range, opos); // range is 0-based
     bool is_iupac;
 
@@ -674,10 +685,10 @@ LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool is
     if (!opos) return LO_OK_REF_SAME_SNP; // POS==oPOS==0 and REF==oREF=='.'
 
     // note: as we're using external references, the range is always the entire contig, and range->first_pos is always 1.
-    const Range *prim_range = ref_seg_get_range (VB, prim_ref, dl->chrom[0], STRa(vb->chrom_name), pos, 1, WORD_INDEX_NONE, Bc (vb->txt_data, vb->line_start), NULL); // doesn't lock as lock=NULL
+    const Range *prim_range = ref_seg_get_range (VB, prim_ref, dl->chrom[0], STRa(vb->chrom_name), pos, 1, WORD_INDEX_NONE, Btxt (vb->line_start), NULL); // doesn't lock as lock=NULL
     ASSVCF (prim_range, "Failed to find PRIM range for chrom=\"%.*s\"", STRf(vb->chrom_name));
 
-    const Range *luft_range = ref_seg_get_range (VB, gref, dl->chrom[1], NULL, 0, opos, 1, luft_ref_index, Bc (vb->txt_data, vb->line_start), NULL);
+    const Range *luft_range = ref_seg_get_range (VB, gref, dl->chrom[1], NULL, 0, opos, 1, luft_ref_index, Btxt (vb->line_start), NULL);
     ASSVCF (luft_range, "Failed to find LUFT range for chrom=%d", dl->chrom[1]);
 
     str_toupper_(vb->main_ref, ref, ref_len);
@@ -957,6 +968,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_main_REFALT)
         ASSPIZ (!flag.debug || IS_REF_EXTERNAL || ref_is_nucleotide_set (range, idx), 
                 "reference is not set: chrom=%.*s pos=%d", STRf(range->chrom_name), pos);
 
+        decl_acgt_decode;
         ref_value = REF (idx);
     }
 

@@ -52,72 +52,78 @@
 #include "random_access.h"
 #include "reconstruct.h"
 #include "chrom.h"
+#include "gencomp.h"
 
 rom dvcf_status_names[NUM_LO_STATUSES] = DVCF_STATUS_NAMES;
 const LuftTransLateProp ltrans_props[NUM_VCF_TRANS] = DVCF_TRANS_PROPS;
 
-// constant snips initialized at the beginning of the first file zip
-#define LO_SNIP_LEN 200
-static char info_luft_snip[LO_SNIP_LEN]={}, info_prim_snip[LO_SNIP_LEN]={}, info_rejt_luft_snip[LO_SNIP_LEN]={}, info_rejt_prim_snip[LO_SNIP_LEN]={};
-static unsigned info_luft_snip_len=LO_SNIP_LEN, info_prim_snip_len=LO_SNIP_LEN, info_rejt_luft_snip_len=LO_SNIP_LEN, info_rejt_prim_snip_len=LO_SNIP_LEN;
+sSTRl(info_luft_snip,200);
+sSTRl(info_prim_snip,200);
+sSTRl(info_rejt_luft_snip,200);
+sSTRl(info_rejt_prim_snip,200);
 
 // ---------------
 // ZIP & SEG stuff
 // ---------------
 
-// ZIP: called by the main thread from *_zip_initialize 
+// ZIP: called by the main thread from vcf_zip_initialize 
 void vcf_lo_zip_initialize (void)
 {
-    static bool lo_snip_initialized = false;
-    if (lo_snip_initialized) return;
-    lo_snip_initialized = true;
+    gencomp_initialize (VCF_COMP_PRIM_ONLY, GCT_OOB);
+    gencomp_initialize (VCF_COMP_LUFT_ONLY, GCT_OOB);
+
+    // add luft translators (except if already added from the VCF header - possibly with "Number" other than '.')
+    for_zctx_that (!zctx->luft_trans && !dict_id_is_field (zctx->dict_id)) 
+        zctx->luft_trans = vcf_lo_luft_trans_id (zctx->dict_id, '.'); 
 
     // prepare (constant) snips. note: we need these snips both for --chain and when zipping dual-coord files
-    SmallContainer con = {
-        .repeats             = 1,
-        .nitems_lo           = NUM_IL_FIELDS,
-        .drop_final_item_sep = true,
-        .filter_items        = true, // needed for --single-coord
-        .items               = { [IL_CHROM  ]={ .dict_id = { _VCF_oCHROM },   .separator = ","  },
-                                 [IL_POS    ]={ .dict_id = { _VCF_oPOS },     .separator = ","  },
-                                 [IL_REF    ]={ .dict_id = { _VCF_LIFT_REF }, .separator = ","  },
-                                 [IL_XSTRAND]={ .dict_id = { _VCF_oXSTRAND }, .separator = ","  } } };
-    container_prepare_snip ((Container*)&con, 0, 0, info_luft_snip, &info_luft_snip_len);
+    DO_ONCE {
+        SmallContainer con = {
+            .repeats             = 1,
+            .nitems_lo           = NUM_IL_FIELDS,
+            .drop_final_item_sep = true,
+            .filter_items        = true, // needed for --single-coord
+            .items               = { [IL_CHROM  ]={ .dict_id = { _VCF_oCHROM   }, .separator = ","  },
+                                     [IL_POS    ]={ .dict_id = { _VCF_oPOS     }, .separator = ","  },
+                                     [IL_REF    ]={ .dict_id = { _VCF_LIFT_REF }, .separator = ","  },
+                                     [IL_XSTRAND]={ .dict_id = { _VCF_oXSTRAND }, .separator = ","  } } };
+        container_prepare_snip ((Container*)&con, 0, 0, info_luft_snip, &info_luft_snip_len);
 
-    con = (SmallContainer){
-        .repeats             = 1,
-        .nitems_lo           = NUM_IL_FIELDS,
-        .drop_final_item_sep = true,
-        .filter_items        = true, // needed for --single-coord
-        .items               = { [IL_CHROM  ]={ .dict_id = { _VCF_CHROM },    .separator = ","  },
-                                 [IL_POS    ]={ .dict_id = { _VCF_COPYPOS },  .separator = ","  },
-                                 [IL_REF    ]={ .dict_id = { _VCF_LIFT_REF }, .separator = ","  },
-                                 [IL_XSTRAND]={ .dict_id = { _VCF_oXSTRAND }, .separator = ","  } } };
-    container_prepare_snip ((Container*)&con, 0, 0, info_prim_snip, &info_prim_snip_len);
+        con = (SmallContainer){
+            .repeats             = 1,
+            .nitems_lo           = NUM_IL_FIELDS,
+            .drop_final_item_sep = true,
+            .filter_items        = true, // needed for --single-coord
+            .items               = { [IL_CHROM  ]={ .dict_id = { _VCF_CHROM    }, .separator = ","  },
+                                     [IL_POS    ]={ .dict_id = { _VCF_COPYPOS  }, .separator = ","  },
+                                     [IL_REF    ]={ .dict_id = { _VCF_LIFT_REF }, .separator = ","  },
+                                     [IL_XSTRAND]={ .dict_id = { _VCF_oXSTRAND }, .separator = ","  } } };
+        container_prepare_snip ((Container*)&con, 0, 0, info_prim_snip, &info_prim_snip_len);
 
-    // for REJTOVER, appearing a line that has only PRIMARY coordinates, we include oCHROM, oPOS and oREFALT which will 
-    // be segged as "" (empty snip) for this variant that cannot be lifted over. The reason is that when reconstructing 
-    // with --luft, the reconstructor will reconstruct the entire line (consuming oCHROM, oPOS, oREFALT for the main VCF fields)
-    // before finally being dropped by the container callback. Likewise for REJTBACK.
-    con = (SmallContainer){
-        .repeats      = 1,
-        .nitems_lo    = 4,
-        .filter_items = true, // needed for --single-coord
-        .items        = { { .dict_id = { _VCF_COPYSTAT } },
-                          { .dict_id = { _VCF_oCHROM }   },
-                          { .dict_id = { _VCF_oPOS }     },
-                          { .dict_id = { _VCF_oREFALT }  } } };
-    container_prepare_snip ((Container*)&con, 0, 0, info_rejt_luft_snip, &info_rejt_luft_snip_len);
+        // for REJTOVER, appearing a line that has only PRIMARY coordinates, we include oCHROM, oPOS and oREFALT which will 
+        // be segged as "" (empty snip) for this variant that cannot be lifted over. The reason is that when reconstructing 
+        // with --luft, the reconstructor will reconstruct the entire line (consuming oCHROM, oPOS, oREFALT for the main VCF fields)
+        // before finally being dropped by the container callback. Likewise for REJTBACK.
+        con = (SmallContainer){
+            .repeats      = 1,
+            .nitems_lo    = 4,
+            .filter_items = true, // needed for --single-coord
+            .items        = { { .dict_id = { _VCF_COPYSTAT } },
+                              { .dict_id = { _VCF_oCHROM   } },
+                              { .dict_id = { _VCF_oPOS     } },
+                              { .dict_id = { _VCF_oREFALT  } } } };
+        container_prepare_snip ((Container*)&con, 0, 0, info_rejt_luft_snip, &info_rejt_luft_snip_len);
 
-    con = (SmallContainer){
-        .repeats      = 1,
-        .nitems_lo    = 4,
-        .filter_items = true, // needed for --single-coord
-        .items        = { { .dict_id = { _VCF_COPYSTAT } },
-                          { .dict_id = { _VCF_CHROM }    },
-                          { .dict_id = { _VCF_COPYPOS }, .separator = { CI0_TRANS_NOR } }, // rather than segging "", we don't reconstruct. so we don't break the "all_the_same" of COPYPOS
-                          { .dict_id = { _VCF_REFALT }   } } };
-    container_prepare_snip ((Container*)&con, 0, 0, info_rejt_prim_snip, &info_rejt_prim_snip_len);
+        con = (SmallContainer){
+            .repeats      = 1,
+            .nitems_lo    = 4,
+            .filter_items = true, // needed for --single-coord
+            .items        = { { .dict_id = { _VCF_COPYSTAT } },
+                              { .dict_id = { _VCF_CHROM    } },
+                              { .dict_id = { _VCF_COPYPOS  }, .separator = { CI0_TRANS_NOR } }, // rather than segging "", we don't reconstruct. so we don't break the "all_the_same" of COPYPOS
+                              { .dict_id = { _VCF_REFALT   } } } };
+        container_prepare_snip ((Container*)&con, 0, 0, info_rejt_prim_snip, &info_rejt_prim_snip_len);
+    }
 }
 
 // returns true if dict_id is AF_* or *_AF, excluding MAX_AF

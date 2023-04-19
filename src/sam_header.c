@@ -284,7 +284,7 @@ static void sam_header_zip_inspect_HD_line (BufferP txt_header)
 
     SAFE_RESTORE;
 
-    COPY_TIMER_VB (evb, sam_header_zip_inspect_HD_line);
+    COPY_TIMER_EVB (sam_header_zip_inspect_HD_line);
 }
 
 static void sam_header_zip_build_hdr_PGs (rom hdr, rom after)
@@ -413,7 +413,7 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
 done:
     SAFE_RESTORE;
 
-    COPY_TIMER_VB (evb, sam_header_zip_inspect_PG_lines); 
+    COPY_TIMER_EVB (sam_header_zip_inspect_PG_lines); 
 }
 
 typedef struct { uint32_t n_contigs, dict_len; } ContigsCbParam;
@@ -525,7 +525,7 @@ bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
             else
                 foreach_binary_SQ_line  (STRb(*txt_header), sam_header_add_contig, NULL, flag.match_chrom_to_reference ? &new_txt_header : NULL);
 
-            COPY_TIMER_VB (evb, sam_header_add_contig);
+            COPY_TIMER_EVB (sam_header_add_contig);
 
             // replace txt_header with the updated one
             if (flag.match_chrom_to_reference) {

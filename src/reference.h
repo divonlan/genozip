@@ -61,7 +61,7 @@ typedef enum { RT_NONE,     // value of ranges.param if ranges is unallocated
 extern void ref_initialize_ranges (Reference ref, RangesType type);
 extern void ref_finalize (void);
 extern void ref_load_external_reference (Reference ref, ContextP chrom_ctx);
-extern void ref_load_stored_reference (Reference ref);
+extern bool ref_load_stored_reference (Reference ref);
 extern bool ref_is_loaded (const Reference ref);
 extern bool ref_is_external_loaded (const Reference ref);
 extern void ref_diff_ref (void);
@@ -79,6 +79,7 @@ extern BufferP ref_get_stored_ra (Reference ref);
 extern Digest ref_get_genome_digest (const Reference ref);
 extern rom ref_get_digest_name (const Reference ref);
 extern void ref_get_genome (Reference ref, const Bits **genome, const Bits **emoneg, PosType64 *genome_nbases);
+extern bool ref_has_emoneg (Reference ref);
 extern void ref_set_genome_is_used (Reference ref, PosType64 gpos, uint32_t len);
 extern bool ref_is_digest_adler (const Reference ref);
 
@@ -113,6 +114,15 @@ extern PosType64 ref_contigs_get_genome_nbases (Reference ref);
 
 extern WordIndex ref_contig_get_by_gpos (const Reference ref, PosType64 gpos, int32_t seq_len, PosType32 *pos);
 
+// cache stuff
+extern bool ref_cache_initialize_genome (Reference ref);
+extern void ref_cache_done_loading (Reference ref);
+extern bool ref_cache_is_cached  (Reference ref);
+extern bool ref_cache_is_loading (Reference ref);
+extern void ref_cache_get_refhash (Reference ref, void **cache_refhash_data, uint64_t *cache_refhash_size, uint32_t *base_layer_bits);
+extern void ref_cache_detach (Reference ref);
+extern void ref_cache_remove (Reference ref);
+
 extern const uint8_t acgt_encode[256];
 extern const uint8_t acgt_encode_comp[256];
 
@@ -124,10 +134,14 @@ static inline bool ref_is_nucleotide_set (ConstRangeP range, uint32_t idx) { ret
 
 static inline bool ref_is_idx_in_range (ConstRangeP range, uint32_t idx) { return idx < range->ref.nbits / 2; }
 
-static inline char acgt_decode (uint8_t b2) { switch (b2) { case 0:return'A' ; case 1:return'C' ; case 2:return'G' ; default:return'T'; }}
-static inline char base_by_idx (ConstBitsP bitarr, uint64_t idx) { return acgt_decode (bits_get2 (bitarr, idx * 2)); } 
-static inline char ref_base_by_idx (ConstRangeP range, uint64_t idx) { return base_by_idx (&range->ref, idx); }
-static inline char ref_base_by_pos (ConstRangeP range, PosType64 pos)  { return ref_base_by_idx (range, pos - range->first_pos); }
+// xxx old way
+// static inline char acgt_decode (uint8_t b2) { switch (b2) { case 0:return'A' ; case 1:return'C' ; case 2:return'G' ; default:return'T'; }} // slow
+// #define decl_acgt_decode 
+#define decl_acgt_decode  const char acgt_decoder[4] = { 'A', 'C', 'G', 'T' } /* its fastest when decoder is an automatic variable */
+#define acgt_decode(x) acgt_decoder[x]
+#define base_by_idx(bits, idx) acgt_decode(bits_get2 ((bits), (idx) * 2))
+#define ref_base_by_idx(range, idx) base_by_idx (&(range)->ref, (idx))
+#define ref_base_by_pos(range, pos) ref_base_by_idx ((range), (pos) - (range)->first_pos)
 
 static inline void ref_assert_nucleotide_available (ConstRangeP range, PosType64 pos) {
     bool available;
@@ -138,7 +152,7 @@ static inline void ref_assert_nucleotide_available (ConstRangeP range, PosType64
     ASSERT (available, "reference is not set: chrom=%.*s pos=%"PRId64, (range)->chrom_name_len, (range)->chrom_name, (pos));
 }
 
-#define REF(idx) ref_base_by_idx (range, (idx))
+#define REF(idx)  ref_base_by_idx (range, (idx))
 #define REFp(pos) ref_base_by_idx (range, (pos)-range->first_pos)
 
 // round-robin around range
@@ -150,11 +164,12 @@ static inline void ref_assert_nucleotide_available (ConstRangeP range, PosType64
 typedef struct { char s[300]; } RangeStr;
 extern RangeStr ref_display_range (ConstRangeP r);
 extern void ref_display_all_ranges (Reference ref);
-extern void ref_print_bases_region (FILE *file, ConstBitsP bitarr, ConstBitsP is_set, PosType64 first_pos, uint64_t start_base, uint64_t num_of_bases, bool is_forward);
+extern void ref_print_bases_region (FILE *file, ConstBitsP bits, ConstBitsP is_set, PosType64 first_pos, uint64_t start_base, uint64_t num_of_bases, bool is_forward);
 extern void ref_print_subrange (rom msg, ConstRangeP r, PosType64 start_pos, PosType64 end_pos, FILE *file);
 extern void ref_print_is_set (ConstRangeP r, PosType64 around_pos, FILE *file);
 extern char *ref_dis_subrange (Reference ref, ConstRangeP r, PosType64 start_pos, PosType64 len, char *seq, bool revcomp);
 extern void ref_display_ref (const Reference ref);
+extern bool ref_buf_locate (Reference ref, ConstBufferP buf);
 
 // globals
 extern Reference gref, prim_ref;

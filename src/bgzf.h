@@ -7,6 +7,7 @@
 //   and subject to penalties specified in the license.
  
 #include "genozip.h"
+#include "sections.h"
 
 #define BGZF_MAX_BLOCK_SIZE 65536 // maximum block size of both compressed and uncompressed data of one block
 
@@ -66,7 +67,8 @@ extern void bgzf_return_segconf_blocks (VBlockP vb);
 // PIZ side
 //---------
 
-extern bool bgzf_load_isizes (Section sl_ent);
+extern FlagsBgzf bgzf_piz_calculate_bgzf_flags (CompIType comp_i, Codec src_codec);
+extern void bgzf_piz_set_txt_file_bgzf_info (FlagsBgzf bgzf_flags, bytes codec_info);
 extern void bgzf_dispatch_compress (Dispatcher dispatcher, STRp (uncomp), bool is_last);
 extern void bgzf_write_finalize (void);
 

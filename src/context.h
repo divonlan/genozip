@@ -86,9 +86,9 @@ typedef struct CtxNode {
 
 typedef ZWord CtxWord;
 
-// for signed numbers, we store them in our "interlaced" format rather than standard ISO format 
+// Interlaced integers are used for storing integers that might be positive or negative, while keeping
+// as many higher bits zero as possible.
 // example signed: 2, -5 <--> interlaced: 4, 9. Why? for example, a int32 -1 will be 0x00000001 rather than 0xfffffffe - 
-// compressing better in an array that contains both positive and negative
 // Note: the full range of the signed type is supported, eg -128 to 127 for int8_t
 #define SAFE_NEGATE(signedtype,n) ((u##signedtype)(-((int64_t)n))) // careful negation to avoid overflow eg -(-128)==0 in int8_t
 #define INTERLACE(signedtype,num) ({ signedtype n=(signedtype)(num); (n < 0) ? ((SAFE_NEGATE(signedtype,n) << 1) - 1) : (((u##signedtype)n) << 1); })
@@ -157,7 +157,6 @@ extern void ctx_substract_txt_len (VBlockP vb, ContextP vctx);
 extern void ctx_add_compressor_time_to_zf_ctx (VBlockP vb);
 extern void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vctx, bool is_lcodec, bool is_lcodec_inherited);
 extern void ctx_reset_codec_commits (void);
-extern void ctx_convert_generated_b250_to_mate_lookup (VBlockP vb, ContextP vctx);
 
 extern ContextP ctx_get_unmapped_ctx (ContextArray contexts, DataType dt, DictIdtoDidMap d2d_map, Did *num_contexts, DictId dict_id, STRp(tag_name));
 
@@ -208,7 +207,7 @@ static inline ContextP ctx_get_existing_ctx_do (VBlockP vb, DictId dict_id)  // 
 
 extern ContextP ctx_get_existing_zctx (DictId dict_id);
 
-extern ContextP ctx_get_zctx_from_vctx (ConstContextP vctx, bool create_if_missing);
+extern ContextP ctx_get_zctx_from_vctx (ConstContextP vctx, bool create_if_missing, bool follow_alias);
 
 extern ContextP ctx_add_new_zf_ctx_from_txtheader (STRp(tag_name), DictId dict_id, TranslatorId luft_translator);
 
@@ -217,7 +216,7 @@ extern void ctx_sort_dictionaries_vb_1(VBlockP vb);
 
 extern void ctx_update_stats (VBlockP vb);
 extern void ctx_free_context (ContextP ctx, Did did_i);
-extern void ctx_destroy_context (ContextP ctx, Did did_i);
+extern void ctx_erase_context_bufs (ContextP ctx, Did did_i);
 
 extern CtxNode *ctx_get_node_by_word_index (ConstContextP ctx, WordIndex word_index);
 extern rom ctx_get_snip_by_word_index_do (ConstContextP ctx, WordIndex word_index, pSTRp(snip), FUNCLINE);

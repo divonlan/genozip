@@ -90,7 +90,7 @@ void vcf_samples_zip_initialize (void)
     seg_prepare_minus_snip (VCF, _FORMAT_AD, _FORMAT_ADR, adf_snip);
     seg_prepare_minus_snip (VCF, _FORMAT_AD, _FORMAT_ADF, adr_snip);
     seg_prepare_minus_snip (VCF, _FORMAT_DP, _FORMAT_RD,  ad_varscan_snip);
-
+        
     seg_prepare_snip_other (SNIP_COPY, _INFO_AF, 0, 0, af_snip);
 
     ab_snip_len = sizeof(ab_snip);
@@ -283,7 +283,7 @@ static void vcf_seg_FORMAT_mux_by_dosagexDP (VBlockVCFP vb, ContextP ctx, STRp(c
     if (!ctx_encountered (VB, FORMAT_DP)) goto cannot_use_special; // no DP in the FORMAT of this line
 
     int64_t DP;
-    if (!str_get_int (last_txt(VB, FORMAT_DP), vb->last_txt_len(FORMAT_DP), &DP)) // In some files, DP may be '.'
+    if (!str_get_int (STRlst (FORMAT_DP), &DP)) // In some files, DP may be '.'
         DP=0;
 
     int channel_i = vcf_seg_get_mux_channel_i (vb, true); // we don't use the multiplexer if its a DVCF REF⇆ALT switch variant as GT changes
@@ -310,7 +310,7 @@ cannot_use_special:
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_DOSAGExDP)
 {
-    unsigned num_channels = ctx->con_cache.len32 ? ctx->con_cache.len32 : (1 + str_count_char (STRa(snip), '\t'));
+    unsigned num_channels = ctx->ctx_cache.len32 ? ctx->ctx_cache.len32 : (1 + str_count_char (STRa(snip), '\t'));
     unsigned num_dps = num_channels / 3;
 
     rom DP_str;
@@ -599,6 +599,104 @@ static void vcf_seg_SAC_items (VBlockVCFP vb, ContextP ctx, STRps(item), Context
     }
 }
 
+//--------------------------
+// FORMAT/ICNT (DRAGEN gVCF)
+//--------------------------
+static void vcf_seg_ICNT (VBlockVCFP vb, ContextP ctx, STRp(ICNT))
+{
+    if (ctx_encountered (VB, FORMAT_AD)) {        
+        str_split_ints (ICNT, ICNT_len, 0, ',', icnt, false);
+        if (!n_icnts) goto fallback;
+
+        uint8_t snip[2 + n_icnts];
+        snip[0] = SNIP_SPECIAL;
+        snip[1] = VCF_SPECIAL_ICNT;
+
+        int64_t delta64 = vb->ad_values[0] - icnts[0];
+        if (delta64 < -112 || delta64 > 111) goto fallback;    // map the range [-112,111]->[32,255]
+        snip[2] = 144 + delta64;
+
+        for (int i=1; i < n_icnts; i++) {
+            if (icnts[i] < 0 || icnts[i] > 223) goto fallback; // map the range [0,223]->[32,255]
+            snip[i+2] = icnts[i] + 32;
+        }
+
+        seg_by_ctx (VB, (char *)snip, 2 + n_icnts, ctx, ICNT_len);
+
+        return;
+    }
+
+fallback:
+    seg_by_ctx (VB, STRa(ICNT), ctx, ICNT_len);
+}
+
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_ICNT)
+{
+    rom ad0_str = last_txt (vb, FORMAT_AD);
+    int64_t ad0 = atoll (ad0_str);
+
+    int64_t delta = (int64_t)(uint8_t)snip[0] - 144;
+    RECONSTRUCT_INT (ad0 - delta);
+
+    for (int i=1; i < snip_len; i++) {
+        RECONSTRUCT1 (',');
+        RECONSTRUCT_INT ((int64_t)(uint8_t)snip[i] - 32);
+    }
+
+    return NO_NEW_VALUE;
+}
+
+// --------------------------
+// FORMAT/SPL (DRAGEN gVCF)
+// --------------------------
+static void vcf_seg_SPL (VBlockVCFP vb, ContextP ctx, STRp(SPL))
+{
+    if (ctx_encountered (VB, FORMAT_PL)) {
+        STRlast (PL, CTX(FORMAT_PL));
+
+        str_split_ints (SPL, SPL_len, 0, ',', spl, false);
+        str_split_ints (PL,  PL_len,  0, ',', pl , false);
+
+        if (!n_pls || n_spls != n_pls) goto fallback;
+
+        // verify prediction
+        bool has_delta = false;
+        uint8_t snip[2 + n_pls];
+        snip[0] = SNIP_SPECIAL;
+        snip[1] = VCF_SPECIAL_SPL;
+
+        for (int i=0; i < n_pls; i++) {
+            int delta64 = spls[i] - MIN_(pls[i], 255);
+            if (delta64 < -112 || delta64 > 111) goto fallback; // doesn't fit 
+
+            snip[i+2] = delta64 + 144; // map [-112,111] -> [32,255]
+            if (delta64) has_delta = true;
+        }
+
+        seg_by_ctx (VB, (char *)snip, 2 + (has_delta ? n_pls : 0), ctx, SPL_len);
+        return;
+    }
+
+fallback:
+    seg_by_ctx (VB, STRa(SPL), ctx, SPL_len);
+}
+
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_SPL)
+{
+    STRlast (PL, CTX(FORMAT_PL));
+    str_split_ints (PL, PL_len, snip_len/*0 or correct number*/, ',', pl,  false);
+
+    for (int i=0; i < n_pls; i++) {
+        int64_t delta = (snip_len ? ((int64_t)(uint8_t)snip[i] - 144) : 0);
+        RECONSTRUCT_INT (MIN_(pls[i], 255) + delta);
+
+        if (i < n_pls-1) 
+            RECONSTRUCT1 (',');
+    }
+
+    return NO_NEW_VALUE;
+}
+
 //----------
 // FORMAT/MB
 //----------
@@ -776,12 +874,12 @@ static inline void vcf_seg_FORMAT_RGQ (VBlockVCFP vb, ContextP ctx, STRp(rgq), C
 
     // case: GT[0] is not '.' - seg the value of RGQ multiplexed by DP
     if (gt[0] != '.') {
-        if (!segconf.has[FORMAT_DP]          ||        // segconf didn't detect FORMAT/DP so we didn't initialize the mux
-            !ctx_encountered (VB, FORMAT_DP) ||        // no DP in the FORMAT of this line
-            segconf.running) goto fallback;  // multiplexor not initalized yet 
+        if (!segconf.has[FORMAT_DP]          ||    // segconf didn't detect FORMAT/DP so we didn't initialize the mux
+            !ctx_encountered (VB, FORMAT_DP) ||    // no DP in the FORMAT of this line
+            segconf.running) goto fallback;        // multiplexor not initalized yet 
 
         int64_t DP;
-        if (!str_get_int (last_txt(VB, FORMAT_DP), vb->last_txt_len(FORMAT_DP), &DP)) // In some files, DP may be '.'
+        if (!str_get_int (STRlst(FORMAT_DP), &DP)) // in some files, DP may be '.'
             DP=0;
 
         int channel_i = MAX_(0, MIN_(DP, mux->num_channels-1));
@@ -808,7 +906,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_RGQ)
     
     // gt[0] != '.' - demulitplex by FORMAT_DP
     else {
-        unsigned num_channels = ctx->con_cache.len32 ? ctx->con_cache.len32 : (1 + str_count_char (STRa(snip), '\t'));
+        unsigned num_channels = ctx->ctx_cache.len32 ? ctx->ctx_cache.len32 : (1 + str_count_char (STRa(snip), '\t'));
 
         rom DP_str;
         int64_t DP = reconstruct_peek (vb, CTX(FORMAT_DP), &DP_str, 0).i;
@@ -1132,7 +1230,7 @@ static inline void vcf_seg_FORMAT_PL (VBlockVCFP vb, ContextP ctx, STRp(PL))
     if (segconf.running && !segconf.has_DP_before_PL) 
         segconf.has_DP_before_PL = ctx_encountered (VB, FORMAT_DP);
 
-    seg_set_last_txt (VB, ctx, STRa(PL)); // used by GQ (points into txt_data, before optimization)
+    seg_set_last_txt (VB, ctx, STRa(PL)); // used by GQ and SPL (points into txt_data, before optimization)
 
     // attempt to optimize PL string, if requested
     unsigned optimized_len = PL_len*2 + 10;                 
@@ -1460,6 +1558,9 @@ static inline bool vcf_seg_sample_has_PS (VBlockVCFP vb, ContextP *ctxs, STRps(s
 // returns the number of colons in the sample
 static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP *ctxs, ContainerP samples, STRp(sample))
 {
+    #define COND0(condition, seg) if (condition) { seg; break; } else  
+    #define COND(condition,  seg) if (condition) { seg; break; } else goto fallback; 
+
     str_split (sample, sample_len, con_nitems (*samples), ':', sf, false);
 
     ASSVCF (n_sfs, "Sample %u has too many subfields - FORMAT field \"%s\" specifies only %u: \"%.*s\"", 
@@ -1673,6 +1774,12 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
 
         // <ID=SAC,Number=.,Type=Integer,Description="Number of reads on the forward and reverse strand supporting each allele (including reference)">
         case _FORMAT_SAC   : vcf_seg_FORMAT_A_R (vb, ctx, con_SAC, STRi(sf, i), STORE_NONE, vcf_seg_SAC_items); break;
+
+        // <ID=ICNT,Number=2,Type=Integer,Description="Counts of INDEL informative reads based on the reference confidence model">
+        case _FORMAT_ICNT  : COND (segconf.vcf_is_gvcf, vcf_seg_ICNT (vb, ctx, STRi(sf, i))); break;
+
+        // <ID=SPL,Number=.,Type=Integer,Description="Normalized, Phred-scaled likelihoods for SNPs based on the reference confidence model">
+        case _FORMAT_SPL  : COND (segconf.vcf_is_gvcf, vcf_seg_SPL (vb, ctx, STRi(sf, i))); break;
 
         // VarScan: <ID=RDF,Number=1,Type=Integer,Description="Depth of reference-supporting bases on forward strand (reads1plus)">
         case _FORMAT_RDF   : vcf_seg_FORMAT_minus (vb, ctx, STRi(sf, i), 0, CTX(FORMAT_RD), CTX(FORMAT_RDR), STRa(rdf_snip)); break;

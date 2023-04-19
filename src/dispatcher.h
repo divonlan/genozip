@@ -35,3 +35,4 @@ extern bool dispatcher_is_done (Dispatcher dispatcher);
 extern void dispatcher_set_task_name (Dispatcher dispatcher, rom task_name);
 extern Dispatcher dispatcher_fan_out_task (rom task_name, rom filename, uint32_t target_progress, rom prog_msg, bool out_of_order, bool test_mode, bool force_single_thread, uint32_t previous_vb_i, uint32_t idle_sleep_microsec, bool free_when_done, DispatcherFunc prepare, DispatcherFunc compute, DispatcherFunc output);
 extern void dispatcher_increment_progress (rom where, int64_t increment);
+extern void dispatcher_calc_avg_compute_vbs (Dispatcher d);

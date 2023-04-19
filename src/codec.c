@@ -190,12 +190,12 @@ Codec codec_assign_best_codec (VBlockP vb,
 {
     START_TIMER;
 
-    bool is_local = (st == SEC_LOCAL);
-    bool is_b250  = (st == SEC_B250 );
+    bool is_local = ST(LOCAL);
+    bool is_b250  = ST(B250);
     Codec non_ctx_codec = CODEC_UNKNOWN; // used for non-b250, non-local sections
     bool data_override = ctx && data;    // caller provided data for us to use *instead* of ctx's own local/b250/dict buffer
     
-    ContextP zctx = ctx ? ctx_get_zctx_from_vctx (ctx, false) : NULL; // note: if is_dict, ctx==zctx
+    ContextP zctx = ctx ? ctx_get_zctx_from_vctx (ctx, false, false) : NULL; // note: if is_dict, ctx==zctx
 
     Codec *selected_codec = is_local ? &ctx->lcodec  : 
                             is_b250  ? &ctx->bcodec  :
@@ -254,7 +254,7 @@ Codec codec_assign_best_codec (VBlockP vb,
     uint64_t save_data_len = data->len;
     uint64_t save_section_list = vb->section_list_buf.len; // save section list as comp_compress adds to it
 
-    data->len = MIN_(data->len * (is_local ? lt_desc[ctx->ltype].width : 1), CODEC_ASSIGN_SAMPLE_SIZE);
+    data->len = MIN_(data->len * (is_local ? lt_width(ctx) : 1), CODEC_ASSIGN_SAMPLE_SIZE);
 
     if (data->len < MIN_LEN_FOR_COMPRESSION) 
         goto done; // if too small - don't assign - compression will use CODEC_NONE and the next VB can try to select
@@ -271,7 +271,7 @@ Codec codec_assign_best_codec (VBlockP vb,
 
         if (*selected_codec == CODEC_NONE) tests[t].size = data->len;
         else {
-            LocalGetLineCB *callback = (st == SEC_LOCAL && !data_override) ? zfile_get_local_data_callback (vb->data_type, ctx) : NULL;
+            LocalGetLineCB *callback = (ST(LOCAL) && !data_override) ? zfile_get_local_data_callback (vb->data_type, ctx) : NULL;
 
             zfile_compress_section_data_ex (vb, ctx, st, callback ? NULL : data, callback, data->len, *selected_codec, SECTION_FLAGS_NONE, 
                                             "codec_assign_best_codec");

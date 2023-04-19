@@ -20,15 +20,19 @@
 #include "stats.h"
 #include "segconf.h"
 #include "gencomp.h"
+#include "tip.h"
+#include "arch.h"
 
 static MiniContainer line_number_container = {};
 
 // called by main thread after reading the header
 void vcf_zip_initialize (void)
 {
-    vcf_lo_zip_initialize ();
     vcf_samples_zip_initialize ();
     vcf_info_zip_initialize ();
+
+    if (z_is_dvcf) 
+        vcf_lo_zip_initialize ();
 
     // container just for adding a prefix to the delta-encoded line number (the container is all_the_same)
     if (flag.add_line_numbers && !line_number_container.repeats) { // possibly already initialized by previous files
@@ -53,11 +57,6 @@ void vcf_zip_initialize (void)
         }
         else
             ctx_populate_zf_ctx_from_contigs (gref, VCF_CHROM, ref_get_ctgs (gref)); 
-    }
-
-    if (z_is_dvcf) {
-        gencomp_initialize (VCF_COMP_PRIM_ONLY, GCT_OOB);
-        gencomp_initialize (VCF_COMP_LUFT_ONLY, GCT_OOB);
     }
 }
 
@@ -136,9 +135,9 @@ void vcf_zip_update_txt_counters (VBlockP vb)
         z_file->txt_data_so_far_bind += VB_VCF->recon_size_luft - vb->recon_size; // add recon_size_luft instead of (already added) recon_size
 }
 
-void vcf_zip_set_txt_header_specific (SectionHeaderTxtHeaderP txt_header)
+void vcf_zip_set_txt_header_flags (struct FlagsTxtHeader *f)
 {
-    txt_header->flags.txt_header.is_txt_luft = (txt_file->coords == DC_LUFT);
+    f->is_txt_luft = (txt_file->coords == DC_LUFT);
 }
 
 void vcf_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeaderP vb_header)
@@ -231,7 +230,7 @@ void vcf_seg_initialize (VBlockP vb_)
         seg_mux_init (VB, CTX(VCF_INFO), 2, VCF_SPECIAL_MUX_BY_HAS_RGQ, false, (MultiplexerP)&vb->mux_INFO, "01");        
     }
 
-    if (segconf.vcf_dbSNP)
+    if (segconf.vcf_is_dbSNP)
         seg_mux_init (VB, CTX(INFO_VC), 3, VCF_SPECIAL_MUX_BY_VARTYPE, true, (MultiplexerP)&vb->mux_VC, "012");
 
     vcf_info_seg_initialize(vb);
@@ -246,6 +245,14 @@ void vcf_seg_initialize (VBlockP vb_)
 
 static void vcf_seg_finalize_segconf (VBlockVCFP vb)
 {
+    // identify DRAGEN GVCF. GATK's is identified in vcf_inspect_txt_header_zip()
+    if (segconf.has[FORMAT_ICNT] && segconf.has[FORMAT_SPL]) 
+        segconf.vcf_is_gvcf = true;
+
+    if (!flag.reference && segconf.vcf_is_gvcf)
+        TIP ("Compressing a GVCF file using a reference file can reduce the compressed file's size by 10%%-30%%.\n"
+             "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
+             arch_get_argv0(), txt_file->name);
 }
 
 void vcf_seg_finalize (VBlockP vb_)
@@ -358,6 +365,8 @@ void vcf_zip_after_vbs (void)
 
 bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id)
 {
+    bytes id = dict_id.id;
+
     return 
         dict_id.num == _VCF_TOPLEVEL ||
         dict_id.num == _VCF_TOPLUFT  ||
@@ -387,15 +396,19 @@ bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id)
         dict_id.num == _INFO_PREJ    ||
 
         // INFO/ AC_* AN_* AF_* and ???_AF are small
-        ((dict_id.id[0] == ('A' | 0xc0)) && (dict_id.id[1] == 'C' || dict_id.id[1] == 'F' || dict_id.id[1] == 'N') && dict_id.id[2] == '_') ||
-        (dict_id_is_vcf_info_sf (dict_id) && dict_id.id[3] == '_' && dict_id.id[4] == 'A' && dict_id.id[5] == 'F' && !dict_id.id[6]);
+        ((id[0] == ('A' | 0xc0)) && (id[1] == 'C' || id[1] == 'F' || id[1] == 'N') && id[2] == '_') ||
+        (dict_id_is_vcf_info_sf (dict_id) && id[3] == '_' && id[4] == 'A' && id[5] == 'F' && !id[6]);
 }
 
-bool vcf_seg_is_big (ConstVBlockP vb, DictId dict_id)
+bool vcf_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id/*dict_id of st_did_i*/)
 {
     return 
-        dict_id.num == _VCF_REFALT  ||
-        dict_id.num == _VCF_oREFALT;
+        dict_id.num    == _VCF_REFALT  ||
+        dict_id.num    == _VCF_oREFALT ||
+        dict_id.num    == _INFO_RAW_MQ ||
+        st_dict_id.num == _FORMAT_PLn  || // P1Ln1 etc are often big
+        st_dict_id.num == _FORMAT_PLy  ||
+        st_dict_id.num == _FORMAT_GP    ; // G1P1 etc are often big
 }
 
 // returns length of gencomp before the copying

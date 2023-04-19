@@ -72,10 +72,6 @@ typedef enum __attribute__ ((__packed__)) {
 
 #define BAM_CIGAR_OP_NONE ((BamCigarOp){ .op=BC_NONE })
 
-// In initial SAM specification verions, the max QNAME length was 255, and reduced to 254 in Aug 2015. 
-// We support 255 to support old SAM/BAM files too.
-#define SAM_MAX_QNAME_LEN 255 // also defined in file.h (compiler will shout if definitions disagree)
-
 extern const char cigar_op_to_char[16]; // BAM to SAM cigar op
 
 #pragma pack()
@@ -458,7 +454,6 @@ typedef struct __attribute__ ((__packed__)) Sag {
 #define MAX_SA_POS            MAXB(31)                 // BAM limit
 #define MAX_SA_NM             MAXB(ALN_NM_BITS)        // our limit
 #define MAX_SA_MAPQ           MAXB(8)                  // BAM limit
-#define MAX_SA_QNAME_LEN      MAXB(8)                  // BAM limit
 #define MAX_SA_SEQ_LEN        MAXB(GRP_SEQ_LEN_BITS)   // our limit
 #define MAX_SA_CIGAR_LEN      MAXB(ALN_CIGAR_LEN_BITS) // our limit - 20 bit, BAM limit - 16 bit for the CIGAR field (may be extended with CG)
 #define MAX_SA_CIGAR_COMP_LEN MAXB(ALN_CIGAR_COMP_LEN_BITS)
@@ -602,7 +597,7 @@ COMPRESSOR_CALLBACK (sam_zip_##tag)                             \
     ZipDataLineSAM *dl = DATA_LINE (vb_line_i);                 \
     *line_data_len = dl->dont_compress_##tag ? 0 : MIN_(maximum_size, dl->f.len); /* note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec */ \
     if (!line_data || ! *line_data_len) return; /* no data, or only lengths were requested */   \
-    *line_data = Btxt(dl->f.index);                             \
+    *line_data = Btxt (dl->f.index);                             \
     if (is_rev) *is_rev = may_be_revcomped ? dl->FLAG.rev_comp : false;\
 }                               
 

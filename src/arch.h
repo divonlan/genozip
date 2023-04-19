@@ -21,5 +21,10 @@ extern rom arch_get_user_host (void);
 extern rom arch_get_os (void);
 extern rom arch_get_distribution (void);
 extern rom arch_get_executable (FailType soft_fail);
-extern rom arch_get_run_time (void);
+extern rom arch_get_argv0 (void);
 extern bool arch_is_valgrind (void);
+
+extern Timestamp arch_timestamp (void);
+
+static inline uint32_t arch_time_lap (uint128_t ts_start) // in msec
+{ return (uint32_t)((arch_timestamp() - ts_start) / 1000000); }

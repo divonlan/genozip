@@ -48,6 +48,7 @@
 #pragma GENDICT ATTR_Name=DTYPE_1=Name
 #pragma GENDICT ATTR_Alias=DTYPE_1=Alias
 #pragma GENDICT ATTR_Parent=DTYPE_1=Parent
+#pragma GENDICT ATTR_ParentItem=DTYPE_1=parentItm // an item of the Parent array
 #pragma GENDICT ATTR_Target=DTYPE_1=Target
 #pragma GENDICT ATTR_Target_ID=DTYPE_1=T1gtID
 #pragma GENDICT ATTR_Target_POS=DTYPE_1=T2gtPOS
@@ -57,6 +58,8 @@
 #pragma GENDICT ATTR_Note=DTYPE_1=Note
 #pragma GENDICT ATTR_Dbxref=DTYPE_1=Dbxref
 #pragma GENDICT ATTR_db_xref=DTYPE_1=db_xref
+#pragma GENDICT ATTR_DBXdb=DTYPE_1=DBXdb
+#pragma GENDICT ATTR_DBXid=DTYPE_1=DBxid
 #pragma GENDICT ATTR_Ontology_term=DTYPE_1=Ontology_term
 #pragma GENDICT ATTR_Is_circular=DTYPE_1=Is_circular
 
@@ -112,10 +115,10 @@ extern rom gff_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaini
 extern void gff_seg_initialize (VBlockP vb_);
 extern void gff_seg_finalize (VBlockP vb);
 extern bool gff_seg_is_small (ConstVBlockP vb, DictId dict_id);
+extern bool gff_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id);
 
 // VBlock stuff
 extern void gff_vb_release_vb();
-extern void gff_vb_destroy_vb();
 extern unsigned gff_vb_size (DataType dt);
 
 // PIZ stuff
@@ -127,7 +130,8 @@ extern CONTAINER_CALLBACK (gff_piz_container_cb);
 SPECIAL (GFF, 0,  exon_number,         gff_piz_special_exon_number);
 #define NUM_GFF_SPECIAL 1
 
-#define GFF_DICT_ID_ALIASES \
-    /*         alias                  maps to this ctx   */  \
-    { DT_GFF, _ATTR_Variant_seq,      _ATTR_Reference_seq }, \
-    { DT_GFF, _ATTR_ancestral_allele, _ATTR_Reference_seq }, 
+#define GFF_DICT_ID_ALIASES                                              \
+    /*        type        alias                   maps to this ctx   */  \
+    { DT_GFF, ALIAS_CTX,  _ATTR_Variant_seq,      _ATTR_Reference_seq }, \
+    { DT_GFF, ALIAS_CTX,  _ATTR_ancestral_allele, _ATTR_Reference_seq }, \
+    { DT_GFF, ALIAS_DICT, _ATTR_ParentItem,       _ATTR_DBXid         }, 

@@ -117,10 +117,12 @@ static inline uint32_t txtfile_read_block_bz2 (VBlockP vb, uint32_t max_bytes)
     return bytes_read;
 }
 
-// BGZF: we read *compressed* data into vb->scratch - that will be decompressed now or later, depending on uncompress. 
+// BGZF: we read *compressed* data into vb->scratch - that will be decompressed now or later, depending on "uncompress". 
 // We read data with a *decompressed* size up to max_uncomp. vb->scratch always contains only full BGZF blocks
 static inline uint32_t txtfile_read_block_bgzf (VBlockP vb, int32_t max_uncomp /* must be signed */, bool uncompress)
 {
+    START_TIMER;
+
     #define uncomp_len prm32[0] // we use vb->compress.param to hold the uncompressed length of the bgzf data in vb->compress
 
     uint32_t block_comp_len, block_uncomp_len, this_uncomp_len=0;
@@ -203,7 +205,11 @@ static inline uint32_t txtfile_read_block_bgzf (VBlockP vb, int32_t max_uncomp /
         txt_file->disk_so_far  += block_comp_len;   
 
         // we decompress one block a time in the loop so that the decompression is parallel with the disk reading into cache
-        if (uncompress) bgzf_uncompress_one_block (vb, BLST (BgzfBlockZip, vb->bgzf_blocks));  
+        if (uncompress) {
+            START_TIMER;
+            bgzf_uncompress_one_block (vb, BLST (BgzfBlockZip, vb->bgzf_blocks));  
+            COPY_TIMER(txtfile_read_block_bgzf_uncompress);
+        }
     }
 
     if (uncompress) {
@@ -211,6 +217,7 @@ static inline uint32_t txtfile_read_block_bgzf (VBlockP vb, int32_t max_uncomp /
         libdeflate_free_decompressor ((struct libdeflate_decompressor **)&vb->gzip_compressor);
     }
 
+    COPY_TIMER (txtfile_read_block_bgzf);
     return this_uncomp_len;
 #undef param
 }
@@ -238,7 +245,7 @@ static uint32_t txtfile_read_block (VBlockP vb, uint32_t max_bytes,
         default: ABORT ("txtfile_read_block: Invalid file type %s (codec=%s)", ft_name (txt_file->type), codec_name (txt_file->codec));
     }
 
-    COPY_TIMER_VB (evb, read);
+    COPY_TIMER_EVB (read);
     return bytes_read;
 }
 
@@ -362,7 +369,7 @@ void txtfile_read_header (bool is_first_txt)
 
     biopsy_take (evb);
 
-    COPY_TIMER_VB (evb, txtfile_read_header); // same profiler entry as txtfile_read_header
+    COPY_TIMER_EVB (txtfile_read_header); // same profiler entry as txtfile_read_header
 }
 
 // default "unconsumed" function file formats where we need to read whole \n-ending lines. returns the unconsumed data length
@@ -371,7 +378,7 @@ int32_t def_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
     ASSERT (*i >= 0 && *i < Ltxt, "*i=%d is out of range [0,%u]", *i, Ltxt);
 
     int32_t j; for (j=*i; j >= (int32_t)first_i; j--) // use j - automatic var - for speed 
-        if (*Btxt(j) == '\n') {
+        if (*Btxt (j) == '\n') {
             *i = j;
             return Ltxt -1 - j;
         }
@@ -382,6 +389,8 @@ int32_t def_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 
 static uint32_t txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb)
 {
+    START_TIMER;
+
     int32_t pass_to_next_vb_len;
     int32_t last_i = Ltxt-1; // next index to test (going backwards)
 
@@ -391,12 +400,12 @@ static uint32_t txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb)
 
         vb->gzip_compressor = libdeflate_alloc_decompressor(vb);
 
-        for (int block_i=vb->bgzf_blocks.len-1; block_i >= 0; block_i--) {
+        for (int block_i=vb->bgzf_blocks.len32 - 1; block_i >= 0; block_i--) {
             BgzfBlockZip *bb = B(BgzfBlockZip, vb->bgzf_blocks, block_i);
             bgzf_uncompress_one_block (vb, bb);
 
             pass_to_next_vb_len = (DT_FUNC(txt_file, unconsumed)(vb, bb->txt_index, &last_i));
-            if (pass_to_next_vb_len >= 0) goto done; // we have the answer (callback returns -1 if no it needs more data)
+            if (pass_to_next_vb_len >= 0) goto done; // we have the answer (callback returns -1 if it needs more data)
         }
 
         libdeflate_free_decompressor ((struct libdeflate_decompressor **)&vb->gzip_compressor);
@@ -423,6 +432,8 @@ static uint32_t txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb)
 
 done:
     libdeflate_free_decompressor ((struct libdeflate_decompressor **)&vb->gzip_compressor);
+    
+    COPY_TIMER (txtfile_get_unconsumed_to_pass_to_next_vb);
     return (uint32_t)pass_to_next_vb_len;
 }
 
@@ -473,8 +484,7 @@ static void txtfile_set_seggable_size (void)
         default: ABORT ("unspecified txt_file->codec=%s (%u)", codec_name (txt_file->codec), txt_file->codec);
     }
         
-    int64_t est_seggable_size = MAX_(0.0, (double)disk_size * source_comp_ratio - (double)txt_file->header_size);
-    __atomic_store_n (&txt_file->est_seggable_size, est_seggable_size, __ATOMIC_RELAXED); 
+    txt_file->est_seggable_size = MAX_(0.0, (double)disk_size * source_comp_ratio - (double)txt_file->header_size);
 
     if (segconf.running)
         txt_file->txt_data_so_far_single = txt_file->header_size; // roll back as we will re-account for this data in VB=1
@@ -482,7 +492,9 @@ static void txtfile_set_seggable_size (void)
 
 int64_t txtfile_get_seggable_size (void)
 {
-    return __atomic_load_n (&txt_file->est_seggable_size, __ATOMIC_RELAXED);
+    // note: this changes each time a VB is read by the main thread, but since its a single 64B word,
+    // a compute thread reading this value will always get a value that makes sense.
+    return txt_file->est_seggable_size; 
 }
 
 uint64_t txtfile_max_memory_per_vb (void)
@@ -515,7 +527,7 @@ void txtfile_read_vblock (VBlockP vb)
     bgzf_zip_init_vb (vb); 
     vb->comp_i = flag.zip_comp_i;  // needed for VB_NAME
 
-    bool always_uncompress = flag.pair == PAIR_READ_2 || // if we're reading the 2nd paired file, fastq_txtfile_have_enough_lines needs the whole data
+    bool always_uncompress = flag.pair == PAIR_R2 || // if we're reading the 2nd paired file, fastq_txtfile_have_enough_lines needs the whole data
                              flag.make_reference      || // unconsumed callback for make-reference needs to inspect the whole data
                              segconf.running          ||
                              flag.optimize_DESC       || // fastq_zip_init_vb needs to count lines
@@ -526,8 +538,13 @@ void txtfile_read_vblock (VBlockP vb)
 
     for (bool first=true; ; first=false) {
 
-        uint32_t len = (max_memory_per_vb > Ltxt) ? txtfile_read_block (vb, MIN_(max_memory_per_vb - Ltxt, 1 GB /* read() can't handle more */), always_uncompress) 
-                                                  : 0;
+        bool is_bgzf = (txt_file->codec == CODEC_BGZF);
+
+        uint32_t bytes_requested = MIN_(max_memory_per_vb - Ltxt, 1 GB /* read() can't handle more */);
+        bool no_read_expected = is_bgzf && (bytes_requested <= BGZF_MAX_BLOCK_SIZE); // in this case, txtfile_read_block is expected to return 0 
+
+        uint32_t len = (max_memory_per_vb > Ltxt) ? txtfile_read_block (vb, bytes_requested, always_uncompress) : 0;
+        
         if (!len && first && !Ltxt) {
             if (vb->vblock_i <= 1) txt_file->header_only = true; // header-only file (the header was already read, and there is no additional data)
                                                                  // note: this doesn't capture header-only 2nd+ bound file
@@ -536,21 +553,23 @@ void txtfile_read_vblock (VBlockP vb)
 
         // when reading BGZF, we might be filled up even without completely filling max_memory_per_vb 
         // if there is room left for only a partial BGZF block (we can't read partial blocks)
-        bool is_bgzf = (txt_file->codec == CODEC_BGZF);
         uint32_t filled_up = max_memory_per_vb - (is_bgzf ? (BGZF_MAX_BLOCK_SIZE - 1): 0);
 
         if (len && Ltxt < filled_up) continue;  // continue filling up txt_data...
 
         // case: this is the 2nd file of a fastq pair - make sure it has at least as many fastq "lines" as the first file
-        uint32_t my_lines, her_lines;
-        if (flag.pair == PAIR_READ_2 &&  // we are reading the second file of a fastq file pair (with --pair)
-            !fastq_txtfile_have_enough_lines (vb, &pass_to_next_vb_len, &my_lines, &her_lines)) { // we don't yet have all the data we need
+        uint32_t my_lines, pair_num_lines, pair_txt_data_len; 
+        VBIType pair_vb_i;
+        if (flag.pair == PAIR_R2 &&  // we are reading the second file of a fastq file pair (with --pair)
+            !fastq_txtfile_have_enough_lines (vb, &pass_to_next_vb_len, &my_lines, &pair_vb_i, &pair_num_lines, &pair_txt_data_len)) { // we don't yet have all the data we need
 
-            ASSINP (len && Ltxt, "Error: File %s has less FASTQ reads than its R1 mate (vb=%s has %u lines while its mate has %u lines; vb=%s Ltxt=%u)", 
-                    txt_name, VB_NAME, my_lines, her_lines, VB_NAME, Ltxt);
+            // note: the opposite case where R2 has more reads than R1 is caught in zip_prepare_one_vb_for_dispatching
+            ASSINP ((len || no_read_expected) && Ltxt, "Error: File %s has less FASTQ reads than its R1 mate (vb=%s has %u lines while its pair_vb_i=%d has pair_txt_data_len=%u pair_num_lines=%u; vb=%s Ltxt=%u bytes_requested=%u bytes_read=%u eof=%s max_memory_per_vb=%"PRIu64")", 
+                    txt_name, VB_NAME, my_lines, pair_vb_i, pair_txt_data_len/*only set if flag.debug*/, pair_num_lines, VB_NAME, Ltxt, bytes_requested, len, TF(txt_file->is_eof), max_memory_per_vb);
 
             // if we need more lines - increase memory and keep on reading
-            max_memory_per_vb += MAX_((is_bgzf ? BGZF_MAX_BLOCK_SIZE : 0), max_memory_per_vb / 16); 
+            max_memory_per_vb += MAX_((is_bgzf ? 2 * BGZF_MAX_BLOCK_SIZE : 0), max_memory_per_vb / 16); 
+
             buf_alloc (vb, &vb->txt_data, 0, max_memory_per_vb, char, 1, "txt_data");    
         }
         else
@@ -594,7 +613,7 @@ void txtfile_read_vblock (VBlockP vb)
 
     zip_init_vb (vb);
 
-    if (segconf.running || seggable_size_is_modifiable())
+    if (!txt_file->est_seggable_size || seggable_size_is_modifiable())
         txtfile_set_seggable_size();
 
     if (!segconf.running) {
@@ -615,40 +634,3 @@ DataType txtfile_get_file_dt (rom filename)
     return file_get_data_type (ft, true);
 }
 
-// get filename of output txt file in genounzip if user didn't specific it with --output
-// case 1: outputing a single file - generate txt_filename based on the z_file's name
-// case 2: unbinding a genozip into multiple txt files - generate txt_filename of a component file from the
-//         component name in SEC_TXT_HEADER 
-rom txtfile_piz_get_filename (rom orig_name, rom prefix, bool is_orig_name_genozip)
-{
-    unsigned fn_len = strlen (orig_name);
-    unsigned dn_len = flag.out_dirname ? strlen (flag.out_dirname) : 0;
-    unsigned genozip_ext_len = is_orig_name_genozip ? (sizeof GENOZIP_EXT - 1) : 0;
-    char *txt_filename = (char *)CALLOC(fn_len + dn_len + 10);
-
-    #define EXT2_MATCHES_TRANSLATE(from,to,ext)  \
-        ((z_file->data_type==(from) && flag.out_dt==(to) && \
-         fn_len >= genozip_ext_len+strlen(ext) && \
-         !strcmp (&txt_filename[fn_len-genozip_ext_len- (sizeof ext - 1)], (ext))) ? (int)(sizeof ext - 1) : 0) 
-
-    // length of extension to remove if translating, eg remove ".sam" if .sam.genozip->.bam */
-    int old_ext_removed_len = EXT2_MATCHES_TRANSLATE (DT_SAM,  DT_BAM,   ".sam") +
-                              EXT2_MATCHES_TRANSLATE (DT_SAM,  DT_SAM,   ".bam") +
-                              EXT2_MATCHES_TRANSLATE (DT_SAM,  DT_FASTQ, ".sam") +
-                              EXT2_MATCHES_TRANSLATE (DT_SAM,  DT_FASTQ, ".bam") +
-                              EXT2_MATCHES_TRANSLATE (DT_VCF,  DT_BCF,   ".vcf") +
-                              EXT2_MATCHES_TRANSLATE (DT_ME23, DT_VCF,   ".txt");
-
-    // case: new directory - take only the basename
-    if (dn_len) orig_name = filename_base (orig_name, 0,0,0,0); 
-    
-    sprintf ((char *)txt_filename, "%s%s%s%.*s%s%s", prefix,
-             (dn_len ? flag.out_dirname : ""), (dn_len ? "/" : ""), 
-             fn_len - genozip_ext_len - old_ext_removed_len, orig_name,
-             old_ext_removed_len ? file_plain_ext_by_dt (flag.out_dt) : "", // add translated extension if needed
-             (z_file->z_flags.bgzf && flag.out_dt != DT_BAM) ? ".gz" : ""); // add .gz if --bgzf (except in BAM where it is implicit)
-
-    if (dn_len) FREE (orig_name);
-
-    return txt_filename;
-}

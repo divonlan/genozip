@@ -223,7 +223,7 @@ static inline void container_verify_line_integrity (VBlockP vb, ContextP debug_l
         
         PutLineFn fn = file_put_line (vb, recon_start, recon_len, "\nFailed line integrity check");
 
-        if (IS_RECON_BAM)
+        if (OUT_DT(BAM))
             iprintf ("Tip: To view the dumped BAM line with:\n   genozip --show-bam %s\n\n", fn.s);
 
         iprintf ("Tip: To extract the original line for comparison use:\n   genozip --biopsy-line=%u/%u -B%u%s %s\n",
@@ -400,6 +400,22 @@ static inline bool container_is_field (VBlockP vb, ContextP ctx, bool is_topleve
            (VB_DT(GFF) && ctx->did_i == GFF_ATTRS);
 }
 
+// if the file was compressed with --debug-lines, we can conduct per-line verification in certain conditions
+static inline ContextP container_get_debug_lines_ctx (VBlockP vb)
+{
+    ContextP ctx = ECTX(_SAM_DEBUG_LINES); // same dict_id (but different did_i) for all data types
+    if (ctx && ctx->is_loaded) {
+        if ((flag.reconstruct_as_src && !flag.deep_fq_only) || (flag.deep_fq_only && vb->comp_i >= SAM_COMP_FQ00))
+            return ctx; // use per-line verification
+        
+        else if (!flag.deep_fq_only)
+            WARN_ONCE ("FYI: this file is compressed with --debug-lines allowing line-level verification during genounzip/genocat. However, this is disabled because output is to %s, and not the original file type",
+                        dt_name(flag.out_dt));
+    }
+
+    return NULL; // no per-line verification
+}
+
 ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, STRp(prefixes))
 {
     TimeSpecType profiler_timer = {}; 
@@ -442,10 +458,11 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
     ContextP debug_lines_ctx = NULL;
     if (is_toplevel) {
         buf_alloc (vb, &vb->lines, 0, con->repeats+1, uint32_t, 1.1, "lines"); // note: lines.len was set in piz_read_one_vb
-        vb->is_dropped = writer_get_is_dropped (vb->vblock_i);
-
-        debug_lines_ctx = ECTX(_SAM_DEBUG_LINES); // same dict_id for all data types
-        if (!debug_lines_ctx || !debug_lines_ctx->is_loaded) debug_lines_ctx = NULL;
+        
+        if (flag.maybe_lines_dropped_by_reconstructor || flag.maybe_lines_dropped_by_writer)
+            vb->is_dropped = writer_get_is_dropped (vb->vblock_i);
+        
+        debug_lines_ctx = container_get_debug_lines_ctx (vb); 
     }
 
     for (uint32_t rep_i=0; rep_i < con->repeats; rep_i++) {
@@ -457,6 +474,9 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
             vb->drop_curr_line = NULL;    
             
             container_set_lines (vb, rep_i);
+
+            if (flag.show_lines)
+                iprintf ("%s byte-in-vb=%u\n", LN_NAME, vb->txt_data.len32);
 
             DT_FUNC (vb, piz_init_line)(vb);
         }
@@ -593,7 +613,8 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
             // of that we error here. These is to prevent actual overflowing which will manifest as difficult to trace memory issues
             ASSPIZ (vb->txt_data.size - Ltxt > 16 KB, "txt_data overflow: Ltxt=%u", Ltxt);
 
-            container_toplevel_filter (vb, rep_i, rep_reconstruction_start, show_non_item);
+            if (flag.maybe_lines_dropped_by_reconstructor || flag.maybe_lines_dropped_by_writer)
+                container_toplevel_filter (vb, rep_i, rep_reconstruction_start, show_non_item);
         }
     } // repeats loop
 

@@ -32,12 +32,6 @@ void vcf_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
     }
 }
 
-// main thread: is it possible that genocat of this file will re-order lines
-bool vcf_piz_maybe_reorder_lines (void)
-{
-    return z_file->z_flags.has_gencomp || sections_get_comp_recon_plan_sec (VCF_COMP_MAIN, 0); // DVCF or being sorted
-}
-
 bool vcf_piz_init_vb (VBlockP vb_, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment)
 { 
     VBlockVCFP vb = (VBlockVCFP)vb_;

@@ -109,6 +109,9 @@ static int url_do_curl_head (rom url,
                              char *stdout_data, unsigned *stdout_len,
                              char *stderr_data, unsigned *stderr_len)
 {
+    ASSERT (stream_is_exec_in_path ("curl"),
+            "Failed to open URL %s because curl was not found in the execution path", url);
+
     // our own instance of curl - to not conflict with url_open
     StreamP curl = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
                                   "To compress files from a URL",
@@ -129,7 +132,7 @@ static int url_do_curl_head (rom url,
 
 // for a url, returns whether that URL exists, and if possible, its file_size, or -1 if its not available
 // note that the file_size availability is at the discretion of the web/ftp site. 
-// in case of an error, returns the error string
+// in case of an error, returns the error string : caller should FREE() the error string
 rom url_get_status (rom url, bool *is_file_exists, int64_t *file_size)
 {
     *is_file_exists = false;
@@ -192,6 +195,7 @@ rom url_get_status (rom url, bool *is_file_exists, int64_t *file_size)
     }
     else *file_size = -1; // file possibly exists (if this is HTTP and response was 200), but length is unknown
 
+    FREE (error);
     return NULL; // no error
 }
 
@@ -224,8 +228,10 @@ int32_t url_read_string (rom url, char *data, uint32_t data_size)
     else return 0;
 }
 
-void url_get_redirect (rom url, STRc(redirect_url))
+bool url_get_redirect (rom url, STRc(redirect_url))
 {
+    if (!stream_is_exec_in_path ("curl")) return false;
+
     // our own instance of curl - to not conflict with url_open
     StreamP curl = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
                                   "To get a URL's redirect", // reason in case of failure to execute curl
@@ -237,9 +243,13 @@ void url_get_redirect (rom url, STRc(redirect_url))
     redirect_url[redirect_url_len] = '\0'; // terminate string
 
     stream_close (&curl, STREAM_WAIT_FOR_PROCESS);
+
+    return true;
 }
 
-// returns a FILE* which streams the content of a URL
+// returns a FILE* which streams the content of a URL 
+// Note: FILE* returned is a *copy* of the FILE* in the curl stream - it should not be FCLOSEd
+// directly, rather call url_kill_curl or url_disconnect_from_curl
 FILE *url_open (StreamP parent_stream, rom url)
 {
     ASSERT0 (!curl, "Error url_open failed because curl is already running");
@@ -249,9 +259,13 @@ FILE *url_open (StreamP parent_stream, rom url)
     bool is_file = str_case_compare (str5, "file:", NULL); // wget doesn't support file://
 
     // check if wget exists, it is better than curl in flakey connections
-    bool has_wget = !flag.is_windows && !system ("which wget > /dev/null 2>&1") && file_exists ("/dev/stdout");
+    bool has_wget = !flag.is_windows && stream_is_exec_in_path ("wget");
 
-    if (has_wget && !is_file)
+    ASSERT (has_wget || stream_is_exec_in_path ("curl"),
+            "Failed to open URL %s because %s not found in the execution path", 
+            url, (flag.is_windows || is_file) ? "curl was" : "wget or curl were");
+
+    if (has_wget && !is_file) // note: stream_create doesn't support soft_fail (yet)
         curl = stream_create (parent_stream, DEFAULT_PIPE_SIZE, 0, 0, 0, 0, 0,
                               "To compress files from a URL", "wget", "--tries=16", "--quiet", "--waitretry=3", "--output-document=/dev/stdout", 
                               url, NULL);
@@ -270,11 +284,22 @@ void url_reset_if_curl (StreamP maybe_curl_stream)
 }
 
 // kill curl - used in case of an
-void url_kill_curl (void)
+void url_kill_curl (FILE **copy_of_input_pipe)
 {
     if (!curl) return; // nothing to do
     
+    if (copy_of_input_pipe) *copy_of_input_pipe = NULL;
     stream_close (&curl, STREAM_KILL_PROCESS);
+}
+
+// close stream without killing curl process - used if stream is used by forked sub-process
+void url_disconnect_from_curl (FILE **copy_of_input_pipe)
+{
+    if (!curl) return; // nothing to do
+    
+    if (copy_of_input_pipe) *copy_of_input_pipe = NULL;
+    stream_close (&curl, STREAM_DONT_WAIT_FOR_PROCESS);
+
 }
 
 // make a string into a a string containing only valid url characters, eg "first last" -> "first%20last"

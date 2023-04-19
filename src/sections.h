@@ -34,6 +34,9 @@
     {"SEC_REF_IUPACS",      sizeof (SectionHeader)              }, \
 }
 
+#define HEADER_IS(_st) (header->section_type == SEC_##_st)
+#define ST(_st) (st == SEC_##_st)
+
 // Section headers - big endian
 
 #define GENOZIP_MAGIC 0x27052012
@@ -62,13 +65,14 @@ typedef union SectionFlags {
     struct FlagsGenozipHeader {
         // note: if updating dts_* flags, update in zfile_compress_genozip_header, sections_show_header too
         #define dts_ref_internal dt_specific // SAM: REF_INTERNAL was used for compressing (i.e. SAM file without reference) (introduced v6)
-        #define dts_paired       dt_specific // FASTQ: This z_file contains one or more pairs of FASTQs compressed with --pair (introduced v9.0.13)
+        #define v14_dts_paired   dt_specific // FASTQ: This z_file contains one or more pairs of FASTQs compressed with --pair (introduced v9.0.13 until v14, since v15 moved to TxtHeader)
         #define dts_mismatch     dt_specific // CHAIN: This chain file's contigs mismatch its references, so it cannot be used with --chain (introduced v12.0.35)
         uint8_t dt_specific      : 1;  // this flag has a different meaning depending on the data_type, may be one of the above ^ 
-        uint8_t aligner          : 1;  // SAM, FASTQ: our aligner may have used to align sequences to the reference (always with FASTQ, sometimes with SAM)
+        uint8_t aligner          : 1;  // SAM, FASTQ: our aligner may have used to align sequences to the reference (always with FASTQ if compressed with a reference, sometimes with SAM)
         uint8_t txt_is_bin       : 1;  // BAM: Source file is binary 
-        uint8_t bgzf             : 1;  // Reconstruct as BGZF (user may override) (determined by the last component)
-        uint8_t adler            : 1;  // true if Adler32 is used, false if MD5 is used (>= v9) or (either MD5 or nothing) (v8)
+        uint8_t has_digest       : 1;  // true if compressed with digest (i.e. not --optimize etc) (v15) 
+        #define v14_bgzf has_digest    // Up to v14: Reconstruct as BGZF (user may override) (determined by the last component) (since v15, determined by SectionHeaderTxtHeader.src_codec)
+        uint8_t adler            : 1;  // true if Adler32 is used, false if MD5 is used 
         uint8_t has_gencomp      : 1;  // VCF: file supports dual coordinates - last two components are the "liftover rejects" data (v12)
                                        // SAM/BAM: PRIM and/or DEPN components exist (v14)
         uint8_t has_taxid        : 1;  // each line in the file has Taxonomic ID information (v12)
@@ -77,7 +81,8 @@ typedef union SectionFlags {
     } genozip_header;
 
     struct FlagsTxtHeader {
-        uint8_t v13_dvcf_comp_i  : 2;  // v12-13: DVCF: 0=Main 1=Primary-only rejects 2=Luft-only rejects (in v14, this moved to SectionEnt.comp_i)
+        uint8_t pair             : 2;  // FASTQ component (inc. in a Deep SAM): PAIR_R1 or PAIR_R2 if this component is a paired FASTQ component (v15)
+        #define v13_dvcf_comp_i pair   // v12-13: DVCF: 0=Main 1=Primary-only rejects 2=Luft-only rejects (in v14, this moved to SectionEnt.comp_i)
         uint8_t is_txt_luft      : 1;  // VCF: true if original source file was a dual-coordinates file in Luft rendition (v12)
         uint8_t unused           : 5;
     } txt_header;
@@ -108,8 +113,8 @@ typedef union SectionFlags {
 
     struct FlagsCtx {
         StoreType store          : 2;  // after reconstruction of a snip, store it in ctx.last_value
-        uint8_t paired           : 1;  // FASTQ: reconstruction of this context requires access to the same section from the same vb of the previous (paired) file
-        #define v8_container     store_delta      // in v8 files - if the context contains 1 or more containers
+        uint8_t paired           : 1;  // FASTQ VB (inc. Deep): R1 context: pair-identical: this section should be used for both R1 and R2 if the corresponding R2 section missing (v15)
+                                       //                       R2 context: pair-assisted: reconstruction of this context requires loading the corresponding R1 context to ctx->b250R1/localR1
         uint8_t store_delta      : 1;  // introduced v12.0.41: after reconstruction of a snip, store last_delta. notes: 1. last_delta also stored in case of a delta snip. 2. if using this, store=STORE_INT must be set.
         #define v13_copy_local_param spl_custom   // up to v13: copy ctx.b250/local.param from SectionHeaderCtx.param. since v14, piz always copies, except for LT_BITMAP
         uint8_t spl_custom       : 1;  // introduced v14: similar to store_per_line, but storing is done by the context's SPECIAL function, instead of in reconstruct_store_history
@@ -149,6 +154,8 @@ typedef union SectionFlags {
 
 } SectionFlags __attribute__((__transparent_union__));
 
+typedef struct FlagsBgzf FlagsBgzf;
+
 #define SECTION_FLAGS_NONE ((SectionFlags){ .flags = 0 })
 
 typedef struct SectionHeader {
@@ -178,10 +185,7 @@ typedef struct {
     union {
         struct {                       // v14
             uint16_t vb_size;          // segconf.vb_size in MB (if not exact MB in zip - rounded up to nearest MB)
-            struct FlagsGenozipHeaderExt {
-                uint8_t has_digest : 1;    // true if compressed with digest (i.e. not --optimize etc) (v15) 
-                uint8_t unused     : 7;                
-            } flags_ext; // more flags (v15)
+            char unused;                       
             CompIType num_txt_files;   // number of txt bound components in this file (1 if no binding). We don't count generated components (gencomp).
         };
         uint32_t v13_num_components;
@@ -255,7 +259,7 @@ typedef struct {
     uint32_t max_lines_per_vb;         // upper bound on how many data lines a VB can have in this file
     Codec    src_codec;                // codec of original txt file (none, bgzf, gz, bz2...)
     uint8_t  codec_info[3];            // codec specific info: for CODEC_BGZF, these are the LSB, 2nd-LSB, 3rd-LSB of the source BGZF-compressed file size
-    Digest   digest;                   // digest of original single txt file (except modified or DVCF). v8: 0 if compressed without --md5. starting v14: only if md5, not alder32 (adler32 digest, starting v14, is stored per VB)
+    Digest   digest;                   // digest of original single txt file (except modified or DVCF). v14: only if md5, not alder32 (adler32 digest, starting v14, is stored per VB) (bug in v14: this field is garbage instead of 0 for FASTQ_COMP_FQR2 if adler32)
     Digest   digest_header;            // MD5 or Adler32 of header
 #define TXT_FILENAME_LEN 256
     char     txt_filename[TXT_FILENAME_LEN]; // filename of this single component. without path, 0-terminated. always in base form like .vcf or .sam, even if the original is compressed .vcf.gz or .bam
@@ -394,6 +398,8 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
    { "DYH" ,0,   8,  0,     0x8000000000000000LL,  0x7fffffffffffffffLL,  0                        }, \
 }
 
+#define lt_width(ctx) (lt_desc[(ctx)->ltype].width)
+
 // used for SEC_LOCAL and SEC_B250
 typedef struct {
     SectionHeader;
@@ -455,22 +461,44 @@ typedef struct {
 } ReconPlanItem, *ReconPlanItemP;
 
 // the data of SEC_SECTION_LIST is an array of the following type, as is the z_file->section_list_buf
-typedef struct SectionEntFileFormat {
+typedef struct __attribute__ ((__packed__)) SectionEntFileFormat { // 19 bytes (since v15)
+    uint32_t offset_delta;     // delta vs previous offset (always positive)
+    int32_t vblock_i_delta;    // delta vs previous section's vblock_i (may be negative) 
+    CompIType comp_i_plus_1;   // stores 0 if same as prev section, COMP_NONE if COMP_NONE, and otherwise comp_i+1.
+    SectionType st;            // 1 byte
+    union {                    // Section-Type-specific field
+        DictId dict_id;        // DICT, LOCAL, B250 or COUNT sections (first occurance of this dict_id)
+        struct {               // DICT, LOCAL, B250 or COUNT sections (2nd+ occurance of this dict_id)
+            char is_dict_id;   // if zero, dict_id is copied from earlier section
+            char unused3[3];
+            uint32_t dict_sec_i; // section from which to copy the dict_id
+        };
+        struct { 
+            uint32_t num_lines;      // VB_HEADER sections - number of lines in this VB. 
+            uint32_t num_non_deep_lines; // VB_HEADER Deep SAM, component MAIN and PRIM: number of lines in this VB that are NOT deepable, i.e. SUPPLEMENTARY or SECONDARY or monochar or with SEQ.len=0  
+        };
+        uint64_t st_specific;  // generic access to the value
+    };
+    SectionFlags flags;        // same flags as in section header (since v12, previously "unused")
+} SectionEntFileFormat;
+
+typedef struct SectionEntFileFormatV14 { // 24 bytes (used up to v14)
     uint64_t offset;           // offset of this section in the file
     union {                    // Section-Type-specific field
         DictId dict_id;        // DICT, LOCAL, B250 or COUNT sections
         struct { 
             uint32_t num_lines;// VB_HEADER sections - number of lines in this VB. 
-            uint32_t num_deep_lines; // VB_HEADER SAM: number of lines in this VB that are deepable, i.e. not SUPPLEMENTARY or SECONDARY (v15), not monochar and with SEQ.len>0 
+            uint32_t unused;
         };
         uint64_t st_specific;  // generic access to the value
     };
     VBIType vblock_i;          // 1-based
     SectionType st;            // 1 byte
     SectionFlags flags;        // same flags as in section header (since v12, previously "unused")
-    CompIType comp_i;          // used for component-related sections, 0-based (v15: 8 bits, COMP_NONE is 255. v14: 2 bits - COMP_NONE was 0. up to v13: "unused")
+    uint8_t comp_i  : 2;       // used for component-related sections, 0-based (since v14, previously "unused"), (0 if COMP_NONE)
+    uint8_t unused1 : 6;
     uint8_t unused2;         
-} SectionEntFileFormat, SectionEntFileFormatP;
+} SectionEntFileFormatV14;     // up to v14 
 
 // the data of SEC_RANDOM_ACCESS is an array of the following type, as is the z_file->ra_buf and vb->ra_buf
 // we maintain one RA entry per vb per every chrom in the the VB
@@ -524,6 +552,11 @@ typedef const struct SectionEnt {
             uint32_t num_lines; // VB_HEADER sections - number of lines in this VB. 
             uint32_t num_deep_lines; // VB_HEADER SAM: number of lines in this VB that are not SUPPLEMENTARY or SECONDARY (v15) 
         };
+        struct { 
+            char is_dict_id;    // if zero, dict_id is copied from dict_sec_i (dict_id.id[0] cannot be zero = a DTYPE_FIELD dict_id cannot start with '@')
+            char unused3[3];
+            uint32_t dict_sec_i;// section from which to copy the dict_id
+        };
         uint64_t st_specific;   // generic access to the value
     };
     VBIType vblock_i;           // 1-based
@@ -532,6 +565,10 @@ typedef const struct SectionEnt {
     SectionType st;             // 1 byte
     SectionFlags flags;         // same flags as in section header, since v12 (before was "unused")
 } SectionEnt;
+
+// alias types in SEC_DICT_ID_ALIASES (since v15)
+typedef enum __attribute__ ((__packed__)) { ALIAS_NONE, ALIAS_CTX, ALIAS_DICT } AliasType;
+#define ALIAS_TYPE_NAMES                  { "NONE",     "CTX",      "DICT"    }
 
 // ---------
 // ZIP stuff
@@ -556,22 +593,19 @@ extern bool sections_next_sec3 (Section *sl_ent, SectionType st1, SectionType st
 extern bool sections_prev_sec2 (Section *sl_ent, SectionType st1, SectionType st2);
 #define sections_prev_sec(sl_ent,st) sections_prev_sec2((sl_ent),(st),SEC_NONE)
 
-extern Section sections_last_sec4 (Section sec, SectionType st1, SectionType st2, SectionType st3, SectionType st4);
-#define sections_component_last(any_sec_in_component) sections_last_sec4 ((any_sec_in_component), SEC_B250, SEC_LOCAL, SEC_VB_HEADER, SEC_RECON_PLAN)
-
 extern uint32_t sections_count_sections_until (SectionType st, Section first_sec, SectionType until_encountering);
 static inline uint32_t sections_count_sections (SectionType st) { return sections_count_sections_until (st, 0, SEC_NONE); }
 
-extern Section sections_vb_header (VBIType vb_i, FailType soft_fail);
-extern Section sections_vb_last (VBIType vb_i);
-
-extern CompIType sections_get_num_comps (bool force_create_index);
+extern void sections_create_index (void);
+extern Section sections_vb_header (VBIType vb_i);
 extern VBIType sections_get_num_vbs (CompIType comp_i);
 extern VBIType sections_get_first_vb_i (CompIType comp_i);
 extern Section sections_get_comp_txt_header_sec (CompIType comp_i);
 extern Section sections_get_comp_recon_plan_sec (CompIType comp_i, bool is_luft_plan);
-extern Section sections_get_next_vb_of_comp_sec (CompIType comp_i, Section *vb_sec);
+extern Section sections_get_comp_bgzf_sec (CompIType comp_i);
+extern Section sections_get_next_vb_header_sec (CompIType comp_i, Section *vb_sec);
 extern Section sections_one_before (Section sec);
+extern bool is_there_any_section_with_dict_id (DictId dict_id);
 
 // API for writer to create modified section list
 extern void sections_new_list_add_vb (BufferP new_list, VBIType vb_i);
@@ -582,13 +616,14 @@ extern void sections_commit_new_list (BufferP new_list);
 
 extern void sections_list_memory_to_file_format (bool in_place);
 extern void sections_list_file_to_memory_format (SectionHeaderGenozipHeaderP genozip_header);
+extern bool sections_is_paired (void);
 
 #define sections_has_dict_id(st) ((st) == SEC_B250 || (st) == SEC_LOCAL || (st) == SEC_DICT || (st) == SEC_COUNTS)
 extern SectionType sections_st_by_name (char *name);
 extern uint32_t st_header_size (SectionType sec_type);
 
 // display functions
-#define sections_read_prefix (vb->preprocessing ? 'P' : flag_loading_auxiliary ? 'L' : 'R')
+#define sections_read_prefix(P_prefix) ((P_prefix) ? 'P' : flag_loading_auxiliary ? 'L' : 'R')
 extern void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if output to buffer */, uint64_t offset, char rw);
 extern void genocat_show_headers (rom z_filename);
 extern void sections_show_gheader (ConstSectionHeaderGenozipHeaderP header);

@@ -40,6 +40,8 @@ typedef enum __attribute__ ((__packed__)) { MP_UNKNOWN, MP_BSBOLT,             M
 #define SAM_MAPPER_SIGNATURE        { "Unknown_mapper", "PN:bwa	VN:BSB"/*\t*/, "PN:bwa", "PN:BWA", "PN:minimap2", "PN:STAR", "PN:bowtie2", "ID: DRAGEN", "PN:gem-mapper", "PN:gem-2-sam", "ID:Bismark", "PN:BS Seeker 2", "PN:Winnowmap", "PN:baz2bam",  "PN:BBMap", "ID:tmap", "PN:hisat2", "ID:Bowtie", "PN:novoalign", "PN:razers3", "ID:BLASR", "PN:nextgenmap-lr", "ID:Delve", "ID:TopHat", "PN:cpu", "PN:longranger.lariat", "PN:clcgenomicswb", "PN:pbmm2", "PN:ccs", "PN:SNAP", "PN:bwa-mem2", "PN:pbrun fq2bam",             }   
 #define MP(x) (segconf.sam_mapper == MP_##x)
 
+#define MAX_SHORT_READ_LEN 2500
+
 // seg configuration set prior to starting to seg a file during segconfig_calculate or txtheader_zip_read_and_compress
 typedef struct {
 
@@ -53,6 +55,8 @@ typedef struct {
 
     // read characteristics (SAM/BAM, KRAKEN and FASTQ)
     QnameFlavor qname_flavor[NUM_QTYPES]; // 0-QNAME 1-QNAME2 (FASTQ) 2=NCBI LINE3 (FASTQ)
+    bool qname_flavor_rediscovered[NUM_QTYPES]; // true if flavor has been modified
+    char qname_line0[NUM_QTYPES][SAM_MAX_QNAME_LEN+1]; // qname of line_i=0 (by which flavor is determined) (nul-terminated)
     SeqTech tech;
 
     // SAM/BAM and FASTQ
@@ -134,8 +138,8 @@ typedef struct {
     bool vcf_is_beagle;
     bool vcf_is_gwas;           // GWAS-VCF format: https://github.com/MRCIEU/gwas-vcf-specification
     bool vcf_illum_gtyping;     // tags from Illumina GenCall genotyping software
-    bool vcf_infinium;
-    bool vcf_dbSNP;
+    bool vcf_is_infinium;
+    bool vcf_is_dbSNP;
     uint64_t count_dosage[2];   // used to calculate pc_has_dosage
     float pc_has_dosage;        // % of the samples x lines that have a valid (0-2) dosage value [0.0,1.0]
     bool use_null_DP_method;    // A method for predicting GT=./. by DP=.

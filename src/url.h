@@ -22,9 +22,10 @@ extern void url_reset_if_curl (StreamP maybe_curl_stream);
 
 extern int32_t url_read_string (rom url, char *data, uint32_t data_size);
 
-extern void url_get_redirect (rom url, STRc(redirect_url));
+extern bool url_get_redirect (rom url, STRc(redirect_url));
 
-extern void url_kill_curl (void);
+extern void url_kill_curl (FILE **copy_of_input_pipe);
+extern void url_disconnect_from_curl (FILE **copy_of_input_pipe);
 
 extern char *url_esc_non_valid_chars_(rom in, char *out, bool esc_all_or_none);
 static inline char *url_esc_non_valid_chars (rom in) { return url_esc_non_valid_chars_ (in, NULL, false); } // on heap

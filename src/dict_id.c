@@ -30,6 +30,9 @@ DictId dict_id_make (STRp(str), DictIdType dict_id_type)
         memcpy (dict_id.id + half1_len, str+str_len-half2_len, half2_len);
     }
 
+    // bc it would causes dict_id.id[0] to be 0 and id[0]=0 means lookback in SectionEntFileFormat
+    ASSERT (dict_id_type != DTYPE_FIELD || dict_id.id[0] != '@', "A DTYPE_FIELD dict_id=%s cannot begin with '@'.", dis_dict_id (dict_id).s);
+
     switch (dict_id_type) {
         case DTYPE_FIELD  : dict_id.id[0] = dict_id.id[0] & 0x3f; break;
         case DTYPE_1      : dict_id.id[0] = dict_id.id[0] | 0xc0; break;
@@ -51,68 +54,6 @@ DictId dict_id_make (STRp(str), DictIdType dict_id_type)
                                     :  (sizeof s == 7) ? {.id = { s0(s,dict_id_type), s[1], s[2], s[3], s[4], s[5] } } \
                                     :  (sizeof s == 8) ? {.id = { s0(s,dict_id_type), s[1], s[2], s[3], s[4], s[5], s[6] } } \
                                     :                    {.id = { s0(s,dict_id_type), s[1], s[2], s[3], s[4], s[5], s[6], s[7] } } )
-
-static void dict_id_show_aliases (void)
-{
-    iprint0 ("Contents of SEC_DICT_ID_ALIASES section:\n");
-    
-    for_buf (DictIdAlias, alias, evb->scratch)
-        iprintf ("alias=%s/%s dst=%s/%s\n", 
-                 dtype_name_z (alias->alias), dis_dict_id (alias->alias).s, 
-                 dtype_name_z (alias->dst),   dis_dict_id (alias->dst).s);
-
-    if (is_genocat) exit_ok();
-}
-
-// ZIP main thread: write to global section
-void dict_id_compress_aliases (void)
-{
-    static struct { DataType dt; uint64_t dict_id_alias; uint64_t dict_id_dst; } aliases_def[] = DICT_ID_ALIASES;
-
-    ASSERTNOTINUSE (evb->scratch);
-    buf_alloc (evb, &evb->scratch, 0, ARRAY_LEN(aliases_def), DictIdAlias, 0, "scratch");
-
-    for (int i=0; i < ARRAY_LEN(aliases_def); i++)
-        if (aliases_def[i].dt == z_file->data_type &&
-            ctx_get_existing_zctx (aliases_def[i].dict_id_dst)->z_data_exists) // it would be better to test existance of the alias rather than dst, but that's not easy to do. testing dst will be a little harmlessly wasteful bc in some cases we will write an alias section when unneeded
-
-            BNXT (DictIdAlias, evb->scratch) = (DictIdAlias){
-                .alias = (DictId)aliases_def[i].dict_id_alias,
-                .dst   = (DictId)aliases_def[i].dict_id_dst
-            };
-
-    if (flag.show_aliases) dict_id_show_aliases();
-
-    if (evb->scratch.len) {
-        evb->scratch.len *= sizeof (DictIdAlias);
-        zfile_compress_section_data (evb, SEC_DICT_ID_ALIASES, &evb->scratch);
-    }
-
-    buf_free (evb->scratch);
-}
-
-// PIZ main thread: read all dict_id aliases, if there are any. Caller should free buffer.
-BufferP dict_id_read_aliases (void) 
-{ 
-    Section sec = sections_last_sec (SEC_DICT_ID_ALIASES, SOFT_FAIL);
-    if (!sec) {
-        if (flag.show_aliases)
-            iprint0 ("No aliases in this file\n");
-            
-        return NULL; // no aliases section
-    }
-
-    ASSERTNOTINUSE (evb->scratch);
-    zfile_get_global_section (SectionHeader, sec, &evb->scratch, "scratch");
-    evb->scratch.len /= sizeof (DictIdAlias);
-
-    for_buf (DictIdAlias, alias, evb->scratch)
-        ASSERT0 (alias->dst.id[0] && alias->alias.id[0], "corrupted aliases buffer");
-    
-    if (flag.show_aliases) dict_id_show_aliases();
-
-    return &evb->scratch;
-}
 
 // template can be 0 - anything OR a type - must 2 MSb of id[0] are used OR a specific dict_id
 // candidate is a specific dict_id that we test for its matching of the template

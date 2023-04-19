@@ -21,12 +21,18 @@ static TimeSpecType profiler_timer; // wallclock
 void profiler_initialize (void)
 {
     mutex_initialize (profile_mutex);
-    clock_gettime(CLOCK_REALTIME, &profiler_timer); // initialze wallclock
+    clock_gettime (CLOCK_REALTIME, &profiler_timer); // initialze wallclock
+}
+
+void profiler_set_avg_compute_vbs (float avg_compute_vbs)
+{
+    profile.avg_compute_vbs = avg_compute_vbs;
 }
 
 void profiler_add (ConstVBlockP vb)
 {
-#   define ADD(x) profile.x += vb->profile.x
+#   define ADD(x) ({ profile.nanosecs.x += vb->profile.nanosecs.x; \
+                     profile.count.x    += vb->profile.count.x; })
     
     mutex_lock (profile_mutex);
 
@@ -35,10 +41,10 @@ void profiler_add (ConstVBlockP vb)
         profile.max_vb_size_mb = MAX_(profile.max_vb_size_mb, segconf.vb_size >> 20);
     }
 
-    ADD (file_open);
+    ADD (file_open_z);
     ADD (file_close);
     ADD (buf_low_level_free);
-    ADD (buf_remove_from_buffer_list);
+    ADD (buf_find_in_buffer_list);
     ADD (read);
     ADD (compute);
     ADD (write);
@@ -111,8 +117,18 @@ void profiler_add (ConstVBlockP vb)
     ADD (recon_plan_compress_one_fragment);
     ADD (zfile_uncompress_section);
     ADD (buf_alloc);
+    ADD (sections_create_index);
     ADD (dispatcher_recycle_vbs);
     ADD (txtfile_read_vblock);
+    ADD (fastq_read_pair_1_data);
+    ADD (piz_read_all_ctxs);
+    ADD (txtfile_get_unconsumed_to_pass_to_next_vb);
+    ADD (bgzf_copy_unconsumed_blocks);
+    ADD (bgzf_read_block);
+    ADD (txtfile_read_block_bgzf);
+    ADD (txtfile_read_block_bgzf_uncompress);
+    ADD (bgzf_uncompress_vb);
+    ADD (fastq_txtfile_have_enough_lines);
     ADD (txtfile_read_header);
     ADD (seg_all_data_lines);
     ADD (seg_initialize);
@@ -138,6 +154,15 @@ void profiler_add (ConstVBlockP vb)
     ADD (qname_seg);
     ADD (ctx_merge_in_vb_ctx);
     ADD (sam_deep_merge);
+    ADD (sam_piz_con_item_cb); 
+    ADD (sam_piz_deep_compress); 
+    ADD (sam_piz_deep_add_qname); 
+    ADD (sam_piz_deep_add_seq); 
+    ADD (sam_piz_deep_add_qual);
+    ADD (fastq_special_set_deep); 
+    ADD (fastq_special_deep_copy_QNAME);
+    ADD (fastq_special_deep_copy_SEQ);
+    ADD (fastq_special_deep_copy_QUAL); 
     ADD (codec_hapmat_count_alt_alleles);
     ADD (digest);
     ADD (ctx_clone);
@@ -181,6 +206,7 @@ void profiler_add (ConstVBlockP vb)
     ADD (random_access_compress);
     ADD (ctx_compress_counts);
     ADD (zfile_compress_genozip_header);
+    ADD (piz_main_loop_idle);
     ADD (tmp1);
     ADD (tmp2);
     ADD (tmp3);
@@ -197,7 +223,7 @@ static inline uint32_t ms(uint64_t ns) { return (uint32_t)(ns / 1000000);}
 rom profiler_print_short (const ProfilerRec *p)
 {
     static char str[300]; // not thread safe
-    sprintf (str, "read: %s compute:%s write: %s", str_int_commas (ms(p->read)).s, str_int_commas (ms(p->compute)).s, str_int_commas (ms(p->write)).s);
+    sprintf (str, "read: %s compute:%s write: %s", str_int_commas (ms(p->nanosecs.read)).s, str_int_commas (ms(p->nanosecs.compute)).s, str_int_commas (ms(p->nanosecs.write)).s);
     return str;
 }
 
@@ -213,10 +239,15 @@ static void print_ctx_compressor_times (void)
 */
 }
 
-void profiler_print_report (void)
+void profiler_add_evb_and_print_report (void)
 {
+    profiler_add (evb);
+
     static rom space = "                                                   ";
-#   define PRINT(x, level) if (ms(profile.x)) iprintf ("%.*s" #x ": %s\n", (level)*3, space, str_int_commas (ms(profile.x)).s);
+#   define PRINT(x, level) if (profile.nanosecs.x)              \
+        iprintf ("%.*s" #x ": %s (N=%s)\n", (level)*3, space,   \
+                 str_int_commas (ms(profile.nanosecs.x)).s,     \
+                 str_int_commas (profile.count.x).s);
     
     rom os = flag.is_windows ? "Windows"
            : flag.is_mac     ? "MacOS"
@@ -229,7 +260,7 @@ void profiler_print_report (void)
 
     iprintf ("Wallclock: %s milliseconds\n", str_int_commas (ms (CHECK_TIMER)).s);
 
-    if (command != ZIP) { // this is a uncompress operation
+    if (command == PIZ) { // this is a uncompress operation
 
         iprint0 ("GENOUNZIP main thread (piz_one_txt_file):\n");
         PRINT (ref_load_stored_reference, 1);
@@ -248,7 +279,8 @@ void profiler_print_report (void)
         PRINT (bgzf_writer_thread, 1);
         PRINT (write, 1);
         PRINT (sam_sa_prim_finalize_ingest, 1);
-        iprintf ("GENOUNZIP compute threads: %s\n", str_int_commas (ms(profile.compute)).s);
+        PRINT (piz_main_loop_idle, 1);
+        iprintf ("GENOUNZIP compute threads: %s\n", str_int_commas (ms(profile.nanosecs.compute)).s);
         PRINT (zfile_uncompress_section, 1);
         PRINT (compressor_bz2,  2);
         PRINT (compressor_lzma, 2);
@@ -276,9 +308,20 @@ void profiler_print_report (void)
         PRINT (sam_piz_sam2fastq_QUAL, 2); 
         PRINT (sam_piz_sam2bam_QUAL, 2);        
         PRINT (sam_cigar_special_CIGAR, 2);
+
+        PRINT (sam_piz_con_item_cb, 2); 
+        PRINT (sam_piz_deep_add_qname, 3); 
+        PRINT (sam_piz_deep_add_seq, 3); 
+        PRINT (sam_piz_deep_add_qual, 3);
+        PRINT (sam_piz_deep_compress, 4); // mostly under qual, a tiny bit of seq
+
+        PRINT (fastq_special_set_deep, 2); 
+        PRINT (fastq_special_deep_copy_QNAME, 2);
+        PRINT (fastq_special_deep_copy_SEQ, 2);
+        PRINT (fastq_special_deep_copy_QUAL, 2);
+         
         PRINT (sam_zip_prim_ingest_vb, 1);
         PRINT (digest, 1); // note: in SAM/BAM digest is done in the writer thread, otherwise its done in the compute thread. TODO: change level to 0 in case of SAM/BAM
-        PRINT (bgzf_compute_thread, 1);
         PRINT (piz_get_line_subfields, 2);
         PRINT (codec_hapmat_piz_get_one_line, 2);
         PRINT (sam_load_groups_add_one_prim_vb, 1);
@@ -288,8 +331,9 @@ void profiler_print_report (void)
             PRINT (codec_domq_reconstruct_dom_run, 3);
         }
         
-        if (profile.bgzf_compute_thread)
-            iprintf ("GENOUNZIP bgzf threads: %s\n", str_int_commas (ms(profile.bgzf_compute_thread)).s);
+        if (profile.nanosecs.bgzf_compute_thread)
+            iprintf ("GENOUNZIP bgzf threads: %s\n", str_int_commas (ms(profile.nanosecs.bgzf_compute_thread)).s);
+        PRINT (bgzf_compute_thread, 1);
     }
     else { // compress
         iprint0 ("GENOZIP main thread (zip_one_file):\n");
@@ -310,8 +354,16 @@ void profiler_print_report (void)
         PRINT (txtheader_compress_one_fragment, 3); 
         PRINT (digest_txt_header, 2);
         PRINT (vb_get_vb, 1);
+        PRINT (fastq_read_pair_1_data, 1);
+        PRINT (piz_read_all_ctxs, 2);
         PRINT (txtfile_read_vblock, 1);
         PRINT (read, 2);
+        PRINT (txtfile_read_block_bgzf, 3);
+        PRINT (bgzf_read_block, 4);
+        PRINT (txtfile_read_block_bgzf_uncompress, 4);
+        PRINT (fastq_txtfile_have_enough_lines, 2);
+        PRINT (txtfile_get_unconsumed_to_pass_to_next_vb, 2);
+        PRINT (bgzf_copy_unconsumed_blocks, 2);
         PRINT (write, 1);
         PRINT (bgzf_io_thread, 1);
         PRINT (ref_make_calculate_digest, 1);
@@ -321,7 +373,8 @@ void profiler_print_report (void)
         PRINT (sam_zip_gc_calc_depn_vb_info, 1);
         PRINT (sam_zip_recon_plan_add_gc_lines, 1);
         PRINT (sam_sa_prim_finalize_ingest, 1);
-        iprintf ("GENOZIP compute threads %s\n", str_int_commas (ms(profile.compute)).s);
+        iprintf ("GENOZIP compute threads %s\n", str_int_commas (ms(profile.nanosecs.compute)).s);
+        PRINT (bgzf_uncompress_vb, 1);
         PRINT (ctx_clone, 1);
         PRINT (scan_index_qnames_preprocessing, 1);
         PRINT (seg_all_data_lines, 1);
@@ -412,26 +465,28 @@ void profiler_print_report (void)
         PRINT (bgzf_compute_thread, 1);
     }    
 
-    PRINT (file_open, 0);
+    PRINT (file_open_z, 0);
     PRINT (file_close, 0);
     PRINT (buf_alloc, 0);
-    PRINT (buf_remove_from_buffer_list, 0);
+    PRINT (sections_create_index, 0);
+    PRINT (buf_find_in_buffer_list, 0);
     PRINT (buf_low_level_free, 0);
-    PRINT (buf_mmap_do, 0);
     PRINT (vb_release_vb_do, 0);
     PRINT (vb_destroy_vb, 0);
     PRINT (dispatcher_recycle_vbs, 0);
     PRINT (generate_rev_complement_genome, 0);
     
-    iprintf ("tmp1: %u tmp2: %u tmp3: %u tmp4: %u tmp5: %u\n\n", ms(profile.tmp1), ms(profile.tmp2), ms(profile.tmp3), ms(profile.tmp4), ms(profile.tmp5));
+    iprintf ("tmp1: %u tmp2: %u tmp3: %u tmp4: %u tmp5: %u\n\n", 
+             ms(profile.nanosecs.tmp1), ms(profile.nanosecs.tmp2), ms(profile.nanosecs.tmp3), ms(profile.nanosecs.tmp4), ms(profile.nanosecs.tmp5));
 
     if (profile.num_vbs) {
         iprint0 ("\nVblock stats:\n");
         iprintf ("  Vblocks: %u\n", profile.num_vbs);
         iprintf ("  Maximum vblock size: %u MB\n", profile.max_vb_size_mb);
-        iprintf ("  Average read time: %u ms\n", ms(profile.read) / profile.num_vbs);
-        iprintf ("  Average compute time: %u ms\n", ms(profile.compute) / profile.num_vbs);
-        iprintf ("  Average write time: %u ms\n", ms(profile.write) / profile.num_vbs);
+        iprintf ("  Average number of VBs in compute: %.1f\n", profile.avg_compute_vbs); // average during the lifetime of the ZIP/PIZ dispatcher, i.e. excluding global_area time etc
+        iprintf ("  Average read time: %u ms\n", ms(profile.nanosecs.read) / profile.num_vbs);
+        iprintf ("  Average compute time: %u ms\n", ms(profile.nanosecs.compute) / profile.num_vbs);
+        iprintf ("  Average write time: %u ms\n", ms(profile.nanosecs.write) / profile.num_vbs);
     }
     
     iprint0 ("\n\n");

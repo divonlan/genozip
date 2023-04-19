@@ -508,7 +508,7 @@ rollback:
 //--------------
 
 // called after reconstructing the txt header and before compute threads
-bool chain_piz_initialize (void)
+bool chain_piz_initialize (CompIType comp_i __attribute__((unused)))
 {
     mutex_initialize (chain_mutex);
 
@@ -683,12 +683,12 @@ static inline void chain_piz_filter_verify_alignment_set (VBlockCHAIN *vb)
 {
     ASSINP (vb->next_prim_0pos == vb->last_int(CHAIN_ENDPRIM),
             "%.*s\nBad data ^^^ in chain file %s: Expecting alignments to add up to ENDPRIM=%s, but they add up to %s",
-            (int)(Ltxt - vb->line_start), Bc (vb->txt_data, vb->line_start),
+            (int)(Ltxt - vb->line_start), Btxt (vb->line_start),
             z_name, str_int_commas (vb->last_int(CHAIN_ENDPRIM)).s, str_int_commas (vb->next_prim_0pos).s);
 
     ASSINP (vb->next_luft_0pos == vb->last_int(CHAIN_ENDLUFT),
             "%.*sBad data ^^^ in chain file %s: Expecting alignments to add up to ENDLUFT=%s, but they add up to %s",
-            (int)(Ltxt - vb->line_start), Bc (vb->txt_data, vb->line_start),
+            (int)(Ltxt - vb->line_start), Btxt (vb->line_start),
             z_name, str_int_commas (vb->last_int(CHAIN_ENDLUFT)).s, str_int_commas (vb->next_luft_0pos).s);
 }
 
@@ -770,11 +770,11 @@ static void chain_contigs_show (bool is_primary)
 void chain_load (void)
 {
     ASSERTNOTNULL (flag.reading_chain);
-    SAVE_FLAGS_AUX;
+    SAVE_FLAGS_AUX ("chain file");
 
     buf_alloc (evb, &chain, 0, 1000, ChainAlignment, 1, "chain"); // must be allocated by main thread
     
-    z_file = file_open (flag.reading_chain, READ, Z_FILE, DT_CHAIN);    
+    z_file = file_open_z_read (flag.reading_chain);    
     SectionHeaderGenozipHeader header;
     zfile_read_genozip_header (&header);
     
@@ -816,7 +816,7 @@ void chain_load (void)
     flag.quiet = true; // don't show progress indicator for the chain file - it is very fast 
     flag.maybe_vb_modified_by_reconstructor = true; // we drop all the lines
 
-    piz_one_txt_file (dispachter, false, false, COMP_NONE, COMP_NONE);
+    piz_one_txt_file (dispachter, false, false, COMP_NONE, COMP_NONE, false);
 
     // --show-chain-contigs
     if (flag.show_chain_contigs) {
@@ -833,10 +833,10 @@ void chain_load (void)
         exit_ok();
     }
 
-    chain_filename = file_make_unix_filename (z_name); // full-path unix-style filename, allocates memory
+    chain_filename = filename_make_unix (z_name); // full-path unix-style filename, allocates memory
 
     file_close (&z_file, false, false);
-    file_close (&txt_file, false, false); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open called from txtheader_piz_read_and_reconstruct.
+    //xxx file_close (&txt_file, false, false); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open_z called from txtheader_piz_read_and_reconstruct.
     
     // recover globals
     RESTORE_VALUE (command);

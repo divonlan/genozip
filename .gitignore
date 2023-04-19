@@ -104,3 +104,4 @@ failed-line.*
 *.dict
 out
 *.backup
+vgcore.*

@@ -156,7 +156,7 @@ void ref_make_calculate_digest (void)
     
     buf_free (gref->genome_buf);
 
-    COPY_TIMER_VB (evb, ref_make_calculate_digest);
+    COPY_TIMER_EVB (ref_make_calculate_digest);
 }
 
 // zip_after_compute callback: make-refernece called by main thread after completing compute thread of VB.
@@ -205,7 +205,7 @@ void ref_fasta_to_ref (FileP file)
 
         WARN ("FYI: cannot find reference file %s: generating it now from %s", ref_filename, file->name);
 
-        rom exec_path = arch_get_executable(HARD_FAIL);
+        rom exec_path = arch_get_executable (HARD_FAIL);
 
         StreamP make_ref = stream_create (NULL, 0, 0, 0, 0, 0, 0, "Make reference",
                                           exec_path, "--make-reference", file->name, 

@@ -107,23 +107,23 @@ static void hash_alloc_local (VBlockP segging_vb, ContextP vctx)
 // goes up (because of the need to traverse linked lists) during the bottleneck time. Coversely, if the hash
 // table size is too big, it both consumes a lot memory, as well as slows down the search time as the dictionary
 // is less likely to fit into the CPU memory caches
-uint32_t hash_get_estimated_entries (VBlockP merging_vb, ContextP zctx, ConstContextP first_merging_vb_ctx)
+uint32_t hash_get_estimated_entries (VBlockP vb, ContextP zctx, ConstContextP vctx)
 {
     double effective_num_vbs   = 0; 
-    double estimated_num_vbs   = MAX_(1, (double)txtfile_get_seggable_size() / (double)merging_vb->txt_data.len);
-    double estimated_num_lines = estimated_num_vbs * (double)merging_vb->lines.len;
+    double estimated_num_vbs   = MAX_(1, (double)txtfile_get_seggable_size() / (double)vb->txt_data.len);
+    double estimated_num_lines = estimated_num_vbs * (double)vb->lines.len;
 
-    if (flag.show_hash && first_merging_vb_ctx->did_i==0) 
+    if (flag.show_hash && vctx->did_i==0) 
         iprintf ("\n\nOutput of --show-hash:\n"
                  "est_vbs=%u vb_1_num_lines=%s est_total_lines=%s\n", 
-                 (unsigned)ceil(estimated_num_vbs), str_int_commas (merging_vb->lines.len).s, str_int_commas ((uint64_t)estimated_num_lines).s);
+                 (unsigned)ceil(estimated_num_vbs), str_int_commas (vb->lines.len).s, str_int_commas ((uint64_t)estimated_num_lines).s);
 
     // if known to small, use hash table of ~ 64K
-    if (DT_(merging_vb, seg_is_small) (merging_vb, zctx->dict_id)) {
+    if (DT_(vb, seg_is_small) (vb, zctx->dict_id)) {
 
         if (flag.show_hash)
             iprintf ("dict=%s : known to be small. hashsize=%s\n", 
-                     first_merging_vb_ctx->tag_name, str_int_commas (hash_next_size_up (1, false)).s); 
+                     vctx->tag_name, str_int_commas (hash_next_size_up (1, false)).s); 
 
         return 1; // will yield smallest hash table - around 64K
     }
@@ -133,14 +133,14 @@ uint32_t hash_get_estimated_entries (VBlockP merging_vb, ContextP zctx, ConstCon
     // which mostly show up in n1, and then a long tail of low frequency entries. The comparison of n2 to n3,
     // assuming that the new snips first introduced in them are mostly low frequency ones, will give us a more accurate predication
     // of the gradient appearance of new snips
-    double n1 = first_merging_vb_ctx->nodes_len_at_1_3;
-    double n2 = first_merging_vb_ctx->nodes_len_at_2_3 ? ((double)first_merging_vb_ctx->nodes_len_at_2_3 - (double)first_merging_vb_ctx->nodes_len_at_1_3) : 0;
-    double n3 = (double)first_merging_vb_ctx->nodes.len - n1 - n2;
+    double n1 = vctx->nodes_len_at_1_3;
+    double n2 = vctx->nodes_len_at_2_3 ? ((double)vctx->nodes_len_at_2_3 - (double)vctx->nodes_len_at_1_3) : 0;
+    double n3 = (double)vctx->nodes.len - n1 - n2;
 
-    double n1_lines      = (double)merging_vb->num_lines_at_1_3;
-    double n2_lines      = (double)merging_vb->num_lines_at_2_3 - n1_lines;
-    double n2_n3_lines   = (double)merging_vb->lines.len - n1_lines;
-    double n3_lines      = (double)merging_vb->lines.len - n1_lines - n2_lines;
+    double n1_lines      = (double)vb->num_lines_at_1_3;
+    double n2_lines      = (double)vb->num_lines_at_2_3 - n1_lines;
+    double n2_n3_lines   = (double)vb->lines.len - n1_lines;
+    double n3_lines      = (double)vb->lines.len - n1_lines - n2_lines;
 
     double n1_density    = n1_lines    ? (n1 / n1_lines)         : 0; // might be more than 1 if multiple per line, eg VCF sample subfields
     double n2_density    = n2_lines    ? (n2 / n2_lines)         : 0; // might be more than 1 if multiple per line, eg VCF sample subfields
@@ -175,7 +175,7 @@ uint32_t hash_get_estimated_entries (VBlockP merging_vb, ContextP zctx, ConstCon
     unsigned gp=0;
 
     if (n3 == 0) 
-        estimated_entries = first_merging_vb_ctx->nodes.len; // we don't expect new entries coming from the next VBs
+        estimated_entries = vctx->nodes.len; // we don't expect new entries coming from the next VBs
 
     // case: growth from n2 to n3 looks like is almost linear growth. we distiguish between 2 cases
     // 1. this is truly a uniform introduction of new entries (for example, an ID per line) - in which case the
@@ -202,7 +202,7 @@ uint32_t hash_get_estimated_entries (VBlockP merging_vb, ContextP zctx, ConstCon
 
         for (gp = ARRAY_LEN(growth_plan) - 1; gp >= 0 ; gp--)
             if (MIN_(effective_num_vbs + 1 /* +1 for first vb */, estimated_num_vbs) > growth_plan[gp].vbs) {
-                estimated_entries = first_merging_vb_ctx->nodes.len * n2_n3_density * growth_plan[gp].factor;
+                estimated_entries = vctx->nodes.len * n2_n3_density * growth_plan[gp].factor;
                 break;
             }
     
@@ -214,20 +214,20 @@ uint32_t hash_get_estimated_entries (VBlockP merging_vb, ContextP zctx, ConstCon
     if (n3_lines) estimated_entries += n3_density * estimated_num_lines * 0.10;
 
     #define BIG_SIZE (1 MB)
-    if (estimated_entries < BIG_SIZE && (DT_FUNC(merging_vb, seg_is_big)(merging_vb, zctx->dict_id))) 
+    if (estimated_entries < BIG_SIZE && (DT_FUNC(vb, seg_is_big)(vb, vctx->dict_id, (vctx->st_did_i != DID_NONE ? CTX(vctx->st_did_i)->dict_id : DICT_ID_NONE))))
         estimated_entries = BIG_SIZE; 
 
     if (flag.show_hash) {
  
-        if (first_merging_vb_ctx->did_i==0) 
+        if (vctx->did_i==0) 
             iprintf ("\n\nOutput of --show-hash:\n"
                      "est_vbs=%u vb_1_num_lines=%s est_total_lines=%s\n", 
-                     (unsigned)ceil(estimated_num_vbs), str_int_commas (merging_vb->lines.len).s, str_int_commas ((uint64_t)estimated_num_lines).s);
+                     (unsigned)ceil(estimated_num_vbs), str_int_commas (vb->lines.len).s, str_int_commas ((uint64_t)estimated_num_lines).s);
         
         iprintf ("dict=%s n1=%d n2=%d n3=%d n2/n3=%2.2lf growth_plan=%u effc_vbs=%u "
                  "n2_n3_lines=%s vctx->nodes.len=%u est_entries=%d hashsize=%s\n", 
-                 first_merging_vb_ctx->tag_name, (int)n1, (int)n2, (int)n3, n2n3_density_ratio, gp, (unsigned)effective_num_vbs, 
-                 str_int_commas ((uint64_t)n2_n3_lines).s, first_merging_vb_ctx->nodes.len32, (int)estimated_entries, 
+                 vctx->tag_name, (int)n1, (int)n2, (int)n3, n2n3_density_ratio, gp, (unsigned)effective_num_vbs, 
+                 str_int_commas ((uint64_t)n2_n3_lines).s, vctx->nodes.len32, (int)estimated_entries, 
                  str_int_commas (hash_next_size_up (estimated_entries * 5, false)).s); 
     }
 

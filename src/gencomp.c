@@ -105,12 +105,14 @@ static VBIType num_MAIN_vbs_absorbedP = 0;
 static QueueStruct queueP[NUM_GC_TYPES] = {}; // queue of txt_data's [1] out-of-band (used for SAM PRIM, DVCF PRIM + LUFT) [2] DEPN (used for SAM DEPN)
 static CompStruct componentsP[MAX_GEN_COMP+1] = {};
 
+#define GC_TXTS_BUF_NAME "queueP.gc_txts"
+
 // --------------------------------------------------------------------------------------
 // unprotected data is accessed by absorbing threads until absorbing is done, 
 // and after by dispatcher functions
 // --------------------------------------------------------------------------------------
 static Buffer reread_depn_lines = {}; // array of type RereadLine
-static VBlockP compress_depn_vb = NULL;
+VBlockP compress_depn_vb = NULL;
 
 //--------------------------------------------------
 // Seg: adding gencomp lines to vb->gencomp
@@ -153,7 +155,8 @@ bool gencomp_comp_eligible_for_digest (VBlockP vb)
     DataType dt = vb ? vb->data_type : z_file->data_type;
 
     return (comp_i == COMP_MAIN) || // The MAIN component is always digestable 
-           (dt == DT_FASTQ);        // FASTQ components are alway digestable (including FQ_COMP_R2, SAM_COMP_FQ00, SAM_COMP_FQ01) 
+           (dt == DT_FASTQ)      || // FASTQ components are alway digestable (including FQ_COMP_R2, SAM_COMP_FQ00, SAM_COMP_FQ01) 
+           ((dt == DT_SAM || dt == DT_BAM) && comp_i >= SAM_COMP_FQ00); // works even when vb=NULL
 }
 
 static void debug_gencomp (rom msg, bool needs_lock)
@@ -229,7 +232,7 @@ void gencomp_initialize (CompIType comp_i, GencompType gct)
 
         // add to evb buf_list, so we can buf_alloc in other threads (similar to INIT in file.c)
         for (int i=0; i < queueP[gct].queue_size; i++) 
-            buf_init_promiscuous_(evb, &queueP[gct].gc_txts[i], "queueP.gc_txts");
+            buf_init_promiscuous_(evb, &queueP[gct].gc_txts[i], GC_TXTS_BUF_NAME);
 
         // add all buffers to "unused stack"
         for (int i=0; i < queueP[gct].queue_size-1; i++) {
@@ -244,12 +247,10 @@ void gencomp_initialize (CompIType comp_i, GencompType gct)
 // main thread
 void gencomp_destroy (void)
 {
+    buf_destroy_by_name (GC_TXTS_BUF_NAME, false); // more efficient destroying
+
     for (GencompType gct=1; gct < NUM_GC_TYPES; gct++)
-        if (queueP[gct].gc_txts) {
-            for (int i=0; i < queueP[gct].queue_size; i++) 
-                buf_destroy (queueP[gct].gc_txts[i]);
-            FREE(queueP[gct].gc_txts);
-        }
+        FREE(queueP[gct].gc_txts);
 
     for (CompIType comp_i=1; comp_i <= MAX_GEN_COMP; comp_i++)
         buf_destroy (componentsP[comp_i].txt_data);
@@ -482,7 +483,7 @@ void gencomp_absorb_vb_gencomp_lines (VBlockP vb)
                               [2] = componentsP[2].type == GCT_DEPN ? MIN_(segconf.vb_size, 1<<26) : segconf.vb_size };
 
     for (int i=1; i<=2; i++)
-        buf_alloc (evb, &componentsP[i].txt_data, 0, comp_size[i], char, 1, "gencomp_txt_data");    
+        buf_alloc (evb, &componentsP[i].txt_data, 0, comp_size[i], char, 1, "componentsP.txt_data");    
 
     // iterate on all lines the segmenter decided to send to gencomp (lines are of mixed componentsP)
     ARRAY (GencompLineIEntry, gc_lines, vb->gencomp_lines)
@@ -746,7 +747,7 @@ void gencomp_sam_prim_vb_has_been_ingested (VBlockP vb)
     if ((VB_DT(SAM) || VB_DT(BAM)) && my_finished_absorbing && !prim_queue_len && num_vbs_dispatched[GCT_OOB] == num_SAM_PRIM_vbs_ingested) {
         sam_sa_prim_finalize_ingest ();
         sam_finished_ingesting_prim = true;
-        if (flag.debug_gencomp) iprintf ("Finished ingesting SA Groups: num_SAM_PRIM_vbs_ingested=%u\n", num_SAM_PRIM_vbs_ingested);
+        if (flag.debug_gencomp) iprintf ("Finished ingesting SAGs: num_SAM_PRIM_vbs_ingested=%u\n", num_SAM_PRIM_vbs_ingested);
     }
 }
 
@@ -776,4 +777,25 @@ void gencomp_reread_lines_as_prescribed (VBlockP vb)
     }
 
     fclose (file);
+}
+
+bool gencomp_buf_locate_depn (void *unused, ConstBufferP buf)    
+{                                                               
+    return (char*)buf >= (char*)&depn &&           
+           (char*)buf <  ((char*)&depn) + sizeof (depn);                
+}                                                       
+
+bool gencomp_buf_locate_componentsP (void *unused, ConstBufferP buf)    
+{                                                               
+    return (char*)buf >= (char*)&componentsP[0] &&                            
+           (char*)buf <  ((char*)&componentsP[0]) + sizeof (componentsP);                
+}                                                       
+
+bool gencomp_buf_locate_queueP (void *unused, ConstBufferP buf)    
+{            
+    for (GencompType gct=1; gct < NUM_GC_TYPES; gct++)
+        if (queueP[gct].gc_txts && buf >= &queueP[gct].gc_txts[0] &&                     
+                                   buf <  &queueP[gct].gc_txts[queueP[gct].queue_size]) return true;
+
+    return false;
 }

@@ -207,6 +207,8 @@ void sam_bismark_zip_update_meth_call (VBlockSAMP vb, RangeP range, uint32_t ran
                                        uint32_t M_i, uint32_t Mseg_len, // the position in the M segment and its length
                                        uint32_t i) // our position within the M segment
 {
+    decl_acgt_decode;
+    
     if (vb->bisulfite_strand == 'C') { // C->T
         bool has_next = vb->binary_cigar.next < vb->binary_cigar.len;
         BamCigarOp next = has_next ? *B(BamCigarOp, vb->binary_cigar, vb->binary_cigar.next) : (BamCigarOp){};

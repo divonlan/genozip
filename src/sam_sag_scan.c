@@ -23,6 +23,7 @@
 #include "libdeflate/libdeflate.h"
 
 static VBlockP real_evb;
+VBlockP scan_vb;
 
 #define vb_depn_index  vb->scratch
 #define z_qname_index  evb->z_data
@@ -215,12 +216,13 @@ void sam_sag_by_flag_scan_for_depn (void)
 
     buf_alloc (evb, &z_file->sag_depn_index, 0, 100, uint32_t, 0, "z_file->sag_depn_index");
 
-    VBlockP scan_vb = vb_initialize_nonpool_vb (VB_ID_DEPN_SCAN, DT_BAM, task_name);
+    scan_vb = vb_initialize_nonpool_vb (VB_ID_DEPN_SCAN, DT_BAM, task_name);
     VBlockP real_evb = evb;
     evb = scan_vb;
 
     FileP save_txt_file = txt_file;
-    txt_file = file_open (save_txt_file->name, READ, TXT_FILE, DT_BAM);
+    txt_file = file_open_txt_read (save_txt_file->name);
+    ASSERTNOTNULL (txt_file);
     
     txtfile_read_header (true); // reads into evb->txt_data and evb->lines.len
     buf_free (evb->txt_data);   // discard the header
@@ -326,7 +328,7 @@ bool sam_might_have_saggies_in_other_VBs (VBlockSAMP vb, ZipDataLineSAM *dl, int
 {
     if (!vb->qname_count.len32) return true; // we didn't count qnames, so we don't have proof that there aren't any saggies in other VBs
 
-    uint32_t qname_hash = QNAME_HASH (Btxt(dl->QNAME.index), dl->QNAME.len, dl->FLAG.is_last);
+    uint32_t qname_hash = QNAME_HASH (Btxt (dl->QNAME.index), dl->QNAME.len, dl->FLAG.is_last);
 
     if (IS_SAG_CC) 
         return true;   // we don't do qname accounting for SAG_BY_CC

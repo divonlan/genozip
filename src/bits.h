@@ -157,9 +157,8 @@ typedef uint8_t word_offset_t; // Offset within a 64 bit word
 //
 // Structs
 //
-
 typedef enum __attribute__ ((__packed__)) { 
-    BITS_UNALLOCATED=0, BITS_REGULAR, BITS_OVERLAY, BITS_MMAP, BITS_STANDALONE 
+    BITS_UNALLOCATED=0, BITS_REGULAR, BITS_OVERLAY, BITS_STANDALONE, BITS_SHM 
 } BitsType; // must be identical to BufferType
 
 typedef struct Bits
@@ -396,7 +395,7 @@ extern void bits_print_binary_word_do (uint64_t word, rom msg, FILE *file);
 
 extern void bits_print_substr (rom msg, ConstBitsP bits, uint64_t start, uint64_t length, FILE *file);
 
-extern void bits_print_substr_bases (rom msg, ConstBitsP bits, uint64_t start, uint64_t length, FILE *file);
+extern void bits_print_substr_bases (rom msg, ConstBitsP bits, uint64_t start_base, uint64_t n_bases, FILE *file);
 
 // Print bit array as hex
 extern size_t bits_print_hex (ConstBitsP bits, uint64_t start, uint64_t length, FILE* fout, char uppercase);

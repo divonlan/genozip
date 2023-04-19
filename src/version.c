@@ -24,17 +24,16 @@ static char redirect_url[128];
 static void *version_background_test_for_newer_do (void *unused)
 {
     thread_running = true;
-
     pthread_setcanceltype (PTHREAD_CANCEL_ASYNCHRONOUS, NULL); // thread can be canceled at any time
 
-    url_get_redirect (GITHUB_LATEST_RELEASE, redirect_url, sizeof redirect_url);
-
-    latest_version = strrchr (redirect_url, '-'); // url looks something like: "https://github.com/divonlan/genozip/releases/tag/genozip-13.0.18"
-    if (latest_version) {
-        latest_version++;
-        if (!flag.debug_latest && !strcmp (latest_version, GENOZIP_CODE_VERSION))
-            latest_version = NULL; // same as current version
-    } 
+    if (url_get_redirect (GITHUB_LATEST_RELEASE, redirect_url, sizeof redirect_url)) {
+        latest_version = strrchr (redirect_url, '-'); // url looks something like: "https://github.com/divonlan/genozip/releases/tag/genozip-13.0.18"
+        if (latest_version) {
+            latest_version++;
+            if (!flag.debug_latest && !strcmp (latest_version, GENOZIP_CODE_VERSION))
+                latest_version = NULL; // same as current version
+        } 
+    }
 
     thread_running = false;
     return NULL;

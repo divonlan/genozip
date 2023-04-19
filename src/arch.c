@@ -38,15 +38,11 @@
 
 static rom argv0 = NULL;
 
-typedef struct timespec TimeSpecType;
-static TimeSpecType execution_start_time; 
-
 #ifdef _WIN32
 // add the genozip path to the user's Path environment variable, if its not already there. 
 // Note: We do all string operations in Unicode, so as to preserve any Unicode characters in the existing Path
-static void arch_add_to_windows_path (rom my_argv0)
+static void arch_add_to_windows_path (void)
 {
-    argv0 = my_argv0;
     rom backslash = strrchr (argv0, '\\');
     if (!backslash) return; // no directory
 
@@ -104,22 +100,22 @@ static bool arch_is_wsl (void)
 static void test_fastq_sam_did_alignment (void)
 {
     // verify that FASTQ/SAM dids are aligned - needed for Deep to work
-    Did did[][2] = { { FASTQ_QNAME,             SAM_QNAME           },
-                     { FASTQ_QNAME2,            UNUSED_FASTQ_QNAME2 },
-                     { FASTQ_AUX,               SAM_AUX             },
-                     { FASTQ_SQBITMAP,          SAM_SQBITMAP        },
-                     { FASTQ_QUAL,              SAM_QUAL            },
-                     { FASTQ_TOPLEVEL,          SAM_TOPLEVEL        },
-                     { FASTQ_LINE3,             UNUSED_FASTQ_LINE3  },
-                     { UNUSED_FASTQ_AUX_LENGTH, FASTQ_AUX_LENGTH    } };
+    Did did[][2] = { { FASTQ_QNAME,      SAM_QNAME              },
+                     { FASTQ_QNAME2,     DEEP_FASTQ_QNAME2      },
+                     { FASTQ_AUX,        SAM_AUX                },
+                     { FASTQ_SQBITMAP,   SAM_SQBITMAP           },
+                     { FASTQ_QUAL,       SAM_QUAL               },
+                     { FASTQ_TOPLEVEL,   SAM_TOPLEVEL           },
+                     { FASTQ_LINE3,      DEEP_FASTQ_LINE3       },
+                     { FASTQ_AUX_LENGTH, DEEP_FASTQ_AUX_LENGTH, } };
 
     for (int i=0; i < ARRAY_LEN(did); i++)
         ASSERT (did[i][0] == did[i][1], "FASTQ/SAM dids misaligned, i=%u", i);
 }
 
-void arch_initialize (rom argv0)
+void arch_initialize (rom my_argv0)
 {
-    clock_gettime(CLOCK_REALTIME, &execution_start_time);
+    argv0 = my_argv0;
 
     // verify CPU architecture and compiler is supported
     ASSERT0 (sizeof(char)==1 && sizeof(short)==2 && sizeof (unsigned)==4 && sizeof(long long)==8, 
@@ -143,6 +139,7 @@ void arch_initialize (rom argv0)
     ASSERT0 (sizeof (ReconPlanItem) == 12, "expecting sizeof (ReconPlanItem)==12");
     ASSERT0 (sizeof (void *)        <= 8,  "expecting sizeof (void *)<=8"); // important bc void* is a member of ValueType, and also counting on it in huffman_decompress
     ASSERT0 (sizeof (ValueType)     == 8,  "expecting sizeof (ValueType)==8");
+    ASSERT0 (sizeof (PairType)      == sizeof(int),  "expecting sizeof (PairType)==sizeof(int)");
 
     // Note: __builtin_clzl is inconsistent between Windows and Linux, even on the same host, so we don't use it
     ASSERT0 (__builtin_clz(5)   == 29, "expecting __builtin_clz to be 32 bit");
@@ -164,7 +161,7 @@ void arch_initialize (rom argv0)
     _setmode(_fileno(stdin),  _O_BINARY);
     _setmode(_fileno(stdout), _O_BINARY);
 
-    arch_add_to_windows_path (argv0);
+    arch_add_to_windows_path();
 #endif
 
     flag.is_wsl = arch_is_wsl();
@@ -228,12 +225,12 @@ double arch_get_physical_mem_size (void)
     if (mem_size) return mem_size;
 
 #ifdef __linux__    
-    static Buffer meminfo = {};
-    file_get_file (evb, "/proc/meminfo", &meminfo, "meminfo", 100, false, true);
+    ASSERTNOTINUSE (evb->scratch);
+    file_get_file (evb, "/proc/meminfo", &evb->scratch, "meminfo", 100, false, true);
 
-    int num_start = strcspn (B1STc(meminfo), "0123456789");
-    mem_size = (double)atoll(Bc(meminfo, num_start)) / (1024.0*1024.0);
-    buf_destroy (meminfo);
+    int num_start = strcspn (B1STc(evb->scratch), "0123456789");
+    mem_size = (double)atoll(Bc(evb->scratch, num_start)) / (1024.0*1024.0);
+    buf_free (evb->scratch);
 
 #elif defined _WIN32
     ULONGLONG kb = 0;
@@ -355,6 +352,11 @@ rom arch_get_executable (FailType soft_fail) // caller should free
     }
 }
 
+rom arch_get_argv0 (void)
+{
+    return argv0;
+}
+
 #ifndef DISTRIBUTION
     #define DISTRIBUTION "unknown" // this occurs if the code is built not using the genozip Makefile
 #endif    
@@ -363,19 +365,6 @@ rom arch_get_distribution (void)
     return DISTRIBUTION[0] ? DISTRIBUTION : "github"; // DISTRIBUTION is "" if genozip is built with "make" without defining DISTRIBUTION - re-write as "github"
 }
  
-rom arch_get_run_time (void)
-{
-    TimeSpecType tb; 
-    clock_gettime(CLOCK_REALTIME, &tb); 
-
-    int seconds_so_far = ((tb.tv_sec - execution_start_time.tv_sec)*1000 + ((int64_t)tb.tv_nsec - (int64_t)execution_start_time.tv_nsec) / 1000000) / 1000; 
-
-    static char time_str[16];
-    str_human_time (seconds_so_far, true, time_str);
-
-    return time_str;
-}
-
 // true if running under valgrind
 bool arch_is_valgrind (void)
 {
@@ -387,4 +376,11 @@ bool arch_is_valgrind (void)
     }
 
     return is_valgrind;
+}
+
+Timestamp inline arch_timestamp (void) 
+{
+    struct timespec tb;
+    clock_gettime (CLOCK_REALTIME, &tb);
+    return (uint128_t)tb.tv_sec * 1000000000 + (uint128_t)tb.tv_nsec;
 }

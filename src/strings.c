@@ -48,11 +48,13 @@ char *str_toupper (rom in, char *out /* out allocated by caller - can be the sam
 StrText char_to_printable (char c) 
 {
     switch ((uint8_t)c) {
-        case 32 ... 126 : return (StrText) { .s = {c, 0} };   // printable ASCII
-        case '\t'       : 
-        case '\n'       : 
-        case '\r'       : return (StrText) { .s = {' ', 0} }; // whitespace
-        default         : { // unprintable - output eg \xf 
+        case 32 ... '\\'-1  : 
+        case '\\'+1 ... 126 : return (StrText) { .s = {c, 0} };   // printable ASCII
+        case '\\'           : return (StrText) { .s = "\\\\" };
+        case '\t'           : return (StrText) { .s = "\\t"  };
+        case '\n'           : return (StrText) { .s = "\\n"  };
+        case '\r'           : return (StrText) { .s = "\\r"  };
+        default             : { // unprintable - output eg \xf 
             StrText p;
             sprintf (p.s, "\\x%x", (uint8_t)c);
             return p;

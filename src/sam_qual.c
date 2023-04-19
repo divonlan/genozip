@@ -81,7 +81,7 @@ COMPRESSOR_CALLBACK (sam_zip_qual)
 
     if (!line_data) return; // only lengths were requested
 
-    *line_data = Btxt(dl->QUAL.index);
+    *line_data = Btxt (dl->QUAL.index);
 
     // if QUAL is just "*" (i.e. unavailable) replace it by " " because '*' is a legal PHRED quality value that will confuse PIZ
     if (dl->QUAL.len == 1 && (*line_data)[0] == '*') 
@@ -96,7 +96,7 @@ COMPRESSOR_CALLBACK (sam_zip_##tag)                             \
     ZipDataLineSAM *dl = DATA_LINE (vb_line_i);                 \
     *line_data_len = dl->dont_compress_##tag ? 0 : MIN_(maximum_size, dl->f.len); /* note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec */ \
     if (!line_data || ! *line_data_len) return; /* no dat, or only lengths were requested */   \
-    *line_data = Btxt(dl->f.index);                             \
+    *line_data = Btxt (dl->f.index);                             \
     if (is_rev) *is_rev = may_be_revcomped ? dl->FLAG.rev_comp : false;\
 }                               
 
@@ -132,7 +132,7 @@ static void sam_get_sa_grp_qual (VBlockSAMP vb)
     if (vb->sag->qual_comp_len) { // qual of this group is compressed
         uint32_t uncomp_len = vb->sag->seq_len;
         void *success = rans_uncompress_to_4x16 (VB, B8(z_file->sag_qual, vb->sag->qual), vb->sag->qual_comp_len,
-                                                 B1ST(uint8_t, vb->scratch), &uncomp_len); 
+                                                 B1ST8(vb->scratch), &uncomp_len); 
 
         ASSERTGOTO (success && uncomp_len == vb->sag->seq_len, "%s: rans_uncompress_to_4x16 failed to decompress an SA Group QUAL data: grp_i=%u success=%u comp_len=%u uncomp_len=%u expected_uncomp_len=%u qual=%"PRIu64,
                     LN_NAME, ZGRP_I(vb->sag), !!success, vb->sag->qual_comp_len, uncomp_len, vb->sag->seq_len, (uint64_t)vb->sag->qual);
@@ -474,9 +474,9 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
 
         HistoryWord word = *B(HistoryWord, ctx->history, vb->saggy_line_i); // QUAL is always stored as LookupTxtData or LookupPerLine
         SamFlags saggy_flags = { .value = history64 (SAM_FLAG, vb->saggy_line_i) };
-        rom saggy_qual = (word.lookup == LookupTxtData) ? Btxt(word.index) : Bc(ctx->per_line, word.index);
+        rom saggy_qual = (word.lookup == LookupTxtData) ? Btxt (word.index) : Bc(ctx->per_line, word.index);
 
-        if ((uint8_t)*saggy_qual == (IS_RECON_BAM ? 0xff : '*'))
+        if ((uint8_t)*saggy_qual == (OUT_DT(BAM) ? 0xff : '*'))
             goto no_diff; // in case prim has no qual - seg did not diff (the current line may or may not have qual)
 
         else if (prim_has_qual_but_i_dont)
@@ -486,7 +486,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
             goto no_diff;
 
         else
-            sam_piz_QUAL_undiff_vs_primary (vb, saggy_qual, word.len, saggy_flags.rev_comp, saggy_anal, flag.out_dt == DT_BAM, reconstruct);                
+            sam_piz_QUAL_undiff_vs_primary (vb, saggy_qual, word.len, saggy_flags.rev_comp, saggy_anal, OUT_DT(BAM), reconstruct);                
     } 
         
     // case: reconstruct from data in local
@@ -536,7 +536,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_QUAL)
     // 1. If l_seq is 0, the QUAL is empty
     // 2. If not (i.e. we have SEQ data but not QUAL) - it is a string of 0xff, length l_seq
     if (VB_SAM->qual_missing) {
-        BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)Btxt(vb->line_start);
+        BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)Btxt (vb->line_start);
         uint32_t l_seq = LTEN32 (alignment->l_seq);
         
         if (!l_seq) // option 1

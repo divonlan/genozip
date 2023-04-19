@@ -118,7 +118,7 @@ static void digest_update_do (VBlockP vb, DigestContext *ctx, rom data, uint64_t
         fclose (f);
     }
 
-    COPY_TIMER_VB (vb, digest);
+    COPY_TIMER (digest);
 }
 
 void digest_piz_verify_one_txt_file (unsigned txt_file_i/* 0-based */)
@@ -129,10 +129,10 @@ void digest_piz_verify_one_txt_file (unsigned txt_file_i/* 0-based */)
     // now, we just confirm that all VBs were verified as expected.
     if (VER(14) && z_file->z_flags.adler) {
         
-        CompIType comp_i = (flag.deep && txt_file_i==1)             ? SAM_COMP_FQ00
-                         : (flag.deep && txt_file_i==2)             ? SAM_COMP_FQ01
-                         : (fastq_piz_is_paired() && txt_file_i==1) ? FQ_COMP_R2
-                         :                                            COMP_MAIN;
+        CompIType comp_i = (flag.deep && txt_file_i==1) ? SAM_COMP_FQ00
+                         : (flag.deep && txt_file_i==2) ? SAM_COMP_FQ01
+                         : (flag.pair && txt_file_i==1) ? FQ_COMP_R2
+                         :                                COMP_MAIN;
 
         uint32_t expected_vbs_verified = sections_get_num_vbs (comp_i);
 
@@ -184,8 +184,8 @@ static void digest_piz_verify_one_vb (VBlockP vb)
 {
     // Compare digest up to this VB transmitted through SectionHeaderVbHeader. If Adler32, it is a stand-alone
     // digest of the VB, and if MD5, it is a commulative digest up to this VB.
-    if ((!txt_file->vb_digest_failed || IS_ADLER)/* && // note: for MD5, we report only the first failed VB, bc the digest is commulative, so all subsequent VBs will fail for sure
-        (VER(14) || !flag.unbind)xxx*/) {                 // note: for files <= v13, we cannot test per-VB digest in unbind mode, because the digests (MD5 and Adler32) are commulative since the beginning of the bound file. However, we still test component-wide digest in piz_verify_digest_one_txt_file.
+    if ((!txt_file->vb_digest_failed || IS_ADLER) && // note: for MD5, we report only the first failed VB, bc the digest is commulative, so all subsequent VBs will fail for sure
+        (VER(14) || !flag.unbind)) {                 // note: for files <= v13, we cannot test per-VB digest in unbind mode, because the digests (MD5 and Adler32) are commulative since the beginning of the bound file. However, we still test component-wide digest in piz_verify_digest_one_txt_file.
 
         // add VB to commulative digests as needed
         Digest single_comp_commulative_digest = (!VER(14) || IS_MD5)      ? digest_snapshot (&z_file->digest_ctx, NULL) : DIGEST_NONE; // up to v13 Adler was commulative too
@@ -247,7 +247,7 @@ bool digest_one_vb (VBlockP vb, bool is_compute_thread,
     bool digestable = gencomp_comp_eligible_for_digest(vb);
 
     // starting V14, if adler32, we digest each VB stand-alone.
-    if (IS_ADLER && VER(14)) {
+    if (IS_ADLER && (IS_ZIP || VER(14))) {
         if (digestable) {
             vb->digest = digest_do (STRb(*data), IS_ADLER, VB_NAME);
             
@@ -256,7 +256,9 @@ bool digest_one_vb (VBlockP vb, bool is_compute_thread,
     }
 
     else {
-        // serialize VBs in order
+        // serialize VBs in order. note: we don't serialize when called from writer, as writer already serializes
+        // the output in the correct order, but digestable=false VBs (e.g. PRIM and DEPN in SAM) are called in 
+        // the order dictated by PLAN_END_OF_VB in the recon_plan which is not neccesarily their sequential order.
         if (is_compute_thread)
             serializer_lock (z_file->digest_serializer, vb->vblock_i);
 
@@ -333,7 +335,7 @@ Digest digest_txt_header (BufferP data, Digest piz_expected_digest)
         RESTORE_FLAG (quiet);
     }
 
-    COPY_TIMER_VB (evb, digest_txt_header);
+    COPY_TIMER_EVB (digest_txt_header);
 
     return digest;
 }

@@ -52,7 +52,7 @@ void vcf_vb_release_vb (VBlockVCFP vb)
     buf_free (vb->last_format);
 }
 
-void vcf_vb_destroy_vb (VBlockVCFP vb)
+void vcf_destroy_vb (VBlockVCFP vb)
 {
     buf_destroy (vb->sf_txt);
     buf_destroy (vb->sf_snip);
@@ -66,6 +66,22 @@ void vcf_vb_destroy_vb (VBlockVCFP vb)
     buf_destroy (vb->tags);
     buf_destroy (vb->rejects_report);
     buf_destroy (vb->last_format);
+}
+
+void vcf_erase_vb_bufs (VBlockVCFP vb)
+{
+    buf_erase (vb->sf_txt);
+    buf_erase (vb->sf_snip);
+    buf_erase (vb->hapmat_helper_index_buf);
+    buf_erase (vb->hapmat_columns_data);
+    buf_erase (vb->hapmat_one_array);
+    buf_erase (vb->hapmat_column_of_zeros);
+    buf_erase (vb->format_mapper_buf);
+    buf_erase (vb->format_contexts);
+    buf_erase (vb->info_items);
+    buf_erase (vb->tags);
+    buf_erase (vb->rejects_report);
+    buf_erase (vb->last_format);
 }
 
 // this is also used to determine whether we should reconstruct this VB in LUFT coordinates - the is_translation callback defined in TRANSLATIONS

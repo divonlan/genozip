@@ -26,6 +26,7 @@
 #include "lookback.h"
 #include "qname.h"
 #include "writer.h"
+#include "vblock.h"
 
 void sam_piz_xtra_line_data (VBlockP vb_)
 {
@@ -67,17 +68,12 @@ void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
     }
 }
 
-bool sam_piz_initialize (void)
+bool sam_piz_initialize (CompIType comp_i)
 {
-    if (flag.deep) sam_piz_deep_initialize();
+    if (flag.deep && (comp_i == SAM_COMP_MAIN || comp_i == SAM_COMP_NONE/*single component or interleave*/)) 
+        sam_piz_deep_initialize();
 
     return true;
-}
-
-// main thread: is it possible that genocat of this file will re-order lines
-bool sam_piz_maybe_reorder_lines (void)
-{
-    return z_file->z_flags.has_gencomp; // has PRIM or DEPN components
 }
 
 bool sam_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment)
@@ -111,7 +107,7 @@ void sam_piz_after_recon (VBlockP vb)
 // PIZ: main thread: piz_process_recon callback: usually called in order of VBs, but out-of-order if --test with no writer
 void sam_piz_process_recon (VBlockP vb)
 {
-    if (flag.collect_coverage)    
+    if (flag.collect_coverage)
         coverage_add_one_vb (vb);
     
     if (flag.deep)
@@ -155,10 +151,10 @@ IS_SKIP (sam_piz_is_skip_section)
         dict_id = (DictId){ .id = { dict_id.id[0], dict_id.id[2], ':', dict_id.id[4] } };
 
     SectionFlags f = { .flags = f8 };
-    bool is_dict = (st == SEC_DICT);
+    bool is_dict = (ST(DICT));
     
     uint64_t dnum = dict_id.num;
-    bool preproc = (purpose == SKIP_PURPOSE_PREPROC) && (st == SEC_B250 || st == SEC_LOCAL); // when loading SA, don't skip the needed B250/LOCAL
+    bool preproc = (purpose == SKIP_PURPOSE_PREPROC) && (ST(B250) || ST(LOCAL)); // when loading SA, don't skip the needed B250/LOCAL
     bool dict_needed_for_preproc = (is_dict && z_file->z_flags.has_gencomp);  // when loading a SEC_DICT in a file that has gencomp, don't skip dicts needed for loading SA
 
     if (dict_id_is_qname_sf(dict_id)) dnum = _SAM_Q1NAME; // treat all QNAME subfields as _SAM_Q1NAME
@@ -192,20 +188,20 @@ IS_SKIP (sam_piz_is_skip_section)
             // fallthrough
 
         case _SAM_QUALSA  :
-            SKIPIFF (preproc || cov || (cnt && !(flag.bases && flag.out_dt == DT_BAM)));
+            SKIPIFF (preproc || cov || (cnt && !(flag.bases && OUT_DT(BAM))));
 
         case _SAM_Q1NAME : case _SAM_QNAMESA :
-            KEEPIF (preproc || dict_needed_for_preproc || (cnt && flag.bases && flag.out_dt == DT_BAM)); // if output is BAM we need the entire BAM record to correctly analyze the SEQ for IUPAC, as it is a structure.
+            KEEPIF (preproc || dict_needed_for_preproc || (cnt && flag.bases && OUT_DT(BAM))); // if output is BAM we need the entire BAM record to correctly analyze the SEQ for IUPAC, as it is a structure.
             SKIPIFF (is_prim);                                         
 
         case _OPTION_SA_Z :
         case _OPTION_SA_MAIN :
-            KEEPIF (IS_SAG_SA && preproc && st == SEC_LOCAL);
-            SKIPIF (IS_SAG_SA && is_prim && st == SEC_LOCAL);
+            KEEPIF (IS_SAG_SA && preproc && ST(LOCAL));
+            SKIPIF (IS_SAG_SA && is_prim && ST(LOCAL));
             KEEP; // need to reconstruct fields (RNAME, POS etc) against saggy
                      
         case _OPTION_SA_RNAME  : case _OPTION_SA_POS : case _OPTION_SA_NM : case _OPTION_SA_CIGAR :
-        case _OPTION_SA_STRAND : case _OPTION_SA_MAPQ : 
+        case _OPTION_SA_STRAND : case _OPTION_SA_MAPQ : case _OPTION_OC_Z/*dict alias dst*/ : 
             KEEPIF (IS_SAG_SA && (preproc || dict_needed_for_preproc));
             KEEPIF (is_main || is_dict); // need to reconstruct from prim line
             SKIPIFF (IS_SAG_SA && is_prim);    
@@ -225,7 +221,7 @@ IS_SKIP (sam_piz_is_skip_section)
         case _OPTION_QX_Z:                      case _OPTION_QX_DIVRQUAL: case _OPTION_QX_DOMQRUNS: case _OPTION_QX_QUALMPLX:
             SKIPIFF (deep_fq || cov || cnt);
 
-        case _SAM_FQ_AUX   : KEEPIFF (flag.out_dt == DT_FASTQ || flag.collect_coverage);
+        case _SAM_FQ_AUX   : KEEPIFF (OUT_DT(FASTQ) || flag.collect_coverage);
         
         case _SAM_FLAG     : KEEP; // needed for demultiplexing by has_prim
         case _SAM_BUDDY    : KEEP; // always needed (if any of these are needed: QNAME, FLAG, MAPQ, CIGAR...)
@@ -248,11 +244,11 @@ IS_SKIP (sam_piz_is_skip_section)
         case _SAM_PNEXT    : case _SAM_P0NEXT : case _SAM_P1NEXT : case _SAM_P2NEXT : case _SAM_P3NEXT : // PNEXT is required by POS
         case _SAM_POS      : SKIPIFF (preproc && IS_SAG_SA);
         case _SAM_TOPLEVEL : KEEPIF (flag.deep && is_dict); // needed to reconstruct the FASTQ components
-                             SKIPIFF (preproc || flag.out_dt == DT_BAM || flag.out_dt == DT_FASTQ);
-        case _SAM_TOP2BAM  : SKIPIFF (preproc || flag.out_dt == DT_SAM || flag.out_dt == DT_FASTQ);
-        case _SAM_TOP2FQ   : SKIPIFF (preproc || flag.out_dt == DT_SAM || flag.out_dt == DT_BAM || flag.extended_translation);
-        case _SAM_TOP2FQEX : SKIPIFF (preproc || flag.out_dt == DT_SAM || flag.out_dt == DT_BAM || !flag.extended_translation);
-        case 0             : KEEPIFF (st == SEC_VB_HEADER || !preproc);
+                             SKIPIFF (preproc || OUT_DT(BAM) || OUT_DT(FASTQ));
+        case _SAM_TOP2BAM  : SKIPIFF (preproc || OUT_DT(SAM) || OUT_DT(FASTQ));
+        case _SAM_TOP2FQ   : SKIPIFF (preproc || OUT_DT(SAM) || OUT_DT(BAM) || flag.extended_translation);
+        case _SAM_TOP2FQEX : SKIPIFF (preproc || OUT_DT(SAM) || OUT_DT(BAM) || !flag.extended_translation);
+        case 0             : KEEPIFF (ST(VB_HEADER) || !preproc);
         
         default            : other :
             SKIPIF ((cov || cnt) && is_aux);
@@ -264,6 +260,81 @@ IS_SKIP (sam_piz_is_skip_section)
 
     #undef KEEP
     #undef SKIP
+}
+
+//-----------------------------
+// --qnames-file filter
+//-----------------------------
+
+typedef struct {
+    uint32_t hash; // hash of qname
+    STRl(qname, SAM_MAX_QNAME_LEN+1);
+} QnameFilterItem;
+static Buffer qnames_filter = {};
+
+static ASCENDING_SORTER (qname_filter_sort_by_hash, QnameFilterItem, hash)
+static BINARY_SEARCHER (find_qname_in_filter, QnameFilterItem, uint32_t, hash, false)
+
+// initialize qnames_filter and flag.qname_filter from command line
+void qname_filter_initialize (rom filename)
+{
+    flag.qname_filter = (filename[0] == '^') ? -1 : 1;
+
+    if (flag.qname_filter == -1) filename++; // negative filter
+
+    file_split_lines (filename, "qnames_file", true);
+
+    ARRAY_alloc (QnameFilterItem, qname, n_lines, true, qnames_filter, evb, "qnames_filter");
+    for (int i=0; i < n_lines; i++) {
+        // qname includes FASTQ "@" prefix - remove it
+        bool has_prefix =(line_lens[i] && *lines[i] == '@');
+
+        // ignore everything after the first space or tab        
+        rom sep;
+        if ((sep = memchr (lines[i], ' ',  line_lens[i]))) line_lens[i] = sep - lines[i]; // truncate at first space
+        if ((sep = memchr (lines[i], '\t', line_lens[i]))) line_lens[i] = sep - lines[i]; // truncate at first tab
+
+        qname[i].qname_len = MIN_(line_lens[i] - has_prefix, SAM_MAX_QNAME_LEN);
+        memcpy (qname[i].qname, lines[i] + has_prefix, qname[i].qname_len);
+
+        qname[i].hash = QNAME_HASH (STRa(qname[i].qname), -1);
+    }
+
+    buf_destroy (data); // defined in file_split_lines
+
+    qsort (STRb(qnames_filter), sizeof(QnameFilterItem), qname_filter_sort_by_hash);
+
+    // remove dups (note: only consecutive dups are removed - if 2+ qnames have the same hash, dups might be interleaved and not removed)
+    int next = 1;
+    for (int i=1; i < n_lines; i++)
+        if ((qname[i].hash != qname[i-1].hash || qname[i].qname_len != qname[i-1].qname_len ||
+            memcmp (qname[i].qname, qname[i-1].qname, qname[i].qname_len))) { // not dup
+            
+            if (i != next) memcpy (&qname[next], &qname[i], sizeof (QnameFilterItem));
+            next++;
+        }
+    qnames_filter.len32 = next;
+
+    // display sorted list of (hash,qname) pairs (uncomment for debugging)
+    // for_buf (QnameFilterItem, e, qnames_filter) iprintf ("%u %s\n", e->hash, e->qname);
+}
+
+static bool sam_piz_line_survives_qname_filter (STRp(qname))
+{
+    ASSERT (qname_len <= SAM_MAX_QNAME_LEN, "qname=\"%.*s\" has length=%u longer than allowed by SAM spec=%u", STRf(qname), qname_len, SAM_MAX_QNAME_LEN);
+
+    uint32_t hash = QNAME_HASH(qname, qname_len, -1);
+    QnameFilterItem *ent = binary_search (find_qname_in_filter, QnameFilterItem, qnames_filter, hash);
+
+    bool found = false;
+
+    for (; ent && ent < BAFT (QnameFilterItem, qnames_filter) && ent->hash == hash; ent++)
+        if (str_issame (qname, ent->qname)) {
+            found = true;
+            break;
+        }
+
+    return (flag.qname_filter == 1) ? found : !found; // positive or negative filter
 }
 
 // set --FLAG filtering from command line argument
@@ -365,7 +436,7 @@ SPECIAL_RECONSTRUCTOR (bam_piz_special_FLOAT)
     if (!reconstruct) goto finish;
 
     // binary reconstruction in little endian - BAM format
-    if (flag.out_dt == DT_BAM) {
+    if (OUT_DT(BAM)) {
         uint32_t n32_lten = LTEN32 (machine_en.i); // little endian (per BAM format spec)
         RECONSTRUCT (&n32_lten, sizeof (uint32_t)); // in binary - float and uint32 are the same
     }
@@ -388,7 +459,7 @@ SPECIAL_RECONSTRUCTOR (bam_piz_special_FLOAT)
         if (dec_digits) {
             unsigned trailing_zeros=0;
             for (int i=Ltxt-1; i >= Ltxt-dec_digits; i--)
-                if (*Bc (vb->txt_data, i) == '0') 
+                if (*Btxt (i) == '0') 
                     trailing_zeros++;
                 else
                     break;
@@ -442,7 +513,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_AUX_SELF)
     ContainerP con = (ContainerP)recon;
 
     // if this translator is called due to SAM->FASTQEXT, cancel translation for the AUX container and its items
-    if (flag.out_dt == DT_FASTQ) {
+    if (OUT_DT(FASTQ)) {
         con->no_translation = true; // turn off translation for this container and its items
         return 0; 
     }
@@ -522,8 +593,9 @@ TXTHEADER_TRANSLATOR (txtheader_sam2fq)
 
 // filtering during reconstruction: called by container_reconstruct_do for each sam alignment (repeat)
 CONTAINER_CALLBACK (sam_piz_container_cb)
-{
+{    
     if (is_top_level) {
+        #define DROP_LINE(reason) ({ vb->drop_curr_line = (reason); goto dropped; })
 
         if (flag.add_line_numbers && TXT_DT(SAM)) {
             Ltxt -= 1 + (*(BLSTtxt-1) == '\r'); // remove \n or \r\n
@@ -532,7 +604,7 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
 
         // case SAM to BAM translation: set alignment.block_size (was in sam_piz_sam2bam_AUX until v11)
         if (dict_id.num == _SAM_TOP2BAM) { 
-            BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)Bc (vb->txt_data, vb->line_start);
+            BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)Btxt (vb->line_start);
             alignment->block_size = Ltxt - vb->line_start - sizeof (uint32_t); // block_size doesn't include the block_size field itself
             alignment->block_size = LTEN32 (alignment->block_size);
         }
@@ -540,16 +612,16 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
         // case SAM to FASTQ translation: drop line if this is not a primary alignment (don't show its secondary or supplamentary alignments)
         else if ((dict_id.num == _SAM_TOP2FQ || dict_id.num == _SAM_TOP2FQEX)
         && ((uint16_t)vb->last_int(SAM_FLAG) & (SAM_FLAG_SECONDARY | SAM_FLAG_SUPPLEMENTARY)))
-            vb->drop_curr_line = "not_primary";
+            DROP_LINE ("not_primary");
 
         // --taxid: filter out by Kraken taxid (SAM, BAM, FASTQ)
-        if (flag.kraken_taxid && !vb->drop_curr_line 
-        && (   (kraken_is_loaded  && !kraken_is_included_loaded (vb, last_txt(vb, SAM_QNAME), vb->last_txt_len (SAM_QNAME)))// +1 in case of FASTQ to skip "@"
+        if (flag.kraken_taxid 
+        && (   (kraken_is_loaded  && !kraken_is_included_loaded (vb, STRlst (SAM_QNAME)))// +1 in case of FASTQ to skip "@"
             || (!kraken_is_loaded && !kraken_is_included_stored (vb, SAM_TAXID, !flag.collect_coverage && !flag.count)))) 
-            vb->drop_curr_line = "taxid";
+            DROP_LINE ("taxid");
 
         // --FLAG
-        if (flag.sam_flag_filter && !vb->drop_curr_line ) {
+        if (flag.sam_flag_filter) {
 
             uint16_t this_sam_flag = (uint16_t)vb->last_int (SAM_FLAG);
         
@@ -558,12 +630,11 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
             if ((flag.sam_flag_filter == SAM_FLAG_INCLUDE_IF_ALL  && !all_flags_set)
             ||  (flag.sam_flag_filter == SAM_FLAG_INCLUDE_IF_NONE && !no_flags_set)
             ||  (flag.sam_flag_filter == SAM_FLAG_EXCLUDE_IF_ALL  &&  all_flags_set))
-                vb->drop_curr_line = "FLAG";
+                DROP_LINE ("FLAG");
         }
 
         // --MAPQ
-        if (flag.sam_mapq_filter && !vb->drop_curr_line) {
-            
+        if (flag.sam_mapq_filter) {     
             if (dict_id.num == _SAM_TOP2FQ || dict_id.num == _SAM_TOP2FQEX)
                 reconstruct_from_ctx (vb, SAM_MAPQ, 0, false); // when translating to FASTQ, MAPQ is normally not reconstructed
 
@@ -571,25 +642,31 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
         
             if ((flag.sam_mapq_filter == SAM_MAPQ_INCLUDE_IF_AT_LEAST && this_mapq < flag.MAPQ) ||
                 (flag.sam_mapq_filter == SAM_MAPQ_EXCLUDE_IF_AT_LEAST && this_mapq >= flag.MAPQ))
-                vb->drop_curr_line = "MAPQ";
+                DROP_LINE ("MAPQ");
         }
 
         // --bases
-        if (flag.bases && !vb->drop_curr_line && 
-            !(TXT_DT(BAM) ? iupac_is_included_bam   (last_txt (vb, SAM_SQBITMAP), ((BAMAlignmentFixed *)recon)->l_seq)
-                             : iupac_is_included_ascii (last_txt (vb, SAM_SQBITMAP), vb->last_txt_len (SAM_SQBITMAP))))
-            vb->drop_curr_line = "bases";
+        if (flag.bases && 
+            !(TXT_DT(BAM) ? iupac_is_included_bam (last_txt (vb, SAM_SQBITMAP), ((BAMAlignmentFixed *)recon)->l_seq)
+                          : iupac_is_included_ascii (STRlst (SAM_SQBITMAP))))
+            DROP_LINE ("bases");
         
+        // --qnames-file
+        if (flag.qname_filter && !sam_piz_line_survives_qname_filter (STRlst (SAM_QNAME))) // works also for FASTQ as SAM_QNAME==FASTQ_QNAME
+            DROP_LINE ("qname_filter");
+
         // count coverage, if needed    
-        if ((flag.show_sex || flag.show_coverage) && is_top_level && !vb->drop_curr_line)
+        if (flag.show_sex || flag.show_coverage)
             sam_piz_update_coverage (vb, vb->last_int(SAM_FLAG), VB_SAM->soft_clip[0] + VB_SAM->soft_clip[1]);
 
-        if (flag.idxstats && !vb->drop_curr_line) {
+        if (flag.idxstats) {
             if (vb->last_int(SAM_FLAG) & SAM_FLAG_UNMAPPED)   
                 (*B64 (vb->unmapped_read_count, vb->last_index(SAM_RNAME)))++;
             else
                 (*B64 (vb->read_count, vb->last_index(SAM_RNAME)))++;
         }
+
+        dropped: {}
     }
 }
 

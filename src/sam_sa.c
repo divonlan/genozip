@@ -38,7 +38,7 @@ bool sam_seg_SA_get_prim_item (VBlockSAMP vb, int sa_item_i, pSTRp(out))
     ZipDataLineSAM *prim_dl = DATA_LINE (vb->saggy_line_i);
     if (!prim_dl->SA.len) return false; // prim line has no SA:Z
 
-    str_split (Btxt(prim_dl->SA.index), prim_dl->SA.len, MAX_SA_NUM_ALNS, ';', prim_aln, false);
+    str_split (Btxt (prim_dl->SA.index), prim_dl->SA.len, MAX_SA_NUM_ALNS, ';', prim_aln, false);
     
     // check if SA:Z even contains enough alignment for our prediction
     if (n_prim_alns < predicted_aln_i+2) return false; // note: n_prim_alns also includes a final empty string due to terminal ';'
@@ -115,7 +115,7 @@ static bool sam_seg_SA_field_is_depn_from_prim (VBlockSAMP vb, ZipDataLineSAM *d
 
     // parse primary SA
     ZipDataLineSAM *prim_dl = DATA_LINE (vb->saggy_line_i);
-    str_split (Btxt(prim_dl->SA.index), prim_dl->SA.len, MAX_SA_NUM_ALNS, ';', prim_aln, false);
+    str_split (Btxt (prim_dl->SA.index), prim_dl->SA.len, MAX_SA_NUM_ALNS, ';', prim_aln, false);
     if (n_prim_alns < 2) return false;
     n_prim_alns--; // remove last empty alignment due terminal ';'
 
@@ -288,7 +288,7 @@ static inline bool sam_piz_SA_field_is_line_matches_aln (VBlockSAMP vb, ContextP
         /*pos   */ str_get_int (STRi(item, SA_POS),  &aln_pos)  && aln_pos  == my_pos;
 
     // we also compare MAPQ and NM, unless --coverage or --count in which case these fields are skipped (because NM requires MD which requires SQBITMAP...)
-    if (!flag.collect_coverage && !flag.count && flag.out_dt != DT_FASTQ)
+    if (!flag.collect_coverage && !flag.count && !OUT_DT(FASTQ))
         found &=
         /*mapq  */ str_get_int (STRi(item, SA_MAPQ), &aln_mapq) && aln_mapq == my_mapq &&
         /*NM:i  */ str_get_int (STRi(item, SA_NM),   &aln_nm)   && aln_nm   == my_nm;

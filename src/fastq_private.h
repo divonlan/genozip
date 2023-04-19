@@ -15,7 +15,7 @@
 typedef struct {
     TxtWord seq;
     uint32_t qual_index;         // start within vb->txt_data (qual_len==seq.len)
-    bool dont_compress_QUAL : 1;
+    bool dont_compress_QUAL : 1; // in case --deep and copied from SAM
     bool monochar           : 1; // sequence is entirely of the same character (eg: NNNNN)
 } ZipDataLineFASTQ;
 
@@ -24,16 +24,18 @@ typedef struct VBlockFASTQ {
     VBLOCK_COMMON_FIELDS
 
     // pairing stuff - used if we are the 2nd file in the pair 
-    uint32_t pair_vb_i;      // the equivalent vb_i in the first file, or 0 if this is the first file
-    uint32_t pair_num_lines; // number of lines in the equivalent vb in the first file
-    char *optimized_desc;    // base of desc in flag.optimize_DESC 
+    uint32_t pair_vb_i;          // ZIP/PIZ: in R2: the equivalent vb_i in the R1 (vb_i >= 1), or 0 if this is R1
+    uint32_t pair_num_lines;     // R2: number of reads (FASTQ lines) in the equivalent vb in the R1
+    uint32_t pair_txt_data_len;  // ZIP R2: populated if flag.debug
+
+    char *optimized_desc;        // base of desc in flag.optimize_DESC 
     uint32_t optimized_desc_len;
-    uint64_t first_line;     // ZIP: used for optimize_DESC  
+    uint64_t first_line;         // ZIP: used for optimize_DESC  
 
     // DESC stuff
-    bool has_extra;          // ZIP: a VB-private copy of segconf.has_extra
+    bool has_extra;              // ZIP: a VB-private copy of segconf.has_extra
 
-    bool item_filter[16];    // PIZ: item filter - true if to reconstrut, false if not. index is item in toplevel container. length must be >= nitems_lo of all genozip verions
+    bool item_filter[16];        // PIZ: item filter - true if to reconstrut, false if not. index is item in toplevel container. length must be >= nitems_lo of all genozip verions
 
     // stats
     uint32_t deep_stats[NUM_DEEP_STATS];  // ZIP: stats collection regarding Deep
@@ -54,11 +56,13 @@ extern bool fastq_is_line3_copy_of_line1 (STRp(qname), STRp(line3), uint32_t des
 
 // SEQ
 extern void fastq_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(seq), bool deep);
+extern bool fastq_piz_R1_test_aligned (VBlockFASTQP vb);
 
 // QUAL
 extern void fastq_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qual), bool deep);
 
 // Deep stuff
+extern void fastq_deep_zip_initialize (void);
 extern void fastq_seg_deep (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(desc), STRp(seq), STRp(qual), bool *deep_desc, bool *deep_seq, bool *deep_qual);
 extern void fastq_deep_seg_finalize_segconf (uint32_t n_lines);
 extern void fastq_deep_seg_initialize (VBlockFASTQP vb);

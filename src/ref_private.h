@@ -39,7 +39,7 @@ typedef struct RefStruct {
     #define rtype param
     
     Buffer genome_buf, emoneg_buf, genome_is_set_buf;
-    Bits *genome, *emoneg/*reverse compliment*/, *genome_is_set;
+    BitsP genome, emoneg/*reverse compliment*/, genome_is_set;
 
     PosType64 genome_nbases;
 
@@ -67,6 +67,22 @@ typedef struct RefStruct {
 
     // iupac stuff
     Buffer iupacs_buf; 
+
+    // cache
+    enum { CACHE_INITITAL, CACHE_OK, CACHE_LOADING, CACHE_NONE } cache_state;
+    int cache_shm;
+
+    // cache consists of a block memory containing a ref_cache struct, followed by the genome, follewed by the refhash
+    struct ref_cache {
+        uint64_t creation_ts;
+        uint64_t genome_size, refhash_size;
+        uint8_t ref_genozip_ver;
+        bool is_populated;
+        uint8_t base_layer_bits;
+        uint8_t unused[61];    // start genome_data word-aligned
+        char genome_data[0];
+    } *cache;
+    void *cache_refhash_data;  // pointer into cache data
 
 } RefStruct;
 

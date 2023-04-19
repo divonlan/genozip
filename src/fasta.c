@@ -49,8 +49,6 @@ void fasta_vb_release_vb (VBlockFASTAP vb)
     CTX(FASTA_NONREF)->local.len = 0; // len might be is used even though buffer is not allocated (in make-ref)
 }
 
-void fasta_vb_destroy_vb (VBlockFASTAP vb) {}
-
 // used by ref_make_create_range
 void fasta_get_data_line (VBlockP vb, uint32_t line_i, uint32_t *seq_data_start, uint32_t *seq_len)
 {
@@ -240,7 +238,7 @@ COMPRESSOR_CALLBACK (fasta_zip_seq)
     *line_data_len = MIN_(dl->seq_len, maximum_size);
     
     if (line_data) // if NULL, only length was requested
-        *line_data = dl->seq_len ? Bc (vb->txt_data, dl->seq_data_start) : NULL;
+        *line_data = dl->seq_len ? Btxt (dl->seq_data_start) : NULL;
 
     if (is_rev) *is_rev = 0;
 }   
@@ -332,7 +330,7 @@ bool fasta_seg_is_small (ConstVBlockP vb, DictId dict_id)
            dict_id.num == _FASTA_EOL;
 }
 
-bool fasta_seg_is_big (ConstVBlockP vb, DictId dict_id)
+bool fasta_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id)
 {
     return dict_id.num == _FASTA_CONTIG; // some FASTAs have lots of contigs. Since the FASTA data type has very few contexts, we can be generous here.
 }
@@ -581,11 +579,11 @@ rom fasta_seg_txt_line (VBlockFASTAP vb, rom line_start, uint32_t remaining_txt_
 // returns true if section is to be skipped reading / uncompressing
 IS_SKIP (fasta_piz_is_skip_section)
 {
-    if (st != SEC_B250 && st != SEC_LOCAL) return false; // we only skip contexts
+    if (!ST(B250) && !ST(LOCAL)) return false; // we only skip contexts
 
     if (flag.reading_reference) return false;  // doesn't apply when using FASTA as a reference
 
-    // note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast
+    // note that flags_update_piz_one_z_file rewrites --header-only as flag.header_only_fast
     if (flag.header_only_fast && 
         (dict_id.num == _FASTA_NONREF || dict_id.num == _FASTA_NONREF_X || dict_id.num == _FASTA_COMMENT))
         return true;
@@ -632,7 +630,7 @@ SPECIAL_RECONSTRUCTOR_DT (fasta_piz_special_SEQ)
         fasta_piz_unreconstruct_trailing_newlines (vb);
 
     // in case of not showing the SEQ in the entire file - we can skip consuming it
-    if (flag.header_only_fast) // note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast
+    if (flag.header_only_fast) // note that flags_update_piz_one_z_file rewrites --header-only as flag.header_only_fast
         vb->drop_curr_line = "header_only_fast";     
     else 
         reconstruct_one_snip (VB, ctx, WORD_INDEX_NONE, snip+1, snip_len-1, RECON_ON);    
@@ -655,11 +653,11 @@ SPECIAL_RECONSTRUCTOR_DT (fasta_piz_special_COMMENT)
 
     // skip showing comment line in case cases - but consume it anyway:
     if (  vb->contig_grepped_out || // 1. if this contig is grepped out
-          flag.out_dt == DT_PHYLIP)       // 2. if we're outputting in Phylis format
+          OUT_DT(PHYLIP))           // 2. if we're outputting in Phylis format
         vb->drop_curr_line = "grep";
 
     // in case of not showing the COMMENT in the entire file (--header-only or this is a --reference) - we can skip consuming it
-    if (flag.header_only_fast)  // note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast
+    if (flag.header_only_fast)  // note that flags_update_piz_one_z_file rewrites --header-only as flag.header_only_fast
         vb->drop_curr_line = "header_only_fast";     
     else 
         reconstruct_one_snip (VB, ctx, WORD_INDEX_NONE, snip, snip_len, RECON_ON);    
@@ -790,7 +788,7 @@ SPECIAL_RECONSTRUCTOR_DT (fasta_piz_special_DESC)
     if (flag.no_header)
         vb->drop_curr_line = "no_header";     
 
-    if (flag.out_dt == DT_PHYLIP) 
+    if (OUT_DT(PHYLIP)) 
         fasta_piz_translate_desc_to_phylip (vb, desc_start);
 
     if (flag.header_one)

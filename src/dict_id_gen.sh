@@ -48,6 +48,11 @@ DictId dict_id_make (const char *str, unsigned str_len, DictIdType dict_id_type)
         memcpy (dict_id.id + half1_len, str+str_len-half2_len, half2_len);
     }
 
+    if (dict_id_type == DTYPE_FIELD && dict_id.id[0] == '@') {
+        fprintf (stderr, "Error in dict_id_gen.c/dict_id_make: dict_id=%.8s of DTYPE_FIELD invalidly begins with '@'.", dict_id.id);
+        return dict_id; // 0
+    }
+
     switch (dict_id_type) {
         case DTYPE_FIELD  : dict_id.id[0] = dict_id.id[0] & 0x3f; break;
         case DTYPE_1      : dict_id.id[0] = dict_id.id[0] | 0xc0; break;

@@ -61,3 +61,7 @@ extern bool gencomp_comp_eligible_for_digest (VBlockP vb);
 extern bool gencomp_am_i_expecting_more_txt_data (void);
 
 extern void gencomp_reread_lines_as_prescribed (VBlockP vb);
+
+extern bool gencomp_buf_locate_depn (void *unused, ConstBufferP buf);
+extern bool gencomp_buf_locate_componentsP (void *unused, ConstBufferP buf);
+extern bool gencomp_buf_locate_queueP (void *unused, ConstBufferP buf);

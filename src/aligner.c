@@ -27,22 +27,10 @@
 #define COMPLIMENT(b) (3-(b))
 
 // strict encoding of A,C,G,T - everything else in non-encodable (a 4 here)
-static const uint32_t nuke_encode[256] = { 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 4
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 16
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 32
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 48
-                                           4, 0, 4, 1, 4, 4, 4, 2, 4, 4, 4, 4, 4, 4, 4, 4,   // 64  A(65)->0 C(67)->1 G(71)->2
-                                           4, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 84  T(84)->3
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 96  
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 112 
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,   // 128
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-                                           4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4 };
+static inline uint32_t nuke_encode (char c)
+{
+    return c=='A'?0 : c=='C'?1 : c=='G'?2 : c=='T'?3 : 4;
+}
 
 // Foward example: If seq is: G-AGGGCT  (G is the hook)  -- matches reference AGGGCT       - function returns 110110101000 (A=00 is the LSb)
 // Reverse       : If seq is: CGCCCT-C  (C is the hook)  -- also matches reference AGGGCT  - function returns 110110101000 - the same
@@ -55,7 +43,7 @@ static inline bool aligner_get_word_from_seq (VBlockP vb, rom seq, uint32_t *ref
     *refhash_word = 0;
 
     for (int i=0; direction * i < nukes_per_hash; i += direction) {   
-        uint32_t base = nuke_encode[(uint8_t)seq[i]];
+        uint32_t base = nuke_encode (seq[i]);
         if (base == 4) {
             COPY_TIMER (aligner_get_word_from_seq);
             return false; // not a A,C,G,T
@@ -75,9 +63,9 @@ static inline bool aligner_get_word_from_seq (VBlockP vb, rom seq, uint32_t *ref
 }
 
 // converts a string sequence to a 2-bit bitmap
-Bits aligner_seq_to_bitmap (rom seq, uint64_t seq_len, 
-                                uint64_t *bitmap_words,  // allocated by caller
-                                bool *seq_is_all_actg) // optional out
+static Bits aligner_seq_to_bitmap (rom seq, uint64_t seq_len, 
+                                   uint64_t *bitmap_words, // allocated by caller
+                                   bool *seq_is_all_acgt)  
 {
     // covert seq to 2-bit array
     Bits seq_bits = { .nbits  = seq_len * 2, 
@@ -85,14 +73,14 @@ Bits aligner_seq_to_bitmap (rom seq, uint64_t seq_len,
                       .words  = bitmap_words,
                       .type   = BITS_REGULAR };
 
-    if (seq_is_all_actg) *seq_is_all_actg = true; // starting optimistic
+    *seq_is_all_acgt = true; // starting optimistically
 
     for (uint64_t base_i=0; base_i < seq_len; base_i++) {
-        uint8_t encoding = nuke_encode[(uint8_t)seq[base_i]];
+        uint8_t encoding = nuke_encode (seq[base_i]);
     
         if (encoding == 4) { // not A, C, G or T - usually N
-            if (seq_is_all_actg) *seq_is_all_actg = false;
-            encoding = 0; // arbitrarily convert 4 (any non-actg is 4) to 0 ('A')
+            *seq_is_all_acgt = false;
+            encoding = 0;    // arbitrarily convert 4 (any non-ACGT is 4) to 0 ('A')
         }
     
         bits_assign2 (&seq_bits, (base_i << 1), encoding);
@@ -169,26 +157,26 @@ static inline PosType64 aligner_best_match (VBlockP vb, STRp(seq), PosType64 pai
             }
         }
 
-#       define UPDATE_BEST(fwd)  ({              \
-            if (gpos != best_gpos) {             \
-                int32_t match_len = (uint32_t)seq_bits.nbits - \
-                    bits_hamming_distance ((fwd) ? genome : emoneg, \
-                                               ((fwd) ? gpos : genome_nbases-1 - (gpos + seq_bits.nbits/2 -1)) * 2, \
-                                               &seq_bits, 0, \
-                                               seq_bits.nbits); \
-                if (pair_gpos != NO_GPOS && ABS(gpos-pair_gpos) > 500) match_len -= 17; /* penalty for remote GPOS in 2nd pair */ \
-                if (match_len > longest_len) {   \
-                    longest_len     = match_len; \
-                    best_gpos       = gpos;      \
-                    best_is_forward = (fwd);     \
-                    /* note: we allow 2 snps and we still consider the match good enough and stop looking further */\
-                    /* compared to stopping only if match_len==seq_len, this adds about 1% to the file size, but is significantly faster */\
-                    if (match_len >= (seq_len - max_snps_for_perfection) * 2) { /* we found (almost) the best possible match */ \
-                        *is_all_ref = maybe_perfect_match && (match_len == seq_len*2); /* perfect match */ \
-                        goto done;               \
-                    }                            \
-                }                                \
-            }                                    \
+#       define UPDATE_BEST(fwd)  ({                                                                                                         \
+            if (gpos != best_gpos) {                                                                                                        \
+                int32_t match_len = (uint32_t)seq_bits.nbits -                                                                              \
+                    bits_hamming_distance ((fwd) ? genome : emoneg,                                                                         \
+                                               ((fwd) ? gpos : genome_nbases-1 - (gpos + seq_bits.nbits/2 -1)) * 2,                         \
+                                               &seq_bits, 0,                                                                                \
+                                               seq_bits.nbits);                                                                             \
+                if (pair_gpos != NO_GPOS && ABS(gpos-pair_gpos) > 500) match_len -= 17; /* penalty for remote GPOS in 2nd pair */           \
+                if (match_len > longest_len) {                                                                                              \
+                    longest_len     = match_len;                                                                                            \
+                    best_gpos       = gpos;                                                                                                 \
+                    best_is_forward = (fwd);                                                                                                \
+                    /* note: we allow 2 snps and we still consider the match good enough and stop looking further */                        \
+                    /* compared to stopping only if match_len==seq_len, this adds about 1% to the file size, but is significantly faster */ \
+                    if (match_len >= (seq_len - max_snps_for_perfection) * 2) { /* we found (almost) the best possible match */             \
+                        *is_all_ref = maybe_perfect_match && (match_len == seq_len*2); /* perfect match */                                  \
+                        goto done;                                                                                                          \
+                    }                                                                                                                       \
+                }                                                                                                                           \
+            }                                                                                                                               \
         })
 
         if (found != NOT_FOUND && (gpos >= 0) && (gpos != NO_GPOS) && (gpos + seq_len_64 < genome_nbases)) { // ignore this gpos if the seq wouldn't fall completely within reference genome
@@ -227,26 +215,21 @@ done:
     return best_gpos;
 }
 
-MappingType aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq), bool no_bitmap_if_perfect,
+MappingType aligner_seg_seq (VBlockP vb, STRp(seq), bool no_bitmap_if_perfect,
                              bool is_pair_2, PosType64 pair_gpos, bool pair_is_forward)
 {
     START_TIMER;
-
+    
+    declare_seq_contexts;
     ConstBitsP genome, emoneg;
     PosType64 genome_nbases;
     ref_get_genome (gref, &genome, &emoneg, &genome_nbases);
 
-    // these 4 contexts are consecutive and in the same order for all relevant data_types in data_types.h
-    ContextP gpos_ctx   = bitmap_ctx + 3; // GPOS
-    ContextP strand_ctx = bitmap_ctx + 4; // STRAND
-    ContextP seqmis_ctx = bitmap_ctx + 5; // SEQMIS_A/C/G/T (4 contexts)
-
     bool is_forward=false, is_all_ref=false;
 
     // our aligner algorithm only works for short reads - long reads tend to have many Indel differences (mostly errors) vs the reference
-    #define MAX_SHORT_READ_LEN 2500
-    PosType64 gpos = (seq_len <= MAX_SHORT_READ_LEN && !segconf.running) 
-                 ? aligner_best_match (VB, STRa(seq), pair_gpos, genome, emoneg, genome_nbases, &is_forward, &is_all_ref) : NO_GPOS; 
+    PosType64 gpos = (seq_len <= MAX_SHORT_READ_LEN) 
+        ? aligner_best_match (VB, STRa(seq), pair_gpos, genome, emoneg, genome_nbases, &is_forward, &is_all_ref) : NO_GPOS; 
 
     if (gpos == NO_GPOS || gpos > genome_nbases - seq_len || gpos > MAX_ALIGNER_GPOS - seq_len || gpos < 0/*never happens*/) {
         COPY_TIMER (aligner_seg_seq);
@@ -305,6 +288,7 @@ MappingType aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq), bool no
         buf_alloc (vb, &seqmis_ctx[i].local, seq_len, 0, char, CTX_GROWTH, NULL); 
 
     uint64_t next_bit = bitmap_ctx->next_local; // copy to automatic variable (optimized to a register) for performace
+    decl_acgt_decode;
     for (uint32_t i=0; i < seq_len; i++) {
 
         char seq_base = is_forward?seq[i] : seq[i]=='A'?'T' : seq[i]=='T'?'A' : seq[i]=='C'?'G' : seq[i]=='G'?'C' : 0;  
@@ -332,39 +316,37 @@ done:
 }
 
 // PIZ: SEQ reconstruction - only for reads compressed with the aligner
-void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len, bool is_pair_2, bool is_perfect_alignment, ReconType reconstruct,
+void aligner_reconstruct_seq (VBlockP vb, uint32_t seq_len, bool is_pair_2, bool is_perfect_alignment, ReconType reconstruct,
                               char *first_mismatch_base,       // optional out: caller should initialize to 0
                               uint32_t *first_mismatch_offset, // optional out
                               uint32_t *num_mismatches)        // optional out: caller should initialize to 0
 {
     START_TIMER;
+    declare_seq_contexts;
 
     if (!bitmap_ctx->is_loaded) return; // if case we need to skip the SEQ field (for the entire file)
-
-    ContextP nonref_ctx = bitmap_ctx + 1;
-    ContextP gpos_ctx   = bitmap_ctx + 3;
-    ContextP strand_ctx = bitmap_ctx + 4;
-    ContextP seqmis_ctx = bitmap_ctx + 5; // SEQMIS_A/C/G/T (4 contexts)
     
     if (is_perfect_alignment || buf_is_alloc (&bitmap_ctx->local)) { // not all non-ref
 
         bool is_forward;
         PosType64 gpos;
 
-        // first file of a pair ("pair 1") or a non-pair fastq or sam
+        // first file of a pair (R1) or a non-pair fastq or sam
         if (!is_pair_2) {
             gpos = gpos_ctx->last_value.i = NEXTLOCAL (uint32_t, gpos_ctx);
             is_forward = NEXTLOCALBIT (strand_ctx);        
         }
 
-        // 2nd file of a pair ("pair 2")
+        // 2nd file of a pair (R2)
         else {
-            is_forward = fastq_piz_get_pair2_is_forward (vb); // MUST be called before gpos reconstruction as it inquires GPOS.pair.next
+            is_forward = fastq_piz_get_pair2_is_forward (vb); // MUST be called before gpos reconstruction as it inquires GPOS.localR1.next
 
             // gpos: don't reconstruct just get last_value
             reconstruct_from_ctx (vb, gpos_ctx->did_i, 0, false); // calls fastq_special_PAIR2_GPOS
             gpos = gpos_ctx->last_value.i;
         }
+
+        if (flag.deep) ctx_set_last_value (vb, strand_ctx, (int64_t)is_forward); // consumed by sam_piz_deep_add_seq
 
         if (flag.show_aligner)
             iprintf ("%s: gpos=%"PRId64" forward=%s\n", LN_NAME, gpos, TF(is_forward));
@@ -385,6 +367,8 @@ void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len,
         }
 
         BASE_ITER_INIT (genome, gpos, seq_len, is_forward); // careful: segfault if no genome
+
+        decl_acgt_decode;
 
         // faster loop in the common case of a perfect (= no mismatches) alignment (is_perfect_alignment introduced in v14)
         if (is_perfect_alignment) {
@@ -411,8 +395,8 @@ void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len,
 
                     if (first_mismatch_base) {
                         if (! *first_mismatch_base) {
-                            *first_mismatch_base   = *BLSTtxt;
-                            *first_mismatch_offset = i;
+                            *first_mismatch_base   = is_forward ? *BLSTtxt : COMPLEM[(int)*BLSTtxt];
+                            *first_mismatch_offset = is_forward ? i : seq_len - i -1;
                         }
                         (*num_mismatches)++;
                     }
@@ -422,6 +406,9 @@ void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len,
     }
 
     else all_nonref: { 
+        if (flag.show_aligner)
+            iprintf ("%s: all nonref\n", LN_NAME);
+
         ASSPIZ (nonref_ctx->next_local + seq_len <= nonref_ctx->local.len32, "NONREF exhausted: next_local=%u + seq_len=%u > local.len=%u",
                 nonref_ctx->next_local, seq_len, nonref_ctx->local.len32);
 

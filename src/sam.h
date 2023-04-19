@@ -33,22 +33,22 @@
 #pragma GENDICT SAM_QBNAME=DTYPE_1=QBNAME // if adding more Q*NAMEs - add to fastq.h and kraken.h too, and update MAX_QNAME_ITEMS
 #pragma GENDICT SAM_QmNAME=DTYPE_1=QmNAME // QmNAME reserved for mate number (always the last dict_id in the container)
 
-#pragma GENDICT UNUSED_FASTQ_QNAME2=DTYPE_FIELD=QNAME2     // QNAME2 is embedded in QNAME (QNAME2 items immediately follow)
-#pragma GENDICT UNUSED_FASTQ_Q0NAME2=DTYPE_1=q0NAME    
-#pragma GENDICT UNUSED_FASTQ_Q1NAME2=DTYPE_1=q1NAME 
-#pragma GENDICT UNUSED_FASTQ_Q2NAME2=DTYPE_1=q2NAME
-#pragma GENDICT UNUSED_FASTQ_Q3NAME2=DTYPE_1=q3NAME
-#pragma GENDICT UNUSED_FASTQ_Q4NAME2=DTYPE_1=q4NAME
-#pragma GENDICT UNUSED_FASTQ_Q5NAME2=DTYPE_1=q5NAME
-#pragma GENDICT UNUSED_FASTQ_Q6NAME2=DTYPE_1=q6NAME 
-#pragma GENDICT UNUSED_FASTQ_Q7NAME2=DTYPE_1=q7NAME 
-#pragma GENDICT UNUSED_FASTQ_Q8NAME2=DTYPE_1=q8NAME 
-#pragma GENDICT UNUSED_FASTQ_Q9NAME2=DTYPE_1=q9NAME 
-#pragma GENDICT UNUSED_FASTQ_QANAME2=DTYPE_1=qANAME 
-#pragma GENDICT UNUSED_FASTQ_QBNAME2=DTYPE_1=qBNAME 
-#pragma GENDICT UNUSED_FASTQ_QmNAME2=DTYPE_1=qmNAME 
+#pragma GENDICT DEEP_FASTQ_QNAME2=DTYPE_FIELD=QNAME2     // QNAME2 is embedded in QNAME (QNAME2 items immediately follow)
+#pragma GENDICT DEEP_FASTQ_Q0NAME2=DTYPE_1=q0NAME    
+#pragma GENDICT DEEP_FASTQ_Q1NAME2=DTYPE_1=q1NAME 
+#pragma GENDICT DEEP_FASTQ_Q2NAME2=DTYPE_1=q2NAME
+#pragma GENDICT DEEP_FASTQ_Q3NAME2=DTYPE_1=q3NAME
+#pragma GENDICT DEEP_FASTQ_Q4NAME2=DTYPE_1=q4NAME
+#pragma GENDICT DEEP_FASTQ_Q5NAME2=DTYPE_1=q5NAME
+#pragma GENDICT DEEP_FASTQ_Q6NAME2=DTYPE_1=q6NAME 
+#pragma GENDICT DEEP_FASTQ_Q7NAME2=DTYPE_1=q7NAME 
+#pragma GENDICT DEEP_FASTQ_Q8NAME2=DTYPE_1=q8NAME 
+#pragma GENDICT DEEP_FASTQ_Q9NAME2=DTYPE_1=q9NAME 
+#pragma GENDICT DEEP_FASTQ_QANAME2=DTYPE_1=qANAME 
+#pragma GENDICT DEEP_FASTQ_QBNAME2=DTYPE_1=qBNAME 
+#pragma GENDICT DEEP_FASTQ_QmNAME2=DTYPE_1=qmNAME 
 
-#pragma GENDICT UNUSED_FASTQ_EXTRA=DTYPE_1=DESC 
+#pragma GENDICT DEEP_FASTQ_EXTRA=DTYPE_1=DESC 
 
 #pragma GENDICT SAM_AUX=DTYPE_FIELD=AUX
 
@@ -56,6 +56,7 @@
 #pragma GENDICT SAM_NONREF=DTYPE_FIELD=NONREF     // these 4 fields must be in this order, right after SAM_SQBITMAP
 #pragma GENDICT SAM_NONREF_X=DTYPE_FIELD=NONREF_X
 #pragma GENDICT SAM_GPOS=DTYPE_FIELD=GPOS
+#pragma GENDICT SAM_GPOS_DELTA=DTYPE_FIELD=G0POS  // v15
 #pragma GENDICT SAM_STRAND=DTYPE_FIELD=STRAND
 #pragma GENDICT SAM_SEQMIS_A=DTYPE_FIELD=SEQMIS_A // v14: mismatch bases vs the reference, when ref=A
 #pragma GENDICT SAM_SEQMIS_C=DTYPE_FIELD=SEQMIS_C // v14: mismatch bases vs the reference, when ref=A
@@ -75,27 +76,28 @@
 // contexts that exist in FASTQ and not SAM - we put them here to reserve the Did so its not 
 // occupied by another SAM contexts causing dictionaries to become mingled in Deep
 
-#pragma GENDICT UNUSED_FASTQ_DEEP_VB=DTYPE_FIELD=DEEP
+#pragma GENDICT DEEP_FASTQ_DEEP=DTYPE_FIELD=DEEP
+#pragma GENDICT DEEP_FASTQ_DEEP_DELTA=DTYPE_FIELD=D0EEP
 
-#pragma GENDICT UNUSED_FASTQ_E1L=DTYPE_FIELD=E1L
-#pragma GENDICT UNUSED_FASTQ_E2L=DTYPE_FIELD=E2L
+#pragma GENDICT DEEP_FASTQ_E1L=DTYPE_FIELD=E1L
+#pragma GENDICT DEEP_FASTQ_E2L=DTYPE_FIELD=E2L
 
-#pragma GENDICT UNUSED_FASTQ_LINE3=DTYPE_FIELD=LINE3
-#pragma GENDICT UNUSED_FASTQ_T0HIRD=DTYPE_1=t0NAME    // must be directly after FASTQ_LINE3
-#pragma GENDICT UNUSED_FASTQ_T1HIRD=DTYPE_1=t1NAME 
-#pragma GENDICT UNUSED_FASTQ_T2HIRD=DTYPE_1=t2NAME
-#pragma GENDICT UNUSED_FASTQ_T3HIRD=DTYPE_1=t3NAME
-#pragma GENDICT UNUSED_FASTQ_T4HIRD=DTYPE_1=t4NAME
-#pragma GENDICT UNUSED_FASTQ_T5HIRD=DTYPE_1=t5NAME
-#pragma GENDICT UNUSED_FASTQ_T6HIRD=DTYPE_1=t6NAME 
-#pragma GENDICT UNUSED_FASTQ_T7HIRD=DTYPE_1=t7NAME 
-#pragma GENDICT UNUSED_FASTQ_T8HIRD=DTYPE_1=t8NAME 
-#pragma GENDICT UNUSED_FASTQ_T9HIRD=DTYPE_1=t9NAME 
-#pragma GENDICT UNUSED_FASTQ_TAHIRD=DTYPE_1=tANAME 
-#pragma GENDICT UNUSED_FASTQ_TBHIRD=DTYPE_1=tBNAME 
-#pragma GENDICT UNUSED_FASTQ_TmHIRD=DTYPE_1=tmNAME 
+#pragma GENDICT DEEP_FASTQ_LINE3=DTYPE_FIELD=LINE3
+#pragma GENDICT DEEP_FASTQ_T0HIRD=DTYPE_1=t0NAME    // must be directly after FASTQ_LINE3
+#pragma GENDICT DEEP_FASTQ_T1HIRD=DTYPE_1=t1NAME 
+#pragma GENDICT DEEP_FASTQ_T2HIRD=DTYPE_1=t2NAME
+#pragma GENDICT DEEP_FASTQ_T3HIRD=DTYPE_1=t3NAME
+#pragma GENDICT DEEP_FASTQ_T4HIRD=DTYPE_1=t4NAME
+#pragma GENDICT DEEP_FASTQ_T5HIRD=DTYPE_1=t5NAME
+#pragma GENDICT DEEP_FASTQ_T6HIRD=DTYPE_1=t6NAME 
+#pragma GENDICT DEEP_FASTQ_T7HIRD=DTYPE_1=t7NAME 
+#pragma GENDICT DEEP_FASTQ_T8HIRD=DTYPE_1=t8NAME 
+#pragma GENDICT DEEP_FASTQ_T9HIRD=DTYPE_1=t9NAME 
+#pragma GENDICT DEEP_FASTQ_TAHIRD=DTYPE_1=tANAME 
+#pragma GENDICT DEEP_FASTQ_TBHIRD=DTYPE_1=tBNAME 
+#pragma GENDICT DEEP_FASTQ_TmHIRD=DTYPE_1=tmNAME 
 
-#pragma GENDICT UNUSED_FASTQ_AUX_LENGTH=DTYPE_2=length 
+#pragma GENDICT DEEP_FASTQ_AUX_LENGTH=DTYPE_2=length 
 
 // -----------------------------------------------------------------------------------------------------------
 // End of common contexts of FASTQ and SAM
@@ -154,7 +156,7 @@
 #pragma GENDICT OPTION_IH_i=DTYPE_2=IH:i     // Query hit total count. Novoalign: Number of stored alignments in SAM that contains the query in the current record. Only present if there is more than one alignment reported for the read (i.e. IH <= NH)
 #pragma GENDICT OPTION_HI_i=DTYPE_2=HI:i     // Query hit index (a number [1,NH])
 #pragma GENDICT OPTION_NM_i=DTYPE_2=NM:i     // Edit distance to the reference
-#pragma GENDICT OPTION_PQ_i=DTYPE_2=PQ:i     // Phred likelihood of the template. Novoalign: "Phred likelihood of the template, conditional on both the mapping being correct. Only for multi-template reads."
+#pragma GENDICT OPTION_PQ_i=DTYPE_2=PQ:i     // Phred likelihood of the template, conditional on the mapping locations of both/all segments being correct.
 #pragma GENDICT OPTION_SM_i=DTYPE_2=SM:i     // Template-independent mapping quality
 #pragma GENDICT OPTION_TC_i=DTYPE_2=TC:i     // The number of segments in the template
 #pragma GENDICT OPTION_UQ_i=DTYPE_2=UQ:i     // Phred likelihood of the segment, conditional on the mapping being correct
@@ -530,6 +532,8 @@
 #pragma GENDICT SAM_E2_Z=DTYPE_FIELD=E2:Z    // This used to be the destination alias from OPTION_E2_Z (need to keep for back comp)
 #pragma GENDICT SAM_U2_Z=DTYPE_FIELD=U2:Z    // This used to be the destination alias from OPTION_U2_Z (need to keep for back comp)
 
+#define SAM_MAX_QNAME_LEN 255/*exc. \0*/     // In initial SAM specification verions, the max QNAME length was 255, and reduced to 254 in Aug 2015. We support 255 to support old SAM/BAM files too. BAM specifies 255 including \0 (so 254).
+
 // Note: 32 bit to save memory (we haven't seen a scenario in which there are more than 4B primary alignments), but can trivially extend to 64b if needed.
 // if we ever want to extend to 64 bits, consider than number of PRIM groups is also limited to 1B unique CIGARs - see sam_seg_prim_add_sag_SA
 typedef uint32_t SAGroup; 
@@ -571,7 +575,7 @@ extern uint32_t sam_num_header_contigs (void);
 extern void sam_seg_initialize (VBlockP vb);
 extern void sam_seg_finalize (VBlockP vb);
 extern bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id);
-extern bool sam_seg_is_big (ConstVBlockP vb, DictId dict_id);
+extern bool sam_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id);
 extern rom sam_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
 extern uint32_t sam_seg_seq_len_from_cigar (STRp(cigar));
 extern uint32_t sam_seg_get_seq_len_by_MD_field (STRp(md_str));
@@ -584,16 +588,15 @@ extern void sam_deep_merge (VBlockP vb);
 
 // PIZ Stuff
 extern void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header);
-extern bool sam_piz_initialize (void);
+extern bool sam_piz_initialize (CompIType comp_i);
 extern void sam_piz_finalize (void);
 extern IS_SKIP (sam_piz_is_skip_section);
-extern bool sam_piz_maybe_reorder_lines (void);
 extern bool sam_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment);
 extern void sam_piz_recon_init (VBlockP vb);
 extern void sam_piz_after_recon (VBlockP vb);
 extern void sam_piz_process_recon (VBlockP vb);
 extern CONTAINER_FILTER_FUNC (sam_piz_filter);
-extern void sam_reconstruct_SEQ_vs_ref (VBlockP vb, ContextP ctx, rom unused, unsigned unused2, ReconType reconstruct);
+extern void sam_reconstruct_SEQ_vs_ref (VBlockP vb, rom unused, unsigned unused2, ReconType reconstruct);
 extern void sam_set_FLAG_filter (rom optarg);
 extern void sam_set_MAPQ_filter (rom optarg);
 extern void sam_piz_load_sags (void);
@@ -602,6 +605,7 @@ extern void sam_reconstruct_missing_quality (VBlockP vb, ReconType reconstruct);
 extern void sam_piz_xtra_line_data (VBlockP vb);
 extern void sam_piz_after_preproc (VBlockP vb);
 extern CONTAINER_ITEM_CALLBACK (sam_piz_con_item_cb);
+extern void qname_filter_initialize (rom filename);
 
 // BAM Stuff
 extern void bam_seg_initialize (VBlockP vb);
@@ -616,7 +620,8 @@ CONTAINER_CALLBACK (sam_piz_container_cb);
 
 // VB stuff
 extern void sam_vb_release_vb();
-extern void sam_vb_destroy_vb();
+extern void sam_destroy_vb();
+extern void sam_erase_vb_bufs();
 extern unsigned sam_vb_size (DataType dt);
 extern unsigned sam_vb_zip_dl_size (void);
 extern void sam_reset_line (VBlockP vb);
@@ -749,17 +754,43 @@ TXTHEADER_TRANSLATOR (sam_header_bam2sam);
 TXTHEADER_TRANSLATOR (sam_header_sam2bam);
 TXTHEADER_TRANSLATOR (txtheader_sam2fq);
 
-#define SAM_DICT_ID_ALIASES                    \
-    /*         alias         maps to       */  \
-    { DT_SAM,  _OPTION_UB_Z, _OPTION_BX_Z },   /* 10xGenomics tags - CellRanger: UB/UR/UY = LongRanger BX/RX/QX */ \
-    { DT_SAM,  _OPTION_UR_Z, _OPTION_RX_Z },   \
-    { DT_SAM,  _OPTION_UY_Z, _OPTION_QX_Z },  
+#define SAM_DICT_ID_ALIASES                                             \
+    /*         type        alias                maps to            */   \
+    { DT_SAM,  ALIAS_CTX,  _OPTION_UB_Z,        _OPTION_BX_Z        },  /* 10xGenomics tags - CellRanger: UB/UR/UY = LongRanger BX/RX/QX */ \
+    { DT_SAM,  ALIAS_CTX,  _OPTION_UR_Z,        _OPTION_RX_Z        },  \
+    { DT_SAM,  ALIAS_CTX,  _OPTION_UY_Z,        _OPTION_QX_Z        },  \
+    { DT_SAM,  ALIAS_DICT, _SAM_RNEXT,          _SAM_RNAME          },  \
+    { DT_SAM,  ALIAS_DICT, _OPTION_OA_RNAME,    _SAM_RNAME          },  \
+    { DT_SAM,  ALIAS_DICT, _OPTION_XA_RNAME,    _SAM_RNAME          },  \
+    { DT_SAM,  ALIAS_DICT, _OPTION_SA_RNAME,    _SAM_RNAME          },  \
+    { DT_SAM,  ALIAS_DICT, _OPTION_MC0_Z,       _OPTION_OC_Z        },  /* note: no need to alias MC1_Z, bc it is normally all-the-same copy-mate */ \
+    { DT_SAM,  ALIAS_DICT, _OPTION_OA_CIGAR,    _OPTION_OC_Z        },  \
+    { DT_SAM,  ALIAS_DICT, _OPTION_XA_CIGAR,    _OPTION_OC_Z        },  \
+    { DT_SAM,  ALIAS_DICT, _OPTION_SA_CIGAR,    _OPTION_OC_Z        },  \
+    { DT_SAM,  ALIAS_DICT, _OPTION_TX_CIGAR,    _OPTION_OC_Z        },  \
+    { DT_SAM,  ALIAS_DICT, _OPTION_AN_CIGAR,    _OPTION_OC_Z        },  \
+    { DT_SAM,  ALIAS_DICT, _OPTION_AN_NEGATIVE, _OPTION_TX_NEGATIVE },  \
+    { DT_SAM,  ALIAS_DICT, _OPTION_AN_GENE,     _OPTION_TX_GENE     },  \
+    { DT_SAM,  ALIAS_DICT, _DEEP_FASTQ_E1L,     _DEEP_FASTQ_E2L     },   
 
-#define BAM_DICT_ID_ALIASES                    \
-    /*         alias         maps to      */   \
-    { DT_BAM,  _OPTION_UB_Z, _OPTION_BX_Z },   \
-    { DT_BAM,  _OPTION_UR_Z, _OPTION_RX_Z },   \
-    { DT_BAM,  _OPTION_UY_Z, _OPTION_QX_Z },  
+#define BAM_DICT_ID_ALIASES                                             \
+    /*         type        alias                maps to            */   \
+    { DT_BAM,  ALIAS_CTX,  _OPTION_UB_Z,        _OPTION_BX_Z        },  \
+    { DT_BAM,  ALIAS_CTX,  _OPTION_UR_Z,        _OPTION_RX_Z        },  \
+    { DT_BAM,  ALIAS_CTX,  _OPTION_UY_Z,        _OPTION_QX_Z        },  \
+    { DT_BAM,  ALIAS_DICT, _SAM_RNEXT,          _SAM_RNAME          },  \
+    { DT_BAM,  ALIAS_DICT, _OPTION_OA_RNAME,    _SAM_RNAME          },  \
+    { DT_BAM,  ALIAS_DICT, _OPTION_XA_RNAME,    _SAM_RNAME          },  \
+    { DT_BAM,  ALIAS_DICT, _OPTION_SA_RNAME,    _SAM_RNAME          },  \
+    { DT_BAM,  ALIAS_DICT, _OPTION_MC0_Z,       _OPTION_OC_Z        },  \
+    { DT_BAM,  ALIAS_DICT, _OPTION_OA_CIGAR,    _OPTION_OC_Z        },  \
+    { DT_BAM,  ALIAS_DICT, _OPTION_XA_CIGAR,    _OPTION_OC_Z        },  \
+    { DT_BAM,  ALIAS_DICT, _OPTION_SA_CIGAR,    _OPTION_OC_Z        },  \
+    { DT_BAM,  ALIAS_DICT, _OPTION_TX_CIGAR,    _OPTION_OC_Z        },  \
+    { DT_BAM,  ALIAS_DICT, _OPTION_AN_CIGAR,    _OPTION_OC_Z        },  \
+    { DT_BAM,  ALIAS_DICT, _OPTION_AN_NEGATIVE, _OPTION_TX_NEGATIVE },  \
+    { DT_BAM,  ALIAS_DICT, _OPTION_AN_GENE,     _OPTION_TX_GENE     },  \
+    { DT_BAM,  ALIAS_DICT, _DEEP_FASTQ_E1L,     _DEEP_FASTQ_E2L     },   
 
 #define SAM_CONTIG_FMT "@SQ	SN:%.*s	LN:%"PRId64
 
@@ -775,6 +806,5 @@ typedef enum { SAM_COMP_NONE=255, SAM_COMP_MAIN=0, SAM_COMP_PRIM=1, SAM_COMP_DEP
 
 #define IS_BAM_ZIP TXT_DT(BAM)
 #define IS_SRC_BAM_PIZ (Z_DT(SAM) && z_file->z_flags.txt_is_bin)       // source file was BAM, NOT that the reconstruction is BAM! 
-#define IS_RECON_BAM (flag.out_dt == DT_BAM)                              // reconstructed file is BAM, regardless of source file type 
 #define IS_SRC_and_RECON_BAM_PIZ (IS_SRC_BAM_PIZ && vb->translation.trans_containers) 
 #define IS_SRC_BAM (command==ZIP ? IS_BAM_ZIP : IS_SRC_BAM_PIZ)

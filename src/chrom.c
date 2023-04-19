@@ -88,7 +88,8 @@ void chrom_2ref_compress (Reference ref)
 void chrom_2ref_load (Reference ref)
 {
     Section sl = sections_last_sec (SEC_CHROM2REF_MAP, SOFT_FAIL);
-    if (!sl) return; // we don't have alternate chroms
+    if (!sl || // we don't have alternate chroms
+        (flag.deep && OUT_DT(FASTQ))) return; // genocat outputting just FASTQ of a Deep file
 
     zfile_get_global_section (SectionHeader, sl, &evb->scratch, "scratch");
 
@@ -136,16 +137,16 @@ void chrom_2ref_load (Reference ref)
     buf_free (evb->scratch);
 }
 
-static void chrom_2ref_seg_set (VBlockP vb, WordIndex chrom_node_index, WordIndex ref_index)
+static void chrom_2ref_seg_set (VBlockP vb, ContextP ctx, WordIndex chrom_node_index, WordIndex ref_index)
 {
     WordIndex index = chrom_node_index - vb->ol_chrom2ref_map.len32;
     ASSERT (index >= 0, "Expecting chrom_node_index=%d >= vb->ol_chrom2ref_map.len=%u", 
             chrom_node_index, vb->ol_chrom2ref_map.len32);
 
-    buf_alloc_255 (vb, &vb->chrom2ref_map, 0, index+1, WordIndex, CTX_GROWTH, "chrom2ref_map");
-    vb->chrom2ref_map.len = MAX_(vb->chrom2ref_map.len32, index+1);
+    buf_alloc_255 (vb, &ctx->chrom2ref_map, 0, index+1, WordIndex, CTX_GROWTH, "chrom2ref_map");
+    ctx->chrom2ref_map.len32 = MAX_(ctx->chrom2ref_map.len32, index+1);
 
-    *B(WordIndex, vb->chrom2ref_map, index) = ref_index; 
+    *B(WordIndex, ctx->chrom2ref_map, index) = ref_index; 
 }
 
 // returns the ref index by the chrom index, works only after Segging of CHROM
@@ -155,7 +156,7 @@ WordIndex chrom_2ref_seg_get (Reference ref, ConstVBlockP vb, WordIndex chrom_in
 
     int32_t ol_len = vb->ol_chrom2ref_map.len32;
     return (chrom_index < ol_len) ? *B(WordIndex, vb->ol_chrom2ref_map, chrom_index)
-                                  : *B(WordIndex, vb->chrom2ref_map, chrom_index - ol_len);
+                                  : *B(WordIndex, CTX(CHROM)->chrom2ref_map, chrom_index - ol_len);
 }
 
 void chrom_calculate_ref2chrom (uint64_t num_ref_contigs)
@@ -276,8 +277,8 @@ finalize:
             STRset (vb->chrom_name, chrom);
     }
 
-    if (is_new && chrom_2ref_seg_is_needed (did_i)) // even if no reference, has ctx_merge_in_one_vctx expects
-        chrom_2ref_seg_set (vb, chrom_node_index, ref_index);
+    if (is_new && chrom_2ref_seg_is_needed (ctx->dict_did_i)) // even if no reference, has ctx_merge_in_one_vctx expects
+        chrom_2ref_seg_set (vb, ctx, chrom_node_index, ref_index);
 
     return chrom_node_index;
 }

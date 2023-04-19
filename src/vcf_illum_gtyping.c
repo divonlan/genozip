@@ -89,6 +89,7 @@ void vcf_seg_PROBE_A (VBlockVCFP vb, ContextP ctx, STRp(probe))
 
         WordIndex strand = CTX(INFO_ILLUMINA_STRAND)->last_value.i;
         PosType64 pos = vb->last_int(INFO_ILLUMINA_POS);
+        decl_acgt_decode;
         
         Range *range = ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos - probe_len, probe_len*2 + 1, 
                                           WORD_INDEX_NONE, NULL, (IS_REF_EXT_STORE ? &lock : NULL));
@@ -140,6 +141,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_PROBE_A)
     uint32_t probe_len;
     str_get_uint32 (snip+1, snip_len-1, &probe_len);
     char *probe = BAFTtxt;
+    decl_acgt_decode;
     
     // forward
     if (*snip == '0') {

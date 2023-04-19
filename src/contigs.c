@@ -467,7 +467,7 @@ void contigs_create_index (ContigPkg *ctgs, SortBy sort_by)
 
     ctgs->sorted_by |= sort_by;
 
-    COPY_TIMER_VB (evb, contigs_create_index);
+    COPY_TIMER_EVB (contigs_create_index);
 }
 
 void contigs_build_contig_pkg_from_zctx (ContigPkg *ctgs, ConstContextP zctx, SortBy sort_by)

@@ -6,6 +6,11 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
 //   under penalties specified in the license.
 
+
+#ifdef __linux__
+#include <linux/limits.h>
+#endif
+#include "genozip.h"
 #include "filename.h"
 #include "file.h"
 #include "codec.h"
@@ -25,7 +30,7 @@ rom filename_z_normal (rom txt_filename, DataType dt, FileType txt_ft)
     if (!txt_filename && (flag.biopsy || flag.biopsy_line.line_i != NO_LINE))
         txt_filename = "dummy"; // we don't have a txt_filename, but that's ok, because we don't need it
 
-    ASSINP0 (txt_filename || !tar_is_tar(), "Piping from stdin is not supported when using --tar");
+    ASSINP0 (txt_filename || !tar_zip_is_tar(), "Piping from stdin is not supported when using --tar");
     ASSINP0 (txt_filename, "Use --output to specify the output filename (with a .genozip extension)");
 
     unsigned dn_len = flag.out_dirname ? strlen (flag.out_dirname) : 0;
@@ -187,4 +192,67 @@ rom filename_base (rom filename, bool remove_exe, rom default_basename,
     sprintf (basename, "%.*s", (int)len, start);
 
     return basename;
+}
+
+// eg "file.fastq.gz" -> "file.fastq"
+void filename_remove_codec_ext (char *filename, FileType ft)
+{
+    rom codec_ext;
+    if (!((codec_ext = strchr (&file_exts[ft][1], '.')))) return; // this file type's extension doesn't have a codec ext (it is, eg ".fastq" not ".fastq.gz")
+    
+    unsigned codec_ext_len = strlen (codec_ext);
+    unsigned fn_len = strlen (filename);
+
+    // make sure filename actually has the codec (eg its not eg "(stdin)")
+    if (fn_len > codec_ext_len && !strcmp (&filename[fn_len-codec_ext_len], codec_ext))
+        filename[fn_len-codec_ext_len] = 0; // shorten string
+}
+
+// change eg "c:\dir\file" to "/c/dir/file" and add full path (allocates memory - caller should free)
+char *filename_make_unix (char *filename)
+{
+    char path[PATH_MAX];
+    unsigned len = strlen (filename);
+    
+    if (
+#ifdef _WIN32
+        (len >= 2 && filename[1] == ':') || // full name - starting with eg C:
+#endif
+        (len >= 1 && filename[0] == '/') || // full name - starting with /
+        !getcwd (path, sizeof (path))) // path too long
+        path[0] = 0;  // don't store path
+
+    char *full_fn = MALLOC (strlen (z_name) + strlen (path) + 2);
+    sprintf (full_fn, "%s%s%s", path, *path ? "/" : "", z_name);
+
+#ifdef _WIN32 // convert to Unix-style filename
+    len = strlen (full_fn);
+
+    if (len >= 2 && full_fn[1] == ':') {
+        full_fn[1] = full_fn[0];
+        full_fn[0] = '/';
+    }
+
+    for (unsigned i=0; i < len; i++)
+        if (full_fn[i] == '\\') full_fn[i] = '/';
+#endif
+
+    return full_fn;
+}
+
+PairType filename_is_fastq_pair (STRp(fn1), STRp(fn2))
+{
+    if (fn1_len != fn2_len) return false; 
+
+    int mismatches = 0, mm_i=0;
+    for (int i=0; i < fn1_len && mismatches < 2; i++)
+        if (fn1[i] != fn2[i]) {
+            mismatches++;
+            mm_i = i;
+        }
+    
+    // its predicted to a pair if filenames are the same, except for '1'⇄'2' switch
+    if  (mismatches == 1 && ((fn1[mm_i] == '1' && fn2[mm_i] == '2'))) return PAIR_R1; // fn1 is PAIR_1
+    if  (mismatches == 1 && ((fn1[mm_i] == '2' && fn2[mm_i] == '1'))) return PAIR_R2; 
+    return NOT_PAIRED_END;
 }

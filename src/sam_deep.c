@@ -42,7 +42,7 @@ void sam_deep_zip_finalize (void)
     uint64_t count=0;
     
     for (VBIType vb_i=1; vb_i <= z_file->num_vbs; vb_i++) {
-        Section sec = sections_vb_header (vb_i, HARD_FAIL);
+        Section sec = sections_vb_header (vb_i);
         if (sec->comp_i == SAM_COMP_DEPN) continue;
 
         *B64(z_file->vb_start_deep_line, vb_i) = count; // note: in ZIP, vb_start_deep_line index is vb_i (unlike PIZ, which is vb_idx)
@@ -110,7 +110,7 @@ void sam_deep_set_QUAL_hash (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual))
 void sam_deep_merge (VBlockP vb_)
 {
     if (!flag.deep) return;
-
+    
     VBlockSAMP vb = (VBlockSAMP)vb_;
 
     START_TIMER;
@@ -178,10 +178,10 @@ DEEPHASHf(deep_ents[linked_ent_i].hash), deep_ents[linked_ent_i].vb_i, deep_ents
         }
 
         // create new entry
-        deep_ents[ent_i++] = (ZipZDeep){ .next   = NO_NEXT, 
-                                         .hash   = dl->deep_hash,
-                                         .vb_i   = vb->vblock_i, 
-                                         .line_i = deep_line_i++ };
+        deep_ents[ent_i++] = (ZipZDeep){ .next    = NO_NEXT, 
+                                         .hash    = dl->deep_hash,
+                                         .vb_i    = vb->vblock_i, 
+                                         .line_i  = deep_line_i++ };
     }
 
     z_file->deep_ents.len32 = ent_i;
@@ -199,6 +199,12 @@ DEEPHASHf(deep_ents[linked_ent_i].hash), deep_ents[linked_ent_i].vb_i, deep_ents
 void sam_piz_deep_initialize (void)
 {
     mutex_initialize (z_file->qname_huf_mutex);
+
+    // In Deep, we digest the SAM VBs in writer (during which the serializer is not used), and the 
+    // FASTQ VBs in their compute threads (with the serializer). Therefore, the serializer needs to be
+    // initialized to skip the SAM VBs 
+    if (!z_file->z_flags.adler) // serializer is only used for md5 (considering Deep files only exist since v15)
+        z_file->digest_serializer.vb_i_last = sections_get_first_vb_i (SAM_COMP_FQ00) - 1;
 }
 
 void sam_piz_deep_init_vb (VBlockSAMP vb, ConstSectionHeaderVbHeaderP header)
@@ -261,6 +267,8 @@ static void sam_piz_deep_sample_qname (STRp(suffix), // if prfx_len>0 then this 
 // copy QNAME as is to deep_ents
 static void sam_piz_deep_add_qname (VBlockSAMP vb)
 {
+    START_TIMER;
+
     STRlast (qname, CTX(sam_is_prim_vb ? SAM_QNAMESA : SAM_QNAME));
 
     sam_piz_alloc_deep_ents (vb, 3 + qname_len); // +3: PizZDeepFlags, qname_len, prfx_len
@@ -318,11 +326,15 @@ static void sam_piz_deep_add_qname (VBlockSAMP vb)
 
     // initialize flags
     *deep_flags = (PizZDeepFlags){ .is_qname_comp = suffix_is_compressed }; 
+
+    COPY_TIMER (sam_piz_deep_add_qname);
 }
 
 // compress QUAL or SEQ - adding a 1B or 4B length
 static bool sam_piz_deep_compress (VBlockSAMP vb, STRp(data), bool is_seq)
 {
+    START_TIMER;
+
     // reverse if needed
     if (last_flags.rev_comp) {
         ASSERTNOTINUSE (vb->scratch);
@@ -364,12 +376,16 @@ static bool sam_piz_deep_compress (VBlockSAMP vb, STRp(data), bool is_seq)
     if (last_flags.rev_comp)   
         buf_free (vb->scratch);
 
+    COPY_TIMER (sam_piz_deep_compress);
+
     return !len_is_1_byte; // true long length
 }
 
 // container item callback for SQBITMAP: pack SEQ into 2-bit and into deep_ents or compress if it has non-ACGT (eg N)
 static void sam_piz_deep_add_seq (VBlockSAMP vb, STRp(seq))
 {
+    START_TIMER;
+
     vb->seq_is_monochar = str_is_monochar (STRa(seq));
 
     // case: not deepable bc no SEQ or monochar - rollback
@@ -396,8 +412,12 @@ static void sam_piz_deep_add_seq (VBlockSAMP vb, STRp(seq))
         memcpy (BAFT8 (vb->deep_ents), &vb->deep_seq, (perfect ? 4 : 6));
         vb->deep_ents.len32 += (perfect ? 4 : 6);
 
-        deep_flags->seq_encoding = perfect ? (last_flags.rev_comp ? ZDEEP_SEQ_PERFECT_REV : ZDEEP_SEQ_PERFECT)
-                                           : (last_flags.rev_comp ? ZDEEP_SEQ_MIS_1_REV   : ZDEEP_SEQ_MIS_1);
+        bool used_aligner = ctx_has_value_in_line_(vb, CTX(SAM_STRAND));
+        bool rev_comp = used_aligner ? !CTX(SAM_STRAND)->last_value.i // rev_comp vs the reference according to our aligner
+                                     : last_flags.rev_comp;           // rev_comp vs the reference according to the SAM alignment
+        
+        deep_flags->seq_encoding = perfect ? (rev_comp ? ZDEEP_SEQ_PERFECT_REV : ZDEEP_SEQ_PERFECT)
+                                           : (rev_comp ? ZDEEP_SEQ_MIS_1_REV   : ZDEEP_SEQ_MIS_1);
     }
 
     // if only A,C,G,T - pack in 2-bits
@@ -425,11 +445,15 @@ static void sam_piz_deep_add_seq (VBlockSAMP vb, STRp(seq))
         deep_flags = B(PizZDeepFlags, vb->deep_ents, *BLST32(vb->deep_index)); // cafeful! sam_piz_deep_compress reallocs vb->deep_ents
         deep_flags->seq_encoding = (is_long ? ZDEEP_SEQ_COMPRESSED_LONG_LEN : ZDEEP_SEQ_COMPRESSED);
     }
+
+    COPY_TIMER (sam_piz_deep_add_seq);
 }
 
 // container item callback for QUAL/QUALSA: compress QUAL into deep_ents
 static void sam_piz_deep_add_qual (VBlockSAMP vb, STRp(qual))
 {
+    START_TIMER;
+
     if (vb->seq_missing || vb->seq_is_monochar || VB_SAM->qual_missing) return; // not a deepable alignment or no QUAL
 
     uint32_t index = *BLST32(vb->deep_index);
@@ -440,6 +464,8 @@ static void sam_piz_deep_add_qual (VBlockSAMP vb, STRp(qual))
 
     deep_flags = B(PizZDeepFlags, vb->deep_ents, *BLST32(vb->deep_index)); // cafeful! sam_piz_deep_compress reallocs vb->deep_ents
     deep_flags->is_long_qual_comp = is_long;
+
+    COPY_TIMER (sam_piz_deep_add_qual);
 }
 
 
@@ -447,6 +473,8 @@ static void sam_piz_deep_add_qual (VBlockSAMP vb, STRp(qual))
 // for BAM: called from SEQ and QUAL translators (before translation) 
 CONTAINER_ITEM_CALLBACK (sam_piz_con_item_cb)
 {
+    START_TIMER;
+
     if (con_item->dict_id.num == _SAM_SQBITMAP) {
         if (!flag.deep                                       || // Deep file (otherwise this callback will not be set), but SAM/BAM-only reconstruction
             last_flags.secondary || last_flags.supplementary || // SECONDARY or SUPPLEMENTARY alignment
@@ -467,6 +495,8 @@ CONTAINER_ITEM_CALLBACK (sam_piz_con_item_cb)
     else if (!VB_SAM->line_not_deepable && 
              (con_item->dict_id.num == _SAM_QUAL || con_item->dict_id.num == _SAM_QUALSA))
         sam_piz_deep_add_qual  (VB_SAM, STRa(recon)); 
+
+    COPY_TIMER (sam_piz_con_item_cb);
 }
 
 //-----------------------------------------------------------------------------

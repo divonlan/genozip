@@ -95,14 +95,11 @@ void sam_zip_initialize (void)
 {
     bool has_hdr_contigs = sam_hdr_contigs && sam_hdr_contigs->contigs.len;
 
-    // Copy header contigs to RNAME and RNEXT upon first component. This is in the order of the
-    // header, as required by BAM (it encodes ref_id based on header order). Note, subsequent
-    // bound files are required to have the same contigs or at least a contiguous subset starting a contig 0.
-    // BAM always has header contigs (might be 0 of them, for an unaligned file), while SAM is allowed to be header-less
-    if (z_file->num_txts_so_far == 1 && has_hdr_contigs) {
+    // Copy header contigs to RNAME upon first component. This is in the order of the header, and
+    // encodes ref_id based on header order. Note: BAM always has header contigs (might be 0 of them, 
+    // for an unaligned file), while SAM is allowed to be header-less (but then requires an external reference)
+    if (z_file->num_txts_so_far == 1 && has_hdr_contigs) 
         ctx_populate_zf_ctx_from_contigs (gref, SAM_RNAME, sam_hdr_contigs);
-        ctx_populate_zf_ctx_from_contigs (gref, SAM_RNEXT, sam_hdr_contigs);
-    }
 
     seg_prepare_snip_other (SNIP_REDIRECTION, _SAM_TAXID, false, 0, taxid_redirection_snip);
 
@@ -230,7 +227,7 @@ static void sam_seg_QNAME_initialize (VBlockSAMP vb)
     CTX(SAM_QNAME)->no_stons = true;             // no singletons, bc sam_piz_special_SET_BUDDY uses PEEK_SNIP
     CTX(SAM_QNAME)->flags.store_per_line = true; // 12.0.41
 
-    qname_seg_initialize (VB, QNAME1, SAM_QNAME, 0); 
+    qname_seg_initialize (VB, QNAME1, SAM_QNAME); 
 
     if (segconf.running)
         segconf.qname_flavor[0] = 0; // unknown
@@ -475,7 +472,7 @@ static void sam_seg_toplevel (VBlockP vb)
                    
     container_seg (vb, CTX(SAM_TOPLEVEL), (ContainerP)&top_level_sam, 0, 0, 0);
 
-    // Deep: top level snip - reconstruction as SAM when genocat --R1 --R2 - reconstruct only what's needed for FASTQ 
+    // Deep: top level snip - reconstruction as SAM when genocat --R1 --R2 --fq - reconstruct only what's needed for FASTQ 
     SmallContainer top_level_deep_fq = {
         .repeats      = vb->lines.len32,
         .is_toplevel  = true,
@@ -728,8 +725,9 @@ static void sam_seg_finalize_segconf (VBlockP vb)
     }
 
     if (flag.reference == REF_INTERNAL && !txt_file->redirected && (!segconf.sam_is_unmapped || !segconf.is_long_reads))
-        TIP ("compressing a %s file using a reference file can reduce the size by 7%%-30%%%s.\nUse: \"genozip --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
-             dt_name (txt_file->data_type), MP(UNKNOWN) ? " (even for unaligned files)" : "", txt_file->name);
+        TIP ("Compressing a %s file using a reference file can reduce the size by 7%%-30%%%s.\n"
+             "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
+             dt_name (txt_file->data_type), arch_get_argv0(), MP(UNKNOWN) ? " (even for unaligned files)" : "", txt_file->name);
 }
 
 void sam_seg_finalize (VBlockP vb)
@@ -809,17 +807,14 @@ void sam_seg_finalize (VBlockP vb)
 // main thread: called after all VBs, before compressing global sections
 void sam_zip_after_vbs (void)
 {
-    // case: header-only file, completely get rid of RNAME, RNEXT
-    if (!sections_count_sections (SEC_VB_HEADER)) {
-        ZCTX(SAM_RNAME)->dict.len = ZCTX(SAM_RNAME)->nodes.len = 
-        ZCTX(SAM_RNEXT)->dict.len = ZCTX(SAM_RNEXT)->nodes.len = 0;
-    }
+    // case: header-only file, completely get rid of RNAME
+    if (!sections_count_sections (SEC_VB_HEADER)) 
+        ZCTX(SAM_RNAME)->dict.len = ZCTX(SAM_RNAME)->nodes.len = 0;
     
     // shorten unused words in dictionary strings to "" (dict pre-populated in sam_zip_initialize)
     if (!IS_REF_INTERNAL) // TO DO: this doesn't work for REF_INTERNAL for example with test.transcriptome.bam
         ctx_shorten_unused_dict_words (SAM_RNAME);
 
-    ctx_shorten_unused_dict_words (SAM_RNEXT);
     ctx_shorten_unused_dict_words (OPTION_XA_STRAND); // remove gem3 bi-sulfite words if not used
 }
 
@@ -895,14 +890,13 @@ bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id)
         0;
 }
 
-bool sam_seg_is_big (ConstVBlockP vb, DictId dict_id)
+bool sam_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id)
 {
     return
         // typically big
         dict_id.num == _OPTION_BX_Z      ||
         dict_id.num == _OPTION_TX_GENE   ||
-        dict_id.num == _OPTION_AN_GENE   ||
-        0;
+        dict_id.num == _OPTION_AN_GENE;
 }
 
 static void sam_get_one_aux (VBlockSAMP vb, int16_t idx,

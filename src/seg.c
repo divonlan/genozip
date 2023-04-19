@@ -473,7 +473,7 @@ bool seg_pos_field_cb (VBlockP vb, ContextP ctx, STRp(pos_str), uint32_t repeat)
 // must be called in seg_initialize 
 void seg_id_field_init (ContextP ctx) 
 { 
-    ContextP zctx = ctx_get_zctx_from_vctx (ctx, false);
+    ContextP zctx = ctx_get_zctx_from_vctx (ctx, false, true); // all aliases need to tbe the same type, bc ID_TYPE_OTHER segs only to local, relying on implicit lookup that happens when there's no dict
     if (zctx) ctx->id_type = zctx->id_type; // set in segconf
 
     if (ctx->id_type == ID_TYPE_ALPHA_NUMERIC) 
@@ -497,10 +497,10 @@ void seg_id_segconf_update_type (ContextP ctx, STRp(id))
 
     // note: we set zctx->id_type only in segconf
     if (!is_alpha_then_numeric)
-        ctx_get_zctx_from_vctx (ctx, true)->id_type = ID_TYPE_OTHER; // its suffienct that one is not alphanumeric to make it "Other"
+        ctx_get_zctx_from_vctx (ctx, true, true)->id_type = ID_TYPE_OTHER; // its suffienct that one is not alphanumeric to make it "Other"
 
     else if (ctx->id_type != ID_TYPE_OTHER)
-        ctx_get_zctx_from_vctx (ctx, true)->id_type = ID_TYPE_ALPHA_NUMERIC; // can only be alpha numeric if not already declared "other"
+        ctx_get_zctx_from_vctx (ctx, true, true)->id_type = ID_TYPE_ALPHA_NUMERIC; // can only be alpha numeric if not already declared "other"
 }
 
 // Commonly (but not always), IDs are SNPid identifiers like "rs17030902". We store the ID divided to 2:
@@ -660,7 +660,7 @@ bool seg_integer_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_byt
         return true;
     }
 
-    // case: non-numeric snip
+    // case: non-numeric snip or if no_stons
     else { 
         seg_by_ctx (VB, STRa(value), ctx, add_bytes);
         return false;
@@ -668,7 +668,7 @@ bool seg_integer_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_byt
 }
 
 // segs a fixed width, 0-padded, non-negative integer - decimal, hex or HEX
-void seg_numeric_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned field_width, unsigned add_bytes)
+void seg_numeric_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_bytes)
 {
 #ifdef DEBUG
     ASSERT (segconf.running || ctx->ltype >= LT_DYN_INT, "Expecting %s.ltype to be DYN_INT*", ctx->tag_name);
@@ -682,9 +682,9 @@ void seg_numeric_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned field_w
                     :                                 str_get_int_dec (STRa(value), (uint64_t*)&n);
 
     // case: its an integer
-    if (is_numeric) { // we interpret no_stons as means also no moving ints to local (one of the reasons is that an int might actually be a float)
+    if (is_numeric) { 
         seg_integer (vb, ctx, n, false, add_bytes);
-        seg_by_ctx (vb, (char[]){ SNIP_NUMERIC, '0'+ (ctx->ltype - LT_DYN_INT), '0' + field_width }, 3, ctx, 0);
+        seg_by_ctx (vb, (char[]){ SNIP_NUMERIC, '0'+ (ctx->ltype - LT_DYN_INT), '0' + value_len }, 3, ctx, 0);
     }
 
     // case: non-numeric snip
@@ -739,7 +739,6 @@ bool seg_float_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_bytes
 WordIndex seg_delta_vs_other_do (VBlockP vb, ContextP ctx, ContextP other_ctx, 
                                  STRp(value), // if value==NULL, we use value_n
                                  int64_t value_n,
-
                                  int64_t max_delta /* max abs value of delta - beyond that, seg as is, ignored if < 0 */,
                                  unsigned add_bytes)
 {
@@ -1055,9 +1054,9 @@ void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, const void *const data
 
 void seg_integer_fixed (VBlockP vb, ContextP ctx, void *number, bool with_lookup, unsigned add_bytes) 
 {
-    buf_alloc (vb, &ctx->local, 0, MAX_(ctx->local.len+1, 32768) * lt_desc[ctx->ltype].width, char, CTX_GROWTH, "contexts->local");
+    buf_alloc (vb, &ctx->local, 0, MAX_(ctx->local.len+1, 32768) * lt_width(ctx), char, CTX_GROWTH, "contexts->local");
 
-    switch (lt_desc[ctx->ltype].width) {
+    switch (lt_width(ctx)) {
         case 1  : BNXT8  (ctx->local) = *(uint8_t  *)number; break;
         case 2  : BNXT16 (ctx->local) = *(uint16_t *)number; break;
         case 4  : BNXT32 (ctx->local) = *(uint32_t *)number; break;
@@ -1197,8 +1196,6 @@ void seg_all_data_lines (VBlockP vb)
     ASSERT (!Ltxt || vb->reread_prescription.len || *BLSTtxt == '\n' || !DTP(vb_end_nl), "%s: %s txt_data unexpectedly doesn't end with a newline. Last 10 chars: \"%10s\"", 
             VB_NAME, dt_name(vb->data_type), Btxt (Ltxt - MIN_(10,Ltxt)));
 
-    ctx_initialize_predefined_ctxs (vb->contexts, vb->data_type, vb->d2d_map, &vb->num_contexts); // Create ctx for the fields in the correct order 
- 
     // allocate the b250 for the fields which each have num_lines entries
     for (Did did_i=0; did_i < DTF(num_fields); did_i++)
         if (segconf.b250_per_line[did_i]) 
@@ -1228,7 +1225,7 @@ void seg_all_data_lines (VBlockP vb)
     bool hash_hints_set_1_3 = false, hash_hints_set_2_3 = false;
     int64_t prev_increment = 0;
 
-    for (vb->line_i=0; vb->line_i < vb->lines.len; vb->line_i++) {
+    for (vb->line_i=0; vb->line_i < vb->lines.len32; vb->line_i++) {
 
         // increment progress indicator
         int64_t increment = BNUMtxt(field_start) - prev_increment;
@@ -1312,8 +1309,8 @@ void seg_all_data_lines (VBlockP vb)
                 segconf.b250_per_line[did_i] = (float)CTX(did_i)->b250.len32 / (float)vb->lines.len32;
     }
 
-    if (!segconf.running) 
-        __atomic_fetch_add (&z_file->comp_num_lines[vb->comp_i], vb->lines.len, __ATOMIC_RELAXED); 
+    //xxx if (!segconf.running) 
+    //     __atomic_fetch_add (&z_file->comp_num_lines[vb->comp_i], vb->lines.len, __ATOMIC_RELAXED); 
 
     ASSINP (vb->lines.len32 <= CON_MAX_REPEATS, // because top_level.repeats = vb->lines.len
             "Genozip works by dividing the file to \"VBlocks\". Unfortuantely, the VBlocks for this file are too big\n"

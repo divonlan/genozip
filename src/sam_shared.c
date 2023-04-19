@@ -81,7 +81,7 @@ void sam_vb_release_vb (VBlockSAMP vb)
     buf_free (vb->meth_call);
 }
 
-void sam_vb_destroy_vb (VBlockSAMP vb)
+void sam_destroy_vb (VBlockSAMP vb)
 {
     buf_destroy (vb->interlaced);
     buf_destroy (vb->XG);
@@ -97,6 +97,24 @@ void sam_vb_destroy_vb (VBlockSAMP vb)
     buf_destroy (vb->qname_count);
     buf_destroy (vb->unconverted_bitmap);
     buf_destroy (vb->meth_call);
+}
+
+void sam_erase_vb_bufs (VBlockSAMP vb)
+{
+    buf_erase (vb->interlaced);
+    buf_erase (vb->XG);
+    buf_erase (vb->textual_cigar);
+    buf_erase (vb->binary_cigar);
+    buf_erase (vb->textual_seq);
+    buf_erase (vb->md_M_is_ref);
+    buf_erase (vb->sag_grps);
+    buf_erase (vb->sag_alns);
+    buf_erase (vb->sa_prim_cigars);
+    buf_erase (vb->qname_hash);
+    buf_erase (vb->line_textual_cigars);
+    buf_erase (vb->qname_count);
+    buf_erase (vb->unconverted_bitmap);
+    buf_erase (vb->meth_call);
 }
 
 // initialization of the line

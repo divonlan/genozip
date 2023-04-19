@@ -27,16 +27,44 @@ static const struct {rom name; uint32_t header_size; } abouts[NUM_SEC_TYPES] = S
 
 const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES] = LOCALTYPE_DESC;
 
-typedef struct {
-    Section first_sec, last_sec;
-    Section next_vb_same_comp_sec; // linked list of VBs of the same comp. final VB is NULL.
+typedef struct SectionsVbIndexEnt {
+    int32_t vb_header_sec_i, last_sec_i; // -1 if none
+    struct SectionsVbIndexEnt *next_vb_of_comp; // linked list of VBs of the same comp. list is terminated with -1. VBs are in the order they appear in section list, not necessarily consecutive vb_i's.
 } SectionsVbIndexEnt;
 
 typedef struct {
-    Section txt_header_sec, bgzf_sec, recon_plan_sec[2];
-    uint32_t first_vb_i, num_vbs;
-    SectionsVbIndexEnt *first_vb_index_ent, *last_vb_index_ent; // first and last VB in this component - in the order the appear in the section list (not necessarily consecutive vb_i)
+    int32_t txt_header_sec_i, bgzf_sec_i, recon_plan_sec_i[2];
+    VBIType first_vb_i, num_vbs;
+    SectionsVbIndexEnt *first_vb_of_comp, *last_vb_of_comp; // first and last VB in this component - in the order the appear in the section list (not necessarily consecutive vb_i)
 } SectionsCompIndexEnt;
+
+static Section Bsec (int32_t sec_i)
+{
+    if (sec_i == -1)
+        return NULL;
+
+    else if (sec_i < z_file->section_list_buf.len32)
+        return B(SectionEnt, z_file->section_list_buf, sec_i);
+
+    else
+        ABORT_R ("sec_i=%d out of range [0,%u]", sec_i, z_file->vb_sections_index.len32-1);
+}
+
+static const SectionsVbIndexEnt *Bvbindex (VBIType vb_i)
+{
+    ASSERT (vb_i >= 1 && vb_i < z_file->vb_sections_index.len32, "vb_i=%u out of range [0,%u]", vb_i, z_file->vb_sections_index.len32-1);
+
+    const SectionsVbIndexEnt *vb_index_ent = B(SectionsVbIndexEnt, z_file->vb_sections_index, vb_i);
+    return vb_index_ent;
+}
+
+static const SectionsCompIndexEnt *Bcompindex (CompIType comp_i)
+{
+    ASSERT (comp_i < z_file->comp_sections_index.len32, "comp_i=%u out of range [0,%u]", comp_i, z_file->comp_sections_index.len32-1);
+
+    const SectionsCompIndexEnt *comp_index_ent = B(SectionsCompIndexEnt, z_file->comp_sections_index, comp_i);
+    return comp_index_ent;
+}
 
 // ZIP only: create section list that goes into the genozip header, as we are creating the sections. returns offset
 void sections_add_to_list (VBlockP vb, ConstSectionHeaderP header)
@@ -53,9 +81,9 @@ void sections_add_to_list (VBlockP vb, ConstSectionHeaderP header)
     if (IS_DICTED_SEC(st)) {
         switch (st) {
             case SEC_DICT   : dict_id = ((SectionHeaderDictionaryP)header)->dict_id; break;
-            case SEC_B250   : dict_id = ((SectionHeaderCtx        *)header)->dict_id; break;
-            case SEC_LOCAL  : dict_id = ((SectionHeaderCtx        *)header)->dict_id; break;
-            case SEC_COUNTS : dict_id = ((SectionHeaderCounts     *)header)->dict_id; break;
+            case SEC_B250   : dict_id = ((SectionHeaderCtxP       )header)->dict_id; break;
+            case SEC_LOCAL  : dict_id = ((SectionHeaderCtxP       )header)->dict_id; break;
+            case SEC_COUNTS : dict_id = ((SectionHeaderCountsP    )header)->dict_id; break;
             default         : ABORT0 ("new section type with dict_id?");
         }
         ASSERT0 (dict_id.num, "dict_id=0");
@@ -69,8 +97,8 @@ void sections_add_to_list (VBlockP vb, ConstSectionHeaderP header)
         .comp_i    = IS_COMP_SEC(st) ? vb->comp_i : COMP_NONE,
         .offset    = vb->z_data.len,  // this is a partial offset (within d) - we will correct it later
         .flags     = header->flags,
-        .num_lines = st==SEC_VB_HEADER ? vb->lines.len32 : 0, 
-        .num_deep_lines = (st==SEC_VB_HEADER && (VB_DT(SAM) || VB_DT(BAM))) ? vb->lines.count : 0, // alignments that are not SUPPLEMENTARY or SECONDARY
+        .num_lines = ST(VB_HEADER) ? vb->lines.len32 : 0, 
+        .num_deep_lines = (ST(VB_HEADER) && (VB_DT(SAM) || VB_DT(BAM))) ? vb->lines.count : 0, // alignments that are not SUPPLEMENTARY or SECONDARY
         .size      = BGEN32 (header->compressed_offset) + BGEN32 (header->data_compressed_len)
     };
 
@@ -155,25 +183,6 @@ bool sections_prev_sec2 (Section *sl_ent,   // optional in/out. if NULL - search
     return false;
 }
 
-// section iterator. skips to the last consecutive section from after sec, that is type st1-4
-Section sections_last_sec4 (Section sec, SectionType st1, SectionType st2, SectionType st3, SectionType st4)
-{
-    ASSERT (!sec || (sec >= B1ST(SectionEnt, z_file->section_list_buf) && sec <= BLST(SectionEnt, z_file->section_list_buf)),
-           "Invalid sec: st1=%s st2=%s st3=%s st4=%s", st_name (st1), st_name (st2), st_name (st3), st_name (st4));
-
-    while (sec < BLST (SectionEnt, z_file->section_list_buf)) {
-
-        sec = sec ? (sec + 1) : B1ST (SectionEnt, z_file->section_list_buf); 
-
-        if (!((st1 != SEC_NONE && sec->st == st1) ||
-              (st2 != SEC_NONE && sec->st == st2) ||
-              (st3 != SEC_NONE && sec->st == st3) ||
-              (st4 != SEC_NONE && sec->st == st4))) break;
-    } 
-    
-    return sec - 1; // sec is either on the first section that is NOT st*, or all sections are st* we are now after the section list - so we decrement it
-}
-
 // count how many sections we have of a certain type
 uint32_t sections_count_sections_until (SectionType st, Section first_sec, SectionType until_encountering)
 {
@@ -193,133 +202,113 @@ uint32_t sections_count_sections_until (SectionType st, Section first_sec, Secti
     return count;
 }
 
-static CompIType sections_calculate_num_comps (void)
-{
-    ARRAY (SectionEnt, secs, z_file->section_list_buf);
-    CompIType max_comp_i = 0;
-
-    for (uint32_t i=0; i < secs_len; i++) 
-        if ((secs[i].st == SEC_VB_HEADER || secs[i].st == SEC_TXT_HEADER) && secs[i].comp_i > max_comp_i)
-            max_comp_i = secs[i].comp_i;
-
-    return max_comp_i + 1;
-}
-
 // -------------------
 // VBs
 // -------------------
 
-// PIZ
-// note: not all VBs and components in the z_file are in the section list or its index - some might have been removed
-// from the section list by the recon_plan (eg in DVCF we remove the unneeded component for the rendition) 
-static void sections_create_index (bool force)
+// PIZ: called twice: once when z_file is opened, and once from sections_commit_new_list (after some VBs have been removed by the recon_plan)
+// ZIP: called after each txt_file is zipped into a z_file
+void sections_create_index (void)
 {
+    START_TIMER;
+
     ASSERTMAINTHREAD;
 
-    // case: section_list_buf has been realloced: re-create the index
-    if (z_file->comp_sections_index.len && z_file->section_list_buf.data != z_file->comp_sections_index.pointer) {
+    if (Z_DT(REF)) return; // reference files have no components or VBs (save time)
+
+    // free existing index in case it is being re-created (after each txt_file is compressed)
+    if (IS_ZIP) {
         buf_free (z_file->comp_sections_index); 
         buf_free (z_file->vb_sections_index);
     }
 
-    if (!force && z_file->comp_sections_index.len) return; // already created
+    ARRAY_alloc (SectionsVbIndexEnt, vb_index, z_file->num_vbs + 1, true, z_file->vb_sections_index, evb, "z_file->vb_sections_index"); // +1 bc vb_i is 1-based
+    ARRAY_alloc (SectionsCompIndexEnt, comp_index, z_file->num_components, true, z_file->comp_sections_index, evb, "z_file->comp_sections_index");
 
-    if (IS_PIZ && !z_file->num_vbs)
-        z_file->num_vbs = sections_count_sections (SEC_VB_HEADER);
+    // initialize
+    for (int i=0; i < vb_index_len; i++)
+        vb_index[i].vb_header_sec_i = vb_index[i].last_sec_i = -1;
 
-    CompIType num_comps = sections_calculate_num_comps(); 
+    for (int i=0; i < comp_index_len; i++)
+        comp_index[i].bgzf_sec_i = comp_index[i].txt_header_sec_i = 
+        comp_index[i].recon_plan_sec_i[0] = comp_index[i].recon_plan_sec_i[1] = -1;
 
-    ARRAY_alloc (SectionsVbIndexEnt, vb_index, z_file->num_vbs + 1, true, z_file->vb_sections_index, evb, "z_file->vb_sections_index"); // +2: +1 bc vb_i is 1-based
-    ARRAY_alloc (SectionsCompIndexEnt, comp_index, num_comps, true, z_file->comp_sections_index, evb, "z_file->comp_sections_index");
-    ARRAY (SectionEnt, sec, z_file->section_list_buf);
+    // populate index
+    SectionsVbIndexEnt *vbinx = NULL; // if non-NULL, we're within a VB section block
+    for_buf2 (SectionEnt, sec, sec_i, z_file->section_list_buf) {
+        if (sec->st == SEC_B250 || sec->st == SEC_LOCAL) continue; // short circuit
 
-    z_file->comp_sections_index.pointer = z_file->section_list_buf.data; // used to detect reallocs
+        SectionsCompIndexEnt *comp = &comp_index[sec->comp_i];
 
-    for (uint32_t sec_i=0; sec_i < sec_len; sec_i++) {
-    
-        CompIType comp_i = sec[sec_i].comp_i;
-        
-        switch (sec[sec_i].st) {
-            
+        // case: we passed the last B250/LOCAL section of the VB 
+        if (vbinx) {
+            vbinx->last_sec_i = sec_i - 1;
+            vbinx = NULL;
+        }
+
+        switch (sec->st) {
             case SEC_TXT_HEADER : 
-                if (!comp_index[comp_i].txt_header_sec) comp_index[comp_i].txt_header_sec = &sec[sec_i]; // first fragment of txt header
+                if (comp->txt_header_sec_i == -1) // store first fragment of txt header
+                    comp->txt_header_sec_i = sec_i; 
                 break;
             
             case SEC_BGZF : 
-                comp_index[comp_i].bgzf_sec = &sec[sec_i]; 
+                comp->bgzf_sec_i = sec_i; 
                 break;
 
             case SEC_RECON_PLAN : {
-                bool is_luft_plan = sec[sec_i].flags.recon_plan.luft;
-                if (!comp_index[comp_i].recon_plan_sec[is_luft_plan]) // save first fragment
-                    comp_index[comp_i].recon_plan_sec[is_luft_plan] = &sec[sec_i]; 
+                bool is_luft_plan = sec->flags.recon_plan.luft;
+                if (comp->recon_plan_sec_i[is_luft_plan] == -1) // save first fragment
+                    comp->recon_plan_sec_i[is_luft_plan] = sec_i; 
                 break;
             }
 
             // note: in ZIP, VBs are written out-of-order, so some VBs might still not be written and hence their index entry will remain empty
             case SEC_VB_HEADER : {
-                VBIType vb_i = sec[sec_i].vblock_i;
+                VBIType vb_i = sec->vblock_i;
                 
                 ASSERT (vb_i>=1 && vb_i < z_file->vb_sections_index.len32, "Bad vb_i=%u, z_file->vb_sections_index.len=%u", vb_i, z_file->vb_sections_index.len32);
                 
-                vb_index[vb_i] = (SectionsVbIndexEnt){
-                    .first_sec = &sec[sec_i],
-                    .last_sec  = sections_last_sec4 (&sec[sec_i], SEC_B250, SEC_LOCAL, SEC_NONE, SEC_NONE)
-                };
+                vbinx = &vb_index[vb_i];
+                *vbinx = (SectionsVbIndexEnt){ .vb_header_sec_i = sec_i };
 
-                if (!comp_index[comp_i].first_vb_i || vb_i < comp_index[comp_i].first_vb_i) 
-                    comp_index[comp_i].first_vb_i = vb_i; // first vb_i in numerical order of vb_i
+                if (!comp->first_vb_i || vb_i < comp->first_vb_i) 
+                    comp->first_vb_i = vb_i; // first vb_i in numerical order of vb_i
 
-                if (!comp_index[comp_i].first_vb_index_ent)
-                    comp_index[comp_i].first_vb_index_ent = &vb_index[vb_i]; // first VB in the order it appears in the section list (not necessarily the lowest vb_i)
+                if (!comp->first_vb_of_comp)
+                    comp->first_vb_of_comp = vbinx; // first VB in the order it appears in the section list (not necessarily the lowest vb_i)
 
-                else // link to previous VB in this component (not necessarily consecutive in the file)
-                    comp_index[comp_i].last_vb_index_ent->next_vb_same_comp_sec = &sec[sec_i];
+                else // link to previous VB in this component (consecutive in section list, but not necessarilty consecutive vb_i)
+                    comp->last_vb_of_comp->next_vb_of_comp = vbinx;
                     
-                comp_index[comp_i].last_vb_index_ent = &vb_index[vb_i]; // last so far
-                comp_index[comp_i].num_vbs++;
-                sec_i = BNUM (z_file->section_list_buf, vb_index[vb_i].last_sec);
+                comp->last_vb_of_comp = vbinx; // last so far
+                comp->num_vbs++;
                 break;
             }
 
             default: break;
         }
     }
+
+    COPY_TIMER_EVB (sections_create_index);
 }
 
 // ZIP / PIZ: returns the SEC_VB_HEADER section, or NULL if this vb_i doesn't exist
-Section sections_vb_header (VBIType vb_i, FailType soft_fail)
-{
-    // note regarding use in ZIP: creates index in the first call only, but that's ok for our use cases in 
-    // --pair (called in R2 to enquire about the R1 VBs) and --deep (called zip_finalize of the SAM txt file to enquire about the SAM VBs)
-    sections_create_index (false); 
+Section sections_vb_header (VBIType vb_i)
+{    
+    uint32_t vb_header_sec_i = Bvbindex(vb_i)->vb_header_sec_i;
+    Section sec = Bsec(vb_header_sec_i);
     
-    ASSERTNOTEMPTY (z_file->vb_sections_index);
-    
-    if (vb_i <= z_file->num_vbs) {
-        Section sec = B(SectionsVbIndexEnt, z_file->vb_sections_index, vb_i)->first_sec;
-        if (!sec) goto fail; // this can happen in ZIP, as VBs are written to the z_file out of order 
+    // sanity
+    ASSERT (sec, "vb_i=%u fits in z_file->vb_sections_index, but it is not indexed", vb_i);
+    ASSERT (sec->st == SEC_VB_HEADER, "Expecting indexed VB section of vb_i=%u to have st=VB_HEADER but it has st=%s", vb_i, st_name(sec->st));
 
-        return sec;
-    }
-    else 
-        return NULL;
-
-fail:
-    if (soft_fail) return NULL;
-    ABORT_R ("cannot find SEC_VB_HEADER for vb_i=%u", vb_i);
+    return sec;
 }
 
 Section sections_one_before (Section sec) 
 { 
     return (!sec || sec == B1ST (SectionEnt, z_file->section_list_buf)) ? NULL : sec-1; 
-}
-
-// PIZ
-Section sections_vb_last (VBIType vb_i)
-{
-    ASSERT (vb_i <= z_file->num_vbs, "Bad vb_i=%u, max is %u", vb_i, z_file->num_vbs);
-    return B(SectionsVbIndexEnt, z_file->vb_sections_index, vb_i)->last_sec;
 }
 
 //---------------------------------------------
@@ -328,31 +317,28 @@ Section sections_vb_last (VBIType vb_i)
 
 void sections_new_list_add_vb (BufferP new_list, VBIType vb_i)
 {
-    SectionsVbIndexEnt *vbent = B(SectionsVbIndexEnt, z_file->vb_sections_index, vb_i);
-    uint32_t num_sections = vbent->last_sec - vbent->first_sec + 1;
+    const SectionsVbIndexEnt *vbent = Bvbindex(vb_i);
+    uint32_t num_sections = vbent->last_sec_i - vbent->vb_header_sec_i + 1;
 
-    memcpy (BAFT (SectionEntModifiable, *new_list), vbent->first_sec, num_sections * sizeof (SectionEnt));
+    memcpy (BAFT (SectionEntModifiable, *new_list), Bsec(vbent->vb_header_sec_i), num_sections * sizeof (SectionEnt));
     new_list->len += num_sections;
 }
 
 void sections_new_list_add_txt_header (BufferP new_list, CompIType comp_i)
 {
-    SectionsCompIndexEnt *compent = B(SectionsCompIndexEnt, z_file->comp_sections_index, comp_i);
-    
-    // add all fragment of the txt_header of this component
-    for (const SectionEntModifiable *ent = compent->txt_header_sec ; ent->st == SEC_TXT_HEADER && ent->comp_i==comp_i ; ent++)
-        BNXT (SectionEntModifiable, *new_list) = *ent;
+    // add all fragments of the txt_header of this component
+    for (Section sec = sections_get_comp_txt_header_sec (comp_i); 
+         sec->st == SEC_TXT_HEADER && sec->comp_i == comp_i; 
+         sec++)
+        BNXT (SectionEntModifiable, *new_list) = *sec;
 }
 
 // PIZ: If any of the components has a SEC_BGZF add it
 void sections_new_list_add_bgzf (BufferP new_list)
 {
-    for (CompIType comp_i=0; comp_i < z_file->comp_sections_index.len; comp_i++) {
-        SectionsCompIndexEnt *comp = B(SectionsCompIndexEnt, z_file->comp_sections_index, comp_i);
-
-        if (comp->bgzf_sec) 
-            BNXT (SectionEntModifiable, *new_list) = *comp->bgzf_sec;
-    } 
+    for_buf2 (SectionsCompIndexEnt, comp, comp_i, z_file->comp_sections_index)
+        if (comp->bgzf_sec_i != -1) 
+            BNXT (SectionEntModifiable, *new_list) = *Bsec(comp->bgzf_sec_i);
 }
 
 void sections_new_list_add_global_sections (BufferP new_list)
@@ -369,7 +355,7 @@ void sections_new_list_add_global_sections (BufferP new_list)
     buf_append (NULL, *new_list, SectionEntModifiable, sec, BAFT(SectionEnt, z_file->section_list_buf) - sec, NULL);
 }
 
-// replace current section list with the new list (if one exists)
+// PIZ: replace current section list with the new list (if one exists)
 void sections_commit_new_list (BufferP new_list)
 {
     if (!new_list->len) return;
@@ -380,14 +366,70 @@ void sections_commit_new_list (BufferP new_list)
     buf_destroy (z_file->section_list_buf);
     buf_move (evb, &z_file->section_list_buf, evb, new_list); // note: in writer, tf_ent[]->last_sec points into new_list (which won't work if we ever change buf_move to buf_copy)
 
-    sections_create_index (true);
+    sections_create_index();
 }
 
 //---------------
 // misc functions
 //---------------
 
-// ZIP
+// up to v14
+static void v14_sections_list_file_to_memory_format (void)
+{
+    ARRAY (const SectionEntFileFormatV14, file_sec, z_file->section_list_buf); // file format
+
+    for_buf2_back (SectionEntModifiable, sec, i, z_file->section_list_buf) {
+        SectionEntFileFormatV14 fsec = file_sec[i]; // make a copy as assignment is overlapping
+        
+        *sec = (SectionEntModifiable){
+            .offset      = BGEN64 (fsec.offset),
+            .st_specific = fsec.st_specific,  
+            .vblock_i    = BGEN32 (fsec.vblock_i),
+            .st          = fsec.st,
+            .comp_i      = (VER(14) && IS_COMP_SEC(fsec.st)) ? fsec.comp_i : COMP_NONE, // note: this field was introduced in v14: COMP_NONE sections have 0, as comp_i is just 2 bit. 
+            .flags       = VER(12) ? fsec.flags  : (SectionFlags){} // prior to v12, flags were stored only in SectionHeader. Since v12, they are also copied to SectionEntFileFormat.
+        };
+
+        if (sec->st == SEC_VB_HEADER) {
+            sec->num_lines  = BGEN32 (sec->num_lines);        
+            z_file->num_vbs = MAX_(z_file->num_vbs, sec->vblock_i);
+
+            if (sec->comp_i != COMP_NONE) {
+                z_file->comp_num_lines[sec->comp_i] += sec->num_lines;
+                z_file->num_components = MAX_(z_file->num_components, sec->comp_i);
+            }
+        }    
+
+        else if (sec->st == SEC_TXT_HEADER && sec->comp_i != COMP_NONE)
+            z_file->num_components = MAX_(z_file->num_components, sec->comp_i);
+
+        if (i < file_sec_len-1)
+            sec->size = (sec+1)->offset - sec->offset;
+    }
+
+    // comp_i was introduced V14, for V<=13, get comp_i by the component's relative position in the file. 
+    if (VER(14)) 
+        z_file->num_components++; // one more than the max comp_i
+
+    else {
+        CompIType comp_i_by_consecutive = COMP_NONE; 
+
+        for_buf (SectionEntModifiable, sec, z_file->section_list_buf) {
+            if (sec->st == SEC_TXT_HEADER) comp_i_by_consecutive++; // note: we only read bound V<=13 files if the are a single FQ pair, or a DVCF
+
+            if (IS_COMP_SEC(sec->st))
+                sec->comp_i = comp_i_by_consecutive; 
+
+            // Up to V11, flags were stored only in SectionHeader
+            if (!VER(12)) 
+                sec->flags = zfile_read_section_header (evb, sec, SEC_NONE).common.flags;
+        }
+
+        z_file->num_components = comp_i_by_consecutive + 1; // one more than the max comp_i
+    }
+}
+
+// ZIP (see also bug 819)
 void sections_list_memory_to_file_format (bool in_place) // in place, or to evb->scratch for testing codec
 {
     if (!in_place) { // just generating for codec testing
@@ -397,23 +439,54 @@ void sections_list_memory_to_file_format (bool in_place) // in place, or to evb-
     }
 
     BufferP out = in_place ? &z_file->section_list_buf : &evb->scratch;
-    ARRAY (const SectionEntModifiable, mem_sec, z_file->section_list_buf); // memory format (entries are larger)
-    ARRAY (SectionEntFileFormat, file_sec, *out); // file format
+
+    // replace dict_id with the the sec_i of its first appearahce. 
+    int32_t first_appearance[z_file->num_contexts];
+    memset (first_appearance, 255, z_file->num_contexts * sizeof (int32_t));
+
+    SectionEntModifiable prev_sec = {};
+    uint32_t prev_num_lines = 0;
+    for_buf2 (SectionEntFileFormat, fsec, i, *out) {
+        SectionEnt sec = *B(SectionEnt, z_file->section_list_buf, i); // copy before it gets overwritten
         
-    for (uint32_t i=0; i < file_sec_len; i++) {
-        file_sec[i] = (SectionEntFileFormat){
-            .vblock_i    = BGEN32 (mem_sec[i].vblock_i),
-            .comp_i      = mem_sec[i].comp_i,  // since v14. in v14 comp_i was 2 bits so COMP_NONE was 0, since v15 comp_i is 8 bits.
-            .offset      = BGEN64 (mem_sec[i].offset),
-            .st_specific = mem_sec[i].st_specific, 
-            .st          = mem_sec[i].st,
-            .flags       = mem_sec[i].flags    // since v12
-        };
-    
-        if (mem_sec[i].st == SEC_VB_HEADER) {
-            file_sec[i].num_lines      = BGEN32 (file_sec[i].num_lines);
-            file_sec[i].num_deep_lines = BGEN32 (file_sec[i].num_deep_lines);
+        int64_t offset_delta = (int64_t)sec.offset - (int64_t)prev_sec.offset;
+        ASSERT (offset_delta >=0LL && offset_delta <= 0xffffffffLL,  // note: offset_delta is size of previous section
+                "section_i=%u size=%"PRId64" st=%s is too big", i-1, offset_delta, st_name ((fsec-1)->st));
+
+        int32_t vb_delta = INTERLACE(int32_t, (int32_t)sec.vblock_i - (int32_t)prev_sec.vblock_i);
+
+        *fsec = (SectionEntFileFormat){
+            .vblock_i_delta = BGEN32 (vb_delta),
+            .comp_i_plus_1  = (i && sec.comp_i == prev_sec.comp_i) ? 0 
+                            : (sec.comp_i == COMP_NONE)            ? COMP_NONE
+                            :                                        (1 + sec.comp_i),  
+            .offset_delta   = BGEN32 ((uint32_t)offset_delta),
+            .st             = sec.st,
+            .flags          = sec.flags    // since v12
+        }; 
+
+        if (IS_DICTED_SEC(sec.st)) {
+            Did did_i = ctx_get_existing_zctx (sec.dict_id)->did_i;
+            if (first_appearance[did_i] == -1) {
+                fsec->dict_id = sec.dict_id;
+                first_appearance[did_i] = i;
+            }
+            else 
+                fsec->dict_sec_i = BGEN32 (first_appearance[did_i]);
         }
+
+        // To do: num_lines - delta from prev_num_lines ; num_deep_lines non-zero only if deep&SAM - -delta vs num_lines
+        // tested, but these make BZ2 compression worse
+        else if (sec.st == SEC_VB_HEADER) {
+            int32_t num_lines_delta = INTERLACE(int32_t, (int32_t)sec.num_lines - (int32_t)prev_num_lines);
+            prev_num_lines = sec.num_lines;
+
+            fsec->num_lines = BGEN32 (num_lines_delta);
+            if (flag.deep && (sec.comp_i == SAM_COMP_MAIN || sec.comp_i == SAM_COMP_PRIM))
+                fsec->num_non_deep_lines = BGEN32(sec.num_lines - sec.num_deep_lines);
+        }
+
+        prev_sec = sec;
     }
 
     out->len *= sizeof (SectionEntFileFormat); // change to counting bytes
@@ -425,80 +498,84 @@ void sections_list_file_to_memory_format (SectionHeaderGenozipHeaderP genozip_he
     struct FlagsGenozipHeader f = genozip_header->flags.genozip_header;
     DataType dt = BGEN16 (genozip_header->data_type);
 
-    // For files v13 and earlier, we can only read them if they are a single component, or two paired FASTQs, or DVCF
+    // For files v13 or earlier, we can only read them if they are a single component, or two paired FASTQs, or DVCF
     // Other bound files need to be decompressed with Genozip v13
     uint32_t v13_num_components = BGEN32 (genozip_header->v13_num_components);
-    ASSINP (VER(14) || 
-            v13_num_components == 1 || // single file
-            (dt == DT_VCF && f.has_gencomp) || // DVCF
-            (dt == DT_FASTQ && (f.dts_paired || !VER(10)) && v13_num_components == 2) || // Paired FASTQs (the dts_paired flag was introduced in V9.0.13)
-            is_genols ||
+    ASSINP (VER(14)                         || 
+            v13_num_components == 1         ||   // single file
+            (dt == DT_VCF && f.has_gencomp) ||   // DVCF
+            (dt == DT_FASTQ && f.v14_dts_paired && v13_num_components == 2) || // Paired FASTQs (the v14_dts_paired flag was introduced in V9.0.13)
+            is_genols                       ||
             flags_is_genocat_global_area_only(), // only show meta-data (can't use flag.genocat_global_area_only bc flags are not set yet)
             "%s is comprised of %u %s files bound together. The bound file feature was discontinued in Genozip v14. To decompress this file, use Genozip v13",
             z_name, v13_num_components, dt_name (BGEN16(genozip_header->data_type)));
     
-    // treat V8/V9 genozip files containing two FASTQ components as paired (the dts_paired flag was introduced in V9.0.13)    
-    if (dt == DT_FASTQ && !VER(10) && v13_num_components == 2) 
-        z_file->z_flags.dts_paired = true; 
-
-    z_file->section_list_buf.len /= sizeof (SectionEntFileFormat); // fix len
+    z_file->section_list_buf.len /= VER(15) ? sizeof (SectionEntFileFormat) : sizeof (SectionEntFileFormatV14); // fix len
 
     buf_alloc (evb, &z_file->section_list_buf, 0, z_file->section_list_buf.len, SectionEnt, 0, NULL); // extend
 
-    ARRAY (SectionEntModifiable, mem_sec,  z_file->section_list_buf); // memory format (entries are larger)
-    ARRAY (const SectionEntFileFormat, file_sec, z_file->section_list_buf); // file format
+    if (VER(15)) {
+        ARRAY (const SectionEntFileFormat, file_sec, z_file->section_list_buf);  // file format
 
-    // note: we work backwards as mem_sec items are larger than file_sec
-    for (int i=file_sec_len-1; i >= 0; i--) {
-        SectionEntFileFormat sec = file_sec[i]; // make a copy as assignment is overlapping
-        
-        mem_sec[i] = (SectionEntModifiable){
-            .offset      = BGEN64 (sec.offset),
-            .st_specific = sec.st_specific,  
-            .vblock_i    = BGEN32 (sec.vblock_i),
-            .st          = sec.st,
-            .comp_i      = (VER(14) && IS_COMP_SEC(sec.st)) ? sec.comp_i : COMP_NONE, // note: in file format v14, COMP_NONE sections have 0, as comp_i is just 2 bit. Since v15, ccmp_i is 8 bit and COMP_NONE is 255.
-            .flags       = VER(12) ? sec.flags  : (SectionFlags){} // flags were introduced in v12
-        };
-
-        if (mem_sec[i].st == SEC_VB_HEADER) {
-            mem_sec[i].num_lines      = BGEN32 (mem_sec[i].num_lines);        
-            mem_sec[i].num_deep_lines = BGEN32 (mem_sec[i].num_deep_lines);
-            z_file->comp_num_lines[mem_sec[i].comp_i] += mem_sec[i].num_lines;
-            z_file->num_vbs = MAX_(z_file->num_vbs, mem_sec[i].vblock_i);
-        }      
-
-        if (i < file_sec_len-1)
-            mem_sec[i].size = mem_sec[i+1].offset - mem_sec[i].offset;
-    }
-
-    // comp_i was introduced V14, for V<=13, get comp_i by the component's relative position in the file. 
-    if (!VER(14)) {
-        CompIType comp_i_by_consecutive = COMP_NONE; 
-
-        for (int i=0; i < mem_sec_len; i++) {
-            SectionEntModifiable sec = mem_sec[i]; // make a copy as assignment is overlapping
+        // note: we work backwards as mem_sec items are larger than file_sec
+        for_buf2_back (SectionEntModifiable, sec, i, z_file->section_list_buf) { // memory format (entries are larger)
+            SectionEntFileFormat fsec = file_sec[i]; // make a copy as assignment is overlapping
             
-            if (sec.st == SEC_TXT_HEADER) comp_i_by_consecutive++; // note: we only read bound V<=13 files if the are a single FQ pair, or a DVCF
-
-            if (IS_COMP_SEC(sec.st))
-                mem_sec[i].comp_i = comp_i_by_consecutive; 
+            *sec = (SectionEntModifiable){
+                .offset      = BGEN32(fsec.offset_delta),
+                .st_specific = fsec.st_specific,  
+                .vblock_i    = DEINTERLACE (int32_t, (int32_t)BGEN32 (fsec.vblock_i_delta)),
+                .st          = fsec.st,
+                .comp_i      = fsec.comp_i_plus_1, 
+                .flags       = fsec.flags
+            };
         }
+
+        // finalize values  
+        int32_t prev_num_lines = 0;
+        for_buf2 (SectionEntModifiable, sec, i, z_file->section_list_buf) {
+            if (i) (sec-1)->size = sec->offset;
+            if (i) sec->offset += (sec-1)->offset;
+
+            sec->comp_i = (sec->comp_i == 0)         ? (sec-1)->comp_i
+                        : (sec->comp_i == COMP_NONE) ? COMP_NONE
+                        :                              (sec->comp_i - 1);
+            sec->vblock_i = i ? (int32_t)(sec-1)->vblock_i + (int32_t)sec->vblock_i : (int32_t)sec->vblock_i;
+
+            if (IS_DICTED_SEC(sec->st) && !sec->is_dict_id) 
+                sec->dict_id = (sec - i + BGEN32(sec->dict_sec_i))->dict_id; // copy from section of first appearance of this dict_id
+
+            else if (sec->st == SEC_VB_HEADER) {
+                sec->num_lines      = prev_num_lines + DEINTERLACE(int32_t, (int32_t)BGEN32 (sec->num_lines/*this is still delta_num_lines*/));
+                prev_num_lines      = sec->num_lines;
+                sec->num_deep_lines = sec->num_lines - BGEN32 (sec->num_deep_lines/*this is still num_non_deep_lines*/);
+                z_file->num_vbs     = MAX_(z_file->num_vbs, sec->vblock_i);
+
+                z_file->comp_num_lines[sec->comp_i] += sec->num_lines;
+            }    
+
+            if (sec->st == SEC_VB_HEADER || sec->st == SEC_TXT_HEADER)
+                z_file->num_components = MAX_(z_file->num_components, sec->comp_i);
+        }
+    
+        z_file->num_components++; // one more than the max comp_i
     }
 
-    mem_sec[file_sec_len-1].size = BGEN32 (genozip_header->data_compressed_len) + 
-                                   BGEN32 (genozip_header->compressed_offset) + 
-                                   sizeof (SectionFooterGenozipHeader);
+    else  // up to v14
+        v14_sections_list_file_to_memory_format();
 
-    sections_create_index (true);
+    BLST(SectionEntModifiable, z_file->section_list_buf)->size =
+        BGEN32 (genozip_header->data_compressed_len) + BGEN32 (genozip_header->compressed_offset) + sizeof (SectionFooterGenozipHeader);
 
+    sections_create_index(); // PIZ initial indexing, we will index again after recon_plan potentially removes some VBs
+    
     // Up to V11, top_level_repeats existed (called num_lines) but was not populated
     // in V12-13 num_lines was transmitted through the VbHeader.top_level_repeats
     // Since V14, num_lines is transmitted through SectionEntFileFormat
     if (VER(12) && !VER(14)) 
         for (VBIType vb_i=1; vb_i <= z_file->num_vbs; vb_i++) {
-            SectionEntModifiable *sec = (SectionEntModifiable *)sections_vb_header (vb_i, HARD_FAIL);
-            SectionHeaderUnion header = zfile_read_section_header (evb, sec->offset, vb_i, SEC_VB_HEADER);
+            SectionEntModifiable *sec = (SectionEntModifiable *)sections_vb_header (vb_i);
+            SectionHeaderUnion header = zfile_read_section_header (evb, sec, SEC_VB_HEADER);
             sec->num_lines = BGEN32 (header.vb_header.v13_top_level_repeats);
         }
 
@@ -507,16 +584,30 @@ void sections_list_file_to_memory_format (SectionHeaderGenozipHeaderP genozip_he
     buf_copy (evb, &z_file->section_list_save, &z_file->section_list_buf, SectionEnt, 0, 0, "z_file->section_list_save");
 
     if (z_file->num_vbs >= 1) {
-        z_file->section_list_save.prm32[0] = BNUM (z_file->section_list_buf, sections_vb_header (1, HARD_FAIL)); // VB=1 first_sec_i
-        z_file->section_list_save.prm32[1] = BNUM (z_file->section_list_buf, sections_vb_last(1));           // VB=1 last_sec_i
+        z_file->section_list_save.prm32[0] = Bvbindex(1)->vb_header_sec_i; 
+        z_file->section_list_save.prm32[1] = Bvbindex(1)->last_sec_i;
     }
     else
         z_file->section_list_save.param = 0;
 }
 
+// check if there is any DICT, LOCAL, B250 or COUNT section of a certain dict_id
+bool is_there_any_section_with_dict_id (DictId dict_id)
+{
+    for_buf (SectionEnt, sec, z_file->section_list_buf)
+        if (sec->dict_id.num == dict_id.num && sections_has_dict_id (sec->st))
+            return true;
+
+    return false;
+}
+
 rom st_name (SectionType sec_type)
 {
-    ASSERT (sec_type >= SEC_NONE && sec_type < NUM_SEC_TYPES, "sec_type=%u out of range [-1,%u]", sec_type, NUM_SEC_TYPES-1);
+    static char invalid[24]; // not thread safe, but not expected except in error situations
+    if (sec_type < SEC_NONE || sec_type >= NUM_SEC_TYPES) {
+        sprintf (invalid, "INVALID(%d)", sec_type);
+        return invalid;
+    }
 
     return (sec_type == SEC_NONE) ? "SEC_NONE" : type_name (sec_type, &abouts[sec_type].name , ARRAY_LEN(abouts));
 }
@@ -551,12 +642,12 @@ rom comp_name (CompIType comp_i)
 
 rom comp_name_ex (CompIType comp_i, SectionType st)
 {
-    if (IS_COMP_SEC (st))     return comp_name (comp_i);
-    if (st == SEC_REFERENCE)  return "REFR";
-    if (st == SEC_REF_IS_SET) return "REFR";
-    if (st == SEC_REF_HASH)   return "REFH";
-    if (st == SEC_DICT)       return "DICT";
-    else                      return "----";
+    if (IS_COMP_SEC(st)) return comp_name (comp_i);
+    if (ST(REFERENCE))   return "REFR";
+    if (ST(REF_IS_SET))  return "REFR";
+    if (ST(REF_HASH))    return "REFH";
+    if (ST(DICT))        return "DICT";
+    else                 return "----";
 }
 
 VbNameStr vb_name (VBlockP vb)
@@ -651,62 +742,81 @@ Section sections_last_sec (SectionType st, FailType soft_fail)
     return NULL;
 }
 
-CompIType sections_get_num_comps (bool force_create_index)
-{
-    sections_create_index (force_create_index);
-
-    return z_file->comp_sections_index.len;
-}
-
-static const SectionsCompIndexEnt *sections_get_comp_index_ent (CompIType comp_i)
-{
-    sections_create_index (false);
-
-    ASSERTNOTEMPTY(z_file->comp_sections_index);
-    ASSERT (comp_i < z_file->comp_sections_index.len, "comp_i=%u out of range [0,%u]", comp_i, (int)z_file->comp_sections_index.len-1);
-
-    const SectionsCompIndexEnt *comp_index_ent = B(SectionsCompIndexEnt, z_file->comp_sections_index, comp_i);
-    return comp_index_ent;
-}
-
 VBIType sections_get_num_vbs (CompIType comp_i) 
 { 
-    sections_create_index (false);
+    if (comp_i >= z_file->comp_sections_index.len32) return 0; // this component doesn't exist (can happen eg when checking for gencomp that doesn't exist in this file)
 
-    if (comp_i >= z_file->comp_sections_index.len) return 0; // this component doesn't exist (can happen eg when checking for gencomp that doesn't exist in this file)
-
-    return sections_get_comp_index_ent (comp_i)->num_vbs;
+    return Bcompindex(comp_i)->num_vbs;
 }
 
 VBIType sections_get_first_vb_i (CompIType comp_i) 
 { 
-    return sections_get_comp_index_ent (comp_i)->first_vb_i;
+    VBIType first_vb_i = Bcompindex(comp_i)->first_vb_i;
+    ASSERT (first_vb_i, "comp_i=%s has no VBs", comp_name (comp_i));
+    return first_vb_i;
 }
 
 Section sections_get_comp_txt_header_sec (CompIType comp_i)
 {
-    Section txt_header_sec = sections_get_comp_index_ent (comp_i)->txt_header_sec;
-    return txt_header_sec;
+    return Bsec(Bcompindex(comp_i)->txt_header_sec_i);
+}
+
+Section sections_get_comp_bgzf_sec (CompIType comp_i)
+{
+    return Bsec(Bcompindex(comp_i)->bgzf_sec_i);
 }
 
 Section sections_get_comp_recon_plan_sec (CompIType comp_i, bool is_luft_plan)
 {
-    return sections_get_comp_index_ent (comp_i)->recon_plan_sec[is_luft_plan];
+    return Bsec(Bcompindex(comp_i)->recon_plan_sec_i[is_luft_plan]);
 }
 
 // get next VB_HEADER in the order they appear in the section list (not necessarily consecutive vb_i)
-Section sections_get_next_vb_of_comp_sec (CompIType comp_i, Section *vb_sec)
+Section sections_get_next_vb_header_sec (CompIType comp_i, Section *vb_header_sec)
 {
-    const SectionsCompIndexEnt *comp_index_ent = sections_get_comp_index_ent (comp_i);
+    const SectionsCompIndexEnt *comp_index_ent = Bcompindex(comp_i);
 
-    if (! *vb_sec)
-        *vb_sec = comp_index_ent->first_vb_index_ent ? comp_index_ent->first_vb_index_ent->first_sec 
-                                                     : NULL; // component has no VBs
+    if (! *vb_header_sec)
+        *vb_header_sec = comp_index_ent->first_vb_of_comp ? 
+            Bsec(comp_index_ent->first_vb_of_comp->vb_header_sec_i) : NULL/*component has no VBs*/;
     
-    else 
-        *vb_sec = B(SectionsVbIndexEnt, z_file->vb_sections_index, (*vb_sec)->vblock_i)->next_vb_same_comp_sec;
+    else {
+        SectionsVbIndexEnt *next_vb_ent = Bvbindex((*vb_header_sec)->vblock_i)->next_vb_of_comp;
+        *vb_header_sec = next_vb_ent ? Bsec (next_vb_ent->vb_header_sec_i) : NULL;
+    }
 
-    return *vb_sec;
+    ASSERT (!(*vb_header_sec) || (*vb_header_sec)->st == SEC_VB_HEADER, 
+            "expecting section to have a SEC_VB_HEADER but it has %s", st_name ((*vb_header_sec)->st));
+
+    return *vb_header_sec;
+}
+
+// inspects z_file flags and if needed reads additional data, and returns true if the z_file consists of FASTQs compressed with --pair
+bool sections_is_paired (void)
+{
+    bool is_paired;
+
+    if (VER(15)) 
+        is_paired = (Z_DT(FASTQ) && z_file->comp_sections_index.len32 == 2) ||
+                    (Z_DT(SAM)   && z_file->comp_sections_index.len32 == 5 && 
+                    Bsec(Bcompindex(SAM_COMP_FQ01)->txt_header_sec_i)->flags.txt_header.pair);
+
+    // up to V14, only FASTQ files could be paired. back comp note: until v13, it was possible to have bound files with multiple pairs (is this true?). not supported here.
+    else if (!Z_DT(FASTQ) || z_file->num_txt_files != 2)  
+        is_paired = false;
+
+    // from V10 to V14 - determine by v14_dts_paired (introduced in 9.0.13) 
+    else 
+        is_paired = z_file->z_flags.v14_dts_paired;
+    
+    // sanity check: R1 and R2 are expected to have the same number of VBs (only if index is already created)
+    if (is_paired && z_file->comp_sections_index.len32) {
+        uint32_t num_vbs_R1 = Bcompindex(z_file->comp_sections_index.len32-2)->num_vbs;
+        uint32_t num_vbs_R2 = Bcompindex(z_file->comp_sections_index.len32-1)->num_vbs;
+        ASSERT (num_vbs_R1 == num_vbs_R2, "R1 and R2 have a different number of VBs (%u vs %u respecitvely)", num_vbs_R1, num_vbs_R2); 
+    }
+
+    return is_paired;
 }
 
 rom lt_name (LocalType lt)
@@ -731,23 +841,28 @@ rom store_type_name (StoreType store)
 typedef struct { char s[128]; } FlagStr;
 static FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt)
 {
-    static rom dts[NUM_DATATYPES]  = { [DT_FASTQ]="dts_paired", [DT_SAM]="dts_ref_internal", [DT_CHAIN]="dts_mismatch" };
-    static rom dts2[NUM_DATATYPES] = { [DT_SAM]="dts2_deep" };
+    rom dts[NUM_DATATYPES]  = { [DT_FASTQ]=(!VER(15) ? "v14_dts_paired" : 0), [DT_SAM]="dts_ref_internal", [DT_CHAIN]="dts_mismatch" };
+    rom dts2[NUM_DATATYPES] = { [DT_SAM]="dts2_deep" };
 
     FlagStr str = {};
 
     switch (st) {
         case SEC_GENOZIP_HEADER:
-            sprintf (str.s, "%s=%u %s=%u aligner=%u txt_is_bin=%u bgzf=%u adler=%u has_gencomp=%u has_taxid=%u",
+            sprintf (str.s, "%s=%u %s=%u aligner=%u txt_is_bin=%u %s=%u adler=%u has_gencomp=%u has_taxid=%u",
                      dts[dt]  ? dts[dt]  : "dt_specific",  f.genozip_header.dt_specific, 
                      dts2[dt] ? dts2[dt] : "dt_specific2", f.genozip_header.dt_specific2, 
-                     f.genozip_header.aligner, f.genozip_header.txt_is_bin, f.genozip_header.bgzf, 
+                     f.genozip_header.aligner, f.genozip_header.txt_is_bin, 
+                     VER(15) ? "has_digest" : "v14_bgzf", f.genozip_header.has_digest, 
                      f.genozip_header.adler, f.genozip_header.has_gencomp,f.genozip_header.has_taxid);
             break;
 
-        case SEC_TXT_HEADER:
-            sprintf (str.s, "is_txt_luft=%u", f.txt_header.is_txt_luft);
+        case SEC_TXT_HEADER: {
+            char extra[64] = {};
+            if (dt==DT_VCF && !VER(14)) sprintf (extra, " dvcf_comp_i=%u", f.txt_header.v13_dvcf_comp_i);
+            if ((dt==DT_SAM || dt==DT_BAM || dt==DT_FASTQ) && VER(15)) sprintf (extra, " pair=%s", pair_type_name (f.txt_header.pair));
+            sprintf (str.s, "is_txt_luft=%u%s", f.txt_header.is_txt_luft, extra);
             break;
+        }
 
         case SEC_VB_HEADER:
             switch (dt) {
@@ -796,12 +911,12 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
 {
     if (flag_loading_auxiliary && !flag.debug_read_ctxs) return; // don't show headers of an auxiliary file in --show-header, but show in --debug-read-ctx
     
-    if (  flag.show_headers   != -1 &&                   // we don't need to show all sections
+    if (  flag.show_headers   != SHOW_ALL_HEADERS &&     // we don't need to show all sections
           flag.show_headers-1 != header->section_type && // we don't need to show this section
           !flag.debug_read_ctxs)
         return;
 
-    bool is_dict_offset = (header->section_type == SEC_DICT && rw == 'W'); // at the point calling this function in zip, SEC_DICT offsets are not finalized yet and are relative to the beginning of the dictionary area in the genozip file
+    bool is_dict_offset = (HEADER_IS(DICT) && rw == 'W'); // at the point calling this function in zip, SEC_DICT offsets are not finalized yet and are relative to the beginning of the dictionary area in the genozip file
     bool v12 = (IS_ZIP || VER(12));
     bool v14 = (IS_ZIP || VER(14));
     bool v15 = (IS_ZIP || VER(15));
@@ -858,7 +973,7 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
                      SEC_TAB, digest_display (h->FASTQ_v13_digest_bound).s, dis_dict_id(h->fastq.segconf_seq_len_dict_id).s);
 
         sprintf (str, "\n%sver=%u enc=%s dt=%s usize=%"PRIu64" lines=%"PRIu64" secs=%u txts=%u vb_size=%u\n" 
-                      "%s%s ref=\"%.*s\" md5ref=%s\n"
+                      "%s%s ref=\"%.*s\" genome_digest=%s\n"
                       "%s" // dt_specific, if there is any
                       "%screated=\"%.*s\"\n",
                  SEC_TAB, h->genozip_version, encryption_name (h->encryption_type), dt_name (dt), 
@@ -986,7 +1101,7 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
 // called from main()
 void genocat_show_headers (rom z_filename)
 {
-    z_file = file_open (z_filename, READ, Z_FILE, DT_NONE);    
+    z_file = file_open_z_read (z_filename);    
 
     SectionHeaderGenozipHeader header;
     TEMP_FLAG (show_headers, 0);
@@ -995,7 +1110,7 @@ void genocat_show_headers (rom z_filename)
 
     ARRAY (SectionEnt, sec, z_file->section_list_buf);
     for (uint32_t i=0; i < sec_len; i++) {
-        header = zfile_read_section_header (evb, sec[i].offset, sec[i].vblock_i, sec[i].st).genozip_header; // we assign the largest of the SectionHeader* types
+        header = zfile_read_section_header (evb, &sec[i], SEC_NONE).genozip_header; // we assign the largest of the SectionHeader* types
         sections_show_header ((SectionHeaderP)&header, NULL, sec[i].offset, 'R');
     }        
 

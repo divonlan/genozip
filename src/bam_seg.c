@@ -74,7 +74,7 @@ static int32_t bam_unconsumed_scan_backwards (VBlockP vb, uint32_t first_i, int3
     // find the first alignment in the data (going backwards) that is entirely in the data - 
     // we identify and alignment by l_read_name and read_name
     for (; *i >= (int32_t)first_i; (*i)--) {
-        const BAMAlignmentFixed *aln = (const BAMAlignmentFixed *)Bc (vb->txt_data, *i);
+        const BAMAlignmentFixed *aln = (const BAMAlignmentFixed *)Btxt (*i);
 
         uint32_t block_size = LTEN32 (aln->block_size);
         if (block_size > 100000000) continue; // quick short-circuit - more than 100M for one alignment - clearly wrong

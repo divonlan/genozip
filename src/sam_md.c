@@ -96,9 +96,8 @@ static inline rom sam_md_consume_M (VBlockSAMP vb, bool is_depn, char **md_in_ou
 
         // case: MD number is bigger than needed by current CIGAR op (perhaps partially covering the next CIGAR op) - update MD in-place
         if (match_len > M_bases || (match_len == M_bases && *md && *md != '^')) {
-            int int_len = str_int (match_len - M_bases, *md_in_out);
+            int int_len = str_int_ex (match_len - M_bases, *md_in_out, false);
             memmove (*md_in_out + int_len, md, strlen(md) + 1/*\0*/); // note: memmove and not sprintf, bc moving to overlapping memory
-            //xxx sprintf (*md_in_out, "%u%s", match_len - M_bases, md); // ^ changed to this to avoid sprintf's internal memcpy of md to overlapping memory
             md = *md_in_out;
             match_len = M_bases;
         }
@@ -117,8 +116,10 @@ static inline rom sam_md_consume_M (VBlockSAMP vb, bool is_depn, char **md_in_ou
             if (!IS_NUCLEOTIDE (*md))
                 error = (*md=='N' ? "Encountered 'N' base while parsing M" : "Not A,C,G,T,N while parsing M"); // Genozip reference supports only A,C,G,T, but this "base" in the MD string is not one of them
 
-            if (!error) 
-                error = sam_seg_analyze_set_one_ref_base (vb, is_depn, *pos, *md, *M_D_bases, range_p, lock); // continue counting mismatch_bases_by_MD despite error
+            else { // set base (if A,C,G,T) even if previous bases had an error
+                rom result = sam_seg_analyze_set_one_ref_base (vb, is_depn, *pos, *md, *M_D_bases, range_p, lock); // continue counting mismatch_bases_by_MD despite error
+                if (result && !error) error = result;
+            }
 
             bits_clear (M_is_ref, *M_is_ref_i); // base in SEQ is expected to be NOT equal to the reference base
             (*M_is_ref_i)++;              
@@ -222,6 +223,7 @@ not_verified:
 
 not_verified_buf_mismatch_count_ok:    
     if (range) ref_unlock (gref, &lock);
+
     vb->md_verified = false;
 
     if (flag.show_wrong_md)
@@ -239,7 +241,7 @@ done:
 void sam_seg_MD_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(md), unsigned add_bytes)
 {
     ctx_set_encountered (VB, CTX(OPTION_MD_Z));
-
+  
     if (vb->md_verified && !vb->cigar_missing && !vb->seq_missing) // note: md_verified might have been reset in sam_seg_SEQ 
         seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_MD }, 2, OPTION_MD_Z, add_bytes);
 
@@ -273,7 +275,8 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_MD)
         sqbitmap_ctx->next_local = sqbitmap_ctx->last_value.i; // rewind back to beginning of the bits of this line (value stored by sam_reconstruct_SEQ_vs_ref)
 
     uint32_t count_match=0;
-
+    decl_acgt_decode;
+    
     for (uint32_t op_i=0; op_i < cigar_len; op_i++) { 
         uint32_t n = cigar[op_i].n;
 

@@ -113,7 +113,7 @@ static void stream_pipe (int *fds, uint32_t pipe_size, bool is_stream_to_genozip
 
 static void stream_abort_cannot_exec (rom exec_name, rom reason)
 {
-    url_kill_curl();
+    url_kill_curl(NULL);
 
     fprintf (stderr, "\n%s: %s, %s needs to be in the execution path.\n", global_cmd, reason, exec_name);  
 
@@ -150,8 +150,7 @@ static HANDLE stream_exec_child (int *stream_stdout_to_genozip, int *stream_stde
              Q(15), Q(16), Q(17), Q(18), Q(19), Q(20), Q(21), Q(22), Q(23), Q(24), Q(25), Q(26), Q(27), Q(28), Q(29));
 #   undef Q
 
-    STARTUPINFO startup_info;
-    memset (&startup_info, 0, sizeof startup_info);
+    STARTUPINFO startup_info = {};
     startup_info.cb         = sizeof startup_info;
     startup_info.hStdError  = stream_stderr_to_genozip ? (HANDLE)_get_osfhandle (stream_stderr_to_genozip[1]) : GetStdHandle (STD_ERROR_HANDLE);
     startup_info.dwFlags    = STARTF_USESTDHANDLES;
@@ -305,7 +304,10 @@ StreamP stream_create (StreamP parent_stream, uint32_t from_stream_stdout, uint3
     if (redirect_stdout_file) 
         FCLOSE (redirect_stdout_file, "redirect_stdout_file"); // the child has this file open, we don't need it
 
-    if (input_pipe) 
+    if (input_pipe && input_url_name) 
+        url_disconnect_from_curl (&input_pipe); // curl now belongs to the child process - we can close the stream to it 
+
+    if (input_pipe && !input_url_name) 
         FCLOSE (input_pipe, "input_pipe"); // the child has this pipe open, we don't need it
 
     // store our side of the pipe, and close the side used by the child
@@ -339,7 +341,8 @@ int stream_close (Stream **stream, StreamCloseMode close_mode)
 {
     if (! *stream) return 0; // nothing to do
 
-    if ((*stream)->substream) stream_close (&(*stream)->substream, close_mode);
+    if ((*stream)->substream) 
+        stream_close (&(*stream)->substream, close_mode);
 
     stream_close_pipes (*stream);
 
@@ -411,4 +414,23 @@ void stream_abort_if_cannot_run (rom exec_name, rom reason)
 
     // if we reach here, everything's good - the exec can run.
     stream_close (&stream, STREAM_KILL_PROCESS);
+}
+
+// check if executable is in the path. Note: in Windows it actually runs the executable, so 
+// only suitable for executables that would terminate immediately.
+bool stream_is_exec_in_path (rom exec)
+{
+#ifdef _WIN32
+    // our own instance of curl - to not conflict with url_open
+    StreamP curl = stream_create (0, 0, 0, 0, 0, 0, 0,
+                                  "where.exe", // reason in case of failure to execute curl
+                                  "where.exe", "/Q", exec, NULL); 
+
+    return stream_close (&curl, STREAM_WAIT_FOR_PROCESS) == 0;
+
+#else
+    char run[32 + strlen(exec)];
+    sprintf (run, "which %s > /dev/null 2>&1", exec);
+    return !system ("which wget > /dev/null 2>&1") && file_exists ("/dev/stdout");
+#endif
 }

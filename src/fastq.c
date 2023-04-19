@@ -21,8 +21,13 @@
 #include "deep.h"
 #include "tokenizer.h"
 #include "coverage.h"
+#include "arch.h"
+#include "filename.h"
+#include "aligner.h"
+#include "zfile.h"
 
 #define dict_id_is_fastq_qname_sf dict_id_is_type_1
+#define dict_id_is_fastq_aux      dict_id_is_type_2
 #define dict_id_fastq_qname_sf dict_id_type_1
 
 sSTRl (copy_qname_snip, 30);
@@ -32,7 +37,7 @@ unsigned fastq_vb_zip_dl_size (void) { return sizeof (ZipDataLineFASTQ); }
 
 void fastq_vb_release_vb (VBlockFASTQP vb)
 {
-    vb->pair_num_lines = vb->pair_vb_i = vb->optimized_desc_len = 0;
+    vb->pair_num_lines = vb->pair_vb_i = vb->optimized_desc_len = vb->pair_txt_data_len = 0;
     vb->first_line = 0;
     vb->has_extra = 0;
     memset (vb->item_filter, 0, sizeof(vb->item_filter));
@@ -40,15 +45,19 @@ void fastq_vb_release_vb (VBlockFASTQP vb)
     FREE (vb->optimized_desc);
 }
 
-void fastq_vb_destroy_vb (VBlockFASTQP vb)
-{
-}
-
 //-----------------------
 // TXTFILE stuff
 //-----------------------
 
-// detect if a generic file is actually a FASTQ - we call based on first character being '@', line 3 starting with '+', and line 1 and 3 being the same length
+static inline bool is_valid_read (rom t[4],      // for textual lines
+                                  uint32_t l[4]) // their lengths
+{
+   return l[0] >= 2 && t[0][0] == '@' &&  // DESC line starts with a '@' and is of length at least 2
+          l[1] >= 1 && l[1] == l[3]   && // QUAL and SEQ have the same length, which is at least 1
+          l[2] >= 1 && t[2][0] == '+';   // THIRD line starts with '+'
+}
+
+// detect if a GENERIC file is actually a FASTQ - we call based on first character being '@', line 3 starting with '+', and line 1 and 3 being the same length
 bool is_fastq (STRp(header), bool *need_more)
 {
     if (!header_len || header[0] != '@' || !str_is_printable (STRa(header))) return false; // fail fast
@@ -63,51 +72,71 @@ bool is_fastq (STRp(header), bool *need_more)
     }
 
     for (int i=0; i < n_lines; i += 4)
-        if (!line_lens[i+0] || lines[i+0][0] != '@' ||
-            !line_lens[i+2] || lines[i+2][0] != '+' ||
-            !line_lens[i+1] || line_lens[i+1] != line_lens[i+3]) return false; // SEQ and QUAL lines are of equal length
+        if (!is_valid_read (&lines[i], &line_lens[i])) return false; // SEQ and QUAL lines are of equal length
 
     return true;
 }
 
-// returns true if txt_data[txt_i] (which is a \n) is the end of a FASTQ record (= block of 4 lines in the file); -1 if out of data
-static inline int fastq_is_end_of_line (VBlockP vb, uint32_t first_i, int32_t txt_i) // index of a \n in txt_data
+bool is_fastq_pair_2 (VBlockP vb)
 {
-    ARRAY (char, txt, vb->txt_data);
+    return VB_DT(FASTQ) && VB_FASTQ->pair_vb_i > 0;
+}
 
-    // if we are not at the EOF and the next char is not '@', then this is for sure not the end of the FASTQ record
-    if (txt_i < Ltxt-1 && txt[txt_i+1] != '@') return false; 
+// "pair assisted" is a type pairing in which R1 data is loaded to ctx->localR1/b250R1 and R2 consults with it in seg/recon.
+// An R2 section that is pair-assisted will have FlagsCtx.paired set (note: in v14, due to a bug, R2.SQBITMAP.b250 should have but failed to set this flag)
+#define DNUM(x) (dict_id.num == _FASTQ_##x)
+bool fastq_zip_use_pair_assisted (DictId dict_id, SectionType st)
+{
+    if (ST(LOCAL) && (DNUM(GPOS) || DNUM(STRAND) || DNUM(DEEP)))
+        return true;
 
-    // if at the end of the data or at the end of a line where the next char is '@'. Verify that the previous line
-    // is the '+' line, to prevent the '@' we're seeing actually the first quality score in QUAL, or the file not ending after the quality line
- 
-    // move two \n's back - the char after is expected to be a '+'
-    unsigned count_nl = 0;
-    for (int32_t i=txt_i-1; i >= (int32_t)first_i; i--) {
-        if (txt[i] == '\n') count_nl++;
-        if (count_nl == 2) return txt[i+1] == '+';
-    }
+    else if (ST(B250) && DNUM(SQBITMAP))
+        return true;
 
-    return -1; 
+    else
+        return false;
+}
+
+// "pair identical" is a type pairing in which the b250 and/or local buffer is identical in both pairs, 
+// so we store only R1 and in PIZ, load it to R2 too. in ZIP, R1 data is loaded to ctx->b250R1/localR1
+// An R1 section with FlagsCtx.paired set means that it should be used for R2 too, if the corresponding R2 section is missing.
+bool fastq_zip_use_pair_identical (DictId dict_id)
+{
+    return dict_id_is_fastq_qname_sf (dict_id) || dict_id_is_fastq_aux (dict_id) || 
+           DNUM(QNAME) || DNUM(QNAME2) || DNUM(LINE3) || DNUM(EXTRA) ||
+           DNUM(AUX) || DNUM(AUX_LENGTH) || DNUM(E1L) || DNUM (E2L) || DNUM(TAXID) || DNUM(TOPLEVEL);
 }
 
 // returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
-int32_t fastq_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i /* in/out */)
+int32_t fastq_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i_out /* in/out */)
 {    
-    ASSERT (*i >= 0 && *i < Ltxt, "*i=%d is out of range [0,%u]", *i, Ltxt);
+    ASSERT (*i_out >= 0 && *i_out < Ltxt, "*i=%d is out of range [0,%u]", *i_out, Ltxt);
 
-    for (; *i >= (int32_t)first_i; (*i)--) {
-        // in FASTQ - an "end of line" is one that the next character is @, or it is the end of the file
-        if (vb->txt_data.data[*i] == '\n')
-            switch (fastq_is_end_of_line (vb, first_i, *i)) {
-                case true  : return Ltxt-1 - *i; // end of line
-                case false : continue;                       // not end of line, continue searching
-                default    : goto out_of_data;  
+    rom nl[8];     // newline pointers: nl[0] is the first from the end
+    uint32_t l[8]; // lengths of segments excluding \n and \r: l[1] is the segment that starts at nl[1]+1 until nl[0]-1 (or nl[0]-2 if there is a \r). l[0] is not used.
+
+    // search backwards for up to 8 newlines (best case: \nD\nS\nT\nQ\n ; worst case: \nD1\nS1\nT1\nQ1\nD2\nS2\nT2\nq2 (q2 is partial Q2))
+    int n=0;
+    for (rom c=Btxt (*i_out), first_c=Btxt (first_i) ; c >= first_c-1/*one beyond*/ && n < 8; c--) 
+        if (c == (first_c-1) || *c == '\n') { // we consider character before the start to also be a "virtual newline"
+            nl[n] = c;
+            if (n) l[n] = ((nl[n-1]) - (nl[n-1][-1] == '\r')) - (nl[n] + 1);
+
+            // 5th+ newline - test for valid read
+            if (n >= 4 && is_valid_read ((rom[]){ nl[n]+1, nl[n-1]+1, nl[n-2]+1, nl[n-3]+1 }, (uint32_t[]){ l[n], l[n-1], l[n-2], l[n-3]})) {
+                *i_out = BNUMtxt (nl[n-4]); // the final newline of this read (everything beyond is "unconsumed" and moved to the next VB) 
+                return BLSTtxt - nl[n-4];   // number of "unconsumed" characters remaining in txt_data after the last \n of this read
             }
-    }
+        
+            n++;
+        }
 
-out_of_data:
-    return -1; // cannot find end-of-line in the data starting first_i
+    ASSINP (n < 8, "Examined 7 textual lines and could not find a valid FASTQ read, it appears that this is not a valid FASTQ file. Data examined:\n%.*s",
+            (int)(nl[0] - nl[7]), nl[7] + 1); // 7 lines and their newlines
+
+    // case: the data provided has less than 8 newlines, and within it we didn't find a read. need more data.
+    *i_out = (int32_t)first_i - 1; // next index to test - one before first_i
+    return -1;
 }
 
 // called by txtfile_read_vblock when reading the 2nd file in a fastq pair - counts the number of fastq "lines" (each being 4 textual lines),
@@ -115,19 +144,23 @@ out_of_data:
 // returns true if we have at least as much as needed, and sets unconsumed_len to the amount of excess characters read
 // returns false is we don't yet have pair_1_num_lines lines - we need to read more
 bool fastq_txtfile_have_enough_lines (VBlockP vb_, uint32_t *unconsumed_len, 
-                                      uint32_t *my_lines, uint32_t *her_lines) // out - only set in case of failure
+                                      uint32_t *my_lines, VBIType *pair_vb_i, uint32_t *pair_lines, uint32_t *pair_txt_data_len) // out - only set in case of failure
 {
+    START_TIMER;
+
     VBlockFASTQ *vb = (VBlockFASTQ *)vb_;
     ASSERTNOTZERO (vb->pair_num_lines, "");
 
     rom next  = B1STtxt;
     rom after = BAFTtxt;
 
-    uint32_t line_i; for (line_i=0; line_i < vb->pair_num_lines * 4; line_i++) {
-        while (next < after && *next != '\n') next++; 
-        if (next >= after) {
-            *my_lines  = line_i;
-            *her_lines = vb->pair_num_lines * 4;
+    uint32_t pair_num_txt_lines = vb->pair_num_lines * 4, line_i;
+    for (line_i=0; line_i < pair_num_txt_lines; line_i++) {
+        if (!(next = memchr (next, '\n', after - next))) {
+            *my_lines          = line_i;
+            *pair_vb_i         = vb->pair_vb_i;
+            *pair_lines        = pair_num_txt_lines;
+            *pair_txt_data_len = vb->pair_txt_data_len;
             return false;
         }
         next++; // skip newline
@@ -135,7 +168,14 @@ bool fastq_txtfile_have_enough_lines (VBlockP vb_, uint32_t *unconsumed_len,
 
     vb->lines.len32 = line_i / 4;
     *unconsumed_len = after - next;
+
+    COPY_TIMER (fastq_txtfile_have_enough_lines);
     return true;
+}
+
+void fastq_zip_set_txt_header_flags (struct FlagsTxtHeader *f)
+{
+    f->pair = flag.pair;
 }
 
 //---------------
@@ -180,7 +220,8 @@ static void fastq_get_optimized_desc_read_name (VBlockFASTQP vb)
 // test if an R2 file has been compressed after R1 without --pair - and produce tip if so
 static void fastq_tip_if_should_be_pair (void)
 {
-    if (flag.pair || !txt_file->name || !flag.reference || txt_file->redirected) return;
+    if (flag.pair || flag.deep || !txt_file->name || !flag.reference || txt_file->redirected || txt_file->is_remote) 
+        return;
 
     char dir_name_buf[strlen (txt_file->name) + 1];
     strcpy (dir_name_buf, txt_file->name);    
@@ -195,50 +236,28 @@ static void fastq_tip_if_should_be_pair (void)
     int bn_len = strlen (bn);
 
     // find R2 file assuming we are R1, if there is one
-    struct dirent *ent;
-    while ((ent = readdir(dir))) {
-        if (strlen (ent->d_name) != bn_len) continue; 
+    struct dirent *ent=0;
+    while (!segconf.r1_or_r2 && (ent = readdir(dir))) 
+        segconf.r1_or_r2 = filename_is_fastq_pair (STRa(bn), ent->d_name, strlen (ent->d_name));
 
-        int mismatches = 0, mm_i=0;
-        rom dn = ent->d_name;
-        for (int i=0; i < bn_len && mismatches < 2; i++)
-            if (dn[i] != bn[i]) {
-                mismatches++;
-                mm_i = i;
-            }
-        
-        // case: we found another genozip file with the same name as txt_file, except for '1'⇄'2' switch
-        if (mismatches == 1 && dn[mm_i] == '2' && bn[mm_i] == '1') {
-
-            char other_bn[bn_len + 1];
-            strcpy (other_bn, bn);
-            other_bn[mm_i] = '2';
-
-            if (!flag.deep)
-                TIP ("Using --pair to compress paired-end FASTQs can reduce the compressed file's size by 10%%. E.g.:\n"
-                    "genozip --reference %s --pair %s %s%s%s\n",
-                    ref_get_filename (gref), txt_name, (is_cd ? "" : dir_name), (is_cd ? "" : "/"), other_bn);
-
-            segconf.r1_or_r2 = PAIR_READ_1;
-            break;
-        } 
-
-        else if (mismatches == 1 && dn[mm_i] == '1' && bn[mm_i] == '2') {
-            segconf.r1_or_r2 = PAIR_READ_2;
-            break;
-        }
-    }
+    if (segconf.r1_or_r2)
+        TIP ("Using --pair to compress paired-end FASTQs can reduce the compressed file's size by 10%%. E.g.:\n"
+             "%s --reference %s --pair %s %s%s%s\n",
+             arch_get_argv0(), ref_get_filename (gref), txt_name, (is_cd ? "" : dir_name), (is_cd ? "" : "/"), ent->d_name);
 
     closedir(dir);    
 }
 
-// called by main thread at the beginning of zipping this file
+// called by main thread at the beginning of zipping this txt file  
 void fastq_zip_initialize (void)
 {
     if (!flag.reference && !txt_file->redirected && !flag.multiseq)
-        TIP ("compressing a FASTQ file using a reference file can reduce the compressed file's size by 20%%-60%%.\nUse: \"genozip --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n", txt_file->name);
+        TIP ("Compressing a FASTQ file using a reference file can reduce the compressed file's size by 20%%-60%%.\n"
+             "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n", 
+             arch_get_argv0(), txt_file->name);
 
-    fastq_tip_if_should_be_pair();
+    else
+        fastq_tip_if_should_be_pair();
     
     // reset lcodec for STRAND and GPOS, as these may change between PAIR_1 and PAIR_2 files
     ZCTX(FASTQ_STRAND)->lcodec = CODEC_UNKNOWN;
@@ -252,6 +271,8 @@ void fastq_zip_initialize (void)
         ctx_populate_zf_ctx_from_contigs (gref, FASTQ_CONTIG, ref_get_ctgs (gref)); 
 
     qname_zip_initialize();
+
+    if (flag.deep) fastq_deep_zip_initialize();
 }
 
 // called by main thread after each txt file compressing is done
@@ -259,53 +280,35 @@ void fastq_zip_finalize (bool is_last_user_txt_file)
 {
     if (is_last_user_txt_file && flag.deep && flag.show_deep)
         fastq_zip_deep_show_entries_stats();
-}
 
-// called by zfile_compress_genozip_header to set FlagsGenozipHeader.dt_specific
-bool fastq_zip_dts_flag (int dts)
-{
-    return (dts==1) ? (flag.pair != NOT_PAIRED_END) : 0;
-}
-
-void fastq_initialize_ctx_for_pairing (VBlockP vb, Did did_i)
-{
-    CTX(did_i)->no_stons = true; // prevent singletons, so pair_1 and pair_2 are comparable based on b250 only
-    
-    if (flag.pair == PAIR_READ_2)
-        ctx_create_node (vb, did_i, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_mate_lookup }, 2); // required by ctx_convert_generated_b250_to_mate_lookup
+    // alternate pair - also works in case of multiple pairs of files
+    flag.pair = (flag.pair == PAIR_R1) ? PAIR_R2
+              : (flag.pair == PAIR_R2) ? PAIR_R1
+              :                              NOT_PAIRED_END;
 }
 
 // called by Compute thread at the beginning of this VB
 void fastq_seg_initialize (VBlockFASTQP vb)
 {
     START_TIMER;
+    declare_seq_contexts;
 
     vb->has_extra = segconf.has_extra; // VB-private copy
 
     if (!flag.deep)
         CTX(FASTQ_CONTIG)->flags.store = STORE_INDEX; // since v12
 
-    Context *gpos_ctx     = CTX(FASTQ_GPOS);
-    Context *strand_ctx   = CTX(FASTQ_STRAND);
-    Context *sqbitmap_ctx = CTX(FASTQ_SQBITMAP);
-    Context *nonref_ctx   = CTX(FASTQ_NONREF);
-    Context *seqmis_ctx   = CTX(FASTQ_SEQMIS_A);
-
     if (flag.aligner_available) {
         strand_ctx->ltype       = LT_BITMAP;
         gpos_ctx->ltype         = LT_UINT32;
         gpos_ctx->flags.store   = STORE_INT;
+        gpos_d_ctx->ltype       = LT_INT16;
         nonref_ctx->no_callback = true; // when using aligner, nonref data is in local. without aligner, the entire SEQ is segged into nonref using a callback
         
-        sqbitmap_ctx->ltype     = LT_BITMAP; // implies no_stons
-        sqbitmap_ctx->local_always = true;
+        bitmap_ctx->ltype     = LT_BITMAP; // implies no_stons
+        bitmap_ctx->local_always = true;
 
-        // cannot all_the_same with no b250 for PAIR_1 - SQBITMAP.b250 is tested in fastq_get_pair_1_gpos_strand
-        // See defect 2023-02-11. We rely on this "no_drop_b250" in fastq_piz_get_pair2_is_forward 
-        if (vb->comp_i == FQ_COMP_R1)
-            sqbitmap_ctx->no_drop_b250 = true; 
-
-        buf_alloc (vb, &sqbitmap_ctx->local, 1, Ltxt / 4, uint8_t, 0, "contexts->local"); 
+        buf_alloc (vb, &bitmap_ctx->local, 1, Ltxt / 4, uint8_t, 0, "contexts->local"); 
         buf_alloc (vb, &strand_ctx->local, 0, roundup_bits2bytes64 (vb->lines.len), uint8_t, 0, "contexts->local"); 
 
         for (int i=0; i < 4; i++)
@@ -320,28 +323,36 @@ void fastq_seg_initialize (VBlockFASTQP vb)
     // initialize QUAL to LT_SEQUENCE, it might be changed later to LT_CODEC (eg domq, longr)
     ctx_set_ltype (VB, LT_SEQUENCE, FASTQ_QUAL, DID_EOL);
 
-    // if we're pair-2, decompress all of pair-1's contexts needed for pairing
-    if (flag.pair == PAIR_READ_2) {
-
-        ASSERT (vb->lines.len32 == vb->pair_num_lines, "in vb=%s (PAIR_READ_2): pair_num_lines=%u but lines.len=%u",
+    if (flag.pair == PAIR_R1) 
+        // cannot all_the_same with no b250 for PAIR_1 - SQBITMAP.b250 is tested in fastq_get_pair_1_gpos_strand
+        // See defect 2023-02-11. We rely on this "no_drop_b250" in fastq_piz_get_pair2_is_forward 
+        bitmap_ctx->no_drop_b250 = true; 
+    
+    else if (flag.pair == PAIR_R2) {
+        ASSERT (vb->lines.len32 == vb->pair_num_lines, "in vb=%s (PAIR_R2): pair_num_lines=%u but lines.len=%u",
                 VB_NAME, vb->pair_num_lines, vb->lines.len32);
 
-        gpos_ctx->pair_local = strand_ctx->pair_local = true;
-
+        // we're pair-2, decompress all of pair-1's contexts needed for pairing
         piz_uncompress_all_ctxs (VB);
 
-        vb->z_data.len32 = 0; // we've finished reading the pair file z_data, next, we're going to write to z_data our compressed output
+        // we've finished uncompressing the pair sections in z_data into their contexts. now, reset z_data for our compressed output coming next.
+        vb->z_data.len32 = 0; 
+
+        // always write the R2 pair-assisted LOCAL/B250 sections, as they carry flag.paired which causes PIZ to load of R1 data
+        bitmap_ctx->no_drop_b250 = true;
+        gpos_ctx->local_always = strand_ctx->local_always = true;
+        if (flag.deep) CTX(FASTQ_DEEP)->local_always = true; 
     }
 
     if (!segconf.running) { // note: if segconf.running, we initialize in qname_segconf_discover_flavor
-        qname_seg_initialize (VB, QNAME1, FASTQ_QNAME, flag.pair); 
-        qname_seg_initialize (VB, QNAME2, (segconf.desc_is_l3 ? FASTQ_LINE3 : FASTQ_QNAME), flag.pair); 
-        qname_seg_initialize (VB, QLINE3, FASTQ_LINE3, flag.pair); 
+        qname_seg_initialize (VB, QNAME1, FASTQ_QNAME); 
+        qname_seg_initialize (VB, QNAME2, (segconf.desc_is_l3 ? FASTQ_LINE3 : FASTQ_QNAME)); 
+        qname_seg_initialize (VB, QLINE3, FASTQ_LINE3); 
         ctx_consolidate_stats (VB, (segconf.desc_is_l3 ? FASTQ_LINE3 : FASTQ_QNAME), FASTQ_AUX, FASTQ_EXTRA, DID_EOL);
     }
 
-    if (vb->comp_i == FQ_COMP_R2)
-        ctx_create_node (VB, FASTQ_SQBITMAP, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_mate_lookup }, 2); // required by ctx_convert_generated_b250_to_mate_lookup
+    if (flag.pair == PAIR_R2)
+        ctx_create_node (VB, FASTQ_SQBITMAP, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_mate_lookup }, 2);
 
     if (flag.optimize_DESC) 
         fastq_get_optimized_desc_read_name (vb);
@@ -359,7 +370,7 @@ void fastq_seg_initialize (VBlockFASTQP vb)
         ctx_set_store (VB, STORE_INT, ECTX(segconf.seq_len_dict_id)->did_i, DID_EOL);
 
     // consolidate stats for --stats
-    ctx_consolidate_stats (VB, FASTQ_SQBITMAP, FASTQ_NONREF, FASTQ_NONREF_X, FASTQ_GPOS, FASTQ_STRAND, FASTQ_SEQMIS_A, FASTQ_SEQMIS_C, FASTQ_SEQMIS_G, FASTQ_SEQMIS_T, DID_EOL);
+    ctx_consolidate_stats (VB, FASTQ_SQBITMAP, FASTQ_NONREF, FASTQ_NONREF_X, FASTQ_GPOS, FASTQ_GPOS_DELTA, FASTQ_STRAND, FASTQ_SEQMIS_A, FASTQ_SEQMIS_C, FASTQ_SEQMIS_G, FASTQ_SEQMIS_T, DID_EOL);
     ctx_consolidate_stats (VB, FASTQ_QUAL, FASTQ_DOMQRUNS, FASTQ_QUALMPLX, FASTQ_DIVRQUAL, DID_EOL);
 
     COPY_TIMER (seg_initialize);
@@ -464,48 +475,52 @@ bool fastq_seg_is_small (ConstVBlockP vb, DictId dict_id)
 
 // ZIP/PIZ main thread: called ahead of zip or piz a pair 2 vb - to read data we need from the previous pair 1 file
 // returns true if successful, false if there isn't a vb with vb_i in the previous file
-bool fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i, bool must_have)
+void fastq_read_pair_1_data (VBlockP vb_, VBIType pair_vb_i)
 {
+    START_TIMER;
+
     VBlockFASTQP vb = (VBlockFASTQP)vb_;
     uint64_t save_disk_so_far = z_file->disk_so_far;
 
     vb->pair_vb_i = pair_vb_i;
 
-    Section sec = sections_vb_header (pair_vb_i, SOFT_FAIL);
-    ASSERT (!must_have || sec, "Cannot find VB_HEADER section of vb_i=%u of pair 1", pair_vb_i);
-    if (!sec) return false;
-
+    Section sec = sections_vb_header (pair_vb_i);
     vb->pair_num_lines = sec->num_lines;
 
+    if (flag.debug)  // use --debug to access - displays in errors in txtfile_read_vblock
+        vb->pair_txt_data_len = BGEN32 (zfile_read_section_header (vb, sec, SEC_VB_HEADER).vb_header.recon_size_prim);
+    
     // read into ctx->pair the data we need from our pair: QNAME,QNAME2,LINE3 and its components, GPOS and STRAND
     buf_alloc (vb, &vb->z_section_headers, MAX_DICTS * 2, 0, uint32_t, 0, "z_section_headers"); // indices into vb->z_data of section headers
-    
-    vb->preprocessing = true; // consumed by fastq_piz_is_skip_section
+        
     piz_read_all_ctxs (VB, &sec, true);
-    vb->preprocessing = false;
-
+    
     file_seek (z_file, 0, SEEK_END, false); // restore
     z_file->disk_so_far = save_disk_so_far;
 
-    return true;
+    COPY_TIMER (fastq_read_pair_1_data);
 }
 
-// main thread: is it possible that genocat of this file will re-order lines
-bool fastq_piz_maybe_reorder_lines (void)
+// main thread: after reading VB_HEADER and before reading local/b250 sections from z_file
+void fastq_piz_before_read (VBlockP vb)
 {
-    return sections_get_num_comps(false) == 2; // genocat always interleaves (= reorders lines) of paired FASTQs
+    if (writer_am_i_pair_2 (vb->vblock_i, &VB_FASTQ->pair_vb_i)) { // sets pair_vb_i if R2, leaves it 0 if R1
+        
+        // backward compatability: prior to V15, PIZ didn't rely on FlagCtx.paired, and it was not always
+        // applied: SQBITMAP.b250 in v14 and GPOS.local (at least) in v14 incorrectly didn't set the flag
+        if (!VER(15)) {
+            CTX(FASTQ_GPOS)->pair_assist_type = CTX(FASTQ_STRAND)->pair_assist_type = SEC_LOCAL;
+            if (VER(14)) CTX(FASTQ_SQBITMAP)->pair_assist_type = SEC_B250;
+        }
+    }
 }
 
-// main thread: called from piz_read_one_vb as DTPZ(piz_read_one_vb)
-bool fastq_piz_init_vb (VBlockP vb_, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment)
+// main thread: called from piz_read_one_vb as DTP(piz_init_vb)
+bool fastq_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment)
 {
-    VBlockFASTQP vb = (VBlockFASTQP )vb_;
-    uint32_t pair_vb_i=0;
-    bool i_am_pair_2 = vb && writer_get_pair (vb->vblock_i, &pair_vb_i) == 2;
-
-    // in case of this is a paired fastq file, get all the pair_1 data not already fetched for the grep above
-    if (i_am_pair_2) 
-        fastq_read_pair_1_data (vb_, pair_vb_i, true);
+    // in case of this is a R2 of a paired fastq file, get the R1 data
+    if (vb && VB_FASTQ->pair_vb_i > 0)
+        fastq_read_pair_1_data (vb, VB_FASTQ->pair_vb_i);
 
     return true;
 }
@@ -694,15 +709,9 @@ void fastq_piz_process_recon (VBlockP vb)
 // returns true if section is to be skipped reading / uncompressing
 IS_SKIP (fastq_piz_is_skip_section)
 {
-    if (st != SEC_LOCAL && st != SEC_B250 && st != SEC_DICT) return false; // we only skip contexts
+    if (!ST(LOCAL) && !ST(B250) && !ST(DICT)) return false; // we only skip contexts
 
     if (dict_id.num == _FASTA_TAXID && flag.kraken_taxid) return false; // TAXID normally skipped in --seq-only etc, but not if filtering for taxid
-
-    // case: this is pair-2 loading pair-1 sections
-    if (purpose == SKIP_PURPOSE_PREPROC)  
-        return !(dict_id_is_fastq_qname_sf (dict_id) || 
-                 dict_id_is_in (dict_id, _FASTQ_QNAME, _FASTQ_QNAME2, _FASTQ_LINE3, _FASTQ_GPOS, _FASTQ_STRAND, DICT_ID_NONE) ||
-                 (dict_id.num == _FASTQ_SQBITMAP && st != SEC_LOCAL));
 
     #define LINE3_dicts _FASTQ_LINE3,  _FASTQ_T0HIRD, _FASTQ_T1HIRD, _FASTQ_T2HIRD, _FASTQ_T3HIRD, _FASTQ_T4HIRD, _FASTQ_T5HIRD, \
                         _FASTQ_T6HIRD, _FASTQ_T7HIRD, _FASTQ_T8HIRD, _FASTQ_T9HIRD, _FASTQ_TAHIRD, _FASTQ_TBHIRD, _FASTQ_TmHIRD /* just line3, not all qnames */
@@ -710,10 +719,10 @@ IS_SKIP (fastq_piz_is_skip_section)
     // we always keep the seq_len context, if we have one
     if (dict_id.num && dict_id.num == segconf.seq_len_dict_id.num) return false;
 
-    // note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast: skip all items but DESC and E1L (except if we need them for --grep)
+    // note that flags_update_piz_one_z_file rewrites --header-only as flag.header_only_fast: skip all items but DESC and E1L (except if we need them for --grep)
     if (flag.header_only_fast && 
         dict_id_is_in (dict_id, _FASTQ_E2L, _FASTQ_DEBUG_LINES, LINE3_dicts,
-                       _FASTQ_SQBITMAP, _FASTQ_NONREF, _FASTQ_NONREF_X, _FASTQ_GPOS, _FASTQ_STRAND,
+                       _FASTQ_SQBITMAP, _FASTQ_NONREF, _FASTQ_NONREF_X, _FASTQ_GPOS, _FASTQ_GPOS_DELTA, _FASTQ_STRAND,
                        _FASTQ_SEQMIS_A, _FASTQ_SEQMIS_C, _FASTQ_SEQMIS_G, _FASTQ_SEQMIS_T, 
                        _FASTQ_QUAL, _FASTQ_DOMQRUNS, _FASTQ_QUALMPLX, _FASTQ_DIVRQUAL, DICT_ID_NONE))
         return true;
@@ -728,7 +737,7 @@ IS_SKIP (fastq_piz_is_skip_section)
     if (flag.qual_only && 
         (   dict_id_is_in (dict_id, _FASTQ_E1L, _FASTQ_QNAME, _FASTQ_QNAME2, _FASTQ_LINE3, _FASTQ_EXTRA, _FASTQ_TAXID, _FASTQ_DEBUG_LINES, DICT_ID_NONE) 
          || dict_id_is_fastq_qname_sf(dict_id) 
-         || dict_id_is_in (dict_id, _FASTQ_NONREF, _FASTQ_NONREF_X, _FASTQ_GPOS, _FASTQ_STRAND, _FASTQ_SEQMIS_A, _FASTQ_SEQMIS_C, _FASTQ_SEQMIS_G, _FASTQ_SEQMIS_T, DICT_ID_NONE))) // we don't need the SEQ line 
+         || dict_id_is_in (dict_id, _FASTQ_NONREF, _FASTQ_NONREF_X, _FASTQ_GPOS, _FASTQ_GPOS_DELTA, _FASTQ_STRAND, _FASTQ_SEQMIS_A, _FASTQ_SEQMIS_C, _FASTQ_SEQMIS_G, _FASTQ_SEQMIS_T, DICT_ID_NONE))) // we don't need the SEQ line 
         return true;
 
     // if we're doing --sex/coverage, we only need TOPLEVEL, FASTQ_SQBITMAP and GPOS
@@ -746,22 +755,6 @@ IS_SKIP (fastq_piz_is_skip_section)
         return true;
 
     return false;
-}
-
-// inspects z_file flags and if needed reads additional data, and returns true if the z_file consists of FASTQs compressed with --pair
-bool fastq_piz_is_paired (void)
-{
-    if (!Z_DT(FASTQ) || z_file->num_txt_files == 1) return false; // note: %2 and not ==1 for back-comp for concatenated files up to v13
-
-    // this is a FASTQ genozip file. Now we can check dts_paired
-    if (z_file->z_flags.dts_paired) return true;  
-
-    // dts_paired is not set. This flag was introduced in 9.0.13 - if file is compressed with genozip version 10+, then for sure the file is not paired
-    if (VER(10)) return false;
-    
-    // for v8, and v9 up to 9.0.12 it is paired iff user is tell us explicitly that this is a paired file
-    z_file->z_flags.dts_paired = flag.undocumented_dts_paired;
-    return flag.undocumented_dts_paired; 
 }
 
 // called before reconstructing first repeat of toplevel container
@@ -852,16 +845,15 @@ CONTAINER_CALLBACK (fastq_piz_container_cb)
 
     // --bases
     if (flag.bases && is_top_level && !vb->drop_curr_line &&
-        !iupac_is_included_ascii (last_txt (vb, FASTQ_SQBITMAP), vb->last_txt_len (FASTQ_SQBITMAP)))
+        !iupac_is_included_ascii (STRlst(FASTQ_SQBITMAP)))
         vb->drop_curr_line = "bases";
 }
 
-// Used in pair-2: reconstruct the parallel b250 snip from pair-1
+// Used in R2: used for pair-assisted b250 reconstruction. copy parallel b250 snip from R1. 
+// Since v14, used for SQBITMAP. For files up to v14, also used for all QNAME subfield contexts
 SPECIAL_RECONSTRUCTOR (fastq_special_mate_lookup)
 {
-    ASSPIZ (ctx->pair_b250, "no pair_1 b250 data for ctx=%s, while reconstructing pair_2. %s%s", ctx->tag_name,
-            !VER(10) ? "If this file was compressed with Genozip version 9.0.12 or older use the --dts_paired command line option. You can see the Genozip version used to compress it with 'genocat -w '" : "",  
-            !VER(10) ? z_name : "");
+    ASSPIZ (ctx->b250R1.len32, "no pair_1 b250 data for ctx=%s, while reconstructing pair_2.", ctx->tag_name);
             
     ctx_get_next_snip (vb, ctx, true, pSTRa(snip));
 

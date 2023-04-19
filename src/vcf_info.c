@@ -1295,11 +1295,11 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_refSNP:          CALL_IF (segconf.vcf_illum_gtyping, seg_id_field_do      (VB, ctx, STRa(value)));
 
         // dbSNP
-        case _INFO_dbSNPBuildID:    CALL_IF (segconf.vcf_dbSNP, seg_integer_or_not (VB, ctx, STRa(value), value_len));
-        case _INFO_RS:              CALL_IF (segconf.vcf_dbSNP, vcf_seg_INFO_RS (vb, ctx, STRa(value)));
-        case _INFO_RSPOS:           CALL_IF (segconf.vcf_dbSNP, vcf_seg_INFO_RSPOS (vb, ctx, STRa(value)));
-        case _INFO_GENEINFO:        CALL_IF (segconf.vcf_dbSNP, seg_array (VB, ctx, INFO_GENEINFO, STRa(value), '|', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
-        case _INFO_VC:              CALL_IF (segconf.vcf_dbSNP, vcf_seg_INFO_VC (vb, ctx, STRa(value)));
+        case _INFO_dbSNPBuildID:    CALL_IF (segconf.vcf_is_dbSNP, seg_integer_or_not (VB, ctx, STRa(value), value_len));
+        case _INFO_RS:              CALL_IF (segconf.vcf_is_dbSNP, vcf_seg_INFO_RS (vb, ctx, STRa(value)));
+        case _INFO_RSPOS:           CALL_IF (segconf.vcf_is_dbSNP, vcf_seg_INFO_RSPOS (vb, ctx, STRa(value)));
+        case _INFO_GENEINFO:        CALL_IF (segconf.vcf_is_dbSNP, seg_array (VB, ctx, INFO_GENEINFO, STRa(value), '|', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
+        case _INFO_VC:              CALL_IF (segconf.vcf_is_dbSNP, vcf_seg_INFO_VC (vb, ctx, STRa(value)));
         // case _INFO_TOPMED: // better leave as simple snip as the items are allele frequencies which are correleted
 
         default: standard_seg:

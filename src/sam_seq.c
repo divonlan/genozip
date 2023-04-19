@@ -64,7 +64,8 @@ static bool sam_analyze_copied_SEQ (VBlockSAMP vb, STRp(seq), const PosType32 po
     BamCigarOpType op = BC_NONE;
 
     uint32_t range_len = (range->last_pos - range->first_pos + 1);
-        
+    decl_acgt_decode;
+
     while (i < seq_len || next_ref < pos_index + ref_consumed) {
 
         ASSERT0 (i <= seq_len && next_ref <= pos_index + ref_consumed, "i or next_ref are out of range");
@@ -176,11 +177,7 @@ fail:
 
 void sam_seg_SEQ_initialize (VBlockSAMP vb)
 {
-    Context *bitmap_ctx = CTX(SAM_SQBITMAP);
-    Context *strand_ctx = CTX(SAM_STRAND);
-    Context *gpos_ctx   = CTX(SAM_GPOS);
-    Context *nonref_ctx = CTX(SAM_NONREF);
-    Context *seqmis_ctx = CTX(SAM_SEQMIS_A); // 4 contexts
+    declare_seq_contexts;
 
     bitmap_ctx->ltype = LT_BITMAP;
     strand_ctx->ltype = LT_BITMAP;
@@ -228,6 +225,7 @@ static void sam_seg_bisulfite_M (VBlockSAMP vb,
     char bisulfite = vb->bisulfite_strand;
     bool MD_NM_by_unconverted = segconf.MD_NM_by_unconverted;
     idx = RR_IDX (idx);
+    decl_acgt_decode;
 
     // iterating on an M segmenet of a SEQ
     for (uint32_t i=0; i < Mseg_len; i++) {
@@ -284,11 +282,8 @@ static void sam_seg_bisulfite_M (VBlockSAMP vb,
 static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(seq), const PosType32 pos, bool is_revcomp,
                                        uint32_t ref_consumed, uint32_t ref_and_seq_consumed, bool no_lock)
 {
+    declare_seq_contexts;   
     START_TIMER;
-
-    Context *bitmap_ctx = CTX(SAM_SQBITMAP);
-    Context *nonref_ctx = CTX(SAM_NONREF);
-    Context *seqmis_ctx = CTX(SAM_SEQMIS_A); // 4 contexts
 
     BitsP bitmap = (BitsP)&bitmap_ctx->local;
     uint32_t bitmap_start = bitmap_ctx->next_local;        
@@ -350,6 +345,8 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(s
         bits_set_region (&range->is_set, pos_index, ref_consumed); // we will need this ref to reconstruct
 
     bool has_D_N = false;
+    decl_acgt_decode;
+
     while (i < seq_len || next_ref < pos_index + ref_consumed) {
 
         ASSERT0 (i <= seq_len && next_ref <= pos_index + ref_consumed, "i or next_ref are out of range");
@@ -408,7 +405,6 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(s
                      // case: ref is set to a different value - we store our value in seqmis_ctx
                     else mismatch: {
                         uint8_t ref_base_2bit = bits_get2 (&range->ref, idx * 2);
-
                         BNXTc (seqmis_ctx[ref_base_2bit].local) = seq[i];
                         bits_clear (bitmap, bit_i++);
                         vb->mismatch_bases_by_SEQ++; // used by NM:i and MD:Z
@@ -571,10 +567,12 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_seq), unsigned
     if (flag.deep || flag.show_deep == 2)
         sam_deep_set_SEQ_hash (vb, dl, STRa(textual_seq));
 
+    bool aligner_ok = flag.aligner_available && !segconf.is_long_reads && !segconf.running;
+
     // case: unmapped line and we have refhash: align to reference
-    if (unmapped && flag.aligner_available) {
+    if (unmapped && aligner_ok) {
         use_aligner:
-        switch (aligner_seg_seq (VB, CTX(SAM_SQBITMAP), STRa(textual_seq), true, false, NO_GPOS, false)) {
+        switch (aligner_seg_seq (VB, STRa(textual_seq), true, false, NO_GPOS, false)) {
             case MAPPING_NO_MAPPING : force_verbatim = true; goto add_seq_verbatim; 
             case MAPPING_PERFECT    : perfect        = true; // fallthrough
             case MAPPING_ALIGNED    : aligner_used   = true; break;
@@ -587,7 +585,7 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_seq), unsigned
     }
 
     // case: unmapped line, no refhash: just store the sequence in nonref without an indication in the bitmap
-    else if (unmapped && !flag.aligner_available) { 
+    else if (unmapped && !aligner_ok) { 
         add_seq_verbatim:        
         buf_add_moreS (VB, &CTX(SAM_NONREF)->local, textual_seq, "contexts->local");
         sam_seg_SEQ_pad_nonref (vb);
@@ -698,7 +696,7 @@ bool sam_seq_pack (VBlockSAMP vb, Bits *packed, uint64_t next_bit, STRp(seq), bo
                     case 'G' : bits_assign2 (packed, next_bit, 2); break;
                     case 'T' : bits_assign2 (packed, next_bit, 3); break;
                     default  : if (soft_fail) return false;
-                               ABORT ("%s: Unexpected base: '%c'(ASCII %u) i=%u seq_len=%u", LN_NAME, seq[i], (uint8_t)seq[i], i, seq_len);
+                               ABORT ("%s: Unexpected base: '%s'(ASCII %u) i=%u seq_len=%u", LN_NAME, char_to_printable(seq[i]).s, (uint8_t)seq[i], i, seq_len);
                 }
         else
             for (int32_t i=seq_len-1; i >= 0; i--, next_bit += 2) 
@@ -708,7 +706,7 @@ bool sam_seq_pack (VBlockSAMP vb, Bits *packed, uint64_t next_bit, STRp(seq), bo
                     case 'G' : bits_assign2 (packed, next_bit, 1); break;
                     case 'T' : bits_assign2 (packed, next_bit, 0); break;
                     default  : if (soft_fail) return false;
-                               ABORT ("%s: Unexpected base: '%c'(ASCII %u) i=%u seq_len=%u", LN_NAME, seq[i], (uint8_t)seq[i], i, seq_len);
+                               ABORT ("%s: Unexpected base: '%s'(ASCII %u) i=%u seq_len=%u", LN_NAME, char_to_printable(seq[i]).s, (uint8_t)seq[i], i, seq_len);
                 }
     }
 
@@ -748,6 +746,7 @@ rom sam_seg_analyze_set_one_ref_base (VBlockSAMP vb, bool is_depn, PosType32 pos
     bool internal_pos_is_populated = IS_REF_INTERNAL && ref_is_nucleotide_set (*range_p, pos_index);
 
     // case: reference already contains a base - but unfortunately it is not "base" - so MD is not reconstractable from reference
+    decl_acgt_decode;
     if (((flag.reference & REF_ZIP_LOADED) || internal_pos_is_populated) && (base != ref_base_by_pos (*range_p, pos))) 
         return ERR_ANALYZE_INCORRECT_REF_BASE; // encountered in the wild when the reference base is a IUPAC
 
@@ -784,7 +783,7 @@ void sam_zip_prim_ingest_vb_pack_seq (VBlockSAMP vb, Sag *vb_grps, uint32_t vb_g
         buf_extend_bits (packed_seq_buf, vb_grp->seq_len * 2); // extend now 
         Bits *sag_seq = (BitsP)packed_seq_buf;
 
-        sam_seq_pack (vb, sag_seq, next_bit, Bc (vb->txt_data, vb_grp->seq), vb_grp->seq_len, is_bam_format, false, HARD_FAIL);
+        sam_seq_pack (vb, sag_seq, next_bit, Btxt (vb_grp->seq), vb_grp->seq_len, is_bam_format, false, HARD_FAIL);
         vb_grp->seq = next_bit / 2; // update from an index into txt_data to an index (bases not bits) into sag_seq
     }
 }
@@ -801,7 +800,7 @@ COMPRESSOR_CALLBACK (sam_zip_seq)
         VB_SAM->textual_seq.len = 0; // reset
         buf_alloc (vb, &VB_SAM->textual_seq, 0, dl->SEQ.len+1 /* +1 for last half-byte */, char, 1.5, "textual_seq");
 
-        bam_seq_to_sam (VB_SAM, (uint8_t *)Btxt(dl->SEQ.index), dl->SEQ.len, false, false, &VB_SAM->textual_seq);
+        bam_seq_to_sam (VB_SAM, (uint8_t *)Btxt (dl->SEQ.index), dl->SEQ.len, false, false, &VB_SAM->textual_seq);
         *line_data = B1STc (VB_SAM->textual_seq);
     }
 
@@ -814,8 +813,10 @@ COMPRESSOR_CALLBACK (sam_zip_seq)
 
 // get a bytemap of ref_consumed values. returns NULL if no range exists. get 2 bases before and after
 // in case needed for methylation calling.
-static inline uint8_t *sam_reconstruct_SEQ_get_ref_bytemap (VBlockSAMP vb, ContextP bitmap_ctx, bool v14, PosType32 pos, bool predict_meth_call)
+static inline uint8_t *sam_reconstruct_SEQ_get_ref_bytemap (VBlockSAMP vb, bool v14, PosType32 pos, bool predict_meth_call)
 {
+    declare_seq_contexts;
+
     // note: in an edge case, when all is_set bits are zero, the range might not even be written to the file
     bool uses_ref_data = vb->ref_consumed && 
                             (v14 || // v14: we always have is_set for all the ref data (mismatches use it for SEQMIS)
@@ -855,21 +856,23 @@ static inline uint8_t *sam_reconstruct_SEQ_get_ref_bytemap (VBlockSAMP vb, Conte
 }
 
 // PIZ: SEQ reconstruction 
-void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, ContextP bitmap_ctx, STRp(snip), ReconType reconstruct)
+void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
 {
     START_TIMER;
 
+    VBlockSAMP vb = (VBlockSAMP)vb_;
+    declare_seq_contexts;
+
     #define adjusted(base_i) ((base_i) + (predict_meth_call ? 2 : 0))
+#ifdef DEBUG // this function is a performance hotspot, therefore this code is only a compilation, not runtime, option
     #define verify_is_set(base_i) ASSPIZ (!flag.debug || IS_REF_EXTERNAL || (adjusted(base_i) < vb->piz_is_set.len32 && *Bc(vb->piz_is_set, adjusted(base_i)) == 1), \
                                           "Expecting POS=%u + base_i=%u to have is_set=1", (PosType32)vb->contexts[SAM_POS].last_value.i, (base_i))
-
-    VBlockSAMP vb = (VBlockSAMP)vb_;
-
+#else
+    #define verify_is_set(base_i)
+#endif
     if (!bitmap_ctx->is_loaded) return; // if case we need to skip the SEQ field (for the entire VB)
 
     bool v14              = VER(14);
-    Context *nonref_ctx   = CTX(SAM_NONREF);
-    Context *seqmis_ctx   = CTX(SAM_SEQMIS_A);
     rom nonref            = Bc (nonref_ctx->local, nonref_ctx->next_local); // possibly, this VB has no nonref (i.e. everything is ref), in which case nonref would be an invalid pointer. That's ok, as it will not be accessed.
     rom nonref_start      = nonref;
     const PosType32 pos   = vb->last_int(SAM_POS);
@@ -900,7 +903,7 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, ContextP bitmap_ctx, STRp(snip), R
     if (aligner_used) {
         char mismatch_base = 0;
         uint32_t mismatch_offset=0, num_mismatches=0;
-        aligner_reconstruct_seq (VB, bitmap_ctx, vb->seq_len, false, is_perfect, reconstruct, &mismatch_base, &mismatch_offset, &num_mismatches);
+        aligner_reconstruct_seq (VB, vb->seq_len, false, is_perfect, reconstruct, &mismatch_base, &mismatch_offset, &num_mismatches);
         
         nonref_ctx->next_local = ROUNDUP4 (nonref_ctx->next_local);
         PosType64 gpos = CTX(SAM_GPOS)->last_value.i; // set in aligner_reconstruct_seq
@@ -936,7 +939,7 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, ContextP bitmap_ctx, STRp(snip), R
 
     bitmap_ctx->last_value.i = bitmap_ctx->next_local; // for SEQ, we use last_value for storing the beginning of the sequence
 
-    uint8_t *ref = sam_reconstruct_SEQ_get_ref_bytemap (vb, bitmap_ctx, v14, pos, predict_meth_call);
+    uint8_t *ref = sam_reconstruct_SEQ_get_ref_bytemap (vb, v14, pos, predict_meth_call);
     if (v14 && !ref) goto unmapped; // starting v14, a missing range is another case of unmapped
 
     const BamCigarOp *cigar = vb->binary_cigar.len32 ? B1ST(BamCigarOp, vb->binary_cigar) 
@@ -949,6 +952,8 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, ContextP bitmap_ctx, STRp(snip), R
 
     char first_mismatch_base=0;
     uint32_t first_mismatch_offset=0; // 32 bit, value might be > 255
+
+    decl_acgt_decode;
 
     while (seq_consumed < vb->seq_len || ref_consumed < vb->ref_consumed) {
         
@@ -967,14 +972,17 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, ContextP bitmap_ctx, STRp(snip), R
 
         // shortcut if perfect (= no mismatches)
         if (is_perfect && consumes_query && consumes_reference) {
-            if (reconstruct) 
-                for (int i=0; i < op.n; i++) {
+            if (reconstruct) {
+                // note: this loop is a performace hotspot and optimized
+                bytes ref_segment = &ref[ref_consumed];
+                for (int i=0; i < op.n; i++) { 
                     verify_is_set (ref_consumed + i);
-                    *recon++ = acgt_decode (ref[ref_consumed + i]);
+                    *recon++ = acgt_decode(*ref_segment++);
                 }
+            }
 
-            seq_consumed       += op.n;
-            ref_consumed       += op.n;
+            seq_consumed += op.n;
+            ref_consumed += op.n;
             op.n = 0;
         }
         
@@ -982,12 +990,11 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, ContextP bitmap_ctx, STRp(snip), R
             if (consumes_query) {
             
                 if (consumes_reference) {
-                            
-                    if (NEXTLOCALBIT (bitmap_ctx)) { // copy from reference (or from converted reference if bisulfite)
+                    if (NEXTLOCALBIT (bitmap_ctx)) { // copy from reference (or from converted reference if bisulfite)                  
                         verify_is_set (ref_consumed);
                         if (reconstruct) {
-                            char ref_base = acgt_decode(ref[ref_consumed]);
-                            
+                            char ref_base = acgt_decode(ref[ref_consumed]);                         
+
                             // case: bisulfite data, we segged against the converted reference (C->T or G->A) - converted bases represent unmethylated bases (methylated bases remain unconverted)
                             if (ref_base == bisulfite) {
                                 ref_base = (bisulfite == 'C') ? 'T' : 'A'; // convert reference base C->T or G->A
@@ -1003,6 +1010,7 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, ContextP bitmap_ctx, STRp(snip), R
 
                             *recon++ = ref_base;
                         } 
+COPY_TIMER(tmp4);
                     }
                     else {
                         vb->mismatch_bases_by_SEQ++;
@@ -1163,9 +1171,9 @@ static void reconstruct_SEQ_copy_saggy (VBlockSAMP vb, ContextP ctx, ReconType r
 
     char *seq = BAFTtxt;
 
-    rom saggy_seq = ((word.lookup == LookupTxtData) ? Btxt(word.index) : Bc(ctx->per_line, word.index));
+    rom saggy_seq = ((word.lookup == LookupTxtData) ? Btxt (word.index) : Bc(ctx->per_line, word.index));
 
-    if (!IS_RECON_BAM) {
+    if (!OUT_DT(BAM)) {
         if (xstrand)
             str_revcomp (seq, saggy_seq + vb->hard_clip[1], seq_len);
         else
@@ -1251,7 +1259,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SEQ)
     // case: reconstruct sequence directly
     else 
         vs_seq__aligner__verbatim:
-        sam_reconstruct_SEQ_vs_ref (VB, ctx, STRa(snip), reconstruct);
+        sam_reconstruct_SEQ_vs_ref (VB, STRa(snip), reconstruct);
 
     return NO_NEW_VALUE;
 }
@@ -1259,11 +1267,13 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SEQ)
 // SAM-to-BAM translator: translate SAM ASCII sequence characters to BAM's 4-bit characters:
 TRANSLATOR_FUNC (sam_piz_sam2bam_SEQ)
 {
+    declare_seq_contexts;
+
     // before translating - add to Deep if needed
     if (flag.deep) 
         sam_piz_con_item_cb (vb, &(ContainerItem){ .dict_id = ctx->dict_id }, STRa(recon));
     
-    BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)Bc (vb->txt_data, vb->line_start);
+    BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)Btxt (vb->line_start);
     uint32_t l_seq = LTEN32 (alignment->l_seq);
 
     // backward compatability note: prior to v14 the condition was:
@@ -1273,7 +1283,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_SEQ)
 
     // case downstream contexts need access to the textual_seq: copy it.
     // Examples: LONGR codec for QUAL; sam_piz_special_BSSEEKER2_XM
-    if (!CTX(SAM_SQBITMAP)->flags.no_textual_seq) {
+    if (!bitmap_ctx->flags.no_textual_seq) {
         buf_alloc (vb, &VB_SAM->textual_seq, 0, recon_len, char, 0, "textual_seq");
         memcpy (B1STc (VB_SAM->textual_seq), recon, recon_len);
         VB_SAM->textual_seq.len = recon_len;

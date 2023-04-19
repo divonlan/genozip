@@ -7,20 +7,16 @@
             "name": "Run Debug",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/src/genozip-debug.exe",
+            // "program": "${workspaceFolder}/src/genozip-debug.exe",
             // "program": "${workspaceFolder}/src/genounzip-debug.exe",
-            // "program": "${workspaceFolder}/src/genocat-debug.exe",
+            "program": "${workspaceFolder}/src/genocat-debug.exe",
             // "program": "${workspaceFolder}/src/genozip-opt.exe",
             //"program": "${workspaceFolder}/src/genozip.exe",
             //"program": "${workspaceFolder}/src/genounzip.exe",
             //"program": "${workspaceFolder}/src/genols-debug.exe",
 
-            // "args" : ["-dt", "private/test/special.basic.deep.sam.genozip"],
-            "args" : ["-f", "private/test/special.basic.deep.sam"],
-            // "args" : ["-fe", "data/GRCh38.v15.ref.genozip", "-3X", "btest.deep.R1.fq", "btest.deep.sam", "btest.deep.R2.fq"],
-            // "args" : ["btest.deep.deep.genozip","-dt"],
-            // "args" : ["--decompress", "--test", "--echo", "private/test/test.pacbio.ccs.10k.bam.genozip"],
-
+            "args" : ["-e", "data/GRCh38.v15.ref.genozip", "-fXW", "private/test/test.human2-R2.fq.gz"],
+                        
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
@@ -40,26 +36,26 @@
             ],
         },
 
-        {
-            "name": "(gdb) Attach",
-            "type": "cppdbg",
-            "request": "attach",
-            "program": "enter program name, for example ${workspaceFolder}/a.exe",
-            "MIMode": "gdb",
-            "miDebuggerPath": "/path/to/gdb",
-            "setupCommands": [
-                {
-                    "description": "Enable pretty-printing for gdb",
-                    "text": "-enable-pretty-printing",
-                    "ignoreFailures": true
-                },
-                {
-                    "description": "Set Disassembly Flavor to Intel",
-                    "text": "-gdb-set disassembly-flavor intel",
-                    "ignoreFailures": true
-                }
-            ]
-        },
+        // {
+        //     "name": "(gdb) Attach",
+        //     "type": "cppdbg",
+        //     "request": "attach",
+        //     "program": "enter program name, for example ${workspaceFolder}/a.exe",
+        //     "MIMode": "gdb",
+        //     "miDebuggerPath": "/path/to/gdb",
+        //     "setupCommands": [
+        //         {
+        //             "description": "Enable pretty-printing for gdb",
+        //             "text": "-enable-pretty-printing",
+        //             "ignoreFailures": true
+        //         },
+        //         {
+        //             "description": "Set Disassembly Flavor to Intel",
+        //             "text": "-gdb-set disassembly-flavor intel",
+        //             "ignoreFailures": true
+        //         }
+        //     ]
+        // },
 
     ]
 }

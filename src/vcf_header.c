@@ -24,6 +24,7 @@
 #include "gencomp.h"
 #include "stats.h"
 #include "tip.h"
+#include "arch.h"
 
 // Globals
 static VcfVersion vcf_version;
@@ -683,9 +684,10 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
     #define IF_IN_SOURCE(signature, segcf) if (stats_programs.len && strstr (stats_programs.data, signature)) segconf.segcf = true
     #define IF_IN_HEADER(signature, segcf) if (strstr (txt_header->data   , signature)) segconf.segcf = true
     
-    IF_IN_SOURCE ("infiniumFinalReportConverter", vcf_infinium);
+    // when adding here, also add to stats_output_file_metadata()
+    IF_IN_SOURCE ("infiniumFinalReportConverter", vcf_is_infinium);
     IF_IN_SOURCE ("VarScan", vcf_is_varscan);
-    IF_IN_SOURCE ("dbSNP", vcf_dbSNP);
+    IF_IN_SOURCE ("dbSNP", vcf_is_dbSNP);
     IF_IN_HEADER ("GenotypeGVCFs", vcf_is_gvcf);
     IF_IN_HEADER ("CombineGVCFs", vcf_is_gvcf);
     IF_IN_HEADER ("beagle", vcf_is_beagle);
@@ -697,13 +699,10 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
     bool has_PROBE = !!strstr (txt_header->data, "##INFO=<ID=PROBE_A");
     SAFE_RESTORE;
 
-    if (!flag.reference && segconf.vcf_is_gvcf)
-        TIP ("compressing a GVCF file using a reference file can reduce the compressed file's size by 10%%-30%%.\nUse: \"genozip --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
-            txt_file->name);
-
     if (!flag.reference && segconf.vcf_illum_gtyping && has_PROBE)
-        TIP ("compressing an Illumina Genotyping VCF file using a reference file can reduce the compressed file's size by 20%%.\nUse: \"genozip --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
-             txt_file->name);
+        TIP ("Compressing an Illumina Genotyping VCF file using a reference file can reduce the compressed file's size by 20%%.\n"
+             "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
+             arch_get_argv0(), txt_file->name);
 
     if (chain_is_loaded && !evb->comp_i)
         vcf_tags_populate_tags_from_command_line();
@@ -765,8 +764,7 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
     if ((chain_is_loaded || txt_file->coords) && evb->comp_i == VCF_COMP_MAIN)
         vcf_header_zip_update_to_dual_coords (txt_header);
 
-    //xxx if (z_file && !z_file->num_txt_files)  // first component 
-    if (z_file)
+    if (z_file) 
         z_file->z_flags.has_gencomp |= (txt_file->coords != DC_NONE);  // note: in case of --chain, z_flags.dual_coords is set in file_open_z
 
     return true; // all good

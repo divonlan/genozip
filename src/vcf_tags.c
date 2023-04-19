@@ -579,10 +579,6 @@ unsigned vcf_tags_rename (VBlockVCFP vb,
 
     for (unsigned i=0; i < num_tags; i++) {
 
-        //xxx #define COPY_TAG(x) ({ \
-        //     memcpy (p, tags[i]->dests[RA_##x], tags[i]->dest_lens[RA_##x]); \
-        //     p += tags[i]->dest_lens[RA_##x]; \
-        // })
         #define COPY_TAG(x) \
             p = mempcpy (p, tags[i]->dests[RA_##x], tags[i]->dest_lens[RA_##x])
 
@@ -591,8 +587,7 @@ unsigned vcf_tags_rename (VBlockVCFP vb,
         else if (is_switch && is_xstrand && HAS (TLAFER)) COPY_TAG (TLAFER);
         else if (is_switch               && HAS (REFALT)) COPY_TAG (REFALT);
         else if (is_xstrand              && HAS (STRAND)) COPY_TAG (STRAND);
-//xxx        else { memcpy (p, tags[i]->tag_name, tags[i]->tag_name_len); p += tags[i]->tag_name_len; }                                             
-        else { p = mempcpy (p, tags[i]->tag_name, tags[i]->tag_name_len); }                                             
+        else p = mempcpy (p, tags[i]->tag_name, tags[i]->tag_name_len); 
             
         // concatenate separator
         if (is_format) {

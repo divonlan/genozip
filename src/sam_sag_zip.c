@@ -62,7 +62,10 @@ void sam_sag_zip_init_vb (VBlockP vb)
 // this is SAM/BAM's zip_after_segconf callback
 void sam_set_sag_type (void)
 {
-    if (flag.no_gencomp || flag.fast || (!segconf.is_sorted && !flag.force_gencomp))
+    if (flag.no_gencomp)
+        segconf.sag_type = SAG_NONE;
+
+    else if ((!segconf.is_sorted || !flag.best) && !flag.force_gencomp)
         segconf.sag_type = SAG_NONE;
 
     else if (MP(LONGRANGER))
@@ -147,7 +150,7 @@ bool sam_seg_prim_add_sag (VBlockSAMP vb, ZipDataLineSAM *dl, uint16_t num_alns/
     // MAIN: check that values are within limits defined in Sag (no need to check in PRIM as we already checked in MAIN)
     if (sam_is_main_vb) {
         FAILIF (!sam_might_have_saggies_in_other_VBs (vb, dl, num_alns), "all sag alignments are contained in this VB%s", "");
-        FAILIF (dl->QNAME.len > MAX_SA_QNAME_LEN, "dl->QNAME.len=%u > %u", dl->QNAME.len, MAX_SA_QNAME_LEN);
+        FAILIF (dl->QNAME.len > SAM_MAX_QNAME_LEN, "dl->QNAME.len=%u > %u", dl->QNAME.len, SAM_MAX_QNAME_LEN);
         FAILIF (seq_len==1 && *textual_seq == '*', "SEQ=\"*\"%s", ""); // we haven't segged seq yet, so vb->seq_missing is not yet set
         FAILIF (seq_len > MAX_SA_SEQ_LEN, "seq_len=%u > %u", seq_len, MAX_SA_SEQ_LEN);
         FAILIF (!dl->POS, "POS=0%s", ""); // unaligned
@@ -208,7 +211,7 @@ int32_t sam_seg_prim_add_sag_SA (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa), in
 
         // in Seg, we add the Adler32 of CIGAR to save memory, as we just need to verify it, not reconstruct it
         uint32_t cigar_len = (is_bam ? vb->textual_cigar.len32 : dl->CIGAR.len);
-        CigarSignature cigar_sig = cigar_sign (is_bam ? B1STc(vb->textual_cigar) : Btxt(dl->CIGAR.index), cigar_len);
+        CigarSignature cigar_sig = cigar_sign (is_bam ? B1STc(vb->textual_cigar) : Btxt (dl->CIGAR.index), cigar_len);
         
         // add primary alignment as first alignment in SA group
         BNXT (SAAln, vb->sag_alns) = (SAAln){
@@ -996,7 +999,7 @@ static uint32_t sam_zip_recon_plan_add_gc_lines (void)
 
     if (flag.show_memory) iprintf ("\nconcurrent_writer_vblocks (consumes memory in decompression, not threads)=%u\n\n", max_conc_writers);
 
-    COPY_TIMER_VB (evb, sam_zip_recon_plan_add_gc_lines);
+    COPY_TIMER_EVB (sam_zip_recon_plan_add_gc_lines);
 
     return max_conc_writers;
 }
@@ -1023,7 +1026,7 @@ void sam_zip_generate_recon_plan (void)
     else if (flag.bind == BIND_SAM)
         flag.bind = BIND_NONE; // no PRIM or DEPN lines found - single-component SAM/BAM without a recon_plan (but don't change if BIND_DEEP)
 
-    COPY_TIMER_VB (evb, generate_recon_plan);
+    COPY_TIMER_EVB (generate_recon_plan);
 }
 
 // Callback from stats_get_compressed_sizes: in PRIM VBs, we seg main field CIGAR into OPTION_SA_CIGAR.

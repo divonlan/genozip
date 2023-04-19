@@ -299,7 +299,7 @@ static inline char base32(uint32_t n) { return (n) < 26 ? ('a' + (n))     // 97-
 
 extern uint64_t p10[];
 
-#ifdef __APPLE__
+#ifdef __APPLE__ // is mempcpy available on gcc of darwin? if so, this is ifdef should be just for clang
 static inline void *mempcpy(void *restrict dest, const void *restrict src, size_t n)
 {
     memcpy (dest, src, n);

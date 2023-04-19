@@ -266,7 +266,7 @@ bool sam_cigar_textual_to_binary (VBlockSAMP vb, STRp(cigar), BufferP binary_cig
 }
 
 // display first 10K characters of a binary cigar - textually
-CigarStr dis_binary_cigar (VBlockSAMP vb, const BamCigarOp *cigar, uint32_t cigar_len/*in ops*/, Buffer *working_buf)
+CigarStr dis_binary_cigar (VBlockSAMP vb, const BamCigarOp *cigar, uint32_t cigar_len/*in ops*/, BufferP working_buf)
 {
     CigarStr out = {};
     sam_cigar_binary_to_textual (vb, cigar_len, cigar, working_buf);
@@ -906,7 +906,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_cigar_special_CIGAR)
 
     rom txt = BAFTtxt;
 
-    if ((flag.out_dt == DT_SAM || flag.out_dt == DT_FASTQ) && !vb->preprocessing) {
+    if ((OUT_DT(SAM) || OUT_DT(FASTQ)) && !vb->preprocessing) {
 
         if (snip[snip_len-1] == '*') // eg "151*" - zip added the "151" to indicate seq_len - we don't reconstruct it, just the '*'
             RECONSTRUCT1 ('*');
@@ -927,9 +927,9 @@ SPECIAL_RECONSTRUCTOR_DT (sam_cigar_special_CIGAR)
     }
 
     // BAM - output vb->binary_cigar generated in sam_cigar_analyze
-    else if (flag.out_dt == DT_BAM && !vb->preprocessing) {
+    else if (OUT_DT(BAM) && !vb->preprocessing) {
         // now we have the info needed to reconstruct bin, l_read_name, n_cigar_op and l_seq
-        BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)Bc (vb->txt_data, vb->line_start);
+        BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)Btxt (vb->line_start);
         alignment->l_read_name = BAFTtxt - alignment->read_name;
         alignment->n_cigar_op  = LTEN16 (vb->binary_cigar.len);
         alignment->l_seq       = (snip[0] == '-') ? 0 : LTEN32 (vb->seq_len);
@@ -975,7 +975,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_COPY_BUDDY_CIGAR)
     BuddyType bt = snip_len > 1 ? BUDDY_MATE : BUDDY_SAGGY; // for mate, it is segged with the other_ctx
 
     // fall back to normal COPY_BUDDY in case of SAM
-    if (flag.out_dt != DT_BAM) 
+    if (!OUT_DT(BAM)) 
         return sam_piz_special_COPY_BUDDY (VB, ctx, STRa(snip), new_value, reconstruct); // SAM or FASTQ output
 
     // get CIGAR field value previously reconstructed in BAM **BINARY** format
@@ -1014,14 +1014,14 @@ void sam_reconstruct_main_cigar_from_sag (VBlockSAMP vb, bool do_htos, ReconType
             uint8_t *comp = B8(z_file->sag_cigars, a->cigar.piz.index);
             uint32_t uncomp_len = cigar_len;
             void *success = rans_uncompress_to_4x16 (VB, comp, a->cigar.piz.comp_len,
-                                                     B1ST(uint8_t, vb->scratch), &uncomp_len); 
+                                                     B1ST8(vb->scratch), &uncomp_len); 
             ASSPIZ (success && uncomp_len == cigar_len, "rans_uncompress_to_4x16 failed to decompress an SA Aln CIGAR data: grp_i=%u aln_i=%"PRIu64" success=%u comp_len=%u uncomp_len=%u expected_uncomp_len=%u cigar_index=%"PRIu64" comp[10]=%s",
                     ZGRP_I(vb->sag), ZALN_I(a), !!success, (uint32_t)a->cigar.piz.comp_len, uncomp_len, cigar_len, (uint64_t)a->cigar.piz.index, str_hex10 (comp, a->cigar.piz.comp_len).s);
         }
 
         // case: not compressed
         else 
-            memcpy (B1ST(uint8_t, vb->scratch), Bc(z_file->sag_cigars, a->cigar.piz.index), cigar_len);
+            memcpy (B1ST8(vb->scratch), Bc(z_file->sag_cigars, a->cigar.piz.index), cigar_len);
     }
 
     char *cigar = B1STc (vb->scratch);

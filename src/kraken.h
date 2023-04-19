@@ -60,7 +60,7 @@ extern void kraken_zip_after_compute (VBlockP vb);
 
 // piz of a kraken file
 extern bool kraken_is_translation (VBlockP vb);
-extern bool kraken_piz_initialize (void);
+extern bool kraken_piz_initialize (CompIType comp_i);
 extern IS_SKIP (kraken_piz_is_skip_section);
 extern CONTAINER_CALLBACK (kraken_piz_container_cb);
 extern void kraken_piz_process_recon (VBlockP vb);

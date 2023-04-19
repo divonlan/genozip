@@ -78,7 +78,7 @@ void sam_sa_prim_finalize_ingest (void)
 
     if (flag.show_sag) sam_show_sag();
 
-    COPY_TIMER_VB (evb, sam_sa_prim_finalize_ingest);
+    COPY_TIMER_EVB (sam_sa_prim_finalize_ingest);
 }
 
 // separately compress qual of each PRIM line - into overlaid buffer. returns total qual length.
@@ -105,7 +105,7 @@ static uint32_t sam_zip_prim_ingest_vb_compress_qual (VBlockSAMP vb, Sag *vb_grp
         uint32_t comp_len = rans_compress_bound_4x16 (vb_grp->seq_len, X_NOSZ);
         if (comp_qual_buf->len + comp_len <= max_comp_len)  { // still room to compress
             uint8_t *qual = B8 (vb->txt_data, vb_grp->qual);  // always in SAM format
-            ASSERT (rans_compress_to_4x16 (evb, qual, vb_grp->seq_len, BAFT(uint8_t, *comp_qual_buf), &comp_len, X_NOSZ) && comp_len,
+            ASSERT (rans_compress_to_4x16 (evb, qual, vb_grp->seq_len, BAFT8(*comp_qual_buf), &comp_len, X_NOSZ) && comp_len,
                     "%s: Failed to compress PRIM qual: qual_len=%u", LN_NAME, vb_grp->seq_len);
         }
 
@@ -146,7 +146,7 @@ static void sam_zip_prim_ingest_vb_copy_qual_vb_to_z (VBlockSAMP vb, Sag *vb_grp
 
             // case: qual is not compressed - copy from txt_data
             else
-                buf_add (&z_file->sag_qual, Btxt(vb_grp->qual), vb_grp->seq_len); // note: qual in txt_data is always textual (in BAM, qual was re-written to textual in bam_rewrite_qual)
+                buf_add (&z_file->sag_qual, Btxt (vb_grp->qual), vb_grp->seq_len); // note: qual in txt_data is always textual (in BAM, qual was re-written to textual in bam_rewrite_qual)
 
             vb_grp->qual = z_qual; // now its an index into z_file->sag_qual
         }
@@ -179,13 +179,11 @@ static inline ZWord copy_solo (VBlockSAMP vb, char **next, TxtWord txtw, bool ch
     uint64_t start = BNUM64(z_file->solo_data, *next);
 
     // if identical, UR and UB, CR and CB, point to the same data in solo_data
-    if (check_copy && start >= txtw.len && !memcmp (*next - txtw.len, Btxt(txtw.index), txtw.len)) 
+    if (check_copy && start >= txtw.len && !memcmp (*next - txtw.len, Btxt (txtw.index), txtw.len)) 
         return (ZWord){ .index = start - txtw.len, .len = txtw.len };
     
     else {
-        //xxx memcpy (*next, Btxt(txtw.index), txtw.len); 
-        // *next += txtw.len; 
-        *next = mempcpy (*next, Btxt(txtw.index), txtw.len); 
+        *next = mempcpy (*next, Btxt (txtw.index), txtw.len); 
         return (ZWord){ .index = start, .len = txtw.len };
     }
 }
@@ -229,8 +227,10 @@ void sam_zip_prim_ingest_vb (VBlockSAMP vb)
 
     if (!vb_grps_len) return; // no SA groups
 
-    // overlay buffers - we can use automatic vars as overlaid buffers are not added to the buffer list
-    Buffer comp_qual_buf={}, packed_seq_buf={};
+    ASSERTNOTINUSE (vb->codec_bufs[0]);
+    ASSERTNOTINUSE (vb->codec_bufs[1]);
+    #define comp_qual_buf  vb->codec_bufs[0]
+    #define packed_seq_buf vb->codec_bufs[1]
 
     // using z_data buf that is already allocated but still empty - we're likely not going to allocate additional memory
     ASSERT (!vb->z_data.len, "expecting vb->z_data.len=0 but it is %"PRIu64, vb->z_data.len);
@@ -316,9 +316,9 @@ void sam_zip_prim_ingest_vb (VBlockSAMP vb)
     buf_add_buf (evb, &z_file->sag_grps, &vb->sag_grps, Sag, NULL); 
     mutex_unlock (grp_mutex);    
 
-    buf_free (packed_seq_buf);
+    buf_free (packed_seq_buf); 
     buf_free (comp_qual_buf);
     buf_free (vb->z_data);
 
-    COPY_TIMER_VB (evb, sam_zip_prim_ingest_vb); 
+    COPY_TIMER_EVB (sam_zip_prim_ingest_vb); 
 }
