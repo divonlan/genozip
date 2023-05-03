@@ -60,7 +60,8 @@ typedef struct {
     #define UNK_QNANE_LEN 127
     #define NUM_COLLECTED_WORDS 6
     char unknown_flavor_qnames[NUM_COLLECTED_WORDS][UNK_QNANE_LEN+1];
-
+    bool longr_bins_calculated; // were LONGR bins calculated in segconf
+    
     // SAM/BAM stuff
     STRl (std_cigar, 16);       // first CIGAR in the file - used in case all CIGARs in the file are the same
     int num_mapped;             // number of segconf reads that are mapped - defined as having (!FLAG.unmapped, RNAME, POS, CIGAR)

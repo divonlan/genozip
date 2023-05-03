@@ -294,7 +294,7 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
 
     rom exec_path = arch_get_executable();
 
-    if (!is_last_txt_file || flag.is_windows) {
+    if (!is_last_txt_file || flag.is_windows || flag.replace/*come back to delete files*/) {
 
         StreamP test = stream_create (NULL, 0, 0, 0, 0, 0, 0,
                                       "To use the --test option",

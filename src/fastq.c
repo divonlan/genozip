@@ -983,9 +983,9 @@ bool fastq_piz_get_pair2_is_forward (VBlockP vb)
 {
     ContextP ctx = CTX(FASTQ_STRAND);
 
-    // defect 2023-02-11: until 14.0.30, we allowed dropping SQBITMAP.b250 sections if all the same (since 14.0.31, we 
+    // defect 2023-02-11: 14.0.0 until 14.0.30, we allowed dropping SQBITMAP.b250 sections if all the same (since 14.0.31, we 
     // set no_drop_b250). Due to the defect, if b250 is dropped, we always segged is_forward verbatim and not as a diff to PAIR1.
-    bool defect_2023_02_11 = !CTX(FASTQ_SQBITMAP)->pair.len32; // can only happen up to 14.0.30
+    bool defect_2023_02_11 = (z_file->genozip_version == 14) && !CTX(FASTQ_SQBITMAP)->pair.len32; // can only happen up to 14.0.30
 
     // case: paired read (including all reads in up to v13) - diff vs pair1
     if (!defect_2023_02_11 && CTX(FASTQ_SQBITMAP)->pair1_is_aligned == PAIR1_ALIGNED) { // always true for files up to v13 and all lines had a is_forward value

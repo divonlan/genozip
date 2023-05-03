@@ -41,7 +41,7 @@ void sam_vb_release_vb (VBlockSAMP vb)
     vb->a_bases = vb->x_bases = vb->y_bases = 0;
     vb->a_index = vb->x_index = vb->y_index = 0;
     vb->md_verified = 0;
-    vb->qual_codec_no_longr = vb->has_qual = vb->saggy_is_prim = false;
+    vb->has_qual = vb->saggy_is_prim = false;
     vb->qual_missing = vb->seq_missing = vb->cigar_missing = vb->check_for_gc = vb->RNEXT_is_equal = 0;
     vb->sag = 0;
     vb->sa_aln = 0;

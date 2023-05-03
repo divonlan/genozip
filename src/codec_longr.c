@@ -118,6 +118,8 @@ void codec_longr_segconf_calculate_bins (VBlockP vb, ContextP ctx,
     buf_alloc (evb, &zctx->counts, 0, 256, uint64_t, 0, "zctx->counts");
     for (unsigned i=0; i < 256; i++)
         BNXT64 (zctx->counts) = value_to_bin[i];
+
+    segconf.longr_bins_calculated = true;
 }
 
 static void codec_longr_calc_channels (LongrState *state, STRp(seq), bytes qual, bool is_rev) 

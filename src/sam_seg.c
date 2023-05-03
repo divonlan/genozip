@@ -685,13 +685,13 @@ void sam_seg_finalize (VBlockP vb)
 
     // assign the QUAL codec
     if (VB_SAM->has_qual)
-        codec_assign_best_qual_codec (vb, SAM_QUAL, sam_zip_qual, VB_SAM->qual_codec_no_longr, true);
+        codec_assign_best_qual_codec (vb, SAM_QUAL, sam_zip_qual, false, true);
 
     // if (CTX(SAM_QUAL_FLANK)->local.len32) xxx doesn't work yet, why?
     //     codec_assign_best_qual_codec (vb, SAM_QUAL_FLANK, NULL, true, false);
 
     if (CTX(OPTION_OQ_Z)->local.len32)
-        codec_assign_best_qual_codec (vb, OPTION_OQ_Z, sam_zip_OQ, VB_SAM->qual_codec_no_longr, true);
+        codec_assign_best_qual_codec (vb, OPTION_OQ_Z, sam_zip_OQ, false, true);
 
     if (CTX(OPTION_TQ_Z)->local.len32)
         codec_assign_best_qual_codec (vb, OPTION_TQ_Z, sam_zip_TQ, true, false);
@@ -1489,8 +1489,8 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
     ASSSEG (str_is_in_range (flds[QUAL], fld_lens[QUAL], 33, 126), flds[QUAL], "Invalid QUAL - it contains non-Phred characters: \"%.*s\"",
            STRfi (fld, QUAL));
 
-    if (fld_lens[SEQ] != fld_lens[QUAL])
-        vb->qual_codec_no_longr = true; // we cannot compress QUAL with CODEC_LONGR in this case
+    ASSSEG (fld_lens[SEQ] == fld_lens[QUAL] || vb->qual_missing, flds[0], "Expecting QUAL(length=%u) to be of the same length as SEQ(length=%u)",
+            fld_lens[QUAL], fld_lens[SEQ]);
 
     // finally we can seg CIGAR now
     sam_seg_CIGAR(vb, dl, fld_lens[CIGAR], STRfld (SEQ), STRfld (QUAL), fld_lens[CIGAR] + 1 /*\t*/);

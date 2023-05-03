@@ -268,10 +268,12 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual_data)/*always te
         dl->dont_compress_QUAL = true; // don't compress this line
     }
 
-    // if we suspect entire file might be qual-less, seg as snip (without adding local) so that would become 
+    // 1. if we suspect entire file might be qual-less, seg as snip (without adding local) so that would become 
     // all-the-same in that. If we might have mixed qual/no-qual in the file, we add to local to not add entropy to b250
-    else if (dl->no_qual && !segconf.nontrivial_qual) {
+    // 2. LONGR codec can't handle mising QUAL
+    else if (dl->no_qual && (!segconf.nontrivial_qual || segconf.is_long_reads)) {
         seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_QUAL, '*' }, 3, SAM_QUAL, add_bytes); 
+        dl->dont_compress_QUAL = true; // don't compress this line
         goto done;
     }
 
@@ -460,7 +462,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
         SamFlags saggy_flags = { .value = history64 (SAM_FLAG, vb->saggy_line_i) };
         rom saggy_qual = (word.lookup == LookupTxtData) ? Btxt(word.index) : Bc(ctx->per_line, word.index);
 
-        if ((uint8_t)*saggy_qual == (IS_RECON_BAM ? 0xff : '*'))
+        if (word.len == 1 && (uint8_t)*saggy_qual == (IS_RECON_BAM ? 0xff : '*'))
             goto no_diff; // in case prim has no qual - seg did not diff (the current line may or may not have qual)
 
         else if (prim_has_qual_but_i_dont)

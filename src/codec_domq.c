@@ -429,7 +429,10 @@ COMPRESS (codec_domq_compress)
     // where QUAL is empty if qual is just one run. We use no_doms rather than another marker, to avoid introducing
     // another letter into the compressed alphabet
     if (runlen &&
-        (qdomruns_buf->len32 || runlen < BLST(QualLine, ql_buf)->qual_len)) { // if len=0 - no runs were added and no non-dom in the last line - all non-diverse lines contain only the dom. we will keep the buffer empty and handle in reconstruct
+        // note: if qdomruns_buf->len32=0 - this final run is the only run - i.e. the qual data of this VB 
+        // consists of initial non-doms followed by a single final run. We can therefore refrain from having a 
+        // qdomruns section and figure it out in recon.
+        (qdomruns_buf->len32 || runlen < BLST(QualLine, ql_buf)->qual_len)) {
         
         buf_alloc (vb, qdomruns_buf, runlen / 254 + 1, 0, uint8_t, 0, 0);
         codec_domq_add_runs (qdomruns_buf, runlen); // add final dom runs
@@ -619,11 +622,25 @@ static inline void codec_domq_reconstruct_do (VBlockP vb, ContextP qual_ctx, Con
     uint32_t qual_len=0;
     uint32_t expected_qual_len = missing_qual ? 1 : len; 
 
-    // case: all non-diverse lines contain only dom. we identify this by domqruns_ctx.local being empty.
+    // case: all non-diverse lines contain only dom (after possibly a few initial characters - see defect 2023-04-27). 
+    // we identify this by domqruns_ctx.local being empty.
     if (!domqruns_ctx->local.len32) {
-        if (reconstruct) {
-            memset (BAFTtxt, dom, expected_qual_len);
-            vb->txt_data.len32 += expected_qual_len;
+        if (reconstruct) {            
+            // possibly an initial string of non-dom values, followed by only dom values (in the domq lines) until the end of the VB
+            while (qual_len < expected_qual_len && qual_ctx->next_local < qual_ctx->local.len32 - 1) { // -1 is important, bc a VB with no non-doms, would have a single 'X' in qual_ctx
+                uint8_t expecting_no_dom = *B8(qual_ctx->local, qual_ctx->next_local);
+                uint8_t q_norm           = *B8(qual_ctx->local, qual_ctx->next_local + 1);
+                
+                ASSPIZ (expecting_no_dom == num_norm_qs, "expecting non-dom qual_len=%u but found %u, qual_ctx->local.len=%u", 
+                        qual_len, expecting_no_dom, qual_ctx->local.len32);
+                RECONSTRUCT1 (denormalize[q_norm]);
+                qual_ctx->next_local += 2;
+                qual_len++;
+            } 
+
+            // remainder is dom
+            memset (BAFTtxt, dom, expected_qual_len - qual_len);
+            vb->txt_data.len32 += expected_qual_len - qual_len;
         }
 
         qual_len = expected_qual_len;

@@ -7,6 +7,7 @@ launch.json
 .conda-timestamp
 .archive.tar.gz
 *.o
+!stub.o
 *.debug-o
 *.opt-o
 *.d

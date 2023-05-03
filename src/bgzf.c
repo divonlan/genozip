@@ -387,6 +387,8 @@ struct FlagsBgzf bgzf_get_compression_level (rom filename, bytes comp_block, uin
 // ZIP: called by Seg to set the bgzf index of the next line
 void bgzf_zip_advance_index (VBlockP vb, uint32_t line_len)
 {
+    if (!vb->bgzf_blocks.len) return; // no BGZF blocks in this VB - all data came from "unconsumed_txt"
+
     vb->line_bgzf_uoffset += line_len;
 
     // udpate current_bb_i and bgzf_offset (note: line_len might span multiple bgzf blocks)

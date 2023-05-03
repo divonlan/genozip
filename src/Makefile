@@ -31,6 +31,10 @@ ifdef IS_CONDA
 		CFLAGS  += -I$(PREFIX)/Library/include 
 	endif
 
+	ifeq ($(uname),Linux)
+		LDFLAGS += stub.o
+	endif
+
 else
 	CC=gcc
 

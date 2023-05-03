@@ -488,8 +488,6 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
         dl->QUAL = (TxtWord){ .index=vb->txt_data.len32, .len = 1 }; // a '*' was placed after txt_data in bam_seg_initialize 
 
         sam_seg_QUAL (vb, dl, alignment, 1, l_seq /* account of l_seq 0xff */);
-        
-        vb->qual_codec_no_longr = true; // we cannot compress QUAL with CODEC_LONGR in this case
     }
 
     // AUX fields - up to MAX_FIELDS of them

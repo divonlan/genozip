@@ -821,6 +821,8 @@ void bits_print_substr (rom msg, ConstBitsP bits,uint64_t start, uint64_t length
 // prints a 2bit bases array - A,C,G,T bases
 void bits_print_substr_bases (rom msg, ConstBitsP bits, uint64_t start, uint64_t length/*in bases*/, FILE *file)
 {
+    if (!file) file = info_stream;
+
     start *= 2; // now it is in bits
     length = MIN_(length * 2, bits->nbits - start);
 

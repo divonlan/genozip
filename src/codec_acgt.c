@@ -165,7 +165,11 @@ COMPRESS (codec_acgt_compress)
     // get codec for NONREF - header->lcodec remains CODEC_ACGT, and we set subcodec to the codec discovered in assign, and set to nonref_ctx->lcodec 
     z_lcodec = ZCTX(nonref_ctx->did_i)->lcodec;
     nonref_ctx->lcodec = z_lcodec; // possibly set by a previous VB call to codec_assign_best_codec
+    
+    vb->scratch.len32 *= sizeof (uint64_t); // ltype is LT_SEQUENCE, but length is in 64b words (in Bits)
     header->sub_codec = codec_assign_best_codec (vb, nonref_ctx, &vb->scratch, SEC_LOCAL);
+    vb->scratch.len32 /= sizeof (uint64_t); // restore
+    
     if (header->sub_codec == CODEC_UNKNOWN) header->sub_codec = CODEC_NONE; // really small
     
     compress_sub: {

@@ -308,7 +308,6 @@ typedef struct VBlockSAM {
     bool saggy_is_prim;            // Seg/PIZ: The line in saggy_line_i is 1. not secondary 2. not supplementary 3. has no hard clips
 
     // QUAL stuff
-    bool qual_codec_no_longr;      // true if we can compress qual with CODEC_LONGR
     bool has_qual;                 // Seg: This VB has at least one line with non-missing qual
 } VBlockSAM;
 
