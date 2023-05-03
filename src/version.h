@@ -1,4 +1,4 @@
-#define GENOZIP_CODE_VERSION "14.0.34"
+#define GENOZIP_CODE_VERSION "14.0.35"
 #define GENOZIP_FILE_FORMAT_VERSION 14
 
 extern void version_background_test_for_newer (void);
