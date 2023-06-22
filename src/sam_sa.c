@@ -77,8 +77,7 @@ static inline bool sam_seg_SA_field_is_line_matches_aln (VBlockSAMP vb, ZipDataL
     STR(line_rname);
     ctx_get_vb_snip_ex (CTX(SAM_RNAME), dl->RNAME, pSTRa(line_rname));
 
-    if (line_rname_len != item_lens[SA_RNAME] ||
-        memcmp (line_rname, items[SA_RNAME], line_rname_len)) return false; // RNAME is different
+    if (!str_issame_(STRa(line_rname), STRi(item, SA_RNAME))) return false; // RNAME is different
     
     // pos, mapq, nm
     int64_t aln_pos, aln_mapq, aln_nm;
@@ -217,7 +216,7 @@ void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa), unsigned add_byt
         int32_t num_alns = 1/*primary aln*/ + seg_array_of_struct (VB, ctx, container_SA, STRa(sa), callbacks, add_bytes); // 0 if SA is malformed 
 
         // We already tested the SA to be good when we added this line to PRIM in sam_seg_prim_add_sag_SA
-        ASSSEG (num_alns >= 2 && num_alns <= MAX_SA_NUM_ALNS, sa, "%s: Not expecting a malformed SA field in PRIM. num_alns=%u SA:Z=\"%.*s\"", 
+        ASSSEG (num_alns >= 2 && num_alns <= MAX_SA_NUM_ALNS, "%s: Not expecting a malformed SA field in PRIM. num_alns=%u SA:Z=\"%.*s\"", 
                 LN_NAME, num_alns, STRf(sa));
 
         // use SA.local to store number of alignments in this SA Group (inc. primary)
@@ -281,10 +280,8 @@ static inline bool sam_piz_SA_field_is_line_matches_aln (VBlockSAMP vb, ContextP
     int64_t aln_pos, aln_mapq, aln_nm;
     bool found = 
         /*strand*/ *items[SA_STRAND] == my_strand &&
-        /*cigar */ vb->textual_cigar.len32 == item_lens[SA_CIGAR] &&
-                   !memcmp (B1STc(vb->textual_cigar), items[SA_CIGAR], item_lens[SA_CIGAR]) &&
-        /*rname */ my_rname_len == item_lens[SA_RNAME] &&
-                   !memcmp (my_rname, items[SA_RNAME], my_rname_len) &&
+        /*cigar */ str_issame_(STRb(vb->textual_cigar), STRi(item, SA_CIGAR)) &&
+        /*rname */ str_issame_(STRa(my_rname), STRi(item, SA_RNAME)) &&
         /*pos   */ str_get_int (STRi(item, SA_POS),  &aln_pos)  && aln_pos  == my_pos;
 
     // we also compare MAPQ and NM, unless --coverage or --count in which case these fields are skipped (because NM requires MD which requires SQBITMAP...)

@@ -92,7 +92,7 @@ void vcf_seg_PROBE_A (VBlockVCFP vb, ContextP ctx, STRp(probe))
         decl_acgt_decode;
         
         Range *range = ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos - probe_len, probe_len*2 + 1, 
-                                          WORD_INDEX_NONE, NULL, (IS_REF_EXT_STORE ? &lock : NULL));
+                                          WORD_INDEX_NONE, (IS_REF_EXT_STORE ? &lock : NULL));
         if (!range) goto fallback;
         
         // test_fwd:

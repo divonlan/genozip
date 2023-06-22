@@ -9,7 +9,7 @@
 #pragma once
 
 #include "genozip.h"
-#include "libdeflate/libdeflate.h"
+#include "segconf.h"
 
 #define dict_id_is_qname_sf dict_id_is_type_1
 #define dict_id_qname_sf dict_id_type_1
@@ -22,26 +22,12 @@ extern void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname));
 extern void qname_zip_initialize (void);
 extern void qname_seg_initialize (VBlockP vb, QType q, Did st_did_i);
 
-typedef enum { QTR_SUCCESS, QTR_QNAME_LEN_0, QTR_FIXED_LEN_MISMATCH, QTR_WRONG_Q, QTR_CONTAINER_MISMATCH, QTR_BAD_INTEGER, QTR_BAD_CHARS, QTR_BAD_NUMERIC, QTR_BAD_HEX, QTR_TECH_MISMATCH, NUM_QTRs } QnameTestResult;
-#define QTR_NAME             { "SUCCESS",   "QNAME_LEN=0",   "FIXED_LEN_MISMATCH",   "WRONG_Q",   "CONTAINER_MISMATCH",   "BAD_INTEGER",   "BAD_CHARS",   "BAD_NUMERIC",   "BAD_HEX",   "TECH_MISMATCH" }
+typedef enum  { QTR_SUCCESS, QTR_QNAME_LEN_0, QTR_FIXED_LEN_MISMATCH, QTR_WRONG_Q, QTR_CONTAINER_MISMATCH, QTR_BAD_INTEGER, QTR_BAD_CHARS, QTR_BAD_NUMERIC, QTR_BAD_HEX, QTR_TECH_MISMATCH, NUM_QTRs } QnameTestResult;
+#define QTR_NAME { "SUCCESS",   "QNAME_LEN=0",   "FIXED_LEN_MISMATCH",   "WRONG_Q",   "CONTAINER_MISMATCH",   "BAD_INTEGER",   "BAD_CHARS",   "BAD_NUMERIC",   "BAD_HEX",   "TECH_MISMATCH" }
 extern QnameTestResult qname_test_flavor (STRp(qname), QType q, QnameFlavor qf, bool quiet);
 
-typedef enum { QF_NO_ID, QF_INTEGER, QF_GENOZIP_OPT } QnameFlavorId;
+extern uint32_t qname_calc_hash (QType q, STRp(qname), thool is_last, bool canonical, uint32_t *uncanonical_suffix_len);
+extern void qname_canonize (QType q, rom qname, uint32_t *qname_len);
 
-// ZIP only: a good hash function for QNAMEs. This is not part of the file format and can be changed any time.
-static inline uint32_t QNAME_HASH (STRp(qname), int is_last /*0/1 or -1 if not used*/) 
-{
-    uint8_t data[qname_len];
-    for (int i=0; i < qname_len; i++)
-        data[i] = ((((uint8_t *)qname)[i]-33) & 0x3f) | ((((uint8_t *)qname)[qname_len-i-1] & 0x3) << 6);
-
-    uint32_t hash = crc32 (0, data, qname_len);
-    if (is_last >= 0) hash = (hash & 0xfffffffe) | is_last;
-
-    return hash;
-}
-
-// these segconf functions are here and not in segconf.h to prevent segconf.h #including qname_flavors.h for QnameFlavorId
 extern rom segconf_qf_name (QType q);
-extern QnameFlavorId segconf_qf_id (QType q);
 extern rom qtype_name (QType q);

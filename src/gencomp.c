@@ -18,6 +18,7 @@
 #include "fastq.h"
 #include "codec.h"
 #include "bgzf.h"
+#include "biopsy.h"
 
 //-----------------------
 // Types & macros
@@ -38,7 +39,7 @@ typedef struct {
 
 // overlays Buffer.param of queue[gct].gc_txts[buf_i]
 typedef struct __attribute__ ((__packed__)) {
-    uint32_t num_lines : 27; // VB size is limited to 2GB and VCF spec mandates at least 16 characters per line (8 mandatory fields)
+    uint32_t num_lines : 27; // VB size is limited to 1GB and VCF spec mandates at least 16 characters per line (8 mandatory fields), SAM mandates 22 (11 fields)
     uint32_t comp_i    : 2;
     uint32_t unused    : 3;
     uint16_t next;           // queue: towards head ; stack: down stack
@@ -84,7 +85,6 @@ typedef struct  {
 //
 // gc_protected protects variables that may be accessed by both "Absorbing functions" and "Dispatcher functions" running concurrently.
 static Mutex gc_protected = {};
-static Serializer gc_vb_serializer = {};
 
 // --------------------------------------------------------------------------------------
 // unprotected data structures - accessed only by "Dispatcher functions" (main thread)
@@ -94,16 +94,36 @@ static VBIType num_SAM_PRIM_vbs_ingested = 0;
 static VBIType num_vbs_dispatched[NUM_GC_TYPES] = {}; // by gencomp type
 static DepnStruct depn = {};              // doesn't need protection because accessed by Dispatcher functions only after Absorption is complete
 
-static enum { DEPN_NONE, DEPN_OFFLOAD, DEPN_REREAD } depn_method; // constant after initialization in gencomp_initialize
+// ZIP: two methods for handling DEPN lines that are collected when segging the MAIN component, and need
+// to be segged later, after all MAIN and PRIM VBs are segged.
+static enum { DEPN_NONE,            
+              DEPN_OFFLOAD, // DEPN lines are offloaded to disk (compressed with RANS), to be later read back
+              DEPN_REREAD   // DEPN lines are re-read from txt file
+            } depn_method;  // immutable after initialization in gencomp_initialize
 
 // --------------------------------------------------------------------------------------
 // Mutex-protected data structures - accessed by both "Dispatcher functions" (main thread)
-// and "Absorbing functions" (serialized compute thread) running concurrently (P final)
+// and "Absorbing functions" (serialized compute thread) running concurrently (veriable names have a 'P' suffix)
 // --------------------------------------------------------------------------------------
 static bool finished_absorbingP = false;
 static VBIType num_MAIN_vbs_absorbedP = 0; 
 static QueueStruct queueP[NUM_GC_TYPES] = {}; // queue of txt_data's [1] out-of-band (used for SAM PRIM, DVCF PRIM + LUFT) [2] DEPN (used for SAM DEPN)
 static CompStruct componentsP[MAX_GEN_COMP+1] = {};
+
+// --------------------------------------------------------------------------------------
+// Queue of VB data waiting for absorbing. We need to absorb in the order of VBs
+// as recon_plan creation expects the lines to be in the same order as in the MAIN component. 
+// so the data waits in line until all previous VBs arrive
+static Mutex preabsorb_queue_mutex = {};
+
+typedef struct {
+    uint32_t vblock_i;
+    CompIType comp_i;
+    Buffer txt_data;       // disowned and moved from VB - only if MAIN and has gencomp lines
+    Buffer gencomp_lines;  // - " -
+} PreabsorbEntry;
+static Buffer preabsorb_queue = {}; // a queue of PreabsorbEntry
+#define last_absorbed_vb_i preabsorb_queue.prm32[0]
 
 #define GC_TXTS_BUF_NAME "queueP.gc_txts"
 
@@ -112,7 +132,7 @@ static CompStruct componentsP[MAX_GEN_COMP+1] = {};
 // and after by dispatcher functions
 // --------------------------------------------------------------------------------------
 static Buffer reread_depn_lines = {}; // array of type RereadLine
-VBlockP compress_depn_vb = NULL;
+static VBlockP compress_depn_vb = NULL;
 
 //--------------------------------------------------
 // Seg: adding gencomp lines to vb->gencomp
@@ -155,7 +175,7 @@ bool gencomp_comp_eligible_for_digest (VBlockP vb)
     DataType dt = vb ? vb->data_type : z_file->data_type;
 
     return (comp_i == COMP_MAIN) || // The MAIN component is always digestable 
-           (dt == DT_FASTQ)      || // FASTQ components are alway digestable (including FQ_COMP_R2, SAM_COMP_FQ00, SAM_COMP_FQ01) 
+           (dt == DT_FASTQ)      || // FASTQ components are alway digestable (including FQ_COMP_R2, SAM_COMP_FQXX) 
            ((dt == DT_SAM || dt == DT_BAM) && comp_i >= SAM_COMP_FQ00); // works even when vb=NULL
 }
 
@@ -185,13 +205,16 @@ void gencomp_initialize (CompIType comp_i, GencompType gct)
     componentsP[COMP_MAIN] = (CompStruct){ .type = GCT_NONE }; 
     componentsP[comp_i]    = (CompStruct){ .type = gct      };
 
-    if (!gc_vb_serializer.initialized) { // initialize once for all components
-        serializer_initialize (gc_vb_serializer);
+    if (!gc_protected.initialized) { // initialize once for all components
+        mutex_initialize (preabsorb_queue_mutex);
         mutex_initialize (gc_protected);
+
+        buf_set_promiscuous (&preabsorb_queue, "preabsorb_queue");
+        buf_alloc (evb, &preabsorb_queue, 0, global_max_threads, PreabsorbEntry, 0, NULL);
     }
 
     // add to buffer list. we can't allocate yet because segconf.vb_size is not known yet
-    buf_init_promiscuous (evb, &componentsP[comp_i].txt_data);
+    buf_set_promiscuous (&componentsP[comp_i].txt_data, "componentsP[]");
 
     // initialize queue. note: same-type components share a queue: in DVCF, LUFT and PRIM are both out-of-band.
     #if MAX_QUEUE_SIZE < MAX_GLOBAL_MAX_THREADS 
@@ -200,8 +223,8 @@ void gencomp_initialize (CompIType comp_i, GencompType gct)
 
     if (gct == GCT_DEPN) {
 
-        buf_init_promiscuous_(evb, &depn.thread_data, "depn.thread_data");
-        buf_init_promiscuous_(evb, &depn.thread_data_comp, "depn.thread_data_comp");
+        buf_set_promiscuous (&depn.thread_data, "depn.thread_data");
+        buf_set_promiscuous (&depn.thread_data_comp, "depn.thread_data_comp");
 
         // if we cannot re-read the depn lines from the file, we will offload them to disk
         if ((txt_file->codec != CODEC_BGZF && txt_file->codec != CODEC_NONE) || txt_file->redirected || txt_file->is_remote) {
@@ -209,18 +232,22 @@ void gencomp_initialize (CompIType comp_i, GencompType gct)
 
             depn.name = MALLOC (strlen (z_file->name) + 20);
             sprintf (depn.name, "%s.DEPN", z_file->name);
-            buf_init_promiscuous (evb, &depn.offload_info);
+            buf_set_promiscuous (&depn.offload_info, "depn.offload_info");
         }
 
         else {
             depn_method = DEPN_REREAD;
-            buf_init_promiscuous_(evb, &reread_depn_lines, "reread_depn_lines");
+            buf_set_promiscuous (&reread_depn_lines, "reread_depn_lines");
         }
     }
 
     if (!queueP[gct].gc_txts) {
         queueP[gct] = (QueueStruct) {
-            .queue_size    = (gct == GCT_OOB)             ? global_max_threads // OOB:  global_max_threads is the theoretical maximum number of gencomp txt_data generatable from global_max_threads concurrently running ZIP compute threads
+            // the OOB queue might grow in case a VB is slow to seg and many VBs after it are pre-absorbed. then when
+            // the slow VB is finally done, all the pre-absorbed VBs are added to the OOB queue at once, before the dispatcher
+            // has a chance to consume any data. We observed cases of the queue growing 3X the number of threads, so 7X
+            // should be sufficient. If it still overflows, flush will fail, resulting in an over-size OOB (=SAM PRIM) VB. no harm.
+            .queue_size    = (gct == GCT_OOB)             ? global_max_threads * 7 // OOB 
                            : (depn_method == DEPN_REREAD) ? global_max_threads // DEPN: when re-reading from txt_file data that doesn't fit into the queue - a larger queue is beneficial
                            :                                1,                 // DEPN: when writing a file with the data that doesn't fit into the queue - No strong benefit of having more buffers in memory, see: private/internal-docs/gencomp-depn-memory-queue-vs-disk.txt
             .next_unused   = 0,           // 0 means gc_txts[0]
@@ -232,7 +259,7 @@ void gencomp_initialize (CompIType comp_i, GencompType gct)
 
         // add to evb buf_list, so we can buf_alloc in other threads (similar to INIT in file.c)
         for (int i=0; i < queueP[gct].queue_size; i++) 
-            buf_init_promiscuous_(evb, &queueP[gct].gc_txts[i], GC_TXTS_BUF_NAME);
+            buf_set_promiscuous (&queueP[gct].gc_txts[i], GC_TXTS_BUF_NAME);
 
         // add all buffers to "unused stack"
         for (int i=0; i < queueP[gct].queue_size-1; i++) {
@@ -247,10 +274,10 @@ void gencomp_initialize (CompIType comp_i, GencompType gct)
 // main thread
 void gencomp_destroy (void)
 {
-    buf_destroy_by_name (GC_TXTS_BUF_NAME, false); // more efficient destroying
+    buflist_destroy_bufs_by_name (GC_TXTS_BUF_NAME, false); 
 
     for (GencompType gct=1; gct < NUM_GC_TYPES; gct++)
-        FREE(queueP[gct].gc_txts);
+        FREE (queueP[gct].gc_txts);
 
     for (CompIType comp_i=1; comp_i <= MAX_GEN_COMP; comp_i++)
         buf_destroy (componentsP[comp_i].txt_data);
@@ -267,15 +294,19 @@ void gencomp_destroy (void)
 
     vb_destroy_vb (&compress_depn_vb);
 
-    serializer_destroy (gc_vb_serializer);
+    mutex_destroy (preabsorb_queue_mutex);
     mutex_destroy (gc_protected);
     memset (queueP,   0, sizeof (queueP));
     memset (componentsP, 0, sizeof (componentsP));
     memset (&depn, 0, sizeof (depn));
     memset ((void*)num_vbs_dispatched, 0, sizeof(num_vbs_dispatched));
+    
     finished_absorbingP = sam_finished_ingesting_prim = false;
     num_SAM_PRIM_vbs_ingested = num_MAIN_vbs_absorbedP = 0;
     depn_method = DEPN_NONE;
+
+    ASSERTISZERO (preabsorb_queue.len);
+    buf_destroy (preabsorb_queue);
 }
 
 //-----------------------------------------------------------------------------------------------
@@ -324,6 +355,8 @@ static void *gencomp_do_offload (void *info_)
 // called by gencomp_flush with gc_protected locked. 
 static void gencomp_offload_DEPN_to_disk (CompIType comp_i, bool is_final_flush)
 {
+    START_TIMER;
+
     // open file upon first write 
     if (!depn.fp) {
         depn.fp = fopen (depn.name, WRITEREAD); 
@@ -359,6 +392,8 @@ static void gencomp_offload_DEPN_to_disk (CompIType comp_i, bool is_final_flush)
         gencomp_do_offload(info);
 
     if (flag.debug_gencomp) debug_gencomp ("offloaded", false);
+
+    COPY_TIMER_EVB (gencomp_offload_DEPN_to_disk);
 }
 
 static void *gencomp_compress_depn (void *comp_buf)
@@ -371,15 +406,17 @@ static void *gencomp_compress_depn (void *comp_buf)
 
 // ZIP: called with gc_protected locked.
 // moves data from componentsP.txt_data where it was absorbing lines from MAIN VBs to the GetQBit or DEPN queue
-static void gencomp_flush (CompIType comp_i, bool is_final_flush) // final flush of gct, not of comp_i!
+static bool gencomp_flush (CompIType comp_i, bool is_final_flush) // final flush of gct, not of comp_i!
 {
-    if (!componentsP[comp_i].txt_data.len) return; // nothing to flush
+    START_TIMER;
+
+    if (!componentsP[comp_i].txt_data.len) return true; // nothing to flush
 
     GencompType gct = componentsP[comp_i].type;
 
     // pop a buffer from the unused stack
     uint16_t buf_i = queueP[gct].next_unused;
-
+ 
     // sanity
     ASSERT ((buf_i == END_OF_LIST) == (queueP[gct].queue_len == queueP[gct].queue_size), 
             "Queue is broken: buf_i=%d END_OF_LIST=%d queueP[%u].queue_len=%u queueP[%u].queue_size=%u",
@@ -394,8 +431,9 @@ static void gencomp_flush (CompIType comp_i, bool is_final_flush) // final flush
 
     // if there are no more room on the queue - offload to disk (only if GCT_DEPN)
     if (buf_i == END_OF_LIST) {
-        // case: Out-of-band: this is an error
-        ASSERT (gct != GCT_OOB, "Out-of-band gencomp queue is full: gc_queue_size=%d", queueP[gct].queue_size);
+        // case: no room for flushing. see comment in gencomp_initialize as to how this might happen. 
+        // caller should just continue to grow componentsP[comp_i].txt_data resulting in an over-sized OOB (=SAM PRIM) VB
+        if (gct == GCT_OOB) return false; 
 
         // case: DEPN - we offload one buffer from the queue to the file
         gencomp_offload_DEPN_to_disk (comp_i, is_final_flush);
@@ -451,63 +489,55 @@ static void gencomp_flush (CompIType comp_i, bool is_final_flush) // final flush
     componentsP[comp_i].txt_data.len = componentsP[comp_i].txt_data.param = 0; // reset
 
     if (flag.debug_gencomp) debug_gencomp(comp_i==1 ? "flushcomp1" : "flushcomp2", false);
+
+    COPY_TIMER_EVB (gencomp_flush);
+    return true;
 }
 
-// called from compute_vb, with VBs in arbitrary order, and serializes them to their order. Notes:
-// (1) We need to do it in the compute thread (rather than the main thread) so that zip_prepare_one_vb_for_dispatching, 
-//     running in the main thread, can busy-wait for all MAIN compute threads to complete before flushing the final txt_data.
-// (2) We do it in VB order, as recon_plan creation expects the lines to be in the same order as in the MAIN component. 
-void gencomp_absorb_vb_gencomp_lines (VBlockP vb) 
+static void gencomp_absorb_add_to_queue (VBlockP vb, // this is the thread VB, NOT necessarily the VB the data originates from 
+                                         VBIType vb_i, ConstBufferP txt_data, ConstBufferP gencomp_lines) 
 {
-    // skip VBs that are not MAIN, or have no gencomp lines
-    if (vb->comp_i != COMP_MAIN || !vb->gencomp_lines.len) {        
-        if (vb->comp_i == COMP_MAIN) num_MAIN_vbs_absorbedP++;
-        
-        serializer_skip (gc_vb_serializer, vb->vblock_i);
-        return;
-    } 
-
-    serializer_lock (gc_vb_serializer, vb->vblock_i);
-
     mutex_lock (gc_protected);
 
     START_TIMER; // not including mutex wait times
-
-    if (flag.debug_gencomp) iprintf ("absorb       %s/%u\n", comp_name (vb->comp_i), vb->vblock_i);
 
     ASSERT0 (!finished_absorbingP, "Absorbing is done - not expecting to be called");
 
     // limit vb_size of depn to 64MB, to reduce the gencomp write bottleneck, esp in --best in files with lots of depn
     // also: a bug in rans_compress_to_4x16 (called from compress_depn_buf) erroring in buffers near 2GB.
     uint32_t comp_size[3] = { [1] = segconf.vb_size,
-                              [2] = componentsP[2].type == GCT_DEPN ? MIN_(segconf.vb_size, 1<<26) : segconf.vb_size };
+                              [2] = componentsP[2].type == GCT_DEPN ? MIN_(segconf.vb_size, 64 MB) : segconf.vb_size };
 
     for (int i=1; i<=2; i++)
         buf_alloc (evb, &componentsP[i].txt_data, 0, comp_size[i], char, 1, "componentsP.txt_data");    
 
-    // iterate on all lines the segmenter decided to send to gencomp (lines are of mixed componentsP)
-    ARRAY (GencompLineIEntry, gc_lines, vb->gencomp_lines)
-    for (uint32_t line_i=0; line_i < gc_lines_len; line_i++) { // cannot use for_buf here
+    if (depn_method == DEPN_REREAD)
+        buf_alloc (NULL, &reread_depn_lines, gencomp_lines->len, 0, RereadLine, 2, "reread_depn_lines");
 
-        GencompLineIEntry *gcl = &gc_lines[line_i];
+    // iterate on all lines the segmenter decided to send to gencomp and place each in the correct queue
+    for_buf (GencompLineIEntry, gcl, *gencomp_lines) {
 
         // flush previous lines if there is no room for new line
-        if (componentsP[gcl->comp_i].txt_data.len + gcl->line_len > comp_size[gcl->comp_i]) 
-            gencomp_flush (gcl->comp_i, false);
+        if (componentsP[gcl->comp_i].txt_data.len + gcl->line_len > comp_size[gcl->comp_i]) {
+            bool flushed = gencomp_flush (gcl->comp_i, false);
+
+            // case: not flushed bc too much data is already waiting for the dispatcher - just continue to grow this txt_data - 
+            // we will have an over-sized VB. See details of how this might happen in comment in gencomp_initialize
+            if (!flushed) 
+                buf_alloc (NULL, &componentsP[gcl->comp_i].txt_data, gcl->line_len, 0, char, 1.5, NULL);
+        }
 
         // note: it is possible that the some lines will fit into the queue, while subsequent
         // lines will be slated for re-reading 
         if (depn_method == DEPN_REREAD && 
             componentsP[gcl->comp_i].type == GCT_DEPN && 
-            queueP[GCT_DEPN].next_unused == END_OF_LIST) {
+            queueP[GCT_DEPN].next_unused == END_OF_LIST) 
             
-            RereadLine reread_line = { .offset = gcl->offset, .line_len = gcl->line_len };
-            buf_append_one (reread_depn_lines, reread_line);
-        }
+            BNXT(RereadLine, reread_depn_lines) = (RereadLine){ .offset = gcl->offset, .line_len = gcl->line_len };
 
-        // to to componentsP.txt_data to be flushed to the queue later
+        // to componentsP.txt_data to be flushed to the queue later
         else {
-            buf_add (&componentsP[gcl->comp_i].txt_data, Btxt (gcl->line_index), gcl->line_len);
+            buf_add_do (&componentsP[gcl->comp_i].txt_data, Bc(*txt_data, gcl->line_index), gcl->line_len);
             componentsP[gcl->comp_i].txt_data.count++; 
         }
     }
@@ -517,12 +547,112 @@ void gencomp_absorb_vb_gencomp_lines (VBlockP vb)
     mutex_unlock (gc_protected);
 
     // we declare the file has having gencomp only if we actually have gencomp data 
-    if (gc_lines_len)
+    if (gencomp_lines->len)
         z_file->z_flags.has_gencomp = true; 
 
-    COPY_TIMER (gencomp_absorb_vb_gencomp_lines);
+    if (flag.debug_gencomp) iprintf ("MAIN/%u absorbed %u gencomp lines\n", vb_i, gencomp_lines->len32);
 
-    serializer_unlock (gc_vb_serializer);
+    COPY_TIMER (gencomp_absorb_add_to_queue);
+}
+
+static VBIType gencomp_absorb_highest_consecutive_vb_i (VBlockP vb)
+{
+    // highest VB in queue & current vb
+    VBIType highest_vb_i = vb->vblock_i;
+    for_buf (PreabsorbEntry, ent, preabsorb_queue) 
+        if (ent->vblock_i > highest_vb_i) highest_vb_i = ent->vblock_i;
+
+    bool exists[highest_vb_i - last_absorbed_vb_i];
+    memset (exists, 0, highest_vb_i - last_absorbed_vb_i);
+    #define I(vb_i) ((vb_i) - last_absorbed_vb_i - 1)
+
+    // mark existing VBs from last_absorbed_vb_i + 1 to highest_vb_i
+    exists[I(vb->vblock_i)] = true;
+    for_buf (PreabsorbEntry, ent, preabsorb_queue) 
+        exists[I(ent->vblock_i)] = true;
+
+    // find highest consecutive
+    for (VBIType vb_i=last_absorbed_vb_i + 1; vb_i <= highest_vb_i; vb_i++)
+        if (!exists[I(vb_i)]) return vb_i - 1;
+
+    return highest_vb_i;
+}
+
+static ASCENDING_SORTER (preabsorb_queue_sorter, PreabsorbEntry, vblock_i)
+
+// called from compute_vb, with VBs in arbitrary order. Notes:
+// (1) We need to do it in the compute thread (rather than the main thread) so that zip_prepare_one_vb_for_dispatching, 
+//     running in the main thread, can busy-wait for all MAIN compute threads to complete before flushing the final txt_data.
+// (2) We do it in VB order, as recon_plan creation expects the lines to be in the same order as in the MAIN component. 
+void gencomp_absorb_vb_gencomp_lines (VBlockP vb) 
+{
+    mutex_lock (preabsorb_queue_mutex); // protects preabsorb_queue
+    
+    buf_alloc (evb, &preabsorb_queue, 1, 0, PreabsorbEntry, 2, NULL);
+
+    // an entry for every unabsorbed MAIN or PRIM VB
+    PreabsorbEntry *ent = &BNXT(PreabsorbEntry, preabsorb_queue);
+    *ent = (PreabsorbEntry){ .vblock_i = vb->vblock_i,
+                             .comp_i   = vb->comp_i }; // also zeros the Buffers
+
+    VBIType highest_consecutive_vb_i = gencomp_absorb_highest_consecutive_vb_i (vb);
+    bool can_absorb = (highest_consecutive_vb_i > last_absorbed_vb_i);
+
+    int num_absorbable = highest_consecutive_vb_i - last_absorbed_vb_i;
+    PreabsorbEntry to_be_destroyed[num_absorbable];
+
+    // only for MAIN VBs with gencomp lines - get the Buffers (unless we are absorbing this VB now) (note that we are absorbing this VB iff we are absorbing any VB)
+    if (vb->comp_i == COMP_MAIN && vb->gencomp_lines.len && !can_absorb) {
+        // buffers are moved to ent, and remain disowned - i.e. not any VB's buffer list
+        buf_disown (vb, vb->txt_data, ent->txt_data, false);
+        buf_disown (vb, vb->gencomp_lines, ent->gencomp_lines, true); // keep the original in VB as it is needed to make the recon plan, eg by sam_zip_gc_after_compute_main
+    }
+
+    // in case we have all consecutive VBs up to a certain VB - absorb all of them now
+    if (can_absorb) {
+        qsort (preabsorb_queue.data, preabsorb_queue.len, sizeof (PreabsorbEntry), preabsorb_queue_sorter);
+
+        // previous VBs on preabsorb_queue
+        for_buf (PreabsorbEntry, ent, preabsorb_queue)
+            if (ent->vblock_i > highest_consecutive_vb_i) 
+                break; // done
+            
+            // case: MAIN VB from a previous thread with gencomp lines that was put on the queue
+            else if (ent->txt_data.type != BUF_UNALLOCATED) 
+                gencomp_absorb_add_to_queue (vb, ent->vblock_i, &ent->txt_data, &ent->gencomp_lines);
+            // case: MAIN VB of the current thread, with gencomp lines
+            else if (ent->vblock_i == vb->vblock_i && ent->comp_i == COMP_MAIN && vb->gencomp_lines.len) 
+                gencomp_absorb_add_to_queue (vb, ent->vblock_i, &vb->txt_data, &vb->gencomp_lines);
+
+            // case: MAIN vb without any gencomp lines (current or a previous thread)
+            else if (ent->comp_i == COMP_MAIN) {
+                if (flag.debug_gencomp)
+                    iprintf ("%s/%u skipping because no gencomp lines\n", comp_name (ent->comp_i), ent->vblock_i);
+                num_MAIN_vbs_absorbedP++;
+            }
+
+            // case: non-MAIN vb
+            else if (flag.debug_gencomp) 
+                iprintf ("%s/%u skipping non-MAIN VB in absorb queue\n", comp_name (ent->comp_i), ent->vblock_i);
+
+        // move entries slated for destruction to to_be_destroyed
+        memcpy (to_be_destroyed, B1ST(PreabsorbEntry, preabsorb_queue), num_absorbable * sizeof (PreabsorbEntry));
+        buf_remove (preabsorb_queue, PreabsorbEntry, 0, num_absorbable); // all buffers in queue are disowned, so no issue moving them
+
+        last_absorbed_vb_i = highest_consecutive_vb_i;
+    }
+    
+    else if (flag.debug_gencomp) 
+        iprintf ("%s queued for absorbing\n", VB_NAME);
+
+    mutex_unlock (preabsorb_queue_mutex);
+
+    // destroy after unlocking the mutex, as it is time consuming (esp on Windows and MacOS)
+    if (can_absorb)
+        for (int i=0; i < num_absorbable; i++) {
+            buf_destroy (to_be_destroyed[i].txt_data); // belongs to this thread since we took ownership
+            buf_destroy (to_be_destroyed[i].gencomp_lines);
+        }
 }
 
 //------------------------------------------------------------------------------------
@@ -648,10 +778,11 @@ bool gencomp_get_txt_data (VBlockP vb)
             iprintf ("Returning %s vb=%s/%u with txt_data: len=%u adler32=%u\n", \
                     (msg), comp_name (vb->comp_i), vb->vblock_i, Ltxt, adler32 (1, STRb(vb->txt_data))); 
 
-    #define RETURN(msg, call) \
-        ( { call;\
-            DEBUG_GENCOMP (msg);\
-            zip_init_vb (vb);\
+    #define RETURN(msg, call)       \
+        ( { call;                   \
+            DEBUG_GENCOMP (msg);    \
+            zip_init_vb (vb);       \
+            biopsy_take (vb);       \
             return true; })
 
     if (!gc_protected.initialized) return false; // definitely no gencomp at all in this file (but if initialized, it doesn't always mean there is gencomp)
@@ -754,6 +885,8 @@ void gencomp_sam_prim_vb_has_been_ingested (VBlockP vb)
 // ZIP: compute thread of a DEPN VB: actually re-reading data into txt_data according to vb->reread_prescription
 void gencomp_reread_lines_as_prescribed (VBlockP vb)
 {
+    START_TIMER;
+
     buf_alloc_exact (vb, vb->txt_data, Ltxt, char, "txt_data");
     Ltxt = 0;
 
@@ -777,25 +910,35 @@ void gencomp_reread_lines_as_prescribed (VBlockP vb)
     }
 
     fclose (file);
+
+    if (flag.debug_gencomp)
+        iprintf ("%s: Reread %u gencomp lines from txt_file adler32=%u\n", 
+                 VB_NAME, vb->reread_prescription.len32, adler32 (1, STRb(vb->txt_data)));
+
+    COPY_TIMER (gencomp_reread_lines_as_prescribed);
 }
 
 bool gencomp_buf_locate_depn (void *unused, ConstBufferP buf)    
 {                                                               
-    return (char*)buf >= (char*)&depn &&           
-           (char*)buf <  ((char*)&depn) + sizeof (depn);                
+    return is_p_in_range (buf, &depn, sizeof (depn));                
 }                                                       
 
 bool gencomp_buf_locate_componentsP (void *unused, ConstBufferP buf)    
 {                                                               
-    return (char*)buf >= (char*)&componentsP[0] &&                            
-           (char*)buf <  ((char*)&componentsP[0]) + sizeof (componentsP);                
+    return is_p_in_range (buf, componentsP, sizeof (componentsP));                
 }                                                       
 
 bool gencomp_buf_locate_queueP (void *unused, ConstBufferP buf)    
 {            
     for (GencompType gct=1; gct < NUM_GC_TYPES; gct++)
-        if (queueP[gct].gc_txts && buf >= &queueP[gct].gc_txts[0] &&                     
-                                   buf <  &queueP[gct].gc_txts[queueP[gct].queue_size]) return true;
+        if (is_p_in_range (buf, queueP[gct].gc_txts, sizeof (Buffer) * queueP[gct].queue_size)) 
+            return true;
 
     return false;
+}
+
+bool gencomp_buf_locate_preabsorb_queue (void *unused, ConstBufferP buf)    
+{            
+    // not really thread safe, but we don't want to lock the mutex and potentially wait a long time in an error situation
+    return preabsorb_queue.data ? is_p_in_range (buf, preabsorb_queue.data, preabsorb_queue.size) : false;
 }

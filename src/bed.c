@@ -28,9 +28,7 @@ sSTRl(copy_TEND_snip, 30);
 // detect if a generic file is actually a BED, based on "browser" optional keyword
 bool is_bed (STRp(header), bool *need_more)
 {
-    bool is_bed = (header_len >= 9 && !memcmp (header, "browser", 7));
-
-    return is_bed;
+    return str_isprefix_(STRa(header), _S("browser"));
 }
 
 // ZIP: called from txtfile_read_header
@@ -47,9 +45,9 @@ int32_t bed_is_header_done (bool is_eof)
 
     uint32_t header_len = 0;
     int i; for (i=0; i < n_lines; i++) {
-        if (!(line_lens[i] >= 7 && !memcmp (lines[i], "browser", 7)) &&
-            !(line_lens[i] >= 5 && !memcmp (lines[i], "track", 5)) &&
-            !(line_lens[i] >= 1 && lines[i][0] == '#') &&
+        if (!str_isprefix_(STRi(line, i), _S("browser")) &&
+            !str_isprefix_(STRi(line, i), _S("track")) &&
+            !str_isprefix_(STRi(line, i), _S("#")) &&
             line_lens[i] != 0) break; // not a header line
 
         header_len += line_lens[i] + 1; // +1 for newline
@@ -131,7 +129,7 @@ static void bed_seg_START (VBlockP vb, STRp(start), WordIndex prev_line_chrom)
         start_val = seg_pos_field (VB, BED_START, BED_END, 0, 0, STRa(start), 0, start_len+1);
     
     else {
-        ASSSEG (str_get_int_range32 (STRa(start), 0, MAX_POS32, &start_val), start, "Invalid START=\"%.*s\"", STRf(start));
+        ASSSEG (str_get_int_range32 (STRa(start), 0, MAX_POS32, &start_val), "Invalid START=\"%.*s\"", STRf(start));
 
         seg_integer_fixed (vb, ctx, &start_val, false, start_len+1);
     }
@@ -198,7 +196,7 @@ rom bed_seg_txt_line (VBlockP vb, rom line, uint32_t remaining_txt_len, bool *ha
 
     // SCORE
     int64_t score;
-    ASSSEG (str_get_int (STRfld(SCORE), &score), flds[SCORE], "Invalid SCORE=\"%.*s\"", STRfi(fld,SCORE));
+    ASSSEG (str_get_int (STRfld(SCORE), &score), "Invalid SCORE=\"%.*s\"", STRfi(fld,SCORE));
     seg_add_to_local_resizable (vb, CTX(BED_SCORE), score, fld_lens[SCORE]+1);
     MAYBE_END_HERE(SCORE);
 
@@ -221,7 +219,7 @@ rom bed_seg_txt_line (VBlockP vb, rom line, uint32_t remaining_txt_len, bool *ha
 
     if (!str_get_int(STRfld(BCOUNT), &bcount) || bcount != predicted_bcount) {
         if (segconf.running) return fallback_to_generic (vb);
-        ASSSEG (false, flds[BCOUNT], "Encountered BCOUNT=\"%.*s\" - but expecting it to be the number of items in BSIZES which is %u", STRfi(fld,BCOUNT), (unsigned)predicted_bcount);
+        ABOSEG ("Encountered BCOUNT=\"%.*s\" - but expecting it to be the number of items in BSIZES which is %u", STRfi(fld,BCOUNT), (unsigned)predicted_bcount);
     }
 
     seg_by_did (vb, (char[]){ SNIP_SPECIAL, BED_SPECIAL_BCOUNT }, 2, BED_BCOUNT, fld_lens[BED_BCOUNT] + 1);

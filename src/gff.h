@@ -118,7 +118,6 @@ extern bool gff_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern bool gff_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id);
 
 // VBlock stuff
-extern void gff_vb_release_vb();
 extern unsigned gff_vb_size (DataType dt);
 
 // PIZ stuff

@@ -42,9 +42,9 @@ static uint64_t __inline windows_popcount (uint64_t w)
 // word of all 1s
 #define WORD_MAX  (~(uint64_t)0)
 
-#define SET_REGION(arr,start,len)    _set_region((arr),(start),(len),FILL_REGION)
-#define CLEAR_REGION(arr,start,len)  _set_region((arr),(start),(len),ZERO_REGION)
-#define TOGGLE_REGION(arr,start,len) _set_region((arr),(start),(len),SWAP_REGION)
+#define SET_REGION(bits,start,len)    _set_region((bits),(start),(len),FILL_REGION)
+#define CLEAR_REGION(bits,start,len)  _set_region((bits),(start),(len),ZERO_REGION)
+#define TOGGLE_REGION(bits,start,len) _set_region((bits),(start),(len),SWAP_REGION)
 
 //
 // Common internal functions
@@ -67,23 +67,23 @@ static inline WordStr _print_word (uint64_t word)
 }
 
 #define DEBUG_VALIDATE(a) validate_bits((a), __FUNCLINE)
-static void validate_bits (ConstBitsP arr, rom file, int lineno)
+static void validate_bits (ConstBitsP bits, rom file, int lineno)
 {
     // Verify that its allocated
-    ASSERT (arr->type != BITS_UNALLOCATED, "[%s:%i] Bits is not allocated", file, lineno);
+    ASSERT (bits->type != BUF_UNALLOCATED, "[%s:%i] Bits is not allocated", file, lineno);
 
     // Check num of words is correct
-    uint64_t num_words = roundup_bits2words64(arr->nbits);
-    ASSERT (num_words == arr->nwords, "[%s:%i] num of words wrong [bits: %i, expected nwords: %i, actual nwords: %i]", 
-            file, lineno, (int)arr->nbits, (int)num_words, (int)arr->nwords);
+    uint64_t num_words = roundup_bits2words64(bits->nbits);
+    ASSERT (num_words == bits->nwords, "[%s:%i] num of words wrong [bits: %i, expected nwords: %i, actual nwords: %i]", 
+            file, lineno, (int)bits->nbits, (int)num_words, (int)bits->nwords);
 
     // Check top word is masked (only if not overlayed - the unused bits of top word don't belong to this bit array and might be used eg by another bit array in genome.ref/genome.is_set)
-    if (arr->type == BITS_REGULAR) {
-      uint64_t tw = arr->nwords == 0 ? 0 : arr->nwords - 1;
-      uint64_t top_bits = bits_in_top_word(arr->nbits);
+    if (bits->type == BUF_REGULAR) {
+      uint64_t tw = bits->nwords == 0 ? 0 : bits->nwords - 1;
+      uint64_t top_bits = bits_in_top_word(bits->nbits);
 
-      ASSERT (arr->words[tw] <= bitmask64(top_bits), "[%s:%i] Expected %i bits in top word[%i] (the rest should be 0) but word=%s\n", 
-              file, lineno, (int)top_bits, (int)tw, _print_word(arr->words[tw]).s);
+      ASSERT (bits->words[tw] <= bitmask64(top_bits), "[%s:%i] Expected %i bits in top word[%i] (the rest should be 0) but word=%s\n", 
+              file, lineno, (int)top_bits, (int)tw, _print_word(bits->words[tw]).s);
     }
 }
 
@@ -295,45 +295,10 @@ Bits bits_alloc_do (uint64_t nbits, bool clear, FUNCLINE)
     return bits;
 }
 
-// reallocates a Buffer-embedded bit array
-void bits_realloc_do (BitsP bits, uint64_t nbits, 
-                      uint64_t low_level_nbits, // if not 0, we over-allocated in anticipation of further reallocs (improves performance)
-                      bool clear, FUNCLINE)
-{
-    ASSERT0 (bits->type == BITS_UNALLOCATED || bits->type == BITS_REGULAR || bits->type == BITS_STANDALONE, 
-             "bit array needs to be BITS_UNALLOCATED or BITS_REGULAR or BITS_STANDALONE for realloc");
-
-    uint64_t old_nbits = bits->nbits;
-
-    if (!low_level_nbits) low_level_nbits = nbits;
-    uint64_t nwords = roundup_bits2words64 (low_level_nbits);
-
-    if (bits->type == BITS_STANDALONE)
-        bits->words = buf_low_level_realloc (bits->words, nwords * sizeof(uint64_t), "", func, code_line);
-
-    else {
-        BufferP buf = buf_get_buffer_from_bits (bits);
-        buf_alloc_do (buf->vb, buf, nwords * sizeof(uint64_t), 1, func, code_line, NULL);
-    }
-
-    bits->nbits  = nbits;
-    bits->nwords = roundup_bits2words64 (nbits); // possibly less than low_level_nbits
-
-    if (clear && nbits >old_nbits) 
-        bits_clear_region (bits, old_nbits, nbits - old_nbits);
-
-    bits_clear_excess_bits_in_top_word (bits); // zero the bits in the top word that are beyond nbits
-}
-
 void bits_free (BitsP bits)
 {
     FREE (bits->words);
     memset (bits, 0, sizeof(Bits));
-}
-
-uint64_t bits_length (ConstBitsP bit_arr)
-{
-    return bit_arr->nbits;
 }
 
 // If bits length < num_bits, resizes to num_bits
@@ -356,41 +321,40 @@ static inline void bits_ensure_size_critical (BitsP bits, uint64_t nbits)
 //
 
 // Get the value of a bit (returns 0 or 1)
-char bits_get_bit (ConstBitsP bits, uint64_t b)
+bool bits_get_bit (ConstBitsP bits, uint64_t b)
 {
-    ASSERT (b < bits->nbits, "Expecting b(%"PRId64") < bits->nbits(%"PRId64")", b, bits->nbits);
-    return bits_get(bits, b);
+    ASSERT (b < bits->nbits, "Expecting b=%"PRId64" < nbits=%"PRId64, b, bits->nbits);
+    return bits_get (bits, b);
 }
 
 // set a bit (to 1) at position b
 void bits_set_bit (BitsP bits, uint64_t b)
 {
-    assert(b < bits->nbits);
-    bits_set(bits,b);
+    ASSERT (b < bits->nbits, "Expecting b=%"PRId64" < nbits=%"PRId64, b, bits->nbits);
+    bits_set (bits,b);
     DEBUG_VALIDATE(bits);
 }
 
 // clear a bit (to 0) at position b
 void bits_clear_bit (BitsP bits, uint64_t b)
 {
-    assert(b < bits->nbits);
-    bits_clear(bits, b);
+    ASSERT (b < bits->nbits, "Expecting b=%"PRId64" < nbits=%"PRId64, b, bits->nbits);
+    bits_clear (bits, b);
     DEBUG_VALIDATE(bits);
 }
 
 // If bit is 0 -> 1, if bit is 1 -> 0.  AKA 'flip'
 void bits_toggle_bit (BitsP bits, uint64_t b)
 {
-    assert(b < bits->nbits);
-    bits_toggle(bits, b);
+    ASSERT (b < bits->nbits, "Expecting b=%"PRId64" < nbits=%"PRId64, b, bits->nbits);
+    bits_toggle (bits, b);
     DEBUG_VALIDATE(bits);
 }
 
-// If char c != 0, set bit; otherwise clear bit
-void bits_assign_bit (BitsP bits, uint64_t b, char c)
+void bits_assign_bit (BitsP bits, uint64_t b, bool set)
 {
-    assert(b < bits->nbits);
-    bits_assign(bits, b, c ? 1 : 0);
+    ASSERT (b < bits->nbits, "Expecting b=%"PRId64" < nbits=%"PRId64, b, bits->nbits);
+    bits_assign (bits, b, set);
     DEBUG_VALIDATE(bits);
 }
 
@@ -453,7 +417,7 @@ void bits_set_region (BitsP bits, uint64_t start, uint64_t len)
     if (!len) return; // nothing to do 
 
     ASSERT (start + len - 1 <= bits->nbits, "Expecting: start(%"PRId64") + len(%"PRId64") - 1 <= bits->nbits(%"PRId64")",
-            start, len, bits->nbits); // divon fixed bug
+            start, len, bits->nbits); 
 
     SET_REGION (bits, start, len);
     DEBUG_VALIDATE (bits);
@@ -476,23 +440,20 @@ void bits_clear_region_do (BitsP bits, uint64_t start, uint64_t len, FUNCLINE)
 // Set, clear all bits at once
 //
 
-// set all elements of data to one
 void bits_set_all (BitsP bits)
 {
     if (!bits->nwords) return; // nothing to do
     
-    uint64_t num_of_bytes = bits->nwords * sizeof(uint64_t);
-    memset(bits->words, 0xFF, num_of_bytes);
-    bits_clear_excess_bits_in_top_word(bits);
+    memset (bits->words, 0xFF, bits->nwords * sizeof(uint64_t));
+    bits_clear_excess_bits_in_top_word (bits);
     DEBUG_VALIDATE(bits);
 }
 
-// set all elements of data to zero
 void bits_clear_all (BitsP bits)
 {
     if (!bits->nwords) return; // nothing to do
 
-    memset(bits->words, 0, bits->nwords * sizeof(uint64_t));
+    memset (bits->words, 0, bits->nwords * sizeof(uint64_t));
     DEBUG_VALIDATE(bits);
 }
 
@@ -512,7 +473,7 @@ uint64_t bits_get_wordn (ConstBitsP bits, uint64_t start, int n /* up to 64 */)
 // Set a word at a time
 //
 // Doesn't extend bit array. However it is safe to TRY to set bits beyond the
-// end of the array, as long as: `start` is < `bits_length(arr)`
+// end of the array, as long as: `start` is < `nbits`
 //
 
 void bits_set_word64 (BitsP bits, uint64_t start, uint64_t word)
@@ -871,43 +832,38 @@ static void _array_copy (BitsP dst, uint64_t dstindx, ConstBitsP src, uint64_t s
 
     word_offset_t bits_in_last_word = length % WORD_SIZE; //bits_in_top_word(length); // divon: fixed this bug in the original library
 
-    if (dst == src && srcindx > dstindx)
-    {
-        // Work left to right
-        for (i=0; i < num_of_full_words; i++)
-        {
-            uint64_t word = _get_word(src, srcindx+i*WORD_SIZE);
-            _set_word(dst, dstindx+i*WORD_SIZE, word);
+    // if possible, work left to right (should work faster due to CPU pre-fetching etc)
+    if (dst != src || srcindx > dstindx) {
+        for (i=0; i < num_of_full_words; i++) {
+            uint64_t word = _get_word (src, srcindx + i * WORD_SIZE);
+            _set_word (dst, dstindx + i * WORD_SIZE, word);
         }
 
-      if (bits_in_last_word > 0)
-      {
-          uint64_t src_word = _get_word(src, srcindx+i*WORD_SIZE);
-          uint64_t dst_word = _get_word(dst, dstindx+i*WORD_SIZE);
+        if (bits_in_last_word > 0) {
+            uint64_t src_word = _get_word (src, srcindx + i * WORD_SIZE);
+            uint64_t dst_word = _get_word (dst, dstindx + i * WORD_SIZE);
 
-          uint64_t mask = bitmask64(bits_in_last_word);
-          uint64_t word = bitmask_merge(src_word, dst_word, mask);
+            uint64_t mask = bitmask64 (bits_in_last_word);
+            uint64_t word = bitmask_merge (src_word, dst_word, mask);
 
-          _set_word(dst, dstindx+num_of_full_words*WORD_SIZE, word);
-      }
+            _set_word (dst, dstindx+num_of_full_words * WORD_SIZE, word);
+        }
     }
-    else
-    {
+
+    else {
         // Work right to left
-        for (i = 0; i < num_of_full_words; i++)
-        {
-            uint64_t word = _get_word(src, srcindx+length-(i+1)*WORD_SIZE);
-            _set_word(dst, dstindx+length-(i+1)*WORD_SIZE, word);
+        for (i = 0; i < num_of_full_words; i++) {
+            uint64_t word = _get_word (src, srcindx+length-(i+1)*WORD_SIZE);
+            _set_word(dst, dstindx + length - (i+1) * WORD_SIZE, word);
         }
 
-        if (bits_in_last_word > 0)
-        {
-            uint64_t src_word = _get_word(src, srcindx);
-            uint64_t dst_word = _get_word(dst, dstindx);
+        if (bits_in_last_word > 0) {
+            uint64_t src_word = _get_word (src, srcindx);
+            uint64_t dst_word = _get_word (dst, dstindx);
 
-            uint64_t mask = bitmask64(bits_in_last_word);
-            uint64_t word = bitmask_merge(src_word, dst_word, mask);
-            _set_word(dst, dstindx, word);
+            uint64_t mask = bitmask64 (bits_in_last_word);
+            uint64_t word = bitmask_merge (src_word, dst_word, mask);
+            _set_word (dst, dstindx, word);
         }
     }
 }
@@ -921,37 +877,13 @@ void bits_copy_do (BitsP dst, uint64_t dstindx, ConstBitsP src, uint64_t srcindx
     ASSERT (dstindx + length <= dst->nbits, "called from %s:%u dstindx(%"PRIu64") + length(%"PRIu64") > dst->nbits(%"PRIu64")", func, code_line, dstindx, length, dst->nbits);
     ASSERT (srcindx + length <= src->nbits, "called from %s:%u srcindx(%"PRIu64") + length(%"PRIu64") > src->nbits(%"PRIu64")", func, code_line, srcindx, length, src->nbits);
 
-    _array_copy(dst, dstindx, src, srcindx, length);
+    _array_copy (dst, dstindx, src, srcindx, length);
 
     // note: only zero top word if copy reaches it
     if (dstindx + length == dst->nbits)
         bits_clear_excess_bits_in_top_word(dst);
 
     DEBUG_VALIDATE(dst);
-}
-
-// concatenate src at the end of dst (divon)
-void bits_concat_do (BitsP base, ConstBitsP add, unsigned additional_concats_expected, FUNCLINE) // only used for non-buffer: low-level realloc more than needed, expecting additional concats - improves perforamce
-{
-    uint64_t index = base->nbits;
-
-    // IMPORTANT: if calling with a Bits that is embedded in a buffer, buf_init_promiscuous must be 
-    // called first (eg in seg_initialize), as bits_realloc_do performs an anonymous realloc 
-    bits_realloc_do (base, 
-                     base->nbits + add->nbits, 
-                     base->nbits + (add->nbits * (1+additional_concats_expected)), // low level allocation of anticipated additional similar-size concats - improves performance
-                     false, func, code_line);
-                       
-//xxx fix this to support additional_concats_expected in buffer. 
-/*    BufferP buf = buf_get_buffer_from_bits (base);
-
-    uint64_t more_words =  roundup_bits2words64 (add->nbits * (1+additional_concats_expected));
-
-    buf_alloc (buf->vb, buf, more_words, 0, uint64_t, 1, NULL);
-    buf_extend_bits (buf, add->nbits);
-    bits_clear_excess_bits_in_top_word (base);
-*/
-    bits_copy (base, index, add, 0, add->nbits);
 }
 
 void bits_overlay (BitsP overlaid_bits, BitsP regular_bits, uint64_t start, uint64_t nbits)
@@ -961,7 +893,7 @@ void bits_overlay (BitsP overlaid_bits, BitsP regular_bits, uint64_t start, uint
             start, nbits, regular_bits->nbits);
 
     uint64_t word_i = start / 64;
-    *overlaid_bits = (Bits){ .type   = BITS_OVERLAY,
+    *overlaid_bits = (Bits){ .type   = BITS_STANDALONE ,
                              .words  = &regular_bits->words[word_i],
                              .nwords = roundup_bits2words64 (nbits),
                              .nbits  = nbits };
@@ -1488,9 +1420,6 @@ uint32_t bits_hamming_distance (ConstBitsP bits_1, uint64_t index_1,
     uint32_t nwords = roundup_bits2words64 (len);
 
     for (uint32_t i=0; i < nwords; i++) {
-        //xxx uint64_t word_1 = shift_1 ? _bits_combined_word (words_1[i], words_1[i+1], shift_1) : words_1[i];
-        // uint64_t word_2 = shift_2 ? _bits_combined_word (words_2[i], words_2[i+1], shift_2) : words_2[i];
-
         uint64_t word_1 = shift_1 ? _bits_combined_word (words_1[i], (&words_1[i+1] < after_1 ? words_1[i+1] : 0), shift_1) : words_1[i];
         uint64_t word_2 = shift_2 ? _bits_combined_word (words_2[i], (&words_2[i+1] < after_2 ? words_2[i+1] : 0), shift_2) : words_2[i];
         

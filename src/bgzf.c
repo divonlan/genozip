@@ -239,6 +239,8 @@ void bgzf_uncompress_vb (VBlockP vb)
 // ZIP: decompresses a prescribed BGZF block when re-reading DEPN lines
 static inline void bgzf_uncompress_one_prescribed_block (VBlockP vb, STRp(bgzf_block), STRc (uncomp_block), uint64_t bb_i)
 {
+    START_TIMER;
+
     BgzfHeader *h = (BgzfHeader *)bgzf_block;
 
     // verify that entire block is within vb->scratch
@@ -262,6 +264,8 @@ static inline void bgzf_uncompress_one_prescribed_block (VBlockP vb, STRp(bgzf_b
         #define C(i) (i < uncomp_block_len ? char_to_printable (uncomp_block[i]).s : "") 
         iprintf ("txt_data[5]=%1s%1s%1s%1s%1s\n", C(0), C(1), C(2), C(3), C(4));
         #undef C
+
+    COPY_TIMER (bgzf_uncompress_one_prescribed_block);
 }
 
 // ZIP: compute thread of a DEPN VB: actually re-reading data into txt_data according to vb->reread_prescription
@@ -398,6 +402,8 @@ FlagsBgzf bgzf_get_compression_level (rom filename, bytes comp_block, uint32_t c
 // ZIP: called by Seg to set the bgzf index of the next line
 void bgzf_zip_advance_index (VBlockP vb, uint32_t line_len)
 {
+    if (!vb->bgzf_blocks.len) return; // no BGZF blocks in this VB - all data came from "unconsumed_txt"
+
     vb->line_bgzf_uoffset += line_len;
 
     // udpate current_bb_i and bgzf_offset (note: line_len might span multiple bgzf blocks)
@@ -547,8 +553,8 @@ FlagsBgzf bgzf_piz_calculate_bgzf_flags (CompIType comp_i, Codec src_codec)
     // case: already set by command line (to a level or "exact")
     else if (flag.bgzf != BGZF_NOT_INITIALIZED) {
         ASSINP (!flag.out_filename || flags_out_filename_implies_bgzf(), 
-                "using %s in combination with %s, requires the output filename to end with %s.gz or .bgz", 
-                OT("output", "o"), OT("bgzf", "z"), Z_DT(SAM)?".bam, " : Z_DT(VCF)?".bcf, " : "");
+                "using %s in combination with %s on a %s file, requires the output filename to end with %s.gz or .bgz", 
+                OT("output", "o"), OT("bgzf", "z"), z_dt_name(), Z_DT(SAM)?".bam, " : Z_DT(VCF)?".bcf, " : "");
     
         ASSINP0 (!OUT_DT(BCF) || flag.bgzf != BGZF_BY_ZFILE, "cannot use --bgzf=exact when outputing a BCF file"); // because we have no control over bcftools' BGZF block generation
     }
@@ -792,7 +798,7 @@ static uint32_t bgzf_calculate_blocks_one_vb (VBlockP vb, bool is_last)
 void bgzf_dispatch_compress (Dispatcher dispatcher, STRp (uncomp), bool is_last)
 {
     // uncompressed data to be dealt with by next call to this function (buffer belongs to writer thread)
-    static Buffer intercall_txt = EMPTY_BUFFER; // belongs to wvb
+    static Buffer intercall_txt = {}; // belongs to wvb
     buf_alloc (wvb, &intercall_txt, 0, BGZF_MAX_BLOCK_SIZE, char, 0, "intercall_txt");
 
     // case: uncomp is not enough to fill a block, just store it to next call

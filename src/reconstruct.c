@@ -256,25 +256,21 @@ static double reconstruct_from_local_float (VBlockP vb, ContextP ctx,
     return num;
 }
 
-// two options: 1. the length maybe given (textually) in snip/snip_len. in that case, it is used and vb->seq_len is updated.
-// if snip_len==0, then the length is taken from vb->seq_len.
 // NOTE: this serves nucleotide sequences AND qual. Bad design. Should have been two separate things.
-uint32_t reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, STRp(len_str), ReconType reconstruct)
+uint32_t reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, uint32_t len, ReconType reconstruct)
 {
     ASSERTNOTNULL (ctx);
-
-    uint32_t len = len_str_len ? atoi (len_str) : vb->seq_len;
 
     if (!ctx->is_loaded) return len;
 
     // special case: handle SAM_QUAL missing quality (expressed as a ' ')
-    if (*Bc(ctx->local, ctx->next_local) == ' ' && (ctx->did_i == SAM_QUAL && (VB_DT(BAM) || VB_DT(SAM)))) {
+    if (ctx->next_local < ctx->local.len32 && *Bc(ctx->local, ctx->next_local) == ' ' && (ctx->did_i == SAM_QUAL && (VB_DT(BAM) || VB_DT(SAM)))) {
         len = 1;
         sam_reconstruct_missing_quality (vb, reconstruct);
     }
 
     else {
-        ASSPIZ (ctx->next_local + len <= ctx->local.len, "unexpected end of %s data: expecting ctx->next_local=%u + seq_len=%u <= local.len=%u", 
+        ASSPIZ (ctx->next_local + len <= ctx->local.len32, "unexpected end of %s data: expecting ctx->next_local=%u + seq_len=%u <= local.len=%u", 
                 ctx->tag_name, ctx->next_local, len, ctx->local.len32);
 
         if (reconstruct) RECONSTRUCT (Bc(ctx->local, ctx->next_local), len);
@@ -444,7 +440,7 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
                 break;
                 
             case LT_CODEC: // snip can optionally be the length of the sequence to be reconstructed
-                codec_args[base_ctx->lcodec].reconstruct (vb, base_ctx->lcodec, base_ctx, STRa(snip)); break;
+                codec_args[base_ctx->lcodec].reconstruct (vb, base_ctx->lcodec, base_ctx, (snip_len ? atoi(snip) : vb->seq_len)); 
                 break;
 
             case LT_INT8 ... LT_UINT64: case LT_hex8 ... LT_HEX64:
@@ -460,7 +456,7 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
             
             // case: the snip is taken to be the length of the sequence (or if missing, the length will be taken from vb->seq_len)
             case LT_SEQUENCE: 
-                reconstruct_from_local_sequence (vb, base_ctx, STRa(snip), reconstruct);
+                reconstruct_from_local_sequence (vb, base_ctx, (snip_len ? atoi(snip) : vb->seq_len), reconstruct);
                 break;
                 
             case LT_BITMAP:
@@ -515,7 +511,7 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
                 base_ctx->tag_name, dt_name (vb->data_type), special);
         ASSERT_DT_FUNC (vb, special);
 
-        has_new_value = DT_FUNC(vb, special)[special](vb, snip_ctx, snip+2, snip_len-2, &new_value, reconstruct);  
+        has_new_value = ((PizSpecialReconstructor)(DT_FUNC(vb, special)[special]))(vb, snip_ctx, snip+2, snip_len-2, &new_value, reconstruct);  
         break;
 
     case SNIP_DIFF:
@@ -672,10 +668,10 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i,
             break;
         }
         case LT_CODEC:
-            codec_args[ctx->lcodec].reconstruct (vb, ctx->lcodec, ctx, NULL, 0); break;
+            codec_args[ctx->lcodec].reconstruct (vb, ctx->lcodec, ctx, vb->seq_len); break;
 
         case LT_SEQUENCE: 
-            reconstruct_from_local_sequence (vb, ctx, NULL, 0, reconstruct); break;
+            reconstruct_from_local_sequence (vb, ctx, vb->seq_len, reconstruct); break;
                 
         case LT_BITMAP:
             ASSERT_DT_FUNC (vb, reconstruct_seq);

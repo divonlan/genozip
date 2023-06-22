@@ -14,9 +14,11 @@
 #include "profiler.h"
 
 typedef struct { 
-    rom mutex_name, func; 
-    uint32_t code_line; 
+    rom mutex_name;  
+    rom func; 
     int64_t accumulator;
+    uint32_t code_line; 
+    bool is_locked;
 } LockPoint;
 
 #define MAX_CODE_LINE 4095
@@ -55,18 +57,18 @@ bool mutex_lock_do (Mutex *mutex, bool blocking, rom func, uint32_t code_line)
         START_TIMER;
         ret = pthread_mutex_lock (&mutex->mutex);
 
-        if (flag.show_time) { 
+        if (flag.show_time_comp_i != COMP_NONE) { // test same condition as START_TIMER 
             if (!lp[code_line].mutex_name) { // first lock at this lockpoint
-                ASSERT (code_line <= MAX_CODE_LINE, "can't use --show-time because of a mutex_lock in a code_line=%u larger than MAX_CODE_LINE=%u. Solution: increase MAX_CODE_LINE", code_line, MAX_CODE_LINE);
-
+                ASSERT (code_line <= MAX_CODE_LINE, "mutex_lock at %s:%u: cannot lock a mutex in a code_line > %u", func, code_line, MAX_CODE_LINE);
                 lp[code_line] = (LockPoint){ .mutex_name = mutex->name, .func = func, .code_line = code_line };
             }
 
             else 
-                ASSERT (lp[code_line].func == func, "can't use --show-time because two mutex_locks exist on the same code_line: %s @ %s:%u and %s @ %s:%u. To solve, add an empty line to shift the code line number of one of them",
-                        lp[code_line].mutex_name, lp[code_line].func, lp[code_line].code_line, mutex->name, func, code_line);
+                if (lp[code_line].func != func) 
+                    WARN_ONCE ("FYI: Two calls to mutex_lock exist on the same code_line: %s @ %s:%u and %s @ %s:%u - --show-time will show their combined time. To solve, add an empty line to shift the code line number of one of them",
+                               lp[code_line].mutex_name, lp[code_line].func, lp[code_line].code_line, mutex->name, func, code_line);
                 
-            lp[code_line].accumulator += CHECK_TIMER; // luckily, we're proected by the mutex...
+            lp[code_line].accumulator += CHECK_TIMER; // luckily, we're protected by the mutex...
         }
     }
     
@@ -74,6 +76,8 @@ bool mutex_lock_do (Mutex *mutex, bool blocking, rom func, uint32_t code_line)
         ret = pthread_mutex_trylock (&mutex->mutex);
         if (ret == EBUSY) return false;
     }
+
+    lp[code_line].is_locked = true; 
 
     ASSERT (!ret, "called from %s by thread=%"PRIu64": pthread_mutex_lock failed on mutex->name=%s: %s", 
             func, (uint64_t)pthread_self(), mutex && mutex->name ? mutex->name : "(null)", strerror (ret)); 
@@ -92,6 +96,8 @@ void mutex_unlock_do (Mutex *mutex, FUNCLINE)
             func, code_line, (uint64_t)pthread_self(), mutex->name);
 
     mutex->lock_func = NULL; // mutex->lock_func is protected by the mutex
+
+    lp[code_line].is_locked = false;
 
     int ret = pthread_mutex_unlock (&mutex->mutex); 
     ASSERT (!ret, "called from %s:%u: pthread_mutex_unlock failed for %s: %s", func, code_line, mutex->name, strerror (ret)); 
@@ -124,7 +130,7 @@ void serializer_initialize_do (SerializerP ser, rom name, rom func)
     }
 
     else
-        buf_init_promiscuous_(evb, &ser->skips, "Serializer.skips"); // so that it can be later alloced in compute threads
+        buf_set_promiscuous (&ser->skips, "Serializer.skips"); // so that it can be later alloced in compute threads
 }
 
 void serializer_destroy_do (SerializerP ser, rom func)
@@ -180,6 +186,11 @@ void serializer_skip_do (SerializerP ser, VBIType vb_i, FUNCLINE)
 
 static DESCENDING_SORTER (mutex_sort_by_accumulator, LockPoint, accumulator)
 
+void mutex_bottleneck_analysis_init (void)
+{
+    memset (lp, 0, sizeof(lp));
+}
+
 void mutex_show_bottleneck_analsyis (void)
 {
     qsort (lp, MAX_CODE_LINE+1, sizeof(LockPoint), mutex_sort_by_accumulator);
@@ -192,6 +203,14 @@ void mutex_show_bottleneck_analsyis (void)
 
         iprintf ("%-8s %-23s %s:%u\n", str_int_commas (lp[i].accumulator / 1000000).s, lp[i].mutex_name, lp[i].func, lp[i].code_line);
     }
+}
 
-    memset (lp, 0, sizeof (lp)); // reset 
+// this is called from Ctrl-C. Works only if --show-time is used as well.
+void mutex_who_is_locked (void)
+{
+    for (int i=0; i <= MAX_CODE_LINE; i++) {
+        LockPoint my_lp = lp[i]; // make a copy for a bit of thread safety
+        if (my_lp.mutex_name && my_lp.is_locked)
+            printf ("Mutex locked: %s locked in %s:%u\n", my_lp.mutex_name, (my_lp.func ? my_lp.func : ""), my_lp.code_line);
+    }
 }

@@ -41,6 +41,8 @@
 #include "tar.h"
 #include "gencomp.h"
 #include "chrom.h"
+#include "buf_list.h"
+#include "dispatcher.h"
 
 // globals - set in main() and immutable thereafter
 char global_cmd[256]; 
@@ -54,97 +56,101 @@ CommandType command = NO_COMMAND, primary_command = NO_COMMAND;
 uint32_t global_max_threads = DEFAULT_MAX_THREADS; 
 static bool tip_printed = false;
 
-#define MAIN(format, ...) ({ if (flag.debug_top) { progress_newline(); fprintf (stderr, "%s[%u]: ", command_name(), getpid()); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } })
-#define MAIN0(string)     ({ if (flag.debug_top) { progress_newline(); fprintf (stderr, "%s[%u]: %s\n", command_name(), getpid(), string); } })
+#define MAIN(format, ...) ({ if (flag.echo || flag.test_i) { progress_newline(); fprintf (stderr, "%s[%u]: ",     command_name(), getpid()); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } })
+#define MAIN0(string)     ({ if (flag.echo || flag.test_i) { progress_newline(); fprintf (stderr, "%s[%u]: %s\n", command_name(), getpid(), string); } })
 
 rom command_name (void) // see CommandType
 {
     switch (command) {
-        case ZIP        : return "ZIP";
-        case PIZ        : return "PIZ";
-        case LIST       : return "LIST";
-        case VERSION    : return "VERSION";
-        case HELP       : return "HELP";
-        case LICENSE    : return "LICENSE";
-        case NO_COMMAND : return "NO_COMMAND";
-        default         : return "Invalid command";
+        case ZIP          : return "ZIP";
+        case PIZ          : return "PIZ";
+        case LIST         : return "LIST";
+        case VERSION      : return "VERSION";
+        case HELP         : return "HELP";
+        case LICENSE      : return "LICENSE";
+        case SHOW_HEADERS : return "SHOW_HEADERS";
+        case NO_COMMAND   : return "NO_COMMAND";
+        default           : return "Invalid command";
     }
 }
 
 void main_exit (bool show_stack, bool is_error) 
 {
-    // case: skip free buffers since we're exiting any, UNLESS run under valgrind - free, so we can detect true memory leaks
-    if (!arch_is_valgrind())
-        buf_set_cleanup_on_exit();  
+    DO_ONCE { // prevent recursive entry due to a failed ASSERT in the cleanup process
 
-    if (!is_error) {
-        version_print_notice_if_has_newer();
+        // case: skip freeing buffers since we're exiting any, UNLESS run under valgrind - in which case we free, so we can detect true memory leaks
+        if (!arch_is_valgrind())
+            flag.let_OS_cleanup_on_exit = true;  
 
-        if (flag.show_time_comp_i == COMP_ALL && !flag.show_time[0])  // show-time without the optional parameter 
-            profiler_add_evb_and_print_report();
+        if (!is_error) {
+            version_print_notice_if_has_newer();
 
-        else if (IS_ZIP || flag.check_latest/*PIZ - test after compress*/)
-            tip_print();
-    }
+            if (IS_ZIP || flag.check_latest/*PIZ - test after compress*/)
+                tip_print();
+        }
 
-    if (is_error && flag.debug_threads)
-        threads_write_log (true);
+        if (is_error && flag.debug_threads)
+            threads_write_log (true);
+            
+        if (show_stack) 
+            threads_print_call_stack(); // this works ok on mac, but does not print function names on Linux (even when compiled with -g)
+
+        // this is normally blocked, it runs only with certain flags (see code)
+        buflist_test_overflows_all_vbs (is_error ? "exit_on_error" : "on_exit");
+
+        if (flag.log_filename) {
+            iprintf ("%s - execution ended %s\n", str_time().s, is_error ? "with an error" : "normally");
+            fclose (info_stream);
+        } 
+
+        if (is_error) {
+            close (1);   // prevent other threads from outputting to terminal (including buffered output), obscuring our error message
+            close (2);
+            url_kill_curl (NULL);  /* <--- BREAKPOINT BRK */
+            file_kill_external_compressors(); 
         
-    if (show_stack) 
-        threads_print_call_stack(); // this works ok on mac, but does not print function names on Linux (even when compiled with -g)
+            // cancel all other threads before closing z_file, so other threads don't attempt to access it 
+            // (eg. z_file->data_type) and get a segmentation fault.
+            threads_cancel_other_threads();
+        }
 
-    buf_test_overflows_all_vbs (is_error ? "exit_on_error" : "on_exit");
+        // if we're in ZIP - rename failed genozip file (but not in PIZ - as its not expected to change the file)
+        if (primary_command == ZIP && z_file && z_file->name && !flag_loading_auxiliary) {
+            STRli (save_name, strlen (z_file->name)+1);
 
-    if (flag.log_filename) {
-        iprintf ("%s - execution ended %s\n", str_time().s, is_error ? "with an error" : "normally");
-        fclose (info_stream);
-    } 
+            if (z_file && z_file->name) 
+                strcpy (save_name, z_file->name);
 
-    if (is_error) {
-        close (1);   // prevent other threads from outputting to terminal (including buffered output), obscuring our error message
-        close (2);
-        url_kill_curl (NULL);  /* <--- BREAKPOINT BRK */
-        file_kill_external_compressors(); 
-    
-        // cancel all other threads before closing z_file, so other threads don't attempt to access it 
-        // (eg. z_file->data_type) and get a segmentation fault.
-        threads_cancel_other_threads();
-    }
+            file_close (&z_file); // also frees file->name
 
-    // if we're in ZIP - rename failed genozip file (but not in PIZ - as its not expected to change the file)
-    if (primary_command == ZIP && z_file && z_file->name && !flag_loading_auxiliary) {
-        STRli (save_name, strlen (z_file->name)+1);
+            // note: logic to avoid a race condition causing the file not to be removed - if another thread seg-faults
+            // because it can't access a z_file filed after z_file is freed, and threads_sigsegv_handler aborts
+            if (is_error && !flag.debug_or_test && file_exists (save_name)) 
+                file_remove (save_name, true);
+        }
 
-        if (z_file && z_file->name) 
-            strcpy (save_name, z_file->name);
+        if (is_error) // call after canceling the writing threads 
+            file_put_data_abort();
 
-        file_close (&z_file, false, false); // also frees file->name
+        fflush (stdout);
+        fflush (stderr);
+        
+        if (!is_error) MAIN0 ("Exiting : Success"); 
 
-        // note: logic to avoid a race condition causing the file not to be removed - if another thread seg-faults
-        // because it can't access a z_file filed after z_file is freed, and threads_sigsegv_handler aborts
-        if (is_error && !flag.debug_or_test && file_exists (save_name)) 
-            file_remove (save_name, true);
-    }
+        threads_finalize();
 
-    if (is_error) // call after canceling the writing threads 
-        file_put_data_abort();
-
-    fflush (stdout);
-    fflush (stderr);
-    
-    if (!is_error) MAIN0 ("Exiting : Success"); 
-
-    threads_finalize();
-
-    // we normally intentionally leak the VBs at process termination, but if we're running valgrind we free so to not display intentional leaks
-    if (arch_is_valgrind()) {
-        ref_finalize();
-        refhash_destroy();
-        kraken_destroy();
-        chain_destroy();
-        vb_destroy_pool_vbs (POOL_MAIN);
-        vb_destroy_pool_vbs (POOL_BGZF);
-        vb_destroy_vb (&evb);
+        // we normally intentionally leak the VBs at process termination, but if we're running valgrind we free so to not display intentional leaks
+        if (arch_is_valgrind()) {
+            flags_finalize();
+            chrom_finalize();
+            ref_finalize (true);
+            refhash_destroy();
+            kraken_destroy();
+            chain_destroy();
+            vb_destroy_pool_vbs (POOL_MAIN);
+            vb_destroy_pool_vbs (POOL_BGZF);
+            vb_destroy_vb (&evb);
+        }
     }
 
     exit (is_error ? EXIT_GENERAL_ERROR : EXIT_OK);
@@ -193,7 +199,7 @@ static void main_print_version()
 
 static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool is_last_z_file)
 {
-    if (n_files > 1) MAIN ("main_genounzip (%u/%u): %s", z_file_i+1, n_files, z_filename);
+    if (n_files > 1) MAIN ("main_genounzip (%u/%u%s): %s", z_file_i+1, n_files, cond_str(flag.test_i, " batch_id=", flag.test_i), z_filename);
     else             MAIN ("main_genounzip: %s", z_filename);
 
     // save flag as it might be modified - so that next file has the same flags
@@ -214,7 +220,7 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
     z_file = file_open_z_read (z_filename);    
 
     if (flag.validate) {
-        file_close (&z_file, false, false);
+        file_close (&z_file);
         return; // we're only validating that z_file is valid
     }
 
@@ -224,7 +230,7 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
     // 3) identify skip cases (DT_NONE returned) - empty file, unzip of a reference
     // 4) reset flag.unbind if file contains only one component
     TEMP_FLAG (genocat_no_reconstruct, true); // so zfile_read_genozip_header doesn't fail on a reference file before flags_update_piz_one_z_file is run
-    if (!z_file->file || !zfile_read_genozip_header (0)) goto done; 
+    if (!z_file->file || !zfile_read_genozip_header (0, SOFT_FAIL)) goto done; 
     RESTORE_FLAG(genocat_no_reconstruct);
 
     // case: reference not loaded yet bc --reference wasn't specified, and we got the ref name from zfile_read_genozip_header()   
@@ -233,7 +239,7 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
 
         if (!flag.genocat_no_reconstruct || 
             (flag.collect_coverage && Z_DT(FASTQ))) { // in collect_coverage with FASTQ we read the non-data sections of the reference
-            SAVE_VALUE (z_file); // actually, read the reference first
+            RESET_VALUE (z_file); // actually, read the reference first
             ref_load_external_reference (gref, NULL);
             RESTORE_VALUE (z_file);
         }
@@ -241,6 +247,9 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
 
     flags_update_piz_one_z_file (z_file_i); // must be before piz_z_file_initialize
    
+    ASSINP (!Z_DT(REF) || flag.genocat_global_area_only, 
+            "%s is a reference file. Did you intend to use \"--reference %s\" ?", z_name, z_name);
+
     Dispatcher dispatcher = piz_z_file_initialize();  
 
     // generate txt_file(s)
@@ -273,11 +282,17 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
 
     tip_dt_encountered (z_file->data_type);
 
-    file_close (&z_file, false, false);
+    // no need to waste time freeing memory of the last file, the process termination will do that
+    flag.let_OS_cleanup_on_exit = is_last_z_file && !arch_is_valgrind(); 
+
+    file_close (&z_file);
     is_first_z_file = false;
 
     if (digest_piz_has_it_failed()) exit_on_error (false); // error message already displayed in piz_verify_digest_one_txt_file
-    
+
+    if (wvb && wvb->in_use) 
+        vb_destroy_vb (&wvb); 
+
     // case --replace: now that the file was reconstructed, we can remove the genozip file
     if (flag.replace && (txt_filename || flag.unbind) && z_filename) 
         file_remove (z_filename, false); 
@@ -293,18 +308,18 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
 {
     rom password = crypt_get_password();
 
-    // On Windows and Mac that usually have limited memory, if ZIP consumed more than 2GB, free memory before PIZ. 
-    // Note: on Windows, freeing memory takes considerable time.
-    if ((flag.is_windows || flag.is_mac || flag.is_wsl) && buf_get_memory_usage () > (1ULL<<31)) {
-        ref_destroy_reference (gref); 
-        ref_destroy_reference (prim_ref); 
+    // if we're short on memory, free the bulk of ZIP process's memory before running the test process.
+    if (arch_get_max_resident_set() > arch_get_physical_mem_size() GB / 4) {
+        ref_finalize (false);
         refhash_destroy();
         kraken_destroy();
         chain_destroy();
         vb_destroy_pool_vbs (POOL_MAIN);
+        vb_dehoard_memory (evb);
+        buf_low_level_release_memory_back_to_kernel();
     }
 
-    rom exec_path = arch_get_executable (HARD_FAIL);
+    rom exec_path = arch_get_executable().s;
 
     // case: we need to execute logic after the test - run in a separate process and wait for its completion
     if (!is_last_txt_file || // come back - we have more files to compress
@@ -352,7 +367,6 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
                                       flag.debug_latest  ? "--debug-latest"   : SKIP_ARG,
                                       flag.show_deep     ? "--show-deep"      : SKIP_ARG,
                                       flag.no_cache      ? "--no-cache"       : SKIP_ARG,
-                                      (flag.debug_top==0 && (flag.echo || getenv ("GENOZIP_TEST"))) ? "--no-debug-top"   : SKIP_ARG,
                                       flag.license_filename           ? "--licfile"            : SKIP_ARG,
                                       flag.license_filename           ? flag.license_filename  : SKIP_ARG,
                                       is_last_txt_file && !flag.debug && !flag.replace ? "--check-latest"       : SKIP_ARG,
@@ -369,8 +383,6 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
         TEMP_VALUE (primary_command, TEST_AFTER_ZIP); // make exit_on_error NOT delete the genozip file in this case, so its available for debugging
         ASSERT (!exit_code, "%s: test exited with status: \"%s\"\n", global_cmd, exit_code_name (exit_code)); // exit with error status 
         RESTORE_VALUE (primary_command); // recover in case of more non-concatenated files
-    
-        FREE (exec_path);
     }
 
     // case: nothing more to do on the compression side - run test replacing the current process, without forking
@@ -403,7 +415,6 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
         if (flag.debug_latest)  argv[argc++] = "--debug-latest";
         if (flag.show_deep)     argv[argc++] = "--show-deep";
         if (flag.no_cache)      argv[argc++] = "--no-cache";
-        if ((flag.debug_top==0 && (flag.echo || getenv ("GENOZIP_TEST")))) argv[argc++] = "--no-debug-top";
 
         if (flag.license_filename) { argv[argc++] = "--licfile"; argv[argc++] = flag.license_filename; }
         if (is_last_txt_file && !flag.debug) 
@@ -413,9 +424,6 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
                                 argv[argc++] = ref_get_filename(gref); }
         argv[argc] = NULL;
                                 // ↑↑↑ Don't forget to add above too ↑↑↑
-
-        if (flag.show_time_comp_i == COMP_ALL && !flag.show_time[0]) // show-time without the optional parameter 
-            profiler_add_evb_and_print_report();
 
         execv (exec_path, (char **)argv);
         ABORT ("Failed to run the executable \"%s\" for testing the compression: %s", exec_path, strerror (errno));
@@ -427,10 +435,11 @@ static void main_genozip (rom txt_filename,
                           unsigned txt_file_i,        // 0-based
                           bool is_last_user_txt_file) // very last file in this execution 
 {
-    if (n_files > 1) MAIN ("main_genozip (%u/%u): %s", txt_file_i+1, n_files, txt_filename ? txt_filename : "stdin");
+    if (n_files > 1) MAIN ("main_genozip (%u/%u%s): %s", txt_file_i+1, n_files, cond_str(flag.test_i, " batch_id=", flag.test_i), txt_filename ? txt_filename : "stdin");
     else             MAIN ("main_genozip: %s", txt_filename ? txt_filename : "stdin");
-    
-    SAVE_FLAGS;
+
+    static Flags save_flag;
+    if (flag.zip_comp_i == 0) save_flag = flag;
 
     ASSINP (!flag.out_filename || !url_is_url (flag.out_filename), 
             "output files must be regular files, they cannot be a URL: %s", flag.out_filename);
@@ -451,7 +460,7 @@ static void main_genozip (rom txt_filename,
     }
 
     if (!txt_file->file) {
-        file_close (&txt_file, false, false);
+        file_close (&txt_file);
         goto done; // this is the case where multiple files are given in the command line, but this one is not compressible (eg its a .genozip file) - we skip it
     }
 
@@ -482,21 +491,21 @@ static void main_genozip (rom txt_filename,
 
     int64_t t_offset = z_file->is_in_tar ? tar_file_offset() : 0; // if tar: offset of beginning of z_file in tar (after tar header block)
 
+    if (flag.bind == BIND_FQ_PAIR || (flag.bind == BIND_DEEP && flag.pair && flag.zip_comp_i >= SAM_COMP_FQ00))
+        flag.pair = (flag.pair==PAIR_R1) ? PAIR_R2 : PAIR_R1;
+
     zip_one_file (txt_file->basename, is_last_user_txt_file);
 
     // increment zip_comp_i for next file 
     flag.zip_comp_i = (flag.bind == BIND_FQ_PAIR) ? (flag.zip_comp_i + 1) % 2
-                    : (flag.bind == BIND_DEEP)    ? ((SamComponentType[]){ SAM_COMP_MAIN, SAM_COMP_FQ00, SAM_COMP_FQ01, COMP_MAIN })[txt_file_i + 1]
+                    : (flag.bind == BIND_DEEP)    ? ((flag.zip_comp_i == SAM_COMP_MAIN) ? SAM_COMP_FQ00 : (flag.zip_comp_i + 1))
                     :                               COMP_MAIN;
 
     tip_dt_encountered (z_file->data_type);
 
-    if (flag.show_stats && z_file->z_closes_after_me)
-        stats_display();
-
     bool remove_txt_file = z_file && flag.replace && txt_filename;
-
-    file_close (&txt_file, false, !(is_last_user_txt_file && z_file->z_closes_after_me));  // no need to waste time closing the last file, the process termination will do that
+    
+    file_close (&txt_file);  
 
     bool is_chain = (Z_DT(CHAIN));
     
@@ -510,7 +519,7 @@ static void main_genozip (rom txt_filename,
 
         int64_t t_size = z_file->is_in_tar ? z_file->disk_size : 0; 
 
-        file_close (&z_file, false, !is_last_user_txt_file); 
+        file_close (&z_file); 
 
         license_one_file_compressed(z_dt);
 
@@ -555,7 +564,6 @@ done:
         RESTORE_FLAG (aligner_available);
         RESTORE_FLAG (no_tip);
         RESTORE_FLAG (bind);
-        RESTORE_FLAG (bind);
         flag.zip_comp_i = COMP_MAIN; // re-assign in case RESTORE_FLAG modified
     }
 } 
@@ -574,8 +582,8 @@ static int main_sort_input_filenames (const void *fn1, const void *fn2)
     DataType dt1 = main_get_file_dt (*(char **)fn1);
     DataType dt2 = main_get_file_dt (*(char **)fn2);
 
-    int sizeof_vb1 = ((dt1 != DT_NONE && dt_props[dt1].sizeof_vb) ? dt_props[dt1].sizeof_vb : def_vb_size)(dt1);
-    int sizeof_vb2 = ((dt2 != DT_NONE && dt_props[dt2].sizeof_vb) ? dt_props[dt2].sizeof_vb : def_vb_size)(dt2);
+    int sizeof_vb1 = get_vb_size (dt1);
+    int sizeof_vb2 = get_vb_size (dt2);
 
     // sort by VB type (assuming their size is unique)
     if (sizeof_vb1 != sizeof_vb2) return sizeof_vb1 - sizeof_vb2;
@@ -619,7 +627,7 @@ static void main_get_filename_list (unsigned num_files, char **filenames,  // in
 
         if (!file_is_dir (fn)) continue;
 
-        if (flag.subdirs) {
+        if (flag.subdirs || is_genols) {
             DIR *dir = opendir (fn);
 
             ASSERT (dir, "failed to open directory %s: %s", fn, strerror (errno));
@@ -635,7 +643,7 @@ static void main_get_filename_list (unsigned num_files, char **filenames,  // in
             closedir(dir);    
         } 
         else
-            WARN ("Skipping directory %s. Use --subdirs to compress directories.", fn);
+            WARN ("Skipping directory %s. %s", fn, IS_ZIP ? "Use --subdirs to compress directories." : "");
 
 
         // remove the directory from the list of files to compress
@@ -693,7 +701,7 @@ static void main_load_reference (rom filename, bool is_first_file, bool is_last_
     }
 
     // Read the refhash and calculate the reverse compliment genome for the aligner algorithm - it was not used before and now it is
-    if (!old_aligner_available && flag.aligner_available) {
+    if (!old_aligner_available && flag.aligner_available && !refhash_buf.count) {
         MAIN0 ("Loading refhash");
         refhash_load_standalone();
     }
@@ -713,9 +721,52 @@ static void set_exe_type (rom argv0)
     FREE (bn);
 }
 
+// command line contains no files - special actions
+static void main_no_files (int argc)
+{
+    // case: --register
+    if (flag.do_register) {
+        license_register();
+        threads_finalize();
+    }
+
+    else if (flag.no_cache) {
+        if (IS_REF_LOADED_ZIP) ref_cache_remove (gref); // remove a specific cache
+        else                   ref_cache_remove_all();
+    }
+
+    else if (flag.ls_cache) 
+        ref_cache_ls();
+
+    else if (is_genols) {
+        genols (NULL, false, NULL, false);
+        genols (NULL, true,  NULL, false); // finalize and print
+    }
+
+    // case: requesting to display the reference: genocat --reference <ref-file> and optionally --regions
+    else if (is_genocat && IS_REF_LOADED_ZIP) {
+        flags_update (0, NULL);
+
+        if (flag.show_ref_diff) 
+            ref_diff_ref();                    
+        
+        else
+            ref_display_ref (gref);
+    }
+
+    // genozip with no parameters and not registered yet - register now
+    else if (is_genozip && argc == 1 && isatty(0) && !license_is_registered())
+        license_register();
+        
+    // otherwise: show help
+    else
+        main_print_help (false);
+}
+
 int main (int argc, char **argv)
 {    
-    flag.debug_or_test = flag.debug || getenv ("GENOZIP_TEST");
+    flag.test_i = getenv ("GENOZIP_TEST");
+    flag.debug_or_test = flag.debug || flag.test_i;
     buf_initialize(); 
 
     // When debugging with Visual Studio Code, its debugger wrapper adds 3 args: "2>CON", "1>CON", "<CON". We remove them.
@@ -727,75 +778,42 @@ int main (int argc, char **argv)
     info_stream = stdout; // may be changed during intialization
     profiler_initialize();
     arch_initialize (argv[0]);
-    evb = vb_initialize_nonpool_vb(VB_ID_EVB, DT_NONE, "main_thread");
+    evb = vb_initialize_nonpool_vb (VB_ID_EVB, DT_NONE, "main_thread");
     threads_initialize(); // requires evb
     random_access_initialize();
     codec_initialize();
 
-    flags_init_from_command_line (argc, argv);
+    flags_init_from_command_line (argc, argv); // also sets command and hence IS_ZIP, IS_PIZ etc
 
     MAIN0 ("Starting main"); // after top_debug is set
 
     if (is_genozip && IS_PIZ) exe_type = EXE_GENOUNZIP; // treat "genozip -d" as genounzip
 
     // --make-reference might be called by genocat or genounzip from ref_fasta_to_ref - we treat it as genozip
-    if (flag.make_reference) exe_type = EXE_GENOZIP;
+    if (flag.make_reference) {
+        exe_type = EXE_GENOZIP;
+        command  = ZIP;
+    }
 
     flags_store_command_line (argc, argv); // can only be called after --password is processed
 
-    // if command not chosen explicitly, use the default determined by the executable name
-    if (command < 0) { 
+    // handle all commands except for ZIP, PIZ or LIST
+    if (command == VERSION) { main_print_version();   return 0; }
+    if (command == LICENSE) { license_display();      return 0; }
+    if (command == HELP)    { main_print_help (true); return 0; }
 
-        if (is_genols) command = LIST; // genols can be run without arguments
-        
-        else if (is_genocat && flag.show_headers) command = SHOW_HEADERS;
-
-        // genozip with no input filename, no output filename, and no input redirection 
-        // note: in docker stdin is a pipe even if going to a terminal. so we show the help even if
-        // coming from a pipe. the user must use "-" to redirect from stdin
-        else if (command == -1 && optind == argc && !flag.out_filename && !flag.files_from &&
-                 (isatty(0) || !strcmp (arch_get_distribution(), "Docker"))) {
-            // case: --register
-            if (flag.do_register) {
-                license_register();
-                threads_finalize();
-                exit (EXIT_OK);
-            }
-
-            // case: requesting to display the reference: genocat --reference <ref-file> and optionally --regions
-            if (is_genocat && (IS_REF_EXTERNAL || IS_REF_EXT_STORE)) {
-                command = PIZ;
-                flags_update (0, NULL);
-
-                if (flag.show_ref_diff) 
-                    ref_diff_ref();                    
-                
-                else if (flag.no_cache)
-                    ref_cache_remove (gref);
-
-                else
-                    ref_display_ref (gref);
-            }
-
-            // genozip with no parameters and not registered yet - register now
-            else if (is_genozip && argc == 1 && isatty(0) && !license_is_registered())
-                license_register();
-                
-            // otherwise: show help
-            else
-                main_print_help (false);
-
-            return 0;
-        }
-
-        else if (is_genounzip) command = PIZ;
-        else if (is_genocat) { command = PIZ; flag.to_stdout = !flag.out_filename ; }
-        else command = ZIP; // default 
+    // genozip with no input filename, no output filename, and no input redirection 
+    // note: in docker stdin is a pipe even if going to a terminal. so we show the help even if
+    // coming from a pipe. the user must use "-" to redirect from stdin
+    if (optind == argc && !flag.out_filename && !flag.files_from && (isatty(0) || arch_is_docker())) {
+        main_no_files (argc);
+        return 0;
     }
 
     unsigned num_z_files=0;
     static Buffer input_files_buf = { .name = "input_files" };
-    main_get_filename_list (argc - optind, &argv[optind], &num_z_files, &input_files_buf);
+    
+    if (IS_ZIP || IS_PIZ || IS_SHOW_HEADERS || IS_LIST) main_get_filename_list (argc - optind, &argv[optind], &num_z_files, &input_files_buf);
     ARRAY (rom , input_files, input_files_buf);
 
     // determine how many threads we have - either as specified by the user, or by the number of cores
@@ -804,14 +822,9 @@ int main (int argc, char **argv)
                 "invalid argument of --threads: \"%s\". Expecting an integer between 1 and %u.", flag.threads_str, MAX_GLOBAL_MAX_THREADS);
 
     else global_max_threads = MIN_(MAX_GLOBAL_MAX_THREADS,
-                                   ((flag.is_windows || flag.is_mac || flag.is_wsl) 
+                                   ((flag.is_windows || flag.is_mac || flag.is_wsl || flag.low_memory) 
                                         ? ((float)arch_get_num_cores() * 0.75)    // under-subscribe on Windows / Mac to maintain UI interactivity
                                         : ((float)arch_get_num_cores() * 1.1 ))); // over-subscribe to keep all cores busy even when some threads are waiting on mutex or join
-
-    // handle all commands except for ZIP, PIZ or LIST
-    if (command == VERSION) { main_print_version();   return 0; }
-    if (command == LICENSE) { license_display();      return 0; }
-    if (command == HELP)    { main_print_help (true); return 0; }
 
     ASSINP (input_files_len || !isatty(0) || command != ZIP, "missing input file. Example: %s myfile.bam", global_cmd);
     ASSINP (input_files_len || !isatty(0) || command != PIZ, "missing input file. Example: %s myfile.bam.genozip", global_cmd);
@@ -824,7 +837,8 @@ int main (int argc, char **argv)
 #endif
 
     // we test for a newer version if its a single file compression (if --test is used, we test after PIZ - check_for_newer is set)
-    if (!flag.quiet && ((IS_ZIP && input_files_len == 1 && !flag.test) || (IS_PIZ && flag.check_latest/*PIZ - test after compress*/)))
+    if (!flag.quiet && !flag.no_upgrade && isatty(0) && isatty(1) && 
+        ((IS_ZIP && input_files_len == 1 && !flag.test) || (IS_PIZ && flag.check_latest/*PIZ - test after compress*/)))
         version_background_test_for_newer();
 
     // IF YOU'RE CONSIDERING EDITING THIS CODE TO BYPASS THE REGISTRTION, DON'T! It would be a violation of the license,
@@ -873,7 +887,9 @@ int main (int argc, char **argv)
         bool is_last_txt_file = (file_i==input_files_len-1);
         bool is_last_z_file = (z_file_i==num_z_files-1);
 
-        main_load_reference (next_input_file, !file_i, is_last_z_file);
+        // load reference, but not if we're in the midst of zipping a bound z_file
+        if (!z_file)
+            main_load_reference (next_input_file, !file_i, is_last_z_file);
 
         switch (command) {
             case ZIP  : main_genozip (next_input_file, 
@@ -884,14 +900,26 @@ int main (int argc, char **argv)
             case PIZ  : main_genounzip (next_input_file, flag.out_filename, file_i, is_last_z_file); 
                         break;           
 
-            case SHOW_HEADERS : genocat_show_headers(next_input_file); break;
+            case SHOW_HEADERS : genocat_show_headers (next_input_file); break;
                         
             case LIST : genols (next_input_file, false, NULL, false); break;
 
             default   : ABORTINP ("unrecognized command %c", command);
         }
 
-        if (!z_file) z_file_i++; // z_file was closed, meaning we're done with it
+        if (!z_file) {
+            z_file_i++; // z_file was closed, meaning we're done with it
+
+            if (file_i < n_files-1) {
+                // if we're short on memory, free up some
+                if (arch_get_max_resident_set() > arch_get_physical_mem_size() GB / 4) {
+                    vb_destroy_pool_vbs (POOL_MAIN);
+                    vb_dehoard_memory (evb);
+                }
+
+                buf_low_level_release_memory_back_to_kernel();
+            }
+        }
     }
 
     // if this is "list", finalize
@@ -906,12 +934,8 @@ int main (int argc, char **argv)
     ASSINP0 (!flag.biopsy, "biopsy VB not found, try a lower number");
     ASSINP0 (flag.biopsy_line.line_i == NO_LINE, "biopsy line not found, try a lower number");
 
-    if (arch_is_valgrind()) { // when testing with valgrind, release memory we normally intentionally leak, to expose true leaks
-        ref_finalize();
+    if (arch_is_valgrind()) // when testing with valgrind, release memory we normally intentionally leak, to expose true leaks
         buf_destroy (input_files_buf);
-        flags_finalize();
-        chrom_finalize();
-    }
 
     exit_ok();
     return 0;

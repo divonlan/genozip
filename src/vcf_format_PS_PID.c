@@ -89,9 +89,9 @@ void vcf_samples_seg_finalize_PS_PID (VBlockVCFP vb)
 {
     // remove PSpos, PSref, PSalt if not needed
     if (CTX(FORMAT_PID)->ps_type || CTX(FORMAT_PS)->ps_type) {
-        if (!ctx_get_count (VB, CTX(FORMAT_PSpos), 0)) ctx_free_context(CTX(FORMAT_PSpos), FORMAT_PSpos);
-        if (!ctx_get_count (VB, CTX(FORMAT_PSref), 0)) ctx_free_context(CTX(FORMAT_PSref), FORMAT_PSref);
-        if (!ctx_get_count (VB, CTX(FORMAT_PSalt), 0)) ctx_free_context(CTX(FORMAT_PSalt), FORMAT_PSalt);
+        if (!ctx_get_count (VB, CTX(FORMAT_PSpos), 0)) buflist_free_ctx (VB, CTX(FORMAT_PSpos));
+        if (!ctx_get_count (VB, CTX(FORMAT_PSref), 0)) buflist_free_ctx (VB, CTX(FORMAT_PSref));
+        if (!ctx_get_count (VB, CTX(FORMAT_PSalt), 0)) buflist_free_ctx (VB, CTX(FORMAT_PSalt));
     }
 
     // consolidate to the context actually used 

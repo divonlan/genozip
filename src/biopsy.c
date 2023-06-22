@@ -38,6 +38,9 @@ void biopsy_init (rom optarg)
     biopsy_fn = MALLOC (strlen(optarg)+50);
     sprintf (biopsy_fn, "%s.biopsy", optarg);
 
+    buf_set_promiscuous (&biopsy_data, "biopsy_data");
+    buf_alloc (evb, &biopsy_data, 0, 64 MB, char, 0, NULL);
+
     flag.biopsy   = true;
     flag.seg_only = true; // no need to write the genozip file (+ we don't even seg, see zip_compress_one_vb)
 }
@@ -62,7 +65,7 @@ void biopsy_take (VBlockP vb)
 
 start_biopsy:
     
-    buf_add_buf (evb, &biopsy_data, &vb->txt_data, char, "biopsy_data");
+    buf_add_buf (NULL, &biopsy_data, &vb->txt_data, char, NULL);
     
     DO_ONCE sprintf (&biopsy_fn[strlen(biopsy_fn)], "%s", file_plain_ext_by_dt (txt_file->data_type));
 
@@ -71,4 +74,9 @@ start_biopsy:
         buf_dump_to_file (biopsy_fn, &biopsy_data, 1, false, false, true, true);
         exit_ok();
     }
+}
+
+bool biopsy_is_done (void)
+{
+    return biopsy_vb_i.len == 0;
 }

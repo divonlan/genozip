@@ -48,7 +48,6 @@
 
 // VB management
 extern unsigned kraken_vb_size (DataType dt);
-extern void kraken_vb_release_vb();
 
 // seg of a kraken file
 extern void kraken_zip_initialize (void);

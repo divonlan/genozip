@@ -41,7 +41,6 @@
 // globals
 FileP z_file   = NULL;
 FileP txt_file = NULL;
-DataType last_z_dt = DT_NONE;
 
 static StreamP input_decompressor = NULL; // bcftools or xz, unzip or samtools - only one at a time
 static StreamP output_compressor  = NULL; // samtools (for cram), bcftools
@@ -194,21 +193,21 @@ static FileType file_get_type_force_dt (rom filename, DataType dt)
 
 // returns the filename without the extension eg myfile.1.sam.gz -> myfile.1. 
 // if raw_name is given, memory is allocated sufficiently to concatenate a extension. Otherwise, filename is overwritten
-void file_get_raw_name_and_type (char *filename, char **raw_name, FileType *out_ft)
+void file_get_raw_name_and_type (rom filename, rom *raw_name, FileType *out_ft)
 {
     unsigned len = strlen (filename);
 
     if (raw_name) {
         *raw_name = MALLOC (len + 30);
-        memcpy (*raw_name, filename, len);
-        (*raw_name)[len] = 0;
+        memcpy (*(char **)raw_name, filename, len);
+        (*(char **)raw_name)[len] = 0;
     }
     else 
         raw_name = &filename; // overwrite filename
 
     FileType ft = file_get_type (filename);
     if (ft != UNKNOWN_FILE_TYPE) 
-        (*raw_name)[len - strlen (file_exts[ft])] = 0;
+        (*(char **)raw_name)[len - strlen (file_exts[ft])] = 0;
 
     if (out_ft) *out_ft = ft;
 }
@@ -373,7 +372,7 @@ static void file_set_filename (FileP file, rom fn)
 
 static void file_initialize_txt_file_data (FileP file)
 {
-    #define TXT_INIT(buf) ({ buf_init_promiscuous_(evb, &file->buf, "txt_file->" #buf); })
+    #define TXT_INIT(buf) ({ buf_set_promiscuous (&file->buf, "txt_file->" #buf); })
 
     if (IS_ZIP) {
         mutex_initialize (file->recon_plan_mutex[0]);
@@ -403,11 +402,11 @@ FileP file_open_txt_read (rom filename)
     int64_t url_file_size = 0; // will be -1 if the web/ftp site does not provide the file size
     rom error = NULL;
     
-    bool is_file_exists = false;
+    thool is_file_exists = unknown;
 
     if (file->is_remote) {
         error = url_get_status (filename, &is_file_exists, &url_file_size); // accessing is expensive - get existance and size in one call
-        if (url_file_size >= 0) file->disk_size = (uint64_t)url_file_size;
+        if (!error && url_file_size >= 0) file->disk_size = (uint64_t)url_file_size;
     }
     
     else if (!file->redirected) { // not stdin
@@ -419,23 +418,25 @@ FileP file_open_txt_read (rom filename)
     }
 
     // return null if genozip input file size is known to be 0, so we can skip it. note: file size of url might be unknown
-    if (is_file_exists && !file->disk_size && !url_file_size && 
+    if (is_file_exists == yes && !file->disk_size && !url_file_size && 
         !(!file->is_remote && !file->redirected && file_is_fifo (filename)))  // a fifo is allowed is be size 0 (as it always is) 
         goto fail;    
 
     if (!file->redirected) {
-        ASSINP (is_file_exists, "cannot open \"%s\" for reading: %s", filename, error);
+        ASSINP (is_file_exists != no, "cannot open \"%s\" for reading: %s", filename, error);
     
         file_set_filename (file, filename);
+    
+        file->basename = filename_base (file->name, false, "", NULL, 0);
 
         // if user provided the type with --input, we use that, otherwise derive from the file name
-        file->type = flag.stdin_type ? flag.stdin_type : file_get_type (file->name);
+        file->type = flag.stdin_type ? flag.stdin_type : file_get_type (file->basename);
     }
 
-    else   // stdin 
+    else {   // stdin 
+        file->basename = filename_base (NULL, false, FILENAME_STDIN, NULL, 0);
         file->type = flag.stdin_type; 
-
-    file->basename = filename_base (file->name, false, FILENAME_STDIN, NULL, 0);
+    }
 
     file->data_type = file_get_data_type (file->type, true);
 
@@ -528,9 +529,11 @@ fallthrough_from_cram: {}
                 file->codec = file->source_codec = CODEC_GZ;
                 
                 int fd = dup (fileno((FILE *)file->file));
+                ASSERT (fd >= 0, "dup failed: %s", strerror (errno));
+
                 FCLOSE (file->file, file_printname (file));
                 
-                file->file  = gzdopen (fd, READ); // we're abandoning the FILE structure (and leaking it, if libc implementation dynamically allocates it) and working only with the fd
+                file->file  = gzdopen (fd, READ); 
                 gzinject (file->file, block, block_size); // a hack - adds a 18 bytes of compressed data to the in stream, which will be consumed next, instead of reading from disk
             } 
 
@@ -542,10 +545,10 @@ fallthrough_from_cram: {}
                 #define XZ_MAGIC (char[]){ 0xFD, '7', 'z', 'X', 'Z', 0 }
 
                 // we already open the file, so not easy to re-open with BZ2_bzopen as it would require injecting the read data into the BZ2 buffers
-                if (block_size >= 3 && !memcmp (block, BZ2_MAGIC, 3)) 
+                if (str_isprefix_((rom)block, block_size, BZ2_MAGIC, 3)) 
                     ABORTINP0 ("The data seems to be in bz2 format. Please use --input to specify the type (eg: \"genozip --input sam.bz2\"");
 
-                if (block_size >= 6 && !memcmp (block, XZ_MAGIC, 6)) {
+                if (str_isprefix_((rom)block, block_size, XZ_MAGIC, 6)) {
                     if (file->redirected) ABORTINP0 ("Compressing piped-in data in xz format is not currently supported");
                     if (file->is_remote) ABORTINP0 ("The data seems to be in xz format. Please use --input to specify the type (eg: \"genozip --input sam.xz\"");
                     ABORTINP0 ("The data seems to be in xz format. Please use --input to specify the type (eg: \"genozip --input sam.xz\"");
@@ -620,6 +623,9 @@ fallthrough_from_cram: {}
         default:
             ABORT ("%s: invalid filename extension for %s files: %s", global_cmd, dt_name (file->data_type), file->name);
     }
+
+    if (flag.show_codec) 
+        iprintf ("%s: source_code=%s\n", file->basename, codec_name (file->source_codec));
 
     if (!file->file) goto fail;
 
@@ -702,17 +708,18 @@ FileP file_open_txt_write (rom filename, DataType data_type, int bgzf_level)
 static void file_initialize_z_file_data (FileP file)
 {
     init_dict_id_to_did_map (file->d2d_map); 
+    profiler_new_z_file();
         
-    #define Z_INIT(buf) ({ buf_init_promiscuous_(evb, &file->buf, "z_file->" #buf); })
+    #define Z_INIT(buf) ({ buf_set_promiscuous (&file->buf, "z_file->" #buf); })
 
     if (file->mode != READ) { // careful not to use IS_ZIP - which is set when reading aux files
         for (Did did_i=0; did_i < MAX_DICTS; did_i++) {
-            ctx_zip_init_promiscuous (&file->contexts[did_i]);
+            ctx_zip_init_promiscuous (&file->contexts[did_i]); // must be done from main thread
 
             mutex_initialize (file->wait_for_vb_1_mutex[did_i]);
             mutex_lock (file->wait_for_vb_1_mutex[did_i]); 
         }
-
+        
         // initialize evb "promiscuous" buffers - i.e. buffers that can be allocated by any thread (obviously protected by eg a mutex)
         // promiscuous buffers must be initialized by the main thread, and buffer.c does not verify their integrity.
         Z_INIT (ra_buf);
@@ -723,9 +730,12 @@ static void file_initialize_z_file_data (FileP file)
         Z_INIT (sag_cigars);
         Z_INIT (sag_seq);
         Z_INIT (sag_qual);
-        Z_INIT (chrom2ref_map);
-        Z_INIT (deep_hash);
+        Z_INIT (deep_index_by[BY_SEQ]);
+        Z_INIT (deep_index_by[BY_QNAME]);
         Z_INIT (deep_ents);
+
+        Z_INIT (contexts[CHROM].chrom2ref_map);
+        buf_set_shared (&file->contexts[CHROM].chrom2ref_map);
     }
     else {
         Z_INIT (sag_qual);
@@ -779,8 +789,8 @@ FileP file_open_z_read (rom filename)
 
     // if a FASTA file was given as an argument to --reference or --REFERENCE, get the .ref.genozip file,
     // possobily running --make-reference in a separate process if needed
-    if (flag.reading_reference && (file_get_data_type (file_get_type (file->name), true) == DT_FASTA) && (file_get_type (file->name) != FASTA_GENOZIP))
-        ref_fasta_to_ref (file);
+    if (flag.reading_reference && (file_get_data_type (file_get_type (file->name), true) == DT_FASTA) && (file_get_type (file->name) != FASTA_GENOZIP)) 
+        disk_filename = ref_fasta_to_ref (file);
 
     ASSINP (!flag.reading_reference || filename_has_ext (file->name, REF_GENOZIP_), 
             "You specified file \"%s\", however with --reference or --REFERENCE, you must specify a reference file (%s file or FASTA file)\n"
@@ -813,9 +823,9 @@ FileP file_open_z_read (rom filename)
         if (cause ||
             (cause = 1 * !file->file) ||
             (cause = 2 * !sb.st_size) ||
-            (cause = 3 * !file_seek (file, -(int)sizeof (magic), SEEK_END, true)) || 
+            (cause = 3 * !file_seek (file, -(int)sizeof (magic), SEEK_END, SOFT_FAIL)) || 
             (cause = 4 * !fread (&magic, sizeof (magic), 1, file->file)) ||
-            (cause = 5 * (BGEN32 (magic) != GENOZIP_MAGIC))) {
+            (cause = 5 * (BGEN32 (magic) != GENOZIP_MAGIC && !(flag.show_headers && flag.force)))) {
             
             int fail_errno = errno;
             FCLOSE (file->file, disk_filename);
@@ -862,9 +872,6 @@ FileP file_open_z_read (rom filename)
     
     file_initialize_z_file_data (file);
 
-    if (file->data_type != DT_REF && file->data_type != DT_NONE) 
-        last_z_dt = file->data_type;
-
     ASSINP (file->file, "cannot open file \"%s\": %s", file->name, strerror(errno)); // errno will be retrieve even the open() was called through zlib and bzlib 
 
 done:
@@ -884,7 +891,7 @@ FileP file_open_z_write (rom filename, FileMode mode, DataType data_type)
     file->supertype = Z_FILE;
     file->mode      = mode;
     file->is_in_tar = tar_zip_is_tar();
-
+    
     if (file_exists (filename) && 
         !flag.force            && 
         !flag.zip_no_z_file    && // not zip with --seg-only
@@ -922,12 +929,12 @@ FileP file_open_z_write (rom filename, FileMode mode, DataType data_type)
             file->file = fopen (file->name, file->mode);
 #ifndef _WIN32
             // set z_file permissions to be the same as the txt_file permissions (if possible)
-            if (file->file && txt_file && txt_file->name && !txt_file->redirected && !txt_file->is_remote) {
+            if (file->file && txt_file && txt_file->name && !txt_file->is_remote) {
                 struct stat st;
                 if (stat (txt_file->name, &st))
                     WARN ("FYI: Failed to set permissions of %s because failed to stat(%s): %s", file->name, txt_file->name, strerror(errno));
                 
-                else
+                else 
                     chmod (file->name, st.st_mode); // ignore errors (e.g. this doesn't work on NTFS)
             }
 #endif
@@ -940,9 +947,6 @@ FileP file_open_z_write (rom filename, FileMode mode, DataType data_type)
     file->genozip_version = GENOZIP_FILE_FORMAT_VERSION; // to allow the VER macro to operate consistently across ZIP/PIZ
     
     file_initialize_z_file_data (file);
-
-    if (file->data_type != DT_REF && file->data_type != DT_NONE) 
-        last_z_dt = file->data_type;
 
     ASSINP (file->file || flag.zip_no_z_file, 
             "cannot open file \"%s\": %s", file->name, strerror(errno)); // errno will be retrieve even the open() was called through zlib and bzlib 
@@ -990,14 +994,17 @@ static void file_index_txt (ConstFileP file)
     }
 }
 
-void file_close (FileP *file_p, 
-                 bool index_txt,      // true if we should also index the txt file after it is closed
-                 bool cleanup_memory) // true means destroy buffers - use if the closed is NOT near the end of the execution, eg when dealing with unbinding bound files
+void file_close (FileP *file_p) 
 {
     START_TIMER;
 
     FileP file = *file_p;
-    *file_p = NULL;
+
+    if (z_file && file == z_file && !flag_loading_auxiliary && 
+        flag.show_time_comp_i == COMP_ALL && !flag.show_time[0]) // show-time without the optional parameter 
+        profiler_add_evb_and_print_report();
+
+    __atomic_store_n (file_p, (FileP)NULL, __ATOMIC_RELAXED); 
 
     if (!file) return; // nothing to do
 
@@ -1024,6 +1031,10 @@ void file_close (FileP *file_p,
 
         else
             FCLOSE (file->file, file_printname (file));
+
+        // create an index file using samtools, bcftools etc, if applicable
+        if (file->mode == WRITE && flag.index_txt && !flag_loading_auxiliary) 
+            file_index_txt (file);
     }
 
     else if (file->file && file->supertype == Z_FILE) {
@@ -1043,22 +1054,18 @@ void file_close (FileP *file_p,
         serializer_destroy (file->digest_serializer);     
     }
 
-    // create an index file using samtools, bcftools etc, if applicable
-    if (index_txt) file_index_txt (file);
-
     // free resources if we are NOT near the end of the execution. If we are at the end of the execution
     // it is faster to just let the process die
 
-    if (cleanup_memory || 
-        arch_is_valgrind()) { // free everything if testing with valgrind, so that we can find true memory leaks
+    if (!flag.let_OS_cleanup_on_exit) {
 
-        if (IS_PIZ && flag.deep) { // in this case, deep_index and deep_ents are Buffers containing arrays of Buffers
+        if (IS_PIZ && flag.deep && file->supertype == Z_FILE) { // in this case, deep_index and deep_ents are Buffers containing arrays of Buffers
             for_buf (Buffer, buf, file->deep_index) buf_destroy (*buf);
             for_buf (Buffer, buf, file->deep_ents)  buf_destroy (*buf);  
             huffman_destroy (&file->qname_huf);          
         }
 
-        buf_destroy_file_bufs (file);
+        buflist_destroy_file_bufs (file);
 
         mutex_destroy (file->dicts_mutex);
         mutex_destroy (file->custom_merge_mutex);
@@ -1152,7 +1159,7 @@ bool file_exists (rom filename)
 // (and exit) or a warning (and return).
 bool file_seek (FileP file, int64_t offset, 
                 int whence, // SEEK_SET, SEEK_CUR or SEEK_END
-                int soft_fail) // 1=warning 2=silent
+                FailType fail_type) 
 {
     ASSERTNOTNULL (file);
     ASSERTNOTNULL (file->file);
@@ -1176,8 +1183,8 @@ bool file_seek (FileP file, int64_t offset,
 
     int ret = fseeko64 ((FILE *)file->file, offset, whence);
 
-    if (soft_fail) {
-        if (!flag.to_stdout && soft_fail==1) {
+    if (fail_type != HARD_FAIL) {
+        if (!flag.to_stdout && fail_type==WARNING_FAIL) {
             ASSERTW (!ret, errno == EINVAL ? "Warning: Error while reading file %s (fseeko64 (whence=%d offset=%"PRId64")): it is too small%s" 
                                            : "Warning: fseeko failed on file %s (whence=%d offset=%"PRId64"): %s", 
                      file_printname (file), whence, offset, errno == EINVAL ? "" : strerror (errno));
@@ -1411,6 +1418,5 @@ rom file_plain_ext_by_dt (DataType dt)
 
 bool file_buf_locate (FileP file, ConstBufferP buf)
 {
-    return file && (char*)buf >= (char*)file && 
-                   (char*)buf <  (char*)(file + 1);
+    return is_p_in_range (buf, file, sizeof (File));
 }

@@ -25,7 +25,7 @@
 static void genols_list_dir(); // forward declaration
 
 void genols (rom z_filename, bool finalize, rom subdir, bool recursive) 
-{
+{    
     if (!finalize) {
         // no specific filename = show entire directory
         if (!z_filename) {
@@ -67,7 +67,7 @@ void genols (rom z_filename, bool finalize, rom subdir, bool recursive)
 
     // we accumulate the string in str_buf and print in the end - so it doesn't get mixed up with 
     // warning messages regarding individual files
-    static Buffer str_buf = EMPTY_BUFFER; 
+    static Buffer str_buf = {}; 
     
     if (finalize) {
         if (files_listed > 1) {
@@ -106,7 +106,7 @@ void genols (rom z_filename, bool finalize, rom subdir, bool recursive)
     z_file = file_open_z_read (z_filename); // open global z_file
 
     SectionHeaderGenozipHeader header;
-    if (!zfile_read_genozip_header (&header))
+    if (!zfile_read_genozip_header (&header, SOFT_FAIL))
         goto finish;
 
     Digest digest = DIGEST_NONE;
@@ -164,7 +164,7 @@ void genols (rom z_filename, bool finalize, rom subdir, bool recursive)
         if (num_lines_count != z_file->num_lines)
             buf_append_string (evb, &str_buf, "\nNote: the difference between the file's num_lines and the total of its components' is the number of lines of the 1st component's header\n");
     }
-    file_close (&z_file, false, false);
+    file_close (&z_file);
 
 finish:
     if (!recursive) {
@@ -173,7 +173,7 @@ finish:
     }
 }
 
-static void genols_list_dir(rom dirname)
+static void genols_list_dir (rom dirname)
 {
     DIR *dir;
     struct dirent *ent;

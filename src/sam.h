@@ -33,7 +33,8 @@
 #pragma GENDICT SAM_QBNAME=DTYPE_1=QBNAME // if adding more Q*NAMEs - add to fastq.h and kraken.h too, and update MAX_QNAME_ITEMS
 #pragma GENDICT SAM_QmNAME=DTYPE_1=QmNAME // QmNAME reserved for mate number (always the last dict_id in the container)
 
-#pragma GENDICT DEEP_FASTQ_QNAME2=DTYPE_FIELD=QNAME2     // QNAME2 is embedded in QNAME (QNAME2 items immediately follow)
+// Fields prefixed with "DEEP_" are not used in SAM, but are here so that the did's are the same for SAM and FASTQ
+#pragma GENDICT DEEP_FASTQ_QNAME2=DTYPE_FIELD=QNAME2
 #pragma GENDICT DEEP_FASTQ_Q0NAME2=DTYPE_1=q0NAME    
 #pragma GENDICT DEEP_FASTQ_Q1NAME2=DTYPE_1=q1NAME 
 #pragma GENDICT DEEP_FASTQ_Q2NAME2=DTYPE_1=q2NAME
@@ -83,7 +84,7 @@
 #pragma GENDICT DEEP_FASTQ_E2L=DTYPE_FIELD=E2L
 
 #pragma GENDICT DEEP_FASTQ_LINE3=DTYPE_FIELD=LINE3
-#pragma GENDICT DEEP_FASTQ_T0HIRD=DTYPE_1=t0NAME    // must be directly after FASTQ_LINE3
+#pragma GENDICT DEEP_FASTQ_T0HIRD=DTYPE_1=t0NAME
 #pragma GENDICT DEEP_FASTQ_T1HIRD=DTYPE_1=t1NAME 
 #pragma GENDICT DEEP_FASTQ_T2HIRD=DTYPE_1=t2NAME
 #pragma GENDICT DEEP_FASTQ_T3HIRD=DTYPE_1=t3NAME
@@ -239,7 +240,7 @@
 #pragma GENDICT OPTION_XT_A=DTYPE_2=XT:A     // U=Unique alignment R=Repeat N=Not mapped M=Mate-sw (Read is fixed due to paired end rescue)
 #pragma GENDICT OPTION_XS_i=DTYPE_2=XS:i     // Suboptimal alignment score. Also: Bowtie, BSSeeker2, BSBolt, tmap, gem
 #pragma GENDICT OPTION_XE_i=DTYPE_2=XE:i     // Number of supporting seeds
-// type not known #pragma GENDICT OPTION_XF_?=DTYPE_2=XF:?  // Support from forward/reverse alignment  
+#pragma GENDICT OPTION_XF_i=DTYPE_2=XF:i     // Support from forward/reverse alignment  
 
 #pragma GENDICT OPTION_XA_Z=DTYPE_2=XA:Z     // (OVERLAP WITH Ion Torrent XA:Z) Alternative hits; format: (chr,pos,CIGAR,NM;)*. Also produced by gem-mapper.
 #pragma GENDICT OPTION_XA_LOOKBACK=DTYPE_2=X^A_LOOKBACK
@@ -500,6 +501,9 @@
 // also: XA:Z, XT:A - same as BWA
 #pragma GENDICT OPTION_md_Z=DTYPE_2=md:Z     // eg "md:Z:27G19>1-1>1-4>3-18"
 
+// DRAGEN
+#pragma GENDICT OPTION_sd_f=DTYPE_2=sd:f     // possibly the output of the option "--rna-quantification-fld-sd", not sure
+
 // added by GATK's BQSR (Base Quality Score Recalibration)
 #pragma GENDICT OPTION_BD_Z=DTYPE_2=BD:Z     // Deletion base quality  (not used in newer versions of GATK)
 #pragma GENDICT OPTION_BI_Z=DTYPE_2=BI:Z     // Insertion base quality (not used in newer versions of GATK)
@@ -567,6 +571,7 @@ extern void sam_header_finalize (void);
 extern void sam_zip_free_end_of_z (void);
 extern bool is_sam (STRp(header), bool *need_more);
 extern bool is_bam (STRp(header), bool *need_more);
+extern void sam_piz_header_init (void);
 
 extern ContigPkgP sam_hdr_contigs;
 extern uint32_t sam_num_header_contigs (void);
@@ -585,6 +590,8 @@ extern void sam_zip_after_compress (VBlockP vb);
 extern void sam_stats_reallocate (void);
 extern void sam_zip_genozip_header (SectionHeaderGenozipHeaderP header);
 extern void sam_deep_merge (VBlockP vb);
+extern rom sam_get_deep_tip (void);
+extern void sam_destroy_deep_tip (void);
 
 // PIZ Stuff
 extern void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header);
@@ -605,7 +612,7 @@ extern void sam_reconstruct_missing_quality (VBlockP vb, ReconType reconstruct);
 extern void sam_piz_xtra_line_data (VBlockP vb);
 extern void sam_piz_after_preproc (VBlockP vb);
 extern CONTAINER_ITEM_CALLBACK (sam_piz_con_item_cb);
-extern void qname_filter_initialize (rom filename);
+extern void seq_filter_initialize (rom filename);
 
 // BAM Stuff
 extern void bam_seg_initialize (VBlockP vb);
@@ -614,14 +621,12 @@ extern int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
 extern void bam_read_vblock (VBlockP vb);
 extern void bam_seg_initialize (VBlockP vb);
 extern rom bam_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
+extern rom bam_assseg_line (VBlockP vb);
 
 // SAM-to-FASTQ stuff
 CONTAINER_CALLBACK (sam_piz_container_cb);
 
 // VB stuff
-extern void sam_vb_release_vb();
-extern void sam_destroy_vb();
-extern void sam_erase_vb_bufs();
 extern unsigned sam_vb_size (DataType dt);
 extern unsigned sam_vb_zip_dl_size (void);
 extern void sam_reset_line (VBlockP vb);
@@ -697,7 +702,7 @@ SPECIAL (SAM, 48, COPY_TEXTUAL_CIGAR,    sam_piz_special_COPY_TEXTUAL_CIGAR);  /
 SPECIAL (SAM, 49, BISMARK_XM,            sam_piz_special_BISMARK_XM);          // introduced 14.0.0
 SPECIAL (SAM, 50, BSBOLT_XB,             sam_piz_special_BSBOLT_XB);           // introduced 14.0.0
 SPECIAL (SAM, 51, UQ,                    sam_piz_special_UQ);                  // introduced 14.0.10
-SPECIAL (SAM, 52, iqsqdq,                sam_piz_special_iq_sq_dq);            // 15.0.0
+SPECIAL (SAM, 52, iqsqdq,                sam_piz_special_iq_sq_dq);            // introduced 15.0.0
 #define NUM_SAM_SPECIAL 53
  
 #define SAM_LOCAL_GET_LINE_CALLBACKS                          \
@@ -766,7 +771,6 @@ TXTHEADER_TRANSLATOR (txtheader_sam2fq);
     { DT_SAM,  ALIAS_DICT, _OPTION_MC0_Z,       _OPTION_OC_Z        },  /* note: no need to alias MC1_Z, bc it is normally all-the-same copy-mate */ \
     { DT_SAM,  ALIAS_DICT, _OPTION_OA_CIGAR,    _OPTION_OC_Z        },  \
     { DT_SAM,  ALIAS_DICT, _OPTION_XA_CIGAR,    _OPTION_OC_Z        },  \
-    { DT_SAM,  ALIAS_DICT, _OPTION_SA_CIGAR,    _OPTION_OC_Z        },  \
     { DT_SAM,  ALIAS_DICT, _OPTION_TX_CIGAR,    _OPTION_OC_Z        },  \
     { DT_SAM,  ALIAS_DICT, _OPTION_AN_CIGAR,    _OPTION_OC_Z        },  \
     { DT_SAM,  ALIAS_DICT, _OPTION_AN_NEGATIVE, _OPTION_TX_NEGATIVE },  \
@@ -782,10 +786,9 @@ TXTHEADER_TRANSLATOR (txtheader_sam2fq);
     { DT_BAM,  ALIAS_DICT, _OPTION_OA_RNAME,    _SAM_RNAME          },  \
     { DT_BAM,  ALIAS_DICT, _OPTION_XA_RNAME,    _SAM_RNAME          },  \
     { DT_BAM,  ALIAS_DICT, _OPTION_SA_RNAME,    _SAM_RNAME          },  \
-    { DT_BAM,  ALIAS_DICT, _OPTION_MC0_Z,       _OPTION_OC_Z        },  \
+    { DT_BAM,  ALIAS_DICT, _OPTION_MC0_Z,       _OPTION_OC_Z        },  /*note: SA_CIGAR cannot be an alias of OC:Z because it causes issues with gencomp */ \
     { DT_BAM,  ALIAS_DICT, _OPTION_OA_CIGAR,    _OPTION_OC_Z        },  \
     { DT_BAM,  ALIAS_DICT, _OPTION_XA_CIGAR,    _OPTION_OC_Z        },  \
-    { DT_BAM,  ALIAS_DICT, _OPTION_SA_CIGAR,    _OPTION_OC_Z        },  \
     { DT_BAM,  ALIAS_DICT, _OPTION_TX_CIGAR,    _OPTION_OC_Z        },  \
     { DT_BAM,  ALIAS_DICT, _OPTION_AN_CIGAR,    _OPTION_OC_Z        },  \
     { DT_BAM,  ALIAS_DICT, _OPTION_AN_NEGATIVE, _OPTION_TX_NEGATIVE },  \
@@ -794,12 +797,9 @@ TXTHEADER_TRANSLATOR (txtheader_sam2fq);
 
 #define SAM_CONTIG_FMT "@SQ	SN:%.*s	LN:%"PRId64
 
+// note: SAM Deep might have a lot more FASTQs, but we don't need an enum value for them
 typedef enum { SAM_COMP_NONE=255, SAM_COMP_MAIN=0, SAM_COMP_PRIM=1, SAM_COMP_DEPN=2, SAM_COMP_FQ00=3, SAM_COMP_FQ01=4 } SamComponentType;
 #define SAM_COMP_NAMES { "MAIN", "PRIM", "DEPN", "FQ00", "FQ01" }
-
-#define sam_is_main_vb (vb->comp_i == SAM_COMP_MAIN)
-#define sam_is_prim_vb (vb->comp_i == SAM_COMP_PRIM)
-#define sam_is_depn_vb (vb->comp_i == SAM_COMP_DEPN)
 
 #define dict_id_is_aux_sf dict_id_is_type_2
 #define dict_id_aux_sf dict_id_type_2

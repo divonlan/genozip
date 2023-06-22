@@ -41,14 +41,6 @@ unsigned fasta_vb_size (DataType dt)
 
 unsigned fasta_vb_zip_dl_size (void) { return sizeof (ZipDataLineFASTA); }
 
-void fasta_vb_release_vb (VBlockFASTAP vb)
-{
-    if (VB_DT(REF) && IS_PIZ) return; // this is actually a VBlock, not VBlockFASTA
-    
-    memset ((char *)vb + sizeof (VBlock), 0, sizeof (VBlockFASTA) - sizeof (VBlock)); // zero all data unique to VBlockFASTA
-    CTX(FASTA_NONREF)->local.len = 0; // len might be is used even though buffer is not allocated (in make-ref)
-}
-
 // used by ref_make_create_range
 void fasta_get_data_line (VBlockP vb, uint32_t line_i, uint32_t *seq_data_start, uint32_t *seq_len)
 {
@@ -180,7 +172,7 @@ int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *last_i)
             // i.e. one that the next character is >, or it is the end of the file
             // note: when compressing FASTA with a reference (eg long reads stored in a FASTA instead of a FASTQ), 
             // line cannot be too long - they must fit in a VB
-            if ((flag.reference & REF_ZIP_LOADED) || flag.multiseq) {
+            if (flag.multiseq) {
                 int is_end_of_contig = fasta_is_end_of_contig (vb, first_i, i);
 
                 switch (is_end_of_contig) {
@@ -273,9 +265,6 @@ void fasta_seg_initialize (VBlockP vb)
     else 
         CTX(FASTA_NONREF)->ltype  = LT_SEQUENCE;
 
-    if (flag.reference & REF_ZIP_LOADED) 
-        CTX(FASTA_NONREF)->no_callback = true; // override callback if we are segmenting to a reference
-
     // in --stats, consolidate stats into FASTA_NONREF
     ctx_consolidate_stats (vb, FASTA_NONREF, FASTA_NONREF_X, DID_EOL);
         
@@ -332,31 +321,32 @@ bool fasta_seg_is_small (ConstVBlockP vb, DictId dict_id)
 
 bool fasta_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id)
 {
-    return dict_id.num == _FASTA_CONTIG; // some FASTAs have lots of contigs. Since the FASTA data type has very few contexts, we can be generous here.
+    return dict_id.num == _FASTA_CONTIG || // some FASTAs have lots of contigs. Since the FASTA data type has very few contexts, we can be generous here.
+           dict_id_is_type_1 (dict_id);
 }
 
 // description line - we segment it to its components
 // note: we store the DESC container in its own ctx rather than just directly in LINEMETA, to make it easier to grep
-static void fasta_seg_desc_line (VBlockFASTAP vb, rom line_start, uint32_t line_len, bool *has_13)
+static void fasta_seg_desc_line (VBlockFASTAP vb, rom line, uint32_t line_len, bool *has_13)
 {
-    SAFE_NUL (&line_start[line_len]);
+    SAFE_NUL (&line[line_len]);
     
     // we store the contig name in a dictionary only (no b250), to be used if this fasta is used as a reference
-    rom chrom_name = line_start + 1;
-    unsigned chrom_name_len = strcspn (line_start + 1, " \t\r\n");
+    rom chrom_name = line + 1;
+    unsigned chrom_name_len = strcspn (line + 1, " \t\r\n");
 
-    ASSSEG0 (chrom_name_len, line_start, "contig is missing a name");
+    ASSSEG0 (chrom_name_len, "contig is missing a name");
 
     __atomic_add_fetch (&z_file->num_sequences, (uint64_t)1, __ATOMIC_RELAXED);
 
     if (!flag.make_reference) {
         if (segconf.fasta_has_contigs) 
-            tokenizer_seg (VB, CTX(FASTA_DESC), line_start, line_len, sep_with_space, 0);
+            tokenizer_seg (VB, CTX(FASTA_DESC), line, line_len, sep_with_space, 0);
 
         // if we don't have contigs, eg this is an amino acid fasta, we're better off
         // not tokenizing the description line as its components are often correlated
         else
-            seg_add_to_local_text (VB, CTX(FASTA_DESC), line_start, line_len, LOOKUP_SIMPLE, line_len);
+            seg_add_to_local_text (VB, CTX(FASTA_DESC), line, line_len, LOOKUP_SIMPLE, line_len);
 
         char special_snip[100]; unsigned special_snip_len = sizeof (special_snip);
         seg_prepare_snip_other_do (SNIP_REDIRECTION, _FASTA_DESC, false, 0, 0, &special_snip[2], &special_snip_len);
@@ -390,9 +380,7 @@ static void fasta_seg_desc_line (VBlockFASTAP vb, rom line_start, uint32_t line_
         }
 
         else {
-            ASSINP (is_new || segconf.running, "Error: bad FASTA file - sequence \"%.*s\" appears more than once%s", chrom_name_len, chrom_name,
-                    flag.bind ? " (possibly in another FASTA being bound)" : 
-                    (flag.reference & REF_ZIP_LOADED) ? " (possibly the sequence size exceeds vblock size, try enlarging with --vblock)" : "");
+            ASSINP (is_new || segconf.running, "Error: bad FASTA file - sequence \"%.*s\" appears more than once", STRf(chrom_name));
          
             vb->ra_initialized = true;
         }
@@ -402,10 +390,10 @@ static void fasta_seg_desc_line (VBlockFASTAP vb, rom line_start, uint32_t line_
     SAFE_RESTORE;
 }
 
-static void fast_seg_comment_line (VBlockFASTAP vb, rom line_start, uint32_t line_len, bool *has_13)
+static void fast_seg_comment_line (VBlockFASTAP vb, STRp (line), bool *has_13)
 {
     if (!flag.make_reference) {
-        seg_add_to_local_text (VB, CTX(FASTA_COMMENT), line_start, line_len, LOOKUP_NONE, line_len); 
+        seg_add_to_local_text (VB, CTX(FASTA_COMMENT), STRa(line), LOOKUP_NONE, line_len); 
 
         char special_snip[100]; unsigned special_snip_len = sizeof (special_snip);
         seg_prepare_snip_other_do (SNIP_OTHER_LOOKUP, _FASTA_COMMENT, false, 0, 0, &special_snip[2], &special_snip_len);
@@ -540,31 +528,31 @@ static void fasta_seg_seq_line (VBlockFASTAP vb, STRp(line),
 //     note: if a comment line is the first line in a VB - it will be segmented as a description. No harm done.
 // 123 - a sequence line - any line that's not a description of sequence line - store its length
 // these ^ are preceded by a 'Y' if the line has a Windows-style \r\n line ending or 'X' if not
-rom fasta_seg_txt_line (VBlockFASTAP vb, rom line_start, uint32_t remaining_txt_len, bool *has_13) // index in vb->txt_data where this line starts
+rom fasta_seg_txt_line (VBlockFASTAP vb, rom line, uint32_t remaining_txt_len, bool *has_13) // index in vb->txt_data where this line starts
 {
     // get entire line
     unsigned line_len;
-    int32_t remaining_vb_txt_len = BAFTtxt - line_start;
+    int32_t remaining_vb_txt_len = BAFTtxt - line;
     
-    rom next_field = seg_get_next_line (VB, line_start, &remaining_vb_txt_len, &line_len, !vb->vb_has_no_newline, has_13, "FASTA line");
+    rom next_field = seg_get_next_line (VB, line, &remaining_vb_txt_len, &line_len, !vb->vb_has_no_newline, has_13, "FASTA line");
 
     // case: description line - we segment it to its components
-    if (*line_start == '>' || (*line_start == ';' && vb->last_line == FASTA_LINE_SEQ)) {
-        fasta_seg_desc_line (vb, line_start, line_len, has_13);
+    if (*line == '>' || (*line == ';' && vb->last_line == FASTA_LINE_SEQ)) {
+        fasta_seg_desc_line (vb, line, line_len, has_13);
 
         if (kraken_is_loaded) {
-            unsigned qname_len = strcspn (line_start + 1, " \t\r\n"); // +1 to skip the '>' or ';'
-            kraken_seg_taxid (VB, FASTA_TAXID, line_start + 1, qname_len, true);
+            unsigned qname_len = strcspn (line + 1, " \t\r\n"); // +1 to skip the '>' or ';'
+            kraken_seg_taxid (VB, FASTA_TAXID, line + 1, qname_len, true);
         }
     }
 
     // case: comment line - stored in the comment buffer
-    else if (*line_start == ';' || !line_len) 
-        fast_seg_comment_line (vb, line_start, line_len, has_13);
+    else if (*line == ';' || !line_len) 
+        fast_seg_comment_line (vb, STRa(line), has_13);
 
     // case: sequence line
     else 
-        fasta_seg_seq_line (vb, line_start, line_len, 
+        fasta_seg_seq_line (vb, STRa(line), 
                             remaining_txt_len == line_len + *has_13, // true if this is the last line in the VB with no newline (but may or may not have \r)
                             !remaining_vb_txt_len || *next_field == '>' || *next_field == ';' || *next_field == '\n' || *next_field == '\r', // is_last_line_in_contig
                             *has_13);
@@ -694,7 +682,7 @@ bool fasta_piz_is_vb_needed (VBIType vb_i)
     // uncompress & map desc field (filtered by piz_is_skip_section)
     piz_uncompress_all_ctxs (VB);
 
-    Context *desc_ctx = CTX(FASTA_DESC);
+    ContextP desc_ctx = CTX(FASTA_DESC);
     desc_ctx->iterator.next_b250 = B1ST8 (desc_ctx->b250); 
 
     uint32_t num_descs = random_access_num_chroms_start_in_this_vb (vb->vblock_i);

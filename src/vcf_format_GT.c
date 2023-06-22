@@ -23,7 +23,7 @@
 // In this case, the haplotype matrix must include the lines without GT too
 void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCFP vb)
 {
-    buf_alloc (vb, &CTX(FORMAT_GT_HT)->local, 0, vb->lines.len * vb->ht_per_line, char, CTX_GROWTH, "contexts->local");
+    buf_alloc (vb, &CTX(FORMAT_GT_HT)->local, 0, vb->lines.len * vb->ht_per_line, char, CTX_GROWTH, CTX_TAG_LOCAL);
 
     for (vb->line_i=0; vb->line_i < vb->lines.len32; vb->line_i++) {
 
@@ -43,7 +43,7 @@ void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCFP vb)
 static void vcf_seg_FORMAT_GT_increase_ploidy (VBlockVCFP vb, unsigned new_ploidy)
 {
     buf_alloc (vb, &CTX(FORMAT_GT_HT)->local, 0, new_ploidy * vcf_num_samples * vb->line_i, 
-               char, CTX_GROWTH, "contexts->local");
+               char, CTX_GROWTH, CTX_TAG_LOCAL);
 
     uint32_t num_samples = vb->line_i * vcf_num_samples + vb->sample_i; // all samples in previous lines + previous samples in current line
     char *ht_data = B1STc (CTX(FORMAT_GT_HT)->local);
@@ -95,7 +95,7 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
         vb->ht_per_line = vb->ploidy * vcf_num_samples;
     }
 
-    buf_alloc (vb, &CTX(FORMAT_GT_HT)->local, vb->ploidy, vb->ht_per_line * vb->lines.len, char, CTX_GROWTH, "contexts->local");
+    buf_alloc (vb, &CTX(FORMAT_GT_HT)->local, vb->ploidy, vb->ht_per_line * vb->lines.len, char, CTX_GROWTH, CTX_TAG_LOCAL);
 
     // note - ploidy of this sample might be smaller than vb->ploidy (eg a male sample in an X chromosesome that was preceded by a female sample, or "." sample)
     Allele *ht_data = B(Allele, CTX(FORMAT_GT_HT)->local, vb->line_i * vb->ht_per_line + vb->ploidy * vb->sample_i);
@@ -216,7 +216,6 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
         return container_seg (vb, ctx, (ContainerP)&gt, 0, 0, save_cell_len); 
     }
 }
-
 //------------------
 // PIZ
 //------------------

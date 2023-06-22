@@ -9,6 +9,8 @@
 
 #ifdef __linux__
 #include <linux/limits.h>
+#elif defined __APPLE__
+#include <sys/syslimits.h>
 #endif
 #include "genozip.h"
 #include "filename.h"
@@ -35,7 +37,8 @@ rom filename_z_normal (rom txt_filename, DataType dt, FileType txt_ft)
 
     unsigned dn_len = flag.out_dirname ? strlen (flag.out_dirname) : 0;
     bool is_url = url_is_url (txt_filename);
-    rom basename = (is_url || dn_len) ? filename_base (txt_filename, false, "", 0,0) : NULL;
+    rom basename = (dn_len || is_url) ? filename_base (txt_filename, false, "", 0, 0) : NULL;
+
     rom local_txt_filename = basename ? basename : txt_filename; 
 
     unsigned fn_len = strlen (local_txt_filename);
@@ -68,21 +71,18 @@ rom filename_z_normal (rom txt_filename, DataType dt, FileType txt_ft)
 char *filename_z_pair (rom fn1, rom fn2, bool test_only)
 {
     FileType ft1, ft2;
-    char *rn1=0, *rn2=0;
+    rom rn1=0, rn2=0;
 
-    // case: new directory - take only the basename
     unsigned dn_len = flag.out_dirname ? strlen (flag.out_dirname) : 0;
-    if (dn_len) {
-        fn1 = filename_base (fn1, 0,0,0,0);
-        fn2 = filename_base (fn2, 0,0,0,0);
-    }
 
-    file_get_raw_name_and_type ((char *)fn1, &rn1, &ft1);
-    file_get_raw_name_and_type ((char *)fn2, &rn2, &ft2);
+    // case: new directory or url - take only the basename
+    rom bn1 = (dn_len || url_is_url (fn1)) ? filename_base (fn1, 0,0,0,0) : NULL;
+    rom bn2 = (dn_len || url_is_url (fn1)) ? filename_base (fn2, 0,0,0,0) : NULL;
+
+    file_get_raw_name_and_type (bn1 ? bn1 : fn1, &rn1, &ft1);
+    file_get_raw_name_and_type (bn2 ? bn2 : fn2, &rn2, &ft2);
     
-    #define MY_RET(x) ({ FREE (rn1); FREE (rn2); \
-                         if (dn_len) { FREE (fn1); FREE (fn2); } \
-                         return (x); })
+    #define MY_RET(x) ({ FREE (rn1); FREE (rn2); FREE (bn1); FREE (bn2); return (x); })
 
     unsigned len = strlen (rn1);
     if (len != strlen (rn2)) MY_RET (NULL);
@@ -111,19 +111,20 @@ char *filename_z_pair (rom fn1, rom fn2, bool test_only)
 
 char *filename_z_deep (rom sam_name)
 {
-    // case: new directory - take only the basename
     unsigned dn_len = flag.out_dirname ? strlen (flag.out_dirname) : 0;
-    if (dn_len) sam_name = filename_base (sam_name, 0,0,0,0);
 
-    char *raw_name = 0;
-    file_get_raw_name_and_type ((char *)sam_name, &raw_name, NULL);
+    // case: new directory - take only the basename
+    rom bn = (dn_len || url_is_url (sam_name)) ? filename_base (sam_name, 0,0,0,0) : NULL;
+
+    rom raw_name = 0;
+    file_get_raw_name_and_type (bn ? bn : sam_name, &raw_name, NULL);
     
     char *deep_fn = MALLOC (strlen (raw_name) + dn_len + 20);
     sprintf (deep_fn, "%s%s%s" DEEP_GENOZIP_, 
              (dn_len ? flag.out_dirname : ""), (dn_len ? "/" : ""), raw_name);
     
     FREE (raw_name);
-    if (dn_len) FREE (sam_name);
+    FREE (bn);
 
     return deep_fn;
 }
@@ -184,10 +185,20 @@ rom filename_base (rom filename, bool remove_exe, rom default_basename,
 
     len -= (start-filename);
 
+    // remove url parameter, eg https://myserver.com/dir/file.txt?param=1 --> file.txt
+    if (url_is_url (filename)) { 
+        char *param = strchr (start, '?');
+        if (param) len = param - start;
+    }
+
     if (!basename) 
         basename = (char *)MALLOC (len + 1); // +1 for \0
-    else 
-        ASSERT (len < basename_size, "actual basename_len=%u but memory allocated=%u", len+1, basename_size);
+    
+    // case: basename too long for pre-allocated memory - use default
+    else if (len+1 > basename_size) {
+        start = default_basename;
+        len = strlen (default_basename);
+    }
 
     sprintf (basename, "%.*s", (int)len, start);
 
@@ -254,5 +265,5 @@ PairType filename_is_fastq_pair (STRp(fn1), STRp(fn2))
     // its predicted to a pair if filenames are the same, except for '1'⇄'2' switch
     if  (mismatches == 1 && ((fn1[mm_i] == '1' && fn2[mm_i] == '2'))) return PAIR_R1; // fn1 is PAIR_1
     if  (mismatches == 1 && ((fn1[mm_i] == '2' && fn2[mm_i] == '1'))) return PAIR_R2; 
-    return NOT_PAIRED_END;
+    return NOT_PAIRED;
 }

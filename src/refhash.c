@@ -26,6 +26,7 @@
 #include "segconf.h"
 #include "strings.h"
 #include "buffer.h"
+#include "buf_list.h"
 
 // ref_hash logic:
 // we use the 28 bits (14 nucleotides) following a "G" hook, as the hash value, to index into a hash table with multiple
@@ -55,24 +56,41 @@ uint32_t num_layers=0;
 bool bits_per_hash_is_odd=0;     // true bits_per_hash is odd
 static uint32_t bits_per_hash=0; // = layer_bits[0]
 uint32_t nukes_per_hash=0;       // = layer_bits[0] / 2
-uint32_t layer_bits[64];         // number of bits in each layer - layer_bits[0] is the base (widest) layer
-uint32_t layer_size[64];         // size (in bytes) of each layer - layer_size[0] is the base (biggest) layer
+static uint32_t layer_bits[64];  // number of bits in each layer - layer_bits[0] is the base (widest) layer
+static uint32_t layer_size[64];  // size (in bytes) of each layer - layer_size[0] is the base (biggest) layer
 uint32_t layer_bitmask[64];      // 1s in the layer_bits[] LSbs
-static Buffer refhash_buf = {};  // One buffer that includes all layers
+Buffer refhash_buf = {};         // One buffer that includes all layers
 uint32_t **refhashs = NULL;      // array of pointers to into refhash_buf.data - beginning of each layer 
+static Digest refhash_digest = DIGEST_NONE;
 
 // used for parallelizing read / write of the refhash
 static uint32_t next_task_layer = 0;
 static uint32_t next_task_start_within_layer = 0;
 
+static Buffer emoneg_buf = {}; // reverse compliment of genome (2-bit). only used by aligner.
+
 // -------------------------------------------
 // shared logic (make refhash + use refhash)
 // -------------------------------------------
 
+uint64_t refhash_get_refhash_size (void)
+{
+    Section sec = sections_last_sec (SEC_REF_HASH, HARD_FAIL);
+
+    SectionHeaderRefHash header = zfile_read_section_header (evb, sec, SEC_REF_HASH).ref_hash;
+    uint32_t base_layer_bits = header.layer_bits + header.layer_i; // layer_i=0 is the base layer, layer_i=1 has 1 bit less etc
+
+    uint64_t refhash_size = 0;
+    for (uint32_t layer_i=0; layer_i < header.num_layers; layer_i++) 
+        refhash_size += ((1 << (base_layer_bits - layer_i)) * sizeof (uint32_t));
+
+    return refhash_size;
+}
+
 static uint64_t refhash_initialize_layers (uint32_t base_layer_bits)
 {
     uint64_t refhash_size = 0;
-    for (unsigned layer_i=0; layer_i < num_layers; layer_i++) {
+    for (uint32_t layer_i=0; layer_i < num_layers; layer_i++) {
         layer_bits[layer_i]    = base_layer_bits - layer_i;
         layer_bitmask[layer_i] = bitmask32 (layer_bits[layer_i]);
         layer_size[layer_i]    = ((1 << layer_bits[layer_i]) * sizeof (uint32_t));
@@ -86,7 +104,9 @@ static uint64_t refhash_initialize_layers (uint32_t base_layer_bits)
     // note: base layer size is 1GB, and every layer is half the size of its predecessor, so total less than 2GB
     if (refhash_buf.type != BUF_SHM) {
         buf_alloc_exact (evb, refhash_buf, refhash_size, uint8_t, "refhash_buf"); 
-        if (flag.make_reference) memset (refhash_buf.data, refhash_size, 255); // set all entries to NO_GPOS. 
+        
+        if (flag.make_reference) 
+            memset (refhash_buf.data, 255/*NO_GPOS*/, refhash_size);
     }
 
     refhashs = CALLOC (num_layers * sizeof (uint32_t *)); // array of pointers
@@ -98,7 +118,22 @@ static uint64_t refhash_initialize_layers (uint32_t base_layer_bits)
         offset += layer_size[layer_i];
     }
 
+    __atomic_thread_fence (__ATOMIC_RELEASE); 
+
     return refhash_size;
+}
+
+// update addresses of refhashs if address of refhash.data has changed
+void refhash_update_layers (int64_t delta_bytes)
+{
+    ASSERTNOTNULL (refhashs);
+
+    ASSERT (delta_bytes % 4 == 0, "expecting delta_bytes=%"PRIu64" to be a multiple of 4", delta_bytes);
+
+    for (unsigned layer_i=0; layer_i < num_layers; layer_i++) 
+        refhashs[layer_i] += delta_bytes / sizeof (uint32_t);
+
+    if (flag.show_cache) iprint0 ("show-cache: updating refhash layers after address changed\n");
 }
 
 // ------------------------------------------------------
@@ -168,7 +203,10 @@ void refhash_calc_one_range (VBlockP vb, // VB of reference compression dispatch
     // since our refhash entries are 32 bit, we cannot use the reference data beyond the first 4Gbp for creating the refhash
     // TO DO: make the hash entries 40bit (or 64 bit?) if genome size > 4Gbp (bug 150)
     if (r->gpos + num_bases >= MAX_ALIGNER_GPOS) {
-        WARN_ONCE ("FYI: %s contains more than %s bases. When compressing a FASTQ or unaligned (i.e. missing RNAME, POS) SAM/BAM file using the reference being generated, only the first %s bases of the reference will be used, possibly affecting the compression ratio. This limitation doesn't apply to aligned SAM/BAM files and VCF files. If you need to use reference files with > 4 billion bases, let us know at support@genozip.com.", 
+        WARN_ONCE ("FYI: %s contains more than %s bases. When compressing a FASTQ or unaligned (i.e. missing RNAME, POS) "
+                   "SAM/BAM file using the reference being generated, only the first %s bases of the reference will be used, "
+                   "possibly affecting the compression ratio. This limitation doesn't apply to aligned SAM/BAM files and VCF files. "
+                   "If you need to use reference files with > 4 billion bases, let us know at " EMAIL_SUPPORT ".", 
                     txt_name, str_int_commas (MAX_ALIGNER_GPOS).s, str_int_commas (MAX_ALIGNER_GPOS).s);
         return;
     }
@@ -187,7 +225,7 @@ void refhash_calc_one_range (VBlockP vb, // VB of reference compression dispatch
             for (unsigned layer_i=0; layer_i < num_layers; layer_i++) {    
                 uint32_t idx = refhash_word & layer_bitmask[layer_i];
 
-                if (refhashs[layer_i][idx] == NO_GPOS) {
+                if (refhashs[layer_i][idx] == (uint32_t)NO_GPOS) {
                     refhashs[layer_i][idx] = BGEN32 (r->gpos + base_i);
                     set=true;
                     break;
@@ -230,25 +268,24 @@ static void refhash_compress_one_vb (VBlockP vb)
     START_TIMER;
 
     uint32_t uncompressed_size = MIN_(make_ref_vb_size, layer_size[vb->refhash_layer] - vb->refhash_start_in_layer);
-    const uint32_t *hash_data = &refhashs[vb->refhash_layer][vb->refhash_start_in_layer / sizeof (uint32_t)];
+    uint32_t *hash_data = &refhashs[vb->refhash_layer][vb->refhash_start_in_layer / sizeof (uint32_t)];
 
-    // calculate density to decide on compression codec
-    uint32_t num_zeros=0;
-    for (uint32_t i=0 ; i < uncompressed_size / sizeof (uint32_t); i++)
-        if (!hash_data[i]) num_zeros++;
+    // // convert NO_GPOS to 0 - compresses a lot better and faster - we convert back in refhash_uncompress_one_vb
+    // for (uint32_t i=0 ; i < uncompressed_size / sizeof (uint32_t); i++)
+    //     if (hash_data[i] == 0xffffffff) 
+    //         hash_data[i] = 0; 
 
     SectionHeaderRefHash header = { .section_type          = SEC_REF_HASH, 
                                     .codec                 = CODEC_RANS32, // Much!! faster than LZMA (compress and uncompress), 8% worse compression of human refs, MUCH better on small refs
                                     .data_uncompressed_len = BGEN32 (uncompressed_size),
                                     .vblock_i              = BGEN32 (vb->vblock_i),
                                     .magic                 = BGEN32 (GENOZIP_MAGIC),
-                                    .compressed_offset     = BGEN32 (sizeof(header)),
                                     .num_layers            = (uint8_t)num_layers,
                                     .layer_i               = (uint8_t)vb->refhash_layer,
                                     .layer_bits            = (uint8_t)layer_bits[vb->refhash_layer],
                                     .start_in_layer        = BGEN32 (vb->refhash_start_in_layer)     };
 
-    comp_compress (vb, NULL, &vb->z_data, (SectionHeaderP)&header, (char*)hash_data, NO_CALLBACK, "SEC_REF_HASH");
+    comp_compress (vb, NULL, &vb->z_data, &header, (char*)hash_data, NO_CALLBACK, "SEC_REF_HASH");
 
     if (flag.show_ref_hash) 
         iprintf ("vb_i=%u Compressing SEC_REF_HASH num_layers=%u layer_i=%u layer_bits=%u start=%u size=%u bytes size_of_disk=%u bytes\n", 
@@ -273,12 +310,88 @@ void refhash_compress_refhash (void)
                              refhash_compress_one_vb, 
                              zfile_output_processed_vb);
 
+    {   
+        START_TIMER;
+        refhash_digest = digest_do (STRb(refhash_buf), !flag.md5, "refhash"); 
+        COPY_TIMER_EVB (refhash_compress_digest); 
+    }
+
     COPY_TIMER_EVB (refhash_compress_refhash);
+}
+
+Digest refhash_get_digest (void)
+{
+    return refhash_digest;
 }
 
 // ----------------------------------------------------------------------------------------------
 // stuff related to ZIPping fasta and fastq using an external reference that includes the refhash
 // ----------------------------------------------------------------------------------------------
+
+ConstBitsP refhash_get_emoneg (void)
+{
+    ASSERTNOTEMPTY (emoneg_buf);
+    return (BitsP)&emoneg_buf;
+}
+
+// private variables used for generating emoneg
+static Reference ref_reverse_compliment_genome_ref = 0; // ref_generate_reverse_complement_genome is called from the main thread so no thread safety issues
+static ConstBitsP genome;
+static PosType64 genome_nbases;
+#define REV_CODEC_GENOME_BASES_PER_THREAD (1ULL << 27) // 128Mbp
+
+static void refhash_revcomp_genome_prepare (VBlockP vb)
+{
+    vb->ref = ref_reverse_compliment_genome_ref;
+    if ((uint64_t)(vb->vblock_i-1) * REV_CODEC_GENOME_BASES_PER_THREAD < genome_nbases)
+        vb->dispatch = READY_TO_COMPUTE;
+    else
+        vb->dispatch = DATA_EXHAUSTED;
+}
+
+static void refhash_revcomp_genome_do (VBlockP vb)
+{
+    bits_reverse_complement_aligned ((BitsP)&emoneg_buf, genome, 
+                                     (uint64_t)(vb->vblock_i-1) * REV_CODEC_GENOME_BASES_PER_THREAD, 
+                                     REV_CODEC_GENOME_BASES_PER_THREAD);
+
+    vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.
+}
+
+
+// Generate an in-memory revcomp copy of genome. Only needed for aligner in ZIP.
+static void refhash_generate_emoneg (Reference ref)
+{
+    START_TIMER;
+    if (buf_is_alloc (&emoneg_buf)) return; // already generated
+
+    SAVE_FLAGS_AUX((rom)0); // silence some flags if --xthreads
+
+    ref_get_genome (ref, &genome, NULL, &genome_nbases);
+    emoneg_buf.can_be_big = true; 
+    buf_alloc_bits (evb, &emoneg_buf, genome_nbases * 2, NOINIT, 0, "emoneg_buf");
+
+    ref_reverse_compliment_genome_ref = ref;
+    dispatcher_fan_out_task ("generate_rev_comp_genome", NULL, 0, 0, true, false, false, 0, 10, true,
+                             refhash_revcomp_genome_prepare, 
+                             refhash_revcomp_genome_do, 
+                             NO_CALLBACK);
+
+    
+    // cleanup 
+    ref_reverse_compliment_genome_ref = 0;
+    genome = 0;
+    genome_nbases = 0;
+    
+    RESTORE_FLAGS;
+
+    COPY_TIMER_EVB (refhash_generate_emoneg);
+}
+
+void refhash_set_digest (Digest digest)
+{
+    refhash_digest = digest;
+}
 
 // entry point of compute thread of refhash decompression
 static void refhash_uncompress_one_vb (VBlockP vb)
@@ -335,65 +448,74 @@ static void refhash_read_one_vb (VBlockP vb)
 
     vb->dispatch = READY_TO_COMPUTE;
 
-    if (flag.debug_or_test) buf_test_overflows(vb, __FUNCTION__); 
+    if (flag.debug_or_test) buflist_test_overflows(vb, __FUNCTION__); 
 
     COPY_TIMER (refhash_read_one_vb);
 }
 
-uint64_t refhash_load_init (uint8_t *out_base_layer_bits/*optional*/)
-{
-    uint32_t base_layer_bits;
-
-    if (ref_cache_is_cached (gref)) {
-        void *cache_refhash_data; 
-        uint64_t cache_refhash_size;
-        ref_cache_get_refhash (gref, &cache_refhash_data, &cache_refhash_size, &base_layer_bits);
-        
-        buf_attach_to_shm (evb, &refhash_buf, cache_refhash_data, cache_refhash_size, "refhash_buf");
-    }
-
-    else {
-        Section sec = sections_last_sec (SEC_REF_HASH, HARD_FAIL);
-
-        SectionHeaderRefHash header = zfile_read_section_header (evb, sec, SEC_REF_HASH).ref_hash;
-        num_layers = header.num_layers;
-
-        base_layer_bits = header.layer_bits + header.layer_i; // layer_i=0 is the base layer, layer_i=1 has 1 bit less etc
-    }
-
-    if (out_base_layer_bits) *out_base_layer_bits = base_layer_bits;
-
-    return refhash_initialize_layers (base_layer_bits);
-}
-
 // ZIP: needed before using aligner
-void refhash_load (void)
+void refhash_load (Reference ref)
 {
     START_TIMER;
+    if (refhash_buf.count) return; // already loaded
 
-    // in ZIP, emoneg is needed IFF aligner is used, i.e. IFF refhash is loaded
-    if (!ref_has_emoneg (gref)) 
-        ref_generate_reverse_complement_genome (gref);
+    // emoneg is needed iff aligner is used (in ZIP)
+    if (flag.aligner_available)
+        refhash_generate_emoneg (ref);
 
-    if (refhash_buf.len) return; // already loaded for a previous file
+    Section sec = sections_last_sec (SEC_REF_HASH, HARD_FAIL);
+    SectionHeaderRefHash header = zfile_read_section_header (evb, sec, SEC_REF_HASH).ref_hash;
+    num_layers = header.num_layers; // set global
 
-    if (!ref_cache_is_loading (gref)) // note: if CACHE_LOADING, already initialized from ref_cache_initialize_genome
-        refhash_load_init (NULL);
+    uint32_t base_layer_bits = header.layer_bits + header.layer_i; // layer_i=0 is the base layer, layer_i=1 has 1 bit less etc
+    refhash_initialize_layers (base_layer_bits);
 
-    if (!ref_cache_is_cached (gref)) // no cache, or loading to cache, but not already cached
-        dispatcher_fan_out_task ("load_refhash", ref_get_filename (gref),
-                                0, "Reading reference file", // same message as in ref_load_stored_reference
+    if (!ref_cache_is_cached (ref)) { // no cache, or loading to cache, but not already cached
+        dispatcher_fan_out_task ("load_refhash", ref_get_filename (ref),
+                                0, (ref_cache_is_populating(ref) ? "Caching reference file" : "Reading reference file"), // same message as in ref_load_stored_reference
                                 true, flag.test, false, 0, 100, true,
                                 refhash_read_one_vb, 
                                 refhash_uncompress_one_vb, 
                                 NO_CALLBACK);
     
+        if (flag.show_cache) iprint0 ("show-cache: done reading refhash from disk\n");
+    }
+
+    // calculate in-memory digest of loaded genome, and compare it to the value calculated by
+    // --make-reference, stored in GENOZIP_HEADER.refhash_digest
+    // This is slow: for a human genome, digest takes about 0.7 seconds (adler) or 7 seconds (md5), so we test the digest sparingly. 
+    // This is low risk: if refhash is corrupted, it will affect compression, but not data integrity (see bug 825)
+    if (ref_get_genozip_version(ref) >= 15 &&              // GENOZIP_HEADER.refhash_digest is available since v15
+        (!ref_cache_is_cached (ref) || flag.show_cache) && // test only on loading from disk or on show-cache
+        !flag.fast) {                                      // skip if --fast. 
+
+        START_TIMER;
+
+        if (flag.show_cache) iprintf ("show-cache: calculating refhash digest %s\n", ref_cache_is_cached (ref) ? "(done only due to --show-cache)" : "");
+
+        bool is_adler = ref_is_digest_adler (ref);
+        Digest digest = digest_do (STRb(refhash_buf), is_adler, "refhash"); 
+
+        ASSERT (digest_is_equal (digest, refhash_digest), "Bad reference file: In-memory digest of refhash is %s, different than calculated by make-reference: %s",
+                digest_display_(digest, is_adler).s, digest_display_(refhash_digest, is_adler).s);
+
+        if (flag.show_cache) iprint0 ("show-cache: verified refhash digest\n");
+
+        COPY_TIMER_EVB (refhash_load_digest);
+    }
+    else
+        if (flag.show_cache) iprintf ("show-cache: loaded refhash without verifying digest (version %u)\n", ref_get_genozip_version(ref));
+
+    refhash_buf.count = true; // loaded
 
     COPY_TIMER_EVB (refhash_load);
 }
 
 void refhash_load_standalone (void)
 {
+    if (ref_cache_is_cached (gref))  // already loaded 
+        refhash_generate_emoneg (gref);
+
     flag.reading_reference = gref; // tell file.c and fasta.c that this is a reference
 
     TEMP_VALUE (command, PIZ);
@@ -403,12 +525,12 @@ void refhash_load_standalone (void)
 
     z_file = file_open_z_read (ref_get_filename (gref));    
 
-    zfile_read_genozip_header (0);
+    zfile_read_genozip_header (0, HARD_FAIL);
 
-    refhash_load();
+    refhash_load (gref);
 
-    file_close (&z_file, false, false);
-    file_close (&txt_file, false, true); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open_z called from txtheader_piz_read_and_reconstruct.
+    file_close (&z_file);
+    file_close (&txt_file); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open_z called from txtheader_piz_read_and_reconstruct.
     
     RESTORE_FLAG (test);
     RESTORE_VALUE (command);
@@ -422,10 +544,13 @@ void refhash_destroy (void)
 {
     if (refhash_buf.type == BUF_UNALLOCATED) return;
 
-    buf_destroy (refhash_buf);
+    if (flag.show_cache && refhash_buf.type == BUF_SHM) 
+        iprint0 ("show-cache: destroy rehash_buf attached to shm\n");
 
-    if (ref_cache_is_cached (gref)) // just in case, expecting it to be already detached when destroying gret
-        ref_cache_detach (gref);
+    buf_destroy (refhash_buf);
+    buf_destroy (emoneg_buf);
+
+    ref_cache_detach (gref);
 
     FREE (refhashs);
 

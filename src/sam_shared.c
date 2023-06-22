@@ -32,91 +32,6 @@ const uint8_t cigar_lookup_bam[16] = {  // note: bit 4 (0x10) is set for all val
 unsigned sam_vb_size (DataType dt) { return sizeof (VBlockSAM); }
 unsigned sam_vb_zip_dl_size (void) { return sizeof (ZipDataLineSAM); }
 
-void sam_vb_release_vb (VBlockSAMP vb)
-{
-    vb->plsg_i = 0;
-    vb->last_cigar = NULL;
-    vb->ref_consumed = vb->ref_and_seq_consumed = vb->soft_clip[0] = vb->soft_clip[1] = 0;
-    vb->mismatch_bases_by_SEQ = vb->mismatch_bases_by_MD = vb->hard_clip[0] = vb->hard_clip[1] = vb->deletions = vb->insertions = 0;
-    vb->longest_seq_len = vb->arith_compress_bound_longest_seq_len = 0;
-    vb->a_bases = vb->x_bases = vb->y_bases = 0;
-    vb->a_index = vb->x_index = vb->y_index = 0;
-    vb->md_verified = 0;
-    vb->qual_codec_no_longr = vb->has_qual = vb->saggy_is_prim = false;
-    vb->qual_missing = vb->seq_missing = vb->seq_is_monochar = vb->cigar_missing = vb->check_for_gc = vb->RNEXT_is_equal = vb->line_not_deepable = 0;
-    vb->sag = 0;
-    vb->sa_aln = 0;
-    vb->comp_qual_len = vb->comp_cigars_len = 0;
-    vb->XG_inc_S = 0;
-    vb->first_grp_i = 0;
-    vb->sag_line_i = 0;
-    vb->saggy_line_i = vb->mate_line_i = 0;
-    vb->depn_clipping_type = 0;
-    vb->saggy_near_count = vb->mate_line_count = vb->prim_far_count = 0;
-    vb->auxs = NULL;
-    vb->aux_lens = NULL;
-    vb->n_auxs = 0;
-    vb->aux_con = NULL;
-    vb->seg_found_prim_line = vb->seg_found_depn_line = 0;
-    vb->consec_is_set_chrom = 0;
-    vb->consec_is_set_pos = vb->consec_is_set_len = 0;
-    vb->deep_seq = (PizDeepSeq){}; 
-    memset (&vb->first_idx, 0, (char*)&vb->after_idx - (char*)&vb->first_idx); // all idx's 
-    memset (&vb->first_mux, 0, (char*)&vb->after_mux - (char*)&vb->first_mux); // all mux's 
-    memset (vb->deep_stats, 0, sizeof (vb->deep_stats));
-    
-    buf_free (vb->interlaced);
-    buf_free (vb->XG);
-    buf_free (vb->textual_cigar);
-    buf_free (vb->binary_cigar);
-    buf_free (vb->textual_seq);
-    buf_free (vb->md_M_is_ref);
-    buf_free (vb->sag_grps);
-    buf_free (vb->sag_alns);
-    buf_free (vb->sa_prim_cigars);
-    buf_free (vb->qname_hash);
-    buf_free (vb->line_textual_cigars);
-    buf_free (vb->qname_count);
-    buf_free (vb->unconverted_bitmap);
-    buf_free (vb->meth_call);
-}
-
-void sam_destroy_vb (VBlockSAMP vb)
-{
-    buf_destroy (vb->interlaced);
-    buf_destroy (vb->XG);
-    buf_destroy (vb->textual_cigar);
-    buf_destroy (vb->binary_cigar);
-    buf_destroy (vb->textual_seq);
-    buf_destroy (vb->md_M_is_ref);
-    buf_destroy (vb->sag_grps);
-    buf_destroy (vb->sag_alns);
-    buf_destroy (vb->sa_prim_cigars);
-    buf_destroy (vb->qname_hash);
-    buf_destroy (vb->line_textual_cigars);
-    buf_destroy (vb->qname_count);
-    buf_destroy (vb->unconverted_bitmap);
-    buf_destroy (vb->meth_call);
-}
-
-void sam_erase_vb_bufs (VBlockSAMP vb)
-{
-    buf_erase (vb->interlaced);
-    buf_erase (vb->XG);
-    buf_erase (vb->textual_cigar);
-    buf_erase (vb->binary_cigar);
-    buf_erase (vb->textual_seq);
-    buf_erase (vb->md_M_is_ref);
-    buf_erase (vb->sag_grps);
-    buf_erase (vb->sag_alns);
-    buf_erase (vb->sa_prim_cigars);
-    buf_erase (vb->qname_hash);
-    buf_erase (vb->line_textual_cigars);
-    buf_erase (vb->qname_count);
-    buf_erase (vb->unconverted_bitmap);
-    buf_erase (vb->meth_call);
-}
-
 // initialization of the line
 void sam_reset_line (VBlockP vb_)
 {
@@ -144,11 +59,12 @@ void sam_reset_line (VBlockP vb_)
         vb->chrom_name_len = 0;
         vb->range = NULL;
         vb->deep_seq = (PizDeepSeq){}; 
-        CTX(SAM_SQBITMAP)->line_sqbitmap.len = 0;
+        vb->seq_is_monochar = false;
+        CTX(SAM_SQBITMAP)->line_sqbitmap.nbits = CTX(SAM_SQBITMAP)->line_sqbitmap.nwords = 0;
 
         // make sure we have enough room for this line if translating. 
         // note: having this allocation here allows us to keep vb->translation.factor relatively small to avoid over-allocation
-        if (!vb->translation.is_src_dt && vb->txt_data.type == BUF_REGULAR) // not BUF_OVERLAY which happens when loading sag
+        if (!vb->translation.is_src_dt && buf_user_count (&vb->txt_data) == 1) // not overlaid which happens loading sag (sam_load_groups_add_solo_data())
             buf_alloc (vb, &vb->txt_data, vb->longest_line_len * 4, 0, char, 1.15, "txt_data");
     }
 
@@ -158,6 +74,8 @@ void sam_reset_line (VBlockP vb_)
         vb->auxs = NULL;
         vb->aux_lens = NULL;
         vb->n_auxs = 0;
+        vb->md_M_is_ref.nbits = vb->md_M_is_ref.nwords = 0;
+        vb->unconverted_bitmap.nbits = vb->unconverted_bitmap.nwords = 0;
     }
 }
 

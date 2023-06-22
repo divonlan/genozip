@@ -63,7 +63,7 @@ void vcf_zip_initialize (void)
 // called after each file
 void vcf_zip_finalize (bool is_last_user_txt_file)
 {
-    if (is_last_user_txt_file) return; // no need to waste time freeing if this is the last file - the process will die momentarily
+    if (flag.let_OS_cleanup_on_exit) return; // no need to waste time freeing if this is the last file - the process will die momentarily
 
     if (z_is_dvcf) gencomp_destroy();
 }
@@ -249,6 +249,9 @@ static void vcf_seg_finalize_segconf (VBlockVCFP vb)
     if (segconf.has[FORMAT_ICNT] && segconf.has[FORMAT_SPL]) 
         segconf.vcf_is_gvcf = true;
 
+    if (segconf.has[FORMAT_IGT] && segconf.has[FORMAT_IPS] && segconf.has[FORMAT_ADALL])
+        segconf.vcf_is_giab_trio = true;
+        
     if (!flag.reference && segconf.vcf_is_gvcf)
         TIP ("Compressing a GVCF file using a reference file can reduce the compressed file's size by 10%%-30%%.\n"
              "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
@@ -372,9 +375,8 @@ bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id)
         dict_id.num == _VCF_TOPLUFT  ||
         dict_id.num == _VCF_CHROM    ||
         dict_id.num == _VCF_oCHROM   ||
-        dict_id.num == _VCF_FORMAT   ||
-        dict_id.num == _VCF_INFO     ||
-        dict_id.num == _VCF_FILTER   ||
+        dict_id.num == _VCF_FORMAT   || // note: NOT including _VCF_INFO - there are cases where it is not small
+        dict_id.num == _VCF_FILTER   || 
         dict_id.num == _VCF_EOL      ||
         dict_id.num == _VCF_SAMPLES  ||
         dict_id.num == _VCF_oCHROM   ||
@@ -382,12 +384,9 @@ bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id)
         dict_id.num == _VCF_oSTATUS  ||
         dict_id.num == _VCF_COORDS   ||
         dict_id.num == _VCF_LIFT_REF ||
-        dict_id.num == _INFO_AC      ||
-        dict_id.num == _INFO_AN      || // note: not _INFO_AF, e.g. big in GWAS VCF
+        dict_id.num == _INFO_AN      || // note: not _INFO_AC, _INFO_AF, _INFO_MLEAC, _INFO_MLEAF - can be big (e.g. big in GWAS VCF)
         dict_id.num == _INFO_DP      ||
         dict_id.num == _INFO_AA      || // stored as a SPECIAL snip
-        dict_id.num == _INFO_MLEAC   ||
-        dict_id.num == _INFO_MLEAF   ||
         dict_id.num == _INFO_LDAF    ||
         dict_id.num == _INFO_MQ0     ||
         dict_id.num == _INFO_LUFT    ||

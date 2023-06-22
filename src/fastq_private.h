@@ -15,7 +15,8 @@
 typedef struct {
     TxtWord seq;
     uint32_t qual_index;         // start within vb->txt_data (qual_len==seq.len)
-    bool dont_compress_QUAL : 1; // in case --deep and copied from SAM
+    uint32_t sam_seq_len;        // Deep: seq_len of matching sam alignment
+    bool dont_compress_QUAL : 1; // true in case --deep and fully copied from SAM
     bool monochar           : 1; // sequence is entirely of the same character (eg: NNNNN)
 } ZipDataLineFASTQ;
 
@@ -28,14 +29,13 @@ typedef struct VBlockFASTQ {
     uint32_t pair_num_lines;     // R2: number of reads (FASTQ lines) in the equivalent vb in the R1
     uint32_t pair_txt_data_len;  // ZIP R2: populated if flag.debug
 
-    char *optimized_desc;        // base of desc in flag.optimize_DESC 
-    uint32_t optimized_desc_len;
+    STRw (optimized_desc);       // base of desc in flag.optimize_DESC 
     uint64_t first_line;         // ZIP: used for optimize_DESC  
 
-    // DESC stuff
     bool has_extra;              // ZIP: a VB-private copy of segconf.has_extra
 
-    bool item_filter[16];        // PIZ: item filter - true if to reconstrut, false if not. index is item in toplevel container. length must be >= nitems_lo of all genozip verions
+    #define FASTQ_NUM_TOP_LEVEL_FIELDS 16
+    bool item_filter[FASTQ_NUM_TOP_LEVEL_FIELDS];  // PIZ: item filter - true if to reconstrut, false if not. index is item in toplevel container. length must be >= nitems_lo of all genozip verions
 
     // stats
     uint32_t deep_stats[NUM_DEEP_STATS];  // ZIP: stats collection regarding Deep
@@ -48,8 +48,8 @@ typedef VBlockFASTQ *VBlockFASTQP;
 #define DATA_LINE(i) B(ZipDataLineFASTQ, vb->lines, i)
 
 // DESC
-extern void fastq_seg_QNAME (VBlockFASTQP vb, STRp(qname), uint32_t line1_len, bool deep);
-extern void fastq_seg_DESC (VBlockFASTQP vb, STRp(desc));
+extern void fastq_seg_QNAME (VBlockFASTQP vb, STRp(qname), uint32_t line1_len, bool deep, uint32_t uncanonical_suffix_len);
+extern void fastq_seg_DESC (VBlockFASTQP vb, STRp(desc), bool deep_qname2, uint32_t uncanonical_suffix_len);
 extern void fastq_seg_LINE3 (VBlockFASTQP vb, STRp(qline3), STRp(qname), STRp(desc));
 extern void fastq_segconf_analyze_DESC (VBlockFASTQP vb, STRp(desc));
 extern bool fastq_is_line3_copy_of_line1 (STRp(qname), STRp(line3), uint32_t desc_len);
@@ -63,9 +63,12 @@ extern void fastq_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qual), b
 
 // Deep stuff
 extern void fastq_deep_zip_initialize (void);
-extern void fastq_seg_deep (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(desc), STRp(seq), STRp(qual), bool *deep_desc, bool *deep_seq, bool *deep_qual);
+extern void fastq_seg_deep (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qname), STRp(qname2), STRp(seq), STRp(qual), bool *deep_qname, bool *deep_seq, bool *deep_qual, uint32_t *uncanonical_suffix_len);
 extern void fastq_deep_seg_finalize_segconf (uint32_t n_lines);
 extern void fastq_deep_seg_initialize (VBlockFASTQP vb);
+extern void fastq_deep_seg_QNAME (VBlockFASTQP vb, Did did_i, STRp(qname), uint32_t uncanonical_suffix_len, unsigned add_bytes);
+extern void fastq_deep_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(seq), ContextP bitmap_ctx, ContextP nonref_ctx);
+extern void fastq_deep_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQ *dl, ContextP qual_ctx, uint32_t qual_len);
 extern void fastq_deep_zip_after_compute (VBlockFASTQP vb);
-extern void fastq_zip_deep_show_entries_stats (void);
+extern void fastq_deep_zip_show_entries_stats (void);
 extern void fastq_deep_piz_wait_for_deep_data (void);

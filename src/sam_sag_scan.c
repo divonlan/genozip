@@ -13,17 +13,18 @@
 // for each dependent line - during segconf, and a function for determining if a depn exists by looking up in this array during seg
 
 #include "genozip.h"
+#include "vblock.h"
 #include "sam_private.h"
 #include "sections.h"
 #include "dispatcher.h"
 #include "profiler.h"
 #include "txtfile.h"
 #include "qname.h"
+#include "progress.h"
 #include "bgzf.h"
-#include "libdeflate/libdeflate.h"
 
 static VBlockP real_evb;
-VBlockP scan_vb;
+static VBlockP scan_vb;
 
 #define vb_depn_index  vb->scratch
 #define z_qname_index  evb->z_data
@@ -68,7 +69,7 @@ static rom scan_index_one_line (VBlockSAMP vb, rom alignment, uint32_t remaining
         ASSERT (str_get_int_range16 (flag_str, tab - flag_str, 0, SAM_MAX_FLAG, &flag.value), "%s: invalid FLAG=%.*s", VB_NAME, (int)(tab - flag_str), flag_str);
     }
 
-    uint32_t hash = QNAME_HASH (qname, qname_len, flag.is_last);
+    uint32_t hash = qname_calc_hash (QNAME1, qname, qname_len, flag.is_last, false, NULL);
 
     if (vb->preprocessing) {
         // depn index
@@ -170,6 +171,22 @@ static void scan_index_qnames_preprocessing (VBlockP vb)
     rom next  = B1STtxt;
     rom after = BAFTtxt;
 
+    // in case of force-gencomp, we also try to detect SA_Z in the first 16 VBs
+    if (flag.force_gencomp && !segconf.has[OPTION_SA_Z]) {
+        if (IS_BAM_ZIP) {
+            for (rom c=next; c < after-3 ; c++) 
+                if (c[0] == 'S' && c[1]== 'A' && c[2] == 'Z') {
+                    segconf.has[OPTION_SA_Z] = true; // likely, bot not 100% sure, that an SAZ string indicates an SA:Z optional field
+                    break;
+                }
+        }
+        else {
+            SAFE_NUL (after);
+            segconf.has[OPTION_SA_Z] = !!strstr (next, "SA:Z:");
+            SAFE_RESTORE;
+        }
+    }
+
     while (next < after)
         next = scan_index_one_line (VB_SAM, next, after - next);
 
@@ -224,8 +241,10 @@ void sam_sag_by_flag_scan_for_depn (void)
     txt_file = file_open_txt_read (save_txt_file->name);
     ASSERTNOTNULL (txt_file);
     
+    TEMP_FLAG(biopsy, false);
     txtfile_read_header (true); // reads into evb->txt_data and evb->lines.len
     buf_free (evb->txt_data);   // discard the header
+    RESTORE_FLAG (biopsy);
     
     dispatcher_fan_out_task (task_name, txt_file->basename, 
                              0, "Preprocessing...", // this is not the same as the preprocessing that happens in PIZ - loading sags'
@@ -234,19 +253,23 @@ void sam_sag_by_flag_scan_for_depn (void)
                              scan_index_qnames_preprocessing, 
                              scan_append_index);
 
+    progress_erase(); // erase "Preprocessing..."
+    
     // most of the sort/uniq work was already done by the compute threads, so this final pass should be fast
-    scan_sort_unique_depn_index (&z_file->sag_depn_index);
+    // TO DO: replace sort with combine sorted arrays 
+    scan_sort_unique_depn_index (&z_file->sag_depn_index); 
     scan_sort_unique_qname_index (&z_qname_index);
 
     // keep only depns that have a qname that appears in 2 or VBs. If all qnames are in a single VB, we will use saggy.
     scan_remove_single_vb_depns ();
 
-    file_close (&txt_file, false, true);
+    file_close (&txt_file);
 
     evb = real_evb;
     vb_destroy_vb (&scan_vb);
     
     txt_file = save_txt_file;
+    txt_file->is_scanned = true;
 }
 
 // for SAG_BY_FLAG: returns true if qname_hash represets a sag that has alignments in more than one VB
@@ -328,7 +351,7 @@ bool sam_might_have_saggies_in_other_VBs (VBlockSAMP vb, ZipDataLineSAM *dl, int
 {
     if (!vb->qname_count.len32) return true; // we didn't count qnames, so we don't have proof that there aren't any saggies in other VBs
 
-    uint32_t qname_hash = QNAME_HASH (Btxt (dl->QNAME.index), dl->QNAME.len, dl->FLAG.is_last);
+    uint32_t qname_hash = qname_calc_hash (QNAME1, Btxt (dl->QNAME.index), dl->QNAME.len, dl->FLAG.is_last, false, NULL);
 
     if (IS_SAG_CC) 
         return true;   // we don't do qname accounting for SAG_BY_CC
@@ -339,7 +362,6 @@ bool sam_might_have_saggies_in_other_VBs (VBlockSAMP vb, ZipDataLineSAM *dl, int
     else {
         if (!n_alns) n_alns = str_count_char (STRauxZ (SA_Z, true), ';'); // happens iff depn of SAG_BY_SA
 
-        return !vb->qname_count.len32 &&
-               n_alns != sam_sag_get_qname_counts_this_vb (B1ST (QnameCount, vb->qname_count), vb->qname_count.len32, 0, vb->qname_count.len - 1, qname_hash);
+        return n_alns != sam_sag_get_qname_counts_this_vb (B1ST (QnameCount, vb->qname_count), vb->qname_count.len32, 0, vb->qname_count.len - 1, qname_hash);
     }
 }

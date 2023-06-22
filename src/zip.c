@@ -44,6 +44,8 @@
 #include "dict_io.h"
 #include "gencomp.h"
 #include "aliases.h"
+#include "buf_list.h"
+#include "arch.h"
 
 static void zip_display_compression_ratio (Digest md5)
 {
@@ -106,14 +108,14 @@ static void zip_display_compression_ratio (Digest md5)
     // when compressing BAM report only ratio_vs_comp (compare to BGZF-compress BAM - we don't care about the underlying plain BAM)
     // Likewise, doesn't have a compression extension (eg .gz), even though it may actually be compressed eg .tbi (which is actually BGZF)
     else if (Z_DT(BAM) || (txt_file && file_get_codec_by_txt_ft (txt_file->data_type, txt_file->type, false) == CODEC_NONE)) 
-        progress_finalize_component_time_ratio (dt_name (z_file->data_type), ratio_vs_comp, md5);
+        progress_finalize_component_time_ratio (z_dt_name(), ratio_vs_comp, md5);
 
     else if (ratio_vs_comp >= 0) {
         if (txt_file->codec == CODEC_NONE || ratio_vs_comp < 1.05) // disk_so_far doesn't give us the true txt file size 
-            progress_finalize_component_time_ratio (dt_name (z_file->data_type), ratio_vs_plain, md5);
+            progress_finalize_component_time_ratio (z_dt_name(), ratio_vs_plain, md5);
         
         else // source was compressed
-            progress_finalize_component_time_ratio_better (dt_name (z_file->data_type), ratio_vs_plain, file_exts[txt_file->type], ratio_vs_comp, md5);
+            progress_finalize_component_time_ratio_better (z_dt_name(), ratio_vs_plain, file_exts[txt_file->type], ratio_vs_comp, md5);
     }
 }
 
@@ -390,7 +392,7 @@ static void zip_generate_transposed_local (VBlockP vb, Context *ctx)
 
     uint32_t rows = ctx->local.len32 / cols;
 
-    ctx->local_param/*xxx flags.copy_local_param*/ = true;
+    ctx->local_param = true;
     /* xxx I don't see where col goes into param??? need to test */
     
     for (uint32_t r=0; r < rows; r++) 
@@ -407,7 +409,7 @@ static void zip_generate_transposed_local (VBlockP vb, Context *ctx)
         }
 
     vb->scratch.len = ctx->local.len;
-    buf_copy_do (vb, &ctx->local, &vb->scratch, lt_width(ctx), 0, 0, __FUNCTION__,__LINE__, "contexts->local"); // copy and not move, so we can keep local's memory for next vb
+    buf_copy_do (vb, &ctx->local, &vb->scratch, lt_width(ctx), 0, 0, __FUNCLINE, CTX_TAG_LOCAL); // copy and not move, so we can keep local's memory for next vb
 
 done:
     buf_free (vb->scratch);
@@ -429,7 +431,7 @@ static void zip_handle_unique_words_ctxs (VBlockP vb)
         if (!ctx_can_have_singletons (ctx) ||
             ctx->b250.len == 1) continue; // handle with all_the_same rather than singleton
          
-        buf_move (vb, &ctx->local, vb, &ctx->dict);
+        buf_move (vb, ctx->local, CTX_TAG_LOCAL, ctx->dict);
         buf_free (ctx->nodes);
         buf_free (ctx->b250);
         ctx->flags.all_the_same = false;
@@ -551,12 +553,9 @@ void zip_compress_all_contexts_b250 (VBlockP vb)
         if (HAS_DEBUG_SEG(ctx)) iprintf ("zip_compress_all_contexts_b250: vb=%s %s: B250.len=%"PRIu64" NODES.len=%"PRIu64"\n", 
                                          VB_NAME, ctx->tag_name, ctx->b250.len, ctx->nodes.len);
 
-        START_TIMER; // for compressor_time
-
+        START_TIMER; 
         zfile_compress_b250_data (vb, ctx);
-
-        if (flag.show_time) 
-            ctx->compressor_time += CHECK_TIMER; // sum b250 and local
+        COPY_TIMER(fields[ctx->did_i]);    
 
         ctx->b250_compressed = true;
     }
@@ -599,14 +598,13 @@ static void zip_compress_all_contexts_local (VBlockP vb)
             if (HAS_DEBUG_SEG(ctx)) iprintf ("%s: zip_compress_all_contexts_local: %s: LOCAL.len=%"PRIu64" LOCAL.param=%"PRIu64"\n", 
                                             VB_NAME, ctx->tag_name, ctx->local.len, ctx->local.param);
 
-            START_TIMER; // for compressor_time
+            START_TIMER; 
             zfile_compress_local_data (vb, ctx, 0);
+            COPY_TIMER(fields[ctx->did_i]);    
 
             if (!ctx->dict_merged) // note: if dict_merged, we are in the second call to this function, and local consists of singletons
                 ctx->no_stons = true; // since we had data in local, we don't allow ctx_commit_node to move singletons to local
-                
-            if (flag.show_time) 
-                ctx->compressor_time += CHECK_TIMER; // sum b250 and local
+
         }
     }
 
@@ -655,49 +653,61 @@ static void zip_update_txt_counters (VBlockP vb)
         (z_sam_gencomp && vb->comp_i==SAM_COMP_MAIN) ? vb->recon_size : Ltxt;
 
     z_file->num_components = MAX_(z_file->num_components, vb->comp_i+1);
-    
-    // add up context compress time
-    if (flag.show_time)
-        ctx_add_compressor_time_to_zf_ctx (vb);
 }
 
 // write all the sections at the end of the file, after all VB stuff has been written
 static void zip_write_global_area (void)
 {
+    #define THREAD_DEBUG(x) threads_log_by_vb (evb, "main_thread:global_area", #x, 0);
+
     // if we're making a reference, we need the RA data to populate the reference section chrome/first/last_pos ahead of ref_compress_ref
+    THREAD_DEBUG (finalize_random_access);
     random_access_finalize_entries (&z_file->ra_buf); // sort RA, update entries that don't yet have a chrom_index
     random_access_finalize_entries (&z_file->ra_buf_luft); 
 
     // if we used the aligner with REF_EXT_STORE, we make sure all the CHROMs referenced are in the CHROM context, so
     // as SEC_REF_CONTIGS refers to them. We do this by seeing which contigs have any bit set in is_set.
     // note: in REF_EXTERNAL we don't use is_set, so we populate all contigs in zip_initialize
-    if (flag.aligner_available && IS_REF_EXT_STORE)
+    if (flag.aligner_available && IS_REF_EXT_STORE) {
+        THREAD_DEBUG (populate_aligned_chroms);
         ref_contigs_populate_aligned_chroms();
+    }
 
+    THREAD_DEBUG (compress_dictionaries);
     dict_io_compress_dictionaries(); 
 
+    THREAD_DEBUG (compress_counts);
     ctx_compress_counts();
 
     // store a mapping of the file's chroms to the reference's contigs, if they are any different
     // note: not needed in REF_EXT_STORE, as we convert the stored ref_contigs to use chrom_index of the file's CHROM
-    if (IS_REF_EXTERNAL && DTFZ(prim_chrom) != DID_NONE) 
+    if (IS_REF_EXTERNAL && DTFZ(prim_chrom) != DID_NONE) {
+        THREAD_DEBUG (compress_chrom_2ref);
         chrom_2ref_compress(gref);
+    }
 
     // output reference, if needed
     bool store_ref = (flag.reference & REF_STORED) || flag.make_reference;
-    if (store_ref) 
+    if (store_ref) {
+        THREAD_DEBUG (compress_ref);
         ref_compress_ref();
-        
+    }
+
     if (flag.make_reference) {
+        THREAD_DEBUG (compress_iupacs);
         ref_iupacs_compress();
+
+        THREAD_DEBUG (compress_refhash);
         refhash_compress_refhash();
     }
 
     // compress alias list, if this data_type has any aliases defined
+    THREAD_DEBUG (compress_aliases);
     aliases_compress();
 
     // SAM/BAM: we don't compress RANDOM_ACCESS for non-sorted in --best (it can be very big, and we want to minimize file size in --best), 
     if (!flag.best || !(Z_DT(BAM) || Z_DT(SAM)) || segconf.is_sorted) {
+        THREAD_DEBUG (compress_random_access);
         // if this data has random access (i.e. it has chrom and pos), compress all random access records into evb->z_data
         Codec codec = random_access_compress (&z_file->ra_buf, SEC_RANDOM_ACCESS, CODEC_UNKNOWN, 0, flag.show_index ? RA_MSG_PRIM : NULL);
     
@@ -708,10 +718,13 @@ static void zip_write_global_area (void)
             random_access_compress (ref_get_stored_ra (gref), SEC_REF_RAND_ACC, codec, 0, flag.show_ref_index ? RA_MSG_REF : NULL);
     }
 
+    THREAD_DEBUG (stats);
     stats_generate();
 
     // compress genozip header (including its payload sectionlist and footer) into evb->z_data
     zfile_compress_genozip_header();    
+
+    stats_finalize();
 
     if (DTPZ(zip_free_end_of_z)) DTPZ(zip_free_end_of_z)();
 }
@@ -721,7 +734,10 @@ static void zip_compress_one_vb (VBlockP vb)
 {
     START_TIMER; 
 
-    if (flag.biopsy) goto done; // we're just taking a biopsy of the txt data, so no need to actually compress
+    // we're just taking a biopsy of the txt data, so no need to actually compress. 
+    if (flag.biopsy && 
+        !(segconf.sag_type && vb->comp_i == SAM_COMP_MAIN)) // except in MAIN of SAM/BAM gencomp - need to generate PRIM and DEPN VBs 
+        goto done; 
 
     // if the txt file is compressed with BGZF, we uncompress now, in the compute thread
     if (txt_file->codec == CODEC_BGZF && flag.pair != PAIR_R2) 
@@ -731,9 +747,9 @@ static void zip_compress_one_vb (VBlockP vb)
     if (zip_need_digest) 
         digest_one_vb (vb, true, NULL); // serializes VBs in order
 
-    // allocate memory for the final compressed data of this vb. allocate 33% of the
-    // vb size on the original file - this is normally enough. if not, we will realloc downstream
-    buf_alloc (vb, &vb->z_data, 0, vb->txt_size / 3, char, CTX_GROWTH, "z_data");
+    // allocate memory for the final compressed data of this vb. allocate 1/8 of the
+    // vb size on the (uncompressed) txt file - this is normally plenty. if not, we will realloc downstream
+    buf_alloc (vb, &vb->z_data, 0, vb->txt_size / 8, char, CTX_GROWTH, "z_data");
 
     // clone global dictionaries while granted exclusive access to the global dictionaries
     ctx_clone (vb);
@@ -742,6 +758,8 @@ static void zip_compress_one_vb (VBlockP vb)
     threads_log_by_vb (vb, "zip", "START SEG", 0);
 
     seg_all_data_lines (vb);
+
+    if (flag.biopsy) goto after_compress; // in case of MAIN VB of SAM/BAM gencomp: we end our biopsy journey here
 
     // identify dictionaries that contain only singleton words (eg a unique id) and move the data from dict to local
     zip_handle_unique_words_ctxs (vb);
@@ -780,7 +798,6 @@ static void zip_compress_one_vb (VBlockP vb)
 
     if (flag.make_reference) serializer_unlock (make_ref_merge_serializer);
 
-
     if (need_compress) {
         zip_compress_all_contexts_local (vb); // for vb=1 - all locals ; for vb>1 - locals which consist of singletons set in ctx_merge_in_vb_ctx (other locals were already compressed above)
         zip_compress_all_contexts_b250 (vb);
@@ -793,6 +810,7 @@ static void zip_compress_one_vb (VBlockP vb)
     random_access_merge_in_vb (vb, 1);
     
     // compress data-type specific sections
+after_compress:
     DT_FUNC (vb, zip_after_compress)(vb);
 
     // tell dispatcher this thread is done and can be joined.
@@ -853,7 +871,7 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
         ASSINP0 (vb->vblock_i > 1 || txt_file->txt_data_so_far_single /* txt header data */, 
                  "Error: Cannot compress stdin data because its size is 0");
         
-        if (flag.debug_or_test) buf_test_overflows(vb, __FUNCTION__); 
+        if (flag.debug_or_test) buflist_test_overflows(vb, __FUNCTION__); 
 
         return;
     }
@@ -898,8 +916,8 @@ void zip_one_file (rom txt_basename,
     dispatcher_start_wallclock();
     if (flag.show_time_comp_i == flag.zip_comp_i) profiler_initialize(); // re-start wallclock
 
-
     z_file->txt_data_so_far_single = 0;
+    z_file->num_components         = MAX_(z_file->num_components, flag.zip_comp_i+1); // may increase further with generated components (in zip_update_txt_counters())
     evb->z_data.len                = 0;
     evb->z_next_header_i           = 0;
     
@@ -935,12 +953,18 @@ void zip_one_file (rom txt_basename,
     max_lines_per_vb=0;
 
     static uint64_t target_progress=0;
-    if (flag.pair != 2) { // note: if 2nd of a FASTQ file pair - we leave the target as it was in the first file as seggable_size is not calculated for the 2nd file
+    if ((Z_DT(FASTQ) && flag.pair != PAIR_R2) ||   // note: if 2nd of a FASTQ file pair - we leave the target as it was in the first file as seggable_size is not calculated for the 2nd file
+        (flag.deep && flag.zip_comp_i <= SAM_COMP_FQ00) ||
+        (!flag.deep && !Z_DT(FASTQ))) {
+
         int64_t est_seggable_size = txtfile_get_seggable_size(); 
-    
+
         target_progress = est_seggable_size * 3 // read, seg, compress
                         + (!flag.make_reference && !flag.seg_only) * est_seggable_size; // write
     }
+
+    if (flag.debug_progress)
+        iprintf ("zip_comp_i=%u : target_progress=%"PRIu64"\n", flag.zip_comp_i, target_progress);
 
     dispatcher = 
         dispatcher_fan_out_task (ZIP_TASK_NAME, txt_basename, 
@@ -960,6 +984,8 @@ void zip_one_file (rom txt_basename,
     // go back and update some fields in the txt header's section header and genozip header 
     if (txt_header_offset >= 0) // note: this will be -1 if we didn't write a SEC_TXT_HEADER section for any reason
         success = zfile_update_txt_header_section_header (txt_header_offset, max_lines_per_vb);
+
+    ASSERT0 (!flag.biopsy || biopsy_is_done(), "Biopsy request not complete - some VBs missing");
 
     // write the BGZF section containing BGZF block sizes, if this txt file is compressed with BGZF
     bgzf_compress_bgzf_section();
@@ -994,7 +1020,7 @@ finish:
     if (flag.md5 && flag.bind && z_file->z_closes_after_me &&
         ((flag.bind == BIND_FQ_PAIR && z_file->num_txts_so_far == 2) ||
          ((flag.bind == BIND_DVCF || flag.bind == BIND_SAM) && z_file->num_txts_so_far == 3)))
-        progress_concatenated_md5 (dt_name (z_file->data_type), digest_snapshot (&z_file->digest_ctx, "file"));
+        progress_concatenated_md5 (z_dt_name(), digest_snapshot (&z_file->digest_ctx, "file"));
 
     z_file->disk_size = z_file->disk_so_far;
 
@@ -1004,7 +1030,10 @@ finish:
                        flag.show_memory && z_file->z_closes_after_me && is_last_user_txt_file); // show memory
 
     if (!z_file->z_closes_after_me)
-        ctx_reset_codec_commits(); //xxx
+        ctx_reset_codec_commits(); 
+
+    // no need to waste time freeing memory of the last file, the process termination will do that
+    flag.let_OS_cleanup_on_exit = is_last_user_txt_file && z_file->z_closes_after_me && !arch_is_valgrind(); 
 
     DT_FUNC (txt_file, zip_finalize)(is_last_user_txt_file);
 

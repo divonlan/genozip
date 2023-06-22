@@ -24,7 +24,7 @@
 #include "version.h"
 
 static ContextP sorter_ctx = NULL; 
-static Buffer chrom_sorter = EMPTY_BUFFER; // ZIP/PIZ: index into sorter_ctx->nodes/word_list, sorted alphabetically by snip
+static Buffer chrom_sorter = {}; // ZIP/PIZ: index into sorter_ctx->nodes/word_list, sorted alphabetically by snip
 
 // the data of SEC_CHROM2REF_MAP - this is part of the Genozip file format
 typedef struct __attribute__ ((__packed__)) { WordIndex chrom_index, ref_index; } Chrom2Ref; 
@@ -45,36 +45,29 @@ void chrom_2ref_compress (Reference ref)
 {
     if (flag.show_chrom2ref) 
         iprint0 ("\nAlternative chrom indices (output of --show-chrom2ref): chroms that are in the file and are mapped to a different index in the reference\n");
-
-    // remove idenity entries (chrom_index==ref_index) from chrom2ref_map
-    ARRAY (WordIndex, c2r, z_file->chrom2ref_map);
     
     ASSERTNOTINUSE (evb->scratch);
-    buf_alloc (evb, &evb->scratch, 0, z_file->chrom2ref_map.len, Chrom2Ref, 1, "scratch");
+    buf_alloc (evb, &evb->scratch, 0, ZCTX(CHROM)->chrom2ref_map.len, Chrom2Ref, 1, "scratch");
     ContextP zctx = ZCTX(DTFZ(prim_chrom));
 
-    for (uint32_t i=0; i < c2r_len; i++) {
-
+    for_buf2 (WordIndex, ref_index, chrom_node_index, ZCTX(CHROM)->chrom2ref_map) {
         if (flag.show_chrom2ref) {
-            rom chrom_name = ctx_snip_from_zf_nodes (zctx, i, 0, 0);
-            rom ref_name = c2r[i] >= 0 ? ref_contigs_get_name (ref, c2r[i], NULL) : "(none)";
+            rom chrom_name = ctx_snip_from_zf_nodes (zctx, chrom_node_index, 0, 0);
+            rom ref_name = *ref_index >= 0 ? ref_contigs_get_name (ref, *ref_index, NULL) : "(none)";
 
-            if (c2r[i] != WORD_INDEX_NONE) 
-                iprintf ("In file: '%s' (%d)\tIn reference: '%s' (%d)\t%s\n", chrom_name, i, ref_name, c2r[i], i != c2r[i] ? "INDEX_CHANGE" : "");
+            if (*ref_index != WORD_INDEX_NONE) 
+                iprintf ("In file: '%s' (%d)\tIn reference: '%s' (%d)\t%s\n", 
+                         chrom_name, chrom_node_index, ref_name, *ref_index, chrom_node_index != *ref_index ? "INDEX_CHANGE" : "");
             else
-                iprintf ("In file: '%s' (%d)\tNot in reference\n", chrom_name, i);
+                iprintf ("In file: '%s' (%d)\tNot in reference\n", chrom_name, chrom_node_index);
         }
-
-        // Change in file format planned for v13:
-        // Up to v12, both identify (ref_contig==chrom_contig) and chrom not matching any ref_contig are represented as a missing mapping
-        // Starting v13, missing mapping will be represented explicitly with -1 (support was added in added in 12.0.35 and temporarily disabled by this line below)
-        if (GENOZIP_FILE_FORMAT_VERSION < 13 && c2r[i] == -1) continue; //  this line can be deleted in v13
 
         // adds the mapping if not identify and adds -1 if this chrom doesn't map to a ref contig.
         // note: we add only contigs that are used (count>0) except for aligner_available in which case we don't have counts (for REF_EXTERNAL, we have 
         // populated all contigs in zip_initialize, and for REF_EXT_STORE we add contigs with any bit set in is_set) 
-        if (c2r[i] != i && (*B64(zctx->counts, i) || flag.aligner_available))
-            BNXT (Chrom2Ref, evb->scratch) = (Chrom2Ref){ .chrom_index = BGEN32(i), .ref_index = BGEN32 (c2r[i]) };
+        if (*ref_index != chrom_node_index && *ref_index != WORD_INDEX_NONE && (*B64(zctx->counts, chrom_node_index) || flag.aligner_available))
+            BNXT (Chrom2Ref, evb->scratch) = (Chrom2Ref){ .chrom_index = BGEN32(chrom_node_index), 
+                                                          .ref_index   = BGEN32(*ref_index)       };
     }
 
     if (evb->scratch.len) {
@@ -87,11 +80,10 @@ void chrom_2ref_compress (Reference ref)
 
 void chrom_2ref_load (Reference ref)
 {
-    Section sl = sections_last_sec (SEC_CHROM2REF_MAP, SOFT_FAIL);
-    if (!sl || // we don't have alternate chroms
-        (flag.deep && OUT_DT(FASTQ))) return; // genocat outputting just FASTQ of a Deep file
+    Section sec = sections_last_sec (SEC_CHROM2REF_MAP, SOFT_FAIL);
+    if (!sec) return;
 
-    zfile_get_global_section (SectionHeader, sl, &evb->scratch, "scratch");
+    zfile_get_global_section (SectionHeader, sec, &evb->scratch, "scratch");
 
     if (flag.show_chrom2ref) 
         iprint0 ("\nAlternative chrom indices (output of --show-chrom2ref): chroms that are in the txt file and are mapped to a different index in the reference\n");
@@ -100,25 +92,26 @@ void chrom_2ref_load (Reference ref)
     Context *zctx = ZCTX(CHROM);
 
     // create mapping user index -> reference index
-    buf_alloc (evb, &z_file->chrom2ref_map, 0, zctx->word_list.len, WordIndex, 1, "z_file->chrom2ref_map");
-    z_file->chrom2ref_map.len = zctx->word_list.len;
+    buf_alloc (evb, &ZCTX(CHROM)->chrom2ref_map, 0, zctx->word_list.len, WordIndex, 1, "ZCTX(CHROM)->chrom2ref_map");
+    ZCTX(CHROM)->chrom2ref_map.len = zctx->word_list.len;
 
     // initialize with unity mapping
-    ARRAY (WordIndex, map, z_file->chrom2ref_map);
+    ARRAY (WordIndex, map, ZCTX(CHROM)->chrom2ref_map);
     for (uint32_t i=0; i < zctx->word_list.len32; i++)
         map[i] = i;
 
     // the indices of chroms that are NOT in the reference (they are only in the user file), will be mapped to ref chroms
     ConstContigPkgP ctgs = ref_get_ctgs (ref); 
     WordIndex num_ref_contigs = ctgs->contigs.len; // must be signed int
-    for (uint32_t i=0; i < evb->scratch.len32; i++) {
-        Chrom2Ref *ent = B(Chrom2Ref, evb->scratch, i);
+
+    for_buf2 (Chrom2Ref, ent, i, evb->scratch) {
         WordIndex chrom_index = BGEN32 (ent->chrom_index);
-        WordIndex ref_index = BGEN32 (ent->ref_index);
+        WordIndex ref_index   = BGEN32 (ent->ref_index);
 
         ASSERT (chrom_index >= 0 && chrom_index < zctx->word_list.len, "chrom_index=%d out of range [0,%d]", chrom_index, (int32_t)zctx->word_list.len-1);
         ASSERT (!num_ref_contigs /* ref not loaded */ || (ref_index >= -1 && ref_index < num_ref_contigs), 
-                "ref_index=%d out of range [-1,%u]", ref_index, num_ref_contigs-1);
+                "ref_index=%d out of range [-1,%u] (chrom_index=%u i=%u len=%u)", 
+                ref_index, num_ref_contigs-1, chrom_index, i, evb->scratch.len32);
 
         map[chrom_index] = ref_index;
 
@@ -149,12 +142,16 @@ static void chrom_2ref_seg_set (VBlockP vb, ContextP ctx, WordIndex chrom_node_i
     *B(WordIndex, ctx->chrom2ref_map, index) = ref_index; 
 }
 
-// returns the ref index by the chrom index, works only after Segging of CHROM
+// ZIP: returns the ref index by the chrom index, works only after Segging of CHROM
 WordIndex chrom_2ref_seg_get (Reference ref, ConstVBlockP vb, WordIndex chrom_index)
 { 
     if (chrom_index == NODE_INDEX_NONE) return NODE_INDEX_NONE;
 
     int32_t ol_len = vb->ol_chrom2ref_map.len32;
+
+    ASSSEG (chrom_index >= 0 && chrom_index < ol_len + CTX(CHROM)->chrom2ref_map.len32, 
+            "chrom_index=%d out of range: ol_len=%u vb->chrom2ref_map.len32=%u", chrom_index, ol_len, CTX(CHROM)->chrom2ref_map.len32);
+
     return (chrom_index < ol_len) ? *B(WordIndex, vb->ol_chrom2ref_map, chrom_index)
                                   : *B(WordIndex, CTX(CHROM)->chrom2ref_map, chrom_index - ol_len);
 }
@@ -165,7 +162,7 @@ void chrom_calculate_ref2chrom (uint64_t num_ref_contigs)
     z_file->ref2chrom_map.len = num_ref_contigs;
 
     ARRAY (WordIndex, r2c, z_file->ref2chrom_map);
-    ARRAY (WordIndex, c2r, z_file->chrom2ref_map);
+    ARRAY (WordIndex, c2r, ZCTX(CHROM)->chrom2ref_map);
     
     for (unsigned i=0; i < c2r_len; i++)
         if (c2r[i] != WORD_INDEX_NONE)
@@ -178,13 +175,13 @@ void chrom_calculate_ref2chrom (uint64_t num_ref_contigs)
 
 WordIndex chrom_seg_ex (VBlockP vb, Did did_i, 
                         STRp(chrom), 
-                        PosType64 LN,       // Optional, if readily known
+                        PosType64 LN,     // Optional, if readily known
                         bool *is_alt_out, // need iff flag.match_chrom_to_reference.
                         int add_bytes,    // must be signed
                         bool recon_changes_if_match, // whether reconstruction changes in case of change in chrom name due to --match-chrom
                         bool *is_new_out) // optional out
 {
-    ASSERTNOTZERO (chrom_len,"");
+    ASSERTNOTZERO (chrom_len);
     decl_ctx (did_i);
     bool is_primary = did_i == DTF(prim_chrom);
     bool is_luft    = did_i == DTF(luft_chrom);
@@ -230,7 +227,7 @@ WordIndex chrom_seg_ex (VBlockP vb, Did did_i,
         // update cache
         seg_set_last_txt (vb, ctx, STRa(save_chrom));
         ctx->last_is_alt = is_alt;
-        ctx->last_growth = chrom_name_growth;
+        ctx->last_growth = chrom_name_growth;  
         ctx->no_stons    = true; // needed for seg_duplicate_last
 
         // if a match was found, we're done
@@ -240,7 +237,7 @@ WordIndex chrom_seg_ex (VBlockP vb, Did did_i,
     // case: either without --match-chrom-to-reference OR chrom not found in the reference
     chrom_node_index = seg_by_ctx_ex (vb, STRa(chrom), ctx, add_bytes, &is_new); // note: this is not the same as ref_index, bc ctx->nodes contains the header contigs first, followed by the reference contigs that are not already in the header
     
-    STR (ref_contig);
+    STR0 (ref_contig);
     if (is_new && ref)
         ref_index = ref_contigs_get_matching (ref, LN, STRa(chrom), pSTRa(ref_contig), false, &is_alt, NULL);
 
@@ -277,7 +274,7 @@ finalize:
             STRset (vb->chrom_name, chrom);
     }
 
-    if (is_new && chrom_2ref_seg_is_needed (ctx->dict_did_i)) // even if no reference, has ctx_merge_in_one_vctx expects
+    if (is_new && chrom_2ref_seg_is_needed (ctx->did_i)) // even if no reference, has ctx_merge_in_one_vctx expects
         chrom_2ref_seg_set (vb, ctx, chrom_node_index, ref_index);
 
     return chrom_node_index;

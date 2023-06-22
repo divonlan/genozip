@@ -31,6 +31,7 @@
 #include "stats.h"
 #include "bgzf.h"
 #include "dispatcher.h"
+#include "buf_list.h"
 #include "libdeflate/libdeflate.h"
 
 WordIndex seg_by_ctx_ex (VBlockP vb, STRp(snip), ContextP ctx, uint32_t add_bytes,
@@ -126,37 +127,46 @@ rom seg_get_next_item (VBlockP vb, rom str, int *str_len,
                        bool *has_13,     // out - only modified if '\r' detected ; only needed if newline=GN_SEP
                        rom item_name)
 {
-    unsigned i=0; for (; i < *str_len; i++) {
-        char c = str[i];
-        if ((tab     == GN_SEP && c == '\t') ||
-            (newline == GN_SEP && c == '\n') ||
-            (space   == GN_SEP && c == ' ')) {
-                *len = i;
-                if (separator) *separator = c;
-                *str_len -= i+1;
+    START_TIMER;
 
-                // check for Windows-style '\r\n' end of line 
-                if (i && c == '\n' && str[i-1] == '\r') {
-                    (*len)--;
-                    ASSERT0 (has_13, "has_13=NULL but expecting it because newline=GN_SEP");
-                    *has_13 = true;
-                }
+    rom c, after;
+    for (c = str, after = str + *str_len; c < after; c++) 
+        switch (*c) {
+            case ' '  : if      (space   == GN_SEP     ) goto sep_found; 
+                        else if (space   == GN_FORBIDEN) goto not_found;
+                        break;
+                       
+            case '\t' : if      (tab     == GN_SEP     ) goto sep_found; 
+                        else if (tab     == GN_FORBIDEN) goto not_found;
+                        break;
 
-                return str + i+1; // beyond the separator
+            case '\n' : if      (newline == GN_SEP     ) goto sep_found; 
+                        else if (newline == GN_FORBIDEN) goto not_found;
+                        break;
+
+            default   : break;
         }
-        else if ((tab     == GN_FORBIDEN && c == '\t') ||
-                 (newline == GN_FORBIDEN && c == '\n') ||
-                 (space   == GN_FORBIDEN && c == ' ' ) ) break;
-    }
 
-    ASSSEG (*str_len, str, "missing %s field", item_name);
-
-    ABOSEG (str, "while segmenting %s: expecting a %s%s%safter \"%.*s\"", 
+not_found: // no sep found in entire string, or forbidden separator encountered
+    ABOSEG ("while segmenting %s: expecting a %s%s%s in \"%.*s\"", 
             item_name,
             newline==GN_SEP ? "NEWLINE " : "", tab==GN_SEP ? "TAB " : "", space==GN_SEP ? "\" \" " : "", 
-            MIN_(i, 1000), str);
+            (int)MIN_(after - str, 1000), str);
+    
+sep_found:
+    *len = c - str;
+    if (separator) *separator = *c;
+    *str_len -= *len + 1;
 
-    return 0; // avoid compiler warning - never reaches here
+    // check for Windows-style '\r\n' end of line 
+    if (c != str && *c == '\n' && *(c-1) == '\r') {
+        ASSERTNOTNULL (has_13);
+        (*len)--;
+        *has_13 = true;
+    }
+
+    COPY_TIMER (seg_get_next_item);
+    return str + *len + 1 + (*c == '\n' && has_13 && *has_13); // beyond the separator
 }
 
 // returns first character after current line
@@ -165,6 +175,8 @@ rom seg_get_next_line (VBlockP vb, rom str,
                        unsigned *len,      // out - length of line exluding \r and \n
                        bool must_have_newline, bool *has_13 /* out */, rom item_name)
 {
+    START_TIMER;
+
     rom after = str + *remaining_len;
     for (rom s=str; s < after; s++)
         if (*s == '\n') {
@@ -177,13 +189,14 @@ rom seg_get_next_line (VBlockP vb, rom str,
                     *has_13 = true;
                 }
 
+                COPY_TIMER (seg_get_next_line);
                 return str + *len + *has_13 + 1; // beyond the separator
         }
     
-    ASSSEG (*remaining_len, str, "missing %s field", item_name);
+    ASSSEG (*remaining_len, "missing %s field", item_name);
 
     // if we reached here - line doesn't end with a newline
-    ASSSEG (!must_have_newline, str, "while segmenting %s: expecting a NEWLINE after (showing at most 1000 characters): \"%.*s\"", 
+    ASSSEG (!must_have_newline, "while segmenting %s: expecting a NEWLINE after (showing at most 1000 characters): \"%.*s\"", 
             item_name, MIN_(*remaining_len, 1000), str);
 
     // we have no newline, but check if last character is a \r
@@ -191,6 +204,7 @@ rom seg_get_next_line (VBlockP vb, rom str,
     *len = *remaining_len - *has_13;
     *remaining_len = 0;
 
+    COPY_TIMER (seg_get_next_line);
     return after;
 }
 
@@ -356,7 +370,7 @@ static PosType64 seg_scan_pos_snip (VBlockP vb, rom snip, unsigned snip_len, boo
         return value; // all good
     }
 
-    ASSSEG (err, snip, "position field must be an integer number between %u and %"PRId64", seeing: %.*s", 
+    ASSSEG (err, "position field must be an integer number between %u and %"PRId64", seeing: %.*s", 
             !!zero_is_bad, MAX_POS, STRf(snip));
 
     *err = is_int ? ERR_SEG_OUT_OF_RANGE : ERR_SEG_NOT_INTEGER;
@@ -719,7 +733,7 @@ bool seg_float_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_bytes
         ctx->ltype = LT_FLOAT32; // set only upon storing the first number - if there are no numbers, leave it as LT_TEXT so it can be used for singletons
 
         // add to local
-        buf_alloc (vb, &ctx->local, 1, vb->lines.len, float, CTX_GROWTH, "contexts->local");
+        buf_alloc (vb, &ctx->local, 1, vb->lines.len, float, CTX_GROWTH, CTX_TAG_LOCAL);
         BNXT (float, ctx->local) = f;
         
         // add to b250
@@ -916,8 +930,8 @@ int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp
     for (unsigned i=0; i < con.nitems_lo; i++) 
         ctxs[i] = ctx_get_ctx (vb, con.items[i].dict_id); 
 
-    if (!ctx->is_stats_parent && ctx->st_did_i == DID_NONE) 
-        ctx_consolidate_stats_(vb, ctx->did_i, con.nitems_lo, ctxs);
+    if (!ctx->is_stats_parent) 
+        ctx_consolidate_stats_(vb, ctx->st_did_i == DID_NONE ? ctx->did_i : ctx->st_did_i, con.nitems_lo, ctxs);
 
     seg_create_rollback_point (vb, ctxs, con.nitems_lo);
 
@@ -931,7 +945,7 @@ int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp
     }
     con.repeats = n_repeats;
 
-    ASSSEG (n_repeats <= CONTAINER_MAX_REPEATS, snip, "exceeded maximum repeats allowed (%u) while parsing %s",
+    ASSSEG (n_repeats <= CONTAINER_MAX_REPEATS, "exceeded maximum repeats allowed (%u) while parsing %s",
             CONTAINER_MAX_REPEATS, ctx->tag_name);
 
     for (unsigned r=0; r < n_repeats; r++) {
@@ -955,7 +969,7 @@ int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp
 
     // in our specific case, element i of con_index contains the node_index of the snip of the container with i repeats, or WORD_INDEX_NONE.
     if (ctx->con_index.len32 < n_repeats+1) {
-        buf_alloc_255 (vb, &ctx->con_index, 0, n_repeats+1, WordIndex, 0, "con_index");
+        buf_alloc_255 (vb, &ctx->con_index, 0, n_repeats+1, WordIndex, 0, CTX_TAG_CON_INDEX);
         ctx->con_index.len32 = ctx->con_index.len32 / sizeof (WordIndex);
     }
 
@@ -986,6 +1000,33 @@ badly_formatted:
 
     return -1; // not segged as a container
 }                           
+
+void seg_array_of_array_of_struct (VBlockP vb, ContextP ctx, 
+                                   char outer_sep,
+                                   MediumContainer inner_con, // container of array of struct
+                                   STRp(snip), const SegCallback *callbacks) // optional - either NULL, or contains a seg callback for each item (any callback may be NULL)
+{
+    str_split (snip, snip_len, 0, outer_sep, inner, false);
+
+    bytes d = ctx->dict_id.id;
+    DictId inner_dict_id = { .id = { d[0], d[1], '-', d[2], d[3], d[4], d[5], d[6] } };
+
+    MiniContainer outer_con = { .drop_final_repsep = true,  
+                                .repeats           = n_inners, 
+                                .nitems_lo         = 1,
+                                .repsep            = { outer_sep },
+                                .items             = { { .dict_id = inner_dict_id } }
+                              };
+
+    container_seg (vb, ctx, (ContainerP)&outer_con, 0, 0, n_inners-1); // account for outer_sep
+
+    ContextP inner_ctx = ctx_get_ctx (vb, inner_dict_id);
+
+    ctx_consolidate_stats (vb, ctx->did_i, inner_ctx->did_i, DID_EOL);
+
+    for (int i=0; i < n_inners; i++)
+        seg_array_of_struct (vb, inner_ctx, inner_con, STRi(inner,i), callbacks, inner_lens[i]);
+}                                   
 
 // returns true if successful
 bool seg_by_container (VBlockP vb, ContextP ctx, ContainerP con, STRp(value), 
@@ -1037,7 +1078,7 @@ void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, const void *const data
             "%s: ctx %s requires no_stons or should have an ltype other than LT_TEXT", LN_NAME, ctx->tag_name);
 #endif
 
-    buf_alloc (vb, &ctx->local, data_len + add_nul, 100000, char, CTX_GROWTH, "contexts->local");
+    buf_alloc (vb, &ctx->local, data_len + add_nul, 100000, char, CTX_GROWTH, CTX_TAG_LOCAL);
     if (data_len) buf_add (&ctx->local, data, data_len); 
     if (add_nul) BNXTc (ctx->local) = 0;
 
@@ -1054,7 +1095,7 @@ void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, const void *const data
 
 void seg_integer_fixed (VBlockP vb, ContextP ctx, void *number, bool with_lookup, unsigned add_bytes) 
 {
-    buf_alloc (vb, &ctx->local, 0, MAX_(ctx->local.len+1, 32768) * lt_width(ctx), char, CTX_GROWTH, "contexts->local");
+    buf_alloc (vb, &ctx->local, 0, MAX_(ctx->local.len+1, 32768) * lt_width(ctx), char, CTX_GROWTH, CTX_TAG_LOCAL);
 
     switch (lt_width(ctx)) {
         case 1  : BNXT8  (ctx->local) = *(uint8_t  *)number; break;
@@ -1095,7 +1136,7 @@ void seg_diff (VBlockP vb, ContextP ctx,
         else                     goto skip_diff; // seg a "copy" snip with no diff in local
     }
 
-    buf_alloc_zero (vb, &ctx->local, value_len, 100 * value_len, uint8_t, CTX_GROWTH, "contexts->local");
+    buf_alloc_zero (vb, &ctx->local, value_len, 100 * value_len, uint8_t, CTX_GROWTH, CTX_TAG_LOCAL);
 
     uint8_t *diff = BAFT8 (ctx->local); 
 
@@ -1145,11 +1186,6 @@ static void seg_more_lines (VBlockP vb, unsigned sizeof_line)
     // note: sadly, we cannot use the normal Buffer macros here because each data_type has its own line type
     buf_alloc_zero (vb, &vb->lines, 0, (vb->lines.len + 1) * sizeof_line, char, 2, "lines");    
     vb->lines.len = vb->lines.size / sizeof_line;
-
-    // allocate more to the b250 buffer of the fields
-    for (Did did_i=0; did_i < DTF(num_fields); did_i++) 
-        if (segconf.b250_per_line[did_i])
-            buf_alloc (vb, &CTX(did_i)->b250, 0, AT_LEAST(did_i), WordIndex, 1, "contexts->b250");
 }
 
 static void seg_verify_file_size (VBlockP vb)
@@ -1199,7 +1235,7 @@ void seg_all_data_lines (VBlockP vb)
     // allocate the b250 for the fields which each have num_lines entries
     for (Did did_i=0; did_i < DTF(num_fields); did_i++)
         if (segconf.b250_per_line[did_i]) 
-            buf_alloc (vb, &CTX(did_i)->b250, 0, AT_LEAST(did_i), WordIndex, 1, "contexts->b250");
+            buf_alloc (vb, &CTX(did_i)->b250, 0, AT_LEAST(did_i), WordIndex, 1, CTX_TAG_B250);
     
     // set estimated number of lines
     vb->lines.len32 = vb->lines.len32  ? vb->lines.len32 // already set? don't change (eg 2nd pair FASTQ, bcl_unconsumed)
@@ -1248,8 +1284,7 @@ void seg_all_data_lines (VBlockP vb)
             iprintf ("%s byte-in-vb=%u\n", LN_NAME, vb->line_start);
 
         // Call the segmenter of the data type to segment one line
-        rom next_field = DT_FUNC (vb, seg_txt_line) (vb, field_start, remaining_txt_len, &has_13);
-        if (!next_field) next_field = field_start + remaining_txt_len; // DT_GENERIC has no segmenter
+        rom next_field = DTP(seg_txt_line) (vb, field_start, remaining_txt_len, &has_13);
 
         uint32_t line_len = next_field - field_start;
 
@@ -1309,9 +1344,6 @@ void seg_all_data_lines (VBlockP vb)
                 segconf.b250_per_line[did_i] = (float)CTX(did_i)->b250.len32 / (float)vb->lines.len32;
     }
 
-    //xxx if (!segconf.running) 
-    //     __atomic_fetch_add (&z_file->comp_num_lines[vb->comp_i], vb->lines.len, __ATOMIC_RELAXED); 
-
     ASSINP (vb->lines.len32 <= CON_MAX_REPEATS, // because top_level.repeats = vb->lines.len
             "Genozip works by dividing the file to \"VBlocks\". Unfortuantely, the VBlocks for this file are too big\n"
             "and have have too many %ss (= over the Genozip's maximum of %u). Current VBlock size is %s.\n"
@@ -1320,12 +1352,12 @@ void seg_all_data_lines (VBlockP vb)
 
     DT_FUNC (vb, seg_finalize)(vb); // data-type specific finalization
 
-     if (!flag.make_reference && !segconf.running && flag.biopsy_line.line_i == NO_LINE) 
+     if (!flag.make_reference && !segconf.running && !flag.biopsy && flag.biopsy_line.line_i == NO_LINE) 
         seg_verify_file_size (vb);
 
     dispatcher_increment_progress ("seg_final", (int64_t)vb->txt_size - prev_increment); // txt_size excludes lines moved to gencomp. increment might be negative
 
-    if (flag.debug_or_test) buf_test_overflows(vb, __FUNCTION__); 
+    if (flag.debug_or_test) buflist_test_overflows(vb, __FUNCTION__); 
 
     COPY_TIMER (seg_all_data_lines);
 }

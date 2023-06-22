@@ -14,17 +14,19 @@ extern double arch_get_physical_mem_size (void);
 extern rom arch_get_endianity (void);
 extern void arch_set_locale (void);
 
-#define ARCH_IP_LEN 16
-extern rom arch_get_ip_addr (rom reason);
-extern rom arch_get_host (void);
-extern rom arch_get_user_host (void);
+#define NET_ID_SIZE 32
 extern rom arch_get_os (void);
 extern rom arch_get_distribution (void);
-extern rom arch_get_executable (FailType soft_fail);
+extern StrTextSuperLong arch_get_executable (void);
 extern rom arch_get_argv0 (void);
 extern bool arch_is_valgrind (void);
-
+extern bool arch_is_docker (void);
+extern bool arch_is_first_compression (void);
 extern Timestamp arch_timestamp (void);
+extern bool arch_is_process_alive (uint32_t pid);
+extern uint64_t arch_get_max_resident_set (void);
 
 static inline uint32_t arch_time_lap (uint128_t ts_start) // in msec
 { return (uint32_t)((arch_timestamp() - ts_start) / 1000000); }
+
+extern Timestamp arch_start_time;

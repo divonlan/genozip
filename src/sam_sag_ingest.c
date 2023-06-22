@@ -22,7 +22,6 @@
 #include "codec.h"
 #include "qname.h"
 #include "compressor.h"
-#include "libdeflate/libdeflate.h"
 #include "htscodecs/rANS_static4x16.h"
 
 //------------------------------------
@@ -50,7 +49,7 @@ static void sam_sa_create_group_index (void)
     ARRAY (SAGroupIndexEntry, index, z_file->sag_grps_index);
     for (uint64_t i=0; i < grp_len; i++) {
         rom grp_qname = GRP_QNAME(&grp[i]);
-        index[i] = (SAGroupIndexEntry){ .grp_i = i, .qname_hash = QNAME_HASH (grp_qname, grp[i].qname_len, grp[i].is_last) };
+        index[i] = (SAGroupIndexEntry){ .grp_i = i, .qname_hash = qname_calc_hash (QNAME1, grp_qname, grp[i].qname_len, grp[i].is_last, false, NULL) };
     }
 
     qsort (index, index_len, sizeof(SAGroupIndexEntry), group_index_sorter);
@@ -94,7 +93,7 @@ static uint32_t sam_zip_prim_ingest_vb_compress_qual (VBlockSAMP vb, Sag *vb_grp
 
     // note: in an unlikely case, the compressed size might be beyond this - in which case we will abandon the compression.
     uint32_t max_comp_len = MIN_(total_qual_len / 1.2 + rans_compress_bound_4x16 (vb_grps[0].seq_len, X_NOSZ), MAX_SA_SEQ_LEN); // heuristic (we don't want this to be unnecessarily too big - bigger than allocated to z_data)
-    buf_alloc (vb, underlying_buf, max_comp_len, 0, char, 0, "z_data"); // likely already allocated
+    buf_alloc (vb, underlying_buf, max_comp_len, 0, char, 0, underlying_buf->name ? NULL : "z_data"); // likely already allocated
     buf_overlay_partial (vb, comp_qual_buf, underlying_buf, underlying_buf->len/*after packed_seq_buf*/, "comp_qual_buf");
 
     for (uint32_t vb_grp_i=0; vb_grp_i < vb_grps_len; vb_grp_i++) {
@@ -166,7 +165,7 @@ static void sam_zip_prim_ingest_vb_copy_qname_vb_to_z (VBlockSAMP vb, Sag *vb_gr
             g->qname = (g-1)->qname; // same index into z_file->sag_qnames like previous qname
         
         else {
-            uint64_t z_qname = z_file->sag_qnames.len;;
+            uint64_t z_qname = z_file->sag_qnames.len;
             memcpy (BAFTc (z_file->sag_qnames), Btxt (g->qname), g->qname_len);
             g->qname = z_qname; // update from index into vb->txt_data to index into z_file->sa_qname
             z_file->sag_qnames.len += g->qname_len;
@@ -224,7 +223,6 @@ void sam_zip_prim_ingest_vb (VBlockSAMP vb)
     START_TIMER;
 
     ARRAY (Sag, vb_grps, vb->sag_grps);
-
     if (!vb_grps_len) return; // no SA groups
 
     ASSERTNOTINUSE (vb->codec_bufs[0]);
@@ -233,7 +231,7 @@ void sam_zip_prim_ingest_vb (VBlockSAMP vb)
     #define packed_seq_buf vb->codec_bufs[1]
 
     // using z_data buf that is already allocated but still empty - we're likely not going to allocate additional memory
-    ASSERT (!vb->z_data.len, "expecting vb->z_data.len=0 but it is %"PRIu64, vb->z_data.len);
+    ASSERTISEMPTY (vb->z_data);
     
     // compress seq and qual of all lines into packed_seq_buf & comp_qual_buf (overlaid on z_data, to save allocating memory)
     sam_zip_prim_ingest_vb_pack_seq (vb, STRa(vb_grps), &vb->z_data, &packed_seq_buf, IS_BAM_ZIP);
@@ -259,7 +257,9 @@ void sam_zip_prim_ingest_vb (VBlockSAMP vb)
         if (!seq_done && mutex_trylock (seq_mutex)) {
             // concatenate this VB's sequence to z_file->sag_seq (in ACGT format)
             uint64_t z_seq = z_file->sag_seq.nbits / 2; // next_seq in bases, not bits
-            bits_concat ((BitsP)&z_file->sag_seq, (BitsP)&packed_seq_buf, 0); // also allocate memory
+            buf_alloc_bits (evb, &z_file->sag_seq, z_file->sag_seq.nbits + packed_seq_buf.nbits, NOINIT, CTX_GROWTH, "z_file->sag_seq");
+            bits_copy ((BitsP)&z_file->sag_seq, z_seq * 2, (BitsP)&packed_seq_buf, 0, packed_seq_buf.nbits);
+
             seq_done = achieved_something = true;                
             mutex_unlock (seq_mutex);
 

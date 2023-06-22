@@ -70,8 +70,8 @@ rom locs_seg_txt_line (VBlockP vb, rom field_start_line, uint32_t remaining_txt_
 
     ContextP ctxs[2]={ CTX(LOCS_X), CTX(LOCS_Y)};
 
-    buf_alloc (vb, &ctxs[0]->local, n_clusters, 0, float, 0, "contexts->local");
-    buf_alloc (vb, &ctxs[1]->local, n_clusters, 0, float, 0, "contexts->local");
+    buf_alloc (vb, &ctxs[0]->local, n_clusters, 0, float, 0, CTX_TAG_LOCAL);
+    buf_alloc (vb, &ctxs[1]->local, n_clusters, 0, float, 0, CTX_TAG_LOCAL);
 
     // Note: volatile, otherwise the gcc optimizer screws up the "precisely reconstructable" test and all
     // clusters appear to be reconstructable even if they're not.

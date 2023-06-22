@@ -44,7 +44,8 @@ extern void zfile_output_processed_vb (VBlockP vb);
 // PIZ side
 // --------
 
-extern bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP header);
+extern uint64_t zfile_read_genozip_header_get_offset (bool as_is);
+extern bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP header, FailType fail_type);
 
 extern SectionHeaderUnion zfile_read_section_header_do (VBlockP vb, Section sec, SectionType expected_sec_type, FUNCLINE);
 #define zfile_read_section_header(vb, sec, expected_sec_type) \
@@ -54,9 +55,9 @@ extern SectionHeaderUnion zfile_read_section_header_do (VBlockP vb, Section sec,
 extern int32_t zfile_read_section_do (FileP file, VBlockP vb, uint32_t original_vb_i, 
                                       BufferP data /* buffer to append */, rom buf_name,
                                       SectionType expected_sec_type, 
-                                      Section sl, FUNCLINE); 
-#define zfile_read_section(file,vb,original_vb_i,data,buf_name,expected_sec_type,sl) \
-    zfile_read_section_do ((file),(VBlockP)(vb),(original_vb_i),(data),(buf_name),(expected_sec_type),(sl), __FUNCLINE)
+                                      Section sec, FUNCLINE); 
+#define zfile_read_section(file,vb,original_vb_i,data,buf_name,expected_sec_type,sec) \
+    zfile_read_section_do ((file),(VBlockP)(vb),(original_vb_i),(data),(buf_name),(expected_sec_type),(sec), __FUNCLINE)
 
 extern void zfile_uncompress_section (VBlockP vb, SectionHeaderUnionP section_header, BufferP uncompressed_data, rom uncompressed_data_buf_name, uint32_t expected_vb_i, SectionType expected_section_type);
 extern void zfile_uncompress_section_into_buf (VBlockP vb, SectionHeaderUnionP section_header_p, uint32_t expected_vb_i, SectionType expected_section_type, BufferP dst_buf, char *dst);
@@ -67,6 +68,8 @@ extern void zfile_uncompress_section_into_buf (VBlockP vb, SectionHeaderUnionP s
         zfile_uncompress_section (evb, B1ST(SectionHeader, evb->z_data), (out_buf), (out_buf_name), 0, (sec)->st); \
     HeaderType header __attribute__((unused)) = !skipped ? *(HeaderType *)evb->z_data.data : (HeaderType){}; /* make a copy of the header */ \
     if (!skipped) buf_free (evb->z_data); 
+
+extern bool zfile_advance_to_next_header (uint64_t *offset, uint64_t *gap);
 
 extern DataType zfile_get_file_dt (rom filename);
 

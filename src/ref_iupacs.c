@@ -29,7 +29,7 @@ typedef struct {
 // --make-reference: called by compute thread, when iupac is found
 void ref_iupacs_add_do (VBlockP vb, uint64_t idx, char iupac)
 {
-    buf_alloc (vb, &CTX(FASTA_NONREF_X)->local, 1, 100, MakeIupac, 2, "contexts->local");
+    buf_alloc (vb, &CTX(FASTA_NONREF_X)->local, 1, 100, MakeIupac, 2, CTX_TAG_LOCAL);
     BNXT (MakeIupac, CTX(FASTA_NONREF_X)->local) = (MakeIupac){ .vblock_i = vb->vblock_i, .idx = idx, .iupac = iupac };
 }
 

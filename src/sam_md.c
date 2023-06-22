@@ -156,7 +156,7 @@ void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(md), PosType3
     RangeP range = NULL;
     RefLock lock = REFLOCK_NONE;
     
-    bool is_depn = (sam_is_depn_vb && vb->sag) || sam_has_saggy; 
+    bool is_depn = (IS_DEPN(vb) && vb->sag) || sam_has_saggy; 
 
     if (flag.show_wrong_md)
         seg_set_last_txt (VB, CTX(OPTION_MD_Z), STRa(md)); // consumed in sam_seg_SEQ
@@ -175,10 +175,10 @@ void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(md), PosType3
     // Therefore, Genozip only activates the special MD alg if its starts and ends with digit.
     if (!md_len || !IS_DIGIT(md[0]) || !IS_DIGIT(md[md_len-1])) not_verified ("Malformed MD:Z field");
 
-    buf_alloc_bits (vb, &vb->md_M_is_ref, vb->ref_and_seq_consumed, "md_M_is_ref"); 
+    // start by marking all as matching, and clear the SNPs later
+    buf_alloc_bits (vb, &vb->md_M_is_ref, vb->ref_and_seq_consumed, SET, CTX_GROWTH, "md_M_is_ref"); 
     BitsP M_is_ref = (BitsP)&vb->md_M_is_ref;
     
-    bits_set_all (M_is_ref); // start by marking all as matching, and clear the SNPs later
     uint64_t M_is_ref_i=0;
     
     uint32_t M_D_bases = vb->ref_consumed; // M/=/X and D

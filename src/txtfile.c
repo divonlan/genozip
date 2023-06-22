@@ -93,6 +93,8 @@ static inline uint32_t txtfile_read_block_plain (VBlockP vb, uint32_t max_bytes)
 
 static inline uint32_t txtfile_read_block_gz (VBlockP vb, uint32_t max_bytes)
 {
+    START_TIMER;
+
     uint32_t bytes_read = gzfread (BAFTtxt, 1, max_bytes, (gzFile)txt_file->file);
     Ltxt += bytes_read;
 
@@ -101,11 +103,15 @@ static inline uint32_t txtfile_read_block_gz (VBlockP vb, uint32_t max_bytes)
     else
         txt_file->is_eof = true;
 
+    COPY_TIMER (txtfile_read_block_gz);
+
     return bytes_read;
 }
 
 static inline uint32_t txtfile_read_block_bz2 (VBlockP vb, uint32_t max_bytes)
 {
+    START_TIMER;
+
     uint32_t bytes_read = BZ2_bzread ((BZFILE *)txt_file->file, BAFTtxt, max_bytes);
     Ltxt += bytes_read;
 
@@ -113,6 +119,8 @@ static inline uint32_t txtfile_read_block_bz2 (VBlockP vb, uint32_t max_bytes)
         txt_file->disk_so_far = BZ2_consumed ((BZFILE *)txt_file->file); 
     else
         txt_file->is_eof = true;
+
+    COPY_TIMER (txtfile_read_block_bz2);
 
     return bytes_read;
 }
@@ -449,7 +457,6 @@ static void txtfile_set_seggable_size (void)
     uint64_t disk_size = txt_file->disk_size ? txt_file->disk_size 
                        : flag.stdin_size     ? flag.stdin_size // user-provided size
                        :                       0; // our estimate will be 0 
-
     double source_comp_ratio=1;
     switch (txt_file->source_codec) {
         case CODEC_GZ:   // for internal compressors, we use the observed source-compression ratio
@@ -563,7 +570,7 @@ void txtfile_read_vblock (VBlockP vb)
         if (flag.pair == PAIR_R2 &&  // we are reading the second file of a fastq file pair (with --pair)
             !fastq_txtfile_have_enough_lines (vb, &pass_to_next_vb_len, &my_lines, &pair_vb_i, &pair_num_lines, &pair_txt_data_len)) { // we don't yet have all the data we need
 
-            // note: the opposite case where R2 has more reads than R1 is caught in zip_prepare_one_vb_for_dispatching
+            // note: the opposite case where R2 has more reads than R1 is caught in fastq_txtfile_have_enough_lines or zip_prepare_one_vb_for_dispatching
             ASSINP ((len || no_read_expected) && Ltxt, "Error: File %s has less FASTQ reads than its R1 mate (vb=%s has %u lines while its pair_vb_i=%d has pair_txt_data_len=%u pair_num_lines=%u; vb=%s Ltxt=%u bytes_requested=%u bytes_read=%u eof=%s max_memory_per_vb=%"PRIu64")", 
                     txt_name, VB_NAME, my_lines, pair_vb_i, pair_txt_data_len/*only set if flag.debug*/, pair_num_lines, VB_NAME, Ltxt, bytes_requested, len, TF(txt_file->is_eof), max_memory_per_vb);
 

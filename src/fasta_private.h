@@ -13,7 +13,6 @@
 #include "fasta.h"
 #include "contigs.h"
 
-// IMPORTANT: if changing fields in VBlockFASTA, also update fasta_vb_release_vb 
 typedef struct VBlockFASTA {    
     VBLOCK_COMMON_FIELDS
 

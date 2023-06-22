@@ -126,16 +126,18 @@
 #define LTEN32(x) (x)
 #define LTEN64(x) (x)
 #define CONST_LTEN64(x) (x)
-#else
-#define LTEN16(x) bswap16(x))
-#define LTEN32(x) bswap32(x))
-#define LTEN64(x) bswap64(x))
+#elif defined __BIG_ENDIAN__
+#define LTEN16(x) bswap16(x)
+#define LTEN32(x) bswap32(x)
+#define LTEN64(x) bswap64(x)
 #define CONST_LTEN64(x) CONST_BSWAP64(x) // when applied to a constant, it is computed in compilation time
 #define BGEN16(x) (x)
 #define BGEN24(x) (x)
 #define BGEN32(x) (x)
 #define BGEN64(x) (x)
 #define CONST_BGEN64(x) (x)
+#else
+#error "Neither __LITTLE_ENDIAN__ nor __BIG_ENDIAN__ is defined"
 #endif
 
 #define LTEN32F(x) ({ union { float f;  uint32_t i; } u = {.f = (x)}; u.i = LTEN32(u.i); u.f; })

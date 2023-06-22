@@ -18,7 +18,7 @@
 
 #define MAX_DESC_FIELDS (MAX_FIELDS-100)
 
-void fastq_seg_QNAME (VBlockFASTQP vb, STRp(qname), uint32_t line1_len, bool deep)
+void fastq_seg_QNAME (VBlockFASTQP vb, STRp(qname), uint32_t line1_len, bool deep, uint32_t uncanonical_suffix_len)
 {
     // case: --optimize_DESC: we replace the description with "filename.line_i" (optimized string stored in vb->optimized_desc)
     unsigned optimized_len = 0; 
@@ -31,7 +31,7 @@ void fastq_seg_QNAME (VBlockFASTQP vb, STRp(qname), uint32_t line1_len, bool dee
     }
 
     if (deep)
-        seg_by_did (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_deep_copy_QNAME }, 2, FASTQ_QNAME, qname_len + 1); // +1 for '@'
+        fastq_deep_seg_QNAME (vb, FASTQ_QNAME, STRa(qname), uncanonical_suffix_len, qname_len + 1); // +1 for '@'
 
     else
         qname_seg (VB, QNAME1, STRa(qname), 1); // account for the '@' (segged as a toplevel container prefix)
@@ -52,12 +52,12 @@ void fastq_seg_LINE3 (VBlockFASTQP vb, STRp(qline3), STRp(qline1), STRp(desc))
     }
     
     else if (segconf.line3 == L3_EMPTY) { // no segging - we will drop the line from top_level
-        ASSSEG (!qline3_len, qline3, "Invalid FASTQ file format: expecting middle line to be a \"+\", but it is \"%.*s\"", STRf(qline3));
+        ASSSEG (!qline3_len, "Invalid FASTQ file format: expecting middle line to be a \"+\", but it is \"%.*s\"", STRf(qline3));
         CTX(FASTQ_LINE3)->txt_len++;      // account for the '+' (it is segged in the toplevel container)
     }
 
     else if (segconf.line3 == L3_COPY_LINE1) {
-        ASSSEG (fastq_is_line3_copy_of_line1 (STRa(qline1), STRa(qline3), desc_len), qline3,
+        ASSSEG (fastq_is_line3_copy_of_line1 (STRa(qline1), STRa(qline3), desc_len),
                 "Invalid FASTQ file format: expecting middle line to be a \"+\" followed by a copy of the description line, but it is \"%.*s\"", STRf(qline3)); 
         seg_by_did (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_copy_line1 }, 2, FASTQ_LINE3, 1 + qline3_len); // +1 - account for the '+' (segged as a toplevel container prefix)
     }
@@ -67,12 +67,15 @@ void fastq_seg_LINE3 (VBlockFASTQP vb, STRp(qline3), STRp(qline1), STRp(desc))
         qname_seg (VB, QLINE3, STRa(qline3), 1);
 
     else 
-        ASSSEG (false, qline3, "Invalid FASTQ file format: expecting middle line to be a \"+\" with or without a copy of the description, but it is \"%.*s\"",
+        ABOSEG ("Invalid FASTQ file format: expecting middle line to be a \"+\" with or without a copy of the description, but it is \"%.*s\"",
                 STRf(qline3));
 }
 
+// DESC = QNAME2 + EXTRA + AUX
 void fastq_segconf_analyze_DESC (VBlockFASTQP vb, STRp(desc))
 {
+    ASSERTNOTZERO (segconf.running);
+
     str_split (desc, desc_len, MAX_DESC_FIELDS - 100, ' ', item, false);
     if (desc_len && !n_items) {
         segconf.has_extra = true;
@@ -87,7 +90,7 @@ void fastq_segconf_analyze_DESC (VBlockFASTQP vb, STRp(desc))
     }
 
     if (n_items - n_auxes > 0)
-        qname_segconf_discover_flavor (VB, QNAME2, STRi(item,0)); // note: also discovers the original TECH, if file has NCBI qnames or when optimize_DESC
+        qname_segconf_discover_flavor (VB, QNAME2, STRi(item,0));   // note: also discovers the original TECH, if file has NCBI qnames or when optimize_DESC
 
     segconf.has_qname2 |= (segconf.qname_flavor[QNAME2] != 0);      // first item, apart from the auxes is the QNAME2 - but only if it has a flavor
     segconf.has_extra  |= (n_items - n_auxes > segconf.has_qname2); // extra info that is not the QNAME2 and not AUX
@@ -149,8 +152,10 @@ static void fastq_seg_aux_container (VBlockFASTQP vb, STRps(tag), uint32_t total
                    total_tag_len + (kraken_is_loaded ? 6 : 0) + n_tags/*leading and internal ' '*/); 
 }
 
-void fastq_seg_DESC (VBlockFASTQP vb, STRp(desc))
+void fastq_seg_DESC (VBlockFASTQP vb, STRp(desc), bool deep_qname2, uint32_t uncanonical_suffix_len)
 {
+    START_TIMER;
+
     str_split (desc, desc_len, 0, ' ', item, false);
     
     // edge case: too many fields - just make it 1
@@ -210,10 +215,12 @@ void fastq_seg_DESC (VBlockFASTQP vb, STRp(desc))
 
     // seg QNAME2, if there is one and we are allowed to seg it
     if (segconf.has_qname2) {
-        
         // case: we are expected to have qname2 - but we don't. delete the ' ' added by the toplevel container prefix
         if (n_items == 0)
             seg_by_did (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_backspace }, 2, FASTQ_QNAME2, 0);
+
+        else if (n_items == 1 && deep_qname2) 
+            fastq_deep_seg_QNAME (vb, FASTQ_QNAME2, STRi(item,0), uncanonical_suffix_len, item_lens[0] + 1); // +1 for the ' '
 
         else if (n_items == 1) 
             qname_seg (VB, QNAME2, STRi(item,0), 1); // account for the ' ' (segged as a toplevel container prefix)
@@ -227,6 +234,8 @@ void fastq_seg_DESC (VBlockFASTQP vb, STRp(desc))
             tokenizer_seg (VB, CTX(FASTQ_QNAME2), items[0], qname2_len, sep_with_space, 1/*+1 for leading ' '*/);
         }        
     }
+
+    COPY_TIMER (fastq_seg_DESC);
 }
 
 //-----------
@@ -235,7 +244,7 @@ void fastq_seg_DESC (VBlockFASTQP vb, STRp(desc))
 
 SPECIAL_RECONSTRUCTOR (fastq_special_backspace)
 {
-    ASSERTNOTZERO (Ltxt, "");
+    ASSERTNOTZERO (Ltxt);
     Ltxt--;
 
     return NO_NEW_VALUE;

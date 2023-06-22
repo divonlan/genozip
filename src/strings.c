@@ -19,8 +19,6 @@
 
 bool is_printable[256] = { [9]=1, [10]=1, [13]=1, [32 ... 126]=1 };
 
-uint64_t p10[] = { 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000, 10000000000ULL, 100000000000ULL, 1000000000000ULL, 10000000000000ULL, 100000000000000ULL, 1000000000000000ULL, 100000000000000000ULL, 100000000000000000ULL };
-
 char *str_tolower (rom in, char *out /* out allocated by caller - can be the same as in */)
 {
     char *startout = out;
@@ -55,7 +53,7 @@ StrText char_to_printable (char c)
         case '\n'           : return (StrText) { .s = "\\n"  };
         case '\r'           : return (StrText) { .s = "\\r"  };
         default             : { // unprintable - output eg \xf 
-            StrText p;
+            StrText p = {};
             sprintf (p.s, "\\x%x", (uint8_t)c);
             return p;
         }
@@ -122,7 +120,7 @@ char *str_to_printable (STRp(in), char *out)
 
 StrText str_size (uint64_t size)
 {
-    StrText s;
+    StrText s = {};
 
     if      (size >= 1 PB) sprintf (s.s, "%3.1lf PB", ((double)size) / (double)(1 PB));
     else if (size >= 1 TB) sprintf (s.s, "%3.1lf TB", ((double)size) / (double)(1 TB));
@@ -137,7 +135,7 @@ StrText str_size (uint64_t size)
 
 StrText str_bases (uint64_t num_bases)
 {
-    StrText s;
+    StrText s = {};
 
     if      (num_bases >= 1000000000000000) sprintf (s.s, "%.1lf Pb", ((double)num_bases) / 1000000000000000.0);
     else if (num_bases >= 1000000000000)    sprintf (s.s, "%.1lf Tb", ((double)num_bases) / 1000000000000.0);
@@ -184,8 +182,35 @@ uint32_t str_int_ex (int64_t n, char *str /* out */, bool add_nul_terminator)
 
 StrText str_int_s (int64_t n)
 {
-    StrText s;
+    StrText s = {};
     str_int (n, s.s);
+    return s;
+}
+
+StrTextLong str_int_s_(rom label/*max 59 chars*/, int64_t n)
+{
+    StrTextLong s = {};
+    int label_len = strlen (label);
+    ASSERT (label_len < sizeof(StrTextLong)-20/*max len of int64*/ -1/*\0*/, "label \"%s\" it too long (len=%u)", STRa(label)); 
+
+    memcpy (s.s, label, label_len);
+    str_int (n, &s.s[label_len]);
+    
+    return s;
+}
+
+StrTextLong str_int_str_(rom label, rom str)
+{
+    StrTextLong s = {};
+    int label_len = strlen (label);
+    int str_len = strlen (str);
+
+    ASSERT (label_len + str_len + 1 < sizeof(StrTextLong), "combined label \"%s\"(len=%u) and string \"%s\"(len=%u) are too long ", STRa(label), STRa(str)); 
+
+    memcpy (s.s, label, label_len);
+    memcpy (s.s + label_len, str, str_len);
+    *(s.s + label_len + str_len) = 0;
+    
     return s;
 }
 
@@ -363,7 +388,7 @@ rom str_to_hex (bytes data, uint32_t data_len, char *hex_str, bool with_dot)
 
 StrText str_hex10 (bytes data, uint32_t data_len)
 {
-    StrText s;
+    StrText s = {};
     str_to_hex (data, MIN_(10, data_len), s.s, false);
     return s;
 }
@@ -371,7 +396,7 @@ StrText str_hex10 (bytes data, uint32_t data_len)
 
 StrText str_int_commas (int64_t n)
 {
-    StrText s;
+    StrText s = {};
     char *c = s.s; 
 
     uint32_t len = 0, orig_len=0;
@@ -406,7 +431,7 @@ StrText str_uint_commas_limit (uint64_t n, uint64_t limit)
 {
     if (n <= limit) return str_int_commas (n);
 
-    StrText s;
+    StrText s = {};
 
     if      (n >= 1000000000000000ULL) sprintf (s.s, "%3.1lfP", ((double)n) / 1000000000000000.0);
     else if (n >=    1000000000000ULL) sprintf (s.s, "%3.1lfT", ((double)n) / 1000000000000.0);
@@ -421,6 +446,8 @@ StrText str_uint_commas_limit (uint64_t n, uint64_t limit)
 
 uint32_t str_get_uint_textual_len (uint64_t n) 
 { 
+    static uint64_t p10[] = { 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000, 10000000000ULL, 100000000000ULL, 1000000000000ULL, 10000000000000ULL, 100000000000000ULL, 1000000000000000ULL, 100000000000000000ULL, 100000000000000000ULL };
+
     for (int i=0; i < ARRAY_LEN(p10); i++)
         if (n < p10[i]) return i+1;
 
@@ -528,7 +555,7 @@ not_scientific_float:
 
 bool str_is_in_range (rom str, uint32_t str_len, char first_c, char last_c)
 {
-    for (; str_len ; str++, str_len--)
+    for (rom after = str + str_len; str < after ; str++)
         if (*str < first_c || *str > last_c) return false;
     return true;
 }
@@ -559,8 +586,9 @@ differ:
 
 #define ASSSPLIT(condition, format, ...) ({\
     if (!(condition)) { \
-        if (enforce_msg) {  \
-            progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); exit_on_error(true); /* same as ASSERT */ \
+        if (enforce_msg || flag.debug_split) {   \
+            progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); \
+            if (enforce_msg) exit_on_error(true); /* same as ASSERT */ \
         } \
         return 0; /* just return 0 if we're not asked to enforce */ \
     } \
@@ -583,7 +611,7 @@ uint32_t str_split_do (STRp(str),
     for (uint32_t str_i=0 ; str_i < str_len ; str_i++) 
         if (str[str_i] == sep) {
             ASSSPLIT (item_i < max_items, "expecting up to %u %s separators but found more: (100 first) %.*s", 
-                      max_items-1, enforce_msg, MIN_(str_len, 100), str);
+                      max_items-1, enforce_msg ? enforce_msg : "", MIN_(str_len, 100), str);
 
             items[item_i++] = &str[str_i+1];
         }
@@ -611,7 +639,7 @@ rom str_split_by_tab_do (STRp(str),
                          bool enforce_msg)
 {
     ASSERTNOTNULL (str);
-    ASSERTNOTZERO (*n_flds, "");
+    ASSERTNOTZERO (*n_flds);
 
     flds[0] = str;
     uint32_t fld_i = 1; 
@@ -678,9 +706,9 @@ uint32_t str_split_by_lines_do (STRp(str), uint32_t max_lines, rom *lines, uint3
 // splits a string based on container items (doesn't need to be nul-terminated). 
 // returns the number on unskipped items if successful
 uint32_t str_split_by_container_do (STRp(str), ConstContainerP con, STRp(con_prefixes),
-                                    rom *items,                // out - array of char* of length max_items - one more than the number of separators
-                                    uint32_t *item_lens,       // optional out - corresponding lengths
-                                    rom enforce_msg)           // non-NULL if enforcement of length is requested
+                                    rom *items,          // out - array of char* of length max_items - one more than the number of separators
+                                    uint32_t *item_lens, // optional out - corresponding lengths
+                                    rom enforce_msg)     // non-NULL if enforcement of length is requested
 {
     if (!str) return 0; // note: str!=NULL + str_len==0 results in n_items=1 - one empty item
 
@@ -716,7 +744,7 @@ uint32_t str_split_by_container_do (STRp(str), ConstContainerP con, STRp(con_pre
 
                 if (sep != CI0_SKIP) { // if CI0_SKIP, we ignore the prefix
                     bool prefix_matches = (str + item_px_len <= after_str) && !memcmp (str, item_px, item_px_len);
-                    ASSSPLIT (prefix_matches, "prefix mismatch for item_i=%u: expecting \"%.*s\" but seeing \"%.*s\"",
+                    ASSSPLIT (prefix_matches, "prefix mismatch for item_i=%d: expecting \"%.*s\" but seeing \"%.*s\"",
                               item_i-1, item_px_len, item_px, MIN_(item_px_len, (int)(after_str-str)), str);
     
                     str += item_px_len; // advance past prefix
@@ -811,7 +839,7 @@ uint32_t str_remove_whitespace (STRp(in), char *out)
 // in-place removal of flanking whitespace from a null-terminated string
 void str_trim (STRe(str))
 {
-    // remove leading whitespave
+    // remove leading whitespace
     int i=0; for (; i < *str_len; i++)
         if (str[i] != ' ' && str[i] != '\t' && str[i] != '\n' && str[i] != '\r')
             break;
@@ -953,7 +981,7 @@ int str_print_text (rom *text, uint32_t num_lines,
         bool wrapped = false;
         while (line_len + (wrapped ? strlen (wrapped_line_prefix) : 0) > line_width) {
             int c; for (c=line_width-1 - (wrapped ? strlen (wrapped_line_prefix) : 0); 
-                        c>=0 && (IS_LETTER(line[c]) || IS_DIGIT (line[c]) || line[c]==','); // wrap lines at - and | too, so we can break very long regex strings like in genocat
+                        c>=0 && (IS_ALPHANUMERIC(line[c]) || line[c]==','); // wrap lines at - and | too, so we can break very long regex strings like in genocat
                         c--); // find 
             iprintf ("%s%.*s\n", wrapped ? wrapped_line_prefix : "", c, line);
             line += c + (line[c]==' '); // skip space too
@@ -1065,11 +1093,21 @@ char *str_revcomp_actg (char *dst_seq, rom src_seq, uint32_t seq_len)
     return dst_seq;
 }
 
-// implementing (slightly modified) memrchr, as it doesn't exist on Windows
-rom my_memrchr (rom str, char c, uint32_t str_len)
+// implementing memrchr, as it doesn't exist in Windows libc (msvcrt.dll) or Darwin (at least clang)
+#if defined _WIN32 || defined __APPLE__
+void *memrchr (const void *s, int c/*interpreted as unsigned char*/, size_t n)
 {
-    for (int32_t i=(int32_t)str_len-1; i >= 0; i++)
-        if (str[i] == c) return &str[i];
+    for (uint8_t c8=c, *p=((uint8_t *)s)+n-1; p >= (uint8_t *)s; p--)
+        if (*p == c8) return p;
+
+    return NULL;
+}
+#endif
+
+char *memchr2 (rom p, char ch1, char ch2, uint32_t count)
+{
+    for (rom after = p + count; p < after; p++)
+        if (*p == ch1 || *p == ch2) return (char *)p;
 
     return NULL;
 }

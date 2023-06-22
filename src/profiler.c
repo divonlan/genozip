@@ -7,33 +7,50 @@
 //   under penalties specified in the license.
 
 #include "genozip.h"
+#include "vblock.h"
 #include "profiler.h"
 #include "flags.h"
-#include "vblock.h"
 #include "file.h"
 #include "segconf.h"
 #include "mutex.h"
 
-static ProfilerRec profile = {};    // data for entire execution 
+static ProfilerRec profile = {};    // data for this z_file 
 static Mutex profile_mutex = {};
 static TimeSpecType profiler_timer; // wallclock
 
 void profiler_initialize (void)
 {
+    mutex_bottleneck_analysis_init();
     mutex_initialize (profile_mutex);
+}
+
+void profiler_new_z_file (void)
+{
+    memset (&profile, 0, sizeof (profile));
     clock_gettime (CLOCK_REALTIME, &profiler_timer); // initialze wallclock
 }
 
 void profiler_set_avg_compute_vbs (float avg_compute_vbs)
 {
-    profile.avg_compute_vbs = avg_compute_vbs;
+    ASSERT0 (profile.num_txt_files >= 0 && profile.num_txt_files < MAX_NUM_TXT_FILES_IN_ZFILE, "too many txt files");
+
+    profile.avg_compute_vbs[profile.num_txt_files++] = avg_compute_vbs;
+}
+
+
+StrTextSuperLong profiler_get_avg_compute_vbs (char sep)
+{
+    StrTextSuperLong s = {};
+    for (int i=0; i < profile.num_txt_files; i++)
+        sprintf (&s.s[strlen(s.s)], "%.1f%c", profile.avg_compute_vbs[i], sep);
+
+    if (s.s[0]) s.s[strlen(s.s)-1] = 0; // remove final separator
+
+    return s;
 }
 
 void profiler_add (ConstVBlockP vb)
 {
-#   define ADD(x) ({ profile.nanosecs.x += vb->profile.nanosecs.x; \
-                     profile.count.x    += vb->profile.count.x; })
-    
     mutex_lock (profile_mutex);
 
     if (Ltxt) {
@@ -41,181 +58,28 @@ void profiler_add (ConstVBlockP vb)
         profile.max_vb_size_mb = MAX_(profile.max_vb_size_mb, segconf.vb_size >> 20);
     }
 
-    ADD (file_open_z);
-    ADD (file_close);
-    ADD (buf_low_level_free);
-    ADD (buf_find_in_buffer_list);
-    ADD (read);
-    ADD (compute);
-    ADD (write);
-    ADD (vb_get_vb);
-    ADD (compressor_bz2);
-    ADD (compressor_lzma);
-    ADD (compressor_bsc);
-    ADD (compressor_domq);
-    ADD (compressor_actg);
-    ADD (compressor_pbwt);
-    ADD (compressor_longr);
-    ADD (compressor_rans);
-    ADD (compressor_arith);
-    ADD (compressor_normq);
-    ADD (zip_generate_b250);
-    ADD (zip_generate_local);
-    ADD (zip_compress_ctxs);
-    ADD (codec_assign_best_codec);
-    ADD (bgzf_io_thread);
-    ADD (bgzf_writer_thread);
-    ADD (bgzf_compute_thread);
-    ADD (reconstruct_vb);
-    ADD (piz_get_line_subfields);
-    ADD (piz_read_one_vb);
-    ADD (codec_hapmat_piz_get_one_line);
-    ADD (codec_longr_reconstruct);
-    ADD (codec_domq_reconstruct);
-    ADD (codec_domq_reconstruct_dom_run);    
-    ADD (fastq_seg_SEQ);
-    ADD (fastq_seg_QUAL);    
-    ADD (sam_seg_SEQ);
-    ADD (sam_seg_QUAL);
-    ADD (sam_seg_is_gc_line);
-    ADD (sam_seg_aux_all);
-    ADD (sam_cigar_binary_to_textual);
-    ADD (squank_seg);
-    ADD (sam_seg_MD_Z_analyze);
-    ADD (bam_seq_to_sam);
-    ADD (sam_seg_bsseeker2_XG_Z_analyze);
-    ADD (sam_seg_sag_stuff);
-    ADD (sam_cigar_seg);
-    ADD (sam_seg_bismark_XM_Z);
-    ADD (sam_seg_bsbolt_XB);
-    ADD (sam_piz_sam2fastq_QUAL); 
-    ADD (sam_piz_sam2bam_QUAL);        
-    ADD (sam_cigar_special_CIGAR);
-    ADD (sam_bismark_piz_update_meth_call);
-    ADD (sam_piz_special_QUAL);
-    ADD (sam_seg_SEQ_vs_ref);
-    ADD (sam_seg_bisulfite_M);
-    ADD (sam_reconstruct_SEQ_vs_ref);
-    ADD (sam_header_add_contig); 
-    ADD (contigs_create_index);
-    ADD (sam_header_zip_inspect_PG_lines); 
-    ADD (sam_header_zip_inspect_HD_line);
-    ADD (ref_initialize_ranges);
-    ADD (txtheader_zip_read_and_compress);
-    ADD (txtheader_compress);
-    ADD (txtheader_compress_one_fragment);
-    ADD (txtheader_piz_read_and_reconstruct);
-    ADD (digest_txt_header);
-    ADD (ref_make_calculate_digest);
-    ADD (scan_index_qnames_preprocessing);
-    ADD (aligner_seg_seq);
-    ADD (aligner_reconstruct_seq);    
-    ADD (dict_io_compress_one_fragment);
-    ADD (dict_io_compress_dictionaries); 
-    ADD (dict_io_assign_codecs); 
-    ADD (recon_plan_compress);
-    ADD (recon_plan_compress_one_fragment);
-    ADD (zfile_uncompress_section);
-    ADD (buf_alloc);
-    ADD (sections_create_index);
-    ADD (dispatcher_recycle_vbs);
-    ADD (txtfile_read_vblock);
-    ADD (fastq_read_pair_1_data);
-    ADD (piz_read_all_ctxs);
-    ADD (txtfile_get_unconsumed_to_pass_to_next_vb);
-    ADD (bgzf_copy_unconsumed_blocks);
-    ADD (bgzf_read_block);
-    ADD (txtfile_read_block_bgzf);
-    ADD (txtfile_read_block_bgzf_uncompress);
-    ADD (bgzf_uncompress_vb);
-    ADD (fastq_txtfile_have_enough_lines);
-    ADD (txtfile_read_header);
-    ADD (seg_all_data_lines);
-    ADD (seg_initialize);
-    ADD (sam_seg_BWA_XA_pos);
-    ADD (sam_seg_BWA_XA_Z);
-    ADD (sam_seg_BWA_XS_i);
-    ADD (sam_seg_AS_i);
-    ADD (sam_seg_NM_i);
-    ADD (sam_seg_SA_Z);
-    ADD (sam_seg_TX_AN_Z);
-    ADD (sam_seg_barcode_qual);
-    ADD (sam_seg_CB_Z);
-    ADD (sam_seg_CR_Z);
-    ADD (sam_seg_RX_Z); 
-    ADD (sam_seg_BX_Z);
-    ADD (sam_seg_QX_Z);
-    ADD (sam_seg_BC_Z);
-    ADD (sam_seg_gene_name_id);
-    ADD (sam_seg_fx_Z);
-    ADD (sam_seg_other_seq);
-    ADD (sam_seg_GR_Z);
-    ADD (sam_seg_GY_Z);
-    ADD (qname_seg);
-    ADD (ctx_merge_in_vb_ctx);
-    ADD (sam_deep_merge);
-    ADD (sam_piz_con_item_cb); 
-    ADD (sam_piz_deep_compress); 
-    ADD (sam_piz_deep_add_qname); 
-    ADD (sam_piz_deep_add_seq); 
-    ADD (sam_piz_deep_add_qual);
-    ADD (fastq_special_set_deep); 
-    ADD (fastq_special_deep_copy_QNAME);
-    ADD (fastq_special_deep_copy_SEQ);
-    ADD (fastq_special_deep_copy_QUAL); 
-    ADD (codec_hapmat_count_alt_alleles);
-    ADD (digest);
-    ADD (ctx_clone);
-    ADD (dict_io_build_word_lists);
-    ADD (aligner_best_match);
-    ADD (aligner_get_match_len);
-    ADD (aligner_get_word_from_seq);
-    ADD (sam_seg_verify_saggy_line_SEQ); 
-    ADD (reconstruct_SEQ_copy_sag_prim);
-    ADD (sam_analyze_copied_SEQ);
-    ADD (generate_rev_complement_genome);
-    ADD (dict_io_read_all_dictionaries);
-    ADD (ref_contigs_compress);
-    ADD (generate_recon_plan);
-    ADD (vcf_linesort_compress_qsort);
-    ADD (vcf_linesort_merge_vb);
-    ADD (vcf_seg_PROBE_A);
-    ADD (ref_load_stored_reference);
-    ADD (ref_read_one_range);
-    ADD (ref_uncompress_one_range);
-    ADD (ref_compress_ref);
-    ADD (ref_compress_one_range);
-    ADD (refhash_calc_one_range);
-    ADD (refhash_compress_refhash);
-    ADD (refhash_compress_one_vb);
-    ADD (refhash_load);
-    ADD (refhash_uncompress_one_vb);
-    ADD (refhash_read_one_vb);
-    ADD (ref_copy_compressed_sections_from_reference_file);
-    ADD (sam_sa_prim_finalize_ingest);
-    ADD (sam_zip_prim_ingest_vb);
-    ADD (sam_zip_recon_plan_add_gc_lines);
-    ADD (sam_zip_gc_calc_depn_vb_info);
-    ADD (sam_load_groups_add_one_prim_vb);
-    ADD (zip_handle_unique_words_ctxs);
-    ADD (ctx_sort_dictionaries_vb_1);
-    ADD (random_access_merge_in_vb);
-    ADD (gencomp_absorb_vb_gencomp_lines);
-    ADD (zip_handle_unique_words_ctxs);
-    ADD (random_access_finalize_entries);
-    ADD (random_access_compress);
-    ADD (ctx_compress_counts);
-    ADD (zfile_compress_genozip_header);
-    ADD (piz_main_loop_idle);
-    ADD (tmp1);
-    ADD (tmp2);
-    ADD (tmp3);
-    ADD (tmp4);
-    ADD (tmp5);
+    int num_profiled = sizeof (profile.nanosecs) / sizeof (uint64_t) - MAX_DICTS + 
+                       (IS_PIZ ? vb->num_contexts : 0); 
+    
+    for (int i=0; i < num_profiled; i++) 
+        if (((uint64_t *)&vb->profile.count)[i]) {
+            ((uint64_t *)&profile.nanosecs)[i] += ((uint64_t *)&vb->profile.nanosecs)[i];
+            ((uint64_t *)&profile.count)[i]    += ((uint64_t *)&vb->profile.count)[i];
+        }
+
+    // ZIP: add compressor data by zctx, while collected by vctx
+    if (IS_ZIP) 
+        for (int v=num_profiled; v < num_profiled + vb->num_contexts; v++) 
+            if (((uint64_t *)&vb->profile.count)[v]) {
+                ContextP zctx = ctx_get_zctx_from_vctx (CTX(v-num_profiled), false, true);
+                if (!zctx) continue; // should never happen
+
+                int z = zctx->did_i + num_profiled;
+                ((uint64_t *)&profile.nanosecs)[z] += ((uint64_t *)&vb->profile.nanosecs)[v];
+                ((uint64_t *)&profile.count)[z]    += ((uint64_t *)&vb->profile.count)[v];
+            }
 
     mutex_unlock (profile_mutex);
-
-#undef ADD
 }
 
 static inline uint32_t ms(uint64_t ns) { return (uint32_t)(ns / 1000000);}
@@ -227,27 +91,17 @@ rom profiler_print_short (const ProfilerRec *p)
     return str;
 }
 
-static void print_ctx_compressor_times (void)
-{
-// this prints the compressor time for each context. temporarily disabled bc we moved profile to be global rather than file by file
-// TO DO: revive this, when compressing a single file
-/*    for (Did did_i=0; did_i < z_file->num_contexts; did_i++) {
-        decl_zctx (did_i);
-        if (ms(zctx->compressor_time))
-            iprintf ("      %s: %u\n", zctx->tag_name, ms(zctx->compressor_time));
-    }
-*/
-}
-
 void profiler_add_evb_and_print_report (void)
 {
     profiler_add (evb);
 
     static rom space = "                                                   ";
-#   define PRINT(x, level) if (profile.nanosecs.x)              \
-        iprintf ("%.*s" #x ": %s (N=%s)\n", (level)*3, space,   \
-                 str_int_commas (ms(profile.nanosecs.x)).s,     \
+#   define PRINT_(x, label, level) if (profile.nanosecs.x)          \
+        iprintf ("%.*s %s: %s (N=%s)\n", (level)*3, space, (label), \
+                 str_int_commas (ms(profile.nanosecs.x)).s,         \
                  str_int_commas (profile.count.x).s);
+
+#   define PRINT(x, level) PRINT_(x, #x, (level)) 
     
     rom os = flag.is_windows ? "Windows"
            : flag.is_mac     ? "MacOS"
@@ -279,7 +133,10 @@ void profiler_add_evb_and_print_report (void)
         PRINT (bgzf_writer_thread, 1);
         PRINT (write, 1);
         PRINT (sam_sa_prim_finalize_ingest, 1);
+        PRINT (sam_piz_deep_grab_deep_ents, 1);
+        PRINT (sam_piz_deep_finalize_ents, 2);
         PRINT (piz_main_loop_idle, 1);
+
         iprintf ("GENOUNZIP compute threads: %s\n", str_int_commas (ms(profile.nanosecs.compute)).s);
         PRINT (zfile_uncompress_section, 1);
         PRINT (compressor_bz2,  2);
@@ -292,19 +149,23 @@ void profiler_add_evb_and_print_report (void)
         PRINT (compressor_actg, 2);
         PRINT (compressor_pbwt, 2);
         PRINT (compressor_longr, 2);
-        print_ctx_compressor_times();
+
         PRINT (reconstruct_vb, 1);
+        for (Did did_i=0; did_i < z_file->num_contexts; did_i++) 
+            PRINT_(fields[did_i], ZCTX(did_i)->tag_name, 2);
+
         PRINT (sam_reconstruct_SEQ_vs_ref, 2);
         PRINT (reconstruct_SEQ_copy_sag_prim, 3);
         PRINT (sam_analyze_copied_SEQ, 3);
         PRINT (sam_bismark_piz_update_meth_call, 3);
         PRINT (aligner_reconstruct_seq, 2);
         PRINT (sam_piz_special_QUAL, 2);
-        if (last_z_dt == DT_SAM || last_z_dt == DT_BAM) {
+        if (Z_DT(SAM) || Z_DT(BAM)) {
             PRINT (codec_longr_reconstruct, 3);
             PRINT (codec_domq_reconstruct, 3);
             PRINT (codec_domq_reconstruct_dom_run, 4);
         }
+        PRINT (fastq_special_monochar_QUAL, 2);        
         PRINT (sam_piz_sam2fastq_QUAL, 2); 
         PRINT (sam_piz_sam2bam_QUAL, 2);        
         PRINT (sam_cigar_special_CIGAR, 2);
@@ -325,7 +186,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (piz_get_line_subfields, 2);
         PRINT (codec_hapmat_piz_get_one_line, 2);
         PRINT (sam_load_groups_add_one_prim_vb, 1);
-        if (last_z_dt == DT_FASTQ) {
+        if (Z_DT(FASTQ)) {
             PRINT (codec_longr_reconstruct, 3);
             PRINT (codec_domq_reconstruct, 2);
             PRINT (codec_domq_reconstruct_dom_run, 3);
@@ -333,15 +194,18 @@ void profiler_add_evb_and_print_report (void)
         
         if (profile.nanosecs.bgzf_compute_thread)
             iprintf ("GENOUNZIP bgzf threads: %s\n", str_int_commas (ms(profile.nanosecs.bgzf_compute_thread)).s);
-        PRINT (bgzf_compute_thread, 1);
     }
+
     else { // compress
         iprint0 ("GENOZIP main thread (zip_one_file):\n");
         PRINT (ref_load_stored_reference, 1);
         PRINT (ref_read_one_range, 2);
         PRINT (ref_uncompress_one_range, 2);
+        PRINT (ref_load_digest, 2); 
         PRINT (refhash_load, 1);
+        PRINT (refhash_load_digest, 2);
         PRINT (refhash_read_one_vb, 2);
+        PRINT (refhash_compress_digest, 2); // make-ref
         PRINT (refhash_uncompress_one_vb, 2);
         PRINT (txtheader_zip_read_and_compress, 1);
         PRINT (txtfile_read_header, 2);
@@ -358,6 +222,8 @@ void profiler_add_evb_and_print_report (void)
         PRINT (piz_read_all_ctxs, 2);
         PRINT (txtfile_read_vblock, 1);
         PRINT (read, 2);
+        PRINT (txtfile_read_block_gz, 3);
+        PRINT (txtfile_read_block_bz2, 3);
         PRINT (txtfile_read_block_bgzf, 3);
         PRINT (bgzf_read_block, 4);
         PRINT (txtfile_read_block_bgzf_uncompress, 4);
@@ -370,9 +236,13 @@ void profiler_add_evb_and_print_report (void)
         PRINT (ref_contigs_compress, 1);
         PRINT (generate_recon_plan, 1);
         PRINT (vcf_linesort_compress_qsort, 2);
-        PRINT (sam_zip_gc_calc_depn_vb_info, 1);
-        PRINT (sam_zip_recon_plan_add_gc_lines, 1);
+        PRINT (sam_zip_recon_plan_add_gc_lines, 2);
+        PRINT (sam_zip_recon_plan_count_writers, 3);
+        PRINT (recon_plan_compress, 2);
+        PRINT (recon_plan_deltify, 3);
+        PRINT (recon_plan_compress_one_fragment, 3);
         PRINT (sam_sa_prim_finalize_ingest, 1);
+        PRINT (zip_main_loop_idle, 1);
         iprintf ("GENOZIP compute threads %s\n", str_int_commas (ms(profile.nanosecs.compute)).s);
         PRINT (bgzf_uncompress_vb, 1);
         PRINT (ctx_clone, 1);
@@ -382,16 +252,22 @@ void profiler_add_evb_and_print_report (void)
         PRINT (qname_seg, 2);
         PRINT (sam_cigar_seg, 2);
         PRINT (squank_seg, 3);
+        PRINT (fastq_seg_get_lines, 2);
+        PRINT (seg_get_next_line, 3);
+        PRINT (seg_get_next_item, 3);
+        PRINT (fastq_seg_deep, 2);
+        PRINT (fastq_seg_deep_consume_unique_matching_ent, 3);
         PRINT (fastq_seg_SEQ, 2);
+        PRINT (fastq_seg_DESC, 2);
         PRINT (sam_seg_SEQ, 2);
         PRINT (sam_seg_SEQ_vs_ref, 3);
         PRINT (sam_seg_bisulfite_M, 4);
         PRINT (sam_seg_verify_saggy_line_SEQ, 3); 
         PRINT (sam_analyze_copied_SEQ, 3);
-        PRINT (aligner_seg_seq, last_z_dt == DT_FASTQ ? 2 : 3);
-        PRINT (aligner_best_match, last_z_dt == DT_FASTQ ? 3 : 4);
-        PRINT (aligner_get_match_len, last_z_dt == DT_FASTQ ? 3 : 4);
-        PRINT (aligner_get_word_from_seq, last_z_dt == DT_FASTQ ? 3 : 4);
+        PRINT (aligner_seg_seq, Z_DT(FASTQ) ? 2 : 3);
+        PRINT (aligner_best_match, Z_DT(FASTQ) ? 3 : 4);
+        PRINT (aligner_get_match_len, Z_DT(FASTQ) ? 3 : 4);
+        PRINT (aligner_get_word_from_seq, Z_DT(FASTQ) ? 3 : 4);
         PRINT (bam_seq_to_sam, 2);
         PRINT (fastq_seg_QUAL, 2);
         PRINT (sam_seg_QUAL, 2);
@@ -424,15 +300,19 @@ void profiler_add_evb_and_print_report (void)
         PRINT (sam_seg_GY_Z, 3);
         PRINT (vcf_seg_PROBE_A, 2);
         PRINT (random_access_merge_in_vb, 1); 
-        PRINT (gencomp_absorb_vb_gencomp_lines, 1);
+        PRINT (gencomp_absorb_add_to_queue, 1);
+        PRINT (gencomp_flush, 2);
+        PRINT (gencomp_offload_DEPN_to_disk, 3);
+        PRINT (gencomp_reread_lines_as_prescribed, 1);
+        PRINT (bgzf_uncompress_one_prescribed_block, 2);
         PRINT (vcf_linesort_merge_vb, 1);
         PRINT (ctx_sort_dictionaries_vb_1, 1); 
         PRINT (ctx_merge_in_vb_ctx, 1);
+        PRINT (wait_for_merge, 2);
         PRINT (sam_deep_merge, 2);
         PRINT (zip_compress_ctxs, 1);
         PRINT (zip_generate_b250, 2);
         PRINT (zip_generate_local, 2);
-        print_ctx_compressor_times();
         PRINT (codec_assign_best_codec, 2);
         PRINT (compressor_bz2,  2);
         PRINT (compressor_lzma, 2);
@@ -444,17 +324,20 @@ void profiler_add_evb_and_print_report (void)
         PRINT (compressor_actg, 2);
         PRINT (compressor_pbwt, 2);
         PRINT (compressor_longr, 2);
+
+        for (Did did_i=0; did_i < z_file->num_contexts; did_i++) 
+            PRINT_(fields[did_i], ZCTX(did_i)->tag_name, 2);
+
         PRINT (codec_hapmat_count_alt_alleles, 2);
         PRINT (dict_io_compress_dictionaries, 1); 
         PRINT (dict_io_assign_codecs, 2); 
         PRINT (dict_io_compress_one_fragment, 2);
-        PRINT (recon_plan_compress, 1);
-        PRINT (recon_plan_compress_one_fragment, 2);
         PRINT (ref_compress_ref, 1);
         PRINT (ref_compress_one_range, 2);
         PRINT (refhash_calc_one_range, 3);
         PRINT (refhash_compress_refhash, 1);
         PRINT (refhash_compress_one_vb, 2);
+        PRINT (refhash_compress_digest, 2);
         PRINT (ref_copy_compressed_sections_from_reference_file, 2);
         PRINT (random_access_finalize_entries, 1);
         PRINT (random_access_compress, 1);
@@ -462,19 +345,29 @@ void profiler_add_evb_and_print_report (void)
         PRINT (zfile_compress_genozip_header, 1);
         PRINT (sam_zip_prim_ingest_vb, 1);
         PRINT (digest, 1);
-        PRINT (bgzf_compute_thread, 1);
     }    
+        // ZIP and PIZ compute thread
+        PRINT (bgzf_compute_thread, 1);
+        PRINT (buf_alloc_compute, 1);
+        PRINT (buflist_add_buf, 2);
+        PRINT (buf_destroy_do_do_compute, 1);
+        PRINT (buf_free_compute, 1);
+        PRINT (buflist_remove_buf, 2)
+        PRINT (buf_overlay_do, 1);
 
     PRINT (file_open_z, 0);
     PRINT (file_close, 0);
-    PRINT (buf_alloc, 0);
+    PRINT (buf_alloc_main, 0);
+    PRINT (buf_destroy_do_do_main, 0);
+    PRINT (buflist_test_overflows_do, 0);
+    PRINT (buflist_sort, 0);
     PRINT (sections_create_index, 0);
-    PRINT (buf_find_in_buffer_list, 0);
+    PRINT (buflist_find_buf, 0);
     PRINT (buf_low_level_free, 0);
     PRINT (vb_release_vb_do, 0);
     PRINT (vb_destroy_vb, 0);
     PRINT (dispatcher_recycle_vbs, 0);
-    PRINT (generate_rev_complement_genome, 0);
+    PRINT (refhash_generate_emoneg, 0);
     
     iprintf ("tmp1: %u tmp2: %u tmp3: %u tmp4: %u tmp5: %u\n\n", 
              ms(profile.nanosecs.tmp1), ms(profile.nanosecs.tmp2), ms(profile.nanosecs.tmp3), ms(profile.nanosecs.tmp4), ms(profile.nanosecs.tmp5));
@@ -483,7 +376,7 @@ void profiler_add_evb_and_print_report (void)
         iprint0 ("\nVblock stats:\n");
         iprintf ("  Vblocks: %u\n", profile.num_vbs);
         iprintf ("  Maximum vblock size: %u MB\n", profile.max_vb_size_mb);
-        iprintf ("  Average number of VBs in compute: %.1f\n", profile.avg_compute_vbs); // average during the lifetime of the ZIP/PIZ dispatcher, i.e. excluding global_area time etc
+        iprintf ("  Average number of VBs in compute (per txt file): %s\n", profiler_get_avg_compute_vbs(',').s); // average during the lifetime of the ZIP/PIZ dispatcher, i.e. excluding global_area time etc
         iprintf ("  Average read time: %u ms\n", ms(profile.nanosecs.read) / profile.num_vbs);
         iprintf ("  Average compute time: %u ms\n", ms(profile.nanosecs.compute) / profile.num_vbs);
         iprintf ("  Average write time: %u ms\n", ms(profile.nanosecs.write) / profile.num_vbs);

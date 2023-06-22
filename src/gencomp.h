@@ -51,7 +51,7 @@ typedef struct __attribute__ ((__packed__)) {
 
 extern void gencomp_seg_add_line (VBlockP vb, CompIType comp_i, STRp(line));
 extern void gencomp_initialize (CompIType comp_i, GencompType gc_type);
-extern void gencomp_destroy(void);
+extern void gencomp_destroy (void);
 extern void gencomp_absorb_vb_gencomp_lines (VBlockP vb);
 extern bool gencomp_get_txt_data (VBlockP vb);
 extern void gencomp_a_main_vb_has_been_dispatched (void);
@@ -65,3 +65,4 @@ extern void gencomp_reread_lines_as_prescribed (VBlockP vb);
 extern bool gencomp_buf_locate_depn (void *unused, ConstBufferP buf);
 extern bool gencomp_buf_locate_componentsP (void *unused, ConstBufferP buf);
 extern bool gencomp_buf_locate_queueP (void *unused, ConstBufferP buf);
+extern bool gencomp_buf_locate_preabsorb_queue (void *unused, ConstBufferP buf);

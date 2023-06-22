@@ -52,7 +52,7 @@ void sam_piz_set_sag (VBlockSAMP vb)
     if (SAM_PIZ_HAS_SAG) return; // vb->sag and sa_aln are already set for this line 
 
     // set vb->sag
-    if (sam_is_depn_vb) {
+    if (IS_DEPN(vb)) {
         // get the PRIM VB and the sag within it which are the SA Group of this DEPN line
         int64_t sa_grp_i = reconstruct_from_local_int (VB, CTX(SAM_SAG), 0, RECON_OFF);
 
@@ -70,7 +70,7 @@ void sam_piz_set_sag (VBlockSAMP vb)
     // set vb->sa_aln (only for SA:Z-type SA Groups)
     if (IS_SAG_SA) {
         // The primary alignment is the first alignment, then the alignments from the SA Groups
-        int64_t sa_aln_i = vb->sag->first_aln_i + (sam_is_depn_vb ? reconstruct_from_local_int (VB, CTX(SAM_SAALN), 0, RECON_OFF) : 0);
+        int64_t sa_aln_i = vb->sag->first_aln_i + (IS_DEPN(vb) ? reconstruct_from_local_int (VB, CTX(SAM_SAALN), 0, RECON_OFF) : 0);
 
         ASSPIZ (sa_aln_i < z_file->sag_alns.len, "sa_aln_i=%"PRId64" is out of range [0,%"PRIu64"]", sa_aln_i, z_file->sag_alns.len-1);
         vb->sa_aln = B(const SAAln, z_file->sag_alns, sa_aln_i);
@@ -99,7 +99,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_pull_from_sag)
     const CCAln   *cc_aln   = NULL;
     const SoloAln *solo_aln = NULL;
 
-    ASSERTNOTZERO (segconf.sag_type, "");
+    ASSERTNOTZERO (segconf.sag_type);
     
     if    (IS_SAG_SOLO) ASSERTNOTNULL ((solo_aln = vb->solo_aln));  // pointer into z_file->sag_alns
     else if (IS_SAG_SA) ASSERTNOTNULL ((sa_aln = vb->sa_aln));  
@@ -145,7 +145,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_pull_from_sag)
         }
 
         case SAM_CIGAR:
-            sam_reconstruct_main_cigar_from_sag (vb, segconf.SA_HtoS==yes && sam_is_depn_vb, reconstruct);
+            sam_reconstruct_main_cigar_from_sag (vb, segconf.SA_HtoS==yes && IS_DEPN(vb), reconstruct);
             return NO_NEW_VALUE;
 
         case OPTION_NM_i:
@@ -196,11 +196,17 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_pull_from_sag)
 }
 
 // PIZ of a QNAME in a PRIM component (an all-the-same context) - copy QNAME from the in-memory SA Group
-SPECIAL_RECONSTRUCTOR (sam_piz_special_PRIM_QNAME)
+SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_PRIM_QNAME)
 {
-    sam_piz_set_sag (VB_SAM);
+    VBlockSAMP vb = (VBlockSAMP)vb_; 
 
-    RECONSTRUCT (GRP_QNAME(VB_SAM->sag), VB_SAM->sag->qname_len);
+    sam_piz_set_sag (vb);
+
+    RECONSTRUCT (GRP_QNAME(vb->sag), vb->sag->qname_len);
     
+    // if seq_len is carried by a QNAME item, set the last value here - it was already reconstructed during sag loading.
+    if (segconf.seq_len_dict_id.num)
+        ctx_set_last_value (VB, ECTX(segconf.seq_len_dict_id), (int64_t)vb->sag->seq_len);
+
     return NO_NEW_VALUE;
 }

@@ -43,13 +43,10 @@ typedef enum __attribute__ ((__packed__)) { DC_NONE, DC_PRIMARY, DC_LUFT, DC_BOT
 #define OTHER_COORDS(c) ((c)==DC_PRIMARY ? DC_LUFT : DC_PRIMARY)
 #define SEL(prim,luft) ((vb->line_coords == DC_PRIMARY) ? (prim) : (luft))
 
-// IMPORTANT: if changing fields in VBlockVCF, also update vb_release_vb
 typedef struct VBlockVCF {
-
     VBLOCK_COMMON_FIELDS
 
     // charactaristics of the data
-    
     Ploidy ploidy;           // ZIP only
     VcfVersion vcf_version;
     uint64_t first_line;     // ZIP: used for --add_line_numbers  
@@ -91,6 +88,7 @@ typedef struct VBlockVCF {
     MULTIPLEXER(MAX_DP_FOR_MUX) mux_RGQ;   
 
     MULTIPLEXER(2) mux_QUAL, mux_INFO; // multiplex by has_RGQ (in GVCF)
+    MULTIPLEXER(2) mux_IGT, mux_IPS;   // multiplex by (sample_i>0)
     MULTIPLEXER(3) mux_VC;             // multiplex dbSNP's INFO/VC by VARTYPE
 
     #define after_mux hapmat_helper_index_buf
@@ -285,6 +283,7 @@ extern void vcf_samples_seg_finalize (VBlockVCFP vb);
 extern rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t *len, char *next_field, bool *has_13);
 extern int vcf_seg_get_mux_channel_i (VBlockVCFP vb, bool fail_if_dvcf_refalt_switch);
 extern int vcf_piz_get_mux_channel_i (VBlockP vb);
+extern ContextP vcf_seg_FORMAT_mux_by_dosage (VBlockVCFP vb, ContextP ctx, STRp(cell), const DosageMultiplexer *mux);
 
 eSTRl(af_snip);
 
@@ -294,6 +293,11 @@ extern void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCFP vb);
 extern void vcf_piz_FORMAT_GT_rewrite_predicted_phase (VBlockP vb, char *recon, uint32_t recon_len);
 extern void vcf_piz_GT_cb_null_GT_if_null_DP (VBlockP vb , char *recon);
 extern int vcf_piz_GT_get_last_dosage (VBlockP vb);
+
+// GIAB trio stuff
+extern void vcf_seg_FORMAT_IGT (VBlockVCFP vb, ContextP ctx, STRp(igt));
+extern void vcf_seg_FORMAT_IPS (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STRp(ips));
+extern void vcf_seg_ADALL_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP *item_ctxs, const int64_t *values);
 
 #define IS_TRIVAL_FORMAT_SUBFIELD ((!recon_len || (recon_len==1 && *recon=='.')) && dict_id_is_vcf_format_sf (ctx->dict_id))
 extern void vcf_FORMAT_PL_decide (VBlockVCFP vb);

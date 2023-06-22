@@ -30,12 +30,11 @@
 #include "recon_plan_io.h"
 #include "dispatcher.h"
 #include "progress.h"
+#include "buf_list.h"
 
 // ---------------
 // Data structures
 // ---------------
-
-#define WRITER_TASK_NAME "writer"
 
 #define IS_DROPPED_BUF_NAME "is_dropped"
 
@@ -53,12 +52,12 @@ typedef struct {
     bool full_vb;
     bool encountered;      // used by writer_update_section_list
     bool fasta_contig_grepped_out; // FASTA: a VB that starts with SEQ data, inherits this from the last contig of the previous VB 
-    PairType pair;         // TXT_HEADER: used for FASTQ and SAM deep: may be NOT_PAIRED_END, PAIR_R1, PAIR_R2
+    PairType pair;         // TXT_HEADER: used for FASTQ and SAM deep: may be NOT_PAIRED, PAIR_R1, PAIR_R2
     Buffer is_dropped_buf; // a Bits with a bit set is the line is marked for dropping
     BitsP is_dropped;      // pointer into is_dropped_buf
 } VbInfo; // used both for VBs and txt headers
 
-#define VBINFO(vb_i) B(VbInfo, vb_info, (vb_i))
+#define VBINFO(vb_i)    B(VbInfo, vb_info, (vb_i))
 #define TXTINFO(comp_i) B(VbInfo, txt_header_info, (comp_i))
 
 #define vb_info         z_file->vb_info[0] // we use only [0] on the PIZ side
@@ -73,7 +72,7 @@ static uint64_t start_comp_in_plan[MAX_NUM_COMPS + 1]; // +1 for "after"
 static void writer_release_vb (VbInfo *v)
 {
     if (v->vb) vb_release_vb (&v->vb, PIZ_TASK_NAME);
-    buf_free (v->is_dropped_buf);
+    buf_destroy (v->is_dropped_buf); // destroy and not free as this memory is not going to be recycled - its a buffer inside a buffer
 }
 
 // --------------------------------
@@ -189,15 +188,14 @@ Bits *writer_get_is_dropped (VBIType vb_i)
     ASSERT (vb_i >= 1 && vb_i < vb_info.len, "vb_i=%u out of range [1,%d]", vb_i, (int)vb_info.len-1);
     VbInfo *v = VBINFO(vb_i);
 
-    // allocate if needed. buffer was put in evb buffer_list by writer_init_vb_info
+    // allocate if needed. buffer was put in wvb buffer_list by writer_init_vb_info
     if (!v->is_dropped) {
-        buf_alloc_bits (evb, &v->is_dropped_buf, v->num_lines, IS_DROPPED_BUF_NAME);
-        buf_zero (&v->is_dropped_buf);
+        buf_alloc_bits (NULL, &v->is_dropped_buf, v->num_lines, CLEAR, 0, IS_DROPPED_BUF_NAME);
         v->is_dropped = (BitsP)&v->is_dropped_buf;
     }
 
     return v->is_dropped;
-}
+}   
 
 // -----------------------------
 // PIZ reconstruction plan stuff
@@ -270,6 +268,8 @@ static void writer_init_vb_info (void)
 {
     if (txt_header_info.len) return; // already initialized
 
+    wvb = vb_initialize_nonpool_vb (VB_ID_WRITER, DT_NONE, WRITER_TASK_NAME);
+
     vb_info.len = writer_init_txt_header_info() + 1; // +1 as first vb_i=1 (entry 0 will be unused) so we have num_vb+1 entries
 
     buf_alloc_zero (evb, &vb_info, 0, vb_info.len, VbInfo, 1, "z_file->vb_info");
@@ -300,7 +300,7 @@ static void writer_init_vb_info (void)
         // we add is_dropped_buf to the evb buffer list. allocation will occur in main thread when writer 
         // create the plan, for VBs on the boundary of head/tail/lines, otherwise in reconstruction compute thread.
         if (flag.maybe_lines_dropped_by_reconstructor || flag.maybe_lines_dropped_by_writer)
-            buf_init_promiscuous (evb, &v->is_dropped_buf);
+            buf_set_promiscuous_do (wvb, &v->is_dropped_buf, "is_dropped_buf", __FUNCLINE);
 
         // head/tail/lines/downsample don't apply to DVCF reject components which are part of the VCF header
         if (z_is_dvcf && v->comp_i != VCF_COMP_MAIN)
@@ -312,7 +312,8 @@ static void writer_init_vb_info (void)
         
         else if (t->pair == PAIR_R2) {
             v->pair_vb_i = vb_i - num_vbs_R;
-            
+            ASSERT (v->pair_vb_i >= 1 && v->pair_vb_i < vb_info.len, "v->pair_vb_i=%d out of range [1,%d]", v->pair_vb_i, vb_info.len32-1);
+
             // verify that this VB and its pair have the same number of lines (test when initiazing the second one)
             uint32_t pair_num_lines = VBINFO(v->pair_vb_i)->num_lines;
             ASSERT (v->num_lines == pair_num_lines, "vb=%u has %u lines, but vb=%u, its pair, has %u lines", 
@@ -323,8 +324,11 @@ static void writer_init_vb_info (void)
         v->needs_recon = true; // default
         #define DROP v->needs_recon = false
 
-        if (!v->num_lines && // can happen if all lines were sent to gencomp
-            !(piz_need_digest && z_has_gencomp)) DROP; // keep anyway if we need to digest
+        // Drop if VB has no lines (can happen e.g. if all lines were sent to gencomp)
+        if (!v->num_lines  && 
+            !Z_DT(GENERIC) && // keep if generic: its normal that generic has no lines
+            !(piz_need_digest && z_has_gencomp)) // keep if we need to digest
+            DROP; 
 
         // --one-vb: user only wants to see a single VB, and this is not it
         else if (flag.one_vb && flag.one_vb != vb_i) DROP; 
@@ -385,12 +389,12 @@ static void writer_init_vb_info (void)
             v->needs_recon
         &&  !flag_loading_auxiliary // we're ingesting, but not reconstructing, an auxiliary file
         &&  !(flag.deep && flag.deep_fq_only && v->comp_i <= SAM_COMP_DEPN) // in Deep: --R1/--R2/--interleaved/--fq: reconstruct MAIN/PRIM/DEPN components but don't write them
-        &&  !(flag.deep && flag.no_writer && v->comp_i >= SAM_COMP_FQ00); // in Deep with no_writer (eg --test): no need to write FASTQ components as unlike gencomp SAM components, these are digested in the compute thread, not in writer
+        &&  !(flag.deep && flag.no_writer && !flag.show_recon_plan && v->comp_i >= SAM_COMP_FQ00); // in Deep with no_writer (eg --test): no need to write FASTQ components as unlike gencomp SAM components, these are digested in the compute thread, not in writer
 
         if (v->needs_write) {
             // mutex: locked:    here (at initialization)
             //        waited on: writer thread, wanting the data
-            //        unlocked:  by main thread after txtheader data is handed over.
+            //        unlocked:  by main thread after vb data is handed over.
             mutex_initialize (v->wait_for_data);
             mutex_lock (v->wait_for_data);
         }
@@ -486,18 +490,13 @@ static void writer_drop_item_lines_from_start (ReconPlanItemP  p, uint32_t drop_
                     // We still need to keep pair-1 in the section list, because we need it for reconstructing pair-2. 
                     // So we insert a zero-line PLAN_RANGE for pair-1
                     buf_insert (NULL, z_file->recon_plan, ReconPlanItem, plan_i, 
-                                (&(ReconPlanItem){ .flavor = PLAN_RANGE,
-                                                   .vb_i = old_p.vb_i,
-                                                   .start_line = 0,
-                                                   .num_lines = 0 }), 
-                                1, NULL);
-
-                    *B(ReconPlanItem, z_file->recon_plan, plan_i + 1) = (ReconPlanItem){
-                        .flavor     = PLAN_RANGE,
-                        .vb_i       = old_p.vb2_i,
-                        .start_line = old_p.num_lines / 2 - 1, // each of the two VBs has (old_p.num_lines / 2) lines
-                        .num_lines  = 1                 
-                };
+                                ((ReconPlanItem[]){ { .flavor = PLAN_RANGE,     .vb_i = old_p.vb_i,  .num_lines = 0, .start_line = 0                       },  
+                                                    { .flavor = PLAN_END_OF_VB, .vb_i = old_p.vb_i                                                         },
+                                                    { .flavor = PLAN_RANGE,     .vb_i = old_p.vb2_i, .num_lines = 1, .start_line = old_p.num_lines / 2 - 1 } } ), // each of the two VBs has (old_p.num_lines / 2) lines
+                                3, NULL);
+                                
+                    *B(ReconPlanItem, z_file->recon_plan, plan_i + 3) = 
+                                 (ReconPlanItem)    { .flavor = PLAN_END_OF_VB, .vb_i = old_p.vb2_i                                                        };
             }
 
             break;
@@ -506,7 +505,7 @@ static void writer_drop_item_lines_from_start (ReconPlanItemP  p, uint32_t drop_
     }
 }
 
-static void writer_drop_item_lines_from_end (ReconPlanItemP  p, uint32_t drop_lines)
+static void writer_drop_item_lines_from_end (ReconPlanItemP p, uint32_t drop_lines)
 {
     VbInfo *v = VBINFO(p->vb_i);
 
@@ -527,12 +526,14 @@ static void writer_drop_item_lines_from_end (ReconPlanItemP  p, uint32_t drop_li
             // case: pair-2 is removed in its entirety and pair-1 has only the first line surviving: update plan item to single line
             if (drop_lines + 1 == p->num_lines) {       
                 VBINFO (p->vb2_i)->needs_recon = VBINFO (p->vb2_i)->needs_write = false;
-                *p = (ReconPlanItem){
-                    .flavor     = PLAN_RANGE,
-                    .vb_i       = p->vb_i,
-                    .start_line = 0,
-                    .num_lines  = 1                 
-                };
+                
+                *p = (ReconPlanItem){ .flavor = PLAN_RANGE, .vb_i = p->vb_i, .start_line = 0, .num_lines = 1 };
+
+                uint32_t plan_i = BNUM (z_file->recon_plan, p);
+
+                buf_insert (NULL, z_file->recon_plan, ReconPlanItem, plan_i + 1, 
+                            (&(ReconPlanItem){ .flavor = PLAN_END_OF_VB, .vb_i = p->vb_i }), 
+                            1, NULL);
             }
 
             break;
@@ -695,14 +696,14 @@ static void writer_update_section_list (void)
             }
         }
 
-    // case: Deep file with --R1 or --R2 - add SAM components
-    if (flag.deep && (flag.one_component == SAM_COMP_FQ00+1 || flag.one_component == SAM_COMP_FQ01+1)) {
+    // case: Deep file with --R1, --R2, --R - add SAM components
+    if (flag.deep && flag.one_component >= SAM_COMP_FQ00+1) {
         writer_add_entire_component_section_list (new_list, SAM_COMP_MAIN);
         writer_add_entire_component_section_list (new_list, SAM_COMP_PRIM);
         writer_add_entire_component_section_list (new_list, SAM_COMP_DEPN);
 
         if (flag.pair && flag.one_component == SAM_COMP_FQ01+1)
-            writer_add_entire_component_section_list (new_list, SAM_COMP_FQ00);
+            writer_add_entire_component_section_list (new_list, SAM_COMP_FQ00); // if paired, R2 needs R1
     }
 
     // case: SAM - add all PRIM VBs that need to be loaded
@@ -727,7 +728,6 @@ static void writer_update_section_list (void)
 // PIZ main thread: add txtheader entry for the component
 static void writer_add_txtheader_plan (CompIType comp_i)
 {
-    //xxx if (!B(VbInfo, txt_header_info, comp_i)->needs_write) return; 
     if (!TXTINFO(comp_i)->needs_recon) return; 
 
     buf_alloc (evb, &z_file->recon_plan, 1, 1000, ReconPlanItem, 1.5, "recon_plan");
@@ -835,7 +835,6 @@ static void writer_add_plan_from_recon_section (CompIType comp_i, bool is_luft,
 
         for (uint64_t i=0; i < plan_len; i++) {
             VbInfo *v = VBINFO(plan[i].vb_i);
-//xxx            if (v->needs_write) {
             if (v->needs_recon) {
                 if (plan[i].flavor == PLAN_FULL_VB) {
                     plan[i].num_lines = v->num_lines; // note: in the file format num_lines=0 - improves compression of RECON_PLAN section
@@ -1136,7 +1135,7 @@ static void writer_write_line_range (VbInfo *v, uint32_t start_line, uint32_t nu
         rom after = Bc (v->vb->txt_data, lines[line_i+1]);  // note: lines has one extra entry so this is always correct
         uint32_t line_len = (uint32_t)(after - start);
         
-        bool is_dropped = v->is_dropped ? bits_get (v->is_dropped, line_i) : false;
+        bool is_dropped = v->is_dropped && bits_get (v->is_dropped, line_i);
 
         ASSERT (after >= start, "vb_i=%u Writing line %i (start_line=%u num_lines=%u): expecting start=%p <= after=%p", 
                 BNUM (vb_info, v), line_i, start_line, num_lines, start, after);
@@ -1180,7 +1179,7 @@ static void writer_write_lines_interleaves (Dispatcher dispatcher, VbInfo *v1, V
 
     ASSERT (v1->num_lines == v2->num_lines, "when interleaving, expecting number of lines of vb_i=%u (%u) to be the same as vb_i=%u (%u)",
             v1->vb->vblock_i, v1->num_lines, v2->vb->vblock_i, v2->num_lines);
-
+    
     ARRAY (uint32_t, lines1, v1->vb->lines);
     ARRAY (uint32_t, lines2, v2->vb->lines);
     
@@ -1191,8 +1190,8 @@ static void writer_write_lines_interleaves (Dispatcher dispatcher, VbInfo *v1, V
         unsigned len1 = lines1[line_i+1] - lines1[line_i];
         unsigned len2 = lines2[line_i+1] - lines2[line_i];
         
-        bool is_dropped1 = bits_get (v1->is_dropped, line_i);
-        bool is_dropped2 = bits_get (v2->is_dropped, line_i);
+        bool is_dropped1 = v1->is_dropped && bits_get (v1->is_dropped, line_i);
+        bool is_dropped2 = v2->is_dropped && bits_get (v2->is_dropped, line_i);
 
         // skip lines dropped in container_reconstruct_do due to vb->drop_curr_line for either leaf
         if ((flag.interleaved == INTERLEAVE_BOTH && !is_dropped1 && !is_dropped2) || 
@@ -1371,8 +1370,6 @@ static void writer_main_loop (VBlockP wvb) // same as wvb global variable
     // The recon plan is supposed to end with all VBs flushed due to END_OF_VB, FULL_VB etc
     ASSERT (!wvb->txt_data.len, "Expected wvb to be flushed, but wvb->txt_data.len=%"PRIu64, wvb->txt_data.len);
 
-    vb_release_vb (&wvb, WRITER_TASK_NAME); 
-
     threads_unset_writer_thread();
 }
 
@@ -1393,7 +1390,6 @@ static void writer_start_writing (CompIType unbind_comp_i)
 
     buf_copy (evb, &txt_file->recon_plan, &z_file->recon_plan, ReconPlanItem, start, after - start, 0); 
     
-    wvb = vb_get_vb (POOL_MAIN, WRITER_TASK_NAME, 0, COMP_NONE);
     writer_thread = threads_create (writer_main_loop, wvb);
 }
 
@@ -1404,23 +1400,20 @@ void writer_destroy_is_vb_info (void)
 // PIZ main thread: wait for writer thread to finish writing a single txt_file
 void writer_finish_writing (bool is_last_txt_file)
 {
-    //xxx if (!flag.no_writer_thread && txt_file && writer_thread != THREAD_ID_NONE) 
     if (writer_thread != THREAD_ID_NONE) 
         // wait for thread to complete (possibly it completed already)
         threads_join (&writer_thread, WRITER_TASK_NAME); // also sets writer_thread=THREAD_ID_NONE
     
     // all mutexes destroyed by main thread, that created them (because we will proceed to freeing z_file in which they live)    
     if (is_last_txt_file) {
-        for (CompIType comp_i=0; comp_i < txt_header_info.len; comp_i++) {
-            VbInfo *comp = TXTINFO(comp_i);
+        for_buf (VbInfo, comp, txt_header_info)
             mutex_destroy (comp->wait_for_data);
-        }
+
+        for_buf (VbInfo, v, vb_info)
+            mutex_destroy (v->wait_for_data);
 
         // destroy all is_dropped bufs allocated by writer in evb (more efficient multiple destroys)
-        buf_destroy_by_name (IS_DROPPED_BUF_NAME, true); 
-
-        for (VBIType vb_i=1; vb_i < vb_info.len; vb_i++) 
-            mutex_destroy (VBINFO(vb_i)->wait_for_data);
+        buflist_destroy_bufs_by_name (IS_DROPPED_BUF_NAME, true); 
     }
 }
 

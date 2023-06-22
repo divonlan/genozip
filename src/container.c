@@ -199,13 +199,19 @@ ContainerP container_peek_get_idxs (VBlockP vb, ContextP ctx, uint16_t n_items,
 
         con = container_retrieve (vb, ctx, wi, snip+1, snip_len-1, 0, 0);
     }
-    
+
     for (uint16_t item_i=0; item_i < con_nitems(*con); item_i++) 
-        for (uint16_t req_i=0 ; req_i < n_items; req_i++)
-            if (req_items[req_i].idx == -1 && con->items[item_i].dict_id.num == req_items[req_i].dnum) {
-                req_items[req_i].idx = item_i;
-                break;
+        for (uint16_t req_i=0 ; req_i < n_items; req_i++) {
+            ContextP ctx = con->items[item_i].dict_id.num ? ECTX(con->items[item_i].dict_id) : NULL;
+            if (ctx) {
+                if (ctx->is_ctx_alias) ctx = CTX(ctx->did_i); // ctx->did_i is different than did_i if its an ALIAS_CTX
+
+                if (req_items[req_i].idx == -1 && ctx->dict_id.num == req_items[req_i].dnum) {
+                    req_items[req_i].idx = item_i;
+                    break;
+                }
             }
+        }
 
     return con; 
 }
@@ -292,7 +298,7 @@ static inline void container_toplevel_filter (VBlockP vb, uint32_t rep_i, rom re
 
         // remove reconstructed text (to save memory and allow writer_flush_vb()), except if...
         if (!flag.interleaved &&               // if --interleave, as we might un-drop the line 
-            !(VB_DT(SAM) && sam_is_prim_vb)) // if SAM:PRIM line, we still need it to reconstruct its DEPNs
+            !(VB_DT(SAM) && vb->comp_i == SAM_COMP_PRIM)) // if SAM:PRIM line, we still need it to reconstruct its DEPNs
             Ltxt = vb->line_start;
 
         bits_set (vb->is_dropped, rep_i);
@@ -391,8 +397,8 @@ static void container_set_lines (VBlockP vb, uint32_t line_i)
     *B32(vb->lines, line_i) = Ltxt;
 }
 
-// is "toplevel level field" (i.e. as defined in the data type's file format)
-static inline bool container_is_field (VBlockP vb, ContextP ctx, bool is_toplevel)
+// true if container is a container of "fields"
+static inline bool container_is_of_fields (VBlockP vb, ContextP ctx, bool is_toplevel)
 {
     return is_toplevel || 
            (VB_DT(SAM) && ctx->did_i == SAM_AUX) || 
@@ -465,6 +471,8 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
         debug_lines_ctx = container_get_debug_lines_ctx (vb); 
     }
 
+    bool is_container_of_fields = container_is_of_fields (vb, ctx, is_toplevel); // TOPLEVEL, AUX, INFO, FORMAT etc
+
     for (uint32_t rep_i=0; rep_i < con->repeats; rep_i++) {
 
         // case this is the top-level snip: initialize line
@@ -498,8 +506,6 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
                      vb->peek_stack_level ? "peeking " : "",
                      vb->vblock_i, vb->line_i, rep_i, con->repeats-1, ctx->tag_name);
 
-        bool is_field = container_is_field (vb, ctx, is_toplevel);
-
         for (unsigned i=0; i < num_items; i++) {
             const ContainerItem *item = &con->items[i];
             Context *item_ctx = item_ctxs[i];
@@ -510,7 +516,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
             bool show_item = vb->show_containers && item_ctx && (!flag.dict_id_show_containers.num || dict_id_typeless (item_ctx->dict_id).num == flag.dict_id_show_containers.num || 
             dict_id_typeless (ctx->dict_id).num == flag.dict_id_show_containers.num);
 
-            if (is_field && item_ctx)
+            if (is_container_of_fields && item_ctx)
                 vb->curr_field = item_ctx->did_i; // for ASSPIZ
 
             // an item filter may filter items in two ways:
@@ -545,7 +551,10 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
 
                 item_ctx->parent_container = con;
 
+                START_TIMER;
 /*BRKPOINT*/    recon_len = reconstruct_from_ctx (vb, item_ctx->did_i, 0, reconstruct); // -1 if WORD_INDEX_MISSING
+
+                if (is_container_of_fields) COPY_TIMER (fields[item_ctx->did_i]);
 
                 // sum up items' values if needed (STORE_INDEX is handled at the end of this function)
                 if (ctx->flags.store == STORE_INT)
@@ -583,7 +592,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
         container_reconstruct_prefix (vb, con, &item_prefixes, &remaining_prefix_len, false, ctx->dict_id, DICT_ID_NONE, show_non_item); 
 
         // remove final separator, if we need to (introduced v12)
-    if (con->drop_final_item_sep && last_non_filtered_item_i >= 0) {
+        if (con->drop_final_item_sep && last_non_filtered_item_i >= 0) {
             const ContainerItem *item = &con->items[last_non_filtered_item_i]; // last_non_filtered_item_i is the last item that survived the filter, of the last repeat
 
             Ltxt -= CI0_ITEM_HAS_FLAG(item) ? (translating ? 0 : !!IS_CI0_SET (CI0_NATIVE_NEXT))
@@ -609,9 +618,10 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
             if (debug_lines_ctx) 
                 container_verify_line_integrity (vb, debug_lines_ctx, rep_reconstruction_start);
 
-            // we allocate txt_data to be OVERFLOW_SIZE (=1MB) beyond needed, if we get 16KB near the edge
+            // we allocate txt_data to be OVERFLOW_SIZE (=1MB) beyond needed, if we get 64KB near the edge
             // of that we error here. These is to prevent actual overflowing which will manifest as difficult to trace memory issues
-            ASSPIZ (vb->txt_data.size - Ltxt > 16 KB, "txt_data overflow: Ltxt=%u", Ltxt);
+            ASSERT (vb->txt_data.size - Ltxt > 64 KB, "%s: txt_data overflow: Ltxt=%u lines.len=%u con->repeats=%u recon_size=%u", 
+                    LN_NAME, Ltxt, vb->lines.len32, con->repeats, vb->recon_size);
 
             if (flag.maybe_lines_dropped_by_reconstructor || flag.maybe_lines_dropped_by_writer)
                 container_toplevel_filter (vb, rep_i, rep_reconstruction_start, show_non_item);
@@ -700,8 +710,8 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
 
         // first encounter with Container for this context - allocate the cache index
         if (!cache_exists) {
-            buf_alloc (vb, &ctx->con_index,    0, ctx->word_list.len, uint32_t, 1, "contexts->con_index");
-            buf_alloc_zero (vb, &ctx->con_len, 0, ctx->word_list.len, uint16_t, 1, "contexts->con_len");
+            buf_alloc (vb, &ctx->con_index,    0, ctx->word_list.len, uint32_t, 1, CTX_TAG_CON_INDEX);
+            buf_alloc_zero (vb, &ctx->con_len, 0, ctx->word_list.len, uint16_t, 1, CTX_TAG_CON_LEN);
         }
 
         // case: add container to cache index - only if it is not a singleton (i.e. has word_index). 
@@ -767,7 +777,7 @@ void container_display (ConstContainerP con)
     type n = (type)ctx->last_value.i; \
     ASSPIZ (ctx->last_value.i>=(int64_t)(mn) && ctx->last_value.i<=(int64_t)(mx),\
             "Error: Failed to convert %s to %s because of bad %s data: %s.last_value=%"PRId64" is out of range for type \"%s\"=[%"PRId64"-%"PRId64"] ctx.store_type=%s ctx.ltype=%s. Common reasons for a bug here: reconstruction an incorrect number, not returning HAS_NEW_VALUE, or not having STORE_INT.",\
-            dt_name (z_file->data_type), dt_name (flag.out_dt), dt_name (z_file->data_type), \
+            z_dt_name(), dt_name (flag.out_dt), z_dt_name(), \
             ctx->tag_name, ctx->last_value.i, #type, (int64_t)(mn), (int64_t)(mx), store_type_name(ctx->flags.store), lt_name(ctx->ltype))
 
 TRANSLATOR_FUNC (container_translate_I8)       { SET_n (int8_t,   INT8_MIN,  INT8_MAX  );               RECONSTRUCT1(n);       return 0; }

@@ -116,12 +116,12 @@ void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAM *dl, unsigned add_bytes)
     // note: for simplicity, we only mux in MAIN.
     // note: we can only mux FLAG by buddy, not mate, bc sam_piz_special_DEMUX_BY_MATE needs FLAG to determine mate
     // note: in collated files, we're better off without this.
-    bool do_mux = (sam_is_main_vb && segconf.is_paired && !segconf.is_collated);
+    bool do_mux = (IS_MAIN(vb) && segconf.is_paired && !segconf.is_collated);
     ContextP channel_ctx = do_mux ? seg_mux_get_channel_ctx (VB, SAM_FLAG, (MultiplexerP)&vb->mux_FLAG, sam_has_mate || sam_has_saggy) 
                                   : CTX(SAM_FLAG);
 
     // case: PRIM line: 
-    if (sam_is_prim_vb) {
+    if (IS_PRIM(vb)) {
         if (!IS_SAG_SA) goto normal; // NH-based SA Groups: FLAG will be used in preprocessing to set revcomp, and then also reconstructed normally
 
         // case: SAG_SA: we store FLAG.rev_comp in OPTION_SA_STRAND instead of FLAG
@@ -135,10 +135,10 @@ void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAM *dl, unsigned add_bytes)
     }
 
     // case: DEPN line with SA Group: we know some flags from SA Groups, so we store FLAG without them (reduces FLAG entropy)
-    else if (sam_is_depn_vb && sam_seg_has_sag_by_nonSA(vb)) // First, Last, Multi are the same for the group (see sam_sa_seg_depn_find_sagroup_noSA)
+    else if (IS_DEPN(vb) && sam_seg_has_sag_by_nonSA(vb)) // First, Last, Multi are the same for the group (see sam_sa_seg_depn_find_sagroup_noSA)
         sam_seg_against_sa_group_int (vb, CTX(SAM_FLAG), dl->FLAG.value & ~(SAM_FLAG_MULTI_SEG | SAM_FLAG_IS_FIRST | SAM_FLAG_IS_LAST), add_bytes);
 
-    else if (sam_is_depn_vb && sam_seg_has_sag_by_SA(vb)) // in SA, we can get the revcomp from the SA alignment (see sam_sa_seg_depn_find_sagroup_SAtag)
+    else if (IS_DEPN(vb) && sam_seg_has_sag_by_SA(vb)) // in SA, we can get the revcomp from the SA alignment (see sam_sa_seg_depn_find_sagroup_SAtag)
         sam_seg_against_sa_group_int (vb, CTX(SAM_FLAG), dl->FLAG.value & ~(SAM_FLAG_MULTI_SEG | SAM_FLAG_IS_FIRST | SAM_FLAG_IS_LAST | SAM_FLAG_REV_COMP), add_bytes);
     
     // case: depn line in main VB
@@ -149,7 +149,7 @@ void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAM *dl, unsigned add_bytes)
     // case: we can retrieve the FLAG from this line's mate
     #define SAME_AS_MATE (SAM_FLAG_MULTI_SEG | SAM_FLAG_IS_ALIGNED | SAM_FLAG_SECONDARY | SAM_FLAG_FILTERED | \
                           SAM_FLAG_DUPLICATE | SAM_FLAG_SUPPLEMENTARY)
-    else if (sam_has_mate && !sam_is_prim_vb && // TO DO: improve sam_load_groups_add_flags to allow FLAG mating in prim VB (bug 620)
+    else if (sam_has_mate && !IS_PRIM(vb) && // TO DO: improve sam_load_groups_add_flags to allow FLAG mating in prim VB (bug 620)
         ({ ZipDataLineSAM *mate_dl = DATA_LINE (vb->mate_line_i); 
            (dl->FLAG.value & SAME_AS_MATE) == (mate_dl->FLAG.value & SAME_AS_MATE) &&
             dl->FLAG.unmapped              == mate_dl->FLAG.next_unmapped          &&
@@ -351,7 +351,7 @@ void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAM *dl, SamNMType nm, unsigned add
     // but the downside is that reconstruction takes longer due to the need to peek MD:Z. Therefore, we limit it to certain cases.
     else if (NM_is_integer && nm == predicted_by_MD && 
                (segconf.NM_after_MD            || // case 1: MD is reconstructed before NM so peek is fast
-                IS_REF_INTERNAL || // case 2: prediction against SEQ performs poorly
+                IS_REF_INTERNAL                || // case 2: prediction against SEQ performs poorly
                 predicted_by_SEQ != nm         || // case 3: rare cases in which prediction by SEQ is wrong with an external reference.
                 flag.best))                       // case 4: the user request the best method
         seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'm'}, 3, OPTION_NM_i, add_bytes);  // 'm' type since v14
@@ -373,7 +373,7 @@ void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAM *dl, SamNMType nm, unsigned add
         seg_integer (VB, ctx, nm, true, add_bytes);
 
     // in PRIM with SA, we also seg it as the first SA alignment (used for PIZ to load alignments to memory, not used for reconstructing SA)
-    if (sam_is_prim_vb && sam_seg_has_sag_by_SA (vb)) {
+    if (IS_PRIM(vb) && sam_seg_has_sag_by_SA (vb)) {
         seg_integer_as_text (VB, OPTION_SA_NM, nm, 0);  // note: for PRIM lines without SA:Z and nm:i, we seg "0" into OPTION_SA_NM in sam_seg_sag_stuff
 
         // count NM field contribution to OPTION_SA_NM, so sam_stats_reallocate can allocate the z_data between NM and SA:Z
@@ -392,7 +392,7 @@ void sam_seg_nM_i (VBlockSAMP vb, ZipDataLineSAM *dl, SamNMType nm, unsigned add
     ContextP ctx = CTX (OPTION_nM_i);
 
     // case: in paired files, its expected to be the same value as the mate
-    if (segconf.is_paired && !sam_is_depn_vb) 
+    if (segconf.is_paired && !IS_DEPN(vb)) 
         sam_seg_buddied_i_fields (vb, dl, OPTION_nM_i, nm, &dl->nM, (MultiplexerP)&vb->mux_nM, STRa(copy_mate_nM_snip), add_bytes);
 
     // else: in non-paired files, we use the same method as NM:i
@@ -411,15 +411,15 @@ void sam_seg_nM_i (VBlockSAMP vb, ZipDataLineSAM *dl, SamNMType nm, unsigned add
         // but the downside is that reconstruction takes longer due to the need to peek MD:Z. Therefore, we limit it to certain cases.
         else if (nm == predicted_by_MD && 
                     (segconf.nM_after_MD            || // case 1: MD is reconstructed before nM so peek is fast
-                     IS_REF_INTERNAL || // case 2: prediction against SEQ performs poorly
+                     IS_REF_INTERNAL                || // case 2: prediction against SEQ performs poorly
                      predicted_by_SEQ != nm         || // case 3: rare cases in which prediction by SEQ is wrong with an external reference.
                      flag.best))                       // case 4: the user request the best method
-            seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'm'}, 3, OPTION_nM_i, add_bytes);  // 'm' type since v14
+            seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'm'}, 3, ctx, add_bytes);  // 'm' type since v14
 
         // method 3: use prediction of the number of mismatches derived by comparing SEQ to a reference.
         // this is usually, but surprisingly not always, correct for an external reference, and often correct for an internal one.
         else if (nm == predicted_by_SEQ)
-            seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'i'}, 3, OPTION_nM_i, add_bytes); 
+            seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'i'}, 3, ctx, add_bytes); 
 
         else fallback: 
             seg_integer (VB, ctx, nm, true, add_bytes);
@@ -604,7 +604,7 @@ static inline void sam_seg_NH_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t nh, 
     ctx_set_encountered (VB, ctx);  // needed by sam_seg_HI_i
 
     // build SAG structure in VB, to be later ingested into z_file->sag_*
-    if (sam_is_depn_vb && vb->sag && vb->sag->num_alns == nh) {
+    if (IS_DEPN(vb) && vb->sag && vb->sag->num_alns == nh) {
         sam_seg_against_sa_group (vb, ctx, add_bytes);
         add_bytes = 0; // if this is prim, we seg again below, but we already added the bytes
     }
@@ -669,11 +669,11 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_HI)
 
 static inline void sam_seg_CP_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t cp, unsigned add_bytes)
 {
-    if (sam_is_depn_vb && vb->sag && IS_SAG_CC && vb->cc_aln->pos == cp) 
+    if (IS_DEPN(vb) && vb->sag && IS_SAG_CC && vb->cc_aln->pos == cp) 
         sam_seg_against_sa_group (vb, CTX(OPTION_CP_i), add_bytes);
 
     // if there's no gencomp - CP tends to compress well by delta, as subsequent lines also tend to have subsequent secondaries
-    else if (sam_is_main_vb && segconf.is_sorted)
+    else if (IS_MAIN(vb) && segconf.is_sorted)
         seg_pos_field (VB, OPTION_CP_i, OPTION_CP_i, 0, 0, 0, 0, cp, add_bytes); 
 
     else {
@@ -754,7 +754,7 @@ static inline void sam_seg_AS_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t as, 
     ctx_set_last_value (VB, CTX (OPTION_AS_i), as);
 
     // depn VB - seg against prim line AS (sag_has_AS determines if its beneficial to do so)
-    if (sam_is_depn_vb && segconf.sag_has_AS && vb->sag) 
+    if (IS_DEPN(vb) && segconf.sag_has_AS && vb->sag) 
         sam_seg_against_sa_group_int (vb, CTX(OPTION_AS_i), (int64_t)vb->sag->as - as, add_bytes);
 
     // in bowtie2-like data, we might be able to copy from mate
@@ -783,7 +783,7 @@ static inline void sam_seg_AS_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t as, 
     }
 
     // case: in STAR paired files, AS expected to be the same value as its mate's
-    else if (MP(STAR) && segconf.is_paired && !sam_is_depn_vb) 
+    else if (MP(STAR) && segconf.is_paired && !IS_DEPN(vb)) 
         sam_seg_buddied_i_fields (vb, dl, OPTION_AS_i, as, &dl->AS, (MultiplexerP)&vb->mux_AS, STRa(copy_mate_AS_snip), add_bytes);
 
     // not bowtie2: store a special snip with delta from ref_consumed
@@ -888,7 +888,7 @@ void sam_seg_MAPQ (VBlockSAMP vb, ZipDataLineSAM *dl, unsigned add_bytes)
 
     ctx_set_last_value (VB, CTX(SAM_MAPQ), (int64_t)dl->MAPQ);
 
-    bool do_mux = sam_is_main_vb && segconf.is_paired; // for simplicity. To do: also for prim/depn components
+    bool do_mux = IS_MAIN(vb) && segconf.is_paired; // for simplicity. To do: also for prim/depn components
     int channel_i = sam_has_mate?1 : sam_has_prim?2 : 0;
     ContextP channel_ctx = do_mux ? seg_mux_get_channel_ctx (VB, SAM_MAPQ, (MultiplexerP)&vb->mux_MAPQ, channel_i) 
                                   : CTX(SAM_MAPQ);
@@ -899,7 +899,7 @@ void sam_seg_MAPQ (VBlockSAMP vb, ZipDataLineSAM *dl, unsigned add_bytes)
         sam_seg_against_sa_group (vb, channel_ctx, add_bytes);
 
         // in PRIM, we also seg it as the first SA alignment (used for PIZ to load alignments to memory, not used for reconstructing SA)
-        if (sam_is_prim_vb) {
+        if (IS_PRIM(vb)) {
             ContextP sa_mapq_ctx = CTX(OPTION_SA_MAPQ);
             seg_integer_fixed (VB, sa_mapq_ctx, &dl->MAPQ, false, 0);
 
@@ -1039,7 +1039,7 @@ void sam_seg_buddied_i_fields (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i,
 // E2 - SEQ data. Currently broken. To do: fix (bug 403)
 /*static void sam_seg_E2_field (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(field), unsigned add_bytes)
 {
-    ASSSEG0 (dl->SEQ.len, field, "E2 tag without a SEQ"); 
+    ASSSEG0 (dl->SEQ.len, "E2 tag without a SEQ"); 
     ASSINP (field_len == dl->SEQ.len, 
             "Error in %s: Expecting E2 data to be of length %u as indicated by CIGAR, but it is %u. E2=%.*s",
             txt_name, dl->SEQ.len, field_len, field_len, field);
@@ -1053,7 +1053,7 @@ void sam_seg_buddied_i_fields (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i,
 // U2 - QUAL data
 static void sam_seg_U2_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(field), unsigned add_bytes)
 {
-    ASSSEG0 (dl->SEQ.len, field, "U2 tag without a SEQ"); 
+    ASSSEG0 (dl->SEQ.len, "U2 tag without a SEQ"); 
     ASSINP (field_len == dl->SEQ.len, 
             "%s: Expecting U2 data to be of length %u as indicated by CIGAR, but it is %u. U2=%.*s",
             LN_NAME, dl->SEQ.len, field_len, STRf(field));
@@ -1084,7 +1084,7 @@ static void sam_seg_initialize_for_float (VBlockSAMP vb, ContextP ctx)
     if (IS_BAM_ZIP)
         seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_FLOAT }, 2, ctx, 0); 
 
-    buf_alloc (VB, &ctx->local, 0, 16384, float, 0, "local"); // initial allocation, so we can use buf_append_one
+    buf_alloc (VB, &ctx->local, 0, 16384, float, 0, CTX_TAG_LOCAL); // initial allocation, so we can use buf_append_one
 } 
 
 static inline SmallContainer *sam_seg_array_field_get_con (VBlockSAMP vb, Context *con_ctx, uint8_t type, bool has_callback, bool is_bam,
@@ -1157,7 +1157,7 @@ static void sam_seg_array_field (VBlockSAMP vb, DictId dict_id, uint8_t type,
     bool is_int = (elem_ctx->flags.store == STORE_INT);
     if (is_int || is_bam) {
         elem_ctx->local.len *= width; // len will be calculated in bytes in this function
-        buf_alloc (vb, &elem_ctx->local, con->repeats * width, con->repeats * width * 256, char, CTX_GROWTH, "contexts->local"); // careful not * line.len - we can get OOM
+        buf_alloc (vb, &elem_ctx->local, con->repeats * width, con->repeats * width * 256, char, CTX_GROWTH, CTX_TAG_LOCAL); // careful not * line.len - we can get OOM
     }
      
     ASSERT (is_int || (type=='f' && !callback), "%s: Type not supported for SAM/BAM arrays '%c'(%u) in ctx=%s",
@@ -1388,6 +1388,8 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
         case _OPTION_mq_Z: COND (TECH(PACBIO), seg_add_to_local_text (VB, CTX(OPTION_mq_Z), STRa(value), LOOKUP_SIMPLE, add_bytes));
         case _OPTION_st_Z: COND (TECH(PACBIO), seg_add_to_local_text (VB, CTX(OPTION_st_Z), STRa(value), LOOKUP_SIMPLE, add_bytes));
         
+        case _OPTION_sd_f: COND (is_bam, goto bam_seg_float_in_b250);
+
         default: fallback:
             
             // all types of integer
@@ -1411,9 +1413,16 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
 
                 if (is_bam) {
                     uint32_t f = numeric.i; // bam_get_one_aux stores float values as binary-identical 32bit integer
-                    seg_add_to_local_fixed (VB, ctx, &f, sizeof(f), LOOKUP_NONE, add_bytes);
+                    seg_integer_fixed (VB, ctx, &f, LOOKUP_NONE, add_bytes);
                 }
-                else
+
+                else if (false) bam_seg_float_in_b250: {
+                    // store in b250, sometimes works better than local (this was the default up to v14)
+                    SNIPi2 (SNIP_SPECIAL, SAM_SPECIAL_FLOAT, numeric.i);
+                    seg_by_dict_id (VB, STRa(snip), dict_id, add_bytes); 
+                }
+                
+                else // sam
                     seg_float_or_not (VB, ctx, STRa(value), add_bytes);
             }
 
@@ -1422,7 +1431,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
                 sam_seg_array_field (vb, dict_id, array_subtype, STRa(value), NULL, NULL);
 
             // Z,H,A - normal snips in their own dictionary
-            else        
+            else 
                 seg_by_dict_id (VB, STRa(value), dict_id, add_bytes); 
     }
     

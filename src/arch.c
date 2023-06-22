@@ -6,7 +6,6 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
-#include <fcntl.h>
 #include <dirent.h>
 #include <errno.h>
 #include <sys/types.h>
@@ -14,16 +13,17 @@
 #include <time.h>
 #ifdef _WIN32
 #include <windows.h>
-#else
+#include <fcntl.h>
+#include <psapi.h>
+#else // Mac and Linux
 #include <sys/utsname.h>
 #include <termios.h>
+#include <sys/resource.h>
 #ifdef __APPLE__
 #include <sys/sysctl.h>
 #include <mach-o/dyld.h>
 #else // LINUX
-#include <sched.h>
 #include <sys/sysinfo.h>
-#include <sys/utsname.h>
 #endif
 #endif
 
@@ -36,9 +36,11 @@
 #include "strings.h"
 #include "file.h"
 
-static rom argv0 = NULL;
+static rom argv0 = NULL, base_argv0 = NULL;
+Timestamp arch_start_time = 0;
 
 #ifdef _WIN32
+
 // add the genozip path to the user's Path environment variable, if its not already there. 
 // Note: We do all string operations in Unicode, so as to preserve any Unicode characters in the existing Path
 static void arch_add_to_windows_path (void)
@@ -80,8 +82,10 @@ static void arch_add_to_windows_path (void)
 
 void arch_set_locale (void)
 {
+#ifndef _WIN32 // TO DO: make this work for Windows
     ASSERTWD0 (setlocale (LC_CTYPE,   flag.is_windows ? ".UTF-8" : "en_US.UTF-8"), "Warning: failed to setlocale of LC_CTYPE");   // accept and print UTF-8 text (to do: doesn't work for Windows)
-    ASSERTWD0 (setlocale (LC_NUMERIC, flag.is_windows ? "english" : "en_US.UTF-8"), "Warning: failed to setlocale of LC_NUMERIC"); // printf's %f uses '.' as the decimal separator (not ',')
+#endif
+    ASSERTWD0 (setlocale (LC_NUMERIC, flag.is_windows ? "english" : "en_US.UTF-8"), "Warning: failed to setlocale of LC_NUMERIC"); // force printf's %f to use '.' as the decimal separator (not ',') (required by the Genozip file format)
 }
 
 static bool arch_is_wsl (void)
@@ -116,6 +120,9 @@ static void test_fastq_sam_did_alignment (void)
 void arch_initialize (rom my_argv0)
 {
     argv0 = my_argv0;
+
+    rom slash = strrchr (argv0, '/');
+    base_argv0 = slash ? slash + 1 : argv0;
 
     // verify CPU architecture and compiler is supported
     ASSERT0 (sizeof(char)==1 && sizeof(short)==2 && sizeof (unsigned)==4 && sizeof(long long)==8, 
@@ -163,8 +170,9 @@ void arch_initialize (rom my_argv0)
 
     arch_add_to_windows_path();
 #endif
-
+    
     flag.is_wsl = arch_is_wsl();
+    arch_start_time = arch_timestamp();
 
     test_fastq_sam_did_alignment();
 }
@@ -251,6 +259,28 @@ double arch_get_physical_mem_size (void)
     return mem_size;
 }
 
+// returns value in bytes
+uint64_t arch_get_max_resident_set (void)
+{
+#ifndef _WIN32
+    // Linux and MacOS - get maximal RSS this process ever had (TO DO: get current resident set)
+    struct rusage usage;
+    if (getrusage (RUSAGE_SELF, &usage) != 0) return 0; // failed
+    return usage.ru_maxrss KB;
+
+#else  
+    // Windows - get *current* working set
+    HANDLE process = OpenProcess (PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, GetCurrentProcessId());
+    if (!process) return 0;
+
+    PROCESS_MEMORY_COUNTERS_EX mem_counters = {};
+    GetProcessMemoryInfo (process, (PROCESS_MEMORY_COUNTERS*)&mem_counters, sizeof (mem_counters));
+    CloseHandle (process);
+
+    return mem_counters.WorkingSetSize; // still 0 if error
+#endif
+}
+
 rom arch_get_os (void)
 {
     static char os[1024];
@@ -271,90 +301,46 @@ rom arch_get_os (void)
     return os;
 }
 
-rom arch_get_ip_addr (rom reason) // optional text in case curl execution fails
-{
-    static char ip_str[ARCH_IP_LEN] = "0.0.0.0"; // default in case of failure
-
-    url_read_string ("https://api.ipify.org", ip_str, ARCH_IP_LEN); // ignore failure
-    ip_str[ARCH_IP_LEN-1] = 0; // just in case
-    
-    return ip_str;
-}
-
-rom arch_get_host (void)
-{
-    #define ARCH_HOST_NAME_LEN 1023
-    static char host[ARCH_HOST_NAME_LEN+1] = {};
-
-    DO_ONCE {
-        #ifdef _WIN32
-            DWORD host_len = ARCH_HOST_NAME_LEN + 1;
-            if (!GetComputerNameExA (ComputerNameDnsFullyQualified, host, &host_len)) host[0] = 0;
-        #else
-            gethostname (host, ARCH_HOST_NAME_LEN);
-        #endif
-    }
-
-    return host;
-}
-
-rom arch_get_user_host (void)
-{
-    static char user_host[2048];
-
-    DO_ONCE {
-        rom user = getenv (flag.is_windows ? "USERNAME" : "USER");
-
-        sprintf (user_host, "%.99s@%.*s", user ? user : "", ARCH_HOST_NAME_LEN, arch_get_host());
-    }
-
-    return user_host;
-}
-
 // good summary here: https://stackoverflow.com/questions/1023306/finding-current-executables-path-without-proc-self-exe/1024937#1024937
-rom arch_get_executable (FailType soft_fail) // caller should free
+// returns nul-terminated executable path
+StrTextSuperLong arch_get_executable (void) 
 {
+    StrTextSuperLong path = {};
+
 #ifdef __linux__    
-    char *path = MALLOC (PATH_MAX + 1);
-    ssize_t path_len = readlink ("/proc/self/exe", path, PATH_MAX); // doesn't nul-terminate
-    ASSRET (path_len > 0 || soft_fail, argv0, "readlink() failed to get executable path from /proc/self/exe: %s", strerror(errno));
+    ssize_t path_len = readlink ("/proc/self/exe", path.s, sizeof(path.s) - 1); // doesn't nul-terminate
+    ASSGOTO (path_len > 0, "readlink() failed to get executable path from /proc/self/exe: %s", strerror(errno));
 
 #elif defined _WIN32
-    char *path = MALLOC (MAX_PATH + 1);
-    DWORD path_len = GetModuleFileNameA (NULL, path, MAX_PATH); // nul-terminates
+    DWORD path_len = GetModuleFileNameA (NULL, path.s, sizeof(path.s) - 1); 
     if (GetLastError() == ERROR_INSUFFICIENT_BUFFER) path_len = 0; // this is also an error
 
-    ASSRET (path_len || soft_fail,  argv0,
-            "GetModuleFileNameA() failed to get executable path from /proc/self/exe: %s", str_win_error());
+    ASSGOTO (path_len, "GetModuleFileNameA() failed to get executable path from /proc/self/exe: %s", str_win_error());
 
 #elif defined __APPLE__
     // see: https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/dyld.3.html
     uint32_t path_len = 0;
     _NSGetExecutablePath (NULL, &path_len); // get path len - possibly more than MAXPATHLEN if has symlinks
-    char *path = MALLOC (path_len + 1);  
+    path_len = MIN_(path_len, sizeof(path.s) - 1);
 
-    ASSRET0 (!_NSGetExecutablePath (path, &path_len), argv0, "_NSGetExecutablePath() failed"); // this should never fail was we have the correct path_len
+    ASSGOTO0 (!_NSGetExecutablePath (path.s, &path_len), "_NSGetExecutablePath() failed"); 
 
 #else // another OS
-    uint32_t path_len = strlen (argv0);
-    char *path = MALLOC (path_len + 1);
-    strcpy (path, argv0);
+    goto error;
 
 #endif
+    path.s[sizeof(path.s)-1] = 0;
+    return path;
 
-    if (path_len) {
-        path[path_len] = 0;
-        return path;
-    }
-    else { // soft fail
-        FREE (path);
-        return NULL;
-    }
+error:
+    ASSERT (strlen (argv0) < sizeof (path.s), "executable name by argv[0] is longer than Genozip's maximum of %u characters: \"%s\"", (int)sizeof(path.s)-1, argv0);
+    strcpy (path.s, argv0);
+    return path;
 }
 
 rom arch_get_argv0 (void)
 {
-    return argv0;
+    return base_argv0;
 }
 
 #ifndef DISTRIBUTION
@@ -372,10 +358,15 @@ bool arch_is_valgrind (void)
 
     if (is_valgrind == unknown) {
         rom p = getenv ("LD_PRELOAD");
-        is_valgrind = (p && (strstr (p, "/valgrind/") || strstr (p, "/vgpreload")));
+        is_valgrind = flag.debug_valgrind || (p && (strstr (p, "/valgrind/") || strstr (p, "/vgpreload")));
     }
 
     return is_valgrind;
+}
+
+bool arch_is_docker (void)
+{
+    return !strcmp (arch_get_distribution(), "Docker");
 }
 
 Timestamp inline arch_timestamp (void) 
@@ -384,3 +375,19 @@ Timestamp inline arch_timestamp (void)
     clock_gettime (CLOCK_REALTIME, &tb);
     return (uint128_t)tb.tv_sec * 1000000000 + (uint128_t)tb.tv_nsec;
 }
+
+bool arch_is_process_alive (uint32_t pid)
+{
+#ifndef _WIN32
+    bool is_alive = (getpgid(pid) >= 0); // test its process group id which is always possible even for processes belong to other users
+#else
+    HANDLE process = OpenProcess (PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+    
+    DWORD exit_code;
+    bool is_alive = process && GetExitCodeProcess (process, &exit_code) && (exit_code == STILL_ACTIVE);
+
+    CloseHandle (process);
+#endif
+    return is_alive;
+}
+

@@ -7,6 +7,7 @@ launch.json
 .conda-timestamp
 .archive.tar.gz
 *.o
+!src/objdir.*/secure/license.o
 *.debug-o
 *.opt-o
 *.d
@@ -33,7 +34,8 @@ genozip-debug*
 genozip-opt*
 genozip-latest*
 1000genomes/*
-src/data/*
+data/*
+support/*
 benchmark.txt
 notes.txt
 to do.txt
@@ -93,6 +95,7 @@ unused-code
 genozip.threads-log.*
 .genozip_license
 dict_id_gen.c
+license.c
 core
 SEC_*.body
 SEC_*.header

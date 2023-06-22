@@ -165,14 +165,13 @@ static int vcf_INFO_ALLELE_get_allele (VBlockVCFP vb, STRp (value))
     if (str_is_1char (value, '.')) return -2;
 
     // check if its equal main REF (which can by REF or oREF)
-    if (value_len == vb->main_ref_len && !memcmp (value, vb->main_ref, value_len))
-        return 0;
+    if (str_issame (value, vb->main_ref)) return 0;
 
     // check if its equal one of the ALTs
     str_split (vb->main_alt, vb->main_alt_len, 0, ',', alt, false);
 
     for (int alt_i=0; alt_i < n_alts; alt_i++) 
-        if (value_len == alt_lens[alt_i] && !memcmp (value, alts[alt_i], value_len)) 
+        if (str_issame_(STRa(value), STRi(alt, alt_i)))
             return alt_i + 1;
 
     // case: not REF or any of the ALTs
@@ -249,8 +248,8 @@ TRANSLATOR_FUNC (vcf_piz_luft_ALLELE)
     VBlockVCFP vcf_vb = VB_VCF;
 
     // reject if LO_OK_REF_NEW_SNP and value is equal to REF
-    if (validate_only && last_ostatus == LO_OK_REF_NEW_SNP && 
-        recon_len == vcf_vb->main_ref_len && !memcmp (recon, vcf_vb->main_ref, recon_len)) return false;
+    if (validate_only && last_ostatus == LO_OK_REF_NEW_SNP && str_issame (recon, vcf_vb->main_ref)) 
+        return false;
 
     // reject if the value is not equal to REF, any ALT or '.'
     if (validate_only && vcf_INFO_ALLELE_get_allele (vcf_vb, STRa(recon)) == -1) return false;
@@ -713,13 +712,13 @@ static bool vcf_seg_INFO_HGVS_indel (VBlockVCFP vb, ContextP ctx, STRp(value), r
 
     if (payload_len) switch (t) {
         case DEL    : // Payload is expected to be the same as the REF field, without the first, left-anchor, base
-                      if (payload_len != vb->main_ref_len-1 || memcmp (payload, vb->main_ref + 1, payload_len)) return false;
+                      if (!str_issame_(STRa(payload), vb->main_ref+1, vb->main_ref_len-1)) return false;
                       break;
         case INS    : // Payload is expected to be the same as the ALT field, without the first, left-anchor, base
-                      if (payload_len != vb->main_alt_len-1 || memcmp (payload, vb->main_alt + 1, payload_len)) return false;
+                      if (!str_issame_(STRa(payload), vb->main_alt+1, vb->main_alt_len-1)) return false;
                       break;
                       // Payload is expected to be the same as the entire ALT field
-        case DELINS : if (payload_len != vb->main_alt_len || memcmp (payload, vb->main_alt, payload_len)) return false;
+        case DELINS : if (!str_issame (payload, vb->main_alt)) return false;
                       break;
     }
 
@@ -1007,6 +1006,40 @@ static inline void vcf_seg_INFO_ANN (VBlockVCFP vb, ContextP ctx, STRp(value))
     seg_array_of_struct (VB, ctx, ann, STRa(value), (SegCallback[]){vcf_seg_INFO_allele,0,0,0,0,0,0,0,0,vcf_seg_INFO_HGVS,0,0,0,0,0,0}, value_len);
 }
 
+// See: https://pcingola.github.io/SnpEff/se_inputoutput/#eff-field-vcf-output-files
+static inline void vcf_seg_INFO_EFF (VBlockVCFP vb, ContextP ctx, STRp(value))
+{
+    seg_add_to_local_text (VB, ctx, STRa(value), LOOKUP_NONE, value_len);
+    return;
+#if 0    
+    // TODO: move to this after we improve to exploit correlations between fields
+    bool is_xstream = value_len > 10 && (!memcmp (value, "UPSTREAM", 8) || !memcmp (value, "DOWNSTREAM", 10));
+
+    MediumContainer eff = {
+        .nitems_lo   = 12, 
+        .repsep      = {','},
+        .drop_final_repsep = true,
+        .items       = { { .dict_id={ _INFO_EFF_Effect             }, .separator = {'('} }, 
+                         { .dict_id={ _INFO_EFF_Effect_impact      }, .separator = {'|'} }, 
+                         { .dict_id={ _INFO_EFF_Functional_Class   }, .separator = {'|'} }, 
+                         { .dict_id={ is_xstream ? _INFO_EFF_Distance : _INFO_EFF_Codon_Change  }, .separator = {'|'} }, 
+                         { .dict_id={ _INFO_EFF_Amino_Acid_Change  }, .separator = {'|'} }, 
+                         { .dict_id={ _INFO_EFF_Amino_Acid_Length  }, .separator = {'|'} }, 
+                         { .dict_id={ _INFO_EFF_Gene_Name          }, .separator = {'|'} }, 
+                         { .dict_id={ _INFO_EFF_Transcript_BioType }, .separator = {'|'} }, 
+                         { .dict_id={ _INFO_EFF_Gene_Coding        }, .separator = {'|'} }, 
+                         { .dict_id={ _INFO_EFF_Transcript_ID      }, .separator = {'|'} }, 
+                         { .dict_id={ _INFO_EFF_Exon_Intron_Rank   }, .separator = {'|'} }, 
+                         { .dict_id={ _INFO_EFF_Genotype_Number    }, .separator = {')'} }, 
+                         
+                        // TODO: handle case where 1 or more of the array have an extra "Warnings_Errors" field
+                        // { .dict_id={ _INFO_EFF_Warnings_Errors       }, .separator = {')'} }, 
+                       } };
+
+    seg_array_of_struct (VB, ctx, eff, STRa(value), NULL, value_len);
+#endif
+}
+
 // ##INFO=<ID=RAW_MQandDP,Number=2,Type=Integer,Description="Raw data (sum of squared MQ and total depth) for improved RMS Mapping Quality calculation. Incompatible with deprecated RAW_MQ formulation.">
 // comma-seperated two numbers: RAW_MQandDP=720000,200: 1. sum of squared MQ values and 2. total reads over variant genotypes (note: INFO/MQ is sqrt(#1/#2))
 static inline void vcf_seg_INFO_RAW_MQandDP (VBlockVCFP vb, ContextP ctx, STRp(value))
@@ -1275,6 +1308,9 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         // ##INFO=<ID=ANN,Number=.,Type=String,Description="Functional annotations: 'Allele | Annotation | Annotation_Impact | Gene_Name | Gene_ID | Feature_Type | Feature_ID | Transcript_BioType | Rank | HGVS.c | HGVS.p | cDNA.pos / cDNA.length | CDS.pos / CDS.length | AA.pos / AA.length | Distance | ERRORS / WARNINGS / INFO'">
         case _INFO_ANN: 
             CALL (vcf_seg_INFO_ANN (vb, ctx, STRa(value)));
+
+        case _INFO_EFF: 
+            CALL (vcf_seg_INFO_EFF (vb, ctx, STRa(value)));
 
         // ##INFO=<ID=RAW_MQandDP,Number=2,Type=Integer,Description="Raw data (sum of squared MQ and total depth) for improved RMS Mapping Quality calculation. Incompatible with deprecated RAW_MQ formulation.">
         case _INFO_RAW_MQandDP:

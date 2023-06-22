@@ -35,7 +35,6 @@
 
 // vblock stuff
 extern unsigned chain_vb_size (DataType dt);
-extern void chain_vb_release_vb();
 
 // zip of a chain file - txtfile
 extern void chain_zip_initialize (void);

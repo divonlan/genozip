@@ -13,9 +13,6 @@
 #include "sam.h"
 #include "file.h"
 
-#define PIZ_TASK_NAME "piz"
-#define PREPROCESSING_TASK_NAME "preprocessing"
-
 extern bool piz_default_skip_section (SectionType st, DictId dict_id);
 
 #define piz_is_skip_section(dt,st,comp_i,dict_id,f,preprocessing) \

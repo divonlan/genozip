@@ -26,7 +26,7 @@ static void fastq_get_pair_1_gpos_strand (VBlockFASTQP vb, PosType64 *pair_gpos,
 
     ASSERT (gpos_ctx->localR1.next < gpos_ctx->localR1.len32, "%s: not enough data GPOS.localR1 (len=%u)", LN_NAME, gpos_ctx->localR1.len32); 
 
-    ASSERT (gpos_ctx->localR1.next < strand_ctx->localR1.nbits, "%s: cannot get pair_1 STRAND bit because pair_1 strand bitarray has only %u bits",
+    ASSERT (gpos_ctx->localR1.next < strand_ctx->localR1.nbits, "%s: cannot get pair_1 STRAND bit because pair_1 strand bits has only %u bits",
             LN_NAME, (unsigned)strand_ctx->localR1.nbits);
 
     // the corresponding line in pair-1 is aligned: get its gpos and is_forward
@@ -64,7 +64,7 @@ void fastq_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(seq), bool deep)
     }
             
     if (deep) { 
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_deep_copy_SEQ }, 2, bitmap_ctx, seq_len); 
+        fastq_deep_seg_SEQ (vb, dl, STRa(seq), bitmap_ctx, nonref_ctx);
         goto done;
     }
                
@@ -83,16 +83,16 @@ void fastq_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(seq), bool deep)
     else {
         if (flag.show_aligner && !segconf.running) iprintf ("%s: unaligned\n", LN_NAME);
 
-        buf_alloc (VB, &nonref_ctx->local, seq_len + 3, Ltxt / 64, char, CTX_GROWTH, "contexts->local"); 
-        buf_add (&nonref_ctx->local, seq, seq_len);
+        seg_add_to_local_fixed (VB, nonref_ctx, STRa(seq), LOOKUP_NONE, seq_len);
 
         // case: we don't need to consume pair-1 gpos (bc we are pair-1, or pair-1 was not aligned): look up from NONREF
         SNIPi3 (SNIP_SPECIAL, FASTQ_SPECIAL_unaligned_SEQ, ' '/*copy from NONREF*/, seq_len_by_qname (vb, seq_len) ? 0 : seq_len);
         seg_by_ctx (VB, STRa(snip), bitmap_ctx, 0); // note: FASTQ_SQBITMAP is always segged whether read is aligned or not
-        nonref_ctx->txt_len += seq_len; // account for the txt data in NONREF
     }
 
 done:
+    if (seq_len > vb->longest_seq_len) vb->longest_seq_len = seq_len;
+
     COPY_TIMER (fastq_seg_SEQ);
 }
 
@@ -291,7 +291,7 @@ SPECIAL_RECONSTRUCTOR (fastq_special_unaligned_SEQ)
 
         // case: take seq_len from DESC item with length=
         else if (!monochar) 
-            reconstruct_from_local_sequence (vb, nonref_ctx, 0, 0, reconstruct);
+            reconstruct_from_local_sequence (vb, nonref_ctx, vb->seq_len, reconstruct);
 
         else {
             memset (BAFTtxt, monochar, vb->seq_len);

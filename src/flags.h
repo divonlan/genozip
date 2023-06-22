@@ -38,16 +38,16 @@ extern rom ref_type_name(void);
 
 typedef enum { STATS_NONE=0, STATS_SHORT=1, STATS_LONG=2, STATS_SHORT_GREP=-1, STATS_LONG_GREP=-2 } StatsType;
 
-typedef enum { NOT_PAIRED_END,                // ZIP and PIZ
-               PAIR_R1, PAIR_R2,      // ZIP 
-               PAIRED_PIZ,                    // PIZ
+typedef enum { NOT_PAIRED,       // ZIP and PIZ
+               PAIR_R1, PAIR_R2, // ZIP: currently compressing R1 or R2 
+               PAIRED,           // PIZ: z_file is paired ; ZIP: --pair or --deep with paired FASTQ
                PAIR_force_sizeof_int=0x7fffffff } PairType; 
-#define PAIR_TYPE_NAMES { "NOT_PAIRED_END", "PAIR_R1", "PAIR_R2", "PAIRED_PIZ" }
+#define PAIR_TYPE_NAMES { "NOT_PAIRED", "PAIR_R1", "PAIR_R2", "PAIRED" }
 
 typedef struct {
     
     // genozip options that affect the compressed file
-    int fast, best, make_reference, multiseq, md5, 
+    int fast, best, low_memory, make_reference, multiseq, md5, 
         deep; // deep is set with --deep in ZIP and from SectionHeaderGenozipHeader.flags.genozip_header.dts2_deep in PIZ
     rom vblock;
     
@@ -70,11 +70,12 @@ typedef struct {
     int header_one, header_only_fast, no_header, header_only, // how to handle the txt header
         seq_only, qual_only, single_coord, 
         regions, gpos, samples, 
-        qname_filter, // 1 positive, -1 negative filter
+        qname_filter, seq_filter, // 1 positive, -1 negative filter
         drop_genotypes, gt_only, luft, sort, unsorted, snps_only, indels_only, // VCF options
-        sequential, no_pg, extended_translation, one_component;
+        sequential, no_pg, extended_translation, 
+        one_component; // 1-based ; 0=option unset (i.e. comp_i = one_component-1)
     TaxonomyId *kraken_taxid;
-    rom regions_file;
+    rom regions_file, qnames_file;
     int64_t lines_first, lines_last, tail;  // set by --head, --tail, --lines 
     rom grep; int grepw; unsigned grep_len; // set by --grep and --grep-w
     uint32_t one_vb, downsample, shard ;
@@ -90,7 +91,7 @@ typedef struct {
     int64_t t_offset, t_size; // PIZ: offset and size of a z_file within a tar file - for genounzip --test executed from genozip
 
     // genols options
-    int bytes;
+    int bytes, ls_cache;
 
     // options affecting the software interaction (but not the file contents)
     int force, quiet, explicit_quiet, noisy, no_tip, show_filename,
@@ -101,7 +102,9 @@ typedef struct {
         index_txt,   // create an index
         subdirs,     // recursively traversing subdirectories
         list,        // a genols option
-        no_cache;    // don't load cache, or delete cache
+        no_cache,    // don't load cache, or delete cache
+        no_upgrade;  // disable upgrade checks
+    rom test_i;      // test of test.sh currently running (undocumented)
     rom threads_str, out_filename, out_dirname, files_from, do_register;
     FileType stdin_type; // set by the --input command line option
     bool explicitly_generic; // user explicitly set the type to generic
@@ -120,23 +123,24 @@ typedef struct {
     enum { CNT_NONE, CNT_TOTAL, CNT_VBs } count; 
     enum { COV_NONE, COV_ALL, COV_CHROM, COV_ONE } show_coverage;
     enum { KRK_NONE, KRK_ALL, KRK_INCLUDED, KRK_EXCLUDED } show_kraken;
-    enum { SHOW_MEM_NONE, SHOW_MEM_NORMAL, SHOW_MEM_PEAK } show_memory;
     
     // stats / debug useful mostly for developers
     int debug, debug_or_test, show_sag, show_depn, show_dict, show_b250, show_aliases, show_digest, log_digest, show_recon_plan,
         show_index, show_gheader, show_ref_contigs, show_chain_contigs, show_ref_seq, show_ref_diff,
         show_reference, show_ref_hash, show_ref_index, show_chrom2ref, show_ref_iupacs, show_chain, show_ranges,
-        show_codec, 
+        show_codec, show_cache, show_memory,
         show_alleles, show_bgzf, show_txt_contigs, show_lines,
         show_threads, show_uncompress, biopsy, show_data_type,
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
         debug_LONG, show_qual, debug_qname, debug_read_ctxs, debug_sag, debug_gencomp, debug_lines, debug_latest,
-        debug_peek, submit_stats, debug_submit, show_deep, show_segconf_has, debug_huffman, debug_top,
-        debug_debug, // ad-hoc debug printing in prod
-        no_gencomp, force_gencomp, no_domqual, verify_codec, seg_only, show_bam, xthreads, show_flags, show_rename_tags,
+        debug_peek, submit_stats, debug_submit, show_deep, show_segconf_has, debug_huffman, debug_split,
+        debug_debug, debug_valgrind, // ad-hoc debug printing in prod
+        no_gencomp, force_gencomp, force_deep, no_domqual, verify_codec, seg_only, show_bam, xthreads, show_flags, show_rename_tags,
         #define SHOW_CONTAINERS_ALL_VBs (-1)
         show_containers, show_aligner, show_buddy,
         echo,         // show the command line in case of an error
+        recover,      // PIZ: attempted recovery from data corruption
+
         #define SHOW_ALL_HEADERS (-1)
         show_headers; // (1 + SectionType to display) or 0=flag off or -1=all sections
     rom help, dump_section, show_is_set, show_time, show_mutex, show_vblocks;
@@ -185,8 +189,10 @@ typedef struct {
                              // ZIP: txt data is modified during Seg
          explicit_ref,       // ref->filename was set by --reference or --REFERENCE (as opposed to being read from the genozip header)
          collect_coverage,   // PIZ: collect coverage data for show_sex/show_coverage/idxstats
-         deep_fq_only;       // PIZ: SAM data is reconstructed by not written, only FASTQ data is written
-
+         deep_fq_only,       // PIZ: SAM data is reconstructed by not written, only FASTQ data is written
+         removing_cache,     // genocat: running --no-cache with only -e <ref-file> to remove cache
+         let_OS_cleanup_on_exit; // don't release resources as we are about to exit - the OS does it faster
+         
     int only_headers,        // genocat --show_headers (not genounzip) show only headers (value is section_type+1 or SHOW_ALL_HEADERS)
         recon_per_line_overhead, // genocat - additional per-line reconstruction txt_data space needed, due to flags
         check_latest;        // PIZ: run with "genozip --decompress --test": ZIP passes this to PIZ upon testing of the last file

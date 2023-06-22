@@ -6,6 +6,7 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
+#include "libdeflate/libdeflate.h"
 #include "qname.h"
 #include "tokenizer.h"
 #include "buffer.h"
@@ -51,7 +52,7 @@ static void qname_remove_skipped_mate (SmallContainerP con_no_skip, uint32_t *pr
     }
 }
 
-static void qname_genarate_qfs_with_mate (QnameFlavorStruct *qfs)
+static void qname_generate_qfs_with_mate (QnameFlavorStruct *qfs)
 {
     // mate item is always the final item
     int mate_item_i = qfs->con.nitems_lo-1;
@@ -97,6 +98,7 @@ static void qname_genarate_qfs_with_mate (QnameFlavorStruct *qfs)
     }
 
     qfs->num_seps++; // we added / to length of prefixes/seperator
+    qfs->is_mated = true;
 
     if (qfs->fixed_len) // note: qfs can have fixed_len even if items aren't fixed (eg IonTorrent)
         qfs->fixed_len += 2;
@@ -113,7 +115,7 @@ void qname_zip_initialize (void)
             if (!qfs->name[0]) { 
                 *qfs = *(qfs+1);
                 qfs->con = *qfs->con_template;
-                qname_genarate_qfs_with_mate (qfs);
+                qname_generate_qfs_with_mate (qfs);
             }
             else
                 qfs->con = *qfs->con_template; // create container
@@ -212,6 +214,7 @@ void qname_zip_initialize (void)
 
 void qname_seg_initialize (VBlockP vb, QType q, Did st_did_i)
 {
+    #define ctx_by_item(item) ((did_q - SAM_QNAME) + ctx_get_ctx (vb, qfs->con.items[item].dict_id))
     QnameFlavor qfs = segconf.qname_flavor[q];
     if (!qfs) return;
 
@@ -222,29 +225,30 @@ void qname_seg_initialize (VBlockP vb, QType q, Did st_did_i)
         ctx_consolidate_statsN (vb, st_did_i, did_q, MAX_QNAME_ITEMS + 1); 
 
     // set STORE_INT as appropriate
-    int ctx_delta = did_q - SAM_QNAME;
-    if (qfs->ordered_item1   != -1) (ctx_delta + ctx_get_ctx (vb, qfs->con.items[qfs->ordered_item1].dict_id))    ->flags.store = STORE_INT; 
-    if (qfs->ordered_item2   != -1) (ctx_delta + ctx_get_ctx (vb, qfs->con.items[qfs->ordered_item2].dict_id))    ->flags.store = STORE_INT; 
-    if (qfs->range_end_item1 != -1) (ctx_delta + ctx_get_ctx (vb, qfs->con.items[qfs->range_end_item1-1].dict_id))->flags.store = STORE_INT; 
-    if (qfs->range_end_item2 != -1) (ctx_delta + ctx_get_ctx (vb, qfs->con.items[qfs->range_end_item2-1].dict_id))->flags.store = STORE_INT; 
-    if (qfs->seq_len_item    != -1) (ctx_delta + ctx_get_ctx (vb, qfs->con.items[qfs->seq_len_item].dict_id))     ->flags.store = STORE_INT; 
+    if (qfs->ordered_item1   != -1) ctx_by_item (qfs->ordered_item1)    ->flags.store = STORE_INT; 
+    if (qfs->ordered_item2   != -1) ctx_by_item (qfs->ordered_item2)    ->flags.store = STORE_INT; 
+    if (qfs->range_end_item1 != -1) ctx_by_item (qfs->range_end_item1-1)->flags.store = STORE_INT; 
+    if (qfs->range_end_item2 != -1) ctx_by_item (qfs->range_end_item2-1)->flags.store = STORE_INT; 
+    if (qfs->seq_len_item    != -1) ctx_by_item (qfs->seq_len_item)     ->flags.store = STORE_INT; 
 
     for (int i=0; qfs->in_local[i] != -1; i++) {
         #define IS(what) qfs->is_##what[qfs->in_local[i]]
-        ContextP ctx = ctx_delta + ctx_get_ctx (vb, qfs->con.items[qfs->in_local[i]].dict_id);
 
         if (IS(integer) || IS(numeric))
-            ctx->ltype = IS(hex) ? LT_DYN_INT_h : LT_DYN_INT; // required by seg_integer_or_not / seg_numeric_or_not
+            ctx_by_item (qfs->in_local[i])->ltype = IS(hex) ? LT_DYN_INT_h : LT_DYN_INT; // required by seg_integer_or_not / seg_numeric_or_not
 
         else // textual
-            ctx->no_stons = true; // required by seg_add_to_local_text
+            ctx_by_item (qfs->in_local[i])->no_stons = true; // required by seg_add_to_local_text
     }
+
+    if (qfs->seq_len_item != -1 && (VB_DT(SAM) || VB_DT(BAM))) 
+        ctx_by_item (qfs->seq_len_item)->flags.store_per_line = true; // consumed by sam_cigar_special_CIGAR
 
     // when pairing, we cannot have singletons, bc a singleton in R1, when appearing in R2 will not
     // be a singleton (since not the first appearance), causing both b250 and local to differ between the R's. 
     if (flag.pair)
         for (int i=0; i < qfs->con.nitems_lo; i++) 
-            (ctx_delta + ctx_get_ctx (vb, qfs->con.items[i].dict_id))->no_stons = true;
+            ctx_by_item (i)->no_stons = true;
 }
 
 // note: we run this function only in discovery, not in segging, because it is quite expensive - checking all numerics.
@@ -254,9 +258,11 @@ QnameTestResult qname_test_flavor (STRp(qname), QType q, QnameFlavor qfs, bool q
 {
     // return embedded qname2, eg "82a6ce63-eb2d-4812-ad19-136092a95f3d" in "@ERR3278978.1 82a6ce63-eb2d-4812-ad19-136092a95f3d/1"
     if (q != QANY && qfs->only_q != QANY && qfs->only_q != q
-        && !(qfs->only_q == Q1or3 && (q == QNAME1 || q == QLINE3))) return QTR_WRONG_Q; 
+        && !(qfs->only_q == Q1or3   && (q == QNAME1 || q == QLINE3))
+        && !(qfs->only_q == QSAM    && (Z_DT(BAM) || Z_DT(SAM)))
+        && !(qfs->only_q == Q2orSAM && (q == QNAME2 || Z_DT(BAM) || Z_DT(SAM)))) return QTR_WRONG_Q; 
 
-    if (q==QNAME2 && segconf.tech != qfs->qname1_tech) 
+    if (q==QNAME2 && (segconf.tech != qfs->qname1_tech && segconf.tech != TECH_UNKNOWN))
         return QTR_TECH_MISMATCH;
 
     if (!qname_len) return QTR_QNAME_LEN_0;
@@ -289,7 +295,7 @@ QnameTestResult qname_test_flavor (STRp(qname), QType q, QnameFlavor qfs, bool q
 // called for the first line in segconf.running
 void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
 {
-    ASSERTNOTZERO (segconf.running, "");
+    ASSERTNOTZERO (segconf.running);
 
     static rom reasons[] = QTR_NAME;
 
@@ -299,8 +305,18 @@ void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
         QnameTestResult reason = QTR_SUCCESS;
         if (!(reason = qname_test_flavor (STRa(qname), q, qfs, true))) {
             segconf.qname_flavor[q] = qfs;
+
+            static QnameCNN char_to_cnn[256] = CHAR_TO_CNN;
+            segconf.flav_prop[q] = (QnameFlavorProp){ .id          = qfs->id, 
+                                                      .has_seq_len = qfs->seq_len_item != -1,
+                                                      .is_mated    = qfs->is_mated,
+                                                      .has_R       = qfs->is_mated || qfs->id == QF_SRA2,
+                                                      .cnn         = char_to_cnn[(int)qfs->cut_to_canonize] };
+            
             segconf.tech = qfs->tech; // note: if this is QNAME2, we update tech according to QNAME2 (instead of NCBI)
             
+            ASSERT (!qfs->cut_to_canonize || segconf.flav_prop[q].cnn, "flavor=%s has cut_to_canonize='%c', but it is missing in CHAR_TO_CNN", qfs->name, qfs->cut_to_canonize);
+
             ASSERT (qname_len <= SAM_MAX_QNAME_LEN, "qname=\"%.*s\" is too long (len=%u)", STRf(qname), qname_len);
             memcpy (segconf.qname_line0[q], qname, qname_len);
 
@@ -343,7 +359,11 @@ void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
 // attempts to modify flavor to accommodate both qname of line_i==0 and current qname. return true if flavor has been modified.
 static bool qname_segconf_rediscover_flavor (VBlockP vb, QType q, STRp(qname))
 {
+    ASSERTNOTZERO (segconf.running); // one of the reasons this cannot run outside of segconf is that segconf_seq_len_dict_id must be the same for all lines
+
     if (segconf.qname_flavor_rediscovered[q]) return false; // we already rediscovered once, not going to do it again
+
+    if (flag.debug_qname) iprintf ("%s: Rediscovering %s\n", LN_NAME, qtype_name (q));
 
     QnameFlavor save_flavor = segconf.qname_flavor[q];
     qname_segconf_discover_flavor (vb, q, STRa(qname));
@@ -377,21 +397,23 @@ bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additional_byt
     ContextP qname_ctx = CTX(did_by_q(q));
     
     // seg container
-    seg_by_ctx (vb, STRi(qfs->con_snip, q),  qname_ctx, qfs->num_seps + add_additional_bytes); // account for container separators, prefixes and caller-requested add_additional_bytes 
+    seg_by_ctx (vb, STRi(qfs->con_snip, q), qname_ctx, qfs->num_seps + add_additional_bytes); // account for container separators, prefixes and caller-requested add_additional_bytes 
 
-    bool sorted_by_qname = (segconf.is_collated || VB_DT(FASTQ) || VB_DT(KRAKEN) || qfs->id == QF_GENOZIP_OPT);
+    bool sorted_by_qname = (segconf.is_collated || VB_DT(FASTQ) || VB_DT(KRAKEN) || qfs->id == QF_GENOZIP_OPT || (!segconf.is_sorted && segconf.is_long_reads));
 
     for (unsigned item_i=0; item_i < qfs->con.nitems_lo; item_i++) {
 
         // get item ctx - Q?NAME did_i are immediately following QNAME, and QmNAME si the last.
         const ContainerItem *item = &qfs->con.items[item_i];
-        value=-1;
+        rom str = items[item_i];
+        uint32_t str_len = item_lens[item_i];
+        value = -1;
 
         // if not integer/numeric as expected, send to rediscovery. 
         // However, if we can no longer rediscover, try to accommodate rather than failing
         if (segconf.running && !segconf.qname_flavor_rediscovered[q]) {
-            if (qfs->is_integer[item_i] && !str_is_int (STRi(item, item_i))) return false;
-            if (qfs->is_numeric[item_i] && !str_is_numeric (STRi(item, item_i))) return false;
+            if (qfs->is_integer[item_i] && !str_is_int (STRa(str))) return false;
+            if (qfs->is_numeric[item_i] && !str_is_numeric (STRa(str))) return false;
         }
 
         // calculate context - a bit messy, but faster than looking up by dict_id (relying on Q?NAME being sequential in the container)
@@ -400,44 +422,46 @@ bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additional_byt
         // case: this is the file is sorted by qname - delta against previous
         if (sorted_by_qname && (item_i == qfs->ordered_item1 || item_i == qfs->ordered_item2) &&
             (ctx_has_value_in_prev_line_(vb, item_ctx) || vb->line_i==0) &&
-            !(item_lens[item_i] >= 2 && items[item_i][0] == '0') && // can't yet handle reproducing leading zeros with a delta (bug 821)
-            ( (!qfs->is_hex[item_i] && str_get_int_dec (STRi(item, item_i), (uint64_t*)&value)) ||
-              ( qfs->is_hex[item_i] && str_get_int_hex (STRi(item, item_i), true, false, (uint64_t*)&value)))) // lower-case hex
+            !(str_len >= 2 && str[0] == '0') && // can't yet handle reproducing leading zeros with a delta (bug 821)
+            ( (!qfs->is_hex[item_i] && str_get_int_dec (STRa(str), (uint64_t*)&value)) ||
+              ( qfs->is_hex[item_i] && str_get_int_hex (STRa(str), true, false, (uint64_t*)&value)))) // lower-case hex
 
-            seg_self_delta (vb, item_ctx, value, (qfs->is_hex[item_i] ? 'x' : 0), item_lens[item_i]);
-        
+            seg_self_delta (vb, item_ctx, value, (qfs->is_hex[item_i] ? 'x' : 0), str_len);
+
         // case: end-of-range item, seg as delta vs previous item which is start-of-range
         else if ((qfs->range_end_item1 == item_i || qfs->range_end_item2 == item_i) &&
-//xxx                 !flag.pair && // we don't use delta against other if we're pairing - too complicated
-                 str_get_int (STRi(item, item_i), &value) && 
+                 str_get_int (STRa(str), &value) && 
                  str_get_int (STRi(item, item_i-1), &prev_value)) {
             SNIP(32);
             seg_prepare_snip_other (SNIP_OTHER_DELTA, qfs->con.items[item_i-1].dict_id, true, value - prev_value, snip);
-            seg_by_ctx (vb, STRa(snip), item_ctx, item_lens[item_i]);      
+            seg_by_ctx (vb, STRa(snip), item_ctx, str_len);      
         }
 
         else if (qfs->is_in_local[item_i]) { 
             if (qfs->is_integer[item_i]) 
-                seg_integer_or_not (vb, item_ctx, STRi(item, item_i), item_lens[item_i]); // hex or not
+                seg_integer_or_not (vb, item_ctx, STRa(str), str_len); // hex or not
 
             else if (qfs->is_numeric[item_i])
-                seg_numeric_or_not (vb, item_ctx, STRi(item, item_i), item_lens[item_i]); // hex or not
+                seg_numeric_or_not (vb, item_ctx, STRa(str), str_len); // hex or not
 
             else 
-                seg_add_to_local_text (vb, item_ctx, STRi(item, item_i), LOOKUP_SIMPLE, item_lens[item_i]);
+                seg_add_to_local_text (vb, item_ctx, STRa(str), LOOKUP_SIMPLE, str_len);
         }
 
         else if (item->separator[0] == CI0_SKIP)
             {} // no segging a skipped item
 
         // case: textual item
-        else
-            seg_by_ctx (vb, STRi(item, item_i), item_ctx, item_lens[item_i]); 
+        else 
+            seg_by_ctx (vb, STRa(str), item_ctx, str_len); 
 
         // case: this item is qname_seq_len - set last_value by the beneficial field (CIGAR in SAM, ? in FASTQ)
-        if (item_i == qfs->seq_len_item && (value >= 0 || str_get_int (STRi(item, item_i), &value))) 
+        if (item_i == qfs->seq_len_item && (value >= 0 || str_get_int (STRa(str), &value))) 
             ctx_set_last_value (vb, item_ctx, value);  
     }
+
+    if (segconf.running && segconf.flav_prop[q].has_R && qname[qname_len-1] != '1' && qname[qname_len-1] != '2')
+        segconf.flav_prop[q].has_R = false;
 
     return true;
 }
@@ -481,20 +505,56 @@ done:
     COPY_TIMER (qname_seg);
 }
 
+// reduces qname to its canonical form: possibly reduces qname_len to make a qname more likely compareble between SAM/BAM and FASTQ 
+void qname_canonize (QType q, rom qname, uint32_t *qname_len)
+{
+    QnameFlavorProp *f = &segconf.flav_prop[q];
+
+    // mated: "HSQ1004:134:C0D8DACXX:3:1101:1318:114841/2" ⟶ "HSQ1004:134:C0D8DACXX:3:1101:1318:114841"
+    // SRA2:  "ERR2708427.177.1" ⟶ "ERR2708427.177"
+    if (f->has_R && *qname_len > 2) 
+        *qname_len -= 2;
+
+    // eg: "NOVID_3053_FC625AGAAXX:6:1:1069:11483:0,84" ⟶ "NOVID_3053_FC625AGAAXX:6:1:1069:11483"
+    else if (f->cnn) {
+        static char cnn_to_char[NUM_CNN] = CNN_TO_CHAR;
+        rom cut = memrchr (qname + 1, cnn_to_char[f->cnn], *qname_len); // +1 so at least one character survives
+        if (cut) *qname_len = cut - qname;
+    }
+}
+
+uint32_t qname_calc_hash (QType q, STRp(qname), thool is_last, bool canonical, 
+                          uint32_t *uncanonical_suffix_len) // optional out
+{
+    uint32_t save_qame_len = qname_len;
+    if (canonical) qname_canonize (q, qSTRa(qname));
+
+    if (uncanonical_suffix_len) 
+        *uncanonical_suffix_len = save_qame_len - qname_len;
+        
+    if (!qname_len) return 0;
+
+    uint8_t data[qname_len];
+    for (int i=0; i < qname_len; i++)
+        data[i] = ((((uint8_t *)qname)[i]-33) & 0x3f) | ((((uint8_t *)qname)[qname_len-i-1] & 0x3) << 6);
+
+    uint32_t hash = crc32 (0, data, qname_len);
+    if (is_last != unknown) hash = (hash & 0xfffffffe) | is_last;
+
+    return hash;
+}
+
 rom segconf_qf_name (QType q)
 {
     return segconf.qname_flavor[q] ? segconf.qname_flavor[q]->name : "N/A";
 }
 
-QnameFlavorId segconf_qf_id (QType q)
-{
-    return segconf.qname_flavor[q]->id;
-}
-
 rom qtype_name (QType q)
 {
-    static rom qtype_names[] = QTYPE_NAME;
-    
-    return (q >= 0 && q < ARRAY_LEN (qtype_names)) ? qtype_names[q] : "Invalid qtype";
+    static rom qtype_names[] = QTYPE_NAME, qtype_neg_names[] = QTYPE_NEG_NAMES;
+
+    return (q >= 0 && q < ARRAY_LEN (qtype_names))     ? qtype_names[q] 
+          :(q < 0 && -q < ARRAY_LEN (qtype_neg_names)) ? qtype_neg_names[-q]
+          :                                              "Invalid_qtype";
 }
 

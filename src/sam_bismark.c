@@ -20,7 +20,7 @@
 // Bismark: The converted reference used to align this read: 2 possible values: "CT" or "GA"
 void sam_seg_bismark_XG_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(xg), unsigned add_bytes)
 {
-    ASSSEG (xg_len==2 && ((xg[0]=='C' && xg[1]=='T') || (xg[0]=='G' && xg[1]=='A')), xg, "Invalid XG:Z=%.*s, expecting CT or GA", STRf(xg));
+    ASSSEG (xg_len==2 && ((xg[0]=='C' && xg[1]=='T') || (xg[0]=='G' && xg[1]=='A')), "Invalid XG:Z=%.*s, expecting CT or GA", STRf(xg));
 
     if (vb->bisulfite_strand)
         seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_BISMARK_XG }, 2, OPTION_XG_Z, add_bytes);
@@ -76,7 +76,7 @@ void sam_seg_bismark_XM_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl)
         else if (op->op == BC_I || op->op == BC_S)
             xm_i += op->n;
 
-    ASSSEG (xm_i == xm_len, xm, "Mismatch between XM:Z=\"%.*s\" and CIGAR=\"%s\"", STRf(xm), 
+    ASSSEG (xm_i == xm_len, "Mismatch between XM:Z=\"%.*s\" and CIGAR=\"%s\"", STRf(xm), 
             dis_binary_cigar (vb, B1ST(BamCigarOp, vb->binary_cigar), vb->binary_cigar.len32, &vb->scratch).s);
 
     if (range) ref_unlock (gref, &lock);
@@ -95,7 +95,7 @@ void sam_seg_bismark_XM_Z (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, int spe
     if (segconf.running) goto no_diff;
 
     if (!str_issame_(STRa(xm), STRb(vb->meth_call))) {
-        ASSSEG (xm_len == dl->SEQ.len, xm, "Expecting XM:Z.len=%u == SEQ.len=%u", xm_len, dl->SEQ.len);
+        ASSSEG (xm_len == dl->SEQ.len, "Expecting XM:Z.len=%u == SEQ.len=%u", xm_len, dl->SEQ.len);
 
         if (flag.show_wrong_xm) {
             iprintf ("%s: QNAME=\"%.*s\" bisulfite_strand=%c %s\n", 
@@ -105,7 +105,7 @@ void sam_seg_bismark_XM_Z (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, int spe
         }
 
         if (vb->meth_call.len) {
-            ASSSEG (xm_len == vb->meth_call.len, xm, "Expecting XM:Z.len=%u == meth_call.len=%u", xm_len, vb->meth_call.len32);
+            ASSSEG (xm_len == vb->meth_call.len, "Expecting XM:Z.len=%u == meth_call.len=%u", xm_len, vb->meth_call.len32);
             
             // note: our diff is compact, according to actual difference observed in Bismark and BSBolt:
             // z,x,h,u - same case, different type

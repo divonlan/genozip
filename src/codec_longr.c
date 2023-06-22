@@ -64,7 +64,10 @@ void codec_longr_segconf_calculate_bins (VBlockP vb, ContextP ctx,
                                          LocalGetLineCB callback) // option 2 - get one line
 {
     ASSERT0 (segconf.running, "Expected segconf.running"); // must run in main thread as we are allocating from evb
-    ContextP zctx = ZCTX(ctx->did_i);
+
+    if (segconf.longr_bins_calculated) return; // bins already calculated - this happens in eg in Deep FASTQ, if bins were calculated by SAM before
+
+    ContextP zctx = ZCTX(ctx->did_i); // note: ctx is be predefinded, so zctx has the same did_i
 
     // create a histogram of values
     uint32_t histogram[256] = {};
@@ -83,7 +86,7 @@ void codec_longr_segconf_calculate_bins (VBlockP vb, ContextP ctx,
         num_values = ctx->local.len;
     }
 
-    // create value_to_bin mapper in zctx->value_to_bin (note: ctx is be predefinded, so zctx has the same did_i)
+    // create value_to_bin mapper in zctx->value_to_bin
     buf_alloc (evb, &zctx->value_to_bin, 0, 256, uint8_t, 0, "value_to_bin");
     uint8_t *value_to_bin = B1ST8 (zctx->value_to_bin);
     zctx->value_to_bin.len = NUM_BINS;
@@ -118,6 +121,8 @@ void codec_longr_segconf_calculate_bins (VBlockP vb, ContextP ctx,
     buf_alloc (evb, &zctx->counts, 0, 256, uint64_t, 0, "zctx->counts");
     for (unsigned i=0; i < 256; i++)
         BNXT64 (zctx->counts) = value_to_bin[i];
+
+    segconf.longr_bins_calculated = true;
 }
 
 static void codec_longr_calc_channels (LongrState *state, STRp(seq), bytes qual, bool is_rev) 
@@ -169,14 +174,14 @@ COMPRESS (codec_longr_compress)
     uint32_t total_len=0;
     for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {
 
-        seq_callback (vb, ctx, line_i,  pSTRa(seq), 0, &is_rev);
         get_line_cb (vb, ctx, line_i, pSTRa(qual), Ltxt, NULL);
-
         if (!qual_len) continue; // this can happen, for example, if a SAM DEPN line is compressed against SA Group
+
+        seq_callback (vb, ctx, line_i,  pSTRa(seq), 0, &is_rev);
 
         codec_longr_calc_channels (state, STRa(seq), (uint8_t*)qual, is_rev);
 
-        ASSERT (seq_len == qual_len, "%s: \"%s\": Expecting seq_len=%u == qual_len=%u. ctx=%s", 
+        ASSERT (seq_len == qual_len || str_is_1char(qual, ' '), "%s: \"%s\": Expecting seq_len=%u == qual_len=%u. ctx=%s", 
                 LN_NAME, name, seq_len, qual_len, TAG_NAME);
 
         total_len += qual_len;
@@ -185,7 +190,7 @@ COMPRESS (codec_longr_compress)
     }
     
     // we now sort the quality data by channel (reversing qual of revcomp reads)
-    buf_alloc (vb, &values_ctx->local, *uncompressed_len, 0, uint8_t, 0, "contexts->local");
+    buf_alloc (vb, &values_ctx->local, *uncompressed_len, 0, uint8_t, 0, CTX_TAG_LOCAL);
     values_ctx->local.len = *uncompressed_len;
 
     uint8_t *sorted_qual = B1ST8 (values_ctx->local);
@@ -213,7 +218,7 @@ COMPRESS (codec_longr_compress)
 
     // channel lengths 
     lens_ctx->local.len = 0; // overwrite previous QUAL->local.len
-    buf_alloc (vb, &lens_ctx->local, LONGR_NUM_CHANNELS, 0, uint32_t, 0, "contexts->local");
+    buf_alloc (vb, &lens_ctx->local, LONGR_NUM_CHANNELS, 0, uint32_t, 0, CTX_TAG_LOCAL);
     lens_ctx->local.len = LONGR_NUM_CHANNELS; 
 
     ARRAY (uint32_t, lens, lens_ctx->local);
@@ -308,7 +313,7 @@ static void codec_longr_reconstruct_init (VBlockP vb, Context *lens_ctx, Context
         value_to_bin_dst[i] = value_to_bin_src[i]; // uint64 -> uint8
 
     // initialize longr state - stored in lens_ctx.longr_state
-    buf_alloc_zero (vb, &lens_ctx->longr_state, 1, 0, LongrState, 0, "contexts->local"); 
+    buf_alloc_zero (vb, &lens_ctx->longr_state, 1, 0, LongrState, 0, CTX_TAG_LOCAL); 
     codec_longr_alg_init (B1ST (LongrState, lens_ctx->longr_state));
 
     lens_ctx->is_initialized = true;
@@ -337,8 +342,10 @@ CODEC_RECONSTRUCT (codec_longr_reconstruct)
     rom seq = (VB_DT(SAM) && VB_SAM->textual_seq.len) ? B1STc (VB_SAM->textual_seq) // note: textual_seq is prepared in sam_piz_sam2bam_SEQ and sam_piz_prim_add_Grps_and_CIGAR
                                                       : last_txtx (vb, seq_ctx); 
 
-    codec_longr_recon_one_read (state, seq, vb->seq_len, is_rev, sorted_qual, next_of_chan, BAFTtxt);
-    Ltxt += vb->seq_len;
+    ASSPIZ0 (len == vb->seq_len, "LONGR supports only len=seq_len"); 
+    
+    codec_longr_recon_one_read (state, seq, len, is_rev, sorted_qual, next_of_chan, BAFTtxt);
+    Ltxt += len;
 
     COPY_TIMER(codec_longr_reconstruct);
 }

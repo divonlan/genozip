@@ -21,7 +21,7 @@
 
 #define foreach_dtype(d) for (DictIdType one_dtype=((d&DTYPE_VCF_INFO) ? DTYPE_VCF_INFO : DTYPE_VCF_FORMAT) ; one_dtype <= ((d&DTYPE_VCF_FORMAT) ? DTYPE_VCF_FORMAT : DTYPE_VCF_INFO); one_dtype++)
  
-static Buffer command_line_tags = EMPTY_BUFFER;
+static Buffer command_line_tags = {};
 
 // compares between tags - returns 0 if they are the same 
 static inline int tags_cmp (STRp (tag_name_a), DictIdType dtype_a, STRp (tag_name_b), DictIdType dtype_b)

@@ -91,7 +91,7 @@ static inline void seg_add_to_local_resizable (VBlockP vb, ContextP ctx, int64_t
 #endif
 
     // TO DO: find a way to better estimate the size, see b250_per_line
-    buf_alloc (vb, &ctx->local, 1, vb->lines.len, int64_t, CTX_GROWTH, "contexts->local");
+    buf_alloc (vb, &ctx->local, 1, vb->lines.len, int64_t, CTX_GROWTH, CTX_TAG_LOCAL);
     BNXT (int64_t, ctx->local) = value;
     if (add_bytes) ctx->txt_len += add_bytes;
     ctx->local_num_words++;
@@ -108,6 +108,8 @@ extern WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_consli
 typedef bool (*SegCallback) (VBlockP vb, ContextP ctx, STRp(value), uint32_t repeat);
 extern int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), const SegCallback *callbacks, unsigned add_bytes);
 extern bool seg_do_nothing_cb (VBlockP vb, ContextP ctx, STRp(field), uint32_t rep);
+
+extern void seg_array_of_array_of_struct (VBlockP vb, ContextP ctx, char outer_sep, MediumContainer inner_con, STRp(snip), const SegCallback *callbacks);
 
 extern bool seg_by_container (VBlockP vb, ContextP ctx, ContainerP con, STRp(value), STRp(container_snip), bool normal_seg_if_fail, unsigned add_bytes);
 
@@ -293,23 +295,16 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux
 
 #define SEG_EOL(f,account_for_ascii10) ({ seg_by_did (VB, *(has_13) ? "\r\n" : "\n", 1 + *(has_13), (f), (account_for_ascii10) + *(has_13)); })
 
-#define ASSSEG(condition, p_into_txt, format, ...)                                                                  \
-    ASSINP ((condition), "%s %s/%s: "format "\nTechnical details: pos_in_vb: %"PRIi64" pos_in_file: %"PRIi64        \
-                         "\n%d characters before to %d characters after (in quotes): \"%.*s\""                      \
-                         "\nTo get vblock: genozip --biopsy %u %s",                                                 \
-                                     str_time().s, txt_name, LN_NAME, __VA_ARGS__,                                  \
-            /* pos_in_vb:         */ (PosType64)(p_into_txt ? ((rom)p_into_txt - B1STtxt) : -1),            \
-            /* pos_in_file:       */ (PosType64)(p_into_txt ? (vb->vb_position_txt_file + ((rom)p_into_txt - B1STtxt)) : -1),\
-            /* +- 10 char snip    */                                                                                \
-            /* chars before:      */ p_into_txt ? MIN_(10, (unsigned)((rom)p_into_txt - B1STtxt)) : -1,   \
-            /* chars after:       */ p_into_txt ? MIN_(10, (unsigned)(BAFTtxt - (rom)p_into_txt)) : -1,\
-            /* snip len:          */ p_into_txt ? (unsigned)(MIN_((rom)p_into_txt+11, BAFTtxt) /* end pos */ - MAX_((rom)p_into_txt-10, vb->txt_data.data) /* start_pos */) : -1,\
-            /* condition for snip */ (vb->txt_data.data && p_into_txt && ((rom)p_into_txt >= B1STtxt) && ((rom)p_into_txt <=/*= too*/ BAFTtxt) ? \
-            /* snip start:        */    MAX_((rom)p_into_txt-30, B1STtxt) : "(inaccessible)"),            \
-            /* biopsy parameters: */ vb->vblock_i, txt_name)
+#define ASSSEG(condition, format, ...)                                                                      \
+    ASSINP ((condition), "%s %s:%s: " format "\nTechnical details: pos_in_vb: %u pos_in_file: %"PRIu64"\n"  \
+                         "To get vblock: \"genozip --biopsy %d %s\". Offending line:\n"                      \
+                         "%s\n",     str_time().s, txt_name, LN_NAME, __VA_ARGS__,                          \
+            /* pos_in_vb/file:    */ vb->line_start, vb->vb_position_txt_file + vb->line_start,             \
+            /* biopsy parameters: */ vb->vblock_i, txt_name,                                                \
+            /* \0-term textual    */ DT_FUNC (vb, assseg_line)((VBlockP)(vb)))
 
-#define ASSSEG0(condition, p_into_txt, err_str) ASSSEG (condition, p_into_txt, err_str "%s", "")
+#define ASSSEG0(condition, err_str) ASSSEG (condition, err_str "%s", "")
 
-#define ABOSEG(p_into_txt, format, ...) ASSSEG(false, p_into_txt, format, __VA_ARGS__)
+#define ABOSEG(format, ...) ASSSEG(false, format, __VA_ARGS__)
 
-#define ABOSEG0(p_into_txt, err_str) ABOSEG(false, p_into_txt, format, err_str "%s", "")
+#define ABOSEG0(err_str)    ASSSEG(false, err_str "%s", "")

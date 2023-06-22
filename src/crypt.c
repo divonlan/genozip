@@ -51,7 +51,7 @@ bool crypt_prompt_for_password()
 
 uint32_t crypt_padded_len (uint32_t len)
 {
-    return len + (password ? (AES_BLOCKLEN - (len % AES_BLOCKLEN)) % AES_BLOCKLEN : 0);
+    return password ? ROUNDUP16(len) : len;
 }
 
 // returns true if encrypted
@@ -59,7 +59,7 @@ bool crypt_get_encrypted_len (uint32_t *data_encrypted_len /* in/out */, uint32_
 {
     if (!password) return false;
 
-    uint32_t pad_len = (AES_BLOCKLEN - (*data_encrypted_len % AES_BLOCKLEN)) % AES_BLOCKLEN;
+    uint32_t pad_len = ROUNDUP16(*data_encrypted_len) - *data_encrypted_len;
     *data_encrypted_len += pad_len; // we are guaranteed there's room for our padding, bc we kept encryption_padding_reserve bytes for it
 
     if (padding_len) *padding_len = pad_len;

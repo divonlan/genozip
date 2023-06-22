@@ -58,13 +58,16 @@ void sam_seq_to_bam (STRp (seq_sam), BufferP seq_bam_buf)
 }
 
 // re-writes BAM format SEQ into textual SEQ
-void bam_seq_to_sam (VBlockSAMP vb, bytes bam_seq, uint32_t seq_len /*bases, not bytes*/, 
+void bam_seq_to_sam (VBlockSAMP vb, bytes bam_seq, 
+                     uint32_t seq_len,       // bases, not bytes
                      bool start_mid_byte,    // ignore first nibble of bam_seq (seq_len doesn't include the ignored nibble)
                      bool test_final_nibble, // if true, we test that the final nibble, if unused, is 0, and warn if not
-                     BufferP out)            // appends to end of buffer - caller should allocate
+                     BufferP out)            // appends to end of buffer - caller should allocate seq_len+1 (+1 for last half-byte) 
 {
     START_TIMER;
         
+    ASSERT (out->len32 + seq_len + 1 <= out->size, "%s: out allocation too small", LN_NAME);
+
     if (!seq_len) {
         BNXTc (*out) = '*';
         return;        
@@ -73,7 +76,7 @@ void bam_seq_to_sam (VBlockSAMP vb, bytes bam_seq, uint32_t seq_len /*bases, not
     // we implement "start_mid_byte" by converting the redudant base too, but starting 1 character before in the buffer 
     char save = 0;
     if (start_mid_byte) {
-        out->len--;
+        out->len32--;
         seq_len++;
         save = *BAFTc (*out); // this is the byte we will overwrite, and recover it later. possibly, the fence if the buffer is empty;
     }
@@ -89,11 +92,11 @@ void bam_seq_to_sam (VBlockSAMP vb, bytes bam_seq, uint32_t seq_len /*bases, not
 
     if (start_mid_byte) {
         *BAFTc(*out) = save;
-        out->len += seq_len;      
+        out->len32 += seq_len;      
         seq_len--;
     }
     else
-        out->len += seq_len;
+        out->len32 += seq_len;
 
 /* TO DO - not working yet
     uint64_t *next64 = BAFT (uint64_t, *out);
@@ -128,7 +131,7 @@ void bam_seq_to_sam (VBlockSAMP vb, bytes bam_seq, uint32_t seq_len /*bases, not
     }
     */
     ASSERTW (!test_final_nibble || !(seq_len % 2) || (*BAFTc (*out)=='='), 
-             "%s: Warning in bam_seq_to_sam: expecting the unused lower 4 bits of last seq byte in an odd-length seq_len=%u to be 0, but its not. This will cause an incorrect MD5",
+             "%s: Warning in bam_seq_to_sam: expecting the unused lower 4 bits of last seq byte in an odd-length seq_len=%u to be 0, but its not. This will cause an incorrect digest",
              LN_NAME, seq_len);
 }
 

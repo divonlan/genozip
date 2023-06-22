@@ -26,7 +26,7 @@ void sam_seg_bsseeker2_XO_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XO), unsign
     // predicting XO to be one of 4 values: +FR -FR +FW -FW, based on a combination of FLAG.rev_comp and multi_segs
     
     // case: value of XO fails the prediction - seg as normal snip     
-    ASSSEG (XO_len == 3 && (XO[0]=='+' || XO[0]=='-') && XO[1]=='F' && (XO[2]=='R' || XO[2]=='W'), XO,
+    ASSSEG (XO_len == 3 && (XO[0]=='+' || XO[0]=='-') && XO[1]=='F' && (XO[2]=='R' || XO[2]=='W'),
             "XO:Z=%.*s but expecting one of four values: +FR -FR +FW -FW", STRf(XO));
 
     seg_by_did (VB, ((char[]){ SNIP_SPECIAL, SAM_SPECIAL_BSSEEKER2_XO, 
@@ -130,7 +130,7 @@ void sam_seg_bsseeker2_XG_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XG)
 
     // get range
     RangeP range = ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), start_pos, after_pos - start_pos, 
-                                      WORD_INDEX_NONE, NULL, 
+                                      WORD_INDEX_NONE,
                                       IS_REF_EXTERNAL ? NULL : &lock); // lock if we might modify reference or is_set
 
     if (!range) FAIL("no_range"); // either hash contention in REF_INTERNAL or this chromosome is missing in the reference file 
@@ -148,7 +148,7 @@ void sam_seg_bsseeker2_XG_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XG)
     }
 
     // if successful (all bases are the same, or not populated): populate missing bases in REF_INTERNAL
-    if (IS_REF_INTERNAL && vb->comp_i == SAM_COMP_MAIN) {
+    if (IS_REF_INTERNAL && IS_MAIN(vb)) {
         xg = B1STc(vb->XG);
         
         for (PosType32 pos = start_pos ; pos < after_pos; pos++, xg++) {
@@ -162,7 +162,7 @@ void sam_seg_bsseeker2_XG_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XG)
     }
 
     // set is_set - we will need these bases in the reference to reconstruct XG
-    if (flag.reference & REF_STORED && vb->comp_i == SAM_COMP_MAIN) 
+    if (flag.reference & REF_STORED && IS_MAIN(vb)) 
         bits_set_region (&range->is_set, start_pos - range->first_pos, after_pos - start_pos); 
 
     ctx_set_encountered (VB, CTX(OPTION_XG_Z)); // = verified

@@ -19,13 +19,19 @@
 #define NUM_CODEC_BUFS 7       // bzlib2 compress requires 4 and decompress requires 2 ; lzma compress requires 7 and decompress 1
                                // if updating, also update array in codec_alloc()
 
-// IMPORTANT: if changing fields in VBlockVCF, also update vb_release_vb
 #define VBLOCK_COMMON_FIELDS \
-    VBIType vblock_i;             /* number of VB within VCF file */\
+    /************* fields that survive buflist_free_vb *************/ \
+    Buffer buffer_list;           /* a buffer containing an array of pointers to all buffers allocated or overlayed in this VB (either by the main thread or its compute thread). */\
+    int32_t id;                   /* id of vb within the vb pool (-1 is the external vb) */\
+    DataType data_type;           /* type of this VB. In PIZ, this is the z_file data_type, NOT flag.out_dt */\
+    DataType data_type_alloced;   /* type of this VB was allocated as. could be different that data_type, see vb_get_vb */\
+    VBlockPoolType pool;          /* the VB pool to which this VB belongs */ \
+    volatile bool in_use;         /* this vb is in use. MUST be last in this section (expected by buflist_free_vb) */\
+    /********** end of fields that survive buflist_free_vb **********/ \
+    \
+    VBIType vblock_i;             /* VB 1-based sequential number in the dispatcher (or 0 if not in dispatcher) */\
     CompIType comp_i;             /* ZIP/PIZ: txt component within z_file that this VB belongs to  */ \
     bool is_eof;                  /* encountered EOF when reading this VB data from file */ \
-    VBlockPoolType pool;          /* the VB pool to which this VB belongs */ \
-    int32_t id;                   /* id of vb within the vb pool (-1 is the external vb) */\
     \
     /* compute thread stuff */ \
     ThreadId compute_thread_id;   /* id of compute thread currently processing this VB */ \
@@ -33,21 +39,14 @@
     void (*compute_func)(VBlockP);/* compute thread entry point */\
     Mutex ready_for_compute;      /* threads_create finished initializeing this VB */\
     \
-    DataType data_type;           /* type of this VB. In PIZ, this is the z_file data_type, NOT flag.out_dt */\
-    DataType data_type_alloced;   /* type of this VB was allocated as. could be different that data_type, see vb_get_vb */\
-    \
-    /* memory management  */\
-    Buffer buffer_list;           /* a buffer containing an array of pointers to all buffers allocated or overlayed in this VB (either by the main thread or its compute thread). */\
-    \
     volatile DispatchStatus dispatch; /* line data is read, and dispatcher can dispatch this VB to a compute thread */\
     volatile bool is_processed;   /* thread completed processing this VB - it is ready for outputting */\
-    volatile bool in_use;         /* this vb is in use */\
     Timestamp start_compute_timestamp; \
     \
     /* tracking lines */\
     Buffer lines;                 /* ZIP: An array of *DataLine* - the lines in this VB; in Deep: .count counts deepable lines in VB */\
                                   /* PIZ: array of (num_lines+1) x (char *) - pointer to within txt_data - start of each line. last item is BAFT(txt_data). */\
-    BitsP is_dropped;             /* PIZ: a bitarray with a bit set is the line is marked for dropping by container_reconstruct_do */ \
+    BitsP is_dropped;             /* PIZ: a bits with a bit set is the line is marked for dropping by container_reconstruct_do */ \
     uint32_t num_lines_at_1_3, num_lines_at_2_3; /* ZIP VB=1 the number of lines segmented when 1/3 + 2/3 of estimate was reached  */\
     uint32_t debug_line_hash;     /* Seg: adler32 of line, used if Seg modifies line */\
     bool debug_line_hash_skip;    /* Seg: don't calculate debug_line_hash as line is skipped */\
@@ -104,6 +103,7 @@
     WordIndex chrom_node_index;   /* ZIP and PIZ: index and name of chrom of the current line. Note: since v12, this is redundant with last_int (CHROM) */ \
     STR(chrom_name);              /* since v12, this redundant with last_txtx/last_txt_len (CHROM) */ \
     uint32_t seq_len;             /* PIZ - last calculated seq_len (as defined by each data_type) */\
+    uint32_t longest_seq_len;     /* ZIP/PIZ SAM/BAM/FASTQ: largest seq_len of textual SEQ in this VB. Transmitted through SectionHeaderVbHeader.longest_seq_len */\
     \
     /* regions & filters */ \
     \
@@ -146,35 +146,36 @@
     uint32_t prev_range_range_i;  /* range_i used to calculate previous range */ \
     WordIndex prev_range_chrom_node_index[2]; /* chrom used to calculate previous range */ \
     \
+    /* ref_iupac quick lookup */\
+    ConstRangeP iupacs_last_range[2]; /* [0]=prim_ref [1]=gref */ \
+    PosType64 iupacs_last_pos[2], iupacs_next_pos[2]; \
+    \
     union { \
     Buffer gencomp_lines;         /* ZIP: array of GencompLineIEntry: DVCF: lines rejected for liftover ; SAM-SA: primary/dependent lines */ \
     Buffer flusher_blocks;        /* PIZ writer vb */ \
     }; \
-    \
-    /* ref_iupac quick lookup */\
-    ConstRangeP iupacs_last_range[2]; /* [0]=prim_ref [1]=gref */ \
-    PosType64 iupacs_last_pos[2], iupacs_next_pos[2]; \
     \
     /* Information content stats - how many bytes does this section have more than the corresponding part of the vcf file */\
     Buffer show_headers_buf;      /* ZIP only: we collect header info, if --show-headers is requested, during compress, but show it only when the vb is written so that it appears in the same order as written to disk */\
     Buffer show_b250_buf;         /* ZIP only: for collecting b250 during generate - so we can print at onces without threads interspersing */\
     Buffer section_list_buf;      /* ZIP only: all the sections non-dictionary created in this vb. we collect them as the vb is processed, and add them to the zfile list in correct order of VBs. */\
     \
-    /* Codec stuff */ \
-    Codec codec_using_codec_bufs; /* codec currently using codec_bufs */\
-    Buffer codec_bufs[NUM_CODEC_BUFS]; /* memory allocation for compressor so it doesn't do its own malloc/free */ \
-    \
-    /* used by CODEC_PBWT, CODEC_HAPMAT */ \
-    uint32_t ht_per_line; \
-    Context *ht_matrix_ctx; \
-    \
     /* used by CODEC_PBWT */ \
     Context *runs_ctx, *fgrc_ctx; /* possibly diffrent did_i for different data types */\
+    \
+    /* used by CODEC_PBWT, CODEC_HAPMAT */ \
+    Context *ht_matrix_ctx; \
+    uint32_t ht_per_line; \
     \
     /* copies of the values in flag, for flags that may change during the execution */\
     bool preprocessing;           /* PIZ: this VB is preprocessing, not reconstructing (SAM: loading SA Groups FASTA/FASTQ: grepping) */ \
     bool show_containers; \
-    uint64_t ensure_dt_specific_fields_start_on_word_boundary; /* this ensures that the data-type-specific fields start at offset=sizeof(VBlock) - making it easier to release specific fields etc. this field is not used and remains 0. */ 
+    \
+    /* Codec stuff */ \
+    Codec codec_using_codec_bufs; /* codec currently using codec_bufs */\
+    Buffer codec_bufs[NUM_CODEC_BUFS]; /* memory allocation for compressor so it doesn't do its own malloc/free */ 
+    #define final_member codec_bufs[NUM_CODEC_BUFS-1]
+    // ^^^ MUST END WITH A 64 bit member (which Buffer does) ^^^^
 
 typedef struct VBlock {
     VBLOCK_COMMON_FIELDS
@@ -185,19 +186,25 @@ typedef struct VBlock {
 
 extern bool vb_is_valid (VBlockP vb);
 
-extern void vb_destroy_vb_do (VBlockP *vb_p, rom func);
-#define vb_destroy_vb(vb_p) vb_destroy_vb_do((vb_p), __FUNCTION__)
-
-#define VB_ID_EVB           -1 // ID of VB used by main thread 
-#define VB_ID_SEGCONF       -2 // ID of VB used by segconf_calculate
-#define VB_ID_DEPN_SCAN     -3
-#define VB_ID_COMPRESS_DEPN -4
-#define NUM_NONPOOL_VBs      4
-extern VBlockP vb_initialize_nonpool_vb(int vb_id, DataType dt, rom task);
+extern VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompIType comp_i);
 
 extern void vb_release_vb_do (VBlockP *vb_p, rom task_name, rom func);
 #define vb_release_vb(vb_p, task_name) vb_release_vb_do ((vb_p), (task_name), __FUNCTION__)
-extern unsigned def_vb_size(DataType dt);
+extern unsigned def_vb_size (DataType dt);
+
+extern void vb_destroy_vb_do (VBlockP *vb_p, rom func);
+#define vb_destroy_vb(vb_p) vb_destroy_vb_do((vb_p), __FUNCTION__)
+
+extern void vb_dehoard_memory (VBlockP vb);
+
+#define VB_ID_EVB           -1 // ID of VB used by main thread 
+#define VB_ID_WRITER        -2
+#define VB_ID_SEGCONF       -3 // ID of VB used by segconf_calculate
+#define VB_ID_DEPN_SCAN     -4
+#define VB_ID_COMPRESS_DEPN -5
+#define NUM_NONPOOL_VBs      5
+extern VBlockP vb_initialize_nonpool_vb (int vb_id, DataType dt, rom task);
+extern VBlockP vb_get_nonpool_vb (int vb_id);
 
 // -------------
 // vb_pool stuff
@@ -214,7 +221,6 @@ typedef struct VBlockPool {
 extern void vb_create_pool (VBlockPoolType type);
 extern VBlockPool *vb_get_pool (VBlockPoolType type, FailType soft_fail);
 extern VBlockP vb_get_from_pool (VBlockPoolP pool, int32_t vb_id);
-extern VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompIType comp_i);
 extern void vb_destroy_pool_vbs (VBlockPoolType type);
 extern uint32_t vb_pool_get_num_in_use (VBlockPoolType type, int32_t *id_in_use);
 extern bool vb_pool_is_full (VBlockPoolType type);
@@ -231,3 +237,9 @@ extern void vb_set_is_processed (VBlockP vb);
 extern rom err_vb_pos (void *vb);
 extern rom pool_name (VBlockPoolType pool_type);
 extern bool vb_buf_locate (VBlockP vb, ConstBufferP buf);
+extern rom textual_assseg_line (VBlockP vb);
+
+static inline uint32_t get_vb_size (DataType dt) 
+{ 
+    return (dt != DT_NONE && dt_props[dt].sizeof_vb) ? dt_props[dt].sizeof_vb(dt) : sizeof (VBlock); 
+}

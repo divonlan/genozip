@@ -150,7 +150,7 @@ static bool huffman_generate_codes (HuffmanP h)
 
         int c = h->nodes[i].c; // also == i-1
 
-        Bits bits = { .nwords = 1, .nbits = 64, .words = &h->codes[c], .type = BITS_REGULAR };
+        Bits bits = { .nwords = 1, .nbits = 64, .words = &h->codes[c], .type = BUF_REGULAR };
         
         int node, parent;
         for (node = i; node != h->roots[0]; node = parent) {
@@ -200,11 +200,8 @@ void huffman_produce_compressor (HuffmanP h)
         ASSERT0 (huffman_generate_codes (h), "Failed to generate Huffman codes");
     }
 
-    // We need to set have_codes only after we have them, so other threads can rely on it. This memory barrier 
-    // tells GCC to refrain from reordering instructions across the barrier.
-    __asm__ __volatile__("" ::: "memory"); 
-
-    h->have_codes = true;
+    // We need to set have_codes only after we have them, so other threads can rely on it. 
+    __atomic_store_n (&h->have_codes, (bool)true, __ATOMIC_RELEASE); 
 }
 
 bool huffman_is_produced (HuffmanP h)
@@ -219,7 +216,7 @@ void huffman_compress (HuffmanP h,
     Bits bits = { .nbits  = *comp_len * 8,
                   .nwords = *comp_len / 8,
                   .words  = (uint64_t *)comp,
-                  .type   = BITS_REGULAR      };
+                  .type   = BUF_REGULAR      };
 
     uint64_t next_bit = 0;
     for (uint32_t i = 0 ; i < uncomp_len; i++) {
@@ -239,7 +236,7 @@ int huffman_decompress (HuffmanP h, bytes comp, uint8_t *uncomp, uint32_t uncomp
 {
     Bits bits = { .nbits  = 64000000000ULL, // some very large number
                   .nwords = 1000000000ULL,
-                  .type   = BITS_REGULAR,
+                  .type   = BITS_STANDALONE,
                   .words  = (uint64_t *)ROUNDDOWN8 ((uint64_t)comp) }; // shift back to align with a 64b word boundary (counting on pointers being up to 64 bit)
 
     // note: if we shifted .words back, the initial value of bit_i will point to were the data actually starts
@@ -247,7 +244,7 @@ int huffman_decompress (HuffmanP h, bytes comp, uint8_t *uncomp, uint32_t uncomp
 
     for (int i=0; i < uncomp_len; i++) {
         int node_i = h->roots[0];
-        while (h->nodes[node_i].left) // has children
+        while (h->nodes[node_i].left)  // has children
             node_i = bits_get (&bits, bit_i++) ? h->nodes[node_i].right : h->nodes[node_i].left;
 
         uncomp[i] = h->nodes[node_i].c;

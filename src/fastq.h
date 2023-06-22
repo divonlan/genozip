@@ -124,6 +124,7 @@ extern void fastq_seg_initialize();
 extern void fastq_seg_finalize();
 extern bool fastq_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern rom fastq_seg_txt_line();
+extern rom fastq_assseg_line (VBlockP vb);
 extern void fastq_seg_pair2_gpos (VBlockP vb, PosType64 pair1_pos, PosType64 pair2_gpos);
 
 // PIZ Stuff
@@ -136,7 +137,6 @@ extern void fastq_recon_aligned_SEQ (VBlockP vb, STRp(seq_len_str), ReconType re
 extern CONTAINER_CALLBACK (fastq_piz_container_cb);
 
 // VBlock stuff
-extern void fastq_vb_release_vb();
 extern unsigned fastq_vb_size (DataType dt);
 extern unsigned fastq_vb_zip_dl_size (void);
 extern void fastq_reset_line (VBlockP vb);
@@ -161,7 +161,7 @@ typedef enum { FQ_COMP_R1, FQ_COMP_R2 } FastqComponentType;
  
 #define FASTQ_SPECIAL { fastq_special_unaligned_SEQ, fastq_special_PAIR2_GPOS, fastq_special_mate_lookup, \
                         fastq_special_set_deep, fastq_special_deep_copy_QNAME, fastq_special_deep_copy_SEQ, fastq_special_deep_copy_QUAL,\
-                        fastq_special_backspace, fastq_special_copy_line1 }
+                        fastq_special_backspace, fastq_special_copy_line1, fastq_special_monochar_QUAL }
 
 SPECIAL (FASTQ, 0,  unaligned_SEQ,   fastq_special_unaligned_SEQ);    // v14
 SPECIAL (FASTQ, 1,  PAIR2_GPOS,      fastq_special_PAIR2_GPOS);       // v14
@@ -172,4 +172,5 @@ SPECIAL (FASTQ, 5,  deep_copy_SEQ,   fastq_special_deep_copy_SEQ);    // v15
 SPECIAL (FASTQ, 6,  deep_copy_QUAL,  fastq_special_deep_copy_QUAL);   // v15
 SPECIAL (FASTQ, 7,  backspace,       fastq_special_backspace);        // v15
 SPECIAL (FASTQ, 8,  copy_line1,      fastq_special_copy_line1);       // v15
-#define NUM_FASTQ_SPECIAL 9
+SPECIAL (FASTQ, 9,  monochar_QUAL,   fastq_special_monochar_QUAL);    // v15
+#define NUM_FASTQ_SPECIAL 10

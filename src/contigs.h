@@ -19,10 +19,10 @@
 
 // Accession Number: https://www.ncbi.nlm.nih.gov/genbank/acc_prefix/
 typedef struct {
-    char version; // version character is version , eg '1'. If version is not specified, then it is set to '1'. 
-    #define ACCESSION_LEN 15 // max by according to ^^^ is 12
-    char AC[ACCESSION_LEN];  // upper-case letters followed by numerals ; zero padded
-    char version2; // second digit of version (since v13)
+    char version;                // version character is version , eg '1'. If version is not specified, then it is set to '1'. 
+    #define ACCESSION_LEN 15     // max by according to ^^^ is 12
+    char AC[ACCESSION_LEN];      // upper-case letters followed by numerals ; zero padded
+    char version2;               // second digit of version (since v13)
 } AccessionNumber; 
 
 typedef union {
@@ -38,8 +38,8 @@ typedef struct Contig {
     CharIndex char_index;        // char index in CHROM dictionary of this contig
     uint32_t snip_len;
     WordIndex ref_index;         // index in reference
-    PosType64 min_pos, max_pos;    // POS field value of smallest and largest POS value of this contig
-    PosType64 gpos;                // The GPOS in genome matching min_pos in contig.
+    PosType64 min_pos, max_pos;  // POS field value of smallest and largest POS value of this contig
+    PosType64 gpos;              // The GPOS in genome matching min_pos in contig.
     ContigMetadata metadata;
 } Contig; 
 
@@ -83,6 +83,7 @@ extern rom contigs_get_name (ConstContigPkgP ctgs, WordIndex index, unsigned *co
 extern WordIndex contigs_get_by_ref_index (ConstContigPkgP ctgs,WordIndex ref_index);
 static inline PosType64 contigs_get_LN (ConstContigPkgP ctgs, WordIndex index) { return index < ctgs->contigs.len32 ? B(Contig, ctgs->contigs, index)->max_pos : 0; }
 static inline PosType64 contigs_get_gpos (ConstContigPkgP ctgs, WordIndex index) { return B(Contig, ctgs->contigs, index)->gpos; }
+extern uint64_t contigs_get_nbases (ConstContigPkgP ctgs);
 
 // iterator
 typedef void (*ContigsIteratorCallback)(STRp(contig_name), PosType64 last_pos, void *callback_param);

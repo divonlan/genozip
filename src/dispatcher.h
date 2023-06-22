@@ -11,12 +11,17 @@
 #include "genozip.h"
 #include "buffer.h"
 
+#define ZIP_TASK_NAME "zip"
+#define PIZ_TASK_NAME "piz"
+#define PREPROCESSING_TASK_NAME "preprocessing"
+#define WRITER_TASK_NAME "writer"
+
 extern Dispatcher dispatcher_init (rom task_name, rom preproc_task_name, VBlockPoolType pool_type, unsigned max_threads, unsigned previous_vb_i,
                                    bool out_of_order, bool test_mode, rom filename, uint64_t target_progress, rom prog_msg);
 extern void dispatcher_start_wallclock (void);
 extern void dispatcher_allow_out_of_order (Dispatcher dispatcher);
 extern void dispatcher_pause (Dispatcher dispatcher);
-extern void dispatcher_resume (Dispatcher dispatcher);
+extern void dispatcher_resume (Dispatcher dispatcher, uint32_t target_progress);
 extern void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i, bool cleanup_after_me, bool show_memory);
 
 typedef void (*DispatcherFunc)(VBlockP);

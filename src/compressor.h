@@ -11,7 +11,7 @@
 #include "genozip.h"
 #include "codec.h"
 
-extern uint32_t comp_compress (VBlockP vb, ContextP ctx, BufferP z_data, SectionHeaderP header, 
+extern uint32_t comp_compress (VBlockP vb, ContextP ctx, BufferP z_data, SectionHeaderUnionP header, 
                                rom uncompressed_data, // option 1 - compress contiguous data
                                LocalGetLineCB callback, rom name); // option 2 - compress data one line at a time
 

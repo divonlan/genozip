@@ -129,17 +129,16 @@ void digest_piz_verify_one_txt_file (unsigned txt_file_i/* 0-based */)
     // now, we just confirm that all VBs were verified as expected.
     if (VER(14) && z_file->z_flags.adler) {
         
-        CompIType comp_i = (flag.deep && txt_file_i==1) ? SAM_COMP_FQ00
-                         : (flag.deep && txt_file_i==2) ? SAM_COMP_FQ01
-                         : (flag.pair && txt_file_i==1) ? FQ_COMP_R2
+        CompIType comp_i = (flag.deep && txt_file_i >= 1) ? (txt_file_i - 1 + SAM_COMP_FQ00)
+                         : (flag.pair && txt_file_i ==1 ) ? FQ_COMP_R2
                          :                                COMP_MAIN;
 
         uint32_t expected_vbs_verified = sections_get_num_vbs (comp_i);
 
         ASSERT (z_file->num_vbs_verified == expected_vbs_verified ||  // success
                 txt_file->vb_digest_failed,                           // failure already announced
-                "Expected to have verified (adler32) all %u VBlocks, but verified %u",
-                expected_vbs_verified, z_file->num_vbs_verified);
+                "Expected to have verified (adler32) all %u VBlocks, but verified %u (txt_file=%s txt_file_i=%u)",
+                expected_vbs_verified, z_file->num_vbs_verified, txt_name, txt_file_i);
 
         if (flag.show_digest)
             iprintf ("Txt file #%u: %u VBs verified\n", txt_file_i, z_file->num_vbs_verified);
@@ -166,16 +165,16 @@ void digest_piz_verify_one_txt_file (unsigned txt_file_i/* 0-based */)
         
         else if (flag.test) {
             progress_finalize_component ("FAILED!");
-            ABORT ("Error: %s of original file=%s is different than decompressed file=%s\n",
-                digest_name(), digest_display (z_file->digest).s, digest_display (decompressed_file_digest).s);
+            ABORT ("Error: %s of original file=%s is different than decompressed file=%s (txt_file=%s txt_file_i=%u)\n",
+                digest_name(), digest_display (z_file->digest).s, digest_display (decompressed_file_digest).s, txt_name, txt_file_i);
         }
 
         // if decompressed incorrectly - warn, but still give user access to the decompressed file
         else { 
             piz_digest_failed = true; // inspected by main_genounzip
-            WARN ("File integrity error: %s of decompressed file %s is %s, but %s of the original %s file was %s", 
+            WARN ("File integrity error: %s of decompressed file %s is %s, but %s of the original %s file was %s (txt_file=%s txt_file_i=%u)", 
                 digest_name(), txt_file->name, digest_display (decompressed_file_digest).s, digest_name(), 
-                dt_name (txt_file->data_type), digest_display (z_file->digest).s);
+                dt_name (txt_file->data_type), digest_display (z_file->digest).s, txt_name, txt_file_i);
         }
     }
 }
@@ -214,9 +213,8 @@ static void digest_piz_verify_one_vb (VBlockP vb)
             if (!txt_file->vb_digest_failed)
                 WARN ("Bad reconstructed vblock has been dumped to: %s.gz\n"
                       "To see the same data in the original file:\n"
-                      "genozip --biopsy %u %s (+any parameters used to compress this file)\n"
-                      "If this is unexpected, please contact support@genozip.com.\n", 
-                    txtfile_dump_vb (vb, z_name), vb->vblock_i, filename_guess_original (txt_file));
+                      "genozip --biopsy %u %s (+any parameters used to compress this file)%s",
+                      txtfile_dump_vb (vb, z_name), vb->vblock_i, filename_guess_original (txt_file), SUPPORT);
 
             if (flag.test) exit_on_error (false);
 
@@ -323,11 +321,10 @@ Digest digest_txt_header (BufferP data, Digest piz_expected_digest)
             WARN ("%s of reconstructed %s header (%s) differs from original file (%s)\n"
                   "Bad reconstructed header has been dumped to: %s\n"
                   "To see the same data in the original file:\n"
-                  "genozip --biopsy 0 %s\n"
-                  "If this is unexpected, please contact support@genozip.com.\n", 
+                  "genozip --biopsy 0 %s%s",
                   digest_name(),
                   dt_name (z_file->data_type), digest_display (digest).s, digest_display (piz_expected_digest).s,
-                  txtfile_dump_vb (data->vb, z_name), filename_guess_original (txt_file));
+                  txtfile_dump_vb (data->vb, z_name), filename_guess_original (txt_file), SUPPORT);
 
             if (flag.test) exit_on_error(false);
         }
@@ -353,14 +350,14 @@ void digest_verify_ref_is_equal (const Reference ref, rom header_ref_filename, c
         ASSINP ((ref_digest.words[0] == header_ref_genome_digest.words[0] && 
                  ref_digest.words[2] == header_ref_genome_digest.words[2] && 
                  ref_digest.words[3] == header_ref_genome_digest.words[3]),
-                "%s: Bad reference file:\n%s (%s) was used for compressing\nNot %s (%s version=%u)",
+                "%s: Incorrect reference file:\n%s (%s) was used for compressing\nNot %s (%s version=%u)",
                 z_name, header_ref_filename, digest_display_ex_(header_ref_genome_digest, DD_NORMAL, unknown, true).s, 
                 ref_get_filename (ref), digest_display_ex_(ref_digest, DD_NORMAL, no, true).s, ref_version);
 
     // reference files produced since v15 can be either Adler or MD5, and digest is of in-memory genome, not FASTA file
     else 
         ASSINP (digest_is_equal (header_ref_genome_digest, ref_digest), 
-                "%s: Bad reference file:\n%s with %s was used for compressing\nBut %s has %s (ref_genozip_version=%u)",
+                "%s: Incorrect reference file:\n%s with %s was used for compressing\nBut %s has %s (ref_genozip_version=%u)",
                 z_name, header_ref_filename, digest_display_ex_(header_ref_genome_digest, DD_NORMAL, unknown, true).s, 
                 ref_get_filename (ref), digest_display_ex_(ref_digest, DD_NORMAL, is_adler, true).s, ref_version);
 

@@ -30,7 +30,7 @@
 static VcfVersion vcf_version;
 uint32_t vcf_num_samples = 0; // number of samples in the file
 static uint32_t vcf_num_displayed_samples = 0; // PIZ only: number of samples to be displayed - might be less that vcf_num_samples if --samples is used
-static Buffer vcf_field_name_line = EMPTY_BUFFER;  // header line of first VCF file read - use to compare to subsequent files to make sure they have the same header during bound
+static Buffer vcf_field_name_line = {};  // header line of first VCF file read - use to compare to subsequent files to make sure they have the same header during bound
 
 static bool vcf_has_file_format_vcf = false; 
 bool vcf_header_get_has_fileformat (void) { return vcf_has_file_format_vcf; }
@@ -43,7 +43,7 @@ static Buffer vcf_header_liftover_dst_contigs = {};
 #define FI_LEN (is_info ? 7 : 9) // length of ##FORMAT= or ##INFO=
 
 // referring to sample strings from the --samples command line option
-static Buffer cmd_samples_buf = EMPTY_BUFFER; // an array of (char *)
+static Buffer cmd_samples_buf = {}; // an array of (char *)
 static bool cmd_is_negative_samples = false;
 
 // referring to samples in the vcf file
@@ -58,7 +58,7 @@ static char *vcf_sample_names_data;    // vcf_sample_names point into here
 
 typedef struct { STR (key); STR (value); } Attr;
 
-void vcf_header_piz_init (void)
+void vcf_piz_header_init (void)
 {
     vcf_num_samples = 0;
     buf_free (vcf_field_name_line);
@@ -88,11 +88,15 @@ static inline unsigned vcf_header_parse_fileformat_line (ConstBufferP txt_header
     rom newline = memchr (line, '\n', line_len);
     unsigned len = newline ? newline - line + 1 : 0;
 
-    if      (!memcmp (line, "##fileformat=VCFv4.1", MIN_(20, len))) vcf_version = VCF_v4_1;
-    else if (!memcmp (line, "##fileformat=VCFv4.2", MIN_(20, len))) vcf_version = VCF_v4_2;
-    else if (!memcmp (line, "##fileformat=VCFv4.3", MIN_(20, len))) vcf_version = VCF_v4_3;
-    else if (!memcmp (line, "##fileformat=VCFv4.4", MIN_(20, len))) vcf_version = VCF_v4_4;
-    else if (!memcmp (line, "##fileformat=VCFv4.5", MIN_(20, len))) vcf_version = VCF_v4_5;
+    if (len >= 20 && str_isprefix_(line, len, _S("##fileformat=VCFv4."))) 
+        switch (line[19]) {
+            case '1' : vcf_version = VCF_v4_1; break;
+            case '2' : vcf_version = VCF_v4_2; break;
+            case '3' : vcf_version = VCF_v4_3; break;
+            case '4' : vcf_version = VCF_v4_4; break;
+            case '5' : vcf_version = VCF_v4_5; break;
+            default: {}
+        }             
 
     return len;
 }
@@ -169,7 +173,7 @@ static void vcf_header_consume_contig (STRp (contig_name), PosType64 *LN, bool i
     // if sorting - we have to pre-populate header & reference contigs (in vcf_zip_initialize) so that vb->is_unsorted is calculated correctly 
     // in vcf_seg_evidence_of_unsorted() (if VBs have their own chrom node_index's, they might be in reverse order vs the eventual z_file chroms)
     if (vcf_is_sorting (VCF_COMP_MAIN)) 
-        ctx_populate_zf_ctx (is_luft_contig ? VCF_oCHROM : VCF_CHROM, STRa(contig_name), ref_index, false); 
+        ctx_populate_zf_ctx (is_luft_contig ? VCF_oCHROM : VCF_CHROM, STRa(contig_name), ref_index); 
 
     if (flag.show_txt_contigs) 
         iprintf ("%s \"%.*s\" LN=%"PRId64" ref_index=%d\n", 
@@ -829,10 +833,8 @@ bool vcf_inspect_txt_header (VBlockP txt_header_vb, BufferP txt_header, struct F
 
 static bool vcf_header_set_globals (rom filename, BufferP vcf_header, FailType soft_fail)
 {
-    static rom vcf_field_name_line_filename = NULL; // file from which the header line was taken
-
     // check for ##fileformat=VCF
-    vcf_has_file_format_vcf = vcf_header->len >= 16 && !memcmp (vcf_header->data, "##fileformat=VCF", 16);
+    vcf_has_file_format_vcf = str_isprefix_(STRb(*vcf_header), _S("##fileformat=VCF"));
 
     // count tabs in last line which should be the field header line
     unsigned tab_count = 0;
@@ -851,28 +853,8 @@ static bool vcf_header_set_globals (rom filename, BufferP vcf_header, FailType s
         else if (vcf_header->data[i] == '#' && (i==0 || vcf_header->data[i-1] == '\n' || vcf_header->data[i-1] == '\r')) {
         
             // ZIP: if first vcf file ; PIZ: everytime - copy the header to the global
-            if (!buf_is_alloc (&vcf_field_name_line) || IS_PIZ) {
+            if (!buf_is_alloc (&vcf_field_name_line) || IS_PIZ) 
                 buf_copy (evb, &vcf_field_name_line, vcf_header, char, i, vcf_header->len - i, "vcf_field_name_line");
-                vcf_field_name_line_filename = filename;
-            }
-
-            // ZIP only: subsequent files - if we're in bound mode just compare to make sure the header is the same
-            else if (flag.bind && 
-                     (vcf_header->len-i != vcf_field_name_line.len || memcmp (vcf_field_name_line.data, &vcf_header->data[i], vcf_field_name_line.len))) {
-
-                WARN ("%s: skipping %s: it has a different VCF header line than %s, see below:\n"
-                      "========= %s =========\n"
-                      "%.*s"
-                      "========= %s ==========\n"
-                      "%.*s"
-                      "=======================================\n", 
-                      global_cmd, filename, vcf_field_name_line_filename,
-                      vcf_field_name_line_filename, STRfb(vcf_field_name_line),
-                      filename, vcf_header->len32-i, &vcf_header->data[i]);
-                
-                if (soft_fail) return false;
-                else           exit_on_error (false);
-            }
 
             // count samples
             vcf_num_samples = (tab_count >= 9) ? tab_count-8 : 0; 

@@ -145,7 +145,6 @@ static void dict_io_compress_one_fragment (VBlockP vb)
         .magic                 = BGEN32 (GENOZIP_MAGIC),
         .section_type          = SEC_DICT,
         .data_uncompressed_len = BGEN32 (vb->fragment_len),
-        .compressed_offset     = BGEN32 (sizeof(SectionHeaderDictionary)),
         .codec                 = vb->fragment_ctx->dcodec,
         .vblock_i              = BGEN32 (vb->vblock_i),
         .num_snips             = BGEN32 (vb->fragment_num_words),
@@ -165,7 +164,7 @@ static void dict_io_compress_one_fragment (VBlockP vb)
 
     if (flag.show_time) codec_show_time (vb, st_name (SEC_DICT), vb->fragment_ctx->tag_name, vb->fragment_ctx->dcodec);
 
-    comp_compress (vb, vb->fragment_ctx, &vb->z_data, (SectionHeader*)&header, vb->fragment_start, NO_CALLBACK, "SEC_DICT");
+    comp_compress (vb, vb->fragment_ctx, &vb->z_data, &header, vb->fragment_start, NO_CALLBACK, "SEC_DICT");
 
     COPY_TIMER (dict_io_compress_one_fragment)    
 
@@ -196,6 +195,18 @@ void dict_io_compress_dictionaries (void)
 static Section dict_sec = NULL; 
 static ContextP dict_ctx = NULL;
 
+// V8 files: calculate dict size by adding up the size of all fragments. 
+// Note: We need this for supporting v8 reference files.
+static uint64_t v8_get_dict_size (VBlockP vb, Section dict_sec)
+{
+    uint64_t size = 0;
+
+    for (Section sec=dict_sec; sec->dict_id.num == dict_sec->dict_id.num ; sec++) 
+        size += BGEN32 (zfile_read_section_header (vb, sec, SEC_DICT).common.data_uncompressed_len);
+
+    return size;
+}
+
 static void dict_io_read_one_vb (VBlockP vb)
 {
     Section old_dict_sec = dict_sec;
@@ -215,12 +226,14 @@ static void dict_io_read_one_vb (VBlockP vb)
             iprintf ("%c Skipped loading DICT/%u %s.dict\n", sections_read_prefix (flag.preprocessing), vb->vblock_i, dict_ctx->tag_name);
         goto done;
     }
-    dict_ctx->is_loaded = true; // not skipped
+
     dict_ctx->dict_flags = dict_sec->flags.dictionary; // v15
 
     int32_t offset = zfile_read_section (z_file, vb, dict_sec->vblock_i, &vb->z_data, "z_data", SEC_DICT, dict_sec);    
     SectionHeaderDictionaryP header = 
         (offset != SECTION_SKIPPED) ? (SectionHeaderDictionaryP)vb->z_data.data : NULL;
+
+    dict_ctx->is_loaded = (offset != SECTION_SKIPPED);
 
     vb->fragment_len = header ? BGEN32 (header->data_uncompressed_len) : 0;
 
@@ -237,11 +250,11 @@ static void dict_io_read_one_vb (VBlockP vb)
         // this allows us to calculate the frag_size with which this dictionary was compressed and hence an upper bound on the size
         uint64_t size_upper_bound = (num_fragments == 1) ? vb->fragment_len : ((uint64_t)roundup2pow (vb->fragment_len) * (uint64_t)num_fragments);
         
-        buf_alloc (evb, &dict_ctx->dict, 0, size_upper_bound, char, 0, "contexts->dict");
+        buf_alloc (evb, &dict_ctx->dict, 0, VER(9) ? size_upper_bound : v8_get_dict_size (vb, dict_sec), char, 0, "contexts->dict");
         dict_ctx->dict.prm32[0] = num_fragments;     // for error reporting
         dict_ctx->dict.prm32[1] = vb->fragment_len;
 
-        buf_set_overlayable (&dict_ctx->dict);
+        buf_set_shared (&dict_ctx->dict);
     }
 
     if (header) {
@@ -250,8 +263,8 @@ static void dict_io_read_one_vb (VBlockP vb)
         dict_ctx->word_list.len += header ? BGEN32 (header->num_snips) : 0;
         dict_ctx->dict.len      += (uint64_t)vb->fragment_len;
 
-        ASSERT (dict_ctx->dict.len <= dict_ctx->dict.size, "Dict %s len=%"PRIu64" exceeds allocated size=%"PRIu64" (num_fragments=%u fragment_1_len=%u)", 
-                dict_ctx->tag_name, dict_ctx->dict.len, (uint64_t)dict_ctx->dict.size, dict_ctx->dict.prm32[0], dict_ctx->dict.prm32[1]);
+        ASSERT (dict_ctx->dict.len <= dict_ctx->dict.size, "%s: Dict %s vb=%u len=%"PRIu64" exceeds allocated size=%"PRIu64" (num_fragments=%u fragment_1_len=%u)", 
+                z_name, dict_ctx->tag_name, vb->vblock_i, dict_ctx->dict.len, (uint64_t)dict_ctx->dict.size, dict_ctx->dict.prm32[0], dict_ctx->dict.prm32[1]);
 
         if (flag.debug_read_ctxs)
             sections_show_header ((SectionHeaderP)header, NULL, dict_sec->offset, sections_read_prefix (flag.preprocessing));
@@ -272,11 +285,11 @@ static void dict_io_uncompress_one_vb (VBlockP vb)
     ASSERT (vb->fragment_start + BGEN32 (header->data_uncompressed_len) <= BAFTc (vb->fragment_ctx->dict), 
             "Buffer overflow when uncompressing dict=%s", vb->fragment_ctx->tag_name);
 
-    // a hack for uncompressing to a location within the buffer - while multiple threads are uncompressing into 
+    // uncompress to a location within the dict buffer - while multiple threads are uncompressing into 
     // non-overlappying regions in the same buffer in parallel
-    Buffer copy = vb->fragment_ctx->dict;
-    copy.data   = vb->fragment_start;
-    zfile_uncompress_section (vb, header, &copy, NULL, 0, SEC_DICT); // NULL name prevents buf_alloc
+    buf_overlay_partial (vb, &vb->scratch, &vb->fragment_ctx->dict, BNUM(vb->fragment_ctx->dict, vb->fragment_start), "scratch");
+    zfile_uncompress_section (vb, header, &vb->scratch, NULL, 0, SEC_DICT); // NULL name prevents buf_alloc
+    buf_free (vb->scratch);
 
 done:
     vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.
@@ -287,7 +300,7 @@ static void dict_io_dict_build_word_list_one (ContextP zctx)
     if (!zctx->word_list.len || zctx->word_list.data) return; // skip if 1. no words, or 2. already built
 
     buf_alloc (evb, &zctx->word_list, 0, zctx->word_list.len, CtxWord, 0, "contexts->word_list");
-    buf_set_overlayable (&zctx->word_list);
+    buf_set_shared (&zctx->word_list);
 
     rom word_start = zctx->dict.data;
     for (uint64_t snip_i=0; snip_i < zctx->word_list.len; snip_i++) {

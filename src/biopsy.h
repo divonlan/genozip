@@ -12,4 +12,4 @@
 
 extern void biopsy_init (rom optarg);
 extern void biopsy_take (VBlockP vb);
-
+extern bool biopsy_is_done (void);

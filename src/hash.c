@@ -242,11 +242,11 @@ void hash_alloc_global (ContextP zctx, uint32_t estimated_entries)
 
     // note: we set all entries to NO_NEXT == 0xffffffff
     buf_alloc_exact_255 (evb, zctx->global_hash, zctx->global_hash_prime, uint32_t, "zctx->global_hash");
-    buf_set_overlayable (&zctx->global_hash);
+    buf_set_shared (&zctx->global_hash);
 
     // note: we set all entries to {NODE_INDEX_NONE, NO_NEXT, NODE_INDEX_NONE} == {0xffffffff x 3} (note: GlobalHashEnt is packed)
     buf_alloc_exact_255 (evb, zctx->global_ents, estimated_entries, GlobalHashEnt, "zctx->global_ents");
-    buf_set_overlayable (&zctx->global_ents);
+    buf_set_shared (&zctx->global_ents);
     zctx->global_ents.len = 0;
 
     hash_populate_from_nodes (zctx);
@@ -327,7 +327,7 @@ WordIndex hash_global_get_entry (ContextP zctx, STRp(snip), HashGlobalGetEntryMo
     }
 
     // case: not found, and we are required to provide a new entry in global_ents
-    buf_alloc (evb, &zctx->global_ents, 1, 0, GlobalHashEnt, 2, "zctx->global_ents");
+    buf_alloc (evb, &zctx->global_ents, 1, 16384, GlobalHashEnt, 2, "zctx->global_ents");
 
     if (g_hashent != &g_head)
         g_hashent = B(GlobalHashEnt, zctx->global_ents, hashent_i); // might have changed after realloc
@@ -417,7 +417,7 @@ WordIndex hash_get_entry_for_seg (VBlockP segging_vb, ContextP vctx, STRp(snip),
         g_hashent = B(GlobalHashEnt, vctx->global_ents, next);
                 
         // case: snip is not in core hash table (at least it wasn't there when we cloned and set our maximum merge_num we accept)
-        uint32_t merge_num = __atomic_load_n (&g_hashent->merge_num, __ATOMIC_RELAXED);
+        uint32_t merge_num = __atomic_load_n (&g_hashent->merge_num, __ATOMIC_ACQUIRE);
         if (g_hashent->node_index == NODE_INDEX_NONE || merge_num > vctx->merge_num) break; // case 3
 
         // we skip singletons and continue searching

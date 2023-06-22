@@ -207,7 +207,6 @@ typedef struct VBlockSAM {
     VBLOCK_COMMON_FIELDS
 
     Buffer textual_seq;            // ZIP/PIZ: BAM: contains the textual SEQ (PIZ: used only in some cases)
-    uint32_t longest_seq_len;      // ZIP/PIZ: largest seq_len of textual SEQ in this VB. Transmitted through SectionHeaderVbHeader.sam_longest_seq_len
     uint32_t arith_compress_bound_longest_seq_len; // PIZ
 
     // current line
@@ -324,7 +323,6 @@ typedef struct VBlockSAM {
     bool saggy_is_prim;            // Seg/PIZ: The line in saggy_line_i is 1. not secondary 2. not supplementary 3. has no hard clips
 
     // QUAL stuff
-    bool qual_codec_no_longr;      // true if we can compress qual with CODEC_LONGR
     bool has_qual;                 // Seg: This VB has at least one line with non-missing qual
 
     // stats
@@ -334,7 +332,7 @@ typedef struct VBlockSAM {
 #define VB_SAM ((VBlockSAMP)vb)
 
 #define line_textual_cigars_used (segconf.has[OPTION_MC_Z] || /* sam_cigar_seg_MC_Z might be called  */ \
-                                  sam_is_main_vb)             /* sam_seg_SA_field_is_depn_from_prim might be called */
+                                  IS_MAIN(vb))             /* sam_seg_SA_field_is_depn_from_prim might be called */
 #define line_cigar(dl) Bc (*(IS_BAM_ZIP ? &vb->line_textual_cigars : &vb->txt_data), (dl)->CIGAR.index)
 
 // fixed-field part of a BAM alignment, see https://samtools.github.io/hts-specs/SAMv1.pdf
@@ -463,6 +461,10 @@ typedef struct __attribute__ ((__packed__)) Sag {
 #define DATA_LINE(i) B(ZipDataLineSAM, vb->lines, i)
 #define MATE(f) DATA_LINE(vb->mate_line_i)->f
 
+#define IS_MAIN(x) ((x)->comp_i == SAM_COMP_MAIN)
+#define IS_PRIM(x) ((x)->comp_i == SAM_COMP_PRIM)
+#define IS_DEPN(x) ((x)->comp_i == SAM_COMP_DEPN)
+
 extern void      sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qname), unsigned add_additional_bytes);
 extern WordIndex sam_seg_RNAME (VBlockSAMP vb, ZipDataLineSAM *dl, STRp (chrom), bool against_sa_group_ok, unsigned add_bytes);
 extern WordIndex sam_seg_RNEXT (VBlockSAMP vb, ZipDataLineSAM *dl, STRp (chrom), unsigned add_bytes);
@@ -472,7 +474,7 @@ extern void      bam_seg_BIN   (VBlockSAMP vb, ZipDataLineSAM *dl, uint16_t bin,
 extern void      sam_seg_NM_i  (VBlockSAMP vb, ZipDataLineSAM *dl, SamNMType NM, unsigned add_bytes);
 
 extern uint16_t bam_reg2bin (int32_t first_pos, int32_t last_pos);
-extern void sam_seg_verify_RNAME (VBlockSAMP vb, rom p_into_txt);
+extern void sam_seg_verify_RNAME (VBlockSAMP vb);
 extern void sam_piz_set_sag (VBlockSAMP vb);
 extern bool sam_seg_test_biopsy_line (VBlockP vb, STRp(line));
 
@@ -616,7 +618,7 @@ extern void sam_piz_deep_initialize (void);
 extern void sam_piz_deep_init_vb (VBlockSAMP vb, ConstSectionHeaderVbHeaderP header);
 extern void sam_piz_deep_grab_deep_ents (VBlockSAMP vb);
 
-#define SA_QUAL_DISPLAY_LEN 12
+#define SA_QUAL_DISPLAY_LEN 20
 extern rom sam_display_qual_from_SA_Group (const Sag *g);
 
 // MD:Z stuff
@@ -714,10 +716,10 @@ extern void sam_seg_mc_i (VBlockSAMP vb, int64_t mc, unsigned add_bytes);
 // -----------------------------------
 // SAG stuff
 // -----------------------------------
-static inline bool sam_seg_has_sag_by_SA (VBlockSAMP vb)    { return  IS_SAG_SA && ((sam_is_depn_vb && vb->sa_aln) || sam_is_prim_vb); }
-static inline bool sam_seg_has_sag_by_nonSA (VBlockSAMP vb) { return !IS_SAG_SA && ((sam_is_depn_vb && vb->sag)    || sam_is_prim_vb); }
+static inline bool sam_seg_has_sag_by_SA (VBlockSAMP vb)    { return  IS_SAG_SA && ((IS_DEPN(vb) && vb->sa_aln) || IS_PRIM(vb)); }
+static inline bool sam_seg_has_sag_by_nonSA (VBlockSAMP vb) { return !IS_SAG_SA && ((IS_DEPN(vb) && vb->sag)    || IS_PRIM(vb)); }
 
-extern void sam_sag_zip_init_vb (VBlockP vb);
+extern void sam_sag_zip_init_vb (VBlockSAMP vb);
 extern void sam_seg_gc_initialize (VBlockSAMP vb);
 extern bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(alignment), bool is_bam);
 extern bool sam_seg_prim_add_sag (VBlockSAMP vb, ZipDataLineSAM *dl, uint16_t num_alns/* inc primary aln*/, bool is_bam);

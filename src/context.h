@@ -98,19 +98,19 @@ static inline bool NEXTLOCALBIT(ContextP ctx)      { bool ret = bits_get ((BitsP
 static inline uint8_t NEXTLOCAL2BITS(ContextP ctx) { uint8_t ret = bits_get ((BitsP)&ctx->local, ctx->next_local) | (bits_get ((BitsP)&ctx->local, ctx->next_local+1) << 1); ctx->next_local += 2; return ret; }
 
 // factor in which we grow buffers in CTX upon realloc
-#define CTX_GROWTH 1.75  
+#define CTX_GROWTH 1.75
 
 #define ctx_node_vb(ctx, node_index, snip_in_dict, snip_len) ctx_node_vb_do(ctx, node_index, snip_in_dict, snip_len, __FUNCLINE)
 #define node_word_index(vb,did_i,index) ((index)!=WORD_INDEX_NONE ? ctx_node_vb (&(vb)->contexts[did_i], (index), 0,0)->word_index : WORD_INDEX_NONE)
 
 #define CTX(did_i)   ({ Did my_did_i = (did_i); /* could be an expression */\
-                        ASSERT (my_did_i < MAX_DICTS, "CTX(): did_i=%u out of range", my_did_i); /* will be optimized-out for constant did_i */ \
+                        ASSERT (my_did_i < MAX_DICTS, "CTX(): did_i=%u out of range", my_did_i); /* optimized out for constant did_i */ \
                         (&vb->contexts[my_did_i]); })
 
 #define LOADED_CTX(did_i) ({ ContextP ctx=CTX(did_i); ASSISLOADED(ctx); ctx; })
 
 #define ZCTX(did_i)  ({ Did my_did_i = (did_i);\
-                        ASSERT (my_did_i < MAX_DICTS, "ZCTX(): did_i=%u out of range", my_did_i);  \
+                        ASSERT (my_did_i < MAX_DICTS, "ZCTX(): did_i=%u out of range", my_did_i); /* optimized out for constant did_i */ \
                         &z_file->contexts[my_did_i]; })
 
 #define last_int(did_i)     contexts[did_i].last_value.i
@@ -127,7 +127,7 @@ static inline char *last_txt (VBlockP vb, Did did_i) { return last_txtx (vb, CTX
 #define history64(did_i, line_i) (*B(int64_t, CTX(did_i)->history, (line_i)))
 
 static inline bool is_last_txt_valid(ContextP ctx) { return ctx->last_txt.index != INVALID_LAST_TXT_INDEX; }
-static inline bool is_same_last_txt(VBlockP vb, ContextP ctx, STRp(str)) { return str_len == ctx->last_txt.len && !memcmp (str, last_txtx(vb, ctx), str_len); }
+static inline bool is_same_last_txt(VBlockP vb, ContextP ctx, STRp(str)) { return str_issame_(STRa(str), STRlst_(ctx)); }
 
 static inline void ctx_init_iterator (ContextP ctx) { ctx->iterator.next_b250 = NULL ; ctx->iterator.prev_word_index = -1; ctx->next_local = 0; }
 
@@ -154,7 +154,6 @@ extern CtxNode *ctx_node_zf_do (ConstContextP ctx, int32_t node_index, rom *snip
 #define ctx_node_zf(ctx, node_index, snip_in_dict, snip_len) ctx_node_zf_do(ctx, node_index, snip_in_dict, snip_len, __FUNCLINE)
 extern void ctx_merge_in_vb_ctx (VBlockP vb);
 extern void ctx_substract_txt_len (VBlockP vb, ContextP vctx);
-extern void ctx_add_compressor_time_to_zf_ctx (VBlockP vb);
 extern void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vctx, bool is_lcodec, bool is_lcodec_inherited);
 extern void ctx_reset_codec_commits (void);
 
@@ -215,8 +214,6 @@ extern void ctx_overlay_dictionaries_to_vb (VBlockP vb);
 extern void ctx_sort_dictionaries_vb_1(VBlockP vb);
 
 extern void ctx_update_stats (VBlockP vb);
-extern void ctx_free_context (ContextP ctx, Did did_i);
-extern void ctx_erase_context_bufs (ContextP ctx, Did did_i);
 
 extern CtxNode *ctx_get_node_by_word_index (ConstContextP ctx, WordIndex word_index);
 extern rom ctx_get_snip_by_word_index_do (ConstContextP ctx, WordIndex word_index, pSTRp(snip), FUNCLINE);
@@ -245,7 +242,7 @@ extern void ctx_read_all_counts (void);
 extern void ctx_compress_counts (void);
 extern rom ctx_get_snip_with_largest_count (Did did_i, int64_t *count);
 extern void ctx_populate_zf_ctx_from_contigs (Reference ref, Did dst_did_i, ConstContigPkgP ctgs);
-extern WordIndex ctx_populate_zf_ctx (Did dst_did_i, STRp (contig_name), WordIndex ref_index, bool set_count);
+extern WordIndex ctx_populate_zf_ctx (Did dst_did_i, STRp (contig_name), WordIndex ref_index);
 
 extern void ctx_dump_binary (VBlockP vb, ContextP ctx, bool local);
 
@@ -380,6 +377,7 @@ extern void ctx_set_ltype (VBlockP vb, int ltype, ...);
 extern void ctx_consolidate_stats (VBlockP vb, int parent, ...);
 extern void ctx_consolidate_statsN(VBlockP vb, Did parent, Did first_dep, unsigned num_deps);
 extern void ctx_consolidate_stats_(VBlockP vb, Did parent, unsigned num_deps, ContextP dep_ctxs[]);
+extern ContextP buf_to_ctx (ContextArray ca, ConstBufferP buf);
 
 extern rom dyn_type_name (DynType dyn_type);
 

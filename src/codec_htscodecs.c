@@ -60,7 +60,7 @@ static bool codec_hts_compress (VBlockP vb, ContextP ctx,
         }
 
         ASSERT (vb->codec_bufs[0].len == *uncompressed_len, "%s: \"%s\": Expecting in_so_far=%u == uncompressed_len=%u ctx=%s callback=%s", 
-                VB_NAME, name, vb->codec_bufs[0].len32, *uncompressed_len, TAG_NAME, !!get_line_cb ? "Yes" : "No");
+                VB_NAME, name, vb->codec_bufs[0].len32, *uncompressed_len, TAG_NAME, TF(!!get_line_cb));
     }
 
     bool ret = !!func (vb, (uint8_t*)uncompressed, *uncompressed_len, (uint8_t*)compressed, compressed_len, order);
@@ -97,8 +97,8 @@ COMPRESS_FUNC_TEMPLATE(arith_compress_to,     ARTw, ORDER_w)
 UNCOMPRESS (codec_rans_uncompress)
 {
     START_TIMER;
-    ASSERTNOTZERO (uncompressed_len, name);
-    ASSERTNOTZERO (compressed_len, name);
+    ASSERTNOTZEROn (uncompressed_len, name);
+    ASSERTNOTZEROn (compressed_len, name);
 
     unsigned out_len = (unsigned)uncompressed_len;
     ASSERT (rans_uncompress_to_4x16 (vb, (uint8_t *)compressed, compressed_len, (uint8_t *)uncompressed_buf->data, &out_len),
@@ -113,8 +113,8 @@ UNCOMPRESS (codec_rans_uncompress)
 UNCOMPRESS (codec_arith_uncompress)
 {
     START_TIMER;
-    ASSERTNOTZERO (uncompressed_len, name);
-    ASSERTNOTZERO (compressed_len, name);
+    ASSERTNOTZEROn (uncompressed_len, name);
+    ASSERTNOTZEROn (compressed_len, name);
 
     unsigned out_len = (unsigned)uncompressed_len;
     ASSERT (arith_uncompress_to (vb, (uint8_t *)compressed, compressed_len, (uint8_t *)uncompressed_buf->data, &out_len),

@@ -26,7 +26,7 @@
 // 2 possible values: G C
 void sam_seg_gem3_XB_A (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(xb), unsigned add_bytes)
 {
-    ASSSEG (xb_len==1 && (xb[0]=='C' || xb[0]=='G'), xb, "Invalid XB:A=%.*s, expecting C or G", STRf(xb));
+    ASSSEG (xb_len==1 && (xb[0]=='C' || xb[0]=='G'), "Invalid XB:A=%.*s, expecting C or G", STRf(xb));
 
     if (vb->bisulfite_strand)
         seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_GEM3_XB }, 2, OPTION_XB_A, add_bytes);

@@ -31,7 +31,11 @@ typedef _Bool bool;
 
 typedef enum __attribute__ ((__packed__)) { no=0, yes=1, unknown=2 } thool; // three-way "bool"
 
-typedef enum __attribute__ ((__packed__)) { HARD_FAIL, SOFT_FAIL } FailType;
+typedef enum __attribute__ ((__packed__)) { 
+    HARD_FAIL,   // display error and abort 
+    SOFT_FAIL,   // silently return error
+    WARNING_FAIL // display warning and return error
+} FailType;
 
 typedef enum __attribute__ ((__packed__)) { RECON_OFF, RECON_ON } ReconType;
 
@@ -112,7 +116,9 @@ typedef const struct QnameFlavorStruct *QnameFlavor;
 typedef struct DispatcherData *Dispatcher;
 typedef struct Huffman *HuffmanP;
 
-typedef struct { char s[80]; } StrText;
+typedef struct { char s[80];   } StrText;
+typedef struct { char s[1024]; } StrTextLong;
+typedef struct { char s[4096]; } StrTextSuperLong;
 
 #define VB ((VBlockP)(vb))
 
@@ -123,10 +129,13 @@ typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT, NUM_EXE_TYPE
 #define is_genols    (exe_type == EXE_GENOLS)
 
 // IMPORTANT: DATATYPES GO INTO THE FILE FORMAT - THEY CANNOT BE CHANGED
-typedef enum { DT_NONE=-1, // used in the code logic, never written to the file
-               DT_REF=0, DT_VCF=1, DT_SAM=2, DT_FASTQ=3, DT_FASTA=4, DT_GFF=5, DT_ME23=6, // these values go into SectionHeaderGenozipHeader.data_type
-               DT_BAM=7, DT_BCF=8, DT_GENERIC=9, DT_PHYLIP=10, DT_CHAIN=11, DT_KRAKEN=12, 
-               DT_LOCS=13, DT_BED=14, NUM_DATATYPES } DataType; 
+typedef enum __attribute__ ((__packed__)) { 
+    DT_NONE=-1, // used in the code logic, never written to the file
+    DT_REF=0, DT_VCF=1, DT_SAM=2, DT_FASTQ=3, DT_FASTA=4, DT_GFF=5, DT_ME23=6, // these values go into SectionHeaderGenozipHeader.data_type
+    DT_BAM=7, DT_BCF=8, DT_GENERIC=9, DT_PHYLIP=10, DT_CHAIN=11, DT_KRAKEN=12, 
+    DT_LOCS=13, DT_BED=14, NUM_DATATYPES 
+} DataType; 
+
 #define Z_DT(dt)   (z_file->data_type   == (DT_##dt))
 #define TXT_DT(dt) (txt_file->data_type == (DT_##dt))
 #define VB_DT(dt)  (vb->data_type       == (DT_##dt))
@@ -164,7 +173,8 @@ typedef uint8_t CompIType;    // comp_i
 #define COMP_MAIN ((CompIType)0)
 #define COMP_ALL  ((CompIType)254)
 #define COMP_NONE ((CompIType)255)
-#define MAX_NUM_COMPS 5       // can be increased if needed
+#define MAX_NUM_COMPS 254 
+#define MAX_NUM_TXT_FILES_IN_ZFILE (MAX_NUM_COMPS-2) // A high number to support many FASTQs in Deep. This is the maximum bc CompIType is uint8_t. 2 components reserved for generated components (in SAM and DVCF).
 
 typedef uint32_t VBIType;     // vblock_i
 typedef uint64_t CharIndex;   // index within dictionary
@@ -201,6 +211,11 @@ typedef union { // 64 bit
     void *p; 
 } ValueType __attribute__((__transparent_union__));
 #define NO_VALUE ((ValueType){})
+
+static inline bool is_p_in_range (const void *p, const void *start, uint64_t bytes)
+{
+    return p && start && (rom)p >= (rom)start && (rom)p < (rom)start + bytes;
+}
 
 // global parameters - set before any thread is created, and never change
 extern uint32_t global_max_threads;
@@ -252,8 +267,8 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     SEC_TXT_HEADER      = 8,  // Per-component section
     SEC_VB_HEADER       = 9,  // Per-VB section
     SEC_DICT            = 10, // Global section
-    SEC_B250            = 11, // Multiple per-VB sections
-    SEC_LOCAL           = 12, // Multiple per-VB sections
+    SEC_B250            = 11, // Multiple sections per-VB
+    SEC_LOCAL           = 12, // Multiple sections per-VB
     SEC_CHROM2REF_MAP   = 13, // Global section
     SEC_STATS           = 14, // Global section
     SEC_BGZF            = 15, // Per-component section (optional): contains the uncompressed sizes of the source file bgzf block
@@ -261,7 +276,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     SEC_COUNTS          = 17, // Global section: introduced v12
     SEC_REF_IUPACS      = 18, // Global section: introduced v12
 
-    NUM_SEC_TYPES // fake section for counting
+    NUM_SEC_TYPES 
 } SectionType;
 
 typedef enum { DATA_EXHAUSTED, READY_TO_COMPUTE, MORE_DATA_MIGHT_COME } DispatchStatus;
@@ -278,8 +293,10 @@ typedef IS_SKIP ((*Skip));
 // PIZ / ZIP inspired by "We don't sell Duff. We sell Fudd"
 typedef enum { NO_COMMAND=-1, ZIP='z', PIZ='d' /* this is unzip */, LIST='l', LICENSE='L', VERSION='V', HELP=140, SHOW_HEADERS=10, TEST_AFTER_ZIP } CommandType;
 extern CommandType command, primary_command;
-#define IS_ZIP (command == ZIP)
-#define IS_PIZ (command == PIZ)
+#define IS_ZIP  (command == ZIP)
+#define IS_PIZ  (command == PIZ)
+#define IS_LIST (command == LIST)
+#define IS_SHOW_HEADERS (command == SHOW_HEADERS)
 
 // external vb - used when an operation is needed outside of the context of a specific VB;
 extern VBlockP evb;
@@ -425,6 +442,8 @@ typedef SORTER ((*Sorter));
 #define qSTRa(x)    x, &x##_len                      
 #define cSTR(x)     x, sizeof x-1                 // a use with a string literal
 #define STRlst(did_i) last_txt (VB, (did_i)), vb->last_txt_len (did_i)
+#define STRlstf(did_i) vb->last_txt_len (did_i), last_txt (VB, (did_i))
+#define STRlst_(ctx) last_txtx (VB, (ctx)), (ctx)->last_txt.len
 
 // for printf %.*s argument list
 #define STRf(x)    ((int)x##_len), x          
@@ -436,9 +455,11 @@ typedef SORTER ((*Sorter));
 #define STRcpy(dst,src)    ({ if (src##_len) { memcpy(dst,src,src##_len) ; dst##_len = src##_len; } })
 #define STRcpyi(dst,i,src) ({ if (src##_len) { memcpy(dst##s[i],src,src##_len) ; dst##_lens[i] = src##_len; } })
 #define STRset(dst,src)    ({ dst=src; dst##_len=src##_len; })
-#define STRtxtset(dst,src)    ({ dst=Btxt ((src).index); dst##_len=(src).len; })
-#define STRinc(x) ({ x++; x##_len--; })
+#define STRtxtset(dst,src) ({ dst=Btxt ((src).index); dst##_len=(src).len; })
+#define STRinc(x)          ({ x++; x##_len--; })
+#define STRdec(x)          ({ x--; x##_len++; })
 #define STRLEN(string_literal) (sizeof string_literal - 1)
+#define _S(x) x, STRLEN(x)
 #define STRtxt(x) Btxt (x), x##_len
 #define STRtxtw(txtword) Btxt ((txtword).index), (txtword).len // used with TxtWord
 #define STRBw(buf,txtword) Bc ((buf), (txtword).index), (txtword).len // used with TxtWord
@@ -474,13 +495,17 @@ typedef uint8_t TranslatorId;
     
 typedef struct { uint32_t qname, seq, qual; } DeepHash;
 
-typedef enum { Q1or3  = -2, // used in "only_q"
-               QANY   = -1, 
-               QNAME1 = 0,   // QNAME is SAM/BAM, KRAKEN, line1 of FASTQ up to first space
-               QNAME2 = 1,   // FASTQ: either: the remainder of line1, but excluding AUX (name=value) data, OR the second (original) QNAME on an NCBI line3, but only if different than line1  
-               QLINE3 = 2,   // FASTQ: The NCBI QNAME on line3, but only if different than line1 
-               NUM_QTYPES } QType; 
-#define QTYPE_NAME {    "QNAME", "QNAME2", "LINE3" }
+typedef enum { QNONE   = -5,
+               QSAM    = -4,
+               Q2orSAM = -3, // may appear as QNAME2 (eg in line3 if QNAME1 is NCBI) or in SAM
+               Q1or3   = -2, // used in "only_q"
+               QANY    = -1, 
+               QNAME1  = 0,  // QNAME is SAM/BAM, KRAKEN, line1 of FASTQ up to first space
+               QNAME2  = 1,  // FASTQ: either: the remainder of line1, but excluding AUX (name=value) data, OR the second (original) QNAME on an NCBI line3, but only if different than line1  
+               QLINE3  = 2,  // FASTQ: The NCBI QNAME on line3, but only if different than line1 
+               NUM_QTYPES/*NUM_QTYPES is part of the file format*/ } QType; 
+#define QTYPE_NAME { "QNAME", "QNAME2", "LINE3" }
+#define QTYPE_NEG_NAMES { "", "QANY", "Q1or3", "Q2orSAM", "QSAM", "QNONE" }
 
 // filter is called before reconstruction of a repeat or an item, and returns false if item should 
 // not be processed. if not processed, contexts are not consumed. if we need the contexts consumed,
@@ -513,6 +538,15 @@ void func (VBlockP vb,                                              \
            char **line_data, uint32_t *line_data_len,               \
            uint32_t maximum_size, /* might be less than the size available if we're sampling in codec_assign_best_codec() */ \
            bool *is_rev)          // QUAL and SEQ callbacks - must be returned in SAM/BAM and set to 0 elsewhere
+
+#define COMPRESSOR_CALLBACK_DT(func)                                \
+void func (VBlockP vb_,                                             \
+           ContextP ctx, /* NULL if not compressing a context */    \
+           LineIType vb_line_i,                                     \
+           char **line_data, uint32_t *line_data_len,               \
+           uint32_t maximum_size, /* might be less than the size available if we're sampling in codec_assign_best_codec() */ \
+           bool *is_rev)          // QUAL and SEQ callbacks - must be returned in SAM/BAM and set to 0 elsewhere
+
 #define CALLBACK_NO_SIZE_LIMIT 0xffffffff // for maximum_size
 
 typedef COMPRESSOR_CALLBACK (LocalGetLineCB);
@@ -567,7 +601,8 @@ extern StrTime str_time (void);
 #define ASSERT0(condition, string)           ASSERT (condition, string "%s", "")
 #define ASSERTISNULL(p)                      ASSERT0 (!p, "expecting "#p" to be NULL")
 #define ASSERTNOTNULL(p)                     ASSERT0 (p, #p" is NULL")
-#define ASSERTNOTZERO(n,name)                ASSERT ((n), "%s: %s=0", (name), #n)
+#define ASSERTNOTZEROn(n,name)               ASSERT ((n), "%s: %s=0", (name), #n)
+#define ASSERTNOTZERO(n)                     ASSERT ((n), "%s=0", #n)
 #define ASSERTISZERO(n)                      ASSERT (!(n), "%s!=0", #n)
 #define ASSERTW(condition, format, ...)      ( { if (!(condition) && !flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); }} )
 #define ASSERTW0(condition, string)          ASSERTW (condition, string "%s", "")
@@ -593,8 +628,8 @@ extern StrTime str_time (void);
 
 #define WARN_ONCE0(string)                   WARN_ONCE (string "%s", "")
 
-#define ASSERTGOTO(condition, format, ...)   ( { if (!(condition)) { progress_newline(); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); goto error; }} )
-#define ASSERTGOTO0(condition, string)       ASSERTGOTO ((condition), string "%s", "")
+#define ASSGOTO(condition, format, ...)      ( { if (!(condition)) { progress_newline(); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); goto error; }} )
+#define ASSGOTO0(condition, string)          ASSGOTO ((condition), string "%s", "")
 
 // exit codes
 #define EXIT_OK                   0

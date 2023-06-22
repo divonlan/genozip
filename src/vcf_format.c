@@ -50,7 +50,7 @@ void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt))
     bool possible_conditional_renaming = possibly_rename && (vb->last_index (VCF_oXSTRAND) || LO_IS_OK_SWITCH (last_ostatus));
 
     // case: FORMAT is the same as previous line - just use the same node_index, but only if there is no chance of conditional renaming
-    if (fmt_len == vb->last_format.len && !memcmp (vb->last_format.data, fmt, fmt_len) && !possible_conditional_renaming) {
+    if (str_issame_(STRa(fmt), STRb(vb->last_format)) && !possible_conditional_renaming) {
         seg_duplicate_last (VB, CTX(VCF_FORMAT), fmt_len + 1 /* \t or \n */);
         dl->format_node_i = (dl-1)->format_node_i;
         return;

@@ -17,7 +17,7 @@ extern PizDisCoords piz_dis_coords (VBlockP vb); // for ASSPIZ
 typedef struct { char s[100]; } PizDisQname; 
 extern PizDisQname piz_dis_qname (VBlockP vb); // for ASSPIZ
 
-#define ASSPIZ(condition, format, ...) ({ if (!(condition)) { progress_newline(); fprintf (stderr, "%s %s/%s: Error in %s:%u line_in_file(1-based)=%"PRIu64" %s%s%s%s: ", str_time().s, LN_NAME, CTX(vb->curr_field)->tag_name, __FUNCLINE, writer_get_txt_line_i ((VBlockP)(vb)), ((Z_DT(VCF) || Z_DT(BCF)) ? " sample_i=" : ""), ((Z_DT(VCF) || Z_DT(BCF)) ? str_int_s (vb->sample_i).s : ""), piz_dis_coords((VBlockP)(vb)).s, piz_dis_qname((VBlockP)(vb)).s); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); }})
+#define ASSPIZ(condition, format, ...) ({ if (!(condition)) { progress_newline(); fprintf (stderr, "%s %s/%s: Error in %s:%u line_in_file(1-based)=%"PRIu64" %s%s%s: ", str_time().s, LN_NAME, CTX(vb->curr_field)->tag_name, __FUNCLINE, writer_get_txt_line_i ((VBlockP)(vb)), cond_int (Z_DT(VCF) || Z_DT(BCF), " sample_i=", vb->sample_i), piz_dis_coords((VBlockP)(vb)).s, piz_dis_qname((VBlockP)(vb)).s); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); }})
 #define ASSPIZ0(condition, string) ASSPIZ (condition, string "%s", "")
 
 // goes into ctx->history if not STORE_INT
@@ -35,7 +35,7 @@ extern int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i, char sep, ReconTy
 #define reconstruct_from_ctx(vb,did_i,sep,reconstruct) reconstruct_from_ctx_do ((VBlockP)(vb),(did_i),(sep),(reconstruct), __FUNCTION__)
 
 extern void reconstruct_one_snip (VBlockP vb, ContextP ctx, WordIndex word_index, STRp(snip), ReconType reconstruct);
-extern uint32_t reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, STRp(len_str), ReconType reconstruct);
+extern uint32_t reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, uint32_t len, ReconType reconstruct);
 extern int64_t reconstruct_from_local_int (VBlockP vb, ContextP ctx, char separator /* 0 if none */, ReconType reconstruct);
 extern HasNewValue reconstruct_demultiplex (VBlockP vb, ContextP ctx, STRp(snip), int channel_i, ValueType *new_value, ReconType reconstruct);
 
@@ -114,12 +114,19 @@ typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, Did did_i, DictI
     ({ ASSPIZ ((ctx)->next_local + (offset) < (ctx)->local.len32, "PEEKNEXTLOCAL: %s.local exhausted: next_local=%u len=%u", (ctx)->tag_name, (ctx)->next_local, (ctx)->local.len32); \
        *B(type, (ctx)->local, (ctx)->next_local + (offset)); })
 
+#ifdef DEBUG
 #define RECONSTRUCT(s,s_len)                                                    \
     ({ uint32_t new_len = (uint32_t)(s_len); /* copy in case caller uses ++ */  \
        ASSPIZ (vb->txt_data.len + new_len <= vb->txt_data.size, "RECONSTRUCT: txt_data overflow: txt_data.len=%"PRIu64" str_len=%u vb->txt_data.size=%u", \
                vb->txt_data.len, new_len, (uint32_t)vb->txt_data.size);  /* leave vb->txt_data.len 64b to detect bugs */     \
-       memcpy (&vb->txt_data.data[Ltxt], (s), new_len);             \
+       memcpy (BAFTtxt, (s), new_len);                                          \
        Ltxt += new_len; })
+#else
+#define RECONSTRUCT(s,s_len) /* note: for speed, we don't check for overflow here. instead, we check after each line in container_reconstruct() */ \
+    ({ uint32_t new_len = (uint32_t)(s_len); /* copy in case caller uses ++ */  \
+       memcpy (BAFTtxt, (s), new_len);                                          \
+       Ltxt += new_len; })
+#endif
 
 #define RECONSTRUCT1(c) vb->txt_data.data[Ltxt++] = (c) // we don't use BNXTc bc it is too expensive
 #define RECONSTRUCT_snip RECONSTRUCT (snip, snip_len)

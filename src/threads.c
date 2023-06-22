@@ -34,13 +34,13 @@
 #include "sections.h"
 #include "arch.h"
 
-static Buffer threads = EMPTY_BUFFER;
+static Buffer threads = {};
 static Mutex threads_mutex = { .name = "threads_mutex-not-initialized" };
-static pthread_t main_thread, writer_thread;
+pthread_t main_thread = 0; 
+static pthread_t writer_thread;
 static bool writer_thread_is_set = false;
-static pthread_t signal_handler_thread;
 
-static Buffer log = EMPTY_BUFFER; // for debugging thread issues, activated with --debug-threads
+static Buffer log = {}; // for debugging thread issues, activated with --debug-threads
 static Mutex log_mutex = {};
 
 typedef struct {
@@ -51,66 +51,106 @@ typedef struct {
     VBIType vb_i, vb_id;
 } ThreadEnt;
 
+static rom __attribute__((unused)) threads_get_task_name (void)
+{
+    pthread_t pthread = pthread_self();
+
+    if (pthread == main_thread) return "main";
+    
+    for_buf (ThreadEnt, ent, threads)
+        if (ent->pthread == pthread) return ent->task_name; // note: this will also detect the writer thread
+
+    return "unregistered";
+}
+
 void threads_print_call_stack (void) 
 {
-#if ! defined _WIN32 && defined DEBUG
-#   define STACK_DEPTH 15
+#ifndef _WIN32
+#   define STACK_DEPTH 100
     void *array[STACK_DEPTH];
-    size_t size = backtrace(array, STACK_DEPTH);
+    size_t count = backtrace (array, STACK_DEPTH);
     
-    fprintf (stderr, "Call stack:\n");
-    backtrace_symbols_fd (array, size, STDERR_FILENO);
+    // note: need to pass -rdynamic to the linker in order to see function names
+    fprintf (stderr, "\nCall stack (%s thread):\n", 
+               threads_am_i_main_thread()   ? "MAIN" 
+             : threads_am_i_writer_thread() ? "WRITER"
+             :                                threads_get_task_name());
+    backtrace_symbols_fd (array, count, STDERR_FILENO);
+
+    fflush (stderr);
 #endif
 }
 
-// #ifdef __linux__
+#ifndef _WIN32
 
-// static void threads_sigsegv_handler (void) 
-// {
-//     iprintf ("Segmentation fault, exiting. Time: %s\n", str_time().s);
-//     threads_print_call_stack(); // this works ok on mac, but seems to not print function names on Linux
-//     threads_cancel_other_threads();
-//     exit (EXIT_SIGSEGV); // dumps core
-// }
+// signal handler of SIGINT (CTRL-C) - debug only 
+static void threads_sigint_handler (int signum) 
+{
+    fprintf (stderr, "\n%s process %u Received SIGINT (usually caused by Ctrl-C):", global_cmd, getpid()); 
 
-// static void threads_sighup_handler (void) 
-// {
-//     iprintf ("Process %u received SIGHUP, ignoring. Use 'kill -9' to kill the process. Time: %s\n", getpid(), str_time().s);
-// }
-
-// // explicitly catch signals, that we otherwise blocked
-// static void *threads_signal_handler (void *unused)
-// {    
-//     // block some signals - we will wait for them explicitly in threads_signal_handler(). this is inherited by all threads
-//     sigset_t sigset = {}; 
-//     sigemptyset (&sigset);
-//     sigaddset (&sigset, SIGSEGV);
-//     sigaddset (&sigset, SIGHUP);
-//     sigaddset (&sigset, SIGUSR1);
-//     sigaddset (&sigset, SIGUSR2);
-//     int err = pthread_sigmask(SIG_BLOCK, &sigset, NULL);
-//     ASSERT (!err, "pthread_sigmask failed: %s", strerror (err));
-
-//     while (1) {
-//         int sig=0, err=0;
-//         ASSERT (!(err = sigwait (&sigset, &sig)), "sigwait failed: %s", strerror (err));
+    threads_print_call_stack(); // this works ok on mac, but seems to not print function names on Linux
     
-//         switch (sig) {
-//             case SIGSEGV  : threads_sigsegv_handler(); break;
-//             case SIGHUP   : threads_sighup_handler();  break;
-//             case SIGUSR1  : fprintf (stderr, "Caught signal SIGUSR1, showing memory\n");
-//                             buf_show_memory_handler(); break;
-//             case SIGUSR2  : fprintf (stderr, "Caught signal SIGUSR2, writing threads log\n");
-//                             threads_write_log (false); break;
-//             case SIGCHLD  : break; // Child process has stopped or exited
-//             case SIGCONT  : break; // Continue executing, if stopped
-//             default       : ABORT ("Unexpected signal %s", strsignal (sig));
-//         }
-//     }
-//     return 0; // never reaches here
-// }
+    // look for deadlocks
+    if (!flag.show_time) fprintf (stderr, "Tip: use --show-time to see locked mutexes with Ctrl-C\n");
 
-// #endif
+    __atomic_thread_fence (__ATOMIC_ACQUIRE);
+    __atomic_signal_fence (__ATOMIC_ACQUIRE);
+
+    mutex_who_is_locked(); // works only if --show_time
+    buflist_who_is_locked();
+    fflush (stderr);
+
+    exit (128 + SIGTERM); 
+}
+
+// signal handler of SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGSYS
+static void threads_bug_signal_handler (int signum) 
+{
+    iprintf ("\n\nSignal \"%s\" received, exiting. Time: %s%s%s", 
+             strsignal (signum), str_time().s, cond_str(flags_command_line(), "\nCommand line: ", flags_command_line()), SUPPORT);
+    threads_print_call_stack(); // this works ok on mac, but seems to not print function names on Linux
+
+    exit (128 + signum); // convention for exit code due to signal - both Linux and MacOS
+}
+
+// signal handler of SIGUSR1 
+static void threads_sigusr1_handler (int signum) 
+{
+    __atomic_thread_fence (__ATOMIC_ACQUIRE);
+    __atomic_signal_fence (__ATOMIC_ACQUIRE);
+    
+    iprint0 ("\n\n");
+    buflist_show_memory (false, 0, 0);
+}
+
+// signal handler of SIGUSR2 
+static void threads_sigusr2_handler (int signum) 
+{
+    __atomic_thread_fence (__ATOMIC_ACQUIRE);
+    __atomic_signal_fence (__ATOMIC_ACQUIRE);
+
+    iprint0 ("\n\n");
+    threads_write_log (true);
+}
+
+#endif
+
+static void threads_init_signal_handlers (void)
+{
+#ifndef _WIN32
+    signal (SIGSEGV, threads_bug_signal_handler);
+    signal (SIGBUS,  threads_bug_signal_handler);
+    signal (SIGFPE,  threads_bug_signal_handler);
+    signal (SIGILL,  threads_bug_signal_handler);
+    signal (SIGSYS,  threads_bug_signal_handler); // used on Mac, ignored on Linux
+
+    signal (SIGUSR1, threads_sigusr1_handler);
+    signal (SIGUSR2, threads_sigusr2_handler);
+
+    if (flag.debug_or_test) 
+        signal (SIGINT, threads_sigint_handler);
+#endif
+}
 
 // called by main thread at system initialization
 void threads_initialize (void)
@@ -119,14 +159,13 @@ void threads_initialize (void)
     mutex_initialize (log_mutex);
     main_thread = pthread_self(); 
 
-    buf_alloc (evb, &log, 500, 1000000, char, 2, "log");
-    buf_alloc (evb, &threads, 0, global_max_threads + 3, ThreadEnt, 2, "threads");
+    buf_set_promiscuous (&log, "log");
+    buf_alloc (evb, &log, 500, 1000000, char, 2, NULL);
+    
+    buf_set_promiscuous (&threads, "threads");
+    buf_alloc (evb, &threads, 0, global_max_threads + 3, ThreadEnt, 2, NULL);
 
-// // only Linux, as in Mac sigwait sometimes returns "invalid argument" - TODO solve this
-// #ifdef __linux__
-//     int err = pthread_create (&signal_handler_thread, NULL, threads_signal_handler, 0); 
-//     ASSERT (!err, "failed to create signal_handler_thread: %s", strerror(err));
-// #endif
+    threads_init_signal_handlers();
 }
 
 void threads_finalize (void)
@@ -136,15 +175,7 @@ void threads_finalize (void)
     if (arch_is_valgrind()) {
         buf_destroy (log);
         buf_destroy (threads);
-
-        if (!pthread_cancel (signal_handler_thread))  // success
-            pthread_join (signal_handler_thread, NULL);
     }
-}
-
-bool threads_am_i_main_thread (void)
-{
-    return pthread_self() == main_thread;
 }
 
 void threads_set_writer_thread (void)
@@ -178,21 +209,21 @@ void threads_write_log (bool to_info_stream)
     }
 }
 
-// called by MAIN thread only
+// called by main and writer threads
 static void threads_log_by_thread_id (ThreadId thread_id, const ThreadEnt *ent, rom event)
 {
     bool has_vb = ent->vb_i != (uint32_t)-1;
 
     if (flag.show_threads)  {
-        if (has_vb) iprintf ("%s: vb_i=%u vb_id=%u %s thread_id=%d pthread=%"PRIu64"\n", ent->task_name, ent->vb_i, ent->vb_id, event, thread_id, (uint64_t)ent->pthread);
+        if (has_vb) iprintf ("%s: vb_i=%u vb_id=%d %s thread_id=%d pthread=%"PRIu64"\n", ent->task_name, ent->vb_i, ent->vb_id, event, thread_id, (uint64_t)ent->pthread);
         else        iprintf ("%s: %s: thread_id=%d pthread=%"PRIu64"\n", ent->task_name, event, thread_id, (uint64_t)ent->pthread);
     }
     
     if (flag.debug_threads) {
         mutex_lock (log_mutex);
-        buf_alloc (NULL, &log, 10000, 1000000, char, 2, "log");
+        buf_alloc (NULL, &log, 10000, 1000000, char, 2, NULL);
         
-        if (has_vb) bufprintf (NULL, &log, "%s: vb_i=%u vb_id=%u %s thread_id=%d pthread=%"PRIu64"\n", ent->task_name, ent->vb_i, ent->vb_id, event, thread_id, (uint64_t)ent->pthread);
+        if (has_vb) bufprintf (NULL, &log, "%s: vb_i=%u vb_id=%d %s thread_id=%d pthread=%"PRIu64"\n", ent->task_name, ent->vb_i, ent->vb_id, event, thread_id, (uint64_t)ent->pthread);
         else        bufprintf (NULL, &log, "%s: %s thread_id=%d pthread=%"PRIu64"\n", ent->task_name, event, thread_id, (uint64_t)ent->pthread);
         mutex_unlock (log_mutex);
     }
@@ -250,13 +281,15 @@ void threads_log_by_vb (ConstVBlockP vb, rom task_name, rom event,
 static void *thread_entry_caller (void *vb_)
 {
     VBlockP vb = (VBlockP)vb_;
-
     pthread_setcanceltype (PTHREAD_CANCEL_ASYNCHRONOUS, NULL); // thread can be canceled at any time
 
     // wait for threads_create to complete updating VB
     mutex_wait (vb->ready_for_compute, true); 
 
     threads_log_by_vb (vb, vb->compute_task, "STARTED", 0);
+
+    // wait for VB initialzation data to be visible to this thread
+    __atomic_thread_fence (__ATOMIC_ACQUIRE); 
 
     TimeSpecType start_time, end_time; 
     clock_gettime(CLOCK_REALTIME, &start_time); 
@@ -271,6 +304,9 @@ static void *thread_entry_caller (void *vb_)
 
     threads_log_by_vb (vb, task_name, "COMPLETED", time_usec);
     
+    // wait for data written by this thread to be visible to other threads
+    __atomic_thread_fence (__ATOMIC_RELEASE); 
+
     return NULL;
 }
 
@@ -287,6 +323,9 @@ ThreadId threads_create (void (*func)(VBlockP), VBlockP vb)
 
     buf_alloc (NULL, &threads, 1, global_max_threads + 3, ThreadEnt, 2, "threads");
     threads.len = MAX_(threads.len, thread_id+1);
+
+    // release all data (inc. VB initialization data) to be visible to the new thread
+    __atomic_thread_fence (__ATOMIC_RELEASE); 
 
     mutex_initialize (vb->ready_for_compute);
     mutex_lock (vb->ready_for_compute); // thread_entry_caller will wait on this until VB is initialized
@@ -323,10 +362,10 @@ void threads_join_do (ThreadId *thread_id, rom expected_task, rom expected_task2
     const ThreadEnt ent = *B(ThreadEnt, threads, *thread_id); // make a copy as array be realloced
     mutex_unlock (threads_mutex);
 
-    ASSERT (*thread_id < threads.len32, "thread_id=%u out of range [0,%u]", *thread_id, threads.len32);
-    ASSERT (ent.task_name, "entry for thread_id=%u has task_name=NULL", *thread_id);
+    ASSERT (*thread_id < threads.len32, "called from %s: thread_id=%u out of range [0,%u]", func, *thread_id, threads.len32);
+    ASSERT (ent.task_name, "called from %s: entry for thread_id=%u has task_name=NULL", func, *thread_id);
     ASSERT (!strcmp (ent.task_name, expected_task) || !strcmp (ent.task_name, expected_task2), 
-            "Expected thread_id=%u to have task=\"%s\" or task=\"%s\", but it has \"%s\"", *thread_id, expected_task, expected_task2, ent.task_name);
+            "called from %s: Expected thread_id=%u to have task=\"%s\" or task=\"%s\", but it has \"%s\"", func, *thread_id, expected_task, expected_task2, ent.task_name);
 
     static ThreadId last_joining = THREAD_ID_NONE;
     if (*thread_id != last_joining) { // show only once in a busy wait
@@ -337,6 +376,9 @@ void threads_join_do (ThreadId *thread_id, rom expected_task, rom expected_task2
     // wait for thread to complete (no wait if it completed already)
     pthread_join (ent.pthread, NULL);
     
+    // wait for data from this thread to arrive
+    __atomic_thread_fence (__ATOMIC_ACQUIRE); 
+
     threads_log_by_thread_id (*thread_id, &ent, "JOINED");
 
     mutex_lock (threads_mutex);

@@ -7,6 +7,7 @@
 //   and subject to penalties specified in the license.
 
 #include <stdarg.h>
+#include <errno.h>
 #include "genozip.h"
 #include "buffer.h"
 #include "strings.h"
@@ -29,25 +30,16 @@
 #include "tar.h"
 #include "generic.h"
 #include "reference.h"
+#include "contigs.h"
 
-typedef struct {
-    Did my_did_i, st_did_i;
-    bool is_dict_alias;
-    int64_t txt_len, z_size;
-    char name[100];
-    rom type;
-    StrText did_i, words, hash, uncomp_dict, comp_dict, comp_b250, uncomp_local, comp_local;
-    float pc_of_txt, pc_of_z, pc_dict, pc_in_local, pc_failed_singletons, pc_hash_occupancy;
-    rom bcodec, lcodec, dcodec;
-    uint32_t global_hash_prime;
-} StatsByLine;
-
-static Buffer stats={}, STATS={}, features={}, hash_occ={}, internals={};
-
+static Buffer stats={}, STATS={};
+Buffer sbl_buf={}, features={}, hash_occ={}, internals={};
 Buffer stats_programs = {}; // data-type specific programs (eg @PG for SAM/BAM FORMAT/INFO tags for VCF)
+int64_t all_txt_len=0;
+float src_comp_ratio=0, all_comp_ratio=0;
 
 // calculate hash_occ before consolidating stats
-static void stats_submit_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
+static void stats_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
 {
     int need_sep=0;
 
@@ -81,10 +73,17 @@ static void stats_submit_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
                     bufprintf (evb, &hash_occ, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.unknown_flavor_qnames[q][i], strlen(segconf.unknown_flavor_qnames[q][i]), ',', -127)).s); 
         }
     }
+
+    // if Deep with QNONE, we send the first QNAME of the SAM file and the first read name of the FASTQ
+    if (flag.deep && segconf.deep_qtype == QNONE) {
+        bufprintf (evb, &hash_occ, "%sDEEP_QNAME_MISMATCH%%2C%%2C%%2C", need_sep++ ? "%3B" : "");
+        bufprintf (evb, &hash_occ, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.deep_1st_qname, strlen(segconf.deep_1st_qname), ',', -127)).s); 
+        bufprintf (evb, &hash_occ, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.deep_1st_desc,  strlen(segconf.deep_1st_desc),  ',', -127)).s); 
+    }
 }
 
 // stats of contexts contributing more than 1% to Z
-static void stats_submit_calc_large_stats (StatsByLine *sbl, unsigned num_stats, uint64_t all_z_size)
+static void stats_calc_large_stats (StatsByLine *sbl, unsigned num_stats, uint64_t all_z_size)
 {
     if (!all_z_size) return;
     
@@ -106,161 +105,6 @@ static void stats_submit_calc_large_stats (StatsByLine *sbl, unsigned num_stats,
             bufprintf (evb, &internals, "%s%%2C%.1f%%25%%2C%u%%2C",
                        url_esc_non_valid_charsS(sbl[i].dcodec).s, 100.0 * (double)zctx->dict.count  / (double)all_z_size, zctx->nodes.len32); // dict
         }
-}
-
-static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt_len, 
-                          float src_comp_ratio, float all_comp_ratio)
-{
-    #define SUBMIT_MAX_URL_LEN 8100 // approx. limit for submission to Forms
-
-    if (all_txt_len < 65536 && !flag.debug_submit && !flag.make_reference) goto done; // don't bother for really small files (in make-ref all_txt_len=0)
-
-#ifndef _WIN32
-    // run submission in a separate process to not stall the main process 
-    fflush ((FILE *)z_file->file); // flush before fork, otherwise both processes will have z_file I/O buffers...
-
-    pid_t child_pid = fork();
-    if (child_pid) goto done; // parent returns
-#endif
-
-    static Buffer url_buf={};
-    
-    // reference: https://stackoverflow.com/questions/18073971/http-post-to-a-google-form/47444396#47444396    
-    /* To get entry IDs - in Chrome browser: 1. open form 2. click on eye icon to Preview 2. right-click Inspect 3. go to "console" tab 4. run this code:
-    function loop(e){
-    if(e.children)
-    for(let i=0;i<e.children.length;i++){
-        let c = e.children[i], n = c.getAttribute('name');
-        if(n) console.log(`${c.getAttribute('aria-label')}: ${n}`);
-        loop(e.children[i]);
-     }
-    }; loop(document.body);
-    */ 
-
-    arch_set_locale(); // in case not inherited from parent process
-    bufprint0 (evb, &url_buf, !flag.debug_submit ? "https://docs.google.com/forms/d/e/1FAIpQLSdc997k63YnW4fRxnQOHRqngCT_6_fIhrBQZgTXPTgrPCpe_w/formResponse" // the ID is in the url when previewing the form
-                                                 : "https://docs.google.com/forms/d/e/1FAIpQLScZE-0ccHZTWQqOYjaWOomSGheDjcOluEfJEIbL5-In35dReg/formResponse"); 
-    bufprintf (evb, &url_buf, "?entry.1917122099=%s", GENOZIP_CODE_VERSION);                           // Genozip version Eg "14.0.0"
-    bufprintf (evb, &url_buf, "&entry.1014872627=%u", license_get_number());                           // license #. Eg "32412351324"
-    bufprintf (evb, &url_buf, "&entry.1861722167=%s", url_esc_non_valid_chars (arch_get_user_host())); // user@host. Eg "john@hpc"
-    bufprintf (evb, &url_buf, "&entry.441046403=%s", dt_name (z_file->data_type));                     // data type. Eg "VCF"
-    bufprintf (evb, &url_buf, "&entry.984213484=%"PRIu64"%%20%%2C%"PRIu64, // extra space (%20) to overcome issue
-               all_txt_len,                      // plain txt size (as arrived in seg) (note: --make-ref is 0)
-               z_file->txt_file_disk_sizes_sum); // src-codec compressed txt size (i.e. source files on disk)
-
-    // add per-component txt sizes
-    if (z_file->txt_file_disk_sizes_sum != z_file->txt_file_disk_sizes[0]) { // more one txt file
-        bufprint0 (evb, &url_buf, "%2C"); // ',' (in bufprint0, unlike bufprintf, it is "%2C" not "%%2C")
-        for (CompIType comp_i=0; comp_i < z_file->num_components; comp_i++)
-            if (z_file->txt_file_disk_sizes[comp_i]) // skip generated components
-                bufprintf (evb, &url_buf, "%"PRId64"%%2B", z_file->txt_file_disk_sizes[comp_i]); 
-
-        url_buf.len32 -= 3; // remove final "%2B"
-    }
-    
-    // per-component source codecs (note: until v14 this field was "source_codec,src_comp_ratio" eg "GZ,2.9") 
-    bufprint0 (evb, &url_buf, "&entry.960659059=");
-    for (CompIType comp_i=0; comp_i < z_file->num_components; comp_i++) 
-        if (z_file->comp_source_codec[comp_i])
-            bufprintf (evb, &url_buf, "%s%%2B", url_esc_non_valid_charsS (codec_name(z_file->comp_source_codec[comp_i])).s);
-    url_buf.len -= 3; // remove the final "%2B"
-
-    bufprintf (evb, &url_buf, "&entry.621670070=%.1f", all_comp_ratio);                                      // Genozip gain over plain txt eg "5.4"
-    
-    extern unsigned n_files;
-    bufprintf (evb, &url_buf, "&entry.1635780209=OS=%s%%3Bdist=%s%%3Bcores=%u%%3Bphysical_GB=%.1f%%3Bruntime=%s%%3Bavg_compute_vbs=%.1f%%3Bn_files=%u", 
-               url_esc_non_valid_charsS (arch_get_os()).s, 
-               url_esc_non_valid_charsS (arch_get_distribution()).s, 
-               arch_get_num_cores(),
-               arch_get_physical_mem_size(), 
-               url_esc_non_valid_charsS (file_get_z_run_time(z_file)).s,
-               z_file->avg_compute_vbs,
-               n_files); 
-
-    bufprintf (evb, &url_buf, "&entry.2140634550=%s", features.len ? url_esc_non_valid_charsS (B1STc(features)).s : "NONE");            // Features. Eg "Sorted"
-    
-    // careful not to use bufprintf for hash_occ and stats_programs as their size is not bound
-    buf_append_string (evb, &url_buf, "&entry.851737826=");
-    buf_append_string (evb, &url_buf, stats_programs.len ? url_esc_non_valid_chars (B1STc(stats_programs)) : "NONE"); 
-
-    buf_append_string (evb, &url_buf, "&entry.282448068=");
-    buf_append_string (evb, &url_buf, hash_occ.len ? B1STc(hash_occ) : "NONE"); // Hash ineffeciencies, eg "RNAME,64.0 KB,102%" - each field is quadlet - name, type, hash size, hash occupancy    
-
-    // fields
-    bufprint0 (evb, &url_buf, "&entry.988930848=");      // Compression ratio of individual fields ratio, eg "FORMAT/GT,20%,78;..." - each field is triplet - name, percentage of z_data, compression ratio
-    for (uint32_t i=0, need_sep=0; i < num_stats; i++) 
-        if (sbl[i].z_size) 
-            bufprintf (evb, &url_buf, "%s%s%%2C%.1f%%25%%2C%.1fX", 
-                       need_sep++ ? "%3B" : "", url_esc_non_valid_charsS(sbl[i].name).s, sbl[i].pc_of_z, (float)sbl[i].txt_len / (float)sbl[i].z_size); // ratio z vs txt
-
-    // Flags. Eg "best,reference=INTERNAL"
-    bufprint0 (evb, &url_buf, "&entry.1369097179=");     
-
-    #define F(name) if (flag.name) { bufprint0 (evb, &url_buf, #name "%3B"); }
-    F(best) ; F(fast) ; F(deep) ; F(pair) ; 
-    F(optimize) ; F(optimize_DESC) ; F(optimize_phred) ; F(optimize_QUAL) ; F(optimize_Vf) ;
-    F(optimize_VQSLOD) ; F(optimize_ZM) ; F(optimize_sort) ; F(GL_to_PL) ; F(GP_to_PP) ;
-    F(add_line_numbers) ; F(sort) ; F(unsorted) ; F(md5) ; F(subdirs) ; F(out_filename) ;
-    F(replace) ; F(force) ; F(stdin_size) ; F(test) ; F(match_chrom_to_reference) ; F(no_kmers) ;
-    F(make_reference) ; F(dvcf_rename) ; F(dvcf_drop) ;
-    F(show_lift) ; F(multiseq) ; F(files_from) ; F(no_gencomp) ; F(force_gencomp) ; 
-    F(debug_lines) ; F(show_sag) ; F(show_depn) ; F(no_domqual) ; F(show_aligner) ; F(show_qual) ;
-    F(show_threads) ; F(debug_threads) ; F(show_vblocks) ; F(show_codec) ;
-    F(show_headers) ; F(show_dict) ; F(show_b250) ; F(show_gheader) ; F(show_recon_plan) ;
-    F(show_ref_contigs) ; F(show_digest) ; F(debug_gencomp) ; F(quiet) ; F(explicitly_generic);
-    F(submit_stats) ; F(debug_submit) ;
-    #undef F
-
-    #define F(name,fmt,none_value) if (flag.name != (none_value)) bufprintf (evb, &url_buf, #name "=" fmt "%%3B", flag.name);
-    F(show_stats, "%u", 0);
-    F(show_stats_comp_i, "%u", COMP_NONE);
-    F(threads_str, "%s", NULL);
-    F(vblock, "%s", NULL);
-    #undef F
-
-    if (flag.reference)           bufprintf (evb, &url_buf, "reference=%s%%3B", ref_type_name());    
-    if (kraken_is_loaded)         bufprint0 (evb, &url_buf, "kraken%3B");    
-    if (chain_is_loaded)          bufprint0 (evb, &url_buf, "chain%3B");    
-    if (crypt_have_password())    bufprint0 (evb, &url_buf, "encrypted%3B");    
-    if (tar_zip_is_tar())         bufprint0 (evb, &url_buf, "tar%3B");    
-    if (flag.kraken_taxid)        bufprint0 (evb, &url_buf, "taxid%3B");    
-    if (flag.stdin_type)          bufprintf (evb, &url_buf, "stdin_type=%s%%3B", ft_name(flag.stdin_type));    
-    if (flag.show_one_counts.num) bufprintf (evb, &url_buf, "show_counts=%s%%3B", url_esc_non_valid_charsS (dis_dict_id(flag.show_one_counts).s).s);
-
-    // Contexts - keep URL beneath 8100 - if needed, trim some little-used contexts 
-    if (url_buf.len <= SUBMIT_MAX_URL_LEN) { 
-        int start_i = url_buf.len32;
-        buf_append_string (evb, &url_buf, "&entry.1636005533=");
-        buf_append_string (evb, &url_buf, internals.len ? B1STc(internals) : "NONE");
-
-        // remove contexts from the bottom until we reduce url to beneath permitted max
-        char *start = Bc (url_buf, start_i); // note: buffer possibly realloced in buf_append_string
-        while (url_buf.len > SUBMIT_MAX_URL_LEN) {
-            char *find = BAFTc(url_buf) - 3;
-            while (find > start && (find[0] != '%' || find[1] != '3' || find[2] != 'B')) find--; // %3B is a semicolon
-            url_buf.len = BNUM (url_buf, find); // either last semicolon, or start of the internals field
-        }
-        *BAFTc(url_buf) = 0;
-    }
-
-    int ret = url_read_string (B1STc(url_buf), NULL, 0);
-    if (ret < 0 && (flag.debug || flag.debug_submit))
-        WARN ("Error: failed to submit to \"stats%s\" (error=%d): URL=\"%s\"", flag.debug_submit ? " DEBUG" : "", ret, B1STc(url_buf));
-    
-    else if (flag.debug_submit)
-        iprintf ("Submitted to \"stats DEBUG\":\n%s\n", B1STc(url_buf));
-
-#ifndef _WIN32
-    exit(0); // child process is done
-#endif
-
-done:
-    // note: we leak the (small amount of) memory allocated by url_esc_non_valid_chars()
-    buf_free (url_buf);    
-    buf_free (hash_occ);    
-    buf_free (features);    
-    buf_free (internals);
-    buf_free (stats_programs);
 }
 
 // store the sizes of dict / b250 / local in zctx->*.param, and of other sections in sbl[st].z_size
@@ -337,7 +181,7 @@ static void stats_output_file_metadata (void)
         
     bufprint0 (evb, &stats, "\n\n");
     if (txt_file->name) 
-        bufprintf (evb, &stats, "%s file%s%s: %.*s\n", dt_name (z_file->data_type), 
+        bufprintf (evb, &stats, "%s file%s%s: %.*s\n", flag.deep ? "BAM/FASTQ" : z_dt_name(),
                    z_file->bound_txt_names.count > 1 ? "s" : "", // param holds the number of txt files
                    (flag.deep && flag.pair)?" (deep & paired)" : flag.deep?" (deep)" : flag.pair?" (paired)" : "", 
                    (int)z_file->bound_txt_names.len, z_file->bound_txt_names.data);
@@ -382,35 +226,53 @@ static void stats_output_file_metadata (void)
         case DT_BAM: {
             uint64_t num_alignments = z_file->comp_num_lines[SAM_COMP_MAIN] + z_file->comp_num_lines[SAM_COMP_PRIM] + z_file->comp_num_lines[SAM_COMP_DEPN]; // excluding Deep FQ components
             unsigned num_fq_files = MAX_(0, (int)z_file->num_components - SAM_COMP_FQ00); 
-            double deep_pc    = (double)100.0 * (double)z_file->deep_stats[NDP_DEEPABLE] / (double)z_file->deep_stats[NDP_FQ_READS];
+            double deep_pc = z_file->deep_stats[NDP_FQ_READS] ? (double)100.0 * (double)z_file->deep_stats[NDP_DEEPABLE] / (double)z_file->deep_stats[NDP_FQ_READS] : 0;
 
             if (z_has_gencomp) 
-                bufprintf (evb, &stats, "%ss: %s (in Prim VBs: %s in Depn VBs: %s)  Contexts: %u   Vblocks: %u x %u MB  Sections: %s\n", 
+                bufprintf (evb, &stats, "%s %ss: %s (in Prim VBs: %s in Depn VBs: %s)\n", 
+                           z_dt_name(),
                            DTPZ (line_name), str_int_commas (num_alignments).s, str_int_commas (z_file->comp_num_lines[SAM_COMP_PRIM]).s, 
-                           str_int_commas (z_file->comp_num_lines[SAM_COMP_DEPN]).s, num_used_ctxs, 
-                           z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), str_int_commas (z_file->section_list_buf.len).s);
+                           str_int_commas (z_file->comp_num_lines[SAM_COMP_DEPN]).s);
+            else
+                bufprintf (evb, &stats, "%s %ss: %s\n", 
+                           z_dt_name(), DTPZ (line_name), str_int_commas (num_alignments).s);
 
             if (flag.deep)
-                bufprintf (evb, &stats, "FASTQ reads: %s in %u FASTQ files (deep=%.1f%%)\n", str_int_commas (z_file->deep_stats[NDP_FQ_READS]).s, num_fq_files, deep_pc);
+                bufprintf (evb, &stats, "FASTQ %ss: %s in %u FASTQ files (deep=%.1f%%%s qtype=%s no_qual=%s has_trimmed=%s)\n", 
+                           dt_props[DT_FASTQ].line_name, str_int_commas (z_file->deep_stats[NDP_FQ_READS]).s, num_fq_files, deep_pc,
+                           cond_int(segconf.sam_cropped_at, " crop=", segconf.sam_cropped_at), qtype_name (segconf.deep_qtype), TF(segconf.deep_no_qual), TF(segconf.deep_has_trimmed));
+
+            bufprintf (evb, &stats, "Contexts: %u  Vblocks: %u x %u MB  Sections: %s\n", 
+                       num_used_ctxs, z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), str_int_commas (z_file->section_list_buf.len).s);
+
+            uint32_t num_deep_fq_vbs = 0;
+            if (flag.deep) 
+                for (CompIType comp_i = SAM_COMP_FQ00; comp_i < z_file->num_components; comp_i++)
+                    num_deep_fq_vbs += sections_get_num_vbs (comp_i);
 
             if (z_has_gencomp) {
                 bufprintf (evb, &stats, "Main VBs: %u Prim VBs: %u Depn VBs: %u", 
                            sections_get_num_vbs(SAM_COMP_MAIN), sections_get_num_vbs(SAM_COMP_PRIM), sections_get_num_vbs(SAM_COMP_DEPN));
 
-                if (flag.deep)
-                    bufprintf (evb, &stats, " FASTQ VBs: %u", sections_get_num_vbs(SAM_COMP_FQ00) + sections_get_num_vbs(SAM_COMP_FQ01));
+                if (flag.deep) 
+                    bufprintf (evb, &stats, " FASTQ VBs: %u", num_deep_fq_vbs);
 
                 bufprint0 (evb, &stats, "\n");
             }
             else if (flag.deep) 
-                bufprintf (evb, &stats, "%s VBs: %u FASTQ VBs: %u\n", 
-                           dt_name (z_file->data_type), sections_get_num_vbs(SAM_COMP_MAIN), sections_get_num_vbs(SAM_COMP_FQ00) + sections_get_num_vbs(SAM_COMP_FQ01));
+                bufprintf (evb, &stats, "%s VBs: %u FASTQ VBs: %u\n", z_dt_name(), sections_get_num_vbs(SAM_COMP_MAIN), num_deep_fq_vbs);
             else
                 REPORT_VBs;
 
-            bufprintf (evb, &features, "num_hdr_contigs=%u;", sam_num_header_contigs());
-            bufprintf (evb, &features, "deep=%.1f%%;", deep_pc);
-            
+            bufprintf (evb, &features, "hdr_ncontigs=%u;", sam_num_header_contigs());
+            if (IS_REF_LOADED_ZIP) bufprintf (evb, &features, "ref_ncontigs=%u;", ref_get_ctgs (gref)->contigs.len32);
+            bufprintf (evb, &features, "ref_nbases=%"PRIu64";", contigs_get_nbases (IS_REF_INTERNAL ? sam_hdr_contigs : ref_get_ctgs (gref)));
+            if (flag.deep) bufprintf (evb, &features, "deep=%.1f%%;", deep_pc);
+            if (flag.deep && segconf.sam_cropped_at) bufprintf (evb, &features, "deep_crop=%ubp;", segconf.sam_cropped_at);
+            if (flag.deep) bufprintf (evb, &features, "deep_qtype=%s;", qtype_name (segconf.deep_qtype));
+            if (flag.deep) bufprintf (evb, &features, "deep_has_trimmed=%s;", TF(segconf.deep_has_trimmed));
+            if (flag.deep) bufprintf (evb, &features, "deep_no_qual=%s;", TF (segconf.deep_no_qual));
+
             if (num_alignments) {
                 FEATURE0 (segconf.is_sorted && !segconf.sam_is_unmapped, "Sorting: Sorted by POS", "Sorted");        
                 FEATURE0 (segconf.is_sorted && segconf.sam_is_unmapped, "Sorting: Unmapped", "Unmapped");        
@@ -450,6 +312,8 @@ static void stats_output_file_metadata (void)
         case DT_BCF:
             bufprintf (evb, &stats, "Samples: %u   ", vcf_header_get_num_samples()); //  no newline
             bufprintf (evb, &features, "num_samples=%u;", vcf_header_get_num_samples());
+            if (IS_REF_LOADED_ZIP) bufprintf (evb, &features, "ref_ncontigs=%u;", ref_get_ctgs (gref)->contigs.len32);
+            if (IS_REF_LOADED_ZIP) bufprintf (evb, &features, "ref_nbases=%"PRIu64";", contigs_get_nbases (ref_get_ctgs (gref)));
 
             if (z_is_dvcf)
                 bufprintf (evb, &stats, "%ss: %s (Prim-only: %s Luft-only: %s)  Contexts: %u   Vblocks: %u x %u MB  Sections: %u\n", 
@@ -465,7 +329,7 @@ static void stats_output_file_metadata (void)
                 bufprint0 (evb, &features, "DVCF;");
             }
 
-            FEATURE0 (segconf.vcf_is_beagle,     "Feature: Beagle", "Beagle"); // TODO: remove some of these here for submit, as redundant with stats_programs
+            FEATURE0 (segconf.vcf_is_beagle,     "Feature: Beagle", "Beagle"); // TODO: remove some of these here for features, as redundant with stats_programs
             FEATURE0 (segconf.vcf_is_varscan,    "Feature: VarScan", "VarScan");
             FEATURE0 (segconf.vcf_is_gwas,       "Feature: GWAS-VCF", "GWAS-VCF");
             FEATURE0 (segconf.vcf_is_gvcf,       "Feature: GVCF", "GVCF");
@@ -500,6 +364,8 @@ static void stats_output_file_metadata (void)
             REPORT_VBs;
             REPORT_QNAME;
             FEATURE (flag.optimize_DESC && z_file->num_lines, "Sequencer: %s", "Sequencer=%s", segconf_tech_name());\
+            if (IS_REF_LOADED_ZIP) bufprintf (evb, &features, "ref_ncontigs=%u;", ref_get_ctgs (gref)->contigs.len32);
+            if (IS_REF_LOADED_ZIP) bufprintf (evb, &features, "ref_nbases=%"PRIu64";", contigs_get_nbases (ref_get_ctgs (gref)));
 
             REPORT_KRAKEN;
             if (segconf.r1_or_r2) bufprintf (evb, &features, "R1_or_R2=R%d;", (segconf.r1_or_r2 == PAIR_R1) ? 1 : 2);
@@ -700,13 +566,14 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
         bufprintf (evb, &STATS, "\nSections (sorted by %% of genozip file):%s\n", "");
     }
 
-    bufprint0 (evb, &STATS, "did_i Name              Parent            #Words  Snips-(%% of #Words)    Hash-table    uncomp      comp      comp    uncomp      comp      comp       txt    comp  %% of  %% of\n");
+    bufprint0 (evb, &STATS, "did_i Name              Parent            #Words  Snips-(% of #Words)     Hash-table   uncomp      comp      comp    uncomp      comp      comp       txt    comp   % of   % of\n");
     bufprint0 (evb, &STATS, "                                         in file   Dict  Local FailSton   Size Occp      dict      dict      b250     local     local     TOTAL             ratio    txt    zip\n");
-
+    // note: bufprint0 requires % to display a %, while fprintf requires %%.
+    
     // if -W or -w appear multiple times, we print the stats header to stderr to allow use with "| grep"
     if (flag.show_stats == STATS_LONG_GREP) {
-        fprintf (stderr, "did_i Name              Parent            #Words  Snips-(%% of #Words)    Hash-table    uncomp      comp      comp    uncomp      comp      comp       txt    comp  %% of  %% of\n");
-        fprintf (stderr, "                                         in file   Dict  Local FailSton   Size Occp      dict      dict      b250     local     local     TOTAL             ratio    txt    zip\n");
+        fprintf (stderr,    "did_i Name              Parent            #Words  Snips-(%% of #Words)     Hash-table   uncomp      comp      comp    uncomp      comp      comp       txt    comp   %% of   %% of\n");
+        fprintf (stderr,    "                                         in file   Dict  Local FailSton   Size Occp      dict      dict      b250     local     local     TOTAL             ratio    txt    zip\n");
     }
 
     for (uint32_t i=0; i < num_stats; i++, s++)
@@ -734,22 +601,21 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
 void stats_generate (void) // specific section, or COMP_NONE if for the entire file
 {
     // initial allocation
-    buf_alloc (evb, &stats,     0, 10000,  char, 1, "stats"); stats.len = 0; // reset if used for previous file
-    buf_alloc (evb, &STATS,     0, 10000,  char, 1, "stats"); STATS.len = 0;
-    buf_alloc (evb, &features,  0, 1000,   char, 1, "stats"); 
-    buf_alloc (evb, &hash_occ,  0, 1000,   char, 1, "stats"); 
-    buf_alloc (evb, &internals, 0, 1000,   char, 1, "stats"); 
-    
+    buf_alloc (evb, &stats,     0, 10000,  char, 1, "stats");
+    buf_alloc (evb, &STATS,     0, 10000,  char, 1, "stats");
+    buf_alloc (evb, &features,  0, 1000,   char, 1, "stats");
+    buf_alloc (evb, &hash_occ,  0, 1000,   char, 1, "stats");
+    buf_alloc (evb, &internals, 0, 1000,   char, 1, "stats");
+
     if (flag.show_stats_comp_i == COMP_NONE) {
         stats_output_file_metadata();
         buf_copy (evb, &STATS, &stats, char,0,0, "stats");
     }
 
-    int64_t all_comp_dict=0, all_uncomp_dict=0, all_comp_b250=0, all_comp_local=0, all_z_size=0, all_txt_len=0;
+    int64_t all_comp_dict=0, all_uncomp_dict=0, all_comp_b250=0, all_comp_local=0, all_z_size=0;
 
     // prepare data
     #define NUM_SBL (NUM_SEC_TYPES + z_file->num_contexts + 2) // 2 for consolidated groups
-    static Buffer sbl_buf = EMPTY_BUFFER;
     ARRAY_alloc (StatsByLine, sbl, NUM_SBL, true, sbl_buf, evb, "stats");
 
     #define ST_NAME(st) (&st_name(st)[4]) // cut off "SEC_" 
@@ -810,7 +676,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
                  :                                                      ZCTX(zctx->st_did_i)->tag_name;
 
         // note: each VB contributes local.len contains its b250.count if it has it, and local_num_len if not 
-        float n_words = zctx->local.len;
+        float n_words = zctx->word_list.count; // set in ctx_update_stats()
 
         s->my_did_i             = zctx->did_i;
         s->st_did_i             = zctx->st_did_i;
@@ -825,7 +691,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
         s->uncomp_dict          = str_size (zctx->dict.len);
         s->comp_dict            = str_size (zctx->dict.count);
         s->comp_b250            = str_size (zctx->b250.count);
-        s->uncomp_local         = str_size (zctx->local.len);
+        s->uncomp_local         = str_size (zctx->local.len); // set in ctx_update_stats()
         s->comp_local           = str_size (zctx->local.count);
         s->pc_of_txt            = txt_size ? 100.0 * (float)s->txt_len / (float)txt_size : 0;
         s->pc_of_z              = z_size   ? 100.0 * (float)s->z_size  / (float)z_size   : 0;
@@ -837,55 +703,55 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
         s++; // increment only if it has some data, otherwise already continued
     }
 
-    unsigned num_stats = s - sbl;
+    sbl_buf.len32 = s - sbl;
 
     // note: for txt size and compression ratio in the TOTAL line (all_comp_ratio) we use txt_data_so_far_bind_0 
     // (the original txt data size) and not all_txt_size (size after ZIP modifications like --optimize). 
     // Therefore, in case of ZIP-modified txt, the sum of the (modified) fields in the TXT column will NOT equal the
     // TOTAL in the TXT column. That's ok.
-    float all_comp_ratio = (float)txt_size_0 /* without modifications */ / (float)all_z_size;
+    all_comp_ratio       = (float)txt_size_0 /* without modifications */ / (float)all_z_size;
     float all_pc_of_txt  = txt_size ? 100.0 * (float)all_txt_len / (float)txt_size : 0 /* with modifications */;
     float all_pc_of_z    = z_size   ? 100.0 * (float)all_z_size  / (float)z_size   : 0;
 
     // long form stats from --STATS    
-    qsort (sbl, num_stats, sizeof (sbl[0]), stats_sort_by_z_size);  // sort by compressed size
+    qsort (sbl, sbl_buf.len32, sizeof (sbl[0]), stats_sort_by_z_size);  // sort by compressed size
 
-    stats_submit_calc_large_stats (sbl, num_stats, all_z_size);
+    stats_calc_large_stats (sbl, sbl_buf.len32, all_z_size);
 
-    stats_output_STATS (sbl, num_stats, 
+    stats_output_STATS (sbl, sbl_buf.len32, 
                         all_txt_len, all_uncomp_dict, all_comp_dict, all_comp_b250, all_comp_local, all_z_size, all_pc_of_txt, all_pc_of_z, all_comp_ratio);
 
     // calculate hash occupancy before consolidating stats
-    stats_submit_calc_hash_occ (sbl, num_stats);
+    stats_calc_hash_occ (sbl, sbl_buf.len32);
     
     // consolidates stats of child contexts into the parent one
-    stats_consolidate_ctxs (sbl, num_stats);
+    stats_consolidate_ctxs (sbl, sbl_buf.len32);
     
-    stats_consolidate_non_ctx (sbl, num_stats, 
+    stats_consolidate_non_ctx (sbl, sbl_buf.len32, 
                                IS_REF_EXT_STORE ? "Reference" : "SEQ", // when compressing SAM/FASTQ with REF_EXT_STORE, account for the reference in its own "Parent"
                                5, ST_NAME (SEC_REFERENCE), ST_NAME (SEC_REF_IS_SET), 
                                ST_NAME (SEC_REF_CONTIGS), ST_NAME (SEC_CHROM2REF_MAP),
                                ST_NAME (SEC_REF_IUPACS));
 
-    stats_consolidate_non_ctx (sbl, num_stats, "Other", 22 + (DTPZ(txt_header_required) == HDR_NONE), "E1L", "E2L", "EOL", 
+    stats_consolidate_non_ctx (sbl, sbl_buf.len32, "Other", 22 + (DTPZ(txt_header_required) == HDR_NONE), "E1L", "E2L", "EOL", 
                                "SAMPLES", "AUX", TOPLEVEL, "ToPLUFT", "TOP2BAM", "TOP2FQ", "TOP2NONE", "TOP2FQEX", "TOP2VCF", "TOP2HASH", 
                                "LINEMETA", "CONTIG", "COORDS", "SAG", "SAALN",
                                ST_NAME (SEC_DICT_ID_ALIASES), ST_NAME (SEC_RECON_PLAN),
                                ST_NAME (SEC_VB_HEADER), ST_NAME (SEC_BGZF), ST_NAME(SEC_TXT_HEADER)/*must be last*/);
         
-    stats_consolidate_non_ctx (sbl, num_stats, "RandomAccessIndex", 2, ST_NAME (SEC_RANDOM_ACCESS), ST_NAME (SEC_REF_RAND_ACC));
+    stats_consolidate_non_ctx (sbl, sbl_buf.len32, "RandomAccessIndex", 2, ST_NAME (SEC_RANDOM_ACCESS), ST_NAME (SEC_REF_RAND_ACC));
     
     ASSERTW (all_txt_len == txt_size || flag.make_reference || // all_txt_len=0 in make-ref as there are no contexts
              z_is_dvcf, // temporarily remove DVCF - our header data accounting is wrong (bug 681)
-             "Expecting all_txt_len=%"PRId64" == txt_size=%"PRId64" (diff=%"PRId64")", all_txt_len, txt_size, (int64_t)txt_size - all_txt_len);
+             "Expecting all_txt_len(sum of txt_len of all contexts)=%"PRId64" == txt_size(modified txt_file size)=%"PRId64" (diff=%"PRId64")", all_txt_len, txt_size, (int64_t)txt_size - all_txt_len);
 
     // short form stats from --stats    
-    qsort (sbl, num_stats, sizeof (sbl[0]), stats_sort_by_z_size);  // re-sort after consolidation
+    qsort (sbl, sbl_buf.len32, sizeof (sbl[0]), stats_sort_by_z_size);  // re-sort after consolidation
 
     // source compression, eg BGZF, against txt before any modifications
-    float src_comp_ratio = (float)txt_size_0 / z_file->txt_file_disk_sizes_sum; 
+    src_comp_ratio = (float)txt_size_0 / z_file->txt_file_disk_sizes_sum; 
 
-    stats_output_stats (sbl, num_stats, src_comp_ratio, all_txt_len, txt_size_0, all_z_size, all_pc_of_txt, all_pc_of_z, all_comp_ratio);
+    stats_output_stats (sbl, sbl_buf.len32, src_comp_ratio, all_txt_len, txt_size_0, all_z_size, all_pc_of_txt, all_pc_of_z, all_comp_ratio);
     
     // if we're showing stats of a single components - output it now
     if (flag.show_stats_comp_i != COMP_NONE) {
@@ -898,10 +764,10 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
     // note: we use txt_data_so_far_bind is the sum of recon_sizes - see zip_update_txt_counters - which is
     // expected to be the sum of txt_len. However, this NOT the size of the original file which is stored in
     // z_file->txt_data_so_far_bind_0.
-    ASSERTW (flag.show_stats_comp_i != COMP_NONE || all_txt_len == txt_size || flag.data_modified || z_is_dvcf || flag.make_reference, 
-             "Hmm... incorrect calculation for %s sizes: total section sizes=%s but file size is %s (diff=%d)", 
-             dt_name (z_file->data_type), str_int_commas (all_txt_len).s, str_int_commas (txt_size).s, 
-             (int32_t)(txt_size - all_txt_len)); 
+    ASSERT (!flag.debug_or_test || flag.show_stats_comp_i != COMP_NONE || all_txt_len == txt_size || flag.data_modified || z_is_dvcf || flag.make_reference, 
+            "Hmm... incorrect calculation for %s sizes: total section sizes=%s but file size is %s (diff=%d)", 
+            z_dt_name(), str_int_commas (all_txt_len).s, str_int_commas (txt_size).s, 
+            (int32_t)(txt_size - all_txt_len)); 
 
     if (flag.show_stats_comp_i == COMP_NONE) { 
         
@@ -916,22 +782,13 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
     if (flag.show_stats_comp_i != COMP_NONE) 
         iprint0 ("\nNote: Components stats don't include global sections like SEC_DICT, SEC_REFERENCE etc\n");
 
-    if (flag.submit_stats || flag.debug_submit || (license_allow_stats() && !flag.debug_or_test))
-        stats_submit (sbl, num_stats, all_txt_len, src_comp_ratio, all_comp_ratio); 
-
-    buf_destroy (sbl_buf);
-    buf_destroy (features);
-    buf_destroy (hash_occ);
-    buf_destroy (internals);
-    buf_destroy (stats_programs);
-
     if (!(flag.show_stats && z_file->z_closes_after_me)) { // case: we're not going to display these stats - free now
         buf_destroy (stats);
         buf_destroy (STATS);
     }
 }
 
-void stats_display (void)
+static void stats_display (void)
 {
     BufferP buf = ABS(flag.show_stats) == 1 ? &stats : &STATS;
 
@@ -971,8 +828,6 @@ void stats_read_and_display (void)
                               ABS(flag.show_stats) == 1 ? &stats : &STATS, "stats");
     
     stats_display();
-
-    if (is_genocat) exit_ok(); // if this is genocat - we're done
 }
 
 // concatenate txt names of bound files so we can show them all
@@ -981,3 +836,20 @@ void stats_add_txt_name (rom fn)
     bufprintf (evb, &z_file->bound_txt_names, "%s%s", z_file->bound_txt_names.len ? " ": "", fn);
     z_file->bound_txt_names.count++; // number of files
 }
+
+void stats_finalize (void)
+{
+    if (flag.show_stats) stats_display();
+
+    buf_destroy (stats);
+    buf_destroy (STATS);
+    buf_destroy (features);
+    buf_destroy (hash_occ);
+    buf_destroy (internals);
+    buf_destroy (STATS);
+    buf_destroy (sbl_buf);
+
+    all_txt_len = 0;
+    src_comp_ratio = all_comp_ratio = 0;    
+}
+ 

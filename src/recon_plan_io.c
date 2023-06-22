@@ -69,35 +69,6 @@ void recon_plan_show (FileP file, bool is_luft, uint32_t conc_writing_vbs, uint3
               "by --show-plan. To see the recon plan actually used for reconstruction, use --output to send file elsewhere.\n");
 }
 
-void recon_plan_sort_by_vb (FileP file)
-{
-    ARRAY (BufWord, recon_plan_index, file->recon_plan_index);
-
-    // check if recon_plan is out of order
-    bool in_order = true;
-    for (VBIType vb_i=2; vb_i < recon_plan_index_len; vb_i++)
-        if (recon_plan_index[vb_i].index < recon_plan_index[vb_i-1].index) {
-            in_order = false;
-            break;
-        }
-
-    if (in_order) return; // already in order, nothing to do
-
-    // copy the plan to scratch, and the copy it back to file->recon_plan in order of VBs
-    buf_copy (evb, &evb->scratch, &file->recon_plan, ReconPlanItem, 0, 0, "scratch");
-    ARRAY (ReconPlanItem, src, evb->scratch);
-    ReconPlanItemP  dst = B1ST (ReconPlanItem, file->recon_plan);
-
-    for (VBIType vb_i=0; vb_i < recon_plan_index_len; vb_i++) { // vb_i may contain a txt_header item
-        uint32_t len = recon_plan_index[vb_i].len;
-        if (!len) continue;
-
-        dst = mempcpy (dst, &src[recon_plan_index[vb_i].index], len * sizeof (ReconPlanItem));
-    }
-
-    buf_free (evb->scratch);
-}
-
 // -------------------------------------------------------------------------------
 // convert ReconPlanItem.start_line between absolute line numbers and deltas
 // -------------------------------------------------------------------------------
@@ -105,6 +76,8 @@ void recon_plan_sort_by_vb (FileP file)
 // ZIP main thread
 static void recon_plan_deltify (void)
 {
+    START_TIMER;
+
     ARRAY (ReconPlanItem, plan, txt_file->recon_plan);
 
     VBIType max_vb_i = 0; // Note: this might be more than z_file->num_vbs, as in SAM recon_plan is compressed before PRIM/DEPN components are segged
@@ -122,6 +95,8 @@ static void recon_plan_deltify (void)
         }
 
     buf_free (evb->codec_bufs[0]);
+
+    COPY_TIMER_EVB (recon_plan_deltify);
 }
 
 // PIZ main thread
@@ -164,9 +139,9 @@ static void recon_plan_prepare_for_compress (VBlockP vb)
     uint32_t frag_i = vb->vblock_i - 1;
     if (frag_i * FRAG_LEN_ZIP >= txt_file->recon_plan.len && vb->vblock_i > 1) return; // don't dispatch (but we do, if its the first VB of an empty recon_plan)
 
-    vb->fragment_start    = (char *)B(ReconPlanItem, txt_file->recon_plan, frag_i * FRAG_LEN_ZIP);
-    vb->fragment_len      = MIN_(FRAG_LEN_ZIP, txt_file->recon_plan.len - frag_i * FRAG_LEN_ZIP) * sizeof (ReconPlanItem);
-    vb->dispatch = READY_TO_COMPUTE;
+    vb->fragment_start = (char *)B(ReconPlanItem, txt_file->recon_plan, frag_i * FRAG_LEN_ZIP);
+    vb->fragment_len   = MIN_(FRAG_LEN_ZIP, txt_file->recon_plan.len - frag_i * FRAG_LEN_ZIP) * sizeof (ReconPlanItem);
+    vb->dispatch       = READY_TO_COMPUTE;
 }
 
 static void recon_plan_compress_one_fragment (VBlockP vb)
@@ -181,7 +156,6 @@ static void recon_plan_compress_one_fragment (VBlockP vb)
     SectionHeaderReconPlan header = (SectionHeaderReconPlan){
         .magic                 = BGEN32 (GENOZIP_MAGIC),
         .section_type          = SEC_RECON_PLAN,
-        .compressed_offset     = BGEN32 (sizeof(SectionHeaderReconPlan)),
         .data_uncompressed_len = BGEN32 (vb->fragment_len),
         .codec                 = frag_codec,
         .flags.recon_plan.luft = is_luft,
@@ -193,7 +167,7 @@ static void recon_plan_compress_one_fragment (VBlockP vb)
     if (flag.show_time) codec_show_time (vb, st_name(SEC_RECON_PLAN), NULL, frag_codec);
 
     vb->comp_i = 0; // goes into SectionEnt.comp_i (this is correct for DVCF and SAM)
-    comp_compress (vb, NULL, &vb->z_data, (SectionHeader*)&header, vb->fragment_start, NO_CALLBACK, "SEC_RECON_PLAN");
+    comp_compress (vb, NULL, &vb->z_data, &header, vb->fragment_start, NO_CALLBACK, "SEC_RECON_PLAN");
 
     COPY_TIMER (recon_plan_compress_one_fragment)    
 
@@ -265,7 +239,7 @@ static void recon_plan_read_one_vb (VBlockP vb)
 
         // allocate maximal memory 
         buf_alloc (evb, &evb->scratch, 0, max_frag_size * evb->scratch.count, char, 0, "scratch");
-        buf_set_overlayable (&evb->scratch);
+        buf_set_shared (&evb->scratch);
     }
 
     vb->fragment_len   = BGEN32 (header->data_uncompressed_len);

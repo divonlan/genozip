@@ -20,6 +20,7 @@
 #include "piz.h"
 #include "zfile.h"
 #include "zip.h"
+#include "lookback.h"
 
 static SmallContainer con_AD={}, con_ADALL={}, con_ADF={}, con_ADR={}, con_SAC={}, con_F1R2={}, con_F2R1={}, 
     con_MB={}, con_SB={}, con_AF={};
@@ -114,7 +115,6 @@ void vcf_samples_zip_initialize (void)
     ASSERT (PL_to_PLy_redirect_snip_len == PL_to_PLn_redirect_snip_len, "Expecting PL_to_PLy_redirect_snip_len%u == PL_to_PLn_redirect_snip_len=%u", PL_to_PLy_redirect_snip_len, PL_to_PLn_redirect_snip_len);
 
     vcf_samples_zip_initialize_PS_PID();
-
     vcf_gwas_zip_initialize(); // no harm if not GWAS
 }
 
@@ -160,14 +160,18 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
     seg_mux_init (VB, CTX(FORMAT_PLy), MUX_CAPACITY(vb->mux_PLy), VCF_SPECIAL_MUX_BY_DOSAGExDP, false, (MultiplexerP)&vb->mux_PLy, NULL);
     
     if (segconf.has[FORMAT_DP]) {
-        seg_mux_init (VB, CTX(FORMAT_GQ),  MUX_CAPACITY(vb->mux_GQ),  VCF_SPECIAL_MUX_BY_DOSAGExDP, false, (MultiplexerP)&vb->mux_GQ,  NULL);
+        seg_mux_init (VB, CTX(FORMAT_GQ),  MUX_CAPACITY(vb->mux_GQ),  VCF_SPECIAL_MUX_BY_DOSAGExDP, false, (MultiplexerP)&vb->mux_GQ, NULL);
         seg_mux_init (VB, CTX(FORMAT_RGQ), MUX_CAPACITY(vb->mux_RGQ), VCF_SPECIAL_RGQ, false, (MultiplexerP)&vb->mux_RGQ, NULL);
     }
     else
         init_mux_by_dosage(GQ);
 
-    if (segconf.vcf_is_gwas) {
+    if (segconf.vcf_is_gwas) 
         seg_id_field_init (CTX(FORMAT_ID));
+
+    if (segconf.vcf_is_giab_trio) {
+        seg_mux_init (VB, CTX(FORMAT_IGT), 2, VCF_SPECIAL_MUX_BY_SAMPLE_I,  false, (MultiplexerP)&vb->mux_IGT, NULL);
+        seg_mux_init (VB, CTX(FORMAT_IPS), 2, VCF_SPECIAL_MUX_BY_IGT_PHASE, false, (MultiplexerP)&vb->mux_IPS, NULL);
     }
 
     // flags to send to PIZ
@@ -225,7 +229,7 @@ int vcf_seg_get_mux_channel_i (VBlockVCFP vb, bool fail_if_dvcf_refalt_switch)
 }
 
 // if cell is NULL, leaves it up to the caller to seg to the channel 
-static inline ContextP vcf_seg_FORMAT_mux_by_dosage (VBlockVCFP vb, ContextP ctx, STRp(cell), const DosageMultiplexer *mux) 
+ContextP vcf_seg_FORMAT_mux_by_dosage (VBlockVCFP vb, ContextP ctx, STRp(cell), const DosageMultiplexer *mux) 
 {
     int channel_i = vcf_seg_get_mux_channel_i (vb, true);
 
@@ -361,14 +365,14 @@ static inline void vcf_seg_FORMAT_transposed (VBlockVCFP vb, ContextP ctx, STRp(
     ctx->ltype = LT_UINT32_TR;
     ctx->flags.store = STORE_INT;
     
-    buf_alloc (vb, &ctx->local, 1, vb->lines.len * vcf_num_samples, uint32_t, 1, "contexts->local");
+    buf_alloc (vb, &ctx->local, 1, vb->lines.len * vcf_num_samples, uint32_t, 1, CTX_TAG_LOCAL);
 
     if (str_is_1char (cell, '.')) 
         BNXT32 (ctx->local) = 0xffffffff;
     
     else {
         ASSSEG (str_get_int (STRa(cell), &ctx->last_value.i) && ctx->last_value.i >= 0 && ctx->last_value.i <= 0xfffffffe, 
-                cell, "While compressing %s expecting an integer in the range [0, 0xfffffffe] or a '.', but found: %.*s", 
+                "While compressing %s expecting an integer in the range [0, 0xfffffffe] or a '.', but found: %.*s", 
                 ctx->tag_name, cell_len, cell);
 
         BNXT32 (ctx->local) = (uint32_t)ctx->last_value.i;
@@ -449,7 +453,7 @@ static inline WordIndex vcf_seg_FORMAT_AD_varscan (VBlockVCFP vb, ContextP ctx, 
 // <ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed">
 static void vcf_seg_AD_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP *item_ctxs, const int64_t *values)
 {       
-    bool has_adall_this_sample = segconf.has[FORMAT_ADALL] && ctx_encountered (VB, FORMAT_ADALL); // note: we can delta vs ADALL unless segconf says so, bc it can ruin other fields that rely on peeking AD, eg AB
+    bool has_adall_this_sample = segconf.has[FORMAT_ADALL] && ctx_encountered (VB, FORMAT_ADALL); // note: we can't delta vs ADALL unless segconf says so, bc it can ruin other fields that rely on peeking AD, eg AB
     int64_t sum = 0; 
 
     for (unsigned i=0; i < n_items; i++) {
@@ -485,24 +489,6 @@ static void vcf_seg_AD_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP
     ctx_set_last_value (VB, ctx, sum);
 
     memcpy (vb->ad_values, values, n_items * sizeof (values[0]));
-}
-
-//-------------
-// FORMAT/ADALL
-//-------------
-
-// Sepcial treatment for item 0
-static void vcf_seg_ADALL_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP *item_ctxs, const int64_t *values)
-{
-    for (unsigned i=0; i < n_items; i++) 
-        if (i==0 || i==1) {
-            if (!vb->mux_ADALL[i].num_channels)
-                seg_mux_init (VB, item_ctxs[i], 4, VCF_SPECIAL_MUX_BY_DOSAGE, false, (MultiplexerP)&vb->mux_ADALL[i], "0123");
-            
-            vcf_seg_FORMAT_mux_by_dosage (vb, item_ctxs[i], STRi(item, i), &vb->mux_ADALL[i]);
-        }
-        else 
-            seg_by_ctx (VB, STRi(item, i), item_ctxs[i], item_lens[i]);
 }
 
 //----------------------
@@ -1182,7 +1168,7 @@ static inline void vcf_seg_FORMAT_AB_verify_channel1 (VBlockVCFP vb)
     char recon_ab_str[32];
     calculate_AB (ad0, ad1, recon_ab_str);
 
-    if (strlen (recon_ab_str) != ab_str_len || memcmp (recon_ab_str, ab_str, ab_str_len)) goto rollback;
+    if (!str_issame_(STRa(ab_str), recon_ab_str, strlen (recon_ab_str))) goto rollback;
     
     ctx_unset_rollback (ab_ctx); // so we can ctx_set_rollback again in the next sample (note: we can't advance rback_id because it is set in vcf_seg_txt_line)
     return; // verified
@@ -1430,6 +1416,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_G)
 //--------------------------------------------------------------------------------------------------------------
 // LongRanger: <ID=BX,Number=.,Type=String,Description="Barcodes and Associated Qual-Scores Supporting Alleles">
 // example: CCTAAAGGTATCGCCG-1_41;TTGTCCGTCGCTAGCG-1_55;TATCATCGTTGGAGGT-1_74
+// See: https://support.10xgenomics.com/genome-exome/software/pipelines/latest/output/vcf
 //--------------------------------------------------------------------------------------------------------------
 static inline void vcf_seg_FORMAT_BX (VBlockVCFP vb, ContextP ctx, STRp(BX))
 {
@@ -1438,10 +1425,12 @@ static inline void vcf_seg_FORMAT_BX (VBlockVCFP vb, ContextP ctx, STRp(BX))
         .drop_final_repsep = true,
         .repsep      = {';'},
         .items       = { { .dict_id={ .id="BXbarcod" }, .separator = {'-'} },
-                         { .dict_id={ .id="BXcoords" },                    } }
+                         { .dict_id={ .id="BXqual"   },                    } }
     };
-
-    seg_array_of_struct (VB, CTX(FORMAT_BX), con, STRa(BX), NULL, BX_len);
+    
+    ctx_get_ctx (VB, con.items[0].dict_id)->no_stons = true;
+    
+    seg_array_of_array_of_struct (VB, CTX(FORMAT_BX), ',', con, STRa(BX), NULL);
 }
 
 //------------------------------------------------------------------------
@@ -1717,10 +1706,7 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
         // case: MIN_DP - it is slightly smaller and usually equal to DP - we store MIN_DP as the delta DP-MIN_DP
         // note: the delta is vs. the DP field that preceeds MIN_DP - we take the DP as 0 there is no DP that preceeds
         case _FORMAT_MIN_DP :
-            if (ctx_has_value (VB, FORMAT_DP)) 
-                seg_delta_vs_other (VB, ctx, CTX(FORMAT_DP), STRi(sf, i));
-            else goto fallback;
-            break;
+            COND (ctx_has_value (VB, FORMAT_DP), seg_delta_vs_other (VB, ctx, CTX(FORMAT_DP), STRi(sf, i)));
 
         case _FORMAT_SDP   :
             if (ctx_has_value_in_line_(VB, CTX(INFO_ADP)))
@@ -1740,9 +1726,6 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
 
         // <ID=PGT,Number=1,Type=String,Description="Physical phasing haplotype information, describing how the alternate alleles are phased in relation to one another">
         case _FORMAT_PGT   :  vcf_seg_FORMAT_PGT (vb, ctx, STRi(sf, i), ctxs, STRas(sf)); break;
-
-        // GIAB: <ID=ADALL,Number=R,Type=Integer,Description="Net allele depths across all datasets">
-        case _FORMAT_ADALL : vcf_seg_FORMAT_A_R (vb, ctx, con_ADALL, STRi(sf, i), STORE_INT, vcf_seg_ADALL_items); break;
 
         // VarScan: <ID=ADF,Number=1,Type=Integer,Description="Depth of variant-supporting bases on forward strand (reads2plus)">
         case _FORMAT_ADF   : 
@@ -1776,10 +1759,10 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
         case _FORMAT_SAC   : vcf_seg_FORMAT_A_R (vb, ctx, con_SAC, STRi(sf, i), STORE_NONE, vcf_seg_SAC_items); break;
 
         // <ID=ICNT,Number=2,Type=Integer,Description="Counts of INDEL informative reads based on the reference confidence model">
-        case _FORMAT_ICNT  : COND (segconf.vcf_is_gvcf, vcf_seg_ICNT (vb, ctx, STRi(sf, i))); break;
+        case _FORMAT_ICNT  : COND (segconf.vcf_is_gvcf, vcf_seg_ICNT (vb, ctx, STRi(sf, i))); 
 
         // <ID=SPL,Number=.,Type=Integer,Description="Normalized, Phred-scaled likelihoods for SNPs based on the reference confidence model">
-        case _FORMAT_SPL  : COND (segconf.vcf_is_gvcf, vcf_seg_SPL (vb, ctx, STRi(sf, i))); break;
+        case _FORMAT_SPL  : COND (segconf.vcf_is_gvcf, vcf_seg_SPL (vb, ctx, STRi(sf, i))); 
 
         // VarScan: <ID=RDF,Number=1,Type=Integer,Description="Depth of reference-supporting bases on forward strand (reads1plus)">
         case _FORMAT_RDF   : vcf_seg_FORMAT_minus (vb, ctx, STRi(sf, i), 0, CTX(FORMAT_RD), CTX(FORMAT_RDR), STRa(rdf_snip)); break;
@@ -1799,6 +1782,11 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
         
         // VCF-GWAS: <ID=ID,Number=1,Type=String,Description="Study variant identifier">
         case _FORMAT_ID    : IF_GWAS(vcf_gwas_seg_FORMAT_ID (vb, ctx, STRi(sf, i)));
+
+        // GIAB fields
+        case _FORMAT_ADALL : vcf_seg_FORMAT_A_R (vb, ctx, con_ADALL, STRi(sf, i), STORE_INT, vcf_seg_ADALL_items); break;
+        case _FORMAT_IGT   : COND (segconf.vcf_is_giab_trio, vcf_seg_FORMAT_IGT (vb, ctx, STRi(sf, i))); 
+        case _FORMAT_IPS   : COND (segconf.vcf_is_giab_trio, vcf_seg_FORMAT_IPS (vb, dl, ctx, STRi(sf, i))); 
 
         default            :
         fallback           : seg_by_ctx (VB, STRi(sf, i), ctx, sf_lens[i]);
@@ -1864,7 +1852,7 @@ rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t *len, char *next
     // initialize LOOKBACK if we have PS or PID
     if (!CTX(VCF_LOOKBACK)->is_initialized && (CTX(FORMAT_PID)->sf_i >= 0 || CTX(FORMAT_PS)->sf_i >= 0))
         vcf_samples_seg_initialize_LOOKBACK (vb);
-
+    
     rom field_start;
     unsigned field_len=0, num_colons=0;
 

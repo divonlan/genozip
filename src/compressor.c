@@ -23,25 +23,27 @@
 uint32_t comp_compress (VBlockP vb, 
                         ContextP ctx,            // note: NULL if not compressing context
                         BufferP z_data,
-                        SectionHeaderP header, 
+                        SectionHeaderUnionP header_u, 
                         rom uncompressed_data,   // option 1 - compress contiguous data
                         LocalGetLineCB callback, // option 2 - compress data one line at a time
                         rom name)                // tag name for b250/local, otherwise section name
 { 
+    SectionHeaderP header = header_u.common;
+
     ASSERT (!uncompressed_data || !callback, "\"%s\": expecting either uncompressed_data or callback but not both", name);
 
     ASSERT (BGEN32 (header->magic) == GENOZIP_MAGIC, "\"%s\": corrupt header - bad magic", name);
 
     ASSERT (header->codec < NUM_CODECS, "\"%s\": unsupported section compressor=%u", name, header->codec);
              
-    uint32_t compressed_offset     = BGEN32 (header->compressed_offset);
+    uint32_t compressed_offset     = st_header_size (header->section_type); 
     uint32_t data_uncompressed_len = BGEN32 (header->data_uncompressed_len);
     uint32_t data_compressed_len   = 0;
     uint32_t data_encrypted_len=0, data_padding=0, header_padding=0;
 
     ASSERT (!data_uncompressed_len || uncompressed_data || callback, "\"%s\": data_uncompressed_len!=0 but neither uncompressed_data nor callback are provided", name);
 
-    ASSERTW (data_uncompressed_len < 1 GB, "%s: Excessive uncompressed_data_len=%u: %s. Please report to support@genozip.com", 
+    ASSERTW (data_uncompressed_len < 1 GB, "%s: Excessive uncompressed_data_len=%u: %s. Please report to " EMAIL_SUPPORT, 
              VB_NAME, data_uncompressed_len, name); // compressing a buffer over 1GB is likely an indication of not handling some edge case well
 
     bool is_encrypted = false;
@@ -63,9 +65,9 @@ uint32_t comp_compress (VBlockP vb,
 
     uint32_t est_compressed_len = codec_args[comp_codec].est_size (header->codec, data_uncompressed_len); 
 
-    // allocate what we think will be enough memory. usually this alloc does nothing, as the memory we pre-allocate for z_data is sufficient
-    buf_alloc (vb, z_data, compressed_offset + est_compressed_len + encryption_padding_reserve, 0, char, 1.5, 
-               z_data->name ? z_data->name : "z_data");
+    // allocate what we think will be enough memory. usually this alloc does nothing, as the memory we pre-allocate for z_data is sufficient (zero for safety)
+    buf_alloc_zero (vb, z_data, compressed_offset + est_compressed_len + encryption_padding_reserve, 0, char, 1.25, 
+                    z_data->name ? z_data->name : z_data == &vb->z_data_test ? "z_data_test" : "z_data");
 
     // compress the data, if we have it...
     if (data_uncompressed_len) {
@@ -81,7 +83,7 @@ uint32_t comp_compress (VBlockP vb,
         vb->codec_using_codec_bufs = comp_codec;
 
         bool success = 
-            codec_args[comp_codec].compress (vb, ctx, header, uncompressed_data, &data_uncompressed_len,
+        codec_args[comp_codec].compress (vb, ctx, header, uncompressed_data, &data_uncompressed_len,
                                              callback,  
                                              BAFTc (*z_data) + compressed_offset, &data_compressed_len,
                                              true, name);
@@ -94,7 +96,7 @@ uint32_t comp_compress (VBlockP vb,
                                                   : MAX_(data_uncompressed_len * 1.5 + 500000,
                                                          codec_args[header->codec].est_size (header->sub_codec, data_uncompressed_len));
 
-            buf_alloc (vb, z_data, compressed_offset + at_least, 0, char, 1, z_data->name ? z_data->name : "z_data");
+            buf_alloc_zero (vb, z_data, compressed_offset + at_least, 0, char, 1, NULL);
             
             data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve;
             data_uncompressed_len = BGEN32 (header->data_uncompressed_len); // reset
@@ -121,40 +123,47 @@ uint32_t comp_compress (VBlockP vb,
         }
     }
 
-    // if there is no compressed data, then no need to write this section (this can happen when
-    // novel codecs create other sections, eg CODEC_GTSHARK)
+    // if there is no compressed data, then no need to write this section
     if (data_uncompressed_len && !data_compressed_len) goto done;
 
     // finalize & copy header
-    header->compressed_offset   = BGEN32 (compressed_offset);  // updated value to include header padding
     header->data_compressed_len = BGEN32 (data_compressed_len);   
     header->data_encrypted_len  = BGEN32 (data_encrypted_len); 
     memcpy (BAFT8(*z_data), header, compressed_offset);
+    
+    uint8_t *section = BAFT8(*z_data);
+    uint8_t *data = section + compressed_offset;
 
     // encrypt if needed - header & body separately
     unsigned total_z_len;
     if (is_encrypted) { // create good padding (just padding with 0 exposes a cryptographic vulnerability)
-        crypt_pad (BAFT8(*z_data), compressed_offset, header_padding);
+        crypt_pad (section, compressed_offset, header_padding);
         
         if (data_uncompressed_len) 
-            crypt_pad (BAFT8(*z_data) + compressed_offset, data_encrypted_len, data_padding);
+            crypt_pad (data, data_encrypted_len, data_padding);
 
         // encrypt the header - we use vb_i, section_type and is_header to generate a different AES key for each section
         VBIType vb_i = BGEN32 (header->vblock_i);
 
+        // encrypt the data body 
+        if (data_uncompressed_len) 
+            crypt_do (vb, data, data_encrypted_len, vb_i, header->section_type, false);
+
+        // calculate digest of the ecnrypted data body 
+        header->z_digest = ((SectionHeaderP)section)->z_digest = BGEN32 (adler32 (1, data, data_encrypted_len)); // note: set in header too, needed by zfile_update_txt_header_section_header
+
         // note: for SEC_VB_HEADER we will encrypt at the end of calculating this VB in zfile_update_compressed_vb_header() 
         // and we will then update z_data in memory prior to writing the encrypted data to disk
         if (!HEADER_IS(VB_HEADER) || header->vblock_i == 0 /* terminator vb header */)
-            crypt_do (vb, BAFT8(*z_data), compressed_offset, vb_i, header->section_type, true);
-
-        // encrypt the data body 
-        if (data_uncompressed_len) 
-            crypt_do (vb, BAFT8(*z_data) + compressed_offset, data_encrypted_len, vb_i, header->section_type, false);
+            crypt_do (vb, section, compressed_offset, vb_i, header->section_type, true);
         
         total_z_len = compressed_offset + data_encrypted_len;
     }
-    else
+    else {
+        header->z_digest = ((SectionHeaderP)section)->z_digest = BGEN32 (adler32 (1, data, data_compressed_len));
+
         total_z_len = compressed_offset + data_compressed_len;
+    }
 
     // add section to the section list
     if (!HEADER_IS(GENOZIP_HEADER) && // the section list is part of the genozip header section currently being compressed, so can't add to it
@@ -204,8 +213,8 @@ bool comp_compress_complex_codec (VBlockP vb, ContextP ctx, SectionHeaderP heade
 void comp_uncompress (VBlockP vb, Codec codec, Codec sub_codec, uint8_t param, STRp(compressed),
                       BufferP uncompressed_data, uint64_t uncompressed_len, rom name)
 {
-    ASSERTNOTZERO (compressed_len, name);
-    ASSERTNOTZERO (uncompressed_len, name);
+    ASSERTNOTZEROn (compressed_len, name);
+    ASSERTNOTZEROn (uncompressed_len, name);
     ASSERT (codec != sub_codec, "vb=%s \"%s\": Expectedly, codec=%s == sub_codec=%s", VB_NAME, name, codec_name(codec), codec_name(sub_codec));
 
     // if this is (1) a simple codec (including CODEC_UNKNOWN) that has a sub-codec or

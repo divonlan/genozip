@@ -45,7 +45,7 @@ int32_t generic_is_header_done (bool is_eof)
     if (!flag.explicitly_generic) {
 
         // test explicitly for CRAM - as it is not a data type
-        if (header_len >= 4 && !memcmp (header, "CRAM", 4)) 
+        if (str_isprefix_(STRa(header), _S("CRAM"))) 
             is_cram = true;
 
         else
@@ -114,16 +114,26 @@ void generic_seg_initialize (VBlockP vb)
 
 void generic_seg_finalize (VBlockP vb)
 {
-    Context *data_ctx = CTX(GNRIC_DATA);
+    ContextP data_ctx = CTX(GNRIC_DATA);
     data_ctx->ltype = LT_UINT8;
-    buf_move (vb, &data_ctx->local, vb, &vb->txt_data);
+    buf_move (vb, data_ctx->local, CTX_TAG_LOCAL, vb->txt_data);
     data_ctx->txt_len += data_ctx->local.len;
 
-    Context *toplevel_ctx = CTX(GNRIC_TOPLEVEL);
+    ContextP toplevel_ctx = CTX(GNRIC_TOPLEVEL);
     toplevel_ctx->no_stons = true; // keep in b250 so it can be eliminated as all_the_same
     
     static const char snip[2] = { SNIP_SPECIAL, GNRIC_SPECIAL_TOPLEVEL };
     seg_by_ctx (VB, snip, 2, toplevel_ctx, 0); 
+}
+
+rom generic_seg_txt_line (VBlockP vb, rom next_line, uint32_t remaining_txt_len, bool *has_13)
+{
+    return next_line + remaining_txt_len; // consumed entire VB
+}
+
+rom generic_assseg_line (VBlockP vb)
+{
+    return "GENERIC cannot display offending line"; 
 }
 
 bool generic_seg_is_small (ConstVBlockP vb, DictId dict_id)
@@ -134,7 +144,7 @@ bool generic_seg_is_small (ConstVBlockP vb, DictId dict_id)
 SPECIAL_RECONSTRUCTOR (generic_piz_TOPLEVEL)
 {
     buf_destroy (vb->txt_data);
-    buf_move (vb, &vb->txt_data, vb, &CTX(GNRIC_DATA)->local);
+    buf_move (vb, vb->txt_data, "txt_data", CTX(GNRIC_DATA)->local);
     return NO_NEW_VALUE;
 }
 

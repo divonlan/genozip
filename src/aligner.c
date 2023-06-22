@@ -71,7 +71,7 @@ static Bits aligner_seq_to_bitmap (rom seq, uint64_t seq_len,
     Bits seq_bits = { .nbits  = seq_len * 2, 
                       .nwords = roundup_bits2words64(seq_len * 2), 
                       .words  = bitmap_words,
-                      .type   = BITS_REGULAR };
+                      .type   = BUF_REGULAR };
 
     *seq_is_all_acgt = true; // starting optimistically
 
@@ -245,13 +245,13 @@ MappingType aligner_seg_seq (VBlockP vb, STRp(seq), bool no_bitmap_if_perfect,
     if (!no_bitmap_if_perfect || !is_all_ref) {
         int64_t missing_bits = (int64_t)seq_len - ((int64_t)bitmap_ctx->local.nbits - (int64_t)bitmap_ctx->next_local);
         if (missing_bits > 0) {
-            buf_alloc_do (vb, &bitmap_ctx->local,roundup_bits2bytes64 (bitmap_ctx->local.nbits + seq_len), CTX_GROWTH, __FUNCLINE, NULL); 
+            buf_alloc_do (vb, &bitmap_ctx->local,roundup_bits2bytes64 (bitmap_ctx->local.nbits + seq_len), CTX_GROWTH, NULL, __FUNCLINE); 
             buf_extend_bits (&bitmap_ctx->local, missing_bits);
         }
     }
 
     if ((strand_ctx->local.size & ~3ULL) * 8 == strand_ctx->local.nbits)
-        buf_alloc_do (vb, &strand_ctx->local, strand_ctx->local.size + sizeof(uint64_t), CTX_GROWTH, __FUNCLINE, NULL);
+        buf_alloc_do (vb, &strand_ctx->local, strand_ctx->local.size + sizeof(uint64_t), CTX_GROWTH, NULL, __FUNCLINE);
         
     buf_alloc (vb, &gpos_ctx->local, 1, 0, uint32_t, CTX_GROWTH, NULL); 
 

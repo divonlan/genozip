@@ -9,6 +9,7 @@
 #ifndef Z_SOLO
 #  include "gzguts.h"
 #endif
+#include "../codec.h"
 
 z_const char * const z_errmsg[10] = {
     (z_const char *)"need dictionary",     /* Z_NEED_DICT       2  */
@@ -291,20 +292,24 @@ void ZLIB_INTERNAL zcfree (voidpf opaque, voidpf ptr)
 #ifndef MY_ZCALLOC /* Any system without a special alloc function */
 
 #ifndef STDC
-extern voidp  malloc OF((uInt size));
+extern voidp  MALLOC OF((uInt size));
 extern voidp  calloc OF((uInt items, uInt size));
 extern void   free   OF((voidpf ptr));
 #endif
 
 voidpf ZLIB_INTERNAL zcalloc (voidpf opaque __attribute__((unused)), unsigned items, unsigned size, FUNCLINE)
 {
-    return sizeof(uInt) > 2 ? (voidpf)malloc(items * size) :
-                              (voidpf)calloc(items, size);
+    // return sizeof(uInt) > 2 ? (voidpf)malloc(items * size) :
+    //                           (voidpf)calloc(items, size);
+    void *mem = MALLOC (items * size);
+    memset (mem, 0, items * size);
+    
+    return mem;
 }
 
 void ZLIB_INTERNAL zcfree (voidpf opaque __attribute__((unused)), voidpf ptr, FUNCLINE)
 {
-    free(ptr);
+    FREE(ptr);
 }
 
 #endif /* MY_ZCALLOC */

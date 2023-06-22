@@ -61,7 +61,7 @@ static void txtheader_compress_one_fragment (VBlockP vb)
     my_header.data_uncompressed_len = BGEN32 (vb->fragment_len);
     my_header.vblock_i              = BGEN32 (vb->vblock_i); // up to 14.0.8 (when TXT_HEADER fragmantization was introduced), this was always 0 for SEC_TXT_HEADER
 
-    comp_compress (vb, NULL, &vb->z_data, (SectionHeader*)&my_header, vb->fragment_start, NO_CALLBACK, "SEC_TXT_HEADER");
+    comp_compress (vb, NULL, &vb->z_data, &my_header, vb->fragment_start, NO_CALLBACK, "SEC_TXT_HEADER");
 
     // copy first fragment header, for updating in zfile_update_txt_header_section_header
     if (vb->vblock_i == 1)
@@ -83,7 +83,6 @@ void txtheader_compress (BufferP txt_header,
     section_header = (SectionHeaderTxtHeader){
         .magic             = BGEN32 (GENOZIP_MAGIC),
         .section_type      = SEC_TXT_HEADER,
-        .compressed_offset = BGEN32 (sizeof (SectionHeaderTxtHeader)),
         .codec             = (codec == CODEC_UNKNOWN) ? CODEC_NONE : codec,
         .src_codec         = txt_file->codec, 
         .digest_header     = flag.data_modified ? DIGEST_NONE : header_md5,
@@ -221,7 +220,7 @@ static void txtheader_uncompress_one_vb (VBlockP vb)
 // case 1: outputing a single file - generate txt_filename based on the z_file's name
 // case 2: unbinding a genozip into multiple txt files - generate txt_filename of a component file from the
 //         component name in SEC_TXT_HEADER 
-static rom txtheader_piz_get_filename (rom orig_name, rom prefix, bool is_orig_name_genozip, bool with_bgzf)
+rom txtheader_piz_get_filename (rom orig_name, rom prefix, bool is_orig_name_genozip, bool with_bgzf)
 {
     unsigned fn_len = strlen (orig_name);
     unsigned dn_len = flag.out_dirname ? strlen (flag.out_dirname) : 0;
@@ -329,16 +328,22 @@ void txtheader_piz_read_and_reconstruct (Section sec)
     // while VB verification relies on v13_commulative_digest_ctx which is commulative across components.
     z_file->digest_ctx = DIGEST_CONTEXT_NONE; // reset digest
 
-    // initialize if needed - but only once per outputted txt file 
-    //i.e. if we have rejects+normal, or concatenated, we will only init in the first)
-    if (!txt_file->piz_header_init_has_run && DTPZ(piz_header_init))
-        txt_file->piz_header_init_has_run = true;
-
     evb->comp_i                = !VER(14) ? header.flags.txt_header.v13_dvcf_comp_i/*v12,13*/ : sec->comp_i/*since v14*/;
     txt_file->max_lines_per_vb = BGEN32 (header.max_lines_per_vb);
     txt_file->txt_flags        = header.flags.txt_header;
     txt_file->num_vbs          = sections_count_sections_until (SEC_VB_HEADER, sec, SEC_TXT_HEADER);    
+    
+    if (VER(15)) 
+        for (QType q=0; q < NUM_QTYPES; q++)
+            segconf.flav_prop[q] = header.flav_prop[q];
 
+    // initialize if needed - but only once per outputted txt file 
+    //i.e. if we have rejects+normal, or concatenated, we will only init in the first)
+    if (!txt_file->piz_header_init_has_run && DTPZ(piz_header_init)) {
+        DTPZ(piz_header_init)();
+        txt_file->piz_header_init_has_run = true;
+    }
+    
     bool needs_write = writer_does_txtheader_need_write (sec->comp_i);
 
     // count header-lines (for --lines etc): before data-modifying inspect_txt_header

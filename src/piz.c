@@ -38,6 +38,7 @@
 #include "txtheader.h"
 #include "base64.h"
 #include "dict_io.h"
+#include "buf_list.h"
 
 // output coordinates of current line (for error printing) - very carefully as we are in an error condition - we can't assume anything
 PizDisCoords piz_dis_coords (VBlockP vb)
@@ -95,8 +96,8 @@ bool piz_grep_match (rom start, rom after)
         char before = (s == start ? ' ' : s[-1]);
         char after  = s[flag.grep_len];
     
-        if (!IS_LETTER(before) && !IS_DIGIT(before) && before != '_' &&
-            !IS_LETTER(after) && !IS_DIGIT(after) && after != '_') {
+        if (!IS_ALPHANUMERIC(before) && before != '_' &&
+            !IS_ALPHANUMERIC(after)  && after  != '_') {
             
             found = true;
             break;
@@ -220,16 +221,11 @@ void piz_uncompress_all_ctxs (VBlockP vb)
                                                 : (is_local ? &ctx->local   : &ctx->b250);
         
         rom target_buf_name = uncompress_to_pair ? (is_local ? "contexts->localR1" : "contexts->b250R1")
-                                                 : (is_local ? "contexts->local"   : "contexts->b250"  );
+                                                 : (is_local ? CTX_TAG_LOCAL   : CTX_TAG_B250  );
 
         START_TIMER;
 
         zfile_uncompress_section (vb, header, target_buf, target_buf_name, BGEN32 (header->vblock_i), header->section_type); 
-
-        if (flag.show_time && !is_genozip)
-            ctx->compressor_time = CHECK_TIMER;
-
-        ctx_add_compressor_time_to_zf_ctx (vb);
 
         if (is_local && dict_id_typeless (ctx->dict_id).num == flag.dump_one_local_dict_id.num && !is_pair_section) 
             ctx_dump_binary (vb, ctx, true);
@@ -280,7 +276,7 @@ void piz_uncompress_all_ctxs (VBlockP vb)
         vb->has_ctx_index = true;
     }
 
-    if (flag.debug_or_test) buf_test_overflows(vb, __FUNCTION__); 
+    if (flag.debug_or_test) buflist_test_overflows(vb, __FUNCTION__); 
 }
 
 // PIZ compute thread entry point
@@ -322,7 +318,7 @@ static void piz_reconstruct_one_vb (VBlockP vb)
 
     vb_set_is_processed (vb); /* tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway */ 
 
-    if (flag.debug_or_test) buf_test_overflows(vb, __FUNCTION__); 
+    if (flag.debug_or_test) buflist_test_overflows(vb, __FUNCTION__); 
 
     COPY_TIMER (compute);
 }
@@ -364,7 +360,7 @@ void piz_read_all_ctxs (VBlockP vb, Section *sec/* VB_HEADER section */, bool is
         bool pair_assisted=false, pair_identical=false, skip_R1=false;
         if (is_pair_data) {
             // note: pair_assisted available since early versions. when loading old versions, flags are fixed in sections_list_file_to_memory_format to be consistent with current version. 
-            pair_assisted  = (IS_ZIP && fastq_zip_use_pair_assisted ((*sec)->dict_id, (*sec)->st))    ||
+            pair_assisted  = (IS_ZIP && fastq_zip_use_pair_assisted ((*sec)->dict_id, (*sec)->st)) ||
                              (IS_PIZ && is_local  && vctx->pair_assist_type == SEC_LOCAL) ||  // R2 section indicated that recon requires assistence of R1 data
                              (IS_PIZ && !is_local && vctx->pair_assist_type == SEC_B250);
 
@@ -417,7 +413,7 @@ void piz_read_all_ctxs (VBlockP vb, Section *sec/* VB_HEADER section */, bool is
         }
     }
 
-    if (flag.debug_or_test) buf_test_overflows(vb, __FUNCTION__); 
+    if (flag.debug_or_test) buflist_test_overflows(vb, __FUNCTION__); 
 
     COPY_TIMER (piz_read_all_ctxs);
 }
@@ -427,9 +423,12 @@ DataType piz_read_global_area (Reference ref)
 {
     START_TIMER;
 
-    bool success = zfile_read_genozip_header (0); // already read if normal file, but not if auxilliary file
+    bool success = zfile_read_genozip_header (0, SOFT_FAIL); // already read if normal file, but not if auxilliary file
 
-    if (flag.show_stats) stats_read_and_display();
+    if (flag.show_stats) {
+        stats_read_and_display();
+        if (is_genocat) return DT_NONE;
+    }
 
     if (!success) return DT_NONE;
 
@@ -500,8 +499,8 @@ DataType piz_read_global_area (Reference ref)
             // load the refhash, if we are compressing FASTA or FASTQ, or if user requested to see it
             if (  (primary_command == ZIP && flag.aligner_available) ||
                   (flag.show_ref_hash && is_genocat) ||
-                  ref_cache_is_loading(ref))
-                refhash_load();
+                  ref_cache_is_populating (ref))
+                refhash_load (ref);
 
             // exit now if all we wanted was just to see the reference (we've already shown it)
             if ((flag.show_reference || flag.show_is_set || flag.show_ref_hash) && is_genocat) exit_ok();
@@ -518,9 +517,6 @@ DataType piz_read_global_area (Reference ref)
                 if ((flag.show_reference || flag.show_is_set || flag.show_ref_hash) && is_genocat) exit_ok();
             }
         }
-    
-        if (flag.reference && z_file->z_flags.aligner && !flag.genocat_no_ref_file) 
-            ref_generate_reverse_complement_genome (ref);
     }
     
 done:
@@ -545,6 +541,7 @@ bool piz_read_one_vb (VBlockP vb, bool for_reconstruction)
     vb->flags            = header.flags.vb_header;
     vb->recon_size       = BGEN32 (header.recon_size_prim);   // might be modified by callback (if DVCF Luft)
     vb->longest_line_len = BGEN32 (header.longest_line_len);
+    vb->longest_seq_len  = VER(15) ? BGEN32 (header.longest_seq_len) : 0;
     vb->expected_digest  = header.digest;
     vb->chrom_node_index = WORD_INDEX_NONE;
     vb->lines.len        = VER(14) ? sec->num_lines : BGEN32 (header.v13_top_level_repeats);
@@ -596,10 +593,6 @@ bool piz_read_one_vb (VBlockP vb, bool for_reconstruction)
 
 static void piz_handover_or_discard_vb (Dispatcher dispatcher, VBlockP *vb)
 {
-    // add up context decompress time
-    if (flag.show_time)
-        ctx_add_compressor_time_to_zf_ctx (*vb);
-
     bool is_handed_over = false;
 
     if ((*vb)->preprocessing) 
@@ -674,6 +667,52 @@ void piz_allow_out_of_order (void)
     dispatcher_allow_out_of_order (main_dispatcher);
 }
 
+static uint64_t piz_target_progress (CompIType comp_i)
+{
+    if (comp_i == COMP_MAIN && Z_DT(SAM))      
+        return 3 * sections_get_num_vbs_(SAM_COMP_MAIN, SAM_COMP_DEPN) + sections_get_num_vbs (SAM_COMP_PRIM); // VBs pre-processed
+    
+    if (comp_i == COMP_MAIN && Z_DT(VCF)) 
+        return 3 * sections_get_num_vbs_(VCF_COMP_MAIN, VCF_COMP_LUFT_ONLY);
+    
+    if (Z_DT(FASTQ) && flag.interleaved) 
+        return 3 * sections_get_num_vbs_(FQ_COMP_R1, FQ_COMP_R2);
+    
+    if (Z_DT(SAM) && flag.deep && flag.interleaved)
+        return 3 * sections_get_num_vbs_(SAM_COMP_FQ00, SAM_COMP_FQ01);
+
+    else {
+        if (comp_i == COMP_NONE) comp_i = COMP_MAIN;
+        return 3 * sections_get_num_vbs_(comp_i, comp_i);
+    }
+}
+
+// get filename, even tough txt_file has not been opened yet. 
+static StrTextLong piz_filename_for_progress (void)
+{
+    Section sec;
+
+    if (flag.one_component && !flag.deep)
+        sec = sections_get_comp_txt_header_sec (flag.one_component - 1);
+    else 
+        sec = sections_get_comp_txt_header_sec (COMP_MAIN);
+
+    SectionHeaderTxtHeader header = zfile_read_section_header (evb, sec, SEC_TXT_HEADER).txt_header;
+
+    bool dot_gz = flag.bgzf == BGZF_NOT_INITIALIZED ? (header.src_codec == CODEC_BGZF || header.src_codec == CODEC_GZ)
+                :                                     (flag.bgzf != 0);
+
+    TEMP_FLAG(out_dirname, NULL); // only basename in progress string
+    rom filename = txtheader_piz_get_filename (header.txt_filename, flag.unbind, false, dot_gz);
+    RESTORE_FLAG(out_dirname);
+
+    StrTextLong name = {};
+    strncpy (name.s, filename, sizeof (StrTextLong)-1);
+    FREE (filename);
+
+    return name;
+}          
+
 Dispatcher piz_z_file_initialize (void)
 {
     // read all non-VB non-TxtHeader sections
@@ -691,11 +730,8 @@ Dispatcher piz_z_file_initialize (void)
 
     if (flag.test || flag.md5) 
         ASSINP0 (dt_get_translation(NULL).is_src_dt, "Error: --test or --md5 cannot be used when converting a file to another format"); 
-    
-    
-    uint64_t target_progress = (Z_DT(SAM) ? sections_get_num_vbs (SAM_COMP_PRIM) : 0) // VBs pre-processed
-                             + 3 * z_file->num_vbs; // VBs read, reconstructed, written
 
+    // note: if --unbind, we will recalculate the target progress in dispatcher_resume()
     Dispatcher dispatcher = dispatcher_init (flag.reading_chain     ? "piz-chain"
                                             :flag.reading_reference ? "piz-ref"
                                             :flag.reading_kraken    ? "piz-kraken"
@@ -705,7 +741,9 @@ Dispatcher piz_z_file_initialize (void)
                                              flag.xthreads ? 1 : global_max_threads, 0, 
                                              flag.test && flag.no_writer_thread, // out-of-order if --test with no writer thread (note: SAM gencomp always have writer thread to do digest). 
                                              flag.test,
-                                             z_file->basename, target_progress, 0);
+                                             flag.out_filename ? flag.out_filename : piz_filename_for_progress().s, 
+                                             piz_target_progress (COMP_MAIN), 
+                                             0);
 
     return dispatcher;
 }
@@ -755,7 +793,8 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
                 txtheader_piz_read_and_reconstruct (sec); 
 
                 // case --unbind: unpausing after previous txt_file pause (requires txt file to be open)
-                if (flag.unbind) dispatcher_resume (dispatcher);  
+                uint64_t target_progress = piz_target_progress (first_comp_i ? first_comp_i : COMP_MAIN);
+                dispatcher_resume (dispatcher, target_progress);
             }
 
             // case SEC_VB_HEADER
@@ -814,7 +853,7 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
     z_file->num_txts_so_far++;
 
     // finish writing the txt_file (note: the writer thread also calculates digest in SAM/BAM with PRIM/DEPN)
-    writer_finish_writing (z_file->num_txts_so_far == z_file->num_txt_files);
+    writer_finish_writing (z_file->num_txts_so_far == z_file->num_txt_files || is_genocat);
 
     // verifies reconstructed file against MD5 or Adler2 and/or codec_args (if bgzf)
     if (piz_need_digest)
@@ -831,7 +870,7 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
         if (flag.count == CNT_TOTAL) iprintf ("%"PRIu64"\n", num_nondrop_lines);
     }
 
-    if (z_file->num_txts_so_far == z_file->num_txt_files) 
+    if (is_genocat || (z_file->num_txts_so_far == z_file->num_txt_files)) // genocat always produces exactly one txt file 
         dispatcher_finish (&dispatcher, NULL, !is_last_z_file || flag.test,
                            flag.show_memory && is_last_z_file);
     else 
@@ -843,7 +882,7 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
     if (flag_is_show_vblocks (PIZ_TASK_NAME)) 
         iprintf ("Finished PIZ of %s\n", txt_file ? txt_file->name : "(no filename)");                
 
-    file_close (&txt_file, flag.index_txt && !flag_loading_auxiliary, !is_last_z_file || !allow_skip_cleaning); 
+    file_close (&txt_file); 
 
     if (flag.show_time && ((flag.show_time_comp_i >= first_comp_i && flag.show_time_comp_i <= last_comp_i) || 
                            (first_comp_i == COMP_NONE && flag.show_time_comp_i != COMP_ALL)))

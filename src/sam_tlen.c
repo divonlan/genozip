@@ -78,10 +78,10 @@ void sam_seg_TLEN (VBlockSAMP vb, ZipDataLineSAM *dl,
     unsigned add_bytes = IS_BAM_ZIP ? sizeof (uint32_t) : tlen_len + 1;
 
     if (tlen) { // get tlen_value
-        ASSSEG0 (tlen_len, tlen, "empty TLEN");
+        ASSSEG0 (tlen_len, "empty TLEN");
 
         bool is_int = str_get_int_range32 (STRa(tlen), MIN_TLEN, MAX_TLEN, &tlen_value); // note: tlen_value remains 0 if not a valid integer
-        ASSSEG (is_int, tlen, "expecting TLEN to be an integer [%d,%d], but found \"%.*s\"", MIN_TLEN, MAX_TLEN, STRf(tlen));
+        ASSSEG (is_int, "expecting TLEN to be an integer [%d,%d], but found \"%.*s\"", MIN_TLEN, MAX_TLEN, STRf(tlen));
     }
 
     if (segconf.running && tlen_value) segconf.has_TLEN_non_zero = true;
@@ -126,8 +126,7 @@ static inline PosType32 sam_piz_predict_TLEN (VBlockSAMP vb, bool has_mc)
     
     if (OUT_DT(BAM) && *(int32_t*)last_rname != *(int32_t*)last_rnext) return 0;
 
-    if (OUT_DT(SAM) && !IS_EQUAL_SIGN (last_rnext) &&
-        (last_rname_len != last_rnext_len || memcmp (last_rname, last_rnext, last_rnext_len))) return 0;
+    if (OUT_DT(SAM) && !IS_EQUAL_SIGN (last_rnext) && !str_issame (last_rname, last_rnext)) return 0;
 
     PosType32 pnext_pos_delta = (PosType32)CTX(SAM_PNEXT)->last_value.i - (PosType32)CTX(SAM_POS)->last_value.i;
 

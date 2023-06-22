@@ -10,7 +10,7 @@ static rom license[] = {
     "TERMS AND CONDITIONS FOR USE",
     
     "1. Definitions.",
-    "\"License\" shall mean the terms and conditions for use as defined by Sections 1 through 7 of this document.",
+    "\"License\" shall mean the terms and conditions for use as defined by Sections 1 through 10 of this document.",
 
     "\"Legal Entity\" shall mean the union of the acting entity and all other entities that control, are controlled by, or are under common control with that entity. For the purposes of this definition, \"control\" means (i) the power, direct or indirect, to cause the direction or management of such entity, whether by contract or otherwise, or (ii) ownership of fifty percent (50%) or more of the outstanding shares, or (iii) beneficial ownership of such entity.",
 
@@ -18,29 +18,29 @@ static rom license[] = {
 
     "\"Derivative Works\" shall mean any work that is based on (or derived from) Genozip and for which the editorial revisions, annotations, elaborations, or other modifications represent, as a whole, an original work of authorship. For the purposes of this License, Derivative Works shall not include works that remain separable from Genozip and Derivative Works thereof.",
     
-    "\"Your Commercial Data\" shall mean data which You (the Legal Entity exercising permissions granted by this License) obtained with intention of using it in the development process of a product and/or in the process or provisioning of any kind of service (including also clinical, diagnostic, DNA or RNA sequencing, bioinformatics and cloud services, but excluding education services) for which You get paid. Data derived from Your Commercial Data is also Your Commerical Data.",
+    "\"Your Commercial Data\" shall mean data which You (the Legal Entity exercising permissions granted by this License) obtained with intention of using it in the development process of a product and/or for provisioning of any kind of service (including also clinical, diagnostic, DNA or RNA sequencing, bioinformatics and cloud services, but excluding education services) for which You get paid. Data derived from Your Commercial Data is also Your Commerical Data.",
 
     "\"Your Computers\" shall mean computers You own and/or cloud accounts You own at 3rd party cloud providers.",
 
     "Other words and terms in this License shall be interpreted as their usual meaning in the context of a software product.",
 
-    "2. Grant of copyright license. Licensor hereby grants to You a limited non-exclusive, non-transferrable, non-sublicensable, revokable copyright license to use Genozip on Your Computers for any of the following limited purposes subject to the conditions attached to each purpose, and subject to the terms and conditions of this License:",
+    "2. Grant of copyright license. Licensor hereby grants to You a limited non-exclusive, non-transferrable, non-sublicensable, revokable copyright license to use Genozip on Your Computers, if you meet the conditions attached to any of the License Types a through f below, for the limited purpose attached to that particular License Type, and subject to the terms and conditions of this License agreement:",
     
-    "   a. For academic research, educational or training purposes provided that You are a recognized academic research institution or a registered student at such an institution, but excluding use with Your Commercial Data (\"Academic License\"). An Academic License is free of charge.",
+    "   a. Academic License: For academic research, educational or training purposes provided that You are a recognized academic research institution or a registered student at such an institution, but excluding use with Your Commercial Data. An Academic License is free of charge.",
     
-    "   b. For another non-commercial purpose, if it has been pre-approved by Licensor in writing. Email "EMAIL_REGISTER" to seek such an approval (this is also an \"Academic License\").",
+    "   b. Academic License: For another non-commercial purpose, if it has been pre-approved by Licensor in writing. Email "EMAIL_REGISTER" to seek such an approval.",
     
-    "   c. For any legal purpose, if a Standard License was purchased and paid for, and for the duration that it is in effect.",
+    "   c. Standard, Enterprise or Premium License: For any legal purpose, if the license was purchased and paid for, and for the duration that it is in effect.",
     
-    "   d. For any legal purpose, if use is limited to the three tools: genounzip, genocat, genols (\"Decompression License\"). A Decompression License is free of charge.",
+    "   d. Decompression License: For any legal purpose, if use is limited to the three tools: genounzip, genocat, genols. A Decompression License is free of charge.",
     
-    "   e. For the purpose of evaluating Genozip, free of charge, for a duration of 30 days (\"Evaluation License\").",
+    "   e. Evaluation License: For the purpose of evaluating Genozip, free of charge, for a duration of 30 days, if You were not already granted an Evaluation License in the past. The duration of an Evaluation License may be extended by written email approval.",
     
-    "   f. For the purpose of distributing Genozip to others via a platform that is free of charge, including (but not limited to) an Internet website, a package or container management system, or a module on an institutional HPC (\"Distribution License\"). A Distribution License is free of charge. Each end user must independently register to Genozip and be granted a Standard, Academic, Decompression or Evaluation License.",
+    "   f. Distribution License: For the purpose of distributing Genozip to others via a platform that is free of charge, including (but not limited to) an Internet website, a package or container management system, or a module on an institutional HPC. A Distribution License is free of charge. Each end user must independently register to Genozip and be granted a Standard, Enterprise, Premium, Academic, Decompression or Evaluation License.",
     
     "3. Additional Terms and conditions",
     
-    "   a. You must fully and accurately complete the registration, either by completing the registeration as prompted by the genozip tool or by receiving registration confirmation after registering by emailing "EMAIL_REGISTER".",
+    "   a. You must fully, truthfully and accurately complete the registration, either by completing the registration as prompted by the genozip tool or by receiving registration confirmation after registering by emailing "EMAIL_REGISTER". The only exception is if you are registering for the purpose of peer-reviewing a manuscript submitted to a journal by the Genozip author - in this case only, you may enter arbitrary information to preserve anonymity.",
     
     "   b. Using Genozip to compress a file is only permitted if the file is retained in its original form as well or the potential loss of data due to Genozip not being able to uncompress the compressed file would not cause any harm.",
     
@@ -48,15 +48,15 @@ static rom license[] = {
     
     "   d. Any software source code intentionally submitted for inclusion in Genozip by You to the Licensor or the Developer, including by using a Github Pull Request, shall imply complete and irrevocable assignment by You to Licensor of all copyright in the submitted source code. Regarding any such source code You submitted for inclusion in Genozip in the past, You hereby assign all copyright in this submitted source code to Licensor.",
     
-    "   e. Reselling Genozip and/or selling a service or a product that includes Genozip or any part of Genozip's code or algorithms (together, \"Genozip Technology\") such that a user of said service or product may directly or indirectly effectuate compression or decompression of data using Genozip Tecnology - permission for such reselling or selling is not granted in this license, and requires a separate reseller or OEM license. To clarify, merely delivering Genozip-compressed files to others (e.g. your clients or collaborators) IS included in the Standard and/or Academic License and IS NOT subject to this restriction.",
+    "   e. Reselling Genozip and/or selling a service or a product that includes Genozip or any part of Genozip's code or algorithms (together, \"Genozip Technology\") such that a user of said service or product may directly or indirectly effectuate compression or decompression of data using Genozip Technology - permission for such reselling or selling is not granted in this license, and requires a separate reseller or OEM license. To clarify, merely delivering Genozip-compressed files to others (e.g. your clients or collaborators) IS included in the Standard, Enterprise, Premium and/or Academic License and IS NOT subject to this restriction.",
 
-    "4. Severely unauthorized use of Genozip. Use which is non-compliant with sections 2, 3a, 3c, 3e shall be considered severely unauthorized use of Genozip. In this case, You agree that Licensor shall be eligible to 20% ownership of any revenue generated and intellectual property created that involved the severely unauthorized use of Genozip.",
+    "4. Severely Unauthorized Use of Genozip. Use which is either: a. with no license (Standard License, Enterprise License, Premium License, Acedemic License, Evaluation License, Decompression License or Distribution License) granted according to section 2; or b. non-compliant with any of sections 3a, 3c, 3e; or both - shall be considered Severely Unauthorized Use of Genozip. In this case, You agree to a. pay Licensor US$100.00 for each file You compressed with Genozip b. that Licensor shall be eligible for 20% ownership of any revenue generated and intellectual property created that involved the Severely Unauthorized Use of Genozip. c. reimburse licensor for all legal and/or collection costs related to Your Severely Unauthorized Use of Genozip.",
 
     "5. Data collected. You consent to the following data collection:",
     
     "   a. At registration time: registration information provided by you and details about your hardware, operating system and IP address as displayed at end of the registration process.",
     
-    "   b. When a file is compressed: a log record containing aggregate statistical information about the performance of the compression algorithm and associated metadata. This logging occurs when using an Academic or Evaluation license. When using a Standard (i.e. paid) License, YOU WILL BE ASKED TO CHOOSE WHETHER OR NOT YOU ALLOW THIS LOGGING. Details can be found here: " WEBSITE_LOGS". ",
+    "   b. When a file is compressed: a log record containing aggregate statistical information about the performance of the compression algorithm and associated metadata. This logging occurs when using an Academic or Evaluation license. When using a Standard, Enterprise or Premium (i.e. paid) License, YOU WILL BE ASKED TO CHOOSE WHETHER OR NOT YOU ALLOW THIS LOGGING. Details can be found here: " WEBSITE_LOGS". ",
  
     "6. Trademarks. This License does not grant permission to use the trade names, trademarks, service marks, or product names of the Licensor, except as required for reasonable and customary use in describing the origin of the Genozip",
     

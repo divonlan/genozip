@@ -21,16 +21,17 @@
 #define IS_SLETTER(c)    ((c)>='a' && (c)<='z')
 #define IS_WS(c) ((c)=='\t' || (c)=='\r' || (c)=='\n')
 #define IS_LETTER(c) (IS_CLETTER(c) || IS_SLETTER(c))
+#define IS_ALPHANUMERIC(c) (IS_LETTER(c) || IS_DIGIT(c))
 #define IS_NON_WS_PRINTABLE(c) (((c)>=33) && ((c)<=126))
 extern bool is_printable[256];
 #define IS_PRINTABLE(c) is_printable[(uint8_t)(c)]
-#define IS_VALID_URL_CHAR(c) (IS_LETTER(c) || IS_DIGIT(c) || c=='-' || c=='_' || c=='.' || c=='~') // characters valid in a URL
+#define IS_VALID_URL_CHAR(c) (IS_ALPHANUMERIC(c) || c=='-' || c=='_' || c=='.' || c=='~') // characters valid in a URL
 #define FLIP_CASE(c)  (IS_CLETTER(c) ? ((c)+32) : (IS_SLETTER(c) ? ((c)-32) : (c))) // flips lower <--> upper case
 #define UPPER_CASE(c) (IS_SLETTER(c) ? ((c)-32) : (c))
 #define LOWER_CASE(c) (IS_CLETTER(c) ? ((c)+32) : (c))
 
-#define IS_ASTERISK(str) (str##_len==1 && *str=='*')
-#define IS_EQUAL_SIGN(str) (str##_len==1 && *str=='=')
+#define IS_ASTERISK(str)   str_is_1char(str, '*')
+#define IS_EQUAL_SIGN(str) str_is_1char(str, '=')
 
 #define TF(s) ((s) ? "true" : "false")
 #define S(s)  ((s) ? (s) : "(none)")
@@ -43,11 +44,16 @@ extern char *str_to_printable (STRp(in), char *out);
 extern char *str_tolower (rom in, char *out /* out allocated by caller - can be the same as in */);
 extern char *str_toupper (rom in, char *out);
 
-static bool inline str_issame_ (STRp(str1), STRp(str2)) // true if the same
+static bool inline str_issame_(STRp(str1), STRp(str2)) // true if the same
 {
     return (str1_len == str2_len) && !memcmp (str1, str2, str1_len);
 }
 #define str_issame(str1,str2) str_issame_ (str1, str1##_len, str2, str2##_len)
+
+static bool inline str_isprefix_(STRp(long_str), STRp(short_str)) // true short_str is a prefix of long_str
+{
+    return (long_str_len >= short_str_len) && !memcmp (long_str, short_str, short_str_len);
+}
 
 // same as str_issame, but internally it searches in reverse - good for strings that are known to differ at their end
 static bool inline str_issameR_ (STRp(str1), STRp(str2)) // true if the same
@@ -85,6 +91,7 @@ static bool inline str_issame_revcomp_(STRp(str1), STRp(str2)) // true if the sa
 #define str_issame_revcomp(str1,str2) str_issame_revcomp_ (str1, str1##_len, str2, str2##_len)
 
 #define str_is_1char(str,char) (str##_len==1 && *str==(char))
+#define str_is_1chari(arr,i,char) (arr##_lens[i]==1 && *arr##s[i]==(char))
 
 extern bool str_case_compare (rom str1, rom str2, bool *identical); // similar to stricmp that doesn't exist on all platforms
 
@@ -163,6 +170,11 @@ extern StrText str_bases (uint64_t num_bases);
 extern StrText str_int_commas (int64_t n);
 extern StrText str_uint_commas_limit (uint64_t n, uint64_t limit);
 extern StrText str_int_s (int64_t n);
+extern StrTextLong str_int_s_(rom label, int64_t n);
+#define cond_int(cond, label, n) ((cond) ? str_int_s_((label), (n)).s : "") /* note: n does not evaluate if cond is false! */\
+
+extern StrTextLong str_int_str_(rom label, rom str);
+#define cond_str(cond, label, str) ((cond) ? str_int_str_((label), (str)).s : "") /* note: str does not evaluate if cond is false! */\
 
 extern rom str_to_hex (bytes data, uint32_t data_len, char *hex_str, bool with_dot);
 extern StrText str_hex10 (bytes data, uint32_t data_len); // up to 10 bytes in hex (21 chars inc. \0)
@@ -289,15 +301,12 @@ extern void str_query_user (rom query, STRc(response), bool allow_empty, Respons
 typedef enum { QDEF_NONE, QDEF_NO, QDEF_YES } DefAnswerType;
 extern bool str_query_user_yn (rom query, DefAnswerType def_answer);
 
-extern rom my_memrchr (rom str, char c, uint32_t str_len);
+extern char *memchr2 (rom p, char ch1, char ch2, uint32_t count);
 
-extern rom str_win_error (void);
-
-static inline char base32(uint32_t n) { return (n) < 26 ? ('a' + (n))     // 97->122. 5bits: 1->26    <-- differentiated 5bits, so to work well with ALT_KEY
-                                             : (n) < 31 ? ((n)-26 + '[')  // 91->95.  5bits: 27->31
-                                             :            '@';          } // 64.      5bits: 0
-
-extern uint64_t p10[];
+// implementing memrchr, as it doesn't exist in Windows libc (msvcrt.dll) or Darwin (at least clang)
+#if defined _WIN32 || defined __APPLE__
+extern void *memrchr (const void *s, int c, size_t n);
+#endif
 
 #ifdef __APPLE__ // is mempcpy available on gcc of darwin? if so, this is ifdef should be just for clang
 static inline void *mempcpy(void *restrict dest, const void *restrict src, size_t n)
@@ -306,3 +315,10 @@ static inline void *mempcpy(void *restrict dest, const void *restrict src, size_
     return dest + n;
 }
 #endif
+
+extern rom str_win_error (void);
+
+static inline char base32(uint32_t n) { return (n) < 26 ? ('a' + (n))     // 97->122. 5bits: 1->26    <-- differentiated 5bits, so to work well with ALT_KEY
+                                             : (n) < 31 ? ((n)-26 + '[')  // 91->95.  5bits: 27->31
+                                             :            '@';          } // 64.      5bits: 0
+

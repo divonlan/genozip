@@ -131,7 +131,7 @@ rom me23_seg_txt_line (VBlockP vb, rom field_start_line, uint32_t remaining_txt_
     // Genotype (a combination of one or two bases or "--")
     GET_LAST_ITEM (ME23_GENOTYPE);
     
-    ASSSEG (field_len == 1 || field_len == 2, field_start, "expecting all genotype data to be 1 or 2 characters, but found one with %u: %.*s",
+    ASSSEG (field_len == 1 || field_len == 2, "expecting all genotype data to be 1 or 2 characters, but found one with %u: %.*s",
             field_len, field_len, field_start);
 
     seg_add_to_local_fixed (vb, CTX(ME23_GENOTYPE), field_start, field_len, LOOKUP_NONE, 0); 
@@ -164,7 +164,7 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
     #define VCF_HEAD_3p2 "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t%.*s\n"
     
     // move the me23 and header to the side for a sec
-    buf_move (comp_vb, &comp_vb->scratch, comp_vb, txtheader_buf);
+    buf_move (comp_vb, comp_vb->scratch, "scratch", *txtheader_buf);
     ARRAY (char, header23, comp_vb->scratch);
 
     Context *ctx = ZCTX(ME23_CHROM);

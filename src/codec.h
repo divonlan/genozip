@@ -39,7 +39,7 @@ typedef UNCOMPRESS (CodecUncompress);
 typedef uint32_t CodecEstSizeFunc (Codec codec, uint64_t uncompressed_len);
 
 #define CODEC_RECONSTRUCT(func) \
-    void func (VBlockP vb, Codec codec, ContextP ctx, STRp(snip))
+    void func (VBlockP vb, Codec codec, ContextP ctx, uint32_t len)
 
 typedef CODEC_RECONSTRUCT (CodecReconstruct);
 

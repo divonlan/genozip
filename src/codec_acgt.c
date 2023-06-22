@@ -121,8 +121,8 @@ COMPRESS (codec_acgt_compress)
     // option 1 - pack contiguous data
     if (uncompressed) {
         // overlay the NONREF.local to NONREF_X.local to avoid needing more memory, as NONREF.local is not needed after packing
-        buf_set_overlayable (&nonref_ctx->local);
-        buf_overlay (vb, &nonref_x_ctx->local, &nonref_ctx->local, "contexts->local");
+        buf_set_shared (&nonref_ctx->local);
+        buf_overlay (vb, &nonref_x_ctx->local, &nonref_ctx->local, CTX_TAG_LOCAL);
 
         PACK (uncompressed, *uncompressed_len); // pack into vb->scratch
 
@@ -133,7 +133,7 @@ COMPRESS (codec_acgt_compress)
 
     // option 2 - callback to get each line
     else if (get_line_cb) {
-        buf_alloc (vb, &nonref_x_ctx->local, 0, *uncompressed_len, uint8_t, CTX_GROWTH, "contexts->local");
+        buf_alloc (vb, &nonref_x_ctx->local, 0, *uncompressed_len, uint8_t, CTX_GROWTH, CTX_TAG_LOCAL);
         for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) {
 
             STRw0(data_1);

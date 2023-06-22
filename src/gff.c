@@ -32,7 +32,6 @@
 
 #define MAX_ENST_ITEMS 10 // maximum number of items in an enst structure. this can be changed without impacting backward compatability.
 
-// IMPORTANT: if changing fields in VBlockGFF, also update gff_vb_release_vb 
 typedef struct VBlockGFF {    
     VBLOCK_COMMON_FIELDS
     STR(prev_type);
@@ -40,13 +39,6 @@ typedef struct VBlockGFF {
 
 typedef VBlockGFF *VBlockGFFP;
 #define VB_GFF ((VBlockGFFP)vb)
-
-// cleanup vb (except common) and get it ready for another usage (without freeing memory held in the Buffers)
-void gff_vb_release_vb (VBlockGFFP vb) 
-{
-    vb->prev_type     = 0;
-    vb->prev_type_len = 0;
-}
 
 unsigned gff_vb_size (DataType dt) { return sizeof (VBlockGFF); }
 
@@ -79,10 +71,10 @@ bool is_gff (STRp(header), bool *need_more)
 {
     SAFE_NULT (header);
 
-    bool is_gff = (header_len >= 13 && !memcmp (header, "##gff-version", 13)) || // must appear for GFF3/GTF
-                  (header_len >= 10 && !memcmp (header, "## mirGFF3", 10))    || // mirGFF, a specific type of GFF3
-                   strstr (header, "#!genome-build")                          || // normally appears in GTF / GVF
-                   strstr (header, "#!genome-version");                          // normally appears in GTF / GVF
+    bool is_gff = (str_isprefix_(STRa(header), _S("##gff-version"))) || // must appear for GFF3/GTF
+                  (str_isprefix_(STRa(header), _S("## mirGFF3")))    || // mirGFF, a specific type of GFF3
+                   strstr (header, "#!genome-build")                 || // normally appears in GTF / GVF
+                   strstr (header, "#!genome-version");                 // normally appears in GTF / GVF
 
     SAFE_RESTORE;
     return is_gff;
@@ -93,13 +85,13 @@ bool gff_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
     SAFE_NUL (BAFTc (*txt_header)); // for atoi
 
     // case: gff version announced explicitly. otherwise we will deduce it during segconf
-    if (txt_header->len >= 15 && !memcmp (B1STc(*txt_header), "##gff-version", 13))
+    if (str_isprefix_(STRb(*txt_header), _S("##gff-version")) && txt_header->len32 >= 15)
         segconf.gff_version = atoi (Bc(*txt_header, 14));
 
-    else if (txt_header->len >= 10 && !memcmp (B1STc(*txt_header), "## mirGFF3", 10))
+    else if (str_isprefix_(STRb(*txt_header), _S("## mirGFF3")))
         segconf.gff_version = 3;
 
-    else if (txt_header->len >= 14 && !memcmp (B1STc(*txt_header), "#gtf-version", 12))
+    else if (str_isprefix_(STRb(*txt_header), _S("#gtf-version")))
         segconf.gff_version = 2;
 
     SAFE_RESTORE;
@@ -322,7 +314,7 @@ static void gff_seg_exon_number (VBlockGFFP vb, STRp(exon_number))
     decl_ctx (ATTR_exon_number);
 
     int64_t en;
-    ASSSEG (str_get_int (STRa(exon_number), &en), exon_number, "expecting exon_number=\"%.*s\" to be an integer", STRf(exon_number));
+    ASSSEG (str_get_int (STRa(exon_number), &en), "expecting exon_number=\"%.*s\" to be an integer", STRf(exon_number));
 
     if (en == exon_number_prediction (vb, ctx))
         seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, GFF_SPECIAL_exon_number }, 2, ctx, exon_number_len);
@@ -506,11 +498,11 @@ static void gff_segconf_set_gff_version (VBlockP vb, STRp(attr))
         switch (attr[i]) {
             case ' ' : segconf.gff_version = 2; return;
             case '=' : segconf.gff_version = 3; return;
-            case '"' : ASSSEG0 (false, attr, "Invalid attribute: quotation mark before separator");
+            case '"' : ABOSEG0 ("Invalid attribute: quotation mark before separator");
             default  : break;
         }
 
-    ASSSEG0 (false, attr, "Invalid attribute: separator not found");
+    ABOSEG0 ("Invalid attribute: separator not found");
 }
 
 // see: http://gmod.org/wiki/GFF2 and https://www.ensembl.org/info/website/upload/gff.html
@@ -536,7 +528,7 @@ static void gff_seg_gff2_attrs_field (VBlockP vb, STRp(attribute))
         else if (in_quotes && attribute[i] == ';') ((char*)attribute)[i] = 1;
 
     str_split (attribute, attribute_len, MAX_DICTS, ';', attr, false);
-    ASSSEG (n_attrs, attribute, "Invalid attributes field: %.*s", STRf(attribute));
+    ASSSEG (n_attrs, "Invalid attributes field: %.*s", STRf(attribute));
 
     // replace back
     str_replace_letter ((char*)STRa(attribute), 1, ';');
@@ -558,7 +550,7 @@ static void gff_seg_gff2_attrs_field (VBlockP vb, STRp(attribute))
     int total_values_len = 0; 
     for (unsigned i=0; i < n_attrs; i++) {
 
-        ASSSEG0 (attr_lens[i] >= 3, attrs[i], "Invalid GFF2 attributes field: Expecting attribute to have at least 3 characters");
+        ASSSEG0 (attr_lens[i] >= 3, "Invalid GFF2 attributes field: Expecting attribute to have at least 3 characters");
 
         // case: space after semicolon of previous field: “gene_id "ENSG00000223972"; gene_version "5"; ”
         bool leading_space = (i && attrs[i][0] == ' ');
@@ -580,11 +572,11 @@ static void gff_seg_gff2_attrs_field (VBlockP vb, STRp(attribute))
                 break;
             }
 
-        ASSSEG0 (value_len, attrs[i], "Invalid GFF2 attributes field: No space separator");
+        ASSSEG0 (value_len, "Invalid GFF2 attributes field: No space separator");
 
         // case: value is enclosed in quotes: “gene_id "ENSG00000223972"; ”
         bool has_quotes = (value[0] == '"'); 
-        ASSSEG (has_quotes == (value[value_len-1] == '"'), attrs[i], "Invalid GFF2 attributes field: expecting no quotes or a pair of quotes: %.*s", STRfi (attr, i));
+        ASSSEG (has_quotes == (value[value_len-1] == '"'), "Invalid GFF2 attributes field: expecting no quotes or a pair of quotes: %.*s", STRfi (attr, i));
         
         if (has_quotes) {  value += 1; value_len -= 2; } // remove quotes
 
@@ -592,7 +584,7 @@ static void gff_seg_gff2_attrs_field (VBlockP vb, STRp(attribute))
 
         // we currently support either a final space or a final quote - we've yet to see an example of space following
         // a quote, and it would be tricky to implement as container item separators have only two characters
-        ASSSEG0 (!(has_quotes && final_space), attrs[i], "Invalid GFF2 attributes field: a field has a space after the closing quote");
+        ASSSEG0 (!(has_quotes && final_space), "Invalid GFF2 attributes field: a field has a space after the closing quote");
         
         // seg value
         con.items[i].dict_id = gff_seg_attr_subfield (vb, STRa(tag), STRa(value), false);
@@ -630,7 +622,7 @@ static void gff_seg_gff3_attrs_field (VBlockP vb, STRp(field))
     unsigned prefixes_len = 2;
 
     str_split (field, field_len, MAX_DICTS, ';', attr, false);
-    ASSSEG (n_attrs, field, "Invalid attributes field: %.*s", STRf(field));
+    ASSSEG (n_attrs, "Invalid attributes field: %.*s", STRf(field));
 
     Container con = { .repeats = 1 };
 
@@ -642,7 +634,7 @@ static void gff_seg_gff3_attrs_field (VBlockP vb, STRp(field))
     // check for parent - hacky for now
     bool has_parent = false;
     for (int i=n_attrs-1; i >= 0; i--) // Parent is usually towards the end
-        if (attr_lens[i] > 7 && !memcmp (attrs[i], "Parent=", 7)) {
+        if (str_isprefix_(STRi(attr,i), _S("Parent="))) {
             has_parent = true;
             break;
         }
@@ -652,7 +644,7 @@ static void gff_seg_gff3_attrs_field (VBlockP vb, STRp(field))
     for (unsigned i=0; i < n_attrs; i++) {
 
         str_split (attrs[i], attr_lens[i], 2, '=', tag_val, true);
-        ASSSEG (n_tag_vals == 2 && tag_val_lens[0] > 0 && tag_val_lens[1] > 0, attrs[i], "Invalid attribute: %.*s", STRfi (attr, i));
+        ASSSEG (n_tag_vals == 2 && tag_val_lens[0] > 0 && tag_val_lens[1] > 0, "Invalid attribute: %.*s", STRfi (attr, i));
 
         memcpy (&prefixes[prefixes_len], tag_vals[0], tag_val_lens[0] + 1);
         prefixes_len += tag_val_lens[0] + 2; // including the '=' and CON_PX_SEP

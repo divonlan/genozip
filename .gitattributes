@@ -3,21 +3,34 @@
 
 # Declare our textual formats as binary so we can check in test files with Unix or Windows style end-of-lines
 *.vcf binary
+*.bcf binary
 *.sam binary
 *.bam binary
 *.cram binary
 *.gff3 binary
 *.gff binary
 *.gvf binary
+*.gtf binary
 genome_*.txt binary
 *.fa binary
 *.fasta binary
+*.fa binary
+*.faa binary
+*.ffn binary
+*.fnn binary
+*.fna binary
+*.frn binary
+*.fas binary
 *.fq binary
 *.fastq binary
 *.phy binary
+*.bed binary
 *.kraken binary
+*.chain binary
+*.locs binary
 *.genozip binary
 
 # installer files
-*.tar
-*.exe
+*.tar binary
+*.exe binary
+*.o binary

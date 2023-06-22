@@ -70,3 +70,7 @@ rom dt_name (DataType dt)
     return type_name (dt, &dt_props[dt].name, NUM_DATATYPES);
 }
 
+rom z_dt_name (void)
+{
+    return IS_SRC_BAM_PIZ ? "BAM" : dt_name (z_file->data_type);
+}

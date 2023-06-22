@@ -170,8 +170,7 @@ static HANDLE stream_exec_child (int *stream_stdout_to_genozip, int *stream_stde
     if (stream_stdout_to_genozip) stream_set_inheritability (stream_stdout_to_genozip[0], false);
     if (genozip_to_stream_stdin)  stream_set_inheritability (genozip_to_stream_stdin[1],  false);
 
-    PROCESS_INFORMATION proc_info; // the output of CreateProcess goes in here
-    memset (&proc_info, 0, sizeof proc_info);
+    PROCESS_INFORMATION proc_info = {}; // the output of CreateProcess goes in here
 
     bool success = CreateProcess (NULL, cmd_line, NULL, NULL, TRUE, NORMAL_PRIORITY_CLASS, 
                                   NULL, NULL, &startup_info, &proc_info);
@@ -195,7 +194,7 @@ static pid_t stream_exec_child (int *stream_stdout_to_genozip, int *stream_stder
     pid_t child_pid = fork();
  
     if (child_pid == -1 && errno == ENOMEM)
-        buf_show_memory (true, 0, 0);
+        buflist_show_memory (true, 0, 0);
 
     ASSERT (child_pid != -1, "fork() failed when attempting to run %s: %s (errno=%d)", argv[0], strerror (errno), errno);
 

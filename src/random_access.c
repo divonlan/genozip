@@ -261,7 +261,7 @@ void random_access_finalize_entries (BufferP ra_buf)
     qsort (sorter, ra_buf->len, sizeof (uint32_t), random_access_sort_by_vb_i);
 
     // use sorter to consturct a sorted RA
-    static Buffer sorted_ra_buf = EMPTY_BUFFER; // must be static because its added to buf_list
+    static Buffer sorted_ra_buf = {}; // must be static because its added to buf_list
     buf_alloc (evb, &sorted_ra_buf, 0, ra_buf->len, RAEntry, 1, ra_buf->name);
     sorted_ra_buf.len = ra_buf->len;
 
@@ -270,7 +270,7 @@ void random_access_finalize_entries (BufferP ra_buf)
 
     // replace ra_buf with sorted one
     buf_destroy (*ra_buf);
-    buf_move (evb, ra_buf, evb, &sorted_ra_buf);
+    buf_grab (evb, *ra_buf, "ra_buf", sorted_ra_buf);
 
     FREE (sorter);
 
@@ -398,7 +398,7 @@ uint32_t random_access_num_chroms_start_in_this_vb (VBIType vb_i)
 // FASTA PIZ main thread: check if all contigs have the same max pos, and return it
 uint32_t random_access_verify_all_contigs_same_length (void)
 {
-    static Buffer max_lens_buf = EMPTY_BUFFER;
+    static Buffer max_lens_buf = {};
     const Context *ctx = ZCTX(CHROM);
     buf_alloc (evb, &max_lens_buf, 0, ctx->word_list.len, PosType64, 1, "max_lens");
     buf_zero (&max_lens_buf);

@@ -57,7 +57,6 @@ extern IS_SKIP (fasta_piz_is_skip_section);
 extern bool fastq_piz_get_pair2_is_forward (VBlockP vb);
 
 // VBlock stuff
-extern void fasta_vb_release_vb();
 extern unsigned fasta_vb_size (DataType dt);
 extern unsigned fasta_vb_zip_dl_size (void);
 extern void fasta_get_data_line (VBlockP vb_, uint32_t line_i, uint32_t *seq_data_start, uint32_t *seq_len);

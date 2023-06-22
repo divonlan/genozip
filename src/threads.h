@@ -16,8 +16,10 @@ extern void threads_join_do (ThreadId *thread_id, rom expected_task, rom expecte
 #define threads_join(threads_id, expected_task) threads_join_do((threads_id), (expected_task), (expected_task), __FUNCTION__)
 #define threads_join2(threads_id, expected_task, expected_task2) threads_join_do((threads_id), (expected_task), (expected_task2), __FUNCTION__)
 extern void threads_cancel_other_threads (void);
-extern bool threads_am_i_main_thread (void);
 extern void threads_print_call_stack (void);
+
+extern pthread_t main_thread;
+static inline bool threads_am_i_main_thread (void) { return pthread_self() == main_thread; }
 
 // writer thread stuff
 extern void threads_set_writer_thread (void);

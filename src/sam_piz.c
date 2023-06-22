@@ -27,6 +27,7 @@
 #include "qname.h"
 #include "writer.h"
 #include "vblock.h"
+#include "libdeflate/libdeflate.h"
 
 void sam_piz_xtra_line_data (VBlockP vb_)
 {
@@ -34,7 +35,7 @@ void sam_piz_xtra_line_data (VBlockP vb_)
 
     if (SAM_PIZ_HAS_SAG) {
         iprintf ("grp_i=%u", ZGRP_I(vb->sag));
-        if (IS_SAG_SA) iprintf ("aln_i=%"PRIu64" (%d within group)", ZALN_I(vb->sa_aln), (int)(ZALN_I(vb->sa_aln) - vb->sag->first_aln_i));
+        if (IS_SAG_SA) iprintf (" aln_i=%"PRIu64" (%d within group)", ZALN_I(vb->sa_aln), (int)(ZALN_I(vb->sa_aln) - vb->sag->first_aln_i));
         iprint0 ("\n");
         
         sam_show_sag_one_grp (ZGRP_I(VB_SAM->sag));
@@ -63,11 +64,14 @@ void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
     }
 
     if (VER(15)) {
-        segconf.deep_no_qname         = header->sam.segconf_deep_no_qname;
+        segconf.deep_qtype            = header->sam.segconf_deep_qname1 ? QNAME1
+                                      : header->sam.segconf_deep_qname2 ? QNAME2
+                                      :                                   QNONE;
         segconf.deep_no_qual          = header->sam.segconf_deep_no_qual;
     }
 }
 
+// called for each txt file, after reading global area, before reading txt header
 bool sam_piz_initialize (CompIType comp_i)
 {
     if (flag.deep && (comp_i == SAM_COMP_MAIN || comp_i == SAM_COMP_NONE/*single component or interleave*/)) 
@@ -76,12 +80,17 @@ bool sam_piz_initialize (CompIType comp_i)
     return true;
 }
 
+static void qname_filter_initialize (rom filename); // forward
+void sam_piz_header_init (void)
+{
+    if (flag.qnames_file)
+        qname_filter_initialize (flag.qnames_file); // note: uses SectionHeaderTxtHeader.flav_props to canonize qnames
+}
+
 bool sam_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment)
 {
-    if (vb->comp_i == SAM_COMP_PRIM)
+    if (IS_PRIM(vb))
         VB_SAM->plsg_i = sam_piz_get_plsg_i (vb->vblock_i);
-
-    if (VER(15)) VB_SAM->longest_seq_len = BGEN32 (header->sam_longest_seq_len);
 
     if (flag.deep)
         sam_piz_deep_init_vb (VB_SAM, header);
@@ -93,7 +102,7 @@ bool sam_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header, uint32_t *
 void sam_piz_recon_init (VBlockP vb)
 {
     // we can proceed with reconstructing a PRIM or DEPN vb, only after SA Groups is loaded - busy-wait for it
-    while ((sam_is_prim_vb || sam_is_depn_vb) && !sam_is_sag_loaded())
+    while ((IS_PRIM(vb) || IS_DEPN(vb)) && !sam_is_sag_loaded())
         usleep (250000); // 250 ms
 
     buf_alloc_zero (vb, &CTX(SAM_CIGAR)->cigar_anal_history, 0, vb->lines.len, CigarAnalItem, 0, "cigar_anal_history"); // initialize to exactly one per line.
@@ -201,7 +210,7 @@ IS_SKIP (sam_piz_is_skip_section)
             KEEP; // need to reconstruct fields (RNAME, POS etc) against saggy
                      
         case _OPTION_SA_RNAME  : case _OPTION_SA_POS : case _OPTION_SA_NM : case _OPTION_SA_CIGAR :
-        case _OPTION_SA_STRAND : case _OPTION_SA_MAPQ : case _OPTION_OC_Z/*dict alias dst*/ : 
+        case _OPTION_SA_STRAND : case _OPTION_SA_MAPQ : 
             KEEPIF (IS_SAG_SA && (preproc || dict_needed_for_preproc));
             KEEPIF (is_main || is_dict); // need to reconstruct from prim line
             SKIPIFF (IS_SAG_SA && is_prim);    
@@ -251,7 +260,7 @@ IS_SKIP (sam_piz_is_skip_section)
         case 0             : KEEPIFF (ST(VB_HEADER) || !preproc);
         
         default            : other :
-            SKIPIF ((cov || cnt) && is_aux);
+            SKIPIF ((cov || cnt) && is_aux && !(is_dict && dnum == _OPTION_OC_Z/*dict-alias of MC0_Z needed to reconstruct CIGAR*/));
             SKIPIF (deep_fq && is_aux && !is_dict); // Dictionaries might be needed for FASTQ AUX fields
             SKIPIF (deep_fq && is_dict && is_aux && !f.dictionary.deep_fastq); // Deep --R1/2: we don't need SAM-only AUX dicts
             SKIPIF (is_dict && !flag.deep && is_aux && f.dictionary.deep_fastq && !f.dictionary.deep_sam);   // Deep file, but we are not reconstructed FQ (hence !flag.deep) - we don't need FASTQ-only AUX dicts
@@ -276,7 +285,7 @@ static ASCENDING_SORTER (qname_filter_sort_by_hash, QnameFilterItem, hash)
 static BINARY_SEARCHER (find_qname_in_filter, QnameFilterItem, uint32_t, hash, false)
 
 // initialize qnames_filter and flag.qname_filter from command line
-void qname_filter_initialize (rom filename)
+static void qname_filter_initialize (rom filename)
 {
     flag.qname_filter = (filename[0] == '^') ? -1 : 1;
 
@@ -286,6 +295,8 @@ void qname_filter_initialize (rom filename)
 
     ARRAY_alloc (QnameFilterItem, qname, n_lines, true, qnames_filter, evb, "qnames_filter");
     for (int i=0; i < n_lines; i++) {
+        if (!line_lens[i]) continue;
+
         // qname includes FASTQ "@" prefix - remove it
         bool has_prefix =(line_lens[i] && *lines[i] == '@');
 
@@ -295,9 +306,13 @@ void qname_filter_initialize (rom filename)
         if ((sep = memchr (lines[i], '\t', line_lens[i]))) line_lens[i] = sep - lines[i]; // truncate at first tab
 
         qname[i].qname_len = MIN_(line_lens[i] - has_prefix, SAM_MAX_QNAME_LEN);
+
         memcpy (qname[i].qname, lines[i] + has_prefix, qname[i].qname_len);
 
-        qname[i].hash = QNAME_HASH (STRa(qname[i].qname), -1);
+        if (VER(15))
+            qname_canonize (QNAME1, qSTRa(qname[i].qname)); // possibly reduces qname_len
+
+        qname[i].hash = qname_calc_hash (QNAME1, STRa(qname[i].qname), unknown, false, NULL);
     }
 
     buf_destroy (data); // defined in file_split_lines
@@ -305,12 +320,12 @@ void qname_filter_initialize (rom filename)
     qsort (STRb(qnames_filter), sizeof(QnameFilterItem), qname_filter_sort_by_hash);
 
     // remove dups (note: only consecutive dups are removed - if 2+ qnames have the same hash, dups might be interleaved and not removed)
-    int next = 1;
-    for (int i=1; i < n_lines; i++)
-        if ((qname[i].hash != qname[i-1].hash || qname[i].qname_len != qname[i-1].qname_len ||
-            memcmp (qname[i].qname, qname[i-1].qname, qname[i].qname_len))) { // not dup
+    int next = 0;
+    for (int i=0; i < n_lines; i++)
+        if (qname[i].qname_len && qname[i].qname[0] && // not empty
+            (!i || qname[i].hash != qname[i-1].hash || !str_issame (qname[i].qname, qname[i-1].qname))) { // not dup
             
-            if (i != next) memcpy (&qname[next], &qname[i], sizeof (QnameFilterItem));
+            if (i != next) qname[next] = qname[i];
             next++;
         }
     qnames_filter.len32 = next;
@@ -323,7 +338,10 @@ static bool sam_piz_line_survives_qname_filter (STRp(qname))
 {
     ASSERT (qname_len <= SAM_MAX_QNAME_LEN, "qname=\"%.*s\" has length=%u longer than allowed by SAM spec=%u", STRf(qname), qname_len, SAM_MAX_QNAME_LEN);
 
-    uint32_t hash = QNAME_HASH(qname, qname_len, -1);
+    if (VER(15))
+        qname_canonize (QNAME1, qSTRa(qname)); // possibly reduce qname_len
+
+    uint32_t hash = qname_calc_hash (QNAME1, STRa(qname), unknown, false, NULL);
     QnameFilterItem *ent = binary_search (find_qname_in_filter, QnameFilterItem, qnames_filter, hash);
 
     bool found = false;
@@ -335,6 +353,78 @@ static bool sam_piz_line_survives_qname_filter (STRp(qname))
         }
 
     return (flag.qname_filter == 1) ? found : !found; // positive or negative filter
+}
+
+//-----------------------------
+// --seqs-file filter
+//-----------------------------
+
+typedef struct {
+    uint32_t hash; // hash of seq
+    STR (seq);
+} SeqFilterItem;
+static Buffer seqs_filter = {};
+
+static ASCENDING_SORTER (seq_filter_sort_by_hash, SeqFilterItem, hash)
+static BINARY_SEARCHER (find_seq_in_filter, SeqFilterItem, uint32_t, hash, false)
+
+// initialize seqs_filter and flag.seq_filter from command line
+void seq_filter_initialize (rom filename)
+{
+    flag.seq_filter = (filename[0] == '^') ? -1 : 1;
+
+    if (flag.seq_filter == -1) filename++; // negative filter
+
+    file_split_lines (filename, "seqs_file", true);
+
+    // 2 entries per requested seq - forward and revcomp
+    ARRAY_alloc (SeqFilterItem, seq, n_lines * 2, true, seqs_filter, evb, "seqs_filter");
+    
+    // forward entries 
+    for (int i=0; i < n_lines; i++) 
+        seq[i] = (SeqFilterItem){ .seq     = lines[i], // pointer into data buffer defined in file_split_lines
+                                  .seq_len = line_lens[i],
+                                  .hash    = crc32 (0, STRi(line,i)) };
+
+    // revcomp entries
+    for (int i=0; i < n_lines; i++) {
+        seq[n_lines + i].seq     = MALLOC (line_lens[i]);
+        seq[n_lines + i].seq_len = line_lens[i];
+        str_revcomp ((char *)seq[n_lines + i].seq, STRi(line, i));
+        seq[n_lines + i].hash    = crc32 (0, STRa(seq[n_lines + i].seq));
+    }
+
+    qsort (STRb(seqs_filter), sizeof(SeqFilterItem), seq_filter_sort_by_hash);
+
+    // remove dups (note: only consecutive dups are removed - if 2+ seqs have the same hash, dups might be interleaved and not removed)
+    int next = 1;
+    for (int i=1; i < n_lines * 2; i++)
+        if ((seq[i].hash != seq[i-1].hash || seq[i].seq_len != seq[i-1].seq_len ||
+            memcmp (seq[i].seq, seq[i-1].seq, seq[i].seq_len))) { // not dup
+            
+            if (i != next) seq[next] = seq[i];
+            next++;
+        }
+    seqs_filter.len32 = next;
+
+    // display sorted list of (hash,seq) pairs (uncomment for debugging)
+    // for_buf (SeqFilterItem, e, seqs_filter) iprintf ("%u %s\n", e->hash, e->seq);
+}
+
+static bool sam_piz_line_survives_seq_filter (STRp(seq))
+{
+    uint32_t hash = crc32 (0, STRa(seq));
+    SeqFilterItem *ent = binary_search (find_seq_in_filter, SeqFilterItem, seqs_filter, hash);
+
+    bool found = false;
+
+    for (; ent && ent < BAFT (SeqFilterItem, seqs_filter) && ent->hash == hash; ent++)
+        if (str_issame (seq, ent->seq)) {
+            found = true;
+            break;
+        }
+
+    return (flag.seq_filter == 1) ? found : !found; // positive or negative filter
 }
 
 // set --FLAG filtering from command line argument
@@ -652,8 +742,12 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
             DROP_LINE ("bases");
         
         // --qnames-file
-        if (flag.qname_filter && !sam_piz_line_survives_qname_filter (STRlst (SAM_QNAME))) // works also for FASTQ as SAM_QNAME==FASTQ_QNAME
+        if (flag.qname_filter && !sam_piz_line_survives_qname_filter (STRlst (IS_PRIM(vb) ? SAM_QNAMESA : SAM_QNAME))) // works also for FASTQ as SAM_QNAME==FASTQ_QNAME
             DROP_LINE ("qname_filter");
+
+        // --seqs-file
+        if (flag.seq_filter && !sam_piz_line_survives_seq_filter (STRlst (SAM_SQBITMAP))) // works also for FASTQ as SAM_SQBITMAP==FASTQ_SQBITMAP
+            DROP_LINE ("seq_filter");
 
         // count coverage, if needed    
         if (flag.show_sex || flag.show_coverage)
@@ -716,7 +810,18 @@ CONTAINER_FILTER_FUNC (sam_piz_filter)
     bool v13_ret_value;
     if (!VER(14) && sam_piz_filter_up_to_v13_stuff (vb, dict_id, item, &v13_ret_value))
         return v13_ret_value;
-     
+
+    else if (dict_id.num == _SAM_TOP2NONE) { // bug 857
+        // if (con->items[item].dict_id.num == _SAM_SQBITMAP && (flag.header_only_fast || flag.qual_only)) 
+        //     return false; // don't reconstruct SEQ
+
+        // if (con->items[item].dict_id.num == _SAM_QUAL     && (flag.header_only_fast || flag.seq_only)) 
+        //     return false; // don't reconstruct QUAL
+
+        // if (con->items[item].dict_id.num == _SAM_QNAME    && (flag.qual_only || flag.seq_only))
+        //     return false; // don't reconstruct QNAME
+    }
+
     // collect_coverage: rather than reconstructing optional, reconstruct SAM_FQ_AUX that just consumes MC:Z if it exists
     else if (dict_id.num == _SAM_AUX) {
         if (flag.collect_coverage) { // filter_repeats is set in the AUX container since v14
@@ -797,14 +902,14 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SET_BUDDY)
     ContextP buddy_ctx = CTX(SAM_BUDDY);
 
     // for prim VB we set sag here, as all lines have a sag. for depn, we will set as we encounter lines that use sage
-    if (sam_is_prim_vb && !vb->preprocessing)
+    if (IS_PRIM(vb) && !vb->preprocessing)
         sam_piz_set_sag (VB_SAM); 
 
     // case 1: when reconstructing prim, we don't normally consume QNAME (we consume QNAMESA instead), so we consume it here
     // case 2: when loading SAG, we set buddy multiple times - as each field is loaded separately (iterators are reset after loading each field)
     //         we refrain to consume when loading the QNAME field, as QNAME itself we will be reconstructed
     //         when preprocessing, we take "reconstruct" to mean "consume qname"
-    if (sam_is_prim_vb && (!vb->preprocessing || (vb->preprocessing && reconstruct))) 
+    if (IS_PRIM(vb) && (!vb->preprocessing || (vb->preprocessing && reconstruct))) 
         LOAD_SNIP (SAM_QNAME);
     else
         PEEK_SNIP (SAM_QNAME);
@@ -933,7 +1038,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_COPY_BUDDY)
 
     // case: numeric value 
     if (ctx->flags.store == STORE_INT) {
-        new_value->i = (buddy_line_i < base_ctx->history.len32) ? *B(int64_t, base_ctx->history, buddy_line_i) : 0; // note: a non-existant STORE_INT buddy is taken as 0
+        new_value->i = (buddy_line_i < base_ctx->history.len32) ? *B64(base_ctx->history, buddy_line_i) : 0; // note: a non-existant STORE_INT buddy is taken as 0
         if (reconstruct) RECONSTRUCT_INT (new_value->i);
         return HAS_NEW_VALUE;
     }
@@ -946,6 +1051,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_COPY_BUDDY)
             ctx_get_snip_by_word_index (ctx, new_value->i, snip);
             RECONSTRUCT_snip;
         }
+            
         return HAS_NEW_VALUE;
     }
 
@@ -954,6 +1060,11 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_COPY_BUDDY)
         if (reconstruct) {
             sam_reconstruct_from_buddy_get_textual_snip (vb, base_ctx, buddy_type, pSTRa(snip));
             RECONSTRUCT_snip;
+
+            if (ctx->did_i == SAM_QNAME && buddy_type == BUDDY_MATE && segconf.flav_prop[QNAME1].has_R)
+                *BLSTtxt = (*BLSTtxt=='1') ? '2' : '1';
+
+            ctx_set_last_value (VB, ctx, (int64_t)buddy_line_i); // this context has STORE_NONE so this can't conflict with anything
         }
 
         return NO_NEW_VALUE; 

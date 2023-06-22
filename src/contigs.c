@@ -75,32 +75,29 @@ static bool contig_name_to_acc_num (STRp(contig), AccessionNumber *ac) // out - 
 
 static void contigs_calculate_accession_numbers (BufferP contigs, ConstBufferP contigs_dict)
 {
-    ARRAY (Contig, ctg, *contigs);
-
-    for (uint64_t i=0; i < ctg_len; i++) {
-
+    for_buf (Contig, ctg, *contigs) {
         // first check for eg "AC:GL949752.1" in the metadata
-        char *s = strstr (ctg[i].metadata.str, "AC:");
+        char *s = strstr (ctg->metadata.str, "AC:");
         if (s) {
             s += 3;
             char ac[ACCESSION_LEN] = "";
             
-            for (unsigned j=0; j < ACCESSION_LEN && (IS_DIGIT(*s) || IS_LETTER(*s)); j++, s++)
+            for (unsigned j=0; j < ACCESSION_LEN && IS_ALPHANUMERIC(*s); j++, s++)
                 ac[j] = UPPER_CASE (*s);
 
-            char version  = (s - ctg[i].metadata.str <= REFCONTIG_MD_LEN-2 && *s == '.')      ? s[1] : '1';
-            char version2 = (s - ctg[i].metadata.str <= REFCONTIG_MD_LEN-3 && IS_DIGIT(s[2])) ? s[2] : 0;
+            char version  = (s - ctg->metadata.str <= REFCONTIG_MD_LEN-2 && *s == '.')      ? s[1] : '1';
+            char version2 = (s - ctg->metadata.str <= REFCONTIG_MD_LEN-3 && IS_DIGIT(s[2])) ? s[2] : 0;
                  
             // overwrite string metadata with parsed meta data
-            memcpy (ctg[i].metadata.parsed.ac.AC, ac, ACCESSION_LEN);
-            ctg[i].metadata.parsed.ac.version = version;
-            ctg[i].metadata.parsed.ac.version = version2;
+            memcpy (ctg->metadata.parsed.ac.AC, ac, ACCESSION_LEN);
+            ctg->metadata.parsed.ac.version = version;
+            ctg->metadata.parsed.ac.version = version2;
         }
 
         // second, try to extract the AC from the contig name. 
         else {
-            rom contig_name = B(const char, *contigs_dict, ctg[i].char_index);
-            contig_name_to_acc_num (contig_name, ctg[i].snip_len, &ctg[i].metadata.parsed.ac);
+            rom contig_name = Bc(*contigs_dict, ctg->char_index);
+            contig_name_to_acc_num (contig_name, ctg->snip_len, &ctg->metadata.parsed.ac);
         }
     }
 }
@@ -185,7 +182,7 @@ WordIndex contigs_get_by_name_do (ConstBufferP contigs, ConstBufferP contigs_dic
     
     WordIndex word_index = *B(WordIndex, *index_buf, mid_sorted_index);
     Contig *mid_word = B(Contig, *contigs, word_index);
-    rom snip = B(const char, *contigs_dict, mid_word->char_index);
+    rom snip = Bc(*contigs_dict, mid_word->char_index);
     uint32_t snip_len = mid_word->snip_len;
  
     int cmp = strncmp (snip, contig_name, contig_name_len);
@@ -421,7 +418,18 @@ rom contigs_get_name (ConstContigPkgP ctgs, WordIndex index, unsigned *contig_na
 
     if (contig_name_len) *contig_name_len = ctg->snip_len;
     
-    return B(const char, ctgs->dict, ctg->char_index);
+    return Bc(ctgs->dict, ctg->char_index);
+}
+
+uint64_t contigs_get_nbases (ConstContigPkgP ctgs)
+{
+    if (!ctgs) return 0;
+    
+    uint64_t nbases = 0;
+    for_buf (const Contig, ctg, ctgs->contigs) 
+        nbases += (ctg->max_pos - ctg->min_pos) + 1;
+
+    return nbases;
 }
 
 // -----------------------------
@@ -431,13 +439,9 @@ rom contigs_get_name (ConstContigPkgP ctgs, WordIndex index, unsigned *contig_na
 // call a callback for each accessed contig. Note: callback function is the same as sam_foreach_SQ_line
 void foreach_contig (ConstContigPkgP ctgs, ContigsIteratorCallback callback, void *callback_param)
 {
-    ASSERTNOTNULL (ctgs);
-
-    ARRAY (const Contig, ctg, ctgs->contigs);
-
-    for (uint64_t i=0; i < ctg_len; i++) {
-        rom ref_chrom_name = B(const char, ctgs->dict, ctg[i].char_index); 
-        callback (ref_chrom_name, strlen (ref_chrom_name), ctg[i].max_pos, callback_param);
+    for_buf (const Contig, ctg, ctgs->contigs) {
+        rom ref_chrom_name = Bc(ctgs->dict, ctg->char_index); 
+        callback (ref_chrom_name, strlen (ref_chrom_name), ctg->max_pos, callback_param);
     }
 }
 
@@ -489,21 +493,18 @@ void contigs_build_contig_pkg_from_zctx (ContigPkg *ctgs, ConstContextP zctx, So
     buf_alloc_zero (evb, &ctgs->contigs, 0, num_contigs, Contig, 1, "ContigPkg->contigs");
 
     // similar logic to ctx_dict_build_word_lists
-    char *start = ctgs->dict.data;
-    Contig *contig = B1ST (Contig, ctgs->contigs);
-    for (uint32_t i=0; i < num_contigs; i++, contig++) {
-
+    rom next_name = B1STc (ctgs->dict);
+    for_buf2 (Contig, contig, i, ctgs->contigs) {
         if (num_counts)
             contig->metadata.parsed.count = *B64(zctx->counts, i);
 
-        char *c=start; while (*c) c++;
-        contig->snip_len   = c - start;
-        contig->char_index = start - ctgs->dict.data;
+        contig->snip_len   = strlen (next_name);
+        contig->char_index = BNUM (ctgs->dict, next_name);
 
         rom contig_name = Bc (ctgs->dict, contig->char_index);
         contig_name_to_acc_num (contig_name, contig->snip_len, &contig->metadata.parsed.ac);
 
-        start = c+1; // skip over the \0
+        next_name += contig->snip_len + 1; // +1 to skip the \0 too
     }
 
     contigs_create_index (ctgs, sort_by);    

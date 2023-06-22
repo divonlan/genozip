@@ -14,6 +14,7 @@
 #include "arch.h"
 #include "license.h"
 #include "website.h"
+#include "sam.h"
 
 static bool dt_encountered[NUM_DATATYPES] = {};
 
@@ -44,19 +45,18 @@ void tip_print (void)
             valid_tips[n++] = notice.s; // 5X more likely than other tips
 
     valid_tips[n++] = "Interested in how Genozip works? See the paper: " PAPER2;
-    valid_tips[n++] = "FYI, some Genozip benchmarks are available here: " WEBSITE_BENCHMARKS;
     valid_tips[n++] = "Tip: you can use Genozip to downsample your data, see: " WEBSITE_DOWNSAMPLING;
     valid_tips[n++] = "Tip: increase the security of your data by using Genozip's built-in encryption, see: " WEBSITE_ENCRYPTION;
     valid_tips[n++] = "Tip: with Genozip, you can archive entire directories, see: " WEBSITE_ARCHIVING;
-    valid_tips[n++] = "Tip: see an example of a FASTQ-to-BAM pipeline using Genozip: " WEBSITE_PIPELINE;
     valid_tips[n++] = "Interested in seeing who else is using Genozip? Here: " WEBSITE_INSTITUTIONS;
     valid_tips[n++] = "Tip: genozip files are an excellent way to share and publish data - uncompressing genozip files is always free\n";
     valid_tips[n++] = "Tip: you can use Genozip to compress a file directly from a URL, see: " WEBSITE_GENOZIP;
-    valid_tips[n++] = "Is Genozip useful? Help your colleagues by asking the IT folks to post it on your institution's bioinformatics page\n";
-    valid_tips[n++] = "Is Genozip useful? Help your colleagues by asking the IT folks to install it as a module on your institution's HPC, see instructions here: " WEBSITE_USING_ON_HPC;
-    valid_tips[n++] = "Please take a moment now to make a note to not forget to cite Genozip:\n" PAPER2_CITATION "\n";
+    valid_tips[n++] = "Is Genozip useful? Help your colleagues by posting on your institution's bioinformatics forum\n";
 
-    if (!strcmp (arch_get_distribution(), "github")) 
+    if (!(E(SAM) || E(BAM) || E(VCF) || E(BCF)))
+        valid_tips[n++] = "Please take a moment now to make a note to not forget to cite Genozip:\n%s" PAPER2_CITATION "\n";
+
+    if (!strcmp (arch_get_distribution(), "github"))  
         valid_tips[n++] = "Do you like Genozip? Please support it by starring it on github: " GITHUB_REPO;
 
     if (E(SAM) || E(BAM) || E(FASTQ)) 
@@ -71,6 +71,10 @@ void tip_print (void)
     if (E(SAM) || E(BAM))
         valid_tips[n++] = "Please take a moment now to make a note to not forget to cite Genozip:\n " PAPER3_CITATION "\n";
 
+    if (sam_get_deep_tip()) // 5X more likely
+        for (int i=0; i < 5; i++)
+            valid_tips[n++] = sam_get_deep_tip();
+
     if (E(VCF) || E(BCF))
         valid_tips[n++] = "Please take a moment now to make a note to not forget to cite Genozip:\n " PAPER1_CITATION "\n";
 
@@ -80,14 +84,18 @@ void tip_print (void)
     if (flag.test) 
         valid_tips[n++] = "FYI: automatic testing after compression can be disabled with --no-test (not recommended)";
 
-    if (!flag.best && !flag.make_reference) 
+    if (!flag.best && !flag.fast && !flag.low_memory && !flag.make_reference) 
         valid_tips[n++] = "Tip: to achieve the best compression, use --best";
 
     if (license_is_eval() && !flag.show_stats)
         valid_tips[n++] = "Tip: to see detailed compression statistics, use --stats";
 
+    if (arch_get_max_resident_set() > 100 GB || flag.is_windows || flag.is_wsl || flag.is_mac)
+        valid_tips[n++] = "Tip: with --low-memory, genozip will consume considerably less RAM, at the expense of compression size and time";
+
     iprintf ("\n%s\n", valid_tips[time(0) % n]); // "randomly" select one of the valid tips
 
     flag.no_tip = true;
+    sam_destroy_deep_tip();
 }
 

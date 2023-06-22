@@ -29,7 +29,7 @@ COMPRESS(codec_normq_compress)
     // case: this is our second entry, after soft-failing. Just continue from where we stopped
     if (!soft_fail) goto do_compress;
 
-    buf_alloc_exact (vb, *qual_buf, qual_buf->len,  char, "contexts->local"); 
+    buf_alloc_exact (vb, *qual_buf, qual_buf->len,  char, CTX_TAG_LOCAL); 
     
     uint32_t next = 0;
     for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) {
@@ -76,7 +76,6 @@ CODEC_RECONSTRUCT (codec_normq_reconstruct)
     ReconType reconstruct = true;
 
     rom next_qual = Bc(ctx->local, ctx->next_local);
-    uint32_t len = snip_len ? atoi(snip) : vb->seq_len;
 
     if (*next_qual==' ') { // this is QUAL="*"
         sam_reconstruct_missing_quality (vb, reconstruct);

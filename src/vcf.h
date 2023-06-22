@@ -46,7 +46,6 @@
 // FORMAT fields
 #pragma GENDICT FORMAT_AD=DTYPE_2=AD                // <ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed">
                                                     // BUT in VarScan conflicting: <ID=AD,Number=1,Type=Integer,Description="Depth of variant-supporting bases (reads2)">
-#pragma GENDICT FORMAT_ADALL=DTYPE_2=ADALL          // from GIAB: <ID=ADALL,Number=R,Type=Integer,Description="Net allele depths across all datasets">
 #pragma GENDICT FORMAT_ADF=DTYPE_2=ADF              // <ID=ADF,Number=R,Type=Float,Description="Allele dosage on fwd strand">
                                                     // Conflicting VarScan: <ID=ADF,Number=1,Type=Integer,Description="Depth of variant-supporting bases on forward strand (reads2plus)">
 #pragma GENDICT FORMAT_ADR=DTYPE_2=ADR              // <ID=ADR,Number=R,Type=Float,Description="Allele dosage on rev strand">
@@ -70,7 +69,7 @@
 #pragma GENDICT FORMAT_SB=DTYPE_2=SB                // <ID=SB,Number=4,Type=Integer,Description="Per-sample component statistics which comprise the Fisher's Exact Test to detect strand bias">
 #pragma GENDICT FORMAT_PS=DTYPE_2=PS                // seen 1: <ID=PS,Number=1,Type=Integer,Description="Phasing set (typically the position of the first variant in the set)">
                                                     // seen 2: <ID=PS,Number=1,Type=Integer,Description="Physical phasing ID information, where each unique ID within a given sample (but not across samples) connects records within a phasing group">
-#pragma GENDICT FORMAT_PSpos=DTYPE_2=PSpos          // 3 contexts used to seg PS and PID
+#pragma GENDICT FORMAT_PSpos=DTYPE_2=PSpos          // 3 contexts used to seg PS and PID (must be in this order, consecutive)
 #pragma GENDICT FORMAT_PSalt=DTYPE_2=PSalt
 #pragma GENDICT FORMAT_PSref=DTYPE_2=PSref
 #pragma GENDICT FORMAT_PID=DTYPE_2=PID              // <ID=PID,Number=1,Type=String,Description="Physical phasing ID information, where each unique ID within a given sample (but not across samples) connects records within a phasing group">
@@ -113,7 +112,7 @@
 #pragma GENDICT INFO_ERATE=DTYPE_1=ERATE            // <ID=ERATE,Number=1,Type=Float,Description="Per-marker Mutation rate from MaCH/Thunder">
 #pragma GENDICT INFO_THETA=DTYPE_1=THETA            // <ID=THETA,Number=1,Type=Float,Description="Per-marker Transition rate from MaCH/Thunder">
 
-// Ann field defined: https://pcingola.github.io/SnpEff/adds/VCFannotationformat_v1.0.pdf
+// SnpEFF: ANN field defined: https://pcingola.github.io/SnpEff/adds/VCFannotationformat_v1.0.pdf
 #pragma GENDICT INFO_ANN=DTYPE_1=ANN                // <ID=ANN,Number=.,Type=String,Description="Functional annotations: 'Allele | Annotation | Annotation_Impact | Gene_Name | Gene_ID | Feature_Type | Feature_ID | Transcript_BioType | Rank | HGVS.c | HGVS.p | cDNA.pos / cDNA.length | CDS.pos / CDS.length | AA.pos / AA.length | Distance | ERRORS / WARNINGS / INFO'">
 #pragma GENDICT INFO_ANN_Allele=DTYPE_1=@ANN_Allele // note: nice looking tag, as might be displayed in INFO/Lref
 #pragma GENDICT INFO_ANN_Annotation=DTYPE_1=A1Annotation
@@ -132,6 +131,23 @@
 #pragma GENDICT INFO_ANN_Distance=DTYPE_1=AeDistance
 #pragma GENDICT INFO_ANN_Errors=DTYPE_1=AfErrors
 
+// SnpEFF: https://pcingola.github.io/SnpEff/se_inputoutput/#eff-field-vcf-output-files
+#pragma GENDICT INFO_EFF=DTYPE_1=EFF
+#pragma GENDICT INFO_EFF_Effect=DTYPE_1=E1Effect                        // Effect of this variant.
+#pragma GENDICT INFO_EFF_Effect_impact=DTYPE_1=E2Effect_impact          // {High, Moderate, Low, Modifier}
+#pragma GENDICT INFO_EFF_Functional_Class=DTYPE_1=E3Functional_Class    // {NONE, SILENT, MISSENSE, NONSENSE}
+#pragma GENDICT INFO_EFF_Codon_Change=DTYPE_1=E4aCodon_Change           // 4th field: Codon change: old_codon/new_codon
+#pragma GENDICT INFO_EFF_Distance=DTYPE_1=E4bDistance                   // 4th field in case of INFO_EFF_Effect=UPSTREAM/DOWNSTREAM: distance to transcript
+#pragma GENDICT INFO_EFF_Amino_Acid_Change=DTYPE_1=E5Amino_Acid_Change  // old_AA AA_position/new_AA (e.g. 'E30K')
+#pragma GENDICT INFO_EFF_Amino_Acid_Length=DTYPE_1=E6Amino_Acid_Length  // Length of protein in amino acids (actually, transcription length divided by 3).
+#pragma GENDICT INFO_EFF_Gene_Name=DTYPE_1=E7Gene_Name
+#pragma GENDICT INFO_EFF_Transcript_BioType=DTYPE_1=E8Transcript_BioType
+#pragma GENDICT INFO_EFF_Gene_Coding=DTYPE_1=E9Gene_Coding              // [CODING | NON_CODING]. This field is 'CODING' if any transcript of the gene is marked as protein coding.
+#pragma GENDICT INFO_EFF_Transcript_ID=DTYPE_1=EaTranscript_ID          // Transcript ID (usually ENSEMBL IDs)
+#pragma GENDICT INFO_EFF_Exon_Intron_Rank=DTYPE_1=EbINFO_EFF_Exon_Intron_Rank  // Exon rank or Intron rank (e.g. '1' for the first exon, '2' for the second exon, etc.)
+#pragma GENDICT INFO_EFF_Genotype_Number=DTYPE_1=EcGenotype_Number      // Genotype number corresponding to this effect (e.g. '2' if the effect corresponds to the second ALT)
+#pragma GENDICT INFO_EFF_Warnings_Errors=DTYPE_1=EdWarnings_Errors      // Any warnings or errors (not shown if empty).
+ 	 
 // Added by GATK HaplotypeCaller in a gVCF: https://gatk.broadinstitute.org/hc/en-us/articles/360035531812-GVCF-Genomic-Variant-Call-Format
 #pragma GENDICT INFO_END=DTYPE_1=END                // <ID=END,Number=1,Type=Integer,Description="Stop position of the interval">
 #pragma GENDICT INFO_MLEAC=DTYPE_1=MLEAC            // <ID=MLEAC,Number=A,Type=Integer,Description="Maximum likelihood expectation (MLE) for the allele counts (not necessarily the same as the AC), for each ALT allele, in the same order as listed">
@@ -353,6 +369,11 @@
 //#pragma GENDICT FORMAT_AF=DTYPE_2=AF              // (overlap) <ID=AF,Number=A,Type=Float,Description="Alternative allele frequency in trait subset">
 //#pragma GENDICT FORMAT_AC=DTYPE_2=AC              // (overlap) <ID=AC,Number=A,Type=Float,Description="Alternative allele count in the trait subset">
 
+// GIAB
+#pragma GENDICT FORMAT_ADALL=DTYPE_2=ADALL          // <ID=ADALL,Number=R,Type=Integer,Description="Net allele depths across all datasets">
+#pragma GENDICT FORMAT_IGT=DTYPE_2=IGT              // <ID=IGT,Number=1,Type=String,Description="Original input genotype">
+#pragma GENDICT FORMAT_IPS=DTYPE_2=IPS              // <ID=IPS,Number=1,Type=String,Description="Phase set for IGT">
+
 // Genozip INFO fields
 #pragma GENDICT INFO_LUFT=DTYPE_1=LUFT
 #pragma GENDICT INFO_PRIM=DTYPE_1=PRIM
@@ -401,16 +422,13 @@ extern CONTAINER_CALLBACK (vcf_piz_container_cb);
 extern CONTAINER_ITEM_CALLBACK (vcf_piz_con_item_cb);
 
 // VCF Header stuff
-extern void vcf_header_piz_init (void);
+extern void vcf_piz_header_init (void);
 extern bool vcf_inspect_txt_header (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags);
 extern uint32_t vcf_header_get_num_samples (void);
 extern bool vcf_header_get_has_fileformat (void);
 extern void vcf_piz_finalize (void);
 
 // VBlock stuff
-extern void vcf_vb_release_vb();
-extern void vcf_destroy_vb();
-extern void vcf_erase_vb_bufs();
 extern void vcf_header_finalize(void);
 extern unsigned vcf_vb_size (DataType dt);
 extern unsigned vcf_vb_zip_dl_size (void);
@@ -450,7 +468,9 @@ extern void vcf_samples_add  (rom samples_str);
                       vcf_piz_special_RGQ, vcf_piz_special_MUX_BY_HAS_RGQ, vcf_piz_special_SVTYPE, \
                       vcf_piz_special_ALLELE_A, vcf_piz_special_ALLELE_B, vcf_piz_special_MUX_BY_ADJ_DOSAGE,\
                       vcf_piz_special_PROBE_A, vcf_piz_special_PROBE_B, vcf_piz_special_QD, \
-                      vcf_piz_special_MUX_BY_VARTYPE, vcf_piz_special_ICNT, vcf_piz_special_SPL }
+                      vcf_piz_special_MUX_BY_VARTYPE, vcf_piz_special_ICNT, vcf_piz_special_SPL,\
+                      vcf_piz_special_MUX_BY_SAMPLE_I, vcf_piz_special_IGT, \
+                      vcf_piz_special_MUX_BY_IGT_PHASE, vcf_piz_special_main_REFALT_DEL }
 
 SPECIAL (VCF, 0,  main_REFALT,         vcf_piz_special_main_REFALT);
 SPECIAL (VCF, 1,  FORMAT,              vcf_piz_special_FORMAT)
@@ -495,7 +515,11 @@ SPECIAL (VCF, 39, QD,                  vcf_piz_special_QD);                     
 SPECIAL (VCF, 40, MUX_BY_VARTYPE,      vcf_piz_special_MUX_BY_VARTYPE);           // added v15.0.0
 SPECIAL (VCF, 41, ICNT,                vcf_piz_special_ICNT);                     // added v15.0.0
 SPECIAL (VCF, 42, SPL,                 vcf_piz_special_SPL);                      // added v15.0.0
-#define NUM_VCF_SPECIAL 43
+SPECIAL (VCF, 43, MUX_BY_SAMPLE_I,     vcf_piz_special_MUX_BY_SAMPLE_I);          // added v15.0.0
+SPECIAL (VCF, 44, IGT,                 vcf_piz_special_IGT);                      // added v15.0.0
+SPECIAL (VCF, 45, MUX_BY_IGT_PHASE,    vcf_piz_special_MUX_BY_IGT_PHASE);         // added v15.0.0
+SPECIAL (VCF, 46, main_REFALT_DEL,     vcf_piz_special_main_REFALT_DEL);          // added v15.0.0
+#define NUM_VCF_SPECIAL 47
 
 // Translators for Luft (=secondary coordinates)
 TRANSLATOR (VCF, VCF,   1,  G,      vcf_piz_luft_G)       // same order as LiftOverStatus starting LO_CANT_G

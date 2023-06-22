@@ -10,7 +10,6 @@
 // SAM / BAM header stuff
 // ----------------------
 
-#include "libdeflate/libdeflate.h"
 #include <time.h>
 #include "sam_private.h"
 #include "file.h"
@@ -26,15 +25,27 @@
 #include "buffer.h"
 #include "strings.h"
 #include "stats.h"
+#include "arch.h"
 
 // globals
 ContigPkgP sam_hdr_contigs = NULL; // If no contigs in header: BAM: empty structure (RNAME must be * for all lines); SAM: NULL (RNAME in lines may have contigs) 
 HdSoType sam_hd_so = HD_SO_UNKNOWN;
 HdGoType sam_hd_go = HD_GO_UNKNOWN;
+static Buffer sam_deep_tip = {};
 
 uint32_t sam_num_header_contigs (void)
 {
     return sam_hdr_contigs ? sam_hdr_contigs->contigs.len32 : 0;
+}
+
+rom sam_get_deep_tip (void)
+{
+    return sam_deep_tip.len ? B1STc(sam_deep_tip) : NULL;
+}
+
+void sam_destroy_deep_tip (void)
+{
+    buf_destroy (sam_deep_tip);
 }
 
 static void sam_header_get_ref_index (STRp (contig_name), PosType64 LN, void *ref_index)
@@ -53,9 +64,9 @@ static void sam_header_add_contig (STRp (contig_name), PosType64 LN, void *out_r
         // case --match-chrom-to-reference
         if (flag.match_chrom_to_reference) {
             if (ref_index != WORD_INDEX_NONE) { // udpate contig name, if this contig is in the reference
-                z_file->header_size -= (int32_t)contig_name_len;
+                z_file->header_size -= (int32_t)contig_name_len * (IS_BAM_ZIP ? 2 : 1); // in BAM the contig appears twice - in the binary and textual header
                 contig_name = ref_contigs_get_name (gref, ref_index, &contig_name_len);
-                z_file->header_size += contig_name_len; // header_size now has the growth in the size due to --match. the base will be added in txtheader_zip_read_and_compress
+                z_file->header_size += contig_name_len * (IS_BAM_ZIP ? 2 : 1); // header_size now has the growth in the size due to --match. the base will be added in txtheader_zip_read_and_compress
             }
             *(WordIndex*)out_ref_index = ref_index;
         }
@@ -246,7 +257,7 @@ static void sam_header_zip_inspect_HD_line (BufferP txt_header)
     uint32_t hdr_len = IS_BAM_ZIP ? *B32(*txt_header, 1)     : txt_header->len32;
     rom hdr          = IS_BAM_ZIP ? (rom)B32(*txt_header, 2) : txt_header->data;
 
-    if (hdr_len < 4 || memcmp (hdr, "@HD\t", 4)) return; // no HD
+    if (!str_isprefix_(STRa(hdr), _S("@HD\t"))) return; // no HD
     
     rom nl = memchr (hdr, '\n', hdr_len);
     if (!nl) return; // no newline
@@ -345,6 +356,35 @@ static void sam_header_zip_build_hdr_PGs (rom hdr, rom after)
     if (stats_programs.len) *BLSTc (stats_programs) = 0; // replace final ';' 
 }
 
+// ZIP and PIZ
+static void sam_header_create_deep_tip (rom hdr, rom after)
+{
+    STR0(fq);
+    sam_deep_tip.name = "sam_deep_tip";
+
+    while (hdr < after && (((fq = strstr (hdr, ".fq.gz")) && (fq_len=6)) || ((fq = strstr (hdr, ".fastq.gz")) && (fq_len=9)))) {
+        // find start of word
+        while (fq > hdr && (IS_ALPHANUMERIC(fq[-1]) || fq[-1] == '_' || fq[-1] == '-')) // note: we stop also at '/' - record only the base name
+            STRdec(fq);
+
+        SAFE_NULT(fq);
+        if (!sam_deep_tip.len || !strstr (B1STc(sam_deep_tip), fq)) { // avoid dups
+            if (!sam_deep_tip.len) 
+                bufprintf (evb, &sam_deep_tip, "Tip: Use --deep to losslessly co-compress BAM and FASTQ, saving about 40%%, compared to compressing FASTQ and BAM separately. E.g.:\n"
+                           "%s --reference %s --deep %s", arch_get_argv0(), ref_get_filename (gref) ? ref_get_filename (gref) : "reference-genome.fa.gz", txt_name);
+
+            buf_add_moreC (evb, &sam_deep_tip, " ", NULL);
+            buf_append_string (evb, &sam_deep_tip, fq);
+        }
+        SAFE_RESTORE;
+        
+        hdr = fq + fq_len;
+    }
+
+    if (sam_deep_tip.len) 
+        buf_add_moreC (evb, &sam_deep_tip, "\n\0", NULL);
+}
+
 // ZIP
 static void sam_header_zip_inspect_PG_lines (BufferP txt_header) 
 {
@@ -385,7 +425,7 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
     segconf.is_minimap2       = MP(MINIMAP2) || MP(WINNOWMAP) || MP(PBMM2);   // aligners based on minimap2
     segconf.is_bowtie2        = MP(BOWTIE2) || MP(HISAT2) || MP(TOPHAT) || MP(BISMARK) || MP(BSSEEKER2); // aligners based on bowtie2
 
-    segconf.sam_has_SA_Z      = segconf.is_bwa || segconf.is_minimap2 || MP(NGMLR); /*|| MP(LONGRANGER); non-standard SA:Z format (POS is off by 1, main-field NM is missing) */ 
+    segconf.sam_has_SA_Z      = segconf.is_bwa || segconf.is_minimap2 || MP(NGMLR) || MP(DRAGEN) || MP(NOVOALIGN); /*|| MP(LONGRANGER); non-standard SA:Z format (POS is off by 1, main-field NM is missing) */ 
     segconf.sam_has_BWA_XA_Z  = (segconf.is_bwa || MP(GEM3) || MP(GEM2SAM) || MP(DELVE) || MP(DRAGEN)) ? yes 
                               : MP(TMAP)                                                               ? no 
                               :                                                                          unknown;
@@ -398,6 +438,8 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
     // build buffer of unique PN+ID fields, for stats
     sam_header_zip_build_hdr_PGs (hdr, after);
     
+    sam_header_create_deep_tip (hdr, after);
+
     if (stats_programs.len) {
 
         #define SCAN(program) (!!strstr (B1STc(stats_programs), (program)))
@@ -553,6 +595,14 @@ bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
 
         // evb buffers must be alloced by the main thread, since other threads cannot modify evb's buf_list
         random_access_alloc_ra_buf (evb, 0, 0);
+    }
+
+    else { // PIZ
+        // deep tip - create in case tip is displayed in "--test after ZIP"
+        uint32_t hdr_len = IS_BAM_ZIP ? *B32(*txt_header, 1)     : txt_header->len32;
+        rom hdr          = IS_BAM_ZIP ? (rom)B32(*txt_header, 2) : txt_header->data;
+
+        sam_header_create_deep_tip (hdr, hdr + hdr_len);
     }
 
     return true;

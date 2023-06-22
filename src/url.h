@@ -15,7 +15,7 @@
 
 extern bool url_is_url (rom filename);
 
-extern rom url_get_status (rom url, bool *is_file_exists, int64_t *file_size);
+extern rom url_get_status (rom url, thool *is_file_exists, int64_t *file_size);
 
 extern FILE *url_open (StreamP parent_stream, rom url);
 extern void url_reset_if_curl (StreamP maybe_curl_stream);

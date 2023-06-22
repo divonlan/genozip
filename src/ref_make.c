@@ -146,8 +146,7 @@ void ref_make_calculate_digest (void)
     gref->genome_nbases = ROUNDUP64 (last_r->gpos + ref_size (last_r)) + 64;
 
     gref->genome_buf.can_be_big = true; // supress warning in case of an extra large genome (eg plant genomes)
-    gref->genome = buf_alloc_bits (evb, &gref->genome_buf, gref->genome_nbases * 2, "ref->genome_buf");
-    buf_zero (&gref->genome_buf); 
+    gref->genome = buf_alloc_bits (evb, &gref->genome_buf, gref->genome_nbases * 2, CLEAR, 0, "ref->genome_buf");
 
     for_buf (Range, r, gref->ranges) 
         bits_copy (gref->genome, r->gpos * 2, &r->ref, 0, ref_size(r) * 2);
@@ -188,15 +187,14 @@ void ref_make_genozip_header (SectionHeaderGenozipHeaderP header)
 }
 
 // zip_finalize callback
-void ref_make_finalize (bool unused) 
+void ref_make_finalize (bool is_last_user_txt_file) 
 { 
-    buf_free (contig_metadata); 
-
+    buf_destroy (contig_metadata); 
     serializer_destroy (make_ref_merge_serializer);
 }
 
 // Get reference file name from FASTA name, and if reference file does not exist, run a separate process to --make-reference
-void ref_fasta_to_ref (FileP file)
+rom ref_fasta_to_ref (FileP file)
 {
     rom ref_filename = filename_z_normal (file->name, DT_REF, file->type);
 
@@ -205,18 +203,14 @@ void ref_fasta_to_ref (FileP file)
 
         WARN ("FYI: cannot find reference file %s: generating it now from %s", ref_filename, file->name);
 
-        rom exec_path = arch_get_executable (HARD_FAIL);
-
         StreamP make_ref = stream_create (NULL, 0, 0, 0, 0, 0, 0, "Make reference",
-                                          exec_path, "--make-reference", file->name, 
+                                          arch_get_executable().s, "--make-reference", file->name, 
                                           flag.submit_stats ? "--submit" : SKIP_ARG,
                                           "--no-tip", NULL);
         
         // wait for child process to finish
         ASSINP (!stream_wait_for_exit (make_ref), "Failed to make reference file %s. Try making it explicitly with \"genozip --make-reference %s\"", 
                 ref_filename, file->name); 
-    
-        FREE (exec_path);
     }
 
     FREE (file->name);
@@ -226,4 +220,8 @@ void ref_fasta_to_ref (FileP file)
 
     REALLOC ((char **)&ref->filename, strlen (ref_filename) + 1, "ref->filename");
     strcpy ((char*)ref->filename, ref_filename);
+
+    file->disk_size = file_get_size (ref_filename);
+
+    return ref->filename;
 }

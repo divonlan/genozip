@@ -10,6 +10,7 @@
 
 #include "genozip.h"
 #include "container.h"
+#include "mutex.h"
 
 // Documented range for users
 #define MIN_VBLOCK_MEMORY  1    // in MB 
@@ -35,12 +36,15 @@ typedef enum __attribute__ ((__packed__)) { DP_DEFAULT, by_AD, by_SDP } FormatDP
 typedef enum __attribute__ ((__packed__)) { L3_UNKNOWN, L3_EMPTY, L3_COPY_LINE1, L3_NCBI, NUM_L3s } FastqLine3Type;
 
 // SamMapperType is part of the file format and values should not be changed (new ones can be added)
-typedef enum __attribute__ ((__packed__)) { MP_UNKNOWN, MP_BSBOLT,             MP_bwa,   MP_BWA,   MP_MINIMAP2,   MP_STAR,   MP_BOWTIE2,   MP_DRAGEN,    MP_GEM3,         MP_GEM2SAM,     MP_BISMARK,   MP_BSSEEKER2,     MP_WINNOWMAP,   MP_BAZ2BAM,    MP_BBMAP,   MP_TMAP,   MP_HISAT2,   MP_BOWTIE,   MP_NOVOALIGN,   MP_RAZER3,    MP_BLASR,   MP_NGMLR,           MP_DELVE,   MP_TOPHAT,   MP_CPU,   MP_LONGRANGER,          MP_CLC,              MP_PBMM2,   MP_CCS,  MP_SNAP,   MP_BWA_MEM2,   MP_PARABRICKS,     NUM_MAPPERS } SamMapperType;
+typedef enum  { MP_UNKNOWN, MP_BSBOLT,             MP_bwa,   MP_BWA,   MP_MINIMAP2,   MP_STAR,   MP_BOWTIE2,   MP_DRAGEN,    MP_GEM3,         MP_GEM2SAM,     MP_BISMARK,   MP_BSSEEKER2,     MP_WINNOWMAP,   MP_BAZ2BAM,    MP_BBMAP,   MP_TMAP,   MP_HISAT2,   MP_BOWTIE,   MP_NOVOALIGN,   MP_RAZER3,    MP_BLASR,   MP_NGMLR,           MP_DELVE,   MP_TOPHAT,   MP_CPU,   MP_LONGRANGER,          MP_CLC,              MP_PBMM2,   MP_CCS,  MP_SNAP,   MP_BWA_MEM2,   MP_PARABRICKS,     NUM_MAPPERS } SamMapperType;
 #define SAM_MAPPER_NAME             { "Unknown_mapper", "bsbolt",              "bwa",    "BWA",    "minimap2",    "STAR",    "bowtie2",    "dragen",     "gem3",          "gem2sam",      "bismark",    "bsseeker2",      "Winnowmap",    "baz2bam",     "BBMap",    "tmap",    "hisat2",    "Bowtie",    "NovoAlign",    "razers3",    "blasr",    "ngmlr",            "Delve",    "TopHat",    "cpu",    "longranger",           "CLCGenomicsWB",    "pbmm2",    "ccs",    "snap",    "bwa-mem2",    "parabricks",                  }
 #define SAM_MAPPER_SIGNATURE        { "Unknown_mapper", "PN:bwa	VN:BSB"/*\t*/, "PN:bwa", "PN:BWA", "PN:minimap2", "PN:STAR", "PN:bowtie2", "ID: DRAGEN", "PN:gem-mapper", "PN:gem-2-sam", "ID:Bismark", "PN:BS Seeker 2", "PN:Winnowmap", "PN:baz2bam",  "PN:BBMap", "ID:tmap", "PN:hisat2", "ID:Bowtie", "PN:novoalign", "PN:razers3", "ID:BLASR", "PN:nextgenmap-lr", "ID:Delve", "ID:TopHat", "PN:cpu", "PN:longranger.lariat", "PN:clcgenomicswb", "PN:pbmm2", "PN:ccs", "PN:SNAP", "PN:bwa-mem2", "PN:pbrun fq2bam",             }   
 #define MP(x) (segconf.sam_mapper == MP_##x)
-
+             
 #define MAX_SHORT_READ_LEN 2500
+
+// also defined in sam.h
+#define SAM_MAX_QNAME_LEN 255/*exc. \0*/     // In initial SAM specification verions, the max QNAME length was 255, and reduced to 254 in Aug 2015. We support 255 to support old SAM/BAM files too. BAM specifies 255 including \0 (so 254).
 
 // seg configuration set prior to starting to seg a file during segconfig_calculate or txtheader_zip_read_and_compress
 typedef struct {
@@ -53,8 +57,9 @@ typedef struct {
     float b250_per_line[MAX_DICTS]; // b250.len / num_lines
     #define AT_LEAST(did_i) ((uint64_t)(10.0 + (segconf.b250_per_line[did_i] * (float)(vb->lines.len32))))
 
-    // read characteristics (SAM/BAM, KRAKEN and FASTQ)
+    // qname characteristics (SAM/BAM, KRAKEN and FASTQ)
     QnameFlavor qname_flavor[NUM_QTYPES]; // 0-QNAME 1-QNAME2 (FASTQ) 2=NCBI LINE3 (FASTQ)
+    QnameFlavorProp flav_prop[NUM_QTYPES];  // flavor properties
     bool qname_flavor_rediscovered[NUM_QTYPES]; // true if flavor has been modified
     char qname_line0[NUM_QTYPES][SAM_MAX_QNAME_LEN+1]; // qname of line_i=0 (by which flavor is determined) (nul-terminated)
     SeqTech tech;
@@ -66,7 +71,8 @@ typedef struct {
     #define NUM_COLLECTED_WORDS 6
     char unknown_flavor_qnames[NUM_QTYPES][NUM_COLLECTED_WORDS][UNK_QNANE_LEN+1];
     bool nontrivial_qual;       // true if we know that not all QUAL values are the same (as they are in newer PacBio files)
-
+    bool longr_bins_calculated; // were LONGR bins calculated in segconf
+    
     // SAM/BAM stuff
     STRl (std_cigar, 16);       // first CIGAR in the file - used in case all CIGARs in the file are the same
     int num_mapped;             // number of segconf reads that are mapped - defined as having (!FLAG.unmapped, RNAME, POS, CIGAR)
@@ -118,6 +124,7 @@ typedef struct {
     uint32_t sam_cigar_len;     // approx average CIGAR len rounded up (during segconf.running==true - total len)
     uint32_t sam_seq_len;       // ZIP/PIZ: approx average (SEQ.len+hard-clips) rounded to the nearest (during segconf.running - total len)
     uint32_t seq_len_to_cm;     // ZIP/PIZ: approx average of (seq_len/cm:i) (during segconf.running - cumulative)
+    uint32_t sam_cropped_at;    // ZIP: it appears that the FASTQ reads were sam_is_cropped to an identical length before aligning. If --deep, this field (as calculated in SAM) is also used when segging FASTQ.
     bool use_pacbio_iqsqdq;     // ZIP: if iq:Z sq:Z and dq:Z are present in all lines, we can compress them, as well as QUAL, better. 
     char CR_CB_seperator;       // ZIP: seperator within CR:Z and CB:Z fields
     bool abort_gencomp;         // ZIP: vb=1 found out that the file actually has no depn or no prim, so we stop sending lines to prim/depn
@@ -140,6 +147,7 @@ typedef struct {
     bool vcf_illum_gtyping;     // tags from Illumina GenCall genotyping software
     bool vcf_is_infinium;
     bool vcf_is_dbSNP;
+    bool vcf_is_giab_trio;
     uint64_t count_dosage[2];   // used to calculate pc_has_dosage
     float pc_has_dosage;        // % of the samples x lines that have a valid (0-2) dosage value [0.0,1.0]
     bool use_null_DP_method;    // A method for predicting GT=./. by DP=.
@@ -166,11 +174,14 @@ typedef struct {
 
     FastqLine3Type line3;       // format of line3
     int r1_or_r2;               // in case compression is WITHOUT --pair: our guess of whether this file is R1 or R2
-    bool deep_no_qname;         // Deep: true if for some segconf lines which have Deep, qname doesn't match (eg, bc of QNAME modifications between FASTQ and SAM)
-    bool deep_no_qual;          // Deep: true if for some segconf lines which have Deep, qual doesn't match (eg, bc of undocumented BQSR)
-    unsigned n_full_mch;        // Deep: count segconf lines where hash matches with at least one SAM line - QNAME, SEQ, QUAL
+    QType deep_qtype;           // Deep: QNAME1 or QNAME2 if for most segconf lines for which have Deep, SAM qname matches FASTQ's QNAME1 or QNAME2, or QNONE if not
+    bool deep_no_qual;          // Deep: true if for most segconf lines which have Deep, qual doesn't match (eg, bc of undocumented BQSR) 
+    bool deep_has_trimmed;      // Deep: some FASTQ reads in segconf appear in SAM trimmed (beyond cropping)
+    char deep_1st_desc[256];    // Deep: DESC line of first FASTQ read of first FASTQ file
+    char deep_1st_qname[256];   // Deep: QNAME of first SAM alignment in file
+    unsigned n_full_mch[2];     // Deep: count segconf lines where hash matches with at least one SAM line - (QNAME1 or QNAME2), SEQ, QUAL
     unsigned n_seq_qual_mch;    // Deep: count segconf lines where hash matches with at least one SAM line - SEQ and QUAL
-    unsigned n_seq_qname_mch;   // Deep: count segconf lines where hash matches with at least one SAM line - SEQ and QNAME 
+    unsigned n_seq_qname_mch[2];// Deep: count segconf lines where FASTQ (QNAME1 or QNAME2) hash matches with at least one SAM line - SEQ and QNAME 
     unsigned n_seq_mch;         // Deep: count segconf lines where hash matches with at least one SAM line - SEQ
     unsigned n_no_mch;          // Deep: count segconf lines that don't match any SAM line (perhaps because SAM is filtered)
 
@@ -195,7 +206,6 @@ extern SegConf segconf; // ZIP: set based on segging a sample of a few first lin
 
 extern void segconf_initialize (void);
 extern void segconf_calculate (void);
-extern void segconf_update_qual (STRp (qual));
 extern bool segconf_is_long_reads(void);
 extern void segconf_mark_as_used (VBlockP vb, unsigned num_ctxs, ...);
 extern rom segconf_sam_mapper_name (void);

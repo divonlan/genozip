@@ -17,6 +17,8 @@
 extern int32_t generic_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
 extern int32_t generic_is_header_done (bool is_eof);
 extern void generic_seg_initialize (VBlockP vb);
+extern rom generic_seg_txt_line (VBlockP vb, rom next_line, uint32_t remaining_txt_len, bool *has_13);
+extern rom generic_assseg_line (VBlockP vb);
 extern void generic_seg_finalize (VBlockP vb);
 extern bool generic_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern rom generic_get_magic (void);

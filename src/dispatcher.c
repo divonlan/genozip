@@ -14,7 +14,6 @@
 #include "progress.h"
 #include "threads.h"
 #include "segconf.h"
-#include "piz.h"
 #include "arch.h"
 
 #define RR(x) ((x) % d->max_threads)
@@ -56,6 +55,7 @@ static TimeSpecType profiler_timer; // wallclock
 
 static Dispatcher main_dispatcher = 0; // dispatcher that updates percentage progress
 
+// called from main and also compute threads
 void dispatcher_increment_progress (rom where, int64_t increment)
 {
     DispatcherData *d = (DispatcherData *)main_dispatcher;
@@ -74,7 +74,7 @@ void dispatcher_increment_progress (rom where, int64_t increment)
     // in unbind mode - dispatcher is not done if there's another component after this one
     bool done = dispatcher_is_done (main_dispatcher);
 
-    progress_update (&d->progress_prefix, d->progress, d->target_progress, done);
+    progress_update (d->task_name, &d->progress_prefix, d->progress, d->target_progress, done);
 }
 
 void dispatcher_start_wallclock (void)
@@ -91,19 +91,19 @@ Dispatcher dispatcher_init (rom task_name,
                             uint64_t target_progress, // implies PROGRESS_PERCENT 
                             rom prog_msg) // implies progress_type=PROGRESS_MESSAGE
 {
-    DispatcherData *d  = (DispatcherData *)CALLOC (sizeof(DispatcherData));
-    d->task_name       = task_name;
+    DispatcherData *d    = (DispatcherData *)CALLOC (sizeof(DispatcherData));
+    d->task_name         = task_name;
     d->preproc_task_name = preproc_task_name ? preproc_task_name : task_name; 
-    d->next_vb_i       = previous_vb_i;  // used if we're binding files - the vblock_i will continue from one file to the next
-    d->max_threads     = MIN_(max_threads, MAX_COMPUTED_VBS);
-    d->progress_type   = prog_msg?PROGRESS_MESSAGE : target_progress?PROGRESS_PERCENT : PROGRESS_NONE;
-    d->target_progress = target_progress;
-    d->pool_type       = pool_type;
-    d->out_of_order    = out_of_order && (d->max_threads > 1);  // max_threads=1 implies processing in order
-    d->last_joined     = (d->max_threads > 1) ? -1 /* none joined yet */ : 0;
-    d->last_dispatched = -1; // none dispatched yet
-    d->next_dispatched = -1; // none generated yet
-    d->init_timestamp  = arch_timestamp();
+    d->next_vb_i         = previous_vb_i;  // used if we're binding files - the vblock_i will continue from one file to the next
+    d->max_threads       = MIN_(max_threads, MAX_COMPUTED_VBS);
+    d->progress_type     = prog_msg?PROGRESS_MESSAGE : target_progress?PROGRESS_PERCENT : PROGRESS_NONE;
+    d->target_progress   = target_progress;
+    d->pool_type         = pool_type;
+    d->out_of_order      = out_of_order && (d->max_threads > 1);  // max_threads=1 implies processing in order
+    d->last_joined       = (d->max_threads > 1) ? -1 /* none joined yet */ : 0;
+    d->last_dispatched   = -1; // none dispatched yet
+    d->next_dispatched   = -1; // none generated yet
+    d->init_timestamp    = arch_timestamp();
 
     if (d->progress_type == PROGRESS_PERCENT)
         main_dispatcher = d;
@@ -116,7 +116,7 @@ Dispatcher dispatcher_init (rom task_name,
     // always create the pool based on global_max_threads, not max_threads, because it is the same pool for all fan-outs throughout the execution
     vb_create_pool (pool_type);
 
-    if (!flag.unbind && filename) // note: for flag.unbind (in main file), we print this in dispatcher_resume() 
+    if (filename) // note: when unbinding, we print this in dispatcher_resume() 
         d->progress_prefix = progress_new_component (filename, prog_msg, test_mode); 
 
     d->pool_in_use_at_init = vb_pool_get_num_in_use (pool_type, NULL); // we need to return the pool after dispatcher in the condition we received it...
@@ -137,14 +137,18 @@ void dispatcher_pause (Dispatcher d)
     d->next_vb_i--;
 }
 
-// PIZ: reinit dispatcher, used when splitting a genozip to its components, using a single dispatcher object
-void dispatcher_resume (Dispatcher d)
+// PIZ: reinit dispatcher, used when splitting a genozip file to its components, using a single dispatcher object
+void dispatcher_resume (Dispatcher d, uint32_t target_progress)
 {
     d->input_exhausted = false;
-    d->paused          = false;
     d->filename        = txt_file->basename;
-    
-    d->progress_prefix = progress_new_component (d->filename, "0\%", flag.test);    
+    d->progress        = 0;
+    d->target_progress = target_progress;
+
+    if (d->paused) 
+        d->progress_prefix = progress_new_component (d->filename, "0\%", flag.test);    
+
+    d->paused          = false;
 }
 
 uint32_t dispatcher_get_next_vb_i (Dispatcher d)
@@ -160,9 +164,8 @@ void dispatcher_set_task_name (Dispatcher d, rom task_name)
 void dispatcher_calc_avg_compute_vbs (Dispatcher d)
 {
     uint32_t dispatcher_lifetime = arch_time_lap (d->init_timestamp);
-
-    z_file->avg_compute_vbs = dispatcher_lifetime ? ((double)d->total_compute_time / (double)dispatcher_lifetime) : 0;
-    profiler_set_avg_compute_vbs (z_file->avg_compute_vbs);
+    
+    profiler_set_avg_compute_vbs (dispatcher_lifetime ? ((double)d->total_compute_time / (double)dispatcher_lifetime) : 0);
 }
 
 void dispatcher_finish (Dispatcher *dd_p, uint32_t *last_vb_i, bool cleanup_after_me,
@@ -174,13 +177,11 @@ void dispatcher_finish (Dispatcher *dd_p, uint32_t *last_vb_i, bool cleanup_afte
 
     // must be before memory release (in ZIP - show in final component of final file)
     if (show_memory) 
-        buf_show_memory (false, d->max_threads, d->max_vb_id_so_far);    
+        buflist_show_memory (false, d->max_threads, d->max_vb_id_so_far);    
 
-    // free memory allocations between files, when compressing multiple non-bound files or 
-    // decompressing multiple files. 
+    // free memory allocations between files, when compressing multiple non-bound files or decompressing multiple files. 
     // don't bother freeing (=save time) if this is the last file, unless we're going to test and need the memory
-    if (cleanup_after_me || 
-        arch_is_valgrind()) { // free everything if testing with valgrind, so that we can find true memory leaks
+    if (cleanup_after_me) {
         if ((IS_ZIP && (IS_REF_INTERNAL || IS_REF_EXT_STORE)) ||
             (IS_PIZ && IS_REF_STORED_PIZ))
             ref_unload_reference (gref);
@@ -195,7 +196,8 @@ void dispatcher_finish (Dispatcher *dd_p, uint32_t *last_vb_i, bool cleanup_afte
 
     int32_t id_in_use;
     uint32_t pool_in_use_at_finish = vb_pool_get_num_in_use (d->pool_type, &id_in_use);
-    ASSERT (pool_in_use_at_finish == d->pool_in_use_at_init, "Dispatcher \"%s\" leaked VBs: pool_in_use_at_init=%u pool_in_use_at_finish=%u (one VB in use is vb_id=%u)",
+    // note for piz: we have 1 at start (wvb) and 0 at finish
+    ASSERT (pool_in_use_at_finish <= d->pool_in_use_at_init, "Dispatcher \"%s\" leaked VBs: pool_in_use_at_init=%u pool_in_use_at_finish=%u (one VB in use is vb_id=%u)",
             d->task_name, d->pool_in_use_at_init, pool_in_use_at_finish, id_in_use);
 
     FREE (d->progress_prefix);
@@ -433,7 +435,9 @@ Dispatcher dispatcher_fan_out_task (rom task_name,
         else {
             if (d == main_dispatcher) dispatcher_increment_progress (0, 0); // ZIP: update progress
 
+            START_TIMER;
             usleep (idle_sleep_microsec); 
+            if (!strcmp (d->task_name, ZIP_TASK_NAME)) COPY_TIMER_EVB (zip_main_loop_idle);
         }
 
     } while (!dispatcher_is_done (d));

@@ -44,7 +44,7 @@ static inline void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char ref, char alt
 
         RefLock lock = REFLOCK_NONE;
 
-        Range *range = ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, 1, WORD_INDEX_NONE, NULL, 
+        Range *range = ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, 1, WORD_INDEX_NONE, 
                                           (IS_REF_EXT_STORE ? &lock : NULL));
         if (range) { // this chrom is in the reference
             uint32_t index_within_range = pos - range->first_pos;
@@ -53,7 +53,7 @@ static inline void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char ref, char alt
             
             // note: in GVCF, REF='N' for ~5% of human genome, but we can't identify as our reference doesn't store N
             if (ref == REF (index_within_range)) 
-                new_ref = '-'; // this should always be the case...
+                new_ref = '-'; // normally, we expect our REF to match the reference...
 
             if (IS_REF_EXT_STORE)
                 bits_set (&range->is_set, index_within_range);
@@ -90,11 +90,54 @@ static inline void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char ref, char alt
     }
 }
 
+// seg a deletion against the reference, if available
+static inline bool vcf_refalt_seg_del_against_reference (VBlockVCFP vb, STRp(ref), char alt)
+{
+    decl_acgt_decode;
+
+    // if we have a reference, we use it (we treat the reference as PRIMARY)
+    // except: if --match-chrom, we assume the user just wants to match, and we don't burden him with needing the reference to decompress
+    if ((!(IS_REF_EXTERNAL && !flag.match_chrom_to_reference) && !IS_REF_EXT_STORE) || 
+        vb->line_coords != DC_PRIMARY ||
+        ref[0] != alt) return false;
+
+    PosType32 pos = vb->last_int(VCF_POS);
+
+    RefLock lock = REFLOCK_NONE;
+
+    Range *range = ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, 1, WORD_INDEX_NONE, 
+                                        (IS_REF_EXT_STORE ? &lock : NULL));
+    
+    if (!range || pos < range->first_pos || pos + ref_len - 1 > range->last_pos)
+        return false; // region implied by REF doesn't fully exist in the reference
+    
+    uint32_t index_within_range = pos - range->first_pos;
+
+    for (int i=0; i < ref_len; i++)
+        if (ref[i] != REF (index_within_range + i)) {
+            ref_unlock (gref, &lock); // does nothing if REFLOCK_NONE
+            return false; // REF doesn't match reference
+        }
+
+    SNIPi2 (SNIP_SPECIAL, VCF_SPECIAL_main_REFALT_DEL, ref_len);
+    seg_by_did (VB, STRa(snip), VCF_REFALT, 0);
+
+    if (IS_REF_EXT_STORE)
+        bits_set_region (&range->is_set, index_within_range, ref_len);
+
+    ref_unlock (gref, &lock); // does nothing if REFLOCK_NONE
+
+    return true;
+}
+
 void vcf_refalt_seg_main_ref_alt (VBlockVCFP vb, STRp(ref), STRp(alt))
 {
     // optimize ref/alt in the common case of single-character
     if (ref_len == 1 && alt_len == 1) 
         vcf_refalt_seg_ref_alt_snp (vb, *ref, *alt);
+
+    else if (ref_len > 1 && alt_len == 1 && vcf_refalt_seg_del_against_reference (vb, STRa(ref), alt[0]))
+        {}
 
     else {
         char ref_alt[ref_len + 1 + alt_len];
@@ -685,10 +728,10 @@ LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool is
     if (!opos) return LO_OK_REF_SAME_SNP; // POS==oPOS==0 and REF==oREF=='.'
 
     // note: as we're using external references, the range is always the entire contig, and range->first_pos is always 1.
-    const Range *prim_range = ref_seg_get_range (VB, prim_ref, dl->chrom[0], STRa(vb->chrom_name), pos, 1, WORD_INDEX_NONE, Btxt (vb->line_start), NULL); // doesn't lock as lock=NULL
+    const Range *prim_range = ref_seg_get_range (VB, prim_ref, dl->chrom[0], STRa(vb->chrom_name), pos, 1, WORD_INDEX_NONE, NULL); // doesn't lock as lock=NULL
     ASSVCF (prim_range, "Failed to find PRIM range for chrom=\"%.*s\"", STRf(vb->chrom_name));
 
-    const Range *luft_range = ref_seg_get_range (VB, gref, dl->chrom[1], NULL, 0, opos, 1, luft_ref_index, Btxt (vb->line_start), NULL);
+    const Range *luft_range = ref_seg_get_range (VB, gref, dl->chrom[1], NULL, 0, opos, 1, luft_ref_index, NULL);
     ASSVCF (luft_range, "Failed to find LUFT range for chrom=%d", dl->chrom[1]);
 
     str_toupper_(vb->main_ref, ref, ref_len);
@@ -745,7 +788,7 @@ LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool is
 
     // case: variant with a symbolic ALT allele (eg <DEL>, <INS> etc)
     if (memchr (alt, '<', alt_len)) {
-        vb->is_del_sv = alt_len == 5 && !memcmp (alt, "<DEL>", 5); // used by vcf_seg_INFO_END
+        vb->is_del_sv = str_issame_(STRa(alt), "<DEL>", 5); // used by vcf_seg_INFO_END
 
         return vcf_refalt_lift_with_sym_allele (vb, STRa(ref), has_missing_alts, STRas(alt), STRa(alt), is_xstrand, prim_range, pos, luft_range, opos);
     }
@@ -995,6 +1038,34 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_main_REFALT)
 
     RECONSTRUCT (ref_alt, sizeof (ref_alt));
 
+done:
+    return NO_NEW_VALUE;
+}   
+
+// Sometimes called to reconstruct the "main" refalt (main AT THE TIME OF SEGGING), 
+// to reconstruct deletions that were stored relative to a reference.
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_main_REFALT_DEL)
+{
+    if (!reconstruct) goto done;
+
+    int ref_len = atoi (snip);
+     
+    PosType32 pos = CTX (VCF_POS)->last_value.i;
+
+    ConstRangeP range = ref_piz_get_range (vb, gref, HARD_FAIL);
+        
+    uint32_t idx = pos - range->first_pos;
+
+    decl_acgt_decode;
+    char *next = BAFTtxt;
+    for (int i=0; i < ref_len; i++)
+        *next++ = REF (idx + i);
+
+    *next++ = '\t';
+    *next = REF (idx); // ALT is the anchor base
+
+    Ltxt += ref_len + 2;
+    
 done:
     return NO_NEW_VALUE;
 }   

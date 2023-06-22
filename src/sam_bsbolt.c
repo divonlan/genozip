@@ -23,7 +23,7 @@ void sam_seg_bsbolt_YS_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(ys), unsigned 
 {
     // note: we expect Watson strand alignments to be revcomp=false and Crick to be revcomp=true
     ASSSEG (ys_len == 5 && (ys[0]=='W' || ys[0]=='C') && (!memcmp (ys+1, "_C2T", 4) || !memcmp (ys+1, "_G2A", 4)),
-            ys, "Invalid YS:Z=%.*s value: expecting one of: W_C2T ; W_G2A ; C_C2T ; C_G2A", STRf(ys));
+            "Invalid YS:Z=%.*s value: expecting one of: W_C2T ; W_G2A ; C_C2T ; C_G2A", STRf(ys));
 
     seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_BSBOLT_YS, 
                               vb->bisulfite_strand?'*' : ((ys[0] == 'C') == dl->FLAG.rev_comp)?'^' : ys[0],
@@ -94,14 +94,14 @@ void sam_seg_bsbolt_XB_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl)
         // note: soft-clip (BC_S) bases are not represented in the XB:Z string
         else if (op->op == BC_I) {
             set_number;
-            ASSSEG (number >= op->n, &xb[xb_i], "expecting number=%u >= op->n=%u (XB:Z=\"%.*s\" CIGAR=\"%s\")", 
+            ASSSEG (number >= op->n, "expecting number=%u >= op->n=%u (XB:Z=\"%.*s\" CIGAR=\"%s\")", 
                     number, op->n, STRf(xb),
                     dis_binary_cigar (vb, B1ST(BamCigarOp, vb->binary_cigar), vb->binary_cigar.len32, &vb->scratch).s);
 
             number -= op->n;
         }
 
-    ASSSEG (xb_i == xb_len, xb, "Mismatch between XB:Z=\"%.*s\" and CIGAR=\"%s\" (xb_i=%u xb_len=%u)", STRf(xb), 
+    ASSSEG (xb_i == xb_len, "Mismatch between XB:Z=\"%.*s\" and CIGAR=\"%s\" (xb_i=%u xb_len=%u)", STRf(xb), 
             dis_binary_cigar (vb, B1ST(BamCigarOp, vb->binary_cigar), vb->binary_cigar.len32, &vb->scratch).s, xb_i, xb_len);
 
     if (range) ref_unlock (gref, &lock);

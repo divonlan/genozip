@@ -23,7 +23,7 @@ PosType32 sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM *dl, WordIndex prev_line_ch
     PosType32 pos = dl->POS;
     PosType32 prev_line_pos = vb->line_i ? (dl-1)->POS : 0;
 
-    bool do_mux = sam_is_main_vb && segconf.is_paired; // for simplicity. To do: also for prim/depn components
+    bool do_mux = IS_MAIN(vb) && segconf.is_paired; // for simplicity. To do: also for prim/depn components
     int channel_i = sam_has_mate?1 : sam_has_prim?2 : 0;
     ContextP channel_ctx = do_mux ? seg_mux_get_channel_ctx (VB, SAM_POS, (MultiplexerP)&vb->mux_POS, channel_i) 
                                   : CTX(SAM_POS);
@@ -35,7 +35,7 @@ PosType32 sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM *dl, WordIndex prev_line_ch
         ctx_set_last_value (VB, CTX(SAM_POS), (int64_t)pos);
 
         // in PRIM, we also seg it as the first SA alignment (used for PIZ to load alignments to memory, not used for reconstructing SA)
-        if (sam_is_prim_vb) {
+        if (IS_PRIM(vb)) {
             seg_pos_field (VB, OPTION_SA_POS, OPTION_SA_POS, 0, 0, 0, 0, dl->POS, 0);
 
             // count POS field contribution to OPTION_SA_POS, so sam_stats_reallocate can allocate the z_data between POS and SA:Z
@@ -74,7 +74,7 @@ static inline int sam_PNEXT_get_mux_channel (VBlockSAMP vb, bool rnext_is_equal)
 void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(pnext_str)/* option 1 */, PosType32 pnext/* option 2 */, unsigned add_bytes)
 {
     if (pnext_str) 
-        ASSSEG (str_get_int_range32 (STRa(pnext_str), 0, MAX_POS_SAM, &pnext), pnext_str,
+        ASSSEG (str_get_int_range32 (STRa(pnext_str), 0, MAX_POS_SAM, &pnext),
                 "PNEXT=\"%.*s\" out of range [0,%d] (pnext_str=%p)", pnext_str_len, pnext_str, (int)MAX_POS_SAM, pnext_str);
 
     if (pnext && segconf.running) 

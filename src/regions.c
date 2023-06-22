@@ -32,7 +32,7 @@ typedef struct {
     bool revcomp;            // display the region in reverse complement
 } Chreg; // = Chromosome Region
 
-static Buffer regions_buf = EMPTY_BUFFER; // all regions together
+static Buffer regions_buf = {}; // all regions together
 static BufferP chregs = NULL;     // one entry per chrom
 
 static WordIndex num_chroms; // signed value as its compared to chrom

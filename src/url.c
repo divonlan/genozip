@@ -30,7 +30,12 @@ static StreamP curl = NULL;
 
 bool url_is_url (rom filename)
 {
-    return !!strstr (filename, "://");
+    // in a URL, immediately following a sequence of letters, we're expecting "://". check this.
+    for (rom c = filename; *c && c < (filename + 8); c++) // relevant URI schemes are http, https, ftp, file... 8 charactersnto be on the safe side (see: https://en.wikipedia.org/wiki/List_of_URI_schemes)
+        if (!IS_LETTER (*c)) 
+            return c > filename && c[0]==':' && c[1]=='/' && c[2]=='/' && c[3];
+
+    return false; // all letters, no ://
 }
 
 #define CURL_RESPONSE_LEN 4096
@@ -133,9 +138,9 @@ static int url_do_curl_head (rom url,
 // for a url, returns whether that URL exists, and if possible, its file_size, or -1 if its not available
 // note that the file_size availability is at the discretion of the web/ftp site. 
 // in case of an error, returns the error string : caller should FREE() the error string
-rom url_get_status (rom url, bool *is_file_exists, int64_t *file_size)
+rom url_get_status (rom url, thool *is_file_exists, int64_t *file_size)
 {
-    *is_file_exists = false;
+    *is_file_exists = unknown;
     *file_size = 0;
     char response[CURL_RESPONSE_LEN];
     char *error = MALLOC (CURL_RESPONSE_LEN);
@@ -180,6 +185,8 @@ rom url_get_status (rom url, bool *is_file_exists, int64_t *file_size)
     if (strstr (error, "http") || strstr (error, "HTTP")) {
         if (strstr (error, "200")) 
             *is_file_exists = true;
+        else if (strstr (error, "404")) // note: some servers respond with 403 ("Forbidden") to a --head request, but allow downloading the file
+            *is_file_exists = false;
         else
             return error;
     } 

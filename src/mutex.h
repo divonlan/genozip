@@ -45,7 +45,9 @@ extern void mutex_unlock_do (MutexP mutex, FUNCLINE);
 extern bool mutex_wait_do (MutexP mutex, bool blocking, FUNCLINE);
 #define mutex_wait(mutex, blocking) mutex_wait_do (&(mutex), (blocking), __FUNCLINE)
 
+extern void mutex_bottleneck_analysis_init (void);
 extern void mutex_show_bottleneck_analsyis (void);
+extern void mutex_who_is_locked (void);
 
 #define mutex_is_show(name) (flag.show_mutex && (flag.show_mutex==(char*)1 || !strncmp ((name), flag.show_mutex, 8))) // only 8 chars so we can catch all genome_muteces[%u]
 

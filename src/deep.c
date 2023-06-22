@@ -11,14 +11,25 @@
 #include "strings.h"
 #include "deep.h"
 #include "vblock.h"
+#include "libdeflate/libdeflate.h"
 
 #define MAX_AUTO_READ_LEN 20000 // not too long, so that the "longer reads" code path also gets some mileage
+
+rom by_names[2] = { "BY_SEQ", "BY_QNAME" };
 
 // hash of a SEQ field in the forward direction 
 // note: I tested crc32 after converting seq to 2-bit. No advantage - Almost identical linked-list-length histogram.
 uint32_t deep_seq_hash (VBlockP vb, STRp(seq), bool is_revcomp)
 {
     char short_read_data[MAX_AUTO_READ_LEN]; 
+
+    // note: segconf.sam_cropped_at is set if the SAM SEQ field has a maximum length that is the length of most segconf alignemtnts, 
+    // indicating that the reads might have been cropped. If segconf.crop==true, we calculate that hash up until the sam_cropped_at,
+    // in both FASTQ and SAM - so this should work regardless of whether the reads were truly cropped.
+    if (segconf.sam_cropped_at && seq_len > segconf.sam_cropped_at) {
+        if (is_revcomp) seq += (seq_len - segconf.sam_cropped_at);
+        seq_len = segconf.sam_cropped_at; 
+    }
 
     if (is_revcomp) {
         char *rc; 
@@ -49,6 +60,12 @@ uint32_t deep_seq_hash (VBlockP vb, STRp(seq), bool is_revcomp)
 uint32_t deep_qual_hash (VBlockP vb, STRp(qual), bool is_revcomp)
 {
     char short_read_data[MAX_AUTO_READ_LEN] = {};
+
+    // same as in deep_seq_hash()
+    if (segconf.sam_cropped_at && qual_len > segconf.sam_cropped_at) {
+        if (is_revcomp) qual += (qual_len - segconf.sam_cropped_at);
+        qual_len = segconf.sam_cropped_at; 
+    }
 
     if (is_revcomp) {
         char *rev; 

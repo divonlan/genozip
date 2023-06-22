@@ -34,7 +34,6 @@
 #define WEBSITE_ATTRIBUTIONS GENOZIP_URL "/attributions"
 #define WEBSITE_LOGS         GENOZIP_URL "/logs"
 #define WEBSITE_COVERAGE     GENOZIP_URL "/coverage"
-#define WEBSITE_BENCHMARKS   GENOZIP_URL "/benchmarks"
 #define WEBSITE_DOWNSAMPLING GENOZIP_URL "/downsampling"
 #define WEBSITE_ENCRYPTION   GENOZIP_URL "/encryption"
 #define WEBSITE_PIPELINE     GENOZIP_URL "/fastq-to-bam-pipeline" 

@@ -140,11 +140,11 @@ rom phy_seg_txt_line (VBlockP vb, rom line, uint32_t remaining_txt_len, bool *ha
     Context *id_ctx  = CTX(PHY_ID);
     Context *seq_ctx = CTX(PHY_SEQ);
 
-    ASSSEG0 (remaining_txt_len >= PHY_ID_LEN + phy_seq_len + 1 /* newline */, line, "Phylip data ends abruptly");
+    ASSSEG0 (remaining_txt_len >= PHY_ID_LEN + phy_seq_len + 1 /* newline */, "Phylip data ends abruptly");
 
     *has_13 = (line[PHY_ID_LEN + phy_seq_len] == '\r');
 
-    ASSSEG (line[PHY_ID_LEN + phy_seq_len + *has_13] == '\n', line, "Expecting the line to be exactly %u characters long", PHY_ID_LEN + phy_seq_len);
+    ASSSEG (line[PHY_ID_LEN + phy_seq_len + *has_13] == '\n', "Expecting the line to be exactly %u characters long", PHY_ID_LEN + phy_seq_len);
 
     DATA_LINE (vb->line_i)->line_start = line - vb->txt_data.data;
 

@@ -24,7 +24,6 @@
 #include "flags.h"
 #include "qname.h"
 #include "recon_plan_io.h"
-#include "libdeflate/libdeflate.h"
 
 typedef struct {
     VBIType vb_i;
@@ -42,9 +41,9 @@ const SoloProp solo_props[NUM_SOLO_TAGS] = SOLO_PROPS;
 //------------------------
 
 // called by main thread after reading a VB - callback of zip_init_vb
-void sam_sag_zip_init_vb (VBlockP vb)
+void sam_sag_zip_init_vb (VBlockSAMP vb)
 {
-    if (vb->comp_i == SAM_COMP_MAIN || !Ltxt) return;
+    if (IS_MAIN(vb) || !Ltxt) return;
 
     // PRIM or DEPN - add to vb_info
     buf_alloc (evb, &z_file->vb_info[vb->comp_i-1], 1, 20, SamGcVbInfo, 2, "z_file->vb_info");
@@ -62,10 +61,12 @@ void sam_sag_zip_init_vb (VBlockP vb)
 // this is SAM/BAM's zip_after_segconf callback
 void sam_set_sag_type (void)
 {
+    // --no-gencomp prohibits gencomp
     if (flag.no_gencomp)
         segconf.sag_type = SAG_NONE;
 
-    else if ((!segconf.is_sorted || !flag.best) && !flag.force_gencomp)
+    // --fast, --low-memory or a non-sorted file prohibit gencomp, but may be overrided with --force-gencomp
+    else if ((!segconf.is_sorted || flag.fast || flag.low_memory) && !flag.force_gencomp)
         segconf.sag_type = SAG_NONE;
 
     else if (MP(LONGRANGER))
@@ -76,7 +77,7 @@ void sam_set_sag_type (void)
 
     // SAG_BY_SA: the preferd Sag method - by SA:Z
     // we identify a PRIM line - if it (1) has SA:Z and (2) supp/secondary flags are clear
-    else if (segconf.sam_has_SA_Z || (segconf.has[OPTION_SA_Z])) // longranger has non-standard SA:Z format
+    else if (segconf.sam_has_SA_Z || segconf.has[OPTION_SA_Z]) // longranger has non-standard SA:Z format
         segconf.sag_type = SAG_BY_SA;
 
     // SAG_BY_NH: STAR and other aligners with NH:i/HI:i instead of SA:Z
@@ -96,7 +97,9 @@ void sam_set_sag_type (void)
              (flag.best || flag.force_gencomp) &&  // too slow for normal mode
              !txt_file->redirected && !txt_file->is_remote) { // conditions for using sam_sag_by_flag_scan_for_depn
         sam_sag_by_flag_scan_for_depn ();
-        segconf.sag_type = SAG_BY_FLAG;
+        segconf.sag_type = !z_file->sag_depn_index.len ? SAG_NONE
+                         : segconf.has[OPTION_SA_Z]    ? SAG_BY_SA  // scan can detect SA:Z not previously detected by segconf
+                         :                               SAG_BY_FLAG;
     }
 
     else 
@@ -112,13 +115,13 @@ void sam_set_sag_type (void)
 void sam_seg_gc_initialize (VBlockSAMP vb)
 {
     // DEPN stuff
-    if (sam_is_depn_vb) {
+    if (IS_DEPN(vb)) {
         CTX(SAM_SAG)->ltype = sizeof(SAGroup)==4 ? LT_UINT32 : LT_UINT64;
         CTX(SAM_SAALN)->ltype   = LT_UINT16; // index of alignment with SA Group
     }
 
     // PRIM stuff 
-    else if (sam_is_prim_vb) { 
+    else if (IS_PRIM(vb)) { 
         CTX(SAM_SAALN)->ltype   = LT_UINT16;   // index of alignment with SA Group
         CTX(OPTION_SA_Z)->ltype = LT_UINT8;    // we store num_alns in local
         CTX(SAM_FLAG)->no_stons = true;        
@@ -133,7 +136,7 @@ void sam_seg_gc_initialize (VBlockSAMP vb)
 #define FAILIF(condition, format, ...) \
   ( { if (condition) { \
           if (flag.debug_sag) iprintf ("%s: " format "\n", LN_NAME, __VA_ARGS__); \
-          if (sam_is_main_vb) return false; \
+          if (IS_MAIN(vb)) return false; \
           else { progress_newline(); fprintf (stderr, "%s: Error in %s:%u: Failed PRIM line because ", LN_NAME, __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); fflush (stderr); exit_on_error(true); }} \
     } )
 
@@ -148,7 +151,7 @@ bool sam_seg_prim_add_sag (VBlockSAMP vb, ZipDataLineSAM *dl, uint16_t num_alns/
     ASSERTNOTNULL (textual_seq);
 
     // MAIN: check that values are within limits defined in Sag (no need to check in PRIM as we already checked in MAIN)
-    if (sam_is_main_vb) {
+    if (IS_MAIN(vb)) {
         FAILIF (!sam_might_have_saggies_in_other_VBs (vb, dl, num_alns), "all sag alignments are contained in this VB%s", "");
         FAILIF (dl->QNAME.len > SAM_MAX_QNAME_LEN, "dl->QNAME.len=%u > %u", dl->QNAME.len, SAM_MAX_QNAME_LEN);
         FAILIF (seq_len==1 && *textual_seq == '*', "SEQ=\"*\"%s", ""); // we haven't segged seq yet, so vb->seq_missing is not yet set
@@ -164,7 +167,7 @@ bool sam_seg_prim_add_sag (VBlockSAMP vb, ZipDataLineSAM *dl, uint16_t num_alns/
     }
 
     // PRIM: actually add the group
-    else if (sam_is_prim_vb) { 
+    else if (IS_PRIM(vb)) { 
         buf_alloc (vb, &vb->sag_grps, 1, 1000, Sag, CTX_GROWTH, "sag_grps");
 
         // add SA group
@@ -206,7 +209,7 @@ int32_t sam_seg_prim_add_sag_SA (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa), in
     FAILIF (vb->hard_clip[0], "hard_clip[LEFT]=%u > 0", vb->hard_clip[0]); // we can't add primary lines with a CIGAR with H as we need the full sequence and qual 
     FAILIF (vb->hard_clip[1], "hard_clip[RIGHT]=%u > 0", vb->hard_clip[1]);
 
-    if (sam_is_prim_vb) { // in PRIM, we actually add the group, in MAIN, we are just testing
+    if (IS_PRIM(vb)) { // in PRIM, we actually add the group, in MAIN, we are just testing
         buf_alloc (vb, &vb->sag_alns, n_alns /*+1 for primary aln*/, 64, SAAln, CTX_GROWTH, "sag_alns");
 
         // in Seg, we add the Adler32 of CIGAR to save memory, as we just need to verify it, not reconstruct it
@@ -254,7 +257,7 @@ int32_t sam_seg_prim_add_sag_SA (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa), in
         bool revcomp = *items[SA_STRAND] == '-';
         FAILIF (item_lens[SA_STRAND] != 1 || (!revcomp && *items[SA_STRAND] != '+'), "in SA alignment %u - STRAND is not '+' or '-'", i);
 
-        if (sam_is_prim_vb) { // in PRIM, we actually add the group, in MAIN, we are just testing
+        if (IS_PRIM(vb)) { // in PRIM, we actually add the group, in MAIN, we are just testing
 
             if (!segconf.SA_CIGAR_can_have_H && sam_cigar_has_H (STRi(item,SA_CIGAR)))
                 segconf.SA_CIGAR_can_have_H = true; // no worries about thread safety, this just gets set to true while segging MAIN and is inspected only when segging MAIN is over
@@ -436,10 +439,10 @@ static int64_t sam_sa_binary_search_for_qname_hash (const SAGroupIndexEntry *ind
 
 // ZIP DEPN: find group index with this_qname in z_file->sag_grps, and if there are several - return the first
 static Sag *sam_sa_get_first_group_by_qname_hash (VBlockSAMP vb, STRp(this_qname), bool is_last, int64_t *grp_index_i, 
-                                                          uint32_t *this_qname_hash) // out
+                                                  uint32_t *this_qname_hash) // out
 {
     // search for a group with qname in z_file->sa_qname
-    *this_qname_hash = QNAME_HASH (this_qname, this_qname_len, is_last);
+    *this_qname_hash = qname_calc_hash (QNAME1, this_qname, this_qname_len, is_last, false, NULL);
     *grp_index_i = sam_sa_binary_search_for_qname_hash (B1ST (SAGroupIndexEntry, z_file->sag_grps_index), *this_qname_hash, 0, z_file->sag_grps_index.len-1);
 
     const SAGroupIndexEntry *index_ent = B(SAGroupIndexEntry, z_file->sag_grps_index, *grp_index_i); // invalid pointer if grp_index_i==-1, that's ok    
@@ -594,8 +597,8 @@ static void sam_sa_seg_depn_find_sagroup_SAtag (VBlockSAMP vb, ZipDataLineSAM *d
     bool revcomp = dl->FLAG.rev_comp;
     uint32_t seq_len = dl->SEQ.len;
 
-    buf_alloc (vb, &CTX(SAM_SAG)->local, 1, vb->lines.len, SAGroup, 1, "contexts->local");
-    buf_alloc (vb, &CTX(SAM_SAALN)->local,   1, vb->lines.len, uint16_t,  1, "contexts->local");
+    buf_alloc (vb, &CTX(SAM_SAG)->local, 1, vb->lines.len, SAGroup, 1, CTX_TAG_LOCAL);
+    buf_alloc (vb, &CTX(SAM_SAALN)->local,   1, vb->lines.len, uint16_t,  1, CTX_TAG_LOCAL);
 
     int64_t grp_index_i=-1;
     uint32_t qname_hash;
@@ -667,7 +670,7 @@ static void sam_sa_seg_depn_find_sagroup_noSA (VBlockSAMP vb, ZipDataLineSAM *dl
     bool revcomp = dl->FLAG.rev_comp;
     uint32_t seq_len = dl->SEQ.len;
 
-    buf_alloc (vb, &CTX(SAM_SAG)->local, 1, vb->lines.len, SAGroup, 1, "contexts->local");
+    buf_alloc (vb, &CTX(SAM_SAG)->local, 1, vb->lines.len, SAGroup, 1, CTX_TAG_LOCAL);
 
     int64_t grp_index_i=-1;
     uint32_t qname_hash;
@@ -743,13 +746,13 @@ void sam_seg_sag_stuff (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_cigar), 
 
     // in Dependent component - try to find which SAGroup this line belongs to, and seg it to SAM_SAG and SAM_SAALN
     // (if successful, this will set vb->sag/sa_aln)
-    if (sam_is_depn_vb && IS_SAG_SA) 
+    if (IS_DEPN(vb) && IS_SAG_SA) 
         sam_sa_seg_depn_find_sagroup_SAtag (vb, dl, STRa(textual_cigar), textual_seq, is_bam);
 
-    else if (sam_is_depn_vb && !IS_SAG_SA) 
+    else if (IS_DEPN(vb) && !IS_SAG_SA) 
         sam_sa_seg_depn_find_sagroup_noSA (vb, dl, textual_seq, is_bam);
 
-    else if (sam_is_prim_vb && IS_SAG_SA && has(SA_Z)) 
+    else if (IS_PRIM(vb) && IS_SAG_SA && has(SA_Z)) 
         ctx_set_encountered (VB, CTX(OPTION_SA_Z)); // for DEPN, this is done in sam_sa_seg_depn_find_sagroup_SAtag
 
     COPY_TIMER (sam_seg_sag_stuff);
@@ -821,7 +824,7 @@ void sam_zip_gc_after_compute_main (VBlockSAMP vb)
             // insert gc lines - a bunch of them that have the same component and are consecutive
             // vb_i within the gencomp components and start_line will be updated later as we don't know them yet
             BNXT (ReconPlanItem, *recon_plan) = 
-                (ReconPlanItem){ .vb_i = (gc_line.comp_i == SAM_COMP_PRIM) ? SAM_GC_UPDATE_PRIM : SAM_GC_UPDATE_DEPN };
+                (ReconPlanItem){ .vb_i = IS_PRIM(&gc_line) ? SAM_GC_UPDATE_PRIM : SAM_GC_UPDATE_DEPN };
           
             // store line lengths, to be used later to calculate vb_info
             BNXT32 (txt_file->line_info[gc_line.comp_i-1]) = gc_line.line_len;
@@ -854,9 +857,7 @@ void sam_zip_gc_after_compute_main (VBlockSAMP vb)
 // Main thread, PRIM VB. Set sam_prim fields of VB_HEADER. Callback from zfile_compress_vb_header
 void sam_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeaderP vb_header)
 {
-    vb_header->sam_longest_seq_len = BGEN32 (VB_SAM->longest_seq_len); // since v15
-
-    if (sam_is_prim_vb) {
+    if (IS_PRIM(vb)) {
         uint32_t total_seq_len=0, total_qname_len=0;
         for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) {
             ZipDataLineSAM *dl = DATA_LINE (line_i);
@@ -888,27 +889,7 @@ static bool sam_zip_recon_plan_full_vb_only (void)
     return true;
 }
 
-// ZIP main thread: merge consecutive recon plan entries of the same VB to reduce the recon plan size
-static void sam_zip_recon_plan_optimize_gc_lines (void)
-{
-    ARRAY (ReconPlanItem, recon_plan, txt_file->recon_plan);
-
-    uint32_t last_i = 0;
-    for (uint32_t i=1; i < recon_plan_len; i++) 
-        // range items - merge if same vb_i
-        if (recon_plan[i]     .flavor == PLAN_RANGE 
-         && recon_plan[last_i].flavor == PLAN_RANGE 
-         && recon_plan[i].vb_i == recon_plan[last_i].vb_i) 
-            recon_plan[last_i].num_lines++;
-                
-        else 
-            recon_plan[++last_i] = recon_plan[i];
-
-    txt_file->recon_plan.len = last_i + 1;
-}
-
-// ZIP main thread: compressing recon plan after DEPN: update recon plan entries of PRIM and DEPN with their details
-static uint32_t sam_zip_recon_plan_add_gc_lines (void)
+static uint32_t sam_zip_recon_plan_count_writers (void)
 {
     START_TIMER;
 
@@ -925,83 +906,107 @@ static uint32_t sam_zip_recon_plan_add_gc_lines (void)
             if (curr_conc_writers > max_conc_writers) max_conc_writers = curr_conc_writers; \
         } })
 
-    SamGcVbInfo *vb_info[2] =             { B1ST (SamGcVbInfo, z_file->vb_info[0]),   // PRIM 
-                                            B1ST (SamGcVbInfo, z_file->vb_info[1]) }; // DEPN
-
-    const SamGcVbInfo *after_vb_info[2] = { BAFT (SamGcVbInfo, z_file->vb_info[0]),   // PRIM
-                                            BAFT (SamGcVbInfo, z_file->vb_info[1]) }; // DEPN
-
-    uint32_t gc_vb_line_i[2] = { 0, 0 }; // PRIM/DEPN line within current VB
     uint32_t curr_conc_writers=0, max_conc_writers=0;
 
     // byte-map of set when a VB is accessed
     ASSERTNOTINUSE (evb->scratch);
     ARRAY_alloc (bool, vb_in_use, z_file->num_vbs+1, true, evb->scratch, evb, "scratch");
 
-    for (uint64_t i=0; i < txt_file->recon_plan.len; i++) { // note: recon_plan may get extended within the loop with INSERBtxtAFTER
+    for_buf (ReconPlanItem, pi, txt_file->recon_plan)
+        if (pi->flavor == PLAN_END_OF_VB) 
+            UPDATE_WRITERS_END_VB (pi->vb_i);
 
-        ReconPlanItemP  pi = B(ReconPlanItem, txt_file->recon_plan, i);
-        VBIType vb_i = pi->vb_i;
-
-        // case: not a depn or prim plan item
-        if (vb_i < SAM_GC_UPDATE_PRIM) {
-            if (pi->flavor == PLAN_END_OF_VB) 
-                UPDATE_WRITERS_END_VB (vb_i);
-
-            else if (pi->flavor == PLAN_FULL_VB) {
-                UPDATE_WRITERS (vb_i);
-                UPDATE_WRITERS_END_VB (vb_i);
-            }
-
-            else 
-                UPDATE_WRITERS (vb_i);
-            
-            continue; // not a gc item
+        else if (pi->flavor == PLAN_FULL_VB) {
+            UPDATE_WRITERS (pi->vb_i);
+            UPDATE_WRITERS_END_VB (pi->vb_i);
         }
 
-        bool is_depn = (vb_i == SAM_GC_UPDATE_DEPN);
-
-        ASSERTNOTNULL (vb_info[is_depn]);
-        ASSERT (vb_info[is_depn] < after_vb_info[is_depn], "vb_info[%u] out if bounds", is_depn);
-
-        vb_i = vb_info[is_depn]->vb_i; // now we know what the true gencomp vb_i is
-
-        *pi = (ReconPlanItem) {
-            .vb_i       = vb_i,  // Re-assemble a line from a prim/depn: vb=vb_i
-            .start_line = gc_vb_line_i[is_depn]++, // line within prim/depn vb
-            .num_lines  = 1
-        };
-
-        UPDATE_WRITERS (vb_i);
-
-        // last line of this PRIM/DEPN VB - move to next VB
-        if (! (--vb_info[is_depn]->num_lines)) {
-            
-            // add PLAN_END_OF_VB after last line of the prim/depn VB
-            *INSERBtxtAFTER (ReconPlanItem, txt_file->recon_plan, i) = (ReconPlanItem){
-                .flavor = PLAN_END_OF_VB,
-                .vb_i   = vb_i,
-            };
-
-            UPDATE_WRITERS_END_VB (vb_i);
-            
-            i++; // skip inserted PLAN_END_OF_VB
-
-            vb_info[is_depn]++; // move to next VB
-            gc_vb_line_i[is_depn] = 0;
-        }
-    }
+        else 
+            UPDATE_WRITERS (pi->vb_i);
 
     buf_free (evb->scratch);
 
-    // merge consecutive GC lines from the same GC & VB
-    sam_zip_recon_plan_optimize_gc_lines();
-
     if (flag.show_memory) iprintf ("\nconcurrent_writer_vblocks (consumes memory in decompression, not threads)=%u\n\n", max_conc_writers);
 
-    COPY_TIMER_EVB (sam_zip_recon_plan_add_gc_lines);
-
+    COPY_TIMER_EVB (sam_zip_recon_plan_count_writers);
     return max_conc_writers;
+}
+
+// ZIP main thread: compressing recon plan after DEPN: update recon plan entries of PRIM and DEPN with their details
+static void sam_zip_recon_plan_add_gc_lines (void)
+{
+    START_TIMER;
+
+    SamGcVbInfo *vb_info[2] =             { B1ST (SamGcVbInfo, z_file->vb_info[0]),   // PRIM 
+                                            B1ST (SamGcVbInfo, z_file->vb_info[1]) }; // DEPN
+
+#ifdef DEBUG
+    const SamGcVbInfo *after_vb_info[2] = { BAFT (SamGcVbInfo, z_file->vb_info[0]),   // PRIM
+                                            BAFT (SamGcVbInfo, z_file->vb_info[1]) }; // DEPN
+#endif
+
+    uint32_t gc_vb_line_i[2] = { 0, 0 }; // PRIM/DEPN line within current VB
+
+    static Buffer raw_recon_plan = {};
+    buf_move (evb, raw_recon_plan, NULL, txt_file->recon_plan);
+
+    txt_file->recon_plan.can_be_big = true;
+    buf_alloc (evb, &txt_file->recon_plan, 0, raw_recon_plan.len + z_file->num_vbs/*for PLAN_END_OF_VB*/, 
+               ReconPlanItem, 0, raw_recon_plan.name);
+
+    ReconPlanItem *next = B1ST (ReconPlanItem, txt_file->recon_plan);
+    ReconPlanItem *start = next;
+
+    for_buf (BufWord, rp_vb, txt_file->recon_plan_index) {
+
+        ReconPlanItem *first = B(ReconPlanItem, raw_recon_plan, rp_vb->index);
+        ReconPlanItem *after = B(ReconPlanItem, raw_recon_plan, rp_vb->index + rp_vb->len);
+
+        for (ReconPlanItem *pi = first; pi < after; pi++) 
+            if (pi->vb_i < SAM_GC_UPDATE_PRIM)   // not a gc item
+                *next++ = *pi;
+            
+            else {
+                bool is_depn = (pi->vb_i == SAM_GC_UPDATE_DEPN);
+
+                VBIType vb_i = vb_info[is_depn]->vb_i; // now we know what the true gencomp vb_i is
+
+#ifdef DEBUG    // sanity check - in tight loop, so only in DEBUG
+                ASSERTNOTNULL (vb_info[is_depn]);
+                ASSERT (vb_info[is_depn] < after_vb_info[is_depn], "vb_info[%u] out if bounds", is_depn);
+#endif
+                // case: previous entry is also a PLAN_RANGE with the same vb - just increment num_lines
+                if (next != start && (next-1)->vb_i == vb_i && (next-1)->flavor == PLAN_RANGE) {
+                    (next-1)->num_lines++;
+                    gc_vb_line_i[is_depn]++;
+                }
+
+                else
+                    *next++ = (ReconPlanItem) {
+                        .vb_i       = vb_i,  // vb_i of the prim/depn vb 
+                        .start_line = gc_vb_line_i[is_depn]++, // line within prim/depn vb
+                        .num_lines  = 1
+                    };
+
+                // last line of this PRIM/DEPN VB - move to next VB
+                if (! (--vb_info[is_depn]->num_lines)) {                
+                    // add PLAN_END_OF_VB after last line of the prim/depn VB
+                    *next++ = (ReconPlanItem){
+                        .flavor = PLAN_END_OF_VB,
+                        .vb_i   = vb_i,
+                    };
+
+                    vb_info[is_depn]++; // move to next VB
+                    gc_vb_line_i[is_depn] = 0;
+                }
+        }
+    }
+
+    txt_file->recon_plan.len = BNUM (txt_file->recon_plan, next);
+
+    buf_destroy (raw_recon_plan);
+
+    COPY_TIMER_EVB (sam_zip_recon_plan_add_gc_lines);
 }
 
 // ZIP main thread
@@ -1011,12 +1016,12 @@ void sam_zip_generate_recon_plan (void)
 
     // case: MAIN component (not all full VBs - we have some PRIM and/or DEPN lines) - plan that incorporates everything 
     if (!sam_zip_recon_plan_full_vb_only()) {
-        // recon_plan may have VBs out of order - fix that now
-        recon_plan_sort_by_vb (txt_file); 
 
         // update recon plan with gencomp lines
-        uint32_t conc_writing_vbs = sam_zip_recon_plan_add_gc_lines();
+        sam_zip_recon_plan_add_gc_lines();
         
+        uint32_t conc_writing_vbs = sam_zip_recon_plan_count_writers();
+
         // output the SEC_RECON_PLAN section
         recon_plan_compress (conc_writing_vbs, false);
     }

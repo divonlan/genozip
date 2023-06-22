@@ -21,12 +21,27 @@ typedef struct {
 
 typedef enum { CHROM_STYLE_UNKNOWN, CHROM_STYLE_chr22, CHROM_STYLE_22 } RefChromeStyle;
 
-typedef struct RefStruct {
+typedef enum { CACHE_INITITAL, CACHE_READY/*shm read-only*/, CACHE_POPULATING/*shm read-write*/, CACHE_NONE } RefCacheState;
 
+// a reference cache is a shared memory segment consisting of a RefCache struct, followed by the genome, follewed by the refhash
+typedef struct ref_cache { 
+    uint32_t magic;               // set to GENOZIP_MAGIC - used to detect whether this shm segment is a Genozip reference cache
+    uint32_t creator_pid;
+    uint64_t creation_ts;         // if set - cache is ready OR currently being populated
+    uint64_t shm_size;                
+    uint8_t genozip_version;      // Genozip version that created this cache (NOT genozip version of reference file)
+    bool is_populated;            // if set - cache is ready
+    bool terminate_holder;        // Windows: a message to the holder process that it can terminate now
+    uint8_t unused[5];            // start genome_data 64b-word-aligned
+    char ref_basename[256];       // nul-terminated basename of reference filename, or <unused> if too long
+    char genome_data[0];
+} RefCache;
+
+typedef struct RefStruct {
     // file 
-    rom filename; // filename of external reference file
-    Digest genome_digest; // v15: digest of genome as it is loaded to memory. Up to v14: MD5 of original FASTA file (buggy)
-    bool is_adler;        // true if genome_digest is Adler32, false if it MD5
+    rom filename;                 // filename of external reference file
+    Digest genome_digest;         // v15: digest of genome as it is loaded to memory. Up to v14: MD5 of original FASTA file (buggy)
+    bool is_adler;                // true if genome_digest is Adler32, false if it MD5
     uint8_t genozip_version;
     bool is_primary;
     bool is_filename_allocated;
@@ -38,8 +53,9 @@ typedef struct RefStruct {
     Buffer ranges; 
     #define rtype param
     
-    Buffer genome_buf, emoneg_buf, genome_is_set_buf;
-    BitsP genome, emoneg/*reverse compliment*/, genome_is_set;
+    Buffer genome_buf, genome_is_set_buf;
+    BitsP genome,                 // the genome in 2-bit representation. attached to shared memory or allocated privately 
+          genome_is_set;          // 1 bit per reference base, indicates if base is needed for reconstructing current file. 
 
     PosType64 genome_nbases;
 
@@ -52,7 +68,7 @@ typedef struct RefStruct {
 
     // ZIP/PIZ: random_access data for the reference sections stored in a target genozip file
     Buffer stored_ra;
-    SPINLOCK (stored_ra_spin); // ZIP only
+    SPINLOCK (stored_ra_spin);    // ZIP only
 
     char *ref_fasta_name;
 
@@ -62,27 +78,22 @@ typedef struct RefStruct {
     ContigPkg ctgs;
 
     // lock stuff
-    Buffer genome_muteces; // one mutex per 64K bases - protects genome->is_set
+    Buffer genome_muteces;        // one mutex per GENOME_BASES_PER_MUTEX (64K) bases - protects genome->is_set
     Buffer genome_mutex_names;
 
     // iupac stuff
     Buffer iupacs_buf; 
 
-    // cache
-    enum { CACHE_INITITAL, CACHE_OK, CACHE_LOADING, CACHE_NONE } cache_state;
+    // reference cache
+    RefCacheState cache_state;
+#ifndef _WIN32
+    #define CACHE_SHM_NONE -1
     int cache_shm;
-
-    // cache consists of a block memory containing a ref_cache struct, followed by the genome, follewed by the refhash
-    struct ref_cache {
-        uint64_t creation_ts;
-        uint64_t genome_size, refhash_size;
-        uint8_t ref_genozip_ver;
-        bool is_populated;
-        uint8_t base_layer_bits;
-        uint8_t unused[61];    // start genome_data word-aligned
-        char genome_data[0];
-    } *cache;
-    void *cache_refhash_data;  // pointer into cache data
+#else
+    #define CACHE_SHM_NONE NULL
+    void *cache_shm; // Windows HANDLE is defined as void *
+#endif
+    RefCache *cache; // cache consists of a block memory containing a RefCache struct, followed by the genome, follewed by the refhash
 
 } RefStruct;
 
@@ -99,3 +110,8 @@ extern WordIndex ref_seg_get_alt_chrom (VBlockP vb);
 extern void ref_contigs_compress_ref_make (Reference ref);
 extern void ref_contigs_compress_stored (Reference ref);
 extern void ref_make_calculate_digest (void);
+
+// cache stuff
+extern bool ref_cache_initialize_genome (Reference ref);
+extern void ref_cache_done_populating (Reference ref);
+extern void ref_cache_remove_do (Reference ref, bool cache_exists, bool verbose);

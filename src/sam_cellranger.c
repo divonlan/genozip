@@ -68,7 +68,7 @@ void sam_seg_CB_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(cb), unsigned add_byt
     if (segconf.running && !segconf.CB_con.repeats) 
         sam_seg_CB_Z_segconf (vb, STRa(cb));
 
-    if (sam_is_depn_vb && vb->sag && IS_SAG_SOLO && str_issame_(STRa(cb), STRBw(z_file->solo_data, vb->solo_aln->word[SOLO_CB])))
+    if (IS_DEPN(vb) && vb->sag && IS_SAG_SOLO && str_issame_(STRa(cb), STRBw(z_file->solo_data, vb->solo_aln->word[SOLO_CB])))
         sam_seg_against_sa_group (vb, CTX(OPTION_CB_Z), add_bytes);
 
     else
@@ -107,7 +107,7 @@ void sam_seg_CR_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(cr), unsigned add_byt
 
     dl->solo_z_fields[SOLO_CR] = TXTWORD(cr);
 
-    if (sam_is_depn_vb && vb->sag && IS_SAG_SOLO && str_issame_(STRa(cr), STRBw(z_file->solo_data, vb->solo_aln->word[SOLO_CR])))
+    if (IS_DEPN(vb) && vb->sag && IS_SAG_SOLO && str_issame_(STRa(cr), STRBw(z_file->solo_data, vb->solo_aln->word[SOLO_CR])))
         sam_seg_against_sa_group (vb, CTX(OPTION_CR_Z), add_bytes);
 
     // copy CB, and if different than CB - xor against it
@@ -157,7 +157,7 @@ bool sam_seg_barcode_qual (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, SoloTag
     }
 
     // seg against sag
-    if (sam_is_depn_vb && vb->sag && IS_SAG_SOLO && str_issame_(STRa(qual), STRBw(z_file->solo_data, vb->solo_aln->word[solo]))) 
+    if (IS_DEPN(vb) && vb->sag && IS_SAG_SOLO && str_issame_(STRa(qual), STRBw(z_file->solo_data, vb->solo_aln->word[solo]))) 
         sam_seg_against_sa_group (vb, CTX(did_i), add_bytes);
     
     // seg as an array - with items in local
@@ -227,7 +227,7 @@ void sam_seg_RX_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(rx), unsigned add_byt
 
     dl->solo_z_fields[SOLO_RX] = TXTWORD(rx);
 
-    if (sam_is_depn_vb && vb->sag && IS_SAG_SOLO && str_issame_(STRa(rx), STRBw(z_file->solo_data, vb->solo_aln->word[SOLO_RX]))) 
+    if (IS_DEPN(vb) && vb->sag && IS_SAG_SOLO && str_issame_(STRa(rx), STRBw(z_file->solo_data, vb->solo_aln->word[SOLO_RX]))) 
         sam_seg_against_sa_group (vb, CTX(OPTION_RX_Z), add_bytes);
 
     else
@@ -245,7 +245,7 @@ void sam_seg_BX_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(bx), unsigned add_byt
 
     dl->solo_z_fields[SOLO_BX] = TXTWORD(bx);
 
-    if (sam_is_depn_vb && vb->sag && IS_SAG_SOLO && str_issame_(STRa(bx), STRBw(z_file->solo_data, vb->solo_aln->word[SOLO_BX])))
+    if (IS_DEPN(vb) && vb->sag && IS_SAG_SOLO && str_issame_(STRa(bx), STRBw(z_file->solo_data, vb->solo_aln->word[SOLO_BX])))
         sam_seg_against_sa_group (vb, CTX(OPTION_BX_Z), add_bytes);
 
     else
@@ -264,7 +264,7 @@ void sam_seg_QX_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qx), unsigned add_byt
 
     dl->solo_z_fields[SOLO_QX] = TXTWORD(qx);
 
-    if (sam_is_depn_vb && vb->sag && IS_SAG_SOLO && str_issame_(STRa(qx), STRBw(z_file->solo_data, vb->solo_aln->word[SOLO_QX]))) {
+    if (IS_DEPN(vb) && vb->sag && IS_SAG_SOLO && str_issame_(STRa(qx), STRBw(z_file->solo_data, vb->solo_aln->word[SOLO_QX]))) {
         sam_seg_against_sa_group (vb, CTX(OPTION_QX_Z), add_bytes);
         dl->dont_compress_QX = true;
     }
@@ -301,7 +301,7 @@ void sam_seg_BC_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(bc), unsigned add_byt
 
     dl->solo_z_fields[SOLO_BC] = TXTWORD(bc);
 
-    if (sam_is_depn_vb && vb->sag && IS_SAG_SOLO && str_issame_(STRa(bc), STRBw(z_file->solo_data, vb->solo_aln->word[SOLO_BC]))) 
+    if (IS_DEPN(vb) && vb->sag && IS_SAG_SOLO && str_issame_(STRa(bc), STRBw(z_file->solo_data, vb->solo_aln->word[SOLO_BC]))) 
         sam_seg_against_sa_group (vb, CTX(OPTION_BC_Z), add_bytes);
 
     else 

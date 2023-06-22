@@ -46,6 +46,7 @@
 #pragma once
 
 #include "genozip.h"
+#include "buf_struct.h"
 
 //------------------------------------------------------------------
 // Macros 
@@ -132,16 +133,16 @@
 #define bitset_op2(func,arr,pos,bit) func((arr), bitset_wrd((arr), (pos)), bitset_idx((arr), (pos)), (bit))
 
 // Auto-detect type size: bit functions
-#define bitset_get(arr,pos)     bitset_op(bitset2_get, (arr), (pos))
-#define bitset_get2(arr,pos)    bitset_op(bitset2_get2, (arr), (pos)) // divon - gets a value [0,3] of 2 bits 
-#define bitset_get4(arr,pos)    bitset_op(bitset2_get4, (arr), (pos)) // divon - gets a value [0,15] of 4 bits 
-#define bitset_set(arr,pos)     bitset_op(bitset2_set, (arr), (pos))
-#define bitset_del(arr,pos)     bitset_op(bitset2_del, (arr), (pos))
-#define bitset_tgl(arr,pos)     bitset_op(bitset2_tgl, (arr), (pos))
-#define bitset_or(arr,pos,bit)  bitset_op2(bitset2_or, (arr), (pos), (bit))
-#define bitset_xor(arr,pos,bit) bitset_op2(bitset2_xor, (arr), (pos), (bit))
-#define bitset_and(arr,pos,bit) bitset_op2(bitset2_and, (arr), (pos), (bit))
-#define bitset_cpy(arr,pos,bit) bitset_op2(bitset2_cpy, (arr), (pos), (bit))
+#define bitset_get(arr,pos)       bitset_op (bitset2_get,  (arr), (pos))
+#define bitset_get2(arr,pos)      bitset_op (bitset2_get2, (arr), (pos)) // divon - gets a value [0,3] of 2 bits 
+#define bitset_get4(arr,pos)      bitset_op (bitset2_get4, (arr), (pos)) // divon - gets a value [0,15] of 4 bits 
+#define bitset_set(arr,pos)       bitset_op (bitset2_set,  (arr), (pos))
+#define bitset_del(arr,pos)       bitset_op (bitset2_del,  (arr), (pos))
+#define bitset_tgl(arr,pos)       bitset_op (bitset2_tgl,  (arr), (pos))
+#define bitset_or(arr,pos,bit)    bitset_op2(bitset2_or,   (arr), (pos), (bit))
+#define bitset_xor(arr,pos,bit)   bitset_op2(bitset2_xor,  (arr), (pos), (bit))
+#define bitset_and(arr,pos,bit)   bitset_op2(bitset2_and,  (arr), (pos), (bit))
+#define bitset_cpy(arr,pos,bit)   bitset_op2(bitset2_cpy,  (arr), (pos), (bit))
 #define bitset_cpy2(arr,pos,bit2) bitset_op2(bitset2_cpy2, (arr), (pos), (bit2))
 
 // Clearing a word does not return a meaningful value
@@ -157,9 +158,6 @@ typedef uint8_t word_offset_t; // Offset within a 64 bit word
 //
 // Structs
 //
-typedef enum __attribute__ ((__packed__)) { 
-    BITS_UNALLOCATED=0, BITS_REGULAR, BITS_OVERLAY, BITS_STANDALONE, BITS_SHM 
-} BitsType; // must be identical to BufferType
 
 typedef struct Bits
 {
@@ -167,8 +165,8 @@ typedef struct Bits
     uint64_t *words;     // maps to Buffer->data
     uint64_t nbits;      // maps to Buffer->nbits
     uint64_t nwords;     // maps to Buffer->len  ; round_up (nbits / 64)
-    uint64_t type  : 3;  // maps to Buffer->type
-    uint64_t other : 61; // used only if this is a Buffer
+    uint64_t type  : BUF_TYPE_BITS;  // maps to Buffer->type
+    uint64_t other : 64-BUF_TYPE_BITS; // used only if this is a Buffer
 } Bits;
 
 #define bits_in_top_word(nbits) ((nbits) ? bitset64_idx((nbits) - 1) + 1 : 0)
@@ -196,13 +194,7 @@ extern Bits bits_init_do (uint64_t nbits, uint8_t *data, uint64_t data_len, bool
 extern Bits bits_alloc_do (uint64_t nbits, bool clear, FUNCLINE);
 #define bits_alloc(nbits, clear) bits_alloc_do ((nbits), (clear), __FUNCLINE)
 
-extern void bits_realloc_do (BitsP bits, uint64_t nbits, uint64_t low_level_nbits, bool clear, FUNCLINE);
-#define bits_realloc(bits, nbits, low_level_nbits, clear) bits_realloc_do ((bits), (nbits), (low_level_nbits), (clear), __FUNCLINE)
-
 extern void bits_free (BitsP bits);
-
-// Get length of bit array
-extern uint64_t bits_length (ConstBitsP bit_arr);
 
 extern void LTEN_bits (BitsP bits); // divon
 
@@ -229,12 +221,11 @@ static inline void bits_assign2(BitsP arr, uint64_t i/*even number*/, uint8_t va
 //
 
 // Get the value of a bit (returns 0 or 1)
-extern char bits_get_bit(ConstBitsP bits, uint64_t b);
-extern void bits_set_bit(BitsP bits, uint64_t b);
-extern void bits_clear_bit(BitsP bits, uint64_t b);
-extern void bits_toggle_bit(BitsP bits, uint64_t b);
-// If char c != 0, set bit; otherwise clear bit
-extern void bits_assign_bit(BitsP bits, uint64_t b, char c);
+extern bool bits_get_bit (ConstBitsP bits, uint64_t b);
+extern void bits_set_bit (BitsP bits, uint64_t b);
+extern void bits_clear_bit (BitsP bits, uint64_t b);
+extern void bits_toggle_bit (BitsP bits, uint64_t b);
+extern void bits_assign_bit (BitsP bits, uint64_t b, bool set);
 
 //
 // Get, set, clear and toggle several bits at once
@@ -330,7 +321,7 @@ extern uint64_t bits_get_wordn(ConstBitsP bits, uint64_t start, int n);
 
 // Set 64 bits at once from a particular start position
 // Doesn't extend bit array. However it is safe to TRY to set bits beyond the
-// end of the array, as long as: `start` is < `bits_length(arr)`
+// end of the array, as long as: `start` is < `nbits`
 extern void bits_set_word64 (BitsP bits, uint64_t start, uint64_t word);
 extern void bits_set_word32 (BitsP bits, uint64_t start, uint32_t word);
 extern void bits_set_word16 (BitsP bits, uint64_t start, uint16_t word);
@@ -400,21 +391,10 @@ extern void bits_print_substr_bases (rom msg, ConstBitsP bits, uint64_t start_ba
 // Print bit array as hex
 extern size_t bits_print_hex (ConstBitsP bits, uint64_t start, uint64_t length, FILE* fout, char uppercase);
 
-//
-// Clone and copy
-//
-
-// Copy bits from one array to another
-// Note: use MACRO bits_copy
-// Destination and source can be the same bits and
-// src/dst regions can overlap
+// Copy bits from one array to another. Destination and source can be the same bits and src/dst regions can overlap
 extern void bits_copy_do (BitsP dst, uint64_t dstindx, ConstBitsP src, uint64_t srcindx, uint64_t length, rom func, unsigned code_line);
-#define bits_copy(dst,dstindex,src,srcindx,length) \
-    bits_copy_do (dst,dstindex,src,srcindx,length, __FUNCLINE)
-
-// concatenate src at the end of dst (divon)
-extern void bits_concat_do (BitsP base, ConstBitsP add, unsigned additional_concats_expected, FUNCLINE);
-#define bits_concat(base,add,additional) bits_concat_do((base),(add),(additional), __FUNCLINE)
+#define bits_copy(dst, dstindex, src, srcindx, length) \
+    bits_copy_do ((dst), (dstindex), (src), (srcindx), (length), __FUNCLINE)
 
 // for each 2 bits in the src array, the dst array will contain those 2 bits in the reverse
 // position, as well as transform them 00->11 11->00 01->10 10->01
@@ -485,20 +465,20 @@ uint64_t bits_effective_length (BitsP bits);
     bool _is_fwd __attribute__((unused)) = (is_fwd); 
 
 #define BASE_NEXT_FWD ({                                    \
+    if (_next_2bit == 0) _word = *_word_p;                  \
     uint8_t base = (_word >> (_next_2bit * 2)) & 3;         \
     if (++_next_2bit == 32) {                               \
         _next_2bit = 0;                                     \
         _word_p++;                                          \
-        _word = *_word_p;                                   \
     }                                                       \
     base; })
 
 #define BASE_NEXT_REVCOMP ({                                \
+    if (_next_2bit == 31) _word = *_word_p;                 \
     uint8_t base = 3 - ((_word >> (_next_2bit * 2)) & 3);   \
     if (--_next_2bit == -1) {                               \
         _next_2bit = 31;                                    \
         _word_p--;                                          \
-        _word = *_word_p;                                   \
     }                                                       \
     base; })
 

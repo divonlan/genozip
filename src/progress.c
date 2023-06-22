@@ -41,7 +41,7 @@ static void progress_update_status (char **prefix, rom status)
 {
     if (flag.quiet) return;
 
-    static rom eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
+    static rom eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
     static rom spaces = "                                                                                ";
 
     if (prefix && *prefix) {
@@ -54,6 +54,11 @@ static void progress_update_status (char **prefix, rom status)
     last_len = strlen (status);
 
     progress_newline_since_update = false;
+}
+
+void progress_erase (void)
+{
+    progress_update_status (NULL, "");
 }
 
 char *progress_new_component (rom new_component_name, 
@@ -104,7 +109,7 @@ char *progress_new_component (rom new_component_name,
     return prefix;
 }
 
-void progress_update (char **prefix, uint64_t sofar, uint64_t total, bool done)
+void progress_update (rom task, char **prefix, uint64_t sofar, uint64_t total, bool done)
 {
     char time_str[70], progress[200];
     if (flag.quiet && !flag.debug_progress) return; 
@@ -127,7 +132,7 @@ void progress_update (char **prefix, uint64_t sofar, uint64_t total, bool done)
         if (!flag.debug_progress)
             progress_update_status (prefix, "Finalizing...");
         else {
-            sprintf (progress, "Finalizing... %u%% sofar=%"PRIu64" total=%"PRIu64, (unsigned)percent, sofar, total);            
+            sprintf (progress, "Finalizing... %u%% task=%s sofar=%"PRIu64" total=%"PRIu64, (unsigned)percent, task, sofar, total);            
             progress_update_status (prefix, progress);
         }
     }
@@ -143,7 +148,8 @@ void progress_update (char **prefix, uint64_t sofar, uint64_t total, bool done)
             if (!flag.debug_progress)
                 sprintf (progress, "%u%% (%s)", (unsigned)percent, time_str);
             else
-                sprintf (progress, "%u%% (%s) sofar=%"PRIu64" total=%"PRIu64" seconds_so_far=%d", (unsigned)percent, time_str, sofar, total, seconds_so_far);            
+                sprintf (progress, "%u%% (%s) task=%s sofar=%"PRIu64" total=%"PRIu64" seconds_so_far=%d", 
+                         (unsigned)percent, time_str, task, sofar, total, seconds_so_far);            
 
             progress_update_status (prefix, progress);
         }

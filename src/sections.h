@@ -158,12 +158,15 @@ typedef struct FlagsBgzf FlagsBgzf;
 
 #define SECTION_FLAGS_NONE ((SectionFlags){ .flags = 0 })
 
-typedef struct SectionHeader {
+typedef struct SectionHeader {         // 28 bytes
     union {
     uint32_t     magic; 
     uint32_t     uncomp_adler32;       // used in --verify-codec (not in file format)
     };
-    uint32_t     compressed_offset;    // number of bytes from the start of the header that is the start of compressed data (sizeof header + header encryption padding)
+    union {
+    uint32_t     v14_compressed_offset;// up to v14: number of bytes from the start of the header that is the start of compressed data (sizeof header + header encryption padding) (32b up to v14, but upper 16b always 0)
+    uint32_t     z_digest;             // Adler32 of the compressed/encrypted data of this section (v15)
+    };
     uint32_t     data_encrypted_len;   // = data_compressed_len + padding if encrypted, 0 if not
     uint32_t     data_compressed_len;
     uint32_t     data_uncompressed_len;
@@ -177,8 +180,8 @@ typedef struct SectionHeader {
 typedef struct {
     SectionHeader;
     uint8_t  genozip_version;
-    EncryptionType encryption_type;    // one of ENC_TYPE_*
-    uint16_t data_type;                // one of DATA_TYPE_*
+    EncryptionType encryption_type;    // one of EncryptionType
+    uint16_t data_type;                // one of DataType
     uint64_t recon_size_prim;          // data size of reconstructed file, if uncompressing as a single file in primary coordinates
     uint64_t num_lines_bound;          // number of lines in a bound file. "line" is data_type-dependent. For FASTQ, it is a read.
     uint32_t num_sections;             // number sections in this file (including this one)
@@ -195,13 +198,20 @@ typedef struct {
         Digest v14_REF_fasta_md5;      // DT_REF: MD5 of original FASTA file (v14, buggy)
         Digest FASTQ_v13_digest_bound; // DT_FASTQ: up to v13 "digest_bound": digest of concatenated pair of FQ (regarding other bound files in v13 - DVCF has digest 0, and other bound files are not reconstructable with v14+)    
     };
+    #define PASSWORD_TEST "WhenIThinkBackOnAllTheCrapIlearntInHighschool"
     uint8_t  password_test[16];        // short encrypted block - used to test the validy of a password
 #define FILE_METADATA_LEN 72
     char     created[FILE_METADATA_LEN];  // nul-terminated metadata
     Digest   license_hash;             // MD5(license_num)
 #define REF_FILENAME_LEN 256
-    char     ref_filename[REF_FILENAME_LEN]; // external reference filename, nul-terimated. ref_filename[0]=0 if there is no external reference. DT_CHAIN: LUFT reference filename.
-    Digest   ref_genome_digest;        // SectionHeaderGenozipHeader.genome_digest of the reference file
+    union {
+    char ref_filename[REF_FILENAME_LEN];   // external reference filename, nul-terimated. ref_filename[0]=0 if there is no external reference. DT_CHAIN: LUFT reference filename.
+    char fasta_filename[REF_FILENAME_LEN]; // DT_REF: fasta file used to generated this reference
+    }; 
+    union {
+        Digest ref_genome_digest;      // Uses REF_EXTERNAL: SectionHeaderGenozipHeader.genome_digest of the reference file
+        Digest refhash_digest;         // DT_REF: digest of refhash (v15)
+    };
     union { // 272 bytes - data-type specific
         struct {
             char prim_filename[REF_FILENAME_LEN]; // external primary coordinates reference file, nul-terimated. added v12.
@@ -226,9 +236,11 @@ typedef struct {
             uint8_t segconf_is_collated  : 1; // SAM: v14
             uint8_t segconf_MD_NM_by_un  : 1; // SAM: v14
             uint8_t segconf_predict_meth : 1; // SAM: v14
-            uint8_t segconf_deep_no_qname: 1; // SAM: v15
+            uint8_t segconf_deep_qname1  : 1; // SAM: v15
+            uint8_t segconf_deep_qname2  : 1; // SAM: v15
             uint8_t segconf_deep_no_qual : 1; // SAM: v15
-            char unused[256];
+            uint8_t unused_bits          : 7;
+            char unused[255];
         } sam;
 
         struct { 
@@ -251,6 +263,34 @@ typedef struct {
     uint32_t magic;
 } SectionFooterGenozipHeader, *SectionFooterGenozipHeaderP;
 
+// NOTE: part of the file format - new flavors can be added, but their value cannot change (v15)
+typedef enum __attribute__ ((__packed__)) { 
+    QF_NO_ID=0, 
+    QF_ILLUM_7=1, QF_ILLUM_7i=2, QF_ILLUM_7umi=3, QF_ILLUM_7c=4, QF_ILLUM_7gs=5, QF_ILLUM_5i=6, QF_ILLUM_5=7, QF_ILLUM_5rng=8, 
+    QF_ILLUM_2bc=9, QF_ILLUM_1bc=10, QF_ILLUM_5q2=11, QF_ILLUM_X_0bc=12, QF_ILLUM_X_1bc=13, QF_ILLUM_X_2bc=14, QF_ILLUM_S_0bc=15, QF_ILLUM_S_1bc=16, QF_ILLUM_S_2bc=17,
+    QF_BGI_varlen=20, QF_BGI_r6=21, QF_BGI_r7=22, QF_BGI_r8=23, QF_BGI_ll7=24, QF_BGI_cl=25, 
+    QF_PACBIO_3=30, QF_PACBIO_rng=31, QF_PACBIO_lbl=32, QF_PACBIO_pln=33,
+    QF_NANOPORE=40, QF_NANOPORE_rng=41, QF_NANOPORE_ext=42,
+    QF_ION_TORR_3=50, QF_ROCHE_454=51, QF_HELICOS=52, 
+    QF_SRA_L=60, QF_SRA2=60, QF_SRA=62,
+    QF_GENOZIP_OPT=70, QF_INTEGER=71, QF_HEX_CHR=72, QF_BAMSURGEON=73, QF_SEQAN=74, QF_CLC_GW=75, QF_STR_INT=76
+} QnameFlavorId;
+
+typedef enum __attribute__ ((__packed__)) { // these values and their order are part of the file format
+                      CNN_NONE, CNN_SEMICOLON, CNN_COLON, CNN_UNDERLINE, CNN_HYPHEN, CNN_HASH, CNN_SPACE, NUM_CNN
+} QnameCNN;
+#define CNN_TO_CHAR { 0,        ';',           ':',       '_',           '-',        '#',      ' ' }
+#define CHAR_TO_CNN { [';']=CNN_SEMICOLON, [':']=CNN_COLON, ['_']=CNN_UNDERLINE, ['-']=CNN_HYPHEN, ['#']=CNN_HASH, [' ']=CNN_SPACE }
+
+typedef struct __attribute__ ((__packed__)) { // 3 bytes
+    QnameFlavorId id;
+    uint8_t has_seq_len : 1;  // qname includes seq_len
+    uint8_t is_mated    : 1;  // qname ends with /1 or /2
+    uint8_t has_R       : 1;  // qname's last character indicates mate: 1 or 2: if both: A. expected (eg is_mated, SRA2) B. confirmed by segconf
+    uint8_t cnn         : 3;  // QnameCNN: terminate before the last character that is this, to canonoize 
+    uint8_t unused_bits : 2;  
+} QnameFlavorProp;
+
 // The text file header section appears once in the file (or multiple times in case of bound file), and includes the txt file header 
 typedef struct {
     SectionHeader;
@@ -264,6 +304,7 @@ typedef struct {
 #define TXT_FILENAME_LEN 256
     char     txt_filename[TXT_FILENAME_LEN]; // filename of this single component. without path, 0-terminated. always in base form like .vcf or .sam, even if the original is compressed .vcf.gz or .bam
     uint64_t txt_header_size;          // size of header in original txt file (likely different than reconstructed size if dual-coordinates)  (v12)
+    QnameFlavorProp flav_prop[NUM_QTYPES]; // SAM/BAM/FASTQ/KRAKEN. properties of QNAME flavor (v15)
 } SectionHeaderTxtHeader, *SectionHeaderTxtHeaderP; 
 
 typedef struct {
@@ -299,7 +340,7 @@ typedef struct {
         uint32_t sam_prim_comp_cigars_len; // SAM PRIM SAG_BY_SA: total size of sag's CIGARs, as compressed in-memory in ZIP (i.e. excluding CIGARs stored in OPTION_SA_CIGAR.dict) (v14)
         uint32_t sam_prim_solo_data_len;   // SAM PRIM SAG_BY_SOLO: size of solo_data
     };
-    uint32_t sam_longest_seq_len;      // SAM: largest seq_len in this VB (v15)
+    uint32_t longest_seq_len;          // SAM / FASTQ: largest seq_len in this VB (v15)
 } SectionHeaderVbHeader, *SectionHeaderVbHeaderP; 
 typedef const SectionHeaderVbHeader *ConstSectionHeaderVbHeaderP;
 
@@ -406,7 +447,7 @@ typedef struct {
     LocalType ltype;           // populated in both SEC_B250 and SEC_LOCAL: goes into ctx.ltype - type of data for the ctx.local buffer
     uint8_t param;             // Three options: 1. goes into ctx.local.param. (until v13: if flags.copy_local_param. since v14: always, except if ltype=LT_BITMAP) 
                                //                2. given to comp_uncompress as a codec parameter
-                               //                3. starting 9.0.11 for ltype=LT_BITMAP: number of unused bits in top bitarray word
+                               //                3. starting 9.0.11 for ltype=LT_BITMAP: number of unused bits in top bits word
     B250Size b250_size : 2;    // b250 sections only: size of each b250 element (v14)
     uint8_t unused2    : 6;
     uint8_t unused;
@@ -599,6 +640,7 @@ static inline uint32_t sections_count_sections (SectionType st) { return section
 extern void sections_create_index (void);
 extern Section sections_vb_header (VBIType vb_i);
 extern VBIType sections_get_num_vbs (CompIType comp_i);
+extern VBIType sections_get_num_vbs_(CompIType first_comp_i, CompIType last_comp_i);
 extern VBIType sections_get_first_vb_i (CompIType comp_i);
 extern Section sections_get_comp_txt_header_sec (CompIType comp_i);
 extern Section sections_get_comp_recon_plan_sec (CompIType comp_i, bool is_luft_plan);
@@ -631,17 +673,16 @@ extern void sections_show_section_list (DataType dt);
 extern rom st_name (SectionType sec_type);
 extern rom lt_name (LocalType lt);
 extern rom store_type_name (StoreType store);
+extern DictId sections_get_dict_id (ConstSectionHeaderP header);
 
-typedef struct { char s[48]; } VbNameStr;
-extern VbNameStr vb_name (VBlockP vb);
+extern StrText vb_name (VBlockP vb);
 #define VB_NAME vb_name(VB).s
 
-typedef struct { char s[64]; } LineNameStr;
-extern LineNameStr line_name (VBlockP vb);
+extern StrText line_name (VBlockP vb);
 #define LN_NAME line_name(VB).s
 
-extern rom comp_name (CompIType comp_i);
-extern rom comp_name_ex (CompIType comp_i, SectionType st);
+extern StrText comp_name_(CompIType comp_i);
+#define comp_name(comp_i) comp_name_(comp_i).s
 
 #define IS_DICTED_SEC(st) ((st)==SEC_DICT || (st)==SEC_B250 || (st)==SEC_LOCAL || (st)==SEC_COUNTS)
 #define IS_VB_SEC(st)     ((st)==SEC_VB_HEADER || (st)==SEC_B250 || (st)==SEC_LOCAL)

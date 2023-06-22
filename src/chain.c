@@ -51,10 +51,10 @@ typedef struct {
     int32_t overlap_aln_i; // the luft range overlaps with with luft range
 } ChainAlignment;
 
-static Buffer chain = { .promiscuous = true };   // immutable after loaded
+static Buffer chain = {};   // immutable after loaded
 static Mutex chain_mutex = {}; // protect chain while PIZ: loading, SEG: accessing seg_alns_so_far
 
-static Buffer seg_alns_so_far = { .promiscuous = true }; // Seg: alignments encountered so far - used for de-dupping in --match
+static Buffer seg_alns_so_far = {}; // Seg: alignments encountered so far - used for de-dupping in --match
 
 // 1) When pizzing a chain as a result of genozip --chain: chain_piz_initialize: prim_contig and luft_contig are generated 
 //    from z_file->contexts of a chain file 
@@ -73,11 +73,6 @@ typedef struct VBlockCHAIN {
 } VBlockCHAIN;
 
 unsigned chain_vb_size (DataType dt) { return sizeof (VBlockCHAIN); }
-
-void chain_vb_release_vb (VBlockCHAIN *vb)
-{
-    vb->next_luft_0pos = vb->next_prim_0pos = 0;
-}
 
 static void chain_display_alignments (void) 
 {
@@ -112,7 +107,7 @@ static void chain_display_alignments (void)
 // returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
 int32_t chain_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i /* in/out */)
 {
-    ARRAY (char, data, vb->txt_data)
+    ARRAY (char, data, vb->txt_data);
 
     ASSERT (*i >= 0 && *i < data_len, "*i=%d is out of range [0,%"PRIu64"]", *i, data_len);
 
@@ -156,6 +151,7 @@ void chain_zip_initialize (void)
     if (flag.match_chrom_to_reference) {
         mutex_initialize (chain_mutex);
         seg_alns_so_far.len = 0;     // free allocation by previous files
+        buf_set_promiscuous (&seg_alns_so_far, "seg_alns_so_far");
         buf_alloc (evb, &seg_alns_so_far, 0, 100, ChainAlignment, 1, "seg_alns_so_far"); // first allocation must be in main thread, so the buffer can be added to evb buf_list
     }
 }
@@ -247,7 +243,7 @@ bool chain_seg_is_small (ConstVBlockP vb, DictId dict_id)
 static void chain_seg_size_field (VBlockCHAIN *vb, rom field_start, int field_len)
 {
     int64_t size;
-    ASSSEG (str_get_int (field_start, field_len, &size), field_start, "Expecting size to be an integer, but found %*s", field_len, field_start);
+    ASSSEG (str_get_int (field_start, field_len, &size), "Expecting size to be an integer, but found %*s", field_len, field_start);
 
     Context *ctx = CTX(CHAIN_SIZE);
 
@@ -262,7 +258,7 @@ static void chain_seg_luft_end_field (VBlockCHAIN *vb, rom field_start, int fiel
 {
     Context *ctx = CTX(CHAIN_ENDLUFT);
 
-    ASSSEG (str_get_int (field_start, field_len, &ctx->last_value.i), field_start, "Expecting qEnd to be an integer, but found %*s", field_len, field_start);
+    ASSSEG (str_get_int (field_start, field_len, &ctx->last_value.i), "Expecting qEnd to be an integer, but found %*s", field_len, field_start);
 
     if (vb->last_int(CHAIN_ENDPRIM) - vb->last_int(CHAIN_STARTPRIM) ==
         ctx->last_value.i           - vb->last_int(CHAIN_STARTLUFT)) {
@@ -313,7 +309,7 @@ static WordIndex chain_seg_name_and_size (VBlockCHAIN *vb, Reference ref, bool i
 {
     PosType64 size_value=0;
     ASSSEG (str_get_int_range64 (STRa(size), 1, 1000000000000000, &size_value),
-            size, "Invalid size field of \"%.*s\": %.*s", STRf(name), STRf(size));;
+            "Invalid size field of \"%.*s\": %.*s", STRf(name), STRf(size));;
 
     seg_by_did (VB, STRa(size), did_i_size, size_len+1);
     
@@ -381,7 +377,7 @@ rom chain_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_tx
 
     SEG_NEXT_ITEM_SP (CHAIN_STRNDPRIM);
     
-    #define ASSERT_VALID_STRAND(f) ASSSEG (f##_len==1 && (*f##_str=='+' || *f##_str=='-'), f##_str, "Invalid strand character \"%.*s\", expecting '+' or '-'", f##_len, f##_str);
+    #define ASSERT_VALID_STRAND(f) ASSSEG (f##_len==1 && (*f##_str=='+' || *f##_str=='-'), "Invalid strand character \"%.*s\", expecting '+' or '-'", f##_len, f##_str);
     ASSERT_VALID_STRAND (CHAIN_STRNDPRIM);
 
     GET_NEXT_ITEM_SP (CHAIN_STARTPRIM);
@@ -473,7 +469,7 @@ rom chain_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_tx
 
     // Empty line after alignment set
     GET_LAST_ITEM (EmptyLine);
-    ASSSEG0 (!field_len, field_start, "Expecting an empty line after alignment set");
+    ASSSEG0 (!field_len, "Expecting an empty line after alignment set");
     SEG_EOL (CHAIN_EOL, false); 
 
     // case: alignment contig names mismatch the references - handling depends on --match-chrom-to-reference
@@ -526,7 +522,7 @@ bool chain_piz_initialize (CompIType comp_i __attribute__((unused)))
 
 SPECIAL_RECONSTRUCTOR (chain_piz_special_BACKSPACE)
 {
-    ASSERTNOTZERO (Ltxt, "");
+    ASSERTNOTZERO (Ltxt);
     Ltxt--;
 
     Context *gaps_ctx = CTX(CHAIN_GAPS); // note: we can't rely on the constants CHAIN_* in PIZ
@@ -772,16 +768,17 @@ void chain_load (void)
     ASSERTNOTNULL (flag.reading_chain);
     SAVE_FLAGS_AUX ("chain file");
 
-    buf_alloc (evb, &chain, 0, 1000, ChainAlignment, 1, "chain"); // must be allocated by main thread
+    buf_set_promiscuous (&chain, "chain");
+    buf_alloc (evb, &chain, 0, 1000, ChainAlignment, 1, NULL); // must be allocated by main thread
     
     z_file = file_open_z_read (flag.reading_chain);    
     SectionHeaderGenozipHeader header;
-    zfile_read_genozip_header (&header);
+    zfile_read_genozip_header (&header, HARD_FAIL);
     
     bool chain_not_for_use = flag.show_chain || flag.show_chain_contigs;
     
     ASSINP (Z_DT(CHAIN), "expected %s to be a genozip'ed chain file, but its a %s file. Tip: compress the chain with \"genozip --input chain\"", 
-            z_name, dt_name (z_file->data_type));
+            z_name, z_dt_name());
 
     ASSINP (chain_not_for_use || (ref_get_filename (gref) && ref_get_filename (prim_ref)),
             "%s is unsuitable for use with %s because it was not compressed with source and destination references using genozip --reference. See: " WEBSITE_CHAIN, 
@@ -800,11 +797,12 @@ void chain_load (void)
     flag.no_writer = flag.no_writer_thread = true;
     flag.genocat_no_reconstruct = false;
     flag.genocat_global_area_only = false;
+    flag.show_time_comp_i = COMP_NONE;
     
     Dispatcher dispachter = piz_z_file_initialize();
 
     // load both references, now that it is set (either explicitly from the command line, or implicitly from the chain GENOZIP_HEADER)
-    SAVE_VALUE (z_file); // actually, read the references first
+    RESET_VALUE (z_file); // actually, read the references first
     ref_load_external_reference (gref, NULL);
     ref_load_external_reference (prim_ref, NULL);
     RESTORE_VALUE (z_file);
@@ -835,8 +833,7 @@ void chain_load (void)
 
     chain_filename = filename_make_unix (z_name); // full-path unix-style filename, allocates memory
 
-    file_close (&z_file, false, false);
-    //xxx file_close (&txt_file, false, false); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open_z called from txtheader_piz_read_and_reconstruct.
+    file_close (&z_file);
     
     // recover globals
     RESTORE_VALUE (command);

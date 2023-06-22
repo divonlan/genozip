@@ -20,7 +20,7 @@
 #include "tip.h"
 
 SegConf segconf = {}; // system-wide global
-VBlockP segconf_vb = NULL;
+static VBlockP segconf_vb = NULL;
 
 // figure out if file is sorted or not
 void segconf_test_sorted (VBlockP vb, WordIndex prev_line_chrom, PosType32 pos, PosType32 prev_line_pos)
@@ -42,7 +42,7 @@ void segconf_test_sorted (VBlockP vb, WordIndex prev_line_chrom, PosType32 pos, 
 // mark contexts as used, for calculation of vb_size
 void segconf_mark_as_used (VBlockP vb, unsigned num_ctxs, ...)
 {
-    ASSERTNOTZERO (segconf.running, "");
+    ASSERTNOTZERO (segconf.running);
 
     va_list args;
     va_start (args, num_ctxs);
@@ -60,6 +60,7 @@ static void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
     #define VBLOCK_MEMORY_MIN_DYN   (16  MB) // VB memory - min/max when set in segconf_calculate
     #define VBLOCK_MEMORY_MAX_DYN   (512 MB) 
     #define VBLOCK_MEMORY_BEST      (512 MB) // VB memory with --best 
+    #define VBLOCK_MEMORY_LOW_MEM   (16  MB) // VB memory - default with --low-memort
     #define VBLOCK_MEMORY_MAKE_REF  (1   MB) // VB memory with --make-reference - reference data 
     #define VBLOCK_MEMORY_GENERIC   (16  MB) // VB memory for the generic data type
     #define VBLOCK_MEMORY_MIN_SMALL (4   MB) // minimum VB memory for small files
@@ -119,31 +120,40 @@ static void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
         // formula - 1MB for each contexts, 128K for each VCF sample
         uint64_t bytes = ((uint64_t)num_used_contexts MB) + (vcf_samples << 17);
 
-        uint64_t min_memory = !segconf.is_sorted         ? VBLOCK_MEMORY_MIN_DYN
-                            : !segconf.is_long_reads     ? VBLOCK_MEMORY_MIN_DYN
-                            : arch_get_num_cores() <= 8  ? VBLOCK_MEMORY_MIN_DYN // eg a personal computer
-                            : arch_get_num_cores() <= 20 ? 128 MB           // higher minimum memory for long reads in sorted SAM - enables CPU scaling
-                            :                              256 MB;
+        // higher minimum memory for long reads in sorted SAM - enables CPU scaling
+        if (segconf.is_long_reads && segconf.is_sorted) {
+            uint64_t min_memory = global_max_threads <= 8  ? VBLOCK_MEMORY_MIN_DYN // eg a personal computer
+                                : global_max_threads <= 20 ? 64 MB
+                                : global_max_threads <= 35 ? 128 MB
+                                :                            256 MB;
+            // actual memory setting VBLOCK_MEMORY_MIN_DYN to VBLOCK_MEMORY_MAX_DYN
+            segconf.vb_size = MIN_(MAX_(bytes, min_memory), VBLOCK_MEMORY_MAX_DYN);
+        }
 
-        // actual memory setting VBLOCK_MEMORY_MIN_DYN to VBLOCK_MEMORY_MAX_DYN
-        segconf.vb_size = MIN_(MAX_(bytes, min_memory), VBLOCK_MEMORY_MAX_DYN);
+        // larger VBs allow high core scaling due to less contention in merge
+        else {
+            segconf.vb_size = MIN_(MAX_(bytes, VBLOCK_MEMORY_MIN_DYN), VBLOCK_MEMORY_MAX_DYN);
+
+            if (global_max_threads > 36)
+                segconf.vb_size = MIN_(segconf.vb_size * 2, ABSOLUTE_MAX_VBLOCK_MEMORY);
         
-        int64_t est_seggable_size = txtfile_get_seggable_size();
+            else if (global_max_threads > 20)
+                segconf.vb_size = MIN_(segconf.vb_size * 1.5, ABSOLUTE_MAX_VBLOCK_MEMORY);
+        }
 
-        if (est_seggable_size) 
-            segconf.vb_size = MIN_(segconf.vb_size, est_seggable_size * 1.5);
+        int64_t est_seggable_size = txtfile_get_seggable_size();
 
         // for small files - reduce VB size, to take advantage of all cores (subject to a minimum VB size)
         if (!flag.best && est_seggable_size && global_max_threads > 1) {
-            uint64_t new_vb_size = MAX_(VBLOCK_MEMORY_MIN_SMALL, est_seggable_size / global_max_threads);
+            uint64_t new_vb_size = MAX_(VBLOCK_MEMORY_MIN_SMALL, est_seggable_size * 1.2 / global_max_threads);
 
             // in case of drastic reduction of large-sample VCF file, provide tip
             if (vcf_samples > 10 && new_vb_size < segconf.vb_size / 2) 
                 TIP0 ("Using --best can significantly improve compression for this particular file");
 
             segconf.vb_size = MIN_(segconf.vb_size, new_vb_size);
-        }
-
+        } 
+        
         // on Windows (inc. WSL) and Mac - which tend to have less memory in typical configurations, warn if we need a lot
         // (note: if user sets --vblock, we won't get here)
         if (flag.is_windows || flag.is_mac || flag.is_wsl) {
@@ -151,14 +161,11 @@ static void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
 
             int concurrent_vbs = 1 + (est_seggable_size ? MIN_(1+ est_seggable_size / segconf.vb_size, global_max_threads) : global_max_threads);
 
-            ASSERTW (segconf.vb_size * concurrent_vbs < MEMORY_WARNING_THREASHOLD,
-                     "\nWARNING: For this file, Genozip selected an optimal setting which consumes a lot of RAM:\n"
-                     "%u threads, each processing %u MB of input data at a time (and using working memory too)\n"
-                     "To reduce RAM consumption, you may use:\n"
-                     "   --threads to set the number of threads (affects speed)\n"
-                     "   --vblock to set the amount of input data (in MB) a thread processes (affects compression ratio)\n"
-                     "   --quiet to silence this warning",
-                     global_max_threads, (uint32_t)(segconf.vb_size >> 20));
+            if (segconf.vb_size * concurrent_vbs > MEMORY_WARNING_THREASHOLD)
+                WARN_ONCE ("\nWARNING: For this file, Genozip selected an optimal setting which consumes a lot of RAM:\n"
+                           "%u threads, each processing %u MB of input data at a time (and using working memory too)\n"
+                           "To reduce RAM consumption, use --low-memory. To silense this warning use --quiet.\n",
+                           global_max_threads, (uint32_t)(segconf.vb_size >> 20));
         }
 
         segconf.vb_size = ROUNDUP1M (segconf.vb_size);
@@ -166,15 +173,14 @@ static void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
     
     if (flag.best && !flag.vblock)
         segconf.vb_size = MAX_(segconf.vb_size, VBLOCK_MEMORY_BEST);
+    
+    if (flag.low_memory && !flag.vblock)
+        segconf.vb_size = MIN_(segconf.vb_size, VBLOCK_MEMORY_LOW_MEM);
 
-    if (flag.show_memory && num_used_contexts) {
-        if (Z_DT(VCF) || Z_DT(BCF))
-            iprintf ("\nDyamically set vblock_memory to %u MB (num_contexts=%u num_vcf_samples=%u)\n", 
-                        (unsigned)(segconf.vb_size >> 20), num_used_contexts, vcf_header_get_num_samples());
-        else
-            iprintf ("\nDyamically set vblock_memory to %u MB (num_contexts=%u)\n", 
-                        (unsigned)(segconf.vb_size >> 20), num_used_contexts);
-    }
+    if (flag.show_memory && num_used_contexts) 
+        iprintf ("\nvblock size set to %u MB (num_used_contexts=%u%s)\n", 
+                 (unsigned)(segconf.vb_size >> 20), num_used_contexts, 
+                 cond_int (Z_DT(VCF) || Z_DT(BCF), " num_vcf_samples=", vcf_header_get_num_samples()));
 }
 
 // this function is called to set is_long_reads, and may be also called while running segconf before is_long_reads is set
@@ -198,25 +204,36 @@ void segconf_initialize (void)
     // note: in Deep, we re-segconf the first FASTQ component, but don't remove the SAM segconf data    
     if (!((Z_DT(SAM) || Z_DT(BAM)) && flag.deep && flag.zip_comp_i == SAM_COMP_FQ00))
         segconf = (SegConf){
-            .vb_size          = z_file->num_txts_so_far ? segconf.vb_size : 0, // components after first inherit vb_size from first
-            .is_sorted        = true,       // initialize optimistically
+            .vb_size           = z_file->num_txts_so_far ? segconf.vb_size : 0, // components after first inherit vb_size from first
+            .is_sorted         = true,      // initialize optimistically
             
             // SAM stuff
-            .is_collated      = true,       // initialize optimistically
-            .MAPQ_has_single_value = true, // initialize optimistically
-            .NM_after_MD      = true,       // initialize optimistically
-            .nM_after_MD      = true,       // initialize optimistically
-            .sam_is_unmapped  = true,       // we will reset this if finding a line with POS>0
-            .SA_HtoS          = unknown,
-            .sam_XG_inc_S     = unknown,
-            .sam_has_BWA_XA_Z = unknown,
-            .CY_con_snip_len  = sizeof (segconf.CY_con_snip),
-            .QT_con_snip_len  = sizeof (segconf.QT_con_snip),
-            .CB_con_snip_len  = sizeof (segconf.CB_con_snip),
+            .is_collated       = true,      // initialize optimistically
+            .MAPQ_has_single_value = true,  // initialize optimistically
+            .NM_after_MD       = true,      // initialize optimistically
+            .nM_after_MD       = true,      // initialize optimistically
+            .sam_is_unmapped   = true,      // we will reset this if finding a line with POS>0
+            .SA_HtoS           = unknown,
+            .sam_XG_inc_S      = unknown,
+            .sam_has_BWA_XA_Z  = unknown,
+            .CY_con_snip_len   = sizeof (segconf.CY_con_snip),
+            .QT_con_snip_len   = sizeof (segconf.QT_con_snip),
+            .CB_con_snip_len   = sizeof (segconf.CB_con_snip),
+
+            // FASTQ stuff
+            .deep_qtype        = QNONE,
 
             // FASTA stuff
             .fasta_has_contigs = true, // initialize optimistically
         };
+
+    // Deep - 1st FASTQ file
+    else {
+        // reset flavor data so we can recalcualte for FASTQ (might be related but different flavor)
+        memset (segconf.qname_flavor, 0, sizeof (segconf.qname_flavor));
+        memset (segconf.qname_flavor_rediscovered, 0, sizeof (segconf.qname_flavor_rediscovered));
+        memset (segconf.qname_line0, 0, sizeof (segconf.qname_line0));
+    }
     
     mutex_initialize (segconf.PL_mux_by_DP_mutex);
 }
@@ -243,9 +260,11 @@ static void segconf_show_has (void)
 // ZIP: Seg a small sample of data of the beginning of the data, to pre-calculate several Seg configuration parameters
 void segconf_calculate (void)
 {
-    if (segconf_no_calculate()) return;
-
-    if (TXT_DT(GENERIC)) {  // no need for a segconf test VB in generic files    
+    // check for components that don't need segconf
+    if (segconf_no_calculate()) return; 
+    
+    if (TXT_DT(GENERIC) ||              // no need for a segconf test VB in generic files
+        (flag.biopsy && flag.force)) {  // no need for segconf for a biopsy if --force (allows for biopsy of defective files)
         segconf_set_vb_size (NULL, segconf.vb_size);
         return;
     }
@@ -317,7 +336,7 @@ void segconf_calculate (void)
     bool best_requires_ref = ((VB_DT(SAM) || VB_DT(BAM)) && !(segconf.is_long_reads && segconf.sam_is_unmapped))
                           || (VB_DT(FASTQ) && !segconf.is_long_reads);
 
-    if (segconf.is_long_reads && (VB_DT(FASTQ) || segconf.sam_is_unmapped)) {
+    if (segconf.is_long_reads && ((VB_DT(FASTQ) && !flag.deep) || segconf.sam_is_unmapped)) {
         flag.reference = REF_NONE;
         flag.aligner_available = false;
     }
@@ -336,17 +355,6 @@ done:
     txt_file->num_lines = 0;
     segconf.running = false;
     #undef vb
-}
-
-void segconf_update_qual (STRp (qual))
-{
-    if (segconf.nontrivial_qual) return; // already established
-
-    for (uint32_t i=1; i < qual_len; i++) 
-        if (qual[i] != qual[0]) {
-            segconf.nontrivial_qual = true;
-            break;
-        }
 }
 
 rom segconf_sam_mapper_name (void)

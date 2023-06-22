@@ -260,10 +260,12 @@ CONTAINER_ITEM_CALLBACK (vcf_piz_con_item_cb)
             vcf_piz_ps_pid_lookback_insert (vb, FORMAT_PS, STRa(recon));
             break;
 
-        case _FORMAT_PID: // since v13: PS has item_cb
+        case _FORMAT_PID: // since v13: PID has item_cb
             vcf_piz_ps_pid_lookback_insert (vb, FORMAT_PID, STRa(recon));
             break;
 
+        // note: for _FORMAT_IPS we insert in vcf_piz_special_MUX_BY_IGT_PHASE
+        
         case _VCF_REFALT: // files compress starting v14.0.12
             vcf_piz_refalt_parse (VB_VCF, STRa(recon));
             break;

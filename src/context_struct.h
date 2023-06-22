@@ -41,17 +41,18 @@ typedef struct Context {
     B250Size b250_size;        // Max size of element in b250 data (PIZ and ZIP after generation) v14
     B250Size pair_b250_size;
     DictId dict_id;            // the dict_id of this context
+    #define FIRST_BUFFER_IN_Context dict
     Buffer dict;               // tab-delimited list of all unique snips - in this VB that don't exist in ol_dict
+    #define CTX_TAG_B250  "contexts->b250"
     Buffer b250;               // ZIP: During Seg, .data contains 32b indices into context->nodes. In zip_generate_b250_section, 
                                //      the "node indices" are converted into "word indices" - indices into the future 
                                //      context->word_list, in base-250. the number of words is moved from .len to .count. 
                                // PIZ: .data contains the word indices (i.e. indices into word_list) in base-250
+    #define CTX_TAG_LOCAL "contexts->local"
     Buffer local;              // VB: Data private to this VB that is not in the dictionary
                                // ZIP Z_FILE .len  # fields of this type segged in the file (for stats)
     Buffer b250R1;             // ZIP/PIZ: used by PAIR_2 FASTQ VBs (inc. in Deep SAM), for paired contexts: PAIR_1 b250 data from corresponding VB (in PIZ: only if CTX_PAIR_LOAD)
     
-    int64_t compressor_time;   // Used when --show-time - time for compressing / decompressing this context
-
     // rollback point - used for rolling back during Seg
     int64_t rback_id;          // ZIP: rollback data valid only if ctx->rback_id == vb->rback_id
     TxtWord rback_last_txt;
@@ -178,9 +179,9 @@ typedef struct Context {
     ConstContainerP parent_container; // PIZ: last container that invoked reconstruction of this context
 
     // ZIP: stats
-    uint64_t txt_len;          // How many characters in reconstructed text are accounted for by snips in this ctx (for stats), when file reconstructed in PRIMARY coordinates (i.e. PRIMARY reconstruction for regular VBs, LUFT reconstruction for ##luft_only VBs, and no reconstruction for ##primary_only VBs)
+    uint64_t txt_len;          // number of characters in reconstructed text are accounted for by snips in this ctx (for stats), when file reconstructed in PRIMARY coordinates (i.e. PRIMARY reconstruction for regular VBs, LUFT reconstruction for ##luft_only VBs, and no reconstruction for ##primary_only VBs)
     };
-    uint32_t local_num_words;  // ZIP: number of words (segs) that went into local. If a field is segged into multiple contexts - this field is incremented in each of them. If the context also uses b250, this field is ignored by stats which uses count instead.
+    uint64_t local_num_words;  // ZIP: number of words (segs) that went into local. If a field is segged into multiple contexts - this field is incremented in each of them. If the context also uses b250, this field is ignored by stats which uses count instead.
 
     union {
     Buffer word_list;          // PIZ z_file: word list. an array of CtxWord - listing the snips in dictionary
@@ -228,7 +229,7 @@ typedef struct Context {
         enum   __attribute__ ((__packed__)) { PAIR1_ALIGNED_UNKNOWN=-1, PAIR1_NOT_ALIGNED=0, PAIR1_ALIGNED=1 } pair1_is_aligned;  // FASTQ_SQBITMAP:  PIZ: used when reconstructing pair-2
         enum   __attribute__ ((__packed__)) { ID_TYPE_UNKNOWN, ID_TYPE_ALPHA_NUMERIC, ID_TYPE_OTHER } id_type; // type of field segged with seg_id_field        
         struct __attribute__ ((__packed__)) { Ploidy gt_prev_ploidy, gt_actual_last_ploidy; char gt_prev_phase; }; // FORMAT_GT: ZIP/PIZ
-        struct __attribute__ ((__packed__)) { enum __attribute__ ((__packed__)) { PS_NONE, PS_POS, PS_POS_REF_ALT, PS_UNKNOWN } ps_type; }; // FORMAT_PS and FORMAT_PID
+        struct __attribute__ ((__packed__)) { enum __attribute__ ((__packed__)) { PS_NONE, PS_POS, PS_POS_REF_ALT, PS_UNKNOWN } ps_type; }; // FORMAT_PS, FORMAT_PID, FORMAT_IPSphased
     };
 
     bool last_encounter_was_reconstructed; // PIZ: only valid if ctx_encountered() is true. Means last encountered was also reconstructed.
@@ -248,11 +249,15 @@ typedef struct Context {
     // ZIP: context specific
     Buffer value_to_bin;       // ZIP: Used by LONGR codec on *_DOMQRUNS contexts
     Buffer longr_state;        // ZIP: Used by LONGR codec on QUAL contexts
-    Buffer chrom2ref_map;      // ZIP: Used by CHROM and contexts with a dict alias to it. Mapping from user file chrom to alternate chrom in reference file (new chroms in this VB) - incides match ctx->nodes
+    Buffer chrom2ref_map;      // ZIP (vb & z), PIZ(z): Used by CHROM and contexts with a dict alias to it. Mapping from user file chrom to alternate chrom in reference file (for ZIP-VB: new chroms in this VB) - incides match ctx->nodes
+    Buffer qual_line;          // ZIP: used by DOMQ codec on *_DOMQRUNS contexts
+    Buffer normalize_buf;      // ZIP: used by DOMQ codec on QUAL contexts
     };
+    #define CTX_TAG_CON_INDEX "contexts->con_index"
     Buffer con_index;          // PIZ: use by contexts that might have containers: Array of uint32_t - index into con_cache - Each item corresponds to word_index. 
                                // ZIP: used by: 1. seg_array_of_struct
     union {
+    #define CTX_TAG_CON_LEN "contexts->con_len"
     Buffer con_len;            // PIZ: use by contexts that might have containers: Array of uint16_t - length of item in cache
     Buffer localR1;            // ZIP/PIZ: used by PAIR_2 FASTQ VBs (inc. in Deep SAM), for paired contexts: PAIR_1 local data from corresponding VB (in PIZ: only if fastq_use_pair_assisted).
     };                         // Note: contexts with containers are always no_stons, so they have no local - therefore no issue with union conflict.
@@ -270,3 +275,4 @@ static inline void init_dict_id_to_did_map (DictIdtoDidMap d2d_map)
 }
 
 typedef Context ContextArray[MAX_DICTS];
+

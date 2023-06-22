@@ -41,27 +41,32 @@ static void BGEN_ref_contigs_not_compacted (BufferP contigs_buf)
     };
 }
 
-// in the case of data compressed with the aligner (FASTQ or unaligned SAM) it might not have all the contigs in CHROM
-// (we might have some, eg in case of a SAM with mixed aligned and unaligned reads). If this is REF_EXT_STORE, the a 
-// SEC_REF_CONTIGS section is created, which refers to the CHROM dict for names, hence we add these chroms. 
+// main thread from zip_write_global_area: in the case of data compressed with the aligner (FASTQ or unaligned reads in SAM) 
+// it might not have all the contigs in CHROM (we might have some, eg in case of a SAM with mixed aligned and unaligned reads). 
+// If this is REF_EXT_STORE, a SEC_REF_CONTIGS is created, which refers to the CHROM dict for names, hence we add these chroms. 
 void ref_contigs_populate_aligned_chroms (void)
 {
     // create sorted index into CHROM
     chrom_index_by_name (CHROM);
 
     for_buf (Range, r, gref->ranges) {
-        bool already_exists = (chrom_get_by_name (STRa(r->chrom_name)) != WORD_INDEX_NONE); // it might exist, eg in a case of a SAM with mixed aligned and unaligned reads
-        if (already_exists) continue;
+        r->num_set = bits_num_set_bits (&r->is_set);
+        if (!r->num_set) continue;
 
-        // add if chrom doesn't already exist ()
-        if ((r->num_set = bits_num_set_bits (&r->is_set))) {
-            
-            WordIndex chrom_index = ctx_populate_zf_ctx (CHROM, STRa(r->chrom_name), r->range_i, true); // add to dictionary and set count (count needed by ref_contigs_compress_stored)
+        WordIndex chrom_index = chrom_get_by_name (STRa(r->chrom_name)); // exists eg in a case of a SAM with mixed aligned and unaligned reads
+        decl_zctx(CHROM);
 
-            buf_alloc_255 (evb, &z_file->chrom2ref_map, 0, MAX_(1000, chrom_index+1), WordIndex, CTX_GROWTH, "z_file->chrom2ref_map");
+        if (chrom_index == WORD_INDEX_NONE) {
+            chrom_index = ctx_populate_zf_ctx (CHROM, STRa(r->chrom_name), r->range_i); // add to dictionary
 
-            *B(WordIndex, z_file->chrom2ref_map, chrom_index) = r->chrom;
+            buf_alloc_255 (evb, &zctx->chrom2ref_map, 0, MAX_(1000, chrom_index+1), WordIndex, CTX_GROWTH, "ZCTX(CHROM)->chrom2ref_map");
+
+            *B(WordIndex, zctx->chrom2ref_map, chrom_index) = r->chrom;
         }
+
+        // make sure count is at least 1 for ref_contigs_compress_stored to store 
+        buf_alloc_zero (evb, &zctx->counts, 0, MAX_(chrom_index + 1, gref->ranges.len32), uint64_t, CTX_GROWTH, "counts");
+        *B64(zctx->counts, chrom_index) = MAX_(*B64(zctx->counts, chrom_index), 1);
     }
 }
 
@@ -110,7 +115,7 @@ void ref_contigs_compress_ref_make (Reference ref)
 {
     START_TIMER;
 
-    static Buffer created_contigs = EMPTY_BUFFER;  
+    static Buffer created_contigs = {};  
 
     if (!buf_is_alloc (&ZCTX(CHROM)->nodes)) return; // no contigs (note: non-empty SAM/BAM files always have contigs, even if only a "*")
 
@@ -172,6 +177,8 @@ void ref_contigs_compress_ref_make (Reference ref)
     if (flag.show_ref_contigs) ref_contigs_show (&created_contigs, true);
 
     ref_contigs_compress_do (&created_contigs, false, false);
+
+    buf_destroy (created_contigs);
 }
 
 // convert Contig to CompactContig if possible, ahead of writing to disk
@@ -209,7 +216,7 @@ void ref_contigs_compress_stored (Reference ref)
     // NOTE: ref_get_range_by_chrom access ranges by chrom, but ref_initialize_loaded_ranges (incorrectly) allocates ranges.len by ref->ctgs.contigs.len 
     // (for non REF_INTERNAL) therefore, we must have ref_contigs aligned with CHROM
     
-    static Buffer created_contigs = EMPTY_BUFFER;          
+    static Buffer created_contigs = {};          
     ARRAY_alloc (Contig, cn, chrom_counts_len, true, created_contigs, evb, "created_contigs");
 
     // create sorted index into CHROM
@@ -244,6 +251,8 @@ void ref_contigs_compress_stored (Reference ref)
     if (has_some_contigs) // Could be false, e.g. in FASTQ if no read was successfully aligned to the reference
         ref_contigs_compress_do (&created_contigs, true, is_compacted); // note: sequential_ref_index introduced v14.0.0, is_compacted introduce v14.0.10.
 
+    buf_destroy (created_contigs);
+    
     COPY_TIMER_EVB (ref_contigs_compress); 
 }
 
@@ -380,8 +389,8 @@ WordIndex ref_contigs_ref_chrom_from_header_chrom (Reference ref, STRp(chrom_nam
     // if its not found, we ignore it. sequences that have this chromosome will just be non-ref
     if (ref_contig_index == WORD_INDEX_NONE) {
         if (IS_ZIP)
-            WARN_ONCE ("FYI: header of %s has contig '%.*s' (and maybe others, too), missing in %s. If the file contains many variants with this contig, it might compress a bit less than when using a reference file that contains all contigs.",
-                        txt_file->basename, STRf(chrom_name), ref->filename);
+            WARN_ONCE ("FYI: header of %s has contig '%.*s' (and maybe others, too), missing in %s. If the file contains many %ss with this contig, it might compress a bit less than when using a reference file that contains all contigs.",
+                        txt_file->basename, STRf(chrom_name), ref->filename, DTPT(line_name));
         return WORD_INDEX_NONE;
     }
 

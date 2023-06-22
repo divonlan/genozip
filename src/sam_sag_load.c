@@ -21,7 +21,6 @@
 #include "writer.h"
 #include "progress.h"
 #include "htscodecs/rANS_static4x16.h"
-#include "libdeflate/libdeflate.h"
 
 typedef struct {
     VBIType vblock_i;
@@ -40,7 +39,6 @@ typedef struct {
 #define plsg_info z_file->vb_info[1]
 static uint32_t next_plsg_i = 0; // iterator for dispatching compute threads
 static VBIType num_prim_vbs_loaded = 0; // number of PRIM VBs whose loading is complete
-static Mutex num_prim_vbs_loaded_mutex = {};
 
 static Mutex copy_qual_mutex = {}, copy_cigars_mutex = {};
 
@@ -66,7 +64,7 @@ ShowAln sam_show_sag_one_aln (const Sag *g, const SAAln *a)
             sprintf (cigar_info, "in=%"PRIu64" l=%u comp=%u", (uint64_t)a->cigar.piz.index, ALN_CIGAR_LEN(a), (int)a->cigar.piz.comp_len);
 
         char rname_str[64]; // should be big enough...
-        sprintf (rname_str, "\"%.48s\"(%u)", ctx_get_snip_by_word_index0 (ZCTX(OPTION_SA_RNAME), a->rname), a->rname);
+        sprintf (rname_str, "\"%.48s\"(%u)", ctx_get_snip_by_word_index0 (ZCTX(VER(15) ? SAM_RNAME/*alias since v15*/ : OPTION_SA_RNAME), a->rname), a->rname);
 
         sprintf (s.s, "aln_i=%u.%u: sa_rname=%-13s pos=%-10u mapq=%-3u strand=%c nm=%-3u cigar[%u]=\"%s\"(%s)",
                 ZGRP_I(g), (unsigned)(ZALN_I(a) - g->first_aln_i), rname_str,
@@ -111,7 +109,7 @@ void sam_show_sag_one_grp (SAGroup grp_i)
 
     iprintf ("grp_i=%u: qname(i=%"PRIu64",l=%u,hash=%u)=%.*s seq=(i=%"PRIu64",l=%u) qual=(i=%"PRIu64",comp_l=%u)[%u]=\"%s\" AS=%u strand=%c mul/fst/lst=%u,%u,%u %s=%u%s%s\n",
              grp_i, (uint64_t)g->qname, g->qname_len, 
-             QNAME_HASH (GRP_QNAME(g), g->qname_len, g->is_last), // the hash is part of the index in ZIP, and not part of the SAGroup struct. Its provided here for its usefulness in debugging
+             qname_calc_hash (QNAME1, GRP_QNAME(g), g->qname_len, g->is_last, false, NULL), // the hash is part of the index in ZIP, and not part of the SAGroup struct. Its provided here for its usefulness in debugging
              g->qname_len, GRP_QNAME(g) , g->seq, g->seq_len, 
              (uint64_t)g->qual, g->qual_comp_len, SA_QUAL_DISPLAY_LEN, sam_display_qual_from_SA_Group (g),  
              (int)g->as, "+-"[g->revcomp], g->multi_segs, g->is_first, g->is_last,
@@ -153,11 +151,12 @@ static void reset_iterators (VBlockSAMP vb)
 // QNAME: reconstruct directly into z_file->sa_qname by overlaying txt_data
 static inline void sam_load_groups_add_qname (VBlockSAMP vb, PlsgVbInfo *plsg, Sag *vb_grps) 
 {
-    Buffer save_txt_data = vb->txt_data;
-    vb->txt_data = (Buffer){};
-    buf_set_overlayable (&z_file->sag_qnames);
+    // note: multiple threads concurrently reconstruct directly into z_file->sag_qnames
+    buf_set_shared (&z_file->sag_qnames);
     buf_overlay_partial (vb, &vb->txt_data, &z_file->sag_qnames, plsg->qname_start, "txt_data");
     
+    ContextP seq_len_ctx = segconf.seq_len_dict_id.num ? ECTX(segconf.seq_len_dict_id) : NULL;
+
     Ltxt = 0;
     for (vb->line_i=0; vb->line_i < plsg->num_grps ; vb->line_i++) {
         sam_reset_line (VB);
@@ -167,11 +166,13 @@ static inline void sam_load_groups_add_qname (VBlockSAMP vb, PlsgVbInfo *plsg, S
         vb_grps[vb->line_i].qname = plsg->qname_start + Ltxt;
         reconstruct_from_ctx (vb, SAM_QNAME, 0, RECON_ON); // reconstructs into vb->txt_data, sets vb->buddy_line_i if SNIP_COPY_BUDDY
         vb_grps[vb->line_i].qname_len = Ltxt - (vb_grps[vb->line_i].qname - plsg->qname_start); // 64 bit arithmetic
+
+        // if seq_len is carried by a QNAME item, set the last value here (needed for sam_cigar_special_CIGAR)
+        if (seq_len_ctx) vb_grps[vb->line_i].seq_len = seq_len_ctx->last_value.i;
     }
 
     buf_free (vb->txt_data);
-    vb->txt_data = save_txt_data;
-    
+
     reset_iterators (vb);
 }
 
@@ -251,18 +252,13 @@ static inline void sam_load_groups_add_seq (VBlockSAMP vb, PlsgVbInfo *plsg, Sag
 {
     if (!CTX(SAM_SQBITMAP)->is_loaded) return; // sequence is skipped
 
-    // reconstruct SEQ to vb->textual_seq, needed by sam_piz_prim_add_QUAL, and overlay txt_data on it
+    // reconstruct SEQ to vb->textual_seq, needed by sam_piz_prim_add_QUAL
     buf_alloc (vb, &vb->textual_seq, 0, vb->seq_len, char, 0, "textual_seq");
-    buf_set_overlayable (&vb->textual_seq);
 
-    Buffer save_txt_data = vb->txt_data;
-    vb->txt_data = (Buffer){};
-    buf_overlay (vb, &vb->txt_data, &vb->textual_seq, "txt_data");
-
+    SWAP (vb->textual_seq, vb->txt_data); // careful as this doesn't modify buffer_list 
     reconstruct_from_ctx (vb, SAM_SQBITMAP, 0, RECON_ON);
-    vb->textual_seq.len32 = Ltxt;
-    buf_free (vb->txt_data); // un-overlay
-    vb->txt_data = save_txt_data;
+    buf_verify (vb->txt_data, "SWAP-txt_data-textual_seq");
+    SWAP (vb->textual_seq, vb->txt_data);
 
     ASSERT (vb->textual_seq.len32 == vb->seq_len, "Expecting textual_seq.len=%u == seq_len=%u", vb->textual_seq.len32, vb->seq_len);
 
@@ -276,21 +272,15 @@ static inline void sam_load_groups_add_qual (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
 {
     if (!CTX(SAM_QUAL)->is_loaded) return; // qual is skipped
 
-    // to reconstruct into codec_bufs[0], we overlay txt_data on it, as the reconstruct machinery reconstructs to txt_data 
     buf_alloc (vb, &vb->codec_bufs[0], vb->seq_len, 0, char, 1, "codec_bufs[0]");
-    buf_set_overlayable (&vb->codec_bufs[0]);
 
-    Buffer save_txt_data = vb->txt_data;
-    vb->txt_data = (Buffer){};
-    buf_overlay (vb, &vb->txt_data, &vb->codec_bufs[0], "txt_data");
-
-    // Reconstruct QUAL of one line into txt_data which is overlaid on codec_bufs[0]
+    // to reconstruct into codec_bufs[0], we exchange it with txt_data, as the reconstruct machinery reconstructs to txt_data 
+    SWAP (vb->codec_bufs[0], vb->txt_data); // careful as this doesn't modify buffer_list 
     reconstruct_from_ctx (vb, SAM_QUAL, 0, RECON_ON); // reconstructs into vb->txt_data
-    vb->codec_bufs[0].len = Ltxt;
-    g->no_qual = vb->qual_missing;
-    buf_free (vb->txt_data); // un-overlay
-    vb->txt_data = save_txt_data;
-
+    buf_verify (vb->txt_data, "SWAP-txt_data-qual");
+    SWAP (vb->codec_bufs[0], vb->txt_data);
+    
+    g->no_qual = vb->qual_missing;    
     if (g->no_qual) goto done; // no quality data for this group - we're done
 
     ASSERT (vb->codec_bufs[0].len == vb->seq_len, "Expecting Ltxt=%u == vb->seq_len=%u", Ltxt, vb->seq_len);
@@ -443,8 +433,7 @@ static inline void sam_load_groups_add_solo_data (VBlockSAMP vb, PlsgVbInfo *pls
     for (int i=0; i < vb->plsg_i; i++) 
         solo_data_start += B(PlsgVbInfo, plsg_info, i)->solo_data_len;
 
-    Buffer save_txt_data = vb->txt_data;
-    vb->txt_data = (Buffer){};
+    // note: multiple threads concurrently reconstruct directly into z_file->solo_data
     buf_overlay_partial (vb, &vb->txt_data, &z_file->solo_data, solo_data_start, "txt_data");
     Ltxt = 0;
 
@@ -463,7 +452,7 @@ static inline void sam_load_groups_add_solo_data (VBlockSAMP vb, PlsgVbInfo *pls
 
     CTX(SAM_AUX)->iterator = (SnipIterator){}; // reset as it might be needed for AS
     buf_free (vb->txt_data); // un-overlay
-    vb->txt_data = save_txt_data;
+
     reset_iterators (vb);
 }
 
@@ -496,6 +485,8 @@ static inline void sam_load_groups_add_grps (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
     // if MC:Z attempts to copy an earlier CIGAR, it will get an empty snip bc CIGAR is not in txt_data. 
     // That's ok, bc this means this MC:Z will not be used to reconstruct its mate's CIGAR as its mate already appeared (and we don't use MC:Z for anything else during pre-processing)
     CTX(SAM_CIGAR)->empty_lookup_ok = true; 
+
+    ContextP seq_len_ctx = segconf.seq_len_dict_id.num ? ECTX(segconf.seq_len_dict_id) : NULL;
 
     // every alignment in the Primary VB represents a grp
     for (SAGroup grp_i=0; grp_i < plsg->num_grps ; grp_i++) {
@@ -561,6 +552,9 @@ static inline void sam_load_groups_add_grps (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
             reconstruct_from_ctx (VB, SAM_POS,   0, RECON_OFF);
             reconstruct_from_ctx (VB, SAM_RNEXT, 0, RECON_OFF); // needed by PNEXT...
             reconstruct_from_ctx (VB, SAM_PNEXT, 0, RECON_OFF); // store in history, in case POS of future-line mates needs it (if copy_buddy(PNEXT))
+            
+            // need to set before reconstructing CIGAR: if seq_len is carried by a QNAME item, set the last value here
+            if (seq_len_ctx) ctx_set_last_value (VB, seq_len_ctx, (int64_t)g->seq_len);
 
             // analyze CIGAR (setting vb->seq_len, vb->ref_consumed etc)
             reconstruct_from_ctx (VB, SAM_CIGAR, 0, RECON_OFF);
@@ -702,21 +696,19 @@ static void sam_load_groups_add_one_prim_vb (VBlockP vb_)
     sam_load_groups_add_flags (vb, plsg, vb_grps);
     sam_load_groups_add_grps (vb, plsg, vb_grps, cc_alns);
     sam_load_groups_move_comp_to_zfile (vb, plsg, vb_grps, vb_alns); // last, as it might block
-    
-    mutex_lock (num_prim_vbs_loaded_mutex);
-    num_prim_vbs_loaded++;
-    mutex_unlock (num_prim_vbs_loaded_mutex);
+
+    __atomic_fetch_add (&num_prim_vbs_loaded, (int)1, __ATOMIC_ACQ_REL);
 
     vb_set_is_processed (VB); // tell dispatcher this thread is done and can be joined.
 
     COPY_TIMER_EVB (sam_load_groups_add_one_prim_vb);                          
 }
 
-// PIZ main thread - dispatches compute compute thread do read SA Groups from one PRIM VB. returns true if dispatched
+// PIZ main thread - dispatches a compute thread do read SA Groups from one PRIM VB. returns true if dispatched
 bool sam_piz_dispatch_one_load_sag_vb (Dispatcher dispatcher)
 {
     if (!VER(14) || flag.genocat_no_reconstruct || flag.header_only
-        || (flag.one_vb && sections_vb_header (flag.one_vb)->comp_i == SAM_COMP_MAIN)) { // --one-vb of a MAIN VB - no need for PRIM/DEPN
+        || (flag.one_vb && IS_MAIN (sections_vb_header (flag.one_vb)))) { // --one-vb of a MAIN VB - no need for PRIM/DEPN
         flag.preprocessing = false;
         return false; // no need to load sags
     }
@@ -780,7 +772,7 @@ void sam_piz_load_sags (void)
         
         sections_get_next_vb_header_sec (SAM_COMP_PRIM, &vb_header_sec);
 
-        ASSERT0 (vb_header_sec->st==SEC_VB_HEADER && vb_header_sec->comp_i==SAM_COMP_PRIM, "expecting a PRIM VB Header");
+        ASSERT0 (vb_header_sec->st==SEC_VB_HEADER && IS_PRIM(vb_header_sec), "expecting a PRIM VB Header");
 
         SectionHeaderVbHeader header = zfile_read_section_header (evb, vb_header_sec, SEC_VB_HEADER).vb_header;
 
@@ -824,10 +816,10 @@ void sam_piz_load_sags (void)
     else if (IS_SAG_SOLO) {
         buf_alloc_exact_zero (evb, z_file->sag_alns, total_grps, SoloAln, "z_file->sag_alns");       
         buf_alloc_exact (evb, z_file->solo_data, total_cigars_len + 65536, char, "z_file->solo_data");  // add some extra as it is created vs reconstruction that sometimes assumes extra bytes available (for peek, or for reconstructing and then abandoning being the same as previous field)
-        buf_set_overlayable (&z_file->solo_data); //  we're going to overlay vb->txt_data on it     
+        buf_set_shared (&z_file->solo_data); //  we're going to overlay vb->txt_data on it     
     }
     
-    buf_alloc_bits (evb, &z_file->sag_seq, total_seq_len * 2, "z_file->sag_seq");   // 2 bits per base
+    buf_alloc_bits (evb, &z_file->sag_seq, total_seq_len * 2, NOINIT, 0, "z_file->sag_seq");   // 2 bits per base
 
     // for in-memory compressed data, the size is an estimate, and we might grow it later, based on the compressed size
     // consumed on the ZIP side (it should be the same, but will not be if ZIP/PIZ codecs are not the same).
@@ -841,7 +833,6 @@ void sam_piz_load_sags (void)
     buf_alloc (evb, &z_file->sag_qual, 0, (float)total_qual_len * 1.05 + 1000000, uint8_t, 1, "z_file->sag_qual"); 
 
     mutex_initialize (copy_qual_mutex);
-    mutex_initialize (num_prim_vbs_loaded_mutex);
 
     save_flag = flag; // save in global variable
 
@@ -871,7 +862,7 @@ Sag *sam_piz_get_prim_vb_first_sa_grp (VBlockSAMP vb)
 
 bool sam_is_sag_loaded (void)
 {
-    uint32_t num_prim_vbs_loaded_now = __atomic_load_n (&num_prim_vbs_loaded, __ATOMIC_RELAXED);
+    uint32_t num_prim_vbs_loaded_now = __atomic_load_n (&num_prim_vbs_loaded, __ATOMIC_ACQUIRE);
 
     return num_prim_vbs_loaded_now == plsg_info.len;
 }

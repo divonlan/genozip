@@ -17,8 +17,6 @@
 
 #define lookback_buf(ctx) ((IS_ZIP) ? &ctx->zip_lookback_buf : &ctx->piz_lookback_buf)
 #define lookback_size(lb_ctx) (1 << ((lb_ctx)->local.prm8[0] + 10))
-#define gap_index len // the index of the entry that is not used, one before (i.e. higher) that the oldest entry
-#define newest_index param
 
 #define RR(value, size) (((value) < 0) ? ((value)+(size)) : ((value)>= size) ? ((value)-(size)) : (value))
 
@@ -32,7 +30,7 @@ void lookback_init (VBlockP vb, ContextP lb_ctx, ContextP ctx, StoreType store_t
         ctx->is_initialized = true;
     }
 
-    buf_alloc (vb, lookback_buf(ctx), 0, lookback_size(lb_ctx) * (store_type == STORE_INDEX ? sizeof (WordIndex) : sizeof (ValueType)), char, 1, "lookback_buf");
+    buf_alloc (vb, lookback_buf(ctx), 0, lookback_size(lb_ctx) * (store_type == STORE_INDEX ? sizeof (WordIndex) : sizeof (ValueType)), char, 1, "contexts->lookback_buf");
  }
 
 // Seg and PIZ
@@ -72,8 +70,8 @@ const void *lookback_get_do (VBlockP vb, ContextP lb_ctx, ContextP ctx,
 {
     uint32_t lb_size = lookback_size (lb_ctx);
 
-    ASSERT (lookback <= lookback_len (ctx, lb_size), "%s: expecting lookback=%u <= lookback_len=%u for ctx=%s %s%s lb_size=%u", 
-            LN_NAME, lookback, lookback_len(ctx, lb_size), ctx->tag_name, ((VB_DT(VCF) || VB_DT(BCF)) ? " sample_i=" : ""), ((VB_DT(VCF) || VB_DT(BCF)) ? str_int_s (vb->sample_i).s : ""), lb_size);
+    ASSERT (lookback <= lookback_len (ctx, lb_size), "%s: expecting lookback=%u <= lookback_len=%u for ctx=%s%s lb_size=%u", 
+            LN_NAME, lookback, lookback_len(ctx, lb_size), ctx->tag_name, cond_int (VB_DT(VCF) || VB_DT(BCF), " sample_i=", vb->sample_i), lb_size);
             
     BufferP buf = lookback_buf(ctx);
     unsigned index = RR(buf->newest_index + lookback - 1, lb_size);
@@ -84,8 +82,8 @@ const void *lookback_get_do (VBlockP vb, ContextP lb_ctx, ContextP ctx,
         return &dummy_value;
     }
 
-    ASSERT (lookback > 0 && lookback < lb_size, "%s: Expecting lookback=%d in ctx=%s %s%s to be in the range [1,%u]", 
-            LN_NAME, lookback, ctx->tag_name, ((VB_DT(VCF) || VB_DT(BCF)) ? " sample_i=" : ""), ((VB_DT(VCF) || VB_DT(BCF)) ? str_int_s (vb->sample_i).s : ""), lb_size-1);
+    ASSERT (lookback > 0 && lookback < lb_size, "%s: Expecting lookback=%d in ctx=%s%s to be in the range [1,%u]", 
+            LN_NAME, lookback, ctx->tag_name, cond_int (VB_DT(VCF) || VB_DT(BCF), " sample_i=", vb->sample_i), lb_size-1);
 
     return (ctx->flags.store == STORE_INDEX) ? (void *)B(WordIndex, *buf, index) 
                                              : (void *)B(ValueType, *buf, index);

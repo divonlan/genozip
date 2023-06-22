@@ -44,7 +44,7 @@ void bam_seg_initialize (VBlockP vb)
 // detect if a generic file is actually a BAM
 bool is_bam (STRp(header), bool *need_more)
 {
-    return header_len >= 4  && !memcmp (header, "BAM\1", 4);
+    return str_isprefix_(STRa(header), _S("BAM\1"));
 }
 
 static int32_t bam_unconsumed_scan_forwards (VBlockP vb)
@@ -151,13 +151,15 @@ int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 
 static rom bam_dump_alignment (VBlockSAMP vb, rom alignment, rom after)
 {
-    Buffer alignment_buf = {}; // note: overlaid buffers needn't be static
-    buf_set_overlayable (&vb->txt_data);
-    buf_overlay_partial (vb, &alignment_buf, &vb->txt_data, BNUMtxt(alignment), "alignment_buf");
-    alignment_buf.len = after - alignment;
+    buf_free (vb->scratch); // feel free to use scratch bc this is called in an ASSERT before aborting
+
+    buf_set_shared (&vb->txt_data);
+    buf_overlay_partial (vb, &vb->scratch, &vb->txt_data, BNUMtxt(alignment), "alignment_buf");
+    vb->scratch.len = after - alignment;
 
     rom fn = "bad_alignment.bam";
-    buf_dump_to_file (fn, &alignment_buf, 1, false, false, false, false);
+    buf_dump_to_file (fn, &vb->scratch, 1, false, false, false, false);
+    buf_free (vb->scratch);
 
     return fn;
 }
@@ -217,7 +219,9 @@ void bam_seg_BIN (VBlockSAMP vb, ZipDataLineSAM *dl, uint16_t bin /* used only i
 static inline void bam_seg_ref_id (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, int32_t ref_id, int32_t compare_to_ref_i)
 {
     ASSERT (ref_id == -1 || (sam_hdr_contigs && ref_id >= 0 && ref_id < (int32_t)sam_hdr_contigs->contigs.len), 
-            "%s: encountered ref_id=%d but header has only %u contigs", LN_NAME, ref_id, sam_hdr_contigs ? sam_hdr_contigs->contigs.len32 : 0);
+            "%s: encountered %s.ref_id=%d but header has only %u contigs%s", 
+            LN_NAME, CTX(did_i)->tag_name, ref_id, sam_hdr_contigs ? sam_hdr_contigs->contigs.len32 : 0,
+            MP(LONGRANGER) ? ". This is a known longranger bug (samtools won't accept this file either)." : "");
 
     // get snip and snip_len
     STR0(snip);
@@ -398,7 +402,7 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     }
 
     // convert BAM seq format to SAM
-    buf_alloc (vb, &vb->textual_seq, 0, l_seq+1 /* +1 for last half-byte */, char, 1.5, "textual_seq");    
+    buf_alloc (vb, &vb->textual_seq, 0, l_seq+1/* +1 for last half-byte */, char, 1.5, "textual_seq");    
     {
     START_TIMER; // time here and not in the function, because this is also called from the LongR codec
     bam_seq_to_sam (vb, seq, l_seq, false, true, &vb->textual_seq);
@@ -418,8 +422,10 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
         goto done;
     }
 
-    // case: to biopsy_line: we just needed to pass sam_seg_is_gc_line and we're done
-    if (flag.biopsy_line.line_i != NO_LINE && sam_seg_test_biopsy_line (VB, alignment, block_size + 4)) 
+    // case: biopsy (only arrives here in MAIN VBs if gencomp) 
+    //       or biopsy_line: we just needed to pass sam_seg_is_gc_line and we're done
+    if ((flag.biopsy && !segconf.running) ||
+        (flag.biopsy_line.line_i != NO_LINE && sam_seg_test_biopsy_line (VB, alignment, block_size + 4)) )
         goto done;  
 
     sam_cigar_binary_to_textual (vb, n_cigar_op, cigar, &vb->textual_cigar); // re-write BAM format CIGAR as SAM textual format in vb->textual_cigar
@@ -438,10 +444,10 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     if (has(NM_i)) 
         dl->NM_len = sam_seg_get_aux_int (vb, vb->idx_NM_i, &dl->NM, true, MIN_NM_i, MAX_NM_i, HARD_FAIL);
 
-    if (!sam_is_main_vb) {
+    if (!IS_MAIN(vb)) {
 
         // set dl->AS needed by sam_seg_prim_add_sag
-        if (sam_is_prim_vb && has(AS_i))
+        if (IS_PRIM(vb) && has(AS_i))
             sam_seg_get_aux_int (vb, vb->idx_AS_i, &dl->AS, true, MIN_AS_i, MAX_AS_i, HARD_FAIL);
 
         sam_seg_sag_stuff (vb, dl, STRb(vb->textual_cigar), B1STc(vb->textual_seq), true);
@@ -455,7 +461,7 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     // note: pos can have a value even if ref_id=-1 (RNAME="*") - this happens if a SAM with a RNAME that is not in the header is converted to BAM with samtools
     sam_seg_POS (vb, dl, prev_line_chrom, sizeof (uint32_t)); // POS
     
-    if (vb->chrom_node_index >= 0) sam_seg_verify_RNAME (vb, NULL);
+    if (vb->chrom_node_index >= 0) sam_seg_verify_RNAME (vb);
 
     sam_seg_MAPQ (vb, dl, sizeof (uint8_t));
 
@@ -488,8 +494,6 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
         dl->QUAL = (TxtWord){ .index=Ltxt, .len = 1 }; // a '*' was placed after txt_data in bam_seg_initialize 
 
         sam_seg_QUAL (vb, dl, alignment, 1, l_seq /* account of l_seq 0xff */);
-        
-        vb->qual_codec_no_longr = true; // we cannot compress QUAL with CODEC_LONGR in this case
     }
 
     // AUX fields - up to MAX_FIELDS of them
@@ -498,7 +502,7 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     // TLEN - must be after AUX as we might need data from MC:Z
     sam_seg_TLEN (vb, dl, 0, 0, tlen, vb->chrom_node_index == dl->RNEXT); // TLEN
 
-    if (sam_is_prim_vb) {
+    if (IS_PRIM(vb)) {
         if      (IS_SAG_NH)   sam_seg_prim_add_sag_NH (vb, dl, dl->NH);
         else if (IS_SAG_CC)   sam_seg_prim_add_sag_CC (vb, dl, dl->NH);
         else if (IS_SAG_FLAG) sam_seg_prim_add_sag (vb, dl, 0, true);

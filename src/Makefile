@@ -19,7 +19,7 @@ endif
 LDFLAGS    += -lpthread -lm 
 CFLAGS     += -Wall -D_LARGEFILE64_SOURCE=1 -D_7ZIP_ST -D_GNU_SOURCE -std=gnu11 -fms-extensions 
 OPTFLAGS   += -Ofast 
-DEBUGFLAGS += -DDEBUG -ggdb3 -O0 
+DEBUGFLAGS += -DDEBUG -ggdb3 -O0  
 
 ifdef IS_CONDA 
 	CFLAGS += -DDISTRIBUTION=\"conda\" # note: matches the name in version.c -DIS_CONDA
@@ -59,14 +59,14 @@ RELEASES = $(DEV_DIR)/private/releases
 DATA     = $(DEV_DIR)/data
 PROD_SRC = ../../genozip-prod/src
 
-SRC_DIRS = zlib bzlib lzma bsc libdeflate htscodecs compatibility
+SRC_DIRS = zlib bzlib lzma bsc libdeflate htscodecs compatibility secure
 
-MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c license.c tip.c      				\
+MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.c      							\
 		  data_types.c bits.c progress.c writer.c tar.c chrom.c qname.c tokenizer.c mutex.c threads.c			\
           zip.c piz.c reconstruct.c recon_history.c recon_peek.c seg.c zfile.c aligner.c flags.c digest.c    	\
 		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c ref_cache.c     	 	\
 		  vcf_piz.c vcf_seg.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c          		\
-		  vcf_format_GT.c vcf_format_PS_PID.c vcf_info_QD.c vcf_info_SF.c vcf_dbsnp.c                           \
+		  vcf_format_GT.c vcf_format_PS_PID.c vcf_info_QD.c vcf_info_SF.c vcf_dbsnp.c vcf_giab.c                       \
 		  vcf_refalt.c vcf_tags.c vcf_linesort.c vcf_format.c vcf_illum_gtyping.c vcf_gwas.c             		\
 		  sam_seg.c sam_piz.c sam_shared.c sam_header.c sam_md.c sam_tlen.c sam_cigar.c sam_fields.c  			\
 		  sam_sa.c bam_seg.c bam_seq.c bam_show.c sam_pacbio.c                                 					\
@@ -74,13 +74,13 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c lice
 		  sam_bwa.c sam_bowtie2.c sam_bsseeker2.c sam_bsbolt.c sam_bismark.c sam_gem3.c sam_tmap.c sam_hisat2.c \
 		  sam_blasr.c sam_minimap2.c sam_cellranger.c sam_biobambam.c sam_pos.c	sam_deep.c 						\
 		  fastq.c fastq_desc.c fastq_seq.c fastq_qual.c fastq_deep.c deep.c										\
-		  fasta.c gff.c bed.c me23.c phylip.c chain.c kraken.c locs.c generic.c 								\
-		  buffer.c random_access.c sections.c base64.c bgzf.c coverage.c txtheader.c lookback.c 				\
+		  fasta.c gff.c bed.c me23.c phylip.c chain.c kraken.c locs.c generic.c lookback.c						\
+		  buffer.c buf_struct.c buf_list.c random_access.c sections.c base64.c bgzf.c coverage.c txtheader.c  	\
 		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c	\
 		  codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c codec_normq.c    							\
 	      txtfile.c profiler.c file.c filename.c dispatcher.c crypt.c aes.c md5.c segconf.c biopsy.c gencomp.c	\
 		  vblock.c regions.c  optimize.c dict_id.c aliases.c hash.c stream.c url.c bases_filter.c dict_io.c		\
-		  recon_plan_io.c version.c huffman.c
+		  recon_plan_io.c version.c huffman.c 
 
 CONDA_COMPATIBILITY_SRCS =  compatibility/mac_gettime.c
 
@@ -103,10 +103,10 @@ CONDA_DOCS = ../LICENSE.txt ../AUTHORS ../README.md
 
 CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h aliases.h txtfile.h zip.h bits.h progress.h website.h \
              endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h huffman.h \
-             buffer.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h codec.h stats.h \
-             crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h qname.h qname_flavors.h \
-			 lookback.h tokenizer.h codec_longr_alg.c gencomp.h dict_io.h recon_plan_io.h tip.h deep.h filename.h \
-			 reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h bgzf.h coverage.h threads.h \
+             buffer.h buf_struct.h buf_list.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h \
+             crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h qname.h qname_flavors.h codec.h  \
+			 lookback.h tokenizer.h codec_longr_alg.c gencomp.h dict_io.h recon_plan_io.h tip.h deep.h filename.h stats.h \
+			 reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h bgzf.h coverage.h threads.h  \
 			 arch.h license.h file_types.h data_types.h base64.h txtheader.h writer.h bases_filter.h genols.h contigs.h chrom.h \
 			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h gff.h bed.h phylip.h chain.h kraken.h locs.h generic.h \
 			 fastq.h fastq_private.h \
@@ -144,14 +144,22 @@ OBJDIR_LINUX=objdir.linux
 OBJDIR_WINDOWS=objdir.windows
 OBJDIR_MAC=objdir.mac
 
+ifneq ($(wildcard secure/.*),) # directory exists
+	MY_SRCS += secure/license.c
+	CFLAGS += -I.
+	CONDA_LIC_OBJS := $(OBJDIR_LINUX)/secure/license.o $(OBJDIR_MAC)/secure/license.o
+else
+	LDFLAGS += $(OBJDIR)/secure/license.o
+endif
+
 ifeq ($(OS),Windows_NT)
 	EXE = .exe
-	LDFLAGS += -static -static-libgcc
+	LDFLAGS += -static -static-libgcc -lIPHLPAPI
 	OBJDIR=$(OBJDIR_WINDOWS)
 	WSL=wsl
 else
     ifeq ($(uname),Linux)
-        LDFLAGS += -lrt -fuse-ld=gold # rt is required by pthreads
+        LDFLAGS += -lrt -fuse-ld=gold -rdynamic # rt is required by pthreads ; rdynamic for backtrace_symbols_fd to show function names
     	OBJDIR=$(OBJDIR_LINUX)
 	endif
 
@@ -160,17 +168,17 @@ else
     	OBJDIR=$(OBJDIR_MAC)
 
 		ifeq ($(CC),gcc) 
-	        LDFLAGS += -fuse-ld=gold
+		LDFLAGS += -rdynamic
 		endif
     endif
 endif
 
 C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(BSC_SRCS) $(LZMA_SRCS) $(DEFLATE_SRCS) $(HTSCODECS_SRC)
 
-OBJS       := $(addprefix $(OBJDIR)/, $(C_SRCS:.c=.o))
+OBJS       := $(addprefix $(OBJDIR)/, $(C_SRCS:.c=.o))       
 DEBUG_OBJS := $(addprefix $(OBJDIR)/, $(C_SRCS:.c=.debug-o)) 
-OPT_OBJS   := $(addprefix $(OBJDIR)/, $(C_SRCS:.c=.opt-o))   # optimized but with debug info, for debugging issues that only manifest with compiler optimization
-DEPS       := $(addprefix $(OBJDIR)/, $(C_SRCS:.c=.d)) 
+OPT_OBJS   := $(addprefix $(OBJDIR)/, $(C_SRCS:.c=.opt-o))    # optimized but with debug info, for debugging issues that only manifest with compiler optimization
+DEPS       := $(addprefix $(OBJDIR)/, $(C_SRCS:.c=.d))       
 
 EXECUTABLES       = genozip$(EXE)       genounzip$(EXE)       genocat$(EXE)       genols$(EXE)
 DEBUG_EXECUTABLES = genozip-debug$(EXE) genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE)
@@ -233,17 +241,17 @@ dict_id_gen.h : $(shell grep -w "pragma GENDICT" *.h | cut -d: -f1 | uniq) dict_
 
 endif # ugly hack to avoid conda failure due to bash issues in dict_id_gen.sh - pre-generate on Windows and check in to github
 
-genozip$(EXE): sync_wsl_clock dict_id_gen.h $(OBJS)
+genozip$(EXE): dict_id_gen.h $(OBJS)
 	@echo Linking $@
 	@$(CC) -o $@ $(OBJS) $(CFLAGS) $(LDFLAGS)
 	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi  # hard linking not possible on some filesystems
  
-genozip-debug$(EXE): sync_wsl_clock dict_id_gen.h $(DEBUG_OBJS)
+genozip-debug$(EXE): dict_id_gen.h $(DEBUG_OBJS)
 	@echo Linking $@
-	@$(CC) -o $@ $(DEBUG_OBJS) $(CFLAGS) $(LDFLAGS) 
+	@$(CC) -o $@ $(DEBUG_OBJS) $(CFLAGS) $(LDFLAGS)
 	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
 
-genozip-opt$(EXE): sync_wsl_clock dict_id_gen.h $(OPT_OBJS)
+genozip-opt$(EXE): dict_id_gen.h $(OPT_OBJS)
 	@echo Linking $@
 	@$(CC) -o $@ $(OPT_OBJS) $(CFLAGS) $(LDFLAGS)
 	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
@@ -296,8 +304,10 @@ endif
 
 version = $(shell head -n1 version.h |cut -d\" -f2)
 
-SH_VERIFY_ALL_COMMITTED = (( `git status |grep 'modified\|Untracked files'|grep -v .gitkeep |wc -l` == 0 )) || \
-                          (echo ERROR: there are some uncommitted changes: ; echo ; git status ; exit 1)
+SH_VERIFY_ALL_COMMITTED = (( `git status |grep 'modified\|Untracked files'|grep -v .gitkeep |wc -l` == 0 )) || 				\
+                          (echo ERROR: there are some uncommitted changes: ; echo ; git status ; exit 1) ;     				\
+						  (( `cd secure; git status |grep 'modified\|Untracked files'|grep -v .gitkeep |wc -l` == 0 )) || 	\
+                          (echo ERROR: there are some uncommitted changes: ; echo ; cd secure ; git status ; exit 1) 
 
 test:
 	@cat test.sh | tr -d "\r" | bash -
@@ -308,25 +318,25 @@ clean-installers:
 clean-debug:
 	@echo Cleaning up debug
 	@rm -f $(DEBUG_OBJS) $(DEBUG_EXECUTABLES) $(OBJDIR)/*.debug-o
-	@rm -f $(OPT_OBJS) $(OPT_EXECUTABLES) $(OBJDIR)/*.opt-o
+	@rm -f $(OPT_OBJS) $(OPT_EXECUTABLES) $(OBJDIR)/*.opt-o 
 
-clean-optimized:
+clean:  # careful not to delete license.o
 	@echo Cleaning up optimized
-	@rm -f $(OBJS) $(EXECUTABLES) $(OBJDIR)/*.o
+	@rm -f $(EXECUTABLES) $(OBJS) $(DEPS) 
 
 clean-distribution: # clean all platforms
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@echo Cleaning up all platforms for distribution
-	@rm -f $(OBJDIR_LINUX)/*.o $(OBJDIR_LINUX)/*.d $(OBJDIR_WINDOWS)/*.o $(OBJDIR_WINDOWS)/*.d $(OBJDIR_MAC)/*.o $(OBJDIR_MAC)/*.d 
+	@rm -f $(OBJDIR_LINUX)/*.o $(OBJDIR_LINUX)/*.d $(OBJDIR_WINDOWS)/*.o $(OBJDIR_WINDOWS)/*.d $(OBJDIR_MAC)/*.o $(OBJDIR_MAC)/*.d
 
 clean-opt:
 	@echo Cleaning up opt
 	@rm -f $(OPT_OBJS) $(EXECUTABLES) $(OPT_EXECUTABLES)/*.opt-o
 
 clean-test:
-	@rm -f $(TEST_DIR)/*.good $(TEST_DIR)/*.bad $(TEST_DIR)/*.local $(TEST_DIR)/*.b250 $(TEST_DIR)/tmp/* $(TEST_DIR)/*.DEPN $(TEST_DIR)/back-compat/*/*.bad
+	@rm -f $(TEST_DIR)/*.genozip $(TEST_DIR)/*.good $(TEST_DIR)/*.bad $(TEST_DIR)/*.local $(TEST_DIR)/*.b250 $(TEST_DIR)/tmp/* $(TEST_DIR)/*.DEPN $(TEST_DIR)/back-compat/*/*.bad
 
-clean: clean-installers clean-test
+clean-dev: clean-installers clean-test # use only in dev - deletes license.o
 	@echo Cleaning up
 	@rm -f $(DEPS) $(filter-out LICENSE.txt,$(WINDOWS_INSTALLER_OBJS)) *.d .archive.tar.gz *.stackdump $(EXECUTABLES) $(OPT_EXECUTABLES) $(DEBUG_EXECUTABLES) 
 	@rm -f *.S *.good *.bad $(DATA)/*.good $(DATA)/*.bad *.local genozip.threads-log.* *.b250 vgcore.*
@@ -369,12 +379,14 @@ decrement-version:
 	@echo "Remove tag: git push --delete origin genozip-a.b.c"
 	@echo "Change version.h to the last version that still has a tag"
 
-.archive.tar.gz : $(C_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) ../LICENSE.txt
+.archive.tar.gz : $(C_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_LIC_OBJS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) ../LICENSE.txt
 	@echo Creating github tag genozip-$(version) and archive
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@git push > /dev/null
 	@(git tag genozip-$(version) > /dev/null ; exit 0) # ignore errors if already exists (due to re-run of make)
+	@(cd secure; git tag genozip-$(version) > /dev/null ; exit 0)
 	@git push origin genozip-$(version) > /dev/null
+	@(cd secure; git push origin genozip-$(version) > /dev/null)
 	@curl https://github.com/divonlan/genozip/archive/genozip-$(version).tar.gz --ssl-no-revoke --silent --location -o $@ > /dev/null
 	@echo GITHUB: go to here: https://github.com/divonlan/genozip/releases/new
 	@echo "1. Set 'Tag version' and 'Release title' are both: genozip-$(version)"
@@ -475,6 +487,7 @@ BUILD_FILES_DOCS = genozip-installer.exe genozip-linux-x86_64.tar LICENSE.html
 push-build: 
 	@(git stage $(BUILD_FILES) ; exit 0) > /dev/null
 	@(git commit -m $(version) ; exit 0) > /dev/null
+	@(cd secure; git commit -m $(version) ; exit 0) > /dev/null
 	@git push > /dev/null
 	@(cd $(INSTALLERS); git stage $(BUILD_FILES_DOCS) ; exit 0) > /dev/null
 	@(git commit -m $(version) ; exit 0) > /dev/null
