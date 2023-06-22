@@ -59,7 +59,7 @@ RELEASES = $(DEV_DIR)/private/releases
 DATA     = $(DEV_DIR)/data
 PROD_SRC = ../../genozip-prod/src
 
-SRC_DIRS = zlib bzlib lzma bsc libdeflate htscodecs compatibility secure
+SRC_DIRS = zlib bzlib lzma bsc libdeflate htscodecs secure
 
 MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.c      							\
 		  data_types.c bits.c progress.c writer.c tar.c chrom.c qname.c tokenizer.c mutex.c threads.c			\
@@ -81,8 +81,6 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.
 	      txtfile.c profiler.c file.c filename.c dispatcher.c crypt.c aes.c md5.c segconf.c biopsy.c gencomp.c	\
 		  vblock.c regions.c  optimize.c dict_id.c aliases.c hash.c stream.c url.c bases_filter.c dict_io.c		\
 		  recon_plan_io.c version.c huffman.c 
-
-CONDA_COMPATIBILITY_SRCS =  compatibility/mac_gettime.c
 
 ZLIB_SRCS  = zlib/gzlib.c zlib/gzread.c zlib/inflate.c zlib/inffast.c zlib/zutil.c zlib/inftrees.c zlib/deflate.c zlib/trees.c
 
@@ -481,7 +479,7 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@ssh `cat mac/.mac_ip_address` -l `cat mac/.mac_username`  "cd genozip ; echo "Pulling from git" ; git pull >& /dev/null ; make -j mac/.from_remote_timestamp" # pull before make as Makefile might have to be pulled
 	@touch $@
 
-BUILD_FILES = version.h genozip-installer.ifp ../LICENSE.txt Makefile
+BUILD_FILES = version.h genozip-installer.ifp ../LICENSE.txt Makefile objdir.linux/secure/license.o objdir.windows/secure/license.o
 
 BUILD_FILES_DOCS = genozip-installer.exe genozip-linux-x86_64.tar LICENSE.html
 

@@ -95,7 +95,7 @@ unused-code
 genozip.threads-log.*
 .genozip_license
 dict_id_gen.c
-./secure
+src/secure
 core
 SEC_*.body
 SEC_*.header
