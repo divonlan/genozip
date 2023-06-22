@@ -197,9 +197,9 @@ docker : $(OBJDIR) $(EXECUTABLES) ../LICENSE.txt
 
 -include $(DEPS)
 
-$(OBJDIR): 
-	@echo Making directory $@
-	@mkdir $@ $(addprefix $@/, $(SRC_DIRS))
+$(OBJDIR):
+	@echo Making directory $@ and its subdirs
+	@mkdir -p $@ $(addprefix $@/, $(SRC_DIRS)) 
 
 $(OBJDIR)/%.d: %.c | $(OBJDIR) # directory is an "order only prerequesite": https://www.gnu.org/savannah-checkouts/gnu/make/manual/html_node/Prerequisite-Types.html#Prerequisite-Types
 	@echo Calculating dependencies $<
@@ -345,7 +345,8 @@ clean-dev: clean-installers clean-test # use only in dev - deletes license.o
 .PHONY: clean clean-debug clean-optimized clean-installers clean-distribution \
         git-pull macos mac/.remote_mac_timestamp delete-arch testfiles test-backup \
 		genozip-linux-x86_64/clean genozip-prod genozip-prod.exe dict_id_gen$(EXE) sync_wsl_clock \
-		push-build increment-version $(INSTALLERS)/LICENSE.html refresh_arch_o genozip-linux-x86_64/clean
+		objdir.linux objdir.windows objdir.mac \
+		push-build increment-version $(INSTALLERS)/LICENSE.html refresh_arch_o genozip-linux-x86_64/clean 
 
 # builds prod for local OS
 genozip-prod$(EXE): 
@@ -479,7 +480,7 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@ssh `cat mac/.mac_ip_address` -l `cat mac/.mac_username`  "cd genozip ; echo "Pulling from git" ; git pull >& /dev/null ; make -j mac/.from_remote_timestamp" # pull before make as Makefile might have to be pulled
 	@touch $@
 
-BUILD_FILES = version.h genozip-installer.ifp ../LICENSE.txt Makefile objdir.linux/secure/license.o objdir.windows/secure/license.o
+BUILD_FILES = version.h genozip-installer.ifp ../LICENSE.txt Makefile objdir.linux/secure/license.o objdir.windows/secure/license.o ../RELEASE_NOTES.txt
 
 BUILD_FILES_DOCS = genozip-installer.exe genozip-linux-x86_64.tar LICENSE.html
 
