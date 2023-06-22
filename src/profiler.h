@@ -9,6 +9,9 @@
 #pragma once
 
 #include "genozip.h"
+#ifdef __APPLE__ 
+#include "mac_compat.h"
+#endif
 #include <time.h>
 
 #define profiled \

@@ -142,7 +142,7 @@ static void fastq_seg_aux_container (VBlockFASTQP vb, STRps(tag), uint32_t total
     if (kraken_is_loaded) {
         con.items[n_tags] = (ContainerItem){ .dict_id = { _FASTQ_TAXID } };  
 
-        memcpy(&prefixes[prefixes_len], (char[]){ 't','a','x','i','d','=',CON_PX_SEP }, 7);
+        memcpy(&prefixes[prefixes_len], ((char[]){ 't','a','x','i','d','=',CON_PX_SEP }), 7);
         prefixes_len += 7;
 
         vb->recon_size += 6; // "taxid="

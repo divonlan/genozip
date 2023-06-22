@@ -105,13 +105,13 @@ static inline uint8_t NEXTLOCAL2BITS(ContextP ctx) { uint8_t ret = bits_get ((Bi
 
 #define CTX(did_i)   ({ Did my_did_i = (did_i); /* could be an expression */\
                         ASSERT (my_did_i < MAX_DICTS, "CTX(): did_i=%u out of range", my_did_i); /* optimized out for constant did_i */ \
-                        (&vb->contexts[my_did_i]); })
+                        (&vb->contexts[my_did_i < MAX_DICTS ? my_did_i : 0 /* avoid compiler warning, hopefully condition is optimized out */]); })
 
 #define LOADED_CTX(did_i) ({ ContextP ctx=CTX(did_i); ASSISLOADED(ctx); ctx; })
 
 #define ZCTX(did_i)  ({ Did my_did_i = (did_i);\
                         ASSERT (my_did_i < MAX_DICTS, "ZCTX(): did_i=%u out of range", my_did_i); /* optimized out for constant did_i */ \
-                        &z_file->contexts[my_did_i]; })
+                        &z_file->contexts[my_did_i < MAX_DICTS ? my_did_i : 0]; })
 
 #define last_int(did_i)     contexts[did_i].last_value.i
 #define last_index(did_i)   contexts[did_i].last_value.i

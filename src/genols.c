@@ -22,7 +22,7 @@
 #include "vblock.h"
 #include "endianness.h"
 
-static void genols_list_dir(); // forward declaration
+static void genols_list_dir (rom dirname); // forward declaration
 
 void genols (rom z_filename, bool finalize, rom subdir, bool recursive) 
 {    
