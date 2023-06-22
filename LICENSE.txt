@@ -7,7 +7,7 @@ TERMS AND CONDITIONS FOR USE
 
 1. Definitions.
 
-"License" shall mean the terms and conditions for use as defined by Sections 1 through 7 of this
+"License" shall mean the terms and conditions for use as defined by Sections 1 through 10 of this
 document.
 
 "Legal Entity" shall mean the union of the acting entity and all other entities that control, are
@@ -49,8 +49,8 @@ excluding use with Your Commercial Data. An Academic License is free of charge.
    b. Academic License: For another non-commercial purpose, if it has been pre-approved by Licensor
 in writing. Email register@genozip.com to seek such an approval.
 
-   c. Standard or Enterprise License: For any legal purpose, if the license was purchased and paid
-for, and for the duration that it is in effect.
+   c. Standard, Enterprise or Premium License: For any legal purpose, if the license was purchased
+and paid for, and for the duration that it is in effect.
 
    d. Decompression License: For any legal purpose, if use is limited to the three tools:
 genounzip, genocat, genols. A Decompression License is free of charge.
@@ -63,15 +63,15 @@ Evaluation License may be extended by written email approval.
 is free of charge, including (but not limited to) an Internet website, a package or container
 management system, or a module on an institutional HPC. A Distribution License is free of charge.
 Each end user must independently register to Genozip and be granted a Standard, Enterprise,
-Academic, Decompression or Evaluation License.
+Premium, Academic, Decompression or Evaluation License.
 
 3. Additional Terms and conditions
 
    a. You must fully, truthfully and accurately complete the registration, either by completing the
-registeration as prompted by the genozip tool or by receiving registration confirmation after
+registration as prompted by the genozip tool or by receiving registration confirmation after
 registering by emailing register@genozip.com. The only exception is if you are registering for the
-purpose of reviewing a manuscript submitted by the Genozip author - in this case only, you may
-enter arbitrary information to preserve anonymity.
+purpose of peer-reviewing a manuscript submitted to a journal by the Genozip author - in this case
+only, you may enter arbitrary information to preserve anonymity.
 
    b. Using Genozip to compress a file is only permitted if the file is retained in its original
 form as well or the potential loss of data due to Genozip not being able to uncompress the
@@ -90,19 +90,19 @@ copyright in this submitted source code to Licensor.
    e. Reselling Genozip and/or selling a service or a product that includes Genozip or any part of
 Genozip's code or algorithms (together, "Genozip Technology") such that a user of said service or
 product may directly or indirectly effectuate compression or decompression of data using Genozip
-Tecnology - permission for such reselling or selling is not granted in this license, and requires a
-separate reseller or OEM license. To clarify, merely delivering Genozip-compressed files to others 
-(e.g. your clients or collaborators) IS included in the Standard, Enterprise and/or Academic
-License and IS NOT subject to this restriction.
+Technology - permission for such reselling or selling is not granted in this license, and requires
+a separate reseller or OEM license. To clarify, merely delivering Genozip-compressed files to
+others (e.g. your clients or collaborators) IS included in the Standard, Enterprise, Premium and/or
+Academic License and IS NOT subject to this restriction.
 
 4. Severely Unauthorized Use of Genozip. Use which is either: a. with no license (Standard License,
-Enterprise License, Acedemic License, Evaluation License, Decompression License or Distribution
-License) granted according to section 2; or b. non-compliant with any of sections 3a, 3c, 3e; or
-both - shall be considered Severely Unauthorized Use of Genozip. In this case, You agree to a. pay
-Licensor US$100.00 for each file You compressed with Genozip b. that Licensor shall be eligible for
-20% ownership of any revenue generated and intellectual property created that involved the Severely
-Unauthorized Use of Genozip. c. reimburse licensor for all legal and/or collection costs related to
-Your Severely Unauthorized Use of Genozip.
+Enterprise License, Premium License, Acedemic License, Evaluation License, Decompression License or
+Distribution License) granted according to section 2; or b. non-compliant with any of sections 3a,
+3c, 3e; or both - shall be considered Severely Unauthorized Use of Genozip. In this case, You agree
+to a. pay Licensor US$100.00 for each file You compressed with Genozip b. that Licensor shall be
+eligible for 20% ownership of any revenue generated and intellectual property created that involved
+the Severely Unauthorized Use of Genozip. c. reimburse licensor for all legal and/or collection
+costs related to Your Severely Unauthorized Use of Genozip.
 
 5. Data collected. You consent to the following data collection:
 
@@ -111,9 +111,9 @@ hardware, operating system and IP address as displayed at end of the registratio
 
    b. When a file is compressed: a log record containing aggregate statistical information about
 the performance of the compression algorithm and associated metadata. This logging occurs when
-using an Academic or Evaluation license. When using a Standard or Enterprise (i.e. paid) License,
-YOU WILL BE ASKED TO CHOOSE WHETHER OR NOT YOU ALLOW THIS LOGGING. Details can be found here: https
-://genozip.com/logs. 
+using an Academic or Evaluation license. When using a Standard, Enterprise or Premium (i.e. paid)
+License, YOU WILL BE ASKED TO CHOOSE WHETHER OR NOT YOU ALLOW THIS LOGGING. Details can be found
+here: https://genozip.com/logs. 
 
 6. Trademarks. This License does not grant permission to use the trade names, trademarks, service
 marks, or product names of the Licensor, except as required for reasonable and customary use in
@@ -152,5 +152,5 @@ ABOVE STATED REMEDY FAILS OF ITS ESSENTIAL PURPOSE.
 
 END OF TERMS AND CONDITIONS
 
-Genozip license version: 15.0.-1
+Genozip license version: 15.0.0
 

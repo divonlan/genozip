@@ -342,6 +342,7 @@ clean-dev: clean-installers clean-test # use only in dev - deletes license.o
 	@rm -f *.S *.good *.bad $(DATA)/*.good $(DATA)/*.bad *.local genozip.threads-log.* *.b250 vgcore.*
 	@rm -R $(OBJDIR)
 	@mkdir $(OBJDIR) $(addprefix $(OBJDIR)/, $(SRC_DIRS))
+	@touch $(OBJDIR)/.gitkeep
 
 .PHONY: clean clean-debug clean-optimized clean-installers clean-distribution \
         git-pull macos mac/.remote_mac_timestamp delete-arch testfiles test-backup \
