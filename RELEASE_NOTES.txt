@@ -3,7 +3,7 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
-15.0.3 NEW MAJOR RELEASE
+15.0.4 NEW MAJOR RELEASE
 - Introducing Deep compression - co-compression of related BAM and FASTQ files with --deep reduces overall
   compressed size by ~40%.
 - Reduce compression time by ~40% on machines with > 50 cores

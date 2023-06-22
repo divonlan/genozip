@@ -205,6 +205,8 @@ $(OBJDIR)/%.d: %.c | $(OBJDIR) # directory is an "order only prerequesite": http
 	@echo Calculating dependencies $<
 	@$(CC) $(CFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
 
+objdir.mac/secure/license.o : CFLAGS += -mmacosx-version-min=10.0
+
 $(OBJDIR)/%.o: %.c $(OBJDIR)/%.d
 	@echo Compiling $<
 	@$(CC) -c -o $@ $< $(CFLAGS)
