@@ -2,7 +2,7 @@
 ProjectFileVersion = "1.1"
 [General]
 Program name = Genozip
-Program version = 15.0.4
+Program version = 15.0.5
 Windows 2000 = 0
 Windows XP = 0
 Windows Server 2003 = 0
@@ -88,7 +88,7 @@ C:\Users\divon\Projects\genozip\src\windows\LICENSE.for-installer.txt
 9.3 KB
 txt
 [Licence_Begin]
-11510
+11540
 {\rtf1\ansi\ansicpg1252\deff0{\fonttbl{\f0\fnil\fcharset0 Arial;}}
 {\colortbl ;\red0\green0\blue0;}
 \viewkind4\uc1\pard\cf1\lang1033\fs20 This program, "Genozip", which includes four tools \par
@@ -153,9 +153,10 @@ agreement:\par
 \par
    a. Academic License: For academic research, educational\par
 or training purposes provided that You are a recognized\par
-academic research institution or a registered student at\par
-such an institution, but excluding use with Your Commercial\par
-Data. An Academic License is free of charge.\par
+academic research institution which is not a hospital, or a\par
+registered student at such an institution, but excluding\par
+use with Your Commercial Data. An Academic License is free\par
+of charge.\par
 \par
    b. Academic License: For another non-commercial purpose,\par
 if it has been pre-approved by Licensor in writing. Email\par
@@ -317,7 +318,7 @@ ESSENTIAL PURPOSE.\par
 \par
 END OF TERMS AND CONDITIONS\par
 \par
-Genozip license version: 15.0.4\par
+Genozip license version: 15.0.5\par
 \par
 }
  [Licence_End]

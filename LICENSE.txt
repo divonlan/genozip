@@ -43,8 +43,9 @@ purpose attached to that particular License Type, and subject to the terms and c
 License agreement:
 
    a. Academic License: For academic research, educational or training purposes provided that You
-are a recognized academic research institution or a registered student at such an institution, but
-excluding use with Your Commercial Data. An Academic License is free of charge.
+are a recognized academic research institution which is not a hospital, or a registered student at
+such an institution, but excluding use with Your Commercial Data. An Academic License is free of
+charge.
 
    b. Academic License: For another non-commercial purpose, if it has been pre-approved by Licensor
 in writing. Email register@genozip.com to seek such an approval.
@@ -152,5 +153,5 @@ ABOVE STATED REMEDY FAILS OF ITS ESSENTIAL PURPOSE.
 
 END OF TERMS AND CONDITIONS
 
-Genozip license version: 15.0.4
+Genozip license version: 15.0.5
 
