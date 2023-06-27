@@ -278,7 +278,7 @@ static int64_t fastq_get_pair_deep_value (VBlockFASTQP vb, ContextP ctx)
         case LT_UINT16: return *B16(ctx->localR1, ctx->localR1.next++); 
         case LT_UINT8:  return *B8 (ctx->localR1, ctx->localR1.next++); 
         default:   
-            ABORT_R ("Unexpected pair_ltype=%u", ctx->pair_ltype);
+            ABORT ("Unexpected pair_ltype=%u", ctx->pair_ltype);
     }
 }
 

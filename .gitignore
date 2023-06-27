@@ -93,7 +93,7 @@ src/conda/README.md
 *.biopsy
 unused-code
 genozip.threads-log.*
-.genozip_license
+.genozip_license*
 dict_id_gen.c
 src/secure
 core

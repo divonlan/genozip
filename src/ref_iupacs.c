@@ -110,7 +110,7 @@ void ref_iupacs_load (Reference ref)
     }
 
 done:
-    if (is_genocat && flag.show_ref_iupacs) exit_ok();
+    if (is_genocat && flag.show_ref_iupacs) exit_ok;
 }
 
 static const Iupac *ref_iupacs_find (Iupac *iupacs, int64_t first, int64_t last, PosType64 gpos)

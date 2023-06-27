@@ -79,7 +79,7 @@ rom dict_id_display_type (DataType dt, DictId dict_id)
     if (dict_id_is_type_1 (dict_id)) return dt_props[dt].dtype_names[1]; 
     if (dict_id_is_type_2 (dict_id)) return dt_props[dt].dtype_names[2]; 
 
-    ABORT0_R ("");
+    ABORT0 ("");
 }
 
 // return true is dict_id is contained in the DICT_ID_NONE-terminated list

@@ -960,8 +960,8 @@ static inline void vcf_seg_FORMAT_DP (VBlockVCFP vb, ContextP ctx, STRp(cell))
     else 
         vcf_seg_FORMAT_transposed (vb, ctx, STRa(cell), cell_len); // this handles DP that is an integer or '.'
 
-    if (*cell != '.') 
-        CTX(INFO_DP)->sum_dp_this_line += ctx->last_value.i; // we may delta INFO/DP against this sum
+    if (*cell != '.' && CTX(INFO_DP)->dp.by_format_dp) 
+        CTX(INFO_DP)->dp.sum_format_dp += ctx->last_value.i; // we may delta INFO/DP against this sum
 
     // add up DP's in certain conditions, for consumption by INFO/QD predictor
     if (has_value)

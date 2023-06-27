@@ -430,7 +430,7 @@ static LiftOverStatus vcf_refalt_lift_deletion (VBlockVCFP vb, rom ref, PosType3
         bool same_flanking_regions = vcf_refalt_lift_same_flanking_regions (is_xstrand, prim_range, pos, ref_len, luft_range, opos, 1);
 
         DEF_PRIM (ref_len + FLANKING_SEQ_LEN*2); 
-        DEF_LUFT (1 + FLANKING_SEQ_LEN*2);
+        DEF_LUFT (1 + FLANKING_SEQ_LEN*2 + 100);
         REJECTIF (!same_flanking_regions, LO_NEW_ALLELE_DEL_REF_CHANGED, 
                   ALTF "REF changed in Deletion variant, but not REF<>ALT switch (i.e. Deletion not integrated into new reference) " PRIMF LUFTF "(shown with flanking %d on either side)",
                   ALT, PRIMFLANKING, LUFTFLANKING, FLANKING_SEQ_LEN);

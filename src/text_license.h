@@ -26,7 +26,7 @@ static rom license[] = {
 
     "2. Grant of copyright license. Licensor hereby grants to You a limited non-exclusive, non-transferrable, non-sublicensable, revokable copyright license to use Genozip on Your Computers, if you meet the conditions attached to any of the License Types a through f below, for the limited purpose attached to that particular License Type, and subject to the terms and conditions of this License agreement:",
     
-    "   a. Academic License: For academic research, educational or training purposes provided that You are a recognized academic research institution or a registered student at such an institution, but excluding use with Your Commercial Data. An Academic License is free of charge.",
+    "   a. Academic License: For academic research, educational or training purposes provided that You are a recognized academic research institution which is not a hospital, or a registered student at such an institution, but excluding use with Your Commercial Data. An Academic License is free of charge.",
     
     "   b. Academic License: For another non-commercial purpose, if it has been pre-approved by Licensor in writing. Email "EMAIL_REGISTER" to seek such an approval.",
     

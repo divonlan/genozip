@@ -383,7 +383,7 @@ void dict_io_read_all_dictionaries (void)
         }
         iprint0 ("\n");
 
-        if (is_genocat) exit_ok(); // if this is genocat - we're done
+        if (is_genocat) exit_ok; // if this is genocat - we're done
     }
 
     COPY_TIMER_EVB (dict_io_read_all_dictionaries);

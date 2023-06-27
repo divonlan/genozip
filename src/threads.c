@@ -84,7 +84,7 @@ void threads_print_call_stack (void)
 #ifndef _WIN32
 
 // signal handler of SIGINT (CTRL-C) - debug only 
-static void threads_sigint_handler (int signum) 
+static void noreturn threads_sigint_handler (int signum) 
 {
     fprintf (stderr, "\n%s process %u Received SIGINT (usually caused by Ctrl-C):", global_cmd, getpid()); 
 
@@ -104,7 +104,7 @@ static void threads_sigint_handler (int signum)
 }
 
 // signal handler of SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGSYS
-static void threads_bug_signal_handler (int signum) 
+static void noreturn threads_bug_signal_handler (int signum) 
 {
     iprintf ("\n\nSignal \"%s\" received, exiting. Time: %s%s%s", 
              strsignal (signum), str_time().s, cond_str(flags_command_line(), "\nCommand line: ", flags_command_line()), SUPPORT);

@@ -820,7 +820,7 @@ void chain_load (void)
     if (flag.show_chain_contigs) {
         chain_contigs_show (true);
         chain_contigs_show (false);
-        if (is_genocat) exit_ok();  // in genocat this, not the data
+        if (is_genocat) exit_ok;  // in genocat this, not the data
     }
 
     // sort the alignmants by (prim_ref_index, prim_start)
@@ -828,7 +828,7 @@ void chain_load (void)
         
     if (flag.show_chain) {
         chain_display_alignments();
-        exit_ok();
+        exit_ok;
     }
 
     chain_filename = filename_make_unix (z_name); // full-path unix-style filename, allocates memory

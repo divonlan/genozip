@@ -849,7 +849,7 @@ static void writer_add_plan_from_recon_section (CompIType comp_i, bool is_luft,
     buf_free (evb->scratch);
 }
 
-static void writer_report_count (void)
+static void noreturn writer_report_count (void)
 {
     uint64_t count=0;
     for_buf (ReconPlanItem, p, z_file->recon_plan) 
@@ -1008,7 +1008,7 @@ bool writer_create_plan (void)
 
     if (flag.show_gheader == 2) { // --show-gheader=2 : show modified section list 
         sections_show_section_list (z_file->data_type);
-        if (is_genocat) exit_ok();
+        if (is_genocat) exit_ok;
     }
 
     // actual number of buffers - the maximum of any recon_plan in this z_file, but not less than 3 or more than num_vbs
@@ -1016,7 +1016,7 @@ bool writer_create_plan (void)
 
     if (flag.show_recon_plan) {
         recon_plan_show (z_file, flag.luft, z_file->max_conc_writing_vbs, vblock_mb);    
-        if (is_genocat) exit_ok();
+        if (is_genocat) exit_ok;
     }
 
 #if defined _WIN32 || defined APPLE

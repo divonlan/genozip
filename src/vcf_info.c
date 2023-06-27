@@ -59,7 +59,7 @@ void vcf_info_seg_initialize (VBlockVCFP vb)
 static inline bool vcf_is_use_DP_by_DP (void)
 {
     // note: we restrict to best, as this method would cause genozip --drop-genotypes, --GT-only, --samples to show INFO/DP=-1
-    return vcf_num_samples > 1 && flag.best;
+    return vcf_num_samples > 1 && flag.best && segconf.has[FORMAT_DP];
 }
 
 // return true if caller still needs to seg 
@@ -78,7 +78,11 @@ static void vcf_seg_INFO_DP (VBlockVCFP vb, ContextP ctx, STRp(value_str))
     else if (!has_value || !vcf_is_use_DP_by_DP()) 
         seg_integer_or_not (VB, ctx, STRa(value_str), value_str_len);
 
-    if (has_value)
+    // we're going to seg (in vcf_finalize_seg_info) INFO/DP against sum of FORMAT/DP (if it has a valid value)
+    else
+        ctx->dp.by_format_dp = has_value;
+
+    if (has_value) 
         ctx_set_last_value (VB, ctx, value);
 }
 
@@ -94,7 +98,7 @@ static void vcf_seg_INFO_DP_by_FORMAT_DP (VBlockVCFP vb)
     snip[snip_len++] = '\t';
 
     // note: INFO/DP >= sum(FORMAT/DP) as the per-sample value is filtered, see: https://gatk.broadinstitute.org/hc/en-us/articles/360036891012-DepthPerSampleHC
-    snip_len += str_int (ctx->last_value.i - ctx->sum_dp_this_line, &snip[snip_len]);
+    snip_len += str_int (ctx->last_value.i - ctx->dp.sum_format_dp, &snip[snip_len]);
 
     seg_by_ctx (VB, STRa(snip), ctx, value_len); 
 }
@@ -107,8 +111,8 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_DP_by_DP)
     if (reconstruct) {
         if (!flag.drop_genotypes && !flag.gt_only && !flag.samples) {
             Ltxt += atoi (items[0]); // number of characters needed to reconstruct the INFO/DP integer
-            ctx->sum_dp_this_line = atoi (items[1]); // initialize with delta
-            ctx->is_initialized = true;              // needs to be finalized
+            ctx->dp.sum_format_dp = atoi (items[1]); // initialize with delta
+            ctx->dp.by_format_dp = true;             // needs to be finalized
         }
         else
             RECONSTRUCT ("-1", 2); // bc we can't calculate INFO/DP in these cases bc we need FORMAT/DP of all samples
@@ -120,7 +124,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_DP_by_DP)
 // finalize reconstructing INFO/DP by sum(FORMAT/DP) - called after reconstructing all samples
 void vcf_piz_finalize_DP_by_DP (VBlockVCFP vb)
 {
-    str_int_ex (CTX(INFO_DP)->sum_dp_this_line, last_txt(VB, INFO_DP), false);
+    str_int_ex (CTX(INFO_DP)->dp.sum_format_dp, last_txt(VB, INFO_DP), false);
 }
 
 // used starting v13.0.5, replaced in v14 with a new vcf_piz_special_DP_by_DP
@@ -128,7 +132,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_DP_by_DP_v13)
 {
     str_split (snip, snip_len, 2, '\t', item, 2);
 
-    int num_dps_this_line = atoi (items[0]);
+    int num_dps_this_line   = atoi (items[0]);
     int64_t value_minus_sum = atoi (items[1]);
 
     ContextP format_dp_ctx = CTX(FORMAT_DP);
@@ -1468,7 +1472,7 @@ void vcf_finalize_seg_info (VBlockVCFP vb)
     if (vb->sf_txt.len) vcf_seg_INFO_SF_seg (vb);
 
     // seg INFO/DP, if against sum of FORMAT/DP
-    if (vcf_is_use_DP_by_DP() && ctx_has_value_in_line_(VB, CTX(INFO_DP))) 
+    if (CTX(INFO_DP)->dp.by_format_dp) 
         vcf_seg_INFO_DP_by_FORMAT_DP (vb);
 
     if (ctx_encountered_in_line (VB, INFO_QD))

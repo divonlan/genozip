@@ -74,7 +74,7 @@ rom command_name (void) // see CommandType
     }
 }
 
-void main_exit (bool show_stack, bool is_error) 
+void noreturn main_exit (bool show_stack, bool is_error) 
 {
     DO_ONCE { // prevent recursive entry due to a failed ASSERT in the cleanup process
 
@@ -364,6 +364,7 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
                                       flag.debug_lines   ? "--debug-lines"    : SKIP_ARG,
                                       flag.show_buddy    ? "--show-buddy"     : SKIP_ARG,
                                       flag.no_tip        ? "--no-tip"         : SKIP_ARG,
+                                      flag.best          ? "--best"           : SKIP_ARG, // used only for displaying tip
                                       flag.debug_latest  ? "--debug-latest"   : SKIP_ARG,
                                       flag.show_deep     ? "--show-deep"      : SKIP_ARG,
                                       flag.no_cache      ? "--no-cache"       : SKIP_ARG,
@@ -412,6 +413,7 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
         if (flag.debug_lines)   argv[argc++] = "--debug-lines";
         if (flag.show_buddy)    argv[argc++] = "--show-buddy";
         if (flag.no_tip)        argv[argc++] = "--no-tip";
+        if (flag.best)          argv[argc++] = "--best";
         if (flag.debug_latest)  argv[argc++] = "--debug-latest";
         if (flag.show_deep)     argv[argc++] = "--show-deep";
         if (flag.no_cache)      argv[argc++] = "--no-cache";
@@ -520,8 +522,6 @@ static void main_genozip (rom txt_filename,
         int64_t t_size = z_file->is_in_tar ? z_file->disk_size : 0; 
 
         file_close (&z_file); 
-
-        license_one_file_compressed(z_dt);
 
         // test the compression, if the user requested --test
         if (flag.test) 
@@ -726,7 +726,7 @@ static void main_no_files (int argc)
 {
     // case: --register
     if (flag.do_register) {
-        license_register();
+        license_register (false);
         threads_finalize();
     }
 
@@ -756,7 +756,7 @@ static void main_no_files (int argc)
 
     // genozip with no parameters and not registered yet - register now
     else if (is_genozip && argc == 1 && isatty(0) && !license_is_registered())
-        license_register();
+        license_register (false);
         
     // otherwise: show help
     else
@@ -937,6 +937,5 @@ int main (int argc, char **argv)
     if (arch_is_valgrind()) // when testing with valgrind, release memory we normally intentionally leak, to expose true leaks
         buf_destroy (input_files_buf);
 
-    exit_ok();
-    return 0;
+    exit_ok;
 }

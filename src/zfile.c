@@ -644,7 +644,7 @@ static void zfile_read_genozip_header_handle_ref_info (ConstSectionHeaderGenozip
     if (flag.show_reference) {
         iprintf ("%s was compressed using the reference file:\nName: %s\nMD5: %s\n",
                     z_name, header->ref_filename, digest_display (header->ref_genome_digest).s);
-        if (is_genocat) exit_ok(); // in genocat --show-reference, we only show the reference, not the data
+        if (is_genocat) exit_ok; // in genocat --show-reference, we only show the reference, not the data
     }
 
     if (!is_genols) { // note: we don't need the reference for genols
@@ -712,7 +712,7 @@ static uint64_t zfile_read_genozip_header_get_actual_offset (void)
         if (BGEN32(GET_UINT32(p)) == GENOZIP_MAGIC && ((SectionHeaderP)p)->section_type == SEC_GENOZIP_HEADER) 
             return BNUM (evb->scratch, p) + (z_file->disk_size - size);
 
-    ABORT_R ("Cannot locate the SEC_GENOZIP_HEADER in the final %u bytes of %s", size, z_name);
+    ABORT ("Cannot locate the SEC_GENOZIP_HEADER in the final %u bytes of %s", size, z_name);
 }
 
 // gets offset to the beginning of the GENOZIP_HEADER section, and sets z_file->genozip_version
@@ -837,7 +837,7 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header, FailType
 
     if (flag.show_data_type) {
         iprintf ("%s\n", z_dt_name());
-        exit_ok();
+        exit_ok;
     }
 
     DT_FUNC (z_file, piz_genozip_header)(header); // data-type specific processing of the Genozip Header
@@ -849,7 +849,7 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header, FailType
 
         if (flag.show_gheader==1) {
             DO_ONCE sections_show_gheader (header);
-            if (is_genocat) exit_ok(); // in genocat, exit after showing the requested data
+            if (is_genocat) exit_ok; // in genocat, exit after showing the requested data
         }
 
         z_file->section_list_buf.param = 1;

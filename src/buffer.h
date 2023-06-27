@@ -11,6 +11,7 @@
 #include "genozip.h"
 #include "endianness.h"
 #include "buf_struct.h"
+#include "local_type.h"
 
 #define ARRAY(element_type, name, buf) \
     element_type *name = ((element_type *)((buf).data)); \
@@ -244,6 +245,10 @@ extern BitsP buf_zfile_buf_to_bits (BufferP buf, uint64_t nbits);
 //-----------------
 // Endianity stuff
 //-----------------
+
+typedef void BgEnBufFunc (BufferP buf, LocalType *lt); 
+
+typedef BgEnBufFunc (*BgEnBuf);
 
 extern BgEnBufFunc BGEN_u8_buf, BGEN_u16_buf, BGEN_u32_buf, BGEN_u64_buf, 
                    BGEN_transpose_u8_buf, BGEN_transpose_u16_buf, BGEN_transpose_u32_buf, BGEN_transpose_u64_buf,

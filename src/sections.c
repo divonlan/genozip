@@ -47,7 +47,7 @@ static Section Bsec (int32_t sec_i)
         return B(SectionEnt, z_file->section_list_buf, sec_i);
 
     else
-        ABORT_R ("sec_i=%d out of range [0,%u]", sec_i, z_file->vb_sections_index.len32-1);
+        ABORT ("sec_i=%d out of range [0,%u]", sec_i, z_file->vb_sections_index.len32-1);
 }
 
 static const SectionsVbIndexEnt *Bvbindex (VBIType vb_i)
@@ -1152,7 +1152,7 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
 }
 
 // called from main()
-void genocat_show_headers (rom z_filename)
+void noreturn genocat_show_headers (rom z_filename)
 {
     z_file = file_open_z_read (z_filename);    
     SectionHeaderGenozipHeader header;
@@ -1218,7 +1218,7 @@ void genocat_show_headers (rom z_filename)
             iprint0 ("ERROR: no valid Footer\n");
     }
 
-    exit_ok();
+    exit_ok;
 }
 
 void sections_show_section_list (DataType dt) // optional - take data from z_data

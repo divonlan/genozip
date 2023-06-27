@@ -1203,11 +1203,8 @@ static void seg_verify_file_size (VBlockP vb)
     if ((vb_recon_size != recon_size || flag.debug_recon_size) && !flag.show_bam) { 
 
         fprintf (stderr, "context.txt_len for vb=%s:\n", VB_NAME);
-        for (Did sf_i=0; sf_i < vb->num_contexts; sf_i++) {
-            decl_ctx (sf_i);
-            if (ctx->nodes.len || ctx->local.len || ctx->txt_len)
-                fprintf (stderr, "%s: %u\n", ctx_tag_name_ex (ctx).s, (uint32_t)ctx->txt_len);
-        }
+        for_ctx_that (ctx->nodes.len || ctx->local.len || ctx->txt_len)
+            fprintf (stderr, "%s: %u\n", ctx_tag_name_ex (ctx).s, (uint32_t)ctx->txt_len);
 
         fprintf (stderr, "%s: reconstructed_vb_size=%s (calculated by adding up ctx.txt_len after segging) but vb->recon_size%s=%s (initialized when reading the file and adjusted for modifications) (diff=%d) (vblock_memory=%s)\n",
                  VB_NAME, str_int_commas (recon_size).s, (vb->data_type == DT_VCF && vcf_vb_is_luft(vb)) ? "_luft" : "", str_int_commas (vb_recon_size).s, 
@@ -1300,7 +1297,7 @@ void seg_all_data_lines (VBlockP vb)
 
         if (flag.biopsy_line.line_i == vb->line_i && flag.biopsy_line.vb_i == vb->vblock_i && !DTP(seg_modifies)) {
             file_put_line (vb, field_start, line_len, "Line biopsy:");
-            exit_ok();
+            exit_ok;
         }
 
         if (line_len > vb->longest_line_len) vb->longest_line_len = line_len;

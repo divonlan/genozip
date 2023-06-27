@@ -327,7 +327,7 @@ void ref_contigs_load_contigs (Reference ref)
 
     if (flag.show_ref_contigs) { 
         ref_contigs_show (&ref->ctgs.contigs, false);
-        if (is_genocat) exit_ok();  // in genocat this, not the data
+        if (is_genocat) exit_ok;  // in genocat this, not the data
     }
 
     // check chromosome naming - assume the first contig is a chromosome

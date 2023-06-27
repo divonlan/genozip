@@ -318,6 +318,10 @@ batch_basic()
 
     test_md5 $file # note: basic.bam needs to be non-BGZF for this to pass
 
+    test_standard "--best" "" $file
+    test_standard "--fast" "" $file
+    test_standard "--low-memory" "" $file
+    
     if [ $file != basic.bam ] && [ $file != basic.generic ]; then # binary files have no \n 
         test_unix_style $file
         test_windows_style $file

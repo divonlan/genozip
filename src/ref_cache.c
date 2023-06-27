@@ -133,7 +133,7 @@ static RefCacheState ref_cache_handle_existing (Reference ref, uint64_t data_siz
 
 // Windows-only, run by cache-hold process: since it inherited the file mapping handle, the file mapping
 // will remain in memory as long as this process is alive. It dies when it is asked to.
-void ref_cache_hold (rom handle_str)
+void noreturn ref_cache_hold (rom handle_str)
 {
 #ifdef _WIN32
     HANDLE h = (HANDLE)atoll (handle_str); // inherited from cache creator process
@@ -246,7 +246,7 @@ bool ref_cache_initialize_genome (Reference ref)
     
     if (flag.removing_cache) {
         ref_cache_remove_do (ref, !cache_did_not_exist, true); 
-        exit_ok();
+        exit_ok;
     }
 
     if (flag.show_cache) iprint0 ("show-cache: shmat read-write\n");

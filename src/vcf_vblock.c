@@ -37,11 +37,8 @@ void vcf_reset_line (VBlockP vb_)
     vb->sample_i = 0;
     vb->line_has_RGQ = RGQ_UNKNOWN;
 
-    CTX(INFO_DP)->sum_dp_this_line = 0;
-    CTX(INFO_DP)->is_initialized = false;        
-
-    CTX(INFO_QD)->qd.pred_type = QD_PRED_NONE; // sum_dp_with_dosage and pred_type
-    CTX(INFO_QD)->qd.sum_dp_with_dosage = 0;
+    CTX(INFO_DP)->ctx_specific = 0;
+    CTX(INFO_QD)->ctx_specific = 0;
 
     if (IS_ZIP) {
         for (Did did_i=0; did_i < NUM_VCF_FIELDS; did_i++)

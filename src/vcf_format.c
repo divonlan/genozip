@@ -103,7 +103,7 @@ void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt))
     
     char renamed_data[n_sf_names * MAX_TAG_LEN];
     rom renamed = renamed_data;
-    int64_t renamed_len = possibly_rename ? vcf_tags_rename (vb, n_sf_names, ctxs, sf_names, sf_name_lens, NULL, renamed_data) : 0;
+    uint32_t renamed_len = possibly_rename ? vcf_tags_rename (vb, n_sf_names, ctxs, sf_names, sf_name_lens, NULL, renamed_data) : 0;
 
     // note: fmt_len and renamed_len need to be int64_t to avoid -Wstringop-overflow warning in gcc 10
     SNIP(6 + fmt_len + renamed_len); // maximum length in case of dual-snip with renaming
@@ -111,7 +111,7 @@ void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt))
     if (renamed_len) {
 
         if (vb->line_coords == DC_LUFT) {
-            vb->recon_size += renamed_len - fmt_len;
+            vb->recon_size += (int)renamed_len - (int)fmt_len;
             SWAP (fmt, renamed);
             SWAP (fmt_len, renamed_len);
         }

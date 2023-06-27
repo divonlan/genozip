@@ -1226,8 +1226,6 @@ validation:
 
     if (flag.pair)
         flags_verify_pair_rules (num_files - 1, &filenames[1]);
-
-    license_show_deep_notice();
 }
 
 static unsigned flags_get_longest_filename (unsigned num_files, rom *filenames)

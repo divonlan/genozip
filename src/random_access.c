@@ -441,7 +441,7 @@ void random_access_load_ra_section (SectionType sec_type, Did chrom_did_i, Buffe
     
     if (show_index_msg) {
         random_access_show_index (ra_buf, false, chrom_did_i, show_index_msg);
-        if (is_genocat) exit_ok(); // in genocat --show-index, we only show the index, not the data
+        if (is_genocat) exit_ok; // in genocat --show-index, we only show the index, not the data
     }
 }
 

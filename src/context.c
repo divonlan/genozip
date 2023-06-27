@@ -207,7 +207,7 @@ WordIndex ctx_decode_b250 (bytes *b, bool advance, B250Size b250_size, rom ctx_n
                     value = ((uint32_t)(*b)[0] << 24) | ((uint32_t)(*b)[1] << 16) | ((uint32_t)(*b)[2] << 8) | (uint32_t)(*b)[3]; 
                     RETURN (value, 4);
                 default:
-                    ABORT_R ("Invalid b250_size=%u", b250_size);
+                    ABORT ("Invalid b250_size=%u", b250_size);
             }
         }
         #undef RETURN
@@ -1397,7 +1397,7 @@ CtxNode *ctx_get_node_by_word_index (ConstContextP ctx, WordIndex word_index)
         // if (node->word_index.n == word_index) return node;
         if (node->word_index == word_index) return node;
 
-    ABORT_R ("ctx_get_node_by_word_index failed to find word_index=%d in did_i=%u", word_index, ctx->did_i);
+    ABORT ("ctx_get_node_by_word_index failed to find word_index=%d in did_i=%u", word_index, ctx->did_i);
 }
 
 // PIZ: get snip by normal word index (doesn't support WORD_INDEX_* - returns "")
@@ -1643,7 +1643,7 @@ static void ctx_show_counts (ContextP zctx)
             iprintf ("\"%s\"(%d)\t%"PRIu64"\t%-4.2f%%\n", counts[i].snip, counts[i].word_index, counts[i].count, 
                         100 * (float)counts[i].count / (float)total);
 
-    if (is_genocat) exit_ok();
+    if (is_genocat) exit_ok;
 }
 
 rom ctx_get_snip_with_largest_count (Did did_i, int64_t *count)

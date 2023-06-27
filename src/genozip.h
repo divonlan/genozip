@@ -14,6 +14,7 @@
 #include <inttypes.h>
 #include <unistd.h> 
 #include <string.h> // must be after inttypes
+#include <stdnoreturn.h>
 
 #include "website.h"
 
@@ -280,9 +281,6 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
 } SectionType;
 
 typedef enum { DATA_EXHAUSTED, READY_TO_COMPUTE, MORE_DATA_MIGHT_COME } DispatchStatus;
-
-typedef void BgEnBufFunc (BufferP buf, uint8_t *lt); // we use uint8_t instead of LocalType (which 1 byte) to avoid #including sections.h
-typedef BgEnBufFunc (*BgEnBuf);
 
 typedef enum { SKIP_PURPOSE_RECON,    // true if this section should be skipped when reading VB data for reconstruction
                SKIP_PURPOSE_PREPROC   // true if this section should be skipped when reading data for preprocessing (SAM: SA Loading FASTA: grep)
@@ -565,9 +563,9 @@ typedef COMPRESSOR_CALLBACK (LocalGetLineCB);
 #define SAFE_RESTORE SAFE_RESTOREx(_)
 
 // sanity checks
-extern void main_exit (bool show_stack, bool is_error);
-static inline void exit_on_error(bool show_stack) { main_exit (show_stack, true); }
-static inline void exit_ok(void) { main_exit (false, false); }
+extern void noreturn main_exit (bool show_stack, bool is_error);
+#define exit_on_error(show_stack) main_exit (show_stack, true)
+#define exit_ok                   main_exit (false, false)
 
 extern FILE *info_stream;
 extern bool is_info_stream_terminal; // is info_stream going to a terminal
@@ -615,9 +613,7 @@ extern StrTime str_time (void);
 #define RETURNW(condition, ret, format, ...) ( { if (!(condition)) { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); } return ret; }} )
 #define RETURNW0(condition, ret, string)     ( { if (!(condition)) { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: %s\n", global_cmd, string); fflush (stderr); } return ret; } } )
 #define ABORT(format, ...)                   ( { progress_newline(); fprintf (stderr, "%s Error in %s:%u: ", str_time().s, __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); fflush (stderr); exit_on_error(true);} )
-#define ABORT_R(format, ...) /*w/ return 0*/ ( { progress_newline(); fprintf (stderr, "%s Error in %s:%u: ", str_time().s, __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); fflush (stderr); exit_on_error(true); return 0;} )
 #define ABORT0(string)                       ABORT (string "%s", "")
-#define ABORT0_R(string)                     ABORT_R (string "%s", "")
 #define WARN(format, ...)                    ( { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); } } )
 #define WARN0(string)                        WARN (string "%s", "")
 

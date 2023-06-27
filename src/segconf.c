@@ -254,7 +254,7 @@ static void segconf_show_has (void)
 
     iprint0 (found ? "\n" : "None\n");
 
-    exit_ok();
+    exit_ok;
 }
 
 // ZIP: Seg a small sample of data of the beginning of the data, to pre-calculate several Seg configuration parameters

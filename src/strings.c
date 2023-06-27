@@ -451,7 +451,7 @@ uint32_t str_get_uint_textual_len (uint64_t n)
     for (int i=0; i < ARRAY_LEN(p10); i++)
         if (n < p10[i]) return i+1;
 
-    ABORT_R ("n=%"PRIu64" too big", n);
+    ABORT ("n=%"PRIu64" too big", n);
 }
 
 // returns 32 bit float value and/or format: "3.123" -> "%5.3f" ; false if not a simple float

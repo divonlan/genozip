@@ -10,15 +10,15 @@
 
 #include "genozip.h"
 
-extern void license_register (void);
+extern void license_register (bool);
 extern bool license_is_registered (void);
 extern void license_set_filename (rom filename);
 extern void license_load (void);
 extern rom license_get_one_line (void);
 extern void license_display (void);
 extern bool license_allow_tip (void);
-extern void license_one_file_compressed (DataType dt);
 extern void license_show_deep_notice (void);
+extern void license_show_pair_notice (void);
 extern bool license_is_eval (void);
 
 typedef struct { char s[16384]; } StrNotice; 

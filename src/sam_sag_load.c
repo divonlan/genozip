@@ -848,7 +848,7 @@ uint32_t sam_piz_get_plsg_i (VBIType vb_i)
         if (plsg[i].vblock_i == vb_i)
             return i;
 
-    ABORT_R ("vb_i=%u is not a PRIM VB", vb_i);
+    ABORT ("vb_i=%u is not a PRIM VB", vb_i);
 }
 
 // PIZ reconstruction compute thread

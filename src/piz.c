@@ -503,7 +503,7 @@ DataType piz_read_global_area (Reference ref)
                 refhash_load (ref);
 
             // exit now if all we wanted was just to see the reference (we've already shown it)
-            if ((flag.show_reference || flag.show_is_set || flag.show_ref_hash) && is_genocat) exit_ok();
+            if ((flag.show_reference || flag.show_is_set || flag.show_ref_hash) && is_genocat) exit_ok;
 
             if (ref_loaded_from_disk) progress_finalize_component ("Done");
         }
@@ -514,7 +514,7 @@ DataType piz_read_global_area (Reference ref)
                 ref_load_stored_reference (gref);
 
                 // exit now if all we wanted was just to see the reference (we've already shown it)
-                if ((flag.show_reference || flag.show_is_set || flag.show_ref_hash) && is_genocat) exit_ok();
+                if ((flag.show_reference || flag.show_is_set || flag.show_ref_hash) && is_genocat) exit_ok;
             }
         }
     }

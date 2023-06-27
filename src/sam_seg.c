@@ -31,6 +31,7 @@
 #include "deep.h"
 #include "arch.h"
 #include "threads.h"
+#include "license.h"
 
 typedef enum { QNAME, FLAG, RNAME, POS, MAPQ, CIGAR, RNEXT, PNEXT, TLEN, SEQ, QUAL, AUX } SamFields __attribute__((unused)); // quick way to define constants
 
@@ -137,6 +138,9 @@ void sam_zip_initialize (void)
                                   true, 0, '0' + BUDDY_EITHER, &copy_buddy_Z_snips[f][1], &copy_buddy_Z_snip_lens[f]);
         copy_buddy_Z_snip_lens[f]++;
     }
+
+    if (flag.deep)
+        license_show_deep_notice();
 }
 
 // called after each txt file (including after the SAM component in Deep)
@@ -1049,11 +1053,11 @@ uint32_t sam_seg_get_aux_int (VBlockSAMP vb, int16_t idx,
 
     // this line doesn't have this field, or (SAM only) the field is not a valid integer
     if (soft_fail) return 0;
-    ABORT_R("%s: no valid value found for %.2s", LN_NAME, vb->auxs[idx]);
+    ABORT("%s: no valid value found for %.2s", LN_NAME, vb->auxs[idx]);
 
 out_of_range:
     if (soft_fail) return 0;
-    ABORT_R("%s: value of %.2s=%" PRId64 " is out of range [%d,%d]", LN_NAME, vb->auxs[idx], numeric.i, min_value, max_value);
+    ABORT("%s: value of %.2s=%" PRId64 " is out of range [%d,%d]", LN_NAME, vb->auxs[idx], numeric.i, min_value, max_value);
 }
 
 void sam_seg_get_aux_Z(VBlockSAMP vb, int16_t idx, pSTRp (snip), bool is_bam)
@@ -1453,7 +1457,7 @@ bool sam_seg_test_biopsy_line (VBlockP vb, STRp (line))
         PutLineFn fn = file_put_line (VB, STRa (line), "Line biopsy:");
 
         if (TXT_DT(BAM)) WARN("Tip: You can view the dumped BAM line with:\n   genozip --show-bam %s", fn.s);
-        exit_ok();
+        exit_ok;
     }
 
     vb->recon_size -= line_len;

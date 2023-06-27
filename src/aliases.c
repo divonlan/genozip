@@ -30,7 +30,7 @@ static void show_aliases (void)
                     dtype_name_z (alias->dst),   dis_dict_id (alias->dst).s);
     }
 
-    if (is_genocat) exit_ok();
+    if (is_genocat) exit_ok;
 }
 
 // return predefined aliases of z_file->data_type

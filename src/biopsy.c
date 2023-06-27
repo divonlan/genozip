@@ -72,7 +72,7 @@ start_biopsy:
     // case: biopsy is ready - dump it to a file and exit
     if (!biopsy_vb_i.len) {
         buf_dump_to_file (biopsy_fn, &biopsy_data, 1, false, false, true, true);
-        exit_ok();
+        exit_ok;
     }
 }
 

@@ -50,7 +50,7 @@ bool vcf_seg_INFO_SF_init (VBlockVCFP vb, ContextP sf_ctx, STRp(value))
             return false; // caller should not seg as we already did
 
         default:
-            ABORT_R ("invalid use_special_sf=%d", vb->use_special_sf);
+            ABORT ("invalid use_special_sf=%d", vb->use_special_sf);
     }
 }
 

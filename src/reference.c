@@ -292,7 +292,7 @@ static void ref_show_sequence (Reference ref)
         }
     }
 
-    if (is_genocat) exit_ok();  // in genocat this, not the data
+    if (is_genocat) exit_ok;  // in genocat this, not the data
 }
 
 // entry point of compute thread of reference decompression. this is called when pizzing a file with a stored reference,
@@ -1212,7 +1212,7 @@ void ref_diff_ref (void)
     printf ("Comparing two references:\nR1 = %s\nR2 = %s\n", gref->filename, prim_ref->filename);
     if (gref->ranges.len != prim_ref->ranges.len) {
         printf ("*** References have a different number of contigs: R1=%u R2=%u\n", (int)gref->ranges.len, (int)prim_ref->ranges.len);
-        exit_ok();
+        exit_ok;
     }
 
     decl_acgt_decode;

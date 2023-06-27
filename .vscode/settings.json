@@ -1,7 +1,7 @@
 {
     "files.associations": {
         "*.eb": "python",
-        "rans_static4x16.h": "c"
+        "sections.h": "c"
     },
     "C_Cpp.dimInactiveRegions": false,
     "restructuredtext.confPath": "${workspaceFolder}\\docs",

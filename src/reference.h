@@ -119,7 +119,7 @@ extern bool ref_cache_is_populating (Reference ref);
 extern void ref_cache_remove (Reference ref);
 extern void ref_cache_remove_all (void);
 extern void ref_cache_detach (Reference ref);
-extern void ref_cache_hold (rom handle_str);
+extern void noreturn ref_cache_hold (rom handle_str);
 extern void ref_cache_ls (void);
 
 extern const uint8_t acgt_encode[256];

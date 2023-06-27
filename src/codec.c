@@ -35,7 +35,7 @@ void *codec_alloc_do (VBlockP vb, uint64_t size, float grow_at_least_factor, FUN
             // printf ("codec_alloc: %u bytes buf=%u\n", size, i);
             return vb->codec_bufs[i].data;
         }
-    ABORT_R ("%s: called from %s:%u codec_alloc could not find a free buffer", VB_NAME, func, code_line);
+    ABORT ("%s: called from %s:%u codec_alloc could not find a free buffer", VB_NAME, func, code_line);
 }
 
 void codec_free_do (void *vb_, void *addr, FUNCLINE)
@@ -69,7 +69,7 @@ void codec_verify_free_all (VBlockP vb, rom op, Codec codec)
 
 static COMPRESS (codec_compress_error) 
 {
-    ABORT_R ("compression of \"%s\": Unsupported codec: %s", name, codec_name (header->codec));
+    ABORT ("compression of \"%s\": Unsupported codec: %s", name, codec_name (header->codec));
 }
 
 

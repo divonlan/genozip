@@ -219,7 +219,10 @@ typedef struct Context {
         int32_t ctx_specific;
         bool last_is_alt;           // CHROM (all DTs): ZIP: last CHROM was an alt
         bool last_is_new;           // SAM_QNAME:       ZIP: used in segconf.running
-        int32_t sum_dp_this_line;   // INFO_DP:         ZIP/PIZ: sum of FORMAT/DP of samples in this line ('.' counts as 0)
+        struct {                    // INFO_DP:
+            int32_t by_format_dp        : 1;   // ZIP/PIZ: segged vs sum of FORMAT/DP
+            int32_t sum_format_dp       : 31;  // ZIP/PIZ: sum of FORMAT/DP of samples in this line ('.' counts as 0).
+        } dp;
         struct {                    // INFO_QD:         ZIP/PIZ: 
             uint32_t sum_dp_with_dosage : 28;  // sum of FORMAT/DP of samples in this line and dosage >= 1
             uint32_t pred_type          : 4;   // predictor type;

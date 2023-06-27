@@ -549,7 +549,7 @@ bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
     // (if an external reference IS provided, the user can decide whether to store it or not, with --reference vs --REFERENCE)
     if (IS_ZIP && flag.reference == REF_NONE) flag.reference = REF_INTERNAL;
 
-    if (flag.show_txt_contigs && is_genocat) exit_ok();
+    if (flag.show_txt_contigs && is_genocat) exit_ok;
 
     // get contigs from @SQ lines
     if (IS_ZIP || flag.collect_coverage) { // note: up to v13, contigs were carried by SEC_REF_CONTIG for REF_INTERNAL too 

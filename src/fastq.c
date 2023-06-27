@@ -25,6 +25,7 @@
 #include "filename.h"
 #include "aligner.h"
 #include "zfile.h"
+#include "license.h"
 
 #define dict_id_is_fastq_qname_sf dict_id_is_type_1
 #define dict_id_is_fastq_aux      dict_id_is_type_2
@@ -264,7 +265,11 @@ void fastq_zip_initialize (void)
 
     qname_zip_initialize();
 
-    if (flag.deep) fastq_deep_zip_initialize();
+    if (flag.deep) 
+        fastq_deep_zip_initialize();
+
+    else
+        license_show_pair_notice();    
 }
 
 // called by main thread after each txt file compressing is done

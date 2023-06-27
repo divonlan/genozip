@@ -247,7 +247,8 @@ CONTAINER_ITEM_CALLBACK (vcf_piz_con_item_cb)
 
         case _FORMAT_DP:
             if (ctx_has_value (vb, FORMAT_DP)) { // not '.' or missing
-                CTX(INFO_DP)->qd.sum_dp_with_dosage += CTX(FORMAT_DP)->last_value.i;
+                if (CTX(INFO_DP)->dp.by_format_dp) 
+                    CTX(INFO_DP)->dp.sum_format_dp += CTX(FORMAT_DP)->last_value.i;
             
                 // add up DP's of samples with GT!=0/0, for consumption by INFO/QD predictor
                 QdPredType pd = CTX(INFO_QD)->qd.pred_type;
@@ -297,7 +298,7 @@ CONTAINER_CALLBACK (vcf_piz_container_cb)
     else if (is_top_level) {
 
         // case: we need to finalize INFO/DP
-        if (CTX(INFO_DP)->is_initialized)
+        if (CTX(INFO_DP)->dp.by_format_dp)
             vcf_piz_finalize_DP_by_DP (VB_VCF);
 
         // case: insert INFO/SF and move rest of line forward - we have an INFO/SF field and we reconstructed one VCF line
