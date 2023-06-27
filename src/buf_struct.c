@@ -692,8 +692,6 @@ void buf_low_level_free (void *p, FUNCLINE)
 
 void *buf_low_level_realloc (void *p, size_t size, rom name, FUNCLINE)
 {
-    uint64_t p_int = (uint64_t)p; // avoid compiler warning for printing dangling pointer
-
 #ifndef _WIN32
     void *new = realloc (p, size);
 #else
@@ -704,7 +702,12 @@ void *buf_low_level_realloc (void *p, size_t size, rom name, FUNCLINE)
              IS_ZIP ? "Try limiting the number of concurrent threads with --threads (affects speed) or reducing the amount of data processed by each thread with --vblock (affects compression ratio)" : "");
 
     if (flag.debug_memory && size >= flag.debug_memory) 
-        iprintf ("realloc(): old=0x%"PRIx64" new=%p name=%s size=%"PRIu64" %s:%u\n", p_int, new, name, (uint64_t)size, func, code_line);
+
+#pragma GCC diagnostic push 
+#pragma GCC diagnostic ignored "-Wpragmas"         // avoid warning if "-Wuse-after-free" is not defined in this version of gcc
+#pragma GCC diagnostic ignored "-Wuse-after-free"  // avoid compiler warning of using p after it is freed
+        iprintf ("realloc(): old=%p new=%p name=%s size=%"PRIu64" %s:%u\n", p, new, name, (uint64_t)size, func, code_line);
+#pragma GCC diagnostic pop
 
     return new;
 }

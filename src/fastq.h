@@ -120,10 +120,10 @@ COMPRESSOR_CALLBACK (fastq_zip_seq);
 COMPRESSOR_CALLBACK(fastq_zip_qual); // used by codec_longr_compress
 
 // SEG Stuff
-extern void fastq_seg_initialize();
-extern void fastq_seg_finalize();
+extern void fastq_seg_initialize (VBlockP vb);
+extern void fastq_seg_finalize(VBlockP vb);
 extern bool fastq_seg_is_small (ConstVBlockP vb, DictId dict_id);
-extern rom fastq_seg_txt_line();
+extern rom fastq_seg_txt_line(VBlockP vb, rom line_start, uint32_t remaining, bool *has_13);
 extern rom fastq_assseg_line (VBlockP vb);
 extern void fastq_seg_pair2_gpos (VBlockP vb, PosType64 pair1_pos, PosType64 pair2_gpos);
 

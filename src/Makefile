@@ -353,7 +353,7 @@ clean-dev: clean-installers clean-test # use only in dev - deletes license.o
 # builds prod for local OS
 genozip-prod$(EXE): 
 	@echo "building prod"
-	@(cd $(PROD_SRC) ; git stash ; git pull ; rm -Rf $(OBJDIR) ; $(MAKE) clean ; touch dict_id_gen.h ; $(MAKE))
+	@(cd $(PROD_SRC) rm -Rf $(OBJDIR) ; git stash ; git pull ; $(MAKE) clean ; touch dict_id_gen.h ; $(MAKE))
 	@cp $(PROD_SRC)/genozip$(EXE) $(DEV_DIR)/genozip-prod$(EXE)
 	@cp $(PROD_SRC)/genozip$(EXE) $(RELEASES)/genozip-$(version)$(EXE)
 	@cp $(PROD_SRC)/genounzip$(EXE) $(DEV_DIR)/genounzip-prod$(EXE)

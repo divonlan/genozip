@@ -45,7 +45,7 @@ extern void fasta_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeaderP
 extern void fasta_seg_initialize(VBlockP vb);
 extern void fasta_seg_finalize (VBlockP vb);
 extern bool fasta_seg_is_small (ConstVBlockP vb, DictId dict_id);
-extern rom fasta_seg_txt_line();
+extern rom fasta_seg_txt_line (VBlockP vb, rom line_start, uint32_t remaining, bool *has_13);
 extern bool fasta_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id);
 
 // PIZ Stuff

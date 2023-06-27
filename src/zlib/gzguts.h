@@ -3,6 +3,10 @@
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
+// divon
+#pragma GCC diagnostic ignored "-Wpragmas"         // avoid warning if "-Wuse-after-free" is not defined in this version of gcc
+#pragma GCC diagnostic ignored "-Wuse-after-free"  // avoid compiler warning of using p after it is freed
+
 #ifdef _LARGEFILE64_SOURCE
 #  ifndef _LARGEFILE_SOURCE
 #    define _LARGEFILE_SOURCE 1

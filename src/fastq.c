@@ -280,9 +280,11 @@ void fastq_zip_finalize (bool is_last_user_txt_file)
 }
 
 // called by Compute thread at the beginning of this VB
-void fastq_seg_initialize (VBlockFASTQP vb)
+void fastq_seg_initialize (VBlockP vb_)
 {
     START_TIMER;
+
+    VBlockFASTQP vb = (VBlockFASTQP)vb_;
     declare_seq_contexts;
 
     vb->has_extra = segconf.has_extra; // VB-private copy
@@ -649,8 +651,10 @@ static rom fastq_seg_get_lines (VBlockFASTQP vb, rom line, int32_t remaining,
 // concept: we treat every 4 lines as a "line". the Description/ID is stored in DESC dictionary and segmented to subfields D?ESC.
 // The sequence is stored in SEQ data. In addition, we utilize the TEMPLATE dictionary for metadata on the line, namely
 // the length of the sequence and whether each line has a \r.
-rom fastq_seg_txt_line (VBlockFASTQP vb, rom line_start, uint32_t remaining, bool *has_13)     // index in vb->txt_data where this line starts
+rom fastq_seg_txt_line (VBlockP vb_, rom line_start, uint32_t remaining, bool *has_13)     // index in vb->txt_data where this line starts
 {
+    VBlockFASTQP vb = (VBlockFASTQP)vb_;
+
     // Split read to to desc, seq, line3 and qual (excluding the '@' and '+')
     STR0(qname); STR0(qname2); STR0(desc); STR0(seq); STR0(line3); STR0(qual);
     bool line_has_13[4] = {};

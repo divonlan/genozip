@@ -528,8 +528,10 @@ static void fasta_seg_seq_line (VBlockFASTAP vb, STRp(line),
 //     note: if a comment line is the first line in a VB - it will be segmented as a description. No harm done.
 // 123 - a sequence line - any line that's not a description of sequence line - store its length
 // these ^ are preceded by a 'Y' if the line has a Windows-style \r\n line ending or 'X' if not
-rom fasta_seg_txt_line (VBlockFASTAP vb, rom line, uint32_t remaining_txt_len, bool *has_13) // index in vb->txt_data where this line starts
+rom fasta_seg_txt_line (VBlockP vb_, rom line, uint32_t remaining_txt_len, bool *has_13) // index in vb->txt_data where this line starts
 {
+    VBlockFASTAP vb = (VBlockFASTAP)vb_;
+    
     // get entire line
     unsigned line_len;
     int32_t remaining_vb_txt_len = BAFTtxt - line;
