@@ -17,7 +17,7 @@
 
 <h1>Genozip</h1><br>
 <br>
-<b>Genozip</b> is a compressor for BAM / SAM / CRAM, FASTQ, VCF and <a href="https://www.genozip.com/compression">other genomic files</a> - see https://genozip.com<br>
+<b>Genozip</b> is a lossless compressor for  FASTQ, BAM/CRAM, VCF and <a href="https://www.genozip.com/compression">many other genomic files</a> - see https://genozip.com<br>
 <br>
 Genozip is also available on <b>Conda</b> and binary downloads, see <a href="https://genozip.com/installing">installation options</a>.<br>
 <br>
