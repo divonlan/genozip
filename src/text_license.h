@@ -40,7 +40,7 @@ static rom license[] = {
     
     "3. Additional Terms and conditions",
     
-    "   a. You must fully, truthfully and accurately complete the registration, either by completing the registration as prompted by the genozip tool or by receiving registration confirmation after registering by emailing "EMAIL_REGISTER". The only exception is if you are registering for the purpose of peer-reviewing a manuscript submitted to a journal by the Genozip author - in this case only, you may enter arbitrary information to preserve anonymity.",
+    "   a. You must fully, truthfully and accurately complete the registration, either by completing the registration as prompted by the genozip tool or by receiving registration confirmation after registering by emailing "EMAIL_REGISTER".",
     
     "   b. Using Genozip to compress a file is only permitted if the file is retained in its original form as well or the potential loss of data due to Genozip not being able to uncompress the compressed file would not cause any harm.",
     

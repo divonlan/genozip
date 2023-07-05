@@ -70,9 +70,7 @@ Premium, Academic, Decompression or Evaluation License.
 
    a. You must fully, truthfully and accurately complete the registration, either by completing the
 registration as prompted by the genozip tool or by receiving registration confirmation after
-registering by emailing register@genozip.com. The only exception is if you are registering for the
-purpose of peer-reviewing a manuscript submitted to a journal by the Genozip author - in this case
-only, you may enter arbitrary information to preserve anonymity.
+registering by emailing register@genozip.com.
 
    b. Using Genozip to compress a file is only permitted if the file is retained in its original
 form as well or the potential loss of data due to Genozip not being able to uncompress the
@@ -156,5 +154,5 @@ ABOVE STATED REMEDY FAILS OF ITS ESSENTIAL PURPOSE.
 
 END OF TERMS AND CONDITIONS
 
-Genozip license version: 15.0.6
+Genozip license version: 15.0.7
 

@@ -2,7 +2,7 @@
 ProjectFileVersion = "1.1"
 [General]
 Program name = Genozip
-Program version = 15.0.6
+Program version = 15.0.7
 Windows 2000 = 0
 Windows XP = 0
 Windows Server 2003 = 0
@@ -88,10 +88,10 @@ C:\Users\divon\Projects\genozip\src\windows\LICENSE.for-installer.txt
 9.3 KB
 txt
 [Licence_Begin]
-11686
-{\rtf1\ansi\ansicpg1252\deff0{\fonttbl{\f0\fnil\fcharset0 Arial;}}
+11468
+{\rtf1\fbidis\ansi\ansicpg1252\deff0{\fonttbl{\f0\fnil\fcharset0 Arial;}}
 {\colortbl ;\red0\green0\blue0;}
-\viewkind4\uc1\pard\cf1\lang1033\fs20 This program, "Genozip", which includes four tools \par
+\viewkind4\uc1\pard\ltrpar\cf1\lang1033\fs20 This program, "Genozip", which includes four tools \par
 (genozip, genounzip, genocat and genols), source code,\par
 object code, executables, documentation and other files,\par
 was developed by Divon Lan ("Developer") and is copyright \par
@@ -191,10 +191,7 @@ Decompression or Evaluation License.\par
 the registration, either by completing the registration as\par
 prompted by the genozip tool or by receiving registration\par
 confirmation after registering by emailing register@genozip\par
-.com. The only exception is if you are registering for the\par
-purpose of peer-reviewing a manuscript submitted to a\par
-journal by the Genozip author - in this case only, you may\par
-enter arbitrary information to preserve anonymity.\par
+.com.\par
 \par
    b. Using Genozip to compress a file is only permitted if\par
 the file is retained in its original form as well or the\par
@@ -322,7 +319,7 @@ ESSENTIAL PURPOSE.\par
 \par
 END OF TERMS AND CONDITIONS\par
 \par
-Genozip license version: 15.0.6\par
+Genozip license version: 15.0.7\par
 \par
 }
  [Licence_End]
