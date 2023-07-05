@@ -17,17 +17,15 @@
 
 <h1>Genozip</h1><br>
 <br>
-<b>Genozip</b> is a compressor for BAM / SAM / CRAM, FASTQ, VCF and <a href="https://www.genozip.com/compression">other genomic files</a> - see https://genozip.com<br>
+<b>Genozip</b> is a lossless compressor for  FASTQ, BAM/CRAM, VCF and <a href="https://www.genozip.com/compression">many other genomic files</a> - see https://genozip.com<br>
 <br>
 Genozip is also available on <b>Conda</b> and binary downloads, see <a href="https://genozip.com/installing">installation options</a>.<br>
 <br>
-For Illumina data <i>.bam</i> and <i>.fastq.gz</i> files, the typical gain over gzip is around 4X. For PacBio and Oxford Nanopore data aligned <i>.bam</i> files, the gain is typically around 2X. For <i>.vcf.gz</i> files, the gain over gzip is typically 3-6X. Here are some <a href="https://genozip.com/benchmarks">benchmarks</a>.<br>
-<br>
-<b>Yes</b>, Genozip can compress already-compressed files (.gz .bz2 .xz .bam .cram).<br> 
-<br> 
-The compression is <a href="https://genozip.com/losslessness">lossless</a> - the decompressed file is 100% identical to the original file (see documentation for exceptions), verifiable by MD5.<br>
-<br>
-<b>Genozip</b> is free for certain academic research use. See <a href="https://genozip.com/get-genozip">eligibility and other licensing options</a> or contact <a href="mailto://sales@genozip.com">sales@genozip.com</a> <br>
+<h2>New: <a href="https://genozip.com">Genozip 15</a> - with Deep™ - losslessly co-compressing BAM and FASTQ files:</h2>
+
+![v15 deep benchmark](https://github.com/divonlan/genozip/assets/56345591/39c7e9c5-135d-49c9-9213-89d4b830842a)
+
+<b>Genozip</b> Genozip is a commercial product, but we make it free for certain academic research use. See <a href="https://genozip.com/get-genozip">eligibility and other licensing options</a> or contact <a href="mailto://sales@genozip.com">sales@genozip.com</a> <br>
 <br>
 <b>IMPORTANT</b>: Genozip is a commercial product, <b>NOT AN OPEN SOURCE</b> product - we provide our source code to assure users that they will always have access to the code needed to decompress their files. <b>HOWEVER</b>, reverse engineering, code modifications, derivative works or inclusion of the code or parts thereof into other software packages is strictly forbidden by the <a href="https://genozip.com/license">license</a> (see <a href="https://genozip.com/licensing-faq">FAQ</a>).<br>
 <br>
