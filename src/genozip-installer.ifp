@@ -2,7 +2,7 @@
 ProjectFileVersion = "1.1"
 [General]
 Program name = Genozip
-Program version = 15.0.5
+Program version = 15.0.6
 Windows 2000 = 0
 Windows XP = 0
 Windows Server 2003 = 0
@@ -88,7 +88,7 @@ C:\Users\divon\Projects\genozip\src\windows\LICENSE.for-installer.txt
 9.3 KB
 txt
 [Licence_Begin]
-11540
+11686
 {\rtf1\ansi\ansicpg1252\deff0{\fonttbl{\f0\fnil\fcharset0 Arial;}}
 {\colortbl ;\red0\green0\blue0;}
 \viewkind4\uc1\pard\cf1\lang1033\fs20 This program, "Genozip", which includes four tools \par
@@ -103,7 +103,7 @@ TERMS AND CONDITIONS FOR USE\par
 1. Definitions.\par
 \par
 "License" shall mean the terms and conditions for use as\par
-defined by Sections 1 through 10 of this document.\par
+defined by Sections 1 through 11 of this document.\par
 \par
 "Legal Entity" shall mean the union of the acting entity\par
 and all other entities that control, are controlled by, or\par
@@ -262,17 +262,21 @@ License, YOU WILL BE ASKED TO CHOOSE WHETHER OR NOT YOU\par
 ALLOW THIS LOGGING. Details can be found here: https:/\par
 /genozip.com/logs. \par
 \par
-6. Trademarks. This License does not grant permission to\par
+6. Mailing list. You consent to receiving low-frequency\par
+product announcement and other marketing emails related to\par
+Genozip.\par
+\par
+7. Trademarks. This License does not grant permission to\par
 use the trade names, trademarks, service marks, or product\par
 names of the Licensor, except as required for reasonable\par
 and customary use in describing the origin of the Genozip\par
 \par
-7. Survival. The limitations of liability and ownership\par
+8. Survival. The limitations of liability and ownership\par
 rights of Genozip contained herein and Licensee\rquote s\par
 obligations following termination of this Agreement will\par
 survive the termination of this Agreement for any reason.\par
 \par
-8. No FDA or other regulatory approvals. The performance\par
+9. No FDA or other regulatory approvals. The performance\par
 characteristics of Genozip have not been established.\par
 Licensee acknowledges and agrees that (i) Genozip has not\par
 been approved, cleared, or licensed by the United States\par
@@ -285,7 +289,7 @@ Licensee\rquote s intended uses of Genozip. Licensee will comply\par
 with all applicable laws and regulations when using and\par
 maintaining Genozip.\par
 \par
-9. Disclaimer of Warranty. Unless required by applicable\par
+10. Disclaimer of Warranty. Unless required by applicable\par
 law or agreed to in writing, Licensor provides Genozip on\par
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY\par
 KIND, either express or implied, including, without\par
@@ -296,7 +300,7 @@ appropriateness of using or redistributing the Genozip and\par
 assume any risks associated with Your exercise of\par
 permissions under this License.\par
 \par
-10. LIMITATION OF LIABILITY. TO THE FULLEST EXTENT\par
+11. LIMITATION OF LIABILITY. TO THE FULLEST EXTENT\par
 PERMITTED BY APPLICABLE LAW, IN NO EVENT AND UNDER NO LEGAL\par
 THEORY, WHETHER IN TORT (INCLUDING NEGLIGENCE), CONTRACT,\par
 STRICT LIABILITY OR OTHER LEGAL OR EQUITABLE THEORY, SHALL\par
@@ -318,7 +322,7 @@ ESSENTIAL PURPOSE.\par
 \par
 END OF TERMS AND CONDITIONS\par
 \par
-Genozip license version: 15.0.5\par
+Genozip license version: 15.0.6\par
 \par
 }
  [Licence_End]

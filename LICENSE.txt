@@ -7,7 +7,7 @@ TERMS AND CONDITIONS FOR USE
 
 1. Definitions.
 
-"License" shall mean the terms and conditions for use as defined by Sections 1 through 10 of this
+"License" shall mean the terms and conditions for use as defined by Sections 1 through 11 of this
 document.
 
 "Legal Entity" shall mean the union of the acting entity and all other entities that control, are
@@ -116,15 +116,18 @@ using an Academic or Evaluation license. When using a Standard, Enterprise or Pr
 License, YOU WILL BE ASKED TO CHOOSE WHETHER OR NOT YOU ALLOW THIS LOGGING. Details can be found
 here: https://genozip.com/logs. 
 
-6. Trademarks. This License does not grant permission to use the trade names, trademarks, service
+6. Mailing list. You consent to receiving low-frequency product announcement and other marketing
+emails related to Genozip.
+
+7. Trademarks. This License does not grant permission to use the trade names, trademarks, service
 marks, or product names of the Licensor, except as required for reasonable and customary use in
 describing the origin of the Genozip
 
-7. Survival. The limitations of liability and ownership rights of Genozip contained herein and
+8. Survival. The limitations of liability and ownership rights of Genozip contained herein and
 Licensee’s obligations following termination of this Agreement will survive the termination of
 this Agreement for any reason.
 
-8. No FDA or other regulatory approvals. The performance characteristics of Genozip have not been
+9. No FDA or other regulatory approvals. The performance characteristics of Genozip have not been
 established. Licensee acknowledges and agrees that (i) Genozip has not been approved, cleared, or
 licensed by the United States Food and Drug Administration or the Hong Kong Department of Health or
 any other regulatory entity in any country for any specific intended use, whether research,
@@ -132,14 +135,14 @@ commercial, diagnostic, or otherwise, and (ii) Licensee must ensure it has any r
 that are necessary for Licensee’s intended uses of Genozip. Licensee will comply with all
 applicable laws and regulations when using and maintaining Genozip.
 
-9. Disclaimer of Warranty. Unless required by applicable law or agreed to in writing, Licensor
+10. Disclaimer of Warranty. Unless required by applicable law or agreed to in writing, Licensor
 provides Genozip on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
 or implied, including, without limitation, any warranties or conditions of TITLE, NON-INFRINGEMENT,
 MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE. You are solely responsible for determining
 the appropriateness of using or redistributing the Genozip and assume any risks associated with
 Your exercise of permissions under this License.
 
-10. LIMITATION OF LIABILITY. TO THE FULLEST EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT AND
+11. LIMITATION OF LIABILITY. TO THE FULLEST EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT AND
 UNDER NO LEGAL THEORY, WHETHER IN TORT (INCLUDING NEGLIGENCE), CONTRACT, STRICT LIABILITY OR OTHER
 LEGAL OR EQUITABLE THEORY, SHALL LICENSOR OR DEVELOPER BE LIABLE FOR DAMAGES, INCLUDING ANY DIRECT,
 INDIRECT, SPECIAL, INCIDENTAL, OR CONSEQUENTIAL DAMAGES OF ANY CHARACTER ARISING AS A RESULT OF
@@ -153,5 +156,5 @@ ABOVE STATED REMEDY FAILS OF ITS ESSENTIAL PURPOSE.
 
 END OF TERMS AND CONDITIONS
 
-Genozip license version: 15.0.5
+Genozip license version: 15.0.6
 
