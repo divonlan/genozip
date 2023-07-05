@@ -47,7 +47,7 @@
 // globals - set in main() and immutable thereafter
 char global_cmd[256]; 
 ExeType exe_type;
-unsigned n_files; // number of input files in the execution
+unsigned file_i, n_files; // number of input files in the execution
 
 // primary_command vs command: primary_command is what the user typed on the command line. command is what is 
 // running now - for example, when ZIP is unzipping a reference, primary_command=ZIP and command=PIZ
@@ -865,7 +865,8 @@ int main (int argc, char **argv)
     if (IS_ZIP && tar_zip_is_tar()) tar_initialize();
 
     n_files = MAX_(input_files_len, 1);
-    for (unsigned file_i=0, z_file_i=0; file_i < n_files; file_i++) {
+    unsigned z_file_i=0;
+    for (file_i=0; file_i < n_files; file_i++) {
 
         // get file name
         rom next_input_file = input_files_len ? input_files[file_i] : NULL;  // NULL means stdin

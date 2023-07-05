@@ -701,13 +701,13 @@ void *buf_low_level_realloc (void *p, size_t size, rom name, FUNCLINE)
     ASSERTW (new, "Out of memory in %s:%u: realloc failed (name=%s size=%"PRIu64" bytes). %s", func, code_line, name, (uint64_t)size, 
              IS_ZIP ? "Try limiting the number of concurrent threads with --threads (affects speed) or reducing the amount of data processed by each thread with --vblock (affects compression ratio)" : "");
 
-    if (flag.debug_memory && size >= flag.debug_memory) 
-
+    if (flag.debug_memory && size >= flag.debug_memory) {
 #pragma GCC diagnostic push 
 #pragma GCC diagnostic ignored "-Wpragmas"         // avoid warning if "-Wuse-after-free" is not defined in this version of gcc
 #pragma GCC diagnostic ignored "-Wuse-after-free"  // avoid compiler warning of using p after it is freed
         iprintf ("realloc(): old=%p new=%p name=%s size=%"PRIu64" %s:%u\n", p, new, name, (uint64_t)size, func, code_line);
 #pragma GCC diagnostic pop
+    }
 
     return new;
 }

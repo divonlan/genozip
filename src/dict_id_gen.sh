@@ -69,7 +69,7 @@ END
     max_fields=0 
 
     #pragma GENDICT REF_CONTIG=DTYPE_FIELD=CONTIG 
-    tags=`egrep -w "^#pragma GENDICT" ${files[*]} | cut -d" " -f3 | tr -d '\15' ` # remove windows \r
+    tags=`egrep -w "^#pragma GENDICT" ${files[*]} | cut -d" " -f3 | cut -d"/" -f1 | tr -d '\15' ` # cut out the // comment in case it it right after the tag ; remove windows \r
     num_tags=`echo $tags | wc -w`
 
     for t in $tags; do

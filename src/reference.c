@@ -590,7 +590,7 @@ bool ref_load_stored_reference (Reference ref)
             // marked as "is_populated". This is just for extra safety.
             else {
                 ref_cache_remove_do (ref, true, false);
-                ABORTINP0 ("Error: Found bad reference cached in memory. It has now been removed. Please try again.");
+                ABORTINP0 ("Error: Found bad reference cached in memory. It has now been removed. Please try again. Please report this incident to " EMAIL_SUPPORT);
             }
         }
         else

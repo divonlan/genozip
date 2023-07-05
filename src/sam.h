@@ -70,9 +70,9 @@
 #pragma GENDICT SAM_DIVRQUAL=DTYPE_FIELD=DIVRQUAL // v14.0.0. DOMQUAL codec: lines that don't have enough dom.
 
 #pragma GENDICT SAM_TOPLEVEL=DTYPE_FIELD=TOPLEVEL // must be called TOPLEVEL
-#pragma GENDICT SAM_BUDDY=DTYPE_FIELD=BUDDY  // must be called BUDDY, expected by sam_reconstruct_from_buddy 
+#pragma GENDICT SAM_BUDDY=DTYPE_FIELD=BUDDY       // must be called BUDDY, expected by sam_reconstruct_from_buddy 
 #pragma GENDICT SAM_TAXID=DTYPE_FIELD=TAXID
-#pragma GENDICT SAM_DEBUG_LINES=DTYPE_FIELD=DBGLINES      // used by --debug-lines
+#pragma GENDICT SAM_DEBUG_LINES=DTYPE_FIELD=DBGLINES  // used by --debug-lines
 
 // contexts that exist in FASTQ and not SAM - we put them here to reserve the Did so its not 
 // occupied by another SAM contexts causing dictionaries to become mingled in Deep

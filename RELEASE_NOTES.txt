@@ -3,6 +3,10 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+15.0.6 5/7/2023
+- Minor bug fixes
+- License update: added consent to receving product-announcement emails.
+
 15.0.5 27/6/2023
 - Minor bug fixes
 - License update: clarify that hospitals of any type are excluded from academic license eligibility

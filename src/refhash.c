@@ -236,7 +236,7 @@ void refhash_calc_one_range (VBlockP vb, // VB of reference compression dispatch
             if (!set && (RANDOM4(base_i+2) == 0)) { 
                 uint32_t layer_i = RANDOM4(base_i+3); // choose layer to overwrite. RANDOM4 bc MAKE_REF_NUM_LAYERS=4
                 uint32_t idx = refhash_word & layer_bitmask[layer_i];
-                refhashs[layer_i][idx] = BGEN32 (r->gpos + base_i); // replace one layer in random
+                refhashs[layer_i][idx] = BGEN32 (r->gpos + base_i); // replace one layer selected randomly
             }
         }
 
