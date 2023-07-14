@@ -377,8 +377,6 @@ void vcf_zip_after_vbs (void)
 
 bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id)
 {
-    bytes id = dict_id.id;
-
     return 
         dict_id.num == _VCF_TOPLEVEL ||
         dict_id.num == _VCF_TOPLUFT  ||

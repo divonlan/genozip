@@ -2,7 +2,7 @@
 ProjectFileVersion = "1.1"
 [General]
 Program name = Genozip
-Program version = 15.0.7
+Program version = 15.0.8
 Windows 2000 = 0
 Windows XP = 0
 Windows Server 2003 = 0
@@ -51,13 +51,13 @@ Shortcut path = <company>\<appname>\
 Allows = 0
 Number = 20
 [SplashScreen]
-Image = C:\Users\divon\projects\genozip\src\genozip-installer.jpg
+Image = C:\Users\divon\genozip\src\genozip-installer.jpg
 Sound = 
 Time = 2
 PlaySound = 0
 Allow = 1
 [Build]
-File = C:\Users\divon\Projects\genozip\src\windows\genozip-installer.exe
+File = C:\Users\divon\genozip\src\windows\genozip-installer.exe
 [Updater]
 Allow = 0
 1 = <appname>
@@ -72,26 +72,26 @@ RunProgs = 0
 Execdlls = 0
 [Languages]
 [Files/Dirs]
-C:\Users\divon\Projects\genozip\src\windows\genocat.exe
-3.7 MB
+C:\Users\divon\genozip\src\windows\genocat.exe
+5 MB
 exe
-C:\Users\divon\Projects\genozip\src\windows\genols.exe
-3.7 MB
+C:\Users\divon\genozip\src\windows\genols.exe
+5 MB
 exe
-C:\Users\divon\Projects\genozip\src\windows\genounzip.exe
-3.7 MB
+C:\Users\divon\genozip\src\windows\genounzip.exe
+5 MB
 exe
-C:\Users\divon\Projects\genozip\src\windows\genozip.exe
-3.7 MB
+C:\Users\divon\genozip\src\windows\genozip.exe
+5 MB
 exe
-C:\Users\divon\Projects\genozip\src\windows\LICENSE.for-installer.txt
-9.3 KB
+C:\Users\divon\genozip\src\windows\LICENSE.for-installer.txt
+9.9 KB
 txt
 [Licence_Begin]
-11468
-{\rtf1\fbidis\ansi\ansicpg1252\deff0{\fonttbl{\f0\fnil\fcharset0 Arial;}}
+11454
+{\rtf1\ansi\ansicpg1252\deff0{\fonttbl{\f0\fnil\fcharset0 Arial;}}
 {\colortbl ;\red0\green0\blue0;}
-\viewkind4\uc1\pard\ltrpar\cf1\lang1033\fs20 This program, "Genozip", which includes four tools \par
+\viewkind4\uc1\pard\cf1\lang1033\fs20 This program, "Genozip", which includes four tools \par
 (genozip, genounzip, genocat and genols), source code,\par
 object code, executables, documentation and other files,\par
 was developed by Divon Lan ("Developer") and is copyright \par
@@ -319,7 +319,7 @@ ESSENTIAL PURPOSE.\par
 \par
 END OF TERMS AND CONDITIONS\par
 \par
-Genozip license version: 15.0.7\par
+Genozip license version: 15.0.8\par
 \par
 }
  [Licence_End]
