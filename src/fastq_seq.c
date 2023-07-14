@@ -278,7 +278,7 @@ SPECIAL_RECONSTRUCTOR (fastq_special_unaligned_SEQ)
         char monochar = 0;
         if (VER(15)) { 
             if (snip[0] != ' ') monochar = snip[0];
-            STRinc (snip);
+            STRinc (snip, 1);
         }
         
         if (snip_len==1 && *snip=='0') 

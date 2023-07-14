@@ -54,7 +54,7 @@ typedef struct VBlockVCF {
     // used for segging INFO
     Buffer info_items;       // Seg: INFO items of the line being segged
 
-    rom main_ref;            // used by vcf_refalt_lift and vcf_seg_INFO_BaseCounts, set by vcf_seg_txt_line
+    rom main_ref;            // Seg: pointer into txt_data of REF in main field, set by vcf_seg_txt_line
     rom main_alt;
 
     unsigned main_ref_len, main_alt_len;
@@ -295,6 +295,7 @@ extern void vcf_piz_GT_cb_null_GT_if_null_DP (VBlockP vb , char *recon);
 extern int vcf_piz_GT_get_last_dosage (VBlockP vb);
 
 // GIAB trio stuff
+extern void vcf_giab_seg_initialize (VBlockVCFP vb);
 extern void vcf_seg_FORMAT_IGT (VBlockVCFP vb, ContextP ctx, STRp(igt));
 extern void vcf_seg_FORMAT_IPS (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STRp(ips));
 extern void vcf_seg_ADALL_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP *item_ctxs, const int64_t *values);
@@ -341,6 +342,7 @@ extern void vcf_piz_finalize_DP_by_DP (VBlockVCFP vb);
 
 extern void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info));
 extern void vcf_finalize_seg_info (VBlockVCFP vb);
+extern bool vcf_seg_INFO_allele (VBlockP vb_, ContextP ctx, STRp(value), uint32_t repeat);
 
 // Refalt stuff
 extern void vcf_refalt_seg_main_ref_alt (VBlockVCFP vb, STRp(ref), STRp(alt));
@@ -369,6 +371,7 @@ extern void vcf_seg_mux_by_adjusted_dosage (VBlockVCFP vb, ContextP ctx, STRp(ba
 
 // dbSNP
 extern void vcf_dbsnp_zip_initialize (void);
+extern void vcf_dbsnp_seg_initialize (VBlockVCFP vb);
 extern void vcf_seg_INFO_RS (VBlockVCFP vb, ContextP ctx, STRp(rs));
 extern void vcf_seg_INFO_RSPOS (VBlockVCFP vb, ContextP ctx, STRp(rspos));
 extern void vcf_seg_INFO_VC (VBlockVCFP vb, ContextP ctx, STRp(vc));
@@ -377,6 +380,40 @@ extern void vcf_seg_INFO_VC (VBlockVCFP vb, ContextP ctx, STRp(vc));
 extern void vcf_gwas_zip_initialize (void);
 extern void vcf_gwas_seg_initialize (VBlockVCFP vb);
 extern void vcf_gwas_seg_FORMAT_ID (VBlockVCFP vb, ContextP ctx, STRp(id));
+
+// VAGrENT stuff
+extern void vcf_vagrent_zip_initialize (void);
+extern void vcf_seg_INFO_VD (VBlockVCFP vb, ContextP ctx, STRp(vd));
+extern void vcf_seg_INFO_VW (VBlockVCFP vb, ContextP ctx, STRp(vw));
+
+// VEP stuff
+extern uint64_t _INFO_Allele;
+extern void vcf_vep_zip_initialize (rom spec, rom buf_1st);
+extern void vcf_vep_seg_initialize (VBlockVCFP vb);
+extern void vcf_seg_INFO_CSQ (VBlockVCFP vb, ContextP ctx, STRp(value));
+
+// SnpEff stuff
+extern void vcf_seg_INFO_ANN (VBlockVCFP vb, ContextP ctx, STRp(value));
+extern void vcf_seg_INFO_EFF (VBlockVCFP vb, ContextP ctx, STRp(value));
+
+// COSMIC stuff
+extern void vcf_cosmic_seg_initialize (VBlockVCFP vb);
+extern void vcf_seg_INFO_LEGACY_ID (VBlockVCFP vb, ContextP ctx, STRp(lid));
+extern void vcf_seg_INFO_SO_TERM (VBlockVCFP vb, ContextP ctx, STRp(st));
+
+// ClinVar stuff
+extern void vcf_seg_hgvs_consolidate_stats (VBlockVCFP vb, Did parent);
+extern bool vcf_seg_INFO_HGVS (VBlockP vb_, ContextP ctx, STRp(value), uint32_t repeat);
+
+// Mastermind stuff
+extern void vcf_mastermind_zip_initialize (void);
+extern void vcf_mastermind_seg_initialize (VBlockVCFP vb);
+extern void vcf_seg_mastermind_HGVSG (VBlockVCFP vb, ContextP ctx, STRp(value));
+extern void vcf_seg_INFO_MMID3 (VBlockVCFP vb, ContextP ctx, STRp(value));
+extern void vcf_seg_INFO_MMURI3 (VBlockVCFP vb, ContextP ctx, STRp(value));
+
+// ICGC stuff
+extern void vcf_seg_INFO_mutation (VBlockVCFP vb, ContextP ctx, STRp(mut));
 
 // Tags stuff
 

@@ -77,7 +77,7 @@ static bool vcf_seg_QD_verify_prediction (ContextP ctx, double qual_value, doubl
 
 static QdPredType vcf_seg_is_QD_predictable (VBlockVCFP vb, ContextP ctx, STRp(qd))
 {
-    rom qual = last_txt (VB, VCF_QUAL) ; uint32_t qual_len = vb->last_txt_len (VCF_QUAL);
+    STRlast (qual, VCF_QUAL);
 
     double qual_value, qd_value;
     if (!str_get_float (STRa(qual), &qual_value, 0, 0) || !str_get_float (STRa(qd), &qd_value, 0, 0) || qd_value <= 0.0) 
@@ -111,9 +111,7 @@ static QdPredType vcf_seg_is_QD_predictable (VBlockVCFP vb, ContextP ctx, STRp(q
 void vcf_seg_INFO_QD (VBlockVCFP vb)
 {
     decl_ctx (INFO_QD);
-
-    rom qd = last_txt (VB, INFO_QD); 
-    uint32_t qd_len = vb->last_txt_len (INFO_QD);
+    STRlast (qd, INFO_QD);
     
     // case: we can't generate a prediction or prediction is wrong - seg normally
     QdPredType pd;

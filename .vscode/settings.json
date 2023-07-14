@@ -1,8 +1,4 @@
 {
-    "files.associations": {
-        "*.eb": "python",
-        "sections.h": "c"
-    },
     "C_Cpp.dimInactiveRegions": false,
     "restructuredtext.confPath": "${workspaceFolder}\\docs",
 
@@ -18,6 +14,10 @@
     "restructuredtext.languageServer.disabled": true,
 
     "files.associations": {
-        "*.eb": "python"
+        "*.eb": "python",
+        "genozip.h": "c",
+        "strings.h": "c",
+        "type_traits": "c",
+        "typeinfo": "c"
     }
 }

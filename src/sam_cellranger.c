@@ -55,7 +55,7 @@ static void sam_seg_CB_Z_segconf (VBlockSAMP vb, STRp(cb))
 
 static void sam_seg_CB_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(cb), unsigned add_bytes)
 {
-    if (!seg_by_container (VB, channel_ctx, (ContainerP)&segconf.CB_con, STRa(cb), STRa(segconf.CB_con_snip), false, add_bytes))
+    if (!seg_by_container (VB, channel_ctx, (ContainerP)&segconf.CB_con, STRa(cb), STRa(segconf.CB_con_snip), NULL, false, add_bytes))
         seg_add_to_local_text (VB, channel_ctx, STRa(cb), LOOKUP_SIMPLE, add_bytes); // requires no_stons
 }
 

@@ -399,7 +399,9 @@ bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additional_byt
     // seg container
     seg_by_ctx (vb, STRi(qfs->con_snip, q), qname_ctx, qfs->num_seps + add_additional_bytes); // account for container separators, prefixes and caller-requested add_additional_bytes 
 
-    bool sorted_by_qname = (segconf.is_collated || VB_DT(FASTQ) || VB_DT(KRAKEN) || qfs->id == QF_GENOZIP_OPT || (!segconf.is_sorted && segconf.is_long_reads));
+    bool sorted_by_qname = (segconf.is_collated || VB_DT(FASTQ) || VB_DT(KRAKEN) || 
+                            qfs->sam_qname_sorted || 
+                            (!segconf.is_sorted && segconf.is_long_reads));
 
     for (unsigned item_i=0; item_i < qfs->con.nitems_lo; item_i++) {
 
@@ -422,11 +424,12 @@ bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additional_byt
         // case: this is the file is sorted by qname - delta against previous
         if (sorted_by_qname && (item_i == qfs->ordered_item1 || item_i == qfs->ordered_item2) &&
             (ctx_has_value_in_prev_line_(vb, item_ctx) || vb->line_i==0) &&
-            !(str_len >= 2 && str[0] == '0') && // can't yet handle reproducing leading zeros with a delta (bug 821)
-            ( (!qfs->is_hex[item_i] && str_get_int_dec (STRa(str), (uint64_t*)&value)) ||
-              ( qfs->is_hex[item_i] && str_get_int_hex (STRa(str), true, false, (uint64_t*)&value)))) // lower-case hex
-
-            seg_self_delta (vb, item_ctx, value, (qfs->is_hex[item_i] ? 'x' : 0), str_len);
+            ( (!qfs->is_hex[item_i] && str_get_int_dec (STRa(str), (uint64_t*)&value)) || ( qfs->is_hex[item_i] && str_get_int_hex (STRa(str), true, false, (uint64_t*)&value))) && // lower-case hex
+            (ABS(value - item_ctx->last_value.i) < MAX_TOKENIZER_DETLA)) 
+            seg_self_delta (vb, item_ctx, value, 
+                            (qfs->is_hex[item_i]?'x' : qfs->is_numeric[item_i]?'d' : 0), 
+                            (qfs->is_hex[item_i] || qfs->is_numeric[item_i]) ? str_len : 0,
+                            str_len);
 
         // case: end-of-range item, seg as delta vs previous item which is start-of-range
         else if ((qfs->range_end_item1 == item_i || qfs->range_end_item2 == item_i) &&

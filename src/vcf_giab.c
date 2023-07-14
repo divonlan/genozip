@@ -14,6 +14,12 @@
 #include "reconstruct.h"
 #include "lookback.h"
 
+void vcf_giab_seg_initialize (VBlockVCFP vb)
+{
+    seg_mux_init (VB, CTX(FORMAT_IGT), 2, VCF_SPECIAL_MUX_BY_SAMPLE_I,  false, (MultiplexerP)&vb->mux_IGT, NULL);
+    seg_mux_init (VB, CTX(FORMAT_IPS), 2, VCF_SPECIAL_MUX_BY_IGT_PHASE, false, (MultiplexerP)&vb->mux_IPS, NULL);
+}
+
 //--------------------------------------------------------------------------------
 // FORMAT/IPS: <ID=IPS,Number=1,Type=String,Description="Phase set for IGT">
 //--------------------------------------------------------------------------------
@@ -25,7 +31,7 @@
 // (no need for lookback as IPS is expected to always be either equal to pos/ref/alt, or to previous phase)
 void vcf_seg_FORMAT_IPS (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STRp(ips))
 {
-    STRlast (igt, CTX(FORMAT_IGT));
+    STRlast (igt, FORMAT_IGT);
     bool is_phased = (ctx_encountered (VB, FORMAT_IGT) && igt_len == 3 && igt[1] == '|');
 
     ContextP channel_ctx = 
@@ -38,7 +44,7 @@ void vcf_seg_FORMAT_IPS (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STRp(i
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_IGT_PHASE)
 {    
-    STRlast (igt, CTX(FORMAT_IGT));
+    STRlast (igt, FORMAT_IGT);
     bool is_phased = (ctx_encountered (VB, FORMAT_IGT) && igt_len == 3 && igt[1] == '|');
 
     HasNewValue ret = reconstruct_demultiplex (vb, ctx, STRa(snip), is_phased, new_value, reconstruct);
@@ -102,7 +108,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_SAMPLE_I)
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_IGT)
 {
-    STRlast(gt, CTX(FORMAT_GT));
+    STRlast(gt, FORMAT_GT);
 
     if (gt_len == 1)
         RECONSTRUCT1 (*gt);

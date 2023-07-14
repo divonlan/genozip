@@ -749,8 +749,6 @@ CONTAINER_FILTER_FUNC (gff_piz_filter)
 
 CONTAINER_CALLBACK (gff_piz_container_cb)
 {
-    if (is_top_level) {
-        VB_GFF->prev_type = last_txt (vb, GFF_TYPE);
-        VB_GFF->prev_type_len = vb->last_txt_len (GFF_TYPE);
-    }
+    if (is_top_level) 
+        SETlast (VB_GFF->prev_type, GFF_TYPE);
 }

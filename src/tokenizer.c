@@ -138,8 +138,6 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
 
         item_ctx->st_did_i = field_ctx->did_i;
 
-        #define MAX_TOKENIZER_DETLA 16384 // arbitrary (Illumina ~= 100-800)
-
         if (ci->is_int) {
             
             PosType64 delta;
@@ -148,7 +146,7 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
                 (delta || !item_ctx->flags.all_the_same)) { // don't do delta if it can ruin the all-the-same
 
                 item_ctx->flags.store = STORE_INT;
-                seg_self_delta (vb, item_ctx, ci->value, 0, ci->item_len);
+                seg_self_delta (vb, item_ctx, ci->value, 0, 0, ci->item_len);
             }
             else {
                 ci->leading_zeros = 0; // we store the snip as-is

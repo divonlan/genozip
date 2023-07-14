@@ -143,11 +143,22 @@ typedef struct {
     bool vcf_is_varscan;        // this VCF file was produced by VarScan
     bool vcf_is_gvcf;
     bool vcf_is_beagle;
+    bool vcf_is_cosmic;
+    bool vcf_is_clinvar;    
+    bool vcf_is_pindel;
+    bool vcf_is_caveman;
+    bool vcf_is_vagrent;
     bool vcf_is_gwas;           // GWAS-VCF format: https://github.com/MRCIEU/gwas-vcf-specification
     bool vcf_illum_gtyping;     // tags from Illumina GenCall genotyping software
     bool vcf_is_infinium;
     bool vcf_is_dbSNP;
     bool vcf_is_giab_trio;
+    bool vcf_is_vep;
+    bool vcf_is_gnomad;
+    bool vcf_is_icgc;
+    bool vcf_is_exac;
+    bool vcf_is_mastermind;
+    bool vcf_is_isaac;          // discontinued IsaacVariantCaller
     uint64_t count_dosage[2];   // used to calculate pc_has_dosage
     float pc_has_dosage;        // % of the samples x lines that have a valid (0-2) dosage value [0.0,1.0]
     bool use_null_DP_method;    // A method for predicting GT=./. by DP=.

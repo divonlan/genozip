@@ -417,8 +417,8 @@ typedef SORTER ((*Sorter));
 #define eSTRl(x) extern char x[]; extern uint32_t x##_len
 
 #define ASSERT_LAST_TXT_VALID(ctx) ASSERT (is_last_txt_valid(ctx), "%s.last_txt is INVALID", (ctx)->tag_name)
-#define STRlast(name,ctx)     ASSERT_LAST_TXT_VALID(ctx); rom name = last_txtx((VBlockP)(vb), (ctx)); unsigned name##_len = (ctx)->last_txt.len
-#define CTXlast(name,ctx)  ({ ASSERT_LAST_TXT_VALID(ctx);     name = last_txtx((VBlockP)(vb), (ctx));          name##_len = (ctx)->last_txt.len; })
+#define STRlast(name,did_i)    ASSERT_LAST_TXT_VALID(CTX(did_i)); rom name = last_txt((VBlockP)(vb), did_i); uint32_t name##_len = CTX(did_i)->last_txt.len
+#define SETlast(name,did_i) ({ ASSERT_LAST_TXT_VALID(CTX(did_i));     name = last_txt((VBlockP)(vb), did_i);          name##_len = CTX(did_i)->last_txt.len; })
 
 // Strings - function parameters
 #define STRp(x)  rom x,   uint32_t x##_len    
@@ -454,8 +454,8 @@ typedef SORTER ((*Sorter));
 #define STRcpyi(dst,i,src) ({ if (src##_len) { memcpy(dst##s[i],src,src##_len) ; dst##_lens[i] = src##_len; } })
 #define STRset(dst,src)    ({ dst=src; dst##_len=src##_len; })
 #define STRtxtset(dst,src) ({ dst=Btxt ((src).index); dst##_len=(src).len; })
-#define STRinc(x)          ({ x++; x##_len--; })
-#define STRdec(x)          ({ x--; x##_len++; })
+#define STRinc(x,n)          ({ x += (n); x##_len -= (n); })
+#define STRdec(x,n)          ({ x -= (n); x##_len += (n); })
 #define STRLEN(string_literal) (sizeof string_literal - 1)
 #define _S(x) x, STRLEN(x)
 #define STRtxt(x) Btxt (x), x##_len

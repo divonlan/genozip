@@ -119,11 +119,9 @@ static inline PosType32 sam_piz_predict_TLEN (VBlockSAMP vb, bool has_mc)
 
     if (!last_flags.multi_segs) return vb->ref_consumed;
 
-    rom last_rname  = last_txt(VB, SAM_RNAME);
-    rom last_rnext  = last_txt(VB, SAM_RNEXT);
-    unsigned last_rname_len = vb->last_txt_len(SAM_RNAME);
-    unsigned last_rnext_len = vb->last_txt_len(SAM_RNEXT);
-    
+    STRlast (last_rname, SAM_RNAME);
+    STRlast (last_rnext, SAM_RNEXT);
+         
     if (OUT_DT(BAM) && *(int32_t*)last_rname != *(int32_t*)last_rnext) return 0;
 
     if (OUT_DT(SAM) && !IS_EQUAL_SIGN (last_rnext) && !str_issame (last_rname, last_rnext)) return 0;

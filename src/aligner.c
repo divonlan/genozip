@@ -125,7 +125,7 @@ static inline PosType64 aligner_best_match (VBlockP vb, STRp(seq), PosType64 pai
     // in case of --fast, we check only 1/5 of the bases, and we are content with a match (not searching any further) if it 
     // has at most 10 SNPs. On our test file, this reduced the number of calls to aligner_get_match_len by about 4X, 
     // at the cost of the compressed file being about 11% larger
-    uint32_t density = (flag.fast ? 5 : 1);
+    uint32_t density = (flag.fast ? 3 : 1);
     uint32_t max_snps_for_perfection = (flag.fast ? 10 : 2);
 
     // we search - checking both forward hooks and reverse hooks, we check only the first layer for now

@@ -10,6 +10,8 @@
 
 #include "genozip.h"
 
+#define MAX_TOKENIZER_DETLA 2000 // arbitrary (Illumina ~= 100-800)
+
 extern const char sep_with_space[], sep_without_space[];
 
 extern void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field), rom is_sep, unsigned add_additional_bytes);

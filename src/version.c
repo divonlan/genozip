@@ -69,8 +69,13 @@ void version_print_notice_if_has_newer (void)
 
 #ifndef _WIN32
             else if (!strcmp (arch_get_distribution(), "conda") &&
-                     str_query_user_yn ("Do you want to upgrade now?", QDEF_YES))
+                     str_query_user_yn ("Do you want to upgrade now?", QDEF_YES)) {
+#pragma GCC diagnostic push 
+#pragma GCC diagnostic ignored "-Wpragmas"         // avoid warning if "-Wuse-after-free" is not defined in this version of gcc
+#pragma GCC diagnostic ignored "-Wunused-result"   // avoid compiler warning due to not checking system() return value
                 system ("conda update genozip");
+#pragma GCC diagnostic pop
+            }
 #endif
             else 
                 iprintf ("Installation instructions: %s\n", WEBSITE_INSTALLING);

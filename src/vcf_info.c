@@ -30,26 +30,31 @@ static SmallContainer RAW_MQandDP_con = {
                    { .dict_id={ _INFO_RAW_MQandDP_DP }                     } }
 };
 
+// called after reading VCF header, before segconf
 void vcf_info_zip_initialize (void) 
 {
     container_prepare_snip ((ContainerP)&RAW_MQandDP_con, 0, 0, qSTRa(RAW_MQandDP_snip));
 
-    vcf_dbsnp_zip_initialize();
+    vcf_dbsnp_zip_initialize(); // called even if not in VCF header, because can be discovered in segconf too
+    if (segconf.vcf_is_vagrent)    vcf_vagrent_zip_initialize();
+    if (segconf.vcf_is_mastermind) vcf_mastermind_zip_initialize();
 }
 
 void vcf_info_seg_initialize (VBlockVCFP vb) 
 {
     ctx_set_store (VB, STORE_INT, INFO_AN, INFO_AC, INFO_ADP, INFO_DP, INFO_MLEAC, DID_EOL);
-    CTX(INFO_AF)->     flags.store = STORE_FLOAT;
+    CTX(INFO_AF)->flags.store = STORE_FLOAT;
     // xxx (is this really needed for --indels-only?) CTX(INFO_SVTYPE)-> flags.store = STORE_INDEX; // since v13 - consumed by vcf_refalt_piz_is_variant_indel
 
     if (!vcf_is_use_DP_by_DP())
         CTX(INFO_DP)->ltype = LT_DYN_INT; 
 
-    seg_id_field_init (CTX(INFO_CSQ_Existing_variation));
     seg_id_field_init (CTX(INFO_RSID));
 
     ctx_consolidate_stats (VB, INFO_RAW_MQandDP, INFO_RAW_MQandDP_MQ, INFO_RAW_MQandDP_DP, DID_EOL);
+    
+    if (segconf.has[INFO_CLNHGVS]) vcf_seg_hgvs_consolidate_stats (vb, INFO_CLNHGVS);
+    if (segconf.has[INFO_HGVSG])   vcf_seg_hgvs_consolidate_stats (vb, INFO_HGVSG);
 }
 
 //--------
@@ -184,7 +189,7 @@ static int vcf_INFO_ALLELE_get_allele (VBlockVCFP vb, STRp (value))
 
 // checks if value is identifcal to the REF or one of the ALT alleles, and if so segs a SPECIAL snip
 // Used for INFO/AA, INFO/CSQ/Allele, INFO/ANN/Allele. Any field using this should have the VCF2VCF_ALLELE translator set in vcf_lo_luft_trans_id.
-static bool vcf_seg_INFO_allele (VBlockP vb_, ContextP ctx, STRp(value), uint32_t repeat) // returns true if caller still needs to seg 
+bool vcf_seg_INFO_allele (VBlockP vb_, ContextP ctx, STRp(value), uint32_t repeat) // returns true if caller still needs to seg 
 {
     VBlockVCFP vb = (VBlockVCFP)vb_;
     
@@ -225,7 +230,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_ALLELE)
 
     ContextP refalt_ctx = VB_VCF->vb_coords == DC_PRIMARY ? CTX (VCF_REFALT) : CTX (VCF_oREFALT); 
 
-    STRlast (refalt, refalt_ctx);
+    STRlast (refalt, refalt_ctx->did_i);
 
     if (!refalt_len) goto done; // variant is single coordinate in the other coordinate
 
@@ -634,421 +639,11 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_SVTYPE)
     return NO_NEW_VALUE;
 }    
 
-// ------------
-// INFO/CLNHGVS
-// ------------
-
-// SNP case: "NC_000023.10:g.154507173T>G"
-static bool vcf_seg_INFO_HGVS_snp (VBlockVCFP vb, ContextP ctx, STRp(value))
-{
-    PosType64 pos = DATA_LINE (vb->line_i)->pos[0]; // data in variant
-    char pos_str[30];
-    unsigned pos_str_len = str_int (pos, pos_str);
-
-    if (value_len < 3 + pos_str_len) return false;
-
-    rom v = &value[value_len - 3];
-    if (v[0] != vb->main_ref[0] || v[1] != '>' || v[2] != vb->main_alt[0]) return false; // REF/ALT differs
-
-    v -= pos_str_len;
-    if (memcmp (v, pos_str, pos_str_len)) return false; // POS differs
-
-    SmallContainer con = { 
-        .repeats   = 1,
-        .nitems_lo = 2,
-        .items = { { .dict_id = (DictId)_INFO_HGVS_snp_pos    },
-                   { .dict_id = (DictId)_INFO_HGVS_snp_refalt } }
-     }; 
-
-    // temporarily surround prefix by separators, and seg container with prefix
-    SAFE_ASSIGNx (&value[-1], CON_PX_SEP, 1);
-    SAFE_ASSIGNx (v,          CON_PX_SEP, 2);
-
-    container_seg (vb, ctx, (ContainerP)&con, &value[-1], v - value + 2, value_len - pos_str_len - 3);
-
-    SAFE_RESTOREx(1);
-    SAFE_RESTOREx(2);
-
-    // seg special snips
-    ctx_consolidate_stats (VB, ctx->did_i, INFO_HGVS_snp_pos, INFO_HGVS_snp_refalt, DID_EOL);
-
-    seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_HGVS_SNP_POS    }), 2, CTX(INFO_HGVS_snp_pos),    pos_str_len);
-    seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_HGVS_SNP_REFALT }), 2, CTX(INFO_HGVS_snp_refalt), 3);
-
-    return true;
-}
-
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_SNP_POS)
-{
-    ContextP pos_ctx = CTX (VCF_POS);
-    
-    if (VB_VCF->vb_coords == DC_PRIMARY)
-        RECONSTRUCT_LAST_TXT (pos_ctx); // faster than RECONSTRUCT_INT
-    
-    else  // if reconstructing Luft, VCF_POS just consumed and last_int set if in Luft coords (see top_luft container)
-        RECONSTRUCT_INT (pos_ctx->last_value.i);
-    
-    return NO_NEW_VALUE;
-}
-
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_SNP_REFALT)
-{
-    rom refalt;
-    reconstruct_peek (vb, CTX (VCF_REFALT), &refalt, NULL); // this special works only on SNPs, so length is always 3
-
-    RECONSTRUCT1 (refalt[0]); // this might overwrite the "peeked" data, but that's ok
-    RECONSTRUCT1 ('>');
-    RECONSTRUCT1 (refalt[2]);
-
-    return NO_NEW_VALUE;
-}
-
-// Deletion case: "n.10571909_10571915delCCCGCCG" (POS=10571908 ; 10571909 are the bases except for the left-anchor, CCCGCCG is the payload of the indel)
-//                "NC_000001.10:g.5993401_5993405del" REF=TAAAAC ALT=T POS=5993397
-//                "NC_000001.10:g.6038478del" REF=AG ALT=A POS=6038476
-// Insertion case: "n.10659939_10659940insTG" (POS=10659939 ; TG is the payload of the indel) 
-// Delins: "NC_000001.10:g.5987727_5987729delinsCCACG" POS=5987727 REF=GTT ALT=CCACG
-typedef enum { DEL, INS, DELINS } HgvsType;
-static bool vcf_seg_INFO_HGVS_indel (VBlockVCFP vb, ContextP ctx, STRp(value), rom op, HgvsType t)
-{
-    rom payload = &op[3];
-    unsigned payload_len = (unsigned)(&value[value_len] - payload);
-
-    if (payload_len) switch (t) {
-        case DEL    : // Payload is expected to be the same as the REF field, without the first, left-anchor, base
-                      if (!str_issame_(STRa(payload), vb->main_ref+1, vb->main_ref_len-1)) return false;
-                      break;
-        case INS    : // Payload is expected to be the same as the ALT field, without the first, left-anchor, base
-                      if (!str_issame_(STRa(payload), vb->main_alt+1, vb->main_alt_len-1)) return false;
-                      break;
-                      // Payload is expected to be the same as the entire ALT field
-        case DELINS : if (!str_issame (payload, vb->main_alt)) return false;
-                      break;
-    }
-
-    // beginning of number is one after the '.' - scan backwards
-    rom start_pos = op-1;
-    while (start_pos[-1] != '.' && start_pos > value) start_pos--;
-    if (start_pos[-1] != '.') return false;
-
-    str_split (start_pos, op-start_pos, 2, '_', pos, false);
-
-    PosType64 pos[2];
-    if (!str_get_int (poss[0], pos_lens[0], &pos[0])) return false;
-    
-    if (n_poss == 2) {
-        if (!str_get_int (poss[1], pos_lens[1], &pos[1])) return false;
-        if (pos[0] + payload_len - 1 != pos[1]) return false;
-    }
-    
-    static const DictId dict_id_start_pos[3] = { { _INFO_HGVS_del_start_pos }, { _INFO_HGVS_ins_start_pos }, { _INFO_HGVS_ins_start_pos  } }; // INS and DELINS use the same start_pos
-    static const DictId dict_id_end_pos[3]   = { { _INFO_HGVS_del_end_pos   }, { _INFO_HGVS_ins_end_pos   }, { _INFO_HGVS_delins_end_pos } };
-    static const DictId dict_id_payload[3]   = { { _INFO_HGVS_del_payload   }, { _INFO_HGVS_ins_payload   }, { _INFO_HGVS_delins_payload } };
-
-    static const Did did_i_start_pos[3] = { INFO_HGVS_del_start_pos, INFO_HGVS_ins_start_pos, INFO_HGVS_ins_start_pos};
-    static const Did did_i_end_pos[3]   = { INFO_HGVS_del_end_pos, INFO_HGVS_ins_end_pos, INFO_HGVS_delins_end_pos};
-    static const Did did_i_payload[3]   = { INFO_HGVS_del_payload, INFO_HGVS_ins_payload, INFO_HGVS_delins_payload};
-
-    static const uint8_t special_end_pos[3]  = { VCF_SPECIAL_HGVS_DEL_END_POS, VCF_SPECIAL_HGVS_INS_END_POS, VCF_SPECIAL_HGVS_DELINS_END_POS };
-    static const uint8_t special_payload[3]  = { VCF_SPECIAL_HGVS_DEL_PAYLOAD, VCF_SPECIAL_HGVS_INS_PAYLOAD, VCF_SPECIAL_HGVS_DELINS_PAYLOAD };
-
-    SmallContainer con = { 
-        .repeats   = 1,
-        .nitems_lo = 3,
-        .items = { { .dict_id = dict_id_start_pos[t], .separator = "_" }, // separator deleted in container_reconstruct_do() if end_pos is missing
-                   { .dict_id = dict_id_end_pos[t]                     },
-                   { .dict_id = dict_id_payload[t]                     } } }; 
-
-    // preper prefixes - a container-wide prefix, and the op is the prefix for item [2]
-    int64_t header_len = start_pos - value;  
-    int64_t op_len = (t==DELINS ? 6 : 3);
-    int64_t prefixes_len = header_len + op_len + 5 /* separators */;
-
-    // note: header_len, op_len and renamed_len prefixes_len to be int64_t to avoid -Wstringop-overflow warning in gcc 10
-    char prefixes[prefixes_len];
-    prefixes[0] = prefixes[header_len+1] = prefixes[header_len+2] = prefixes[header_len+3] = prefixes[header_len+4+op_len] = CON_PX_SEP;
-    memcpy (&prefixes[1], value, header_len);
-    memcpy (&prefixes[header_len+4], op, op_len);
-    
-    container_seg (vb, ctx, (ContainerP)&con, prefixes, prefixes_len, value_len - pos_lens[0] - (n_poss==2 ? pos_lens[1] : 0) - payload_len);
-
-    // seg special snips
-    ctx_consolidate_stats (VB, ctx->did_i, did_i_start_pos[t], did_i_end_pos[t], did_i_payload[t], DID_EOL);
-
-    CTX(did_i_start_pos[t])->flags.store = STORE_INT; // consumed by vcf_piz_special_INFO_HGVS_DEL_END_POS
-
-    seg_pos_field (VB, did_i_start_pos[t], VCF_POS, SPF_UNLIMITED_DELTA, 0, 0, 0, pos[0], pos_lens[0]);
-    
-    // We pos_lens[1] only if the payload is longer than 1
-    if (n_poss == 2)
-        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, special_end_pos[t] }), 2, CTX(did_i_end_pos[t]), pos_lens[1]);
-    else
-        seg_by_ctx (VB, NULL, 0, CTX(did_i_end_pos[t]), 0); // becomes WORD_INDEX_MISSING - container_reconstruct_do will remove the preceding _
-
-    // the del payload is optional - we may or may not have it
-    if (payload_len)
-        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, special_payload[t] }), 2, CTX(did_i_payload[t]), payload_len);
-    else
-        seg_by_ctx (VB, NULL, 0, CTX(did_i_payload[t]), 0); 
-
-    return true;
-}
-
-// <ID=CLNHGVS,Number=.,Type=String,Description="Top-level (primary assembly, alt, or patch) HGVS expression.">
-static bool vcf_seg_INFO_HGVS (VBlockP vb_, ContextP ctx, STRp(value), uint32_t repeat)
-{
-    VBlockVCFP vb = (VBlockVCFP)vb_;
-
-    if (ctx_encountered_in_line (VB, INFO_END)) 
-        goto fail; // we can't use this if there is an END before CLNHGVS, as it will change last_int(VCF_POS) during reconstruction
-
-    // if main->refalt is different than REFALT then we can't use this function, as reconstruction is based on VCF_REFALT
-    if (vb->line_coords == DC_LUFT && (LO_IS_OK_SWITCH (last_ostatus) || LO_IS_REJECTED (last_ostatus) || *CTX(VCF_oXSTRAND)->last_snip != '-'))
-        goto fail;
-
-    SAFE_NULT (value);
-
-    bool success = false;
-    rom op;
-    if      (vb->main_ref_len == 1 && vb->main_alt_len == 1) success = vcf_seg_INFO_HGVS_snp   (vb, ctx, STRa(value));
-    else if ((op = strstr (value, "delins")))                success = vcf_seg_INFO_HGVS_indel (vb, ctx, STRa(value), op, DELINS); // must be before del and ins
-    else if ((op = strstr (value, "del")))                   success = vcf_seg_INFO_HGVS_indel (vb, ctx, STRa(value), op, DEL);
-    else if ((op = strstr (value, "ins")))                   success = vcf_seg_INFO_HGVS_indel (vb, ctx, STRa(value), op, INS);
-    
-    SAFE_RESTORE;
-    
-    if (success) return true; // indeed segged
-
-fail:
-    seg_by_ctx (VB, STRa(value), ctx, value_len); 
-    return true; // indeed segged
-}
-
-static void vcf_piz_special_INFO_HGVS_INDEL_END_POS (VBlockP vb, HgvsType t)
-{
-    STR (refalt);
-    reconstruct_peek (vb, CTX (VCF_REFALT), pSTRa(refalt)); // this special works only on SNPs, so length is always 3
-
-    SAFE_NULT (refalt);
-    rom tab = strchr (refalt, '\t');
-    ASSPIZ (tab, "invalid REF+ALT=\"%.*s\"", STRf(refalt));
-    SAFE_RESTORE;
-
-    // reconstruct the DEL payload - this is the REF except for the first (anchor) base. reconstruct with one (possibly overlapping) copy
-    static uint64_t start_pos_dnum[3] = { _INFO_HGVS_del_start_pos, _INFO_HGVS_ins_start_pos, _INFO_HGVS_ins_start_pos }; // ins and delins share start_pos
-    rom alt   = tab + 1;
-    rom after = &refalt[refalt_len];
-
-    PosType64 start_pos = ECTX (start_pos_dnum[t])->last_value.i;
-    PosType64 end_pos = (t == DEL) ? (start_pos + tab - refalt - 2)
-                    : (t == INS) ? (start_pos + after - alt - 2)
-                    : /* DELINS */ (start_pos + after - alt - 1);
-
-    RECONSTRUCT_INT (end_pos);
-}
-
-// three separate SPECIAL snips, so that they each because all_the_same
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_DEL_END_POS)    { vcf_piz_special_INFO_HGVS_INDEL_END_POS (vb, DEL);    return NO_NEW_VALUE; }
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_INS_END_POS)    { vcf_piz_special_INFO_HGVS_INDEL_END_POS (vb, INS);    return NO_NEW_VALUE; }
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_DELINS_END_POS) { vcf_piz_special_INFO_HGVS_INDEL_END_POS (vb, DELINS); return NO_NEW_VALUE; }
-
-static void vcf_piz_special_INFO_HGVS_INDEL_PAYLOAD (VBlockP vb, HgvsType t)
-{
-    STR (refalt);
-    reconstruct_peek (vb, CTX (VCF_REFALT), pSTRa(refalt)); // this special works only on SNPs, so length is always 3
-
-    SAFE_NULT (refalt);
-    rom tab = strchr (refalt, '\t');
-    SAFE_RESTORE;
-
-    ASSPIZ (tab, "invalid REF+ALT=\"%.*s\"", STRf(refalt));
-
-    rom alt   = tab + 1;
-    rom after = &refalt[refalt_len];
-
-    rom payload = (t == DEL) ? (refalt + 1) // REF except for the anchor base
-                        : (t == INS) ? (alt + 1)    // ALT except for the anchor base
-                        : /* DELINS */ alt;         // the entire ALT
-
-    PosType64 payload_len = (t == DEL) ? (tab - refalt - 1)
-                        : (t == INS) ? (after - alt - 1)
-                        : /* DELINS */ (after - alt);
-
-    memmove (BAFTtxt, payload, payload_len);
-    Ltxt += payload_len;
-}
-
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_DEL_PAYLOAD)    { vcf_piz_special_INFO_HGVS_INDEL_PAYLOAD (vb, DEL);    return false; }
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_INS_PAYLOAD)    { vcf_piz_special_INFO_HGVS_INDEL_PAYLOAD (vb, INS);    return false; }
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_DELINS_PAYLOAD) { vcf_piz_special_INFO_HGVS_INDEL_PAYLOAD (vb, DELINS); return false; }
-
-// --------
-// INFO/CSQ
-// --------
-
-// ##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|Existing_variation|ALLELE_NUM|DISTANCE|STRAND|FLAGS|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|GMAF|AFR_MAF|AMR_MAF|EAS_MAF|EUR_MAF|SAS_MAF|AA_MAF|EA_MAF|ExAC_MAF|ExAC_Adj_MAF|ExAC_AFR_MAF|ExAC_AMR_MAF|ExAC_EAS_MAF|ExAC_FIN_MAF|ExAC_NFE_MAF|ExAC_OTH_MAF|ExAC_SAS_MAF|CLIN_SIG|SOMATIC|PHENO|PUBMED|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info|context|ancestral">
-// Originating from the VEP software
-// example: CSQ=-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000423562|unprocessed_pseudogene||||||||||rs780379327|1|876|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000438504|unprocessed_pseudogene||||||||||rs780379327|1|876|-1||deletion|1|HGNC|38034|YES||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000450305|transcribed_unprocessed_pseudogene|6/6||ENST00000450305.2:n.448_449delGC||448-449|||||rs780379327|1||1||deletion|1|HGNC|37102|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000456328|processed_transcript|3/3||ENST00000456328.2:n.734_735delGC||734-735|||||rs780379327|1||1||deletion|1|HGNC|37102|YES||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000488147|unprocessed_pseudogene||||||||||rs780379327|1|917|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000515242|transcribed_unprocessed_pseudogene|3/3||ENST00000515242.2:n.727_728delGC||727-728|||||rs780379327|1||1||deletion|1|HGNC|37102|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000518655|transcribed_unprocessed_pseudogene|3/4||ENST00000518655.2:n.565_566delGC||565-566|||||rs780379327|1||1||deletion|1|HGNC|37102|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000538476|unprocessed_pseudogene||||||||||rs780379327|1|924|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000541675|unprocessed_pseudogene||||||||||rs780379327|1|876|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|regulatory_region_variant|MODIFIER|||RegulatoryFeature|ENSR00001576075|CTCF_binding_site||||||||||rs780379327|1||||deletion|1|||||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|
-static inline void vcf_seg_INFO_CSQ (VBlockVCFP vb, ContextP ctx, STRp(value))
-{
-    static const MediumContainer csq = {
-        .nitems_lo   = 70, 
-        .drop_final_repsep = true,
-        .repsep      = {','},
-        .items       = { { .dict_id={ _INFO_CSQ_Allele             }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_Consequence        }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_IMPACT             }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_SYMBOL             }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_Gene               }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_Feature            }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_Feature            }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_Feature            }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_EXON               }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_INTRON             }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_HGVSc              }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_HGVSp              }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_cDNA_position      }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_CDS_position       }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_Protein_position   }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_Amino_acids        }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_Codons             }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_Existing_variation }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_ALLELE_NUM         }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_DISTANCE           }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_STRAND             }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_FLAGS              }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_VARIANT_CLASS      }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_MINIMISED          }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_SYMBOL_SOURCE      }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_HGNC_ID            }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_CANONICAL          }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_TSL                }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_APPRIS             }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_CCDS               }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_ENSP               }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_SWISSPROT          }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_TREMBL             }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_UNIPARC            }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_GENE_PHENO         }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_SIFT               }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_PolyPhen           }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_DOMAINS            }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_HGVS_OFFSET        }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_CLIN_SIG           }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_SOMATIC            }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_PHENO              }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_PUBMED             }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_MOTIF_NAME         }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_MOTIF_POS          }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_HIGH_INF_POS       }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_MOTIF_SCORE_CHANGE }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_LoF                }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_LoF_filter         }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_LoF_flags          }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_LoF_info           }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_context            }, .separator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_ancestral          }                     } } };
-
-    SegCallback callbacks[70] = { [ 0] =  vcf_seg_INFO_allele,  // INFO_CSQ_Allele
-                                  // [10] = vcf_seg_INFO_HGVS,  // INFO_CSQ_HGVSc - commented out bc compresses better without - bc POS with HGVS is relative rather than absolute
-                                  [12] = seg_integer_or_not_cb, // INFO_CSQ_cDNA_position - usually "int", sometimes "int-int" where int is an integer or ? 
-                                  [13] = seg_integer_or_not_cb, // INFO_CSQ_CDS_position
-                                  [14] = seg_integer_or_not_cb, // INFO_CSQ_Protein_position
-                                  [17] = seg_id_field_cb,       // INFO_CSQ_Existing_variation
-                                  [19] = seg_integer_or_not_cb, // INFO_CSQ_DISTANCE 
-                                };
-    seg_array_of_struct (VB, ctx, csq, STRa(value), callbacks, value_len);
-}
-
-// --------
-// INFO/ANN
-// --------
-
-// ##INFO=<ID=ANN,Number=.,Type=String,Description="Functional annotations: 'Allele | Annotation | Annotation_Impact | Gene_Name | Gene_ID | Feature_Type | Feature_ID | Transcript_BioType | Rank | HGVS.c | HGVS.p | cDNA.pos / cDNA.length | CDS.pos / CDS.length | AA.pos / AA.length | Distance | ERRORS / WARNINGS / INFO'">
-// See: https://pcingola.github.io/SnpEff/adds/VCFannotationformat_v1.0.pdf
-// example: ANN=T|intergenic_region|MODIFIER|U2|ENSG00000277248|intergenic_region|ENSG00000277248|||n.10510103A>T||||||
-static inline void vcf_seg_INFO_ANN (VBlockVCFP vb, ContextP ctx, STRp(value))
-{
-    static const MediumContainer ann = {
-        .nitems_lo   = 16, 
-        .drop_final_repsep = true,
-        .repsep      = {','},
-        .items       = { { .dict_id={ _INFO_ANN_Allele             }, .separator = {'|'} }, 
-                         { .dict_id={ _INFO_ANN_Annotation         }, .separator = {'|'} }, 
-                         { .dict_id={ _INFO_ANN_Annotation_Impact  }, .separator = {'|'} }, 
-                         { .dict_id={ _INFO_ANN_Gene_Name          }, .separator = {'|'} }, 
-                         { .dict_id={ _INFO_ANN_Gene_ID            }, .separator = {'|'} }, 
-                         { .dict_id={ _INFO_ANN_Feature_Type       }, .separator = {'|'} }, 
-                         { .dict_id={ _INFO_ANN_Feature_ID         }, .separator = {'|'} }, 
-                         { .dict_id={ _INFO_ANN_Transcript_BioType }, .separator = {'|'} }, 
-                         { .dict_id={ _INFO_ANN_Rank               }, .separator = {'|'} }, 
-                         { .dict_id={ _INFO_ANN_HGVS_c             }, .separator = {'|'} }, 
-                         { .dict_id={ _INFO_ANN_HGVS_p             }, .separator = {'|'} }, 
-                         { .dict_id={ _INFO_ANN_cDNA               }, .separator = {'|'} }, 
-                         { .dict_id={ _INFO_ANN_CDS                }, .separator = {'|'} }, 
-                         { .dict_id={ _INFO_ANN_AA                 }, .separator = {'|'} }, 
-                         { .dict_id={ _INFO_ANN_Distance           }, .separator = {'|'} }, 
-                         { .dict_id={ _INFO_ANN_Errors             }                     } } };
-
-    seg_array_of_struct (VB, ctx, ann, STRa(value), (SegCallback[]){vcf_seg_INFO_allele,0,0,0,0,0,0,0,0,vcf_seg_INFO_HGVS,0,0,0,0,0,0}, value_len);
-}
-
-// See: https://pcingola.github.io/SnpEff/se_inputoutput/#eff-field-vcf-output-files
-static inline void vcf_seg_INFO_EFF (VBlockVCFP vb, ContextP ctx, STRp(value))
-{
-    seg_add_to_local_text (VB, ctx, STRa(value), LOOKUP_NONE, value_len);
-    return;
-#if 0    
-    // TODO: move to this after we improve to exploit correlations between fields
-    bool is_xstream = value_len > 10 && (!memcmp (value, "UPSTREAM", 8) || !memcmp (value, "DOWNSTREAM", 10));
-
-    MediumContainer eff = {
-        .nitems_lo   = 12, 
-        .repsep      = {','},
-        .drop_final_repsep = true,
-        .items       = { { .dict_id={ _INFO_EFF_Effect             }, .separator = {'('} }, 
-                         { .dict_id={ _INFO_EFF_Effect_impact      }, .separator = {'|'} }, 
-                         { .dict_id={ _INFO_EFF_Functional_Class   }, .separator = {'|'} }, 
-                         { .dict_id={ is_xstream ? _INFO_EFF_Distance : _INFO_EFF_Codon_Change  }, .separator = {'|'} }, 
-                         { .dict_id={ _INFO_EFF_Amino_Acid_Change  }, .separator = {'|'} }, 
-                         { .dict_id={ _INFO_EFF_Amino_Acid_Length  }, .separator = {'|'} }, 
-                         { .dict_id={ _INFO_EFF_Gene_Name          }, .separator = {'|'} }, 
-                         { .dict_id={ _INFO_EFF_Transcript_BioType }, .separator = {'|'} }, 
-                         { .dict_id={ _INFO_EFF_Gene_Coding        }, .separator = {'|'} }, 
-                         { .dict_id={ _INFO_EFF_Transcript_ID      }, .separator = {'|'} }, 
-                         { .dict_id={ _INFO_EFF_Exon_Intron_Rank   }, .separator = {'|'} }, 
-                         { .dict_id={ _INFO_EFF_Genotype_Number    }, .separator = {')'} }, 
-                         
-                        // TODO: handle case where 1 or more of the array have an extra "Warnings_Errors" field
-                        // { .dict_id={ _INFO_EFF_Warnings_Errors       }, .separator = {')'} }, 
-                       } };
-
-    seg_array_of_struct (VB, ctx, eff, STRa(value), NULL, value_len);
-#endif
-}
-
 // ##INFO=<ID=RAW_MQandDP,Number=2,Type=Integer,Description="Raw data (sum of squared MQ and total depth) for improved RMS Mapping Quality calculation. Incompatible with deprecated RAW_MQ formulation.">
 // comma-seperated two numbers: RAW_MQandDP=720000,200: 1. sum of squared MQ values and 2. total reads over variant genotypes (note: INFO/MQ is sqrt(#1/#2))
 static inline void vcf_seg_INFO_RAW_MQandDP (VBlockVCFP vb, ContextP ctx, STRp(value))
 {
-    seg_by_container (VB, ctx, (ContainerP)&RAW_MQandDP_con, STRa(value), STRa(RAW_MQandDP_snip), true, value_len);
+    seg_by_container (VB, ctx, (ContainerP)&RAW_MQandDP_con, STRa(value), STRa(RAW_MQandDP_snip), NULL, true, value_len);
 }
 
 // --------------
@@ -1195,12 +790,19 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
     }
 
     // ##INFO=<ID=AA,Number=1,Type=String,Description="Ancestral Allele">
-    if (z_is_dvcf && ctx->luft_trans == VCF2VCF_ALLELE) 
+    if (z_is_dvcf && ctx->luft_trans == VCF2VCF_ALLELE && !(segconf.vcf_is_cosmic && ctx->dict_id.num == _INFO_AA)) // INFO/AA in COSMIC is something else
         vcf_seg_INFO_allele (VB, ctx, STRa(value), 0);
 
+    // many fields, for example: ##INFO=<ID=AN_amr_male,Number=1,Type=Integer,Description="Total number of alleles in male samples of Latino ancestry">
+    else if ((ctx->tag_name[0] == 'A' && (ctx->tag_name[1] == 'N' || ctx->tag_name[1] == 'C') && (ctx->tag_name[2] == '_' || ctx->tag_name[2] == '-')) ||
+             !memcmp (ctx->tag_name, "nhomalt", 7)) {
+        ctx->ltype = LT_DYN_INT;
+        seg_integer_or_not (VB, ctx, STRa(value), value_len);
+    }
+
     else switch (ctx->dict_id.num) {
-        #define CALL(f) (f); break
-        #define CALL_IF(cond,f) if (cond) { (f); break; } else goto standard_seg 
+        #define CALL(f) ({ (f); break; })
+        #define CALL_IF(cond,f)  if (cond) { (f); break; } else goto standard_seg 
         #define CALL_WITH_FALLBACK(f) if (f(vb, ctx, STRa(value))) { seg_by_ctx (VB, STRa(value), ctx, value_len); } break
         #define STORE_AND_SEG(store_type) ({ seg_set_last_txt_store_value (VB, ctx, STRa(value), store_type); seg_by_ctx (VB, STRa(value), ctx, value_len); break; })
 
@@ -1263,23 +865,22 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
 
         // ##INFO=<ID=QD,Number=1,Type=Float,Description="Variant Confidence/Quality by Depth">
         case _INFO_QD:
-            seg_set_last_txt (VB, CTX(INFO_QD), STRa(value)); break;
+        seg_set_last_txt (VB, CTX(INFO_QD), STRa(value)); break;
 
-        // ##INFO=<ID=AA,Number=1,Type=String,Description="Ancestral Allele">
-        case _INFO_AA: 
-            CALL (vcf_seg_INFO_allele (VB, ctx, STRa(value), 0));
+        // ##INFO=<ID=AA,Number=1,Type=String,Description="Ancestral Allele"> 
+        case _INFO_AA: // But in COSMIC, INFO/AA is something entirely different
+            CALL_IF (!segconf.vcf_is_cosmic, vcf_seg_INFO_allele (VB, ctx, STRa(value), 0));
 
         // ##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|Existing_variation|ALLELE_NUM|DISTANCE|STRAND|FLAGS|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|GMAF|AFR_MAF|AMR_MAF|EAS_MAF|EUR_MAF|SAS_MAF|AA_MAF|EA_MAF|ExAC_MAF|ExAC_Adj_MAF|ExAC_AFR_MAF|ExAC_AMR_MAF|ExAC_EAS_MAF|ExAC_FIN_MAF|ExAC_NFE_MAF|ExAC_OTH_MAF|ExAC_SAS_MAF|CLIN_SIG|SOMATIC|PHENO|PUBMED|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info|context|ancestral">
         // Originating from the VEP software
-        // example: CSQ=-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000423562|unprocessed_pseudogene||||||||||rs780379327|1|876|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000438504|unprocessed_pseudogene||||||||||rs780379327|1|876|-1||deletion|1|HGNC|38034|YES||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000450305|transcribed_unprocessed_pseudogene|6/6||ENST00000450305.2:n.448_449delGC||448-449|||||rs780379327|1||1||deletion|1|HGNC|37102|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000456328|processed_transcript|3/3||ENST00000456328.2:n.734_735delGC||734-735|||||rs780379327|1||1||deletion|1|HGNC|37102|YES||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000488147|unprocessed_pseudogene||||||||||rs780379327|1|917|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000515242|transcribed_unprocessed_pseudogene|3/3||ENST00000515242.2:n.727_728delGC||727-728|||||rs780379327|1||1||deletion|1|HGNC|37102|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000518655|transcribed_unprocessed_pseudogene|3/4||ENST00000518655.2:n.565_566delGC||565-566|||||rs780379327|1||1||deletion|1|HGNC|37102|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000538476|unprocessed_pseudogene||||||||||rs780379327|1|924|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000541675|unprocessed_pseudogene||||||||||rs780379327|1|876|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|regulatory_region_variant|MODIFIER|||RegulatoryFeature|ENSR00001576075|CTCF_binding_site||||||||||rs780379327|1||||deletion|1|||||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|
         case _INFO_CSQ:
-            CALL (vcf_seg_INFO_CSQ (vb, ctx, STRa(value)));
+        case _INFO_vep:
+            CALL_IF (segconf.vcf_is_vep, vcf_seg_INFO_CSQ (vb, ctx, STRa(value)));
         
         // ##INFO=<ID=DP_HIST,Number=R,Type=String,Description="Histogram for DP; Mids: 2.5|7.5|12.5|17.5|22.5|27.5|32.5|37.5|42.5|47.5|52.5|57.5|62.5|67.5|72.5|77.5|82.5|87.5|92.5|97.5">
         // ##INFO=<ID=GQ_HIST,Number=R,Type=String,Description="Histogram for GQ; Mids: 2.5|7.5|12.5|17.5|22.5|27.5|32.5|37.5|42.5|47.5|52.5|57.5|62.5|67.5|72.5|77.5|82.5|87.5|92.5|97.5">
         // ##INFO=<ID=AGE_HISTOGRAM_HET,Number=A,Type=String,Description="Histogram of ages of allele carriers; Bins: <30|30|35|40|45|50|55|60|65|70|75|80+">
         // ##INFO=<ID=AGE_HISTOGRAM_HOM,Number=A,Type=String,Description="Histogram of ages of homozygous allele carriers; Bins: <30|30|35|40|45|50|55|60|65|70|75|80+">
-        case _INFO_vep:
         case _INFO_DP_HIST:
         case _INFO_GQ_HIST:
         case _INFO_AGE_HISTOGRAM_HET:
@@ -1294,8 +895,10 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
             CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), '|', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
 
         // ##INFO=<ID=CLNHGVS,Number=.,Type=String,Description="Top-level (primary assembly, alt, or patch) HGVS expression.">
-        case _INFO_CLNHGVS:
-            CALL (vcf_seg_INFO_HGVS (VB, ctx, STRa(value), 0));
+        case _INFO_CLNHGVS: // ClinVar & dbSNP
+        case _INFO_HGVSG:   // COSMIC & Mastermind
+            if (segconf.vcf_is_mastermind) CALL (vcf_seg_mastermind_HGVSG (vb, ctx, STRa(value)));
+            else                           CALL (vcf_seg_INFO_HGVS (VB, ctx, STRa(value), 0)); 
 
         // ##INFO=<ID=CLNVI,Number=.,Type=String,Description="the variant's clinical sources reported as tag-value pairs of database and variant identifier">
         // example: CPIC:0b3ac4db1d8e6e08a87b6942|CPIC:647d4339d5c1ddb78daff52f|CPIC:9968ce1c4d35811e7175cd29|CPIC:PA166160951|CPIC:c6c73562e2b9e4ebceb0b8bc
@@ -1305,16 +908,12 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_ALLELEID:
             CALL (seg_integer_or_not (VB, ctx, STRa(value), value_len));
 
-        // ##INFO=<ID=RSID,Number=1,Type=String,Description="dbSNP identifier">
         case _INFO_RSID:
             CALL (seg_id_field_do (VB, ctx, STRa(value)));
 
-        // ##INFO=<ID=ANN,Number=.,Type=String,Description="Functional annotations: 'Allele | Annotation | Annotation_Impact | Gene_Name | Gene_ID | Feature_Type | Feature_ID | Transcript_BioType | Rank | HGVS.c | HGVS.p | cDNA.pos / cDNA.length | CDS.pos / CDS.length | AA.pos / AA.length | Distance | ERRORS / WARNINGS / INFO'">
-        case _INFO_ANN: 
-            CALL (vcf_seg_INFO_ANN (vb, ctx, STRa(value)));
-
-        case _INFO_EFF: 
-            CALL (vcf_seg_INFO_EFF (vb, ctx, STRa(value)));
+        // SnpEff
+        case _INFO_ANN: CALL (vcf_seg_INFO_ANN (vb, ctx, STRa(value)));
+        case _INFO_EFF: CALL (vcf_seg_INFO_EFF (vb, ctx, STRa(value)));
 
         // ##INFO=<ID=RAW_MQandDP,Number=2,Type=Integer,Description="Raw data (sum of squared MQ and total depth) for improved RMS Mapping Quality calculation. Incompatible with deprecated RAW_MQ formulation.">
         case _INFO_RAW_MQandDP:
@@ -1323,6 +922,21 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         // ##INFO=<ID=HaplotypeScore,Number=1,Type=Float,Description="Consistency of the site with at most two segregating haplotypes">
         case _INFO_HaplotypeScore:
             CALL (seg_float_or_not (VB, ctx, STRa(value), value_len));
+
+        // ICGC
+        case _INFO_mutation:        CALL_IF (segconf.vcf_is_icgc, vcf_seg_INFO_mutation (vb, ctx, STRa(value)));
+        case _INFO_CONSEQUENCE:     CALL_IF (segconf.vcf_is_icgc, seg_array (VB, ctx, INFO_CONSEQUENCE, STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
+        case _INFO_OCCURRENCE:      CALL_IF (segconf.vcf_is_icgc, seg_array (VB, ctx, INFO_OCCURRENCE,  STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
+
+        // COSMIC
+        case _INFO_LEGACY_ID:       CALL_IF (segconf.vcf_is_cosmic, vcf_seg_INFO_LEGACY_ID   (vb, ctx, STRa(value)));
+        case _INFO_SO_TERM:         CALL_IF (segconf.vcf_is_cosmic, vcf_seg_INFO_SO_TERM     (vb, ctx, STRa(value)));
+
+        // Mastermind
+        case _INFO_MMID3:           CALL_IF (segconf.vcf_is_mastermind, vcf_seg_INFO_MMID3   (vb, ctx, STRa(value)));
+        case _INFO_MMURI3:          CALL_IF (segconf.vcf_is_mastermind, vcf_seg_INFO_MMURI3  (vb, ctx, STRa(value)));
+        case _INFO_MMURI:           CALL_IF (segconf.vcf_is_mastermind, seg_add_to_local_text (VB, ctx, STRa(value), LOOKUP_NONE, value_len));
+        case _INFO_GENE:            CALL_IF (segconf.vcf_is_mastermind, STORE_AND_SEG (STORE_NONE)); // consumed by vcf_seg_INFO_MMID3
 
         // Illumina genotyping
         case _INFO_PROBE_A:         CALL_IF (segconf.vcf_illum_gtyping, vcf_seg_PROBE_A      (vb, ctx, STRa(value)));
@@ -1340,7 +954,32 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_RSPOS:           CALL_IF (segconf.vcf_is_dbSNP, vcf_seg_INFO_RSPOS (vb, ctx, STRa(value)));
         case _INFO_GENEINFO:        CALL_IF (segconf.vcf_is_dbSNP, seg_array (VB, ctx, INFO_GENEINFO, STRa(value), '|', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
         case _INFO_VC:              CALL_IF (segconf.vcf_is_dbSNP, vcf_seg_INFO_VC (vb, ctx, STRa(value)));
+        case _INFO_FREQ:            CALL_IF (segconf.vcf_is_dbSNP, seg_add_to_local_text (VB, ctx, STRa(value), LOOKUP_NONE, value_len));
         // case _INFO_TOPMED: // better leave as simple snip as the items are allele frequencies which are correleted
+
+        // dbNSFP
+        case _INFO_Polyphen2_HDIV_score : 
+        case _INFO_PUniprot_aapos       :
+        case _INFO_SiPhy_29way_pi       :
+            CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
+
+        case _INFO_VEST3_score  :
+        case _INFO_FATHMM_score :
+            CALL (seg_add_to_local_text (VB, ctx, STRa(value), LOOKUP_NONE, value_len));
+
+        // gnomAD
+        case _INFO_age_hist_het_bin_freq:
+        //case _INFO_age_hist_hom_bin_freq: // same dict_id as _INFO_age_hist_het_bin_freq
+        case _INFO_gq_hist_alt_bin_freq:
+        //case _INFO_gq_hist_all_bin_freq:
+        case _INFO_dp_hist_alt_bin_freq:
+        //case _INFO_dp_hist_all_bin_freq:
+        case _INFO_ab_hist_alt_bin_freq:
+            CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), '|', 0, false, STORE_INT, DICT_ID_NONE, value_len));
+
+        // VAGrENT
+        case _INFO_VD:              CALL_IF (segconf.vcf_is_vagrent, vcf_seg_INFO_VD (vb, ctx, STRa(value)));
+        case _INFO_VW:              CALL_IF (segconf.vcf_is_vagrent, vcf_seg_INFO_VW (vb, ctx, STRa(value)));
 
         default: standard_seg:
             seg_by_ctx (VB, STRa(value), ctx, value_len);

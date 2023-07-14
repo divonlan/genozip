@@ -274,7 +274,7 @@ typedef enum __attribute__ ((__packed__)) {
     QF_NANOPORE=40, QF_NANOPORE_rng=41, QF_NANOPORE_ext=42,
     QF_ION_TORR_3=50, QF_ROCHE_454=51, QF_HELICOS=52, 
     QF_SRA_L=60, QF_SRA2=60, QF_SRA=62,
-    QF_GENOZIP_OPT=70, QF_INTEGER=71, QF_HEX_CHR=72, QF_BAMSURGEON=73, QF_SEQAN=74, QF_CLC_GW=75, QF_STR_INT=76
+    QF_GENOZIP_OPT=70, QF_INTEGER=71, QF_HEX_CHR=72, QF_BAMSURGEON=73, QF_SEQAN=74, QF_CLC_GW=75, QF_STR_INT=76, QF_CONSENSUS=77,
 } QnameFlavorId;
 
 typedef enum __attribute__ ((__packed__)) { // these values and their order are part of the file format

@@ -18,18 +18,18 @@
 #include "segconf.h"
 
 typedef struct {        
-    WordIndex node_index;     // index into Context.ston_nodes (if < ston_nodes.len) or Context.nodes or NODE_INDEX_NONE
+    WordIndex node_index;     // index into Context.ston_nodes (if < ston_nodes.len) or Context.nodes or WORD_INDEX_NONE
     uint32_t next;            // linked list - index into Context.global/local_ents or NO_NEXT
                               //               local_ents indices start at LOCAL_HASH_OFFSET
 } LocalHashEnt;
 
 #pragma pack(4)
 typedef struct {        
-    WordIndex node_index;     // index into Context.nodes or NODE_INDEX_NONE
+    WordIndex node_index;     // index into Context.nodes or WORD_INDEX_NONE
     uint32_t next;            // linked list - index into Context.global/local_ents or NO_NEXT
     int32_t merge_num;        // the merge_num in which the "node_index" field was set. when this global hash is overlayed 
                               // to a vctx, that vctx is permitted use the node_index value if this merge_num is <= vctx->merge_num,
-                              // otherwise, it should treat it as NODE_INDEX_NONE.
+                              // otherwise, it should treat it as WORD_INDEX_NONE.
 } GlobalHashEnt;
 #pragma pack()
 
@@ -244,7 +244,7 @@ void hash_alloc_global (ContextP zctx, uint32_t estimated_entries)
     buf_alloc_exact_255 (evb, zctx->global_hash, zctx->global_hash_prime, uint32_t, "zctx->global_hash");
     buf_set_shared (&zctx->global_hash);
 
-    // note: we set all entries to {NODE_INDEX_NONE, NO_NEXT, NODE_INDEX_NONE} == {0xffffffff x 3} (note: GlobalHashEnt is packed)
+    // note: we set all entries to {WORD_INDEX_NONE, NO_NEXT, WORD_INDEX_NONE} == {0xffffffff x 3} (note: GlobalHashEnt is packed)
     buf_alloc_exact_255 (evb, zctx->global_ents, estimated_entries, GlobalHashEnt, "zctx->global_ents");
     buf_set_shared (&zctx->global_ents);
     zctx->global_ents.len = 0;
@@ -274,17 +274,17 @@ WordIndex hash_global_get_entry (ContextP zctx, STRp(snip), HashGlobalGetEntryMo
 
         g_hashent = B(GlobalHashEnt, zctx->global_ents, hashent_i);
 
-        // case: snip is not in core hash table and also no other snip occupies the slot (node_index==NODE_INDEX_NONE happens only in the core table)
-        if (g_hashent->node_index == NODE_INDEX_NONE) { // unoccupied space in core hash table
+        // case: snip is not in core hash table and also no other snip occupies the slot (node_index==WORD_INDEX_NONE happens only in the core table)
+        if (g_hashent->node_index == WORD_INDEX_NONE) { // unoccupied space in core hash table
             // thread safety: VB threads with merge_num < ours, might be segmenting right now, and have this global hash overlayed 
             // and accessing it. we make sure that the setting of g_hashent->merge_num is atomic and the other threads will at all times either
-            // see NIL or merge_num - both of which indicate the this entry is effectively NODE_INDEX_NONE as they have an older merge_num
+            // see NIL or merge_num - both of which indicate the this entry is effectively WORD_INDEX_NONE as they have an older merge_num
 
             if (mode != HASH_READ_ONLY) {
                 g_hashent->next = NO_NEXT;
 
                 if (mode == HASH_NEW_OK_SINGLETON_IN_VB) {
-                    g_hashent->node_index = -((int32_t)zctx->ston_nodes.len++) - 2; // -2 because: 0 is mapped to -2, 1 to -3 etc (as 0 is ambiguius and -1 is NODE_INDEX_NONE)
+                    g_hashent->node_index = -((int32_t)zctx->ston_nodes.len++) - 2; // -2 because: 0 is mapped to -2, 1 to -3 etc (as 0 is ambiguius and -1 is WORD_INDEX_NONE)
                     ASSERT (zctx->ston_nodes.len <= MAX_WORDS_IN_CTX, "zctx->ston_nodes is full: too many singletons in zctx=%s len=%u. snip=\"%.*s\"", 
                             zctx->tag_name, zctx->ston_nodes.len32, STRf(snip));
                 }
@@ -323,7 +323,7 @@ WordIndex hash_global_get_entry (ContextP zctx, STRp(snip), HashGlobalGetEntryMo
     // case: not found - return if this was a read only request
     if (mode == HASH_READ_ONLY) {
         if (old_node) *old_node = NULL; // we don't have an old node
-        return NODE_INDEX_NONE;
+        return WORD_INDEX_NONE;
     }
 
     // case: not found, and we are required to provide a new entry in global_ents
@@ -344,15 +344,15 @@ WordIndex hash_global_get_entry (ContextP zctx, STRp(snip), HashGlobalGetEntryMo
     // we enter the node as a singleton (=in ston_nodes) if this was a singleton in this VB and not found in any previous VB 
     // (the second occurance in the file isn't a singleton anymore)
     bool is_singleton_global   = ((mode == HASH_NEW_OK_SINGLETON_IN_VB) && !singleton_encountered);
-    new_hashent->node_index    = is_singleton_global ? (-((int32_t)zctx->ston_nodes.len32++) - 2) : zctx->nodes.len32++; // -2 because: 0 is mapped to -2, 1 to -3 etc (as 0 is ambiguius and -1 is NODE_INDEX_NONE)
+    new_hashent->node_index    = is_singleton_global ? (-((int32_t)zctx->ston_nodes.len32++) - 2) : zctx->nodes.len32++; // -2 because: 0 is mapped to -2, 1 to -3 etc (as 0 is ambiguius and -1 is WORD_INDEX_NONE)
     new_hashent->next          = NO_NEXT;
 
     if (is_singleton_global) 
-        ASSERT (zctx->ston_nodes.len32 <= MAX_NODE_INDEX, "number of singleton in context %s exceeded the maximum of %u. snip=\"%.*s\"", 
-                zctx->tag_name, MAX_NODE_INDEX, STRf(snip));
+        ASSERT (zctx->ston_nodes.len32 <= MAX_WORD_INDEX, "number of singleton in context %s exceeded the maximum of %u. snip=\"%.*s\"", 
+                zctx->tag_name, MAX_WORD_INDEX, STRf(snip));
     else
-        ASSERT (zctx->nodes.len32 <= MAX_NODE_INDEX, "number of nodes in context %s exceeded the maximum of %u. snip=\"%.*s\"", 
-                zctx->tag_name, MAX_NODE_INDEX, STRf(snip));
+        ASSERT (zctx->nodes.len32 <= MAX_WORD_INDEX, "number of nodes in context %s exceeded the maximum of %u. snip=\"%.*s\"", 
+                zctx->tag_name, MAX_WORD_INDEX, STRf(snip));
 
 #ifdef DEBUG
     #define HASH_OCC_WARNING 2ULL
@@ -386,7 +386,7 @@ WordIndex hash_global_get_entry (ContextP zctx, STRp(snip), HashGlobalGetEntryMo
 // 2. if its in the local hash table - i.e. added by us (this vb) earlier - we take it
 // 3. if not found - we add it to the local hash table
 WordIndex hash_get_entry_for_seg (VBlockP segging_vb, ContextP vctx, STRp(snip), 
-                                  WordIndex node_index_if_new, // NODE_INDEX_NONE means "read only in global hash (ol_nodes)"
+                                  WordIndex node_index_if_new, // WORD_INDEX_NONE means "read only in global hash (ol_nodes)"
                                   CtxNode **node)        // out - node if node is found, NULL if not
 {
     // first, search for the snip in the global table
@@ -418,7 +418,7 @@ WordIndex hash_get_entry_for_seg (VBlockP segging_vb, ContextP vctx, STRp(snip),
                 
         // case: snip is not in core hash table (at least it wasn't there when we cloned and set our maximum merge_num we accept)
         uint32_t merge_num = __atomic_load_n (&g_hashent->merge_num, __ATOMIC_ACQUIRE);
-        if (g_hashent->node_index == NODE_INDEX_NONE || merge_num > vctx->merge_num) break; // case 3
+        if (g_hashent->node_index == WORD_INDEX_NONE || merge_num > vctx->merge_num) break; // case 3
 
         // we skip singletons and continue searching
         if (g_hashent->node_index < 0) continue;
@@ -432,7 +432,7 @@ WordIndex hash_get_entry_for_seg (VBlockP segging_vb, ContextP vctx, STRp(snip),
     }
 
     // caller requested read-only
-    if (node_index_if_new == NODE_INDEX_NONE)
+    if (node_index_if_new == WORD_INDEX_NONE)
         goto not_found;
 
     // snip was not found in the global hash table (as it was at the time we cloned), we now search
@@ -454,12 +454,12 @@ WordIndex hash_get_entry_for_seg (VBlockP segging_vb, ContextP vctx, STRp(snip),
         l_hashent_i = l_hashent->next;
         l_hashent = B(LocalHashEnt, vctx->local_ents, l_hashent_i);
 
-        // case: snip is not in hash table and also no other snip occupies the slot (node_index==NODE_INDEX_NONE happens only in the core table)
-        if (l_hashent->node_index == NODE_INDEX_NONE) { // unoccupied space in core hash table
+        // case: snip is not in hash table and also no other snip occupies the slot (node_index==WORD_INDEX_NONE happens only in the core table)
+        if (l_hashent->node_index == WORD_INDEX_NONE) { // unoccupied space in core hash table
             l_hashent->next = NO_NEXT;
             l_hashent->node_index = node_index_if_new;
             if (node) *node = NULL;
-            return NODE_INDEX_NONE;
+            return WORD_INDEX_NONE;
         }
 
         if (node) { // if the caller doesn't provide "node", he is telling us that with certainly the snip is not in the hash table
@@ -489,5 +489,5 @@ WordIndex hash_get_entry_for_seg (VBlockP segging_vb, ContextP vctx, STRp(snip),
 
 not_found:
     if (node) *node = NULL;
-    return NODE_INDEX_NONE;
+    return WORD_INDEX_NONE;
 }

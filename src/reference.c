@@ -683,6 +683,7 @@ RangeP ref_seg_get_range (VBlockP vb, Reference ref, WordIndex chrom, STRp(chrom
 
     if (ref_index == WORD_INDEX_NONE) return NULL;
 
+    ASSSEG (ref_index < ref->ranges.len32, "ref_index=%d out of range: ref->ranges.len=%u", ref_index, ref->ranges.len32);
     RangeP range = B(Range, ref->ranges, ref_index);
 
     // when using an external refernce, pos has to be within the reference range

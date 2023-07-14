@@ -690,6 +690,9 @@ void seg_numeric_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_byt
 
     if (segconf.running) goto fallback;
 
+    bool has_zero_x = (ctx->ltype == LT_DYN_INT_h || ctx->ltype == LT_DYN_INT_H) && value_len > 2 && value[0] == '0' && value[1] == 'x';
+    if (has_zero_x) STRinc (value, 2); // skip initial "0x"
+
     int64_t n;
     bool is_numeric = (ctx->ltype == LT_DYN_INT_h) ? (str_get_int_hex (STRa(value), true, false, (uint64_t*)&n)) // number with leading 0 is segged as a snip
                     : (ctx->ltype == LT_DYN_INT_H) ? (str_get_int_hex (STRa(value), false, true, (uint64_t*)&n)) // number with leading 0 is segged as a snip
@@ -698,7 +701,7 @@ void seg_numeric_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_byt
     // case: its an integer
     if (is_numeric) { 
         seg_integer (vb, ctx, n, false, add_bytes);
-        seg_by_ctx (vb, (char[]){ SNIP_NUMERIC, '0'+ (ctx->ltype - LT_DYN_INT), '0' + value_len }, 3, ctx, 0);
+        seg_by_ctx (vb, (char[]){ SNIP_NUMERIC, '0'+ (ctx->ltype - LT_DYN_INT), '0' + value_len, 'x' }, 3 + has_zero_x, ctx, 0);
     }
 
     // case: non-numeric snip
@@ -781,15 +784,24 @@ fallback:
 }
 
 // note: seg_initialize should set STORE_INT for this ctx
-WordIndex seg_self_delta (VBlockP vb, ContextP ctx, int64_t value, char format/* 0 for normal decimal*/, uint32_t add_bytes)
+WordIndex seg_self_delta (VBlockP vb, ContextP ctx, int64_t value, 
+                          char format,        // 'd', 'x' or 'X'. 0 is normal, unformatted, number 
+                          unsigned fixed_len, // >0 means zero-padded fixed len (legal values: 0-190) 
+                          uint32_t add_bytes)
 {
 #ifdef DEBUG
     ASSERT (segconf.running || ctx->flags.store == STORE_INT, "expecting %s to have store=STORE_INT", ctx->tag_name);
+    ASSERT (fixed_len <= 190, "fixed_len=%u is larger than 190", fixed_len);
 #endif
-    char delta_snip[30];
+
+    char delta_snip[32];
     delta_snip[0] = SNIP_SELF_DELTA;
-    if (format) delta_snip[1] = format; // currently only 'x' (lower case hex) is supported
-    unsigned delta_snip_len = 1 + !!format + str_int (value - ctx->last_value.i, &delta_snip[1 + !!format]);
+    if (format) {
+        delta_snip[1] = format; // currently only 'x' (lower case hex) is supported
+        if (fixed_len) delta_snip[2] = 'A' + fixed_len; // fixed_len=190 -> snip=255
+    }
+
+    unsigned delta_snip_len = 1 + !!format + !!fixed_len + str_int (value - ctx->last_value.i, &delta_snip[1 + !!format + !!fixed_len]);
 
     ctx_set_last_value (vb, ctx, value);
 
@@ -830,7 +842,9 @@ WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_
                                 .items     = { { .dict_id = arr_dict_id } } }; // only one item
 
         arr_ctx = ctx_get_ctx (vb, arr_dict_id);
-        arr_ctx->st_did_i = container_ctx->st_did_i = stats_conslidation_did_i;
+    
+        if (arr_ctx->st_did_i == DID_NONE) // first time
+            arr_ctx->st_did_i = container_ctx->st_did_i = stats_conslidation_did_i;
     }
     else { 
         con         = B1ST (MiniContainer, container_ctx->con_cache);
@@ -894,7 +908,7 @@ WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_
 
         // case: delta of 2nd+ item
         else if (str_get_int (STRa(this_item), &this_item_value)) 
-            seg_self_delta (vb, arr_ctx, this_item_value, 0, this_item_len);
+            seg_self_delta (vb, arr_ctx, this_item_value, 0, 0, this_item_len);
 
         // non-integer that cannot be delta'd - store as-is
         else 
@@ -1031,6 +1045,7 @@ void seg_array_of_array_of_struct (VBlockP vb, ContextP ctx,
 // returns true if successful
 bool seg_by_container (VBlockP vb, ContextP ctx, ContainerP con, STRp(value), 
                        STRp(container_snip), // optional
+                       SegCallback item_seg, // optional
                        bool normal_seg_if_fail,
                        unsigned add_bytes)
 {
@@ -1051,9 +1066,13 @@ bool seg_by_container (VBlockP vb, ContextP ctx, ContainerP con, STRp(value),
     int accounted_for = 0;
     for (int i=0; i < n_items; i++) {
         ContextP item_ctx = ctx_get_ctx (vb, con->items[i].dict_id);
-
-        if (item_ctx->ltype >= LT_DYN_INT)
+        
+        if (item_seg)
+            item_seg (vb, item_ctx, STRi(item, i), 0);
+        
+        else if (item_ctx->ltype >= LT_DYN_INT)
             seg_integer_or_not (vb, item_ctx, STRi(item, i), item_lens[i]);
+        
         else
             seg_by_ctx (vb, STRi(item, i), item_ctx, item_lens[i]);
         

@@ -223,8 +223,7 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
 // return dosage derived from GT - equivalent to dosage calculation in vcf_seg_FORMAT_GT
 int vcf_piz_GT_get_last_dosage (VBlockP vb)
 {
-    rom gt = last_txt (vb, FORMAT_GT);
-    unsigned gt_len = CTX(FORMAT_GT)->last_txt.len;
+    STRlast (gt, FORMAT_GT);
 
     for (unsigned i=1; i < gt_len; i += 2)
         if (gt[i] != '/' && gt[i] != '|') return -1; // we have an allele >= 10 - dosage is -1
@@ -240,9 +239,7 @@ int vcf_piz_GT_get_last_dosage (VBlockP vb)
 
 static inline bool vcf_piz_is_in_FORMAT (VBlockP vb, rom tag/*2-chars*/)
 {
-    // get FORMAT field
-    rom format = last_txt (vb, VCF_FORMAT);
-    uint32_t format_len = vb->last_txt_len (VCF_FORMAT);
+    STRlast (format, VCF_FORMAT);
 
     // check if a :PS: or :PS\t exists (using PS as an example)
     for (int i=3; i < format_len-1; i++) // start from 3 - skip "GT:"

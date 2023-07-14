@@ -1075,8 +1075,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_COPY_REForALT)
 {
     if (!reconstruct) return false;
 
-    rom refalt = last_txt(vb, VCF_REFALT);
-    uint32_t refalt_len = vb->last_txt_len (VCF_REFALT);
+    STRlast (refalt, VCF_REFALT);
     
     // shortcut in case of SNP
     if (refalt_len == 3)
@@ -1105,24 +1104,22 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_COPY_REForALT)
 // --snps-only implementation (called from vcf_piz_container_cb)
 bool vcf_refalt_piz_is_variant_snp (VBlockVCFP vb)
 {
-    Did refalt = vb->vb_coords == DC_PRIMARY ? VCF_REFALT : VCF_oREFALT;
-    unsigned txt_len = vb->last_txt_len (refalt);
+    STRlast (txt, vb->vb_coords == DC_PRIMARY ? VCF_REFALT : VCF_oREFALT);
+ 
     if (txt_len <= 3) return true; // short circuit most common case  of a bi-allelic SNP (<3 can never happen, here to avoid issues)
 
-    rom txt = last_txt (VB, refalt);
     return txt[1] == '\t' && str_count_char (&txt[2], txt_len-2, ',') * 2 == txt_len-3; // true if multi-allelic SNP
 }
 
 // --indels-only implementation (called from vcf_piz_container_cb)
 bool vcf_refalt_piz_is_variant_indel (VBlockVCFP vb)
 {
-    Did refalt = vb->vb_coords == DC_PRIMARY ? VCF_REFALT : VCF_oREFALT;
-    unsigned txt_len = vb->last_txt_len (refalt);
+    STRlast (txt, vb->vb_coords == DC_PRIMARY ? VCF_REFALT : VCF_oREFALT);
+
     if (txt_len == 3 || vcf_refalt_piz_is_variant_snp (vb)) return false; // Not an INDEL: its a SNP (short circuit most common case of a bi-allelic SNP)
 
     if (ctx_has_value_in_line_(vb, CTX(INFO_SVTYPE))) return false; // Note an INDEL: its a structural variant
 
-    rom txt = last_txt (VB, refalt);
     if (memchr (txt, '<', txt_len) || memchr (txt, '[', txt_len) || memchr (txt, ']', txt_len)) return false; // Not an INDEL: its an SV
 
     return true;

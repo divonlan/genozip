@@ -166,7 +166,7 @@ void sam_zip_init_vb (VBlockP vb_)
 {
     VBlockSAMP vb = (VBlockSAMP)vb_;
 
-    vb->chrom_node_index = NODE_INDEX_NONE;
+    vb->chrom_node_index = WORD_INDEX_NONE;
     vb->XG_inc_S = unknown;
 
     // note: we test for sorted and not collated, because we want non-sorted long read files (which are collated)
@@ -1080,11 +1080,12 @@ void sam_seg_verify_RNAME (VBlockSAMP vb)
     if (IS_REF_INTERNAL && (!sam_hdr_contigs /* SQ-less SAM */ || !sam_hdr_contigs->contigs.len /* SQ-less BAM */)) return;
     if (IS_ASTERISK(vb->chrom_name)) return; // unaligned
 
-    if (sam_hdr_contigs)
-        // since this SAM file has a header, all RNAMEs must be listed in it (the header contigs appear first in CTX(RNAME), see sam_zip_initialize
+    // Per SAM spec, if the header has any SQ lines, all RNAMEs must be listed in it (the header contigs appear first in CTX(RNAME), see sam_zip_initialize
+    if (sam_hdr_contigs && sam_hdr_contigs->contigs.len)
         ASSSEG (vb->chrom_node_index < sam_hdr_contigs->contigs.len, "RNAME \"%.*s\" does not have an SQ record in the header", STRf (vb->chrom_name));
 
-    else {                                                                             // headerless SAM
+    // case an external reference and no SQ lines: if an RNAME is missing in the reference file, we compressed the alignment as "unaligned"
+    else {  // headerless SAM
         WordIndex ref_index = chrom_2ref_seg_get (gref, VB, vb->chrom_node_index); // possibly an alt contig
         if (ref_index == WORD_INDEX_NONE) {
             WARN_ONCE("FYI: RNAME \"%.*s\" (and possibly others) is missing in the reference file. This might impact the compression ratio.",
@@ -1394,7 +1395,7 @@ WordIndex sam_seg_RNAME (VBlockSAMP vb, ZipDataLineSAM *dl, STRp (chrom),
     }
 
     // protect rname from removal by ctx_shorten_unused_dict_words if we didn't seg normally
-    if (!normal_seg && node_index != NODE_INDEX_NONE) // note: node_index==-1 when RNAME="*"
+    if (!normal_seg && node_index != WORD_INDEX_NONE) // note: node_index==-1 when RNAME="*"
         ctx_protect_from_removal (VB, CTX(SAM_RNAME), node_index);
 
     return node_index;
@@ -1443,7 +1444,7 @@ WordIndex sam_seg_RNEXT (VBlockSAMP vb, ZipDataLineSAM *dl, STRp (chrom), unsign
     }
 
     // protect rnext from removal by ctx_shorten_unused_dict_words if we didn't seg normally
-    if (!normal_seg && node_index != NODE_INDEX_NONE) // note: node_index==-1 when RNEXT="*"
+    if (!normal_seg && node_index != WORD_INDEX_NONE) // note: node_index==-1 when RNEXT="*"
         ctx_protect_from_removal (VB, CTX(SAM_RNEXT), node_index);
 
     return node_index;
@@ -1519,7 +1520,7 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
 
     dl->SEQ.index = BNUMtxt (flds[SEQ]); // SEQ.len to be determined by sam_cigar_analyze
     dl->QNAME = TXTWORDi (fld, QNAME);
-    dl->QUAL = TXTWORDi (fld, QUAL);
+    dl->QUAL  = TXTWORDi (fld, QUAL);
 
     if (fld_lens[QUAL] == 1 && flds[QUAL][0] == '*')
         vb->qual_missing = dl->no_qual = true;

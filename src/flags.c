@@ -1332,7 +1332,7 @@ void flags_update (unsigned num_files, rom *filenames)
          flag.dump_one_b250_dict_id.num || // all other sections (except CHROM) are blocked from reading in piz_default_skip_section
          flag.show_index || flag.dump_section || flag.show_one_counts.num || flag.show_flags || flag.show_data_type ||
          flag.show_aliases || flag.show_txt_contigs || flag.show_gheader || flag.show_recon_plan || flag.show_ref_contigs ||
-         (flag.count && !flag.bases && !flag.grep) ||
+        (flag.count && !flag.bases && !flag.grep) ||
          flag.collect_coverage); // note: this is updated in flags_update_piz_one_z_file
 
     flag.no_tip |= flag.quiet || flag.test_i || tar_zip_is_tar() || !isatty(0) || !isatty (1) ||

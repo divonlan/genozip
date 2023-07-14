@@ -137,7 +137,7 @@ test_redirected() { # $1=filename  $2...$N=optional extra genozip arg
         exit 1
     fi
 
-    cleanup
+    # note: no cleanup, we still need the output files
 }
 
 test_unix_style() {  # $1=filename  ; optional $2=rm
@@ -1305,19 +1305,16 @@ batch_real_world_with_ref_md5() # $1 extra genozip argument
 #     done
 # }
 
-made_versions=0
 batch_real_world_backcomp()
 {
     batch_print_header $1
 
     cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
 
-    if (( ! made_versions )); then
-        make -C $TESTDIR versions  # generate files listed in "files"
-        made_versions=1
-    fi
-
+    # compress all real world test files with old genozip version. Some files might fail compression -
+    # they will remain with size 0 and we will ignore them in this test.
     private/scripts/link_license.sh $1
+    make -C $TESTDIR $1.version  # generate files listed in "files"
     
     local files=( $TESTDIR/$1/*.genozip )
     
@@ -1574,6 +1571,7 @@ batch_make_reference()
     local alt_ref_file_name=$OUTDIR/output2.ref.genozip
     mv $ref_file $alt_ref_file_name || exit 1
     $genozip private/test/basic.fq -e $alt_ref_file_name -fXo $output || exit 1
+
     mv $alt_ref_file_name $ref_file || exit 1
     export GENOZIP_REFERENCE=${ref_file}
     $genounzip -t $output || exit 1 # alt_ref_file_name no longer exists, so genounzip depends on GENOZIP_REFERENCE

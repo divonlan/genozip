@@ -199,7 +199,7 @@ StrTextLong str_int_s_(rom label/*max 59 chars*/, int64_t n)
     return s;
 }
 
-StrTextLong str_int_str_(rom label, rom str)
+StrTextLong str_str_s_(rom label, rom str)
 {
     StrTextLong s = {};
     int label_len = strlen (label);
@@ -336,9 +336,11 @@ bool str_get_int_hex (STRp(str), bool allow_hex, bool allow_HEX,
         if      (c >= '0' && c <= '9') out = (out << 4) | (c - '0');
         else if (allow_HEX && c >= 'A' && c <= 'F') out = (out << 4) | (c - 'A' + 10);
         else if (allow_hex && c >= 'a' && c <= 'f') out = (out << 4) | (c - 'a' + 10);
-        else return false;
+        else    
+            return false;
 
-        if (out < prev_out) return false; // number overflowed beyond maximum uint64_t
+        if (out < prev_out) 
+            return false; // number overflowed beyond maximum uint64_t
     }
 
     if (value) *value = out; // update only if successful
@@ -1028,16 +1030,17 @@ bool str_query_user_yn (rom query, DefAnswerType def_answer)
 void str_query_user (rom query, char *response, uint32_t response_size, bool allow_empty, 
                      ResponseVerifier verifier, rom verifier_param)
 {
-    uint32_t len;
+    uint32_t len = 0;
     do {
         fprintf (stderr, "%s", query);
 
         // Linux: in case of non-Latin, fgets doesn't handle backspace well - not completely removing the multi-byte character from the string (bug 593)
         // Windows (MingW): the string is terminated before the first non-Latin character on bash terminal and only ???? on Powershell and Command (bug 594)
         do {
-            fgets (response, response_size, stdin); 
-            len = strlen (response);
-            str_trim (response, &len);
+            if (fgets (response, response_size, stdin)) { // success
+                len = strlen (response);
+                str_trim (response, &len);
+            }
         } while (!len && !allow_empty);
 
     } while (verifier && !verifier (response, len, verifier_param));

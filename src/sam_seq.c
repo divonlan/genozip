@@ -932,6 +932,9 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
 
     // case: unmapped, and copied verbatim
     if (unmapped || force_verbatim) unmapped: {
+        ASSPIZ (nonref_ctx->next_local + vb->seq_len <= nonref_ctx->local.len32, "nonref_ctx.local overflow: next_local=%u seq_len=%u local.len=%u",
+                nonref_ctx->next_local, vb->seq_len, nonref_ctx->local.len32);
+                
         if (reconstruct) RECONSTRUCT (nonref, vb->seq_len); 
         nonref_ctx->next_local += ROUNDUP4 (vb->seq_len);
         goto done;

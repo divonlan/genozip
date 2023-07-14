@@ -125,8 +125,7 @@ static inline unsigned vcf_seg_FORMAT_PS_PID_test_lookback (VBlockVCFP vb, Conte
 
 static inline bool vcf_seg_FORMAT_PS_PID_ps_matches_pid (VBlockVCFP vb, STRp(ps))
 {
-    rom pid = last_txt (VB, FORMAT_PID);
-    unsigned pid_len = vb->last_txt_len (FORMAT_PID);
+    STRlast (pid, FORMAT_PID);
 
     return (pid_len > ps_len) && (pid[ps_len] == '_') && str_is_numeric (STRa(ps)) && !memcmp (ps, pid, ps_len);
 }

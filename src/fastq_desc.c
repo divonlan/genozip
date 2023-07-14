@@ -254,13 +254,13 @@ SPECIAL_RECONSTRUCTOR (fastq_special_copy_line1)
 {
     if (!reconstruct) return NO_NEW_VALUE;
 
-    CTXlast (snip, CTX(FASTQ_QNAME));
+    SETlast (snip, FASTQ_QNAME);
     RECONSTRUCT_snip;
 
     static Did dids[] = { FASTQ_QNAME2, FASTQ_EXTRA, FASTQ_AUX };
     for (int i=0; i < ARRAY_LEN (dids); i++)
         if (ctx_encountered_in_line (vb, dids[i])) {
-            CTXlast (snip, CTX(dids[i]));
+            SETlast (snip, dids[i]);
             RECONSTRUCT1 (' ');
             RECONSTRUCT_snip;
         };

@@ -181,7 +181,7 @@ TranslatorId vcf_lo_luft_trans_id (DictId dict_id, char number)
     else if (dict_id.num == _FORMAT_DS)       return VCF2VCF_PLOIDY; // eg (if ploidy=2): 1.25 -> 0.75 
     
     else if (dict_id.num == _INFO_AA          
-    ||       dict_id.num == _INFO_CSQ_Allele
+    ||       dict_id.num == _INFO_Allele
     ||       dict_id.num == _INFO_ANN_Allele ) return VCF2VCF_ALLELE; 
      
     else if (dict_id.num == _FORMAT_SAC       // eg 25,1,6,2 --> 6,2,25,1 (upon REF⇄ALT SWITCH)

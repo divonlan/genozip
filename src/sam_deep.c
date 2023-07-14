@@ -335,7 +335,7 @@ static void sam_piz_deep_add_qname (VBlockSAMP vb)
 {
     START_TIMER;
 
-    STRlast (qname, CTX(IS_PRIM(vb) ? SAM_QNAMESA : SAM_QNAME));
+    STRlast (qname, IS_PRIM(vb) ? SAM_QNAMESA : SAM_QNAME);
 
     sam_piz_alloc_deep_ents (vb, 3 + qname_len); // +3: PizZDeepFlags, qname_len, prfx_len
 

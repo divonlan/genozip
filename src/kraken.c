@@ -178,7 +178,7 @@ bool kraken_seg_is_small (ConstVBlockP vb, DictId dict_id)
         // typically small 
         dict_id.num == _KRAKEN_CU       ||
         dict_id.num == _KRAKEN_QNAME    || // container
-        dict_id.num == _KRAKEN_TAXID    || // usually a few thousand species
+        dict_id.num == _KRAKEN_TAXID    || // usually a few thousand organisms
         dict_id.num == _KRAKEN_SEQLEN   ||
         dict_id.num == _KRAKEN_KMERS    || // container
         dict_id.num == _KRAKEN_EOL      ||

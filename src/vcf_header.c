@@ -681,25 +681,48 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
 {
     if (!vcf_header_set_globals (txt_file->name, txt_header, true)) return false; // samples are different than a previous concatented file
 
+    stats_programs.name = "stats_programs";
+
     txtfile_foreach_line (txt_header, false, vcf_header_build_stats_programs, 0, 0, 0, 0);
-    if (stats_programs.len) *BAFTc (stats_programs) = 0; // nul-terminate
 
     SAFE_NUL (BAFTc (*txt_header));
     #define IF_IN_SOURCE(signature, segcf) if (stats_programs.len && strstr (stats_programs.data, signature)) segconf.segcf = true
-    #define IF_IN_HEADER(signature, segcf) if (strstr (txt_header->data   , signature)) segconf.segcf = true
+    #define IF_IN_HEADER(signature, segcf, program) ({ if ((sig = strstr (txt_header->data, (signature)))) {                    \
+                                                           segconf.segcf = true;                                                \
+                                                           if (program) { buf_append_string (evb, &stats_programs, program);    \
+                                                                          BNXTc (stats_programs) = ';'; } } })
+
     
     // when adding here, also add to stats_output_file_metadata()
+    rom sig;
     IF_IN_SOURCE ("infiniumFinalReportConverter", vcf_is_infinium);
     IF_IN_SOURCE ("VarScan", vcf_is_varscan);
     IF_IN_SOURCE ("dbSNP", vcf_is_dbSNP);
-    IF_IN_HEADER ("GenotypeGVCFs", vcf_is_gvcf);
-    IF_IN_HEADER ("CombineGVCFs", vcf_is_gvcf);
-    IF_IN_HEADER ("beagle", vcf_is_beagle);
-    IF_IN_HEADER ("Illumina GenCall", vcf_illum_gtyping);
-    IF_IN_HEADER ("Log R Ratio", vcf_illum_gtyping);
-    IF_IN_HEADER ("Number of cases used to estimate genetic effect", vcf_is_gwas); // v1.0
-    IF_IN_HEADER ("##trait", vcf_is_gwas); /*v1.2*/
+    IF_IN_SOURCE ("COSMIC", vcf_is_cosmic);
+    IF_IN_SOURCE ("ClinVar", vcf_is_clinvar);
+    IF_IN_SOURCE ("IsaacVariantCaller", vcf_is_isaac);
+    IF_IN_HEADER ("GenotypeGVCFs", vcf_is_gvcf, "GenotypeGVCFs");
+    IF_IN_HEADER ("CombineGVCFs", vcf_is_gvcf, "CombineGVCFs");
+    if (segconf.vcf_is_isaac) IF_IN_HEADER ("gvcf", vcf_is_gvcf, NULL);
+    IF_IN_HEADER ("beagle", vcf_is_beagle, "beagle");
+    IF_IN_HEADER ("Pindel", vcf_is_pindel, "Pindel");
+    IF_IN_HEADER ("caveman", vcf_is_caveman, "CaVEMan");
+    IF_IN_HEADER ("gnomAD", vcf_is_gnomad, "gnomAD");
+    IF_IN_HEADER ("ExAC", vcf_is_exac, "ExAC");
+    IF_IN_HEADER ("Mastermind", vcf_is_mastermind, "Mastermind");
+    IF_IN_HEADER ("VcfAnnotate.pl", vcf_is_vagrent, "VAGrENT");
+    IF_IN_HEADER ("ICGC", vcf_is_icgc, "ICGC");
+    IF_IN_HEADER ("Illumina GenCall", vcf_illum_gtyping, "Illumina GenCall");
+    IF_IN_HEADER ("Log R Ratio", vcf_illum_gtyping, "Illumina Genotyping");
+    IF_IN_HEADER ("Number of cases used to estimate genetic effect", vcf_is_gwas, "GWAS_1.0"); // v1.0
+    IF_IN_HEADER ("##trait", vcf_is_gwas, "GWAS_1.2"); /*v1.2*/
     
+    #define VEP_SIGNATURE "VEP. Format: "
+    IF_IN_HEADER (VEP_SIGNATURE, vcf_is_vep, "VEP");
+    if (segconf.vcf_is_vep) vcf_vep_zip_initialize (sig + STRLEN(VEP_SIGNATURE), txt_header->data);
+
+    if (stats_programs.len) *BLSTc (stats_programs) = 0; // replace final ';' with nul
+
     bool has_PROBE = !!strstr (txt_header->data, "##INFO=<ID=PROBE_A");
     SAFE_RESTORE;
 
@@ -766,7 +789,7 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
 
     // case: --chain: add liftover_contig, liftover_reference, chain, dual_coordinates keys
     if ((chain_is_loaded || txt_file->coords) && evb->comp_i == VCF_COMP_MAIN)
-        vcf_header_zip_update_to_dual_coords (txt_header);
+        vcf_header_zip_update_to_dual_coords (txt_header); // note: in VEP, can only be called after vcf_vep_zip_initialize 
 
     if (z_file) 
         z_file->z_flags.has_gencomp |= (txt_file->coords != DC_NONE);  // note: in case of --chain, z_flags.dual_coords is set in file_open_z

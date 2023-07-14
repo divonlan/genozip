@@ -25,10 +25,10 @@ extern rom seg_get_next_item (VBlockP vb, rom str, int *str_len, GetNextAllow ne
 extern rom seg_get_next_line (VBlockP vb, rom str, int *str_len, unsigned *len, bool must_have_newline, bool *has_13 /* out */, rom item_name);
 
 extern WordIndex seg_by_ctx_ex (VBlockP vb, STRp(snip), ContextP ctx, uint32_t add_bytes, bool *is_new);
-static inline WordIndex seg_by_ctx (VBlockP vb, STRp(snip), ContextP ctx, unsigned add_bytes)                      { return seg_by_ctx_ex (vb, STRa(snip), ctx, add_bytes, NULL); }
-static inline WordIndex seg_by_dict_id (VBlockP vb, STRp(snip), DictId dict_id, unsigned add_bytes)                { return seg_by_ctx_ex (vb, STRa(snip), ctx_get_ctx (vb, dict_id), add_bytes, NULL); }
+static inline WordIndex seg_by_ctx (VBlockP vb, STRp(snip), ContextP ctx, unsigned add_bytes)                 { return seg_by_ctx_ex (vb, STRa(snip), ctx, add_bytes, NULL); }
+static inline WordIndex seg_by_dict_id (VBlockP vb, STRp(snip), DictId dict_id, unsigned add_bytes)           { return seg_by_ctx_ex (vb, STRa(snip), ctx_get_ctx (vb, dict_id), add_bytes, NULL); }
 static inline WordIndex seg_by_did_i_ex (VBlockP vb, STRp(snip), Did did_i, unsigned add_bytes, bool *is_new) { return seg_by_ctx_ex (vb, STRa(snip), CTX(did_i), add_bytes, is_new); }
-static inline WordIndex seg_by_did (VBlockP vb, STRp(snip), Did did_i, unsigned add_bytes)                  { return seg_by_ctx_ex (vb, STRa(snip), CTX(did_i), add_bytes, NULL); }
+static inline WordIndex seg_by_did (VBlockP vb, STRp(snip), Did did_i, unsigned add_bytes)                    { return seg_by_ctx_ex (vb, STRa(snip), CTX(did_i), add_bytes, NULL); }
 
 extern WordIndex seg_known_node_index (VBlockP vb, ContextP ctx, WordIndex node_index, unsigned add_bytes);
 extern WordIndex seg_duplicate_last (VBlockP vb, ContextP ctx, unsigned add_bytes);
@@ -38,7 +38,7 @@ extern void seg_integer (VBlockP vb, ContextP ctx, int64_t n, bool with_lookup, 
 extern WordIndex seg_integer_as_text_do (VBlockP vb, ContextP ctx, int64_t n, unsigned add_bytes); // segs integer as normal textual snip
 #define seg_integer_as_text(vb,did_i,n,add_sizeof_n) seg_integer_as_text_do((VBlockP)(vb), &vb->contexts[did_i], (n), (add_sizeof_n) ? sizeof(n) : 0)
 
-extern WordIndex seg_self_delta (VBlockP vb, ContextP ctx, int64_t value, char format, uint32_t add_bytes);
+extern WordIndex seg_self_delta (VBlockP vb, ContextP ctx, int64_t value, char format, unsigned fixed_len, uint32_t add_bytes);
 
 extern void seg_simple_lookup (VBlockP vb, ContextP ctx, unsigned add_bytes);
 extern void seg_lookup_with_length (VBlockP vb, ContextP ctx, int32_t length, unsigned add_bytes);
@@ -48,7 +48,7 @@ extern bool seg_integer_or_not_cb (VBlockP vb, ContextP ctx, STRp(int_str), uint
 extern bool seg_float_or_not (VBlockP vb, ContextP ctx, STRp(this_value), unsigned add_bytes);
 extern void seg_numeric_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_bytes);
 
-#define MAX_POS_DELTA   16384  // the max delta (in either direction) that we will put in a dictionary - above this it goes to local. This number can be changed at any time without affecting backward compatability - it is used only by ZIP, not PIZ
+#define MAX_POS_DELTA   24000  // the max delta (in either direction) that we will put in a dictionary - above this it goes to local. This number can be changed at any time without affecting backward compatability - it is used only by ZIP, not PIZ
 #define SPF_BAD_SNIPS_TOO   1  // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
 #define SPF_ZERO_IS_BAD     2  // whether 0 is considered a bad POS (if true and POS is 0, to be handled according to seg_bad_snips_too)
 #define SPF_UNLIMITED_DELTA 4  // Always use delta, even if larger than MAX_POS_DELTA
@@ -105,13 +105,13 @@ extern void seg_diff (VBlockP vb, ContextP ctx, ContextP base_ctx, STRp(value), 
 
 extern WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_did_i, rom value, int32_t value_len, char sep, char subarray_sep, bool use_integer_delta, StoreType store_in_local, DictId arr_dict_id, int add_bytes);
 
-typedef bool (*SegCallback) (VBlockP vb, ContextP ctx, STRp(value), uint32_t repeat);
+typedef bool (*SegCallback) (VBlockP vb, ContextP ctx, STRp(value), uint32_t repeat); // returns true if segged successfully
 extern int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), const SegCallback *callbacks, unsigned add_bytes);
 extern bool seg_do_nothing_cb (VBlockP vb, ContextP ctx, STRp(field), uint32_t rep);
 
 extern void seg_array_of_array_of_struct (VBlockP vb, ContextP ctx, char outer_sep, MediumContainer inner_con, STRp(snip), const SegCallback *callbacks);
 
-extern bool seg_by_container (VBlockP vb, ContextP ctx, ContainerP con, STRp(value), STRp(container_snip), bool normal_seg_if_fail, unsigned add_bytes);
+extern bool seg_by_container (VBlockP vb, ContextP ctx, ContainerP con, STRp(value), STRp(container_snip), SegCallback item_seg, bool normal_seg_if_fail, unsigned add_bytes);
 
 extern void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, bool has_parameter, int64_t int_param, char char_param,
                                        char *snip, unsigned *snip_len /* in / out */);

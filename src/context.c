@@ -430,14 +430,14 @@ WordIndex ctx_create_node_do (VBlockP vb, ContextP vctx, STRp(snip), bool *is_ne
             vb->vblock_i, vctx->tag_name, snip_len, actual_len, STRf(snip));
 #endif
 
-    ASSERT (node_index_if_new <= MAX_NODE_INDEX, 
+    ASSERT (node_index_if_new <= MAX_WORD_INDEX, 
             "ctx of %s is full (max allowed words=%u): ol_nodes.len=%u nodes.len=%u",
             vctx->tag_name, MAX_WORDS_IN_CTX, vctx->ol_nodes.len32, vctx->nodes.len32);
 
     // get the node from the hash table if it already exists, or add this snip to the hash table if not
     CtxNode *node;
     WordIndex existing_node_index = hash_get_entry_for_seg (vb, vctx, STRa(snip), node_index_if_new, &node);
-    if (existing_node_index != NODE_INDEX_NONE) {
+    if (existing_node_index != WORD_INDEX_NONE) {
         (*B32(vctx->counts, existing_node_index))++; // note: counts.len = nodes.len + ol_nodes.len
         if (is_new) *is_new = false;
         
@@ -452,7 +452,7 @@ WordIndex ctx_create_node_do (VBlockP vb, ContextP vctx, STRp(snip), bool *is_ne
     }
     
     // this snip isn't in the hash table - its a new snip
-    ASSERT (vctx->nodes.len < MAX_NODE_INDEX, "too many words in dictionary %s (MAX_NODE_INDEX=%u)", vctx->tag_name, MAX_NODE_INDEX);
+    ASSERT (vctx->nodes.len < MAX_WORD_INDEX, "too many words in dictionary %s (MAX_WORD_INDEX=%u)", vctx->tag_name, MAX_WORD_INDEX);
 
     buf_alloc (vb, &vctx->nodes,  1, INITIAL_NUM_NODES, CtxNode,  CTX_GROWTH, "contexts->nodes");
     buf_alloc (vb, &vctx->counts, 1, INITIAL_NUM_NODES, uint32_t, CTX_GROWTH, "contexts->counts");
@@ -1096,14 +1096,14 @@ static inline bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx, uint8_t *vb
 
         // set word_index to be indexing the global dict - to be used by zip_generate_b250_section()
         if (is_new) {
-            vb_node->word_index = zf_node->word_index = zf_node_index;
-
             // note: chrom2ref_map is protected by ZMUTEX(zctx) (zctx is CHROM as we followed alias)
             if (chrom_2ref_seg_is_needed(zctx->did_i) && vctx->chrom2ref_map.len) { // SAM: it is ctx->chrom2ref_map.len=0 and nodes.len>0: in case of gencomp_len=2 will will have a SPECIAL snip node, but we don't use chrom2ref as all contigs must be in the SAM header
                 buf_alloc_255 (evb, &ZCTX(CHROM)->chrom2ref_map, 0, MAX_(INITIAL_NUM_NODES, zf_node_index+1), WordIndex, CTX_GROWTH, "ZCTX(CHROM)->chrom2ref_map");
                 *B(WordIndex, ZCTX(CHROM)->chrom2ref_map, zf_node_index) = *B(WordIndex, vctx->chrom2ref_map, i);
                 ZCTX(CHROM)->chrom2ref_map.len32 = MAX_(ZCTX(CHROM)->chrom2ref_map.len32, zf_node_index + 1);
             }
+
+            vb_node->word_index = zf_node->word_index = zf_node_index;
         } else 
             // a previous VB already already calculated the word index for this node. if it was done by vb_i=1,
             // then it is also re-sorted and the word_index is no longer the same as the node_index
@@ -1114,8 +1114,10 @@ static inline bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx, uint8_t *vb
     if (zctx->dict.len > EXCESSIVE_DICT_SIZE && !zctx->dict_len_excessive) {
         zctx->dict_len_excessive = true; // warn only once (per context)
         WARN ("WARNING: excessive zctx dictionary size - causing slow compression and decompression and reduced compression ratio. Please report this to " EMAIL_SUPPORT ".\n"
-              "sam_mapper=%s segconf_qf_name=%s data_type=%s ctx=%s vb=%s vb_size=%"PRIu64" zctx->dict.len=%"PRIu64" version=%s. First 1000 bytes: ", 
-              segconf_sam_mapper_name(), segconf_qf_name(QNAME1), z_dt_name(), zctx->tag_name, VB_NAME, segconf.vb_size, zctx->dict.len, GENOZIP_CODE_VERSION);
+              "%s %s data_type=%s ctx=%s vb=%s vb_size=%"PRIu64" zctx->dict.len=%"PRIu64" version=%s. First 1000 bytes: ", 
+              cond_str (VB_DT(BAM) || VB_DT(SAM), "sam_mapper=", segconf_sam_mapper_name()), 
+              cond_str (VB_DT(BAM) || VB_DT(SAM) || VB_DT(FASTQ) || VB_DT(KRAKEN), "segconf_qf_name=", segconf_qf_name(QNAME1)), 
+              z_dt_name(), zctx->tag_name, VB_NAME, segconf.vb_size, zctx->dict.len, GENOZIP_CODE_VERSION);
         str_print_dict (stderr, zctx->dict.data, 1000, false, false);
     }
 
@@ -1467,7 +1469,7 @@ rom ctx_snip_from_zf_nodes (ConstContextP zctx, WordIndex node_index, pSTRp(snip
 WordIndex ctx_get_ol_node_index_by_snip (VBlockP vb, ContextP ctx, STRp(snip))
 {
     CtxNode *node = NULL;
-    return hash_get_entry_for_seg (vb, ctx, STRa(snip), NODE_INDEX_NONE/*read-only*/, &node);
+    return hash_get_entry_for_seg (vb, ctx, STRa(snip), WORD_INDEX_NONE/*read-only*/, &node);
 }
 
 static BufferP sorter_cmp_counts = NULL; // for use by sorter_cmp - used only in vblock_i=1, so no thread safety issues

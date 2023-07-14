@@ -329,13 +329,6 @@ static void stats_output_file_metadata (void)
                 bufprint0 (evb, &features, "DVCF;");
             }
 
-            FEATURE0 (segconf.vcf_is_beagle,     "Feature: Beagle", "Beagle"); // TODO: remove some of these here for features, as redundant with stats_programs
-            FEATURE0 (segconf.vcf_is_varscan,    "Feature: VarScan", "VarScan");
-            FEATURE0 (segconf.vcf_is_gwas,       "Feature: GWAS-VCF", "GWAS-VCF");
-            FEATURE0 (segconf.vcf_is_gvcf,       "Feature: GVCF", "GVCF");
-            FEATURE0 (segconf.vcf_is_dbSNP,      "Feature: dbSNP", "dbSNP");
-            FEATURE0 (segconf.vcf_is_infinium,   "Feature: Infinium", "Infinium");
-            FEATURE0 (segconf.vcf_illum_gtyping, "Feature: Illumina Genotyping", "Illumina Genotyping");
             break;
 
         case DT_KRAKEN: {
@@ -348,7 +341,7 @@ static void stats_output_file_metadata (void)
                 bufprintf (evb, &stats, "Dominant TaxID: %s  %s: %s (%-5.2f%%)\n", dominant_taxid, DTPZ (line_name),
                         str_int_commas (dominant_taxid_count).s, 100.0 * (float)dominant_taxid_count / (float)z_file->num_lines); 
             else
-                bufprint0 (evb, &stats, "Dominant TaxID: No dominant species\n"); 
+                bufprint0 (evb, &stats, "Dominant TaxID: No dominant organism\n"); 
 
             REPORT_QNAME;
             break;
@@ -415,6 +408,9 @@ static void stats_output_file_metadata (void)
         bufprintf (evb, &features, "segconf.line_len=%u;", segconf.line_len); 
         if (segconf.longest_seq_len) bufprintf (evb, &features, "segconf.longest_seq_len=%u;", segconf.longest_seq_len); 
     }
+
+    if (stats_programs.len)
+        bufprintf (evb, &stats, "Programs: %.*s\n", STRfb(stats_programs));
 
     bufprintf (evb, &stats, "Genozip version: %s %s\nDate compressed: %s\n", 
                GENOZIP_CODE_VERSION, arch_get_distribution(), str_time().s);

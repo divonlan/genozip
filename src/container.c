@@ -70,7 +70,7 @@ WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con,
     // con=NULL means MISSING Container (see container_reconstruct_do)
     if (!con) return seg_by_ctx (VB, NULL, 0, ctx, 0); 
     
-    unsigned con_b64_size = base64_size(con_sizeof (*con));
+    unsigned con_b64_size  = base64_size(con_sizeof (*con));
     unsigned con1_snip_len = 1 + con_b64_size + prefixes_len;
     unsigned con2_snip_len = 1 + con_b64_size + ren_prefixes_len;
 

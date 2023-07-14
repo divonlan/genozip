@@ -672,6 +672,8 @@ static void sam_cigar_update_random_access (VBlockSAMP vb, ZipDataLineSAM *dl)
 
     else { // external ref
         WordIndex ref_index = chrom_2ref_seg_get (gref, VB, vb->chrom_node_index); 
+        if (ref_index == WORD_INDEX_NONE) return; // not in reference
+
         PosType64 LN = ref_contigs_get_contig_length (gref, ref_index, 0, 0, false); // -1 if no ref_index
 
         if (LN == -1) {}

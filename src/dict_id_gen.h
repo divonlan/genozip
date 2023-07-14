@@ -89,42 +89,21 @@
 #define _INFO_THETA ((uint64_t)280586701012)
 #define _INFO_ANN ((uint64_t)5131969)
 #define _INFO_ANN_Allele ((uint64_t)7308327811160097216)
-#define _INFO_ANN_Annotation ((uint64_t)7957695015373844929)
-#define _INFO_ANN_Annotation_Impact ((uint64_t)8386654066607993537)
-#define _INFO_ANN_Gene_Name ((uint64_t)7308604759626691521)
-#define _INFO_ANN_Gene_ID ((uint64_t)4920568956974478529)
-#define _INFO_ANN_Feature_Type ((uint64_t)7309475598605628865)
-#define _INFO_ANN_Feature_ID ((uint64_t)4920568956974413505)
-#define _INFO_ANN_Transcript_BioType ((uint64_t)7309475598824650689)
-#define _INFO_ANN_Rank ((uint64_t)118121823353025)
-#define _INFO_ANN_HGVS_c ((uint64_t)7160533562570586561)
-#define _INFO_ANN_HGVS_p ((uint64_t)8097282285063659969)
-#define _INFO_ANN_cDNA ((uint64_t)71804410618561)
-#define _INFO_ANN_CDS ((uint64_t)357627552705)
-#define _INFO_ANN_AA ((uint64_t)1094804673)
-#define _INFO_ANN_Distance ((uint64_t)7305804385182049729)
-#define _INFO_ANN_Errors ((uint64_t)8318833999040833217)
 #define _INFO_EFF ((uint64_t)4605637)
-#define _INFO_EFF_Effect ((uint64_t)8386658421570875845)
-#define _INFO_EFF_Effect_impact ((uint64_t)8386654066474037957)
-#define _INFO_EFF_Functional_Class ((uint64_t)8319100055135335365)
-#define _INFO_EFF_Codon_Change ((uint64_t)7306930284453246149)
-#define _INFO_EFF_Distance ((uint64_t)7305804384563246277)
-#define _INFO_EFF_Amino_Acid_Change ((uint64_t)7306930285155792325)
-#define _INFO_EFF_Amino_Acid_Length ((uint64_t)7526754601219995333)
-#define _INFO_EFF_Gene_Name ((uint64_t)7308604759626692549)
-#define _INFO_EFF_Transcript_BioType ((uint64_t)7309475598824650949)
-#define _INFO_EFF_Gene_Coding ((uint64_t)7453010313261562309)
-#define _INFO_EFF_Transcript_ID ((uint64_t)4920569021617955269)
-#define _INFO_EFF_Exon_Intron_Rank ((uint64_t)7741231815625106117)
-#define _INFO_EFF_Genotype_Number ((uint64_t)8243102914961695685)
-#define _INFO_EFF_Warnings_Errors ((uint64_t)8318833998756799685)
 #define _INFO_END ((uint64_t)4476613)
 #define _INFO_MLEAC ((uint64_t)288857869517)
 #define _INFO_MLEAF ((uint64_t)301742771405)
-#define _INFO_SOR ((uint64_t)5394387)
 #define _INFO_QD ((uint64_t)17617)
+#define _INFO_FS ((uint64_t)21446)
+#define _INFO_SOR ((uint64_t)5394387)
+#define _INFO_MQRankSum ((uint64_t)7887302043068682701)
+#define _INFO_ReadPosRankSum ((uint64_t)7887302043120002514)
 #define _INFO_HaplotypeScore ((uint64_t)7310027617987486152)
+#define _INFO_ExcessHet ((uint64_t)8387189541506873541)
+#define _INFO_AS_QD ((uint64_t)293422977985)
+#define _INFO_BaseQRankSum ((uint64_t)7887302043137958338)
+#define _INFO_InbreedingCoeff ((uint64_t)7378696568827965129)
+#define _INFO_AS_InbreedingCoeff ((uint64_t)7378696568139895745)
 #define _INFO_RAW_MQ ((uint64_t)89392753885650)
 #define _INFO_RAW_MQandDP ((uint64_t)5783858246659293650)
 #define _INFO_RAW_MQandDP_MQ ((uint64_t)5783858246523629778)
@@ -133,66 +112,31 @@
 #define _FORMAT_MIN_DP ((uint64_t)88254586964301)
 #define _FORMAT_SPL ((uint64_t)5001299)
 #define _FORMAT_ICNT ((uint64_t)1414415177)
+#define _INFO_SNVSB ((uint64_t)284866006739)
+#define _INFO_SNVHPOL ((uint64_t)21479304459603667)
+#define _INFO_CIGAR ((uint64_t)353282509251)
+#define _INFO_RU ((uint64_t)21970)
+#define _INFO_REFREP ((uint64_t)88258663302610)
+#define _INFO_IDREP ((uint64_t)344760403145)
+#define _INFO_BLOCKAVG_min30p3a ((uint64_t)7004065198081264834)
+#define _FORMAT_GQX ((uint64_t)5787975)
+#define _FORMAT_DPF ((uint64_t)4608068)
+#define _FORMAT_DPI ((uint64_t)4804676)
 #define _FORMAT_BX ((uint64_t)22594)
 #define _FORMAT_PQ ((uint64_t)20816)
 #define _FORMAT_JQ ((uint64_t)20810)
-#define _INFO_vep ((uint64_t)7366134)
 #define _INFO_AGE_HISTOGRAM_HET ((uint64_t)6072339247036450753)
 #define _INFO_AGE_HISTOGRAM_HOM ((uint64_t)5570750838538061761)
 #define _INFO_MAX_AF ((uint64_t)77246586438093)
 #define _INFO_CSQ ((uint64_t)5329859)
-#define _INFO_CSQ_Allele ((uint64_t)7308327811210757056)
-#define _INFO_CSQ_Consequence ((uint64_t)7305804401960235491)
-#define _INFO_CSQ_IMPACT ((uint64_t)6071768535843156707)
-#define _INFO_CSQ_SYMBOL ((uint64_t)5498686569886987235)
-#define _INFO_CSQ_Gene ((uint64_t)7308890602250384611)
-#define _INFO_CSQ_Feature ((uint64_t)7310034287616800483)
-#define _INFO_CSQ_EXON ((uint64_t)5642825912858917091)
-#define _INFO_CSQ_INTRON ((uint64_t)5642819380213660131)
-#define _INFO_CSQ_HGVSc ((uint64_t)7157159097128935907)
-#define _INFO_CSQ_HGVSp ((uint64_t)8093907819621999331)
-#define _INFO_CSQ_cDNA_position ((uint64_t)7957695014888498147)
-#define _INFO_CSQ_CDS_position ((uint64_t)7957695014888498403)
-#define _INFO_CSQ_Protein_position ((uint64_t)7957695014888498659)
-#define _INFO_CSQ_Amino_acids ((uint64_t)8314886687319877347)
-#define _INFO_CSQ_Codons ((uint64_t)8317708038451718115)
-#define _INFO_CSQ_Existing_variation ((uint64_t)7957695014888499427)
-#define _INFO_CSQ_ALLELE_NUM ((uint64_t)5572446285234137571)
-#define _INFO_CSQ_DISTANCE ((uint64_t)4990918854500903651)
-#define _INFO_CSQ_STRAND ((uint64_t)4921943264570076131)
-#define _INFO_CSQ_FLAGS ((uint64_t)6000836824532217059)
-#define _INFO_CSQ_VARIANT_CLASS ((uint64_t)6004214524252745187)
-#define _INFO_CSQ_MINIMISED ((uint64_t)4919429742334275299)
-#define _INFO_CSQ_SYMBOL_SOURCE ((uint64_t)4990923338446761955)
-#define _INFO_CSQ_HGNC_ID ((uint64_t)4920568810610847971)
-#define _INFO_CSQ_CANONICAL ((uint64_t)5494747002544812515)
-#define _INFO_CSQ_TSL ((uint64_t)5499832338312557283)
-#define _INFO_CSQ_APPRIS ((uint64_t)6001418483363181539)
-#define _INFO_CSQ_CCDS ((uint64_t)5999994559970637027)
-#define _INFO_CSQ_ENSP ((uint64_t)5788056005725353443)
-#define _INFO_CSQ_SWISSPROT ((uint64_t)6075164927261374179)
-#define _INFO_CSQ_TREMBL ((uint64_t)5495039455457933283)
-#define _INFO_CSQ_UNIPARC ((uint64_t)4851011561849060067)
-#define _INFO_CSQ_GENE_PHENO ((uint64_t)5714581154084125155)
-#define _INFO_CSQ_SIFT ((uint64_t)6072621769751231203)
-#define _INFO_CSQ_PolyPhen ((uint64_t)7954879010990932451)
-#define _INFO_CSQ_DOMAINS ((uint64_t)6002815898217562851)
-#define _INFO_CSQ_HGVS_OFFSET ((uint64_t)6072351234056209379)
-#define _INFO_CSQ_AF ((uint64_t)19775126011856099)
-#define _INFO_CSQ_CLIN_SIG ((uint64_t)5136728518844175843)
-#define _INFO_CSQ_SOMATIC ((uint64_t)4848499113355073251)
-#define _INFO_CSQ_PHENO ((uint64_t)5714581154084114915)
-#define _INFO_CSQ_PUBMED ((uint64_t)4919423115199731939)
-#define _INFO_CSQ_MOTIF_NAME ((uint64_t)4993719366451419619)
-#define _INFO_CSQ_MOTIF_POS ((uint64_t)6003105198624692963)
-#define _INFO_CSQ_HIGH_INF_POS ((uint64_t)6003105198624686307)
-#define _INFO_CSQ_MOTIF_SCORE_CHANGE ((uint64_t)4992044754407728355)
-#define _INFO_CSQ_LoF ((uint64_t)5075359277339846115)
-#define _INFO_CSQ_LoF_filter ((uint64_t)8243122701541269219)
-#define _INFO_CSQ_LoF_flags ((uint64_t)8315722354811678179)
-#define _INFO_CSQ_LoF_info ((uint64_t)8027224784449514211)
-#define _INFO_CSQ_context ((uint64_t)8392569455859949539)
-#define _INFO_CSQ_ancestral ((uint64_t)7809649072743328739)
+#define _INFO_vep ((uint64_t)7366134)
+#define _INFO_MMCNT ((uint64_t)362090286541)
+#define _INFO_MMCNT1 ((uint64_t)54238160047565)
+#define _INFO_MMCNT2 ((uint64_t)55337671675341)
+#define _INFO_MMCNT3 ((uint64_t)56437183303117)
+#define _INFO_MMID3 ((uint64_t)220188986829)
+#define _INFO_MMURI3 ((uint64_t)56390006951373)
+#define _INFO_MMURI ((uint64_t)314913934797)
 #define _INFO_ALLELEID ((uint64_t)4920540261761436865)
 #define _INFO_CLNDN ((uint64_t)336153431235)
 #define _INFO_CLNHGVS ((uint64_t)23457287222742211)
@@ -212,8 +156,21 @@
 #define _INFO_HGVS_ins_payload ((uint64_t)8317701419990202312)
 #define _INFO_HGVS_delins_end_pos ((uint64_t)8317701475824777416)
 #define _INFO_HGVS_delins_payload ((uint64_t)8317701475824777672)
+#define _INFO_HGVS_dup_end_pos ((uint64_t)8103493465155253960)
+#define _INFO_HGVS_no_payload ((uint64_t)8103493465155254728)
+#define _INFO_CONSEQUENCE ((uint64_t)4990918871713992643)
+#define _INFO_OCCURRENCE ((uint64_t)4990918871746823119)
+#define _INFO_mutation ((uint64_t)7957695015159100909)
+#define _INFO_studies ((uint64_t)32481125653116147)
+#define _INFO_affected_donors ((uint64_t)8318833981645022945)
+#define _INFO_project_count ((uint64_t)8389772277225321200)
+#define _INFO_tested_donors ((uint64_t)8318833981897532916)
 #define _INFO_DP_HIST ((uint64_t)23735472255619268)
 #define _INFO_GQ_HIST ((uint64_t)23735472255619527)
+#define _INFO_age_hist_het_bin_freq ((uint64_t)8171062882946344929)
+#define _INFO_gq_hist_alt_bin_freq ((uint64_t)8171062883096949223)
+#define _INFO_dp_hist_alt_bin_freq ((uint64_t)8171062883096948964)
+#define _INFO_ab_hist_alt_bin_freq ((uint64_t)8171062883096945377)
 #define _INFO_SVLEN ((uint64_t)336170079955)
 #define _INFO_SVTYPE ((uint64_t)76211398399699)
 #define _INFO_CIPOS ((uint64_t)357812947395)
@@ -271,6 +228,7 @@
 #define _INFO_CAF ((uint64_t)4604355)
 #define _INFO_G5A ((uint64_t)4273607)
 #define _INFO_G5 ((uint64_t)13767)
+#define _FORMAT_FRQ ((uint64_t)5329478)
 #define _INFO_PROBE_A ((uint64_t)18400624556069584)
 #define _INFO_PROBE_B ((uint64_t)18682099532780240)
 #define _INFO_ALLELE_A ((uint64_t)4710559929135287489)
@@ -290,6 +248,57 @@
 #define _INFO_IMP ((uint64_t)5262793)
 #define _FORMAT_RC ((uint64_t)17234)
 #define _FORMAT_AC ((uint64_t)17217)
+#define _INFO_CDS ((uint64_t)5457091)
+#define _INFO_GENE ((uint64_t)1162757575)
+#define _INFO_HGVSC ((uint64_t)289160972232)
+#define _INFO_HGVSG ((uint64_t)306340841416)
+#define _INFO_HGVSP ((uint64_t)344995547080)
+#define _INFO_LEGACY_ID ((uint64_t)4920568904830895564)
+#define _INFO_SO_TERM ((uint64_t)21764030928474067)
+#define _INFO_STRAND ((uint64_t)75102894052563)
+#define _INFO_TIER ((uint64_t)1380272596)
+#define _INFO_TRANSCRIPT ((uint64_t)6075436515171848916)
+#define _INFO_CNT ((uint64_t)5525187)
+#define _INFO_IS_CANONICAL ((uint64_t)5494747002310710217)
+#define _INFO_OLD_VARIANT ((uint64_t)6074864730756107471)
+#define _INFO_SAMPLE_COUNT ((uint64_t)6074886746507395539)
+#define _INFO_MP ((uint64_t)20685)
+#define _INFO_GP ((uint64_t)20679)
+#define _INFO_TG ((uint64_t)18388)
+#define _INFO_TP ((uint64_t)20692)
+#define _INFO_SG ((uint64_t)18387)
+#define _INFO_SP ((uint64_t)20691)
+#define _INFO_DS ((uint64_t)21444)
+#define _INFO_CA ((uint64_t)16835)
+#define _INFO_SNP ((uint64_t)5263059)
+#define _FORMAT_AA ((uint64_t)16705)
+#define _FORMAT_CA ((uint64_t)16707)
+#define _FORMAT_GA ((uint64_t)16711)
+#define _FORMAT_TA ((uint64_t)16724)
+#define _FORMAT_PM ((uint64_t)19792)
+#define _INFO_PC ((uint64_t)17360)
+#define _INFO_RE ((uint64_t)17874)
+#define _INFO_LEN ((uint64_t)5129676)
+#define _INFO_S1 ((uint64_t)12755)
+#define _INFO_S2 ((uint64_t)13011)
+#define _INFO_PA ((uint64_t)16848)
+#define _INFO_NA ((uint64_t)16846)
+#define _INFO_REP ((uint64_t)5260754)
+#define _INFO_PRV ((uint64_t)5657296)
+#define _INFO_F017 ((uint64_t)925970630)
+#define _FORMAT_NP ((uint64_t)20558)
+#define _FORMAT_PB ((uint64_t)16976)
+#define _FORMAT_NB ((uint64_t)16974)
+#define _FORMAT_PD ((uint64_t)17488)
+#define _FORMAT_ND ((uint64_t)17486)
+#define _FORMAT_PR ((uint64_t)21072)
+#define _FORMAT_NR ((uint64_t)21070)
+#define _FORMAT_PU ((uint64_t)21840)
+#define _FORMAT_NU ((uint64_t)21838)
+#define _INFO_VD ((uint64_t)17622)
+#define _INFO_VW ((uint64_t)22486)
+#define _INFO_VDVW_ARR ((uint64_t)5931875536943334614)
+#define _INFO_VT ((uint64_t)21718)
 #define _INFO_RSID ((uint64_t)1145656274)
 #define _FORMAT_NS ((uint64_t)21326)
 #define _FORMAT_EZ ((uint64_t)23109)
@@ -302,6 +311,11 @@
 #define _FORMAT_ADALL ((uint64_t)327696860225)
 #define _FORMAT_IGT ((uint64_t)5523273)
 #define _FORMAT_IPS ((uint64_t)5460041)
+#define _INFO_Polyphen2_HDIV_score ((uint64_t)7310027618205331408)
+#define _INFO_PUniprot_aapos ((uint64_t)8317990600576691925)
+#define _INFO_VEST3_score ((uint64_t)7310027617582925270)
+#define _INFO_FATHMM_score ((uint64_t)7310027617381663174)
+#define _INFO_SiPhy_29way_pi ((uint64_t)7597677546419808723)
 #define _INFO_LUFT ((uint64_t)1413895628)
 #define _INFO_PRIM ((uint64_t)1296650960)
 #define _INFO_LREJ ((uint64_t)1785033420)
@@ -896,7 +910,7 @@ typedef enum { REF_CONTIG, NUM_REF_FIELDS } REFFields;
     [REF_CONTIG] = { { _REF_CONTIG }, TAG(CONTIG) }, \
 } 
 
-typedef enum { VCF_CHROM, VCF_POS, VCF_ID, VCF_REFALT, VCF_QUAL, VCF_FILTER, VCF_INFO, VCF_FORMAT, VCF_SAMPLES, VCF_LOOKBACK, VCF_EOL, VCF_TOPLEVEL, VCF_oCHROM, VCF_oPOS, VCF_oREFALT, VCF_oXSTRAND, VCF_COORDS, VCF_oSTATUS, VCF_COPYPOS, VCF_LIFT_REF, VCF_COPYSTAT, VCF_TOPLUFT, VCF_LINE_NUM, VCF_DEBUG_LINES, FORMAT_AD, FORMAT_ADF, FORMAT_ADR, FORMAT_AF, FORMAT_DP, FORMAT_DS, FORMAT_GL, FORMAT_GP, FORMAT_GQ, FORMAT_GT, FORMAT_PL, FORMAT_PLy, FORMAT_PLn, FORMAT_PRI, FORMAT_F1R2, FORMAT_F2R1, FORMAT_MB, FORMAT_PP, FORMAT_SAC, FORMAT_SB, FORMAT_PS, FORMAT_PSpos, FORMAT_PSalt, FORMAT_PSref, FORMAT_PID, FORMAT_PGT, FORMAT_FL, FORMAT_AB, FORMAT_AB3, FORMAT_GT_HT, FORMAT_GT_HT_INDEX, FORMAT_PBWT_RUNS, FORMAT_PBWT_FGRC, INFO_AC, INFO_AF, INFO_AN, INFO_AA, INFO_BaseCounts, INFO_DP, INFO_DP4, INFO_SF, INFO_VQSLOD, INFO_MQ, INFO_MQ0, INFO_NS, INFO_LDAF, INFO_AVGPOST, INFO_RSQ, INFO_ERATE, INFO_THETA, INFO_ANN, INFO_ANN_Allele, INFO_ANN_Annotation, INFO_ANN_Annotation_Impact, INFO_ANN_Gene_Name, INFO_ANN_Gene_ID, INFO_ANN_Feature_Type, INFO_ANN_Feature_ID, INFO_ANN_Transcript_BioType, INFO_ANN_Rank, INFO_ANN_HGVS_c, INFO_ANN_HGVS_p, INFO_ANN_cDNA, INFO_ANN_CDS, INFO_ANN_AA, INFO_ANN_Distance, INFO_ANN_Errors, INFO_EFF, INFO_EFF_Effect, INFO_EFF_Effect_impact, INFO_EFF_Functional_Class, INFO_EFF_Codon_Change, INFO_EFF_Distance, INFO_EFF_Amino_Acid_Change, INFO_EFF_Amino_Acid_Length, INFO_EFF_Gene_Name, INFO_EFF_Transcript_BioType, INFO_EFF_Gene_Coding, INFO_EFF_Transcript_ID, INFO_EFF_Exon_Intron_Rank, INFO_EFF_Genotype_Number, INFO_EFF_Warnings_Errors, INFO_END, INFO_MLEAC, INFO_MLEAF, INFO_SOR, INFO_QD, INFO_HaplotypeScore, INFO_RAW_MQ, INFO_RAW_MQandDP, INFO_RAW_MQandDP_MQ, INFO_RAW_MQandDP_DP, FORMAT_RGQ, FORMAT_MIN_DP, FORMAT_SPL, FORMAT_ICNT, FORMAT_BX, FORMAT_PQ, FORMAT_JQ, INFO_vep, INFO_AGE_HISTOGRAM_HET, INFO_AGE_HISTOGRAM_HOM, INFO_MAX_AF, INFO_CSQ, INFO_CSQ_Allele, INFO_CSQ_Consequence, INFO_CSQ_IMPACT, INFO_CSQ_SYMBOL, INFO_CSQ_Gene, INFO_CSQ_Feature, INFO_CSQ_EXON, INFO_CSQ_INTRON, INFO_CSQ_HGVSc, INFO_CSQ_HGVSp, INFO_CSQ_cDNA_position, INFO_CSQ_CDS_position, INFO_CSQ_Protein_position, INFO_CSQ_Amino_acids, INFO_CSQ_Codons, INFO_CSQ_Existing_variation, INFO_CSQ_ALLELE_NUM, INFO_CSQ_DISTANCE, INFO_CSQ_STRAND, INFO_CSQ_FLAGS, INFO_CSQ_VARIANT_CLASS, INFO_CSQ_MINIMISED, INFO_CSQ_SYMBOL_SOURCE, INFO_CSQ_HGNC_ID, INFO_CSQ_CANONICAL, INFO_CSQ_TSL, INFO_CSQ_APPRIS, INFO_CSQ_CCDS, INFO_CSQ_ENSP, INFO_CSQ_SWISSPROT, INFO_CSQ_TREMBL, INFO_CSQ_UNIPARC, INFO_CSQ_GENE_PHENO, INFO_CSQ_SIFT, INFO_CSQ_PolyPhen, INFO_CSQ_DOMAINS, INFO_CSQ_HGVS_OFFSET, INFO_CSQ_AF, INFO_CSQ_CLIN_SIG, INFO_CSQ_SOMATIC, INFO_CSQ_PHENO, INFO_CSQ_PUBMED, INFO_CSQ_MOTIF_NAME, INFO_CSQ_MOTIF_POS, INFO_CSQ_HIGH_INF_POS, INFO_CSQ_MOTIF_SCORE_CHANGE, INFO_CSQ_LoF, INFO_CSQ_LoF_filter, INFO_CSQ_LoF_flags, INFO_CSQ_LoF_info, INFO_CSQ_context, INFO_CSQ_ancestral, INFO_ALLELEID, INFO_CLNDN, INFO_CLNHGVS, INFO_CLNVI, INFO_CLNORIGIN, INFO_CLNSIG, INFO_CLNDISDB, INFO_CLNREVSTAT, INFO_CLNACC, INFO_HGVS_snp_pos, INFO_HGVS_snp_refalt, INFO_HGVS_del_start_pos, INFO_HGVS_del_end_pos, INFO_HGVS_del_payload, INFO_HGVS_ins_start_pos, INFO_HGVS_ins_end_pos, INFO_HGVS_ins_payload, INFO_HGVS_delins_end_pos, INFO_HGVS_delins_payload, INFO_DP_HIST, INFO_GQ_HIST, INFO_SVLEN, INFO_SVTYPE, INFO_CIPOS, INFO_CIEND, INFO_SVANN, INFO_MATEID, INFO_MATEDIST, INFO_IMPRECISE, INFO_SHADOWED, FORMAT_CN, INFO_PV4, INFO_RPB, INFO_MQB, INFO_BQB, INFO_MQSB, FORMAT_RDF, FORMAT_RDR, FORMAT_SDP, FORMAT_RD, FORMAT_FREQ, FORMAT_PVAL, FORMAT_RBQ, FORMAT_ABQ, INFO_ADP, INFO_WT, INFO_HET, INFO_HOM, INFO_NC, INFO_RS, INFO_RSPOS, INFO_TOPMED, INFO_GENEINFO, INFO_dbSNPBuildID, INFO_PSEUDOGENEINFO, INFO_SAO, INFO_SSR, INFO_VC, INFO_PM, INFO_NSF, INFO_NSM, INFO_NSN, INFO_SYN, INFO_U3, INFO_U5, INFO_ASS, INFO_DSS, INFO_INT, INFO_R3, INFO_R5, INFO_GNO, INFO_PUB, INFO_FREQ, INFO_COMMON, INFO_VP, INFO_CAF, INFO_G5A, INFO_G5, INFO_PROBE_A, INFO_PROBE_B, INFO_ALLELE_A, INFO_ALLELE_B, INFO_refSNP, INFO_ILLUMINA_CHR, INFO_ILLUMINA_POS, INFO_ILLUMINA_STRAND, FORMAT_BAF, FORMAT_X, FORMAT_Y, INFO_INFINIUM_CR, INFO_INFINIUM_GentrainScore, INFO_INFINIUM_HW, INFO_AR2, INFO_DR2, INFO_IMP, FORMAT_RC, FORMAT_AC, INFO_RSID, FORMAT_NS, FORMAT_EZ, FORMAT_SI, FORMAT_NC, FORMAT_ES, FORMAT_SE, FORMAT_LP, FORMAT_ID, FORMAT_ADALL, FORMAT_IGT, FORMAT_IPS, INFO_LUFT, INFO_PRIM, INFO_LREJ, INFO_PREJ, NUM_VCF_FIELDS } VCFFields;
+typedef enum { VCF_CHROM, VCF_POS, VCF_ID, VCF_REFALT, VCF_QUAL, VCF_FILTER, VCF_INFO, VCF_FORMAT, VCF_SAMPLES, VCF_LOOKBACK, VCF_EOL, VCF_TOPLEVEL, VCF_oCHROM, VCF_oPOS, VCF_oREFALT, VCF_oXSTRAND, VCF_COORDS, VCF_oSTATUS, VCF_COPYPOS, VCF_LIFT_REF, VCF_COPYSTAT, VCF_TOPLUFT, VCF_LINE_NUM, VCF_DEBUG_LINES, FORMAT_AD, FORMAT_ADF, FORMAT_ADR, FORMAT_AF, FORMAT_DP, FORMAT_DS, FORMAT_GL, FORMAT_GP, FORMAT_GQ, FORMAT_GT, FORMAT_PL, FORMAT_PLy, FORMAT_PLn, FORMAT_PRI, FORMAT_F1R2, FORMAT_F2R1, FORMAT_MB, FORMAT_PP, FORMAT_SAC, FORMAT_SB, FORMAT_PS, FORMAT_PSpos, FORMAT_PSalt, FORMAT_PSref, FORMAT_PID, FORMAT_PGT, FORMAT_FL, FORMAT_AB, FORMAT_AB3, FORMAT_GT_HT, FORMAT_GT_HT_INDEX, FORMAT_PBWT_RUNS, FORMAT_PBWT_FGRC, INFO_AC, INFO_AF, INFO_AN, INFO_AA, INFO_BaseCounts, INFO_DP, INFO_DP4, INFO_SF, INFO_VQSLOD, INFO_MQ, INFO_MQ0, INFO_NS, INFO_LDAF, INFO_AVGPOST, INFO_RSQ, INFO_ERATE, INFO_THETA, INFO_ANN, INFO_ANN_Allele, INFO_EFF, INFO_END, INFO_MLEAC, INFO_MLEAF, INFO_QD, INFO_FS, INFO_SOR, INFO_MQRankSum, INFO_ReadPosRankSum, INFO_HaplotypeScore, INFO_ExcessHet, INFO_AS_QD, INFO_BaseQRankSum, INFO_InbreedingCoeff, INFO_AS_InbreedingCoeff, INFO_RAW_MQ, INFO_RAW_MQandDP, INFO_RAW_MQandDP_MQ, INFO_RAW_MQandDP_DP, FORMAT_RGQ, FORMAT_MIN_DP, FORMAT_SPL, FORMAT_ICNT, INFO_SNVSB, INFO_SNVHPOL, INFO_CIGAR, INFO_RU, INFO_REFREP, INFO_IDREP, INFO_BLOCKAVG_min30p3a, FORMAT_GQX, FORMAT_DPF, FORMAT_DPI, FORMAT_BX, FORMAT_PQ, FORMAT_JQ, INFO_AGE_HISTOGRAM_HET, INFO_AGE_HISTOGRAM_HOM, INFO_MAX_AF, INFO_CSQ, INFO_vep, INFO_MMCNT, INFO_MMCNT1, INFO_MMCNT2, INFO_MMCNT3, INFO_MMID3, INFO_MMURI3, INFO_MMURI, INFO_ALLELEID, INFO_CLNDN, INFO_CLNHGVS, INFO_CLNVI, INFO_CLNORIGIN, INFO_CLNSIG, INFO_CLNDISDB, INFO_CLNREVSTAT, INFO_CLNACC, INFO_HGVS_snp_pos, INFO_HGVS_snp_refalt, INFO_HGVS_del_start_pos, INFO_HGVS_del_end_pos, INFO_HGVS_del_payload, INFO_HGVS_ins_start_pos, INFO_HGVS_ins_end_pos, INFO_HGVS_ins_payload, INFO_HGVS_delins_end_pos, INFO_HGVS_delins_payload, INFO_HGVS_dup_end_pos, INFO_HGVS_no_payload, INFO_CONSEQUENCE, INFO_OCCURRENCE, INFO_mutation, INFO_studies, INFO_affected_donors, INFO_project_count, INFO_tested_donors, INFO_DP_HIST, INFO_GQ_HIST, INFO_age_hist_het_bin_freq, INFO_gq_hist_alt_bin_freq, INFO_dp_hist_alt_bin_freq, INFO_ab_hist_alt_bin_freq, INFO_SVLEN, INFO_SVTYPE, INFO_CIPOS, INFO_CIEND, INFO_SVANN, INFO_MATEID, INFO_MATEDIST, INFO_IMPRECISE, INFO_SHADOWED, FORMAT_CN, INFO_PV4, INFO_RPB, INFO_MQB, INFO_BQB, INFO_MQSB, FORMAT_RDF, FORMAT_RDR, FORMAT_SDP, FORMAT_RD, FORMAT_FREQ, FORMAT_PVAL, FORMAT_RBQ, FORMAT_ABQ, INFO_ADP, INFO_WT, INFO_HET, INFO_HOM, INFO_NC, INFO_RS, INFO_RSPOS, INFO_TOPMED, INFO_GENEINFO, INFO_dbSNPBuildID, INFO_PSEUDOGENEINFO, INFO_SAO, INFO_SSR, INFO_VC, INFO_PM, INFO_NSF, INFO_NSM, INFO_NSN, INFO_SYN, INFO_U3, INFO_U5, INFO_ASS, INFO_DSS, INFO_INT, INFO_R3, INFO_R5, INFO_GNO, INFO_PUB, INFO_FREQ, INFO_COMMON, INFO_VP, INFO_CAF, INFO_G5A, INFO_G5, FORMAT_FRQ, INFO_PROBE_A, INFO_PROBE_B, INFO_ALLELE_A, INFO_ALLELE_B, INFO_refSNP, INFO_ILLUMINA_CHR, INFO_ILLUMINA_POS, INFO_ILLUMINA_STRAND, FORMAT_BAF, FORMAT_X, FORMAT_Y, INFO_INFINIUM_CR, INFO_INFINIUM_GentrainScore, INFO_INFINIUM_HW, INFO_AR2, INFO_DR2, INFO_IMP, FORMAT_RC, FORMAT_AC, INFO_CDS, INFO_GENE, INFO_HGVSC, INFO_HGVSG, INFO_HGVSP, INFO_LEGACY_ID, INFO_SO_TERM, INFO_STRAND, INFO_TIER, INFO_TRANSCRIPT, INFO_CNT, INFO_IS_CANONICAL, INFO_OLD_VARIANT, INFO_SAMPLE_COUNT, INFO_MP, INFO_GP, INFO_TG, INFO_TP, INFO_SG, INFO_SP, INFO_DS, INFO_CA, INFO_SNP, FORMAT_AA, FORMAT_CA, FORMAT_GA, FORMAT_TA, FORMAT_PM, INFO_PC, INFO_RE, INFO_LEN, INFO_S1, INFO_S2, INFO_PA, INFO_NA, INFO_REP, INFO_PRV, INFO_F017, FORMAT_NP, FORMAT_PB, FORMAT_NB, FORMAT_PD, FORMAT_ND, FORMAT_PR, FORMAT_NR, FORMAT_PU, FORMAT_NU, INFO_VD, INFO_VW, INFO_VDVW_ARR, INFO_VT, INFO_RSID, FORMAT_NS, FORMAT_EZ, FORMAT_SI, FORMAT_NC, FORMAT_ES, FORMAT_SE, FORMAT_LP, FORMAT_ID, FORMAT_ADALL, FORMAT_IGT, FORMAT_IPS, INFO_Polyphen2_HDIV_score, INFO_PUniprot_aapos, INFO_VEST3_score, INFO_FATHMM_score, INFO_SiPhy_29way_pi, INFO_LUFT, INFO_PRIM, INFO_LREJ, INFO_PREJ, NUM_VCF_FIELDS } VCFFields;
 
 #define VCF_PREDEFINED { \
     [VCF_CHROM] = { { _VCF_CHROM }, TAG(CHROM) }, \
@@ -975,42 +989,21 @@ typedef enum { VCF_CHROM, VCF_POS, VCF_ID, VCF_REFALT, VCF_QUAL, VCF_FILTER, VCF
     [INFO_THETA] = { { _INFO_THETA }, TAG(THETA) }, \
     [INFO_ANN] = { { _INFO_ANN }, TAG(ANN) }, \
     [INFO_ANN_Allele] = { { _INFO_ANN_Allele }, TAG(@ANN_Allele) }, \
-    [INFO_ANN_Annotation] = { { _INFO_ANN_Annotation }, TAG(A1Annotation) }, \
-    [INFO_ANN_Annotation_Impact] = { { _INFO_ANN_Annotation_Impact }, TAG(A2Annotation_Impact) }, \
-    [INFO_ANN_Gene_Name] = { { _INFO_ANN_Gene_Name }, TAG(A3Gene_Name) }, \
-    [INFO_ANN_Gene_ID] = { { _INFO_ANN_Gene_ID }, TAG(A4Gene_ID) }, \
-    [INFO_ANN_Feature_Type] = { { _INFO_ANN_Feature_Type }, TAG(A5Feature_Type) }, \
-    [INFO_ANN_Feature_ID] = { { _INFO_ANN_Feature_ID }, TAG(A6Feature_ID) }, \
-    [INFO_ANN_Transcript_BioType] = { { _INFO_ANN_Transcript_BioType }, TAG(A7Transcript_BioType) }, \
-    [INFO_ANN_Rank] = { { _INFO_ANN_Rank }, TAG(A8Rank) }, \
-    [INFO_ANN_HGVS_c] = { { _INFO_ANN_HGVS_c }, TAG(A9HGVS_c) }, \
-    [INFO_ANN_HGVS_p] = { { _INFO_ANN_HGVS_p }, TAG(AaHGVS_p) }, \
-    [INFO_ANN_cDNA] = { { _INFO_ANN_cDNA }, TAG(AbcDNA) }, \
-    [INFO_ANN_CDS] = { { _INFO_ANN_CDS }, TAG(AcCDS) }, \
-    [INFO_ANN_AA] = { { _INFO_ANN_AA }, TAG(AdAA) }, \
-    [INFO_ANN_Distance] = { { _INFO_ANN_Distance }, TAG(AeDistance) }, \
-    [INFO_ANN_Errors] = { { _INFO_ANN_Errors }, TAG(AfErrors) }, \
     [INFO_EFF] = { { _INFO_EFF }, TAG(EFF) }, \
-    [INFO_EFF_Effect] = { { _INFO_EFF_Effect }, TAG(E1Effect) }, \
-    [INFO_EFF_Effect_impact] = { { _INFO_EFF_Effect_impact }, TAG(E2Effect_impact) }, \
-    [INFO_EFF_Functional_Class] = { { _INFO_EFF_Functional_Class }, TAG(E3Functional_Class) }, \
-    [INFO_EFF_Codon_Change] = { { _INFO_EFF_Codon_Change }, TAG(E4aCodon_Change) }, \
-    [INFO_EFF_Distance] = { { _INFO_EFF_Distance }, TAG(E4bDistance) }, \
-    [INFO_EFF_Amino_Acid_Change] = { { _INFO_EFF_Amino_Acid_Change }, TAG(E5Amino_Acid_Change) }, \
-    [INFO_EFF_Amino_Acid_Length] = { { _INFO_EFF_Amino_Acid_Length }, TAG(E6Amino_Acid_Length) }, \
-    [INFO_EFF_Gene_Name] = { { _INFO_EFF_Gene_Name }, TAG(E7Gene_Name) }, \
-    [INFO_EFF_Transcript_BioType] = { { _INFO_EFF_Transcript_BioType }, TAG(E8Transcript_BioType) }, \
-    [INFO_EFF_Gene_Coding] = { { _INFO_EFF_Gene_Coding }, TAG(E9Gene_Coding) }, \
-    [INFO_EFF_Transcript_ID] = { { _INFO_EFF_Transcript_ID }, TAG(EaTranscript_ID) }, \
-    [INFO_EFF_Exon_Intron_Rank] = { { _INFO_EFF_Exon_Intron_Rank }, TAG(EbINFO_EFF_Exon_Intron_Rank) }, \
-    [INFO_EFF_Genotype_Number] = { { _INFO_EFF_Genotype_Number }, TAG(EcGenotype_Number) }, \
-    [INFO_EFF_Warnings_Errors] = { { _INFO_EFF_Warnings_Errors }, TAG(EdWarnings_Errors) }, \
     [INFO_END] = { { _INFO_END }, TAG(END) }, \
     [INFO_MLEAC] = { { _INFO_MLEAC }, TAG(MLEAC) }, \
     [INFO_MLEAF] = { { _INFO_MLEAF }, TAG(MLEAF) }, \
-    [INFO_SOR] = { { _INFO_SOR }, TAG(SOR) }, \
     [INFO_QD] = { { _INFO_QD }, TAG(QD) }, \
+    [INFO_FS] = { { _INFO_FS }, TAG(FS) }, \
+    [INFO_SOR] = { { _INFO_SOR }, TAG(SOR) }, \
+    [INFO_MQRankSum] = { { _INFO_MQRankSum }, TAG(MQRankSum) }, \
+    [INFO_ReadPosRankSum] = { { _INFO_ReadPosRankSum }, TAG(ReadPosRankSum) }, \
     [INFO_HaplotypeScore] = { { _INFO_HaplotypeScore }, TAG(HaplotypeScore) }, \
+    [INFO_ExcessHet] = { { _INFO_ExcessHet }, TAG(ExcessHet) }, \
+    [INFO_AS_QD] = { { _INFO_AS_QD }, TAG(AS_QD) }, \
+    [INFO_BaseQRankSum] = { { _INFO_BaseQRankSum }, TAG(BaseQRankSum) }, \
+    [INFO_InbreedingCoeff] = { { _INFO_InbreedingCoeff }, TAG(InbreedingCoeff) }, \
+    [INFO_AS_InbreedingCoeff] = { { _INFO_AS_InbreedingCoeff }, TAG(AS_InbreedingCoeff) }, \
     [INFO_RAW_MQ] = { { _INFO_RAW_MQ }, TAG(RAW_MQ) }, \
     [INFO_RAW_MQandDP] = { { _INFO_RAW_MQandDP }, TAG(RAW_MQandDP) }, \
     [INFO_RAW_MQandDP_MQ] = { { _INFO_RAW_MQandDP_MQ }, TAG(R0AW_MQandDP) }, \
@@ -1019,66 +1012,31 @@ typedef enum { VCF_CHROM, VCF_POS, VCF_ID, VCF_REFALT, VCF_QUAL, VCF_FILTER, VCF
     [FORMAT_MIN_DP] = { { _FORMAT_MIN_DP }, TAG(MIN_DP) }, \
     [FORMAT_SPL] = { { _FORMAT_SPL }, TAG(SPL) }, \
     [FORMAT_ICNT] = { { _FORMAT_ICNT }, TAG(ICNT) }, \
+    [INFO_SNVSB] = { { _INFO_SNVSB }, TAG(SNVSB) }, \
+    [INFO_SNVHPOL] = { { _INFO_SNVHPOL }, TAG(SNVHPOL) }, \
+    [INFO_CIGAR] = { { _INFO_CIGAR }, TAG(CIGAR) }, \
+    [INFO_RU] = { { _INFO_RU }, TAG(RU) }, \
+    [INFO_REFREP] = { { _INFO_REFREP }, TAG(REFREP) }, \
+    [INFO_IDREP] = { { _INFO_IDREP }, TAG(IDREP) }, \
+    [INFO_BLOCKAVG_min30p3a] = { { _INFO_BLOCKAVG_min30p3a }, TAG(BLOCKAVG_min30p3a) }, \
+    [FORMAT_GQX] = { { _FORMAT_GQX }, TAG(GQX) }, \
+    [FORMAT_DPF] = { { _FORMAT_DPF }, TAG(DPF) }, \
+    [FORMAT_DPI] = { { _FORMAT_DPI }, TAG(DPI) }, \
     [FORMAT_BX] = { { _FORMAT_BX }, TAG(BX) }, \
     [FORMAT_PQ] = { { _FORMAT_PQ }, TAG(PQ) }, \
     [FORMAT_JQ] = { { _FORMAT_JQ }, TAG(JQ) }, \
-    [INFO_vep] = { { _INFO_vep }, TAG(vep) }, \
     [INFO_AGE_HISTOGRAM_HET] = { { _INFO_AGE_HISTOGRAM_HET }, TAG(AGE_HISTOGRAM_HET) }, \
     [INFO_AGE_HISTOGRAM_HOM] = { { _INFO_AGE_HISTOGRAM_HOM }, TAG(AGE_HISTOGRAM_HOM) }, \
     [INFO_MAX_AF] = { { _INFO_MAX_AF }, TAG(MAX_AF) }, \
     [INFO_CSQ] = { { _INFO_CSQ }, TAG(CSQ) }, \
-    [INFO_CSQ_Allele] = { { _INFO_CSQ_Allele }, TAG(@CSQ_Allele) }, \
-    [INFO_CSQ_Consequence] = { { _INFO_CSQ_Consequence }, TAG(c1SQ_Consequence) }, \
-    [INFO_CSQ_IMPACT] = { { _INFO_CSQ_IMPACT }, TAG(c2SQ_IMPACT) }, \
-    [INFO_CSQ_SYMBOL] = { { _INFO_CSQ_SYMBOL }, TAG(c3SQ_SYMBOL) }, \
-    [INFO_CSQ_Gene] = { { _INFO_CSQ_Gene }, TAG(c4SQ_Gene) }, \
-    [INFO_CSQ_Feature] = { { _INFO_CSQ_Feature }, TAG(c6SQ_Feature) }, \
-    [INFO_CSQ_EXON] = { { _INFO_CSQ_EXON }, TAG(c8SQ_EXON) }, \
-    [INFO_CSQ_INTRON] = { { _INFO_CSQ_INTRON }, TAG(c9SQ_INTRON) }, \
-    [INFO_CSQ_HGVSc] = { { _INFO_CSQ_HGVSc }, TAG(caSQ_HGVSc) }, \
-    [INFO_CSQ_HGVSp] = { { _INFO_CSQ_HGVSp }, TAG(cbSQ_HGVSp) }, \
-    [INFO_CSQ_cDNA_position] = { { _INFO_CSQ_cDNA_position }, TAG(ccSQ_cDNA_position) }, \
-    [INFO_CSQ_CDS_position] = { { _INFO_CSQ_CDS_position }, TAG(cdSQ_CDS_position) }, \
-    [INFO_CSQ_Protein_position] = { { _INFO_CSQ_Protein_position }, TAG(ceSQ_Protein_position) }, \
-    [INFO_CSQ_Amino_acids] = { { _INFO_CSQ_Amino_acids }, TAG(cfSQ_Amino_acids) }, \
-    [INFO_CSQ_Codons] = { { _INFO_CSQ_Codons }, TAG(cgSQ_Codons) }, \
-    [INFO_CSQ_Existing_variation] = { { _INFO_CSQ_Existing_variation }, TAG(chSQ_Existing_variation) }, \
-    [INFO_CSQ_ALLELE_NUM] = { { _INFO_CSQ_ALLELE_NUM }, TAG(ciSQ_ALLELE_NUM) }, \
-    [INFO_CSQ_DISTANCE] = { { _INFO_CSQ_DISTANCE }, TAG(cjSQ_DISTANCE) }, \
-    [INFO_CSQ_STRAND] = { { _INFO_CSQ_STRAND }, TAG(ckSQ_STRAND) }, \
-    [INFO_CSQ_FLAGS] = { { _INFO_CSQ_FLAGS }, TAG(clSQ_FLAGS) }, \
-    [INFO_CSQ_VARIANT_CLASS] = { { _INFO_CSQ_VARIANT_CLASS }, TAG(cmSQ_VARIANT_CLASS) }, \
-    [INFO_CSQ_MINIMISED] = { { _INFO_CSQ_MINIMISED }, TAG(cnSQ_MINIMISED) }, \
-    [INFO_CSQ_SYMBOL_SOURCE] = { { _INFO_CSQ_SYMBOL_SOURCE }, TAG(coSQ_SYMBOL_SOURCE) }, \
-    [INFO_CSQ_HGNC_ID] = { { _INFO_CSQ_HGNC_ID }, TAG(cpSQ_HGNC_ID) }, \
-    [INFO_CSQ_CANONICAL] = { { _INFO_CSQ_CANONICAL }, TAG(cqSQ_CANONICAL) }, \
-    [INFO_CSQ_TSL] = { { _INFO_CSQ_TSL }, TAG(crSQ_TSL) }, \
-    [INFO_CSQ_APPRIS] = { { _INFO_CSQ_APPRIS }, TAG(csSQ_APPRIS) }, \
-    [INFO_CSQ_CCDS] = { { _INFO_CSQ_CCDS }, TAG(ctSQ_CCDS) }, \
-    [INFO_CSQ_ENSP] = { { _INFO_CSQ_ENSP }, TAG(cuSQ_ENSP) }, \
-    [INFO_CSQ_SWISSPROT] = { { _INFO_CSQ_SWISSPROT }, TAG(cvSQ_SWISSPROT) }, \
-    [INFO_CSQ_TREMBL] = { { _INFO_CSQ_TREMBL }, TAG(cwSQ_TREMBL) }, \
-    [INFO_CSQ_UNIPARC] = { { _INFO_CSQ_UNIPARC }, TAG(czSQ_UNIPARC) }, \
-    [INFO_CSQ_GENE_PHENO] = { { _INFO_CSQ_GENE_PHENO }, TAG(cySQ_GENE_PHENO) }, \
-    [INFO_CSQ_SIFT] = { { _INFO_CSQ_SIFT }, TAG(czSQ_SIFT) }, \
-    [INFO_CSQ_PolyPhen] = { { _INFO_CSQ_PolyPhen }, TAG(cASQ_PolyPhen) }, \
-    [INFO_CSQ_DOMAINS] = { { _INFO_CSQ_DOMAINS }, TAG(cBSQ_DOMAINS) }, \
-    [INFO_CSQ_HGVS_OFFSET] = { { _INFO_CSQ_HGVS_OFFSET }, TAG(cCSQ_HGVS_OFFSET) }, \
-    [INFO_CSQ_AF] = { { _INFO_CSQ_AF }, TAG(cDSQ_AF) }, \
-    [INFO_CSQ_CLIN_SIG] = { { _INFO_CSQ_CLIN_SIG }, TAG(cUSQ_CLIN_SIG) }, \
-    [INFO_CSQ_SOMATIC] = { { _INFO_CSQ_SOMATIC }, TAG(cVSQ_SOMATIC) }, \
-    [INFO_CSQ_PHENO] = { { _INFO_CSQ_PHENO }, TAG(cQSQ_PHENO) }, \
-    [INFO_CSQ_PUBMED] = { { _INFO_CSQ_PUBMED }, TAG(cXSQ_PUBMED) }, \
-    [INFO_CSQ_MOTIF_NAME] = { { _INFO_CSQ_MOTIF_NAME }, TAG(cYSQ_MOTIF_NAME) }, \
-    [INFO_CSQ_MOTIF_POS] = { { _INFO_CSQ_MOTIF_POS }, TAG(cZSQ_MOTIF_POS) }, \
-    [INFO_CSQ_HIGH_INF_POS] = { { _INFO_CSQ_HIGH_INF_POS }, TAG(c@SQ_HIGH_INF_POS) }, \
-    [INFO_CSQ_MOTIF_SCORE_CHANGE] = { { _INFO_CSQ_MOTIF_SCORE_CHANGE }, TAG(c$SQ_MOTIF_SCORE_CHANGE) }, \
-    [INFO_CSQ_LoF] = { { _INFO_CSQ_LoF }, TAG(c%SQ_LoF) }, \
-    [INFO_CSQ_LoF_filter] = { { _INFO_CSQ_LoF_filter }, TAG(c^SQ_LoF_filter) }, \
-    [INFO_CSQ_LoF_flags] = { { _INFO_CSQ_LoF_flags }, TAG(c-SQ_LoF_flags) }, \
-    [INFO_CSQ_LoF_info] = { { _INFO_CSQ_LoF_info }, TAG(c*SQ_LoF_info) }, \
-    [INFO_CSQ_context] = { { _INFO_CSQ_context }, TAG(c_SQ_context) }, \
-    [INFO_CSQ_ancestral] = { { _INFO_CSQ_ancestral }, TAG(c+SQ_ancestral) }, \
+    [INFO_vep] = { { _INFO_vep }, TAG(vep) }, \
+    [INFO_MMCNT] = { { _INFO_MMCNT }, TAG(MMCNT) }, \
+    [INFO_MMCNT1] = { { _INFO_MMCNT1 }, TAG(MMCNT1) }, \
+    [INFO_MMCNT2] = { { _INFO_MMCNT2 }, TAG(MMCNT2) }, \
+    [INFO_MMCNT3] = { { _INFO_MMCNT3 }, TAG(MMCNT3) }, \
+    [INFO_MMID3] = { { _INFO_MMID3 }, TAG(MMID3) }, \
+    [INFO_MMURI3] = { { _INFO_MMURI3 }, TAG(MMURI3) }, \
+    [INFO_MMURI] = { { _INFO_MMURI }, TAG(MMURI) }, \
     [INFO_ALLELEID] = { { _INFO_ALLELEID }, TAG(ALLELEID) }, \
     [INFO_CLNDN] = { { _INFO_CLNDN }, TAG(CLNDN) }, \
     [INFO_CLNHGVS] = { { _INFO_CLNHGVS }, TAG(CLNHGVS) }, \
@@ -1098,8 +1056,21 @@ typedef enum { VCF_CHROM, VCF_POS, VCF_ID, VCF_REFALT, VCF_QUAL, VCF_FILTER, VCF
     [INFO_HGVS_ins_payload] = { { _INFO_HGVS_ins_payload }, TAG(H7GVS_payload_ins) }, \
     [INFO_HGVS_delins_end_pos] = { { _INFO_HGVS_delins_end_pos }, TAG(H8GVS_endpos_delins) }, \
     [INFO_HGVS_delins_payload] = { { _INFO_HGVS_delins_payload }, TAG(H9GVS_payload_delins) }, \
+    [INFO_HGVS_dup_end_pos] = { { _INFO_HGVS_dup_end_pos }, TAG(H6GVS_endpos_dup) }, \
+    [INFO_HGVS_no_payload] = { { _INFO_HGVS_no_payload }, TAG(H9GVS_payload_dup) }, \
+    [INFO_CONSEQUENCE] = { { _INFO_CONSEQUENCE }, TAG(CONSEQUENCE) }, \
+    [INFO_OCCURRENCE] = { { _INFO_OCCURRENCE }, TAG(OCCURRENCE) }, \
+    [INFO_mutation] = { { _INFO_mutation }, TAG(mutation) }, \
+    [INFO_studies] = { { _INFO_studies }, TAG(studies) }, \
+    [INFO_affected_donors] = { { _INFO_affected_donors }, TAG(affected_donors) }, \
+    [INFO_project_count] = { { _INFO_project_count }, TAG(project_count) }, \
+    [INFO_tested_donors] = { { _INFO_tested_donors }, TAG(tested_donors) }, \
     [INFO_DP_HIST] = { { _INFO_DP_HIST }, TAG(DP_HIST) }, \
     [INFO_GQ_HIST] = { { _INFO_GQ_HIST }, TAG(GQ_HIST) }, \
+    [INFO_age_hist_het_bin_freq] = { { _INFO_age_hist_het_bin_freq }, TAG(age_hist_het_bin_freq) }, \
+    [INFO_gq_hist_alt_bin_freq] = { { _INFO_gq_hist_alt_bin_freq }, TAG(gq_hist_alt_bin_freq) }, \
+    [INFO_dp_hist_alt_bin_freq] = { { _INFO_dp_hist_alt_bin_freq }, TAG(dp_hist_alt_bin_freq) }, \
+    [INFO_ab_hist_alt_bin_freq] = { { _INFO_ab_hist_alt_bin_freq }, TAG(ab_hist_alt_bin_freq) }, \
     [INFO_SVLEN] = { { _INFO_SVLEN }, TAG(SVLEN) }, \
     [INFO_SVTYPE] = { { _INFO_SVTYPE }, TAG(SVTYPE) }, \
     [INFO_CIPOS] = { { _INFO_CIPOS }, TAG(CIPOS) }, \
@@ -1157,6 +1128,7 @@ typedef enum { VCF_CHROM, VCF_POS, VCF_ID, VCF_REFALT, VCF_QUAL, VCF_FILTER, VCF
     [INFO_CAF] = { { _INFO_CAF }, TAG(CAF) }, \
     [INFO_G5A] = { { _INFO_G5A }, TAG(G5A) }, \
     [INFO_G5] = { { _INFO_G5 }, TAG(G5) }, \
+    [FORMAT_FRQ] = { { _FORMAT_FRQ }, TAG(FRQ) }, \
     [INFO_PROBE_A] = { { _INFO_PROBE_A }, TAG(PROBE_A) }, \
     [INFO_PROBE_B] = { { _INFO_PROBE_B }, TAG(PROBE_B) }, \
     [INFO_ALLELE_A] = { { _INFO_ALLELE_A }, TAG(ALLELE_A) }, \
@@ -1176,6 +1148,57 @@ typedef enum { VCF_CHROM, VCF_POS, VCF_ID, VCF_REFALT, VCF_QUAL, VCF_FILTER, VCF
     [INFO_IMP] = { { _INFO_IMP }, TAG(IMP) }, \
     [FORMAT_RC] = { { _FORMAT_RC }, TAG(RC) }, \
     [FORMAT_AC] = { { _FORMAT_AC }, TAG(AC) }, \
+    [INFO_CDS] = { { _INFO_CDS }, TAG(CDS) }, \
+    [INFO_GENE] = { { _INFO_GENE }, TAG(GENE) }, \
+    [INFO_HGVSC] = { { _INFO_HGVSC }, TAG(HGVSC) }, \
+    [INFO_HGVSG] = { { _INFO_HGVSG }, TAG(HGVSG) }, \
+    [INFO_HGVSP] = { { _INFO_HGVSP }, TAG(HGVSP) }, \
+    [INFO_LEGACY_ID] = { { _INFO_LEGACY_ID }, TAG(LEGACY_ID) }, \
+    [INFO_SO_TERM] = { { _INFO_SO_TERM }, TAG(SO_TERM) }, \
+    [INFO_STRAND] = { { _INFO_STRAND }, TAG(STRAND) }, \
+    [INFO_TIER] = { { _INFO_TIER }, TAG(TIER) }, \
+    [INFO_TRANSCRIPT] = { { _INFO_TRANSCRIPT }, TAG(TRANSCRIPT) }, \
+    [INFO_CNT] = { { _INFO_CNT }, TAG(CNT) }, \
+    [INFO_IS_CANONICAL] = { { _INFO_IS_CANONICAL }, TAG(IS_CANONICAL) }, \
+    [INFO_OLD_VARIANT] = { { _INFO_OLD_VARIANT }, TAG(OLD_VARIANT) }, \
+    [INFO_SAMPLE_COUNT] = { { _INFO_SAMPLE_COUNT }, TAG(SAMPLE_COUNT) }, \
+    [INFO_MP] = { { _INFO_MP }, TAG(MP) }, \
+    [INFO_GP] = { { _INFO_GP }, TAG(GP) }, \
+    [INFO_TG] = { { _INFO_TG }, TAG(TG) }, \
+    [INFO_TP] = { { _INFO_TP }, TAG(TP) }, \
+    [INFO_SG] = { { _INFO_SG }, TAG(SG) }, \
+    [INFO_SP] = { { _INFO_SP }, TAG(SP) }, \
+    [INFO_DS] = { { _INFO_DS }, TAG(DS) }, \
+    [INFO_CA] = { { _INFO_CA }, TAG(CA) }, \
+    [INFO_SNP] = { { _INFO_SNP }, TAG(SNP) }, \
+    [FORMAT_AA] = { { _FORMAT_AA }, TAG(AA) }, \
+    [FORMAT_CA] = { { _FORMAT_CA }, TAG(CA) }, \
+    [FORMAT_GA] = { { _FORMAT_GA }, TAG(GA) }, \
+    [FORMAT_TA] = { { _FORMAT_TA }, TAG(TA) }, \
+    [FORMAT_PM] = { { _FORMAT_PM }, TAG(PM) }, \
+    [INFO_PC] = { { _INFO_PC }, TAG(PC) }, \
+    [INFO_RE] = { { _INFO_RE }, TAG(RE) }, \
+    [INFO_LEN] = { { _INFO_LEN }, TAG(LEN) }, \
+    [INFO_S1] = { { _INFO_S1 }, TAG(S1) }, \
+    [INFO_S2] = { { _INFO_S2 }, TAG(S2) }, \
+    [INFO_PA] = { { _INFO_PA }, TAG(PA) }, \
+    [INFO_NA] = { { _INFO_NA }, TAG(NA) }, \
+    [INFO_REP] = { { _INFO_REP }, TAG(REP) }, \
+    [INFO_PRV] = { { _INFO_PRV }, TAG(PRV) }, \
+    [INFO_F017] = { { _INFO_F017 }, TAG(F017) }, \
+    [FORMAT_NP] = { { _FORMAT_NP }, TAG(NP) }, \
+    [FORMAT_PB] = { { _FORMAT_PB }, TAG(PB) }, \
+    [FORMAT_NB] = { { _FORMAT_NB }, TAG(NB) }, \
+    [FORMAT_PD] = { { _FORMAT_PD }, TAG(PD) }, \
+    [FORMAT_ND] = { { _FORMAT_ND }, TAG(ND) }, \
+    [FORMAT_PR] = { { _FORMAT_PR }, TAG(PR) }, \
+    [FORMAT_NR] = { { _FORMAT_NR }, TAG(NR) }, \
+    [FORMAT_PU] = { { _FORMAT_PU }, TAG(PU) }, \
+    [FORMAT_NU] = { { _FORMAT_NU }, TAG(NU) }, \
+    [INFO_VD] = { { _INFO_VD }, TAG(VD) }, \
+    [INFO_VW] = { { _INFO_VW }, TAG(VW) }, \
+    [INFO_VDVW_ARR] = { { _INFO_VDVW_ARR }, TAG(VDVW_ARR) }, \
+    [INFO_VT] = { { _INFO_VT }, TAG(VT) }, \
     [INFO_RSID] = { { _INFO_RSID }, TAG(RSID) }, \
     [FORMAT_NS] = { { _FORMAT_NS }, TAG(NS) }, \
     [FORMAT_EZ] = { { _FORMAT_EZ }, TAG(EZ) }, \
@@ -1188,6 +1211,11 @@ typedef enum { VCF_CHROM, VCF_POS, VCF_ID, VCF_REFALT, VCF_QUAL, VCF_FILTER, VCF
     [FORMAT_ADALL] = { { _FORMAT_ADALL }, TAG(ADALL) }, \
     [FORMAT_IGT] = { { _FORMAT_IGT }, TAG(IGT) }, \
     [FORMAT_IPS] = { { _FORMAT_IPS }, TAG(IPS) }, \
+    [INFO_Polyphen2_HDIV_score] = { { _INFO_Polyphen2_HDIV_score }, TAG(Polyphen2_HDIV_score) }, \
+    [INFO_PUniprot_aapos] = { { _INFO_PUniprot_aapos }, TAG(Uniprot_aapos) }, \
+    [INFO_VEST3_score] = { { _INFO_VEST3_score }, TAG(VEST3_score) }, \
+    [INFO_FATHMM_score] = { { _INFO_FATHMM_score }, TAG(FATHMM_score) }, \
+    [INFO_SiPhy_29way_pi] = { { _INFO_SiPhy_29way_pi }, TAG(SiPhy_29way_pi) }, \
     [INFO_LUFT] = { { _INFO_LUFT }, TAG(LUFT) }, \
     [INFO_PRIM] = { { _INFO_PRIM }, TAG(PRIM) }, \
     [INFO_LREJ] = { { _INFO_LREJ }, TAG(Lrej) }, \

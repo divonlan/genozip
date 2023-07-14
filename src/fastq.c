@@ -861,7 +861,7 @@ CONTAINER_CALLBACK (fastq_piz_container_cb)
             STR(qname);
 
             if (VER(15)) 
-                CTXlast (qname, CTX(FASTQ_QNAME));
+                SETlast (qname, FASTQ_QNAME);
             
             else { // up to 14 the entire line1 was segged in FASTQ_EXTRA
                 qname = last_txt (vb, FASTQ_EXTRA) + !prefixes_len; // +1 to skip the "@", if '@' is in DESC and not in prefixes (for files up to version 12.0.13)

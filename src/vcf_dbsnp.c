@@ -21,6 +21,13 @@ void vcf_dbsnp_zip_initialize (void)
     seg_prepare_snip_other (SNIP_OTHER_DELTA, _VCF_POS, true, 0, delta_POS_snip);
 }
 
+void vcf_dbsnp_seg_initialize (VBlockVCFP vb)
+{
+    seg_mux_init (VB, CTX(INFO_VC), 3, VCF_SPECIAL_MUX_BY_VARTYPE, true, (MultiplexerP)&vb->mux_VC, "012");
+
+    CTX(VCF_QUAL)->no_stons = true;
+}
+
 // ##INFO=<ID=RS,Number=1,Type=Integer,Description="dbSNP ID (i.e. rs number)">
 // *might* be the same as the numeric value of the ID
 void vcf_seg_INFO_RS (VBlockVCFP vb, ContextP ctx, STRp(rs))
@@ -94,7 +101,7 @@ void vcf_seg_INFO_VC (VBlockVCFP vb, ContextP ctx, STRp(vc))
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_VARTYPE)
 {
-    STRlast (refalt, CTX(VCF_REFALT));
+    STRlast (refalt, VCF_REFALT);
     str_split (refalt, refalt_len, 2, '\t', ra, true);
 
     VarType vartype = get_vartype (STRi(ra,0), STRi(ra,1));

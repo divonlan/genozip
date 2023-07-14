@@ -230,17 +230,17 @@ void vcf_seg_initialize (VBlockP vb_)
         seg_mux_init (VB, CTX(VCF_INFO), 2, VCF_SPECIAL_MUX_BY_HAS_RGQ, false, (MultiplexerP)&vb->mux_INFO, "01");        
     }
 
-    if (segconf.vcf_is_dbSNP)
-        seg_mux_init (VB, CTX(INFO_VC), 3, VCF_SPECIAL_MUX_BY_VARTYPE, true, (MultiplexerP)&vb->mux_VC, "012");
-
     vcf_info_seg_initialize(vb);
     vcf_samples_seg_initialize(vb);
 
-    if (segconf.vcf_illum_gtyping) 
-        vcf_illum_gtyping_initialize (vb);
-
-    if (segconf.vcf_is_gwas)
-        vcf_gwas_seg_initialize (vb);
+    if (segconf.vcf_illum_gtyping)  vcf_illum_gtyping_initialize (vb);
+    if (segconf.vcf_is_gwas)        vcf_gwas_seg_initialize (vb);
+    if (segconf.vcf_is_cosmic)      vcf_cosmic_seg_initialize (vb);
+    if (segconf.vcf_is_vep)         vcf_vep_seg_initialize (vb);
+    if (segconf.vcf_is_mastermind)  vcf_mastermind_seg_initialize (vb);
+    if (segconf.vcf_is_dbSNP)       vcf_dbsnp_seg_initialize (vb);
+    if (segconf.vcf_is_giab_trio)   vcf_giab_seg_initialize (vb);
+    if (segconf.vcf_is_gnomad)      CTX(VCF_QUAL)->no_stons = true;
 }             
 
 static void vcf_seg_finalize_segconf (VBlockVCFP vb)
@@ -251,6 +251,15 @@ static void vcf_seg_finalize_segconf (VBlockVCFP vb)
 
     if (segconf.has[FORMAT_IGT] && segconf.has[FORMAT_IPS] && segconf.has[FORMAT_ADALL])
         segconf.vcf_is_giab_trio = true;
+        
+    // an alternative way to discover dbSNP if ##source is missing
+    if (!!segconf.has[INFO_RS] + !!segconf.has[INFO_RSPOS] + !!segconf.has[INFO_SAO] + !!segconf.has[INFO_SSR] +
+        !!segconf.has[INFO_dbSNPBuildID] + !!segconf.has[INFO_VC] + !!segconf.has[INFO_NSM] + !!segconf.has[INFO_U3] >= 3)
+        segconf.vcf_is_dbSNP = true;
+
+    // in gnomAD, we have a huge number of INFO fields in various permutations - generating a huge INFO dictionary, but which compresses very very well
+    if (segconf.vcf_is_gnomad)
+        ZCTX(VCF_INFO)->dict_len_excessive = true; // don't warn if excessive
         
     if (!flag.reference && segconf.vcf_is_gvcf)
         TIP ("Compressing a GVCF file using a reference file can reduce the compressed file's size by 10%%-30%%.\n"
@@ -384,19 +393,15 @@ bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id)
         dict_id.num == _VCF_oSTATUS  ||
         dict_id.num == _VCF_COORDS   ||
         dict_id.num == _VCF_LIFT_REF ||
-        dict_id.num == _INFO_AN      || // note: not _INFO_AC, _INFO_AF, _INFO_MLEAC, _INFO_MLEAF - can be big (e.g. big in GWAS VCF)
         dict_id.num == _INFO_DP      ||
-        dict_id.num == _INFO_AA      || // stored as a SPECIAL snip
+        (dict_id.num == _INFO_AA && !segconf.vcf_is_cosmic) || // stored as a SPECIAL snip
         dict_id.num == _INFO_LDAF    ||
         dict_id.num == _INFO_MQ0     ||
         dict_id.num == _INFO_LUFT    ||
         dict_id.num == _INFO_PRIM    ||
         dict_id.num == _INFO_LREJ    ||
-        dict_id.num == _INFO_PREJ    ||
-
-        // INFO/ AC_* AN_* AF_* and ???_AF are small
-        ((id[0] == ('A' | 0xc0)) && (id[1] == 'C' || id[1] == 'F' || id[1] == 'N') && id[2] == '_') ||
-        (dict_id_is_vcf_info_sf (dict_id) && id[3] == '_' && id[4] == 'A' && id[5] == 'F' && !id[6]);
+        dict_id.num == _INFO_PREJ;
+        // note: _INFO_AN, _INFO_AC, _INFO_AF, _INFO_MLEAC, _INFO_MLEAF - can be big (e.g. big in GWAS VCF, ExAC, gnomad...)
 }
 
 bool vcf_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id/*dict_id of st_did_i*/)
@@ -477,8 +482,12 @@ static inline void vcf_seg_QUAL (VBlockVCFP vb, STRp(qual))
 {
     set_last_txt (VCF_QUAL, qual);
 
+    // gnomAD - store in local
+    if (segconf.vcf_is_gnomad || segconf.vcf_is_dbSNP)
+        seg_add_to_local_text (VB, CTX(VCF_QUAL), STRa(qual), LOOKUP_NONE, qual_len+1);
+
     // case: GVCF - multiplex by has_RGQ
-    if (!segconf.running && segconf.has[FORMAT_RGQ]) {
+    else if (!segconf.running && segconf.has[FORMAT_RGQ]) {
         ContextP channel_ctx = seg_mux_get_channel_ctx (VB, VCF_QUAL, (MultiplexerP)&vb->mux_QUAL, vb->line_has_RGQ);
         seg_by_ctx (VB, STRa(qual), channel_ctx, qual_len+1);
         seg_by_did (VB, STRa(vb->mux_QUAL.snip), VCF_QUAL, 0);

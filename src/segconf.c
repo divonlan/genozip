@@ -30,7 +30,7 @@ void segconf_test_sorted (VBlockP vb, WordIndex prev_line_chrom, PosType32 pos, 
         segconf.is_sorted = false;
 
     // evidence of not being sorted: our CHROM is different than previous line, but we encountered it before
-    if (segconf.is_sorted && (prev_line_chrom != NODE_INDEX_NONE) && (prev_line_chrom != vb->chrom_node_index) && 
+    if (segconf.is_sorted && (prev_line_chrom != WORD_INDEX_NONE) && (prev_line_chrom != vb->chrom_node_index) && 
         *B32 (CTX(CHROM)->counts, vb->chrom_node_index) > 1) // 1 if it has been segged on this line for the first time
         segconf.is_sorted = false;
     

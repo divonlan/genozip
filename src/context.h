@@ -19,9 +19,6 @@
 
 #define MAX_WORDS_IN_CTX 0x7ffffff0 // limit on nodes.len, word_list.len - partly because hash uses signed int32_t + 2 for singlton using index-2
 
-#define NODE_INDEX_NONE    -1
-#define MAX_NODE_INDEX (MAX_WORDS_IN_CTX-1)
-
 #define MAX_WORD_INDEX (MAX_WORDS_IN_CTX-1)
 #define WORD_INDEX_NONE    -1
 #define WORD_INDEX_ONE_UP  -2 // the value is the one more than the previous value
@@ -72,6 +69,7 @@
 #define B250_MAX_WI_3BYTES ((0xFA << 16) - 1) // same, for 3 bytes
 
 #define decl_ctx(did_i) ContextP ctx = CTX(did_i)
+#define decl_const_ctx(did_i) ConstContextP ctx = CTX(did_i)
 #define decl_zctx(did_i) ContextP zctx = ZCTX(did_i)
 
 // ZIP only
@@ -195,7 +193,8 @@ static inline Did ctx_get_existing_did_i_do (DictId dict_id, const ContextArray 
     else
         return ctx_get_unmapped_existing_did_i (contexts, ctx_index, num_contexts, dict_id);
 }    
-#define ctx_get_existing_did_i(vb,dict_id) ctx_get_existing_did_i_do (dict_id, vb->contexts, vb->d2d_map, (vb->has_ctx_index ? vb->ctx_index : NULL), vb->num_contexts)
+#define ctx_get_existing_did_i(vb,dict_id) ctx_get_existing_did_i_do ((dict_id), (vb)->contexts, (vb)->d2d_map, ((vb)->has_ctx_index ? (vb)->ctx_index : NULL), (vb)->num_contexts)
+#define zctx_get_existing_did_i(dict_id) ctx_get_existing_did_i_do ((dict_id), z_file->contexts, z_file->d2d_map, NULL, z_file->num_contexts)
 
 static inline ContextP ctx_get_existing_ctx_do (VBlockP vb, DictId dict_id)  // returns NULL if context doesn't exist
 {

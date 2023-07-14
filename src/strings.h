@@ -173,8 +173,8 @@ extern StrText str_int_s (int64_t n);
 extern StrTextLong str_int_s_(rom label, int64_t n);
 #define cond_int(cond, label, n) ((cond) ? str_int_s_((label), (n)).s : "") /* note: n does not evaluate if cond is false! */\
 
-extern StrTextLong str_int_str_(rom label, rom str);
-#define cond_str(cond, label, str) ((cond) ? str_int_str_((label), (str)).s : "") /* note: str does not evaluate if cond is false! */\
+extern StrTextLong str_str_s_(rom label, rom str);
+#define cond_str(cond, label, str) ((cond) ? str_str_s_((label), (str)).s : "") /* note: str does not evaluate if cond is false! */\
 
 extern rom str_to_hex (bytes data, uint32_t data_len, char *hex_str, bool with_dot);
 extern StrText str_hex10 (bytes data, uint32_t data_len); // up to 10 bytes in hex (21 chars inc. \0)

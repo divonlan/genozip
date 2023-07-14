@@ -130,31 +130,24 @@ void chrom_2ref_load (Reference ref)
     buf_free (evb->scratch);
 }
 
-static void chrom_2ref_seg_set (VBlockP vb, ContextP ctx, WordIndex chrom_node_index, WordIndex ref_index)
-{
-    WordIndex index = chrom_node_index - vb->ol_chrom2ref_map.len32;
-    ASSERT (index >= 0, "Expecting chrom_node_index=%d >= vb->ol_chrom2ref_map.len=%u", 
-            chrom_node_index, vb->ol_chrom2ref_map.len32);
-
-    buf_alloc_255 (vb, &ctx->chrom2ref_map, 0, index+1, WordIndex, CTX_GROWTH, "chrom2ref_map");
-    ctx->chrom2ref_map.len32 = MAX_(ctx->chrom2ref_map.len32, index+1);
-
-    *B(WordIndex, ctx->chrom2ref_map, index) = ref_index; 
-}
-
 // ZIP: returns the ref index by the chrom index, works only after Segging of CHROM
 WordIndex chrom_2ref_seg_get (Reference ref, ConstVBlockP vb, WordIndex chrom_index)
 { 
-    if (chrom_index == NODE_INDEX_NONE) return NODE_INDEX_NONE;
+    ASSSEG (chrom_index >= WORD_INDEX_NONE, "invalid chrom_index=%d", chrom_index);
 
     int32_t ol_len = vb->ol_chrom2ref_map.len32;
+    decl_const_ctx(CHROM);
 
-    ASSSEG (chrom_index >= 0 && chrom_index < ol_len + CTX(CHROM)->chrom2ref_map.len32, 
-            "chrom_index=%d out of range: ol_len=%u vb->chrom2ref_map.len32=%u", chrom_index, ol_len, CTX(CHROM)->chrom2ref_map.len32);
+    WordIndex ref_index = (chrom_index == WORD_INDEX_NONE)                  ? WORD_INDEX_NONE
+                        : (chrom_index < ol_len)                            ? *B(WordIndex, vb->ol_chrom2ref_map, chrom_index)
+                        : (chrom_index < ol_len + ctx->chrom2ref_map.len32) ? *B(WordIndex, ctx->chrom2ref_map, chrom_index - ol_len)
+                        :                                                     WORD_INDEX_NONE; // not in reference
 
-    return (chrom_index < ol_len) ? *B(WordIndex, vb->ol_chrom2ref_map, chrom_index)
-                                  : *B(WordIndex, CTX(CHROM)->chrom2ref_map, chrom_index - ol_len);
-}
+    ASSSEG (ref_index >= WORD_INDEX_NONE && ref_index < (WordIndex)ref_num_contigs (ref), 
+            "ref_index=%d out of range: ref->ranges.len=%u, chrom_index=%d", ref_index, ref_num_contigs (ref), chrom_index);
+
+    return ref_index;
+}   
 
 void chrom_calculate_ref2chrom (uint64_t num_ref_contigs)
 {
@@ -183,7 +176,7 @@ WordIndex chrom_seg_ex (VBlockP vb, Did did_i,
 {
     ASSERTNOTZERO (chrom_len);
     decl_ctx (did_i);
-    bool is_primary = did_i == DTF(prim_chrom);
+    bool is_primary = did_i == DTF(prim_chrom); // note: possibly neither primary or luft, eg SA_RNAME
     bool is_luft    = did_i == DTF(luft_chrom);
     bool has_chain  = chain_is_loaded || IS_REF_MAKE_CHAIN;
 
@@ -233,7 +226,7 @@ WordIndex chrom_seg_ex (VBlockP vb, Did did_i,
         // if a match was found, we're done
         if (ref_index != WORD_INDEX_NONE) goto finalize;
     }
-        
+
     // case: either without --match-chrom-to-reference OR chrom not found in the reference
     chrom_node_index = seg_by_ctx_ex (vb, STRa(chrom), ctx, add_bytes, &is_new); // note: this is not the same as ref_index, bc ctx->nodes contains the header contigs first, followed by the reference contigs that are not already in the header
     
@@ -274,8 +267,10 @@ finalize:
             STRset (vb->chrom_name, chrom);
     }
 
-    if (is_new && chrom_2ref_seg_is_needed (ctx->did_i)) // even if no reference, has ctx_merge_in_one_vctx expects
-        chrom_2ref_seg_set (vb, ctx, chrom_node_index, ref_index);
+    if (is_new) { 
+        buf_alloc_255 (vb, &ctx->chrom2ref_map, 0, chrom_node_index+1, WordIndex, CTX_GROWTH, "chrom2ref_map");
+        *B(WordIndex, ctx->chrom2ref_map, chrom_node_index) = ref_index; // note: not a simple BNXT bc possibly nodes can be created outside of chrom_seg_ex, eg SNIP_SPECIAL
+    }
 
     return chrom_node_index;
 }

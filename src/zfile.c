@@ -674,7 +674,7 @@ static void zfile_read_genozip_header_handle_ref_info (ConstSectionHeaderGenozip
         // case: this file requires an external reference, but command line doesn't include --reference - attempt to use the
         // reference specified in the header. 
         // Note: this code will be executed when zfile_read_genozip_header is called from main_genounzip.
-        else if (!flag.explicit_ref && // reference NOT was specified on command line
+        else if (!flag.explicit_ref && !getenv ("GENOZIP_REFERENCE") && // reference NOT was specified on command line
                  !Z_DT(REF) && // for reference files, this field is actual fasta_filename
                  !(gref_fn && !strcmp (gref_fn, header->ref_filename))) { // ref_filename already set from a previous file with the same reference
 

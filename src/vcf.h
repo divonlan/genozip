@@ -112,49 +112,30 @@
 #pragma GENDICT INFO_ERATE=DTYPE_1=ERATE            // <ID=ERATE,Number=1,Type=Float,Description="Per-marker Mutation rate from MaCH/Thunder">
 #pragma GENDICT INFO_THETA=DTYPE_1=THETA            // <ID=THETA,Number=1,Type=Float,Description="Per-marker Transition rate from MaCH/Thunder">
 
-// SnpEFF: ANN field defined: https://pcingola.github.io/SnpEff/adds/VCFannotationformat_v1.0.pdf
-#pragma GENDICT INFO_ANN=DTYPE_1=ANN                // <ID=ANN,Number=.,Type=String,Description="Functional annotations: 'Allele | Annotation | Annotation_Impact | Gene_Name | Gene_ID | Feature_Type | Feature_ID | Transcript_BioType | Rank | HGVS.c | HGVS.p | cDNA.pos / cDNA.length | CDS.pos / CDS.length | AA.pos / AA.length | Distance | ERRORS / WARNINGS / INFO'">
+// SnpEFF
+#pragma GENDICT INFO_ANN=DTYPE_1=ANN                // <ID=ANN,Number=.,Type=String,Description="Functional annotations: 'Allele | Annotation | Annotation_Impact | Gene_Name | Gene_ID | Feature_Type | Feature_ID | Transcript_BioType | Rank | HGVS.c | HGVS.p | cDNA.pos / cDNA.length | CDS.pos / CDS.length | AA.pos / AA.length | Distance | ERRORS / WARNINGS / INFO'">. See: https://pcingola.github.io/SnpEff/adds/VCFannotationformat_v1.0.pdf
 #pragma GENDICT INFO_ANN_Allele=DTYPE_1=@ANN_Allele // note: nice looking tag, as might be displayed in INFO/Lref
-#pragma GENDICT INFO_ANN_Annotation=DTYPE_1=A1Annotation
-#pragma GENDICT INFO_ANN_Annotation_Impact=DTYPE_1=A2Annotation_Impact
-#pragma GENDICT INFO_ANN_Gene_Name=DTYPE_1=A3Gene_Name
-#pragma GENDICT INFO_ANN_Gene_ID=DTYPE_1=A4Gene_ID
-#pragma GENDICT INFO_ANN_Feature_Type=DTYPE_1=A5Feature_Type 
-#pragma GENDICT INFO_ANN_Feature_ID=DTYPE_1=A6Feature_ID
-#pragma GENDICT INFO_ANN_Transcript_BioType=DTYPE_1=A7Transcript_BioType
-#pragma GENDICT INFO_ANN_Rank=DTYPE_1=A8Rank
-#pragma GENDICT INFO_ANN_HGVS_c=DTYPE_1=A9HGVS_c
-#pragma GENDICT INFO_ANN_HGVS_p=DTYPE_1=AaHGVS_p
-#pragma GENDICT INFO_ANN_cDNA=DTYPE_1=AbcDNA
-#pragma GENDICT INFO_ANN_CDS=DTYPE_1=AcCDS
-#pragma GENDICT INFO_ANN_AA=DTYPE_1=AdAA
-#pragma GENDICT INFO_ANN_Distance=DTYPE_1=AeDistance
-#pragma GENDICT INFO_ANN_Errors=DTYPE_1=AfErrors
 
-// SnpEFF: https://pcingola.github.io/SnpEff/se_inputoutput/#eff-field-vcf-output-files
-#pragma GENDICT INFO_EFF=DTYPE_1=EFF
-#pragma GENDICT INFO_EFF_Effect=DTYPE_1=E1Effect                        // Effect of this variant.
-#pragma GENDICT INFO_EFF_Effect_impact=DTYPE_1=E2Effect_impact          // {High, Moderate, Low, Modifier}
-#pragma GENDICT INFO_EFF_Functional_Class=DTYPE_1=E3Functional_Class    // {NONE, SILENT, MISSENSE, NONSENSE}
-#pragma GENDICT INFO_EFF_Codon_Change=DTYPE_1=E4aCodon_Change           // 4th field: Codon change: old_codon/new_codon
-#pragma GENDICT INFO_EFF_Distance=DTYPE_1=E4bDistance                   // 4th field in case of INFO_EFF_Effect=UPSTREAM/DOWNSTREAM: distance to transcript
-#pragma GENDICT INFO_EFF_Amino_Acid_Change=DTYPE_1=E5Amino_Acid_Change  // old_AA AA_position/new_AA (e.g. 'E30K')
-#pragma GENDICT INFO_EFF_Amino_Acid_Length=DTYPE_1=E6Amino_Acid_Length  // Length of protein in amino acids (actually, transcription length divided by 3).
-#pragma GENDICT INFO_EFF_Gene_Name=DTYPE_1=E7Gene_Name
-#pragma GENDICT INFO_EFF_Transcript_BioType=DTYPE_1=E8Transcript_BioType
-#pragma GENDICT INFO_EFF_Gene_Coding=DTYPE_1=E9Gene_Coding              // [CODING | NON_CODING]. This field is 'CODING' if any transcript of the gene is marked as protein coding.
-#pragma GENDICT INFO_EFF_Transcript_ID=DTYPE_1=EaTranscript_ID          // Transcript ID (usually ENSEMBL IDs)
-#pragma GENDICT INFO_EFF_Exon_Intron_Rank=DTYPE_1=EbINFO_EFF_Exon_Intron_Rank  // Exon rank or Intron rank (e.g. '1' for the first exon, '2' for the second exon, etc.)
-#pragma GENDICT INFO_EFF_Genotype_Number=DTYPE_1=EcGenotype_Number      // Genotype number corresponding to this effect (e.g. '2' if the effect corresponds to the second ALT)
-#pragma GENDICT INFO_EFF_Warnings_Errors=DTYPE_1=EdWarnings_Errors      // Any warnings or errors (not shown if empty).
+#pragma GENDICT INFO_EFF=DTYPE_1=EFF                // See: https://pcingola.github.io/SnpEff/se_inputoutput/#eff-field-vcf-output-files
  	 
 // Added by GATK HaplotypeCaller in a gVCF: https://gatk.broadinstitute.org/hc/en-us/articles/360035531812-GVCF-Genomic-Variant-Call-Format
 #pragma GENDICT INFO_END=DTYPE_1=END                // <ID=END,Number=1,Type=Integer,Description="Stop position of the interval">
 #pragma GENDICT INFO_MLEAC=DTYPE_1=MLEAC            // <ID=MLEAC,Number=A,Type=Integer,Description="Maximum likelihood expectation (MLE) for the allele counts (not necessarily the same as the AC), for each ALT allele, in the same order as listed">
 #pragma GENDICT INFO_MLEAF=DTYPE_1=MLEAF            // <ID=MLEAF,Number=A,Type=Float,Description="Maximum likelihood expectation (MLE) for the allele frequency (not necessarily the same as the AF), for each ALT allele, in the same order as listed">
-#pragma GENDICT INFO_SOR=DTYPE_1=SOR                // <ID=SOR,Number=1,Type=Float,Description="Symmetric Odds Ratio of 2x2 contingency table to detect strand bias">. See: https://gatk.broadinstitute.org/hc/en-us/articles/360036361772-StrandOddsRatio
+
+// GATK Hard-filtering germline short variants : https://gatk.broadinstitute.org/hc/en-us/articles/360035890471-Hard-filtering-germline-short-variants
 #pragma GENDICT INFO_QD=DTYPE_1=QD                  // <ID=QD,Number=1,Type=Float,Description="Variant Confidence/Quality by Depth">. See: https://gatk.broadinstitute.org/hc/en-us/articles/360041414572-QualByDepth
+#pragma GENDICT INFO_FS=DTYPE_1=FS                  // Strand bias estimated using Fisher's exact test : https://gatk.broadinstitute.org/hc/en-us/articles/360037592371-FisherStrand
+#pragma GENDICT INFO_SOR=DTYPE_1=SOR                // <ID=SOR,Number=1,Type=Float,Description="Symmetric Odds Ratio of 2x2 contingency table to detect strand bias">. See: https://gatk.broadinstitute.org/hc/en-us/articles/360036361772-StrandOddsRatio
+#pragma GENDICT INFO_MQRankSum=DTYPE_1=MQRankSum    // Rank sum test for mapping qualities of REF versus ALT reads : https://gatk.broadinstitute.org/hc/en-us/articles/360037426091-MappingQualityRankSumTest
+#pragma GENDICT INFO_ReadPosRankSum=DTYPE_1=ReadPosRankSum         // Rank sum test for relative positioning of REF versus ALT alleles within read : https://gatk.broadinstitute.org/hc/en-us/articles/360036367052-ReadPosRankSumTest
+
 #pragma GENDICT INFO_HaplotypeScore=DTYPE_1=HaplotypeScore // <ID=HaplotypeScore,Number=1,Type=Float,Description="Consistency of the site with at most two segregating haplotypes">
+#pragma GENDICT INFO_ExcessHet=DTYPE_1=ExcessHet    // Phred-scaled p-value for exact test of excess heterozygosity : https://gatk.broadinstitute.org/hc/en-us/articles/360037261311-ExcessHet
+#pragma GENDICT INFO_AS_QD=DTYPE_1=AS_QD            // Allele-specific call confidence normalized by depth of sample reads supporting the allele : https://gatk.broadinstitute.org/hc/en-us/articles/360036485832-AS-QualByDepth
+#pragma GENDICT INFO_BaseQRankSum=DTYPE_1=BaseQRankSum             // Rank sum test of REF versus ALT base quality scores : https://gatk.broadinstitute.org/hc/en-us/articles/360036863231-BaseQualityRankSumTest
+#pragma GENDICT INFO_InbreedingCoeff=DTYPE_1=InbreedingCoeff       // Likelihood-based test for the consanguinity among samples : https://gatk.broadinstitute.org/hc/en-us/articles/360036351032-InbreedingCoeff
+#pragma GENDICT INFO_AS_InbreedingCoeff=DTYPE_1=AS_InbreedingCoeff // Allele-specific likelihood-based test for the consanguinity among samples : https://gatk.broadinstitute.org/hc/en-us/articles/360036827291-AS-InbreedingCoeff
 #pragma GENDICT INFO_RAW_MQ=DTYPE_1=RAW_MQ          // <ID=RAW_MQ,Number=1,Type=Float,Description="Raw data for RMS Mapping Quality">
 
 #pragma GENDICT INFO_RAW_MQandDP=DTYPE_1=RAW_MQandDP// <ID=RAW_MQandDP,Number=2,Type=Integer,Description="Raw data (sum of squared MQ and total depth) for improved RMS Mapping Quality calculation. Incompatible with deprecated RAW_MQ formulation.">
@@ -168,72 +149,45 @@
 #pragma GENDICT FORMAT_SPL=DTYPE_2=SPL              // <ID=SPL,Number=.,Type=Integer,Description="Normalized, Phred-scaled likelihoods for SNPs based on the reference confidence model">
 #pragma GENDICT FORMAT_ICNT=DTYPE_2=ICNT            // <ID=ICNT,Number=2,Type=Integer,Description="Counts of INDEL informative reads based on the reference confidence model">
 
+// IsaacVariantCaller (discontinued) : https://support.illumina.com/content/dam/illumina-support/documents/documentation/software_documentation/basespace/isaac-wgs-user-guide-15050954b.pdf
+// Also: https://github.com/sequencing/isaac_variant_caller
+#pragma GENDICT INFO_SNVSB=DTYPE_1=SNVSB            // SNV site strand bias
+#pragma GENDICT INFO_SNVHPOL=DTYPE_1=SNVHPOL        // SNV contextual homopolymer length
+#pragma GENDICT INFO_CIGAR=DTYPE_1=CIGAR            // CIGAR alignment for each alternate indel allele
+#pragma GENDICT INFO_RU=DTYPE_1=RU                  // Smallest repeating sequence unit extended or contracted in the indel allele relative to the reference. RUs longer than 20 bases are not reported.
+#pragma GENDICT INFO_REFREP=DTYPE_1=REFREP          // Number of times RU is repeated in reference
+#pragma GENDICT INFO_IDREP=DTYPE_1=IDREP            // Number of times RU is repeated in indel allele.
+#pragma GENDICT INFO_BLOCKAVG_min30p3a=DTYPE_1=BLOCKAVG_min30p3a // Non-variant site block. All sites in a block are constrained to be non-variant, have the same filter value, and have all sample values in range [x,y], y <= max(x+3,(x*1.3)). All printed site block sample values are the minimum observed in the region spanned by the block
+#pragma GENDICT FORMAT_GQX=DTYPE_2=GQX              // Minimum of {Genotype quality assuming variant position,Genotype quality assuming non-variant position}
+#pragma GENDICT FORMAT_DPF=DTYPE_2=DPF              // Base calls filtered from input before site genotyping
+#pragma GENDICT FORMAT_DPI=DTYPE_2=DPI              // Read depth associated with indel, taken from the position preceding the indel
+
 // 10xGenomics: https://support.10xgenomics.com/genome-exome/software/pipelines/latest/output/vcf
 #pragma GENDICT FORMAT_BX=DTYPE_2=BX                // <ID=BX,Number=.,Type=String,Description="Barcodes and Associated Qual-Scores Supporting Alleles">
 #pragma GENDICT FORMAT_PQ=DTYPE_2=PQ                // <ID=PQ,Number=1,Type=Integer,Description="Phred QV indicating probability at this variant is incorrectly phased">
 #pragma GENDICT FORMAT_JQ=DTYPE_2=JQ                // <ID=JQ,Number=1,Type=Integer,Description="Phred QV indicating probability of a phasing switch error in gap prior to this variant">
 
-// Ensembl VEP (Variant Effect Predictor) fields: https://www.ensembl.org/info/docs/tools/vep/script/vep_options.html
-#pragma GENDICT INFO_vep=DTYPE_1=vep
+// Ensembl VEP (Variant Effect Predictor) fields: https://www.ensembl.org/info/docs/tools/vep/script/vep_options.html https://www.ensembl.org/info/docs/tools/vep/index.html
 #pragma GENDICT INFO_AGE_HISTOGRAM_HET=DTYPE_1=AGE_HISTOGRAM_HET 
 #pragma GENDICT INFO_AGE_HISTOGRAM_HOM=DTYPE_1=AGE_HISTOGRAM_HOM
 #pragma GENDICT INFO_MAX_AF=DTYPE_1=MAX_AF          // highest allele frequency observed in any population from 1000 genomes, ESP or gnomAD
 
 #pragma GENDICT INFO_CSQ=DTYPE_1=CSQ                // <ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|Existing_variation|ALLELE_NUM|DISTANCE|STRAND|FLAGS|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|GMAF|AFR_MAF|AMR_MAF|EAS_MAF|EUR_MAF|SAS_MAF|AA_MAF|EA_MAF|ExAC_MAF|ExAC_Adj_MAF|ExAC_AFR_MAF|ExAC_AMR_MAF|ExAC_EAS_MAF|ExAC_FIN_MAF|ExAC_NFE_MAF|ExAC_OTH_MAF|ExAC_SAS_MAF|CLIN_SIG|SOMATIC|PHENO|PUBMED|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info|context|ancestral">
-#pragma GENDICT INFO_CSQ_Allele=DTYPE_1=@CSQ_Allele              // 0 (note: nice looking tag, as might be displayed in INFO/Lref)
-#pragma GENDICT INFO_CSQ_Consequence=DTYPE_1=c1SQ_Consequence
-#pragma GENDICT INFO_CSQ_IMPACT=DTYPE_1=c2SQ_IMPACT
-#pragma GENDICT INFO_CSQ_SYMBOL=DTYPE_1=c3SQ_SYMBOL
-#pragma GENDICT INFO_CSQ_Gene=DTYPE_1=c4SQ_Gene
-#pragma GENDICT INFO_CSQ_Feature=DTYPE_1=c6SQ_Feature            // 5-7 together as Feature implies Feature_Type and Transcript_BioType
-#pragma GENDICT INFO_CSQ_EXON=DTYPE_1=c8SQ_EXON
-#pragma GENDICT INFO_CSQ_INTRON=DTYPE_1=c9SQ_INTRON
-#pragma GENDICT INFO_CSQ_HGVSc=DTYPE_1=caSQ_HGVSc                // 10
-#pragma GENDICT INFO_CSQ_HGVSp=DTYPE_1=cbSQ_HGVSp
-#pragma GENDICT INFO_CSQ_cDNA_position=DTYPE_1=ccSQ_cDNA_position
-#pragma GENDICT INFO_CSQ_CDS_position=DTYPE_1=cdSQ_CDS_position
-#pragma GENDICT INFO_CSQ_Protein_position=DTYPE_1=ceSQ_Protein_position
-#pragma GENDICT INFO_CSQ_Amino_acids=DTYPE_1=cfSQ_Amino_acids
-#pragma GENDICT INFO_CSQ_Codons=DTYPE_1=cgSQ_Codons
-#pragma GENDICT INFO_CSQ_Existing_variation=DTYPE_1=chSQ_Existing_variation
-#pragma GENDICT INFO_CSQ_ALLELE_NUM=DTYPE_1=ciSQ_ALLELE_NUM
-#pragma GENDICT INFO_CSQ_DISTANCE=DTYPE_1=cjSQ_DISTANCE
-#pragma GENDICT INFO_CSQ_STRAND=DTYPE_1=ckSQ_STRAND              // 20
-#pragma GENDICT INFO_CSQ_FLAGS=DTYPE_1=clSQ_FLAGS
-#pragma GENDICT INFO_CSQ_VARIANT_CLASS=DTYPE_1=cmSQ_VARIANT_CLASS
-#pragma GENDICT INFO_CSQ_MINIMISED=DTYPE_1=cnSQ_MINIMISED
-#pragma GENDICT INFO_CSQ_SYMBOL_SOURCE=DTYPE_1=coSQ_SYMBOL_SOURCE
-#pragma GENDICT INFO_CSQ_HGNC_ID=DTYPE_1=cpSQ_HGNC_ID
-#pragma GENDICT INFO_CSQ_CANONICAL=DTYPE_1=cqSQ_CANONICAL
-#pragma GENDICT INFO_CSQ_TSL=DTYPE_1=crSQ_TSL
-#pragma GENDICT INFO_CSQ_APPRIS=DTYPE_1=csSQ_APPRIS
-#pragma GENDICT INFO_CSQ_CCDS=DTYPE_1=ctSQ_CCDS
-#pragma GENDICT INFO_CSQ_ENSP=DTYPE_1=cuSQ_ENSP                  // 30
-#pragma GENDICT INFO_CSQ_SWISSPROT=DTYPE_1=cvSQ_SWISSPROT
-#pragma GENDICT INFO_CSQ_TREMBL=DTYPE_1=cwSQ_TREMBL
-#pragma GENDICT INFO_CSQ_UNIPARC=DTYPE_1=czSQ_UNIPARC
-#pragma GENDICT INFO_CSQ_GENE_PHENO=DTYPE_1=cySQ_GENE_PHENO
-#pragma GENDICT INFO_CSQ_SIFT=DTYPE_1=czSQ_SIFT
-#pragma GENDICT INFO_CSQ_PolyPhen=DTYPE_1=cASQ_PolyPhen
-#pragma GENDICT INFO_CSQ_DOMAINS=DTYPE_1=cBSQ_DOMAINS
-#pragma GENDICT INFO_CSQ_HGVS_OFFSET=DTYPE_1=cCSQ_HGVS_OFFSET
-#pragma GENDICT INFO_CSQ_AF=DTYPE_1=cDSQ_AF                      // 39-55 all 17 AF fields together, as their sequence in b250 is repetative
-#pragma GENDICT INFO_CSQ_CLIN_SIG=DTYPE_1=cUSQ_CLIN_SIG
-#pragma GENDICT INFO_CSQ_SOMATIC=DTYPE_1=cVSQ_SOMATIC
-#pragma GENDICT INFO_CSQ_PHENO=DTYPE_1=cQSQ_PHENO
-#pragma GENDICT INFO_CSQ_PUBMED=DTYPE_1=cXSQ_PUBMED
-#pragma GENDICT INFO_CSQ_MOTIF_NAME=DTYPE_1=cYSQ_MOTIF_NAME      // 60
-#pragma GENDICT INFO_CSQ_MOTIF_POS=DTYPE_1=cZSQ_MOTIF_POS
-#pragma GENDICT INFO_CSQ_HIGH_INF_POS=DTYPE_1=c@SQ_HIGH_INF_POS
-#pragma GENDICT INFO_CSQ_MOTIF_SCORE_CHANGE=DTYPE_1=c$SQ_MOTIF_SCORE_CHANGE
-#pragma GENDICT INFO_CSQ_LoF=DTYPE_1=c%SQ_LoF
-#pragma GENDICT INFO_CSQ_LoF_filter=DTYPE_1=c^SQ_LoF_filter
-#pragma GENDICT INFO_CSQ_LoF_flags=DTYPE_1=c-SQ_LoF_flags
-#pragma GENDICT INFO_CSQ_LoF_info=DTYPE_1=c*SQ_LoF_info
-#pragma GENDICT INFO_CSQ_context=DTYPE_1=c_SQ_context
-#pragma GENDICT INFO_CSQ_ancestral=DTYPE_1=c+SQ_ancestral
+#pragma GENDICT INFO_vep=DTYPE_1=vep/*in gnomAD*/   // <ID=vep,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|Existing_variation|ALLELE_NUM|DISTANCE|STRAND|FLAGS|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|GMAF|AFR_MAF|AMR_MAF|EAS_MAF|EUR_MAF|SAS_MAF|AA_MAF|EA_MAF|ExAC_MAF|ExAC_Adj_MAF|ExAC_AFR_MAF|ExAC_AMR_MAF|ExAC_EAS_MAF|ExAC_FIN_MAF|ExAC_NFE_MAF|ExAC_OTH_MAF|ExAC_SAS_MAF|CLIN_SIG|SOMATIC|PHENO|PUBMED|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info">
 
-// clinvar (also in dbSNP)
+// Mastermind (also as VEP extension) : https://www.genomenon.com/wp-content/uploads/2019/09/MM-Integration-Technical-Documentation-2019-08-23.pdf
+// INFO fields: GENE,HGVSG,MMCNT1,MMCNT2,MMCNT3,MMID3,MMURI3
+//#pragma GENDICT INFO_GENE=DTYPE_1=GENE            // (dup) <ID=GENE,Number=.,Type=String,Description="Genes for this variant">
+//#pragma GENDICT INFO_HGVSG=DTYPE_1=HGVSG          // (dup) <ID=HGVSG,Number=1,Type=String,Description="HGVS genomic notation for this variant">
+#pragma GENDICT INFO_MMCNT=DTYPE_1=MMCNT           
+#pragma GENDICT INFO_MMCNT1=DTYPE_1=MMCNT1          // <ID=MMCNT1,Number=1,Type=Integer,Description="Count of Mastermind articles with cDNA matches for this specific variant">
+#pragma GENDICT INFO_MMCNT2=DTYPE_1=MMCNT2          // <ID=MMCNT2,Number=1,Type=Integer,Description="Count of Mastermind articles with variants either explicitly matching at the cDNA level or given only at protein level">
+#pragma GENDICT INFO_MMCNT3=DTYPE_1=MMCNT3          // <ID=MMCNT3,Number=1,Type=Integer,Description="Count of Mastermind articles including other DNA-level variants resulting in the same amino acid change">
+#pragma GENDICT INFO_MMID3=DTYPE_1=MMID3            // <ID=MMID3,Number=.,Type=String,Description="Mastermind variant identifiers, as gene:key, for MMCNT3">
+#pragma GENDICT INFO_MMURI3=DTYPE_1=MMURI3          // <ID=MMURI3,Number=1,Type=String,Description="Mastermind search URI for articles including other DNA-level variants resulting in the same amino acid change">
+#pragma GENDICT INFO_MMURI=DTYPE_1=MMURI
+
+// ClinVar (also in dbSNP)
 #pragma GENDICT INFO_ALLELEID=DTYPE_1=ALLELEID      // <ID=ALLELEID,Number=1,Type=Integer,Description="the ClinVar Allele ID">
 #pragma GENDICT INFO_CLNDN=DTYPE_1=CLNDN            // <ID=CLNDN,Number=.,Type=String,Description="ClinVar's preferred disease name for the concept specified by disease identifiers in CLNDISDB">
 #pragma GENDICT INFO_CLNHGVS=DTYPE_1=CLNHGVS        // <ID=CLNHGVS,Number=.,Type=String,Description="Top-level (primary assembly, alt, or patch) HGVS expression.">
@@ -255,10 +209,31 @@
 #pragma GENDICT INFO_HGVS_ins_payload=DTYPE_1=H7GVS_payload_ins
 #pragma GENDICT INFO_HGVS_delins_end_pos=DTYPE_1=H8GVS_endpos_delins     
 #pragma GENDICT INFO_HGVS_delins_payload=DTYPE_1=H9GVS_payload_delins
+#pragma GENDICT INFO_HGVS_dup_end_pos=DTYPE_1=H6GVS_endpos_dup     
+#pragma GENDICT INFO_HGVS_no_payload=DTYPE_1=H9GVS_payload_dup
 
-// ExAC fields
+// ICGC see: https://icgc-data-parser.readthedocs.io/en/master/icgc-ssm-file.html and https://docs.icgc.org/submission/guide/icgc-simple-somatic-mutation-format/
+#pragma GENDICT INFO_CONSEQUENCE=DTYPE_1=CONSEQUENCE// <ID=CONSEQUENCE,Number=.,Type=String,Description="Mutation consequence predictions annotated by SnpEff (subfields: gene_symbol|gene_affected|gene_strand|transcript_name|transcript_affected|protein_affected|consequence_type|cds_mutation|aa_mutation)">
+#pragma GENDICT INFO_OCCURRENCE=DTYPE_1=OCCURRENCE  // <ID=OCCURRENCE,Number=.,Type=String,Description="Mutation occurrence counts broken down by project (subfields: project_code|affected_donors|tested_donors|frequency)">
+#pragma GENDICT INFO_mutation=DTYPE_1=mutation      // <ID=mutation,Number=1,Type=String,Description="Somatic mutation definition">
+#pragma GENDICT INFO_studies=DTYPE_1=studies        // <ID=studies,Number=1,Type=Integer,Description="Produced from study.">
+#pragma GENDICT INFO_affected_donors=DTYPE_1=affected_donors // <ID=affected_donors,Number=1,Type=Integer,Description="Number of donors with the current mutation">
+#pragma GENDICT INFO_project_count=DTYPE_1=project_count     // <ID=project_count,Number=1,Type=Integer,Description="Number of projects with the current mutation">
+#pragma GENDICT INFO_tested_donors=DTYPE_1=tested_donors     // <ID=tested_donors,Number=1,Type=Integer,Description="Total number of donors with SSM data available">
+
+// ExAC (Exome Aggregation Consortium) fields: https://gnomad.broadinstitute.org/downloads#exac-variants
 #pragma GENDICT INFO_DP_HIST=DTYPE_1=DP_HIST        // from ExAC: Depth (DP) histogram in 20 equal intervals between 0-100 : See https://www.biorxiv.org/content/biorxiv/suppl/2015/10/30/030338.DC1/030338-1.pdf
 #pragma GENDICT INFO_GQ_HIST=DTYPE_1=GQ_HIST        // from ExAC: Genotype Quality (GQ) histogram in 20 equal intervals between 0-100
+
+// gnomAD: https://gnomad.broadinstitute.org/downloads 
+// note: pairs of fields, eg INFO_age_hist_het_bin_freq and INFO_age_hist_hom_bin_freq, map to the same dict_id
+#pragma GENDICT INFO_age_hist_het_bin_freq=DTYPE_1=age_hist_het_bin_freq     // <ID=age_hist_het_bin_freq,Number=A,Type=String,Description="Histogram of ages of heterozygous individuals; bin edges are: 30.0|35.0|40.0|45.0|50.0|55.0|60.0|65.0|70.0|75.0|80.0; total number of individuals of any genotype bin: bin_edges|bin_freq|n_smaller|n_larger">
+//#pragma GENDICT INFO_age_hist_hom_bin_freq=DTYPE_1=age_hist_hom_bin_freq   // <ID=age_hist_hom_bin_freq,Number=A,Type=String,Description="Histogram of ages of homozygous alternate individuals; bin edges are: 30.0|35.0|40.0|45.0|50.0|55.0|60.0|65.0|70.0|75.0|80.0; total number of individuals of any genotype bin: bin_edges|bin_freq|n_smaller|n_larger">
+#pragma GENDICT INFO_gq_hist_alt_bin_freq=DTYPE_1=gq_hist_alt_bin_freq       // <ID=gq_hist_alt_bin_freq,Number=A,Type=String,Description="Histogram for GQ in heterozygous individuals calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100">
+//#pragma GENDICT INFO_gq_hist_all_bin_freq=DTYPE_1=gq_hist_all_bin_freq     // <ID=dp_hist_alt_bin_freq,Number=A,Type=String,Description="Histogram for DP in heterozygous individuals calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100">
+#pragma GENDICT INFO_dp_hist_alt_bin_freq=DTYPE_1=dp_hist_alt_bin_freq       // <ID=dp_hist_alt_bin_freq,Number=A,Type=String,Description="Histogram for DP in heterozygous individuals calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100">
+//#pragma GENDICT INFO_dp_hist_all_bin_freq=DTYPE_1=dp_hist_all_bin_freq     // <ID=dp_hist_all_bin_freq,Number=A,Type=String,Description="Histogram for DP calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100">
+#pragma GENDICT INFO_ab_hist_alt_bin_freq=DTYPE_1=ab_hist_alt_bin_freq       // <ID=ab_hist_alt_bin_freq,Number=A,Type=String,Description="Histogram for AB in heterozygous individuals calculated on high quality genotypes; bin edges are: 0.00|0.05|0.10|0.15|0.20|0.25|0.30|0.35|0.40|0.45|0.50|0.55|0.60|0.65|0.70|0.75|0.80|0.85|0.90|0.95|1.00">
 
 // Structural variants (also uses INFO/END): https://www.internationalgenome.org/wiki/Analysis/Variant%20Call%20Format/VCF%20(Variant%20Call%20Format)%20version%204.0/encoding-structural-variants/
 #pragma GENDICT INFO_SVLEN=DTYPE_1=SVLEN
@@ -328,6 +303,7 @@
 #pragma GENDICT INFO_CAF=DTYPE_1=CAF                // <ID=CAF,Number=.,Type=String,Description="An ordered, comma delimited list of allele frequencies based on 1000Genomes, starting with the reference allele followed by alternate alleles as ordered in the ALT column. Where a 1000Genomes alternate allele is not in the dbSNPs alternate allele set, the allele is added to the ALT column.  The minor allele is the second largest value in the list, and was previuosly reported in VCF as the GMAF.  This is the GMAF reported on the RefSNP and EntrezSNP pages and VariationReporter"> 
 #pragma GENDICT INFO_G5A=DTYPE_1=G5A                // >5% minor allele frequency in each and all populations
 #pragma GENDICT INFO_G5=DTYPE_1=G5                  // >5% minor allele frequency in 1+ populations
+#pragma GENDICT FORMAT_FRQ=DTYPE_2=FRQ              // <ID=FRQ,Number=.,Type=Float,Description="Frequency of each alternate allele." : https://www.ncbi.nlm.nih.gov/projects/SNP/docs/dbSNP_VCF_Submission.pdf
 
 // Illumina Genotyping. See explanation: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4751548/
 #pragma GENDICT INFO_PROBE_A=DTYPE_1=PROBE_A        // <ID=PROBE_A,Number=1,Type=String,Description="Probe base pair sequence">
@@ -356,6 +332,71 @@
 #pragma GENDICT FORMAT_RC=DTYPE_2=RC                // <ID=RC,Number=1,Type=Integer,Description="Count of reads with REF allele">
 #pragma GENDICT FORMAT_AC=DTYPE_2=AC                // <ID=AC,Number=1,Type=Integer,Description="Count of reads with ALT allele">
 
+//  COSMIC: https://cancer.sanger.ac.uk/cosmic/download
+// #pragma GENDICT INFO_AA=DTYPE_1=AA               // (dup) <ID=AA,Number=1,Type=String,Description="Peptide annotation">
+#pragma GENDICT INFO_CDS=DTYPE_1=CDS                // <ID=CDS,Number=1,Type=String,Description="CDS annotation">
+#pragma GENDICT INFO_GENE=DTYPE_1=GENE              // <ID=GENE,Number=1,Type=String,Description="Gene name">
+#pragma GENDICT INFO_HGVSC=DTYPE_1=HGVSC            // <ID=HGVSC,Number=1,Type=String,Description="HGVS cds syntax">
+#pragma GENDICT INFO_HGVSG=DTYPE_1=HGVSG            // <ID=HGVSG,Number=1,Type=String,Description="HGVS genomic syntax">
+#pragma GENDICT INFO_HGVSP=DTYPE_1=HGVSP            // <ID=HGVSP,Number=1,Type=String,Description="HGVS peptide syntax">
+#pragma GENDICT INFO_LEGACY_ID=DTYPE_1=LEGACY_ID    // <ID=LEGACY_ID,Number=1,Type=String,Description="Legacy Mutation ID">
+#pragma GENDICT INFO_SO_TERM=DTYPE_1=SO_TERM        // <ID=SO_TERM,Number=1,Type=String,Description="SO term for this mutation">
+#pragma GENDICT INFO_STRAND=DTYPE_1=STRAND          // <ID=STRAND,Number=1,Type=String,Description="Gene strand">
+#pragma GENDICT INFO_TIER=DTYPE_1=TIER              // <ID=TIER,Number=1,Type=String,Description="Indicates to which tier of the Cancer Gene Census the gene belongs (1/2)">
+#pragma GENDICT INFO_TRANSCRIPT=DTYPE_1=TRANSCRIPT  // <ID=TRANSCRIPT,Number=1,Type=String,Description="Transcript accession">
+#pragma GENDICT INFO_CNT=DTYPE_1=CNT                // <ID=CNT,Number=1,Type=Integer,Description="How many samples have this mutation">
+#pragma GENDICT INFO_IS_CANONICAL=DTYPE_1=IS_CANONICAL // <ID=IS_CANONICAL,Number=1,Type=String,Description="The Ensembl Canonical transcript is a single, representative transcript identified at every locus. For details see: https://www.ensembl.org/info/genome/genebuild/canonical.html">
+#pragma GENDICT INFO_OLD_VARIANT=DTYPE_1=OLD_VARIANT   // <ID=OLD_VARIANT,Number=.,Type=String,Description="Original chr:pos:ref:alt encoding">
+#pragma GENDICT INFO_SAMPLE_COUNT=DTYPE_1=SAMPLE_COUNT // <ID=SAMPLE_COUNT,Number=1,Type=Integer,Description="How many samples have this mutation">
+
+// CaVEMan: https://github.com/cancerit/CaVEMan
+#pragma GENDICT INFO_MP=DTYPE_1=MP                  // <ID=MP,Number=1,Type=Float,Description="Sum of CaVEMan somatic genotype probabilities">
+#pragma GENDICT INFO_GP=DTYPE_1=GP                  // <ID=GP,Number=1,Type=Float,Description="Sum of CaVEMan germline genotype probabilities">
+#pragma GENDICT INFO_TG=DTYPE_1=TG                  // <ID=TG,Number=1,Type=String,Description="Most probable genotype as called by CaVEMan">
+#pragma GENDICT INFO_TP=DTYPE_1=TP                  // <ID=TP,Number=1,Type=Float,Description="Probability of most probable genotype as called by CaVEMan">
+#pragma GENDICT INFO_SG=DTYPE_1=SG                  // <ID=SG,Number=1,Type=String,Description="2nd most probable genotype as called by CaVEMan">
+#pragma GENDICT INFO_SP=DTYPE_1=SP                  // <ID=SP,Number=1,Type=Float,Description="Probability of 2nd most probable genotype as called by CaVEMan">
+#pragma GENDICT INFO_DS=DTYPE_1=DS                  // <ID=DS,Number=.,Type=String,Description="DBSnp ID of known SNP">
+#pragma GENDICT INFO_CA=DTYPE_1=CA                  // <ID=CA,Number=0,Type=Flag,Description="Position could not be annotated to a coding region of a transcript.">
+#pragma GENDICT INFO_SNP=DTYPE_1=SNP                // <ID=SNP,Number=0,Type=Flag,Description="Position matches a dbSNP entry.">
+#pragma GENDICT FORMAT_AA=DTYPE_2=AA                // <ID=AA,Number=1,Type=Integer,Description="Reads presenting a A for this position">
+#pragma GENDICT FORMAT_CA=DTYPE_2=CA                // <ID=CA,Number=1,Type=Integer,Description="Reads presenting a C for this position">
+#pragma GENDICT FORMAT_GA=DTYPE_2=GA                // <ID=GA,Number=1,Type=Integer,Description="Reads presenting a G for this position">
+#pragma GENDICT FORMAT_TA=DTYPE_2=TA                // <ID=TA,Number=1,Type=Integer,Description="Reads presenting a T for this position">
+#pragma GENDICT FORMAT_PM=DTYPE_2=PM                // <ID=PM,Number=1,Type=Float,Description="Proportion of mut allele">
+
+// pindel: https://gmt.genome.wustl.edu/packages/pindel/user-manual.html 
+#pragma GENDICT INFO_PC=DTYPE_1=PC                  // <ID=PC,Number=1,Type=String,Description="Pindel call">
+//#pragma GENDICT INFO_RS=DTYPE_1=RS                // (dup) <ID=RS,Number=1,Type=Integer,Description="Range start">
+#pragma GENDICT INFO_RE=DTYPE_1=RE                  // <ID=RE,Number=1,Type=Integer,Description="Range end">
+#pragma GENDICT INFO_LEN=DTYPE_1=LEN                // <ID=LEN,Number=1,Type=Integer,Description="Length">
+#pragma GENDICT INFO_S1=DTYPE_1=S1                  // <ID=S1,Number=1,Type=Integer,Description="S1">
+#pragma GENDICT INFO_S2=DTYPE_1=S2                  // <ID=S2,Number=1,Type=Float,Description="S2">
+#pragma GENDICT INFO_PA=DTYPE_1=PA                  // <ID=PA,Number=1,Type=String,Description="Annotation on the positive strand">
+#pragma GENDICT INFO_NA=DTYPE_1=NA                  // <ID=NA,Number=1,Type=String,Description="Annotation on the negative strand">
+#pragma GENDICT INFO_REP=DTYPE_1=REP                // <ID=REP,Number=1,Type=Integer,Description="Change repeat count with range">
+#pragma GENDICT INFO_PRV=DTYPE_1=PRV                // <ID=PRV,Number=1,Type=Float,Description="Fraction of reads reporting the most prevalent change">
+#pragma GENDICT INFO_F017=DTYPE_1=F017              // <ID=F017,Number=0,Type=Flag,Description="Variant must not overlap with a simple repeat">
+//#pragma GENDICT FORMAT_PP=DTYPE_2=PP              // (dup) <ID=PP,Number=1,Type=Integer,Description="Pindel calls on the positive strand">
+#pragma GENDICT FORMAT_NP=DTYPE_2=NP                // <ID=NP,Number=1,Type=Integer,Description="Pindel calls on the negative strand">
+#pragma GENDICT FORMAT_PB=DTYPE_2=PB                // <ID=PB,Number=1,Type=Integer,Description="BWA calls on the positive strand">
+#pragma GENDICT FORMAT_NB=DTYPE_2=NB                // <ID=NB,Number=1,Type=Integer,Description="BWA calls on the negative strand">
+#pragma GENDICT FORMAT_PD=DTYPE_2=PD                // <ID=PD,Number=1,Type=Integer,Description="BWA mapped reads on the positive strand">
+#pragma GENDICT FORMAT_ND=DTYPE_2=ND                // <ID=ND,Number=1,Type=Integer,Description="BWA mapped reads on the negative strand">
+#pragma GENDICT FORMAT_PR=DTYPE_2=PR                // <ID=PR,Number=1,Type=Integer,Description="Total mapped reads on the positive strand">
+#pragma GENDICT FORMAT_NR=DTYPE_2=NR                // <ID=NR,Number=1,Type=Integer,Description="Total mapped reads on the negative strand">
+#pragma GENDICT FORMAT_PU=DTYPE_2=PU                // <ID=PU,Number=1,Type=Integer,Description="Unique calls on the positive strand">
+#pragma GENDICT FORMAT_NU=DTYPE_2=NU                // <ID=NU,Number=1,Type=Integer,Description="Unique calls on the negative strand">
+
+// VAGrENT - Variation Annotation Generator: 
+// https://github.com/cancerit/VAGrENT   https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6101192/
+// https://www.researchgate.net/publication/309117351_VAGrENT_Variation_Annotation_Generator/figures?lo=1
+#pragma GENDICT INFO_VD=DTYPE_1=VD                  // <ID=VD,Number=1,Type=String,Description="Vagrent Default Annotation">
+#pragma GENDICT INFO_VW=DTYPE_1=VW                  // <ID=VW,Number=1,Type=String,Description="Vagrent Most Deleterious Annotation">
+#pragma GENDICT INFO_VDVW_ARR=DTYPE_1=VDVW_ARR
+//#pragma GENDICT INFO_VC=DTYPE_1=VC                // (dup) <ID=VW,Number=1,Type=String,Description="Variant consequence based on Vagrent default annotation">
+#pragma GENDICT INFO_VT=DTYPE_1=VT                  // <ID=VW,Number=1,Type=String,Description="Variant type based on Vagrent default annotation">
+
 // Gwas2VCF: https://github.com/MRCIEU/gwas-vcf-specification
 #pragma GENDICT INFO_RSID=DTYPE_1=RSID              // <ID=RSID,Number=1,Type=String,Description="dbSNP identifier">
 #pragma GENDICT FORMAT_NS=DTYPE_2=NS                // <ID=NS,Number=A,Type=Float,Description="Variant-specific number of samples/individuals with called genotypes used to test association with specified trait">
@@ -373,6 +414,13 @@
 #pragma GENDICT FORMAT_ADALL=DTYPE_2=ADALL          // <ID=ADALL,Number=R,Type=Integer,Description="Net allele depths across all datasets">
 #pragma GENDICT FORMAT_IGT=DTYPE_2=IGT              // <ID=IGT,Number=1,Type=String,Description="Original input genotype">
 #pragma GENDICT FORMAT_IPS=DTYPE_2=IPS              // <ID=IPS,Number=1,Type=String,Description="Phase set for IGT">
+
+// dbNSFP: https://gist.github.com/sahilseth/78721eada1f0007c7afd and also https://hzhou.scholar.harvard.edu/blog/dbnsfp
+#pragma GENDICT INFO_Polyphen2_HDIV_score=DTYPE_1=Polyphen2_HDIV_score // Polyphen2 score based on HumDiv, i.e. hdiv_prob.
+#pragma GENDICT INFO_PUniprot_aapos=DTYPE_1=Uniprot_aapos              // amino acid position as to Uniprot_acc_Polyphen2.
+#pragma GENDICT INFO_VEST3_score=DTYPE_1=VEST3_score                   // VEST 3.0 score. Score ranges from 0 to 1. The larger the score the more likely the mutation may cause functional change. 
+#pragma GENDICT INFO_FATHMM_score=DTYPE_1=FATHMM_score                 // FATHMM default score (weighted for human inherited-disease mutations with Disease Ontology) (FATHMMori). Scores range from -16.13 to 10.64. The smaller the score the more likely the SNP has damaging effect.
+#pragma GENDICT INFO_SiPhy_29way_pi=DTYPE_1=SiPhy_29way_pi             // The estimated stationary distribution of A, C, G and T at the site, using SiPhy algorithm based on 29 mammals genomes. 
 
 // Genozip INFO fields
 #pragma GENDICT INFO_LUFT=DTYPE_1=LUFT
@@ -470,7 +518,8 @@ extern void vcf_samples_add  (rom samples_str);
                       vcf_piz_special_PROBE_A, vcf_piz_special_PROBE_B, vcf_piz_special_QD, \
                       vcf_piz_special_MUX_BY_VARTYPE, vcf_piz_special_ICNT, vcf_piz_special_SPL,\
                       vcf_piz_special_MUX_BY_SAMPLE_I, vcf_piz_special_IGT, \
-                      vcf_piz_special_MUX_BY_IGT_PHASE, vcf_piz_special_main_REFALT_DEL }
+                      vcf_piz_special_MUX_BY_IGT_PHASE, vcf_piz_special_main_REFALT_DEL, vcf_piz_special_mutation, \
+                      vcf_piz_special_SO_TERM, vcf_piz_special_MMURI }
 
 SPECIAL (VCF, 0,  main_REFALT,         vcf_piz_special_main_REFALT);
 SPECIAL (VCF, 1,  FORMAT,              vcf_piz_special_FORMAT)
@@ -519,7 +568,10 @@ SPECIAL (VCF, 43, MUX_BY_SAMPLE_I,     vcf_piz_special_MUX_BY_SAMPLE_I);        
 SPECIAL (VCF, 44, IGT,                 vcf_piz_special_IGT);                      // added v15.0.0
 SPECIAL (VCF, 45, MUX_BY_IGT_PHASE,    vcf_piz_special_MUX_BY_IGT_PHASE);         // added v15.0.0
 SPECIAL (VCF, 46, main_REFALT_DEL,     vcf_piz_special_main_REFALT_DEL);          // added v15.0.0
-#define NUM_VCF_SPECIAL 47
+SPECIAL (VCF, 47, mutation,            vcf_piz_special_mutation);                 // added v15.0.8
+SPECIAL (VCF, 48, SO_TERM,             vcf_piz_special_SO_TERM);                  // added v15.0.8
+SPECIAL (VCF, 49, MMURI,               vcf_piz_special_MMURI);                    // added v15.0.8
+#define NUM_VCF_SPECIAL 50
 
 // Translators for Luft (=secondary coordinates)
 TRANSLATOR (VCF, VCF,   1,  G,      vcf_piz_luft_G)       // same order as LiftOverStatus starting LO_CANT_G

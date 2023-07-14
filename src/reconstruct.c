@@ -63,10 +63,12 @@ static int64_t reconstruct_from_delta (VBlockP vb,
         ? reconstruct_peek (vb, base_ctx, 0, 0).i // value of this line/sample - whether already encountered or peek a future value
         : base_ctx->last_value.i; // use last_value even if base_ctx not encountered yet
 
-    bool hex = delta_snip_len && delta_snip[0] == 'x';
-    if (hex) {
-        delta_snip_len--;
-        delta_snip++;
+    char format = (delta_snip_len && !IS_DIGIT (delta_snip[0]) && delta_snip[0] != '-') ? delta_snip[0] : 0;
+    unsigned fixed_len = (format && delta_snip_len > 2 && !IS_DIGIT (delta_snip[1]) && delta_snip[1] != '-') ? (delta_snip[1] - 'A') : 0; // since 15.0.8  
+    
+    if (format) {
+        delta_snip_len -= 1 + !!fixed_len;
+        delta_snip     += 1 + !!fixed_len;
     }
 
     if (str_is_1char (delta_snip, '-'))
@@ -78,11 +80,27 @@ static int64_t reconstruct_from_delta (VBlockP vb,
     else 
         my_ctx->last_delta = (int64_t)strtoull (delta_snip, NULL, 10 /* base 10 */); // strtoull can handle negative numbers, despite its name
 
+    char *num_str = BAFTtxt;
     int64_t new_value = base_value + my_ctx->last_delta;  
-    if (reconstruct && !hex)
-        RECONSTRUCT_INT (new_value);
-    else if (reconstruct && hex)
-        RECONSTRUCT_HEX (new_value, false);
+    if (reconstruct)
+        switch (format) {
+            case 0   : 
+            case 'd' : RECONSTRUCT_INT (new_value);        break;
+            case 'x' : RECONSTRUCT_HEX (new_value, false); break;
+            case 'X' : RECONSTRUCT_HEX (new_value, true);  break; // since 15.0.8
+            default  : ASSPIZ (false, "Unrecognized format %c(ASCII %u)", format, format);
+        }
+         
+    // pad 0s if needed
+    if (fixed_len) {
+        uint32_t unpadded_len = BAFTtxt - num_str;
+        if (unpadded_len < fixed_len) {
+            int pad = fixed_len - unpadded_len;
+            memmove (num_str + pad, num_str, unpadded_len); // move up to make room for the padded 0s
+            for (int i=0; i < pad; i++) num_str[i] = '0';
+            Ltxt += pad;
+        }
+    }
 
     return new_value;
 }
@@ -132,7 +150,7 @@ static void reconstruct_from_diff (VBlockP vb, ContextP ctx, STRp(snip), ReconTy
         reconstruct_peek (vb, base_ctx, pSTRa(base));
     
     else 
-        CTXlast (base, base_ctx);
+        SETlast (base, base_ctx->did_i);
         
     int64_t diff_len;
     ASSPIZ (str_get_int (STRa(snip), &diff_len), "In ctx=%s: Invalid XOR_DIFF snip: \"%.*s", ctx->tag_name, STRf(snip));
@@ -382,19 +400,21 @@ static HasNewValue reconstruct_numeric (VBlockP vb, ContextP ctx, STRp(snip), Va
     new_value->i = reconstruct_from_local_int (vb, ctx, 0, RECON_OFF);
     
     if (reconstruct) {
-        char format[32] = "%.*s%0*";
+        char format[32] = "0x%.*s%0*";
 
         if (new_value->i <= 0xffffffffLL)
-            format[7] = "uxX"[snip[1] - '0'];
+            format[9] = "uxX"[snip[1] - '0'];
 
         else // beyond 32b uint
             switch (snip[1] - '0') { // snip[1] is type
-                case 0: memcpy (&format[7], PRIu64, STRLEN(PRIu64)); break;
-                case 1: memcpy (&format[7], PRIx64, STRLEN(PRIx64)); break;
-                case 2: memcpy (&format[7], PRIX64, STRLEN(PRIX64)); break;
+                case 0: memcpy (&format[9], PRIu64, STRLEN(PRIu64)); break;
+                case 1: memcpy (&format[9], PRIx64, STRLEN(PRIx64)); break;
+                case 2: memcpy (&format[9], PRIX64, STRLEN(PRIX64)); break;
             }
 
-        Ltxt += sprintf (BAFTtxt, format, 
+        bool has_zero_x = snip_len == 4 && snip[3] == 'x'; // since 15.0.8
+
+        Ltxt += sprintf (BAFTtxt, format + (has_zero_x ? 0 : 2), 
                          snip_len-3, &snip[3],       // prefix - since 14.0.18
                          snip[2]-'0', new_value->i); // snip[2] is width
     }

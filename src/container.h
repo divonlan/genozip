@@ -87,7 +87,7 @@ typedef struct MiniContainer   { CONTAINER_FIELDS(1)                 } MiniConta
 #define SMALL_CON_NITEMS 16
 typedef struct SmallContainer  { CONTAINER_FIELDS(SMALL_CON_NITEMS)  } SmallContainer;
 
-#define MEDIUM_CON_NITEMS 80
+#define MEDIUM_CON_NITEMS 100
 typedef struct MediumContainer { CONTAINER_FIELDS(MEDIUM_CON_NITEMS) } MediumContainer;
 
 #pragma pack()

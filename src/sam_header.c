@@ -365,7 +365,7 @@ static void sam_header_create_deep_tip (rom hdr, rom after)
     while (hdr < after && (((fq = strstr (hdr, ".fq.gz")) && (fq_len=6)) || ((fq = strstr (hdr, ".fastq.gz")) && (fq_len=9)))) {
         // find start of word
         while (fq > hdr && (IS_ALPHANUMERIC(fq[-1]) || fq[-1] == '_' || fq[-1] == '-')) // note: we stop also at '/' - record only the base name
-            STRdec(fq);
+            STRdec(fq, 1);
 
         SAFE_NULT(fq);
         if (!sam_deep_tip.len || !strstr (B1STc(sam_deep_tip), fq)) { // avoid dups

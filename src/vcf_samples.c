@@ -166,14 +166,6 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
     else
         init_mux_by_dosage(GQ);
 
-    if (segconf.vcf_is_gwas) 
-        seg_id_field_init (CTX(FORMAT_ID));
-
-    if (segconf.vcf_is_giab_trio) {
-        seg_mux_init (VB, CTX(FORMAT_IGT), 2, VCF_SPECIAL_MUX_BY_SAMPLE_I,  false, (MultiplexerP)&vb->mux_IGT, NULL);
-        seg_mux_init (VB, CTX(FORMAT_IPS), 2, VCF_SPECIAL_MUX_BY_IGT_PHASE, false, (MultiplexerP)&vb->mux_IPS, NULL);
-    }
-
     // flags to send to PIZ
     vb->flags.vcf.use_null_DP_method = segconf.use_null_DP_method;
 }
@@ -258,8 +250,7 @@ ContextP vcf_seg_FORMAT_mux_by_dosage (VBlockVCFP vb, ContextP ctx, STRp(cell), 
 // there return 0/0,0->0 ; 0/1,1/0,1->1 ; 1/1->2 ; others->3
 int vcf_piz_get_mux_channel_i (VBlockP vb)
 {
-    rom gt = last_txt (vb, FORMAT_GT);
-    unsigned gt_len = CTX(FORMAT_GT)->last_txt.len;
+    STRlast (gt, FORMAT_GT);
 
     if (gt_len == 3) { // diploid
         if ((gt[0]!='0' && gt[0]!='1') || (gt[2]!='0' && gt[2]!='1')) return 3; 
@@ -638,7 +629,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_ICNT)
 static void vcf_seg_SPL (VBlockVCFP vb, ContextP ctx, STRp(SPL))
 {
     if (ctx_encountered (VB, FORMAT_PL)) {
-        STRlast (PL, CTX(FORMAT_PL));
+        STRlast (PL, FORMAT_PL);
 
         str_split_ints (SPL, SPL_len, 0, ',', spl, false);
         str_split_ints (PL,  PL_len,  0, ',', pl , false);
@@ -669,7 +660,7 @@ fallback:
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_SPL)
 {
-    STRlast (PL, CTX(FORMAT_PL));
+    STRlast (PL, FORMAT_PL);
     str_split_ints (PL, PL_len, snip_len/*0 or correct number*/, ',', pl,  false);
 
     for (int i=0; i < n_pls; i++) {
@@ -744,7 +735,7 @@ static int64_t vcf_predict_GQ (VBlockVCFP vb, Did src_did_i)
     STR(src);
 
     if (IS_ZIP)
-        CTXlast (src, CTX(src_did_i));
+        SETlast (src, src_did_i);
     else
         reconstruct_peek (VB, CTX(src_did_i), pSTRa(src));
 
@@ -791,7 +782,7 @@ static void vcf_seg_FORMAT_GQ_do_seg (VBlockVCFP vb, int64_t gq_value, int64_t p
 static inline void vcf_seg_FORMAT_GQ (VBlockVCFP vb)
 {
     ContextP gq_ctx = CTX(FORMAT_GQ);
-    STRlast (gq, gq_ctx);
+    STRlast (gq, FORMAT_GQ);
 
     // second best: mux by dosage, and possibly DP
     if (!segconf.running && !segconf.GQ_by_GP && !segconf.GQ_by_PL) {
@@ -1154,7 +1145,7 @@ static inline void vcf_seg_FORMAT_AB_verify_channel1 (VBlockVCFP vb)
     ContextP ad0_ctx = ECTX (con_AD.items[0].dict_id);
     ContextP ad1_ctx = ECTX (con_AD.items[1].dict_id);
 
-    STRlast (ab_str, ab_ctx);
+    STRlast (ab_str, FORMAT_AB);
 
     // rollback if we don't have AD0, AD1 this line, or if their value is not as expected by the formula
     if (!ad0_ctx || !ad1_ctx) goto rollback;
@@ -1652,7 +1643,9 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
 
         // <ID=PP,Number=G,Type=Integer,Description="Phred-scaled genotype posterior probabilities rounded to the closest integer">
         case _FORMAT_PP:
-            if (flag.optimize_phred && vcf_phred_optimize (STRi(sf, i), qSTRa(optimized))) 
+            if (segconf.vcf_is_pindel)
+                goto fallback; // PP means something entirely different in Pindel
+            else if (flag.optimize_phred && vcf_phred_optimize (STRi(sf, i), qSTRa(optimized))) 
                 SEG_OPTIMIZED_MUX_BY_DOSAGE(PP);
             else
                 vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_PP);
