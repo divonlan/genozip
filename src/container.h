@@ -17,7 +17,8 @@
 #define CON_PX_SEP_             "\4"         // string version (careful not \x4 as it can combine with the next character to eg \x4F)
 #define CON_PX_SEP_SHOW_REPEATS '\x5'        // an alternative terminator - outputs the number of repeats in LTEN32 after the prefix (used for BAM 'B' array count field)
 
-#define CONTAINER_MAX_REPEATS 0xfffffe       // 3 byte unsigned int (16M) (minus 1 for easier detection of overflows)
+#define CONTAINER_MAX_REPEATS  0xfffffe      // 3 byte unsigned int (16M) (minus 1 for easier detection of overflows)
+#define CON_REPEATS_IS_SEQ_LEN 0xffffff
 #define CONTAINER_MAX_SELF_TRANS_CHANGE 50
 
 #define CONTAINER_MAX_DICTS 2047             // 11 bits -matches CONTAINER_FIELDS.nitems_lo+nitems_hi

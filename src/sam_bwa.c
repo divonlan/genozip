@@ -415,7 +415,7 @@ void sam_seg_BWA_XS_i (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, int64_t xs,
             seg_by_ctx (VB, "0", 1, channel_ctx, add_bytes);
 
         else
-            seg_integer_as_text_do (VB, channel_ctx, xs, add_bytes);
+            seg_integer_as_snip_do (VB, channel_ctx, xs, add_bytes);
 
         seg_by_did (VB, STRa(vb->mux_XS.snip), did_i, 0);
     }

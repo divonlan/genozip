@@ -5,7 +5,9 @@
 
 // divon
 #pragma GCC diagnostic ignored "-Wpragmas"         // avoid warning if "-Wuse-after-free" is not defined in this version of gcc
+#pragma GCC diagnostic ignored "-Wunknown-warning-option" // same
 #pragma GCC diagnostic ignored "-Wuse-after-free"  // avoid compiler warning of using p after it is freed
+#pragma GCC diagnostic ignored "-Wdeprecated-non-prototype"
 
 #ifdef _LARGEFILE64_SOURCE
 #  ifndef _LARGEFILE_SOURCE

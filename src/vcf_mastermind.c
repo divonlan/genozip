@@ -126,7 +126,7 @@ void vcf_seg_INFO_MMURI3 (VBlockVCFP vb, ContextP ctx, STRp(value))
             *next++ = SNIP_SPECIAL;
             *next++ = VCF_SPECIAL_MMURI;
             next = mempcpy (next, value, mut-value); // substring before '='
-            *next++ = 255; // means: reconstruct escaped HGVSG
+            *next++ = (char)255; // means: reconstruct escaped HGVSG
             next = mempcpy (next, after, value+value_len - after); // substring following '&'
 
             seg_by_ctx (VB, snip, next - snip, ctx, value_len); 

@@ -430,6 +430,9 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
     if (flag.show_time && is_toplevel) 
         clock_gettime (CLOCK_REALTIME, &profiler_timer);
     
+    bool copy_rpts_from_seq_len = (con->repeats == CON_REPEATS_IS_SEQ_LEN);
+    if (copy_rpts_from_seq_len) ((ContainerP)con)->repeats = vb->seq_len;
+
     int32_t last_non_filtered_item_i = -1;
 
     bool translating = vb->translation.trans_containers && !con->no_translation;
@@ -643,12 +646,14 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
         Ltxt -= CI0_ITEM_HAS_FLAG(item) ? (translating ? 0 : !!IS_CI0_SET (CI0_NATIVE_NEXT))
                                         : (!!item->separator[0] + !!item->separator[1]);
     }
-     
-    if (is_toplevel)   
-        COPY_TIMER (reconstruct_vb);
 
     if (ctx->flags.store == STORE_INDEX) // STORE_INDEX for a container means store number of repeats (since 13.0.5)
         new_value.i += con->repeats;
+
+    if (copy_rpts_from_seq_len) ((ContainerP)con)->repeats = CON_REPEATS_IS_SEQ_LEN; // restore
+
+    if (is_toplevel)   
+        COPY_TIMER (reconstruct_vb);
 
     return new_value;
 }

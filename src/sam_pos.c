@@ -103,7 +103,7 @@ void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(pnext_str)/* option 
         if (!pnext) 
             seg_by_did (VB, "0", 1, SAM_PNEXT, add_bytes); // this is expected to be all-the-same
         else
-            seg_integer_as_text_do (VB, CTX(SAM_PNEXT), pnext, add_bytes); // this is not expected to happen usually. note: segged as text to avoid making local and int buffer, which would prevent singletons in the expected case
+            seg_integer_as_snip_do (VB, CTX(SAM_PNEXT), pnext, add_bytes); // this is not expected to happen usually. note: segged as text to avoid making local and int buffer, which would prevent singletons in the expected case
     }
     
     ctx_set_last_value (VB, CTX(SAM_PNEXT), (int64_t)pnext);

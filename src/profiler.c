@@ -298,6 +298,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (sam_seg_other_seq, 3);
         PRINT (sam_seg_GR_Z, 3);
         PRINT (sam_seg_GY_Z, 3);
+        PRINT (sam_seg_ultima_tp, 3);
         PRINT (vcf_seg_PROBE_A, 2);
         PRINT (random_access_merge_in_vb, 1); 
         PRINT (gencomp_absorb_add_to_queue, 1);

@@ -399,7 +399,7 @@ WordIndex hash_get_entry_for_seg (VBlockP segging_vb, ContextP vctx, STRp(snip),
     else
         g_hashent->next = NO_NEXT;
 
-    for (unsigned depth=0; ; depth++) {
+    for (unsigned __attribute__((unused)) depth=0; ; depth++) {
         
         // four cases for "next":
         // 1. NO_NEXT - the linked list is terminated and we have not found our snip

@@ -224,7 +224,7 @@ static SmallContainer con_illumina_2bc = {
 #define PX_illumina_2bc { "", "", ":", "", "" } 
 
 // Example: "1:N:0:0" 
-static SmallContainer con_illumina_5_q2 = {
+static SmallContainer con_illumina_0bc = {
     .repeats   = 1,
     .nitems_lo = 4,
     .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = ":"                    },  
@@ -233,7 +233,7 @@ static SmallContainer con_illumina_5_q2 = {
                    { .dict_id = { _SAM_Q3NAME }                                      } }  // barcode
 };
 
-#define PX_illumina_5_q2 { "", "", ":", "" } 
+#define PX_illumina_0bc { "", "", ":", "" } 
 
 // Example: 2:N:0:CTGAAGCT
 static SmallContainer con_illumina_1bc = {
@@ -330,6 +330,85 @@ static SmallContainer con_bgi_CL = {
 };
 
 #define PX_bgi_CL { "CL", "", "C", "R", "_" } // "CL" is a prefix, and the 2nd L is seprator 
+
+// ULTIMA_1 format
+// Example: 004733_1-X0003-1345904491
+static SmallContainer con_ultima_1 = {
+    .repeats             = 1,
+    .nitems_lo           = 4,
+    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_FIXED_0_PAD, 6  } }, 
+                             { .dict_id = { _SAM_Q1NAME }, .separator = "-"                     }, 
+                             { .dict_id = { _SAM_Q2NAME }, .separator = { CI0_FIXED_0_PAD, 5  } }, 
+                             { .dict_id = { _SAM_Q3NAME }, .separator = { CI0_FIXED_0_PAD, 10 } } } 
+};
+
+#define PX_ULTIMA_1 { "", "_", "", "-" }  
+
+// ULTIMA_2 format
+// Example: 014214_2-UFOx1-143-9871314132_AGTAC
+static SmallContainer con_ultima_2 = {
+    .repeats             = 1,
+    .nitems_lo           = 6,
+    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_FIXED_0_PAD, 6  } }, 
+                             { .dict_id = { _SAM_Q1NAME }, .separator = "-"                     }, 
+                             { .dict_id = { _SAM_Q2NAME }, .separator = { CI0_FIXED_0_PAD, 5  } }, 
+                             { .dict_id = { _SAM_Q3NAME }, .separator = "-" }, 
+                             { .dict_id = { _SAM_Q4NAME }, .separator = { CI0_FIXED_0_PAD, 10 } },
+                             { .dict_id = { _SAM_Q5NAME }                                       } } 
+};
+
+#define PX_ULTIMA_2 { "", "_", "", "-", "", "_" }  
+
+// Singular Genomics
+// example: B05:000:FC2:4:1:272670:483
+static SmallContainer con_singular = {
+    .repeats   = 1,
+    .nitems_lo = 8,
+    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = ":"                    },  
+                   { .dict_id = { _SAM_Q1NAME }, .separator = { CI0_FIXED_0_PAD, 3 } },
+                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"                    },
+                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"                    },
+                   { .dict_id = { _SAM_Q4NAME }, .separator = ":"                    },
+                   { .dict_id = { _SAM_Q5NAME }, .separator = ":"                    },
+                   { .dict_id = { _SAM_Q6NAME },                                     },
+                   { .dict_id = { _SAM_QmNAME }, I_AM_MATE                           } } 
+};
+
+#define PX_SINGULAR { "", "", ":" }  
+
+// Element Biosciences
+// examples: 
+// PLT-03:BBS-0174:2140948523:1:10102:0293:0058
+// PLT-16:APP-0316:UNKNOWN_FLOWCELL:1:10102:0582:0027
+static SmallContainer con_element = {
+    .repeats   = 1,
+    .nitems_lo = 8,
+    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = ":"                    },  
+                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"                    },  
+                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"                    }, 
+                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"                    }, 
+                   { .dict_id = { _SAM_Q4NAME }, .separator = ":"                    }, 
+                   { .dict_id = { _SAM_Q5NAME }, .separator = { CI0_FIXED_0_PAD, 4 } },
+                   { .dict_id = { _SAM_Q6NAME }, .separator = { CI0_FIXED_0_PAD, 4 } },
+                   { .dict_id = { _SAM_QmNAME }, I_AM_MATE                           } } 
+};
+
+#define PX_ELEMENT { "", "", "", "", "", "", ":", PX_MATE_FIXED_0_PAD }  
+
+// example: PLT-04:APP-0289::1:10102:0562:0050
+static SmallContainer con_element_6 = {
+    .repeats   = 1,
+    .nitems_lo = 7,
+    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = ":"                    },  
+                   { .dict_id = { _SAM_Q1NAME }, .separator = {':',':'}              },  
+                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"                    }, 
+                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"                    }, 
+                   { .dict_id = { _SAM_Q4NAME }, .separator = { CI0_FIXED_0_PAD, 4 } },
+                   { .dict_id = { _SAM_Q5NAME }, .separator = { CI0_FIXED_0_PAD, 4 } },
+                   { .dict_id = { _SAM_QmNAME }, I_AM_MATE                           } } 
+};
+
+#define PX_ELEMENT_6 { "", "", "", "", "", ":", PX_MATE_FIXED_0_PAD }  
 
 //--------------------------------------------------------------------------------------------------------------
 // ION_TORRENT_3 format: 17 characters: RunID[5] : Row[5] : Column[5]
@@ -669,78 +748,88 @@ typedef struct QnameFlavorStruct {
 } QnameFlavorStruct;
 
 static QnameFlavorStruct qf[] = { 
-/*  mate    id             name             example                                       tech          qname1_tech only_q  con_template       canon #sp integer_items       numeric_items   in-local            hex_items       srt ord1,2 rng    sqln len px_strs           test_file  */
+/*  mate    id             name             example                                       tech          qname1_tech   only_q  con_template       canon #sp integer_items       numeric_items   in-local            hex_items       srt ord1,2 rng    sqln len px_strs           test_file  */
     // QNAMEs generated by sequencers
-    {},  { QF_ILLUM_7,     "Illumina",      { "A00488:61:HMLGNDSXX:4:1101:4345:1000" },   TECH_ILLUM,   TECH_NCBI,  QANY,   &con_illumina_7,    0,   6,  {1,3,4,5,6,-1},     {-1},           {1,3,-1},           {-1},           0,  5,6,   -1,-1, -1,                        /* flavor.illumina_7_fq.fq */ },
+    {},  { QF_ILLUM_7,     "Illumina",      { "A00488:61:HMLGNDSXX:4:1101:4345:1000" },   TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_7,    0,   6,  {1,3,4,5,6,-1},     {-1},           {1,3,5,6,-1},       {-1},           0,  5,6,   -1,-1, -1,                        /* flavor.illumina_7_fq.fq */ },
     {},  { QF_ILLUM_7i,    "Illumina#bc",   { "A00488:61:HMLGNDSXX:4:1101:4345:1000#CTGGGAAG" }, 
-                                                                                          TECH_ILLUM,   TECH_NCBI,  QANY,   &con_illumina_7i,   '#', 7,  {1,3,4,5,6,-1},     {-1},           {1,3,-1},           {-1},           0,  5,6,   -1,-1, -1,                        /* flavor.illumina#bc.sam */ },
+                                                                                          TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_7i,   '#', 7,  {1,3,4,5,6,-1},     {-1},           {1,3,5,6,-1},       {-1},           0,  5,6,   -1,-1, -1,                        /* flavor.illumina#bc.sam */ },
     {},  { QF_ILLUM_7umi,  "Illumina-umi",  { "A00488:61:HMLGNDSXX:4:1101:4345:1000;umi=ACCTTCCAA" },   
-                                                                                          TECH_ILLUM,   TECH_NCBI,  QANY,   &con_illumina_7umi, ';', 11, {1,3,4,5,6,-1},     {-1},           {1,3,-1},           {-1},           0,  5,6,   -1,-1, -1,  0, PX_illumina_7umi   /* flavor.illumina_7umi.fq */ },
+                                                                                          TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_7umi, ';', 11, {1,3,4,5,6,-1},     {-1},           {1,3,5,6,-1},       {-1},           0,  5,6,   -1,-1, -1,  0, PX_illumina_7umi   /* flavor.illumina_7umi.fq */ },
     {},  { QF_ILLUM_7c,    "Illumina:bc",   { "SDF-02:GFH-0166::1:13435:2311:1233:GTAGCCAATCA" }, 
-                                                                                          TECH_ILLUM,   TECH_NCBI,  QANY,   &con_illumina_7c,   ':', 7,  {3,4,5,6,-1},       {-1},           {3,-1},             {-1},           0,  5,6,   -1,-1, -1,                        /* flavor.illumina-bc-fq.fq, flavor.illumina.colon.sam */ },
+                                                                                          TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_7c,   ':', 7,  {3,4,5,6,-1},       {-1},           {3,-1},             {-1},           0,  5,6,   -1,-1, -1,                        /* flavor.illumina-bc-fq.fq, flavor.illumina.colon.sam */ },
     {},  { QF_ILLUM_7gs,   "Illumina-gs",   { "ATATA-ATGCATAG|ab|A00488:61:HMLGNDSXX:4:1101:4345:1000|1" },   
-                                                                                          TECH_ILLUM,   TECH_NCBI,  QANY,   &con_illumina_7gs,  0,   10, {4,6,7,8,9,-1},     {-1},           {4,6,-1},           {-1},           0,  8,9,   -1,-1, -1,                        /* flavor.illumina-gs.sam */},
+                                                                                          TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_7gs,  0,   10, {4,6,7,8,9,-1},     {-1},           {4,6,-1},           {-1},           0,  8,9,   -1,-1, -1,                        /* flavor.illumina-gs.sam */},
+    {},  { QF_SINGULAR,    "Singular",      { "B05:000:FC2:4:1:272670:483" },             TECH_SINGLR,  TECH_NCBI,    QANY,   &con_singular,      0,   6,  {3,4,5,6,-1},       {1,-1},         {5,6,-1},           {-1},           0,  6,-1,  -1,-1, -1,  0,  PX_SINGULAR       /* flavor.singualr.fq */ },
+    {},  { QF_ELEMENT,     "Element",       { "PLT-16:APP-0316:UNKNOWN_FLOWCELL:1:10102:0582:0027", "PLT-03:BBS-0174:2140948523:1:10102:0293:0058" },     
+                                                                                          TECH_ELEMENT, TECH_NCBI,    QANY,   &con_element,       0,   6,  {2,3,-1},           {5,6,-1},       {5,6,-1},           {-1},           0,  6,-1,  -1,-1, -1,  0,  PX_ELEMENT        /* flavor.element.fq */ },
+    {},  { QF_ELEMENT_6,   "Element-6",     { "PLT-04:APP-0289::1:10102:0338:0025" },     TECH_ELEMENT, TECH_NCBI,    QANY,   &con_element_6,     0,   6,  {2,3,-1},           {4,5,-1},       {4,5,-1},           {-1},           0,  5,-1,  -1,-1, -1,  0,  PX_ELEMENT_6      /* flavor.element-6.fq */ },
     {},  { QF_BGI_varlen,  "BGI-varlen",    { "8A_V100004684L3C001R029311637", "V300022116L2C001R0012002968", "V300046476L1C001R00110001719" },          
-                                                                                          TECH_BGI,     TECH_NCBI,  QANY,   &con_bgi_varlen,    0,   3,  {4,-1},             {1,2,3,-1},     {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1,  0,  PX_bgi_varlen     },
+                                                                                          TECH_BGI,     TECH_NCBI,    QANY,   &con_bgi_varlen,    0,   3,  {4,-1},             {1,2,3,-1},     {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1,  0,  PX_bgi_varlen     },
     {},  { QF_BGI_r6,      "BGI-R6",        { "8A_V100004684L3C001R029011637", "V300014293BL2C001R027005967", "V300003413L4C001R016000000" },          
-                                                                                          TECH_BGI,     TECH_NCBI,  QANY,   &con_bgi_R6,        0,   3,  {-1},               {1,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1,  0,  PX_bgi_R          },
+                                                                                          TECH_BGI,     TECH_NCBI,    QANY,   &con_bgi_R6,        0,   3,  {-1},               {1,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1,  0,  PX_bgi_R          },
     {},  { QF_BGI_r7,      "BGI-R7",        { "V300017009_8AL2C001R0030001805", "V300022116L2C001R0010002968", "V300014296L2C001R0013000027", "E100001117L1C001R0030000000", "E1000536L1C002R0020000005" },         
-                                                                                          TECH_BGI,     TECH_NCBI,  QANY,   &con_bgi_R7,        0,   3,  {-1},               {1,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1,  0,  PX_bgi_R          },
-    {},  { QF_BGI_r8,      "BGI-R8",        { "V300046476L1C001R00100001719" },           TECH_BGI,     TECH_NCBI,  QANY,   &con_bgi_R8,        0,   3,  {-1},               {1,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1,  0,  PX_bgi_R          },
-    {},  { QF_BGI_ll7,     "BGI-LL7",       { "DP8400010271TLL1C005R0511863479" },        TECH_BGI,     TECH_NCBI,  QANY,   &con_bgi_LL7,       0,   4,  {-1},               {1,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1,  0,  PX_bgi_LL         },
-    {},  { QF_BGI_cl,      "BGI-CL",        { "CL100025298L1C002R050_244547" },           TECH_BGI,     TECH_NCBI,  QANY,   &con_bgi_CL,        0,   6,  {4,-1},             {1,2,3,-1},     {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1,  0,  PX_bgi_CL         }, 
-    {},  { QF_ION_TORR_3,  "IonTorrent",    { "ZEWTM:10130:07001" },                      TECH_IONTORR, TECH_NCBI,  QANY,   &con_ion_torrent_3, 0,   2,  {-1},               {-1},           {-1},               {-1},           0,  -1,-1, -1,-1, -1,  17                    },
-    {},  { QF_ILLUM_5i,    "Illumina-old#", { "HWI-ST550_0201:3:1101:1626:2216#ACAGTG" }, TECH_ILLUM,   TECH_NCBI,  QANY,   &con_illumina_5i,   '#', 5,  {1,2,3,4,-1},       {-1},           {-1},               {-1},           0,  -1,-1, -1,-1, -1,                        },
-    {},  { QF_ILLUM_5,     "Illumina-old",  { "SOLEXA-1GA-1_4_FC20ENL:7:258:737:870" },   TECH_ILLUM,   TECH_NCBI,  QANY,   &con_illumina_5,    0,   4,  {1,2,3,4,-1},       {-1},           {1,2,3,4-1},        {-1},           0,  -1,-1, -1,-1, -1,                        },
+                                                                                          TECH_BGI,     TECH_NCBI,    QANY,   &con_bgi_R7,        0,   3,  {-1},               {1,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1,  0,  PX_bgi_R          },
+    {},  { QF_BGI_r8,      "BGI-R8",        { "V300046476L1C001R00100001719" },           TECH_BGI,     TECH_NCBI,    QANY,   &con_bgi_R8,        0,   3,  {-1},               {1,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1,  0,  PX_bgi_R          },
+    {},  { QF_BGI_ll7,     "BGI-LL7",       { "DP8400010271TLL1C005R0511863479" },        TECH_BGI,     TECH_NCBI,    QANY,   &con_bgi_LL7,       0,   4,  {-1},               {1,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1,  0,  PX_bgi_LL         },
+    {},  { QF_BGI_cl,      "BGI-CL",        { "CL100025298L1C002R050_244547" },           TECH_BGI,     TECH_NCBI,    QANY,   &con_bgi_CL,        0,   6,  {4,-1},             {1,2,3,-1},     {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1,  0,  PX_bgi_CL         }, 
+         { QF_ULTIMA_1,    "Ultima-1",      { "004733_1-X0003-0072646116" },              TECH_ULTIMA,  TECH_NCBI,    QANY,   &con_ultima_1,      0,   3,  {1,-1},             {3,-1},         {1,3,-1},           {-1},           0,  -1,-1, -1,-1, -1,  25, PX_ULTIMA_1       /* flavor.ultima-1.sam */},
+         { QF_ULTIMA_2,    "Ultima-2",      { "014214_2-UFOx1-143-9871314132_AGTAC" },    TECH_ULTIMA,  TECH_NCBI,    QANY,   &con_ultima_2,      0,   5,  {1,-1},             {4,-1},         {1,4,-1},           {-1},           0,  -1,-1, -1,-1, -1,  0,  PX_ULTIMA_2       /* flavor.ultima-2.fq  */},
+    {},  { QF_ION_TORR_3,  "IonTorrent",    { "ZEWTM:10130:07001" },                      TECH_IONTORR, TECH_NCBI,    QANY,   &con_ion_torrent_3, 0,   2,  {-1},               {-1},           {-1},               {-1},           0,  -1,-1, -1,-1, -1,  17                    },
+    {},  { QF_ILLUM_5i,    "Illumina-old#", { "HWI-ST550_0201:3:1101:1626:2216#ACAGTG" }, TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_5i,   '#', 5,  {1,2,3,4,-1},       {-1},           {-1},               {-1},           0,  -1,-1, -1,-1, -1,                        },
+    {},  { QF_ILLUM_5,     "Illumina-old",  { "SOLEXA-1GA-1_4_FC20ENL:7:258:737:870" },   TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_5,    0,   4,  {1,2,3,4,-1},       {-1},           {1,2,3,4-1},        {-1},           0,  -1,-1, -1,-1, -1,                        },
     {},  { QF_ILLUM_5rng,  "Illumina-oldR", { "NOVID_3053_FC625AGAAXX:6:1:1069:11483:0,84" },   
-                                                                                          TECH_ILLUM,   TECH_NCBI,  QANY,   &con_illumina_5rng, ':', 6,  {1,2,3,4,5,6,-1},   {-1},           {1,2,3,4,5,6-1},    {-1},           0,  -1,-1, -1,-1, 6,                         },
-    {},  { QF_ROCHE_454,   "Roche-454",     { "000050_1712_0767" },                       TECH_454,     TECH_NCBI,  QANY,   &con_roche_454,     0,   2,  {-1},               {0,1,2,-1},     {-1},               {-1},           0,  -1,-1, -1,-1, -1,  16, PX_roche_454      },
-    {},  { QF_HELICOS,     "Helicos",       { "VHE-242383071011-15-1-0-2" },              TECH_HELICOS, TECH_NCBI,  QANY,   &con_helicos,       0,   5,  {2,3,4,5,-1},       {-1},           {-1},               {-1},           0,  -1,-1, -1,-1, -1,                        },
-    {},  { QF_PACBIO_3,    "PacBio-3",      { "0ae26d65_70722_4787" },                    TECH_PACBIO,  TECH_NCBI,  QANY,   &con_pacbio_3,      0,   2,  {1,2,-1},           {0,-1},         {1,2,-1},           {0,-1},         0,  -1,-1, -1,-1, -1,  0,  PX_pacbio_3       /* test.pacbio-blasr.bam */},
+                                                                                          TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_5rng, ':', 6,  {1,2,3,4,5,6,-1},   {-1},           {1,2,3,4,5,6-1},    {-1},           0,  -1,-1, -1,-1, 6,                         },
+    {},  { QF_ROCHE_454,   "Roche-454",     { "000050_1712_0767" },                       TECH_454,     TECH_NCBI,    QANY,   &con_roche_454,     0,   2,  {-1},               {0,1,2,-1},     {-1},               {-1},           0,  -1,-1, -1,-1, -1,  16, PX_roche_454      },
+    {},  { QF_HELICOS,     "Helicos",       { "VHE-242383071011-15-1-0-2" },              TECH_HELICOS, TECH_NCBI,    QANY,   &con_helicos,       0,   5,  {2,3,4,5,-1},       {-1},           {-1},               {-1},           0,  -1,-1, -1,-1, -1,                        },
+    {},  { QF_PACBIO_3,    "PacBio-3",      { "0ae26d65_70722_4787" },                    TECH_PACBIO,  TECH_NCBI,    QANY,   &con_pacbio_3,      0,   2,  {1,2,-1},           {0,-1},         {1,2,-1},           {0,-1},         0,  -1,-1, -1,-1, -1,  0,  PX_pacbio_3       /* test.pacbio-blasr.bam */},
     {},  { QF_PACBIO_rng,  "PacBio-Range",  { "m130802_221257_00127_c100560082550000001823094812221334_s1_p0/128361/872_4288" },
-                                                                                          TECH_PACBIO,  TECH_NCBI,  QANY,   &con_pacbio_range,  0,   4,  {1,2,3,-1},         {-1},           {1,-1},             {-1},           0,  -1,-1,  3,-1, -1,  0,  PX_pacbio         }, // note: tried ord1=1 for pacbio flavors, we're worse off than in_local
-    {},  { QF_PACBIO_lbl,  "PacBio-Label",  { "m64136_200621_234916/18/ccs" },            TECH_PACBIO,  TECH_NCBI,  QANY,   &con_pacbio_label,  0,   3,  {1,-1},             {-1},           {1,-1},             {-1},           0,  -1,-1, -1,-1, -1,  0,  PX_pacbio         /* flavor.pacbio_label.aux.fq */},
-    {},  { QF_PACBIO_pln,  "PacBio-Plain",  { "m64136_200621_234916/18" },                TECH_PACBIO,  TECH_NCBI,  QANY,   &con_pacbio_plain,  0,   2,  {1,-1},             {-1},           {1,-1},             {-1},           0,  -1,-1, -1,-1, -1,  0,  PX_pacbio         },
-    {},  { QF_NANOPORE,    "Nanopore",      { "af84b0c1-6945-4323-9193-d9f6f2c38f9a" },   TECH_ONP,     TECH_NCBI,  QANY,   &con_nanopore,      0,   4,  {-1},               {0,1,2,3,4-1},  {0,1,2,3,4,-1},     {0,1,2,3,4,-1}, 0,  -1,-1, -1,-1, -1,  36, PX_nanopore       /* flavor.nanopore.aux.fq, flavor.nanopore.length.fq */},
+                                                                                          TECH_PACBIO,  TECH_NCBI,    QANY,   &con_pacbio_range,  0,   4,  {1,2,3,-1},         {-1},           {1,-1},             {-1},           0,  -1,-1,  3,-1, -1,  0,  PX_pacbio         }, // note: tried ord1=1 for pacbio flavors, we're worse off than in_local
+    {},  { QF_PACBIO_lbl,  "PacBio-Label",  { "m64136_200621_234916/18/ccs" },            TECH_PACBIO,  TECH_NCBI,    QANY,   &con_pacbio_label,  0,   3,  {1,-1},             {-1},           {1,-1},             {-1},           0,  -1,-1, -1,-1, -1,  0,  PX_pacbio         /* flavor.pacbio_label.aux.fq */},
+    {},  { QF_PACBIO_pln,  "PacBio-Plain",  { "m64136_200621_234916/18" },                TECH_PACBIO,  TECH_NCBI,    QANY,   &con_pacbio_plain,  0,   2,  {1,-1},             {-1},           {1,-1},             {-1},           0,  -1,-1, -1,-1, -1,  0,  PX_pacbio         },
+    {},  { QF_NANOPORE,    "Nanopore",      { "af84b0c1-6945-4323-9193-d9f6f2c38f9a" },   TECH_ONP,     TECH_NCBI,    QANY,   &con_nanopore,      0,   4,  {-1},               {0,1,2,3,4-1},  {0,1,2,3,4,-1},     {0,1,2,3,4,-1}, 0,  -1,-1, -1,-1, -1,  36, PX_nanopore       /* flavor.nanopore.aux.fq, flavor.nanopore.length.fq */},
     {},  { QF_NANOPORE_rng,"Nanopore-rng",  { "2a228edf-218c-46b3-b1b8-3d613b8530dc_39-13665" },
-                                                                                          TECH_ONP,     TECH_NCBI,  QANY,   &con_nanopore_rng,  0,   6,  {5,6,-1},           {0,1,2,3,4,-1}, {0,1,2,3,4,5,6,-1}, {0,1,2,3,4,-1}, 0,  -1,-1, -1,-1, -1,  0,  PX_nanopore_rng   /* flavor.nanopore-rng.fq */}, // 14.0.31
+                                                                                          TECH_ONP,     TECH_NCBI,    QANY,   &con_nanopore_rng,  0,   6,  {5,6,-1},           {0,1,2,3,4,-1}, {0,1,2,3,4,5,6,-1}, {0,1,2,3,4,-1}, 0,  -1,-1, -1,-1, -1,  0,  PX_nanopore_rng   /* flavor.nanopore-rng.fq */}, // 14.0.31
 /*  mate    id             name             example                                       tech          qname1_tech only_q  con_template       #sp  integer_items       numeric_items   in-local            hex_items       ord1,2 rng    sqln len px_strs           test_file  (header line copy for editing convenience)*/
     {},  { QF_NANOPORE_ext,"Nanopore-ext",  { "2a228edf-d8bc-45d4-9c96-3d613b8530dc_Basecall_2D_000_template" },
-                                                                                          TECH_ONP,     TECH_NCBI,  QANY,   &con_nanopore_ext,  0,   5,  {-1},               {0,1,2,3,4,-1}, {0,1,2,3,4,-1},     {0,1,2,3,4,-1}, 0,  -1,-1, -1,-1, -1,  0,  PX_nanopore_ext   },
+                                                                                          TECH_ONP,     TECH_NCBI,    QANY,   &con_nanopore_ext,  0,   5,  {-1},               {0,1,2,3,4,-1}, {0,1,2,3,4,-1},     {0,1,2,3,4,-1}, 0,  -1,-1, -1,-1, -1,  0,  PX_nanopore_ext   },
     {},  { QF_BAMSURGEON,  "BamSurgeon",    { "22:33597495-34324994_726956_727496_0:0:0_0:0:0_2963e" },   
-                                                                                          TECH_UNKNOWN, NO_QNAME2,  QNAME1, &con_bamsurgeon,    0,   7,  {1,2,3,4,7,-1},     {-1},           {1,3,7,-1},         {7,-1},         0,  1,3,   2,4,   -1,                        },
+                                                                                          TECH_UNKNOWN, NO_QNAME2,    QNAME1, &con_bamsurgeon,    0,   7,  {1,2,3,4,7,-1},     {-1},           {1,3,7,-1},         {7,-1},         0,  1,3,   2,4,   -1,                        },
     // NCBI QNAMEs - no mate, as mate is part of QNAME2 in this case
-         { QF_SRA_L,       "NCBI_SRA_L",    { "SRR11215720.1_1_length=120" },             TECH_NCBI,    NO_QNAME2,  Q1or3,  &con_ncbi_sra_L,    0,   10, {1,2,-1},           {-1},           {2,-1},             {-1},           0,  2,-1,  -1,-1,  3,  0,  PX_sra_len        },
-         { QF_SRA2,        "NCBI-SRA2",     { "ERR2708427.1.1" },                         TECH_NCBI,    NO_QNAME2,  Q1or3,  &con_ncbi_sra2,     0,   2,  {2,3,-1},           {-1},           {2,3,-1},           {-1},           0,  2,-1,  -1,-1, -1,                        /* flavor.nanopore.length.fq */},
-         { QF_SRA,         "NCBI-SRA",      { "SRR001666.1" },                            TECH_NCBI,    NO_QNAME2,  Q1or3,  &con_ncbi_sra,      0,   1,  {2,-1},             {-1},           {2,-1},             {-1},           0,  2,-1,  -1,-1, -1,                        /* flavor.ncbi_sra.sam, flavor.ncbi_srr_fq.fq */},
+         { QF_SRA_L,       "NCBI_SRA_L",    { "SRR11215720.1_1_length=120" },             TECH_NCBI,    NO_QNAME2,    Q1or3,  &con_ncbi_sra_L,    0,   10, {1,2,-1},           {-1},           {2,-1},             {-1},           0,  2,-1,  -1,-1,  3,  0,  PX_sra_len        },
+         { QF_SRA2,        "NCBI-SRA2",     { "ERR2708427.1.1" },                         TECH_NCBI,    NO_QNAME2,    Q1or3,  &con_ncbi_sra2,     0,   2,  {2,3,-1},           {-1},           {2,3,-1},           {-1},           0,  2,-1,  -1,-1, -1,                        /* flavor.nanopore.length.fq */},
+         { QF_SRA,         "NCBI-SRA",      { "SRR001666.1" },                            TECH_NCBI,    NO_QNAME2,    Q1or3,  &con_ncbi_sra,      0,   1,  {2,-1},             {-1},           {2,-1},             {-1},           0,  2,-1,  -1,-1, -1,                        /* flavor.nsra.sam, flavor.sra.fq */},
 
-    // QNAME2 - Illumina - no mate, as mate is part of QNAME in this case
-         { QF_ILLUM_2bc,   "Illumina-2bc",  { "2:N:0:CTGAAGCT+ATAGAGGC" },                TECH_ILLUM,   TECH_ILLUM, QNAME2, &con_illumina_2bc,  0,   4,  {0,2,-1},           {-1},           {0,-1},             {-1},           0,  -1,-1, -1,-1, -1,  0, PX_illumina_2bc   /* flavor.illumina_7_fq.fq */ }, 
-         { QF_ILLUM_1bc,   "Illumina-1bc",  { "2:N:0:GATATTAC" },                         TECH_ILLUM,   TECH_ILLUM, QNAME2, &con_illumina_1bc,  0,   3,  {0,2,-1},           {-1},           {0,-1},             {-1},           0,  -1,-1, -1,-1, -1,  0, PX_illumina_1bc   /* flavor.illumina_1bc.fq, flavor.illumina-bc-fq.fq, flavor.illumina_0bc.fq */}, 
-         { QF_ILLUM_5q2,   "Illumina-5-q2", { "1:N:0:0" },                                TECH_ILLUM,   TECH_ILLUM, QNAME2, &con_illumina_5_q2, 0,   3,  {0,2,3,-1},         {-1},           {0,-1},             {-1},           0,  -1,-1, -1,-1, -1,  0, PX_illumina_5_q2  /* special.solexa-R1.fq */  }, // v14.0.0
+    // QNAME2 - Illumina and Singular - no mate, as mate is part of QNAME in this case
+         { QF_ILLUM_2bc,   "Illumina-2bc",  { "2:N:0:CTGAAGCT+ATAGAGGC" },                TECH_ILLUM,   TECH_ILLUM,   QNAME2, &con_illumina_2bc,  0,   4,  {0,2,-1},           {-1},           {0,-1},             {-1},           0,  -1,-1, -1,-1, -1,  0, PX_illumina_2bc   /* flavor.illumina_7_fq.fq */ }, 
+         { QF_ILLUM_0bc,   "Illumina-0bc",  { "1:N:0:0" },                                TECH_ILLUM,   TECH_ILLUM,   QNAME2, &con_illumina_0bc,  0,   3,  {0,2,3,-1},         {-1},           {0,-1},             {-1},           0,  -1,-1, -1,-1, -1,  0, PX_illumina_0bc   /* special.solexa-R1.fq */  }, // v14.0.0
+         { QF_ILLUM_1bc,   "Illumina-1bc",  { "2:N:0:GATATTAC" },                         TECH_ILLUM,   TECH_ILLUM,   QNAME2, &con_illumina_1bc,  0,   3,  {0,2,-1},           {-1},           {0,-1},             {-1},           0,  -1,-1, -1,-1, -1,  0, PX_illumina_1bc   /* flavor.illumina_1bc.fq, flavor.illumina-bc-fq.fq, flavor.illumina_0bc.fq */}, 
+         { QF_SINGULR_1bc, "Singular-1bc",  { "2:N:0:NNNNNN" },                           TECH_SINGLR,  TECH_SINGLR,  QNAME2, &con_illumina_1bc,  0,   3,  {0,2,-1},           {-1},           {0,-1},             {-1},           0,  -1,-1, -1,-1, -1,  0, PX_illumina_1bc   /* flavor.singualr.fq */}, 
+         { QF_ELEMENT_2bc, "Element-2bc",   { "1:N:0:CTACAGTG+AGTCGCTT" },                TECH_ELEMENT, TECH_ELEMENT, QNAME2, &con_illumina_2bc,  0,   4,  {0,2,-1},           {-1},           {0,-1},             {-1},           0,  -1,-1, -1,-1, -1,  0, PX_illumina_2bc   /* flavor.illumina_7_fq.fq */ }, 
+         { QF_ELEMENT_0bc, "Element-0bc",   { "1:N:0:1" },                                TECH_ELEMENT, TECH_ELEMENT, QNAME2, &con_illumina_0bc,  0,   3,  {0,2,3,-1},         {-1},           {0,-1},             {-1},           0,  -1,-1, -1,-1, -1,  0, PX_illumina_0bc   /* special.solexa-R1.fq */  }, 
+         { QF_ELEMENT_1bc, "Element-1bc",   { "1:N:0:CTACAGTG" },                         TECH_ELEMENT, TECH_ELEMENT, QNAME2, &con_illumina_1bc,  0,   3,  {0,2,-1},           {-1},           {0,-1},             {-1},           0,  -1,-1, -1,-1, -1,  0, PX_illumina_1bc   /* flavor.illumina_1bc.fq, flavor.illumina-bc-fq.fq, flavor.illumina_0bc.fq */}, 
 
     // observed as QNAME2 in NCBI (possibly with mate) and in SAM/BAM
     {},  { QF_ILLUM_X_2bc, "Illumina_X_2bc",{ "A00180:28:HC3F5DRXX:2:2110:27453:21981_1:N:0:ATTACTCGATCT+GGCTCTGA" }, 
-                                                                                          TECH_ILLUM,   TECH_NCBI,  Q2orSAM,&con_illumina_X_2bc,'_', 11, {1,3,4,5,6,7,9,-1}, {-1},           {1,3,7,8,9,-1},     {-1},           0,  5,6,   -1,-1, -1,                        /* flavor.illumina_X_2bc.fq */},
+                                                                                          TECH_ILLUM,   TECH_NCBI,    Q2orSAM,&con_illumina_X_2bc,'_', 11, {1,3,4,5,6,7,9,-1}, {-1},           {1,3,7,8,9,-1},     {-1},           0,  5,6,   -1,-1, -1,                        /* flavor.illumina_X_2bc.fq */},
     {},  { QF_ILLUM_X_1bc, "Illumina_X_1bc",{ "ST-E00314:354:H7J2YCCXY:1:1101:7080:1450_1:N:0:NAGGCG" }, 
-                                                                                          TECH_ILLUM,   TECH_NCBI,  Q2orSAM,&con_illumina_X_1bc,'_', 10, {1,3,4,5,6,7,9,-1}, {-1},           {1,3,7,8,9,-1},     {-1},           0,  5,6,   -1,-1, -1,                        /* flavor.illumina_X_1bc.sam */},
+                                                                                          TECH_ILLUM,   TECH_NCBI,    Q2orSAM,&con_illumina_X_1bc,'_', 10, {1,3,4,5,6,7,9,-1}, {-1},           {1,3,7,8,9,-1},     {-1},           0,  5,6,   -1,-1, -1,                        /* flavor.illumina_X_1bc.sam */},
     {},  { QF_ILLUM_X_0bc, "Illumina_X_0bc",{ "A00488:61:HMLGNDSXX:4:1101:4345:1000_2:N:0" },
-                                                                                          TECH_ILLUM,   TECH_NCBI,  Q2orSAM,&con_illumina_X_0bc,'_', 7,  {1,3,4,5,6,-1},     {-1},           {1,3,-1},           {-1},           0,  5,6,   -1,-1, -1,                        /* flavor.illumina_X_0bc.sam */ }, // v14.0.17  
+                                                                                          TECH_ILLUM,   TECH_NCBI,    Q2orSAM,&con_illumina_X_0bc,'_', 7,  {1,3,4,5,6,-1},     {-1},           {1,3,-1},           {-1},           0,  5,6,   -1,-1, -1,                        /* flavor.illumina_X_0bc.sam */ }, // v14.0.17  
     // only possible in SAM/BAM
     {},  { QF_ILLUM_S_2bc, "Illumina_S_2bc",{ "A00180:28:HC3F5DRXX:2:2110:27453:21981 1:N:0:ATTACTCGATCT+GGCTCTGA" }, 
-                                                                                          TECH_ILLUM,   TECH_NCBI,  QSAM,   &con_illumina_S_2bc,' ', 11, {1,3,4,5,6,7,9,-1}, {-1},           {1,3,7,8,9,-1},     {-1},           0,  5,6,   -1,-1, -1,                        /* flavor.illumina_S_2bc.sam */},
+                                                                                          TECH_ILLUM,   TECH_NCBI,    QSAM,   &con_illumina_S_2bc,' ', 11, {1,3,4,5,6,7,9,-1}, {-1},           {1,3,7,8,9,-1},     {-1},           0,  5,6,   -1,-1, -1,                        /* flavor.illumina_S_2bc.sam */},
     {},  { QF_ILLUM_S_1bc, "Illumina_S_1bc",{ "ST-E00314:354:H7J2YCCXY:1:1101:7080:1450 1:N:0:NAGGCG" }, 
-                                                                                          TECH_ILLUM,   TECH_NCBI,  QSAM,   &con_illumina_S_1bc,' ', 10, {1,3,4,5,6,7,9,-1}, {-1},           {1,3,7,8,9,-1},     {-1},           0,  5,6,   -1,-1, -1,                        },
+                                                                                          TECH_ILLUM,   TECH_NCBI,    QSAM,   &con_illumina_S_1bc,' ', 10, {1,3,4,5,6,7,9,-1}, {-1},           {1,3,7,8,9,-1},     {-1},           0,  5,6,   -1,-1, -1,                        },
     {},  { QF_ILLUM_S_0bc, "Illumina_S_0bc",{ "A00488:61:HMLGNDSXX:4:1101:4345:1000 2:N:0" },
-                                                                                          TECH_ILLUM,   TECH_NCBI,  QSAM,   &con_illumina_S_0bc,' ', 7,  {1,3,4,5,6,-1},     {-1},           {1,3,-1},           {-1},           0,  5,6,   -1,-1, -1,                        }, // v14.0.17  
+                                                                                          TECH_ILLUM,   TECH_NCBI,    QSAM,   &con_illumina_S_0bc,' ', 7,  {1,3,4,5,6,-1},     {-1},           {1,3,-1},           {-1},           0,  5,6,   -1,-1, -1,                        }, // v14.0.17  
     // QNAMEs generated by various software tools
-    {},  { QF_SEQAN,       "seqan",         { "adeno-reads100.fasta.000000008" },         TECH_UNKNOWN, TECH_NCBI,  QANY,   &con_seqan,         0,   2,  {-1},               {2, -1},        {-1},               {-1},           0,  2,-1,  -1,-1, -1,   0,  PX_seqan         },
-    {},  { QF_CLC_GW,      "CLC-GW",        { "umi64163_count1" },                        TECH_UNKNOWN, TECH_NCBI,  QANY,   &con_clc_gw,        0,   9,  {0,1,-1},           {-1},           {0,1,-1},           {-1},           0,  -1,-1, -1,-1, -1,   0,  PX_clc_gw        },
-    {},  { QF_HEX_CHR,     "hex_chr",       { "30cf_chr10" }, /* wgsim simulator? */      TECH_UNKNOWN, TECH_NCBI,  QANY,   &con_hex_chr,       0,   1,  {-1},               {0,-1},         {0,-1},             {0,-1},         0,  -1,-1, -1,-1, -1,   0,  PX_hex_chr       }, // added v14
-    {},  { QF_INTEGER,     "Integer",       { "123" },                                    TECH_UNKNOWN, TECH_NCBI,  QANY,   &con_integer,       0,   0,  {0,-1},             {-1},           {0,-1},             {-1},           0,  0,-1,  -1,-1, -1,                        /* flavor.ncbi_srr_fq.fq */}, 
-    {},  { QF_STR_INT,     "Str_Integer",   { "read_1" },   /* eg CLC */                  TECH_UNKNOWN, TECH_NCBI,  QANY,   &con_str_integer,   0,   1,  {1,-1},             {-1},           {1,-1},             {-1},           0,  1,-1,  -1,-1, -1,                        },
-         { QF_CONSENSUS,   "consensus",     { "consensus:23" },                           TECH_UNKNOWN, NO_QNAME2,  QSAM,   &con_consensus,     0,   10, {0,-1},             {-1},           {0,-1},             {-1},           1,  0,-1,  -1,-1, -1,   0,  PX_consensus     /* flavor.concensus.sam  */ },
-    {},  { QF_GENOZIP_OPT, "Genozip-opt",   { "basic.1" },  /* must be last */            TECH_UNKNOWN, TECH_NCBI,  QANY,   &con_genozip_opt,   0,   1,  {1,-1},             {-1},           {1,-1},             {-1},           1,  1,-1,  -1,-1, -1,                        /* flavor.Genozip-opt.fq */ },
+    {},  { QF_SEQAN,       "seqan",         { "adeno-reads100.fasta.000000008" },         TECH_UNKNOWN, TECH_NCBI,    QANY,   &con_seqan,         0,   2,  {-1},               {2, -1},        {-1},               {-1},           0,  2,-1,  -1,-1, -1,   0,  PX_seqan         },
+    {},  { QF_CLC_GW,      "CLC-GW",        { "umi64163_count1" },                        TECH_UNKNOWN, TECH_NCBI,    QANY,   &con_clc_gw,        0,   9,  {0,1,-1},           {-1},           {0,1,-1},           {-1},           0,  -1,-1, -1,-1, -1,   0,  PX_clc_gw        },
+    {},  { QF_HEX_CHR,     "hex_chr",       { "30cf_chr10" }, /* wgsim simulator? */      TECH_UNKNOWN, TECH_NCBI,    QANY,   &con_hex_chr,       0,   1,  {-1},               {0,-1},         {0,-1},             {0,-1},         0,  -1,-1, -1,-1, -1,   0,  PX_hex_chr       }, // added v14
+    {},  { QF_INTEGER,     "Integer",       { "123" },                                    TECH_UNKNOWN, TECH_NCBI,    QANY,   &con_integer,       0,   0,  {0,-1},             {-1},           {0,-1},             {-1},           0,  0,-1,  -1,-1, -1,                        /* flavor.ncbi_srr_fq.fq */}, 
+    {},  { QF_STR_INT,     "Str_Integer",   { "read_1" },   /* eg CLC */                  TECH_UNKNOWN, TECH_NCBI,    QANY,   &con_str_integer,   0,   1,  {1,-1},             {-1},           {1,-1},             {-1},           0,  1,-1,  -1,-1, -1,                        },
+         { QF_CONSENSUS,   "consensus",     { "consensus:23" },                           TECH_UNKNOWN, NO_QNAME2,    QSAM,   &con_consensus,     0,   10, {0,-1},             {-1},           {0,-1},             {-1},           1,  0,-1,  -1,-1, -1,   0,  PX_consensus     /* flavor.concensus.sam  */ },
+    {},  { QF_GENOZIP_OPT, "Genozip-opt",   { "basic.1" },  /* must be last */            TECH_UNKNOWN, TECH_NCBI,    QANY,   &con_genozip_opt,   0,   1,  {1,-1},             {-1},           {1,-1},             {-1},           1,  1,-1,  -1,-1, -1,                        /* flavor.Genozip-opt.fq */ },
 };
 
 #define NUM_QFs ARRAY_LEN(qf)

@@ -34,7 +34,7 @@ void sam_seg_bowtie2_YS_i (VBlockSAMP vb, ZipDataLineSAM *dl, ValueType YS, unsi
         seg_by_ctx (VB, STRa(copy_mate_AS_snip), channel_ctx, add_bytes);
 
     else 
-        seg_integer_as_text_do (VB, channel_ctx, YS.i, add_bytes);    
+        seg_integer_as_snip_do (VB, channel_ctx, YS.i, add_bytes);    
 
     seg_by_did (VB, STRa(vb->mux_YS.snip), OPTION_YS_i, 0); // de-multiplexor
 }

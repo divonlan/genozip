@@ -239,7 +239,7 @@ bool seg_set_last_txt_store_value (VBlockP vb, ContextP ctx, STRp(value), StoreT
     return stored;
 }
 
-WordIndex seg_integer_as_text_do (VBlockP vb, ContextP ctx, int64_t n, unsigned add_bytes)
+WordIndex seg_integer_as_snip_do (VBlockP vb, ContextP ctx, int64_t n, unsigned add_bytes)
 {
     char snip[24];
     unsigned snip_len = str_int (n, snip);
@@ -780,7 +780,7 @@ WordIndex seg_delta_vs_other_do (VBlockP vb, ContextP ctx, ContextP other_ctx,
 
 fallback:
     return value ? seg_by_ctx (VB, STRa(value), ctx, add_bytes) 
-                 : seg_integer_as_text_do (vb, ctx, value_n, add_bytes);
+                 : seg_integer_as_snip_do (vb, ctx, value_n, add_bytes);
 }
 
 // note: seg_initialize should set STORE_INT for this ctx
@@ -929,6 +929,68 @@ bool seg_do_nothing_cb (VBlockP vb, ContextP ctx, STRp(field), uint32_t rep)
     return true; // "segged successfully" - do nothing
 }
 
+bool seg_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), 
+                 const SegCallback *callbacks, // optional - either NULL, or contains a seg callback for each item (any callback may be NULL)
+                 unsigned add_bytes)
+{
+    ASSERT0 (con.repeats==1 && !con.repsep[0], "expecting con.repeats==1 and no repsep");
+
+    ContextP ctxs[con.nitems_lo]; 
+
+    for (unsigned i=0; i < con.nitems_lo; i++) 
+        ctxs[i] = ctx_get_ctx (vb, con.items[i].dict_id); 
+
+    if (!ctx->is_stats_parent) 
+        ctx_consolidate_stats_(vb, ctx->st_did_i == DID_NONE ? ctx->did_i : ctx->st_did_i, con.nitems_lo, ctxs);
+
+    seg_create_rollback_point (vb, ctxs, con.nitems_lo);
+
+    // get items in each repeat
+    str_split_by_container (snip, snip_len, &con, NULL, 0, item, NULL);
+    
+    if (n_items != con.nitems_lo) 
+        goto badly_formatted;
+
+    for (unsigned i=0; i < n_items; i++)
+        if (callbacks && callbacks[i]) {
+            if (!callbacks[i] (vb, ctxs[i], STRi(item,i), 0))
+                goto badly_formatted;
+        }
+        else
+            seg_by_ctx (VB, STRi(item,i), ctxs[i], item_lens[i]);
+
+    // finally, the Container snip itself - we attempt to use the known node_index if it is cached in con_index
+
+    buf_alloc_exact_255 (vb, ctx->con_index, 1, WordIndex, CTX_TAG_CON_INDEX);
+
+    // count printable item separators
+    unsigned num_printable_separators=0;
+    for (unsigned i=0; i < con.nitems_lo; i++) 
+        num_printable_separators += is_printable[con.items[i].separator[0]] + is_printable[con.items[i].separator[1]];
+
+    WordIndex node_index = *B1ST(WordIndex, ctx->con_index);
+    unsigned account_for = num_printable_separators + ((int)add_bytes - snip_len);
+
+    // case: first container with this many repeats - seg and add to cache
+    if (node_index == WORD_INDEX_NONE) 
+        *B1ST(WordIndex, ctx->con_index) = container_seg (vb, ctx, (ContainerP)&con, NULL, 0, account_for);
+    
+    // case: we already know the node index of the container with this many repeats
+    else 
+        seg_known_node_index (vb, ctx, node_index, account_for);
+
+    return true;
+
+badly_formatted:
+    // roll back all the changed data
+    seg_rollback (vb);
+
+    // now just seg the entire snip
+    seg_by_ctx (VB, STRa(snip), ctx, add_bytes); 
+
+    return false; // not segged as a container
+}                           
+
 // a field that looks like: "non_coding_transcript_variant 0 ncRNA ENST00000431238,intron_variant 0 primary_transcript ENST00000431238"
 // we have an array (2 entires in this example) of items (4 in this examples) - the entries are separated by comma and the items by space
 // observed in Ensembel generated GVF: Variant_effect, sift_prediction, polyphen_prediction, variant_peptide
@@ -995,7 +1057,7 @@ int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp
     WordIndex node_index = *B(WordIndex, ctx->con_index, n_repeats);
     unsigned account_for = con.repeats * num_printable_separators /* item seperators */ + con.repeats - con.drop_final_repsep /* repeat separators */ + ((int)add_bytes - snip_len);
 
-    // case: first container with the many repeats - seg and add to cache
+    // case: first container with this many repeats - seg and add to cache
     if (node_index == WORD_INDEX_NONE) 
         *B(WordIndex, ctx->con_index, n_repeats) = container_seg (vb, ctx, (ContainerP)&con, NULL, 0, account_for);
     

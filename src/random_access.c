@@ -362,7 +362,7 @@ bool random_access_is_vb_included (VBIType vb_i)
     // case: an entire VB without RA data while some other VBs do have. For example - a sorted SAM where unaligned reads are pushed to the end of the file
     if (!ra) return false; // don't include this VB
 
-    for (uint32_t ra_i=0; ra->vblock_i == vb_i; ra_i++, ra++) 
+    for ( ; ra->vblock_i == vb_i; ra++) 
         if (regions_get_ra_intersection (ra->chrom_index, ra->min_pos, ra->max_pos))
             return true; // vb is included
 

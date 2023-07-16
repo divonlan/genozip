@@ -104,7 +104,7 @@ void sam_seg_TLEN (VBlockSAMP vb, ZipDataLineSAM *dl,
         seg_integer (VB, ctx, tlen_value, true, add_bytes);
 
     else
-        seg_integer_as_text_do (VB, ctx, tlen_value, add_bytes); // likely all 0, so all-the-same
+        seg_integer_as_snip_do (VB, ctx, tlen_value, add_bytes); // likely all 0, so all-the-same
 
     ctx->last_value.i = tlen_value;
 }

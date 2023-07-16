@@ -70,7 +70,7 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.
 		  vcf_refalt.c vcf_tags.c vcf_linesort.c vcf_format.c vcf_illum_gtyping.c vcf_gwas.c vcf_vagrent.c		\
 		  vcf_icgc.c vcf_snpeff.c vcf_cosmic.c vcf_mastermind.c													\
 		  sam_seg.c sam_piz.c sam_shared.c sam_header.c sam_md.c sam_tlen.c sam_cigar.c sam_fields.c  			\
-		  sam_sa.c bam_seg.c bam_seq.c bam_show.c sam_pacbio.c                                 					\
+		  sam_sa.c bam_seg.c bam_seq.c bam_show.c sam_pacbio.c sam_ultima.c                               					\
 		  sam_seq.c sam_qual.c sam_sag_zip.c sam_sag_piz.c sam_sag_load.c sam_sag_ingest.c sam_sag_scan.c    	\
 		  sam_bwa.c sam_bowtie2.c sam_bsseeker2.c sam_bsbolt.c sam_bismark.c sam_gem3.c sam_tmap.c sam_hisat2.c \
 		  sam_blasr.c sam_minimap2.c sam_cellranger.c sam_biobambam.c sam_pos.c	sam_deep.c 						\

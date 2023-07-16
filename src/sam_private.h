@@ -257,10 +257,11 @@ typedef struct VBlockSAM {
     #define first_mux mux_XS
     Multiplexer4 mux_XS;
     Multiplexer4 mux_PNEXT;
-    Multiplexer3 mux_POS, mux_MAPQ; // ZIP: DEMUX_BY_MATE_PRIM multiplexors
+    Multiplexer3 mux_POS, mux_MAPQ;// ZIP: DEMUX_BY_MATE_PRIM multiplexors
     Multiplexer2 mux_FLAG, mux_MQ, mux_MC, mux_ms, mux_AS, mux_YS, mux_nM, // ZIP: DEMUX_BY_MATE or DEMUX_BY_BUDDY multiplexors
                  mux_mated_z_fields[NUM_MATED_Z_TAGS]; 
-    Multiplexer3 mux_NH;            // ZIP: DEMUX_BY_BUDDY_MAP
+    Multiplexer3 mux_NH;           // ZIP: DEMUX_BY_BUDDY_MAP
+    Multiplexer7 mux_tp;           // ZIP: DEMUX_BY_QUAL (number of channels matches TP_NUM_BINS)
 
     // CIGAR stuff
     #define after_mux last_cigar
@@ -654,6 +655,14 @@ extern void sam_seg_cm_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t cm, unsigne
 extern void sam_seg_pacbio_xq (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, TxtWord *dl_word, STRp(value), unsigned add_bytes);
 extern bool sam_seg_pacbio_qual (VBlockSAMP vb, STRp(qual), unsigned add_bytes);
 extern void sam_recon_pacbio_qual (VBlockSAMP vb, ContextP ctx, bool reconstruct);
+
+// Ultima stuff
+extern void sam_ultima_zip_initialize (void);
+extern void sam_ultima_seg_initialize (VBlockSAMP vb);
+extern void sam_seg_ultima_tp (VBlockSAMP vb, ContextP ctx, void *cb_param, void *tp_, uint32_t tp_len);
+extern void sam_seg_ultima_bi (VBlockSAMP vb, STRp(bi_str), unsigned add_bytes);
+extern void sam_seg_ultima_XV (VBlockSAMP vb, STRp(xv), unsigned add_bytes);
+extern void sam_seg_ultima_XW (VBlockSAMP vb, STRp(xw), unsigned add_bytes);
 
 // hisat2 stuff
 extern void sam_seg_HISAT2_Zs_Z (VBlockSAMP vb, STRp(zs), unsigned add_bytes);

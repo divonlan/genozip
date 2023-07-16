@@ -211,7 +211,7 @@ void bam_seg_BIN (VBlockSAMP vb, ZipDataLineSAM *dl, uint16_t bin /* used only i
         WARN_ONCE ("FYI: %s: bad bin value in: this_pos=%d ref_consumed=%u flag=%u last_pos=%d: bin=%u but reg2bin=%u. No harm. This warning will not be shown again for this file.",
                     LN_NAME, this_pos, vb->ref_consumed, dl->FLAG.value, last_pos, bin, reg2bin);
 #endif
-        seg_integer_as_text (vb, SAM_BAM_BIN, bin, is_bam);
+        seg_integer_as_snip (vb, SAM_BAM_BIN, bin, is_bam);
         CTX(SAM_BAM_BIN)->flags.store = STORE_INT;
     }
 }

@@ -1620,7 +1620,7 @@ batch_reference_backcomp()
         test_header "$f - reference file backward compatability with prod"
 
         echo "old file, old reference, new genounzip"
-        $genozip_latest $TESTDIR/$f -mf -e $prod_ref_file -o $output || exit 1
+        $genozip_latest $TESTDIR/$f -mf -e $prod_ref_file -o $output -X || exit 1
         $genounzip -t $output -e $prod_ref_file || exit 1
 
         local latest_version=`$genozip_latest -V|cut -c9-10`

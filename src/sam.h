@@ -526,6 +526,28 @@
 #pragma GENDICT OPTION_de_f=DTYPE_2=de:f     // Gap-compressed per-base sequence divergence
 #pragma GENDICT OPTION_rl_i=DTYPE_2=rl:i     // Length of query regions harboring repetitive seeds
 
+// Ultima Genomics
+// also has standard tags: AS:i SA:Z NM:i X1:i MD:Z RG:Z
+#pragma GENDICT OPTION_tp_B_c=DTYPE_2=tp:B:c
+#pragma GENDICT OPTION_tp_B_ARR=DTYPE_2=tpc_ARR // matches dict_id created in sam_seg_array_field_get_con
+#pragma GENDICT OPTION_bi_Z=DTYPE_2=bi:Z
+//#pragma GENDICT OPTION_rq_f=DTYPE_2=rq:f   // (dup)
+#pragma GENDICT OPTION_XV_Z=DTYPE_2=XV:Z
+#pragma GENDICT OPTION_XW_Z=DTYPE_2=XW:Z
+#pragma GENDICT OPTION_tm_Z=DTYPE_2=tm:Z
+
+// Illumina iSAAC (discontinued): https://github.com/Illumina/Isaac4/blob/master/src/markdown/manual.md
+//#pragma GENDICT OPTION_AS_i=DTYPE_2=AS_i   // (dup) Pair alignment score
+//#pragma GENDICT OPTION_BC_Z=DTYPE_2=BC_Z   // (dup) Barcode string.
+//#pragma GENDICT OPTION_NM_i=DTYPE_2=NM_i   // (dup) Edit distance (mismatches and gaps) including the soft-clipped parts of the read
+//#pragma GENDICT OPTION_OC_Z=DTYPE_2=OC_Z   // (dup) Original CIGAR before realignment or alignment splitting
+//pragma GENDICT OPTION_OP_i=DTYPE_2=OP_i   // (dup) Original position before realignment
+//#pragma GENDICT OPTION_RG_Z=DTYPE_2=RG_Z   // (dup) Isaac read groups correspond to flowcell/lane/barcode. Should not be used for anything other than debugging
+//#pragma GENDICT OPTION_SM_i=DTYPE_2=SM_i   // (dup) Single read alignment score. Rescued shadows have it set to 65535 meaning that SM was not computed.
+#pragma GENDICT OPTION_ZX_i=DTYPE_2=ZX_i     // Cluster X pixel coordinate on the tile times 100 (only available when running from BCL, excluded from output by default)
+#pragma GENDICT OPTION_ZY_i=DTYPE_2=ZY_i     // Cluster Y pixel coordinate on the tile times 100 (only available when running from BCL, excluded from output by default)
+
+
 // RSEM tags (RNA-Seq transcript quantification program developed in 2009): https://github.com/bli25/RSEM_tutorial
 #pragma GENDICT OPTION_ZW_f=DTYPE_2=ZW:f     // posterior probability that this alignment is true
 
@@ -648,7 +670,7 @@ extern void sam_reset_line (VBlockP vb);
                       sam_piz_special_BISMARK_XG, sam_piz_special_HI, sam_piz_special_DEMUX_BY_BUDDY_MAP, sam_piz_special_SEQ_LEN,\
                       sam_piz_special_FI, sam_piz_special_cm, sam_piz_special_COPY_BUDDY, sam_piz_special_SET_BUDDY, \
                       sam_piz_special_TX_AN_POS, sam_piz_special_COPY_TEXTUAL_CIGAR, sam_piz_special_BISMARK_XM, \
-                      sam_piz_special_BSBOLT_XB, sam_piz_special_UQ, sam_piz_special_iq_sq_dq \
+                      sam_piz_special_BSBOLT_XB, sam_piz_special_UQ, sam_piz_special_iq_sq_dq, sam_piz_special_DEMUX_BY_QUAL \
                     }
 SPECIAL (SAM, 0,  CIGAR,                 sam_cigar_special_CIGAR);
 SPECIAL (SAM, 1,  TLEN_old,              sam_piz_special_TLEN_old);            // used up to 12.0.42
@@ -703,7 +725,8 @@ SPECIAL (SAM, 49, BISMARK_XM,            sam_piz_special_BISMARK_XM);          /
 SPECIAL (SAM, 50, BSBOLT_XB,             sam_piz_special_BSBOLT_XB);           // introduced 14.0.0
 SPECIAL (SAM, 51, UQ,                    sam_piz_special_UQ);                  // introduced 14.0.10
 SPECIAL (SAM, 52, iqsqdq,                sam_piz_special_iq_sq_dq);            // introduced 15.0.0
-#define NUM_SAM_SPECIAL 53
+SPECIAL (SAM, 53, DEMUX_BY_QUAL,         sam_piz_special_DEMUX_BY_QUAL);       // introduced 15.0.10
+#define NUM_SAM_SPECIAL 54
  
 #define SAM_LOCAL_GET_LINE_CALLBACKS                          \
     { DT_SAM, _OPTION_BD_BI,       sam_zip_BD_BI           }, \

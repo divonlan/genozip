@@ -210,27 +210,6 @@ static QualDiffType sam_seg_QUAL_diff (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(m
         other_qual = &other_qual[last_other_overlap]; // LAST character of other qual
     }
 
-    // uint32_t num_diff_0 = 0; // number of base scores for which diff=0
-
-    // if (!xstrand) {
-    //     uint32_t first_other_overlap = flank[0] ? 0 : (vb->hard_clip[0] - other_hard_clip[0]);
-    //     rom overlap_other_qual = &other_qual[first_other_overlap];
-
-    //     for (uint32_t i=0; i < overlap_len; i++) {
-    //         diff[i] = overlap_my_qual[i] - overlap_other_qual[i]; // a value [-93,93] as qual is [33,126]
-    //         num_diff_0 += !diff[i];
-    //     }
-    // }
-    // else {
-    //     uint32_t last_other_overlap = other_qual_len - 1 - (flank[0] ? 0 : (vb->hard_clip[0] - other_hard_clip[1]));
-    //     rom overlap_other_qual = &other_qual[last_other_overlap];
-
-    //     for (int32_t/*signed*/ i=0; i < overlap_len; i++) {
-    //         diff[i] = overlap_my_qual[i] - overlap_other_qual[-i]; 
-    //         num_diff_0 += !diff[i];
-    //     }
-    // }
-
     // abort diff if we have too many different base scores - we're better off not diffing
     if (!sam_seg_QUAL_diff_do (vb, overlap_my_qual, other_qual, overlap_len, xstrand, diff)) {  
         // rescue QUAL that suffer from an NGMLR bug - where QUAL strings of supplementary alignments sometimes have the wrong orientation

@@ -30,4 +30,5 @@ extern uint32_t qname_calc_hash (QType q, STRp(qname), thool is_last, bool canon
 extern void qname_canonize (QType q, rom qname, uint32_t *qname_len);
 
 extern rom segconf_qf_name (QType q);
+extern QnameFlavorId segconf_qf_id (QType q);
 extern rom qtype_name (QType q);

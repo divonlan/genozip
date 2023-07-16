@@ -89,7 +89,7 @@ void sam_zip_free_end_of_z (void)
     sam_header_finalize();
 }
 
-// main thread, called for each component. called before segconf.
+// main thread, called for each component. called after reading txt header, before segconf.
 void sam_zip_initialize (void)
 {
     bool has_hdr_contigs = sam_hdr_contigs && sam_hdr_contigs->contigs.len;
@@ -139,6 +139,8 @@ void sam_zip_initialize (void)
         copy_buddy_Z_snip_lens[f]++;
     }
 
+    if (MP(ULTIMA)) sam_ultima_zip_initialize();
+    
     if (flag.deep)
         license_show_deep_notice();
 }
@@ -393,6 +395,8 @@ void sam_seg_initialize (VBlockP vb_)
         sam_seg_TX_AN_initialize (vb, OPTION_AN_Z);
     }
 
+    if (MP(ULTIMA)) sam_ultima_seg_initialize (vb);
+    
     ctx_set_store (VB, STORE_INDEX, OPTION_XA_Z, DID_EOL); // for containers this stores repeats - used by sam_piz_special_X1->container_peek_repeats
 
     if (segconf.sam_has_BWA_XS_i) // XS:i is as defined some aligners

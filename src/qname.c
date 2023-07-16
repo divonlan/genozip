@@ -313,7 +313,8 @@ void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
                                                       .has_R       = qfs->is_mated || qfs->id == QF_SRA2,
                                                       .cnn         = char_to_cnn[(int)qfs->cut_to_canonize] };
             
-            segconf.tech = qfs->tech; // note: if this is QNAME2, we update tech according to QNAME2 (instead of NCBI)
+            if (q == QNAME1 || (q == QNAME2 && segconf.tech == TECH_NCBI))
+                segconf.tech = qfs->tech; // note: if this is QNAME2, we update tech according to QNAME2 (instead of NCBI)
             
             ASSERT (!qfs->cut_to_canonize || segconf.flav_prop[q].cnn, "flavor=%s has cut_to_canonize='%c', but it is missing in CHAR_TO_CNN", qfs->name, qfs->cut_to_canonize);
 
@@ -550,6 +551,11 @@ uint32_t qname_calc_hash (QType q, STRp(qname), thool is_last, bool canonical,
 rom segconf_qf_name (QType q)
 {
     return segconf.qname_flavor[q] ? segconf.qname_flavor[q]->name : "N/A";
+}
+
+QnameFlavorId segconf_qf_id (QType q)
+{
+    return segconf.qname_flavor[q] ? segconf.qname_flavor[q]->id : QF_NO_ID;
 }
 
 rom qtype_name (QType q)

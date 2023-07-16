@@ -268,13 +268,16 @@ typedef struct {
 typedef enum __attribute__ ((__packed__)) { 
     QF_NO_ID=0, 
     QF_ILLUM_7=1, QF_ILLUM_7i=2, QF_ILLUM_7umi=3, QF_ILLUM_7c=4, QF_ILLUM_7gs=5, QF_ILLUM_5i=6, QF_ILLUM_5=7, QF_ILLUM_5rng=8, 
-    QF_ILLUM_2bc=9, QF_ILLUM_1bc=10, QF_ILLUM_5q2=11, QF_ILLUM_X_0bc=12, QF_ILLUM_X_1bc=13, QF_ILLUM_X_2bc=14, QF_ILLUM_S_0bc=15, QF_ILLUM_S_1bc=16, QF_ILLUM_S_2bc=17,
+    QF_ILLUM_2bc=9, QF_ILLUM_1bc=10, QF_ILLUM_0bc=11, QF_ILLUM_X_0bc=12, QF_ILLUM_X_1bc=13, QF_ILLUM_X_2bc=14, QF_ILLUM_S_0bc=15, QF_ILLUM_S_1bc=16, QF_ILLUM_S_2bc=17,
     QF_BGI_varlen=20, QF_BGI_r6=21, QF_BGI_r7=22, QF_BGI_r8=23, QF_BGI_ll7=24, QF_BGI_cl=25, 
     QF_PACBIO_3=30, QF_PACBIO_rng=31, QF_PACBIO_lbl=32, QF_PACBIO_pln=33,
     QF_NANOPORE=40, QF_NANOPORE_rng=41, QF_NANOPORE_ext=42,
     QF_ION_TORR_3=50, QF_ROCHE_454=51, QF_HELICOS=52, 
     QF_SRA_L=60, QF_SRA2=60, QF_SRA=62,
     QF_GENOZIP_OPT=70, QF_INTEGER=71, QF_HEX_CHR=72, QF_BAMSURGEON=73, QF_SEQAN=74, QF_CLC_GW=75, QF_STR_INT=76, QF_CONSENSUS=77,
+    QF_ULTIMA_1=80, QF_ULTIMA_2=81,
+    QF_SINGULAR=90, QF_SINGULR_1bc=92, 
+    QF_ELEMENT=100, QF_ELEMENT_6=101, QF_ELEMENT_0bc=102, QF_ELEMENT_1bc=103, QF_ELEMENT_2bc=104,
 } QnameFlavorId;
 
 typedef enum __attribute__ ((__packed__)) { // these values and their order are part of the file format

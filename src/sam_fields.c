@@ -162,7 +162,7 @@ void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAM *dl, unsigned add_bytes)
 
     // case: normal snip
     else normal:
-        seg_integer_as_text_do (VB, channel_ctx, dl->FLAG.value, add_bytes);
+        seg_integer_as_snip_do (VB, channel_ctx, dl->FLAG.value, add_bytes);
 
     if (do_mux)
         seg_by_did (VB, STRa(vb->mux_FLAG.snip), SAM_FLAG, 0); // de-multiplexor
@@ -374,7 +374,7 @@ void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAM *dl, SamNMType nm, unsigned add
 
     // in PRIM with SA, we also seg it as the first SA alignment (used for PIZ to load alignments to memory, not used for reconstructing SA)
     if (IS_PRIM(vb) && sam_seg_has_sag_by_SA (vb)) {
-        seg_integer_as_text (VB, OPTION_SA_NM, nm, 0);  // note: for PRIM lines without SA:Z and nm:i, we seg "0" into OPTION_SA_NM in sam_seg_sag_stuff
+        seg_integer_as_snip (VB, OPTION_SA_NM, nm, 0);  // note: for PRIM lines without SA:Z and nm:i, we seg "0" into OPTION_SA_NM in sam_seg_sag_stuff
 
         // count NM field contribution to OPTION_SA_NM, so sam_stats_reallocate can allocate the z_data between NM and SA:Z
         CTX(OPTION_SA_NM)->counts.count += add_bytes; 
@@ -482,7 +482,7 @@ static void sam_seg_SM_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t SM, unsigne
     }
 
     else 
-        seg_integer_as_text_do (VB, ctx, SM, add_bytes); 
+        seg_integer_as_snip_do (VB, ctx, SM, add_bytes); 
 
     ctx_set_last_value (VB, ctx, SM);
 }    
@@ -534,7 +534,7 @@ static void sam_seg_AM_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t AM, unsigne
     }
 
     else fallback:
-        seg_integer_as_text_do (VB, ctx, AM, add_bytes);    
+        seg_integer_as_snip_do (VB, ctx, AM, add_bytes);    
 }    
 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_AM)
@@ -776,7 +776,7 @@ static inline void sam_seg_AS_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t as, 
 
         else
             // TODO: AS prediction, see bug 520
-            //seg_integer_as_text_do (VB, channel_ctx, as, add_bytes);    
+            //seg_integer_as_snip_do (VB, channel_ctx, as, add_bytes);    
             seg_integer (VB, channel_ctx, as, true, add_bytes);
 
         seg_by_did (VB, STRa(vb->mux_AS.snip), OPTION_AS_i, 0); // de-multiplexor
@@ -1019,7 +1019,7 @@ void sam_seg_buddied_i_fields (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i,
         // this field, the dl value in Seg will be 0, as will be the History value in recon.
 
         if (by_buddy_map && dl->FLAG.unmapped)
-            seg_integer_as_text_do (VB, channel_ctx, my_value, add_bytes); // seg as snip, as this will likely become all-the-same
+            seg_integer_as_snip_do (VB, channel_ctx, my_value, add_bytes); // seg as snip, as this will likely become all-the-same
 
         else if (sam_has_mate && my_value == *mate_value)    
             seg_by_ctx (VB, STRa(copy_snip), channel_ctx, add_bytes); // note: prior to v14, we stored ms qual_score in QUAL history, not in ms:i history 
@@ -1137,7 +1137,7 @@ static inline SmallContainer *sam_seg_array_field_get_con (VBlockSAMP vb, Contex
 
 // an array - all elements go into a single item context, multiple repeats. items are segged as dynamic integers or floats, or a callback is called to seg them.
 typedef void (*ArrayItemCallback) (VBlockSAMP vb, ContextP ctx, void *cb_param, void *array, uint32_t array_len);
-static void sam_seg_array_field (VBlockSAMP vb, DictId dict_id, uint8_t type, 
+static void sam_seg_array_field (VBlockSAMP vb, ZipDataLineSAM *dl, DictId dict_id, uint8_t type, 
                                  rom array, int/*signed*/ array_len, // SAM: comma separated array ; BAM : arrays original width and machine endianity
                                  ArrayItemCallback callback, void *cb_param) // optional - call back for each item to seg the item
 {   
@@ -1151,13 +1151,15 @@ static void sam_seg_array_field (VBlockSAMP vb, DictId dict_id, uint8_t type,
     int array_bytes = is_bam ? (width * array_len) : array_len;
     elem_ctx->txt_len += array_bytes;
 
-    con->repeats = is_bam ? array_len : (1 + str_count_char (STRa(array), ','));
-    ASSERT (con->repeats < CONTAINER_MAX_REPEATS, "%s: array has too many elements, more than %u", LN_NAME, CONTAINER_MAX_REPEATS);
+    uint32_t repeats = is_bam ? array_len : (1 + str_count_char (STRa(array), ','));
+    con->repeats = (repeats == dl->SEQ.len ? CON_REPEATS_IS_SEQ_LEN : repeats);
+
+    ASSERT (repeats < CONTAINER_MAX_REPEATS, "%s: array has too many elements, more than %u", LN_NAME, CONTAINER_MAX_REPEATS);
 
     bool is_int = (elem_ctx->flags.store == STORE_INT);
     if (is_int || is_bam) {
         elem_ctx->local.len *= width; // len will be calculated in bytes in this function
-        buf_alloc (vb, &elem_ctx->local, con->repeats * width, con->repeats * width * 256, char, CTX_GROWTH, CTX_TAG_LOCAL); // careful not * line.len - we can get OOM
+        buf_alloc (vb, &elem_ctx->local, repeats * width, repeats * width * 256, char, CTX_GROWTH, CTX_TAG_LOCAL); // careful not * line.len - we can get OOM
     }
      
     ASSERT (is_int || (type=='f' && !callback), "%s: Type not supported for SAM/BAM arrays '%c'(%u) in ctx=%s",
@@ -1170,7 +1172,7 @@ static void sam_seg_array_field (VBlockSAMP vb, DictId dict_id, uint8_t type,
 
     else { // SAM
         // note: we're not using str_split on array, because the number of elements can be very large (eg one per base in PacBio ip:B) - possibly stack overflow
-        for (uint32_t i=0; i < con->repeats; i++) { // str_len will be -1 after last number
+        for (uint32_t i=0; i < repeats; i++) { // str_len will be -1 after last number
 
             rom snip = array;
             for (; array_len && *array != ','; array++, array_len--) {};
@@ -1191,11 +1193,11 @@ static void sam_seg_array_field (VBlockSAMP vb, DictId dict_id, uint8_t type,
             array++;
         }
 
-        if (is_int) elem_ctx->local.len += con->repeats * width;
+        if (is_int) elem_ctx->local.len += repeats * width;
     }
 
     if (callback)
-        callback (vb, elem_ctx, cb_param, local_start, con->repeats);
+        callback (vb, elem_ctx, cb_param, local_start, repeats);
 
     if (is_int || is_bam)
        elem_ctx->local.len /= width; // return len back to counting in units of ltype
@@ -1203,6 +1205,17 @@ static void sam_seg_array_field (VBlockSAMP vb, DictId dict_id, uint8_t type,
     // add bytes here in case of BAM - all to main field
     unsigned container_add_bytes = is_bam ? (4/*count*/ + 1/*type*/) : (2/*type - eg "i,"*/ + 1/*\t or \n*/);
     container_seg (vb, con_ctx, (ContainerP)con, ((char[]){ CON_PX_SEP, type, ',', CON_PX_SEP }), 4, container_add_bytes);
+}
+
+static void sam_seg_float_as_snip (VBlockSAMP vb, ContextP ctx, STRp(sam_value), ValueType bam_value, unsigned add_bytes)
+{
+    if (IS_BAM_ZIP) {
+        SNIPi2 (SNIP_SPECIAL, SAM_SPECIAL_FLOAT, bam_value.i);
+        seg_by_dict_id (VB, STRa(snip), ctx->dict_id, add_bytes); 
+    }
+    
+    else // sam
+        seg_float_or_not (VB, ctx, STRa(sam_value), add_bytes);
 }
 
 // process an optional subfield, that looks something like MX:Z:abcdefg. We use "MX" for the field name, and
@@ -1356,7 +1369,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
 
         case _OPTION_Zs_Z: COND (MP(HISAT2), sam_seg_HISAT2_Zs_Z (vb, STRa(value), add_bytes));
 
-        case _OPTION_ZM_B_s: COND (MP(TMAP) && flag.optimize_ZM, sam_seg_array_field (vb, _OPTION_ZM_B_s, array_subtype, STRa(value), sam_optimize_TMAP_ZM, 0));
+        case _OPTION_ZM_B_s: COND (MP(TMAP) && flag.optimize_ZM, sam_seg_array_field (vb, dl, _OPTION_ZM_B_s, array_subtype, STRa(value), sam_optimize_TMAP_ZM, 0));
 
         case _OPTION_YH_Z: COND (MP(NOVOALIGN), seg_add_to_local_text (VB, CTX(OPTION_YH_Z), STRa(value), LOOKUP_NONE, add_bytes)); break;
         case _OPTION_YQ_Z: COND (MP(NOVOALIGN), seg_add_to_local_text (VB, CTX(OPTION_YQ_Z), STRa(value), LOOKUP_NONE, add_bytes)); break;
@@ -1388,8 +1401,15 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
         case _OPTION_mq_Z: COND (TECH(PACBIO), seg_add_to_local_text (VB, CTX(OPTION_mq_Z), STRa(value), LOOKUP_SIMPLE, add_bytes));
         case _OPTION_st_Z: COND (TECH(PACBIO), seg_add_to_local_text (VB, CTX(OPTION_st_Z), STRa(value), LOOKUP_SIMPLE, add_bytes));
         
-        case _OPTION_sd_f: COND (is_bam, goto bam_seg_float_in_b250);
+        case _OPTION_sd_f: sam_seg_float_as_snip (vb, CTX(OPTION_sd_f), STRa(value), numeric, add_bytes); break;
 
+        // Ultima Genomics fields
+        case _OPTION_tp_B_c: COND (MP(ULTIMA) && !dl->no_qual, sam_seg_array_field (vb, dl, _OPTION_tp_B_c, array_subtype, STRa(value), sam_seg_ultima_tp, dl));
+        case _OPTION_bi_Z: COND (MP(ULTIMA), sam_seg_ultima_bi (vb, STRa(value), add_bytes));
+        case _OPTION_XV_Z: COND (MP(ULTIMA), sam_seg_ultima_XV (vb, STRa(value), add_bytes));
+        case _OPTION_XW_Z: COND (MP(ULTIMA), sam_seg_ultima_XW (vb, STRa(value), add_bytes));
+        case _OPTION_rq_f: COND (MP(ULTIMA), sam_seg_float_as_snip (vb, CTX(OPTION_rq_f), STRa(value), numeric, add_bytes));
+    
         default: fallback:
             
             // all types of integer
@@ -1411,15 +1431,10 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
                 if (!ctx->is_initialized) 
                     sam_seg_initialize_for_float (vb, ctx);
 
+                // note: for some fields, sam_seg_float_as_snip() is better.
                 if (is_bam) {
                     uint32_t f = numeric.i; // bam_get_one_aux stores float values as binary-identical 32bit integer
                     seg_integer_fixed (VB, ctx, &f, LOOKUP_NONE, add_bytes);
-                }
-
-                else if (false) bam_seg_float_in_b250: {
-                    // store in b250, sometimes works better than local (this was the default up to v14)
-                    SNIPi2 (SNIP_SPECIAL, SAM_SPECIAL_FLOAT, numeric.i);
-                    seg_by_dict_id (VB, STRa(snip), dict_id, add_bytes); 
                 }
                 
                 else // sam
@@ -1428,7 +1443,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
 
             // Numeric array
             else if (sam_type == 'B') 
-                sam_seg_array_field (vb, dict_id, array_subtype, STRa(value), NULL, NULL);
+                sam_seg_array_field (vb, dl, dict_id, array_subtype, STRa(value), NULL, NULL);
 
             // Z,H,A - normal snips in their own dictionary
             else 

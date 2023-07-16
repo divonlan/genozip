@@ -149,7 +149,7 @@
 #pragma GENDICT FORMAT_SPL=DTYPE_2=SPL              // <ID=SPL,Number=.,Type=Integer,Description="Normalized, Phred-scaled likelihoods for SNPs based on the reference confidence model">
 #pragma GENDICT FORMAT_ICNT=DTYPE_2=ICNT            // <ID=ICNT,Number=2,Type=Integer,Description="Counts of INDEL informative reads based on the reference confidence model">
 
-// IsaacVariantCaller (discontinued) : https://support.illumina.com/content/dam/illumina-support/documents/documentation/software_documentation/basespace/isaac-wgs-user-guide-15050954b.pdf
+// Illumina IsaacVariantCaller (discontinued) : https://support.illumina.com/content/dam/illumina-support/documents/documentation/software_documentation/basespace/isaac-wgs-user-guide-15050954b.pdf
 // Also: https://github.com/sequencing/isaac_variant_caller
 #pragma GENDICT INFO_SNVSB=DTYPE_1=SNVSB            // SNV site strand bias
 #pragma GENDICT INFO_SNVHPOL=DTYPE_1=SNVHPOL        // SNV contextual homopolymer length

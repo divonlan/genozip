@@ -20,8 +20,8 @@
 #define ABSOLUTE_MIN_VBLOCK_MEMORY ((uint64_t)1000) // in Bytes
 #define ABSOLUTE_MAX_VBLOCK_MEMORY ((uint64_t)MAX_VBLOCK_MEMORY MB)
 
-typedef enum __attribute__ ((__packed__)) { NO_QNAME2=-1, TECH_UNKNOWN=0,   TECH_ILLUM, TECH_PACBIO, TECH_ONP,          TECH_454, TECH_BGI,   TECH_IONTORR, TECH_HELICOS, TECH_NCBI, NUM_TECHS } SeqTech;
-#define TECH_NAME                         {               "Unknown_tech",   "Illumina", "PacBio",    "Oxford_Nanopore", "454",    "MGI_Tech", "IonTorrent", "Helicos",    "NCBI"               }
+typedef enum __attribute__ ((__packed__)) { NO_QNAME2=-1, TECH_UNKNOWN=0,   TECH_ILLUM, TECH_PACBIO, TECH_ONP,          TECH_454, TECH_BGI,   TECH_IONTORR, TECH_HELICOS, TECH_NCBI, TECH_ULTIMA, TECH_SINGLR, TECH_ELEMENT, NUM_TECHS } SeqTech;
+#define TECH_NAME                         {               "Unknown_tech",   "Illumina", "PacBio",    "Oxford_Nanopore", "454",    "MGI_Tech", "IonTorrent", "Helicos",    "NCBI",    "Ultima",    "Singular",  "Element"              }
 #define TECH(x) (segconf.tech == TECH_##x)
 
 typedef enum __attribute__ ((__packed__)) { SQT_UNKNOWN, SQT_NUKE, SQT_AMINO, SQT_NUKE_OR_AMINO } SeqType;
@@ -36,9 +36,9 @@ typedef enum __attribute__ ((__packed__)) { DP_DEFAULT, by_AD, by_SDP } FormatDP
 typedef enum __attribute__ ((__packed__)) { L3_UNKNOWN, L3_EMPTY, L3_COPY_LINE1, L3_NCBI, NUM_L3s } FastqLine3Type;
 
 // SamMapperType is part of the file format and values should not be changed (new ones can be added)
-typedef enum  { MP_UNKNOWN, MP_BSBOLT,             MP_bwa,   MP_BWA,   MP_MINIMAP2,   MP_STAR,   MP_BOWTIE2,   MP_DRAGEN,    MP_GEM3,         MP_GEM2SAM,     MP_BISMARK,   MP_BSSEEKER2,     MP_WINNOWMAP,   MP_BAZ2BAM,    MP_BBMAP,   MP_TMAP,   MP_HISAT2,   MP_BOWTIE,   MP_NOVOALIGN,   MP_RAZER3,    MP_BLASR,   MP_NGMLR,           MP_DELVE,   MP_TOPHAT,   MP_CPU,   MP_LONGRANGER,          MP_CLC,              MP_PBMM2,   MP_CCS,  MP_SNAP,   MP_BWA_MEM2,   MP_PARABRICKS,     NUM_MAPPERS } SamMapperType;
-#define SAM_MAPPER_NAME             { "Unknown_mapper", "bsbolt",              "bwa",    "BWA",    "minimap2",    "STAR",    "bowtie2",    "dragen",     "gem3",          "gem2sam",      "bismark",    "bsseeker2",      "Winnowmap",    "baz2bam",     "BBMap",    "tmap",    "hisat2",    "Bowtie",    "NovoAlign",    "razers3",    "blasr",    "ngmlr",            "Delve",    "TopHat",    "cpu",    "longranger",           "CLCGenomicsWB",    "pbmm2",    "ccs",    "snap",    "bwa-mem2",    "parabricks",                  }
-#define SAM_MAPPER_SIGNATURE        { "Unknown_mapper", "PN:bwa	VN:BSB"/*\t*/, "PN:bwa", "PN:BWA", "PN:minimap2", "PN:STAR", "PN:bowtie2", "ID: DRAGEN", "PN:gem-mapper", "PN:gem-2-sam", "ID:Bismark", "PN:BS Seeker 2", "PN:Winnowmap", "PN:baz2bam",  "PN:BBMap", "ID:tmap", "PN:hisat2", "ID:Bowtie", "PN:novoalign", "PN:razers3", "ID:BLASR", "PN:nextgenmap-lr", "ID:Delve", "ID:TopHat", "PN:cpu", "PN:longranger.lariat", "PN:clcgenomicswb", "PN:pbmm2", "PN:ccs", "PN:SNAP", "PN:bwa-mem2", "PN:pbrun fq2bam",             }   
+typedef enum  {                       MP_UNKNOWN,       MP_BSBOLT,             MP_bwa,   MP_BWA,   MP_MINIMAP2,   MP_STAR,   MP_BOWTIE2,   MP_DRAGEN,    MP_GEM3,         MP_GEM2SAM,     MP_BISMARK,   MP_BSSEEKER2,     MP_WINNOWMAP,   MP_BAZ2BAM,    MP_BBMAP,   MP_TMAP,   MP_HISAT2,   MP_BOWTIE,   MP_NOVOALIGN,   MP_RAZER3,    MP_BLASR,   MP_NGMLR,           MP_DELVE,   MP_TOPHAT,   MP_CPU,   MP_LONGRANGER,          MP_CLC,              MP_PBMM2,   MP_CCS,  MP_SNAP,   MP_BWA_MEM2,   MP_PARABRICKS,     MP_ISAAC,   MP_ULTIMA, NUM_MAPPERS } SamMapperType;
+#define SAM_MAPPER_NAME             { "Unknown_mapper", "bsbolt",              "bwa",    "BWA",    "minimap2",    "STAR",    "bowtie2",    "dragen",     "gem3",          "gem2sam",      "bismark",    "bsseeker2",      "Winnowmap",    "baz2bam",     "BBMap",    "tmap",    "hisat2",    "Bowtie",    "NovoAlign",    "razers3",    "blasr",    "ngmlr",            "Delve",    "TopHat",    "cpu",    "longranger",           "CLCGenomicsWB",    "pbmm2",    "ccs",    "snap",    "bwa-mem2",    "parabricks",      "iSAAC",    "Ultima"               }
+#define SAM_MAPPER_SIGNATURE        { "Unknown_mapper", "PN:bwa	VN:BSB"/*\t*/, "PN:bwa", "PN:BWA", "PN:minimap2", "PN:STAR", "PN:bowtie2", "ID: DRAGEN", "PN:gem-mapper", "PN:gem-2-sam", "ID:Bismark", "PN:BS Seeker 2", "PN:Winnowmap", "PN:baz2bam",  "PN:BBMap", "ID:tmap", "PN:hisat2", "ID:Bowtie", "PN:novoalign", "PN:razers3", "ID:BLASR", "PN:nextgenmap-lr", "ID:Delve", "ID:TopHat", "PN:cpu", "PN:longranger.lariat", "PN:clcgenomicswb", "PN:pbmm2", "PN:ccs", "PN:SNAP", "PN:bwa-mem2", "PN:pbrun fq2bam", "PN:iSAAC", "ID:UA-"               }   
 #define MP(x) (segconf.sam_mapper == MP_##x)
              
 #define MAX_SHORT_READ_LEN 2500

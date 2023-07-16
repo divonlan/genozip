@@ -35,8 +35,8 @@ extern WordIndex seg_duplicate_last (VBlockP vb, ContextP ctx, unsigned add_byte
 
 extern void seg_integer (VBlockP vb, ContextP ctx, int64_t n, bool with_lookup, unsigned add_bytes);
 
-extern WordIndex seg_integer_as_text_do (VBlockP vb, ContextP ctx, int64_t n, unsigned add_bytes); // segs integer as normal textual snip
-#define seg_integer_as_text(vb,did_i,n,add_sizeof_n) seg_integer_as_text_do((VBlockP)(vb), &vb->contexts[did_i], (n), (add_sizeof_n) ? sizeof(n) : 0)
+extern WordIndex seg_integer_as_snip_do (VBlockP vb, ContextP ctx, int64_t n, unsigned add_bytes); // segs integer as normal textual snip
+#define seg_integer_as_snip(vb,did_i,n,add_sizeof_n) seg_integer_as_snip_do((VBlockP)(vb), &vb->contexts[did_i], (n), (add_sizeof_n) ? sizeof(n) : 0)
 
 extern WordIndex seg_self_delta (VBlockP vb, ContextP ctx, int64_t value, char format, unsigned fixed_len, uint32_t add_bytes);
 
@@ -106,8 +106,10 @@ extern void seg_diff (VBlockP vb, ContextP ctx, ContextP base_ctx, STRp(value), 
 extern WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_did_i, rom value, int32_t value_len, char sep, char subarray_sep, bool use_integer_delta, StoreType store_in_local, DictId arr_dict_id, int add_bytes);
 
 typedef bool (*SegCallback) (VBlockP vb, ContextP ctx, STRp(value), uint32_t repeat); // returns true if segged successfully
-extern int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), const SegCallback *callbacks, unsigned add_bytes);
 extern bool seg_do_nothing_cb (VBlockP vb, ContextP ctx, STRp(field), uint32_t rep);
+
+extern bool seg_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), const SegCallback *callbacks, unsigned add_bytes);
+extern int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), const SegCallback *callbacks, unsigned add_bytes);
 
 extern void seg_array_of_array_of_struct (VBlockP vb, ContextP ctx, char outer_sep, MediumContainer inner_con, STRp(snip), const SegCallback *callbacks);
 

@@ -55,9 +55,14 @@ static SRes codec_lzma_data_in_callback (const ISeqInStream *p, void *buf, size_
         instream->next_in_1  = instream->next_in_2  = 0;
         instream->avail_in_1 = instream->avail_in_2 = 0;
 
+        #pragma GCC diagnostic push 
+        #pragma GCC diagnostic ignored "-Wpragmas"         // avoid warning if "-Wuse-after-free" is not defined in this version of gcc
+        #pragma GCC diagnostic ignored "-Wunknown-warning-option" // same
+        #pragma GCC diagnostic ignored "-Wdeprecated-non-prototype"
         instream->callback (instream->vb, instream->ctx, instream->line_i, 
                             &instream->next_in_1, &instream->avail_in_1,
                             instream->avail_in, NULL);
+        #pragma GCC diagnostic pop
 
         instream->line_i++;
     }
