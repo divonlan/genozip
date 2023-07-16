@@ -46,7 +46,7 @@ void sam_ultima_seg_initialize (VBlockSAMP vb)
 }
 
 // example: tp:B:c,1,1,1,1,1,1,-1,2,0,0,0,2,-1,1,1,-1,2,0,0,0,0,2,-1,1,1,0,0,
-// Note: currently implemented for BAM only
+
 void sam_seg_ultima_tp (VBlockSAMP vb, ContextP arr_ctx, void *dl_, void *tp_, uint32_t tp_len)
 {
     START_TIMER;

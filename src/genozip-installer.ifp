@@ -2,7 +2,7 @@
 ProjectFileVersion = "1.1"
 [General]
 Program name = Genozip
-Program version = 15.0.9
+Program version = 15.0.10
 Windows 2000 = 0
 Windows XP = 0
 Windows Server 2003 = 0
@@ -88,7 +88,7 @@ C:\Users\divon\genozip\src\windows\LICENSE.for-installer.txt
 9.9 KB
 txt
 [Licence_Begin]
-11454
+11455
 {\rtf1\ansi\ansicpg1252\deff0{\fonttbl{\f0\fnil\fcharset0 Arial;}}
 {\colortbl ;\red0\green0\blue0;}
 \viewkind4\uc1\pard\cf1\lang1033\fs20 This program, "Genozip", which includes four tools \par
@@ -319,7 +319,7 @@ ESSENTIAL PURPOSE.\par
 \par
 END OF TERMS AND CONDITIONS\par
 \par
-Genozip license version: 15.0.9\par
+Genozip license version: 15.0.10\par
 \par
 }
  [Licence_End]
