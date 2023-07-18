@@ -7,9 +7,7 @@
 //   and subject to penalties specified in the license.
 
 #include "vcf_private.h"
-#include "seg.h"
 #include "piz.h"
-#include "context.h"
 #include "reconstruct.h"
 
 void vcf_seg_hgvs_consolidate_stats (VBlockVCFP vb, Did parent)
@@ -41,8 +39,8 @@ static bool vcf_seg_INFO_HGVS_snp (VBlockVCFP vb, ContextP ctx, STRp(value))
     SmallContainer con = { 
         .repeats   = 1,
         .nitems_lo = 2,
-        .items = { { .dict_id = (DictId)_INFO_HGVS_snp_pos    },
-                   { .dict_id = (DictId)_INFO_HGVS_snp_refalt } }
+        .items = { { .dict_id.num = _INFO_HGVS_snp_pos    },
+                   { .dict_id.num = _INFO_HGVS_snp_refalt } }
      }; 
 
     // temporarily surround prefix by separators, and seg container with prefix

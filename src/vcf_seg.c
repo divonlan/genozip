@@ -7,18 +7,11 @@
 //   and subject to penalties specified in the license.
 
 #include "vcf_private.h"
-#include "seg.h"
-#include "context.h"
 #include "random_access.h"
-#include "file.h"
 #include "zip.h"
-#include "dict_id.h"
-#include "codec.h"
-#include "strings.h"
 #include "chrom.h"
 #include "libdeflate/libdeflate.h"
 #include "stats.h"
-#include "segconf.h"
 #include "gencomp.h"
 #include "tip.h"
 #include "arch.h"
@@ -240,6 +233,7 @@ void vcf_seg_initialize (VBlockP vb_)
     if (segconf.vcf_is_mastermind)  vcf_mastermind_seg_initialize (vb);
     if (segconf.vcf_is_dbSNP)       vcf_dbsnp_seg_initialize (vb);
     if (segconf.vcf_is_giab_trio)   vcf_giab_seg_initialize (vb);
+    if (segconf.vcf_is_isaac)       vcf_isaac_seg_initialize (vb);
     if (segconf.vcf_is_gnomad)      CTX(VCF_QUAL)->no_stons = true;
 }             
 

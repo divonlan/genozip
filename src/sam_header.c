@@ -12,18 +12,13 @@
 
 #include <time.h>
 #include "sam_private.h"
-#include "file.h"
 #include "random_access.h"
-#include "reference.h"
 #include "zfile.h"
 #include "version.h"
 #include "endianness.h"
-#include "website.h"
-#include "segconf.h"
 #include "contigs.h"
 #include "flags.h"
 #include "buffer.h"
-#include "strings.h"
 #include "stats.h"
 #include "arch.h"
 
@@ -425,7 +420,7 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
     segconf.is_minimap2       = MP(MINIMAP2) || MP(WINNOWMAP) || MP(PBMM2);   // aligners based on minimap2
     segconf.is_bowtie2        = MP(BOWTIE2) || MP(HISAT2) || MP(TOPHAT) || MP(BISMARK) || MP(BSSEEKER2); // aligners based on bowtie2
 
-    segconf.sam_has_SA_Z      = segconf.is_bwa || segconf.is_minimap2 || MP(NGMLR) || MP(DRAGEN) || MP(NOVOALIGN) || MP(ULTIMA); /*|| MP(LONGRANGER); non-standard SA:Z format (POS is off by 1, main-field NM is missing) */ 
+    segconf.sam_has_SA_Z      = segconf.is_bwa || segconf.is_minimap2 || MP(NGMLR) || MP(DRAGEN) || MP(NOVOALIGN) || MP(ULTIMA) || MP(ISAAC); /*|| MP(LONGRANGER); non-standard SA:Z format (POS is off by 1, main-field NM is missing) */ 
     segconf.sam_has_BWA_XA_Z  = (segconf.is_bwa || MP(GEM3) || MP(GEM2SAM) || MP(DELVE) || MP(DRAGEN)) ? yes 
                               : MP(TMAP)                                                               ? no 
                               :                                                                          unknown;

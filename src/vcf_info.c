@@ -8,16 +8,12 @@
 
 #include <math.h>
 #include "vcf_private.h"
-#include "seg.h"
 #include "piz.h"
-#include "context.h"
 #include "optimize.h"
 #include "file.h"
-#include "strings.h"
 #include "dict_id.h"
 #include "codec.h"
 #include "reconstruct.h"
-#include "gff.h"
 #include "stats.h"
 
 static inline bool vcf_is_use_DP_by_DP (void); // forward
@@ -981,6 +977,10 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         // VAGrENT
         case _INFO_VD:              CALL_IF (segconf.vcf_is_vagrent, vcf_seg_INFO_VD (vb, ctx, STRa(value)));
         case _INFO_VW:              CALL_IF (segconf.vcf_is_vagrent, vcf_seg_INFO_VW (vb, ctx, STRa(value)));
+
+        // IsaacVariantCaller / starling
+        case _INFO_CSQT:            CALL_IF (segconf.vcf_is_isaac, seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
+        case _INFO_cosmic:          CALL_IF (segconf.vcf_is_isaac, seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
 
         default: standard_seg:
             seg_by_ctx (VB, STRa(value), ctx, value_len);

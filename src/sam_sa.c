@@ -14,14 +14,9 @@
 // See: https://samtools.github.io/hts-specs/SAMtags.pdf
 // ---------------------------------------------------------
 
-#include "genozip.h"
 #include "sam_private.h"
-#include "strings.h"
-#include "seg.h"
-#include "piz.h"
 #include "reconstruct.h"
 #include "chrom.h"
-#include "codec.h"
 
 //---------
 // SEG

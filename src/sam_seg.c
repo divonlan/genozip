@@ -905,8 +905,7 @@ bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id)
         // bwa tags see here: http://bio-bwa.sourceforge.net/bwa.shtml : "SAM ALIGNMENT FORMAT"
         dict_id.num == _OPTION_X0_i      ||
         dict_id.num == _OPTION_X1_i      ||
-        dict_id.num == _OPTION_XA_Z      ||
-        dict_id.num == _OPTION_XA_RNAME  ||
+        dict_id.num == _OPTION_XA_RNAME  || // not _OPTION_XA_Z!  it can be large if non-bwa format (which can happen even if using bwa)
         dict_id.num == _OPTION_XA_NM     ||
         dict_id.num == _OPTION_XA_STRAND ||
         dict_id.num == _OPTION_XA_CIGAR  ||

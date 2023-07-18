@@ -8,25 +8,16 @@
 
 #include <math.h>
 #include "sam_private.h"
-#include "seg.h"
-#include "context.h"
 #include "piz.h"
 #include "reconstruct.h"
-#include "strings.h"
-#include "dict_id.h"
-#include "codec.h" // must be included before reference.h
-#include "reference.h"
 #include "regions.h"
 #include "aligner.h"
 #include "file.h"
-#include "container.h"
 #include "coverage.h"
 #include "bases_filter.h"
-#include "endianness.h"
 #include "lookback.h"
 #include "qname.h"
 #include "writer.h"
-#include "vblock.h"
 #include "libdeflate/libdeflate.h"
 
 void sam_piz_xtra_line_data (VBlockP vb_)

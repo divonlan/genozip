@@ -8,18 +8,9 @@
 
 // a module for handling CIGAR and MC:Z
 
-#include "genozip.h"
 #include "sam_private.h"
-#include "strings.h"
-#include "reference.h"
-#include "segconf.h"
-#include "seg.h"
-#include "piz.h"
 #include "reconstruct.h"
-#include "codec.h"
-#include "profiler.h"
 #include "md5.h"
-#include "segconf.h"
 #include "random_access.h"
 #include "chrom.h"
 #include "htscodecs/rANS_static4x16.h"

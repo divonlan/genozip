@@ -7,16 +7,12 @@
 //   and subject to penalties specified in the license.
 
 #include <math.h>
-#include "genozip.h"
 #include "vcf_private.h"
 #include "zfile.h"
 #include "txtfile.h"
-#include "seg.h"
 #include "context.h"
 #include "file.h"
 #include "dict_id.h"
-#include "strings.h"
-#include "codec.h"
 #include "reconstruct.h"
 #include "piz.h"
 

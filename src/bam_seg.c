@@ -6,26 +6,8 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
-#include "genozip.h"
-#include "profiler.h"
-#include "digest.h"
-#include "buffer.h"
-#include "vblock.h"
-#include "txtfile.h"
-#include "file.h"
-#include "endianness.h"
 #include "sam_private.h"
-#include "seg.h"
-#include "strings.h"
-#include "random_access.h"
-#include "dict_id.h"
-#include "codec.h"
-#include "flags.h"
-#include "profiler.h"
-#include "context.h"
-#include "kraken.h"
-#include "segconf.h"
-#include "qname.h"
+#include "txtfile.h"
 #include "libdeflate/libdeflate.h"
 
 void bam_seg_initialize (VBlockP vb)

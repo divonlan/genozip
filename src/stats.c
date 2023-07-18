@@ -54,9 +54,9 @@ static void stats_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
                        need_sep++ ? "%3B" : "", url_esc_non_valid_charsS(sbl[i].name).s, url_esc_non_valid_charsS(sbl[i].type).s, 
                        url_esc_non_valid_charsS (str_size (sbl[i].global_hash_prime).s).s, (int)sbl[i].pc_hash_occupancy);
             
-            uint32_t n_words = zctx->nodes.len32; // this is at least 32K as smallest hash table is 64K 
+            uint32_t n_words = zctx->nodes.len32; // note: this can be a low number despite pc_hash_occupancy being large - if words ended up as singletons
             WordIndex words[NUM_COLLECTED_WORDS] = { 0, 1, 2, n_words-3, n_words-2, n_words-1 }; // first three and last threewords in the the dictionary of this field
-            for (int i=0; i < NUM_COLLECTED_WORDS; i++)
+            for (int i=0; i < MIN_(NUM_COLLECTED_WORDS, n_words); i++)
                 // note: str_replace_letter modifies dict data, but its ok, since we have already written the dicts to z_file
                 bufprintf (evb, &hash_occ, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter ((char *)ctx_snip_from_zf_nodes (zctx, words[i], 0, 0), sizeof(UrlStr), ',', -127)).s); 
         }

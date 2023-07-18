@@ -158,10 +158,25 @@
 #pragma GENDICT INFO_REFREP=DTYPE_1=REFREP          // Number of times RU is repeated in reference
 #pragma GENDICT INFO_IDREP=DTYPE_1=IDREP            // Number of times RU is repeated in indel allele.
 #pragma GENDICT INFO_BLOCKAVG_min30p3a=DTYPE_1=BLOCKAVG_min30p3a // Non-variant site block. All sites in a block are constrained to be non-variant, have the same filter value, and have all sample values in range [x,y], y <= max(x+3,(x*1.3)). All printed site block sample values are the minimum observed in the region spanned by the block
-#pragma GENDICT FORMAT_GQX=DTYPE_2=GQX              // Minimum of {Genotype quality assuming variant position,Genotype quality assuming non-variant position}
-#pragma GENDICT FORMAT_DPF=DTYPE_2=DPF              // Base calls filtered from input before site genotyping
-#pragma GENDICT FORMAT_DPI=DTYPE_2=DPI              // Read depth associated with indel, taken from the position preceding the indel
+#pragma GENDICT FORMAT_GQX=DTYPE_2=GQX              // <ID=GQX,Number=1,Type=Integer,Description="Empirically calibrated variant quality score for variant sites, otherwise Minimum of {Genotype quality assuming variant position,Genotype quality assuming non-variant position}">
+#pragma GENDICT FORMAT_DPF=DTYPE_2=DPF              // <ID=DPF,Number=1,Type=Integer,Description="Basecalls filtered from input prior to site genotyping">
+#pragma GENDICT FORMAT_DPI=DTYPE_2=DPI              // <ID=DPI,Number=1,Type=Integer,Description="Read depth associated with indel, taken from the site preceding the indel.">
 
+// Illumina starling (looks like evolved IsaacVariantCaller): https://support.illumina.com/help/BS_App_TS_Amplicon_OLH_15055858/Content/Source/Informatics/Apps/IsaacVariantCaller_appENR.htm
+// (also SNVSB, SNVHPOL, CIGAR, RU, REFREP, IDREP, BLOCKAVG_min30p3a, GQX, DPF, DPI as in IsaacVariantCaller and standard tags)
+#pragma GENDICT INFO_cosmic=DTYPE_1=cosmic          // <ID=cosmic,Number=.,Type=String,Description="The numeric identifier for the variant in the Catalogue of Somatic Mutations in Cancer (COSMIC) database. Format: GenotypeIndex|Significance">
+#pragma GENDICT INFO_phyloP=DTYPE_1=phyloP          // <ID=phyloP,Number=A,Type=Float,Description="PhyloP conservation score. Denotes how conserved the reference sequence is between species throughout evolution">
+#pragma GENDICT INFO_AF1000G=DTYPE_1=AF1000G        // <ID=AF1000G,Number=A,Type=Float,Description="The allele frequency from all populations of 1000 genomes data">
+//#pragma GENDICT INFO_AA=DTYPE_1=AA                // (dup) <ID=AA,Number=A,Type=String,Description="The inferred allele ancestral (if determined) to the chimpanzee/human lineage.">
+#pragma GENDICT INFO_GMAF=DTYPE_1=GMAF              // <ID=GMAF,Number=A,Type=String,Description="Global minor allele frequency (GMAF); technically, the frequency of the second most frequent allele.  Format: GlobalMinorAllele|AlleleFreqGlobalMinor">
+#pragma GENDICT INFO_clinvar=DTYPE_1=clinvar        // <ID=clinvar,Number=.,Type=String,Description="Clinical significance. Format: GenotypeIndex|Significance">
+#pragma GENDICT INFO_EVS=DTYPE_1=EVS                // <ID=EVS,Number=A,Type=String,Description="Allele frequency, coverage and sample count taken from the Exome Variant Server (EVS). Format: AlleleFreqEVS|EVSCoverage|EVSSamples.">
+#pragma GENDICT INFO_RefMinor=DTYPE_1=RefMinor      // <ID=RefMinor,Number=0,Type=Flag,Description="Denotes positions where the reference base is a minor allele and is annotated as though it were a variant">
+#pragma GENDICT INFO_CSQT=DTYPE_1=CSQT              // <ID=CSQT,Number=.,Type=String,Description="Consequence type as predicted by IAE. Format: GenotypeIndex|HGNC|Transcript ID|Consequence">
+#pragma GENDICT INFO_CSQR=DTYPE_1=CSQR              // <ID=CSQR,Number=.,Type=String,Description="Predicted regulatory consequence type. Format: GenotypeIndex|RegulatoryID|Consequence">
+#pragma GENDICT INFO_Unphased=DTYPE_1=Unphased      // <ID=Unphased,Number=0,Type=Flag,Description="Indicates a record that is within the specified phasing window of another variant but could not be phased due to lack of minimum read support.">
+#pragma GENDICT FORMAT_VF=DTYPE_2=VF                // <ID=VF,Number=1,Type=Float,Description="Variant frequency">
+#
 // 10xGenomics: https://support.10xgenomics.com/genome-exome/software/pipelines/latest/output/vcf
 #pragma GENDICT FORMAT_BX=DTYPE_2=BX                // <ID=BX,Number=.,Type=String,Description="Barcodes and Associated Qual-Scores Supporting Alleles">
 #pragma GENDICT FORMAT_PQ=DTYPE_2=PQ                // <ID=PQ,Number=1,Type=Integer,Description="Phred QV indicating probability at this variant is incorrectly phased">
@@ -519,7 +534,7 @@ extern void vcf_samples_add  (rom samples_str);
                       vcf_piz_special_MUX_BY_VARTYPE, vcf_piz_special_ICNT, vcf_piz_special_SPL,\
                       vcf_piz_special_MUX_BY_SAMPLE_I, vcf_piz_special_IGT, \
                       vcf_piz_special_MUX_BY_IGT_PHASE, vcf_piz_special_main_REFALT_DEL, vcf_piz_special_mutation, \
-                      vcf_piz_special_SO_TERM, vcf_piz_special_MMURI }
+                      vcf_piz_special_SO_TERM, vcf_piz_special_MMURI, vcf_piz_special_DEMUX_GQX }
 
 SPECIAL (VCF, 0,  main_REFALT,         vcf_piz_special_main_REFALT);
 SPECIAL (VCF, 1,  FORMAT,              vcf_piz_special_FORMAT)
@@ -571,7 +586,8 @@ SPECIAL (VCF, 46, main_REFALT_DEL,     vcf_piz_special_main_REFALT_DEL);        
 SPECIAL (VCF, 47, mutation,            vcf_piz_special_mutation);                 // added v15.0.8
 SPECIAL (VCF, 48, SO_TERM,             vcf_piz_special_SO_TERM);                  // added v15.0.8
 SPECIAL (VCF, 49, MMURI,               vcf_piz_special_MMURI);                    // added v15.0.8
-#define NUM_VCF_SPECIAL 50
+SPECIAL (VCF, 50, DEMUX_GQX,           vcf_piz_special_DEMUX_GQX);                // added v15.0.11
+#define NUM_VCF_SPECIAL 51
 
 // Translators for Luft (=secondary coordinates)
 TRANSLATOR (VCF, VCF,   1,  G,      vcf_piz_luft_G)       // same order as LiftOverStatus starting LO_CANT_G

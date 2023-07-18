@@ -12,14 +12,11 @@
 #include "vblock.h"
 #include "crypt.h"
 #include "version.h"
-#include "endianness.h"
 #include "file.h"
 #include "dispatcher.h"
 #include "txtfile.h"
 #include "txtheader.h"
-#include "strings.h"
 #include "dict_id.h"
-#include "website.h"
 #include "contigs.h"
 #include "gencomp.h"
 #include "stats.h"
@@ -701,6 +698,7 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
     IF_IN_SOURCE ("COSMIC", vcf_is_cosmic);
     IF_IN_SOURCE ("ClinVar", vcf_is_clinvar);
     IF_IN_SOURCE ("IsaacVariantCaller", vcf_is_isaac);
+    IF_IN_SOURCE ("starling", vcf_is_isaac);
     IF_IN_HEADER ("GenotypeGVCFs", vcf_is_gvcf, "GenotypeGVCFs");
     IF_IN_HEADER ("CombineGVCFs", vcf_is_gvcf, "CombineGVCFs");
     if (segconf.vcf_is_isaac) IF_IN_HEADER ("gvcf", vcf_is_gvcf, NULL);

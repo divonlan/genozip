@@ -839,7 +839,7 @@ WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_
         *con = (MiniContainer){ .nitems_lo = 1, 
                                 .drop_final_repsep = true,
                                 .repsep    = { sep },
-                                .items     = { { .dict_id = arr_dict_id } } }; // only one item
+                                .items[0].dict_id = arr_dict_id }; // only one item
 
         arr_ctx = ctx_get_ctx (vb, arr_dict_id);
     

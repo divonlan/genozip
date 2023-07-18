@@ -6,17 +6,11 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
 //   under penalties specified in the license.
 
-#include "genozip.h"
 #include "sam_private.h"
-#include "strings.h"
-#include "reference.h"
-#include "segconf.h"
-#include "seg.h"
 #include "piz.h"
 #include "reconstruct.h"
 #include "optimize.h"
 #include "codec.h"
-#include "deep.h"
 #include "htscodecs/rANS_static4x16.h"
 
 rom bam_qual_display (bytes qual, uint32_t l_seq) // caller should free memory

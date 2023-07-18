@@ -158,7 +158,7 @@ typedef struct {
     bool vcf_is_icgc;
     bool vcf_is_exac;
     bool vcf_is_mastermind;
-    bool vcf_is_isaac;          // discontinued IsaacVariantCaller
+    bool vcf_is_isaac;          // IsaacVariantCaller / starling
     uint64_t count_dosage[2];   // used to calculate pc_has_dosage
     float pc_has_dosage;        // % of the samples x lines that have a valid (0-2) dosage value [0.0,1.0]
     bool use_null_DP_method;    // A method for predicting GT=./. by DP=.

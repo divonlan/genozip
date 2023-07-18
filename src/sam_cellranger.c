@@ -6,16 +6,8 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
 //   under penalties specified in the license.
 
-#include "genozip.h"
 #include "sam_private.h"
-#include "strings.h"
-#include "seg.h"
-#include "piz.h"
 #include "reconstruct.h"
-#include "chrom.h"
-#include "codec.h"
-#include "profiler.h"
-#include "container.h"
 #include "lookback.h"
 
 // fields used by STARsolo and 10xGenomics cellranger. Some are SAM-standard and some not.

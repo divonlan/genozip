@@ -6,16 +6,10 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
 //   under penalties specified in the license.
 
-#include "genozip.h"
 #include "sam_private.h"
-#include "strings.h"
-#include "seg.h"
-#include "piz.h"
 #include "reconstruct.h"
 #include "chrom.h"
-#include "codec.h"
 #include "lookback.h"
-#include "profiler.h"
 
 // -------------------------------------------------------
 // XA:Z "Alternative alignments" (a BWA, gem3 feature)
@@ -71,15 +65,14 @@ static void sam_seg_BWA_XA_initialize (VBlockSAMP vb)
     CTX(OPTION_XA_Z)->is_initialized = true;
 }
 
+#define SET_XA(old,new) ({ thool expected = (old); \
+                           __atomic_compare_exchange_n (&segconf.sam_has_BWA_XA_Z, &expected, (new), false, __ATOMIC_RELAXED, __ATOMIC_RELAXED); })
+
 static bool sam_seg_verify_BWA_XA (VBlockSAMP vb, STRp(xa))
 {
-    // set only if not already set by another thread
-    #define SET_XA(x) __atomic_compare_exchange_n (&segconf.sam_has_BWA_XA_Z, &expected, (x), false, __ATOMIC_RELAXED, __ATOMIC_RELAXED)
-    thool expected = unknown;
-
     str_split (xa, xa_len, 0, ';', rep, false); // verify at least one semicolon
     if (n_reps < 2) 
-        SET_XA(no);
+        SET_XA(unknown, no); // set only if not already set by another thread
 
     else { // test first repeat
         str_split (reps[0], rep_lens[0], 4, ',', item, true);
@@ -91,9 +84,9 @@ static bool sam_seg_verify_BWA_XA (VBlockSAMP vb, STRp(xa))
             !sam_is_cigar (STRi(item,2), false)        || // item [2] must be a valid textual CIGAR
             !str_is_int (STRi(item,3)))                   // item [3] must be an integer (NM)
             
-            SET_XA(no);
+            SET_XA(unknown, no);
         else
-            SET_XA(yes);
+            SET_XA(unknown, yes);
     }
 
     return (segconf.sam_has_BWA_XA_Z == yes); // as set by this thread, or perhaps another thread that beat us to it
@@ -222,8 +215,10 @@ void sam_seg_BWA_XA_Z (VBlockSAMP vb, STRp(xa), unsigned add_bytes)
                                            use_lb ? callbacks : callbacks_no_lb, add_bytes);
 
     // case: we failed to seg as a container - flush lookbacks (rare condition, and complicated to rollback given the round-robin and unlimited repeats)
-    if (use_lb && repeats == -1) 
+    if (use_lb && repeats == -1) {
+        SET_XA (yes, no); // this file's XA:Z is not bwa format after all 
         lookback_flush (VB, &container_XA);
+    }
 
     COPY_TIMER(sam_seg_BWA_XA_Z);
 }

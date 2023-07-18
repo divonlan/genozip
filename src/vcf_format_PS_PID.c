@@ -37,9 +37,9 @@ void vcf_samples_zip_initialize_PS_PID (void)
     SmallContainer con_PS_pos_ref_alt = {
         .repeats   = 1,
         .nitems_lo = 3,
-        .items     = { { .dict_id = (DictId)_FORMAT_PSpos, .separator = "_"},
-                       { .dict_id = (DictId)_FORMAT_PSref, .separator = "_"},
-                       { .dict_id = (DictId)_FORMAT_PSalt                  } } };                       
+        .items     = { { .dict_id.num = _FORMAT_PSpos, .separator = "_"},
+                       { .dict_id.num = _FORMAT_PSref, .separator = "_"},
+                       { .dict_id.num = _FORMAT_PSalt                  } } };                       
 
     ps_pra_snip_len = sizeof (ps_pra_snip);
     container_prepare_snip ((ContainerP)&con_PS_pos_ref_alt, 0, 0, ps_pra_snip, &ps_pra_snip_len); 

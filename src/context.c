@@ -1454,7 +1454,7 @@ WordIndex ctx_get_word_index_by_snip (VBlockP vb, ContextP ctx, STRp(snip))
 rom ctx_snip_from_zf_nodes (ConstContextP zctx, WordIndex node_index, pSTRp(snip))
 {
     ASSERT (node_index >= 0 && node_index < zctx->nodes.len32, 
-            "node_index=%d out of range, nodes.len=%u", node_index, zctx->nodes.len32);
+            "node_index=%d out of range, %s.nodes.len=%u", node_index, zctx->tag_name, zctx->nodes.len32);
 
     CtxNode *node = B(CtxNode, zctx->nodes, node_index);
     rom my_snip = Bc (zctx->dict, node->char_index);

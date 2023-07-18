@@ -7,12 +7,7 @@
 //   and subject to penalties specified in the license.
 
 #include "vcf_private.h"
-#include "seg.h"
-#include "context.h"
-#include "strings.h"
-#include "dict_id.h"
 #include "reconstruct.h"
-#include "lookback.h"
 
 void vcf_giab_seg_initialize (VBlockVCFP vb)
 {

@@ -26,10 +26,10 @@ sSTRl(con_decanonize2_snip,96);
 
 void fastq_deep_zip_initialize (void)
 {
-    SmallContainer con1 = { .repeats = 1, .nitems_lo = 2, .items = { { .dict_id = (DictId)_FASTQ_Q0NAME }, { .dict_id = (DictId)_FASTQ_Q1NAME } }};
+    SmallContainer con1 = { .repeats = 1, .nitems_lo = 2, .items = { { .dict_id.num = _FASTQ_Q0NAME }, { .dict_id.num = _FASTQ_Q1NAME } }};
     container_prepare_snip ((ContainerP)&con1, NULL, 0, qSTRa(con_decanonize1_snip));
 
-    SmallContainer con2 = { .repeats = 1, .nitems_lo = 2, .items = { { .dict_id = (DictId)_FASTQ_Q0NAME2 }, { .dict_id = (DictId)_FASTQ_Q1NAME2 } }};
+    SmallContainer con2 = { .repeats = 1, .nitems_lo = 2, .items = { { .dict_id.num = _FASTQ_Q0NAME2 }, { .dict_id.num = _FASTQ_Q1NAME2 } }};
     container_prepare_snip ((ContainerP)&con2, NULL, 0, qSTRa(con_decanonize2_snip));
 }
 

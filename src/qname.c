@@ -400,9 +400,9 @@ bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additional_byt
     // seg container
     seg_by_ctx (vb, STRi(qfs->con_snip, q), qname_ctx, qfs->num_seps + add_additional_bytes); // account for container separators, prefixes and caller-requested add_additional_bytes 
 
-    bool sorted_by_qname = (segconf.is_collated || VB_DT(FASTQ) || VB_DT(KRAKEN) || 
-                            qfs->sam_qname_sorted || 
-                            (!segconf.is_sorted && segconf.is_long_reads));
+    bool sorted_by_qname = VB_DT(FASTQ) || VB_DT(KRAKEN) ||   
+                           segconf.is_collated || qfs->sam_qname_sorted || 
+                           (!segconf.is_sorted && segconf.is_long_reads);
 
     for (unsigned item_i=0; item_i < qfs->con.nitems_lo; item_i++) {
 
@@ -423,7 +423,8 @@ bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additional_byt
         ContextP item_ctx = qname_ctx + ((item->dict_id.num == _SAM_QmNAME) ? MAX_QNAME_ITEMS : (1+item_i)); // note: QmName, if exists, is always the last item
                         
         // case: this is the file is sorted by qname - delta against previous
-        if (sorted_by_qname && (item_i == qfs->ordered_item1 || item_i == qfs->ordered_item2) &&
+        if (sorted_by_qname && 
+            (item_i == qfs->ordered_item1 || item_i == qfs->ordered_item2) &&
             (ctx_has_value_in_prev_line_(vb, item_ctx) || vb->line_i==0) &&
             ( (!qfs->is_hex[item_i] && str_get_int_dec (STRa(str), (uint64_t*)&value)) || ( qfs->is_hex[item_i] && str_get_int_hex (STRa(str), true, false, (uint64_t*)&value))) && // lower-case hex
             (ABS(value - item_ctx->last_value.i) < MAX_TOKENIZER_DETLA)) 

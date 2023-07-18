@@ -10,12 +10,7 @@
 // MD:Z - "Mismatch & Deleted bases" - see https://samtools.github.io/hts-specs/SAMtags.pdf
 // ----------------------------------------------------------------------------------------
 
-#include "genozip.h"
 #include "sam_private.h"
-#include "strings.h"
-#include "reference.h"
-#include "segconf.h"
-#include "seg.h"
 #include "piz.h"
 #include "reconstruct.h"
 

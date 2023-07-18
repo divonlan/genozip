@@ -70,8 +70,7 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
                          .nitems_lo = 1, 
                          .drop_final_repsep = true, 
                          .callback = (vb->use_special_sf == USE_SF_YES || segconf.use_null_DP_method),
-                         .items = { { .dict_id = (DictId)_FORMAT_GT_HT } },
-                       };
+                         .items[0].dict_id.num = _FORMAT_GT_HT };
 
     unsigned save_cell_len = cell_len;
 
@@ -216,6 +215,7 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
         return container_seg (vb, ctx, (ContainerP)&gt, 0, 0, save_cell_len); 
     }
 }
+
 //------------------
 // PIZ
 //------------------

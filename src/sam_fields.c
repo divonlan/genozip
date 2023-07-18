@@ -6,18 +6,11 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
-#include "genozip.h"
 #include "sam_private.h"
-#include "seg.h"
-#include "codec.h"
-#include "piz.h"
 #include "reconstruct.h"
 #include "context.h"
-#include "container.h"
 #include "chrom.h"
 #include "optimize.h"
-#include "strings.h"
-#include "segconf.h"
 
 static const StoreType aux_field_store_flag[256] = {
     ['c']=STORE_INT, ['C']=STORE_INT, 

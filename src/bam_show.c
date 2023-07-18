@@ -6,11 +6,7 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
 //   under penalties specified in the license.
 
-#include "genozip.h"
-#include "buffer.h"
-#include "vblock.h"
 #include "sam_private.h"
-#include "strings.h"
 
 static void bam_show_one_aux (STRp(aux))
 {

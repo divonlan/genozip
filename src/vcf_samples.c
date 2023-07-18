@@ -829,9 +829,10 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_GQ)
     int64_t prediction = vcf_predict_GQ (VB_VCF, src_ctx->did_i);
     int64_t delta = atoi (tab+1);
 
-    RECONSTRUCT_INT (prediction - delta);
+    new_value->i = prediction - delta;
+    RECONSTRUCT_INT (new_value->i);
 
-    return NO_NEW_VALUE;
+    return HAS_NEW_VALUE;
 }
 
 //-----------
@@ -1688,7 +1689,9 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
 
         // standard: <ID=GQ,Number=1,Type=Integer,Description="Genotype Quality">
         // GIAB: <ID=GQ,Number=1,Type=Integer,Description="Net Genotype quality across all datasets, calculated from GQ scores of callsets supporting the consensus GT, using only one callset from each dataset">   
-        case _FORMAT_GQ   : seg_set_last_txt (VB, ctx, STRi(sf, i)); break; // postpone to later
+        case _FORMAT_GQ   : if (segconf.vcf_is_isaac) seg_set_last_txt_store_value (VB, ctx, STRi(sf, i), STORE_INT);
+                            else                      seg_set_last_txt (VB, ctx, STRi(sf, i)); 
+                            break; // postpone to later
             
         case _FORMAT_RGQ  : vcf_seg_FORMAT_RGQ (vb, ctx, STRi(sf, i), ctxs[0], STRi(sf,0)); break;
 
@@ -1780,6 +1783,9 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
         case _FORMAT_ADALL : vcf_seg_FORMAT_A_R (vb, ctx, con_ADALL, STRi(sf, i), STORE_INT, vcf_seg_ADALL_items); break;
         case _FORMAT_IGT   : COND (segconf.vcf_is_giab_trio, vcf_seg_FORMAT_IGT (vb, ctx, STRi(sf, i))); 
         case _FORMAT_IPS   : COND (segconf.vcf_is_giab_trio, vcf_seg_FORMAT_IPS (vb, dl, ctx, STRi(sf, i))); 
+
+        // Illumina ISAAC fields
+        case _FORMAT_GQX   : COND (segconf.vcf_is_isaac, vcf_seg_FORMAT_GQX (vb, ctx, STRi(sf, i)));
 
         default            :
         fallback           : seg_by_ctx (VB, STRi(sf, i), ctx, sf_lens[i]);

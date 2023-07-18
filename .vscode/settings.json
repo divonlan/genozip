@@ -18,6 +18,8 @@
         "genozip.h": "c",
         "strings.h": "c",
         "type_traits": "c",
-        "typeinfo": "c"
+        "typeinfo": "c",
+        "piz.h": "c",
+        "sam_private.h": "c"
     }
 }

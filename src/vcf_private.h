@@ -12,16 +12,14 @@
 #include "vcf.h"
 #include "website.h"
 #include "seg.h"
-#include "container.h"
 
 #define VCF_FIELD_NAMES "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO"
 #define VCF_FIELD_NAMES_LONG VCF_FIELD_NAMES "\tFORMAT"
 
-// IMPORTANT: if changing fields in DataLine, also update vb_release_vb
 typedef struct {
     WordIndex chrom[2];          // Seg: enter as node_index ; Merge: convert to word_index
-    PosType32 pos[2];           // arrays of [2] - { primary-coord, luft-coord } 
-    PosType32 end_delta;        // Delta of INFO/END vs POS (same in both coordinates) - used in case chrom and pos are the same
+    PosType32 pos[2];            // arrays of [2] - { primary-coord, luft-coord } 
+    PosType32 end_delta;         // Delta of INFO/END vs POS (same in both coordinates) - used in case chrom and pos are the same
     uint32_t tie_breaker;        // tie-breaker in case chrom, pos and end are the same
     
     bool has_haplotype_data : 1; // FORMAT field contains GT
@@ -90,6 +88,7 @@ typedef struct VBlockVCF {
     MULTIPLEXER(2) mux_QUAL, mux_INFO; // multiplex by has_RGQ (in GVCF)
     MULTIPLEXER(2) mux_IGT, mux_IPS;   // multiplex by (sample_i>0)
     MULTIPLEXER(3) mux_VC;             // multiplex dbSNP's INFO/VC by VARTYPE
+    MULTIPLEXER(3) mux_GQX;            // multiplex Isaac's FORMAT/GQX
 
     #define after_mux hapmat_helper_index_buf
     // used by CODEC_HAPM (for VCF haplotype matrix) 
@@ -414,6 +413,10 @@ extern void vcf_seg_INFO_MMURI3 (VBlockVCFP vb, ContextP ctx, STRp(value));
 
 // ICGC stuff
 extern void vcf_seg_INFO_mutation (VBlockVCFP vb, ContextP ctx, STRp(mut));
+
+// ISAAC stuff
+extern void vcf_isaac_seg_initialize (VBlockVCFP vb);
+extern void vcf_seg_FORMAT_GQX (VBlockVCFP vb, ContextP ctx, STRp(gqx));
 
 // Tags stuff
 
