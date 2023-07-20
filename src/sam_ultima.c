@@ -14,7 +14,7 @@ sSTRl(copy_RNAME_snip, 32);
 
 // used in ZIP and PIZ - part of the file format
 #define TP_NUM_BINS 7
-static const uint8_t tp_bins[256] = { [0 ... 38]=0, [39 ... 41]=1, [42 ... 61]=2, [60 ...62]=3, [63 ... 64]=4, [65 ... 72]=5, [73 ... 255]=6 };
+static const uint8_t tp_bins[256] = { [0 ... 38]=0, [39 ... 41]=1, [42 ... 59]=2, [60 ...62]=3, [63 ... 64]=4, [65 ... 72]=5, [73 ... 255]=6 };
 
 void sam_ultima_zip_initialize (void)
 {

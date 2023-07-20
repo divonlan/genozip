@@ -224,8 +224,9 @@ rom txtheader_piz_get_filename (rom orig_name, rom prefix, bool is_orig_name_gen
 {
     unsigned fn_len = strlen (orig_name);
     unsigned dn_len = flag.out_dirname ? strlen (flag.out_dirname) : 0;
+    unsigned px_len = prefix ? strlen (prefix) : 0;
     unsigned genozip_ext_len = is_orig_name_genozip ? (sizeof GENOZIP_EXT - 1) : 0;
-    char *txt_filename = (char *)CALLOC(fn_len + dn_len + 10);
+    char *txt_filename = (char *)CALLOC(fn_len + dn_len + px_len + 10);
 
     #define EXT2_MATCHES_TRANSLATE(from,to,ext)  \
         ((z_file->data_type==(from) && flag.out_dt==(to) && \

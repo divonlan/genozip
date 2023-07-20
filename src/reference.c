@@ -804,7 +804,12 @@ static void ref_copy_compressed_sections_from_reference_file (Reference ref)
             ref_copy_one_compressed_section (ref, ref_file, &sec_reference[i]);
             bits_clear_region (&contig_r->is_set, SEC_REFERENCE_start_in_contig_r, SEC_REFERNECE_len);
 
-            if (contig_r->num_set != -1) contig_r->num_set -= bits_is_set;
+            if (contig_r->num_set != -1) {
+                ASSERT (bits_is_set <= contig_r->num_set, "Expecting bits_is_set=%"PRId64" <= %u(%.*s)->num_set=%"PRId64,
+                        bits_is_set, contig_r->chrom, STRf(contig_r->chrom_name), contig_r->num_set);
+                
+                contig_r->num_set -= bits_is_set;
+            }
         }
     }
 
@@ -826,7 +831,7 @@ static bool ref_remove_flanking_regions (Reference ref, RangeP r, uint64_t *star
     bool has_any_bit = bits_find_first_set_bit (&r->is_set, start_flanking_region_len);
 
     char bits[65];
-    ASSERT (has_any_bit, "range %u (%s) has no bits set in r->is_set but r->num_set=%"PRIu64" (r->is_set.nbits=%"PRIu64"). is_set(first 64 bits)=%s", 
+    ASSERT (has_any_bit, "range %u (%s) has no bits set in r->is_set but r->num_set=%"PRId64" (r->is_set.nbits=%"PRIu64"). is_set(first 64 bits)=%s", 
             BNUM (ref->ranges, r), r->chrom_name, r->num_set, r->is_set.nbits, bits_to_substr (&r->is_set, 0, 64, bits)); 
 
     has_any_bit = bits_find_prev_set_bit (&r->is_set, r->is_set.nbits, &last_1);
@@ -861,6 +866,9 @@ static bool ref_compact_ref (Reference ref, RangeP r)
     if (!r || !r->num_set) return false;
 
     ASSERT0 (r->is_set.nbits, "r->is_set.nbits=0");
+
+    ASSERT (r->num_set >= 0 && r->num_set <= r->is_set.nbits, "range %u (%s) r->num_set=%"PRId64" is out of range [0,%"PRIu64"]",
+            BNUM (ref->ranges, r), r->chrom_name, r->num_set, r->is_set.nbits); 
 
     // remove flanking regions
     uint64_t start_flanking_region_len;
@@ -1018,6 +1026,12 @@ void ref_compress_ref (void)
     if (gref->ranges.rtype != RT_MAKE_REF)
         ref_contigs_compress_stored (gref);  
 
+    // initialize Range.num_set (must be before ref_copy_compressed_sections_from_reference_file)
+    if (!flag.make_reference)
+        for_buf (Range, r, gref->ranges) 
+            if (!r->num_set) 
+                r->num_set = -1; // if not already set by ref_contigs_populate_aligned_chroms
+
     // copy already-compressed SEC_REFERENCE sections from the genozip reference file, but only such sections that are almost entirely
     // covered by ranges with is_set=true. we mark these ranges affected as is_set=false.
     if (gref->ranges.rtype == RT_LOADED)
@@ -1032,12 +1046,6 @@ void ref_compress_ref (void)
     SAVE_FLAGS;
     
     if (flag.show_reference) flag.quiet = true; // show references instead of progress
-
-    // initialize Range.num_set (used by ref_prepare_range_for_compress)
-    if (!flag.make_reference)
-        for_buf (Range, r, gref->ranges) 
-            if (!r->num_set) 
-                r->num_set = -1; // if not already set by ref_contigs_populate_aligned_chroms
                 
     // proceed to compress all ranges that have still have data in them after copying
     Dispatcher dispatcher = 

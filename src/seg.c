@@ -956,6 +956,10 @@ bool seg_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip),
             if (!callbacks[i] (vb, ctxs[i], STRi(item,i), 0))
                 goto badly_formatted;
         }
+        
+        else if (ctxs[i]->ltype >= LT_DYN_INT)
+            seg_integer_or_not (VB, ctxs[i], STRi(item,i), item_lens[i]);
+        
         else
             seg_by_ctx (VB, STRi(item,i), ctxs[i], item_lens[i]);
 
@@ -971,7 +975,7 @@ bool seg_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip),
     WordIndex node_index = *B1ST(WordIndex, ctx->con_index);
     unsigned account_for = num_printable_separators + ((int)add_bytes - snip_len);
 
-    // case: first container with this many repeats - seg and add to cache
+    // case: first time - seg and add to cache
     if (node_index == WORD_INDEX_NONE) 
         *B1ST(WordIndex, ctx->con_index) = container_seg (vb, ctx, (ContainerP)&con, NULL, 0, account_for);
     

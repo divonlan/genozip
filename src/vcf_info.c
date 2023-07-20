@@ -38,7 +38,9 @@ void vcf_info_zip_initialize (void)
 
 void vcf_info_seg_initialize (VBlockVCFP vb) 
 {
-    ctx_set_store (VB, STORE_INT, INFO_AN, INFO_AC, INFO_ADP, INFO_DP, INFO_MLEAC, DID_EOL);
+    ctx_set_store (VB, STORE_INT, INFO_AN, INFO_AC, INFO_ADP, INFO_DP, INFO_MLEAC, 
+                   INFO_DP4_RF, INFO_DP4_RR, INFO_DP4_AF, INFO_DP4_AR, DID_EOL);
+
     CTX(INFO_AF)->flags.store = STORE_FLOAT;
     // xxx (is this really needed for --indels-only?) CTX(INFO_SVTYPE)-> flags.store = STORE_INDEX; // since v13 - consumed by vcf_refalt_piz_is_variant_indel
 
@@ -52,6 +54,8 @@ void vcf_info_seg_initialize (VBlockVCFP vb)
     if (segconf.has[INFO_CLNHGVS]) vcf_seg_hgvs_consolidate_stats (vb, INFO_CLNHGVS);
     if (segconf.has[INFO_HGVSG])   vcf_seg_hgvs_consolidate_stats (vb, INFO_HGVSG);
     if (segconf.has[INFO_ANN])     vcf_seg_hgvs_consolidate_stats (vb, INFO_ANN); // subfield HGVS_c
+
+    CTX(INFO_DP4_RF)->ltype = CTX(INFO_DP4_AF)->ltype = LT_DYN_INT;
 }
 
 //--------
@@ -158,6 +162,33 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_DP_by_DP_v13)
     RECONSTRUCT_INT (new_value->i);
 
     return HAS_NEW_VALUE;
+}
+
+static bool vcf_seg_INFO_DP4_delta (VBlockP vb, ContextP ctx, STRp(value), uint32_t unused_rep)
+{
+    if (ctx_encountered_in_line (vb, (ctx-1)->did_i)) {
+        seg_delta_vs_other (VB, ctx, ctx-1, STRa(value));
+        return true; // segged successfully
+    }
+    else
+        return false;
+}
+
+// <ID=DP4,Number=4,Type=Integer,Description="# high-quality ref-forward bases, ref-reverse, alt-forward and alt-reverse bases">
+// Expecting first two values to be roughly similar, as the two last bases roughly similar
+static void vcf_seg_INFO_DP4 (VBlockVCFP vb, ContextP ctx, STRp(dp4))
+{
+    static const MediumContainer container_DP4 = {
+        .repeats      = 1, 
+        .nitems_lo    = 4, 
+        .items        = { { .dict_id.num = _INFO_DP4_RF, .separator = "," }, 
+                          { .dict_id.num = _INFO_DP4_RR, .separator = "," }, 
+                          { .dict_id.num = _INFO_DP4_AF, .separator = "," }, 
+                          { .dict_id.num = _INFO_DP4_AR                   } } };
+
+    SegCallback callbacks[4] = { 0, vcf_seg_INFO_DP4_delta, 0, vcf_seg_INFO_DP4_delta }; 
+
+    seg_struct (VB, ctx, container_DP4, STRa(dp4), callbacks, dp4_len);
 }
 
 // -------
@@ -885,7 +916,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
             CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), ',', '|', false, STORE_INT, DICT_ID_NONE, value_len));
 
         case _INFO_DP4:
-            CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, STORE_INT, DICT_ID_NONE, value_len));
+            CALL (vcf_seg_INFO_DP4 (vb, ctx, STRa(value)));
 
         // ##INFO=<ID=CLNDN,Number=.,Type=String,Description="ClinVar's preferred disease name for the concept specified by disease identifiers in CLNDISDB">
         case _INFO_CLNDN:

@@ -164,7 +164,7 @@ void coverage_sex_classifier (bool is_first_z_file)
                                   };
 
     if (!flag.multiple_files) {
-        iprint0 ("\nWARNING: NOT SUITABLE FOR CLINICAL USE\n\n");
+        iprint0 ("\nWARNING: EXPERIMENTAL FEATURE, USE AT YOUR OWN RISK. NOT SUITABLE FOR CLINICAL USE\n\n");
         iprintf (is_info_stream_terminal ? "--sex for: %s\n%-10s  %-*s  %-6s  %-6s  %-6s  %-4s  %-4s\n" 
                                          : "--sex for: %s\n%s\t%*s\t%s\t%s\t%s\t%s\t%s\n",
                 z_name, "Sex", flag.longest_filename, "File", is_sam ? "DP_1" : "DP_AS", "DP_X", "DP_Y", 

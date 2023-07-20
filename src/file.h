@@ -121,7 +121,7 @@ typedef struct File {
     Buffer unconsumed_bgzf_blocks;     // ZIP: unconsumed or partially consumed bgzf blocks - moved to the next VB
     Buffer bgzf_isizes;                // ZIP/PIZ: uncompressed size of the bgzf blocks in which this txt file is compressed (in BGEN16)
     Buffer bgzf_starts;                // ZIP: offset in txt_file of each BGZF block
-    struct FlagsBgzf bgzf_flags;       // correspond to SectionHeader.flags in SEC_BGZF
+    struct FlagsBgzf bgzf_flags;       // corresponds to SectionHeader.flags in SEC_BGZF
     uint8_t bgzf_signature[3];         // PIZ: 3 LSB of size of source BGZF-compressed file, as passed in SectionHeaderTxtHeader.codec_info
 
     // TXT file: data used in --sex, --coverage and --idxstats

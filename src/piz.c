@@ -699,8 +699,11 @@ static StrTextLong piz_filename_for_progress (void)
 
     SectionHeaderTxtHeader header = zfile_read_section_header (evb, sec, SEC_TXT_HEADER).txt_header;
 
-    bool dot_gz = flag.bgzf == BGZF_NOT_INITIALIZED ? (header.src_codec == CODEC_BGZF || header.src_codec == CODEC_GZ)
+    // note: for bz2, xz, and zip - we reconstruct as gz too. better choice than plain.
+    #define C(cdc) (header.src_codec == CODEC_##cdc)
+    bool dot_gz = flag.bgzf == BGZF_NOT_INITIALIZED ? ((C(BGZF) || C(GZ) || C(BZ2) || C(XZ) || C(ZIP))) // note: similar logic to in bgzf_piz_calculate_bgzf_flags
                 :                                     (flag.bgzf != 0);
+    #undef C
 
     TEMP_FLAG(out_dirname, NULL); // only basename in progress string
     rom filename = txtheader_piz_get_filename (header.txt_filename, flag.unbind, false, dot_gz);

@@ -1031,14 +1031,14 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
         SectionHeaderTxtHeaderP h = (SectionHeaderTxtHeaderP)header;
         if (VER(15))
             sprintf (str, "\n%stxt_data_size=%"PRIu64" txt_header_size=%"PRIu64" lines=%"PRIu64" max_lines_per_vb=%u digest=%s digest_header=%s\n" 
-                    "%stxt_codec=%s (args=0x%02X.%02X.%02X) %s txt_filename=\"%.*s\"\n",
+                    "%ssrc_codec=%s (args=0x%02X.%02X.%02X) %s txt_filename=\"%.*s\"\n",
                     SEC_TAB, BGEN64 (h->txt_data_size), v12 ? BGEN64 (h->txt_header_size) : 0, BGEN64 (h->txt_num_lines), BGEN32 (h->max_lines_per_vb), 
                     digest_display (h->digest).s, digest_display (h->digest_header).s, 
                     SEC_TAB, codec_name (h->src_codec), h->codec_info[0], h->codec_info[1], h->codec_info[2], 
                     sections_dis_flags (f, st, dt).s, TXT_FILENAME_LEN, h->txt_filename);
         else
             sprintf (str, "\n%stxt_data_size=%"PRIu64" txt_header_size=%"PRIu64" lines=%"PRIu64" max_lines_per_vb=%u digest=%s digest_header=%s\n" 
-                    "%stxt_codec=%s (args=0x%02X.%02X.%02X) %s txt_filename=\"%.*s\" flav_prop=(id,has_seq_len,is_mated,has_R,cnn)=[[%u,%u,%u,%u,%u],[%u,%u,%u,%u,%u],[%u,%u,%u,%u,%u]]\n",
+                    "%ssrc_codec=%s (args=0x%02X.%02X.%02X) %s txt_filename=\"%.*s\" flav_prop=(id,has_seq_len,is_mated,has_R,cnn)=[[%u,%u,%u,%u,%u],[%u,%u,%u,%u,%u],[%u,%u,%u,%u,%u]]\n",
                     SEC_TAB, BGEN64 (h->txt_data_size), v12 ? BGEN64 (h->txt_header_size) : 0, BGEN64 (h->txt_num_lines), BGEN32 (h->max_lines_per_vb), 
                     digest_display (h->digest).s, digest_display (h->digest_header).s, 
                     SEC_TAB, codec_name (h->src_codec), h->codec_info[0], h->codec_info[1], h->codec_info[2], 

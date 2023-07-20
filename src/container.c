@@ -101,7 +101,7 @@ WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con,
         iprint0 ("\n");
     }
 
-    return seg_by_ctx_ex (vb, snip, snip_len, ctx, add_bytes, is_new); 
+    return seg_by_ctx_ex (vb, STRa(snip), ctx, add_bytes, is_new); 
 }
 
 //----------------------

@@ -105,7 +105,7 @@ static inline bool vcf_refalt_seg_del_against_reference (VBlockVCFP vb, STRp(ref
 
     RefLock lock = REFLOCK_NONE;
 
-    Range *range = ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, 1, WORD_INDEX_NONE, 
+    Range *range = ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, ref_len, WORD_INDEX_NONE, 
                                         (IS_REF_EXT_STORE ? &lock : NULL));
     
     if (!range || pos < range->first_pos || pos + ref_len - 1 > range->last_pos)

@@ -258,7 +258,8 @@ static inline void bgzf_uncompress_one_prescribed_block (VBlockP vb, STRp(bgzf_b
                                        h+1, bgzf_block_len - sizeof(BgzfHeader) - sizeof (BgzfFooter), // compressed
                                        STRa(uncomp_block), NULL);  // uncompressed
 
-    ASSERT (ret == LIBDEFLATE_SUCCESS, "libdeflate_deflate_decompress failed: %s", libdeflate_error(ret));
+    ASSERT (ret == LIBDEFLATE_SUCCESS, "%s: libdeflate_deflate_decompress failed: %s. bgzf_block_len=%u uncomp_block_len=%u bb_i=%"PRIu64, 
+            VB_NAME, libdeflate_error(ret), bgzf_block_len, uncomp_block_len, bb_i);
 
     if (flag.show_bgzf)
         #define C(i) (i < uncomp_block_len ? char_to_printable (uncomp_block[i]).s : "") 
@@ -282,7 +283,7 @@ void bgzf_reread_uncompress_vb_as_prescribed (VBlockP vb, FILE *file)
         while (line->line_len) { 
 
             uint64_t offset = *B64 (txt_file->bgzf_starts, line->offset.bb_i);
-            uint16_t isize  = BGEN16 (*B16 (txt_file->bgzf_isizes, line->offset.bb_i)) + 1;
+            uint32_t isize  = BGEN16 (*B16 (txt_file->bgzf_isizes, line->offset.bb_i)) + 1; // maximum isize is 65536 (not 65535)
 
             if (offset != last_offset) {
                 ASSERT (!fseeko64 (file, offset, SEEK_SET),
@@ -582,8 +583,11 @@ FlagsBgzf bgzf_piz_calculate_bgzf_flags (CompIType comp_i, Codec src_codec)
         
     // case: bgzf_flags.level is to left to be determined by whether the source file was compressed (see bgzf_piz_calculate_bgzf_flags)
     if (bgzf_flags.level == BGZF_COMP_LEVEL_UNKNOWN)
-        bgzf_flags.level = (src_codec == CODEC_BGZF || src_codec == CODEC_GZ) ? BGZF_COMP_LEVEL_DEFAULT : 0;
-
+        #define C(cdc) (src_codec == CODEC_##cdc)
+        // note: for bz2, xz, and zip - we reconstruct as gz too. better choice than plain.
+        bgzf_flags.level = (C(BGZF) || C(GZ) || C(BZ2) || C(XZ) || C(ZIP)) ? BGZF_COMP_LEVEL_DEFAULT : 0; // note: similar logic to piz_filename_for_progress
+        #undef C
+        
     return bgzf_flags;
 }
 

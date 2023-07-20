@@ -99,12 +99,17 @@
 #pragma GENDICT INFO_AA=DTYPE_1=AA                  // <ID=AA,Number=1,Type=String,Description="Ancestral Allele"> - defined in the VCF specification
 #pragma GENDICT INFO_BaseCounts=DTYPE_1=BaseCounts
 #pragma GENDICT INFO_DP=DTYPE_1=DP                  // <ID=DP,Number=1,Type=Integer,Description="Approximate read depth; some reads may have been filtered">
-#pragma GENDICT INFO_DP4=DTYPE_1=DP4                // <ID=DP4,Number=4,Type=Integer,Description="# high-quality ref-forward bases, ref-reverse, alt-forward and alt-reverse bases">
 #pragma GENDICT INFO_SF=DTYPE_1=SF                  // <ID=SF,Number=.,Type=String,Description="Source File (index to sourceFiles, f when filtered)">
 #pragma GENDICT INFO_VQSLOD=DTYPE_1=VQSLOD          // <ID=VQSLOD,Number=1,Type=Float,Description="Log odds of being a true variant versus being false under the trained Gaussian mixture model">
 #pragma GENDICT INFO_MQ=DTYPE_1=MQ                  // <ID=MQ,Number=1,Type=Integer,Description="Root-mean-square mapping quality of covering reads">    
 #pragma GENDICT INFO_MQ0=DTYPE_1=MQ0                // <ID=MQ0,Number=1,Type=Integer,Description="Total Mapping Quality Zero Reads"> (VCF spec: "Number of MAPQ == 0 reads covering this record")
 #pragma GENDICT INFO_NS=DTYPE_1=NS                  // <ID=NS,Number=1,Type=Integer,Description="Number of Samples With Data">
+
+#pragma GENDICT INFO_DP4=DTYPE_1=DP4                // <ID=DP4,Number=4,Type=Integer,Description="# high-quality ref-forward bases, ref-reverse, alt-forward and alt-reverse bases">
+#pragma GENDICT INFO_DP4_RF=DTYPE_1=DrfP4                
+#pragma GENDICT INFO_DP4_RR=DTYPE_1=DrrP4                
+#pragma GENDICT INFO_DP4_AF=DTYPE_1=DafP4                
+#pragma GENDICT INFO_DP4_AR=DTYPE_1=DarP4          
 
 #pragma GENDICT INFO_LDAF=DTYPE_1=LDAF              // <ID=LDAF,Number=1,Type=Float,Description="MLE Allele Frequency Accounting for LD">
 #pragma GENDICT INFO_AVGPOST=DTYPE_1=AVGPOST        // <ID=AVGPOST,Number=1,Type=Float,Description="Average posterior probability from MaCH/Thunder">
@@ -157,26 +162,30 @@
 #pragma GENDICT INFO_RU=DTYPE_1=RU                  // Smallest repeating sequence unit extended or contracted in the indel allele relative to the reference. RUs longer than 20 bases are not reported.
 #pragma GENDICT INFO_REFREP=DTYPE_1=REFREP          // Number of times RU is repeated in reference
 #pragma GENDICT INFO_IDREP=DTYPE_1=IDREP            // Number of times RU is repeated in indel allele.
-#pragma GENDICT INFO_BLOCKAVG_min30p3a=DTYPE_1=BLOCKAVG_min30p3a // Non-variant site block. All sites in a block are constrained to be non-variant, have the same filter value, and have all sample values in range [x,y], y <= max(x+3,(x*1.3)). All printed site block sample values are the minimum observed in the region spanned by the block
+#pragma GENDICT INFO_TI=DTYPE_1=TI                  // <ID=TI,Number=.,Type=String,Description="Transcript ID">
+#pragma GENDICT INFO_GI=DTYPE_1=GI                  // <ID=GI,Number=.,Type=String,Description="Gene ID">
+#pragma GENDICT INFO_FC=DTYPE_1=FC                  // <ID=FC,Number=.,Type=String,Description="Functional Consequence">
 #pragma GENDICT FORMAT_GQX=DTYPE_2=GQX              // <ID=GQX,Number=1,Type=Integer,Description="Empirically calibrated variant quality score for variant sites, otherwise Minimum of {Genotype quality assuming variant position,Genotype quality assuming non-variant position}">
 #pragma GENDICT FORMAT_DPF=DTYPE_2=DPF              // <ID=DPF,Number=1,Type=Integer,Description="Basecalls filtered from input prior to site genotyping">
 #pragma GENDICT FORMAT_DPI=DTYPE_2=DPI              // <ID=DPI,Number=1,Type=Integer,Description="Read depth associated with indel, taken from the site preceding the indel.">
+//#pragma GENDICT INFO_=DTYPE_1=EXON                // (flag) <ID=EXON,Number=0,Type=Flag,Description="Exon Region">
+//#pragma GENDICT INFO_BLOCKAVG_min30p3a=DTYPE_1=BLOCKAVG_min30p3a // (flag) <ID=BLOCKAVG_min30p3a,Number=0,Type=Flag,Description="Non-variant site block. All sites in a block are constrained to be non-variant, have the same filter value, and have all sample values in range [x,y], y <= max(x+3,(x*1.3)). All printed site block sample values are the minimum observed in the region spanned by the block">
 
 // Illumina starling (looks like evolved IsaacVariantCaller): https://support.illumina.com/help/BS_App_TS_Amplicon_OLH_15055858/Content/Source/Informatics/Apps/IsaacVariantCaller_appENR.htm
 // (also SNVSB, SNVHPOL, CIGAR, RU, REFREP, IDREP, BLOCKAVG_min30p3a, GQX, DPF, DPI as in IsaacVariantCaller and standard tags)
 #pragma GENDICT INFO_cosmic=DTYPE_1=cosmic          // <ID=cosmic,Number=.,Type=String,Description="The numeric identifier for the variant in the Catalogue of Somatic Mutations in Cancer (COSMIC) database. Format: GenotypeIndex|Significance">
 #pragma GENDICT INFO_phyloP=DTYPE_1=phyloP          // <ID=phyloP,Number=A,Type=Float,Description="PhyloP conservation score. Denotes how conserved the reference sequence is between species throughout evolution">
 #pragma GENDICT INFO_AF1000G=DTYPE_1=AF1000G        // <ID=AF1000G,Number=A,Type=Float,Description="The allele frequency from all populations of 1000 genomes data">
-//#pragma GENDICT INFO_AA=DTYPE_1=AA                // (dup) <ID=AA,Number=A,Type=String,Description="The inferred allele ancestral (if determined) to the chimpanzee/human lineage.">
 #pragma GENDICT INFO_GMAF=DTYPE_1=GMAF              // <ID=GMAF,Number=A,Type=String,Description="Global minor allele frequency (GMAF); technically, the frequency of the second most frequent allele.  Format: GlobalMinorAllele|AlleleFreqGlobalMinor">
 #pragma GENDICT INFO_clinvar=DTYPE_1=clinvar        // <ID=clinvar,Number=.,Type=String,Description="Clinical significance. Format: GenotypeIndex|Significance">
 #pragma GENDICT INFO_EVS=DTYPE_1=EVS                // <ID=EVS,Number=A,Type=String,Description="Allele frequency, coverage and sample count taken from the Exome Variant Server (EVS). Format: AlleleFreqEVS|EVSCoverage|EVSSamples.">
-#pragma GENDICT INFO_RefMinor=DTYPE_1=RefMinor      // <ID=RefMinor,Number=0,Type=Flag,Description="Denotes positions where the reference base is a minor allele and is annotated as though it were a variant">
 #pragma GENDICT INFO_CSQT=DTYPE_1=CSQT              // <ID=CSQT,Number=.,Type=String,Description="Consequence type as predicted by IAE. Format: GenotypeIndex|HGNC|Transcript ID|Consequence">
 #pragma GENDICT INFO_CSQR=DTYPE_1=CSQR              // <ID=CSQR,Number=.,Type=String,Description="Predicted regulatory consequence type. Format: GenotypeIndex|RegulatoryID|Consequence">
-#pragma GENDICT INFO_Unphased=DTYPE_1=Unphased      // <ID=Unphased,Number=0,Type=Flag,Description="Indicates a record that is within the specified phasing window of another variant but could not be phased due to lack of minimum read support.">
 #pragma GENDICT FORMAT_VF=DTYPE_2=VF                // <ID=VF,Number=1,Type=Float,Description="Variant frequency">
-#
+//#pragma GENDICT INFO_AA=DTYPE_1=AA                // (dup) <ID=AA,Number=A,Type=String,Description="The inferred allele ancestral (if determined) to the chimpanzee/human lineage.">
+//#pragma GENDICT INFO_RefMinor=DTYPE_1=RefMinor    // (flag) <ID=RefMinor,Number=0,Type=Flag,Description="Denotes positions where the reference base is a minor allele and is annotated as though it were a variant">
+//#pragma GENDICT INFO_Unphased=DTYPE_1=Unphased    // (flag) <ID=Unphased,Number=0,Type=Flag,Description="Indicates a record that is within the specified phasing window of another variant but could not be phased due to lack of minimum read support.">
+
 // 10xGenomics: https://support.10xgenomics.com/genome-exome/software/pipelines/latest/output/vcf
 #pragma GENDICT FORMAT_BX=DTYPE_2=BX                // <ID=BX,Number=.,Type=String,Description="Barcodes and Associated Qual-Scores Supporting Alleles">
 #pragma GENDICT FORMAT_PQ=DTYPE_2=PQ                // <ID=PQ,Number=1,Type=Integer,Description="Phred QV indicating probability at this variant is incorrectly phased">
@@ -270,6 +279,27 @@
 #pragma GENDICT INFO_MQB=DTYPE_1=MQB                // <ID=MQB,Number=1,Type=Float,Description="Mann-Whitney U test of Mapping Quality Bias (bigger is better)">
 #pragma GENDICT INFO_BQB=DTYPE_1=BQB                // <ID=BQB,Number=1,Type=Float,Description="Mann-Whitney U test of Base Quality Bias (bigger is better)">
 #pragma GENDICT INFO_MQSB=DTYPE_1=MQSB              // <ID=MQSB,Number=1,Type=Float,Description="Mann-Whitney U test of Mapping Quality vs Strand Bias (bigger is better)”>
+
+// samtools mpileup / bcftools call
+#pragma GENDICT INFO_INDEL=DTYPE_1=INDEL            // <ID=INDEL,Number=0,Type=Flag,Description="Indicates that the variant is an INDEL.">
+#pragma GENDICT INFO_IDV=DTYPE_1=IDV                // <ID=IDV,Number=1,Type=Integer,Description="Maximum number of raw reads supporting an indel">
+#pragma GENDICT INFO_IMF=DTYPE_1=IMF                // <ID=IMF,Number=1,Type=Float,Description="Maximum fraction of raw reads supporting an indel">
+#pragma GENDICT INFO_VDB=DTYPE_1=VDB                // <ID=VDB,Number=1,Type=Float,Description="Variant Distance Bias for filtering splice-site artefacts in RNA-seq data (bigger is better)",Version="3">
+#pragma GENDICT INFO_RPB2=DTYPE_1=RPB2              // <ID=RPB2,Number=1,Type=Float,Description="Mann-Whitney U test of Read Position Bias [CDF] (bigger is better)">
+#pragma GENDICT INFO_MQB2=DTYPE_1=MQB2              // <ID=MQB2,Number=1,Type=Float,Description="Mann-Whitney U test of Mapping Quality Bias [CDF] (bigger is better)">
+#pragma GENDICT INFO_BQB2=DTYPE_1=BQB2              // <ID=BQB2,Number=1,Type=Float,Description="Mann-Whitney U test of Base Quality Bias [CDF] (bigger is better)">
+#pragma GENDICT INFO_MQSB2=DTYPE_1=MQSB2            // <ID=MQSB2,Number=1,Type=Float,Description="Mann-Whitney U test of Mapping Quality vs Strand Bias [CDF] (bigger is better)">
+#pragma GENDICT INFO_SGB=DTYPE_1=SGB                // <ID=SGB,Number=1,Type=Float,Description="Segregation based metric.">
+#pragma GENDICT INFO_MQ0F=DTYPE_1=MQ0F              // <ID=MQ0F,Number=1,Type=Float,Description="Fraction of MQ0 reads (smaller is better)">
+#pragma GENDICT INFO_I16=DTYPE_1=I16                // <ID=I16,Number=16,Type=Float,Description="Auxiliary tag used for calling, see description of bcf_callret1_t in bam2bcf.h">
+#pragma GENDICT INFO_QS=DTYPE_1=QS                  // <ID=QS,Number=R,Type=Float,Description="Auxiliary tag used for calling">
+#pragma GENDICT INFO_DPR=DTYPE_1=DPR                // <ID=DPR,Number=R,Type=Integer,Description="Number of high-quality bases observed for each allele">
+#pragma GENDICT INFO_AD=DTYPE_1=AD                  // <ID=AD,Number=R,Type=Integer,Description="Total allelic depths">
+#pragma GENDICT INFO_ADF=DTYPE_1=ADF                // <ID=ADF,Number=R,Type=Integer,Description="Total allelic depths on the forward strand">
+#pragma GENDICT INFO_ADR=DTYPE_1=ADR                // <ID=ADR,Number=R,Type=Integer,Description="Total allelic depths on the reverse strand">
+#pragma GENDICT FORMAT_SP=DTYPE_2=SP                // <ID=SP,Number=1,Type=Integer,Description="Phred-scaled strand bias P-value">
+#pragma GENDICT FORMAT_DV=DTYPE_2=DV                // <ID=DV,Number=1,Type=Integer,Description="Number of high-quality non-reference bases">
+#pragma GENDICT FORMAT_DPR=DTYPE_2=DPR              // <ID=DPR,Number=R,Type=Integer,Description="Number of high-quality bases observed for each allele">
 
 // VarScan FORMAT and INFO fields: http://varscan.sourceforge.net/using-varscan.html
 #pragma GENDICT FORMAT_RDF=DTYPE_2=RDF              // <ID=RDF,Number=1,Type=Integer,Description="Depth of reference-supporting bases on forward strand (reads1plus)">

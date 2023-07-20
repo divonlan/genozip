@@ -22,6 +22,12 @@
 #include "zlib.h"
 #include "../genozip.h"
 
+// divon
+#pragma GCC diagnostic ignored "-Wpragmas"         // avoid warning if "-Wuse-after-free" is not defined in this version of gcc
+#pragma GCC diagnostic ignored "-Wunknown-warning-option" // same
+#pragma GCC diagnostic ignored "-Wuse-after-free"  // avoid compiler warning of using p after it is freed
+#pragma GCC diagnostic ignored "-Wdeprecated-non-prototype"
+
 #if defined(STDC) && !defined(Z_SOLO)
 #  if !(defined(_WIN32_WCE) && defined(_MSC_VER))
 #    include <stddef.h>

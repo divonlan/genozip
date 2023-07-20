@@ -671,18 +671,18 @@ _prev_bit_func_def(bits_find_prev_set_bit,  GET_WORD);
 _prev_bit_func_def(bits_find_prev_clear_bit,NEG_WORD);
 
 // Find the index of the first bit that is set.
-// Returns 1 if a bit is set, otherwise 0
+// Returns true if a bit is set.
 // Index of first set bit is stored in the integer pointed to by result
 // If no bits are set, value at `result` is not changed
 bool bits_find_first_set_bit (ConstBitsP bits, uint64_t *result)
 {
-    return bits_find_next_set_bit(bits, 0, result);
+    return bits_find_next_set_bit (bits, 0, result);
 }
 
 // same same
 bool bits_find_first_clear_bit (ConstBitsP bits, uint64_t *result)
 {
-    return bits_find_next_clear_bit(bits, 0, result);
+    return bits_find_next_clear_bit (bits, 0, result);
 }
 
 // Find the index of the last bit that is set.
