@@ -54,6 +54,7 @@ bool buf_dump_to_file (rom filename, ConstBufferP buf, unsigned buf_word_width, 
             if (fn_len >= 4 && !memcmp (&update_filename[fn_len-4], ".bam", 4)) {
                 char gz_filename[fn_len + 10];
                 sprintf (gz_filename, "%s.gz", update_filename);
+                file_remove (update_filename, true);
                 file_rename (gz_filename, update_filename, false);
             }
             else 
@@ -270,7 +271,7 @@ void LTEN_u64_buf (BufferP buf, LocalType *lt) { if (!flag.is_lten) for_buf (uin
 // the number of columns to be the number of samples in the VCF header
 static inline uint32_t BGEN_transpose_num_cols (ConstBufferP buf)
 {
-    uint32_t cols = buf->count; // cols and rows in terms of the target non-transposed matrix (0 if VCF)
+    uint32_t cols = buf->n_cols; // cols and rows in terms of the target non-transposed matrix (0 if vcf_num_samples)
 
     if (!cols) cols = vcf_header_get_num_samples(); 
     ASSERT0 (cols, "vcf_header_get_num_samples=0");

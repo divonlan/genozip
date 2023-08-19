@@ -40,7 +40,7 @@ typedef struct VBlockGFF {
 typedef VBlockGFF *VBlockGFFP;
 #define VB_GFF ((VBlockGFFP)vb)
 
-unsigned gff_vb_size (DataType dt) { return sizeof (VBlockGFF); }
+unsigned gff_vb_size (DataType dt) { return sizeof (VBlockGFF);  }
 
 sSTRl(copy_gene_name_snip,32);
 sSTRl(dbx_container_snip,100);
@@ -113,7 +113,7 @@ int32_t gff_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 
             if (j < final_i && *Btxt (j+1) == '>') {
                 if (!segconf.running) {
-                    segconf.has_embdedded_fasta = true;
+                    segconf.has_embedded_fasta = true;
                     segconf.fasta_has_contigs = false; // GFF3-embedded FASTA doesn't have contigs, because did=0 is reserved for GFF's SEQID
                 }
 

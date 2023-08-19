@@ -651,13 +651,14 @@ rom str_split_by_tab_do (STRp(str),
     for (str_i=0 ; str_i < str_len ; str_i++) {
         char c = str[str_i]; 
         if (c == '\t') {
-            ASSSPLIT (fld_i < *n_flds, "expecting up to %u fields but found more", *n_flds);
+            ASSSPLIT (fld_i < *n_flds, "expecting up to %u fields but found more. str_len=%u str(first 1000)=\"%.*s\"", *n_flds, str_len, MIN_(1000, str_len), str);
 
             flds[fld_i++] = &str[str_i+1];
         }
 
         else if (c == '\r') {
-            ASSSPLIT (str_i+1 < str_len && str[str_i+1] == '\n', "encountered a \\r without a following \\n (str_i=%u)", str_i);
+            ASSSPLIT (str_i+1 < str_len && str[str_i+1] == '\n', "encountered a \\r without a following \\n. str_i=%u str_len=%u str(first 1000)=\"%.*s\" last_20_until_str_i=%s", 
+                      str_i, str_len, MIN_(1000, str_len), str, str_to_printable_(&str[str_i-MIN_(str_i,20)+1], MIN_(str_i,20)).s);
             my_has_13 = true;
             break;
         }
@@ -668,14 +669,14 @@ rom str_split_by_tab_do (STRp(str),
         }
     }
 
-    ASSSPLIT (str_i < str_len, "Line not terminated by newline (str_len=%u)", str_len);
+    ASSSPLIT (str_i < str_len, "Line not terminated by newline. str_len=%u str(first 1000)=\"%.*s\"", str_len, MIN_(1000, str_len), str);
 
     for (uint32_t i=0; i < fld_i-1; i++)    
         fld_lens[i] = flds[i+1] - flds[i] - 1; 
         
     fld_lens[fld_i-1] = &str[str_i] - flds[fld_i-1];
 
-    ASSSPLIT (!exactly || fld_i == *n_flds, "expecting %u fields but found more", *n_flds);
+    ASSSPLIT (!exactly || fld_i == *n_flds, "expecting %u fields but found more. str=\"%.*s\"", *n_flds, str_len, str);
 
     *n_flds = fld_i;
 
@@ -828,12 +829,12 @@ void str_nul_separate_do (STRps(item))
 }
 
 // generate new string (mem allocated by caller) - copy of in, but removing all ASCII < 33 or > 126 
-uint32_t str_remove_whitespace (STRp(in), char *out)
+uint32_t str_remove_whitespace (STRp(in), bool also_uppercase, char *out)
 {
     uint32_t out_len = 0;
     for (uint32_t i=0; i < in_len; i++)
         if (in[i] >= 33 && in[i] <= 126) 
-            out[out_len++] = in[i];
+            out[out_len++] = also_uppercase ? UPPER_CASE(in[i]) : in[i];
 
     return out_len;
 }

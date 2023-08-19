@@ -259,7 +259,7 @@ void fasta_seg_initialize (VBlockP vb)
 
     // if this neocleotide FASTA of unrelated contigs, we're better off with ACGT        
     if (!flag.multiseq && segconf.seq_type == SQT_NUKE)
-        codec_acgt_comp_init (VB, FASTA_NONREF);
+        codec_acgt_seg_initialize (VB, FASTA_NONREF, true);
 
     // if the contigs in this FASTA are related, let codec_assign_best_codec assign the bext codec 
     else 

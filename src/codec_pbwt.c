@@ -413,7 +413,7 @@ CODEC_RECONSTRUCT (codec_pbwt_reconstruct)
     Allele ht = '*';
     do { 
         ht = NEXTLOCAL (Allele, vb->ht_matrix_ctx);
-    } while (ht == '*' && vb->ht_matrix_ctx->next_local < vb->ht_matrix_ctx->local.len);
+    } while (ht == '*' && vb->ht_matrix_ctx->next_local < vb->ht_matrix_ctx->local.len32);
 
     if (vb->drop_curr_line) return;
 

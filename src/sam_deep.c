@@ -494,7 +494,7 @@ static void sam_piz_deep_add_seq (VBlockSAMP vb, STRp(seq))
     }
 
     // if only A,C,G,T - pack in 2-bits
-    else if (str_is_only_ACGT (STRa(seq), NULL)) {
+    else if (str_is_ACGT (STRa(seq), NULL)) {
         sam_piz_alloc_deep_ents (vb, 4 + seq_len + 2*sizeof(uint64_t)/*padding for Bits*/); 
 
         uint32_t pack_index = ROUNDUP8 (vb->deep_ents.len32); // 64b word-align as required by Bits

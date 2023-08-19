@@ -166,7 +166,7 @@ void serializer_lock_do (SerializerP ser, VBIType vb_i, FUNCLINE)
         usleep (WAIT_TIME_USEC);
 
         // timeout after approx 30 minutes
-        ASSERT (i < TIMEOUT*(1000000/WAIT_TIME_USEC), "called from %s:%u: Timeout (%u sec) while waiting for serializer %s in vb=%u. vb_i_last=%u", 
+        ASSERT (i < TIMEOUT * (1000000 / WAIT_TIME_USEC), "called from %s:%u: Timeout (%u sec) while waiting for serializer %s in vb=%u. vb_i_last=%u", 
                 func, code_line, TIMEOUT, ser->name, vb_i, ser->vb_i_last);
     }
 }

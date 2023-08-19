@@ -22,8 +22,8 @@ typedef enum __attribute__ ((__packed__)) { BUF_UNALLOCATED=0, BUF_REGULAR,   BI
 
 typedef struct { 
     bool lock;
-    uint16_t link_count;        // # of buffers pointing to this spinlock. >= Buffer user count, bc if buffer splits, spinlock doesn't.
-} BufferSpinlock;               // see internal-docs/overlay-logic.txt
+    uint16_t link_count;       // # of buffers pointing to this spinlock. >= Buffer user count, bc if buffer splits, spinlock doesn't.
+} BufferSpinlock;              // see internal-docs/overlay-logic.txt
 
 typedef struct Buffer {        // 72 bytes
     //------------------------------------------------------------------------------------------------------
@@ -36,6 +36,7 @@ typedef struct Buffer {        // 72 bytes
         int64_t param;    
         int64_t next;     
         int64_t count;    
+        uint64_t n_cols;       // for matrices
         uint64_t nbits;        // for Bits
         int32_t newest_index;  // for lookback
         uint32_t prm32[2];

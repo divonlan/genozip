@@ -73,7 +73,7 @@
 #define decl_zctx(did_i) ContextP zctx = ZCTX(did_i)
 
 // ZIP only
-typedef struct CtxNode {
+typedef struct CtxNode {      // 128 bit
     CharIndex char_index;     // character index into dictionary array
     uint32_t snip_len;        // not including \0 terminator present in dictionary array
     union {

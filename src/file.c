@@ -86,7 +86,7 @@ FileType file_get_z_ft_by_txt_in_ft (DataType dt, FileType txt_ft)
 Codec file_get_codec_by_txt_ft (DataType dt, FileType txt_ft, bool source)
 {
     if (source && txt_ft == BAM) return CODEC_BAM; // if !source, it would be CODEC_BGZF
-    if (source && txt_ft == BCF) return CODEC_BCF; 
+    if (txt_ft == BCF || txt_ft == BCF_GZ || txt_ft == BCF_BGZF) return CODEC_BCF; 
 
     for (unsigned i=0; txt_in_ft_by_dt[dt][i].in; i++)
         if (txt_in_ft_by_dt[dt][i].in == txt_ft) 
@@ -958,6 +958,8 @@ FileP file_open_z_write (rom filename, FileMode mode, DataType data_type)
 // index file is it is a disk file of a type that can be indexed
 static void file_index_txt (ConstFileP file)
 {
+    ASSERTNOTNULL (file);
+
     RETURNW (file->name,, "%s: cannot create an index file when output goes to stdout", global_cmd);
 
     StreamP indexing = NULL;
@@ -1084,6 +1086,7 @@ void file_write (FileP file, const void *data, unsigned len)
 {
     if (!len) return; // nothing to do
 
+    ASSERTNOTNULL (file);
     ASSERTNOTNULL (file->file);
     ASSERTNOTNULL (data);
     
@@ -1199,6 +1202,9 @@ bool file_seek (FileP file, int64_t offset,
 
 int64_t file_tell_do (FileP file, FailType soft_fail, rom func, unsigned line)
 {
+    ASSERTNOTNULL (file);
+    ASSERTNOTNULL (file->file);
+
     if (IS_ZIP && file->supertype == TXT_FILE && file->codec == CODEC_GZ)
         return gzconsumed64 ((gzFile)file->file); 
     
@@ -1333,6 +1339,7 @@ bool file_put_data (rom filename, const void *data, uint64_t len,
     // we can't enter if file_put_data_abort is active, or it needs to wait for us before deleting tmp files
     mutex_lock (put_data_mutex);
 
+    remove (filename);
     int renamed_failed = rename (tmp_filename, filename);
 
     put_data_tmp_filenames[my_file_i] = NULL; // remove tmp file name from list 
@@ -1375,7 +1382,7 @@ PutLineFn file_put_line (VBlockP vb, STRp(line), rom msg)
 
     if (IS_PIZ)
         WARN ("\n%s line=%s line_in_file(1-based)=%"PRIu64". Dumped %s (dumping first occurance only)", 
-                msg, line_name(vb).s, writer_get_txt_line_i (vb), fn.s);
+                msg, line_name(vb).s, writer_get_txt_line_i (vb, vb->line_i), fn.s);
     else
         WARN ("\n%s line=%s vb_size=%u MB. Dumped %s", msg, line_name(vb).s, (int)(segconf.vb_size >> 20), fn.s);
 

@@ -56,9 +56,17 @@ void vcf_zip_initialize (void)
 // called after each file
 void vcf_zip_finalize (bool is_last_user_txt_file)
 {
-    if (flag.let_OS_cleanup_on_exit) return; // no need to waste time freeing if this is the last file - the process will die momentarily
+    // if REFALT takes more than 10% of z_file, advise on using --reference (note: if GVCF, we already advised in vcf_seg_finalize_segconf)
+    decl_zctx(VCF_REFALT);
+    int refalt_z_pc = 100 * (zctx->dict.count + zctx->b250.count + zctx->local.count) / z_file->disk_size;
 
-    if (z_is_dvcf) gencomp_destroy();
+    if (!flag.reference && refalt_z_pc > 10)
+        TIP ("Compressing a this %s file using a reference file can reduce the compressed file's size by %d%%-%d%%.\n"
+             "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
+             z_dt_name(), refalt_z_pc / 3, (int)((float)refalt_z_pc / 1.5), arch_get_argv0(), txt_file->name);
+
+    if (!flag.let_OS_cleanup_on_exit && z_is_dvcf) // note: no need to waste time freeing if this is the last file - the process will die momentarily
+        gencomp_destroy();
 }
 
 // detect if a generic file is actually a vcf
@@ -234,6 +242,7 @@ void vcf_seg_initialize (VBlockP vb_)
     if (segconf.vcf_is_dbSNP)       vcf_dbsnp_seg_initialize (vb);
     if (segconf.vcf_is_giab_trio)   vcf_giab_seg_initialize (vb);
     if (segconf.vcf_is_isaac)       vcf_isaac_seg_initialize (vb);
+    if (segconf.vcf_is_manta)       vcf_manta_seg_initialize (vb);
     if (segconf.vcf_is_gnomad)      CTX(VCF_QUAL)->no_stons = true;
 }             
 
@@ -401,6 +410,7 @@ bool vcf_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id/*dict_id
     return 
         dict_id.num    == _VCF_REFALT  ||
         dict_id.num    == _VCF_oREFALT ||
+        dict_id.num    == _VCF_QUAL    || // QUAL is sometimes in upper tens of thousands, but hash calculated to 64K
         dict_id.num    == _INFO_RAW_MQ ||
         st_dict_id.num == _FORMAT_PLn  || // P1Ln1 etc are often big
         st_dict_id.num == _FORMAT_PLy  ||
@@ -571,7 +581,11 @@ rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
     if (flag.add_line_numbers) 
         vcf_seg_add_line_number (vb, VCF_ID_len);
     else {
-        seg_id_field (VB, CTX(VCF_ID), VCF_ID_str, VCF_ID_len, true);
+        if (segconf.vcf_is_manta)
+            vcf_seg_manta_ID (vb, STRd(VCF_ID));
+        else
+            seg_id_field (VB, CTX(VCF_ID), VCF_ID_str, VCF_ID_len, true);
+        
         seg_set_last_txt (VB, CTX(VCF_ID), STRd(VCF_ID));
     }
 
@@ -668,8 +682,10 @@ rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
             gencomp_seg_add_line (VB, vb->line_coords, field_start_line, line_len);
 
             // in a VCF_COMP_MAIN VB, single-coordinate lines won't be displayed in the opposite reconstruction
-            if (vb->line_coords == DC_PRIMARY) vb->recon_size_luft = save_recon_size - line_len;
-            else  /* DC_LUFT  */               vb->recon_size      = save_recon_size - line_len;
+            if (vb->line_coords == DC_PRIMARY) 
+                vb->recon_size_luft = save_recon_size - line_len;
+            else  /* DC_LUFT  */               
+                vb->recon_size      = save_recon_size - line_len;
         
             // unaccount for this line, if its a Luft-only line in a dual-coordinate variant (i.e. main VCF data line) as it won't appear in the default reconstruction
             if (vb->vb_coords == DC_BOTH && vb->line_coords == DC_LUFT)

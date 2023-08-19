@@ -903,9 +903,15 @@ static FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt)
                 case DT_VCF: 
                     sprintf (str.s, "coords=%s null_DP=%u", vcf_coords_name (f.vb_header.vcf.coords), f.vb_header.vcf.use_null_DP_method);
                     break;
+                
                 case DT_SAM: case DT_BAM:
                     if (VER(13) && !VER(14)) sprintf (str.s, "sorted=%u collated=%u", f.vb_header.sam.v13_is_sorted, f.vb_header.sam.v13_is_collated);
                     break;
+                
+                case DT_GFF:
+                    if (VER(15)) sprintf (str.s, "embedded_fasta=%u", f.vb_header.gff.embedded_fasta);
+                    break;
+                
                 default:
                     str.s[0] = 0;
             }

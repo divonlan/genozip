@@ -369,6 +369,10 @@ void buflist_free_vb (VBlockP vb)
     buflist_sort (vb, true); // need buffers to be sorted to erase the space between them
     
     uint32_t sizeof_vb = get_vb_size (vb->data_type); // note: buffers are expected in current data_type part of buffer, not in the unused portion due to an historical alloced_data_type
+    
+    ASSERT (sizeof_vb <= get_vb_size (vb->data_type_alloced), "Expecting vb_i=%u vb->id=%u data_type=%s to be of size >= %u, but it is allocated as %s of size %u",
+            vb->vblock_i, vb->id, dt_name (vb->data_type), sizeof_vb, dt_name (vb->data_type_alloced), get_vb_size (vb->data_type_alloced));
+
     VBIType vb_i = vb->vblock_i; // save before it is erased
 
     char *start_erase = (char *)&vb->in_use + 1; // in_use is last in "fields that survive buflist_free_vb"
@@ -628,6 +632,13 @@ static bool buflist_test_overflows_do (VBlockP vb, bool primary, rom msg)
         // case: buf was 'buf_destroy'd
         if (BL_IS_REMOVED (ent->buf)) continue;  
 
+        if (!buf) {
+            buflist_display (vb);
+            fprintf (stderr, "%s: buf=NULL for buf_i=%u in vb->buffer_list ^^^. buffer_list=%s", VB_NAME, buf_i, buf_desc(&vb->buffer_list).s);
+            corruption = "buffer_list has entry with buf=NULL";
+            goto done;
+        }
+
 #ifdef WIN32
         if (IsBadReadPtr (ent->buf, sizeof (Buffer))) {
             fprintf (stderr, "%s%s: Memory corruption in vb->id=%d (vb->vblock_i=%d) buffer=%p func=%s:%u \"%s\" (buf_i=%u): buffer structure inaccessible (invalid pointer)\n", 
@@ -645,15 +656,15 @@ static bool buflist_test_overflows_do (VBlockP vb, bool primary, rom msg)
 
         if (vb && buf->vb != vb) {
             fprintf (stderr, "%s%s: Memory corruption in vb->id=%d (vb->vblock_i=%d) buffer=%p func=%s:%u \"%s\" (buf_i=%u): Corrupt Buffer structure OR invalid buffer pointer - buf->vb=%p != vb=%p\n", 
-                        nl[primary], msg, vb->id, vb->vblock_i, buf, fcn, buf_i, buf->vb, vb);
+                     nl[primary], msg, vb->id, vb->vblock_i, buf, fcn, buf_i, buf->vb, vb);
             buflist_locate (buf, "Corrupt Buffer");
             corruption = "VB mismatch";
         }
         else if (buf->data && buf->vb->vblock_i != vb->vblock_i) { // buffers might still be here from the previous incarnation of this vb - its ok if they're not allocated yet
                     fprintf (stderr, "%s%s: Memory corruption in vb_id=%d: buf_vb_i=%d differs from thread_vb_i=%d: buffer: %s %p func: %s:%u \"%s\" memory: %p-%p name: %s vb_i=%u buf_i=%u\n",
-                    nl[primary], msg, vb ? vb->id : -999, buf->vb->vblock_i, vb->vblock_i, buf_type_name(buf), 
-                    buf, fcn, buf->memory, buf->memory + buf_mem_size (buf)-1,
-                    buf_desc (buf).s, buf->vb->vblock_i, buf_i);
+                             nl[primary], msg, vb ? vb->id : -999, buf->vb->vblock_i, vb->vblock_i, buf_type_name(buf), 
+                             buf, fcn, buf->memory, buf->memory + buf_mem_size (buf)-1,
+                             buf_desc (buf).s, buf->vb->vblock_i, buf_i);
             corruption = "vblock_i mismatch";
         }
         else if (buf->type < 0 || buf->type > BUF_NUM_TYPES) {
@@ -664,16 +675,16 @@ static bool buflist_test_overflows_do (VBlockP vb, bool primary, rom msg)
         }
         else if (!buf->name) {
             fprintf (stderr, "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d): buffer=%p func=%s:%u \"%s\" (buf_i=%u): Corrupt Buffer structure - null name", 
-                        nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, buf, fcn, buf_i);
+                     nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, buf, fcn, buf_i);
             fprintf (stderr, " Buffer=%s\n", buf_desc(buf).s);  // separate fprintf in case it seg faults
             corruption = "missing name";
         }
         else if (BUNDERFLOW(buf) != UNDERFLOW_TRAP) {
             fprintf (stderr, 
-                    "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d): Underflow: buffer: %s %p func: %s:%u memory: %p-%p name: %s vb_i=%u buf_i=%u. Fence=%c%c%c%c%c%c%c%c\n",
-                    nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, buf_type_name(buf), buf, func, code_line, buf->memory, buf->memory+buf_mem_size(buf)-1, 
-                    buf_desc (buf).s, buf->vb->vblock_i, buf_i, 
-                    buf->memory[0], buf->memory[1], buf->memory[2], buf->memory[3], buf->memory[4], buf->memory[5], buf->memory[6], buf->memory[7]);
+                     "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d): Underflow: buffer: %s %p func: %s:%u memory: %p-%p name: %s vb_i=%u buf_i=%u. Fence=%c%c%c%c%c%c%c%c\n",
+                     nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, buf_type_name(buf), buf, func, code_line, buf->memory, buf->memory+buf_mem_size(buf)-1, 
+                     buf_desc (buf).s, buf->vb->vblock_i, buf_i, 
+                     buf->memory[0], buf->memory[1], buf->memory[2], buf->memory[3], buf->memory[4], buf->memory[5], buf->memory[6], buf->memory[7]);
 
             buf_unlock;
             buflist_find_underflow_culprit (vb, buf->memory, msg);
@@ -687,9 +698,9 @@ static bool buflist_test_overflows_do (VBlockP vb, bool primary, rom msg)
         else if (BOVERFLOW(buf) != OVERFLOW_TRAP) {
             char *of = &buf->memory[buf->size + sizeof(uint64_t)];
             fprintf (stderr,
-                    "%s%s: Memory corruption in vb_id=%d (vb_i=%d): Overflow: buffer: %s %p func: %s:%u memory: %p-%p name: %s vb_i=%u buf_i=%u Fence=%c%c%c%c%c%c%c%c\n",
-                    nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, buf_type_name(buf), buf, func, code_line, buf->memory, buf->memory+buf_mem_size(buf)-1, 
-                    buf_desc (buf).s, buf->vb->vblock_i, buf_i, of[0], of[1], of[2], of[3], of[4], of[5], of[6], of[7]);
+                     "%s%s: Memory corruption in vb_id=%d (vb_i=%d): Overflow: buffer: %s %p func: %s:%u memory: %p-%p name: %s vb_i=%u buf_i=%u Fence=%c%c%c%c%c%c%c%c\n",
+                     nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, buf_type_name(buf), buf, func, code_line, buf->memory, buf->memory+buf_mem_size(buf)-1, 
+                     buf_desc (buf).s, buf->vb->vblock_i, buf_i, of[0], of[1], of[2], of[3], of[4], of[5], of[6], of[7]);
             
             if (primary) buflist_test_overflows_all_other_vb (vb, msg, false);
             primary = false;
@@ -698,9 +709,10 @@ static bool buflist_test_overflows_do (VBlockP vb, bool primary, rom msg)
         }
 
     done_one_buf:
-        buf_unlock; // promiscuous lock
+        if (buf) buf_unlock; // promiscuous lock
     }
     
+    done: 
     buf_unlock; // buf_list lock
 
     ASSERT (!primary || !corruption, "Aborting due to memory corruption \"%s\"", corruption); // primary will exit on corruption

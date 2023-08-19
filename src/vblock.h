@@ -16,8 +16,8 @@
 #include "data_types.h"
 #include "sections.h"
 
-#define NUM_CODEC_BUFS 7       // bzlib2 compress requires 4 and decompress requires 2 ; lzma compress requires 7 and decompress 1
-                               // if updating, also update array in codec_alloc()
+#define NUM_CODEC_BUFS 7          // bzlib2 compress requires 4 and decompress requires 2 ; lzma compress requires 7 and decompress 1
+                                  // if updating, also update array in codec_alloc()
 
 #define VBLOCK_COMMON_FIELDS \
     /************* fields that survive buflist_free_vb *************/ \
@@ -161,10 +161,10 @@
     Buffer section_list_buf;      /* ZIP only: all the sections non-dictionary created in this vb. we collect them as the vb is processed, and add them to the zfile list in correct order of VBs. */\
     \
     /* used by CODEC_PBWT */ \
-    Context *runs_ctx, *fgrc_ctx; /* possibly diffrent did_i for different data types */\
+    ContextP runs_ctx, fgrc_ctx;  /* possibly diffrent did_i for different data types */\
     \
     /* used by CODEC_PBWT, CODEC_HAPMAT */ \
-    Context *ht_matrix_ctx; \
+    ContextP ht_matrix_ctx; \
     uint32_t ht_per_line; \
     \
     /* copies of the values in flag, for flags that may change during the execution */\
@@ -197,9 +197,9 @@ extern void vb_destroy_vb_do (VBlockP *vb_p, rom func);
 
 extern void vb_dehoard_memory (VBlockP vb);
 
-#define VB_ID_EVB           -1 // ID of VB used by main thread 
+#define VB_ID_EVB           -1  // ID of VB used by main thread 
 #define VB_ID_WRITER        -2
-#define VB_ID_SEGCONF       -3 // ID of VB used by segconf_calculate
+#define VB_ID_SEGCONF       -3  // ID of VB used by segconf_calculate
 #define VB_ID_DEPN_SCAN     -4
 #define VB_ID_COMPRESS_DEPN -5
 #define NUM_NONPOOL_VBs      5

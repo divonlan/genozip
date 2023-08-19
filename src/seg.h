@@ -105,10 +105,12 @@ extern void seg_diff (VBlockP vb, ContextP ctx, ContextP base_ctx, STRp(value), 
 
 extern WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_did_i, rom value, int32_t value_len, char sep, char subarray_sep, bool use_integer_delta, StoreType store_in_local, DictId arr_dict_id, int add_bytes);
 
+extern void seg_uint32_matrix (VBlockP vb, ContextP container_ctx, Did stats_conslidation_did_i, STRp(value), char row_sep/*255 if always single row*/, char col_sep, bool is_transposed, int add_bytes);
+
 typedef bool (*SegCallback) (VBlockP vb, ContextP ctx, STRp(value), uint32_t repeat); // returns true if segged successfully
 extern bool seg_do_nothing_cb (VBlockP vb, ContextP ctx, STRp(field), uint32_t rep);
 
-extern bool seg_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), const SegCallback *callbacks, unsigned add_bytes);
+extern bool seg_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), const SegCallback *callbacks, unsigned add_bytes, bool account_in_subfields);
 extern int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), const SegCallback *callbacks, unsigned add_bytes);
 
 extern void seg_array_of_array_of_struct (VBlockP vb, ContextP ctx, char outer_sep, MediumContainer inner_con, STRp(snip), const SegCallback *callbacks);

@@ -73,7 +73,7 @@ CODEC_RECONSTRUCT (codec_normq_reconstruct)
 {   
     if (!ctx->is_loaded) return;
 
-    ReconType reconstruct = true;
+    ReconType reconstruct = RECON_ON;
 
     rom next_qual = Bc(ctx->local, ctx->next_local);
 

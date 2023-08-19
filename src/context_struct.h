@@ -219,6 +219,7 @@ typedef struct Context {
         int32_t ctx_specific;
         bool last_is_alt;           // CHROM (all DTs): ZIP: last CHROM was an alt
         bool last_is_new;           // SAM_QNAME:       ZIP: used in segconf.running
+        bool has_len;               // INFO_ANN subfields of cDNA, CDS, AA: ZIP
         int32_t last_repeat;        // OPTION_tp_B_c:   PIZ
         struct {                    // INFO_DP:
             int32_t by_format_dp        : 1;   // ZIP/PIZ: segged vs sum of FORMAT/DP
@@ -249,6 +250,7 @@ typedef struct Context {
                                //      Each struct is truncated to used items, followed by prefixes. 
                                // ZIP: seg_array, sam_seg_array_field_get_con cache a container.
     Buffer ctx_cache;          // PIZ: used to cached Contexts of Multiplexers and other dict_id look ups
+    Buffer packed;             // PIZ: used by contexts that compressed CODEC_ACTG               
     
     // ZIP: context specific
     Buffer value_to_bin;       // ZIP: Used by LONGR codec on *_DOMQRUNS contexts

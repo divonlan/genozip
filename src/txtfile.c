@@ -31,12 +31,14 @@
 
 #define MAX_TXT_HEADER_LEN ((uint64_t)0xffffffff) // maximum length of txt header - one issue with enlarging it is that we digest it in one go, and the digest module is 32 bit
 
-// dump bad vb to disk
+// PIZ: dump bad vb to disk
 rom txtfile_dump_vb (VBlockP vb, rom base_name)
 {
     char *dump_filename = MALLOC (strlen (base_name) + 100); // we're going to leak this allocation
     sprintf (dump_filename, "%s.vblock-%u.start-%"PRIu64".len-%u.bad", 
-             base_name, vb->vblock_i, vb->vb_position_txt_file, Ltxt);
+            base_name, vb->vblock_i, vb->vb_position_txt_file, Ltxt);
+
+    if (flag.is_windows) str_replace_letter (dump_filename, strlen(dump_filename), '/', '\\');
 
     buf_dump_to_file (dump_filename, &vb->txt_data, 1, false, false, false, true);
 

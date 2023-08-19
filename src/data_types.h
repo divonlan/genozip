@@ -195,7 +195,7 @@ extern DataTypeProperties dt_props[NUM_DATATYPES], dt_props_def;
 
 typedef struct DataTypeFields {
     const unsigned num_fields;
-    const Did pos, nonref, prim_chrom, luft_chrom, luft_pos; // the fields, or DID_NONE if this data type doesn't have them
+    const Did pos, prim_chrom, luft_chrom, luft_pos; // the fields, or DID_NONE if this data type doesn't have them
     const Did qname; // some ID of the line (in addition to CHROM and POS) to be printed by ASSPIZ in case of an error
     DictId eol, toplevel;
     struct { 
@@ -208,22 +208,22 @@ typedef struct DataTypeFields {
 #define TOPLEVEL "TOPLEVEL"
 
 #define DATA_TYPE_FIELDS { \
-/* num_fields        pos              nonref        prim_chrom      luft_chrom      luft_pos         qname            eol             toplevel             predefined        */ \
-  {NUM_REF_FIELDS,   DID_NONE,        DID_NONE,     CHROM,          DID_NONE,       DID_NONE,        DID_NONE,        {},             {},                  REF_PREDEFINED    }, \
-  {NUM_VCF_FIELDS,   VCF_POS,         DID_NONE,     CHROM,          VCF_oCHROM,     VCF_oPOS,        DID_NONE,        {_VCF_EOL},     {_VCF_TOPLEVEL},     VCF_PREDEFINED    }, \
-  {NUM_SAM_FIELDS,   SAM_POS,         SAM_NONREF,   CHROM,          DID_NONE,       DID_NONE,        SAM_QNAME,       {_SAM_EOL},     {_SAM_TOPLEVEL},     SAM_PREDEFINED    }, \
-  {NUM_FASTQ_FIELDS, DID_NONE,        FASTQ_NONREF, CHROM,          DID_NONE,       DID_NONE,        FASTQ_QNAME,     {_FASTQ_E1L},   {_FASTQ_TOPLEVEL},   FASTQ_PREDEFINED  }, \
-  {NUM_FASTA_FIELDS, DID_NONE,        FASTA_NONREF, CHROM,          DID_NONE,       DID_NONE,        DID_NONE,        {_FASTA_EOL},   {_FASTA_TOPLEVEL},   FASTA_PREDEFINED  }, \
-  {NUM_GFF_FIELDS,   GFF_START,       DID_NONE,     CHROM,          DID_NONE,       DID_NONE,        DID_NONE,        {_GFF_EOL},     {_GFF_TOPLEVEL},     GFF_PREDEFINED    }, \
-  {NUM_ME23_FIELDS,  ME23_POS,        DID_NONE,     CHROM,          DID_NONE,       DID_NONE,        DID_NONE,        {_ME23_EOL},    {_ME23_TOPLEVEL},    ME23_PREDEFINED   }, \
-  {NUM_SAM_FIELDS,   SAM_POS,         SAM_NONREF,   CHROM,          DID_NONE,       DID_NONE,        SAM_QNAME,       {_SAM_EOL},     {_SAM_TOP2BAM},      SAM_PREDEFINED    }, \
-  {NUM_VCF_FIELDS,   VCF_POS,         DID_NONE,     CHROM,          VCF_oCHROM,     VCF_oPOS,        DID_NONE,        {_VCF_EOL},     {_VCF_TOPLEVEL},     VCF_PREDEFINED    }, \
-  {NUM_GNRIC_FIELDS, DID_NONE,        DID_NONE,     DID_NONE,       DID_NONE,       DID_NONE,        DID_NONE,        {},             {_GNRIC_TOPLEVEL},   GNRIC_PREDEFINED  }, \
-  {NUM_PHY_FIELDS,   DID_NONE,        DID_NONE,     DID_NONE,       DID_NONE,       DID_NONE,        DID_NONE,        {_PHY_EOL},     {_PHY_TOPLEVEL},     PHY_PREDEFINED    }, \
-  {NUM_CHAIN_FIELDS, CHAIN_STARTPRIM, DID_NONE,     CHAIN_NAMEPRIM, CHAIN_NAMELUFT, CHAIN_STARTLUFT, DID_NONE,        {_CHAIN_EOL},   {_CHAIN_TOPLEVEL},   CHAIN_PREDEFINED  }, \
-  {NUM_KRAKEN_FIELDS,DID_NONE,        DID_NONE,     DID_NONE,       DID_NONE,       DID_NONE,        KRAKEN_QNAME,    {_KRAKEN_EOL},  {_KRAKEN_TOPLEVEL},  KRAKEN_PREDEFINED }, \
-  {NUM_LOCS_FIELDS,  DID_NONE,        DID_NONE,     DID_NONE,       DID_NONE,       DID_NONE,        DID_NONE,        {},             {_LOCS_TOPLEVEL},    LOCS_PREDEFINED   }, \
-  {NUM_BED_FIELDS,   BED_START,       DID_NONE,     CHROM,          DID_NONE,       DID_NONE,        DID_NONE,        {_BED_EOL},     {_BED_TOPLEVEL},     BED_PREDEFINED    }, \
+/* num_fields        pos              prim_chrom      luft_chrom      luft_pos         qname            eol             toplevel             predefined        */ \
+  {NUM_REF_FIELDS,   DID_NONE,        CHROM,          DID_NONE,       DID_NONE,        DID_NONE,        {},             {},                  REF_PREDEFINED    }, \
+  {NUM_VCF_FIELDS,   VCF_POS,         CHROM,          VCF_oCHROM,     VCF_oPOS,        DID_NONE,        {_VCF_EOL},     {_VCF_TOPLEVEL},     VCF_PREDEFINED    }, \
+  {NUM_SAM_FIELDS,   SAM_POS,         CHROM,          DID_NONE,       DID_NONE,        SAM_QNAME,       {_SAM_EOL},     {_SAM_TOPLEVEL},     SAM_PREDEFINED    }, \
+  {NUM_FASTQ_FIELDS, DID_NONE,        CHROM,          DID_NONE,       DID_NONE,        FASTQ_QNAME,     {_FASTQ_E1L},   {_FASTQ_TOPLEVEL},   FASTQ_PREDEFINED  }, \
+  {NUM_FASTA_FIELDS, DID_NONE,        CHROM,          DID_NONE,       DID_NONE,        DID_NONE,        {_FASTA_EOL},   {_FASTA_TOPLEVEL},   FASTA_PREDEFINED  }, \
+  {NUM_GFF_FIELDS,   GFF_START,       CHROM,          DID_NONE,       DID_NONE,        DID_NONE,        {_GFF_EOL},     {_GFF_TOPLEVEL},     GFF_PREDEFINED    }, \
+  {NUM_ME23_FIELDS,  ME23_POS,        CHROM,          DID_NONE,       DID_NONE,        DID_NONE,        {_ME23_EOL},    {_ME23_TOPLEVEL},    ME23_PREDEFINED   }, \
+  {NUM_SAM_FIELDS,   SAM_POS,         CHROM,          DID_NONE,       DID_NONE,        SAM_QNAME,       {_SAM_EOL},     {_SAM_TOP2BAM},      SAM_PREDEFINED    }, \
+  {NUM_VCF_FIELDS,   VCF_POS,         CHROM,          VCF_oCHROM,     VCF_oPOS,        DID_NONE,        {_VCF_EOL},     {_VCF_TOPLEVEL},     VCF_PREDEFINED    }, \
+  {NUM_GNRIC_FIELDS, DID_NONE,        DID_NONE,       DID_NONE,       DID_NONE,        DID_NONE,        {},             {_GNRIC_TOPLEVEL},   GNRIC_PREDEFINED  }, \
+  {NUM_PHY_FIELDS,   DID_NONE,        DID_NONE,       DID_NONE,       DID_NONE,        DID_NONE,        {_PHY_EOL},     {_PHY_TOPLEVEL},     PHY_PREDEFINED    }, \
+  {NUM_CHAIN_FIELDS, CHAIN_STARTPRIM, CHAIN_NAMEPRIM, CHAIN_NAMELUFT, CHAIN_STARTLUFT, DID_NONE,        {_CHAIN_EOL},   {_CHAIN_TOPLEVEL},   CHAIN_PREDEFINED  }, \
+  {NUM_KRAKEN_FIELDS,DID_NONE,        DID_NONE,       DID_NONE,       DID_NONE,        KRAKEN_QNAME,    {_KRAKEN_EOL},  {_KRAKEN_TOPLEVEL},  KRAKEN_PREDEFINED }, \
+  {NUM_LOCS_FIELDS,  DID_NONE,        DID_NONE,       DID_NONE,       DID_NONE,        DID_NONE,        {},             {_LOCS_TOPLEVEL},    LOCS_PREDEFINED   }, \
+  {NUM_BED_FIELDS,   BED_START,       CHROM,          DID_NONE,       DID_NONE,        DID_NONE,        {_BED_EOL},     {_BED_TOPLEVEL},     BED_PREDEFINED    }, \
 }
 
 extern DataTypeFields dt_fields[NUM_DATATYPES];
@@ -279,7 +279,7 @@ typedef struct DtTranslation {
     /* Phylip to FASTA      */ { DT_PHYLIP,  false,   DT_FASTA,  { _PHY_TOP2FASTA },     1.1, txtheader_phy2fa,    true,     false, NULL                  }, \
     /* VCF: genocat --luft  */ { DT_VCF,     false,   DT_VCF,    { _VCF_TOPLUFT },       1,   NULL,                true,     false, vcf_vb_is_luft        }, /* Length of --luft is exactly recon_size_luft*/ \
     /* genocat --taxid      */ { DT_KRAKEN,  false,   DT_NONE,   { _KRAKEN_TOP2TAXID },  1,   NULL,                true,     false, kraken_is_translation }, \
-    /* LOCS reconstruction  */ { DT_LOCS,    true,  DT_LOCS,   { _LOCS_TOPLEVEL },     1,   NULL,                true,     true,  NULL                  }, \
+    /* LOCS reconstruction  */ { DT_LOCS,    true,    DT_LOCS,   { _LOCS_TOPLEVEL },     1,   NULL,                true,     true,  NULL                  }, \
 }
 
 extern const DtTranslation dt_get_translation (VBlockP vb);

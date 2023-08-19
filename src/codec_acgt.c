@@ -15,6 +15,7 @@
 #include "piz.h"
 #include "context.h"
 #include "file.h"
+#include "seg.h"
 
 // -------------------------------------------------------------------------------------
 // acgt stuff
@@ -58,16 +59,31 @@ const uint8_t acgt_encode_comp[256] =
 // ZIP side
 //--------------
 
-void codec_acgt_comp_init (VBlockP vb, Did nonref_did_i)
+void codec_acgt_seg_initialize (VBlockP vb, Did nonref_did_i,
+                                bool has_x) // caller declares that sequences contain strictly only A,C,G,T (uppercase) - verified by caller
 {
-        Context *nonref_ctx     = CTX(nonref_did_i);
+        ContextP nonref_ctx     = CTX(nonref_did_i);
         nonref_ctx->lcodec      = CODEC_ACGT; // ACGT is better than LZMA and BSC
         nonref_ctx->ltype       = LT_SEQUENCE;
+        nonref_ctx->no_stons    = true;       // we're storing the sequencing in local, so we can't also have singletons
+        nonref_ctx->flags.acgt_no_x = !has_x;
 
-        Context *nonref_x_ctx   = nonref_ctx + 1;
-        nonref_x_ctx->ltype     = LT_UINT8;
-        nonref_x_ctx->local_dep = DEP_L1;     // NONREF_X.local is created with NONREF.local is compressed
-        nonref_x_ctx->lcodec    = CODEC_XCGT; // prevent codec_assign_best from assigning it a different codec
+        if (has_x) {
+            ContextP nonref_x_ctx   = nonref_ctx + 1;
+            nonref_x_ctx->ltype     = LT_UINT8;
+            nonref_x_ctx->local_dep = DEP_L1;     // NONREF_X.local is created with NONREF.local is compressed
+            nonref_x_ctx->lcodec    = CODEC_XCGT; // prevent codec_assign_best from assigning it a different codec
+        }
+}
+
+void codec_acgt_seg (VBlockP vb, ContextP ctx, STRp (seq))
+{
+    if (!ctx->flags.acgt_no_x || str_is_ACGT (STRa(seq), NULL))
+        seg_add_to_local_text (vb, ctx, STRa(seq), LOOKUP_WITH_LENGTH, seq_len);
+    
+    // case no X context, and seq isn't strictly A,C,G or T - seg to the dictionary (note: if this is expected, better have an X context)
+    else
+        seg_by_ctx (vb, STRa(seq), ctx, seq_len); // can't add to local, because this is CODEC_ACGT has no_x
 }
 
 // packing of an array A,C,G,T characters into a 2-bit Bits, stored in vb->scratch. 
@@ -102,12 +118,14 @@ COMPRESS (codec_acgt_compress)
     
     #define PACK(data,len) { if (len) codec_acgt_pack (packed, (data), (len)); }
 
-    Context *nonref_ctx   = ctx;
-    Context *nonref_x_ctx = nonref_ctx + 1;
-    Bits *packed;
+    ContextP nonref_ctx = ctx;
+    bool has_x = !nonref_ctx->flags.acgt_no_x;
 
+    ContextP nonref_x_ctx = has_x ? (nonref_ctx + 1) : NULL;
+    BitsP packed;
+    
     // case: this is our second entry, after soft-failing. Just continue from where we stopped
-    if (nonref_x_ctx->local.len) {
+    if (has_x && nonref_x_ctx->local.len) {
         packed = (BitsP)&vb->scratch;
         goto compress_sub;
     }
@@ -121,18 +139,23 @@ COMPRESS (codec_acgt_compress)
     // option 1 - pack contiguous data
     if (uncompressed) {
         // overlay the NONREF.local to NONREF_X.local to avoid needing more memory, as NONREF.local is not needed after packing
-        buf_set_shared (&nonref_ctx->local);
-        buf_overlay (vb, &nonref_x_ctx->local, &nonref_ctx->local, CTX_TAG_LOCAL);
+        if (has_x) {
+            buf_set_shared (&nonref_ctx->local);
+            buf_overlay (vb, &nonref_x_ctx->local, &nonref_ctx->local, CTX_TAG_LOCAL);
+        }
 
         PACK (uncompressed, *uncompressed_len); // pack into vb->scratch
 
         // calculate the exception in-place in NONREF.local also overlayed to NONREF_X.local
-        for (uint32_t i=0; i < *uncompressed_len; i++) \
-            ((uint8_t*)uncompressed)[i] = (uint8_t)(uncompressed[i]) ^ acgt_exceptions[(uint8_t)(uncompressed[i])];
+        if (has_x) 
+            for (uint32_t i=0; i < *uncompressed_len; i++) \
+                ((uint8_t*)uncompressed)[i] = (uint8_t)(uncompressed[i]) ^ acgt_exceptions[(uint8_t)(uncompressed[i])];
     }
 
-    // option 2 - callback to get each line
+    // option 2 - callback to get each line 
     else if (get_line_cb) {
+        ASSERT0 (has_x, "ACGT compression with get_line_cb is only support with has_X"); // we can easily add support if needed in the future
+        
         buf_alloc (vb, &nonref_x_ctx->local, 0, *uncompressed_len, uint8_t, CTX_GROWTH, CTX_TAG_LOCAL);
         for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) {
 
@@ -151,12 +174,15 @@ COMPRESS (codec_acgt_compress)
     bits_clear_excess_bits_in_top_word (packed); // for good measure (V15)
 
     // get codec for NONREF_X header->lcodec remains CODEC_XCGT, and we set subcodec to the codec discovered in assign, and set to nonref_ctx->lcode
-    Codec z_lcodec = ZCTX(nonref_x_ctx->did_i)->lcodec;
-    nonref_x_ctx->lcodec = z_lcodec; // possibly set by a previous VB call to codec_assign_best_codec
-    nonref_x_ctx->lsubcodec_piz = codec_assign_best_codec (vb, nonref_x_ctx, NULL, SEC_LOCAL);
-    if (nonref_x_ctx->lsubcodec_piz == CODEC_UNKNOWN) nonref_x_ctx->lsubcodec_piz = CODEC_NONE; // really small
-    
-    nonref_x_ctx->lcodec = CODEC_XCGT;
+    Codec z_lcodec;
+    if (has_x) {
+        z_lcodec = ZCTX(nonref_x_ctx->did_i)->lcodec;
+        nonref_x_ctx->lcodec = z_lcodec; // possibly set by a previous VB call to codec_assign_best_codec
+        nonref_x_ctx->lsubcodec_piz = codec_assign_best_codec (vb, nonref_x_ctx, NULL, SEC_LOCAL);
+        if (nonref_x_ctx->lsubcodec_piz == CODEC_UNKNOWN) nonref_x_ctx->lsubcodec_piz = CODEC_NONE; // really small
+        
+        nonref_x_ctx->lcodec = CODEC_XCGT;
+    }
 
     // note: we store in Little Endian unlike the rest of the data that is in Big Endian, because LTEN keeps the nucleotides in their
     // original order, and improves compression ratio by about 2%
@@ -198,22 +224,22 @@ COMPRESS (codec_acgt_compress)
 // if snip_len==0, then the length is taken from seq_len.
 UNCOMPRESS (codec_xcgt_uncompress)
 {
-    // uncompress NONREF_X using CODEC_XCGT.sub_codec (passed to us as sub_codec)
-    codec_args[sub_codec].uncompress (vb, sub_codec, param, STRa(compressed), uncompressed_buf, uncompressed_len, CODEC_NONE, name);
-
-    const Bits *acgt_packed = (BitsP)&vb->scratch; // data from NONREF context (2-bit per base)
-    rom acgt_x = B1ST (const char, *uncompressed_buf); // data from NONREF_X context
-    
-    Context *nonref_ctx = CTX(DTF(nonref));
+    ContextP nonref_ctx = ctx - 1;
     ASSERTISALLOCED (nonref_ctx->local);
-    
+
+    // uncompress NONREF_X using CODEC_XCGT.sub_codec (passed to us as sub_codec)
+    codec_args[sub_codec].uncompress (vb, ctx, sub_codec, param, STRa(compressed), uncompressed_buf, uncompressed_len, CODEC_NONE, name);
+
+    ConstBitsP packed = (BitsP)&nonref_ctx->packed;           // data from NONREF context (2-bit per base)
+    rom acgt_x = B1ST (const char, *uncompressed_buf); // data from NONREF_X context (possibly NULL)
+        
     char *nonref = B1STc (nonref_ctx->local); // note: local was allocated by caller ahead of comp_uncompress -> codec_acgt_uncompress of the NONREF context
 
     decl_acgt_decode;
     for (uint32_t i=0; i < uncompressed_len; i++) {
-        if      (!acgt_x || acgt_x[i] == 0) *nonref++ = base_by_idx(acgt_packed, i);      // case 0: use acgt as is - 'A', 'C', 'G' or 'T'
-        else if (           acgt_x[i] == 1) *nonref++ = base_by_idx(acgt_packed, i) + 32; // case 1: convert to lower case - 'a', 'c', 'g' or 't'
-        else                                *nonref++ = acgt_x[i];                        // case non-0/1: use acgt_x (this is usually, but not necessarily, 'N')
+        if      (!acgt_x || acgt_x[i] == 0) *nonref++ = base_by_idx(packed, i);      // case 0: use acgt as is - 'A', 'C', 'G' or 'T'
+        else if (           acgt_x[i] == 1) *nonref++ = base_by_idx(packed, i) + 32; // case 1: convert to lower case - 'a', 'c', 'g' or 't'
+        else                                *nonref++ = acgt_x[i];                   // case non-0/1: use acgt_x (this is usually, but not necessarily, 'N')
     }
 
     buf_free (vb->scratch);
@@ -226,21 +252,33 @@ UNCOMPRESS (codec_xcgt_uncompress)
 // 3) codec_xcgt_uncompress also combines vb->scratch with NONREF_X.local to recreate NONREF.local - an LT_SEQUENCE local buffer
 UNCOMPRESS (codec_acgt_uncompress)
 {
-    ASSERTNOTINUSE (vb->scratch);
+    BufferP packed_buf = ctx->flags.acgt_no_x ? &vb->scratch : &ctx->packed;
+    ASSERTNOTINUSE (*packed_buf);
 
     uint64_t bitmap_num_bytes = roundup_bits2bytes64 (uncompressed_len * 2); // 4 nucleotides per byte, rounded up to whole 64b words
-    buf_alloc (vb, &vb->scratch, 0, bitmap_num_bytes, char, 1, "scratch");    
+    buf_alloc (vb, packed_buf, 0, bitmap_num_bytes, char, 1, "packed");    
 
     // uncompress bitmap using CODEC_ACGT.sub_codec (passed to us as sub_codec) into vb->scratch
-    codec_args[sub_codec].uncompress (vb, sub_codec, param, compressed, compressed_len, &vb->scratch, bitmap_num_bytes, CODEC_NONE, name);
+    codec_args[sub_codec].uncompress (vb, ctx, sub_codec, param, compressed, compressed_len, packed_buf, bitmap_num_bytes, CODEC_NONE, name);
 
     // finalize bitmap structure
-    Bits *packed     = (BitsP)&vb->scratch;
+    BitsP packed   = (BitsP)packed_buf;
     packed->nbits  = uncompressed_len * 2;
     packed->nwords = roundup_bits2words64 (packed->nbits);
 
     LTEN_bits (packed);
 
     bits_clear_excess_bits_in_top_word (packed);
+
+    // decode here if no X. If there's X we decode in codec_xcgt_uncompress (acgt_no_x added in 15.0.13)
+    if (ctx->flags.acgt_no_x) {
+        char *nonref = B1STc (ctx->local); // note: local was allocated by caller ahead of comp_uncompress -> codec_acgt_uncompress of the NONREF context
+
+        decl_acgt_decode;
+        for (uint32_t i=0; i < uncompressed_len; i++) 
+            *nonref++ = base_by_idx(packed, i);
+
+        buf_free (*packed_buf);
+    }
 }
 

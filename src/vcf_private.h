@@ -417,6 +417,12 @@ extern void vcf_seg_INFO_mutation (VBlockVCFP vb, ContextP ctx, STRp(mut));
 // ISAAC stuff
 extern void vcf_isaac_seg_initialize (VBlockVCFP vb);
 extern void vcf_seg_FORMAT_GQX (VBlockVCFP vb, ContextP ctx, STRp(gqx));
+extern void vcf_seg_INFO_RU (VBlockVCFP vb, ContextP ctx, STRp(ru));
+extern void vcf_seg_INFO_IDREP (VBlockVCFP vb, ContextP ctx, STRp(idrep));
+
+// manta stuff
+extern void vcf_manta_seg_initialize (VBlockVCFP vb);
+extern void vcf_seg_manta_ID (VBlockVCFP vb, STRp(id));
 
 // Tags stuff
 

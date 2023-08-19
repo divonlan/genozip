@@ -169,7 +169,7 @@ void sam_seg_ultima_XV (VBlockSAMP vb, STRp(xv), unsigned add_bytes)
 
     SegCallback callbacks[4] = { 0, sam_seg_ultima_delta_POS, sam_seg_ultima_XV_AS, sam_seg_ultima_XV_MAPQ }; 
 
-    seg_struct (VB, CTX(OPTION_XV_Z), container_XV, STRa(xv), callbacks, add_bytes);
+    seg_struct (VB, CTX(OPTION_XV_Z), container_XV, STRa(xv), callbacks, add_bytes, true);
 }
 
 // describes the first few mismatches - except for .repeats, it can be 100% determined by MD:Z and SEQ

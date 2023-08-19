@@ -143,6 +143,8 @@ typedef struct {
     bool vcf_is_varscan;        // this VCF file was produced by VarScan
     bool vcf_is_gvcf;
     bool vcf_is_beagle;
+    bool vcf_is_dragen;
+    bool vcf_is_manta;
     bool vcf_is_cosmic;
     bool vcf_is_clinvar;    
     bool vcf_is_pindel;
@@ -203,7 +205,7 @@ typedef struct {
 
     // GFF stuff
     int gff_version;
-    bool has_embdedded_fasta;
+    bool has_embedded_fasta;
 
     // Chain stuff
     bool chain_mismatches_ref;  // Some contigs mismatch the reference files, so this chain file cannot be used with --chain

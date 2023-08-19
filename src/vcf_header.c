@@ -697,6 +697,7 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
     IF_IN_SOURCE ("ClinVar", vcf_is_clinvar);
     IF_IN_SOURCE ("IsaacVariantCaller", vcf_is_isaac);
     IF_IN_SOURCE ("starling", vcf_is_isaac);
+    IF_IN_SOURCE ("GenerateSVCandidates", vcf_is_manta); // https://www.google.com/url?q=https://github.com/Illumina/manta/blob/master/docs/userGuide/README.md&sa=D&source=editors&ust=1691772389670163&usg=AOvVaw0q6tSBscyNHJ4YyV-tu7R7
     IF_IN_HEADER ("GenotypeGVCFs", vcf_is_gvcf, "GenotypeGVCFs");
     IF_IN_HEADER ("CombineGVCFs", vcf_is_gvcf, "CombineGVCFs");
     if (segconf.vcf_is_isaac) IF_IN_HEADER ("gvcf", vcf_is_gvcf, NULL);
@@ -712,7 +713,8 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
     IF_IN_HEADER ("Log R Ratio", vcf_illum_gtyping, "Illumina Genotyping");
     IF_IN_HEADER ("Number of cases used to estimate genetic effect", vcf_is_gwas, "GWAS_1.0"); // v1.0
     IF_IN_HEADER ("##trait", vcf_is_gwas, "GWAS_1.2"); /*v1.2*/
-    
+    IF_IN_HEADER ("DRAGEN", vcf_is_dragen, "DRAGEN");
+
     #define VEP_SIGNATURE "VEP. Format: "
     IF_IN_HEADER (VEP_SIGNATURE, vcf_is_vep, "VEP");
     if (segconf.vcf_is_vep) vcf_vep_zip_initialize (sig + STRLEN(VEP_SIGNATURE), txt_header->data);

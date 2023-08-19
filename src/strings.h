@@ -19,6 +19,8 @@
 #define IS_HEXDIGITUP(c) (IS_DIGIT(c) || ((c)>='A' && (c)<='F'))
 #define IS_CLETTER(c)    ((c)>='A' && (c)<='Z')
 #define IS_SLETTER(c)    ((c)>='a' && (c)<='z')
+#define IS_ACGT(c)       ((c)=='A' || (c)=='C' || (c)=='G' || (c)=='T')
+#define IS_ACGTN(c)      (IS_ACGT(c) || (c)=='N')
 #define IS_WS(c) ((c)=='\t' || (c)=='\r' || (c)=='\n')
 #define IS_LETTER(c) (IS_CLETTER(c) || IS_SLETTER(c))
 #define IS_ALPHANUMERIC(c) (IS_LETTER(c) || IS_DIGIT(c))
@@ -41,6 +43,12 @@ extern StrText char_to_printable (char c);
 extern char *str_print_snip (STRp(in), char *out);
 
 extern char *str_to_printable (STRp(in), char *out);
+static inline StrTextSuperLong str_to_printable_(STRp(in)) { // for bound-length short texts
+    StrTextSuperLong s;
+    str_to_printable (STRa(in), s.s);
+    return s;
+}
+
 extern char *str_tolower (rom in, char *out /* out allocated by caller - can be the same as in */);
 extern char *str_toupper (rom in, char *out);
 
@@ -216,7 +224,8 @@ static bool inline str_is_hexlo(STRp(str))     { for (int i=0; i<str_len; i++) i
 static bool inline str_is_hexup(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_HEXDIGITUP(str[i]))       return false; return true; } 
 static bool inline str_is_printable(STRp(str)) { for (int i=0; i<str_len; i++) if (!IS_PRINTABLE(str[i]))        return false; return true; } 
 static bool inline str_is_no_ws(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_NON_WS_PRINTABLE(str[i])) return false; return true; } 
-static bool inline str_is_only_ACGT(STRp(str), uint32_t *bad_i) { for (int i=0; i<str_len; i++) if (str[i]!='A' && str[i]!='C' && str[i]!='G' && str[i]!='T') { if(bad_i) *bad_i = i; return false; } return true; } 
+static bool inline str_is_ACGT(STRp(str), uint32_t *bad_i) { for (int i=0; i<str_len; i++) if (!IS_ACGT(str[i])) { if(bad_i) *bad_i = i; return false; } return true; } 
+static bool inline str_is_ACGTN(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_ACGTN(str[i]))            return false; return true; } 
 
 extern bool str_is_in_range (STRp(str), char first_c, char last_c);
 
@@ -283,7 +292,7 @@ extern void str_remove_CR_do (uint32_t n_lines, pSTRp(line));
 extern void str_nul_separate_do (STRps(item));
 #define str_nul_separate(name) str_nul_separate_do (n_##name##s, name##s, name##_lens)
 
-extern uint32_t str_remove_whitespace (STRp(in), char *out);
+extern uint32_t str_remove_whitespace (STRp(in), bool also_uppercase, char *out);
 extern void str_trim (STRe(str));
 
 extern rom type_name (uint32_t item, 

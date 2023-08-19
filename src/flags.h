@@ -130,7 +130,7 @@ typedef struct {
         show_reference, show_ref_hash, show_ref_index, show_chrom2ref, show_ref_iupacs, show_chain, show_ranges,
         show_codec, show_cache, show_memory,
         show_alleles, show_bgzf, show_txt_contigs, show_lines,
-        show_threads, show_uncompress, biopsy, show_data_type,
+        show_threads, show_uncompress, biopsy, skip_segconf, show_data_type,
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
         debug_LONG, show_qual, debug_qname, debug_read_ctxs, debug_sag, debug_gencomp, debug_lines, debug_latest,
         debug_peek, submit_stats, debug_submit, show_deep, show_segconf_has, debug_huffman, debug_split,

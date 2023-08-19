@@ -73,10 +73,7 @@ static COMPRESS (codec_compress_error)
 }
 
 
-static void codec_uncompress_error (VBlockP vb, Codec codec, uint8_t param,
-                                    rom compressed, uint32_t compressed_len,
-                                    BufferP uncompressed_buf, uint64_t uncompressed_len,
-                                    Codec sub_codec, rom name)
+static UNCOMPRESS (codec_uncompress_error)
 {
     ABORT ("Error in comp_uncompress: \"%s\": unsupported codec: %s. Please upgrade to the most recent version of Genozip.", name, codec_name (codec));
 }

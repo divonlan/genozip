@@ -89,13 +89,15 @@ test_standard()  # $1 genozip args $2 genounzip args $3... filenames
         local single_output=1
     fi
 
-    test_header "$genozip ${zip_args[*]} ${files[*]}" # after COPY, NOPREFIX and CONCAT modifications occurred
+    test_header "$genozip ${zip_args[*]} ${files[*]}"    # after COPY, NOPREFIX and CONCAT modifications occurred
     
-    if (( ${#files[@]} == 1 || $single_output )); then # test with Adler32, unless caller specifies --md5
+    if (( ${#files[@]} == 1 || $single_output )); then   # test with Adler32, unless caller specifies --md5
         $genozip -X ${zip_args[@]} ${files[@]} -o $output -f || exit 1
         $genounzip ${unzip_args[@]} $output -t || exit 1
-    else 
+    elif cmp --silent `echo "$genozip" | cut -d" " -f1` `echo "$genounzip" | cut -d" " -f1`; then # --test will work correctly only if genozip==genounzip (otherwise we won't be testing the intended PIZ executable)
         $genozip ${zip_args[@]} ${unzip_args[@]} ${files[@]} -ft || exit 1
+    else
+        echo "skipping test because genozip and genounzip are different executables" 
     fi
     
     if [ ! -n "$single_output" ]; then
@@ -129,7 +131,8 @@ test_redirected() { # $1=filename  $2...$N=optional extra genozip arg
         input="--input ${file#*.}"
     fi
 
-    cat $file | $genozip ${args[@]:1} $input --test --force --output $output - || exit 1
+    cat $file | $genozip ${args[@]:1} $input -X --force --output $output - || exit 1
+    $genounzip --test $output
 
     # verify not generic
     if [[ $input != "" ]] && [[ $input != "--input generic" ]] && [[ `$genocat $output --show-data-type` == "GENERIC" ]]; then
@@ -1061,8 +1064,8 @@ batch_prod_compatability()
 
     if [ ! -d ../genozip-prod ]; then return; fi
     
-    save_genozip=$genozip
-    genozip=$genozip_latest -m
+    local save_genozip=$genozip
+    genozip="$genozip_latest"
 
     if (( $1 <= $2 + 0  )) ; then batch_basic basic.vcf     ; fi
     if (( $1 <= $2 + 1  )) ; then batch_dvcf                ; fi

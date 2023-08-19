@@ -695,7 +695,7 @@ static void gencomp_get_txt_data_from_queue (VBlockP vb, GencompType gct)
         Ltxt = *B1ST32 (*buf);
         buf_alloc (vb, &vb->txt_data, 0, segconf.vb_size, char, 0, "txt_data"); 
     
-        codec_rans_uncompress (evb, CODEC_RANS8, 0, buf->data + 4, buf->len - 4, 
+        codec_rans_uncompress (evb, NULL, CODEC_RANS8, 0, buf->data + 4, buf->len - 4, 
                                &vb->txt_data, Ltxt, 0, "txt_data");
     }
 
@@ -735,7 +735,7 @@ static void gencomp_get_txt_data_from_disk (VBlockP vb)
     Ltxt = *B1ST32 (depn.thread_data_comp); // first 4 bytes = uncomp_len
     ASSERT (Ltxt <= segconf.vb_size, "Invalid Ltxt=%u", Ltxt); // sanity
 
-    codec_rans_uncompress (evb, CODEC_RANS8, 0, depn.thread_data_comp.data+4, depn.thread_data_comp.len-4, 
+    codec_rans_uncompress (evb, NULL, CODEC_RANS8, 0, depn.thread_data_comp.data+4, depn.thread_data_comp.len-4, 
                            &vb->txt_data, Ltxt, 0, "txt_data");
 
     if (flag.debug_gencomp) 

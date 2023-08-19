@@ -28,7 +28,9 @@
 typedef COMPRESS (CodecCompress);
 
 #define UNCOMPRESS(func)                                             \
-    void func (VBlockP vb, Codec codec, uint8_t param,               \
+    void func (VBlockP vb,                                           \
+               ContextP ctx, /* NULL if not compressing a context */ \
+               Codec codec, uint8_t param,                           \
                rom compressed, uint32_t compressed_len,              \
                BufferP uncompressed_buf, uint64_t uncompressed_len,  \
                Codec sub_codec,                                      \
@@ -133,11 +135,13 @@ extern void codec_assign_best_qual_codec (VBlockP vb, Did qual_did, LocalGetLine
 
 // ACGT stuff
 extern const uint8_t acgt_encode[256];
-extern void codec_acgt_comp_init (VBlockP vb, Did nonref_did_i);
+extern void codec_acgt_seg_initialize (VBlockP vb, Did nonref_did_i, bool has_x);
+extern void codec_acgt_seg (VBlockP vb, ContextP ctx, STRp (seq));
 extern void codec_acgt_reconstruct (VBlockP vb, ContextP ctx, STRp(snip));
 
 // BSC stuff
 extern void codec_bsc_initialize (void);
+extern rom codec_bsc_errstr (int err);
 
 // HAPMAT stuff - retired, used for compressing old files
 extern void codec_hapmat_piz_calculate_columns (VBlockP vb);

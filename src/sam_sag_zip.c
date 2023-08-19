@@ -154,7 +154,7 @@ bool sam_seg_prim_add_sag (VBlockSAMP vb, ZipDataLineSAM *dl, uint16_t num_alns/
         FAILIF (dl->hard_clip[0] || dl->hard_clip[1], "has_hard_clips%s", ""); // primary cannot have hard clips
         
         uint32_t bad_i;
-        FAILIF (!str_is_only_ACGT (textual_seq, seq_len, &bad_i), 
+        FAILIF (!str_is_ACGT (textual_seq, seq_len, &bad_i), 
                 "RNAME=\"%.*s\" POS=%d. Found '%c' in base_i=%u in SEQ is not A,C,G or T. SEQ=\"%.*s\"", 
                 vb->chrom_name_len, vb->chrom_name, dl->POS, textual_seq[bad_i], bad_i, seq_len, textual_seq);
     }
@@ -606,7 +606,7 @@ static void sam_sa_seg_depn_find_sagroup_SAtag (VBlockSAMP vb, ZipDataLineSAM *d
     if (is_bam && (seq_len&1) && (*B8 (vb->txt_data, dl->SEQ.index + seq_len/2) & 0xf)) DONE;
 
     // we can't encode depn seq bases other than A,C,G,T as we operate in 2bit
-    if (!str_is_only_ACGT (textual_seq, seq_len, NULL)) DONE;
+    if (!str_is_ACGT (textual_seq, seq_len, NULL)) DONE;
 
     ctx_set_encountered (VB, CTX(OPTION_SA_Z));
     uint32_t n_my_alns = str_count_char (STRauxZ(SA_Z, is_bam), ';') + 1; // +1 for alignment of my main fields

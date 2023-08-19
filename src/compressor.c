@@ -210,7 +210,9 @@ bool comp_compress_complex_codec (VBlockP vb, ContextP ctx, SectionHeaderP heade
     return compress (vb, ctx, header, ctx->local.data, uncompressed_len, NULL, compressed, compressed_len, false, name);
 }
 
-void comp_uncompress (VBlockP vb, Codec codec, Codec sub_codec, uint8_t param, STRp(compressed),
+void comp_uncompress (VBlockP vb,
+                      ContextP ctx, // note: NULL if not uncompressing context
+                      Codec codec, Codec sub_codec, uint8_t param, STRp(compressed),
                       BufferP uncompressed_data, uint64_t uncompressed_len, rom name)
 {
     ASSERTNOTZEROn (compressed_len, name);
@@ -227,7 +229,7 @@ void comp_uncompress (VBlockP vb, Codec codec, Codec sub_codec, uint8_t param, S
         codec_verify_free_all (vb, "uncompressor", codec);
 
         vb->codec_using_codec_bufs = codec;
-        codec_args[codec].uncompress (vb, codec, param, STRa(compressed), uncompressed_data, uncompressed_len, sub_codec, name);
+        codec_args[codec].uncompress (vb, ctx, codec, param, STRa(compressed), uncompressed_data, uncompressed_len, sub_codec, name);
         codec_free_all (vb); // just in case
         vb->codec_using_codec_bufs = CODEC_UNKNOWN;
 
@@ -247,7 +249,7 @@ void comp_uncompress (VBlockP vb, Codec codec, Codec sub_codec, uint8_t param, S
     if (run_subcodec) { // might run with or without first running the primary codec
         codec_verify_free_all (vb, "uncompressor", sub_codec);
         vb->codec_using_codec_bufs = sub_codec;
-        codec_args[sub_codec].uncompress (vb, sub_codec, param, STRa(compressed), uncompressed_data, uncompressed_len, CODEC_UNKNOWN, name);
+        codec_args[sub_codec].uncompress (vb, ctx, sub_codec, param, STRa(compressed), uncompressed_data, uncompressed_len, CODEC_UNKNOWN, name);
         codec_free_all (vb); // just in case
         vb->codec_using_codec_bufs = CODEC_UNKNOWN;
     }

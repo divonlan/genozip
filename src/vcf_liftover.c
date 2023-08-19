@@ -306,8 +306,10 @@ static void vcf_lo_seg_REJX_do (VBlockVCFP vb, unsigned add_bytes)
 
     // if we're segging a Primary line, and rejecting the Luft rendition, then the reject will be only reconstructed in primary coordinates, and vice versa
     // we modified the text by adding this string (the "REJX" is accounted for in vcf_seg_info_add_DVCF_to_InfoItems)
-    if (vb->line_coords == DC_PRIMARY) vb->recon_size      += add_bytes; 
-    else                               vb->recon_size_luft += add_bytes;
+    if (vb->line_coords == DC_PRIMARY) 
+        vb->recon_size      += add_bytes; 
+    else                               
+        vb->recon_size_luft += add_bytes;
 }
 
 static const Did rb_did_i[3][8] = { {}, 
@@ -430,7 +432,7 @@ void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl)
     // Do the same for PRIM. 
     Context *prim_ctx = vcf_lo_seg_lo_snip (vb, info_prim_snip, info_prim_snip_len, INFO_PRIM, 0);
     prim_ctx->last_txt.len = 0; // 0 as not added to recon_size (txt_len is used only for Primary coordinates)
-    vb->recon_size_luft += vb->last_txt_len (VCF_POS) + vb->chrom_name_len + vb->main_ref_len + 4; // 4=3 commas + xstrand. We added INFO/PRIM to the Luft coordinates reconstruction
+    vb->recon_size_luft += opos_len + ochrom_len + oref_len + 4; // Luft coordinates reconstruction: 4=3 commas + xstrand. We added ochrom/opos/oref to the main fields, while chrom/pos/ref moved to the new INFO/PRIM field 
 
     // ostatus is OK 
     seg_by_did (VB, dvcf_status_names[ostatus], strlen (dvcf_status_names[ostatus]), VCF_oSTATUS, 0);

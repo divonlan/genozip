@@ -376,7 +376,7 @@ static void stats_output_file_metadata (void)
         case DT_GFF:
             REPORT_VBs;
             FEATURE (true, "GFF version: %d", "GFF_version=%d", segconf.gff_version); 
-            FEATURE (segconf.has_embdedded_fasta, "FASTA Sequences: %"PRIu64, "num_fasta_sequences=%"PRIu64, z_file->num_sequences);
+            FEATURE (segconf.has_embedded_fasta, "FASTA Sequences: %"PRIu64, "num_fasta_sequences=%"PRIu64, z_file->num_sequences);
             break;
             
         case DT_BED:

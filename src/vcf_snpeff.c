@@ -16,6 +16,43 @@
 // INFO/ANN
 // --------
 
+// segs cDNA, CDS, AA which may be in the format of "pos" and may "pos/len" 
+static bool vcf_seg_INFO_ANN_pos_len (VBlockP vb, ContextP ctx, STRp(value), uint32_t repeat) 
+{
+    static const MediumContainer con = {
+        .repeats      = 1, 
+        .nitems_lo    = 2, 
+        .items        = { { .dict_id.num = DICT_ID_MAKE2_L("A0NN_pos"), .separator = "/" }, 
+                          { .dict_id.num = DICT_ID_MAKE2_L("A1NN_len")                   } } };
+
+    // check if format is "pos" or "pos/len"
+    if (!ctx->is_initialized && value_len) {
+        int slashes = str_count_char (STRa(value), '/');
+        if (slashes > 1) return false;
+            
+        ctx->has_len = (slashes == 1);
+        if (ctx->has_len)
+            ctx_get_ctx (vb, con.items[0].dict_id)->ltype = 
+            ctx_get_ctx (vb, con.items[0].dict_id)->ltype = LT_DYN_INT;
+            
+        else
+            ctx->ltype = LT_DYN_INT; 
+
+        ctx->is_initialized = true; 
+    }
+
+    if (!value_len)
+        seg_by_ctx (vb, "", 0, ctx, 0);
+
+    else if (ctx->has_len)
+        seg_struct (vb, ctx, con, STRa(value), NULL, value_len, false);
+    
+    else
+        seg_integer_or_not (vb, ctx, STRa(value), value_len);
+
+    return true;
+}
+
 // ##INFO=<ID=ANN,Number=.,Type=String,Description="Functional annotations: 'Allele | Annotation | Annotation_Impact | Gene_Name | Gene_ID | Feature_Type | Feature_ID | Transcript_BioType | Rank | HGVS.c | HGVS.p | cDNA.pos / cDNA.length | CDS.pos / CDS.length | AA.pos / AA.length | Distance | ERRORS / WARNINGS / INFO'">
 // See: https://pcingola.github.io/SnpEff/adds/VCFannotationformat_v1.0.pdf
 // example: ANN=T|intergenic_region|MODIFIER|U2|ENSG00000277248|intergenic_region|ENSG00000277248|||n.10510103A>T||||||
@@ -42,7 +79,11 @@ void vcf_seg_INFO_ANN (VBlockVCFP vb, ContextP ctx, STRp(value))
                          { .dict_id.num=DICT_ID_MAKE1_L("Distance"),            .separator = {'|'} }, 
                          { .dict_id.num=DICT_ID_MAKE1_6("Errors")                                  } } };
 
-    seg_array_of_struct (VB, ctx, ann, STRa(value), (SegCallback[]){vcf_seg_INFO_allele,0,0,0,0,0,0,0,0,vcf_seg_INFO_HGVS,0,0,0,0,0,0}, value_len);
+    SegCallback callbacks[16] = { [0]         = vcf_seg_INFO_allele,
+                                  [9]         = vcf_seg_INFO_HGVS,
+                                  [11 ... 13] = vcf_seg_INFO_ANN_pos_len };
+
+    seg_array_of_struct (VB, ctx, ann, STRa(value), callbacks, value_len);
 }
 
 // See: https://pcingola.github.io/SnpEff/se_inputoutput/#eff-field-vcf-output-files

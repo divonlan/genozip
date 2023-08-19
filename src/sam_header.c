@@ -619,7 +619,19 @@ int32_t bam_is_header_done (bool is_eof)
     bool is_magical = !memcmp (evb->txt_data.data, BAM_MAGIC, 4);
     if (flag.show_bam && !is_magical) return 0; // BAM file has no header - allowed only with --show-bam
 
-    ASSINP (is_magical, "%s doesn't have a BAM magic - it doesn't seem to be a BAM file: magic=%2.2x%2.2x%2.2x%2.2x ", txt_name, (uint8_t)evb->txt_data.data[0], (uint8_t)evb->txt_data.data[1], (uint8_t)evb->txt_data.data[2], (uint8_t)evb->txt_data.data[3]);
+    if (!is_magical) {
+        // check - perhaps is actually SAM (easy to accidentally get samtools to produce SAM instead of BAM)
+        if (evb->txt_data.len32 < 64 KB && !is_eof)
+            return HEADER_NEED_MORE; // we need a bit of data to tell if its SAM
+
+        if (is_sam (STRb(evb->txt_data), NULL)) {
+            txt_file->data_type = z_file->data_type = DT_SAM;
+            z_file->z_flags.txt_is_bin = false;
+            return HEADER_DATA_TYPE_CHANGED;
+        }
+        else
+            ASSINP (false, "%s doesn't have a BAM magic - it doesn't seem to be a BAM file: magic=%2.2x%2.2x%2.2x%2.2x ", txt_name, (uint8_t)evb->txt_data.data[0], (uint8_t)evb->txt_data.data[1], (uint8_t)evb->txt_data.data[2], (uint8_t)evb->txt_data.data[3]);
+    }
 
     // sam header text
     uint32_t l_text = HDR32;

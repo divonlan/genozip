@@ -87,4 +87,4 @@ extern void digest_verify_ref_is_equal (const Reference ref, rom header_ref_file
 // backward compatability note: in v8 files compressed without --md5 or --test, we had no digest. starting v9, we have Adler32
 #define piz_need_digest (z_file->z_flags.has_digest && !flag.data_modified && !flag.genocat_no_reconstruct && !flag_loading_auxiliary) 
 
-#define zip_need_digest (!flag.make_reference && !flag.data_modified)
+#define zip_need_digest (!flag.make_reference && !flag.data_modified && !flag.biopsy && flag.biopsy_line.line_i == NO_LINE)

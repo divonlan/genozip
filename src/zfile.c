@@ -163,7 +163,7 @@ void zfile_uncompress_section (VBlockP vb,
             uncompressed_data->len = data_uncompressed_len;
         }
 
-        comp_uncompress (vb, header->codec, header->sub_codec, codec_param,
+        comp_uncompress (vb, ctx, header->codec, header->sub_codec, codec_param,
                          (char*)header + compressed_offset, data_compressed_len, 
                          uncompressed_data, data_uncompressed_len,
                          dict_id.num ? dis_dict_id(dict_id).s : st_name(expected_section_type));
@@ -1002,10 +1002,12 @@ void zfile_output_processed_vb (VBlockP vb)
     vb->z_data.len = 0;
 
     // sanity
-    uint64_t actual_disk_so_far = file_tell (z_file, false);
-    ASSERT (actual_disk_so_far == z_file->disk_so_far, "%s: Expecting actual_disk_so_far=%"PRIu64" == z_file->disk_so_far=%"PRIu64,
-            VB_NAME, actual_disk_so_far, z_file->disk_so_far);
-
+    if (!flag.zip_no_z_file) {
+        uint64_t actual_disk_so_far = file_tell (z_file, false);
+        ASSERT (actual_disk_so_far == z_file->disk_so_far, "%s: Expecting actual_disk_so_far=%"PRIu64" == z_file->disk_so_far=%"PRIu64,
+                VB_NAME, actual_disk_so_far, z_file->disk_so_far);
+    }
+    
     ctx_update_stats (vb);
 
     if (flag.show_headers && buf_is_alloc (&vb->show_headers_buf))

@@ -22,6 +22,7 @@
 #include "endianness.h"
 #include "profiler.h"
 #include "progress.h"
+#include "writer.h"
 
 #define IS_ADLER (IS_ZIP ? !flag.md5 : z_file->z_flags.adler)
 #define IS_MD5 (!IS_ADLER)
@@ -125,6 +126,10 @@ void digest_piz_verify_one_txt_file (unsigned txt_file_i/* 0-based */)
 {
     char s[200];  
 
+    // note: in case of --test, we abort in case of a digest error (here or in digest_piz_verify_one_vb)
+    //       but in case of decompression, we print an error but allow the decompression to proceed, so
+    //       that we can detect where the incorrect reconstruction occurred + reduce damage to minimum
+
     // since v14, if Alder32, we verify each TxtHeader and VB, but we don't create a cumulative digest for the entire file. 
     // now, we just confirm that all VBs were verified as expected.
     if (VER(14) && z_file->z_flags.adler) {
@@ -203,22 +208,23 @@ static void digest_piz_verify_one_vb (VBlockP vb)
             if (vb->recon_size != vb->txt_data.len) // note: leave vb->txt_data.len 64bit to detect bugs
                 sprintf (recon_size_warn, "Expecting: VB_HEADER.recon_size=%u == txt_data.len=%"PRIu64"\n", vb->recon_size, vb->txt_data.len);
 
-            WARN ("reconstructed vblock=%s/%u, (%s=%s) differs from original file (%s=%s).\n%s",
-                  comp_name (vb->comp_i), vb->vblock_i, 
+            WARN ("reconstructed vblock=%s/%u (vb_line_i=0 -> txt_line_i(1-based)=%"PRIu64" num_lines=%u), (%s=%s) differs from original file (%s=%s).\n%s",
+                  comp_name (vb->comp_i), vb->vblock_i, writer_get_txt_line_i (vb, 0), vb->lines.len32,
                   DIGEST_NAME, digest_display (piz_digest).s, 
                   DIGEST_NAME, digest_display (vb->expected_digest).s, 
                   recon_size_warn);
 
-            // case: first bad VB: dump bad VB to disk
-            if (!txt_file->vb_digest_failed)
+            // case: first bad VB: dump bad VB to disk and maybe exit
+            if (!__atomic_test_and_set (&txt_file->vb_digest_failed, __ATOMIC_RELAXED)) { // not WARN_ONCE because we might be genounzipping multiple files - we want to show this for every failed file (see also note in digest_piz_verify_one_txt_file)
                 WARN ("Bad reconstructed vblock has been dumped to: %s.gz\n"
                       "To see the same data in the original file:\n"
-                      "genozip --biopsy %u %s (+any parameters used to compress this file)%s",
-                      txtfile_dump_vb (vb, z_name), vb->vblock_i, filename_guess_original (txt_file), SUPPORT);
+                      "genozip --biopsy %u -B%u %s%s%s",
+                      txtfile_dump_vb (vb, z_name), vb->vblock_i, (unsigned)(segconf.vb_size >> 20), 
+                      (Z_DT(SAM) && !z_file->z_flags.has_gencomp) ? "--no-gencomp " : "",
+                      filename_guess_original (txt_file), SUPPORT);
 
-            if (flag.test) exit_on_error (false);
-
-            txt_file->vb_digest_failed = true;
+                if (flag.test) exit_on_error (false); // must be inside the atomic test, otherwise another thread will exit before we completed dumping
+            }
         }
 
         else {

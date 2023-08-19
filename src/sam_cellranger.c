@@ -29,7 +29,7 @@ static void sam_seg_CB_Z_segconf (VBlockSAMP vb, STRp(cb))
 
     str_split (cb, cb_len, 0, segconf.CR_CB_seperator, item, false);
 
-    bool has_suffix = (n_items > 1) && !str_is_only_ACGT (STRi(item, n_items-1), NULL);
+    bool has_suffix = (n_items > 1) && !str_is_ACGT (STRi(item, n_items-1), NULL);
          
     segconf.n_CR_CB_CY_seps = n_items - has_suffix - 1;
 

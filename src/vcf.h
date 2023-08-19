@@ -154,6 +154,18 @@
 #pragma GENDICT FORMAT_SPL=DTYPE_2=SPL              // <ID=SPL,Number=.,Type=Integer,Description="Normalized, Phred-scaled likelihoods for SNPs based on the reference confidence model">
 #pragma GENDICT FORMAT_ICNT=DTYPE_2=ICNT            // <ID=ICNT,Number=2,Type=Integer,Description="Counts of INDEL informative reads based on the reference confidence model">
 
+// DRAGEN CNV files
+#pragma GENDICT INFO_REFLEN=DTYPE_1=REFLEN          // <ID=REFLEN,Number=1,Type=Integer,Description="Number of REF positions included in this record"> (observed in DRAGEN)
+#pragma GENDICT FORMAT_PE=DTYPE_2=PE                // <ID=PE,Number=2,Type=Integer,Description="Number of improperly paired end reads at start and stop breakpoints">
+#pragma GENDICT FORMAT_BC=DTYPE_2=BC                // <ID=BC,Number=1,Type=Integer,Description="Number of bins in the region">
+//#pragma GENDICT FORMAT_CN=DTYPE_2=CN              // (duplicate) <ID=CN,Number=1,Type=Integer,Description="Estimated copy number">
+
+// DRAGEN manta
+//#pragma GENDICT FORMAT_PR=DTYPE_2=PR              // (duplicate) <ID=PR,Number=.,Type=Integer,Description="Spanning paired-read support for the ref and alt alleles in the order listed">
+#pragma GENDICT FORMAT_SR=DTYPE_2=SR                // <ID=SR,Number=.,Type=Integer,Description="Split reads for the ref and alt alleles in the order listed, for reads where P(allele|read)>0.999">
+#pragma GENDICT INFO_LEFT_SVINSSEQ=DTYPE_1=LEFT_SVINSSEQ   // <ID=LEFT_SVINSSEQ,Number=.,Type=String,Description="Known left side of insertion for an insertion of unknown length">
+#pragma GENDICT INFO_RIGHT_SVINSSEQ=DTYPE_1=RIGHT_SVINSSEQ // <ID=RIGHT_SVINSSEQ,Number=.,Type=String,Description="Known right side of insertion for an insertion of unknown length">
+
 // Illumina IsaacVariantCaller (discontinued) : https://support.illumina.com/content/dam/illumina-support/documents/documentation/software_documentation/basespace/isaac-wgs-user-guide-15050954b.pdf
 // Also: https://github.com/sequencing/isaac_variant_caller
 #pragma GENDICT INFO_SNVSB=DTYPE_1=SNVSB            // SNV site strand bias
@@ -459,6 +471,9 @@
 #pragma GENDICT FORMAT_ADALL=DTYPE_2=ADALL          // <ID=ADALL,Number=R,Type=Integer,Description="Net allele depths across all datasets">
 #pragma GENDICT FORMAT_IGT=DTYPE_2=IGT              // <ID=IGT,Number=1,Type=String,Description="Original input genotype">
 #pragma GENDICT FORMAT_IPS=DTYPE_2=IPS              // <ID=IPS,Number=1,Type=String,Description="Phase set for IGT">
+#pragma GENDICT INFO_AC_Hom=DTYPE_1=AC_Hom          // <ID=AC_Hom,Number=A,Type=Integer,Description="Allele counts in homozygous genotypes">
+#pragma GENDICT INFO_AC_Het=DTYPE_1=AC_Het          // <ID=AC_Het,Number=A,Type=Integer,Description="Allele counts in heterozygous genotypes">
+#pragma GENDICT INFO_AC_Hemi=DTYPE_1=AC_Hemi        // <ID=AC_Hemi,Number=A,Type=Integer,Description="Allele counts in hemizygous genotypes">
 
 // dbNSFP: https://gist.github.com/sahilseth/78721eada1f0007c7afd and also https://hzhou.scholar.harvard.edu/blog/dbnsfp
 #pragma GENDICT INFO_Polyphen2_HDIV_score=DTYPE_1=Polyphen2_HDIV_score // Polyphen2 score based on HumDiv, i.e. hdiv_prob.
@@ -548,7 +563,7 @@ extern void vcf_tags_cmdline_rename_option(void);
 // Samples stuff
 extern void vcf_samples_add  (rom samples_str);
 
-#define VCF_SPECIAL { vcf_piz_special_main_REFALT, vcf_piz_special_FORMAT, vcf_piz_special_INFO_AC, vcf_piz_special_INFO_SVLEN, \
+#define VCF_SPECIAL { vcf_piz_special_main_REFALT, vcf_piz_special_FORMAT, vcf_piz_special_INFO_AC, vcf_piz_special_SVLEN, \
                       vcf_piz_special_FORMAT_DS_old, vcf_piz_special_INFO_BaseCounts, vcf_piz_special_INFO_SF, piz_special_MINUS,  \
                       vcf_piz_special_LIFT_REF, vcf_piz_special_COPYSTAT, vcf_piz_special_other_REFALT, vcf_piz_special_COPYPOS, vcf_piz_special_ALLELE, \
                       vcf_piz_special_INFO_HGVS_SNP_POS, vcf_piz_special_INFO_HGVS_SNP_REFALT, \
@@ -564,12 +579,13 @@ extern void vcf_samples_add  (rom samples_str);
                       vcf_piz_special_MUX_BY_VARTYPE, vcf_piz_special_ICNT, vcf_piz_special_SPL,\
                       vcf_piz_special_MUX_BY_SAMPLE_I, vcf_piz_special_IGT, \
                       vcf_piz_special_MUX_BY_IGT_PHASE, vcf_piz_special_main_REFALT_DEL, vcf_piz_special_mutation, \
-                      vcf_piz_special_SO_TERM, vcf_piz_special_MMURI, vcf_piz_special_DEMUX_GQX }
+                      vcf_piz_special_SO_TERM, vcf_piz_special_MMURI, \
+                      vcf_piz_special_DEMUX_GQX, vcf_piz_special_RU, vcf_piz_special_IDREP }
 
 SPECIAL (VCF, 0,  main_REFALT,         vcf_piz_special_main_REFALT);
 SPECIAL (VCF, 1,  FORMAT,              vcf_piz_special_FORMAT)
 SPECIAL (VCF, 2,  AC,                  vcf_piz_special_INFO_AC);
-SPECIAL (VCF, 3,  SVLEN,               vcf_piz_special_INFO_SVLEN);
+SPECIAL (VCF, 3,  SVLEN,               vcf_piz_special_SVLEN);
 SPECIAL (VCF, 4,  DS_old,              vcf_piz_special_FORMAT_DS_old);            // used in files up to 12.0.42
 SPECIAL (VCF, 5,  BaseCounts,          vcf_piz_special_INFO_BaseCounts);
 SPECIAL (VCF, 6,  SF,                  vcf_piz_special_INFO_SF);
@@ -617,7 +633,9 @@ SPECIAL (VCF, 47, mutation,            vcf_piz_special_mutation);               
 SPECIAL (VCF, 48, SO_TERM,             vcf_piz_special_SO_TERM);                  // added v15.0.8
 SPECIAL (VCF, 49, MMURI,               vcf_piz_special_MMURI);                    // added v15.0.8
 SPECIAL (VCF, 50, DEMUX_GQX,           vcf_piz_special_DEMUX_GQX);                // added v15.0.11
-#define NUM_VCF_SPECIAL 51
+SPECIAL (VCF, 51, RU,                  vcf_piz_special_RU);                       // added v15.0.13
+SPECIAL (VCF, 52, IDREP,               vcf_piz_special_IDREP);                    // added v15.0.13
+#define NUM_VCF_SPECIAL 53
 
 // Translators for Luft (=secondary coordinates)
 TRANSLATOR (VCF, VCF,   1,  G,      vcf_piz_luft_G)       // same order as LiftOverStatus starting LO_CANT_G

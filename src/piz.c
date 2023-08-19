@@ -140,7 +140,7 @@ bool piz_default_skip_section (SectionType st, DictId dict_id)
     return skip;
 }
 
-static inline void piz_adjust_one_local (ContextP ctx, BufferP local_buf, LocalType *ltype, uint8_t num_bits, bool uncompress_to_pair) 
+static inline void piz_adjust_one_local (ContextP ctx, BufferP local_buf, LocalType *ltype, uint8_t param, bool uncompress_to_pair) 
 { 
     const LocalTypeDesc *ltd = &lt_desc[*ltype];
 
@@ -154,11 +154,14 @@ static inline void piz_adjust_one_local (ContextP ctx, BufferP local_buf, LocalT
     if (!uncompress_to_pair || IS_PIZ || !fastq_zip_use_pair_identical (ctx->dict_id)) {
         
         if (*ltype == LT_BITMAP) { 
-            local_buf->nbits = local_buf->len * 64 - num_bits ; 
+            local_buf->nbits = local_buf->len * 64 - param ; 
             LTEN_bits ((BitsP)local_buf); 
-        } 
+        }
+
+        else if (*ltype >= LT_UINT8_TR && *ltype <= LT_UINT64_TR)
+            local_buf->n_cols = param; // 0 means vcf_num_samples
         
-        else if (ltd->file_to_native)   
+        if (ltd->file_to_native)   
             ltd->file_to_native (local_buf, ltype); // BGEN, transpose etc - updates ltype in case of Transpose, after untransposing
     }
 }

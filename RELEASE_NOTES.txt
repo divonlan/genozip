@@ -3,6 +3,13 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+15.0.13 19/8/2023
+- VCF: Better compression of Isaac/starling files
+- Recognized SAM files even if they incorrectly have an extension ".bam"
+- New diagnostic option: --skip-segconf
+- bug fixes
+- Update of article 4 in license
+
 15.0.12 19/7/2023
 - VCF: better compression when using --reference
 - genounzip of a file that was originally compressed with .bz2, .xz or .zip is now recompressed with .gz. Use --bgzf=0 to instruct genounzip to refrain from recompressing.

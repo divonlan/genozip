@@ -120,13 +120,15 @@ typedef union SectionFlags {
         #define v13_copy_local_param spl_custom   // up to v13: copy ctx.b250/local.param from SectionHeaderCtx.param. since v14, piz always copies, except for LT_BITMAP
         uint8_t spl_custom       : 1;  // introduced v14: similar to store_per_line, but storing is done by the context's SPECIAL function, instead of in reconstruct_store_history
         uint8_t all_the_same     : 1;  // SEC_B250: the b250 data contains only one element, and should be used to reconstruct any number of snips from this context
+
         #define same_line        ctx_specific_flag // v13.0.5: Valid for contexts that use SNIP_OTHER_DELTA and SNIP_DIFF: if true, reconstructs gets the value in the line (whether before or after). if false, it gets the last value.
         #define no_textual_seq   ctx_specific_flag // v14.0.0: SAM_SQBITMAP: indicates that sam_piz_sam2bam_SEQ doesn't need to store textual_seq. 
         #define depn_clip_hard   ctx_specific_flag // v14.0.0: OPTION_SA_Z in SAM_COMP_MAIN: if true: depn lines, if their CIGAR has a clipping, it is hard clipping (H)
         #define lookback0_ok     ctx_specific_flag // v14.0.0: contexts that are items of a container with lookback. indicates that a SNIP_LOOKBACK when lookback=0 is not an error.
         #define trailing_zero_ok ctx_specific_flag // v14.0.17: INFO_QD: whether reconstruct with or without trailing zeros. 
-
+        #define acgt_no_x        ctx_specific_flag // v15.0.13: contexts compressed with CODEC_ACGT: (NONREF and others): this context has no _X companion context
         uint8_t ctx_specific_flag: 1;  // v10.0.3: flag specific a context 
+
         uint8_t store_per_line   : 1;  // v12.0.41: store value or text for each line - in context->history        
     } ctx;
 
@@ -275,7 +277,7 @@ typedef enum __attribute__ ((__packed__)) {
     QF_ION_TORR_3=50, QF_ROCHE_454=51, QF_HELICOS=52, 
     QF_SRA_L=60, QF_SRA2=60, QF_SRA=62,
     QF_GENOZIP_OPT=70, QF_INTEGER=71, QF_HEX_CHR=72, QF_BAMSURGEON=73, QF_SEQAN=74, QF_CLC_GW=75, QF_STR_INT=76, QF_CONSENSUS=77,
-    QF_ULTIMA_1=80, QF_ULTIMA_2=81,
+    QF_ULTIMA_1=80, QF_ULTIMA_2bc=81, QF_ULTIMA_1bc=83,
     QF_SINGULAR=90, QF_SINGULR_1bc=92, 
     QF_ELEMENT=100, QF_ELEMENT_6=101, QF_ELEMENT_0bc=102, QF_ELEMENT_1bc=103, QF_ELEMENT_2bc=104,
 } QnameFlavorId;
@@ -363,7 +365,7 @@ typedef struct {
 // used for SEC_LOCAL and SEC_B250
 typedef struct {
     SectionHeader;
-    LocalType ltype;           // populated in both SEC_B250 and SEC_LOCAL: goes into ctx.ltype - type of data for the ctx.local buffer
+    LocalType ltype;           // populated in both SEC_B250 and SEC_LOCAL: goes into ctx.ltype - type of data for the ctx->local buffer
     uint8_t param;             // Three options: 1. goes into ctx.local.param. (until v13: if flags.copy_local_param. since v14: always, except if ltype=LT_BITMAP) 
                                //                2. given to comp_uncompress as a codec parameter
                                //                3. starting 9.0.11 for ltype=LT_BITMAP: number of unused bits in top bits word

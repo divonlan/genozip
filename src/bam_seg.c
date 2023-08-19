@@ -26,7 +26,7 @@ void bam_seg_initialize (VBlockP vb)
 // detect if a generic file is actually a BAM
 bool is_bam (STRp(header), bool *need_more)
 {
-    return str_isprefix_(STRa(header), _S("BAM\1"));
+    return str_isprefix_(STRa(header), _S(BAM_MAGIC));
 }
 
 static int32_t bam_unconsumed_scan_forwards (VBlockP vb)
@@ -404,8 +404,8 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
         goto done;
     }
 
-    // case: biopsy (only arrives here in MAIN VBs if gencomp) 
-    //       or biopsy_line: we just needed to pass sam_seg_is_gc_line and we're done
+    // case: biopsy (only arrives here in MAIN VBs if gencomp) biopsy_line: 
+    // we just need to pass sam_seg_is_gc_line and we're done
     if ((flag.biopsy && !segconf.running) ||
         (flag.biopsy_line.line_i != NO_LINE && sam_seg_test_biopsy_line (VB, alignment, block_size + 4)) )
         goto done;  

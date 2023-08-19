@@ -1787,6 +1787,15 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
         // Illumina ISAAC fields
         case _FORMAT_GQX   : COND (segconf.vcf_is_isaac, vcf_seg_FORMAT_GQX (vb, ctx, STRi(sf, i)));
 
+        // DRAGEN fields
+        case _FORMAT_PE    : COND (segconf.vcf_is_dragen, seg_array (VB, ctx, ctx->did_i, STRi(sf, i), ',', 0, false, STORE_INT, DICT_ID_NONE, sf_lens[i]));
+        case _FORMAT_BC    : 
+        case _FORMAT_CN    : COND (segconf.vcf_is_dragen, seg_integer_or_not (VB, ctx, STRi(sf, i), sf_lens[i]));
+
+        // manta fields
+        case _FORMAT_SR    :
+        case _FORMAT_PR    : COND (segconf.vcf_is_manta, seg_array (VB, ctx, ctx->did_i, STRi(sf, i), ',', 0, false, STORE_INT, DICT_ID_NONE, sf_lens[i]));
+
         default            :
         fallback           : seg_by_ctx (VB, STRi(sf, i), ctx, sf_lens[i]);
         }

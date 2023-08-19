@@ -263,8 +263,8 @@ void segconf_calculate (void)
     // check for components that don't need segconf
     if (segconf_no_calculate()) return; 
     
-    if (TXT_DT(GENERIC) ||              // no need for a segconf test VB in generic files
-        (flag.biopsy && flag.force)) {  // no need for segconf for a biopsy if --force (allows for biopsy of defective files)
+    if (TXT_DT(GENERIC) ||    // no need for a segconf test VB in generic files
+        flag.skip_segconf) {  // for use in combination with --biopsy, to biopsy of a defective file
         segconf_set_vb_size (NULL, segconf.vb_size);
         return;
     }

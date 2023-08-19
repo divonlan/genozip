@@ -39,7 +39,9 @@ void vcf_info_zip_initialize (void)
 void vcf_info_seg_initialize (VBlockVCFP vb) 
 {
     ctx_set_store (VB, STORE_INT, INFO_AN, INFO_AC, INFO_ADP, INFO_DP, INFO_MLEAC, 
-                   INFO_DP4_RF, INFO_DP4_RR, INFO_DP4_AF, INFO_DP4_AR, DID_EOL);
+                   INFO_DP4_RF, INFO_DP4_RR, INFO_DP4_AF, INFO_DP4_AR, 
+                   INFO_AC_Hom, INFO_AC_Het, INFO_AC_Hemi,
+                   DID_EOL);
 
     CTX(INFO_AF)->flags.store = STORE_FLOAT;
     // xxx (is this really needed for --indels-only?) CTX(INFO_SVTYPE)-> flags.store = STORE_INDEX; // since v13 - consumed by vcf_refalt_piz_is_variant_indel
@@ -55,7 +57,7 @@ void vcf_info_seg_initialize (VBlockVCFP vb)
     if (segconf.has[INFO_HGVSG])   vcf_seg_hgvs_consolidate_stats (vb, INFO_HGVSG);
     if (segconf.has[INFO_ANN])     vcf_seg_hgvs_consolidate_stats (vb, INFO_ANN); // subfield HGVS_c
 
-    CTX(INFO_DP4_RF)->ltype = CTX(INFO_DP4_AF)->ltype = LT_DYN_INT;
+    CTX(INFO_SVLEN)->ltype = CTX(INFO_DP4_RF)->ltype = CTX(INFO_DP4_AF)->ltype = LT_DYN_INT;
 }
 
 //--------
@@ -188,7 +190,7 @@ static void vcf_seg_INFO_DP4 (VBlockVCFP vb, ContextP ctx, STRp(dp4))
 
     SegCallback callbacks[4] = { 0, vcf_seg_INFO_DP4_delta, 0, vcf_seg_INFO_DP4_delta }; 
 
-    seg_struct (VB, ctx, container_DP4, STRa(dp4), callbacks, dp4_len);
+    seg_struct (VB, ctx, container_DP4, STRa(dp4), callbacks, dp4_len, true);
 }
 
 // -------
@@ -217,7 +219,7 @@ static int vcf_INFO_ALLELE_get_allele (VBlockVCFP vb, STRp (value))
 
 // checks if value is identifcal to the REF or one of the ALT alleles, and if so segs a SPECIAL snip
 // Used for INFO/AA, INFO/CSQ/Allele, INFO/ANN/Allele. Any field using this should have the VCF2VCF_ALLELE translator set in vcf_lo_luft_trans_id.
-bool vcf_seg_INFO_allele (VBlockP vb_, ContextP ctx, STRp(value), uint32_t repeat) // returns true if caller still needs to seg 
+bool vcf_seg_INFO_allele (VBlockP vb_, ContextP ctx, STRp(value), uint32_t repeat)  
 {
     VBlockVCFP vb = (VBlockVCFP)vb_;
     
@@ -411,33 +413,51 @@ TRANSLATOR_FUNC (vcf_piz_luft_XREV)
 // INFO/AC
 // -------
 
-static void vcf_seg_INFO_AC (VBlockVCFP vb, ContextP ac_ctx, STRp(field))
+static void vcf_seg_INFO_AC (VBlockVCFP vb, ContextP ac_ctx, STRp(ac_str))
 {
     // case: AC = AN * AF (might not be, due to rounding errors, esp if AF is a very small fraction)
     if (ctx_has_value_in_line_(vb, CTX(INFO_AC)) && // AC exists and is a valid int (set in vcf_seg_info_subfields if AC is a single int)
         ctx_has_value_in_line_(vb, CTX(INFO_AN)) && // AN exists and is a valid int
         ctx_has_value_in_line_(vb, CTX(INFO_AF)) && // AF exists and is a valid float
-        (int64_t)round (CTX(INFO_AF)->last_value.f * CTX(INFO_AN)->last_value.i) == CTX(INFO_AC)->last_value.i) { // AF * AN == AC
+        (int64_t)round (CTX(INFO_AF)->last_value.f * CTX(INFO_AN)->last_value.i) == ac_ctx->last_value.i) { // AF * AN == AC
 
         ac_ctx->no_stons = true;
-        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_AC }), 2, ac_ctx, field_len);
+        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_AC }), 2, ac_ctx, ac_str_len);
+    }
+
+    // GIAB: AC = AC_Hom + AC_Het + AC_Hemo
+    else if (ctx_has_value_in_line_(vb, CTX(INFO_AC_Hom)) &&
+             ctx_has_value_in_line_(vb, CTX(INFO_AC_Het)) &&
+             ctx_has_value_in_line_(vb, CTX(INFO_AC_Hemi)) &&
+             ac_ctx->last_value.i == CTX(INFO_AC_Hom)->last_value.i + CTX(INFO_AC_Het)->last_value.i + CTX(INFO_AC_Hemi)->last_value.i) {
+        ac_ctx->no_stons = true;
+        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_AC, '1' }), 3, ac_ctx, ac_str_len);
     }
 
     // case: AC is multi allelic, or an invalid value, or missing AN or AF or AF*AN != AC
     else 
-        seg_by_ctx (VB, STRa(field), ac_ctx, field_len);
+        seg_by_ctx (VB, STRa(ac_str), ac_ctx, ac_str_len);
 }
 
 // reconstruct: AC = AN * AF
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_AC)
 {
-    if (!reconstruct) return false;
-
     // Backward compatability note: In files v6->11, snip has 2 bytes for AN, AF which mean: '0'=appears after AC, '1'=appears before AC. We ignore them.
 
     // note: update last_value too, so its available to vcf_piz_luft_A_AN, which is called becore last_value is updated
-    ctx->last_value.i = new_value->i = (int64_t)round (reconstruct_peek (vb, CTX(INFO_AN), 0, 0).i * reconstruct_peek(vb, CTX(INFO_AF), 0, 0).f);
-    RECONSTRUCT_INT (new_value->i); 
+    if (!snip_len || !VER(15))
+        ctx->last_value.i = new_value->i = (int64_t)round (reconstruct_peek (vb, CTX(INFO_AN), 0, 0).i * reconstruct_peek(vb, CTX(INFO_AF), 0, 0).f);
+
+    else if (*snip == '1') 
+        ctx->last_value.i = new_value->i = 
+            reconstruct_peek (vb, CTX(INFO_AC_Hom),  0, 0).i +
+            reconstruct_peek (vb, CTX(INFO_AC_Het),  0, 0).i +
+            reconstruct_peek (vb, CTX(INFO_AC_Hemi), 0, 0).i;
+
+    else 
+        ASSPIZ (false, "unrecognized snip '%c'(%u). upgrade to latest version of Genozip.", *snip, (uint8_t)*snip);
+
+    if (reconstruct) RECONSTRUCT_INT (new_value->i); 
 
     return HAS_NEW_VALUE;
 }
@@ -580,29 +600,60 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_COPYPOS)
     return NO_NEW_VALUE;
 }
 
-// ----------
-// INFO/SVLEN
-// ----------
 
-static inline bool vcf_seg_test_SVLEN (VBlockVCFP vb, STRp(svlen_str))
+// ------------------------
+// INFO/SVLEN & INFO/REFLEN
+// ------------------------
+
+static inline void vcf_seg_INFO_SVLEN (VBlockVCFP vb, ContextP ctx, STRp(svlen_str))
 {
     int64_t svlen;
-    if (!str_get_int (STRa(svlen_str), &svlen)) return false;
+    if (!str_get_int (STRa(svlen_str), &svlen)) 
+        seg_by_ctx (VB, STRa(svlen_str), ctx, svlen_str_len);
 
-    int64_t last_delta = CTX (VCF_POS)->last_delta; // INFO_END is an alias of POS - so the last delta would be between END and POS
-    return last_delta == -svlen;
+    // if SVLEN is negative, it is expected to be minus the delta between END and POS
+    else if (-svlen == CTX(VCF_POS)->last_delta) // INFO_END is an alias of POS - so the last delta would be between END and POS
+        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_SVLEN }), 2, ctx, svlen_str_len);
+
+    // for left-anchored deletions or insertions, SVLEN might be the length of the payload
+    else if (svlen == MAX_(vb->main_alt_len, vb->main_ref_len) - 1)
+        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_SVLEN, '1' }), 3, ctx, svlen_str_len);
+
+    else
+        seg_integer_or_not (VB, ctx, STRa(svlen_str), svlen_str_len);
 }
 
-// the case where SVLEN is minus the delta between END and POS
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_SVLEN)
+static inline void vcf_seg_INFO_REFLEN (VBlockVCFP vb, ContextP ctx, STRp(reflen_str)) // note: ctx is INFO/END *not* POS (despite being an alias)
 {
-    if (!reconstruct) goto done;
+    int64_t reflen;
 
-    int64_t value = -CTX (VCF_POS)->last_delta; // END is a alias of POS - they share the same data stream - so last_delta would be the delta between END and POS
-    RECONSTRUCT_INT (value);
+    if (CTX(VCF_POS)->last_delta && str_get_int (STRa(reflen_str), &reflen) && reflen == CTX(VCF_POS)->last_delta)
+        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_SVLEN, '2' }, 3, ctx, reflen_str_len);
+    else
+        seg_by_ctx (VB, STRa(reflen_str), ctx, reflen_str_len);
+}
 
-done:
-    return NO_NEW_VALUE;
+
+// the case where SVLEN is minus the delta between END and POS
+SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_SVLEN)
+{
+    VBlockVCFP vb = (VBlockVCFP)vb_;
+    
+    if (!snip_len) 
+        new_value->i = -CTX(VCF_POS)->last_delta; // END is a alias of POS - they share the same data stream - so last_delta would be the delta between END and POS
+
+    else if (*snip == '2') // introduced 15.0.13
+        new_value->i = CTX(VCF_POS)->last_delta;
+
+    else if (*snip == '1') // introduced 15.0.13
+        new_value->i = MAX_(vb->main_alt_len, vb->main_ref_len) - 1;
+
+    else
+        ASSPIZ (false, "unrecognized snip '%c'(%u). upgrade to latest version of Genozip.", *snip, (uint8_t)*snip);
+
+    if (reconstruct) RECONSTRUCT_INT (new_value->i);
+
+    return HAS_NEW_VALUE;
 }
 
 // -----------
@@ -754,8 +805,10 @@ static void vcf_seg_info_add_DVCF_to_InfoItems (VBlockVCFP vb)
         if (chain_is_loaded || rolled_back || added_variant) {
             uint32_t growth = INFO_DVCF_LEN + 1 + (vb->info_items.len32 > 2); // +1 for '=', +1 for ';' if we already have item(s) execpt for the DVCF items
 
-            if (vb->line_coords == DC_PRIMARY) vb->recon_size += growth;
-            else vb->recon_size_luft += growth;
+            if (vb->line_coords == DC_PRIMARY) 
+                vb->recon_size += growth;
+            else 
+                vb->recon_size_luft += growth;
         }
     }
 
@@ -849,13 +902,14 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_CIEND: // alias of INFO/CIPOS
             CALL (seg_by_did (VB, STRa(value), INFO_CIPOS, value_len));
 
-        // if SVLEN is negative, it is expected to be minus the delta between END and POS
         case _INFO_SVLEN:
-            CALL_IF (vcf_seg_test_SVLEN (vb, STRa(value)), 
-                     seg_by_ctx (VB, ((char [2]){ SNIP_SPECIAL, VCF_SPECIAL_SVLEN }), 2, ctx, value_len));
+            CALL (vcf_seg_INFO_SVLEN (vb, ctx, STRa(value)));
 
         case _INFO_SVTYPE:
             CALL_WITH_FALLBACK (vcf_seg_SVTYPE);
+
+        case _INFO_REFLEN:
+            CALL (vcf_seg_INFO_REFLEN (vb, ctx, STRa(value)));
 
         // ##INFO=<ID=BaseCounts,Number=4,Type=Integer,Description="Counts of each base">
         case _INFO_BaseCounts: 
@@ -893,7 +947,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
 
         // ##INFO=<ID=QD,Number=1,Type=Float,Description="Variant Confidence/Quality by Depth">
         case _INFO_QD:
-        seg_set_last_txt (VB, CTX(INFO_QD), STRa(value)); break;
+            seg_set_last_txt (VB, CTX(INFO_QD), STRa(value)); break;
 
         // ##INFO=<ID=AA,Number=1,Type=String,Description="Ancestral Allele"> 
         case _INFO_AA: // But in COSMIC, INFO/AA is something entirely different
@@ -913,7 +967,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_GQ_HIST:
         case _INFO_AGE_HISTOGRAM_HET:
         case _INFO_AGE_HISTOGRAM_HOM: 
-            CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), ',', '|', false, STORE_INT, DICT_ID_NONE, value_len));
+            CALL (seg_uint32_matrix (VB, ctx, ctx->did_i, STRa(value), ',', '|', false, value_len));
 
         case _INFO_DP4:
             CALL (vcf_seg_INFO_DP4 (vb, ctx, STRa(value)));
@@ -1010,8 +1064,15 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_VW:              CALL_IF (segconf.vcf_is_vagrent, vcf_seg_INFO_VW (vb, ctx, STRa(value)));
 
         // IsaacVariantCaller / starling
+        case _INFO_RU:              CALL_IF (segconf.vcf_is_isaac, vcf_seg_INFO_RU (vb, ctx, STRa(value)));
+        case _INFO_REFREP:          CALL_IF (segconf.vcf_is_isaac, seg_integer_or_not (VB, ctx, STRa(value), value_len));
+        case _INFO_IDREP:           CALL_IF (segconf.vcf_is_isaac, vcf_seg_INFO_IDREP (vb, ctx, STRa(value)));
         case _INFO_CSQT:            CALL_IF (segconf.vcf_is_isaac, seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
         case _INFO_cosmic:          CALL_IF (segconf.vcf_is_isaac, seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
+
+        // manta
+        // case _INFO_LEFT_SVINSSEQ: 
+        // case _INFO_RIGHT_SVINSSEQ: // tried ACGT, better off without
 
         default: standard_seg:
             seg_by_ctx (VB, STRa(value), ctx, value_len);

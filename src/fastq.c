@@ -312,7 +312,7 @@ void fastq_seg_initialize (VBlockP vb_)
     }
 
     if (!flag.multiseq)
-        codec_acgt_comp_init (VB, FASTQ_NONREF);
+        codec_acgt_seg_initialize (VB, FASTQ_NONREF, true);
 
     // initialize QUAL to LT_SEQUENCE, it might be changed later to LT_CODEC (eg domq, longr)
     ctx_set_ltype (VB, LT_SEQUENCE, FASTQ_QUAL, DID_EOL);

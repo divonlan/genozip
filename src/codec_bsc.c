@@ -12,7 +12,7 @@
 #include "buffer.h"
 #include "bsc/libbsc.h"
 
-static rom codec_bsc_errstr (int err)
+rom codec_bsc_errstr (int err)
 {
     switch (err) {
         case LIBBSC_NO_ERROR:              return "LIBBSC_NO_ERROR";

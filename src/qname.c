@@ -20,6 +20,7 @@
 #include "qname_flavors.h"
 #include "file.h"
 #include "sam.h"
+#include "codec.h"
 
 static STRl(copy_qname, 50);
 
@@ -182,6 +183,9 @@ void qname_zip_initialize (void)
                 ASSERT (qfs->con.items[qfs->integer_items[i]].separator[0] != CI0_FIXED_0_PAD,
                         "since qfs=%s item=%u has seperator[0] == CI0_FIXED_0_PAD, expecting it to be numeric, not int", qfs->name, qfs->integer_items[i]);
                 qfs->is_integer[qfs->integer_items[i]] = true;
+
+                ASSERT (qfs->barcode_item != qfs->integer_items[i], "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both an integer_item and barcode_item",
+                        qfs->name, qfs->barcode_item);
             }
 
             for (unsigned i=0; qfs->numeric_items[i] != -1; i++) {
@@ -191,6 +195,9 @@ void qname_zip_initialize (void)
 
                 ASSERT (!qfs->is_integer[qfs->numeric_items[i]], "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both an integer_item and numeric_item",
                         qfs->name, qfs->numeric_items[i]);
+
+                ASSERT (qfs->barcode_item != qfs->numeric_items[i], "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both an numeric_item and barcode_item",
+                        qfs->name, qfs->barcode_item);
             }
 
             for (unsigned i=0; qfs->hex_items[i] != -1; i++) {
@@ -199,10 +206,27 @@ void qname_zip_initialize (void)
                 ASSERT (qfs->is_integer[qfs->hex_items[i]] || qfs->is_numeric[qfs->hex_items[i]], 
                         "Error in definition of QNAME flavor=%s: item=%u a hex_item must also be either an integer_item or a numeric_item",
                         qfs->name, qfs->hex_items[i]);
+
+                ASSERT (qfs->barcode_item != qfs->hex_items[i], "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both an hex_item and barcode_item",
+                        qfs->name, qfs->barcode_item);
             }
 
             for (unsigned i=0; qfs->in_local[i] != -1; i++)
                 qfs->is_in_local[qfs->in_local[i]] = true;
+
+            if (qfs->barcode_item != -1) {
+                ASSERT (qfs->barcode_item != qfs->range_end_item1 && qfs->barcode_item != qfs->range_end_item2, 
+                        "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both a range_item and barcode_item",
+                        qfs->name, qfs->barcode_item);
+
+                ASSERT (qfs->barcode_item != qfs->ordered_item1 && qfs->barcode_item != qfs->ordered_item2, 
+                        "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both an ordered_item and barcode_item",
+                        qfs->name, qfs->barcode_item);
+
+                ASSERT (qfs->barcode_item != qfs->seq_len_item, 
+                        "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both a seq_len_item and barcode_item",
+                        qfs->name, qfs->barcode_item);
+            }
 
             ASSERT (qfs->ordered_item1 == -1 || qfs->is_integer[qfs->ordered_item1] || qfs->is_numeric[qfs->ordered_item1] || qfs->is_hex[qfs->ordered_item1], 
                     "Error in definition of QNAME flavor=%s: item=%u is one of \"ordered_item\" - expecting it to be is_integer or is_numeric or is_hex", qfs->name, qfs->ordered_item1);
@@ -231,15 +255,24 @@ void qname_seg_initialize (VBlockP vb, QType q, Did st_did_i)
     if (qfs->range_end_item2 != -1) ctx_by_item (qfs->range_end_item2-1)->flags.store = STORE_INT; 
     if (qfs->seq_len_item    != -1) ctx_by_item (qfs->seq_len_item)     ->flags.store = STORE_INT; 
 
+    bool barcode_initialized = false;
     for (int i=0; qfs->in_local[i] != -1; i++) {
         #define IS(what) qfs->is_##what[qfs->in_local[i]]
 
         if (IS(integer) || IS(numeric))
             ctx_by_item (qfs->in_local[i])->ltype = IS(hex) ? LT_DYN_INT_h : LT_DYN_INT; // required by seg_integer_or_not / seg_numeric_or_not
 
+        else if (qfs->barcode_item == qfs->in_local[i]) {
+            codec_acgt_seg_initialize (vb, ctx_by_item (qfs->barcode_item)->did_i, false);
+            barcode_initialized = true;
+        }
         else // textual
             ctx_by_item (qfs->in_local[i])->no_stons = true; // required by seg_add_to_local_text
     }
+
+    // a barcode that is not in local, is strictly in dict (eg molecular identifiers might be sparsely distributed in the file - we don't want the first VB encountering to mark as singleton)
+    if (qfs->barcode_item != -1 && !barcode_initialized)
+        ctx_by_item (qfs->barcode_item)->no_stons = true;
 
     if (qfs->seq_len_item != -1 && (VB_DT(SAM) || VB_DT(BAM))) 
         ctx_by_item (qfs->seq_len_item)->flags.store_per_line = true; // consumed by sam_cigar_special_CIGAR
@@ -288,6 +321,9 @@ QnameTestResult qname_test_flavor (STRp(qname), QType q, QnameFlavor qfs, bool q
     // check that all the items expected to be integer (no leading zeros) are indeed so
     for (const int *item_i = qfs->integer_items; *item_i != -1; item_i++)
         if (!qfs->is_hex[*item_i] && !str_is_int (STRi(item, *item_i))) return QTR_BAD_INTEGER;
+
+    if (qfs->barcode_item != -1)
+        if (!str_is_ACGTN (STRi(item, qfs->barcode_item))) return QTR_NOT_BARCODE;
 
     return QTR_SUCCESS; // yes, qname is of this flavor
 }
@@ -448,6 +484,9 @@ bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additional_byt
 
             else if (qfs->is_numeric[item_i])
                 seg_numeric_or_not (vb, item_ctx, STRa(str), str_len); // hex or not
+
+            else if (qfs->barcode_item == item_i) 
+                codec_acgt_seg (vb, item_ctx, STRa(str));
 
             else 
                 seg_add_to_local_text (vb, item_ctx, STRa(str), LOOKUP_SIMPLE, str_len);

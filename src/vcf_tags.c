@@ -43,8 +43,8 @@ static void vcf_tags_cmdline_type_and_name_do (STRp(s), rom option,
         ASSINP (n_lefts > 0, "%s: invalid format of tag name: \"%.*s\". Expecting something like \"INFO/AC\" or just \"AC\". See " WEBSITE_DVCF,
                 option, s_len, s);
 
-        *tag_name = lefts[n_lefts==0 ? 0 : n_lefts-1]; // condition to avoid compiler warning 
-        *tag_name_len = left_lens[n_lefts==0 ? 0 : n_lefts-1];
+        *tag_name = lefts[n_lefts==0 ? 0 : (n_lefts-1)]; // condition to avoid compiler warning 
+        *tag_name_len = left_lens[n_lefts==0 ? 0 : (n_lefts-1)];
 
         ASSINP (*tag_name_len > 0, "%s: empty tag name. See: " WEBSITE_DVCF, option);    
         

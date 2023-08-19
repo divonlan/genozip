@@ -90,7 +90,7 @@ void writer_set_num_txtheader_lines (CompIType comp_i, uint32_t num_txtheader_li
 // or record in binary file (eg alignment in BAM). In case of a text file, it also includes the header lines.
 // For now: returns 0 if reconstruction modifies the file, and therefore recon_plan doesn't reconstruct the original file
 // To do: return line according to recon plan even if modified. challenge: lines dropped by reconstructor and not known yet to writer
-uint64_t writer_get_txt_line_i (VBlockP vb)
+uint64_t writer_get_txt_line_i (VBlockP vb, LineIType line_in_vb/*0-based*/)
 {
     if (flag.data_modified) return 0;
 
@@ -102,8 +102,8 @@ uint64_t writer_get_txt_line_i (VBlockP vb)
     for (uint64_t i=0; i < plan_len; i++) {
         if (plan[i].vb_i == vb->vblock_i) {
             // case: plan item containing this line
-            if (vb_num_lines + plan[i].num_lines > vb->line_i) 
-                return txt_num_lines + (vb->line_i - vb_num_lines) + 1; // +1 because 1-based 
+            if (vb_num_lines + plan[i].num_lines > line_in_vb) 
+                return txt_num_lines + (line_in_vb - vb_num_lines) + 1; // +1 because 1-based 
 
             // case: plan item is from current VB, but we have not yet reached the current line
             else

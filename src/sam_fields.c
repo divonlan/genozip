@@ -1134,8 +1134,11 @@ static void sam_seg_array_field (VBlockSAMP vb, ZipDataLineSAM *dl, DictId dict_
                                  rom array, int/*signed*/ array_len, // SAM: comma separated array ; BAM : arrays original width and machine endianity
                                  ArrayItemCallback callback, void *cb_param) // optional - call back for each item to seg the item
 {   
-    // prepare array container - a single item, with number of repeats of array element. array type is stored as a prefix
     bool is_bam = IS_BAM_ZIP;
+
+    uint32_t repeats = (is_bam || !array_len) ? array_len : (1 + str_count_char (STRa(array), ','));
+
+    // prepare array container - a single item, with number of repeats of array element. array type is stored as a prefix
     Context *con_ctx = ctx_get_ctx (vb, dict_id), *elem_ctx;
     SmallContainer *con = sam_seg_array_field_get_con (vb, con_ctx, type, !!callback, is_bam, &elem_ctx);
 
@@ -1144,7 +1147,6 @@ static void sam_seg_array_field (VBlockSAMP vb, ZipDataLineSAM *dl, DictId dict_
     int array_bytes = is_bam ? (width * array_len) : array_len;
     elem_ctx->txt_len += array_bytes;
 
-    uint32_t repeats = is_bam ? array_len : (1 + str_count_char (STRa(array), ','));
     con->repeats = (repeats == dl->SEQ.len ? CON_REPEATS_IS_SEQ_LEN : repeats);
 
     ASSERT (repeats < CONTAINER_MAX_REPEATS, "%s: array has too many elements, more than %u", LN_NAME, CONTAINER_MAX_REPEATS);
@@ -1195,9 +1197,14 @@ static void sam_seg_array_field (VBlockSAMP vb, ZipDataLineSAM *dl, DictId dict_
     if (is_int || is_bam)
        elem_ctx->local.len /= width; // return len back to counting in units of ltype
  
-    // add bytes here in case of BAM - all to main field
-    unsigned container_add_bytes = is_bam ? (4/*count*/ + 1/*type*/) : (2/*type - eg "i,"*/ + 1/*\t or \n*/);
-    container_seg (vb, con_ctx, (ContainerP)con, ((char[]){ CON_PX_SEP, type, ',', CON_PX_SEP }), 4, container_add_bytes);
+    if (repeats) {
+        unsigned container_add_bytes = is_bam ? (4/*count*/ + 1/*type*/) : (2/*type - eg "i,"*/ + 1/*\t or \n*/);
+        container_seg (vb, con_ctx, (ContainerP)con, ((char[]){ CON_PX_SEP, type, ',', CON_PX_SEP }), 4, container_add_bytes);
+    }
+    else {
+        unsigned container_add_bytes = is_bam ? (4/*count*/ + 1/*type*/) : (1/*type - eg "i"*/ + 1/*\t or \n*/);
+        container_seg (vb, con_ctx, (ContainerP)con, ((char[]){ CON_PX_SEP, type, CON_PX_SEP }), 3, container_add_bytes);
+    }
 }
 
 static void sam_seg_float_as_snip (VBlockSAMP vb, ContextP ctx, STRp(sam_value), ValueType bam_value, unsigned add_bytes)

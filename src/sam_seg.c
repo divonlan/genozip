@@ -76,12 +76,36 @@ bool sam_zip_dts_flag (int dts)
 // Seg stuff
 // ----------------------
 
-// detect if a generic file is actually a SAM
-bool is_sam (STRp(header), bool *need_more)
+static bool is_headerful_sam (STRp(header))
 {
     #define H(x) !memcmp (header, "@" #x "\t", 4)
 
     return header_len >= 4 && (H(HD) || H(CO) || H(SQ) || H(RG) || H(PG)); 
+}
+
+static bool is_headerless_sam (STRp(header))
+{
+    if (!str_is_printable (STRa(header))) return false;
+
+    // test one line to see that the fields make sense
+    str_split_by_tab (header, header_len, MAX_FIELDS + AUX, NULL, false, false); // also advances header
+    
+    if (!header || n_flds < AUX-1 || !sam_is_cigar (STRfld(CIGAR), false) ||
+        !str_is_int (STRfld (FLAG)) || !str_is_int (STRfld (POS)) || !str_is_int (STRfld (MAPQ)) || 
+        !str_is_int (STRfld (PNEXT)) || !str_is_int (STRfld (TLEN)))
+        return false;
+
+    // AUX fields start with xx:x:
+    for (uint32_t i=AUX; i < n_flds; i++)
+        if (fld_lens[i] < 5 || flds[i][2] != ':' || flds[i][4] != ':') return false;
+
+    return true;
+}
+
+// detect if a generic file is actually a SAM
+bool is_sam (STRp(header), bool *need_more)
+{
+    return is_headerful_sam (STRa(header)) || is_headerless_sam (STRa(header));
 }
 
 void sam_zip_free_end_of_z (void)
@@ -380,7 +404,7 @@ void sam_seg_initialize (VBlockP vb_)
     else
         ctx_consolidate_stats (VB, OPTION_SA_Z, OPTION_SA_RNAME, OPTION_SA_POS, OPTION_SA_STRAND, OPTION_SA_CIGAR, OPTION_SA_MAPQ, OPTION_SA_NM, OPTION_SA_MAIN, DID_EOL);
 
-    codec_acgt_comp_init (VB, SAM_NONREF);
+    codec_acgt_seg_initialize (VB, SAM_NONREF, true);
 
     sam_seg_QNAME_initialize (vb);
     sam_seg_QUAL_initialize (vb);
@@ -754,7 +778,8 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
     if (flag.reference == REF_INTERNAL && !txt_file->redirected && (!segconf.sam_is_unmapped || !segconf.is_long_reads))
         TIP ("Compressing a %s file using a reference file can reduce the size by 7%%-30%%%s.\n"
              "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
-             dt_name (txt_file->data_type), arch_get_argv0(), MP(UNKNOWN) ? " (even for unaligned files)" : "", txt_file->name);
+             dt_name (txt_file->data_type), MP(UNKNOWN) ? " (even for unaligned files)" : "", 
+             arch_get_argv0(), txt_file->name);
     
     ASSERT (!flag.debug_or_test || !segconf.has[OPTION_SA_Z] || segconf.sam_has_SA_Z || MP(LONGRANGER) || MP(UNKNOWN),
             "%s produces SA:Z, expecting segconf.sam_has_SA_Z to be set", segconf_sam_mapper_name()); // should be set in sam_header_zip_inspect_PG_lines
@@ -933,15 +958,15 @@ static void sam_get_one_aux (VBlockSAMP vb, int16_t idx,
     rom aux = vb->auxs[idx];
     uint32_t aux_len = vb->aux_lens[idx];
 
-    ASSSEG (aux_len >= 6 && aux[2] == ':' && aux[4] == ':', "invalid optional field format: %.*s", STRf (aux));
+    ASSSEG ((aux_len >= 6 || (aux_len == 5 && (aux[3]=='Z' || aux[3]=='H'))) && aux[2] == ':' && aux[4] == ':', "invalid optional field format: %.*s", STRf (aux));
 
     *tag = aux;
     *type = aux[3];
 
     if (*type == 'B') {
         *array_subtype = aux[5];
-        *value = aux + 7;
-        *value_len = aux_len - 7;
+        *value = (aux_len >= 7) ? (aux + 7) : (aux + 6);
+        *value_len = (aux_len >= 7) ? (aux_len - 7) : 0;
     }
 
     else {
@@ -961,7 +986,9 @@ void sam_seg_idx_aux (VBlockSAMP vb)
     bool is_bam = IS_BAM_ZIP;
 
     for (int16_t f = 0; f < vb->n_auxs; f++) {
-        ASSSEG (vb->aux_lens[f] > (is_bam ? 3 : 5), "Invalid auxilliary field format. AUX tag #%u (0-based) has a length of %u, expecting %u: \"%.*s\"",
+        ASSSEG (vb->aux_lens[f] > (is_bam ? 3 : 5) || 
+                (!is_bam && vb->aux_lens[f] == 5 && (vb->auxs[f][3] == 'Z' || vb->auxs[f][3] == 'H')), // in SAM, Z, H can be data-less, in BAM, they are nul-terminated
+                "Invalid auxilliary field format. AUX tag #%u (0-based) has a length of %u, expecting %u: \"%.*s\"",
                 f, vb->aux_lens[f], (is_bam ? 3 : 5), MIN_(16, vb->aux_lens[f]), vb->auxs[f]);
 
         char c1 = vb->auxs[f][0];
@@ -1157,11 +1184,19 @@ void sam_seg_aux_all (VBlockSAMP vb, ZipDataLineSAM *dl)
         if (!bam_type) bam_type = sam_seg_sam_type_to_bam_type (sam_type, numeric.i);
         if (!sam_type) sam_type = sam_seg_bam_type_to_sam_type (bam_type);
 
+        if (sam_type == 'Z')
+            for (int i=0; i < value_len; i++)
+                ASSSEG (value[i] >= ' ' && value[i] <= '~', // SAM specification section 1.5
+                        "Invalid character in %c%c:Z field [index=%u]: ASCII %u", tag[0], tag[1], i, value[i]);
+
+        else if (sam_type == 'H')
+            ASSSEG (str_is_hexup (STRa(value)), "Invalid character in %c%c:H field", tag[0], tag[1]);
+
         ASSERT (bam_type, "%s: value %" PRId64 " of field %c%c is out of range of the BAM specification: [%d-%u]",
                 LN_NAME, numeric.i, tag[0], tag[1], -0x80000000, 0x7fffffff);
 
         con.items[con_nitems (con)] = (ContainerItem){
-            .dict_id    = sam_seg_aux_field (vb, dl, is_bam, tag, bam_type, array_subtype, STRa (value), numeric),
+            .dict_id    = sam_seg_aux_field (vb, dl, is_bam, tag, bam_type, array_subtype, STRa(value), numeric),
             .translator = aux_field_translator((uint8_t)bam_type), // how to transform the field if reconstructing to BAM
             .separator  = {aux_sep_by_type[is_bam][(uint8_t)bam_type], '\t'},
         };

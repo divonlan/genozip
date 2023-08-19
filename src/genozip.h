@@ -17,6 +17,7 @@
 #include <stdnoreturn.h>
 
 #include "website.h"
+#include "version.h"
 
 #pragma GCC diagnostic ignored "-Wunknown-pragmas"    // needed for our #pragma GENDICT
 #ifdef __clang__ 
@@ -38,7 +39,7 @@ typedef enum __attribute__ ((__packed__)) {
     WARNING_FAIL // display warning and return error
 } FailType;
 
-typedef enum __attribute__ ((__packed__)) { RECON_OFF, RECON_ON } ReconType;
+typedef enum __attribute__ ((__packed__)) { RECON_OFF, RECON_ON, RECON_PREFIX_ONLY } ReconType;
 
 typedef unsigned __int128 uint128_t;
 typedef          __int128 int128_t;
@@ -382,7 +383,7 @@ typedef SORTER ((*Sorter));
 // actually do a binary search. buf is required to be sorted in an ascending order of field
 #define binary_search(func, type, buf, value) func (B1ST(type,(buf)), BLST(type,(buf)), value, 0);
 
-#define DO_ONCE static uint64_t do_once=0; if (!__atomic_test_and_set (&do_once, __ATOMIC_RELAXED))  
+#define DO_ONCE static bool do_once=0; if (!__atomic_test_and_set (&do_once, __ATOMIC_RELAXED))  
 
 // Strings - declarations
 #define SNIP(len) uint32_t snip_len=(len); char snip[len]
@@ -584,6 +585,8 @@ static inline void progress_newline(void) {
     }
 }
 
+static inline void stall (void) { while (1) sleep (1); }
+
 // check for a user error
 #define ASSINP(condition, format, ...)       ( { if (!(condition)) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); if (flags_command_line()) fprintf (stderr, "\n\ncommand: %s\n", flags_command_line()); else fprintf (stderr, "\n"); fflush (stderr); exit_on_error(false); }} )
 #define ASSINP0(condition, string)           ASSINP (condition, string "%s", "")
@@ -595,7 +598,7 @@ typedef struct { char s[256]; } StrTime; // long, in case of eg Chinese language
 extern StrTime str_time (void);
 
 #define SUPPORT "\nIf this is unexpected, please contact "EMAIL_SUPPORT".\n"
-#define ASSERT(condition, format, ...)       ( { if (!(condition)) { progress_newline(); fprintf (stderr, "%s Error in %s:%u: ", str_time().s, __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); fflush (stderr); exit_on_error(true); }} )
+#define ASSERT(condition, format, ...)       ( { if (!(condition)) { progress_newline(); fprintf (stderr, "%s Error in %s:%u " GENOZIP_CODE_VERSION ": ", str_time().s, __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); fflush (stderr); exit_on_error(true); }} )
 #define ASSERT0(condition, string)           ASSERT (condition, string "%s", "")
 #define ASSERTISNULL(p)                      ASSERT0 (!p, "expecting "#p" to be NULL")
 #define ASSERTNOTNULL(p)                     ASSERT0 (p, #p" is NULL")

@@ -122,6 +122,8 @@ void arch_initialize (rom my_argv0)
     argv0 = my_argv0;
 
     rom slash = strrchr (argv0, '/');
+    if (!slash && flag.is_windows) slash = strrchr (argv0, '\\');
+
     base_argv0 = slash ? slash + 1 : argv0;
 
     // verify CPU architecture and compiler is supported

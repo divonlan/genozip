@@ -36,8 +36,8 @@ typedef struct {
 
 typedef struct {
     VBIType vblock_i;
+    uint32_t start_line;
     LineCmpInfo info;
-    uint32_t start_line, num_lines;
     WordIndex prim_chrom_wi;
     PosType32 prim_start_pos;
 } LineInfo;
@@ -58,9 +58,6 @@ bool vcf_is_sorting (CompIType comp_i)
 
 static void vcf_linesort_merge_vb_do (VBlockP vb, bool is_luft)
 {
-    ASSERT_DT_FUNC (vb, sizeof_zip_dataline);
-    const unsigned dl_size = DT_FUNC (vb, sizeof_zip_dataline)();
-    
     mutex_lock (txt_file->recon_plan_mutex[is_luft]);
 
     buf_alloc (evb, &txt_file->line_info[is_luft], vb->lines.len, 0, LineInfo, CTX_GROWTH, 0); // added to evb buf_list in file_initialize_txt_file_data
@@ -68,7 +65,7 @@ static void vcf_linesort_merge_vb_do (VBlockP vb, bool is_luft)
     uint32_t start_i = txt_file->line_info[is_luft].len32;
 
     for (uint32_t line_i=0 ; line_i < vb->lines.len32 ; line_i++) {
-        ZipDataLineVCF *dl = (ZipDataLineVCF *)(&vb->lines.data[dl_size * line_i]);
+        ZipDataLineVCF *dl = DATA_LINE(line_i);
         PosType64 pos = dl->pos[is_luft];
         WordIndex chrom_word_index = node_word_index (vb, (is_luft ? DTF(luft_chrom) : DTF(prim_chrom)), dl->chrom[is_luft]);
 
@@ -77,20 +74,19 @@ static void vcf_linesort_merge_vb_do (VBlockP vb, bool is_luft)
             BNXT (LineInfo, txt_file->line_info[is_luft]) = (LineInfo){
                 .vblock_i         = vb->vblock_i,
                 .start_line       = line_i,
-                .num_lines        = 1,
                 .info.chrom_wi    = chrom_word_index,
                 .info.start_pos   = pos,
                 .info.end_pos     = pos + MAX_(0, dl->end_delta),
                 .info.tie_breaker = dl->tie_breaker,
 
                 // Primary coord data (for duplicate detection in Luft)
-                .prim_chrom_wi  = is_luft ? node_word_index (vb, CHROM, dl->chrom[0]) : WORD_INDEX_NONE,
-                .prim_start_pos = is_luft ? dl->pos[0] : 0,
+                .prim_chrom_wi    = is_luft ? node_word_index (vb, CHROM, dl->chrom[0]) : WORD_INDEX_NONE,
+                .prim_start_pos   = is_luft ? dl->pos[0] : 0,
             };
     }
 
     // store information about this VB, that will help us figure out if the entire file is sorted or not
-    buf_alloc_zero (evb, &txt_file->vb_info[is_luft], 0, MIN_(1000, vb->vblock_i), LsVbInfo, CTX_GROWTH, 0); // added to evb buf_list in file_initialize_txt_file_data
+    buf_alloc_zero (evb, &txt_file->vb_info[is_luft], 0, MAX_(1000, vb->vblock_i), LsVbInfo, CTX_GROWTH, 0); // added to evb buf_list in file_initialize_txt_file_data
 
     LineInfo *last_line = BLST (LineInfo, txt_file->line_info[is_luft]);
 
@@ -319,8 +315,9 @@ static uint32_t vcf_linesort_plan_reconstruction (bool is_luft)
         // same vb and consecutive lines - collapse to a single entry
         if (prev_li && 
             li->vblock_i == prev_li->vblock_i &&  
-            prev_li->start_line + prev_li->num_lines == li->start_line)
-            BLST (ReconPlanItem, *recon_plan)->num_lines += li->num_lines;
+            prev_li->start_line + 1 == li->start_line)
+            
+            BLST (ReconPlanItem, *recon_plan)->num_lines++;
 
         // different vb or non-consecutive lines - start new entry
         else {
@@ -328,7 +325,7 @@ static uint32_t vcf_linesort_plan_reconstruction (bool is_luft)
             BNXT (ReconPlanItem, *recon_plan) = (ReconPlanItem){
                 .vb_i       = li->vblock_i,
                 .start_line = li->start_line,
-                .num_lines  = li->num_lines
+                .num_lines  = 1
             };
         }
         
@@ -361,7 +358,7 @@ static uint32_t vcf_linesort_plan_reconstruction (bool is_luft)
     return max_num_txt_data_bufs;
 }
 
-// ZIP
+// ZIP main thread
 static void vcf_zip_generate_recon_plan_do (bool is_luft)
 {
     // create txt_file->recon_plan

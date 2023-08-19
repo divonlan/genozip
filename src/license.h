@@ -20,6 +20,7 @@ extern bool license_allow_tip (void);
 extern void license_show_deep_notice (void);
 extern void license_show_pair_notice (void);
 extern bool license_is_eval (void);
+extern void license_prepare (rom arg);
 
 typedef struct { char s[16384]; } StrNotice; 
 extern StrNotice license_print_default_notice (void);

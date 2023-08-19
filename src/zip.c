@@ -195,7 +195,7 @@ static inline void zip_generate_one_b250 (VBlockP vb, ContextP ctx, uint32_t wor
 // because: 1. the dictionary got integrated into the global one - some values might have already been in the global
 // dictionary thanks to other threads working on other VBs  
 // 2. for the first VB, we sort the dictionary by frequency returns true if section should be dropped
-static bool zip_generate_b250 (VBlockP vb, Context *ctx)
+static bool zip_generate_b250 (VBlockP vb, ContextP ctx)
 {
     START_TIMER;
     bool ret = true;
@@ -265,7 +265,7 @@ static bool zip_generate_b250 (VBlockP vb, Context *ctx)
     return ret;
 }
 
-static void zip_resize_local (VBlockP vb, Context *ctx)
+static void zip_resize_local (VBlockP vb, ContextP ctx)
 {
     if (!ctx->local.len) {
         ctx->ltype = LT_UINT8;
@@ -360,7 +360,7 @@ static void zip_resize_local (VBlockP vb, Context *ctx)
 
 // selects the smallest size (8, 16, 32) for the data, transposes, and BGENs
 // note: in PIZ, these are untransposed in eg BGEN_transpose_u32_buf
-static void zip_generate_transposed_local (VBlockP vb, Context *ctx)
+static void zip_generate_transposed_local (VBlockP vb, ContextP ctx)
 {
     ARRAY (uint32_t, data, ctx->local);
 
@@ -374,19 +374,19 @@ static void zip_generate_transposed_local (VBlockP vb, Context *ctx)
     
     buf_alloc (vb, &vb->scratch, 0, ctx->local.len * lt_width(ctx), char, 1, "scratch");
 
-    uint32_t cols = ctx->local.count;
+    uint32_t cols = ctx->local.n_cols;
     // we're restricted to 255 columns, because this number goes into uint8_t SectionHeaderCtx.param
     ASSERT (cols >= 0 && cols <= 255, "columns=%u out of range [1,255] in transposed matrix %s", cols, ctx->tag_name);
 
-    if (!cols) cols = vcf_header_get_num_samples(); // 0 if not vcf/bcf (not restricted to 255)
-    
+    if (!cols) {
+        ASSERT (Z_DT(VCF), "%s: cols=0 for ctx=%s", VB_NAME, ctx->tag_name);
+        cols = vcf_header_get_num_samples(); // not restricted to 255
+    }
+
     // case: matrix is not transposable - just BGEN it
     if (ctx->local.len32 % cols) {
         ctx->ltype = LT_UINT32; // not transposed
-
-        for (unsigned i=0; i < ctx->local.len32; i++)
-            data[i] = BGEN32 (data[i]);
-            
+        BGEN_u32_buf (&ctx->local, 0);
         goto done;
     }
 

@@ -10,6 +10,7 @@
 
 #include "genozip.h"
 #include "writer.h"
+#include "file.h"
 
 typedef struct { char s[100]; } PizDisCoords; 
 extern PizDisCoords piz_dis_coords (VBlockP vb); // for ASSPIZ
@@ -17,7 +18,18 @@ extern PizDisCoords piz_dis_coords (VBlockP vb); // for ASSPIZ
 typedef struct { char s[100]; } PizDisQname; 
 extern PizDisQname piz_dis_qname (VBlockP vb); // for ASSPIZ
 
-#define ASSPIZ(condition, format, ...) ({ if (!(condition)) { progress_newline(); fprintf (stderr, "%s %s/%s: Error in %s:%u line_in_file(1-based)=%"PRIu64" %s%s%s: ", str_time().s, LN_NAME, CTX(vb->curr_field)->tag_name, __FUNCLINE, writer_get_txt_line_i ((VBlockP)(vb)), cond_int (Z_DT(VCF) || Z_DT(BCF), " sample_i=", vb->sample_i), piz_dis_coords((VBlockP)(vb)).s, piz_dis_qname((VBlockP)(vb)).s); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); }})
+#define ASSPIZ(condition, format, ...) ({ \
+    if (!(condition)) { \
+        DO_ONCE { /* first thread to fail at this point prints error and starts exit flow, other threads stall */ \
+            progress_newline(); \
+            fprintf (stderr, "%s %s/%s: Error in %s:%u line_in_file(1-based)=%"PRIu64" %s%s%s: ", str_time().s, LN_NAME, CTX(vb->curr_field)->tag_name, __FUNCLINE, writer_get_txt_line_i ((VBlockP)(vb), vb->line_i), cond_int (Z_DT(VCF) || Z_DT(BCF), " sample_i=", vb->sample_i), piz_dis_coords((VBlockP)(vb)).s, piz_dis_qname((VBlockP)(vb)).s); fprintf (stderr, (format), __VA_ARGS__); \
+            fprintf (stderr, "\n"); \
+            exit_on_error(true); \
+        } \
+        else stall(); \
+    } \
+})
+
 #define ASSPIZ0(condition, string) ASSPIZ (condition, string "%s", "")
 
 // goes into ctx->history if not STORE_INT
@@ -117,8 +129,8 @@ typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, Did did_i, DictI
 #ifdef DEBUG
 #define RECONSTRUCT(s,s_len)                                                    \
     ({ uint32_t new_len = (uint32_t)(s_len); /* copy in case caller uses ++ */  \
-       ASSPIZ (vb->txt_data.len + new_len <= vb->txt_data.size, "RECONSTRUCT: txt_data overflow: txt_data.len=%"PRIu64" str_len=%u vb->txt_data.size=%u", \
-               vb->txt_data.len, new_len, (uint32_t)vb->txt_data.size);  /* leave vb->txt_data.len 64b to detect bugs */     \
+       ASSPIZ (vb->txt_data.len + new_len <= vb->txt_data.size, "RECONSTRUCT: txt_data overflow: txt_data.len=%"PRIu64" str_len=%u vb->txt_data.size=%u. vb->txt_data dumped to %s.gz", \
+               vb->txt_data.len, new_len, (uint32_t)vb->txt_data.size, txtfile_dump_vb ((VBlockP)(vb), z_name));  /* leave vb->txt_data.len 64b to detect bugs */     \
        memcpy (BAFTtxt, (s), new_len);                                          \
        Ltxt += new_len; })
 #else

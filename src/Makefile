@@ -68,7 +68,7 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.
 		  vcf_piz.c vcf_seg.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c vcf_hgvs.c      \
 		  vcf_format_GT.c vcf_format_PS_PID.c vcf_info_QD.c vcf_info_SF.c vcf_dbsnp.c vcf_giab.c vcf_vep.c      \
 		  vcf_refalt.c vcf_tags.c vcf_linesort.c vcf_format.c vcf_illum_gtyping.c vcf_gwas.c vcf_vagrent.c		\
-		  vcf_icgc.c vcf_snpeff.c vcf_cosmic.c vcf_mastermind.c vcf_isaac.c										\
+		  vcf_icgc.c vcf_snpeff.c vcf_cosmic.c vcf_mastermind.c vcf_isaac.c	vcf_manta.c								\
 		  sam_seg.c sam_piz.c sam_shared.c sam_header.c sam_md.c sam_tlen.c sam_cigar.c sam_fields.c  			\
 		  sam_sa.c bam_seg.c bam_seq.c bam_show.c sam_pacbio.c sam_ultima.c                               					\
 		  sam_seq.c sam_qual.c sam_sag_zip.c sam_sag_piz.c sam_sag_load.c sam_sag_ingest.c sam_sag_scan.c    	\
@@ -325,6 +325,7 @@ clean:  # careful not to delete license.o
 	@rm -f $(EXECUTABLES) $(OBJS) $(DEPS) 
 
 clean-distribution: # clean all platforms
+	@bash --norc --noprofile secure/prepare.sh # before clean removes executables
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@echo Cleaning up all platforms for distribution
 	@rm -f $(OBJDIR_LINUX)/*.o $(OBJDIR_LINUX)/*.d $(OBJDIR_WINDOWS)/*.o $(OBJDIR_WINDOWS)/*.d $(OBJDIR_MAC)/*.o $(OBJDIR_MAC)/*.d
@@ -494,10 +495,12 @@ push-build:
 distribution:             clean-distribution increment-version testfiles ../LICENSE.txt $(INSTALLERS)/LICENSE.html $(INSTALLERS)/genozip-linux-x86_64.tar.build $(INSTALLERS)/genozip-installer.exe \
                           push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
 	@(cd $(CONDA_FEEDSTOCK) ; git pull)
+	@echo "Now, build for older versions of glibc (see internal-docs)"
 
 distribution-maintenance: clean-distribution increment-version testfiles ../LICENSE.txt $(INSTALLERS)/LICENSE.html $(INSTALLERS)/genozip-linux-x86_64.tar.build $(INSTALLERS)/genozip-installer.exe \
                           push-build conda/.conda-timestamp 
 	@(cd $(CONDA_FEEDSTOCK) ; git pull)
+	@echo "Now, build for older versions of glibc (see internal-docs)"
 
 test-backup: genozip.exe
 	@echo "Compressing test/ files for in preparation for backup (except cram and bcf)"

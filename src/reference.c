@@ -676,8 +676,9 @@ RangeP ref_seg_get_range (VBlockP vb, Reference ref, WordIndex chrom, STRp(chrom
     // sanity checks
     ASSERT0 (vb->chrom_name, "vb->chrom_name=NULL");
     
-    ASSINP0 (ref->ranges.rtype, "No contigs available, use --reference"); // no external reference and no header contigs
-    
+    // case: no external reference and no header contigs
+    ASSINP (ref->ranges.rtype, "No contigs specified in the %s header, use --reference", z_dt_name());
+             
     if (ref_index == WORD_INDEX_NONE)
         ref_index = IS_REF_INTERNAL ? chrom :  chrom_2ref_seg_get (ref, vb, chrom)/*only works for prim_chrom*/;
 

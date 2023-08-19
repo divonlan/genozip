@@ -181,9 +181,12 @@ VBlockP vb_initialize_nonpool_vb (int vb_id, DataType dt, rom task)
     vb->pool              = NO_POOL;
     init_dict_id_to_did_map (vb->d2d_map); 
     
-    vb->buffer_list.name = "buffer_list";
-    buf_init_lock (&vb->buffer_list);
-    buflist_add_buf (vb, &vb->buffer_list, __FUNCLINE);
+    if (!vb->buffer_list.vb) {
+        vb->buffer_list.name = "buffer_list";
+        buf_init_lock (&vb->buffer_list);
+        buflist_add_buf (vb, &vb->buffer_list, __FUNCLINE);
+        vb->buffer_list.vb = vb; // indication buffer was added to buffer list
+    }
 
     nonpool_vbs[NUM_NONPOOL_VBs + vb_id] = vb; // vb_id is a negative integer
     set_in_use (vb, true);
@@ -202,7 +205,7 @@ static VBlockP vb_update_data_type (VBlockP vb, DataType dt, DataType alloc_dt, 
 
     // the new data type has a private section in its VB, that is different that the one of alloc_dt - realloc private section
     if (vb->data_type_alloced != alloc_dt && alloc_dt != DT_NONE) {
-        
+
         // destroy private part of previous data_type. we also destroy all contexts as new data type is going
         // to allocate different contexts with a different memory usage profile (eg b250 vs local) for each
         if (vb->data_type_alloced != DT_NONE) 
@@ -235,7 +238,7 @@ VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompITy
 
     DataType dt = (type == POOL_BGZF)            ? DT_NONE
                 : (flag.deep && flag.zip_comp_i >= SAM_COMP_FQ00) ? DT_FASTQ
-                : (IS_ZIP && segconf.has_embdedded_fasta) ? DT_FASTA // GFF3 with embedded FASTA
+                : (IS_ZIP && segconf.has_embedded_fasta) ? DT_FASTA // GFF3 with embedded FASTA
                 : (IS_ZIP && txt_file)           ? txt_file->data_type
                 : (IS_PIZ && z_file && flag.deep && comp_i != COMP_NONE && comp_i >= SAM_COMP_FQ00) ? DT_FASTQ
                 : (IS_PIZ && z_file)             ? z_file->data_type  
@@ -247,6 +250,7 @@ VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompITy
                       : (dt == DT_REF && IS_PIZ)     ? DT_NONE
                       : dt == DT_BAM                 ? DT_SAM
                       : dt == DT_BCF                 ? DT_VCF 
+                      : (dt == DT_GFF && IS_PIZ)     ? DT_FASTA // vb is allocated before reading the VB_HEADER, so we don't yet know if it is a embdedded fasta VB. To be safe, we allocate enough memory for a VBlockFASTA (which is larger), so we can change the dt in gff_piz_init_vb() without needing to realloc
                       :                                dt;
 
     // circle around until a VB becomes available (busy wait)
@@ -286,10 +290,13 @@ VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompITy
     vb->pool              = type;
     init_dict_id_to_did_map (vb->d2d_map);
 
-    vb->buffer_list.name = "buffer_list";
-    buf_init_lock (&vb->buffer_list);
-    buflist_add_buf (vb, &vb->buffer_list, __FUNCLINE);
-
+    if (!vb->buffer_list.vb) {
+        vb->buffer_list.name = "buffer_list";
+        buf_init_lock (&vb->buffer_list);
+        buflist_add_buf (vb, &vb->buffer_list, __FUNCLINE);
+        vb->buffer_list.vb = vb; // indication buffer was added to buffer list
+    }
+    
     if (flag_is_show_vblocks (task_name)) 
         iprintf ("VB_GET_VB(task=%s id=%u) vb_i=%s/%d num_in_use=%u/%u\n", 
                   task_name, vb->id, comp_name (vb->comp_i), vb->vblock_i, num_in_use, pool->num_vbs);

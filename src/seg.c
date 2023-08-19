@@ -864,9 +864,7 @@ WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_
         con->drop_final_repsep = true;
 
     // count repeats (1 + number of seperators)
-    con->repeats=1;
-    for (int32_t i=0; i < value_len; i++) 
-        if (value[i] == sep) con->repeats++;
+    con->repeats = 1 + str_count_char (STRa(value), sep);
 
     if (container_ctx->flags.store == STORE_INT) 
         ctx_set_last_value (vb, container_ctx, (int64_t)0);
@@ -924,6 +922,107 @@ WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_
     return container_seg (vb, container_ctx, (ContainerP)con, 0, 0, con->repeats - con->drop_final_repsep + additional_bytes); // acount for separators and additional bytes
 }
 
+// segs an 2-dimentional array (e.g. "0|0|0,1|2|3") of uint32_t so that it is stored in local transposed. 
+// The number of columns (3 in this example) must be identical for the entire VB or its an seg error.
+// its also a seg error if any item is not a uint32 integer. The number of lines may vary.
+// note: zip_generate_transposed_local might later reduce it to uint16 or uint8.
+void seg_uint32_matrix (VBlockP vb, ContextP container_ctx, Did stats_conslidation_did_i, 
+                        STRp(value), char row_sep/*255 if always single row*/, char col_sep, bool is_transposed, int add_bytes)
+{
+    bytes id = container_ctx->dict_id.id;
+    DictId arr_dict_id = { .id = { id[0], 
+                                   ((id[1]+1) % 256) | 128, // different IDs for top array, subarray and items
+                                   id[2], id[3], id[4], id[5], id[6], id[7] } };
+
+    ContextP arr_ctx = ctx_get_ctx (vb, arr_dict_id);
+
+    // case: first call in this VB - initialize
+    if (!arr_ctx->local.n_cols) {
+        ctx_consolidate_stats (vb, stats_conslidation_did_i, container_ctx->did_i, arr_ctx->did_i, DID_EOL);
+
+        arr_ctx->flags.store = STORE_INT; // also need for BAM translation
+        arr_ctx->ltype = is_transposed ? LT_UINT32_TR : LT_UINT32;
+
+        rom first_row_sep = memchr (value, row_sep, value_len);
+        
+        arr_ctx->local.n_cols = 1 + str_count_char (value, first_row_sep ? (first_row_sep - value) : value_len, col_sep); // n_cols
+
+        if (is_transposed) {
+            ASSERT (arr_ctx->local.n_cols <= 255, "%s: n_cols=%d greater than max allowed 255", VB_NAME, (int)arr_ctx->local.n_cols);
+            
+            arr_ctx->local_param = true; // copy arr_ctx->local.n_cols to SectionHeaderCtx.param
+        }
+    }
+
+    seg_create_rollback_point (vb, NULL, 2, container_ctx->did_i, arr_ctx->did_i);
+
+    // seg all integers into matrix
+    str_split (value, value_len, 0, row_sep, row, false);
+    if (!n_rows) goto badly_formatted;
+    uint32_t n_cols_ = arr_ctx->local.n_cols;
+
+    buf_alloc (vb, &arr_ctx->local, n_rows * n_cols_, vb->lines.len32 * n_cols_, uint32_t, 1, CTX_TAG_LOCAL);
+
+    uint32_t *next = BAFT32 (arr_ctx->local);
+    for (int r=0; r < n_rows; r++) {
+        str_split (rows[r], row_lens[r], n_cols_, col_sep, col, true);
+        if (!n_cols) goto badly_formatted;
+
+        for (int c=0; c < n_cols; c++) {
+            uint32_t item;
+            if (!str_get_uint32 (cols[c], col_lens[c], &item)) goto badly_formatted;
+
+            *next++ = item;
+        }
+    }
+
+    arr_ctx->local.len32 += n_rows * n_cols_;
+    unsigned account_in_arr_ctx = value_len - (n_rows * n_cols_ - 1);
+    arr_ctx->txt_len += account_in_arr_ctx; // entire string except separators
+
+    // finally, the Container snip itself - we attempt to use the known node_index if it is cached in con_index
+
+    // in our specific case, element i of con_index contains the node_index of the snip of the container with i repeats, or WORD_INDEX_NONE.
+    if (container_ctx->con_index.len32 < n_rows+1) {
+        buf_alloc_255 (vb, &container_ctx->con_index, 0, n_rows+1, WordIndex, 0, CTX_TAG_CON_INDEX);
+        container_ctx->con_index.len32 = container_ctx->con_index.len32 / sizeof (WordIndex);
+    }
+
+    WordIndex node_index = *B(WordIndex, container_ctx->con_index, n_rows);
+    unsigned account_in_container_ctx = add_bytes - account_in_arr_ctx;
+
+    // case: first container with this many repeats - seg and add to cache
+    if (node_index == WORD_INDEX_NONE) {
+        ASSSEG (n_cols_ <= MEDIUM_CON_NITEMS, "expecting n_cols=%u <= MEDIUM_CON_NITEMS=%u", n_cols_, MEDIUM_CON_NITEMS);
+
+        MediumContainer con = { .nitems_lo           = n_cols_,
+                                .repeats             = n_rows,
+                                .repsep[0]           = row_sep,
+                                .drop_final_repsep   = true,
+                                .drop_final_item_sep = true     };
+
+        ContainerItem con_item = { .dict_id = arr_ctx->dict_id, .separator[0] = col_sep };
+        for (uint32_t c=0; c < n_cols_; c++)
+            con.items[c] = con_item;
+
+        *B(WordIndex, container_ctx->con_index, n_rows) = 
+            container_seg (vb, container_ctx, (ContainerP)&con, NULL, 0, account_in_container_ctx);
+    }
+
+    // case: we already know the node index of the container with this many repeats
+    else 
+        seg_known_node_index (vb, container_ctx, node_index, account_in_container_ctx);
+
+    return;
+
+badly_formatted:
+    // roll back all the changed data
+    seg_rollback (vb);
+
+    // now just seg the value
+    seg_by_ctx (VB, STRa(value), container_ctx, add_bytes);
+}
+
 bool seg_do_nothing_cb (VBlockP vb, ContextP ctx, STRp(field), uint32_t rep)
 {
     return true; // "segged successfully" - do nothing
@@ -931,7 +1030,8 @@ bool seg_do_nothing_cb (VBlockP vb, ContextP ctx, STRp(field), uint32_t rep)
 
 bool seg_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), 
                  const SegCallback *callbacks, // optional - either NULL, or contains a seg callback for each item (any callback may be NULL)
-                 unsigned add_bytes)
+                 unsigned add_bytes,
+                 bool account_in_subfields)    // true if to account in subfields, false if in parent
 {
     ASSERT0 (con.repeats==1 && !con.repsep[0], "expecting con.repeats==1 and no repsep");
 
@@ -958,10 +1058,10 @@ bool seg_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip),
         }
         
         else if (ctxs[i]->ltype >= LT_DYN_INT)
-            seg_integer_or_not (VB, ctxs[i], STRi(item,i), item_lens[i]);
+            seg_integer_or_not (VB, ctxs[i], STRi(item,i), account_in_subfields ? item_lens[i] : 0);
         
         else
-            seg_by_ctx (VB, STRi(item,i), ctxs[i], item_lens[i]);
+            seg_by_ctx (VB, STRi(item,i), ctxs[i], account_in_subfields ? item_lens[i] : 0);
 
     // finally, the Container snip itself - we attempt to use the known node_index if it is cached in con_index
 
@@ -973,7 +1073,8 @@ bool seg_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip),
         num_printable_separators += is_printable[con.items[i].separator[0]] + is_printable[con.items[i].separator[1]];
 
     WordIndex node_index = *B1ST(WordIndex, ctx->con_index);
-    unsigned account_for = num_printable_separators + ((int)add_bytes - snip_len);
+    unsigned account_for = account_in_subfields ? (num_printable_separators + ((int)add_bytes - snip_len)) 
+                                                : add_bytes;
 
     // case: first time - seg and add to cache
     if (node_index == WORD_INDEX_NONE) 

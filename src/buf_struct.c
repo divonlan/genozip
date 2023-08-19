@@ -239,11 +239,13 @@ void buf_alloc_do (VBlockP vb, BufferP buf, uint64_t requested_size,
 
         buf_init (buf, memory, requested_size, func, code_line, name);
         
-        if (!buf->promiscuous) // if promiscuous, already added
-            buflist_add_buf (vb, buf, func, code_line);
-        else
-            ASSERT (buf->vb, "called from %s:%u: Expecting promiscuous buffer to be on the buffer_list: %s", func, code_line, buf_desc (buf).s);
-    
+        if (buf != &vb->buffer_list) { // buffer_list buffer is added in vb_get_vb / vb_initialize_nonpool_vb
+            if (!buf->promiscuous) // if promiscuous or buffer_list, already added
+                buflist_add_buf (vb, buf, func, code_line);
+            else
+                ASSERT (buf->vb, "called from %s:%u: Expecting promiscuous buffer to be on the buffer_list: %s", func, code_line, buf_desc (buf).s);
+        }
+        
         goto done;
     }
 
@@ -492,7 +494,7 @@ void buf_destroy_do_do (BufListEnt *ent, FUNCLINE)
 
     BufferP buf = ent->buf;
     VBlockP vb = buf->vb;
-    
+
     if (flag.debug_memory==1) 
         iprintf ("Destroy %s: buf_addr=%p vb->id=%d buf_i=%u\n", buf_desc (buf).s, buf, buf->vb->id, BNUM (buf->vb->buffer_list, ent));
 

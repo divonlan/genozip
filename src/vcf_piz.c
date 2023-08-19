@@ -92,7 +92,8 @@ void vcf_piz_insert_field (VBlockVCFP vb, Did did, STRp(value))
     Ltxt += value_len;
 
     // note: keep txt_data.len 64b to detect bugs
-    ASSERT (vb->txt_data.len <= vb->txt_data.size, "txt_data overflow: len=%"PRIu64" > size=%"PRIu64, vb->txt_data.len, (uint64_t)vb->txt_data.size);
+    ASSPIZ (vb->txt_data.len <= vb->txt_data.size, "txt_data overflow: len=%"PRIu64" > size=%"PRIu64". vb->txt_data dumped to %s.gz", 
+            vb->txt_data.len, (uint64_t)vb->txt_data.size, txtfile_dump_vb (VB, z_name));
     
     // adjust lookback addresses that might be affected by this insertion
     vcf_piz_ps_pid_lookback_shift (VB, addr, value_len);
@@ -167,7 +168,7 @@ CONTAINER_FILTER_FUNC (vcf_piz_filter)
                 if (flag.show_dvcf)
                     return true; // show
                 else if (z_is_dvcf)
-                    *reconstruct = false; // set last_index, without reconstructing
+                    *reconstruct = RECON_PREFIX_ONLY; // set last_index, without reconstructing, but reconstruct ##primary_only if needed
                 else
                     return false; // filter out entirely without consuming (non-DC files have no oStatus data)
             }
@@ -187,7 +188,7 @@ CONTAINER_FILTER_FUNC (vcf_piz_filter)
             // case: --single-coord - get rid of the DVCF INFO item that would be displayed (this kills the prefixes, but not the values)
             if (flag.single_coord && (dnum == _INFO_PRIM || dnum == _INFO_LUFT || dnum == _INFO_LREJ || dnum == _INFO_PREJ)) {
                 if (con_nitems (*con) == 2 && z_is_dvcf) RECONSTRUCT1 ('.'); // if this variant's only INFO fields are DVCF - replace with '.'
-                *reconstruct = false; // consume but don't reconstruct
+                *reconstruct = RECON_OFF; // consume but don't reconstruct
             }
             break;
 
@@ -197,7 +198,7 @@ CONTAINER_FILTER_FUNC (vcf_piz_filter)
         case _INFO_PREJ:
             // case: --single-coord - get rid of all of the DVCF INFO item's subitems (needed, since the "reconstruct" in _VCF_INFO for the _INFO_PRIM item, doesn't propagate to the _INFO_PRIM container)
             if (flag.single_coord)
-                *reconstruct = false; // consume but don't reconstruct
+                *reconstruct = RECON_OFF; // consume but don't reconstruct
             break;
 
         case _VCF_SAMPLES:
@@ -216,6 +217,7 @@ CONTAINER_FILTER_FUNC (vcf_piz_filter)
     }
 
     return true;    
+
 }
 
 // ------------------------------------
