@@ -2,7 +2,7 @@
 ProjectFileVersion = "1.1"
 [General]
 Program name = Genozip
-Program version = 15.0.12
+Program version = 15.0.13
 Windows 2000 = 0
 Windows XP = 0
 Windows Server 2003 = 0
@@ -88,10 +88,10 @@ C:\Users\divon\genozip\src\windows\LICENSE.for-installer.txt
 9.9 KB
 txt
 [Licence_Begin]
-11455
-{\rtf1\ansi\ansicpg1252\deff0{\fonttbl{\f0\fnil\fcharset0 Arial;}}
+11582
+{\rtf1\fbidis\ansi\deff0{\fonttbl{\f0\fnil\fcharset0 Arial;}}
 {\colortbl ;\red0\green0\blue0;}
-\viewkind4\uc1\pard\cf1\lang1033\fs20 This program, "Genozip", which includes four tools \par
+\viewkind4\uc1\pard\ltrpar\cf1\lang1033\fs20 This program, "Genozip", which includes four tools \par
 (genozip, genounzip, genocat and genols), source code,\par
 object code, executables, documentation and other files,\par
 was developed by Divon Lan ("Developer") and is copyright \par
@@ -231,12 +231,14 @@ subject to this restriction.\par
 either: a. with no license (Standard License, Enterprise\par
 License, Premium License, Acedemic License, Evaluation\par
 License, Decompression License or Distribution License)\par
-granted according to section 2; or b. non-compliant with\par
-any of sections 3a, 3c, 3e; or both - shall be considered\par
-Severely Unauthorized Use of Genozip. In this case, You\par
-agree to a. pay Licensor US$100.00 for each file You\par
-compressed with Genozip b. that Licensor shall be eligible\par
-for 20% ownership of any revenue generated and intellectual\par
+granted according to section 2; and/or b. non-compliant\par
+with any of sections 3a, 3c, 3e; and/or c. use of Genozip\par
+for which you were granted an Academic License to compress\par
+Your Commercial Data - shall be considered Severely\par
+Unauthorized Use of Genozip. In this case, You agree to a.\par
+pay Licensor US$100.00 for each file You compressed with\par
+Genozip b. that Licensor shall be eligible for 20%\par
+ownership of any revenue generated and intellectual\par
 property created that involved the Severely Unauthorized\par
 Use of Genozip. c. reimburse licensor for all legal and/or\par
 collection costs related to Your Severely Unauthorized Use\par
@@ -269,7 +271,7 @@ names of the Licensor, except as required for reasonable\par
 and customary use in describing the origin of the Genozip\par
 \par
 8. Survival. The limitations of liability and ownership\par
-rights of Genozip contained herein and Licensee\rquote s\par
+rights of Genozip contained herein and Licensee\'e2\'80\'99s\par
 obligations following termination of this Agreement will\par
 survive the termination of this Agreement for any reason.\par
 \par
@@ -282,7 +284,7 @@ Health or any other regulatory entity in any country for\par
 any specific intended use, whether research, commercial,\par
 diagnostic, or otherwise, and (ii) Licensee must ensure it\par
 has any regulatory approvals that are necessary for\par
-Licensee\rquote s intended uses of Genozip. Licensee will comply\par
+Licensee\'e2\'80\'99s intended uses of Genozip. Licensee will comply\par
 with all applicable laws and regulations when using and\par
 maintaining Genozip.\par
 \par
@@ -319,7 +321,8 @@ ESSENTIAL PURPOSE.\par
 \par
 END OF TERMS AND CONDITIONS\par
 \par
-Genozip license version: 15.0.12\par
+Genozip license version: 15.0.13\par
+\par
 \par
 }
  [Licence_End]
