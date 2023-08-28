@@ -16,6 +16,7 @@ extern void arch_set_locale (void);
 
 #define NET_ID_SIZE 32
 extern rom arch_get_os (void);
+extern rom arch_get_glibc (void);
 extern rom arch_get_distribution (void);
 extern StrTextSuperLong arch_get_executable (void);
 extern rom arch_get_argv0 (void);

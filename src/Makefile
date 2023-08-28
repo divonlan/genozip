@@ -32,7 +32,11 @@ ifdef IS_CONDA
 	endif
 
 else
-	CC=gcc
+	ifdef GCC # set by conda
+		CC=$(GCC) 
+	else
+		CC=gcc
+	endif
 
 	# set -march. note: if conda, we leave it to conda to set
 	ifeq ($(OS),Windows_NT)
@@ -329,7 +333,8 @@ clean-distribution: # clean all platforms
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@echo Cleaning up all platforms for distribution
 	@rm -f $(OBJDIR_LINUX)/*.o $(OBJDIR_LINUX)/*.d $(OBJDIR_WINDOWS)/*.o $(OBJDIR_WINDOWS)/*.d $(OBJDIR_MAC)/*.o $(OBJDIR_MAC)/*.d
-
+	@conda activate distribution
+	
 clean-opt:
 	@echo Cleaning up opt
 	@rm -f $(OPT_OBJS) $(EXECUTABLES) $(OPT_EXECUTABLES)/*.opt-o

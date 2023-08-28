@@ -102,6 +102,7 @@ typedef struct {
         index_txt,   // create an index
         subdirs,     // recursively traversing subdirectories
         list,        // a genols option
+        no_bgzf,     // if this is a GZIP file, treat as normal GZIP, not BGZF
         no_cache,    // don't load cache, or delete cache
         no_upgrade;  // disable upgrade checks
     rom test_i;      // test of test.sh currently running (undocumented)
@@ -223,7 +224,7 @@ extern Flags flag;
 #define SAVE_FLAGS_AUX(aux_name) Flags save_flag = flag;                                                                        \
     if (flag.xthreads) { /* we assume user is interested only in PIZ/ZIP traffic */                                             \
         if ((aux_name) && (flag.show_threads || flag.debug_memory || flag.show_vblocks))                                        \
-            WARN_ONCE ("FYI: xthreads: Turning off show_vblocks, show_threads, debug_memory while loading %s\n", (aux_name));   \
+            WARN_ONCE ("FYI: xthreads: Turning off show_vblocks, show_threads, debug_memory while loading %s\n", (aux_name) ? (aux_name) : "");   \
         flag.show_threads = flag.debug_memory = false;                                                                          \
         flag.show_vblocks = NULL;                                                                                               \
     }                                                                                                                           \

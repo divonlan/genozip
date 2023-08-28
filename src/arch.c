@@ -25,6 +25,9 @@
 #else // LINUX
 #include <sys/sysinfo.h>
 #endif
+#if defined __GNUC__ && !defined __clang__ 
+#include <gnu/libc-version.h>
+#endif
 #endif
 
 #include "genozip.h"
@@ -301,6 +304,15 @@ rom arch_get_os (void)
 #endif
 
     return os;
+}
+
+rom arch_get_glibc (void)
+{
+#if defined __GNUC__ && ! defined _WIN32 && ! defined __clang__ 
+    return gnu_get_libc_version();
+#else
+    return "not_glibc";
+#endif
 }
 
 // good summary here: https://stackoverflow.com/questions/1023306/finding-current-executables-path-without-proc-self-exe/1024937#1024937

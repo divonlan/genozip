@@ -31,16 +31,16 @@
 
 // all data in Little Endian. Defined in https://datatracker.ietf.org/doc/html/rfc1952 and https://samtools.github.io/hts-specs/SAMv1.pdf
 typedef struct __attribute__ ((__packed__)) BgzfHeader {
-    uint8_t id1;    // Gzip id - must be 31
-    uint8_t id2;    // Gzip id - must be 139
+    uint8_t id1;    // Gzip id - must be 31  (0x1f)
+    uint8_t id2;    // Gzip id - must be 139 (0x8b)
     uint8_t cm;     // Compression Method - must be 8
     uint8_t flg;    // Flags - must be 4 (FEXTRA)
     uint32_t mtime; // Modification Time
     uint8_t xfl;    // eXtra Flags
     uint8_t os;     // Operating System
     uint16_t xlen;  // Size of extra fields - 6 if contain only BGZF (may be more)
-    uint8_t si1;    // BGZF id - must be 66
-    uint8_t si2;    // BGZF id - must be 67
+    uint8_t si1;    // BGZF id - must be 66  (0x42)
+    uint8_t si2;    // BGZF id - must be 67  (0x43)
     uint16_t slen;  // BGZF extra field length - must be 2
     uint16_t bsize; // BGZF extra field - (compressed block size -1)
 } BgzfHeader;
@@ -98,8 +98,11 @@ static int32_t bgzf_read_block_raw (FILE *file, // txt_file is not yet assigned 
     }
 
     // case: this is GZIP block that is NOT a valid BGZF block (see: https://samtools.github.io/hts-specs/SAMv1.pdf)
-    if (!(*block_size == 18 && !memcmp (h, BGZF_PREFIX, BGZF_PREFIX_LEN))) {
-        ASSERT (soft_fail, "invalid BGZF block while reading %s", basename);
+    if (flag.no_bgzf || // user instructed us to treat BGZF data as normal GZIP data
+        (!(*block_size == sizeof (struct BgzfHeader) && !memcmp (h, BGZF_PREFIX, BGZF_PREFIX_LEN)))) {
+        ASSINP (soft_fail, "Encountered a GZIP block that unexpectedly is not BGZF in %s offset=%"PRIu64" - this can happen if this file is a concatenation of two files\nSolution: use --no-bgzf", 
+                basename, (uint64_t)ftello64 (file) - *block_size);
+
         return BGZF_BLOCK_GZIP_NOT_BGZIP;
     }
 
