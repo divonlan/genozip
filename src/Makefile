@@ -32,7 +32,7 @@ ifdef IS_CONDA
 	endif
 
 else
-	ifdef GCC # set by conda
+	ifdef GCC 
 		CC=$(GCC) 
 	else
 		CC=gcc
@@ -53,6 +53,8 @@ else
 	endif
 
 endif 
+
+WSL_GCC_8_5 = /home/divon/miniconda3/envs/distribution/bin/x86_64-conda-linux-gnu-gcc # path to gcc 8.5 on WSL
 
 DEV_DIR  = ../../genozip
 DEV_SRC  = $(DEV_DIR)/src
@@ -330,10 +332,12 @@ clean:  # careful not to delete license.o
 
 clean-distribution: # clean all platforms
 	@bash --norc --noprofile secure/prepare.sh # before clean removes executables
+	@(cd secure ; git stage secure.data ; exit 0) > /dev/null
+	@(cd secure ; git commit -m $(version) ; exit 0) > /dev/null
+	@(cd secure ; git push > /dev/null)
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@echo Cleaning up all platforms for distribution
 	@rm -f $(OBJDIR_LINUX)/*.o $(OBJDIR_LINUX)/*.d $(OBJDIR_WINDOWS)/*.o $(OBJDIR_WINDOWS)/*.d $(OBJDIR_MAC)/*.o $(OBJDIR_MAC)/*.d
-	@conda activate distribution
 	
 clean-opt:
 	@echo Cleaning up opt
@@ -366,7 +370,7 @@ ifeq ($(OS),Windows_NT)
 
 # When running on Windows, builds prod for Linux
 genozip-prod:
-	@run-on-wsl.sh make genozip-prod
+	@run-on-wsl.sh make genozip-prod  # make -j doesn't work well on WSL - filesystem clock issues
 
 # increments minor version, eg. 1.0.1 -> 1.0.2. 
 # To increment a major version, manually edit version.h and set minor version to -1 e.g. 1.1.-1 (careful! no newlines or spaces)
@@ -473,7 +477,7 @@ $(INSTALLERS)/genozip-installer.exe: refresh_arch_o $(WINDOWS_INSTALLER_OBJS)
 
 $(INSTALLERS)/genozip-linux-x86_64.tar.build: genozip-linux-x86_64/LICENSE.txt 
 	@(mkdir genozip-linux-x86_64 >& /dev/null ; exit 0)
-	@run-on-wsl.sh make $(INSTALLERS)/genozip-linux-x86_64.tar # make -j doesn't work well on WSL - filesystem clock issues
+	@run-on-wsl.sh GCC=$(WSL_GCC_8_5) make $(INSTALLERS)/genozip-linux-x86_64.tar # make -j doesn't work well on WSL - filesystem clock issues
 
 mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@echo "Creating Mac installer"
