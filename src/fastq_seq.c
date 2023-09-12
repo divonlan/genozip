@@ -96,9 +96,20 @@ done:
     COPY_TIMER (fastq_seg_SEQ);
 }
 
+// used by QUAL codecs: LONGR and HOMP
 COMPRESSOR_CALLBACK (fastq_zip_seq) 
 {
-    STRtxtset (*line_data, DATA_LINE (vb_line_i)->seq);
+    ZipDataLineFASTQ *dl = DATA_LINE (vb_line_i);
+    bool trimmed = flag.deep && (dl->seq.len > dl->sam_seq_len);
+
+    // note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec
+    *line_data_len  = trimmed ? MIN_(maximum_size, dl->seq.len - dl->sam_seq_len) // compress only trimmed bases, other bases will be copied from Deep
+                    :           MIN_(maximum_size, dl->seq.len);
+    
+    if (!line_data) return; // only lengths were requested
+
+    *line_data = Btxt (dl->seq.index) + (trimmed ? dl->sam_seq_len : 0);
+
     if (is_rev) *is_rev = 0;
 }
 

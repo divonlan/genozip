@@ -76,7 +76,7 @@ static void stats_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
 
     // if Deep with QNONE, we send the first QNAME of the SAM file and the first read name of the FASTQ
     if (flag.deep && segconf.deep_qtype == QNONE) {
-        bufprintf (evb, &hash_occ, "%sDEEP_QNAME_MISMATCH%%2C%%2C%%2C", need_sep++ ? "%3B" : "");
+        bufprintf (evb, &hash_occ, "%sQNONE_REASON%%2C%%2C%%2C", need_sep++ ? "%3B" : "");
         bufprintf (evb, &hash_occ, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.deep_1st_qname, strlen(segconf.deep_1st_qname), ',', -127)).s); 
         bufprintf (evb, &hash_occ, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.deep_1st_desc,  strlen(segconf.deep_1st_desc),  ',', -127)).s); 
     }
@@ -226,7 +226,7 @@ static void stats_output_file_metadata (void)
         case DT_BAM: {
             uint64_t num_alignments = z_file->comp_num_lines[SAM_COMP_MAIN] + z_file->comp_num_lines[SAM_COMP_PRIM] + z_file->comp_num_lines[SAM_COMP_DEPN]; // excluding Deep FQ components
             unsigned num_fq_files = MAX_(0, (int)z_file->num_components - SAM_COMP_FQ00); 
-            double deep_pc = z_file->deep_stats[NDP_FQ_READS] ? (double)100.0 * (double)z_file->deep_stats[NDP_DEEPABLE] / (double)z_file->deep_stats[NDP_FQ_READS] : 0;
+            double deep_pc = z_file->deep_stats[NDP_FQ_READS] ? (double)100.0 * (double)(z_file->deep_stats[NDP_DEEPABLE] + z_file->deep_stats[NDP_DEEPABLE_TRIM]) / (double)z_file->deep_stats[NDP_FQ_READS] : 0;
 
             if (z_has_gencomp) 
                 bufprintf (evb, &stats, "%s %ss: %s (in Prim VBs: %s in Depn VBs: %s)\n", 

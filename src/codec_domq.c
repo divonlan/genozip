@@ -16,14 +16,8 @@
 // thereby allowing runs of over 255 (e.g. a run "255-255-5" would be a run of 255+255+5=515 doms)
 
 #include "vblock.h"
-#include "data_types.h"
-#include "file.h"
-#include "piz.h"
 #include "reconstruct.h"
-#include "profiler.h"
 #include "codec.h"
-#include "context.h"
-#include "stats.h"
 #include "base64.h"
 #include "seg.h"
 
@@ -68,6 +62,12 @@ static void show_denormalize (VBlockP vb, bytes denormalize, const uint32_t line
     }
 }
 
+void codec_domq_update_qual_len (VBlockP vb, ContextP ctx, uint32_t line_i, uint32_t new_len) 
+{ 
+    ContextP declare_domq_contexts (ctx);
+    B(QualLine, ql_buf, line_i)->qual_len = new_len; 
+}
+
 //--------------
 // ZIP side
 //--------------
@@ -84,7 +84,7 @@ static bool codec_domq_qual_data_is_a_fit_for_domq (VBlockP vb, ContextP qual_ct
             VB_NAME, qual_ctx->tag_name, qual_ctx->local.len32);
 
 #   define DOMQUAL_SAMPLE_LEN 2500   // we don't need more than this to find out
-#   define NUM_LINES_IN_SAMPLE 5
+#   define NUM_LINES_IN_SAMPLE 10
 #   define MINIMUM_PERCENT_DOM_PER_LINE   50 // a lower bar for testing - we just need to see that this file is of the time of doms, even if these few reads would be "diversity"
 #   define MINIMUM_PERCENT_LINES_WITH_DOM 50
 
@@ -124,6 +124,10 @@ static bool codec_domq_qual_data_is_a_fit_for_domq (VBlockP vb, ContextP qual_ct
         num_tested_lines++;
     }
     
+    if (flag.show_codec)
+        printf ("%s fit for DOMQ: num_lines_with_dom=%u (i.e. min %u%% dom) out of of num_tested_lines=%u\n", 
+                qual_ctx->tag_name, num_lines_with_dom, MINIMUM_PERCENT_DOM_PER_LINE, num_tested_lines);
+
     return num_tested_lines && (num_lines_with_dom * 100 / num_tested_lines > MINIMUM_PERCENT_LINES_WITH_DOM);
 }
 
@@ -311,7 +315,7 @@ bool codec_domq_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB get_line_c
     }
 }
 
-// normalize qual in lines, so that lines can have a different dom chacters - doms are always normalized to 0
+// normalize qual in lines, so that lines can have a different dom characters - doms are always normalized to 0
 static inline void codec_domq_normalize_qual (ContextP qual_ctx, ContextP domqruns_ctx)
 {
     ARRAY (uint8_t, normalize, normalize_buf);
@@ -346,7 +350,7 @@ COMPRESS (codec_domq_compress)
 {
     START_TIMER;
     
-    ContextP declare_domq_contexts (ECTX (((SectionHeaderCtxP)header)->dict_id));
+    ContextP declare_domq_contexts (ctx);
 
     codec_domq_normalize_qual (qual_ctx, domqruns_ctx);
 
@@ -358,7 +362,9 @@ COMPRESS (codec_domq_compress)
 
     uint8_t no_doms = qual_ctx->local.prm8[0] & 0x7f; // set by codec_domq_prepare_normalize
 
-    Buffer *non_dom_buf;
+    uint32_t vb_qual_len = qual_buf->len32;
+
+    BufferP non_dom_buf;
     if (get_line_cb) {
         non_dom_buf = qual_buf;
         non_dom_buf->len = 0;
@@ -371,13 +377,13 @@ COMPRESS (codec_domq_compress)
     }
 
     // this is usually enough, but might not be in some edge cases
-    // note: qual_buf->len is the total length of all qual lines
-    buf_alloc (vb, non_dom_buf,          0, 1 + qual_buf->len / 5,  char, 1, CTX_TAG_LOCAL); 
-    buf_alloc (vb, qdomruns_buf,         0, 1 + qual_buf->len / 10, char, 1, CTX_TAG_LOCAL);
+    // note: vb_qual_len is the total length of all qual lines
+    buf_alloc (vb, non_dom_buf,          0, 1 + vb_qual_len / 5,  char, 1, CTX_TAG_LOCAL); 
+    buf_alloc (vb, qdomruns_buf,         0, 1 + vb_qual_len / 10, char, 1, CTX_TAG_LOCAL);
     buf_alloc (vb, &qualmplx_ctx->local, 0, 1 + vb->lines.len,      char, 0, CTX_TAG_LOCAL);
     
     if (qual_ctx->local.prm8[1]) // has_diverse
-        buf_alloc (vb, &divrqual_ctx->local, 0, 1 + qual_buf->len / 5, char, 1, CTX_TAG_LOCAL);
+        buf_alloc (vb, &divrqual_ctx->local, 0, 1 + vb_qual_len / 5, char, 1, CTX_TAG_LOCAL);
 
     uint32_t runlen = 0;
     
@@ -479,7 +485,7 @@ do_compress: ({});
 
 // shorten a run, including handling multi-bytes run - preparing the run length for the next line, 
 // by deducting the amount that was consumed by this line
-static inline uint32_t shorten_run (uint8_t *run, uint32_t full_num_bytes, uint32_t full_runlen, uint32_t this_runlen)
+uint32_t codec_domq_shorten_run (uint8_t *run, uint32_t full_num_bytes, uint32_t full_runlen, uint32_t this_runlen)
 {
     uint32_t next_runlen = full_runlen - this_runlen;
 
@@ -524,7 +530,7 @@ static inline uint32_t codec_domq_reconstruct_dom_run (VBlockP vb, ContextP domq
     // case: a run spans multiple lines - take only what we need, and leave the rest for the next line
     // note: if we use max_len exactly, then we still leave a run of 0 length, so next line can start with a "run" as usual
     if (runlen >= max_len) { 
-        domqruns_ctx->next_local += shorten_run (start, num_bytes, runlen, max_len); // unconsume this run as we will consume it again in the next line (but shorter)
+        domqruns_ctx->next_local += codec_domq_shorten_run (start, num_bytes, runlen, max_len); // unconsume this run as we will consume it again in the next line (but shorter)
         runlen = max_len;
     }
     else
@@ -588,7 +594,7 @@ static inline void codec_domq_reconstruct_do_v13 (VBlockP vb, ContextP qual_ctx,
 }
 
 // PIZ: returns de-normalization vector for dom_i (i.e. for current line)
-static inline bytes codec_domq_piz_get_denorm (VBlockP vb, ContextP domqruns_ctx, uint8_t dom_i, uint8_t num_norm_qs)
+bytes codec_domq_piz_get_denorm (VBlockP vb, ContextP domqruns_ctx, uint8_t dom_i, uint8_t num_norm_qs)
 {
     // initialize, if not already initialized
     if (!domqruns_ctx->domq_denorm.len) {

@@ -36,7 +36,7 @@ typedef struct {
 
 unsigned fasta_vb_size (DataType dt) 
 { 
-    return dt == DT_REF && IS_PIZ ? sizeof (VBlock) : sizeof (VBlockFASTA); 
+    return (dt == DT_REF && IS_PIZ) ? sizeof (VBlock) : sizeof (VBlockFASTA); 
 }
 
 unsigned fasta_vb_zip_dl_size (void) { return sizeof (ZipDataLineFASTA); }
@@ -340,15 +340,15 @@ static void fasta_seg_desc_line (VBlockFASTAP vb, rom line, uint32_t line_len, b
     __atomic_add_fetch (&z_file->num_sequences, (uint64_t)1, __ATOMIC_RELAXED);
 
     if (!flag.make_reference) {
-        if (segconf.fasta_has_contigs) 
-            tokenizer_seg (VB, CTX(FASTA_DESC), line, line_len, sep_with_space, 0);
+        if (segconf.seq_type == SQT_NUKE) 
+            tokenizer_seg (VB, CTX(FASTA_DESC), STRa(line), sep_with_space, 0);
 
-        // if we don't have contigs, eg this is an amino acid fasta, we're better off
-        // not tokenizing the description line as its components are often correlated
+        // if this is an amino acid fasta, we're better off not tokenizing the description line as its 
+        // components are often correlated
         else
-            seg_add_to_local_text (VB, CTX(FASTA_DESC), line, line_len, LOOKUP_SIMPLE, line_len);
+            seg_add_to_local_text (VB, CTX(FASTA_DESC), STRa(line), LOOKUP_SIMPLE, line_len);
 
-        char special_snip[100]; unsigned special_snip_len = sizeof (special_snip);
+        STRli(special_snip, 100);
         seg_prepare_snip_other_do (SNIP_REDIRECTION, _FASTA_DESC, false, 0, 0, &special_snip[2], &special_snip_len);
         special_snip[0] = SNIP_SPECIAL;
         special_snip[1] = FASTA_SPECIAL_DESC;
@@ -395,7 +395,7 @@ static void fast_seg_comment_line (VBlockFASTAP vb, STRp (line), bool *has_13)
     if (!flag.make_reference) {
         seg_add_to_local_text (VB, CTX(FASTA_COMMENT), STRa(line), LOOKUP_NONE, line_len); 
 
-        char special_snip[100]; unsigned special_snip_len = sizeof (special_snip);
+        STRli (special_snip, 100);
         seg_prepare_snip_other_do (SNIP_OTHER_LOOKUP, _FASTA_COMMENT, false, 0, 0, &special_snip[2], &special_snip_len);
 
         special_snip[0] = SNIP_SPECIAL;
@@ -452,7 +452,7 @@ static void fasta_seg_seq_line_do (VBlockFASTAP vb, uint32_t line_len, bool is_f
         seg_duplicate_last (VB, lm_ctx, 0);
 
     else { 
-        char special_snip[100]; unsigned special_snip_len = sizeof (special_snip);
+        STRli (special_snip, 100);
         seg_prepare_snip_other_do (SNIP_OTHER_LOOKUP, _FASTA_NONREF, 
                                    true, (int32_t)line_len, 0, &special_snip[3], &special_snip_len);
 
@@ -466,8 +466,8 @@ static void fasta_seg_seq_line_do (VBlockFASTAP vb, uint32_t line_len, bool is_f
     if (!is_first_line_in_contig) 
         ctx_set_last_value (VB, lm_ctx, (ValueType){ .i = line_len });
 
-    seq_ctx->txt_len   += line_len;
-    seq_ctx->local.len += line_len;
+    seq_ctx->txt_len     += line_len;
+    seq_ctx->local.len32 += line_len;
 } 
 
 static void fasta_seg_seq_line (VBlockFASTAP vb, STRp(line), 

@@ -30,7 +30,10 @@
 #pragma GENDICT SAM_Q8NAME=DTYPE_1=Q8NAME 
 #pragma GENDICT SAM_Q9NAME=DTYPE_1=Q9NAME 
 #pragma GENDICT SAM_QANAME=DTYPE_1=QANAME 
-#pragma GENDICT SAM_QBNAME=DTYPE_1=QBNAME // if adding more Q*NAMEs - add to fastq.h and kraken.h too, and update MAX_QNAME_ITEMS
+#pragma GENDICT SAM_QBNAME=DTYPE_1=QBNAME 
+#pragma GENDICT SAM_QCNAME=DTYPE_1=QCNAME 
+#pragma GENDICT SAM_QDNAME=DTYPE_1=QDNAME 
+#pragma GENDICT SAM_QENAME=DTYPE_1=QENAME // if adding more Q*NAMEs - add to fastq.h and kraken.h too, and update MAX_QNAME_ITEMS
 #pragma GENDICT SAM_QmNAME=DTYPE_1=QmNAME // QmNAME reserved for mate number (always the last dict_id in the container)
 
 // Fields prefixed with "DEEP_" are not used in SAM, but are here so that the did's are the same for SAM and FASTQ
@@ -47,6 +50,9 @@
 #pragma GENDICT DEEP_FASTQ_Q9NAME2=DTYPE_1=q9NAME 
 #pragma GENDICT DEEP_FASTQ_QANAME2=DTYPE_1=qANAME 
 #pragma GENDICT DEEP_FASTQ_QBNAME2=DTYPE_1=qBNAME 
+#pragma GENDICT DEEP_FASTQ_QCNAME2=DTYPE_1=qCNAME 
+#pragma GENDICT DEEP_FASTQ_QDNAME2=DTYPE_1=qDNAME 
+#pragma GENDICT DEEP_FASTQ_QeNAME2=DTYPE_1=qENAME 
 #pragma GENDICT DEEP_FASTQ_QmNAME2=DTYPE_1=qmNAME 
 
 #pragma GENDICT DEEP_FASTQ_EXTRA=DTYPE_1=DESC 
@@ -96,6 +102,9 @@
 #pragma GENDICT DEEP_FASTQ_T9HIRD=DTYPE_1=t9NAME 
 #pragma GENDICT DEEP_FASTQ_TAHIRD=DTYPE_1=tANAME 
 #pragma GENDICT DEEP_FASTQ_TBHIRD=DTYPE_1=tBNAME 
+#pragma GENDICT DEEP_FASTQ_TCHIRD=DTYPE_1=tCNAME 
+#pragma GENDICT DEEP_FASTQ_TDHIRD=DTYPE_1=tDNAME 
+#pragma GENDICT DEEP_FASTQ_TEHIRD=DTYPE_1=tENAME 
 #pragma GENDICT DEEP_FASTQ_TmHIRD=DTYPE_1=tmNAME 
 
 #pragma GENDICT DEEP_FASTQ_AUX_LENGTH=DTYPE_2=length 
@@ -614,6 +623,7 @@ extern void sam_zip_genozip_header (SectionHeaderGenozipHeaderP header);
 extern void sam_deep_merge (VBlockP vb);
 extern rom sam_get_deep_tip (void);
 extern void sam_destroy_deep_tip (void);
+extern void sam_update_qual_len (VBlockP vb, uint32_t line_i, uint32_t new_len);
 
 // PIZ Stuff
 extern void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header);
@@ -635,6 +645,8 @@ extern void sam_piz_xtra_line_data (VBlockP vb);
 extern void sam_piz_after_preproc (VBlockP vb);
 extern CONTAINER_ITEM_CALLBACK (sam_piz_con_item_cb);
 extern void seq_filter_initialize (rom filename);
+extern BufferP sam_get_textual_seq (VBlockP vb);
+extern bool sam_is_last_flags_rev_comp (VBlockP vb);
 
 // BAM Stuff
 extern void bam_seg_initialize (VBlockP vb);
@@ -670,7 +682,8 @@ extern void sam_reset_line (VBlockP vb);
                       sam_piz_special_BISMARK_XG, sam_piz_special_HI, sam_piz_special_DEMUX_BY_BUDDY_MAP, sam_piz_special_SEQ_LEN,\
                       sam_piz_special_FI, sam_piz_special_cm, sam_piz_special_COPY_BUDDY, sam_piz_special_SET_BUDDY, \
                       sam_piz_special_TX_AN_POS, sam_piz_special_COPY_TEXTUAL_CIGAR, sam_piz_special_BISMARK_XM, \
-                      sam_piz_special_BSBOLT_XB, sam_piz_special_UQ, sam_piz_special_iq_sq_dq, sam_piz_special_DEMUX_BY_QUAL \
+                      sam_piz_special_BSBOLT_XB, sam_piz_special_UQ, sam_piz_special_iq_sq_dq, sam_piz_special_DEMUX_BY_QUAL, \
+                      sultima_piz_special_DEMUX_BY_Q4NAME, \
                     }
 SPECIAL (SAM, 0,  CIGAR,                 sam_cigar_special_CIGAR);
 SPECIAL (SAM, 1,  TLEN_old,              sam_piz_special_TLEN_old);            // used up to 12.0.42
@@ -726,7 +739,8 @@ SPECIAL (SAM, 50, BSBOLT_XB,             sam_piz_special_BSBOLT_XB);           /
 SPECIAL (SAM, 51, UQ,                    sam_piz_special_UQ);                  // introduced 14.0.10
 SPECIAL (SAM, 52, iqsqdq,                sam_piz_special_iq_sq_dq);            // introduced 15.0.0
 SPECIAL (SAM, 53, DEMUX_BY_QUAL,         sam_piz_special_DEMUX_BY_QUAL);       // introduced 15.0.10
-#define NUM_SAM_SPECIAL 54
+SPECIAL (SAM, 54, SULTIMA,               sultima_piz_special_DEMUX_BY_Q4NAME); // introduced 15.0.15
+#define NUM_SAM_SPECIAL 55
  
 #define SAM_LOCAL_GET_LINE_CALLBACKS                          \
     { DT_SAM, _OPTION_BD_BI,       sam_zip_BD_BI           }, \
@@ -737,7 +751,6 @@ SPECIAL (SAM, 53, DEMUX_BY_QUAL,         sam_piz_special_DEMUX_BY_QUAL);       /
     { DT_SAM, _OPTION_QX_Z,        sam_zip_QX              }, \
     { DT_SAM, _OPTION_2Y_Z,        sam_zip_2Y              }, \
     { DT_SAM, _OPTION_iq_sq_dq,    sam_zip_iq_sq_dq        }, 
-
 
 #define BAM_LOCAL_GET_LINE_CALLBACKS                          \
     { DT_BAM, _OPTION_BD_BI,       sam_zip_BD_BI           }, \

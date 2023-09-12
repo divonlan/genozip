@@ -24,6 +24,7 @@
 #include "bits.h"
 #include "file.h"
 #include "threads.h"
+#include "version.h"
 
 #define DISPLAY_ALLOCS_AFTER 0 // display allocations, except the first X allocations. reallocs are always displayed
 
@@ -209,7 +210,7 @@ void buf_alloc_do (VBlockP vb, BufferP buf, uint64_t requested_size,
 
 #define REQUEST_TOO_BIG_THREADSHOLD (3 GB)
     if (requested_size > REQUEST_TOO_BIG_THREADSHOLD && !buf->can_be_big) // use WARN instead of ASSERTW to have a place for breakpoint
-        WARN ("Warning: buf_alloc called from %s:%u for \"%s\" requested %s. This is suspiciously high and might indicate a bug - please report to " EMAIL_SUPPORT ". vb->vblock_i=%u buf=%s line_i=%d",
+        WARN ("Warning: buf_alloc called from %s:%u " GENOZIP_CODE_VERSION " for \"%s\" requested %s. This is suspiciously high and might indicate a bug - please report to " EMAIL_SUPPORT ". vb->vblock_i=%u buf=%s line_i=%d",
               func, code_line, name, str_size (requested_size).s, vb->vblock_i, buf_desc (buf).s, vb->line_i);
 
     ASSERT (buf->type == BUF_REGULAR || buf->type == BUF_UNALLOCATED, "called from %s:%u: cannot buf_alloc a buffer of type %s. details: %s", 

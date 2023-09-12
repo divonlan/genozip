@@ -654,7 +654,7 @@ done:
 
 static void sam_cigar_update_random_access (VBlockSAMP vb, ZipDataLineSAM *dl)
 {
-    if (IS_ASTERISK (vb->chrom_name) || dl->POS <= 0) return;
+    if (segconf.disable_random_acccess || IS_ASTERISK (vb->chrom_name) || dl->POS <= 0) return;
 
     PosType32 last_pos = dl->POS + vb->ref_consumed - 1;
 

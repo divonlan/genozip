@@ -100,7 +100,7 @@ static int32_t bgzf_read_block_raw (FILE *file, // txt_file is not yet assigned 
     // case: this is GZIP block that is NOT a valid BGZF block (see: https://samtools.github.io/hts-specs/SAMv1.pdf)
     if (flag.no_bgzf || // user instructed us to treat BGZF data as normal GZIP data
         (!(*block_size == sizeof (struct BgzfHeader) && !memcmp (h, BGZF_PREFIX, BGZF_PREFIX_LEN)))) {
-        ASSINP (soft_fail, "Encountered a GZIP block that unexpectedly is not BGZF in %s offset=%"PRIu64" - this can happen if this file is a concatenation of two files\nSolution: use --no-bgzf", 
+        ASSINP (soft_fail, "Encountered a GZIP block that unexpectedly is not BGZF in %s offset=%"PRIu64"\nSolution: use --no-bgzf", 
                 basename, (uint64_t)ftello64 (file) - *block_size);
 
         return BGZF_BLOCK_GZIP_NOT_BGZIP;

@@ -10,6 +10,7 @@
 
 #include "genozip.h"
 #include "sections.h"
+#include "multiplexer.h"
 
 #pragma GENDICT_PREFIX FASTQ
 
@@ -30,7 +31,10 @@
 #pragma GENDICT FASTQ_Q8NAME=DTYPE_1=Q8NAME 
 #pragma GENDICT FASTQ_Q9NAME=DTYPE_1=Q9NAME 
 #pragma GENDICT FASTQ_QANAME=DTYPE_1=QANAME     
-#pragma GENDICT FASTQ_QBNAME=DTYPE_1=QBNAME         // if adding more Q*NAMEs - add to kraken.h and sam.h and update MAX_QNAME_ITEMS
+#pragma GENDICT FASTQ_QBNAME=DTYPE_1=QBNAME     
+#pragma GENDICT FASTQ_QCNAME=DTYPE_1=QCNAME     
+#pragma GENDICT FASTQ_QDNAME=DTYPE_1=QDNAME     
+#pragma GENDICT FASTQ_QENAME=DTYPE_1=QENAME         // if adding more Q*NAMEs - add to kraken.h and sam.h and update MAX_QNAME_ITEMS
 #pragma GENDICT FASTQ_QmNAME=DTYPE_1=QmNAME         // QmNAME reserved for mate number (always the last dict_id in the container)
 
 #pragma GENDICT FASTQ_QNAME2=DTYPE_FIELD=QNAME2     // QNAME2 is embedded in QNAME (QNAME2 items immediately follow)
@@ -46,6 +50,9 @@
 #pragma GENDICT FASTQ_Q9NAME2=DTYPE_1=q9NAME 
 #pragma GENDICT FASTQ_QANAME2=DTYPE_1=qANAME 
 #pragma GENDICT FASTQ_QBNAME2=DTYPE_1=qBNAME 
+#pragma GENDICT FASTQ_QCNAME2=DTYPE_1=qCNAME 
+#pragma GENDICT FASTQ_QDNAME2=DTYPE_1=qDNAME 
+#pragma GENDICT FASTQ_QENAME2=DTYPE_1=qENAME 
 #pragma GENDICT FASTQ_QmNAME2=DTYPE_1=qmNAME
 
 #pragma GENDICT FASTQ_EXTRA=DTYPE_1=DESC            // until v14, the entire line1 was segged in FASTQ_DESC, since v15 is it used just for the "extra info" field in line1. dict_id remains "DESC" for backward compatibility
@@ -92,6 +99,9 @@
 #pragma GENDICT FASTQ_T9HIRD=DTYPE_1=t9NAME 
 #pragma GENDICT FASTQ_TAHIRD=DTYPE_1=tANAME 
 #pragma GENDICT FASTQ_TBHIRD=DTYPE_1=tBNAME 
+#pragma GENDICT FASTQ_TCHIRD=DTYPE_1=tCNAME 
+#pragma GENDICT FASTQ_TDHIRD=DTYPE_1=tDNAME 
+#pragma GENDICT FASTQ_TEHIRD=DTYPE_1=tENAME 
 #pragma GENDICT FASTQ_TmHIRD=DTYPE_1=tmNAME 
 
 #pragma GENDICT FASTQ_AUX_LENGTH=DTYPE_2=length 
@@ -126,6 +136,8 @@ extern bool fastq_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern rom fastq_seg_txt_line(VBlockP vb, rom line_start, uint32_t remaining, bool *has_13);
 extern rom fastq_assseg_line (VBlockP vb);
 extern void fastq_seg_pair2_gpos (VBlockP vb, PosType64 pair1_pos, PosType64 pair2_gpos);
+extern void fastq_update_qual_len (VBlockP vb, uint32_t line_i, uint32_t new_len);
+extern Multiplexer2P fastq_get_sultima_mux (VBlockP vb);
 
 // PIZ Stuff
 extern void fastq_piz_process_recon (VBlockP vb);
@@ -161,16 +173,19 @@ typedef enum { FQ_COMP_R1, FQ_COMP_R2 } FastqComponentType;
  
 #define FASTQ_SPECIAL { fastq_special_unaligned_SEQ, fastq_special_PAIR2_GPOS, fastq_special_mate_lookup, \
                         fastq_special_set_deep, fastq_special_deep_copy_QNAME, fastq_special_deep_copy_SEQ, fastq_special_deep_copy_QUAL,\
-                        fastq_special_backspace, fastq_special_copy_line1, fastq_special_monochar_QUAL }
+                        fastq_special_backspace, fastq_special_copy_line1, fastq_special_monochar_QUAL, \
+                        sultima_piz_special_DEMUX_BY_Q4NAME, \
+                      }
 
-SPECIAL (FASTQ, 0,  unaligned_SEQ,   fastq_special_unaligned_SEQ);    // v14
-SPECIAL (FASTQ, 1,  PAIR2_GPOS,      fastq_special_PAIR2_GPOS);       // v14
-SPECIAL (FASTQ, 2,  mate_lookup,     fastq_special_mate_lookup);      // v14
-SPECIAL (FASTQ, 3,  set_deep,        fastq_special_set_deep);         // v15
-SPECIAL (FASTQ, 4,  deep_copy_QNAME, fastq_special_deep_copy_QNAME);  // v15
-SPECIAL (FASTQ, 5,  deep_copy_SEQ,   fastq_special_deep_copy_SEQ);    // v15
-SPECIAL (FASTQ, 6,  deep_copy_QUAL,  fastq_special_deep_copy_QUAL);   // v15
-SPECIAL (FASTQ, 7,  backspace,       fastq_special_backspace);        // v15
-SPECIAL (FASTQ, 8,  copy_line1,      fastq_special_copy_line1);       // v15
-SPECIAL (FASTQ, 9,  monochar_QUAL,   fastq_special_monochar_QUAL);    // v15
-#define NUM_FASTQ_SPECIAL 10
+SPECIAL (FASTQ, 0,  unaligned_SEQ,   fastq_special_unaligned_SEQ);          // v14
+SPECIAL (FASTQ, 1,  PAIR2_GPOS,      fastq_special_PAIR2_GPOS);             // v14
+SPECIAL (FASTQ, 2,  mate_lookup,     fastq_special_mate_lookup);            // v14
+SPECIAL (FASTQ, 3,  set_deep,        fastq_special_set_deep);               // v15
+SPECIAL (FASTQ, 4,  deep_copy_QNAME, fastq_special_deep_copy_QNAME);        // v15
+SPECIAL (FASTQ, 5,  deep_copy_SEQ,   fastq_special_deep_copy_SEQ);          // v15
+SPECIAL (FASTQ, 6,  deep_copy_QUAL,  fastq_special_deep_copy_QUAL);         // v15
+SPECIAL (FASTQ, 7,  backspace,       fastq_special_backspace);              // v15
+SPECIAL (FASTQ, 8,  copy_line1,      fastq_special_copy_line1);             // v15
+SPECIAL (FASTQ, 9,  monochar_QUAL,   fastq_special_monochar_QUAL);          // v15
+SPECIAL (FASTQ, 10, SULTIMA,         sultima_piz_special_DEMUX_BY_Q4NAME);  // introduced 15.0.15
+#define NUM_FASTQ_SPECIAL 11

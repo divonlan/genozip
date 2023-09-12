@@ -422,7 +422,7 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
 
     segconf.sam_has_SA_Z      = segconf.is_bwa || segconf.is_minimap2 || MP(NGMLR) || MP(DRAGEN) || MP(NOVOALIGN) || MP(ULTIMA) || MP(ISAAC); /*|| MP(LONGRANGER); non-standard SA:Z format (POS is off by 1, main-field NM is missing) */ 
     segconf.sam_has_BWA_XA_Z  = (segconf.is_bwa || MP(GEM3) || MP(GEM2SAM) || MP(DELVE) || MP(DRAGEN)) ? yes 
-                              : MP(TMAP)                                                               ? no 
+                              : MP(TMAP) || MP(TORRENT_BC)                                             ? no 
                               :                                                                          unknown;
     segconf.sam_has_BWA_XS_i  = segconf.is_bwa || MP(TMAP) || MP(GEM3) || (segconf.is_bowtie2 && !MP(HISAT2)) || MP(CPU) || MP(LONGRANGER) || MP(DRAGEN);
     segconf.sam_has_BWA_XM_i  = segconf.is_bwa || segconf.is_bowtie2 || MP(NOVOALIGN) || MP(DRAGEN);

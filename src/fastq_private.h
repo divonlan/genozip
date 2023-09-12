@@ -14,7 +14,7 @@
 
 typedef struct {
     TxtWord seq;
-    uint32_t qual_index;         // start within vb->txt_data (qual_len==seq.len)
+    TxtWord qual;                // start within vb->txt_data (qual.len==seq.len except if condensed by codec_homp_compress)
     uint32_t sam_seq_len;        // Deep: seq_len of matching sam alignment
     bool dont_compress_QUAL : 1; // true in case --deep and fully copied from SAM
     bool monochar           : 1; // sequence is entirely of the same character (eg: NNNNN)
@@ -39,6 +39,8 @@ typedef struct VBlockFASTQ {
 
     // stats
     uint32_t deep_stats[NUM_DEEP_STATS];  // ZIP: stats collection regarding Deep
+
+    Multiplexer2 mux_SULTIMA;
 } VBlockFASTQ;
 
 typedef VBlockFASTQ *VBlockFASTQP;

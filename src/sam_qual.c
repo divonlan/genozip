@@ -362,6 +362,11 @@ void sam_seg_other_qual (VBlockSAMP vb, TxtWord *dl_word, Did did_i, STRp(qual),
         seg_lookup_with_length (VB, CTX(did_i), qual_len, 0);
 }
 
+void sam_update_qual_len (VBlockP vb, uint32_t line_i, uint32_t new_len) 
+{ 
+    DATA_LINE(line_i)->QUAL.len = new_len; 
+}
+
 //---------
 // QUAL PIZ
 //---------

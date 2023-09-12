@@ -23,7 +23,7 @@ COMPRESS(codec_normq_compress)
     START_TIMER;
     ASSERT (!uncompressed && get_line_cb, "%s: only callback option is supported. ctx=%s", VB_NAME, TAG_NAME);
 
-    ContextP qual_ctx = ECTX (((SectionHeaderCtxP)header)->dict_id); // may be SAM_QUAL or OPTION_U2_Z  
+    ContextP qual_ctx = ctx; // may be SAM_QUAL or OPTION_U2_Z  
     BufferP qual_buf = &qual_ctx->local;
 
     // case: this is our second entry, after soft-failing. Just continue from where we stopped

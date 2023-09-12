@@ -106,6 +106,7 @@ void noreturn main_exit (bool show_stack, bool is_error)
         if (is_error) {
             close (1);   // prevent other threads from outputting to terminal (including buffered output), obscuring our error message
             close (2);
+
             url_kill_curl (NULL);  /* <--- BREAKPOINT BRK */
             file_kill_external_compressors(); 
         

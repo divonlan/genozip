@@ -664,8 +664,8 @@ rom fastq_seg_txt_line (VBlockP vb_, rom line_start, uint32_t remaining, bool *h
     
     // set dl fields, consumed by fastq_zip_qual/seq
     ZipDataLineFASTQ *dl = DATA_LINE (vb->line_i);
-    dl->seq = TXTWORD(seq); 
-    dl->qual_index = BNUMtxt (qual);
+    dl->seq  = TXTWORD(seq); 
+    dl->qual = TXTWORD(qual);
 
     if (kraken_is_loaded) 
         fastq_seg_kraken_tax_id (vb, STRa(qname));

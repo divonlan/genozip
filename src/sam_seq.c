@@ -788,7 +788,7 @@ void sam_zip_prim_ingest_vb_pack_seq (VBlockSAMP vb, Sag *vb_grps, uint32_t vb_g
     bits_clear_excess_bits_in_top_word ((BitsP)packed_seq_buf);
 }
 
-// used by codec_longr_compress
+// used by codec_longr and codec_homp
 COMPRESSOR_CALLBACK_DT (sam_zip_seq) 
 {
     VBlockSAMP vb = (VBlockSAMP)vb_;
@@ -1282,10 +1282,9 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_SEQ)
     // backward compatability note: prior to v14 the condition was:
     // if (CTX(SAM_QUAL)->lcodec == CODEC_LONGR) ...
     // Since v14, it is determined by a flag. Since this flag is 0 in V<=13, earlier files will always
-    // store textual_seq, including if CODEC_LONGR
 
     // case downstream contexts need access to the textual_seq: copy it.
-    // Examples: LONGR codec for QUAL; sam_piz_special_BSSEEKER2_XM
+    // Examples: LONGR and HOMP codecs for QUAL; sam_piz_special_BSSEEKER2_XM
     if (!bitmap_ctx->flags.no_textual_seq) {
         buf_alloc (vb, &VB_SAM->textual_seq, 0, recon_len, char, 0, "textual_seq");
         memcpy (B1STc (VB_SAM->textual_seq), recon, recon_len);
@@ -1344,4 +1343,9 @@ TRANSLATOR_FUNC (sam_piz_sam2fastq_SEQ)
         str_revcomp_in_place (STRa(recon));
 
     return 0;
+}
+
+BufferP sam_get_textual_seq (VBlockP vb)
+{
+    return &VB_SAM->textual_seq;
 }

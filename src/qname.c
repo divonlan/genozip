@@ -230,6 +230,22 @@ void qname_zip_initialize (void)
 
             ASSERT (qfs->ordered_item1 == -1 || qfs->is_integer[qfs->ordered_item1] || qfs->is_numeric[qfs->ordered_item1] || qfs->is_hex[qfs->ordered_item1], 
                     "Error in definition of QNAME flavor=%s: item=%u is one of \"ordered_item\" - expecting it to be is_integer or is_numeric or is_hex", qfs->name, qfs->ordered_item1);
+
+            if (qfs->callback_item != -1) {
+                ASSERT (qf_callbacks[qfs->id], "QNAME flavor=%s defines a callback, but the callback is not listed in qf_callbacks", qfs->name);
+
+                ASSERT (qfs->callback_item != qfs->range_end_item1 && qfs->callback_item != qfs->range_end_item2, 
+                        "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both a range_item and callback_item",
+                        qfs->name, qfs->callback_item);
+
+                ASSERT (qfs->callback_item != qfs->ordered_item1 && qfs->callback_item != qfs->ordered_item2, 
+                        "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both an ordered_item and callback_item",
+                        qfs->name, qfs->callback_item);
+
+                ASSERT (!qfs->is_in_local[qfs->callback_item], 
+                        "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both an is_in_local and callback_item",
+                        qfs->name, qfs->callback_item);
+            }
         }
 
         seg_prepare_snip_other (SNIP_COPY, (DictId)_SAM_QNAME, false, 0, copy_qname); // QNAME dict_id is the same for SAM, FASTQ, KRAKEN
@@ -345,8 +361,7 @@ void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
             static QnameCNN char_to_cnn[256] = CHAR_TO_CNN;
             segconf.flav_prop[q] = (QnameFlavorProp){ .id          = qfs->id, 
                                                       .has_seq_len = qfs->seq_len_item != -1,
-                                                      .is_mated    = qfs->is_mated,
-                                                      .has_R       = qfs->is_mated || qfs->id == QF_SRA2,
+                                                      .has_R       = qfs->is_mated, 
                                                       .cnn         = char_to_cnn[(int)qfs->cut_to_canonize] };
             
             if (q == QNAME1 || (q == QNAME2 && segconf.tech == TECH_NCBI))
@@ -421,7 +436,7 @@ fail:
 }
 
 // attempt to seg according to the qf - return true if successful
-bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additional_bytes)
+static bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additional_bytes)
 {
     QnameFlavor qfs = segconf.qname_flavor[q];
     ASSERTNOTNULL (qfs);
@@ -491,6 +506,9 @@ bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additional_byt
             else 
                 seg_add_to_local_text (vb, item_ctx, STRa(str), LOOKUP_SIMPLE, str_len);
         }
+
+        else if (qfs->callback_item == item_i)
+            qf_callbacks[qfs->id](vb, item_ctx, STRa(str));
 
         else if (item->separator[0] == CI0_SKIP)
             {} // no segging a skipped item

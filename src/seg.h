@@ -13,6 +13,7 @@
 #include "sections.h"
 #include "context.h"
 #include "container.h"
+#include "multiplexer.h"
 
 typedef enum { ERR_SEG_NO_ERROR=0, ERR_SEG_OUT_OF_RANGE, ERR_SEG_NOT_INTEGER } SegError;
 
@@ -162,36 +163,6 @@ bool seg_set_last_txt_store_value (VBlockP vb, ContextP ctx, STRp(value), StoreT
 extern void seg_create_rollback_point (VBlockP vb, ContextP *ctxs, unsigned num_ctxs, ...); // list of did_i
 extern void seg_add_ctx_to_rollback_point (VBlockP vb, ContextP ctx);
 extern void seg_rollback (VBlockP vb);
-
-// Multiplexers
-#define BASE64_DICT_ID_LEN 14
-#define MULTIPLEXER(n_channels)                     \
-struct __attribute__ ((__packed__)) {               \
-    /* all 32b/64b fields are word-aligned */       \
-    ContextP ctx;                                   \
-    bool no_stons;                                  \
-    uint8_t special_code;                           \
-    uint16_t num_channels;                          \
-    DictId dict_ids[n_channels];                    \
-    ContextP channel_ctx[n_channels];               \
-    uint32_t snip_len;                              \
-    char snip[BASE64_DICT_ID_LEN * (n_channels)];   \
-}                               
-#define MUX ((MultiplexerP)mux)
-#define MUX_CAPACITY(mux) (sizeof((mux).dict_ids)/sizeof(DictId)) // max number of channels this mux can contain
-#define MUX_CHANNEL_CTX(mux) ((ContextP *)((mux)->dict_ids + (mux)->num_channels))
-#define MUX_SNIP_LEN(mux)    (*(uint32_t*)(MUX_CHANNEL_CTX(mux) + (mux)->num_channels))
-#define MUX_SNIP(mux)        ((char*)(&MUX_SNIP_LEN(mux) + 1))
-
-typedef MULTIPLEXER(1000) *MultiplexerP;
-typedef const MULTIPLEXER(1000) *ConstMultiplexerP;
-
-typedef MULTIPLEXER(2) Multiplexer2, *Multiplexer2P;
-typedef MULTIPLEXER(3) Multiplexer3, *Multiplexer3P;
-typedef MULTIPLEXER(4) Multiplexer4, *Multiplexer4P;
-typedef MULTIPLEXER(5) Multiplexer5, *Multiplexer5P;
-typedef MULTIPLEXER(6) Multiplexer6, *Multiplexer6P;
-typedef MULTIPLEXER(7) Multiplexer7, *Multiplexer7P;
 
 extern void seg_mux_init (VBlockP vb, ContextP ctx, unsigned num_channels, uint8_t special_code, bool no_stons, MultiplexerP mux, rom channel_letters);
 extern ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux, uint32_t channel_i);

@@ -29,6 +29,7 @@
 #include "dict_id_gen.h"
 #include "chrom.h"
 #include "stats.h"
+#include "contigs.h"
 
 #define MAX_ENST_ITEMS 10 // maximum number of items in an enst structure. this can be changed without impacting backward compatability.
 

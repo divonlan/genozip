@@ -1855,6 +1855,16 @@ batch_deep() # note: use --debug-deep for detailed tracking
     local T=$TESTDIR/deep.trimmed
     $genozip $T.fq $T.sam -fe $GRCh38 -o $output -3t || exit 1
 
+    # trimmed with LONG (codec consumes trimmed SEQ)
+    test_header deep.trim+longr
+    local T=$TESTDIR/deep.trim+longr
+    $genozip $T.fq $T.sam -fe $GRCh38 -o $output -3t || exit 1
+
+    # trimmed with HOMP (codec consumes trimmed SEQ and calls fastq_zip_qual for sub-codec too)
+    test_header deep.trim+homp
+    local T=$TESTDIR/deep.trim+homp
+    $genozip $T.fq $T.sam -fe $GRCh38 -o $output -3t || exit 1
+    
     # Illumina WGS - different FASTQ and SAM qname flavors
     cleanup_cache
     test_header "deep.qtype=QNAME2 - different FASTQ and SAM qname flavors"

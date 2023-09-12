@@ -16,7 +16,6 @@
 
 extern const char sep_with_space[], sep_without_space[];
 extern void qname_seg (VBlockP vb, QType q, STRp(qname), unsigned add_additional_bytes);
-extern bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additional_bytes);
 extern void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname));
 
 extern void qname_zip_initialize (void);
@@ -32,3 +31,9 @@ extern void qname_canonize (QType q, rom qname, uint32_t *qname_len);
 extern rom segconf_qf_name (QType q);
 extern QnameFlavorId segconf_qf_id (QType q);
 extern rom qtype_name (QType q);
+
+typedef void (*QnameSegCallback) (VBlockP vb, ContextP ctx, STRp(value));
+
+// flavor-specific callbacks
+extern void sultima_Q5NAME_cb (VBlockP vb, ContextP ctx, STRp(value));
+

@@ -1085,3 +1085,8 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_FASTQ_CONSUME_AUX)
 
     return NO_NEW_VALUE; 
 }
+
+bool sam_is_last_flags_rev_comp (VBlockP vb)
+{
+    return last_flags.rev_comp;
+}

@@ -84,9 +84,9 @@ uint32_t comp_compress (VBlockP vb,
 
         bool success = 
         codec_args[comp_codec].compress (vb, ctx, header, uncompressed_data, &data_uncompressed_len,
-                                             callback,  
-                                             BAFTc (*z_data) + compressed_offset, &data_compressed_len,
-                                             true, name);
+                                         callback,  
+                                         BAFTc (*z_data) + compressed_offset, &data_compressed_len,
+                                         true, name);
         codec_free_all (vb); // just in case
 
         // if output buffer is too small, increase it, and try again

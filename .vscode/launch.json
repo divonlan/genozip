@@ -7,15 +7,16 @@
             "name": "Run Debug",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/src/genozip-debug.exe",
-            // "program": "${workspaceFolder}/src/genounzip-debug.exe",
+            // "program": "${workspaceFolder}/src/genozip-debug.exe",
+            "program": "${workspaceFolder}/src/genounzip-debug.exe",
             // "program": "${workspaceFolder}/src/genocat-debug.exe",
             // "program": "${workspaceFolder}/src/genozip-opt.exe",
             // "program": "${workspaceFolder}/src/genozip.exe",
             //"program": "${workspaceFolder}/src/genounzip.exe",
             // "program": "${workspaceFolder}/src/genols-debug.exe",
 
-            "args" : ["-fX", "1.biopsy.bam"],
+            "args" : ["--echo", "-t", "-e", "private/test/latest/hs37d5.ref.genozip", "private/test/latest/test.embedded-fasta.gff.genozip"],
+
             "environment": [
                 // { "name": "GENOZIP_REFERENCE", "value": "/mnt/c/Users/divon/Projects/genozip/data/hs37d5.v15.ref.genozip:data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip", },
             ],

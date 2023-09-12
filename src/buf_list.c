@@ -633,6 +633,7 @@ static bool buflist_test_overflows_do (VBlockP vb, bool primary, rom msg)
         if (BL_IS_REMOVED (ent->buf)) continue;  
 
         if (!buf) {
+            // known issue: bug 912
             buflist_display (vb);
             fprintf (stderr, "%s: buf=NULL for buf_i=%u in vb->buffer_list ^^^. buffer_list=%s", VB_NAME, buf_i, buf_desc(&vb->buffer_list).s);
             corruption = "buffer_list has entry with buf=NULL";

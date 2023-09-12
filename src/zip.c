@@ -705,8 +705,7 @@ static void zip_write_global_area (void)
     THREAD_DEBUG (compress_aliases);
     aliases_compress();
 
-    // SAM/BAM: we don't compress RANDOM_ACCESS for non-sorted in --best (it can be very big, and we want to minimize file size in --best), 
-    if (!flag.best || !(Z_DT(BAM) || Z_DT(SAM)) || segconf.is_sorted) {
+    if (!segconf.disable_random_acccess) {
         THREAD_DEBUG (compress_random_access);
         // if this data has random access (i.e. it has chrom and pos), compress all random access records into evb->z_data
         Codec codec = random_access_compress (&z_file->ra_buf, SEC_RANDOM_ACCESS, CODEC_UNKNOWN, 0, flag.show_index ? RA_MSG_PRIM : NULL);
@@ -806,8 +805,10 @@ static void zip_compress_one_vb (VBlockP vb)
     dispatcher_increment_progress ("compress2", 1 - vb->txt_size / 2); // 1/2 compression done
 
     // merge in random access - IF it is used
-    random_access_merge_in_vb (vb, 0);
-    random_access_merge_in_vb (vb, 1);
+    if (!segconf.disable_random_acccess) {
+        random_access_merge_in_vb (vb, 0);
+        random_access_merge_in_vb (vb, 1);
+    }
     
     // compress data-type specific sections
 after_compress:

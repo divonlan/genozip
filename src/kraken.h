@@ -26,7 +26,10 @@
 #pragma GENDICT KRAKEN_Q8NAME=DTYPE_1=Q8NAME 
 #pragma GENDICT KRAKEN_Q9NAME=DTYPE_1=Q9NAME 
 #pragma GENDICT KRAKEN_QANAME=DTYPE_1=QANAME 
-#pragma GENDICT KRAKEN_QBNAME=DTYPE_1=QBNAME // if adding more Q*NAMEs - add to fastq.h and sam.h and update MAX_QNAME_ITEMS
+#pragma GENDICT KRAKEN_QBNAME=DTYPE_1=QBNAME 
+#pragma GENDICT KRAKEN_QCNAME=DTYPE_1=QCNAME 
+#pragma GENDICT KRAKEN_QDNAME=DTYPE_1=QDNAME 
+#pragma GENDICT KRAKEN_QENAME=DTYPE_1=QENAME // if adding more Q*NAMEs - add to fastq.h and sam.h and update MAX_QNAME_ITEMS
 #pragma GENDICT KRAKEN_QmNAME=DTYPE_1=QmNAME // QmNAME reserved for mate number (always the last dict_id in the container)
 
 #pragma GENDICT KRAKEN_TAXID=DTYPE_FIELD=TAXID

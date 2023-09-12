@@ -164,6 +164,7 @@ void profiler_add_evb_and_print_report (void)
             PRINT (codec_longr_reconstruct, 3);
             PRINT (codec_domq_reconstruct, 3);
             PRINT (codec_domq_reconstruct_dom_run, 4);
+            PRINT (codec_homp_reconstruct, 3);
         }
         PRINT (fastq_special_monochar_QUAL, 2);        
         PRINT (sam_piz_sam2fastq_QUAL, 2); 
@@ -190,6 +191,7 @@ void profiler_add_evb_and_print_report (void)
             PRINT (codec_longr_reconstruct, 3);
             PRINT (codec_domq_reconstruct, 2);
             PRINT (codec_domq_reconstruct_dom_run, 3);
+            PRINT (codec_homp_reconstruct, 2);
         }
         
         if (profile.nanosecs.bgzf_compute_thread)
@@ -325,9 +327,10 @@ void profiler_add_evb_and_print_report (void)
         PRINT (compressor_actg, 2);
         PRINT (compressor_pbwt, 2);
         PRINT (compressor_longr, 2);
+        PRINT (compressor_homp, 2);
 
-        for (Did did_i=0; did_i < z_file->num_contexts; did_i++) 
-            PRINT_(fields[did_i], ZCTX(did_i)->tag_name, 2);
+        for_zctx 
+            PRINT_(fields[zctx->did_i], zctx->tag_name, 2);
 
         PRINT (codec_hapmat_count_alt_alleles, 2);
         PRINT (dict_io_compress_dictionaries, 1); 

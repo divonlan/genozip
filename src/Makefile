@@ -84,7 +84,7 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.
 		  fasta.c gff.c bed.c me23.c phylip.c chain.c kraken.c locs.c generic.c lookback.c						\
 		  buffer.c buf_struct.c buf_list.c random_access.c sections.c base64.c bgzf.c coverage.c txtheader.c  	\
 		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c	\
-		  codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c codec_normq.c    							\
+		  codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c codec_normq.c codec_homp.c					\
 	      txtfile.c profiler.c file.c filename.c dispatcher.c crypt.c aes.c md5.c segconf.c biopsy.c gencomp.c	\
 		  vblock.c regions.c  optimize.c dict_id.c aliases.c hash.c stream.c url.c bases_filter.c dict_io.c		\
 		  recon_plan_io.c version.c huffman.c 
@@ -110,7 +110,7 @@ CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h al
              endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h huffman.h \
              buffer.h buf_struct.h buf_list.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h \
              crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h qname.h qname_flavors.h codec.h  \
-			 lookback.h tokenizer.h codec_longr_alg.c gencomp.h dict_io.h recon_plan_io.h tip.h deep.h filename.h stats.h \
+			 lookback.h tokenizer.h codec_longr_alg.c gencomp.h dict_io.h recon_plan_io.h tip.h deep.h filename.h stats.h multiplexer.h \
 			 reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h bgzf.h coverage.h threads.h local_type.h \
 			 arch.h license.h file_types.h data_types.h base64.h txtheader.h writer.h bases_filter.h genols.h contigs.h chrom.h \
 			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h gff.h bed.h phylip.h chain.h kraken.h locs.h generic.h \
@@ -504,12 +504,10 @@ push-build:
 distribution:             clean-distribution increment-version testfiles ../LICENSE.txt $(INSTALLERS)/LICENSE.html $(INSTALLERS)/genozip-linux-x86_64.tar.build $(INSTALLERS)/genozip-installer.exe \
                           push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
 	@(cd $(CONDA_FEEDSTOCK) ; git pull)
-	@echo "Now, build for older versions of glibc (see internal-docs)"
 
 distribution-maintenance: clean-distribution increment-version testfiles ../LICENSE.txt $(INSTALLERS)/LICENSE.html $(INSTALLERS)/genozip-linux-x86_64.tar.build $(INSTALLERS)/genozip-installer.exe \
                           push-build conda/.conda-timestamp 
 	@(cd $(CONDA_FEEDSTOCK) ; git pull)
-	@echo "Now, build for older versions of glibc (see internal-docs)"
 
 test-backup: genozip.exe
 	@echo "Compressing test/ files for in preparation for backup (except cram and bcf)"

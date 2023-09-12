@@ -822,7 +822,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_REF_CONSUMED)
 
 // ----------------------------------------------------------------------------------------------
 // Prediction based on SEQ.len and soft_clip. Use for:
-// qs:i (pacvio) : per-read: 0-based start of query in the ZMW read (absent in CCS)
+// qs:i (pacbio) : per-read: 0-based start of query in the ZMW read (absent in CCS)
 // qe:i (pacbio) : per-read: 0-based end of query in the ZMW read (absent in CCS)
 // XS:i (blasr)  : read alignment start position without counting previous soft clips (1 based)
 // XE:i (blasr)  : read alignment end position without counting previous soft clips (1 based)
@@ -848,7 +848,7 @@ static inline void sam_seg_SEQ_END (VBlockSAMP vb, ZipDataLineSAM *dl, ContextP 
     int32_t prediction = sam_SEQ_END_prediction (op, dl->SEQ.len, vb->soft_clip[0], vb->soft_clip[1]);
 
     if (value == prediction)
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_SEQ_LEN, op[0], op[1], op[2], op[3] }, 6, ctx, add_bytes);
+        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_SEQ_LEN, op[0], op[1], op[2], op[3] }, 6, ctx, add_bytes); // note: this SPECIAL is also used in sam_seg_MD_Z
 
     else 
         seg_integer (VB, ctx, value, true, add_bytes);
@@ -1369,7 +1369,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
 
         case _OPTION_Zs_Z: COND (MP(HISAT2), sam_seg_HISAT2_Zs_Z (vb, STRa(value), add_bytes));
 
-        case _OPTION_ZM_B_s: COND (MP(TMAP) && flag.optimize_ZM, sam_seg_array_field (vb, dl, _OPTION_ZM_B_s, array_subtype, STRa(value), sam_optimize_TMAP_ZM, 0));
+        case _OPTION_ZM_B_s: COND ((MP(TMAP/*mapped file*/) || MP(TORRENT_BC/*unmapped file*/)) && flag.optimize_ZM, sam_seg_array_field (vb, dl, _OPTION_ZM_B_s, array_subtype, STRa(value), sam_optimize_TMAP_ZM, 0));
 
         case _OPTION_YH_Z: COND (MP(NOVOALIGN), seg_add_to_local_text (VB, CTX(OPTION_YH_Z), STRa(value), LOOKUP_NONE, add_bytes)); break;
         case _OPTION_YQ_Z: COND (MP(NOVOALIGN), seg_add_to_local_text (VB, CTX(OPTION_YQ_Z), STRa(value), LOOKUP_NONE, add_bytes)); break;

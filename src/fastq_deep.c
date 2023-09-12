@@ -101,8 +101,8 @@ void fastq_deep_seg_finalize_segconf (uint32_t n_lines)
     if (!segconf.deep_has_trimmed) buf_destroy (z_file->deep_index_by[BY_QNAME]);
 
     if (flag.show_deep) 
-        iprintf ("segconf: n_lines=%u n_full_mch=(%u,%u) n_seq_qname_mch=(%u,%u) n_seq_qual_mch=%u n_seq_only=%u n_no_match=%u has_trimmed=%s\n",
-                 n_lines, segconf.n_full_mch[0], segconf.n_full_mch[1], segconf.n_seq_qname_mch[0], segconf.n_seq_qname_mch[1], 
+        iprintf ("segconf: n_lines=%u threashold=%u n_full_mch=(%u,%u) n_seq_qname_mch=(%u,%u) n_seq_qual_mch=%u n_seq_only=%u n_no_match=%u has_trimmed=%s\n",
+                 n_lines, threashold, segconf.n_full_mch[0], segconf.n_full_mch[1], segconf.n_seq_qname_mch[0], segconf.n_seq_qname_mch[1], 
                  segconf.n_seq_qual_mch, segconf.n_seq_mch, segconf.n_no_mch, TF(segconf.deep_has_trimmed));
 
     // test: likewise, matching QUAL
@@ -501,7 +501,7 @@ void fastq_deep_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQ *dl, ContextP qual_c
 
     seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_deep_copy_QUAL }, 2, qual_ctx, qual_len);
     
-    if (trim_len)
+    if (trim_len) 
         qual_ctx->local.len32 += trim_len; // fastq_zip_qual will get the trimmed part of the qual string
     else
         dl->dont_compress_QUAL = true;

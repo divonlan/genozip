@@ -45,18 +45,24 @@ void fastq_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qual), bool dee
 COMPRESSOR_CALLBACK (fastq_zip_qual) 
 {
     ZipDataLineFASTQ *dl = DATA_LINE (vb_line_i);
-    bool trimmed = dl->seq.len > dl->sam_seq_len;
 
     // note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec
-    *line_data_len  = dl->dont_compress_QUAL ? 0 
-                    : trimmed                ? MIN_(maximum_size, dl->seq.len - dl->sam_seq_len) // compress only trimmed bases, other bases will be copied from Deep
-                    :                          MIN_(maximum_size, dl->seq.len);
+    // note: in sam_seq_len (i.e. Deep and we copied the prefix of QUAL from SAM) - compress only the uncopied suffix
+    *line_data_len  = dl->dont_compress_QUAL ? 0 : MIN_(maximum_size, dl->qual.len - dl->sam_seq_len);
     
     if (!line_data) return; // only lengths were requested
 
-    *line_data = Btxt (dl->qual_index) + (trimmed ? dl->sam_seq_len : 0);
+    *line_data = Btxt (dl->qual.index) + dl->sam_seq_len;
     
     if (is_rev) *is_rev = 0;
+}
+
+void fastq_update_qual_len (VBlockP vb, uint32_t line_i, uint32_t new_len) 
+{ 
+    ZipDataLineFASTQ *dl = DATA_LINE (line_i);
+
+    // note: add back sam_seq_len bc it will be substracted again when sub-codec calls fastq_zip_qual
+    dl->qual.len = new_len + dl->sam_seq_len;
 }
 
 //---------------

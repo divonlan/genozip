@@ -235,12 +235,20 @@ done:
 // if MD value can be derived from the seq_len, we don't need to store - store just an empty string
 void sam_seg_MD_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(md), unsigned add_bytes)
 {
+    uint32_t md_value;
+
     ctx_set_encountered (VB, CTX(OPTION_MD_Z));
-  
+    
     if (vb->md_verified && !vb->cigar_missing && !vb->seq_missing) // note: md_verified might have been reset in sam_seg_SEQ 
         seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_MD }, 2, OPTION_MD_Z, add_bytes);
 
-    else // store in local. note: this is tested to be much better than splitting by length and storing short ones in dict 
+    // in case not verified (eg bc it is depn) but (common case) it is equal to (seq_len - soft_clips)
+    else if (!vb->md_verified && !vb->seq_missing && str_get_uint32 (STRa(md), &md_value) && 
+             md_value == dl->SEQ.len - vb->soft_clip[0] - vb->soft_clip[1]) 
+        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_SEQ_LEN, '+', '0', '-', '-' }, 6, OPTION_MD_Z, add_bytes); // also used in sam_seg_SEQ_END
+
+    // store in local. note: this is tested to be much better than splitting by length and storing short ones in dict
+    else  
         seg_add_to_local_text (VB, CTX(OPTION_MD_Z), STRa(md), LOOKUP_SIMPLE, add_bytes);
 }
 

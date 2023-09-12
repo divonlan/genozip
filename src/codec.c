@@ -333,6 +333,8 @@ void codec_assign_best_qual_codec (VBlockP vb, Did did_i,
     if (!flag.fast && segconf.is_long_reads && !no_longr && segconf.nontrivial_qual)
         codec_longr_comp_init (vb, did_i);
 
+    else if (!flag.no_domqual && segconf.tech == TECH_ULTIMA && codec_homp_comp_init (vb, did_i, callback));
+
     else if (!flag.no_domqual && codec_domq_comp_init (vb, did_i, callback));
     
     else if (maybe_revcomped) { // normq only makes sense where qual is revcomped according to the revcomp flag (SAM/BAM)
@@ -365,6 +367,7 @@ void codec_show_time (VBlockP vb, rom name, rom subname, Codec codec)
         (strcmp (flag.show_time, "compressor_bsc"   ) && codec==CODEC_BSC ) || 
         (strcmp (flag.show_time, "compressor_acgt"  ) && codec==CODEC_ACGT) || 
         (strcmp (flag.show_time, "compressor_domq"  ) && codec==CODEC_DOMQ) || 
+        (strcmp (flag.show_time, "compressor_ulti"  ) && codec==CODEC_HOMP) || 
         (strcmp (flag.show_time, "compressor_pbwt"  ) && codec==CODEC_PBWT) || 
         (strcmp (flag.show_time, "compressor_longr" ) && codec==CODEC_LONGR) || 
         (strcmp (flag.show_time, "compressor_rans"  ) && (codec==CODEC_RANS32 || codec==CODEC_RANS32_pack || codec==CODEC_RANS8 || codec==CODEC_RANS32_pack)) || 

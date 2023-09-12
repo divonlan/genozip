@@ -718,10 +718,12 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
         if (!segconf.evidence_of_sorted)
             segconf.is_sorted = false;
         
-        // we have at leaest one pair of lines with the same QNAME, and the file is not sorted
+        // we have at least one pair of lines with the same QNAME, and the file is not sorted
         if (!segconf.is_sorted && segconf.evidence_of_collated)
             segconf.is_collated = true;
     }
+
+    segconf.disable_random_acccess = !segconf.is_sorted;
 
     segconf.has_barcodes = segconf.has[OPTION_CB_Z] || segconf.has[OPTION_CR_Z] || segconf.has[OPTION_CY_Z] || segconf.has[OPTION_BX_Z] || 
                            segconf.has[OPTION_RX_Z] || segconf.has[OPTION_QX_Z] || segconf.has[OPTION_BC_Z] || segconf.has[OPTION_QT_Z];
@@ -820,7 +822,9 @@ void sam_seg_finalize (VBlockP vb_)
         codec_assign_best_qual_codec (VB, OPTION_U2_Z, sam_zip_U2, true, true);
 
     // determine if sam_piz_sam2bam_SEQ ought to store vb->textual_seq
-    CTX(SAM_SQBITMAP)->flags.no_textual_seq = CTX(SAM_QUAL)->lcodec != CODEC_LONGR && segconf.sam_mapper != MP_BSSEEKER2;
+    CTX(SAM_SQBITMAP)->flags.no_textual_seq = CTX(SAM_QUAL)->lcodec != CODEC_LONGR && 
+                                              CTX(SAM_QUAL)->lcodec != CODEC_HOMP  && 
+                                              segconf.sam_mapper != MP_BSSEEKER2;
 
     if (flag.biopsy_line.line_i == NO_LINE) // no --biopsy-line
         sam_seg_toplevel (VB);

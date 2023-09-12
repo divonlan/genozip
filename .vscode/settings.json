@@ -22,6 +22,9 @@
         "piz.h": "c",
         "sam_private.h": "c",
         "errno.h": "c",
-        "*.data": "c"
+        "*.data": "c",
+        "buffer.h": "c",
+        "profiler.h": "c",
+        "stats.h": "c"
     }
 }

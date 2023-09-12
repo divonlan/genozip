@@ -63,7 +63,7 @@ typedef int32_t TaxonomyId;
 
 #define MEMORY_WARNING_THREASHOLD 0x100000000  // (4 GB) warning in some cases that we predict that user choices would cause us to consume more than this
 
-#define MAX_QNAME_ITEMS 13 // mate + normal (matching Q?NAME defined in sam.h, fastq.h, kraken.h) 
+#define MAX_QNAME_ITEMS 16 // mate + normal (matching Q?NAME defined in sam.h, fastq.h, kraken.h) 
 
 #define NO_CALLBACK NULL
 
@@ -249,7 +249,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     CODEC_BAM=23,       // in v8 BAM was a codec which was compressed using samtools as external compressor. Since v14 we use the codec name for displaying "BAM" in stats total line.
     CODEC_CRAM=24, CODEC_ZIP=25,
 
-    CODEC_LONGR=26, CODEC_NORMQ=27,
+    CODEC_LONGR=26, CODEC_NORMQ=27, CODEC_HOMP=28,
 
     NUM_CODECS,
 } Codec; 
@@ -454,7 +454,6 @@ typedef SORTER ((*Sorter));
 #define STRcpy(dst,src)    ({ if (src##_len) { memcpy(dst,src,src##_len) ; dst##_len = src##_len; } })
 #define STRcpyi(dst,i,src) ({ if (src##_len) { memcpy(dst##s[i],src,src##_len) ; dst##_lens[i] = src##_len; } })
 #define STRset(dst,src)    ({ dst=src; dst##_len=src##_len; })
-#define STRtxtset(dst,src) ({ dst=Btxt ((src).index); dst##_len=(src).len; })
 #define STRinc(x,n)          ({ x += (n); x##_len -= (n); })
 #define STRdec(x,n)          ({ x -= (n); x##_len += (n); })
 #define STRLEN(string_literal) (sizeof string_literal - 1)

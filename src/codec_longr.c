@@ -23,7 +23,6 @@
 #include "piz.h"
 #include "strings.h"
 #include "stats.h"
-#include "sam_private.h"
 
 #include "codec_longr_alg.c" // seperate source file for this, as it derived from external code with a different license
 
@@ -154,8 +153,8 @@ COMPRESS (codec_longr_compress)
     ASSERTISNULL (uncompressed);
     ASSERT (soft_fail, "%s: second entry not expected, ctx=%s", VB_NAME, TAG_NAME);
 
-    ContextP lens_ctx   = ECTX (((SectionHeaderCtxP)header)->dict_id);
-    ContextP values_ctx = lens_ctx + 1;
+    ContextP lens_ctx   = ctx; 
+    ContextP values_ctx = ctx + 1;
     
     LocalGetLineCB *seq_callback = (VB_DT(FASTQ) ? fastq_zip_seq : sam_zip_seq);
     
@@ -177,7 +176,7 @@ COMPRESS (codec_longr_compress)
         get_line_cb (vb, ctx, line_i, pSTRa(qual), Ltxt, NULL);
         if (!qual_len) continue; // this can happen, for example, if a SAM DEPN line is compressed against SA Group
 
-        seq_callback (vb, ctx, line_i,  pSTRa(seq), 0, &is_rev);
+        seq_callback (vb, ctx, line_i,  pSTRa(seq), CALLBACK_NO_SIZE_LIMIT, &is_rev);
 
         codec_longr_calc_channels (state, STRa(seq), (uint8_t*)qual, is_rev);
 
@@ -327,22 +326,26 @@ CODEC_RECONSTRUCT (codec_longr_reconstruct)
 
     ContextP lens_ctx   = ctx;
     ContextP values_ctx = ctx + 1;
-    ContextP seq_ctx    = CTX(VB_DT(FASTQ) ? FASTQ_SQBITMAP : SAM_SQBITMAP);
+    ContextP seq_ctx    = VB_DT(FASTQ) ? CTX(FASTQ_SQBITMAP) : CTX(SAM_SQBITMAP);
     
     if (!lens_ctx->is_initialized) 
         codec_longr_reconstruct_init (vb, lens_ctx, values_ctx);
 
-    bool is_rev = !VB_DT(FASTQ) /* SAM or BAM */ /*&& lens_ctx->dict_id.num == _SAM_QUAL*/ && last_flags.rev_comp;
+    bool is_rev = !VB_DT(FASTQ) /* SAM or BAM */ && sam_is_last_flags_rev_comp(vb);
 
     ARRAY (uint8_t, sorted_qual, values_ctx->local);
     ARRAY (uint32_t, next_of_chan, lens_ctx->local);
     LongrState *state = B1ST (LongrState, lens_ctx->longr_state);
     state->value_to_bin = B1ST8 (values_ctx->value_to_bin);
 
-    rom seq = (VB_DT(SAM) && VB_SAM->textual_seq.len) ? B1STc (VB_SAM->textual_seq) // note: textual_seq is prepared in sam_piz_sam2bam_SEQ and sam_piz_prim_add_Grps_and_CIGAR
-                                                      : last_txtx (vb, seq_ctx); 
+    rom seq = (VB_DT(SAM) && sam_get_textual_seq(vb)->len) ? B1STc (*sam_get_textual_seq(vb)) // note: textual_seq is prepared in sam_piz_sam2bam_SEQ sam_load_groups_add_seq
+                                                           : last_txtx (vb, seq_ctx); 
 
-    ASSPIZ0 (len == vb->seq_len, "LONGR supports only len=seq_len"); 
+    // case: Deep, and len is only the trimmed suffix as the rest if copied from SAM (see fastq_special_deep_copy_QUAL)
+    if (flag.deep && len < vb->seq_len)
+        seq += (vb->seq_len - len); // advance seq to the trimmed part too
+    else
+        ASSPIZ (len == vb->seq_len, "expecting len=%u == vb->seq_len=%u", len, vb->seq_len);
     
     codec_longr_recon_one_read (state, seq, len, is_rev, sorted_qual, next_of_chan, BAFTtxt);
     Ltxt += len;

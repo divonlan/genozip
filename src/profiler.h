@@ -21,9 +21,9 @@
         compressor_domq, compressor_actg, bgzf_io_thread, bgzf_compute_thread, bgzf_writer_thread,\
         bgzf_uncompress_vb, txtfile_read_block_bgzf_uncompress,\
         piz_get_line_subfields, zip_generate_b250, zip_generate_local, zip_compress_ctxs, ctx_merge_in_vb_ctx, wait_for_merge,\
-        zfile_uncompress_section, codec_assign_best_codec, compressor_pbwt, compressor_longr, \
+        zfile_uncompress_section, codec_assign_best_codec, compressor_pbwt, compressor_longr, compressor_homp, \
         compressor_rans, compressor_arith, compressor_normq,\
-        codec_domq_reconstruct, codec_domq_reconstruct_dom_run, codec_longr_reconstruct,\
+        codec_domq_reconstruct, codec_domq_reconstruct_dom_run, codec_longr_reconstruct, codec_homp_reconstruct,\
         reconstruct_vb, buf_alloc_main, buf_alloc_compute, buf_destroy_do_do_main, buf_destroy_do_do_compute, buf_overlay_do, \
         buf_free_main, buf_free_compute, buflist_add_buf, buflist_remove_buf, \
         dispatcher_recycle_vbs, sections_create_index, \
