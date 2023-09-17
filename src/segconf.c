@@ -307,9 +307,11 @@ void segconf_calculate (void)
 
     seg_all_data_lines (vb);      
     SAVE_FLAG (aligner_available); // might have been set in sam_seg_finalize_segconf
+    SAVE_FLAG (no_tip);
     RESTORE_FLAGS;
     RESTORE_FLAG (aligner_available);
-
+    RESTORE_FLAG (no_tip);
+    
     if (flag.show_segconf_has) 
         segconf_show_has();
 

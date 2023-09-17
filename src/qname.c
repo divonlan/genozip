@@ -608,7 +608,10 @@ uint32_t qname_calc_hash (QType q, STRp(qname), thool is_last, bool canonical,
 
 rom segconf_qf_name (QType q)
 {
-    return segconf.qname_flavor[q] ? segconf.qname_flavor[q]->name : "N/A";
+    if (q == QSAM)
+        return segconf.deep_sam_qname_flavor ? segconf.deep_sam_qname_flavor->name : "N/A";
+    else
+        return segconf.qname_flavor[q] ? segconf.qname_flavor[q]->name : "N/A";
 }
 
 QnameFlavorId segconf_qf_id (QType q)

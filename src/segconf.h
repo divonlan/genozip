@@ -59,7 +59,8 @@ typedef struct {
     bool disable_random_acccess; // random_access section is not to be outputted
 
     // qname characteristics (SAM/BAM, KRAKEN and FASTQ)
-    QnameFlavor qname_flavor[NUM_QTYPES]; // 0-QNAME 1-QNAME2 (FASTQ) 2=NCBI LINE3 (FASTQ)
+    QnameFlavor qname_flavor[NUM_QTYPES+1]; // 0-QNAME 1-QNAME2 (FASTQ) 2=NCBI LINE3 (FASTQ)
+    QnameFlavor deep_sam_qname_flavor;      // save for stats, in --deep
     QnameFlavorProp flav_prop[NUM_QTYPES];  // flavor properties
     bool qname_flavor_rediscovered[NUM_QTYPES]; // true if flavor has been modified
     char qname_line0[NUM_QTYPES][SAM_MAX_QNAME_LEN+1]; // qname of line_i=0 (by which flavor is determined) (nul-terminated)

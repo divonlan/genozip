@@ -647,7 +647,7 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
     segconf.is_long_reads   = segconf_is_long_reads();
     segconf.sam_multi_RG    = CTX(OPTION_RG_Z)->nodes.len32 >= 2;
     segconf.sam_cigar_len   = 1 + ((segconf.sam_cigar_len - 1) / vb->lines.len32);                   // set to the average CIGAR len (rounded up)
-
+    
     if (num_lines_at_max_len(vb) > vb->lines.len32 / 2 &&  // more than half the lines are at exactly maximal length
         (vb->lines.len32 > 100 || txt_file->is_eof)    &&  // enough lines to be reasonably convinced that this is not by chance
         !segconf.is_long_reads)        // TO DO: trimming long-read qual in FASTQ with --deep would mess up LONGR codec, we need to sort this out
@@ -759,6 +759,9 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
         flag.aligner_available = true;
         refhash_load_standalone();
     }
+
+    // save for stats
+    if (flag.deep) segconf.deep_sam_qname_flavor = segconf.qname_flavor[QNAME1];
 
     // with REF_EXTERNAL and unaligned data, we don't know which chroms are seen (bc unlike REF_EXT_STORE, we don't use is_set), so
     // we just copy all reference contigs. this are not needed for decompression, just for --coverage/--sex/--idxstats

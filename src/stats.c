@@ -213,9 +213,8 @@ static void stats_output_file_metadata (void)
                    z_file->num_vbs, str_size (segconf.vb_size).s, z_file->section_list_buf.len32); })
 
     #define REPORT_QNAME \
-        FEATURE (z_file->num_lines, "Read name style: %s%s%s", "Qname=%s%s%s", \
-                 segconf_qf_name (0), \
-                 segconf.qname_flavor[1] ? " + " : "", segconf.qname_flavor[1] ? segconf_qf_name (1) : "")
+        FEATURE (z_file->num_lines, "Read name style: %s%s", "Qname=%s%s", \
+                 segconf_qf_name (0), cond_str(segconf.qname_flavor[1], " + ", segconf_qf_name(1)))
 
     #define REPORT_KRAKEN \
         FEATURE0 (kraken_is_loaded, "Features: Per-line taxonomy ID data", "taxonomy_data")
@@ -302,6 +301,9 @@ static void stats_output_file_metadata (void)
                 FEATURE(true, "Buddying: sag_type=%s mate=%.*f%% saggy_near=%.*f%% prim_far=%.*f%%",
                         "sag_type=%s;mate=%.*f%%;saggy_near=%.*f%%;prim_far=%.*f%%",
                         sag_type_name (segconf.sag_type), PREC(mate_line_pc), mate_line_pc, PREC(saggy_near_pc), saggy_near_pc, PREC(prim_far_pc), prim_far_pc);
+
+                if (flag.deep) 
+                    FEATURE (z_file->num_lines, "SAM qname: %s", "SAM_Qname=%s", segconf_qf_name (QSAM))
 
                 REPORT_QNAME;
             }            

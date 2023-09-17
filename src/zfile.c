@@ -761,6 +761,8 @@ uint64_t zfile_read_genozip_header_get_offset (bool as_is)
             "You must upgrade Genozip to open this file. See: %s\n",
             z_name, z_file->genozip_version, GENOZIP_CODE_VERSION, WEBSITE_INSTALLING);
 
+    bool metadata_only = is_genocat && (flag.show_stats || flag.show_gheader || flag.show_headers || flag.show_aliases || flag.show_dict);
+
     // in version 6, we canceled backward compatability with v1-v5
     ASSRET (VER(6), 0, "Skipping %s: it was compressed with an older version of genozip - version %u.\nIt may be uncompressed with genozip versions %u to 5",
             z_name, z_file->genozip_version, z_file->genozip_version);
@@ -772,7 +774,7 @@ uint64_t zfile_read_genozip_header_get_offset (bool as_is)
     ASSRET (VER(8), 0, "Skipping %s: it was compressed with version 7 of genozip. It may be uncompressed with genozip version 7", z_name);
 
     // in version 15, we canceled backward compatability with v8,9,10 (except reference files which continue to be supported back to v8, as they might be needed to decompress files of later versions)
-    ASSRET (VER(11) || Z_DT(REF), 0, "Skipping %s: it was compressed with version %u of genozip. It may be uncompressed with genozip versions %u to 14",
+    ASSRET (metadata_only || VER(11) || Z_DT(REF), 0, "Skipping %s: it was compressed with version %u of genozip. It may be uncompressed with genozip versions %u to 14",
             z_name, z_file->genozip_version, z_file->genozip_version);
 
     return offset;

@@ -192,37 +192,35 @@ static SmallContainer con_illumina_7c = {
                    { .dict_id = { _SAM_QmNAME }, I_AM_MATE                 } } 
 };
 
-// Example: ATATA-ATGCATAG|ab|A00488:61:HMLGNDSXX:4:1101:4345:1000|1 (BAM omly)
+// Example: ATATA-ATGCATAG|ab|A00488:61:HMLGNDSXX:4:1101:4345:1000|1 (BAM only)
 static SmallContainer con_illumina_7gs = {
     .repeats   = 1,
-    .nitems_lo = 11,
-    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = "-"          },  
+    .nitems_lo = 10,
+    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = "|"          }, // the two parts of the barcode are correletated and hence segged together
                    { .dict_id = { _SAM_Q1NAME }, .separator = "|"          },
-                   { .dict_id = { _SAM_Q2NAME }, .separator = "|"          },
-                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"          },  
+                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"          },  
+                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"          },
                    { .dict_id = { _SAM_Q4NAME }, .separator = ":"          },
                    { .dict_id = { _SAM_Q5NAME }, .separator = ":"          },
                    { .dict_id = { _SAM_Q6NAME }, .separator = ":"          },
                    { .dict_id = { _SAM_Q7NAME }, .separator = ":"          },
-                   { .dict_id = { _SAM_Q8NAME }, .separator = ":"          },
-                   { .dict_id = { _SAM_Q9NAME }, .separator = "|"          },
-                   { .dict_id = { _SAM_QANAME },                           } } 
+                   { .dict_id = { _SAM_Q8NAME }, .separator = "|"          },
+                   { .dict_id = { _SAM_Q9NAME },                           } } // number of reads merged together during the consensus analysis step 
 };
 
 // Example: ATATA-ATGCATAG|ab|A00488:61:HMLGNDSXX:4:1101:4345:1000 (FASTQ only)
 static SmallContainer con_illumina_7gsFQ = {
     .repeats   = 1,
-    .nitems_lo = 11,
-    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = "-"          },  
+    .nitems_lo = 10,
+    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = "|"          },
                    { .dict_id = { _SAM_Q1NAME }, .separator = "|"          },
-                   { .dict_id = { _SAM_Q2NAME }, .separator = "|"          },
-                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"          },  
+                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"          },  
+                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"          },
                    { .dict_id = { _SAM_Q4NAME }, .separator = ":"          },
                    { .dict_id = { _SAM_Q5NAME }, .separator = ":"          },
                    { .dict_id = { _SAM_Q6NAME }, .separator = ":"          },
                    { .dict_id = { _SAM_Q7NAME }, .separator = ":"          },
-                   { .dict_id = { _SAM_Q8NAME }, .separator = ":"          },
-                   { .dict_id = { _SAM_Q9NAME }                            }, 
+                   { .dict_id = { _SAM_Q8NAME }                            }, 
                    { .dict_id = { _SAM_QmNAME }, I_AM_MATE                 } } 
 };
 
@@ -299,38 +297,37 @@ CON_BGI_R(8);
 #define CON_BGI_Rgs(n) /* BAM only*/ \
 static SmallContainer con_bgi_Rgs##n = {  \
     .repeats             = 1,           \
-    .nitems_lo           = 9,           \
-    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = "-"                    },                 \
+    .nitems_lo           = 8,           \
+    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = "|"                    }, /* the two parts of the barcode are correletated and hence segged together */                \
                              { .dict_id = { _SAM_Q1NAME }, .separator = "|"                    },                 \
-                             { .dict_id = { _SAM_Q2NAME }, .separator = "|"                    },                 \
-                             { .dict_id = { _SAM_Q3NAME }, .separator = "L"                    }, /* Flow cell */ \
-                             { .dict_id = { _SAM_Q4NAME }, .separator = { CI0_FIXED_0_PAD, 1 } }, /* Lane      */ \
-                             { .dict_id = { _SAM_Q5NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, /* Column    */ \
-                             { .dict_id = { _SAM_Q6NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, /* Row       */ \
-                             { .dict_id = { _SAM_Q7NAME }, .separator = { CI0_FIXED_0_PAD, n } }, /* Tile      */ \
-                             { .dict_id = { _SAM_Q8NAME }                                      } }/* Mate      */ \
+                             { .dict_id = { _SAM_Q2NAME }, .separator = "L"                    }, /* Flow cell */ \
+                             { .dict_id = { _SAM_Q3NAME }, .separator = { CI0_FIXED_0_PAD, 1 } }, /* Lane      */ \
+                             { .dict_id = { _SAM_Q4NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, /* Column    */ \
+                             { .dict_id = { _SAM_Q5NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, /* Row       */ \
+                             { .dict_id = { _SAM_Q6NAME }, .separator = { CI0_FIXED_0_PAD, n } }, /* Tile      */ \
+                             { .dict_id = { _SAM_Q7NAME }                                      } }/* number of reads merged together during the consensus analysis step */ \
 }
 CON_BGI_Rgs(8);
 
-#define PX_bgi_Rgs { "", "", "", "", "", "C", "R", "", "|" }
+#define PX_bgi_Rgs { "", "", "", "", "C", "R", "", "|" }
 
+// Example: CGGTCT-AACCT|ab|E200003777L1C001R00100888074
 #define CON_BGI_RgsFQ(n) /* FASTQ only */ \
 static SmallContainer con_bgi_RgsFQ##n = {  \
     .repeats             = 1,           \
-    .nitems_lo           = 9,           \
-    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = "-"                    },                 \
+    .nitems_lo           = 8,           \
+    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = "|"                    }, /* the two parts of the barcode are correletated and hence segged together */                \
                              { .dict_id = { _SAM_Q1NAME }, .separator = "|"                    },                 \
-                             { .dict_id = { _SAM_Q2NAME }, .separator = "|"                    },                 \
-                             { .dict_id = { _SAM_Q3NAME }, .separator = "L"                    }, /* Flow cell */ \
-                             { .dict_id = { _SAM_Q4NAME }, .separator = { CI0_FIXED_0_PAD, 1 } }, /* Lane      */ \
-                             { .dict_id = { _SAM_Q5NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, /* Column    */ \
-                             { .dict_id = { _SAM_Q6NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, /* Row       */ \
-                             { .dict_id = { _SAM_Q7NAME }, .separator = { CI0_FIXED_0_PAD, n } }, /* Tile      */ \
+                             { .dict_id = { _SAM_Q2NAME }, .separator = "L"                    }, /* Flow cell */ \
+                             { .dict_id = { _SAM_Q3NAME }, .separator = { CI0_FIXED_0_PAD, 1 } }, /* Lane      */ \
+                             { .dict_id = { _SAM_Q4NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, /* Column    */ \
+                             { .dict_id = { _SAM_Q5NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, /* Row       */ \
+                             { .dict_id = { _SAM_Q6NAME }, .separator = { CI0_FIXED_0_PAD, n } }, /* Tile      */ \
                              { .dict_id = { _SAM_QmNAME }, I_AM_MATE                           } }/* Mate      */ \
 }
 CON_BGI_RgsFQ(8);
 
-#define PX_bgi_RgsFQ { "", "", "", "", "", "C", "R", "", PX_MATE_FIXED_0_PAD }
+#define PX_bgi_RgsFQ { "", "", "", "", "C", "R", "", PX_MATE_FIXED_0_PAD }
 
 // variant of BGI flavor where Q4NAME is a variable-length integer rather than a fixed-length zero-padded numeric
 static SmallContainer con_bgi_varlen = {  \
@@ -859,9 +856,9 @@ static QnameFlavorStruct qf[] = {
 /*  mate    id             name             example                                       tech          qname1_tech   only_q  con_template       canon #sp integer_items       numeric_items   in-local            hex_items       srt ord1,2 rng    sqln bc cb  len px_strs           test_file  */
     // QNAMEs generated by sequencers
     {},  { QF_ILLUM_7gsFQ, "Illumina-gsFQ", { "ATATA-ATGCATAG|ab|A00488:61:HMLGNDSXX:4:1101:4345:1000" },   // must be before QF_ILLUM_7
-                                                                                          TECH_ILLUM,   TECH_NCBI,    QNAME1, &con_illumina_7gsFQ,0,   9,  {4,6,7,8,9,-1},     {-1},           {4,6,-1},           {-1},           0,  8,9,   -1,-1, -1, -1, -1,                       /* flavor.illumina-gsFQ.fq */},
+                                                                                          TECH_ILLUM,   TECH_NCBI,    QNAME1, &con_illumina_7gsFQ,0,   8,  {3,5,6,7,8,-1},     {-1},           {3,5,-1},           {-1},           0,  7,8,   -1,-1, -1, -1, -1,                       /* flavor.illumina-gsFQ.fq */},
          { QF_ILLUM_7gs,   "Illumina-gs",   { "ATATA-ATGCATAG|ab|A00488:61:HMLGNDSXX:4:1101:4345:1000|1" },   
-                                                                                          TECH_ILLUM,   TECH_NCBI,    QSAM,   &con_illumina_7gs,  0,   10, {4,6,7,8,9,10,-1},  {-1},           {4,6,-1},           {-1},           0,  8,9,   -1,-1, -1, -1, -1,    .is_mated=true     /* flavor.illumina-gs.sam */},
+                                                                                          TECH_ILLUM,   TECH_NCBI,    QSAM,   &con_illumina_7gs,  0,   9,  {3,5,6,7,8,9,-1},   {-1},           {3,5,-1},           {-1},           0,  7,8,   -1,-1, -1, -1, -1,    .is_mated=true     /* flavor.illumina-gs.sam */}, // is_mated is set so that the |1 suffix is removed during canonization
     {},  { QF_ILLUM_7,     "Illumina",      { "A00488:61:HMLGNDSXX:4:1101:4345:1000" },   TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_7,    0,   6,  {1,3,4,5,6,-1},     {-1},           {1,3,5,6,-1},       {-1},           0,  5,6,   -1,-1, -1, -1, -1,                       /* flavor.illumina_7_fq.fq */ },
     {},  { QF_ILLUM_7i,    "Illumina#bc",   { "A00488:61:HMLGNDSXX:4:1101:4345:1000#CTGGGAAG" }, 
                                                                                           TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_7i,   '#', 7,  {1,3,4,5,6,-1},     {-1},           {1,3,5,6,-1},       {-1},           0,  5,6,   -1,-1, -1, 7,  -1,                       /* flavor.illumina#bc.sam */ },
@@ -881,9 +878,9 @@ static QnameFlavorStruct qf[] = {
     {},  { QF_BGI_r7,      "BGI-R7",        { "V300017009_8AL2C001R0030001805", "V300022116L2C001R0010002968", "V300014296L2C001R0013000027", "E100001117L1C001R0030000000", "E1000536L1C002R0020000005" },         
                                                                                           TECH_BGI,     TECH_NCBI,    QANY,   &con_bgi_R7,        0,   3,  {-1},               {1,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, 0,  PX_bgi_R          },
     {},  { QF_BGI_rgs8FQ,  "BGI-Rgs8FQ",    { "CGGTCT-AACCT|ab|E200003777L1C001R00100888074" },         // must be before QF_BGI_r8
-                                                                                          TECH_BGI,     TECH_NCBI,    QNAME1, &con_bgi_RgsFQ8,    0,   6,  {-1},               {4,5,6,7,-1},   {5,6,7,-1},         {-1},           0,  7,6,   -1,-1, -1, -1, -1, 0,  PX_bgi_RgsFQ      },
+                                                                                          TECH_BGI,     TECH_NCBI,    QNAME1, &con_bgi_RgsFQ8,    0,   5,  {-1},               {3,4,5,6,-1},   {4,5,6,-1},         {-1},           0,  6,5,   -1,-1, -1, -1, -1, 0,  PX_bgi_RgsFQ      },
          { QF_BGI_rgs8,    "BGI-Rgs8",      { "CGGTCT-AACCT|ab|E200003777L1C001R00100888074|2" },       
-                                                                                          TECH_BGI,     TECH_NCBI,    QSAM,   &con_bgi_Rgs8,      0,   7,  {-1},               {4,5,6,7,-1},   {5,6,7,-1},         {-1},           0,  7,6,   -1,-1, -1, -1, -1, 0,  PX_bgi_Rgs, .is_mated=true },
+                                                                                          TECH_BGI,     TECH_NCBI,    QSAM,   &con_bgi_Rgs8,      0,   6,  {-1},               {3,4,5,6,-1},   {4,5,6,-1},         {-1},           0,  6,5,   -1,-1, -1, -1, -1, 0,  PX_bgi_Rgs, .is_mated=true }, // is_mated is set so that the |1 suffix is removed during canonization
     {},  { QF_BGI_r8,      "BGI-R8",        { "V300046476L1C001R00100001719" },           TECH_BGI,     TECH_NCBI,    QANY,   &con_bgi_R8,        0,   3,  {-1},               {1,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, 0,  PX_bgi_R          },
     {},  { QF_BGI_ll7,     "BGI-LL7",       { "DP8400010271TLL1C005R0511863479" },        TECH_BGI,     TECH_NCBI,    QANY,   &con_bgi_LL7,       0,   4,  {-1},               {1,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, 0,  PX_bgi_LL         },
     {},  { QF_BGI_cl,      "BGI-CL",        { "CL100025298L1C002R050_244547" },           TECH_BGI,     TECH_NCBI,    QANY,   &con_bgi_CL,        0,   6,  {4,-1},             {1,2,3,-1},     {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, 0,  PX_bgi_CL         }, 
@@ -928,6 +925,7 @@ static QnameFlavorStruct qf[] = {
          { QF_ELEMENT_2bc, "Element-2bc",   { "1:N:0:CTACAGTG+AGTCGCTT" },                TECH_ELEMENT, TECH_ELEMENT, QNAME2, &con_illumina_2bc,  0,   4,  {0,2,-1},           {-1},           {0,-1},             {-1},           0,  -1,-1, -1,-1, -1, 3,  -1, 0,  PX_illumina_2bc   /* flavor.illumina_7_fq.fq */ }, 
          { QF_ELEMENT_0bc, "Element-0bc",   { "1:N:0:1" },                                TECH_ELEMENT, TECH_ELEMENT, QNAME2, &con_illumina_0bc,  0,   3,  {0,2,3,-1},         {-1},           {0,-1},             {-1},           0,  -1,-1, -1,-1, -1, -1, -1, 0,  PX_illumina_0bc   /* special.solexa-R1.fq */  }, 
          { QF_ELEMENT_1bc, "Element-1bc",   { "1:N:0:CTACAGTG" },                         TECH_ELEMENT, TECH_ELEMENT, QNAME2, &con_illumina_1bc,  0,   3,  {0,2,-1},           {-1},           {0,-1},             {-1},           0,  -1,-1, -1,-1, -1, 3,  -1, 0,  PX_illumina_1bc   /* flavor.illumina_1bc.fq, flavor.illumina-bc-fq.fq, flavor.illumina_0bc.fq */}, 
+         { QF_ILLUM_2bc,   "BGI-Rgs-2bc",   { "2:N:0:CTGAAGCT+ATAGAGGC" },                TECH_BGI,     TECH_BGI,     QNAME2, &con_illumina_2bc,  0,   4,  {0,2,-1},           {-1},           {0,-1},             {-1},           0,  -1,-1, -1,-1, -1, 3,  -1, 0,  PX_illumina_2bc   /* flavor.illumina_7_fq.fq */ }, 
 
     // observed as QNAME2 in NCBI (possibly with mate) and in SAM/BAM
     {},  { QF_ILLUM_X_2bc, "Illumina_X_2bc",{ "A00180:28:HC3F5DRXX:2:2110:27453:21981_1:N:0:ATTACTCGATCT+GGCTCTGA" }, 

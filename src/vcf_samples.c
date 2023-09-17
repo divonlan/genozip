@@ -21,6 +21,7 @@
 #include "zfile.h"
 #include "zip.h"
 #include "lookback.h"
+#include "tip.h"
 
 static SmallContainer con_AD={}, con_ADALL={}, con_ADF={}, con_ADR={}, con_SAC={}, con_F1R2={}, con_F2R1={}, 
     con_MB={}, con_SB={}, con_AF={};
@@ -182,6 +183,9 @@ void vcf_samples_seg_finalize (VBlockVCFP vb)
         // whether we should seg GQ as a function of GP or PL (the better of the two) - only if this works for at least 20% of the samples
         segconf.GQ_by_GP = (segconf.count_GQ_by_GP > vb->lines.len * vcf_num_samples / 5) && (segconf.count_GQ_by_GP >  segconf.count_GQ_by_PL);
         segconf.GQ_by_PL = (segconf.count_GQ_by_PL > vb->lines.len * vcf_num_samples / 5) && (segconf.count_GQ_by_PL >= segconf.count_GQ_by_GP);
+
+        if (segconf.has_DP_before_PL && !flag.best && !z_is_dvcf)
+            TIP0 ("Compressing this particular VCF with --best could result in significantly better compression");
     }
     else {
         vcf_samples_seg_finalize_PS_PID(vb);
