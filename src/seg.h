@@ -164,7 +164,7 @@ extern void seg_create_rollback_point (VBlockP vb, ContextP *ctxs, unsigned num_
 extern void seg_add_ctx_to_rollback_point (VBlockP vb, ContextP ctx);
 extern void seg_rollback (VBlockP vb);
 
-extern void seg_mux_init (VBlockP vb, ContextP ctx, unsigned num_channels, uint8_t special_code, bool no_stons, MultiplexerP mux, rom channel_letters);
+extern void seg_mux_init (VBlockP vb, ContextP ctx, unsigned num_channels, uint8_t special_code, bool no_stons, MultiplexerP mux);
 extern ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux, uint32_t channel_i);
 
 // --------------------

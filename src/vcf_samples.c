@@ -147,7 +147,7 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
         : PL_mux_by_DP_NO;
 
     // initialize dosage multiplexers
-    #define init_mux_by_dosage(name) seg_mux_init ((VBlockP)vb, CTX(FORMAT_##name), 4, VCF_SPECIAL_MUX_BY_DOSAGE, CTX(FORMAT_##name)->no_stons, (MultiplexerP)&vb->mux_##name, "0123")
+    #define init_mux_by_dosage(name) seg_mux_init ((VBlockP)vb, CTX(FORMAT_##name), 4, VCF_SPECIAL_MUX_BY_DOSAGE, CTX(FORMAT_##name)->no_stons, (MultiplexerP)&vb->mux_##name)
     init_mux_by_dosage(PRI);
     init_mux_by_dosage(GL);
     init_mux_by_dosage(DS);
@@ -158,11 +158,11 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
     init_mux_by_dosage(RD);
     init_mux_by_dosage(PLn);
 
-    seg_mux_init (VB, CTX(FORMAT_PLy), MUX_CAPACITY(vb->mux_PLy), VCF_SPECIAL_MUX_BY_DOSAGExDP, false, (MultiplexerP)&vb->mux_PLy, NULL);
+    seg_mux_init (VB, CTX(FORMAT_PLy), MUX_CAPACITY(vb->mux_PLy), VCF_SPECIAL_MUX_BY_DOSAGExDP, false, (MultiplexerP)&vb->mux_PLy);
     
     if (segconf.has[FORMAT_DP]) {
-        seg_mux_init (VB, CTX(FORMAT_GQ),  MUX_CAPACITY(vb->mux_GQ),  VCF_SPECIAL_MUX_BY_DOSAGExDP, false, (MultiplexerP)&vb->mux_GQ, NULL);
-        seg_mux_init (VB, CTX(FORMAT_RGQ), MUX_CAPACITY(vb->mux_RGQ), VCF_SPECIAL_RGQ, false, (MultiplexerP)&vb->mux_RGQ, NULL);
+        seg_mux_init (VB, CTX(FORMAT_GQ),  MUX_CAPACITY(vb->mux_GQ),  VCF_SPECIAL_MUX_BY_DOSAGExDP, false, (MultiplexerP)&vb->mux_GQ);
+        seg_mux_init (VB, CTX(FORMAT_RGQ), MUX_CAPACITY(vb->mux_RGQ), VCF_SPECIAL_RGQ, false, (MultiplexerP)&vb->mux_RGQ);
     }
     else
         init_mux_by_dosage(GQ);
@@ -470,7 +470,7 @@ static void vcf_seg_AD_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP
             
             else if (i==0 || i==1) {
                 if (!vb->mux_AD[i].num_channels)
-                    seg_mux_init (VB, item_ctxs[i], 4, VCF_SPECIAL_MUX_BY_DOSAGE, false, (MultiplexerP)&vb->mux_AD[i], "0123");
+                    seg_mux_init (VB, item_ctxs[i], 4, VCF_SPECIAL_MUX_BY_DOSAGE, false, (MultiplexerP)&vb->mux_AD[i]);
                 
                 vcf_seg_FORMAT_mux_by_dosage (vb, item_ctxs[i], STRi(item, i), &vb->mux_AD[i]);
             }

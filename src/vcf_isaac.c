@@ -14,7 +14,7 @@ void vcf_isaac_seg_initialize (VBlockVCFP vb)
     ctx_set_store (VB, STORE_INT, FORMAT_GQ, FORMAT_GQX, INFO_REFREP, DID_EOL); 
 
     // GQX stuff
-    seg_mux_init (VB, CTX(FORMAT_GQX), 3, VCF_SPECIAL_DEMUX_GQX, false, (MultiplexerP)&vb->mux_GQX, "012"); 
+    seg_mux_init (VB, CTX(FORMAT_GQX), 3, VCF_SPECIAL_DEMUX_GQX, false, (MultiplexerP)&vb->mux_GQX); 
     seg_by_did (VB, STRa(vb->mux_GQX.snip), FORMAT_GQX, 0); // all the same
 
     CTX(INFO_REFREP)->ltype = LT_DYN_INT;

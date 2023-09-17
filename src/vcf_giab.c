@@ -11,8 +11,8 @@
 
 void vcf_giab_seg_initialize (VBlockVCFP vb)
 {
-    seg_mux_init (VB, CTX(FORMAT_IGT), 2, VCF_SPECIAL_MUX_BY_SAMPLE_I,  false, (MultiplexerP)&vb->mux_IGT, NULL);
-    seg_mux_init (VB, CTX(FORMAT_IPS), 2, VCF_SPECIAL_MUX_BY_IGT_PHASE, false, (MultiplexerP)&vb->mux_IPS, NULL);
+    seg_mux_init (VB, CTX(FORMAT_IGT), 2, VCF_SPECIAL_MUX_BY_SAMPLE_I,  false, (MultiplexerP)&vb->mux_IGT);
+    seg_mux_init (VB, CTX(FORMAT_IPS), 2, VCF_SPECIAL_MUX_BY_IGT_PHASE, false, (MultiplexerP)&vb->mux_IPS);
 }
 
 //--------------------------------------------------------------------------------
@@ -133,7 +133,7 @@ void vcf_seg_ADALL_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP *it
     for (unsigned i=0; i < n_items; i++) 
         if (i==0 || i==1) {
             if (!vb->mux_ADALL[i].num_channels)
-                seg_mux_init (VB, item_ctxs[i], 4, VCF_SPECIAL_MUX_BY_DOSAGE, false, (MultiplexerP)&vb->mux_ADALL[i], "0123");
+                seg_mux_init (VB, item_ctxs[i], 4, VCF_SPECIAL_MUX_BY_DOSAGE, false, (MultiplexerP)&vb->mux_ADALL[i]);
             
             vcf_seg_FORMAT_mux_by_dosage (vb, item_ctxs[i], STRi(item, i), &vb->mux_ADALL[i]);
         }

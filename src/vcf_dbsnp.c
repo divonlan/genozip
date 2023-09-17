@@ -20,7 +20,7 @@ void vcf_dbsnp_zip_initialize (void)
 
 void vcf_dbsnp_seg_initialize (VBlockVCFP vb)
 {
-    seg_mux_init (VB, CTX(INFO_VC), 3, VCF_SPECIAL_MUX_BY_VARTYPE, true, (MultiplexerP)&vb->mux_VC, "012");
+    seg_mux_init (VB, CTX(INFO_VC), 3, VCF_SPECIAL_MUX_BY_VARTYPE, true, (MultiplexerP)&vb->mux_VC);
 
     CTX(VCF_QUAL)->no_stons = true;
 }

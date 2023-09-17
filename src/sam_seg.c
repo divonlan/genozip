@@ -424,39 +424,39 @@ void sam_seg_initialize (VBlockP vb_)
     ctx_set_store (VB, STORE_INDEX, OPTION_XA_Z, DID_EOL); // for containers this stores repeats - used by sam_piz_special_X1->container_peek_repeats
 
     if (segconf.sam_has_BWA_XS_i) // XS:i is as defined some aligners
-        seg_mux_init (VB, CTX(OPTION_XS_i), 4, SAM_SPECIAL_BWA_XS, false, (MultiplexerP)&vb->mux_XS, "0123");
+        seg_mux_init (VB, CTX(OPTION_XS_i), 4, SAM_SPECIAL_BWA_XS, false, (MultiplexerP)&vb->mux_XS);
 
     else if (MP(HISAT2)) // ZS:i is like BWA's XS:i
-        seg_mux_init (VB, CTX(OPTION_ZS_i), 4, SAM_SPECIAL_BWA_XS, false, (MultiplexerP)&vb->mux_XS, "0123");
+        seg_mux_init (VB, CTX(OPTION_ZS_i), 4, SAM_SPECIAL_BWA_XS, false, (MultiplexerP)&vb->mux_XS);
 
     if (sam_has_bowtie2_YS_i()) {
         ctx_set_store_per_line (VB, OPTION_AS_i, OPTION_YS_i, DID_EOL);
-        seg_mux_init (VB, CTX(OPTION_YS_i), 2, SAM_SPECIAL_DEMUX_BY_MATE, false, (MultiplexerP)&vb->mux_YS, "01");
+        seg_mux_init (VB, CTX(OPTION_YS_i), 2, SAM_SPECIAL_DEMUX_BY_MATE, false, (MultiplexerP)&vb->mux_YS);
     }
 
     if (MP(STAR) && segconf.is_paired && !IS_DEPN(vb)) {
-        seg_mux_init (VB, CTX(OPTION_nM_i), 2, SAM_SPECIAL_DEMUX_BY_MATE, false, (MultiplexerP)&vb->mux_nM, "01");
+        seg_mux_init (VB, CTX(OPTION_nM_i), 2, SAM_SPECIAL_DEMUX_BY_MATE, false, (MultiplexerP)&vb->mux_nM);
         ctx_set_store_per_line (VB, OPTION_AS_i, OPTION_nM_i, DID_EOL);
     }
 
     if (segconf.sam_ms_type == ms_BIOBAMBAM) {
-        seg_mux_init (VB, CTX(OPTION_ms_i), 2, SAM_SPECIAL_DEMUX_BY_MATE, false, (MultiplexerP)&vb->mux_ms, "01");
+        seg_mux_init (VB, CTX(OPTION_ms_i), 2, SAM_SPECIAL_DEMUX_BY_MATE, false, (MultiplexerP)&vb->mux_ms);
 
         CTX(OPTION_ms_i)->flags.spl_custom = true;  // custom store-per-line - SPECIAL will handle the storing
         CTX(OPTION_ms_i)->flags.store = STORE_INT;  // since v14 - store QUAL_score for mate ms:i (in v13 it was stored in QUAL)
     }
     
-    seg_mux_init (VB, CTX(SAM_FLAG), 2, SAM_SPECIAL_DEMUX_BY_BUDDY, false, (MultiplexerP)&vb->mux_FLAG, "01");
-    seg_mux_init (VB, CTX(SAM_POS), 3, SAM_SPECIAL_DEMUX_BY_MATE_PRIM, true, (MultiplexerP)&vb->mux_POS, "012");
-    seg_mux_init (VB, CTX(SAM_PNEXT), 4, SAM_SPECIAL_PNEXT, true, (MultiplexerP)&vb->mux_PNEXT, "0123");
-    seg_mux_init (VB, CTX(SAM_MAPQ), 3, SAM_SPECIAL_DEMUX_BY_MATE_PRIM, false, (MultiplexerP)&vb->mux_MAPQ, "012");
-    seg_mux_init (VB, CTX(OPTION_MQ_i), 2, SAM_SPECIAL_DEMUX_BY_MATE, false, (MultiplexerP)&vb->mux_MQ, "01");
-    seg_mux_init (VB, CTX(OPTION_MC_Z), 2, SAM_SPECIAL_DEMUX_BY_MATE, false, (MultiplexerP)&vb->mux_MC, "01");
-    seg_mux_init (VB, CTX(OPTION_AS_i), 2, SAM_SPECIAL_DEMUX_BY_MATE, false, (MultiplexerP)&vb->mux_AS, "01");
-    seg_mux_init (VB, CTX(OPTION_NH_i), 3, SAM_SPECIAL_DEMUX_BY_BUDDY_MAP, false, (MultiplexerP)&vb->mux_NH, "012");
+    seg_mux_init (VB, CTX(SAM_FLAG), 2, SAM_SPECIAL_DEMUX_BY_BUDDY, false, (MultiplexerP)&vb->mux_FLAG);
+    seg_mux_init (VB, CTX(SAM_POS), 3, SAM_SPECIAL_DEMUX_BY_MATE_PRIM, true, (MultiplexerP)&vb->mux_POS);
+    seg_mux_init (VB, CTX(SAM_PNEXT), 4, SAM_SPECIAL_PNEXT, true, (MultiplexerP)&vb->mux_PNEXT);
+    seg_mux_init (VB, CTX(SAM_MAPQ), 3, SAM_SPECIAL_DEMUX_BY_MATE_PRIM, false, (MultiplexerP)&vb->mux_MAPQ);
+    seg_mux_init (VB, CTX(OPTION_MQ_i), 2, SAM_SPECIAL_DEMUX_BY_MATE, false, (MultiplexerP)&vb->mux_MQ);
+    seg_mux_init (VB, CTX(OPTION_MC_Z), 2, SAM_SPECIAL_DEMUX_BY_MATE, false, (MultiplexerP)&vb->mux_MC);
+    seg_mux_init (VB, CTX(OPTION_AS_i), 2, SAM_SPECIAL_DEMUX_BY_MATE, false, (MultiplexerP)&vb->mux_AS);
+    seg_mux_init (VB, CTX(OPTION_NH_i), 3, SAM_SPECIAL_DEMUX_BY_BUDDY_MAP, false, (MultiplexerP)&vb->mux_NH);
 
     for (MatedZFields f = 0; f < NUM_MATED_Z_TAGS; f++)
-        seg_mux_init (VB, CTX(buddied_Z_dids[f]), 2, SAM_SPECIAL_DEMUX_BY_BUDDY, false, (MultiplexerP)&vb->mux_mated_z_fields[f], "01");
+        seg_mux_init (VB, CTX(buddied_Z_dids[f]), 2, SAM_SPECIAL_DEMUX_BY_BUDDY, false, (MultiplexerP)&vb->mux_mated_z_fields[f]);
         
     // get counts of qnames in the VB, that will allow us to leave lines in th  e VB for saggy instead of gencomp
     // note: for SAG_BY_SA in --best, we send all prim/depn to gencomp (see bug 629)

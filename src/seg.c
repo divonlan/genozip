@@ -302,7 +302,7 @@ void seg_mux_display (MultiplexerP mux)
 }
 
 void seg_mux_init (VBlockP vb, ContextP ctx, unsigned num_channels, uint8_t special_code, 
-                   bool no_stons, MultiplexerP mux, rom channel_letters) // optional - a string with num_channels unique characters
+                   bool no_stons, MultiplexerP mux) // optional - a string with num_channels unique characters
 {
     // note: if we ever need more than 256, we need to update the dict_id generation formula below
     ASSERT (num_channels <= 256, "num_channels=%u exceeds maximum of 256", num_channels);
@@ -322,7 +322,7 @@ void seg_mux_init (VBlockP vb, ContextP ctx, unsigned num_channels, uint8_t spec
     // calculate dict_ids, eg: PL -> PlL, PmL, PnL, PoL
     for (int i=0; i < num_channels; i++) {
         mux->dict_ids[i] = dict_id_template;
-        mux->dict_ids[i].id[1] = channel_letters ? channel_letters[i] : (((uint16_t)id[1] + (uint16_t)i) & 0xff);
+        mux->dict_ids[i].id[1] = ((uint16_t)'0' + (uint16_t)i) & 0xff;
         if (id_len <= 5) str_int (i, (char*)&mux->dict_ids[i].id[id_len]); // add numerical digits for ease of debugging if we have room
     }
 

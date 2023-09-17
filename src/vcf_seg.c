@@ -227,8 +227,8 @@ void vcf_seg_initialize (VBlockP vb_)
     ctx_create_node (VB, VCF_COPYPOS,  (char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPYPOS  }, 2);
 
     if (segconf.has[FORMAT_RGQ]) {
-        seg_mux_init (VB, CTX(VCF_QUAL), 2, VCF_SPECIAL_MUX_BY_HAS_RGQ, false, (MultiplexerP)&vb->mux_QUAL, "01");
-        seg_mux_init (VB, CTX(VCF_INFO), 2, VCF_SPECIAL_MUX_BY_HAS_RGQ, false, (MultiplexerP)&vb->mux_INFO, "01");        
+        seg_mux_init (VB, CTX(VCF_QUAL), 2, VCF_SPECIAL_MUX_BY_HAS_RGQ, false, (MultiplexerP)&vb->mux_QUAL);
+        seg_mux_init (VB, CTX(VCF_INFO), 2, VCF_SPECIAL_MUX_BY_HAS_RGQ, false, (MultiplexerP)&vb->mux_INFO);        
     }
 
     vcf_info_seg_initialize(vb);
