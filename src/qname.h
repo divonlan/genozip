@@ -10,6 +10,7 @@
 
 #include "genozip.h"
 #include "segconf.h"
+#include "aliases.h"
 
 #define dict_id_is_qname_sf dict_id_is_type_1
 #define dict_id_qname_sf dict_id_type_1
@@ -21,8 +22,8 @@ extern void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname));
 extern void qname_zip_initialize (void);
 extern void qname_seg_initialize (VBlockP vb, QType q, Did st_did_i);
 
-typedef enum  { QTR_SUCCESS, QTR_QNAME_LEN_0, QTR_FIXED_LEN_MISMATCH, QTR_WRONG_Q, QTR_CONTAINER_MISMATCH, QTR_BAD_INTEGER, QTR_BAD_CHARS, QTR_BAD_NUMERIC, QTR_BAD_HEX, QTR_TECH_MISMATCH, QTR_NOT_BARCODE, NUM_QTRs } QnameTestResult;
-#define QTR_NAME { "SUCCESS",   "QNAME_LEN=0",   "FIXED_LEN_MISMATCH",   "WRONG_Q",   "CONTAINER_MISMATCH",   "BAD_INTEGER",   "BAD_CHARS",   "BAD_NUMERIC",   "BAD_HEX",   "TECH_MISMATCH",   "NOT_BARCODE" }
+typedef enum  { QTR_SUCCESS, QTR_QNAME_LEN_0, QTR_FIXED_LEN_MISMATCH, QTR_WRONG_Q, QTR_CONTAINER_MISMATCH, QTR_BAD_INTEGER, QTR_BAD_CHARS, QTR_BAD_NUMERIC, QTR_BAD_HEX, QTR_TECH_MISMATCH, QTR_NOT_BARCODE, QTR_NOT_BARCODE2, NUM_QTRs } QnameTestResult;
+#define QTR_NAME { "SUCCESS",   "QNAME_LEN=0",   "FIXED_LEN_MISMATCH",   "WRONG_Q",   "CONTAINER_MISMATCH",   "BAD_INTEGER",   "BAD_CHARS",   "BAD_NUMERIC",   "BAD_HEX",   "TECH_MISMATCH",   "NOT_BARCODE",   "NOT_BARCODE2" }
 extern QnameTestResult qname_test_flavor (STRp(qname), QType q, QnameFlavor qf, bool quiet);
 
 extern uint32_t qname_calc_hash (QType q, STRp(qname), thool is_last, bool canonical, uint32_t *uncanonical_suffix_len);
@@ -31,6 +32,7 @@ extern void qname_canonize (QType q, rom qname, uint32_t *qname_len);
 extern rom segconf_qf_name (QType q);
 extern QnameFlavorId segconf_qf_id (QType q);
 extern rom qtype_name (QType q);
+extern DictIdAlias qname_get_alias (QType q);
 
 typedef void (*QnameSegCallback) (VBlockP vb, ContextP ctx, STRp(value));
 

@@ -11,6 +11,7 @@
 #include "file.h"
 #include "zfile.h"
 #include "buffer.h"
+#include "qname.h"
 
 static Buffer aliases = {};
 
@@ -59,6 +60,12 @@ void aliases_compress (void)
 {
     ASSERTNOTINUSE (aliases);
     aliases_zip_get_predefined (true);
+
+    // add qname alias if there is one
+    buf_alloc (evb, &aliases, NUM_QTYPES, 0, DictIdAlias, 0, NULL);
+    for (QType q=QNAME1; q < NUM_QTYPES; q++) 
+        if (qname_get_alias(q).alias_type)
+            BNXT (DictIdAlias, aliases) = qname_get_alias(q);
 
     if (flag.show_aliases) show_aliases();
 

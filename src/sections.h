@@ -269,8 +269,8 @@ typedef struct {
 // NOTE: part of the file format - new flavors can be added, but their value cannot change (v15)
 typedef enum __attribute__ ((__packed__)) { 
     QF_NO_ID=0, 
-    QF_ILLUM_7=1, QF_ILLUM_7i=2, QF_ILLUM_7umi=3, QF_ILLUM_7c=4, QF_ILLUM_7gs=5, QF_ILLUM_5i=6, QF_ILLUM_5=7, QF_ILLUM_5rng=8,  
-    QF_ILLUM_2bc=9, QF_ILLUM_1bc=10, QF_ILLUM_0bc=11, QF_ILLUM_X_0bc=12, QF_ILLUM_X_1bc=13, QF_ILLUM_X_2bc=14, QF_ILLUM_S_0bc=15, QF_ILLUM_S_1bc=16, QF_ILLUM_S_2bc=17, QF_ILLUM_7gsFQ=18,
+    QF_ILLUM_7=1, QF_ILLUM_7i=2, QF_ILLUM_7umi=3, QF_ILLUM_7_bc=4, QF_ILLUM_7gs=5, QF_ILLUM_5i=6, QF_ILLUM_5=7, QF_ILLUM_5rng=8,  
+    QF_ILLUM_2bc=9, QF_ILLUM_1bc=10, QF_ILLUM_0bc=11, QF_ILLUM_X_0bc=12, QF_ILLUM_X_1bc=13, QF_ILLUM_X_2bc=14, QF_ILLUM_S_0bc=15, QF_ILLUM_S_1bc=16, QF_ILLUM_S_2bc=17, QF_ILLUM_7gsFQ=18, QF_ILLUM_7_2bc=19,
     QF_BGI_varlen=20, QF_BGI_r6=21, QF_BGI_r7=22, QF_BGI_r8=23, QF_BGI_ll7=24, QF_BGI_cl=25, QF_BGI_rgs8=26, QF_BGI_rgs8FQ=27,
     QF_PACBIO_3=30, QF_PACBIO_rng=31, QF_PACBIO_lbl=32, QF_PACBIO_pln=33,
     QF_NANOPORE=40, QF_NANOPORE_rng=41, QF_NANOPORE_ext=42,

@@ -11,6 +11,7 @@
 #include "container.h"
 #include "dict_id_gen.h"
 #include "segconf.h"
+#include "aliases.h"
 #include "qname.h" // for editor
 
 #define PX_MATE_FIXED_0_PAD (char[]){ CI0_SKIP } // add to prefix for mate item IFF preceeding item has CI0_FIXED_0_PAD
@@ -178,7 +179,7 @@ static SmallContainer con_illumina_S_0bc = {
 };
 
 // Example: SDF-02:GFH-0166::1:13435:2311:1233:GTAGCCAATCA
-static SmallContainer con_illumina_7c = {
+static SmallContainer con_illumina_7bc = {
     .repeats   = 1,
     .nitems_lo = 9,
     .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = ":"          },  
@@ -189,6 +190,22 @@ static SmallContainer con_illumina_7c = {
                    { .dict_id = { _SAM_Q5NAME }, .separator = ":"          },
                    { .dict_id = { _SAM_Q6NAME }, .separator = ":"          },
                    { .dict_id = { _SAM_Q7NAME },                           },
+                   { .dict_id = { _SAM_QmNAME }, I_AM_MATE                 } } 
+};
+
+// Example: A00488:61:HMLGNDSXX:4:1101:4345:1000:TGCTGGG+ACTTTTA
+static SmallContainer con_illumina_7bc2 = {
+    .repeats   = 1,
+    .nitems_lo = 10,
+    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = ":"          },  
+                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q4NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q5NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q6NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q7NAME }, .separator = "+"          },
+                   { .dict_id = { _SAM_Q8NAME },                           }, 
                    { .dict_id = { _SAM_QmNAME }, I_AM_MATE                 } } 
 };
 
@@ -850,6 +867,7 @@ typedef struct QnameFlavorStruct {
     SmallContainer con;                   // container
     bool is_integer[MAX_QNAME_ITEMS], is_hex[MAX_QNAME_ITEMS], is_in_local[MAX_QNAME_ITEMS], is_numeric[MAX_QNAME_ITEMS]; // indexed according to order of items in the container (NOT by order of did_i)
     bool is_mated;                        // true means qname has a /1 or /2, qfs generated with qname_genarate_qfs_with_mate()
+    int barcode_item2;                    // set if we have a barcode item with a '+' separator
 } QnameFlavorStruct;
 
 static QnameFlavorStruct qf[] = { 
@@ -859,18 +877,20 @@ static QnameFlavorStruct qf[] = {
                                                                                           TECH_ILLUM,   TECH_NCBI,    QNAME1, &con_illumina_7gsFQ,0,   8,  {3,5,6,7,8,-1},     {-1},           {3,5,-1},           {-1},           0,  7,8,   -1,-1, -1, -1, -1,                       /* flavor.illumina-gsFQ.fq */},
          { QF_ILLUM_7gs,   "Illumina-gs",   { "ATATA-ATGCATAG|ab|A00488:61:HMLGNDSXX:4:1101:4345:1000|1" },   
                                                                                           TECH_ILLUM,   TECH_NCBI,    QSAM,   &con_illumina_7gs,  0,   9,  {3,5,6,7,8,9,-1},   {-1},           {3,5,-1},           {-1},           0,  7,8,   -1,-1, -1, -1, -1,    .is_mated=true     /* flavor.illumina-gs.sam */}, // is_mated is set so that the |1 suffix is removed during canonization
-    {},  { QF_ILLUM_7,     "Illumina",      { "A00488:61:HMLGNDSXX:4:1101:4345:1000" },   TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_7,    0,   6,  {1,3,4,5,6,-1},     {-1},           {1,3,5,6,-1},       {-1},           0,  5,6,   -1,-1, -1, -1, -1,                       /* flavor.illumina_7_fq.fq */ },
+    {},  { QF_ILLUM_7,     "Illumina",      { "A00488:61:HMLGNDSXX:4:1101:4345:1000" },   TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_7,    0,   6,  {1,3,4,5,6,-1},     {-1},           {1,3,5,6,-1},       {-1},           0,  5,6,   -1,-1, -1, -1, -1,                       /* flavor.illumina-7.fq */ },
     {},  { QF_ILLUM_7i,    "Illumina#bc",   { "A00488:61:HMLGNDSXX:4:1101:4345:1000#CTGGGAAG" }, 
                                                                                           TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_7i,   '#', 7,  {1,3,4,5,6,-1},     {-1},           {1,3,5,6,-1},       {-1},           0,  5,6,   -1,-1, -1, 7,  -1,                       /* flavor.illumina#bc.sam */ },
     {},  { QF_ILLUM_7umi,  "Illumina-umi",  { "A00488:61:HMLGNDSXX:4:1101:4345:1000;umi=ACCTTCCAA" },   
                                                                                           TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_7umi, ';', 11, {1,3,4,5,6,-1},     {-1},           {1,3,5,6,-1},       {-1},           0,  5,6,   -1,-1, -1, 7,  -1, 0,  PX_illumina_7umi  /* flavor.illumina_7umi.fq */ },
-    {},  { QF_ILLUM_7c,    "Illumina:bc",   { "SDF-02:GFH-0166::1:13435:2311:1233:GTAGCCAATCA" }, 
-                                                                                          TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_7c,   ':', 7,  {3,4,5,6,-1},       {-1},           {3,7,-1},           {-1},           0,  5,6,   -1,-1, -1, 7,  -1,                       /* flavor.illumina-bc-fq.fq, flavor.illumina.colon.sam */ },
+    {},  { QF_ILLUM_7_2bc, "Illumina:2bc",  { "A00488:61:HMLGNDSXX:4:1101:4345:1000:TGCTGGG+ACTTTTA" }, 
+                                                                                          TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_7bc2, ':', 8,  {3,4,5,6,-1},       {-1},           {3,-1},             {-1},           0,  5,6,   -1,-1, -1, 7,  -1,                       /* flavor.illumina-7-2bc.fq */ },
+    {},  { QF_ILLUM_7_bc,  "Illumina:bc",   { "SDF-02:GFH-0166::1:13435:2311:1233:GTAGCCAATCA" }, 
+                                                                                          TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_7bc,  ':', 7,  {3,4,5,6,-1},       {-1},           {3,-1},             {-1},           0,  5,6,   -1,-1, -1, 7,  -1,                       /* flavor.illumina-7-bc.fq, flavor.illumina.colon.sam */ },
     {},  { QF_SINGULAR,    "Singular",      { "B05:000:FC2:4:1:272670:483" },             TECH_SINGLR,  TECH_NCBI,    QANY,   &con_singular,      0,   6,  {3,4,5,6,-1},       {1,-1},         {5,6,-1},           {-1},           0,  6,-1,  -1,-1, -1, -1, -1, 0,  PX_SINGULAR       /* flavor.singualr.fq */ },
     {},  { QF_ELEMENT,     "Element",       { "PLT-16:APP-0316:UNKNOWN_FLOWCELL:1:10102:0582:0027", "PLT-03:BBS-0174:2140948523:1:10102:0293:0058" },     
                                                                                           TECH_ELEMENT, TECH_NCBI,    QANY,   &con_element,       0,   6,  {3,-1},             {5,6,-1},       {5,6,-1},           {-1},           0,  6,-1,  -1,-1, -1, -1, -1, 0,  PX_ELEMENT        /* flavor.element.fq */ },
     {},  { QF_ELEMENT_6,   "Element-6",     { "PLT-04:APP-0289::1:10102:0338:0025" },     TECH_ELEMENT, TECH_NCBI,    QANY,   &con_element_6,     0,   6,  {2,3,-1},           {4,5,-1},       {4,5,-1},           {-1},           0,  5,-1,  -1,-1, -1, -1, -1, 0,  PX_ELEMENT_6      /* flavor.element-6.fq */ },
-/*  mate    id             name             example                                       tech          qname1_tech   only_q  con_template       canon #sp integer_items       numeric_items   in-local            hex_items       srt ord1,2 rng    sqln len px_strs           test_file  */
+/*  mate    id             name             example                                       tech          qname1_tech   only_q  con_template       canon #sp integer_items       numeric_items   in-local            hex_items       srt ord1,2 rng    sqln bc cb  len px_strs           test_file  */
     {},  { QF_BGI_varlen,  "BGI-varlen",    { "8A_V100004684L3C001R029311637", "V300022116L2C001R0012002968", "V300046476L1C001R00110001719" },          
                                                                                           TECH_BGI,     TECH_NCBI,    QANY,   &con_bgi_varlen,    0,   3,  {4,-1},             {1,2,3,-1},     {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, 0,  PX_bgi_varlen     },
     {},  { QF_BGI_r6,      "BGI-R6",        { "8A_V100004684L3C001R029011637", "V300014293BL2C001R027005967", "V300003413L4C001R016000000" },          
@@ -907,7 +927,7 @@ static QnameFlavorStruct qf[] = {
     {},  { QF_NANOPORE,    "Nanopore",      { "af84b0c1-6945-4323-9193-d9f6f2c38f9a" },   TECH_ONP,     TECH_NCBI,    QANY,   &con_nanopore,      0,   4,  {-1},               {0,1,2,3,4-1},  {0,1,2,3,4,-1},     {0,1,2,3,4,-1}, 0,  -1,-1, -1,-1, -1, -1, -1, 36, PX_nanopore       /* flavor.nanopore.aux.fq, flavor.nanopore.length.fq */},
     {},  { QF_NANOPORE_rng,"Nanopore-rng",  { "2a228edf-218c-46b3-b1b8-3d613b8530dc_39-13665" },
                                                                                           TECH_ONP,     TECH_NCBI,    QANY,   &con_nanopore_rng,  0,   6,  {5,6,-1},           {0,1,2,3,4,-1}, {0,1,2,3,4,5,6,-1}, {0,1,2,3,4,-1}, 0,  -1,-1, -1,-1, -1, -1, -1, 0,  PX_nanopore_rng   /* flavor.nanopore-rng.fq */}, // 14.0.31
-/*  mate    id             name             example                                       tech          qname1_tech   only_q  con_template       canon #sp integer_items       numeric_items   in-local            hex_items       srt ord1,2 rng    sqln len px_strs           test_file  */
+/*  mate    id             name             example                                       tech          qname1_tech   only_q  con_template       canon #sp integer_items       numeric_items   in-local            hex_items       srt ord1,2 rng    sqln bc cb  len px_strs           test_file  */
     {},  { QF_NANOPORE_ext,"Nanopore-ext",  { "2a228edf-d8bc-45d4-9c96-3d613b8530dc_Basecall_2D_000_template" },
                                                                                           TECH_ONP,     TECH_NCBI,    QANY,   &con_nanopore_ext,  0,   5,  {-1},               {0,1,2,3,4,-1}, {0,1,2,3,4,-1},     {0,1,2,3,4,-1}, 0,  -1,-1, -1,-1, -1, -1, -1, 0,  PX_nanopore_ext   },
     {},  { QF_BAMSURGEON,  "BamSurgeon",    { "22:33597495-34324994_726956_727496_0:0:0_0:0:0_2963e" },   
