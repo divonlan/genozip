@@ -37,5 +37,5 @@ extern DictIdAlias qname_get_alias (QType q);
 typedef void (*QnameSegCallback) (VBlockP vb, ContextP ctx, STRp(value));
 
 // flavor-specific callbacks
-extern void sultima_Q5NAME_cb (VBlockP vb, ContextP ctx, STRp(value));
+extern void ultima_c_Q5NAME_cb (VBlockP vb, ContextP ctx, STRp(value));
 

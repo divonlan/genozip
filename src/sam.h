@@ -683,7 +683,7 @@ extern void sam_reset_line (VBlockP vb);
                       sam_piz_special_FI, sam_piz_special_cm, sam_piz_special_COPY_BUDDY, sam_piz_special_SET_BUDDY, \
                       sam_piz_special_TX_AN_POS, sam_piz_special_COPY_TEXTUAL_CIGAR, sam_piz_special_BISMARK_XM, \
                       sam_piz_special_BSBOLT_XB, sam_piz_special_UQ, sam_piz_special_iq_sq_dq, sam_piz_special_DEMUX_BY_QUAL, \
-                      sultima_piz_special_DEMUX_BY_Q4NAME, \
+                      ultima_c_piz_special_DEMUX_BY_Q4NAME, \
                     }
 SPECIAL (SAM, 0,  CIGAR,                 sam_cigar_special_CIGAR);
 SPECIAL (SAM, 1,  TLEN_old,              sam_piz_special_TLEN_old);            // used up to 12.0.42
@@ -739,7 +739,7 @@ SPECIAL (SAM, 50, BSBOLT_XB,             sam_piz_special_BSBOLT_XB);           /
 SPECIAL (SAM, 51, UQ,                    sam_piz_special_UQ);                  // introduced 14.0.10
 SPECIAL (SAM, 52, iqsqdq,                sam_piz_special_iq_sq_dq);            // introduced 15.0.0
 SPECIAL (SAM, 53, DEMUX_BY_QUAL,         sam_piz_special_DEMUX_BY_QUAL);       // introduced 15.0.10
-SPECIAL (SAM, 54, SULTIMA,               sultima_piz_special_DEMUX_BY_Q4NAME); // introduced 15.0.15
+SPECIAL (SAM, 54, ULTIMA_C,              ultima_c_piz_special_DEMUX_BY_Q4NAME);// introduced 15.0.15
 #define NUM_SAM_SPECIAL 55
  
 #define SAM_LOCAL_GET_LINE_CALLBACKS                          \

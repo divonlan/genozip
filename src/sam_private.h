@@ -259,7 +259,7 @@ typedef struct VBlockSAM {
     Multiplexer4 mux_PNEXT;
     Multiplexer3 mux_POS, mux_MAPQ;// ZIP: DEMUX_BY_MATE_PRIM multiplexors
     Multiplexer2 mux_FLAG, mux_MQ, mux_MC, mux_ms, mux_AS, mux_YS, mux_nM, // ZIP: DEMUX_BY_MATE or DEMUX_BY_BUDDY multiplexors
-                 mux_mated_z_fields[NUM_MATED_Z_TAGS], mux_SULTIMA; 
+                 mux_mated_z_fields[NUM_MATED_Z_TAGS], mux_ultima_c; 
     Multiplexer3 mux_NH;           // ZIP: DEMUX_BY_BUDDY_MAP
     Multiplexer7 mux_tp;           // ZIP: DEMUX_BY_QUAL (number of channels matches TP_NUM_BINS)
 

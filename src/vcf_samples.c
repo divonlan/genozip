@@ -208,7 +208,7 @@ static inline bool vcf_seg_sample_has_null_value (uint64_t dnum, ContextP *ctxs,
 
 // returns: 0,1,2 correspond to 0/0 0/1 1/1, 3 means "no dosage" - multi-allelic or '.' or ploidy > 2
 // -1 means caller should not use her SPECIAL
-static int vcf_mux_by_dosage_channel_i (VBlockVCFP vb, bool fail_if_dvcf_refalt_switch)
+int vcf_seg_get_mux_channel_i (VBlockVCFP vb, bool fail_if_dvcf_refalt_switch)
 {
     // fail if this is a DVCF ref<>alt switch, if caller requested so,
     // or if there is no valid GT in this sample
@@ -227,7 +227,7 @@ static int vcf_mux_by_dosage_channel_i (VBlockVCFP vb, bool fail_if_dvcf_refalt_
 // if cell is NULL, leaves it up to the caller to seg to the channel 
 ContextP vcf_seg_FORMAT_mux_by_dosage (VBlockVCFP vb, ContextP ctx, STRp(cell), const DosageMultiplexer *mux) 
 {
-    int channel_i = vcf_mux_by_dosage_channel_i (vb, true);
+    int channel_i = vcf_seg_get_mux_channel_i (vb, true);
 
     // we don't use the multiplexer if its a DVCF REF⇆ALT switch variant as GT changes
     if (channel_i == -1) {
@@ -252,7 +252,7 @@ ContextP vcf_seg_FORMAT_mux_by_dosage (VBlockVCFP vb, ContextP ctx, STRp(cell), 
 
 static void vcf_seg_FORMAT_mux_by_dosage_int (VBlockVCFP vb, ContextP ctx, int64_t value, const DosageMultiplexer *mux, uint32_t add_bytes) 
 {
-    int channel_i = vcf_mux_by_dosage_channel_i (vb, true);
+    int channel_i = vcf_seg_get_mux_channel_i (vb, true);
 
     // we don't use the multiplexer if its a DVCF REF⇆ALT switch variant as GT changes
     if (channel_i == -1) {
@@ -304,7 +304,7 @@ static void vcf_seg_FORMAT_mux_by_dosagexDP (VBlockVCFP vb, ContextP ctx, STRp(c
     if (!str_get_int (STRlst (FORMAT_DP), &DP)) // In some files, DP may be '.'
         DP=0;
 
-    int channel_i = vcf_mux_by_dosage_channel_i (vb, true); // we don't use the multiplexer if its a DVCF REF⇆ALT switch variant as GT changes
+    int channel_i = vcf_seg_get_mux_channel_i (vb, true); // we don't use the multiplexer if its a DVCF REF⇆ALT switch variant as GT changes
     if (channel_i == -1) goto cannot_use_special;
 
     unsigned num_dps = mux->num_channels / 3;
@@ -1126,7 +1126,7 @@ static bool vcf_phred_optimize (rom snip, unsigned len, char *optimized_snip, un
 // If expectation is met, SPECIAL is segged in AB. 
 static inline void vcf_seg_FORMAT_AB (VBlockVCFP vb, ContextP ctx, STRp(ab))
 {
-    int channel_i = vcf_mux_by_dosage_channel_i (vb, false);
+    int channel_i = vcf_seg_get_mux_channel_i (vb, false);
     bool is_0_or_2 = (channel_i==0 || channel_i==2); // note: dos02 doesn't change in case of DVCF REF⇆ALT switch
     bool ab_missing = ab_len==1 && *ab=='.';
 

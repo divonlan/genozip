@@ -137,7 +137,7 @@ extern rom fastq_seg_txt_line(VBlockP vb, rom line_start, uint32_t remaining, bo
 extern rom fastq_assseg_line (VBlockP vb);
 extern void fastq_seg_pair2_gpos (VBlockP vb, PosType64 pair1_pos, PosType64 pair2_gpos);
 extern void fastq_update_qual_len (VBlockP vb, uint32_t line_i, uint32_t new_len);
-extern Multiplexer2P fastq_get_sultima_mux (VBlockP vb);
+extern Multiplexer2P fastq_get_ultima_c_mux (VBlockP vb);
 
 // PIZ Stuff
 extern void fastq_piz_process_recon (VBlockP vb);
@@ -174,7 +174,7 @@ typedef enum { FQ_COMP_R1, FQ_COMP_R2 } FastqComponentType;
 #define FASTQ_SPECIAL { fastq_special_unaligned_SEQ, fastq_special_PAIR2_GPOS, fastq_special_mate_lookup, \
                         fastq_special_set_deep, fastq_special_deep_copy_QNAME, fastq_special_deep_copy_SEQ, fastq_special_deep_copy_QUAL,\
                         fastq_special_backspace, fastq_special_copy_line1, fastq_special_monochar_QUAL, \
-                        sultima_piz_special_DEMUX_BY_Q4NAME, \
+                        ultima_c_piz_special_DEMUX_BY_Q4NAME, \
                       }
 
 SPECIAL (FASTQ, 0,  unaligned_SEQ,   fastq_special_unaligned_SEQ);          // v14
@@ -187,5 +187,5 @@ SPECIAL (FASTQ, 6,  deep_copy_QUAL,  fastq_special_deep_copy_QUAL);         // v
 SPECIAL (FASTQ, 7,  backspace,       fastq_special_backspace);              // v15
 SPECIAL (FASTQ, 8,  copy_line1,      fastq_special_copy_line1);             // v15
 SPECIAL (FASTQ, 9,  monochar_QUAL,   fastq_special_monochar_QUAL);          // v15
-SPECIAL (FASTQ, 10, SULTIMA,         sultima_piz_special_DEMUX_BY_Q4NAME);  // introduced 15.0.15
+SPECIAL (FASTQ, 10, ULTIMA_C,        ultima_c_piz_special_DEMUX_BY_Q4NAME); // introduced 15.0.15
 #define NUM_FASTQ_SPECIAL 11

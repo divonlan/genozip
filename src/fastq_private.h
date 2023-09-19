@@ -40,7 +40,7 @@ typedef struct VBlockFASTQ {
     // stats
     uint32_t deep_stats[NUM_DEEP_STATS];  // ZIP: stats collection regarding Deep
 
-    Multiplexer2 mux_SULTIMA;
+    Multiplexer2 mux_ultima_c;
 } VBlockFASTQ;
 
 typedef VBlockFASTQ *VBlockFASTQP;

@@ -238,9 +238,9 @@ void fastq_seg_DESC (VBlockFASTQP vb, STRp(desc), bool deep_qname2, uint32_t unc
     COPY_TIMER (fastq_seg_DESC);
 }
 
-Multiplexer2P fastq_get_sultima_mux (VBlockP vb)
+Multiplexer2P fastq_get_ultima_c_mux (VBlockP vb)
 {
-    return &VB_FASTQ->mux_SULTIMA;
+    return &VB_FASTQ->mux_ultima_c;
 }
 
 //-----------
