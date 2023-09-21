@@ -24,6 +24,7 @@
 #include "chrom.h"
 #include "tokenizer.h"
 #include "writer.h" 
+#include "zfile.h"
 
 #define dict_id_is_fasta_desc_sf dict_id_is_type_1
 #define dict_id_fasta_desc_sf dict_id_type_1
@@ -172,7 +173,7 @@ int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *last_i)
             // i.e. one that the next character is >, or it is the end of the file
             // note: when compressing FASTA with a reference (eg long reads stored in a FASTA instead of a FASTQ), 
             // line cannot be too long - they must fit in a VB
-            if (flag.multiseq) {
+            if (segconf.multiseq) {
                 int is_end_of_contig = fasta_is_end_of_contig (vb, first_i, i);
 
                 switch (is_end_of_contig) {
@@ -258,10 +259,9 @@ void fasta_seg_initialize (VBlockP vb)
     }
 
     // if this neocleotide FASTA of unrelated contigs, we're better off with ACGT        
-    if (!flag.multiseq && segconf.seq_type == SQT_NUKE)
+    if (!segconf.running && !segconf.multiseq && segconf.seq_type == SQT_NUKE)
         codec_acgt_seg_initialize (VB, FASTA_NONREF, true);
 
-    // if the contigs in this FASTA are related, let codec_assign_best_codec assign the bext codec 
     else 
         CTX(FASTA_NONREF)->ltype  = LT_SEQUENCE;
 
@@ -271,8 +271,48 @@ void fasta_seg_initialize (VBlockP vb)
     COPY_TIMER (seg_initialize);
 }
 
+static void fasta_seg_finalize_segconf (VBlockP vb)
+{
+    // case: we've seen only characters that are both nucleotide and protein (as are A,C,G,T,N) - call it as nucleotide
+    if (segconf.seq_type == SQT_NUKE_OR_AMINO) segconf.seq_type = SQT_NUKE;
+    ASSINP0 (!flag.make_reference || segconf.seq_type == SQT_NUKE, "Can't use --make-reference on this file, because it contains amino acids instead of nucleotides");
+
+    // decide whether the sequences in this FASTA represent contigs (in which case we want a FASTA_CONTIG dictionary
+    // and random access) or do they represent reads (in which case they are likely too numerous to be added to a dict)
+    uint64_t num_contigs_this_vb = CTX(FASTA_CONTIG)->nodes.len;
+    ASSINP0 (num_contigs_this_vb, "Invalid FASTA file: no sequence description line");
+
+    uint64_t avg_contig_size_this_vb = Ltxt / num_contigs_this_vb;
+    uint64_t est_num_contigs_in_file = txtfile_get_seggable_size() / avg_contig_size_this_vb;
+
+    // limit the number of contigs, to avoid the FASTA_CONTIG dictionary becoming too big. note this also
+    // sets a limit for fasta-to-phylip translation
+    #define MAX_CONTIGS_IN_FILE 1000000 
+    segconf.fasta_has_contigs &= (num_contigs_this_vb == 1 || // the entire VB is a single contig
+                                  est_num_contigs_in_file <  MAX_CONTIGS_IN_FILE); 
+
+    ASSINP0 (!flag.make_reference || segconf.fasta_has_contigs, "Can't use --make-reference on this file, because Genozip can't find the contig names in the FASTA description lines");
+
+    // if we have multiple shortish contigs in segconf data, this might be multiseq - test
+    if (num_contigs_this_vb >= 5 && !flag.make_reference && !flag.fast) {
+        ContextP ctx = CTX(FASTA_NONREF);
+        ctx->lcodec = CODEC_LZMA;
+        zfile_compress_local_data (vb, ctx, 0);
+
+        segconf.multiseq = (ctx->local.len32 / ctx->local_in_z_len >= 7); // expecting ~4 for unrelated sequences and >10 for multiseq
+
+        if (segconf.multiseq) {
+            ctx_commit_codec_to_zf_ctx (vb, ctx, true, true); // assign LZMA
+            ZCTX(FASTA_NONREF)->lcodec_hard_coded = true;     // suppress re-assigning the codec
+        } 
+    }
+}
+
 void fasta_seg_finalize (VBlockP vb)
 {
+    if (segconf.running) 
+        fasta_seg_finalize_segconf (vb);
+
     if (!flag.make_reference) {
         // top level snip
         SmallContainer top_level = { 
@@ -285,28 +325,6 @@ void fasta_seg_finalize (VBlockP vb)
         };
 
         container_seg (vb, CTX(FASTA_TOPLEVEL), (ContainerP)&top_level, 0, 0, 0);
-    }
-
-    // decide whether the sequences in this FASTA represent contigs (in which case we want a FASTA_CONTIG dictionary
-    // and random access) or do they represent reads (in which case they are likely to numerous to be added to a dict)
-    if (segconf.running) {
-        uint64_t num_contigs_this_vb = CTX(FASTA_CONTIG)->nodes.len;
-        ASSINP0 (num_contigs_this_vb, "Invalid FASTA file: no sequence description line");
-
-        uint64_t avg_contig_size_this_vb = Ltxt / num_contigs_this_vb;
-        uint64_t est_num_contigs_in_file = txtfile_get_seggable_size() / avg_contig_size_this_vb;
-
-        // case: we've seen only characters that are both nucleotide and protein (as are A,C,G,T,N) - call it as nucleotide
-        if (segconf.seq_type == SQT_NUKE_OR_AMINO) segconf.seq_type = SQT_NUKE;
-        ASSINP0 (!flag.make_reference || segconf.seq_type == SQT_NUKE, "Can't use --make-reference on this file, because it contains amino acids instead of nucleotides");
-
-        // limit the number of contigs, to avoid the FASTA_CONTIG dictionary becoming too big. note this also
-        // sets a limit for fasta-to-phylip translation
-        #define MAX_CONTIGS_IN_FILE 1000000 
-        segconf.fasta_has_contigs &= (num_contigs_this_vb == 1 || // the entire VB is a single contig
-                                      est_num_contigs_in_file <  MAX_CONTIGS_IN_FILE); 
-
-        ASSINP0 (!flag.make_reference || segconf.fasta_has_contigs, "Can't use --make-reference on this file, because Genozip can't find the contig names in the FASTA description lines");
     }
 }
 

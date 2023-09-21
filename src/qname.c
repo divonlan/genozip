@@ -116,6 +116,17 @@ void qname_zip_initialize (void)
             if (!qfs->name[0]) { 
                 *qfs = *(qfs+1);
                 qfs->con = *qfs->con_template;
+
+                char item_sep = qfs->con.items[qfs->con.nitems_lo-1].separator[0];
+                ASSERT (item_sep == CI0_SKIP, "In flavor=\"%s\", expecting separator of %s to be I_AM_MATE since it is mated, but it is '%c'(%u)", 
+                        qfs->name, dis_dict_id (qfs->con.items[qfs->con.nitems_lo-1].dict_id).s, item_sep, item_sep);
+
+                ASSERT (qfs->con.nitems_lo < 2 || qfs->con.items[qfs->con.nitems_lo-2].separator[0] != CI0_FIXED_0_PAD || 
+                        (qfs->px_strs[qfs->con.nitems_lo-1] && qfs->px_strs[qfs->con.nitems_lo-1][0] == CI0_SKIP), 
+                        "In flavor=\"%s\", since %s has separator CI0_FIXED_0_PAD, prefix[%u] must be PX_MATE_FIXED_0_PAD, but it is \"%s\"", 
+                        qfs->name, dis_dict_id (qfs->con.items[qfs->con.nitems_lo-2].dict_id).s, qfs->con.nitems_lo-1,
+                        qfs->px_strs[qfs->con.nitems_lo-1] ? qfs->px_strs[qfs->con.nitems_lo-1] : "(NULL)");
+
                 qname_generate_qfs_with_mate (qfs);
             }
             else
@@ -427,7 +438,7 @@ void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
         segconf.qname_flavor[q] = (q==QNAME1) ? &qf[NUM_QFs-1] : NULL; // relying on Genozip-opt being last
 
     // set up dict id alias. need to do explicitly, because not predefined
-    if (segconf.qname_flavor[q]->barcode_item2 != -1) {
+    if (segconf.qname_flavor[q] && segconf.qname_flavor[q]->barcode_item2 != -1) {
         Did did_i_bc1 = did_by_q (q) + 1 + segconf.qname_flavor[q]->barcode_item;
         Did did_i_bc2 = did_by_q (q) + 1 + segconf.qname_flavor[q]->barcode_item2;
         ZCTX(did_i_bc2)->dict_did_i = did_i_bc1;

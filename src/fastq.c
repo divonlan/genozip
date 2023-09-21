@@ -244,14 +244,6 @@ static void fastq_tip_if_should_be_pair (void)
 // called by main thread at the beginning of zipping this txt file  
 void fastq_zip_initialize (void)
 {
-    if (!flag.reference && !txt_file->redirected && !flag.multiseq)
-        TIP ("Compressing a FASTQ file using a reference file can reduce the compressed file's size by 20%%-60%%.\n"
-             "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n", 
-             arch_get_argv0(), txt_file->name);
-
-    else
-        fastq_tip_if_should_be_pair();
-            
     // reset lcodec for STRAND and GPOS, as these may change between PAIR_1 and PAIR_2 files
     ZCTX(FASTQ_STRAND)->lcodec = CODEC_UNKNOWN;
     ZCTX(FASTQ_GPOS  )->lcodec = CODEC_UNKNOWN;
@@ -311,8 +303,10 @@ void fastq_seg_initialize (VBlockP vb_)
         buf_alloc (vb, &gpos_ctx->local, 1, vb->lines.len, uint32_t, CTX_GROWTH, CTX_TAG_LOCAL); 
     }
 
-    if (!flag.multiseq)
+    if (!segconf.multiseq && !segconf.running)
         codec_acgt_seg_initialize (VB, FASTQ_NONREF, true);
+    else
+        CTX(FASTQ_NONREF)->ltype = LT_SEQUENCE;
 
     // initialize QUAL to LT_SEQUENCE, it might be changed later to LT_CODEC (eg domq, longr)
     ctx_set_ltype (VB, LT_SEQUENCE, FASTQ_QUAL, DID_EOL);
@@ -370,14 +364,41 @@ void fastq_seg_initialize (VBlockP vb_)
     COPY_TIMER (seg_initialize);
 }
 
+static void fastq_seg_finalize_segconf (VBlockP vb)
+{
+    segconf.longest_seq_len = vb->longest_seq_len;
+    segconf.is_long_reads = segconf_is_long_reads();
+
+    if (flag.deep) fastq_deep_seg_finalize_segconf (vb->lines.len32);
+
+    // if no reference, compress NONREF to check if fastq is multiseq
+    if (!flag.reference && !flag.fast) {
+        ContextP ctx = CTX(FASTQ_NONREF);
+        ctx->lcodec = CODEC_LZMA;
+        zfile_compress_local_data (vb, ctx, 0);
+
+        segconf.multiseq = (ctx->local.len32 / ctx->local_in_z_len >= 6); // expecting ~4 for unrelated sequences and >10 for multiseq
+        if (segconf.multiseq) {
+            ctx_commit_codec_to_zf_ctx (vb, ctx, true, true); // assign LZMA 
+            ZCTX(FASTQ_NONREF)->lcodec_hard_coded = true;     // suppress re-assigning the codec
+        } 
+    }
+
+    if (!segconf.multiseq) {
+        if (!flag.reference && !txt_file->redirected)
+            TIP ("Compressing a FASTQ file using a reference file can reduce the compressed file's size by 20%%-60%%.\n"
+                "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n", 
+                arch_get_argv0(), txt_file->name);
+
+        else
+            fastq_tip_if_should_be_pair();          
+    }  
+}
+
 void fastq_seg_finalize (VBlockP vb)
 {
-    if (segconf.running) {
-        segconf.longest_seq_len = vb->longest_seq_len;
-        segconf.is_long_reads = segconf_is_long_reads();
-
-        if (flag.deep) fastq_deep_seg_finalize_segconf (vb->lines.len32);
-    }
+    if (segconf.running) 
+        fastq_seg_finalize_segconf (vb);
 
     // assign the QUAL codec
     codec_assign_best_qual_codec (vb, FASTQ_QUAL, fastq_zip_qual, false, false);

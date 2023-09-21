@@ -66,6 +66,9 @@ typedef struct {
     char qname_line0[NUM_QTYPES][SAM_MAX_QNAME_LEN+1]; // qname of line_i=0 (by which flavor is determined) (nul-terminated)
     SeqTech tech;
 
+    // FASTQ and FASTA
+    bool multiseq;              // sequences in file are variants of each others 
+
     // SAM/BAM and FASTQ
     uint32_t longest_seq_len;   // length of the longest seq_len in the segconf data 
     DictId seq_len_dict_id;     // dict_id of one of the QNAME/QNAME2/LINE3/FASTQ_AUX contexts, which is expected to hold the seq_len for this read. 0 if there is no such item.

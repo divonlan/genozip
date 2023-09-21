@@ -359,6 +359,7 @@ static void stats_output_file_metadata (void)
             REPORT_VBs;
             REPORT_QNAME;
             FEATURE (flag.optimize_DESC && z_file->num_lines, "Sequencer: %s", "Sequencer=%s", segconf_tech_name());\
+            if (segconf.multiseq)  bufprint0 (evb, &features, "multiseq;");
             if (IS_REF_LOADED_ZIP) bufprintf (evb, &features, "ref_ncontigs=%u;", ref_get_ctgs (gref)->contigs.len32);
             if (IS_REF_LOADED_ZIP) bufprintf (evb, &features, "ref_nbases=%"PRIu64";", contigs_get_nbases (ref_get_ctgs (gref)));
 
@@ -370,6 +371,7 @@ static void stats_output_file_metadata (void)
         case DT_FASTA:
             FEATURE0 (segconf.seq_type==SQT_AMINO, "Sequence type: Amino acids",      "Amino_acids");
             FEATURE0 (segconf.seq_type==SQT_NUKE,  "Sequence type: Nucleotide bases", "Nucleotide_bases");
+            if (segconf.multiseq) bufprint0 (evb, &features, "multiseq;");
             FEATURE (true, "Sequences: %"PRIu64, "num_sequences=%"PRIu64, z_file->num_sequences);
             REPORT_VBs;
             REPORT_KRAKEN;

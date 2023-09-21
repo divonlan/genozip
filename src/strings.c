@@ -770,12 +770,6 @@ uint32_t str_split_by_container_do (STRp(str), ConstContainerP con, STRp(con_pre
                 ASSSPLIT (str <= after_str, "item_i=%u fixed_len=%u goes beyond end of string \"%.*s\"", item_i, *item_lens, str_len, save_str);
                 break;
             
-            case 0: // no separator - goes to end of string
-                *item_lens = after_str - str;
-                *items = str; // zero-length item - next item will start from the same str_i
-                str = after_str;
-                break;
-
             case CI0_DIGIT: // items goes until a digit or end-of-string is encountered
                 *items = str;
 
@@ -784,9 +778,36 @@ uint32_t str_split_by_container_do (STRp(str), ConstContainerP con, STRp(con_pre
                 *item_lens = str - *items;
                 break;
 
-            default:
-                ASSERT (IS_PRINTABLE(sep), "item_i=%u sep=%u is not a printable character in string \"%.*s\"", item_i, sep, str_len, save_str);
+            case 0: 
+                // case: no separator and next item has no prefix - goes to end of string
+                if (!(px < after_px && IS_PRINTABLE(*px))) { // make sure we don't have an implicit separator - the prefix of the next item
+                    *item_lens = after_str - str;
+                    *items = str; 
+                    str = after_str;
+                }
 
+                // case: terminated by prefix of next item
+                else {
+                    rom c; for (c = px; *c != CON_PX_SEP; c++);
+                    uint32_t next_px_len = c - px;
+                    
+                    *items = str;
+
+                    // increment str to the first character of the next item's prefix 
+                    while (str < after_str-next_px_len && memcmp (str, px, next_px_len)) str++; 
+
+                    ASSSPLIT (str < after_str-next_px_len || !memcmp (str, px, next_px_len), 
+                              "item_i=%u reached end of string without finding separator '%c' in string \"%.*s\"", 
+                              item_i, sep, str_len, save_str);
+
+                    *item_lens = str - *items;
+                }
+
+                break;
+
+            default: 
+                ASSERT (IS_PRINTABLE(sep), "item_i=%u sep=%u is not a printable character in string \"%.*s\"", item_i, sep, str_len, save_str);
+                
                 char sep1 = con->items[item_i].separator[1];
                 if (!IS_PRINTABLE (sep1)) sep1 = 0;
                 
