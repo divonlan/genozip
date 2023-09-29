@@ -93,6 +93,7 @@ typedef struct {
     { 0, "LNGR", "+",      codec_longr_compress,     USE_SUBCODEC,             codec_longr_reconstruct,   codec_longr_est_size     }, \
     { 0, "NRMQ", "+",      codec_normq_compress,     USE_SUBCODEC,             codec_normq_reconstruct,   codec_complex_est_size,  }, \
     { 0, "HOMP", "+",      codec_homp_compress,      USE_SUBCODEC,             codec_homp_reconstruct,    codec_complex_est_size,  }, \
+    { 0, "T0",   "+",      codec_t0_compress,        USE_SUBCODEC,             codec_t0_reconstruct,      codec_complex_est_size,  }, \
 }
 
 extern CodecArgs codec_args[NUM_CODECS];
@@ -101,14 +102,15 @@ extern CodecCompress codec_bz2_compress, codec_lzma_compress, codec_domq_compres
                      codec_none_compress, codec_acgt_compress, codec_xcgt_compress, codec_pbwt_compress, 
                      codec_RANB_compress, codec_RANW_compress, codec_RANb_compress, codec_RANw_compress, 
                      codec_ARTB_compress, codec_ARTW_compress, codec_ARTb_compress, codec_ARTw_compress,
-                     codec_longr_compress, codec_normq_compress, codec_homp_compress;
+                     codec_longr_compress, codec_normq_compress, codec_homp_compress, codec_t0_compress;
 
 extern CodecUncompress codec_bz2_uncompress, codec_lzma_uncompress, codec_acgt_uncompress, codec_xcgt_uncompress,
                        codec_bsc_uncompress, codec_none_uncompress, codec_gtshark_uncompress, codec_pbwt_uncompress,
                        codec_rans_uncompress, codec_arith_uncompress;
 
 extern CodecReconstruct codec_hapmat_reconstruct, codec_domq_reconstruct, codec_pbwt_reconstruct, 
-                        codec_longr_reconstruct, codec_normq_reconstruct, codec_homp_reconstruct;
+                        codec_longr_reconstruct, codec_normq_reconstruct, codec_homp_reconstruct,
+                        codec_t0_reconstruct;
 
 extern CodecEstSizeFunc codec_none_est_size, codec_bsc_est_size, codec_hapmat_est_size, codec_domq_est_size,
                         codec_RANB_est_size, codec_RANW_est_size, codec_RANb_est_size, codec_RANw_est_size, 
@@ -152,6 +154,10 @@ extern bool codec_domq_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB cal
 
 // HOMP stuff
 extern bool codec_homp_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB callback);
+
+// T0 stuff
+extern void codec_t0_comp_init (VBlockP vb);
+extern bool codec_t0_data_is_a_fit_for_t0 (VBlockP vb);
 
 // BZ2 stuff
 extern uint64_t BZ2_consumed (void *bz_file); // a hacky addition to bzip2

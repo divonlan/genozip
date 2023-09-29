@@ -177,6 +177,17 @@ FileType file_get_type (rom filename)
     return UNKNOWN_FILE_TYPE; // this should never happen, because GNRIC_ is "" so it will catch everything
 }
 
+static FileType file_get_type_of_generic (rom filename)
+{
+    if (!filename) return UNKNOWN_FILE_TYPE;
+
+    if (filename_has_ext (filename, ".gz"))  return GNRIC_GZ;
+    if (filename_has_ext (filename, ".bz2")) return GNRIC_BZ2;
+    if (filename_has_ext (filename, ".xz"))  return GNRIC_XZ;
+    if (filename_has_ext (filename, ".zip")) return GNRIC_ZIP;
+    else                                     return GNRIC;
+}
+
 static FileType file_get_type_force_dt (rom filename, DataType dt)
 {
     FileType ft = file_get_type (filename); 
@@ -430,7 +441,9 @@ FileP file_open_txt_read (rom filename)
         file->basename = filename_base (file->name, false, "", NULL, 0);
 
         // if user provided the type with --input, we use that, otherwise derive from the file name
-        file->type = flag.stdin_type ? flag.stdin_type : file_get_type (file->basename);
+        file->type = flag.stdin_type == GNRIC ? file_get_type_of_generic (file->basename)
+                   : flag.stdin_type          ? flag.stdin_type 
+                   :                            file_get_type (file->basename);
     }
 
     else {   // stdin 
@@ -542,16 +555,23 @@ fallthrough_from_cram: {}
             else if (bgzf_uncompressed_size == BGZF_BLOCK_IS_NOT_GZIP) {
 
                 #define BZ2_MAGIC "BZh"
-                #define XZ_MAGIC (char[]){ 0xFD, '7', 'z', 'X', 'Z', 0 }
+                #define XZ_MAGIC  (char[]){ 0xFD, '7', 'z', 'X', 'Z', 0 }
+                #define ZIP_MAGIC (char[]){ 0x50, 0x4b, 0x03, 0x04 }
 
                 // we already open the file, so not easy to re-open with BZ2_bzopen as it would require injecting the read data into the BZ2 buffers
                 if (str_isprefix_((rom)block, block_size, BZ2_MAGIC, 3)) 
-                    ABORTINP0 ("The data seems to be in bz2 format. Please use --input to specify the type (eg: \"genozip --input sam.bz2\"");
+                    ABORTINP0 ("The data seems to be in bz2 format. Please use --input to specify the type (eg: \"genozip --input sam.bz2\")");
 
                 if (str_isprefix_((rom)block, block_size, XZ_MAGIC, 6)) {
                     if (file->redirected) ABORTINP0 ("Compressing piped-in data in xz format is not currently supported");
-                    if (file->is_remote) ABORTINP0 ("The data seems to be in xz format. Please use --input to specify the type (eg: \"genozip --input sam.xz\"");
-                    ABORTINP0 ("The data seems to be in xz format. Please use --input to specify the type (eg: \"genozip --input sam.xz\"");
+                    if (file->is_remote) ABORTINP0 ("The data seems to be in xz format. Please use --input to specify the type (eg: \"genozip --input sam.xz\")");
+                    ABORTINP0 ("The data seems to be in xz format. Please use --input to specify the type (eg: \"genozip --input sam.xz\")");
+                }
+
+                if (str_isprefix_((rom)block, block_size, ZIP_MAGIC, 4)) {
+                    if (file->redirected) ABORTINP0 ("Compressing piped-in data in zip format is not currently supported");
+                    if (file->is_remote) ABORTINP0 ("The data seems to be in zip format. Please use --input to specify the type (eg: \"genozip --input generic.zip\")");
+                    ABORTINP0 ("The data seems to be in zip format. Please use --input to specify the type (eg: \"genozip --input generic.zip\")");
                 }
 
                 file->codec = CODEC_NONE;
@@ -851,6 +871,8 @@ FileP file_open_z_read (rom filename)
                     WARN ("Skipping %s: %s%s", file->name, cause_str,
                             !(once++) ? " (--quiet to silence this message)" : "");
                 }
+                
+                file_close (&file);
                 
                 goto done;
             }

@@ -219,6 +219,7 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
             "output files must be regular files, they cannot be a URL: %s", txt_filename);
 
     z_file = file_open_z_read (z_filename);    
+    if (!z_file) return; // failed to open the file - error already displayed
 
     if (flag.validate) {
         file_close (&z_file);

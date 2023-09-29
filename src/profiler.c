@@ -165,6 +165,7 @@ void profiler_add_evb_and_print_report (void)
             PRINT (codec_domq_reconstruct, 3);
             PRINT (codec_domq_reconstruct_dom_run, 4);
             PRINT (codec_homp_reconstruct, 3);
+            PRINT (codec_t0_reconstruct, 3);
         }
         PRINT (fastq_special_monochar_QUAL, 2);        
         PRINT (sam_piz_sam2fastq_QUAL, 2); 
@@ -328,6 +329,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (compressor_pbwt, 2);
         PRINT (compressor_longr, 2);
         PRINT (compressor_homp, 2);
+        PRINT (compressor_t0, 2);
 
         for_zctx 
             PRINT_(fields[zctx->did_i], zctx->tag_name, 2);

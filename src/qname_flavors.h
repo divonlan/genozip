@@ -311,11 +311,11 @@ CON_BGI_R(8);
 
 #define PX_bgi_R { "", "", "C", "R", "", PX_MATE_FIXED_0_PAD }
 
-#define CON_BGI_Rgs(n) /* BAM only*/ \
-static SmallContainer con_bgi_Rgs##n = {  \
-    .repeats             = 1,           \
-    .nitems_lo           = 8,           \
-    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = "|"                    }, /* the two parts of the barcode are correletated and hence segged together */                \
+#define CON_BGI_Rgs(n) /* SAM/BAM only*/    \
+static SmallContainer con_bgi_Rgs##n = {    \
+    .repeats             = 1,               \
+    .nitems_lo           = 8,               \
+    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = "|"                    }, /* the two parts of the barcode are correletated and hence segged together */ \
                              { .dict_id = { _SAM_Q1NAME }, .separator = "|"                    },                 \
                              { .dict_id = { _SAM_Q2NAME }, .separator = "L"                    }, /* Flow cell */ \
                              { .dict_id = { _SAM_Q3NAME }, .separator = { CI0_FIXED_0_PAD, 1 } }, /* Lane      */ \
@@ -333,7 +333,7 @@ CON_BGI_Rgs(8);
 static SmallContainer con_bgi_RgsFQ##n = {  \
     .repeats             = 1,           \
     .nitems_lo           = 8,           \
-    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = "|"                    }, /* the two parts of the barcode are correletated and hence segged together */                \
+    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = "|"                    }, /* the two parts of the barcode are correletated and hence segged together */ \
                              { .dict_id = { _SAM_Q1NAME }, .separator = "|"                    },                 \
                              { .dict_id = { _SAM_Q2NAME }, .separator = "L"                    }, /* Flow cell */ \
                              { .dict_id = { _SAM_Q3NAME }, .separator = { CI0_FIXED_0_PAD, 1 } }, /* Lane      */ \
@@ -464,37 +464,43 @@ static SmallContainer con_ultima_c_bc = {
                    { .dict_id = { _SAM_QENAME }                    } }
 };
 
-// QF_ULTIMA_b format
-// Example: 014214_2-UFOx1-143-9871314132
-static SmallContainer con_ultima_b = {
-    .repeats             = 1,
-    .nitems_lo           = 5,
-    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_FIXED_0_PAD, 6  } }, 
-                             { .dict_id = { _SAM_Q1NAME }, .separator = "-"                     }, 
-                             { .dict_id = { _SAM_Q2NAME }, .separator = { CI0_FIXED_0_PAD, 5  } }, 
-                             { .dict_id = { _SAM_Q3NAME }, .separator = "-" }, 
-                             { .dict_id = { _SAM_Q4NAME }, .separator = { CI0_FIXED_0_PAD, 10 } } } 
+// QF_ULTIMA_b? format
+// Example: 014214_2-UGAv1-143-9871314132
+#define CON_ULTIMA_B(n) \
+static SmallContainer con_ultima_b##n = {                                                           \
+    .repeats             = 1,                                                                       \
+    .nitems_lo           = 5,                                                                       \
+    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_FIXED_0_PAD, n  } },  \
+                             { .dict_id = { _SAM_Q1NAME }, .separator = "-"                     },  \
+                             { .dict_id = { _SAM_Q2NAME }, .separator = { CI0_FIXED_0_PAD, 5  } },  \
+                             { .dict_id = { _SAM_Q3NAME }, .separator = "-" },                      \
+                             { .dict_id = { _SAM_Q4NAME }, .separator = { CI0_FIXED_0_PAD, 10 } } } \
 };
+CON_ULTIMA_B(6)
+CON_ULTIMA_B(9)
 
 #define PX_ULTIMA_B { "", "_", "", "-", "" }  
 
-// QF_ULTIMA_b_bc format
-// Example: 014214_2-UFOx1-143-9871314132_AGTAC
-static SmallContainer con_ultima_b_bc = {
-    .repeats             = 1,
-    .nitems_lo           = 6,
-    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_FIXED_0_PAD, 6  } }, 
-                             { .dict_id = { _SAM_Q1NAME }, .separator = "-"                     }, 
-                             { .dict_id = { _SAM_Q2NAME }, .separator = { CI0_FIXED_0_PAD, 5  } }, 
-                             { .dict_id = { _SAM_Q3NAME }, .separator = "-" }, 
-                             { .dict_id = { _SAM_Q4NAME }, .separator = { CI0_FIXED_0_PAD, 10 } },
-                             { .dict_id = { _SAM_Q5NAME }                                       } } 
+// QF_ULTIMA_b?_bc format
+// Example: 014214_2-UGAv1-143-9871314132_AGTAC
+#define CON_ULTIMA_B_BC(n) \
+static SmallContainer con_ultima_b##n##_bc = {                                                           \
+    .repeats             = 1,                                                                       \
+    .nitems_lo           = 6,                                                                       \
+    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_FIXED_0_PAD, n  } },  \
+                             { .dict_id = { _SAM_Q1NAME }, .separator = "-"                     },  \
+                             { .dict_id = { _SAM_Q2NAME }, .separator = { CI0_FIXED_0_PAD, 5  } },  \
+                             { .dict_id = { _SAM_Q3NAME }, .separator = "-" },                      \
+                             { .dict_id = { _SAM_Q4NAME }, .separator = { CI0_FIXED_0_PAD, 10 } },  \
+                             { .dict_id = { _SAM_Q5NAME }                                       } } \
 };
+CON_ULTIMA_B_BC(6)
+CON_ULTIMA_B_BC(9)
 
 #define PX_ULTIMA_B_BC { "", "_", "", "-", "", "_" }  
 
 // QF_ULTIMA_d format
-// Example: 014214-UFOx1-143-9871314132
+// Example: 014214-UGAv1-143-9871314132
 static SmallContainer con_ultima_d = {
     .repeats             = 1,
     .nitems_lo           = 4,
@@ -507,7 +513,7 @@ static SmallContainer con_ultima_d = {
 #define PX_ULTIMA_D { "", "-", "-", "" }  
 
 // QF_ULTIMA_d_bc format
-// Example: 014214-UFOx1-143-9871314132_AGTAC
+// Example: 014214-UGAv1-143-9871314132_AGTAC
 static SmallContainer con_ultima_d_bc = {
     .repeats             = 1,
     .nitems_lo           = 5,
@@ -899,7 +905,7 @@ typedef struct QnameFlavorStruct {
     STRl (con_prefix, MAX_PREFIX_LEN);    // prefix of container
     SmallContainer con;                   // container
     bool is_integer[MAX_QNAME_ITEMS], is_hex[MAX_QNAME_ITEMS], is_in_local[MAX_QNAME_ITEMS], is_numeric[MAX_QNAME_ITEMS]; // indexed according to order of items in the container (NOT by order of did_i)
-    bool is_mated;                        // true means qname has a /1 or /2, qfs generated with qname_genarate_qfs_with_mate()
+    bool is_mated;                        // true means qname has a /1 or /2 - and that mates (defined by is_first/is_last SAM flags) have opposite /1 vs /2. This field is generated with qname_genarate_qfs_with_mate()
     int barcode_item2;                    // set if we have a barcode item with a '+' separator
 } QnameFlavorStruct;
 
@@ -909,7 +915,7 @@ static QnameFlavorStruct qf[] = {
     {},  { QF_ILLUM_7gsFQ, "Illumina-gsFQ", { "ATATA-ATGCATAG|ab|A00488:61:HMLGNDSXX:4:1101:4345:1000" },   // must be before QF_ILLUM_7
                                                                                           TECH_ILLUM,   TECH_NCBI,    QNAME1, &con_illumina_7gsFQ,0,   8,  {3,5,6,7,8,-1},     {-1},           {3,5,-1},           {-1},           0,  7,8,   -1,-1, -1, -1, -1,                       /* flavor.illumina-gsFQ.fq */},
          { QF_ILLUM_7gs,   "Illumina-gs",   { "ATATA-ATGCATAG|ab|A00488:61:HMLGNDSXX:4:1101:4345:1000|1" },   
-                                                                                          TECH_ILLUM,   TECH_NCBI,    QSAM,   &con_illumina_7gs,  0,   9,  {3,5,6,7,8,9,-1},   {-1},           {3,5,-1},           {-1},           0,  7,8,   -1,-1, -1, -1, -1,    .is_mated=true     /* flavor.illumina-gs.sam */}, // is_mated is set so that the |1 suffix is removed during canonization
+                                                                                          TECH_ILLUM,   TECH_NCBI,    QSAM,   &con_illumina_7gs,  '|', 9,  {3,5,6,7,8,9,-1},   {-1},           {3,5,-1},           {-1},           0,  7,8,   -1,-1, -1, -1, -1,                       /* flavor.illumina-gs.sam */},
     {},  { QF_ILLUM_7,     "Illumina",      { "A00488:61:HMLGNDSXX:4:1101:4345:1000" },   TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_7,    0,   6,  {1,3,4,5,6,-1},     {-1},           {1,3,5,6,-1},       {-1},           0,  5,6,   -1,-1, -1, -1, -1,                       /* flavor.illumina-7.fq */ },
     {},  { QF_ILLUM_7i,    "Illumina#bc",   { "A00488:61:HMLGNDSXX:4:1101:4345:1000#CTGGGAAG" }, 
                                                                                           TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_7i,   '#', 7,  {1,3,4,5,6,-1},     {-1},           {1,3,5,6,-1},       {-1},           0,  5,6,   -1,-1, -1, 7,  -1,                       /* flavor.illumina#bc.sam */ },
@@ -933,23 +939,25 @@ static QnameFlavorStruct qf[] = {
     {},  { QF_BGI_rgs8FQ,  "BGI-Rgs8FQ",    { "CGGTCT-AACCT|ab|E200003777L1C001R00100888074" },         // must be before QF_BGI_r8
                                                                                           TECH_BGI,     TECH_NCBI,    QNAME1, &con_bgi_RgsFQ8,    0,   5,  {-1},               {3,4,5,6,-1},   {4,5,6,-1},         {-1},           0,  6,5,   -1,-1, -1, -1, -1, 0,  PX_bgi_RgsFQ      },
          { QF_BGI_rgs8,    "BGI-Rgs8",      { "CGGTCT-AACCT|ab|E200003777L1C001R00100888074|2" },       
-                                                                                          TECH_BGI,     TECH_NCBI,    QSAM,   &con_bgi_Rgs8,      0,   6,  {-1},               {3,4,5,6,-1},   {4,5,6,-1},         {-1},           0,  6,5,   -1,-1, -1, -1, -1, 0,  PX_bgi_Rgs, .is_mated=true }, // is_mated is set so that the |1 suffix is removed during canonization
+                                                                                          TECH_BGI,     TECH_NCBI,    QSAM,   &con_bgi_Rgs8,      '|', 6,  {-1},               {3,4,5,6,-1},   {4,5,6,-1},         {-1},           0,  6,5,   -1,-1, -1, -1, -1, 0,  PX_bgi_Rgs,       }, 
     {},  { QF_BGI_r8,      "BGI-R8",        { "V300046476L1C001R00100001719" },           TECH_BGI,     TECH_NCBI,    QANY,   &con_bgi_R8,        0,   3,  {-1},               {1,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, 0,  PX_bgi_R          },
     {},  { QF_BGI_ll7,     "BGI-LL7",       { "DP8400010271TLL1C005R0511863479" },        TECH_BGI,     TECH_NCBI,    QANY,   &con_bgi_LL7,       0,   4,  {-1},               {1,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, 0,  PX_bgi_LL         },
     {},  { QF_BGI_cl,      "BGI-CL",        { "CL100025298L1C002R050_244547" },           TECH_BGI,     TECH_NCBI,    QANY,   &con_bgi_CL,        0,   6,  {4,-1},             {1,2,3,-1},     {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, 0,  PX_bgi_CL         }, 
-         { QF_ULTIMA_a,    "Ultima.a",      { "004733_1-X0003-0072646116" },              TECH_ULTIMA,  TECH_NCBI,    QANY,   &con_ultima_a,      0,   3,  {1,-1},             {3,-1},         {1,3,-1},           {-1},           0,  -1,-1, -1,-1, -1, -1, -1, 25, PX_ULTIMA_A       /* flavor.ultima-a.sam */},
-         { QF_ULTIMA_a_bc, "Ultima.a-bc",   { "004733_1-X0003-0072646116_TCGTCACTCGAAAACT" },         
+         { QF_ULTIMA_a,    "Ultima.a",      { "012345_1-X0003-0072646116" },              TECH_ULTIMA,  TECH_NCBI,    QANY,   &con_ultima_a,      0,   3,  {1,-1},             {3,-1},         {1,3,-1},           {-1},           0,  -1,-1, -1,-1, -1, -1, -1, 25, PX_ULTIMA_A       /* flavor.ultima-a.sam */},
+         { QF_ULTIMA_a_bc, "Ultima.a-bc",   { "012345_1-X0003-0072646116_TCGTCACTCGAAAACT" },         
                                                                                           TECH_ULTIMA,  TECH_NCBI,    QANY,   &con_ultima_a_bc,   0,   4,  {1,-1},             {3,-1},         {1,3,-1},           {-1},           0,  -1,-1, -1,-1, -1, 4,  -1, 0,  PX_ULTIMA_A_BC    /* flavor.ultima-a-bc.fq */},
-         { QF_ULTIMA_b,    "Ultima.b",      { "014214_2-UFOx1-3-9871314132" },            TECH_ULTIMA,  TECH_NCBI,    QANY,   &con_ultima_b,      0,   4,  {1,-1},             {4,-1},         {1,4,-1},           {-1},           0,  -1,-1, -1,-1, -1, -1, -1, 0,  PX_ULTIMA_B       /* flavor.ultima-b.fq  */},
-         { QF_ULTIMA_b_bc, "Ultima.b_bc",   { "014214_2-UFOx1-143-9871314132_AGTAC" },    TECH_ULTIMA,  TECH_NCBI,    QANY,   &con_ultima_b_bc,   0,   5,  {1,-1},             {4,-1},         {1,4,-1},           {-1},           0,  -1,-1, -1,-1, -1, 5,  -1, 0,  PX_ULTIMA_B_BC    /* flavor.ultima-b-bc.fq  */},
-         { QF_ULTIMA_d,    "Ultima.d",      { "014214-UFOx1-3-9871314132" },              TECH_ULTIMA,  TECH_NCBI,    QANY,   &con_ultima_d,      0,   3,  {-1},               {3,-1},         {1,3,-1},           {-1},           0,  -1,-1, -1,-1, -1, -1, -1, 0,  PX_ULTIMA_D       /* flavor.ultima-d.fq  */},
-         { QF_ULTIMA_d_bc, "Ultima.d_bc",   { "014214-UFOx1-143-9871314132_AGTAC" },      TECH_ULTIMA,  TECH_NCBI,    QANY,   &con_ultima_d_bc,   0,   4,  {-1},               {3,-1},         {1,3,-1},           {-1},           0,  -1,-1, -1,-1, -1, 4,  -1, 0,  PX_ULTIMA_D_BC    /* flavor.ultima-d-bc.fq  */},
+         { QF_ULTIMA_b6,   "Ultima.b6",     { "012345_2-UGAv1-3-9871314132" },            TECH_ULTIMA,  TECH_NCBI,    QANY,   &con_ultima_b6,     0,   4,  {1,-1},             {4,-1},         {1,4,-1},           {-1},           0,  -1,-1, -1,-1, -1, -1, -1, 0,  PX_ULTIMA_B       /* flavor.ultima-b6.fq  */},
+         { QF_ULTIMA_b6_bc,"Ultima.b6_bc",  { "012345_2-UGAv1-143-9871314132_AGTAC" },    TECH_ULTIMA,  TECH_NCBI,    QANY,   &con_ultima_b6_bc,  0,   5,  {1,-1},             {4,-1},         {1,4,-1},           {-1},           0,  -1,-1, -1,-1, -1, 5,  -1, 0,  PX_ULTIMA_B_BC    /* flavor.ultima-b6-bc.fq  */},
+         { QF_ULTIMA_b9,   "Ultima.b9",     { "012345678_2-UGAv3-3-9871314132" },         TECH_ULTIMA,  TECH_NCBI,    QANY,   &con_ultima_b9,     0,   4,  {1,-1},             {4,-1},         {1,4,-1},           {-1},           0,  -1,-1, -1,-1, -1, -1, -1, 0,  PX_ULTIMA_B       },
+         { QF_ULTIMA_b9_bc,"Ultima.b9_bc",  { "012345678_2-UGAv3-143-9871314132_AGTAC" }, TECH_ULTIMA,  TECH_NCBI,    QANY,   &con_ultima_b9_bc,  0,   5,  {1,-1},             {4,-1},         {1,4,-1},           {-1},           0,  -1,-1, -1,-1, -1, 5,  -1, 0,  PX_ULTIMA_B_BC    },
+         { QF_ULTIMA_d,    "Ultima.d",      { "012345-UGAv1-3-9871314132" },              TECH_ULTIMA,  TECH_NCBI,    QANY,   &con_ultima_d,      0,   3,  {-1},               {3,-1},         {1,3,-1},           {-1},           0,  -1,-1, -1,-1, -1, -1, -1, 0,  PX_ULTIMA_D       /* flavor.ultima-d.fq  */},
+         { QF_ULTIMA_d_bc, "Ultima.d_bc",   { "012345-UGAv1-143-9871314132_AGTAC" },      TECH_ULTIMA,  TECH_NCBI,    QANY,   &con_ultima_d_bc,   0,   4,  {-1},               {3,-1},         {1,3,-1},           {-1},           0,  -1,-1, -1,-1, -1, 4,  -1, 0,  PX_ULTIMA_D_BC    /* flavor.ultima-d-bc.fq  */},
          { QF_ULTIMA_c,    "Ultima.c",      { "V222:23526:::1:1:7:9831:222:1:443:N:0.99:Z0199:" },         
                                                                                           TECH_ULTIMA,  TECH_NCBI,    QANY,   &con_ultima_c,      0,   14, {1,4,5,6,7,8,9,10,-1},{-1},         {4,7,8,10,-1},      {-1},           0,  -1,-1, -1,-1, -1, -1, 5,  0,                    /* flavor.ultima-c.fq */},
          { QF_ULTIMA_c_bc, "Ultima.c_bc",   { "V222:23526:::1:1:7:9831:222:1:443:N:0.99:Z0199:_GCTGCTGACA" },         
                                                                                           TECH_ULTIMA,  TECH_NCBI,    QANY,   &con_ultima_c_bc,   0,   15, {1,4,5,6,7,8,9,10,-1},{-1},         {4,7,8,10,-1},      {-1},           0,  -1,-1, -1,-1, -1, 14, 5,  0,                    /* flavor.ultima-c-bc.fq */},
-    {},  { QF_ION_TORR_3,  "IonTorrent",    { "ZEWTM:00130:07001" },                      TECH_IONTORR, TECH_NCBI,    QANY,   &con_ion_torrent_3, 0,   2,  {-1},               {1,2,-1},       {1,2,-1},           {-1},           0,  1,2,   -1,-1, -1, -1, -1, 17,  PX_ion_torrent_3 /* flavor.ion_torrent_3.fq*/},
-    {},  { QF_ILLUM_5i,    "Illumina-old#", { "HWI-ST550_0201:3:1101:1626:2216#ACAGTG" }, TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_5i,   '#', 5,  {1,2,3,4,-1},       {-1},           {-1},               {-1},           0,  -1,-1, -1,-1, -1, 5,  -1,                       },
+    {},  { QF_ION_TORR_3,  "IonTorrent",    { "ZEWTM:00130:07001" },                      TECH_IONTORR, TECH_NCBI,    QANY,   &con_ion_torrent_3, 0,   2,  {-1},               {1,2,-1},       {1,2,-1},           {-1},           0,  1,2,   -1,-1, -1, -1, -1, 17, PX_ion_torrent_3  /* flavor.ion_torrent_3.fq*/},
+    {},  { QF_ILLUM_5i,    "Illumina-old#", { "HWI-ST550_0201:3:1101:1626:2216#ACAGTG" }, TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_5i,   '#', 5,  {1,2,3,4,-1},       {-1},           {3,4,-1},           {-1},           0,  -1,-1, -1,-1, -1, 5,  -1,                       },
     {},  { QF_ILLUM_5,     "Illumina-old",  { "SOLEXA-1GA-1_4_FC20ENL:7:258:737:870" },   TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_5,    0,   4,  {1,2,3,4,-1},       {-1},           {1,2,3,4-1},        {-1},           0,  -1,-1, -1,-1, -1, -1, -1,                       },
     {},  { QF_ILLUM_5rng,  "Illumina-oldR", { "NOVID_3053_FC625AGAAXX:6:1:1069:11483:0,84" },   
                                                                                           TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_5rng, ':', 6,  {1,2,3,4,5,6,-1},   {-1},           {1,2,3,4,5,6-1},    {-1},           0,  -1,-1, -1,-1, 6,  -1, -1,                       },
@@ -958,8 +966,8 @@ static QnameFlavorStruct qf[] = {
     {},  { QF_PACBIO_3,    "PacBio-3",      { "0ae26d65_70722_4787" },                    TECH_PACBIO,  TECH_NCBI,    QANY,   &con_pacbio_3,      0,   2,  {1,2,-1},           {0,-1},         {1,2,-1},           {0,-1},         0,  -1,-1, -1,-1, -1, -1, -1, 0,  PX_pacbio_3       /* test.pacbio-blasr.bam */},
     {},  { QF_PACBIO_rng,  "PacBio-Range",  { "m130802_221257_00127_c100560082550000001823094812221334_s1_p0/128361/872_4288" },
                                                                                           TECH_PACBIO,  TECH_NCBI,    QANY,   &con_pacbio_range,  0,   4,  {1,2,3,-1},         {-1},           {1,-1},             {-1},           0,  -1,-1,  3,-1, -1, -1, -1, 0,  PX_pacbio         }, // note: tried ord1=1 for pacbio flavors, we're worse off than in_local
-    {},  { QF_PACBIO_lbl,  "PacBio-Label",  { "m64136_200621_234916/18/ccs" },            TECH_PACBIO,  TECH_NCBI,    QANY,   &con_pacbio_label,  0,   3,  {1,-1},             {-1},           {1,-1},             {-1},           0,  -1,-1, -1,-1, -1, -1, -1, 0,  PX_pacbio         /* flavor.pacbio_label.aux.fq */},
-    {},  { QF_PACBIO_pln,  "PacBio-Plain",  { "m64136_200621_234916/18" },                TECH_PACBIO,  TECH_NCBI,    QANY,   &con_pacbio_plain,  0,   2,  {1,-1},             {-1},           {1,-1},             {-1},           0,  -1,-1, -1,-1, -1, -1, -1, 0,  PX_pacbio         },
+    {},  { QF_PACBIO_lbl,  "PacBio-Label",  { "m64136_200621_234916/18/ccs" },            TECH_PACBIO,  TECH_NCBI,    QANY,   &con_pacbio_label,  0,   3,  {1,-1},             {-1},           {1,-1},             {-1},           0,  1,-1,  -1,-1, -1, -1, -1, 0,  PX_pacbio         /* flavor.pacbio_label.aux.fq */},
+    {},  { QF_PACBIO_pln,  "PacBio-Plain",  { "m64136_200621_234916/18" },                TECH_PACBIO,  TECH_NCBI,    QANY,   &con_pacbio_plain,  0,   2,  {1,-1},             {-1},           {1,-1},             {-1},           0,  1,-1,  -1,-1, -1, -1, -1, 0,  PX_pacbio         },
     {},  { QF_NANOPORE,    "Nanopore",      { "af84b0c1-6945-4323-9193-d9f6f2c38f9a" },   TECH_ONP,     TECH_NCBI,    QANY,   &con_nanopore,      0,   4,  {-1},               {0,1,2,3,4-1},  {0,1,2,3,4,-1},     {0,1,2,3,4,-1}, 0,  -1,-1, -1,-1, -1, -1, -1, 36, PX_nanopore       /* flavor.nanopore.aux.fq, flavor.nanopore.length.fq */},
     {},  { QF_NANOPORE_rng,"Nanopore-rng",  { "2a228edf-218c-46b3-b1b8-3d613b8530dc_39-13665" },
                                                                                           TECH_ONP,     TECH_NCBI,    QANY,   &con_nanopore_rng,  0,   6,  {5,6,-1},           {0,1,2,3,4,-1}, {0,1,2,3,4,5,6,-1}, {0,1,2,3,4,-1}, 0,  -1,-1, -1,-1, -1, -1, -1, 0,  PX_nanopore_rng   /* flavor.nanopore-rng.fq */}, // 14.0.31

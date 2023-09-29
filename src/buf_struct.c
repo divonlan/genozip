@@ -79,7 +79,7 @@ rom buf_type_name (ConstBufferP buf)
     if (buf->type >= 0 && buf->type < BUF_NUM_TYPES) 
         return names[buf->type];
     else {
-        static char s[24]; // used for error printing
+        char *s = malloc (32); // used for error printing
         sprintf (s, "invalid_buf_type=%u", buf->type);
         return s;
     }
@@ -484,7 +484,7 @@ void buf_free_do (BufferP buf, FUNCLINE)
             break;
 
         default:
-            ABORT0 ("Error: invalid buf->type");
+            ABORT ("Error: invalid buf->type=%s", buf_type_name (buf));
     }
 } 
 

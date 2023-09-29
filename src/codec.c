@@ -268,7 +268,7 @@ Codec codec_assign_best_codec (VBlockP vb,
 
         if (*selected_codec == CODEC_NONE) tests[t].size = data->len;
         else {
-            LocalGetLineCB *callback = (ST(LOCAL) && !data_override) ? zfile_get_local_data_callback (vb->data_type, ctx) : NULL;
+            LocalGetLineCB *callback = (ST(LOCAL) && !data_override && !ctx->no_callback) ? zfile_get_local_data_callback (vb->data_type, ctx) : NULL;
 
             zfile_compress_section_data_ex (vb, ctx, st, callback ? NULL : data, callback, data->len, *selected_codec, SECTION_FLAGS_NONE, 
                                             "codec_assign_best_codec");
@@ -333,7 +333,7 @@ void codec_assign_best_qual_codec (VBlockP vb, Did did_i,
     if (!flag.fast && segconf.is_long_reads && !no_longr && segconf.nontrivial_qual)
         codec_longr_comp_init (vb, did_i);
 
-    else if (!flag.no_domqual && segconf.tech == TECH_ULTIMA && codec_homp_comp_init (vb, did_i, callback));
+    else if (codec_homp_comp_init (vb, did_i, callback)); // only if Ultima, it might succeed
 
     else if (!flag.no_domqual && codec_domq_comp_init (vb, did_i, callback));
     

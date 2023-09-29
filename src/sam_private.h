@@ -172,7 +172,10 @@ typedef struct {
 
     DeepHash deep_hash;            // Set for primary (i.e. not supplementary or secondary) alignments
     TxtWord QUAL, OQ, TQ, _2Y, GY, U2, BD_BI[2], SA, QNAME, MC;// coordinates in txt_data 
-    TxtWord dq, iq, sq;            // PacBio - coordinates in txt_data
+    union {
+    struct { TxtWord dq, iq, sq; };// PacBio - coordinates in txt_data
+    TxtWord t0;                    // Ultima - coordinates in txt_data
+    };
     TxtWord CIGAR;                 // SAM: coordinates in txt_data (always); BAM: coordinates in vb->line_textual_cigars
     TxtWord SEQ;                   // coordinates in txt_data. Note: len is actual sequence length in bases (not bytes) determined from any or or of: CIGAR, SEQ, QUAL. If more than one contains the length, they must all agree
     int32_t QUAL_score;            // used by ms:i
@@ -257,8 +260,8 @@ typedef struct VBlockSAM {
     #define first_mux mux_XS
     Multiplexer4 mux_XS;
     Multiplexer4 mux_PNEXT;
-    Multiplexer3 mux_POS, mux_MAPQ;// ZIP: DEMUX_BY_MATE_PRIM multiplexors
-    Multiplexer2 mux_FLAG, mux_MQ, mux_MC, mux_ms, mux_AS, mux_YS, mux_nM, // ZIP: DEMUX_BY_MATE or DEMUX_BY_BUDDY multiplexors
+    Multiplexer3 mux_POS, mux_MAPQ;// ZIP: DEMUX_BY_MATE_PRIM multiplexers
+    Multiplexer2 mux_FLAG, mux_MQ, mux_MC, mux_ms, mux_AS, mux_YS, mux_nM, // ZIP: DEMUX_BY_MATE or DEMUX_BY_BUDDY multiplexers
                  mux_mated_z_fields[NUM_MATED_Z_TAGS], mux_ultima_c; 
     Multiplexer3 mux_NH;           // ZIP: DEMUX_BY_BUDDY_MAP
     Multiplexer7 mux_tp;           // ZIP: DEMUX_BY_QUAL (number of channels matches TP_NUM_BINS)
@@ -645,7 +648,6 @@ extern void sam_piz_XA_field_insert_lookback_v13 (VBlockP vb);
 
 // bowtie2 stuff
 extern void sam_seg_bowtie2_YS_i (VBlockSAMP vb, ZipDataLineSAM *dl, ValueType YS, unsigned add_bytes);
-static inline bool sam_has_bowtie2_YS_i (void) { return MP(BOWTIE2) || MP(BSSEEKER2) || MP(HISAT2); }
 
 // minimap2 stuff
 extern void sam_seg_s1_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t s1, unsigned add_bytes);
@@ -659,10 +661,13 @@ extern void sam_recon_pacbio_qual (VBlockSAMP vb, ContextP ctx, bool reconstruct
 // Ultima stuff
 extern void sam_ultima_zip_initialize (void);
 extern void sam_ultima_seg_initialize (VBlockSAMP vb);
+extern void sam_ultima_finalize_segconf (VBlockSAMP vb);
 extern void sam_seg_ultima_tp (VBlockSAMP vb, ContextP ctx, void *cb_param, void *tp_, uint32_t tp_len);
 extern void sam_seg_ultima_bi (VBlockSAMP vb, STRp(bi_str), unsigned add_bytes);
 extern void sam_seg_ultima_XV (VBlockSAMP vb, STRp(xv), unsigned add_bytes);
 extern void sam_seg_ultima_XW (VBlockSAMP vb, STRp(xw), unsigned add_bytes);
+extern void sam_seg_ultima_t0 (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(t0), unsigned add_bytes);
+extern void sam_seg_ultima_MI (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(mi), unsigned add_bytes);
 
 // hisat2 stuff
 extern void sam_seg_HISAT2_Zs_Z (VBlockSAMP vb, STRp(zs), unsigned add_bytes);

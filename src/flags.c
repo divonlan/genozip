@@ -782,7 +782,7 @@ verify_command:
             case '^' : flag.replace       = 1       ; break;
             case '@' : flag.threads_str   = optarg  ; break;
             case '1' : flag.header_one    = 1       ; break;
-            case '2' : flag.pair          = PAIRED ; break;
+            case '2' : flag.pair          = PAIRED  ; break;
             case '3' : flag.deep          = 1       ; break;
             case '9' : flag.optimize      = 1       ; break;
             case 'X' : flag.no_test       = 1       ; break; 
@@ -805,7 +805,7 @@ verify_command:
             case 'l' : flag.list          = 1       ; break;
             case 'h' : flag.header_only   = 1       ; break;
             case 'm' : flag.md5           = 1       ; break;
-            case 'n' : flags_set_lines (optarg)      ; break;
+            case 'n' : flags_set_lines (optarg)     ; break;
             case 'o' : flags_set_out_filename(optarg); break;
             case 'p' : crypt_set_password (optarg)  ; break;
             case 'q' : flag.quiet         = 1       ; break;
@@ -820,8 +820,8 @@ verify_command:
             case 'y' : flag.show_dvcf     = 1       ; break;
             case 'w' : flag_set_stats (STATS_SHORT, optarg); break;
             case 'W' : flag_set_stats (STATS_LONG,  optarg); break;
+            case 'z' : flags_set_explicit_bgzf (optarg)    ; break;
             case 'x' : flag.index_txt     = 1       ; break;
-            case 'z' : flags_set_explicit_bgzf (optarg)      ; break;
             case '~' : flag.show_is_set   = optarg  ; break;
             case 1   : flags_set_show_time (optarg) ; break; // show_time with or without a specific member of ProfilerRec
             case 2   : if (optarg) flag.dict_id_show_one_b250 = dict_id_make (optarg, strlen (optarg), DTYPE_PLAIN); 
@@ -851,8 +851,8 @@ verify_command:
             case 19  : flag.validate = optarg ? VLD_REPORT_VALID : VLD_REPORT_INVALID ; break;
             case 20  : flag.count = optarg ? CNT_VBs : CNT_TOTAL; break;
             case 21  : kraken_set_show_kraken (optarg); break;
-            case 22  : flags_set_head (optarg)       ; break;
-            case 23  : flags_set_tail (optarg)       ; break;
+            case 22  : flags_set_head (optarg)      ; break;
+            case 23  : flags_set_tail (optarg)      ; break;
             case 24  : iupac_set (optarg)           ; break;
             case 26  : license_set_filename (optarg); break;
             case 27  : tar_set_tar_name (optarg)    ; break;
@@ -872,7 +872,7 @@ verify_command:
             case 136 : flag.show_sag = optarg ? atoi(optarg)+1 : -1; break;   //-1=show all, >=1 - show grp_i=show_sag-1 
             case 137 : flag_set_biopsy_line (optarg); break;
             case 138 : /* 138 is not currently used - available */; break;
-            case 139 : flag_set_show_deep (optarg);  break;
+            case 139 : flag_set_show_deep (optarg)  ; break;
             case 141 : flag.show_vblocks = (optarg ? optarg : "") ; break;
             case 142 : flag.t_offset = atoll (optarg); break;
             case 143 : flag.t_size   = atoll (optarg); break;

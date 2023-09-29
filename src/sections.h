@@ -277,23 +277,24 @@ typedef enum __attribute__ ((__packed__)) {
     QF_ION_TORR_3=50, QF_ROCHE_454=51, QF_HELICOS=52, 
     QF_SRA_L=60, QF_SRA2=60, QF_SRA=62,
     QF_GENOZIP_OPT=70, QF_INTEGER=71, QF_HEX_CHR=72, QF_BAMSURGEON=73, QF_SEQAN=74, QF_CLC_GW=75, QF_STR_INT=76, QF_CONSENSUS=77,
-    QF_ULTIMA_a=80, QF_ULTIMA_b_bc=81, QF_ULTIMA_a_bc=83, QF_ULTIMA_c=84, QF_ULTIMA_c_bc=85, QF_ULTIMA_b=86, QF_ULTIMA_d=87, QF_ULTIMA_d_bc=88,
+    QF_ULTIMA_a=80, QF_ULTIMA_b6_bc=81, QF_ULTIMA_a_bc=83, QF_ULTIMA_c=84, QF_ULTIMA_c_bc=85, QF_ULTIMA_b6=86, QF_ULTIMA_d=87, QF_ULTIMA_d_bc=88, 
+    QF_ULTIMA_b9=89, QF_ULTIMA_b9_bc=110,
     QF_SINGULAR=90, QF_SINGULR_1bc=92, 
     QF_ELEMENT=100, QF_ELEMENT_6=101, QF_ELEMENT_0bc=102, QF_ELEMENT_1bc=103, QF_ELEMENT_2bc=104,
     NUM_FLAVORS
 } QnameFlavorId;
 
 typedef enum __attribute__ ((__packed__)) { // these values and their order are part of the file format
-                      CNN_NONE, CNN_SEMICOLON, CNN_COLON, CNN_UNDERLINE, CNN_HYPHEN, CNN_HASH, CNN_SPACE, NUM_CNN
-} QnameCNN;
-#define CNN_TO_CHAR { 0,        ';',           ':',       '_',           '-',        '#',      ' ' }
-#define CHAR_TO_CNN { [';']=CNN_SEMICOLON, [':']=CNN_COLON, ['_']=CNN_UNDERLINE, ['-']=CNN_HYPHEN, ['#']=CNN_HASH, [' ']=CNN_SPACE }
+                      CNN_NONE, CNN_SEMICOLON, CNN_COLON, CNN_UNDERLINE, CNN_HYPHEN, CNN_HASH, CNN_SPACE, CNN_PIPE, NUM_CNN
+} QnameCNN /* 3 bits */;
+#define CNN_TO_CHAR { 0,        ';',           ':',       '_',           '-',        '#',      ' ',       '|' }
+#define CHAR_TO_CNN { [';']=CNN_SEMICOLON, [':']=CNN_COLON, ['_']=CNN_UNDERLINE, ['-']=CNN_HYPHEN, ['#']=CNN_HASH, [' ']=CNN_SPACE, ['|']=CNN_PIPE }
 
 typedef struct __attribute__ ((__packed__)) { // 3 bytes
     QnameFlavorId id;
     uint8_t has_seq_len : 1;  // qname includes seq_len
     uint8_t unused_bit  : 1;  // 15.0.0 to 15.0.14 : is_mated: qname ends with /1 or /2 (never used in PIZ)
-    uint8_t has_R       : 1;  // qname's final two characters are separator + mate (1 or 2), eg "/1" or "|2" or ".1"
+    uint8_t is_mated    : 1;  // qname's final two characters are separator + mate (1 or 2), eg "/1" or "|2" or ".1"
     uint8_t cnn         : 3;  // QnameCNN: terminate before the last character that is this, to canonoize 
     uint8_t unused_bits : 2;  
 } QnameFlavorProp;

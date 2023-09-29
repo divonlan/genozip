@@ -202,8 +202,13 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_PRIM_QNAME)
 
     sam_piz_set_sag (vb);
 
+    uint32_t last_txt_index = Ltxt;
+
     RECONSTRUCT (GRP_QNAME(vb->sag), vb->sag->qname_len);
-    
+
+    CTX(SAM_QNAME)->last_txt = (TxtWord){ .index = last_txt_index,
+                                          .len   = Ltxt - last_txt_index }; // 15.0.16 - need by sam_ultima_bi_prediction
+
     // if seq_len is carried by a QNAME item, set the last value here - it was already reconstructed during sag loading.
     if (segconf.seq_len_dict_id.num)
         ctx_set_last_value (VB, ECTX(segconf.seq_len_dict_id), (int64_t)vb->sag->seq_len);

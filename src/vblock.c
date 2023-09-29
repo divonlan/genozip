@@ -236,13 +236,19 @@ VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompITy
 
     VBlockPool *pool = vb_get_pool (type, HARD_FAIL);
 
-    DataType dt = (type == POOL_BGZF)            ? DT_NONE
+#ifdef DEBUG
+    // if GFF VB becauses larger than FASTA, then we need to change the dt assignment conditions below
+    ASSERT0 (get_vb_size (DT_FASTA) > get_vb_size (DT_GFF), "Failed assumption that FASTA has larger VB than GFF");
+#endif
+
+    DataType dt = (type == POOL_BGZF)                             ? DT_NONE
                 : (flag.deep && flag.zip_comp_i >= SAM_COMP_FQ00) ? DT_FASTQ
-                : (IS_ZIP && segconf.has_embedded_fasta) ? DT_FASTA // GFF3 with embedded FASTA
-                : (IS_ZIP && txt_file)           ? txt_file->data_type
+                : (IS_ZIP && segconf.has_embedded_fasta)          ? DT_FASTA // GFF3 with embedded FASTA (allocate a FASTA VB as it larger than GFF and can accommodate both)
+                : (IS_ZIP && txt_file)                            ? txt_file->data_type
+                : (IS_PIZ && z_file && Z_DT(GFF))                 ? DT_FASTA // vb is allocated before reading the VB_HEADER, so we don't yet know if it is a embdedded fasta VB. To be safe, we allocate enough memory for a VBlockFASTA (which is larger), so we can change the dt in gff_piz_init_vb() without needing to realloc
                 : (IS_PIZ && z_file && flag.deep && comp_i != COMP_NONE && comp_i >= SAM_COMP_FQ00) ? DT_FASTQ
-                : (IS_PIZ && z_file)             ? z_file->data_type  
-                :                                  DT_NONE;
+                : (IS_PIZ && z_file)                              ? z_file->data_type  
+                :                                                   DT_NONE;
     
     uint64_t sizeof_vb = get_vb_size (dt);
 
@@ -250,8 +256,10 @@ VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompITy
                       : (dt == DT_REF && IS_PIZ)     ? DT_NONE
                       : dt == DT_BAM                 ? DT_SAM
                       : dt == DT_BCF                 ? DT_VCF 
-                      : (dt == DT_GFF && IS_PIZ)     ? DT_FASTA // vb is allocated before reading the VB_HEADER, so we don't yet know if it is a embdedded fasta VB. To be safe, we allocate enough memory for a VBlockFASTA (which is larger), so we can change the dt in gff_piz_init_vb() without needing to realloc
                       :                                dt;
+
+    if (type == POOL_MAIN && IS_PIZ && z_file && Z_DT(GFF)) 
+        dt = DT_GFF; // return GFF dt to its true dt after getting the size, otherwise it won't work   
 
     // circle around until a VB becomes available (busy wait)
     uint32_t vb_id; for (vb_id=0; ; vb_id = (vb_id+1) % pool->num_vbs) {

@@ -158,7 +158,7 @@ void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAM *dl, unsigned add_bytes)
         seg_integer_as_snip_do (VB, channel_ctx, dl->FLAG.value, add_bytes);
 
     if (do_mux)
-        seg_by_did (VB, STRa(vb->mux_FLAG.snip), SAM_FLAG, 0); // de-multiplexor
+        seg_by_did (VB, STRa(vb->mux_FLAG.snip), SAM_FLAG, 0); // de-multiplexer
 
     // first pairing test (another test is in sam_seg_finalize_segconf)
     if (segconf.running) {
@@ -772,7 +772,7 @@ static inline void sam_seg_AS_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t as, 
             //seg_integer_as_snip_do (VB, channel_ctx, as, add_bytes);    
             seg_integer (VB, channel_ctx, as, true, add_bytes);
 
-        seg_by_did (VB, STRa(vb->mux_AS.snip), OPTION_AS_i, 0); // de-multiplexor
+        seg_by_did (VB, STRa(vb->mux_AS.snip), OPTION_AS_i, 0); // de-multiplexer
     }
 
     // case: in STAR paired files, AS expected to be the same value as its mate's
@@ -918,7 +918,7 @@ void sam_seg_MAPQ (VBlockSAMP vb, ZipDataLineSAM *dl, unsigned add_bytes)
     }
 
     if (do_mux)
-        seg_by_did (VB, STRa(vb->mux_MAPQ.snip), SAM_MAPQ, 0); // de-multiplexor
+        seg_by_did (VB, STRa(vb->mux_MAPQ.snip), SAM_MAPQ, 0); // de-multiplexer
 }
 
 // MQ:i Mapping quality of the mate/next segment
@@ -937,7 +937,7 @@ static inline void sam_seg_MQ_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t mq, 
     else 
         seg_delta_vs_other_do (VB, channel_ctx, CTX(SAM_MAPQ), 0, 0, mq, -1, add_bytes);
 
-    seg_by_did (VB, STRa(vb->mux_MQ.snip), OPTION_MQ_i, 0); // de-multiplexor
+    seg_by_did (VB, STRa(vb->mux_MQ.snip), OPTION_MQ_i, 0); // de-multiplexer
 }
 
 // RG:Z, PG:Z, PU:Z, LB:Z, RX:Z and others: we predict that the value will be the same as the buddy
@@ -966,7 +966,7 @@ void sam_seg_buddied_Z_fields (VBlockSAMP vb, ZipDataLineSAM *dl, MatedZFields f
         seg_by_ctx (VB, STRa(value), channel_ctx, add_bytes); 
 
     if (do_mux)
-        seg_by_did (VB, STRa(vb->mux_mated_z_fields[f].snip), buddied_Z_dids[f], 0); // de-multiplexor
+        seg_by_did (VB, STRa(vb->mux_mated_z_fields[f].snip), buddied_Z_dids[f], 0); // de-multiplexer
 
     dl->mated_z_fields[f] = TXTWORD(value);
 }
@@ -1023,7 +1023,7 @@ void sam_seg_buddied_i_fields (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i,
         else 
             seg_integer (VB, channel_ctx, my_value, true, add_bytes);    
 
-        seg_by_ctx (VB, MUX_SNIP(mux), MUX_SNIP_LEN(mux), ctx, 0); // de-multiplexor
+        seg_by_ctx (VB, MUX_SNIP(mux), MUX_SNIP_LEN(mux), ctx, 0); // de-multiplexer
     }
     else
         seg_integer (VB, ctx, my_value, true, add_bytes);        
@@ -1273,8 +1273,8 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
         case _OPTION_PU_Z: sam_seg_buddied_Z_fields (vb, dl, MATED_PU, STRa(value), 0, add_bytes); break;
         case _OPTION_LB_Z: sam_seg_buddied_Z_fields (vb, dl, MATED_LB, STRa(value), 0, add_bytes); break;
         case _OPTION_OX_Z: sam_seg_buddied_Z_fields (vb, dl, MATED_OX, STRa(value), 0, add_bytes); break;
-        case _OPTION_MI_Z: sam_seg_buddied_Z_fields (vb, dl, MATED_MI, STRa(value), 0, add_bytes); break;
-
+        case _OPTION_MI_Z: COND0 (!MP(ULTIMA), sam_seg_buddied_Z_fields (vb, dl, MATED_MI, STRa(value), 0, add_bytes))
+                           COND (  MP(ULTIMA), sam_seg_ultima_MI (vb, dl, STRa(value), add_bytes));
         case _OPTION_CY_Z: dl->dont_compress_CY = sam_seg_barcode_qual (vb, dl, OPTION_CY_Z, SOLO_CY, segconf.n_CR_CB_CY_seps, STRa(value), qSTRa(segconf.CY_con_snip), &segconf.CY_con, add_bytes); break;
         case _OPTION_QT_Z: dl->dont_compress_QT = sam_seg_barcode_qual (vb, dl, OPTION_QT_Z, SOLO_QT, segconf.n_BC_QT_seps,    STRa(value), qSTRa(segconf.QT_con_snip), &segconf.QT_con, add_bytes); break;
 
@@ -1336,16 +1336,16 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
 
         case _OPTION_ZS_i: COND (MP(HISAT2), sam_seg_BWA_XS_i (vb, dl, OPTION_ZS_i, numeric.i, add_bytes)); 
 
-        case _OPTION_YS_i: COND (sam_has_bowtie2_YS_i(), sam_seg_bowtie2_YS_i (vb, dl, numeric, add_bytes));
+        case _OPTION_YS_i: COND (segconf.sam_has_bowtie2_YS_i, sam_seg_bowtie2_YS_i (vb, dl, numeric, add_bytes));
 
-        // case _OPTION_XR_Z: COND (MP(BISMARK) || MP(DRAGEN), sam_seg_bismark_XR_Z (vb, dl, STRa(value), add_bytes));
+        // case _OPTION_XR_Z: COND (segconf.sam_has_bismark_XM_XG_XR, sam_seg_bismark_XR_Z (vb, dl, STRa(value), add_bytes));
 
         case _OPTION_XO_Z: COND (MP(BSSEEKER2), sam_seg_bsseeker2_XO_Z (vb, dl, STRa(value), add_bytes));
 
-        case _OPTION_XG_Z: COND0 (MP(BISMARK) || MP(DRAGEN), sam_seg_bismark_XG_Z (vb, dl, STRa(value), add_bytes))
+        case _OPTION_XG_Z: COND0 (segconf.sam_has_bismark_XM_XG_XR, sam_seg_bismark_XG_Z (vb, dl, STRa(value), add_bytes))
                            COND (MP(BSSEEKER2), sam_seg_bsseeker2_XG_Z (vb, dl, STRa(value), add_bytes));
 
-        case _OPTION_XM_Z: COND0 (MP(BISMARK) || MP(DRAGEN), sam_seg_bismark_XM_Z (vb, dl, OPTION_XM_Z, SAM_SPECIAL_BISMARK_XM, STRa(value), add_bytes))
+        case _OPTION_XM_Z: COND0 (segconf.sam_has_bismark_XM_XG_XR, sam_seg_bismark_XM_Z (vb, dl, OPTION_XM_Z, SAM_SPECIAL_BISMARK_XM, STRa(value), add_bytes))
                            COND (MP(BSSEEKER2), sam_seg_bsseeker2_XM_Z (vb, dl, STRa(value), add_bytes));
 
         case _OPTION_XB_A: COND (MP(GEM3), sam_seg_gem3_XB_A (vb, dl, STRa(value), add_bytes));
@@ -1409,7 +1409,8 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
         case _OPTION_XV_Z: COND (MP(ULTIMA), sam_seg_ultima_XV (vb, STRa(value), add_bytes));
         case _OPTION_XW_Z: COND (MP(ULTIMA), sam_seg_ultima_XW (vb, STRa(value), add_bytes));
         case _OPTION_rq_f: COND (MP(ULTIMA), sam_seg_float_as_snip (vb, CTX(OPTION_rq_f), STRa(value), numeric, add_bytes));
-    
+        case _OPTION_t0_Z: COND (segconf.sam_has_ultima_t0, sam_seg_ultima_t0 (vb, dl, STRa(value), add_bytes));
+
         default: fallback:
             
             // all types of integer

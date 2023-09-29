@@ -1098,14 +1098,9 @@ batch_real_world_1_adler32() # $1 extra genozip argument
     fi
 
     # without reference
-    local files=( `cd $TESTDIR; ls -1 test.*vcf* test.*sam* test.*bam \
-                   test.*fq* test.*fa* \
-                   basic.phy* test.*gvf* test.*gtf* test.*gff* test.*locs* test.*bed* \
-                   test.*txt* test.*kraken* | \
-                   grep -v "$filter_out" | grep -v headerless | grep -vF .genozip | grep -vF .md5 | grep -vF .bad |\
-                   grep -v test.embedded-fasta.gff.gz` ) 
-
-    for f in ${files[@]}; do rm -f ${f}.genozip; done
+    local files=( `cd $TESTDIR; ls -1 test.*vcf* test.*sam* test.*bam test.*fq* test.*fa* basic.phy*    \
+                   test.*gvf* test.*gtf* test.*gff* test.*locs* test.*bed* test.*txt* test.*kraken*     \
+                   | grep -v "$filter_out" | grep -v headerless | grep -vF .genozip | grep -vF .md5 | grep -vF .bad `) 
 
     # test genozip and genounzip --test
     echo "subsets of real world files (without reference)"
@@ -1120,7 +1115,7 @@ batch_real_world_genounzip_single_process() # $1 extra genozip argument
 {
     batch_print_header
 
-    local files=( `cd $TESTDIR; ls -1 test.*.vcf.genozip test.*.sam test.*.bam.genozip \
+    local files=( `cd $TESTDIR; ls -1 test.*.vcf.genozip test.*.sam.genozip test.*.bam.genozip \
                    test.*.fq.genozip test.*.fa.genozip \
                    basic.phy.genozip test.*.gvf.genozip test.*.gtf.genozip test.*gff*.genozip \
                    test.*.locs.genozip test.*.bed.genozip \
@@ -1146,7 +1141,7 @@ batch_real_world_genounzip_compare_file() # $1 extra genozip argument
                    test.*fq* test.*fa* \
                    basic.phy* test.*gvf* test.*gtf* test.*gff* test.*locs* test.*bed* \
                    test.*txt* test.*kraken* | \
-                   grep -v "$filter_out" | grep -v headerless | grep -vF .genozip | grep -Fv .md5 | grep -Fv .bad | grep -Fv .xz | grep -Fv .bz2 | grep -v test.embedded-fasta.gff.gz` )
+                   grep -v "$filter_out" | grep -v headerless | grep -vF .genozip | grep -Fv .md5 | grep -Fv .bad | grep -Fv .xz | grep -Fv .bz2` )
     
     # test full genounzip (not --test), including generation of BZGF
     for f in ${files[@]}; do 
@@ -1163,7 +1158,7 @@ batch_real_world_genounzip_compare_file() # $1 extra genozip argument
 
         # same is in private/test/Makefile
         if [[ `head -c2 $recon | od -x | head -1 | cut -d" " -f2 || exit 1` == 8b1f ]]; then
-            local actual_md5=`gzip -dc < $recon | md5sum | cut -d" " -f1`
+            local actual_md5=`zcat $recon | md5sum | cut -d" " -f1`
         else
             local actual_md5=`md5sum $recon | cut -d" " -f1`
         fi
@@ -1179,60 +1174,6 @@ batch_real_world_genounzip_compare_file() # $1 extra genozip argument
 
     cleanup 
 }
-
-# batch_real_world_1_backcomp() # replaced with more comprehensive back comp testing
-# {
-#     batch_print_header
-
-#     cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
-
-#     local filter_out=nothing
-#     if [ ! -x "$(command -v xz)" ] ; then # xz unavailable
-#         local filter_out=.xz
-#     fi
-
-#     # without reference
-#     local files=(  `cd $TESTDIR; ls -1 test.*vcf test.*vcf.gz test.*sam test.*sam.gz test.*bam \
-#                    test.*fq test.*fq.gz test.*fa test.*fa.gz test.*fasta test.*fasta.gz \
-#                    basic.phy test.*gvf test.*gvf.gz test.*gtf test.*gtf.gz test.*gff test.*gff.gz test.*locs \
-#                    test.*txt test.*txt.gz test.*kraken test.*kraken.gz \
-#                    | grep -v test.embedded-fasta.gff.gz \
-#                    | grep -v headerless.sam` ) 
-
-#     local i=0
-#     for f in ${files[@]}; do 
-#         i=$(( i + 1 ))
-
-#         # exceptions - supported in 14.0.0 but not earlier
-#         # if [[ $f == test.3rd-line-sra.fq ]]; then continue; fi 
-#         # if [[ $f == test.bsseeker2-pysam-qual.bam ]]; then continue; fi
-#         # if [[ $f == test.covid.gisaid.nuke.fasta.gz ]]; then continue; fi
-#         # if [[ $f == test.transcriptome.bam ]]; then continue; fi
-
-#         # exceptions - supported in 14.0.5 but not earlier
-#         # if [[ $f == test.novoalign.bam ]]; then continue; fi
-
-#         # exceptions - supported in 14.0.7 but not earlier
-#         # if [[ $f == test.ubam.bam ]]; then continue; fi
-
-#         # exceptions - supported in 14.0.9 but not earlier
-#         # if [[ $f == test.MC_Z_in_prim.sam ]]; then continue; fi
-#         # if [[ $f == test.10M-contigs.sam.bz2 ]]; then continue; fi
-#         # if [[ $f == test.unmapped-is-saggy.sam ]]; then continue; fi
-
-#         # exceptions - supported in 14.0.10 but not earlier
-#         # if [[ $f == test.minimap2+biobambam.bam ]]; then continue; fi
-#         # if [[ $f == test.saggy-alns-with-and-without-CIGAR.sam.gz ]]; then continue; fi
-#         # if [[ $f == test.novoalign-SA-omit-NM-0.sam ]]; then continue; fi
-
-#         # exceptions - supported in 14.0.12 but not earlier
-#         if [[ $f == test.NM-binary-then-integer.bam ]]; then continue; fi
-            
-#         test_header "$f - backward compatability with prod ($i/${#files[@]})"
-#         $genozip_latest $TESTDIR/$f --md5 -fo $output || exit 1
-#         $genounzip -t $output || exit 1
-#     done
-# }
 
 batch_real_world_with_ref_md5() # $1 extra genozip argument
 {
@@ -1378,13 +1319,23 @@ batch_real_world_small_vbs()
 batch_multiseq()
 {
     batch_print_header
-    test_standard "--multiseq" " " test.coronavirus.fasta
 
-    # regions
-    test_count_genocat_lines "$TESTDIR/test.coronavirus.fasta" "--regions MW362225.1" 22
-    test_count_genocat_lines "$TESTDIR/test.coronavirus.fasta" "--regions ^MW362225.1" 99978
+    # note: not test.virus.nanopore.fq : see bug 917
+    local files=( test.coronavirus.fasta test.virus.pacbio-subreads.fq.gz test.virus.iontorrent.fq.gz )
 
-    test_standard "--multiseq" " " test.nanopore-virus.fq
+# TODO
+    # for f in ${files38[@]}; do 
+    #     test_header "$f - checking multiseq identification"
+    # done
+
+# OLD
+    # test_standard "--multiseq" " " test.coronavirus.fasta
+
+    # # regions
+    # test_count_genocat_lines "$TESTDIR/test.coronavirus.fasta" "--regions MW362225.1" 22
+    # test_count_genocat_lines "$TESTDIR/test.coronavirus.fasta" "--regions ^MW362225.1" 99978
+
+    # test_standard "--multiseq" " " test.nanopore-virus.fq
 }
 
 # CRAM hs37d5

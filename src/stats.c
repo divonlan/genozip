@@ -64,13 +64,13 @@ static void stats_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
 
     // we send the first 6 qnames in case of unrecognized QNAME flavor or in case of existing by unrecognized QNAME2 flavor
     for (QType q=QNAME1; q < NUM_QTYPES; q++) {
-        if (!segconf.qname_flavor[q] && segconf.unknown_flavor_qnames[q][0][0]) { // at least 1 instance of QNAME2 exists
+        if (!segconf.qname_flavor[q] && segconf.n_unk_flav_qnames[q]) {
 
             bufprintf (evb, &hash_occ, "%s%s%%2C%%2C%%2C", need_sep++ ? "%3B" : "", qtype_name(q));
 
-            for (int i=0; i < NUM_COLLECTED_WORDS; i++)
-                if (segconf.unknown_flavor_qnames[q][i][0])
-                    bufprintf (evb, &hash_occ, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.unknown_flavor_qnames[q][i], strlen(segconf.unknown_flavor_qnames[q][i]), ',', -127)).s); 
+            for (int i=0; i < segconf.n_unk_flav_qnames[q]; i++)
+                if (segconf.unk_flav_qnames[q][i][0])
+                    bufprintf (evb, &hash_occ, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.unk_flav_qnames[q][i], strlen(segconf.unk_flav_qnames[q][i]), ',', -127)).s); 
         }
     }
 
@@ -273,9 +273,9 @@ static void stats_output_file_metadata (void)
             if (flag.deep) bufprintf (evb, &features, "deep_no_qual=%s;", TF (segconf.deep_no_qual));
 
             if (num_alignments) {
-                FEATURE0 (segconf.is_sorted && !segconf.sam_is_unmapped, "Sorting: Sorted by POS", "Sorted");        
+                FEATURE0 (segconf.is_sorted && !segconf.sam_is_unmapped, "Sorting: Sorted by POS", "Sorted_by_POS");        
                 FEATURE0 (segconf.is_sorted && segconf.sam_is_unmapped, "Sorting: Unmapped", "Unmapped");        
-                FEATURE0 (segconf.is_collated, "Sorting: Collated by QNAME", "Collated");
+                FEATURE0 (segconf.is_collated, "Sorting: Collated by QNAME", "Collated_by_QNAME");
                 FEATURE0 (!segconf.is_sorted && !segconf.is_collated, "Sorting: Not sorted or collated", "Not_sorted_or_collated");
             }
                         
@@ -359,7 +359,7 @@ static void stats_output_file_metadata (void)
             REPORT_VBs;
             REPORT_QNAME;
             FEATURE (flag.optimize_DESC && z_file->num_lines, "Sequencer: %s", "Sequencer=%s", segconf_tech_name());\
-            if (segconf.multiseq)  bufprint0 (evb, &features, "multiseq;");
+            FEATURE0 (segconf.multiseq, "Multiseq", "multiseq");
             if (IS_REF_LOADED_ZIP) bufprintf (evb, &features, "ref_ncontigs=%u;", ref_get_ctgs (gref)->contigs.len32);
             if (IS_REF_LOADED_ZIP) bufprintf (evb, &features, "ref_nbases=%"PRIu64";", contigs_get_nbases (ref_get_ctgs (gref)));
 
@@ -370,8 +370,8 @@ static void stats_output_file_metadata (void)
 
         case DT_FASTA:
             FEATURE0 (segconf.seq_type==SQT_AMINO, "Sequence type: Amino acids",      "Amino_acids");
-            FEATURE0 (segconf.seq_type==SQT_NUKE,  "Sequence type: Nucleotide bases", "Nucleotide_bases");
-            if (segconf.multiseq) bufprint0 (evb, &features, "multiseq;");
+            FEATURE0 (segconf.seq_type==SQT_NUKE, "Sequence type: Nucleotide bases", "Nucleotide_bases");
+            FEATURE0 (segconf.multiseq, "Multiseq", "multiseq");
             FEATURE (true, "Sequences: %"PRIu64, "num_sequences=%"PRIu64, z_file->num_sequences);
             REPORT_VBs;
             REPORT_KRAKEN;
@@ -676,7 +676,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
                  :                                                      ZCTX(zctx->st_did_i)->tag_name;
 
         // note: each VB contributes local.len contains its b250.count if it has it, and local_num_len if not 
-        float n_words = zctx->word_list.count; // set in ctx_update_stats()
+        float n_words = zctx->word_list.count; // fields segged of this type in the file : set in ctx_update_stats()
 
         s->my_did_i             = zctx->did_i;
         s->st_did_i             = zctx->st_did_i;

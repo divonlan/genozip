@@ -380,7 +380,7 @@ static ValueType reconstruct_from_lookback (VBlockP vb, ContextP ctx, STRp(snip)
     return value; 
 }
 
-// called from SPECIAL demultiplexor
+// called from SPECIAL demultiplexer
 HasNewValue reconstruct_demultiplex (VBlockP vb, ContextP ctx, STRp(snip), int channel_i, ValueType *new_value, ReconType reconstruct)
 {
     ContextP channel_ctx = MCTX (channel_i, snip, snip_len);

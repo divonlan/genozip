@@ -384,7 +384,7 @@ PosType64 seg_pos_field (VBlockP vb,
                          unsigned opt,      // a combination of SPF_* options
                          char missing,      // a character allowed (meaning "missing value"), segged as SNIP_DONT_STORE
                          STRp(pos_str),     // option 1
-                         PosType64 this_pos,  // option 2
+                         PosType64 this_pos,// option 2
                          unsigned add_bytes)     
 {
     ContextP snip_ctx = CTX(snip_did_i);
@@ -669,7 +669,13 @@ bool seg_integer_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_byt
 
     // case: its an integer
     if (!ctx->no_stons && is_int) { // we interpret no_stons as means also no moving ints to local (one of the reasons is that an int might actually be a float)
-        if (ctx->ltype < LT_DYN_INT) ctx->ltype = LT_DYN_INT; // note: the LT_DYN* types are the last in LocalType
+        if (ctx->ltype < LT_DYN_INT) {
+            ASSERT (ctx->ltype == LT_TEXT, "%s->ltype==%s, cannot be set to LT_DYN_INT", 
+                    ctx->tag_name, lt_name(ctx->ltype));
+
+            ctx->ltype = LT_DYN_INT; // note: the LT_DYN* types are the last in LocalType
+        }
+        
         seg_integer (vb, ctx, n, true, add_bytes);
         return true;
     }
@@ -1456,7 +1462,7 @@ void seg_all_data_lines (VBlockP vb)
         uint32_t remaining_txt_len = BREMAINS (vb->txt_data, field_start);
         
         if (!remaining_txt_len) { // we're done
-            vb->lines.len = vb->line_i; // update to actual number of lines
+            vb->lines.len32 = vb->line_i; // update to actual number of lines
             break;
         }
 

@@ -25,6 +25,7 @@
         "*.data": "c",
         "buffer.h": "c",
         "profiler.h": "c",
-        "stats.h": "c"
+        "stats.h": "c",
+        "file.h": "c"
     }
 }

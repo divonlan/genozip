@@ -492,13 +492,12 @@
 
 // Bismark tags: https://github.com/FelixKrueger/Bismark/tree/master/Docs#bismark-bamsam-output-default and https://github.com/FelixKrueger/Bismark/bismark
 // Dragen (compatible XR,XG,XM with Bismark): https://support.illumina.com/content/dam/illumina-support/help/Illumina_DRAGEN_Bio_IT_Platform_v3_7_1000000141465/Content/SW/Informatics/Dragen/MPipelineMeth_fDG.htm
-//#pragma GENDICT OPTION_XM_Z=DTYPE_2=XM:Z   // (overlap) (also Dragen) methylation call string
-#pragma GENDICT OPTION_XR_Z=DTYPE_2=XR:Z     // read conversion state for the alignment
-//#pragma GENDICT OPTION_XR_Z=DTYPE_2=XR:Z   // (overlap) (also Dragen) read conversion state for the alignment
+//#pragma GENDICT OPTION_XM_Z=DTYPE_2=XM:Z   // (overlap) (also Dragen, Ultima) methylation call string
+#pragma GENDICT OPTION_XR_Z=DTYPE_2=XR:Z     // (also Dragen, Ultima) read conversion state for the alignment (Ultima: Which base conversion was performed on the read: CT or GA)
 //#pragma GENDICT OPTION_XA_Z=DTYPE_2=XA:Z   // (overlap) the number of non-bisulfite mismatches in read-1 (note: this is a numeric field despite the :Z)
 //#pragma GENDICT OPTION_XB_Z=DTYPE_2=XB:Z   // (overlap) the number of non-bisulfite mismatches in read-2 (note: this is a numeric field despite the :Z)
 //#pragma GENDICT OPTION_YS_Z=DTYPE_2=YS:Z   // (overlap) strand identity, see https://github.com/FelixKrueger/Bismark/issues/455
-//#pragma GENDICT OPTION_XG_Z=DTYPE_2=XG:Z   // (overlap) (also Dragen) genome conversion state for the alignment
+//#pragma GENDICT OPTION_XG_Z=DTYPE_2=XG:Z   // (overlap) (also Dragen, Ultima) genome conversion state for the alignment (Ultima: Which base conversion was performed on the reference: CT or GA)
 
 // gem3-mapper: https://github.com/smarco/gem3-mapper/blob/master/src/io/output_sam.c
 // also: XS:i - same as BWA
@@ -536,21 +535,32 @@
 #pragma GENDICT OPTION_rl_i=DTYPE_2=rl:i     // Length of query regions harboring repetitive seeds
 
 // Ultima Genomics
-// also has standard tags: AS:i SA:Z NM:i X1:i MD:Z RG:Z
+// also has standard tags: AS:i SA:Z NM:i MD:Z RG:Z. Methylation fields: XM:Z, XG:Z, XR:Z. XA:Z, X1:i as in bwa.
 #pragma GENDICT OPTION_tp_B_c=DTYPE_2=tp:B:c
 #pragma GENDICT OPTION_tp_B_ARR=DTYPE_2=tpc_ARR // matches dict_id created in sam_seg_array_field_get_con
 #pragma GENDICT OPTION_bi_Z=DTYPE_2=bi:Z
-//#pragma GENDICT OPTION_rq_f=DTYPE_2=rq:f   // (dup)
+//#pragma GENDICT OPTION_rq_f=DTYPE_2=rq:f   // (dup) Read quality
 #pragma GENDICT OPTION_XV_Z=DTYPE_2=XV:Z
 #pragma GENDICT OPTION_XW_Z=DTYPE_2=XW:Z
-#pragma GENDICT OPTION_tm_Z=DTYPE_2=tm:Z
+#pragma GENDICT OPTION_tm_Z=DTYPE_2=tm:Z     
+#pragma GENDICT OPTION_t0_Z=DTYPE_2=t0:Z     
+#pragma GENDICT OPTION_pt_i=DTYPE_2=pt:i     
+#pragma GENDICT OPTION_px_i=DTYPE_2=px:i     
+#pragma GENDICT OPTION_py_i=DTYPE_2=py:i     
+#pragma GENDICT OPTION_si_i=DTYPE_2=si:i     
+#pragma GENDICT OPTION_a3_i=DTYPE_2=a3:i     
+#pragma GENDICT OPTION_pr_i=DTYPE_2=pr:i     
+#pragma GENDICT OPTION_tq_i=DTYPE_2=tq:i
+#pragma GENDICT OPTION_tz_i=DTYPE_2=tz:i
+#pragma GENDICT OPTION_DS_i=DTYPE_2=DS:i
+//#pragma GENDICT OPTION_MI_Z=DTYPE_2=MI:Z   // (dup) non standard. appears to have QNAME format.
 
 // Illumina iSAAC (discontinued): https://github.com/Illumina/Isaac4/blob/master/src/markdown/manual.md
 //#pragma GENDICT OPTION_AS_i=DTYPE_2=AS_i   // (dup) Pair alignment score
 //#pragma GENDICT OPTION_BC_Z=DTYPE_2=BC_Z   // (dup) Barcode string.
 //#pragma GENDICT OPTION_NM_i=DTYPE_2=NM_i   // (dup) Edit distance (mismatches and gaps) including the soft-clipped parts of the read
 //#pragma GENDICT OPTION_OC_Z=DTYPE_2=OC_Z   // (dup) Original CIGAR before realignment or alignment splitting
-//pragma GENDICT OPTION_OP_i=DTYPE_2=OP_i   // (dup) Original position before realignment
+//#pragma GENDICT OPTION_OP_i=DTYPE_2=OP_i   // (dup) Original position before realignment
 //#pragma GENDICT OPTION_RG_Z=DTYPE_2=RG_Z   // (dup) Isaac read groups correspond to flowcell/lane/barcode. Should not be used for anything other than debugging
 //#pragma GENDICT OPTION_SM_i=DTYPE_2=SM_i   // (dup) Single read alignment score. Rescued shadows have it set to 65535 meaning that SM was not computed.
 #pragma GENDICT OPTION_ZX_i=DTYPE_2=ZX_i     // Cluster X pixel coordinate on the tile times 100 (only available when running from BCL, excluded from output by default)
@@ -585,6 +595,7 @@ COMPRESSOR_CALLBACK(sam_zip_TQ);
 COMPRESSOR_CALLBACK(sam_zip_QX);
 COMPRESSOR_CALLBACK(sam_zip_2Y);
 COMPRESSOR_CALLBACK(sam_zip_U2);
+COMPRESSOR_CALLBACK(sam_zip_t0);
 COMPRESSOR_CALLBACK(sam_zip_iq_sq_dq);
 COMPRESSOR_CALLBACK(sam_zip_BD_BI);
 extern void sam_zip_initialize (void);
@@ -624,6 +635,7 @@ extern void sam_deep_merge (VBlockP vb);
 extern rom sam_get_deep_tip (void);
 extern void sam_destroy_deep_tip (void);
 extern void sam_update_qual_len (VBlockP vb, uint32_t line_i, uint32_t new_len);
+extern void sam_ultima_update_t0_len (VBlockP vb, uint32_t line_i, uint32_t new_len);
 
 // PIZ Stuff
 extern void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header);
@@ -683,7 +695,7 @@ extern void sam_reset_line (VBlockP vb);
                       sam_piz_special_FI, sam_piz_special_cm, sam_piz_special_COPY_BUDDY, sam_piz_special_SET_BUDDY, \
                       sam_piz_special_TX_AN_POS, sam_piz_special_COPY_TEXTUAL_CIGAR, sam_piz_special_BISMARK_XM, \
                       sam_piz_special_BSBOLT_XB, sam_piz_special_UQ, sam_piz_special_iq_sq_dq, sam_piz_special_DEMUX_BY_QUAL, \
-                      ultima_c_piz_special_DEMUX_BY_Q4NAME, \
+                      ultima_c_piz_special_DEMUX_BY_Q4NAME, sam_piz_special_bi \
                     }
 SPECIAL (SAM, 0,  CIGAR,                 sam_cigar_special_CIGAR);
 SPECIAL (SAM, 1,  TLEN_old,              sam_piz_special_TLEN_old);            // used up to 12.0.42
@@ -740,7 +752,8 @@ SPECIAL (SAM, 51, UQ,                    sam_piz_special_UQ);                  /
 SPECIAL (SAM, 52, iqsqdq,                sam_piz_special_iq_sq_dq);            // introduced 15.0.0
 SPECIAL (SAM, 53, DEMUX_BY_QUAL,         sam_piz_special_DEMUX_BY_QUAL);       // introduced 15.0.10
 SPECIAL (SAM, 54, ULTIMA_C,              ultima_c_piz_special_DEMUX_BY_Q4NAME);// introduced 15.0.15
-#define NUM_SAM_SPECIAL 55
+SPECIAL (SAM, 55, bi,                    sam_piz_special_bi);                  // introduced 15.0.16
+#define NUM_SAM_SPECIAL 56
  
 #define SAM_LOCAL_GET_LINE_CALLBACKS                          \
     { DT_SAM, _OPTION_BD_BI,       sam_zip_BD_BI           }, \
@@ -750,7 +763,8 @@ SPECIAL (SAM, 54, ULTIMA_C,              ultima_c_piz_special_DEMUX_BY_Q4NAME);/
     { DT_SAM, _OPTION_TQ_Z,        sam_zip_TQ              }, \
     { DT_SAM, _OPTION_QX_Z,        sam_zip_QX              }, \
     { DT_SAM, _OPTION_2Y_Z,        sam_zip_2Y              }, \
-    { DT_SAM, _OPTION_iq_sq_dq,    sam_zip_iq_sq_dq        }, 
+    { DT_SAM, _OPTION_iq_sq_dq,    sam_zip_iq_sq_dq        }, \
+    { DT_SAM, _OPTION_t0_Z,        sam_zip_t0              }, 
 
 #define BAM_LOCAL_GET_LINE_CALLBACKS                          \
     { DT_BAM, _OPTION_BD_BI,       sam_zip_BD_BI           }, \
@@ -760,7 +774,8 @@ SPECIAL (SAM, 54, ULTIMA_C,              ultima_c_piz_special_DEMUX_BY_Q4NAME);/
     { DT_BAM, _OPTION_TQ_Z,        sam_zip_TQ              }, \
     { DT_BAM, _OPTION_QX_Z,        sam_zip_QX              }, \
     { DT_BAM, _OPTION_2Y_Z,        sam_zip_2Y              }, \
-    { DT_BAM, _OPTION_iq_sq_dq,    sam_zip_iq_sq_dq        }, 
+    { DT_BAM, _OPTION_iq_sq_dq,    sam_zip_iq_sq_dq        }, \
+    { DT_BAM, _OPTION_t0_Z,        sam_zip_t0              }, 
     
 // Important: Numbers (and order) of translators cannot be changed, as they are part of the file format
 // (they are included in the TOP2BAM container)

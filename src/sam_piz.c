@@ -1052,7 +1052,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_COPY_BUDDY)
             sam_reconstruct_from_buddy_get_textual_snip (vb, base_ctx, buddy_type, pSTRa(snip));
             RECONSTRUCT_snip;
 
-            if (ctx->did_i == SAM_QNAME && buddy_type == BUDDY_MATE && segconf.flav_prop[QNAME1].has_R)
+            if (ctx->did_i == SAM_QNAME && buddy_type == BUDDY_MATE && segconf.flav_prop[QNAME1].is_mated)
                 *BLSTtxt = (*BLSTtxt=='1') ? '2' : '1';
 
             ctx_set_last_value (VB, ctx, (int64_t)buddy_line_i); // this context has STORE_NONE so this can't conflict with anything

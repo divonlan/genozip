@@ -355,34 +355,45 @@ QnameTestResult qname_test_flavor (STRp(qname), QType q, QnameFlavor qfs, bool q
     if (q != QANY && qfs->only_q != QANY && qfs->only_q != q
         && !(qfs->only_q == Q1or3   && (q == QNAME1 || q == QLINE3))
         && !(qfs->only_q == QSAM    && (Z_DT(BAM) || Z_DT(SAM)))
-        && !(qfs->only_q == Q2orSAM && (q == QNAME2 || Z_DT(BAM) || Z_DT(SAM)))) return QTR_WRONG_Q; 
+        && !(qfs->only_q == Q2orSAM && (q == QNAME2 || Z_DT(BAM) || Z_DT(SAM)))) 
+        return QTR_WRONG_Q; 
 
     if (q==QNAME2 && (segconf.tech != qfs->qname1_tech && segconf.tech != TECH_UNKNOWN))
         return QTR_TECH_MISMATCH;
 
-    if (!qname_len) return QTR_QNAME_LEN_0;
+    if (!qname_len) 
+        return QTR_QNAME_LEN_0;
 
     // test fixed length, if applicable
-    if (qfs->fixed_len && qname_len != qfs->fixed_len) return QTR_FIXED_LEN_MISMATCH;
+    if (qfs->fixed_len && qname_len != qfs->fixed_len) 
+        return QTR_FIXED_LEN_MISMATCH;
+
+    if (qfs->is_mated && qname[qname_len-1] != '1' && qname[qname_len-1] != '2') 
+        return QTR_NO_MATE;
 
     str_split_by_container (qname, qname_len, &qfs->con, qfs->con_prefix, qfs->con_prefix_len, item, quiet ? NULL : qfs->name);
-    if (!n_items) return QTR_CONTAINER_MISMATCH; // failed to split according to container - qname is not of this flavor
+    if (!n_items) 
+        return QTR_CONTAINER_MISMATCH; // failed to split according to container - qname is not of this flavor
 
     // items cannot include whitespace or non-printable chars
     for (uint32_t item_i=0; item_i < n_items; item_i++)
-        if (!str_is_no_ws (STRi(item, item_i))) return QTR_BAD_CHARS;
+        if (!str_is_no_ws (STRi(item, item_i))) 
+            return QTR_BAD_CHARS;
 
     // check that all the items expected to be numeric (leading zeros ok) are indeed so
     for (const int *item_i = qfs->numeric_items; *item_i != -1; item_i++)
-        if (!qfs->is_hex[*item_i] && !str_is_numeric (STRi(item, *item_i))) return QTR_BAD_NUMERIC;
+        if (!qfs->is_hex[*item_i] && !str_is_numeric (STRi(item, *item_i))) 
+            return QTR_BAD_NUMERIC;
 
     // check that all the items expected to be lower case hexadecimal are indeed so
     for (const int *item_i = qfs->hex_items; *item_i != -1; item_i++)
-        if (!str_is_hexlo (STRi(item, *item_i))) return QTR_BAD_HEX;
+        if (!str_is_hexlo (STRi(item, *item_i))) 
+            return QTR_BAD_HEX;
 
     // check that all the items expected to be integer (no leading zeros) are indeed so
     for (const int *item_i = qfs->integer_items; *item_i != -1; item_i++)
-        if (!qfs->is_hex[*item_i] && !str_is_int (STRi(item, *item_i))) return QTR_BAD_INTEGER;
+        if (!qfs->is_hex[*item_i] && !str_is_int (STRi(item, *item_i))) 
+            return QTR_BAD_INTEGER;
 
     return QTR_SUCCESS; // yes, qname is of this flavor
 }
@@ -404,7 +415,7 @@ void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
             static QnameCNN char_to_cnn[256] = CHAR_TO_CNN;
             segconf.flav_prop[q] = (QnameFlavorProp){ .id          = qfs->id, 
                                                       .has_seq_len = qfs->seq_len_item != -1,
-                                                      .has_R       = qfs->is_mated, 
+                                                      .is_mated    = qfs->is_mated, 
                                                       .cnn         = char_to_cnn[(int)qfs->cut_to_canonize] };
             
             if (q == QNAME1 || (q == QNAME2 && segconf.tech == TECH_NCBI))
@@ -569,9 +580,6 @@ static bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additio
             ctx_set_last_value (vb, item_ctx, value);  
     }
 
-    if (segconf.running && segconf.flav_prop[q].has_R && qname[qname_len-1] != '1' && qname[qname_len-1] != '2')
-        segconf.flav_prop[q].has_R = false;
-
     return true;
 }
 
@@ -605,12 +613,15 @@ void qname_seg (VBlockP vb, QType q, STRp (qname), unsigned add_additional_bytes
 
     if (segconf.running) {
         // collect the first 6 qnames / q2names, if flavor is unknown    
-        if (vb->line_i < 6 && !flavor) // unrecognized flavor
-            memcpy (segconf.unknown_flavor_qnames[q][vb->line_i], qname, MIN_(qname_len, UNK_QNANE_LEN));
+        if (segconf.n_unk_flav_qnames[q] < NUM_COLLECTED_WORDS && !flavor) // unrecognized flavor
+            memcpy (segconf.unk_flav_qnames[q][segconf.n_unk_flav_qnames[q]], qname, MIN_(qname_len, UNK_QNANE_LEN));
+    
+        if (!segconf.n_unk_flav_qnames[q] || memcmp (segconf.unk_flav_qnames[q][segconf.n_unk_flav_qnames[q]], segconf.unk_flav_qnames[q][segconf.n_unk_flav_qnames[q]-1], UNK_QNANE_LEN))
+            segconf.n_unk_flav_qnames[q]++; // advance iff qname is different than previous line (not always the case if collated)
     }
 
 done:
-    seg_set_last_txt (vb, qname_ctx, STRa(qname)); // needed also for kraken in sam
+    seg_set_last_txt (vb, qname_ctx, STRa(qname)); // needed also bi:Z and for kraken in sam
     COPY_TIMER (qname_seg);
 }
 
@@ -621,7 +632,7 @@ void qname_canonize (QType q, rom qname, uint32_t *qname_len)
 
     // mated: "HSQ1004:134:C0D8DACXX:3:1101:1318:114841/2" ⟶ "HSQ1004:134:C0D8DACXX:3:1101:1318:114841"
     // SRA2:  "ERR2708427.177.1" ⟶ "ERR2708427.177"
-    if (f->has_R && *qname_len > 2) 
+    if (f->is_mated && *qname_len > 2) 
         *qname_len -= 2;
 
     // eg: "NOVID_3053_FC625AGAAXX:6:1:1069:11483:0,84" ⟶ "NOVID_3053_FC625AGAAXX:6:1:1069:11483"

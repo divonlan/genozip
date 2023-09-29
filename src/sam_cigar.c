@@ -848,7 +848,7 @@ void sam_cigar_seg_MC_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(mc), uint32_t a
 
     dl->MC = TXTWORD(mc); 
 
-    seg_by_did (VB, STRa(vb->mux_MC.snip), OPTION_MC_Z, 0); // de-multiplexor
+    seg_by_did (VB, STRa(vb->mux_MC.snip), OPTION_MC_Z, 0); // de-multiplexer
 
     ctx_set_last_value (VB, CTX(OPTION_MC_Z), (ValueType){ .i = sam_cigar_get_MC_ref_consumed (STRa(mc)) } );
 }

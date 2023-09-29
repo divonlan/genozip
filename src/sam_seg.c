@@ -342,7 +342,7 @@ void sam_seg_initialize (VBlockP vb_)
                    T(MP(NGMLR), OPTION_QS_i), T(MP(NGMLR), OPTION_QE_i), T(MP(NGMLR), OPTION_XR_i),
                    DID_EOL);
 
-    ctx_set_ltype (VB, LT_UINT32, OPTION_CP_i, DID_EOL);
+    ctx_set_ltype (VB, LT_UINT32, SAM_POS, OPTION_CP_i, DID_EOL);
 
     if (segconf.is_collated)
         CTX(SAM_POS)->flags.store_delta = true; // since v12.0.41
@@ -419,7 +419,10 @@ void sam_seg_initialize (VBlockP vb_)
         sam_seg_TX_AN_initialize (vb, OPTION_AN_Z);
     }
 
-    if (MP(ULTIMA)) sam_ultima_seg_initialize (vb);
+    if (MP(ULTIMA)) 
+        sam_ultima_seg_initialize (vb);
+    else
+        CTX(OPTION_t0_Z)->no_callback = true; // override Ultima's sam_zip_t0
     
     ctx_set_store (VB, STORE_INDEX, OPTION_XA_Z, DID_EOL); // for containers this stores repeats - used by sam_piz_special_X1->container_peek_repeats
 
@@ -429,7 +432,7 @@ void sam_seg_initialize (VBlockP vb_)
     else if (MP(HISAT2)) // ZS:i is like BWA's XS:i
         seg_mux_init (VB, CTX(OPTION_ZS_i), 4, SAM_SPECIAL_BWA_XS, false, (MultiplexerP)&vb->mux_XS);
 
-    if (sam_has_bowtie2_YS_i()) {
+    if (segconf.sam_has_bowtie2_YS_i) {
         ctx_set_store_per_line (VB, OPTION_AS_i, OPTION_YS_i, DID_EOL);
         seg_mux_init (VB, CTX(OPTION_YS_i), 2, SAM_SPECIAL_DEMUX_BY_MATE, false, (MultiplexerP)&vb->mux_YS);
     }
@@ -685,9 +688,13 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
     segconf.AS_is_2ref_consumed = (segconf.AS_is_2ref_consumed > vb->lines.len32 / 2);
 
     // possibly reset sam_bisulfite, first set in sam_header_zip_inspect_PG_lines 
-    segconf.sam_bisulfite = MP(BISMARK) || MP(BSSEEKER2) || (MP(DRAGEN) && segconf.has[OPTION_XM_Z]) ||
-                            MP(BSBOLT) || (MP(GEM3) && segconf.has[OPTION_XB_A]);
+    segconf.sam_bisulfite = MP(BISMARK) || MP(BSSEEKER2) || MP(BSBOLT) ||
+                            (MP(DRAGEN) && segconf.has[OPTION_XM_Z])   ||
+                            (MP(ULTIMA) && segconf.has[OPTION_XM_Z])   ||
+                            (MP(GEM3)   && segconf.has[OPTION_XB_A]);
 
+    segconf.sam_has_bismark_XM_XG_XR &= segconf.sam_bisulfite;
+    
     ASSINP (!segconf.sam_bisulfite        // not a bisulfite file
          || flag.force                    // --force overrides
          || IS_REF_EXTERNAL || IS_REF_EXT_STORE   // reference is provided
@@ -779,6 +786,9 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
         WARN0 ("FYI: Genozip currently doesn't do a very good job at compressing PacBio kinetic BAM files. This is because we haven't figured out yet a good method to compress kinetic data - the ip:B, pw:B, fi:B, fp:B, ri:B, rp:B fields. Sorry!\n");
         RESTORE_FLAG(quiet);
     }
+
+    if (TECH(ULTIMA))
+        sam_ultima_finalize_segconf (vb);
 
     if (flag.reference == REF_INTERNAL && !txt_file->redirected && (!segconf.sam_is_unmapped || !segconf.is_long_reads))
         TIP ("Compressing a %s file using a reference file can reduce the size by 7%%-30%%%s.\n"
@@ -1257,14 +1267,14 @@ static inline bool has_same_qname (VBlockSAMP vb, STRp (qname), LineIType buddy_
 // seg mate as buddy and return true if this line has one
 static inline BuddyType sam_seg_mate (VBlockSAMP vb, SamFlags f, STRp (qname), uint32_t my_hash, bool *insert_to_hash)
 {
-    if (sam_is_depn (f) || !segconf.is_paired) return false;
+    if (sam_is_depn (f) || !segconf.is_paired) return BUDDY_NONE;
 
     uint32_t mate_hash = qname_calc_hash (QNAME1, STRa(qname), !f.is_last, true, NULL) & MAXB(vb->qname_hash.prm8[0]);
     LineIType candidate = LINE_BY_HASH(mate_hash);
     SamFlags mate_f = DATA_LINE(candidate)->FLAG;
 
     // case: mate is found
-    if (has_same_qname (vb, STRa (qname), candidate, segconf.flav_prop[QNAME1].has_R) && 
+    if (has_same_qname (vb, STRa (qname), candidate, segconf.flav_prop[QNAME1].is_mated) && 
         !sam_is_depn (mate_f) && 
         mate_f.is_last != f.is_last) {
         
@@ -1287,7 +1297,7 @@ static inline BuddyType sam_seg_mate (VBlockSAMP vb, SamFlags f, STRp (qname), u
 // seg saggy (a previous line that's member of the same sag) as buddy and return true if this line has one
 static inline BuddyType sam_seg_saggy (VBlockSAMP vb, SamFlags f, STRp (qname), uint32_t my_hash, bool *insert_to_hash)
 {
-    if (!IS_MAIN(vb)) return false;
+    if (!IS_MAIN(vb)) return BUDDY_NONE;
 
     LineIType candidate = LINE_BY_HASH(my_hash);
     SamFlags saggy_f = DATA_LINE(candidate)->FLAG;
@@ -1370,12 +1380,16 @@ void sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAM *dl, STRp (qname), unsigned ad
 
     // case: if QNAME is the same as buddy's - seg against buddy
     // note: in PRIM segging against buddy here is used for loading sag, SAM_QNAMESA is used for reconstruction
-    if (bt)
+    if (bt) {
         seg_by_ctx (VB, (char[]){SNIP_SPECIAL, SAM_SPECIAL_COPY_BUDDY, '0' + bt}, 3, ctx, qname_len + add_additional_bytes); // seg QNAME as copy-from-buddy
+        seg_set_last_txt (VB, ctx, STRa(qname)); 
+    }
 
     // case: DEPN with SA Group: seg against SA Group (unless already segged against buddy)
-    else if (IS_DEPN(vb) && vb->sag)
+    else if (IS_DEPN(vb) && vb->sag) {
         sam_seg_against_sa_group (vb, ctx, qname_len + add_additional_bytes);
+        seg_set_last_txt (VB, ctx, STRa(qname)); 
+    }
 
     else normal_seg:
         qname_seg (VB, QNAME1, STRa (qname), add_additional_bytes); // note: for PRIM component, this will be consumed with loading SA

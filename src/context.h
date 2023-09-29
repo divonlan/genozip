@@ -101,7 +101,7 @@ static inline uint8_t NEXTLOCAL2BITS(ContextP ctx) { uint8_t ret = bits_get ((Bi
 #define ctx_node_vb(ctx, node_index, snip_in_dict, snip_len) ctx_node_vb_do(ctx, node_index, snip_in_dict, snip_len, __FUNCLINE)
 #define node_word_index(vb,did_i,index) ((index)!=WORD_INDEX_NONE ? ctx_node_vb (&(vb)->contexts[did_i], (index), 0,0)->word_index : WORD_INDEX_NONE)
 
-#define CTX(did_i)   ({ Did my_did_i = (did_i); /* could be an expression */\
+#define CTX(did_i)   ({ Did my_did_i = (did_i); /* evaluate did_i only once */\
                         ASSERT (my_did_i < MAX_DICTS, "CTX(): did_i=%u out of range", my_did_i); /* optimized out for constant did_i */ \
                         (&vb->contexts[my_did_i]); })
 

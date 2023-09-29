@@ -960,7 +960,10 @@ static inline void ctx_drop_all_the_same (VBlockP vb, ContextP zctx, ContextP vc
     if (flag.debug_generate) 
         iprintf ("%s: %s is \"all_the_same\" - dropped %sb250 b250.len=%"PRIu64"\n", VB_NAME, vctx->tag_name, (is_simple_lookup ? "dict AND " : ""), vctx->b250.len);
     
+    uint32_t num_of_fields_segged = vctx->b250.len32; 
     buf_free (vctx->b250);
+    vctx->b250.count = num_of_fields_segged; // for stats - consumed in ctx_update_stats 
+
     if (is_simple_lookup) buf_free (vctx->dict); // if this is a SNIP_LOOKUP, we don't need the new dict entry added in this VB, as absent dict, lookup will happen 
     return;
 

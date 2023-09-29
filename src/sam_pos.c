@@ -23,16 +23,18 @@ PosType32 sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM *dl, WordIndex prev_line_ch
     PosType32 pos = dl->POS;
     PosType32 prev_line_pos = vb->line_i ? (dl-1)->POS : 0;
 
+    ContextP pos_ctx = CTX(SAM_POS);
+
     bool do_mux = IS_MAIN(vb) && segconf.is_paired; // for simplicity. To do: also for prim/depn components
     int channel_i = sam_has_mate?1 : sam_has_prim?2 : 0;
     ContextP channel_ctx = do_mux ? seg_mux_get_channel_ctx (VB, SAM_POS, (MultiplexerP)&vb->mux_POS, channel_i) 
-                                  : CTX(SAM_POS);
+                                  : pos_ctx;
 
     // case: DEPN or PRIM line.
     // Note: in DEPN, pos already verified in sam_sa_seg_depn_find_sagroup to be as in SA alignment
     if (sam_seg_has_sag_by_SA (vb)) {
         sam_seg_against_sa_group (vb, channel_ctx, add_bytes);
-        ctx_set_last_value (VB, CTX(SAM_POS), (int64_t)pos);
+        ctx_set_last_value (VB, pos_ctx, (int64_t)pos);
 
         // in PRIM, we also seg it as the first SA alignment (used for PIZ to load alignments to memory, not used for reconstructing SA)
         if (IS_PRIM(vb)) {
@@ -51,13 +53,16 @@ PosType32 sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM *dl, WordIndex prev_line_ch
     else if (sam_has_prim && sam_seg_is_item_predicted_by_prim_SA (vb, SA_POS, pos)) 
         seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_COPY_PRIM, '0'+SA_POS }, 3, channel_ctx, add_bytes); 
 
-    else  
+    else if (!segconf.is_sorted) 
+        seg_integer_fixed (VB, channel_ctx, &pos, true, add_bytes);
+
+    else 
         pos = seg_pos_field (VB, channel_ctx->did_i, SAM_POS, 0, 0, 0, 0, pos, add_bytes);
 
-    ctx_set_last_value (VB, CTX(SAM_POS), (int64_t)pos);
+    ctx_set_last_value (VB, pos_ctx, (int64_t)pos);
 
     if (do_mux)
-        seg_by_did (VB, STRa(vb->mux_POS.snip), SAM_POS, 0); // de-multiplexor
+        seg_by_did (VB, STRa(vb->mux_POS.snip), SAM_POS, 0); // de-multiplexer
 
     random_access_update_pos (VB, 0, SAM_POS);
 

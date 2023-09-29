@@ -877,7 +877,7 @@ static inline void vcf_seg_FORMAT_RGQ (VBlockVCFP vb, ContextP ctx, STRp(rgq), C
     if (gt[0] != '.') {
         if (!segconf.has[FORMAT_DP]          ||    // segconf didn't detect FORMAT/DP so we didn't initialize the mux
             !ctx_encountered (VB, FORMAT_DP) ||    // no DP in the FORMAT of this line
-            segconf.running) goto fallback;        // multiplexor not initalized yet 
+            segconf.running) goto fallback;        // multiplexer not initalized yet 
 
         int64_t DP;
         if (!str_get_int (STRlst(FORMAT_DP), &DP)) // in some files, DP may be '.'

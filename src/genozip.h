@@ -249,7 +249,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     CODEC_BAM=23,       // in v8 BAM was a codec which was compressed using samtools as external compressor. Since v14 we use the codec name for displaying "BAM" in stats total line.
     CODEC_CRAM=24, CODEC_ZIP=25,
 
-    CODEC_LONGR=26, CODEC_NORMQ=27, CODEC_HOMP=28,
+    CODEC_LONGR=26, CODEC_NORMQ=27, CODEC_HOMP=28, CODEC_T0=29,
 
     NUM_CODECS,
 } Codec; 

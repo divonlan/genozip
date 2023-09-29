@@ -118,7 +118,7 @@ static void stream_abort_cannot_exec (rom exec_name, rom reason)
     fprintf (stderr, "\n%s: %s, %s needs to be in the execution path.\n", global_cmd, reason, exec_name);  
 
     if (!strstr (exec_name, "genozip")) // this is NOT genozip run from main_test_after_genozip
-        fprintf (stderr, "Note that %s is a separate software package that is not affiliated with genozip in any way.\n", exec_name);  
+        fprintf (stderr, "Note that %s is a separate software package that is not affiliated with Genozip in any way.\n", exec_name);  
 
     exit (EXIT_STREAM); // special code - if we are a child existing, the parent will catch this error code
 }

@@ -413,22 +413,25 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
 
     if (MP(STAR) && strstr (hdr, "--solo")) segconf.star_solo = true;
 
-    // note: this file *might* be of bisulfite-treated reads. 
-    // This variable might be reset after segconf if it fails additonal conditions 
-    segconf.sam_bisulfite     = MP(BISMARK) || MP(BSSEEKER2) || MP(DRAGEN) || MP(BSBOLT) || MP(GEM3);
+    // note: this file *might* be of bisulfite-treated reads. This variable might be reset in sam_seg_finalize_segconf if it fails additonal conditions 
+    segconf.sam_bisulfite     = MP(BISMARK) || MP(BSSEEKER2) || MP(DRAGEN) || MP(BSBOLT) || MP(GEM3) || MP(ULTIMA);
+    segconf.sam_has_bismark_XM_XG_XR = MP(BISMARK) || MP(DRAGEN) || MP(ULTIMA);
+
     segconf.is_bwa            = MP(BWA) || MP(BSBOLT) || MP (CPU) || MP(BWA_MEM2) || MP(PARABRICKS); // aligners based on bwa
     segconf.is_minimap2       = MP(MINIMAP2) || MP(WINNOWMAP) || MP(PBMM2);   // aligners based on minimap2
     segconf.is_bowtie2        = MP(BOWTIE2) || MP(HISAT2) || MP(TOPHAT) || MP(BISMARK) || MP(BSSEEKER2); // aligners based on bowtie2
 
     segconf.sam_has_SA_Z      = segconf.is_bwa || segconf.is_minimap2 || MP(NGMLR) || MP(DRAGEN) || MP(NOVOALIGN) || MP(ULTIMA) || MP(ISAAC); /*|| MP(LONGRANGER); non-standard SA:Z format (POS is off by 1, main-field NM is missing) */ 
-    segconf.sam_has_BWA_XA_Z  = (segconf.is_bwa || MP(GEM3) || MP(GEM2SAM) || MP(DELVE) || MP(DRAGEN)) ? yes 
-                              : MP(TMAP) || MP(TORRENT_BC)                                             ? no 
-                              :                                                                          unknown;
+    segconf.sam_has_BWA_XA_Z  = (segconf.is_bwa || MP(GEM3) || MP(GEM2SAM) || MP(DELVE) || MP(DRAGEN) || MP(ULTIMA)) ? yes 
+                              : MP(TMAP) || MP(TORRENT_BC)                                                           ? no 
+                              :                                                                                        unknown;
     segconf.sam_has_BWA_XS_i  = segconf.is_bwa || MP(TMAP) || MP(GEM3) || (segconf.is_bowtie2 && !MP(HISAT2)) || MP(CPU) || MP(LONGRANGER) || MP(DRAGEN);
     segconf.sam_has_BWA_XM_i  = segconf.is_bwa || segconf.is_bowtie2 || MP(NOVOALIGN) || MP(DRAGEN);
     segconf.sam_has_BWA_XT_A  = segconf.is_bwa || MP(DRAGEN);
     segconf.sam_has_BWA_XC_i  = segconf.is_bwa || MP(DRAGEN);
     segconf.sam_has_BWA_X01_i = segconf.is_bwa || MP(DRAGEN);
+
+    segconf.sam_has_bowtie2_YS_i = MP(BOWTIE2) || MP(BSSEEKER2) || MP(HISAT2);
 
     // build buffer of unique PN+ID fields, for stats
     sam_header_zip_build_hdr_PGs (hdr, after);
