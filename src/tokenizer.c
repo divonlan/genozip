@@ -20,8 +20,8 @@
 // Up to MAX_TOKENS subfields are permitted - if there are more, then all the trailing part is just
 // consider part of the last component.
 // each subfield is stored in its own dictionary
-const char sep_with_space[256]    = { [':']=true, [';']=true, ['/']=true, ['|']=true, ['_']=true, ['#']=true, [' ']=true, ['\t']=true, [1]=true };
-const char sep_without_space[256] = { [':']=true, [';']=true, ['/']=true, ['|']=true, ['_']=true, ['#']=true, };
+const char sep_with_space[256]    = { [':']=true, [';']=true, ['/']=true, ['|']=true, ['_']=true, ['#']=true, ['=']=true, [' ']=true, ['\t']=true, [1]=true };
+const char sep_without_space[256] = { [':']=true, [';']=true, ['/']=true, ['|']=true, ['_']=true, ['#']=true, ['=']=true, };
 
 //--------------------------------------------
 // Default compound segger
@@ -96,29 +96,31 @@ static void tokenizer_split (STRp(field), rom is_sep, bool split_on_digit_bounda
     }
 }                                      
 
-Container tokenizer_initialize_container_array (DictId dict_id)
+static MediumContainer tokenizer_con_template; // uninitialized
+void tokenizer_zip_initialize (void)
 {
-    Container con = (Container){ .repeats = 1 };
+    DO_ONCE {
+        tokenizer_con_template = (MediumContainer){ .repeats = 1 };
 
-    for (unsigned i=0; i < MAX_TOKENS; i++) {
-        bytes id = dict_id.id;
-        
-        char dict_id_str[8] = { id[0], base32(i), id[1], id[2], id[3], id[4], id[5], id[6] };
-        
-        con.items[i].dict_id = dict_id_make (dict_id_str, 8, DTYPE_1);
+        DictId dict_id = dict_id_make (cSTR("TOKEN"), DTYPE_1); 
+    
+        for (unsigned i=0; i < MAX_TOKENS; i++) {
+            bytes id = dict_id.id;
+            
+            char dict_id_str[8] = { id[0], base32(i), id[1], id[2], id[3], id[4], id[5], id[6] };
+            
+            tokenizer_con_template.items[i].dict_id = dict_id_make (dict_id_str, 8, DTYPE_1);
+        }
     }
 
-    return con;
+    // note: contexts are not created here - they are created during seg only if actually needed
 }
 
 void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field), 
                     rom is_sep,   
                     unsigned add_additional_bytes)  // account for characters in addition to the field
 {
-    // when generate the items from "TOKEN" - from from field_ctx's dict_id to avoid clashing
-    // with qname in case tokenizer is used as a fallback
-    DictId generator_dict_id = dict_id_make (cSTR("TOKEN"), DTYPE_1); 
-    Container con = tokenizer_initialize_container_array (generator_dict_id); 
+    MediumContainer con = tokenizer_con_template; 
     Token items[MAX_TOKENS];
 
     tokenizer_split (STRa(field), is_sep, false, items, &con.nitems_lo);
@@ -128,8 +130,8 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
     unsigned prefixes_len = 2;
     unsigned num_seps = 0;
 
-    for (unsigned i=0; i < con.nitems_lo; i++) {
-        Token  *ci = &items[i];
+    for (uint8_t i=0; i < con.nitems_lo; i++) {
+        Token *ci = &items[i];
         ContainerItem *CI = &con.items[i];
 
         // process the subfield that just ended
@@ -182,5 +184,5 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
         seg_set_last_txt (vb, item_ctx, STRa(ci->item));
     }
 
-    container_seg (vb, field_ctx, &con, prefixes, prefixes_len, num_seps + add_additional_bytes);
+    container_seg (vb, field_ctx, (ContainerP)&con, prefixes, prefixes_len, num_seps + add_additional_bytes);
 }

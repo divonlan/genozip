@@ -297,6 +297,8 @@ void qname_zip_initialize (void)
         }
 
         seg_prepare_snip_other (SNIP_COPY, (DictId)_SAM_QNAME, false, 0, copy_qname); // QNAME dict_id is the same for SAM, FASTQ, KRAKEN
+    
+        tokenizer_zip_initialize();
     }
 }
 

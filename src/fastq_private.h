@@ -12,6 +12,9 @@
 #include "vblock.h"
 #include "file.h"
 
+#define DTYPE_QNAME     DTYPE_1
+#define DTYPE_FASTQ_AUX DTYPE_2
+
 typedef struct {
     TxtWord seq;
     TxtWord qual;                // start within vb->txt_data (qual.len==seq.len except if condensed by codec_homp_compress)

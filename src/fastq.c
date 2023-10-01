@@ -461,9 +461,9 @@ void fastq_seg_finalize (VBlockP vb)
         prefixes_len -= px_len; })
 
     bool has_line3  = segconf.line3 != L3_EMPTY;
-    bool has_qname2 = segconf.has_qname2  && !flag.optimize_DESC;
-    bool has_extra  = VB_FASTQ->has_extra && !flag.optimize_DESC;
-    bool has_aux    = segconf.has_aux     && !flag.optimize_DESC;
+    bool has_qname2 = !flag.optimize_DESC && segconf.has_qname2;
+    bool has_extra  = !flag.optimize_DESC && VB_FASTQ->has_extra;
+    bool has_aux    = !flag.optimize_DESC && (segconf.has_aux || segconf.has_saux);
     bool desc_is_l3 = segconf.desc_is_l3; // whether the Description (QNAME2 + EXTRA + AUX) appears on line 1 or line 3 (note: if on both, the line 3 is just a copy snip from line 1)
 
     // remove unneeded container and prefix items - in reverse order
@@ -706,7 +706,7 @@ rom fastq_seg_txt_line (VBlockP vb_, rom line_start, uint32_t remaining, bool *h
     fastq_seg_QNAME (vb, STRa(qname), line1_len, segconf.deep_qtype == QNAME1 && deep_qname, uncanonical_suffix_len);
 
     // seg DESC (i.e. QNAME2 + EXTRA + AUX), it might have come either from line1 or from line3
-    if (segconf.has_desc && !flag.optimize_DESC)
+    if (segconf.has_desc && !flag.optimize_DESC) 
         fastq_seg_DESC (vb, STRa(desc), segconf.deep_qtype == QNAME2 && deep_qname, uncanonical_suffix_len);
 
     fastq_seg_LINE3 (vb, STRa(line3), STRa(qname), STRa(desc)); // before SEQ, in case it as a segconf_seq_len_dict_id field

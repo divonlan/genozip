@@ -1147,7 +1147,7 @@ static void sam_seg_array_field (VBlockSAMP vb, ZipDataLineSAM *dl, DictId dict_
     int array_bytes = is_bam ? (width * array_len) : array_len;
     elem_ctx->txt_len += array_bytes;
 
-    con->repeats = (repeats == dl->SEQ.len ? CON_REPEATS_IS_SEQ_LEN : repeats);
+    con->repeats = ((dl && repeats == dl->SEQ.len) ? CON_REPEATS_IS_SEQ_LEN : repeats);
 
     ASSERT (repeats < CONTAINER_MAX_REPEATS, "%s: array has too many elements, more than %u", LN_NAME, CONTAINER_MAX_REPEATS);
 
@@ -1216,6 +1216,48 @@ static void sam_seg_float_as_snip (VBlockSAMP vb, ContextP ctx, STRp(sam_value),
     
     else // sam
         seg_float_or_not (VB, ctx, STRa(sam_value), add_bytes);
+}
+
+// note: also called from fastq_seg_one_saux()
+void sam_seg_aux_field_fallback (VBlockP vb, void *dl, DictId dict_id, char sam_type, char array_subtype,
+                                 STRp(value), ValueType numeric, unsigned add_bytes)
+{
+    // all types of integer
+    if (sam_type == 'i') {
+        ContextP ctx = ctx_get_ctx (vb, dict_id);
+
+        if (!ctx->is_initialized) {
+            ctx->ltype = LT_DYN_INT;
+            ctx->flags.store = STORE_INT; // needs this be reconstructable as BAM
+            ctx->is_initialized = true;
+        }
+
+        seg_integer (VB, ctx, numeric.i, true, add_bytes);
+    }
+
+    else if (sam_type == 'f') {
+        ContextP ctx = ctx_get_ctx (vb, dict_id);
+
+        if (!ctx->is_initialized) 
+            sam_seg_initialize_for_float (VB_SAM, ctx);
+
+        // note: for some fields, sam_seg_float_as_snip() is better.
+        if (IS_BAM_ZIP) {
+            uint32_t f = numeric.i; // bam_get_one_aux stores float values as binary-identical 32bit integer
+            seg_integer_fixed (VB, ctx, &f, LOOKUP_NONE, add_bytes);
+        }
+        
+        else // sam
+            seg_float_or_not (VB, ctx, STRa(value), add_bytes);
+    }
+
+    // Numeric array
+    else if (sam_type == 'B') 
+        sam_seg_array_field (VB_SAM, (ZipDataLineSAM *)dl, dict_id, array_subtype, STRa(value), NULL, NULL);
+
+    // Z,H,A - normal snips in their own dictionary
+    else 
+        seg_by_dict_id (VB, STRa(value), dict_id, add_bytes);     
 }
 
 // process an optional subfield, that looks something like MX:Z:abcdefg. We use "MX" for the field name, and
@@ -1412,43 +1454,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
         case _OPTION_t0_Z: COND (segconf.sam_has_ultima_t0, sam_seg_ultima_t0 (vb, dl, STRa(value), add_bytes));
 
         default: fallback:
-            
-            // all types of integer
-            if (sam_type == 'i') {
-                ContextP ctx = ctx_get_ctx (vb, dict_id);
-
-                if (!ctx->is_initialized) {
-                    ctx->ltype = LT_DYN_INT;
-                    ctx->flags.store = STORE_INT; // needs this be reconstructable as BAM
-                    ctx->is_initialized = true;
-                }
-
-                seg_integer (VB, ctx, numeric.i, true, add_bytes);
-            }
-
-            else if (sam_type == 'f') {
-                ContextP ctx = ctx_get_ctx (vb, dict_id);
-
-                if (!ctx->is_initialized) 
-                    sam_seg_initialize_for_float (vb, ctx);
-
-                // note: for some fields, sam_seg_float_as_snip() is better.
-                if (is_bam) {
-                    uint32_t f = numeric.i; // bam_get_one_aux stores float values as binary-identical 32bit integer
-                    seg_integer_fixed (VB, ctx, &f, LOOKUP_NONE, add_bytes);
-                }
-                
-                else // sam
-                    seg_float_or_not (VB, ctx, STRa(value), add_bytes);
-            }
-
-            // Numeric array
-            else if (sam_type == 'B') 
-                sam_seg_array_field (vb, dl, dict_id, array_subtype, STRa(value), NULL, NULL);
-
-            // Z,H,A - normal snips in their own dictionary
-            else 
-                seg_by_dict_id (VB, STRa(value), dict_id, add_bytes); 
+            sam_seg_aux_field_fallback (VB, dl, dict_id, sam_type, array_subtype, STRa(value), numeric, add_bytes);
     }
     
     return dict_id;

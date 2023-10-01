@@ -182,15 +182,16 @@ typedef struct {
     // FASTQ
     union {
         struct {            
-            uint8_t has_desc   : 3; // non-zero if any of the 3 bitfields are set
-            uint8_t unused     : 5;
+            uint8_t has_desc   : 4; // non-zero if any of the 4 bitfields are set
+            uint8_t unused     : 4;
         };
         struct {
             uint8_t has_qname2 : 1;               
             uint8_t has_extra  : 1;
-            uint8_t has_aux    : 1;
+            uint8_t has_aux    : 1; // aux data in the format "length=7 pooptiz=2"
+            uint8_t has_saux   : 1; // aux data in SAM format "BC:Z:TATTCATA+TCCAAGCG        ZX:Z:TTAA"
             uint8_t desc_is_l3 : 1; // either L1 or L3 can have these properties, but not both
-            uint8_t unused2    : 4;
+            uint8_t unused2    : 3;
         };
     };
 

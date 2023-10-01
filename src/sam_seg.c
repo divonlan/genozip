@@ -1193,8 +1193,8 @@ void sam_seg_aux_all (VBlockSAMP vb, ZipDataLineSAM *dl)
             if (idx == vb->idx_NM_i) // we already converted NM to integer, no need to do it again
                 numeric.i = dl->NM;
             else
-                ASSERT(str_get_int (STRa (value), &numeric.i), "%s: Expecting integer value for auxiliary field %c%c but found \"%.*s\"",
-                       LN_NAME, tag[0], tag[1], STRf (value));
+                ASSSEG (str_get_int (STRa (value), &numeric.i), "%s: Expecting integer value for auxiliary field %c%c but found \"%.*s\"",
+                        LN_NAME, tag[0], tag[1], STRf (value));
             value = 0;
         }
 
