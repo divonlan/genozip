@@ -96,7 +96,7 @@ void biopsy_take (VBlockP vb)
 
     return; // we were not requested to take a biopsy from this vb
 
-start_biopsy:
+start_biopsy: {
     DO_ONCE {
         sprintf (&biopsy_fn[strlen(biopsy_fn)], "%s", file_plain_ext_by_dt (txt_file->data_type));
         file_remove (biopsy_fn, true); // remove old file
@@ -126,6 +126,7 @@ start_biopsy:
         biopsy_compress();
         exit_ok;
     }
+}
 }
 
 bool biopsy_is_done (void)
