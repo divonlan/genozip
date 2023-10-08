@@ -214,6 +214,7 @@ out_of_data:
 // called by main thread at the beginning of zipping this file
 void fasta_zip_initialize (void)
 {
+    tokenizer_zip_initialize();
 }
 
 void fasta_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeaderP vb_header)
@@ -249,7 +250,7 @@ void fasta_seg_initialize (VBlockP vb)
     CTX(FASTA_LINEMETA)->no_stons  = true; // avoid edge case where entire b250 is moved to local due to singletons, because fasta_reconstruct_vb iterates on ctx->b250
     CTX(FASTA_COMMENT)->no_stons   = true;
     
-    if (!segconf.fasta_has_contigs) 
+    if (!segconf.fasta_has_contigs || segconf.seq_type == SQT_AMINO) 
         CTX(FASTA_DESC)->no_stons  = true;
 
     if (kraken_is_loaded) {

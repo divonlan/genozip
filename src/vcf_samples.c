@@ -153,6 +153,7 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
     init_mux_by_dosage(DS);
     init_mux_by_dosage(PP);
     init_mux_by_dosage(GP);
+    init_mux_by_dosage(VAF);
     init_mux_by_dosage(PVAL);
     init_mux_by_dosage(FREQ);
     init_mux_by_dosage(RD);
@@ -381,7 +382,7 @@ static inline void vcf_seg_FORMAT_transposed (VBlockVCFP vb, ContextP ctx, STRp(
     
     buf_alloc (vb, &ctx->local, 1, vb->lines.len * vcf_num_samples, uint32_t, 1, CTX_TAG_LOCAL);
 
-    if (str_is_1char (cell, '.')) 
+    if (IS_PERIOD (cell)) 
         BNXT32 (ctx->local) = 0xffffffff;
     
     else {
@@ -1021,7 +1022,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_PGT)
         reconstruct_peek (vb, CTX(FORMAT_PID), pSTRa(pid)); // note: we can't use last_txt, because PS might be reconstructed before PID, as its peeked by GT
         
         // case: if this SPECIAL was used with PID='.'
-        if (str_is_1char (pid, '.')) 
+        if (IS_PERIOD (pid)) 
             RECONSTRUCT1 ('.');
 
         // case: ht0 and ht1 are the same as in GT
@@ -1695,6 +1696,9 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
         
         // VarScan: <ID=FREQ,Number=1,Type=String,Description="Variant allele frequency">
         case _FORMAT_FREQ : vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_FREQ) ; break;
+        
+        // <ID=VAF,Number=A,Type=Float,Description="Variant allele fractions.">
+        case _FORMAT_VAF  : vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_VAF) ; break;
         
         #define ILLUM_GTYPING_MUX_BY_DOSAGE(tag) \
             if (segconf.vcf_illum_gtyping) { vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_##tag); break; }\

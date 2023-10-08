@@ -83,7 +83,7 @@ bool codec_homp_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB get_line_c
 {
     ContextP qual_ctx = CTX(qual_did_i);
 
-    if ((!TECH(ULTIMA) && !MP(ULTIMA)) || // either the TECH or the mapper are an indication of potentially Ultima data 
+    if ((!TECH(ULTIMA) && !TECH(UNKNOWN) && !MP(ULTIMA)) || // either the TECH or the mapper are an indication of potentially Ultima data 
         qual_did_i != FASTQ_QUAL /* =SAM_QUAL */                         ||
         !codec_homp_qual_data_is_a_fit_for_homp (vb, qual_ctx, get_line_cb))
         return false;
@@ -91,6 +91,9 @@ bool codec_homp_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB get_line_c
     qual_ctx->ltype  = LT_CODEC;
     qual_ctx->lcodec = CODEC_HOMP;
 
+    if (segconf.running && TECH(UNKNOWN)) 
+        segconf.tech = TECH_ULTIMA; // if tech is unknown, given HOMP compatability, it is likely Ultima
+        
     return true;
 }
 
@@ -109,7 +112,7 @@ COMPRESS (codec_homp_compress)
         STRw(qual);
         get_line_cb (vb, ctx, line_i, pSTRa (qual), CALLBACK_NO_SIZE_LIMIT, NULL);
 
-        if (!qual_len) continue;
+        if (qual_len <= 1) continue; // including no qual and qual=" "
 
         char *next_condensed = qual; // copy in-place;
 
@@ -150,7 +153,7 @@ COMPRESS (codec_homp_compress)
                 i += hp_len - 1; // skip to end of homopolymer
             }
             
-            else
+            else  
                 *next_condensed++ = qual[i];
         }
 
@@ -198,8 +201,9 @@ CODEC_RECONSTRUCT (codec_homp_reconstruct)
     // get SEQ
     ContextP seq_ctx = VB_DT(FASTQ) ? CTX(FASTQ_SQBITMAP) : CTX(SAM_SQBITMAP);
 
-    rom seq = (VB_DT(SAM) && sam_get_textual_seq(vb)->len) ? B1STc (*sam_get_textual_seq(vb)) // note: textual_seq is prepared in sam_piz_sam2bam_SEQ sam_load_groups_add_seq
-                                                           : last_txtx (vb, seq_ctx); 
+    ConstBufferP textual_seq = VB_DT(SAM) ? sam_get_textual_seq(vb) : NULL; // note: textual_seq is prepared in sam_piz_sam2bam_SEQ sam_load_groups_add_seq
+
+    rom seq = (textual_seq && textual_seq->len32) ? B1STc (*textual_seq) : last_txtx (vb, seq_ctx); 
 
     // case: Deep, and len is only the trimmed suffix as the rest if copied from SAM (see fastq_special_deep_copy_QUAL)
     if (flag.deep && len < vb->seq_len)
@@ -211,37 +215,44 @@ CODEC_RECONSTRUCT (codec_homp_reconstruct)
     char *next_recon = BAFTtxt;
     char *next_condensed = Bc(ctx->local, ctx->next_local);
 
-    for (uint32_t i=0; i < len; i++) {
-        unsigned hp_len = homopolymer_len (seq, len, i);  
-
-        if (hp_len > 1) {
-            // case: non-condensable
-            if (*next_condensed & 0x80) {
-                *next_recon++ = *next_condensed++ & 0x7f;
-                for (unsigned h=1; h < hp_len; h++)
-                    *next_recon++ = *next_condensed++;
-            }
-
-            else { 
-                char prev_qual = 0;
-                for (unsigned h=0; h < (hp_len + 1) / 2; h++) 
-                    *next_recon++ = prev_qual = (prev_qual == TOP_QUAL) ? TOP_QUAL : (*next_condensed++);
-
-                rom c = next_recon - 1 - (hp_len&1);
-                for (unsigned h=0; h < hp_len / 2; h++)
-                    *next_recon++ = *c--; // copy mirror
-            }
-
-            i += hp_len - 1; // skip to end of homopolymer
-        }
-        
-        else
-            *next_recon++ = *next_condensed++;
+    if (*next_condensed == ' ') { // SAM missing quality (expressed as a ' ')
+        sam_reconstruct_missing_quality (vb, reconstruct);
+        ctx->next_local++;
     }
-
-    if (reconstruct) Ltxt += len;
     
-    ctx->next_local = BNUM (ctx->local, next_condensed);
+    else {
+        for (uint32_t i=0; i < len; i++) {
+            unsigned hp_len = homopolymer_len (seq, len, i);  
+
+            if (hp_len > 1) {
+                // case: non-condensable
+                if (*next_condensed & 0x80) {
+                    *next_recon++ = *next_condensed++ & 0x7f;
+                    for (unsigned h=1; h < hp_len; h++)
+                        *next_recon++ = *next_condensed++;
+                }
+
+                else { 
+                    char prev_qual = 0;
+                    for (unsigned h=0; h < (hp_len + 1) / 2; h++) 
+                        *next_recon++ = prev_qual = (prev_qual == TOP_QUAL) ? TOP_QUAL : (*next_condensed++);
+
+                    rom c = next_recon - 1 - (hp_len&1);
+                    for (unsigned h=0; h < hp_len / 2; h++)
+                        *next_recon++ = *c--; // copy mirror
+                }
+
+                i += hp_len - 1; // skip to end of homopolymer
+            }
+            
+            else
+                *next_recon++ = *next_condensed++;
+        }
+
+        if (reconstruct) Ltxt += len;
+
+        ctx->next_local = BNUM (ctx->local, next_condensed);
+    }
 
     COPY_TIMER(codec_homp_reconstruct);
 }

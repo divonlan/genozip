@@ -453,7 +453,7 @@ static void sam_piz_QUAL_primary (VBlockSAMP vb)
 {
     sam_get_sa_grp_qual (vb); // uncompress PRIM qual to vb->scratch
 
-    RECONSTRUCT (vb->scratch.data, vb->scratch.len);
+    RECONSTRUCT_BUF (vb->scratch);
     buf_free (vb->scratch);
 }
 
@@ -499,7 +499,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
       
         if (!reconstruct) {}
 
-        else if (g->no_qual || prim_has_qual_but_i_dont) 
+        else if (g->no_qual || prim_has_qual_but_i_dont) // note: g->no_qual is set if the line has no QUAL, and also if QUAL is not loaded due to flags
             sam_reconstruct_missing_quality (VB, reconstruct);
 
         else if (IS_DEPN(vb)) {

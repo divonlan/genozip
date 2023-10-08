@@ -566,7 +566,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_RNAME)
     ctx_get_snip_by_word_index (ctx, ctx->last_value.i, snip);
 
     // if it is '*', reconstruct -1
-    if (str_is_1char (snip, '*'))
+    if (IS_ASTERISK(snip))
         RECONSTRUCT_BIN32 (-1);
 
     // if its RNEXT and =, emit the last index of RNAME

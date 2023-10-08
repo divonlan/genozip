@@ -80,14 +80,15 @@
 #define rot32(x,r) (((x)<<(r)) | ((x)>>(32-(r))))
 #define rot64(x,r) (((x)<<(r)) | ((x)>>(64-(r))))
 
-// need to check for length == 0, undefined behaviour if uint64_t >> 64 etc
-#define bitmask(nbits,type) ((nbits) ? ~(type)0 >> (sizeof(type)*8-(nbits)): (type)0)
-#define bitmask32(nbits) bitmask(nbits,uint32_t)
-#define bitmask64(nbits) bitmask(nbits,uint64_t)
+// A bitmask is a value with the (nbits) lower bits set to 1, and the remaining bits set to 0
+#define bitmask(nbits, type) ((nbits) ? (type)~(type)0 >> (sizeof(type)*8-(nbits)) : (type)0)
+#define bitmask8(nbits)  bitmask(nbits, uint8_t)
+#define bitmask16(nbits) bitmask(nbits, uint16_t)
+#define bitmask32(nbits) bitmask(nbits, uint32_t)
+#define bitmask64(nbits) bitmask(nbits, uint64_t)
 
-// A possibly faster way to combine two words with a mask
-//#define bitmask_merge(a,b,abits) ((a & abits) | (b & ~abits))
-#define bitmask_merge(a,b,abits) (b ^ ((a ^ b) & abits))
+// combine two words: for "1" bits in the abits, take the bit from a, and for "0" take the bit from b
+#define bitmask_merge(a,b,abits) (b ^ ((a ^ b) & abits))  // equivalent to ((a & abits) | (b & ~abits))
 
 //
 // Bit array (bitset)

@@ -201,7 +201,7 @@ static void vcf_seg_INFO_DP4 (VBlockVCFP vb, ContextP ctx, STRp(dp4))
 static int vcf_INFO_ALLELE_get_allele (VBlockVCFP vb, STRp (value))
 {
     // check for '.'
-    if (str_is_1char (value, '.')) return -2;
+    if (IS_PERIOD (value)) return -2;
 
     // check if its equal main REF (which can by REF or oREF)
     if (str_issame (value, vb->main_ref)) return 0;
@@ -1100,7 +1100,7 @@ void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
     vb->info_items.len = 0; // reset from previous line
 
     // case: INFO field is '.' (empty) (but not in DVCF as we will need to deal with DVCF items)
-    if (!z_is_dvcf && str_is_1char (info, '.')) {
+    if (!z_is_dvcf && IS_PERIOD (info)) {
         seg_by_did (VB, ".", 1, VCF_INFO, 2); // + 1 for \t or \n
         return;
     }

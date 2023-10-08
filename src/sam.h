@@ -536,20 +536,20 @@
 
 // Ultima Genomics
 // also has standard tags: AS:i SA:Z NM:i MD:Z RG:Z. Methylation fields: XM:Z, XG:Z, XR:Z. XA:Z, X1:i as in bwa.
-#pragma GENDICT OPTION_tp_B_c=DTYPE_2=tp:B:c
+#pragma GENDICT OPTION_tp_B_c=DTYPE_2=tp:B:c // supplemental base quality information
 #pragma GENDICT OPTION_tp_B_ARR=DTYPE_2=tpc_ARR // matches dict_id created in sam_seg_array_field_get_con
 #pragma GENDICT OPTION_bi_Z=DTYPE_2=bi:Z
 //#pragma GENDICT OPTION_rq_f=DTYPE_2=rq:f   // (dup) Read quality
 #pragma GENDICT OPTION_XV_Z=DTYPE_2=XV:Z
 #pragma GENDICT OPTION_XW_Z=DTYPE_2=XW:Z
-#pragma GENDICT OPTION_tm_Z=DTYPE_2=tm:Z     
-#pragma GENDICT OPTION_t0_Z=DTYPE_2=t0:Z     
-#pragma GENDICT OPTION_pt_i=DTYPE_2=pt:i     
-#pragma GENDICT OPTION_px_i=DTYPE_2=px:i     
-#pragma GENDICT OPTION_py_i=DTYPE_2=py:i     
-#pragma GENDICT OPTION_si_i=DTYPE_2=si:i     
-#pragma GENDICT OPTION_a3_i=DTYPE_2=a3:i     
-#pragma GENDICT OPTION_pr_i=DTYPE_2=pr:i     
+#pragma GENDICT OPTION_tm_Z=DTYPE_2=tm:Z     // Trimming reasons: A=Adapter Q=Quality Z=Three Zeroes
+#pragma GENDICT OPTION_t0_Z=DTYPE_2=t0:Z     // supplemental base quality information
+#pragma GENDICT OPTION_pr_i=DTYPE_2=pr:i     // Ring index, 1-based
+#pragma GENDICT OPTION_pt_i=DTYPE_2=pt:i     // Tile index, 1-based
+#pragma GENDICT OPTION_px_i=DTYPE_2=px:i     // X position in tile
+#pragma GENDICT OPTION_py_i=DTYPE_2=py:i     // Y position in tile
+#pragma GENDICT OPTION_si_i=DTYPE_2=si:i     // Intensity of the first T flow
+#pragma GENDICT OPTION_a3_i=DTYPE_2=a3:i     // Start position in input of segment "native adapter" in format "trim native adapter and limit lengths"
 #pragma GENDICT OPTION_tq_i=DTYPE_2=tq:i
 #pragma GENDICT OPTION_tz_i=DTYPE_2=tz:i
 #pragma GENDICT OPTION_DS_i=DTYPE_2=DS:i
@@ -606,6 +606,7 @@ extern void sam_zip_after_compute (VBlockP vb);
 extern void sam_zip_after_vbs (void);
 extern void sam_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeaderP vb_header);
 extern void sam_sa_prim_finalize_ingest (void);
+extern uint64_t cram_estimated_num_alignments (rom filename);
 
 // HEADER stuff
 extern bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags);
@@ -636,6 +637,8 @@ extern rom sam_get_deep_tip (void);
 extern void sam_destroy_deep_tip (void);
 extern void sam_update_qual_len (VBlockP vb, uint32_t line_i, uint32_t new_len);
 extern void sam_ultima_update_t0_len (VBlockP vb, uint32_t line_i, uint32_t new_len);
+extern void sam_seg_aux_field_fallback (VBlockP vb, void *dl, DictId dict_id, char sam_type, char array_subtype,
+                                        STRp(value), ValueType numeric, unsigned add_bytes);
 
 // PIZ Stuff
 extern void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header);
@@ -695,7 +698,7 @@ extern void sam_reset_line (VBlockP vb);
                       sam_piz_special_FI, sam_piz_special_cm, sam_piz_special_COPY_BUDDY, sam_piz_special_SET_BUDDY, \
                       sam_piz_special_TX_AN_POS, sam_piz_special_COPY_TEXTUAL_CIGAR, sam_piz_special_BISMARK_XM, \
                       sam_piz_special_BSBOLT_XB, sam_piz_special_UQ, sam_piz_special_iq_sq_dq, sam_piz_special_DEMUX_BY_QUAL, \
-                      ultima_c_piz_special_DEMUX_BY_Q4NAME, sam_piz_special_bi \
+                      ultima_c_piz_special_DEMUX_BY_Q4NAME, sam_piz_special_bi, sam_piz_special_sd \
                     }
 SPECIAL (SAM, 0,  CIGAR,                 sam_cigar_special_CIGAR);
 SPECIAL (SAM, 1,  TLEN_old,              sam_piz_special_TLEN_old);            // used up to 12.0.42
@@ -753,7 +756,9 @@ SPECIAL (SAM, 52, iqsqdq,                sam_piz_special_iq_sq_dq);            /
 SPECIAL (SAM, 53, DEMUX_BY_QUAL,         sam_piz_special_DEMUX_BY_QUAL);       // introduced 15.0.10
 SPECIAL (SAM, 54, ULTIMA_C,              ultima_c_piz_special_DEMUX_BY_Q4NAME);// introduced 15.0.15
 SPECIAL (SAM, 55, bi,                    sam_piz_special_bi);                  // introduced 15.0.16
-#define NUM_SAM_SPECIAL 56
+SPECIAL (SAM, 56, sd,                    sam_piz_special_sd);                  // introduced 15.0.17
+SPECIAL (SAM, 57, AS,                    sam_piz_special_AS);                  // introduced 15.0.17
+#define NUM_SAM_SPECIAL 58
  
 #define SAM_LOCAL_GET_LINE_CALLBACKS                          \
     { DT_SAM, _OPTION_BD_BI,       sam_zip_BD_BI           }, \

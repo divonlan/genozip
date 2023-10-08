@@ -262,7 +262,7 @@ typedef struct VBlockSAM {
     Multiplexer4 mux_PNEXT;
     Multiplexer3 mux_POS, mux_MAPQ;// ZIP: DEMUX_BY_MATE_PRIM multiplexers
     Multiplexer2 mux_FLAG, mux_MQ, mux_MC, mux_ms, mux_AS, mux_YS, mux_nM, // ZIP: DEMUX_BY_MATE or DEMUX_BY_BUDDY multiplexers
-                 mux_mated_z_fields[NUM_MATED_Z_TAGS], mux_ultima_c; 
+                 mux_mated_z_fields[NUM_MATED_Z_TAGS], mux_ultima_c, mux_dragen_sd; 
     Multiplexer3 mux_NH;           // ZIP: DEMUX_BY_BUDDY_MAP
     Multiplexer7 mux_tp;           // ZIP: DEMUX_BY_QUAL (number of channels matches TP_NUM_BINS)
 
@@ -401,7 +401,7 @@ typedef struct __attribute__ ((__packed__)) SAAln {
 
     WordIndex rname;       // Zip: word_index into RNAME == SAM header contig number.
                            // Piz: word_index into OPTION_SA_RNAME
-    PosType32 pos;        // 31 bits per SAM spec
+    PosType32 pos;         // 31 bits per SAM spec
     uint32_t mapq    : 8;  // 8 bit by SAM specification
     uint32_t revcomp : 1;  // 1 for - and 0 for +
     uint32_t nm      : ALN_NM_BITS; 
@@ -426,7 +426,7 @@ typedef struct __attribute__ ((__packed__)) CigarAnalItem {
 #define GRP_QUAL_BITS     48
 #define GRP_AS_BITS       16
 
-// note: fields ordered to packed and word-aligned. These structures are NOT written to the genozip file.
+// note: fields ordered so to be packed and word-aligned. These structures are NOT written to the genozip file.
 typedef struct __attribute__ ((__packed__)) Sag {
     // 40 bytes
     uint64_t qname           : 60;                // index into: vb: txt_data ; z_file: zfile->sag_qnames
@@ -481,6 +481,7 @@ extern uint16_t bam_reg2bin (int32_t first_pos, int32_t last_pos);
 extern void sam_seg_verify_RNAME (VBlockSAMP vb);
 extern void sam_piz_set_sag (VBlockSAMP vb);
 extern bool sam_seg_test_biopsy_line (VBlockP vb, STRp(line));
+extern void sam_seg_float_as_snip (VBlockSAMP vb, ContextP ctx, STRp(sam_value), ValueType bam_value, unsigned add_bytes);
 
 static inline bool sam_is_depn (SamFlags f) { return f.supplementary || f.secondary; }
 
@@ -497,6 +498,8 @@ static bool inline sam_line_is_prim (ZipDataLineSAM *dl) { return !sam_is_depn (
                                              (!segconf.is_paired && !sam_is_depn ((SamFlags){ .value = history64(SAM_FLAG, VB_SAM->buddy_line_i)}))))
 
 extern bool sam_seg_peek_int_field (VBlockSAMP vb, Did did_i, int16_t idx, int32_t min_value, int32_t max_value, bool set_last_value, int32_t *value);
+
+extern void sam_segconf_set_by_MP (void);
 
 // BUDDY stuff
 extern void sam_piz_set_buddy_v13 (VBlockP vb);
@@ -669,6 +672,10 @@ extern void sam_seg_ultima_XW (VBlockSAMP vb, STRp(xw), unsigned add_bytes);
 extern void sam_seg_ultima_t0 (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(t0), unsigned add_bytes);
 extern void sam_seg_ultima_MI (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(mi), unsigned add_bytes);
 
+// Dragen stuff
+extern void sam_dragen_initialize (VBlockSAMP vb);
+extern void sam_dragen_seg_sd_f (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sd), ValueType numeric, unsigned add_bytes);
+
 // hisat2 stuff
 extern void sam_seg_HISAT2_Zs_Z (VBlockSAMP vb, STRp(zs), unsigned add_bytes);
 
@@ -705,6 +712,7 @@ extern bool sam_seg_gem3_XA_strand_cb (VBlockP vb, ContextP ctx, STRp(field), ui
 extern void sam_seg_blasr_FI_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t fi, unsigned add_bytes);
 
 // scRNA-seq stuff (STARsolo and cellranger)
+extern void sam_segconf_retag_UBURUY (void);
 extern void sam_seg_TX_AN_initialize (VBlockSAMP vb, Did did_i);
 extern void sam_seg_TX_AN_Z (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, STRp(value), unsigned add_bytes);
 

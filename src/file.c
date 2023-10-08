@@ -462,6 +462,9 @@ FileP file_open_txt_read (rom filename)
 
     switch (file->codec) { 
         case CODEC_CRAM: {
+            if (!file->is_remote && !file->redirected)
+                file->est_num_lines = cram_estimated_num_alignments (file->name); // for progress indication
+                
             rom samtools_T_option = ref_get_cram_ref(gref);
             input_decompressor = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 
                                                 file->is_remote ? file->name : NULL,      // url                                        
@@ -1142,6 +1145,45 @@ bool file_rename (rom old_name, rom new_name, bool fail_quietly)
     ASSERTW (!ret || fail_quietly, "Warning: failed to rename %s to %s: %s", old_name, new_name, strerror (errno));
 
     return !ret; // true if successful
+}
+
+// also updates filename to .gz (but not if .bam)
+void file_gzip (char *filename)
+{
+    unsigned fn_len = strlen (filename);
+
+    char command[fn_len + 50];
+
+    int ret = 1;
+
+    if (!flag.is_windows) {
+        sprintf (command, "bgzip -@%u -f \"%s\"", global_max_threads, filename);
+        ret = system (command);
+    }
+    
+    if ((ret && errno == ENOENT) || flag.is_windows) { // no bgzip - try pigz
+        sprintf (command, "pigz -f \"%s\"", filename);
+        ret = system (command);
+    }
+
+    if (ret && errno == ENOENT) { // no pigz - try gzip
+        memcpy (command, "gzip", 4);
+        ret = system (command);
+    }
+
+    ASSERTW (!ret, "FYI: \"%s\" returned %d. No harm.", command, ret); 
+
+    if (!ret) {
+        // special case: rename .bam.gz -> .bam
+        if (fn_len >= 4 && !memcmp (&filename[fn_len-4], ".bam", 4)) {
+            char gz_filename[fn_len + 10];
+            sprintf (gz_filename, "%s.gz", filename);
+            file_remove (filename, true);
+            file_rename (gz_filename, filename, false);
+        }
+        else 
+            strcpy (&filename[fn_len], ".gz");
+    }
 }
 
 void file_mkfifo (rom filename)

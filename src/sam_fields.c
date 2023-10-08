@@ -741,9 +741,11 @@ static inline void sam_seg_AS_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t as, 
 {
     START_TIMER;
 
-    if (segconf.running) 
-        if (ABS((int32_t)2*vb->ref_consumed - as) < 10) segconf.AS_is_2ref_consumed++;
-    
+    if (segconf.running) {
+        if (ABS((int32_t)vb->ref_consumed     - as) < 20) segconf.AS_is_ref_consumed++;
+        if (ABS((int32_t)vb->ref_consumed * 2 - as) < 10) segconf.AS_is_2ref_consumed++;
+    }
+
     ctx_set_last_value (VB, CTX (OPTION_AS_i), as);
 
     // depn VB - seg against prim line AS (sag_has_AS determines if its beneficial to do so)
@@ -780,7 +782,7 @@ static inline void sam_seg_AS_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t as, 
         sam_seg_buddied_i_fields (vb, dl, OPTION_AS_i, as, &dl->AS, (MultiplexerP)&vb->mux_AS, STRa(copy_mate_AS_snip), add_bytes);
 
     // not bowtie2: store a special snip with delta from ref_consumed
-    else if (ABS((int32_t)vb->ref_consumed-as) < 10) {
+    else if (segconf.AS_is_ref_consumed) {
         SNIPi2 (SNIP_SPECIAL, SAM_SPECIAL_REF_CONSUMED, (int32_t)vb->ref_consumed-as);
         seg_by_did (VB, STRa(snip), OPTION_AS_i, add_bytes); 
     }
@@ -1207,14 +1209,16 @@ static void sam_seg_array_field (VBlockSAMP vb, ZipDataLineSAM *dl, DictId dict_
     }
 }
 
-static void sam_seg_float_as_snip (VBlockSAMP vb, ContextP ctx, STRp(sam_value), ValueType bam_value, unsigned add_bytes)
+void sam_seg_float_as_snip (VBlockSAMP vb, ContextP ctx, STRp(sam_value), ValueType bam_value, unsigned add_bytes)
 {
     if (IS_BAM_ZIP) {
+        // in case of BAM, numeric contains the float value - we seg its binary representation
         SNIPi2 (SNIP_SPECIAL, SAM_SPECIAL_FLOAT, bam_value.i);
         seg_by_dict_id (VB, STRa(snip), ctx->dict_id, add_bytes); 
     }
     
-    else // sam
+    else 
+        // in case of SAM, we seg the string so we maintain the precise textual representation. 
         seg_float_or_not (VB, ctx, STRa(sam_value), add_bytes);
 }
 
@@ -1443,7 +1447,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
         case _OPTION_mq_Z: COND (TECH(PACBIO), seg_add_to_local_text (VB, CTX(OPTION_mq_Z), STRa(value), LOOKUP_SIMPLE, add_bytes));
         case _OPTION_st_Z: COND (TECH(PACBIO), seg_add_to_local_text (VB, CTX(OPTION_st_Z), STRa(value), LOOKUP_SIMPLE, add_bytes));
         
-        case _OPTION_sd_f: sam_seg_float_as_snip (vb, CTX(OPTION_sd_f), STRa(value), numeric, add_bytes); break;
+        case _OPTION_sd_f: COND (MP(DRAGEN), sam_dragen_seg_sd_f (vb, dl, STRa(value), numeric, add_bytes));
 
         // Ultima Genomics fields
         case _OPTION_tp_B_c: COND (MP(ULTIMA) && !dl->no_qual, sam_seg_array_field (vb, dl, _OPTION_tp_B_c, array_subtype, STRa(value), sam_seg_ultima_tp, dl));

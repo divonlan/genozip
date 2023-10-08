@@ -120,6 +120,7 @@ typedef struct {
     bool has_barcodes;          // ZIP: file uses barcodes
     bool star_solo;             // ZIP: using STARsolo or cellranger
     uint32_t AS_is_2ref_consumed; // ZIP/PIZ: AS value tends to be double ref_consumed (counter during segconf, bool during seg/piz)
+    uint32_t AS_is_ref_consumed;// ZIP/PIZ: AS value tends to be double ref_consumed (counter during segconf, bool during seg/piz)
     uint8_t MAPQ_value;         // used during segconf.running to calculate sam_mapq_has_single_value
     bool MAPQ_has_single_value; // all non-0 MAPQ have the same value
     msType sam_ms_type;         // ZIP/PIZ: type of ms:i 

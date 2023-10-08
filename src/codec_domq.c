@@ -575,6 +575,7 @@ static inline void codec_domq_reconstruct_do_v13 (VBlockP vb, ContextP qual_ctx,
             qual_ctx->next_local--; // leave it unconsumed as it might be needed by the next lines
             break;
         }
+        
         else
             c = NEXTLOCAL (char, qual_ctx);
 

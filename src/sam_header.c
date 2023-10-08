@@ -293,7 +293,7 @@ static void sam_header_zip_inspect_HD_line (BufferP txt_header)
     COPY_TIMER_EVB (sam_header_zip_inspect_HD_line);
 }
 
-static void sam_header_zip_build_hdr_PGs (rom hdr, rom after)
+static void sam_header_zip_build_stats_programs (rom hdr, rom after)
 {
     #define EQ3(s1,s2) (s1[0]==s2[0] && s1[1]==s2[1] && s1[2]==s2[2])
 
@@ -354,6 +354,8 @@ static void sam_header_zip_build_hdr_PGs (rom hdr, rom after)
 // ZIP and PIZ
 static void sam_header_create_deep_tip (rom hdr, rom after)
 {
+    SAFE_NUL (after);
+
     STR0(fq);
     sam_deep_tip.name = "sam_deep_tip";
 
@@ -378,6 +380,8 @@ static void sam_header_create_deep_tip (rom hdr, rom after)
 
     if (sam_deep_tip.len) 
         buf_add_moreC (evb, &sam_deep_tip, "\n\0", NULL);
+
+    SAFE_RESTORE;
 }
 
 // ZIP
@@ -387,57 +391,53 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
 
     uint32_t hdr_len = IS_BAM_ZIP ? *B32(*txt_header, 1)     : txt_header->len32;
     rom hdr          = IS_BAM_ZIP ? (rom)B32(*txt_header, 2) : txt_header->data;
-    rom after = hdr + hdr_len;
+    rom after        = hdr + hdr_len;
     
     if (!hdr_len) return; // no header
     
     SAFE_NULT(hdr);
 
     // advance to point to first @PG line
-    hdr--;
-    while ((hdr = strchr (hdr+1, '@'))) 
-        if (hdr[1] == 'P' && hdr[2] == 'G') break; 
+    #define IS_PG(s) (s[1] == 'P' && s[2] == 'G')
 
-    if (!hdr) goto done; // header doesn't contain any @PG lines
+    rom s = hdr - 1;
+    while ((s = strchr (s+1, '@'))) 
+        if (IS_PG(s)) break;
 
-    // hdr is at the beginning of the first PG line, which is typically at the end of the SAM header
+    if (!s) goto done; // header doesn't contain any @PG lines
+    rom first_PG = s;
+
+    rom after_PGs = NULL;
+    while ((s = strchr (s+1, '@'))) 
+        if (!after_PGs && !IS_PG(s)) 
+            after_PGs = s;
+
+        else if (after_PGs && IS_PG(s)) // oops, found another PG after bunch of non-PGs... cancel previous "after_PGs"
+            after_PGs = NULL;
+
+    if (!after_PGs) after_PGs = after;
+
+    RESAFE_NUL (after_PGs); // move the NUL up to after all PG lines (even if PG lines are non-sequential)
+
     static rom map_sigs[] = SAM_MAPPER_SIGNATURE;
     ASSERT0 (ARRAY_LEN(map_sigs) == NUM_MAPPERS, "Invalid SAM_MAPPER_SIGNATURE array length - perhaps missing commas between strings?");
 
     for (int i=1; i < ARRAY_LEN(map_sigs); i++) // skip 0=unknown
-        if (strstr (hdr, map_sigs[i]) &&  // scans header starting first PG line
-            (!segconf.sam_mapper || strlen (map_sigs[i]) > strlen(map_sigs[segconf.sam_mapper]))) // first match or better match (eg "bwa-mem2" is a better match than "bwa")
+        if (strstr (first_PG, map_sigs[i]) &&   // scans subset of header containing all PG lines
+            (!segconf.sam_mapper || strlen (map_sigs[i]) > strlen(map_sigs[segconf.sam_mapper]))) { // first match or better match (eg "bwa-mem2" is a better match than "bwa")
             segconf.sam_mapper = i;
+            break;
+        }
 
     if (MP(bwa)) segconf.sam_mapper = MP_BWA; // we consider "bwa" to be "BWA"
 
-    if (MP(STAR) && strstr (hdr, "--solo")) segconf.star_solo = true;
+    if (MP(STAR) && strstr (first_PG, "--solo")) segconf.star_solo = true;
 
-    // note: this file *might* be of bisulfite-treated reads. This variable might be reset in sam_seg_finalize_segconf if it fails additonal conditions 
-    segconf.sam_bisulfite     = MP(BISMARK) || MP(BSSEEKER2) || MP(DRAGEN) || MP(BSBOLT) || MP(GEM3) || MP(ULTIMA);
-    segconf.sam_has_bismark_XM_XG_XR = MP(BISMARK) || MP(DRAGEN) || MP(ULTIMA);
-
-    segconf.is_bwa            = MP(BWA) || MP(BSBOLT) || MP (CPU) || MP(BWA_MEM2) || MP(PARABRICKS); // aligners based on bwa
-    segconf.is_minimap2       = MP(MINIMAP2) || MP(WINNOWMAP) || MP(PBMM2);   // aligners based on minimap2
-    segconf.is_bowtie2        = MP(BOWTIE2) || MP(HISAT2) || MP(TOPHAT) || MP(BISMARK) || MP(BSSEEKER2); // aligners based on bowtie2
-
-    segconf.sam_has_SA_Z      = segconf.is_bwa || segconf.is_minimap2 || MP(NGMLR) || MP(DRAGEN) || MP(NOVOALIGN) || MP(ULTIMA) || MP(ISAAC); /*|| MP(LONGRANGER); non-standard SA:Z format (POS is off by 1, main-field NM is missing) */ 
-    segconf.sam_has_BWA_XA_Z  = (segconf.is_bwa || MP(GEM3) || MP(GEM2SAM) || MP(DELVE) || MP(DRAGEN) || MP(ULTIMA)) ? yes 
-                              : MP(TMAP) || MP(TORRENT_BC)                                                           ? no 
-                              :                                                                                        unknown;
-    segconf.sam_has_BWA_XS_i  = segconf.is_bwa || MP(TMAP) || MP(GEM3) || (segconf.is_bowtie2 && !MP(HISAT2)) || MP(CPU) || MP(LONGRANGER) || MP(DRAGEN);
-    segconf.sam_has_BWA_XM_i  = segconf.is_bwa || segconf.is_bowtie2 || MP(NOVOALIGN) || MP(DRAGEN);
-    segconf.sam_has_BWA_XT_A  = segconf.is_bwa || MP(DRAGEN);
-    segconf.sam_has_BWA_XC_i  = segconf.is_bwa || MP(DRAGEN);
-    segconf.sam_has_BWA_X01_i = segconf.is_bwa || MP(DRAGEN);
-
-    segconf.sam_has_bowtie2_YS_i = MP(BOWTIE2) || MP(BSSEEKER2) || MP(HISAT2);
-
-    // build buffer of unique PN+ID fields, for stats
-    sam_header_zip_build_hdr_PGs (hdr, after);
+    sam_segconf_set_by_MP();
     
-    sam_header_create_deep_tip (hdr, after);
-
+    // build buffer of unique PN+ID fields, for stats
+    sam_header_zip_build_stats_programs (first_PG, after_PGs);
+        
     if (stats_programs.len) {
 
         #define SCAN(program) (!!strstr (B1STc(stats_programs), (program)))
@@ -452,6 +452,10 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
 
 done:
     SAFE_RESTORE;
+
+    // insect entire header, not just PG lines (after nul after all PGs has been restored)
+    
+    sam_header_create_deep_tip (hdr, after); 
 
     COPY_TIMER_EVB (sam_header_zip_inspect_PG_lines); 
 }
@@ -597,8 +601,8 @@ bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
 
     else { // PIZ
         // deep tip - create in case tip is displayed in "--test after ZIP"
-        uint32_t hdr_len = IS_BAM_ZIP ? *B32(*txt_header, 1)     : txt_header->len32;
-        rom hdr          = IS_BAM_ZIP ? (rom)B32(*txt_header, 2) : txt_header->data;
+        uint32_t hdr_len = IS_SRC_BAM_PIZ ? *B32(*txt_header, 1)     : txt_header->len32;
+        rom hdr          = IS_SRC_BAM_PIZ ? (rom)B32(*txt_header, 2) : txt_header->data;
 
         sam_header_create_deep_tip (hdr, hdr + hdr_len);
     }

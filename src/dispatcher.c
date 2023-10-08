@@ -68,7 +68,7 @@ void dispatcher_increment_progress (rom where, int64_t increment)
     if (!threads_am_i_main_thread()) return; // only main thread updates the output message
 
     // update target
-    if (IS_ZIP)
+    if (IS_ZIP && !txt_file->est_num_lines)
         d->target_progress = 3 * txtfile_get_seggable_size();
 
     // in unbind mode - dispatcher is not done if there's another component after this one
@@ -376,6 +376,8 @@ bool dispatcher_is_done (Dispatcher d)
 
 bool dispatcher_is_input_exhausted (Dispatcher d)
 {
+    ASSERTNOTNULL (d);
+    
     return d->input_exhausted;
 }
 

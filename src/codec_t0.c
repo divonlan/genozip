@@ -155,8 +155,9 @@ CODEC_RECONSTRUCT (codec_t0_reconstruct)
     // get SEQ
     ContextP seq_ctx = CTX(SAM_SQBITMAP);
 
-    rom seq = sam_get_textual_seq(vb)->len ? B1STc (*sam_get_textual_seq(vb)) // note: textual_seq is prepared in sam_piz_sam2bam_SEQ sam_load_groups_add_seq
-                                           : last_txtx (vb, seq_ctx); 
+    ConstBufferP textual_seq = sam_get_textual_seq(vb); // note: textual_seq is prepared in sam_piz_sam2bam_SEQ or sam_load_groups_add_seq
+
+    rom seq = textual_seq->len32 ? B1STc (*textual_seq) : last_txtx (vb, seq_ctx); 
 
     ASSPIZ (len == vb->seq_len, "expecting len=%u == vb->seq_len=%u", len, vb->seq_len);
 

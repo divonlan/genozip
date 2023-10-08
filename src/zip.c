@@ -736,7 +736,7 @@ static void zip_compress_one_vb (VBlockP vb)
     // we're just taking a biopsy of the txt data, so no need to actually compress. 
     if (flag.biopsy && 
         !(segconf.sag_type && vb->comp_i == SAM_COMP_MAIN)) // except in MAIN of SAM/BAM gencomp - need to generate PRIM and DEPN VBs 
-        goto done; 
+        goto after_compress; 
 
     // if the txt file is compressed with BGZF, we uncompress now, in the compute thread
     if (txt_file->codec == CODEC_BGZF && flag.pair != PAIR_R2) 
@@ -744,7 +744,7 @@ static void zip_compress_one_vb (VBlockP vb)
 
     // calculate the digest contribution of this VB, and the digest snapshot of this VB
     if (zip_need_digest) 
-        digest_one_vb (vb, true, NULL); // serializes VBs in order
+        digest_one_vb (vb, true, NULL); // serializes VBs in order if MD5
 
     // allocate memory for the final compressed data of this vb. allocate 1/8 of the
     // vb size on the (uncompressed) txt file - this is normally plenty. if not, we will realloc downstream
@@ -781,8 +781,8 @@ static void zip_compress_one_vb (VBlockP vb)
     // while vb_i=1 is busy merging, other VBs can handle local
     if (vb->vblock_i != 1 && need_compress) 
         zip_compress_all_contexts_local (vb); // not yet locals that consist of singletons transferred from dict to local in ctx_merge_in_vb_ctx (these will have len=0 at this point)
-
-    dispatcher_increment_progress ("compress1", vb->txt_size / 2); // 1/2 compression done
+    
+    dispatcher_increment_progress ("compress1", PROGRESS_UNIT/2); // 1/2 compression done
 
     // merge new words added in this vb into the z_file.contexts, ahead of zip_generate_b250().
     // writing indices based on the merged dictionaries. dictionaries are compressed. 
@@ -802,7 +802,7 @@ static void zip_compress_one_vb (VBlockP vb)
         zip_compress_all_contexts_b250 (vb);
     }
 
-    dispatcher_increment_progress ("compress2", 1 - vb->txt_size / 2); // 1/2 compression done
+    dispatcher_increment_progress ("compress2", PROGRESS_UNIT-(PROGRESS_UNIT/2)); // 1/2 compression done
 
     // merge in random access - IF it is used
     if (!segconf.disable_random_acccess) {
@@ -810,12 +810,11 @@ static void zip_compress_one_vb (VBlockP vb)
         random_access_merge_in_vb (vb, 1);
     }
     
-    // compress data-type specific sections
 after_compress:
+    // examples: compress data-type specific sections ; absorb gencomp lines
     DT_FUNC (vb, zip_after_compress)(vb);
 
     // tell dispatcher this thread is done and can be joined.
-done:
     vb_set_is_processed (vb); 
 
     COPY_TIMER (compute);
@@ -871,7 +870,10 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
         // error if stdin is empty - can happen only when redirecting eg "cat empty-file|./genozip -" (we test for empty regular files in main_genozip)
         ASSINP0 (vb->vblock_i > 1 || txt_file->txt_data_so_far_single /* txt header data */, 
                  "Error: Cannot compress stdin data because its size is 0");
-        
+
+        if (flag.biopsy && vb->dispatch == DATA_EXHAUSTED)
+            biopsy_data_is_exhausted();
+
         if (flag.debug_or_test) buflist_test_overflows(vb, __FUNCTION__); 
 
         return;
@@ -900,7 +902,7 @@ static void zip_complete_processing_one_vb (VBlockP vb)
     
     zip_update_txt_counters (vb);
 
-    dispatcher_increment_progress ("z_write", vb->txt_size); // writing done.
+    dispatcher_increment_progress ("z_write", PROGRESS_UNIT); // writing done.
 
     z_file->num_vbs = MAX_(z_file->num_vbs, vb->vblock_i); // note: VBs are written out of order, so this can increase by 0, 1, or more than 1
     txt_file->num_vbs++;
@@ -958,10 +960,10 @@ void zip_one_file (rom txt_basename,
         (flag.deep && flag.zip_comp_i <= SAM_COMP_FQ00) ||
         (!flag.deep && !Z_DT(FASTQ))) {
 
-        int64_t est_seggable_size = txtfile_get_seggable_size(); 
+        int64_t progress_unit = txt_file->est_num_lines ? txt_file->est_num_lines : txtfile_get_seggable_size(); 
 
-        target_progress = est_seggable_size * 3 // read, seg, compress
-                        + (!flag.make_reference && !flag.seg_only) * est_seggable_size; // write
+        target_progress = progress_unit * 3 // read, seg, compress
+                        + (!flag.make_reference && !flag.seg_only && !flag.biopsy) * progress_unit; // write
     }
 
     if (flag.debug_progress)
@@ -980,7 +982,7 @@ void zip_one_file (rom txt_basename,
 
     dispatcher_calc_avg_compute_vbs (dispatcher);
 
-    dispatcher_increment_progress ("txt_header", txt_header_len * 3); // txt_header was already read, computed and written
+    dispatcher_increment_progress ("txt_header", txt_file->est_num_lines ? 3 : (txt_header_len * 3)); //  account for txt_header read, computed and written
 
     // go back and update some fields in the txt header's section header and genozip header 
     if (txt_header_offset >= 0) // note: this will be -1 if we didn't write a SEC_TXT_HEADER section for any reason

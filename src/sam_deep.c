@@ -151,13 +151,13 @@ void sam_deep_set_SEQ_hash (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_seq)
     if (!dl->is_deepable) return; 
     
     // case: sam_deep_set_QNAME_hash happened, but now we discover that SEQ is missing or mono-char
-    if (str_is_1char (textual_seq, '*') ||     // note: we don't test SEQ.len, bc SEQ.len=0 for unmapped reads, but they are still deepable
+    if (IS_ASTERISK(textual_seq) ||     // note: we don't test SEQ.len, bc SEQ.len=0 for unmapped reads, but they are still deepable
         str_is_monochar (STRa(textual_seq))) { // note: not deepable bc mono-char an elevated chance of hash contention
      
         dl->is_deepable = false;
         vb->lines.count--;
 
-        vb->deep_stats[str_is_1char (textual_seq, '*') ? RSN_NO_SEQ : RSN_MONOCHAR]++; // counting non-deepability reasons        
+        vb->deep_stats[IS_ASTERISK(textual_seq) ? RSN_NO_SEQ : RSN_MONOCHAR]++; // counting non-deepability reasons        
     }
 
     else {
@@ -551,7 +551,7 @@ CONTAINER_ITEM_CALLBACK (sam_piz_con_item_cb)
     if (con_item->dict_id.num == _SAM_SQBITMAP) {
         if (!flag.deep                                       || // Deep file (otherwise this callback will not be set), but SAM/BAM-only reconstruction
             last_flags.secondary || last_flags.supplementary || // SECONDARY or SUPPLEMENTARY alignment
-            str_is_1char (recon, '*')                        || // Missing SEQ
+            IS_ASTERISK(recon)                               || // Missing SEQ
             str_is_monochar (STRa(recon))) {                    // mono-char SEQ
 
             VB_SAM->line_not_deepable = true;

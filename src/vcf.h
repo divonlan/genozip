@@ -66,6 +66,7 @@
 #pragma GENDICT FORMAT_MB=DTYPE_2=MB                // <ID=MB,Number=4,Type=Integer,Description="Per-sample component statistics to detect mate bias">
 #pragma GENDICT FORMAT_PP=DTYPE_2=PP                // <ID=PP,Number=G,Type=Integer,Description="Phred-scaled genotype posterior probabilities rounded to the closest integer">
 #pragma GENDICT FORMAT_SAC=DTYPE_2=SAC              // <ID=SAC,Number=.,Type=Integer,Description="Number of reads on the forward and reverse strand supporting each allele (including reference)">
+#pragma GENDICT FORMAT_VAF=DTYPE_2=VAF              // <ID=VAF,Number=A,Type=Float,Description="Variant allele fractions."> see: https://genomemedicine.biomedcentral.com/articles/10.1186/s13073-019-0664-4#:~:text=The%20variant%20allele%20frequency%20(VAF,approximately%2050%25%20or%20100%25.
 #pragma GENDICT FORMAT_SB=DTYPE_2=SB                // <ID=SB,Number=4,Type=Integer,Description="Per-sample component statistics which comprise the Fisher's Exact Test to detect strand bias">
 #pragma GENDICT FORMAT_PS=DTYPE_2=PS                // seen 1: <ID=PS,Number=1,Type=Integer,Description="Phasing set (typically the position of the first variant in the set)">
                                                     // seen 2: <ID=PS,Number=1,Type=Integer,Description="Physical phasing ID information, where each unique ID within a given sample (but not across samples) connects records within a phasing group">

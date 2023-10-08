@@ -26,6 +26,14 @@
         "buffer.h": "c",
         "profiler.h": "c",
         "stats.h": "c",
-        "file.h": "c"
-    }
+        "file.h": "c",
+        "*.tcc": "c",
+        "optional": "c",
+        "system_error": "c",
+        "array": "c",
+        "functional": "c",
+        "tuple": "c",
+        "utility": "c"
+    },
+    "cmake.sourceDirectory": "C:/Users/divon/genozip/src/onion"
 }

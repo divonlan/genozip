@@ -33,6 +33,7 @@ extern bool is_printable[256];
 #define LOWER_CASE(c) (IS_CLETTER(c) ? ((c)+32) : (c))
 
 #define IS_ASTERISK(str)   str_is_1char(str, '*')
+#define IS_PERIOD(str)     str_is_1char(str, '.')
 #define IS_EQUAL_SIGN(str) str_is_1char(str, '=')
 
 #define TF(s) ((s) ? "true" : "false")

@@ -59,7 +59,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_NEG)
         if (!validate_only) Ltxt--;
     }
 
-    else if (str_is_1char (recon, '0') || str_is_1char (recon, '.')) {
+    else if (str_is_1char (recon, '0') || IS_PERIOD (recon)) {
     } // "0" and "." are unchanged
 
     // case: positive to negative

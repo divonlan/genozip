@@ -207,7 +207,7 @@ static rom display_binary_cigar (VBlockSAMP vb)
 // return true if string is a valid textual cigar
 bool sam_is_cigar (STRp(cigar), bool allow_empty)
 {
-    if (str_is_1char(cigar, '*')) return allow_empty; 
+    if (IS_ASTERISK(cigar)) return allow_empty; 
 
     rom after = cigar + cigar_len;
 
@@ -226,7 +226,7 @@ bool sam_cigar_textual_to_binary (VBlockSAMP vb, STRp(cigar), BufferP binary_cig
 {
     ASSERTNOTINUSE (*binary_cigar);
 
-    if (str_is_1char(cigar, '*')) return true; // empty binary cigar
+    if (IS_ASTERISK(cigar)) return true; // empty binary cigar
 
     uint32_t n_ops = 0;
     for (int i=0; i < cigar_len; i++)

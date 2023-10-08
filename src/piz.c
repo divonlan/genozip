@@ -78,6 +78,12 @@ PizDisQname piz_dis_qname (VBlockP vb)
     return out;
 }
 
+void asspiz_text (VBlockP vb, FUNCLINE)
+{
+    progress_newline(); 
+    fprintf (stderr, "%s %s/%s: Error in %s:%u line_in_file(1-based)=%"PRIu64" %s%s%s: ", str_time().s, LN_NAME, CTX(vb->curr_field)->tag_name, func, code_line, writer_get_txt_line_i ((VBlockP)(vb), vb->line_i), cond_int (Z_DT(VCF) || Z_DT(BCF), " sample_i=", vb->sample_i), piz_dis_coords((VBlockP)(vb)).s, piz_dis_qname((VBlockP)(vb)).s); 
+}
+
 bool piz_grep_match (rom start, rom after)
 {
     bool found = false;

@@ -16,14 +16,14 @@ static void bam_show_one_aux (STRp(aux))
 
     rom next_field = &aux[3];
     switch (aux[2]) {
-        case 'c' : iprintf ("%d ", NEXT_UINT8);   break;
-        case 'C' : iprintf ("%u ", NEXT_UINT8);   break;
-        case 'A' : iprintf ("%c ", NEXT_UINT8);   break;
-        case 's' : iprintf ("%d ", NEXT_UINT16);  break;
-        case 'S' : iprintf ("%u ", NEXT_UINT16);  break;
-        case 'i' : iprintf ("%d ", NEXT_UINT32);  break;
-        case 'I' : iprintf ("%u ", NEXT_UINT32);  break;
-        case 'f' : iprintf ("%f ", NEXT_FLOAT32); break;
+        case 'c' : iprintf ("%d ", (int8_t) NEXT_UINT8);   break;
+        case 'C' : iprintf ("%u ",          NEXT_UINT8);   break;
+        case 'A' : iprintf ("%c ",          NEXT_UINT8);   break;
+        case 's' : iprintf ("%d ", (int16_t)NEXT_UINT16);  break;
+        case 'S' : iprintf ("%u ",          NEXT_UINT16);  break;
+        case 'i' : iprintf ("%d ", (int32_t)NEXT_UINT32);  break;
+        case 'I' : iprintf ("%u ",          NEXT_UINT32);  break;
+        case 'f' : iprintf ("%f ",          NEXT_FLOAT32); break;
         case 'H' :
         case 'Z' : iprintf ("%s ", next_field); next_field += strlen (next_field)+1 ; break;
         
@@ -34,13 +34,13 @@ static void bam_show_one_aux (STRp(aux))
             for (uint32_t i=0; i < count; i++) 
                 switch (type) {
                     #define SEP (i==count-1 ? ' ' : ',')
-                    case 'c' : iprintf ("%d%c", NEXT_UINT8,   SEP); break;
-                    case 'C' : iprintf ("%u%c", NEXT_UINT8,   SEP); break;
-                    case 's' : iprintf ("%d%c", NEXT_UINT16,  SEP); break;
-                    case 'S' : iprintf ("%u%c", NEXT_UINT16,  SEP); break;
-                    case 'i' : iprintf ("%d%c", NEXT_UINT32,  SEP); break;
-                    case 'I' : iprintf ("%u%c", NEXT_UINT32,  SEP); break;
-                    case 'f' : iprintf ("%f%c", NEXT_FLOAT32, SEP); break;
+                    case 'c' : iprintf ("%d%c", (int8_t) NEXT_UINT8,   SEP); break;
+                    case 'C' : iprintf ("%u%c",          NEXT_UINT8,   SEP); break;
+                    case 's' : iprintf ("%d%c", (int16_t)NEXT_UINT16,  SEP); break;
+                    case 'S' : iprintf ("%u%c",          NEXT_UINT16,  SEP); break;
+                    case 'i' : iprintf ("%d%c", (int32_t)NEXT_UINT32,  SEP); break;
+                    case 'I' : iprintf ("%u%c",          NEXT_UINT32,  SEP); break;
+                    case 'f' : iprintf ("%f%c",          NEXT_FLOAT32, SEP); break;
                 }
         }
     }
@@ -48,7 +48,6 @@ static void bam_show_one_aux (STRp(aux))
 
 rom bam_show_line (VBlockSAMP vb, rom alignment, uint32_t remaining_txt_len)   
 {
-
     rom next_field = alignment;
     uint32_t block_size = NEXT_UINT32;
     rom after = alignment + block_size + sizeof (uint32_t);

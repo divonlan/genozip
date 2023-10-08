@@ -144,8 +144,8 @@ int64_t txtheader_zip_read_and_compress (int64_t *txt_header_offset, CompIType c
     // for VCF, we need to check if the samples are the same before approving binding (other data types can bind without restriction)
     //          also: header is modified if --chain or compressing a Luft file
     // for SAM, we check that the contigs specified in the header are consistent with the reference given in --reference/--REFERENCE
-    uint64_t txt_header_size = evb->txt_data.len;
-    if (!(DT_FUNC_OPTIONAL (txt_file, inspect_txt_header, true)(evb, &evb->txt_data, (struct FlagsTxtHeader){}))) { 
+    uint64_t txt_header_size = evb->txt_data.len; // note: 0 if BAM with --show-bam
+    if (txt_header_size && !(DT_FUNC_OPTIONAL (txt_file, inspect_txt_header, true)(evb, &evb->txt_data, (struct FlagsTxtHeader){}))) { 
         buf_free (evb->txt_data);
         return -1;
     }

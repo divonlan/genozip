@@ -18,12 +18,13 @@ extern PizDisCoords piz_dis_coords (VBlockP vb); // for ASSPIZ
 typedef struct { char s[100]; } PizDisQname; 
 extern PizDisQname piz_dis_qname (VBlockP vb); // for ASSPIZ
 
+extern void asspiz_text (VBlockP vb, FUNCLINE);
+
 #define ASSPIZ(condition, format, ...) ({ \
     if (!(condition)) { \
         DO_ONCE { /* first thread to fail at this point prints error and starts exit flow, other threads stall */ \
-            progress_newline(); \
-            fprintf (stderr, "%s %s/%s: Error in %s:%u line_in_file(1-based)=%"PRIu64" %s%s%s: ", str_time().s, LN_NAME, CTX(vb->curr_field)->tag_name, __FUNCLINE, writer_get_txt_line_i ((VBlockP)(vb), vb->line_i), cond_int (Z_DT(VCF) || Z_DT(BCF), " sample_i=", vb->sample_i), piz_dis_coords((VBlockP)(vb)).s, piz_dis_qname((VBlockP)(vb)).s); fprintf (stderr, (format), __VA_ARGS__); \
-            fprintf (stderr, "\n"); \
+            asspiz_text ((VBlockP)vb, __FUNCLINE);\
+            fprintf (stderr, format "\n", __VA_ARGS__); \
             exit_on_error(true); \
         } \
         else stall(); \

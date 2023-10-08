@@ -43,24 +43,8 @@ bool buf_dump_to_file (rom filename, ConstBufferP buf, unsigned buf_word_width, 
     else
         success = file_put_data (update_filename, buf->data, buf->len * buf_word_width, 0);
 
-    if (success && do_gzip) {
-        char command[fn_len + 50];
-        sprintf (command, "gzip -f \"%s\"", update_filename);
-        int ret = system (command);
-        ASSERTW (!ret, "FYI: \"%s\" returned %d. No harm.", command, ret); 
-
-        if (!ret) {
-            // special case: rename .bam.gz -> .bam
-            if (fn_len >= 4 && !memcmp (&update_filename[fn_len-4], ".bam", 4)) {
-                char gz_filename[fn_len + 10];
-                sprintf (gz_filename, "%s.gz", update_filename);
-                file_remove (update_filename, true);
-                file_rename (gz_filename, update_filename, false);
-            }
-            else 
-                strcpy (&update_filename[fn_len], ".gz");
-        }
-    }        
+    if (success && do_gzip) 
+        file_gzip (update_filename); // updates filename if successful
 
     if (success && verbose) iprintf ("\nDumped file %s\n", update_filename);
 

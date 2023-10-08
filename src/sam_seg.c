@@ -319,6 +319,9 @@ void sam_seg_initialize (VBlockP vb_)
                       T(MP(BSSEEKER2), OPTION_XM_Z), T(MP(BSSEEKER2), OPTION_XG_Z),
                       T(MP(BSBOLT), OPTION_XB_Z),
                       T(MP(BISMARK), OPTION_XM_Z),
+                      T(MP(NOVOALIGN), OPTION_YH_Z), T(MP(NOVOALIGN), OPTION_YQ_Z),
+                      T(TECH(PACBIO), OPTION_dt_Z), T(TECH(PACBIO), OPTION_mq_Z), T(TECH(PACBIO), OPTION_st_Z),
+                      T(TECH(PACBIO), OPTION_dq_Z), T(TECH(PACBIO), OPTION_iq_Z), T(TECH(PACBIO), OPTION_sq_Z),
                       OPTION_CY_Z, OPTION_QT_Z, OPTION_CB_Z, // barcode fallback segging - add to local text
                       T(kraken_is_loaded, SAM_TAXID),
                       DID_EOL);
@@ -419,10 +422,12 @@ void sam_seg_initialize (VBlockP vb_)
         sam_seg_TX_AN_initialize (vb, OPTION_AN_Z);
     }
 
-    if (MP(ULTIMA)) 
+    if (MP(ULTIMA) || segconf.running) // note: need also in segconf, so we can identify Ultima parameters in case it is Ultima (no harm if it is not)
         sam_ultima_seg_initialize (vb);
     else
         CTX(OPTION_t0_Z)->no_callback = true; // override Ultima's sam_zip_t0
+    
+    if (MP(DRAGEN)) sam_dragen_initialize (vb);
     
     ctx_set_store (VB, STORE_INDEX, OPTION_XA_Z, DID_EOL); // for containers this stores repeats - used by sam_piz_special_X1->container_peek_repeats
 
@@ -643,6 +648,33 @@ static uint32_t num_lines_at_max_len (VBlockSAMP vb)
     return count;
 }
 
+void sam_segconf_set_by_MP (void)
+{
+    // note: this file *might* be of bisulfite-treated reads. This variable might be reset in sam_seg_finalize_segconf if it fails additonal conditions 
+    segconf.sam_bisulfite     = MP(BISMARK) || MP(BSSEEKER2) || MP(DRAGEN) || MP(BSBOLT) || MP(GEM3) || MP(ULTIMA);
+    segconf.sam_has_bismark_XM_XG_XR = MP(BISMARK) || MP(DRAGEN) || MP(ULTIMA);
+
+    // in bisulfate data, we still calculate MD:Z and NM:i vs unconverted reference
+    segconf.MD_NM_by_unconverted = MP(BISMARK) || MP(DRAGEN) || MP(BSBOLT) || MP(GEM3) || MP(BSSEEKER2);
+
+    segconf.is_bwa            = MP(BWA) || MP(BSBOLT) || MP (CPU) || MP(BWA_MEM2) || MP(PARABRICKS); // aligners based on bwa
+    segconf.is_minimap2       = MP(MINIMAP2) || MP(WINNOWMAP) || MP(PBMM2);   // aligners based on minimap2
+    segconf.is_bowtie2        = MP(BOWTIE2) || MP(HISAT2) || MP(TOPHAT) || MP(BISMARK) || MP(BSSEEKER2); // aligners based on bowtie2
+
+    segconf.sam_has_SA_Z      = segconf.is_bwa || segconf.is_minimap2 || MP(NGMLR) || MP(DRAGEN) || MP(NOVOALIGN) || MP(ULTIMA) || MP(ISAAC); /*|| MP(LONGRANGER); non-standard SA:Z format (POS is off by 1, main-field NM is missing) */ 
+    segconf.sam_has_BWA_XA_Z  = (segconf.is_bwa || MP(GEM3) || MP(GEM2SAM) || MP(DELVE) || MP(DRAGEN) || MP(ULTIMA)) ? yes 
+                              : MP(TMAP) || MP(TORRENT_BC)                                                           ? no 
+                              :                                                                                        segconf.sam_has_BWA_XA_Z; // remain "unknown" or as determined by segconf
+                              
+    segconf.sam_has_BWA_XS_i  = segconf.is_bwa || MP(TMAP) || MP(GEM3) || (segconf.is_bowtie2 && !MP(HISAT2)) || MP(CPU) || MP(LONGRANGER) || MP(DRAGEN);
+    segconf.sam_has_BWA_XM_i  = segconf.is_bwa || segconf.is_bowtie2 || MP(NOVOALIGN) || MP(DRAGEN);
+    segconf.sam_has_BWA_XT_A  = segconf.is_bwa || MP(DRAGEN);
+    segconf.sam_has_BWA_XC_i  = segconf.is_bwa || MP(DRAGEN);
+    segconf.sam_has_BWA_X01_i = segconf.is_bwa || MP(DRAGEN);
+
+    segconf.sam_has_bowtie2_YS_i = MP(BOWTIE2) || MP(BSSEEKER2) || MP(HISAT2);
+}
+
 // finalize Seg configuration parameters
 static void sam_seg_finalize_segconf (VBlockSAMP vb)
 {
@@ -663,9 +695,17 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
     if (segconf.seq_len_to_cm > 255)
         segconf.seq_len_to_cm = 0;
 
+    // 1. earlier Ultima files where bwa was used, 2. headerless files - if we have ultima fields treat as MP_ULTIMA
+    if (TECH(ULTIMA) && (MP(BWA) || MP(UNKNOWN)) && segconf.has[OPTION_t0_Z] && segconf.has[OPTION_tp_B_c]) {
+        segconf.sam_mapper = MP_ULTIMA;
+        sam_segconf_set_by_MP();
+    }
+
     // in some STAR transcriptome files, there are no @PG header lines. it is important that mapper is set to STAR so we can use liberal saggy_line_i, as SA groups are large
-    if (MP(UNKNOWN) && segconf.has[OPTION_NH_i] && segconf.has[OPTION_HI_i] && !segconf.has[OPTION_SA_Z])
+    if (MP(UNKNOWN) && segconf.has[OPTION_NH_i] && segconf.has[OPTION_HI_i] && !segconf.has[OPTION_SA_Z]) {
         segconf.sam_mapper = MP_STAR;
+        sam_segconf_set_by_MP();
+    }
 
     if (MP(STAR)) segconf.sag_has_AS = true;
 
@@ -684,8 +724,8 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
         segconf.has_cellranger = true; // STAR Solo mimics cellranger's tags
     }
 
-    // we set AS_is_2ref_consumed, meaning AS tends to be near 2 X ref_consumed, if at least half of the lines say so
-    segconf.AS_is_2ref_consumed = (segconf.AS_is_2ref_consumed > vb->lines.len32 / 2);
+    segconf.AS_is_ref_consumed  = (segconf.AS_is_ref_consumed > vb->lines.len32 / 2);
+    segconf.AS_is_2ref_consumed = (segconf.AS_is_2ref_consumed > vb->lines.len32 / 2); // AS tends to be near 2 X ref_consumed, if at least half of the lines say so
 
     // possibly reset sam_bisulfite, first set in sam_header_zip_inspect_PG_lines 
     segconf.sam_bisulfite = MP(BISMARK) || MP(BSSEEKER2) || MP(BSBOLT) ||
@@ -704,9 +744,6 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
     segconf.sam_predict_meth_call = segconf.sam_bisulfite          &&
                                     !IS_REF_INTERNAL && // bug 648
                                     (MP(BISMARK) || MP(DRAGEN) || MP(BSBOLT)); // have methylation call tags
-
-    // in bisulfate data, we still calculate MD:Z and NM:i vs unconverted reference
-    segconf.MD_NM_by_unconverted = MP(BISMARK) || MP(DRAGEN) || MP(BSBOLT) || MP(GEM3) || MP(BSSEEKER2);
 
     // if we have @HD-SO "coordinate" or "queryname", then we take that as definitive. Otherwise, we go by our segconf sampling.
     if (sam_hd_so == HD_SO_COORDINATE) {
@@ -754,11 +791,8 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
         segconf.sam_ms_type = ms_BIOBAMBAM;
 
     // update context tag names if this file has UB/UR/UY which are aliased to BX/RX/QX
-    if (segconf.has[OPTION_UB_Z] || segconf.has[OPTION_UR_Z]) {
-        strcpy (ZCTX(OPTION_BX_Z)->tag_name, "UB:Z");
-        strcpy (ZCTX(OPTION_RX_Z)->tag_name, "UR:Z");
-        strcpy (ZCTX(OPTION_QX_Z)->tag_name, "UY:Z");
-    }
+    if (segconf.has[OPTION_UB_Z] || segconf.has[OPTION_UR_Z]) 
+        sam_segconf_retag_UBURUY();
 
     // allow aligner if unmapped file (usually only enabled in best) if we have unmapped reads in segconf indicating a file enriched
     // in unmapped reads (normally, in sorted BAMs unmapped reads are at the end of the file)
@@ -787,7 +821,7 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
         RESTORE_FLAG(quiet);
     }
 
-    if (TECH(ULTIMA))
+    if (MP(ULTIMA))
         sam_ultima_finalize_segconf (vb);
 
     if (flag.reference == REF_INTERNAL && !txt_file->redirected && (!segconf.sam_is_unmapped || !segconf.is_long_reads))

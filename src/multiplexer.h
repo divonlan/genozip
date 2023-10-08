@@ -34,9 +34,10 @@ struct __attribute__ ((__packed__)) {               \
 typedef MULTIPLEXER(1000) *MultiplexerP;
 typedef const MULTIPLEXER(1000) *ConstMultiplexerP;
 
-typedef MULTIPLEXER(2) Multiplexer2, *Multiplexer2P;
-typedef MULTIPLEXER(3) Multiplexer3, *Multiplexer3P;
-typedef MULTIPLEXER(4) Multiplexer4, *Multiplexer4P;
-typedef MULTIPLEXER(5) Multiplexer5, *Multiplexer5P;
-typedef MULTIPLEXER(6) Multiplexer6, *Multiplexer6P;
-typedef MULTIPLEXER(7) Multiplexer7, *Multiplexer7P;
+typedef MULTIPLEXER(2)  Multiplexer2,  *Multiplexer2P;
+typedef MULTIPLEXER(3)  Multiplexer3,  *Multiplexer3P;
+typedef MULTIPLEXER(4)  Multiplexer4,  *Multiplexer4P;
+typedef MULTIPLEXER(5)  Multiplexer5,  *Multiplexer5P;
+typedef MULTIPLEXER(6)  Multiplexer6,  *Multiplexer6P;
+typedef MULTIPLEXER(7)  Multiplexer7,  *Multiplexer7P;
+typedef MULTIPLEXER(10) Multiplexer10, *Multiplexer10P;

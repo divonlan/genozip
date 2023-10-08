@@ -946,6 +946,7 @@ bool zfile_update_txt_header_section_header (uint64_t offset_in_z_file, uint32_t
 // ZIP compute thread - called from zip_compress_one_vb()
 void zfile_compress_vb_header (VBlockP vb)
 {
+
     SectionHeaderVbHeader vb_header = {
         .magic             = BGEN32 (GENOZIP_MAGIC),
         .section_type      = SEC_VB_HEADER,

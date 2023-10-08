@@ -12,6 +12,17 @@
 
 // fields used by STARsolo and 10xGenomics cellranger. Some are SAM-standard and some not.
 
+// update context tag names if this file has UB/UR/UY which are aliased to BX/RX/QX
+void sam_segconf_retag_UBURUY (void)
+{
+    strcpy (ZCTX(OPTION_BX_Z)->tag_name, "UB:Z");
+    strcpy (ZCTX(OPTION_RX_Z)->tag_name, "UR:Z");
+    strcpy (ZCTX(OPTION_QX_Z)->tag_name, "UY:Z");
+    strcpy (ZCTX(OPTION_QX_DOMQRUNS)->tag_name, "U0Y_DOMQ");
+    strcpy (ZCTX(OPTION_QX_QUALMPLX)->tag_name, "U1Y_MPLX");
+    strcpy (ZCTX(OPTION_QX_DIVRQUAL)->tag_name, "U2Y_DEVQ");
+}
+
 //------------------------------------------------------------------------------------------------------------------------
 // CB:Z - "Cell identifier, consisting of the optionally-corrected cellular barcode sequence and an optional suffix"
 // CellRanger format: CB:Z:TCACTATCATGGCTGC-1 

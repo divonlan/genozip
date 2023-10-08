@@ -111,7 +111,7 @@ char *progress_new_component (rom new_component_name,
 
 void progress_update (rom task, char **prefix, uint64_t sofar, uint64_t total, bool done)
 {
-    char time_str[70], progress[200];
+    char time_str[70], progress_str[200];
     if (flag.quiet && !flag.debug_progress) return; 
 
     TimeSpecType tb; 
@@ -132,8 +132,8 @@ void progress_update (rom task, char **prefix, uint64_t sofar, uint64_t total, b
         if (!flag.debug_progress)
             progress_update_status (prefix, "Finalizing...");
         else {
-            sprintf (progress, "Finalizing... %u%% task=%s sofar=%"PRIu64" total=%"PRIu64, (unsigned)percent, task, sofar, total);            
-            progress_update_status (prefix, progress);
+            sprintf (progress_str, "Finalizing... %u%% task=%s sofar=%"PRIu64" total=%"PRIu64, (unsigned)percent, task, sofar, total);            
+            progress_update_status (prefix, progress_str);
         }
     }
     
@@ -146,12 +146,12 @@ void progress_update (rom task, char **prefix, uint64_t sofar, uint64_t total, b
             str_human_time (secs, false, time_str);
 
             if (!flag.debug_progress)
-                sprintf (progress, "%u%% (%s)", (unsigned)percent, time_str);
+                sprintf (progress_str, "%u%% (%s)", (unsigned)percent, time_str);
             else
-                sprintf (progress, "%u%% (%s) task=%s sofar=%"PRIu64" total=%"PRIu64" seconds_so_far=%d", 
+                sprintf (progress_str, "%u%% (%s) task=%s sofar=%"PRIu64" total=%"PRIu64" seconds_so_far=%d", 
                          (unsigned)percent, time_str, task, sofar, total, seconds_so_far);            
 
-            progress_update_status (prefix, progress);
+            progress_update_status (prefix, progress_str);
         }
     }
 

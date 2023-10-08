@@ -22,7 +22,7 @@ void vcf_dbsnp_seg_initialize (VBlockVCFP vb)
 {
     seg_mux_init (VB, CTX(INFO_VC), 3, VCF_SPECIAL_MUX_BY_VARTYPE, true, (MultiplexerP)&vb->mux_VC);
 
-    CTX(VCF_QUAL)->no_stons = true;
+    ctx_set_no_stons (VB, VCF_QUAL, INFO_FREQ, DID_EOL);
 }
 
 // ##INFO=<ID=RS,Number=1,Type=Integer,Description="dbSNP ID (i.e. rs number)">

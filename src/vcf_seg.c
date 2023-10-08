@@ -161,6 +161,7 @@ void vcf_seg_initialize (VBlockP vb_)
     ctx_set_no_stons (VB, VCF_CHROM, VCF_oCHROM, VCF_FORMAT, VCF_INFO, VCF_oSTATUS, VCF_COORDS, 
                       VCF_TOPLEVEL, VCF_TOPLUFT, VCF_LIFT_REF, VCF_COPYPOS, VCF_oXSTRAND, 
                       VCF_POS, VCF_oPOS, VCF_LINE_NUM, INFO_HGVS_del_start_pos, INFO_HGVS_ins_start_pos, INFO_HGVS_ins_start_pos, // as required by seg_pos_field
+                      INFO_FATHMM_score, INFO_VEST3_score, // dbNSFP
                       DID_EOL);
 
     ctx_set_store (VB, STORE_INDEX, VCF_oSTATUS, VCF_COORDS, VCF_oXSTRAND, VCF_CHROM, VCF_oCHROM, DID_EOL);

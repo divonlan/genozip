@@ -552,7 +552,7 @@ typedef COMPRESSOR_CALLBACK (LocalGetLineCB);
 #define SAFE_ASSIGNx(addr,char_val,x) /* we are careful to evaluate addr, char_val only once, lest they contain eg ++ */ \
     char *__addr##x = (char*)(addr); \
     char __save##x  = *__addr##x; \
-    *__addr##x= (char_val)
+    *__addr##x = (char_val)
 #define SAFE_RESTOREx(x) *__addr##x = __save##x
 
 #define SAFE_ASSIGN(addr,char_val) SAFE_ASSIGNx ((addr), (char_val), _)
@@ -561,6 +561,8 @@ typedef COMPRESSOR_CALLBACK (LocalGetLineCB);
 #define SAFE_NULT(str) SAFE_ASSIGN((&str[str##_len]), 0)
 
 #define SAFE_RESTORE SAFE_RESTOREx(_)
+
+#define RESAFE_NUL(addr) ({ SAFE_RESTORE ; __addr_ = (char*)(addr); __save_ = *__addr_ ; *__addr_ = 0; })
 
 // sanity checks
 extern void noreturn main_exit (bool show_stack, bool is_error);

@@ -30,7 +30,6 @@ static VBlockP scan_vb;
 #define z_qname_index  evb->z_data
 
 typedef struct { uint32_t hash; VBIType vb_i; } QnameIndexEnt;
-
 static rom scan_index_one_line (VBlockSAMP vb, rom alignment, uint32_t remaining_txt_len)   
 {
     STR(qname);

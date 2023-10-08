@@ -278,7 +278,7 @@ void vcf_piz_GT_cb_null_GT_if_null_DP (VBlockP vb , char *recon)
         STR(DP);
         reconstruct_peek (VB, CTX(FORMAT_DP), pSTRa(DP));
 
-        if (str_is_1char (DP, '.')) {
+        if (IS_PERIOD (DP)) {
             recon[-2] = recon[0] = '.';
             recon[-1] = '/';
         }

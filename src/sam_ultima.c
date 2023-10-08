@@ -33,9 +33,12 @@ void sam_ultima_seg_initialize (VBlockSAMP vb)
 
     seg_by_ctx (VB,STRa(vb->mux_tp.snip), arr_ctx, 0);  // all-the-same (not ctx_create node bc we need the b250 to carry the flags)
 
-    if (segconf.sam_has_ultima_t0)
-        codec_t0_comp_init (VB);
-    else
+    if (segconf.sam_has_ultima_t0) {
+        if (IS_DEPN(vb))
+            CTX(OPTION_t0_Z)->ltype = LT_SEQUENCE; // see bug 922
+        else
+            codec_t0_comp_init (VB); 
+    } else
         CTX(OPTION_t0_Z)->no_callback = true; // seg t0 normally
 
     if (segconf.running) {
@@ -49,7 +52,6 @@ void sam_ultima_finalize_segconf (VBlockSAMP vb)
 }
 
 // example: tp:B:c,1,1,1,1,1,1,-1,2,0,0,0,2,-1,1,1,-1,2,0,0,0,0,2,-1,1,1,0,0,
-
 void sam_seg_ultima_tp (VBlockSAMP vb, ContextP arr_ctx, void *dl_, void *tp_, uint32_t tp_len)
 {
     START_TIMER;
@@ -79,10 +81,10 @@ void sam_seg_ultima_tp (VBlockSAMP vb, ContextP arr_ctx, void *dl_, void *tp_, u
                 seg_integer_as_snip (vb, chan[6]->did_i, tp[i], false);
         }
         else 
-            *next[b]++ = tp[i]; // multiplex by whether QUAL[i] is 'I'
+            *next[b]++ = tp[i]; 
     }
 
-    // If BAM: divvy is txt_len between the two channels. note: this is a lot more difficult to do for SAM
+    // If BAM: divvy is txt_len between the channels. note: this is a lot more difficult to do for SAM
     bool is_bam = IS_BAM_ZIP;
     if (is_bam) {
         chan[6]->txt_len += tp_len;
@@ -220,7 +222,8 @@ void sam_seg_ultima_XW (VBlockSAMP vb, STRp(xw), unsigned add_bytes)
     seg_array_of_struct (VB, CTX(OPTION_XW_Z), container_XW, STRa(xw), callbacks, add_bytes);
 }
 
-// t0:Z : 
+// t0:Z : supplemental base quality information
+// example: =77+**1119955))),,,..=I///;;;222888*****:;;>>>>AA<<<<IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII@@@@IIAAAA<<<<
 void sam_seg_ultima_t0 (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(t0), unsigned add_bytes)    
 {                                                          
     decl_ctx (OPTION_t0_Z);

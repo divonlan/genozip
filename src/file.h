@@ -47,7 +47,8 @@ typedef struct File {
     int64_t disk_size;                 // 0 if not known (eg stdin or http stream). 
     int64_t disk_so_far;               // data read/write to/from "disk" (using fread/fwrite) (possibley gz/bz2 compressed)
     int64_t est_seggable_size;         // TXT_FILE ZIP, access via txtfile_get_seggable_size(). Estimated size of txt_data in file, i.e. excluding the header. It is exact for plain files, or based on test_vb if the file has source compression
-
+    int64_t est_num_lines;             // TXT_FILE ZIP, an alternative for progress bar - by lines instead of bytes
+    
     // this relate to the textual data represented. In case of READ - only data that was picked up from the read buffer.
     int64_t txt_data_so_far_single;    // TXT_FILE: data read (ZIP) or written (PIZ) to/from txt file so far
                                        // Z_FILE: txt data represented in the GENOZIP data written (ZIP) or read (PIZ) to/from the genozip file so far for the current txt file
@@ -251,6 +252,7 @@ extern bool file_is_dir (rom filename);
 extern void file_mkdir (rom dirname);
 extern void file_remove (rom filename, bool fail_quietly);
 extern bool file_rename (rom old_name, rom new_name, bool fail_quietly);
+extern void file_gzip (char *filename);
 extern void file_mkfifo (rom filename);
 extern uint64_t file_get_size (rom filename);
 extern char *file_compressible_extensions (bool plain_only);

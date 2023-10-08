@@ -417,19 +417,17 @@ static uint32_t txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb)
             pass_to_next_vb_len = (DT_FUNC(txt_file, unconsumed)(vb, bb->txt_index, &last_i));
             if (pass_to_next_vb_len >= 0) goto done; // we have the answer (callback returns -1 if it needs more data)
         }
-
-        libdeflate_free_decompressor ((struct libdeflate_decompressor **)&vb->gzip_compressor);
-
-        // if not found - fall through to test the passed-down data too now
     }
 
     // test remaining txt_data including passed-down data from previous VB
     pass_to_next_vb_len = (DT_FUNC(vb, unconsumed)(vb, 0, &last_i));
 
-    // case: we're testing memory and this VB is too small for a single line - return and caller will try again with a larger VB
-    if (segconf.running && pass_to_next_vb_len < 0) return (uint32_t)-1;
+    if (flag.truncate_partial_last_line && pass_to_next_vb_len < 0 && !segconf.running) 
+        Ltxt = pass_to_next_vb_len = 0; // truncate last partial line
 
-    ASSERT (pass_to_next_vb_len >= 0, "Reason: failed to find a full line %sin vb=%s data_type=%s txt_data.len=%u txt_file->codec=%s.\n"
+    ASSERT (pass_to_next_vb_len >= 0 ||
+            segconf.running, // case: we're testing memory and this VB is too small for a single line - return and caller will try again with a larger VB 
+            "Reason: failed to find a full line %sin vb=%s data_type=%s txt_data.len=%u txt_file->codec=%s.\n"
             "Known possible causes:\n"
             "- The file is %s %s.\n"
             "- The file is not a %s file.\n"
@@ -511,7 +509,7 @@ uint64_t txtfile_max_memory_per_vb (void)
     return segconf.vb_size - TXTFILE_READ_VB_PADDING;
 }
 
-// ZIP main threads.
+// ZIP main thread
 void txtfile_read_vblock (VBlockP vb)
 {
     START_TIMER;
@@ -627,7 +625,7 @@ void txtfile_read_vblock (VBlockP vb)
 
     if (!segconf.running) {
         biopsy_take (vb);
-        dispatcher_increment_progress ("read", Ltxt);
+        dispatcher_increment_progress ("read", txt_file->est_num_lines ? (Ltxt / MAX_(segconf.line_len,1)) : Ltxt);
     }
 
     COPY_TIMER (txtfile_read_vblock);

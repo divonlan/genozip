@@ -55,6 +55,8 @@ typedef struct {
     int optimize, optimize_sort, optimize_phred, GL_to_PL, GP_to_PP, optimize_VQSLOD,  // optimize flags
         optimize_QUAL, optimize_Vf, optimize_ZM, optimize_DESC,
         allow_ambiguous, add_line_numbers, match_chrom_to_reference, no_kmers;
+        
+    int truncate_partial_last_line; // we don't consider this option data modifying as its used for debugging - digest is calculated only after truncation
     
     char *dvcf_rename, *dvcf_drop;
     

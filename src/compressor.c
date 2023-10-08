@@ -41,7 +41,8 @@ uint32_t comp_compress (VBlockP vb,
     uint32_t data_compressed_len   = 0;
     uint32_t data_encrypted_len=0, data_padding=0, header_padding=0;
 
-    ASSERT (!data_uncompressed_len || uncompressed_data || callback, "\"%s\": data_uncompressed_len!=0 but neither uncompressed_data nor callback are provided", name);
+    ASSERT (!data_uncompressed_len || uncompressed_data || callback, "data_uncompressed_len!=0 but neither uncompressed_data nor callback are provided: st=%s ctx=%s", 
+            st_name (header->section_type), ctx ? ctx->tag_name : "NONE");
 
     ASSERTW (data_uncompressed_len < 1 GB, "%s: Excessive uncompressed_data_len=%u: %s. Please report to " EMAIL_SUPPORT, 
              VB_NAME, data_uncompressed_len, name); // compressing a buffer over 1GB is likely an indication of not handling some edge case well

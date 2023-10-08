@@ -526,6 +526,13 @@ static SmallContainer con_ultima_d_bc = {
 
 #define PX_ULTIMA_D_BC { "", "-", "-", "", "_" }  
 
+// example: 1
+static SmallContainer con_ultima_n = {
+    .repeats             = 1,
+    .nitems_lo           = 1,
+    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_FIXED_0_PAD, 10 } } }
+};
+
 // Singular Genomics
 // example: B05:000:FC2:4:1:272670:483
 static SmallContainer con_singular = {
@@ -956,6 +963,7 @@ static QnameFlavorStruct qf[] = {
                                                                                           TECH_ULTIMA,  TECH_NCBI,    QANY,   &con_ultima_c,      0,   14, {1,4,5,6,7,8,9,10,-1},{-1},         {4,7,8,10,-1},      {-1},           0,  -1,-1, -1,-1, -1, -1, 5,  0,                    /* flavor.ultima-c.fq */},
          { QF_ULTIMA_c_bc, "Ultima.c_bc",   { "V222:23526:::1:1:7:9831:222:1:443:N:0.99:Z0199:_GCTGCTGACA" },         
                                                                                           TECH_ULTIMA,  TECH_NCBI,    QANY,   &con_ultima_c_bc,   0,   15, {1,4,5,6,7,8,9,10,-1},{-1},         {4,7,8,10,-1},      {-1},           0,  -1,-1, -1,-1, -1, 14, 5,  0,                    /* flavor.ultima-c-bc.fq */},
+         { QF_ULTIMA_n,    "Ultima.n",      { "0871314132" },                             TECH_ULTIMA,  TECH_NCBI,    QANY,   &con_ultima_n,      0,   0,  {-1},               {0,-1},         {0,-1},             {-1},           0,  -1,-1, -1,-1, -1, -1, -1, 0,                    /* flavor.ultima-n.sam  */},
     {},  { QF_ION_TORR_3,  "IonTorrent",    { "ZEWTM:00130:07001" },                      TECH_IONTORR, TECH_NCBI,    QANY,   &con_ion_torrent_3, 0,   2,  {-1},               {1,2,-1},       {1,2,-1},           {-1},           0,  1,2,   -1,-1, -1, -1, -1, 17, PX_ion_torrent_3  /* flavor.ion_torrent_3.fq*/},
     {},  { QF_ILLUM_5i,    "Illumina-old#", { "HWI-ST550_0201:3:1101:1626:2216#ACAGTG" }, TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_5i,   '#', 5,  {1,2,3,4,-1},       {-1},           {3,4,-1},           {-1},           0,  -1,-1, -1,-1, -1, 5,  -1,                       },
     {},  { QF_ILLUM_5,     "Illumina-old",  { "SOLEXA-1GA-1_4_FC20ENL:7:258:737:870" },   TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_5,    0,   4,  {1,2,3,4,-1},       {-1},           {1,2,3,4-1},        {-1},           0,  -1,-1, -1,-1, -1, -1, -1,                       },

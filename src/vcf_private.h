@@ -75,7 +75,7 @@ typedef struct VBlockVCF {
     // Multiplexers
     #define first_mux mux_PLn
     DosageMultiplexer mux_PLn, mux_GL, mux_GP, mux_PRI, mux_DS, mux_PP, mux_PVAL, mux_FREQ, mux_RD, 
-                      mux_BAF, mux_X, mux_Y,
+                      mux_BAF, mux_X, mux_Y, mux_VAF,
                       mux_AD[2], mux_ADALL[2];
 
     PLMuxByDP PL_mux_by_DP;

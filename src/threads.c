@@ -98,6 +98,9 @@ static void noreturn threads_sigint_handler (int signum)
 
     mutex_who_is_locked(); // works only if --show_time
     buflist_who_is_locked();
+    
+    // flush remaining output (eg in genocat)
+    fflush (stdout);
     fflush (stderr);
 
     exit (128 + SIGTERM); 

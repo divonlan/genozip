@@ -250,7 +250,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_PS_by_PID)
         reconstruct_peek (vb, CTX(FORMAT_PID), pSTRa(pid)); // note: we can't use last_txt, because PS might be reconstructed before PID, as its peeked by GT
         
         // if this SPECIAL was used with PID='.'
-        if (str_is_1char (pid, '.')) 
+        if (IS_PERIOD (pid)) 
             ctx->value_is_missing = true;
 
         else {

@@ -92,7 +92,7 @@ void writer_set_num_txtheader_lines (CompIType comp_i, uint32_t num_txtheader_li
 // To do: return line according to recon plan even if modified. challenge: lines dropped by reconstructor and not known yet to writer
 uint64_t writer_get_txt_line_i (VBlockP vb, LineIType line_in_vb/*0-based*/)
 {
-    if (flag.data_modified) return 0;
+    if (flag.data_modified || !vb->lines.len32) return 0;
 
     // since data is unmodified, we have only FULL_VB, RANGE, END_OF_VB and TXTHEADER plan items 
     int64_t txt_num_lines  = 0;
@@ -325,9 +325,10 @@ static void writer_init_vb_info (void)
         #define DROP v->needs_recon = false
 
         // Drop if VB has no lines (can happen e.g. if all lines were sent to gencomp)
-        if (!v->num_lines  && 
-            !Z_DT(GENERIC) && // keep if generic: its normal that generic has no lines
-            !(piz_need_digest && z_has_gencomp)) // keep if we need to digest
+        if (!v->num_lines       && 
+            !Z_DT(GENERIC)      && // keep if generic: its normal that generic has no lines
+            vb_i != flag.one_vb && // sam_piz_dispatch_one_load_sag_vb needs the section header of one_vb 
+            !(piz_need_digest && z_has_gencomp)) // keep if we need to digest (digest after prim/depn lines are added back in)
             DROP; 
 
         // --one-vb: user only wants to see a single VB, and this is not it
@@ -1328,7 +1329,7 @@ static void writer_main_loop (VBlockP wvb) // same as wvb global variable
                 bool needs_flush = do_digest_v ? digest_one_vb (v->vb, false, &wvb->txt_data) : true;
 
                 // note: if we're digesting gencomp VBs, we dont flush wvb when finishing a non-digestable VB (eg PRIM/DEPN in SAM/BAM)
-                if (needs_flush)
+                if (needs_flush || i == txt_file->recon_plan.len-1/*final VB*/)  
                     writer_flush_vb (dispatcher, wvb, false, false); // flush remaining unflushed lines of this VB
 
                 writer_release_vb (v);

@@ -203,14 +203,14 @@ static inline void sam_load_groups_add_flags (VBlockSAMP vb, PlsgVbInfo *plsg, S
 // Grp loader compute thread: copy to z_file->sag_qual
 static inline void sam_load_groups_move_comp_to_zfile (VBlockSAMP vb, PlsgVbInfo *plsg, Sag *vb_grps, SAAln *vb_alns) 
 {
-    plsg->comp_qual_len   = vb_qual_buf.len; // update to actual (might not be the same as received from ZIP, if codec has changed)
+    plsg->comp_qual_len = vb_qual_buf.len; // update to actual (might not be the same as received from ZIP, if codec has changed)
     
     if (IS_SAG_SA)
         plsg->comp_cigars_len = vb_cigars_buf.len;
 
     // copy buffers in arbitrary order, based on mutex availability
-    bool qual_done=false, 
-         cigars_done= !IS_SAG_SA; // CIGARs only in SAG_BY_SA
+    bool qual_done = false; 
+    bool cigars_done = !IS_SAG_SA; // CIGARs only in SAG_BY_SA
     uint64_t start_qual=0, start_cigars=0;
 
     while (!qual_done || !cigars_done) {
@@ -572,8 +572,10 @@ static inline void sam_load_groups_add_grps (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
             sam_load_groups_add_seq (vb, plsg, g, plsg->seq_start + total_seq_len);
 
         // add QUAL data to the group, possibly compressing it in-memory
-        if (CTX(SAM_QUAL)->is_loaded)
+        if (CTX(SAM_QUAL)->is_loaded) 
             sam_load_groups_add_qual (vb, plsg, g);
+        else
+            g->no_qual = true; // prevent attempting to reconstruct QUAL if its not loaded
 
         // get the index of the tag in this alignment's AUX container. we're really interested if they exist or not.
         ContainerPeekItem idxs[2] = { { _OPTION_AS_i, -1 }, { _OPTION_MC_Z, -1 } };

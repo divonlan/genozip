@@ -510,7 +510,7 @@ static void gff_segconf_set_gff_version (VBlockP vb, STRp(attr))
 static void gff_seg_gff2_attrs_field (VBlockP vb, STRp(attribute))
 {
     // case: "." attribute
-    if (str_is_1char (attribute, '.')) {
+    if (IS_PERIOD(attribute)) {
         seg_by_did (VB, ".", 1, GFF_ATTRS, 2);
         return;
     }
@@ -613,7 +613,7 @@ static void gff_seg_gff2_attrs_field (VBlockP vb, STRp(attribute))
 static void gff_seg_gff3_attrs_field (VBlockP vb, STRp(field))
 {
     // case: "." field
-    if (str_is_1char (field, '.')) {
+    if (IS_PERIOD (field)) {
         seg_by_did (VB, ".", 1, GFF_ATTRS, 2);
         return;
     }

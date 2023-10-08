@@ -1407,6 +1407,20 @@ static void seg_verify_file_size (VBlockP vb)
     }
 }
 
+// increment progress indicator
+static void seg_increment_progress (VBlockP vb, uint32_t bytes_so_far_this_vb, int64_t *prev_increment)
+{
+    // by bytes or by lines
+    int64_t this_increment = (txt_file->est_num_lines ? vb->line_i : bytes_so_far_this_vb);
+    
+    int64_t increment = this_increment - *prev_increment;
+    
+    if (increment > (txt_file->est_num_lines ? 2500/*lines*/ : 1000000/*bytes*/)) {
+        dispatcher_increment_progress ("seg", increment);
+        *prev_increment = this_increment;
+    }
+}
+
 // split each lines in this VB to its components
 void seg_all_data_lines (VBlockP vb)
 {
@@ -1448,17 +1462,14 @@ void seg_all_data_lines (VBlockP vb)
 
     rom field_start = B1STtxt;
     bool hash_hints_set_1_3 = false, hash_hints_set_2_3 = false;
-    int64_t prev_increment = 0;
+    int64_t progress = 0;
+    int64_t n_lines_processed=0; // number of lines sent to segging. some of them might have been sent to gencomp. 
 
-    for (vb->line_i=0; vb->line_i < vb->lines.len32; vb->line_i++) {
+    for (vb->line_i=0; vb->line_i < vb->lines.len32; vb->line_i++, n_lines_processed++) {
 
-        // increment progress indicator
-        int64_t increment = BNUMtxt(field_start) - prev_increment;
-        if (increment > 1000000 && !segconf.running) {
-            dispatcher_increment_progress ("seg", increment);
-            prev_increment = BNUMtxt(field_start);
-        }
-
+        if (!segconf.running) 
+            seg_increment_progress (vb, BNUMtxt(field_start), &progress);
+        
         uint32_t remaining_txt_len = BREMAINS (vb->txt_data, field_start);
         
         if (!remaining_txt_len) { // we're done
@@ -1544,7 +1555,10 @@ void seg_all_data_lines (VBlockP vb)
      if (!flag.make_reference && !segconf.running && !flag.biopsy && flag.biopsy_line.line_i == NO_LINE) 
         seg_verify_file_size (vb);
 
-    dispatcher_increment_progress ("seg_final", (int64_t)vb->txt_size - prev_increment); // txt_size excludes lines moved to gencomp. increment might be negative
+    // txt_size and lines.len exclude lines moved to gencomp. increment might be negative
+    dispatcher_increment_progress ("seg_final", 
+                                   txt_file->est_num_lines ? (n_lines_processed - (int64_t)vb->lines.len) 
+                                                           : ((int64_t)vb->txt_size - progress));
 
     if (flag.debug_or_test) buflist_test_overflows(vb, __FUNCTION__); 
 
