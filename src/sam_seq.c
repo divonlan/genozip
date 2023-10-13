@@ -86,7 +86,7 @@ static bool sam_analyze_copied_SEQ (VBlockSAMP vb, STRp(seq), const PosType32 po
                         goto fail;
 
                     // case our seq is identical to the reference at this site
-                    else if (IS_NUCLEOTIDE (seq[i]) && seq[i] == REF(idx)) 
+                    else if (IS_ACGT (seq[i]) && seq[i] == REF(idx)) 
                         bit_i++; // bit remains set. 
  
                     // case: ref is set to a different value - update the bitmap
@@ -367,7 +367,7 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(s
                 
                 else while (n && next_ref < pos_index + ref_consumed) {
 
-                    bool normal_base = IS_NUCLEOTIDE (seq[i]);
+                    bool normal_base = IS_ACGT (seq[i]);
 
                     // circle around to beginning of chrom if out of range (can only happen with external reference, expected only with circular chromosomes) 
                     uint32_t idx = (next_ref >= range_len) ? next_ref - range_len : next_ref; 

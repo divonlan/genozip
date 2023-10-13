@@ -599,7 +599,7 @@ typedef struct { char s[256]; } StrTime; // long, in case of eg Chinese language
 extern StrTime str_time (void);
 
 #define SUPPORT "\nIf this is unexpected, please contact "EMAIL_SUPPORT".\n"
-#define ASSERT(condition, format, ...)       ( { if (!(condition)) { progress_newline(); fprintf (stderr, "%s Error in %s:%u " GENOZIP_CODE_VERSION ": ", str_time().s, __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); fflush (stderr); exit_on_error(true); }} )
+#define ASSERT(condition, format, ...)       ( { if (!(condition)) { progress_newline(); fprintf (stderr, "%s Error in %s:%u %s: ", str_time().s, __FUNCLINE, GENOZIP_CODE_VERSION); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); fflush (stderr); exit_on_error(true); }} )
 #define ASSERT0(condition, string)           ASSERT (condition, string "%s", "")
 #define ASSERTISNULL(p)                      ASSERT0 (!p, "expecting "#p" to be NULL")
 #define ASSERTNOTNULL(p)                     ASSERT0 (p, #p" is NULL")

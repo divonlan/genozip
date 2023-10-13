@@ -73,7 +73,7 @@ void ref_make_create_range (VBlockP vb)
     uint64_t seq_len = CTX(FASTA_NONREF)->local.len;
 
     // at this point, we don't yet know the first/last pos or the chrom - we just create the 2bit sequence array.
-    // the missing details will be added during ref_make_prepare_range_for_compress
+    // the missing details will be added during ref_make_prepare_one_range_for_compress
     r->ref = bits_alloc (seq_len * 2, false); // 2 bits per base
     r->range_id = vb->vblock_i-1;
 
@@ -114,22 +114,38 @@ void ref_make_ref_init (void)
     serializer_initialize (make_ref_merge_serializer);
 }
 
+void ref_make_prepare_ranges_for_compress (void)
+{
+    for_buf2 (Range, r, i, gref->ranges) { 
+        // we have exactly one contig for each VB (but possibly multiple VBs with the same contig), one one RAEntry for that contig
+        // during seg we didn't know the chrom,first,last_pos, so we add them now, from the RA
+        random_access_get_ra_info (i+1, &r->chrom, &r->first_pos, &r->last_pos);
+
+        // set gpos "global pos" - a single 0-based coordinate spanning all ranges in order        
+        // each chrom's gpos be 64-base aligned (so that is_set, which has 1 bit per base, can be word-aligned for each chrom) 
+        r->gpos = !i                         ? 0                                         // first range
+                : (r->chrom != (r-1)->chrom) ? ROUNDUP64 ((r-1)->gpos + ref_size (r-1))  // first range of a contig
+                :                              (r-1)->gpos + ref_size (r-1);             // 2nd+ range of contig
+    }
+
+    PosType64 max_gpos = BLST(Range, gref->ranges)->gpos;
+
+    // since our refhash entries are 32 bit, we cannot use the reference data beyond the first 4Gbp for creating the refhash
+    // TO DO: make the hash entries 40bit (or 64 bit?) if genome size > 4Gbp (bug 150)
+    ASSERTW (max_gpos <= MAX_ALIGNER_GPOS,
+             "FYI: %s contains %s bases. When compressing a FASTQ or unaligned (i.e. missing RNAME, POS) "
+             "SAM/BAM file using the reference being generated, only the first %s bases of the reference will be used, "
+             "possibly affecting the compression ratio. This limitation doesn't apply to aligned SAM/BAM files and VCF files. "
+             "If you need to use reference files larger than %s, let us know at " EMAIL_SUPPORT ".", 
+             txt_name, str_bases (max_gpos).s, str_bases (MAX_ALIGNER_GPOS).s, str_bases (MAX_ALIGNER_GPOS).s);
+}
+
 // the "read" part of reference-compressing dispatcher, called from ref_compress_ref
-void ref_make_prepare_range_for_compress (VBlockP vb)
+void ref_make_prepare_one_range_for_compress (VBlockP vb)
 {
     if (vb->vblock_i-1 == gref->ranges.len32) return; // we're done
 
-    Range *r = B(Range, gref->ranges, vb->vblock_i-1); // vb_i=1 goes to ranges[0] etc
-
-    // we have exactly one contig for each VB (but possibly multiple VBs with the same contig), one one RAEntry for that contig
-    // during seg we didn't know the chrom,first,last_pos, so we add them now, from the RA
-    random_access_get_ra_info (vb->vblock_i, &r->chrom, &r->first_pos, &r->last_pos);
-
-    // set gpos "global pos" - a single 0-based coordinate spanning all ranges in order        
-    // each chrom's gpos be 64-base aligned (so that is_set, which has 1 bit per base, can be word-aligned for each chrom) 
-    r->gpos = (vb->vblock_i == 1)        ? 0                                         // first range
-            : (r->chrom != (r-1)->chrom) ? ROUNDUP64 ((r-1)->gpos + ref_size (r-1))  // first range of a contig
-            :                              (r-1)->gpos + ref_size (r-1);             // 2nd+ range of contig
+    RangeP r = B(Range, gref->ranges, vb->vblock_i-1); // vb_i=1 goes to ranges[0] etc
 
     vb->range          = r; // range to compress
     vb->range->num_set = r->ref.nbits / 2;

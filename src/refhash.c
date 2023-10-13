@@ -200,16 +200,9 @@ void refhash_calc_one_range (VBlockP vb, // VB of reference compression dispatch
     // end of this one (note: we only look at one next range - even if it is very short, we will not overflow to the next one after)
     PosType64 num_bases = this_range_size - (nukes_per_hash - MIN_(next_range_size, nukes_per_hash) ); // take up to NUKES_PER_HASH bases from the next range, if available
 
-    // since our refhash entries are 32 bit, we cannot use the reference data beyond the first 4Gbp for creating the refhash
-    // TO DO: make the hash entries 40bit (or 64 bit?) if genome size > 4Gbp (bug 150)
-    if (r->gpos + num_bases >= MAX_ALIGNER_GPOS) {
-        WARN_ONCE ("FYI: %s contains more than %s bases. When compressing a FASTQ or unaligned (i.e. missing RNAME, POS) "
-                   "SAM/BAM file using the reference being generated, only the first %s bases of the reference will be used, "
-                   "possibly affecting the compression ratio. This limitation doesn't apply to aligned SAM/BAM files and VCF files. "
-                   "If you need to use reference files with > 4 billion bases, let us know at " EMAIL_SUPPORT ".", 
-                    txt_name, str_int_commas (MAX_ALIGNER_GPOS).s, str_int_commas (MAX_ALIGNER_GPOS).s);
-        return;
-    }
+    // we cannot use the reference data beyond the MAX_ALIGNER_GPOS for creating the refhash
+    if (r->gpos + num_bases - 1 > MAX_ALIGNER_GPOS)
+        return; // note: warning already displayed in ref_compress_ref
 
     decl_acgt_decode;
     for (PosType64 base_i=0; base_i < num_bases; base_i++)

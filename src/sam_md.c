@@ -44,7 +44,7 @@ static inline rom sam_md_consume_D (VBlockSAMP vb, bool is_depn, char **md_in_ou
 {
     char *md = *md_in_out;
 
-    if (! *md || *md != '^' || !IS_NUCLEOTIDE(md[1])) {
+    if (! *md || *md != '^' || !IS_ACGT(md[1])) {
         *critical_error = true;
         return "Malformed MD while parsing D - expecting '^'"; // expecting a deletion (must include at least one base)
     }
@@ -52,7 +52,7 @@ static inline rom sam_md_consume_D (VBlockSAMP vb, bool is_depn, char **md_in_ou
     md++;
 
     rom error=NULL;
-    while (IS_NUCLEOTIDE(*md) && D_bases) {
+    while (IS_ACGT(*md) && D_bases) {
         if (!error)
             error = sam_seg_analyze_set_one_ref_base (vb, is_depn, *pos, *md, *M_D_bases, range_p, lock); // // continue counting mismatch_bases_by_MD despite error
             
@@ -62,7 +62,7 @@ static inline rom sam_md_consume_D (VBlockSAMP vb, bool is_depn, char **md_in_ou
         md++;
     }
 
-    if (IS_NUCLEOTIDE(*md) || D_bases) {
+    if (IS_ACGT(*md) || D_bases) {
         *critical_error = true;
         return "CIGAR D length and MD number of deleted bases don't match"; 
     }
@@ -108,7 +108,7 @@ static inline rom sam_md_consume_M (VBlockSAMP vb, bool is_depn, char **md_in_ou
         // "bases" (eg N), but we apply the MD special alg only for ACGT.
         if (M_bases) {
 
-            if (!IS_NUCLEOTIDE (*md))
+            if (!IS_ACGT (*md))
                 error = (*md=='N' ? "Encountered 'N' base while parsing M" : "Not A,C,G,T,N while parsing M"); // Genozip reference supports only A,C,G,T, but this "base" in the MD string is not one of them
 
             else { // set base (if A,C,G,T) even if previous bases had an error

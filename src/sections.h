@@ -367,7 +367,8 @@ typedef struct {
 // used for SEC_LOCAL and SEC_B250
 typedef struct {
     SectionHeader;
-    LocalType ltype;           // populated in both SEC_B250 and SEC_LOCAL: goes into ctx.ltype - type of data for the ctx->local buffer
+    LocalType ltype;           // SEC_LOCAL: goes into ctx.ltype - type of data for the ctx->local buffer
+                               // SEC_250:   unused. up to 15.0.17 populated ctx->ltype and copied in PIZ to ctx->ltype if the corresponding local section is absent (not clear why)
     uint8_t param;             // Three options: 1. goes into ctx.local.param. (until v13: if flags.copy_local_param. since v14: always, except if ltype=LT_BITMAP) 
                                //                2. given to comp_uncompress as a codec parameter
                                //                3. starting 9.0.11 for ltype=LT_BITMAP: number of unused bits in top bits word

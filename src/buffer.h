@@ -59,25 +59,25 @@
 #define BAFTtxt             (&vb->txt_data.data[Ltxt])
 
 #define for_buf(element_type, iterator, buf)  \
-    for (element_type *iterator=B1ST(element_type, (buf)); iterator < BAFT(element_type, (buf)); iterator++)
+    for (element_type *iterator=B1ST(element_type, (buf)), *fb_after=BAFT(element_type, (buf)); iterator < fb_after; iterator++)
 
 #define for_buf_back(element_type, iterator, buf)  \
-    for (element_type *iterator=BLST(element_type, (buf)); iterator >= B1ST(element_type, (buf)); iterator--)
+    for (element_type *iterator=BLST(element_type, (buf)), *fb_first=B1ST(element_type, (buf)); iterator >= fb_first; iterator--)
 
 // loop with two concurrent iterators "iter_p" (pointer to element_type) and "iter_i" (32bit) 
 #define for_buf2(element_type, iter_p, iter_i, buf) \
-    for (uint32_t iter_i=0; iter_i < (buf).len32;)  \
-        for (element_type *iter_p=B1ST(element_type, (buf)); iter_p < BAFT(element_type, (buf)); iter_p++, iter_i++)
+    for (uint32_t iter_i=0, iter_i_after=(buf).len32; iter_i < iter_i_after;)  \
+        for (element_type *iter_p=B1ST(element_type, (buf)), *fb_after=BAFT(element_type, (buf)); iter_p < fb_after; iter_p++, iter_i++)
 
 #define for_buf2_back(element_type, iter_p, iter_i, buf) \
     for (int32_t iter_i=(buf).len32-1; iter_i >= 0;)  \
-        for (element_type *iter_p=BLST(element_type, (buf)); iter_p >= B1ST(element_type, (buf)); iter_p--, iter_i--)
+        for (element_type *iter_p=BLST(element_type, (buf)), *fb_first=B1ST(element_type, (buf)); iter_p >= fb_first; iter_p--, iter_i--)
 
 #define for_buf_tandem(element_type1, iterator1, buf1, element_type2, iterator2, buf2)  \
     ASSERT ((buf1).len32 == (buf2).len32, "expecting %s.len=%u == %s.len=%u", (buf1).name, (buf1).len32, (buf2).name, (buf2).len32);\
-    element_type1 *iterator1=B1ST(element_type1, (buf1)); \
+    element_type1 *iterator1=B1ST(element_type1, (buf1)), *fb_after=BAFT(element_type1, (buf1)); \
     element_type2 *iterator2=B1ST(element_type2, (buf2)); \
-    for (; iterator1 < BAFT(element_type, (buf)); iterator1++, iterator2++)
+    for (; iterator1 < fb_after; iterator1++, iterator2++)
 
 // remove entries from buffer that fail to meet the condition
 #define buf_remove_items_except_(type, buf, keep_predicate) \

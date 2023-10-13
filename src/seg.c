@@ -642,8 +642,7 @@ bool seg_id_field2_cb (VBlockP vb, ContextP ctx, STRp(id), uint32_t repeat)
 void seg_integer (VBlockP vb, ContextP ctx, int64_t n, bool with_lookup, unsigned add_bytes)
 {
 #ifdef DEBUG
-    ASSERT (segconf.running || ctx->ltype == LT_DYN_INT || ctx->ltype == LT_DYN_INT_h || ctx->ltype == LT_DYN_INT_H,
-            "ctx=%s must have a LT_DYN_INT* ltype", ctx->tag_name);
+    ASSERT (segconf.running || IS_LT_DYN (ctx->ltype), "ctx=%s must have a LT_DYN_INT* ltype", ctx->tag_name);
 
     ASSERT (segconf.running || ctx->flags.store == STORE_INT ||
             !(VB_DT(SAM) || VB_DT(BAM)) || ctx->tag_name[2] != ':' || // applicable to SAM/BAM optional fields
@@ -669,7 +668,7 @@ bool seg_integer_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_byt
 
     // case: its an integer
     if (!ctx->no_stons && is_int) { // we interpret no_stons as means also no moving ints to local (one of the reasons is that an int might actually be a float)
-        if (ctx->ltype < LT_DYN_INT) {
+        if (!IS_LT_DYN(ctx->ltype)) {
             ASSERT (ctx->ltype == LT_TEXT, "%s->ltype==%s, cannot be set to LT_DYN_INT", 
                     ctx->tag_name, lt_name(ctx->ltype));
 
@@ -691,7 +690,7 @@ bool seg_integer_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_byt
 void seg_numeric_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_bytes)
 {
 #ifdef DEBUG
-    ASSERT (segconf.running || ctx->ltype >= LT_DYN_INT, "Expecting %s.ltype to be DYN_INT*", ctx->tag_name);
+    ASSERT (segconf.running || IS_LT_DYN (ctx->ltype), "Expecting %s.ltype to be DYN_INT*", ctx->tag_name);
 #endif
 
     if (segconf.running) goto fallback;
@@ -1063,7 +1062,7 @@ bool seg_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip),
                 goto badly_formatted;
         }
         
-        else if (ctxs[i]->ltype >= LT_DYN_INT)
+        else if (IS_LT_DYN (ctxs[i]->ltype))
             seg_integer_or_not (VB, ctxs[i], STRi(item,i), account_in_subfields ? item_lens[i] : 0);
         
         else
@@ -1243,7 +1242,7 @@ bool seg_by_container (VBlockP vb, ContextP ctx, ContainerP con, STRp(value),
         if (item_seg)
             item_seg (vb, item_ctx, STRi(item, i), 0);
         
-        else if (item_ctx->ltype >= LT_DYN_INT)
+        else if (IS_LT_DYN (item_ctx->ltype))
             seg_integer_or_not (vb, item_ctx, STRi(item, i), item_lens[i]);
         
         else
@@ -1302,6 +1301,21 @@ void seg_integer_fixed (VBlockP vb, ContextP ctx, void *number, bool with_lookup
 
     if (with_lookup)     
         seg_by_ctx (vb, (char[]){ SNIP_LOOKUP }, 1, ctx, 0);
+}
+
+// requires setting ltype=LT_DYN_INT* in seg_initialize, but not need to set ltype as it will be set in zip_resize_local
+void seg_add_to_local_resizable (VBlockP vb, ContextP ctx, int64_t value, unsigned add_bytes)
+{
+#ifdef DEBUG
+    ASSERT (segconf.running || IS_LT_DYN (ctx->ltype), 
+            "%s: Expecting ctx->ltype=%s to be LT_DYN_INT* in ctx=%s ", LN_NAME, lt_name(ctx->ltype), ctx->tag_name);
+#endif
+
+    // TO DO: find a way to better estimate the size, see b250_per_line
+    buf_alloc (vb, &ctx->local, 1, vb->lines.len, int64_t, CTX_GROWTH, CTX_TAG_LOCAL);
+    BNXT (int64_t, ctx->local) = value;
+    if (add_bytes) ctx->txt_len += add_bytes;
+    ctx->local_num_words++;
 }
 
 void seg_diff (VBlockP vb, ContextP ctx, 

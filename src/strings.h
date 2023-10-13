@@ -10,23 +10,22 @@
 
 #include "genozip.h"
 
-#define IS_NUCLEOTIDE(c) ((c) == 'A' || (c) == 'T' || (c) == 'C' || (c) == 'G')
-#define IS_DIGIT(c)      ((c)>='0' && (c)<='9')
-#define NUM2HEXDIGIT(n)  ((n)<=9 ? '0' + (n) : 'A'+((n)-10))  // converts a number [0,15] to hex digit character
-#define HEXDIGIT2NUM(c)  (IS_DIGIT(c) ? ((c)-'0') : ((c)-'A') // converts an uppercase hex digit to a number [0,15]
-#define IS_HEXDIGIT(c)   (IS_DIGIT(c) || ((c)>='A' && (c)<='F') || ((c)>='a' && (c)<='f'))
-#define IS_HEXDIGITlo(c) (IS_DIGIT(c) || ((c)>='a' && (c)<='f'))
-#define IS_HEXDIGITUP(c) (IS_DIGIT(c) || ((c)>='A' && (c)<='F'))
-#define IS_CLETTER(c)    ((c)>='A' && (c)<='Z')
-#define IS_SLETTER(c)    ((c)>='a' && (c)<='z')
-#define IS_ACGT(c)       ((c)=='A' || (c)=='C' || (c)=='G' || (c)=='T')
-#define IS_ACGTN(c)      (IS_ACGT(c) || (c)=='N')
-#define IS_WS(c) ((c)=='\t' || (c)=='\r' || (c)=='\n')
-#define IS_LETTER(c) (IS_CLETTER(c) || IS_SLETTER(c))
+#define IS_DIGIT(c)        ((c)>='0' && (c)<='9')
+#define NUM2HEXDIGIT(n)    ((n)<=9 ? '0' + (n) : 'A'+((n)-10))      // converts a number [0,15] to hex digit character
+#define HEXDIGIT2NUM(c)    (IS_DIGIT(c) ? ((c)-'0') : ((c)-'A'+10)) // converts an uppercase hex digit to a number [0,15]
+#define IS_HEXDIGIT(c)     (IS_DIGIT(c) || ((c)>='A' && (c)<='F') || ((c)>='a' && (c)<='f'))
+#define IS_HEXDIGITlo(c)   (IS_DIGIT(c) || ((c)>='a' && (c)<='f'))
+#define IS_HEXDIGITUP(c)   (IS_DIGIT(c) || ((c)>='A' && (c)<='F'))
+#define IS_CLETTER(c)      ((c)>='A' && (c)<='Z')
+#define IS_SLETTER(c)      ((c)>='a' && (c)<='z')
+#define IS_ACGT(c)         ((c)=='A' || (c)=='T' || (c)=='C' || (c)=='G') // AT often have slightly higher frequency than CG, so testing first
+#define IS_ACGTN(c)        (IS_ACGT(c) || (c)=='N')
+#define IS_WS(c)           ((c)=='\t' || (c)=='\r' || (c)=='\n')
+#define IS_LETTER(c)       (IS_CLETTER(c) || IS_SLETTER(c))
 #define IS_ALPHANUMERIC(c) (IS_LETTER(c) || IS_DIGIT(c))
 #define IS_NON_WS_PRINTABLE(c) (((c)>=33) && ((c)<=126))
 extern bool is_printable[256];
-#define IS_PRINTABLE(c) is_printable[(uint8_t)(c)]
+#define IS_PRINTABLE(c)    is_printable[(uint8_t)(c)]
 #define IS_VALID_URL_CHAR(c) (IS_ALPHANUMERIC(c) || c=='-' || c=='_' || c=='.' || c=='~') // characters valid in a URL
 #define FLIP_CASE(c)  (IS_CLETTER(c) ? ((c)+32) : (IS_SLETTER(c) ? ((c)-32) : (c))) // flips lower <--> upper case
 #define UPPER_CASE(c) (IS_SLETTER(c) ? ((c)-32) : (c))

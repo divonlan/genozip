@@ -220,7 +220,6 @@ uint32_t zfile_compress_b250_data (VBlockP vb, ContextP ctx)
         .vblock_i              = BGEN32 (vb->vblock_i),
         .flags.ctx             = flags,
         .dict_id               = ctx->dict_id,
-        .ltype                 = ctx->ltype,
         .b250_size             = ctx->b250_size
     };
 

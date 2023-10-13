@@ -84,19 +84,7 @@ static inline void seg_add_to_local_fixed (VBlockP vb, ContextP ctx, const void 
 extern void seg_integer_fixed (VBlockP vb, Context *ctx, void *number, bool with_lookup, unsigned add_bytes);
 
 // requires setting ltype=LT_DYN_INT* in seg_initialize, but not need to set ltype as it will be set in zip_resize_local
-static inline void seg_add_to_local_resizable (VBlockP vb, ContextP ctx, int64_t value, unsigned add_bytes)
-{
-#ifdef DEBUG
-    ASSERT (segconf.running || ctx->ltype==LT_DYN_INT || ctx->ltype==LT_DYN_INT_h || ctx->ltype==LT_DYN_INT_H, 
-            "%s: Expecting ctx->ltype=%s to be LT_DYN_INT* in ctx=%s ", LN_NAME, lt_name(ctx->ltype), ctx->tag_name);
-#endif
-
-    // TO DO: find a way to better estimate the size, see b250_per_line
-    buf_alloc (vb, &ctx->local, 1, vb->lines.len, int64_t, CTX_GROWTH, CTX_TAG_LOCAL);
-    BNXT (int64_t, ctx->local) = value;
-    if (add_bytes) ctx->txt_len += add_bytes;
-    ctx->local_num_words++;
-}
+extern void seg_add_to_local_resizable (VBlockP vb, ContextP ctx, int64_t value, unsigned add_bytes);
 
 extern WordIndex seg_delta_vs_other_do (VBlockP vb, ContextP ctx, ContextP other_ctx, STRp(value), int64_t value_n, int64_t max_delta, unsigned add_bytes);
 static inline WordIndex seg_delta_vs_other (VBlockP vb, ContextP ctx, ContextP other_ctx, STRp(value))

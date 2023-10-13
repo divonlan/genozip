@@ -272,7 +272,7 @@ static int64_t fastq_get_pair_deep_value (VBlockFASTQP vb, ContextP ctx)
     ASSERT (ctx->localR1.next < ctx->localR1.len32, "%s: not enough data DEEP.localR1 (len=%u)", LN_NAME, ctx->localR1.len32); 
 
     switch (ctx->pair_ltype) {
-        case LT_INT64:  // note: if UINT64 will appear as INT64 is it was DYN_INT. we treat it as UINT64.
+        case LT_INT64:  // note: if UINT64 will appear as INT64 as it was DYN_INT. we treat it as UINT64.
         case LT_UINT64: return *B64(ctx->localR1, ctx->localR1.next++); 
         case LT_UINT32: return *B32(ctx->localR1, ctx->localR1.next++); 
         case LT_UINT16: return *B16(ctx->localR1, ctx->localR1.next++); 

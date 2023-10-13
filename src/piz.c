@@ -196,6 +196,9 @@ void piz_uncompress_all_ctxs (VBlockP vb)
         bool is_pair_section = vb_is_pair_2 && (BGEN32 (header->vblock_i) != vb->vblock_i); // is this a section of R1 read into an R2 vb 
         bool uncompress_to_pair = is_pair_section && (!header->flags.ctx.paired/*not pair-identical*/ || IS_ZIP); // ZIP: always; PIZ: if pair-assisted
 
+        ASSERT (is_b250 || header->ltype < NUM_LTYPES, "in vb=%u ctx=%s.%s: ltype=%u >= NUM_LTYPES=%u. This can possibly be solved by upgrading Genozip to the latest version", 
+                vb->vblock_i, ctx->tag_name, is_local ? "local" : "b250", header->ltype, NUM_LTYPES);
+
         // PIZ only: load normal section, or a pair-identical section of from the R1 VB
         if (!uncompress_to_pair) {
             
@@ -203,14 +206,17 @@ void piz_uncompress_all_ctxs (VBlockP vb)
             // R2 section was decompressed so no need for the pair-identical R1 section
             if ((is_local && ctx->local_uncompressed) || (is_b250 && ctx->b250_uncompressed))
                 continue;
-            
-            if (is_local || !ctx->ltype) // a b250 can set ltype if its not already set by an earlier SEC_LOCAL section  
-                ctx->ltype = header->ltype; // in case of b250
-            
-            if (is_local) 
+                        
+            if (is_local) {
                 ctx->lcodec = header->codec;
+                ctx->ltype = header->ltype; 
+            }
 
             else { // b250
+                // old logic - not clear if/why it is needed but not removed to avoid break back comp:
+                if (!VER(15) && !ctx->ltype) 
+                    ctx->ltype = header->ltype; 
+
                 ctx->iterator  = (SnipIterator){ .next_b250 = B1ST8 (ctx->b250), .prev_word_index = WORD_INDEX_NONE };
                 ctx->b250_size = header->b250_size; // note: for files<=v13, this was always 0, ie B250_BYTES_4
             }

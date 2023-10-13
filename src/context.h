@@ -382,9 +382,9 @@ extern rom dyn_type_name (DynType dyn_type);
 
 extern SORTER (sort_by_dict_id);
 
-#define for_zctx for (ContextP zctx=ZCTX(0); zctx < ZCTX(z_file->num_contexts); zctx++) 
-#define for_vctx for (ContextP vctx=CTX(0);  vctx < CTX(vb->num_contexts);      vctx++) 
-#define for_ctx  for (ContextP ctx=CTX(0);   ctx  < CTX(vb->num_contexts);      ctx++) 
-#define for_zctx_that for (ContextP zctx=ZCTX(0); zctx < ZCTX(z_file->num_contexts); zctx++) if /* for each context for which the condition is true */
-#define for_vctx_that for (ContextP vctx=CTX(0);  vctx < CTX(vb->num_contexts);      vctx++) if 
-#define for_ctx_that  for (ContextP ctx=CTX(0);   ctx  < CTX(vb->num_contexts);      ctx++)  if 
+#define for_zctx for (ContextP zctx=ZCTX(0), fc_after=ZCTX(z_file->num_contexts); zctx < fc_after; zctx++) 
+#define for_vctx for (ContextP vctx=CTX(0),  fc_after=CTX(vb->num_contexts);      vctx < fc_after; vctx++) 
+#define for_ctx  for (ContextP ctx=CTX(0),   fc_after=CTX(vb->num_contexts);      ctx  < fc_after; ctx++) 
+#define for_zctx_that for (ContextP zctx=ZCTX(0), fc_after=ZCTX(z_file->num_contexts); zctx < fc_after; zctx++) if /* for each context for which the condition is true */
+#define for_vctx_that for (ContextP vctx=CTX(0),  fc_after=CTX(vb->num_contexts);      vctx < fc_after; vctx++) if 
+#define for_ctx_that  for (ContextP ctx=CTX(0),   fc_after=CTX(vb->num_contexts);      ctx  < fc_after; ctx++)  if 

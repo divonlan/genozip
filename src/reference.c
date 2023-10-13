@@ -981,7 +981,7 @@ static void ref_compress_one_range (VBlockP vb)
 }
 
 // main thread: compress the reference - one section per range, using Dispatcher to do them in parallel 
-// note: this is not called in make_reference - instead, ref_make_prepare_range_for_compress is called
+// note: this is not called in make_reference - instead, ref_make_prepare_one_range_for_compress is called
 static void ref_prepare_range_for_compress (VBlockP vb)
 {
     static uint32_t next_range_i=0;
@@ -1028,10 +1028,14 @@ void ref_compress_ref (void)
         ref_contigs_compress_stored (gref);  
 
     // initialize Range.num_set (must be before ref_copy_compressed_sections_from_reference_file)
-    if (!flag.make_reference)
+    if (!flag.make_reference) {
         for_buf (Range, r, gref->ranges) 
             if (!r->num_set) 
                 r->num_set = -1; // if not already set by ref_contigs_populate_aligned_chroms
+    }
+
+    else 
+        ref_make_prepare_ranges_for_compress();
 
     // copy already-compressed SEC_REFERENCE sections from the genozip reference file, but only such sections that are almost entirely
     // covered by ranges with is_set=true. we mark these ranges affected as is_set=false.
@@ -1051,7 +1055,7 @@ void ref_compress_ref (void)
     // proceed to compress all ranges that have still have data in them after copying
     Dispatcher dispatcher = 
         dispatcher_fan_out_task ("compress_ref", NULL, 0, "Writing reference...", true, false, false, 0, 5000, false,
-                                 flag.make_reference ? ref_make_prepare_range_for_compress : ref_prepare_range_for_compress, 
+                                 flag.make_reference ? ref_make_prepare_one_range_for_compress : ref_prepare_range_for_compress, 
                                  ref_compress_one_range, 
                                  zfile_output_processed_vb);
 
@@ -1071,7 +1075,7 @@ void ref_compress_ref (void)
     // compress reference random access (note: in case of a reference file, SEC_REF_RAND_ACC will be identical to SEC_RANDOM_ACCESS. That's ok, its tiny)
     random_access_finalize_entries (&gref->stored_ra); // sort in order of vb_i
 
-    // range data needed for contigs is set in ref_make_prepare_range_for_compress, called from dispatcher_fan_out_task
+    // range data needed for contigs is set in ref_make_prepare_one_range_for_compress, called from dispatcher_fan_out_task
     if (flag.make_reference) {
         ref_contigs_compress_ref_make (gref); 
 
@@ -1433,7 +1437,7 @@ void ref_initialize_ranges (Reference ref, RangesType type)
     }
 
     // note: genome_nbases must be full words, so that bits_reverse_complement doesn't need to shift
-    // note: mirrors setting num_gap_bytes in ref_make_prepare_range_for_compress
+    // note: mirrors setting num_gap_bytes in ref_make_prepare_one_range_for_compress
     ref->genome_nbases = ROUNDUP64 (ref_contigs_get_genome_nbases (ref)) + 64; // round up to the nearest 64 bases, and add one word, needed by aligner_get_match_len for bit shifting overflow
 
     if (ref_has_is_set()) 

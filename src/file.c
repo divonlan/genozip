@@ -46,7 +46,7 @@ static StreamP input_decompressor = NULL; // bcftools or xz, unzip or samtools -
 static StreamP output_compressor  = NULL; // samtools (for cram), bcftools
 
 // global pointers - so the can be compared eg "if (mode == READ)"
-rom READ      = "rb";  // use binary mode (b) in read and write so Windows doesn't add \r
+rom READ      = "rb";  // use binary mode (b) in read and write so Windows doesn't add \r. "b" is accepted but ignored in Linux and MacOS.
 rom WRITE     = "wb";
 rom WRITEREAD = "wb+"; // only supported for z_file and gencomp disk files
 

@@ -97,7 +97,8 @@ typedef struct RefStruct {
 
 } RefStruct;
 
-extern void ref_make_prepare_range_for_compress (VBlockP vb);
+extern void ref_make_prepare_ranges_for_compress (void);
+extern void ref_make_prepare_one_range_for_compress (VBlockP vb);
 
 // lock stuff
 extern void ref_lock_initialize (Reference ref);

@@ -72,7 +72,7 @@ static void sam_header_add_contig (STRp (contig_name), PosType64 LN, void *out_r
 
     // In case of REF_INTERNAL compression, and we have a header contigs - we calculate their GPOS
     Contig *prev = sam_hdr_contigs->contigs.len ? B(Contig, sam_hdr_contigs->contigs, sam_hdr_contigs->contigs.len-1) : NULL;
-    PosType64 gpos = (IS_REF_INTERNAL && prev) ? ROUNDUP64 (prev->gpos + prev->max_pos) : 0; // similar to ref_make_prepare_range_for_compress
+    PosType64 gpos = (IS_REF_INTERNAL && prev) ? ROUNDUP64 (prev->gpos + prev->max_pos) : 0; // similar to ref_make_prepare_one_range_for_compress
 
     // add to contigs. note: index is sam_hdr_contigs is by order of appearance in header, not the same as the reference
     BNXT (Contig, sam_hdr_contigs->contigs) = (Contig){ 

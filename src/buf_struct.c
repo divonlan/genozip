@@ -210,8 +210,8 @@ void buf_alloc_do (VBlockP vb, BufferP buf, uint64_t requested_size,
 
 #define REQUEST_TOO_BIG_THREADSHOLD (3 GB)
     if (requested_size > REQUEST_TOO_BIG_THREADSHOLD && !buf->can_be_big) // use WARN instead of ASSERTW to have a place for breakpoint
-        WARN ("Warning: buf_alloc called from %s:%u " GENOZIP_CODE_VERSION " for \"%s\" requested %s. This is suspiciously high and might indicate a bug - please report to " EMAIL_SUPPORT ". vb->vblock_i=%u buf=%s line_i=%d",
-              func, code_line, name, str_size (requested_size).s, vb->vblock_i, buf_desc (buf).s, vb->line_i);
+        WARN ("Warning: buf_alloc called from %s:%u %s for \"%s\" requested %s. This is suspiciously high and might indicate a bug - please report to " EMAIL_SUPPORT ". vb->vblock_i=%u buf=%s line_i=%d",
+              func, code_line, GENOZIP_CODE_VERSION, name, str_size (requested_size).s, vb->vblock_i, buf_desc (buf).s, vb->line_i);
 
     ASSERT (buf->type == BUF_REGULAR || buf->type == BUF_UNALLOCATED, "called from %s:%u: cannot buf_alloc a buffer of type %s. details: %s", 
             func, code_line, buf_type_name (buf), buf_desc (buf).s);

@@ -374,39 +374,60 @@ static void zip_generate_transposed_local (VBlockP vb, ContextP ctx)
     
     buf_alloc (vb, &vb->scratch, 0, ctx->local.len * lt_width(ctx), char, 1, "scratch");
 
-    uint32_t cols = ctx->local.n_cols;
-    // we're restricted to 255 columns, because this number goes into uint8_t SectionHeaderCtx.param
-    ASSERT (cols >= 0 && cols <= 255, "columns=%u out of range [1,255] in transposed matrix %s", cols, ctx->tag_name);
+    uint32_t cols;
 
-    if (!cols) {
+    // note: caller needs to set local.n_cols to number of columns. or if it remains 0, it is interprets as vcf_num_samples
+    if (ctx->local.n_cols) {
+        cols = ctx->local.n_cols;
+
+        // we're restricted to 255 columns, because this number goes into uint8_t SectionHeaderCtx.param
+        ASSERT (cols >= 0 && cols <= 255, "columns=%u out of range [1,255] in transposed matrix %s", cols, ctx->tag_name);
+
+        ctx->local_param = true;
+    }
+    else {
         ASSERT (Z_DT(VCF), "%s: cols=0 for ctx=%s", VB_NAME, ctx->tag_name);
         cols = vcf_header_get_num_samples(); // not restricted to 255
-    }
+    } 
 
     // case: matrix is not transposable - just BGEN it
     if (ctx->local.len32 % cols) {
         ctx->ltype = LT_UINT32; // not transposed
+        ctx->local_param = false;
+
         BGEN_u32_buf (&ctx->local, 0);
         goto done;
     }
 
     uint32_t rows = ctx->local.len32 / cols;
 
-    ctx->local_param = true;
-    /* xxx I don't see where col goes into param??? need to test */
-    
-    for (uint32_t r=0; r < rows; r++) 
-        for (uint32_t c=0; c < cols; c++) {
-
-            uint32_t value = data[r * cols + c];
-
-            switch (ctx->ltype) { // note: the casting aslo correctly converts 0xffffffff to eg 0xff
-                case LT_UINT8_TR  : *B8 ( vb->scratch, c * rows + r) =         (uint8_t)value;   break;
-                case LT_UINT16_TR : *B16 (vb->scratch, c * rows + r) = BGEN16 ((uint16_t)value); break;
-                case LT_UINT32_TR : *B32 (vb->scratch, c * rows + r) = BGEN32 (value);           break;
-                default: ABORT ("Bad ltype=%s", lt_name (ctx->ltype));
-            }
+    switch (ctx->ltype) { // note: the casting also correctly converts 0xffffffff to eg 0xff
+        case LT_UINT8_TR: {
+            ARRAY (uint8_t, scratch, vb->scratch);
+            for (uint32_t r=0; r < rows; r++) 
+                for (uint32_t c=0; c < cols; c++) 
+                    scratch[c * rows + r] = (uint8_t)data[r * cols + c];
+            break;
         }
+
+        case LT_UINT16_TR: {
+            ARRAY (uint16_t, scratch, vb->scratch);
+            for (uint32_t r=0; r < rows; r++) 
+                for (uint32_t c=0; c < cols; c++) 
+                    scratch[c * rows + r] = BGEN16 ((uint16_t)data[r * cols + c]);
+            break;
+        }
+
+        case LT_UINT32_TR: {
+            ARRAY (uint32_t, scratch, vb->scratch);
+            for (uint32_t r=0; r < rows; r++) 
+                for (uint32_t c=0; c < cols; c++) 
+                    scratch[c * rows + r] = BGEN32 (data[r * cols + c]);
+            break;
+        }
+
+        default: ABORT ("Bad ltype=%s", lt_name (ctx->ltype));
+    }
 
     vb->scratch.len = ctx->local.len;
     buf_copy_do (vb, &ctx->local, &vb->scratch, lt_width(ctx), 0, 0, __FUNCLINE, CTX_TAG_LOCAL); // copy and not move, so we can keep local's memory for next vb
@@ -446,7 +467,7 @@ static bool zip_generate_local (VBlockP vb, ContextP ctx)
     
     ASSERT (ctx->dict_id.num, "tag_name=%s did_i=%u: ctx->dict_id=0 despite ctx->local containing data", ctx->tag_name, (unsigned)(ctx - vb->contexts));
 
-    bool resizeable = ctx->ltype == LT_DYN_INT || ctx->ltype == LT_DYN_INT_H || ctx->ltype == LT_DYN_INT_h; 
+    bool resizeable = IS_LT_DYN (ctx->ltype); 
     if (resizeable) 
         zip_resize_local (vb, ctx);
 

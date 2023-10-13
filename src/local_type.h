@@ -12,6 +12,7 @@
 
 // LT_* values are consistent with BAM optional 'B' types (and extend them)
 typedef enum __attribute__ ((__packed__)) { // 1 byte
+    // LT values that are part of the file format - values can be added but not changed
     LT_TEXT      = 0,   // 0-seperated snips
     LT_INT8      = 1,    
     LT_UINT8     = 2,
@@ -38,15 +39,17 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     LT_HEX32     = 23,  // upper-case UINT32 hex
     LT_hex64     = 24,  // lower-case UINT64 hex
     LT_HEX64     = 25,  // upper-case UINT64 hex
+    NUM_LTYPES,         // counts LocalTypes that can appear in the Genozip file format
 
-    // after here - not part of the file format, just used during seg
-    // note: the LT_DYN* types are assumed to be the last by 
+    // LT_DYN* - LT values that are NOT part of the file format, just used during seg 
     LT_DYN_INT,         // dynamic size local 
     LT_DYN_INT_h,       // dynamic size local - hex
     LT_DYN_INT_H,       // dynamic size local - HEX
     
-    NUM_LOCAL_TYPES
+    NUM_LOCAL_TYPES     // counts all LocalTypes
 } LocalType;
+
+#define IS_LT_DYN(ltype) ((ltype) == LT_DYN_INT || (ltype) == LT_DYN_INT_h || (ltype) == LT_DYN_INT_H)
 
 typedef void BgEnBufFunc (BufferP buf, LocalType *lt); 
 
@@ -90,7 +93,7 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
    { "H32", 0,   4,  0,     0,                     0xffffffffLL,          BGEN_u32_buf             }, \
    { "h64", 0,   8,  0,     0,                     0x7fffffffffffffffLL,  BGEN_u64_buf             }, \
    { "H64", 0,   8,  0,     0,                     0x7fffffffffffffffLL,  BGEN_u64_buf             }, \
-                                                                                                      \
+   { /* NUM_LTYPES */                                                                              }, \
    /* after here - not part of the file format, just used during seg */                               \
    { "DYN", 0,   8,  0,     0x8000000000000000LL,  0x7fffffffffffffffLL,  0                        }, \
    { "DYh" ,0,   8,  0,     0x8000000000000000LL,  0x7fffffffffffffffLL,  0                        }, \
