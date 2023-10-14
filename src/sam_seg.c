@@ -332,7 +332,7 @@ void sam_seg_initialize (VBlockP vb_)
                    DID_EOL);
 
     // initialize these to LT_SEQUENCE, the qual-type ones might be changed later to LT_CODEC (eg domq, longr)
-    ctx_set_ltype (VB, LT_SEQUENCE, SAM_QUAL, SAM_QUAL_FLANK, OPTION_BD_BI, OPTION_iq_sq_dq, 
+    ctx_set_ltype (VB, LT_SEQUENCE, SAM_QUAL, SAM_QUAL_FLANK, OPTION_BD_BI, OPTION_BQ_Z, OPTION_iq_sq_dq, 
                    OPTION_QX_Z, OPTION_CY_ARR, OPTION_QT_ARR,
                    OPTION_CR_Z_X, OPTION_RX_Z_X, OPTION_2R_Z, OPTION_TR_Z, DID_EOL);
 

@@ -170,6 +170,7 @@
 #pragma GENDICT OPTION_SM_i=DTYPE_2=SM:i     // Template-independent mapping quality
 #pragma GENDICT OPTION_TC_i=DTYPE_2=TC:i     // The number of segments in the template
 #pragma GENDICT OPTION_UQ_i=DTYPE_2=UQ:i     // Phred likelihood of the segment, conditional on the mapping being correct
+#pragma GENDICT OPTION_BQ_Z=DTYPE_2=BQ:Z     // Offset to base alignment quality (BAQ), of the same length as the read sequence. See https://www.htslib.org/doc/samtools-mpileup.html
 
 #pragma GENDICT OPTION_U2_Z=DTYPE_2=U2:Z     // Phred probability of the 2nd call being wrong conditional on the best being wrong
 #pragma GENDICT OPTION_U2_DOMQRUNS=DTYPE_2=DOMQRUNS // these 3 must be right after SAM_QUAL. DOMQRUNS is also used by LONGR. For backwards compatability, we can never change its name.
@@ -596,6 +597,7 @@ COMPRESSOR_CALLBACK(sam_zip_QX);
 COMPRESSOR_CALLBACK(sam_zip_2Y);
 COMPRESSOR_CALLBACK(sam_zip_U2);
 COMPRESSOR_CALLBACK(sam_zip_t0);
+COMPRESSOR_CALLBACK(sam_zip_BQ);
 COMPRESSOR_CALLBACK(sam_zip_iq_sq_dq);
 COMPRESSOR_CALLBACK(sam_zip_BD_BI);
 extern void sam_zip_initialize (void);
@@ -768,6 +770,7 @@ SPECIAL (SAM, 57, AS,                    sam_piz_special_AS);                  /
     { DT_SAM, _OPTION_TQ_Z,        sam_zip_TQ              }, \
     { DT_SAM, _OPTION_QX_Z,        sam_zip_QX              }, \
     { DT_SAM, _OPTION_2Y_Z,        sam_zip_2Y              }, \
+    { DT_SAM, _OPTION_BQ_Z,        sam_zip_BQ              }, \
     { DT_SAM, _OPTION_iq_sq_dq,    sam_zip_iq_sq_dq        }, \
     { DT_SAM, _OPTION_t0_Z,        sam_zip_t0              }, 
 
@@ -779,6 +782,7 @@ SPECIAL (SAM, 57, AS,                    sam_piz_special_AS);                  /
     { DT_BAM, _OPTION_TQ_Z,        sam_zip_TQ              }, \
     { DT_BAM, _OPTION_QX_Z,        sam_zip_QX              }, \
     { DT_BAM, _OPTION_2Y_Z,        sam_zip_2Y              }, \
+    { DT_BAM, _OPTION_BQ_Z,        sam_zip_BQ              }, \
     { DT_BAM, _OPTION_iq_sq_dq,    sam_zip_iq_sq_dq        }, \
     { DT_BAM, _OPTION_t0_Z,        sam_zip_t0              }, 
     

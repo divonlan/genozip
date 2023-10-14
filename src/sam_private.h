@@ -178,6 +178,7 @@ typedef struct {
     };
     TxtWord CIGAR;                 // SAM: coordinates in txt_data (always); BAM: coordinates in vb->line_textual_cigars
     TxtWord SEQ;                   // coordinates in txt_data. Note: len is actual sequence length in bases (not bytes) determined from any or or of: CIGAR, SEQ, QUAL. If more than one contains the length, they must all agree
+    TxtWord BQ;
     int32_t QUAL_score;            // used by ms:i
     int32_t nM;                    // used in paired-end STAR files
     SamASType AS;

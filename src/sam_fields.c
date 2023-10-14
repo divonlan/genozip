@@ -288,6 +288,30 @@ done:
     return NO_NEW_VALUE;
 }
 
+// ---------------------------------------------
+// BQ:Z "Offset to base alignment quality (BAQ)"
+// ---------------------------------------------
+
+static void sam_seg_BQ (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(bq), unsigned add_bytes)
+{
+    ContextP ctx = CTX(OPTION_BQ_Z);
+
+    dl->BQ = TXTWORD (bq);
+    ctx->local.len32 += bq_len;
+
+    if (bq_len == dl->SEQ.len) seg_simple_lookup (VB, ctx, add_bytes);
+    else                       seg_lookup_with_length (VB, ctx, bq_len, add_bytes);
+}
+
+COMPRESSOR_CALLBACK (sam_zip_BQ)
+{
+    ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
+
+    *line_data_len = dl->BQ.len;
+    *line_data = Btxt (dl->BQ.index);
+}
+
+
 // ----------------------------
 // NM:i "Number of differences"
 // ----------------------------
@@ -1309,6 +1333,8 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
         case _OPTION_NM_i: COND (!MP(BLASR), sam_seg_NM_i (vb, dl, (SamNMType)numeric.i, add_bytes)); // blasr uses NM:i in a non-standard way
 
         case _OPTION_nM_i: COND (MP(STAR), sam_seg_nM_i (vb, dl, (SamNMType)numeric.i, add_bytes)); break;
+        
+        case _OPTION_BQ_Z: sam_seg_BQ (vb, dl, STRa(value), add_bytes); break;
 
         case _OPTION_BD_Z:
         case _OPTION_BI_Z: sam_seg_BD_BI_Z (vb, dl, STRa(value), dict_id, add_bytes); break;

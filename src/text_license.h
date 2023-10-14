@@ -26,7 +26,7 @@ static rom license[] = {
 
     "2. Grant of copyright license. Licensor hereby grants to You a limited non-exclusive, non-transferrable, non-sublicensable, revokable copyright license to use Genozip on Your Computers, if you meet the conditions attached to any of the License Types a through f below, for the limited purpose attached to that particular License Type, and subject to the terms and conditions of this License agreement:",
     
-    "   a. Academic License: For academic research, educational or training purposes provided that You are a recognized academic research institution which is not a hospital, or a registered student at such an institution, but excluding use with Your Commercial Data. An Academic License is free of charge.",
+    "   a. Academic License: For academic research, educational or training purposes provided that You are a recognized academic research institution which is not a hospital, or a registered student at such an institution, but excluding use with Your Commercial Data.",
     
     "   b. Academic License: For another non-commercial purpose, if it has been pre-approved by Licensor in writing. Email "EMAIL_REGISTER" to seek such an approval.",
     
@@ -56,7 +56,7 @@ static rom license[] = {
     
     "   a. At registration time: registration information provided by you and details about your hardware, operating system and IP address as displayed at end of the registration process.",
     
-    "   b. When a file is compressed: a log record containing aggregate statistical information about the performance of the compression algorithm and associated metadata. This logging occurs when using an Academic or Evaluation license. When using a Standard, Enterprise or Premium (i.e. paid) License, YOU WILL BE ASKED TO CHOOSE WHETHER OR NOT YOU ALLOW THIS LOGGING. Details can be found here: " WEBSITE_LOGS". ",
+    "   b. When a file is compressed: a log record containing aggregate statistical information about the performance of the compression algorithm and associated metadata. This logging occurs when using a free license. When using a Paid Academic, Standard, Enterprise or Premium (i.e. paid) License, YOU WILL BE ASKED TO CHOOSE WHETHER OR NOT YOU ALLOW THIS LOGGING. Details can be found here: " WEBSITE_LOGS". ",
  
     "6. Mailing list. You consent to receiving low-frequency product announcement and other marketing emails related to Genozip.",
     

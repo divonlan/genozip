@@ -130,6 +130,8 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
     unsigned prefixes_len = 2;
     unsigned num_seps = 0;
 
+    bool is_ordered = !((VB_DT(BAM) || VB_DT(SAM)) && segconf.is_sorted);
+
     for (uint8_t i=0; i < con.nitems_lo; i++) {
         Token *ci = &items[i];
         ContainerItem *CI = &con.items[i];
@@ -140,32 +142,45 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
 
         item_ctx->st_did_i = field_ctx->did_i;
 
-        if (ci->is_int) {
-            
-            PosType64 delta;
-            if (ctx_has_value_in_prev_line_(vb, item_ctx) && 
-                ABS((delta = ci->value - item_ctx->last_value.i)) < MAX_TOKENIZER_DETLA &&
-                (delta || !item_ctx->flags.all_the_same)) { // don't do delta if it can ruin the all-the-same
+        if (ci->is_int) {            
+            if (is_ordered) {
+                PosType64 delta;
+                if (ctx_has_value_in_prev_line_(vb, item_ctx) && 
+                    ABS((delta = ci->value - item_ctx->last_value.i)) < MAX_TOKENIZER_DETLA &&
+                    (delta || !item_ctx->flags.all_the_same)) { // don't do delta if it can ruin the all-the-same
 
-                item_ctx->flags.store = STORE_INT;
-                seg_self_delta (vb, item_ctx, ci->value, 0, 0, ci->item_len);
+                    item_ctx->flags.store = STORE_INT;
+                    seg_self_delta (vb, item_ctx, ci->value, 0, 0, ci->item_len);
+                }
+                else 
+                    goto fallback;
             }
+
             else {
-                ci->leading_zeros = 0; // we store the snip as-is
-                goto fallback;
+                // if not ordered (i.e. this is a sorted-by-POS SAM/BAM) - store integers in local
+                if (item_ctx->ltype == LT_UINT8)  // already seg_diff in a previous line of this VB - cannot store in local
+                    goto fallback;
+
+                else {
+                    item_ctx->ltype = LT_DYN_INT;
+                    seg_integer (vb, item_ctx, ci->value, true, ci->item_len);
+                }
             }
 
             ctx_set_last_value (vb, item_ctx, ci->value);
         }
         else if (ctx_encountered_in_prev_line (vb, item_ctx->did_i) &&
-                 item_ctx->last_txt.len == ci->item_len) {
+                 item_ctx->last_txt.len == ci->item_len &&
+                 item_ctx->ltype != LT_DYN_INT) { // not already set to LT_DYN_INT in a previous line of this VB
             
             item_ctx->ltype = LT_UINT8;
             seg_diff (vb, item_ctx, item_ctx, STRa(ci->item), item_ctx->flags.all_the_same, ci->item_len); // don't xor-diff if it can ruin the all-the-same
         }
 
-        else fallback: 
+        else fallback: {
+            ci->leading_zeros = 0; // we store the snip as-is
             seg_by_ctx (vb, STRa(ci->item), item_ctx, ci->item_len);
+        }
 
         // set separators
         CI->separator[0] = ci->sep;

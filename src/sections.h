@@ -271,6 +271,7 @@ typedef enum __attribute__ ((__packed__)) {
     QF_NO_ID=0, 
     QF_ILLUM_7=1, QF_ILLUM_7i=2, QF_ILLUM_7umi=3, QF_ILLUM_7_bc=4, QF_ILLUM_7gs=5, QF_ILLUM_5i=6, QF_ILLUM_5=7, QF_ILLUM_5rng=8,  
     QF_ILLUM_2bc=9, QF_ILLUM_1bc=10, QF_ILLUM_0bc=11, QF_ILLUM_X_0bc=12, QF_ILLUM_X_1bc=13, QF_ILLUM_X_2bc=14, QF_ILLUM_S_0bc=15, QF_ILLUM_S_1bc=16, QF_ILLUM_S_2bc=17, QF_ILLUM_7gsFQ=18, QF_ILLUM_7_2bc=19,
+    QF_ILLUM_7_rbc=121,
     QF_BGI_varlen=20, QF_BGI_r6=21, QF_BGI_r7=22, QF_BGI_r8=23, QF_BGI_ll7=24, QF_BGI_cl=25, QF_BGI_rgs8=26, QF_BGI_rgs8FQ=27, QF_BGI_Rgs_2bc=28,
     QF_PACBIO_3=30, QF_PACBIO_rng=31, QF_PACBIO_lbl=32, QF_PACBIO_pln=33,
     QF_NANOPORE=40, QF_NANOPORE_rng=41, QF_NANOPORE_ext=42,
@@ -367,9 +368,9 @@ typedef struct {
 // used for SEC_LOCAL and SEC_B250
 typedef struct {
     SectionHeader;
-    LocalType ltype;           // SEC_LOCAL: goes into ctx.ltype - type of data for the ctx->local buffer
-                               // SEC_250:   unused. up to 15.0.17 populated ctx->ltype and copied in PIZ to ctx->ltype if the corresponding local section is absent (not clear why)
-    uint8_t param;             // Three options: 1. goes into ctx.local.param. (until v13: if flags.copy_local_param. since v14: always, except if ltype=LT_BITMAP) 
+    LocalType ltype;           // SEC_LOCAL: goes into ctx->ltype - type of data of the ctx->local buffer
+                               // SEC_250:   unused. up to 15.0.17 populated with ctx->ltype and copied in PIZ to ctx->ltype if the corresponding local section is absent (not clear why)
+    uint8_t param;             // Three options: 1. goes into ctx->local.param. (until v13: if flags.copy_local_param. since v14: always, except if ltype=LT_BITMAP) 
                                //                2. given to comp_uncompress as a codec parameter
                                //                3. starting 9.0.11 for ltype=LT_BITMAP: number of unused bits in top bits word
     B250Size b250_size : 2;    // b250 sections only: size of each b250 element (v14)

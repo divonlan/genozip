@@ -101,7 +101,7 @@ void generic_seg_initialize (VBlockP vb)
 
             // if extension is gz, bz2 or xz - add the prior filename component
             rom last_dot2 = NULL;
-            if (!strcmp (last_dot+1, "gz") || !strcmp (last_dot+1, "bz2") || !strcmp (last_dot+1, "xz")) {
+            if (!strcmp (last_dot+1, "gz") || !strcmp (last_dot+1, "bz2") || !strcmp (last_dot+1, "xz") || !strcmp (last_dot+1, "zip")) {
                 SAFE_NUL(last_dot);
                 last_dot2 = strrchr (txt_file->name, '.');
                 SAFE_RESTORE;
