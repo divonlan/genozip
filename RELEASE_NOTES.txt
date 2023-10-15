@@ -3,7 +3,7 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
-15.0.19 14/10/2023
+15.0.20 15/10/2023
 - BAM: better compression of BQ:Z
 - Added Paid Academic license option & updated license terms accordingly
 
