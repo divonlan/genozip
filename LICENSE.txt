@@ -44,8 +44,7 @@ License agreement:
 
    a. Academic License: For academic research, educational or training purposes provided that You
 are a recognized academic research institution which is not a hospital, or a registered student at
-such an institution, but excluding use with Your Commercial Data. An Academic License is free of
-charge.
+such an institution, but excluding use with Your Commercial Data.
 
    b. Academic License: For another non-commercial purpose, if it has been pre-approved by Licensor
 in writing. Email register@genozip.com to seek such an approval.
@@ -111,7 +110,7 @@ hardware, operating system and IP address as displayed at end of the registratio
 
    b. When a file is compressed: a log record containing aggregate statistical information about
 the performance of the compression algorithm and associated metadata. This logging occurs when
-using an Academic or Evaluation license. When using a Standard, Enterprise or Premium (i.e. paid)
+using a free license. When using a Paid Academic, Standard, Enterprise or Premium (i.e. paid)
 License, YOU WILL BE ASKED TO CHOOSE WHETHER OR NOT YOU ALLOW THIS LOGGING. Details can be found
 here: https://genozip.com/logs. 
 
@@ -155,5 +154,5 @@ ABOVE STATED REMEDY FAILS OF ITS ESSENTIAL PURPOSE.
 
 END OF TERMS AND CONDITIONS
 
-Genozip license version: 15.0.18
+Genozip license version: 15.0.19
 
