@@ -88,7 +88,7 @@ C:\Users\divon\genozip\src\windows\LICENSE.for-installer.txt
 9.9 KB
 txt
 [Licence_Begin]
-11580
+11517
 {\rtf1\ansi\ansicpg1252\deff0{\fonttbl{\f0\fnil\fcharset0 Arial;}}
 {\colortbl ;\red0\green0\blue0;}
 \viewkind4\uc1\pard\cf1\lang1033\fs20 This program, "Genozip", which includes four tools \par
@@ -155,8 +155,7 @@ agreement:\par
 or training purposes provided that You are a recognized\par
 academic research institution which is not a hospital, or a\par
 registered student at such an institution, but excluding\par
-use with Your Commercial Data. An Academic License is free\par
-of charge.\par
+use with Your Commercial Data.\par
 \par
    b. Academic License: For another non-commercial purpose,\par
 if it has been pre-approved by Licensor in writing. Email\par
@@ -255,8 +254,8 @@ registration process.\par
    b. When a file is compressed: a log record containing\par
 aggregate statistical information about the performance of\par
 the compression algorithm and associated metadata. This\par
-logging occurs when using an Academic or Evaluation license\par
-. When using a Standard, Enterprise or Premium (i.e. paid)\par
+logging occurs when using a free license. When using a Paid\par
+Academic, Standard, Enterprise or Premium (i.e. paid)\par
 License, YOU WILL BE ASKED TO CHOOSE WHETHER OR NOT YOU\par
 ALLOW THIS LOGGING. Details can be found here: https:/\par
 /genozip.com/logs. \par
@@ -271,7 +270,7 @@ names of the Licensor, except as required for reasonable\par
 and customary use in describing the origin of the Genozip\par
 \par
 8. Survival. The limitations of liability and ownership\par
-rights of Genozip contained herein and Licensee\'e2\'80\'99s\par
+rights of Genozip contained herein and Licensee\rquote s\par
 obligations following termination of this Agreement will\par
 survive the termination of this Agreement for any reason.\par
 \par
@@ -284,7 +283,7 @@ Health or any other regulatory entity in any country for\par
 any specific intended use, whether research, commercial,\par
 diagnostic, or otherwise, and (ii) Licensee must ensure it\par
 has any regulatory approvals that are necessary for\par
-Licensee\'e2\'80\'99s intended uses of Genozip. Licensee will comply\par
+Licensee\rquote s intended uses of Genozip. Licensee will comply\par
 with all applicable laws and regulations when using and\par
 maintaining Genozip.\par
 \par
@@ -321,8 +320,7 @@ ESSENTIAL PURPOSE.\par
 \par
 END OF TERMS AND CONDITIONS\par
 \par
-Genozip license version: 15.0.17\par
-\par
+Genozip license version: 15.0.20\par
 \par
 }
  [Licence_End]
