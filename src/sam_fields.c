@@ -215,19 +215,18 @@ COMPRESSOR_CALLBACK (sam_zip_U2)
 static void sam_seg_BD_BI_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(field), DictId dict_id, unsigned add_bytes)
 {
     bool is_bi = (dict_id.num == _OPTION_BI_Z);
-    Context *this_ctx  = is_bi ? CTX(OPTION_BI_Z) : CTX (OPTION_BD_Z);
+    ContextP ctx  = CTX (is_bi ? OPTION_BI_Z : OPTION_BD_Z);
 
-    if (field_len != dl->SEQ.len) {
-        seg_by_ctx (VB, STRa(field), this_ctx, field_len);
-        return;
+    if (field_len == dl->SEQ.len) {
+        dl->BD_BI[is_bi] = TXTWORD (field);
+
+        CTX(OPTION_BD_BI)->txt_len += add_bytes; 
+        CTX(OPTION_BD_BI)->local.len32 += field_len;
+
+        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, SAM_SPECIAL_BDBI }), 2, ctx, 0);
     }
-    
-    dl->BD_BI[is_bi] = TXTWORD (field);
-
-    CTX(OPTION_BD_BI)->txt_len += add_bytes; 
-    CTX(OPTION_BD_BI)->local.len32 += field_len;
-
-    seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, SAM_SPECIAL_BDBI }), 2, this_ctx, 0);
+    else
+        seg_by_ctx (VB, STRa(field), ctx, field_len);
 }
 
 // callback function for compress to get BD_BI data of one line: this is an
@@ -235,26 +234,32 @@ static void sam_seg_BD_BI_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(field), Dic
 COMPRESSOR_CALLBACK (sam_zip_BD_BI)
 {
     ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
-    
-    rom bd = dl->BD_BI[0].index ? Btxt (dl->BD_BI[0].index) : NULL;
-    rom bi = dl->BD_BI[1].index ? Btxt (dl->BD_BI[1].index) : NULL;
-    
-    if (!bd && !bi) return; // no BD or BI on this line
 
-    ASSERT (bd && bi, "%s/%u: A line has one of the BD:Z/BI:Z pair - Genozip can only compress lines that have either both BD:Z and BI:Z or neither", VB_NAME, vb_line_i); 
+    uint32_t bd_len = dl->BD_BI[0].len;
+    uint32_t bi_len = dl->BD_BI[1].len;
+     
+    rom bd = bd_len ? Btxt (dl->BD_BI[0].index) : "";
+    rom bi = bi_len ? Btxt (dl->BD_BI[1].index) : "";
     
+    if (!bd_len && !bi_len) return; // no BD or BI on this line
+
+    ASSERT (bd_len == bi_len && bd_len == dl->SEQ.len, 
+            "%s/%u Expecting BD.len=%u == BI.len=%u == SEQ.len==%u. BD=\"%.*s\" BI=\"%.*s\"",
+            VB_NAME, vb_line_i, bd_len, bi_len, dl->SEQ.len, STRf(bd), STRf(bi));
+        
     // note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec
-    *line_data_len  = MIN_(maximum_size, dl->SEQ.len * 2);
+    *line_data_len  = MIN_(maximum_size, bd_len * 2);
     if (is_rev) *is_rev = dl->FLAG.rev_comp;
 
     if (!line_data) return; // only length was requested
 
-    buf_alloc_exact (vb, VB_SAM->interlaced, dl->SEQ.len * 2, uint8_t, "interlaced");
+    buf_alloc_exact (vb, VB_SAM->interlaced, bd_len * 2, uint8_t, "interlaced");
 
     uint8_t *next = B1ST8 (VB_SAM->interlaced);
-    for (uint32_t i=0; i < dl->SEQ.len; i++) {
-        *next++ = bd[i];
-        *next++ = bi[i] - bd[i];
+    rom after = bd + bd_len;
+    while (bd < after) {
+        *next++ = *bd;
+        *next++ = *bi++ - *bd++;
     }
 
     *line_data = B1STc (VB_SAM->interlaced);
@@ -265,7 +270,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_BD_BI)
 {
     if (!vb->seq_len || !reconstruct) goto done;
 
-    Context *bdbi_ctx = CTX(OPTION_BD_BI);
+    ContextP bdbi_ctx = CTX(OPTION_BD_BI);
 
     // note: bd and bi use their own next_local to retrieve data from bdbi_ctx. the actual index
     // in bdbi_ctx.local is calculated given the interlacing
