@@ -237,6 +237,12 @@ COMPRESSOR_CALLBACK (fasta_zip_seq)
     if (is_rev) *is_rev = 0;
 }   
 
+// called by main thread, as VBs complete (might be out-of-order)
+void fasta_zip_after_compute (VBlockP vb)
+{
+    z_file->num_sequences += vb->num_sequences; // for stats
+}
+
 void fasta_seg_initialize (VBlockP vb)
 {
     START_TIMER;
@@ -356,7 +362,7 @@ static void fasta_seg_desc_line (VBlockFASTAP vb, rom line, uint32_t line_len, b
 
     ASSSEG0 (chrom_name_len, "contig is missing a name");
 
-    __atomic_add_fetch (&z_file->num_sequences, (uint64_t)1, __ATOMIC_RELAXED);
+    vb->num_sequences++; // for stats
 
     if (!flag.make_reference) {
         if (segconf.seq_type == SQT_NUKE) 

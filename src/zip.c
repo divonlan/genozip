@@ -674,6 +674,8 @@ static void zip_update_txt_counters (VBlockP vb)
         (z_sam_gencomp && vb->comp_i==SAM_COMP_MAIN) ? vb->recon_size : Ltxt;
 
     z_file->num_components = MAX_(z_file->num_components, vb->comp_i+1);
+
+    // Note: no data-type-specific code here, instead, put in *_zip_after_compute
 }
 
 // write all the sections at the end of the file, after all VB stuff has been written

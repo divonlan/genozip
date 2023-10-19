@@ -354,7 +354,7 @@ done:
 //-----------------------------------------------------------------------------------------------------
 void sam_seg_other_qual (VBlockSAMP vb, TxtWord *dl_word, Did did_i, STRp(qual), bool len_is_seq_len, unsigned add_bytes)
 {
-    *dl_word = (TxtWord){ .index = BNUMtxt (qual), .len = qual_len };
+    *dl_word = TXTWORD(qual);
     CTX(did_i)->local.len32 += qual_len;
     CTX(did_i)->txt_len     += add_bytes;
 

@@ -965,6 +965,7 @@ static void flags_test_conflicts (unsigned num_files /* optional */)
         CONFLICT (flag.test,        flag.biopsy,         OT("test", "t"),      "--biopsy");
         CONFLICT (flag.best,        flag.fast,           OT("best", "b"),      OT("fast", "F"));
         CONFLICT (flag.best,        flag.low_memory,     OT("best", "b"),      "--low-memory");
+        CONFLICT (flag.test,        flag.seg_only,       "--seg-only",         OT("test", "t"));
         CONFLICT (flag.test,        flag.make_reference, "--make-reference",   OT("test", "t"));
         CONFLICT (flag.reference,   flag.make_reference, "--make-reference",   OT("reference", "e"));
         CONFLICT (flag.no_gencomp,  flag.force_gencomp,  "--no-gencomp",       "--force-gencomp");
@@ -1396,7 +1397,7 @@ void flags_update_zip_one_file (void)
     // add v14: --test if user selected --test, OR this condition is true
     flag.explicit_test = flag.test;
     flag.test |= !flag.no_test && !flag.make_reference && !flag.data_modified && !flag.biopsy && flag.biopsy_line.line_i == NO_LINE &&
-                 !flag.show_bam && 
+                 !flag.show_bam && !flag.seg_only && 
                  !flag.debug && !flag.show_time && !flag.show_memory;
 
     ASSINP0 (!flag.test_i || flag.test || flag.no_test || flag.debug || flag.make_reference || flag.zip_no_z_file || flag.data_modified, 

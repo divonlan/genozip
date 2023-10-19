@@ -159,6 +159,11 @@
     Buffer show_headers_buf;      /* ZIP only: we collect header info, if --show-headers is requested, during compress, but show it only when the vb is written so that it appears in the same order as written to disk */\
     Buffer show_b250_buf;         /* ZIP only: for collecting b250 during generate - so we can print at onces without threads interspersing */\
     Buffer section_list_buf;      /* ZIP only: all the sections non-dictionary created in this vb. we collect them as the vb is processed, and add them to the zfile list in correct order of VBs. */\
+    union { \
+    uint32_t num_sequences;       /* ZIP only: FASTA: num DESC lines encountered in this VB */ \
+    uint32_t num_perfect_matches; /* ZIP only: SAM/BAM/FASTQ: number of perfect matches found by aligner */ \
+    }; \
+    uint32_t num_aligned;         /* ZIP only: number of lines successfully aligned by the aligner. for stats */ \
     \
     /* used by CODEC_PBWT */ \
     ContextP runs_ctx, fgrc_ctx;  /* possibly diffrent did_i for different data types */\

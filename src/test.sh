@@ -253,6 +253,9 @@ verify_is_fastq() # $1 fastq file name
         echo "After converting $1 to FASTQ: $fastq has $pluses '+' lines and $lines lines, but expecting $(($pluses * 4)) lines"
         exit 1
     fi
+
+    # test file structure by segging
+    $genozip --seg-only $fastq || exit 1
 }
 
 # note: only runs it to see that it doesn't crash, doesn't validate results
@@ -538,14 +541,14 @@ batch_match_chrom()
         three=$OUTDIR/three.$f
 
         # convert to CHROM_STYLE_22
-        $genozip --match-chrom $file -Xfo ${one}.genozip -e $hg19 || exit 1
+        $genozip --match-chrom $file -Xfo ${one}.genozip -e $hg19_plusMT || exit 1
         $genounzip -z0 ${one}.genozip || exit 1
 
         #convert CHROM_STYLE_chr22 and then to CHROM_STYLE_22
         $genozip --match-chrom $file -Xfo ${two}.genozip -e $hs37d5 || exit 1
         $genounzip -z0 -f ${two}.genozip || exit 1
 
-        $genozip --match-chrom $two -Xfo ${three}.genozip -e $hg19 || exit 1
+        $genozip --match-chrom $two -Xfo ${three}.genozip -e $hg19_plusMT || exit 1
         $genounzip -z0 -f ${three}.genozip || exit 1
 
         cmp_2_files $three $one 
@@ -762,11 +765,16 @@ batch_sam_fq_translations()
                  special.NA12878.bam 
                  special.pacbio.ccs.bam  # unaligned SAM/BAM with no SQ records
                  special.human2.bam
-                 special.collated.bam)
+                 special.collated.bam
+                 test.starsolo.sam)      # has PRIM and DEPN components
+
     local file
     for file in ${files[@]}; do
         test_translate_sambam_to_fastq $file
-        test_translate_sambam_to_fastq ${file%.bam}.sam
+
+        if [ "${file##*.}" == bam ]; then
+            test_translate_sambam_to_fastq ${file%.bam}.sam
+        fi
     done
 }
 
@@ -1187,9 +1195,10 @@ batch_real_world_with_ref_md5() # $1 extra genozip argument
     local files37=( test.IonXpress.sam.gz \
                     test.human.fq.gz test.human2.bam test.pacbio.clr.bam \
                     test.human2-R1.fq.bz2 test.pacbio.ccs.10k.bam test.unmapped.sam.gz \
-                    test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq test.pacbio-blasr.bam \
+                    test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq \
                     test.human2.filtered.snp.vcf test.solexa-headerless.sam test.cigar-no-seq-qual.bam )
 
+    local files19=( test.pacbio-blasr.bam )
     local files38=( test.1KG-38.vcf.gz test.human-collated-headerless.sam test.human-sorted-headerless.sam )
 
     local filesT2T1_1=( test.nanopore.t2t_v1_1.bam )
@@ -1198,9 +1207,12 @@ batch_real_world_with_ref_md5() # $1 extra genozip argument
     test_standard "-mf $1 -E $GRCh38 --show-filename" " " ${files38[*]}
 
     cleanup_cache
+    test_standard "-mf $1 -e $hg19   --show-filename" " " ${files19[*]}
+
+    cleanup_cache
     test_standard "-mf $1 -E $T2T1_1 --show-filename" " " ${filesT2T1_1[*]}
     
-    for f in ${files37[@]} ${files38[@]} ${filesT2T1_1[@]} test.GRCh38_to_GRCh37.chain; do rm -f ${TESTDIR}/${f}.genozip ; done
+    for f in ${files37[@]} ${files19[@]} ${files38[@]} ${filesT2T1_1[@]} test.GRCh38_to_GRCh37.chain; do rm -f ${TESTDIR}/${f}.genozip ; done
     cleanup_cache
 }
 
@@ -1422,7 +1434,7 @@ batch_reference_sam()
     cleanup_cache
     echo "command line with mixed SAM and FASTQ files with --reference"
     echo "Note: '$GRCh38' needs to be up to date with the latest genozip format"
-    test_standard "-me$GRCh38" " " test.human2.bam test.human.fq.gz test.human3-collated.bam
+    test_standard "-me$GRCh38" " " test.human.fq.gz test.human3-collated.bam
 
     echo "multiple SAM with --REFERENCE" 
     test_standard "-mE$GRCh38" " " test.human-collated-headerless.sam test.human3-collated.bam
@@ -1433,7 +1445,7 @@ batch_reference_sam()
 
     cleanup_cache
     echo "BAM with --reference and --password, alternate chrom names" 
-    test_standard "-me$hg19 --password 123" "-p123 -e$hg19" test.human2.bam  
+    test_standard "-me$hg19_plusMT --password 123" "-p123 -e$hg19_plusMT" test.human2.bam  
     cleanup_cache
 
     cleanup_cache
@@ -1448,7 +1460,7 @@ batch_reference_vcf()
     batch_print_header
 
     echo "multiple VCF with --reference, --md5 using hs37d5 ; alternate chroms names"
-    test_standard "COPY -me$hg19" " " test.human2.filtered.snp.vcf
+    test_standard "COPY -me$hg19_plusMT" " " test.human2.filtered.snp.vcf
     cleanup_cache
 
     echo "GVCF with --reference, --md5 using GRCh38"
@@ -1809,12 +1821,12 @@ batch_deep() # note: use --debug-deep for detailed tracking
     # trimmed with LONG (codec consumes trimmed SEQ)
     test_header deep.trim+longr
     local T=$TESTDIR/deep.trim+longr
-    $genozip $T.fq $T.sam -fe $GRCh38 -o $output -3t || exit 1
+    $genozip $T.fq $T.sam -fe $hs37d5 -o $output -3t || exit 1
 
     # trimmed with HOMP (codec consumes trimmed SEQ and calls fastq_zip_qual for sub-codec too)
     test_header deep.trim+homp
     local T=$TESTDIR/deep.trim+homp
-    $genozip $T.fq $T.sam -fe $GRCh38 -o $output -3t || exit 1
+    $genozip $T.fq $T.sam -fe $hs37d5 -o $output -3t || exit 1
     
     # Illumina WGS - different FASTQ and SAM qname flavors
     cleanup_cache
@@ -1847,9 +1859,10 @@ is_linux=`uname|grep -i Linux`
 
 # reference and chain files
 hg19=$REFDIR/hg19.v15.ref.genozip
+hg19_plusMT=$REFDIR/hg19_plusMT.v15.ref.genozip
 hs37d5=$REFDIR/hs37d5.v15.ref.genozip
 GRCh38=$REFDIR/GRCh38.v15.ref.genozip
-T2T1_1=$REFDIR/chm13.v15.ref.genozip
+T2T1_1=$REFDIR/chm13_1.1.v15.ref.genozip
 mm10=$REFDIR/mm10.v15.ref.genozip
 chinese_spring=$REFDIR/Chinese_Spring.v15.ref.genozip
 chain37_38=$REFDIR/GRCh37_to_GRCh38.chain

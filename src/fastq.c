@@ -192,6 +192,9 @@ void fastq_zip_after_compute (VBlockP vb)
 {
     if (flag.deep)
         fastq_deep_zip_after_compute (VB_FASTQ);
+
+    z_file->num_perfect_matches += vb->num_perfect_matches; // for stats
+    z_file->num_aligned         += vb->num_aligned;
 }
 
 // case of --optimize-DESC: generate the prefix of the read name from the txt file name

@@ -219,6 +219,9 @@ void sam_zip_after_compute (VBlockP vb)
 
     else if (IS_PRIM(vb))
         gencomp_sam_prim_vb_has_been_ingested (vb);
+
+    z_file->num_perfect_matches += vb->num_perfect_matches; // for stats
+    z_file->num_aligned         += vb->num_aligned;
 }
 
 // main thread: writing data-type specific fields to genozip header
@@ -352,15 +355,15 @@ void sam_seg_initialize (VBlockP vb_)
 
     // we may use mates (other than for QNAME) if not is_long_reads (meaning: no mates in this file) and not DEPN components (bc we seg against PRIM)
     if (segconf.is_paired && !IS_DEPN(vb))
-        ctx_set_store_per_line (VB, SAM_RNAME, SAM_RNEXT, SAM_FLAG, SAM_POS, SAM_PNEXT, SAM_MAPQ, SAM_CIGAR,
+        ctx_set_store_per_line (VB, SAM_RNAME, SAM_RNEXT, SAM_FLAG, SAM_POS, SAM_PNEXT, SAM_MAPQ,
                                 OPTION_MQ_i, OPTION_MC_Z, OPTION_SM_i, DID_EOL);
 
     // case: some lines may be segged against a in-VB saggy line
     if (IS_MAIN(vb)) // 14.0.0
-        ctx_set_store_per_line (VB, SAM_RNAME, SAM_RNEXT, SAM_PNEXT, SAM_POS, SAM_CIGAR, SAM_MAPQ, SAM_FLAG,
+        ctx_set_store_per_line (VB, SAM_RNAME, SAM_RNEXT, SAM_PNEXT, SAM_POS, SAM_MAPQ, SAM_FLAG,
                                 OPTION_SA_Z, OPTION_NM_i, DID_EOL);
 
-    ctx_set_store_per_line (VB, OPTION_NH_i, T(segconf.is_paired && segconf.sam_multi_RG, OPTION_RG_Z), DID_EOL);
+    ctx_set_store_per_line (VB, SAM_CIGAR, OPTION_NH_i, T(segconf.is_paired && segconf.sam_multi_RG, OPTION_RG_Z), DID_EOL);
 
     if (segconf.is_paired)
         for (MatedZFields f = 1; f < NUM_MATED_Z_TAGS; f++) // note: f starts from 1, bc RG is set above with T()

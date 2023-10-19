@@ -1475,6 +1475,18 @@ WordIndex ctx_get_ol_node_index_by_snip (VBlockP vb, ContextP ctx, STRp(snip))
     return hash_get_entry_for_seg (vb, ctx, STRa(snip), WORD_INDEX_NONE/*read-only*/, &node);
 }
 
+// ZIP
+CharIndex ctx_get_char_index_of_snip (ContextP zctx, STRp(snip), bool soft_fail)
+{
+    for_buf (CtxNode, node, zctx->nodes)
+        if (node->snip_len == snip_len && !memcmp (Bc(zctx->dict, node->char_index), snip, snip_len))
+            return node->char_index;
+
+    ASSERT (soft_fail, "Cannot find snip \"%.*s\" in %s.dict", STRf(snip), zctx->tag_name);
+
+    return (CharIndex)-1; // note found
+}
+
 static BufferP sorter_cmp_counts = NULL; // for use by sorter_cmp - used only in vblock_i=1, so no thread safety issues
 static SORTER (sorter_cmp)  
 { 

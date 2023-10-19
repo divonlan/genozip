@@ -197,7 +197,11 @@ typedef struct File {
     uint32_t max_conc_writing_vbs;     // Z_FILE: PIZ: the maximal value conc_writing_vbs across all SEC_RECON_PLAN sections in this z_file
     uint64_t deep_stats[NUM_DEEP_STATS]; // Z_FILE: ZIP/PIZ: SAM: stats collection on Deep performance
     uint64_t saggy_near_count, mate_line_count, prim_far_count; // Z_FILE ZIP: SAM: for stats
-    uint64_t num_sequences;            // Z_FILE: ZIP: FASTA: for stats
+    union {
+    uint64_t num_sequences;            // Z_FILE: ZIP: FASTA: num "DESC" lines in this file. for stats
+    uint64_t num_perfect_matches;      // Z_FILE: ZIP: SAM/BAM/FASTQ: number of perfect matches found by aligner. for stats 
+    };
+    uint64_t num_aligned;              // Z_FILE: ZIP: SAM/BAM/FASTQ: number of alignments successfully found by aligner. for stats 
 
     // per-component data (ZIP)
     uint64_t comp_num_lines[MAX_NUM_COMPS];             // Z_FILE: PIZ/ZIP: number of lines in each component (note: includes DVCF reject components despite being duplicate lines)

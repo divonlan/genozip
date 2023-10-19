@@ -240,10 +240,22 @@ void ref_contigs_compress_stored (Reference ref)
         cn[chrom].min_pos   = r->first_pos - delta;
         cn[chrom].max_pos   = r->last_pos;
 
+        if (flag.show_ref_contigs) {
+            cn[chrom].char_index = ctx_get_char_index_of_snip (ZCTX(CHROM), STRa(r->chrom_name), false);
+            cn[chrom].snip_len   = r->chrom_name_len;
+        }
+
         has_some_contigs = true;
     }
 
-    if (flag.show_ref_contigs) ref_contigs_show (&created_contigs, true); // note: cannot call this after compacting
+    if (flag.show_ref_contigs) {
+        ref_contigs_show (&created_contigs, true); // note: cannot call this after compacting
+
+        for_buf (Contig, cn, created_contigs) {
+            cn->char_index = 0; // these don't need to be written to the file
+            cn->snip_len   = 0;        
+        }
+    }
 
     // compact contigs if possible - 20 bytes per contigs vs 132
     bool is_compacted = ref_contigs_compress_compact (&created_contigs);
@@ -404,14 +416,8 @@ WordIndex ref_contigs_ref_chrom_from_header_chrom (Reference ref, STRp(chrom_nam
         else if (*hdr_LN != ref_LN && IS_ZIP) { // note: in PIZ, the REF_INTERNAL contigs might differ in length from the header contigs
             rom ref_contig_name = ref_contigs_get_name (ref, ref_contig_index, NULL); // might be different that chrom_name if it matches an alt_name
         
-            char fmt[200]; // no unbound names in fmt
-            sprintf (fmt, "%%s: wrong reference file - different chromosome length: %%s has a \"%s\", but in %%s '%%s' has LN=%%"PRId64".%%s", DTPT (hdr_contigs));
-
-            if (!flag.force)
-                ASSINP (false, fmt, "Error", txt_name, STRf(chrom_name), *hdr_LN, ref->filename, ref_contig_name, ref_LN, " Use --force to override.");
-
-            else
-                WARN (fmt, "Warning", txt_name, STRf(chrom_name), *hdr_LN, ref->filename, ref_contig_name, ref_LN, "");
+            ASSINP (false, "Error: wrong reference file - different contig length: in %s \"%.*s\" has LN=%"PRIu64", but in %s \"%s\" has LN=%"PRId64, 
+                    txt_name, STRf(chrom_name), *hdr_LN, ref->filename, ref_contig_name, ref_LN);
         }
     }
 

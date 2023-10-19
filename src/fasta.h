@@ -40,6 +40,7 @@ extern bool is_fasta (STRp(header), bool *need_more);
 extern void fasta_zip_initialize (void);
 COMPRESSOR_CALLBACK(fasta_zip_seq);
 extern void fasta_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeaderP vb_header);
+extern void fasta_zip_after_compute (VBlockP vb);
 
 // SEG Stuff
 extern void fasta_seg_initialize(VBlockP vb);

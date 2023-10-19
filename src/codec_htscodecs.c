@@ -71,14 +71,14 @@ static bool codec_hts_compress (VBlockP vb, ContextP ctx,
     return ret;
 }
 
-#define COMPRESS_FUNC_TEMPLATE(func,codec,order)                                                             \
-COMPRESS (codec_##codec##_compress)                                                                          \
-{                                                                                                            \
-    int ret;                                                                                                 \
-    ASSERT ((ret = codec_hts_compress (vb, ctx, uncompressed, uncompressed_len, get_line_cb, compressed, compressed_len,     \
-                                       func, order, soft_fail, name)) || soft_fail,                          \
+#define COMPRESS_FUNC_TEMPLATE(func,codec,order)                                                                                            \
+COMPRESS (codec_##codec##_compress)                                                                                                         \
+{                                                                                                                                           \
+    int ret;                                                                                                                                \
+    ASSERT ((ret = codec_hts_compress (vb, ctx, uncompressed, uncompressed_len, get_line_cb, compressed, compressed_len,                    \
+                                       func, order, soft_fail, name)) || soft_fail,                                                         \
             "%s: Failed " #func " uncompressed_len=%u compressed_len=%u. ctx=%s", VB_NAME, *uncompressed_len, *compressed_len, TAG_NAME);   \
-    return ret;                                                                                              \
+    return ret;                                                                                                                             \
 }
 
 COMPRESS_FUNC_TEMPLATE(rans_compress_to_4x16, RANB, ORDER_B)

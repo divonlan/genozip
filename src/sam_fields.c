@@ -217,16 +217,16 @@ static void sam_seg_BD_BI_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(field), Dic
     bool is_bi = (dict_id.num == _OPTION_BI_Z);
     ContextP ctx  = CTX (is_bi ? OPTION_BI_Z : OPTION_BD_Z);
 
-    if (field_len == dl->SEQ.len) {
-        dl->BD_BI[is_bi] = TXTWORD (field);
+    // TO DO: we should not enforce BD/BI format correctness, bug 924 (challenge: if either BD or BI are misformatted, then *both* need to be segged normally and dl->BD_BI=(0,0))
+    ASSSEG (field_len == dl->SEQ.len, "Expecting %s.len=%u == SEQ.len==%u. %s=\"%.*s\"",
+            ctx->tag_name, field_len, dl->SEQ.len, ctx->tag_name, STRf(field));
 
-        CTX(OPTION_BD_BI)->txt_len += add_bytes; 
-        CTX(OPTION_BD_BI)->local.len32 += field_len;
+    dl->BD_BI[is_bi] = TXTWORD (field);
 
-        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, SAM_SPECIAL_BDBI }), 2, ctx, 0);
-    }
-    else
-        seg_by_ctx (VB, STRa(field), ctx, field_len);
+    CTX(OPTION_BD_BI)->txt_len += add_bytes; 
+    CTX(OPTION_BD_BI)->local.len32 += field_len;
+
+    seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, SAM_SPECIAL_BDBI }), 2, ctx, 0);
 }
 
 // callback function for compress to get BD_BI data of one line: this is an
@@ -241,11 +241,14 @@ COMPRESSOR_CALLBACK (sam_zip_BD_BI)
     rom bd = bd_len ? Btxt (dl->BD_BI[0].index) : "";
     rom bi = bi_len ? Btxt (dl->BD_BI[1].index) : "";
     
-    if (!bd_len && !bi_len) return; // no BD or BI on this line
-
-    ASSERT (bd_len == bi_len && bd_len == dl->SEQ.len, 
-            "%s/%u Expecting BD.len=%u == BI.len=%u == SEQ.len==%u. BD=\"%.*s\" BI=\"%.*s\"",
-            VB_NAME, vb_line_i, bd_len, bi_len, dl->SEQ.len, STRf(bd), STRf(bi));
+    if (!bd_len && !bi_len) {
+        *line_data_len = 0;
+        return;
+    }
+    
+    // both BD and BI must exist. bug 924 
+    ASSERT (bd_len && bi_len, "%s/%u Expecting both BD and BI to exist if either exists but BD=\"%.*s\" BI=\"%.*s\"",
+            VB_NAME, dl->SEQ.len, STRf(bd), STRf(bi));
         
     // note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec
     *line_data_len  = MIN_(maximum_size, bd_len * 2);
@@ -277,14 +280,14 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_BD_BI)
     ASSPIZ (ctx->next_local + vb->seq_len * 2 <= bdbi_ctx->local.len, "Error reading: unexpected end of %s data. Expecting ctx->next_local=%u + vb->seq_len=%u * 2 <= bdbi_ctx->local.len=%"PRIu64, 
             dis_dict_id (bdbi_ctx->dict_id).s, ctx->next_local, vb->seq_len, bdbi_ctx->local.len);
 
-    char *dst        = BAFTtxt;
-    rom src          = Bc (bdbi_ctx->local, ctx->next_local * 2);
-    uint32_t seq_len = vb->seq_len; // automatic var for effeciency
+    char *dst   = BAFTtxt;
+    char *after = dst + vb->seq_len;
+    rom src     = Bc (bdbi_ctx->local, ctx->next_local * 2);
 
     if (ctx->dict_id.num == _OPTION_BD_Z)
-        for (uint32_t i=0; i < seq_len; i++, src+=2, dst++) *dst = *src;
+        for (; dst < after; src+=2, dst++) *dst = *src;
     else
-        for (uint32_t i=0; i < seq_len; i++, src+=2, dst++) *dst = *src + *(src+1);
+        for (; dst < after; src+=2, dst++) *dst = *src + *(src+1);
     
     Ltxt += vb->seq_len;    
     ctx->next_local += vb->seq_len;

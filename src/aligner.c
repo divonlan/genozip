@@ -281,6 +281,8 @@ MappingType aligner_seg_seq (VBlockP vb, STRp(seq), bool no_bitmap_if_perfect,
             bitmap_ctx->next_local += seq_len;
         }
 
+        vb->num_perfect_matches++; // for stats
+        
         goto done;
     }
 
@@ -311,7 +313,10 @@ MappingType aligner_seg_seq (VBlockP vb, STRp(seq), bool no_bitmap_if_perfect,
     bitmap_ctx->next_local = next_bit;
 
 done:
+    vb->num_aligned++; // for stats
+
     COPY_TIMER (aligner_seg_seq);
+
     return is_all_ref ? MAPPING_PERFECT : MAPPING_ALIGNED; // successful
 }
 

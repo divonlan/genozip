@@ -225,11 +225,13 @@ static inline rom ctx_get_vb_snip (ConstContextP vctx, WordIndex vb_node_index) 
 static inline rom ctx_get_words_snip(ConstContextP ctx, WordIndex word_index)  // PIZ
     { return ctx_get_snip_by_word_index0 (ctx, word_index); }
 
-extern WordIndex ctx_get_word_index_by_snip (VBlockP vb, ContextP ctx, STRp(snip));
+extern WordIndex ctx_get_word_index_by_snip (VBlockP vb, ContextP ctx, STRp(snip)); // PIZ
 
 extern rom ctx_snip_from_zf_nodes (ConstContextP zctx, WordIndex node_index, pSTRp(snip));
 
 extern WordIndex ctx_get_ol_node_index_by_snip (VBlockP vb, ContextP ctx, STRp(snip)); 
+
+extern CharIndex ctx_get_char_index_of_snip (ContextP zctx, STRp(snip), bool soft_fail); // ZIP
 
 extern void ctx_initialize_predefined_ctxs (ContextArray contexts, DataType dt, DictIdtoDidMap d2d_map, Did *num_contexts);
 extern void ctx_zip_init_promiscuous (ContextP ctx);

@@ -43,16 +43,16 @@ static void stats_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
 {
     int need_sep=0;
 
-    for (uint32_t i=0; i < num_stats; i++) {
-        ContextP zctx = (sbl[i].my_did_i != DID_NONE) ? ZCTX(sbl[i].my_did_i) : NULL;
+    for (StatsByLine *s=sbl, *after=sbl + num_stats; s < after; s++) {
+        ContextP zctx = (s->my_did_i != DID_NONE) ? ZCTX(s->my_did_i) : NULL;
 
-        if (sbl[i].pc_hash_occupancy > 75 || // > 75%
+        if (s->pc_hash_occupancy > 75 || // > 75%
             (zctx && zctx->nodes.len > 1000000 && z_file->num_lines / zctx->nodes.len < 16)) { // more than 10% of num_lines (and at least 1M)
              
             // in case of an over-populated hash table, we send the first 3 and last 3 words in the dictionary, which will help debugging the issue
             bufprintf (evb, &hash_occ, "%s%s%%2C%s%%2C%s%%2C%u%%25", 
-                       need_sep++ ? "%3B" : "", url_esc_non_valid_charsS(sbl[i].name).s, url_esc_non_valid_charsS(sbl[i].type).s, 
-                       url_esc_non_valid_charsS (str_size (sbl[i].global_hash_prime).s).s, (int)sbl[i].pc_hash_occupancy);
+                       need_sep++ ? "%3B" : "", url_esc_non_valid_charsS(s->name).s, url_esc_non_valid_charsS(s->type).s, 
+                       url_esc_non_valid_charsS (str_size (s->global_hash_prime).s).s, (int)s->pc_hash_occupancy);
             
             uint32_t n_words = zctx->nodes.len32; // note: this can be a low number despite pc_hash_occupancy being large - if words ended up as singletons
             WordIndex words[NUM_COLLECTED_WORDS] = { 0, 1, 2, n_words-3, n_words-2, n_words-1 }; // first three and last threewords in the the dictionary of this field
@@ -82,28 +82,30 @@ static void stats_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
     }
 }
 
-// stats of contexts contributing more than 1% to Z
-static void stats_calc_large_stats (StatsByLine *sbl, unsigned num_stats, uint64_t all_z_size)
+// stats of contexts and sections contribution to Z
+static void stats_prepare_internals (StatsByLine *sbl, unsigned num_stats, uint64_t all_z_size)
 {
     if (!all_z_size) return;
     
     int need_sep = 0;
 
-    for (uint32_t i=0; i < num_stats; i++) 
-        if (sbl[i].z_size && sbl[i].my_did_i != DID_NONE) {
-            ContextP zctx = ZCTX(sbl[i].my_did_i);
-
+    for (StatsByLine *after=sbl + num_stats; sbl < after; sbl++) 
+        if (sbl->z_size) {
             bufprintf (evb, &internals, "%s%s%%2C%s%%2C%.1f%%25%%2C", 
-                       need_sep++ ? "%3B" : "", url_esc_non_valid_charsS(sbl[i].name).s, url_esc_non_valid_charsS(sbl[i].type).s, sbl[i].pc_of_z);
+                       need_sep++ ? "%3B" : "", url_esc_non_valid_charsS(sbl->name).s, url_esc_non_valid_charsS(sbl->type).s, sbl->pc_of_z);
 
-            bufprintf (evb, &internals, "%s%%2C%.1f%%25%%2C",
-                       url_esc_non_valid_charsS(sbl[i].lcodec).s, 100.0 * (double)zctx->local.count / (double)all_z_size);  // local
+            if (sbl->my_did_i != DID_NONE) {
+                ContextP zctx = ZCTX(sbl->my_did_i);
 
-            bufprintf (evb, &internals, "%s%%2C%.1f%%25%%2C",
-                       url_esc_non_valid_charsS(sbl[i].bcodec).s, 100.0 * (double)zctx->b250.count  / (double)all_z_size);  // b250
+                bufprintf (evb, &internals, "%s%%2C%.1f%%25%%2C",
+                           url_esc_non_valid_charsS(sbl->lcodec).s, 100.0 * (double)zctx->local.count / (double)all_z_size);  // local
 
-            bufprintf (evb, &internals, "%s%%2C%.1f%%25%%2C%u%%2C",
-                       url_esc_non_valid_charsS(sbl[i].dcodec).s, 100.0 * (double)zctx->dict.count  / (double)all_z_size, zctx->nodes.len32); // dict
+                bufprintf (evb, &internals, "%s%%2C%.1f%%25%%2C",
+                           url_esc_non_valid_charsS(sbl->bcodec).s, 100.0 * (double)zctx->b250.count  / (double)all_z_size);  // b250
+
+                bufprintf (evb, &internals, "%s%%2C%.1f%%25%%2C%u%%2C",
+                           url_esc_non_valid_charsS(sbl->dcodec).s, 100.0 * (double)zctx->dict.count  / (double)all_z_size, zctx->nodes.len32); // dict
+            }
         }
 }
 
@@ -302,6 +304,11 @@ static void stats_output_file_metadata (void)
                         "sag_type=%s;mate=%.*f%%;saggy_near=%.*f%%;prim_far=%.*f%%",
                         sag_type_name (segconf.sag_type), PREC(mate_line_pc), mate_line_pc, PREC(saggy_near_pc), saggy_near_pc, PREC(prim_far_pc), prim_far_pc);
 
+                if (z_file->num_aligned) {
+                    bufprintf (evb, &features, "aligner_ok=%.1f%%;", 100.0 * (double)z_file->num_aligned / (double)z_file->num_lines);
+                    bufprintf (evb, &features, "aligner_perfect=%.1f%%;", 100.0 * (double)z_file->num_perfect_matches / (double)z_file->num_lines);
+                }
+
                 if (flag.deep) 
                     FEATURE (z_file->num_lines, "SAM qname: %s", "SAM_Qname=%s", segconf_qf_name (QSAM))
 
@@ -362,7 +369,10 @@ static void stats_output_file_metadata (void)
             FEATURE0 (segconf.multiseq, "Multiseq", "multiseq");
             if (IS_REF_LOADED_ZIP) bufprintf (evb, &features, "ref_ncontigs=%u;", ref_get_ctgs (gref)->contigs.len32);
             if (IS_REF_LOADED_ZIP) bufprintf (evb, &features, "ref_nbases=%"PRIu64";", contigs_get_nbases (ref_get_ctgs (gref)));
-
+            if (z_file->num_aligned) {
+                bufprintf (evb, &features, "aligner_ok=%.1f%%;", 100.0 * (double)z_file->num_aligned / (double)z_file->num_lines);                
+                bufprintf (evb, &features, "aligner_perfect=%.1f%%;", 100.0 * (double)z_file->num_perfect_matches / (double)z_file->num_lines);
+            }
             REPORT_KRAKEN;
             if (segconf.r1_or_r2) bufprintf (evb, &features, "R1_or_R2=R%d;", (segconf.r1_or_r2 == PAIR_R1) ? 1 : 2);
 
@@ -470,33 +480,33 @@ static void stats_consolidate_non_ctx (StatsByLine *sbl, unsigned num_stats, rom
 
     // use existing SBL if it matches the consolidated name
     StatsByLine *survivor = NULL;
-    for (unsigned i=0; i < num_stats; i++) 
-        if (sbl[i].name[0] && !strcmp (consolidated_name, sbl[i].name)) {
-            survivor = &sbl[i];
+    for (StatsByLine *s=sbl, *after=sbl + num_stats; s < after; s++) 
+        if (s->name[0] && !strcmp (consolidated_name, s->name)) {
+            survivor = s;
             break;
         }
 
-    for (unsigned i=0; i < num_stats; i++) {
+    for (StatsByLine *s=sbl, *after=sbl + num_stats; s < after; s++) {
         
-        if (!sbl[i].name[0]) continue; // unused entry
+        if (!s->name[0]) continue; // unused entry
 
-        for (unsigned d=0; d < num_deps; d++)
-            if (!strcmp (deps[d], sbl[i].name)) {
+        for (unsigned d=0; d < num_deps; d++) 
+            if (!strcmp (deps[d], s->name)) {
                 if (!survivor) {
-                    survivor = &sbl[i]; // first found gets to be the survivor
+                    survivor = s; // first found gets to be the survivor
                 }
                 else {
-                    survivor->txt_len   += sbl[i].txt_len;
-                    survivor->z_size    += sbl[i].z_size;  
-                    survivor->pc_of_txt += sbl[i].pc_of_txt;
-                    survivor->pc_of_z   += sbl[i].pc_of_z; 
+                    survivor->txt_len   += s->txt_len;
+                    survivor->z_size    += s->z_size;  
+                    survivor->pc_of_txt += s->pc_of_txt;
+                    survivor->pc_of_z   += s->pc_of_z; 
                     strcpy (survivor->name, consolidated_name); // rename only if at least one was consolidated
 
                     if (flag.debug_stats)
                         iprintf ("Consolidated %s (txt_len=%"PRIu64" z_size=%"PRIu64") into %s (AFTER: txt_len=%"PRIu64" z_size=%"PRIu64")\n",
-                                 sbl[i].name, sbl[i].txt_len, sbl[i].z_size, survivor->name, survivor->txt_len, survivor->z_size);
+                                 s->name, s->txt_len, s->z_size, survivor->name, survivor->txt_len, survivor->z_size);
 
-                    sbl[i] = (StatsByLine){}; 
+                    *s = (StatsByLine){}; 
                 }
                 break;
             } 
@@ -716,7 +726,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
     // long form stats from --STATS    
     qsort (sbl, sbl_buf.len32, sizeof (sbl[0]), stats_sort_by_z_size);  // sort by compressed size
 
-    stats_calc_large_stats (sbl, sbl_buf.len32, all_z_size);
+    stats_prepare_internals (sbl, sbl_buf.len32, all_z_size);
 
     stats_output_STATS (sbl, sbl_buf.len32, 
                         all_txt_len, all_uncomp_dict, all_comp_dict, all_comp_b250, all_comp_local, all_z_size, all_pc_of_txt, all_pc_of_z, all_comp_ratio);
