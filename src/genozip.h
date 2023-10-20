@@ -559,6 +559,7 @@ typedef COMPRESSOR_CALLBACK (LocalGetLineCB);
 
 #define SAFE_NUL(addr) SAFE_ASSIGN((addr), 0)
 #define SAFE_NULT(str) SAFE_ASSIGN((&str[str##_len]), 0)
+#define SAFE_NULB(buf) SAFE_ASSIGN((BAFTc((buf))), 0)
 
 #define SAFE_RESTORE SAFE_RESTOREx(_)
 

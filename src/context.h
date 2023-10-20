@@ -119,8 +119,9 @@ static inline uint8_t NEXTLOCAL2BITS(ContextP ctx) { uint8_t ret = bits_get ((Bi
 static inline char *last_txt (VBlockP vb, Did did_i) { return last_txtx (vb, CTX(did_i)); }
 #define last_txt_len(did_i) contexts[did_i].last_txt.len
 
-#define set_last_txt_(did_i, value, value_len) CTX(did_i)->last_txt = (TxtWord){ .index = BNUMtxt (value), .len = value_len }
-#define set_last_txt(did_i, value) set_last_txt_(did_i, value, value##_len)
+#define set_last_txtC(ctx, value, value_len) (ctx)->last_txt = (TxtWord){ .index = BNUMtxt(value), .len = (value_len) }
+#define set_last_txt_(did_i, value, value_len) set_last_txtC(CTX(did_i), (value), (value_len))
+#define set_last_txt(did_i, value) set_last_txt_((did_i), value, value##_len)
 
 #define history64(did_i, line_i) (*B(int64_t, CTX(did_i)->history, (line_i)))
 
@@ -149,7 +150,7 @@ extern WordIndex ctx_search_for_word_index (ContextP ctx, STRp(snip));
 extern void ctx_clone (VBlockP vb);
 extern CtxNode *ctx_node_vb_do (ConstContextP ctx, WordIndex node_index, rom *snip_in_dict, uint32_t *snip_len, FUNCLINE);
 extern CtxNode *ctx_node_zf_do (ConstContextP ctx, int32_t node_index, rom *snip_in_dict, uint32_t *snip_len, FUNCLINE);
-#define ctx_node_zf(ctx, node_index, snip_in_dict, snip_len) ctx_node_zf_do(ctx, node_index, snip_in_dict, snip_len, __FUNCLINE)
+#define ctx_node_zf(ctx, node_index, snip_in_dict, snip_len) ctx_node_zf_do ((ctx), (node_index), (snip_in_dict), (snip_len), __FUNCLINE)
 extern void ctx_merge_in_vb_ctx (VBlockP vb);
 extern void ctx_substract_txt_len (VBlockP vb, ContextP vctx);
 extern void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vctx, bool is_lcodec, bool is_lcodec_inherited);
@@ -198,7 +199,7 @@ static inline Did ctx_get_existing_did_i_do (DictId dict_id, const ContextArray 
 
 static inline ContextP ctx_get_existing_ctx_do (VBlockP vb, DictId dict_id)  // returns NULL if context doesn't exist
 {
-    Did did_i = ctx_get_existing_did_i(vb, dict_id); 
+    Did did_i = ctx_get_existing_did_i (vb, dict_id); 
     return (did_i == DID_NONE) ? NULL : CTX(did_i); 
 }
 #define ECTX(dict_id) ctx_get_existing_ctx_do ((VBlockP)(vb), (dict_id))

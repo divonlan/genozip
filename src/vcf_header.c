@@ -664,10 +664,8 @@ static void vcf_add_all_ref_contigs_to_header (BufferP txt_header)
 
 static bool vcf_header_build_stats_programs (STRp(line), void *unused1, void *unused2, unsigned unused3)
 {
-    if (LINEIS ("##source=")) {
-        buf_append (evb, stats_programs, char, &line[9], line_len-9, "stats_programs");
-        *BLSTc (stats_programs) = ';'; // replace \n with ; - the separator required by stats_programs
-    }
+    if (LINEIS ("##source=")) 
+        stats_add_one_program (&line[9], line_len-10); // without the \n
 
     return false; // continue iterating
 }
@@ -676,16 +674,13 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
 {
     if (!vcf_header_set_globals (txt_file->name, txt_header, true)) return false; // samples are different than a previous concatented file
 
-    stats_programs.name = "stats_programs";
-
     txtfile_foreach_line (txt_header, false, vcf_header_build_stats_programs, 0, 0, 0, 0);
 
-    SAFE_NUL (BAFTc (*txt_header));
-    #define IF_IN_SOURCE(signature, segcf) if (stats_programs.len && strstr (stats_programs.data, signature)) segconf.segcf = true
+    SAFE_NULB (*txt_header);
+    #define IF_IN_SOURCE(signature, segcf) if (stats_is_in_programs (signature)) segconf.segcf = true
     #define IF_IN_HEADER(signature, segcf, program) ({ if ((sig = strstr (txt_header->data, (signature)))) {                    \
                                                            segconf.segcf = true;                                                \
-                                                           if (program) { buf_append_string (evb, &stats_programs, program);    \
-                                                                          BNXTc (stats_programs) = ';'; } } })
+                                                           if (program[0]) stats_add_one_program (program, strlen (program)); } })
 
     
     // when adding here, also add to stats_output_file_metadata()
@@ -700,7 +695,7 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
     IF_IN_SOURCE ("GenerateSVCandidates", vcf_is_manta); // https://www.google.com/url?q=https://github.com/Illumina/manta/blob/master/docs/userGuide/README.md&sa=D&source=editors&ust=1691772389670163&usg=AOvVaw0q6tSBscyNHJ4YyV-tu7R7
     IF_IN_HEADER ("GenotypeGVCFs", vcf_is_gvcf, "GenotypeGVCFs");
     IF_IN_HEADER ("CombineGVCFs", vcf_is_gvcf, "CombineGVCFs");
-    if (segconf.vcf_is_isaac) IF_IN_HEADER ("gvcf", vcf_is_gvcf, NULL);
+    if (segconf.vcf_is_isaac) IF_IN_HEADER ("gvcf", vcf_is_gvcf, "");
     IF_IN_HEADER ("beagle", vcf_is_beagle, "beagle");
     IF_IN_HEADER ("Pindel", vcf_is_pindel, "Pindel");
     IF_IN_HEADER ("caveman", vcf_is_caveman, "CaVEMan");
@@ -718,8 +713,6 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
     #define VEP_SIGNATURE "VEP. Format: "
     IF_IN_HEADER (VEP_SIGNATURE, vcf_is_vep, "VEP");
     if (segconf.vcf_is_vep) vcf_vep_zip_initialize (sig + STRLEN(VEP_SIGNATURE), txt_header->data);
-
-    if (stats_programs.len) *BLSTc (stats_programs) = 0; // replace final ';' with nul
 
     bool has_PROBE = !!strstr (txt_header->data, "##INFO=<ID=PROBE_A");
     SAFE_RESTORE;

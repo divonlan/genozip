@@ -83,7 +83,7 @@ bool is_gff (STRp(header), bool *need_more)
 
 bool gff_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags)
 {
-    SAFE_NUL (BAFTc (*txt_header)); // for atoi
+    SAFE_NULB (*txt_header); // for atoi
 
     // case: gff version announced explicitly. otherwise we will deduce it during segconf
     if (str_isprefix_(STRb(*txt_header), _S("##gff-version")) && txt_header->len32 >= 15)

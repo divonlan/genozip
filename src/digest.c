@@ -23,6 +23,7 @@
 #include "profiler.h"
 #include "progress.h"
 #include "writer.h"
+#include "txtheader.h"
 
 #define IS_ADLER (IS_ZIP ? !flag.md5 : z_file->z_flags.adler)
 #define IS_MD5 (!IS_ADLER)
@@ -221,7 +222,8 @@ static void digest_piz_verify_one_vb (VBlockP vb)
                       "genozip --biopsy %u -B%u %s%s%s",
                       txtfile_dump_vb (vb, z_name), vb->vblock_i, (unsigned)(segconf.vb_size >> 20), 
                       (Z_DT(SAM) && !z_file->z_flags.has_gencomp) ? "--no-gencomp " : "",
-                      filename_guess_original (txt_file), SUPPORT);
+                      (txt_file && txt_file->name) ? filename_guess_original (txt_file) : IS_PIZ ? txtheader_get_txt_filename_from_section().s : "(uncalculable)",
+                      SUPPORT);
 
                 if (flag.test) exit_on_error (false); // must be inside the atomic test, otherwise another thread will exit before we completed dumping
             }

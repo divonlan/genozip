@@ -360,6 +360,9 @@ void fastq_seg_initialize (VBlockP vb_)
     if (segconf.seq_len_dict_id.num)
         ctx_set_store (VB, STORE_INT, ECTX(segconf.seq_len_dict_id)->did_i, DID_EOL);
 
+    if (segconf.has_agent_trimmer) 
+        agilent_seg_initialize (VB);
+    
     // consolidate stats for --stats
     ctx_consolidate_stats (VB, FASTQ_SQBITMAP, FASTQ_NONREF, FASTQ_NONREF_X, FASTQ_GPOS, FASTQ_GPOS_DELTA, FASTQ_STRAND, FASTQ_SEQMIS_A, FASTQ_SEQMIS_C, FASTQ_SEQMIS_G, FASTQ_SEQMIS_T, DID_EOL);
     ctx_consolidate_stats (VB, FASTQ_QUAL, FASTQ_DOMQRUNS, FASTQ_QUALMPLX, FASTQ_DIVRQUAL, DID_EOL);
@@ -406,6 +409,9 @@ void fastq_seg_finalize (VBlockP vb)
     // assign the QUAL codec
     codec_assign_best_qual_codec (vb, FASTQ_QUAL, fastq_zip_qual, false, false);
     
+    if (segconf.has_agent_trimmer) 
+        codec_assign_best_qual_codec (vb, OPTION_QX_Z, NULL, true, false);
+
     // top level snip
     SmallContainer top_level = { 
         .repeats        = vb->lines.len32,
@@ -441,7 +447,7 @@ void fastq_seg_finalize (VBlockP vb)
                         '@', CON_PX_SEP,   // 3:  QNAME prefix
                         ' ', CON_PX_SEP,   // 5:  QNAME2 prefix
                         ' ', CON_PX_SEP,   // 7:  EXTRA prefix
-                        ' ', CON_PX_SEP,   // 9:  AUX prefix
+                        " \t"[segconf.has_saux], CON_PX_SEP,   // 9:  AUX or SAUX prefix
                         CON_PX_SEP,        // 11: empty E1L line prefix
                         CON_PX_SEP,        // 12: empty SQBITMAP line prefix
                         CON_PX_SEP,        // 13: empty E2L line prefix
@@ -582,23 +588,29 @@ static rom fastq_seg_get_lines (VBlockFASTQP vb, rom line, int32_t remaining,
         if (flag.deep) 
             memcpy (segconf.deep_1st_desc, *qname, MIN_(*line1_len, sizeof (segconf.deep_1st_desc)-1));
 
-        *desc = memchr (*qname, ' ', *line1_len);
+        *desc = memchr2 (*qname, ' ', '\t', *line1_len);
+
+        // if \t was found before any space, this *might* be SAUX (or \t might belong to qname)
+        if (*desc && **desc == '\t' && !fastq_segconf_analyze_saux (vb, *desc + 1, *qname + *line1_len - *desc - 1))
+            *desc = memchr (*qname, ' ', *line1_len); // not SAUX - tab belongs to qname
 
         // Discover the QNAME flavor. Also discovers the original TECH, even when optimize_DESC
         qname_segconf_discover_flavor (VB, QNAME1, *qname, (*desc ? *desc - *qname : *line1_len)); 
 
-        if (*desc) fastq_segconf_analyze_DESC (vb, *desc + 1, *qname + *line1_len - *desc - 1);
+        if (*desc && **desc == ' ') 
+            fastq_segconf_analyze_DESC (vb, *desc + 1, *qname + *line1_len - *desc - 1);
     }
 
-    if (segconf.has_desc && !segconf.desc_is_l3 && (*desc = memchr (*qname, ' ', *line1_len))) {
+    // get desc and qname2
+    if (segconf.has_desc && !segconf.desc_is_l3 && (*desc = memchr (*qname, " \t"[segconf.has_saux], *line1_len))) {
         
-        (*desc)++; // skip separator (' ' or ';')
+        (*desc)++; // skip separator 
         *desc_len = *qname + *line1_len - *desc; 
         *qname_len = *line1_len - *desc_len - 1;
 
         rom after;
-        if (segconf.has_qname2 && (after = (segconf.has_aux || segconf.has_extra) ? memchr (*desc, ' ', *desc_len)
-                                                                                  : (*desc + *desc_len))) {
+        if (segconf.has_qname2 && // note: has_saux and has_qname2 are mutually exclusive
+            (after = (segconf.has_aux || segconf.has_extra) ? memchr (*desc, ' ', *desc_len) : (*desc + *desc_len))) {
             *qname2 = *desc;
             *qname2_len = after - *qname2;
         }
@@ -630,7 +642,7 @@ static rom fastq_seg_get_lines (VBlockFASTQP vb, rom line, int32_t remaining,
 
         // test for e.g. Line1: "@3/1" Line3: "+SRR2982101.3 3 length=101"
         else if (!segconf.has_desc) {
-            *desc = memchr (*line3, ' ', *line3_len);
+            *desc = memchr (*line3, ' ', *line3_len); // note: SAUX not supported on line 3 (never observed in the wild)
 
             qname_segconf_discover_flavor (VB, QLINE3, *line3, *desc - *line3);
 
@@ -646,7 +658,7 @@ static rom fastq_seg_get_lines (VBlockFASTQP vb, rom line, int32_t remaining,
     }
 
     if (segconf.has_desc && segconf.desc_is_l3) {
-        *desc = memchr (*line3, ' ', *line3_len);
+        *desc = memchr (*line3, ' ', *line3_len); // note: not \t, bc SAUX not supported on line 3 (never observed in the wild)
         if (*desc) {
             (*desc)++; // skip space
             *desc_len = *line3 + *line3_len - *desc;
@@ -708,8 +720,12 @@ rom fastq_seg_txt_line (VBlockP vb_, rom line_start, uint32_t remaining, bool *h
 
     fastq_seg_QNAME (vb, STRa(qname), line1_len, segconf.deep_qtype == QNAME1 && deep_qname, uncanonical_suffix_len);
 
+    // seg SAUX
+    if (segconf.has_saux)
+        fastq_seg_saux (vb, STRa(desc));
+
     // seg DESC (i.e. QNAME2 + EXTRA + AUX), it might have come either from line1 or from line3
-    if (segconf.has_desc && !flag.optimize_DESC) 
+    else if (segconf.has_desc && !flag.optimize_DESC) 
         fastq_seg_DESC (vb, STRa(desc), segconf.deep_qtype == QNAME2 && deep_qname, uncanonical_suffix_len);
 
     fastq_seg_LINE3 (vb, STRa(line3), STRa(qname), STRa(desc)); // before SEQ, in case it as a segconf_seq_len_dict_id field

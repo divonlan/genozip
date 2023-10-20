@@ -365,9 +365,14 @@ void sam_seg_initialize (VBlockP vb_)
 
     ctx_set_store_per_line (VB, SAM_CIGAR, OPTION_NH_i, T(segconf.is_paired && segconf.sam_multi_RG, OPTION_RG_Z), DID_EOL);
 
-    if (segconf.is_paired)
+    if (segconf.is_paired) {
         for (MatedZFields f = 1; f < NUM_MATED_Z_TAGS; f++) // note: f starts from 1, bc RG is set above with T()
             ctx_set_store_per_line (VB, buddied_Z_dids[f], DID_EOL);
+
+        // exception - we don't use buddying for RX:Z in AGeNT Trimmer (canceling allows RX:Z b250 section elimination)
+        if (segconf.has_agent_trimmer)
+            CTX(OPTION_RX_Z)->flags.store_per_line = CTX(OPTION_RX_Z)->flags.ctx_specific_flag = false;
+    }
 
     if (kraken_is_loaded)
         CTX(SAM_TAXID)->counts_section = true;
@@ -424,6 +429,9 @@ void sam_seg_initialize (VBlockP vb_)
         sam_seg_TX_AN_initialize (vb, OPTION_TX_Z);
         sam_seg_TX_AN_initialize (vb, OPTION_AN_Z);
     }
+
+    if (segconf.has_agent_trimmer) 
+        agilent_seg_initialize (VB);
 
     if (MP(ULTIMA) || segconf.running) // note: need also in segconf, so we can identify Ultima parameters in case it is Ultima (no harm if it is not)
         sam_ultima_seg_initialize (vb);
@@ -797,6 +805,12 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
     if (segconf.has[OPTION_UB_Z] || segconf.has[OPTION_UR_Z]) 
         sam_segconf_retag_UBURUY();
 
+    // note: same logic as in fastq_segconf_is_saux
+    if (segconf.has[OPTION_ZA_Z] && segconf.has[OPTION_ZB_Z] && segconf.has[OPTION_RX_Z] && segconf.has[OPTION_QX_Z] && segconf.has[OPTION_BC_Z]) {
+        segconf.has_agent_trimmer = true;
+        stats_add_one_program (_S("AGeNT_Trimmer")); // note: Trimmers adds the fields to the FASTQ file (as SAUX), and copied to BAM with eg bwa mem -C, so no @PG line
+    }
+
     // allow aligner if unmapped file (usually only enabled in best) if we have unmapped reads in segconf indicating a file enriched
     // in unmapped reads (normally, in sorted BAMs unmapped reads are at the end of the file)
     if (segconf.num_mapped < vb->lines.len32 && !flag.aligner_available && IS_REF_LOADED_ZIP) {
@@ -860,7 +874,7 @@ void sam_seg_finalize (VBlockP vb_)
         codec_assign_best_qual_codec (VB, OPTION_CY_ARR, NULL, true, false);
 
     if (CTX(OPTION_QX_Z)->local.len32)
-        codec_assign_best_qual_codec (VB, OPTION_QX_Z, sam_zip_QX, true, false);
+        codec_assign_best_qual_codec (VB, OPTION_QX_Z, segconf.has_agent_trimmer ? NULL : sam_zip_QX, true, false);
 
     if (CTX(OPTION_2Y_Z)->local.len32)
         codec_assign_best_qual_codec (VB, OPTION_2Y_Z, sam_zip_2Y, true, true);
@@ -1083,6 +1097,8 @@ void sam_seg_idx_aux (VBlockSAMP vb)
             TEST_AUX(dq_Z, 'd', 'q', 'Z');
             TEST_AUX(iq_Z, 'i', 'q', 'Z');
             TEST_AUX(sq_Z, 's', 'q', 'Z');
+            TEST_AUX(ZA_Z, 'Z', 'A', 'Z');
+            TEST_AUX(ZB_Z, 'Z', 'B', 'Z');
             default: {}
         }
     }

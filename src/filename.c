@@ -132,6 +132,8 @@ char *filename_z_deep (rom sam_name)
 // PIZ: guess original filename from uncompressed txt filename and compression algoritm (allocated memory)
 rom filename_guess_original (ConstFileP file)
 {
+    if (!file) return "(is-NULL)";
+
     if (file->codec == CODEC_NONE) return file->name;
 
     unsigned len = strlen (file->name) + 10;

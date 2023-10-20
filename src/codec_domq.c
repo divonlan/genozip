@@ -124,10 +124,13 @@ static bool codec_domq_qual_data_is_a_fit_for_domq (VBlockP vb, ContextP qual_ct
         num_tested_lines++;
     }
     
-    if (flag.show_codec)
-        printf ("%s fit for DOMQ: num_lines_with_dom=%u (i.e. min %u%% dom) out of of num_tested_lines=%u\n", 
-                qual_ctx->tag_name, num_lines_with_dom, MINIMUM_PERCENT_DOM_PER_LINE, num_tested_lines);
-
+    if (flag.show_codec) {
+        if (get_line_cb)
+            printf ("%s fit for DOMQ: num_lines_with_dom=%u (i.e. min %u%% dom) out of of num_tested_lines=%u\n", 
+                    qual_ctx->tag_name, num_lines_with_dom, MINIMUM_PERCENT_DOM_PER_LINE, num_tested_lines);
+        else
+            printf ("%s fit for DOMQ: data is >= %u%% dom\n", qual_ctx->tag_name, MINIMUM_PERCENT_DOM_PER_LINE);
+    }
     return num_tested_lines && (num_lines_with_dom * 100 / num_tested_lines > MINIMUM_PERCENT_LINES_WITH_DOM);
 }
 

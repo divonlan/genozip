@@ -15,6 +15,8 @@
 #define DTYPE_QNAME     DTYPE_1
 #define DTYPE_FASTQ_AUX DTYPE_2
 
+#define MAX_DESC_FIELDS (MAX_FIELDS-100)
+
 typedef struct {
     TxtWord seq;
     TxtWord qual;                // start within vb->txt_data (qual.len==seq.len except if condensed by codec_homp_compress)
@@ -58,6 +60,15 @@ extern void fastq_seg_DESC (VBlockFASTQP vb, STRp(desc), bool deep_qname2, uint3
 extern void fastq_seg_LINE3 (VBlockFASTQP vb, STRp(qline3), STRp(qname), STRp(desc));
 extern void fastq_segconf_analyze_DESC (VBlockFASTQP vb, STRp(desc));
 extern bool fastq_is_line3_copy_of_line1 (STRp(qname), STRp(line3), uint32_t desc_len);
+
+// SAUX
+extern bool fastq_segconf_analyze_saux (VBlockFASTQP vb, STRp(saux));
+extern void fastq_seg_saux (VBlockFASTQP vb, STRp(saux));
+
+// Agilent stuff
+extern void agilent_seg_initialize (VBlockP vb);
+extern void agilent_seg_RX (VBlockP vb, ContextP ctx, STRp(rx), unsigned add_bytes); // RX and QX are also in sam_private.h.
+extern void agilent_seg_QX (VBlockP vb, ContextP ctx, STRp(qx), unsigned add_bytes);
 
 // SEQ
 extern void fastq_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(seq), bool deep);

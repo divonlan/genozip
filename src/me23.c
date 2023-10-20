@@ -30,7 +30,7 @@
 
 bool me23_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags)
 {
-    SAFE_NUL (BAFTc (*txt_header));
+    SAFE_NULB (*txt_header);
 
     ASSINP (strstr (txt_header->data, "23andMe"), "file %s is missing a 23andMe header and thus not identified as a 23andMe file", 
             txt_name);

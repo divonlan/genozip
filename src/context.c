@@ -1300,6 +1300,10 @@ void ctx_initialize_predefined_ctxs (ContextArray contexts,
 
     for (Did did_i=0; did_i < dt_fields[dt].num_fields; did_i++) {
         DictId dict_id = dt_fields[dt].predefined[did_i].dict_id;
+
+        // special case: if initializing FASTQ which shares Dids with SAM - [0] is "CONTIG" instead of "RNAME"
+        if (dt == DT_FASTQ && did_i == FASTQ_CONTIG) dict_id.num = DICT_ID_MAKEF_6 ("CONTIG");
+
         ASSERT (dict_id.num, "No did_i->dict_id mapping is defined for predefined did_i=%u in dt=%s", did_i, dt_name (dt));
 
         // skip if its an alias 

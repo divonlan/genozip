@@ -347,8 +347,6 @@ static void sam_header_zip_build_stats_programs (rom hdr, rom after)
             }
         }
     }
-
-    if (stats_programs.len) *BLSTc (stats_programs) = 0; // replace final ';' 
 }
 
 // ZIP and PIZ
@@ -438,17 +436,12 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
     // build buffer of unique PN+ID fields, for stats
     sam_header_zip_build_stats_programs (first_PG, after_PGs);
         
-    if (stats_programs.len) {
+    // a small subset of biobambam2 programs - only those that generate ms:i / mc:i tags
+    segconf.is_biobambam2_sort = stats_is_in_programs ("bamsormadup") || stats_is_in_programs ("bamsort") || stats_is_in_programs ("bamtagconversion");
 
-        #define SCAN(program) (!!strstr (B1STc(stats_programs), (program)))
+    segconf.has_bqsr = stats_is_in_programs ("ApplyBQSR");
 
-        // a small subset of biobambam2 programs - only those that generate ms:i / mc:i tags
-        segconf.is_biobambam2_sort = SCAN("bamsormadup") || SCAN("bamsort") || SCAN("bamtagconversion");
-
-        segconf.has_bqsr = SCAN("ApplyBQSR");
-
-        segconf.has_RSEM = SCAN("RSEM") || SCAN("rsem");
-    }
+    segconf.has_RSEM = stats_is_in_programs ("RSEM") || stats_is_in_programs ("rsem");
 
 done:
     SAFE_RESTORE;

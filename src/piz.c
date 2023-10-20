@@ -702,35 +702,6 @@ static uint64_t piz_target_progress (CompIType comp_i)
     }
 }
 
-// get filename, even tough txt_file has not been opened yet. 
-static StrTextLong piz_filename_for_progress (void)
-{
-    Section sec;
-
-    if (flag.one_component && !flag.deep)
-        sec = sections_get_comp_txt_header_sec (flag.one_component - 1);
-    else 
-        sec = sections_get_comp_txt_header_sec (COMP_MAIN);
-
-    SectionHeaderTxtHeader header = zfile_read_section_header (evb, sec, SEC_TXT_HEADER).txt_header;
-
-    // note: for bz2, xz, and zip - we reconstruct as gz too. better choice than plain.
-    #define C(cdc) (header.src_codec == CODEC_##cdc)
-    bool dot_gz = flag.bgzf == BGZF_NOT_INITIALIZED ? ((C(BGZF) || C(GZ) || C(BZ2) || C(XZ) || C(ZIP))) // note: similar logic to in bgzf_piz_calculate_bgzf_flags
-                :                                     (flag.bgzf != 0);
-    #undef C
-
-    TEMP_FLAG(out_dirname, NULL); // only basename in progress string
-    rom filename = txtheader_piz_get_filename (header.txt_filename, flag.unbind, false, dot_gz);
-    RESTORE_FLAG(out_dirname);
-
-    StrTextLong name = {};
-    strncpy (name.s, filename, sizeof (StrTextLong)-1);
-    FREE (filename);
-
-    return name;
-}          
-
 Dispatcher piz_z_file_initialize (void)
 {
     // read all non-VB non-TxtHeader sections
@@ -759,7 +730,7 @@ Dispatcher piz_z_file_initialize (void)
                                              flag.xthreads ? 1 : global_max_threads, 0, 
                                              flag.test && flag.no_writer_thread, // out-of-order if --test with no writer thread (note: SAM gencomp always have writer thread to do digest). 
                                              flag.test,
-                                             flag.out_filename ? flag.out_filename : piz_filename_for_progress().s, 
+                                             flag.out_filename ? flag.out_filename : txtheader_get_txt_filename_from_section().s, 
                                              piz_target_progress (COMP_MAIN), 
                                              0);
 

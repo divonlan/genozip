@@ -9,14 +9,8 @@
 #include "fastq_private.h"
 #include "seg.h"
 #include "piz.h"
-#include "deep.h"
-#include "aligner.h"
-#include "refhash.h"
-#include "coverage.h"
 #include "qname.h"
 #include "tokenizer.h"
-
-#define MAX_DESC_FIELDS (MAX_FIELDS-100)
 
 void fastq_seg_QNAME (VBlockFASTQP vb, STRp(qname), uint32_t line1_len, bool deep, uint32_t uncanonical_suffix_len)
 {
@@ -130,118 +124,10 @@ static void fastq_seg_aux_container (VBlockFASTQP vb, STRps(tag), uint32_t total
                    total_tag_len + (kraken_is_loaded ? 6 : 0) + n_tags/*leading and internal ' '*/); 
 }
 
-//-----------------------------------------------------------------------------------
-// SAUX: SAM style AUX. eg BC:Z:CTTA, separated by an arbitrary number of ' ' or '\t'
-//-----------------------------------------------------------------------------------
-
-static inline bool fastq_get_saux_field_len (rom f, uint32_t *len) // false if format is invalid
-{
-    *len = strcspn (f, " \t");
-
-    if (*len < 5 || (f[3] == 'B' && *len < 7))
-        return false;
-
-    if (f[2] != ':' || f[4] != ':' || 
-        !IS_LETTER(f[0]) || !IS_ALPHANUMERIC(f[1]) ||
-        (f[3] != 'i' && f[3] != 'Z' && f[3] != 'B' && f[3] != 'A' && f[3] != 'H' && f[3] != 'f'))
-        return false;
-
-    if (f[3] == 'B' && 
-        (f[6] != ':' || (f[5] != 'c' && f[5] != 'C' && f[5] != 's' && f[5] != 'S' && f[5] != 'i' && f[5] != 'I' && f[5] != 'f')))
-        return false;
-
-    return true;
-}
-
-// check if DESC consists of SAM-style fields, separated by one or more spaces or tabs
-static bool fastq_segconf_is_saux (STRp(desc)) 
-{
-    SAFE_NULT (desc);
-    uint32_t n_fields = 0, n_spaces, field_len;
-    rom c = desc;
-
-    while ((n_spaces = strspn (c, " \t"))) { // skip to c field
-        c += n_spaces;
-
-        if (!fastq_get_saux_field_len (c, &field_len)) {            
-            n_fields = 0; // not saux format
-            break;
-        }
-
-        n_fields++;
-        c += field_len;
-    }
-
-    SAFE_RESTORE;
-    return n_fields > 0;
-}
-
-static DictId fastq_seg_one_saux (VBlockFASTQP vb, rom tag, char sam_type, char array_subtype, STRp (value), unsigned add_bytes)
-{
-    char dict_name[6] = { tag[0], tag[1], ':', sam_type, ':', array_subtype }; // last 2 are ignored if not array
-    DictId dict_id = dict_id_make (dict_name, (sam_type=='B' ? 6 : 4), DTYPE_FASTQ_AUX); // match dict_id as declared in #pragma GENDICT
-
-    ValueType numeric = {};
-    if (sam_type == 'i') {
-        ASSSEG(str_get_int (STRa (value), &numeric.i), "%s: Expecting integer value for auxiliary field %c%c but found \"%.*s\"",
-                LN_NAME, tag[0], tag[1], STRf (value));
-        value = 0;
-    }
-        
-    sam_seg_aux_field_fallback (VB, NULL, dict_id, sam_type, array_subtype, STRa(value), numeric, add_bytes);
-
-    return dict_id;
-}
-
-static void fastq_seg_saux (VBlockFASTQP vb, STRp(desc))
-{
-    SAFE_NULT (desc);
-    uint32_t n_fields = 0, n_spaces, field_len;
-    rom c = desc;
-
-    ASSSEG (desc_len < 64 KB, "desc too long:\n%.*s", STRf(desc));
-
-    STRl(prefixes, desc_len) = 2;
-    prefixes[0] = CON_PX_SEP;
-    prefixes[1] = CON_PX_SEP;
-
-    Container con = { .repeats = 1 };
-
-    while ((n_spaces = strspn (c, " \t"))) { // skip to c field
-        memcpy (&prefixes[prefixes_len], c, n_spaces);
-        prefixes_len += n_spaces;
-
-        c += n_spaces;
-        
-        ASSSEG (fastq_get_saux_field_len (c, &field_len), "Invalid SAM tags format in field %u: \"%.*s\"", n_fields, STRf(desc));
-
-        uint32_t tag_name_len = (c[3] == 'B') ? 7 : 5;
-
-        memcpy (&prefixes[prefixes_len], c, tag_name_len);
-        prefixes[prefixes_len + tag_name_len] = CON_PX_SEP;
-        prefixes_len += tag_name_len + 1;
-
-        con.items[n_fields++].dict_id = fastq_seg_one_saux (vb, c, c[3], (c[3] == 'B') ? c[5] : 0, c + tag_name_len, field_len - tag_name_len, field_len - tag_name_len);
-
-        c += field_len;
-    }
-
-    con_set_nitems (con, n_fields);
-
-    container_seg (VB, CTX(FASTQ_AUX), &con, prefixes, prefixes_len, 
-                   prefixes_len - n_fields - 1  ); // account for tags and whitespace
-    SAFE_RESTORE;
-}
-
-// DESC = QNAME2 + EXTRA + AUX <or> DESC = SAUX
+// called for segconf line_i=0. DESC = QNAME2 + EXTRA + AUX <or> DESC = SAUX
 void fastq_segconf_analyze_DESC (VBlockFASTQP vb, STRp(desc))
 {
     ASSERTNOTZERO (segconf.running);
-
-    if (fastq_segconf_is_saux (STRa(desc))) {
-        segconf.has_saux = true; // aux data in SAM format
-        return;
-    }
 
     str_split (desc, desc_len, MAX_DESC_FIELDS - 100, ' ', item, false);
     if (desc_len && !n_items) {
@@ -267,11 +153,6 @@ void fastq_segconf_analyze_DESC (VBlockFASTQP vb, STRp(desc))
 void fastq_seg_DESC (VBlockFASTQP vb, STRp(desc), bool deep_qname2, uint32_t uncanonical_suffix_len)
 {
     START_TIMER;
-
-    if (segconf.has_saux) {
-        fastq_seg_saux (vb, STRa(desc));
-        return;
-    }
 
     str_split (desc, desc_len, 0, ' ', item, false);
     

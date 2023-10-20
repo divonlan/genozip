@@ -262,6 +262,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (fastq_seg_deep_consume_unique_matching_ent, 3);
         PRINT (fastq_seg_SEQ, 2);
         PRINT (fastq_seg_DESC, 2);
+        PRINT (fastq_seg_saux, 2);
         PRINT (sam_seg_SEQ, 2);
         PRINT (sam_seg_SEQ_vs_ref, 3);
         PRINT (sam_seg_bisulfite_M, 4);

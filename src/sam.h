@@ -37,25 +37,25 @@
 #pragma GENDICT SAM_QmNAME=DTYPE_1=QmNAME // QmNAME reserved for mate number (always the last dict_id in the container)
 
 // Fields prefixed with "DEEP_" are not used in SAM, but are here so that the did's are the same for SAM and FASTQ
-#pragma GENDICT DEEP_FASTQ_QNAME2=DTYPE_FIELD=QNAME2
-#pragma GENDICT DEEP_FASTQ_Q0NAME2=DTYPE_1=q0NAME    
-#pragma GENDICT DEEP_FASTQ_Q1NAME2=DTYPE_1=q1NAME 
-#pragma GENDICT DEEP_FASTQ_Q2NAME2=DTYPE_1=q2NAME
-#pragma GENDICT DEEP_FASTQ_Q3NAME2=DTYPE_1=q3NAME
-#pragma GENDICT DEEP_FASTQ_Q4NAME2=DTYPE_1=q4NAME
-#pragma GENDICT DEEP_FASTQ_Q5NAME2=DTYPE_1=q5NAME
-#pragma GENDICT DEEP_FASTQ_Q6NAME2=DTYPE_1=q6NAME 
-#pragma GENDICT DEEP_FASTQ_Q7NAME2=DTYPE_1=q7NAME 
-#pragma GENDICT DEEP_FASTQ_Q8NAME2=DTYPE_1=q8NAME 
-#pragma GENDICT DEEP_FASTQ_Q9NAME2=DTYPE_1=q9NAME 
-#pragma GENDICT DEEP_FASTQ_QANAME2=DTYPE_1=qANAME 
-#pragma GENDICT DEEP_FASTQ_QBNAME2=DTYPE_1=qBNAME 
-#pragma GENDICT DEEP_FASTQ_QCNAME2=DTYPE_1=qCNAME 
-#pragma GENDICT DEEP_FASTQ_QDNAME2=DTYPE_1=qDNAME 
-#pragma GENDICT DEEP_FASTQ_QeNAME2=DTYPE_1=qENAME 
-#pragma GENDICT DEEP_FASTQ_QmNAME2=DTYPE_1=qmNAME 
+#pragma GENDICT FASTQ_QNAME2=DTYPE_FIELD=QNAME2
+#pragma GENDICT FASTQ_Q0NAME2=DTYPE_1=q0NAME    
+#pragma GENDICT FASTQ_Q1NAME2=DTYPE_1=q1NAME 
+#pragma GENDICT FASTQ_Q2NAME2=DTYPE_1=q2NAME
+#pragma GENDICT FASTQ_Q3NAME2=DTYPE_1=q3NAME
+#pragma GENDICT FASTQ_Q4NAME2=DTYPE_1=q4NAME
+#pragma GENDICT FASTQ_Q5NAME2=DTYPE_1=q5NAME
+#pragma GENDICT FASTQ_Q6NAME2=DTYPE_1=q6NAME 
+#pragma GENDICT FASTQ_Q7NAME2=DTYPE_1=q7NAME 
+#pragma GENDICT FASTQ_Q8NAME2=DTYPE_1=q8NAME 
+#pragma GENDICT FASTQ_Q9NAME2=DTYPE_1=q9NAME 
+#pragma GENDICT FASTQ_QANAME2=DTYPE_1=qANAME 
+#pragma GENDICT FASTQ_QBNAME2=DTYPE_1=qBNAME 
+#pragma GENDICT FASTQ_QCNAME2=DTYPE_1=qCNAME 
+#pragma GENDICT FASTQ_QDNAME2=DTYPE_1=qDNAME 
+#pragma GENDICT FASTQ_QeNAME2=DTYPE_1=qENAME 
+#pragma GENDICT FASTQ_QmNAME2=DTYPE_1=qmNAME 
 
-#pragma GENDICT DEEP_FASTQ_EXTRA=DTYPE_1=DESC 
+#pragma GENDICT FASTQ_EXTRA=DTYPE_1=DESC 
 
 #pragma GENDICT SAM_AUX=DTYPE_FIELD=AUX
 
@@ -83,31 +83,31 @@
 // contexts that exist in FASTQ and not SAM - we put them here to reserve the Did so its not 
 // occupied by another SAM contexts causing dictionaries to become mingled in Deep
 
-#pragma GENDICT DEEP_FASTQ_DEEP=DTYPE_FIELD=DEEP
-#pragma GENDICT DEEP_FASTQ_DEEP_DELTA=DTYPE_FIELD=D0EEP
+#pragma GENDICT FASTQ_DEEP=DTYPE_FIELD=DEEP
+#pragma GENDICT FASTQ_DEEP_DELTA=DTYPE_FIELD=D0EEP
 
-#pragma GENDICT DEEP_FASTQ_E1L=DTYPE_FIELD=E1L
-#pragma GENDICT DEEP_FASTQ_E2L=DTYPE_FIELD=E2L
+#pragma GENDICT FASTQ_E1L=DTYPE_FIELD=E1L
+#pragma GENDICT FASTQ_E2L=DTYPE_FIELD=E2L
 
-#pragma GENDICT DEEP_FASTQ_LINE3=DTYPE_FIELD=LINE3
-#pragma GENDICT DEEP_FASTQ_T0HIRD=DTYPE_1=t0NAME
-#pragma GENDICT DEEP_FASTQ_T1HIRD=DTYPE_1=t1NAME 
-#pragma GENDICT DEEP_FASTQ_T2HIRD=DTYPE_1=t2NAME
-#pragma GENDICT DEEP_FASTQ_T3HIRD=DTYPE_1=t3NAME
-#pragma GENDICT DEEP_FASTQ_T4HIRD=DTYPE_1=t4NAME
-#pragma GENDICT DEEP_FASTQ_T5HIRD=DTYPE_1=t5NAME
-#pragma GENDICT DEEP_FASTQ_T6HIRD=DTYPE_1=t6NAME 
-#pragma GENDICT DEEP_FASTQ_T7HIRD=DTYPE_1=t7NAME 
-#pragma GENDICT DEEP_FASTQ_T8HIRD=DTYPE_1=t8NAME 
-#pragma GENDICT DEEP_FASTQ_T9HIRD=DTYPE_1=t9NAME 
-#pragma GENDICT DEEP_FASTQ_TAHIRD=DTYPE_1=tANAME 
-#pragma GENDICT DEEP_FASTQ_TBHIRD=DTYPE_1=tBNAME 
-#pragma GENDICT DEEP_FASTQ_TCHIRD=DTYPE_1=tCNAME 
-#pragma GENDICT DEEP_FASTQ_TDHIRD=DTYPE_1=tDNAME 
-#pragma GENDICT DEEP_FASTQ_TEHIRD=DTYPE_1=tENAME 
-#pragma GENDICT DEEP_FASTQ_TmHIRD=DTYPE_1=tmNAME 
+#pragma GENDICT FASTQ_LINE3=DTYPE_FIELD=LINE3
+#pragma GENDICT FASTQ_T0HIRD=DTYPE_1=t0NAME
+#pragma GENDICT FASTQ_T1HIRD=DTYPE_1=t1NAME 
+#pragma GENDICT FASTQ_T2HIRD=DTYPE_1=t2NAME
+#pragma GENDICT FASTQ_T3HIRD=DTYPE_1=t3NAME
+#pragma GENDICT FASTQ_T4HIRD=DTYPE_1=t4NAME
+#pragma GENDICT FASTQ_T5HIRD=DTYPE_1=t5NAME
+#pragma GENDICT FASTQ_T6HIRD=DTYPE_1=t6NAME 
+#pragma GENDICT FASTQ_T7HIRD=DTYPE_1=t7NAME 
+#pragma GENDICT FASTQ_T8HIRD=DTYPE_1=t8NAME 
+#pragma GENDICT FASTQ_T9HIRD=DTYPE_1=t9NAME 
+#pragma GENDICT FASTQ_TAHIRD=DTYPE_1=tANAME 
+#pragma GENDICT FASTQ_TBHIRD=DTYPE_1=tBNAME 
+#pragma GENDICT FASTQ_TCHIRD=DTYPE_1=tCNAME 
+#pragma GENDICT FASTQ_TDHIRD=DTYPE_1=tDNAME 
+#pragma GENDICT FASTQ_TEHIRD=DTYPE_1=tENAME 
+#pragma GENDICT FASTQ_TmHIRD=DTYPE_1=tmNAME 
 
-#pragma GENDICT DEEP_FASTQ_AUX_LENGTH=DTYPE_2=length 
+#pragma GENDICT FASTQ_AUX_LENGTH=DTYPE_2=length 
 
 // -----------------------------------------------------------------------------------------------------------
 // End of common contexts of FASTQ and SAM
@@ -180,7 +180,7 @@
 #pragma GENDICT OPTION_E2_Z=DTYPE_2=E2:Z     // The 2nd most likely base calls
 #pragma GENDICT OPTION_2NONREF=DTYPE_2=N2ONREF // these 4 fields must be in this order, right after OPTION_E2_Z
 #pragma GENDICT OPTION_N2ONREFX=DTYPE_2=n2ONREFX
-#pragma GENDICT OPTION_2GPOS=DTYPE_FIELD=G2POS
+#pragma GENDICT OPTION_2GPOS=DTYPE_2=G2POS   // 15.0.23 changed from FIELD to DTYPE_2 
 #pragma GENDICT OPTION_S2TRAND=DTYPE_2=S2TRAND
 
 #pragma GENDICT OPTION_SA_Z=DTYPE_2=SA:Z     // Other canonical alignments in a chimeric alignment
@@ -205,7 +205,7 @@
 #pragma GENDICT OPTION_QT_ARR=DTYPE_2=QT_ARR // array items (must be one after)
 #pragma GENDICT OPTION_QT_DOMQRUNS=DTYPE_FIELD=Q0T_DOMQ // these 3 must be right after OPTION_QT_Z (similar to SAM_QUAL).
 #pragma GENDICT OPTION_QT_QUALMPLX=DTYPE_FIELD=Q1T_MPLX 
-#pragma GENDICT OPTION_QT_DIVRQUAL=DTYPE_FIELD=Q2T_DEVQ 
+#pragma GENDICT OPTION_QT_DIVRQUAL=DTYPE_FIELD=Q2T_DEVQ // these 3 are supposed to be DTYPE_2, they are DTYPE_FIELD by error. we keep it this way for back comp
 
 #pragma GENDICT OPTION_CR_Z=DTYPE_2=CR:Z     // Cellular barcode. The uncorrected sequence bases of the cellular barcode as reported by the sequencing machine
 #pragma GENDICT OPTION_CR_Z_X=DTYPE_2=C0R_X  
@@ -217,7 +217,7 @@
 #pragma GENDICT OPTION_CY_ARR=DTYPE_2=CY_ARR // array items (must be one after)
 #pragma GENDICT OPTION_CY_DOMQRUNS=DTYPE_FIELD=C0Y_DOMQ // these 3 must be right after OPTION_CY_Z (similar to SAM_QUAL).
 #pragma GENDICT OPTION_CY_QUALMPLX=DTYPE_FIELD=C1Y_MPLX 
-#pragma GENDICT OPTION_CY_DIVRQUAL=DTYPE_FIELD=C2Y_DEVQ 
+#pragma GENDICT OPTION_CY_DIVRQUAL=DTYPE_FIELD=C2Y_DEVQ // these 3 are supposed to be DTYPE_2, they are DTYPE_FIELD by error. we keep it this way for back comp
 
 #pragma GENDICT OPTION_OX_Z=DTYPE_2=OX:Z     // Original unique molecular barcode bases
 #pragma GENDICT OPTION_MI_Z=DTYPE_2=MI:Z     // Molecular identifier; a string that uniquely identifies the molecule from which the record was derived
@@ -226,7 +226,7 @@
 #pragma GENDICT OPTION_OQ_Z=DTYPE_2=OQ:Z     // Original Quality - "Original base quality, usually before recalibration. Same encoding as QUAL" 
 #pragma GENDICT OPTION_OQ_DOMQRUNS=DTYPE_FIELD=O0Q_DOMQ // these 3 must be right after OPTION_OQ_Z (similar to SAM_QUAL).
 #pragma GENDICT OPTION_OQ_QUALMPLX=DTYPE_FIELD=O1Q_MPLX 
-#pragma GENDICT OPTION_OQ_DIVRQUAL=DTYPE_FIELD=O2Q_DEVQ 
+#pragma GENDICT OPTION_OQ_DIVRQUAL=DTYPE_FIELD=O2Q_DEVQ // these 3 are supposed to be DTYPE_2, they are DTYPE_FIELD by error. we keep it this way for back comp
 
 #pragma GENDICT OPTION_OA_Z=DTYPE_2=OA:Z     // Original Alignment - "The original alignment information of the record prior to realignment or unalignment by a subsequent tool" 
 #pragma GENDICT OPTION_OA_RNAME=DTYPE_2=O0A_RNAME  
@@ -362,7 +362,7 @@
 #pragma GENDICT OPTION_2Y_Z=DTYPE_2=2Y:Z     // Quality related to the sequence 2R - perhaps the R2 QUAL?
 #pragma GENDICT OPTION_2Y_DOMQRUNS=DTYPE_FIELD=20Y_DOMQ // these 3 must be right after OPTION_2Y_Z (similar to SAM_QUAL).
 #pragma GENDICT OPTION_2Y_QUALMPLX=DTYPE_FIELD=21Y_MPLX 
-#pragma GENDICT OPTION_2Y_DIVRQUAL=DTYPE_FIELD=22Y_DEVQ 
+#pragma GENDICT OPTION_2Y_DIVRQUAL=DTYPE_FIELD=22Y_DEVQ // these 3 are supposed to be DTYPE_2, they are DTYPE_FIELD by error. we keep it this way for back comp
 
 // cellranger has many more
 
@@ -376,14 +376,14 @@
 #pragma GENDICT OPTION_QX_Z=DTYPE_2=QX:Z     // longranger: Raw Chromium barcode read quality. Phred scores as reported by sequencer.
 #pragma GENDICT OPTION_QX_DOMQRUNS=DTYPE_FIELD=Q0X_DOMQ // these 3 must be right after OPTION_QX_Z (similar to SAM_QUAL).
 #pragma GENDICT OPTION_QX_QUALMPLX=DTYPE_FIELD=Q1X_MPLX 
-#pragma GENDICT OPTION_QX_DIVRQUAL=DTYPE_FIELD=Q2X_DEVQ 
+#pragma GENDICT OPTION_QX_DIVRQUAL=DTYPE_FIELD=Q2X_DEVQ // these 3 are supposed to be DTYPE_2, they are DTYPE_FIELD by error. we keep it this way for back comp
 
 #pragma GENDICT OPTION_TR_Z=DTYPE_2=TR:Z     // longranger & cellranger: Sequence of the 7 trimmed bases following the barcode sequence at the start of R1. Can be used to reconstruct the original R1 sequence.
 
 #pragma GENDICT OPTION_TQ_Z=DTYPE_2=TQ:Z     // longranger: Quality values of the 7 trimmed bases following the barcode sequence at the start of R1. Can be used to reconstruct the original R1 quality values.
 #pragma GENDICT OPTION_TQ_DOMQRUNS=DTYPE_FIELD=T0Q_DOMQ // these 3 must be right after OPTION_TQ_Z (similar to SAM_QUAL).
 #pragma GENDICT OPTION_TQ_QUALMPLX=DTYPE_FIELD=T1Q_MPLX 
-#pragma GENDICT OPTION_TQ_DIVRQUAL=DTYPE_FIELD=T2Q_DEVQ 
+#pragma GENDICT OPTION_TQ_DIVRQUAL=DTYPE_FIELD=T2Q_DEVQ // these 3 are supposed to be DTYPE_2, they are DTYPE_FIELD by error. we keep it this way for back comp
 
 #pragma GENDICT OPTION_PC_i=DTYPE_2=PC:i     // longranger: Phred-scaled confidence that this read was phased correctly.
 #pragma GENDICT OPTION_PS_i=DTYPE_2=PS:i     // longranger: Phase set containing this read. This corresponds to the phase set (PS) field in the VCF file. The value is the position of the first SNP in the phase block.
@@ -571,6 +571,27 @@
 // RSEM tags (RNA-Seq transcript quantification program developed in 2009): https://github.com/bli25/RSEM_tutorial
 #pragma GENDICT OPTION_ZW_f=DTYPE_2=ZW:f     // posterior probability that this alignment is true
 
+// Agilent Genomics Toolkit (AGeNT) - see https://www.agilent.com/cs/library/software/Public/AGeNT%20ReadMe.pdf
+// AGeNT Trimmer. also: standard BC:Z
+#pragma GENDICT OPTION_ZA_Z=DTYPE_2=ZA:Z     // 3 bases of BC:Z (first half of dual MBC), followed by 1 or 2 dark bases 
+#pragma GENDICT OPTION_ZB_Z=DTYPE_2=ZB:Z     // 3 bases of BC:Z (second half of dual MBC), followed by 1 or 2 dark bases 
+//#pragma GENDICT OPTION_RX_Z=DTYPE_2=RX:Z   // (dup) first half + second of MBC, format: "TTA-TTC" (3-hyphen-3) 
+//#pragma GENDICT OPTION_QX_Z=DTYPE_2=QX:Z   // (dup) base qualities of RX, format:"DDD DDA"
+
+// AGeNT LocatIt 
+#pragma GENDICT OPTION_fi_Z=DTYPE_2=fi:Z     // Justifications for being filtered out, eg "fi:Z:BAD_READ2_QUALITY;BELOW_MBC_NREADS_LIMIT;"
+#pragma GENDICT OPTION_XI_i=DTYPE_2=XI:i     // number of duplicates collapsed for the single-strand consensus read 
+#pragma GENDICT OPTION_XJ_i=DTYPE_2=XJ:i     // number of duplicates collapsed for the single-strand consensus read on the complementary strand
+
+// AGeNT CReaK
+#pragma GENDICT OPTION_xc_i=DTYPE_2=xc:i     // Indicates whether this read is covered by intervals in the BED file
+#pragma GENDICT OPTION_xm_i=DTYPE_2=xm:i     // Number of read pairs associated with an MBC / single consensus read pair
+#pragma GENDICT OPTION_xd_i=DTYPE_2=xd:i     // Number of read pairs associated with a duplex MBC / duplex consensus read pair
+#pragma GENDICT OPTION_zd_Z=DTYPE_2=zd:Z     // Comma-separated list of read names of duplicates that are associated with this single/duplex consensus read
+#pragma GENDICT OPTION_zp_Z=DTYPE_2=zp:Z     // Original information from single consensus read that shares the same name as the duplex consensus read before it was merged. format: pipe(|)-separated sub-fields: QNAME|SEQ|QUAL|CIGAR|MD:Z
+#pragma GENDICT OPTION_zn_Z=DTYPE_2=zn:Z     // Original information from single consensus read that not share the name as the duplex consensus read before it was merged. Same format as zp:Z
+
+// Genozip-generated tags
 #pragma GENDICT OPTION_tx_i=DTYPE_2=tx:i     // Genozip tag for taxonomy ID
 
 // backward compatability for decompressing files compressed with older versions that had aliases to these destinations (used by ctx_initialize_predefined_ctxs)
@@ -700,7 +721,8 @@ extern void sam_reset_line (VBlockP vb);
                       sam_piz_special_FI, sam_piz_special_cm, sam_piz_special_COPY_BUDDY, sam_piz_special_SET_BUDDY, \
                       sam_piz_special_TX_AN_POS, sam_piz_special_COPY_TEXTUAL_CIGAR, sam_piz_special_BISMARK_XM, \
                       sam_piz_special_BSBOLT_XB, sam_piz_special_UQ, sam_piz_special_iq_sq_dq, sam_piz_special_DEMUX_BY_QUAL, \
-                      ultima_c_piz_special_DEMUX_BY_Q4NAME, sam_piz_special_bi, sam_piz_special_sd \
+                      ultima_c_piz_special_DEMUX_BY_Q4NAME, sam_piz_special_bi, sam_piz_special_sd, \
+                      agilent_special_AGENT_RX, agilent_special_AGENT_QX, \
                     }
 SPECIAL (SAM, 0,  CIGAR,                 sam_cigar_special_CIGAR);
 SPECIAL (SAM, 1,  TLEN_old,              sam_piz_special_TLEN_old);            // used up to 12.0.42
@@ -759,8 +781,9 @@ SPECIAL (SAM, 53, DEMUX_BY_QUAL,         sam_piz_special_DEMUX_BY_QUAL);       /
 SPECIAL (SAM, 54, ULTIMA_C,              ultima_c_piz_special_DEMUX_BY_Q4NAME);// introduced 15.0.15
 SPECIAL (SAM, 55, bi,                    sam_piz_special_bi);                  // introduced 15.0.16
 SPECIAL (SAM, 56, sd,                    sam_piz_special_sd);                  // introduced 15.0.17
-SPECIAL (SAM, 57, AS,                    sam_piz_special_AS);                  // introduced 15.0.17
-#define NUM_SAM_SPECIAL 58
+SPECIAL (SAM, 57, AGENT_RX,              agilent_special_AGENT_RX);            // introduced 15.0.23
+SPECIAL (SAM, 58, AGENT_QX,              agilent_special_AGENT_QX);            // introduced 15.0.23
+#define NUM_SAM_SPECIAL 59
  
 #define SAM_LOCAL_GET_LINE_CALLBACKS                          \
     { DT_SAM, _OPTION_BD_BI,       sam_zip_BD_BI           }, \
@@ -835,7 +858,7 @@ TXTHEADER_TRANSLATOR (txtheader_sam2fq);
     { DT_SAM,  ALIAS_DICT, _OPTION_AN_CIGAR,    _OPTION_OC_Z        },  \
     { DT_SAM,  ALIAS_DICT, _OPTION_AN_NEGATIVE, _OPTION_TX_NEGATIVE },  \
     { DT_SAM,  ALIAS_DICT, _OPTION_AN_GENE,     _OPTION_TX_GENE     },  \
-    { DT_SAM,  ALIAS_DICT, _DEEP_FASTQ_E1L,     _DEEP_FASTQ_E2L     },   
+    { DT_SAM,  ALIAS_DICT, _FASTQ_E1L,          _FASTQ_E2L          },   
 
 #define BAM_DICT_ID_ALIASES                                             \
     /*         type        alias                maps to            */   \
@@ -853,7 +876,7 @@ TXTHEADER_TRANSLATOR (txtheader_sam2fq);
     { DT_BAM,  ALIAS_DICT, _OPTION_AN_CIGAR,    _OPTION_OC_Z        },  \
     { DT_BAM,  ALIAS_DICT, _OPTION_AN_NEGATIVE, _OPTION_TX_NEGATIVE },  \
     { DT_BAM,  ALIAS_DICT, _OPTION_AN_GENE,     _OPTION_TX_GENE     },  \
-    { DT_BAM,  ALIAS_DICT, _DEEP_FASTQ_E1L,     _DEEP_FASTQ_E2L     },   
+    { DT_BAM,  ALIAS_DICT, _FASTQ_E1L,          _FASTQ_E2L          },   
 
 #define SAM_CONTIG_FMT "@SQ	SN:%.*s	LN:%"PRId64
 

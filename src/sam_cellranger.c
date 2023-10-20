@@ -184,7 +184,7 @@ bool sam_seg_barcode_qual (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, SoloTag
 }
 
 //------------------------------------------------------------------------------------------------------------------------
-// RX:Z (SAM standard tag - longranger, novoalign) ; UR:Z (cellranger) - "Chromium molecular barcode sequence as reported by the sequencer"
+// RX:Z (SAM standard tag - longranger, novoalign, agilent) ; UR:Z (cellranger) - "Chromium molecular barcode sequence as reported by the sequencer"
 // BX:Z (longranger) ; UB:Z (cellranger) - "Chromium molecular barcode sequence that is error-corrected among other molecular barcodes with the same cellular barcode and gene alignment"
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -219,7 +219,7 @@ void sam_seg_RX_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(rx), unsigned add_byt
 {
     START_TIMER;
 
-    // In Novoalign (and maybe others) RX can consist of multiple barcodes eg: "GTCCCT-TTTCTA"
+    // In Novoalign, AGeNT Trimmer (and maybe others) RX can consist of multiple barcodes eg: "GTCCCT-TTTCTA"
     if (segconf.running && !segconf.n_RX_seps) {    
         if      (memchr (rx, '_', rx_len)) segconf.RX_sep = '_'; 
         else if (memchr (rx, '-', rx_len)) segconf.RX_sep = '-'; // as recommended by the SAM spec
@@ -233,6 +233,9 @@ void sam_seg_RX_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(rx), unsigned add_byt
     if (IS_DEPN(vb) && vb->sag && IS_SAG_SOLO && str_issame_(STRa(rx), STRBw(z_file->solo_data, vb->solo_aln->word[SOLO_RX]))) 
         sam_seg_against_sa_group (vb, CTX(OPTION_RX_Z), add_bytes);
 
+    else if (segconf.has_agent_trimmer)                               // Agilent case - expected to be predictable from ZA:Z and ZB:B, so no need to mate
+        agilent_seg_RX (VB, CTX(OPTION_RX_Z), STRa(rx), add_bytes);
+        
     else
         sam_seg_buddied_Z_fields (vb, dl, MATED_RX, STRa(rx), 
                                   segconf.RX_sep ? sam_seg_RX_array   // Novoalign-like case - array of short barcodes
@@ -258,7 +261,7 @@ void sam_seg_BX_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(bx), unsigned add_byt
 }
 
 //-----------------------------------------------------------------------------------------------------
-// QX:Z (longranger, novoalign) UY:Z (cellranger) - "Chromium molecular barcode read quality. Phred scores as reported by sequencer"
+// QX:Z (longranger, novoalign, AGeNT Trimmer) UY:Z (cellranger) - "Chromium molecular barcode read quality. Phred scores as reported by sequencer"
 //-----------------------------------------------------------------------------------------------------
 
 void sam_seg_QX_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qx), unsigned add_bytes)
@@ -272,6 +275,9 @@ void sam_seg_QX_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qx), unsigned add_byt
         dl->dont_compress_QX = true;
     }
     
+    else if (segconf.has_agent_trimmer) 
+        agilent_seg_QX (VB, CTX(OPTION_QX_Z), STRa(qx), add_bytes);
+
     else {
         CTX(OPTION_QX_Z)->local.len32 += qx_len;
         seg_lookup_with_length (VB, CTX(OPTION_QX_Z), qx_len, add_bytes); // actual data will be accessed by the codec with a callback
@@ -308,7 +314,7 @@ void sam_seg_BC_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(bc), unsigned add_byt
         sam_seg_against_sa_group (vb, CTX(OPTION_BC_Z), add_bytes);
 
     else 
-        sam_seg_buddied_Z_fields (vb, dl, FIRST_SOLO_TAG + SOLO_BC, STRa(bc),  
+        sam_seg_buddied_Z_fields (vb, dl, MATED_BC, STRa(bc),  
                                   segconf.n_BC_QT_seps ? sam_seg_BC_array : 0,
                                   add_bytes);
 

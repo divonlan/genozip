@@ -26,6 +26,9 @@ typedef struct {
 extern void stats_generate (void);          
 extern void stats_read_and_display (void);  
 extern void stats_add_txt_name (rom fn);
-extern void stats_finalize (void);          
+extern void stats_finalize (void);      
+    
+extern void stats_add_one_program (STRp(prog_name));
+extern bool stats_is_in_programs (rom signature);
 
 extern Buffer stats_programs;

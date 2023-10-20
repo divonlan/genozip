@@ -99,10 +99,10 @@ typedef int32_t SamASType;
 
 // Z fields which are expected to be the same as their prim - overlap . 
 #define FIRST_SOLO_TAG MATED_BX
-typedef enum         {                                                                               SOLO_BX,     SOLO_RX,     SOLO_CB,     SOLO_CR,     SOLO_BC,/* solo-only-after-this*/ SOLO_QX, SOLO_CY, SOLO_QT, NUM_SOLO_TAGS } SoloTags;
+typedef enum         {                                                                                                         SOLO_BX,     SOLO_RX,     SOLO_CB,     SOLO_CR,     SOLO_BC,/* solo-only-after-this*/ SOLO_QX, SOLO_CY, SOLO_QT, NUM_SOLO_TAGS } SoloTags;
                        /* only mated (not solo) tags first */
-typedef enum         { MATED_RG,    MATED_PG,    MATED_PU,    MATED_LB,    MATED_OX,    MATED_MI,    MATED_BX,    MATED_RX,    MATED_CB,    MATED_CR,    MATED_BC,   NUM_MATED_Z_TAGS } MatedZFields;
-#define MATED_Z_DIDs { OPTION_RG_Z, OPTION_PG_Z, OPTION_PU_Z, OPTION_LB_Z, OPTION_OX_Z, OPTION_MI_Z, OPTION_BX_Z, OPTION_RX_Z, OPTION_CB_Z, OPTION_CR_Z, OPTION_BC_Z,                 }                
+typedef enum         { MATED_RG,    MATED_PG,    MATED_PU,    MATED_LB,    MATED_OX,    MATED_MI,    MATED_ZA,    MATED_ZB,    MATED_BX,    MATED_RX,    MATED_CB,    MATED_CR,    MATED_BC,   NUM_MATED_Z_TAGS } MatedZFields;
+#define MATED_Z_DIDs { OPTION_RG_Z, OPTION_PG_Z, OPTION_PU_Z, OPTION_LB_Z, OPTION_OX_Z, OPTION_MI_Z, OPTION_ZA_Z, OPTION_ZB_Z, OPTION_BX_Z, OPTION_RX_Z, OPTION_CB_Z, OPTION_CR_Z, OPTION_BC_Z,                 }                
 extern Did buddied_Z_dids[NUM_MATED_Z_TAGS];
 
 #define SOLO_PROPS { /* in the order of SoloTags */ \
@@ -234,13 +234,14 @@ typedef struct VBlockSAM {
     uint32_t consec_is_set_len;
 
     // Seg: 0-based index into AUX fields, -1 means field is not present in this line
+    // When adding, also update sam_seg_idx_aux
     #define first_idx idx_NM_i
     int16_t idx_NM_i, idx_MD_Z, idx_SA_Z, idx_XG_Z, idx_NH_i, idx_HI_i, idx_IH_i,
             idx_X0_i, idx_X1_i, idx_XA_Z, idx_AS_i, 
             idx_CC_Z, idx_CP_i, idx_ms_i, idx_SM_i,
             idx_UB_Z, idx_BX_Z, idx_CB_Z, idx_GX_Z, idx_CR_Z, idx_CY_Z,
             idx_XO_Z, idx_YS_Z, idx_XB_A, idx_XM_Z, idx_XB_Z,
-            idx_dq_Z, idx_iq_Z, idx_sq_Z;
+            idx_dq_Z, idx_iq_Z, idx_sq_Z, idx_ZA_Z, idx_ZB_Z;
     #define has(f)   (vb->idx_##f  != -1)
     #define has_MD   (has(MD_Z) && segconf.has[OPTION_MD_Z])
 
@@ -735,6 +736,11 @@ extern void sam_seg_gene_name_id (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, 
 extern uint32_t sam_get_QUAL_score (VBlockSAMP vb, STRp(qual));
 extern void sam_seg_ms_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t ms, unsigned add_bytes);
 extern void sam_seg_mc_i (VBlockSAMP vb, int64_t mc, unsigned add_bytes);
+
+// Agilent stuff
+extern void agilent_seg_initialize (VBlockP vb);
+extern void agilent_seg_RX (VBlockP vb, ContextP ctx, STRp(rx), unsigned add_bytes); // RX and QX are also in fastq_private.h.
+extern void agilent_seg_QX (VBlockP vb, ContextP ctx, STRp(qx), unsigned add_bytes); 
 
 // -----------------------------------
 // SAG stuff

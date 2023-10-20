@@ -21,4 +21,5 @@ extern int64_t txtheader_zip_read_and_compress (int64_t *txt_header_offset, Comp
 
 extern rom txtheader_piz_get_filename (rom orig_name, rom prefix, bool is_orig_name_genozip, bool with_bgzf);
 extern void txtheader_piz_read_and_reconstruct (Section txt_header_sec);
+extern StrTextLong txtheader_get_txt_filename_from_section (void);
 

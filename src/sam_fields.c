@@ -1309,7 +1309,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
     unsigned add_bytes = sam_seg_aux_add_bytes (bam_type, value_len, is_bam);
 
     #define COND0(condition, seg) if (condition) { seg; break; } else  
-    #define COND(condition,  seg) if (condition) { seg; break; } else goto fallback; 
+    #define COND(condition,  seg) if (condition) { seg; break; } else goto fallback
 
     if (segconf.running)
         segconf.has[ctx_get_ctx (VB, dict_id)->did_i]++;
@@ -1490,6 +1490,10 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
         case _OPTION_XW_Z: COND (MP(ULTIMA), sam_seg_ultima_XW (vb, STRa(value), add_bytes));
         case _OPTION_rq_f: COND (MP(ULTIMA), sam_seg_float_as_snip (vb, CTX(OPTION_rq_f), STRa(value), numeric, add_bytes));
         case _OPTION_t0_Z: COND (segconf.sam_has_ultima_t0, sam_seg_ultima_t0 (vb, dl, STRa(value), add_bytes));
+        
+        // Agilent
+        case _OPTION_ZA_Z: COND (segconf.has_agent_trimmer, sam_seg_buddied_Z_fields (vb, dl, MATED_ZA, STRa(value), 0, add_bytes));
+        case _OPTION_ZB_Z: COND (segconf.has_agent_trimmer, sam_seg_buddied_Z_fields (vb, dl, MATED_ZB, STRa(value), 0, add_bytes));
 
         default: fallback:
             sam_seg_aux_field_fallback (VB, dl, dict_id, sam_type, array_subtype, STRa(value), numeric, add_bytes);

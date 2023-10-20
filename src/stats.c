@@ -38,6 +38,26 @@ Buffer stats_programs = {}; // data-type specific programs (eg @PG for SAM/BAM F
 int64_t all_txt_len=0;
 float src_comp_ratio=0, all_comp_ratio=0;
 
+void stats_add_one_program (STRp(prog_name))
+{
+    stats_programs.name = "stats_programs"; // initialize name (note: destroyed between files, so needs to be reinitialized)
+
+    buf_append (evb, stats_programs, char, prog_name, prog_name_len, "stats_programs");
+
+    BNXTc (stats_programs) = ';'; // note: buf_append allocates one extra character
+}
+
+bool stats_is_in_programs (rom signature)
+{
+    if (!stats_programs.len) return false;
+
+    SAFE_NULB(stats_programs);
+    bool found = strstr (B1STc(stats_programs), signature);
+    SAFE_RESTORE;
+
+    return found;
+}
+
 // calculate hash_occ before consolidating stats
 static void stats_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
 {
@@ -423,8 +443,11 @@ static void stats_output_file_metadata (void)
         if (segconf.longest_seq_len) bufprintf (evb, &features, "segconf.longest_seq_len=%u;", segconf.longest_seq_len); 
     }
 
-    if (stats_programs.len)
+    if (stats_programs.len) {
+        if (*BLSTc(stats_programs) == ';') stats_programs.len--; // remove final ';'
+     
         bufprintf (evb, &stats, "Programs: %.*s\n", STRfb(stats_programs));
+    }
 
     bufprintf (evb, &stats, "Genozip version: %s %s\nDate compressed: %s\n", 
                GENOZIP_CODE_VERSION, arch_get_distribution(), str_time().s);
@@ -858,6 +881,7 @@ void stats_finalize (void)
     buf_destroy (internals);
     buf_destroy (STATS);
     buf_destroy (sbl_buf);
+    buf_destroy (stats_programs);
 
     all_txt_len = 0;
     src_comp_ratio = all_comp_ratio = 0;    

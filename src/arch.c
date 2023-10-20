@@ -104,22 +104,6 @@ static bool arch_is_wsl (void)
 #endif
 }
 
-static void test_fastq_sam_did_alignment (void)
-{
-    // verify that FASTQ/SAM dids are aligned - needed for Deep to work
-    Did did[][2] = { { FASTQ_QNAME,      SAM_QNAME              },
-                     { FASTQ_QNAME2,     DEEP_FASTQ_QNAME2      },
-                     { FASTQ_AUX,        SAM_AUX                },
-                     { FASTQ_SQBITMAP,   SAM_SQBITMAP           },
-                     { FASTQ_QUAL,       SAM_QUAL               },
-                     { FASTQ_TOPLEVEL,   SAM_TOPLEVEL           },
-                     { FASTQ_LINE3,      DEEP_FASTQ_LINE3       },
-                     { FASTQ_AUX_LENGTH, DEEP_FASTQ_AUX_LENGTH, } };
-
-    for (int i=0; i < ARRAY_LEN(did); i++)
-        ASSERT (did[i][0] == did[i][1], "FASTQ/SAM dids misaligned, i=%u", i);
-}
-
 void arch_initialize (rom my_argv0)
 {
     argv0 = my_argv0;
@@ -178,8 +162,6 @@ void arch_initialize (rom my_argv0)
     
     flag.is_wsl = arch_is_wsl();
     arch_start_time = arch_timestamp();
-
-    test_fastq_sam_did_alignment();
 }
 
 rom arch_get_endianity (void)
