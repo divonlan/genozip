@@ -941,6 +941,8 @@ void fastq_reset_line (VBlockP vb_)
     
     CTX(FASTQ_SQBITMAP)->pair1_is_aligned = VER(14) ? PAIR1_ALIGNED_UNKNOWN 
                                                     : PAIR1_ALIGNED; // up to v13, all lines had alignment data, even if unmapped
+
+    vb->sam_seq_offset = 0;
 }
 
 //---------------------------------------------------------

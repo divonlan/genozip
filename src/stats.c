@@ -259,9 +259,8 @@ static void stats_output_file_metadata (void)
                            z_dt_name(), DTPZ (line_name), str_int_commas (num_alignments).s);
 
             if (flag.deep)
-                bufprintf (evb, &stats, "FASTQ %ss: %s in %u FASTQ files (deep=%.1f%%%s qtype=%s no_qual=%s has_trimmed=%s)\n", 
-                           dt_props[DT_FASTQ].line_name, str_int_commas (z_file->deep_stats[NDP_FQ_READS]).s, num_fq_files, deep_pc,
-                           cond_int(segconf.sam_cropped_at, " crop=", segconf.sam_cropped_at), qtype_name (segconf.deep_qtype), TF(segconf.deep_no_qual), TF(segconf.deep_has_trimmed));
+                bufprintf (evb, &stats, "FASTQ %ss: %s in %u FASTQ files\n", 
+                           dt_props[DT_FASTQ].line_name, str_int_commas (z_file->deep_stats[NDP_FQ_READS]).s, num_fq_files);
 
             bufprintf (evb, &stats, "Contexts: %u  Vblocks: %u x %u MB  Sections: %s\n", 
                        num_used_ctxs, z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), str_int_commas (z_file->section_list_buf.len).s);
@@ -291,7 +290,7 @@ static void stats_output_file_metadata (void)
             if (flag.deep) bufprintf (evb, &features, "deep=%.1f%%;", deep_pc);
             if (flag.deep && segconf.sam_cropped_at) bufprintf (evb, &features, "deep_crop=%ubp;", segconf.sam_cropped_at);
             if (flag.deep) bufprintf (evb, &features, "deep_qtype=%s;", qtype_name (segconf.deep_qtype));
-            if (flag.deep) bufprintf (evb, &features, "deep_has_trimmed=%s;", TF(segconf.deep_has_trimmed));
+            if (flag.deep) bufprintf (evb, &features, "deep_trimming=%s;", segconf_deep_trimming_name());
             if (flag.deep) bufprintf (evb, &features, "deep_no_qual=%s;", TF (segconf.deep_no_qual));
 
             if (num_alignments) {
@@ -323,6 +322,10 @@ static void stats_output_file_metadata (void)
                 FEATURE(true, "Buddying: sag_type=%s mate=%.*f%% saggy_near=%.*f%% prim_far=%.*f%%",
                         "sag_type=%s;mate=%.*f%%;saggy_near=%.*f%%;prim_far=%.*f%%",
                         sag_type_name (segconf.sag_type), PREC(mate_line_pc), mate_line_pc, PREC(saggy_near_pc), saggy_near_pc, PREC(prim_far_pc), prim_far_pc);
+
+                if (flag.deep)
+                    bufprintf (evb, &stats, "Deep: fq_reads_deeped=%.1f%%%s qtype=%s no_qual=%s trimming=%s\n", 
+                               deep_pc, cond_int(segconf.sam_cropped_at, " crop=", segconf.sam_cropped_at), qtype_name (segconf.deep_qtype), TF(segconf.deep_no_qual), segconf_deep_trimming_name());
 
                 if (z_file->num_aligned) {
                     bufprintf (evb, &features, "aligner_ok=%.1f%%;", 100.0 * (double)z_file->num_aligned / (double)z_file->num_lines);

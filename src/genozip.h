@@ -399,6 +399,14 @@ typedef SORTER ((*Sorter));
     snip[1] = (op1);            \
     unsigned snip_len = 2 + str_int ((n), &snip[2]);
 
+#define SNIPi2_2(op0,op1,n1,n2) \
+    char snip[48];              \
+    snip[0] = (op0);            \
+    snip[1] = (op1);            \
+    unsigned snip_len = 2 + str_int ((n1), &snip[2]); \
+    snip[snip_len++] = ',';     \
+    snip_len += str_int ((n2), &snip[snip_len])
+
 #define SNIPi3(op0,op1,op2,n)   \
     char snip[24];              \
     snip[0] = (op0);            \

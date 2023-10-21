@@ -377,3 +377,9 @@ rom segconf_tech_name (void)
     return (segconf.tech >= 0 && segconf.tech < NUM_TECHS) ? tech_name[segconf.tech] : "INVALID_MAPPER";
 }
 
+rom segconf_deep_trimming_name (void)
+{
+    return segconf.deep_has_trimmed_left ? "LeftRight"
+         : segconf.deep_has_trimmed      ? "RightOnly"
+         :                                 "None";
+}

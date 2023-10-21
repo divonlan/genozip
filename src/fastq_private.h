@@ -21,14 +21,19 @@ typedef struct {
     TxtWord seq;
     TxtWord qual;               // start within vb->txt_data (qual.len==seq.len except if condensed by codec_homp_compress)
     uint32_t sam_seq_len;       // Deep: seq_len of matching sam alignment
-    bool dont_compress_QUAL;    // true in case --deep and fully copied from SAM
+    uint32_t sam_seq_offset;    // Deep: start of matching SAM SEQ within FASTQ SEQ
+    bool dont_compress_QUAL;    // true in case of Deep and fully copied from SAM
     bool deep_qual;             // QUAL is to be fully or partially copied from Deep
     bool monochar;              // sequence is entirely of the same character (eg: NNNNN)
+    bool qual_is_trims_only;    // Deep: fastq_zip_qual has modified the QUAL data to be trims only 
 } ZipDataLineFASTQ;
 
 // IMPORTANT: if changing fields in VBlockFASTQ, also update vb_fast_release_vb 
 typedef struct VBlockFASTQ {
     VBLOCK_COMMON_FIELDS
+
+    // current line
+    uint32_t sam_seq_offset;     // PIZ Deep: offset of start of SEQ / QUAL copied from SAM with the FASTQ SEQ / QUAL
 
     // pairing stuff - used if we are the 2nd file in the pair 
     uint32_t pair_vb_i;          // ZIP/PIZ: in R2: the equivalent vb_i in the R1 (vb_i >= 1), or 0 if this is R1

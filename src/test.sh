@@ -1838,6 +1838,10 @@ batch_deep() # note: use --debug-deep for detailed tracking
     local T=$TESTDIR/deep.trimmed-deep_no_qual
     $genozip $T.bam $T.R1.fq.gz $T.R2.fq.gz -fe $hg19 -p 123 -o $output -3t || exit 1
 
+    test_header "deep.left-right-trimming"
+    local T=$TESTDIR/deep.left-right-trimming
+    $genozip $T.bam $T.fq.gz -fe $hg19 -o $output -3t || exit 1
+
     # pacbio ccs, minimap2, single FASTQ
     cleanup_cache
     test_header deep.pacbio-ccs

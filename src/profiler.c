@@ -259,6 +259,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (seg_get_next_line, 3);
         PRINT (seg_get_next_item, 3);
         PRINT (fastq_seg_deep, 2);
+        PRINT (fastq_deep_seg_find_subseq, 3);
         PRINT (fastq_seg_deep_consume_unique_matching_ent, 3);
         PRINT (fastq_seg_SEQ, 2);
         PRINT (fastq_seg_DESC, 2);
