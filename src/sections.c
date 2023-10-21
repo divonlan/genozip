@@ -968,13 +968,14 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
     
     rom SEC_TAB = isatty(1) ? "            ++  " : " "; // single line if not terminal - eg for grepping
 
-    sprintf (str, "%c %s%-*"PRIu64" %-19s %-4.4s %-4.4s vb=%-3u %s=%-6u txt_len=%-7u z_len=%-7u enc_len=%-7u%s ",
+    sprintf (str, "%c %s%-*"PRIu64" %-19s %-4.4s %-4.4s vb=%-3u %s=%*u txt_len=%-7u z_len=%-7u enc_len=%-7u%s ",
              rw, 
              is_dict_offset ? "~" : "", 9-is_dict_offset, offset, 
              st_name(header->section_type), 
              codec_name (header->codec), codec_name (header->sub_codec),
              BGEN32 (header->vblock_i), 
              VER(15) ? "z_digest" : "comp_off",
+             VER(15) ? -10 : -4,
              VER(15) ? BGEN32 (header->z_digest) : BGEN32 (header->v14_compressed_offset), 
              BGEN32 (header->data_uncompressed_len), 
              BGEN32 (header->data_compressed_len), 

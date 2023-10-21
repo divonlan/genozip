@@ -502,7 +502,7 @@ SPECIAL_RECONSTRUCTOR (bam_piz_special_FLOAT)
 {
     union { uint32_t i; float f; } machine_en; // number in machine endianity
 
-    // case: since v15, float is stored in local
+    // case: since v15, float is *may* stored in local
     if (!snip_len) 
         machine_en.f = NEXTLOCAL(float, ctx);
     

@@ -348,7 +348,7 @@ void codec_assign_best_qual_codec (VBlockP vb, Did did_i,
     if (ctx->ltype != LT_SEQUENCE)
         ctx_commit_codec_to_zf_ctx (vb, ctx, true, false); // used only for submitting stats
         
-    if (flag.show_codec) // aligned to the output of codec_assign_best_codec
+    if (flag.show_codec && ctx->lcodec != CODEC_UNKNOWN) // aligned to the output of codec_assign_best_codec
         iprintf ("%-8s %-12s %-5s          *[%s]\n", VB_NAME, ctx->tag_name, "LOCAL", codec_name(CTX(did_i)->lcodec));
 }
 

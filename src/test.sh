@@ -1834,6 +1834,10 @@ batch_deep() # note: use --debug-deep for detailed tracking
     local T="$TESTDIR/deep.qtype=QNAME2"
     $genozip $T.1.fq $T.2.fq $T.sam -fE $hg19 -3t -o $output || exit 1
 
+    test_header "deep.trimmed-deep_no_qual - encrypted"
+    local T=$TESTDIR/deep.trimmed-deep_no_qual
+    $genozip $T.bam $T.R1.fq.gz $T.R2.fq.gz -fe $hg19 -p 123 -o $output -3t || exit 1
+
     # pacbio ccs, minimap2, single FASTQ
     cleanup_cache
     test_header deep.pacbio-ccs

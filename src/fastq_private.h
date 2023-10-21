@@ -19,10 +19,11 @@
 
 typedef struct {
     TxtWord seq;
-    TxtWord qual;                // start within vb->txt_data (qual.len==seq.len except if condensed by codec_homp_compress)
-    uint32_t sam_seq_len;        // Deep: seq_len of matching sam alignment
-    bool dont_compress_QUAL : 1; // true in case --deep and fully copied from SAM
-    bool monochar           : 1; // sequence is entirely of the same character (eg: NNNNN)
+    TxtWord qual;               // start within vb->txt_data (qual.len==seq.len except if condensed by codec_homp_compress)
+    uint32_t sam_seq_len;       // Deep: seq_len of matching sam alignment
+    bool dont_compress_QUAL;    // true in case --deep and fully copied from SAM
+    bool deep_qual;             // QUAL is to be fully or partially copied from Deep
+    bool monochar;              // sequence is entirely of the same character (eg: NNNNN)
 } ZipDataLineFASTQ;
 
 // IMPORTANT: if changing fields in VBlockFASTQ, also update vb_fast_release_vb 
@@ -75,7 +76,7 @@ extern void fastq_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(seq), boo
 extern bool fastq_piz_R1_test_aligned (VBlockFASTQP vb);
 
 // QUAL
-extern void fastq_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qual), bool deep);
+extern void fastq_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qual));
 
 // Deep stuff
 extern void fastq_deep_zip_initialize (void);

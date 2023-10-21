@@ -17,13 +17,13 @@
 // ZIP
 //---------------
 
-void fastq_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qual), bool deep)
+void fastq_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qual))
 {
     START_TIMER;
 
     decl_ctx (FASTQ_QUAL);
 
-    if (deep)
+    if (dl->deep_qual)
         fastq_deep_seg_QUAL (vb, dl, ctx, qual_len);
 
     else if (str_is_monochar (STRa(qual))) {
@@ -46,13 +46,15 @@ COMPRESSOR_CALLBACK (fastq_zip_qual)
 {
     ZipDataLineFASTQ *dl = DATA_LINE (vb_line_i);
 
+    // note: if we're copy QUAL from Deep (fully or partially), compress only the uncopied suffix starting at sam_seq_len
+    uint32_t offset = dl->deep_qual ? dl->sam_seq_len : 0;
+
     // note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec
-    // note: in sam_seq_len (i.e. Deep and we copied the prefix of QUAL from SAM) - compress only the uncopied suffix
-    *line_data_len  = dl->dont_compress_QUAL ? 0 : MIN_(maximum_size, dl->qual.len - dl->sam_seq_len);
+    *line_data_len  = dl->dont_compress_QUAL ? 0 : MIN_(maximum_size, dl->qual.len - offset);
     
     if (!line_data) return; // only lengths were requested
 
-    *line_data = Btxt (dl->qual.index) + dl->sam_seq_len;
+    *line_data = Btxt (dl->qual.index) + offset;
     
     if (is_rev) *is_rev = 0;
 }
@@ -61,8 +63,10 @@ void fastq_update_qual_len (VBlockP vb, uint32_t line_i, uint32_t new_len)
 { 
     ZipDataLineFASTQ *dl = DATA_LINE (line_i);
 
-    // note: add back sam_seq_len bc it will be substracted again when sub-codec calls fastq_zip_qual
-    dl->qual.len = new_len + dl->sam_seq_len;
+    uint32_t offset = dl->deep_qual ? dl->sam_seq_len : 0; // as in fastq_zip_qual
+
+    // note: new_len is based line_data_len returned from fastq_zip_qual and hence does not include offset - we need to add it back.
+    dl->qual.len = new_len + offset;
 }
 
 //---------------

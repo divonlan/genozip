@@ -712,11 +712,11 @@ rom fastq_seg_txt_line (VBlockP vb_, rom line_start, uint32_t remaining, bool *h
     dl->monochar = str_is_monochar (STRa(seq)); // set dl->monochar
 
     // case --deep: compare DESC, SEQ and QUAL to the SAM/BAM data
-    bool deep_qname=false, deep_seq=false, deep_qual=false;
+    bool deep_qname=false, deep_seq=false;
     uint32_t uncanonical_suffix_len = 0;
     
     if (flag.deep || flag.show_deep == 2)
-        fastq_seg_deep (vb, dl, STRa(qname), STRa(qname2), STRa(seq), STRa(qual), &deep_qname, &deep_seq, &deep_qual, &uncanonical_suffix_len);
+        fastq_seg_deep (vb, dl, STRa(qname), STRa(qname2), STRa(seq), STRa(qual), &deep_qname, &deep_seq, &dl->deep_qual, &uncanonical_suffix_len);
 
     fastq_seg_QNAME (vb, STRa(qname), line1_len, segconf.deep_qtype == QNAME1 && deep_qname, uncanonical_suffix_len);
 
@@ -732,7 +732,7 @@ rom fastq_seg_txt_line (VBlockP vb_, rom line_start, uint32_t remaining, bool *h
 
     fastq_seg_SEQ (vb, dl, STRa(seq), deep_seq);
 
-    fastq_seg_QUAL (vb, dl, STRa(qual), deep_qual);
+    fastq_seg_QUAL (vb, dl, STRa(qual));
 
     // 4 end of lines. note: we have 2 EOL contexts, so we can show the correct EOL if in case of --header-only
     for (int i=0; i < 4; i++) {

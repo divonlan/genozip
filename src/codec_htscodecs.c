@@ -43,7 +43,7 @@ static bool codec_hts_compress (VBlockP vb, ContextP ctx,
                                 uint32_t *uncompressed_len, 
                                 LocalGetLineCB get_line_cb, // option 2 - compress data one line at a time
                                 STRe(compressed),           // in/out 
-                                unsigned char *(*func)(VBlockP vb, unsigned char *in, unsigned int in_size, unsigned char *out, unsigned int *out_size, int order),                                
+                                uint8_t *(*func)(VBlockP vb, uint8_t *in, unsigned in_size, uint8_t *out, unsigned *out_size, int order),                                
                                 int order, FailType soft_fail, rom name)
 {
     START_TIMER;
@@ -59,8 +59,8 @@ static bool codec_hts_compress (VBlockP vb, ContextP ctx,
                 buf_add (&vb->codec_bufs[0], line, line_len);
         }
 
-        ASSERT (vb->codec_bufs[0].len == *uncompressed_len, "%s: \"%s\": Expecting in_so_far=%u == uncompressed_len=%u ctx=%s callback=%s", 
-                VB_NAME, name, vb->codec_bufs[0].len32, *uncompressed_len, TAG_NAME, TF(!!get_line_cb));
+        ASSERT (vb->codec_bufs[0].len == *uncompressed_len, "%s: \"%s\": Expecting total_qual_len_from_callbacks=%u == uncompressed_len=%u ctx=%s", 
+                VB_NAME, name, vb->codec_bufs[0].len32, *uncompressed_len, TAG_NAME);
     }
 
     bool ret = !!func (vb, (uint8_t*)uncompressed, *uncompressed_len, (uint8_t*)compressed, compressed_len, order);
