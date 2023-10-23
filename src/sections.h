@@ -85,7 +85,8 @@ typedef union SectionFlags {
         uint8_t pair             : 2;  // FASTQ component (inc. in a Deep SAM): PAIR_R1 or PAIR_R2 if this component is a paired FASTQ component (v15)
         #define v13_dvcf_comp_i pair   // v12-13: DVCF: 0=Main 1=Primary-only rejects 2=Luft-only rejects (in v14, this moved to SectionEnt.comp_i)
         uint8_t is_txt_luft      : 1;  // VCF: true if original source file was a dual-coordinates file in Luft rendition (v12)
-        uint8_t unused           : 5;
+        uint8_t no_gz_ext        : 1;  // source file was compressed with GZ/BGZF AND it did not have a .gz/.bgz extension (15.0.23) 
+        uint8_t unused           : 4;
     } txt_header;
 
     union FlagsVbHeader {

@@ -894,7 +894,7 @@ static FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt)
             char extra[64] = {};
             if (dt==DT_VCF && !VER(14)) sprintf (extra, " dvcf_comp_i=%u", f.txt_header.v13_dvcf_comp_i);
             if ((dt==DT_SAM || dt==DT_BAM || dt==DT_FASTQ) && VER(15)) sprintf (extra, " pair=%s", pair_type_name (f.txt_header.pair));
-            sprintf (str.s, "is_txt_luft=%u%s", f.txt_header.is_txt_luft, extra);
+            sprintf (str.s, "is_txt_luft=%u no_gz_ext=%u %s", f.txt_header.is_txt_luft, f.txt_header.no_gz_ext, extra);
             break;
         }
 

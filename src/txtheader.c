@@ -92,6 +92,11 @@ void txtheader_compress (BufferP txt_header,
     // data type (of txt file!) specific fields
     if (DTPT(zip_set_txt_header_flags)) DTPT(zip_set_txt_header_flags)(&section_header.flags.txt_header);
 
+    // true if filename is compressed with gz/bgzf but does not have a .gz/.bgz extension (e.g. usually true for BAM files)
+    section_header.flags.txt_header.no_gz_ext = 
+        (txt_file->source_codec == CODEC_GZ || txt_file->source_codec == CODEC_BGZF || txt_file->source_codec == CODEC_BAM) &&
+        txt_file->basename && !filename_has_ext (txt_file->basename, ".gz") && !filename_has_ext (txt_file->basename, ".bgz");
+
     // In BGZF, we store the 3 least significant bytes of the file size, so check if the reconstructed BGZF file is likely the same
     if (txt_file->codec == CODEC_BGZF) 
         bgzf_sign (txt_file->disk_size, section_header.codec_info);
@@ -220,7 +225,7 @@ static void txtheader_uncompress_one_vb (VBlockP vb)
 // case 1: outputing a single file - generate txt_filename based on the z_file's name
 // case 2: unbinding a genozip into multiple txt files - generate txt_filename of a component file from the
 //         component name in SEC_TXT_HEADER 
-rom txtheader_piz_get_filename (rom orig_name, rom prefix, bool is_orig_name_genozip, bool with_bgzf)
+static rom txtheader_piz_get_filename (rom orig_name, rom prefix, bool is_orig_name_genozip, bool with_bgzf, bool no_gz_ext)
 {
     unsigned fn_len = strlen (orig_name);
     unsigned dn_len = flag.out_dirname ? strlen (flag.out_dirname) : 0;
@@ -234,29 +239,33 @@ rom txtheader_piz_get_filename (rom orig_name, rom prefix, bool is_orig_name_gen
          !strcmp (&txt_filename[fn_len-genozip_ext_len- (sizeof ext - 1)], (ext))) ? (int)(sizeof ext - 1) : 0) 
 
     // length of extension to remove if translating, eg remove ".sam" if .sam.genozip->.bam */
-    int old_ext_removed_len = EXT2_MATCHES_TRANSLATE (DT_SAM,   DT_BAM,    ".sam") +
-                              EXT2_MATCHES_TRANSLATE (DT_SAM,   DT_SAM,    ".bam") +
-                              EXT2_MATCHES_TRANSLATE (DT_SAM,   DT_FASTQ,  ".sam") +
-                              EXT2_MATCHES_TRANSLATE (DT_SAM,   DT_FASTQ,  ".bam") +
-                              EXT2_MATCHES_TRANSLATE (DT_VCF,   DT_BCF,    ".vcf") +
-                              EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".fa" ) +
-                              EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".faa") +
-                              EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".ffn") +
-                              EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".fna") +
-                              EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".frn") +
-                              EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".fas") +
-                              EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".fsa") +
-                              EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".fasta") +
-                              EXT2_MATCHES_TRANSLATE (DT_ME23,  DT_VCF,    ".txt");
+    int old_ext_removed_len = EXT2_MATCHES_TRANSLATE (DT_SAM,   DT_BAM,    ".sam")
+                            + EXT2_MATCHES_TRANSLATE (DT_SAM,   DT_SAM,    ".bam")
+                            + EXT2_MATCHES_TRANSLATE (DT_SAM,   DT_FASTQ,  ".sam")
+                            + EXT2_MATCHES_TRANSLATE (DT_SAM,   DT_FASTQ,  ".bam")
+                            + EXT2_MATCHES_TRANSLATE (DT_VCF,   DT_BCF,    ".vcf")
+                            + EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".fa" )
+                            + EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".faa")
+                            + EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".ffn")
+                            + EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".fna")
+                            + EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".frn")
+                            + EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".fas")
+                            + EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".fsa")
+                            + EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".fasta")
+                            + EXT2_MATCHES_TRANSLATE (DT_ME23,  DT_VCF,    ".txt");
 
     // case: new directory - take only the basename
     if (dn_len) orig_name = filename_base (orig_name, 0,0,0,0); 
     
+    // cases in which BGZF compression does not result in a ".gz" file name extension:
+    // if original gz/bgzf-compressed file did not have a .gz/.bgz extension (since 15.0.23) or when outputing BAM or BCF
+    no_gz_ext |= OUT_DT(BCF) || OUT_DT(BAM); 
+
     sprintf ((char *)txt_filename, "%s%s%s%.*s%s%s", prefix ? prefix : "",
              (dn_len ? flag.out_dirname : ""), (dn_len ? "/" : ""), 
              fn_len - genozip_ext_len - old_ext_removed_len, orig_name,
              old_ext_removed_len ? file_plain_ext_by_dt (flag.out_dt) : "", // add translated extension if needed
-             (with_bgzf && !OUT_DT(BAM) && !OUT_DT(BCF)) ? ".gz" : ""); // add .gz if --bgzf (except in BAM and BCF where it is implicit)
+             (with_bgzf && !no_gz_ext) ? ".gz" : ""); // add .gz if needed
 
     if (dn_len) FREE (orig_name); // allocated by filename_base
 
@@ -282,7 +291,7 @@ StrTextLong txtheader_get_txt_filename_from_section (void)
     #undef C
 
     TEMP_FLAG(out_dirname, NULL); // only basename in progress string
-    rom filename = txtheader_piz_get_filename (header.txt_filename, flag.unbind, false, dot_gz);
+    rom filename = txtheader_piz_get_filename (header.txt_filename, flag.unbind, false, dot_gz, header.flags.txt_header.no_gz_ext);
     RESTORE_FLAG(out_dirname);
 
     StrTextLong name = {};
@@ -337,8 +346,8 @@ void txtheader_piz_read_and_reconstruct (Section sec)
 
         filename = flag.to_stdout    ? NULL 
                  : flag.out_filename ? flag.out_filename
-                 : flag.unbind       ? txtheader_piz_get_filename (header.txt_filename, flag.unbind, false, bgzf_flags.level >= 1)
-                 :                     txtheader_piz_get_filename (z_name,              "",          true,  bgzf_flags.level >= 1); // use genozip filename as a base regardless of original name
+                 : flag.unbind       ? txtheader_piz_get_filename (header.txt_filename, flag.unbind, false, bgzf_flags.level >= 1, header.flags.txt_header.no_gz_ext)
+                 :                     txtheader_piz_get_filename (z_name,              "",          true,  bgzf_flags.level >= 1, header.flags.txt_header.no_gz_ext); // use genozip filename as a base regardless of original name
     }
 
     // note: when reading an auxiliary file or no_writer - we still create txt_file (but don't actually open the physical file)
