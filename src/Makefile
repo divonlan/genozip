@@ -419,6 +419,7 @@ conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@echo " "
 	@echo "Copying $^ to conda feedstock"
+	@(cd $(CONDA_FEEDSTOCK); git reset --hard)
 	@cp conda/README.md $(CONDA_FEEDSTOCK)
 	@cp conda/meta.yaml conda/build.sh conda/bld.bat $(CONDA_RECIPE_DIR)
 	@echo "Committing my files to branch genozip on my fork"
