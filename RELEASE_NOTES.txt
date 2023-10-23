@@ -3,7 +3,7 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
-15.0.23
+15.0.23 23/10/2023
 - BAM and VCF: verification that the contig lengths in the reference file provided with --reference match those specified in the file header
 - Agilent AGeNT Trimmer: better compression of FASTQ and BAM files with Trimmer tags
 - --deep now supports data in which BAM sequences may be trimmed at either end relative to their FASTQ counterparts (previously, only trimming at the end of the read was supported)
