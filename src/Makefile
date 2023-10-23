@@ -463,7 +463,7 @@ $(INSTALLERS)/genozip-installer.exe: refresh_arch_o $(WINDOWS_INSTALLER_OBJS)
 	@(mkdir windows >& /dev/null ; exit 0)
 	@echo 'Creating Windows installer'
 	@echo 'WINDOWS: Using the UI:'
-	@echo '  (1) Open genozip-installer.ifp'
+	@echo '  (1) Open genozip-installer.ifp - OPEN FROM genozip/src DIRECTORY EVEN WHEN BUILDING PROD'
 	@echo '  (2) Set General-Program version to $(version)'
 	@echo '  (3) In Dialogs->License upload license from windows/LICENSE-for-installer.txt'
 	@echo '  (3) Click Save, then click Build'
