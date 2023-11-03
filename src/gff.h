@@ -48,7 +48,7 @@
 #pragma GENDICT ATTR_Name=DTYPE_1=Name
 #pragma GENDICT ATTR_Alias=DTYPE_1=Alias
 #pragma GENDICT ATTR_Parent=DTYPE_1=Parent
-#pragma GENDICT ATTR_ParentItem=DTYPE_1=parentItm // an item of the Parent array
+#pragma GENDICT ATTR_ParentItem=DTYPE_1=parentItm           // an item of the Parent array
 #pragma GENDICT ATTR_Target=DTYPE_1=Target
 #pragma GENDICT ATTR_Target_ID=DTYPE_1=T1gtID
 #pragma GENDICT ATTR_Target_POS=DTYPE_1=T2gtPOS
@@ -76,30 +76,38 @@
 #pragma GENDICT ATTR_variant_peptide=DTYPE_1=variant_peptide
 
 // GTF fields
-#pragma GENDICT ATTR_gene_id=DTYPE_1=gene_id
-#pragma GENDICT ATTR_gene_name=DTYPE_1=gene_name
-#pragma GENDICT ATTR_transcript_id=DTYPE_1=transcript_id
-#pragma GENDICT ATTR_transcript_name=DTYPE_1=transcript_name
+#pragma GENDICT ATTR_gene_id=DTYPE_1=gene_id                // eg "ENSMUSG00000051951.5"
+#pragma GENDICT ATTR_gene_type=DTYPE_1=gene_type            // eg "snRNA"
+#pragma GENDICT ATTR_gene_status=DTYPE_1=gene_status        // eg "KNOWN"
+#pragma GENDICT ATTR_gene_name=DTYPE_1=gene_name            // eg "Xkr4"
+#pragma GENDICT ATTR_transcript_id=DTYPE_1=transcript_id    // eg "ENSMUST00000159265.1"
+#pragma GENDICT ATTR_transcript_name=DTYPE_1=transcript_name// eg "Xkr4-202"
 #pragma GENDICT ATTR_transcript_name_gene=DTYPE_1=t0ranscript_name
 #pragma GENDICT ATTR_transcript_name_num=DTYPE_1=t1ranscript_name
 
-#pragma GENDICT ATTR_protein_id=DTYPE_1=protein_id
-#pragma GENDICT ATTR_ccds_id=DTYPE_1=ccds_id
-#pragma GENDICT ATTR_exon_id=DTYPE_1=exon_id
-#pragma GENDICT ATTR_exon_number=DTYPE_1=exon_number
+#pragma GENDICT ATTR_protein_id=DTYPE_1=protein_id          // eg "ENSMUSP00000070648.4"
+#pragma GENDICT ATTR_ccds_id=DTYPE_1=ccds_id                // eg "CCDS47836"
+
+#pragma GENDICT ATTR_exon_id=DTYPE_1=exon_id                // eg "ENSMUSE00000485541.3"
+#pragma GENDICT ATTR_exon_number=DTYPE_1=exon_number        // eg "1"
+
+// Gencode GTF: https://www.gencodegenes.org/pages/data_format.html
+#pragma GENDICT ATTR_havana_gene=DTYPE_1=havana_gene        // eg "OTTMUSG00000026353.2" 
+#pragma GENDICT ATTR_havana_transcript=DTYPE_1=havana_transcript    // eg "OTTMUST00000065166.1"
+#pragma GENDICT ATTR_ccdsid=DTYPE_1=ccdsid                  // eg "CCDS14803.1"
 
 // MGKit (Metagenomics): https://mgkit.readthedocs.io/en/latest/gff.html#gff-specs
-#pragma GENDICT ATTR_db=DTYPE_1=db                 // identifies the database used to make the gene_id prediction: any string, like UNIPROT-SP, UNIPROT-TR, NCBI-NT
-#pragma GENDICT ATTR_taxon_db=DTYPE_1=taxon_db     // identifies the database used to make the taxon_id prediction: any string, like UNIPROT-SP, UNIPROT-TR, NCBI-NT
-#pragma GENDICT ATTR_dbq=DTYPE_1=dbq               // identifies the quality of the database, used when filtering annotations: integer
-#pragma GENDICT ATTR_taxon_id=DTYPE_1=taxon_id     // identifies the annotation taxon, NCBI taxonomy is used: integer
-#pragma GENDICT ATTR_uid=DTYPE_1=uid               // unique identifier for the annotation, any string is accepted but a value is assigned by using uuid.uuid4(): string
-#pragma GENDICT ATTR_cov=DTYPE_1=cov               // coverage for the annotation over all samples, keys ending with _cov indicates coverage for each sample : integer
-#pragma GENDICT ATTR_exp_syn=DTYPE_1=exp_syn       // expected number of synonymous changes for the annotation
-#pragma GENDICT ATTR_exp_nonsyn=DTYPE_1=exp_nonsyn // expected number of non-synonymous changes for the annotation
-#pragma GENDICT ATTR_taxon_name=DTYPE_1=taxon_name // name of the taxon : string
-#pragma GENDICT ATTR_lineage=DTYPE_1=lineage       // taxon lineage : string
-#pragma GENDICT ATTR_EC=DTYPE_1=EC                 // list of EC numbers associated to the annotation : comma separated values
+#pragma GENDICT ATTR_db=DTYPE_1=db                          // identifies the database used to make the gene_id prediction: any string, like UNIPROT-SP, UNIPROT-TR, NCBI-NT
+#pragma GENDICT ATTR_taxon_db=DTYPE_1=taxon_db              // identifies the database used to make the taxon_id prediction: any string, like UNIPROT-SP, UNIPROT-TR, NCBI-NT
+#pragma GENDICT ATTR_dbq=DTYPE_1=dbq                        // identifies the quality of the database, used when filtering annotations: integer
+#pragma GENDICT ATTR_taxon_id=DTYPE_1=taxon_id              // identifies the annotation taxon, NCBI taxonomy is used: integer
+#pragma GENDICT ATTR_uid=DTYPE_1=uid                        // unique identifier for the annotation, any string is accepted but a value is assigned by using uuid.uuid4(): string
+#pragma GENDICT ATTR_cov=DTYPE_1=cov                        // coverage for the annotation over all samples, keys ending with _cov indicates coverage for each sample : integer
+#pragma GENDICT ATTR_exp_syn=DTYPE_1=exp_syn                // expected number of synonymous changes for the annotation
+#pragma GENDICT ATTR_exp_nonsyn=DTYPE_1=exp_nonsyn          // expected number of non-synonymous changes for the annotation
+#pragma GENDICT ATTR_taxon_name=DTYPE_1=taxon_name          // name of the taxon : string
+#pragma GENDICT ATTR_lineage=DTYPE_1=lineage                // taxon lineage : string
+#pragma GENDICT ATTR_EC=DTYPE_1=EC                          // list of EC numbers associated to the annotation : comma separated values
 
 // other fields
 #pragma GENDICT ATTR_chr=DTYPE_1=chr

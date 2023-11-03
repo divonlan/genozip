@@ -454,14 +454,12 @@ static void main_genozip (rom txt_filename,
     if (!txt_file)  // open the file - possibly already open from main_load_reference
        txt_file = file_open_txt_read (txt_filename);
 
-    // skip this file if its size is 0
+    // skip this file if its size is 0 or it is a .genozip file
     if (!txt_file) {
-        if (tar_zip_is_tar()) {
-            tar_copy_file (txt_filename);
-            WARN ("Copied %s to the tar file", txt_filename);
-        }    
-        else 
+        // note: we already handled the .genozip file case in file_open_txt_read_test_valid_dt
+        if (!filename_has_ext (txt_filename, ".genozip")) 
             WARN ("Cannot compress file %s because its size is 0 - skipping it", txt_filename);
+
         return;
     }
 

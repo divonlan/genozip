@@ -154,20 +154,6 @@ void gff_seg_initialize (VBlockP vb)
         ctx_consolidate_stats (vb, ATTR_Dbxref, ATTR_DBXid, ATTR_DBXdb, DID_EOL);
     else if (segconf.has[ATTR_db_xref])
         ctx_consolidate_stats (vb, ATTR_db_xref, ATTR_DBXid, ATTR_DBXdb, DID_EOL);
-
-    if (segconf.has[ATTR_Parent])
-        seg_id_field_init (CTX(ATTR_DBXid));
-    else {
-        seg_id_field_init (CTX(ATTR_Dbxref));
-        seg_id_field_init (CTX(ATTR_db_xref));
-    }
-
-    seg_id_field_init (CTX(ATTR_Name));
-    seg_id_field_init (CTX(ATTR_exon_id));
-    seg_id_field_init (CTX(ATTR_gene_id));
-    seg_id_field_init (CTX(ATTR_protein_id));
-    seg_id_field_init (CTX(ATTR_ccds_id));
-    seg_id_field_init (CTX(ATTR_transcript_id));
 }
 
 void gff_seg_finalize (VBlockP vb)
@@ -215,11 +201,12 @@ bool gff_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id)
     return dict_id.num == _ATTR_DBXid; 
 }
 
+// eg: "DGVa_201810:essv9162", "DGVa_201810:essv11114"
 static void gff_seg_dbxref (VBlockP vb, ContextP ctx, STRp(value), bool has_parent)
 {
     // if we have no Parent, we're better off segging as a simple ID
     if (!segconf.has[ATTR_Parent] || segconf.running)
-        seg_id_field (vb, ctx, value, value_len, false);  
+        seg_id_field (vb, ctx, STRa(value), false, value_len);  
 
     else {
         // split by the first ':'. We don't use str_split bc the second item can contain : which we don't split
@@ -228,7 +215,7 @@ static void gff_seg_dbxref (VBlockP vb, ContextP ctx, STRp(value), bool has_pare
             int db_len = colon - value;
             int id_len = value_len - db_len - 1;
 
-            // containr
+            // container
             seg_by_ctx (vb, STRa(dbx_container_snip), ctx, 1); // account for ':' 
             
             // DB component
@@ -236,7 +223,7 @@ static void gff_seg_dbxref (VBlockP vb, ContextP ctx, STRp(value), bool has_pare
 
             // ID component: case: we're not a parent (bc we have one) - seg as ID as this is likely a unique ID
             if (has_parent)
-                seg_id_field (vb, CTX(ATTR_DBXid), colon+1, id_len, false); 
+                seg_id_field (vb, CTX(ATTR_DBXid), colon+1, id_len, false, id_len); 
             
             // ID component: case: we are a parent (bc we don't have one) - seg normally, as aliased with ATTR_ParentItem
             else
@@ -368,9 +355,9 @@ static inline DictId gff_seg_attr_subfield (VBlockP vb, STRp(tag), STRp(value), 
             goto plain_seg;
         break;
 
-    // example: Name=gene021872.2
+    // example: { "gene021872.2" } { "HG-1885", "HG-789" }
     case _ATTR_Name:
-        seg_id_field (vb, CTX(ATTR_Name), value, value_len, false);
+        seg_id_field (vb, CTX(ATTR_Name), STRa(value), false, value_len);
         break;
 
     // example: Parent=mRNA00001,mRNA00002,mRNA00003
@@ -470,12 +457,15 @@ static inline DictId gff_seg_attr_subfield (VBlockP vb, STRp(tag), STRp(value), 
         gff_seg_transcript_name (VB_GFF, STRa(value));
         break;
 
-    case _ATTR_gene_id: 
+    case _ATTR_gene_id:
+    case _ATTR_havana_gene: 
     case _ATTR_transcript_id: 
+    case _ATTR_havana_transcript: 
     case _ATTR_ccds_id: 
+    case _ATTR_ccdsid: 
     case _ATTR_protein_id: 
     case _ATTR_exon_id: 
-        seg_id_field2 (vb, ctx, STRa(value), value_len);
+        seg_id_field (vb, ctx, STRa(value), true, value_len);
         break;
 
     case _ATTR_exon_number:

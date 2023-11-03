@@ -108,6 +108,19 @@ WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con,
 // Reconstruction
 //----------------------
 
+StrTextMegaLong container_stack (VBlockP vb)
+{
+    StrTextMegaLong s;
+    int len = 0;
+
+    for (int i=0; i < vb->con_stack_len; i++)
+        len += sprintf (&s.s[len], "%s[%u]->", CTX(vb->con_stack[i])->tag_name, vb->con_repeat[i]);
+
+    s.s[len-2] = 0; // remove final "->"
+
+    return s;
+}
+
 static uint32_t count_repsep (STRp (str), char repsep)
 {
     uint32_t count = str_count_char (STRa(str), repsep);
@@ -425,7 +438,13 @@ static inline ContextP container_get_debug_lines_ctx (VBlockP vb)
 ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, STRp(prefixes))
 {
     TimeSpecType profiler_timer = {}; 
-    bool is_toplevel = con->is_toplevel; // copy to automatic
+    bool is_toplevel = con->is_toplevel; // copy to automatic. note: it is possible that we are top of stack but not a toplevel container - eg when reconstructing for SAG loading
+    
+    ASSPIZ (vb->con_stack_len < MAX_CON_STACK, "Container stack overflow: %s->%s", container_stack (vb).s, ctx->tag_name);
+
+    vb->con_stack [vb->con_stack_len] = ctx->did_i;
+    vb->con_repeat[vb->con_stack_len] = -1;
+    vb->con_stack_len++;
 
     if (flag.show_time && is_toplevel) 
         clock_gettime (CLOCK_REALTIME, &profiler_timer);
@@ -477,6 +496,8 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
     bool is_container_of_fields = container_is_of_fields (vb, ctx, is_toplevel); // TOPLEVEL, AUX, INFO, FORMAT etc
 
     for (uint32_t rep_i=0; rep_i < con->repeats; rep_i++) {
+
+        vb->con_repeat[vb->con_stack_len-1] = rep_i;
 
         // case this is the top-level snip: initialize line
         if (is_toplevel) {
@@ -659,6 +680,8 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
 
     if (copy_rpts_from_seq_len) ((ContainerP)con)->repeats = CON_REPEATS_IS_SEQ_LEN; // restore
 
+    vb->con_stack_len--;
+    
     if (is_toplevel)   
         COPY_TIMER (reconstruct_vb);
 
@@ -773,15 +796,15 @@ void container_display (ConstContainerP con)
 {
     uint32_t num_items = con_nitems (*con);
 
-    iprintf ("repeats=%u\nnum_items=%u\ndrop_final_item_sep=%u\ndrop_final_repeat_sep=%u\n"
-                          "filter_repeats=%u\nfilter_items=%u\nis_toplevel=%u\nrepsep={ %u %u }\n",
-             con->repeats, num_items, con->drop_final_item_sep, con->drop_final_repsep, 
-             con->filter_repeats, con->filter_items, con->is_toplevel, con->repsep[0], con->repsep[1]);
+    iprintf ("repeats = %u\nnum_items = %u\ndrop_final_item_sep = %s\ndrop_final_repeat_sep = %s\n"
+                          "filter_repeats = %s\nfilter_items = %s\nis_toplevel = %s\nrepsep = { '%c'(%u), '%c'(%u) }\n",
+             con->repeats, num_items, TF(con->drop_final_item_sep), TF(con->drop_final_repsep), 
+             TF(con->filter_repeats), TF(con->filter_items), TF(con->is_toplevel), con->repsep[0], con->repsep[0], con->repsep[1], con->repsep[1]);
     
     for (unsigned i=0; i < num_items; i++)
-        iprintf ("item %u: dict_id=%s separator={ %u %u } translator=%u\n",
+        iprintf ("item %-2u: dict_id=%-8s separator={ '%c'(%u), '%c'(%u) } translator=%u\n",
                  i, dis_dict_id (con->items[i].dict_id).s,  
-                 con->items[i].separator[0], con->items[i].separator[1], con->items[i].translator);
+                 con->items[i].separator[0], con->items[i].separator[0], con->items[i].separator[1], con->items[i].separator[1], con->items[i].translator);
     
     fflush (info_stream);
 }
@@ -800,5 +823,5 @@ TRANSLATOR_FUNC (container_translate_LTEN_I16) { SET_n (int16_t,  INT16_MIN, INT
 TRANSLATOR_FUNC (container_translate_LTEN_U16) { SET_n (uint16_t, 0,         UINT16_MAX); n=LTEN16(n);  RECONSTRUCT(&n,2);     return 0; }
 TRANSLATOR_FUNC (container_translate_LTEN_I32) { SET_n (int32_t,  INT32_MIN, INT32_MAX ); n=LTEN32(n);  RECONSTRUCT(&n,4);     return 0; }
 TRANSLATOR_FUNC (container_translate_LTEN_U32) { SET_n (uint32_t, 0,         UINT32_MAX); n=LTEN32(n);  RECONSTRUCT(&n,4);     return 0; }
-TRANSLATOR_FUNC (container_translate_LTEN_F32) { float n=ctx->last_value.f;             ; n=LTEN32F(n); RECONSTRUCT(&n,4);     return 0; }
+TRANSLATOR_FUNC (container_translate_LTEN_F32) { float  n=ctx->last_value.f;            ; n=LTEN32F(n); RECONSTRUCT(&n,4);     return 0; }
 TRANSLATOR_FUNC (container_translate_LTEN_F64) { double n=ctx->last_value.f;            ; n=LTEN64F(n); RECONSTRUCT(&n,8);     return 0; }

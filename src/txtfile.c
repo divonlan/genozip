@@ -500,7 +500,7 @@ static void txtfile_set_seggable_size (void)
 int64_t txtfile_get_seggable_size (void)
 {
     // note: this changes each time a VB is read by the main thread, but since its a single 64B word,
-    // a compute thread reading this value will always get a value that makes sense.
+    // a compute thread reading this value will always get a value that makes sense (not using atomic to avoid unnecessary overhead)
     return txt_file->est_seggable_size; 
 }
 

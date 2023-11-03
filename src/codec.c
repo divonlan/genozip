@@ -320,20 +320,20 @@ done:
 }
 
 void codec_assign_best_qual_codec (VBlockP vb, Did did_i,  
-                                   LocalGetLineCB callback, bool no_longr, bool maybe_revcomped)
+                                   LocalGetLineCB callback, bool no_longr, bool no_seq_dependency, 
+                                   bool maybe_revcomped)
 {
     decl_ctx (did_i);
 
-    if (segconf.running) {
-        if (!flag.fast && segconf.nontrivial_qual && !no_longr && segconf_is_long_reads()) // note: we can't use segconf.is_long_reads (variable) because it is not set yet 
-            codec_longr_segconf_calculate_bins (vb, CTX(did_i+1), callback);
-        return;
-    }
-
-    if (!flag.fast && segconf.is_long_reads && !no_longr && segconf.nontrivial_qual)
+    if (flag.force_longr && did_i == SAM_QUAL)
         codec_longr_comp_init (vb, did_i);
 
-    else if (codec_homp_comp_init (vb, did_i, callback)); // only if Ultima, it might succeed
+    else if (codec_pacb_maybe_used (did_i) && !no_seq_dependency && codec_pacb_comp_init (vb, callback));
+
+    else if (!no_longr && !no_seq_dependency && codec_longr_maybe_used (did_i))
+        codec_longr_comp_init (vb, did_i);
+
+    else if (!no_seq_dependency && codec_homp_comp_init (vb, did_i, callback)); // only if Ultima, it might succeed
 
     else if (!flag.no_domqual && codec_domq_comp_init (vb, did_i, callback));
     
@@ -345,9 +345,12 @@ void codec_assign_best_qual_codec (VBlockP vb, Did did_i,
     else
         ctx->ltype = LT_SEQUENCE;  // codec to be assigned by codec_assign_best_codec
     
-    if (ctx->ltype != LT_SEQUENCE)
-        ctx_commit_codec_to_zf_ctx (vb, ctx, true, false); // used only for submitting stats
-        
+    if (ctx->ltype != LT_SEQUENCE && did_i == SAM_QUAL/*==FASTQ_QUAL*/) {
+        // ctx_commit_codec_to_zf_ctx (vb, ctx, true, false); // used only for submitting stats
+
+        segconf.qual_codec = ctx->lcodec; // used only for submitting stats (no atomic - last one wins)
+    }
+
     if (flag.show_codec && ctx->lcodec != CODEC_UNKNOWN) // aligned to the output of codec_assign_best_codec
         iprintf ("%-8s %-12s %-5s          *[%s]\n", VB_NAME, ctx->tag_name, "LOCAL", codec_name(CTX(did_i)->lcodec));
 }

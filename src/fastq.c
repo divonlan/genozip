@@ -384,10 +384,8 @@ static void fastq_seg_finalize_segconf (VBlockP vb)
         zfile_compress_local_data (vb, ctx, 0);
 
         segconf.multiseq = (ctx->local.len32 / ctx->local_in_z_len >= 6); // expecting ~4 for unrelated sequences and >10 for multiseq
-        if (segconf.multiseq) {
-            ctx_commit_codec_to_zf_ctx (vb, ctx, true, true); // assign LZMA 
-            ZCTX(FASTQ_NONREF)->lcodec_hard_coded = true;     // suppress re-assigning the codec
-        } 
+        if (segconf.multiseq) 
+            ctx_segconf_set_hard_coded_lcodec (FASTQ_NONREF, CODEC_LZMA); 
     }
 
     if (!segconf.multiseq) {
@@ -399,6 +397,12 @@ static void fastq_seg_finalize_segconf (VBlockP vb)
         else
             fastq_tip_if_should_be_pair();          
     }  
+
+    if (codec_pacb_maybe_used (FASTQ_QUAL)) 
+        codec_pacb_segconf_finalize (VB);
+
+    if (codec_longr_maybe_used (FASTQ_QUAL)) 
+        codec_longr_segconf_calculate_bins (VB, CTX(FASTQ_QUAL + 1), fastq_zip_qual);
 }
 
 void fastq_seg_finalize (VBlockP vb)
@@ -407,10 +411,10 @@ void fastq_seg_finalize (VBlockP vb)
         fastq_seg_finalize_segconf (vb);
 
     // assign the QUAL codec
-    codec_assign_best_qual_codec (vb, FASTQ_QUAL, fastq_zip_qual, false, false);
+    codec_assign_best_qual_codec (vb, FASTQ_QUAL, fastq_zip_qual, false, segconf.deep_has_trimmed, false);
     
     if (segconf.has_agent_trimmer) 
-        codec_assign_best_qual_codec (vb, OPTION_QX_Z, NULL, true, false);
+        codec_assign_best_qual_codec (vb, OPTION_QX_Z, NULL, true, true, false);
 
     // top level snip
     SmallContainer top_level = { 
@@ -819,7 +823,7 @@ IS_SKIP (fastq_piz_is_skip_section)
         return true;
 
     // note: we don't SKIP for --count with an additional filter. Logic is too complicated and bug-prone.
-    if (flag.count && !flag.grep && sections_has_dict_id (st) && 
+    if (flag.count && !flag.grep && IS_DICTED_SEC (st) && 
         !flag.bases && !flag.regions && !flag.kraken_taxid && !kraken_is_loaded &&
         dict_id.num != _FASTQ_TOPLEVEL) 
         return true;

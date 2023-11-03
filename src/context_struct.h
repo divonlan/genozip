@@ -20,11 +20,12 @@ typedef struct { // initialize with ctx_init_iterator()
 
 typedef enum { DYN_DEC, DYN_hex, DYN_HEX } DynType;
 
+typedef enum   __attribute__ ((__packed__)) { IDT_UNKNOWN, IDT_ALPHA_INT, IDT_ALPHA_NUM, IDT_ALPHA_INT_DOT_INT, IDT_ALPHA_NUM_DOT_INT, IDT_OTHER } IdType;
+
 typedef struct Context {
     // ----------------------------
     // common fields for ZIP & PIZ
     // ----------------------------
-    #define MAX_TAG_LEN 64     // including terminating nul (must be divisible by 8 for Tag struct)
     char tag_name[MAX_TAG_LEN];// nul-terminated tag name 
     Did did_i;                 // the index of this ctx within the array vb->contexts. PIZ: if this context is an ALIAS_CTX, did_i contains the destination context did_i
     union {
@@ -71,11 +72,13 @@ typedef struct Context {
     Buffer ston_nodes;         // ZIP z_file: nodes of singletons
 
     // PIZ: context-specific buffer
+    Buffer piz_ctx_specific_buf;
     Buffer qname_nodes;        // PIZ: used in KRAKEN_QNAME
     Buffer cigar_anal_history; // PIZ: used in SAM_CIGAR - items of type CigarAnalItem
     Buffer line_sqbitmap;      // PIZ: used in SAM_SQBITMAP
     Buffer domq_denorm;        // PIZ SAM/BAM/FASTQ: DomQual codec denormalization table for contexts with QUAL data 
     Buffer piz_lookback_buf;   // PIZ: SAM: used by contexts with lookback 
+    Buffer channel_data;       // PIZ: SAM: QUAL/OPTION_iq_Z/OPTION_dq_Z/OPTION_sq_Z : used by PACB codec
     };
 
     union {
@@ -86,7 +89,6 @@ typedef struct Context {
 
     Buffer counts;             // ZIP/PIZ: counts of snips (VB:uint32_t, z_file:uint64_t)
                                // ZIP: counts.param is a context-specific global counter that gets accumulated in zctx during merge (e.g. OPTION_SA_CIGAR)
-    
     // Seg: snip (in dictionary) and node_index the last non-empty ("" or NULL) snip evaluated
     rom last_snip;             
     unsigned last_snip_len;
@@ -117,7 +119,8 @@ typedef struct Context {
     bool z_data_exists;        // ZIP/PIZ: z_file has SEC_DICT, SEC_B250 and/or SEC_LOCAL sections of this context (not necessarily loaded)
     bool local_always;         // always create a local section in zfile, even if it is empty 
     bool is_stats_parent;      // other contexts have this context in st_did_i
-    bool counts_section;       // output a SEC_COUNTS section for this context
+    bool counts_section;       // ZIP: output ctx->counts to SEC_COUNTS section for this context
+    bool subdicts_section;     // ZIP: output ctx->subdicts to SEC_SUBDICTS section for this context
     bool line_is_luft_trans;   // Seg: true if current line, when reconstructed with --luft, should be translated with luft_trans (false if no
                                //      trans_luft exists for this context, or it doesn't trigger for this line, or line is already in LUFT coordinates)
     union {
@@ -179,7 +182,7 @@ typedef struct Context {
     ConstContainerP parent_container; // PIZ: last container that invoked reconstruction of this context
 
     // ZIP: stats
-    uint64_t txt_len;          // number of characters in reconstructed text are accounted for by snips in this ctx (for stats), when file reconstructed in PRIMARY coordinates (i.e. PRIMARY reconstruction for regular VBs, LUFT reconstruction for ##luft_only VBs, and no reconstruction for ##primary_only VBs)
+    uint64_t txt_len;          // ZIP: number of characters in reconstructed text are accounted for by snips in this ctx (for stats), when file reconstructed in PRIMARY coordinates (i.e. PRIMARY reconstruction for regular VBs, LUFT reconstruction for ##luft_only VBs, and no reconstruction for ##primary_only VBs) (note: seg_seg_long_CIGAR assumes this is uint64_t)
     };
     uint64_t local_num_words;  // ZIP: number of words (segs) that went into local. If a field is segged into multiple contexts - this field is incremented in each of them. If the context also uses b250, this field is ignored by stats which uses count instead.
 
@@ -230,9 +233,10 @@ typedef struct Context {
             uint32_t pred_type          : 4;   // predictor type;
         } qd;
         int32_t last_end_line_i;    // INFO_END:        PIZ: last line on which INFO/END was encountered 
+
+        IdType id_type;             // ZIP: type of ID in fields segged with seg_id_field        
              
         enum   __attribute__ ((__packed__)) { PAIR1_ALIGNED_UNKNOWN=-1, PAIR1_NOT_ALIGNED=0, PAIR1_ALIGNED=1 } pair1_is_aligned;  // FASTQ_SQBITMAP:  PIZ: used when reconstructing pair-2
-        enum   __attribute__ ((__packed__)) { ID_TYPE_UNKNOWN, ID_TYPE_ALPHA_NUMERIC, ID_TYPE_OTHER } id_type; // type of field segged with seg_id_field        
         struct __attribute__ ((__packed__)) { Ploidy gt_prev_ploidy, gt_actual_last_ploidy; char gt_prev_phase; }; // FORMAT_GT: ZIP/PIZ
         struct __attribute__ ((__packed__)) { enum __attribute__ ((__packed__)) { PS_NONE, PS_POS, PS_POS_REF_ALT, PS_UNKNOWN } ps_type; }; // FORMAT_PS, FORMAT_PID, FORMAT_IPSphased
     };
@@ -246,18 +250,21 @@ typedef struct Context {
     // ----------------------------------------------------------------------------------------
 
     union {
-    Buffer con_cache;          // PIZ: use by contexts that might have containers: Handled by container_reconstruct - an array of Container which includes the did_i. 
+    Buffer con_cache;          // PIZ: vctx: use by contexts that might have containers: Handled by container_reconstruct - an array of Container which includes the did_i. 
                                //      Each struct is truncated to used items, followed by prefixes. 
                                // ZIP: seg_array, sam_seg_array_field_get_con cache a container.
-    Buffer ctx_cache;          // PIZ: used to cached Contexts of Multiplexers and other dict_id look ups
-    Buffer packed;             // PIZ: used by contexts that compressed CODEC_ACTG               
+    Buffer ctx_cache;          // PIZ: vctx: used to cached Contexts of Multiplexers and other dict_id look ups
+    Buffer packed;             // PIZ: vctx: used by contexts that compressed CODEC_ACTG               
     
     // ZIP: context specific
+    Buffer zip_ctx_specific_buf;
+    Buffer subdicts;           // ZIP/PIZ: zctx: Used by contexts that set ctx->subdicts_section: QUAL in PACB codec, iq:Z
     Buffer value_to_bin;       // ZIP: Used by LONGR codec on *_DOMQRUNS contexts
     Buffer longr_state;        // ZIP: Used by LONGR codec on QUAL contexts
-    Buffer chrom2ref_map;      // ZIP (vb & z), PIZ(z): Used by CHROM and contexts with a dict alias to it. Mapping from user file chrom to alternate chrom in reference file (for ZIP-VB: new chroms in this VB) - incides match ctx->nodes
+    Buffer chrom2ref_map;      // ZIP (vctx & zctx), PIZ(zctx): Used by CHROM and contexts with a dict alias to it. Mapping from user file chrom to alternate chrom in reference file (for ZIP-VB: new chroms in this VB) - incides match ctx->nodes
     Buffer qual_line;          // ZIP: used by DOMQ codec on *_DOMQRUNS contexts
     Buffer normalize_buf;      // ZIP: used by DOMQ codec on QUAL contexts
+    Buffer interlaced;         // ZIP: used to interlace BD/BI and iq/dq/sq line data
     };
     #define CTX_TAG_CON_INDEX "contexts->con_index"
     Buffer con_index;          // PIZ: use by contexts that might have containers: Array of uint32_t - index into con_cache - Each item corresponds to word_index. 

@@ -59,6 +59,8 @@ typedef int32_t TaxonomyId;
 
 #define MAX_FIELDS 2048  // Maximum number of fields in a line (eg VCF variant, SAM line etc), including VCF/FORMAT fields, VCF/INFO fields GVF/ATTR fields, SAM/AUX fields etc. 
 
+#define MAX_TAG_LEN 64   // including terminating nul (must be divisible by 8 for Tag struct)
+
 #define DEFAULT_MAX_THREADS 8 // used if num_cores is not discoverable and the user didn't specifiy --threads
 
 #define MEMORY_WARNING_THREASHOLD 0x100000000  // (4 GB) warning in some cases that we predict that user choices would cause us to consume more than this
@@ -87,6 +89,8 @@ typedef struct Buffer *BufferP;
 typedef const struct Buffer *ConstBufferP;
 typedef struct Container *ContainerP;
 typedef const struct Container *ConstContainerP;
+typedef struct MiniContainer *MiniContainerP;
+typedef const struct MiniContainer *ConstMiniContainerP;
 typedef struct SmallContainer *SmallContainerP;
 typedef const struct SmallContainer *ConstSmallContainerP;
 typedef struct MediumContainer *MediumContainerP;
@@ -118,9 +122,10 @@ typedef const struct QnameFlavorStruct *QnameFlavor;
 typedef struct DispatcherData *Dispatcher;
 typedef struct Huffman *HuffmanP;
 
-typedef struct { char s[80];   } StrText;
-typedef struct { char s[1024]; } StrTextLong;
-typedef struct { char s[4096]; } StrTextSuperLong;
+typedef struct { char s[80];    } StrText;
+typedef struct { char s[1024];  } StrTextLong;
+typedef struct { char s[4096];  } StrTextSuperLong;
+typedef struct { char s[65536]; } StrTextMegaLong;
 
 #define VB ((VBlockP)(vb))
 
@@ -209,7 +214,8 @@ typedef struct __attribute__ ((__packed__)) { uint64_t index : 40; // up to Z_MA
 typedef union { // 64 bit
     int64_t i;
     double f;
-    TxtWord; // index into in txt_data (note: gcc/clang flag -fms-extensions is needed for this type of anonymous struct use)
+    float f32;  // used by bam_get_one_aux 
+    TxtWord;    // index into in txt_data (note: gcc/clang flag -fms-extensions is needed for this type of anonymous struct use)
     void *p; 
 } ValueType __attribute__((__transparent_union__));
 #define NO_VALUE ((ValueType){})
@@ -230,7 +236,7 @@ extern ExeType exe_type;
 extern FileP z_file, txt_file; 
 
 // IMPORTANT: This is part of the genozip file format. Also update codec.h/codec_args
-// If making any changes, update arrays in 1. codec.h 2. (for codecs that have a public file format, eg .zip) txtfile_set_seggable_size
+// If making any changes, update arrays in 1. CODEC_ARGS in codec.h 2. (for codecs that have a public file format, eg .zip) txtfile_set_seggable_size
 typedef enum __attribute__ ((__packed__)) { // 1 byte
     CODEC_UNKNOWN=0, 
     CODEC_NONE=1, CODEC_GZ=2, CODEC_BZ2=3, CODEC_LZMA=4, CODEC_BSC=5, 
@@ -249,7 +255,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     CODEC_BAM=23,       // in v8 BAM was a codec which was compressed using samtools as external compressor. Since v14 we use the codec name for displaying "BAM" in stats total line.
     CODEC_CRAM=24, CODEC_ZIP=25,
 
-    CODEC_LONGR=26, CODEC_NORMQ=27, CODEC_HOMP=28, CODEC_T0=29,
+    CODEC_LONGR=26, CODEC_NORMQ=27, CODEC_HOMP=28, CODEC_T0=29, CODEC_PACB=30,
 
     NUM_CODECS,
 } Codec; 
@@ -277,6 +283,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     SEC_RECON_PLAN      = 16, // Per-component section (optional): introduced v12
     SEC_COUNTS          = 17, // Global section: introduced v12
     SEC_REF_IUPACS      = 18, // Global section: introduced v12
+    SEC_SUBDICTS        = 19, // Global section: introduced 15.0.25
 
     NUM_SEC_TYPES 
 } SectionType;
@@ -424,7 +431,7 @@ typedef SORTER ((*Sorter));
 #define mSTRl(name,multi,len) char name##s[multi][len]; uint32_t name##_len##s[multi]
 #define STRli(name,len) uint32_t name##_len = (len) ; char name[name##_len] // avoid evaluating len twice
 #define eSTRl(x) extern char x[]; extern uint32_t x##_len
-
+#define txtSTR(x,txtword) rom x = Btxt ((txtword).index); uint32_t x##_len = (txtword).len
 #define ASSERT_LAST_TXT_VALID(ctx) ASSERT (is_last_txt_valid(ctx), "%s.last_txt is INVALID", (ctx)->tag_name)
 #define STRlast(name,did_i)    ASSERT_LAST_TXT_VALID(CTX(did_i)); rom name = last_txt((VBlockP)(vb), did_i); uint32_t name##_len = CTX(did_i)->last_txt.len
 #define SETlast(name,did_i) ({ ASSERT_LAST_TXT_VALID(CTX(did_i));     name = last_txt((VBlockP)(vb), did_i);          name##_len = CTX(did_i)->last_txt.len; })
@@ -457,7 +464,9 @@ typedef SORTER ((*Sorter));
 #define STRfi(x,i) x##_lens[i], x##s[i]
 #define STRfb(buf) (int)(buf).len, (buf).data 
 #define STRfw(txtword) (txtword).len, Btxt ((txtword).index) // used with TxtWord
+#define STRtxtw(txtword) Btxt ((txtword).index), (txtword).len // used with TxtWord
 #define STRfBw(buf,txtword) (txtword).len, Bc ((buf), (txtword).index) // used with TxtWord or ZWord
+#define STRtxt(x) Btxt (x), x##_len
 
 #define STRcpy(dst,src)    ({ if (src##_len) { memcpy(dst,src,src##_len) ; dst##_len = src##_len; } })
 #define STRcpyi(dst,i,src) ({ if (src##_len) { memcpy(dst##s[i],src,src##_len) ; dst##_lens[i] = src##_len; } })
@@ -466,8 +475,6 @@ typedef SORTER ((*Sorter));
 #define STRdec(x,n)          ({ x -= (n); x##_len += (n); })
 #define STRLEN(string_literal) (sizeof string_literal - 1)
 #define _S(x) x, STRLEN(x)
-#define STRtxt(x) Btxt (x), x##_len
-#define STRtxtw(txtword) Btxt ((txtword).index), (txtword).len // used with TxtWord
 #define STRBw(buf,txtword) Bc ((buf), (txtword).index), (txtword).len // used with TxtWord
 #define FUNCLINE rom func, uint32_t code_line
 #define __FUNCLINE __FUNCTION__, __LINE__
@@ -508,6 +515,7 @@ typedef enum { QNONE   = -5,
                QANY    = -1, 
                QNAME1  = 0,  // QNAME is SAM/BAM, KRAKEN, line1 of FASTQ up to first space
                QNAME2  = 1,  // FASTQ: either: the remainder of line1, but excluding AUX (name=value) data, OR the second (original) QNAME on an NCBI line3, but only if different than line1  
+                             // SAM/BAM: A second flavor (eg of consensus reads)
                QLINE3  = 2,  // FASTQ: The NCBI QNAME on line3, but only if different than line1 
                NUM_QTYPES/*NUM_QTYPES is part of the file format*/ } QType; 
 #define QTYPE_NAME { "QNAME", "QNAME2", "LINE3" }

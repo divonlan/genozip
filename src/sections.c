@@ -71,11 +71,12 @@ DictId sections_get_dict_id (ConstSectionHeaderP header)
     if (!header) return DICT_ID_NONE;
     
     switch (header->section_type) {
-        case SEC_DICT   : return ((SectionHeaderDictionaryP)header)->dict_id; break;
-        case SEC_B250   : return ((SectionHeaderCtxP       )header)->dict_id; break;
-        case SEC_LOCAL  : return ((SectionHeaderCtxP       )header)->dict_id; break;
-        case SEC_COUNTS : return ((SectionHeaderCountsP    )header)->dict_id; break;
-        default         : return DICT_ID_NONE;
+        case SEC_DICT     : return ((SectionHeaderDictionaryP)header)->dict_id; break;
+        case SEC_B250     : return ((SectionHeaderCtxP       )header)->dict_id; break;
+        case SEC_LOCAL    : return ((SectionHeaderCtxP       )header)->dict_id; break;
+        case SEC_COUNTS   : return ((SectionHeaderCountsP    )header)->dict_id; break;
+        case SEC_SUBDICTS : return ((SectionHeaderSubDictsP  )header)->dict_id; break;
+        default           : return DICT_ID_NONE;
     }
 }
 
@@ -354,7 +355,7 @@ void sections_new_list_add_global_sections (BufferP new_list)
     // get first section that's not TXT_HEADER/BGZF/VB_HEADER/LOCAL/B250/COUNT/DICT
     Section sec = NULL;
     for_buf_back (SectionEnt, s, z_file->section_list_buf) 
-        if (sections_has_dict_id(s->st) || s->st == SEC_VB_HEADER || s->st == SEC_TXT_HEADER || s->st == SEC_BGZF) {
+        if (IS_DICTED_SEC(s->st) || s->st == SEC_VB_HEADER || s->st == SEC_TXT_HEADER || s->st == SEC_BGZF) {
             sec = s; 
             break;
         }
@@ -604,7 +605,7 @@ void sections_list_file_to_memory_format (SectionHeaderGenozipHeaderP genozip_he
 bool is_there_any_section_with_dict_id (DictId dict_id)
 {
     for_buf (SectionEnt, sec, z_file->section_list_buf)
-        if (sec->dict_id.num == dict_id.num && sections_has_dict_id (sec->st))
+        if (sec->dict_id.num == dict_id.num && IS_DICTED_SEC (sec->st))
             return true;
 
     return false;
@@ -1144,7 +1145,13 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
 
     case SEC_COUNTS: {
         SectionHeaderCountsP h = (SectionHeaderCountsP)header;
-        sprintf (str, "  %s/%-8s\t\n", dtype_name_z (h->dict_id), dis_dict_id (h->dict_id).s); 
+        sprintf (str, "  %s/%-8s param=%"PRId64"\t\n", dtype_name_z (h->dict_id), dis_dict_id (h->dict_id).s, h->nodes_param); 
+        break;
+    }
+
+    case SEC_SUBDICTS: {
+        SectionHeaderSubDictsP h = (SectionHeaderSubDictsP)header;
+        sprintf (str, "  %s/%-8s param=%"PRId64"\t\n", dtype_name_z (h->dict_id), dis_dict_id (h->dict_id).s, h->param); 
         break;
     }
 
@@ -1250,6 +1257,13 @@ void sections_show_section_list (DataType dt) // optional - take data from z_dat
                      BNUM(z_file->section_list_buf, s), st_name(s->st), 
                      comp_name_ex (s->comp_i, s->st).s, s->vblock_i, s->offset, s->size, sections_dis_flags (s->flags, s->st, dt).s);
 
+        else if (s->st == SEC_COUNTS || s->st == SEC_SUBDICTS)
+            iprintf ("%5u %-20.20s %s%s%-8.8s\t             offset=%-8"PRIu64"  size=%-6u  %s\n", 
+                     BNUM(z_file->section_list_buf, s), st_name(s->st),
+                     s->dict_id.num ? dtype_name_z(s->dict_id) :"     ", 
+                     s->dict_id.num ? "/" : "", 
+                     s->dict_id.num ? dis_dict_id (s->dict_id).s : "", 
+                     s->offset, s->size, sections_dis_flags (s->flags, s->st, dt).s);
         else
             iprintf ("%5u %-20.20s\t\t\t             offset=%-8"PRIu64"  size=%-6u  %s\n", 
                      BNUM(z_file->section_list_buf, s), st_name(s->st),

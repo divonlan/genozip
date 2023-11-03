@@ -73,8 +73,6 @@ CODEC_RECONSTRUCT (codec_normq_reconstruct)
 {   
     if (!ctx->is_loaded) return;
 
-    ReconType reconstruct = RECON_ON;
-
     rom next_qual = Bc(ctx->local, ctx->next_local);
 
     if (*next_qual==' ') { // this is QUAL="*"
@@ -86,9 +84,10 @@ CODEC_RECONSTRUCT (codec_normq_reconstruct)
         if (reconstruct) {
             if (last_flags.rev_comp) str_reverse (BAFTtxt, next_qual, len);
             else                     memcpy      (BAFTtxt, next_qual, len);
+
+            Ltxt += len;
         }
 
         ctx->next_local += len;
-        Ltxt += len;
     }
 }

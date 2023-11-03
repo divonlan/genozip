@@ -33,6 +33,7 @@
     {"SEC_RECON_PLAN",      sizeof (SectionHeaderReconPlan)     }, \
     {"SEC_COUNTS",          sizeof (SectionHeaderCounts)        }, \
     {"SEC_REF_IUPACS",      sizeof (SectionHeader)              }, \
+    {"SEC_SUBDICTS",        sizeof (SectionHeaderSubDicts)      }, \
 }
 
 #define HEADER_IS(_st) (header->section_type == SEC_##_st)
@@ -278,11 +279,12 @@ typedef enum __attribute__ ((__packed__)) {
     QF_NANOPORE=40, QF_NANOPORE_rng=41, QF_NANOPORE_ext=42,
     QF_ION_TORR_3=50, QF_ROCHE_454=51, QF_HELICOS=52, 
     QF_SRA_L=60, QF_SRA2=60, QF_SRA=62,
-    QF_GENOZIP_OPT=70, QF_INTEGER=71, QF_HEX_CHR=72, QF_BAMSURGEON=73, QF_SEQAN=74, QF_CLC_GW=75, QF_STR_INT=76, QF_CONSENSUS=77,
+    QF_GENOZIP_OPT=70, QF_INTEGER=71, QF_HEX_CHR=72, QF_BAMSURGEON=73, QF_SEQAN=74, QF_CLC_GW=75, QF_STR_INT=76, QF_CONSENSUS=77, QF_CONS=78, QF_Sint=79,
     QF_ULTIMA_a=80, QF_ULTIMA_b6_bc=81, QF_ULTIMA_a_bc=83, QF_ULTIMA_c=84, QF_ULTIMA_c_bc=85, QF_ULTIMA_b6=86, QF_ULTIMA_d=87, QF_ULTIMA_d_bc=88, 
     QF_ULTIMA_b9=89, QF_ULTIMA_b9_bc=110, QF_ULTIMA_n=111,
     QF_SINGULAR=90, QF_SINGULR_1bc=92, 
     QF_ELEMENT=100, QF_ELEMENT_6=101, QF_ELEMENT_0bc=102, QF_ELEMENT_1bc=103, QF_ELEMENT_2bc=104,
+    QF_ONSO=130,
     NUM_FLAVORS
 } QnameFlavorId;
 
@@ -356,21 +358,27 @@ typedef const SectionHeaderVbHeader *ConstSectionHeaderVbHeaderP;
 
 typedef struct {
     SectionHeader;           
-    uint32_t num_snips;                // number of items in dictionary
+    uint32_t num_snips;        // number of items in dictionary
     DictId   dict_id;           
 } SectionHeaderDictionary, *SectionHeaderDictionaryP;
 
 typedef struct {
     SectionHeader;           
-    int64_t  nodes_param;              // an extra piece of data transferred to/from Context.counts_extra
+    int64_t  nodes_param;      // an extra piece of data transferred to/from Context.counts_extra
     DictId   dict_id;           
 } SectionHeaderCounts, *SectionHeaderCountsP;     
+
+typedef struct {
+    SectionHeader;           
+    int64_t  param;            // an extra piece of data transferred to/from zctx->subdicts.param
+    DictId   dict_id;           
+} SectionHeaderSubDicts, *SectionHeaderSubDictsP;     
 
 // used for SEC_LOCAL and SEC_B250
 typedef struct {
     SectionHeader;
     LocalType ltype;           // SEC_LOCAL: goes into ctx->ltype - type of data of the ctx->local buffer
-                               // SEC_250:   unused. up to 15.0.17 populated with ctx->ltype and copied in PIZ to ctx->ltype if the corresponding local section is absent (not clear why)
+                               // SEC_250:   unused. up to 15.0.17 populated with ctx->ltype and copied in PIZ to ctx->ltype if the corresponding local section is absent
     uint8_t param;             // Three options: 1. goes into ctx->local.param. (until v13: if flags.copy_local_param. since v14: always, except if ltype=LT_BITMAP) 
                                //                2. given to comp_uncompress as a codec parameter
                                //                3. starting 9.0.11 for ltype=LT_BITMAP: number of unused bits in top bits word
@@ -488,6 +496,7 @@ typedef union {
     SectionHeaderVbHeader vb_header;
     SectionHeaderDictionary dict;
     SectionHeaderCounts counts;
+    SectionHeaderSubDicts subdicts;
     SectionHeaderCtx ctx;
     SectionHeaderReference reference;
     SectionHeaderRefHash ref_hash;
@@ -502,6 +511,7 @@ typedef union {
     SectionHeaderVbHeaderP vb_header;
     SectionHeaderDictionaryP dict;
     SectionHeaderCountsP counts;
+    SectionHeaderSubDictsP subdicts;
     SectionHeaderCtxP ctx;
     SectionHeaderReferenceP reference;
     SectionHeaderRefHashP ref_hash;
@@ -586,7 +596,6 @@ extern void sections_list_memory_to_file_format (bool in_place);
 extern void sections_list_file_to_memory_format (SectionHeaderGenozipHeaderP genozip_header);
 extern bool sections_is_paired (void);
 
-#define sections_has_dict_id(st) ((st) == SEC_B250 || (st) == SEC_LOCAL || (st) == SEC_DICT || (st) == SEC_COUNTS)
 extern SectionType sections_st_by_name (char *name);
 extern uint32_t st_header_size (SectionType sec_type);
 
@@ -610,7 +619,7 @@ extern StrText line_name (VBlockP vb);
 extern StrText comp_name_(CompIType comp_i);
 #define comp_name(comp_i) comp_name_(comp_i).s
 
-#define IS_DICTED_SEC(st) ((st)==SEC_DICT || (st)==SEC_B250 || (st)==SEC_LOCAL || (st)==SEC_COUNTS)
+#define IS_DICTED_SEC(st) ((st)==SEC_B250 || (st)==SEC_LOCAL || (st)==SEC_DICT || (st)==SEC_COUNTS || (st) == SEC_SUBDICTS)
 #define IS_VB_SEC(st)     ((st)==SEC_VB_HEADER || (st)==SEC_B250 || (st)==SEC_LOCAL)
 #define IS_COMP_SEC(st)   (IS_VB_SEC(st) || (st)==SEC_TXT_HEADER || (st)==SEC_BGZF || (st)==SEC_RECON_PLAN)
 #define IS_FRAG_SEC(st)   ((st)==SEC_DICT || (st)==SEC_TXT_HEADER || (st)==SEC_RECON_PLAN || (st)==SEC_REFERENCE || (st)==SEC_REF_IS_SET || (st)==SEC_REF_HASH) // global sections fragmented with a dispatcher, and hence use vb_i 

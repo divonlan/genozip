@@ -8,6 +8,8 @@
 
 #include "vcf_private.h"
 #include "reconstruct.h"
+#include "container.h"
+#include "seg.h"
 
 // Handle VEP fields: https://www.ensembl.org/info/docs/tools/vep/index.html
 
@@ -15,26 +17,92 @@ static MediumContainer csq_con;
 static SegCallback csq_cbs[MEDIUM_CON_NITEMS];
 
 uint64_t _INFO_Allele; // needs to be translated in DVCF
-static uint64_t _INFO_Existing_variation, _INFO_cDNA_position, _INFO_CDS_position, _INFO_Protein_position, _INFO_DISTANCE;
+static uint64_t _INFO_Existing_variation, _INFO_cDNA_position, _INFO_CDS_position, _INFO_Protein_position, _INFO_DISTANCE, 
+                _INFO_AFR_MAF, _INFO_AMR_MAF, _INFO_EAS_MAF, _INFO_EUR_MAF, _INFO_SAS_MAF, _INFO_AA_MAF, _INFO_EA_MAF, _INFO_ExAC_MAF;
+
+static DictId maf_dict_id[2];
+sSTRl(maf_container_snip,100);
+           
+static bool vcf_vep_Existing_var_cb (VBlockP vb, ContextP ctx, STRp(ev), uint32_t repeat)
+{
+    seg_array_by_callback (VB, ctx, STRa(ev), '&', seg_id_field_varlen_int_cb, ev_len);
+    return true;
+}
+
+static bool vcf_vep_af_item (VBlockP vb_, ContextP ctx, STRp(af_item), uint32_t repeat)
+{
+    VBlockVCFP vb = (VBlockVCFP)vb_;
+
+    str_split (af_item, af_item_len, 2, ':', item, true);
+    
+    bool is_snp = vb->main_ref_len == 1 && vb->alt_lens[repeat] == 1;
+    
+    if (n_items == 2 && item_lens[0] == 1 &&
+          ((is_snp  && *af_item == *vb->alts[repeat]) || 
+           (!is_snp && *af_item == '-' ))) {
+
+        seg_by_dict_id (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_next_ALT }, 2, maf_dict_id[0], 0);
+        
+        seg_by_dict_id (VB, STRi(item,1), maf_dict_id[1], 0);
+        
+        seg_by_ctx (VB, STRa(maf_container_snip), ctx, af_item_len);
+    }
+
+    else 
+        seg_by_ctx (VB, STRa(af_item), ctx, af_item_len);
+
+    return true;
+}
+
+static bool vcf_vep_af_field (VBlockP vb, ContextP ctx, STRp(af_arr), uint32_t repeat)
+{
+    seg_array_by_callback (VB, ctx, STRa(af_arr), '&', vcf_vep_af_item, af_arr_len);
+    return true;
+}
+
+SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_next_ALT)
+{
+    VBlockVCFP vb = (VBlockVCFP)vb_;
+
+    int8_t alt_i = vb->con_repeat[vb->con_stack_len-2];
+
+    if (reconstruct) {
+        if (vb->main_ref_len == 1 && vb->alt_lens[alt_i] == 1) // SNP
+            RECONSTRUCT1 (*vb->alts[alt_i]);
+        else
+            RECONSTRUCT1('-');
+    }
+
+    return NO_NEW_VALUE;
+}
 
 // called from vcf_inspect_txt_header_zip, NOT vcf_info_zip_initialize
-void vcf_vep_zip_initialize (rom spec, rom buf_1st) // nul-terminated string containing list of fields. list of fields expected to be terminated by a '"'
+void vcf_vep_zip_initialize (void) // nul-terminated string containing list of fields. list of fields expected to be terminated by a '"'
 {
-    _INFO_Allele             = dict_id_make ("Allele",             STRLEN("Allele"),             DTYPE_VCF_INFO).num;
-    _INFO_Existing_variation = dict_id_make ("Existing_variation", STRLEN("Existing_variation"), DTYPE_VCF_INFO).num;
-    _INFO_cDNA_position      = dict_id_make ("cDNA_position",      STRLEN("cDNA_position"),      DTYPE_VCF_INFO).num;
-    _INFO_CDS_position       = dict_id_make ("CDS_position",       STRLEN("CDS_position"),       DTYPE_VCF_INFO).num;
-    _INFO_Protein_position   = dict_id_make ("Protein_position",   STRLEN("Protein_position"),   DTYPE_VCF_INFO).num;
-    _INFO_DISTANCE           = dict_id_make ("CSQ_DISTANCE",       STRLEN("CSQ_DISTANCE"),       DTYPE_VCF_INFO).num;
+    ASSERTNOTNULL (segconf.vcf_vep_spec); // allocated in vcf_inspect_txt_header_zip
+    
+    _INFO_Allele             = dict_id_make (_S("Allele"),             DTYPE_VCF_INFO).num;
+    _INFO_Existing_variation = dict_id_make (_S("Existing_variation"), DTYPE_VCF_INFO).num;
+    _INFO_cDNA_position      = dict_id_make (_S("cDNA_position"),      DTYPE_VCF_INFO).num;
+    _INFO_CDS_position       = dict_id_make (_S("CDS_position"),       DTYPE_VCF_INFO).num;
+    _INFO_Protein_position   = dict_id_make (_S("Protein_position"),   DTYPE_VCF_INFO).num;
+    _INFO_DISTANCE           = dict_id_make (_S("CSQ_DISTANCE"),       DTYPE_VCF_INFO).num;
+    _INFO_AFR_MAF            = dict_id_make (_S("AFR_MAF"),            DTYPE_VCF_INFO).num;
+    _INFO_AMR_MAF            = dict_id_make (_S("AMR_MAF"),            DTYPE_VCF_INFO).num;
+    _INFO_EAS_MAF            = dict_id_make (_S("EAS_MAF"),            DTYPE_VCF_INFO).num;
+    _INFO_EUR_MAF            = dict_id_make (_S("EUR_MAF"),            DTYPE_VCF_INFO).num;
+    _INFO_SAS_MAF            = dict_id_make (_S("SAS_MAF"),            DTYPE_VCF_INFO).num;
+    _INFO_AA_MAF             = dict_id_make (_S("AA_MAF"),             DTYPE_VCF_INFO).num;
+    _INFO_EA_MAF             = dict_id_make (_S("EA_MAF"),             DTYPE_VCF_INFO).num;
+    _INFO_ExAC_MAF           = dict_id_make (_S("ExAC_MAF"),           DTYPE_VCF_INFO).num; // note: this includes all ExAC_*_MAF fields that get mapped to the same context due to dict_id_make logic
 
-    rom after = strchr (spec, '"');
-    ASSERT (after, "VCF header errror: INFO/CSQ Description does not end with a quote:\n%.2000s", spec);
-    int spec_len = after - spec;
+    rom spec = segconf.vcf_vep_spec;
+    int spec_len = strlen (segconf.vcf_vep_spec);
 
     str_split (spec, spec_len, 0, '|', name, false);
 
-    if (n_names > MEDIUM_CON_NITEMS) {
-        WARN ("FYI: VEP CSQ field has %u annotations, but compression will be sub-optimal as it has more than %u fields. - please report to " EMAIL_SUPPORT ":\n%.*s", n_names, CONTAINER_MAX_DICTS, spec_len, spec);    
+    if (n_names > MEDIUM_CON_NITEMS) { // if this every happens, we should switch to a larger container
+        WARN ("FYI: VEP CSQ field has %u annotations, but compression will be sub-optimal as it has more than %u fields. - please report to " EMAIL_SUPPORT ":\n%.*s", n_names, CONTAINER_MAX_DICTS, STRf(spec));    
         segconf.vcf_is_vep = false;
         return;
     }
@@ -47,11 +115,9 @@ void vcf_vep_zip_initialize (rom spec, rom buf_1st) // nul-terminated string con
 
     // check if field is CSQ or vep
     bool is_vep = false;
-    for (rom c=spec-1; c > buf_1st; c--)
+    for (rom c=spec + spec_len -1; c >= spec; c--)
         if (*c == '#') {
-            SAFE_NUL(spec);
             is_vep = !!strstr (c, "ID=vep");
-            SAFE_RESTORE;
             break;
         }
 
@@ -62,22 +128,45 @@ void vcf_vep_zip_initialize (rom spec, rom buf_1st) // nul-terminated string con
         if (!zctx) // already exist - predefined
             zctx = ctx_get_existing_zctx (csq_con.items[i].dict_id);
 
-        ASSERT (zctx, "Failed to get zctx for INFO/CTX subfield %.*s", name_lens[i], names[i]);
+        ASSERT (zctx, "Failed to get zctx for %s subfield \"%.*s\"", 
+                ZCTX(is_vep ? INFO_vep : INFO_CSQ)->tag_name, name_lens[i], names[i]);
+
         zctx->st_did_i = is_vep ? INFO_vep : INFO_CSQ;
 
         #define CB(dnum,cb) if (zctx->dict_id.num == (dnum)) csq_cbs[i] = (cb); else
-        CB (_INFO_Allele,             vcf_seg_INFO_allele  )
-        CB (_INFO_Existing_variation, seg_id_field_cb      )
-        CB (_INFO_cDNA_position,      seg_integer_or_not_cb)
-        CB (_INFO_CDS_position,       seg_integer_or_not_cb)
-        CB (_INFO_Protein_position,   seg_integer_or_not_cb)
-        CB (_INFO_DISTANCE,           seg_integer_or_not_cb)
-        /* else */                        {};
+
+        CB (_INFO_Allele,             vcf_seg_INFO_allele    )
+        CB (_INFO_Existing_variation, vcf_vep_Existing_var_cb)
+        CB (_INFO_cDNA_position,      seg_integer_or_not_cb  )
+        CB (_INFO_CDS_position,       seg_integer_or_not_cb  )
+        CB (_INFO_Protein_position,   seg_integer_or_not_cb  )
+        CB (_INFO_DISTANCE,           seg_integer_or_not_cb  )
+
+        if (!z_is_dvcf) {
+            CB (_INFO_AFR_MAF,  vcf_vep_af_field)
+            CB (_INFO_AMR_MAF,  vcf_vep_af_field)
+            CB (_INFO_EAS_MAF,  vcf_vep_af_field)
+            CB (_INFO_EUR_MAF,  vcf_vep_af_field)
+            CB (_INFO_SAS_MAF,  vcf_vep_af_field)
+            CB (_INFO_AA_MAF,   vcf_vep_af_field)
+            CB (_INFO_EA_MAF,   vcf_vep_af_field)
+            CB (_INFO_ExAC_MAF, vcf_vep_af_field)
+            /* else */          {};
+        }
         #undef CB
     }
 
-// 5-7 together as Feature implies Feature_Type and Transcript_BioType
-// 39-55 all 17 AF fields together, as their sequence in b250 is repetative
+    maf_dict_id[0] = (DictId)DICT_ID_MAKE1_L("VEP_MAF0");
+    maf_dict_id[1] = (DictId)DICT_ID_MAKE1_L("VEP_MAF0");
+    
+    SmallContainer con = { .repeats   = 1, 
+                           .nitems_lo = 2,
+                           .items[0]  = { .dict_id = maf_dict_id[0], .separator = ":" },
+                           .items[1]  = { .dict_id = maf_dict_id[1]                   } };
+
+    container_prepare_snip ((ContainerP)&con, 0, 0, qSTRa (maf_container_snip));
+
+    FREE (segconf.vcf_vep_spec); // allocated in vcf_inspect_txt_header_zip
 }
 
 void vcf_vep_seg_initialize (VBlockVCFP vb)
@@ -88,8 +177,9 @@ void vcf_vep_seg_initialize (VBlockVCFP vb)
     IF_HAS (_INFO_CDS_position      , CTX(did_i)->ltype = LT_DYN_INT); 
     IF_HAS (_INFO_Protein_position  , CTX(did_i)->ltype = LT_DYN_INT); 
     IF_HAS (_INFO_DISTANCE          , CTX(did_i)->ltype = LT_DYN_INT); 
-    IF_HAS (_INFO_Existing_variation, seg_id_field_init (CTX(did_i)));
     #undef IF_HAS
+
+    ctx_get_ctx (vb, maf_dict_id[0])->st_did_i = ctx_get_ctx (vb, maf_dict_id[1])->st_did_i = INFO_CSQ;
 }
 
 // CSQ subfields vary according to VEP parameters. Two examples:

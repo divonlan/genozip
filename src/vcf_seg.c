@@ -177,8 +177,6 @@ void vcf_seg_initialize (VBlockP vb_)
     CTX(VCF_COORDS)->  no_vb1_sort = true; // indices need to remaining matching to Coords
     CTX(VCF_oXSTRAND)->no_vb1_sort = true; // indices need to order of ctx_create_node
 
-    seg_id_field_init (CTX(VCF_ID));
-
     // counts sections
     CTX(VCF_CHROM)-> counts_section = true;
     CTX(VCF_oCHROM)->counts_section = true;
@@ -585,7 +583,7 @@ rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
         if (segconf.vcf_is_manta)
             vcf_seg_manta_ID (vb, STRd(VCF_ID));
         else
-            seg_id_field (VB, CTX(VCF_ID), VCF_ID_str, VCF_ID_len, true);
+            seg_id_field (VB, CTX(VCF_ID), STRd(VCF_ID), false, VCF_ID_len+1);
         
         seg_set_last_txt (VB, CTX(VCF_ID), STRd(VCF_ID));
     }
@@ -599,7 +597,8 @@ rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
     vb->main_alt     = VCF_ALT_str;
     vb->main_ref_len = VCF_REF_len;
     vb->main_alt_len = VCF_ALT_len;
- 
+    vcf_parse_main_alt (vb);
+
     vb->line_has_RGQ = !segconf.running && segconf.has[FORMAT_RGQ] && vcf_refalt_seg_ref_alt_line_has_RGQ (VCF_ALT_str);
 
     // note: we treat REF+\t+ALT as a single field because REF and ALT are highly corrected, in the case of SNPs:

@@ -114,12 +114,14 @@ static int32_t bgzf_read_block_raw (FILE *file, // txt_file is not yet assigned 
     int save_errno = errno; // we want to report errno of fread, not ftell.
 
     // if failed, always error, even if soft_fail
-    ASSERT (bytes == body_size, "%s Failed to read BGZF block of %s (ftell=%"PRId64" err=\"%s\")", 
-            feof (file) ? "Unexpected end of file while reading" : "Failed to read body of", 
+    ASSERT (bytes == body_size || flag.truncate_partial_last_line, 
+            "%s %s (ftell=%"PRId64" err=\"%s\"). %s\n", 
+            feof (file) ? "Unexpected end of file while reading" : "Failed to read body", 
             basename, ftello64 (file), 
-            (is_remote && save_errno == ESPIPE) ? "Disconnected from remote host" : strerror (save_errno));
+            (is_remote && save_errno == ESPIPE) ? "Disconnected from remote host" : strerror (save_errno),
+            feof (file) ? "If file is expected to be truncated, you may use --truncate-partial-last-line to disregard the final partial BGZF block." : "");
     
-    return 0; // success
+    return (bytes == body_size) ? BGZF_BLOCK_SUCCESS : BGZF_ABRUBT_EOF;
 }
 
 // ZIP: reads and validates a BGZF block, and returns the uncompressed size or (only if soft_fail) an error

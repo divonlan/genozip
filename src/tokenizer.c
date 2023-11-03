@@ -140,7 +140,7 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
         Context *item_ctx = ctx_get_ctx (vb, CI->dict_id);
         ASSERT (item_ctx, "item_ctx for %s is NULL", dis_dict_id (CI->dict_id).s);
 
-        item_ctx->st_did_i = field_ctx->did_i;
+        item_ctx->st_did_i = (field_ctx->st_did_i != DID_NONE) ? field_ctx->st_did_i : field_ctx->did_i;
 
         if (ci->is_int) {            
             if (is_ordered) {

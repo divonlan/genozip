@@ -581,7 +581,7 @@ extern void vcf_samples_add  (rom samples_str);
                       vcf_piz_special_MUX_BY_SAMPLE_I, vcf_piz_special_IGT, \
                       vcf_piz_special_MUX_BY_IGT_PHASE, vcf_piz_special_main_REFALT_DEL, vcf_piz_special_mutation, \
                       vcf_piz_special_SO_TERM, vcf_piz_special_MMURI, \
-                      vcf_piz_special_DEMUX_GQX, vcf_piz_special_RU, vcf_piz_special_IDREP }
+                      vcf_piz_special_DEMUX_GQX, vcf_piz_special_RU, vcf_piz_special_IDREP, vcf_piz_special_next_ALT }
 
 SPECIAL (VCF, 0,  main_REFALT,         vcf_piz_special_main_REFALT);
 SPECIAL (VCF, 1,  FORMAT,              vcf_piz_special_FORMAT)
@@ -636,7 +636,8 @@ SPECIAL (VCF, 49, MMURI,               vcf_piz_special_MMURI);                  
 SPECIAL (VCF, 50, DEMUX_GQX,           vcf_piz_special_DEMUX_GQX);                // added v15.0.11
 SPECIAL (VCF, 51, RU,                  vcf_piz_special_RU);                       // added v15.0.13
 SPECIAL (VCF, 52, IDREP,               vcf_piz_special_IDREP);                    // added v15.0.13
-#define NUM_VCF_SPECIAL 53
+SPECIAL (VCF, 53, next_ALT,            vcf_piz_special_next_ALT);                 // added v15.0.25
+#define NUM_VCF_SPECIAL 54
 
 // Translators for Luft (=secondary coordinates)
 TRANSLATOR (VCF, VCF,   1,  G,      vcf_piz_luft_G)       // same order as LiftOverStatus starting LO_CANT_G

@@ -139,17 +139,20 @@ void profiler_add_evb_and_print_report (void)
 
         iprintf ("GENOUNZIP compute threads: %s\n", str_int_commas (ms(profile.nanosecs.compute)).s);
         PRINT (zfile_uncompress_section, 1);
-        PRINT (compressor_bz2,  2);
-        PRINT (compressor_lzma, 2);
-        PRINT (compressor_bsc,  2);
-        PRINT (compressor_rans, 2);
+        PRINT (compressor_bz2,   2);
+        PRINT (compressor_lzma,  2);
+        PRINT (compressor_bsc,   2);
+        PRINT (compressor_rans,  2);
         PRINT (compressor_arith, 2);
-        PRINT (compressor_domq, 2);
+        PRINT (compressor_domq,  2);
         PRINT (compressor_normq, 2);
-        PRINT (compressor_actg, 2);
-        PRINT (compressor_pbwt, 2);
+        PRINT (compressor_actg,  2);
+        PRINT (compressor_pbwt,  2);
         PRINT (compressor_longr, 2);
-
+        PRINT (compressor_homp,  2);
+        PRINT (compressor_t0,    2);
+        PRINT (compressor_pacb,  2);
+        
         PRINT (reconstruct_vb, 1);
         for (Did did_i=0; did_i < z_file->num_contexts; did_i++) 
             PRINT_(fields[did_i], ZCTX(did_i)->tag_name, 2);
@@ -161,11 +164,12 @@ void profiler_add_evb_and_print_report (void)
         PRINT (aligner_reconstruct_seq, 2);
         PRINT (sam_piz_special_QUAL, 2);
         if (Z_DT(SAM) || Z_DT(BAM)) {
-            PRINT (codec_longr_reconstruct, 3);
+            PRINT (codec_longr_reconstruct,3);
+            PRINT (codec_homp_reconstruct, 3);
+            PRINT (codec_t0_reconstruct,   3);
+            PRINT (codec_pacb_reconstruct, 3);
             PRINT (codec_domq_reconstruct, 3);
             PRINT (codec_domq_reconstruct_dom_run, 4);
-            PRINT (codec_homp_reconstruct, 3);
-            PRINT (codec_t0_reconstruct, 3);
         }
         PRINT (fastq_special_monochar_QUAL, 2);        
         PRINT (sam_piz_sam2fastq_QUAL, 2); 
@@ -193,6 +197,7 @@ void profiler_add_evb_and_print_report (void)
             PRINT (codec_domq_reconstruct, 2);
             PRINT (codec_domq_reconstruct_dom_run, 3);
             PRINT (codec_homp_reconstruct, 2);
+            PRINT (codec_pacb_reconstruct, 2);
         }
         
         if (profile.nanosecs.bgzf_compute_thread)
@@ -320,18 +325,20 @@ void profiler_add_evb_and_print_report (void)
         PRINT (zip_generate_b250, 2);
         PRINT (zip_generate_local, 2);
         PRINT (codec_assign_best_codec, 2);
-        PRINT (compressor_bz2,  2);
-        PRINT (compressor_lzma, 2);
-        PRINT (compressor_bsc,  2);
-        PRINT (compressor_rans, 2);
+        
+        PRINT (compressor_bz2,   2);
+        PRINT (compressor_lzma,  2);
+        PRINT (compressor_bsc,   2);
+        PRINT (compressor_rans,  2);
         PRINT (compressor_arith, 2);
-        PRINT (compressor_domq, 2);
+        PRINT (compressor_domq,  2);
         PRINT (compressor_normq, 2);
-        PRINT (compressor_actg, 2);
-        PRINT (compressor_pbwt, 2);
+        PRINT (compressor_actg,  2);
+        PRINT (compressor_pbwt,  2);
         PRINT (compressor_longr, 2);
-        PRINT (compressor_homp, 2);
-        PRINT (compressor_t0, 2);
+        PRINT (compressor_homp,  2);
+        PRINT (compressor_t0,    2);
+        PRINT (compressor_pacb,  2);
 
         for_zctx 
             PRINT_(fields[zctx->did_i], zctx->tag_name, 2);

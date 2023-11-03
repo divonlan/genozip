@@ -256,16 +256,17 @@ COMPRESSOR_CALLBACK (sam_zip_BD_BI)
 
     if (!line_data) return; // only length was requested
 
-    buf_alloc_exact (vb, VB_SAM->interlaced, bd_len * 2, uint8_t, "interlaced");
+    ctx = CTX(OPTION_BD_BI);
+    buf_alloc_exact (vb, ctx->interlaced, bd_len * 2, uint8_t, "interlaced");
 
-    uint8_t *next = B1ST8 (VB_SAM->interlaced);
+    uint8_t *next = B1ST8 (ctx->interlaced);
     rom after = bd + bd_len;
     while (bd < after) {
         *next++ = *bd;
         *next++ = *bi++ - *bd++;
     }
 
-    *line_data = B1STc (VB_SAM->interlaced);
+    *line_data = B1STc (ctx->interlaced);
 }   
 
 // BD and BI - reconstruct from BD_BI context which contains interlaced BD and BI data. 
@@ -314,176 +315,9 @@ static void sam_seg_BQ (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(bq), unsigned ad
 COMPRESSOR_CALLBACK (sam_zip_BQ)
 {
     ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
-
+    
     *line_data_len = dl->BQ.len;
     *line_data = Btxt (dl->BQ.index);
-}
-
-
-// ----------------------------
-// NM:i "Number of differences"
-// ----------------------------
-
-static inline void sam_seg_NM_get_prediction (VBlockSAMP vb, ZipDataLineSAM *dl, 
-                                              int32_t *predicted_by_SEQ, int32_t *predicted_by_MD)
-{
-    *predicted_by_SEQ = (vb->mismatch_bases_by_SEQ != -1          && !vb->cigar_missing && !vb->seq_missing && !dl->FLAG.unmapped) ? 
-        vb->mismatch_bases_by_SEQ + vb->deletions + vb->insertions : -1;
-    
-    *predicted_by_MD  = (has_MD && vb->mismatch_bases_by_MD != -1 && !vb->cigar_missing && !vb->seq_missing && !dl->FLAG.unmapped) ? 
-        vb->mismatch_bases_by_MD  + vb->deletions + vb->insertions : -1;
-}
-
-// Two variations:
-// 1) Integer NM per SAM specification https://samtools.github.io/hts-specs/SAMtags.pdf: "Number of differences (mismatches plus inserted and deleted bases) 
-// between the sequence and reference, counting only (case-insensitive) A, C, G and T bases in sequence and reference as potential matches, with everything
-// else being a mismatch. Note this means that ambiguity codes in both sequence and reference that match each other, such as ‘N’ in both, or compatible 
-// codes such as ‘A’ and ‘R’, are still counted as mismatches. The special sequence base ‘=’ will always be considered to be a match, even if the reference 
-// is ambiguous at that point. Alignment reference skips, padding, soft and hard clipping (‘N’, ‘P’, ‘S’ and ‘H’ CIGAR operations) do not count as mismatches,
-// but insertions and deletions count as one mismatch per base."
-// Note: we observed cases (eg PacBio data with bwa-sw) that NM is slightly different than expected, potentially
-// seggable with a delta. However, the added entropy to b250 outweighs the benefit, and we're better off without delta.
-// 2) Binary NM: 0 if sequence fully matches the reference when aligning according to CIGAR, 1 is not.
-void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAM *dl, SamNMType nm, unsigned add_bytes)
-{
-    START_TIMER;
-
-    ContextP ctx = CTX (OPTION_NM_i);
-
-    // check for evidence that NM is integer (not binary) - usually, this happens in segconf, but it can also happen later in the execution
-    if (nm > 1 && !segconf.NM_is_integer) 
-        segconf.NM_is_integer = true; 
-
-    // make a copy, so it remains consistent throughout the if statements below, even if segconf.NM_is_integer is set by another thread in their midst
-    bool NM_is_integer = segconf.NM_is_integer; 
-
-    if (segconf.running) {
-        if (has_MD && vb->idx_MD_Z > vb->idx_NM_i) segconf.NM_after_MD = false; // we found evidence that sometimes NM is before MD
-        goto no_special;
-    }
-
-    // possible already segged - from sam_seg_SA_Z
-    if (ctx_has_value_in_line_(vb, ctx)) return;
-
-    ctx_set_last_value (VB, ctx, (int64_t)nm);
-
-    int32_t predicted_by_SEQ, predicted_by_MD;
-    sam_seg_NM_get_prediction (vb, dl, &predicted_by_SEQ, &predicted_by_MD);
-
-    if (nm < 0) goto no_special; // invalid nm value
-
-    // method 1: if we have MD:Z, we use prediction of number of mismatches derived by analyzing it. This is almost always correct, 
-    // but the downside is that reconstruction takes longer due to the need to peek MD:Z. Therefore, we limit it to certain cases.
-    else if (NM_is_integer && nm == predicted_by_MD && 
-               (segconf.NM_after_MD            || // case 1: MD is reconstructed before NM so peek is fast
-                IS_REF_INTERNAL                || // case 2: prediction against SEQ performs poorly
-                predicted_by_SEQ != nm         || // case 3: rare cases in which prediction by SEQ is wrong with an external reference.
-                flag.best))                       // case 4: the user request the best method
-        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'm'}, 3, OPTION_NM_i, add_bytes);  // 'm' type since v14
-
-    // method 2: copy from SA Group. DEPN or PRIM line. Note: in DEPN, nm already verified in sam_sa_seg_depn_find_sagroup to be as in SA alignment
-    else if (sam_seg_has_sag_by_SA (vb)) 
-        sam_seg_against_sa_group (vb, ctx, add_bytes); 
-
-    // method 3: use prediction of the number of mismatches derived by comparing SEQ to a reference.
-    // this is usually, but surprisingly not always, correct for an external reference, and often correct for an internal one.
-    else if (NM_is_integer && nm == predicted_by_SEQ)
-        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'i'}, 3, OPTION_NM_i, add_bytes); 
-
-    // case nm is a binary 0/1 rather than an integer. We use prediction against SEQ. TO DO: Support prediction against MD:Z too.
-    else if (!NM_is_integer && predicted_by_SEQ != -1 && (nm > 0) == (predicted_by_SEQ > 0)) 
-        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'b'}, 3, OPTION_NM_i, add_bytes); 
-
-    else no_special: 
-        seg_integer (VB, ctx, nm, true, add_bytes);
-
-    // in PRIM with SA, we also seg it as the first SA alignment (used for PIZ to load alignments to memory, not used for reconstructing SA)
-    if (IS_PRIM(vb) && sam_seg_has_sag_by_SA (vb)) {
-        seg_integer_as_snip (VB, OPTION_SA_NM, nm, 0);  // note: for PRIM lines without SA:Z and nm:i, we seg "0" into OPTION_SA_NM in sam_seg_sag_stuff
-
-        // count NM field contribution to OPTION_SA_NM, so sam_stats_reallocate can allocate the z_data between NM and SA:Z
-        CTX(OPTION_SA_NM)->counts.count += add_bytes; 
-    }
-
-    COPY_TIMER (sam_seg_NM_i);
-}
-
-// --------------------------------------------------------------------------------------------------------------
-// nM:i: (STAR) the number of mismatches per (paired) alignment, not to be confused with NM, which is the number of mismatches in each mate.
-// --------------------------------------------------------------------------------------------------------------
-
-void sam_seg_nM_i (VBlockSAMP vb, ZipDataLineSAM *dl, SamNMType nm, unsigned add_bytes)
-{
-    ContextP ctx = CTX (OPTION_nM_i);
-
-    // case: in paired files, its expected to be the same value as the mate
-    if (segconf.is_paired && !IS_DEPN(vb)) 
-        sam_seg_buddied_i_fields (vb, dl, OPTION_nM_i, nm, &dl->nM, (MultiplexerP)&vb->mux_nM, STRa(copy_mate_nM_snip), add_bytes);
-
-    // else: in non-paired files, we use the same method as NM:i
-    else {
-        if (segconf.running) {
-            if (has_MD && !ctx_encountered_in_line (VB, OPTION_MD_Z)) segconf.nM_after_MD = false; // we found evidence that sometimes nM is before MD
-            goto fallback;
-        }
-
-        int32_t predicted_by_SEQ, predicted_by_MD;
-        sam_seg_NM_get_prediction (vb, dl, &predicted_by_SEQ, &predicted_by_MD);
-
-        if (nm < 0) goto fallback; // invalid nm value
-
-        // method 1: if we have MD:Z, we use prediction of number of mismatches derived by analyzing it. This is almost always correct, 
-        // but the downside is that reconstruction takes longer due to the need to peek MD:Z. Therefore, we limit it to certain cases.
-        else if (nm == predicted_by_MD && 
-                    (segconf.nM_after_MD            || // case 1: MD is reconstructed before nM so peek is fast
-                     IS_REF_INTERNAL                || // case 2: prediction against SEQ performs poorly
-                     predicted_by_SEQ != nm         || // case 3: rare cases in which prediction by SEQ is wrong with an external reference.
-                     flag.best))                       // case 4: the user request the best method
-            seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'm'}, 3, ctx, add_bytes);  // 'm' type since v14
-
-        // method 3: use prediction of the number of mismatches derived by comparing SEQ to a reference.
-        // this is usually, but surprisingly not always, correct for an external reference, and often correct for an internal one.
-        else if (nm == predicted_by_SEQ)
-            seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'i'}, 3, ctx, add_bytes); 
-
-        else fallback: 
-            seg_integer (VB, ctx, nm, true, add_bytes);
-    }
-}
-
-static inline int64_t sam_piz_NM_get_mismatches_by_MD (VBlockSAMP vb)
-{
-    STR(MD);
-    reconstruct_peek (VB, CTX(OPTION_MD_Z), pSTRa(MD));
-
-    // count mismatches
-    bool deletion=false;
-    int32_t mismatches = 0;
-    for (int i=0; i < MD_len; i++) 
-        switch (MD[i]) {
-            case '^'         : deletion = true;  break;
-            case '0' ... '9' : deletion = false; break;
-            default          : if (!deletion) mismatches++;
-        }
-
-    return mismatches;
-}
-
-SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_NM)
-{
-    VBlockSAMP vb = (VBlockSAMP)vb_;
-
-    switch (*snip) {
-        case 'm' : new_value->i = sam_piz_NM_get_mismatches_by_MD(vb) + vb->deletions + vb->insertions; break;
-        case 'i' : new_value->i = vb->mismatch_bases_by_SEQ + vb->deletions + vb->insertions;           break;
-        case 'b' : new_value->i = (vb->mismatch_bases_by_SEQ + vb->deletions + vb->insertions) > 0;     break;
-        default  : ASSPIZ (false, "unrecognized opcode '%c'", *snip);
-    }
-
-    if (reconstruct) // will be false if BAM, reconstruction is done by translator based on new_value set here
-        RECONSTRUCT_INT (new_value->i);
-
-    return HAS_NEW_VALUE;
 }
 
 // ----------------------------------------------------------------------------------------------------------
@@ -495,7 +329,7 @@ static void sam_seg_SM_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t SM, unsigne
 
     if (SM >= 0 && SM <= 255 && 
         SM != 254 &&           // note: 254 is a valid, but highly improbable value - we use 254 for "copy from MAPQ" so a actual 254 is segged as an exception
-        !(SM && !dl->MAPQ)) {  // we're expecting XM=0 if MAPQ=0
+        !(SM && !dl->MAPQ)) {  // we're expecting SM=0 if MAPQ=0
         
         // store value in local (254 means "copy from MAPQ"), except if MAPQ=0 - we know SM=0 so no need to store
         if (dl->MAPQ) {
@@ -1164,9 +998,9 @@ static inline SmallContainer *sam_seg_array_field_get_con (VBlockSAMP vb, Contex
 
 // an array - all elements go into a single item context, multiple repeats. items are segged as dynamic integers or floats, or a callback is called to seg them.
 typedef void (*ArrayItemCallback) (VBlockSAMP vb, ContextP ctx, void *cb_param, void *array, uint32_t array_len);
-static void sam_seg_array_field (VBlockSAMP vb, ZipDataLineSAM *dl, DictId dict_id, uint8_t type, 
-                                 rom array, int/*signed*/ array_len, // SAM: comma separated array ; BAM : arrays original width and machine endianity
-                                 ArrayItemCallback callback, void *cb_param) // optional - call back for each item to seg the item
+void sam_seg_array_field (VBlockSAMP vb, ZipDataLineSAM *dl, DictId dict_id, uint8_t type, 
+                          rom array, int/*signed*/ array_len, // SAM: comma separated array ; BAM : arrays original width and machine endianity
+                          ArrayItemCallback callback, void *cb_param) // optional - call back for each item to seg the item
 {   
     bool is_bam = IS_BAM_ZIP;
 
@@ -1296,11 +1130,34 @@ void sam_seg_aux_field_fallback (VBlockP vb, void *dl, DictId dict_id, char sam_
         seg_by_dict_id (VB, STRa(value), dict_id, add_bytes);     
 }
 
+static void sam_seg_set_last_value_f_from_aux (VBlockSAMP vb, Did did_i, bool is_bam,
+                                               STRp(value),       // used if SAM 
+                                               ValueType numeric) // .f32 needs to be set if BAM
+{
+    ContextP ctx = CTX(did_i);
+
+    if (is_bam) 
+        ctx_set_last_value (VB, ctx, (double)numeric.f32);
+
+    else {
+        SAFE_NULT(value);
+        char *after;
+        numeric.f = strtod (value, &after); // same as in reconstruct_one_snip
+        SAFE_RESTORE;
+
+        ASSSEG (after == value + value_len, "%s: Expecting float value for auxiliary field %s but found \"%.*s\"",
+                LN_NAME, ctx->tag_name, STRf (value));
+
+        ctx_set_last_value (VB, ctx, numeric);
+    }
+}
+
 // process an optional subfield, that looks something like MX:Z:abcdefg. We use "MX" for the field name, and
 // the data is abcdefg. The full name "MX:Z:" is stored as part of the AUX dictionary entry
 DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam, 
                           rom tag, char bam_type, char array_subtype, 
-                          STRp(value), ValueType numeric) // two options 
+                          STRp(value), ValueType numeric, // two options 
+                          int16_t idx) // 0-based index of this field within AUX
 {
     char sam_type = sam_seg_bam_type_to_sam_type (bam_type);
     char dict_name[6] = { tag[0], tag[1], ':', sam_type, ':', array_subtype }; // last 2 are ignored if not array
@@ -1409,7 +1266,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
 
         case _OPTION_XT_A: COND (segconf.sam_has_BWA_XT_A, sam_seg_BWA_XT_A (vb, value[0], add_bytes));
 
-        case _OPTION_XM_i: COND0 (segconf.sam_has_BWA_XM_i, sam_seg_BWA_XM_i (vb, numeric, add_bytes))
+        case _OPTION_XM_i: COND0 (segconf.sam_has_XM_i_is_mismatches, sam_seg_XM_i (vb, dl, numeric.i, idx, add_bytes))
                            COND (MP(TMAP), sam_seg_TMAP_XM_i (vb, numeric, add_bytes));
 
         case _OPTION_X1_i: COND (segconf.sam_has_BWA_X01_i, sam_seg_BWA_X1_i (vb, numeric.i, add_bytes)); break;
@@ -1477,10 +1334,16 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
         case _OPTION_sq_Z: COND0 (segconf.use_pacbio_iqsqdq, sam_seg_pacbio_xq (vb, dl, OPTION_sq_Z, &dl->sq, STRa(value), add_bytes))
                            COND (TECH(PACBIO), seg_add_to_local_text (VB, CTX(OPTION_sq_Z), STRa(value), LOOKUP_SIMPLE, add_bytes)); 
         
+        case _OPTION_np_i: COND (TECH(PACBIO), sam_seg_pacbio_np (vb, dl, numeric.i, add_bytes));
+
+        case _OPTION_ec_f: COND (TECH(PACBIO) && segconf.has[OPTION_ec_f], ({ sam_seg_set_last_value_f_from_aux (vb, OPTION_ec_f, is_bam, STRa(value), numeric); goto fallback; })); // consumed by np:i
+
         case _OPTION_dt_Z: COND (TECH(PACBIO), seg_add_to_local_text (VB, CTX(OPTION_dt_Z), STRa(value), LOOKUP_SIMPLE, add_bytes));
         case _OPTION_mq_Z: COND (TECH(PACBIO), seg_add_to_local_text (VB, CTX(OPTION_mq_Z), STRa(value), LOOKUP_SIMPLE, add_bytes));
         case _OPTION_st_Z: COND (TECH(PACBIO), seg_add_to_local_text (VB, CTX(OPTION_st_Z), STRa(value), LOOKUP_SIMPLE, add_bytes));
         
+        case _OPTION_zm_i: COND(segconf.sam_has_zm_by_Q1NAME, sam_seg_pacbio_zm (vb, numeric.i, add_bytes));
+
         case _OPTION_sd_f: COND (MP(DRAGEN), sam_dragen_seg_sd_f (vb, dl, STRa(value), numeric, add_bytes));
 
         // Ultima Genomics fields
@@ -1488,7 +1351,8 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
         case _OPTION_bi_Z: COND (MP(ULTIMA), sam_seg_ultima_bi (vb, STRa(value), add_bytes));
         case _OPTION_XV_Z: COND (MP(ULTIMA), sam_seg_ultima_XV (vb, STRa(value), add_bytes));
         case _OPTION_XW_Z: COND (MP(ULTIMA), sam_seg_ultima_XW (vb, STRa(value), add_bytes));
-        case _OPTION_rq_f: COND (MP(ULTIMA), sam_seg_float_as_snip (vb, CTX(OPTION_rq_f), STRa(value), numeric, add_bytes));
+        case _OPTION_rq_f: COND (MP(ULTIMA) || segconf.pacbio_subreads, sam_seg_float_as_snip (vb, CTX(OPTION_rq_f), STRa(value), numeric, add_bytes)); // expecting all-the-same for subreads
+
         case _OPTION_t0_Z: COND (segconf.sam_has_ultima_t0, sam_seg_ultima_t0 (vb, dl, STRa(value), add_bytes));
         
         // Agilent

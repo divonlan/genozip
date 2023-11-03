@@ -155,6 +155,7 @@ extern void ctx_merge_in_vb_ctx (VBlockP vb);
 extern void ctx_substract_txt_len (VBlockP vb, ContextP vctx);
 extern void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vctx, bool is_lcodec, bool is_lcodec_inherited);
 extern void ctx_reset_codec_commits (void);
+extern void ctx_segconf_set_hard_coded_lcodec (Did did_i, Codec codec);
 
 extern ContextP ctx_get_unmapped_ctx (ContextArray contexts, DataType dt, DictIdtoDidMap d2d_map, Did *num_contexts, DictId dict_id, STRp(tag_name));
 
@@ -242,6 +243,8 @@ extern void ctx_shorten_unused_dict_words (Did did_i);
 extern void ctx_piz_initialize_zctxs (void);
 extern void ctx_read_all_counts (void);
 extern void ctx_compress_counts (void);
+extern void ctx_read_all_subdicts (void);
+extern void ctx_compress_subdicts (void);
 extern rom ctx_get_snip_with_largest_count (Did did_i, int64_t *count);
 extern void ctx_populate_zf_ctx_from_contigs (Reference ref, Did dst_did_i, ConstContigPkgP ctgs);
 extern WordIndex ctx_populate_zf_ctx (Did dst_did_i, STRp (contig_name), WordIndex ref_index);
@@ -295,20 +298,6 @@ static inline void ctx_set_last_value (VBlockP vb, ContextP ctx, ValueType last_
     ctx->last_value    = last_value;
     ctx->last_line_i   = vb->line_i;
     ctx->last_sample_i = vb->sample_i; // used for VCF/FORMAT. otherwise meaningless but harmless.
-}
-
-// returns true if value is set
-static inline bool ctx_set_last_value_from_str (VBlockP vb, ContextP ctx, STRp(str))
-{
-    if ((ctx->flags.store == STORE_INT   && str_get_int   (STRa(str), &ctx->last_value.i)) ||
-        (ctx->flags.store == STORE_FLOAT && str_get_float (STRa(str), &ctx->last_value.f, 0, 0))) {
-
-        ctx->last_line_i   = vb->line_i;
-        ctx->last_sample_i = vb->sample_i; // used for VCF/FORMAT. otherwise meaningless but harmless.
-        return true;
-    }
-    else
-        return false;
 }
 
 // set encountered if not already ctx_set_last_value (encounted = seen, but without setting last_value)
@@ -378,7 +367,7 @@ extern void ctx_set_store_per_line (VBlockP vb, ...);
 extern void ctx_set_ltype (VBlockP vb, int ltype, ...);
 extern void ctx_consolidate_stats (VBlockP vb, int parent, ...);
 extern void ctx_consolidate_statsN(VBlockP vb, Did parent, Did first_dep, unsigned num_deps);
-extern void ctx_consolidate_stats_(VBlockP vb, Did parent, unsigned num_deps, ContextP dep_ctxs[]);
+extern void ctx_consolidate_stats_(VBlockP vb, ContextP parent_ctx, ContainerP con);
 extern ContextP buf_to_ctx (ContextArray ca, ConstBufferP buf);
 
 extern rom dyn_type_name (DynType dyn_type);

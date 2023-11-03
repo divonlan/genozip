@@ -67,7 +67,7 @@ PROD_SRC = ../../genozip-prod/src
 
 SRC_DIRS = secure zlib bzlib lzma bsc libdeflate htscodecs
 
-MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.c      							\
+MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.c seg_id.c 						\
 		  data_types.c bits.c progress.c writer.c tar.c chrom.c qname.c tokenizer.c mutex.c threads.c			\
           zip.c piz.c reconstruct.c recon_history.c recon_peek.c seg.c zfile.c aligner.c flags.c digest.c    	\
 		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c ref_cache.c     	 	\
@@ -75,18 +75,18 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.
 		  vcf_format_GT.c vcf_format_PS_PID.c vcf_info_QD.c vcf_info_SF.c vcf_dbsnp.c vcf_giab.c vcf_vep.c      \
 		  vcf_refalt.c vcf_tags.c vcf_linesort.c vcf_format.c vcf_illum_gtyping.c vcf_gwas.c vcf_vagrent.c		\
 		  vcf_icgc.c vcf_snpeff.c vcf_cosmic.c vcf_mastermind.c vcf_isaac.c	vcf_manta.c							\
-		  sam_seg.c sam_piz.c sam_shared.c sam_header.c sam_md.c sam_tlen.c sam_cigar.c sam_fields.c  			\
+		  sam_seg.c sam_piz.c sam_shared.c sam_header.c sam_md.c sam_nm.c sam_tlen.c sam_cigar.c sam_fields.c  	\
 		  sam_sa.c bam_seg.c bam_seq.c bam_show.c sam_pacbio.c sam_ultima.c cram.c agilent.c               		\
 		  sam_seq.c sam_qual.c sam_sag_zip.c sam_sag_piz.c sam_sag_load.c sam_sag_ingest.c sam_sag_scan.c    	\
 		  sam_bwa.c sam_bowtie2.c sam_bsseeker2.c sam_bsbolt.c sam_bismark.c sam_gem3.c sam_tmap.c sam_hisat2.c \
 		  sam_blasr.c sam_dragen.c sam_minimap2.c sam_cellranger.c sam_biobambam.c sam_pos.c sam_deep.c 		\
 		  fastq.c fastq_desc.c fastq_seq.c fastq_qual.c fastq_deep.c fastq_saux.c deep.c						\
-		  fasta.c gff.c bed.c me23.c phylip.c chain.c kraken.c locs.c generic.c lookback.c						\
+		  fasta.c gff.c bed.c me23.c phylip.c chain.c kraken.c locs.c generic.c lookback.c compressor.c			\
 		  buffer.c buf_struct.c buf_list.c random_access.c sections.c base64.c bgzf.c coverage.c txtheader.c  	\
-		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c	\
+		  codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c	codec_pacb.c	\
 		  codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c codec_normq.c codec_homp.c codec_t0.c		\
 	      txtfile.c profiler.c file.c filename.c dispatcher.c crypt.c aes.c md5.c segconf.c biopsy.c gencomp.c	\
-		  vblock.c regions.c  optimize.c dict_id.c aliases.c hash.c stream.c url.c bases_filter.c dict_io.c		\
+		  vblock.c regions.c optimize.c dict_id.c aliases.c hash.c stream.c url.c bases_filter.c dict_io.c		\
 		  recon_plan_io.c version.c huffman.c 
 
 ZLIB_SRCS  = zlib/gzlib.c zlib/gzread.c zlib/inflate.c zlib/inffast.c zlib/zutil.c zlib/inftrees.c zlib/deflate.c zlib/trees.c
@@ -177,7 +177,11 @@ else
     endif
 endif
 
-C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(BSC_SRCS) $(LZMA_SRCS) $(DEFLATE_SRCS) $(HTSCODECS_SRC)
+C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(BSC_SRCS) $(LZMA_SRCS) $(DEFLATE_SRCS) $(HTSCODECS_SRC) 
+
+ifeq ($(uname),Linux)
+	C_SRCS += $(ONION_SRCS)
+endif
 
 OBJS       := $(addprefix $(OBJDIR)/, $(C_SRCS:.c=.o))       
 DEBUG_OBJS := $(addprefix $(OBJDIR)/, $(C_SRCS:.c=.debug-o)) 

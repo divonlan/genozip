@@ -34,6 +34,7 @@ void vcf_info_zip_initialize (void)
     vcf_dbsnp_zip_initialize(); // called even if not in VCF header, because can be discovered in segconf too
     if (segconf.vcf_is_vagrent)    vcf_vagrent_zip_initialize();
     if (segconf.vcf_is_mastermind) vcf_mastermind_zip_initialize();
+    if (segconf.vcf_is_vep)        vcf_vep_zip_initialize();
 }
 
 void vcf_info_seg_initialize (VBlockVCFP vb) 
@@ -48,8 +49,6 @@ void vcf_info_seg_initialize (VBlockVCFP vb)
 
     if (!vcf_is_use_DP_by_DP())
         CTX(INFO_DP)->ltype = LT_DYN_INT; 
-
-    seg_id_field_init (CTX(INFO_RSID));
 
     ctx_consolidate_stats (VB, INFO_RAW_MQandDP, INFO_RAW_MQandDP_MQ, INFO_RAW_MQandDP_DP, DID_EOL);
     
@@ -715,6 +714,9 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_SVTYPE)
     else if (ref_len == 1 && alt_len > 1) 
         RECONSTRUCT ("INS", 3);
 
+    else
+        ASSPIZ (false, "failed to reconstruct SVTYPE: ref_len=%u alt=\"%.*s\"", ref_len, STRf(alt));
+
     return NO_NEW_VALUE;
 }    
 
@@ -991,7 +993,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
             CALL (seg_integer_or_not (VB, ctx, STRa(value), value_len));
 
         case _INFO_RSID:
-            CALL (seg_id_field_do (VB, ctx, STRa(value)));
+            CALL (seg_id_field (VB, ctx, STRa(value), false, value_len));
 
         // SnpEff
         case _INFO_ANN: CALL (vcf_seg_INFO_ANN (vb, ctx, STRa(value)));
@@ -1028,7 +1030,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_ILLUMINA_CHR:    CALL_IF (segconf.vcf_illum_gtyping, vcf_seg_ILLUMINA_CHR (vb, ctx, STRa(value)));
         case _INFO_ILLUMINA_POS:    CALL_IF (segconf.vcf_illum_gtyping, vcf_seg_ILLUMINA_POS (vb, ctx, STRa(value)));
         case _INFO_ILLUMINA_STRAND: CALL_IF (segconf.vcf_illum_gtyping, vcf_seg_ILLUMINA_STRAND (vb, ctx, STRa(value)));
-        case _INFO_refSNP:          CALL_IF (segconf.vcf_illum_gtyping, seg_id_field_do      (VB, ctx, STRa(value)));
+        case _INFO_refSNP:          CALL_IF (segconf.vcf_illum_gtyping, seg_id_field         (VB, ctx, STRa(value), false, value_len));
 
         // dbSNP
         case _INFO_dbSNPBuildID:    CALL_IF (segconf.vcf_is_dbSNP, seg_integer_or_not (VB, ctx, STRa(value), value_len));

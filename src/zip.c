@@ -443,19 +443,26 @@ static void zip_handle_unique_words_ctxs (VBlockP vb)
     START_TIMER;
 
     for_ctx {
-        if (!ctx->nodes.len || ctx->nodes.len != ctx->b250.len) continue; // check that all words are unique (and new to this vb)
-        if ((VB_DT(VCF) || VB_DT(BCF)) && dict_id_is_vcf_format_sf (ctx->dict_id)) continue; // this doesn't work for FORMAT fields
-        if (ctx->nodes.len < vb->lines.len / 5) continue; // don't bother if this is a rare field less than 20% of the lines
-        if (buf_is_alloc (&ctx->local))     continue; // skip if we are already using local to optimize in some other way
+        if (ctx->local.len ||  // local is not free to accept our singletons
+            ctx->no_stons  ||  // don't change to LT_TEXT if we were explicitly forbidden having singletons
+            ((VB_DT(VCF) || VB_DT(BCF)) && dict_id_is_vcf_format_sf (ctx->dict_id))) // this doesn't work for FORMAT fields
+            continue;
+            
+        // reset ltype to LT_TEXT so that we can use local for singletons (either here or in ctx_commit_node - subject to conditions).
+        // note: ltype was possibly assigned a different value in *_seg_initialize, but then local not utilized.
+        ctx->ltype = LT_TEXT; 
 
-        // don't move to local if its on the list of special dict_ids that are always in dict (because local is used for something else - eg pos or id data)
-        if (!ctx_can_have_singletons (ctx) ||
-            ctx->b250.len == 1) continue; // handle with all_the_same rather than singleton
-         
+        if (!ctx->nodes.len                    || // no new words in this VB 
+            ctx->nodes.len != ctx->b250.len    || // not all new words in this VB are singletons
+            ctx->nodes.len < vb->lines.len / 5 || // don't bother if this is a rare field less than 20% of the lines
+            !ctx_can_have_singletons (ctx)     || // this context is not allowed to have singletons
+            ctx->b250.len == 1)                   // only one word - better to handle with all_the_same rather than singleton
+            continue;
+        
+        buf_free (ctx->local); // possibly local was allocated, but then not utilized
         buf_move (vb, ctx->local, CTX_TAG_LOCAL, ctx->dict);
         buf_free (ctx->nodes);
         buf_free (ctx->b250);
-        ctx->flags.all_the_same = false;
     }
 
     COPY_TIMER (zip_handle_unique_words_ctxs);
@@ -701,6 +708,9 @@ static void zip_write_global_area (void)
 
     THREAD_DEBUG (compress_counts);
     ctx_compress_counts();
+
+    THREAD_DEBUG (compress_subdicts);
+    ctx_compress_subdicts();
 
     // store a mapping of the file's chroms to the reference's contigs, if they are any different
     // note: not needed in REF_EXT_STORE, as we convert the stored ref_contigs to use chrom_index of the file's CHROM

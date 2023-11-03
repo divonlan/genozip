@@ -324,9 +324,11 @@ void qname_seg_initialize (VBlockP vb, QType q, Did st_did_i)
     for (int i=0; qfs->in_local[i] != -1; i++) {
         #define IS(what) qfs->is_##what[qfs->in_local[i]]
 
-        if (IS(integer) || IS(numeric))
+        if (IS(integer) || IS(numeric)) {
             ctx_by_item (qfs->in_local[i])->ltype = IS(hex) ? LT_DYN_INT_h : LT_DYN_INT; // required by seg_integer_or_not / seg_numeric_or_not
-
+            ctx_by_item (qfs->in_local[i])->flags.store = STORE_INT; // required by seg_integer_or_not / seg_numeric_or_not
+        }
+        
         else // textual
             ctx_by_item (qfs->in_local[i])->no_stons = true; // required by seg_add_to_local_text
     }
@@ -412,6 +414,17 @@ void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
     for (QnameFlavor qfs=&qf[0]; qfs < &qf[NUM_QFs]; qfs++) {
         QnameTestResult reason = QTR_SUCCESS;
         if (!(reason = qname_test_flavor (STRa(qname), q, qfs, true))) {
+
+            // case: first discovery: store discovered qname
+            if (!segconf.qname_line0[q][0]) 
+                memcpy (segconf.qname_line0[q], qname, MIN_(qname_len, SAM_MAX_QNAME_LEN));
+
+            // case: rediscovery: check that it is also an acceptable flavor for stored qname_line0
+            else {
+                if (QTR_SUCCESS != qname_test_flavor (segconf.qname_line0[q], strlen(segconf.qname_line0[q]), QANY, qfs, !flag.debug_qname))
+                    continue;
+            }
+
             segconf.qname_flavor[q] = qfs;
 
             static QnameCNN char_to_cnn[256] = CHAR_TO_CNN;
@@ -424,9 +437,6 @@ void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
                 segconf.tech = qfs->tech; // note: if this is QNAME2, we update tech according to QNAME2 (instead of NCBI)
             
             ASSERT (!qfs->cut_to_canonize || segconf.flav_prop[q].cnn, "flavor=%s has cut_to_canonize='%c', but it is missing in CHAR_TO_CNN", qfs->name, qfs->cut_to_canonize);
-
-            ASSERT (qname_len <= SAM_MAX_QNAME_LEN, "qname=\"%.*s\" is too long (len=%u)", STRf(qname), qname_len);
-            memcpy (segconf.qname_line0[q], qname, qname_len);
 
             if (qfs->seq_len_item != -1) 
                 segconf.seq_len_dict_id = qfs->con.items[qfs->seq_len_item].dict_id;
@@ -457,6 +467,9 @@ void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
         ZCTX(did_i_bc2)->dict_did_i = did_i_bc1;
     }
 
+    if (segconf.qname_flavor[q] && segconf.qname_flavor[q]->id == QF_PACBIO_lbl && qname_len > 4 && !memcmp (&qname[qname_len-4], "/ccs", 4))
+        segconf.is_pacbio_ccs = true;
+        
     DO_ONCE // unit test
     if (flag.debug || flag.debug_qname)
         for (QnameFlavor qfs=&qf[0]; qfs < &qf[NUM_QFs]; qfs++) {
@@ -484,10 +497,6 @@ static bool qname_segconf_rediscover_flavor (VBlockP vb, QType q, STRp(qname))
     qname_segconf_discover_flavor (vb, q, STRa(qname));
 
     if (!segconf.qname_flavor[q]) goto fail; // qname has unknown flavor
-
-    // test if qname of line_i=0 can agree on the new flavor
-    QnameTestResult reason = qname_test_flavor (segconf.qname_line0[q], strlen(segconf.qname_line0[q]), QANY, segconf.qname_flavor[q], !flag.debug_qname); 
-    if (reason != QTR_SUCCESS) goto fail; // qname of line_i=0 doesn't agree with new flavor, we will stick to the old flavor
 
     // we found a new flavor which is agreeable to both this qname and line_i=0's qname
     segconf.qname_flavor_rediscovered[q] = true;
@@ -608,18 +617,32 @@ void qname_seg (VBlockP vb, QType q, STRp (qname), unsigned add_additional_bytes
     if (!success && segconf.running && qname_segconf_rediscover_flavor (vb, q, STRa(qname)))
         success = qname_seg_qf (vb, q, STRa(qname), add_additional_bytes); // now with new flavor
 
-    if (!success) 
+    // in SAM/BAM, we allow two flavours - try the second one (eg the second could be a consensus read name)
+    if (!success && flavor && (VB_DT(SAM) || VB_DT(BAM)) && q == QNAME1) {
+        qname_seg (vb, QNAME2, STRa(qname), 0);
+
+        STRl(snip,16);
+        seg_prepare_snip_other (SNIP_REDIRECTION, _SAM_QNAME2, false, 0, snip);
+        seg_by_ctx (vb, STRa(snip), qname_ctx, add_additional_bytes);
+        return;
+    } 
+
+    if (!success) {
         tokenizer_seg (VB, qname_ctx, STRa(qname), 
                        VB_DT(FASTQ) ? sep_with_space : sep_without_space, 
                        add_additional_bytes);
 
-    if (segconf.running) {
-        // collect the first 6 qnames / q2names, if flavor is unknown    
-        if (segconf.n_unk_flav_qnames[q] < NUM_COLLECTED_WORDS && !flavor) // unrecognized flavor
-            memcpy (segconf.unk_flav_qnames[q][segconf.n_unk_flav_qnames[q]], qname, MIN_(qname_len, UNK_QNANE_LEN));
-    
-        if (!segconf.n_unk_flav_qnames[q] || memcmp (segconf.unk_flav_qnames[q][segconf.n_unk_flav_qnames[q]], segconf.unk_flav_qnames[q][segconf.n_unk_flav_qnames[q]-1], UNK_QNANE_LEN))
-            segconf.n_unk_flav_qnames[q]++; // advance iff qname is different than previous line (not always the case if collated)
+        if (segconf.running) {
+            // case SAM/BAM: reset to QNAME1 to avoid a confusing stats display - as we failed to seg by QNAME1 and QNAME2 flavors - but this is the one and only QNAME field
+            if (VB_DT(SAM) || VB_DT(BAM)) q = QNAME1; 
+
+            // collect the first 6 qnames / q2names, if flavor is unknown OR not successful in segging by flavor 
+            if (segconf.n_unk_flav_qnames[q] < NUM_COLLECTED_WORDS) // unrecognized flavor
+                memcpy (segconf.unk_flav_qnames[q][segconf.n_unk_flav_qnames[q]], qname, MIN_(qname_len, UNK_QNANE_LEN));
+        
+            if (!segconf.n_unk_flav_qnames[q] || memcmp (segconf.unk_flav_qnames[q][segconf.n_unk_flav_qnames[q]], segconf.unk_flav_qnames[q][segconf.n_unk_flav_qnames[q]-1], UNK_QNANE_LEN))
+                segconf.n_unk_flav_qnames[q]++; // advance iff qname is different than previous line (not always the case if collated)
+        }
     }
 
 done:

@@ -115,7 +115,7 @@ extern ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainer
 extern ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, STRp(snip), pSTRp(out_prefixes));
 extern bool container_has_item (ContextP ctx, DictId dict_id);
 extern uint32_t container_peek_repeats (VBlockP vb, ContextP ctx, char repsep);
-extern bool container_peek_has_item (VBlockP vb, ContextP ctx, DictId item_dict_id, bool consume);
+extern bool container_peek_has_item (VBlockP vb, ContextP container_ctx, DictId item_dict_id, bool consume);
 
 typedef struct { uint64_t dnum; int16_t idx; } ContainerPeekItem;
 extern ContainerP container_peek_get_idxs (VBlockP vb, ContextP ctx, Did n_items, ContainerPeekItem *items, bool consume);

@@ -712,8 +712,16 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
 
     #define VEP_SIGNATURE "VEP. Format: "
     IF_IN_HEADER (VEP_SIGNATURE, vcf_is_vep, "VEP");
-    if (segconf.vcf_is_vep) vcf_vep_zip_initialize (sig + STRLEN(VEP_SIGNATURE), txt_header->data);
-
+    if (segconf.vcf_is_vep) {
+        rom vep = sig + STRLEN(VEP_SIGNATURE);
+        rom quote = strpbrk (vep, "\"\n");
+        if (quote && *quote == '"') { // cursory verification of field format
+            unsigned vep_len = quote - vep;
+            segconf.vcf_vep_spec = CALLOC (vep_len + 1); 
+            memcpy (segconf.vcf_vep_spec, vep, vep_len); // consumed and freed by by vcf_vep_zip_initialize
+        }
+    }
+    
     bool has_PROBE = !!strstr (txt_header->data, "##INFO=<ID=PROBE_A");
     SAFE_RESTORE;
 
@@ -780,7 +788,7 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
 
     // case: --chain: add liftover_contig, liftover_reference, chain, dual_coordinates keys
     if ((chain_is_loaded || txt_file->coords) && evb->comp_i == VCF_COMP_MAIN)
-        vcf_header_zip_update_to_dual_coords (txt_header); // note: in VEP, can only be called after vcf_vep_zip_initialize 
+        vcf_header_zip_update_to_dual_coords (txt_header); // note: we can't update VEP bc vcf_vep_zip_initialize has not been called yet (bug 932)
 
     if (z_file) 
         z_file->z_flags.has_gencomp |= (txt_file->coords != DC_NONE);  // note: in case of --chain, z_flags.dual_coords is set in file_open_z

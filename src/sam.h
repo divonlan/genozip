@@ -36,24 +36,24 @@
 #pragma GENDICT SAM_QENAME=DTYPE_1=QENAME // if adding more Q*NAMEs - add to fastq.h and kraken.h too, and update MAX_QNAME_ITEMS
 #pragma GENDICT SAM_QmNAME=DTYPE_1=QmNAME // QmNAME reserved for mate number (always the last dict_id in the container)
 
-// Fields prefixed with "DEEP_" are not used in SAM, but are here so that the did's are the same for SAM and FASTQ
-#pragma GENDICT FASTQ_QNAME2=DTYPE_FIELD=QNAME2
-#pragma GENDICT FASTQ_Q0NAME2=DTYPE_1=q0NAME    
-#pragma GENDICT FASTQ_Q1NAME2=DTYPE_1=q1NAME 
-#pragma GENDICT FASTQ_Q2NAME2=DTYPE_1=q2NAME
-#pragma GENDICT FASTQ_Q3NAME2=DTYPE_1=q3NAME
-#pragma GENDICT FASTQ_Q4NAME2=DTYPE_1=q4NAME
-#pragma GENDICT FASTQ_Q5NAME2=DTYPE_1=q5NAME
-#pragma GENDICT FASTQ_Q6NAME2=DTYPE_1=q6NAME 
-#pragma GENDICT FASTQ_Q7NAME2=DTYPE_1=q7NAME 
-#pragma GENDICT FASTQ_Q8NAME2=DTYPE_1=q8NAME 
-#pragma GENDICT FASTQ_Q9NAME2=DTYPE_1=q9NAME 
-#pragma GENDICT FASTQ_QANAME2=DTYPE_1=qANAME 
-#pragma GENDICT FASTQ_QBNAME2=DTYPE_1=qBNAME 
-#pragma GENDICT FASTQ_QCNAME2=DTYPE_1=qCNAME 
-#pragma GENDICT FASTQ_QDNAME2=DTYPE_1=qDNAME 
-#pragma GENDICT FASTQ_QeNAME2=DTYPE_1=qENAME 
-#pragma GENDICT FASTQ_QmNAME2=DTYPE_1=qmNAME 
+// Fields prefixed with "FASTQ_" are not used in SAM, but are here so that the did's are the same for SAM and FASTQ
+#pragma GENDICT SAM_QNAME2=DTYPE_FIELD=QNAME2
+#pragma GENDICT SAM_Q0NAME2=DTYPE_1=q0NAME    
+#pragma GENDICT SAM_Q1NAME2=DTYPE_1=q1NAME 
+#pragma GENDICT SAM_Q2NAME2=DTYPE_1=q2NAME
+#pragma GENDICT SAM_Q3NAME2=DTYPE_1=q3NAME
+#pragma GENDICT SAM_Q4NAME2=DTYPE_1=q4NAME
+#pragma GENDICT SAM_Q5NAME2=DTYPE_1=q5NAME
+#pragma GENDICT SAM_Q6NAME2=DTYPE_1=q6NAME 
+#pragma GENDICT SAM_Q7NAME2=DTYPE_1=q7NAME 
+#pragma GENDICT SAM_Q8NAME2=DTYPE_1=q8NAME 
+#pragma GENDICT SAM_Q9NAME2=DTYPE_1=q9NAME 
+#pragma GENDICT SAM_QANAME2=DTYPE_1=qANAME 
+#pragma GENDICT SAM_QBNAME2=DTYPE_1=qBNAME 
+#pragma GENDICT SAM_QCNAME2=DTYPE_1=qCNAME 
+#pragma GENDICT SAM_QDNAME2=DTYPE_1=qDNAME 
+#pragma GENDICT SAM_QeNAME2=DTYPE_1=qENAME 
+#pragma GENDICT SAM_QmNAME2=DTYPE_1=qmNAME 
 
 #pragma GENDICT FASTQ_EXTRA=DTYPE_1=DESC 
 
@@ -424,7 +424,7 @@
 #pragma GENDICT OPTION_dq_Z=DTYPE_2=dq:Z     // per-base: DeletionQV
 #pragma GENDICT OPTION_iq_Z=DTYPE_2=iq:Z     // per-base: InsertionQV
 #pragma GENDICT OPTION_sq_Z=DTYPE_2=sq:Z     // per-base: SubstitutionQV
-#pragma GENDICT OPTION_iq_sq_dq=DTYPE_2=iq_sq_dq
+#pragma GENDICT OPTION_iq_sq_dq=DTYPE_2=iq_sq_dq 
 #pragma GENDICT OPTION_ip_B_C=DTYPE_2=ip:B:C // per-base: Interpulse duration (IPD) measured in frames (raw frames or codec V1)
 #pragma GENDICT OPTION_pw_B_C=DTYPE_2=pw:B:C // per-base: PulseWidth measured in frames (raw frames or codec V1)
 #pragma GENDICT OPTION_fi_B_C=DTYPE_2=fi:B:C // per-base (Hi-Fi kinetic info): Forward IPD (codec V1)
@@ -437,7 +437,7 @@
 #pragma GENDICT OPTION_sc_A=DTYPE_2=sc_A     // scrap read: Scrap region-type annotation, one of A:=Adapter, B:=Barcode, L:=LQRegion, or F:=Filtered
 
 // PacBio Lima tags: https://lima.how/output/bam.html
-#pragma GENDICT OPTION_bc_B_S=DTYPE_2=bc:B:S // Barcode pair indices, integer codes represent 0-based position in the FASTA file of barcodes
+#pragma GENDICT OPTION_bc_B_S=DTYPE_2=bc:B:S // Barcode pair indices, integer codes represent 0-based position in the FASTA file of barcodes.
 #pragma GENDICT OPTION_bq_i=DTYPE_2=bq:i     // Barcode score / quality, normalized between 0 and 100
 #pragma GENDICT OPTION_bl_Z=DTYPE_2=bl:Z     // Barcode sequence clipped from leading end
 #pragma GENDICT OPTION_bt_Z=DTYPE_2=bt:Z     // Barcode sequence clipped from trailing end
@@ -591,6 +591,9 @@
 #pragma GENDICT OPTION_zp_Z=DTYPE_2=zp:Z     // Original information from single consensus read that shares the same name as the duplex consensus read before it was merged. format: pipe(|)-separated sub-fields: QNAME|SEQ|QUAL|CIGAR|MD:Z
 #pragma GENDICT OPTION_zn_Z=DTYPE_2=zn:Z     // Original information from single consensus read that not share the name as the duplex consensus read before it was merged. Same format as zp:Z
 
+// Bionano
+#pragma GENDICT OPTION_ls_B_i=DTYPE_2=ls:B:i
+
 // Genozip-generated tags
 #pragma GENDICT OPTION_tx_i=DTYPE_2=tx:i     // Genozip tag for taxonomy ID
 
@@ -628,6 +631,7 @@ extern bool sam_zip_dts_flag (int dts);
 extern void sam_zip_after_compute (VBlockP vb);
 extern void sam_zip_after_vbs (void);
 extern void sam_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeaderP vb_header);
+extern uint32_t sam_zip_get_seq_len (VBlockP vb, uint32_t line_i);
 extern void sam_sa_prim_finalize_ingest (void);
 extern uint64_t cram_estimated_num_alignments (rom filename);
 
@@ -662,6 +666,7 @@ extern void sam_update_qual_len (VBlockP vb, uint32_t line_i, uint32_t new_len);
 extern void sam_ultima_update_t0_len (VBlockP vb, uint32_t line_i, uint32_t new_len);
 extern void sam_seg_aux_field_fallback (VBlockP vb, void *dl, DictId dict_id, char sam_type, char array_subtype,
                                         STRp(value), ValueType numeric, unsigned add_bytes);
+extern int32_t sam_zip_get_np (VBlockP vb, LineIType line_i);
 
 // PIZ Stuff
 extern void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header);
@@ -785,30 +790,18 @@ SPECIAL (SAM, 57, AGENT_RX,              agilent_special_AGENT_RX);            /
 SPECIAL (SAM, 58, AGENT_QX,              agilent_special_AGENT_QX);            // introduced 15.0.23
 #define NUM_SAM_SPECIAL 59
  
-#define SAM_LOCAL_GET_LINE_CALLBACKS                          \
-    { DT_SAM, _OPTION_BD_BI,       sam_zip_BD_BI           }, \
-    { DT_SAM, _SAM_QUAL,           sam_zip_qual            }, \
-    { DT_SAM, _OPTION_U2_Z,        sam_zip_U2              }, \
-    { DT_SAM, _OPTION_OQ_Z,        sam_zip_OQ              }, \
-    { DT_SAM, _OPTION_TQ_Z,        sam_zip_TQ              }, \
-    { DT_SAM, _OPTION_QX_Z,        sam_zip_QX              }, \
-    { DT_SAM, _OPTION_2Y_Z,        sam_zip_2Y              }, \
-    { DT_SAM, _OPTION_BQ_Z,        sam_zip_BQ              }, \
-    { DT_SAM, _OPTION_iq_sq_dq,    sam_zip_iq_sq_dq        }, \
-    { DT_SAM, _OPTION_t0_Z,        sam_zip_t0              }, 
+#define SAM_LOCAL_GET_LINE_CALLBACKS(dt)        \
+    { dt, _OPTION_BD_BI,    sam_zip_BD_BI    }, \
+    { dt, _SAM_QUAL,        sam_zip_qual     }, \
+    { dt, _OPTION_U2_Z,     sam_zip_U2       }, \
+    { dt, _OPTION_OQ_Z,     sam_zip_OQ       }, \
+    { dt, _OPTION_TQ_Z,     sam_zip_TQ       }, \
+    { dt, _OPTION_QX_Z,     sam_zip_QX       }, \
+    { dt, _OPTION_2Y_Z,     sam_zip_2Y       }, \
+    { dt, _OPTION_BQ_Z,     sam_zip_BQ       }, \
+    { dt, _OPTION_iq_sq_dq, sam_zip_iq_sq_dq }, \
+    { dt, _OPTION_t0_Z,     sam_zip_t0       }, 
 
-#define BAM_LOCAL_GET_LINE_CALLBACKS                          \
-    { DT_BAM, _OPTION_BD_BI,       sam_zip_BD_BI           }, \
-    { DT_BAM, _SAM_QUAL,           sam_zip_qual            }, \
-    { DT_BAM, _OPTION_U2_Z,        sam_zip_U2              }, \
-    { DT_BAM, _OPTION_OQ_Z,        sam_zip_OQ              }, \
-    { DT_BAM, _OPTION_TQ_Z,        sam_zip_TQ              }, \
-    { DT_BAM, _OPTION_QX_Z,        sam_zip_QX              }, \
-    { DT_BAM, _OPTION_2Y_Z,        sam_zip_2Y              }, \
-    { DT_BAM, _OPTION_BQ_Z,        sam_zip_BQ              }, \
-    { DT_BAM, _OPTION_iq_sq_dq,    sam_zip_iq_sq_dq        }, \
-    { DT_BAM, _OPTION_t0_Z,        sam_zip_t0              }, 
-    
 // Important: Numbers (and order) of translators cannot be changed, as they are part of the file format
 // (they are included in the TOP2BAM container)
 // translator numbers must start from 1 - 0 is reserved for "none"
@@ -842,41 +835,23 @@ TXTHEADER_TRANSLATOR (sam_header_bam2sam);
 TXTHEADER_TRANSLATOR (sam_header_sam2bam);
 TXTHEADER_TRANSLATOR (txtheader_sam2fq);
 
-#define SAM_DICT_ID_ALIASES                                             \
-    /*         type        alias                maps to            */   \
-    { DT_SAM,  ALIAS_CTX,  _OPTION_UB_Z,        _OPTION_BX_Z        },  /* 10xGenomics tags - CellRanger: UB/UR/UY = LongRanger BX/RX/QX */ \
-    { DT_SAM,  ALIAS_CTX,  _OPTION_UR_Z,        _OPTION_RX_Z        },  \
-    { DT_SAM,  ALIAS_CTX,  _OPTION_UY_Z,        _OPTION_QX_Z        },  \
-    { DT_SAM,  ALIAS_DICT, _SAM_RNEXT,          _SAM_RNAME          },  \
-    { DT_SAM,  ALIAS_DICT, _OPTION_OA_RNAME,    _SAM_RNAME          },  \
-    { DT_SAM,  ALIAS_DICT, _OPTION_XA_RNAME,    _SAM_RNAME          },  \
-    { DT_SAM,  ALIAS_DICT, _OPTION_SA_RNAME,    _SAM_RNAME          },  \
-    { DT_SAM,  ALIAS_DICT, _OPTION_MC0_Z,       _OPTION_OC_Z        },  /* note: no need to alias MC1_Z, bc it is normally all-the-same copy-mate */ \
-    { DT_SAM,  ALIAS_DICT, _OPTION_OA_CIGAR,    _OPTION_OC_Z        },  \
-    { DT_SAM,  ALIAS_DICT, _OPTION_XA_CIGAR,    _OPTION_OC_Z        },  \
-    { DT_SAM,  ALIAS_DICT, _OPTION_TX_CIGAR,    _OPTION_OC_Z        },  \
-    { DT_SAM,  ALIAS_DICT, _OPTION_AN_CIGAR,    _OPTION_OC_Z        },  \
-    { DT_SAM,  ALIAS_DICT, _OPTION_AN_NEGATIVE, _OPTION_TX_NEGATIVE },  \
-    { DT_SAM,  ALIAS_DICT, _OPTION_AN_GENE,     _OPTION_TX_GENE     },  \
-    { DT_SAM,  ALIAS_DICT, _FASTQ_E1L,          _FASTQ_E2L          },   
-
-#define BAM_DICT_ID_ALIASES                                             \
-    /*         type        alias                maps to            */   \
-    { DT_BAM,  ALIAS_CTX,  _OPTION_UB_Z,        _OPTION_BX_Z        },  \
-    { DT_BAM,  ALIAS_CTX,  _OPTION_UR_Z,        _OPTION_RX_Z        },  \
-    { DT_BAM,  ALIAS_CTX,  _OPTION_UY_Z,        _OPTION_QX_Z        },  \
-    { DT_BAM,  ALIAS_DICT, _SAM_RNEXT,          _SAM_RNAME          },  \
-    { DT_BAM,  ALIAS_DICT, _OPTION_OA_RNAME,    _SAM_RNAME          },  \
-    { DT_BAM,  ALIAS_DICT, _OPTION_XA_RNAME,    _SAM_RNAME          },  \
-    { DT_BAM,  ALIAS_DICT, _OPTION_SA_RNAME,    _SAM_RNAME          },  \
-    { DT_BAM,  ALIAS_DICT, _OPTION_MC0_Z,       _OPTION_OC_Z        },  /*note: SA_CIGAR cannot be an alias of OC:Z because it causes issues with gencomp */ \
-    { DT_BAM,  ALIAS_DICT, _OPTION_OA_CIGAR,    _OPTION_OC_Z        },  \
-    { DT_BAM,  ALIAS_DICT, _OPTION_XA_CIGAR,    _OPTION_OC_Z        },  \
-    { DT_BAM,  ALIAS_DICT, _OPTION_TX_CIGAR,    _OPTION_OC_Z        },  \
-    { DT_BAM,  ALIAS_DICT, _OPTION_AN_CIGAR,    _OPTION_OC_Z        },  \
-    { DT_BAM,  ALIAS_DICT, _OPTION_AN_NEGATIVE, _OPTION_TX_NEGATIVE },  \
-    { DT_BAM,  ALIAS_DICT, _OPTION_AN_GENE,     _OPTION_TX_GENE     },  \
-    { DT_BAM,  ALIAS_DICT, _FASTQ_E1L,          _FASTQ_E2L          },   
+#define SAM_DICT_ID_ALIASES(dt)                                     \
+    /*     type        alias                maps to            */   \
+    { dt,  ALIAS_CTX,  _OPTION_UB_Z,        _OPTION_BX_Z        },  /* 10xGenomics tags - CellRanger: UB/UR/UY = LongRanger BX/RX/QX */ \
+    { dt,  ALIAS_CTX,  _OPTION_UR_Z,        _OPTION_RX_Z        },  \
+    { dt,  ALIAS_CTX,  _OPTION_UY_Z,        _OPTION_QX_Z        },  \
+    { dt,  ALIAS_DICT, _SAM_RNEXT,          _SAM_RNAME          },  \
+    { dt,  ALIAS_DICT, _OPTION_OA_RNAME,    _SAM_RNAME          },  \
+    { dt,  ALIAS_DICT, _OPTION_XA_RNAME,    _SAM_RNAME          },  \
+    { dt,  ALIAS_DICT, _OPTION_SA_RNAME,    _SAM_RNAME          },  \
+    { dt,  ALIAS_DICT, _OPTION_MC0_Z,       _OPTION_OC_Z        },  /* note: no need to alias MC1_Z, bc it is normally all-the-same copy-mate */ \
+    { dt,  ALIAS_DICT, _OPTION_OA_CIGAR,    _OPTION_OC_Z        },  /* note: SA_CIGAR cannot be an alias of OC:Z because it causes issues with gencomp */ \
+    { dt,  ALIAS_DICT, _OPTION_XA_CIGAR,    _OPTION_OC_Z        },  \
+    { dt,  ALIAS_DICT, _OPTION_TX_CIGAR,    _OPTION_OC_Z        },  \
+    { dt,  ALIAS_DICT, _OPTION_AN_CIGAR,    _OPTION_OC_Z        },  \
+    { dt,  ALIAS_DICT, _OPTION_AN_NEGATIVE, _OPTION_TX_NEGATIVE },  \
+    { dt,  ALIAS_DICT, _OPTION_AN_GENE,     _OPTION_TX_GENE     },  \
+    { dt,  ALIAS_DICT, _FASTQ_E1L,          _FASTQ_E2L          },  /* for deep */
 
 #define SAM_CONTIG_FMT "@SQ	SN:%.*s	LN:%"PRId64
 

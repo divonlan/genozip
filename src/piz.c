@@ -209,7 +209,7 @@ void piz_uncompress_all_ctxs (VBlockP vb)
                         
             if (is_local) {
                 ctx->lcodec = header->codec;
-                ctx->ltype = header->ltype; 
+                ctx->ltype  = header->ltype; 
             }
 
             else { // b250
@@ -278,6 +278,7 @@ void piz_uncompress_all_ctxs (VBlockP vb)
                 // we zero the history, bc when seg compares to a dl value for a field that didn't exist,
                 // it sees 0. It might seg against that 0. So we need history to be 0 too.
                 case STORE_INT   : buf_alloc_exact_zero (vb, ctx->history, vb->lines.len, int64_t,     "history"); break;
+                case STORE_FLOAT : buf_alloc_exact_zero (vb, ctx->history, vb->lines.len, double,      "history"); break;
                 case STORE_INDEX : buf_alloc_exact_zero (vb, ctx->history, vb->lines.len, WordIndex,   "history"); break;
                 default          : buf_alloc_exact_zero (vb, ctx->history, vb->lines.len, HistoryWord, "history"); break;
             }
@@ -322,6 +323,8 @@ static void piz_reconstruct_one_vb (VBlockP vb)
     // reconstruct from top level snip
     Did top_level_did_i = ctx_get_existing_did_i (vb, vb->translation.toplevel); 
     reconstruct_from_ctx (vb, top_level_did_i, 0, true);
+    
+    ASSERT (!vb->con_stack_len, "%s: Expecting container stack to be empty, but con_stack_len=%u", VB_NAME, vb->con_stack_len);
 
     // calculate the digest contribution of this VB, and the digest snapshot of this VB
     // note: if we have generated components from which lines might be inserted into the VB - we verify in writer instead 
@@ -475,7 +478,9 @@ DataType piz_read_global_area (Reference ref)
     // if the user wants to see only the header, we can skip regions and random access
     if (!flag.header_only) {
 
-        ctx_read_all_counts(); // read all counts section
+        ctx_read_all_counts();   // read all SEC_COUNTS sections
+
+        ctx_read_all_subdicts(); // read all SEC_SUBDICTS sections
 
         // update chrom node indices using the CHROM dictionary, for the user-specified regions (in case -r/-R were specified)
         if (flag.regions && ZCTX(flag.luft ? DTFZ(luft_chrom) : DTFZ(prim_chrom))->word_list.len) // FASTQ compressed without reference, has no CHROMs 

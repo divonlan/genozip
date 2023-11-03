@@ -39,7 +39,7 @@
 #define WEBSITE_INSTITUTIONS GENOZIP_URL "/institutions"
 #define WEBSITE_PRICING_FAQ  GENOZIP_URL "/licensing-faq"
 #define WEBSITE_REFERRAL     GENOZIP_URL "/referral-program"
-#define WEBSITE_BUY          GENOZIP_URL "/purchase"
+#define WEBSITE_BUY          GENOZIP_URL "/checkout"
 
 #define EMAIL_SUPPORT  "support@genozip.com"
 #define EMAIL_SALES    "sales@genozip.com"

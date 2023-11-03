@@ -352,22 +352,6 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_BWA_X1)
     return HAS_NEW_VALUE;
 }
 
-// -------------------------------------------------
-// XM:i BWA: "Number of mismatches in the alignment" 
-// -------------------------------------------------
-
-void sam_seg_BWA_XM_i (VBlockSAMP vb, ValueType XM, unsigned add_bytes)
-{
-    ContextP NM_ctx;
-    
-    // XM is predicted to be equal NM (in our test file > 99% identical to NM)
-    if (ctx_has_value_in_line (vb, _OPTION_NM_i, &NM_ctx) && XM.i == NM_ctx->last_value.i) 
-        seg_by_did (VB, STRa(copy_NM_snip), OPTION_XM_i, add_bytes); // copy from NM
-            
-    else
-        seg_integer (VB, CTX(OPTION_XM_i), XM.i, true, add_bytes);
-}
-
 // ----------------------------------------------------------------------------------------------
 // Suboptimal alignment score : XS:i in bwa, dragen, bsbolt, tmap and bowtie2 ; ZS:i in hisat2
 // ----------------------------------------------------------------------------------------------

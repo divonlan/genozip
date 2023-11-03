@@ -111,6 +111,8 @@ void zfile_uncompress_section (VBlockP vb,
     }
     else if (expected_section_type == SEC_COUNTS) 
         dict_id = header_p.counts->dict_id;
+    else if (expected_section_type == SEC_SUBDICTS) 
+        dict_id = header_p.subdicts->dict_id;
 
     ContextP ctx = NULL;
     if (IS_DICTED_SEC (expected_section_type)) { 
@@ -457,9 +459,7 @@ int32_t zfile_read_section_do (FileP file,
 
     if (flag.show_headers) {
         sections_show_header (header, NULL, sec ? sec->offset : 0, 'R');
-        if (is_genocat && (expected_sec_type == SEC_B250      || expected_sec_type == SEC_LOCAL     || 
-                           expected_sec_type == SEC_DICT      || expected_sec_type == SEC_COUNTS    || 
-                           expected_sec_type == SEC_REFERENCE || expected_sec_type == SEC_REF_IS_SET))
+        if (is_genocat && (IS_DICTED_SEC (expected_sec_type) || expected_sec_type == SEC_REFERENCE || expected_sec_type == SEC_REF_IS_SET))
              return header_offset; // in genocat --show-header - we only show headers, nothing else
     }
 

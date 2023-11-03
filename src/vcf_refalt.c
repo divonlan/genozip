@@ -841,15 +841,29 @@ void vcf_refalt_seg_other_REFALT (VBlockVCFP vb, Did did_i, LiftOverStatus ostat
 // PIZ stuff
 // ---------
 
+// ZIP + PIZ
+void vcf_parse_main_alt (VBlockVCFP vb)
+{
+    if (vb->n_alts != 0) return; // already parsed
+
+    vb->n_alts = str_split_do (STRa(vb->main_alt), ARRAY_LEN(vb->alts), ',', vb->alts, vb->alt_lens, false, NULL);
+
+    if (vb->n_alts == 0) vb->n_alts = -1; // failed
+}
+
 // item callback of REFALT in TOPLEVEL, called with files compressed starting 14.0.12
 void vcf_piz_refalt_parse (VBlockVCFP vb, STRp(refalt))
 {
+    if (!refalt_len) return; // can happen in DVCF
+
     ConstContextP ctx = CTX(VCF_REFALT);
 
     vb->main_ref     = last_txtx (vb, ctx);
     vb->main_alt     = memchr (vb->main_ref, '\t', ctx->last_txt.len) + 1;
     vb->main_ref_len = vb->main_alt - vb->main_ref - 1;
     vb->main_alt_len = ctx->last_txt.len - vb->main_ref_len - 1;
+
+    vcf_parse_main_alt (vb);
 }
 
 // single-base re-anchoring, eg REF=ACGT ALT=G anchor="T" --> REF=TACT ALT=T  (assuming reference is TACTG)

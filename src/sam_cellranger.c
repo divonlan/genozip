@@ -129,7 +129,7 @@ void sam_seg_CR_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(cr), unsigned add_byt
 // Note: Might be multiple elements seperated by a space (spec recommentation) or '_' (observed in STARsolo) 
 // Requirements: 1. array did, 2. zip callback function
 bool sam_seg_barcode_qual (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, SoloTags solo, uint8_t n_seps, 
-                           STRp(qual), qSTRp (con_snip), MiniContainer *con, unsigned add_bytes)
+                           STRp(qual), qSTRp (con_snip), MiniContainerP con, unsigned add_bytes)
 {
     START_TIMER;
 
@@ -529,7 +529,7 @@ static bool sam_seg_TX_AN_gene (VBlockP vb, ContextP gene_ctx, STRp(gene), uint3
         seg_by_ctx (vb, STRa(AN_lookback_snip), gene_ctx, gene_len); 
 
     else 
-        // no lookback - seg normally. Note: we can't seg_id_field2 because we are looking back by index
+        // no lookback - seg normally. Note: we can't seg_id_field because we are looking back by index
         gene_index = seg_by_ctx (vb, STRa(gene), gene_ctx, gene_len); 
 
     seg_add_to_local_resizable (vb, lb_ctx, lookback, 0);

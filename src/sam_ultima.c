@@ -67,7 +67,7 @@ void sam_seg_ultima_tp (VBlockSAMP vb, ContextP arr_ctx, void *dl_, void *tp_, u
 
     char *next[TP_NUM_BINS-1], *start[TP_NUM_BINS-1];
     for (int b=0; b < TP_NUM_BINS-1; b++) {
-        buf_alloc (VB, &chan[b]->local, tp_len, 0, int8_t, CTX_GROWTH, "local");
+        buf_alloc (VB, &chan[b]->local, tp_len, 0, int8_t, CTX_GROWTH, CTX_TAG_LOCAL);
         next[b]  = BAFTc(chan[b]->local);
         start[b] = next[b];
     }

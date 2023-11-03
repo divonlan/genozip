@@ -186,7 +186,7 @@ static void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
 // this function is called to set is_long_reads, and may be also called while running segconf before is_long_reads is set
 bool segconf_is_long_reads(void) 
 { 
-    return TECH(PACBIO) || TECH(ONP) || 
+    return TECH(PACBIO) || TECH(ONT) || MP(BIONANO) ||
            segconf.longest_seq_len > MAX_SHORT_READ_LEN ||
            flag.debug_LONG;
 }

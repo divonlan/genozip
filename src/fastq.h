@@ -16,6 +16,7 @@
 // SAM and FASTQ share the same Dids and DictIds
 #define FASTQ_CONTIG        SAM_RNAME
 #define FASTQ_QNAME         SAM_QNAME
+#define FASTQ_QNAME2        SAM_QNAME2
 #define FASTQ_AUX           SAM_AUX
 #define FASTQ_SQBITMAP      SAM_SQBITMAP
 #define FASTQ_NONREF        SAM_NONREF
@@ -40,6 +41,9 @@
 #define _FASTQ_QNAME        _SAM_QNAME
 #define _FASTQ_Q0NAME       _SAM_Q0NAME
 #define _FASTQ_Q1NAME       _SAM_Q1NAME
+#define _FASTQ_QNAME2       _SAM_QNAME2
+#define _FASTQ_Q0NAME2      _SAM_Q0NAME2
+#define _FASTQ_Q1NAME2      _SAM_Q1NAME2
 #define _FASTQ_AUX          _SAM_AUX
 #define _FASTQ_SQBITMAP     _SAM_SQBITMAP
 #define _FASTQ_NONREF       _SAM_NONREF
@@ -79,6 +83,7 @@ extern void fastq_zip_init_vb (VBlockP vb);
 extern void fastq_zip_after_compute (VBlockP vb);
 extern bool fastq_zip_use_pair_assisted (DictId dict_id, SectionType st);
 extern bool fastq_zip_use_pair_identical (DictId dict_id);
+extern uint32_t fastq_zip_get_seq_len (VBlockP vb, uint32_t line_i) ;
 
 COMPRESSOR_CALLBACK (fastq_zip_seq);
 COMPRESSOR_CALLBACK(fastq_zip_qual); // used by codec_longr_compress

@@ -69,8 +69,6 @@ void me23_seg_initialize (VBlockP vb)
     CTX(ME23_CHROM)->flags.store = STORE_INDEX; // since v12
     CTX(ME23_POS)->flags.store   = STORE_INT;   // since v12
     CTX(ME23_GENOTYPE)->ltype    = LT_SEQUENCE;
-
-    seg_id_field_init (CTX(ME23_ID));
 }
 
 void me23_seg_finalize (VBlockP vb)
@@ -119,7 +117,7 @@ rom me23_seg_txt_line (VBlockP vb, rom field_start_line, uint32_t remaining_txt_
     int32_t len = BAFTtxt - field_start_line;
 
     GET_NEXT_ITEM (ME23_ID);
-    seg_id_field (vb, CTX(ME23_ID), field_start, field_len, true);
+    seg_id_field (vb, CTX(ME23_ID), field_start, field_len, false, field_len+1);
 
     GET_NEXT_ITEM (ME23_CHROM);
     chrom_seg (vb, field_start, field_len);

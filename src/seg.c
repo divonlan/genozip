@@ -68,14 +68,15 @@ WordIndex seg_duplicate_last (VBlockP vb, ContextP ctx, unsigned add_bytes)
     return seg_known_node_index (vb, ctx, LASTb250(ctx), add_bytes); 
 }
 
-#define MAX_ROLLBACK_CTXS ARRAY_LEN(vb->rollback_ctxs)
+#define MAX_ROLLBACK_CTXS ARRAY_LEN(vb->rollback_dids)
 
 // NOTE: this does not save recon_size - if the processing may change recon_size it must be saved and rolled back separately
 void seg_create_rollback_point (VBlockP vb, 
-                                ContextP *ctxs,    // option 1
-                                unsigned num_ctxs, // applied to both options
-                                ...)               // option 2
+                                ContainerP con,         // option 1 - all the items in a container
+                                unsigned num_ctxs, ...) // option 2 - explict list of Dids
 {
+    if (con) num_ctxs = con_nitems (*con);
+
     ASSERT (num_ctxs <= MAX_ROLLBACK_CTXS, "num_ctxs=%u > MAX_ROLLBACK_CTXS=%u", num_ctxs, MAX_ROLLBACK_CTXS);
 
     va_list args;
@@ -84,10 +85,12 @@ void seg_create_rollback_point (VBlockP vb,
     vb->rback_id++; // new rollback point
     vb->num_rollback_ctxs = 0;
 
-    for (unsigned i=0; i < num_ctxs; i++) {
-        vb->rollback_ctxs[vb->num_rollback_ctxs] = ctxs ? ctxs[i] : CTX(va_arg (args, int)); // note: 'Did' {aka 'short unsigned int'} is promoted to 'int' when passed through '...'
+    for (uint32_t i=0; i < num_ctxs; i++) {
+        if (con && !con->items[i].dict_id.num) continue;
 
-        if (ctx_set_rollback (vb, vb->rollback_ctxs[vb->num_rollback_ctxs], false)) // added
+        vb->rollback_dids[vb->num_rollback_ctxs] = con ? ctx_get_ctx (vb, con->items[i].dict_id)->did_i : va_arg (args, int); // note: 'Did' {aka 'short unsigned int'} is promoted to 'int' when passed through '...'
+
+        if (ctx_set_rollback (vb, CTX(vb->rollback_dids[vb->num_rollback_ctxs]), false)) // added
             vb->num_rollback_ctxs++;
     }
 }
@@ -97,7 +100,7 @@ void seg_add_ctx_to_rollback_point (VBlockP vb, ContextP ctx)
 {
     ASSERT (vb->num_rollback_ctxs < MAX_ROLLBACK_CTXS, "num_ctxs=%u > MAX_ROLLBACK_CTXS=%u", vb->num_rollback_ctxs+1, MAX_ROLLBACK_CTXS);
 
-    vb->rollback_ctxs[vb->num_rollback_ctxs] = ctx;
+    vb->rollback_dids[vb->num_rollback_ctxs] = ctx->did_i;
     
     if (ctx_set_rollback (vb, ctx, false)) // added
         vb->num_rollback_ctxs++;
@@ -106,7 +109,7 @@ void seg_add_ctx_to_rollback_point (VBlockP vb, ContextP ctx)
 void seg_rollback (VBlockP vb)
 {
     for (uint32_t i=0; i < vb->num_rollback_ctxs; i++) 
-        ctx_rollback (vb, vb->rollback_ctxs[i], false);
+        ctx_rollback (vb, CTX(vb->rollback_dids[i]), false);
 }
 
 void seg_simple_lookup (VBlockP vb, ContextP ctx, unsigned add_bytes)
@@ -484,160 +487,6 @@ bool seg_pos_field_cb (VBlockP vb, ContextP ctx, STRp(pos_str), uint32_t repeat)
     return true; // segged successfully
 }
 
-// must be called in seg_initialize 
-void seg_id_field_init (ContextP ctx) 
-{ 
-    ContextP zctx = ctx_get_zctx_from_vctx (ctx, false, true); // all aliases need to tbe the same type, bc ID_TYPE_OTHER segs only to local, relying on implicit lookup that happens when there's no dict
-    if (zctx) ctx->id_type = zctx->id_type; // set in segconf
-
-    if (ctx->id_type == ID_TYPE_ALPHA_NUMERIC) 
-        ctx->ltype = LT_DYN_INT; 
-
-    ctx->no_stons = true; // we use local to store the numeric part (ALPHA_NUMERIC) or the entire ID (OTHER), so cannot also have singletons
-    ctx->is_initialized = true; 
-}
-
-void seg_id_segconf_update_type (ContextP ctx, STRp(id))
-{
-    // scan for non-digits
-    int i=0; for (; i < id_len; i++) 
-        if (IS_DIGIT (id[i])) break;
-
-    // scan for digits
-    for (;i < id_len; i++)
-        if (!IS_DIGIT (id[i])) break;
-
-    bool is_alpha_then_numeric = (i == id_len); // non-digits then digits - either group can be of 0 length
-
-    // note: we set zctx->id_type only in segconf
-    if (!is_alpha_then_numeric)
-        ctx_get_zctx_from_vctx (ctx, true, true)->id_type = ID_TYPE_OTHER; // its suffienct that one is not alphanumeric to make it "Other"
-
-    else if (ctx->id_type != ID_TYPE_OTHER)
-        ctx_get_zctx_from_vctx (ctx, true, true)->id_type = ID_TYPE_ALPHA_NUMERIC; // can only be alpha numeric if not already declared "other"
-}
-
-// Commonly (but not always), IDs are SNPid identifiers like "rs17030902". We store the ID divided to 2:
-// - We store the final digits, if any exist, and up to 9 digits, as an integer in SEC_NUMERIC_ID_DATA
-// - In the dictionary we store the prefix up to this number, and \1 if there is a number and a \2 
-//   if the caller (as in seg_me23) wants us to store an extra bit.
-// example: rs17030902 : in the dictionary we store "rs\1" or "rs\1\2" and in SEC_NUMERIC_ID_DATA we store 17030902.
-//          1423       : in the dictionary we store "\1" and 1423 SEC_NUMERIC_ID_DATA
-//          abcd       : in the dictionary we store "abcd" and nothing is stored SEC_NUMERIC_ID_DATA
-
-// this version compresses better if the numeric part is expected to be variable-width without leading zeros
-void seg_id_field_do (VBlockP vb, ContextP ctx, STRp(id))
-{
-    ASSERT (ctx->is_initialized, "%s: seg_id_field_init not called for ctx=%s", LN_NAME, ctx->tag_name);
-
-    if (segconf.running) {
-        seg_id_segconf_update_type (ctx, STRa(id));
-        seg_by_ctx (vb, STRa(id), ctx, id_len);
-        return;
-    }
-    
-    // case: first appearance of this context is after segconf lines - decide type based on this line
-    if (ctx->id_type == ID_TYPE_UNKNOWN) {
-        seg_id_segconf_update_type (ctx, STRa(id));
-        seg_id_field_init (ctx);
-    }
-    
-    // if not alphanumeric - store ID in local as IDs are expected to be quite unique
-    if (ctx->id_type == ID_TYPE_OTHER) 
-        seg_add_to_local_text (vb, ctx, STRa(id), LOOKUP_SIMPLE, id_len);
-    
-    else { // ID_TYPE_ALPHA_NUMERIC
-        int i=id_len-1; for (; i >= 0; i--) 
-            if (!IS_DIGIT (id[i])) break;
-        
-        unsigned num_digits = MIN_(id_len - (i+1), 18); // up to 0x0DE0,B6B3,A763,FFFF - fits in int64_t
-
-        // leading zeros will be part of the dictionary data, not the number
-        for (unsigned i = id_len - num_digits; i < id_len; i++) 
-            if (id[i] == '0') 
-                num_digits--;
-            else 
-                break;
-
-        // added to local if we have a trailing number
-        if (num_digits) {
-            int64_t id_num;
-            ASSERT (str_get_int (&id[id_len - num_digits], num_digits, &id_num), 
-                    "Failed str_get_int ctx=%s vb=%u line=%d", ctx->tag_name, vb->vblock_i, vb->line_i);
-            seg_add_to_local_resizable (vb, ctx, id_num, 0);
-
-            if (ctx->flags.store == STORE_INT) ctx_set_last_value (vb, ctx, id_num);
-        }
-
-        // prefix the textual part with SNIP_LOOKUP_UINT32 if needed (we temporarily overwrite the previous separator or the buffer underflow area)
-        unsigned new_len = id_len - num_digits;
-        SAFE_ASSIGN (&id[-1], SNIP_LOOKUP); // we assign it anyway bc of the macro convenience, but we included it only if num_digits>0
-        seg_by_ctx (VB, id-(num_digits > 0), new_len + (num_digits > 0), ctx, id_len); // account for the entire length, and sometimes with \t
-        SAFE_RESTORE;
-    }
-}
-
-// this version compresses better if the numeric part is expected to be fixed-width with possible leading zeros
-void seg_id_field2 (VBlockP vb, ContextP ctx, STRp(id), unsigned add_bytes)
-{
-    ASSERT (ctx->is_initialized, "%s: seg_id_field_init not called for ctx=%s", LN_NAME, ctx->tag_name);
-
-    if (segconf.running) {
-        seg_id_segconf_update_type (ctx, STRa(id));
-        seg_by_ctx (vb, STRa(id), ctx, id_len);
-        return;
-    }
-
-    // case: first appearance of this context is after segconf lines - decide type based on this line
-    if (ctx->id_type == ID_TYPE_UNKNOWN) {
-        seg_id_segconf_update_type (ctx, STRa(id));
-        seg_id_field_init (ctx);
-    }
-    
-    // if not alphanumeric - store ID in local as IDs are expected to be quite unique
-    if (ctx->id_type == ID_TYPE_OTHER) 
-        seg_add_to_local_text (vb, ctx, STRa(id), LOOKUP_SIMPLE, id_len);
-
-    else { // ID_TYPE_ALPHA_NUMERIC
-        int i=id_len-1; for (; i >= 0; i--) 
-            if (!IS_DIGIT (id[i])) break;
-        
-        unsigned num_digits = MIN_(id_len - (i+1), 18); // up to 0x0DE0,B6B3,A763,FFFF - fits in int64_t (excess digits will go in the prefix)
-
-        if (num_digits) {
-            int64_t n;
-            str_get_int_dec (&id[id_len - num_digits], num_digits, (uint64_t*)&n);
-
-            seg_integer (vb, ctx, n, false, add_bytes); // integer into local
-
-            SAFE_ASSIGNx(&id[-3], SNIP_NUMERIC,      1);
-            SAFE_ASSIGNx(&id[-2], '0'/*LT_DYN_INT*/, 2);
-            SAFE_ASSIGNx(&id[-1], '0' + num_digits,  3);
-            
-            seg_by_ctx (vb, id-3, 3 + (id_len - num_digits), ctx, 0); // SNIP_NUMERIC with prefix
-
-            SAFE_RESTOREx(1); SAFE_RESTOREx(2); SAFE_RESTOREx(3);
-
-            if (ctx->flags.store == STORE_INT) ctx_set_last_value (vb, ctx, n);
-        }
-
-        else
-            seg_by_ctx (vb, STRa(id), ctx, add_bytes);
-    }
-}
-
-bool seg_id_field_cb (VBlockP vb, ContextP ctx, STRp(id), uint32_t repeat)
-{
-    seg_id_field_do (vb, ctx, STRa(id));
-    return true; // segged successfully
-}
-
-bool seg_id_field2_cb (VBlockP vb, ContextP ctx, STRp(id), uint32_t repeat)
-{
-    seg_id_field2 (vb, ctx, STRa(id), id_len);
-    return true; // segged successfully
-}
-
 // note: caller must set ctx->ltype=LT_DYN_INT*
 void seg_integer (VBlockP vb, ContextP ctx, int64_t n, bool with_lookup, unsigned add_bytes)
 {
@@ -720,7 +569,8 @@ bool seg_integer_or_not_cb (VBlockP vb, ContextP ctx, STRp(int_str), uint32_t re
     return true; // segged successfully
 }
 
-// if its a float, stores the float in local, and a LOOKUP in b250, and returns true. if not - normal seg, and returns false.
+// seg a textual snip that is expected to be a float, so that reconstruction reconstructs
+// the exact textual representation without floating point issues
 bool seg_float_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_bytes)
 {
     // TO DO: implement reconstruction in reconstruct_one_snip-SNIP_LOOKUP
@@ -728,7 +578,7 @@ bool seg_float_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_bytes
     unsigned format_len;
 
     // case: its an float
-    if (!ctx->no_stons && // we interpret no_stons as means also no moving ints to local (one of the reasons is that an int might actually be a float)
+        if (!ctx->no_stons && // we interpret no_stons as means also no moving ints to local (one of the reasons is that an int might actually be a float)
         str_get_float (STRa(value), &ctx->last_value.f, &snip[1], &format_len)) {
 
         // verify that we can reconstruct the number precisely (not always the case, 
@@ -736,7 +586,7 @@ bool seg_float_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_bytes
         float f = (float)ctx->last_value.f; // 64bit -> 32bit
         char recon[value_len+1];
         sprintf (recon, &snip[1], f);
-        if (memcmp (value, recon, value_len)) goto fallback;
+    if (memcmp (value, recon, value_len)) goto fallback;
 
         ctx->ltype = LT_FLOAT32; // set only upon storing the first number - if there are no numbers, leave it as LT_TEXT so it can be used for singletons
 
@@ -765,7 +615,8 @@ WordIndex seg_delta_vs_other_do (VBlockP vb, ContextP ctx, ContextP other_ctx,
                                  unsigned add_bytes)
 {
 #ifdef DEBUG
-    ASSERT (segconf.running || (ctx->flags.store == STORE_INT && other_ctx->flags.store == STORE_INT), 
+    ASSERT (segconf.running || 
+            (ctx->flags.store == STORE_INT && (other_ctx->flags.store == STORE_INT || other_ctx->flags.store == STORE_FLOAT)), 
             "expecting ctx=%s and other_ctx=%s to have STORE_INT", ctx->tag_name, other_ctx->tag_name);
 #endif
 
@@ -775,7 +626,11 @@ WordIndex seg_delta_vs_other_do (VBlockP vb, ContextP ctx, ContextP other_ctx,
 
     ctx_set_last_value (vb, ctx, value_n);
 
-    int64_t delta = value_n - other_ctx->last_value.i; 
+    int64_t other_value_n = (other_ctx->flags.store == STORE_FLOAT) 
+        ? (int64_t)other_ctx->last_value.f // simple cast to int (not rounding) as in reconstruct_from_delta
+        : other_ctx->last_value.i;
+    
+    int64_t delta = value_n - other_value_n; 
     if (max_delta >= 0 && ABS(delta) > max_delta) goto fallback;
 
     SNIP(32);
@@ -825,18 +680,14 @@ WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_
                      DictId arr_dict_id,        // item dict_id, DICT_ID_NONE if we don't care what it is 
                      int add_bytes)             // account for this much
 {
-    MiniContainer *con;
+    MiniContainerP con;
     ContextP arr_ctx;
     int additional_bytes = add_bytes - value_len;
 
     // first use in this VB - prepare context where array elements will go in
     if (!container_ctx->con_cache.len32) {
-        bytes id = container_ctx->dict_id.id;
-
         if (!arr_dict_id.num)        
-            arr_dict_id = (DictId){ .id = { id[0], 
-                                            ((id[1]+1) % 256) | 128, // different IDs for top array, subarray and items
-                                            id[2], id[3], id[4], id[5], id[6], id[7] } };
+            arr_dict_id = sub_dict_id (container_ctx->dict_id, 1);
         
         buf_alloc (vb, &container_ctx->con_cache, 0, 1, MiniContainer, 1, "contexts->con_cache");
 
@@ -925,6 +776,50 @@ WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_
     }
 
     return container_seg (vb, container_ctx, (ContainerP)con, 0, 0, con->repeats - con->drop_final_repsep + additional_bytes); // acount for separators and additional bytes
+}
+
+
+void seg_array_by_callback (VBlockP vb, ContextP container_ctx, STRp(arr), char sep, SegCallback item_seg, unsigned add_bytes)
+{
+    MiniContainerP con;
+    ContextP arr_ctx;
+
+    if (!arr_len) {
+        seg_by_ctx (vb, "", 0, container_ctx, 0);
+        return;
+    }
+
+    // first use in this VB - prepare context where array elements will go in
+    if (!container_ctx->con_cache.len32) {
+        DictId arr_dict_id = sub_dict_id (container_ctx->dict_id, 1);
+        
+        buf_alloc (vb, &container_ctx->con_cache, 0, 1, MiniContainer, 1, "contexts->con_cache");
+
+        con = B1ST (MiniContainer, container_ctx->con_cache);
+        *con = (MiniContainer){ .nitems_lo = 1, 
+                                .repsep[0] = sep,
+                                .items[0].dict_id = arr_dict_id }; // only one item
+
+        ctx_consolidate_stats_(vb, container_ctx, (ContainerP)con);
+    }
+    else 
+        con = B1ST (MiniContainer, container_ctx->con_cache);
+
+    arr_ctx = ctx_get_ctx (vb, con->items[0].dict_id);
+
+    con->drop_final_repsep = (arr_len && arr[arr_len-1] != sep);
+
+    str_split (arr, arr_len - !con->drop_final_repsep, 0, sep, item, false);
+
+    unsigned sum_lens = 0;
+    for (uint32_t i=0; i < n_items; i++) {  // value_len will be -1 after last number
+        item_seg (VB, arr_ctx, STRi(item,i), i);
+    
+        sum_lens += item_lens[i];
+    }
+
+    con->repeats = n_items;
+    container_seg (vb, container_ctx, (ContainerP)con, 0, 0, add_bytes - sum_lens); // acount for separators and additional bytes
 }
 
 // segs an 2-dimentional array (e.g. "0|0|0,1|2|3") of uint32_t so that it is stored in local transposed. 
@@ -1040,15 +935,10 @@ bool seg_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip),
 {
     ASSERT0 (con.repeats==1 && !con.repsep[0], "expecting con.repeats==1 and no repsep");
 
-    ContextP ctxs[con.nitems_lo]; 
-
-    for (unsigned i=0; i < con.nitems_lo; i++) 
-        ctxs[i] = ctx_get_ctx (vb, con.items[i].dict_id); 
-
     if (!ctx->is_stats_parent) 
-        ctx_consolidate_stats_(vb, ctx->st_did_i == DID_NONE ? ctx->did_i : ctx->st_did_i, con.nitems_lo, ctxs);
+        ctx_consolidate_stats_(vb, ctx, (ContainerP)&con);
 
-    seg_create_rollback_point (vb, ctxs, con.nitems_lo);
+    seg_create_rollback_point (vb, (ContainerP)&con, 0);
 
     // get items in each repeat
     str_split_by_container (snip, snip_len, &con, NULL, 0, item, NULL);
@@ -1056,17 +946,20 @@ bool seg_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip),
     if (n_items != con.nitems_lo) 
         goto badly_formatted;
 
-    for (unsigned i=0; i < n_items; i++)
+    for (uint32_t i=0; i < n_items; i++) {
+        ContextP item_ctx = ctx_get_ctx (vb, con.items[i].dict_id);
+
         if (callbacks && callbacks[i]) {
-            if (!callbacks[i] (vb, ctxs[i], STRi(item,i), 0))
+            if (!callbacks[i] (vb, item_ctx, STRi(item,i), 0))
                 goto badly_formatted;
         }
         
-        else if (IS_LT_DYN (ctxs[i]->ltype))
-            seg_integer_or_not (VB, ctxs[i], STRi(item,i), account_in_subfields ? item_lens[i] : 0);
+        else if (IS_LT_DYN (item_ctx->ltype))
+            seg_integer_or_not (VB, item_ctx, STRi(item,i), account_in_subfields ? item_lens[i] : 0);
         
         else
-            seg_by_ctx (VB, STRi(item,i), ctxs[i], account_in_subfields ? item_lens[i] : 0);
+            seg_by_ctx (VB, STRi(item,i), item_ctx, account_in_subfields ? item_lens[i] : 0);
+    }
 
     // finally, the Container snip itself - we attempt to use the known node_index if it is cached in con_index
 
@@ -1111,15 +1004,10 @@ int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp
                              const SegCallback *callbacks, // optional - either NULL, or contains a seg callback for each item (any callback may be NULL)
                              unsigned add_bytes)
 {
-    ContextP ctxs[con.nitems_lo]; 
-
-    for (unsigned i=0; i < con.nitems_lo; i++) 
-        ctxs[i] = ctx_get_ctx (vb, con.items[i].dict_id); 
-
     if (!ctx->is_stats_parent) 
-        ctx_consolidate_stats_(vb, ctx->st_did_i == DID_NONE ? ctx->did_i : ctx->st_did_i, con.nitems_lo, ctxs);
+        ctx_consolidate_stats_(vb, ctx, (ContainerP)&con);
 
-    seg_create_rollback_point (vb, ctxs, con.nitems_lo);
+    seg_create_rollback_point (vb, (ContainerP)&con, 0);
 
     // get repeats
     str_split (snip, snip_len, 0, con.repsep[0], repeat, false);
@@ -1134,7 +1022,7 @@ int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp
     ASSSEG (n_repeats <= CONTAINER_MAX_REPEATS, "exceeded maximum repeats allowed (%u) while parsing %s",
             CONTAINER_MAX_REPEATS, ctx->tag_name);
 
-    for (unsigned r=0; r < n_repeats; r++) {
+    for (uint32_t r=0; r < n_repeats; r++) {
 
         // get items in each repeat
         str_split_by_container (repeats[r], repeat_lens[r], &con, NULL, 0, item, NULL);
@@ -1142,13 +1030,16 @@ int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp
         if (n_items != con.nitems_lo) 
             goto badly_formatted;
 
-        for (unsigned i=0; i < n_items; i++)
+        for (uint32_t i=0; i < n_items; i++) {
+            ContextP item_ctx = ctx_get_ctx (vb, con.items[i].dict_id);
+            
             if (callbacks && callbacks[i]) {
-                if (!callbacks[i] (vb, ctxs[i], STRi(item,i), r))
+                if (!callbacks[i] (vb, item_ctx, STRi(item,i), r))
                     goto badly_formatted;
             }
             else
-                seg_by_ctx (VB, STRi(item,i), ctxs[i], item_lens[i]);
+                seg_by_ctx (VB, STRi(item,i), item_ctx, item_lens[i]);
+        }
     }
 
     // finally, the Container snip itself - we attempt to use the known node_index if it is cached in con_index

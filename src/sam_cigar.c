@@ -769,7 +769,7 @@ void sam_seg_CIGAR (VBlockSAMP vb, ZipDataLineSAM *dl, uint32_t last_cigar_len, 
     else if (last_cigar_len > MAX_CIGAR_LEN_IN_DICT && cigar_snip_len == 2 && 
              dl->SEQ.len + vb->hard_clip[0] + vb->hard_clip[1] == segconf.sam_seq_len)
         squank_seg (vb, ctx, vb->last_cigar, last_cigar_len, 0/*always*/, SEQ_LEN_FROM_SEGCONF, add_bytes); 
-
+    
     // case: long CIGAR and SEQ or CIGAR are missing or short CIGAR
     else { 
         memcpy (&cigar_snip[cigar_snip_len], vb->last_cigar, last_cigar_len);

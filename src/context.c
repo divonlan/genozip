@@ -904,6 +904,16 @@ void ctx_reset_codec_commits (void)
     }
 }
 
+void ctx_segconf_set_hard_coded_lcodec (Did did_i, Codec codec)
+{
+    ASSERT0 (did_i < DTFZ(num_fields), "function can only be called for pre-defined did's");
+    ASSERT0 (segconf.running, "function can only be called during segconf");
+    
+    ContextP zctx = ZCTX(did_i);
+    zctx->lcodec = codec;
+    zctx->lcodec_hard_coded = true; 
+}
+
 static inline void ctx_drop_all_the_same (VBlockP vb, ContextP zctx, ContextP vctx)
 {
     rom reason=0;
@@ -1044,9 +1054,10 @@ static inline bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx, uint8_t *vb
     zctx->merge_num++; // first merge is #1 (first clone which happens before the first merge, will get vb-)
     zctx->num_new_entries_prev_merged_vb = vctx->nodes.len; // number of new words in this dict from this VB
     
-    zctx->counts_section |= vctx->counts_section;   // for use of ctx_compress_counts
-    zctx_alias->counts.count += vctx->counts.count; // context-specific counter (not passed to PIZ)
-
+    zctx->counts_section     |= vctx->counts_section;   // compress ctx->counts in ctx_compress_counts
+    zctx->subdicts_section   |= vctx->subdicts_section; // compress ctx->zip_ctx_specific_buf in ctx_compress_subdicts
+    zctx_alias->counts.count += vctx->counts.count;     // context-specific counter (not passed to PIZ)
+    
     if (vb->vblock_i == 1 && (vctx->b250.len || vctx->local.len))  // vb=1 must have either a b250 or local section to carry the flags, otherwise the default flags are 0
         zctx_alias->flags = vctx->flags; // vb_1 flags will be the default flags for this context, used by piz in case there are no b250 or local sections due to all_the_same. see zip_generate_b250_section and piz_read_all_ctxs
 
@@ -1264,7 +1275,7 @@ ContextP ctx_get_unmapped_ctx (ContextArray contexts, DataType dt, DictIdtoDidMa
             return &contexts[did_i];
 
     ContextP ctx = &contexts[*num_contexts]; 
- 
+
     //iprintf ("New context: dict_id=%s in did_i=%u \n", dis_dict_id (dict_id).s, did_i);
     ASSERT (*num_contexts < MAX_DICTS, "cannot create a context for %.*s (dict_id=%s) because number of dictionaries would exceed MAX_DICTS=%u", 
             tag_name_len, tag_name, dis_dict_id (dict_id).s, MAX_DICTS);
@@ -1559,7 +1570,7 @@ void ctx_update_stats (VBlockP vb)
 {
     for_vctx {    
         ContextP zctx = ctx_get_zctx_from_vctx (vctx, false, false);
-        if (!zctx) continue; // this can happen if FORMAT subfield appears, but no line has data for it
+        if (!zctx) continue; // this can happen eg if a context is created in seg, but no data it added to it
 
         zctx->b250.count      += vctx->b250.count;      // number of segs into b250
         zctx->local_num_words += vctx->local_num_words; // number of segs into local
@@ -1718,15 +1729,16 @@ void ctx_compress_counts (void)
         if (flag.show_one_counts.num == dict_id_typeless (zctx->dict_id).num) 
             ctx_show_counts (zctx);
 
-        if (zctx->counts_section && zctx->counts.len) {
+        if (zctx->counts_section && zctx->counts.len32) {
 
             // remove protection bit
-            for_buf (uint64_t, count, zctx->counts)
-                *count &= ~COUNT_PROTECTED_FROM_REMOVAL64;
+            if (zctx->counts_section)
+                for_buf (uint64_t, count, zctx->counts)
+                    *count &= ~COUNT_PROTECTED_FROM_REMOVAL64;
                 
             BGEN_u64_buf (&zctx->counts, NULL);       
 
-            zctx->counts.len *= sizeof (uint64_t);
+            zctx->counts.len32 *= sizeof (uint64_t);
 
             Codec codec = codec_assign_best_codec (evb, NULL, &zctx->counts, SEC_COUNTS);
 
@@ -1748,30 +1760,6 @@ void ctx_compress_counts (void)
     }
 
     COPY_TIMER_EVB (ctx_compress_counts);
-}
-
-// PIZ: called by main thread after reading GENOZIP_HEADER - create predefined contexts as well as all
-// contexts that exist in the file, and mark those with data in the file as "z_data_exists". 
-// z_data_exists can be relied on in flags_update_piz_one_z_file and IS_SKIP functions.
-void ctx_piz_initialize_zctxs (void)
-{
-    if (z_file->num_contexts) return; // already initialized (this happens, bc zfile_read_genozip_header is called multiple times)
-
-    ctx_initialize_predefined_ctxs (z_file->contexts, z_file->data_type, z_file->d2d_map, &z_file->num_contexts);
-
-    Section sec = NULL;
-    while (sections_next_sec3 (&sec, SEC_B250, SEC_LOCAL, SEC_DICT)) {
-        ContextP zctx = ctx_get_existing_zctx (sec->dict_id);
-
-        // case: first encounter in z_file with this non-predefined dict_id - initialize a ctx for it
-        if (!zctx) { 
-            zctx = &z_file->contexts[z_file->num_contexts++];
-            ctx_initialize_ctx (zctx, z_file->num_contexts-1, sec->dict_id, z_file->d2d_map, 0, 0);
-        }
-
-        if (!zctx->z_data_exists) // predefined not encountered before, or non-predefined just initialized
-            zctx->z_data_exists = true; // store to memory only in rare cases of new encounter
-    }
 }
 
 // PIZ: called by the main threads from piz_read_global_area
@@ -1798,6 +1786,75 @@ void ctx_read_all_counts (void)
     }
 
     ASSINP (counts_shown || !flag.show_one_counts.num || !is_genocat, "There is no SEC_COUNTS section for %s", dis_dict_id (flag.show_one_counts).s);
+}
+
+// --------------------------------
+// ZIP & PIZ: SEC_SUBDICTS sections
+// --------------------------------
+
+void ctx_compress_subdicts (void)
+{
+    for_zctx_that (zctx->subdicts_section && zctx->subdicts.len) {
+        zctx->subdicts.len32 *= sizeof (DictId);
+
+        Codec codec = codec_assign_best_codec (evb, NULL, &zctx->subdicts, SEC_SUBDICTS);
+
+        SectionHeaderSubDicts header = (SectionHeaderSubDicts){ 
+            .magic                 = BGEN32 (GENOZIP_MAGIC),
+            .section_type          = SEC_SUBDICTS,
+            .data_uncompressed_len = BGEN32 (zctx->subdicts.len32),
+            .codec                 = codec,
+            .vblock_i              = 0,
+            .param                 = BGEN64 (zctx->subdicts.param),
+            .dict_id               = zctx->dict_id
+        };
+
+        comp_compress (evb, zctx, &evb->z_data, &header, zctx->subdicts.data, NO_CALLBACK, "SEC_SUBDICTS");
+        zctx->subdicts.len32 /= sizeof (DictId);
+    }
+}
+
+void ctx_read_all_subdicts (void)
+{
+    Section sec = NULL;
+    while (sections_next_sec (&sec, SEC_SUBDICTS))  {
+        ContextP zctx = ctx_get_existing_zctx (sec->dict_id);
+        
+        zfile_get_global_section (SectionHeaderSubDicts, sec, &zctx->subdicts, "subdicts");
+        if (flag.only_headers || !zctx->subdicts.len) continue; // only show headers, or section skipped
+
+        zctx->subdicts.len /= sizeof (DictId);
+
+        zctx->subdicts.param = BGEN64 (header.param);
+
+        // create the contexts listed in the section
+        for_buf (DictId, dict_id_p, zctx->subdicts)
+            ctx_get_ctx_do (z_file->contexts, z_file->data_type, z_file->d2d_map, &z_file->num_contexts, *dict_id_p, 0, 0);
+    }
+}
+
+// PIZ: called by main thread after reading GENOZIP_HEADER - create predefined contexts as well as all
+// contexts that exist in the file, and mark those with data in the file as "z_data_exists". 
+// z_data_exists can be relied on in flags_update_piz_one_z_file and IS_SKIP functions.
+void ctx_piz_initialize_zctxs (void)
+{
+    if (z_file->num_contexts) return; // already initialized (this happens, bc zfile_read_genozip_header is called multiple times)
+
+    ctx_initialize_predefined_ctxs (z_file->contexts, z_file->data_type, z_file->d2d_map, &z_file->num_contexts);
+
+    Section sec = NULL;
+    while (sections_next_sec3 (&sec, SEC_B250, SEC_LOCAL, SEC_DICT)) {
+        ContextP zctx = ctx_get_existing_zctx (sec->dict_id);
+
+        // case: first encounter in z_file with this non-predefined dict_id - initialize a ctx for it
+        if (!zctx) { 
+            zctx = &z_file->contexts[z_file->num_contexts++];
+            ctx_initialize_ctx (zctx, z_file->num_contexts-1, sec->dict_id, z_file->d2d_map, 0, 0);
+        }
+
+        if (!zctx->z_data_exists) // predefined not encountered before, or non-predefined just initialized
+            zctx->z_data_exists = true; // store to memory only in rare cases of new encounter
+    }
 }
 
 TagNameEx ctx_tag_name_ex (ConstContextP ctx)
@@ -1939,19 +1996,32 @@ void ctx_set_store (VBlockP vb, int store_type,     ...) { SET_MULTI_CTX (store_
 void ctx_set_ltype (VBlockP vb, int ltype,          ...) { SET_MULTI_CTX (ltype, ltype, ltype); }                 // clang issues a warning if ltype is of type LocalType
 void ctx_consolidate_stats (VBlockP vb, int parent, ...) { SET_MULTI_CTX (parent, st_did_i, parent); CTX(parent)->is_stats_parent = true;} // clang issues a warning if parent is of type Did
 
-void ctx_consolidate_stats_(VBlockP vb, Did parent, unsigned num_deps, ContextP dep_ctxs[])
+void ctx_consolidate_stats_(VBlockP vb, ContextP parent_ctx, ContainerP con)
 {
-    for (unsigned d=0; d < num_deps; d++)
-        if (dep_ctxs[d]->did_i != parent) 
-            dep_ctxs[d]->st_did_i = parent;
+    uint32_t num_deps = con_nitems (*con);
 
-    if (CTX(parent)->st_did_i == DID_NONE)
-        CTX(parent)->is_stats_parent = true;
+    // find the ultimate ancestor to be displayed in stats
+    if (parent_ctx->st_did_i != DID_NONE) 
+        parent_ctx = CTX(parent_ctx->st_did_i);
+
+    for (uint32_t d=0; d < num_deps; d++) {
+        if (!con->items[d].dict_id.num) continue;
+
+        ContextP item_ctx = ctx_get_ctx (vb, con->items[d].dict_id);
+        if (item_ctx->did_i != parent_ctx->did_i) 
+            item_ctx->st_did_i = parent_ctx->did_i;
+    }
+
+    parent_ctx->is_stats_parent = true;
 }
 
 // consolidate a consecutive block of Dids
 void ctx_consolidate_statsN (VBlockP vb, Did parent, Did first_dep, unsigned num_deps)
 {
+    // find the ultimate ancestor to be displayed in stats
+    if (CTX(parent)->st_did_i != DID_NONE) 
+        parent = CTX(parent)->st_did_i;
+
     for (ContextP ctx=CTX(first_dep); ctx < CTX(first_dep + num_deps); ctx++)
         if (ctx->did_i != parent) 
             ctx->st_did_i = parent;

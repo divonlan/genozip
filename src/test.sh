@@ -20,7 +20,7 @@ cleanup()
 { 
     rm -fR $OUTDIR/* $TESTDIR/*.bad $TESTDIR/*.rejects.* 
     cleanup_cache
-    private/scripts/link_license.sh latest 
+    $SCRIPTSDIR/install_license.sh latest || exit 1
 }
 
 cmp_2_files() 
@@ -119,7 +119,7 @@ test_redirected() { # $1=filename  $2...$N=optional extra genozip arg
 
     # instead of passing the input, we pass the filename. that works, because the code compares extensions
     local ext=${file##*.}
-    if [[ $ext == 'gz' || $ext == 'bz2' || $ext == 'xz' ]]; then
+    if [[ $ext == 'gz' || $ext == 'bz2' || $ext == 'xz' || $ext == 'zip' ]]; then
         local f=${file##*.} # remove .gz etc
         local ext=${f##*.}
     fi
@@ -128,7 +128,7 @@ test_redirected() { # $1=filename  $2...$N=optional extra genozip arg
     local has_is_data_type=( vcf sam fastq fq fa gff gvf gtf bam bed me23 )
     local input=""
     if [[ ! " ${has_is_data_type[*]} " =~ " $ext " ]]; then
-        input="--input ${file#*.}"
+        input="--input ${file##*.}"
     fi
 
     cat $file | $genozip ${args[@]:1} $input -X --force --output $output - || exit 1
@@ -172,7 +172,7 @@ test_stdout()
 {
     test_header "$1 - redirecting stdout"
     local file=$TESTDIR/$1
-    local ext=${file#*.}
+    local ext=${file##*.}
     local arg;
 
     if [ "$ext" = "bam" ]; then 
@@ -328,7 +328,7 @@ batch_basic()
     test_standard "--fast" "" $file
     test_standard "--low-memory" "" $file
     
-    if [ $file != basic.bam ] && [ $file != basic.generic ]; then # binary files have no \n 
+    if [ "$file" != basic.bam ] && [ "$file" != basic.generic ]; then # binary files have no \n 
         test_unix_style $file
         test_windows_style $file
         replace=REPLACE
@@ -338,7 +338,7 @@ batch_basic()
 
     test_standard "NOPREFIX CONCAT $ref" " " file://${path}${TESTDIR}/$file
     test_standard "-p123 $ref" "--password 123" $file
-    if [ -z "$is_windows" ] || [ $file != basic.bam ]; then # can't redirect binary files in Windows
+    if [ -z "$is_windows" ] || [ "$file" != basic.bam ]; then # can't redirect binary files in Windows
     # if [ -z "$is_windows" ]; then # in windows, we don't support redirecting stdin (bug 339)
         test_redirected $file
     # fi
@@ -761,13 +761,14 @@ batch_sam_fq_translations()
 
     # note: we have these files in both sam and bam versions generated with samtools
     local files=(special.buddy.bam 
-                 special.depn.bam        # depn/prim with/without QUAL
+                 special.depn.bam              # depn/prim with/without QUAL
                  special.NA12878.bam 
-                 special.pacbio.ccs.bam  # unaligned SAM/BAM with no SQ records
+                 special.pacbio.ccs.bam        # unaligned SAM/BAM with no SQ records
                  special.human2.bam
                  special.collated.bam
-                 test.starsolo.sam)      # has PRIM and DEPN components
-
+                 test.starsolo.sam             # has PRIM and DEPN components
+                 special.pacbio.iq-dq-sq.sam   # QUAL depends on iq:Z, dq:Z, sq:Z
+                 special.CODEC_PACB+np+ec.sam) # QUAL depends on np:i, ec:i
     local file
     for file in ${files[@]}; do
         test_translate_sambam_to_fastq $file
@@ -831,9 +832,9 @@ batch_piz_no_license()
         local licfile=$HOME/.genozip_license
     fi
 
-    $genozip private/test/minimal.vcf -fX || exit 1
+    $genozip $TESTDIR/minimal.vcf -fX || exit 1
     mv $licfile ${licfile}.test
-    $genounzip -t private/test/minimal.vcf.genozip || exit 1
+    $genounzip -t $TESTDIR/minimal.vcf.genozip || exit 1
     mv ${licfile}.test $licfile 
 }
 
@@ -1100,15 +1101,21 @@ batch_real_world_1_adler32() # $1 extra genozip argument
 
     cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
 
-    local filter_out=nothing
+    local filter_xz=nothing
     if [ ! -x "$(command -v xz)" ] ; then # xz unavailable
-        local filter_out=.xz
+        local filter_xz=.xz
+    fi
+
+    local filter_zip=nothing
+    if [ ! -x "$(command -v unzip)" ] ; then # xz unavailable
+        local filter_zip=.zip
     fi
 
     # without reference
     local files=( `cd $TESTDIR; ls -1 test.*vcf* test.*sam* test.*bam test.*fq* test.*fa* basic.phy*    \
-                   test.*gvf* test.*gtf* test.*gff* test.*locs* test.*bed* test.*txt* test.*kraken*     \
-                   | grep -v "$filter_out" | grep -v headerless | grep -vF .genozip | grep -vF .md5 | grep -vF .bad `) 
+                   test.*gvf* test.*gtf* test.*gff* test.*locs* test.*bed* test.*txt* test.*kraken* test/*.pbi  \
+                   | grep -v "$filter_xz" | grep -v "$filter_zip" \
+                   | grep -v headerless | grep -vF .genozip | grep -vF .md5 | grep -vF .bad `) 
 
     # test genozip and genounzip --test
     echo "subsets of real world files (without reference)"
@@ -1127,7 +1134,7 @@ batch_real_world_genounzip_single_process() # $1 extra genozip argument
                    test.*.fq.genozip test.*.fa.genozip \
                    basic.phy.genozip test.*.gvf.genozip test.*.gtf.genozip test.*gff*.genozip \
                    test.*.locs.genozip test.*.bed.genozip \
-                   test.*txt.genozip test.*kraken.genozip |
+                   test.*txt.genozip test.*kraken.genozip test.*.pbi.genozip |
                    grep -vF .d.vcf`)
 
     $genounzip ${files[@]/#/$TESTDIR/} --test || exit 1
@@ -1139,22 +1146,38 @@ batch_real_world_genounzip_compare_file() # $1 extra genozip argument
 
     cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
 
-    local filter_out=nothing
+    local filter_xz=nothing
     if [ ! -x "$(command -v xz)" ] ; then # xz unavailable
-        local filter_out=.xz
+        local filter_xz=.xz
+    fi
+
+    local filter_zip=nothing
+    if [ ! -x "$(command -v unzip)" ] ; then # xz unavailable
+        local filter_zip=.zip
     fi
 
     # without reference
     local files=( `cd $TESTDIR; ls -1 test.*vcf* test.*sam* test.*bam \
                    test.*fq* test.*fa* \
                    basic.phy* test.*gvf* test.*gtf* test.*gff* test.*locs* test.*bed* \
-                   test.*txt* test.*kraken* | \
-                   grep -v "$filter_out" | grep -v headerless | grep -vF .genozip | grep -Fv .md5 | grep -Fv .bad | grep -Fv .xz | grep -Fv .bz2` )
+                   test.*txt* test.*kraken* test.*pbi \
+                   | grep -v "$filter_xz" | grep -v "$filter_zip" \
+                   | grep -v headerless | grep -vF .genozip | grep -Fv .md5 | grep -Fv .bad ` )
     
     # test full genounzip (not --test), including generation of BZGF
     for f in ${files[@]}; do 
 
-        local genozip_file=${TESTDIR}/${f%.gz}.genozip
+        if   [[ $f == *.gz ]];  then
+            local genozip_file=${TESTDIR}/${f%.gz}.genozip
+        elif [[ $f == *.zip ]]; then
+            local genozip_file=${TESTDIR}/${f%.zip}.genozip
+        elif [[ $f == *.xz ]];  then
+            local genozip_file=${TESTDIR}/${f%.xz}.genozip
+        elif [[ $f == *.bz2 ]];  then
+            local genozip_file=${TESTDIR}/${f%.bz2}.genozip
+        else
+            local genozip_file=${TESTDIR}/$f.genozip
+        fi
 
         # note: normally, the test runs on files compressed in batch_real_world_1_adler32 - we compress them here if not
         if [ ! -f $genozip_file ]; then
@@ -1164,7 +1187,7 @@ batch_real_world_genounzip_compare_file() # $1 extra genozip argument
         local recon=${OUTDIR}/$f
         $genounzip $genozip_file -o $recon || exit 1
 
-        # same is in private/test/Makefile
+        # same is in $TESTDIR/Makefile
         if [[ `head -c2 $recon | od -x | head -1 | cut -d" " -f2 || exit 1` == 8b1f ]]; then
             local actual_md5=`zcat $recon | md5sum | cut -d" " -f1`
         else
@@ -1269,7 +1292,7 @@ batch_real_world_backcomp()
 
     # compress all real world test files with old genozip version. Some files might fail compression -
     # they will remain with size 0 and we will ignore them in this test.
-    private/scripts/link_license.sh $1
+    $SCRIPTSDIR/install_license.sh $1 || exit 1
     make -C $TESTDIR $1.version  # generate files listed in "files"
     
     local files=( $TESTDIR/$1/*.genozip )
@@ -1299,11 +1322,6 @@ batch_real_world_small_vbs()
     batch_print_header
 
     cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
-
-    local filter_out=nothing
-    if [ ! -x "$(command -v xz)" ] ; then # xz unavailable
-        local filter_out=.xz
-    fi
 
     # lots of small VBs
     local files=( test.IonXpress.sam.gz                                 \
@@ -1536,7 +1554,7 @@ batch_make_reference()
     # test using env var $GENOZIP_REFERENCE
     local alt_ref_file_name=$OUTDIR/output2.ref.genozip
     mv $ref_file $alt_ref_file_name || exit 1
-    $genozip private/test/basic.fq -e $alt_ref_file_name -fXo $output || exit 1
+    $genozip $TESTDIR/basic.fq -e $alt_ref_file_name -fXo $output || exit 1
 
     mv $alt_ref_file_name $ref_file || exit 1
     export GENOZIP_REFERENCE=${ref_file}
@@ -1851,9 +1869,16 @@ batch_deep() # note: use --debug-deep for detailed tracking
     cleanup
 }
 
-TESTDIR=private/test
+if [ -n "$is_windows" ]; then
+BASEDIR=../genozip
+else
+BASEDIR=.
+fi
+
+TESTDIR=$BASEDIR/private/test
+SCRIPTSDIR=$BASEDIR/private/scripts
 OUTDIR=$TESTDIR/tmp
-REFDIR=../genozip/data
+REFDIR=$BASEDIR/data
 
 output=${OUTDIR}/output.genozip
 output2=${OUTDIR}/output2.genozip

@@ -71,3 +71,19 @@ extern DisplayPrintId dis_dict_id (DictId dict_id);
 #define DICT_ID_MAKEF_6(s) ((((uint64_t)(s[0] & 0x3f)) | ((uint64_t)s[1] << 8) | ((uint64_t)s[2] << 16) | ((uint64_t)s[3] << 24) | ((uint64_t)s[4] << 32) | ((uint64_t)s[5] << 40)))
 #define DICT_ID_MAKEF_7(s) ((((uint64_t)(s[0] & 0x3f)) | ((uint64_t)s[1] << 8) | ((uint64_t)s[2] << 16) | ((uint64_t)s[3] << 24) | ((uint64_t)s[4] << 32) | ((uint64_t)s[5] << 40) | ((uint64_t)s[6] << 48)))
 #define DICT_ID_MAKEF_L(s) ((((uint64_t)(s[0] & 0x3f)) | ((uint64_t)s[1] << 8) | ((uint64_t)s[2] << 16) | ((uint64_t)s[3] << 24) | ((uint64_t)s[sizeof s-5] << 32) | ((uint64_t)s[sizeof s-4] << 40) | ((uint64_t)s[sizeof s-3] << 48) | ((uint64_t)s[sizeof s-2] << 56)))
+
+static inline DictId sub_dict_id (DictId dict_id, uint8_t offset/*1-255*/)
+{
+    bytes id = dict_id.id;
+    
+    return (DictId){ .id = { id[0],          // same DTYPE dict_id
+                             id[1] + offset, // 8-bit arithmetic, so modulo 256 
+                             id[2], id[3], id[4], id[5], id[6], id[7] } };
+}
+
+static inline DictId sub_dict_id_(DictId dict_id, char ordinal)
+{
+    bytes id = dict_id.id;
+    
+    return (DictId){ .id = { id[0], ordinal, id[1], id[2], id[3], id[4], id[5], id[6] } };
+}

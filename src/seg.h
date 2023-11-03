@@ -58,14 +58,10 @@ extern PosType64 seg_pos_field (VBlockP vb, Did snip_did_i, Did base_did_i, unsi
                               char missing, STRp(pos_str), PosType64 this_pos, unsigned add_bytes);
 extern bool seg_pos_field_cb (VBlockP vb, ContextP ctx, STRp(pos_str), uint32_t repeat);
 
-extern void seg_id_field_init (ContextP ctx);
-extern void seg_id_field_do (VBlockP vb, ContextP ctx, STRp(id_snip));
-#define seg_id_field(vb, ctx, id, id_len, account_for_separator) \
-    ({ seg_id_field_do(VB, (ctx), (id), (id_len)); (ctx)->txt_len += !!(account_for_separator); })
-extern void seg_id_field2 (VBlockP vb, ContextP ctx, STRp(id), unsigned add_bytes);
+extern void seg_id_field (VBlockP vb, ContextP ctx, STRp(id), bool hint_zero_padded_fixed_len, unsigned add_bytes);     
 
-extern bool seg_id_field_cb (VBlockP vb, ContextP ctx, STRp(id), uint32_t repeat);
-extern bool seg_id_field2_cb (VBlockP vb, ContextP ctx, STRp(id), uint32_t repeat);
+extern bool seg_id_field_varlen_int_cb (VBlockP vb, ContextP ctx, STRp(id), uint32_t repeat);
+extern bool seg_id_field_fixed_int_cb (VBlockP vb, ContextP ctx, STRp(id), uint32_t repeat);
 
 typedef enum { LOOKUP_NONE, LOOKUP_SIMPLE, LOOKUP_WITH_LENGTH } Lookup;
 extern void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, const void *const data, uint32_t data_len, bool add_nul, Lookup lookup_type, bool is_singleton, unsigned add_bytes);
@@ -92,11 +88,14 @@ static inline WordIndex seg_delta_vs_other (VBlockP vb, ContextP ctx, ContextP o
 
 extern void seg_diff (VBlockP vb, ContextP ctx, ContextP base_ctx, STRp(value), bool entire_snip_if_same, unsigned add_bytes);
 
+typedef bool (*SegCallback) (VBlockP vb, ContextP ctx, STRp(value), uint32_t repeat); // returns true if segged successfully
+
 extern WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_did_i, rom value, int32_t value_len, char sep, char subarray_sep, bool use_integer_delta, StoreType store_in_local, DictId arr_dict_id, int add_bytes);
+
+extern void seg_array_by_callback (VBlockP vb, ContextP container_ctx, STRp(arr), char sep, SegCallback item_seg, unsigned add_bytes);
 
 extern void seg_uint32_matrix (VBlockP vb, ContextP container_ctx, Did stats_conslidation_did_i, STRp(value), char row_sep/*255 if always single row*/, char col_sep, bool is_transposed, int add_bytes);
 
-typedef bool (*SegCallback) (VBlockP vb, ContextP ctx, STRp(value), uint32_t repeat); // returns true if segged successfully
 extern bool seg_do_nothing_cb (VBlockP vb, ContextP ctx, STRp(field), uint32_t rep);
 
 extern bool seg_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), const SegCallback *callbacks, unsigned add_bytes, bool account_in_subfields);
@@ -120,9 +119,14 @@ extern void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, 
     ({ snip##_lens[i] = sizeof (snip##s);\
        seg_prepare_snip_other_do ((snip_code), (other_dict_id), true, 0, (char_param), (snip##s)[i], &snip##_lens[i]); })
 
-#define seg_prepare_snip_special_other(special_code, other_dict_id, snip, char_param) \
+#define seg_prepare_snip_special_other(special_code, other_dict_id, snip, char_param/*0=no parameter*/) \
     ({ snip[0]=SNIP_SPECIAL; snip##_len=sizeof(snip)-1; \
        seg_prepare_snip_other_do ((special_code), (other_dict_id), char_param, 0, char_param, &snip[1], &snip##_len); \
+       snip##_len++; })
+
+#define seg_prepare_snip_special_other_int(special_code, other_dict_id, snip, int_param) \
+    ({ snip[0]=SNIP_SPECIAL; snip##_len=sizeof(snip)-1; \
+       seg_prepare_snip_other_do ((special_code), (other_dict_id), true, int_param, 0, &snip[1], &snip##_len); \
        snip##_len++; })
 
 extern void seg_prepare_multi_dict_id_special_snip (uint8_t special_code, unsigned num_dict_ids, DictId *dict_ids, char *out_snip, unsigned *out_snip_len);
@@ -148,7 +152,7 @@ static void inline seg_set_last_txt (VBlockP vb, ContextP ctx, STRp(value))
 
 bool seg_set_last_txt_store_value (VBlockP vb, ContextP ctx, STRp(value), StoreType store_type);
 
-extern void seg_create_rollback_point (VBlockP vb, ContextP *ctxs, unsigned num_ctxs, ...); // list of did_i
+extern void seg_create_rollback_point (VBlockP vb, ContainerP con, unsigned num_ctxs, ...); // list of did_i
 extern void seg_add_ctx_to_rollback_point (VBlockP vb, ContextP ctx);
 extern void seg_rollback (VBlockP vb);
 

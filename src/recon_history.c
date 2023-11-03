@@ -44,6 +44,10 @@ void reconstruct_store_history (VBlockP vb, ContextP ctx)
             *B(int64_t, ctx->history, vb->line_i) = ctx->last_value.i; 
             break;
 
+        case STORE_FLOAT:   
+            *B(double, ctx->history, vb->line_i) = ctx->last_value.f; 
+            break;
+
         case STORE_INDEX: 
             *B(WordIndex, ctx->history, vb->line_i) = ctx->last_value.i; 
             break;
@@ -96,9 +100,10 @@ void reconstruct_to_history (VBlockP vb, ContextP ctx)
             
             *hw = (HistoryWord){ .index = ctx->per_line.len32, .len = (BAFTtxt - txt), .lookup = LookupPerLine };
 
-        buf_add_more (vb, &ctx->per_line, txt, hw->len, "per_line");
-            BNXTc (ctx->per_line) = 0;         // nul-terminate
-            Ltxt = BNUMtxt(txt); // remove reconstructed text from txt_data
+            buf_add_more (vb, &ctx->per_line, txt, hw->len, "per_line");
+            BNXTc (ctx->per_line) = 0; // nul-terminate
+            
+            Ltxt = BNUMtxt(txt);       // remove reconstructed text from txt_data
         } 
     }
     

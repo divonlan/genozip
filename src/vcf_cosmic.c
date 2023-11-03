@@ -12,12 +12,12 @@
 
 void vcf_cosmic_seg_initialize (VBlockVCFP vb)
 {
-    seg_id_field_init (CTX(INFO_LEGACY_ID));
 }
 
+// eg: "COSN8882887", "COSN30315184"
 void vcf_seg_INFO_LEGACY_ID (VBlockVCFP vb, ContextP ctx, STRp(lid))
 {
-    seg_id_field_do (VB, ctx, STRa(lid));
+    seg_id_field (VB, ctx, STRa(lid), false, lid_len);
 }
 
 void vcf_seg_INFO_SO_TERM (VBlockVCFP vb, ContextP ctx, STRp(st))

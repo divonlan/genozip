@@ -27,9 +27,7 @@ void sam_seg_HISAT2_Zs_Z (VBlockSAMP vb, STRp(zs), unsigned add_bytes)
                          { .dict_id.num = _OPTION_Zs_TYPE, .separator = {'|'} },
                          { .dict_id.num = _OPTION_Zs_RS                       } }
     };
-
-    if (!CTX(OPTION_Zs_RS)->is_initialized) seg_id_field_init (CTX(OPTION_Zs_RS));
     
-    seg_array_of_struct (VB, CTX(OPTION_Zs_Z), con, STRa(zs), (SegCallback[]){0, 0, seg_id_field_cb}, add_bytes);
+    seg_array_of_struct (VB, CTX(OPTION_Zs_Z), con, STRa(zs), (SegCallback[]){0, 0, seg_id_field_varlen_int_cb}, add_bytes);
 }
 

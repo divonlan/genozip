@@ -20,8 +20,8 @@
 #define ABSOLUTE_MIN_VBLOCK_MEMORY ((uint64_t)1000) // in Bytes
 #define ABSOLUTE_MAX_VBLOCK_MEMORY ((uint64_t)MAX_VBLOCK_MEMORY MB)
 
-typedef enum __attribute__ ((__packed__)) { NO_QNAME2=-1, TECH_UNKNOWN=0,   TECH_ILLUM, TECH_PACBIO, TECH_ONP,          TECH_454, TECH_BGI,   TECH_IONTORR, TECH_HELICOS, TECH_NCBI, TECH_ULTIMA, TECH_SINGLR, TECH_ELEMENT, NUM_TECHS } SeqTech;
-#define TECH_NAME                         {               "Unknown_tech",   "Illumina", "PacBio",    "Oxford_Nanopore", "454",    "MGI_Tech", "IonTorrent", "Helicos",    "NCBI",    "Ultima",    "Singular",  "Element"              }
+typedef enum __attribute__ ((__packed__)) { NO_QNAME2=-1, TECH_UNKNOWN=0,   TECH_ILLUM, TECH_PACBIO, TECH_ONT,          TECH_454, TECH_BGI,   TECH_IONTORR, TECH_HELICOS, TECH_NCBI, TECH_ULTIMA, TECH_SINGLR, TECH_ELEMENT, TECH_ONSO, NUM_TECHS } SeqTech;
+#define TECH_NAME                         {               "Unknown_tech",   "Illumina", "PacBio",    "Oxford_Nanopore", "454",    "MGI_Tech", "IonTorrent", "Helicos",    "NCBI",    "Ultima",    "Singular",  "Element",    "Onso"               }
 #define TECH(x) (segconf.tech == TECH_##x)
 
 typedef enum __attribute__ ((__packed__)) { SQT_UNKNOWN, SQT_NUKE, SQT_AMINO, SQT_NUKE_OR_AMINO } SeqType;
@@ -36,9 +36,9 @@ typedef enum __attribute__ ((__packed__)) { DP_DEFAULT, by_AD, by_SDP } FormatDP
 typedef enum __attribute__ ((__packed__)) { L3_UNKNOWN, L3_EMPTY, L3_COPY_LINE1, L3_NCBI, NUM_L3s } FastqLine3Type;
 
 // SamMapperType is part of the file format and values should not be changed (new ones can be added)
-typedef enum  {                       MP_UNKNOWN,       MP_BSBOLT,             MP_bwa,   MP_BWA,   MP_MINIMAP2,   MP_STAR,   MP_BOWTIE2,   MP_DRAGEN,    MP_GEM3,         MP_GEM2SAM,     MP_BISMARK,   MP_BSSEEKER2,     MP_WINNOWMAP,   MP_BAZ2BAM,    MP_BBMAP,   MP_TMAP,   MP_HISAT2,   MP_BOWTIE,   MP_NOVOALIGN,   MP_RAZER3,    MP_BLASR,   MP_NGMLR,           MP_DELVE,   MP_TOPHAT,   MP_CPU,   MP_LONGRANGER,          MP_CLC,              MP_PBMM2,   MP_CCS,  MP_SNAP,   MP_BWA_MEM2,   MP_PARABRICKS,     MP_ISAAC,   MP_ULTIMA, MP_TORRENT_BC,        NUM_MAPPERS } SamMapperType;
-#define SAM_MAPPER_NAME             { "Unknown_mapper", "bsbolt",              "bwa",    "BWA",    "minimap2",    "STAR",    "bowtie2",    "dragen",     "gem3",          "gem2sam",      "bismark",    "bsseeker2",      "Winnowmap",    "baz2bam",     "BBMap",    "tmap",    "hisat2",    "Bowtie1",   "NovoAlign",    "razers3",    "blasr",    "ngmlr",            "Delve",    "TopHat",    "cpu",    "longranger",           "CLCGenomicsWB",    "pbmm2",    "ccs",    "snap",    "bwa-mem2",    "parabricks",      "iSAAC",    "Ultima",  "Torrent_BC",                     }
-#define SAM_MAPPER_SIGNATURE        { "Unknown_mapper", "PN:bwa	VN:BSB"/*\t*/, "PN:bwa", "PN:BWA", "PN:minimap2", "PN:STAR", "PN:bowtie2", "ID: DRAGEN", "PN:gem-mapper", "PN:gem-2-sam", "ID:Bismark", "PN:BS Seeker 2", "PN:Winnowmap", "PN:baz2bam",  "PN:BBMap", "ID:tmap", "PN:hisat2", "ID:Bowtie", "PN:novoalign", "PN:razers3", "ID:BLASR", "PN:nextgenmap-lr", "ID:Delve", "ID:TopHat", "PN:cpu", "PN:longranger.lariat", "PN:clcgenomicswb", "PN:pbmm2", "PN:ccs", "PN:SNAP", "PN:bwa-mem2", "PN:pbrun fq2bam", "PN:iSAAC", "ID:UA-",  "PN:BaseCaller",                  }   
+typedef enum  {                       MP_UNKNOWN,       MP_BSBOLT,             MP_bwa,   MP_BWA,   MP_MINIMAP2,   MP_STAR,   MP_BOWTIE2,   MP_DRAGEN,    MP_GEM3,         MP_GEM2SAM,     MP_BISMARK,   MP_BSSEEKER2,     MP_WINNOWMAP,   MP_BAZ2BAM,    MP_BBMAP,   MP_TMAP,   MP_HISAT2,   MP_BOWTIE,   MP_NOVOALIGN,   MP_RAZER3,    MP_BLASR,   MP_NGMLR,           MP_DELVE,   MP_TOPHAT,   MP_CPU,   MP_LONGRANGER,          MP_CLC,              MP_PBMM2,   MP_CCS,  MP_SNAP,   MP_BWA_MEM2,   MP_PARABRICKS,     MP_ISAAC,   MP_ULTIMA, MP_TORRENT_BC,   MP_BIONANO,      NUM_MAPPERS } SamMapperType;
+#define SAM_MAPPER_NAME             { "Unknown_mapper", "bsbolt",              "bwa",    "BWA",    "minimap2",    "STAR",    "bowtie2",    "dragen",     "gem3",          "gem2sam",      "bismark",    "bsseeker2",      "Winnowmap",    "baz2bam",     "BBMap",    "tmap",    "hisat2",    "Bowtie1",   "NovoAlign",    "razers3",    "blasr",    "ngmlr",            "Delve",    "TopHat",    "cpu",    "longranger",           "CLCGenomicsWB",    "pbmm2",    "ccs",    "snap",    "bwa-mem2",    "parabricks",      "iSAAC",    "Ultima",  "Torrent_BC",    "Bionano",                   }
+#define SAM_MAPPER_SIGNATURE        { "Unknown_mapper", "PN:bwa	VN:BSB"/*\t*/, "PN:bwa", "PN:BWA", "PN:minimap2", "PN:STAR", "PN:bowtie2", "ID: DRAGEN", "PN:gem-mapper", "PN:gem-2-sam", "ID:Bismark", "PN:BS Seeker 2", "PN:Winnowmap", "PN:baz2bam",  "PN:BBMap", "ID:tmap", "PN:hisat2", "ID:Bowtie", "PN:novoalign", "PN:razers3", "ID:BLASR", "PN:nextgenmap-lr", "ID:Delve", "ID:TopHat", "PN:cpu", "PN:longranger.lariat", "PN:clcgenomicswb", "PN:pbmm2", "PN:ccs", "PN:SNAP", "PN:bwa-mem2", "PN:pbrun fq2bam", "PN:iSAAC", "ID:UA-",  "PN:BaseCaller", "ID:xmap_to_bam",            }   
 #define MP(x) (segconf.sam_mapper == MP_##x)
              
 #define MAX_SHORT_READ_LEN 2500
@@ -76,10 +76,16 @@ typedef struct {
     #define NUM_COLLECTED_WORDS 6
     char unk_flav_qnames[NUM_QTYPES][NUM_COLLECTED_WORDS][UNK_QNANE_LEN+1]; // first 6 qnames if flavor is unknown
     uint8_t n_unk_flav_qnames[NUM_QTYPES];  // number of entries populated in unk_flav_qnames
+    #define NUM_UNK_ID_CTXS 10
+    #define UNK_ID_LEN 32
+    char unk_ids_tag_name[NUM_UNK_ID_CTXS][MAX_TAG_LEN];
+    char unk_ids[NUM_UNK_ID_CTXS][NUM_COLLECTED_WORDS][UNK_ID_LEN+1];
+    Codec qual_codec;           // for stats          
     bool nontrivial_qual;       // true if we know that not all QUAL values are the same (as they are in newer PacBio files)
     bool longr_bins_calculated; // were LONGR bins calculated in segconf
     bool has_agent_trimmer;     // has fields generated by Agilent AGeNT Trimmer
-
+    bool is_pacbio_ccs;
+    
     // SAM/BAM stuff
     STRl (std_cigar, 16);       // first CIGAR in the file - used in case all CIGARs in the file are the same
     int num_mapped;             // number of segconf reads that are mapped - defined as having (!FLAG.unmapped, RNAME, POS, CIGAR)
@@ -99,16 +105,18 @@ typedef struct {
     bool is_bwa;                // aligner used is based on bwa
     bool is_minimap2;           // aligner used is based on minimap2
     bool is_bowtie2;            // aligner used is based on bowtie2
+    bool pacbio_subreads;       // this is a pacbio subreads file
     bool sam_has_SA_Z;
     thool sam_has_BWA_XA_Z;
     bool sam_has_BWA_XS_i;
-    bool sam_has_BWA_XM_i;
+    bool sam_has_XM_i_is_mismatches;
     bool sam_has_BWA_XT_A ;
     bool sam_has_BWA_XC_i;
     bool sam_has_BWA_X01_i;
     bool sam_has_bowtie2_YS_i;
     bool sam_has_bismark_XM_XG_XR;
     bool sam_has_ultima_t0;
+    bool sam_has_zm_by_Q1NAME;
     bool sam_bisulfite;         // this BAM file is of reads that have been treated with bisulfite to detect methylation
     bool sam_predict_meth_call; // ZIP/PIZ: true if segging SEQ should also predict the methylation call in vb->meth_call
     bool bs_strand_not_by_rev_comp; // true if vb->bisulfite_strand cannot be predicted by FLAG.rev_comp
@@ -167,6 +175,7 @@ typedef struct {
     bool vcf_is_dbSNP;
     bool vcf_is_giab_trio;
     bool vcf_is_vep;
+    char *vcf_vep_spec;
     bool vcf_is_gnomad;
     bool vcf_is_icgc;
     bool vcf_is_exac;

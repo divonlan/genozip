@@ -269,16 +269,16 @@ void bam_get_one_aux (VBlockSAMP vb, int16_t idx,
     
     switch (*type) {
         // in case of an numeric type, we pass the value as a ValueType
-        case 'i': *value_len = 4; numeric->i = (int32_t)LTEN32 (GET_UINT32 (aux)); break;
-        case 'I': 
-        case 'f': *value_len = 4; numeric->i = LTEN32 (GET_UINT32 (aux));          break; // note: uint32 and float are binary-identical so this effectively sets value->f            
-        case 's': *value_len = 2; numeric->i = (int16_t)LTEN16 (GET_UINT16 (aux)); break;
-        case 'S': *value_len = 2; numeric->i = LTEN16 (GET_UINT16 (aux));          break;
-        case 'c': *value_len = 1; numeric->i = (int8_t)*aux;                       break;
-        case 'C': *value_len = 1; numeric->i = (uint8_t)*aux;                      break;
+        case 'i': *value_len = 4; numeric->i   = (int32_t)LTEN32 (GET_UINT32 (aux)); break;
+        case 'I': *value_len = 4; numeric->i   = LTEN32 (GET_UINT32 (aux));          break; 
+        case 'f': *value_len = 4; numeric->f32 = LTEN32F (GET_FLOAT32 (aux));        break; // note: this DOES NOT result in the correct value in last_value.f
+        case 's': *value_len = 2; numeric->i   = (int16_t)LTEN16 (GET_UINT16 (aux)); break;
+        case 'S': *value_len = 2; numeric->i   = LTEN16 (GET_UINT16 (aux));          break;
+        case 'c': *value_len = 1; numeric->i   = (int8_t)*aux;                       break;
+        case 'C': *value_len = 1; numeric->i   = (uint8_t)*aux;                      break;
         case 'Z': 
-        case 'H': *value_len = vb->aux_lens[idx] - 4; *value = aux;                break; // value_len excludes the terminating \0
-        case 'A': *value_len = 1; *value = aux;                                    break;
+        case 'H': *value_len = vb->aux_lens[idx] - 4; *value = aux;                  break; // value_len excludes the terminating \0
+        case 'A': *value_len = 1; *value = aux;                                      break;
 
         // in case of a numerical value we pass the data as is, in machine endianity
         case 'B':

@@ -65,7 +65,7 @@ IS_SKIP (vcf_piz_is_skip_section)
          dict_id_is_vcf_format_sf (dict_id)))
         return true;
 
-    if (flag.gt_only && sections_has_dict_id (st) && dict_id_is_vcf_format_sf (dict_id) 
+    if (flag.gt_only && IS_DICTED_SEC (st) && dict_id_is_vcf_format_sf (dict_id) 
         && dict_id.num != _FORMAT_GT
         && dict_id.num != _FORMAT_GT_HT
         && dict_id.num != _FORMAT_PBWT_RUNS
@@ -74,7 +74,7 @@ IS_SKIP (vcf_piz_is_skip_section)
         return true;
 
     // if --count, we only need TOPLEVEL and the fields needed for the available filters (--regions)
-    if (flag.count && sections_has_dict_id (st) &&
+    if (flag.count && IS_DICTED_SEC (st) &&
         (     dict_id.num != _VCF_TOPLEVEL && 
               dict_id.num != _VCF_CHROM    && // easier to always have CHROM
              (dict_id.num != _VCF_POS || !flag.regions))) return true;

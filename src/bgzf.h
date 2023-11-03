@@ -45,6 +45,7 @@ extern void bgzf_sign (uint64_t disk_size, uint8_t *signature);
 // ZIP side
 //---------
 
+#define BGZF_BLOCK_SUCCESS        0
 #define BGZF_BLOCK_GZIP_NOT_BGZIP -1
 #define BGZF_BLOCK_IS_NOT_GZIP    -2
 #define BGZF_ABRUBT_EOF           -3 // EOF without an EOF block

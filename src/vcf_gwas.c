@@ -24,8 +24,6 @@ void vcf_gwas_seg_initialize (VBlockVCFP vb)
 {
     // even though sparse, ES, ES, LP and AF are rarely unique - we're slightly better off without singletons
     ctx_set_no_stons (VB, INFO_AF, FORMAT_ES, FORMAT_SE, FORMAT_LP, DID_EOL); 
-
-    seg_id_field_init (CTX(FORMAT_ID));
 }
 
 //--------------------------------------------------------------------------------------------------------------
@@ -41,7 +39,7 @@ void vcf_gwas_seg_FORMAT_ID (VBlockVCFP vb, ContextP ctx, STRp(id))
         seg_by_ctx (VB, STRa(copy_ID_snip), ctx, id_len);
 
     else 
-        seg_id_field (VB, ctx, id, id_len, false);
+        seg_id_field (VB, ctx, STRa(id), false, id_len);
 }
 
 // ---------------

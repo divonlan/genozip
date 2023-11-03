@@ -292,12 +292,6 @@ static void fasta_seg_finalize_segconf (VBlockP vb)
     uint64_t avg_contig_size_this_vb = Ltxt / num_contigs_this_vb;
     uint64_t est_num_contigs_in_file = txtfile_get_seggable_size() / avg_contig_size_this_vb;
 
-    // limit the number of contigs, to avoid the FASTA_CONTIG dictionary becoming too big. note this also
-    // sets a limit for fasta-to-phylip translation
-    #define MAX_CONTIGS_IN_FILE 1000000 
-    segconf.fasta_has_contigs &= (num_contigs_this_vb == 1 || // the entire VB is a single contig
-                                  est_num_contigs_in_file <  MAX_CONTIGS_IN_FILE); 
-
     ASSINP0 (!flag.make_reference || segconf.fasta_has_contigs, "Can't use --make-reference on this file, because Genozip can't find the contig names in the FASTA description lines");
 
     // if we have multiple shortish contigs in segconf data, this might be multiseq - test
@@ -306,13 +300,18 @@ static void fasta_seg_finalize_segconf (VBlockP vb)
         ctx->lcodec = CODEC_LZMA;
         zfile_compress_local_data (vb, ctx, 0);
 
-        segconf.multiseq = (ctx->local.len32 / ctx->local_in_z_len >= 7); // expecting ~4 for unrelated sequences and >10 for multiseq
+        segconf.multiseq = (ctx->local.len32 / ctx->local_in_z_len >= 7); // expecting 4-4.5 for unrelated sequences and >10 for multiseq
 
-        if (segconf.multiseq) {
-            ctx_commit_codec_to_zf_ctx (vb, ctx, true, true); // assign LZMA
-            ZCTX(FASTA_NONREF)->lcodec_hard_coded = true;     // suppress re-assigning the codec
-        } 
+        if (segconf.multiseq)
+            ctx_segconf_set_hard_coded_lcodec (FASTA_NONREF, CODEC_LZMA); 
     }
+
+    // limit the number of contigs, to avoid the FASTA_CONTIG dictionary becoming too big. note this also
+    // sets a limit for fasta-to-phylip translation
+    #define MAX_CONTIGS_IN_FILE 100000 
+    segconf.fasta_has_contigs &= !segconf.multiseq &&
+                                 (num_contigs_this_vb == 1 || // the entire VB is a single contig
+                                  est_num_contigs_in_file <  MAX_CONTIGS_IN_FILE); 
 }
 
 void fasta_seg_finalize (VBlockP vb)

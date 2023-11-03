@@ -19,6 +19,8 @@
 #define NUM_CODEC_BUFS 7          // bzlib2 compress requires 4 and decompress requires 2 ; lzma compress requires 7 and decompress 1
                                   // if updating, also update array in codec_alloc()
 
+#define MAX_CON_STACK 32          // maximum depth of container recursion in PIZ
+
 #define VBLOCK_COMMON_FIELDS \
     /************* fields that survive buflist_free_vb *************/ \
     Buffer buffer_list;           /* a buffer containing an array of pointers to all buffers allocated or overlayed in this VB (either by the main thread or its compute thread). */\
@@ -78,8 +80,18 @@
     uint8_t num_type2_subfields; \
     RangeP range;                 /* ZIP: used for compressing the reference ranges. SAM PIZ: used */ \
     \
+    union { \
+    struct { /* ZIP */ \
     uint32_t num_rollback_ctxs;   /* ZIP: Seg rollback contexts */ \
-    ContextP rollback_ctxs[MEDIUM_CON_NITEMS]; \
+    Did rollback_dids[MEDIUM_CON_NITEMS]; \
+    }; \
+    struct { /* PIZ */ \
+    uint32_t con_stack_len;       /* PIZ */ \
+    Did con_stack[MAX_CON_STACK]; /* PIZ: current containers being reconstructed ([0] is always a top level container) */ \
+    int32_t con_repeat[MAX_CON_STACK];/* PIZ: current repeat being reconstructed in each container in the container stack */ \
+    }; \
+    }; \
+    \
     Buffer frozen_state;          /* PIZ: reconstruction state - frozen during reconstruct_peek */ \
     \
     /* data for dictionary and recon_plan compressing */ \

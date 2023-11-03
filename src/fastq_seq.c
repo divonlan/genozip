@@ -96,6 +96,11 @@ done:
     COPY_TIMER (fastq_seg_SEQ);
 }
 
+uint32_t fastq_zip_get_seq_len (VBlockP vb, uint32_t line_i) 
+{ 
+    return DATA_LINE (line_i)->sam_seq_len;
+}
+
 // used by QUAL codecs: LONGR and HOMP
 COMPRESSOR_CALLBACK (fastq_zip_seq) 
 {

@@ -91,7 +91,7 @@ typedef int32_t SamTlenType;
 #define MAX_NM_i 0x7fffffff  // at most the max length of a SAM contig
 typedef int32_t SamNMType;
 
-#define MIN_AS_i -0x7fffffff // note: in longranger, AS:i can be negative    
+#define MIN_AS_i -0x7fffffff // note: in longranger and bowtie2, AS:i can be negative    
 #define MAX_AS_i 0x7fffffff
 typedef int32_t SamASType;
 
@@ -173,22 +173,25 @@ typedef struct {
     DeepHash deep_hash;            // Set for primary (i.e. not supplementary or secondary) alignments
     TxtWord QUAL, OQ, TQ, _2Y, GY, U2, BD_BI[2], SA, QNAME, MC;// coordinates in txt_data 
     union {
-    struct { TxtWord dq, iq, sq; };// PacBio - coordinates in txt_data
+    struct {                       // PacBio
+    TxtWord dq, iq, sq;            // coordinates in txt_data
+    int32_t np;
+    };
     TxtWord t0;                    // Ultima - coordinates in txt_data
+    int32_t nM;                    // STAR - used in paired-end STAR files
     };
     TxtWord CIGAR;                 // SAM: coordinates in txt_data (always); BAM: coordinates in vb->line_textual_cigars
     TxtWord SEQ;                   // coordinates in txt_data. Note: len is actual sequence length in bases (not bytes) determined from any or or of: CIGAR, SEQ, QUAL. If more than one contains the length, they must all agree
     TxtWord BQ;
     int32_t QUAL_score;            // used by ms:i
-    int32_t nM;                    // used in paired-end STAR files
     SamASType AS;
+    SamASType YS;                  // used for bowtie2 and some other mappers
     WordIndex RNAME, RNEXT;
     PosType32 POS, PNEXT;         
     uint32_t seq_consumed;
     uint32_t ref_consumed;
     uint32_t hard_clip[2];        
     int32_t NH;                    // used by sam_seg_HI_i
-    SamASType YS;                  // used for bowtie2 and some other mappers
     SamNMType NM;                  // value of NM:i and its length
     SamFlags FLAG; 
     uint8_t NM_len;                
@@ -254,11 +257,8 @@ typedef struct VBlockSAM {
                                    // PIZ: bsseeker2 XG:Z field with the underscores removed, as reconstructed when peeking during XM:Z special recon
     thool XG_inc_S;                // Seg: whether to include soft_clip[0]
 
-    union {
-    Buffer interlaced;             // ZIP: interlaced BD and BI data for one line
     Buffer deep_index;             // PIZ: entry per prim_line - uint32_t index into deep_ents
-    };
-
+ 
     #define first_mux mux_XS
     Multiplexer4 mux_XS;
     Multiplexer4 mux_PNEXT;
@@ -330,6 +330,7 @@ typedef struct VBlockSAM {
 
     // QUAL stuff
     bool has_qual;                 // Seg: This VB has at least one line with non-missing qual
+    bool has_missing_qual;         // Seg: This VB has at least one line with missing qual
 
     // stats
     uint32_t deep_stats[NUM_DEEP_STATS]; // ZIP/PIZ: stats collection regarding Deep - one entry for each in DeepStatsZip/DeepStatsPiz
@@ -477,7 +478,11 @@ extern WordIndex sam_seg_RNEXT (VBlockSAMP vb, ZipDataLineSAM *dl, STRp (chrom),
 extern void      sam_seg_MAPQ  (VBlockSAMP vb, ZipDataLineSAM *dl, unsigned add_bytes);
 extern void      sam_seg_TLEN  (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(tlen), SamTlenType tlen_value, bool is_rname_rnext_same);
 extern void      bam_seg_BIN   (VBlockSAMP vb, ZipDataLineSAM *dl, uint16_t bin, bool is_bam);
-extern void      sam_seg_NM_i  (VBlockSAMP vb, ZipDataLineSAM *dl, SamNMType NM, unsigned add_bytes);
+
+// mismatch counters
+extern void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAM *dl, SamNMType NM, unsigned add_bytes);
+extern void sam_seg_XM_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t xm, int16_t idx, unsigned add_bytes);
+extern void sam_seg_nM_i (VBlockSAMP vb, ZipDataLineSAM *dl, SamNMType nm, unsigned add_bytes);
 
 extern uint16_t bam_reg2bin (int32_t first_pos, int32_t last_pos);
 extern void sam_seg_verify_RNAME (VBlockSAMP vb);
@@ -523,6 +528,8 @@ extern bool sam_piz_line_has_aux_field (VBlockSAMP vb, DictId dict_id);
 
 extern uint32_t sam_seg_get_aux_int (VBlockSAMP vb, int16_t idx, int32_t *number, bool is_bam, int32_t min_value, int32_t max_value, FailType soft_fail);
 #define sam_seg_get_aux_int_(vb,tag) ({ int32_t value; sam_seg_get_aux_int (vb, vb->idx_##tag, &value, IS_BAM_ZIP, -0x80000000, 0x7fffffff, HARD_FAIL); value; })
+
+extern uint32_t sam_seg_get_aux_float (VBlockSAMP vb, int16_t idx, double *number, bool is_bam, FailType soft_fail);
 
 extern void sam_seg_get_aux_Z (VBlockSAMP vb, int16_t idx, pSTRp (snip), bool is_bam);
 extern char sam_seg_get_aux_A (VBlockSAMP vb, int16_t idx, bool is_bam);
@@ -647,7 +654,6 @@ extern void sam_seg_BWA_X1_i (VBlockSAMP vb, int64_t X1, unsigned add_bytes);
 extern void sam_seg_BWA_XT_A (VBlockSAMP vb, char XT, unsigned add_bytes);
 extern void sam_seg_BWA_XC_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t XC, unsigned add_bytes);
 extern void sam_seg_BWA_XS_i (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, ValueType XS, unsigned add_bytes);
-extern void sam_seg_BWA_XM_i (VBlockSAMP vb, ValueType XM, unsigned add_bytes);
 extern void sam_seg_BWA_XA_Z (VBlockSAMP vb, STRp(xa), unsigned add_bytes);
 extern void sam_piz_XA_field_insert_lookback_v13 (VBlockP vb);
 
@@ -659,9 +665,13 @@ extern void sam_seg_s1_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t s1, unsigne
 extern void sam_seg_cm_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t cm, unsigned add_bytes);
 
 // PacBio stuff
+extern void sam_pacbio_seg_initialize (VBlockSAMP vb);
 extern void sam_seg_pacbio_xq (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, TxtWord *dl_word, STRp(value), unsigned add_bytes);
+extern void sam_seg_pacbio_np (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t np, unsigned add_bytes);
+extern void sam_seg_pacbio_zm (VBlockSAMP vb, int64_t zm, unsigned add_bytes);
 extern bool sam_seg_pacbio_qual (VBlockSAMP vb, STRp(qual), unsigned add_bytes);
 extern void sam_recon_pacbio_qual (VBlockSAMP vb, ContextP ctx, bool reconstruct);
+extern void sam_recon_skip_pacbio_qual (VBlockSAMP vb);
 
 // Ultima stuff
 extern void sam_ultima_zip_initialize (void);
@@ -729,7 +739,7 @@ extern void sam_seg_other_seq (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, STR
 extern void sam_seg_GR_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(gr), unsigned add_bytes);
 extern void sam_seg_GY_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(gy), unsigned add_bytes);
 
-extern bool sam_seg_barcode_qual (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, SoloTags solo, uint8_t n_seps, STRp(qual), qSTRp (con_snip), MiniContainer *con, unsigned add_bytes);
+extern bool sam_seg_barcode_qual (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, SoloTags solo, uint8_t n_seps, STRp(qual), qSTRp (con_snip), MiniContainerP con, unsigned add_bytes);
 extern void sam_seg_gene_name_id (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, STRp(value), unsigned add_bytes);
 
 // biobambam2 stuff
@@ -820,7 +830,7 @@ static inline char sam_seg_sam_type_to_bam_type (char type, int64_t n)
     return 0; // number out of range
 }
 
-extern DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam, rom tag, char bam_type, char bam_array_subtype, STRp(value), ValueType numeric);
+extern DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam, rom tag, char bam_type, char bam_array_subtype, STRp(value), ValueType numeric, int16_t idx);
 
 typedef struct { char s[200]; } DisFlagsStr;
 extern DisFlagsStr sam_dis_flags (SamFlags flags);
@@ -834,9 +844,9 @@ extern const uint8_t aux_width[256];
 extern rom ERR_ANALYZE_RANGE_NOT_AVAILABLE, ERR_ANALYZE_DEPN_NOT_IN_REF, ERR_ANALYZE_INCORRECT_REF_BASE;
 
 eSTRl(taxid_redirection_snip);
-eSTRl(copy_NM_snip);
 eSTRl(copy_GX_snip);
 eSTRl(copy_POS_snip);
+eSTRl(copy_Q1NAME_int);
 eSTRl(copy_mate_CIGAR_snip);
 eSTRl(copy_mate_MAPQ_snip);
 eSTRl(copy_mate_MQ_snip);

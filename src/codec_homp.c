@@ -196,8 +196,6 @@ CODEC_RECONSTRUCT (codec_homp_reconstruct)
 {
     START_TIMER;
  
-    ReconType reconstruct = RECON_ON;
-
     // get SEQ
     ContextP seq_ctx = VB_DT(FASTQ) ? CTX(FASTQ_SQBITMAP) : CTX(SAM_SQBITMAP);
 

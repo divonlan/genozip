@@ -82,9 +82,9 @@ static void stats_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
         }
     }
 
-    // we send the first 6 qnames in case of unrecognized QNAME flavor or in case of existing by unrecognized QNAME2 flavor
+    // we send the first 6 qnames of unrecognized QNAME flavor or in case of existing by unrecognized QNAME2 flavor
     for (QType q=QNAME1; q < NUM_QTYPES; q++) {
-        if (!segconf.qname_flavor[q] && segconf.n_unk_flav_qnames[q]) {
+        if (segconf.n_unk_flav_qnames[q]) {
 
             bufprintf (evb, &hash_occ, "%s%s%%2C%%2C%%2C", need_sep++ ? "%3B" : "", qtype_name(q));
 
@@ -92,6 +92,13 @@ static void stats_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
                 if (segconf.unk_flav_qnames[q][i][0])
                     bufprintf (evb, &hash_occ, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.unk_flav_qnames[q][i], strlen(segconf.unk_flav_qnames[q][i]), ',', -127)).s); 
         }
+    }
+
+    for (int id_i=0; id_i < NUM_UNK_ID_CTXS && segconf.unk_ids_tag_name[id_i][0]; id_i++) {
+            bufprintf (evb, &hash_occ, "%s%s%%2C%%2C%%2C", need_sep++ ? "%3B" : "", segconf.unk_ids_tag_name[id_i]);
+
+            for (int i=0; i < NUM_COLLECTED_WORDS && segconf.unk_ids[id_i][i][0]; i++)
+                bufprintf (evb, &hash_occ, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.unk_ids[id_i][i], strlen(segconf.unk_ids[id_i][i]), ',', -127)).s); 
     }
 
     // if Deep with QNONE, we send the first QNAME of the SAM file and the first read name of the FASTQ
@@ -145,25 +152,26 @@ static void stats_get_compressed_sizes (StatsByLine *sbl)
 
     for (Section sec = section_next(0); sec; sec = section_next (sec)) {
 
-        if (flag.show_stats_comp_i == COMP_NONE && sec->st != SEC_B250 && sec->st != SEC_DICT && sec->st != SEC_LOCAL && sec->st != SEC_COUNTS)
+        if (flag.show_stats_comp_i == COMP_NONE && !IS_DICTED_SEC (sec->st))
             sbl[sec->st].z_size += sec->size;
             
         else if (flag.show_stats_comp_i != COMP_NONE && flag.show_stats_comp_i == sec->comp_i && 
             (sec->st==SEC_VB_HEADER || sec->st==SEC_TXT_HEADER || sec->st==SEC_RECON_PLAN))
             sbl[sec->st].z_size += sec->size;
             
-        else if ((flag.show_stats_comp_i == COMP_NONE || flag.show_stats_comp_i == sec->comp_i) && 
-                 (sec->st == SEC_B250 || sec->st == SEC_DICT || sec->st == SEC_LOCAL || sec->st == SEC_COUNTS)) {
-            Did did_i = ctx_get_existing_did_i_do (sec->dict_id, z_file->contexts, z_file->d2d_map,
-                                                        ctx_index, z_file->num_contexts);
+        else if ((flag.show_stats_comp_i == COMP_NONE || flag.show_stats_comp_i == sec->comp_i) && IS_DICTED_SEC (sec->st)) {
+            Did did_i = ctx_get_existing_did_i_do (sec->dict_id, z_file->contexts, z_file->d2d_map, ctx_index, z_file->num_contexts);
+
+            ASSERT (did_i != DID_NONE, "Cannot find zctx for %s with dict_id=%s\n", st_name(sec->st), dis_dict_id (sec->dict_id).s);
 
             // accumulate z_size for its context in its local/b250/dict.param
             switch (sec->st) {
-                case SEC_LOCAL  : ZCTX(did_i)->local.count += sec->size; break;
-                case SEC_B250   : ZCTX(did_i)->b250.count  += sec->size; break;
-                case SEC_COUNTS :
-                case SEC_DICT   : ZCTX(did_i)->dict.count  += sec->size; break;
-                default         : break;
+                case SEC_LOCAL    : ZCTX(did_i)->local.count += sec->size; break;
+                case SEC_B250     : ZCTX(did_i)->b250.count  += sec->size; break;
+                case SEC_COUNTS   :
+                case SEC_SUBDICTS :
+                case SEC_DICT     : ZCTX(did_i)->dict.count  += sec->size; break;
+                default           : break;
             }
         }
     }
@@ -294,15 +302,16 @@ static void stats_output_file_metadata (void)
             if (flag.deep) bufprintf (evb, &features, "deep_no_qual=%s;", TF (segconf.deep_no_qual));
 
             if (num_alignments) {
-                FEATURE0 (segconf.is_sorted && !segconf.sam_is_unmapped, "Sorting: Sorted by POS", "Sorted_by_POS");        
-                FEATURE0 (segconf.is_sorted && segconf.sam_is_unmapped, "Sorting: Unmapped", "Unmapped");        
-                FEATURE0 (segconf.is_collated, "Sorting: Collated by QNAME", "Collated_by_QNAME");
-                FEATURE0 (!segconf.is_sorted && !segconf.is_collated, "Sorting: Not sorted or collated", "Not_sorted_or_collated");
+                FEATURE0 (segconf.is_sorted && !segconf.sam_is_unmapped, "Sorting: Sorted by POS", "Sorted_by=POS");        
+                FEATURE0 (segconf.is_sorted && segconf.sam_is_unmapped, "Sorting: Unmapped", "Sorted_by=Unmapped");        
+                FEATURE0 (segconf.is_collated, "Sorting: Collated by QNAME", "Sorted_by=QNAME");
+                FEATURE0 (!segconf.is_sorted && !segconf.is_collated, "Sorting: Not sorted or collated", "Sorted_by=NONE");
             }
                         
             FEATURE (true, "Aligner: %s", "Mapper=%s", segconf_sam_mapper_name()); 
+            bufprintf (evb, &features, "QUAL=%s;", !segconf.nontrivial_qual ? "Trivial" : segconf.qual_codec != CODEC_UNKNOWN ? codec_name (segconf.qual_codec) : codec_name (ZCTX(SAM_QUAL)->lcodec));
+
             FEATURE0 (segconf.sam_bisulfite, "Feature: Bisulfite", "Bisulfite");
-            FEATURE0 (segconf.is_paired, "Feature: Paired-End", "Paired-End");
             FEATURE0 (segconf.has_cellranger, "Feature: cellranger-style fields", "has_cellranger");
             REPORT_KRAKEN;
 
@@ -396,6 +405,7 @@ static void stats_output_file_metadata (void)
                 bufprintf (evb, &features, "aligner_ok=%.1f%%;", 100.0 * (double)z_file->num_aligned / (double)z_file->num_lines);                
                 bufprintf (evb, &features, "aligner_perfect=%.1f%%;", 100.0 * (double)z_file->num_perfect_matches / (double)z_file->num_lines);
             }
+            bufprintf (evb, &features, "Qual=%s;", !segconf.nontrivial_qual ? "Trivial" : segconf.qual_codec != CODEC_UNKNOWN ? codec_name (segconf.qual_codec) : codec_name (ZCTX(SAM_QUAL)->lcodec));
             REPORT_KRAKEN;
             if (segconf.r1_or_r2) bufprintf (evb, &features, "R1_or_R2=R%d;", (segconf.r1_or_r2 == PAIR_R1) ? 1 : 2);
 
@@ -434,7 +444,7 @@ static void stats_output_file_metadata (void)
             bufprintf (evb, &stats, "Vblocks: %u x %u MB  Sections: %u\n", 
                        z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), z_file->section_list_buf.len32);
     
-            bufprintf (evb, &features, "magic=%s;extension=\"%s\";", generic_get_magic(), generic_get_ext());
+            bufprintf (evb, &features, "magic=%s;extension=\"%s\";", generic_get_magic().s, generic_get_ext());
             break;
 
         default:
@@ -702,7 +712,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
 
         if ((Z_DT(VCF) || Z_DT(BCF) || Z_DT(GFF)) && dict_id_type(zctx->dict_id) != DTYPE_FIELD)
             sprintf (s->name, "%s/%s", dtype_name_z(zctx->dict_id), zctx->tag_name);
-        else 
+        else  
             strcpy (s->name, zctx->tag_name);
 
         // parent

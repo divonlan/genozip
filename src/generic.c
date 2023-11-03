@@ -18,7 +18,7 @@
 #include "tip.h"
 
 #define MAGIC_SIZE 32
-static char magic[MAGIC_SIZE] = {}; // first 8 bytes of the generic file
+static char magic[MAGIC_SIZE+1] = {}; // first bytes of the generic file
 static char ext[32] = {}; // nul-terminated txt filename extension
 
 // all data is always consumed
@@ -91,7 +91,7 @@ void generic_seg_initialize (VBlockP vb)
 {
     // capture the first MAGIC_SIZE bytes and the extension to be reported in stats
     if (vb->vblock_i == 1) {
-        memset (magic, 0, MAGIC_SIZE);
+        memset (magic, 0, MAGIC_SIZE+1);
         memcpy (magic, B1STtxt, MIN_(MAGIC_SIZE, Ltxt));
 
         // copy return last component if it is not the whole filename, and short (we want the extension that indicates the file type, not the part of the filename that indicates the data)
@@ -148,17 +148,17 @@ SPECIAL_RECONSTRUCTOR (generic_piz_TOPLEVEL)
     return NO_NEW_VALUE;
 }
 
-rom generic_get_magic (void)
+StrTextLong generic_get_magic (void)
 {
-    static char s[MAGIC_SIZE * 4 + 10];
-    s[0] = '"';
-    str_to_printable (magic, sizeof(magic), &s[1]);
+    StrTextLong s = {};
+    s.s[0] = '"';
+    str_to_printable (magic, strlen(magic), &s.s[1]);
 
-    int len = strlen(s);
-    s[len] = '"';
-    s[len+1] = ' ';
+    int len = strlen(s.s);
+    s.s[len] = '"';
+    s.s[len+1] = ' ';
 
-    str_to_hex ((bytes)magic, sizeof(magic), &s[len+2], true);
+    str_to_hex ((bytes)magic, strlen(magic), &s.s[len+2], true);
 
     return s;
 }

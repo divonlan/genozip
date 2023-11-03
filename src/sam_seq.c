@@ -788,6 +788,11 @@ void sam_zip_prim_ingest_vb_pack_seq (VBlockSAMP vb, Sag *vb_grps, uint32_t vb_g
     bits_clear_excess_bits_in_top_word ((BitsP)packed_seq_buf);
 }
 
+uint32_t sam_zip_get_seq_len (VBlockP vb, uint32_t line_i) 
+{ 
+    return DATA_LINE (line_i)->SEQ.len;
+}
+
 // used by codec_longr and codec_homp
 COMPRESSOR_CALLBACK_DT (sam_zip_seq) 
 {

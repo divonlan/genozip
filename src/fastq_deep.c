@@ -51,6 +51,8 @@ void fastq_deep_seg_initialize (VBlockFASTQP vb)
         ctx_set_ltype (VB, LT_INT8, FASTQ_DEEP_DELTA, DID_EOL); 
         ctx_consolidate_stats (VB, FASTQ_DEEP, FASTQ_DEEP_DELTA, DID_EOL);
     }
+
+    CTX(FASTQ_SQBITMAP)->no_stons = true;
 }
 
 void fastq_deep_zip_show_entries_stats (void) 
@@ -808,15 +810,10 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_deep_copy_SEQ)
 static void fastq_recon_qual_trim (VBlockFASTQP vb, ContextP ctx, uint32_t len, bool reconstruct)
 {
     switch (ctx->ltype) { // the relevant subset of ltypes from reconstruct_from_ctx_do
-        case LT_CODEC: { 
-            uint32_t save_len = Ltxt;
-            
-            codec_args[ctx->lcodec].reconstruct (VB, ctx->lcodec, ctx, len); 
-            
-            if (!reconstruct) Ltxt = save_len; // un-reconstruct
-            
+        case LT_CODEC:         
+            codec_args[ctx->lcodec].reconstruct (VB, ctx->lcodec, ctx, len, reconstruct); 
             break;
-        }
+        
         case LT_SEQUENCE: 
             reconstruct_from_local_sequence (VB, ctx, len, reconstruct); 
             break;

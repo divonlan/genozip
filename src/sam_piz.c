@@ -18,6 +18,7 @@
 #include "lookback.h"
 #include "qname.h"
 #include "writer.h"
+#include "codec.h"
 #include "libdeflate/libdeflate.h"
 
 void sam_piz_xtra_line_data (VBlockP vb_)
@@ -143,6 +144,7 @@ IS_SKIP (sam_piz_is_skip_section)
     #define SKIPIFF(cond) ({ if (cond) SKIP; else KEEP; })
     #define KEEPIFF(cond) ({ if (cond) KEEP; else SKIP;})
 
+    // case FASTQ components in a Deep file: use FASTQ skip fucntion instead
     if (comp_i >= SAM_COMP_FQ00 && comp_i != COMP_NONE)
         return fastq_piz_is_skip_section (st, comp_i, dict_id, f8, purpose);
 
@@ -158,6 +160,8 @@ IS_SKIP (sam_piz_is_skip_section)
     bool dict_needed_for_preproc = (is_dict && z_file->z_flags.has_gencomp);  // when loading a SEC_DICT in a file that has gencomp, don't skip dicts needed for loading SA
 
     if (dict_id_is_qname_sf(dict_id)) dnum = _SAM_Q1NAME; // treat all QNAME subfields as _SAM_Q1NAME
+    if (codec_pacb_is_qual (dict_id)) dnum = _SAM_QUAL;
+
     bool is_prim = (comp_i == SAM_COMP_PRIM) && !preproc;
     bool is_main = (comp_i == SAM_COMP_MAIN);
     bool cov  = flag.collect_coverage;
@@ -180,7 +184,11 @@ IS_SKIP (sam_piz_is_skip_section)
         case _SAM_QUAL : case _SAM_DOMQRUNS : case _SAM_QUALMPLX : case _SAM_DIVRQUAL :
             SKIPIF (is_prim);                                         
             SKIPIFF (cov || cnt);
-        
+
+        case _OPTION_np_i : case _OPTION_ec_f : // np is needed for reconstruting QUAL (PACB codec), and ec is needed to rereconstruct np
+        case _OPTION_iq_sq_dq : case SAM_QUAL_PACBIO_DIFF: // iq_sq_dq, if it exists, is combined with DIFF to construct QUAL
+            SKIPIFF (cov || cnt);
+
         case _SAM_TLEN    :
         case _SAM_BAM_BIN :
         case _SAM_EOL     :
@@ -1069,7 +1077,9 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_FASTQ_CONSUME_AUX)
 {
     VBlockSAMP vb = (VBlockSAMP)vb_;
 
-    ContainerPeekItem peek_items[] = { { _OPTION_MC_Z, -1 }, { _OPTION_SA_Z, -1 } };
+    ContainerPeekItem peek_items[] = { 
+        { _OPTION_MC_Z, -1 }, { _OPTION_SA_Z, -1 }, { _OPTION_ec_f, -1 }, { _OPTION_np_i, -1 }, 
+        { _OPTION_iq_Z, -1 }, { _OPTION_dq_Z, -1 }, { _OPTION_sq_Z, -1 } };
 
     vb->aux_con = container_peek_get_idxs (VB, CTX(SAM_AUX), ARRAY_LEN(peek_items), peek_items, true);
 
@@ -1082,6 +1092,13 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_FASTQ_CONSUME_AUX)
     if (CTX(OPTION_SA_Z)->flags.store_per_line && CTX(OPTION_SA_Z)->is_loaded &&
         peek_items[1].idx != -1) // line has SA:Z field
         reconstruct_to_history (VB, CTX(OPTION_SA_Z));
+
+    // np:i and ec:f are PacBio tags used to reconstruct QUAL,iq,dq,sq - we just need the last_value, no need to store history
+    if (CTX(OPTION_ec_f)->is_loaded && peek_items[2].idx != -1) // line has ec:f field
+        reconstruct_from_ctx (VB, OPTION_ec_f, 0, false); 
+
+    if (CTX(OPTION_np_i)->is_loaded && peek_items[3].idx != -1) // line has np:i field
+        reconstruct_from_ctx (VB, OPTION_np_i, 0, false); 
 
     return NO_NEW_VALUE; 
 }

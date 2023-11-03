@@ -56,12 +56,21 @@ static int64_t reconstruct_from_delta (VBlockP vb,
 {
     ASSISLOADED (base_ctx);
     ASSPIZ0 (delta_snip, "delta_snip is NULL");
-    ASSPIZ (base_ctx->flags.store == STORE_INT, "reconstructing %s - calculating delta \"%.*s\" from a base of %s, but %s, doesn't have STORE_INT",
-            my_ctx->tag_name, STRf(delta_snip), base_ctx->tag_name, base_ctx->tag_name);
 
-    int64_t base_value = (my_ctx->flags.same_line && my_ctx != base_ctx)
-        ? reconstruct_peek (vb, base_ctx, 0, 0).i // value of this line/sample - whether already encountered or peek a future value
-        : base_ctx->last_value.i; // use last_value even if base_ctx not encountered yet
+    int64_t base_value;
+    if (base_ctx->flags.store == STORE_INT)
+        base_value = (my_ctx->flags.same_line && my_ctx != base_ctx)
+            ? reconstruct_peek (vb, base_ctx, 0, 0).i // value of this line/sample - whether already encountered or peek a future value
+            : base_ctx->last_value.i; // use last_value even if base_ctx not encountered yet
+
+    else if (base_ctx->flags.store == STORE_FLOAT) // since 15.0.25
+        base_value = (my_ctx->flags.same_line && my_ctx != base_ctx)
+            ? (int64_t)reconstruct_peek (vb, base_ctx, 0, 0).f
+            : (int64_t)base_ctx->last_value.f; // simple cast to int64_t (not rounding) as in seg_delta_vs_other_do
+
+    else 
+        ASSPIZ (false, "reconstructing %s - calculating delta \"%.*s\" from a base of %s, but %s, doesn't have STORE_INT or STORE_FLOAT",
+                my_ctx->tag_name, STRf(delta_snip), base_ctx->tag_name, base_ctx->tag_name);
 
     char format = (delta_snip_len && !IS_DIGIT (delta_snip[0]) && delta_snip[0] != '-') ? delta_snip[0] : 0;
     unsigned fixed_len = (format && delta_snip_len > 2 && !IS_DIGIT (delta_snip[1]) && delta_snip[1] != '-') ? (delta_snip[1] - 'A') : 0; // since 15.0.8  
@@ -460,7 +469,7 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
                 break;
                 
             case LT_CODEC: // snip can optionally be the length of the sequence to be reconstructed
-                codec_args[base_ctx->lcodec].reconstruct (vb, base_ctx->lcodec, base_ctx, (snip_len ? atoi(snip) : vb->seq_len)); 
+                codec_args[base_ctx->lcodec].reconstruct (vb, base_ctx->lcodec, base_ctx, (snip_len ? atoi(snip) : vb->seq_len), reconstruct); 
                 break;
 
             case LT_INT8 ... LT_UINT64: case LT_hex8 ... LT_HEX64:
@@ -517,8 +526,23 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
 
     case SNIP_COPY: 
         base_ctx = (snip_len==1) ? snip_ctx : reconstruct_get_other_ctx_from_snip (vb, snip_ctx, pSTRa(snip)); 
-        RECONSTRUCT_LAST_TXT (base_ctx);
-        new_value = base_ctx->last_value; 
+
+        // xxx possible improvement of SNIP_COPY - needs extensive testing to make sure there are conflicts with other settings of ctx_specific_flag
+        // if same_line=true, we copy value on the line whether before or after
+        // if (snip_ctx->flags.same_line && snip_ctx != base_ctx) { 
+        //     STR(snip);
+        //     new_value = reconstruct_peek (vb, base_ctx, pSTRa(snip)); // value of this line/sample - whether already encountered or peek a future value
+        //     if (snip == BAFTtxt)
+        //         Ltxt += snip_len;
+        //     else
+        //         RECONSTRUCT_snip;
+        // }
+
+        // if same_line=false, we copy previous value, whether on this line or previous line
+        // else {
+            RECONSTRUCT_LAST_TXT (base_ctx);
+            new_value = base_ctx->last_value; 
+        // }
         has_new_value = HAS_NEW_VALUE;
         break;
 
@@ -595,7 +619,7 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
 
             case STORE_FLOAT: {
                 char *after;
-                new_value.f = strtod (snip, &after); // allows negative values
+                new_value.f = strtod (snip, &after); // allows negative values (note: same as in sam_seg_set_last_value_f_from_aux and sam_seg_get_aux_float)
 
                 // if the snip in its entirety is not a valid number, don't store the value.
                 // this can happen for example when seg_pos_field stores a "nonsense" snip.
@@ -688,7 +712,7 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i,
             break;
         }
         case LT_CODEC:
-            codec_args[ctx->lcodec].reconstruct (vb, ctx->lcodec, ctx, vb->seq_len); break;
+            codec_args[ctx->lcodec].reconstruct (vb, ctx->lcodec, ctx, vb->seq_len, reconstruct); break;
 
         case LT_SEQUENCE: 
             reconstruct_from_local_sequence (vb, ctx, vb->seq_len, reconstruct); break;

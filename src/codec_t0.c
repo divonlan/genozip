@@ -150,8 +150,6 @@ CODEC_RECONSTRUCT (codec_t0_reconstruct)
 {
     START_TIMER;
  
-    ReconType reconstruct = RECON_ON;
-
     // get SEQ
     ContextP seq_ctx = CTX(SAM_SQBITMAP);
 

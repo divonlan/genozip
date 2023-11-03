@@ -232,22 +232,22 @@ extern DataTypeFields dt_fields[NUM_DATATYPES];
 #define DTFT(prop) (dt_fields[txt_file->data_type].prop)
 
 // list of ctx who's local data is compressed via a callback function
-#define LOCAL_GET_LINE_CALLBACKS {  \
-    SAM_LOCAL_GET_LINE_CALLBACKS    \
-    BAM_LOCAL_GET_LINE_CALLBACKS    \
-    FASTQ_LOCAL_GET_LINE_CALLBACKS  \
-    FASTA_LOCAL_GET_LINE_CALLBACKS  \
-    PHY_LOCAL_GET_LINE_CALLBACKS    \
+#define LOCAL_GET_LINE_CALLBACKS {          \
+    SAM_LOCAL_GET_LINE_CALLBACKS(DT_SAM)    \
+    SAM_LOCAL_GET_LINE_CALLBACKS(DT_BAM)    \
+    FASTQ_LOCAL_GET_LINE_CALLBACKS          \
+    FASTA_LOCAL_GET_LINE_CALLBACKS          \
+    PHY_LOCAL_GET_LINE_CALLBACKS            \
 }
 
 // aliases - these are used only in PIZ, as a way for multiple dict_id's to get access to the same data storage
 // on the ZIP side, the data is just placed directly in the destination ctx
-#define DICT_ID_ALIASES { \
-    VCF_DICT_ID_ALIASES   \
-    SAM_DICT_ID_ALIASES   \
-    BAM_DICT_ID_ALIASES   \
-    FASTQ_DICT_ID_ALIASES \
-    GFF_DICT_ID_ALIASES   \
+#define DICT_ID_ALIASES {       \
+    VCF_DICT_ID_ALIASES         \
+    SAM_DICT_ID_ALIASES(DT_SAM) \
+    SAM_DICT_ID_ALIASES(DT_BAM) \
+    FASTQ_DICT_ID_ALIASES       \
+    GFF_DICT_ID_ALIASES         \
 }
 
 typedef struct DtTranslation { 

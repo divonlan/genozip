@@ -36,9 +36,9 @@
 typedef enum { QNAME, FLAG, RNAME, POS, MAPQ, CIGAR, RNEXT, PNEXT, TLEN, SEQ, QUAL, AUX } SamFields __attribute__((unused)); // quick way to define constants
 
 STRl(taxid_redirection_snip, 100);
-STRl(copy_NM_snip, 30);
 STRl(copy_GX_snip, 30);
 STRl(copy_POS_snip, 30);
+STRl(copy_Q1NAME_int, 30);
 STRl(copy_mate_CIGAR_snip, 30);
 STRl(copy_mate_MAPQ_snip, 30);
 STRl(copy_mate_MQ_snip, 30);
@@ -129,7 +129,7 @@ void sam_zip_initialize (void)
     qname_zip_initialize();
 
     seg_prepare_snip_other (SNIP_COPY, _SAM_POS, false, 0, copy_POS_snip);
-    seg_prepare_snip_other (SNIP_COPY, _OPTION_NM_i, false, 0, copy_NM_snip);
+    seg_prepare_snip_other (SNIP_OTHER_DELTA, _SAM_Q1NAME, true, 0, copy_Q1NAME_int);   
     seg_prepare_snip_other (SNIP_COPY, _OPTION_GX_Z, false, 0, copy_GX_snip);
     seg_prepare_snip_other (SNIP_LOOKBACK, _OPTION_XA_LOOKBACK, false, 0, XA_lookback_snip);
     seg_prepare_snip_other (SNIP_LOOKBACK, _OPTION_TX_LOOKBACK, false, 0, TX_lookback_snip);
@@ -259,10 +259,11 @@ static void sam_seg_0X_initialize (VBlockP vb, Did strand_did_i)
 
 static void sam_seg_QNAME_initialize (VBlockSAMP vb)
 {
-    CTX(SAM_QNAME)->no_stons = true;             // no singletons, bc sam_piz_special_SET_BUDDY uses PEEK_SNIP
-    CTX(SAM_QNAME)->flags.store_per_line = true; // 12.0.41
+    CTX(SAM_QNAME)->no_stons = true;              // no singletons, bc sam_piz_special_SET_BUDDY uses PEEK_SNIP
+    CTX(SAM_QNAME)->flags.store_per_line = true;  // 12.0.41
 
     qname_seg_initialize (VB, QNAME1, SAM_QNAME); 
+    qname_seg_initialize (VB, QNAME2, SAM_QNAME); // we support up to two flavors (eg 2nd flavor can be consensus reads) 
 
     if (segconf.running)
         segconf.qname_flavor[0] = 0; // unknown
@@ -295,7 +296,6 @@ void sam_seg_initialize (VBlockP vb_)
                    OPTION_tx_i, OPTION_YS_i, OPTION_XC_i, OPTION_AM_i, OPTION_SM_i, OPTION_X0_i, OPTION_X1_i, OPTION_CP_i,
                    OPTION_OP_i, OPTION_NH_i, OPTION_HI_i, OPTION_UQ_i, OPTION_cm_i, 
                    OPTION_SA_POS, OPTION_OA_POS,
-                   T(TECH(PACBIO), OPTION_qs_i), T(TECH(PACBIO), OPTION_qe_i),
                    T(MP(BLASR), OPTION_XS_i), T(MP(BLASR), OPTION_XE_i), T(MP(BLASR), OPTION_XQ_i), T(MP(BLASR), OPTION_XL_i), T(MP(BLASR), OPTION_FI_i),
                    T(MP(NGMLR), OPTION_QS_i), T(MP(NGMLR), OPTION_QE_i), T(MP(NGMLR), OPTION_XR_i),
                    T(segconf.is_minimap2, OPTION_s1_i), OPTION_ZS_i, OPTION_nM_i,
@@ -323,8 +323,6 @@ void sam_seg_initialize (VBlockP vb_)
                       T(MP(BSBOLT), OPTION_XB_Z),
                       T(MP(BISMARK), OPTION_XM_Z),
                       T(MP(NOVOALIGN), OPTION_YH_Z), T(MP(NOVOALIGN), OPTION_YQ_Z),
-                      T(TECH(PACBIO), OPTION_dt_Z), T(TECH(PACBIO), OPTION_mq_Z), T(TECH(PACBIO), OPTION_st_Z),
-                      T(TECH(PACBIO), OPTION_dq_Z), T(TECH(PACBIO), OPTION_iq_Z), T(TECH(PACBIO), OPTION_sq_Z),
                       OPTION_CY_Z, OPTION_QT_Z, OPTION_CB_Z, // barcode fallback segging - add to local text
                       T(kraken_is_loaded, SAM_TAXID),
                       DID_EOL);
@@ -335,7 +333,7 @@ void sam_seg_initialize (VBlockP vb_)
                    DID_EOL);
 
     // initialize these to LT_SEQUENCE, the qual-type ones might be changed later to LT_CODEC (eg domq, longr)
-    ctx_set_ltype (VB, LT_SEQUENCE, SAM_QUAL, SAM_QUAL_FLANK, OPTION_BD_BI, OPTION_BQ_Z, OPTION_iq_sq_dq, 
+    ctx_set_ltype (VB, LT_SEQUENCE, SAM_QUAL, SAM_QUAL_FLANK, OPTION_BD_BI, OPTION_BQ_Z, OPTION_iq_sq_dq,
                    OPTION_QX_Z, OPTION_CY_ARR, OPTION_QT_ARR,
                    OPTION_CR_Z_X, OPTION_RX_Z_X, OPTION_2R_Z, OPTION_TR_Z, DID_EOL);
 
@@ -343,7 +341,6 @@ void sam_seg_initialize (VBlockP vb_)
     ctx_set_ltype (VB, LT_DYN_INT, SAM_BUDDY, OPTION_HI_i, OPTION_NM_i, OPTION_NH_i, OPTION_XM_i, OPTION_X1_i,
                    OPTION_AS_i, OPTION_XS_i, OPTION_ZS_i, OPTION_cm_i, OPTION_ms_i, OPTION_nM_i, OPTION_UQ_i,
                    T(segconf.has_TLEN_non_zero, SAM_TLEN), // note: we don't set if !has_TLEN_non_zero, bc values are stored in b250 and may require singletons
-                   T(TECH(PACBIO), OPTION_qs_i), T(TECH(PACBIO), OPTION_qe_i),
                    T(MP(BLASR), OPTION_XS_i), T(MP(BLASR), OPTION_XE_i), T(MP(BLASR), OPTION_XQ_i), T(MP(BLASR), OPTION_XL_i), T(MP(BLASR), OPTION_FI_i),
                    T(MP(NGMLR), OPTION_QS_i), T(MP(NGMLR), OPTION_QE_i), T(MP(NGMLR), OPTION_XR_i),
                    DID_EOL);
@@ -376,17 +373,6 @@ void sam_seg_initialize (VBlockP vb_)
 
     if (kraken_is_loaded)
         CTX(SAM_TAXID)->counts_section = true;
-
-    if (TECH(PACBIO)) {
-        ctx_set_no_stons (VB, OPTION_dt_Z, OPTION_mq_Z, OPTION_st_Z, 
-                          OPTION_dq_Z, OPTION_sq_Z, OPTION_iq_Z, DID_EOL); // Following BD_BI logic: we can't use local for singletons as next_local is used to point into iq_sq_dq
-
-        if (segconf.use_pacbio_iqsqdq) {
-            ctx_set_ltype (VB, LT_SEQUENCE, OPTION_dq_Z, OPTION_iq_Z, OPTION_sq_Z, DID_EOL);
-
-            ctx_consolidate_stats (VB, OPTION_iq_sq_dq, OPTION_dq_Z, OPTION_iq_Z, OPTION_sq_Z, DID_EOL);
-        }
-    }
 
     // in --stats, consolidate stats
     ctx_consolidate_stats (VB, SAM_SQBITMAP, SAM_NONREF, SAM_NONREF_X, SAM_GPOS, SAM_STRAND, SAM_SEQMIS_A, SAM_SEQMIS_C, SAM_SEQMIS_G, SAM_SEQMIS_T, DID_EOL);
@@ -440,6 +426,8 @@ void sam_seg_initialize (VBlockP vb_)
     
     if (MP(DRAGEN)) sam_dragen_initialize (vb);
     
+    if (TECH(PACBIO)) sam_pacbio_seg_initialize (vb);
+
     ctx_set_store (VB, STORE_INDEX, OPTION_XA_Z, DID_EOL); // for containers this stores repeats - used by sam_piz_special_X1->container_peek_repeats
 
     if (segconf.sam_has_BWA_XS_i) // XS:i is as defined some aligners
@@ -447,6 +435,9 @@ void sam_seg_initialize (VBlockP vb_)
 
     else if (MP(HISAT2)) // ZS:i is like BWA's XS:i
         seg_mux_init (VB, CTX(OPTION_ZS_i), 4, SAM_SPECIAL_BWA_XS, false, (MultiplexerP)&vb->mux_XS);
+
+    if (segconf.sam_has_XM_i_is_mismatches)
+        CTX(OPTION_XM_i)->flags.same_line = true;   // copy NM from same line
 
     if (segconf.sam_has_bowtie2_YS_i) {
         ctx_set_store_per_line (VB, OPTION_AS_i, OPTION_YS_i, DID_EOL);
@@ -463,8 +454,9 @@ void sam_seg_initialize (VBlockP vb_)
 
         CTX(OPTION_ms_i)->flags.spl_custom = true;  // custom store-per-line - SPECIAL will handle the storing
         CTX(OPTION_ms_i)->flags.store = STORE_INT;  // since v14 - store QUAL_score for mate ms:i (in v13 it was stored in QUAL)
+
     }
-    
+
     seg_mux_init (VB, CTX(SAM_FLAG), 2, SAM_SPECIAL_DEMUX_BY_BUDDY, false, (MultiplexerP)&vb->mux_FLAG);
     seg_mux_init (VB, CTX(SAM_POS), 3, SAM_SPECIAL_DEMUX_BY_MATE_PRIM, true, (MultiplexerP)&vb->mux_POS);
     seg_mux_init (VB, CTX(SAM_PNEXT), 4, SAM_SPECIAL_PNEXT, true, (MultiplexerP)&vb->mux_PNEXT);
@@ -595,7 +587,7 @@ static void sam_seg_toplevel (VBlockP vb)
                          { .dict_id = { _SAM_PNEXT    }, .separator = { CI0_INVISIBLE }                  },// needed for reconstructing POS (in case of BUDDY)
                          { .dict_id = { _SAM_FLAG     }, .separator = { CI0_INVISIBLE }, .translator = SAM2FASTQ_FLAG }, // need to know if seq is reverse complemented & if it is R2 ; reconstructs "1" for R1 and "2" for R2
                          { .dict_id = { _SAM_CIGAR    }, .separator = { CI0_INVISIBLE }                  },// needed for reconstructing seq and also of SA_CIGAR (need vb->hard_clips[] for de-squanking)
-                         { .dict_id = { _SAM_FQ_AUX   }, .separator = { CI0_INVISIBLE }                  },// consumes OPTION_MC_Z (needed for mate CIGAR), OPTION_SA_Z (need for saggy RNAME, POS, CIGAR, NM, MAPQ)
+                         { .dict_id = { _SAM_FQ_AUX   }, .separator = { CI0_INVISIBLE }                  },// consumes OPTION_MC_Z (needed for mate CIGAR), OPTION_SA_Z (need for saggy RNAME, POS, CIGAR, NM, MAPQ), np:i, ec:f (needed in PacBio for QUAL) - see sam_piz_special_FASTQ_CONSUME_AUX
                          { .dict_id = { _SAM_SQBITMAP }, .separator = { CI0_TRANS_ALWAYS, '\n' }, .translator = SAM2FASTQ_SEQ  },
                          { .dict_id = { qual_dict_id  }, .separator = { CI0_TRANS_ALWAYS, '\n' }, .translator = SAM2FASTQ_QUAL }, // also moves fastq "line" to R2 (paired file) if needed
                       }
@@ -678,7 +670,7 @@ void sam_segconf_set_by_MP (void)
                               :                                                                                        segconf.sam_has_BWA_XA_Z; // remain "unknown" or as determined by segconf
                               
     segconf.sam_has_BWA_XS_i  = segconf.is_bwa || MP(TMAP) || MP(GEM3) || (segconf.is_bowtie2 && !MP(HISAT2)) || MP(CPU) || MP(LONGRANGER) || MP(DRAGEN);
-    segconf.sam_has_BWA_XM_i  = segconf.is_bwa || segconf.is_bowtie2 || MP(NOVOALIGN) || MP(DRAGEN);
+    segconf.sam_has_XM_i_is_mismatches  = segconf.is_bwa || segconf.is_bowtie2 || MP(NOVOALIGN) || MP(DRAGEN);
     segconf.sam_has_BWA_XT_A  = segconf.is_bwa || MP(DRAGEN);
     segconf.sam_has_BWA_XC_i  = segconf.is_bwa || MP(DRAGEN);
     segconf.sam_has_BWA_X01_i = segconf.is_bwa || MP(DRAGEN);
@@ -693,7 +685,7 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
     segconf.is_long_reads   = segconf_is_long_reads();
     segconf.sam_multi_RG    = CTX(OPTION_RG_Z)->nodes.len32 >= 2;
     segconf.sam_cigar_len   = 1 + ((segconf.sam_cigar_len - 1) / vb->lines.len32);                   // set to the average CIGAR len (rounded up)
-    
+
     if (num_lines_at_max_len(vb) > vb->lines.len32 / 2 &&  // more than half the lines are at exactly maximal length
         (vb->lines.len32 > 100 || txt_file->is_eof)    &&  // enough lines to be reasonably convinced that this is not by chance
         !segconf.is_long_reads)        // TO DO: trimming long-read qual in FASTQ with --deep would mess up LONGR codec, we need to sort this out
@@ -735,6 +727,10 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
         segconf.has_cellranger = true; // STAR Solo mimics cellranger's tags
     }
 
+    segconf.sam_has_zm_by_Q1NAME = TECH(PACBIO) && segconf.flav_prop[QNAME1].id != QF_PACBIO_3;
+
+    segconf.pacbio_subreads = MP(BAZ2BAM) && segconf.has[OPTION_pw_B_C] && segconf.has[OPTION_ip_B_C];
+    
     segconf.AS_is_ref_consumed  = (segconf.AS_is_ref_consumed > vb->lines.len32 / 2);
     segconf.AS_is_2ref_consumed = (segconf.AS_is_2ref_consumed > vb->lines.len32 / 2); // AS tends to be near 2 X ref_consumed, if at least half of the lines say so
 
@@ -849,6 +845,13 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
     
     ASSERT (!flag.debug_or_test || !segconf.has[OPTION_SA_Z] || segconf.sam_has_SA_Z || MP(LONGRANGER) || MP(UNKNOWN),
             "%s produces SA:Z, expecting segconf.sam_has_SA_Z to be set", segconf_sam_mapper_name()); // should be set in sam_header_zip_inspect_PG_lines
+
+    if (codec_pacb_maybe_used (SAM_QUAL)) 
+        codec_pacb_segconf_finalize (VB);
+    
+
+    if (codec_longr_maybe_used (SAM_QUAL))
+        codec_longr_segconf_calculate_bins (VB, CTX(SAM_QUAL + 1), sam_zip_qual);
 }
 
 void sam_seg_finalize (VBlockP vb_)
@@ -860,42 +863,45 @@ void sam_seg_finalize (VBlockP vb_)
         bits_truncate ((BitsP)&CTX(SAM_SQBITMAP)->local, CTX(SAM_SQBITMAP)->next_local); // remove unused bits due to MAPPING_PERFECT
     }
 
-    // assign the QUAL codec
-    if (vb->has_qual && CTX(SAM_QUAL)->local.len32) 
-        codec_assign_best_qual_codec (VB, SAM_QUAL, sam_zip_qual, false, true);
-
-    if (CTX(OPTION_OQ_Z)->local.len32)
-        codec_assign_best_qual_codec (VB, OPTION_OQ_Z, sam_zip_OQ, false, true);
-
-    if (CTX(OPTION_TQ_Z)->local.len32)
-        codec_assign_best_qual_codec (VB, OPTION_TQ_Z, sam_zip_TQ, true, false);
-
-    if (CTX(OPTION_CY_ARR)->local.len32)
-        codec_assign_best_qual_codec (VB, OPTION_CY_ARR, NULL, true, false);
-
-    if (CTX(OPTION_QX_Z)->local.len32)
-        codec_assign_best_qual_codec (VB, OPTION_QX_Z, segconf.has_agent_trimmer ? NULL : sam_zip_QX, true, false);
-
-    if (CTX(OPTION_2Y_Z)->local.len32)
-        codec_assign_best_qual_codec (VB, OPTION_2Y_Z, sam_zip_2Y, true, true);
-
-    if (CTX(OPTION_QT_ARR)->local.len32)
-        codec_assign_best_qual_codec (VB, OPTION_QT_Z, NULL, true, false);
-
-    if (CTX(OPTION_U2_Z)->local.len32)
-        codec_assign_best_qual_codec (VB, OPTION_U2_Z, sam_zip_U2, true, true);
-
-    // determine if sam_piz_sam2bam_SEQ ought to store vb->textual_seq
-    CTX(SAM_SQBITMAP)->flags.no_textual_seq = CTX(SAM_QUAL)->lcodec != CODEC_LONGR && 
-                                              CTX(SAM_QUAL)->lcodec != CODEC_HOMP  && 
-                                              segconf.sam_mapper != MP_BSSEEKER2;
-
-    if (flag.biopsy_line.line_i == NO_LINE) // no --biopsy-line
-        sam_seg_toplevel (VB);
-
     // finalize Seg configuration parameters
     if (segconf.running)
         sam_seg_finalize_segconf (vb);
+
+    // assign the QUAL codec
+    else {
+        if (vb->has_qual && CTX(SAM_QUAL)->local.len32) 
+            codec_assign_best_qual_codec (VB, SAM_QUAL, sam_zip_qual, false, false, true);
+
+        if (CTX(OPTION_OQ_Z)->local.len32)
+            codec_assign_best_qual_codec (VB, OPTION_OQ_Z, sam_zip_OQ, false, false, true);
+
+        if (CTX(OPTION_TQ_Z)->local.len32)
+            codec_assign_best_qual_codec (VB, OPTION_TQ_Z, sam_zip_TQ, true, true, false);
+
+        if (CTX(OPTION_CY_ARR)->local.len32)
+            codec_assign_best_qual_codec (VB, OPTION_CY_ARR, NULL, true, true, false);
+
+        if (CTX(OPTION_QX_Z)->local.len32)
+            codec_assign_best_qual_codec (VB, OPTION_QX_Z, segconf.has_agent_trimmer ? NULL : sam_zip_QX, true, true, false);
+
+        if (CTX(OPTION_2Y_Z)->local.len32)
+            codec_assign_best_qual_codec (VB, OPTION_2Y_Z, sam_zip_2Y, true, true, true);
+
+        if (CTX(OPTION_QT_ARR)->local.len32)
+            codec_assign_best_qual_codec (VB, OPTION_QT_Z, NULL, true, true, false);
+
+        if (CTX(OPTION_U2_Z)->local.len32)
+            codec_assign_best_qual_codec (VB, OPTION_U2_Z, sam_zip_U2, true, true, true);
+    }
+
+    // determine if sam_piz_sam2bam_SEQ ought to store vb->textual_seq
+    CTX(SAM_SQBITMAP)->flags.no_textual_seq = CTX(SAM_QUAL)->lcodec    != CODEC_LONGR && 
+                                              CTX(SAM_QUAL)->lcodec    != CODEC_HOMP  && 
+                                              CTX(SAM_QUAL)->lcodec    != CODEC_PACB  && 
+                                              segconf.sam_mapper       != MP_BSSEEKER2;
+
+    if (flag.biopsy_line.line_i == NO_LINE) // no --biopsy-line
+        sam_seg_toplevel (VB);
 
     // get rid of some contexts if we ended up not have using them
     static const Did delete_me[] = {
@@ -917,9 +923,6 @@ void sam_seg_finalize (VBlockP vb_)
         __atomic_add_fetch(&z_file->saggy_near_count, (uint64_t)vb->saggy_near_count, __ATOMIC_RELAXED);
         __atomic_add_fetch(&z_file->prim_far_count,   (uint64_t)vb->prim_far_count,   __ATOMIC_RELAXED);
     }
-
-    if (!CTX(SAM_QUAL)->local.len)
-        CTX(SAM_QUAL)->ltype = LT_TEXT; // if no QUAL in this VB, switch back to LT_TEXT to enable all_the_same
 
     // VB1: if we've not found depn lines in the VB, abort gencomp (likely the depn lines were filtered out)
     if (vb->vblock_i == 1 && !vb->seg_found_depn_line && !flag.force_gencomp)
@@ -1160,6 +1163,32 @@ out_of_range:
     ABORT("%s: value of %.2s=%" PRId64 " is out of range [%d,%d]", LN_NAME, vb->auxs[idx], numeric.i, min_value, max_value);
 }
 
+// returns the length of the field, or 0 if it is not found
+uint32_t sam_seg_get_aux_float (VBlockSAMP vb, int16_t idx,
+                                double *number, // modified only if float is parsed
+                                bool is_bam, FailType soft_fail)
+{
+    ValueType numeric;
+    uint32_t value_len;
+    char *after;
+
+    rom value = sam_seg_get_aux (vb, idx, &value_len, &numeric, is_bam);
+
+    if (value && 
+        (  is_bam || // note: use strtod as in reconstruct_one_snip to avoid discrepencies in float parsing
+           ((numeric.f = strtod (value, &after)) && after == value + value_len))) {
+        *number = numeric.f;
+        return value_len;
+    }
+
+    // this line doesn't have this field, or (SAM only) the field is not a valid float
+    else if (soft_fail) 
+        return 0;
+    
+    else
+        ABORT("%s: no valid float found for %.2s", LN_NAME, vb->auxs[idx]);
+}
+
 void sam_seg_get_aux_Z(VBlockSAMP vb, int16_t idx, pSTRp (snip), bool is_bam)
 {
     *snip = vb->auxs[idx] + (is_bam ? 3 : 5);
@@ -1266,7 +1295,7 @@ void sam_seg_aux_all (VBlockSAMP vb, ZipDataLineSAM *dl)
                 LN_NAME, numeric.i, tag[0], tag[1], -0x80000000, 0x7fffffff);
 
         con.items[con_nitems (con)] = (ContainerItem){
-            .dict_id    = sam_seg_aux_field (vb, dl, is_bam, tag, bam_type, array_subtype, STRa(value), numeric),
+            .dict_id    = sam_seg_aux_field (vb, dl, is_bam, tag, bam_type, array_subtype, STRa(value), numeric, idx),
             .translator = aux_field_translator((uint8_t)bam_type), // how to transform the field if reconstructing to BAM
             .separator  = {aux_sep_by_type[is_bam][(uint8_t)bam_type], '\t'},
         };

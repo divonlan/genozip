@@ -20,7 +20,6 @@ sSTRl(copy_POS_snip, 30);
 void vcf_illum_gtyping_initialize (VBlockVCFP vb)
 {
     ctx_set_store (VB, STORE_INT, INFO_ALLELE_A, INFO_ILLUMINA_POS, DID_EOL);
-    seg_id_field_init (CTX(INFO_refSNP));
 
     seg_mux_init (VB, CTX(FORMAT_BAF), 4, VCF_SPECIAL_MUX_BY_ADJ_DOSAGE, true, (MultiplexerP)&vb->mux_BAF);
     seg_mux_init (VB, CTX(FORMAT_X),   4, VCF_SPECIAL_MUX_BY_ADJ_DOSAGE, true, (MultiplexerP)&vb->mux_X);

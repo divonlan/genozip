@@ -106,7 +106,6 @@ void recon_stack_push (VBlockP vb, ContextP ctx)
     increment_level (vb, ctx);
 }
 
-
 // get reconstructed text without advancing the iterator or changing last_*. context may be already reconstructed or not.
 // Note: txt points into txt_data (past reconstructed or BAFT) - caller should copy it elsewhere
 ValueType reconstruct_peek (VBlockP vb, ContextP ctx, 

@@ -702,8 +702,6 @@ CODEC_RECONSTRUCT (codec_domq_reconstruct)
 
     ContextP declare_domq_contexts (ctx);
 
-    ReconType reconstruct = RECON_ON;
-
     // case: up to v13, all reads were compressed with the same dom (no multiplexing)
     if (!VER(14)) 
         codec_domq_reconstruct_do_v13 (vb, qual_ctx, reconstruct);

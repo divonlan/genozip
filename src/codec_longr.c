@@ -26,6 +26,12 @@
 
 #include "codec_longr_alg.c" // seperate source file for this, as it derived from external code with a different license
 
+bool codec_longr_maybe_used (Did did_i)
+{
+    return did_i == SAM_QUAL/*==FASTQ_QUAL*/ && 
+           ((TECH(ONT) && segconf.nontrivial_qual && !flag.no_longr && !flag.fast) || flag.force_longr);
+}
+
 // similar structure to DOMQUAL 
 void codec_longr_comp_init (VBlockP vb, Did qual_did_i)
 {

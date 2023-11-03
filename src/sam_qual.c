@@ -240,15 +240,16 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual)/*always textual
 {
     START_TIMER;
 
-    Context *qual_ctx = CTX(SAM_QUAL);
+    ContextP qual_ctx = CTX(SAM_QUAL);
     ZipDataLineSAM *saggy_dl;
     bool prim_has_qual_but_i_dont = false; // will be set if this line has no QUAL, but its prim line does (very rare)
     QualDiffType diff_type = QDT_DEFAULT;  // quality scores are too different, we're better off not diffing (added 14.0.10)
     bool pacbio_diff = false;
     char monochar = 0;
-
-    vb->has_qual |= !vb->qual_missing;
-
+    
+    vb->has_qual         |= !vb->qual_missing; // true if any line in the VB has qual
+    vb->has_missing_qual |=  vb->qual_missing; // true if any line in the VB is missing qual
+    
     // case --optimize_QUAL: optimize in place, must be done before sam_deep_set_QUAL_hash calculates a hash
     if (flag.optimize_QUAL && !vb->qual_missing) 
         optimize_phred_quality_string ((char*)STRa(qual));
@@ -545,7 +546,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
 
         else switch (ctx->ltype) { // the relevant subset of ltypes from reconstruct_from_ctx_do
             case LT_CODEC:
-                codec_args[ctx->lcodec].reconstruct (VB, ctx->lcodec, ctx, vb->seq_len); break;
+                codec_args[ctx->lcodec].reconstruct (VB, ctx->lcodec, ctx, vb->seq_len, reconstruct); break;
 
             case LT_SEQUENCE: 
                 reconstruct_from_local_sequence (VB, ctx, vb->seq_len, reconstruct); break;
@@ -555,6 +556,10 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
 
     uint32_t qual_len = BAFTtxt - qual;
 
+    // if we're using pacbio diff in this VB, but skipped it this line (eg due to monochar), update next_local
+    if (CTX(OPTION_iq_sq_dq)->is_loaded && !pacbio_diff)
+        sam_recon_skip_pacbio_qual (vb);
+        
 #ifdef DEBUG
     for (uint32_t i=0; i < qual_len; i++)
         ASSPIZ (IS_NON_WS_PRINTABLE(qual[i]), "Invalid QUAL character reconstructed: i=%u char=%u\n", i, (uint8_t)qual[i]);

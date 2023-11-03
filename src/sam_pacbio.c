@@ -8,6 +8,59 @@
 
 #include "sam_private.h"
 #include "reconstruct.h"
+#include "piz.h"
+
+void sam_pacbio_seg_initialize (VBlockSAMP vb)
+{
+    ctx_set_no_stons (VB, OPTION_dt_Z, OPTION_mq_Z, OPTION_st_Z, DID_EOL);
+
+    ctx_set_ltype (VB, LT_DYN_INT, OPTION_qs_i, OPTION_qe_i, OPTION_np_i, DID_EOL);
+    
+    ctx_set_store (VB, STORE_INT, OPTION_qs_i, OPTION_qe_i, OPTION_zm_i, OPTION_np_i, DID_EOL);
+
+    ctx_set_store (VB, STORE_FLOAT, OPTION_ec_f, DID_EOL);
+
+    if (segconf.has[OPTION_ec_f]) 
+        CTX(OPTION_np_i)->flags.same_line = true;  // np segged as delta vs ec, and np needs to be peeked for QUAL, before reconstructing ec
+
+    if (segconf.use_pacbio_iqsqdq) {
+        ctx_set_ltype (VB, LT_SEQUENCE, OPTION_dq_Z, OPTION_iq_Z, OPTION_sq_Z, DID_EOL);        
+        ctx_consolidate_stats (VB, OPTION_iq_sq_dq, OPTION_dq_Z, OPTION_iq_Z, OPTION_sq_Z, DID_EOL);
+    }
+}
+
+// -------------
+// zm:i
+// -------------
+
+void sam_seg_pacbio_zm (VBlockSAMP vb, int64_t zm, unsigned add_bytes)    
+{                               
+    if (zm == CTX(SAM_Q1NAME)->last_value.i) 
+        seg_by_ctx (VB, STRa(copy_Q1NAME_int), CTX(OPTION_zm_i), add_bytes);
+
+    else 
+        seg_integer (VB, CTX(OPTION_zm_i), zm, true, add_bytes);
+}
+
+// -------------
+// np:i
+// -------------
+
+void sam_seg_pacbio_np (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t np, unsigned add_bytes)    
+{                     
+    dl->np = np;
+
+    if (segconf.has[OPTION_ec_f] && ctx_has_value_in_line_(vb, CTX(OPTION_ec_f)))
+        seg_delta_vs_other_do (VB, CTX(OPTION_np_i), CTX(OPTION_ec_f), 0, 0, np, -1, add_bytes);
+
+    else 
+        seg_integer (VB, CTX(OPTION_np_i), np, true, add_bytes);
+}
+
+int32_t sam_zip_get_np (VBlockP vb, LineIType line_i)
+{
+    return DATA_LINE(line_i)->np;
+}
 
 //-------------------------------
 // QUAL - predicted by iq, sq, dq
@@ -41,7 +94,7 @@ bool sam_seg_pacbio_qual (VBlockSAMP vb, STRp(qual)/*textual*/, unsigned add_byt
     if (dq_len != qual_len || iq_len != qual_len || sq_len != qual_len) return false;
 
     buf_alloc (VB, &diff_ctx->local, qual_len, MIN_(vb->lines.len * qual_len, Ltxt / 5/*SEQ+QUAL+dq+iq+sq*/), 
-               char, CTX_GROWTH, "local");
+               char, CTX_GROWTH, CTX_TAG_LOCAL);
 
     char *next = BAFTc(diff_ctx->local);
 
@@ -73,24 +126,42 @@ PACBIO_QV(sq)
 void sam_recon_pacbio_qual (VBlockSAMP vb, ContextP ctx, bool reconstruct)
 {
     ContextP diff_ctx = CTX(SAM_QUAL_PACBIO_DIFF);
+    ContextP il_ctx   = CTX(OPTION_iq_sq_dq);
 
-    if (!reconstruct) return;
-
+    ASSISLOADED(il_ctx);
+    ASSISLOADED(diff_ctx);
+    
     ASSPIZ (diff_ctx->next_local + vb->seq_len <= diff_ctx->local.len32, "SAM_QUAL_PACBIO_DIFF.local exhausted: next_local=%u + seq_len=%u > len=%u",
             diff_ctx->next_local, vb->seq_len, diff_ctx->local.len32);
 
-    rom diff = Bc(diff_ctx->local, diff_ctx->next_local);
-    rom il   = Bc(CTX(OPTION_iq_sq_dq)->local, CTX(OPTION_iq_Z)->next_local * 3); // interlaced data
+    ASSPIZ (il_ctx->next_local + vb->seq_len * 3 <= il_ctx->local.len32, "OPTION_iq_sq_dq.local exhausted: next_local=%u + 3*seq_len=%u > len=%u",
+            il_ctx->next_local, 3*vb->seq_len, il_ctx->local.len32);
 
-    char *qual = BAFTtxt;
+    if (reconstruct) {
+        rom diff = Bc(diff_ctx->local, diff_ctx->next_local);
+        rom il   = Bc(il_ctx->local, il_ctx->next_local); // interlaced data
 
-    for (int i=0; i < vb->seq_len; i++) { 
-        *qual++ = (*diff++) + prediction (il[0], il[1] - il[0], -il[2]);
-        il += 3;
+        char *qual = BAFTtxt, *after = BAFTtxt + vb->seq_len;
+
+        while (qual < after) { 
+            *qual++ = (*diff++) + prediction (il[0], il[1] - il[0], -il[2]);
+            il += 3;
+        }
+
+        Ltxt += vb->seq_len;
     }
 
-    Ltxt += vb->seq_len;
     diff_ctx->next_local += vb->seq_len;
+
+    // note: OPTION_iq_sq_dq.next_local is used for reconstructing QUAL, while OPTION_[idx]q_Z.next_local are used for iq/dq/sq
+    il_ctx->next_local   += vb->seq_len * 3; 
+}
+
+// advance il_ctx->next_local in case this line's QUAL was NOT segged with iq_sq_dq (eg it was monochar)
+void sam_recon_skip_pacbio_qual (VBlockSAMP vb)
+{
+    if (container_peek_has_item (VB, CTX(SAM_AUX), _OPTION_iq_Z, false))
+        CTX(OPTION_iq_sq_dq)->next_local += vb->seq_len * 3; 
 }
 
 
@@ -132,16 +203,17 @@ COMPRESSOR_CALLBACK (sam_zip_iq_sq_dq)
 
     if (!line_data) return; // only length was requested
 
-    buf_alloc_exact (vb, VB_SAM->interlaced, dl->SEQ.len * 3, uint8_t, "interlaced");
+    BufferP il = &CTX(OPTION_iq_sq_dq)->interlaced;
+    buf_alloc_exact (vb, *il, dl->SEQ.len * 3, uint8_t, "interlaced");
 
-    uint8_t *next = B1ST8 (VB_SAM->interlaced);
+    uint8_t *next = B1ST8 (*il);
     for (uint32_t i=0; i < dl->SEQ.len; i++) {
         *next++ = iq[i];
         *next++ = iq[i] + sq[i];
         *next++ = -dq[i];
     }
 
-    *line_data = B1STc (VB_SAM->interlaced);
+    *line_data = B1STc (*il);
 }   
 
 // iq, sq, dq - reconstruct from iq_sq_dq context which contains interlaced data. 
@@ -178,3 +250,4 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_iq_sq_dq)
 done:
     return NO_NEW_VALUE;
 }
+
