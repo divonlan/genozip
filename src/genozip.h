@@ -214,7 +214,7 @@ typedef struct __attribute__ ((__packed__)) { uint64_t index : 40; // up to Z_MA
 typedef union { // 64 bit
     int64_t i;
     double f;
-    float f32;  // used by bam_get_one_aux 
+    struct { float f32, unused; };  // used by bam_get_one_aux 
     TxtWord;    // index into in txt_data (note: gcc/clang flag -fms-extensions is needed for this type of anonymous struct use)
     void *p; 
 } ValueType __attribute__((__transparent_union__));
