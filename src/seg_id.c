@@ -214,7 +214,7 @@ void seg_id_field (VBlockP vb, ContextP ctx, STRp(id),
 
     return;
 
-fallback: 
+fallback: { 
     // in case of id type mismatch, add id to local, but of a different context, as ctx->local is DYN_INT
     ContextP ctx_fallback = id_fallback_ctx(vb, ctx);
     seg_by_ctx (vb, STRa(id), ctx_fallback, id_len);
@@ -222,7 +222,7 @@ fallback:
     STRl(snip, 30);
     seg_prepare_snip_other (SNIP_REDIRECTION, ctx_fallback->dict_id, false, 0, snip);
     seg_by_ctx (vb, STRa(snip), ctx, add_bytes - id_len);
-
+}
     #undef T
 }
 
