@@ -103,7 +103,7 @@ bool codec_pacb_comp_init (VBlockP vb, LocalGetLineCB get_line_cb)
 // ZIP: called for QUAL-like dids
 bool codec_pacb_maybe_used (Did did_i)
 {
-    return (TECH(PACBIO) && segconf.nontrivial_qual && !segconf.use_pacbio_iqsqdq && did_i == SAM_QUAL/*==FASTQ_QUAL*/);
+    return (TECH(PACBIO) && !flag.no_pacb && segconf.nontrivial_qual && !segconf.use_pacbio_iqsqdq && did_i == SAM_QUAL/*==FASTQ_QUAL*/);
 }
 
 // ZIP: calculate the channel_i for each score on the line based on its environment (SEQ)

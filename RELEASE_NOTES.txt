@@ -3,6 +3,11 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+15.0.26 13/11/2023
+- Incremental compression improvements for VCF
+- Support for --deep for BAM files with consensus reads
+- minor bug fixes
+
 15.0.25 3/11/2023
 - PacBio: further improvement of an additional 5-10% in compression of PacBio CCS and CLR files (BAM and FASTQ). 
 - incremental improvements in BAM and GTF compression

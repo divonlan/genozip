@@ -38,10 +38,11 @@ static const uint8_t cigar_char_to_op[256] = { [0 ... 255]=BC_INVALID,
 #define X (c == 'X')
 
 // CIGAR snip opcodes - part of the file format
-#define COPY_MATE_MC_Z     ((char)0x80)   // copy from mate's MC:Z
-#define COPY_PRIM_SA_CIGAR ((char)0x81)   // v14: copy from prim's SA_CIGAR
-#define COPY_QNAME_LENGTH  ((char)0x82)   // v14: derive CIGAR from qname's length= component
-#define SQUANK             ((char)0x83)   // v14
+#define COPY_MATE_MC_Z             ((char)0x80)   // copy from mate's MC:Z
+#define COPY_PRIM_SA_CIGAR         ((char)0x81)   // v14: copy from prim's SA_CIGAR
+#define COPY_QNAME_LENGTH          ((char)0x82)   // v14: derive CIGAR from qname's length= component
+#define SQUANK                     ((char)0x83)   // v14
+#define COPY_QNAME_LENGTH_NO_CIGAR ((char)0x84)   // v15.0.26 - get seq_len from QNAME, and CIGAR is *
 
 //---------
 // Shared
@@ -711,7 +712,18 @@ void sam_seg_CIGAR (VBlockSAMP vb, ZipDataLineSAM *dl, uint32_t last_cigar_len, 
 
         dl->SEQ.len = MAX_(seq_data_len, dl->QUAL.len); // one or both might be not available and hence =1
 
-        cigar_snip_len += str_int (dl->SEQ.len, &cigar_snip[cigar_snip_len]);
+        // test if we can predict SEQ.len from QNAME's seq_len
+        if (segconf.seq_len_dict_id.num) {
+            ContextP qname_seq_len_ctx = ECTX(segconf.seq_len_dict_id);
+
+            if (ctx_has_value_in_line_(VB, qname_seq_len_ctx) && dl->SEQ.len == qname_seq_len_ctx->last_value.i)
+                cigar_snip[cigar_snip_len++] = COPY_QNAME_LENGTH_NO_CIGAR;
+            else 
+                goto no_qname_seq_len;
+        }
+
+        else no_qname_seq_len:
+            cigar_snip_len += str_int (dl->SEQ.len, &cigar_snip[cigar_snip_len]);
     } 
     else { // CIGAR is available - just check the seq and qual lengths
         ASSSEG (!seq_is_available || seq_data_len == dl->SEQ.len,
@@ -746,7 +758,7 @@ void sam_seg_CIGAR (VBlockSAMP vb, ZipDataLineSAM *dl, uint32_t last_cigar_len, 
             sam_cigar_seg_prim_cigar (vb, vb->last_cigar, last_cigar_len);
     }
 
-    // case: copy from "length=" item of QNAME
+    // case: copy from "length=" item of QNAME (only if CIGAR is a simple M)
     else if (sam_cigar_seggable_by_qname (vb)) 
         seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_CIGAR, COPY_QNAME_LENGTH }, 3, ctx, add_bytes);
 
@@ -882,8 +894,9 @@ SPECIAL_RECONSTRUCTOR_DT (sam_cigar_special_CIGAR)
             snip_len = vb->scratch.len;
             break;
 
-        case COPY_QNAME_LENGTH: // copy from QNAME item with "length="
-            buf_alloc (vb, &vb->scratch, 0, 10, char, 0, "scratch");
+        case COPY_QNAME_LENGTH: // copy from QNAME item with "length=" or range
+        case COPY_QNAME_LENGTH_NO_CIGAR: // 15.0.26
+            buf_alloc (vb, &vb->scratch, 0, 16, char, 0, "scratch");
             
             ContextP len_ctx = ECTX(segconf.seq_len_dict_id);
             
@@ -901,14 +914,16 @@ SPECIAL_RECONSTRUCTOR_DT (sam_cigar_special_CIGAR)
                 vb->seq_len = *B64(len_ctx->history, buddy_line_i);
             }
             
-            else
+            else 
                 ASSPIZ (false, "len_ctx=%s has no value in line", len_ctx->tag_name);
             
             vb->scratch.len32 = str_int (vb->seq_len, B1STc (vb->scratch));
-            BNXTc (vb->scratch) = 'M';
+
+            BNXTc (vb->scratch) = (snip[0] == COPY_QNAME_LENGTH) ? 'M' : '*';
 
             snip     = vb->scratch.data;
             snip_len = vb->scratch.len;
+            
             break;
 
         default: {}

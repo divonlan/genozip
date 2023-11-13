@@ -350,10 +350,10 @@ ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux, uint3
         MUX_CHANNEL_CTX(mux)[channel_i] = channel_ctx;
 
         channel_ctx->is_initialized = true;
-        channel_ctx->flags.store  = mux->ctx->flags.store;
-        channel_ctx->ltype        = mux->ctx->ltype; 
-        channel_ctx->no_stons     = mux->no_stons; // not inherited from parent
-        channel_ctx->st_did_i     = (mux->ctx->st_did_i == DID_NONE) ? mux->ctx->did_i : mux->ctx->st_did_i;
+        channel_ctx->flags.store    = mux->ctx->flags.store;
+        channel_ctx->ltype          = mux->ctx->ltype; 
+        channel_ctx->no_stons       = mux->no_stons; // not inherited from parent
+        channel_ctx->st_did_i       = (mux->ctx->st_did_i == DID_NONE) ? mux->ctx->did_i : mux->ctx->st_did_i;
         channel_ctx->flags.ctx_specific_flag = mux->ctx->flags.ctx_specific_flag; // inherit - needed for "same_line"        
     }
 
@@ -439,9 +439,9 @@ PosType64 seg_pos_field (VBlockP vb,
     if ((!IS_FLAG (opt, SPF_UNLIMITED_DELTA) && (ABS(pos_delta) > MAX_POS_DELTA) && base_ctx->last_value.i) ||
         IS_FLAG (opt, SPF_NO_DELTA)) {
 
-        snip_ctx->ltype = LT_UINT32;
+        snip_ctx->ltype = LT_DYN_INT;
         snip_ctx->last_delta = 0;  // on last_delta as we're PIZ won't have access to it - since we're not storing it in b250 
-        seg_integer_fixed (vb, snip_ctx, &this_pos, true, add_bytes);
+        seg_integer (vb, snip_ctx, this_pos, true, add_bytes); // some fields (eg Z5:i) might be -1, so careful not to assume UINT32
 
         return this_pos;
     }
@@ -499,7 +499,7 @@ void seg_integer (VBlockP vb, ContextP ctx, int64_t n, bool with_lookup, unsigne
             "ctx=%s must have flags.store=STORE_INT", ctx->tag_name); // needed to allow recon to translate to BAM
 #endif
 
-    ctx_set_last_value (vb, ctx, (ValueType){.i = n});
+    ctx_set_last_value (vb, ctx, n);
 
     seg_add_to_local_resizable (vb, ctx, n, add_bytes);
 
@@ -689,7 +689,7 @@ WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_
         if (!arr_dict_id.num)        
             arr_dict_id = sub_dict_id (container_ctx->dict_id, 1);
         
-        buf_alloc (vb, &container_ctx->con_cache, 0, 1, MiniContainer, 1, "contexts->con_cache");
+        buf_alloc (vb, &container_ctx->con_cache, 0, 1, MiniContainer, 1, CTX_TAG_CON_CACHE);
 
         con = B1ST (MiniContainer, container_ctx->con_cache);
         *con = (MiniContainer){ .nitems_lo = 1, 
@@ -793,7 +793,7 @@ void seg_array_by_callback (VBlockP vb, ContextP container_ctx, STRp(arr), char 
     if (!container_ctx->con_cache.len32) {
         DictId arr_dict_id = sub_dict_id (container_ctx->dict_id, 1);
         
-        buf_alloc (vb, &container_ctx->con_cache, 0, 1, MiniContainer, 1, "contexts->con_cache");
+        buf_alloc (vb, &container_ctx->con_cache, 0, 1, MiniContainer, 1, CTX_TAG_CON_CACHE);
 
         con = B1ST (MiniContainer, container_ctx->con_cache);
         *con = (MiniContainer){ .nitems_lo = 1, 
@@ -813,7 +813,7 @@ void seg_array_by_callback (VBlockP vb, ContextP container_ctx, STRp(arr), char 
 
     unsigned sum_lens = 0;
     for (uint32_t i=0; i < n_items; i++) {  // value_len will be -1 after last number
-        item_seg (VB, arr_ctx, STRi(item,i), i);
+        item_seg (VB, arr_ctx, STRi(item,i), i); // return value ignored - must be true
     
         sum_lens += item_lens[i];
     }

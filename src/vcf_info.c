@@ -488,118 +488,6 @@ TRANSLATOR_FUNC (vcf_piz_luft_A_AN)
     return true;    
 }
 
-// --------
-// INFO/END
-// --------
-
-static void vcf_seg_INFO_END (VBlockVCFP vb, ContextP end_ctx, rom end_str, unsigned end_len) // note: ctx is INFO/END *not* POS (despite being an alias)
-{
-    // END is an alias of POS
-    seg_pos_field (VB, VCF_POS, VCF_POS, SPF_BAD_SNIPS_TOO | SPF_ZERO_IS_BAD | SPF_UNLIMITED_DELTA, 0, end_str, end_len, 0, end_len);
-
-    // add end_delta to dl for sorting. it is used only in case chrom and pos are identical
-    DATA_LINE (vb->line_i)->end_delta = vb->last_delta (VCF_POS);
-
-    // case --chain: if we have lifted-over POS (as primary POS field or in INFO/LIFTBACK), 
-    // check that lifting-over of END is delta-encoded and is lifted over to the same, non-xstrand, Chain alignment, and reject if not
-    if (chain_is_loaded && LO_IS_OK (last_ostatus)) { 
-
-        bool is_xstrand = (vb->last_index (VCF_oXSTRAND) > 0); // set in vcf_lo_seg_generate_INFO_DVCF
-        PosType64 aln_last_pos = chain_get_aln_prim_last_pos (vb->pos_aln_i); 
-        PosType64 end = vb->last_int (VCF_POS); 
-
-        // case: we don't yet handle END translation in case of a reverse strand
-        if (is_xstrand)            
-            REJECT_SUBFIELD (LO_INFO, end_ctx, ".\tVariant with INFO/END and chain file alignment with a negative strand%s", "");
-
-        // case: END goes beyond the end of the chain file alignment and its a <DEL>
-        else if (vb->is_del_sv && end > aln_last_pos) {
-
-            // case: END goes beyond end of alignment
-            PosType64 gap_after = chain_get_aln_gap_after (vb->pos_aln_i);
-            
-            // case: END falls in the gap after - <DEL> is still valid but translated END needs to be closer to POS to avoid gap - 
-            // we don't yet do this
-            if (end <= aln_last_pos + gap_after)
-                REJECT_SUBFIELD (LO_INFO, end_ctx, ".\t<DEL> variant: INFO/END=%.*s is in the gap after the end of the chain file alignment", end_len, end_str);
-    
-            // case: END falls on beyond the gap (next alignment or beyond) - this variant cannot be lifted
-            else
-                REJECT_SUBFIELD (LO_INFO, end_ctx, ".\t<DEL> variant: INFO/END=%.*s is beyond the end of the chain file alignment and also beyond the gap after the alignment", end_len, end_str);
-        }
-
-        // case: END goes beyond the end of the chain file alignment and its NOT a <DEL>
-        else if (!vb->is_del_sv && end > aln_last_pos) 
-            REJECT_SUBFIELD (LO_INFO, end_ctx, ".\tPOS and INFO/END=%.*s are not on the same chain file alignment", end_len, end_str);
-
-        // case: invalid value. since we use SPF_UNLIMITED_DELTA, any integer value should succeed
-        else if (!CTX(VCF_POS)->last_delta)
-            REJECT_SUBFIELD (LO_INFO, end_ctx, ".\tINFO/END=%.*s has an invalid value", end_len, end_str);        
-    }
-}
-
-// END data resides in POS (its an alias), but has a different translator as its a different container item. 
-// For END, we didn't add an oPOS entry, because we can't consume it when showing Primary. Instead, we do delta arithmetic.
-// returns true if successful (return value used only if validate_only)
-TRANSLATOR_FUNC (vcf_piz_luft_END)
-{
-    // ZIP liftover validation: postpone to vcf_seg_INFO_END
-    if (validate_only) return true; 
-
-    PosType64 translated_end;
-    ContextP pos_ctx  = CTX (VCF_POS);
-    ContextP opos_ctx = CTX (VCF_oPOS);
-    
-    // ZIP liftback (POS is always before END, because we seg INFO/LIFTOVER first)
-    if (IS_ZIP && VB_VCF->line_coords == DC_LUFT) { // liftback
-        PosType64 oend;
-        if (!str_get_int_range64 (STRa(recon), 0, MAX_POS, &oend))
-            return false;
-
-        translated_end = pos_ctx->last_value.i + (oend - opos_ctx->last_value.i);
-    }
-
-    // PIZ liftover: we have already reconstructed oPOS and POS (as an item in VCF_TOPLUFT)
-    else {
-        translated_end = opos_ctx->last_value.i + pos_ctx->last_delta; ; // delta for generated this END value (END - POS)
-
-        CTX(INFO_END)->last_end_line_i = vb->line_i; // so vcf_piz_special_COPYPOS knows that END was reconstructed
-    }
-
-    // re-reconstruct END
-    Ltxt -= recon_len; 
-    RECONSTRUCT_INT (translated_end);
-    
-    return true;    
-}
-
-// Called to reconstruct the POS subfield of INFO/LIFTBACK, handling the possibility of INFO/END
-// Also used for FORMAT/PS
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_COPYPOS)
-{
-    if (!reconstruct) return NO_NEW_VALUE;
-    
-    bool has_end = CTX(INFO_END)->last_end_line_i == vb->line_i; // true if INFO/END was encountered
-
-    ContextP pos_ctx = CTX (VCF_POS);
-    int64_t pos;
-
-    if (has_end) {
-        int64_t end   = pos_ctx->last_value.i;
-        int64_t delta = pos_ctx->last_delta;
-        pos = end - delta;
-    }
-    else
-        pos = pos_ctx->last_value.i;
-
-    if (snip_len)
-        pos += atoi (snip); // add optional delta (since 13.0.5)
-
-    RECONSTRUCT_INT (pos); // vcf_piz_luft_END makes sure it always contains the value of POS, not END
-    return NO_NEW_VALUE;
-}
-
-
 // ------------------------
 // INFO/SVLEN & INFO/REFLEN
 // ------------------------
@@ -1102,7 +990,7 @@ void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
     vb->info_items.len = 0; // reset from previous line
 
     // case: INFO field is '.' (empty) (but not in DVCF as we will need to deal with DVCF items)
-    if (!z_is_dvcf && IS_PERIOD (info)) {
+    if (!z_is_dvcf && IS_PERIOD (info) && !segconf.vcf_is_isaac) { // note: in Isaac, it slightly better to mux the "."
         seg_by_did (VB, ".", 1, VCF_INFO, 2); // + 1 for \t or \n
         return;
     }
@@ -1264,9 +1152,11 @@ void vcf_finalize_seg_info (VBlockVCFP vb)
     char ren_prefixes[con_nitems(con) * MAX_TAG_LEN]; 
     unsigned ren_prefixes_len = z_is_dvcf && !vb->is_rejects_vb ? vcf_tags_rename (vb, con_nitems(con), 0, 0, 0, B1ST (InfoItem, vb->info_items), ren_prefixes) : 0;
 
-    // case GVCF: multiplex by has_RGQ
-    if (!segconf.running && segconf.has[FORMAT_RGQ]) {
-        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, VCF_INFO, (MultiplexerP)&vb->mux_INFO, vb->line_has_RGQ);
+    // case GVCF: multiplex by has_RGQ or FILTER in Isaac
+    if (!segconf.running && (segconf.has[FORMAT_RGQ] || segconf.vcf_is_isaac)) {
+        ContextP channel_ctx = 
+            seg_mux_get_channel_ctx (VB, VCF_INFO, (MultiplexerP)&vb->mux_INFO, (segconf.has[FORMAT_RGQ] ? vb->line_has_RGQ : vcf_isaac_info_channel_i (VB)));
+        
         seg_by_did (VB, STRa(vb->mux_INFO.snip), VCF_INFO, 0);
 
         // if we're compressing a Luft rendition, swap the prefixes

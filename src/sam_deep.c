@@ -132,17 +132,21 @@ void sam_deep_zip_finalize (void)
 #define MAX_ENTRIES 0xfffffffe // our current implementation is limited to 4G reads
 
 // ZIP compute thread while segging SEQ
-void sam_deep_set_QNAME_hash (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qname))
+void sam_deep_set_QNAME_hash (VBlockSAMP vb, ZipDataLineSAM *dl, QType q, STRp(qname))
 {
-    if (!dl->FLAG.secondary && !dl->FLAG.supplementary) {
-        dl->deep_hash.qname = deep_qname_hash (QNAME1, STRa(qname), NULL);
+    // note: we must drop consensus reads, because Deep has an assumption, used to prove uniqueness by hash,
+    // that there are no BAM alignments except those in the FASTQ files provided
+    if (!dl->FLAG.secondary && !dl->FLAG.supplementary && !segconf.flav_prop[q].is_consensus) {
+        dl->deep_hash.qname = deep_qname_hash (q, STRa(qname), NULL);
         dl->is_deepable = true; // note: we haven't tested SEQ yet, so this might still change
 
         vb->lines.count++;      // counts deepable lines
     }
 
     else
-        vb->deep_stats[dl->FLAG.secondary ? RSN_SECONDARY : RSN_SUPPLEMENTARY]++; // counting non-deepability reasons
+        vb->deep_stats[segconf.flav_prop[q].is_consensus ? RSN_CONSENSUS 
+                     : dl->FLAG.secondary                ? RSN_SECONDARY 
+                     :                                     RSN_SUPPLEMENTARY]++; // counting non-deepability reasons
 }
 
 // ZIP compute thread while segging SEQ: set hash of forward SEQ (i.e. as it would appear in the FASTQ file) 
@@ -261,6 +265,7 @@ void sam_deep_merge (VBlockP vb_)
 // SAM PIZ: step 1: output QNAME,SEQ,QUAL into vb->deep_ents / vb->deep_index
 //-----------------------------------------------------------------------------
 
+// main thread: called for after reading global area
 void sam_piz_deep_initialize (void)
 {
     mutex_initialize (z_file->qname_huf_mutex);
@@ -542,7 +547,7 @@ static void sam_piz_deep_add_qual (VBlockSAMP vb, STRp(qual))
 }
 
 
-// For SAM: called for top-level SAM container if compressed with --deep
+// For SAM: called for top-level SAM container if compressed with --deep (defined as con_item_cb in data_types.h)
 // for BAM: called from SEQ and QUAL translators (before translation) 
 CONTAINER_ITEM_CALLBACK (sam_piz_con_item_cb)
 {
@@ -551,6 +556,7 @@ CONTAINER_ITEM_CALLBACK (sam_piz_con_item_cb)
     if (con_item->dict_id.num == _SAM_SQBITMAP) {
         if (!flag.deep                                       || // Deep file (otherwise this callback will not be set), but SAM/BAM-only reconstruction
             last_flags.secondary || last_flags.supplementary || // SECONDARY or SUPPLEMENTARY alignment
+            (segconf.flav_prop[QNAME2].is_consensus && ctx_encountered_in_line (vb, SAM_QNAME2)) || // consensus alignment 
             IS_ASTERISK(recon)                               || // Missing SEQ
             str_is_monochar (STRa(recon))) {                    // mono-char SEQ
 

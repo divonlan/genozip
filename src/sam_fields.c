@@ -321,6 +321,47 @@ COMPRESSOR_CALLBACK (sam_zip_BQ)
 }
 
 // ----------------------------------------------------------------------------------------------------------
+// MM:Z: Base modifications / methylation
+// Example: "C+m,5,12,0;C+h,5,12,0;"
+// ----------------------------------------------------------------------------------------------------------
+
+void sam_MM_zip_initialize (void)
+{
+    segconf.MM_con = (SmallContainer){ 
+        .nitems_lo = 2, 
+        .repeats   = 1,
+        .items[0]  = { .dict_id = sub_dict_id_(_OPTION_MM_Z, '0'), .separator = "," },
+        .items[1]  = { .dict_id = sub_dict_id_(_OPTION_MM_Z, '1')                   } 
+    };
+
+    segconf.MM_con_snip_len = sizeof (segconf.MM_con_snip);
+    container_prepare_snip ((ContainerP)&segconf.MM_con, 0, 0, qSTRa(segconf.MM_con_snip));
+}
+
+static bool sam_seg_MM_Z_item (VBlockP vb, ContextP ctx, 
+                               STRp(mm_item),  // e.g. "C+m,5,12,0" 
+                               uint32_t repeat)
+{
+    rom comma = memchr (mm_item, ',', mm_item_len);
+    ASSSEG (comma, "Invalid MM:Z item: \"%.*s\"", STRf(mm_item));
+
+    seg_by_dict_id (vb, mm_item, comma - mm_item, segconf.MM_con.items[0].dict_id, comma - mm_item);
+    
+    rom arr = comma + 1;
+    uint32_t arr_len = mm_item_len + mm_item - arr;
+    seg_array (vb, ctx_get_ctx(vb, segconf.MM_con.items[1].dict_id), ctx->st_did_i, arr, arr_len, ',', 0, false, true, DICT_ID_NONE, arr_len);
+    
+    seg_by_ctx (vb, STRa(segconf.MM_con_snip), ctx, 1); // account for comma
+
+    return true;
+}
+
+static void sam_seg_MM_Z (VBlockSAMP vb, STRp(mm), unsigned add_bytes)
+{
+    seg_array_by_callback (VB, CTX(OPTION_MM_Z), STRa(mm), ';', sam_seg_MM_Z_item, add_bytes);
+}
+
+// ----------------------------------------------------------------------------------------------------------
 // SM:i: Template-independent mapping quality
 // ----------------------------------------------------------------------------------------------------------
 static void sam_seg_SM_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t SM, unsigned add_bytes)
@@ -1137,7 +1178,7 @@ static void sam_seg_set_last_value_f_from_aux (VBlockSAMP vb, Did did_i, bool is
     ContextP ctx = CTX(did_i);
 
     if (is_bam) 
-        ctx_set_last_value (VB, ctx, (double)numeric.f32);
+        ctx_set_last_value (VB, ctx, (double)numeric.f32.f);
 
     else {
         SAFE_NULT(value);
@@ -1224,6 +1265,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
         case _OPTION_UY_Z: // alias of QX (cellranger)
         case _OPTION_QX_Z: sam_seg_QX_Z (vb, dl, STRa(value), add_bytes); break;
         case _OPTION_BC_Z: sam_seg_BC_Z (vb, dl, STRa(value), add_bytes); break;
+        case _OPTION_MM_Z: sam_seg_MM_Z (vb, STRa(value), add_bytes); break;
 
         case _OPTION_2Y_Z: COND (segconf.has_cellranger, sam_seg_other_qual (vb, &dl->_2Y, OPTION_2Y_Z, STRa(value), false, add_bytes));
         

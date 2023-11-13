@@ -251,3 +251,18 @@ done:
     return NO_NEW_VALUE;
 }
 
+// SAM + FASTQ: callback defined in qname_flavor for QF_PACBIO_rng 
+void seg_qname_rng2seq_len_cb (VBlockP vb, ContextP ctx, STRp(value))
+{
+    seg_by_ctx (vb, (char[]){ SNIP_SPECIAL, (VB_DT(FASTQ) ? FASTQ_SPECIAL_qname_rng2seq_len : SAM_SPECIAL_qname_rng2seq_len) }, 2, ctx, 0);
+
+    ctx_set_last_value (vb, ctx, (ctx-1)->last_value.i - (ctx-2)->last_value.i);
+}
+
+// SAM + FASTQ: since item has CI0_INVISIBLE, this function is always called with reconstruct=false
+SPECIAL_RECONSTRUCTOR (special_qname_rng2seq_len)
+{
+    new_value->i = (ctx-1)->last_value.i - (ctx-2)->last_value.i;
+
+    return HAS_NEW_VALUE;
+}

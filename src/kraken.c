@@ -125,6 +125,9 @@ void kraken_seg_initialize (VBlockP vb)
 
 void kraken_seg_finalize (VBlockP vb)
 {
+    if (segconf.running)
+        qname_segconf_finalize (VB);
+
     // top level snip - IMPORTNAT - kraken_piz_filter needs to changed and support backward compatability
     SmallContainer top_level = { 
         .repeats      = vb->lines.len,

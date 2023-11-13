@@ -22,7 +22,8 @@
 #include "sam.h"
 #include "codec.h"
 
-static STRl(copy_qname, 50);
+sSTRl(copy_qname, 16);
+sSTRl(snip_redirect_to_QNAME2, 16);
 
 static inline Did did_by_q (QType q) 
 {
@@ -66,7 +67,7 @@ static void qname_generate_qfs_with_mate (QnameFlavorStruct *qfs)
     qfs->con.items[mate_item_i].separator[1] = 1;
     
     // name
-    strcpy (&qfs->name[strlen(qfs->name)], "/");
+    strcpy (&qfs->name[strlen(qfs->name)], "@");
     
     // examples
     for (int i=0; i < QFS_MAX_EXAMPLES; i++) {
@@ -76,16 +77,19 @@ static void qname_generate_qfs_with_mate (QnameFlavorStruct *qfs)
         strcpy (&qfs->example[i][example_len], "/1");
     }
 
-    // case 1: previous item is not fixed - move its separator (possibly 0) to the mate item and make it '/'
-    if (qfs->con.items[mate_item_i-1].separator[0] != CI0_FIXED_0_PAD) {
-        qfs->con.items[mate_item_i].separator[0] = qfs->con.items[mate_item_i-1].separator[0]; // 0 or ' '
-        qfs->con.items[mate_item_i].separator[1] = 0;
-        qfs->con.items[mate_item_i-1].separator[0] = '/';
+    // case 1: previous item is not fixed of invisible - move its separator (possibly 0) to the mate item and make it '/'
+    uint8_t *prev_sep = qfs->con.items[mate_item_i-1].separator; 
+    uint8_t *mate_sep = qfs->con.items[mate_item_i  ].separator; 
+    
+    if (prev_sep[0] != CI0_FIXED_0_PAD) {
+        mate_sep[0] = prev_sep[0]; // 0 or ' '
+        mate_sep[1] = 0;
+        prev_sep[0] = '/';
     }
 
     // case 2: previous item is fixed - add / as a prefix. 
-    else { // eg con_roche_454
-        // qfs must already a PX_MATE prefix item for the mate item, if previous item is fixed
+    else { // eg con_roche_454, con_pacbio_range
+        // qfs must already a PX_MATE_FIXED_0_PAD prefix item for the mate item, if previous item is fixed or invisible
         ASSERT (qname_get_px_str_len (qfs) > mate_item_i, "QnameFlavor=%s: expecting PX_MATE prefix item to exist for mate_item_i=%u",
                 qfs->name, mate_item_i);
 
@@ -93,7 +97,7 @@ static void qname_generate_qfs_with_mate (QnameFlavorStruct *qfs)
     }
 
     // add new item as numeric item (at beginning of array - easier, and the order doesn't matter)
-    if (qfs->con.items[mate_item_i].separator[0] == CI0_FIXED_0_PAD) {
+    if (mate_sep[0] == CI0_FIXED_0_PAD) {
         memmove (&qfs->numeric_items[1], qfs->numeric_items, sizeof(qfs->numeric_items) - sizeof(qfs->numeric_items[0])); // make room
         qfs->numeric_items[0] = mate_item_i;
     }
@@ -104,6 +108,7 @@ static void qname_generate_qfs_with_mate (QnameFlavorStruct *qfs)
     if (qfs->fixed_len) // note: qfs can have fixed_len even if items aren't fixed (eg IonTorrent)
         qfs->fixed_len += 2;
 }
+
 
 // we need to prepare the containers only once and they can serve data types, as the containers
 // are data-type independent (since all data types use the dict_id for QNAMEs)
@@ -297,7 +302,9 @@ void qname_zip_initialize (void)
         }
 
         seg_prepare_snip_other (SNIP_COPY, (DictId)_SAM_QNAME, false, 0, copy_qname); // QNAME dict_id is the same for SAM, FASTQ, KRAKEN
-    
+
+        seg_prepare_snip_other (SNIP_REDIRECTION, _SAM_QNAME2, false, 0, snip_redirect_to_QNAME2);
+
         tokenizer_zip_initialize();
     }
 }
@@ -317,8 +324,8 @@ void qname_seg_initialize (VBlockP vb, QType q, Did st_did_i)
     // set STORE_INT as appropriate
     if (qfs->ordered_item1   != -1) ctx_by_item (qfs->ordered_item1)    ->flags.store = STORE_INT; 
     if (qfs->ordered_item2   != -1) ctx_by_item (qfs->ordered_item2)    ->flags.store = STORE_INT; 
-    if (qfs->range_end_item1 != -1) ctx_by_item (qfs->range_end_item1-1)->flags.store = STORE_INT; 
-    if (qfs->range_end_item2 != -1) ctx_by_item (qfs->range_end_item2-1)->flags.store = STORE_INT; 
+    if (qfs->range_end_item1 != -1) ctx_by_item (qfs->range_end_item1-1)->flags.store = ctx_by_item (qfs->range_end_item1)->flags.store = STORE_INT; 
+    if (qfs->range_end_item2 != -1) ctx_by_item (qfs->range_end_item2-1)->flags.store = ctx_by_item (qfs->range_end_item2)->flags.store = STORE_INT; 
     if (qfs->seq_len_item    != -1) ctx_by_item (qfs->seq_len_item)     ->flags.store = STORE_INT; 
 
     for (int i=0; qfs->in_local[i] != -1; i++) {
@@ -350,6 +357,32 @@ void qname_seg_initialize (VBlockP vb, QType q, Did st_did_i)
             ctx_by_item (i)->no_stons = true;
 }
 
+void qname_segconf_finalize (VBlockP vb)
+{
+    // SAM: if we have a consensus flavor, it must QNAME2, expected by sam_piz_con_item_cb
+    if (VB_DT(SAM) || VB_DT(BAM)) {
+        if (segconf.flav_prop[QNAME1].is_consensus && segconf.qname_flavor[QNAME2]) {
+            SWAP (segconf.qname_flavor[QNAME1], segconf.qname_flavor[QNAME2]);
+            SWAP (segconf.flav_prop[QNAME1],    segconf.flav_prop[QNAME2]);
+            SWAP (segconf.qname_line0[QNAME1],  segconf.qname_line0[QNAME2]);
+        }
+
+        if (flag.deep) 
+            for (QType q=QNAME1; q <= QNAME2; q++)
+                segconf.deep_sam_qname_flavor[q] = segconf.qname_flavor[q];
+    }
+
+    for (QType q=QNAME1; q < NUM_QTYPES; q++) 
+        if (segconf.qname_flavor[q])
+            segconf.sorted_by_qname[q] = VB_DT(FASTQ) || VB_DT(KRAKEN) ||   
+                                         segconf.is_collated || segconf.qname_flavor[q]->sam_qname_sorted || 
+                                         (!segconf.is_sorted && !segconf.is_paired);
+
+    // if only consensus reads exist, change tech to unknown
+    if (segconf.tech == TECH_CONS)
+        segconf.tech = TECH_UNKNOWN;
+}
+
 // note: we run this function only in discovery, not in segging, because it is quite expensive - checking all numerics.
 // returns 0 if qname is indeed the flavor, or error code if not
 
@@ -362,8 +395,10 @@ QnameTestResult qname_test_flavor (STRp(qname), QType q, QnameFlavor qfs, bool q
         && !(qfs->only_q == Q2orSAM && (q == QNAME2 || Z_DT(BAM) || Z_DT(SAM)))) 
         return QTR_WRONG_Q; 
 
-    if (q==QNAME2 && (segconf.tech != qfs->qname1_tech && segconf.tech != TECH_UNKNOWN))
-        return QTR_TECH_MISMATCH;
+    // in FASTQ, QNAME1 match fq_qname1_tech
+    if (q==QNAME2 && Z_DT(FASTQ) && 
+        qfs->fq_qname1_tech != TECH_ANY && segconf.tech != qfs->fq_qname1_tech && segconf.tech != TECH_UNKNOWN)
+            return QTR_TECH_MISMATCH;
 
     if (!qname_len) 
         return QTR_QNAME_LEN_0;
@@ -416,24 +451,25 @@ void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
         if (!(reason = qname_test_flavor (STRa(qname), q, qfs, true))) {
 
             // case: first discovery: store discovered qname
-            if (!segconf.qname_line0[q][0]) 
-                memcpy (segconf.qname_line0[q], qname, MIN_(qname_len, SAM_MAX_QNAME_LEN));
+            if (!segconf.qname_line0[q].s[0]) 
+                memcpy (segconf.qname_line0[q].s, qname, MIN_(qname_len, SAM_MAX_QNAME_LEN));
 
             // case: rediscovery: check that it is also an acceptable flavor for stored qname_line0
             else {
-                if (QTR_SUCCESS != qname_test_flavor (segconf.qname_line0[q], strlen(segconf.qname_line0[q]), QANY, qfs, !flag.debug_qname))
+                if (QTR_SUCCESS != qname_test_flavor (segconf.qname_line0[q].s, strlen(segconf.qname_line0[q].s), QANY, qfs, true))
                     continue;
             }
 
             segconf.qname_flavor[q] = qfs;
 
             static QnameCNN char_to_cnn[256] = CHAR_TO_CNN;
-            segconf.flav_prop[q] = (QnameFlavorProp){ .id          = qfs->id, 
-                                                      .has_seq_len = qfs->seq_len_item != -1,
-                                                      .is_mated    = qfs->is_mated, 
-                                                      .cnn         = char_to_cnn[(int)qfs->cut_to_canonize] };
-            
-            if (q == QNAME1 || (q == QNAME2 && segconf.tech == TECH_NCBI))
+            segconf.flav_prop[q] = (QnameFlavorProp){//xxx .id           = qfs->id, 
+                                                      .has_seq_len  = (qfs->seq_len_item != -1),
+                                                      .is_mated     = qfs->is_mated, 
+                                                      .is_consensus = (qfs->tech == TECH_CONS),
+                                                      .cnn          = char_to_cnn[(int)qfs->cut_to_canonize] };
+
+            if (q == QNAME1 || (q == QNAME2 && (segconf.tech == TECH_NCBI || segconf.tech == TECH_CONS)))
                 segconf.tech = qfs->tech; // note: if this is QNAME2, we update tech according to QNAME2 (instead of NCBI)
             
             ASSERT (!qfs->cut_to_canonize || segconf.flav_prop[q].cnn, "flavor=%s has cut_to_canonize='%c', but it is missing in CHAR_TO_CNN", qfs->name, qfs->cut_to_canonize);
@@ -450,7 +486,7 @@ void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
         }
 
         else if (flag.debug_qname && reason) 
-            iprintf ("%.*s is not flavor \"%s\". Reason: %s\n", STRf(qname), qfs->name, reasons[reason]);
+            iprintf ("%.*s is not %s flavor \"%s\". Reason: %s\n", STRf(qname), qtype_name(q), qfs->name, reasons[reason]);
     }
 
     if (flag.debug_qname && !segconf.qname_flavor[q])
@@ -507,6 +543,20 @@ fail:
     return false;
 }
 
+// SAM seg
+QType qname_sam_get_qtype (STRp(qname))
+{
+    // if we have a QNAME2 flavor and qname matches it, return QNAME2, otherwise QNAME1
+    if (segconf.qname_flavor[QNAME2]) {
+        QnameFlavor qfs = segconf.qname_flavor[QNAME2];
+        str_split_by_container (qname, qname_len, &qfs->con, qfs->con_prefix, qfs->con_prefix_len, item, NULL);
+
+        return n_items ? QNAME2 : QNAME1;
+    }
+    else
+        return QNAME1;
+}
+
 // attempt to seg according to the qf - return true if successful
 static bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additional_bytes)
 {
@@ -522,10 +572,6 @@ static bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additio
     
     // seg container
     seg_by_ctx (vb, STRi(qfs->con_snip, q), qname_ctx, qfs->num_seps + add_additional_bytes); // account for container separators, prefixes and caller-requested add_additional_bytes 
-
-    bool sorted_by_qname = VB_DT(FASTQ) || VB_DT(KRAKEN) ||   
-                           segconf.is_collated || qfs->sam_qname_sorted || 
-                           (!segconf.is_sorted && segconf.is_long_reads);
 
     for (unsigned item_i=0; item_i < qfs->con.nitems_lo; item_i++) {
 
@@ -546,9 +592,8 @@ static bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additio
         ContextP item_ctx = qname_ctx + ((item->dict_id.num == _SAM_QmNAME) ? MAX_QNAME_ITEMS : (1+item_i)); // note: QmName, if exists, is always the last item
                         
         // case: this is the file is sorted by qname - delta against previous
-        if (sorted_by_qname && 
+        if (segconf.sorted_by_qname[q] && 
             (item_i == qfs->ordered_item1 || item_i == qfs->ordered_item2) &&
-            (ctx_has_value_in_prev_line_(vb, item_ctx) || vb->line_i==0) &&
             ( (!qfs->is_hex[item_i] && str_get_int_dec (STRa(str), (uint64_t*)&value)) || ( qfs->is_hex[item_i] && str_get_int_hex (STRa(str), true, false, (uint64_t*)&value))) && // lower-case hex
             (ABS(value - item_ctx->last_value.i) < MAX_TOKENIZER_DETLA)) 
             seg_self_delta (vb, item_ctx, value, 
@@ -586,8 +631,10 @@ static bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additio
         else 
             seg_by_ctx (vb, STRa(str), item_ctx, str_len); 
 
-        // case: this item is qname_seq_len - set last_value by the beneficial field (CIGAR in SAM, ? in FASTQ)
-        if (item_i == qfs->seq_len_item && (value >= 0 || str_get_int (STRa(str), &value))) 
+        // case: set last_value if needed and not already set. note: some lines do not set last_value -
+        // if qname is not parsed and just copied from elsewhere (previous line, buddy, pair, deep, sag...)
+        if (item_ctx->flags.store == STORE_INT && !ctx_has_value_in_line_(vb, item_ctx) &&
+            (value >= 0 || str_get_int (STRa(str), &value)))
             ctx_set_last_value (vb, item_ctx, value);  
     }
 
@@ -613,7 +660,7 @@ void qname_seg (VBlockP vb, QType q, STRp (qname), unsigned add_additional_bytes
         success = qname_seg_qf (vb, q, STRa(qname), add_additional_bytes);
 
     // if we're in segconf - check if there is another flavor that matches both this qname and 
-    // the qname of line_i=0 on which flavor is based. Eg BGI-varlen can change to BGI-R7 if this qname has a leading 0 in Q4NAME.
+    // the qname of line_i=0 on which flavor is based. Eg MGI-varlen can change to MGI-R7 if this qname has a leading 0 in Q4NAME.
     if (!success && segconf.running && qname_segconf_rediscover_flavor (vb, q, STRa(qname)))
         success = qname_seg_qf (vb, q, STRa(qname), add_additional_bytes); // now with new flavor
 
@@ -621,9 +668,7 @@ void qname_seg (VBlockP vb, QType q, STRp (qname), unsigned add_additional_bytes
     if (!success && flavor && (VB_DT(SAM) || VB_DT(BAM)) && q == QNAME1) {
         qname_seg (vb, QNAME2, STRa(qname), 0);
 
-        STRl(snip,16);
-        seg_prepare_snip_other (SNIP_REDIRECTION, _SAM_QNAME2, false, 0, snip);
-        seg_by_ctx (vb, STRa(snip), qname_ctx, add_additional_bytes);
+        seg_by_ctx (vb, STRa(snip_redirect_to_QNAME2), qname_ctx, add_additional_bytes);
         return;
     } 
 
@@ -653,7 +698,7 @@ done:
 // reduces qname to its canonical form: possibly reduces qname_len to make a qname more likely compareble between SAM/BAM and FASTQ 
 void qname_canonize (QType q, rom qname, uint32_t *qname_len)
 {
-    QnameFlavorProp *f = &segconf.flav_prop[q];
+    QnameFlavorProp *f = &segconf.flav_prop[q]; // all 0 if no flavor
 
     // mated: "HSQ1004:134:C0D8DACXX:3:1101:1318:114841/2" ⟶ "HSQ1004:134:C0D8DACXX:3:1101:1318:114841"
     // SRA2:  "ERR2708427.177.1" ⟶ "ERR2708427.177"
@@ -692,7 +737,9 @@ uint32_t qname_calc_hash (QType q, STRp(qname), thool is_last, bool canonical,
 rom segconf_qf_name (QType q)
 {
     if (q == QSAM)
-        return segconf.deep_sam_qname_flavor ? segconf.deep_sam_qname_flavor->name : "N/A";
+        return segconf.deep_sam_qname_flavor[0] ? segconf.deep_sam_qname_flavor[0]->name : "N/A";
+    else if (q == QSAM2)
+        return segconf.deep_sam_qname_flavor[1] ? segconf.deep_sam_qname_flavor[1]->name : "N/A";
     else
         return segconf.qname_flavor[q] ? segconf.qname_flavor[q]->name : "N/A";
 }

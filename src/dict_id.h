@@ -83,6 +83,10 @@ static inline DictId sub_dict_id (DictId dict_id, uint8_t offset/*1-255*/)
 
 static inline DictId sub_dict_id_(DictId dict_id, char ordinal)
 {
+#ifdef DEBUG    
+    ASSERT0 (ordinal >= 33 && ordinal <= 126, "expecting ordinal to be a printable character"); // just so stats etc looks nicer
+#endif
+
     bytes id = dict_id.id;
     
     return (DictId){ .id = { id[0], ordinal, id[1], id[2], id[3], id[4], id[5], id[6] } };

@@ -268,26 +268,6 @@ typedef struct {
     uint32_t magic;
 } SectionFooterGenozipHeader, *SectionFooterGenozipHeaderP;
 
-// NOTE: part of the file format - new flavors can be added, but their value cannot change (v15)
-typedef enum __attribute__ ((__packed__)) { 
-    QF_NO_ID=0, 
-    QF_ILLUM_7=1, QF_ILLUM_7i=2, QF_ILLUM_7umi=3, QF_ILLUM_7_bc=4, QF_ILLUM_7gs=5, QF_ILLUM_5i=6, QF_ILLUM_5=7, QF_ILLUM_5rng=8,  
-    QF_ILLUM_2bc=9, QF_ILLUM_1bc=10, QF_ILLUM_0bc=11, QF_ILLUM_X_0bc=12, QF_ILLUM_X_1bc=13, QF_ILLUM_X_2bc=14, QF_ILLUM_S_0bc=15, QF_ILLUM_S_1bc=16, QF_ILLUM_S_2bc=17, QF_ILLUM_7gsFQ=18, QF_ILLUM_7_2bc=19,
-    QF_ILLUM_7_rbc=121,
-    QF_BGI_varlen=20, QF_BGI_r6=21, QF_BGI_r7=22, QF_BGI_r8=23, QF_BGI_ll7=24, QF_BGI_cl=25, QF_BGI_rgs8=26, QF_BGI_rgs8FQ=27, QF_BGI_Rgs_2bc=28,
-    QF_PACBIO_3=30, QF_PACBIO_rng=31, QF_PACBIO_lbl=32, QF_PACBIO_pln=33,
-    QF_NANOPORE=40, QF_NANOPORE_rng=41, QF_NANOPORE_ext=42,
-    QF_ION_TORR_3=50, QF_ROCHE_454=51, QF_HELICOS=52, 
-    QF_SRA_L=60, QF_SRA2=60, QF_SRA=62,
-    QF_GENOZIP_OPT=70, QF_INTEGER=71, QF_HEX_CHR=72, QF_BAMSURGEON=73, QF_SEQAN=74, QF_CLC_GW=75, QF_STR_INT=76, QF_CONSENSUS=77, QF_CONS=78, QF_Sint=79,
-    QF_ULTIMA_a=80, QF_ULTIMA_b6_bc=81, QF_ULTIMA_a_bc=83, QF_ULTIMA_c=84, QF_ULTIMA_c_bc=85, QF_ULTIMA_b6=86, QF_ULTIMA_d=87, QF_ULTIMA_d_bc=88, 
-    QF_ULTIMA_b9=89, QF_ULTIMA_b9_bc=110, QF_ULTIMA_n=111,
-    QF_SINGULAR=90, QF_SINGULR_1bc=92, 
-    QF_ELEMENT=100, QF_ELEMENT_6=101, QF_ELEMENT_0bc=102, QF_ELEMENT_1bc=103, QF_ELEMENT_2bc=104,
-    QF_ONSO=130,
-    NUM_FLAVORS
-} QnameFlavorId;
-
 typedef enum __attribute__ ((__packed__)) { // these values and their order are part of the file format
                       CNN_NONE, CNN_SEMICOLON, CNN_COLON, CNN_UNDERLINE, CNN_HYPHEN, CNN_HASH, CNN_SPACE, CNN_PIPE, NUM_CNN
 } QnameCNN /* 3 bits */;
@@ -295,12 +275,12 @@ typedef enum __attribute__ ((__packed__)) { // these values and their order are 
 #define CHAR_TO_CNN { [';']=CNN_SEMICOLON, [':']=CNN_COLON, ['_']=CNN_UNDERLINE, ['-']=CNN_HYPHEN, ['#']=CNN_HASH, [' ']=CNN_SPACE, ['|']=CNN_PIPE }
 
 typedef struct __attribute__ ((__packed__)) { // 3 bytes
-    QnameFlavorId id;
-    uint8_t has_seq_len : 1;  // qname includes seq_len
-    uint8_t unused_bit  : 1;  // 15.0.0 to 15.0.14 : is_mated: qname ends with /1 or /2 (never used in PIZ)
-    uint8_t is_mated    : 1;  // qname's final two characters are separator + mate (1 or 2), eg "/1" or "|2" or ".1"
-    uint8_t cnn         : 3;  // QnameCNN: terminate before the last character that is this, to canonoize 
-    uint8_t unused_bits : 2;  
+    uint8_t unused;                    // 15.0.0 to 15.0.25 : flavor_id (never used in PIZ)
+    uint8_t has_seq_len  : 1;          // qname includes seq_len
+    uint8_t is_consensus : 1;          // qname flavor is a "consensus read" flavor (15.0.26) (15.0.0 to 15.0.14 : is_mated: qname ends with /1 or /2 (never used in PIZ))
+    uint8_t is_mated     : 1;          // qname's final two characters are separator + mate (1 or 2), eg "/1" or "|2" or ".1" (previously called "has_R")
+    uint8_t cnn          : 3;          // QnameCNN: terminate before the last character that is this, to canonoize 
+    uint8_t unused_bits  : 2;
 } QnameFlavorProp;
 
 // The text file header section appears once in the file (or multiple times in case of bound file), and includes the txt file header 
@@ -314,7 +294,7 @@ typedef struct {
     Digest   digest;                   // digest of original single txt file (except modified or DVCF). v14: only if md5, not alder32 (adler32 digest, starting v14, is stored per VB) (bug in v14: this field is garbage instead of 0 for FASTQ_COMP_FQR2 if adler32)
     Digest   digest_header;            // MD5 or Adler32 of header
 #define TXT_FILENAME_LEN 256
-    char     txt_filename[TXT_FILENAME_LEN]; // filename of this single component. without path, 0-terminated. always in base form like .vcf or .sam, even if the original is compressed .vcf.gz or .bam
+    char     txt_filename[TXT_FILENAME_LEN];// filename of this single component. without path, 0-terminated. always in base form like .vcf or .sam, even if the original is compressed .vcf.gz or .bam
     uint64_t txt_header_size;          // size of header in original txt file (likely different than reconstructed size if dual-coordinates)  (v12)
     QnameFlavorProp flav_prop[NUM_QTYPES]; // SAM/BAM/FASTQ/KRAKEN. properties of QNAME flavor (v15)
 } SectionHeaderTxtHeader, *SectionHeaderTxtHeaderP; 

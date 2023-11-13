@@ -377,7 +377,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
             segconf.flav_prop[q] = header.flav_prop[q];
 
     // initialize if needed - but only once per outputted txt file 
-    //i.e. if we have rejects+normal, or concatenated, we will only init in the first)
+    // i.e. if we have rejects+normal, or concatenated, we will only init in the first)
     if (!txt_file->piz_header_init_has_run && DTPZ(piz_header_init)) {
         DTPZ(piz_header_init)();
         txt_file->piz_header_init_has_run = true;

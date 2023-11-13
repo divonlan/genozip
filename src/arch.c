@@ -22,8 +22,11 @@
 #ifdef __APPLE__
 #include <sys/sysctl.h>
 #include <mach-o/dyld.h>
+#include <sys/param.h>
+#include <sys/mount.h>
 #else // LINUX
 #include <sys/sysinfo.h>
+#include <sys/vfs.h>
 #endif
 #if defined __GNUC__ && !defined __clang__ 
 #include <gnu/libc-version.h>
@@ -245,6 +248,60 @@ double arch_get_physical_mem_size (void)
 
     return mem_size;
 }
+
+StrText arch_get_filesystem_type (void)
+{
+    StrText s = { "unknown" };
+    
+    if (txt_file && txt_file->is_remote) {
+        strcpy (s.s, "remote");
+        goto done;
+    }
+
+    if (txt_file && txt_file->redirected && !txt_file->name) {
+        strcpy (s.s, "pipe");
+        goto done;
+    }
+
+    if (!txt_file || !txt_file->file || !txt_file->name) 
+        goto done;
+
+#ifdef __linux__    
+    struct statfs fs;
+    if (statfs (txt_name, &fs)) goto done; 
+
+    rom name = NULL;
+    #define NAME(magic, name_s) case magic: name = name_s; break
+    switch (fs.f_type) {
+        NAME (0xff534d42, "CIFS");
+        NAME (0xef53,     "ext2/3/4");
+        NAME (0x6969,     "nfs");
+        NAME (0x5346544e, "NTFS");
+        NAME (0x858458f6, "ramfs");
+        NAME (0x58465342, "xfs");
+        NAME (0x01021997, "v9fs");
+
+        default: sprintf (s.s, "0x%lx", fs.f_type); 
+    }
+
+    if (name) strcpy (s.s, name);
+
+#elif defined __APPLE__
+    struct statfs fs;
+    if (statfs (txt_name, &fs)) goto done; 
+
+    memcpy (s.s, fs.f_fstypename, MIN_(sizeof(fs.f_fstypename), sizeof(s)-1));
+
+#elif defined _WIN32
+    WCHAR ws[100];
+    if (!GetVolumeInformationByHandleW ((HANDLE)_get_osfhandle(fileno (txt_file->file)), 0, 0, 0, 0, 0, ws, ARRAY_LEN(ws))) goto done;
+
+    wcstombs (s.s, ws, sizeof(s.s)-1);
+#endif    
+
+done:
+    return s;
+} 
 
 // returns value in bytes
 uint64_t arch_get_max_resident_set (void)

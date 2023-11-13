@@ -20,8 +20,8 @@
 #define ABSOLUTE_MIN_VBLOCK_MEMORY ((uint64_t)1000) // in Bytes
 #define ABSOLUTE_MAX_VBLOCK_MEMORY ((uint64_t)MAX_VBLOCK_MEMORY MB)
 
-typedef enum __attribute__ ((__packed__)) { NO_QNAME2=-1, TECH_UNKNOWN=0,   TECH_ILLUM, TECH_PACBIO, TECH_ONT,          TECH_454, TECH_BGI,   TECH_IONTORR, TECH_HELICOS, TECH_NCBI, TECH_ULTIMA, TECH_SINGLR, TECH_ELEMENT, TECH_ONSO, NUM_TECHS } SeqTech;
-#define TECH_NAME                         {               "Unknown_tech",   "Illumina", "PacBio",    "Oxford_Nanopore", "454",    "MGI_Tech", "IonTorrent", "Helicos",    "NCBI",    "Ultima",    "Singular",  "Element",    "Onso"               }
+typedef enum __attribute__ ((__packed__)) { TECH_NONE=-1, TECH_ANY=-2, TECH_CONS=-3, TECH_UNKNOWN=0,   TECH_ILLUM, TECH_PACBIO, TECH_ONT,          TECH_454, TECH_MGI,   TECH_IONTORR, TECH_HELICOS, TECH_NCBI, TECH_ULTIMA, TECH_SINGLR, TECH_ELEMENT, TECH_ONSO, NUM_TECHS } SeqTech;
+#define TECH_NAME                         {                                          "Unknown_tech",   "Illumina", "PacBio",    "Oxford_Nanopore", "454",    "MGI_Tech", "IonTorrent", "Helicos",    "NCBI",    "Ultima",    "Singular",  "Element",    "Onso"               }
 #define TECH(x) (segconf.tech == TECH_##x)
 
 typedef enum __attribute__ ((__packed__)) { SQT_UNKNOWN, SQT_NUKE, SQT_AMINO, SQT_NUKE_OR_AMINO } SeqType;
@@ -40,11 +40,13 @@ typedef enum  {                       MP_UNKNOWN,       MP_BSBOLT,             M
 #define SAM_MAPPER_NAME             { "Unknown_mapper", "bsbolt",              "bwa",    "BWA",    "minimap2",    "STAR",    "bowtie2",    "dragen",     "gem3",          "gem2sam",      "bismark",    "bsseeker2",      "Winnowmap",    "baz2bam",     "BBMap",    "tmap",    "hisat2",    "Bowtie1",   "NovoAlign",    "razers3",    "blasr",    "ngmlr",            "Delve",    "TopHat",    "cpu",    "longranger",           "CLCGenomicsWB",    "pbmm2",    "ccs",    "snap",    "bwa-mem2",    "parabricks",      "iSAAC",    "Ultima",  "Torrent_BC",    "Bionano",                   }
 #define SAM_MAPPER_SIGNATURE        { "Unknown_mapper", "PN:bwa	VN:BSB"/*\t*/, "PN:bwa", "PN:BWA", "PN:minimap2", "PN:STAR", "PN:bowtie2", "ID: DRAGEN", "PN:gem-mapper", "PN:gem-2-sam", "ID:Bismark", "PN:BS Seeker 2", "PN:Winnowmap", "PN:baz2bam",  "PN:BBMap", "ID:tmap", "PN:hisat2", "ID:Bowtie", "PN:novoalign", "PN:razers3", "ID:BLASR", "PN:nextgenmap-lr", "ID:Delve", "ID:TopHat", "PN:cpu", "PN:longranger.lariat", "PN:clcgenomicswb", "PN:pbmm2", "PN:ccs", "PN:SNAP", "PN:bwa-mem2", "PN:pbrun fq2bam", "PN:iSAAC", "ID:UA-",  "PN:BaseCaller", "ID:xmap_to_bam",            }   
 #define MP(x) (segconf.sam_mapper == MP_##x)
-             
+
 #define MAX_SHORT_READ_LEN 2500
 
 // also defined in sam.h
 #define SAM_MAX_QNAME_LEN 255/*exc. \0*/     // In initial SAM specification verions, the max QNAME length was 255, and reduced to 254 in Aug 2015. We support 255 to support old SAM/BAM files too. BAM specifies 255 including \0 (so 254).
+
+typedef struct { char s[SAM_MAX_QNAME_LEN+1]; } QnameStr;
 
 // seg configuration set prior to starting to seg a file during segconfig_calculate or txtheader_zip_read_and_compress
 typedef struct {
@@ -59,13 +61,14 @@ typedef struct {
     bool disable_random_acccess; // random_access section is not to be outputted
 
     // qname characteristics (SAM/BAM, KRAKEN and FASTQ)
-    QnameFlavor qname_flavor[NUM_QTYPES+1]; // 0-QNAME 1-QNAME2 (FASTQ) 2=NCBI LINE3 (FASTQ)
-    QnameFlavor deep_sam_qname_flavor;      // save for stats, in --deep
-    QnameFlavorProp flav_prop[NUM_QTYPES];  // flavor properties
-    bool qname_flavor_rediscovered[NUM_QTYPES]; // true if flavor has been modified
-    char qname_line0[NUM_QTYPES][SAM_MAX_QNAME_LEN+1]; // qname of line_i=0 (by which flavor is determined) (nul-terminated)
+    QnameFlavor qname_flavor[NUM_QTYPES+1];     // 0-QNAME 1-QNAME2(FASTQ) 1=secondary flavor(SAM) 2=NCBI LINE3 (FASTQ)
+    QnameFlavor deep_sam_qname_flavor[2];       // save for stats, in --deep (SAM's QNAME and QNAME2)
+    QnameFlavorProp flav_prop[NUM_QTYPES];      // flavor properties
+    bool sorted_by_qname[NUM_QTYPES];           // qnames appear in the file in a sorted order
+    bool qname_flavor_rediscovered[NUM_QTYPES]; // true if flavor has been modified (used only during segconf.running)
+    QnameStr qname_line0[NUM_QTYPES];           // qname of line_i=0 (by which flavor is determined) (nul-terminated)
     SeqTech tech;
-
+    
     // FASTQ and FASTA
     bool multiseq;              // sequences in file are variants of each others 
 
@@ -81,6 +84,7 @@ typedef struct {
     char unk_ids_tag_name[NUM_UNK_ID_CTXS][MAX_TAG_LEN];
     char unk_ids[NUM_UNK_ID_CTXS][NUM_COLLECTED_WORDS][UNK_ID_LEN+1];
     Codec qual_codec;           // for stats          
+    uint32_t qual_histo[94];    // histogram of qual values in segconf data
     bool nontrivial_qual;       // true if we know that not all QUAL values are the same (as they are in newer PacBio files)
     bool longr_bins_calculated; // were LONGR bins calculated in segconf
     bool has_agent_trimmer;     // has fields generated by Agilent AGeNT Trimmer
@@ -105,6 +109,7 @@ typedef struct {
     bool is_bwa;                // aligner used is based on bwa
     bool is_minimap2;           // aligner used is based on minimap2
     bool is_bowtie2;            // aligner used is based on bowtie2
+    bool has_bwa_meth;           // file was treated with bwa-meth before and after alignment with bwa
     bool pacbio_subreads;       // this is a pacbio subreads file
     bool sam_has_SA_Z;
     thool sam_has_BWA_XA_Z;
@@ -152,11 +157,12 @@ typedef struct {
     uint8_t n_CR_CB_CY_seps, n_BC_QT_seps, n_RX_seps;
     char BC_sep, RX_sep;
     MiniContainer CY_con, QT_con;
-    SmallContainer CB_con;
+    SmallContainer CB_con, MM_con;
 
     STRl(CY_con_snip, 64);
     STRl(QT_con_snip, 64);
     STRl(CB_con_snip, 64 + SMALL_CON_NITEMS * 16);     
+    STRl(MM_con_snip, 64 + SMALL_CON_NITEMS * 16);     
 
     // VCF stuff
     bool vcf_is_varscan;        // this VCF file was produced by VarScan
@@ -247,3 +253,4 @@ extern rom segconf_sam_mapper_name (void);
 extern rom segconf_tech_name (void);
 extern rom segconf_deep_trimming_name (void);
 extern void segconf_test_sorted (VBlockP vb, WordIndex prev_line_chrom, PosType32 pos, PosType32 prev_line_pos);
+extern StrText segconf_get_qual_histo (void);

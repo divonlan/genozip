@@ -98,7 +98,7 @@ void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(pnext_str)/* option 
             seg_by_ctx (VB, STRa(copy_saggy_PNEXT_snip), channel_ctx, add_bytes); // copy from PNEXT to the channel ctx
 
         else 
-            pnext = seg_pos_field (VB, channel_ctx->did_i, SAM_POS, 0, 0, 0, 0, pnext, add_bytes);
+            pnext = seg_pos_field (VB, channel_ctx->did_i, SAM_POS, SPF_UNLIMITED_DELTA, 0, 0, 0, pnext, add_bytes);
 
         seg_by_did (VB, STRa(vb->mux_PNEXT.snip), SAM_PNEXT, 0);
     }

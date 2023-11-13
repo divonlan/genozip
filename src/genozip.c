@@ -220,6 +220,8 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
     ASSINP (!txt_filename || !url_is_url (txt_filename), 
             "output files must be regular files, they cannot be a URL: %s", txt_filename);
 
+    memset (&segconf, 0, sizeof (segconf)); // PIZ is expected to set all segconf fields it uses, from the z_file. we reset it between files just for extra hygene
+
     z_file = file_open_z_read (z_filename);    
     if (!z_file) return; // failed to open the file - error already displayed
 
@@ -258,7 +260,6 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
 
     // generate txt_file(s)
     if (dispatcher) {
-
         piz_set_main_dispatcher (dispatcher);
         
         if (flag.interleaved && Z_DT(FASTQ))
@@ -766,7 +767,7 @@ static void main_no_files (int argc)
 }
 
 int main (int argc, char **argv)
-{    
+{        
     flag.test_i = getenv ("GENOZIP_TEST");
     flag.debug_or_test = flag.debug || flag.test_i;
     buf_initialize(); 

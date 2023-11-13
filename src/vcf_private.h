@@ -31,7 +31,7 @@ typedef struct {
 
 typedef enum { VCF_v_UNKNOWN, VCF_v4_1, VCF_v4_2, VCF_v4_3, VCF_v4_4, VCF_v4_5 } VcfVersion;
 
-typedef MULTIPLEXER(4) DosageMultiplexer;
+typedef Multiplexer4 DosageMultiplexer;
 
 #define VCF_MAX_ARRAY_ITEMS SMALL_CON_NITEMS
 
@@ -91,10 +91,11 @@ typedef struct VBlockVCF {
     MULTIPLEXER(1 + 7 * 3) mux_GQ;
     MULTIPLEXER(MAX_DP_FOR_MUX) mux_RGQ;   
 
-    MULTIPLEXER(2) mux_QUAL, mux_INFO; // multiplex by has_RGQ (in GVCF)
-    MULTIPLEXER(2) mux_IGT, mux_IPS;   // multiplex by (sample_i>0)
-    MULTIPLEXER(3) mux_VC;             // multiplex dbSNP's INFO/VC by VARTYPE
-    MULTIPLEXER(3) mux_GQX;            // multiplex Isaac's FORMAT/GQX
+    Multiplexer2 mux_POS;           // GVCF: multiplex by whether this field is END or POS
+    Multiplexer2 mux_QUAL, mux_INFO;// GVCF: multiplex by has_RGQ
+    Multiplexer2 mux_IGT, mux_IPS;  // multiplex by (sample_i>0)
+    Multiplexer3 mux_VC;            // multiplex dbSNP's INFO/VC by VARTYPE
+    Multiplexer3 mux_GQX;           // multiplex Isaac's FORMAT/GQX
 
     #define after_mux hapmat_helper_index_buf
     // used by CODEC_HAPM (for VCF haplotype matrix) 
@@ -202,21 +203,21 @@ typedef enum {
 // NOTE: The rejection strings should not change or vcf_lo_seg_INFO_REJX won't identify oStatus in rejected lines when parsing old dual coordinate files (it will fallback to LO_REJECTED)
 // It *IS OK* to add more statuses, change their order or change their numeric values, it is *NOT OK* to modify the names as they are part of the file format
 extern rom dvcf_status_names[NUM_LO_STATUSES];
-#define DVCF_STATUS_NAMES { /* for display esthetics - max 25 characters - note: these strings are defined in the dual-coordinate specification */\
-    "UNKNOWN", \
-    "OK", "OkRefSameSNP", "OkRefSameSNPRev", "OkRefSameSNPIupac", \
-    "OkRefSameIndel", "OkRefSameNDNIRev", "OkRefSameDelRev", "OkRefSameInsRev", \
-    "OkRefSameNotLeftAnc", "OkRefSameStructVariant", "OkRefAltSwitchSNP", \
-    "OkRefAltSwitchIndel", "OkRefAltSwitchDelToIns", "OkRefAltSwitchIndelRpts", "OkRefAltSwitchIndelFlank", "OkRefAltSwitchNDNI", "OkRefAltSwitchWithGap", \
-    "OkRefAltSwitchNotLeftAnc", "OkNewRefSNP", \
-    "Rejected", "ChromNotInPrimReference", "ChromNotInChainFile", \
-    "RefNotMappedInChain", "NewAnchorNotInChrom", "RefSplitInChain", \
-    "RefMismatchesReference", "RefMultiAltSwitchSNP", "RefNewAlleleSNP", "RefMultiAltSwitchIndel", \
-    "RefNewAlleleDelRefChgHas*", "RefNewAlleleDelRefChanged", "RefNewAlleleDelSameRef", \
-    "RefNewAlleleInsRefChanged", "RefNewAlleleInsSameRef", "RefNewAlleleIndelNoSwitch", "RefNewAlleleNDNI",\
-    "XstrandNotLeftAnc", "RefNewAlleleNotLeftAnc","RefNewAlleleSV", "XstrandSV", "ComplexRearrangements", \
-    "AddedVariant", "UnsupportedRefAlt", \
-    "INFO", "FORMAT", "AltsNotSameLenInsRev" \
+#define DVCF_STATUS_NAMES { /* for display esthetics - max 25 characters - note: these strings are defined in the dual-coordinate specification */ \
+    "UNKNOWN",                                                                                              \
+    "OK", "OkRefSameSNP", "OkRefSameSNPRev", "OkRefSameSNPIupac",                                           \
+    "OkRefSameIndel", "OkRefSameNDNIRev", "OkRefSameDelRev", "OkRefSameInsRev",                             \
+    "OkRefSameNotLeftAnc", "OkRefSameStructVariant", "OkRefAltSwitchSNP",                                   \
+    "OkRefAltSwitchIndel", "OkRefAltSwitchDelToIns", "OkRefAltSwitchIndelRpts", "OkRefAltSwitchIndelFlank", \
+    "OkRefAltSwitchNDNI", "OkRefAltSwitchWithGap", "OkRefAltSwitchNotLeftAnc", "OkNewRefSNP",               \
+    "Rejected", "ChromNotInPrimReference", "ChromNotInChainFile",                                           \
+    "RefNotMappedInChain", "NewAnchorNotInChrom", "RefSplitInChain",                                        \
+    "RefMismatchesReference", "RefMultiAltSwitchSNP", "RefNewAlleleSNP", "RefMultiAltSwitchIndel",          \
+    "RefNewAlleleDelRefChgHas*", "RefNewAlleleDelRefChanged", "RefNewAlleleDelSameRef",                     \
+    "RefNewAlleleInsRefChanged", "RefNewAlleleInsSameRef", "RefNewAlleleIndelNoSwitch", "RefNewAlleleNDNI", \
+    "XstrandNotLeftAnc", "RefNewAlleleNotLeftAnc","RefNewAlleleSV", "XstrandSV", "ComplexRearrangements",   \
+    "AddedVariant", "UnsupportedRefAlt",                                                                    \
+    "INFO", "FORMAT", "AltsNotSameLenInsRev"                                                                \
 }
 
 #define LO_IS_REJECTED(ost) ((ost) >= LO_REJECTED) // note: this condition works also for unrecognized reject strings (that an have index >= NUM_LO_STATUSES)
@@ -236,25 +237,25 @@ extern rom dvcf_status_names[NUM_LO_STATUSES];
 typedef enum { IL_CHROM, IL_POS, IL_REF, IL_XSTRAND, NUM_IL_FIELDS } InfoLiftFields; 
 
 // Liftover - header keys
-#define HK_GENOZIP_CMD  "##genozip_command="
-#define HK_CHAIN        "##chain="
-#define HK_DC           "##dual_coordinates"
-#define HK_ORIGINAL_REF "##original_reference="
-#define HK_DC_PRIMARY  HK_DC"=PRIMARY"
-#define HK_DC_LUFT     HK_DC"=LUFT"
+#define HK_GENOZIP_CMD        "##genozip_command="
+#define HK_CHAIN              "##chain="
+#define HK_DC                 "##dual_coordinates"
+#define HK_ORIGINAL_REF       "##original_reference="
+#define HK_DC_PRIMARY         HK_DC"=PRIMARY"
+#define HK_DC_LUFT            HK_DC"=LUFT"
 #define HK_RENDALG            "RendAlg"
 #define HK_RENDALG_ATTR       HK_RENDALG"="
 #define HK_RENAME_REFALT_ATTR "RenameRefalt="
 #define HK_RENAME_STRAND_ATTR "RenameStrand="
 #define HK_RENAME_TLAFER_ATTR "RenameTlafer="
 #define HK_RENAME_ALWAYS_ATTR "RenameAlways="
-#define TAG_SOURCE      "Source=\""GENOZIP_URL"\""
-#define KH_INFO         "##INFO=<ID="
-#define KH_INFO_LUFT    KH_INFO INFO_LUFT_NAME ",Number=4,Type=String,Description=\"Info for rendering variant in LUFT coords. See " WEBSITE_DVCF "\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
-#define KH_INFO_PRIM    KH_INFO INFO_PRIM_NAME ",Number=4,Type=String,Description=\"Info for rendering variant in PRIMARY coords\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
-#define KH_INFO_LREJ    KH_INFO INFO_LREJ_NAME ",Number=1,Type=String,Description=\"Reason variant was rejected for LUFT coords\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
-#define KH_INFO_PREJ    KH_INFO INFO_PREJ_NAME ",Number=1,Type=String,Description=\"Reason variant was rejected for PRIMARY coords\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
-#define KH_INFO_oSTATUS KH_INFO "oSTATUS,Number=1,Type=String,Description=\"Lift status\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
+#define TAG_SOURCE            "Source=\""GENOZIP_URL"\""
+#define KH_INFO               "##INFO=<ID="
+#define KH_INFO_LUFT          KH_INFO INFO_LUFT_NAME ",Number=4,Type=String,Description=\"Info for rendering variant in LUFT coords. See " WEBSITE_DVCF "\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
+#define KH_INFO_PRIM          KH_INFO INFO_PRIM_NAME ",Number=4,Type=String,Description=\"Info for rendering variant in PRIMARY coords\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
+#define KH_INFO_LREJ          KH_INFO INFO_LREJ_NAME ",Number=1,Type=String,Description=\"Reason variant was rejected for LUFT coords\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
+#define KH_INFO_PREJ          KH_INFO INFO_PREJ_NAME ",Number=1,Type=String,Description=\"Reason variant was rejected for PRIMARY coords\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
+#define KH_INFO_oSTATUS       KH_INFO "oSTATUS,Number=1,Type=String,Description=\"Lift status\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
 
 // VCF standard keys
 #define HK_CONTIG      "##contig="
@@ -278,6 +279,10 @@ extern uint32_t vcf_num_samples; // ZIP
 extern char *vcf_samples_is_included;
 #define samples_am_i_included(sample_i) (!flag.samples || ((bool)(vcf_samples_is_included[sample_i]))) // macro for speed - this is called in the critical loop of reconstructing samples
 extern VcfVersion vcf_header_get_version (void);
+
+// POS stuff
+extern void vcf_seg_pos (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(pos_str));
+extern void vcf_seg_INFO_END (VBlockVCFP vb, ContextP end_ctx, STRp(end_str));
 
 // Samples stuff
 extern void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt));
@@ -426,6 +431,7 @@ extern void vcf_isaac_seg_initialize (VBlockVCFP vb);
 extern void vcf_seg_FORMAT_GQX (VBlockVCFP vb, ContextP ctx, STRp(gqx));
 extern void vcf_seg_INFO_RU (VBlockVCFP vb, ContextP ctx, STRp(ru));
 extern void vcf_seg_INFO_IDREP (VBlockVCFP vb, ContextP ctx, STRp(idrep));
+extern int vcf_isaac_info_channel_i (VBlockP vb);
 
 // manta stuff
 extern void vcf_manta_seg_initialize (VBlockVCFP vb);

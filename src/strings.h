@@ -154,7 +154,8 @@ static inline uint64_t str_count_char (rom str, uint64_t len, char c)
 // true if entire string is a single character
 static inline bool str_is_monochar (STRp(str))
 {
-    char mono = str[0];
+    char mono = str_len ? str[0] : 0;
+ 
     for (int i=1; i < str_len; i++)
         if (str[i] != mono) return false;
     
@@ -299,7 +300,7 @@ extern rom type_name (uint32_t item,
                       rom  const *name, // the address in which a pointer to name is found, if item is in range
                       uint32_t num_names);
 
-extern void str_print_dict (FILE *fp, STRp(data), bool add_newline, bool remove_equal_asterisk);
+extern void str_print_dict (FILE *fp, STRp(data), bool with_word_index, bool add_newline, bool remove_equal_asterisk);
 
 extern int str_print_text (rom *text, uint32_t num_lines, rom wrapped_line_prefix, rom newline_separator,
                            rom added_header, uint32_t line_width /* 0=calcuate optimal */);

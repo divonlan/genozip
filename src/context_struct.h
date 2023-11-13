@@ -250,6 +250,7 @@ typedef struct Context {
     // ----------------------------------------------------------------------------------------
 
     union {
+    #define CTX_TAG_CON_CACHE "contexts->con_cache"        
     Buffer con_cache;          // PIZ: vctx: use by contexts that might have containers: Handled by container_reconstruct - an array of Container which includes the did_i. 
                                //      Each struct is truncated to used items, followed by prefixes. 
                                // ZIP: seg_array, sam_seg_array_field_get_con cache a container.

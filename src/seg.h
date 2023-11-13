@@ -49,7 +49,7 @@ extern bool seg_integer_or_not_cb (VBlockP vb, ContextP ctx, STRp(int_str), uint
 extern bool seg_float_or_not (VBlockP vb, ContextP ctx, STRp(this_value), unsigned add_bytes);
 extern void seg_numeric_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_bytes);
 
-#define MAX_POS_DELTA   24000  // the max delta (in either direction) that we will put in a dictionary - above this it goes to local. This number can be changed at any time without affecting backward compatability - it is used only by ZIP, not PIZ
+#define MAX_POS_DELTA     250  // the max delta (in either direction) that we will put in a dictionary - above this it goes to local. This number can be changed at any time without affecting backward compatability - it is used only by ZIP, not PIZ
 #define SPF_BAD_SNIPS_TOO   1  // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
 #define SPF_ZERO_IS_BAD     2  // whether 0 is considered a bad POS (if true and POS is 0, to be handled according to seg_bad_snips_too)
 #define SPF_UNLIMITED_DELTA 4  // Always use delta, even if larger than MAX_POS_DELTA

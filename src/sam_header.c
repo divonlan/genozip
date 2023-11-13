@@ -431,18 +431,11 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
 
     if (MP(STAR) && strstr (first_PG, "--solo")) segconf.star_solo = true;
 
-    sam_segconf_set_by_MP();
-    
     // build buffer of unique PN+ID fields, for stats
     sam_header_zip_build_stats_programs (first_PG, after_PGs);
-        
-    // a small subset of biobambam2 programs - only those that generate ms:i / mc:i tags
-    segconf.is_biobambam2_sort = stats_is_in_programs ("bamsormadup") || stats_is_in_programs ("bamsort") || stats_is_in_programs ("bamtagconversion");
 
-    segconf.has_bqsr = stats_is_in_programs ("ApplyBQSR");
-
-    segconf.has_RSEM = stats_is_in_programs ("RSEM") || stats_is_in_programs ("rsem");
-
+    sam_segconf_set_by_MP();
+    
 done:
     SAFE_RESTORE;
 

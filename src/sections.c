@@ -1046,14 +1046,14 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
                     sections_dis_flags (f, st, dt).s, TXT_FILENAME_LEN, h->txt_filename);
         else
             sprintf (str, "\n%stxt_data_size=%"PRIu64" txt_header_size=%"PRIu64" lines=%"PRIu64" max_lines_per_vb=%u digest=%s digest_header=%s\n" 
-                    "%ssrc_codec=%s (args=0x%02X.%02X.%02X) %s txt_filename=\"%.*s\" flav_prop=(id,has_seq_len,is_mated,cnn)=[[%u,%u,%u,%u],[%u,%u,%u,%u],[%u,%u,%u,%u]]\n",
+                    "%ssrc_codec=%s (args=0x%02X.%02X.%02X) %s txt_filename=\"%.*s\" flav_prop=(id,has_seq_len,is_mated,cnn)=[[%u,%u,%u],[%u,%u,%u],[%u,%u,%u]]\n",
                     SEC_TAB, BGEN64 (h->txt_data_size), v12 ? BGEN64 (h->txt_header_size) : 0, BGEN64 (h->txt_num_lines), BGEN32 (h->max_lines_per_vb), 
                     digest_display (h->digest).s, digest_display (h->digest_header).s, 
                     SEC_TAB, codec_name (h->src_codec), h->codec_info[0], h->codec_info[1], h->codec_info[2], 
                     sections_dis_flags (f, st, dt).s, TXT_FILENAME_LEN, h->txt_filename,
-                    h->flav_prop[0].id, h->flav_prop[0].has_seq_len, h->flav_prop[0].is_mated, h->flav_prop[0].cnn,
-                    h->flav_prop[1].id, h->flav_prop[1].has_seq_len, h->flav_prop[1].is_mated, h->flav_prop[1].cnn,
-                    h->flav_prop[2].id, h->flav_prop[2].has_seq_len, h->flav_prop[2].is_mated, h->flav_prop[2].cnn);
+                    h->flav_prop[0].has_seq_len, h->flav_prop[0].is_mated, h->flav_prop[0].cnn,
+                    h->flav_prop[1].has_seq_len, h->flav_prop[1].is_mated, h->flav_prop[1].cnn,
+                    h->flav_prop[2].has_seq_len, h->flav_prop[2].is_mated, h->flav_prop[2].cnn);
 
         break;
     }
@@ -1068,8 +1068,9 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
                     BGEN32 (h->z_data_bytes), digest_display (h->digest).s, sections_dis_flags (f, st, dt).s);
         else if (Z_DT(SAM))
             sprintf (str, 
-                    "\n%srecon_size=%u longest_line=%u z_data_bytes=%u digest=%s prim=(seq=%u comp_qual=%u qname=%u num_alns=%u first_grp_i=%u %s=%u) %s\n", 
-                    SEC_TAB, BGEN32 (h->recon_size_prim),  BGEN32 (h->longest_line_len), 
+                    "\n%srecon_size=%u longest_line=%u longest_seq=%u z_data_bytes=%u digest=%s prim=(seq=%u comp_qual=%u qname=%u num_alns=%u first_grp_i=%u %s=%u) %s\n", 
+                    SEC_TAB, BGEN32 (h->recon_size_prim),  
+                    BGEN32 (h->longest_line_len), BGEN32(h->longest_seq_len),
                     BGEN32 (h->z_data_bytes), digest_display (h->digest).s, 
                     v14 ? BGEN32 (h->sam_prim_seq_len)          : 0,
                     v14 ? BGEN32 (h->sam_prim_comp_qual_len)    : 0,
@@ -1079,6 +1080,11 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
                     IS_SAG_SA?"comp_cigars" : IS_SAG_SOLO?"solo_data" : "unused",
                     v14 ? BGEN32 (h->sam_prim_comp_cigars_len)  : 0,
                     sections_dis_flags (f, st, dt).s);
+        else if (Z_DT(FASTQ))
+            sprintf (str, 
+                    "\n%srecon_size=%u longest_line=%u longest_seq=%u z_data_bytes=%u digest=%s %s\n",
+                    SEC_TAB, BGEN32 (h->recon_size_prim),BGEN32 (h->longest_line_len), BGEN32(h->longest_seq_len),
+                    BGEN32 (h->z_data_bytes), digest_display (h->digest).s, sections_dis_flags (f, st, dt).s);
         else
             sprintf (str, 
                     "\n%srecon_size=%u longest_line=%u z_data_bytes=%u digest=%s %s\n",

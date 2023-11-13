@@ -11,6 +11,7 @@
 extern void arch_initialize (rom argv0);
 extern unsigned arch_get_num_cores (void);
 extern double arch_get_physical_mem_size (void);
+extern StrText arch_get_filesystem_type (void);
 extern rom arch_get_endianity (void);
 extern void arch_set_locale (void);
 

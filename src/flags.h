@@ -138,7 +138,7 @@ typedef struct {
         debug_LONG, show_qual, debug_qname, debug_read_ctxs, debug_sag, debug_gencomp, debug_lines, debug_latest,
         debug_peek, submit_stats, debug_submit, show_deep, show_segconf_has, debug_huffman, debug_split,
         debug_debug, debug_valgrind, // ad-hoc debug printing in prod
-        no_gencomp, force_gencomp, force_deep, no_domqual, no_longr, force_longr, verify_codec, seg_only, show_bam, xthreads, show_flags, show_rename_tags,
+        no_gencomp, force_gencomp, force_deep, no_domqual, no_pacb, no_longr, force_longr, verify_codec, seg_only, show_bam, xthreads, show_flags, show_rename_tags,
         #define SHOW_CONTAINERS_ALL_VBs (-1)
         show_containers, show_aligner, show_buddy,
         echo,         // show the command line in case of an error

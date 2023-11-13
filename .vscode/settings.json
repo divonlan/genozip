@@ -13,6 +13,8 @@
     },
     "restructuredtext.languageServer.disabled": true,
 
+    "files.eol": "\n",
+    
     "files.associations": {
         "*.eb": "python",
         "genozip.h": "c",

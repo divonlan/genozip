@@ -107,12 +107,12 @@ static void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
         segconf.vb_size = VBLOCK_MEMORY_GENERIC;
 
     // if we failed to calculate an estimated size or file is very small - use default
-    else if (txtfile_get_seggable_size() < VBLOCK_MEMORY_GENERIC)
-        segconf.vb_size = VBLOCK_MEMORY_GENERIC;
+    // else if (txtfile_get_seggable_size() < VBLOCK_MEMORY_GENERIC)
+    //     segconf.vb_size = VBLOCK_MEMORY_GENERIC;
 
     else { 
         // count number of contexts used
-        for_ctx_that (ctx->b250.len || ctx->local.len)
+        for_ctx_that (ctx->b250.len32 || ctx->local.len32)
             num_used_contexts++;
             
         uint32_t vcf_samples = (TXT_DT(VCF) || TXT_DT(BCF)) ? vcf_header_get_num_samples() : 0;
@@ -145,7 +145,17 @@ static void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
 
         // for small files - reduce VB size, to take advantage of all cores (subject to a minimum VB size)
         if (!flag.best && est_seggable_size && global_max_threads > 1) {
-            uint64_t new_vb_size = MAX_(VBLOCK_MEMORY_MIN_SMALL, est_seggable_size * 1.2 / global_max_threads);
+            
+            // assuming infinite cores, estimate the max number of concurrent threads based on I/O and source-decompression constraints
+            // TO DO: make this more accurate taking into account the type of filesystem (eg nfs) etc
+            uint32_t est_max_threads = txt_file->source_codec == CODEC_BGZF ? 60  // bottleneck is disk I/O - but less that CODEC_NONE as less data is read
+                                     : txt_file->source_codec == CODEC_BAM  ? 60  // bottleneck is disk I/O - but less that CODEC_NONE as less data is read
+                                     : txt_file->source_codec == CODEC_CRAM ? 40  // bottleneck is samtools
+                                     : txt_file->source_codec == CODEC_GZ   ? 20  // bottleneck is GZ-decompression in main thread
+                                     : txt_file->source_codec == CODEC_NONE ? 30  // bottleneck is disk I/O
+                                     :                                        30; // arbitrary
+
+            uint64_t new_vb_size = MAX_(VBLOCK_MEMORY_MIN_SMALL, est_seggable_size * 1.2 / MIN_(est_max_threads, global_max_threads));
 
             // in case of drastic reduction of large-sample VCF file, provide tip
             if (vcf_samples > 10 && new_vb_size < segconf.vb_size / 2) 
@@ -197,6 +207,7 @@ static bool segconf_no_calculate (void)
            ((Z_DT(SAM) || Z_DT(BAM)) && flag.deep && flag.zip_comp_i >= SAM_COMP_FQ01); // --deep: no recalculating for second (or more) FASTQ file
 }
 
+// ZIP only
 void segconf_initialize (void)
 {
     if (segconf_no_calculate()) return;
@@ -204,27 +215,27 @@ void segconf_initialize (void)
     // note: in Deep, we re-segconf the first FASTQ component, but don't remove the SAM segconf data    
     if (!((Z_DT(SAM) || Z_DT(BAM)) && flag.deep && flag.zip_comp_i == SAM_COMP_FQ00))
         segconf = (SegConf){
-            .vb_size           = z_file->num_txts_so_far ? segconf.vb_size : 0, // components after first inherit vb_size from first
-            .is_sorted         = true,      // initialize optimistically
+            .vb_size               = z_file->num_txts_so_far ? segconf.vb_size : 0, // components after first inherit vb_size from first
+            .is_sorted             = true,      // initialize optimistically
             
             // SAM stuff
-            .is_collated       = true,      // initialize optimistically
-            .MAPQ_has_single_value = true,  // initialize optimistically
-            .NM_after_MD       = true,      // initialize optimistically
-            .nM_after_MD       = true,      // initialize optimistically
-            .sam_is_unmapped   = true,      // we will reset this if finding a line with POS>0
-            .SA_HtoS           = unknown,
-            .sam_XG_inc_S      = unknown,
-            .sam_has_BWA_XA_Z  = unknown,
-            .CY_con_snip_len   = sizeof (segconf.CY_con_snip),
-            .QT_con_snip_len   = sizeof (segconf.QT_con_snip),
-            .CB_con_snip_len   = sizeof (segconf.CB_con_snip),
+            .is_collated           = true,      // initialize optimistically
+            .MAPQ_has_single_value = true,      // initialize optimistically
+            .NM_after_MD           = true,      // initialize optimistically
+            .nM_after_MD           = true,      // initialize optimistically
+            .sam_is_unmapped       = true,      // we will reset this if finding a line with POS>0
+            .SA_HtoS               = unknown,
+            .sam_XG_inc_S          = unknown,
+            .sam_has_BWA_XA_Z      = unknown,
+            .CY_con_snip_len       = sizeof (segconf.CY_con_snip),
+            .QT_con_snip_len       = sizeof (segconf.QT_con_snip),
+            .CB_con_snip_len       = sizeof (segconf.CB_con_snip),
 
             // FASTQ stuff
-            .deep_qtype        = QNONE,
+            .deep_qtype            = QNONE,
 
             // FASTA stuff
-            .fasta_has_contigs = true, // initialize optimistically
+            .fasta_has_contigs     = true, // initialize optimistically
         };
 
     // Deep - 1st FASTQ file
@@ -319,10 +330,6 @@ void segconf_calculate (void)
 
     segconf_set_vb_size (vb, save_vb_size);
 
-    // case: long reads. we can't use the genozip aligner.
-    if (segconf.is_long_reads)
-        flag.aligner_available = false; // note: original value of flag will be restore when zip of this file is complete (see main_genozip)
-
     // return the data to txt_file->unconsumed_txt - squeeze it in before the passed-up data
     buf_insert (evb, txt_file->unconsumed_txt, char, 0, txt_data_copy.data, txt_data_copy.len, "txt_file->unconsumed_txt");
     buf_destroy (txt_data_copy);
@@ -336,21 +343,16 @@ void segconf_calculate (void)
     if (Z_DT(VCF) || Z_DT(BCF))
         txt_file->reject_bytes += save_luft_reject_bytes; // return reject bytes to txt_file, to be reassigned to VB
 
-    // require compressing with a reference when using --best with SAM/BAM/FASTQ, with some exceptions
-    bool best_requires_ref = ((VB_DT(SAM) || VB_DT(BAM)) && !(segconf.is_long_reads && segconf.sam_is_unmapped))
-                          || (VB_DT(FASTQ) && !segconf.is_long_reads);
-
-    if (segconf.is_long_reads && ((VB_DT(FASTQ) && !flag.deep) || segconf.sam_is_unmapped)) {
-        flag.reference = REF_NONE;
-        flag.aligner_available = false;
-    }
-
     ASSINP (!flag.best                    // no --best specified
-         || flag.force                    // --force overrides
-         || !best_requires_ref            // --best doesn't require ref
+         || flag.force                    // --force overrides requirement for a reference with --best
+         || !flag.aligner_available       // we actually don't require ref as no aligner anyway
          || IS_REF_EXTERNAL || IS_REF_EXT_STORE   // reference is provided
          || flag.zip_no_z_file,           // we're not creating a compressed format
-            "Using --best on a %s file also requires using --reference. Override with --force.", dt_name(vb->data_type));
+            "Using --best on a %s file also requires using --reference or --REFERENCE. Override with --force.", dt_name(vb->data_type));
+
+    // note: this can happen with --best --force
+    if (!IS_REF_EXTERNAL && !IS_REF_EXT_STORE && flag.aligner_available)
+        flag.aligner_available = false;
 
 done:
     vb_destroy_vb (&vb);
@@ -374,7 +376,13 @@ rom segconf_tech_name (void)
     rom tech_name[] = TECH_NAME;
     ASSERT0 (ARRAY_LEN(tech_name) == NUM_TECHS, "Invalid TECH_NAME array length - perhaps missing commas between strings?");
 
-    return (segconf.tech >= 0 && segconf.tech < NUM_TECHS) ? tech_name[segconf.tech] : "INVALID_MAPPER";
+    switch (segconf.tech) {
+        case 0 ... NUM_TECHS-1 : return tech_name[segconf.tech];
+        case TECH_NONE         : return "None";
+        case TECH_ANY          : return "Any";
+        case TECH_CONS         : return "Consensus";
+        default                : return "Invalid";
+    }
 }
 
 rom segconf_deep_trimming_name (void)
@@ -382,4 +390,34 @@ rom segconf_deep_trimming_name (void)
     return segconf.deep_has_trimmed_left ? "LeftRight"
          : segconf.deep_has_trimmed      ? "RightOnly"
          :                                 "None";
+}
+
+StrText segconf_get_qual_histo (void)
+{
+    StrText s = {};
+    char *next = s.s;
+
+    // get the (up to) 16 qual scores with the highest count. O(N^2) method, but that's ok - only ~1500 iterations.
+    for (int i=0; i < 16; i++) {
+        int max_score = 0;
+        uint32_t max_count = 0;
+
+        for (int score=0; score < 94; score++)
+            if (segconf.qual_histo[score] > max_count) {
+                max_count = segconf.qual_histo[score];
+                max_score = score + 33;
+            }
+
+        if (!max_count) break;
+
+        switch (max_score) {
+            case ';' : memcpy (next, "；", STRLEN("；")); next += STRLEN("；"); break; // Unicode ；and ≐ (in UTF-8) to avoid breaking spreadsheet
+            case '=' : memcpy (next, "≐", STRLEN("≐")); next += STRLEN("≐"); break; 
+            default  : *next++ = max_score;
+        }
+
+        segconf.qual_histo[max_score-33] = 0;
+    }
+
+    return s;
 }

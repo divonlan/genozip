@@ -556,7 +556,7 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_seq), unsigned
     if (flag.deep || flag.show_deep == 2)
         sam_deep_set_SEQ_hash (vb, dl, STRa(textual_seq));
 
-    bool aligner_ok = flag.aligner_available && !segconf.is_long_reads && !segconf.running;
+    bool aligner_ok = flag.aligner_available && !segconf.running;
 
     // case: unmapped line and we have refhash: align to reference
     if (unmapped && aligner_ok) {

@@ -145,8 +145,8 @@ typedef struct {
 } QnameCount;
 
 // number of alignments that are non-deepable for each of these reasons
-typedef enum {      RSN_DEEPABLE, RSN_SECONDARY, RSN_SUPPLEMENTARY, RSN_NO_SEQ, RSN_MONOCHAR, NUM_DEEP_STATS_ZIP } DeepStatsZip; 
-#define RSN_NAMES { "Deepable",   "Secondary",   "Supplementary",   "No_SEQ",   "Monochar" }
+typedef enum {      RSN_DEEPABLE, RSN_SECONDARY, RSN_SUPPLEMENTARY, RSN_NO_SEQ, RSN_MONOCHAR, RSN_CONSENSUS, NUM_DEEP_STATS_ZIP } DeepStatsZip; 
+#define RSN_NAMES { "Deepable",   "Secondary",   "Supplementary",   "No_SEQ",   "Monochar",   "Consensus" }
 
 // number of bytes consumed by QNAME/SEQ/QUAL in z_file->deep_ents
 typedef enum {           QNAME_BYTES, SEQ_BYTES, QUAL_BYTES, NUM_DEEP_STATS_PIZ } DeepStatsPiz;
@@ -627,7 +627,7 @@ extern void sam_seg_other_qual (VBlockSAMP vb, TxtWord *dl_word, Did did_i, STRp
 // --deep stuff
 // Stuff that happens during SAM seg
 extern void sam_deep_zip_finalize (void);
-extern void sam_deep_set_QNAME_hash (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qname));
+extern void sam_deep_set_QNAME_hash (VBlockSAMP vb, ZipDataLineSAM *dl, QType q, STRp(qname));
 extern void sam_deep_set_SEQ_hash (VBlockSAMP vb,ZipDataLineSAM *dl, STRp(textual_seq));
 extern void sam_deep_set_QUAL_hash (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual));
 extern void sam_piz_deep_initialize (void);
@@ -648,6 +648,9 @@ extern bool sam_seg_0A_mapq_cb (VBlockP vb, ContextP ctx, STRp (mapq_str), uint3
 extern bool sam_seg_SA_get_prim_item (VBlockSAMP vb, int sa_item, pSTRp(out));
 extern void sam_piz_SA_get_prim_item (VBlockSAMP vb, int sa_item, pSTRp(out));
 extern bool sam_seg_is_item_predicted_by_prim_SA (VBlockSAMP vb, int sa_item_i, int64_t value);
+
+// MM:Z stuff
+extern void sam_MM_zip_initialize (void);
 
 // BWA stuff
 extern void sam_seg_BWA_X1_i (VBlockSAMP vb, int64_t X1, unsigned add_bytes);

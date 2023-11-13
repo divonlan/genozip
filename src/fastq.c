@@ -398,11 +398,21 @@ static void fastq_seg_finalize_segconf (VBlockP vb)
             fastq_tip_if_should_be_pair();          
     }  
 
+    // cases where aligner is available (note: called even if reference is not loaded, so that it errors in segconf_calculate)
+    if (flag.best || flag.deep)
+        flag.aligner_available = true;
+
+    // cases where aligner is not available, despite setting in main_load_reference
+    else if (segconf.is_long_reads) 
+        flag.aligner_available = false;
+
     if (codec_pacb_maybe_used (FASTQ_QUAL)) 
         codec_pacb_segconf_finalize (VB);
 
     if (codec_longr_maybe_used (FASTQ_QUAL)) 
         codec_longr_segconf_calculate_bins (VB, CTX(FASTQ_QUAL + 1), fastq_zip_qual);
+
+    qname_segconf_finalize (VB);
 }
 
 void fastq_seg_finalize (VBlockP vb)

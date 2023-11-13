@@ -734,6 +734,8 @@ uint32_t str_split_by_container_do (STRp(str), ConstContainerP con, STRp(con_pre
 
         char sep = con->items[item_i].separator[0];
         
+        if (sep == CI0_INVISIBLE) continue;
+        
         // verify item prefix
         if (px < after_px) {
             rom item_px = px;
@@ -947,7 +949,8 @@ rom type_name (uint32_t item,
     return *name;    
 }
 
-void str_print_dict (FILE *fp, STRp(data), bool add_newline, bool remove_equal_asterisk)
+// print one or more words in Context.dict
+void str_print_dict (FILE *fp, STRp(data), bool with_word_index, bool add_newline, bool remove_equal_asterisk)
 {
     WordIndex word_index=0;
 
@@ -960,10 +963,11 @@ void str_print_dict (FILE *fp, STRp(data), bool add_newline, bool remove_equal_a
 
         if (!i || data[i] || data[i-1]) { // skip empty words
             
-            if (!i || !data[i-1]) fprintf (fp, "%u%c", word_index, add_newline ? '\t' : '='); 
+            if (with_word_index && (!i || !data[i-1])) 
+                fprintf (fp, "%u%c", word_index, add_newline ? '\t' : '='); 
 
             switch (data[i]) {
-                case 32 ... 127 : fputc (data[i], fp);      break;
+                case 32 ... 126 : fputc (data[i], fp);      break;
                 case 0          : fputc (add_newline ? '\n' : ' ', fp); break; // snip separator
                 case '\t'       : fwrite ("\\t", 1, 2, fp); break;
                 case '\n'       : fwrite ("\\n", 1, 2, fp); break;

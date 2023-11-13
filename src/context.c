@@ -1132,7 +1132,7 @@ static inline bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx, uint8_t *vb
               cond_str (VB_DT(BAM) || VB_DT(SAM), "sam_mapper=", segconf_sam_mapper_name()), 
               cond_str (VB_DT(BAM) || VB_DT(SAM) || VB_DT(FASTQ) || VB_DT(KRAKEN), "segconf_qf_name=", segconf_qf_name(QNAME1)), 
               z_dt_name(), zctx->tag_name, VB_NAME, segconf.vb_size, zctx->dict.len, GENOZIP_CODE_VERSION);
-        str_print_dict (stderr, zctx->dict.data, 1000, false, false);
+        str_print_dict (stderr, zctx->dict.data, 1000, true, false, false);
     }
 
     if (flag.deep) {
@@ -1671,10 +1671,13 @@ static void ctx_show_counts (ContextP zctx)
     iprintf ("Showing counts of %s (did_i=%u). Total items=%"PRIu64" Number of categories=%u\n", zctx->tag_name, zctx->did_i, total, (unsigned)counts_len);    
 
     if (total)
-        for (uint32_t i=0; i < counts_len; i++) 
-            iprintf ("\"%s\"(%d)\t%"PRIu64"\t%-4.2f%%\n", counts[i].snip, counts[i].word_index, counts[i].count, 
-                        100 * (float)counts[i].count / (float)total);
-
+        for (uint32_t i=0; i < counts_len; i++) {            
+            iprint0 ("\"");
+            str_print_dict (info_stream, counts[i].snip, strlen(counts[i].snip), false, false, false);
+            iprintf ("\"(%d)\t%"PRIu64"\t%-4.2f%%\n", counts[i].word_index, counts[i].count, 
+                     100 * (float)counts[i].count / (float)total);
+        }
+        
     if (is_genocat) exit_ok;
 }
 

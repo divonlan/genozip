@@ -247,8 +247,8 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual)/*always textual
     bool pacbio_diff = false;
     char monochar = 0;
     
-    vb->has_qual         |= !vb->qual_missing; // true if any line in the VB has qual
-    vb->has_missing_qual |=  vb->qual_missing; // true if any line in the VB is missing qual
+    if (vb->qual_missing) vb->has_missing_qual = true;
+    else                  vb->has_qual = true;
     
     // case --optimize_QUAL: optimize in place, must be done before sam_deep_set_QUAL_hash calculates a hash
     if (flag.optimize_QUAL && !vb->qual_missing) 
@@ -339,8 +339,13 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual)/*always textual
     if (!segconf.running && segconf.sam_ms_type == ms_BIOBAMBAM && !flag.optimize_QUAL)
         dl->QUAL_score = sam_get_QUAL_score (vb, STRa(qual));
  
-    if (segconf.running && !monochar)
-        segconf.nontrivial_qual = true;
+    if (segconf.running) {
+        if (!monochar && !vb->qual_missing) segconf.nontrivial_qual = true;
+
+        for (uint32_t i=0; i < qual_len; i++)
+            if (IS_NON_WS_PRINTABLE(qual[i]))
+                segconf.qual_histo[qual[i]-33]++;
+    }
 
 done:
     COPY_TIMER (sam_seg_QUAL);

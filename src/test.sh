@@ -806,15 +806,21 @@ batch_qname_flavors()
 {
     batch_print_header
 
-    local files=( `cd $TESTDIR; ls -1 flavor.* | \
+    local files=( `cd $TESTDIR/flavors; ls -1 flavor.* | \
                    grep -vF .genozip | grep -vF .md5 | grep -vF .bad ` ) 
 
     local file
     for file in ${files[@]}; do
         test_header "Testing QNAME flavor of $file"
-        $genozip $TESTDIR/$file -Wft -o $output > $OUTDIR/stats || exit 1
-        if (( `grep QNAME $OUTDIR/stats | grep OKEN | wc -l` )); then
-            echo "$file: QNAME flavor not identified"
+        
+        local expected_flavor=`echo $file | cut -d. -f2`
+        
+        $genozip "$TESTDIR/flavors/$file" -Wft -o $output --debug-qname > $OUTDIR/stats || exit 1
+        local observed_flavor=`grep "Read name style:" $OUTDIR/stats | cut -d" " -f4`
+
+        if [[ "$expected_flavor" != "$observed_flavor" ]]; then
+            cat $OUTDIR/stats
+            echo "$file: Incorrect flavor. Filename indicates \"$expected_flavor\" but genozip found \"$observed_flavor\""
             exit 1
         fi
     done
@@ -1569,6 +1575,7 @@ batch_make_reference()
 update_latest()
 {
     pushd ../genozip-latest
+    git reset --hard
     git pull
     make -j
     popd

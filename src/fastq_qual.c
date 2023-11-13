@@ -38,6 +38,11 @@ void fastq_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qual))
         if (segconf.running) segconf.nontrivial_qual = true; // not monochar
     }
 
+    if (segconf.running)
+        for (uint32_t i=0; i < qual_len; i++)
+            if (IS_NON_WS_PRINTABLE(qual[i]))
+                segconf.qual_histo[qual[i]-33]++;
+
     COPY_TIMER (fastq_seg_QUAL);
 }
 

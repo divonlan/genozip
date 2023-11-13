@@ -14,7 +14,7 @@ void vcf_isaac_seg_initialize (VBlockVCFP vb)
     ctx_set_store (VB, STORE_INT, FORMAT_GQ, FORMAT_GQX, INFO_REFREP, DID_EOL); 
 
     // GQX stuff
-    seg_mux_init (VB, CTX(FORMAT_GQX), 3, VCF_SPECIAL_DEMUX_GQX, false, (MultiplexerP)&vb->mux_GQX); 
+    seg_mux_init (VB, CTX(FORMAT_GQX), 3, VCF_SPECIAL_MUX_GQX, false, (MultiplexerP)&vb->mux_GQX); 
     seg_by_did (VB, STRa(vb->mux_GQX.snip), FORMAT_GQX, 0); // all the same
 
     CTX(INFO_REFREP)->ltype = LT_DYN_INT;
@@ -37,7 +37,7 @@ void vcf_seg_FORMAT_GQX (VBlockVCFP vb, ContextP ctx, STRp(gqx))
         seg_by_ctx (VB, STRa(gqx), chan_ctx, gqx_len);
 }
 
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_DEMUX_GQX)
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_GQX)
 {
     rom gt = last_txt (VB, FORMAT_GT);
 
@@ -100,4 +100,18 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_IDREP)
     if (reconstruct) RECONSTRUCT_INT (new_value->i);
 
     return HAS_NEW_VALUE;
+}
+
+// INFO - mux by filter
+int vcf_isaac_info_channel_i (VBlockP vb)
+{
+    STRlast (filter, VCF_FILTER);
+
+    #define FILT(f) str_issame_(STRa(filter), f, STRLEN(f)) 
+    return FILT("PASS") || FILT("LowGQX") || FILT("HighDPFRatio") || FILT("LowGQX;HighDPFRatio");
+}
+
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_ISAAC_FILTER)
+{
+    return reconstruct_demultiplex (vb, ctx, STRa(snip), vcf_isaac_info_channel_i (vb), new_value, reconstruct);
 }

@@ -71,6 +71,9 @@ void tip_print (void)
     if (E(SAM) || E(BAM))
         valid_tips[n++] = "Please take a moment now to make a note to not forget to cite Genozip:\n " PAPER3_CITATION "\n";
 
+    if (flag.deep)
+        valid_tips[n++] = "Please take a moment now to make a note to not forget to cite Genozip:\n " PAPER4_CITATION "\n";
+
     if (!flag.deep && (E(SAM) || E(BAM) || E(FASTQ)) && sam_get_deep_tip()) // 5X more likely
         for (int i=0; i < 5; i++)
             valid_tips[n++] = sam_get_deep_tip();

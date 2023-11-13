@@ -214,7 +214,7 @@ typedef struct __attribute__ ((__packed__)) { uint64_t index : 40; // up to Z_MA
 typedef union { // 64 bit
     int64_t i;
     double f;
-    struct { float f32, unused; };  // used by bam_get_one_aux 
+    struct { float f, unused; } f32;  // used by bam_get_one_aux (note: struct due to clang)
     TxtWord;    // index into in txt_data (note: gcc/clang flag -fms-extensions is needed for this type of anonymous struct use)
     void *p; 
 } ValueType __attribute__((__transparent_union__));
@@ -508,8 +508,9 @@ typedef uint8_t TranslatorId;
     
 typedef struct { uint32_t qname, seq, qual; } DeepHash;
 
-typedef enum { QNONE   = -5,
-               QSAM    = -4,
+typedef enum { QNONE   = -6,
+               QSAM2   = -5, // SAM QNAME2, while segging deep (for example, consensus reads flavor)
+               QSAM    = -4, // SAM qname, while segging deep
                Q2orSAM = -3, // may appear as QNAME2 (eg in line3 if QNAME1 is NCBI) or in SAM
                Q1or3   = -2, // used in "only_q"
                QANY    = -1, 
@@ -624,7 +625,9 @@ extern StrTime str_time (void);
 #define ASSERTNOTZERO(n)                     ASSERT ((n), "%s=0", #n)
 #define ASSERTISZERO(n)                      ASSERT (!(n), "%s!=0", #n)
 #define ASSERTW(condition, format, ...)      ( { if (!(condition) && !flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); }} )
-#define ASSERTW0(condition, string)          ASSERTW (condition, string "%s", "")
+#define WARN_IF(condition, format, ...)      ( { if ( (condition) && !flag.explicit_quiet) { progress_newline(); fprintf (stderr, "Warning: "); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n\n"); fflush (stderr); }} )
+#define ASSERTW0(condition, string)          ASSERTW ((condition), string "%s", "")
+#define WARN_IF0(condition, string)          WARN_IF ((condition), string "%s", "")
 #define ASSERTWD(condition, format, ...)     ( { if (!(condition) && flag.debug && !flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); }} )
 #define ASSERTWD0(condition, string)         ASSERTWD (condition, string "%s", "")
 #define ASSRET(condition, ret, format, ...)  ( { if (!(condition)) { progress_newline(); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); return ret; }} )

@@ -781,9 +781,9 @@ static void writer_add_interleaved_plan (CompIType comp_1, CompIType comp_2)
 
     ASSERT0 (R1_num_vbs, "Component has no VBs");
 
-    buf_alloc (evb, &z_file->recon_plan, R1_num_vbs, 0, ReconPlanItem, 0, "recon_plan");
-
     writer_add_txtheader_plan (comp_1); // enough to add one txt header - just to open the txt file
+
+    buf_alloc (evb, &z_file->recon_plan, R1_num_vbs, 0, ReconPlanItem, 0, "recon_plan");
 
     for (VBIType i=0; i < R1_num_vbs; i++) {
 

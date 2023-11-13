@@ -230,6 +230,12 @@ void vcf_seg_initialize (VBlockP vb_)
         seg_mux_init (VB, CTX(VCF_INFO), 2, VCF_SPECIAL_MUX_BY_HAS_RGQ, false, (MultiplexerP)&vb->mux_INFO);        
     }
 
+    else if (segconf.vcf_is_isaac)
+        seg_mux_init (VB, CTX(VCF_INFO), 2, VCF_SPECIAL_MUX_BY_ISAAC_FILTER, false, (MultiplexerP)&vb->mux_INFO);        
+
+    if (segconf.vcf_is_gvcf)
+        seg_mux_init (VB, CTX(VCF_POS), 2, VCF_SPECIAL_MUX_BY_END, false, (MultiplexerP)&vb->mux_POS);
+
     vcf_info_seg_initialize(vb);
     vcf_samples_seg_initialize(vb);
 
@@ -247,8 +253,9 @@ void vcf_seg_initialize (VBlockP vb_)
 
 static void vcf_seg_finalize_segconf (VBlockVCFP vb)
 {
-    // identify DRAGEN GVCF. GATK's is identified in vcf_inspect_txt_header_zip()
-    if (segconf.has[FORMAT_ICNT] && segconf.has[FORMAT_SPL]) 
+    // identify DRAGEN and Isaac GVCF. GATK's is identified in vcf_inspect_txt_header_zip()
+    if ((segconf.has[FORMAT_ICNT] && segconf.has[FORMAT_SPL]) || // DRAGEN GVCF
+         segconf.vcf_is_isaac) // Isaac is always GVCF
         segconf.vcf_is_gvcf = true;
 
     if (segconf.has[FORMAT_IGT] && segconf.has[FORMAT_IPS] && segconf.has[FORMAT_ADALL])
@@ -557,23 +564,7 @@ rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
     }
 
     GET_NEXT_ITEM (VCF_POS);
-    set_last_txt_(VCF_POS, VCF_POS_str, VCF_POS_len); // consumed by vcf_seg_FORMAT_PS, vcf_seg_ILLUMINA_POS
-
-    if (vb->line_coords == DC_PRIMARY) {
-        PosType64 pos = dl->pos[0] = seg_pos_field (vb_, VCF_POS, VCF_POS, 0, '.', STRd(VCF_POS), 0, VCF_POS_len+1);
-
-        if (pos == 0 && !(*VCF_POS_str == '.' && VCF_POS_len == 1)) // POS == 0 - invalid value return from seg_pos_field
-            WARN_ONCE ("FYI: invalid POS=%"PRId64" value in chrom=%.*s vb_i=%u vb_line_i=%d: line will be compressed, but not indexed", 
-                       pos, vb->chrom_name_len, vb->chrom_name, vb->vblock_i, vb->line_i);
-                
-        if (pos) random_access_update_pos (vb_, 0, VCF_POS);
-    }
-
-    else { // LUFT
-        dl->pos[1] = seg_pos_field (vb_, VCF_oPOS, VCF_oPOS, 0, '.', STRd(VCF_POS), 0, VCF_POS_len);
-        if (dl->pos[1]) random_access_update_pos (vb_, 1, VCF_oPOS);
-        CTX(vb->vb_coords==DC_LUFT ? VCF_oPOS : VCF_POS)->txt_len++; // account for the tab - in oPOS in the ##luft_only VB and in POS (on behalf on the primary POS) if this is a Dual-coord line (we will rollback accounting later if its not)
-    }
+    vcf_seg_pos (vb, dl, STRd(VCF_POS));
 
     GET_NEXT_ITEM (VCF_ID);
 
@@ -610,7 +601,8 @@ rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
     vcf_seg_QUAL (vb, STRd (VCF_QUAL));
 
     SEG_NEXT_ITEM (VCF_FILTER);
-    
+    seg_set_last_txt (VB, CTX(VCF_FILTER), field_start, field_len);
+        
     // if --chain, seg dual coordinate record - lift over CHROM, POS and REFALT to luft coordinates
     if (chain_is_loaded)
         vcf_lo_seg_generate_INFO_DVCF (vb, dl);

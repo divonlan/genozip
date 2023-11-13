@@ -163,6 +163,8 @@ void sam_zip_initialize (void)
         copy_buddy_Z_snip_lens[f]++;
     }
 
+    sam_MM_zip_initialize();
+
     if (MP(ULTIMA)) sam_ultima_zip_initialize();
     
     if (flag.deep)
@@ -259,20 +261,15 @@ static void sam_seg_0X_initialize (VBlockP vb, Did strand_did_i)
 
 static void sam_seg_QNAME_initialize (VBlockSAMP vb)
 {
-    CTX(SAM_QNAME)->no_stons = true;              // no singletons, bc sam_piz_special_SET_BUDDY uses PEEK_SNIP
+    CTX(SAM_QNAME)->no_stons = true;              // no singletons, because sam_piz_special_SET_BUDDY uses PEEK_SNIP 
     CTX(SAM_QNAME)->flags.store_per_line = true;  // 12.0.41
 
     qname_seg_initialize (VB, QNAME1, SAM_QNAME); 
     qname_seg_initialize (VB, QNAME2, SAM_QNAME); // we support up to two flavors (eg 2nd flavor can be consensus reads) 
 
-    if (segconf.running)
-        segconf.qname_flavor[0] = 0; // unknown
-
     // initial allocations based on segconf data
-    else {
-        vb->qname_hash.prm8[0] = MIN_(20, MAX_(14, 32 - __builtin_clz (vb->lines.len32 * 5))); // between 14 and 20 bits - tested - no additional compression benefit beyond 20 bits
-        buf_alloc_255(vb, &vb->qname_hash, 0, (1ULL << vb->qname_hash.prm8[0]), int32_t, 1, "qname_hash");
-    }
+    vb->qname_hash.prm8[0] = MIN_(20, MAX_(14, 32 - __builtin_clz (vb->lines.len32 * 5))); // between 14 and 20 bits - tested - no additional compression benefit beyond 20 bits
+    buf_alloc_255(vb, &vb->qname_hash, 0, (1ULL << vb->qname_hash.prm8[0]), int32_t, 1, "qname_hash");
 
     // all-the-same for SAM_BUDDY
     seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_SET_BUDDY}, 2, SAM_BUDDY, 0);
@@ -395,6 +392,7 @@ void sam_seg_initialize (VBlockP vb_)
     ctx_consolidate_stats (VB, OPTION_GY_Z, OPTION_GY_Z_X, DID_EOL);
     ctx_consolidate_stats (VB, SAM_QNAME, SAM_BUDDY, SAM_QNAMESA, SAM_FQ_AUX, DID_EOL);
     ctx_consolidate_stats (VB, OPTION_BD_BI, OPTION_BI_Z, OPTION_BD_Z, DID_EOL);
+    ctx_consolidate_stats_(VB, CTX(OPTION_MM_Z), (ContainerP)&segconf.MM_con);
 
     if (segconf.has[OPTION_HI_i] && !segconf.has[OPTION_SA_Z])
         ctx_consolidate_stats (VB, OPTION_HI_i, OPTION_SA_Z, DID_EOL);
@@ -653,8 +651,17 @@ static uint32_t num_lines_at_max_len (VBlockSAMP vb)
 
 void sam_segconf_set_by_MP (void)
 {
+    // a small subset of biobambam2 programs - only those that generate ms:i / mc:i tags
+    segconf.is_biobambam2_sort = stats_is_in_programs ("bamsormadup") || stats_is_in_programs ("bamsort") || stats_is_in_programs ("bamtagconversion");
+
+    segconf.has_bwa_meth = MP(BWA) && stats_is_in_programs ("bwa-meth"); // https://github.com/brentp/bwa-meth
+
+    segconf.has_bqsr = stats_is_in_programs ("ApplyBQSR");
+
+    segconf.has_RSEM = stats_is_in_programs ("RSEM") || stats_is_in_programs ("rsem");
+
     // note: this file *might* be of bisulfite-treated reads. This variable might be reset in sam_seg_finalize_segconf if it fails additonal conditions 
-    segconf.sam_bisulfite     = MP(BISMARK) || MP(BSSEEKER2) || MP(DRAGEN) || MP(BSBOLT) || MP(GEM3) || MP(ULTIMA);
+    segconf.sam_bisulfite     = MP(BISMARK) || MP(BSSEEKER2) || MP(DRAGEN) || MP(BSBOLT) || MP(GEM3) || MP(ULTIMA) || segconf.has_bwa_meth;
     segconf.sam_has_bismark_XM_XG_XR = MP(BISMARK) || MP(DRAGEN) || MP(ULTIMA);
 
     // in bisulfate data, we still calculate MD:Z and NM:i vs unconverted reference
@@ -727,29 +734,32 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
         segconf.has_cellranger = true; // STAR Solo mimics cellranger's tags
     }
 
-    segconf.sam_has_zm_by_Q1NAME = TECH(PACBIO) && segconf.flav_prop[QNAME1].id != QF_PACBIO_3;
+    segconf.sam_has_zm_by_Q1NAME = TECH(PACBIO) && segconf_qf_id (QNAME1) != QF_PACBIO_3;
 
     segconf.pacbio_subreads = MP(BAZ2BAM) && segconf.has[OPTION_pw_B_C] && segconf.has[OPTION_ip_B_C];
     
-    segconf.AS_is_ref_consumed  = (segconf.AS_is_ref_consumed > vb->lines.len32 / 2);
+    segconf.AS_is_ref_consumed  = (segconf.AS_is_ref_consumed  > vb->lines.len32 / 2);
     segconf.AS_is_2ref_consumed = (segconf.AS_is_2ref_consumed > vb->lines.len32 / 2); // AS tends to be near 2 X ref_consumed, if at least half of the lines say so
 
-    // possibly reset sam_bisulfite, first set in sam_header_zip_inspect_PG_lines 
+    // possibly reset sam_bisulfite, first set in sam_header_zip_inspect_PG_lines->sam_segconf_set_by_MP
     segconf.sam_bisulfite = MP(BISMARK) || MP(BSSEEKER2) || MP(BSBOLT) ||
-                            (MP(DRAGEN) && segconf.has[OPTION_XM_Z])   ||
-                            (MP(ULTIMA) && segconf.has[OPTION_XM_Z])   ||
-                            (MP(GEM3)   && segconf.has[OPTION_XB_A]);
+                           (MP(DRAGEN)   && segconf.has[OPTION_XM_Z])  ||
+                           (MP(ULTIMA)   && segconf.has[OPTION_XM_Z])  ||
+                           (MP(GEM3)     && segconf.has[OPTION_XB_A])  ||
+                           segconf.has_bwa_meth                        ||
+                           segconf.has[OPTION_MM_Z]; // standard tag generated by: PacBio: Primrose, ccsmeth and Nanopore: Bonito, Guppy, Nanopolish, Megalodon, Remora
 
     segconf.sam_has_bismark_XM_XG_XR &= segconf.sam_bisulfite;
     
     ASSINP (!segconf.sam_bisulfite        // not a bisulfite file
+         || segconf.sam_is_unmapped       // we can't use the bisulfite methods if unmapped             
          || flag.force                    // --force overrides
          || IS_REF_EXTERNAL || IS_REF_EXT_STORE   // reference is provided
          || flag.zip_no_z_file,           // we're not creating a compressed format
             "Compressing bisulfite file %s requires using --reference. Override with --force.", dt_name (vb->data_type));
 
-    segconf.sam_predict_meth_call = segconf.sam_bisulfite          &&
-                                    !IS_REF_INTERNAL && // bug 648
+    segconf.sam_predict_meth_call = segconf.sam_bisulfite &&
+                                    !IS_REF_INTERNAL      && // bug 648
                                     (MP(BISMARK) || MP(DRAGEN) || MP(BSBOLT)); // have methylation call tags
 
     // if we have @HD-SO "coordinate" or "queryname", then we take that as definitive. Otherwise, we go by our segconf sampling.
@@ -807,15 +817,17 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
         stats_add_one_program (_S("AGeNT_Trimmer")); // note: Trimmers adds the fields to the FASTQ file (as SAUX), and copied to BAM with eg bwa mem -C, so no @PG line
     }
 
-    // allow aligner if unmapped file (usually only enabled in best) if we have unmapped reads in segconf indicating a file enriched
-    // in unmapped reads (normally, in sorted BAMs unmapped reads are at the end of the file)
-    if (segconf.num_mapped < vb->lines.len32 && !flag.aligner_available && IS_REF_LOADED_ZIP) {
+    // cases where aligner is available (note: called even if reference is not loaded, so that it errors in segconf_calculate)
+    if (flag.best || flag.deep ||
+        (segconf.num_mapped < vb->lines.len32 && IS_REF_LOADED_ZIP && !segconf.is_long_reads)) { // evidence of unmapped reads. note: this won't catch unmapped reads in a sorted file, as they will be at the end of the file. in this case, the user should specificy --best to align unmapped reads
+
         flag.aligner_available = true;
-        refhash_load_standalone();
+        if (IS_REF_LOADED_ZIP) refhash_load_standalone();
     }
 
-    // save for stats
-    if (flag.deep) segconf.deep_sam_qname_flavor = segconf.qname_flavor[QNAME1];
+    // cases where aligner is not available, despite setting in main_load_reference
+    else if (segconf.is_long_reads) 
+        flag.aligner_available = false;
 
     // with REF_EXTERNAL and unaligned data, we don't know which chroms are seen (bc unlike REF_EXT_STORE, we don't use is_set), so
     // we just copy all reference contigs. this are not needed for decompression, just for --coverage/--sex/--idxstats
@@ -826,11 +838,9 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
         segconf.use_pacbio_iqsqdq = true;
 
     // Aplogize to user for not doing a good job with PacBio subreads files
-    if ((MP(BAZ2BAM) || TECH(PACBIO)) && 
-            (segconf.has[OPTION_ip_B_C] || segconf.has[OPTION_pw_B_C] || segconf.has[OPTION_fi_B_C] || 
-             segconf.has[OPTION_fp_B_C] || segconf.has[OPTION_ri_B_C] || segconf.has[OPTION_rp_B_C])) {
+    if ((MP(BAZ2BAM) || TECH(PACBIO)) && (segconf.has[OPTION_ip_B_C] || segconf.has[OPTION_pw_B_C])) {
         TEMP_FLAG(quiet, flag.explicit_quiet); // note: quiet is set to true in segconf
-        WARN0 ("FYI: Genozip currently doesn't do a very good job at compressing PacBio kinetic BAM files. This is because we haven't figured out yet a good method to compress kinetic data - the ip:B, pw:B, fi:B, fp:B, ri:B, rp:B fields. Sorry!\n");
+        WARN0 ("FYI: Genozip currently doesn't do a very good job at compressing PacBio subreads files. This is because we haven't figured out yet a good method to compress kinetic data - the ip:B and pw:B fields. Sorry!\n");
         RESTORE_FLAG(quiet);
     }
 
@@ -852,6 +862,8 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
 
     if (codec_longr_maybe_used (SAM_QUAL))
         codec_longr_segconf_calculate_bins (VB, CTX(SAM_QUAL + 1), sam_zip_qual);
+
+    qname_segconf_finalize (VB);
 }
 
 void sam_seg_finalize (VBlockP vb_)
@@ -1436,12 +1448,14 @@ void sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAM *dl, STRp (qname), unsigned ad
         goto normal_seg;
     }
 
-    uint32_t qname_hash = qname_calc_hash (QNAME1, qname, qname_len, dl->FLAG.is_last, true, NULL); // note: canonical=true as we use the same hash for find a mate and a saggy
-    uint32_t my_hash = qname_hash & MAXB(vb->qname_hash.prm8[0]);
+    QType q = qname_sam_get_qtype (STRa(qname)); // QNAME2 if we have QNAME2 and qname matches, else QNAME1
+
+    uint32_t qname_hash = qname_calc_hash (q, STRa(qname), dl->FLAG.is_last, true, NULL); // note: canonical=true as we use the same hash for find a mate and a saggy
+    uint32_t my_hash    = qname_hash & MAXB(vb->qname_hash.prm8[0]);
     bool insert_to_hash = false;
 
     if (flag.deep || flag.show_deep == 2) 
-        sam_deep_set_QNAME_hash (vb, dl, STRa(qname));
+        sam_deep_set_QNAME_hash (vb, dl, q, STRa(qname));
 
     BuddyType bt = sam_seg_mate  (vb, dl->FLAG, STRa (qname), my_hash, &insert_to_hash) | // bitwise or
                    sam_seg_saggy (vb, dl->FLAG, STRa (qname), my_hash, &insert_to_hash);
@@ -1474,7 +1488,7 @@ void sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAM *dl, STRp (qname), unsigned ad
     }
 
     else normal_seg:
-        qname_seg (VB, QNAME1, STRa (qname), add_additional_bytes); // note: for PRIM component, this will be consumed with loading SA
+        qname_seg (VB, QNAME1/*must always start from QNAME1*/, STRa (qname), add_additional_bytes); // note: for PRIM component, this will be consumed with loading SA
 
     // case: PRIM: additional seg against SA Group - store in SAM_QNAMESA - Reconstruct will take from here in PRIM per Toplevel container
     if (IS_PRIM(vb))
@@ -1611,13 +1625,13 @@ void sam_seg_init_bisulfite (VBlockSAMP vb, ZipDataLineSAM *dl)
     // the converted reference to which this read was mapped (C->T conversion or G->A conversion)
     // note: we calculate it always to avoid needless adding entropy in the snip
     vb->bisulfite_strand =  !segconf.sam_bisulfite    ? 0 
-                            : IS_REF_INTERNAL         ? 0 // bug 648
+                            : IS_REF_INTERNAL         ? 0  // bug 648
                             : MP(BISMARK)   && has(XG_Z) ? sam_seg_get_aux_A (vb, vb->idx_XG_Z, IS_BAM_ZIP)
                             : MP(DRAGEN)    && has(XG_Z) ? sam_seg_get_aux_A (vb, vb->idx_XG_Z, IS_BAM_ZIP)
                             : MP(BSSEEKER2) && has(XO_Z) ? "CG"[sam_seg_get_aux_A (vb, vb->idx_XO_Z, IS_BAM_ZIP) == '-']
                             : MP(BSBOLT)    && has(YS_Z) ? "CG"[sam_seg_get_aux_A (vb, vb->idx_YS_Z, IS_BAM_ZIP) == 'C']
                             : MP(GEM3)      && has(XB_A) ? sam_seg_get_aux_A (vb, vb->idx_XB_A, IS_BAM_ZIP)
-                            :                           0;
+                            :                           0; // including MM/ML tags
 
     // enter the converted bases into the reference, in case of REF_INTERNAL 
     if (segconf.running || !vb->bisulfite_strand) return;
@@ -1744,7 +1758,7 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
 
     sam_seg_init_bisulfite (vb, dl);
 
-    // we search forward for MD:Z now, XG:Z as we will need it for SEQ if it exists
+    // we analyze MD:Z now (if it exists) as we will need it for SEQ
     if (has_MD)
         sam_seg_MD_Z_analyze (vb, dl, STRauxZ(MD_Z, false), dl->POS);
 

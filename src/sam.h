@@ -171,6 +171,8 @@
 #pragma GENDICT OPTION_TC_i=DTYPE_2=TC:i     // The number of segments in the template
 #pragma GENDICT OPTION_UQ_i=DTYPE_2=UQ:i     // Phred likelihood of the segment, conditional on the mapping being correct
 #pragma GENDICT OPTION_BQ_Z=DTYPE_2=BQ:Z     // Offset to base alignment quality (BAQ), of the same length as the read sequence. See https://www.htslib.org/doc/samtools-mpileup.html
+#pragma GENDICT OPTION_ML_B_C=DTYPE_2=ML:B:C // Base modification probabilities
+#pragma GENDICT OPTION_MM_Z=DTYPE_2=MM:Z     // Base modifications / methylation
 
 #pragma GENDICT OPTION_U2_Z=DTYPE_2=U2:Z     // Phred probability of the 2nd call being wrong conditional on the best being wrong
 #pragma GENDICT OPTION_U2_DOMQRUNS=DTYPE_2=DOMQRUNS // these 3 must be right after SAM_QUAL. DOMQRUNS is also used by LONGR. For backwards compatability, we can never change its name.
@@ -407,7 +409,7 @@
 #pragma GENDICT OPTION_XQ_i=DTYPE_2=XQ:i     // query read length
 #pragma GENDICT OPTION_XT_i=DTYPE_2=XT:i     // # of continues reads, always 1 for blasr
     
-// PacBio tags. Source: https://pacbiofileformats.readthedocs.io/en/11.0/BAM.html
+// PacBio tags. Source: https://pacbiofileformats.readthedocs.io/en/12.0/SubreadsInternalBAM.html
 #pragma GENDICT OPTION_cx_i=DTYPE_2=cx:i     // per-read: Subread local context Flags: enum LocalContextFlags { ADAPTER_BEFORE = 1, ADAPTER_AFTER = 2, BARCODE_BEFORE = 4, BARCODE_AFTER = 8, FORWARD_PASS = 16, REVERSE_PASS = 32 }
 #pragma GENDICT OPTION_qs_i=DTYPE_2=qs:i     // per-read: 0-based start of query in the ZMW read (absent in CCS)
 #pragma GENDICT OPTION_qe_i=DTYPE_2=qe:i     // per-read: 0-based end of query in the ZMW read (absent in CCS)
@@ -435,6 +437,7 @@
 #pragma GENDICT OPTION_rn_i=DTYPE_2=rn:i     // per-base (Hi-Fi kinetic info): Reverse number of complete passes (zero or more)
 #pragma GENDICT OPTION_sz_A=DTYPE_2=sz_A     // scrap read: ZMW classification annotation, one of N:=Normal, C:=Control, M:=Malformed, or S:=Sentinel
 #pragma GENDICT OPTION_sc_A=DTYPE_2=sc_A     // scrap read: Scrap region-type annotation, one of A:=Adapter, B:=Barcode, L:=LQRegion, or F:=Filtered
+#pragma GENDICT OPTION_ls_B_C=DTYPE_2=ls:B:C // ??
 
 // PacBio Lima tags: https://lima.how/output/bam.html
 #pragma GENDICT OPTION_bc_B_S=DTYPE_2=bc:B:S // Barcode pair indices, integer codes represent 0-based position in the FASTA file of barcodes.
@@ -727,7 +730,7 @@ extern void sam_reset_line (VBlockP vb);
                       sam_piz_special_TX_AN_POS, sam_piz_special_COPY_TEXTUAL_CIGAR, sam_piz_special_BISMARK_XM, \
                       sam_piz_special_BSBOLT_XB, sam_piz_special_UQ, sam_piz_special_iq_sq_dq, sam_piz_special_DEMUX_BY_QUAL, \
                       ultima_c_piz_special_DEMUX_BY_Q4NAME, sam_piz_special_bi, sam_piz_special_sd, \
-                      agilent_special_AGENT_RX, agilent_special_AGENT_QX, \
+                      agilent_special_AGENT_RX, agilent_special_AGENT_QX, special_qname_rng2seq_len, \
                     }
 SPECIAL (SAM, 0,  CIGAR,                 sam_cigar_special_CIGAR);
 SPECIAL (SAM, 1,  TLEN_old,              sam_piz_special_TLEN_old);            // used up to 12.0.42
@@ -788,7 +791,8 @@ SPECIAL (SAM, 55, bi,                    sam_piz_special_bi);                  /
 SPECIAL (SAM, 56, sd,                    sam_piz_special_sd);                  // introduced 15.0.17
 SPECIAL (SAM, 57, AGENT_RX,              agilent_special_AGENT_RX);            // introduced 15.0.23
 SPECIAL (SAM, 58, AGENT_QX,              agilent_special_AGENT_QX);            // introduced 15.0.23
-#define NUM_SAM_SPECIAL 59
+SPECIAL (SAM, 59, qname_rng2seq_len,     special_qname_rng2seq_len);           // introduced 15.0.26
+#define NUM_SAM_SPECIAL 60
  
 #define SAM_LOCAL_GET_LINE_CALLBACKS(dt)        \
     { dt, _OPTION_BD_BI,    sam_zip_BD_BI    }, \

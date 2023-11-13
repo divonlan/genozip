@@ -63,7 +63,7 @@ void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
     }
 }
 
-// called for each txt file, after reading global area, before reading txt header
+// main thread: called for each txt file, after reading global area, before reading txt header
 bool sam_piz_initialize (CompIType comp_i)
 {
     if (flag.deep && (comp_i == SAM_COMP_MAIN || comp_i == SAM_COMP_NONE/*single component or interleave*/)) 
@@ -73,6 +73,7 @@ bool sam_piz_initialize (CompIType comp_i)
 }
 
 static void qname_filter_initialize (rom filename); // forward
+
 void sam_piz_header_init (void)
 {
     if (flag.qnames_file)

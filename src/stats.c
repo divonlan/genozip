@@ -244,7 +244,7 @@ static void stats_output_file_metadata (void)
 
     #define REPORT_QNAME \
         FEATURE (z_file->num_lines, "Read name style: %s%s", "Qname=%s%s", \
-                 segconf_qf_name (0), cond_str(segconf.qname_flavor[1], " + ", segconf_qf_name(1)))
+                 segconf_qf_name (0), cond_str(segconf.qname_flavor[1], "+", segconf_qf_name(1))) // no space surrounding the '+' as expected by batch_qname_flavors
 
     #define REPORT_KRAKEN \
         FEATURE0 (kraken_is_loaded, "Features: Per-line taxonomy ID data", "taxonomy_data")
@@ -299,7 +299,7 @@ static void stats_output_file_metadata (void)
             if (flag.deep && segconf.sam_cropped_at) bufprintf (evb, &features, "deep_crop=%ubp;", segconf.sam_cropped_at);
             if (flag.deep) bufprintf (evb, &features, "deep_qtype=%s;", qtype_name (segconf.deep_qtype));
             if (flag.deep) bufprintf (evb, &features, "deep_trimming=%s;", segconf_deep_trimming_name());
-            if (flag.deep) bufprintf (evb, &features, "deep_no_qual=%s;", TF (segconf.deep_no_qual));
+            if (flag.deep) bufprintf (evb, &features, "deep_qual=%s;", TF (!segconf.deep_no_qual));
 
             if (num_alignments) {
                 FEATURE0 (segconf.is_sorted && !segconf.sam_is_unmapped, "Sorting: Sorted by POS", "Sorted_by=POS");        
@@ -309,7 +309,8 @@ static void stats_output_file_metadata (void)
             }
                         
             FEATURE (true, "Aligner: %s", "Mapper=%s", segconf_sam_mapper_name()); 
-            bufprintf (evb, &features, "QUAL=%s;", !segconf.nontrivial_qual ? "Trivial" : segconf.qual_codec != CODEC_UNKNOWN ? codec_name (segconf.qual_codec) : codec_name (ZCTX(SAM_QUAL)->lcodec));
+            bufprintf (evb, &features, "Qual=%s;", !segconf.nontrivial_qual ? "Trivial" : segconf.qual_codec != CODEC_UNKNOWN ? codec_name (segconf.qual_codec) : codec_name (ZCTX(SAM_QUAL)->lcodec));
+            bufprintf (evb, &features, "Qual_histo=%s;", segconf_get_qual_histo().s);
 
             FEATURE0 (segconf.sam_bisulfite, "Feature: Bisulfite", "Bisulfite");
             FEATURE0 (segconf.has_cellranger, "Feature: cellranger-style fields", "has_cellranger");
@@ -342,7 +343,8 @@ static void stats_output_file_metadata (void)
                 }
 
                 if (flag.deep) 
-                    FEATURE (z_file->num_lines, "SAM qname: %s", "SAM_Qname=%s", segconf_qf_name (QSAM))
+                    FEATURE (z_file->num_lines, "SAM qname: %s%s", "SAM_Qname=%s%s", 
+                             segconf_qf_name (QSAM), cond_str(segconf.deep_sam_qname_flavor[1], "+", segconf_qf_name(QSAM2)))
 
                 REPORT_QNAME;
             }            
@@ -406,6 +408,8 @@ static void stats_output_file_metadata (void)
                 bufprintf (evb, &features, "aligner_perfect=%.1f%%;", 100.0 * (double)z_file->num_perfect_matches / (double)z_file->num_lines);
             }
             bufprintf (evb, &features, "Qual=%s;", !segconf.nontrivial_qual ? "Trivial" : segconf.qual_codec != CODEC_UNKNOWN ? codec_name (segconf.qual_codec) : codec_name (ZCTX(SAM_QUAL)->lcodec));
+            bufprintf (evb, &features, "Qual_histo=%s;", segconf_get_qual_histo().s);
+
             REPORT_KRAKEN;
             if (segconf.r1_or_r2) bufprintf (evb, &features, "R1_or_R2=R%d;", (segconf.r1_or_r2 == PAIR_R1) ? 1 : 2);
 

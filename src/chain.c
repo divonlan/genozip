@@ -266,7 +266,7 @@ static void chain_seg_luft_end_field (VBlockCHAIN *vb, rom field_start, int fiel
     }
 
     else
-        seg_pos_field (VB, CHAIN_ENDLUFT, CHAIN_STARTLUFT, 0, 0, field_start, field_len, 0, field_len + 1);
+        seg_pos_field (VB, CHAIN_ENDLUFT, CHAIN_STARTLUFT, SPF_UNLIMITED_DELTA, 0, field_start, field_len, 0, field_len + 1);
 }
 
 // returns false if length is inconsistent with reference, and true if length is the same or contig doesn't exist in reference
@@ -381,10 +381,10 @@ rom chain_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_tx
     ASSERT_VALID_STRAND (CHAIN_STRNDPRIM);
 
     GET_NEXT_ITEM_SP (CHAIN_STARTPRIM);
-    seg_pos_field (vb_, CHAIN_STARTPRIM, CHAIN_ENDPRIM, 0, 0, STRd(CHAIN_STARTPRIM), 0, field_len + 1);
+    seg_pos_field (vb_, CHAIN_STARTPRIM, CHAIN_ENDPRIM, SPF_UNLIMITED_DELTA, 0, STRd(CHAIN_STARTPRIM), 0, field_len + 1);
 
     GET_NEXT_ITEM_SP (CHAIN_ENDPRIM);
-    seg_pos_field (vb_, CHAIN_ENDPRIM, CHAIN_STARTPRIM, 0, 0, STRd(CHAIN_ENDPRIM), 0,field_len + 1);
+    seg_pos_field (vb_, CHAIN_ENDPRIM, CHAIN_STARTPRIM, SPF_UNLIMITED_DELTA, 0, STRd(CHAIN_ENDPRIM), 0,field_len + 1);
 
     random_access_update_first_last_pos (vb_, 0, prim_chrom, STRd(CHAIN_STARTPRIM), STRd (CHAIN_ENDPRIM));
 
@@ -399,7 +399,7 @@ rom chain_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_tx
     ASSERT_VALID_STRAND (CHAIN_STRNDLUFT);
 
     GET_NEXT_ITEM_SP (CHAIN_STARTLUFT);
-    seg_pos_field (vb_, CHAIN_STARTLUFT, CHAIN_ENDLUFT, 0, 0, STRd(CHAIN_STARTLUFT), 0, field_len + 1);
+    seg_pos_field (vb_, CHAIN_STARTLUFT, CHAIN_ENDLUFT, SPF_UNLIMITED_DELTA, 0, STRd(CHAIN_STARTLUFT), 0, field_len + 1);
 
     GET_NEXT_ITEM_SP (CHAIN_ENDLUFT);
     chain_seg_luft_end_field (vb, field_start, field_len);
