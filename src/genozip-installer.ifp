@@ -2,7 +2,7 @@
 ProjectFileVersion = "1.1"
 [General]
 Program name = Genozip
-Program version = 15.0.25
+Program version = 15.0.26
 Windows 2000 = 0
 Windows XP = 0
 Windows Server 2003 = 0
@@ -88,8 +88,8 @@ C:\Users\divon\genozip\src\windows\LICENSE.for-installer.txt
 9.9 KB
 txt
 [Licence_Begin]
-11519
-{\rtf1\ansi\deff0{\fonttbl{\f0\fnil\fcharset0 Arial;}}
+11517
+{\rtf1\ansi\ansicpg1252\deff0{\fonttbl{\f0\fnil\fcharset0 Arial;}}
 {\colortbl ;\red0\green0\blue0;}
 \viewkind4\uc1\pard\cf1\lang1033\fs20 This program, "Genozip", which includes four tools \par
 (genozip, genounzip, genocat and genols), source code,\par
@@ -270,7 +270,7 @@ names of the Licensor, except as required for reasonable\par
 and customary use in describing the origin of the Genozip\par
 \par
 8. Survival. The limitations of liability and ownership\par
-rights of Genozip contained herein and Licensee\'e2\'80\'99s\par
+rights of Genozip contained herein and Licensee\rquote s\par
 obligations following termination of this Agreement will\par
 survive the termination of this Agreement for any reason.\par
 \par
@@ -283,7 +283,7 @@ Health or any other regulatory entity in any country for\par
 any specific intended use, whether research, commercial,\par
 diagnostic, or otherwise, and (ii) Licensee must ensure it\par
 has any regulatory approvals that are necessary for\par
-Licensee\'e2\'80\'99s intended uses of Genozip. Licensee will comply\par
+Licensee\rquote s intended uses of Genozip. Licensee will comply\par
 with all applicable laws and regulations when using and\par
 maintaining Genozip.\par
 \par
@@ -320,8 +320,7 @@ ESSENTIAL PURPOSE.\par
 \par
 END OF TERMS AND CONDITIONS\par
 \par
-Genozip license version: 15.0.25\par
-\par
+Genozip license version: 15.0.23\par
 \par
 }
  [Licence_End]
