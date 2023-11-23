@@ -370,7 +370,8 @@ extern void vcf_parse_main_alt (VBlockVCFP vb);
 extern bool vcf_piz_line_has_RGQ (VBlockVCFP vb);
 
 // Illumina genotyping stuff
-extern void vcf_illum_gtyping_initialize (VBlockVCFP vb);
+extern void vcf_illum_gtyping_zip_initialize (void);
+extern void vcf_illum_gtyping_seg_initialize (VBlockVCFP vb);
 extern void vcf_seg_PROBE_A (VBlockVCFP vb, ContextP ctx, STRp(value));
 extern void vcf_seg_PROBE_B (VBlockVCFP vb, ContextP ctx, STRp(value));
 extern void vcf_seg_ILLUMINA_CHR (VBlockVCFP vb, ContextP ctx, STRp(chr));

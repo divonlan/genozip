@@ -95,8 +95,8 @@ COMPRESSOR_CALLBACK (phy_zip_seq)
 
 void phy_seg_initialize (VBlockP vb)
 {
-    CTX(PHY_SEQ)->ltype = LT_SEQUENCE;
-    CTX(PHY_ID)->ltype  = LT_SEQUENCE;
+    CTX(PHY_SEQ)->ltype = LT_BLOB;
+    CTX(PHY_ID)->ltype  = LT_BLOB;
     CTX(PHY_TOPLEVEL)->no_stons  = true; // keep in b250 so it can be eliminated as all_the_same
     CTX(PHY_TOP2FASTA)->no_stons = true;
 }

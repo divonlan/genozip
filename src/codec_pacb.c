@@ -13,6 +13,7 @@
 #include "sam.h"
 #include "container.h"
 #include "endianness.h"
+#include "piz.h"
 
 // ZIP/PIZ: contribution of the SEQ environment (seq_i-1 to seq_i+2) to channel_i. This is part of codec / file format
 #define NUM_Ks 7
@@ -103,7 +104,8 @@ bool codec_pacb_comp_init (VBlockP vb, LocalGetLineCB get_line_cb)
 // ZIP: called for QUAL-like dids
 bool codec_pacb_maybe_used (Did did_i)
 {
-    return (TECH(PACBIO) && !flag.no_pacb && segconf.nontrivial_qual && !segconf.use_pacbio_iqsqdq && did_i == SAM_QUAL/*==FASTQ_QUAL*/);
+    return (TECH(PACBIO) && !flag.no_pacb && segconf.nontrivial_qual && !segconf.use_pacbio_iqsqdq &&
+            (did_i == SAM_QUAL/*==FASTQ_QUAL*/ || did_i == SAM_CQUAL || did_i == OPTION_OQ_Z));
 }
 
 // ZIP: calculate the channel_i for each score on the line based on its environment (SEQ)
@@ -164,7 +166,7 @@ COMPRESS (codec_pacb_compress)
     // first pass - get the channel_i of each score into channels, and calculate lengths
     for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {   
         STRw(score);
-        get_line_cb (vb, ctx, line_i, pSTRa (score), CALLBACK_NO_SIZE_LIMIT, NULL);
+        get_line_cb (vb, ctx, line_i, pSTRa (score), CALLBACK_NO_SIZE_LIMIT, NULL); // QUAL or OQ:Z
 
         if (!score_len) continue; // compressed by another method
 
@@ -218,13 +220,26 @@ COMPRESS (codec_pacb_compress)
 
 static int32_t codec_pacb_piz_get_np (VBlockP vb)
 {
+    decl_ctx (OPTION_np_i);
+    ASSISLOADED (ctx);
+
     // case: AUX already recontructed (case 1: TOP2FQEX - reconstructed on AUX DESC line, case2: TOP2FQ reconstructed above)
-    if (ctx_has_value_in_line_(vb, CTX(OPTION_np_i))) 
-        return CTX(OPTION_np_i)->last_value.i;
+    if (ctx_has_value_in_line_(vb, ctx)) 
+        return ctx->last_value.i;
 
     // case : AUX will be reconstructed later - just peek np:i now
-    else 
-        return reconstruct_peek (vb, CTX(OPTION_np_i), 0, 0).i;
+    else if (!vb->preprocessing)
+        return reconstruct_peek (vb, ctx, 0, 0).i;
+
+    // case: preprocessing (loading SAGs) 
+    else {
+        // np might be a delta against ec, so if we have ec:f on the line, we need to consume it
+        if (container_peek_has_item (vb, CTX(SAM_AUX), _OPTION_ec_f, false)) // don't consume AUX - it will be consumed in sam_load_groups_add_grps
+            reconstruct_from_ctx (vb, OPTION_ec_f, 0, false); // consumes ec_f and sets ec_f.last_value
+
+        reconstruct_from_ctx (vb, OPTION_np_i, 0, false);     // consumes np_i and sets np_i.last_value
+        return ctx->last_value.i;
+    }
 }
 
 CODEC_RECONSTRUCT (codec_pacb_reconstruct)
@@ -266,9 +281,8 @@ CODEC_RECONSTRUCT (codec_pacb_reconstruct)
     char *next_recon = BAFTtxt;
     for (uint32_t i=0; i < len; i++) {
         uint8_t K = QUAL_get_K_value (seq, len, i);
-
         uint8_t channel_i = NUM_Ks * np0 + K;
-        ASSPIZ (next[channel_i] < after[channel_i], "out of data in channel_i=%u", channel_i);
+        ASSPIZ (next[channel_i] < after[channel_i], "out of data in channel_i=%u i=%u", channel_i, i);
 
         *next_recon++ = *next[channel_i]++;
     }

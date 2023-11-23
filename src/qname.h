@@ -45,7 +45,7 @@ typedef enum __attribute__ ((__packed__)) {
 #define dict_id_qname_sf dict_id_type_1
 
 extern const char sep_with_space[], sep_without_space[];
-extern void qname_seg (VBlockP vb, QType q, STRp(qname), unsigned add_additional_bytes);
+extern bool qname_seg (VBlockP vb, QType q, STRp(qname), unsigned add_additional_bytes);
 extern void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname));
 extern QType qname_sam_get_qtype (STRp(qname));
 

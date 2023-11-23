@@ -1,4 +1,4 @@
-#!/bin/bash 
+#!/bin/bash
 
 # ------------------------------------------------------------------
 #   test.sh
@@ -944,6 +944,10 @@ batch_genocat_tests()
     test_count_genocat_lines $file "-H --qnames-file $filter" 4
     test_count_genocat_lines $file "-H --qnames-file ^$filter" 11
 
+    local filter_opt=`cut -d" " -f1 $filter | sed "s/^@//g" | tr "\n" ","`
+    test_count_genocat_lines $file "-H --qnames $filter_opt" 4
+    test_count_genocat_lines $file "-H --qnames ^$filter_opt" 11
+
     local filter=$TESTDIR/basic.sam.seq-filter
     test_count_genocat_lines $file "-H --seqs-file $filter" 4
     test_count_genocat_lines $file "-H --seqs-file ^$filter" 11
@@ -1119,7 +1123,7 @@ batch_real_world_1_adler32() # $1 extra genozip argument
 
     # without reference
     local files=( `cd $TESTDIR; ls -1 test.*vcf* test.*sam* test.*bam test.*fq* test.*fa* basic.phy*    \
-                   test.*gvf* test.*gtf* test.*gff* test.*locs* test.*bed* test.*txt* test.*kraken* test/*.pbi  \
+                   test.*gvf* test.*gtf* test.*gff* test.*locs* test.*bed* test.*txt* test.*kraken* test.*.pbi  \
                    | grep -v "$filter_xz" | grep -v "$filter_zip" \
                    | grep -v headerless | grep -vF .genozip | grep -vF .md5 | grep -vF .bad `) 
 
@@ -1852,7 +1856,12 @@ batch_deep() # note: use --debug-deep for detailed tracking
     test_header deep.trim+homp
     local T=$TESTDIR/deep.trim+homp
     $genozip $T.fq $T.sam -fe $hs37d5 -o $output -3t || exit 1
-    
+
+    # FASTQ with SAUX
+    test_header deep.illum.saux
+    local T=$TESTDIR/deep.illum.saux
+    $genozip $T.R1.fq $T.R2.fq $T.sam -fe $hs37d5 -o $output -3t || exit 1
+
     # Illumina WGS - different FASTQ and SAM qname flavors
     cleanup_cache
     test_header "deep.qtype=QNAME2 - different FASTQ and SAM qname flavors"

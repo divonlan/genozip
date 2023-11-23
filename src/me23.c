@@ -68,7 +68,7 @@ void me23_seg_initialize (VBlockP vb)
     CTX(ME23_CHROM)->no_vb1_sort = true;
     CTX(ME23_CHROM)->flags.store = STORE_INDEX; // since v12
     CTX(ME23_POS)->flags.store   = STORE_INT;   // since v12
-    CTX(ME23_GENOTYPE)->ltype    = LT_SEQUENCE;
+    CTX(ME23_GENOTYPE)->ltype    = LT_BLOB;
 }
 
 void me23_seg_finalize (VBlockP vb)

@@ -49,10 +49,8 @@ extern bool seg_integer_or_not_cb (VBlockP vb, ContextP ctx, STRp(int_str), uint
 extern bool seg_float_or_not (VBlockP vb, ContextP ctx, STRp(this_value), unsigned add_bytes);
 extern void seg_numeric_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_bytes);
 
-#define MAX_POS_DELTA     250  // the max delta (in either direction) that we will put in a dictionary - above this it goes to local. This number can be changed at any time without affecting backward compatability - it is used only by ZIP, not PIZ
 #define SPF_BAD_SNIPS_TOO   1  // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
 #define SPF_ZERO_IS_BAD     2  // whether 0 is considered a bad POS (if true and POS is 0, to be handled according to seg_bad_snips_too)
-#define SPF_UNLIMITED_DELTA 4  // Always use delta, even if larger than MAX_POS_DELTA
 #define SPF_NO_DELTA        8  // All integer data goes into local
 extern PosType64 seg_pos_field (VBlockP vb, Did snip_did_i, Did base_did_i, unsigned opt, 
                               char missing, STRp(pos_str), PosType64 this_pos, unsigned add_bytes);
@@ -66,12 +64,21 @@ extern bool seg_id_field_fixed_int_cb (VBlockP vb, ContextP ctx, STRp(id), uint3
 typedef enum { LOOKUP_NONE, LOOKUP_SIMPLE, LOOKUP_WITH_LENGTH } Lookup;
 extern void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, const void *const data, uint32_t data_len, bool add_nul, Lookup lookup_type, bool is_singleton, unsigned add_bytes);
 
-static inline void seg_add_to_local_text (VBlockP vb, ContextP ctx, STRp(snip), Lookup lookup_type, unsigned add_bytes) 
+static inline void seg_add_to_local_string (VBlockP vb, ContextP ctx, STRp(snip), Lookup lookup_type, unsigned add_bytes) 
 { 
 #ifdef DEBUG
-    ASSERT (segconf.running || ctx->no_stons, "%s: Expecting ctx->no_stons=true in ctx=%s", LN_NAME, ctx->tag_name);
+    ASSERT (segconf.running || ctx->ltype == LT_STRING, "%s: Expecting %s.ltype=LT_STRING but found %s", LN_NAME, ctx->tag_name, lt_name (ctx->ltype));
+    ASSERT (lookup_type==LOOKUP_NONE || lookup_type==LOOKUP_SIMPLE, "%s: expecting LOOKUP_NONE or LOOKUP_SIMPLE in ctx=%s", LN_NAME, ctx->tag_name);
 #endif
-    seg_add_to_local_fixed_do (vb, ctx, STRa(snip), lookup_type != LOOKUP_WITH_LENGTH, lookup_type, false, add_bytes); 
+    seg_add_to_local_fixed_do (vb, ctx, STRa(snip), true, lookup_type, false, add_bytes); 
+}
+
+static inline void seg_add_to_local_blob (VBlockP vb, ContextP ctx, STRp(blob), unsigned add_bytes) 
+{ 
+#ifdef DEBUG
+    ASSERT (segconf.running || ctx->ltype == LT_BLOB, "%s: Expecting %s.ltype=LT_BLOB but found %s", LN_NAME, ctx->tag_name, lt_name (ctx->ltype));
+#endif
+    seg_add_to_local_fixed_do (vb, ctx, STRa(blob), false, LOOKUP_WITH_LENGTH, false, add_bytes); 
 }
 
 static inline void seg_add_to_local_fixed (VBlockP vb, ContextP ctx, const void *data, uint32_t data_len, Lookup lookup_type, unsigned add_bytes)
@@ -82,9 +89,9 @@ extern void seg_integer_fixed (VBlockP vb, Context *ctx, void *number, bool with
 // requires setting ltype=LT_DYN_INT* in seg_initialize, but not need to set ltype as it will be set in zip_resize_local
 extern void seg_add_to_local_resizable (VBlockP vb, ContextP ctx, int64_t value, unsigned add_bytes);
 
-extern WordIndex seg_delta_vs_other_do (VBlockP vb, ContextP ctx, ContextP other_ctx, STRp(value), int64_t value_n, int64_t max_delta, unsigned add_bytes);
-static inline WordIndex seg_delta_vs_other (VBlockP vb, ContextP ctx, ContextP other_ctx, STRp(value))
-    { return seg_delta_vs_other_do (vb, ctx, other_ctx, STRa(value), ctx->last_value.i, -1, value_len); }
+extern void seg_delta_vs_other_do (VBlockP vb, ContextP ctx, ContextP other_ctx, STRp(value), int64_t value_n, int64_t max_delta, unsigned add_bytes);
+static inline void seg_delta_vs_other (VBlockP vb, ContextP ctx, ContextP other_ctx, STRp(value))
+    { seg_delta_vs_other_do (vb, ctx, other_ctx, STRa(value), ctx->last_value.i, -1, value_len); }
 
 extern void seg_diff (VBlockP vb, ContextP ctx, ContextP base_ctx, STRp(value), bool entire_snip_if_same, unsigned add_bytes);
 
@@ -131,13 +138,19 @@ extern void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, 
 
 extern void seg_prepare_multi_dict_id_special_snip (uint8_t special_code, unsigned num_dict_ids, DictId *dict_ids, char *out_snip, unsigned *out_snip_len);
 
-extern void seg_prepare_minus_snip_do (DictId dict_id_a, DictId dict_id_b, uint8_t special_code, char *snip, unsigned *snip_len);
+extern void seg_prepare_array_dict_id_special_snip (int num_dict_ids, DictId *dict_ids, uint8_t special_code, qSTRp(snip));
+
+#define seg_prepare_plus_snip(dt, num_dict_ids, dict_ids, snip) \
+    ({ snip##_len = sizeof (snip);\
+       seg_prepare_array_dict_id_special_snip ((num_dict_ids), (dict_ids), dt##_SPECIAL_PLUS, (snip), &snip##_len); })
+
 #define seg_prepare_minus_snip(dt, dict_id_a, dict_id_b, snip) \
     ({ snip##_len = sizeof (snip);\
-       seg_prepare_minus_snip_do ((dict_id_a), (dict_id_b), dt##_SPECIAL_MINUS, (snip), &snip##_len); })
+       seg_prepare_array_dict_id_special_snip (2, (DictId[]){(DictId)(dict_id_a), (DictId)(dict_id_b)}, dt##_SPECIAL_MINUS, (snip), &snip##_len); })
+
 #define seg_prepare_minus_snip_i(dt, dict_id_a, dict_id_b, snip, i) \
     ({ snip##_lens[i] = sizeof (snip##s[i]);\
-       seg_prepare_minus_snip_do ((dict_id_a), (dict_id_b), dt##_SPECIAL_MINUS, snip##s[i], &snip##_lens[i]); })
+       seg_prepare_array_dict_id_special_snip (2, (DictId[]){(DictId)(dict_id_a), (DictId)(dict_id_b)}, dt##_SPECIAL_MINUS, snip##s[i], &snip##_lens[i]); })
 
 static void inline seg_set_last_txt (VBlockP vb, ContextP ctx, STRp(value))
 {
@@ -255,10 +268,6 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux
     field_start = next_field; \
     next_field = seg_get_next_item (VB, field_start, &len, GN_SEP, GN_IGNORE, GN_IGNORE, &field_len, &separator, has_13, #f); \
     FIELD (f)
-
-#define SEG_NEXT_ITEM_NL(f)  \
-    GET_NEXT_ITEM_NL (f); \
-    seg_by_did (VB, field_start, field_len, f, field_len+1);
 
 #define SEG_EOL(f,account_for_ascii10) ({ seg_by_did (VB, *(has_13) ? "\r\n" : "\n", 1 + *(has_13), (f), (account_for_ascii10) + *(has_13)); })
 

@@ -35,7 +35,7 @@ void sam_ultima_seg_initialize (VBlockSAMP vb)
 
     if (segconf.sam_has_ultima_t0) {
         if (IS_DEPN(vb))
-            CTX(OPTION_t0_Z)->ltype = LT_SEQUENCE; // see bug 922
+            CTX(OPTION_t0_Z)->ltype = LT_BLOB; // see bug 922
         else
             codec_t0_comp_init (VB); 
     } else

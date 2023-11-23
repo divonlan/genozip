@@ -8,11 +8,11 @@
 
 #include <errno.h>
 #include "genozip.h"
+#include "endianness.h"
 #include "sections.h"
 #include "vblock.h"
 #include "context.h"
 #include "zfile.h"
-#include "endianness.h"
 #include "file.h"
 #include "dict_id.h"
 #include "strings.h"
@@ -21,6 +21,8 @@
 #include "dispatcher.h"
 #include "piz.h"
 #include "compressor.h"
+#include "dict_io.h"
+#include "base64.h"
 
 // -------------------------------------
 // ZIP: Assign codecs to dictionaries
@@ -157,10 +159,10 @@ static void dict_io_compress_one_fragment (VBlockP vb)
                  vb->fragment_ctx->tag_name, vb->vblock_i, vb->fragment_ctx->did_i, vb->fragment_num_words);
     
     if (dict_id_is_show (vb->fragment_ctx->dict_id))
-        str_print_dict (info_stream, vb->fragment_start, vb->fragment_len, true, flag.show_dict, false);
+        dict_io_print (info_stream, vb->fragment_start, vb->fragment_len, true, flag.show_dict, false);
 
     if (flag.list_chroms && vb->fragment_ctx->did_i == CHROM)
-        str_print_dict (info_stream, vb->fragment_start, vb->fragment_len, true, false, VB_DT(SAM) || VB_DT(BAM));
+        dict_io_print (info_stream, vb->fragment_start, vb->fragment_len, true, false, VB_DT(SAM) || VB_DT(BAM));
 
     if (flag.show_time) codec_show_time (vb, st_name (SEC_DICT), vb->fragment_ctx->tag_name, vb->fragment_ctx->dcodec);
 
@@ -372,14 +374,14 @@ void dict_io_read_all_dictionaries (void)
             if (!ctx->dict.len) continue;
 
             if (flag.list_chroms && ((!flag.luft && ctx->did_i == CHROM) || (flag.luft && ctx->did_i == VCF_oCHROM)))
-                str_print_dict (info_stream, STRb(ctx->dict), true, true, Z_DT(SAM));
+                dict_io_print (info_stream, STRb(ctx->dict), true, true, Z_DT(SAM));
             
             if (flag.show_dict) 
-                iprintf ("%s (did_i=%u, num_snips=%u, dict_size=%"PRIu64" bytes)\n", 
-                         ctx->tag_name, did_i, ctx->word_list.len32, ctx->dict.len);
+                iprintf ("%-8s\tdid_i=%-3u\tnum_snips=%u\tdict_size=%s\n", 
+                         ctx->tag_name, did_i, ctx->word_list.len32, str_size (ctx->dict.len).s);
 
             if (dict_id_is_show (ctx->dict_id))
-                str_print_dict (info_stream, STRb(ctx->dict), true, true, false);
+                dict_io_print (info_stream, STRb(ctx->dict), true, true, false);
         }
         iprint0 ("\n");
 
@@ -387,4 +389,91 @@ void dict_io_read_all_dictionaries (void)
     }
 
     COPY_TIMER_EVB (dict_io_read_all_dictionaries);
+}
+
+// print one or more words in Context.dict
+void dict_io_print (FILE *fp, STRp(data), bool with_word_index, bool add_newline, bool remove_equal_asterisk)
+{
+    rom word = data, after = data + data_len;
+    
+    for (WordIndex word_index=0; word < after; word_index++) {
+        int word_len = strlen (word);
+        char op = (word_len && word[0] > 0 && word[0] < 32) ? word[0] : 0;
+
+        // in case we are showing chrom data in --list-chroms in SAM - don't show * and =
+        if (remove_equal_asterisk && (str_is_1char(word,'*') || str_is_1char(word,'='))) 
+            goto cont;
+
+        if (with_word_index) 
+            fprintf (fp, "%u%c", word_index, add_newline ? '\t' : '='); 
+
+        if (!op) fputc ('\"', fp);
+
+        for (int i=0; i < word_len; i++) {
+
+            if (!i && op) {
+                switch (op) {
+                    case SNIP_LOOKUP               : fwrite (_S("[LOOKUP]"),      1, fp); break;
+                    case SNIP_OTHER_LOOKUP         : fwrite (_S("[OLOOKUP]"),     1, fp); break;
+                    case v13_SNIP_MATE_LOOKUP      : fwrite (_S("[MLOOKUP]"),     1, fp); break;
+                    case SNIP_CONTAINER            : fwrite (_S("[CONTAINER]"),   1, fp); break;
+                    case SNIP_SELF_DELTA           : fwrite (_S("[DELTA]"),       1, fp); break;
+                    case SNIP_OTHER_DELTA          : fwrite (_S("[ODELTA]"),      1, fp); break;
+                    case v13_SNIP_FASTQ_PAIR2_GPOS : fwrite (_S("[PAIR2GPOS]"),   1, fp); break;
+                    case SNIP_REDIRECTION          : fwrite (_S("[REDIRECTION]"), 1, fp); break;
+                    case SNIP_DONT_STORE           : fwrite (_S("[DONT_STORE]"),  1, fp); break;
+                    case SNIP_COPY                 : fwrite (_S("[COPY]"),        1, fp); break;
+                    case SNIP_DUAL                 : fwrite (_S("[DUAL]"),        1, fp); break;
+                    case SNIP_LOOKBACK             : fwrite (_S("[LOOKBACK]"),    1, fp); break;
+                    case v13_SNIP_COPY_BUDDY       : fwrite (_S("[BCOPY]"),       1, fp); break;
+                    case SNIP_DIFF                 : fwrite (_S("[DIFF]"),        1, fp); break;
+                    case SNIP_NUMERIC              : fwrite (_S("[NUMERIC]"),     1, fp); break;
+                    case SNIP_SPECIAL              : fprintf (fp, "[SPECIAL-%u]", word[1]-32); i++; break;
+                    default                        : fprintf (fp, "\\x%x", (uint8_t)op);
+                }
+
+                if (op == SNIP_OTHER_LOOKUP || op == SNIP_OTHER_DELTA || op == SNIP_COPY) {
+                    unsigned b64_len = base64_sizeof (DictId);
+                    DictId dict_id;
+                    base64_decode (&word[1], &b64_len, dict_id.id);
+                    fprintf (fp, "(%s)", dis_dict_id (dict_id).s);
+                    i += b64_len;
+                }
+
+                else if (op == SNIP_CONTAINER) {
+                    // decode
+                    Container con;
+                    unsigned b64_len = word_len - 1; // maximum length of b64 
+                    base64_decode (&word[1], &b64_len, (uint8_t*)&con);
+                    i += b64_len;
+
+                    con.repeats = BGEN24 (con.repeats);
+                    unsigned prefixes_len = word_len - (i+1);
+                    fprintf (fp, "%s", container_to_json (&con, &word[i+1], prefixes_len).s);
+                    i += prefixes_len;
+                }
+            }
+
+            else 
+                fprintf (fp, "%s", char_to_printable (word[i]).s);
+        }
+
+        if (!op) fputc ('\"', fp);
+    
+    cont: 
+        word += word_len + 1;
+        fputc ((add_newline || word == after) ? '\n' : ' ', fp);
+    }
+    fflush (fp);
+}
+
+void dict_io_show_singletons (VBlockP vb, ContextP ctx)
+{
+    if (ctx->ltype == LT_SINGLETON) {
+        iprintf ("%s: %s.local contains singletons: ", VB_NAME, ctx->tag_name);
+        dict_io_print (info_stream, STRb(ctx->local), true, false, false);
+    }
+
+    else
+        iprintf ("%s: %s.ltype=%s, it does not contain singletons\n", VB_NAME, ctx->tag_name, lt_name (ctx->ltype));
 }

@@ -151,7 +151,7 @@ CODEC_RECONSTRUCT (codec_hapmat_reconstruct)
             break;
 
         default: 
-            ASSPIZ (false, "Invalid character found in decompressed HT array: '%c' (ASCII %u)",  ht, ht);
+            ABORT_PIZ ("Invalid character found in decompressed HT array: '%c' (ASCII %u)",  ht, ht);
     }
 }
 

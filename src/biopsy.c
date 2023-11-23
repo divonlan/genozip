@@ -92,7 +92,9 @@ void biopsy_take (VBlockP vb)
             goto start_biopsy;
 
 
-    if (vb->vblock_i == 0) goto start_biopsy; // always output the txt header
+    // always output the txt header except if --no-header
+    if (vb->vblock_i == 0 && !flag.no_header) 
+        goto start_biopsy; 
 
     return; // we were not requested to take a biopsy from this vb
 

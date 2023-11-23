@@ -309,8 +309,19 @@ static void stats_output_file_metadata (void)
             }
                         
             FEATURE (true, "Aligner: %s", "Mapper=%s", segconf_sam_mapper_name()); 
-            bufprintf (evb, &features, "Qual=%s;", !segconf.nontrivial_qual ? "Trivial" : segconf.qual_codec != CODEC_UNKNOWN ? codec_name (segconf.qual_codec) : codec_name (ZCTX(SAM_QUAL)->lcodec));
-            bufprintf (evb, &features, "Qual_histo=%s;", segconf_get_qual_histo().s);
+
+            bufprintf (evb, &features, "QUAL=%s;", !segconf.nontrivial_qual ? "Trivial" : (ZCTX(SAM_QUAL)->qual_codec != CODEC_UNKNOWN) ? codec_name (ZCTX(SAM_QUAL)->qual_codec) : codec_name (ZCTX(SAM_QUAL)->lcodec));
+            bufprintf (evb, &features, "QUAL_histo=%s;", segconf_get_qual_histo(QHT_QUAL).s);
+            
+            if (segconf.flav_prop[QNAME2].is_consensus) { // Qual of consensus reads
+                bufprintf (evb, &features, "CQUAL=%s;", (ZCTX(SAM_CQUAL)->qual_codec != CODEC_UNKNOWN) ? codec_name (ZCTX(SAM_CQUAL)->qual_codec) : codec_name (ZCTX(SAM_CQUAL)->lcodec));
+                bufprintf (evb, &features, "CQUAL_histo=%s;", segconf_get_qual_histo(QHT_CONSENSUS).s);
+            }
+
+            if (segconf.has[OPTION_OQ_Z]) {
+                bufprintf (evb, &features, "OQ=%s;", (ZCTX(OPTION_OQ_Z)->qual_codec != CODEC_UNKNOWN) ? codec_name (ZCTX(OPTION_OQ_Z)->qual_codec) : codec_name (ZCTX(OPTION_OQ_Z)->lcodec));
+                bufprintf (evb, &features, "OQ_histo=%s;", segconf_get_qual_histo(QHT_OQ).s);
+            }
 
             FEATURE0 (segconf.sam_bisulfite, "Feature: Bisulfite", "Bisulfite");
             FEATURE0 (segconf.has_cellranger, "Feature: cellranger-style fields", "has_cellranger");
@@ -407,8 +418,8 @@ static void stats_output_file_metadata (void)
                 bufprintf (evb, &features, "aligner_ok=%.1f%%;", 100.0 * (double)z_file->num_aligned / (double)z_file->num_lines);                
                 bufprintf (evb, &features, "aligner_perfect=%.1f%%;", 100.0 * (double)z_file->num_perfect_matches / (double)z_file->num_lines);
             }
-            bufprintf (evb, &features, "Qual=%s;", !segconf.nontrivial_qual ? "Trivial" : segconf.qual_codec != CODEC_UNKNOWN ? codec_name (segconf.qual_codec) : codec_name (ZCTX(SAM_QUAL)->lcodec));
-            bufprintf (evb, &features, "Qual_histo=%s;", segconf_get_qual_histo().s);
+            bufprintf (evb, &features, "Qual=%s;", !segconf.nontrivial_qual ? "Trivial" : ZCTX(SAM_QUAL)->qual_codec != CODEC_UNKNOWN ? codec_name (ZCTX(SAM_QUAL)->qual_codec) : codec_name (ZCTX(SAM_QUAL)->lcodec));
+            bufprintf (evb, &features, "Qual_histo=%s;", segconf_get_qual_histo(QHT_QUAL).s);
 
             REPORT_KRAKEN;
             if (segconf.r1_or_r2) bufprintf (evb, &features, "R1_or_R2=R%d;", (segconf.r1_or_r2 == PAIR_R1) ? 1 : 2);

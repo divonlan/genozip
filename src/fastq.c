@@ -95,7 +95,7 @@ bool fastq_zip_use_pair_identical (DictId dict_id)
 {
     return dict_id_is_fastq_qname_sf (dict_id) || dict_id_is_fastq_aux (dict_id) || 
            DNUM(QNAME) || DNUM(QNAME2) || DNUM(LINE3) || DNUM(EXTRA) ||
-           DNUM(AUX) || DNUM(AUX_LENGTH) || DNUM(E1L) || DNUM (E2L) || DNUM(TAXID) || DNUM(TOPLEVEL);
+           DNUM(AUX) || DNUM(E1L) || DNUM (E2L) || DNUM(TAXID) || DNUM(TOPLEVEL);
 }
 
 // returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
@@ -270,8 +270,8 @@ void fastq_zip_initialize (void)
 // called by main thread after each txt file compressing is done
 void fastq_zip_finalize (bool is_last_user_txt_file)
 {
-    if (is_last_user_txt_file && flag.deep && flag.show_deep)
-        fastq_deep_zip_show_entries_stats();
+    if (is_last_user_txt_file && flag.deep)
+        fastq_deep_zip_finalize();
 }
 
 // called by Compute thread at the beginning of this VB
@@ -309,10 +309,10 @@ void fastq_seg_initialize (VBlockP vb_)
     if (!segconf.multiseq && !segconf.running)
         codec_acgt_seg_initialize (VB, FASTQ_NONREF, true);
     else
-        CTX(FASTQ_NONREF)->ltype = LT_SEQUENCE;
+        CTX(FASTQ_NONREF)->ltype = LT_BLOB;
 
-    // initialize QUAL to LT_SEQUENCE, it might be changed later to LT_CODEC (eg domq, longr)
-    ctx_set_ltype (VB, LT_SEQUENCE, FASTQ_QUAL, DID_EOL);
+    // initialize QUAL to LT_BLOB, it might be changed later to LT_CODEC (eg domq, longr)
+    ctx_set_ltype (VB, LT_BLOB, FASTQ_QUAL, DID_EOL);
 
     if (flag.pair == PAIR_R1) 
         // cannot all_the_same with no b250 for PAIR_1 - SQBITMAP.b250 is tested in fastq_get_pair_1_gpos_strand
@@ -353,6 +353,13 @@ void fastq_seg_initialize (VBlockP vb_)
         CTX(FASTQ_TAXID)->no_stons       = true; // must be no_stons the SEC_COUNTS data needs to mirror the dictionary words
         CTX(FASTQ_TAXID)->counts_section = true; 
     }
+
+    // when pairing, we cannot have singletons, bc a singleton in R1, when appearing in R2 will not
+    // be a singleton (since not the first appearance), causing both b250 and local to differ between the R's. 
+    if (flag.pair)
+        for (Did did_i=0; did_i < MAX_DICTS; did_i++)
+            if (segconf.has[did_i]) // aux and saux contexts. note: for non-predefined contexts, their did_i will be the same in all VBs, bc the format of all lines in FASTQ is the same. Even if not, all non-predefined contexts in FASTQ are DTYPE_2, and we are setting no_stons for DTYPE_2 contexts anyway
+                CTX(did_i)->no_stons = true;
 
     if (flag.deep)
         fastq_deep_seg_initialize (vb);
@@ -461,7 +468,7 @@ void fastq_seg_finalize (VBlockP vb)
                         '@', CON_PX_SEP,   // 3:  QNAME prefix
                         ' ', CON_PX_SEP,   // 5:  QNAME2 prefix
                         ' ', CON_PX_SEP,   // 7:  EXTRA prefix
-                        " \t"[segconf.has_saux], CON_PX_SEP,   // 9:  AUX or SAUX prefix
+                        " \t"[segconf.saux_tab_sep], CON_PX_SEP,   // 9:  AUX or SAUX prefix
                         CON_PX_SEP,        // 11: empty E1L line prefix
                         CON_PX_SEP,        // 12: empty SQBITMAP line prefix
                         CON_PX_SEP,        // 13: empty E2L line prefix
@@ -605,18 +612,18 @@ static rom fastq_seg_get_lines (VBlockFASTQP vb, rom line, int32_t remaining,
         *desc = memchr2 (*qname, ' ', '\t', *line1_len);
 
         // if \t was found before any space, this *might* be SAUX (or \t might belong to qname)
-        if (*desc && **desc == '\t' && !fastq_segconf_analyze_saux (vb, *desc + 1, *qname + *line1_len - *desc - 1))
-            *desc = memchr (*qname, ' ', *line1_len); // not SAUX - tab belongs to qname
+        if (*desc && !fastq_segconf_analyze_saux (vb, *desc + 1, *qname + *line1_len - *desc - 1) && **desc == '\t') 
+            *desc = memchr (*qname, ' ', *line1_len); // \t separator but not SAUX - tab belongs to qname
 
         // Discover the QNAME flavor. Also discovers the original TECH, even when optimize_DESC
         qname_segconf_discover_flavor (VB, QNAME1, *qname, (*desc ? *desc - *qname : *line1_len)); 
 
-        if (*desc && **desc == ' ') 
+        if (!segconf.has_saux && *desc && **desc == ' ') 
             fastq_segconf_analyze_DESC (vb, *desc + 1, *qname + *line1_len - *desc - 1);
     }
 
     // get desc and qname2
-    if (segconf.has_desc && !segconf.desc_is_l3 && (*desc = memchr (*qname, " \t"[segconf.has_saux], *line1_len))) {
+    if (segconf.has_desc && !segconf.desc_is_l3 && (*desc = memchr (*qname, " \t"[segconf.saux_tab_sep], *line1_len))) {
         
         (*desc)++; // skip separator 
         *desc_len = *qname + *line1_len - *desc; 

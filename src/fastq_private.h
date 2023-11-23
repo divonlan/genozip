@@ -92,5 +92,5 @@ extern void fastq_deep_seg_QNAME (VBlockFASTQP vb, Did did_i, STRp(qname), uint3
 extern void fastq_deep_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(seq), ContextP bitmap_ctx, ContextP nonref_ctx);
 extern void fastq_deep_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQ *dl, ContextP qual_ctx, uint32_t qual_len);
 extern void fastq_deep_zip_after_compute (VBlockFASTQP vb);
-extern void fastq_deep_zip_show_entries_stats (void);
+extern void fastq_deep_zip_finalize (void);
 extern void fastq_deep_piz_wait_for_deep_data (void);

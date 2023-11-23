@@ -48,7 +48,7 @@
 #pragma GENDICT ATTR_Name=DTYPE_1=Name
 #pragma GENDICT ATTR_Alias=DTYPE_1=Alias
 #pragma GENDICT ATTR_Parent=DTYPE_1=Parent
-#pragma GENDICT ATTR_ParentItem=DTYPE_1=parentItm           // an item of the Parent array
+#pragma GENDICT ATTR_ParentItem=DTYPE_1=parentItm           // an item of the Parent array (defined explicity and cannot be changed, as defined in alias list, including of old files)
 #pragma GENDICT ATTR_Target=DTYPE_1=Target
 #pragma GENDICT ATTR_Target_ID=DTYPE_1=T1gtID
 #pragma GENDICT ATTR_Target_POS=DTYPE_1=T2gtPOS
@@ -109,6 +109,20 @@
 #pragma GENDICT ATTR_lineage=DTYPE_1=lineage                // taxon lineage : string
 #pragma GENDICT ATTR_EC=DTYPE_1=EC                          // list of EC numbers associated to the annotation : comma separated values
 
+// prodigal (prokaryote gene prediction): https://github.com/hyattpd/prodigal/wiki
+#pragma GENDICT ATTR_partial=DTYPE_1=partial
+#pragma GENDICT ATTR_start_type=DTYPE_1=start_type
+#pragma GENDICT ATTR_rbs_motif=DTYPE_1=rbs_motif
+#pragma GENDICT ATTR_rbs_spacer=DTYPE_1=rbs_spacer
+#pragma GENDICT ATTR_gc_cont=DTYPE_1=gc_cont
+#pragma GENDICT ATTR_conf=DTYPE_1=conf
+#pragma GENDICT ATTR_score=DTYPE_1=score
+#pragma GENDICT ATTR_cscore=DTYPE_1=cscore
+#pragma GENDICT ATTR_sscore=DTYPE_1=sscore
+#pragma GENDICT ATTR_rscore=DTYPE_1=rscore
+#pragma GENDICT ATTR_uscore=DTYPE_1=uscore
+#pragma GENDICT ATTR_tscore=DTYPE_1=tscore
+
 // other fields
 #pragma GENDICT ATTR_chr=DTYPE_1=chr
 
@@ -124,6 +138,7 @@ extern void gff_seg_initialize (VBlockP vb_);
 extern void gff_seg_finalize (VBlockP vb);
 extern bool gff_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern bool gff_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id);
+extern void gff_reset_line (VBlockP vb);
 
 // VBlock stuff
 extern unsigned gff_vb_size (DataType dt);
@@ -134,11 +149,10 @@ extern CONTAINER_FILTER_FUNC (gff_piz_filter);
 extern CONTAINER_CALLBACK (gff_piz_container_cb);
 
 #define GFF_SPECIAL {  gff_piz_special_exon_number }
-SPECIAL (GFF, 0,  exon_number,         gff_piz_special_exon_number);
+SPECIAL (GFF, 0,  exon_number, gff_piz_special_exon_number);
 #define NUM_GFF_SPECIAL 1
 
 #define GFF_DICT_ID_ALIASES                                              \
     /*        type        alias                   maps to this ctx   */  \
     { DT_GFF, ALIAS_CTX,  _ATTR_Variant_seq,      _ATTR_Reference_seq }, \
-    { DT_GFF, ALIAS_CTX,  _ATTR_ancestral_allele, _ATTR_Reference_seq }, \
-    { DT_GFF, ALIAS_DICT, _ATTR_ParentItem,       _ATTR_DBXid         }, 
+    { DT_GFF, ALIAS_CTX,  _ATTR_ancestral_allele, _ATTR_Reference_seq }, 

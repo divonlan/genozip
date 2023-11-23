@@ -55,41 +55,73 @@ void fastq_deep_seg_initialize (VBlockFASTQP vb)
     CTX(FASTQ_SQBITMAP)->no_stons = true;
 }
 
-void fastq_deep_zip_show_entries_stats (void) 
+// called by main thread after ALL FASTQ files are done compressing with Deep
+void fastq_deep_zip_finalize (void) 
 {
-    static rom names[] = NO_DEEP_NAMES;
+    if (flag.show_deep) {
+        static rom names[] = NO_DEEP_NAMES;
 
-    uint64_t total = z_file->deep_stats[NDP_FQ_READS];
-    iprint0 ("\nFASTQ reads breakdown by deepability:\n");
-    
-    for (int i=0; i < NUM_DEEP_STATS; i++) 
-        if (z_file->deep_stats[i])
-            iprintf ("%-11.11s: %"PRIu64" (%.1f%%)\n", names[i], z_file->deep_stats[i], 100.0 * (double)z_file->deep_stats[i] / (double)total);
+        uint64_t total = z_file->deep_stats[NDP_FQ_READS];
+        iprint0 ("\nFASTQ reads breakdown by deepability:\n");
+        
+        for (int i=0; i < NUM_DEEP_STATS; i++) 
+            if (z_file->deep_stats[i])
+                iprintf ("%-11.11s: %"PRIu64" (%.1f%%)\n", names[i], z_file->deep_stats[i], 100.0 * (double)z_file->deep_stats[i] / (double)total);
+    }
 
     ARRAY (ZipZDeep, deep_ents, z_file->deep_ents);
 
+    // Count deepable alignments in SAM that were did not appear in FASTQ. This would be an user
+    // error as we require that FASTQ files covering all SAM alignments (except supplementary, 
+    // secondary and consensus) must be provided when using --deep 
     uint64_t count_not_consumed=0, count_dups=0;
     for (uint64_t ent_i=0; ent_i < deep_ents_len; ent_i++) 
         if (deep_ents[ent_i].dup) count_dups++;
         else if (!deep_ents[ent_i].consumed) count_not_consumed++;
 
-    #define NUM_SHOW 20
-    iprintf ("\nNumber of %s deepable alignments not consumed by FASTQ reads: %"PRIu64"\n"
-             "- Unusable due to multiple alignments with same hash: %"PRIu64"\n"
-             "- No matching FASTQ read: %"PRIu64" (showing first %d)\n",
-             z_dt_name(), count_not_consumed + count_dups, count_dups, count_not_consumed, (int)MIN_(count_not_consumed, NUM_SHOW));
+    if (flag.show_deep) {
+        #define NUM_SHOW 20
+        iprintf ("\nNumber of %s deepable alignments not consumed by FASTQ reads: %"PRIu64"\n"
+                "- Unusable due to multiple alignments with same hash: %"PRIu64"\n"
+                "- No matching FASTQ read: %"PRIu64" (showing first %d)\n",
+                z_dt_name(), count_not_consumed + count_dups, count_dups, count_not_consumed, (int)MIN_(count_not_consumed, NUM_SHOW));
 
-    // show the first few unconsumed
-    if (count_not_consumed)
-        for (uint64_t ent_i=0, count=0; ent_i < deep_ents_len && count < NUM_SHOW; ent_i++)
-            if (!deep_ents[ent_i].consumed && !deep_ents[ent_i].dup) {
-                iprintf ("sam_vb=%u line_i=%u hash=%u,%u,%u\n", deep_ents[ent_i].vb_i, deep_ents[ent_i].line_i, DEEPHASHf(deep_ents[ent_i].hash));
-                count++;
-            }
+        // show the first few unconsumed
+        if (count_not_consumed)
+            for (uint64_t ent_i=0, count=0; ent_i < deep_ents_len && count < NUM_SHOW; ent_i++)
+                if (!deep_ents[ent_i].consumed && !deep_ents[ent_i].dup) {
+                    iprintf ("sam_vb=%u line_i=%u hash=%u,%u,%u\n", deep_ents[ent_i].vb_i, deep_ents[ent_i].line_i, DEEPHASHf(deep_ents[ent_i].hash));
+                    count++;
+                }
+    }
+
+    // technical explanation: if a BAM alignment that has no correspoding FASTQ read it is an indication 
+    // that not all BAM alignments are covered by FASTQ reads (contrary to Genozip user instructions).
+    // The real problem however, would not be detected here - it is a case that a BAM alignment that is not
+    // covered by a FASTQ read, has, by chance, the same hashes as a FASTQ read that is not present in the 
+    // BAM data (which is allowed). If this occurs, Deep will incorrectly map the FASTQ read to the redundant 
+    // BAM alignment. This BAM alignment will be marked as "consumed" and hence not counted in 
+    // "count_not_consumed". However, --test would catch this and error on reconstruction. 
+    else if (count_not_consumed) {
+        WARN ("WARNING: detected %"PRIu64" %s alignments (other than supplementary, secondary and consensus alignments) which "
+              "are absent in the FASTQ file(s). Genozip requires that the FASTQ files included in --deep cover all alignments "
+              "in the %s file, or otherwise, in rare cases, the resulting compressed file might be corrupted. If such corruption occurs, "
+              "the testing that will follow now will detect it. If the testing completes successfully, then there is no problem. "
+              "An example of an alignment present in the %s file but missing in the FASTQ file(s) can be obtained by running:\n"
+              "   genozip --biopsy-line=%u/%u -B%u%s %s\n",
+              count_not_consumed, z_dt_name(), z_dt_name(), z_dt_name(),
+              deep_ents[0].vb_i, deep_ents[0].line_i, (int)segconf.vb_size >> 20, 
+              (z_file->z_flags.has_gencomp ? "" : " --no-gencomp"),
+              segconf.sam_deep_filename);
+
+        flag.test = true; // force testing in this case
+    }
 }
 
 void fastq_deep_seg_finalize_segconf (uint32_t n_lines)
 {
+    if (flag.biopsy || flag.biopsy_line.line_i != NO_LINE) return;
+
     unsigned n_mch = n_lines - segconf.n_no_mch; // exclude lines that don't match any SAM line - perhaps they were filtered out and excluded from the SAM file 
     unsigned threashold = flag.force_deep ? 1 : MAX_(n_mch/2, 1); // at least half of the lines need this level of matching (or at least 1 if --force-deep)
 
@@ -704,8 +736,8 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_deep_copy_SEQ)
 
     // 3 cases:
     // 0 items - no trimming
-    // 1 item  - up to 15.0.22 - trimming with offset 0
-    // 2 items - from 15.0.23 - trimming supports offset >= 0
+    // 1 item  - trim_len - up to 15.0.22 - trimming with offset 0
+    // 2 items - (trim_len, seq_offset), from 15.0.23 - trimming supports offset >= 0 (i.e. left-trimming)
     if (snip_len) {
         str_split_ints (snip, snip_len, 2, ',', item, false);
         trim_len = items[0];
@@ -728,7 +760,7 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_deep_copy_SEQ)
     
     vb->seq_len = deep_seq_len + trim_len; 
     
-    ASSERT (vb->seq_len <= vb->longest_seq_len, "%s: unexpectedly seq_len(as read from deep_ent)=%u > vb->longest_seq_len=%u (deep_seq_len=%u trim_len=%u)",
+    ASSPIZ (vb->seq_len <= vb->longest_seq_len, "%s: unexpectedly seq_len(as read from deep_ent)=%u > vb->longest_seq_len=%u (deep_seq_len=%u trim_len=%u)",
             LN_NAME, vb->seq_len, vb->longest_seq_len, deep_seq_len, trim_len); // sanity check
 
     // reconstruct SEQ copied from SAM
@@ -814,12 +846,12 @@ static void fastq_recon_qual_trim (VBlockFASTQP vb, ContextP ctx, uint32_t len, 
             codec_args[ctx->lcodec].reconstruct (VB, ctx->lcodec, ctx, len, reconstruct); 
             break;
         
-        case LT_SEQUENCE: 
+        case LT_BLOB: 
             reconstruct_from_local_sequence (VB, ctx, len, reconstruct); 
             break;
 
         default: 
-            ASSPIZ (false, "Invalid ltype=%s for %s", lt_name (ctx->ltype), ctx->tag_name);
+            ABORT_PIZ ("Invalid ltype=%s for %s", lt_name (ctx->ltype), ctx->tag_name);
     }
 } 
 

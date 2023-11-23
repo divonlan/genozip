@@ -334,7 +334,8 @@ static void writer_init_vb_info (void)
         // --one-vb: user only wants to see a single VB, and this is not it
         else if (flag.one_vb && flag.one_vb != vb_i) DROP; 
 
-        // --header-only: drop all VBs (except VCF - handled separately below)
+        // --header-only: drop all VBs (except VCF - handled separately below, 
+        // and except FASTQ and FASTA, for which --header-only sets flag.header_only_fast, not flag.header_only)
         else if (flag.header_only && z_file->data_type != DT_VCF) DROP; 
 
         else switch (z_file->data_type) {

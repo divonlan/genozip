@@ -156,12 +156,13 @@ uint32_t vcf_seg_get_vb_recon_size (VBlockP vb)
 // called by Compute threadfrom seg_all_data_lines
 void vcf_seg_initialize (VBlockP vb_)
 {
+    #define T(cond, did_i) ((cond) ? (did_i) : DID_NONE)
+
     VBlockVCFP vb = (VBlockVCFP)vb_;
 
     ctx_set_no_stons (VB, VCF_CHROM, VCF_oCHROM, VCF_FORMAT, VCF_INFO, VCF_oSTATUS, VCF_COORDS, 
                       VCF_TOPLEVEL, VCF_TOPLUFT, VCF_LIFT_REF, VCF_COPYPOS, VCF_oXSTRAND, 
                       VCF_POS, VCF_oPOS, VCF_LINE_NUM, INFO_HGVS_del_start_pos, INFO_HGVS_ins_start_pos, INFO_HGVS_ins_start_pos, // as required by seg_pos_field
-                      INFO_FATHMM_score, INFO_VEST3_score, // dbNSFP
                       DID_EOL);
 
     ctx_set_store (VB, STORE_INDEX, VCF_oSTATUS, VCF_COORDS, VCF_oXSTRAND, VCF_CHROM, VCF_oCHROM, DID_EOL);
@@ -170,7 +171,16 @@ void vcf_seg_initialize (VBlockP vb_)
 
     ctx_set_store (VB, STORE_FLOAT, VCF_QUAL, DID_EOL); // consumed by vcf_piz_special_QD
 
-    ctx_set_ltype (VB, LT_DYN_INT, INFO_RAW_MQandDP_MQ, INFO_RAW_MQandDP_DP, INFO_dbSNPBuildID, DID_EOL);
+    ctx_set_ltype (VB, LT_STRING, 
+                   T(segconf.vcf_is_gnomad || segconf.vcf_is_dbSNP, VCF_QUAL), 
+                   T(segconf.vcf_is_mastermind, INFO_MMURI), 
+                   T(segconf.vcf_is_dbSNP, INFO_FREQ),
+                   INFO_FATHMM_score, INFO_VEST3_score, DID_EOL);
+
+    ctx_set_ltype (VB, LT_DYN_INT, 
+                   INFO_RAW_MQandDP_MQ, INFO_RAW_MQandDP_DP, 
+                   T(segconf.vcf_is_dbSNP, INFO_dbSNPBuildID), 
+                   DID_EOL);
     
     CTX(VCF_oCHROM)->  no_vb1_sort = true; // indices need to remain as in the Chain file
     CTX(VCF_oSTATUS)-> no_vb1_sort = true; // indices need to remaining matching to LiftOverStatus
@@ -239,7 +249,7 @@ void vcf_seg_initialize (VBlockP vb_)
     vcf_info_seg_initialize(vb);
     vcf_samples_seg_initialize(vb);
 
-    if (segconf.vcf_illum_gtyping)  vcf_illum_gtyping_initialize (vb);
+    if (segconf.vcf_illum_gtyping)  vcf_illum_gtyping_seg_initialize (vb);
     if (segconf.vcf_is_gwas)        vcf_gwas_seg_initialize (vb);
     if (segconf.vcf_is_cosmic)      vcf_cosmic_seg_initialize (vb);
     if (segconf.vcf_is_vep)         vcf_vep_seg_initialize (vb);
@@ -248,7 +258,6 @@ void vcf_seg_initialize (VBlockP vb_)
     if (segconf.vcf_is_giab_trio)   vcf_giab_seg_initialize (vb);
     if (segconf.vcf_is_isaac)       vcf_isaac_seg_initialize (vb);
     if (segconf.vcf_is_manta)       vcf_manta_seg_initialize (vb);
-    if (segconf.vcf_is_gnomad)      CTX(VCF_QUAL)->no_stons = true;
 }             
 
 static void vcf_seg_finalize_segconf (VBlockVCFP vb)
@@ -491,8 +500,8 @@ static inline void vcf_seg_QUAL (VBlockVCFP vb, STRp(qual))
     set_last_txt (VCF_QUAL, qual);
 
     // gnomAD - store in local
-    if (segconf.vcf_is_gnomad || segconf.vcf_is_dbSNP)
-        seg_add_to_local_text (VB, CTX(VCF_QUAL), STRa(qual), LOOKUP_NONE, qual_len+1);
+    if (segconf.vcf_is_gnomad || segconf.vcf_is_dbSNP) // if condition changes, update ctx_set_ltype in vcf_seg_initialize too
+        seg_add_to_local_string (VB, CTX(VCF_QUAL), STRa(qual), LOOKUP_NONE, qual_len+1);
 
     // case: GVCF - multiplex by has_RGQ
     else if (!segconf.running && segconf.has[FORMAT_RGQ]) {

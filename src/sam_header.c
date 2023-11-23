@@ -427,8 +427,6 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
             break;
         }
 
-    if (MP(bwa)) segconf.sam_mapper = MP_BWA; // we consider "bwa" to be "BWA"
-
     if (MP(STAR) && strstr (first_PG, "--solo")) segconf.star_solo = true;
 
     // build buffer of unique PN+ID fields, for stats

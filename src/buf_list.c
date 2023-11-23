@@ -458,7 +458,8 @@ void buflist_destroy_vb_bufs (VBlockP vb, bool only_if_unused)
     BufListEnt *buf_list_ent = NULL;
     for_buf (BufListEnt, ent, vb->buffer_list) {
         if (BL_IS_REMOVED(ent->buf) || 
-            (only_if_unused && (ent->buf->data || ent->buf->len || ent->buf->param))) continue;
+            (only_if_unused && (ent->buf->data || ent->buf->len || ent->buf->param || ent->buf->promiscuous))) 
+            continue;
     
         if (ent->buf != &vb->buffer_list) 
             buf_destroy_do_do (ent, __FUNCLINE);

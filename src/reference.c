@@ -599,6 +599,8 @@ bool ref_load_stored_reference (Reference ref)
 
     // if we're populating the cache, also load refhash (even if not needed for compressing current file)
     if (populating) {
+        flag.aligner_available = true; // so that emoneg is generated too - to keep consistency that refhash and emoneg exist or don't exist together
+        
         refhash_load (ref);
 
         // finalizing loading the genome and refhash, and detaching read-write shm.

@@ -82,7 +82,7 @@ static void vcf_seg_INFO_END_liftover (VBlockVCFP vb, ContextP end_ctx, STRp(end
     else if (!vb->is_del_sv && end > aln_last_pos) 
         REJECT_SUBFIELD (LO_INFO, end_ctx, ".\tPOS and INFO/END=%.*s are not on the same chain file alignment", end_str_len, end_str);
 
-    // case: invalid value. since we use SPF_UNLIMITED_DELTA, any integer value should succeed
+    // case: invalid value
     else if (!CTX(INFO_END)->last_delta)
         REJECT_SUBFIELD (LO_INFO, end_ctx, ".\tINFO/END=%.*s has an invalid value", end_str_len, end_str);        
 
@@ -96,14 +96,14 @@ void vcf_seg_INFO_END (VBlockVCFP vb, ContextP end_ctx, STRp(end_str)) // end_ct
     if (segconf.vcf_is_gvcf) {
         ContextP subctx = seg_mux_get_channel_ctx (VB, VCF_POS, (MultiplexerP)&vb->mux_POS, 1); // goes into channel_i=1: "this is END"
 
-        PosType64 end = seg_pos_field (VB, subctx->did_i, VCF_POS, SPF_BAD_SNIPS_TOO | SPF_ZERO_IS_BAD | (is_liftover ? SPF_UNLIMITED_DELTA : 0), 0, STRa(end_str), 0, end_str_len);
+        PosType64 end = seg_pos_field (VB, subctx->did_i, VCF_POS, SPF_BAD_SNIPS_TOO | SPF_ZERO_IS_BAD, 0, STRa(end_str), 0, end_str_len);
         ctx_set_last_value (VB, CTX(VCF_POS), end); // END is an alias of POS
 
         seg_by_did (VB, STRa(vb->mux_POS.snip), VCF_POS, 0); // de-multiplexer
     }
     
     else  
-        seg_pos_field (VB, VCF_POS, VCF_POS, SPF_BAD_SNIPS_TOO | SPF_ZERO_IS_BAD | SPF_UNLIMITED_DELTA, 0, STRa(end_str), 0, end_str_len);
+        seg_pos_field (VB, VCF_POS, VCF_POS, SPF_BAD_SNIPS_TOO | SPF_ZERO_IS_BAD, 0, STRa(end_str), 0, end_str_len);
 
     // add end_delta to dl for sorting. it is used only in case chrom and pos are identical
     DATA_LINE (vb->line_i)->end_delta = vb->last_delta (INFO_END);

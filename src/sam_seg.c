@@ -60,6 +60,7 @@ STRl(redirect_to_CR_X_snip, 30);
 STRl(redirect_to_GR_X_snip, 30);
 STRl(redirect_to_GY_X_snip, 30);
 STRl(redirect_to_RX_X_snip, 30);
+STRl(XC_snip, 48);
 char copy_buddy_Z_snips[NUM_MATED_Z_TAGS][30]; unsigned copy_buddy_Z_snip_lens[NUM_MATED_Z_TAGS];
 
 WordIndex xa_lookback_strand_word_index = WORD_INDEX_NONE, xa_lookback_rname_word_index = WORD_INDEX_NONE;
@@ -152,6 +153,7 @@ void sam_zip_initialize (void)
     seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_AS_i, copy_mate_AS_snip, '0' + BUDDY_MATE);
     seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_NH_i, copy_buddy_NH_snip, '0' + BUDDY_EITHER);
     seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY_CIGAR, _SAM_CIGAR, copy_mate_CIGAR_snip, '0' + BUDDY_MATE);
+    seg_prepare_plus_snip (SAM, 3, ((DictId[]){ {_OPTION_XX_i}, {_OPTION_YY_i}, {_OPTION_XY_i} }), XC_snip);
 
     // we seg into mux channels, but we copy from the parent
     for (MatedZFields f = 0; f < NUM_MATED_Z_TAGS; f++)
@@ -167,8 +169,12 @@ void sam_zip_initialize (void)
 
     if (MP(ULTIMA)) sam_ultima_zip_initialize();
     
-    if (flag.deep)
+    if (flag.deep) {
+        if (txt_file->name)
+            strncpy (segconf.sam_deep_filename, txt_file->name, sizeof(segconf.sam_deep_filename)-1);
+
         license_show_deep_notice();
+    }
 }
 
 // called after each txt file (including after the SAM component in Deep)
@@ -284,14 +290,15 @@ void sam_seg_initialize (VBlockP vb_)
     if (vb->reread_prescription.len)
         gencomp_reread_lines_as_prescribed (VB);
 
-    // all numeric fields need STORE_INT / STORE_FLOAT to be reconstructable to BAM (possibly already set)
-    // via the translators set in the SAM_TOP2BAM Container
     #define T(cond, did_i) ((cond) ? (did_i) : DID_NONE)
     
+    // note: all numeric fields need STORE_INT / STORE_FLOAT to be reconstructable to BAM (possibly already set)
+    // via the translators set in the SAM_TOP2BAM Container
     ctx_set_store (VB, STORE_INT, SAM_TLEN, SAM_MAPQ, SAM_FLAG, SAM_POS, SAM_PNEXT, SAM_GPOS,
                    OPTION_NM_i, OPTION_AS_i, OPTION_MQ_i, OPTION_XS_i, OPTION_XM_i, OPTION_mc_i, OPTION_ms_i, OPTION_Z5_i,
                    OPTION_tx_i, OPTION_YS_i, OPTION_XC_i, OPTION_AM_i, OPTION_SM_i, OPTION_X0_i, OPTION_X1_i, OPTION_CP_i,
                    OPTION_OP_i, OPTION_NH_i, OPTION_HI_i, OPTION_UQ_i, OPTION_cm_i, 
+                   OPTION_XX_i, OPTION_YY_i, OPTION_XO_i,
                    OPTION_SA_POS, OPTION_OA_POS,
                    T(MP(BLASR), OPTION_XS_i), T(MP(BLASR), OPTION_XE_i), T(MP(BLASR), OPTION_XQ_i), T(MP(BLASR), OPTION_XL_i), T(MP(BLASR), OPTION_FI_i),
                    T(MP(NGMLR), OPTION_QS_i), T(MP(NGMLR), OPTION_QE_i), T(MP(NGMLR), OPTION_XR_i),
@@ -308,36 +315,39 @@ void sam_seg_initialize (VBlockP vb_)
                        OPTION_RX_Z, OPTION_CR_Z, // whe UR and CR are reconstruted as XOR_DIFF against UB and CB respectively, we search for the values on the same line (befor or after)
                        DID_EOL);
 
-    // don't store singletons in local. note: automatically implied if ltype!=LT_TEXT is set
+    // don't store singletons in local even if local is not used for anything else
     ctx_set_no_stons (VB,
                       SAM_RNAME, SAM_RNEXT, // BAM reconstruction needs RNAME, RNEXT word indices. also needed for random access.
-                      OPTION_MD_Z,
-                      OPTION_BI_Z, OPTION_BD_Z,                                               // we can't use local for singletons in BD or BI as next_local is used by sam_piz_special_BD_BI to point into BD_BI
-                      OPTION_SA_CIGAR, OPTION_XA_CIGAR, OPTION_OA_CIGAR, OPTION_OC_Z,         // we can't use local for singletons bc sam_seg_other_CIGAR manually offloads CIGARs to local
-                      OPTION_QX_Z,
                       SAM_POS, SAM_PNEXT, OPTION_mc_i, OPTION_OP_i, OPTION_Z5_i, OPTION_CP_i, // required by seg_pos_field
-                      T(MP(BSSEEKER2), OPTION_XM_Z), T(MP(BSSEEKER2), OPTION_XG_Z),
-                      T(MP(BSBOLT), OPTION_XB_Z),
-                      T(MP(BISMARK), OPTION_XM_Z),
-                      T(MP(NOVOALIGN), OPTION_YH_Z), T(MP(NOVOALIGN), OPTION_YQ_Z),
-                      OPTION_CY_Z, OPTION_QT_Z, OPTION_CB_Z, // barcode fallback segging - add to local text
+                      T(IS_PRIM(vb), OPTION_SA_CIGAR), // index needed by sam_load_groups_add_aln_cigar
                       T(kraken_is_loaded, SAM_TAXID),
                       DID_EOL);
 
-    // also implies no_stons
+    ctx_set_ltype (VB, LT_STRING, OPTION_MD_Z,
+                   T(MP(BSBOLT), OPTION_XB_Z),
+                   T(MP(BISMARK), OPTION_XM_Z),
+                   T(MP(BSSEEKER2), OPTION_XM_Z), T(MP(BSSEEKER2), OPTION_XG_Z),
+                   T(MP(NOVOALIGN), OPTION_YH_Z), T(MP(NOVOALIGN), OPTION_YQ_Z),
+                   OPTION_CY_Z, OPTION_QT_Z, OPTION_CB_Z, // barcode fallback segging - added to local as string
+                   SAM_CIGAR, OPTION_MC_Z, OPTION_OC_Z, OPTION_SA_CIGAR, OPTION_OA_CIGAR, OPTION_XA_CIGAR, OPTION_TX_CIGAR, OPTION_AN_CIGAR, // cigar might be stored as a string if too complex or squanked (see sam_seg_CIGAR, sam_seg_other_CIGAR, sam_cigar_seg_MC_Z, squank_seg)
+                   DID_EOL);
+
     ctx_set_ltype (VB, LT_UINT8, SAM_MAPQ, OPTION_SA_MAPQ, OPTION_SM_i, OPTION_AM_i, OPTION_OA_MAPQ, // MAPQ (and hence other fields carrying mapping quality) is uint8_t by BAM specification
                    OPTION_RX_Z, OPTION_CR_Z, OPTION_GR_Z, OPTION_GY_Z,                               // local has xor_diff data
                    DID_EOL);
 
-    // initialize these to LT_SEQUENCE, the qual-type ones might be changed later to LT_CODEC (eg domq, longr)
-    ctx_set_ltype (VB, LT_SEQUENCE, SAM_QUAL, SAM_QUAL_FLANK, OPTION_BD_BI, OPTION_BQ_Z, OPTION_iq_sq_dq,
-                   OPTION_QX_Z, OPTION_CY_ARR, OPTION_QT_ARR,
+    // initialize these to LT_BLOB, the qual-type ones might be changed later to LT_CODEC (eg domq, longr)
+    ctx_set_ltype (VB, LT_BLOB, SAM_QUAL, SAM_QUAL_FLANK, OPTION_BD_BI, OPTION_BQ_Z, OPTION_iq_sq_dq,
+                   OPTION_QX_Z, OPTION_CY_ARR, OPTION_QT_ARR, OPTION_CR_Z_X,
+                   OPTION_BI_Z, OPTION_BD_Z,
                    OPTION_CR_Z_X, OPTION_RX_Z_X, OPTION_2R_Z, OPTION_TR_Z, DID_EOL);
 
     // set ltype=LT_DYN_INT to allow use of seg_integer
     ctx_set_ltype (VB, LT_DYN_INT, SAM_BUDDY, OPTION_HI_i, OPTION_NM_i, OPTION_NH_i, OPTION_XM_i, OPTION_X1_i,
                    OPTION_AS_i, OPTION_XS_i, OPTION_ZS_i, OPTION_cm_i, OPTION_ms_i, OPTION_nM_i, OPTION_UQ_i,
                    T(segconf.has_TLEN_non_zero, SAM_TLEN), // note: we don't set if !has_TLEN_non_zero, bc values are stored in b250 and may require singletons
+                   T(segconf.sam_has_xcons, OPTION_YY_i),
+                   T(segconf.sam_has_xcons, OPTION_XO_i),
                    T(MP(BLASR), OPTION_XS_i), T(MP(BLASR), OPTION_XE_i), T(MP(BLASR), OPTION_XQ_i), T(MP(BLASR), OPTION_XL_i), T(MP(BLASR), OPTION_FI_i),
                    T(MP(NGMLR), OPTION_QS_i), T(MP(NGMLR), OPTION_QE_i), T(MP(NGMLR), OPTION_XR_i),
                    DID_EOL);
@@ -374,7 +384,8 @@ void sam_seg_initialize (VBlockP vb_)
     // in --stats, consolidate stats
     ctx_consolidate_stats (VB, SAM_SQBITMAP, SAM_NONREF, SAM_NONREF_X, SAM_GPOS, SAM_STRAND, SAM_SEQMIS_A, SAM_SEQMIS_C, SAM_SEQMIS_G, SAM_SEQMIS_T, DID_EOL);
     ctx_consolidate_stats (VB, SAM_QUAL, SAM_DOMQRUNS, SAM_QUALMPLX, SAM_DIVRQUAL, SAM_QUALSA, SAM_QUAL_PACBIO_DIFF,
-                           SAM_QUAL_FLANK, SAM_QUAL_FLANK_DOMQRUNS, SAM_QUAL_FLANK_QUALMPLX, SAM_QUAL_FLANK_DIVRQUAL, DID_EOL);
+                           SAM_QUAL_FLANK, SAM_QUAL_FLANK_DOMQRUNS, SAM_QUAL_FLANK_QUALMPLX, SAM_QUAL_FLANK_DIVRQUAL, 
+                           SAM_CQUAL, SAM_CDOMQRUNS, SAM_CQUALMPLX, SAM_CDIVRQUAL, DID_EOL);
     ctx_consolidate_stats (VB, OPTION_OQ_Z, OPTION_OQ_DOMQRUNS, OPTION_OQ_QUALMPLX, OPTION_OQ_DIVRQUAL, DID_EOL);
     ctx_consolidate_stats (VB, OPTION_TQ_Z, OPTION_TQ_DOMQRUNS, OPTION_TQ_QUALMPLX, OPTION_TQ_DIVRQUAL, DID_EOL);
     ctx_consolidate_stats (VB, OPTION_2Y_Z, OPTION_2Y_DOMQRUNS, OPTION_2Y_QUALMPLX, OPTION_2Y_DIVRQUAL, DID_EOL);
@@ -453,6 +464,10 @@ void sam_seg_initialize (VBlockP vb_)
         CTX(OPTION_ms_i)->flags.spl_custom = true;  // custom store-per-line - SPECIAL will handle the storing
         CTX(OPTION_ms_i)->flags.store = STORE_INT;  // since v14 - store QUAL_score for mate ms:i (in v13 it was stored in QUAL)
 
+    }
+    if (segconf.sam_has_xcons) {
+        seg_mux_init (VB, CTX(OPTION_YY_i), 2, SAM_SPECIAL_DEMUX_BY_XX_0, false, (MultiplexerP)&vb->mux_YY);
+        seg_mux_init (VB, CTX(OPTION_XO_i), 2, SAM_SPECIAL_DEMUX_BY_AS,   false, (MultiplexerP)&vb->mux_XO);
     }
 
     seg_mux_init (VB, CTX(SAM_FLAG), 2, SAM_SPECIAL_DEMUX_BY_BUDDY, false, (MultiplexerP)&vb->mux_FLAG);
@@ -651,6 +666,8 @@ static uint32_t num_lines_at_max_len (VBlockSAMP vb)
 
 void sam_segconf_set_by_MP (void)
 {
+    if (MP(bwa)) segconf.sam_mapper = MP_BWA; // we consider "bwa" to be "BWA"
+
     // a small subset of biobambam2 programs - only those that generate ms:i / mc:i tags
     segconf.is_biobambam2_sort = stats_is_in_programs ("bamsormadup") || stats_is_in_programs ("bamsort") || stats_is_in_programs ("bamtagconversion");
 
@@ -667,11 +684,12 @@ void sam_segconf_set_by_MP (void)
     // in bisulfate data, we still calculate MD:Z and NM:i vs unconverted reference
     segconf.MD_NM_by_unconverted = MP(BISMARK) || MP(DRAGEN) || MP(BSBOLT) || MP(GEM3) || MP(BSSEEKER2);
 
-    segconf.is_bwa            = MP(BWA) || MP(BSBOLT) || MP (CPU) || MP(BWA_MEM2) || MP(PARABRICKS); // aligners based on bwa
+    segconf.is_bwa            = MP(BWA) || MP(bwa) || MP(BSBOLT) || MP (CPU) || MP(BWA_MEM2) || MP(PARABRICKS); // aligners based on bwa
     segconf.is_minimap2       = MP(MINIMAP2) || MP(WINNOWMAP) || MP(PBMM2);   // aligners based on minimap2
     segconf.is_bowtie2        = MP(BOWTIE2) || MP(HISAT2) || MP(TOPHAT) || MP(BISMARK) || MP(BSSEEKER2); // aligners based on bowtie2
 
     segconf.sam_has_SA_Z      = segconf.is_bwa || segconf.is_minimap2 || MP(NGMLR) || MP(DRAGEN) || MP(NOVOALIGN) || MP(ULTIMA) || MP(ISAAC); /*|| MP(LONGRANGER); non-standard SA:Z format (POS is off by 1, main-field NM is missing) */ 
+    
     segconf.sam_has_BWA_XA_Z  = (segconf.is_bwa || MP(GEM3) || MP(GEM2SAM) || MP(DELVE) || MP(DRAGEN) || MP(ULTIMA)) ? yes 
                               : MP(TMAP) || MP(TORRENT_BC)                                                           ? no 
                               :                                                                                        segconf.sam_has_BWA_XA_Z; // remain "unknown" or as determined by segconf
@@ -679,7 +697,7 @@ void sam_segconf_set_by_MP (void)
     segconf.sam_has_BWA_XS_i  = segconf.is_bwa || MP(TMAP) || MP(GEM3) || (segconf.is_bowtie2 && !MP(HISAT2)) || MP(CPU) || MP(LONGRANGER) || MP(DRAGEN);
     segconf.sam_has_XM_i_is_mismatches  = segconf.is_bwa || segconf.is_bowtie2 || MP(NOVOALIGN) || MP(DRAGEN);
     segconf.sam_has_BWA_XT_A  = segconf.is_bwa || MP(DRAGEN);
-    segconf.sam_has_BWA_XC_i  = segconf.is_bwa || MP(DRAGEN);
+    segconf.sam_has_BWA_XC_i  = segconf.is_bwa || MP(DRAGEN); // might be canceled during segconf (see sam_seg_BWA_XC_i)
     segconf.sam_has_BWA_X01_i = segconf.is_bwa || MP(DRAGEN);
 
     segconf.sam_has_bowtie2_YS_i = MP(BOWTIE2) || MP(BSSEEKER2) || MP(HISAT2);
@@ -746,8 +764,7 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
                            (MP(DRAGEN)   && segconf.has[OPTION_XM_Z])  ||
                            (MP(ULTIMA)   && segconf.has[OPTION_XM_Z])  ||
                            (MP(GEM3)     && segconf.has[OPTION_XB_A])  ||
-                           segconf.has_bwa_meth                        ||
-                           segconf.has[OPTION_MM_Z]; // standard tag generated by: PacBio: Primrose, ccsmeth and Nanopore: Bonito, Guppy, Nanopolish, Megalodon, Remora
+                           segconf.has_bwa_meth; // note: methylation tags MM:Z and ML:B:C do not imply bisulfite - e.g. PacBio detects methylation differently: https://www.pacb.com/products-and-services/applications/epigenetics/
 
     segconf.sam_has_bismark_XM_XG_XR &= segconf.sam_bisulfite;
     
@@ -761,6 +778,12 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
     segconf.sam_predict_meth_call = segconf.sam_bisulfite &&
                                     !IS_REF_INTERNAL      && // bug 648
                                     (MP(BISMARK) || MP(DRAGEN) || MP(BSBOLT)); // have methylation call tags
+
+
+    if (segconf.flav_prop[QNAME2].is_consensus && segconf.has[OPTION_XX_i] && segconf.has[OPTION_YY_i] && segconf.has[OPTION_XC_i] && segconf.has[OPTION_XO_i]) {
+        segconf.sam_has_xcons = true;
+        segconf.sam_has_BWA_XC_i = false;
+    }
 
     // if we have @HD-SO "coordinate" or "queryname", then we take that as definitive. Otherwise, we go by our segconf sampling.
     if (sam_hd_so == HD_SO_COORDINATE) {
@@ -859,7 +882,6 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
     if (codec_pacb_maybe_used (SAM_QUAL)) 
         codec_pacb_segconf_finalize (VB);
     
-
     if (codec_longr_maybe_used (SAM_QUAL))
         codec_longr_segconf_calculate_bins (VB, CTX(SAM_QUAL + 1), sam_zip_qual);
 
@@ -883,6 +905,9 @@ void sam_seg_finalize (VBlockP vb_)
     else {
         if (vb->has_qual && CTX(SAM_QUAL)->local.len32) 
             codec_assign_best_qual_codec (VB, SAM_QUAL, sam_zip_qual, false, false, true);
+
+        if (vb->has_qual && CTX(SAM_CQUAL)->local.len32) 
+            codec_assign_best_qual_codec (VB, SAM_CQUAL, sam_zip_cqual, false, false, true);
 
         if (CTX(OPTION_OQ_Z)->local.len32)
             codec_assign_best_qual_codec (VB, OPTION_OQ_Z, sam_zip_OQ, false, false, true);
@@ -1148,6 +1173,11 @@ uint32_t sam_seg_get_aux_int (VBlockSAMP vb, int16_t idx,
 {
     ASSERT (min_value <= max_value, "%s: expecting idx=%u expecting min_value=%d <= max_value=%d", LN_NAME, idx, min_value, max_value);
 
+    if (idx == -1) {
+        if (soft_fail) return 0;
+        ABORT("%s: idx==-1, perhaps field is not in this line?", LN_NAME);
+    } 
+
     ValueType numeric;
     uint32_t value_len;
     rom value = sam_seg_get_aux (vb, idx, &value_len, &numeric, is_bam);
@@ -1180,6 +1210,11 @@ uint32_t sam_seg_get_aux_float (VBlockSAMP vb, int16_t idx,
                                 double *number, // modified only if float is parsed
                                 bool is_bam, FailType soft_fail)
 {
+    if (idx == -1) {
+        if (soft_fail) return 0;
+        ABORT("%s: idx==-1, perhaps field is not in this line?", LN_NAME);
+    } 
+
     ValueType numeric;
     uint32_t value_len;
     char *after;
@@ -1203,12 +1238,16 @@ uint32_t sam_seg_get_aux_float (VBlockSAMP vb, int16_t idx,
 
 void sam_seg_get_aux_Z(VBlockSAMP vb, int16_t idx, pSTRp (snip), bool is_bam)
 {
+    ASSSEG (idx >= 0, "%s: idx==-1, perhaps field is not in this line?", LN_NAME);
+
     *snip = vb->auxs[idx] + (is_bam ? 3 : 5);
     *snip_len = vb->aux_lens[idx] - (is_bam ? 4 : 5); // bam: remove the count of the \0 that is including in aux_lens[idx] in BAM
 }
 
 char sam_seg_get_aux_A (VBlockSAMP vb, int16_t idx, bool is_bam)
 {
+    ASSSEG (idx >= 0, "%s: idx==-1, perhaps field is not in this line?", LN_NAME);
+
     return *(vb->auxs[idx] + (is_bam ? 3 : 5));
 }
 
@@ -1487,8 +1526,10 @@ void sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAM *dl, STRp (qname), unsigned ad
         seg_set_last_txt (VB, ctx, STRa(qname)); 
     }
 
-    else normal_seg:
-        qname_seg (VB, QNAME1/*must always start from QNAME1*/, STRa (qname), add_additional_bytes); // note: for PRIM component, this will be consumed with loading SA
+    else normal_seg: {
+        bool is_qname2 = qname_seg (VB, QNAME1/*must always start from QNAME1*/, STRa (qname), add_additional_bytes); // note: for PRIM component, this will be consumed with loading SA
+        dl->is_consensus = is_qname2 && !IS_PRIM(vb)/*bug 949*/ && segconf.flav_prop[QNAME2].is_consensus;
+    }
 
     // case: PRIM: additional seg against SA Group - store in SAM_QNAMESA - Reconstruct will take from here in PRIM per Toplevel container
     if (IS_PRIM(vb))

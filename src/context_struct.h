@@ -107,7 +107,7 @@ typedef struct Context {
     
     // ZIP-only instructions NOT written to the genozip file
     union {
-    bool no_stons;             // ZIP: don't attempt to move singletons to local (singletons are never moved anyway if ltype!=LT_TEXT)
+    bool no_stons;             // ZIP: don't attempt to move singletons to local even if ltype=LT_SINGLETON or if local is not used for anything else
     bool is_ctx_alias;         // PIZ: context is an alias            
     };
 
@@ -223,6 +223,10 @@ typedef struct Context {
         bool last_is_alt;           // CHROM (all DTs): ZIP: last CHROM was an alt
         bool last_is_new;           // SAM_QNAME:       ZIP: used in segconf.running
         bool has_len;               // INFO_ANN subfields of cDNA, CDS, AA: ZIP
+        struct {                    // SAM_QUAL, SAM_CQUAL, OPTION_OQ_Z, FASTQ_QUAL: 
+            bool longr_bins_calculated; // ZIP zctx: codec_longr: were LONGR bins calculated in segconf
+            Codec qual_codec;       // ZIP zctx: for displaying in stats
+        };
         int32_t last_repeat;        // OPTION_tp_B_c:   PIZ
         struct {                    // INFO_DP:
             int32_t by_format_dp        : 1;   // ZIP/PIZ: segged vs sum of FORMAT/DP

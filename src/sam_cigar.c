@@ -567,9 +567,6 @@ done:
 
 void sam_seg_cigar_initialize (VBlockSAMP vb)
 {
-    CTX(SAM_CIGAR)->no_stons = CTX(OPTION_MC_Z)->no_stons = true; // we're offloading to local ourselves
-    // note: store_per_line initialized in sam_seg_initialize
-
     // create an "all the same" node for SAM_FQ_AUX
     ctx_create_node (VB, SAM_FQ_AUX, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_FASTQ_CONSUME_AUX }, 2);
 }
@@ -585,7 +582,7 @@ void sam_seg_other_CIGAR (VBlockSAMP vb, ContextP ctx, STRp (cigar), bool squank
     // complicated CIGARs are better off in local - anything more than eg 112M39S 
     // note: we set no_stons=true in sam_seg_initialize so we can use local for this rather than singletons
     else if (cigar_len > MAX_CIGAR_LEN_IN_DICT)
-        seg_add_to_local_text (VB, ctx, STRa(cigar), LOOKUP_SIMPLE, add_bytes);
+        seg_add_to_local_string (VB, ctx, STRa(cigar), LOOKUP_SIMPLE, add_bytes);
  
     // short CIGAR
     else 
@@ -789,7 +786,7 @@ void sam_seg_CIGAR (VBlockSAMP vb, ZipDataLineSAM *dl, uint32_t last_cigar_len, 
         cigar_snip_len += last_cigar_len;
 
         if (last_cigar_len > MAX_CIGAR_LEN_IN_DICT) 
-            seg_add_to_local_text (VB, ctx, STRa(cigar_snip), LOOKUP_SIMPLE, add_bytes);
+            seg_add_to_local_string (VB, ctx, STRa(cigar_snip), LOOKUP_SIMPLE, add_bytes);
 
         else 
             seg_by_ctx (VB, STRa(cigar_snip), ctx, add_bytes); 
@@ -847,13 +844,10 @@ void sam_cigar_seg_MC_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(mc), uint32_t a
     
     // case: long CIGAR and SEQ and CIGAR are not missing, with the "standard" sam_seq_len (normally only works for short reads)
     else if (mc_len > MAX_CIGAR_LEN_IN_DICT && 
-             squank_seg (vb, channel_ctx, STRa(mc), dl->SEQ.len + vb->hard_clip[0] + vb->hard_clip[1], SEQ_LEN_FROM_MAIN, add_bytes)) 
-        channel_ctx->no_stons = true; // we're using local for these lookups, so we can't use it for singletons
+             squank_seg (vb, channel_ctx, STRa(mc), dl->SEQ.len + vb->hard_clip[0] + vb->hard_clip[1], SEQ_LEN_FROM_MAIN, add_bytes)) {}
 
-    else if (mc_len > MAX_CIGAR_LEN_IN_DICT) {
-        channel_ctx->no_stons = true; 
-        seg_add_to_local_text (VB, channel_ctx, STRa(mc), LOOKUP_SIMPLE, add_bytes);
-    }
+    else if (mc_len > MAX_CIGAR_LEN_IN_DICT) 
+        seg_add_to_local_string (VB, channel_ctx, STRa(mc), LOOKUP_SIMPLE, add_bytes);
 
     else 
         seg_by_ctx (VB, STRa(mc), channel_ctx, add_bytes);    
@@ -915,7 +909,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_cigar_special_CIGAR)
             }
             
             else 
-                ASSPIZ (false, "len_ctx=%s has no value in line", len_ctx->tag_name);
+                ABORT_PIZ ("len_ctx=%s has no value in line", len_ctx->tag_name);
             
             vb->scratch.len32 = str_int (vb->seq_len, B1STc (vb->scratch));
 

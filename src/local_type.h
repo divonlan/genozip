@@ -13,7 +13,7 @@
 // LT_* values are consistent with BAM optional 'B' types (and extend them)
 typedef enum __attribute__ ((__packed__)) { // 1 byte
     // LT values that are part of the file format - values can be added but not changed
-    LT_TEXT      = 0,   // 0-seperated snips
+    LT_SINGLETON = 0,   // nul-terminated singleton snips (note: ltype=0 was called LT_TEXT until 15.0.26 and included both SINGLETONs and STRINGs)
     LT_INT8      = 1,    
     LT_UINT8     = 2,
     LT_INT16     = 3,
@@ -24,21 +24,22 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     LT_UINT64    = 8,   // ffu
     LT_FLOAT32   = 9,   
     LT_FLOAT64   = 10,  // ffu
-    LT_SEQUENCE  = 11,  // length of data extracted is determined by vb->seq_len
+    LT_BLOB      = 11,  // length of data extracted is determined by vb->seq_len or provided in the LOOKUP snip (until 15.0.26 called LT_SEQUENCE)
     LT_BITMAP    = 12,  // a bitmap
     LT_CODEC     = 13,  // codec specific type with its codec specific reconstructor
     LT_UINT8_TR  = 14,  // transposed array - number of columns in original array is in param (up to 255 columns)
     LT_UINT16_TR = 15,  // "
     LT_UINT32_TR = 16,  // "
     LT_UINT64_TR = 17,  // "
-    LT_hex8      = 18,  // lower-case UINT8 hex
-    LT_HEX8      = 19,  // upper-case UINT8 hex
+    LT_hex8      = 18,  // lower-case UINT8  hex
+    LT_HEX8      = 19,  // upper-case UINT8  hex
     LT_hex16     = 20,  // lower-case UINT16 hex
     LT_HEX16     = 21,  // upper-case UINT16 hex
     LT_hex32     = 22,  // lower-case UINT32 hex
     LT_HEX32     = 23,  // upper-case UINT32 hex
     LT_hex64     = 24,  // lower-case UINT64 hex
     LT_HEX64     = 25,  // upper-case UINT64 hex
+    LT_STRING    = 26,  // nul-terminated strings
     NUM_LTYPES,         // counts LocalTypes that can appear in the Genozip file format
 
     // LT_DYN* - LT values that are NOT part of the file format, just used during seg 
@@ -65,9 +66,9 @@ typedef struct LocalTypeDesc {
 } LocalTypeDesc;
 
 extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
-#define LOCALTYPE_DESC { \
-/*   name   sam  wid signed min_int                max_int                file_to_native */ \
-   { "TXT", 0,   1,  0,     0,                     0,                     0                        }, \
+#define LOCALTYPE_DESC {                                                                              \
+/*   name   sam  wid signed min_int                max_int                file_to_native           */ \
+   { "SIN", 0,   1,  0,     0,                     0,                     0                        }, \
    { "I8 ", 'c', 1,  1,     -0x80LL,               0x7fLL,                BGEN_deinterlace_d8_buf  }, \
    { "U8 ", 'C', 1,  0,     0,                     0xffLL,                BGEN_u8_buf              }, \
    { "I16", 's', 2,  1,     -0x8000LL,             0x7fffLL,              BGEN_deinterlace_d16_buf }, \
@@ -78,7 +79,7 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
    { "U64", 0,   8,  0,     0,                     0x7fffffffffffffffLL,  BGEN_u64_buf             }, /* note: our internal representation is int64_t so max is limited by that */ \
    { "F32", 'f', 4,  0,     0,                     0,                     BGEN_u32_buf             }, \
    { "F64", 0,   8,  0,     0,                     0,                     BGEN_u64_buf             }, \
-   { "SEQ", 0,   1,  0,     0,                     0,                     0                        }, \
+   { "BLB", 0,   1,  0,     0,                     0,                     0                        }, \
    { "BMP", 0,   8,  0,     0,                     0,                     0                        }, \
    { "COD", 0,   1,  0,     0,                     0,                     0                        }, \
    { "T8 ", 0,   1,  0,     0,                     0xffLL,                BGEN_transpose_u8_buf    }, \
@@ -93,6 +94,7 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
    { "H32", 0,   4,  0,     0,                     0xffffffffLL,          BGEN_u32_buf             }, \
    { "h64", 0,   8,  0,     0,                     0x7fffffffffffffffLL,  BGEN_u64_buf             }, \
    { "H64", 0,   8,  0,     0,                     0x7fffffffffffffffLL,  BGEN_u64_buf             }, \
+   { "STR", 0,   1,  0,     0,                     0,                     0                        }, \
    { /* NUM_LTYPES */                                                                              }, \
    /* after here - not part of the file format, just used during seg */                               \
    { "DYN", 0,   8,  0,     0x8000000000000000LL,  0x7fffffffffffffffLL,  0                        }, \

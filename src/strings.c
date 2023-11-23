@@ -733,9 +733,7 @@ uint32_t str_split_by_container_do (STRp(str), ConstContainerP con, STRp(con_pre
     for (uint32_t item_i=0; item_i < num_items; item_i++) { 
 
         char sep = con->items[item_i].separator[0];
-        
-        if (sep == CI0_INVISIBLE) continue;
-        
+                
         // verify item prefix
         if (px < after_px) {
             rom item_px = px;
@@ -947,38 +945,6 @@ rom type_name (uint32_t item,
     }
     
     return *name;    
-}
-
-// print one or more words in Context.dict
-void str_print_dict (FILE *fp, STRp(data), bool with_word_index, bool add_newline, bool remove_equal_asterisk)
-{
-    WordIndex word_index=0;
-
-    for (uint32_t i=0; i < data_len; i++) {
-        // in case we are showing chrom data in --list-chroms in SAM - don't show * and =
-        if (remove_equal_asterisk && (data[i]=='*' || data[i]=='=') && !data[i+1]) {
-            i++;
-            continue; // skip character and following separator
-        }
-
-        if (!i || data[i] || data[i-1]) { // skip empty words
-            
-            if (with_word_index && (!i || !data[i-1])) 
-                fprintf (fp, "%u%c", word_index, add_newline ? '\t' : '='); 
-
-            switch (data[i]) {
-                case 32 ... 126 : fputc (data[i], fp);      break;
-                case 0          : fputc (add_newline ? '\n' : ' ', fp); break; // snip separator
-                case '\t'       : fwrite ("\\t", 1, 2, fp); break;
-                case '\n'       : fwrite ("\\n", 1, 2, fp); break;
-                case '\r'       : fwrite ("\\r", 1, 2, fp); break;
-                default         : fprintf (fp, "\\x%x", (uint8_t)data[i]);
-            }
-        }
-
-        if (!data[i]) word_index++;
-    }
-    fflush (fp);
 }
 
 int str_print_text (rom *text, uint32_t num_lines,

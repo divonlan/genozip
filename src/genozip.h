@@ -625,7 +625,7 @@ extern StrTime str_time (void);
 #define ASSERTNOTZERO(n)                     ASSERT ((n), "%s=0", #n)
 #define ASSERTISZERO(n)                      ASSERT (!(n), "%s!=0", #n)
 #define ASSERTW(condition, format, ...)      ( { if (!(condition) && !flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); }} )
-#define WARN_IF(condition, format, ...)      ( { if ( (condition) && !flag.explicit_quiet) { progress_newline(); fprintf (stderr, "Warning: "); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n\n"); fflush (stderr); }} )
+#define WARN_IF(condition, format, ...)      ( { if ( (condition) && !flag.explicit_quiet) { progress_newline(); fprintf (stderr, "%s: WARNING: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n\n"); fflush (stderr); }} )
 #define ASSERTW0(condition, string)          ASSERTW ((condition), string "%s", "")
 #define WARN_IF0(condition, string)          WARN_IF ((condition), string "%s", "")
 #define ASSERTWD(condition, format, ...)     ( { if (!(condition) && flag.debug && !flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); }} )

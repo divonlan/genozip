@@ -605,9 +605,6 @@ static void sam_sa_seg_depn_find_sagroup_SAtag (VBlockSAMP vb, ZipDataLineSAM *d
     // we can't encode last "base" other than 0 (see also bug 531)
     if (is_bam && (seq_len&1) && (*B8 (vb->txt_data, dl->SEQ.index + seq_len/2) & 0xf)) DONE;
 
-    // we can't encode depn seq bases other than A,C,G,T as we operate in 2bit
-    if (!str_is_ACGT (textual_seq, seq_len, NULL)) DONE;
-
     ctx_set_encountered (VB, CTX(OPTION_SA_Z));
     uint32_t n_my_alns = str_count_char (STRauxZ(SA_Z, is_bam), ';') + 1; // +1 for alignment of my main fields
 
@@ -632,7 +629,9 @@ static void sam_sa_seg_depn_find_sagroup_SAtag (VBlockSAMP vb, ZipDataLineSAM *d
             dl->FLAG.multi_segs == g->multi_segs                                 &&
             n_my_alns           == g->num_alns                                   && 
             str_issame_(STRtxtw(dl->QNAME), GRP_QNAME(g), g->qname_len)          && 
-            sam_seg_depn_find_SA_aln (vb, g, n_my_alns, my_alns, &my_aln_i)) {
+            sam_seg_depn_find_SA_aln (vb, g, n_my_alns, my_alns, &my_aln_i)      &&
+            sam_seg_depn_is_subseq_of_prim (vb, (uint8_t*)textual_seq, dl->SEQ.len, (revcomp != g->revcomp), g, is_bam)) { // this will fail if SEQ has non-ACGT or if DEPN sequence invalidly does not match the PRIM sequence (observed in the wild)
+
 
             // found - seg into local
             BNXT (SAGroup, CTX(SAM_SAG)->local) = ZGRP_I(g);
@@ -746,7 +745,7 @@ void sam_seg_sag_stuff (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_cigar), 
         sam_sa_seg_depn_find_sagroup_noSA (vb, dl, textual_seq, is_bam);
 
     else if (IS_PRIM(vb) && IS_SAG_SA && has(SA_Z)) 
-        ctx_set_encountered (VB, CTX(OPTION_SA_Z)); // for DEPN, this is done in sam_sa_seg_depn_find_sagroup_SAtag
+        ctx_set_encountered (VB, CTX(OPTION_SA_Z)); // note: for DEPN, this is done in sam_sa_seg_depn_find_sagroup_SAtag
 
     COPY_TIMER (sam_seg_sag_stuff);
 }

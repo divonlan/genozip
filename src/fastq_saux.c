@@ -59,6 +59,7 @@ bool fastq_segconf_analyze_saux (VBlockFASTQP vb, STRp(saux))
     }
 
     segconf.has_saux = true;
+    segconf.saux_tab_sep = (saux[-1] == '\t');
 
     return true;
 }

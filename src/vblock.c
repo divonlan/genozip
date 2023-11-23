@@ -136,10 +136,14 @@ void vb_destroy_vb_do (VBlockP *vb_p, rom func)
     if (!is_evb) COPY_TIMER_EVB (vb_destroy_vb);
 }
 
-// destroys all unused (i.e. data=NULL) buffers
-void vb_dehoard_memory (VBlockP vb)
+// return all VBlocks memory and unused evb memory to libc and optionally to the kernel
+void vb_dehoard_memory (bool release_to_kernel)
 {
-    buflist_destroy_vb_bufs (vb, true);
+    vb_destroy_pool_vbs (POOL_MAIN); 
+    buflist_destroy_vb_bufs (evb, true); // destroys all unused buffers
+
+    if (release_to_kernel)
+        buf_low_level_release_memory_back_to_kernel();
 }
 
 void vb_create_pool (VBlockPoolType type)

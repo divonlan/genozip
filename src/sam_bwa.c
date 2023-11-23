@@ -194,12 +194,12 @@ void sam_seg_BWA_XA_Z (VBlockSAMP vb, STRp(xa), unsigned add_bytes)
         .repeats      = 0, 
         .nitems_lo    = 6, 
         .repsep       = {';'}, // including last item
-        .items        = { { .dict_id = { _OPTION_XA_LOOKBACK   }, .separator = { CI0_INVISIBLE, CI1_LOOKBACK } }, 
-                          { .dict_id = { _OPTION_XA_RNAME      }, .separator = { ',',           CI1_LOOKBACK } }, 
-                          { .dict_id = { _OPTION_XA_STRAND     }, .separator = { CI0_DIGIT,     CI1_LOOKBACK } },
-                          { .dict_id = { _OPTION_XA_POS        }, .separator = { ',',           CI1_LOOKBACK } },
-                          { .dict_id = { _OPTION_XA_CIGAR      }, .separator = { ','}                          },
-                          { .dict_id = { _OPTION_XA_NM         },                                              } }  };
+        .items        = { { .dict_id = { _OPTION_XA_LOOKBACK }, .separator = { CI0_INVISIBLE, CI1_LOOKBACK } }, 
+                          { .dict_id = { _OPTION_XA_RNAME    }, .separator = { ',',           CI1_LOOKBACK } }, 
+                          { .dict_id = { _OPTION_XA_STRAND   }, .separator = { CI0_DIGIT,     CI1_LOOKBACK } },
+                          { .dict_id = { _OPTION_XA_POS      }, .separator = { ',',           CI1_LOOKBACK } },
+                          { .dict_id = { _OPTION_XA_CIGAR    }, .separator = { ','}                          },
+                          { .dict_id = { _OPTION_XA_NM       },                                              } }  };
 
     // case: for a collated (or otherwise unsorted) file, we can lookup against our mate, but if we have no
     // mate, we just seg without lookback, because XA:Z in near lines are not expected to be similar (also: in segconf.running)

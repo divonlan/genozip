@@ -270,8 +270,8 @@ CONTAINER_ITEM_CALLBACK (vcf_piz_con_item_cb)
             break;
 
         default:
-            ASSPIZ (false, "vcf_piz_con_item_cb doesn't know how to handle dict_id=%s. Please upgrade to the latest version of Genozip", 
-                    dis_dict_id (con_item->dict_id).s);
+            ABORT_PIZ ("vcf_piz_con_item_cb doesn't know how to handle dict_id=%s. Please upgrade to the latest version of Genozip", 
+                       dis_dict_id (con_item->dict_id).s);
     }
 }
 

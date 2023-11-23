@@ -160,7 +160,7 @@ static bool vcf_seg_INFO_HGVS_indel (VBlockVCFP vb, ContextP ctx, STRp(value), r
 
     CTX(did_i_start_pos[t])->flags.store = STORE_INT; // consumed by vcf_piz_special_INFO_HGVS_DEL_END_POS
 
-    seg_pos_field (VB, did_i_start_pos[t], VCF_POS, SPF_UNLIMITED_DELTA, 0, 0, 0, pos[0], pos_lens[0]);
+    seg_pos_field (VB, did_i_start_pos[t], VCF_POS, 0, 0, 0, 0, pos[0], pos_lens[0]);
     
     // We pos_lens[1] only if the payload is longer than 1
     if (n_poss == 2)

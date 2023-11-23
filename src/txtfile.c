@@ -522,7 +522,7 @@ void txtfile_read_vblock (VBlockP vb)
 
     // read data from the file until either 1. EOF is reached 2. end of block is reached
     uint64_t max_memory_per_vb = txtfile_max_memory_per_vb();
-    uint32_t pass_to_next_vb_len=0;
+    uint32_t pass_to_next_vb_len = 0;
 
     // start with using the data passed down from the previous VB (note: copy & free and not move! so we can reuse txt_data next vb)
     if (txt_file->unconsumed_txt.len) {

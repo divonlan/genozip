@@ -201,7 +201,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_NM)
         case 'M' : case 'm' : new_value->i = sam_piz_NM_get_mismatches_by_MD(vb) + indels_count; break;
         case 'I' : case 'i' : new_value->i = vb->mismatch_bases_by_SEQ + indels_count;           break;
         case 'b' :            new_value->i = (vb->mismatch_bases_by_SEQ + indels_count) > 0;     break;
-        default  :            ASSPIZ (false, "unrecognized opcode '%c' - upgrade to a newer Genozip version", *snip);
+        default  :            ABORT_PIZ ("unrecognized opcode '%c' - upgrade to a newer Genozip version", *snip);
     }
 
     if (reconstruct) // will be false if BAM, reconstruction is done by translator based on new_value set here

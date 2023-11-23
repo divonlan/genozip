@@ -392,7 +392,7 @@ rom segconf_deep_trimming_name (void)
          :                                 "None";
 }
 
-StrText segconf_get_qual_histo (void)
+StrText segconf_get_qual_histo (QualHistType qht)
 {
     StrText s = {};
     char *next = s.s;
@@ -403,8 +403,8 @@ StrText segconf_get_qual_histo (void)
         uint32_t max_count = 0;
 
         for (int score=0; score < 94; score++)
-            if (segconf.qual_histo[score] > max_count) {
-                max_count = segconf.qual_histo[score];
+            if (segconf.qual_histo[qht][score] > max_count) {
+                max_count = segconf.qual_histo[qht][score];
                 max_score = score + 33;
             }
 
@@ -416,7 +416,7 @@ StrText segconf_get_qual_histo (void)
             default  : *next++ = max_score;
         }
 
-        segconf.qual_histo[max_score-33] = 0;
+        segconf.qual_histo[qht][max_score-33] = 0;
     }
 
     return s;

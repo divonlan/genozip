@@ -175,10 +175,10 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_pull_from_sag)
             return HAS_NEW_VALUE;
 
         case SAM_SQBITMAP:
-            ASSPIZ0 (false, "Expecting SAM_SQBITMAP to be handled by sam_piz_special_SEQ");
+            ABORT_PIZ0 ("Expecting SAM_SQBITMAP to be handled by sam_piz_special_SEQ");
         
         case SAM_QUAL:
-            ASSPIZ0 (false, "Expecting SAM_QUAL to be handled by sam_piz_special_QUAL");
+            ABORT_PIZ0 ("Expecting SAM_QUAL to be handled by sam_piz_special_QUAL");
 
         default:
             // solo tags
@@ -189,7 +189,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_pull_from_sag)
                 }
 
             // not a solo tag
-            ASSPIZ (false, "Unexpected ctx=%s(%u)", ctx->tag_name, ctx->did_i);
+            ABORT_PIZ ("Unexpected ctx=%s(%u)", ctx->tag_name, ctx->did_i);
     }
 
     return NO_NEW_VALUE; // just to suppress compiler warning

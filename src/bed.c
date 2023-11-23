@@ -69,8 +69,9 @@ void bed_seg_initialize (VBlockP vb)
 
     ctx_set_no_stons (vb, 
                       BED_CHROM, // needs b250 node_index for random access
-                      BED_NAME,  // required by seg_add_to_local_text
                       BED_START, BED_END, BED_TSTART, BED_TEND, DID_EOL); // as requied by seg_pos_field
+
+    ctx_set_ltype (vb, LT_STRING, BED_NAME, DID_EOL);
 
     if (!segconf.is_sorted || segconf.running) 
         ctx_set_ltype (vb, LT_UINT32, BED_START, DID_EOL);
@@ -191,7 +192,7 @@ rom bed_seg_txt_line (VBlockP vb, rom line, uint32_t remaining_txt_len, bool *ha
     MAYBE_END_HERE(END);
 
     // NAME
-    seg_add_to_local_text (vb, CTX(BED_NAME), STRfld(NAME), LOOKUP_NONE, fld_lens[NAME] + 1);
+    seg_add_to_local_string (vb, CTX(BED_NAME), STRfld(NAME), LOOKUP_NONE, fld_lens[NAME] + 1);
     MAYBE_END_HERE(NAME);
 
     // SCORE

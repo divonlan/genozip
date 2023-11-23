@@ -14,3 +14,6 @@ extern void zip_one_file (rom vcf_basename, bool is_last_user_txt_file);
 extern void zip_compress_all_contexts_b250 (VBlockP vb);
 extern void zip_init_vb (VBlockP vb);
 extern bool zip_is_input_exhausted (void);
+
+extern LocalGetLineCB *zip_get_local_data_callback (DataType dt, ContextP ctx);
+extern void zip_set_no_stons_if_callback (VBlockP vb);

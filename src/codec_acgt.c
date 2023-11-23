@@ -64,7 +64,7 @@ void codec_acgt_seg_initialize (VBlockP vb, Did nonref_did_i,
 {
         ContextP nonref_ctx     = CTX(nonref_did_i);
         nonref_ctx->lcodec      = CODEC_ACGT; // ACGT is better than LZMA and BSC
-        nonref_ctx->ltype       = LT_SEQUENCE;
+        nonref_ctx->ltype       = LT_BLOB;
         nonref_ctx->no_stons    = true;       // we're storing the sequencing in local, so we can't also have singletons
         nonref_ctx->flags.acgt_no_x = !has_x;
 
@@ -74,16 +74,6 @@ void codec_acgt_seg_initialize (VBlockP vb, Did nonref_did_i,
             nonref_x_ctx->local_dep = DEP_L1;     // NONREF_X.local is created with NONREF.local is compressed
             nonref_x_ctx->lcodec    = CODEC_XCGT; // prevent codec_assign_best from assigning it a different codec
         }
-}
-
-void codec_acgt_seg (VBlockP vb, ContextP ctx, STRp (seq))
-{
-    if (!ctx->flags.acgt_no_x || str_is_ACGT (STRa(seq), NULL))
-        seg_add_to_local_text (vb, ctx, STRa(seq), LOOKUP_WITH_LENGTH, seq_len);
-    
-    // case no X context, and seq isn't strictly A,C,G or T - seg to the dictionary (note: if this is expected, better have an X context)
-    else
-        seg_by_ctx (vb, STRa(seq), ctx, seq_len); // can't add to local, because this is CODEC_ACGT has no_x
 }
 
 // packing of an array A,C,G,T characters into a 2-bit Bits, stored in vb->scratch. 
@@ -192,7 +182,7 @@ COMPRESS (codec_acgt_compress)
     z_lcodec = ZCTX(nonref_ctx->did_i)->lcodec;
     nonref_ctx->lcodec = z_lcodec; // possibly set by a previous VB call to codec_assign_best_codec
 
-    vb->scratch.len32 *= sizeof (uint64_t); // ltype is LT_SEQUENCE, but length is in 64b words (in Bits)
+    vb->scratch.len32 *= sizeof (uint64_t); // ltype is LT_BLOB, but length is in 64b words (in Bits)
     header->sub_codec = codec_assign_best_codec (vb, nonref_ctx, &vb->scratch, SEC_LOCAL);
     vb->scratch.len32 /= sizeof (uint64_t); // restore
 
@@ -249,7 +239,7 @@ UNCOMPRESS (codec_xcgt_uncompress)
 // - ACGT-compressed data is stored in two consecutive sections, NONREF which has CODEC_ACGT, and NONREF_X which has sub_codec2
 // 1) NONREF contains a 2-bit representation of the bases: is is uncompressed by codec_acgt_uncompress into vb->scratch using sub_codec
 // 2) NONREF_X is a character array of exceptions and is uncompressed into NONREF_X.local by codec_xcgt_uncompress
-// 3) codec_xcgt_uncompress also combines vb->scratch with NONREF_X.local to recreate NONREF.local - an LT_SEQUENCE local buffer
+// 3) codec_xcgt_uncompress also combines vb->scratch with NONREF_X.local to recreate NONREF.local - an LT_BLOB local buffer
 UNCOMPRESS (codec_acgt_uncompress)
 {
     BufferP packed_buf = ctx->flags.acgt_no_x ? &vb->scratch : &ctx->packed;

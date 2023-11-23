@@ -373,8 +373,8 @@ static void sam_load_groups_add_aln_cigar (VBlockSAMP vb, PlsgVbInfo *plsg, Sag 
 
     // case: the cigar is in dict - we therefore don't store - reconstruction will copy it from the dictionary
     else {
-        ASSERT (word_index >= 0 && word_index < ctx->word_list.len32, "word_index=%d out of range [0,%d] snip_len=%u snip[0]=%u snip=\"%.*s\"", 
-                word_index, ctx->word_list.len32-1, snip_len, snip_len ? (uint8_t)snip[0] : 0, STRf(snip));
+        ASSERT (word_index >= 0 && word_index < ctx->word_list.len32, "word_index=%d of %s out of range [0,%d] snip_len=%u snip[0]=%u snip=\"%.*s\"", 
+                word_index, ctx->tag_name, ctx->word_list.len32-1, snip_len, snip_len ? (uint8_t)snip[0] : 0, STRf(snip));
 
         a->cigar.piz.is_word = true; // cigar is in ZCTX(OPTION_SA_CIGAR).dict (short cigar)
         a->cigar.piz.index   = word_index;

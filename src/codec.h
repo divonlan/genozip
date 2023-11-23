@@ -141,7 +141,6 @@ extern void codec_assign_best_qual_codec (VBlockP vb, Did qual_did, LocalGetLine
 // ACGT stuff
 extern const uint8_t acgt_encode[256];
 extern void codec_acgt_seg_initialize (VBlockP vb, Did nonref_did_i, bool has_x);
-extern void codec_acgt_seg (VBlockP vb, ContextP ctx, STRp (seq));
 extern void codec_acgt_reconstruct (VBlockP vb, ContextP ctx, STRp(snip));
 
 // BSC stuff

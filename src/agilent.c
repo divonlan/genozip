@@ -12,7 +12,7 @@
 
 void agilent_seg_initialize (VBlockP vb)
 {
-    ctx_set_ltype (VB, LT_SEQUENCE, OPTION_QX_Z, DID_EOL);
+    ctx_set_ltype (VB, LT_BLOB, OPTION_QX_Z, DID_EOL);
     ctx_consolidate_stats (VB, OPTION_QX_Z, OPTION_QX_DOMQRUNS, OPTION_QX_QUALMPLX, OPTION_QX_DIVRQUAL, DID_EOL);
 
     CTX(OPTION_QX_Z)->no_callback = true; // QX is normally compressed with a callback, but not with AGeNT Trimmer

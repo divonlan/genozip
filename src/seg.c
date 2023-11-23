@@ -286,13 +286,16 @@ void seg_prepare_multi_dict_id_special_snip (uint8_t special_code, unsigned num_
 }
 
 // prepare snip of A - B
-void seg_prepare_minus_snip_do (DictId dict_id_a, DictId dict_id_b, uint8_t special_code, char *snip, unsigned *snip_len)
+void seg_prepare_array_dict_id_special_snip (int num_dict_ids, DictId *dict_ids, uint8_t special_code, qSTRp(snip))
 {
+    // make sure we have enough memory
+    unsigned required_len = 2 + base64_size (num_dict_ids * DICT_ID_LEN); 
+    ASSERT (*snip_len >= required_len, "*snip_len=%u, but it needs to be at least %u", *snip_len, required_len);
+
     snip[0] = SNIP_SPECIAL;
     snip[1] = special_code;
     
-    DictId two_dicts[2] = { dict_id_a, dict_id_b };
-    *snip_len = 2 + base64_encode ((uint8_t *)two_dicts, sizeof (two_dicts), &snip[2]);
+    *snip_len = 2 + base64_encode ((uint8_t *)dict_ids, num_dict_ids * DICT_ID_LEN, &snip[2]);
 }
 
 void seg_mux_display (MultiplexerP mux)
@@ -433,19 +436,6 @@ PosType64 seg_pos_field (VBlockP vb,
     
     ctx_set_last_value (vb, snip_ctx, this_pos);
 
-    // if the delta is too big, add this_pos (not delta) to local and put SNIP_LOOKUP in the b250
-    // EXCEPT if it is the first vb (ie last_pos==0) because we want to avoid creating a whole RANDOM_POS
-    // section in every VB just for a single entry in case of a nicely sorted file
-    if ((!IS_FLAG (opt, SPF_UNLIMITED_DELTA) && (ABS(pos_delta) > MAX_POS_DELTA) && base_ctx->last_value.i) ||
-        IS_FLAG (opt, SPF_NO_DELTA)) {
-
-        snip_ctx->ltype = LT_DYN_INT;
-        snip_ctx->last_delta = 0;  // on last_delta as we're PIZ won't have access to it - since we're not storing it in b250 
-        seg_integer (vb, snip_ctx, this_pos, true, add_bytes); // some fields (eg Z5:i) might be -1, so careful not to assume UINT32
-
-        return this_pos;
-    }
-
     // store the delta in last_delta only if we're also putting in the b250
     snip_ctx->last_delta = pos_delta;
     
@@ -466,15 +456,21 @@ PosType64 seg_pos_field (VBlockP vb,
         else 
             seg_prepare_snip_other_do (SNIP_OTHER_DELTA, base_ctx->dict_id, false, 0, 0, pos_delta_str, &total_len);
 
-        unsigned delta_len = str_int (pos_delta, &pos_delta_str[total_len]);
-        total_len += delta_len;
+        // backcomp note: starting 15.0.27 we store the delta in local. up to 15.0.26, local 
+        // was used to store full (not delta) values, if the delta went beyond MAX_DELTA, while
+        // the delta was stored in the snip as a textual integer
+        pos_delta_str[total_len++] = '$'; 
+
+        snip_ctx->ltype = LT_DYN_INT; // TO DO: set in *_seg_initialize
+        seg_add_to_local_resizable (vb, snip_ctx, pos_delta, 0); 
 
         seg_by_ctx (VB, pos_delta_str, total_len, snip_ctx, add_bytes);
     }
+
     // case: the delta is the negative of the previous delta - add a SNIP_SELF_DELTA with no payload - meaning negated delta
     else {
         char negated_delta = SNIP_SELF_DELTA; // no delta means negate the previous delta
-        seg_by_did (VB, &negated_delta, 1, snip_did_i, add_bytes);
+        seg_by_ctx (VB, &negated_delta, 1, snip_ctx, add_bytes);
         snip_ctx->last_delta = 0; // no negated delta next time
     }
 
@@ -491,7 +487,7 @@ bool seg_pos_field_cb (VBlockP vb, ContextP ctx, STRp(pos_str), uint32_t repeat)
 void seg_integer (VBlockP vb, ContextP ctx, int64_t n, bool with_lookup, unsigned add_bytes)
 {
 #ifdef DEBUG
-    ASSERT (segconf.running || IS_LT_DYN (ctx->ltype), "ctx=%s must have a LT_DYN_INT* ltype", ctx->tag_name);
+    ASSERT (segconf.running || IS_LT_DYN (ctx->ltype), "ctx=%s must have a LT_DYN_INT* ltype but found %s", ctx->tag_name, lt_name(ctx->ltype));
 
     ASSERT (segconf.running || ctx->flags.store == STORE_INT ||
             !(VB_DT(SAM) || VB_DT(BAM)) || ctx->tag_name[2] != ':' || // applicable to SAM/BAM optional fields
@@ -516,19 +512,15 @@ bool seg_integer_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_byt
                 :                                str_get_int (STRa(value), &n);
 
     // case: its an integer
-    if (!ctx->no_stons && is_int) { // we interpret no_stons as means also no moving ints to local (one of the reasons is that an int might actually be a float)
-        if (!IS_LT_DYN(ctx->ltype)) {
-            ASSERT (ctx->ltype == LT_TEXT, "%s->ltype==%s, cannot be set to LT_DYN_INT", 
-                    ctx->tag_name, lt_name(ctx->ltype));
-
-            ctx->ltype = LT_DYN_INT; // note: the LT_DYN* types are the last in LocalType
-        }
+    if (is_int && (IS_LT_DYN(ctx->ltype) || ctx->ltype == LT_SINGLETON)) { 
+        if (ctx->ltype == LT_SINGLETON) 
+            ctx->ltype = LT_DYN_INT; 
         
         seg_integer (vb, ctx, n, true, add_bytes);
         return true;
     }
 
-    // case: non-numeric snip or if no_stons
+    // case: non-numeric snip 
     else { 
         seg_by_ctx (VB, STRa(value), ctx, add_bytes);
         return false;
@@ -539,7 +531,7 @@ bool seg_integer_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_byt
 void seg_numeric_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_bytes)
 {
 #ifdef DEBUG
-    ASSERT (segconf.running || IS_LT_DYN (ctx->ltype), "Expecting %s.ltype to be DYN_INT*", ctx->tag_name);
+    ASSERT (segconf.running || IS_LT_DYN (ctx->ltype), "Expecting %s.ltype to be DYN_INT* but found %s", ctx->tag_name, lt_name(ctx->ltype));
 #endif
 
     if (segconf.running) goto fallback;
@@ -578,7 +570,7 @@ bool seg_float_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_bytes
     unsigned format_len;
 
     // case: its an float
-        if (!ctx->no_stons && // we interpret no_stons as means also no moving ints to local (one of the reasons is that an int might actually be a float)
+    if ((ctx->ltype == LT_FLOAT32 || ctx->ltype == LT_SINGLETON) &&
         str_get_float (STRa(value), &ctx->last_value.f, &snip[1], &format_len)) {
 
         // verify that we can reconstruct the number precisely (not always the case, 
@@ -586,9 +578,11 @@ bool seg_float_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_bytes
         float f = (float)ctx->last_value.f; // 64bit -> 32bit
         char recon[value_len+1];
         sprintf (recon, &snip[1], f);
-    if (memcmp (value, recon, value_len)) goto fallback;
 
-        ctx->ltype = LT_FLOAT32; // set only upon storing the first number - if there are no numbers, leave it as LT_TEXT so it can be used for singletons
+        if (memcmp (value, recon, value_len)) goto fallback;
+
+        if (ctx->ltype == LT_SINGLETON)
+            ctx->ltype = LT_FLOAT32; // set only upon storing the first number - if there are no numbers, leave it as LT_SINGLETON so it can be used for singletons
 
         // add to local
         buf_alloc (vb, &ctx->local, 1, vb->lines.len, float, CTX_GROWTH, CTX_TAG_LOCAL);
@@ -608,11 +602,11 @@ bool seg_float_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_bytes
     }
 }
 
-WordIndex seg_delta_vs_other_do (VBlockP vb, ContextP ctx, ContextP other_ctx, 
-                                 STRp(value), // if value==NULL, we use value_n
-                                 int64_t value_n,
-                                 int64_t max_delta /* max abs value of delta - beyond that, seg as is, ignored if < 0 */,
-                                 unsigned add_bytes)
+void seg_delta_vs_other_do (VBlockP vb, ContextP ctx, ContextP other_ctx, 
+                            STRp(value), // if value==NULL, we use value_n
+                            int64_t value_n,
+                            int64_t max_delta /* max abs value of delta - beyond that, seg as is, ignored if < 0 */,
+                            unsigned add_bytes)
 {
 #ifdef DEBUG
     ASSERT (segconf.running || 
@@ -622,25 +616,32 @@ WordIndex seg_delta_vs_other_do (VBlockP vb, ContextP ctx, ContextP other_ctx,
 
     ASSERTNOTNULL (other_ctx);
 
-    if (value && !str_get_int (STRa(value), &value_n)) goto fallback;
+    if (value && !str_get_int (STRa(value), &value_n)) {
+        seg_by_ctx (VB, STRa(value), ctx, add_bytes);
+        return;
+    }
 
-    ctx_set_last_value (vb, ctx, value_n);
+    if (ctx->ltype == LT_SINGLETON) 
+        ctx->ltype = LT_DYN_INT; 
 
     int64_t other_value_n = (other_ctx->flags.store == STORE_FLOAT) 
         ? (int64_t)other_ctx->last_value.f // simple cast to int (not rounding) as in reconstruct_from_delta
         : other_ctx->last_value.i;
     
     int64_t delta = value_n - other_value_n; 
-    if (max_delta >= 0 && ABS(delta) > max_delta) goto fallback;
+    if (max_delta >= 0 && ABS(delta) > max_delta) 
+        seg_integer (vb, ctx, value_n, true, add_bytes);
 
-    SNIP(32);
-    seg_prepare_snip_other (SNIP_OTHER_DELTA, other_ctx->dict_id, true, (int32_t)delta, snip);
+    else {
+        SNIP(32);
+        seg_prepare_snip_other (SNIP_OTHER_DELTA, other_ctx->dict_id, false, 0, snip);
+        snip[snip_len++] = '$'; // lookup delta from local
+        seg_by_ctx (VB, STRa(snip), ctx, add_bytes);
 
-    return seg_by_ctx (VB, STRa(snip), ctx, add_bytes);
+        seg_add_to_local_resizable (vb, ctx, delta, 0); 
+    }
 
-fallback:
-    return value ? seg_by_ctx (VB, STRa(value), ctx, add_bytes) 
-                 : seg_integer_as_snip_do (vb, ctx, value_n, add_bytes);
+    ctx_set_last_value (vb, ctx, value_n);
 }
 
 // note: seg_initialize should set STORE_INT for this ctx
@@ -651,17 +652,22 @@ WordIndex seg_self_delta (VBlockP vb, ContextP ctx, int64_t value,
 {
 #ifdef DEBUG
     ASSERT (segconf.running || ctx->flags.store == STORE_INT, "expecting %s to have store=STORE_INT", ctx->tag_name);
+    ASSERT (segconf.running || IS_LT_DYN (ctx->ltype), 
+            "%s: Expecting %s.ltype=LT_DYN_INT* but found %s", LN_NAME, ctx->tag_name, lt_name (ctx->ltype));
     ASSERT (fixed_len <= 190, "fixed_len=%u is larger than 190", fixed_len);
 #endif
 
-    char delta_snip[32];
+    char delta_snip[8];
     delta_snip[0] = SNIP_SELF_DELTA;
     if (format) {
         delta_snip[1] = format; // currently only 'x' (lower case hex) is supported
         if (fixed_len) delta_snip[2] = 'A' + fixed_len; // fixed_len=190 -> snip=255
     }
 
-    unsigned delta_snip_len = 1 + !!format + !!fixed_len + str_int (value - ctx->last_value.i, &delta_snip[1 + !!format + !!fixed_len]);
+    unsigned delta_snip_len = 1 + !!format + !!fixed_len;
+    delta_snip[delta_snip_len++] = '$'; // lookup delta from local
+
+    seg_add_to_local_resizable (vb, ctx, value - ctx->last_value.i, 0); 
 
     ctx_set_last_value (vb, ctx, value);
 
@@ -1024,7 +1030,7 @@ int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp
 
     for (uint32_t r=0; r < n_repeats; r++) {
 
-        // get items in each repeat
+        // get items in each repeat 
         str_split_by_container (repeats[r], repeat_lens[r], &con, NULL, 0, item, NULL);
         
         if (n_items != con.nitems_lo) 
@@ -1156,8 +1162,8 @@ bool seg_by_container (VBlockP vb, ContextP ctx, ContainerP con, STRp(value),
 void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, const void *const data, uint32_t data_len, bool add_nul, Lookup lookup_type, bool is_singleton, unsigned add_bytes) 
 {
 #ifdef DEBUG
-    ASSERT (is_singleton || ctx->no_stons || ctx->ltype != LT_TEXT || segconf.running, 
-            "%s: ctx %s requires no_stons or should have an ltype other than LT_TEXT", LN_NAME, ctx->tag_name);
+    ASSERT (is_singleton || ctx->ltype != LT_SINGLETON || segconf.running, 
+            "%s: ctx %s requires ltype!=LT_SINGLETON", LN_NAME, ctx->tag_name);
 #endif
 
     buf_alloc (vb, &ctx->local, data_len + add_nul, 100000, char, CTX_GROWTH, CTX_TAG_LOCAL);
@@ -1199,7 +1205,7 @@ void seg_add_to_local_resizable (VBlockP vb, ContextP ctx, int64_t value, unsign
 {
 #ifdef DEBUG
     ASSERT (segconf.running || IS_LT_DYN (ctx->ltype), 
-            "%s: Expecting ctx->ltype=%s to be LT_DYN_INT* in ctx=%s ", LN_NAME, lt_name(ctx->ltype), ctx->tag_name);
+            "%s: Expecting ltype=LT_DYN_INT* in ctx=%s but found %s", LN_NAME, ctx->tag_name, lt_name(ctx->ltype));
 #endif
 
     // TO DO: find a way to better estimate the size, see b250_per_line
@@ -1216,7 +1222,7 @@ void seg_diff (VBlockP vb, ContextP ctx,
                unsigned add_bytes)
 {
 #ifdef DEBUG
-    ASSERT (ctx->ltype == LT_UINT8, "expecting %s to have ltype=LT_UINT8", ctx->tag_name);
+    ASSERT (ctx->ltype == LT_UINT8, "expecting %s to have ltype=LT_UINT8 but found %s", ctx->tag_name, lt_name(ctx->ltype));
 
     // entire_snip_if_same is for self-diffing - we might be better off just segging the snip again without a diff than
     // an empty diff (lower b250 entropy)
@@ -1361,6 +1367,10 @@ void seg_all_data_lines (VBlockP vb)
     
     DT_FUNC (vb, seg_initialize)(vb);  // data-type specific initialization
 
+    // if local is going to be compressed using a callback, we can't have singletons go to local
+    // note: called after seg_initialize, to allow for setting of ctx->no_callback where needed 
+    zip_set_no_stons_if_callback (vb);
+    
     // allocate lines
     uint32_t sizeof_line = DT_FUNC_OPTIONAL (vb, sizeof_zip_dataline, 1)(); // 1 - we waste a little bit of memory to avoid making exceptions throughout the code logic
     buf_alloc_zero (vb, &vb->lines, 0, vb->lines.len * sizeof_line, char, 1, "lines");

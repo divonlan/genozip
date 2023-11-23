@@ -65,9 +65,9 @@ void fastq_seg_LINE3 (VBlockFASTQP vb, STRp(qline3), STRp(qline1), STRp(desc))
                 STRf(qline3));
 }
 
-//-----------------
-// AUX: eg len=1234
-//-----------------
+//----------------------
+// AUX: eg "length=1234"
+//----------------------
 
 static void fastq_seg_one_aux (VBlockFASTQP vb, STRp(tag_name), STRp(value))
 {
@@ -135,11 +135,16 @@ void fastq_segconf_analyze_DESC (VBlockFASTQP vb, STRp(desc))
         return; // too many fields - entire desc will be treated as "extra" and added to DESC.local
     }
 
-    // count auxes
+    // count auxes (an aux is eg "length=151")
     int n_auxes=0;
     for (int i=n_items-1; i >= 0; i--, n_auxes++) {
         str_split (items[i], item_lens[i], 2, '=', side, true); // an AUX field is a name=value pair, eg "length=151"
         if (n_sides != 2) break;
+
+        // set segconf.has[]. 
+        DictId dict_id = dict_id_make (STRi(side,0), DTYPE_2);
+        ContextP ctx = ctx_get_ctx_tag (vb, dict_id, sides[0], side_lens[0]); // create if it doesn't already exist
+        segconf.has[ctx->did_i] = true;
     }
 
     if (n_items - n_auxes > 0)

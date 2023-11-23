@@ -267,7 +267,7 @@ void vcf_piz_FORMAT_GT_rewrite_predicted_phase (VBlockP vb, char *recon, uint32_
     // we only use prediction in in diploid GTs, and genozip allows only single or double-digit alleles
     if      (recon[1] == '&') recon[1] = prediction;
     else if (recon[2] == '&') recon[2] = prediction;
-    else ASSPIZ (false, "Cannot find '&' predictable phase in recon: \"%.*s\"", recon_len, recon);
+    else ABORT_PIZ ("Cannot find '&' predictable phase in recon: \"%.*s\"", recon_len, recon);
 }
 
 // called after 2nd HT in a diploid GT, if has_null_DP alg is activated 

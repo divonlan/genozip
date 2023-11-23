@@ -99,10 +99,10 @@ typedef int32_t SamASType;
 
 // Z fields which are expected to be the same as their prim - overlap . 
 #define FIRST_SOLO_TAG MATED_BX
-typedef enum         {                                                                                                         SOLO_BX,     SOLO_RX,     SOLO_CB,     SOLO_CR,     SOLO_BC,/* solo-only-after-this*/ SOLO_QX, SOLO_CY, SOLO_QT, NUM_SOLO_TAGS } SoloTags;
+typedef enum         {                                                                                                                      SOLO_BX,     SOLO_RX,     SOLO_CB,     SOLO_CR,     SOLO_BC,/* solo-only-after-this*/ SOLO_QX, SOLO_CY, SOLO_QT, NUM_SOLO_TAGS } SoloTags;
                        /* only mated (not solo) tags first */
-typedef enum         { MATED_RG,    MATED_PG,    MATED_PU,    MATED_LB,    MATED_OX,    MATED_MI,    MATED_ZA,    MATED_ZB,    MATED_BX,    MATED_RX,    MATED_CB,    MATED_CR,    MATED_BC,   NUM_MATED_Z_TAGS } MatedZFields;
-#define MATED_Z_DIDs { OPTION_RG_Z, OPTION_PG_Z, OPTION_PU_Z, OPTION_LB_Z, OPTION_OX_Z, OPTION_MI_Z, OPTION_ZA_Z, OPTION_ZB_Z, OPTION_BX_Z, OPTION_RX_Z, OPTION_CB_Z, OPTION_CR_Z, OPTION_BC_Z,                 }                
+typedef enum         { MATED_RG,    MATED_PG,    MATED_PU,    MATED_LB,    MATED_OX,    MATED_MI,    MATED_ZA,    MATED_ZB,    MATED_YB,    MATED_BX,    MATED_RX,    MATED_CB,    MATED_CR,    MATED_BC,   NUM_MATED_Z_TAGS } MatedZFields;
+#define MATED_Z_DIDs { OPTION_RG_Z, OPTION_PG_Z, OPTION_PU_Z, OPTION_LB_Z, OPTION_OX_Z, OPTION_MI_Z, OPTION_ZA_Z, OPTION_ZB_Z, OPTION_YB_Z, OPTION_BX_Z, OPTION_RX_Z, OPTION_CB_Z, OPTION_CR_Z, OPTION_BC_Z,                 }                
 extern Did buddied_Z_dids[NUM_MATED_Z_TAGS];
 
 #define SOLO_PROPS { /* in the order of SoloTags */ \
@@ -171,7 +171,7 @@ typedef struct {
     };
 
     DeepHash deep_hash;            // Set for primary (i.e. not supplementary or secondary) alignments
-    TxtWord QUAL, OQ, TQ, _2Y, GY, U2, BD_BI[2], SA, QNAME, MC;// coordinates in txt_data 
+    TxtWord QUAL, OQ, TQ, _2Y, GY, U2, BD_BI[2], SA, QNAME, MC, YB;// coordinates in txt_data 
     union {
     struct {                       // PacBio
     TxtWord dq, iq, sq;            // coordinates in txt_data
@@ -198,6 +198,7 @@ typedef struct {
     uint8_t MAPQ, MQ;              // MAPQ is 8 bit by BAM specification, and MQ is mate MAPQ by SAMtags specification
     bool no_seq             : 1;   // SEQ is missing for this line
     bool is_deepable        : 1;   // True if this line is deepable: Not SEC/DUPP and SEQ exists and is not mono-char.
+    bool is_consensus       : 1;   // This alignment is a consensus read
     bool no_qual            : 1;   // QUAL is missing this line
     bool dont_compress_QUAL : 1;   // don't compress QUAL in this line
     bool dont_compress_OQ   : 1;   // don't compress OQ in this line
@@ -264,7 +265,7 @@ typedef struct VBlockSAM {
     Multiplexer4 mux_PNEXT;
     Multiplexer3 mux_POS, mux_MAPQ;// ZIP: DEMUX_BY_MATE_PRIM multiplexers
     Multiplexer2 mux_FLAG, mux_MQ, mux_MC, mux_ms, mux_AS, mux_YS, mux_nM, // ZIP: DEMUX_BY_MATE or DEMUX_BY_BUDDY multiplexers
-                 mux_mated_z_fields[NUM_MATED_Z_TAGS], mux_ultima_c, mux_dragen_sd; 
+                 mux_mated_z_fields[NUM_MATED_Z_TAGS], mux_ultima_c, mux_dragen_sd, mux_YY, mux_XO; 
     Multiplexer3 mux_NH;           // ZIP: DEMUX_BY_BUDDY_MAP
     Multiplexer7 mux_tp;           // ZIP: DEMUX_BY_QUAL (number of channels matches TP_NUM_BINS)
 
@@ -471,6 +472,8 @@ typedef struct __attribute__ ((__packed__)) Sag {
 #define IS_MAIN(x) ((x)->comp_i == SAM_COMP_MAIN)
 #define IS_PRIM(x) ((x)->comp_i == SAM_COMP_PRIM)
 #define IS_DEPN(x) ((x)->comp_i == SAM_COMP_DEPN)
+
+extern void sam_seg_aux_field_fallback_int (VBlockSAMP vb, ContextP ctx, int64_t n, unsigned add_bytes);
 
 extern void      sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qname), unsigned add_additional_bytes);
 extern WordIndex sam_seg_RNAME (VBlockSAMP vb, ZipDataLineSAM *dl, STRp (chrom), bool against_sa_group_ok, unsigned add_bytes);
@@ -755,6 +758,11 @@ extern void agilent_seg_initialize (VBlockP vb);
 extern void agilent_seg_RX (VBlockP vb, ContextP ctx, STRp(rx), unsigned add_bytes); // RX and QX are also in fastq_private.h.
 extern void agilent_seg_QX (VBlockP vb, ContextP ctx, STRp(qx), unsigned add_bytes); 
 
+// xcons stuff
+extern void sam_seg_xcons_YY_i (VBlockSAMP vb, int64_t yy, unsigned add_bytes);
+extern void sam_seg_xcons_XC_i (VBlockSAMP vb, int64_t xc, unsigned add_bytes);
+extern void sam_seg_xcons_XO_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t xo, unsigned add_bytes);
+
 // -----------------------------------
 // SAG stuff
 // -----------------------------------
@@ -868,4 +876,6 @@ eSTRl(redirect_to_CR_X_snip);
 eSTRl(redirect_to_GR_X_snip);
 eSTRl(redirect_to_GY_X_snip);
 eSTRl(redirect_to_RX_X_snip);
+eSTRl(XC_snip);
+
 extern char copy_buddy_Z_snips[NUM_MATED_Z_TAGS][30]; extern unsigned copy_buddy_Z_snip_lens[NUM_MATED_Z_TAGS];

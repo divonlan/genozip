@@ -1132,7 +1132,7 @@ static inline bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx, uint8_t *vb
               cond_str (VB_DT(BAM) || VB_DT(SAM), "sam_mapper=", segconf_sam_mapper_name()), 
               cond_str (VB_DT(BAM) || VB_DT(SAM) || VB_DT(FASTQ) || VB_DT(KRAKEN), "segconf_qf_name=", segconf_qf_name(QNAME1)), 
               z_dt_name(), zctx->tag_name, VB_NAME, segconf.vb_size, zctx->dict.len, GENOZIP_CODE_VERSION);
-        str_print_dict (stderr, zctx->dict.data, 1000, true, false, false);
+        dict_io_print (stderr, zctx->dict.data, 1000, true, false, false);
     }
 
     if (flag.deep) {
@@ -1336,7 +1336,7 @@ void ctx_initialize_predefined_ctxs (ContextArray contexts,
     // initialize alias contexts (note: all aliases and their destinations are predefined)
     // note: all alias destinations that ever existed in previous versions of Genozip must be defined in #pragma GENDICT for this to work
     for_buf2 (DictIdAlias, alias, alias_i, *aliases) {
-        ASSERT0 (alias_dids[alias_i] != DID_NONE, "Duplicate alias detected"); // a missing alias_did, means another entry got set twice
+        ASSERT0 (alias_dids[alias_i] != DID_NONE, "Problem with aliases: either a dict_id defined in aliases is no longer a predefined context, or a duplicate alias exists. See genocat --show-aliases"); // a missing alias_did, might mean another entry got set twice
         
         ContextP alias_ctx = &z_file->contexts[alias_dids[alias_i]];
         ContextP dst_ctx   = ctx_get_existing_zctx (alias->dst); 
@@ -1645,7 +1645,7 @@ static void ctx_show_counts (ContextP zctx)
     buf_alloc (evb, &show_counts_buf, 0, zctx->counts.len, ShowCountsEnt, 0, "show_counts_buf");
 
     // QUAL counts store Longr value-to-bin mapping
-    bool maybe_longr = ((Z_DT(BAM) || Z_DT(SAM)) && (zctx->dict_id.num == _SAM_DOMQRUNS || zctx->dict_id.num == _OPTION_OQ_DOMQRUNS || zctx->dict_id.num == _OPTION_U2_DOMQRUNS))
+    bool maybe_longr = ((Z_DT(BAM) || Z_DT(SAM)) && (zctx->dict_id.num == _SAM_DOMQRUNS || zctx->dict_id.num == _SAM_CDOMQRUNS || zctx->dict_id.num == _OPTION_OQ_DOMQRUNS || zctx->dict_id.num == _OPTION_U2_DOMQRUNS))
                     || (Z_DT(FASTQ) && zctx->dict_id.num == _FASTQ_DOMQRUNS);
 
     uint64_t total=0;
@@ -1673,7 +1673,7 @@ static void ctx_show_counts (ContextP zctx)
     if (total)
         for (uint32_t i=0; i < counts_len; i++) {            
             iprint0 ("\"");
-            str_print_dict (info_stream, counts[i].snip, strlen(counts[i].snip), false, false, false);
+            dict_io_print (info_stream, counts[i].snip, strlen(counts[i].snip), false, false, false);
             iprintf ("\"(%d)\t%"PRIu64"\t%-4.2f%%\n", counts[i].word_index, counts[i].count, 
                      100 * (float)counts[i].count / (float)total);
         }

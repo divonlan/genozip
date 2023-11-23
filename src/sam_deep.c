@@ -24,8 +24,10 @@ static void sam_deep_zip_show_index_stats (void)
     for (int i=BY_SEQ; i <= BY_QNAME; i++) {
         ARRAY (uint32_t, index, z_file->deep_index_by[i]);
 
-        iprintf ("\nz_file.deep_index_by[%s].len=%"PRIu64" z_file.deep_ents.len=%"PRIu64"\n", 
-                 by_names[i], z_file->deep_index_by[i].len, z_file->deep_ents.len);
+        iprintf ("\nz_file.deep_index_by[%s].len=%"PRIu64" (%s) z_file.deep_ents.len=%"PRIu64" (%s)\n", 
+                 by_names[i], 
+                 z_file->deep_index_by[i].len, str_size (z_file->deep_index_by[i].len * sizeof (uint32_t)).s, 
+                 z_file->deep_ents.len, str_size (z_file->deep_ents.len * sizeof (ZipZDeep)).s);
 
         #define NUM_LENS 64
         uint64_t used=0;
@@ -59,8 +61,8 @@ static void sam_deep_zip_show_index_stats (void)
         }
 
         if (longest_len > 16384)
-            iprintf ("\nFYI: %s index entry %u has %"PRIu64 " deep entries on its linked list. This is excessively large and might cause slowness." SUPPORT,
-                     by_names[i], longest_len_hash, longest_len); // note: error only shows with --show-deep... not very useful
+            iprintf ("\nFYI: %s index entry %u has %"PRIu64 " deep entries on its linked list. This is excessively large and might cause slowness.%s",
+                     by_names[i], longest_len_hash, longest_len, SUPPORT); // note: error only shows with --show-deep... not very useful
 
         iprintf ("\nDeep index[%s] entries used: %"PRIu64" / %"PRIu64" (%.1f%%)\n", 
                  by_names[i], used, index_len, 100.0 * (double)used / (double)index_len);
@@ -106,8 +108,13 @@ void sam_deep_zip_finalize (void)
 {
     threads_log_by_vb (evb, "main_thread", "sam_deep_zip_finalize", 0);
     
+    if (flag.biopsy || flag.biopsy_line.line_i != NO_LINE) return;
+
+    // return unused memory to libc
+    buf_trim (z_file->deep_ents, ZipZDeep);
+    
     // Build vb_start_deep_line: first deep_line (0-based SAM-wide line_i, but not counting SUPP/SEC lines, monochar reads, SEQ.len=0) of each SAM VB
-    buf_alloc_exact_zero (evb, z_file->vb_start_deep_line,z_file->num_vbs + 1, uint64_t, "z_file->vb_start_deep_line");
+    buf_alloc_exact_zero (evb, z_file->vb_start_deep_line, z_file->num_vbs + 1, uint64_t, "z_file->vb_start_deep_line");
 
     uint64_t count=0;
     
@@ -125,6 +132,9 @@ void sam_deep_zip_finalize (void)
     }
 
     memset (z_file->deep_stats, 0, sizeof (z_file->deep_stats)); // we will reuse this field to gather stats while segging the FASTQ files
+
+    // return a bunch of memory to the kernel before moving on to FASTQ
+    vb_dehoard_memory (true);
 }
 
 // SAM seg: calculate hash values into dl->deep_*
@@ -186,8 +196,8 @@ void sam_deep_set_QUAL_hash (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual))
 // ZIP compute thread: mutex-protected callback from ctx_merge_in_vb_ctx during merge: add VB's deep_hash to z_file->deep_index_by_*/deep_ents
 void sam_deep_merge (VBlockP vb_)
 {
-    if (!flag.deep) return;
-    
+    if (!flag.deep || flag.biopsy || flag.biopsy_line.line_i != NO_LINE) return;
+
     VBlockSAMP vb = (VBlockSAMP)vb_;
     START_TIMER;
 

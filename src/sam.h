@@ -75,6 +75,12 @@
 #pragma GENDICT SAM_QUALMPLX=DTYPE_FIELD=QUALMPLX // v14.0.0. DOMQUAL codec: dom multiplexer 
 #pragma GENDICT SAM_DIVRQUAL=DTYPE_FIELD=DIVRQUAL // v14.0.0. DOMQUAL codec: lines that don't have enough dom.
 
+// quality for consensus reads
+#pragma GENDICT SAM_CQUAL=DTYPE_FIELD=CQUAL 
+#pragma GENDICT SAM_CDOMQRUNS=DTYPE_FIELD=CDOMQRUN 
+#pragma GENDICT SAM_CQUALMPLX=DTYPE_FIELD=CQUALMPX 
+#pragma GENDICT SAM_CDIVRQUAL=DTYPE_FIELD=CDVRQUAL 
+
 #pragma GENDICT SAM_TOPLEVEL=DTYPE_FIELD=TOPLEVEL // must be called TOPLEVEL
 #pragma GENDICT SAM_BUDDY=DTYPE_FIELD=BUDDY       // must be called BUDDY, expected by sam_reconstruct_from_buddy 
 #pragma GENDICT SAM_TAXID=DTYPE_FIELD=TAXID
@@ -208,6 +214,8 @@
 #pragma GENDICT OPTION_QT_DOMQRUNS=DTYPE_FIELD=Q0T_DOMQ // these 3 must be right after OPTION_QT_Z (similar to SAM_QUAL).
 #pragma GENDICT OPTION_QT_QUALMPLX=DTYPE_FIELD=Q1T_MPLX 
 #pragma GENDICT OPTION_QT_DIVRQUAL=DTYPE_FIELD=Q2T_DEVQ // these 3 are supposed to be DTYPE_2, they are DTYPE_FIELD by error. we keep it this way for back comp
+
+#pragma GENDICT OPTION_YB_Z=DTYPE_2=YB:Z     // xcons: Barcode sequence
 
 #pragma GENDICT OPTION_CR_Z=DTYPE_2=CR:Z     // Cellular barcode. The uncorrected sequence bases of the cellular barcode as reported by the sequencing machine
 #pragma GENDICT OPTION_CR_Z_X=DTYPE_2=C0R_X  
@@ -388,8 +396,8 @@
 #pragma GENDICT OPTION_TQ_DIVRQUAL=DTYPE_FIELD=T2Q_DEVQ // these 3 are supposed to be DTYPE_2, they are DTYPE_FIELD by error. we keep it this way for back comp
 
 #pragma GENDICT OPTION_PC_i=DTYPE_2=PC:i     // longranger: Phred-scaled confidence that this read was phased correctly.
-#pragma GENDICT OPTION_PS_i=DTYPE_2=PS:i     // longranger: Phase set containing this read. This corresponds to the phase set (PS) field in the VCF file. The value is the position of the first SNP in the phase block.
-#pragma GENDICT OPTION_HP_i=DTYPE_2=HP:i     // longranger: Haplotype of the molecule that generated the read.
+#pragma GENDICT OPTION_PS_i=DTYPE_2=PS:i     // longranger, HiPhase: Phase set containing this read. This corresponds to the phase set (PS) field in the VCF file. The value is the position of the first SNP in the phase block.
+#pragma GENDICT OPTION_HP_i=DTYPE_2=HP:i     // longranger, HiPhase: Haplotype of the molecule that generated the read.
 #pragma GENDICT OPTION_MI_i=DTYPE_2=MI:i     // longranger: Global molecule identifier for molecule that generated this read.
 
 #pragma GENDICT OPTION_AM_A=DTYPE_2=AM:A     // longranger: 1 if this alignment in a long molecule, 0 otherwise. Alignments in long molecules will have their MAPQ boosted above alternative alignments not in molecules.
@@ -597,6 +605,11 @@
 // Bionano
 #pragma GENDICT OPTION_ls_B_i=DTYPE_2=ls:B:i
 
+// xcons
+#pragma GENDICT OPTION_XX_i=DTYPE_2=XX:i
+#pragma GENDICT OPTION_XY_i=DTYPE_2=XY:i
+#pragma GENDICT OPTION_YY_i=DTYPE_2=YY:i
+
 // Genozip-generated tags
 #pragma GENDICT OPTION_tx_i=DTYPE_2=tx:i     // Genozip tag for taxonomy ID
 
@@ -618,6 +631,7 @@ extern rom sag_type_name (SagType sagt);
 // ZIP Stuff
 COMPRESSOR_CALLBACK(sam_zip_seq); // used by longr codec
 COMPRESSOR_CALLBACK(sam_zip_qual);
+COMPRESSOR_CALLBACK(sam_zip_cqual);
 COMPRESSOR_CALLBACK(sam_zip_OQ);
 COMPRESSOR_CALLBACK(sam_zip_TQ);
 COMPRESSOR_CALLBACK(sam_zip_QX);
@@ -730,7 +744,8 @@ extern void sam_reset_line (VBlockP vb);
                       sam_piz_special_TX_AN_POS, sam_piz_special_COPY_TEXTUAL_CIGAR, sam_piz_special_BISMARK_XM, \
                       sam_piz_special_BSBOLT_XB, sam_piz_special_UQ, sam_piz_special_iq_sq_dq, sam_piz_special_DEMUX_BY_QUAL, \
                       ultima_c_piz_special_DEMUX_BY_Q4NAME, sam_piz_special_bi, sam_piz_special_sd, \
-                      agilent_special_AGENT_RX, agilent_special_AGENT_QX, special_qname_rng2seq_len, \
+                      agilent_special_AGENT_RX, agilent_special_AGENT_QX, special_qname_rng2seq_len, sam_piz_special_DEMUX_BY_XX_0, \
+                      sam_piz_special_DEMUX_BY_AS, piz_special_PLUS, \
                     }
 SPECIAL (SAM, 0,  CIGAR,                 sam_cigar_special_CIGAR);
 SPECIAL (SAM, 1,  TLEN_old,              sam_piz_special_TLEN_old);            // used up to 12.0.42
@@ -792,11 +807,15 @@ SPECIAL (SAM, 56, sd,                    sam_piz_special_sd);                  /
 SPECIAL (SAM, 57, AGENT_RX,              agilent_special_AGENT_RX);            // introduced 15.0.23
 SPECIAL (SAM, 58, AGENT_QX,              agilent_special_AGENT_QX);            // introduced 15.0.23
 SPECIAL (SAM, 59, qname_rng2seq_len,     special_qname_rng2seq_len);           // introduced 15.0.26
-#define NUM_SAM_SPECIAL 60
+SPECIAL (SAM, 60, DEMUX_BY_XX_0,         sam_piz_special_DEMUX_BY_XX_0);       // introduced 15.0.27
+SPECIAL (SAM, 61, DEMUX_BY_AS,           sam_piz_special_DEMUX_BY_AS);         // introduced 15.0.27
+SPECIAL (SAM, 62, PLUS,                  piz_special_PLUS);                    // introduced 15.0.27
+#define NUM_SAM_SPECIAL 63
  
 #define SAM_LOCAL_GET_LINE_CALLBACKS(dt)        \
     { dt, _OPTION_BD_BI,    sam_zip_BD_BI    }, \
     { dt, _SAM_QUAL,        sam_zip_qual     }, \
+    { dt, _SAM_CQUAL,       sam_zip_cqual    }, \
     { dt, _OPTION_U2_Z,     sam_zip_U2       }, \
     { dt, _OPTION_OQ_Z,     sam_zip_OQ       }, \
     { dt, _OPTION_TQ_Z,     sam_zip_TQ       }, \

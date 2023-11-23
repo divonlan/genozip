@@ -162,8 +162,10 @@ uint32_t bam_split_aux (VBlockSAMP vb, rom alignment, rom aux, rom after_aux, ro
             aux_lens[n_auxs] = strlen (aux+3) + 4; // add tag[2], type and \0
             SAFE_RESTORE;
         }
-        else if (aux[2] == 'B') 
-            aux_lens[n_auxs] = 8 + GET_UINT32 (aux+4) * size[(int)aux[3]]; 
+        else if (aux[2] == 'B') {
+            uint32_t array_len = GET_UINT32 (aux+4);
+            aux_lens[n_auxs] = 8 + array_len * size[(int)aux[3]]; 
+        }
         
         else if (size[(int)aux[2]])
             aux_lens[n_auxs] = 3 + size[(int)aux[2]];

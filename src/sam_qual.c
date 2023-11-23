@@ -71,7 +71,7 @@ COMPRESSOR_CALLBACK (sam_zip_qual)
     ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
 
     // note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec
-    *line_data_len  = dl->dont_compress_QUAL ? 0 : MIN_(maximum_size, dl->QUAL.len);
+    *line_data_len  = (dl->dont_compress_QUAL || dl->is_consensus) ? 0 : MIN_(maximum_size, dl->QUAL.len);
 
     if (!line_data) return; // only lengths were requested
 
@@ -80,6 +80,20 @@ COMPRESSOR_CALLBACK (sam_zip_qual)
     // if QUAL is just "*" (i.e. unavailable) replace it by " " because '*' is a legal PHRED quality value that will confuse PIZ
     if (dl->QUAL.len == 1 && (*line_data)[0] == '*') 
         *line_data = " "; // pointer to static string
+
+    if (is_rev) *is_rev = dl->FLAG.rev_comp;
+}
+
+COMPRESSOR_CALLBACK (sam_zip_cqual) 
+{
+    ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
+
+    // note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec
+    *line_data_len  = (dl->dont_compress_QUAL || !dl->is_consensus) ? 0 : MIN_(maximum_size, dl->QUAL.len);
+
+    if (!line_data) return; // only lengths were requested
+
+    *line_data = Btxt (dl->QUAL.index);
 
     if (is_rev) *is_rev = dl->FLAG.rev_comp;
 }
@@ -267,7 +281,7 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual)/*always textual
     // note: if prim (of either type) has no QUAL, we don't attempt to diff - bc piz wouldn't be able to know whether 
     // the current line has QUAL or not
 
-    // case: DEPN component, line has a sag, and the saq has qual
+    // case: DEPN component, line has a sag, and the sag has qual
     else if (vb->sag && IS_DEPN(vb) && !vb->sag->no_qual) {
         if (vb->qual_missing) {
             prim_has_qual_but_i_dont = true;
@@ -327,8 +341,9 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual)/*always textual
     // Note: in PRIM, QUAL is not reconstructed (as QUAL is not in TOPLEVEL container) - it is consumed when loading SA Groups
     //       Instead, all-the-same QUALSA is reconstructed (SPECIAL copying from the SA Group)
     else standard: {
-        qual_ctx->local.len32 += dl->QUAL.len;
-        qual_ctx->txt_len     += add_bytes;
+        ContextP ctx = dl->is_consensus ? CTX(SAM_CQUAL) : qual_ctx;
+        ctx->local.len32 += dl->QUAL.len;
+        ctx->txt_len     += add_bytes;
     }   
 
     // seg SPECIAL. note: in prim this is all-the-same and segged in sam_seg_QUAL_initialize
@@ -344,7 +359,7 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual)/*always textual
 
         for (uint32_t i=0; i < qual_len; i++)
             if (IS_NON_WS_PRINTABLE(qual[i]))
-                segconf.qual_histo[qual[i]-33]++;
+                segconf.qual_histo[dl->is_consensus ? QHT_CONSENSUS : QHT_QUAL][qual[i]-33]++;
     }
 
 done:
@@ -366,6 +381,11 @@ void sam_seg_other_qual (VBlockSAMP vb, TxtWord *dl_word, Did did_i, STRp(qual),
 
     if (!len_is_seq_len) 
         seg_lookup_with_length (VB, CTX(did_i), qual_len, 0);
+
+    if (segconf.running && did_i == OPTION_OQ_Z) 
+        for (uint32_t i=0; i < qual_len; i++)
+            if (IS_NON_WS_PRINTABLE(qual[i]))
+                segconf.qual_histo[QHT_OQ][qual[i]-33]++;
 }
 
 void sam_update_qual_len (VBlockP vb, uint32_t line_i, uint32_t new_len) 
@@ -549,14 +569,19 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
         if (snip[0] == '*')  // case of seg suspecting entire file is qual-less
             sam_reconstruct_missing_quality (VB, reconstruct);
 
-        else switch (ctx->ltype) { // the relevant subset of ltypes from reconstruct_from_ctx_do
-            case LT_CODEC:
-                codec_args[ctx->lcodec].reconstruct (VB, ctx->lcodec, ctx, vb->seq_len, reconstruct); break;
+        else {
+            bool is_consensus = (!IS_PRIM(vb)/*bug 949*/ && ctx_encountered_in_line (VB, SAM_QNAME2) && segconf.flav_prop[QNAME2].is_consensus);
+            if (is_consensus) ctx = CTX(SAM_CQUAL);
 
-            case LT_SEQUENCE: 
-                reconstruct_from_local_sequence (VB, ctx, vb->seq_len, reconstruct); break;
+            switch (ctx->ltype) { // the relevant subset of ltypes from reconstruct_from_ctx_do
+                case LT_CODEC:
+                    codec_args[ctx->lcodec].reconstruct (VB, ctx->lcodec, ctx, vb->seq_len, reconstruct); break;
 
-            default: ASSPIZ (false, "Invalid ltype=%s for %s", lt_name (ctx->ltype), ctx->tag_name);
+                case LT_BLOB: 
+                    reconstruct_from_local_sequence (VB, ctx, vb->seq_len, reconstruct); break;
+
+                default: ABORT_PIZ ("Invalid ltype=%s for %s", lt_name (ctx->ltype), ctx->tag_name);
+            }
         }
 
     uint32_t qual_len = BAFTtxt - qual;

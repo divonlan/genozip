@@ -90,7 +90,7 @@ static void seg_id_field_init (VBlockP vb, ContextP ctx, STRp(id), bool hint_zer
 
     else idt_other: {
         ctx->id_type = IDT_OTHER;
-        ctx->no_stons = true;
+        ctx->ltype = LT_STRING;
     }
 
     ctx->is_initialized = true;
@@ -153,7 +153,7 @@ void seg_id_field (VBlockP vb, ContextP ctx, STRp(id),
         seg_id_field_init (vb, ctx, STRa(id), hint_zero_padded_fixed_len);
         
     if (T(OTHER)) {
-        seg_add_to_local_text (vb, ctx, STRa(id), LOOKUP_NONE, add_bytes);
+        seg_add_to_local_string (vb, ctx, STRa(id), LOOKUP_SIMPLE, add_bytes); // LOOKUP_SIMPLE bc eg in gff_seg_dbxref we mix seg_id_field with other methods
 
         if (segconf.running && id_len > 1)
             seg_id_add_to_unknown (ctx, STRa(id));

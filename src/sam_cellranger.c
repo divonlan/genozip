@@ -59,7 +59,7 @@ static void sam_seg_CB_Z_segconf (VBlockSAMP vb, STRp(cb))
 static void sam_seg_CB_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(cb), unsigned add_bytes)
 {
     if (!seg_by_container (VB, channel_ctx, (ContainerP)&segconf.CB_con, STRa(cb), STRa(segconf.CB_con_snip), NULL, false, add_bytes))
-        seg_add_to_local_text (VB, channel_ctx, STRa(cb), LOOKUP_SIMPLE, add_bytes); // requires no_stons
+        seg_add_to_local_string (VB, channel_ctx, STRa(cb), LOOKUP_SIMPLE, add_bytes); // requires no_stons
 }
 
 void sam_seg_CB_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(cb), unsigned add_bytes)
@@ -97,7 +97,7 @@ static void sam_seg_CR_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(cr), un
     
     else fallback: {
         // add "exception" (i.e. undiffable) cr to CR_X
-        seg_add_to_local_fixed (VB, CTX(OPTION_CR_Z_X), STRa(cr), LOOKUP_WITH_LENGTH, add_bytes);
+        seg_add_to_local_blob (VB, CTX(OPTION_CR_Z_X), STRa(cr), add_bytes);
 
         // add redirection CR -> CR_X
         seg_by_ctx (VB, STRa(redirect_to_CR_X_snip), channel_ctx, 0); 
@@ -170,14 +170,14 @@ bool sam_seg_barcode_qual (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, SoloTag
         if (!n_items) goto fallback;
 
         for (int i=0; i < n_items; i++) 
-            seg_add_to_local_fixed (VB, CTX(array_did_i), STRi(item,i), LOOKUP_WITH_LENGTH, item_lens[i]);
+            seg_add_to_local_blob (VB, CTX(array_did_i), STRi(item,i), item_lens[i]);
 
         seg_by_did (VB, con_snip, *con_snip_len, did_i, (add_bytes - qual_len) + (n_items-1)); // account for separators
     }
 
     else fallback: 
         // note: this goes into the primary did_i, not the array item
-        seg_add_to_local_text (VB, CTX(did_i), STRa(qual), LOOKUP_SIMPLE, add_bytes);
+        seg_add_to_local_string (VB, CTX(did_i), STRa(qual), LOOKUP_SIMPLE, add_bytes);
 
     COPY_TIMER(sam_seg_barcode_qual);
     return dont_compress;
@@ -203,7 +203,7 @@ static void sam_seg_RX_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(rx), un
     
     else fallback: {
         // if undiffable, store verbatim in RX_X
-        seg_add_to_local_fixed (VB, CTX(OPTION_RX_Z_X), STRa(rx), LOOKUP_WITH_LENGTH, add_bytes);
+        seg_add_to_local_blob (VB, CTX(OPTION_RX_Z_X), STRa(rx), add_bytes);
 
         // add redirection RX -> RX_X
         seg_by_ctx (VB, STRa(redirect_to_RX_X_snip), channel_ctx, 0); 
@@ -372,7 +372,7 @@ void sam_seg_other_seq (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, STRp(seq),
 {
     START_TIMER;
 
-    seg_add_to_local_fixed (VB, CTX(did_i), STRa(seq), LOOKUP_WITH_LENGTH, add_bytes);
+    seg_add_to_local_blob (VB, CTX(did_i), STRa(seq), add_bytes);
 
     COPY_TIMER (sam_seg_other_seq);
 }
@@ -398,7 +398,7 @@ void sam_seg_GR_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(gr), unsigned add_byt
     
     else fallback: {
         // add "exception" (i.e. undiffable) cr to CR_X
-        seg_add_to_local_fixed (VB, CTX(OPTION_GR_Z_X), STRa(gr), LOOKUP_WITH_LENGTH, add_bytes);
+        seg_add_to_local_blob (VB, CTX(OPTION_GR_Z_X), STRa(gr), add_bytes);
         // SNIPi1 (SNIP_LOOKUP, gr_len);
         // seg_by_did (VB, STRa(snip), OPTION_GR_Z_X, add_bytes);
 
@@ -430,7 +430,7 @@ void sam_seg_GY_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(gy), unsigned add_byt
     
     else fallback: {
         // add "exception" (i.e. undiffable) cy to CY_X
-        seg_add_to_local_fixed (VB, CTX(OPTION_GY_Z_X), STRa(gy), LOOKUP_WITH_LENGTH, add_bytes);
+        seg_add_to_local_blob (VB, CTX(OPTION_GY_Z_X), STRa(gy), add_bytes);
 
         // add redirection GY -> GY_X
         seg_by_ctx (VB, STRa(redirect_to_GY_X_snip), CTX(OPTION_GY_Z), 0); 

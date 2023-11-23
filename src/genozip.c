@@ -319,9 +319,7 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
         refhash_destroy();
         kraken_destroy();
         chain_destroy();
-        vb_destroy_pool_vbs (POOL_MAIN);
-        vb_dehoard_memory (evb);
-        buf_low_level_release_memory_back_to_kernel();
+        vb_dehoard_memory (true);
     }
 
     rom exec_path = arch_get_executable().s;
@@ -916,10 +914,8 @@ int main (int argc, char **argv)
 
             if (file_i < n_files-1) {
                 // if we're short on memory, free up some
-                if (arch_get_max_resident_set() > arch_get_physical_mem_size() GB / 4) {
-                    vb_destroy_pool_vbs (POOL_MAIN);
-                    vb_dehoard_memory (evb);
-                }
+                if (arch_get_max_resident_set() > arch_get_physical_mem_size() GB / 4)
+                    vb_dehoard_memory (false);
 
                 buf_low_level_release_memory_back_to_kernel();
             }

@@ -14,7 +14,7 @@ void sam_pacbio_seg_initialize (VBlockSAMP vb)
 {
     ctx_set_no_stons (VB, OPTION_dt_Z, OPTION_mq_Z, OPTION_st_Z, DID_EOL);
 
-    ctx_set_ltype (VB, LT_DYN_INT, OPTION_qs_i, OPTION_qe_i, OPTION_np_i, DID_EOL);
+    ctx_set_ltype (VB, LT_DYN_INT, OPTION_qs_i, OPTION_qe_i, OPTION_np_i, OPTION_zm_i, DID_EOL);
     
     ctx_set_store (VB, STORE_INT, OPTION_qs_i, OPTION_qe_i, OPTION_zm_i, OPTION_np_i, DID_EOL);
 
@@ -24,7 +24,7 @@ void sam_pacbio_seg_initialize (VBlockSAMP vb)
         CTX(OPTION_np_i)->flags.same_line = true;  // np segged as delta vs ec, and np needs to be peeked for QUAL, before reconstructing ec
 
     if (segconf.use_pacbio_iqsqdq) {
-        ctx_set_ltype (VB, LT_SEQUENCE, OPTION_dq_Z, OPTION_iq_Z, OPTION_sq_Z, DID_EOL);        
+        ctx_set_ltype (VB, LT_BLOB, OPTION_dq_Z, OPTION_iq_Z, OPTION_sq_Z, DID_EOL);        
         ctx_consolidate_stats (VB, OPTION_iq_sq_dq, OPTION_dq_Z, OPTION_iq_Z, OPTION_sq_Z, DID_EOL);
     }
 }
@@ -34,8 +34,9 @@ void sam_pacbio_seg_initialize (VBlockSAMP vb)
 // -------------
 
 void sam_seg_pacbio_zm (VBlockSAMP vb, int64_t zm, unsigned add_bytes)    
-{                               
-    if (zm == CTX(SAM_Q1NAME)->last_value.i) 
+{                  
+    // note: we can't delta vs Q1NAME in PRIM/DEPN bc QNAME is copied as a whole from SAG             
+    if (IS_MAIN(vb) && zm == CTX(SAM_Q1NAME)->last_value.i) 
         seg_by_ctx (VB, STRa(copy_Q1NAME_int), CTX(OPTION_zm_i), add_bytes);
 
     else 

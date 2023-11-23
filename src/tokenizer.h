@@ -10,8 +10,6 @@
 
 #include "genozip.h"
 
-#define MAX_TOKENIZER_DETLA 1024 // arbitrary (Illumina ~= 100-800)
-
 extern const char sep_with_space[], sep_without_space[];
 
 extern void tokenizer_zip_initialize (void);

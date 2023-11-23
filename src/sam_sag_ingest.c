@@ -67,6 +67,16 @@ void sam_sa_prim_finalize_ingest (void)
 
     if (flag.show_sag) sam_show_sag();
 
+    // return memory to libc
+    buf_trim (z_file->sag_qnames, char);
+    buf_trim (z_file->solo_data, char);
+    
+    if      (IS_SAG_SA)   buf_trim (z_file->sag_alns, SAAln);
+    else if (IS_SAG_CC)   buf_trim (z_file->sag_alns, CCAln);
+    else if (IS_SAG_SOLO) buf_trim (z_file->sag_alns, SoloAln);
+
+    // TODO: trim z_file->sag_seq (bits buffer)
+    
     COPY_TIMER_EVB (sam_sa_prim_finalize_ingest);
 }
 

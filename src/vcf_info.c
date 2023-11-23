@@ -35,6 +35,7 @@ void vcf_info_zip_initialize (void)
     if (segconf.vcf_is_vagrent)    vcf_vagrent_zip_initialize();
     if (segconf.vcf_is_mastermind) vcf_mastermind_zip_initialize();
     if (segconf.vcf_is_vep)        vcf_vep_zip_initialize();
+    if (segconf.vcf_illum_gtyping) vcf_illum_gtyping_zip_initialize();
 }
 
 void vcf_info_seg_initialize (VBlockVCFP vb) 
@@ -65,8 +66,9 @@ void vcf_info_seg_initialize (VBlockVCFP vb)
 
 static inline bool vcf_is_use_DP_by_DP (void)
 {
-    // note: we restrict to best, as this method would cause genozip --drop-genotypes, --GT-only, --samples to show INFO/DP=-1
-    return vcf_num_samples > 1 && flag.best && segconf.has[FORMAT_DP];
+    // note: this method causes genozip --drop-genotypes, --GT-only, --samples to show INFO/DP=-1
+    // user can specify --secure-DP to avoid this
+    return vcf_num_samples > 1 && !flag.secure_DP && segconf.has[FORMAT_DP];
 }
 
 // return true if caller still needs to seg 
@@ -454,7 +456,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_AC)
             reconstruct_peek (vb, CTX(INFO_AC_Hemi), 0, 0).i;
 
     else 
-        ASSPIZ (false, "unrecognized snip '%c'(%u). upgrade to latest version of Genozip.", *snip, (uint8_t)*snip);
+        ABORT_PIZ ("unrecognized snip '%c'(%u). upgrade to latest version of Genozip.", *snip, (uint8_t)*snip);
 
     if (reconstruct) RECONSTRUCT_INT (new_value->i); 
 
@@ -536,7 +538,7 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_SVLEN)
         new_value->i = MAX_(vb->main_alt_len, vb->main_ref_len) - 1;
 
     else
-        ASSPIZ (false, "unrecognized snip '%c'(%u). upgrade to latest version of Genozip.", *snip, (uint8_t)*snip);
+        ABORT_PIZ ("unrecognized snip '%c'(%u). upgrade to latest version of Genozip.", *snip, (uint8_t)*snip);
 
     if (reconstruct) RECONSTRUCT_INT (new_value->i);
 
@@ -603,7 +605,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_SVTYPE)
         RECONSTRUCT ("INS", 3);
 
     else
-        ASSPIZ (false, "failed to reconstruct SVTYPE: ref_len=%u alt=\"%.*s\"", ref_len, STRf(alt));
+        ABORT_PIZ ("failed to reconstruct SVTYPE: ref_len=%u alt=\"%.*s\"", ref_len, STRf(alt));
 
     return NO_NEW_VALUE;
 }    
@@ -907,7 +909,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         // Mastermind
         case _INFO_MMID3:           CALL_IF (segconf.vcf_is_mastermind, vcf_seg_INFO_MMID3   (vb, ctx, STRa(value)));
         case _INFO_MMURI3:          CALL_IF (segconf.vcf_is_mastermind, vcf_seg_INFO_MMURI3  (vb, ctx, STRa(value)));
-        case _INFO_MMURI:           CALL_IF (segconf.vcf_is_mastermind, seg_add_to_local_text (VB, ctx, STRa(value), LOOKUP_NONE, value_len));
+        case _INFO_MMURI:           CALL_IF (segconf.vcf_is_mastermind, seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, value_len));
         case _INFO_GENE:            CALL_IF (segconf.vcf_is_mastermind, STORE_AND_SEG (STORE_NONE)); // consumed by vcf_seg_INFO_MMID3
 
         // Illumina genotyping
@@ -926,7 +928,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_RSPOS:           CALL_IF (segconf.vcf_is_dbSNP, vcf_seg_INFO_RSPOS (vb, ctx, STRa(value)));
         case _INFO_GENEINFO:        CALL_IF (segconf.vcf_is_dbSNP, seg_array (VB, ctx, INFO_GENEINFO, STRa(value), '|', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
         case _INFO_VC:              CALL_IF (segconf.vcf_is_dbSNP, vcf_seg_INFO_VC (vb, ctx, STRa(value)));
-        case _INFO_FREQ:            CALL_IF (segconf.vcf_is_dbSNP, seg_add_to_local_text (VB, ctx, STRa(value), LOOKUP_NONE, value_len));
+        case _INFO_FREQ:            CALL_IF (segconf.vcf_is_dbSNP, seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, value_len));
         // case _INFO_TOPMED: // better leave as simple snip as the items are allele frequencies which are correleted
 
         // dbNSFP
@@ -937,7 +939,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
 
         case _INFO_VEST3_score  :
         case _INFO_FATHMM_score :
-            CALL (seg_add_to_local_text (VB, ctx, STRa(value), LOOKUP_NONE, value_len));
+            CALL (seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, value_len));
 
         // gnomAD
         case _INFO_age_hist_het_bin_freq:

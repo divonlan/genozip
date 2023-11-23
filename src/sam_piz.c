@@ -72,12 +72,16 @@ bool sam_piz_initialize (CompIType comp_i)
     return true;
 }
 
-static void qname_filter_initialize (rom filename); // forward
+static void qname_filter_initialize_from_file (rom filename); // forward
+static void qname_filter_initialize_from_opt (rom opt); 
 
 void sam_piz_header_init (void)
 {
     if (flag.qnames_file)
-        qname_filter_initialize (flag.qnames_file); // note: uses SectionHeaderTxtHeader.flav_props to canonize qnames
+        qname_filter_initialize_from_file (flag.qnames_file); // note: uses SectionHeaderTxtHeader.flav_props to canonize qnames
+
+    if (flag.qnames_opt)
+        qname_filter_initialize_from_opt (flag.qnames_opt); 
 }
 
 bool sam_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment)
@@ -182,7 +186,8 @@ IS_SKIP (sam_piz_is_skip_section)
                            // (during PRIM SA Group loading, skip function is temporarily changed to sam_plsg_only). see also: sam_load_groups_add_grps
             SKIPIFF ((cov || cnt) && !flag.bases && !has_sa);
 
-        case _SAM_QUAL : case _SAM_DOMQRUNS : case _SAM_QUALMPLX : case _SAM_DIVRQUAL :
+        case _SAM_QUAL  : case _SAM_DOMQRUNS  : case _SAM_QUALMPLX  : case _SAM_DIVRQUAL  :
+        case _SAM_CQUAL : case _SAM_CDOMQRUNS : case _SAM_CQUALMPLX : case _SAM_CDIVRQUAL : 
             SKIPIF (is_prim);                                         
             SKIPIFF (cov || cnt);
 
@@ -238,7 +243,7 @@ IS_SKIP (sam_piz_is_skip_section)
         case _SAM_RNAME    : KEEP;
         case _SAM_SAG      : KEEP;
         case _SAM_SAALN    : KEEP;
-        case _SAM_AUX      : KEEP; // needed in preproc for container_peek_get_idxs
+        case _SAM_AUX      : KEEP; // needed in preproc for container_peek_get_idxs and codec_pacb_piz_get_np
 
         case _OPTION_MQ_i  :       // needed for MAPQ reconstruction (mate copy)
         case _SAM_MAPQ     : // required for SA:Z reconstruction, which is required for RNAME, POS etc if segged against saggy
@@ -284,8 +289,8 @@ static Buffer qnames_filter = {};
 static ASCENDING_SORTER (qname_filter_sort_by_hash, QnameFilterItem, hash)
 static BINARY_SEARCHER (find_qname_in_filter, QnameFilterItem, uint32_t, hash, false)
 
-// initialize qnames_filter and flag.qname_filter from command line
-static void qname_filter_initialize (rom filename)
+// initialize qnames_filter and flag.qname_filter from file
+static void qname_filter_initialize_from_file (rom filename)
 {
     flag.qname_filter = (filename[0] == '^') ? -1 : 1;
 
@@ -331,7 +336,32 @@ static void qname_filter_initialize (rom filename)
     qnames_filter.len32 = next;
 
     // display sorted list of (hash,qname) pairs (uncomment for debugging)
-    // for_buf (QnameFilterItem, e, qnames_filter) iprintf ("%u %s\n", e->hash, e->qname);
+    // for_buf (QnameFilterItem, e, qnames_filter) iprintf ("hash=%u %s\n", e->hash, e->qname);
+}
+
+// initialize qnames_filter and flag.qname_filter from command line
+static void qname_filter_initialize_from_opt (rom opt)
+{
+    flag.qname_filter = (opt[0] == '^') ? -1 : 1;
+
+    if (flag.qname_filter == -1) opt++; // negative filter
+
+    str_split (opt, strlen(opt), 0, ',', str, false);
+
+    ARRAY_alloc (QnameFilterItem, qname, n_strs, true, qnames_filter, evb, "qnames_filter");
+    for (int i=0; i < n_strs; i++) {
+        if (!str_lens[i] || str_lens[i] > SAM_MAX_QNAME_LEN) continue;
+
+        qname[i].qname_len = str_lens[i];
+        memcpy (qname[i].qname, strs[i], qname[i].qname_len);
+
+        qname[i].hash = qname_calc_hash (QNAME1, STRa(qname[i].qname), unknown, false, NULL);
+    }
+
+    qsort (STRb(qnames_filter), sizeof(QnameFilterItem), qname_filter_sort_by_hash);
+
+    // display sorted list of (hash,qname) pairs (uncomment for debugging)
+    // for_buf (QnameFilterItem, e, qnames_filter) iprintf ("hash=%u %s\n", e->hash, e->qname);
 }
 
 static bool sam_piz_line_survives_qname_filter (STRp(qname))
@@ -669,7 +699,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_ARRAY_SELF)
     // the number of repeats (in LTEN32) to be outputed after the prefix
     prefixes[1] = CON_PX_SEP_SHOW_REPEATS; // prefixes is now { type, CON_PX_SEP_SHOW_REPEATS }
     
-    return -1; // change in prefixes length
+    return con->repeats ? -1 : 0; // change in prefixes length (no change in length if repeats=0, because no comman in SAM eg "ML:B:C" - empty array)
 }
 
 //------------------------------------------------------------------------------------
@@ -741,7 +771,7 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
                           : iupac_is_included_ascii (STRlst (SAM_SQBITMAP))))
             DROP_LINE ("bases");
         
-        // --qnames-file
+        // --qnames and --qnames-file
         if (flag.qname_filter && !sam_piz_line_survives_qname_filter (STRlst (IS_PRIM(vb) ? SAM_QNAMESA : SAM_QNAME))) // works also for FASTQ as SAM_QNAME==FASTQ_QNAME
             DROP_LINE ("qname_filter");
 
@@ -989,7 +1019,7 @@ void sam_reconstruct_from_buddy_get_textual_snip (VBlockSAMP vb, ContextP ctx, B
                              break;
         case LookupLocal   : buf = &ctx->local    ; break;
         case LookupPerLine : buf = &ctx->per_line ; break;
-        default : ASSPIZ (false, "Invalid value word.lookup=%d", word.lookup);
+        default : ABORT_PIZ ("Invalid value word.lookup=%d", word.lookup);
     }
 
     ASSPIZ (char_index < buf->len, "buddy (of type %s) word ctx=%s buddy_line_i=%d char_index=%"PRIu64" is out of range of buffer %s len=%"PRIu64, 

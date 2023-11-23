@@ -84,9 +84,6 @@ void tip_print (void)
     if (!flag.optimize && (E(SAM) || E(BAM) || E(VCF) || E(BCF) || E(GFF) || E(FASTQ))) 
         valid_tips[n++] = "Tip: using --optimize permits Genozip to make minor modifications to the data that usually have no impact on downstream analysis, yet result in significantly better compression, see: " WEBSITE_GENOZIP;
 
-    if (flag.test) 
-        valid_tips[n++] = "FYI: automatic testing after compression can be disabled with --no-test (not recommended)";
-
     if (!flag.best && !flag.fast && !flag.low_memory && !flag.make_reference) 
         valid_tips[n++] = "Tip: to achieve the best compression, use --best";
 

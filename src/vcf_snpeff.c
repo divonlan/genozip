@@ -91,7 +91,7 @@ void vcf_seg_INFO_ANN (VBlockVCFP vb, ContextP ctx, STRp(value))
 void vcf_seg_INFO_EFF (VBlockVCFP vb, ContextP ctx, STRp(value))
 {
     seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len);
-    // seg_add_to_local_text (VB, ctx, STRa(value), LOOKUP_NONE, value_len);
+    // seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, value_len);
     // return;
 #if 0    
     // TODO: move to this after we improve to exploit correlations between fields

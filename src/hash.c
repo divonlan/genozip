@@ -364,8 +364,8 @@ WordIndex hash_global_get_entry (ContextP zctx, STRp(snip), HashGlobalGetEntryMo
             WARN_ONCE ("Unusually slow compression due to Genozip under-allocating resources because the input file is streaming through a pipe preventing it from knowing the file size. To overcome this, please use --input-size (value in bytes, can be approximate) to inform Genozip of the file size. ctx=%s hash_prime=%u snip=\"%.*s\"", 
                        zctx->tag_name, zctx->global_hash_prime, STRf(snip));
         else
-            WARN_ONCE ("Unexpected structure of file is causing unusually slow compression. ctx=%s hash_prime=%u snip=\"%.*s\"", 
-                       zctx->tag_name, zctx->global_hash_prime, STRf(snip));
+            WARN_ONCE ("Unexpected structure of file is causing unusually slow compression. ctx=%s hash_prime=%u snip=\"%.*s\"%s", 
+                       zctx->tag_name, zctx->global_hash_prime, STRf(snip), SUPPORT);
     }
 
     // now, with the new_hashent set, we can atomically update the "next"

@@ -337,6 +337,8 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(s
     bool has_D_N = false;
     decl_acgt_decode;
 
+    bool is_ref_internal = IS_REF_INTERNAL;
+
     while (i < seq_len || next_ref < pos_index + ref_consumed) {
 
         ASSERT0 (i <= seq_len && next_ref <= pos_index + ref_consumed, "i or next_ref are out of range");
@@ -374,7 +376,7 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(s
 
                     // case: we have not yet set a value for this site - we set it now. note: in ZIP, is_set means that the site
                     // will be needed for pizzing. With REF_INTERNAL, this is equivalent to saying we have set the ref value for the site
-                    if (IS_REF_INTERNAL && !no_lock && !ref_is_nucleotide_set (range, idx)) { 
+                    if (is_ref_internal && !no_lock && !ref_is_nucleotide_set (range, idx)) { 
 
                         // note: in case this is a non-normal base (eg N), set the reference to an arbitrarily to 'A' as we 
                         // we will store this non-normal base in seqmis_ctx multiplexed by the reference base (i.e. in seqmis_ctx['A']).
@@ -422,8 +424,7 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(s
 
             // for Deletion or Skipping - we move the next_ref ahead
             case BC_D: case BC_N: {
-                unsigned ref_consumed_skip = (IS_REF_INTERNAL ? MIN_(n, range_len - next_ref)
-                                                                             : n);
+                unsigned ref_consumed_skip = (is_ref_internal ? MIN_(n, range_len - next_ref) : n);
                 next_ref += ref_consumed_skip;
                 n        -= ref_consumed_skip;
                 has_D_N  =  true;
@@ -975,7 +976,7 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
                 case BC_I : case BC_S :             consumes_query=true;  consumes_reference=false; break;
                 case BC_D : case BC_N :             consumes_query=false; consumes_reference=true;  break;
                 case BC_H : case BC_P :             consumes_query=false; consumes_reference=false; break;
-                default   : ASSPIZ (false, "Invalid op=%d", op.op);
+                default   : ABORT_PIZ ("Invalid op=%d", op.op);
             }
         }
 

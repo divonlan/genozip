@@ -173,7 +173,8 @@ fallback:
         show_wrong_xb (vb, dl, STRa(XB), "(fallback)");
 
     buf_free (vb->scratch);
-    seg_add_to_local_text (VB, CTX(OPTION_XB_Z), STRa(XB), LOOKUP_SIMPLE, add_bytes);
+
+    seg_add_to_local_string (VB, CTX(OPTION_XB_Z), STRa(XB), LOOKUP_SIMPLE, add_bytes);
 }
 
 SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_BSBOLT_XB)

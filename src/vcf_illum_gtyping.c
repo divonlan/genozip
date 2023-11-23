@@ -17,7 +17,13 @@
 sSTRl(copy_CHROM_snip, 30);
 sSTRl(copy_POS_snip, 30);
 
-void vcf_illum_gtyping_initialize (VBlockVCFP vb)
+void vcf_illum_gtyping_zip_initialize (void)
+{
+    seg_prepare_snip_other (SNIP_COPY, _VCF_CHROM, false, 0, copy_CHROM_snip);
+    seg_prepare_snip_other (SNIP_COPY, _VCF_POS, false,   0, copy_POS_snip);
+}
+
+void vcf_illum_gtyping_seg_initialize (VBlockVCFP vb)
 {
     ctx_set_store (VB, STORE_INT, INFO_ALLELE_A, INFO_ILLUMINA_POS, DID_EOL);
 
@@ -25,10 +31,7 @@ void vcf_illum_gtyping_initialize (VBlockVCFP vb)
     seg_mux_init (VB, CTX(FORMAT_X),   4, VCF_SPECIAL_MUX_BY_ADJ_DOSAGE, true, (MultiplexerP)&vb->mux_X);
     seg_mux_init (VB, CTX(FORMAT_Y),   4, VCF_SPECIAL_MUX_BY_ADJ_DOSAGE, true, (MultiplexerP)&vb->mux_Y);
 
-    seg_prepare_snip_other (SNIP_COPY, _VCF_CHROM, false, 0, copy_CHROM_snip);
-    seg_prepare_snip_other (SNIP_COPY, _VCF_POS, false,   0, copy_POS_snip);
-
-    ctx_set_ltype (VB, LT_SEQUENCE, INFO_PROBE_A, INFO_PROBE_B, DID_EOL);
+    ctx_set_ltype (VB, LT_BLOB, INFO_PROBE_A, INFO_PROBE_B, DID_EOL);
 
     // create ILLUMINA_STRAND nodes as we will refer to them by index 
     if (segconf.has[INFO_ILLUMINA_STRAND]) {
@@ -43,7 +46,7 @@ void vcf_illum_gtyping_initialize (VBlockVCFP vb)
 // <ID=ILLUMINA_STRAND,Number=1,Type=String,Description="Probe strand">
 void vcf_seg_ILLUMINA_STRAND (VBlockVCFP vb, ContextP ctx, STRp(strand))
 {
-    WordIndex wi = seg_by_ctx (VB, STRa(strand), ctx, strand_len); // nodes pre-created in vcf_illum_gtyping_initialize
+    WordIndex wi = seg_by_ctx (VB, STRa(strand), ctx, strand_len); // nodes pre-created in vcf_illum_gtyping_seg_initialize
     ctx_set_last_value (VB, ctx, (int64_t)wi);
 }
 
@@ -118,7 +121,7 @@ void vcf_seg_PROBE_A (VBlockVCFP vb, ContextP ctx, STRp(probe))
     }
 
     else fallback: 
-        seg_add_to_local_fixed (VB, ctx, STRa(probe), LOOKUP_WITH_LENGTH, probe_len);
+        seg_add_to_local_blob (VB, ctx, STRa(probe), probe_len);
 
     ref_unlock (gref, &lock); // does nothing if REFLOCK_NONE
 
@@ -175,7 +178,7 @@ void vcf_seg_PROBE_B (VBlockVCFP vb, ContextP ctx, STRp(seq))
 
     // another real sequence - store verbatim
     else if (seq_len > 1)
-        seg_add_to_local_fixed (VB, ctx, STRa(seq), LOOKUP_WITH_LENGTH, seq_len);
+        seg_add_to_local_blob (VB, ctx, STRa(seq), seq_len);
 
     // likely a '.'
     else
@@ -222,7 +225,7 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_ALLELE_A)
         switch (*snip) {
             case 'R' : RECONSTRUCT (vb->main_ref, vb->main_ref_len); RECONSTRUCT1 ('*'); break;
             case 'A' : RECONSTRUCT (vb->main_alt, vb->main_alt_len);                     break;
-            default  : ASSPIZ (false, "Invalid snip=%.*s", STRf(snip));
+            default  : ABORT_PIZ ("Invalid snip=%.*s", STRf(snip));
         }
 
     new_value->i = snip[0];
@@ -252,7 +255,7 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_ALLELE_B)
         switch (CTX(INFO_ALLELE_A)->last_value.i) {
             case 'A' : RECONSTRUCT1 (vb->main_ref[0]); RECONSTRUCT1 ('*'); break;
             case 'R' : RECONSTRUCT1 (vb->main_alt[0]);                     break;
-            default  : ASSPIZ (false, "Invalid INFO_ALLELE_A.last_value=%"PRId64, CTX(INFO_ALLELE_A)->last_value.i);
+            default  : ABORT_PIZ ("Invalid INFO_ALLELE_A.last_value=%"PRId64, CTX(INFO_ALLELE_A)->last_value.i);
         }
 
     return NO_NEW_VALUE;

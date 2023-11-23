@@ -254,10 +254,11 @@ void fasta_seg_initialize (VBlockP vb)
     CTX(FASTA_CONTIG)->flags.store = STORE_INDEX; // since v12
     CTX(FASTA_CONTIG)->no_stons    = true; // needs b250 node_index for reference
     CTX(FASTA_LINEMETA)->no_stons  = true; // avoid edge case where entire b250 is moved to local due to singletons, because fasta_reconstruct_vb iterates on ctx->b250
-    CTX(FASTA_COMMENT)->no_stons   = true;
     
-    if (!segconf.fasta_has_contigs || segconf.seq_type == SQT_AMINO) 
-        CTX(FASTA_DESC)->no_stons  = true;
+    CTX(FASTA_COMMENT)->ltype = LT_STRING;
+    
+    if (segconf.seq_type == SQT_AMINO || Z_DT(GFF)) 
+        CTX(FASTA_DESC)->ltype = LT_STRING;
 
     if (kraken_is_loaded) {
         CTX(FASTA_TAXID)->flags.store    = STORE_INT;
@@ -270,7 +271,7 @@ void fasta_seg_initialize (VBlockP vb)
         codec_acgt_seg_initialize (VB, FASTA_NONREF, true);
 
     else 
-        CTX(FASTA_NONREF)->ltype  = LT_SEQUENCE;
+        CTX(FASTA_NONREF)->ltype  = LT_BLOB;
 
     // in --stats, consolidate stats into FASTA_NONREF
     ctx_consolidate_stats (vb, FASTA_NONREF, FASTA_NONREF_X, DID_EOL);
@@ -364,13 +365,13 @@ static void fasta_seg_desc_line (VBlockFASTAP vb, rom line, uint32_t line_len, b
     vb->num_sequences++; // for stats
 
     if (!flag.make_reference) {
-        if (segconf.seq_type == SQT_NUKE) 
+        if (segconf.seq_type == SQT_NUKE && !Z_DT(GFF)) 
             tokenizer_seg (VB, CTX(FASTA_DESC), STRa(line), sep_with_space, 0);
 
         // if this is an amino acid fasta, we're better off not tokenizing the description line as its 
         // components are often correlated
         else
-            seg_add_to_local_text (VB, CTX(FASTA_DESC), STRa(line), LOOKUP_SIMPLE, line_len);
+            seg_add_to_local_string (VB, CTX(FASTA_DESC), STRa(line), LOOKUP_SIMPLE, line_len);
 
         STRli(special_snip, 100);
         seg_prepare_snip_other_do (SNIP_REDIRECTION, _FASTA_DESC, false, 0, 0, &special_snip[2], &special_snip_len);
@@ -417,7 +418,7 @@ static void fasta_seg_desc_line (VBlockFASTAP vb, rom line, uint32_t line_len, b
 static void fast_seg_comment_line (VBlockFASTAP vb, STRp (line), bool *has_13)
 {
     if (!flag.make_reference) {
-        seg_add_to_local_text (VB, CTX(FASTA_COMMENT), STRa(line), LOOKUP_NONE, line_len); 
+        seg_add_to_local_string (VB, CTX(FASTA_COMMENT), STRa(line), LOOKUP_NONE, line_len); 
 
         STRli (special_snip, 100);
         seg_prepare_snip_other_do (SNIP_OTHER_LOOKUP, _FASTA_COMMENT, false, 0, 0, &special_snip[2], &special_snip_len);

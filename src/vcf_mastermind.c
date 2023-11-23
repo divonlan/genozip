@@ -43,8 +43,6 @@ void vcf_mastermind_seg_initialize (VBlockVCFP vb)
 {
     ctx_consolidate_stats (VB, INFO_HGVSG, hgvsg_did_accession, hgvsg_did_hgvs, DID_EOL);
     vcf_seg_hgvs_consolidate_stats (vb, INFO_HGVSG);
-
-    CTX(INFO_MMURI)->no_stons = true;
 }
 
 // <ID=HGVSG,Number=1,Type=String,Description="HGVS genomic notation for this variant">

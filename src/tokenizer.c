@@ -142,14 +142,18 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
 
         item_ctx->st_did_i = (field_ctx->st_did_i != DID_NONE) ? field_ctx->st_did_i : field_ctx->did_i;
 
+        #define MAX_TOKENIZER_DETLA 16384 // note: delta is stored in local
+
         if (ci->is_int) {            
             if (is_ordered) {
                 PosType64 delta;
                 if (ctx_has_value_in_prev_line_(vb, item_ctx) && 
                     ABS((delta = ci->value - item_ctx->last_value.i)) < MAX_TOKENIZER_DETLA &&
-                    (delta || !item_ctx->flags.all_the_same)) { // don't do delta if it can ruin the all-the-same
+                    (delta || !item_ctx->flags.all_the_same) &&  // don't do delta if it can ruin the all-the-same
+                    (item_ctx->ltype == LT_DYN_INT || item_ctx->ltype == LT_SINGLETON)) { 
 
                     item_ctx->flags.store = STORE_INT;
+                    item_ctx->ltype = LT_DYN_INT;
                     seg_self_delta (vb, item_ctx, ci->value, 0, 0, ci->item_len);
                 }
                 else 

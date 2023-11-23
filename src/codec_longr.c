@@ -28,7 +28,7 @@
 
 bool codec_longr_maybe_used (Did did_i)
 {
-    return did_i == SAM_QUAL/*==FASTQ_QUAL*/ && 
+    return (did_i == SAM_QUAL/*==FASTQ_QUAL*/ || did_i == SAM_CQUAL|| did_i == OPTION_OQ_Z) && 
            ((TECH(ONT) && segconf.nontrivial_qual && !flag.no_longr && !flag.fast) || flag.force_longr);
 }
 
@@ -36,12 +36,12 @@ bool codec_longr_maybe_used (Did did_i)
 void codec_longr_comp_init (VBlockP vb, Did qual_did_i)
 {
     // lens_ctx contains the lens array - an array of uint32 - each entry is the length of the corresponding channel in values_ctx
-    ContextP lens_ctx = CTX(qual_did_i);
-    lens_ctx->ltype   = LT_CODEC;    // causes reconstruction to go to codec_longr_reconstruct
-    lens_ctx->lcodec  = CODEC_LONGR;
+    ContextP lens_ctx             = CTX(qual_did_i);
+    lens_ctx->ltype               = LT_CODEC;    // causes reconstruction to go to codec_longr_reconstruct
+    lens_ctx->lcodec              = CODEC_LONGR;
 
     // values_ctx contains the base quality data, sorted by channel
-    ContextP values_ctx           = lens_ctx+1; // used
+    ContextP values_ctx           = lens_ctx+1;  // used
     values_ctx->ltype             = LT_UINT8;
     values_ctx->local_dep         = DEP_L1; 
     values_ctx->lcodec            = CODEC_ARITH8;
@@ -70,9 +70,9 @@ void codec_longr_segconf_calculate_bins (VBlockP vb, ContextP ctx,
 {
     ASSERT0 (segconf.running, "Expected segconf.running"); // must run in main thread as we are allocating from evb
 
-    if (segconf.longr_bins_calculated) return; // bins already calculated - this happens in eg in Deep FASTQ, if bins were calculated by SAM before
-
     ContextP zctx = ZCTX(ctx->did_i); // note: ctx is be predefinded, so zctx has the same did_i
+
+    if (zctx->longr_bins_calculated) return; // bins already calculated - this happens in eg in Deep FASTQ, if bins were calculated by SAM before
 
     // create a histogram of values
     uint32_t histogram[256] = {};
@@ -127,7 +127,7 @@ void codec_longr_segconf_calculate_bins (VBlockP vb, ContextP ctx,
     for (unsigned i=0; i < 256; i++)
         BNXT64 (zctx->counts) = value_to_bin[i];
 
-    segconf.longr_bins_calculated = true;
+    zctx->longr_bins_calculated = true;
 }
 
 static void codec_longr_calc_channels (LongrState *state, STRp(seq), bytes qual, bool is_rev) 

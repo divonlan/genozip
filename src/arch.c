@@ -279,7 +279,9 @@ StrText arch_get_filesystem_type (void)
         NAME (0x5346544e, "NTFS");
         NAME (0x858458f6, "ramfs");
         NAME (0x58465342, "xfs");
-        NAME (0x01021997, "v9fs");
+        NAME (0x01021997, "v9fs");     // Used by WSL
+        NAME (0x0bd00bd0, "Lustre");   // HPC filesystem: https://www.lustre.org/
+        NAME (0x65735546, "FUSE");     // Filesystem in user space: https://www.kernel.org/doc/html/next/filesystems/fuse.html
 
         default: sprintf (s.s, "0x%lx", fs.f_type); 
     }

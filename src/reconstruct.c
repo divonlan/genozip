@@ -21,19 +21,41 @@
 #include "lookback.h"
 #include "aligner.h"
 
+// decode and store the the contexts in the first call for ctx (only one MINUS snip allowed per ctx)
+static void decode_dicts (VBlockP vb, ContextP ctx, STRp(snip))
+{
+    #define MAX_SNIP_DICTS 3 // increase if needed
+    buf_alloc_zero (vb, &ctx->ctx_cache, 0, MAX_SNIP_DICTS, ContextP, 1, "ctx_cache");
+
+    DictId dicts[MAX_SNIP_DICTS]; 
+    ctx->ctx_cache.len32 = base64_decode (snip, &snip_len, (uint8_t *)dicts) / sizeof (DictId);
+
+    for (int i=0; i < ctx->ctx_cache.len32; i++)
+        *B(ContextP, ctx->ctx_cache, i) = ECTX (dicts[i]);
+}
+
+// parameter is two or more dict_id's (in base64). reconstructs sum(dict[i].last_value)
+SPECIAL_RECONSTRUCTOR (piz_special_PLUS)
+{
+    if (!ctx->ctx_cache.len32) 
+        decode_dicts (vb, ctx, STRa(snip));
+
+    new_value->i = 0;
+    for (int i=0; i < ctx->ctx_cache.len32; i++)
+        if (ctx_has_value_in_line_(vb, *B(ContextP, ctx->ctx_cache, i)))
+            new_value->i += (*B(ContextP, ctx->ctx_cache, i))->last_value.i;
+
+    if (reconstruct)
+        RECONSTRUCT_INT (new_value->i); 
+
+    return HAS_NEW_VALUE; 
+}
+
 // parameter is two dict_id's (in base64). reconstructs dict1.last_value - dict2.last_value
 SPECIAL_RECONSTRUCTOR (piz_special_MINUS)
 {
-    // decode and store the the contexts in the first call for ctx (only one MINUS snip allowed per ctx)
-    if (!ctx->ctx_cache.len32) {
-        buf_alloc_zero (vb, &ctx->ctx_cache, 0, 2, ContextP, 1, "ctx_cache");
-
-        DictId two_dicts[2];
-        base64_decode (snip, &snip_len, (uint8_t *)two_dicts);
-
-        *B(ContextP, ctx->ctx_cache, 0) = ECTX (two_dicts[0]);
-        *B(ContextP, ctx->ctx_cache, 1) = ECTX (two_dicts[1]);
-    }
+    if (!ctx->ctx_cache.len32) 
+        decode_dicts (vb, ctx, STRa(snip));
 
     new_value->i = (*B(ContextP, ctx->ctx_cache, 0))->last_value.i - 
                    (*B(ContextP, ctx->ctx_cache, 1))->last_value.i;
@@ -57,7 +79,7 @@ static int64_t reconstruct_from_delta (VBlockP vb,
     ASSISLOADED (base_ctx);
     ASSPIZ0 (delta_snip, "delta_snip is NULL");
 
-    int64_t base_value;
+    int64_t base_value = 0;
     if (base_ctx->flags.store == STORE_INT)
         base_value = (my_ctx->flags.same_line && my_ctx != base_ctx)
             ? reconstruct_peek (vb, base_ctx, 0, 0).i // value of this line/sample - whether already encountered or peek a future value
@@ -69,11 +91,11 @@ static int64_t reconstruct_from_delta (VBlockP vb,
             : (int64_t)base_ctx->last_value.f; // simple cast to int64_t (not rounding) as in seg_delta_vs_other_do
 
     else 
-        ASSPIZ (false, "reconstructing %s - calculating delta \"%.*s\" from a base of %s, but %s, doesn't have STORE_INT or STORE_FLOAT",
-                my_ctx->tag_name, STRf(delta_snip), base_ctx->tag_name, base_ctx->tag_name);
+        ABORT_PIZ ("reconstructing %s - calculating delta \"%.*s\" from a base of %s, but %s, doesn't have STORE_INT or STORE_FLOAT",
+                   my_ctx->tag_name, STRf(delta_snip), base_ctx->tag_name, base_ctx->tag_name);
 
-    char format = (delta_snip_len && !IS_DIGIT (delta_snip[0]) && delta_snip[0] != '-') ? delta_snip[0] : 0;
-    unsigned fixed_len = (format && delta_snip_len > 2 && !IS_DIGIT (delta_snip[1]) && delta_snip[1] != '-') ? (delta_snip[1] - 'A') : 0; // since 15.0.8  
+    char format = (delta_snip_len && !IS_DIGIT (delta_snip[0]) && delta_snip[0] != '-' && delta_snip[0] != '$') ? delta_snip[0] : 0;
+    unsigned fixed_len = (format && delta_snip_len > 2 && ((uint8_t)delta_snip[1]) >= 'A') ? (((uint8_t)delta_snip[1]) - 'A') : 0; // since 15.0.8  
     
     if (format) {
         delta_snip_len -= 1 + !!fixed_len;
@@ -86,7 +108,10 @@ static int64_t reconstruct_from_delta (VBlockP vb,
     else if (!delta_snip_len)
         my_ctx->last_delta = -my_ctx->last_delta; // negated previous delta
 
-    else 
+    else if (str_is_1char (delta_snip, '$')) // since 15.0.27
+        my_ctx->last_delta = reconstruct_from_local_int (vb, my_ctx, 0, false);
+
+    else // up to 15.0.26
         my_ctx->last_delta = (int64_t)strtoull (delta_snip, NULL, 10 /* base 10 */); // strtoull can handle negative numbers, despite its name
 
     char *num_str = BAFTtxt;
@@ -97,7 +122,7 @@ static int64_t reconstruct_from_delta (VBlockP vb,
             case 'd' : RECONSTRUCT_INT (new_value);        break;
             case 'x' : RECONSTRUCT_HEX (new_value, false); break;
             case 'X' : RECONSTRUCT_HEX (new_value, true);  break; // since 15.0.8
-            default  : ASSPIZ (false, "Unrecognized format %c(ASCII %u)", format, format);
+            default  : ABORT_PIZ ("Unrecognized format %c(ASCII %u)", format, format);
         }
          
     // pad 0s if needed
@@ -205,7 +230,7 @@ int64_t reconstruct_from_local_int (VBlockP vb, ContextP ctx, char separator /* 
         case LT_UINT64: case LT_hex64: case LT_HEX64:  num = NEXTLOCAL(uint64_t, ctx); break;
         case LT_INT64 :                                num = NEXTLOCAL(int64_t,  ctx); break;
         default: 
-            ASSPIZ (false, "Unexpected ltype=%s(%u) for ctx=\"%s\"", lt_name(ctx->ltype), ctx->ltype, ctx->tag_name); 
+            ABORT_PIZ ("Unexpected ltype=%s(%u) for ctx=\"%s\"", lt_name(ctx->ltype), ctx->ltype, ctx->tag_name); 
     }
 
     if (reconstruct) { 
@@ -243,7 +268,7 @@ int64_t reconstruct_peek_local_int (VBlockP vb, ContextP ctx, int offset /*0=nex
         case LT_UINT64: num = PEEKNEXTLOCAL(uint64_t, ctx, offset); break;
         case LT_INT64:  num = PEEKNEXTLOCAL(int64_t,  ctx, offset); break;
         default: 
-            ASSPIZ (false, "Unexpected ltype=%s(%u)", lt_name(ctx->ltype), ctx->ltype); 
+            ABORT_PIZ ("Unexpected ltype=%s(%u)", lt_name(ctx->ltype), ctx->ltype); 
     }
 
     if ((VB_DT(VCF) || VB_DT(BCF)) && num==lt_desc[ctx->ltype].max_int && dict_id_is_vcf_format_sf (ctx->dict_id)
@@ -265,7 +290,7 @@ static double reconstruct_from_local_float (VBlockP vb, ContextP ctx,
         case LT_FLOAT32: num = NEXTLOCAL(float,  ctx); break;
         case LT_FLOAT64: num = NEXTLOCAL(double, ctx); break;
         default: 
-            ASSPIZ (false, "Unexpected ltype=%s(%u) in ctx=%s", lt_name(ctx->ltype), ctx->ltype, ctx->tag_name); 
+            ABORT_PIZ ("Unexpected ltype=%s(%u) in ctx=%s", lt_name(ctx->ltype), ctx->ltype, ctx->tag_name); 
     }
 
     if (reconstruct) { 
@@ -463,7 +488,8 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
             base_ctx = reconstruct_get_other_ctx_from_snip (vb, snip_ctx, pSTRa(snip)); // also updates snip and snip_len
 
         switch (base_ctx->ltype) {
-            case LT_TEXT:
+            case LT_STRING:
+            case LT_SINGLETON:
                 if (snip_len && reconstruct) RECONSTRUCT_snip; // reconstruct this snip before adding the looked up data
                 reconstruct_from_local_text (vb, base_ctx, reconstruct); // this will call us back recursively with the snip retrieved
                 break;
@@ -484,7 +510,7 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
                 break;
             
             // case: the snip is taken to be the length of the sequence (or if missing, the length will be taken from vb->seq_len)
-            case LT_SEQUENCE: 
+            case LT_BLOB: 
                 reconstruct_from_local_sequence (vb, base_ctx, (snip_len ? atoi(snip) : vb->seq_len), reconstruct);
                 break;
                 
@@ -714,7 +740,7 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i,
         case LT_CODEC:
             codec_args[ctx->lcodec].reconstruct (vb, ctx->lcodec, ctx, vb->seq_len, reconstruct); break;
 
-        case LT_SEQUENCE: 
+        case LT_BLOB: 
             reconstruct_from_local_sequence (vb, ctx, vb->seq_len, reconstruct); break;
                 
         case LT_BITMAP:
@@ -722,11 +748,12 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i,
             DT_FUNC (vb, reconstruct_seq) (vb, NULL, 0, reconstruct);
             break;
         
-        case LT_TEXT:
+        case LT_SINGLETON:
+        case LT_STRING:
             reconstruct_from_local_text (vb, ctx, reconstruct); break;
 
         default:
-            ASSPIZ (false, "Invalid ltype=%u in ctx=%s", ctx->ltype, ctx->tag_name);
+            ABORT_PIZ ("Invalid ltype=%u in ctx=%s", ctx->ltype, ctx->tag_name);
         }
     }
 

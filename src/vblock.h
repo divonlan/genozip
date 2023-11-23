@@ -212,7 +212,7 @@ extern unsigned def_vb_size (DataType dt);
 extern void vb_destroy_vb_do (VBlockP *vb_p, rom func);
 #define vb_destroy_vb(vb_p) vb_destroy_vb_do((vb_p), __FUNCTION__)
 
-extern void vb_dehoard_memory (VBlockP vb);
+extern void vb_dehoard_memory (bool release_to_kernel);
 
 #define VB_ID_EVB           -1  // ID of VB used by main thread 
 #define VB_ID_WRITER        -2

@@ -47,7 +47,7 @@ typedef enum { NOT_PAIRED,       // ZIP and PIZ
 typedef struct {
     
     // genozip options that affect the compressed file
-    int fast, best, low_memory, make_reference, multiseq, md5, 
+    int fast, best, low_memory, make_reference, multiseq, md5, secure_DP,
         deep; // deep is set with --deep in ZIP and from SectionHeaderGenozipHeader.flags.genozip_header.dts2_deep in PIZ
     rom vblock;
     
@@ -77,7 +77,7 @@ typedef struct {
         sequential, no_pg, extended_translation, 
         one_component; // 1-based ; 0=option unset (i.e. comp_i = one_component-1)
     TaxonomyId *kraken_taxid;
-    rom regions_file, qnames_file;
+    rom regions_file, qnames_file, qnames_opt;
     int64_t lines_first, lines_last, tail;  // set by --head, --tail, --lines 
     rom grep; int grepw; unsigned grep_len; // set by --grep and --grep-w
     uint32_t one_vb, downsample, shard ;
@@ -155,6 +155,7 @@ typedef struct {
     
     DictId dict_id_show_one_b250,   // argument of --show-b250-one
            show_one_counts,
+           show_singletons_dict_id, // argument of --show-singletons
            dump_one_b250_dict_id,   // argument of --dump-b250-one
            dump_one_local_dict_id,  // argument of --dump-local-one
            dict_id_show_containers, // argument of --show-containers
@@ -238,7 +239,7 @@ extern Flags flag;
     flag.bases = IUP_NONE;                                                                                                      \
     flag.interleaved = INTERLEAVE_NONE;                                                                                         \
     flag.grep = flag.unbind = flag.show_one_dict = flag.out_filename = NULL; /* char* */                                        \
-    flag.dict_id_show_one_b250 = flag.dump_one_b250_dict_id = flag.dump_one_local_dict_id = DICT_ID_NONE; /* DictId */ 
+    flag.dict_id_show_one_b250 = flag.dump_one_b250_dict_id = flag.dump_one_local_dict_id = flag.show_singletons_dict_id = DICT_ID_NONE; /* DictId */ 
     
 #define SAVE_FLAG(f) typeof(flag.f) save_##f = flag.f 
 #define TEMP_FLAG(f,value) SAVE_FLAG(f) ; flag.f=(typeof(flag.f))(uint64_t)value

@@ -321,23 +321,30 @@ void qname_seg_initialize (VBlockP vb, QType q, Did st_did_i)
     if (st_did_i != DID_NONE)
         ctx_consolidate_statsN (vb, st_did_i, did_q, MAX_QNAME_ITEMS + 1); 
 
-    // set STORE_INT as appropriate
-    if (qfs->ordered_item1   != -1) ctx_by_item (qfs->ordered_item1)    ->flags.store = STORE_INT; 
-    if (qfs->ordered_item2   != -1) ctx_by_item (qfs->ordered_item2)    ->flags.store = STORE_INT; 
-    if (qfs->range_end_item1 != -1) ctx_by_item (qfs->range_end_item1-1)->flags.store = ctx_by_item (qfs->range_end_item1)->flags.store = STORE_INT; 
-    if (qfs->range_end_item2 != -1) ctx_by_item (qfs->range_end_item2-1)->flags.store = ctx_by_item (qfs->range_end_item2)->flags.store = STORE_INT; 
-    if (qfs->seq_len_item    != -1) ctx_by_item (qfs->seq_len_item)     ->flags.store = STORE_INT; 
+    // set STORE_INT and ltype as appropriate
+    if (segconf.sorted_by_qname[q]) {
+        #define INIT_ORDERED(field) ({ ContextP ctx = ctx_by_item (qfs->field); ctx->flags.store = STORE_INT; ctx->ltype = LT_DYN_INT; })
+        if (qfs->ordered_item1 != -1) INIT_ORDERED (ordered_item1);
+        if (qfs->ordered_item2 != -1) INIT_ORDERED (ordered_item2);
+    }
+
+    #define INIT_RANGE(field) ({ ContextP ctx = ctx_by_item (qfs->field); (ctx-1)->flags.store = ctx->flags.store = STORE_INT; ctx->ltype = LT_DYN_INT; })
+    if (qfs->range_end_item1 != -1) INIT_RANGE (range_end_item1);
+    if (qfs->range_end_item2 != -1) INIT_RANGE (range_end_item2);
+
+    if (qfs->seq_len_item != -1) ctx_by_item (qfs->seq_len_item)->flags.store = STORE_INT; 
 
     for (int i=0; qfs->in_local[i] != -1; i++) {
         #define IS(what) qfs->is_##what[qfs->in_local[i]]
+        ContextP item_ctx = ctx_by_item (qfs->in_local[i]);
 
         if (IS(integer) || IS(numeric)) {
-            ctx_by_item (qfs->in_local[i])->ltype = IS(hex) ? LT_DYN_INT_h : LT_DYN_INT; // required by seg_integer_or_not / seg_numeric_or_not
-            ctx_by_item (qfs->in_local[i])->flags.store = STORE_INT; // required by seg_integer_or_not / seg_numeric_or_not
+            item_ctx->ltype = IS(hex) ? LT_DYN_INT_h : LT_DYN_INT; // required by seg_integer_or_not / seg_numeric_or_not
+            item_ctx->flags.store = STORE_INT; // required by seg_integer_or_not / seg_numeric_or_not
         }
         
         else // textual
-            ctx_by_item (qfs->in_local[i])->no_stons = true; // required by seg_add_to_local_text
+            item_ctx->ltype = LT_STRING;
     }
 
     // a barcode that is not in local, is strictly in dict (eg molecular identifiers might be sparsely distributed in the file - we don't want the first VB encountering to mark as singleton)
@@ -463,8 +470,7 @@ void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
             segconf.qname_flavor[q] = qfs;
 
             static QnameCNN char_to_cnn[256] = CHAR_TO_CNN;
-            segconf.flav_prop[q] = (QnameFlavorProp){//xxx .id           = qfs->id, 
-                                                      .has_seq_len  = (qfs->seq_len_item != -1),
+            segconf.flav_prop[q] = (QnameFlavorProp){ .has_seq_len  = (qfs->seq_len_item != -1),
                                                       .is_mated     = qfs->is_mated, 
                                                       .is_consensus = (qfs->tech == TECH_CONS),
                                                       .cnn          = char_to_cnn[(int)qfs->cut_to_canonize] };
@@ -594,8 +600,10 @@ static bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additio
         // case: this is the file is sorted by qname - delta against previous
         if (segconf.sorted_by_qname[q] && 
             (item_i == qfs->ordered_item1 || item_i == qfs->ordered_item2) &&
-            ( (!qfs->is_hex[item_i] && str_get_int_dec (STRa(str), (uint64_t*)&value)) || ( qfs->is_hex[item_i] && str_get_int_hex (STRa(str), true, false, (uint64_t*)&value))) && // lower-case hex
-            (ABS(value - item_ctx->last_value.i) < MAX_TOKENIZER_DETLA)) 
+            ( (!qfs->is_hex[item_i] && qfs->is_integer[item_i] && str_get_int     (STRa(str), &value)) || 
+              (!qfs->is_hex[item_i] && qfs->is_numeric[item_i] && str_get_int_dec (STRa(str), (uint64_t*)&value)) || 
+              ( qfs->is_hex[item_i]                            && str_get_int_hex (STRa(str), true, false, (uint64_t*)&value)))) // lower-case hex
+
             seg_self_delta (vb, item_ctx, value, 
                             (qfs->is_hex[item_i]?'x' : qfs->is_numeric[item_i]?'d' : 0), 
                             (qfs->is_hex[item_i] || qfs->is_numeric[item_i]) ? str_len : 0,
@@ -618,7 +626,7 @@ static bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additio
                 seg_numeric_or_not (vb, item_ctx, STRa(str), str_len); // hex or not
 
             else 
-                seg_add_to_local_text (vb, item_ctx, STRa(str), LOOKUP_SIMPLE, str_len);
+                seg_add_to_local_string (vb, item_ctx, STRa(str), LOOKUP_SIMPLE, str_len);
         }
 
         else if (qfs->callback_item == item_i)
@@ -628,7 +636,7 @@ static bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additio
             {} // no segging a skipped item
 
         // case: textual item
-        else 
+        else
             seg_by_ctx (vb, STRa(str), item_ctx, str_len); 
 
         // case: set last_value if needed and not already set. note: some lines do not set last_value -
@@ -641,7 +649,8 @@ static bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additio
     return true;
 }
 
-void qname_seg (VBlockP vb, QType q, STRp (qname), unsigned add_additional_bytes)  // account for characters in addition to the field
+// returns true is redirected to QNAME2
+bool qname_seg (VBlockP vb, QType q, STRp (qname), unsigned add_additional_bytes)  // account for characters in addition to the field
 {
     START_TIMER;
 
@@ -669,7 +678,7 @@ void qname_seg (VBlockP vb, QType q, STRp (qname), unsigned add_additional_bytes
         qname_seg (vb, QNAME2, STRa(qname), 0);
 
         seg_by_ctx (vb, STRa(snip_redirect_to_QNAME2), qname_ctx, add_additional_bytes);
-        return;
+        return true;
     } 
 
     if (!success) {
@@ -693,6 +702,8 @@ void qname_seg (VBlockP vb, QType q, STRp (qname), unsigned add_additional_bytes
 done:
     seg_set_last_txt (vb, qname_ctx, STRa(qname)); // needed also bi:Z and for kraken in sam
     COPY_TIMER (qname_seg);
+
+    return false;
 }
 
 // reduces qname to its canonical form: possibly reduces qname_len to make a qname more likely compareble between SAM/BAM and FASTQ 

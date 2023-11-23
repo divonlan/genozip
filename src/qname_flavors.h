@@ -722,7 +722,7 @@ static SmallContainer con_pacbio_range = {
                              { .dict_id = { _SAM_Q1NAME }, .separator = "/"              },
                              { .dict_id = { _SAM_Q2NAME }, .separator = "_"              },
                              { .dict_id = { _SAM_Q3NAME }                                },
-                             { .dict_id = { _SAM_Q4NAME }, .separator[0] = CI0_INVISIBLE } } 
+                             { .dict_id = { _SAM_Q4NAME }, .separator[0] = CI0_INVISIBLE } } // used to calculate seq_len from range
 }; // note: mate not yet support with CI0_INVISIBLE (TO DO)
 
 // {movieName}/{holeNumber}/ccs 
@@ -1067,7 +1067,7 @@ static QnameFlavorStruct qf[] = {
     {},  { QF_STR_INT,     "Str_Integer",   { "read_1" },   /* eg CLC */                  TECH_UNKNOWN, TECH_NCBI,    QANY,   &con_str_integer,   0,   1,  {1,-1},             {-1},           {1,-1},             {-1},           0,  1,-1,  -1,-1, -1, -1, -1,                       },
          { QF_CONSENSUS,   "consensus",     { "consensus:23" },                           TECH_CONS,    TECH_NCBI,    QANY,   &con_prfx_and_int,  0,   10, {0,-1},             {-1},           {0,-1},             {-1},           1,  0,-1,  -1,-1, -1, -1, -1, 0,  PX_consensus      },
          { QF_CONS,        "cons",          { "cons113" },                                TECH_CONS,    TECH_NCBI,    QANY,   &con_prfx_and_int,  0,   4,  {0,-1},             {-1},           {0,-1},             {-1},           1,  0,-1,  -1,-1, -1, -1, -1, 0,  PX_cons           },
-         { QF_Sint,        "Sint",          { "S522414" },                                TECH_UNKNOWN, TECH_NCBI,    QANY,   &con_prfx_and_int,  0,   1,  {0,-1},             {-1},           {0,-1},             {-1},           0,  0,-1, -1,-1, -1, -1, -1, 0,  PX_Sint           },
+         { QF_Sint,        "Sint",          { "S522414" },                                TECH_UNKNOWN, TECH_NCBI,    QANY,   &con_prfx_and_int,  0,   1,  {0,-1},             {-1},           {0,-1},             {-1},           0,  0,-1,  -1,-1, -1, -1, -1, 0,  PX_Sint           },
     {},  { QF_GENOZIP_OPT, "Genozip-opt",   { "basic.1" },  /* must be last */            TECH_UNKNOWN, TECH_NCBI,    QANY,   &con_genozip_opt,   0,   1,  {1,-1},             {-1},           {1,-1},             {-1},           1,  1,-1,  -1,-1, -1, -1, -1,                       },
 };
 #define NUM_QFs ARRAY_LEN(qf) // note: different than NUM_FLAVORS bc each flavor might have two QFs: one for mated

@@ -29,8 +29,6 @@ extern void zfile_compress_section_data_ex (VBlockP vb, ContextP ctx, SectionTyp
 extern uint32_t zfile_compress_b250_data  (VBlockP vb, ContextP ctx);
 extern uint32_t zfile_compress_local_data (VBlockP vb, ContextP ctx, uint32_t sample_size);
 
-extern LocalGetLineCB *zfile_get_local_data_callback (DataType dt, ContextP ctx);
-
 extern void zfile_compress_vb_header (VBlockP vb);
 extern void zfile_update_compressed_vb_header (VBlockP vb);
 

@@ -184,6 +184,9 @@ void buf_disown_do (VBlockP vb, BufferP src_buf, BufferP dst_buf, bool make_a_co
 extern void buf_verify_do (ConstBufferP buf, rom msg, FUNCLINE);
 #define buf_verify(buf, msg) buf_verify_do (&(buf), (msg), __FUNCLINE)
 
+extern void buf_trim_do (BufferP buf, uint64_t size, FUNCLINE);
+#define buf_trim(buf, type) buf_trim_do (&(buf), (buf).len * sizeof(type), __FUNCLINE)
+
 typedef struct {
     rom name;
     uint64_t bytes; 

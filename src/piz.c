@@ -140,7 +140,7 @@ bool piz_default_skip_section (SectionType st, DictId dict_id)
 
     skip |= flag.genocat_no_ref_file && (ST(REFERENCE) || st == SEC_REF_HASH || ST(REF_IS_SET));
 
-    if (skip && (is_genocat) && dict_id.num && dict_id.num == flag.dump_one_local_dict_id.num)
+    if (skip && is_genocat && dict_id.num && (dict_id.num == flag.show_singletons_dict_id.num || dict_id.num == flag.dump_one_local_dict_id.num))
         skip = false;
         
     return skip;
@@ -242,6 +242,9 @@ void piz_uncompress_all_ctxs (VBlockP vb)
 
         zfile_uncompress_section (vb, header, target_buf, target_buf_name, BGEN32 (header->vblock_i), header->section_type); 
 
+        if (is_local && dict_id_typeless (ctx->dict_id).num == flag.show_singletons_dict_id.num && !is_pair_section) 
+            dict_io_show_singletons (vb, ctx);
+            
         if (is_local && dict_id_typeless (ctx->dict_id).num == flag.dump_one_local_dict_id.num && !is_pair_section) 
             ctx_dump_binary (vb, ctx, true);
 
@@ -374,7 +377,7 @@ void piz_read_all_ctxs (VBlockP vb, Section *sec/* VB_HEADER section */, bool is
         ASSERT (!zctx->is_ctx_alias || !VER(12), "Found a %s section of %s, this is unexpected because %s is an alias (of %s)",
                 st_name((*sec)->st), zctx->tag_name, zctx->tag_name, ZCTX(zctx->did_i)->tag_name);
 
-        // if we're a R2 VB loading R1 data, decide if we need to load this section
+        // if we're a FASTQ R2 VB loading R1 data, decide if we need to load this section
         bool pair_assisted=false, pair_identical=false, skip_R1=false;
         if (is_pair_data) {
             // note: pair_assisted available since early versions. when loading old versions, flags are fixed in sections_list_file_to_memory_format to be consistent with current version. 

@@ -236,18 +236,6 @@ uint32_t zfile_compress_b250_data (VBlockP vb, ContextP ctx)
     return compressed_size;
 }
 
-LocalGetLineCB *zfile_get_local_data_callback (DataType dt, ContextP ctx)
-{
-    static struct { DataType dt; const uint64_t dict_id_num; LocalGetLineCB *func; } callbacks[] = LOCAL_GET_LINE_CALLBACKS;
-
-    if (ctx && !ctx->no_callback)
-        for (unsigned i=0; i < ARRAY_LEN(callbacks); i++)
-            if (callbacks[i].dt == dt && callbacks[i].dict_id_num == ctx->dict_id.num) 
-                return callbacks[i].func;
-
-    return NULL;
-}
-
 // returns compressed size
 uint32_t zfile_compress_local_data (VBlockP vb, ContextP ctx, uint32_t sample_size /* 0 means entire local buffer */)
 {   
@@ -276,7 +264,7 @@ uint32_t zfile_compress_local_data (VBlockP vb, ContextP ctx, uint32_t sample_si
         .param                 = ctx->local_param ? ctx->local.prm8[0] : 0,
     };
 
-    LocalGetLineCB *callback = zfile_get_local_data_callback (vb->data_type, ctx);
+    LocalGetLineCB *callback = zip_get_local_data_callback (vb->data_type, ctx);
 
     ctx->local_in_z = vb->z_data.len32;
 

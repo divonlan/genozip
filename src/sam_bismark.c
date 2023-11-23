@@ -187,7 +187,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_BISMARK_XM)
                     *recon++ = IS_SLETTER (c) ? UPPER_CASE(c) : LOWER_CASE(c); 
 
                 else
-                    ASSPIZ0 (false, "Corrupt XM:Z diff");
+                    ABORT_PIZ0 ("Corrupt XM:Z diff");
             }
 
             ctx->next_local = BNUM (ctx->local, diff);
@@ -197,7 +197,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_BISMARK_XM)
         }
 
         default:
-            ASSPIZ (false, "Invalid XM snip=%u", xm_type);
+            ABORT_PIZ ("Invalid XM snip=%u", xm_type);
     }
 
     return NO_NEW_VALUE; 

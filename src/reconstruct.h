@@ -33,6 +33,17 @@ extern void asspiz_text (VBlockP vb, FUNCLINE);
 
 #define ASSPIZ0(condition, string) ASSPIZ (condition, string "%s", "")
 
+#define ABORT_PIZ(format, ...) ({ \
+    DO_ONCE { /* first thread to fail at this point prints error and starts exit flow, other threads stall */ \
+        asspiz_text ((VBlockP)vb, __FUNCLINE);\
+        fprintf (stderr, format "\n", __VA_ARGS__); \
+        exit_on_error(true); \
+    } \
+    else stall(); \
+})
+
+#define ABORT_PIZ0(string) ABORT_PIZ (string "%s", "")
+
 // goes into ctx->history if not STORE_INT
 typedef enum __attribute__ ((__packed__)) { LookupTxtData, LookupDict, LookupLocal, LookupPerLine } LookupType;
 #define LOOKUP_TYPE_NAMES { "LookupTxtData", "LookupDict", "LookupLocal", "LookupPerLine" }

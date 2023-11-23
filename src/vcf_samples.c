@@ -122,10 +122,13 @@ void vcf_samples_zip_initialize (void)
 
 void vcf_samples_seg_initialize (VBlockVCFP vb)
 {
+    #define T(cond, did_i) ((cond) ? (did_i) : DID_NONE)
+
     ctx_set_store (VB, STORE_INT, FORMAT_ADALL, FORMAT_DP, FORMAT_AD, FORMAT_RD, FORMAT_RDR, FORMAT_RDF,
                    FORMAT_ADR, FORMAT_ADF, FORMAT_SDP, DID_EOL);
 
-    ctx_set_ltype (VB, LT_DYN_INT, FORMAT_RD, FORMAT_GQ, FORMAT_RGQ, DID_EOL);
+    ctx_set_ltype (VB, LT_DYN_INT, FORMAT_RD, FORMAT_GQ, FORMAT_RGQ, FORMAT_MIN_DP, FORMAT_SDP,
+                   DID_EOL);
     
     CTX(FORMAT_GT)->no_stons  = true; // we store the GT matrix in local, so cannot accomodate singletons
     
@@ -377,9 +380,14 @@ static WordIndex vcf_seg_FORMAT_minus (VBlockVCFP vb, ContextP ctx,
 // used for DP, GQ, A0D and otheres - store in transposed matrix in local 
 static inline void vcf_seg_FORMAT_transposed (VBlockVCFP vb, ContextP ctx, STRp(cell), unsigned add_bytes)
 {
-    ctx->ltype = LT_UINT32_TR;
-    ctx->flags.store = STORE_INT;
-    
+    if (ctx->ltype != LT_UINT32_TR) {
+        ASSERT (ctx->ltype == LT_SINGLETON, "Expecting ctx->ltype=%s to be SIN", lt_name(ctx->ltype));
+
+        ctx->ltype = LT_UINT32_TR;
+        ctx->flags.store = STORE_INT;
+    }
+
+    // note: note just in initialization, as number of lines is an estimate and might change
     buf_alloc (vb, &ctx->local, 1, vb->lines.len * vcf_num_samples, uint32_t, 1, CTX_TAG_LOCAL);
 
     if (IS_PERIOD (cell)) 
@@ -446,7 +454,7 @@ static WordIndex vcf_seg_FORMAT_A_R (VBlockVCFP vb, ContextP ctx, SmallContainer
 // ---------
 
 // <ID=AD,Number=1,Type=Integer,Description="Depth of variant-supporting bases (reads2)">
-static inline WordIndex vcf_seg_FORMAT_AD_varscan (VBlockVCFP vb, ContextP ctx, STRp(ad_str))
+static inline void vcf_seg_FORMAT_AD_varscan (VBlockVCFP vb, ContextP ctx, STRp(ad_str))
 {
     // case: AD = DP-RD
     int64_t ad;
@@ -455,14 +463,14 @@ static inline WordIndex vcf_seg_FORMAT_AD_varscan (VBlockVCFP vb, ContextP ctx, 
         str_get_int (STRa(ad_str), &ad) &&
         ad == CTX(FORMAT_DP)->last_value.i - CTX(FORMAT_RD)->last_value.i) 
     
-        return vcf_seg_FORMAT_minus (vb, ctx, 0, ad_str_len, ad, CTX(FORMAT_DP), CTX(FORMAT_RD), STRa(ad_varscan_snip));
+        vcf_seg_FORMAT_minus (vb, ctx, 0, ad_str_len, ad, CTX(FORMAT_DP), CTX(FORMAT_RD), STRa(ad_varscan_snip));
 
     // case: we have only one sample, and INFO/ADP - we expect FORMAT/AD and INFO/ADP to be related
     else if (ctx_has_value_in_line_(vb, CTX(INFO_ADP)) && vcf_num_samples==1)
-        return seg_delta_vs_other (VB, ctx, CTX(INFO_ADP), STRa(ad_str));
+        seg_delta_vs_other (VB, ctx, CTX(INFO_ADP), STRa(ad_str));
 
     else
-        return seg_by_ctx (VB, STRa(ad_str), ctx, ad_str_len);
+        seg_by_ctx (VB, STRa(ad_str), ctx, ad_str_len);
 }
 
 // <ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed">
@@ -952,12 +960,24 @@ static inline void vcf_seg_FORMAT_DP (VBlockVCFP vb, ContextP ctx, STRp(cell))
     seg_set_last_txt (VB, ctx, STRa(cell));
 
     // case - we have FORMAT/AD - calculate delta vs the sum of AD components
-    if (segconf.FORMAT_DP_method == by_AD && ctx_has_value (VB, FORMAT_AD))
-        seg_delta_vs_other (VB, ctx, CTX(FORMAT_AD), STRa(cell));
+    if (segconf.FORMAT_DP_method == by_AD) {
+        if (ctx_has_value (VB, FORMAT_AD))
+            seg_delta_vs_other (VB, ctx, CTX(FORMAT_AD), STRa(cell));
+        else {
+            seg_by_ctx (VB, STRa(cell), ctx, cell_len);
+            if (has_value) ctx_set_last_value (VB, ctx, value);
+        }
+    }
 
     // case - we have FORMAT/SDP - calculate delta vs the sum of AD components
-    else if (segconf.FORMAT_DP_method == by_SDP && ctx_has_value (VB, FORMAT_SDP))
-        seg_delta_vs_other (VB, ctx, CTX(FORMAT_SDP), STRa(cell));
+    else if (segconf.FORMAT_DP_method == by_SDP) {
+        if (ctx_has_value (VB, FORMAT_SDP))
+            seg_delta_vs_other (VB, ctx, CTX(FORMAT_SDP), STRa(cell));
+        else {
+            seg_by_ctx (VB, STRa(cell), ctx, cell_len);
+            if (has_value) ctx_set_last_value (VB, ctx, value);
+        }
+    }
     
     // single-sample default: seg against INFO/DP
     else if (vcf_num_samples == 1) {
@@ -1303,7 +1323,7 @@ void vcf_FORMAT_PL_after_vbs (void)
     if (!ZCTX(FORMAT_PL)->nodes.len) return; // no FORMAT/PL in this file
 
     if (ZCTX(FORMAT_PL)->nodes.len > 1) {
-        str_print_dict (info_stream, STRb(ZCTX(FORMAT_PL)->dict), true, true, false);
+        dict_io_print (info_stream, STRb(ZCTX(FORMAT_PL)->dict), true, true, false);
         ABORT ("Expecting FORMAT_PL to have exactly one word in its dict, but it has %"PRIu64, ZCTX(FORMAT_PL)->nodes.len);
     }
 

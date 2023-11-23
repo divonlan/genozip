@@ -7,16 +7,11 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
-#include "genozip.h"
 #include "container.h"
-#include "vblock.h"
-#include "data_types.h"
 #include "base64.h"
 #include "seg.h"
 #include "reconstruct.h"
-#include "dict_id.h"
 #include "endianness.h"
-#include "file.h"
 #include "regions.h"
 #include "piz.h"
 #include "writer.h"
@@ -384,7 +379,7 @@ static inline unsigned container_reconstruct_item_seperator (VBlockP vb, const C
     }
 
     else if (item->separator[0] < '\t') {
-        ASSPIZ (false, "Unrecognized special seperator %u. Please upgrade to latest version of Genozip", item->separator[0]); // a seperator from the future
+        ABORT_PIZ ("Unrecognized special seperator %u. Please upgrade to latest version of Genozip", item->separator[0]); // a seperator from the future
         return 0;
     }
 
@@ -478,10 +473,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
     ValueType new_value = {};
 
     if (show_non_item) // show container reconstruction 
-        iprintf ("%s%sVB=%u Container: %s repeats=%u items=%u filter_items=%u filter_repeats=%u callback=%u\n", 
-                 vb->preprocessing    ? "preproc " : "",
-                 vb->peek_stack_level ? "peeking " : "",
-                 vb->vblock_i, dis_dict_id (ctx->dict_id).s, con->repeats, con_nitems(*con), con->filter_items, con->filter_repeats, con->callback);
+        iprintf ("Container(%s)=%s\n", dis_dict_id (ctx->dict_id).s, container_to_json (con, STRa(prefixes)).s);
 
     ContextP debug_lines_ctx = NULL;
     if (is_toplevel) {
@@ -791,22 +783,100 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
     return con_p;
 }
 
-// display
-void container_display (ConstContainerP con)
+static StrText item_sep_name0 (uint8_t sep)
 {
+    StrText s = {};
+
+    if (sep & 0x80) {
+        int s_len = 0;
+        if ((sep & 0x7f) & CI0_TRANS_NUL)    s_len += sprintf (&s.s[s_len], "TRANS_NUL|");
+        if ((sep & 0x7f) & CI0_TRANS_NOR)    s_len += sprintf (&s.s[s_len], "TRANS_NOR|");
+        if ((sep & 0x7f) & CI0_TRANS_MOVE)   s_len += sprintf (&s.s[s_len], "TRANS_MOVE|");
+        if ((sep & 0x7f) & CI0_NATIVE_NEXT)  s_len += sprintf (&s.s[s_len], "NATIVE_NEXT|");
+        if ((sep & 0x7f) & CI0_TRANS_ALWAYS) s_len += sprintf (&s.s[s_len], "TRANS_ALWAYS|");
+
+        if (s_len) s.s[s_len-1] = 0; // remove final |
+    }
+    
+    else switch (sep) {
+        case CI0_NONE         : strcpy (s.s, "NONE");         break;
+        case CI0_INVISIBLE    : strcpy (s.s, "INVISIBLE");    break;
+        case CI0_FIXED_0_PAD  : strcpy (s.s, "FIXED_0_PAD");  break;
+        case CI0_SKIP         : strcpy (s.s, "SKIP");         break;
+        case CI0_DIGIT        : strcpy (s.s, "DIGIT");        break;
+        default               : sprintf (s.s, "'%.5s'", char_to_printable (sep).s); 
+    }
+
+    return s;
+}
+
+static StrText item_sep_name1 (uint8_t sep)
+{
+    StrText s = {};
+
+    switch (sep) {
+        case CI1_NONE         : strcpy (s.s, "NONE");         break;
+        case CI1_ITEM_CB      : strcpy (s.s, "ITEM_CB");      break;
+        case CI1_ITEM_PRIVATE : strcpy (s.s, "ITEM_PRIVATE"); break;
+        case CI1_LOOKBACK     : strcpy (s.s, "LOOKBACK");     break;
+        default               : sprintf (s.s, "'%.5s'", char_to_printable (sep).s); 
+    }
+
+    return s;
+}
+
+static StrTextLong container_flags (ConstContainerP con)
+{
+    StrTextLong s = {};
+    int s_len = 0;
+
+    if (con->drop_final_repsep)                   s_len += sprintf (&s.s[s_len], "drop_final_repsep|");
+    if (con->drop_final_item_sep)                 s_len += sprintf (&s.s[s_len], "drop_final_item_sep|");
+    if (con->drop_final_item_sep_of_final_repeat) s_len += sprintf (&s.s[s_len], "drop_final_item_sep_of_final_repeat|");
+    if (con->keep_empty_item_sep)                 s_len += sprintf (&s.s[s_len], "keep_empty_item_sep|");
+    if (con->filter_repeats)                      s_len += sprintf (&s.s[s_len], "filter_repeats|");
+    if (con->filter_items)                        s_len += sprintf (&s.s[s_len], "filter_items|");
+    if (con->is_toplevel)                         s_len += sprintf (&s.s[s_len], "is_toplevel|");
+    if (con->callback)                            s_len += sprintf (&s.s[s_len], "callback|");
+    if (con->no_translation)                      s_len += sprintf (&s.s[s_len], "no_translation|");
+
+    if (s_len) s.s[s_len-1] = 0; // remove final |
+
+    return s;
+}
+
+StrTextMegaLong container_to_json (ConstContainerP con, STRp (prefixes))
+{
+    StrTextMegaLong s;
+    int s_len = 0;
+    
     uint32_t num_items = con_nitems (*con);
 
-    iprintf ("repeats = %u\nnum_items = %u\ndrop_final_item_sep = %s\ndrop_final_repeat_sep = %s\n"
-                          "filter_repeats = %s\nfilter_items = %s\nis_toplevel = %s\nrepsep = { '%c'(%u), '%c'(%u) }\n",
-             con->repeats, num_items, TF(con->drop_final_item_sep), TF(con->drop_final_repsep), 
-             TF(con->filter_repeats), TF(con->filter_items), TF(con->is_toplevel), con->repsep[0], con->repsep[0], con->repsep[1], con->repsep[1]);
+    s_len = sprintf (s.s,"{ \"repeats\": %s, \"num_items\": %u, \"flags\": %s, \"repsep\": [ '%.5s', '%.5s' ], \"items\": [ ",
+                     (con->repeats == CON_REPEATS_IS_SEQ_LEN ? "SEQ_LEN" : str_int_s (con->repeats).s),
+                     num_items,container_flags(con).s,
+                     char_to_printable (con->repsep[0]).s, char_to_printable(con->repsep[1]).s);
     
     for (unsigned i=0; i < num_items; i++)
-        iprintf ("item %-2u: dict_id=%-8s separator={ '%c'(%u), '%c'(%u) } translator=%u\n",
-                 i, dis_dict_id (con->items[i].dict_id).s,  
-                 con->items[i].separator[0], con->items[i].separator[0], con->items[i].separator[1], con->items[i].separator[1], con->items[i].translator);
+        s_len += sprintf (&s.s[s_len], "{ \"dict_id\": \"%s\", \"separator\": [ %s, %s ], \"translator\": %u }, ",
+                          dis_dict_id (con->items[i].dict_id).s,  
+                          item_sep_name0 (con->items[i].separator[0]).s, item_sep_name1 (con->items[i].separator[1]).s, 
+                          con->items[i].translator);
     
-    fflush (info_stream);
+    if (num_items) s_len -= 2; // remove last com
+    s_len += sprintf (&s.s[s_len], " }, prefixes=[ ");
+
+    str_split (prefixes, prefixes_len, 0, CON_PX_SEP, pr, false);
+
+    for (unsigned i=0; i < n_prs-1; i++) {
+        char out[pr_lens[i] * 2 + 1];
+        s_len += sprintf (&s.s[s_len], "\"%s\", ", str_to_printable (STRi(pr,i), out));
+    }
+
+    if (num_items) s_len -= 2; // remove last comma
+    s_len += sprintf (&s.s[s_len], " ] }");
+
+    return s;
 }
 
 // Translators reconstructing last_value as a little endian binary

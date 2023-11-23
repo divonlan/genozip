@@ -16,6 +16,7 @@
 #include "vblock.h"
 #include "segconf.h"
 #include "strings.h"
+#include "dict_io.h"
 
 #define MAX_WORDS_IN_CTX 0x7ffffff0 // limit on nodes.len, word_list.len - partly because hash uses signed int32_t + 2 for singlton using index-2
 
@@ -278,7 +279,7 @@ static inline void ctx_unset_rollback (ContextP ctx) { ctx->rback_id = 1; }
 extern void ctx_rollback (VBlockP vb, ContextP ctx, bool override_id);
 
 static inline bool ctx_can_have_singletons (ContextP ctx) 
-    { return (ctx->ltype == LT_TEXT) && !ctx->no_stons && 
+    { return (ctx->ltype == LT_SINGLETON) && !ctx->no_stons && 
               (ctx->flags.store != STORE_INDEX) && !ctx->flags.all_the_same; } 
 
 // returns true if dict_id was *previously* segged on this line, and we stored a valid last_value (int or float)

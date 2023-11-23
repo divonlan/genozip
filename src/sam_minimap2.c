@@ -22,7 +22,7 @@ void sam_seg_s1_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t s1, unsigned add_b
         seg_delta_vs_other_do (VB, CTX(OPTION_s1_i), CTX(OPTION_AS_i), NULL, 0, s1, 255, add_bytes);
 
     else
-        seg_integer_as_snip_do (VB, CTX(OPTION_s1_i), s1, add_bytes); // unlikely to be ever reached - seg as text to keep context as LT_TEXT
+        seg_integer_as_snip_do (VB, CTX(OPTION_s1_i), s1, add_bytes); // unlikely to be ever reached - seg as text to keep context as LT_SINGLETON
 }
 
 // -------------------------------------------------------

@@ -12,6 +12,7 @@
 #include "dict_id.h"
 #include "file.h"
 #include "zfile.h"
+#include "zip.h"
 #include "profiler.h"
 #include "bgzf.h"
 
@@ -268,7 +269,7 @@ Codec codec_assign_best_codec (VBlockP vb,
 
         if (*selected_codec == CODEC_NONE) tests[t].size = data->len;
         else {
-            LocalGetLineCB *callback = (ST(LOCAL) && !data_override && !ctx->no_callback) ? zfile_get_local_data_callback (vb->data_type, ctx) : NULL;
+            LocalGetLineCB *callback = (ST(LOCAL) && !data_override && !ctx->no_callback) ? zip_get_local_data_callback (vb->data_type, ctx) : NULL;
 
             zfile_compress_section_data_ex (vb, ctx, st, callback ? NULL : data, callback, data->len, *selected_codec, SECTION_FLAGS_NONE, 
                                             "codec_assign_best_codec");
@@ -343,13 +344,10 @@ void codec_assign_best_qual_codec (VBlockP vb, Did did_i,
     }
 
     else
-        ctx->ltype = LT_SEQUENCE;  // codec to be assigned by codec_assign_best_codec
+        ctx->ltype = LT_BLOB;  // codec to be assigned by codec_assign_best_codec
     
-    if (ctx->ltype != LT_SEQUENCE && did_i == SAM_QUAL/*==FASTQ_QUAL*/) {
-        // ctx_commit_codec_to_zf_ctx (vb, ctx, true, false); // used only for submitting stats
-
-        segconf.qual_codec = ctx->lcodec; // used only for submitting stats (no atomic - last one wins)
-    }
+    if (ctx->ltype != LT_BLOB && (did_i == SAM_QUAL/*==FASTQ_QUAL*/ || did_i == SAM_CQUAL || did_i == OPTION_OQ_Z)) 
+        ZCTX(did_i)->qual_codec = ctx->lcodec; // used only for submitting stats (no atomic - last one wins)
 
     if (flag.show_codec && ctx->lcodec != CODEC_UNKNOWN) // aligned to the output of codec_assign_best_codec
         iprintf ("%-8s %-12s %-5s          *[%s]\n", VB_NAME, ctx->tag_name, "LOCAL", codec_name(CTX(did_i)->lcodec));

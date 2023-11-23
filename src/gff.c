@@ -36,6 +36,9 @@
 typedef struct VBlockGFF {    
     VBLOCK_COMMON_FIELDS
     STR(prev_type);
+
+    // current line
+    bool has_parent;  
 } VBlockGFF;
 
 typedef VBlockGFF *VBlockGFFP;
@@ -114,8 +117,10 @@ int32_t gff_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 
             if (j < final_i && *Btxt (j+1) == '>') {
                 if (!segconf.running) {
+                    // note: we don't run segconf on an embedded FASTA - we set the values here instead
                     segconf.has_embedded_fasta = true;
-                    segconf.fasta_has_contigs = false; // GFF3-embedded FASTA doesn't have contigs, because did=0 is reserved for GFF's SEQID
+                    segconf.fasta_has_contigs  = false; // GFF3-embedded FASTA doesn't have contigs, because did=0 is reserved for GFF's SEQID
+                    segconf.seq_type           = SQT_NUKE;
                 }
 
                 break; // terminate VB (and component) at this newline - next line is FASTA
@@ -142,8 +147,10 @@ void gff_seg_initialize (VBlockP vb)
 
     ctx_set_no_stons (vb, GFF_COMMENT/*required by STORE_INDEX (otherwise singletons don't get their index stored)*/, 
                       GFF_SEQID/*needs b250 node_index for random access*/, 
-                      GFF_ATTRS, ATTR_Variant_seq, ATTR_Reference_seq, ATTR_ancestral_allele,
+                      GFF_ATTRS, 
                       ATTR_Target_POS, ATTR_ID, GFF_START, GFF_END, DID_EOL); // as requied by seg_pos_field
+
+    ctx_set_ltype (vb, LT_STRING, ATTR_Variant_seq, ATTR_Reference_seq, ATTR_ancestral_allele, DID_EOL);
 
     ctx_set_ltype (vb, LT_DYN_INT, ATTR_transcript_name_num, DID_EOL);
 
@@ -156,8 +163,17 @@ void gff_seg_initialize (VBlockP vb)
         ctx_consolidate_stats (vb, ATTR_db_xref, ATTR_DBXid, ATTR_DBXdb, DID_EOL);
 }
 
+static void gff_seg_finalize_segconf (VBlockP vb)
+{
+    if (segconf.has[ATTR_score] && segconf.has[ATTR_cscore] && segconf.has[ATTR_sscore])
+        stats_add_one_program (_S("Prodigal"));
+}
+
 void gff_seg_finalize (VBlockP vb)
 {
+    if (segconf.running) 
+        gff_seg_finalize_segconf (vb);
+
     CTX(ENSTid)->st_did_i = DID_NONE; // cancel consolidatation as it goes into multiple attributes
 
     // top level snip
@@ -182,6 +198,18 @@ void gff_seg_finalize (VBlockP vb)
     container_seg (vb, CTX(GFF_TOPLEVEL), (Container *)&top_level, 0, 0, 0);
 }
 
+// initialization of the line
+void gff_reset_line (VBlockP vb_)
+{
+    VBlockGFFP vb = (VBlockGFFP)vb_;
+
+    ASSERT (VB_DT(GFF), "VB has wrong data type: %s", dt_name (vb->data_type));
+
+    if (IS_ZIP) {
+        vb->has_parent = false;
+    }
+}
+
 bool gff_seg_is_small (ConstVBlockP vb, DictId dict_id)
 {
     return dict_id.num == _GFF_TOPLEVEL  ||
@@ -198,13 +226,15 @@ bool gff_seg_is_small (ConstVBlockP vb, DictId dict_id)
 
 bool gff_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id)
 {
-    return dict_id.num == _ATTR_DBXid; 
+    return dict_id.num == _ATTR_DBXid           ||
+           dict_id.num == _ATTR_transcript_name ||
+           dict_id.num == _ATTR_gene_name;
 }
 
-// eg: "DGVa_201810:essv9162", "DGVa_201810:essv11114"
-static void gff_seg_dbxref (VBlockP vb, ContextP ctx, STRp(value), bool has_parent)
+// eg: "DGVa_201810:essv9162", "GeneID:100287102,HGNC:HGNC:37102"
+static bool gff_seg_dbxref_one (VBlockP vb, ContextP ctx, STRp(value), uint32_t repeat)
 {
-    // if we have no Parent, we're better off segging as a simple ID
+    // if this file has no "Parent", we're better off segging as a simple ID
     if (!segconf.has[ATTR_Parent] || segconf.running)
         seg_id_field (vb, ctx, STRa(value), false, value_len);  
 
@@ -218,25 +248,36 @@ static void gff_seg_dbxref (VBlockP vb, ContextP ctx, STRp(value), bool has_pare
             // container
             seg_by_ctx (vb, STRa(dbx_container_snip), ctx, 1); // account for ':' 
             
-            // DB component
+            // DB name component
             seg_by_did (vb, value, db_len, ATTR_DBXdb, db_len); 
 
-            // ID component: case: we're not a parent (bc we have one) - seg as ID as this is likely a unique ID
-            if (has_parent)
-                seg_id_field (vb, CTX(ATTR_DBXid), colon+1, id_len, false, id_len); 
-            
-            // ID component: case: we are a parent (bc we don't have one) - seg normally, as aliased with ATTR_ParentItem
-            else
-                seg_by_did (vb, colon+1, id_len, ATTR_DBXid, id_len); 
+            // ID component
+            seg_id_field (vb, CTX(ATTR_DBXid), colon+1, id_len, false, id_len); 
         }
 
         else  // fallback
             seg_by_ctx (vb, STRa(value), ctx, value_len); 
     }
+
+    return true;
+}
+
+static void gff_seg_dbxref (VBlockGFFP vb, ContextP ctx, STRp(value))
+{
+    STRlast(last, ctx->did_i);
+
+    // e.g. exons usually have the same DBXref as their transcript 
+    if (str_issame(value, last)) 
+        seg_by_ctx (VB, (char[]){ SNIP_COPY }, 1, ctx, value_len);
+
+    else
+        seg_array_by_callback (VB, ctx, STRa(value), ',', gff_seg_dbxref_one, value_len);
+
+    seg_set_last_txt (VB, ctx, STRa(value));
 }
 
 // returns true if successful
-static bool gff_seg_target (VBlockP vb, STRp(value))
+static bool gff_seg_target (VBlockGFFP vb, STRp(value))
 {
     str_split (value, value_len, 4, ' ', item, false);
     if (n_items != 3 && n_items != 4) return false; // not standard Target format
@@ -252,8 +293,8 @@ static bool gff_seg_target (VBlockP vb, STRp(value))
     };
 
     seg_by_did (VB, items[0], item_lens[0], ATTR_Target_ID, item_lens[0]);
-    seg_pos_field (vb, ATTR_Target_POS, ATTR_Target_POS, 0, 0, items[1], item_lens[1], 0, item_lens[1]);
-    seg_pos_field (vb, ATTR_Target_POS, ATTR_Target_POS, 0, 0, items[2], item_lens[2], 0, item_lens[2]);
+    seg_pos_field (VB, ATTR_Target_POS, ATTR_Target_POS, 0, 0, items[1], item_lens[1], 0, item_lens[1]);
+    seg_pos_field (VB, ATTR_Target_POS, ATTR_Target_POS, 0, 0, items[2], item_lens[2], 0, item_lens[2]);
 
     if (n_items == 4)
         seg_by_did (VB, items[3], item_lens[3], ATTR_Target_STRAND, item_lens[3]);
@@ -323,7 +364,7 @@ SPECIAL_RECONSTRUCTOR (gff_piz_special_exon_number)
     return HAS_NEW_VALUE;
 }
 
-static inline DictId gff_seg_attr_subfield (VBlockP vb, STRp(tag), STRp(value), bool has_parent)
+static inline DictId gff_seg_attr_subfield (VBlockGFFP vb, STRp(tag), STRp(value))
 {
     DictId dict_id = dict_id_make (STRa(tag), DTYPE_GFF_ATTR);
 
@@ -335,19 +376,18 @@ static inline DictId gff_seg_attr_subfield (VBlockP vb, STRp(tag), STRp(value), 
     switch (dict_id.num) {
 
     // ID - sometimes this is a sequential number (GRCh37/38)
-    // sometimes it is something like this: c5312581-5d6e-4234-89d7-4974581f2993
+    // sometimes it is something like this: c5312581-5d6e-4234-89d7-4974581f2993, sometimes exon-NR_024540.1-2
     case _ATTR_ID: 
         if (str_is_int (value, value_len))
-            seg_pos_field (vb, ATTR_ID, ATTR_ID, SPF_BAD_SNIPS_TOO, 0, STRa(value), 0, value_len);
+            seg_pos_field (VB, ATTR_ID, ATTR_ID, SPF_BAD_SNIPS_TOO, 0, STRa(value), 0, value_len);
         else
             seg_by_did (VB, STRa(value), ATTR_ID, value_len);
         break;
 
-    // Dbxref (example: "dbSNP_151:rs1307114892") - we divide to the non-numeric part which we store
-    // in a dictionary and the numeric part which store in a local
+    // example: "GeneID:100287102,GenBank:NR_046018.2,HGNC:HGNC:37102"
     case _ATTR_Dbxref:
     case _ATTR_db_xref: 
-        gff_seg_dbxref (vb, ctx, STRa(value), has_parent);
+        gff_seg_dbxref (vb, ctx, STRa(value));
         break;
 
     case _ATTR_Target:
@@ -357,12 +397,12 @@ static inline DictId gff_seg_attr_subfield (VBlockP vb, STRp(tag), STRp(value), 
 
     // example: { "gene021872.2" } { "HG-1885", "HG-789" }
     case _ATTR_Name:
-        seg_id_field (vb, CTX(ATTR_Name), STRa(value), false, value_len);
+        seg_id_field (VB, CTX(ATTR_Name), STRa(value), false, value_len);
         break;
 
     // example: Parent=mRNA00001,mRNA00002,mRNA00003
     case _ATTR_Parent:
-        seg_array (vb, CTX(ATTR_Parent), ATTR_Parent, STRa(value), ',', 0, false, STORE_NONE, _ATTR_ParentItem, value_len);
+        seg_array (VB, CTX(ATTR_Parent), ATTR_Parent, STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len);
         break;
 
     //case _ATTR_Gap: // I tried: 1. array (no improvement) ; 2. string of op-codes in b250 + integers in local (negligible improvement)
@@ -379,7 +419,7 @@ static inline DictId gff_seg_attr_subfield (VBlockP vb, STRp(tag), STRp(value), 
                              { .dict_id={.id="V2arEff" }, .separator = {' '} },
                              { .dict_id={.num=_ENSTid  },                    } }
         };
-        seg_array_of_struct (vb, CTX(ATTR_Variant_effect), Variant_effect, STRa(value), NULL, value_len);
+        seg_array_of_struct (VB, CTX(ATTR_Variant_effect), Variant_effect, STRa(value), NULL, value_len);
         break;
     }
 
@@ -393,7 +433,7 @@ static inline DictId gff_seg_attr_subfield (VBlockP vb, STRp(tag), STRp(value), 
                              { .dict_id={.id="S2iftPr" }, .separator = {' '} },
                              { .dict_id={.num=_ENSTid  },                    } }
         };
-        seg_array_of_struct (vb, CTX(ATTR_sift_prediction), sift_prediction, STRa(value), NULL, value_len);
+        seg_array_of_struct (VB, CTX(ATTR_sift_prediction), sift_prediction, STRa(value), NULL, value_len);
         break;
     }
 
@@ -407,7 +447,7 @@ static inline DictId gff_seg_attr_subfield (VBlockP vb, STRp(tag), STRp(value), 
                              { .dict_id={.id="P2olyPhP" }, .separator = {' '} },
                              { .dict_id={.num=_ENSTid   },                    } }
         };
-        seg_array_of_struct (vb, CTX(ATTR_polyphen_prediction), polyphen_prediction, STRa(value), NULL, value_len);
+        seg_array_of_struct (VB, CTX(ATTR_polyphen_prediction), polyphen_prediction, STRa(value), NULL, value_len);
         break;
     }
 
@@ -420,7 +460,7 @@ static inline DictId gff_seg_attr_subfield (VBlockP vb, STRp(tag), STRp(value), 
                              { .dict_id={.id="v1arPep"  }, .separator = {' '} },
                              { .dict_id={.num=_ENSTid   },                    } }
         };
-        seg_array_of_struct (vb, CTX(ATTR_variant_peptide), variant_peptide, STRa(value), NULL, value_len);
+        seg_array_of_struct (VB, CTX(ATTR_variant_peptide), variant_peptide, STRa(value), NULL, value_len);
         break;
     }
 
@@ -429,11 +469,11 @@ static inline DictId gff_seg_attr_subfield (VBlockP vb, STRp(tag), STRp(value), 
     case _ATTR_Reference_seq:
     case _ATTR_ancestral_allele: 
         // note: all three are stored together in _ATTR_Reference_seq as they are correlated
-        seg_add_to_local_text (vb, CTX(ATTR_Reference_seq), STRa(value), LOOKUP_NONE, value_len); 
+        seg_add_to_local_string (VB, CTX(ATTR_Reference_seq), STRa(value), LOOKUP_NONE, value_len); 
         break;
 
     case _ATTR_chr:
-        chrom_seg_by_did_i (vb, ATTR_chr, STRa(value), value_len);
+        chrom_seg_by_did_i (VB, ATTR_chr, STRa(value), value_len);
         break;
 
     // Optimize Variant_freq
@@ -454,7 +494,7 @@ static inline DictId gff_seg_attr_subfield (VBlockP vb, STRp(tag), STRp(value), 
         goto plain_seg;
 
     case _ATTR_transcript_name:
-        gff_seg_transcript_name (VB_GFF, STRa(value));
+        gff_seg_transcript_name (vb, STRa(value));
         break;
 
     case _ATTR_gene_id:
@@ -465,11 +505,11 @@ static inline DictId gff_seg_attr_subfield (VBlockP vb, STRp(tag), STRp(value), 
     case _ATTR_ccdsid: 
     case _ATTR_protein_id: 
     case _ATTR_exon_id: 
-        seg_id_field (vb, ctx, STRa(value), true, value_len);
+        seg_id_field (VB, ctx, STRa(value), true, value_len);
         break;
 
     case _ATTR_exon_number:
-        gff_seg_exon_number (VB_GFF, STRa(value));
+        gff_seg_exon_number (vb, STRa(value));
         break;
 
     default:
@@ -477,13 +517,13 @@ static inline DictId gff_seg_attr_subfield (VBlockP vb, STRp(tag), STRp(value), 
         seg_by_ctx (VB, STRa(value), ctx, value_len);
     }
 
-    ctx_set_encountered (vb, ctx);
+    ctx_set_encountered (VB, ctx);
 
     return dict_id;
 }
 
 // determine GFF version by ATTR key/value seperator
-static void gff_segconf_set_gff_version (VBlockP vb, STRp(attr))
+static void gff_segconf_set_gff_version (VBlockGFFP vb, STRp(attr))
 {
     for (int i=0; i < attr_len-1; i++)
         switch (attr[i]) {
@@ -497,7 +537,7 @@ static void gff_segconf_set_gff_version (VBlockP vb, STRp(attr))
 }
 
 // see: http://gmod.org/wiki/GFF2 and https://www.ensembl.org/info/website/upload/gff.html
-static void gff_seg_gff2_attrs_field (VBlockP vb, STRp(attribute))
+static void gff_seg_gff2_attrs_field (VBlockGFFP vb, STRp(attribute))
 {
     // case: "." attribute
     if (IS_PERIOD(attribute)) {
@@ -578,7 +618,7 @@ static void gff_seg_gff2_attrs_field (VBlockP vb, STRp(attribute))
         ASSSEG0 (!(has_quotes && final_space), "Invalid GFF2 attributes field: a field has a space after the closing quote");
         
         // seg value
-        con.items[i].dict_id = gff_seg_attr_subfield (vb, STRa(tag), STRa(value), false);
+        con.items[i].dict_id = gff_seg_attr_subfield (vb, STRa(tag), STRa(value));
 
         // add leading_space, name, ' ' separator, opening quote to prefix 
         int item_prefix_len = leading_space + tag_len + 1 + has_quotes;
@@ -600,7 +640,7 @@ static void gff_seg_gff2_attrs_field (VBlockP vb, STRp(attribute))
     container_seg (vb, CTX(GFF_ATTRS), &con, prefixes, prefixes_len, attribute_len - total_values_len + 1/*\n*/ + extra_space); 
 }
 
-static void gff_seg_gff3_attrs_field (VBlockP vb, STRp(field))
+static void gff_seg_gff3_attrs_field (VBlockGFFP vb, STRp(field))
 {
     // case: "." field
     if (IS_PERIOD (field)) {
@@ -623,10 +663,9 @@ static void gff_seg_gff3_attrs_field (VBlockP vb, STRp(field))
         con.drop_final_item_sep = true; // last item doesn't not end with a semicolon
 
     // check for parent - hacky for now
-    bool has_parent = false;
     for (int i=n_attrs-1; i >= 0; i--) // Parent is usually towards the end
         if (str_isprefix_(STRi(attr,i), _S("Parent="))) {
-            has_parent = true;
+            vb->has_parent = true;
             break;
         }
 
@@ -641,7 +680,7 @@ static void gff_seg_gff3_attrs_field (VBlockP vb, STRp(field))
         prefixes_len += tag_val_lens[0] + 2; // including the '=' and CON_PX_SEP
         prefixes[prefixes_len-1] = CON_PX_SEP;
 
-        con.items[i].dict_id = gff_seg_attr_subfield (vb, STRi(tag_val, 0), STRi (tag_val, 1), has_parent);
+        con.items[i].dict_id = gff_seg_attr_subfield (vb, STRi(tag_val, 0), STRi (tag_val, 1));
         con.items[i].separator[0] = ';'; 
     }
 
@@ -662,8 +701,10 @@ static void gff_seg_TYPE (VBlockGFFP vb, STRp(type))
     set_last_txt (GFF_TYPE, type);
 }
 
-rom gff_seg_txt_line (VBlockP vb, rom field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
+rom gff_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
 {
+    VBlockGFFP vb = (VBlockGFFP)vb_;
+
     rom next_field=field_start_line, field_start;
     unsigned field_len=0;
     char separator;
@@ -672,7 +713,8 @@ rom gff_seg_txt_line (VBlockP vb, rom field_start_line, uint32_t remaining_txt_l
     // handle a comment (#), directive (##), experimental directive (#!) or empty line 
     if (next_field[0] == '#' || next_field[0] == '\n' || next_field[0] == '\r' ||
         (remaining_txt_len >= 6 && !memcmp (next_field, "track ", 6))) { // Ensembl GTF track lines, eg: “track name=coords description="Chromosome coordinates list" priority=2"”
-        SEG_NEXT_ITEM_NL (GFF_COMMENT);
+        GET_NEXT_ITEM_NL (GFF_COMMENT); 
+        seg_by_did (VB, field_start, field_len, GFF_COMMENT, field_len+1);
         
         goto eol; // if we have a comment, then during piz, the other fields will be filtered out
     }
@@ -680,18 +722,18 @@ rom gff_seg_txt_line (VBlockP vb, rom field_start_line, uint32_t remaining_txt_l
         seg_by_did (VB, NULL, 0, GFF_COMMENT, 0); // missing comment field
 
     GET_NEXT_ITEM (GFF_SEQID);
-    chrom_seg (vb, STRd(GFF_SEQID));
+    chrom_seg (VB, STRd(GFF_SEQID));
 
     SEG_NEXT_ITEM (GFF_SOURCE);
     
     GET_NEXT_ITEM (GFF_TYPE);
-    gff_seg_TYPE (VB_GFF, STRd(GFF_TYPE));
+    gff_seg_TYPE (vb, STRd(GFF_TYPE));
 
     GET_NEXT_ITEM (GFF_START);
-    gff_seg_START (VB_GFF, STRd(GFF_START));
+    gff_seg_START (vb, STRd(GFF_START));
 
     GET_NEXT_ITEM (GFF_END);
-    seg_pos_field (vb, GFF_END, GFF_START, 0, 0, STRd(GFF_END), 0, GFF_END_len+1);
+    seg_pos_field (VB, GFF_END, GFF_START, 0, 0, STRd(GFF_END), 0, GFF_END_len+1);
 
     SEG_NEXT_ITEM (GFF_SCORE);
     SEG_NEXT_ITEM (GFF_STRAND);

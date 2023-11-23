@@ -316,6 +316,25 @@ done:
     else           COPY_TIMER (buf_alloc_compute); 
 }
 
+// shrink buffer down to size, returning memory to libc (but not to kernel)
+void buf_trim_do (BufferP buf, uint64_t size, FUNCLINE)
+{
+    if (size >= buf->size || !buf->memory) return; // nothing to do - size if already smaller
+
+    ASSERT (!buf->shared, "%s:%u trimming is not currently supported on shared buffers: buf=%s", func, code_line, buf_desc(buf).s);
+
+    buf_lock_if (buf, buf->spinlock); // promiscous or buf_list or caller lock...
+
+    buf_verify_integrity (buf, func, code_line, "buf_alloc_do");
+
+    reset_memory_pointer (buf);
+        
+    char *new_memory = (char *)buf_low_level_realloc (old_memory, size + CTL_SIZE, buf->name, func, code_line);
+    buf_init (buf, new_memory, size, func, code_line, buf->name);
+
+    buf_unlock;
+}
+
 void buf_set_shared (BufferP buf)
 {
     if (!buf->shared) {

@@ -119,6 +119,28 @@ static void zip_display_compression_ratio (Digest md5)
     }
 }
 
+static struct { DataType dt; const uint64_t dict_id_num; LocalGetLineCB *func; } callbacks[] = LOCAL_GET_LINE_CALLBACKS;
+
+LocalGetLineCB *zip_get_local_data_callback (DataType dt, ContextP ctx)
+{
+    if (ctx && !ctx->no_callback)
+        for (unsigned i=0; i < ARRAY_LEN(callbacks); i++)
+            if (callbacks[i].dt == dt && callbacks[i].dict_id_num == ctx->dict_id.num) 
+                return callbacks[i].func;
+
+    return NULL;
+}
+
+void zip_set_no_stons_if_callback (VBlockP vb)
+{
+    for (unsigned i=0; i < ARRAY_LEN(callbacks); i++)
+        if (callbacks[i].dt == vb->data_type) {
+            ContextP ctx = ctx_get_ctx (vb, callbacks[i].dict_id_num);
+            
+            if (!ctx->no_callback) ctx->no_stons = true;
+        }
+}
+
 // B250 generation means re-writing the b250 buffer with 2 modifications:
 // 1) We write the word_index (i.e. the sequential number of the word in the dict in z_file) instead
 // of the VB's node_index (that is private to this VB)
@@ -444,13 +466,13 @@ static void zip_handle_unique_words_ctxs (VBlockP vb)
 
     for_ctx {
         if (ctx->local.len ||  // local is not free to accept our singletons
-            ctx->no_stons  ||  // don't change to LT_TEXT if we were explicitly forbidden having singletons
+            ctx->no_stons  ||  // don't change to LT_SINGLETON if we were explicitly forbidden having singletons
             ((VB_DT(VCF) || VB_DT(BCF)) && dict_id_is_vcf_format_sf (ctx->dict_id))) // this doesn't work for FORMAT fields
             continue;
             
-        // reset ltype to LT_TEXT so that we can use local for singletons (either here or in ctx_commit_node - subject to conditions).
+        // reset ltype to LT_SINGLETON so that we can use local for singletons (either here or in ctx_commit_node - subject to conditions).
         // note: ltype was possibly assigned a different value in *_seg_initialize, but then local not utilized.
-        ctx->ltype = LT_TEXT; 
+        ctx->ltype = LT_SINGLETON; 
 
         if (!ctx->nodes.len                    || // no new words in this VB 
             ctx->nodes.len != ctx->b250.len    || // not all new words in this VB are singletons
@@ -617,6 +639,9 @@ static void zip_compress_all_contexts_local (VBlockP vb)
 
             if (!zip_generate_local (vb, ctx))
                 continue; // section dropped
+
+            if (dict_id_typeless (ctx->dict_id).num == flag.show_singletons_dict_id.num) 
+                dict_io_show_singletons (vb, ctx);
 
             if (dict_id_typeless (ctx->dict_id).num == flag.dump_one_local_dict_id.num) 
                 ctx_dump_binary (vb, ctx, true);
