@@ -562,7 +562,7 @@ void buf_destroy_do_do (BufListEnt *ent, FUNCLINE)
 
 void buf_destroy_do (BufferP buf, FUNCLINE)
 {
-    if (!buf     || 
+    if (!buf || 
         (!buf->vb && buf->type == BUF_UNALLOCATED) || // never allocated 
         flag.let_OS_cleanup_on_exit) return; // nothing to do (we don't destroy on exit, as the exiting thread may not be able to remove from buf_list)
 

@@ -134,12 +134,12 @@ extern void codec_show_time (VBlockP vb, rom name, rom subname, Codec codec);
 
 #define CODEC_ASSIGN_SAMPLE_SIZE 99999 // bytes (slightly better results than 50K)
 extern Codec codec_assign_best_codec (VBlockP vb, ContextP ctx, BufferP non_ctx_data, SectionType st);
-extern void codec_assign_best_qual_codec (VBlockP vb, Did qual_did, LocalGetLineCB callback, bool no_longr, bool no_seq_dependency, bool maybe_revcomped);
+extern void codec_assign_best_qual_codec (VBlockP vb, Did qual_did, LocalGetLineCB callback, bool no_seq_dependency, bool maybe_revcomped, bool *codec_requires_seq);
 
 #define TAG_NAME (ctx ? ctx->tag_name : "NoContext")
 
 // ACGT stuff
-extern const uint8_t acgt_encode[256];
+extern const uint8_t acgt_encode[256], acgt_encode_comp[256];
 extern void codec_acgt_seg_initialize (VBlockP vb, Did nonref_did_i, bool has_x);
 extern void codec_acgt_reconstruct (VBlockP vb, ContextP ctx, STRp(snip));
 

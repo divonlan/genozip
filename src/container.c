@@ -325,8 +325,7 @@ static inline void container_toplevel_filter (VBlockP vb, uint32_t rep_i, rom re
 
 CONTAINER_FILTER_FUNC (container_no_filter)
 {
-    ABORT ("File %s requires a filter for dict_id=%s item=%u. Please upgrade to the latest version of genozip",
-           z_name, dis_dict_id (dict_id).s, item);
+    ABORT ("File %s requires a filter for dict_id=%s item=%u. %s", z_name, dis_dict_id (dict_id).s, item, genozip_update_msg());
 
     return true;    
 }
@@ -342,8 +341,8 @@ static inline unsigned container_reconstruct_item_seperator (VBlockP vb, const C
     if (item->separator[1] == CI1_ITEM_CB && IS_VALID_SEP1_FLAG) {
 
         // note: in v13 we had a bug in qname.c that caused a seperator to change { CI0_SKIP, 1 } -> { 0, 1 }, thereby incorrectly triggering this function, so we refrain for erroring in that case
-        ASSPIZ ((DT_FUNC(vb, con_item_cb)) || !VER(14), "data_type=%s doesn't have con_item_cb requested by dict_id=%s. Please upgrade to the latest version of Genozip",
-                dt_name (vb->data_type), dis_dict_id (item->dict_id).s);
+        ASSPIZ ((DT_FUNC(vb, con_item_cb)) || !VER(14), "data_type=%s doesn't have con_item_cb requested by dict_id=%s. %s",
+                dt_name (vb->data_type), dis_dict_id (item->dict_id).s, genozip_update_msg());
 
         if (!vb->frozen_state.prm8[0]) // only if we're not just peeking
             DT_FUNC(vb, con_item_cb)(vb, item, reconstruction_start, BAFTtxt - reconstruction_start);
@@ -379,7 +378,7 @@ static inline unsigned container_reconstruct_item_seperator (VBlockP vb, const C
     }
 
     else if (item->separator[0] < '\t') {
-        ABORT_PIZ ("Unrecognized special seperator %u. Please upgrade to latest version of Genozip", item->separator[0]); // a seperator from the future
+        ABORT_PIZ ("Unrecognized special seperator %u. %s", item->separator[0], genozip_update_msg()); // a seperator from the future
         return 0;
     }
 
@@ -457,8 +456,8 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
     container_reconstruct_prefix (vb, con, pSTRa(prefixes), false, ctx->dict_id, DICT_ID_NONE, show_non_item); 
 
     ASSERT (DTP (container_filter) || (!con->filter_repeats && !con->filter_items), 
-            "data_type=%s doesn't support container_filter, despite being specified in the Container. Please upgrade to the latest version of Genozip.", 
-            dt_name (vb->data_type));
+            "data_type=%s doesn't support container_filter, despite being specified in the Container. %s", 
+            dt_name (vb->data_type), genozip_update_msg());
 
     uint32_t num_items = con_nitems(*con);
     Context *item_ctxs[num_items];
@@ -705,8 +704,8 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
         base64_decode (snip, &b64_len, (uint8_t*)&con);
         con.repeats = BGEN24 (con.repeats);
 
-        ASSERT (con_nitems (con) <= MAX_FIELDS, "A container of %s has %u items which is beyond MAX_FIELDS=%u. Please upgrade to latest version of genozip to access this file.",
-                ctx->tag_name, con_nitems (con), MAX_FIELDS);
+        ASSERT (con_nitems (con) <= MAX_FIELDS, "A container of %s has %u items which is beyond MAX_FIELDS=%u. %s",
+                ctx->tag_name, con_nitems (con), MAX_FIELDS, genozip_update_msg());
 
         // get the did_i for each dict_id - unfortunately we can only store did_i up to 254 (changing this would be a change in the file format)
         for (uint32_t item_i=0; item_i < con_nitems (con); item_i++)

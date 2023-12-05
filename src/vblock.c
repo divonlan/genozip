@@ -139,7 +139,7 @@ void vb_destroy_vb_do (VBlockP *vb_p, rom func)
 // return all VBlocks memory and unused evb memory to libc and optionally to the kernel
 void vb_dehoard_memory (bool release_to_kernel)
 {
-    vb_destroy_pool_vbs (POOL_MAIN); 
+    vb_destroy_pool_vbs (POOL_MAIN, false); 
     buflist_destroy_vb_bufs (evb, true); // destroys all unused buffers
 
     if (release_to_kernel)
@@ -369,14 +369,15 @@ bool vb_is_valid (VBlockP vb)
 }
 
 // frees memory of all VBs, except for non-pool VBs (evb, segconf...)
-void vb_destroy_pool_vbs (VBlockPoolType type)
+void vb_destroy_pool_vbs (VBlockPoolType type, bool destroy_pool)
 {
     if (!pools[type]) return;
 
     for (uint32_t vb_id=0; vb_id < pools[type]->num_vbs; vb_id++) 
         vb_destroy_vb (&pools[type]->vb[vb_id]);
 
-    FREE (pools[type]);
+    if (destroy_pool)
+        FREE (pools[type]);
 }
 
 // NOT thread safe, use only in execution-terminating messages

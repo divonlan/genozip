@@ -60,6 +60,7 @@ void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
                                       : header->sam.segconf_deep_qname2 ? QNAME2
                                       :                                   QNONE;
         segconf.deep_no_qual          = header->sam.segconf_deep_no_qual;
+        segconf.est_sam_factor        = (double)header->sam.segconf_sam_factor / (double)SAM_FACTOR_MULT;
     }
 }
 
@@ -136,6 +137,8 @@ void sam_piz_finalize (void)
         buf_destroy (z_file->sag_cigars);
         buf_destroy (z_file->sag_seq);
         buf_destroy (z_file->sag_qual);
+
+        vb_dehoard_memory (true);
     }
 }
 

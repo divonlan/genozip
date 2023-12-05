@@ -281,6 +281,8 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux
 
 #define ASSSEG0(condition, err_str) ASSSEG (condition, err_str "%s", "")
 
+#define ASSSEGNOTNULL(p)    ASSSEG0 (p, #p" is NULL")
+
 #define ABOSEG(format, ...) ASSSEG(false, format, __VA_ARGS__)
 
 #define ABOSEG0(err_str)    ASSSEG(false, err_str "%s", "")

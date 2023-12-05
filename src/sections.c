@@ -1003,12 +1003,12 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
                      digest_display_ex (h->chain.prim_genome_digest, DD_MD5).s);
 
         else if ((DT(SAM) || DT(BAM)) && v14)
-            sprintf (dt_specific, "%ssegconf=(sorted=%u,collated=%u,seq_len=%u,seq_len_to_cm=%u,ms_type=%u,has_MD_or_NM=%u,bisulfite=%u,MD_NM_by_unconverted=%u,predict_meth=%u,is_paired=%u,sag_type=%s,sag_has_AS=%u,pysam_qual=%u,cellranger=%u,SA_HtoS=%u,seq_len_dict_id=%s,deep_qname1=%u,deep_qname2=%u,deep_no_qual=%u)\n", 
+            sprintf (dt_specific, "%ssegconf=(sorted=%u,collated=%u,seq_len=%u,seq_len_to_cm=%u,ms_type=%u,has_MD_or_NM=%u,bisulfite=%u,MD_NM_by_unconverted=%u,predict_meth=%u,is_paired=%u,sag_type=%s,sag_has_AS=%u,pysam_qual=%u,cellranger=%u,SA_HtoS=%u,seq_len_dict_id=%s,deep_qname1=%u,deep_qname2=%u,deep_no_qual=%u,%uXsam_factor=%u)\n", 
                      SEC_TAB, h->sam.segconf_is_sorted, h->sam.segconf_is_collated, BGEN32 (h->sam.segconf_seq_len), h->sam.segconf_seq_len_cm, h->sam.segconf_ms_type, h->sam.segconf_has_MD_or_NM, 
                      h->sam.segconf_bisulfite, h->sam.segconf_MD_NM_by_un, h->sam.segconf_predict_meth, 
                      h->sam.segconf_is_paired, sag_type_name(h->sam.segconf_sag_type), h->sam.segconf_sag_has_AS, 
                      h->sam.segconf_pysam_qual, h->sam.segconf_cellranger, h->sam.segconf_SA_HtoS, dis_dict_id(h->sam.segconf_seq_len_dict_id).s,
-                     h->sam.segconf_deep_qname1, h->sam.segconf_deep_qname2, h->sam.segconf_deep_no_qual);
+                     h->sam.segconf_deep_qname1, h->sam.segconf_deep_qname2, h->sam.segconf_deep_no_qual, SAM_FACTOR_MULT, h->sam.segconf_sam_factor);
 
         else if (DT(REF)) {
             if (v15) sprintf (dt_specific, "%sgenome_digest=%s\n", SEC_TAB, digest_display (h->genome_digest).s);
@@ -1019,11 +1019,11 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
             sprintf (dt_specific, "%sFASTQ_v13_digest_bound=%s segconf_seq_len_dict_id=%s\n", 
                      SEC_TAB, digest_display (h->FASTQ_v13_digest_bound).s, dis_dict_id(h->fastq.segconf_seq_len_dict_id).s);
 
-        sprintf (str, "\n%sver=%u enc=%s dt=%s usize=%"PRIu64" lines=%"PRIu64" secs=%u txts=%u vb_size=%u\n" 
+        sprintf (str, "\n%sver=%u.0.%u enc=%s dt=%s usize=%"PRIu64" lines=%"PRIu64" secs=%u txts=%u vb_size=%u\n" 
                       "%s%s %s=\"%.*s\" %s=%s\n"
                       "%s" // dt_specific, if there is any
                       "%screated=\"%.*s\"\n",
-                 SEC_TAB, h->genozip_version, encryption_name (h->encryption_type), dt_name (dt), 
+                 SEC_TAB, h->genozip_version, h->genozip_minor_ver/*15.0.28*/, encryption_name (h->encryption_type), dt_name (dt), 
                  BGEN64 (h->recon_size_prim), BGEN64 (h->num_lines_bound), BGEN32 (h->num_sections), h->num_txt_files,
                  BGEN16(h->vb_size), 
                  SEC_TAB, sections_dis_flags (f, st, dt).s,
@@ -1287,7 +1287,7 @@ void sections_show_gheader (ConstSectionHeaderGenozipHeaderP header)
     
     if (header) {
         iprintf ("Contents of the SEC_GENOZIP_HEADER section (output of --show-gheader) of %s:\n", z_name);
-        iprintf ("  genozip_version: %u\n",         header->genozip_version);
+        iprintf ("  genozip_version: %u.0.%u\n",    header->genozip_version, header->genozip_minor_ver); // note: minor version always 0 before 15.0.28
         iprintf ("  data_type: %s\n",               dt_name (dt));
         iprintf ("  encryption_type: %s\n",         encryption_name (header->encryption_type)); 
         iprintf ("  recon_size_prim: %s\n",         str_int_commas (BGEN64 (header->recon_size_prim)).s);

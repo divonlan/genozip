@@ -20,7 +20,9 @@ typedef struct { // initialize with ctx_init_iterator()
 
 typedef enum { DYN_DEC, DYN_hex, DYN_HEX } DynType;
 
-typedef enum   __attribute__ ((__packed__)) { IDT_UNKNOWN, IDT_ALPHA_INT, IDT_ALPHA_NUM, IDT_ALPHA_INT_DOT_INT, IDT_ALPHA_NUM_DOT_INT, IDT_OTHER } IdType;
+typedef enum __attribute__ ((__packed__)) { IDT_UNKNOWN, IDT_ALPHA_INT, IDT_ALPHA_NUM, IDT_ALPHA_INT_DOT_INT, IDT_ALPHA_NUM_DOT_INT, IDT_OTHER } IdType;
+
+typedef enum __attribute__ ((__packed__)) { DEP_L0, DEP_L1, DEP_L2, NUM_LOCAL_DEPENDENCY_LEVELS } LocalDepType;
 
 typedef struct Context {
     // ----------------------------
@@ -79,6 +81,7 @@ typedef struct Context {
     Buffer domq_denorm;        // PIZ SAM/BAM/FASTQ: DomQual codec denormalization table for contexts with QUAL data 
     Buffer piz_lookback_buf;   // PIZ: SAM: used by contexts with lookback 
     Buffer channel_data;       // PIZ: SAM: QUAL/OPTION_iq_Z/OPTION_dq_Z/OPTION_sq_Z : used by PACB codec
+    Buffer homopolymer;        // PIZ: SAM: OPTION_tp_B_c
     };
 
     union {
@@ -127,7 +130,7 @@ typedef struct Context {
     bool lcodec_hard_coded;    // ZIP: lcodec is hard-coded and should not be reassigned
     bool empty_lookup_ok;      // PIZ: 
     };
-    enum __attribute__ ((__packed__)) { DEP_L0, DEP_L1, DEP_L2, NUM_LOCAL_DEPENDENCY_LEVELS } local_dep; // ZIP: this local is created when another local is compressed (each NONREF_X is created with NONREF is compressed) (value=0,1,2)
+    LocalDepType local_dep;    // ZIP: this local is created when another local is compressed (each NONREF_X is created with NONREF is compressed) (value=0,1,2)
     bool is_loaded;            // PIZ: either dict or local or b250 are loaded (not skipped) so context can be reconstructed
     bool is_initialized;       // ZIP / PIZ: context-specific initialization has been done
     union {
@@ -220,6 +223,7 @@ typedef struct Context {
    
     union { // 32 bit
         int32_t ctx_specific;
+        uint32_t segconf_max;       // maximum value during segconf
         bool last_is_alt;           // CHROM (all DTs): ZIP: last CHROM was an alt
         bool last_is_new;           // SAM_QNAME:       ZIP: used in segconf.running
         bool has_len;               // INFO_ANN subfields of cDNA, CDS, AA: ZIP
@@ -227,7 +231,14 @@ typedef struct Context {
             bool longr_bins_calculated; // ZIP zctx: codec_longr: were LONGR bins calculated in segconf
             Codec qual_codec;       // ZIP zctx: for displaying in stats
         };
-        int32_t last_repeat;        // OPTION_tp_B_c:   PIZ
+        struct ctx_tp {             // PIZ: OPTION_tp_B_ARR (15.0.10-15.0.27: OPTION_tp_B_c)
+            #define TP_LEN_BITS 11
+            #define HP_LEN_BITS 9
+            uint32_t repeat    : TP_LEN_BITS; // repeat within tp:B
+            uint32_t hp_start  : TP_LEN_BITS; // start of current condensed homopolymer (-1 if this is not a condensed homopolymer)
+            uint32_t hp_len    : HP_LEN_BITS; // length of current homopolymer
+            uint32_t condensed : 1;           // current homopolymer is condensed
+        } tp;
         struct {                    // INFO_DP:
             int32_t by_format_dp        : 1;   // ZIP/PIZ: segged vs sum of FORMAT/DP
             int32_t sum_format_dp       : 31;  // ZIP/PIZ: sum of FORMAT/DP of samples in this line ('.' counts as 0).
@@ -239,7 +250,6 @@ typedef struct Context {
         int32_t last_end_line_i;    // INFO_END:        PIZ: last line on which INFO/END was encountered 
 
         IdType id_type;             // ZIP: type of ID in fields segged with seg_id_field        
-             
         enum   __attribute__ ((__packed__)) { PAIR1_ALIGNED_UNKNOWN=-1, PAIR1_NOT_ALIGNED=0, PAIR1_ALIGNED=1 } pair1_is_aligned;  // FASTQ_SQBITMAP:  PIZ: used when reconstructing pair-2
         struct __attribute__ ((__packed__)) { Ploidy gt_prev_ploidy, gt_actual_last_ploidy; char gt_prev_phase; }; // FORMAT_GT: ZIP/PIZ
         struct __attribute__ ((__packed__)) { enum __attribute__ ((__packed__)) { PS_NONE, PS_POS, PS_POS_REF_ALT, PS_UNKNOWN } ps_type; }; // FORMAT_PS, FORMAT_PID, FORMAT_IPSphased
@@ -270,6 +280,7 @@ typedef struct Context {
     Buffer qual_line;          // ZIP: used by DOMQ codec on *_DOMQRUNS contexts
     Buffer normalize_buf;      // ZIP: used by DOMQ codec on QUAL contexts
     Buffer interlaced;         // ZIP: used to interlace BD/BI and iq/dq/sq line data
+    Buffer mi_history;         // ZIP: used by OPTION_MI_Z in Ultima
     };
     #define CTX_TAG_CON_INDEX "contexts->con_index"
     Buffer con_index;          // PIZ: use by contexts that might have containers: Array of uint32_t - index into con_cache - Each item corresponds to word_index. 

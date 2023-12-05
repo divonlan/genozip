@@ -26,12 +26,6 @@
 
 #define COMPLIMENT(b) (3-(b))
 
-// strict encoding of A,C,G,T - everything else in non-encodable (a 4 here)
-static inline uint32_t nuke_encode (char c)
-{
-    return c=='A'?0 : c=='C'?1 : c=='G'?2 : c=='T'?3 : 4;
-}
-
 // Foward example: If seq is: G-AGGGCT  (G is the hook)  -- matches reference AGGGCT       - function returns 110110101000 (A=00 is the LSb)
 // Reverse       : If seq is: CGCCCT-C  (C is the hook)  -- also matches reference AGGGCT  - function returns 110110101000 - the same
 // calculates a refhash word from 14 nucleotides following a 'G' (only last G in a sequenece of GGGG...)

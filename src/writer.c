@@ -97,13 +97,15 @@ uint64_t writer_get_txt_line_i (VBlockP vb, LineIType line_in_vb/*0-based*/)
     // since data is unmodified, we have only FULL_VB, RANGE, END_OF_VB and TXTHEADER plan items 
     int64_t txt_num_lines  = 0;
     LineIType vb_num_lines = 0;
+    int64_t factor = VB_DT(FASTQ) ? 4 : 1; // in FASTQ, each plan line is 4 txt lines
+
     ARRAY (ReconPlanItem, plan, z_file->recon_plan);
     
     for (uint64_t i=0; i < plan_len; i++) {
         if (plan[i].vb_i == vb->vblock_i) {
             // case: plan item containing this line
             if (vb_num_lines + plan[i].num_lines > line_in_vb) 
-                return txt_num_lines + (line_in_vb - vb_num_lines) + 1; // +1 because 1-based 
+                return txt_num_lines + (line_in_vb - vb_num_lines) * factor + 1; // +1 because 1-based 
 
             // case: plan item is from current VB, but we have not yet reached the current line
             else
@@ -112,7 +114,7 @@ uint64_t writer_get_txt_line_i (VBlockP vb, LineIType line_in_vb/*0-based*/)
 
         // note: txtheader lines are not included in the plan item, bc they are not counted for --header, --downsample etc
         txt_num_lines += (plan[i].flavor == PLAN_TXTHEADER) ? TXTINFO(plan[i].comp_i)->num_lines
-                                                            : VB_DT(FASTQ) ? (4 * plan[i].num_lines) : plan[i].num_lines; // in FASTQ, each plan line is 4 txt lines
+                                                            : (factor * plan[i].num_lines); 
     }
 
     WARN_ONCE0 ("Unexpectedly, unable to find current vb/line_i in recon_plan");

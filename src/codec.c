@@ -76,13 +76,13 @@ static COMPRESS (codec_compress_error)
 
 static UNCOMPRESS (codec_uncompress_error)
 {
-    ABORT ("Error in comp_uncompress: \"%s\": unsupported codec: %s. Please upgrade to the most recent version of Genozip.", name, codec_name (codec));
+    ABORT ("Error in comp_uncompress: \"%s\": unsupported codec: %s. %s", name, codec_name (codec), genozip_update_msg());
 }
 
 static CODEC_RECONSTRUCT (codec_reconstruct_error)
 {
-    ABORT ("Error in reconstruct_from_ctx_do: in ctx=%s - codec %s has no LT_CODEC reconstruction. Please upgrade to the most recent version of Genozip.", 
-           dis_dict_id (ctx->dict_id).s, codec_name (codec));
+    ABORT ("Error in reconstruct_from_ctx_do: in ctx=%s - codec %s has no LT_CODEC reconstruction. %s", 
+           dis_dict_id (ctx->dict_id).s, codec_name (codec), genozip_update_msg());
 }
 
 static uint32_t codec_est_size_default (Codec codec, uint64_t uncompressed_len)
@@ -321,8 +321,9 @@ done:
 }
 
 void codec_assign_best_qual_codec (VBlockP vb, Did did_i,  
-                                   LocalGetLineCB callback, bool no_longr, bool no_seq_dependency, 
-                                   bool maybe_revcomped)
+                                   LocalGetLineCB callback, bool no_seq_dependency, 
+                                   bool maybe_revcomped,
+                                   bool *codec_requires_seq)
 {
     decl_ctx (did_i);
 
@@ -330,11 +331,11 @@ void codec_assign_best_qual_codec (VBlockP vb, Did did_i,
         codec_longr_comp_init (vb, did_i);
 
     else if (codec_pacb_maybe_used (did_i) && !no_seq_dependency && codec_pacb_comp_init (vb, callback));
-
-    else if (!no_longr && !no_seq_dependency && codec_longr_maybe_used (did_i))
+    
+    else if (!no_seq_dependency && codec_longr_maybe_used (did_i))
         codec_longr_comp_init (vb, did_i);
 
-    else if (!no_seq_dependency && codec_homp_comp_init (vb, did_i, callback)); // only if Ultima, it might succeed
+    else if (!no_seq_dependency && codec_homp_comp_init (vb, did_i, callback)); // only if Ultima, it might succeed. takes precedence of DOMQ
 
     else if (!flag.no_domqual && codec_domq_comp_init (vb, did_i, callback));
     
@@ -348,6 +349,9 @@ void codec_assign_best_qual_codec (VBlockP vb, Did did_i,
     
     if (ctx->ltype != LT_BLOB && (did_i == SAM_QUAL/*==FASTQ_QUAL*/ || did_i == SAM_CQUAL || did_i == OPTION_OQ_Z)) 
         ZCTX(did_i)->qual_codec = ctx->lcodec; // used only for submitting stats (no atomic - last one wins)
+
+    if (codec_requires_seq && (ctx->lcodec == CODEC_PACB || ctx->lcodec == CODEC_LONGR || ctx->lcodec == CODEC_HOMP)) 
+        *codec_requires_seq = true;
 
     if (flag.show_codec && ctx->lcodec != CODEC_UNKNOWN) // aligned to the output of codec_assign_best_codec
         iprintf ("%-8s %-12s %-5s          *[%s]\n", VB_NAME, ctx->tag_name, "LOCAL", codec_name(CTX(did_i)->lcodec));

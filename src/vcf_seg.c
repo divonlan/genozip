@@ -275,6 +275,15 @@ static void vcf_seg_finalize_segconf (VBlockVCFP vb)
         !!segconf.has[INFO_dbSNPBuildID] + !!segconf.has[INFO_VC] + !!segconf.has[INFO_NSM] + !!segconf.has[INFO_U3] >= 3)
         segconf.vcf_is_dbSNP = true;
 
+    if (segconf.vcf_is_deep_variant && segconf.has[INFO_X_LM] && segconf.has[INFO_X_RM]) {
+        segconf.vcf_is_ultima_dv = true;
+
+        if (!flag.reference)
+            TIP ("Compressing a Ultima Genomics Deep Variable file using a reference file can reduce the size by 8%%.\n"
+                "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
+                arch_get_argv0(), txt_file->name);
+    }
+
     // in gnomAD, we have a huge number of INFO fields in various permutations - generating a huge INFO dictionary, but which compresses very very well
     if (segconf.vcf_is_gnomad)
         ZCTX(VCF_INFO)->dict_len_excessive = true; // don't warn if excessive
@@ -283,6 +292,19 @@ static void vcf_seg_finalize_segconf (VBlockVCFP vb)
         TIP ("Compressing a GVCF file using a reference file can reduce the compressed file's size by 10%%-30%%.\n"
              "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
              arch_get_argv0(), txt_file->name);
+
+    // In case of dependency DAG: DP->(sum)AD->(mux)GT we can't have GT->(null)DP
+    if (segconf.FORMAT_DP_method == by_AD) segconf.use_null_DP_method = false;
+
+    // percent of (samples x lines) that have a dosage value of 0,1 or 2 
+    segconf.pc_has_dosage = (float)segconf.count_dosage[1] / (float)(segconf.count_dosage[0] + segconf.count_dosage[1]);
+
+    // whether we should seg GQ as a function of GP or PL (the better of the two) - only if this works for at least 20% of the samples
+    segconf.GQ_by_GP = (segconf.count_GQ_by_GP > vb->lines.len * vcf_num_samples / 5) && (segconf.count_GQ_by_GP >  segconf.count_GQ_by_PL);
+    segconf.GQ_by_PL = (segconf.count_GQ_by_PL > vb->lines.len * vcf_num_samples / 5) && (segconf.count_GQ_by_PL >= segconf.count_GQ_by_GP);
+
+    if (segconf.has_DP_before_PL && !flag.best && !z_is_dvcf)
+        TIP0 ("Compressing this particular VCF with --best could result in significantly better compression");
 }
 
 void vcf_seg_finalize (VBlockP vb_)
@@ -477,8 +499,8 @@ static void vcf_seg_assign_tie_breaker (VBlockVCFP vb, ZipDataLineVCF *dl)
     if (vb->line_coords == DC_LUFT && LO_IS_OK (ostatus))
         vcf_refalt_seg_convert_to_primary (vb, ostatus);
 
-    // tie breaker is crc32 of the Primary REF\tALT, except for Luft-only lines, where it is the Adler32 of the Luft REF\tALT
-    dl->tie_breaker = crc32 (1, vb->main_ref, vb->main_ref_len + 1 + vb->main_alt_len);
+    // tie breaker is crc32 of the Primary REF\tALT, except for Luft-only lines, where it is the crc32 of the Luft REF\tALT
+    dl->tie_breaker = crc32 (1, vb->main_ref, vb->main_ref_len + 1 + vb->main_alt_len) ^ dl->end_delta;
 }
 
 static inline bool vcf_refalt_seg_ref_alt_line_has_RGQ (rom str)

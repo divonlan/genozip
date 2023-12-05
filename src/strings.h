@@ -162,6 +162,15 @@ static inline bool str_is_monochar (STRp(str))
     return true;
 }
 
+static inline unsigned homopolymer_len (STRp(seq), unsigned start)
+{
+    char base = seq[start];
+    for (unsigned i=start+1; i < seq_len; i++)
+        if (seq[i] != base) return i - start;
+
+    return seq_len - start;
+}
+
 // count the number of consecutive occurances of a character
 static inline uint64_t str_count_consecutive_char (rom str, uint64_t len, char c)
 {
@@ -189,8 +198,15 @@ extern rom str_to_hex (bytes data, uint32_t data_len, char *hex_str, bool with_d
 extern StrText str_hex10 (bytes data, uint32_t data_len); // up to 10 bytes in hex (21 chars inc. \0)
 
 // string length of an integer. #include <math.h> if using this.
-static inline unsigned str_int_len (uint32_t n)
-    { return n<10?1 : n<100?2 : n<1000?3 : n<10000?4 : n<100000?5 : n<1000000?6 : n<10000000?7 : n<100000000?8 : n<1000000000?9 : 10; }
+static inline unsigned str_int_len (int64_t n_)
+{ 
+    uint64_t n = ABS(n_); // longest possible number: -9,223,372,036,854,775,808 - 20 characters (without commas)
+    return (n_ < 0) +
+           (n<10ULL?1 : n<100ULL?2 : n<1000ULL?3 : n<10000ULL?4 : n<100000ULL?5 : n<1000000ULL?6 : n<10000000ULL?7 
+          : n<100000000ULL?8 : n<1000000000ULL?9 : n<10000000000ULL?10 : n<100000000000ULL?11 : n<1000000000000ULL?12 
+          : n<10000000000000ULL?13 : n<100000000000000ULL?14 : n<1000000000000000ULL?15 : n<10000000000000000ULL?16 
+          : n<100000000000000000ULL?17: n<1000000000000000000ULL?18 : 19); 
+}
 
 extern uint32_t str_int_ex (int64_t n, char *str /* out */, bool add_nul_terminator);
 static inline uint32_t str_int (int64_t n, char *str /* out */) { return str_int_ex (n, str, true); }

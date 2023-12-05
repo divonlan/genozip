@@ -250,6 +250,25 @@ static QualDiffType sam_seg_QUAL_diff (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(m
     return diff_type; // all good
 }
 
+static void sam_seg_QUAL_segconf (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual)/*always textual*/, bool monochar)
+{
+    if (!monochar && !vb->qual_missing) segconf.nontrivial_qual = true;
+
+    for (uint32_t i=0; i < qual_len; i++)
+        if (IS_NON_WS_PRINTABLE(qual[i]))
+            segconf.qual_histo[dl->is_consensus ? QHT_CONSENSUS : QHT_QUAL][qual[i]-33]++;
+
+    if (!dl->is_consensus) {
+        STRw(seq);
+        sam_zip_seq (VB, NULL, vb->line_i,  pSTRa(seq), CALLBACK_NO_SIZE_LIMIT, NULL);
+        if (seq_len != qual_len) return;
+        
+        for (unsigned i=0; i < seq_len; i++)
+            if (IS_NON_WS_PRINTABLE(qual[i]) && IS_ACGT(seq[i]))
+                segconf.qual_histo_acgt[dl->FLAG.rev_comp ? acgt_encode_comp[(uint8_t)seq[i]] : acgt_encode[(uint8_t)seq[i]]][qual[i]-33]++;
+    }
+}
+
 void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual)/*always textual*/, unsigned add_bytes)
 {
     START_TIMER;
@@ -354,13 +373,8 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual)/*always textual
     if (!segconf.running && segconf.sam_ms_type == ms_BIOBAMBAM && !flag.optimize_QUAL)
         dl->QUAL_score = sam_get_QUAL_score (vb, STRa(qual));
  
-    if (segconf.running) {
-        if (!monochar && !vb->qual_missing) segconf.nontrivial_qual = true;
-
-        for (uint32_t i=0; i < qual_len; i++)
-            if (IS_NON_WS_PRINTABLE(qual[i]))
-                segconf.qual_histo[dl->is_consensus ? QHT_CONSENSUS : QHT_QUAL][qual[i]-33]++;
-    }
+    if (segconf.running) 
+        sam_seg_QUAL_segconf (vb, dl, STRa(qual), monochar);
 
 done:
     COPY_TIMER (sam_seg_QUAL);

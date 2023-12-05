@@ -40,8 +40,17 @@ const DtTranslation dt_get_translation (VBlockP vb) // vb=NULL relates to the tx
         if (translations[i].src_z_non_bin_dt == z_dt &&
             (translations[i].src_z_is_binary == i_am_binary || translations[i].src_z_is_binary == unknown) &&
             translations[i].dst_txt_dt       == flag.out_dt &&
-            (!translations[i].is_translation || translations[i].is_translation (vb))) // if non-NULL, this flag determines if it is a translation
-            return translations[i + flag.extended_translation]; // get one of the following entries if extended
+            (!translations[i].is_translation || translations[i].is_translation (vb))) {// if non-NULL, this flag determines if it is a translation
+            
+            // special case BAM->SAM: since 15.0.28 segconf reports the actual factor which may vary widely between different files
+            if (translations[i].toplevel.num == _SAM_TOPLEVEL && segconf.est_sam_factor) {
+                DtTranslation copy = translations[i];
+                copy.factor = segconf.est_sam_factor * 1.20; // 20% safety margin above what segconf reported
+                return copy;
+            }
+            else
+                return translations[i + flag.extended_translation]; // get one of the following entries if extended
+        }
     }
 
     // translation not found - return a non-translation "translation"
@@ -72,5 +81,7 @@ rom dt_name (DataType dt)
 
 rom z_dt_name (void)
 {
-    return IS_SRC_BAM_PIZ ? "BAM" : dt_name (z_file->data_type);
+    return IS_SRC_BAM_PIZ ? "BAM" 
+         : z_file         ? dt_name (z_file->data_type)
+         :                  "ERR_NULL_Z_FILE";
 }

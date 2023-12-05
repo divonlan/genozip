@@ -40,7 +40,7 @@ typedef struct File {
     bool is_in_tar;                    // z_file: file is embedded in tar file
     bool is_scanned;                   // TXT_FILE: sam_sag_by_flag_scan_for_depn has been performed for this file
     DataType data_type;
-    Codec source_codec;                // TXT_FILE ZIP: codec of txt file before redirection (eg CRAM, XZ, ZIP...)
+    Codec source_codec;                // TXT_FILE ZIP: codec of txt file before redirection (eg CRAM, XZ, ZIP...). Note: CODEC_BAM if BAM (with or without internal bgzf compression)
     Codec codec;                       // TXT_FILE ZIP: generic codec used with this file. If redirected - as read by txtfile (eg for cram files this is BGZF)
 
     // these relate to actual bytes on the disk
@@ -75,8 +75,9 @@ typedef struct File {
     bool piz_header_init_has_run;      // PIZ: true if we called piz_header_init to initialize (only once per outputted txt_file, even if concatenated)
 
     // Used for READING GENOZIP files
-    uint8_t genozip_version;           // PIZ: GENOZIP_FILE_FORMAT_VERSION of the genozip file being read. ZIP: set to GENOZIP_FILE_FORMAT_VERSION
-        
+    uint8_t genozip_version;           // major version of the genozip file being created / read
+    uint8_t genozip_minor_ver;
+            
     CompIType num_txt_files;           // PIZ Z_FILE: set from genozip header (ZIP: see num_txts_so_far)
     CompIType num_txts_so_far;         // ZIP Z_FILE: number of txt files compressed into this z_file - each becomes one or more components
                                        // PIZ Z_FILE: number of txt files written from this z_file - each generated from one or more components 
@@ -247,6 +248,7 @@ extern rom ft_name (FileType ft);
 extern void file_get_file (VBlockP vb, rom filename, BufferP buf, rom buf_name, uint64_t max_size, bool verify_textual, bool add_string_terminator);
 extern bool file_put_data (rom filename, const void *data, uint64_t len, mode_t mode);
 extern void file_put_data_abort (void);
+extern void file_put_data_reset_after_fork (void);
 
 typedef struct { char s[64]; } PutLineFn;
 extern PutLineFn file_put_line (VBlockP vb, STRp(line), rom msg);

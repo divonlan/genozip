@@ -108,7 +108,7 @@ static void zip_display_compression_ratio (Digest md5)
     // when compressing BAM report only ratio_vs_comp (compare to BGZF-compress BAM - we don't care about the underlying plain BAM)
     // Likewise, doesn't have a compression extension (eg .gz), even though it may actually be compressed eg .tbi (which is actually BGZF)
     else if (Z_DT(BAM) || (txt_file && file_get_codec_by_txt_ft (txt_file->data_type, txt_file->type, false) == CODEC_NONE)) 
-        progress_finalize_component_time_ratio (z_dt_name(), ratio_vs_comp, md5);
+        progress_finalize_component_time_ratio (txt_file->source_codec == CODEC_CRAM ? "CRAM" : z_dt_name(), ratio_vs_comp, md5);
 
     else if (ratio_vs_comp >= 0) {
         if (txt_file->codec == CODEC_NONE || ratio_vs_comp < 1.05) // disk_so_far doesn't give us the true txt file size 

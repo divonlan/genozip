@@ -45,7 +45,6 @@
 #include "dispatcher.h"
 #include "biopsy.h"
 
-
 // globals - set in main() and immutable thereafter
 char global_cmd[256]; 
 ExeType exe_type;
@@ -58,8 +57,8 @@ CommandType command = NO_COMMAND, primary_command = NO_COMMAND;
 uint32_t global_max_threads = DEFAULT_MAX_THREADS; 
 static bool tip_printed = false;
 
-#define MAIN(format, ...) ({ if (flag.echo || flag.test_i) { progress_newline(); fprintf (stderr, "%s[%u]: ",     command_name(), getpid()); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } })
-#define MAIN0(string)     ({ if (flag.echo || flag.test_i) { progress_newline(); fprintf (stderr, "%s[%u]: %s\n", command_name(), getpid(), string); } })
+#define MAIN(format, ...) ({ if (!flag.explicit_quiet && (flag.echo || flag.test_i)) { progress_newline(); fprintf (stderr, "%s[%u]: ",     command_name(), getpid()); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } })
+#define MAIN0(string)     ({ if (!flag.explicit_quiet && (flag.echo || flag.test_i)) { progress_newline(); fprintf (stderr, "%s[%u]: %s\n", command_name(), getpid(), string); } })
 
 rom command_name (void) // see CommandType
 {
@@ -150,8 +149,8 @@ void noreturn main_exit (bool show_stack, bool is_error)
             refhash_destroy();
             kraken_destroy();
             chain_destroy();
-            vb_destroy_pool_vbs (POOL_MAIN);
-            vb_destroy_pool_vbs (POOL_BGZF);
+            vb_destroy_pool_vbs (POOL_MAIN, true);
+            vb_destroy_pool_vbs (POOL_BGZF, true);
             vb_destroy_vb (&evb);
         }
     }

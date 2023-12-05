@@ -397,14 +397,17 @@ StrText segconf_get_qual_histo (QualHistType qht)
     StrText s = {};
     char *next = s.s;
 
+    uint32_t *histo = IS_ACGT(qht) ? segconf.qual_histo_acgt[acgt_encode[qht]]
+                                   : segconf.qual_histo[qht];
+
     // get the (up to) 16 qual scores with the highest count. O(N^2) method, but that's ok - only ~1500 iterations.
     for (int i=0; i < 16; i++) {
         int max_score = 0;
         uint32_t max_count = 0;
 
-        for (int score=0; score < 94; score++)
-            if (segconf.qual_histo[qht][score] > max_count) {
-                max_count = segconf.qual_histo[qht][score];
+        for (int score=0; score < NUM_QUAL_SCORES; score++)
+            if (histo[score] > max_count) {
+                max_count = histo[score];
                 max_score = score + 33;
             }
 
@@ -416,7 +419,7 @@ StrText segconf_get_qual_histo (QualHistType qht)
             default  : *next++ = max_score;
         }
 
-        segconf.qual_histo[qht][max_score-33] = 0;
+        histo[max_score-33] = 0;
     }
 
     return s;

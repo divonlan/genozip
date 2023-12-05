@@ -37,17 +37,15 @@ static rom progress_ellapsed_time (bool ever)
     return time_str;
 }
 
-static void progress_update_status (char **prefix, rom status)
+static void progress_update_status (rom prefix, rom status)
 {
     if (flag.quiet) return;
 
     static rom eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
     static rom spaces = "                                                                                ";
 
-    if (prefix && *prefix) {
-        iprintf ("%s", *prefix);
-        FREE (*prefix);
-    }
+    if (prefix && prefix[0]) 
+        iprintf ("%s", prefix);
 
     iprintf ("%.*s%.*s%.*s%s", last_len, eraser, last_len, spaces, last_len, eraser, status);
 
@@ -61,11 +59,11 @@ void progress_erase (void)
     progress_update_status (NULL, "");
 }
 
-char *progress_new_component (rom new_component_name, 
-                              rom message, // can be NULL
-                              int new_test_mode)   // true, false or -1 for unchanged
+void progress_new_component (rom new_component_name, 
+                             rom message, // can be NULL
+                             bool new_test_mode)
 {
-    char *prefix = NULL;
+    StrTextSuperLong prefix = {};
 
     // (re) initialize if new component
     if (!component_name || strcmp (new_component_name, component_name)) {
@@ -76,40 +74,48 @@ char *progress_new_component (rom new_component_name,
             ever_start_time_initialized = true;
         }
 
-        if (new_test_mode != -1) 
-            test_mode = new_test_mode;
-
+        test_mode = new_test_mode;
         component_name = new_component_name; 
 
         if (!flag.quiet) {
-            prefix = MALLOC (100 + strlen (global_cmd) + strlen (component_name));
+            
             if (test_mode) { 
-                char genounzip_str[strlen(global_cmd)+3];
-                if (strstr (global_cmd, "genozip")) {
-                    char *zip = strstr (global_cmd, "zip");
-                    sprintf (genounzip_str, "%.*sun%s", (int)(zip-global_cmd), global_cmd, zip);
-                }
-                else 
-                    strcpy (genounzip_str, global_cmd);
+                int global_cmd_len = strlen (global_cmd);
+                int component_name_len = strlen (component_name);
 
-                sprintf (prefix, "testing: %s %s : ", genounzip_str, component_name);
+                if (64 + global_cmd_len + component_name_len < sizeof(prefix)) { // fits in prefix 
+                    char genounzip_str[component_name_len + 3];
+                    if (strstr (global_cmd, "genozip")) {
+                        char *zip = strstr (global_cmd, "zip");
+                        sprintf (genounzip_str, "%.*sun%s", (int)(zip-global_cmd), global_cmd, zip);
+                    }
+                    else 
+                        strcpy (genounzip_str, global_cmd);
+
+                    if (component_name_len > 4 && !memcmp (&component_name[component_name_len-5], ".cram", 5))
+                        sprintf (prefix.s, "testing: %s %.*s.bam : ", genounzip_str, component_name_len-5, component_name);                
+                    else
+                        sprintf (prefix.s, "testing: %s %s : ", genounzip_str, component_name);
+                }
+
+                else
+                    strcpy (prefix.s, "testing: ");
+
             }
             else if (flag.make_reference)
-                sprintf (prefix, "%saking refernece file: %s %s : ", 
+                sprintf (prefix.s, "%saking refernece file: %s %s : ", 
                          txt_file->is_remote ? "Downloading & m" : "M", global_cmd, component_name);
             
             else
-                sprintf (prefix, "%s %s : ", global_cmd, component_name); 
+                sprintf (prefix.s, "%s %s : ", global_cmd, component_name); 
         }
     }
 
     if (!flag.reading_chain) 
-        progress_update_status (&prefix, message ? message : "");
-
-    return prefix;
+        progress_update_status (prefix.s, message ? message : "");
 }
 
-void progress_update (rom task, char **prefix, uint64_t sofar, uint64_t total, bool done)
+void progress_update (rom task, uint64_t sofar, uint64_t total, bool done)
 {
     char time_str[70], progress_str[200];
     if (flag.quiet && !flag.debug_progress) return; 
@@ -130,10 +136,10 @@ void progress_update (rom task, char **prefix, uint64_t sofar, uint64_t total, b
     // case: we've reached 99% prematurely... we under-estimated the time
     if (!done && percent > 99 && (last_seconds_so_far < seconds_so_far)) {
         if (!flag.debug_progress)
-            progress_update_status (prefix, "Finalizing...");
+            progress_update_status (NULL, "Finalizing...");
         else {
             sprintf (progress_str, "Finalizing... %u%% task=%s sofar=%"PRIu64" total=%"PRIu64, (unsigned)percent, task, sofar, total);            
-            progress_update_status (prefix, progress_str);
+            progress_update_status (NULL, progress_str);
         }
     }
     
@@ -151,7 +157,7 @@ void progress_update (rom task, char **prefix, uint64_t sofar, uint64_t total, b
                 sprintf (progress_str, "%u%% (%s) task=%s sofar=%"PRIu64" total=%"PRIu64" seconds_so_far=%d", 
                          (unsigned)percent, time_str, task, sofar, total, seconds_so_far);            
 
-            progress_update_status (prefix, progress_str);
+            progress_update_status (NULL, progress_str);
         }
     }
 

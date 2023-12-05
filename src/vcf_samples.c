@@ -177,23 +177,8 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
 
 void vcf_samples_seg_finalize (VBlockVCFP vb)
 {
-    if (segconf.running) {
-        // In case of dependency DAG: DP->(sum)AD->(mux)GT we can't have GT->(null)DP
-        if (segconf.FORMAT_DP_method == by_AD) segconf.use_null_DP_method = false;
-
-        // percent of (samples x lines) that have a dosage value of 0,1 or 2 
-        segconf.pc_has_dosage = (float)segconf.count_dosage[1] / (float)(segconf.count_dosage[0] + segconf.count_dosage[1]);
-
-        // whether we should seg GQ as a function of GP or PL (the better of the two) - only if this works for at least 20% of the samples
-        segconf.GQ_by_GP = (segconf.count_GQ_by_GP > vb->lines.len * vcf_num_samples / 5) && (segconf.count_GQ_by_GP >  segconf.count_GQ_by_PL);
-        segconf.GQ_by_PL = (segconf.count_GQ_by_PL > vb->lines.len * vcf_num_samples / 5) && (segconf.count_GQ_by_PL >= segconf.count_GQ_by_GP);
-
-        if (segconf.has_DP_before_PL && !flag.best && !z_is_dvcf)
-            TIP0 ("Compressing this particular VCF with --best could result in significantly better compression");
-    }
-    else {
+    if (!segconf.running) 
         vcf_samples_seg_finalize_PS_PID(vb);
-    }
 }
 
 // returns true is the sample has a '.' value

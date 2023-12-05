@@ -188,7 +188,9 @@ typedef struct {
     EncryptionType encryption_type;    // one of EncryptionType
     uint16_t data_type;                // one of DataType
     uint64_t recon_size_prim;          // data size of reconstructed file, if uncompressing as a single file in primary coordinates
-    uint64_t num_lines_bound;          // number of lines in a bound file. "line" is data_type-dependent. For FASTQ, it is a read.
+    uint64_t genozip_minor_ver : 8;    // populated since 15.0.28
+    uint64_t unused8           : 8;
+    uint64_t num_lines_bound   : 48;   // number of lines in a bound file. "line" is data_type-dependent. For FASTQ, it is a read.
     uint32_t num_sections;             // number sections in this file (including this one)
     union {
         struct {                       // v14
@@ -245,7 +247,8 @@ typedef struct {
             uint8_t segconf_deep_qname2  : 1; // SAM: v15
             uint8_t segconf_deep_no_qual : 1; // SAM: v15
             uint8_t unused_bits          : 7;
-            char unused[255];
+            uint8_t segconf_sam_factor;       // 15.0.28: BAM only: 64X estimated blow-up factor of SAM txt_data vs BAM 
+            char unused[254];
         } sam;
 
         struct { 
@@ -359,7 +362,7 @@ typedef struct {
     SectionHeader;
     LocalType ltype;           // SEC_LOCAL: goes into ctx->ltype - type of data of the ctx->local buffer
                                // SEC_250:   unused. up to 15.0.17 populated with ctx->ltype and copied in PIZ to ctx->ltype if the corresponding local section is absent
-    uint8_t param;             // Three options: 1. goes into ctx->local.param. (until v13: if flags.copy_local_param. since v14: always, except if ltype=LT_BITMAP) 
+    uint8_t param;             // Three options: 1. goes into ctx->local.param. (in PIZ: until v13: if flags.copy_local_param. since v14: always, except if ltype=LT_BITMAP) 
                                //                2. given to comp_uncompress as a codec parameter
                                //                3. starting 9.0.11 for ltype=LT_BITMAP: number of unused bits in top bits word
     B250Size b250_size : 2;    // b250 sections only: size of each b250 element (v14)

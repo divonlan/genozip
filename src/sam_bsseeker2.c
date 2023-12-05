@@ -291,7 +291,7 @@ void sam_seg_bsseeker2_XM_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XM), unsign
     }
 
     rom xg  = Bc (vb->XG, 2); // skip 2 flanking bases
-    rom seq = IS_BAM_ZIP ? vb->textual_seq.data : Btxt (dl->SEQ.index);
+    rom seq = vb->textual_seq_str;
     bool rev_comp = dl->FLAG.rev_comp;
 
     ARRAY (BamCigarOp, cigar, vb->binary_cigar);
@@ -348,7 +348,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_BSSEEKER2_XM)
     xg_len = vb->XG.len;
     int32_t xg_i=0;
 
-    rom seq = OUT_DT(BAM) ? vb->textual_seq.data : last_txt(VB, SAM_SQBITMAP);
+    rom seq = sam_piz_get_textual_seq (VB);
     char *recon = BAFTtxt;
     ARRAY (BamCigarOp, cigar, vb->binary_cigar);
     int op_i = (!XG_inc_S && cigar[0].op == BC_S);

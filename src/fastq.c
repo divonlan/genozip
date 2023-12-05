@@ -428,10 +428,10 @@ void fastq_seg_finalize (VBlockP vb)
         fastq_seg_finalize_segconf (vb);
 
     // assign the QUAL codec
-    codec_assign_best_qual_codec (vb, FASTQ_QUAL, fastq_zip_qual, false, segconf.deep_has_trimmed, false);
+    codec_assign_best_qual_codec (vb, FASTQ_QUAL, fastq_zip_qual, segconf.deep_has_trimmed, false, NULL);
     
     if (segconf.has_agent_trimmer) 
-        codec_assign_best_qual_codec (vb, OPTION_QX_Z, NULL, true, true, false);
+        codec_assign_best_qual_codec (vb, OPTION_QX_Z, NULL, true, false, NULL);
 
     // top level snip
     SmallContainer top_level = { 

@@ -83,12 +83,12 @@ void sam_seg_TLEN (VBlockSAMP vb, ZipDataLineSAM *dl,
     if (segconf.has_TLEN_non_zero && sam_seg_predict_TLEN (vb, dl, is_rname_rnext_same, &predicted_tlen)
         && ABS (tlen_value - predicted_tlen) <= 7) {
 
-/*        if (predicted_tlen != tlen_value)
-            printf ("WRONG FLAG=%x tlen=%d expected=%d : line_i=%u POS=%u PNEXT=%u RefConsumed=%u mate_RefConsumed=%u sup=%u next_unmapped=%u is_first=%u rev=%u next_rev=%u aligned=%u\n", 
-                    dl->FLAG.value, (int)tlen_value, (int)predicted_tlen,
-                    vb->line_i, (int)dl->POS, (int)dl->PNEXT, vb->ref_consumed, (int)CTX(OPTION_MC_Z)->last_value.i,
-                    dl->FLAG.supplementary, dl->FLAG.next_unmapped, dl->FLAG.is_first, dl->FLAG.rev_comp, dl->FLAG.next_rev_comp, dl->FLAG.is_aligned);
-*/
+        // if (predicted_tlen != tlen_value)
+        //     printf ("WRONG FLAG=%x tlen=%d expected=%d : line_i=%u POS=%u PNEXT=%u RefConsumed=%u mate_RefConsumed=%u sup=%u next_unmapped=%u is_first=%u rev=%u next_rev=%u aligned=%u\n", 
+        //             dl->FLAG.value, (int)tlen_value, (int)predicted_tlen,
+        //             vb->line_i, (int)dl->POS, (int)dl->PNEXT, vb->ref_consumed, (int)CTX(OPTION_MC_Z)->last_value.i,
+        //             dl->FLAG.supplementary, dl->FLAG.next_unmapped, dl->FLAG.is_first, dl->FLAG.rev_comp, dl->FLAG.next_rev_comp, dl->FLAG.is_aligned);
+
         SNIPi3 (SNIP_SPECIAL, SAM_SPECIAL_TLEN, '0' + (segconf.has[OPTION_MC_Z] > 0), tlen_value - predicted_tlen);
         seg_by_ctx (VB, STRa(snip), ctx, add_bytes);
     }

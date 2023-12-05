@@ -38,5 +38,6 @@
         "utility": "c",
         "endianness.h": "c"
     },
-    "cmake.sourceDirectory": "C:/Users/divon/genozip/src/onion"
+    "cmake.sourceDirectory": "C:/Users/divon/genozip/src/onion",
+    "cmake.configureOnOpen": false
 }

@@ -969,8 +969,9 @@ FileP file_open_z_write (rom filename, FileMode mode, DataType data_type)
     if (chain_is_loaded)
         file->z_flags.has_gencomp = true; // dual-coordinate file
 
-    file->genozip_version = GENOZIP_FILE_FORMAT_VERSION; // to allow the VER macro to operate consistently across ZIP/PIZ
-    
+    file->genozip_version   = exec_version_major(); // to allow the VER macro to operate consistently across ZIP/PIZ
+    file->genozip_minor_ver = exec_version_minor();
+
     file_initialize_z_file_data (file);
 
     ASSINP (file->file || flag.zip_no_z_file, 
@@ -1434,6 +1435,11 @@ void file_put_data_abort (void)
         }
 
     // mutex remains locked - no more files can be put after this point
+}
+
+void file_put_data_reset_after_fork (void)
+{
+    put_data_mutex = (Mutex){};
 }
 
 PutLineFn file_put_line (VBlockP vb, STRp(line), rom msg)

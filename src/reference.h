@@ -122,7 +122,11 @@ extern void ref_cache_detach (Reference ref);
 extern void noreturn ref_cache_hold (rom handle_str);
 extern void ref_cache_ls (void);
 
-extern const uint8_t acgt_encode[256];
+// strict encoding of A,C,G,T - everything else in non-encodable (a 4 here)
+static inline uint32_t nuke_encode      (char c) { return c=='A'?0 : c=='C'?1 : c=='G'?2 : c=='T'?3 : 4; }
+static inline uint32_t nuke_encode_comp (char c) { return c=='T'?0 : c=='G'?1 : c=='C'?2 : c=='A'?3 : 4; }
+
+extern const uint8_t acgt_encode[256]; // also encodes IUPACs to 0->4
 extern const uint8_t acgt_encode_comp[256];
 
 // note that the following work on idx and not pos! (idx is the index within the range)

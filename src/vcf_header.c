@@ -709,7 +709,8 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
     IF_IN_HEADER ("Number of cases used to estimate genetic effect", vcf_is_gwas, "GWAS_1.0"); // v1.0
     IF_IN_HEADER ("##trait", vcf_is_gwas, "GWAS_1.2"); /*v1.2*/
     IF_IN_HEADER ("DRAGEN", vcf_is_dragen, "DRAGEN");
-
+    IF_IN_HEADER ("DeepVariant", vcf_is_deep_variant, "DeepVariant");
+    
     #define VEP_SIGNATURE "VEP. Format: "
     IF_IN_HEADER (VEP_SIGNATURE, vcf_is_vep, "VEP");
     if (segconf.vcf_is_vep) {

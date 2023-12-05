@@ -617,6 +617,7 @@ int32_t bam_is_header_done (bool is_eof)
 
         if (is_sam (STRb(evb->txt_data), NULL)) {
             txt_file->data_type = z_file->data_type = DT_SAM;
+            txt_file->source_codec = txt_file->codec; // not CODEC_BAM anymore
             z_file->z_flags.txt_is_bin = false;
             return HEADER_DATA_TYPE_CHANGED;
         }

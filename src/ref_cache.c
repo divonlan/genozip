@@ -272,7 +272,7 @@ bool ref_cache_initialize_genome (Reference ref)
         // set our other data *after* the creation_ts
         ref->cache->creator_pid = getpid();
         ref->cache->magic = GENOZIP_MAGIC;
-        ref->cache->genozip_version = GENOZIP_FILE_FORMAT_VERSION;
+        ref->cache->genozip_version = exec_version_major();
         ref->cache->shm_size = shm_size;
         filename_base (ref->filename, false, "<unknown>", ref->cache->ref_basename, sizeof (ref->cache->ref_basename));
 

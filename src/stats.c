@@ -323,6 +323,9 @@ static void stats_output_file_metadata (void)
                 bufprintf (evb, &features, "OQ_histo=%s;", segconf_get_qual_histo(QHT_OQ).s);
             }
 
+            bufprintf (evb, &features, "Qual_acgt=%s――%s――%s――%s;", // super long unicode hyphen 
+                       segconf_get_qual_histo('A').s, segconf_get_qual_histo('C').s, segconf_get_qual_histo('G').s, segconf_get_qual_histo('T').s);
+
             FEATURE0 (segconf.sam_bisulfite, "Feature: Bisulfite", "Bisulfite");
             FEATURE0 (segconf.has_cellranger, "Feature: cellranger-style fields", "has_cellranger");
             REPORT_KRAKEN;
@@ -420,6 +423,9 @@ static void stats_output_file_metadata (void)
             }
             bufprintf (evb, &features, "Qual=%s;", !segconf.nontrivial_qual ? "Trivial" : ZCTX(SAM_QUAL)->qual_codec != CODEC_UNKNOWN ? codec_name (ZCTX(SAM_QUAL)->qual_codec) : codec_name (ZCTX(SAM_QUAL)->lcodec));
             bufprintf (evb, &features, "Qual_histo=%s;", segconf_get_qual_histo(QHT_QUAL).s);
+
+            bufprintf (evb, &features, "Qual_acgt=%s――%s――%s――%s;", // super long unicode hyphens
+                       segconf_get_qual_histo('A').s, segconf_get_qual_histo('C').s, segconf_get_qual_histo('G').s, segconf_get_qual_histo('T').s);
 
             REPORT_KRAKEN;
             if (segconf.r1_or_r2) bufprintf (evb, &features, "R1_or_R2=R%d;", (segconf.r1_or_r2 == PAIR_R1) ? 1 : 2);

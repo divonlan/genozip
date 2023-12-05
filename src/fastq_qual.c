@@ -17,6 +17,21 @@
 // ZIP
 //---------------
 
+static void fastq_seg_QUAL_segconf (VBlockFASTQP vb, STRp(qual))
+{
+    for (uint32_t i=0; i < qual_len; i++)
+        if (IS_NON_WS_PRINTABLE(qual[i]))
+            segconf.qual_histo[0][qual[i]-33]++;
+
+    STRw(seq);
+    fastq_zip_seq (VB, NULL, vb->line_i,  pSTRa(seq), CALLBACK_NO_SIZE_LIMIT, NULL);
+    if (seq_len != qual_len) return;
+    
+    for (unsigned i=0; i < seq_len; i++)
+        if (IS_NON_WS_PRINTABLE(qual[i]) && IS_ACGT(seq[i]))
+            segconf.qual_histo_acgt[acgt_encode[(uint8_t)seq[i]]][qual[i]-33]++;
+}
+
 void fastq_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qual))
 {
     START_TIMER;
@@ -39,9 +54,7 @@ void fastq_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qual))
     }
 
     if (segconf.running)
-        for (uint32_t i=0; i < qual_len; i++)
-            if (IS_NON_WS_PRINTABLE(qual[i]))
-                segconf.qual_histo[0][qual[i]-33]++;
+        fastq_seg_QUAL_segconf (vb, STRa(qual));
 
     COPY_TIMER (fastq_seg_QUAL);
 }

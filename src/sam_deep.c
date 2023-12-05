@@ -180,7 +180,7 @@ void sam_deep_set_SEQ_hash (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_seq)
     }
 }
 
-// ZIP compute thread while segging QUAL: hash of forward QUAL (i.e. as it would appear in the FASTQ file) for Deep 
+// ZIP: compute thread while segging QUAL: hash of forward QUAL (i.e. as it would appear in the FASTQ file) for Deep 
 void sam_deep_set_QUAL_hash (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual))
 {
     if (!dl->is_deepable || 
@@ -190,7 +190,7 @@ void sam_deep_set_QUAL_hash (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual))
 
     if (flag.show_deep == 2 && deephash_issame (dl->deep_hash, flag.debug_deep_hash)) 
         iprintf ("%s Found deep_hash=%u,%u,%u\nQNAME=\"%.*s\"\nSEQ=\"%.*s\"\nQUAL=\"%.*s\"\n",
-                 LN_NAME, DEEPHASHf(dl->deep_hash), STRfw(dl->QNAME), STRfb(vb->textual_seq), STRfw(dl->QUAL));
+                 LN_NAME, DEEPHASHf(dl->deep_hash), STRfw(dl->QNAME), dl->SEQ.len, vb->textual_seq_str, STRfw(dl->QUAL));
 }
 
 // ZIP compute thread: mutex-protected callback from ctx_merge_in_vb_ctx during merge: add VB's deep_hash to z_file->deep_index_by_*/deep_ents

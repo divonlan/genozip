@@ -106,7 +106,7 @@ void vcf_seg_INFO_END (VBlockVCFP vb, ContextP end_ctx, STRp(end_str)) // end_ct
         seg_pos_field (VB, VCF_POS, VCF_POS, SPF_BAD_SNIPS_TOO | SPF_ZERO_IS_BAD, 0, STRa(end_str), 0, end_str_len);
 
     // add end_delta to dl for sorting. it is used only in case chrom and pos are identical
-    DATA_LINE (vb->line_i)->end_delta = vb->last_delta (INFO_END);
+    DATA_LINE (vb->line_i)->end_delta = vb->last_delta (VCF_POS);
 
     // case --chain: if we have lifted-over POS (as primary POS field or in INFO/LIFTBACK), 
     // check that lifting-over of END is delta-encoded and is lifted over to the same, non-xstrand, Chain alignment, and reject if not

@@ -548,14 +548,14 @@
 
 // Ultima Genomics
 // also has standard tags: AS:i SA:Z NM:i MD:Z RG:Z. Methylation fields: XM:Z, XG:Z, XR:Z. XA:Z, X1:i as in bwa.
-#pragma GENDICT OPTION_tp_B_c=DTYPE_2=tp:B:c // supplemental base quality information
+#pragma GENDICT OPTION_tp_B_c=DTYPE_2=tp:B:c // supplemental base quality information: are homopolymers more likely increase or decrease in length (see: https://cdn.sanity.io/files/l7780ks7/production/6424eac65cabf9f5be68613c8780aacafe28202f.pdf)
 #pragma GENDICT OPTION_tp_B_ARR=DTYPE_2=tpc_ARR // matches dict_id created in sam_seg_array_field_get_con
 #pragma GENDICT OPTION_bi_Z=DTYPE_2=bi:Z
 //#pragma GENDICT OPTION_rq_f=DTYPE_2=rq:f   // (dup) Read quality
 #pragma GENDICT OPTION_XV_Z=DTYPE_2=XV:Z
 #pragma GENDICT OPTION_XW_Z=DTYPE_2=XW:Z
 #pragma GENDICT OPTION_tm_Z=DTYPE_2=tm:Z     // Trimming reasons: A=Adapter Q=Quality Z=Three Zeroes
-#pragma GENDICT OPTION_t0_Z=DTYPE_2=t0:Z     // supplemental base quality information
+#pragma GENDICT OPTION_t0_Z=DTYPE_2=t0:Z     // supplemental base quality information: the probability for missed signal in any flow with zero length: see https://cdn.sanity.io/files/l7780ks7/production/6424eac65cabf9f5be68613c8780aacafe28202f.pdf
 #pragma GENDICT OPTION_pr_i=DTYPE_2=pr:i     // Ring index, 1-based
 #pragma GENDICT OPTION_pt_i=DTYPE_2=pt:i     // Tile index, 1-based
 #pragma GENDICT OPTION_px_i=DTYPE_2=px:i     // X position in tile
@@ -565,7 +565,7 @@
 #pragma GENDICT OPTION_tq_i=DTYPE_2=tq:i
 #pragma GENDICT OPTION_tz_i=DTYPE_2=tz:i
 #pragma GENDICT OPTION_DS_i=DTYPE_2=DS:i
-//#pragma GENDICT OPTION_MI_Z=DTYPE_2=MI:Z   // (dup) non standard. appears to have QNAME format.
+//#pragma GENDICT OPTION_MI_Z=DTYPE_2=MI:Z   // (dup) non standard. Appears on Duplicate reads or reads that have a Duplicate, and is the QNAME of the non-duplicate read
 
 // Illumina iSAAC (discontinued): https://github.com/Illumina/Isaac4/blob/master/src/markdown/manual.md
 //#pragma GENDICT OPTION_AS_i=DTYPE_2=AS_i   // (dup) Pair alignment score
@@ -584,7 +584,7 @@
 
 // Agilent Genomics Toolkit (AGeNT) - see https://www.agilent.com/cs/library/software/Public/AGeNT%20ReadMe.pdf
 // AGeNT Trimmer. also: standard BC:Z
-#pragma GENDICT OPTION_ZA_Z=DTYPE_2=ZA:Z     // 3 bases of BC:Z (first half of dual MBC), followed by 1 or 2 dark bases 
+#pragma GENDICT OPTION_ZA_Z=DTYPE_2=ZA:Z     // 3 bases of BC:Z (first half of dual MBC (Molecular Barcode)), followed by 1 or 2 dark bases 
 #pragma GENDICT OPTION_ZB_Z=DTYPE_2=ZB:Z     // 3 bases of BC:Z (second half of dual MBC), followed by 1 or 2 dark bases 
 //#pragma GENDICT OPTION_RX_Z=DTYPE_2=RX:Z   // (dup) first half + second of MBC, format: "TTA-TTC" (3-hyphen-3) 
 //#pragma GENDICT OPTION_QX_Z=DTYPE_2=QX:Z   // (dup) base qualities of RX, format:"DDD DDA"
@@ -705,7 +705,7 @@ extern void sam_piz_xtra_line_data (VBlockP vb);
 extern void sam_piz_after_preproc (VBlockP vb);
 extern CONTAINER_ITEM_CALLBACK (sam_piz_con_item_cb);
 extern void seq_filter_initialize (rom filename);
-extern BufferP sam_get_textual_seq (VBlockP vb);
+extern rom sam_piz_get_textual_seq (VBlockP vb);
 extern bool sam_is_last_flags_rev_comp (VBlockP vb);
 
 // BAM Stuff
@@ -726,7 +726,7 @@ extern unsigned sam_vb_zip_dl_size (void);
 extern void sam_reset_line (VBlockP vb);
 
 // Special - used for SAM & BAM
-#define SAM_SPECIAL { sam_cigar_special_CIGAR, sam_piz_special_TLEN_old, sam_piz_special_BD_BI, sam_piz_special_AS_old, \
+#define SAM_SPECIAL { sam_cigar_special_CIGAR, sam_piz_special_TLEN_old, sam_piz_special_BD_BI, sam_piz_special_delta_seq_len, \
                       sam_piz_special_MD_old, bam_piz_special_FLOAT, bam_piz_special_BIN, sam_piz_special_NM,   \
                       sam_piz_special_MD, sam_piz_special_REF_CONSUMED, \
                       sam_piz_special_PNEXT_IS_PREV_POS_old, sam_piz_special_COPY_MATE_FLAG, sam_piz_special_COPY_MATE_TLEN_old, \
@@ -742,15 +742,16 @@ extern void sam_reset_line (VBlockP vb);
                       sam_piz_special_BISMARK_XG, sam_piz_special_HI, sam_piz_special_DEMUX_BY_BUDDY_MAP, sam_piz_special_SEQ_LEN,\
                       sam_piz_special_FI, sam_piz_special_cm, sam_piz_special_COPY_BUDDY, sam_piz_special_SET_BUDDY, \
                       sam_piz_special_TX_AN_POS, sam_piz_special_COPY_TEXTUAL_CIGAR, sam_piz_special_BISMARK_XM, \
-                      sam_piz_special_BSBOLT_XB, sam_piz_special_UQ, sam_piz_special_iq_sq_dq, sam_piz_special_DEMUX_BY_QUAL, \
+                      sam_piz_special_BSBOLT_XB, sam_piz_special_UQ, sam_piz_special_iq_sq_dq, sam_piz_special_ULTIMA_tp_old, \
                       ultima_c_piz_special_DEMUX_BY_Q4NAME, sam_piz_special_bi, sam_piz_special_sd, \
                       agilent_special_AGENT_RX, agilent_special_AGENT_QX, special_qname_rng2seq_len, sam_piz_special_DEMUX_BY_XX_0, \
                       sam_piz_special_DEMUX_BY_AS, piz_special_PLUS, \
+                      sam_piz_special_ULTIMA_tp, sam_piz_special_ULTIMA_MI, \
                     }
 SPECIAL (SAM, 0,  CIGAR,                 sam_cigar_special_CIGAR);
 SPECIAL (SAM, 1,  TLEN_old,              sam_piz_special_TLEN_old);            // used up to 12.0.42
 SPECIAL (SAM, 2,  BDBI,                  sam_piz_special_BD_BI);
-SPECIAL (SAM, 3,  AS_old,                sam_piz_special_AS_old);              // Reconstructs seq_len minus delta. Note: called "AS" until 12.0.37 and used to reconstruct AS:i
+SPECIAL (SAM, 3,  delta_seq_len,         sam_piz_special_delta_seq_len);       // Reconstructs seq_len minus delta. Note: called "AS" until 12.0.37 and used to reconstruct AS:i, and "AS_old" until 15.0.27
 SPECIAL (SAM, 4,  MD_old,                sam_piz_special_MD_old);              // used in files compressed with Genozip up to 12.0.36
 SPECIAL (SAM, 5,  FLOAT,                 bam_piz_special_FLOAT);               // used in BAM to represent float optional values
 SPECIAL (SAM, 6,  BIN,                   bam_piz_special_BIN);   
@@ -800,7 +801,7 @@ SPECIAL (SAM, 49, BISMARK_XM,            sam_piz_special_BISMARK_XM);          /
 SPECIAL (SAM, 50, BSBOLT_XB,             sam_piz_special_BSBOLT_XB);           // introduced 14.0.0
 SPECIAL (SAM, 51, UQ,                    sam_piz_special_UQ);                  // introduced 14.0.10
 SPECIAL (SAM, 52, iqsqdq,                sam_piz_special_iq_sq_dq);            // introduced 15.0.0
-SPECIAL (SAM, 53, DEMUX_BY_QUAL,         sam_piz_special_DEMUX_BY_QUAL);       // introduced 15.0.10
+SPECIAL (SAM, 53, ULTIMA_tp_old,         sam_piz_special_ULTIMA_tp_old);       // 15.0.10 to 15.0.27, called DEMUX_BY_QUAL
 SPECIAL (SAM, 54, ULTIMA_C,              ultima_c_piz_special_DEMUX_BY_Q4NAME);// introduced 15.0.15
 SPECIAL (SAM, 55, bi,                    sam_piz_special_bi);                  // introduced 15.0.16
 SPECIAL (SAM, 56, sd,                    sam_piz_special_sd);                  // introduced 15.0.17
@@ -810,7 +811,9 @@ SPECIAL (SAM, 59, qname_rng2seq_len,     special_qname_rng2seq_len);           /
 SPECIAL (SAM, 60, DEMUX_BY_XX_0,         sam_piz_special_DEMUX_BY_XX_0);       // introduced 15.0.27
 SPECIAL (SAM, 61, DEMUX_BY_AS,           sam_piz_special_DEMUX_BY_AS);         // introduced 15.0.27
 SPECIAL (SAM, 62, PLUS,                  piz_special_PLUS);                    // introduced 15.0.27
-#define NUM_SAM_SPECIAL 63
+SPECIAL (SAM, 63, ULTIMA_tp,             sam_piz_special_ULTIMA_tp);           // introduced 15.0.28
+SPECIAL (SAM, 64, ULTIMA_mi,             sam_piz_special_ULTIMA_MI);           // introduced 15.0.28
+#define NUM_SAM_SPECIAL 65
  
 #define SAM_LOCAL_GET_LINE_CALLBACKS(dt)        \
     { dt, _OPTION_BD_BI,    sam_zip_BD_BI    }, \

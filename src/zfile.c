@@ -629,8 +629,11 @@ static void zfile_read_genozip_header_handle_ref_info (ConstSectionHeaderGenozip
     if (digest_is_zero (header->ref_genome_digest)) return; // no reference info in header - we're done
 
     if (flag.show_reference) {
-        iprintf ("%s was compressed using the reference file:\nName: %s\nMD5: %s\n",
-                    z_name, header->ref_filename, digest_display (header->ref_genome_digest).s);
+        if (flag.force)
+            iprintf ("%s", header->ref_filename);
+        else
+            iprintf ("%s was compressed using the reference file:\nName: %s\nMD5: %s\n",
+                        z_name, header->ref_filename, digest_display (header->ref_genome_digest).s);
         if (is_genocat) exit_ok; // in genocat --show-reference, we only show the reference, not the data
     }
 
@@ -733,37 +736,41 @@ uint64_t zfile_read_genozip_header_get_offset (bool as_is)
              z_name, offset, z_file->disk_size);
 
     SectionHeaderGenozipHeader top;
-    RETURNW (fread (&top, sizeof (SectionHeader) + 4/*only the needed bytes*/, 1, z_file->file) == 1, 0, "Error in %s: failed to read genozip header", z_name);
+    RETURNW (fread (&top, sizeof (SectionHeader) + 13/*only the needed bytes*/, 1, z_file->file) == 1, 0, "Error in %s: failed to read genozip header", z_name);
 
     RETURNW (BGEN32 (top.magic) == GENOZIP_MAGIC, 0, "Error in %s: offset=%"PRIu64" of the GENOZIP_HEADER section as it appears in the Footer appears to be wrong, or the GENOZIP_HEADER section has bad magic (file_size=%"PRIu64").%s", 
              z_name, offset, z_file->disk_size, flag.debug_or_test ? " Try again with --recover." : "");
 
     RESTORE_FLAG(quiet);
 
-    z_file->genozip_version = top.genozip_version;
+    z_file->genozip_version   = top.genozip_version;
+    z_file->genozip_minor_ver = top.genozip_minor_ver; // 0 before 15.0.28
+
     z_file->data_type = BGEN16 (top.data_type);
 
-    ASSRET (z_file->genozip_version <= GENOZIP_FILE_FORMAT_VERSION, 0,
-            "Error: %s cannot be opened because it was compressed with a newer version of genozip (version %u) while the version you're running is older (version %s).\n"
-            "You must upgrade Genozip to open this file. See: %s\n",
-            z_name, z_file->genozip_version, GENOZIP_CODE_VERSION, WEBSITE_INSTALLING);
+    // check that file version is at most this executable version, except for reference file for which only major version is tested
+    ASSINP (z_file->genozip_version < exec_version_major() || 
+            (z_file->genozip_version == exec_version_major() && (z_file->genozip_minor_ver <= exec_version_minor() || Z_DT(REF))),
+            "Error: %s cannot be opened because it was compressed with genozip version %u.0.%u which is newer than the version running - %s.\n%s",
+            z_name, z_file->genozip_version, z_file->genozip_minor_ver, GENOZIP_CODE_VERSION, genozip_update_msg());
 
     bool metadata_only = is_genocat && (flag.show_stats || flag.show_gheader || flag.show_headers || flag.show_aliases || flag.show_dict);
 
+    #define MSG "Error: %s was compressed with version %u of genozip. It may be uncompressed with genozip versions %u to %u"
+
     // in version 6, we canceled backward compatability with v1-v5
-    ASSRET (VER(6), 0, "Skipping %s: it was compressed with an older version of genozip - version %u.\nIt may be uncompressed with genozip versions %u to 5",
-            z_name, z_file->genozip_version, z_file->genozip_version);
+    ASSINP (VER(6), MSG, z_name, z_file->genozip_version, z_file->genozip_version, 5);
 
     // in version 7, we canceled backward compatability with v6
-    ASSRET (VER(7), 0, "Skipping %s: it was compressed with version 6 of genozip. It may be uncompressed with genozip version 6", z_name);
+    ASSINP (VER(7), MSG, z_name, z_file->genozip_version, 6, 6);
 
     // in version 8, we canceled backward compatability with v7
-    ASSRET (VER(8), 0, "Skipping %s: it was compressed with version 7 of genozip. It may be uncompressed with genozip version 7", z_name);
+    ASSINP (VER(8), MSG, z_name, z_file->genozip_version, 7, 7);
 
     // in version 15, we canceled backward compatability with v8,9,10 (except reference files which continue to be supported back to v8, as they might be needed to decompress files of later versions)
-    ASSRET (metadata_only || VER(11) || Z_DT(REF), 0, "Skipping %s: it was compressed with version %u of genozip. It may be uncompressed with genozip versions %u to 14",
-            z_name, z_file->genozip_version, z_file->genozip_version);
+    ASSINP (metadata_only || VER(11) || Z_DT(REF), MSG, z_name, z_file->genozip_version, z_file->genozip_version, 14);
 
+    #undef MSG
     return offset;
 }
 
@@ -783,7 +790,7 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header, FailType
     if (out_header) *out_header = *header;
 
     DataType data_type = (DataType)(BGEN16 (header->data_type)); 
-    ASSERT ((unsigned)data_type < NUM_DATATYPES, "unrecognized data_type=%d: please upgrade genozip to the latest version", data_type);
+    ASSERT ((unsigned)data_type < NUM_DATATYPES, "unrecognized data_type=%d. %s", data_type, genozip_update_msg());
 
     if (Z_DT(NONE) || Z_DT(GENERIC)) {
         z_file->data_type = data_type;

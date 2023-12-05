@@ -6,6 +6,7 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
+#include <math.h>
 #include "sam_private.h"
 #include "reference.h"
 #include "refhash.h"
@@ -254,6 +255,13 @@ void sam_zip_genozip_header (SectionHeaderGenozipHeaderP header)
     header->sam.segconf_deep_qname1     = (segconf.deep_qtype == QNAME1);// v15
     header->sam.segconf_deep_qname2     = (segconf.deep_qtype == QNAME2);// v15
     header->sam.segconf_deep_no_qual    = segconf.deep_no_qual;          // v15
+    
+    unsigned est_sam_factor_mult = round (MAX_(segconf.est_sam_factor, 1) * (double)SAM_FACTOR_MULT);
+    if (est_sam_factor_mult > 255) {
+        WARN ("est_sam_factor_mult=%u, this might affect genocat translation to SAM. %s", est_sam_factor_mult, SUPPORT);
+        est_sam_factor_mult = 0; // fallback to PIZ default
+    }
+    header->sam.segconf_sam_factor      = est_sam_factor_mult;
 }
 
 // initialize SA and OA
@@ -298,7 +306,7 @@ void sam_seg_initialize (VBlockP vb_)
                    OPTION_NM_i, OPTION_AS_i, OPTION_MQ_i, OPTION_XS_i, OPTION_XM_i, OPTION_mc_i, OPTION_ms_i, OPTION_Z5_i,
                    OPTION_tx_i, OPTION_YS_i, OPTION_XC_i, OPTION_AM_i, OPTION_SM_i, OPTION_X0_i, OPTION_X1_i, OPTION_CP_i,
                    OPTION_OP_i, OPTION_NH_i, OPTION_HI_i, OPTION_UQ_i, OPTION_cm_i, 
-                   OPTION_XX_i, OPTION_YY_i, OPTION_XO_i,
+                   OPTION_XX_i, OPTION_YY_i, OPTION_XO_i, OPTION_a3_i,
                    OPTION_SA_POS, OPTION_OA_POS,
                    T(MP(BLASR), OPTION_XS_i), T(MP(BLASR), OPTION_XE_i), T(MP(BLASR), OPTION_XQ_i), T(MP(BLASR), OPTION_XL_i), T(MP(BLASR), OPTION_FI_i),
                    T(MP(NGMLR), OPTION_QS_i), T(MP(NGMLR), OPTION_QE_i), T(MP(NGMLR), OPTION_XR_i),
@@ -710,6 +718,7 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
     segconf.is_long_reads   = segconf_is_long_reads();
     segconf.sam_multi_RG    = CTX(OPTION_RG_Z)->nodes.len32 >= 2;
     segconf.sam_cigar_len   = 1 + ((segconf.sam_cigar_len - 1) / vb->lines.len32);                   // set to the average CIGAR len (rounded up)
+    segconf.est_sam_factor  = (double)segconf.est_segconf_sam_size / (double)Ltxt;
 
     if (num_lines_at_max_len(vb) > vb->lines.len32 / 2 &&  // more than half the lines are at exactly maximal length
         (vb->lines.len32 > 100 || txt_file->is_eof)    &&  // enough lines to be reasonably convinced that this is not by chance
@@ -904,38 +913,37 @@ void sam_seg_finalize (VBlockP vb_)
     // assign the QUAL codec
     else {
         if (vb->has_qual && CTX(SAM_QUAL)->local.len32) 
-            codec_assign_best_qual_codec (VB, SAM_QUAL, sam_zip_qual, false, false, true);
+            codec_assign_best_qual_codec (VB, SAM_QUAL, sam_zip_qual, false, true, &vb->codec_requires_seq);
 
         if (vb->has_qual && CTX(SAM_CQUAL)->local.len32) 
-            codec_assign_best_qual_codec (VB, SAM_CQUAL, sam_zip_cqual, false, false, true);
+            codec_assign_best_qual_codec (VB, SAM_CQUAL, sam_zip_cqual, false, true, &vb->codec_requires_seq);
 
         if (CTX(OPTION_OQ_Z)->local.len32)
-            codec_assign_best_qual_codec (VB, OPTION_OQ_Z, sam_zip_OQ, false, false, true);
+            codec_assign_best_qual_codec (VB, OPTION_OQ_Z, sam_zip_OQ, false, true, &vb->codec_requires_seq);
 
         if (CTX(OPTION_TQ_Z)->local.len32)
-            codec_assign_best_qual_codec (VB, OPTION_TQ_Z, sam_zip_TQ, true, true, false);
+            codec_assign_best_qual_codec (VB, OPTION_TQ_Z, sam_zip_TQ, true, false, &vb->codec_requires_seq);
 
         if (CTX(OPTION_CY_ARR)->local.len32)
-            codec_assign_best_qual_codec (VB, OPTION_CY_ARR, NULL, true, true, false);
+            codec_assign_best_qual_codec (VB, OPTION_CY_ARR, NULL, true, false, &vb->codec_requires_seq);
 
         if (CTX(OPTION_QX_Z)->local.len32)
-            codec_assign_best_qual_codec (VB, OPTION_QX_Z, segconf.has_agent_trimmer ? NULL : sam_zip_QX, true, true, false);
+            codec_assign_best_qual_codec (VB, OPTION_QX_Z, segconf.has_agent_trimmer ? NULL : sam_zip_QX, true, false, &vb->codec_requires_seq);
 
         if (CTX(OPTION_2Y_Z)->local.len32)
-            codec_assign_best_qual_codec (VB, OPTION_2Y_Z, sam_zip_2Y, true, true, true);
+            codec_assign_best_qual_codec (VB, OPTION_2Y_Z, sam_zip_2Y, true, true, &vb->codec_requires_seq);
 
         if (CTX(OPTION_QT_ARR)->local.len32)
-            codec_assign_best_qual_codec (VB, OPTION_QT_Z, NULL, true, true, false);
+            codec_assign_best_qual_codec (VB, OPTION_QT_Z, NULL, true, false, &vb->codec_requires_seq);
 
         if (CTX(OPTION_U2_Z)->local.len32)
-            codec_assign_best_qual_codec (VB, OPTION_U2_Z, sam_zip_U2, true, true, true);
+            codec_assign_best_qual_codec (VB, OPTION_U2_Z, sam_zip_U2, true, true, &vb->codec_requires_seq);
     }
 
-    // determine if sam_piz_sam2bam_SEQ ought to store vb->textual_seq
-    CTX(SAM_SQBITMAP)->flags.no_textual_seq = CTX(SAM_QUAL)->lcodec    != CODEC_LONGR && 
-                                              CTX(SAM_QUAL)->lcodec    != CODEC_HOMP  && 
-                                              CTX(SAM_QUAL)->lcodec    != CODEC_PACB  && 
-                                              segconf.sam_mapper       != MP_BSSEEKER2;
+    // determine if sam_piz_sam2bam_SEQ ought to store vb->textual_seq (saves piz time if not)
+    CTX(SAM_SQBITMAP)->flags.no_textual_seq = !vb->codec_requires_seq            && // a QUAL-like field uses a codec that requires SEQ
+                                              segconf.sam_mapper != MP_BSSEEKER2 &&
+                                              !segconf.has[OPTION_tp_B_c];
 
     if (flag.biopsy_line.line_i == NO_LINE) // no --biopsy-line
         sam_seg_toplevel (VB);
@@ -1139,6 +1147,7 @@ void sam_seg_idx_aux (VBlockSAMP vb)
             TEST_AUX(sq_Z, 's', 'q', 'Z');
             TEST_AUX(ZA_Z, 'Z', 'A', 'Z');
             TEST_AUX(ZB_Z, 'Z', 'B', 'Z');
+            TEST_AUX(pr_i, 'p', 'r', 'i');
             default: {}
         }
     }
@@ -1715,6 +1724,8 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
     sam_seg_idx_aux (vb);
 
     dl->SEQ.index = BNUMtxt (flds[SEQ]); // SEQ.len to be determined by sam_cigar_analyze
+    vb->textual_seq_str = flds[SEQ]; 
+
     dl->QNAME = TXTWORDi (fld, QNAME);
     dl->QUAL  = TXTWORDi (fld, QUAL);
 

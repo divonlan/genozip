@@ -316,7 +316,7 @@ static void piz_reconstruct_one_vb (VBlockP vb)
     #define OVERFLOW_SIZE (1 MB) // allow some overflow space as sometimes we reconstruct unaccounted for data: 1. container templates 2. reconstruct_peek and others
     
     buf_alloc (vb, &vb->txt_data, 0, 
-               vb->recon_size * vb->translation.factor + OVERFLOW_SIZE + flag.recon_per_line_overhead * vb->lines.len32, 
+               vb->recon_size * vb->translation.factor/*see TRANSLATIONS*/ + OVERFLOW_SIZE + flag.recon_per_line_overhead * vb->lines.len32, 
                char, 1.1, "txt_data"); 
 
     piz_uncompress_all_ctxs (vb);

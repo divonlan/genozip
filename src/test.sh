@@ -5,12 +5,6 @@
 #   Copyright (C) 2019-2023 Genozip Limited
 #   Please see terms and conditions in the file LICENSE.txt
 
-start_date=`date`
-shopt -s extglob  # Enables extglob - see https://mywiki.wooledge.org/glob
-unset GENOZIP_REFERENCE   # initialize
-
-ulimit -c unlimited # enable core dumps
-
 cleanup_cache()
 {
     $genozip --no-cache
@@ -289,7 +283,6 @@ view_file()
 
 batch_print_header()
 {
-    GENOZIP_TEST=$((GENOZIP_TEST + 1))
     echo "***************************************************************************"
     echo "******* ${FUNCNAME[1]} (batch_id=${GENOZIP_TEST}) " $1
     echo "***************************************************************************"
@@ -310,6 +303,9 @@ batch_minimal()
 batch_basic()
 {
     batch_print_header
+
+    local save_genozip=$genozip
+    if [ "$2" == latest ]; then genozip="$genozip_latest"; fi
 
     local file replace
     file=$1
@@ -349,6 +345,8 @@ batch_basic()
 
     test_optimize $file
     unset GENOZIP_REFERENCE
+
+    genozip=$save_genozip
 }
 
 # pre-compressed files (except BGZF) and non-precompressed BAM
@@ -583,9 +581,12 @@ test_kraken() { # $1 file and genozip args ; $2 1st genocat arguments ; $3 2nd g
     fi        
 }
 
-batch_kraken() # $1 genozip arguments #2 genocat (one of them must include --kraken)
+batch_kraken() # $1 genozip arguments #2 genocat (optional $3="latest") (one of $1 or $2 must include --kraken)
 {
     batch_print_header
+
+    local save_genozip=$genozip
+    if [ "$3" == latest ]; then genozip="$genozip_latest"; fi
 
     local files=(${TESTDIR}/basic.bam ${TESTDIR}/basic-test-kraken.fq ${TESTDIR}/basic-test-kraken.fa ${TESTDIR}/basic.kraken \
                  ${TESTDIR}/basic.sam)
@@ -637,7 +638,9 @@ batch_kraken() # $1 genozip arguments #2 genocat (one of them must include --kra
     test_kraken "${TESTDIR}/basic.bam $1"\
                 "-k570,500+0 $2" \
                 "-k^570,500+0 $2"
-                
+
+    genozip=$save_genozip
+                    
     cleanup
 }
 
@@ -1066,43 +1069,25 @@ batch_bam_subsetting()
 batch_backward_compatability()
 {
     batch_print_header
-    local files=( `ls -r $TESTDIR/back-compat/[0-9]*/*.genozip` )
+    local files=( `ls -r $TESTDIR/back-compat/[0-9]*/*.genozip | grep -v "/0"` ) # since v15, backcomp goes back only to v11 
     local file
     for file in ${files[@]}; do
         test_header "$file - backward compatability test"
-        $genounzip --no-cache -t $file || exit 1
+        
+        # update the reference path (possibly ../genozip/data)
+        local ref=`$genocat $file --show-reference --force`
+        local ref_opt=""
+        if [ "${ref:0:5}" = data/ ]; then
+            ref_opt="--reference $REFDIR/${ref:5:1000}"         
+        elif [ "${ref:0:13}" = private/test/ ]; then
+            ref_opt="--reference $TESTDIR/${ref:13:1000}" 
+        fi
+
+        $genounzip --no-cache -t $file $ref_opt || exit 1
     done
 
+
     cleanup # to do: change loop ^ to double loop, clean up after each version (to remove shm)
-}
-
-num_batch_prod_compatability_tests=14
-batch_prod_compatability()
-{
-    if [ "$i_am_prod" == "1" ]; then return; fi 
-
-    if [ ! -d ../genozip-prod ]; then return; fi
-    
-    local save_genozip=$genozip
-    genozip="$genozip_latest"
-
-    if (( $1 <= $2 + 0  )) ; then batch_basic basic.vcf     ; fi
-    if (( $1 <= $2 + 1  )) ; then batch_dvcf                ; fi
-    if (( $1 <= $2 + 2  )) ; then batch_reference_fastq     ; fi
-    if (( $1 <= $2 + 3  )) ; then batch_reference_sam       ; fi
-    if (( $1 <= $2 + 4  )) ; then batch_basic basic.bam     ; fi
-    if (( $1 <= $2 + 5  )) ; then batch_basic basic.fq      ; fi
-    if (( $1 <= $2 + 6  )) ; then batch_basic basic.fa      ; fi
-    if (( $1 <= $2 + 7  )) ; then batch_basic basic.chain   ; fi
-    if (( $1 <= $2 + 8  )) ; then batch_basic basic.gvf     ; fi
-    if (( $1 <= $2 + 9  )) ; then batch_basic basic.me23    ; fi
-    if (( $1 <= $2 + 10 )) ; then batch_kraken " " "-K$kraken"           ; fi
-    if (( $1 <= $2 + 11 )) ; then batch_basic basic.phy     ; fi
-    if (( $1 <= $2 + 12 )) ; then batch_basic basic.generic ; fi
-    if (( $1 <= $2 + 13 )) ; then batch_basic basic.bed     ; fi
-    # if adding tests, update num_batch_prod_compatability_tests
-
-    genozip=$save_genozip
 }
     
 batch_real_world_1_adler32() # $1 extra genozip argument
@@ -1581,7 +1566,7 @@ update_latest()
     pushd ../genozip-latest
     git reset --hard
     git pull
-    make -j
+    make -j 
     popd
 }
 
@@ -1751,6 +1736,12 @@ batch_genols()
 batch_tar_files_from()
 {
     batch_print_header
+
+    if [ -n "$i_am_prod" ] && [ -n "$is_windows" ]; then
+        echo "Test doesn't work for prod on Windows" # because tar.exe does not accept .. in pathnames eg ../genozip/...
+        return
+    fi
+
     cleanup
 
     local tar=${OUTDIR}/output.tar
@@ -1885,6 +1876,18 @@ batch_deep() # note: use --debug-deep for detailed tracking
     cleanup
 }
 
+# only if doing a full test (starting from 0) - delete genome and hash caches
+sparkling_clean()
+{
+    batch_print_header
+    rm -f ${hg19}.*cache* ${hs37d5}.*cache* ${GRCh38}.*cache* ${TESTDIR}/*.genozip ${TESTDIR}/*.bad ${TESTDIR}/*.bad.gz ${TESTDIR}/basic-subdirs/*.genozip ${TESTDIR}/*rejects* ${TESTDIR}/*.DEPN
+}
+
+start_date="`date`"
+is_windows="`uname|grep -i mingw``uname|grep -i MSYS`"
+is_mac=`uname|grep -i Darwin`
+is_linux=`uname|grep -i Linux`
+
 if [ -n "$is_windows" ]; then
 BASEDIR=../genozip
 else
@@ -1901,10 +1904,6 @@ output2=${OUTDIR}/output2.genozip
 recon=${OUTDIR}/recon.txt
 kraken=${OUTDIR}/kraken.genozip
 chain=${OUTDIR}/chain.genozip
-
-is_windows="`uname|grep -i mingw``uname|grep -i MSYS`"
-is_mac=`uname|grep -i Darwin`
-is_linux=`uname|grep -i Linux`
 
 # reference and chain files
 hg19=$REFDIR/hg19.v15.ref.genozip
@@ -1924,15 +1923,13 @@ fi
 # debug, opt, prod
 is_debug=`echo $1|grep debug`
 if [ -n "$is_debug" ]; then 
-    debug_zip=-debug
-    debug_nonzip=-debug
+    debug=-debug
     shift
 fi
 
 is_opt=`echo $1|grep opt`
 if [ -n "$is_opt" ]; then 
-    debug_zip=-opt
-    debug_nonzip=-opt
+    debug=-opt
     shift
 fi
 
@@ -1964,24 +1961,22 @@ else
     path=$PWD/
 fi
 
-genozip_exe=$dir/genozip${debug_zip}$exe
+export GENOZIP_TEST=$1
+shift
+
+# executables
+genozip_exe=$dir/genozip${debug}$exe
 genozip_latest_exe=../genozip-latest/genozip$exe
-genounzip_exe=$dir/genounzip${debug_nonzip}$exe
-genocat_exe=$dir/genocat${debug_nonzip}$exe
-genols_exe=$dir/genols${debug_nonzip}$exe
+genounzip_exe=$dir/genounzip${debug}$exe
+genocat_exe=$dir/genocat${debug}$exe
+genols_exe=$dir/genols${debug}$exe
 
-extra_arg=$2
-
-# genozip()
-# {
-#     $genozip_exe --echo --TEST $GENOZIP_TEST $extra_arg $zip_threads $1 $2 $3 $4 $5 $6 $7 $8 $8 $
-# }
-
-genozip="$genozip_exe --echo $2 $zip_threads"
-genozip_latest="$genozip_latest_exe --echo $2 $zip_threads"
-genounzip="$genounzip_exe --echo $2 $piz_threads"
-genocat_no_echo="$genocat_exe $2 $piz_threads"
-genocat="$genocat_exe --echo $2 $piz_threads"
+# $@ - extra args
+genozip="$genozip_exe --echo $@ $zip_threads"
+genozip_latest="$genozip_latest_exe --echo $@ $zip_threads"
+genounzip="$genounzip_exe --echo $@ $piz_threads"
+genocat_no_echo="$genocat_exe $@ $piz_threads"
+genocat="$genocat_exe --echo $@ $piz_threads"
 genols=$genols_exe 
 
 basics=(basic.vcf basic.chain basic.sam basic.vcf basic.bam basic.fq basic.fa basic.gvf basic.gtf basic.me23 \
@@ -2006,84 +2001,97 @@ cleanup
 
 make -C $TESTDIR --quiet -j sync_wsl_clock generated md5s || exit 1
 
-# only if doing a full test (starting from 0) - delete genome and hash caches
-sparkling_clean()
-{
-    batch_print_header
-    rm -f ${hg19}.*cache* ${hs37d5}.*cache* ${GRCh38}.*cache* ${TESTDIR}/*.genozip ${TESTDIR}/*.bad ${TESTDIR}/*.bad.gz ${TESTDIR}/basic-subdirs/*.genozip ${TESTDIR}/*rejects* ${TESTDIR}/*.DEPN
+inc() { 
+    GENOZIP_TEST=$((GENOZIP_TEST + 1)) 
 }
 
-# unfortunately Mac's bash doesn't support "case" with fall-through ( ;& )
-export GENOZIP_TEST=$1
-GENOZIP_TEST=$((GENOZIP_TEST - 1))
+# loop bc unfortunately Mac's bash doesn't support "case" with fall-through ( ;& )
+for GENOZIP_TEST in `seq $GENOZIP_TEST 1000`; do 
+case $GENOZIP_TEST in
+0 )  sparkling_clean              ;;
+1 )  batch_minimal                ;;
+2 )  batch_basic basic.vcf        ;;
+3 )  batch_basic basic.bam        ;;
+4 )  batch_basic basic.sam        ;;
+5 )  batch_basic basic.fq         ;;
+6 )  batch_basic basic.fa         ;;
+7 )  batch_basic basic.bed        ;;
+8 )  batch_basic basic.chain      ;;
+9 )  batch_basic basic.gvf        ;;
+10)  batch_basic basic.gtf        ;;
+11)  batch_basic basic.me23       ;;
+12)  batch_basic basic.kraken     ;;
+13)  batch_basic basic.phy        ;;
+14)  batch_basic basic.generic    ;;
+15)  batch_precompressed          ;;
+16)  batch_bgzf                   ;;
+17)  batch_subdirs                ;;
+18)  batch_special_algs           ;;
+19)  batch_dvcf                   ;;
+20)  batch_sam_bam_translations   ;;
+21)  batch_sam_fq_translations    ;;
+22)  batch_23andMe_translations   ;;
+23)  batch_phylip_translations    ;;
+24)  batch_genocat_tests          ;;
+25)  batch_grep_count_lines       ;;
+26)  batch_bam_subsetting         ;;
+27)  batch_backward_compatability ;;
+28)  batch_match_chrom            ;;
+29)  batch_kraken " " "-K$kraken" ;;   # genocat loads kraken data
+30)  batch_kraken "-K$kraken" " " ;;   # genozip loads kraken data
+31)  batch_single_thread          ;; 
+32)  batch_copy_ref_section       ;; 
+33)  batch_iupac                  ;; 
+34)  batch_genols                 ;;
+35)  batch_tar_files_from         ;;
+36)  batch_gencomp_depn_methods   ;; 
+37)  batch_deep                   ;; 
+38)  batch_real_world_small_vbs   ;; 
+39)  batch_real_world_1_adler32   ;; 
+40)  batch_real_world_genounzip_single_process ;; 
+41)  batch_real_world_genounzip_compare_file   ;; 
+42)  batch_real_world_1_adler32 "--best -f" ;; 
+43)  batch_real_world_1_adler32 "--fast --force-gencomp" ;; 
+44)  batch_real_world_with_ref_md5;; 
+45)  batch_real_world_with_ref_md5 "--best --no-cache --force-gencomp" ;; 
+46)  batch_multiseq               ;;
+47)  batch_external_cram          ;;
+48)  batch_external_bcf           ;;
+49)  batch_external_unzip         ;;
+50)  batch_reference_fastq        ;;
+51)  batch_reference_sam          ;;
+52)  batch_reference_vcf          ;;
+53)  batch_many_small_files       ;;
+54)  batch_make_reference         ;;
+55)  batch_headerless_wrong_ref   ;;
+56)  batch_replace                ;;
+57)  batch_coverage_idxstats_sex  ;;
+58)  batch_qname_flavors          ;;
+59)  batch_piz_no_license         ;;
+60)  batch_reference_backcomp     ;;
+61)  batch_real_world_backcomp 11.0.11 ;; # note: versions must match VERSIONS in test/Makefile
+62)  batch_real_world_backcomp 12.0.42 ;; 
+63)  batch_real_world_backcomp 13.0.21 ;; 
+64)  batch_real_world_backcomp 14.0.33 ;; 
+65)  batch_real_world_backcomp latest  ;;
 
-if (( $1 <= 0  )) ; then  sparkling_clean              ; fi
-if (( $1 <= 1  )) ; then  batch_minimal                ; fi
-if (( $1 <= 2  )) ; then  batch_basic basic.vcf        ; fi
-if (( $1 <= 3  )) ; then  batch_basic basic.bam        ; fi
-if (( $1 <= 4  )) ; then  batch_basic basic.sam        ; fi
-if (( $1 <= 5  )) ; then  batch_basic basic.fq         ; fi
-if (( $1 <= 6  )) ; then  batch_basic basic.fa         ; fi
-if (( $1 <= 7  )) ; then  batch_basic basic.bed        ; fi
-if (( $1 <= 8  )) ; then  batch_basic basic.chain      ; fi
-if (( $1 <= 9  )) ; then  batch_basic basic.gvf        ; fi
-if (( $1 <= 10 )) ; then  batch_basic basic.gtf        ; fi
-if (( $1 <= 11 )) ; then  batch_basic basic.me23       ; fi
-if (( $1 <= 12 )) ; then  batch_basic basic.kraken     ; fi
-if (( $1 <= 13 )) ; then  batch_basic basic.phy        ; fi
-if (( $1 <= 14 )) ; then  batch_basic basic.generic    ; fi
-if (( $1 <= 15 )) ; then  batch_precompressed          ; fi
-if (( $1 <= 16 )) ; then  batch_bgzf                   ; fi
-if (( $1 <= 17 )) ; then  batch_subdirs                ; fi
-if (( $1 <= 18 )) ; then  batch_special_algs           ; fi
-if (( $1 <= 19 )) ; then  batch_dvcf                   ; fi
-if (( $1 <= 20 )) ; then  batch_sam_bam_translations   ; fi
-if (( $1 <= 21 )) ; then  batch_sam_fq_translations    ; fi
-if (( $1 <= 22 )) ; then  batch_23andMe_translations   ; fi
-if (( $1 <= 23 )) ; then  batch_phylip_translations    ; fi
-if (( $1 <= 24 )) ; then  batch_genocat_tests          ; fi
-if (( $1 <= 25 )) ; then  batch_grep_count_lines       ; fi
-if (( $1 <= 26 )) ; then  batch_bam_subsetting         ; fi
-if (( $1 <= 27 )) ; then  batch_backward_compatability ; fi
-if (( $1 <= 28 )) ; then  batch_match_chrom            ; fi
-if (( $1 <= 29 )) ; then  batch_kraken " " "-K$kraken" ; fi   # genocat loads kraken data
-if (( $1 <= 30 )) ; then  batch_kraken "-K$kraken" " " ; fi   # genozip loads kraken data
-if (( $1 <= 31 )) ; then  batch_single_thread          ; fi 
-if (( $1 <= 32 )) ; then  batch_copy_ref_section       ; fi 
-if (( $1 <= 33 )) ; then  batch_iupac                  ; fi 
-if (( $1 <= 34 )) ; then  batch_genols                 ; fi
-if (( $1 <= 35 )) ; then  batch_tar_files_from         ; fi
-if (( $1 <= 36 )) ; then  batch_gencomp_depn_methods   ; fi 
-if (( $1 <= 37 )) ; then  batch_deep                   ; fi 
-if (( $1 <= 38 )) ; then  batch_real_world_small_vbs   ; fi 
-if (( $1 <= 39 )) ; then  batch_real_world_1_adler32   ; fi 
-if (( $1 <= 40 )) ; then  batch_real_world_genounzip_single_process ; fi 
-if (( $1 <= 41 )) ; then  batch_real_world_genounzip_compare_file   ; fi 
-if (( $1 <= 42 )) ; then  batch_real_world_1_adler32 "--best -f" ; fi 
-if (( $1 <= 43 )) ; then  batch_real_world_1_adler32 "--fast --force-gencomp" ; fi 
-if (( $1 <= 44 )) ; then  batch_real_world_with_ref_md5; fi 
-if (( $1 <= 45 )) ; then  batch_real_world_with_ref_md5 "--best --no-cache --force-gencomp" ; fi 
-if (( $1 <= 46 )) ; then  batch_multiseq               ; fi
-if (( $1 <= 47 )) ; then  batch_external_cram          ; fi
-if (( $1 <= 48 )) ; then  batch_external_bcf           ; fi
-if (( $1 <= 49 )) ; then  batch_external_unzip         ; fi
-if (( $1 <= 50 )) ; then  batch_reference_fastq        ; fi
-if (( $1 <= 51 )) ; then  batch_reference_sam          ; fi
-if (( $1 <= 52 )) ; then  batch_reference_vcf          ; fi
-if (( $1 <= 53 )) ; then  batch_many_small_files       ; fi
-if (( $1 <= 54 )) ; then  batch_make_reference         ; fi
-if (( $1 <= 55 )) ; then  batch_headerless_wrong_ref   ; fi
-if (( $1 <= 56 )) ; then  batch_replace                ; fi
-if (( $1 <= 57 )) ; then  batch_coverage_idxstats_sex  ; fi
-if (( $1 <= 58 )) ; then  batch_qname_flavors          ; fi
-if (( $1 <= 59 )) ; then  batch_piz_no_license         ; fi
-if (( $1 <= 60 )) ; then  batch_reference_backcomp     ; fi
-if (( $1 <= 61 )) ; then  batch_real_world_backcomp 11.0.11 ; fi # note: versions must match VERSIONS in test/Makefile
-if (( $1 <= 62 )) ; then  batch_real_world_backcomp 12.0.42 ; fi 
-if (( $1 <= 63 )) ; then  batch_real_world_backcomp 13.0.21 ; fi 
-if (( $1 <= 64 )) ; then  batch_real_world_backcomp 14.0.33 ; fi 
-if (( $1 <= 65 )) ; then  batch_real_world_backcomp latest  ; fi 
-next=65
-if (( $1 <= $next + $num_batch_prod_compatability_tests )) ; then batch_prod_compatability $1 $next ; fi
+66)  batch_basic basic.vcf     latest  ;;
+67)  batch_basic basic.bam     latest  ;;
+68)  batch_basic basic.sam     latest  ;;
+69)  batch_basic basic.fq      latest  ;;
+70)  batch_basic basic.fa      latest  ;;
+71)  batch_basic basic.bed     latest  ;;
+72)  batch_basic basic.chain   latest  ;;
+73)  batch_basic basic.gvf     latest  ;;
+74)  batch_basic basic.gtf     latest  ;;
+75)  batch_basic basic.me23    latest  ;;
+76)  batch_basic basic.kraken  latest  ;;
+77)  batch_basic basic.phy     latest  ;;
+78)  batch_basic basic.generic latest  ;;
+79)  batch_kraken " " "-K$kraken"  latest ;;   # genocat loads kraken data
+
+* ) break; # break out of loop
+
+esac; done
 
 printf "\nALL GOOD! \nstart: $start_date\nend:   `date`\n"

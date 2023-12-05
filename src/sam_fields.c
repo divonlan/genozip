@@ -490,7 +490,7 @@ static void sam_seg_UQ_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t UQ, unsigne
 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_UQ)
 {
-    ASSPIZ0 (*snip=='1' || *snip=='2', "Unrecognized snip - upgrade to the most recent version of Genozip");
+    ASSPIZ (*snip=='1' || *snip=='2', "Unrecognized snip. %s", genozip_update_msg());
 
     int64_t other = reconstruct_peek (vb, CTX(*snip=='1' ? OPTION_AS_i : OPTION_NM_i), 0, 0).i; 
 
@@ -717,7 +717,7 @@ static inline void sam_seg_AS_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t as, 
 
 // reconstruct seq_len or (seq_len-snip)
 // Note: This is used by AS:i fields in files compressed up to 12.0.37
-SPECIAL_RECONSTRUCTOR (sam_piz_special_AS_old)
+SPECIAL_RECONSTRUCTOR (sam_piz_special_delta_seq_len)
 {
     new_value->i = (int32_t)vb->seq_len - atoi (snip); // seq_len if snip=""
     if (reconstruct) RECONSTRUCT_INT (new_value->i);
@@ -1412,8 +1412,9 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
         case _OPTION_sd_f: COND (MP(DRAGEN), sam_dragen_seg_sd_f (vb, dl, STRa(value), numeric, add_bytes));
 
         // Ultima Genomics fields
-        case _OPTION_tp_B_c: COND (MP(ULTIMA) && !dl->no_qual, sam_seg_array_field (vb, dl, _OPTION_tp_B_c, array_subtype, STRa(value), sam_seg_ultima_tp, dl));
+        case _OPTION_tp_B_c: COND (segconf.has[OPTION_tp_B_c] && !dl->no_qual && segconf.has[OPTION_tp_B_c], sam_seg_array_field (vb, dl, _OPTION_tp_B_c, array_subtype, STRa(value), sam_seg_ULTIMA_tp, dl));
         case _OPTION_bi_Z: COND (MP(ULTIMA), sam_seg_ultima_bi (vb, STRa(value), add_bytes));
+        case _OPTION_a3_i: COND (MP(ULTIMA), sam_seg_ultima_a3 (vb, dl, numeric.i, add_bytes));
         case _OPTION_XV_Z: COND (MP(ULTIMA), sam_seg_ultima_XV (vb, STRa(value), add_bytes));
         case _OPTION_XW_Z: COND (MP(ULTIMA), sam_seg_ultima_XW (vb, STRa(value), add_bytes));
         case _OPTION_rq_f: COND (MP(ULTIMA) || segconf.pacbio_subreads, sam_seg_float_as_snip (vb, CTX(OPTION_rq_f), STRa(value), numeric, add_bytes)); // expecting all-the-same for subreads

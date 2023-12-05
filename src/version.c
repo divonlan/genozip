@@ -14,11 +14,29 @@
 #include "flags.h"
 #include "strings.h"
 #include "arch.h"
+#include "website.h"
 
 static rom latest_version = NULL;
 static bool thread_running = false;
 static pthread_t thread_id;
 static char redirect_url[128];
+
+// version of the genozip executable running
+int exec_version_major (void)
+{
+    return (GENOZIP_CODE_VERSION[0]-'0') * 10 + (GENOZIP_CODE_VERSION[1]-'0');
+}
+
+int exec_version_minor (void)
+{
+    rom ver = GENOZIP_CODE_VERSION;
+    return atoi (strrchr (ver, '.') + 1);
+}
+
+rom genozip_update_msg (void)
+{
+    return "Please update Genozip to the latest version. See: " WEBSITE_INSTALLING;
+}
 
 // thread entry
 static void *version_background_test_for_newer_do (void *unused)
@@ -69,7 +87,7 @@ void version_print_notice_if_has_newer (void)
 
 #ifndef _WIN32
             else if (!strcmp (arch_get_distribution(), "conda") &&
-                     str_query_user_yn ("Do you want to upgrade now?", QDEF_YES)) {
+                     str_query_user_yn ("Do you want to update Genozip now?", QDEF_YES)) {
 #pragma GCC diagnostic push 
 #pragma GCC diagnostic ignored "-Wpragmas"         // avoid warning if "-Wuse-after-free" is not defined in this version of gcc
 #pragma GCC diagnostic ignored "-Wunused-result"   // avoid compiler warning due to not checking system() return value

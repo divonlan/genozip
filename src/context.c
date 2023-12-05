@@ -1992,12 +1992,12 @@ ASCENDING_SORTER (sort_by_dict_id, ContextIndex, dict_id.num)
     va_end (args)                                      
 
 // ZIP, typically called from seg_initialize
-void ctx_set_no_stons (VBlockP vb,                  ...) { SET_MULTI_CTX (vb, no_stons, true); }
-void ctx_set_store_per_line (VBlockP vb,            ...) { SET_MULTI_CTX (vb, flags.store_per_line, true); }
-void ctx_set_same_line (VBlockP vb,                 ...) { SET_MULTI_CTX (vb, flags.same_line, true); }
-void ctx_set_store (VBlockP vb, int store_type,     ...) { SET_MULTI_CTX (store_type, flags.store, store_type); } // clang issues a warning if store_type is of type StoreType
-void ctx_set_ltype (VBlockP vb, int ltype,          ...) { SET_MULTI_CTX (ltype, ltype, ltype); }                 // clang issues a warning if ltype is of type LocalType
-void ctx_consolidate_stats (VBlockP vb, int parent, ...) { SET_MULTI_CTX (parent, st_did_i, parent); CTX(parent)->is_stats_parent = true;} // clang issues a warning if parent is of type Did
+void ctx_set_no_stons (VBlockP vb,                   ...) { SET_MULTI_CTX (vb, no_stons, true); }
+void ctx_set_store_per_line (VBlockP vb,             ...) { SET_MULTI_CTX (vb, flags.store_per_line, true); }
+void ctx_set_same_line (VBlockP vb,                  ...) { SET_MULTI_CTX (vb, flags.same_line, true); }
+void ctx_set_store (VBlockP vb, int store_type,      ...) { SET_MULTI_CTX (store_type, flags.store, (store_type)); } // clang issues a warning if store_type is of type StoreType
+void ctx_set_ltype (VBlockP vb, int ltype,           ...) { SET_MULTI_CTX (ltype, ltype, (ltype)); }                 // clang issues a warning if ltype is of type LocalType
+void ctx_consolidate_stats (VBlockP vb, int parent,  ...) { SET_MULTI_CTX (parent, st_did_i, parent); CTX(parent)->is_stats_parent = true;} // clang issues a warning if parent is of type Did
 
 void ctx_consolidate_stats_(VBlockP vb, ContextP parent_ctx, ContainerP con)
 {

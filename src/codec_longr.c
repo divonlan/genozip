@@ -332,7 +332,6 @@ CODEC_RECONSTRUCT (codec_longr_reconstruct)
 
     ContextP lens_ctx   = ctx;
     ContextP values_ctx = ctx + 1;
-    ContextP seq_ctx    = VB_DT(FASTQ) ? CTX(FASTQ_SQBITMAP) : CTX(SAM_SQBITMAP);
     
     if (!lens_ctx->is_initialized) 
         codec_longr_reconstruct_init (vb, lens_ctx, values_ctx);
@@ -344,8 +343,7 @@ CODEC_RECONSTRUCT (codec_longr_reconstruct)
     LongrState *state = B1ST (LongrState, lens_ctx->longr_state);
     state->value_to_bin = B1ST8 (values_ctx->value_to_bin);
 
-    rom seq = (VB_DT(SAM) && sam_get_textual_seq(vb)->len) ? B1STc (*sam_get_textual_seq(vb)) // note: textual_seq is prepared in sam_piz_sam2bam_SEQ sam_load_groups_add_seq
-                                                           : last_txtx (vb, seq_ctx); 
+    rom seq = VB_DT(SAM) ? sam_piz_get_textual_seq(vb) : last_txtx (vb, CTX(FASTQ_SQBITMAP)); 
 
     // case: Deep, and len is only the trimmed suffix as the rest if copied from SAM (see fastq_special_deep_copy_QUAL)
     if (flag.deep && len < vb->seq_len)

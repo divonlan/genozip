@@ -366,6 +366,7 @@ extern void ctx_set_no_stons (VBlockP vb, ...);
 extern void ctx_set_same_line (VBlockP vb, ...);
 extern void ctx_set_store_per_line (VBlockP vb, ...);
 extern void ctx_set_ltype (VBlockP vb, int ltype, ...);
+extern void ctx_set_local_dep (VBlockP vb, LocalDepType ld, ...);
 extern void ctx_consolidate_stats (VBlockP vb, int parent, ...);
 extern void ctx_consolidate_statsN(VBlockP vb, Did parent, Did first_dep, unsigned num_deps);
 extern void ctx_consolidate_stats_(VBlockP vb, ContextP parent_ctx, ContainerP con);

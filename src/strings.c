@@ -205,12 +205,16 @@ StrTextLong str_str_s_(rom label, rom str)
     int label_len = strlen (label);
     int str_len = strlen (str);
 
-    ASSERT (label_len + str_len + 1 < sizeof(StrTextLong), "combined label \"%s\"(len=%u) and string \"%s\"(len=%u) are too long ", STRa(label), STRa(str)); 
+    bool truncated = (label_len + str_len > sizeof(s)-1);
 
-    memcpy (s.s, label, label_len);
-    memcpy (s.s + label_len, str, str_len);
-    *(s.s + label_len + str_len) = 0;
-    
+    if (truncated)
+        sprintf (s.s, "%.17s%.*s...", label, (int)(sizeof(s)-4-label_len), str);
+    else {
+        memcpy (s.s, label, label_len);
+        memcpy (s.s + label_len, str, str_len);
+        *(s.s + label_len + str_len) = 0;
+    }
+
     return s;
 }
 

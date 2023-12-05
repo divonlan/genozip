@@ -303,9 +303,8 @@ bool codec_domq_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB get_line_c
         qual_ctx->ltype         = LT_CODEC;
         qual_ctx->lcodec        = CODEC_DOMQ;
 
-        domqruns_ctx->ltype     = qualmplx_ctx->ltype     = divrqual_ctx->ltype     = LT_UINT8;
+        ctx_set_ltype (vb, LT_UINT8, SAM_DOMQRUNS, SAM_QUALMPLX, SAM_DIVRQUAL, DID_EOL);
         domqruns_ctx->local_dep = qualmplx_ctx->local_dep = divrqual_ctx->local_dep = DEP_L1;  
-        domqruns_ctx->no_stons  = true; // no singletons as we use local for the data
 
         // normalize quality scores in preparation for compression. note: we do it here in seg, as we need to seg the denormalization table
         codec_domq_prepare_normalize (vb, qual_ctx, get_line_cb, qual_ctx, domqruns_ctx);

@@ -265,10 +265,11 @@ void bam_get_one_aux (VBlockSAMP vb, int16_t idx,
 {
     rom aux = vb->auxs[idx];
     *tag  = aux;
-    *type = aux[2]; // c, C, s, S, i, I, f, A, Z, H or B
+    *type = aux[2];     // c, C, s, S, i, I, f, A, Z, H or B
     aux += 3;
-    *array_subtype = 0;
-    
+    *array_subtype = 0; // c, C, s, S, i, I, f
+    *value = NULL;
+
     switch (*type) {
         // in case of an numeric type, we pass the value as a ValueType
         case 'i': *value_len = 4; numeric->i     = (int32_t)LTEN32 (GET_UINT32 (aux)); break;
@@ -310,6 +311,70 @@ void bam_get_one_aux (VBlockSAMP vb, int16_t idx,
         default:
             ABORT ("%s: Invalid field type: '%c' for field \"%c%c\"", LN_NAME, *type, (*tag)[0], (*tag)[1]);
     }
+}
+
+// segconf
+static uint32_t bam_segconf_get_transated_sam_line_len (VBlockSAMP vb, ZipDataLineSAM *dl, SamTlenType tlen)
+{
+    unsigned rname_len, rnext_len;
+
+    if (dl->RNAME == -1) 
+        rname_len = 1; // "*" in SAM
+    else 
+        contigs_get_name (sam_hdr_contigs, dl->RNAME, &rname_len);
+
+    if (dl->RNAME == dl->RNEXT || dl->RNEXT == -1)
+        rnext_len = 1; // "=" or "*" in SAM
+    else
+        contigs_get_name (sam_hdr_contigs, dl->RNEXT, &rnext_len);
+    
+    uint32_t sam_line_len =  
+        dl->QNAME.len + rname_len + rnext_len +
+        2 * 9 +             // POS and PNEXT: account for 9 characters - as segconf is biased to small values that are not representative of the file 
+        str_int_len (dl->FLAG.value) + str_int_len (dl->MAPQ) + vb->textual_cigar.len32 + 
+        str_int_len (tlen) + dl->SEQ.len + (dl->no_qual ? 1 : dl->SEQ.len) + 
+        (11 + vb->n_auxs) + // \t or \n seperators
+        (5 * vb->n_auxs);   // AUX field prefix, eg AS:i: (we account for the extra 2 characters of B below)
+
+    for (uint32_t idx=0; idx < vb->n_auxs; idx++) {
+        STR0(value);
+        ValueType numeric;
+        rom tag;
+        char bam_type = 0, array_subtype = 0;
+
+        bam_get_one_aux (vb, idx, &tag, &bam_type, &array_subtype, pSTRa (value), &numeric);
+
+        #define ASSUMED_FLOAT_LEN 7 // est SAM representation of a BAM floating point
+        if (bam_type == 'f')
+            sam_line_len += ASSUMED_FLOAT_LEN; 
+
+        else if (!value) // c, C, s, S, i, I
+            sam_line_len += str_int_len (numeric.i); 
+
+        else if (bam_type == 'Z' || bam_type == 'H' || bam_type == 'A')
+            sam_line_len += value_len;
+
+        else if (bam_type == 'B') {
+            sam_line_len += 2 + value_len; // added eg ":c" and commas
+
+            switch (array_subtype) {
+                // TO DO: support calculation of Big Endian - numbers need to be flipped before taking the length
+                case 'f' : sam_line_len += value_len * ASSUMED_FLOAT_LEN; break; 
+                case 'I' : for (int i=0; i < value_len; i++) sam_line_len += str_int_len (GET_UINT32 (value + i * sizeof(uint32_t))); break;
+                case 'i' : for (int i=0; i < value_len; i++) sam_line_len += str_int_len ((int32_t)GET_UINT32 (value + i * sizeof(int32_t))); break;
+                case 'S' : for (int i=0; i < value_len; i++) sam_line_len += str_int_len (GET_UINT16 (value + i * sizeof(uint16_t))); break;
+                case 's' : for (int i=0; i < value_len; i++) sam_line_len += str_int_len ((int16_t)GET_UINT16 (value + i * sizeof(int16_t))); break;
+                case 'C' : for (int i=0; i < value_len; i++) sam_line_len += str_int_len (*(uint8_t *)(value + i)); break;
+                case 'c' : for (int i=0; i < value_len; i++) sam_line_len += str_int_len (*(int8_t  *)(value + i)); break;
+                default  : ABORT ("unrecognized BAM array_subtype='%c'(%u)", array_subtype, array_subtype);
+            }
+        }
+
+        else
+            ABORT ("unrecognized BAM type='%c'(%u)", bam_type, bam_type);
+    }
+
+    return sam_line_len;
 }
 
 rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line */,
@@ -374,7 +439,7 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     vb->n_auxs   = bam_split_aux (vb, alignment, aux, after, auxs, aux_lens);
     vb->auxs     = auxs;    // note: pointers to data on the stack
     vb->aux_lens = aux_lens;
-
+                        
     sam_seg_idx_aux (vb);
     
     if (vb->chrom_node_index != WORD_INDEX_NONE) 
@@ -390,6 +455,7 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     {
     START_TIMER; // time here and not in the function, because this is also called from the LongR codec
     bam_seq_to_sam (vb, seq, l_seq, false, true, &vb->textual_seq);
+    vb->textual_seq_str = B1STc(vb->textual_seq); 
     COPY_TIMER(bam_seq_to_sam);
     }
 
@@ -494,6 +560,9 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     }
 
     if (dl->SEQ.len > vb->longest_seq_len) vb->longest_seq_len = dl->SEQ.len;
+
+    if (segconf.running)
+        segconf.est_segconf_sam_size += bam_segconf_get_transated_sam_line_len (vb, dl, tlen);
 
 done: {}
 

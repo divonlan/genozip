@@ -40,6 +40,7 @@ void sam_reset_line (VBlockP vb_)
     ASSERT (VB_DT(SAM) || VB_DT(BAM), "VB has wrong data type: %s", dt_name (vb->data_type));
     
     vb->textual_cigar.len = vb->binary_cigar.len = vb->binary_cigar.next = 0;
+    vb->textual_seq.len = 0;
     vb->qual_missing = vb->seq_missing = vb->seq_is_monochar = vb->cigar_missing = vb->line_not_deepable = false;
     vb->XG.len = 0;
     vb->seq_len = 0;
@@ -52,7 +53,9 @@ void sam_reset_line (VBlockP vb_)
     vb->saggy_is_prim = false;
     vb->meth_call.len32 = 0;
     vb->bisulfite_strand = 0;
+    
     if (IS_PIZ) {
+        vb->textual_seq_str = NULL;
         vb->aux_con = NULL;
         vb->chrom_node_index = WORD_INDEX_NONE;
         vb->chrom_name = "";
@@ -61,11 +64,12 @@ void sam_reset_line (VBlockP vb_)
         vb->deep_seq = (PizDeepSeq){}; 
         vb->seq_is_monochar = false;
         CTX(SAM_SQBITMAP)->line_sqbitmap.nbits = CTX(SAM_SQBITMAP)->line_sqbitmap.nwords = 0;
+        CTX(OPTION_tp_B_ARR)->tp = (struct ctx_tp){};
 
         // make sure we have enough room for this line if translating. 
         // note: having this allocation here allows us to keep vb->translation.factor relatively small to avoid over-allocation
         if (!vb->translation.is_src_dt && buf_user_count (&vb->txt_data) == 1) // not overlaid which happens loading sag (sam_load_groups_add_solo_data())
-            buf_alloc (vb, &vb->txt_data, vb->longest_line_len * 4, 0, char, 1.15, "txt_data");
+            buf_alloc (vb, &vb->txt_data, vb->longest_line_len * 5, 0, char, 1.15, "txt_data");
     }
 
     else { // ZIP

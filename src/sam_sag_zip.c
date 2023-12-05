@@ -138,25 +138,25 @@ void sam_seg_gc_initialize (VBlockSAMP vb)
 // PRIM: add SA Group (not alignments) to the data structure in VB 
 bool sam_seg_prim_add_sag (VBlockSAMP vb, ZipDataLineSAM *dl, uint16_t num_alns/* inc primary aln*/, bool is_bam)
 {
-    rom textual_seq = is_bam ? B1STc(vb->textual_seq) : Btxt (dl->SEQ.index);
-    uint32_t seq_len = is_bam ? vb->textual_seq.len32 : dl->SEQ.len;
+    rom seq = vb->textual_seq_str;
+    uint32_t seq_len = dl->SEQ.len;
 
-    ASSERTNOTNULL (textual_seq);
+    ASSERT (seq, "%s: seq=NULL", LN_NAME);
 
     // MAIN: check that values are within limits defined in Sag (no need to check in PRIM as we already checked in MAIN)
     if (IS_MAIN(vb)) {
         FAILIF (!sam_might_have_saggies_in_other_VBs (vb, dl, num_alns), "all sag alignments are contained in this VB%s", "");
         FAILIF (dl->QNAME.len > SAM_MAX_QNAME_LEN, "dl->QNAME.len=%u > %u", dl->QNAME.len, SAM_MAX_QNAME_LEN);
-        FAILIF (seq_len==1 && *textual_seq == '*', "SEQ=\"*\"%s", ""); // we haven't segged seq yet, so vb->seq_missing is not yet set
+        FAILIF (seq_len==1 && *seq == '*', "SEQ=\"*\"%s", ""); // we haven't segged seq yet, so vb->seq_missing is not yet set
         FAILIF (seq_len > MAX_SA_SEQ_LEN, "seq_len=%u > %u", seq_len, MAX_SA_SEQ_LEN);
         FAILIF (!dl->POS, "POS=0%s", ""); // unaligned
         FAILIF (num_alns > MAX_SA_NUM_ALNS, "%s=%u > %u", (IS_SAG_NH || IS_SAG_SOLO || IS_SAG_CC) ? "NH:i" : "num_alns", num_alns, MAX_SA_NUM_ALNS);
         FAILIF (dl->hard_clip[0] || dl->hard_clip[1], "has_hard_clips%s", ""); // primary cannot have hard clips
         
         uint32_t bad_i;
-        FAILIF (!str_is_ACGT (textual_seq, seq_len, &bad_i), 
+        FAILIF (!str_is_ACGT (STRa(seq), &bad_i), 
                 "RNAME=\"%.*s\" POS=%d. Found '%c' in base_i=%u in SEQ is not A,C,G or T. SEQ=\"%.*s\"", 
-                vb->chrom_name_len, vb->chrom_name, dl->POS, textual_seq[bad_i], bad_i, seq_len, textual_seq);
+                STRf(vb->chrom_name), dl->POS, seq[bad_i], bad_i, STRf(seq));
     }
 
     // PRIM: actually add the group

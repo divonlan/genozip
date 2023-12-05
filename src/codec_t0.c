@@ -13,15 +13,6 @@
 #include "profiler.h"
 #include "compressor.h"
 
-static inline unsigned homopolymer_len (STRp(seq), unsigned start)
-{
-    char base = seq[start];
-    for (unsigned i=start+1; i < seq_len; i++)
-        if (seq[i] != base) return i - start;
-
-    return seq_len - start;
-}
-
 //--------------
 // ZIP side
 //--------------
@@ -66,8 +57,8 @@ bool codec_t0_data_is_a_fit_for_t0 (VBlockP vb)
 void codec_t0_comp_init (VBlockP vb)
 {
     ContextP t0_ctx = CTX(OPTION_t0_Z);
-    t0_ctx->ltype  = LT_CODEC;
-    t0_ctx->lcodec = CODEC_T0;
+    t0_ctx->ltype   = LT_CODEC;
+    t0_ctx->lcodec  = CODEC_T0;
 }
 
 COMPRESS (codec_t0_compress)
@@ -150,12 +141,7 @@ CODEC_RECONSTRUCT (codec_t0_reconstruct)
 {
     START_TIMER;
  
-    // get SEQ
-    ContextP seq_ctx = CTX(SAM_SQBITMAP);
-
-    ConstBufferP textual_seq = sam_get_textual_seq(vb); // note: textual_seq is prepared in sam_piz_sam2bam_SEQ or sam_load_groups_add_seq
-
-    rom seq = textual_seq->len32 ? B1STc (*textual_seq) : last_txtx (vb, seq_ctx); 
+    rom seq = sam_piz_get_textual_seq (vb);
 
     ASSPIZ (len == vb->seq_len, "expecting len=%u == vb->seq_len=%u", len, vb->seq_len);
 

@@ -166,7 +166,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_QD)
     if (reconstruct)
         ctx->qd.pred_type = (uint32_t)(snip[0] - '0');
 
-    ASSPIZ (ctx->qd.pred_type < NUM_QD_PRED_TYPES, "Unknown pred_type=%d. Please upgrade to the latest version of Genozip", ctx->qd.pred_type);
+    ASSPIZ (ctx->qd.pred_type < NUM_QD_PRED_TYPES, "Unknown pred_type=%d. %s", ctx->qd.pred_type, genozip_update_msg());
     
     return NO_NEW_VALUE;
 }

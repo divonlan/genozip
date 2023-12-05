@@ -286,6 +286,18 @@
 #pragma GENDICT INFO_SHADOWED=DTYPE_1=SHADOWED      // <ID=SHADOWED,Number=0,Type=Flag,Description="CNV overlaps with or is encapsulated by deletion">
 #pragma GENDICT FORMAT_CN=DTYPE_2=CN                // <ID=CN,Number=1,Type=Integer,Description="Copy number genotype for imprecise events">
 
+// Ultima Genomics
+#pragma GENDICT INFO_VARIANT_TYPE=DTYPE_1=VARIANT_TYPE // <ID=VARIANT_TYPE,Number=1,Type=String,Description="Flow: type of variant: SNP/NON-H-INDEL/H-INDEL">
+#pragma GENDICT INFO_UG_HCR=DTYPE_1=UG_HCR          // <ID=UG_HCR,Number=1,Type=String,Description="Genomic Region Annotation: High confidence regions as described in Almogy et al., 2022 (gs://concordanz/hg38/UG-High-Confidence-Regions/v1.3/ug_hcr.bed)">
+#pragma GENDICT INFO_X_CSS=DTYPE_1=X_CSS            // <ID=X_CSS,Number=A,Type=String,Description="Flow: cycle skip status: cycle-skip, possible-cycle-skip, non-skip">
+#pragma GENDICT INFO_X_GCC=DTYPE_1=X_GCC            // <ID=X_GCC,Number=1,Type=Float,Description="Flow: percentage of G or C in the window around hmer">
+#pragma GENDICT INFO_X_HIL=DTYPE_1=X_HIL            // <ID=X_HIL,Number=A,Type=Integer,Description="Flow: length of the hmer indel, if so">
+#pragma GENDICT INFO_X_HIN=DTYPE_1=X_HIN            // <ID=X_HIN,Number=A,Type=String,Description="Flow: nucleotide of the hmer indel, if so">
+#pragma GENDICT INFO_X_IC=DTYPE_1=X_IC              // <ID=X_IC,Number=A,Type=String,Description="Flow: indel class: ins, del, NA">
+#pragma GENDICT INFO_X_IL=DTYPE_1=X_IL              // <ID=X_IL,Number=A,Type=Integer,Description="Flow: length of indel">
+#pragma GENDICT INFO_X_LM=DTYPE_1=X_LM              // <ID=X_LM,Number=A,Type=String,Description="Flow: motif to the left of the indel">
+#pragma GENDICT INFO_X_RM=DTYPE_1=X_RM              // <ID=X_RM,Number=A,Type=String,Description="Flow: motif to the right of the indel">
+
 // bcftools call
 #pragma GENDICT INFO_PV4=DTYPE_1=PV4                // <ID=PV4,Number=4,Type=Float,Description="P-values for strand bias, baseQ bias, mapQ bias and tail distance bias">
 #pragma GENDICT INFO_RPB=DTYPE_1=RPB                // <ID=RPB,Number=1,Type=Float,Description="Mann-Whitney U test of Read Position Bias (bigger is better)">
@@ -582,7 +594,7 @@ extern void vcf_samples_add  (rom samples_str);
                       vcf_piz_special_MUX_BY_IGT_PHASE, vcf_piz_special_main_REFALT_DEL, vcf_piz_special_mutation, \
                       vcf_piz_special_SO_TERM, vcf_piz_special_MMURI, \
                       vcf_piz_special_MUX_GQX, vcf_piz_special_RU, vcf_piz_special_IDREP, vcf_piz_special_next_ALT, \
-                      vcf_piz_special_MUX_BY_END, vcf_piz_special_MUX_BY_ISAAC_FILTER }
+                      vcf_piz_special_MUX_BY_END, vcf_piz_special_MUX_BY_ISAAC_FILTER, vcf_piz_special_X_LM_RM }
 
 SPECIAL (VCF, 0,  main_REFALT,         vcf_piz_special_main_REFALT);
 SPECIAL (VCF, 1,  FORMAT,              vcf_piz_special_FORMAT)
@@ -640,7 +652,8 @@ SPECIAL (VCF, 52, IDREP,               vcf_piz_special_IDREP);                  
 SPECIAL (VCF, 53, next_ALT,            vcf_piz_special_next_ALT);                 // added v15.0.25
 SPECIAL (VCF, 54, MUX_BY_END,          vcf_piz_special_MUX_BY_END);               // added v15.0.26
 SPECIAL (VCF, 55, MUX_BY_ISAAC_FILTER, vcf_piz_special_MUX_BY_ISAAC_FILTER);      // added v15.0.26
-#define NUM_VCF_SPECIAL 56
+SPECIAL (VCF, 56, X_LM_RM,             vcf_piz_special_X_LM_RM);                  // added v15.0.28
+#define NUM_VCF_SPECIAL 57
 
 // Translators for Luft (=secondary coordinates)
 TRANSLATOR (VCF, VCF,   1,  G,      vcf_piz_luft_G)       // same order as LiftOverStatus starting LO_CANT_G

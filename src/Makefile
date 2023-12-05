@@ -54,7 +54,7 @@ else
 
 endif 
 
-WSL_GCC_8_5 = /home/divon/miniconda3/envs/distribution/bin/x86_64-conda-linux-gnu-gcc # path to gcc 8.5 on WSL
+WSL_GCC_8_5 = /home/divon/miniconda3/envs/distribution/bin/x86_64-conda-linux-gnu-gcc # path to gcc 8.5 on WSL (generate with: conda create -n distribution gcc_linux-64=8.5.0)
 
 DEV_DIR  = ../../genozip
 DEV_SRC  = $(DEV_DIR)/src
@@ -74,7 +74,7 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.
 		  vcf_piz.c vcf_seg.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c vcf_hgvs.c      \
 		  vcf_format_GT.c vcf_format_PS_PID.c vcf_info_QD.c vcf_info_SF.c vcf_dbsnp.c vcf_giab.c vcf_vep.c      \
 		  vcf_refalt.c vcf_tags.c vcf_linesort.c vcf_format.c vcf_illum_gtyping.c vcf_gwas.c vcf_vagrent.c		\
-		  vcf_icgc.c vcf_snpeff.c vcf_cosmic.c vcf_mastermind.c vcf_isaac.c	vcf_manta.c vcf_pos.c				\
+		  vcf_icgc.c vcf_snpeff.c vcf_cosmic.c vcf_mastermind.c vcf_isaac.c	vcf_manta.c vcf_pos.c vcf_ultima.c	\
 		  sam_seg.c sam_piz.c sam_shared.c sam_header.c sam_md.c sam_nm.c sam_tlen.c sam_cigar.c sam_fields.c  	\
 		  sam_sa.c bam_seg.c bam_seq.c bam_show.c sam_pacbio.c sam_ultima.c sam_xcons.c cram.c agilent.c   		\
 		  sam_seq.c sam_qual.c sam_sag_zip.c sam_sag_piz.c sam_sag_load.c sam_sag_ingest.c sam_sag_scan.c    	\
@@ -216,9 +216,11 @@ $(OBJDIR)/%.d: %.c | $(OBJDIR) # directory is an "order only prerequesite": http
 	@$(CC) $(CFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
 
 objdir.mac/secure/license.o : CFLAGS += -mmacosx-version-min=10.0
+ifeq ($(OS),Windows_NT)
 objdir.mac/secure/license.o : secure/license.c
 	@echo "getting $>"
 	@(cd ..; mac-get-license-o.sh)
+endif
 
 $(OBJDIR)/%.o: %.c $(OBJDIR)/%.d
 	@echo Compiling $<
@@ -403,10 +405,6 @@ decrement-version:
 	@git push origin genozip-$(version) > /dev/null
 	@(cd secure; git push origin genozip-$(version) > /dev/null)
 	@curl https://github.com/divonlan/genozip/archive/genozip-$(version).tar.gz --ssl-no-revoke --silent --location -o $@ > /dev/null
-	@echo GITHUB: go to here: https://github.com/divonlan/genozip/releases/new
-	@echo "1. Set 'Tag version' and 'Release title' are both: genozip-$(version)"
-	@echo "2. Copy the notes for the version from RELEASE NOTES"
-	@echo "3. Update 'latest' release to new tag"
 
 conda/meta.yaml: conda/meta.template.yaml .archive.tar.gz ../README.md
 	@echo "Generating conda/meta.yaml"
@@ -438,12 +436,14 @@ conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld
 	@touch $@
 	@echo "CONDA: Using a browser:"
 	@echo "  (1) Go to https://github.com/divonlan/genozip-feedstock/tree/genozip "
-	@echo "  (2) Click 'Contribute' -> 'Open pull request'"
-	@echo "  (3) Go to https://dev.azure.com/conda-forge/feedstock-builds/_build "
-	@echo "  (4) Click on genozip and wait (~8 min) for the test to complete. Fix any issues."
-	@echo "  (5) Go back to the tab in (2) and click 'Merge pull request' and the 'Confirm merge' (DONT CLICK 'Delete branch')"
-	@echo "  (6) Go to https://dev.azure.com/conda-forge/feedstock-builds/_build and watch the build - it should be fine"
-	@echo "  (7) In ~30 minutes users will be able to 'conda update genozip'"
+	@echo "  (2) Click 'Contribute' -> 'Open pull request' OR 'Create pull request'"
+	@echo "  (3) Click 'Resolve conflicts' -> select the top option in each of the 2 conflicts, then commit"
+	@echo "  (4) Wait for all 4 tests to pass (~8 minutes)"
+	@echo "  (5) Click 'Merge pull request' and the 'Confirm merge' (DONT CLICK 'Delete branch')"
+	@echo "  (6) In local terminal: cd ../genozip-feedstock/; git pull; cd -"
+	@echo "  (7) Open: https://github.com/divonlan/genozip/releases/new
+	@echo "  (8) Set 'Tag version' and 'Release title' are both: genozip-$(version)"
+	@echo "  (9) Copy the notes for the version from RELEASE NOTES -> Publish release"
 
 # Building Windows InstallForge with distribution flag: we delete arch.o to force it to re-compile with DISTRIBUTION=InstallForge.
 windows/%.exe: CFLAGS += $(OPTFLAGS) # -DDISTRIBUTION=\"InstallForge\" # note: matches the name in version.c

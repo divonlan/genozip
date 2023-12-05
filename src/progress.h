@@ -11,8 +11,8 @@
 #include "genozip.h"
 #include "digest.h"
 
-extern char *progress_new_component (rom component_name, rom message, int test_mode);
-extern void progress_update (rom task, char **prefix, uint64_t sofar, uint64_t total, bool done);
+extern void progress_new_component (rom component_name, rom message, bool test_mode);
+extern void progress_update (rom task, uint64_t sofar, uint64_t total, bool done);
 extern void progress_finalize_component (rom status);
 extern void progress_finalize_component_time (rom status, Digest md5);
 extern void progress_finalize_component_time_ratio (rom me, float ratio, Digest md5);

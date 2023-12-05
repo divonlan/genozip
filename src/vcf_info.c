@@ -456,7 +456,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_AC)
             reconstruct_peek (vb, CTX(INFO_AC_Hemi), 0, 0).i;
 
     else 
-        ABORT_PIZ ("unrecognized snip '%c'(%u). upgrade to latest version of Genozip.", *snip, (uint8_t)*snip);
+        ABORT_PIZ ("unrecognized snip '%c'(%u). %s", *snip, (uint8_t)*snip, genozip_update_msg());
 
     if (reconstruct) RECONSTRUCT_INT (new_value->i); 
 
@@ -538,7 +538,7 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_SVLEN)
         new_value->i = MAX_(vb->main_alt_len, vb->main_ref_len) - 1;
 
     else
-        ABORT_PIZ ("unrecognized snip '%c'(%u). upgrade to latest version of Genozip.", *snip, (uint8_t)*snip);
+        ABORT_PIZ ("unrecognized snip '%c'(%u). %s", *snip, (uint8_t)*snip, genozip_update_msg());
 
     if (reconstruct) RECONSTRUCT_INT (new_value->i);
 
@@ -962,6 +962,10 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_CSQT:            CALL_IF (segconf.vcf_is_isaac, seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
         case _INFO_cosmic:          CALL_IF (segconf.vcf_is_isaac, seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
 
+        // Ultima Genomics Deep Variant
+        case _INFO_X_LM:
+        case _INFO_X_RM:            CALL_IF (segconf.vcf_is_ultima_dv, vcf_seg_INFO_X_LM_RM (vb, ctx, STRa(value)));
+        
         // manta
         // case _INFO_LEFT_SVINSSEQ: 
         // case _INFO_RIGHT_SVINSSEQ: // tried ACGT, better off without

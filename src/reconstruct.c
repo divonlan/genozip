@@ -519,8 +519,8 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
                 DT_FUNC (vb, reconstruct_seq) (vb, STRa(snip), reconstruct);
                 break;
 
-            default: ABORT ("%s: while reconstructing %s: Unsupported lt_type=%s (%u) for SNIP_LOOKUP or SNIP_OTHER_LOOKUP. Please upgrade to the latest version of Genozip.", 
-                            LN_NAME, base_ctx->tag_name, lt_name(base_ctx->ltype), base_ctx->ltype);
+            default: ABORT ("%s: while reconstructing %s: Unsupported lt_type=%s (%u) for SNIP_LOOKUP or SNIP_OTHER_LOOKUP. %s", 
+                            LN_NAME, base_ctx->tag_name, lt_name(base_ctx->ltype), base_ctx->ltype, genozip_update_msg());
         }
 
         break;
@@ -577,8 +577,8 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
                 
         uint8_t special = snip[1] - 32; // +32 was added by SPECIAL macro
 
-        ASSPIZ (special < DTP (num_special), "Reconstructing %s requires special %s handler %u which doesn't exist in this version of genozip - please upgrade to the latest version", 
-                base_ctx->tag_name, dt_name (vb->data_type), special);
+        ASSPIZ (special < DTP (num_special), "Reconstructing %s requires special %s handler %u which doesn't exist in this version of genozip. %s", 
+                base_ctx->tag_name, dt_name (vb->data_type), special, genozip_update_msg());
         ASSERT_DT_FUNC (vb, special);
 
         has_new_value = ((PizSpecialReconstructor)(DT_FUNC(vb, special)[special]))(vb, snip_ctx, snip+2, snip_len-2, &new_value, reconstruct);  
@@ -610,8 +610,8 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
         break;
 
     case NUM_SNIP_CODES ... 31:
-        ABORT ("%s: File %s requires a SNIP code=%u for %s. Please upgrade to the latest version of Genozip",
-               LN_NAME, z_name, snip[0], base_ctx->tag_name);
+        ABORT ("%s: File %s requires a SNIP code=%u for %s. %s",
+               LN_NAME, z_name, snip[0], base_ctx->tag_name, genozip_update_msg());
 
     case SNIP_DONT_STORE:
         store_type  = STORE_NONE; // override store and fall through

@@ -130,13 +130,16 @@ static inline bool vcf_refalt_seg_del_against_reference (VBlockVCFP vb, STRp(ref
     return true;
 }
 
+
+#define IS_SINGLE_BASE_ALTS(n_alts, alt_len) ((n_alts)*2-1 == (alt_len))
+
 void vcf_refalt_seg_main_ref_alt (VBlockVCFP vb, STRp(ref), STRp(alt))
 {
     // optimize ref/alt in the common case of single-character
-    if (ref_len == 1 && alt_len == 1) 
+    if (vb->n_alts == 1 && vb->var_types[0] == VT_SNP) 
         vcf_refalt_seg_ref_alt_snp (vb, *ref, *alt);
 
-    else if (ref_len > 1 && alt_len == 1 && vcf_refalt_seg_del_against_reference (vb, STRa(ref), alt[0]))
+    else if (vb->n_alts == 1 && vb->var_types[0] == VT_DEL && vcf_refalt_seg_del_against_reference (vb, STRa(ref), alt[0]))
         {}
 
     else {
@@ -182,8 +185,6 @@ void vcf_refalt_seg_main_ref_alt (VBlockVCFP vb, STRp(ref), STRp(alt))
 #define ECLIPSED(seq,len) MIN_(MAX_BASES_REJECTS_FILE,(len)), seq, ECLIPSE(len)
 #define XSTRANDF "%s"
 #define XSTRAND (is_xstrand ? "xstrand=true " : "")
-
-#define IS_SINGLE_BASE_ALTS(n_alts, alt_len) ((n_alts)*2-1 == (alt_len))
 
 #define ALTF "%.*s%s\t"
 #define ALT ECLIPSED (alt, alt_len)
@@ -695,7 +696,7 @@ static inline bool vcf_refalt_is_left_anchored (STRp(ref), STRps(alt))
 // The ALT field might contain missing ALTs eg "GAAGAAA,G,*,GGAAA". Removes the missing ALTs from the list
 // A '*' means another allele is defined by a deletion a previous line that overlaps this variant.
 // See: https://gatk.broadinstitute.org/hc/en-us/articles/360035531912-Spanning-or-overlapping-deletions-allele-
-static bool vcf_refalt_lift_remove_missing_alts (uint32_t *n_alts, rom *alts, uint32_t *alt_lens)
+static bool vcf_refalt_remove_missing_alts (uint32_t *n_alts, rom *alts, uint32_t *alt_lens)
 {
     bool has_missing_alts = false;
 
@@ -742,7 +743,7 @@ LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool is
     ASSVCF (n_alts, "Invalid ALT=\"%.*s\"", STRf(alt));
 
     // If the alt list has '*' ALTs - remove them as eg ALT="A,*" is still just one non-REF allele
-    bool has_missing_alts = vcf_refalt_lift_remove_missing_alts (&n_alts, alts, alt_lens);
+    bool has_missing_alts = vcf_refalt_remove_missing_alts (&n_alts, alts, alt_lens);
 
     vb->is_del_sv = false; // initialize
 
@@ -849,6 +850,21 @@ void vcf_parse_main_alt (VBlockVCFP vb)
     vb->n_alts = str_split_do (STRa(vb->main_alt), ARRAY_LEN(vb->alts), ',', vb->alts, vb->alt_lens, false, NULL);
 
     if (vb->n_alts == 0) vb->n_alts = -1; // failed
+
+    else 
+        for (int alt_i=0; alt_i < vb->n_alts; alt_i++) {       
+            if (vb->main_ref_len == 1 && vb->alt_lens[alt_i] == 1 && IS_ACGT(vb->alts[alt_i][0])) 
+                vb->var_types[alt_i] = VT_SNP;
+
+            else if (vb->main_ref_len > 1 && vb->alt_lens[alt_i] == 1 && *vb->main_ref == *vb->alts[alt_i])
+                vb->var_types[alt_i] = VT_DEL;
+
+            else if (vb->main_ref_len == 1 && vb->alt_lens[alt_i] > 1 && str_is_ACGT (STRi(vb->alt, alt_i), NULL))
+                vb->var_types[alt_i] = VT_INS;
+
+            else  // To do - identify additional types 
+                vb->var_types[alt_i] = VT_UNKNOWN; // need to reset as could be set by previous line
+        }
 }
 
 // item callback of REFALT in TOPLEVEL, called with files compressed starting 14.0.12

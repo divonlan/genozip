@@ -97,7 +97,7 @@ bool codec_pacb_comp_init (VBlockP vb, LocalGetLineCB get_line_cb)
 
     ctx->ltype  = LT_CODEC;
     ctx->lcodec = CODEC_PACB;
-    
+
     return true;
 }
 
@@ -272,11 +272,7 @@ CODEC_RECONSTRUCT (codec_pacb_reconstruct)
     const rom *after = B(rom, ctx->channel_data, n_channels);
     
     // reconstruct 
-    ContextP seq_ctx = CTX(SAM_SQBITMAP); // same as FASTQ_SQBITMAP
-
-    ConstBufferP textual_seq = VB_DT(SAM) ? sam_get_textual_seq(vb) : NULL; // note: textual_seq is prepared in sam_piz_sam2bam_SEQ sam_load_groups_add_seq
-
-    rom seq = (textual_seq && textual_seq->len32) ? B1STc (*textual_seq) : last_txtx (vb, seq_ctx); 
+    rom seq = VB_DT(SAM) ? sam_piz_get_textual_seq(vb) : last_txtx (vb, CTX(FASTQ_SQBITMAP)); 
 
     char *next_recon = BAFTtxt;
     for (uint32_t i=0; i < len; i++) {

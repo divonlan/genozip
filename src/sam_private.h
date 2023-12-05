@@ -213,18 +213,19 @@ typedef struct {
 // note: making VBlockSAM __packed__ will ruin the math in sam_seg_buddied_i_fields
 typedef struct VBlockSAM {
     VBLOCK_COMMON_FIELDS
-
-    Buffer textual_seq;            // ZIP/PIZ: BAM: contains the textual SEQ (PIZ: used only in some cases)
+    
     uint32_t arith_compress_bound_longest_seq_len; // PIZ
 
     // current line
+    Buffer textual_seq;            // ZIP/PIZ: BAM: contains the textual SEQ (PIZ: used unless flags.no_textual_seq)
+    rom textual_seq_str;           // ZIP/PIZ: BAM: points into textual_seq SAM: points into txt_data
     bool seq_missing;              // ZIP/PIZ: current line: SAM "*" BAM: l_seq=0
     bool seq_is_monochar;          // PIZ only
     bool cigar_missing;            // ZIP/PIZ: current line: SAM "*" BAM: n cigar op=0
     bool qual_missing;             // ZIP/PIZ: current line: SAM "*" BAM: l_seq=0 or QUAL all 0xff (of if segconf.pysam_qual: 0xff followed by 0s
     bool RNEXT_is_equal;           // RNEXT represents the same contig as RNAME (though the word index may differ in SAM, or RNEXT might be "=")
     bool line_not_deepable;        // PIZ only
-    PizDeepSeq deep_seq;              // PIZ Deep: reconstruction instructions of SEQ, used only if cigar is perfect (eg 151M) and there is at most one mismatch vs reference
+    PizDeepSeq deep_seq;           // PIZ Deep: reconstruction instructions of SEQ, used only if cigar is perfect (eg 151M) and there is at most one mismatch vs reference
 
     uint32_t n_auxs;               // ZIP: AUX data of this line
     rom *auxs;                     
@@ -245,7 +246,8 @@ typedef struct VBlockSAM {
             idx_CC_Z, idx_CP_i, idx_ms_i, idx_SM_i,
             idx_UB_Z, idx_BX_Z, idx_CB_Z, idx_GX_Z, idx_CR_Z, idx_CY_Z,
             idx_XO_Z, idx_YS_Z, idx_XB_A, idx_XM_Z, idx_XB_Z,
-            idx_dq_Z, idx_iq_Z, idx_sq_Z, idx_ZA_Z, idx_ZB_Z;
+            idx_dq_Z, idx_iq_Z, idx_sq_Z, idx_ZA_Z, idx_ZB_Z,
+            idx_pr_i;
     #define has(f)   (vb->idx_##f  != -1)
     #define has_MD   (has(MD_Z) && segconf.has[OPTION_MD_Z])
 
@@ -267,7 +269,7 @@ typedef struct VBlockSAM {
     Multiplexer2 mux_FLAG, mux_MQ, mux_MC, mux_ms, mux_AS, mux_YS, mux_nM, // ZIP: DEMUX_BY_MATE or DEMUX_BY_BUDDY multiplexers
                  mux_mated_z_fields[NUM_MATED_Z_TAGS], mux_ultima_c, mux_dragen_sd, mux_YY, mux_XO; 
     Multiplexer3 mux_NH;           // ZIP: DEMUX_BY_BUDDY_MAP
-    Multiplexer7 mux_tp;           // ZIP: DEMUX_BY_QUAL (number of channels matches TP_NUM_BINS)
+    Multiplexer7 mux_tp;           // ZIP: ULTIMA_tp (number of channels matches TP_NUM_BINS)
 
     // CIGAR stuff
     #define after_mux last_cigar
@@ -332,6 +334,7 @@ typedef struct VBlockSAM {
     // QUAL stuff
     bool has_qual;                 // Seg: This VB has at least one line with non-missing qual
     bool has_missing_qual;         // Seg: This VB has at least one line with missing qual
+    bool codec_requires_seq;       // Seg: one or more fields uses a codec that requires SEQ for reconstruction
 
     // stats
     uint32_t deep_stats[NUM_DEEP_STATS]; // ZIP/PIZ: stats collection regarding Deep - one entry for each in DeepStatsZip/DeepStatsPiz
@@ -683,12 +686,14 @@ extern void sam_recon_skip_pacbio_qual (VBlockSAMP vb);
 extern void sam_ultima_zip_initialize (void);
 extern void sam_ultima_seg_initialize (VBlockSAMP vb);
 extern void sam_ultima_finalize_segconf (VBlockSAMP vb);
-extern void sam_seg_ultima_tp (VBlockSAMP vb, ContextP ctx, void *cb_param, void *tp_, uint32_t tp_len);
+extern void sam_seg_ULTIMA_tp (VBlockSAMP vb, ContextP ctx, void *cb_param, void *tp_, uint32_t tp_len);
 extern void sam_seg_ultima_bi (VBlockSAMP vb, STRp(bi_str), unsigned add_bytes);
 extern void sam_seg_ultima_XV (VBlockSAMP vb, STRp(xv), unsigned add_bytes);
 extern void sam_seg_ultima_XW (VBlockSAMP vb, STRp(xw), unsigned add_bytes);
 extern void sam_seg_ultima_t0 (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(t0), unsigned add_bytes);
 extern void sam_seg_ultima_MI (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(mi), unsigned add_bytes);
+extern void sam_seg_ultima_a3 (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t a3, unsigned add_bytes);
+extern void sam_seg_ultima_pt (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t pt, unsigned add_bytes);
 
 // Dragen stuff
 extern void sam_dragen_initialize (VBlockSAMP vb);

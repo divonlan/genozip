@@ -42,7 +42,6 @@ typedef struct DispatcherData {
     enum { PROGRESS_PERCENT, PROGRESS_MESSAGE, PROGRESS_NONE } progress_type;
     rom filename;
     
-    char *progress_prefix;
     uint64_t progress;        // progress towards target_progress
     uint64_t target_progress; // progress reaches this, it is at 100%
 
@@ -74,7 +73,7 @@ void dispatcher_increment_progress (rom where, int64_t increment)
     // in unbind mode - dispatcher is not done if there's another component after this one
     bool done = dispatcher_is_done (main_dispatcher);
 
-    progress_update (d->task_name, &d->progress_prefix, d->progress, d->target_progress, done);
+    progress_update (d->task_name, d->progress, d->target_progress, done);
 }
 
 void dispatcher_start_wallclock (void)
@@ -117,7 +116,7 @@ Dispatcher dispatcher_init (rom task_name,
     vb_create_pool (pool_type);
 
     if (filename) // note: when unbinding, we print this in dispatcher_resume() 
-        d->progress_prefix = progress_new_component (filename, prog_msg, test_mode); 
+        progress_new_component (filename, prog_msg, test_mode); 
 
     d->pool_in_use_at_init = vb_pool_get_num_in_use (pool_type, NULL); // we need to return the pool after dispatcher in the condition we received it...
 
@@ -146,7 +145,7 @@ void dispatcher_resume (Dispatcher d, uint32_t target_progress)
     d->target_progress = target_progress;
 
     if (d->paused) 
-        d->progress_prefix = progress_new_component (d->filename, "0\%", flag.test);    
+        progress_new_component (d->filename, "0\%", flag.test);    
 
     d->paused          = false;
 }
@@ -200,7 +199,6 @@ void dispatcher_finish (Dispatcher *dd_p, uint32_t *last_vb_i, bool cleanup_afte
     ASSERT (pool_in_use_at_finish <= d->pool_in_use_at_init, "Dispatcher \"%s\" leaked VBs: pool_in_use_at_init=%u pool_in_use_at_finish=%u (one VB in use is vb_id=%u)",
             d->task_name, d->pool_in_use_at_init, pool_in_use_at_finish, id_in_use);
 
-    FREE (d->progress_prefix);
     FREE (*dd_p);
 }
 

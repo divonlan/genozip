@@ -260,6 +260,8 @@ static inline void sam_load_groups_add_seq (VBlockSAMP vb, PlsgVbInfo *plsg, Sag
     buf_verify (vb->txt_data, "SWAP-txt_data-textual_seq");
     SWAP (vb->textual_seq, vb->txt_data);
 
+    vb->textual_seq_str = B1STc (vb->textual_seq);
+
     ASSERT (vb->textual_seq.len32 == vb->seq_len, "Expecting textual_seq.len=%u == seq_len=%u", vb->textual_seq.len32, vb->seq_len);
 
     // pack SEQ data into z_file->sag_seq

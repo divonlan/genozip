@@ -312,6 +312,7 @@ typedef int ThreadId;
 #define THREAD_ID_NONE ((ThreadId)-1)
 
 #define VER(n) (z_file->genozip_version >= (n))
+#define VER2(major,minor) (z_file->genozip_version > (major) || (z_file->genozip_version == (major) && z_file->genozip_minor_ver >= (minor)))
 #define EXACT_VER(n) (z_file->genozip_version == (n))
 
 #define KB *((uint64_t)1<<10)
