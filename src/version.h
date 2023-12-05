@@ -1,4 +1,4 @@
-#define GENOZIP_CODE_VERSION "15.0.27"
+#define GENOZIP_CODE_VERSION "15.0.28"
 
 extern int exec_version_major (void);
 extern int exec_version_minor (void);
