@@ -9,6 +9,7 @@
 #pragma once
 
 #include "genozip.h"
+#include "sections.h"
 
 extern void license_register (bool);
 extern bool license_is_registered (void);
@@ -17,11 +18,8 @@ extern void license_load (void);
 extern rom license_get_one_line (void);
 extern void license_display (void);
 extern bool license_allow_tip (void);
-extern void license_show_deep_notice (void);
-extern void license_show_pair_notice (void);
+extern void license_eval_notice (void);
 extern bool license_is_eval (void);
 extern void license_prepare (rom arg);
-
-typedef struct { char s[16384]; } StrNotice; 
-extern StrNotice license_print_default_notice (void);
-
+extern bool license_piz_prepare_genozip_header (SectionHeaderGenozipHeaderP header, FailType fail_type);
+extern StrTextLong license_academic_tip (void);

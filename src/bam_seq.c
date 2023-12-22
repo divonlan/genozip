@@ -64,7 +64,7 @@ void bam_seq_to_sam (VBlockSAMP vb, bytes bam_seq,
 {
     START_TIMER;
         
-    ASSERT (out->len32 + seq_len + 1 <= out->size, "%s: out allocation too small", LN_NAME);
+    ASSERT (out->len32 + seq_len + 2 <= out->size, "%s: out allocation too small", LN_NAME);
 
     if (!seq_len) {
         BNXTc (*out) = '*';
@@ -96,6 +96,12 @@ void bam_seq_to_sam (VBlockSAMP vb, bytes bam_seq,
     else
         out->len32 += seq_len;
 
+    ASSERTW (!test_final_nibble || !(seq_len % 2) || (*BAFTc (*out)=='='), 
+             "%s: Warning in bam_seq_to_sam: expecting the unused lower 4 bits of last seq byte in an odd-length seq_len=%u to be 0, but its not. This will cause an incorrect digest",
+             LN_NAME, seq_len);
+
+    *BAFTc(*out) = 0; // nul-terminate after end of seq
+    
 /* TO DO - not working yet
     uint64_t *next64 = BAFT (uint64_t, *out);
 
@@ -128,9 +134,6 @@ void bam_seq_to_sam (VBlockSAMP vb, bytes bam_seq,
         }
     }
     */
-    ASSERTW (!test_final_nibble || !(seq_len % 2) || (*BAFTc (*out)=='='), 
-             "%s: Warning in bam_seq_to_sam: expecting the unused lower 4 bits of last seq byte in an odd-length seq_len=%u to be 0, but its not. This will cause an incorrect digest",
-             LN_NAME, seq_len);
 }
 
 /*

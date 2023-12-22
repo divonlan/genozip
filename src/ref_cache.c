@@ -139,7 +139,7 @@ void noreturn ref_cache_hold (rom handle_str)
     HANDLE h = (HANDLE)atoll (handle_str); // inherited from cache creator process
 
     const RefCache *ref_cache = MapViewOfFile (h, FILE_MAP_READ, 0, 0, sizeof (RefCache));
-   
+    
     while (!ref_cache->terminate_holder) 
         sleep(2); // it will take us up to 2 seconds get the termination order. that's fine - user is not waiting on this.
 #endif
@@ -272,7 +272,7 @@ bool ref_cache_initialize_genome (Reference ref)
         // set our other data *after* the creation_ts
         ref->cache->creator_pid = getpid();
         ref->cache->magic = GENOZIP_MAGIC;
-        ref->cache->genozip_version = exec_version_major();
+        ref->cache->genozip_version = code_version_major();
         ref->cache->shm_size = shm_size;
         filename_base (ref->filename, false, "<unknown>", ref->cache->ref_basename, sizeof (ref->cache->ref_basename));
 
@@ -327,7 +327,7 @@ unsigned ref_cache_iterator (bool (*callback)(int shmid, RefCache *cache))
 
 #ifdef __linux__
     ASSERTNOTINUSE (evb->scratch);
-    file_get_file (evb, "/proc/sysvipc/shm", &evb->scratch, "scratch", 1 MB, false, false);
+    file_get_file (evb, "/proc/sysvipc/shm", &evb->scratch, "scratch", 1 MB, VERIFY_ASCII, false);
 
     str_split_by_lines (evb->scratch.data, evb->scratch.len, 1000);
 
@@ -400,7 +400,7 @@ void ref_cache_remove_all (void)
         }
     }
 
-    if (count) WARN ("Removed in-memory caching of %d reference file%s", count, count>1 ? "s" : "");
+    if (count) WARN ("Removed in-memory caching of %d reference file%s", STRfN(count));
 #endif 
 }
 

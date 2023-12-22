@@ -11,9 +11,9 @@
 #include "genozip.h"
 #include "sections.h"
 
-extern void crypt_set_password (char *new_password);
-extern rom crypt_get_password(void);
-extern bool crypt_have_password (void);
+extern void crypt_set_password (rom new_password);
+extern rom crypt_get_password (void);
+extern bool has_password (void);
 extern bool crypt_prompt_for_password(void);
 extern uint32_t crypt_padded_len (uint32_t len);
 extern bool crypt_get_encrypted_len (uint32_t *data_encrypted_len /* in/out */, uint32_t *padding_len /* out */);

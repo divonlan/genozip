@@ -48,6 +48,7 @@
 // globals - set in main() and immutable thereafter
 char global_cmd[256]; 
 ExeType exe_type;
+
 unsigned file_i, n_files; // number of input files in the execution
 
 // primary_command vs command: primary_command is what the user typed on the command line. command is what is 
@@ -55,7 +56,6 @@ unsigned file_i, n_files; // number of input files in the execution
 CommandType command = NO_COMMAND, primary_command = NO_COMMAND; 
 
 uint32_t global_max_threads = DEFAULT_MAX_THREADS; 
-static bool tip_printed = false;
 
 #define MAIN(format, ...) ({ if (!flag.explicit_quiet && (flag.echo || flag.test_i)) { progress_newline(); fprintf (stderr, "%s[%u]: ",     command_name(), getpid()); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } })
 #define MAIN0(string)     ({ if (!flag.explicit_quiet && (flag.echo || flag.test_i)) { progress_newline(); fprintf (stderr, "%s[%u]: %s\n", command_name(), getpid(), string); } })
@@ -86,7 +86,7 @@ void noreturn main_exit (bool show_stack, bool is_error)
         if (!is_error) {
             version_print_notice_if_has_newer();
 
-            if (IS_ZIP || flag.check_latest/*PIZ - test after compress*/)
+            if (IS_ZIP || (IS_PIZ && flag.check_latest)/*non-returning test after compress*/)
                 tip_print();
         }
 
@@ -160,20 +160,20 @@ void noreturn main_exit (bool show_stack, bool is_error)
 
 static void main_print_help (bool explicit)
 {
-    static rom *texts[NUM_EXE_TYPES] = { help_genozip, help_genounzip, help_genols, help_genocat }; // same order as ExeType
-    static unsigned sizes[NUM_EXE_TYPES] = {sizeof(help_genozip), sizeof(help_genounzip), sizeof(help_genols), sizeof(help_genocat) };
+    static rom *texts[NUM_EXE_TYPES] = { help_genozip, help_genounzip, help_genocat, help_genols }; // same order as ExeType
+    static unsigned sizes[NUM_EXE_TYPES] = {sizeof(help_genozip), sizeof(help_genounzip), sizeof(help_genocat), sizeof(help_genols) };
 
-    if (flag.help && !strcmp (flag.help, "genozip")) 
+    if      (flag.help && !strcmp (flag.help, "genozip")) 
         str_print_text (help_genozip,      ARRAY_LEN(help_genozip),      "                          ",  "\n", NULL, 0);
 
     else if (flag.help && !strcmp (flag.help, "genounzip")) 
         str_print_text (help_genounzip,    ARRAY_LEN(help_genounzip),    "                          ",  "\n", NULL, 0);
 
-    else if (flag.help && !strcmp (flag.help, "genols")) 
-        str_print_text (help_genols,       ARRAY_LEN(help_genols),       "                          ",  "\n", NULL, 0);
-
     else if (flag.help && !strcmp (flag.help, "genocat")) 
         str_print_text (help_genocat,      ARRAY_LEN(help_genocat),      "                          ",  "\n", NULL, 0);
+
+    else if (flag.help && !strcmp (flag.help, "genols")) 
+        str_print_text (help_genols,       ARRAY_LEN(help_genols),       "                          ",  "\n", NULL, 0);
 
     else if (flag.help && !strcmp (flag.help, "attributions")) 
         str_print_text (help_attributions, ARRAY_LEN(help_attributions), "                          ",  "\n", NULL, 0);
@@ -323,17 +323,21 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
 
     rom exec_path = arch_get_executable().s;
 
+    char t_offset_str[24]={}, t_size_str[24]={}, sendto_str[24]={};
+    
+    if (t_size) {
+        sprintf (t_offset_str, "%"PRId64, t_offset);
+        sprintf (t_size_str,   "%"PRId64, t_size);
+    }
+
+    if (flag.sendto)
+        sprintf (sendto_str, "%"PRId64, flag.sendto);
+
     // case: we need to execute logic after the test - run in a separate process and wait for its completion
     if (!is_last_txt_file || // come back - we have more files to compress
         flag.is_windows   || // Windows API has no execv 
         flag.replace      || // come back to delete files
         t_size) {            // come back to close the tar file
-
-        char t_offset_str[24]={}, t_size_str[24]={};
-        if (t_size) {
-            sprintf (t_offset_str, "%"PRId64, t_offset);
-            sprintf (t_size_str,   "%"PRId64, t_size);
-        }
 
         StreamP test = stream_create (NULL, 0, 0, 0, 0, 0, 0,
                                       "To use the --test option",
@@ -370,15 +374,15 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
                                       flag.debug_latest  ? "--debug-latest"   : SKIP_ARG,
                                       flag.show_deep     ? "--show-deep"      : SKIP_ARG,
                                       flag.no_cache      ? "--no-cache"       : SKIP_ARG,
-                                      flag.license_filename           ? "--licfile"            : SKIP_ARG,
-                                      flag.license_filename           ? flag.license_filename  : SKIP_ARG,
-                                      is_last_txt_file && !flag.debug && !flag.replace ? "--check-latest"       : SKIP_ARG,
-                                      IS_REF_EXTERNAL && !is_chain    ? "--reference"          : SKIP_ARG, // normal pizzing of a chain file doesn't require a reference
-                                      IS_REF_EXTERNAL && !is_chain    ? ref_get_filename(gref) : SKIP_ARG, 
+                                      flag.sendto        ? "--sendto"         : SKIP_ARG,
+                                      flag.sendto        ? sendto_str         : SKIP_ARG,
+                                      flag.license_filename        ? "--licfile"            : SKIP_ARG,
+                                      flag.license_filename        ? flag.license_filename  : SKIP_ARG,
+                                      IS_REF_EXTERNAL && !is_chain ? "--reference"          : SKIP_ARG, // normal pizzing of a chain file doesn't require a reference
+                                      IS_REF_EXTERNAL && !is_chain ? ref_get_filename(gref) : SKIP_ARG, 
+                                      // note: no need for --check-latest as this call returns, and we check-latest and print the tip it in ZIP
                                       NULL);
                                       // ↓↓↓ Don't forget to add below too ↓↓↓
-
-        tip_printed = is_last_txt_file; // --check-latest sent to PIZ causes it to print the tip
         
         // wait for child process to finish, so that the shell doesn't print its prompt until the test is done
         int exit_code = stream_wait_for_exit (test);
@@ -419,12 +423,17 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
         if (flag.debug_latest)  argv[argc++] = "--debug-latest";
         if (flag.show_deep)     argv[argc++] = "--show-deep";
         if (flag.no_cache)      argv[argc++] = "--no-cache";
+        if (!flag.debug)        argv[argc++] = "--check-latest"; // we're not coming, so PIZ will check-latest and print tip
 
-        if (flag.license_filename) { argv[argc++] = "--licfile"; argv[argc++] = flag.license_filename; }
-        if (is_last_txt_file && !flag.debug) 
-                                argv[argc++] = "--check-latest";
-        if (IS_REF_EXTERNAL && !is_chain) 
-                              { argv[argc++] = "--reference"; 
+        if (flag.sendto) {      argv[argc++] = "--sendto"; 
+                                argv[argc++] = sendto_str; }
+
+        if (flag.license_filename) { 
+                                argv[argc++] = "--licfile"; 
+                                argv[argc++] = flag.license_filename; }
+
+        if (IS_REF_EXTERNAL && !is_chain) { 
+                                argv[argc++] = "--reference"; 
                                 argv[argc++] = ref_get_filename(gref); }
         argv[argc] = NULL;
                                 // ↑↑↑ Don't forget to add above too ↑↑↑
@@ -478,6 +487,8 @@ static void main_genozip (rom txt_filename,
 
         z_file = file_open_z_write (z_filename, flag.pair ? WRITEREAD : WRITE, txt_file->data_type);
         FREE(z_filename); // file_open_z copies the name
+
+        license_eval_notice();
     }
 
     stats_add_txt_name (txt_name); // add txt_name (inluding stdin) to stats data stored in z_file
@@ -606,7 +617,7 @@ static void main_get_filename_list (unsigned num_files, char **filenames,  // in
 
     // set argv to file names
     if (flag.files_from) {
-        file_split_lines (flag.files_from, "files-from", true);
+        file_split_lines (flag.files_from, "files-from", VERIFY_ASCII);
         
         // handle case of "tar xvf myfile.tar |& genounzip --files-from -" when using bsdtar:
         // the output has an added "x " prefix eg "x junk.sam.genozip"
@@ -713,10 +724,10 @@ static void set_exe_type (rom argv0)
 {
     rom bn = filename_base (argv0, false, NULL, NULL, 0);
     
-    if      (strstr (bn, "genols"))    exe_type = EXE_GENOLS;
+    if      (strstr (bn, "genols"))    exe_type = EXE_GENOLS;   // captures genols-debug, genols.exe etc
     else if (strstr (bn, "genocat"))   exe_type = EXE_GENOCAT;
     else if (strstr (bn, "genounzip")) exe_type = EXE_GENOUNZIP;
-    else                               exe_type = EXE_GENOZIP; // default
+else                                   exe_type = EXE_GENOZIP; // default
 
     FREE (bn);
 }
@@ -768,13 +779,13 @@ int main (int argc, char **argv)
     flag.test_i = getenv ("GENOZIP_TEST");
     flag.debug_or_test = flag.debug || flag.test_i;
     buf_initialize(); 
+    set_exe_type (argv[0]);
 
     // When debugging with Visual Studio Code, its debugger wrapper adds 3 args: "2>CON", "1>CON", "<CON". We remove them.
     if (argc >= 4 && !strcmp (argv[argc-1], "<CON")) argc -= 3;
 
     filename_base (argv[0], true, "(executable)", global_cmd, sizeof(global_cmd)); // global var
 
-    set_exe_type(argv[0]);
     info_stream = stdout; // may be changed during intialization
     profiler_initialize();
     arch_initialize (argv[0]);
@@ -782,6 +793,7 @@ int main (int argc, char **argv)
     threads_initialize(); // requires evb
     random_access_initialize();
     codec_initialize();
+    dt_initialize();
 
     flags_init_from_command_line (argc, argv); // also sets command and hence IS_ZIP, IS_PIZ etc
 
@@ -838,7 +850,7 @@ int main (int argc, char **argv)
 
     // we test for a newer version if its a single file compression (if --test is used, we test after PIZ - check_for_newer is set)
     if (!flag.quiet && !flag.no_upgrade && isatty(0) && isatty(1) && 
-        ((IS_ZIP && input_files_len == 1 && !flag.test) || (IS_PIZ && flag.check_latest/*PIZ - test after compress*/)))
+        ((IS_ZIP && !flag.test) || (IS_PIZ && flag.check_latest/*PIZ - test after compress of last file*/)))
         version_background_test_for_newer();
 
     // IF YOU'RE CONSIDERING EDITING THIS CODE TO BYPASS THE REGISTRTION, DON'T! It would be a violation of the license,

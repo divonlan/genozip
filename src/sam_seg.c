@@ -32,7 +32,6 @@
 #include "deep.h"
 #include "arch.h"
 #include "threads.h"
-#include "license.h"
 
 typedef enum { QNAME, FLAG, RNAME, POS, MAPQ, CIGAR, RNEXT, PNEXT, TLEN, SEQ, QUAL, AUX } SamFields __attribute__((unused)); // quick way to define constants
 
@@ -170,18 +169,17 @@ void sam_zip_initialize (void)
 
     if (MP(ULTIMA)) sam_ultima_zip_initialize();
     
-    if (flag.deep) {
-        if (txt_file->name)
-            strncpy (segconf.sam_deep_filename, txt_file->name, sizeof(segconf.sam_deep_filename)-1);
-
-        license_show_deep_notice();
-    }
+    if (flag.deep && txt_file->name)
+        strncpy (segconf.sam_deep_filename, txt_file->name, sizeof(segconf.sam_deep_filename)-1);
 }
 
 // called after each txt file (including after the SAM component in Deep)
 void sam_zip_finalize (bool is_last_user_txt_file)
 {
     threads_log_by_vb (evb, "main_thread", "sam_zip_finalize", 0);
+
+    if (flag.analyze_ins)
+        sam_zip_report_monochar_inserts();
 
     if (!flag.let_OS_cleanup_on_exit) {
 
@@ -255,6 +253,7 @@ void sam_zip_genozip_header (SectionHeaderGenozipHeaderP header)
     header->sam.segconf_deep_qname1     = (segconf.deep_qtype == QNAME1);// v15
     header->sam.segconf_deep_qname2     = (segconf.deep_qtype == QNAME2);// v15
     header->sam.segconf_deep_no_qual    = segconf.deep_no_qual;          // v15
+    header->sam.segconf_use_ins_ctxs    = segconf.use_insertion_ctxs;    // 15.0.29
     
     unsigned est_sam_factor_mult = round (MAX_(segconf.est_sam_factor, 1) * (double)SAM_FACTOR_MULT);
     if (est_sam_factor_mult > 255) {
@@ -390,7 +389,9 @@ void sam_seg_initialize (VBlockP vb_)
         CTX(SAM_TAXID)->counts_section = true;
 
     // in --stats, consolidate stats
-    ctx_consolidate_stats (VB, SAM_SQBITMAP, SAM_NONREF, SAM_NONREF_X, SAM_GPOS, SAM_STRAND, SAM_SEQMIS_A, SAM_SEQMIS_C, SAM_SEQMIS_G, SAM_SEQMIS_T, DID_EOL);
+    ctx_consolidate_stats (VB, SAM_SQBITMAP, SAM_NONREF, SAM_NONREF_X, SAM_GPOS, SAM_STRAND, 
+                           SAM_SEQMIS_A, SAM_SEQMIS_C, SAM_SEQMIS_G, SAM_SEQMIS_T, 
+                           SAM_SEQINS_A, SAM_SEQINS_C, SAM_SEQINS_G, SAM_SEQINS_T, DID_EOL);
     ctx_consolidate_stats (VB, SAM_QUAL, SAM_DOMQRUNS, SAM_QUALMPLX, SAM_DIVRQUAL, SAM_QUALSA, SAM_QUAL_PACBIO_DIFF,
                            SAM_QUAL_FLANK, SAM_QUAL_FLANK_DOMQRUNS, SAM_QUAL_FLANK_QUALMPLX, SAM_QUAL_FLANK_DIVRQUAL, 
                            SAM_CQUAL, SAM_CDOMQRUNS, SAM_CQUALMPLX, SAM_CDIVRQUAL, DID_EOL);
@@ -744,6 +745,10 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
         sam_segconf_set_by_MP();
     }
 
+    // sequencing technologies that results in lots of insertion errors - will benefit from the use_insertion_ctxs method
+    if (TECH(PACBIO) || TECH(NANOPORE) || TECH(ULTIMA))
+        segconf.use_insertion_ctxs = true;
+
     if (MP(STAR)) segconf.sag_has_AS = true;
 
     // evidence of STARsolo or cellranger (this is also detected in the SAM header)
@@ -879,7 +884,7 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
     if (MP(ULTIMA))
         sam_ultima_finalize_segconf (vb);
 
-    if (flag.reference == REF_INTERNAL && !txt_file->redirected && (!segconf.sam_is_unmapped || !segconf.is_long_reads))
+    if (flag.reference == REF_INTERNAL && !txt_file->redirected && !flag.seg_only && (!segconf.sam_is_unmapped || !segconf.is_long_reads))
         TIP ("Compressing a %s file using a reference file can reduce the size by 7%%-30%%%s.\n"
              "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
              dt_name (txt_file->data_type), MP(UNKNOWN) ? " (even for unaligned files)" : "", 

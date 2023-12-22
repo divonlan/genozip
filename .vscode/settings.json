@@ -36,7 +36,9 @@
         "functional": "c",
         "tuple": "c",
         "utility": "c",
-        "endianness.h": "c"
+        "endianness.h": "c",
+        "version.h": "c",
+        "libgen.h": "c"
     },
     "cmake.sourceDirectory": "C:/Users/divon/genozip/src/onion",
     "cmake.configureOnOpen": false

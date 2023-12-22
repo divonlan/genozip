@@ -10,11 +10,16 @@ cleanup_cache()
     $genozip --no-cache
 }
 
+install_license()
+{
+    $SCRIPTSDIR/install_license.sh $1 || exit 1
+}
+
 cleanup() 
 { 
     rm -fR $OUTDIR/* $TESTDIR/*.bad $TESTDIR/*.rejects.* 
     cleanup_cache
-    $SCRIPTSDIR/install_license.sh latest || exit 1
+    install_license Premium || exit 1
 }
 
 cmp_2_files() 
@@ -27,6 +32,11 @@ cmp_2_files()
         $md5 $1 $2
         exit 1
     fi
+}
+
+verify_failure() # $1=exe $2=$? 
+{
+    if (( $2 == 0 )); then echo "Error: expecting $1 to fail but it succeeded"; exit 1; fi
 }
 
 test_header() 
@@ -198,8 +208,10 @@ test_md5()
     local file=$TESTDIR/$1
 
     $genozip $file -Xf --md5 -o $output || exit 1
-    genozip_md5=`$genols $output | grep $output | cut -c 51-82`
-    real_md5=`$md5 $file | cut -d" " -f1`
+    
+    local genozip_md5 real_md5
+    genozip_md5=`$genols $output | grep $output | cut -c 51-82` || exit $? 
+    real_md5=`$md5 $file | cut -d" " -f1` || exit $?
 
     if [[ "$genozip_md5" != "$real_md5" ]]; then echo "FAILED - expected $file to have MD5=\"$real_md5\" but genozip calculated MD5=\"$genozip_md5\""; exit 1; fi
 
@@ -561,17 +573,18 @@ test_kraken() { # $1 file and genozip args ; $2 1st genocat arguments ; $3 2nd g
     local zip_args=$1
     local cat1_args=$2
     local cat2_args=$3
+    local lines_plus lines_minus fastq lines 
+    
+    $genozip $1 -Xfo $output --prepare-for-taxid || exit 1 # note: --prepare_for_taxid is a FASTA option, ignored for other data types
 
-    $genozip $1 -Xfo $output || exit 1
-
-    local lines_plus=`$genocat_no_echo $output -Hq ${cat1_args[*]} --count`
+    lines_plus=`$genocat_no_echo $output -Hq ${cat1_args[*]} --count` || exit $? 
     if [ "$lines_plus" == "" ] || [ "$lines_plus" -eq 0 ]; then echo "genocat error - \$lines_plus=\"$lines_plus\""; exit 1; fi
 
-    local lines_minus=`$genocat_no_echo $output -Hq $3 --count`
+    lines_minus=`$genocat_no_echo $output -Hq $3 --count` || exit $? 
     if [ "$lines_minus" == "" ] || [ "$lines_minus" -eq 0 ]; then echo "genocat error - \$lines_minus=\"$lines_minus\""; exit 1; fi
     
-    local fastq=`echo $2 | tr " " "\n" | grep "\-\-fastq"` # this is "--fastq" if it appears in $2 or "" if not
-    local lines=`$genocat_no_echo $fastq -Hq $output --count`
+    fastq=`echo $2 | tr " " "\n" | grep "\-\-fastq"` # this is "--fastq" if it appears in $2 or "" if not
+    lines=`$genocat_no_echo $fastq -Hq $output --count` || exit $? 
     if [ "$lines" == "" ] || [ "$lines" -eq 0 ]; then echo "genocat error - \$lines=\"$lines\""; exit 1; fi
     
     echo "$file : lines_plus=$lines_plus lines_minus=$lines_minus lines=$lines"
@@ -592,7 +605,8 @@ batch_kraken() # $1 genozip arguments #2 genocat (optional $3="latest") (one of 
                  ${TESTDIR}/basic.sam)
     local file
 
-    $genozip ${TESTDIR}/basic.kraken -Xfo $kraken --no-kmers # here we test with --no-kmers, below we test without
+    # note: here we test with --no-kmers, below we test without. 
+    $genozip ${TESTDIR}/basic.kraken -Xfo $kraken --no-kmers 
 
     # testing filtering FASTA, FASTQ, SAM and KRAKEN itself with --taxid 
     for file in ${files[@]}; do
@@ -696,24 +710,25 @@ batch_iupac()
 
     # SAM - using --count
     test_header "genocat --bases ACGTN --count (SAM)"
-    local count=`$genocat_no_echo $output -H --bases ACGTN --count -q`
+    local count # seperate from assignment to preserve exit code
+    count=`$genocat_no_echo $output -H --bases ACGTN --count -q` || exit $? 
     if [ "$count" == "" ]; then echo genocat error; exit 1; fi
 
     if [ "$count" -ne $non_iupac_lines ]; then echo "bad count = $count, expecting $non_iupac_lines"; exit 1; fi
 
     test_header "genocat --bases ^ACGTN --count (SAM)"
-    local count=`$genocat_no_echo $output -H --bases ^ACGTN --count -q`
+    count=`$genocat_no_echo $output -H --bases ^ACGTN --count -q` || exit $? 
     if [ "$count" -ne 1 ]; then echo "bad count = $count"; exit 1; fi
 
     # BAM - using --count
     test_header "genocat --bases ACGTN --count --bam"
-    local count=`$genocat_no_echo $output --bam --bases ACGTN --count -q`
+    count=`$genocat_no_echo $output --bam --bases ACGTN --count -q` || exit $? 
     if [ "$count" == "" ]; then echo genocat error; exit 1; fi
 
     if [ "$count" -ne $non_iupac_lines ]; then echo "bad count = $count, expecting $non_iupac_lines"; exit 1; fi
 
     test_header "genocat --bases ^ACGTN --count --bam"
-    local count=`$genocat_no_echo $output --bam --bases ^ACGTN --count -q`
+    count=`$genocat_no_echo $output --bam --bases ^ACGTN --count -q` || exit $? 
     if [ "$count" -ne 1 ]; then echo "bad count = $count"; exit 1; fi
 
     # FASTQ (verifying with wc)
@@ -723,13 +738,13 @@ batch_iupac()
     
     # FASTQ - using --count
     test_header "genocat --bases ACGTN --count (FASTQ)"
-    local count=`$genocat_no_echo $output -H --bases ACGTN --count -q`
+    count=`$genocat_no_echo $output -H --bases ACGTN --count -q` || exit $? 
     if [ "$count" == "" ]; then echo genocat error; exit 1; fi
 
     if [ "$count" -ne $non_iupac_lines ]; then echo "bad count = $count, expecting $non_iupac_lines"; exit 1; fi
 
     test_header "genocat --bases ^ACGTN --count (FASTQ)"
-    local count=`$genocat_no_echo $output -H --bases ^ACGTN --count -q`
+    count=`$genocat_no_echo $output -H --bases ^ACGTN --count -q` || exit $? 
     if [ "$count" -ne 1 ]; then echo "bad count = $count"; exit 1; fi
 }
 
@@ -835,16 +850,125 @@ batch_piz_no_license()
 {
     batch_print_header
 
-    if [ -n "$is_windows" ]; then
-        local licfile=$APPDATA/genozip/.genozip_license
-    else
-        local licfile=$HOME/.genozip_license
+    $genozip $TESTDIR/minimal.vcf -fX || exit 1
+
+    rm -f $LICFILE
+    $genounzip -t $TESTDIR/minimal.vcf.genozip || exit 1
+
+    cleanup
+}
+
+batch_sendto()
+{
+    batch_print_header
+
+    local lic_num=`tail -1 $LICENSESDIR/genozip_license.v15.Premium | sed "s/[^0-9]//g"`
+
+    test_header "sender compresses+tests, receiver uncompresses\n"
+    install_license SendTo || exit 1
+    $genozip $TESTDIR/minimal.vcf -ft --sendto $lic_num || exit 1
+
+    install_license Premium || exit 1
+    $genounzip $TESTDIR/minimal.vcf.genozip -fo $output || exit 1
+
+    test_header "sender compresses+tests with encryption, receiver uncompresses\n"
+    install_license SendTo || exit 1
+    $genozip $TESTDIR/minimal.vcf -ft -p xyz --sendto $lic_num || exit 1
+
+    install_license Premium || exit 1
+    $genounzip $TESTDIR/minimal.vcf.genozip -fo $output -p xyz || exit 1
+
+    test_header "wrong license number - expecting ACCESS DENIED\n"
+    install_license SendTo || exit 1
+    $genozip $TESTDIR/minimal.vcf -ft --sendto 1234 || exit 1
+
+    install_license Premium || exit 1
+    $genounzip $TESTDIR/minimal.vcf.genozip -fo $output 
+    verify_failure genounzip $?
+
+    test_header "no license - expecting ACCESS DENIED\n"
+    install_license SendTo || exit 1
+    $genozip $TESTDIR/minimal.vcf -ft --sendto 1234 || exit 1
+    $genounzip $TESTDIR/minimal.vcf.genozip -fo $output
+    verify_failure genounzip $?
+
+    test_header "Academic license - expecting ACCESS DENIED\n"
+    install_license SendTo || exit 1
+    local lic_num=`tail -1 $LICENSESDIR/genozip_license.v15.Academic | sed "s/[^0-9]//g"`
+
+    $genozip $TESTDIR/minimal.vcf -ft --sendto $lic_num || exit 1
+    install_license Academic || exit 1
+
+    $genounzip $TESTDIR/minimal.vcf.genozip -fo $output
+    verify_failure genounzip $?
+
+    test_header "Enteprise license w/ no-eval - expecting ACCESS DENIED\n"
+    install_license SendTo || exit 1
+    local lic_num=`tail -1 $LICENSESDIR/genozip_license.v15.Enterprise | sed "s/[^0-9]//g"`
+
+    $genozip $TESTDIR/minimal.vcf -ft --sendto $lic_num || exit 1
+    install_license Enterprise || exit 1
+
+    $genounzip $TESTDIR/minimal.vcf.genozip -fo $output --no-eval
+    verify_failure genounzip $?
+
+    cleanup
+}
+
+batch_user_message_permissions()
+{
+    batch_print_header
+
+    local msg=$TESTDIR/user-message
+    local line="`head -1 $msg`"
+    local file=$TESTDIR/minimal.vcf
+    local recon=$OUTDIR/recon.vcf
+    local recon_msg=$OUTDIR/msg
+
+    test_header "test: successful message: generated with Premium, read without a license"
+    install_license Premium
+    $genozip $file --user-message $msg -fXo $output || exit 1
+
+    rm -f $LICFILE
+
+    $genounzip $output -fo $recon > $recon_msg || exit 1
+    if [[ `grep $line $recon_msg | wc -l` != 1 ]]; then
+        echo "Error: cannot find message from $msg in $recon_msg"
+        exit 1
     fi
 
-    $genozip $TESTDIR/minimal.vcf -fX || exit 1
-    mv $licfile ${licfile}.test
-    $genounzip -t $TESTDIR/minimal.vcf.genozip || exit 1
-    mv ${licfile}.test $licfile 
+    test_header "test: failed message: generated with Enterprise"
+    install_license Enterprise
+    $genozip $file --user-message $msg -fXo $output --no-eval
+    verify_failure genozip $?
+
+    cleanup
+}
+
+batch_password_permissions()
+{
+    batch_print_header
+
+    local file=$TESTDIR/minimal.vcf
+    local recon=$OUTDIR/recon.vcf
+    local recon_msg=$OUTDIR/msg
+
+    test_header "test: successful encryption: generated with Premium, read with Academic"
+    install_license Premium
+    $genozip $file --password 1234567890qwertyuiop -fXo $output || exit 1
+
+    install_license Academic
+    $genounzip $output --password 1234567890qwertyuiop -fo $recon > $recon_msg || exit 1
+
+    test_header "test: failed decryption: wrong password"
+    $genounzip $output --password wrong_password -fo $recon > $recon_msg
+    verify_failure genounzip $?
+
+    test_header "test: failed encryption in Academic"
+    $genozip $file --password 1234567890qwertyuiop -fXo $output 
+    verify_failure genozip $?
+
+    cleanup
 }
 
 # Test 23andMe translations
@@ -992,7 +1116,9 @@ batch_grep_count_lines()
 
         # count
         $genozip $TESTDIR/$file -Xfo $output || exit 1
-        local count=`$genocat_no_echo --quiet --count $output || exit`
+    
+        local count # seperate from assignment to preserve exit code
+        count=`$genocat_no_echo --quiet --count $output` || exit $? 
         if [ "$count" == "" ]; then echo genocat error; exit 1; fi
 
         # lines
@@ -1069,13 +1195,14 @@ batch_bam_subsetting()
 batch_backward_compatability()
 {
     batch_print_header
-    local files=( `ls -r $TESTDIR/back-compat/[0-9]*/*.genozip | grep -v "/0"` ) # since v15, backcomp goes back only to v11 
-    local file
+    local files=( `ls -r $TESTDIR/back-compat/[0-9]*/*.genozip | grep -v "/0" | grep -v .ref.genozip` ) # since v15, backcomp goes back only to v11 
+    local file ref
     for file in ${files[@]}; do
         test_header "$file - backward compatability test"
         
         # update the reference path (possibly ../genozip/data)
-        local ref=`$genocat $file --show-reference --force`
+        ref=`$genocat $file --show-reference --force` || exit 1 
+
         local ref_opt=""
         if [ "${ref:0:5}" = data/ ]; then
             ref_opt="--reference $REFDIR/${ref:5:1000}"         
@@ -1214,10 +1341,12 @@ batch_real_world_with_ref_md5() # $1 extra genozip argument
                     test.human.fq.gz test.human2.bam test.pacbio.clr.bam \
                     test.human2-R1.fq.bz2 test.pacbio.ccs.10k.bam test.unmapped.sam.gz \
                     test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq \
-                    test.human2.filtered.snp.vcf test.solexa-headerless.sam test.cigar-no-seq-qual.bam )
+                    test.human2.filtered.snp.vcf test.solexa-headerless.sam test.cigar-no-seq-qual.bam \
+                    test.platypus.vcf )
 
     local files19=( test.pacbio-blasr.bam )
-    local files38=( test.1KG-38.vcf.gz test.human-collated-headerless.sam test.human-sorted-headerless.sam )
+    local files38=( test.1KG-38.vcf.gz test.human-collated-headerless.sam test.human-sorted-headerless.sam \
+                    test.ultima-giab.vcf.gz )
 
     local filesT2T1_1=( test.nanopore.t2t_v1_1.bam )
 
@@ -1287,7 +1416,7 @@ batch_real_world_backcomp()
 
     # compress all real world test files with old genozip version. Some files might fail compression -
     # they will remain with size 0 and we will ignore them in this test.
-    $SCRIPTSDIR/install_license.sh $1 || exit 1
+    install_license $1 || exit 1
     make -C $TESTDIR $1.version  # generate files listed in "files"
     
     local files=( $TESTDIR/$1/*.genozip )
@@ -1404,28 +1533,29 @@ batch_reference_fastq()
     test_standard "CONCAT -e$GRCh38 -p 123 --pair -mB1" "-p123" test.human2-R1.fq.bz2 test.human2-R2.fq.bz2
 
     # test --grep (regression test for bug 788)
-    local n=`$genocat --grep "@A00910:85:HYGWJDSXX:1:1101:9028:1000" -p 123 $output --count || exit 1`
+    local n
+    n=`$genocat --grep "@A00910:85:HYGWJDSXX:1:1101:9028:1000" -p 123 $output --count` || exit $?
     if (( n != 2 )); then
         echo "Expecting 2 reads to be grepped in paired FASTQ"
         exit 1
     fi
 
     # test single-line --head (only pair-1 is expressed) - note: cannot use --count with --head
-    local n=`$genocat --head=1 -p 123 $output | wc -l`
+    n=`$genocat --head=1 -p 123 $output | wc -l` || exit $? 
     if (( n != 4 )); then
         echo "Expecting 1 read to be counted with --head=1 in paired FASTQ but lines=$n"
         exit 1
     fi
 
     # test single-line --tail (only pair-2 expressed) - note: cannot use --count with --tail
-    local n=`$genocat --tail=1 -p 123 $output | wc -l`
+    n=`$genocat --tail=1 -p 123 $output | wc -l` || exit $? 
     if (( n != 4 )); then
         echo "Expecting 1 reads to be counted with --tail=1 in paired FASTQ"
         exit 1
     fi
 
     # test --bases
-    local n=`$genocat --bases=N -p 123 $output --count || exit 1`
+    n=`$genocat --bases=N -p 123 $output --count || exit 1` || exit $? 
     if (( n != 99 )); then
         echo "Expecting 99 reads to be counted with --bases=N in this paired FASTQ"
         exit 1
@@ -1541,16 +1671,16 @@ batch_make_reference()
     echo "FASTQ with --REFERENCE"
     test_standard "$REF" " " basic.fq 
 
-#    if [ -z "$is_windows" ]; then # in windows, we don't support redirecting stdin
-        echo "unaligned SAM with --REFERENCE - from stdin"
-        test_redirected basic-unaligned.sam "$REF"
-#    fi
+    echo "unaligned SAM with --REFERENCE - from stdin"
+    test_redirected basic-unaligned.sam "$REF"
 
     # test using env var $GENOZIP_REFERENCE
+    if [ -n "$is_windows" ]; then cleanup_cache; fi # in Windows, we have to clear the cache before mv, bc holder process has a open handle to the file
     local alt_ref_file_name=$OUTDIR/output2.ref.genozip
     mv $ref_file $alt_ref_file_name || exit 1
     $genozip $TESTDIR/basic.fq -e $alt_ref_file_name -fXo $output || exit 1
 
+    if [ -n "$is_windows" ]; then cleanup_cache; fi 
     mv $alt_ref_file_name $ref_file || exit 1
     export GENOZIP_REFERENCE=${ref_file}
     $genounzip -t $output || exit 1 # alt_ref_file_name no longer exists, so genounzip depends on GENOZIP_REFERENCE
@@ -1603,7 +1733,8 @@ batch_reference_backcomp()
         $genozip_latest $TESTDIR/$f -mf -e $prod_ref_file -o $output -X || exit 1
         $genounzip -t $output -e $prod_ref_file || exit 1
 
-        local latest_version=`$genozip_latest -V|cut -c9-10`
+        local latest_version
+        latest_version=`$genozip_latest -V | cut -c9-10` || exit $? 
         if (( latest_version >= 15 )); then # prior to v15 we didn't in have the in-memory digest
             echo "old file, old reference, new genounzip with new reference"
             $genounzip -t $output -e $ref_file || exit 1
@@ -1737,21 +1868,28 @@ batch_tar_files_from()
 {
     batch_print_header
 
-    if [ -n "$i_am_prod" ] && [ -n "$is_windows" ]; then
-        echo "Test doesn't work for prod on Windows" # because tar.exe does not accept .. in pathnames eg ../genozip/...
-        return
-    fi
-
     cleanup
 
+    test_header "genozip --tar + --subdirs + --files-from"
+
     local tar=${OUTDIR}/output.tar
+    pushd $TESTDIR/../.. # avoid problems with relative paths in basic-files-from* if testing on Windows
+    
+    $genozip -D -T ${TESTDIR}/basic-files-from -Xf --tar $tar || exit 1 
+    
+    test_header "genols ; genocat --files-from"
 
-    $genozip -D -T ${TESTDIR}/basic-files-from -Xf --tar $tar  || exit 1
     tar xvf $tar || exit 1
-
     cat ${TESTDIR}/basic-files-from-genozip | $genounzip --files-from - -t || exit 1
+    
     $genols --files-from ${TESTDIR}/basic-files-from-genozip || exit 1
     $genocat --files-from ${TESTDIR}/basic-files-from-genozip > $output || exit 1
+
+    test_header "genozip --tar + --subdirs + --files-from + --reference + test"
+    
+    $genozip -D -T ${TESTDIR}/basic-files-from -tf --tar $tar --reference $hs37d5  || exit 1
+
+    popd
     
     cleanup
 }
@@ -1883,6 +2021,8 @@ sparkling_clean()
     rm -f ${hg19}.*cache* ${hs37d5}.*cache* ${GRCh38}.*cache* ${TESTDIR}/*.genozip ${TESTDIR}/*.bad ${TESTDIR}/*.bad.gz ${TESTDIR}/basic-subdirs/*.genozip ${TESTDIR}/*rejects* ${TESTDIR}/*.DEPN
 }
 
+set -o pipefail # if any command in a pipe fails, then the pipe exit code is failure 
+
 start_date="`date`"
 is_windows="`uname|grep -i mingw``uname|grep -i MSYS`"
 is_mac=`uname|grep -i Darwin`
@@ -1896,8 +2036,14 @@ fi
 
 TESTDIR=$BASEDIR/private/test
 SCRIPTSDIR=$BASEDIR/private/scripts
+LICENSESDIR=$BASEDIR/private/licenses
 OUTDIR=$TESTDIR/tmp
 REFDIR=$BASEDIR/data
+if [ -n "$is_windows" ]; then
+    LICFILE=$APPDATA/genozip/.genozip_license.v15
+else
+    LICFILE=$HOME/.genozip_license.v15
+fi
 
 output=${OUTDIR}/output.genozip
 output2=${OUTDIR}/output2.genozip
@@ -1941,7 +2087,7 @@ if [ -n "$is_prod" ]; then
 fi
 
 if [ ! -n "$dir" ]; then 
-    dir=.
+    dir=$PWD
 fi
 
 if (( `pwd | grep genozip-prod | wc -l` == 1 )); then
@@ -2068,27 +2214,30 @@ case $GENOZIP_TEST in
 57)  batch_coverage_idxstats_sex  ;;
 58)  batch_qname_flavors          ;;
 59)  batch_piz_no_license         ;;
-60)  batch_reference_backcomp     ;;
-61)  batch_real_world_backcomp 11.0.11 ;; # note: versions must match VERSIONS in test/Makefile
-62)  batch_real_world_backcomp 12.0.42 ;; 
-63)  batch_real_world_backcomp 13.0.21 ;; 
-64)  batch_real_world_backcomp 14.0.33 ;; 
-65)  batch_real_world_backcomp latest  ;;
+60)  batch_sendto                 ;;
+61)  batch_user_message_permissions    ;;
+62)  batch_password_permissions   ;;
+63)  batch_reference_backcomp     ;;
+64)  batch_real_world_backcomp 11.0.11 ;; # note: versions must match VERSIONS in test/Makefile
+65)  batch_real_world_backcomp 12.0.42 ;; 
+66)  batch_real_world_backcomp 13.0.21 ;; 
+67)  batch_real_world_backcomp 14.0.33 ;; 
+68)  batch_real_world_backcomp latest  ;;
 
-66)  batch_basic basic.vcf     latest  ;;
-67)  batch_basic basic.bam     latest  ;;
-68)  batch_basic basic.sam     latest  ;;
-69)  batch_basic basic.fq      latest  ;;
-70)  batch_basic basic.fa      latest  ;;
-71)  batch_basic basic.bed     latest  ;;
-72)  batch_basic basic.chain   latest  ;;
-73)  batch_basic basic.gvf     latest  ;;
-74)  batch_basic basic.gtf     latest  ;;
-75)  batch_basic basic.me23    latest  ;;
-76)  batch_basic basic.kraken  latest  ;;
-77)  batch_basic basic.phy     latest  ;;
-78)  batch_basic basic.generic latest  ;;
-79)  batch_kraken " " "-K$kraken"  latest ;;   # genocat loads kraken data
+69)  batch_basic basic.vcf     latest  ;;
+70)  batch_basic basic.bam     latest  ;;
+71)  batch_basic basic.sam     latest  ;;
+72)  batch_basic basic.fq      latest  ;;
+73)  batch_basic basic.fa      latest  ;;
+74)  batch_basic basic.bed     latest  ;;
+75)  batch_basic basic.chain   latest  ;;
+76)  batch_basic basic.gvf     latest  ;;
+77)  batch_basic basic.gtf     latest  ;;
+78)  batch_basic basic.me23    latest  ;;
+79)  batch_basic basic.kraken  latest  ;;
+80)  batch_basic basic.phy     latest  ;;
+81)  batch_basic basic.generic latest  ;;
+82)  batch_kraken " " "-K$kraken"  latest ;;   # genocat loads kraken data
 
 * ) break; # break out of loop
 

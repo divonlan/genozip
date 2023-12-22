@@ -76,7 +76,7 @@ typedef struct File {
 
     // Used for READING GENOZIP files
     uint8_t genozip_version;           // major version of the genozip file being created / read
-    uint8_t genozip_minor_ver;
+    uint16_t genozip_minor_ver;
             
     CompIType num_txt_files;           // PIZ Z_FILE: set from genozip header (ZIP: see num_txts_so_far)
     CompIType num_txts_so_far;         // ZIP Z_FILE: number of txt files compressed into this z_file - each becomes one or more components
@@ -125,6 +125,10 @@ typedef struct File {
     Buffer bgzf_starts;                // ZIP: offset in txt_file of each BGZF block
     struct FlagsBgzf bgzf_flags;       // corresponds to SectionHeader.flags in SEC_BGZF
     uint8_t bgzf_signature[3];         // PIZ: 3 LSB of size of source BGZF-compressed file, as passed in SectionHeaderTxtHeader.codec_info
+    
+    // TXT FILE: accounting for truncation when --truncate-partial-last-line is used
+    bool bgzf_truncated_last_block;    // ZIP: detected a truncated last block
+    uint32_t last_truncated_line_len;  // ZIP: bytes truncated due to incomplete final line. note that if file is BGZF, then this truncated data is contained in the final intact BGZF blocks, after already discarding the final incomplete BGZF block
 
     // TXT file: data used in --sex, --coverage and --idxstats
     Buffer coverage;
@@ -245,7 +249,9 @@ extern rom file_plain_ext_by_dt (DataType dt);
 extern rom ft_name (FileType ft);
 
 // wrapper operations for operating system files
-extern void file_get_file (VBlockP vb, rom filename, BufferP buf, rom buf_name, uint64_t max_size, bool verify_textual, bool add_string_terminator);
+typedef enum { VERIFY_NONE, VERIFY_ASCII, VERIFY_UTF8 } FileContentVerificationType; 
+extern void file_get_file (VBlockP vb, rom filename, BufferP buf, rom buf_name, uint64_t max_size, FileContentVerificationType ver_type, bool add_string_terminator);
+
 extern bool file_put_data (rom filename, const void *data, uint64_t len, mode_t mode);
 extern void file_put_data_abort (void);
 extern void file_put_data_reset_after_fork (void);
@@ -294,10 +300,10 @@ static inline bool file_is_written_via_ext_compressor(ConstFileP file) {
 }
 
 // read the contents and a newline-separated text file and split into lines - creating char **lines, unsigned *line_lens and unsigned n_lines
-#define file_split_lines(fn, name, verify_textual)                                          \
-    static Buffer data = {};                                                      \
+#define file_split_lines(fn, name, ver_type)                                                \
+    static Buffer data = {};                                                                \
     ASSINP0 (!data.len, "only one instance of a " name " option can be used");              \
-    file_get_file (evb, fn, &data, "file_split_lines__" name, 0, verify_textual, false);    \
+    file_get_file (evb, fn, &data, "file_split_lines__" name, 0, ver_type, false);          \
     ASSINP (data.len, "File %s is empty", (fn));                                            \
     ASSINP (*BLSTc(data) == '\n', "File %s expected to end with a newline", (fn));          \
                                                                                             \

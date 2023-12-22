@@ -82,6 +82,9 @@ typedef struct Context {
     Buffer piz_lookback_buf;   // PIZ: SAM: used by contexts with lookback 
     Buffer channel_data;       // PIZ: SAM: QUAL/OPTION_iq_Z/OPTION_dq_Z/OPTION_sq_Z : used by PACB codec
     Buffer homopolymer;        // PIZ: SAM: OPTION_tp_B_c
+    Buffer columns_data;       // PIZ: VCF: FORMAT_GT_HT with CODEC_HAPMAT
+    Buffer column_of_zeros;    // PIZ: VCF: FORMAT_GT_HT_INDEX with CODEC_HAPMAT
+    Buffer one_array;          // PIZ: VCF: FORMAT_PBWT_RUNS with CODEC_HAPMAT
     };
 
     union {
@@ -226,7 +229,10 @@ typedef struct Context {
         uint32_t segconf_max;       // maximum value during segconf
         bool last_is_alt;           // CHROM (all DTs): ZIP: last CHROM was an alt
         bool last_is_new;           // SAM_QNAME:       ZIP: used in segconf.running
-        bool has_len;               // INFO_ANN subfields of cDNA, CDS, AA: ZIP
+        bool has_len;               // ZIP: INFO_ANN subfields of cDNA, CDS, AA
+        thool use_special_sf;       // ZIP: INFO_SF
+        thool line_has_RGQ;         // ZIP/PIZ: FORMAT_RGQ : GVCF
+
         struct {                    // SAM_QUAL, SAM_CQUAL, OPTION_OQ_Z, FASTQ_QUAL: 
             bool longr_bins_calculated; // ZIP zctx: codec_longr: were LONGR bins calculated in segconf
             Codec qual_codec;       // ZIP zctx: for displaying in stats
@@ -279,8 +285,10 @@ typedef struct Context {
     Buffer chrom2ref_map;      // ZIP (vctx & zctx), PIZ(zctx): Used by CHROM and contexts with a dict alias to it. Mapping from user file chrom to alternate chrom in reference file (for ZIP-VB: new chroms in this VB) - incides match ctx->nodes
     Buffer qual_line;          // ZIP: used by DOMQ codec on *_DOMQRUNS contexts
     Buffer normalize_buf;      // ZIP: used by DOMQ codec on QUAL contexts
-    Buffer interlaced;         // ZIP: used to interlace BD/BI and iq/dq/sq line data
-    Buffer mi_history;         // ZIP: used by OPTION_MI_Z in Ultima
+    Buffer interlaced;         // ZIP: SAM: used to interlace BD/BI and iq/dq/sq line data
+    Buffer mi_history;         // ZIP: SAM: used by OPTION_MI_Z in Ultima
+    Buffer info_items;         // ZIP: VCF: VCF_INFO
+    Buffer sf_snip;            // ZIP/PIZ: VCF: INFO_SF
     };
     #define CTX_TAG_CON_INDEX "contexts->con_index"
     Buffer con_index;          // PIZ: use by contexts that might have containers: Array of uint32_t - index into con_cache - Each item corresponds to word_index. 

@@ -91,6 +91,9 @@ static void sam_header_add_contig (STRp (contig_name), PosType64 LN, void *out_r
     // add to contigs_dict
     buf_add_more (NULL, &sam_hdr_contigs->dict, contig_name, contig_name_len, NULL);
     BNXTc (sam_hdr_contigs->dict) = 0; // nul-termiante
+
+    // contigs may contain a semicolon, eg "ScxkALA_1850;HRSCAF=2697" (see: https://hgdownload.soe.ucsc.edu/hubs/GCF/005/870/125/GCF_005870125.1/GCF_005870125.1.chromAlias.txtwcs)
+    segconf.sam_semcol_in_contig = segconf.sam_semcol_in_contig || memchr (contig_name, ';', contig_name_len);
 }
 
 // call a callback for each SQ line (contig) in the textual header (SAM and BAM). Note: callback function is the same as foreach_contig

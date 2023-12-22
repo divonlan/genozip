@@ -50,6 +50,7 @@ extern rom fasta_seg_txt_line (VBlockP vb, rom line_start, uint32_t remaining, b
 extern bool fasta_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id);
 
 // PIZ Stuff
+extern bool fasta_piz_initialize (CompIType comp_i);
 extern void fasta_piz_process_recon (VBlockP vb);
 extern bool fasta_piz_is_vb_needed (VBIType vb_i);
 extern bool fasta_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment);

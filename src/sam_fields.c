@@ -644,7 +644,9 @@ static void sam_seg_OA_Z (VBlockSAMP vb, STRp(field), unsigned add_bytes)
 
     SegCallback callbacks[6] = { [SA_RNAME]=sam_seg_OA_rname_cb, [SA_POS]=sam_seg_OA_pos_cb, [SA_CIGAR]=sam_seg_0A_cigar_cb, [SA_MAPQ]=sam_seg_0A_mapq_cb };
      
-    seg_array_of_struct (VB, CTX(OPTION_OA_Z), container_OA, STRa(field), callbacks, add_bytes);
+    seg_array_of_struct (VB, CTX(OPTION_OA_Z), container_OA, STRa(field), callbacks, 
+                         segconf.sam_semcol_in_contig ? sam_seg_correct_for_semcol_in_contig : NULL,
+                         add_bytes);
 }
 
 // ----------------------------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-//   sam_isaac.c
+//   vcf_isaac.c
 //   Copyright (C) 2022-2023 Genozip Limited. Patent pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //

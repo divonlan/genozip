@@ -19,6 +19,8 @@
 
 bool is_printable[256] = { [9]=1, [10]=1, [13]=1, [32 ... 126]=1 };
 
+uint64_t p10[] = { 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000, 10000000000ULL, 100000000000ULL, 1000000000000ULL, 10000000000000ULL, 100000000000000ULL, 1000000000000000ULL, 100000000000000000ULL, 100000000000000000ULL };
+
 char *str_tolower (rom in, char *out /* out allocated by caller - can be the same as in */)
 {
     char *startout = out;
@@ -46,8 +48,6 @@ char *str_toupper (rom in, char *out /* out allocated by caller - can be the sam
 StrText char_to_printable (char c) 
 {
     switch ((uint8_t)c) {
-        case 32 ... '\\'-1  : 
-        case '\\'+1 ... 126 : return (StrText) { .s = {c, 0} };   // printable ASCII
         case '\\'           : return (StrText) { .s = "\\\\" };
         case '\t'           : return (StrText) { .s = "\\t"  };
         case '\n'           : return (StrText) { .s = "\\n"  };
@@ -452,10 +452,8 @@ StrText str_uint_commas_limit (uint64_t n, uint64_t limit)
 
 uint32_t str_get_uint_textual_len (uint64_t n) 
 { 
-    static uint64_t p10[] = { 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000, 10000000000ULL, 100000000000ULL, 1000000000000ULL, 10000000000000ULL, 100000000000000ULL, 1000000000000000ULL, 100000000000000000ULL, 100000000000000000ULL };
-
-    for (int i=0; i < ARRAY_LEN(p10); i++)
-        if (n < p10[i]) return i+1;
+    for (int i=1; i < ARRAY_LEN(p10); i++)
+        if (n < p10[i]) return i;
 
     ABORT ("n=%"PRIu64" too big", n);
 }
@@ -1042,14 +1040,24 @@ void str_query_user (rom query, char *response, uint32_t response_size, bool all
     } while (verifier && !verifier (response, len, verifier_param));
 }
 
-rom str_win_error (void)
+rom str_win_error_(uint32_t error)
 {
     static char msg[100];
 #ifdef _WIN32
     FormatMessageA (FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,                   
-                    NULL, GetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), msg, sizeof (msg), NULL);
+                    NULL, error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), msg, sizeof (msg), NULL);
 #endif
     return msg;
+}
+
+rom str_win_error (void)
+{
+#ifdef _WIN32
+    uint32_t error = GetLastError();
+    return str_win_error_(error);
+#else
+    return "";
+#endif
 }
 
 // C<>G A<>T c<>g a<>t ; IUPACs: R<>Y K<>M B<>V D<>H W<>W S<>S N<>N (+ lowercase); other ASCII 32->126 preserved ; other = 0
@@ -1156,4 +1164,27 @@ StrTime str_time (void)
 #endif
 
     return s;
+}
+
+// check if string is UTF-8 based on Unicode version 15 (2022): Table 3-7 in https://www.unicode.org/versions/Unicode15.0.0/UnicodeStandard-15.0.pdf
+bool str_is_utf8 (STRp(s))
+{
+    rom after = s + s_len;
+
+    while (s < after) {
+        #define r(i,first,last) ((uint8_t)s[i] >= (first) && (uint8_t)s[i] <= (last))
+        if      (               r(0, 0x00, 0x7f)) s += 1;
+        else if (s+1 < after && r(0, 0xC2, 0xDF) && r(1, 0x80, 0xBF)) s += 2;
+        else if (s+2 < after && r(0, 0xE0, 0xE0) && r(1, 0xA0, 0xBF) && r(2, 0x80, 0xBF)) s += 3;
+        else if (s+2 < after && r(0, 0xE1, 0xEC) && r(1, 0x80, 0xBF) && r(2, 0x80, 0xBF)) s += 3;
+        else if (s+2 < after && r(0, 0xED, 0xED) && r(1, 0x80, 0x9F) && r(2, 0x80, 0xBF)) s += 3;
+        else if (s+2 < after && r(0, 0xEE, 0xEF) && r(1, 0x80, 0xBF) && r(2, 0x80, 0xBF)) s += 3;
+        else if (s+3 < after && r(0, 0xF0, 0xF0) && r(1, 0x90, 0xBF) && r(2, 0x80, 0xBF) && r(3, 0x80, 0xBF)) s += 4;
+        else if (s+3 < after && r(0, 0xF1, 0xF3) && r(1, 0x80, 0xBF) && r(2, 0x80, 0xBF) && r(3, 0x80, 0xBF)) s += 4;
+        else if (s+3 < after && r(0, 0xF4, 0xF4) && r(1, 0x80, 0x8F) && r(2, 0x80, 0xBF) && r(3, 0x80, 0xBF)) s += 4;
+        else return false; // not UTF-8
+        #undef r
+    }
+
+    return true;
 }

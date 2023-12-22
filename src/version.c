@@ -7,7 +7,11 @@
 //   under penalties specified in the license.
 
 #include <pthread.h>
-
+#include <errno.h>
+#include <libgen.h>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 #include "genozip.h"
 #include "url.h"
 #include "version.h"
@@ -15,6 +19,7 @@
 #include "strings.h"
 #include "arch.h"
 #include "website.h"
+#include "file.h"
 
 static rom latest_version = NULL;
 static bool thread_running = false;
@@ -22,15 +27,29 @@ static pthread_t thread_id;
 static char redirect_url[128];
 
 // version of the genozip executable running
-int exec_version_major (void)
+int code_version_major (void)
 {
     return (GENOZIP_CODE_VERSION[0]-'0') * 10 + (GENOZIP_CODE_VERSION[1]-'0');
 }
 
-int exec_version_minor (void)
+int code_version_minor (void)
 {
     rom ver = GENOZIP_CODE_VERSION;
     return atoi (strrchr (ver, '.') + 1);
+}
+
+StrText version_str (void)
+{
+    StrText s={};
+
+    if (IS_ZIP || !z_file)  
+        sprintf (s.s, "version=%s", GENOZIP_CODE_VERSION);
+    else if (!VER2(15,28))
+        sprintf (s.s, "code_version=%s file_version=%u", GENOZIP_CODE_VERSION, z_file->genozip_version);
+    else        
+        sprintf (s.s, "code_version=%s file_version=%u.0.%u", GENOZIP_CODE_VERSION, z_file->genozip_version, z_file->genozip_minor_ver);
+
+    return s;
 }
 
 rom genozip_update_msg (void)
@@ -66,6 +85,127 @@ void version_background_test_for_newer (void)
     pthread_create (&thread_id, NULL, version_background_test_for_newer_do, NULL); // ignore errors
 }
 
+#ifndef _WIN32
+static void my_system (rom command)
+{
+    #pragma GCC diagnostic push 
+    #pragma GCC diagnostic ignored "-Wpragmas"         // avoid warning if "-Wuse-after-free" is not defined in this version of gcc
+    #pragma GCC diagnostic ignored "-Wunused-result"   // avoid compiler warning due to not checking system() return value
+
+    int ret = system (command);
+    ASSERT (ret != -1, "Failed to create child process for: \"%s\": %s", command, strerror (ret));
+    ASSERT (!ret, "command \"%s\" failed: status=%d", command, ret);
+
+    #pragma GCC diagnostic pop
+}
+#endif
+
+#ifdef __linux__
+static bool is_updatable (void)
+{
+    // check that executable is "genozip" (not genozip-debug or renamed to anything else). note: even in piz with --test, executable is "genozip"
+    rom exe_base = basename (arch_get_executable().s); // note: basename might modify string
+    if (strcmp (exe_base, "genozip"))
+        return false; 
+
+    // check that executable directory is writeable
+    char *dir_name = dirname (arch_get_executable().s);
+    if (access (dir_name, W_OK)) return false;
+
+    return true;
+}
+
+static void udpate_do (void)
+{
+    // cd to /tmp
+    rom save_cwd = getcwd (0, 0);
+    ASSERT (save_cwd, "getcwd failed: %s", strerror (errno));
+
+    ASSERT (!chdir ("/tmp"), "chdir(\"/tmp\") failed: %s", strerror (errno));
+
+    // download
+    my_system ("rm -f " TARBALL_NAME);
+    my_system ("wget --quiet " GITHUB_LINUX_TARBALL);
+
+    // untar
+    char cmd1[100 + STRLEN(TARBALL_NAME)];
+    sprintf (cmd1, "tar xf %s", TARBALL_NAME);
+    my_system (cmd1);
+
+    // mv to destination 
+    rom dir_name = dirname (arch_get_executable().s);
+    char cmd2[strlen(dir_name) + 100];
+
+    rom exe_names[] = { "genozip", "genounzip", "genocat", "genols" };
+    for (int exe_i=0; exe_i < ARRAY_LEN(exe_names); exe_i++) {    
+        // note: mv better than cp because it preserves the hard links ; mv better than rename because it works across filesystems
+        sprintf (cmd2, "mv genozip-linux-x86_64/%s %s", exe_names[exe_i], dir_name);
+        my_system (cmd2);
+    }
+
+    // cleanup
+    sprintf (cmd1, "rm -Rf genozip-linux-x86_64 %s", TARBALL_NAME); // note: "genozip-linux-x86_64" is defined in the Makefile
+    my_system (cmd1);
+
+    // revert current directory
+    ASSERT (!chdir (save_cwd), "chdir(\"%s\") failed: %s", save_cwd, strerror (errno));
+    FREE (save_cwd);
+
+    iprint0 ("Genozip has been updated.\n");
+}
+
+#elif defined _WIN32
+// static bool is_updatable (void)
+// {
+//     // check that executable is "genozip.exe" (not genozip-debug.exe or renamed to anything else). note: even in piz with --test, executable is "genozip.exe"
+//     rom exe_base = basename (arch_get_executable().s); // note: basename might modify string
+//     if (strcmp (exe_base, "genozip.exe"))
+//         return false; 
+
+//     return true;
+// }
+
+// static void udpate_do (void)
+// {
+//     rom dir_name = dirname (arch_get_executable().s);
+//     int dir_name_len = strlen (dir_name);
+
+//     char src[dir_name_len + 100], dst[dir_name_len + 100], old[dir_name_len + 100];
+
+//     sprintf (src, "%s/genozip.exe", dir_name);
+//     sprintf (old, "%s/genozip-old.exe", dir_name); // cannot delete running executable
+//     DeleteFile (old); // perhaps from previous upgrade - ignore errors
+    
+//     ASSERT (MoveFile (src, old), "Failed to MoveFile %s to %s: %s", src, old, str_win_error());
+
+//     // DOESNT WORK: any attempt to create an exe file - either by downloading it, or by downloading
+//     // to another extension and then CopyFile or MoveFile to an .exe - no error is returned, but exe is not created.
+//     sprintf (dst, "%s/%s", dir_name, WINDOWS_UPDATE_NAME);
+//     DeleteFile (dst); 
+//     ASSERT (URLDownloadToFile (NULL, GITHUB_WINDOWS_UPDATE, dst, 0, NULL) == S_OK,
+//             "Failed to download %s", GITHUB_WINDOWS_UPDATE);
+
+//     ASSERT (MoveFile (dst, src), "Failed to MoveFile %s to %s: %s", dst, src, str_win_error());
+
+//     sprintf (dst, "%s/LICENSE.txt", dir_name);
+//     ASSERT (URLDownloadToFile (NULL, GITHUB_LICENSE_TXT, dst, 0, NULL) == S_OK,
+//             "Failed to download %s", GITHUB_LICENSE_TXT);
+
+//     rom exe_names[] = { "genounzip", "genocat", "genols" };
+//     for (int exe_i=0; exe_i < ARRAY_LEN (exe_names); exe_i++) {
+//         // rename current file to -old
+//         sprintf (old, "%s/%s-old.exe", dir_name, exe_names[exe_i]); // cannot delete running executable
+//         DeleteFile (old); // perhaps from previous upgrade - ignore errors
+//         ASSERT (MoveFile (src, old), "Failed to MoveFile %s to %s: %s", src, old, str_win_error());
+        
+//         sprintf (dst, "%s/genounzip.exe", dir_name);
+//         ASSERT (CopyFile (src, dst, false), "Failed to CopyFile %s to %s: %s", src, dst, str_win_error());
+//     }    
+
+//     iprint0 ("Genozip has been updated.\n");
+// }
+#endif
+
 void version_print_notice_if_has_newer (void)
 {
     // case: Genozip finished its work while thread is still running - kill it
@@ -78,23 +218,28 @@ void version_print_notice_if_has_newer (void)
                  latest_version, GENOZIP_CODE_VERSION);
 
         if (is_info_stream_terminal) {
-            // note: distribution names are defined in the Makefile
-            if (!strcmp (arch_get_distribution(), "InstallForge")) 
-                iprintf ("You can install the latest version from here: %s\n", GITHUB_WINDOWS_INSTALLER);
+            if (0) {}
+#ifdef _WIN32
+            // else if (is_updatable() &&                      
+            //     str_query_user_yn ("Do you want to update Genozip now?", QDEF_YES)) 
+            //     udpate_do();
             
-            else if (!strcmp (arch_get_distribution(), "linux-x86_64"))
-                iprintf ("You can download the latest version from here: %s\n", GITHUB_LINUX_TARBALL);
+#elif defined __linux__            
+            else if (strcmp (arch_get_distribution(), "conda") && // anything but conda. note: distribution names are defined in the Makefile
+                is_updatable() &&                      
+                str_query_user_yn ("Do you want to update Genozip now?", QDEF_YES)) 
+                udpate_do();
+#endif            
 
 #ifndef _WIN32
             else if (!strcmp (arch_get_distribution(), "conda") &&
                      str_query_user_yn ("Do you want to update Genozip now?", QDEF_YES)) {
-#pragma GCC diagnostic push 
-#pragma GCC diagnostic ignored "-Wpragmas"         // avoid warning if "-Wuse-after-free" is not defined in this version of gcc
-#pragma GCC diagnostic ignored "-Wunused-result"   // avoid compiler warning due to not checking system() return value
-                system ("conda update genozip");
-#pragma GCC diagnostic pop
+                my_system ("conda update genozip");
             }
 #endif
+            else if (!strcmp (arch_get_distribution(), "InstallForge")) 
+                iprintf ("You can install the latest version from here: %s\n", GITHUB_WINDOWS_INSTALLER);
+
             else 
                 iprintf ("Installation instructions: %s\n", WEBSITE_INSTALLING);
         }

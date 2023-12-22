@@ -295,7 +295,9 @@ void sam_seg_ultima_XW (VBlockSAMP vb, STRp(xw), unsigned add_bytes)
 
     SegCallback callbacks[4] = { 0, sam_seg_ultima_delta_POS }; 
 
-    seg_array_of_struct (VB, CTX(OPTION_XW_Z), container_XW, STRa(xw), callbacks, add_bytes);
+    seg_array_of_struct (VB, CTX(OPTION_XW_Z), container_XW, STRa(xw), callbacks, 
+                         segconf.sam_semcol_in_contig ? sam_seg_correct_for_semcol_in_contig : NULL,
+                         add_bytes); 
 }
 
 // t0:Z : supplemental base quality information

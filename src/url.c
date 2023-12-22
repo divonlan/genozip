@@ -12,6 +12,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #ifndef _WIN32
+#include <sys/socket.h>
 #include <fcntl.h>
 #endif
 
@@ -41,32 +42,35 @@ bool url_is_url (rom filename)
 #define CURL_RESPONSE_LEN 4096
 
 // returns error string if curl itself (not server) failed, or NULL if successful
-static void url_do_curl (rom url, char *stdout_data, unsigned *stdout_len,
-                         char *error, unsigned *error_len) 
+static void url_do_curl (rom url, char *stdout_data, unsigned *stdout_len/*in/out*/,
+                         char *error, unsigned *error_len,
+                         bool blocking, bool follow_redirects) 
 {
     // our own instance of curl - to not conflict with url_open
     StreamP curl = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
                                   "To read from a URL", // reason in case of failure to execute curl
                                   "curl", 
-                                  flag.is_windows ? "--ssl-no-revoke" : SKIP_ARG, 
+                                  flag.is_windows  ? "--ssl-no-revoke" : SKIP_ARG, 
+                                  follow_redirects ? "--location"      : SKIP_ARG,
                                   url, NULL); 
 
-    int fd1 = fileno (stream_from_stream_stdout (curl));
-    int fd2 = fileno (stream_from_stream_stderr (curl));
+    FILE *data_stream  = stream_from_stream_stdout (curl);
+    FILE *error_stream = stream_from_stream_stdout (curl);
 
 #ifndef _WIN32
     // set non-blocking (unfortunately _pipes in Windows are always blocking)
-    ASSERT (!fcntl(fd1, F_SETFL, fcntl (fd1, F_GETFL) | O_NONBLOCK), "fcntl failed: %s", strerror (errno));
+    if (!blocking)
+        ASSERT (!fcntl(fileno(data_stream), F_SETFL, fcntl (fileno(data_stream), F_GETFL) | O_NONBLOCK), "fcntl failed: %s", strerror (errno));
 #endif
 
     for (int i=0; i < 100; i++) {
-        int ret = read (fd1, stdout_data, CURL_RESPONSE_LEN-1);
-        if (ret == -1) {
+        int ret = fread (stdout_data, 1, *stdout_len - 1, data_stream); // -1 to leave room for \0
+        if (ret == 0) {
             if (errno == EAGAIN) { // doesn't happen on Windows
                 usleep (100000); // 100ms
                 continue;
             }
-            ABORT ("failed to read() from the pipe: %s", strerror (errno));
+            ABORT ("failed to read() from the pipe to curl(%s): %s", url, strerror (errno));
         }
     
         *stdout_len = (unsigned)ret;
@@ -75,7 +79,7 @@ static void url_do_curl (rom url, char *stdout_data, unsigned *stdout_len,
 
     stdout_data[*stdout_len] = '\0'; // terminate string
 
-    *error_len = read (fd2, error, CURL_RESPONSE_LEN-1);
+    *error_len = fread (error, 1, CURL_RESPONSE_LEN-1, error_stream); 
     error[*error_len] = '\0'; // terminate string
 
     int curl_exit_code = stream_close (&curl, STREAM_DONT_WAIT_FOR_PROCESS); // Don't wait for process - Google Forms call hangs if waiting
@@ -207,9 +211,9 @@ rom url_get_status (rom url, thool *is_file_exists, int64_t *file_size)
 }
 
 // reads a string response from a URL, returns a nul-terminated string and the number of characters (excluding \0), or -1 if failed
-int32_t url_read_string (rom url, char *data, uint32_t data_size)
+int32_t url_read_string (rom url, STRc(data), bool blocking, bool follow_redirects)
 {
-    char response[CURL_RESPONSE_LEN], error[CURL_RESPONSE_LEN];
+    char *response, local_response[CURL_RESPONSE_LEN], error[CURL_RESPONSE_LEN];
     unsigned response_len=0, error_len=0;
 
     int url_len = strlen (url);
@@ -219,20 +223,16 @@ int32_t url_read_string (rom url, char *data, uint32_t data_size)
         if (url[i] == '?') in_arg = true;
     }
 
-    url_do_curl (url, response, &response_len, error, &error_len);
+    response     = data ? data     : local_response;
+    response_len = data ? data_len : CURL_RESPONSE_LEN;
+    url_do_curl (url, response, &response_len, error, &error_len, blocking, follow_redirects);
 
     if (error_len && !response_len) return -1; // failure
 
     if (response_len && strstr (response, "Bad Request"))
         return -2;
 
-    if (data) {
-        unsigned len = MIN_(data_size-1, response_len);
-        memcpy (data, response, len);
-        data[len] = '\0';
-        return len;
-    }
-    else return 0;
+    return data ? response_len : 0;
 }
 
 bool url_get_redirect (rom url, STRc(redirect_url))

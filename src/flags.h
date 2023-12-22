@@ -47,9 +47,10 @@ typedef enum { NOT_PAIRED,       // ZIP and PIZ
 typedef struct {
     
     // genozip options that affect the compressed file
-    int fast, best, low_memory, make_reference, multiseq, md5, secure_DP,
+    int fast, best, low_memory, make_reference, multiseq, md5, secure_DP, 
         deep; // deep is set with --deep in ZIP and from SectionHeaderGenozipHeader.flags.genozip_header.dts2_deep in PIZ
     rom vblock;
+    int64_t sendto;
     
     // ZIP: data modifying options
     int optimize, optimize_sort, optimize_phred, GL_to_PL, GP_to_PP, optimize_VQSLOD,  // optimize flags
@@ -74,7 +75,7 @@ typedef struct {
         regions, gpos, samples, 
         qname_filter, seq_filter, // 1 positive, -1 negative filter
         drop_genotypes, gt_only, luft, sort, unsorted, snps_only, indels_only, // VCF options
-        sequential, no_pg, extended_translation, 
+        sequential, no_pg, extended_translation, prepare_for_taxid,
         one_component; // 1-based ; 0=option unset (i.e. comp_i = one_component-1)
     TaxonomyId *kraken_taxid;
     rom regions_file, qnames_file, qnames_opt;
@@ -96,7 +97,7 @@ typedef struct {
     int bytes, ls_cache;
 
     // options affecting the software interaction (but not the file contents)
-    int force, quiet, explicit_quiet, noisy, no_tip, show_filename,
+    int force, quiet, explicit_quiet, noisy, no_tip, show_filename, analyze_ins,
         to_stdout,   // set implicitly if genocat without --output
         replace, 
         lic_width,   // width of license output, 0=dynamic (undocumented parameter of --license)
@@ -106,7 +107,8 @@ typedef struct {
         list,        // a genols option
         no_bgzf,     // if this is a GZIP file, treat as normal GZIP, not BGZF
         no_cache,    // don't load cache, or delete cache
-        no_upgrade;  // disable upgrade checks
+        no_upgrade,  // disable upgrade checks
+        no_eval;     // don't allow features on eval basis (used for testing permissions)
     rom test_i;      // test of test.sh currently running (undocumented)
     rom threads_str, out_filename, out_dirname, files_from, do_register;
     FileType stdin_type; // set by the --input command line option
@@ -136,9 +138,9 @@ typedef struct {
         show_threads, show_uncompress, biopsy, skip_segconf, show_data_type,
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
         debug_LONG, show_qual, debug_qname, debug_read_ctxs, debug_sag, debug_gencomp, debug_lines, debug_latest,
-        debug_peek, submit_stats, debug_submit, show_deep, show_segconf_has, debug_huffman, debug_split,
+        debug_peek, stats_submit, debug_submit, show_deep, show_segconf_has, debug_huffman, debug_split,
         debug_debug, debug_valgrind, // ad-hoc debug printing in prod
-        no_gencomp, force_gencomp, force_deep, no_domqual, no_pacb, no_longr, force_longr, verify_codec, seg_only, show_bam, xthreads, show_flags, show_rename_tags,
+        no_gencomp, force_gencomp, force_deep, no_domqual, no_pacb, no_longr, force_longr, verify_codec, seg_only, show_bam, xthreads, show_rename_tags,
         #define SHOW_CONTAINERS_ALL_VBs (-1)
         show_containers, show_aligner, show_buddy,
         echo,         // show the command line in case of an error

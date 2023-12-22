@@ -187,7 +187,9 @@ void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa), unsigned add_byt
         // we seg a container into OPTION_SA_MAIN if there is no prim line, or if the prim line doesn't match (=abnormal)
         if (abnormal || !has_prim) {
             SegCallback callbacks[NUM_SA_ITEMS] = { [SA_RNAME]=chrom_seg_cb, [SA_POS]=seg_pos_field_cb, [SA_CIGAR]=sam_seg_0A_cigar_cb, [SA_MAPQ]=sam_seg_0A_mapq_cb };            
-            seg_array_of_struct (VB, CTX(OPTION_SA_MAIN), container_SA, STRa(sa), callbacks, add_bytes); 
+            seg_array_of_struct (VB, CTX(OPTION_SA_MAIN), container_SA, STRa(sa), callbacks, 
+                                 segconf.sam_semcol_in_contig ? sam_seg_correct_for_semcol_in_contig : NULL,
+                                 add_bytes); 
         }
 
         // special function can reconstruct depn SA from prim SA - no need to seg anything else
@@ -208,7 +210,10 @@ void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa), unsigned add_byt
         sam_seg_NM_i (vb, dl, dl->NM, dl->NM_len);
 
         SegCallback callbacks[NUM_SA_ITEMS] = { [SA_RNAME]=chrom_seg_cb, [SA_POS]=seg_pos_field_cb, [SA_CIGAR]=sam_seg_0A_cigar_cb, [SA_MAPQ]=sam_seg_0A_mapq_cb };            
-        int32_t num_alns = 1/*primary aln*/ + seg_array_of_struct (VB, ctx, container_SA, STRa(sa), callbacks, add_bytes); // 0 if SA is malformed 
+        int32_t num_alns = 1/*primary aln*/ + seg_array_of_struct (VB, ctx, container_SA, STRa(sa), callbacks,  // 0 if SA is malformed 
+                                                                   segconf.sam_semcol_in_contig ? sam_seg_correct_for_semcol_in_contig : NULL,
+                                                                   add_bytes); 
+
 
         // We already tested the SA to be good when we added this line to PRIM in sam_seg_prim_add_sag_SA
         ASSSEG (num_alns >= 2 && num_alns <= MAX_SA_NUM_ALNS, "%s: Not expecting a malformed SA field in PRIM. num_alns=%u SA:Z=\"%.*s\"", 
@@ -235,7 +240,9 @@ void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa), unsigned add_byt
 
         else {
             SegCallback callbacks[NUM_SA_ITEMS] = { [SA_RNAME]=chrom_seg_cb, [SA_POS]=seg_pos_field_cb, [SA_CIGAR]=sam_seg_0A_cigar_cb, [SA_MAPQ]=sam_seg_0A_mapq_cb };            
-            seg_array_of_struct (VB, ctx, container_SA, STRa(sa), callbacks, add_bytes);
+            seg_array_of_struct (VB, ctx, container_SA, STRa(sa), callbacks, 
+                                 segconf.sam_semcol_in_contig ? sam_seg_correct_for_semcol_in_contig : NULL,
+                                 add_bytes); 
         }
         break;
 

@@ -3,8 +3,19 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+15.0.29 22/12/2023
+- genozip --tar now supports compressing with --reference, see https://www.genozip.com/archiving
+- New option genozip --sendto - only the designated user can decompress the file. Receiver must be a Premium user.
+- New option genozip --user-message - include a message that will be displayed to users when decompressing (Premium)
+- Encryption using --password is now available only in Genozip Premium
+- Seamless software updates for users who installed from genozip-linux-x86_64.tar (previously available only for users who installed from conda)
+- When attempting to use features allowed only for higher-level licenses, permission will be granted for evaluation
+- VCF: better compression of Platypus VCF files
+- New options: genocat: --analyze-insertions genozip: --prepare-for-taxid
+- Canceled option: --show-flags
+
 15.0.28 5/12/2023
-- Better compression of Ultima Genomics data: BAM/CRAM files and Deep Variant VCF files
+- Better compression of Ultima Genomics data: BAM/CRAM and VCF files
 - minor bug fixes
 
 15.0.27 23/11/2023

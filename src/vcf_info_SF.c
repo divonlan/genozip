@@ -14,7 +14,8 @@
 #include "dict_id.h"
 #include "reconstruct.h"
 
-#define adjustment CTX(INFO_SF)->last_delta
+#define adjustment  CTX(INFO_SF)->last_delta
+#define sf_snip_buf CTX(INFO_SF)->sf_snip
 #define next param
 
 // INFO/SF contains a comma-seperated list of the 0-based index of the samples that are NOT '.'
@@ -24,15 +25,15 @@
 // if it is wrong we set use_special_sf=NO. The assumption is that normally, it is either true for all lines or false.
 bool vcf_seg_INFO_SF_init (VBlockVCFP vb, ContextP sf_ctx, STRp(value))
 {
-    switch (vb->use_special_sf) {
+    switch (sf_ctx->use_special_sf) {
 
-        case USE_SF_NO: 
+        case no: 
             return true; // "special" is suppressed - caller should go ahead and seg normally
 
-        case USE_SF_UNKNOWN: 
-            vb->use_special_sf = USE_SF_YES; // first call to this function, after finding that we have an INFO/SF field - set and fall through
+        case unknown: 
+            sf_ctx->use_special_sf = yes; // first call to this function, after finding that we have an INFO/SF field - set and fall through
 
-        case USE_SF_YES: 
+        case yes: 
             // we store the SF value in a buffer, since seg_FORMAT_GT overlays the haplotype buffer onto txt_data and may override the SF field
             // we will need the SF data if the field fails verification in vcf_seg_INFO_SF_one_sample
             buf_alloc (vb, &vb->sf_txt, 0, value_len + 1, char, 2, "sf_txt"); // +1 for nul-terminator
@@ -43,14 +44,14 @@ bool vcf_seg_INFO_SF_init (VBlockVCFP vb, ContextP sf_ctx, STRp(value))
             adjustment = 0;      
             
             // snip being contructed 
-            buf_alloc (vb, &vb->sf_snip, 0, value_len + 20, char, 2, "sf_snip"); // initial value - we will increase if needed
-            BNXTc (vb->sf_snip) = SNIP_SPECIAL;
-            BNXTc (vb->sf_snip) = VCF_SPECIAL_SF;
+            buf_alloc (vb, &sf_snip_buf, 0, value_len + 20, char, 2, "sf_snip"); // initial value - we will increase if needed
+            BNXTc (sf_snip_buf) = SNIP_SPECIAL;
+            BNXTc (sf_snip_buf) = VCF_SPECIAL_SF;
 
             return false; // caller should not seg as we already did
 
         default:
-            ABORT ("invalid use_special_sf=%d", vb->use_special_sf);
+            ABORT ("invalid use_special_sf=%d", sf_ctx->use_special_sf);
     }
 }
 
@@ -60,7 +61,7 @@ void vcf_seg_INFO_SF_one_sample (VBlockVCFP vb)
     // case: no more SF values left to compare - we ignore this sample
     while (vb->sf_txt.next < vb->sf_txt.len) {
 
-        buf_alloc (vb, &vb->sf_snip, 10, 0, char, 2, "sf_snip");
+        buf_alloc (vb, &sf_snip_buf, 10, 0, char, 2, "sf_snip");
 
         char *sf_one_value = Bc (vb->sf_txt, vb->sf_txt.next); 
         char *after;
@@ -70,21 +71,21 @@ void vcf_seg_INFO_SF_one_sample (VBlockVCFP vb)
 
         // case: badly formatted SF field
         if (*after != ',' && *after != 0) {
-            vb->use_special_sf = USE_SF_NO; // failed - turn off for the remainder of this vb
+            CTX(INFO_SF)->use_special_sf = no; // failed - turn off for the remainder of this vb
             break;
         }
         
         // case: value exists in SF and samples
         else if (value == adjusted_sample_i) {
-            BNXTc (vb->sf_snip) = ',';
+            BNXTc (sf_snip_buf) = ',';
             vb->sf_txt.next = BNUM (vb->sf_txt, after) + 1; // +1 to skip comma
             break;
         }
 
         // case: value in SF file doesn't appear in samples - keep the value in the snip
         else if (value < adjusted_sample_i) {
-            vb->sf_snip.len += str_int (value, BAFTc (vb->sf_snip));
-            BNXTc (vb->sf_snip) = ',';
+            sf_snip_buf.len += str_int (value, BAFTc (sf_snip_buf));
+            BNXTc (sf_snip_buf) = ',';
             adjustment++;
             vb->sf_txt.next = BNUM (vb->sf_txt, after) + 1; // +1 to skip comma
             // continue and read the next value
@@ -92,7 +93,7 @@ void vcf_seg_INFO_SF_one_sample (VBlockVCFP vb)
 
         // case: value in SF is larger than current sample - don't advance iterator - perhaps future sample will cover it
         else { // value > adjusted_sample_i
-            BNXTc (vb->sf_snip) = '~'; // skipped sample
+            BNXTc (sf_snip_buf) = '~'; // skipped sample
             break; 
         }
     }
@@ -103,31 +104,31 @@ void vcf_seg_INFO_SF_seg (VBlockVCFP vb)
     // case: SF data remains after all samples - copy it
     int32_t remaining_len = (uint32_t)(vb->sf_txt.len - vb->sf_txt.next); // -1 if all done, because we skipped a non-existing comma
     if (remaining_len > 0) {
-        buf_add_more (VB, &vb->sf_snip, Bc (vb->sf_txt, vb->sf_txt.next), remaining_len, "sf_snip");
-        BNXTc (vb->sf_snip) = ','; // buf_add_more allocates one character extra
+        buf_add_more (VB, &sf_snip_buf, Bc (vb->sf_txt, vb->sf_txt.next), remaining_len, "sf_snip");
+        BNXTc (sf_snip_buf) = ','; // buf_add_more allocates one character extra
     }
 
-    if (vb->use_special_sf == USE_SF_YES) 
-        seg_by_ctx (VB, STRb(vb->sf_snip), CTX(INFO_SF), vb->sf_txt.len);
+    if (CTX(INFO_SF)->use_special_sf == yes) 
+        seg_by_ctx (VB, STRb(sf_snip_buf), CTX(INFO_SF), vb->sf_txt.len);
     
-    else if (vb->use_special_sf == USE_SF_NO)
+    else if (CTX(INFO_SF)->use_special_sf == no)
         seg_by_ctx (VB, STRb(vb->sf_txt), CTX(INFO_SF), vb->sf_txt.len);
 
     buf_free (vb->sf_txt);
-    buf_free (vb->sf_snip);
+    buf_free (sf_snip_buf);
 }
 
 #undef adjustment
 #undef param
 
-#define adjustment vcf_vb->contexts[INFO_SF].last_delta
-#define sample_i   vcf_vb->contexts[INFO_SF].last_value.i
-#define snip_i     vcf_vb->sf_snip.param
+#define adjustment vb->contexts[INFO_SF].last_delta
+#define sample_i   vb->contexts[INFO_SF].last_value.i
+#define snip_i     sf_snip_buf.param
 
 // leave space for reconstructing SF - actual reconstruction will be in vcf_piz_container_cb
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_SF)
+SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_INFO_SF)
 {
-    VBlockVCFP vcf_vb = (VBlockVCFP)vb;
+    VBlockVCFP vb = (VBlockVCFP)vb_;
 
     if (reconstruct) {
         adjustment    = 0;
@@ -135,18 +136,18 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_SF)
         snip_i        = 0;
 
         // temporary place for SF
-        buf_alloc (vb, &vcf_vb->sf_txt, 0, 5 * vcf_header_get_num_samples(), char, 1, "sf_txt"); // initial estimate, we may further grow it later
-        vcf_vb->sf_txt.len = 0;
+        buf_alloc (vb, &vb->sf_txt, 0, 5 * vcf_header_get_num_samples(), char, 1, "sf_txt"); // initial estimate, we may further grow it later
+        vb->sf_txt.len = 0;
 
         // copy snip to sf_snip (note: the SNIP_SPECIAL+code are already removed)
-        buf_add_moreS (vb, &vcf_vb->sf_snip, snip, "sf_snip");
+        buf_add_moreS (vb, &sf_snip_buf, snip, "sf_snip");
     }
 
     return NO_NEW_VALUE;
 }
 
 // While reconstructing the GT fields of the samples - calculate the INFO/SF field
-void vcf_piz_GT_cb_calc_INFO_SF (VBlockVCFP vcf_vb, unsigned rep, char *recon, int32_t recon_len)
+void vcf_piz_GT_cb_calc_INFO_SF (VBlockVCFP vb, unsigned rep, char *recon, int32_t recon_len)
 {
     if (rep != 0) return; // we only look at the first ht in a sample, and only if its not '.'/'%'
 
@@ -155,11 +156,11 @@ void vcf_piz_GT_cb_calc_INFO_SF (VBlockVCFP vcf_vb, unsigned rep, char *recon, i
         return;
     }
 
-    ARRAY (const char, sf_snip, vcf_vb->sf_snip);
+    ARRAY (const char, sf_snip, sf_snip_buf);
 
     while (snip_i < sf_snip_len) {
 
-        buf_alloc (vcf_vb, &vcf_vb->sf_txt, 12, 0, char, 2, "sf_txt"); // sufficient for int32 + ','
+        buf_alloc (vb, &vb->sf_txt, 12, 0, char, 2, "sf_txt"); // sufficient for int32 + ','
 
         int32_t adjusted_sample_i = (int32_t)(sample_i + adjustment); // last_delta is the number of values in SF that are not in samples
 
@@ -167,10 +168,10 @@ void vcf_piz_GT_cb_calc_INFO_SF (VBlockVCFP vcf_vb, unsigned rep, char *recon, i
         if (sf_snip[snip_i] == ',') {
             snip_i++;
 
-            buf_add_int_as_text (&vcf_vb->sf_txt, adjusted_sample_i);
+            buf_add_int_as_text (&vb->sf_txt, adjusted_sample_i);
 
             if (snip_i < sf_snip_len) // add comma if not done yet
-                BNXTc (vcf_vb->sf_txt) = ',';
+                BNXTc (vb->sf_txt) = ',';
 
             break;
         }
@@ -187,7 +188,7 @@ void vcf_piz_GT_cb_calc_INFO_SF (VBlockVCFP vcf_vb, unsigned rep, char *recon, i
             unsigned len = comma - &sf_snip[snip_i];
             bool add_comma = (snip_i + len + 1 < sf_snip_len); // add comma if not last
 
-            buf_add (&vcf_vb->sf_txt, &sf_snip[snip_i], len + add_comma);
+            buf_add (&vb->sf_txt, &sf_snip[snip_i], len + add_comma);
             snip_i += len + 1;
 
             adjustment++;
@@ -198,23 +199,23 @@ void vcf_piz_GT_cb_calc_INFO_SF (VBlockVCFP vcf_vb, unsigned rep, char *recon, i
 }
 
 // Upon completing the line - insert the calculated INFO/SF field to its place
-int vcf_piz_TOPLEVEL_cb_insert_INFO_SF (VBlockVCFP vcf_vb)
+int vcf_piz_TOPLEVEL_cb_insert_INFO_SF (VBlockVCFP vb)
 {
-    ARRAY (const char, sf_snip, vcf_vb->sf_snip);
+    ARRAY (const char, sf_snip, sf_snip_buf);
 
     // if there are some items remaining in the snip (values that don't appear in samples) - copy them
     if (snip_i < sf_snip_len) {
         unsigned remaining_len = sf_snip_len - snip_i - 1; // all except the final comma
-        buf_add_more ((VBlockP)vcf_vb, &vcf_vb->sf_txt, &sf_snip[snip_i], remaining_len, "sf_txt"); 
+        buf_add_more ((VBlockP)vb, &vb->sf_txt, &sf_snip[snip_i], remaining_len, "sf_txt"); 
     }
 
     // make room for the SF txt and copy it to its final location
-    vcf_piz_insert_field (vcf_vb, INFO_SF, STRb(vcf_vb->sf_txt));
+    vcf_piz_insert_field (vb, INFO_SF, STRb(vb->sf_txt));
 
-    buf_free (vcf_vb->sf_snip);
-    buf_free (vcf_vb->sf_txt);
+    buf_free (sf_snip_buf);
+    buf_free (vb->sf_txt);
 
-    return vcf_vb->sf_txt.len;
+    return vb->sf_txt.len;
 }
 
 #undef sample_i

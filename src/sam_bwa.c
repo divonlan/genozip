@@ -13,7 +13,6 @@
 
 // -------------------------------------------------------
 // XA:Z "Alternative alignments" (a BWA, gem3 feature)
-//
 // XA format is: (chr,pos,CIGAR,NM;)*  pos starts with +- which is strand
 // Example XA:Z:chr9,-60942781,150M,0;chr9,-42212061,150M,0;chr9,-61218415,150M,0;chr9,+66963977,150M,1;
 // See: http://bio-bwa.sourceforge.net/bwa.shtml
@@ -75,6 +74,9 @@ static bool sam_seg_verify_BWA_XA (VBlockSAMP vb, STRp(xa))
         SET_XA(unknown, no); // set only if not already set by another thread
 
     else { // test first repeat
+        if (segconf.sam_semcol_in_contig && !memchr (reps[0], ',', rep_lens[0])) 
+            rep_lens[0] += rep_lens[1] + 1; // if first rep is a half-contig, merge it with second rep
+        
         str_split (reps[0], rep_lens[0], 4, ',', item, true);
 
         // verify 4 items, and POS is a -/+ followed by an integer. note: GEM3 XA format will be a "no". TO DO: recognize GEM3 format 
@@ -176,13 +178,34 @@ static bool sam_seg_SA_no_lookback_cb (VBlockP vb, ContextP ctx, STRp(snip), uin
     return true; // segged successfully
 }
 
+
+// Called after splitting in case contig names may contain a ; - in which case we need to correct over-splitting
+// Example: XA:Z:ScxkALA_1000;HRSCAF=1302,+101183,26S19M104S,0;ScxkALA_1805;HRSCAF=2562,+35201024,17S19M111S,0
+// Original split: [0]=ScxkALA_1000  [1]=HRSCAF=1302,+101183,26S19M104S,0  [2]=ScxkALA_1805  [3]=HRSCAF=2562,+35201024,17S19M111S,0
+// Correct to:     [0]=ScxkALA_1000;HRSCAF=1302,+101183,26S19M104S,0  [1]=ScxkALA_1805;HRSCAF=2562,+35201024,17S19M111S,0
+void sam_seg_correct_for_semcol_in_contig (uint32_t *n_repeats, rom *repeats, uint32_t *repeat_lens)
+{
+    for (uint32_t i=0; i < *n_repeats-1; i++)  // -1 bc last repeat cannot be a half contig
+        if (!memchr (repeats[i], ',', repeat_lens[i])) { // a repeat containing no commas is a "half contig" (eg "ScxkALA_1000")
+            // extend to include the semicolon and the subsequent repeat
+            repeat_lens[i] += 1 + repeat_lens[i+1]; 
+            
+            // eliminate the subsequent repeat
+            memmove (&repeats[i+1],     &repeats[i+2],     (*n_repeats - i - 2) * sizeof (rom));
+            memmove (&repeat_lens[i+1], &repeat_lens[i+2], (*n_repeats - i - 2) * sizeof (uint32_t));
+            (*n_repeats)--;
+        }
+}
+
 void sam_seg_BWA_XA_Z (VBlockSAMP vb, STRp(xa), unsigned add_bytes)
 {
     START_TIMER;
 
-    // case: still "unknown". set to "yes" or "no" and proceed accordingly.
+    // case: still "unknown". set to "yes" or "no" and proceed accordingly. this can happen in any VB.
     if (segconf.sam_has_BWA_XA_Z == unknown && !sam_seg_verify_BWA_XA (vb, STRa(xa))) {
-        seg_by_did (VB, STRa(xa), OPTION_XA_Z, add_bytes); // fallback;
+        DO_ONCE memcpy (segconf.sam_malformed_XA, xa, MIN_(xa_len, sizeof (segconf.sam_malformed_XA)));
+
+        seg_by_did (VB, STRa(xa), OPTION_XA_Z, add_bytes); // fallback;        
         return;
     }
 
@@ -212,7 +235,9 @@ void sam_seg_BWA_XA_Z (VBlockSAMP vb, STRp(xa), unsigned add_bytes)
                                  sam_seg_BWA_XA_pos_cb, sam_seg_0A_cigar_cb, 0 };
 
     int32_t repeats = seg_array_of_struct (VB, CTX(OPTION_XA_Z), container_XA, STRa(xa), 
-                                           use_lb ? callbacks : callbacks_no_lb, add_bytes);
+                                           use_lb ? callbacks : callbacks_no_lb, 
+                                           segconf.sam_semcol_in_contig ? sam_seg_correct_for_semcol_in_contig : NULL,
+                                           add_bytes);
 
     // case: we failed to seg as a container - flush lookbacks (rare condition, and complicated to rollback given the round-robin and unlimited repeats)
     if (use_lb && repeats == -1) {

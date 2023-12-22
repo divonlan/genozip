@@ -106,7 +106,7 @@ extern void seg_uint32_matrix (VBlockP vb, ContextP container_ctx, Did stats_con
 extern bool seg_do_nothing_cb (VBlockP vb, ContextP ctx, STRp(field), uint32_t rep);
 
 extern bool seg_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), const SegCallback *callbacks, unsigned add_bytes, bool account_in_subfields);
-extern int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), const SegCallback *callbacks, unsigned add_bytes);
+extern int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), const SegCallback *callbacks, void (*split_correction_callback) (uint32_t *n_repeats, rom *repeats, uint32_t *repeat_lens), unsigned add_bytes);
 
 extern void seg_array_of_array_of_struct (VBlockP vb, ContextP ctx, char outer_sep, MediumContainer inner_con, STRp(snip), const SegCallback *callbacks);
 

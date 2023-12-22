@@ -54,7 +54,7 @@ else
 
 endif 
 
-WSL_GCC_8_5 = /home/divon/miniconda3/envs/distribution/bin/x86_64-conda-linux-gnu-gcc # path to gcc 8.5 on WSL (generate with: conda create -n distribution gcc_linux-64=8.5.0)
+WSL_GCC_8_5 = /home_local_fs/divon/miniconda3/envs/distribution/bin/x86_64-conda-linux-gnu-gcc # path to gcc 8.5 on WSL (generate with: conda create -n distribution gcc_linux-64=8.5.0)
 
 DEV_DIR  = ../../genozip
 DEV_SRC  = $(DEV_DIR)/src
@@ -75,6 +75,7 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.
 		  vcf_format_GT.c vcf_format_PS_PID.c vcf_info_QD.c vcf_info_SF.c vcf_dbsnp.c vcf_giab.c vcf_vep.c      \
 		  vcf_refalt.c vcf_tags.c vcf_linesort.c vcf_format.c vcf_illum_gtyping.c vcf_gwas.c vcf_vagrent.c		\
 		  vcf_icgc.c vcf_snpeff.c vcf_cosmic.c vcf_mastermind.c vcf_isaac.c	vcf_manta.c vcf_pos.c vcf_ultima.c	\
+		  vcf_platypus.c																						\
 		  sam_seg.c sam_piz.c sam_shared.c sam_header.c sam_md.c sam_nm.c sam_tlen.c sam_cigar.c sam_fields.c  	\
 		  sam_sa.c bam_seg.c bam_seq.c bam_show.c sam_pacbio.c sam_ultima.c sam_xcons.c cram.c agilent.c   		\
 		  sam_seq.c sam_qual.c sam_sag_zip.c sam_sag_piz.c sam_sag_load.c sam_sag_ingest.c sam_sag_scan.c    	\
@@ -87,7 +88,7 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.
 		  codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c codec_normq.c codec_homp.c codec_t0.c		\
 	      txtfile.c profiler.c file.c filename.c dispatcher.c crypt.c aes.c md5.c segconf.c biopsy.c gencomp.c	\
 		  vblock.c regions.c optimize.c dict_id.c aliases.c hash.c stream.c url.c bases_filter.c dict_io.c		\
-		  recon_plan_io.c version.c huffman.c 
+		  recon_plan_io.c version.c huffman.c user_message.c
 
 ZLIB_SRCS  = zlib/gzlib.c zlib/gzread.c zlib/inflate.c zlib/inffast.c zlib/zutil.c zlib/inftrees.c zlib/deflate.c zlib/trees.c
 
@@ -114,7 +115,7 @@ CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h al
 			 reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h bgzf.h coverage.h threads.h local_type.h \
 			 arch.h license.h file_types.h data_types.h base64.h txtheader.h writer.h bases_filter.h genols.h contigs.h chrom.h \
 			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h gff.h bed.h phylip.h chain.h kraken.h locs.h generic.h \
-			 fastq.h fastq_private.h \
+			 fastq.h fastq_private.h user_message.h \
              mac_compat.h  \
 			 zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h \
 			 zlib/deflate.h zlib/trees.h \
@@ -158,7 +159,8 @@ endif
 
 ifeq ($(OS),Windows_NT)
 	EXE = .exe
-	LDFLAGS += -static -static-libgcc -lIPHLPAPI
+#	LDFLAGS += -static -static-libgcc -lIPHLPAPI -lUrlmon
+	LDFLAGS += -static-libgcc -lIPHLPAPI -lUrlmon
 	OBJDIR=$(OBJDIR_WINDOWS)
 	WSL=wsl
 else
@@ -215,9 +217,9 @@ $(OBJDIR)/%.d: %.c | $(OBJDIR) # directory is an "order only prerequesite": http
 	@echo Calculating dependencies $<
 	@$(CC) $(CFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
 
-objdir.mac/secure/license.o : CFLAGS += -mmacosx-version-min=10.0
+objdir.mac/secure/license.o : CFLAGS += -mmacosx-version-min=10.13
 ifeq ($(OS),Windows_NT)
-objdir.mac/secure/license.o : secure/license.c
+objdir.mac/secure/license.o : secure/license.c secure/license_sys.c secure/license_stats.c secure/license_zfile.c  secure/license_buf.c
 	@echo "getting $>"
 	@(cd ..; mac-get-license-o.sh)
 endif
@@ -393,7 +395,8 @@ increment-version: # note: target name is not "version.h" so this is not invoked
 
 decrement-version:
 	@echo "Do manually:"
-	@echo "Remove tag: git push --delete origin genozip-a.b.c"
+	@echo "Remove tag: 
+	c"
 	@echo "Change version.h to the last version that still has a tag"
 
 .archive.tar.gz : $(C_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_LIC_OBJS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) ../LICENSE.txt
@@ -441,7 +444,7 @@ conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld
 	@echo "  (4) Wait for all 4 tests to pass (~8 minutes)"
 	@echo "  (5) Click 'Merge pull request' and the 'Confirm merge' (DONT CLICK 'Delete branch')"
 	@echo "  (6) In local terminal: cd ../genozip-feedstock/; git pull; cd -"
-	@echo "  (7) Open: https://github.com/divonlan/genozip/releases/new
+	@echo "  (7) Open: https://github.com/divonlan/genozip/releases/new"
 	@echo "  (8) Set 'Tag version' and 'Release title' are both: genozip-$(version)"
 	@echo "  (9) Copy the notes for the version from RELEASE NOTES -> Publish release"
 
@@ -480,7 +483,8 @@ $(INSTALLERS)/genozip-installer.exe: refresh_arch_o $(WINDOWS_INSTALLER_OBJS)
 	@if [ `cd ..; basename $$PWD` != genozip ] ; then cp $(WINDOWS_INSTALLER_OBJS) $(DEV_SRC)/windows ; cp $(DEV_SRC)/genozip-installer.ifp $(DEV_SRC)/genozip-installer.ifp.save ; fi # so this works for genozip-prod too - because InstallForge uses absolute paths 
 	@($(UTILS)/InstallForge/InstallForge.exe ; exit 0)
 	@if [ -f $(OBJDIR)/arch.o ]; then rm -f $(OBJDIR)/arch.o >& /dev/null ; fi # remove this arch.o which contains DISTRIBUTION
-	@if [ `cd ..; basename $$PWD` != genozip ] ; then mv $(DEV_SRC)/genozip-installer.ifp . ; mv $(DEV_SRC)/genozip-installer.ifp.save $(DEV_SRC)/genozip-installer.ifp ; fi # we always edit the version in the genozip dir
+	@# we always edit the version in the genozip dir. we copy it to the current dir so it gets committed on git. we revert to old version in DEV_SRC to avoid problems with git merge
+	@if [ `cd ..; basename $$PWD` != genozip ] ; then mv $(DEV_SRC)/genozip-installer.ifp . ; mv $(DEV_SRC)/genozip-installer.ifp.save $(DEV_SRC)/genozip-installer.ifp ; fi
 	@cp $(DEV_SRC)/windows/genozip-installer.exe $(INSTALLERS)
 
 $(INSTALLERS)/genozip-linux-x86_64.tar.build: genozip-linux-x86_64/LICENSE.txt 
@@ -498,23 +502,27 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 
 BUILD_FILES = version.h genozip-installer.ifp ../LICENSE.txt Makefile objdir.linux/secure/license.o objdir.windows/secure/license.o ../RELEASE_NOTES.txt
 
-BUILD_FILES_DOCS = genozip-installer.exe genozip-linux-x86_64.tar LICENSE.html
+INSTALLER_FILES = genozip-installer.exe genozip-linux-x86_64.tar LICENSE.html
 
 push-build: 
 	@(git stage $(BUILD_FILES) ; exit 0) > /dev/null
 	@(git commit -m $(version) ; exit 0) > /dev/null
 	@(cd secure; git commit -m $(version) ; exit 0) > /dev/null
 	@git push > /dev/null
-	@(cd $(INSTALLERS); git stage $(BUILD_FILES_DOCS) ; exit 0) > /dev/null
+	@(cd $(INSTALLERS); git stage $(INSTALLER_FILES) ; exit 0) > /dev/null
 	@(git commit -m $(version) ; exit 0) > /dev/null
 	@git push > /dev/null
 
 distribution:             clean-distribution increment-version testfiles ../LICENSE.txt $(INSTALLERS)/LICENSE.html $(INSTALLERS)/genozip-linux-x86_64.tar.build $(INSTALLERS)/genozip-installer.exe \
                           push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
+	@(printf "\nClick Enter after committing the feedstock conflict resolution: <Click>")
+	@(read x)
 	@(cd $(CONDA_FEEDSTOCK) ; git pull)
 
 distribution-maintenance: clean-distribution increment-version testfiles ../LICENSE.txt $(INSTALLERS)/LICENSE.html $(INSTALLERS)/genozip-linux-x86_64.tar.build $(INSTALLERS)/genozip-installer.exe \
                           push-build conda/.conda-timestamp 
+	@(printf "\nClick Enter after committing the feedstock conflict resolution: <Click>")
+	@(read x)
 	@(cd $(CONDA_FEEDSTOCK) ; git pull)
 
 test-backup: genozip.exe
@@ -547,7 +555,10 @@ genozip-linux-x86_64/genounzip genozip-linux-x86_64/genocat genozip-linux-x86_64
 	@echo Generating $@
 	@ln -f $< $@
 
-LINUX_TARGZ_OBJS = genozip-linux-x86_64/genozip genozip-linux-x86_64/genounzip genozip-linux-x86_64/genocat genozip-linux-x86_64/genols 
+genozip-linux-x86_64/LICENSE.txt: ../LICENSE.txt
+	@cp -f $< $@
+
+LINUX_TARGZ_OBJS = genozip-linux-x86_64/genozip genozip-linux-x86_64/genounzip genozip-linux-x86_64/genocat genozip-linux-x86_64/genols genozip-linux-x86_64/LICENSE.txt
 
 # this must be run ONLY as part of "make distribution" or else versions will be out of sync
 # this is run on Linux by run-on-wsl.sh

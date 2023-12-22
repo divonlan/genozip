@@ -36,10 +36,13 @@ void vcf_info_zip_initialize (void)
     if (segconf.vcf_is_mastermind) vcf_mastermind_zip_initialize();
     if (segconf.vcf_is_vep)        vcf_vep_zip_initialize();
     if (segconf.vcf_illum_gtyping) vcf_illum_gtyping_zip_initialize();
+    if (segconf.vcf_is_platypus)   vcf_platypus_zip_initialize();
 }
 
 void vcf_info_seg_initialize (VBlockVCFP vb) 
 {
+    #define T(cond, did_i) ((cond) ? (did_i) : DID_NONE)
+
     ctx_set_store (VB, STORE_INT, INFO_AN, INFO_AC, INFO_ADP, INFO_DP, INFO_MLEAC, 
                    INFO_DP4_RF, INFO_DP4_RR, INFO_DP4_AF, INFO_DP4_AR, 
                    INFO_AC_Hom, INFO_AC_Het, INFO_AC_Hemi,
@@ -48,16 +51,17 @@ void vcf_info_seg_initialize (VBlockVCFP vb)
     CTX(INFO_AF)->flags.store = STORE_FLOAT;
     // xxx (is this really needed for --indels-only?) CTX(INFO_SVTYPE)-> flags.store = STORE_INDEX; // since v13 - consumed by vcf_refalt_piz_is_variant_indel
 
-    if (!vcf_is_use_DP_by_DP())
-        CTX(INFO_DP)->ltype = LT_DYN_INT; 
+    CTX(INFO_SF)->use_special_sf = unknown;
+    
+    ctx_set_ltype (VB, LT_DYN_INT, INFO_SVLEN, INFO_DP4_RF, INFO_DP4_AF,
+                   T(!vcf_is_use_DP_by_DP(), INFO_DP),
+                   DID_EOL);
 
     ctx_consolidate_stats (VB, INFO_RAW_MQandDP, INFO_RAW_MQandDP_MQ, INFO_RAW_MQandDP_DP, DID_EOL);
     
     if (segconf.has[INFO_CLNHGVS]) vcf_seg_hgvs_consolidate_stats (vb, INFO_CLNHGVS);
     if (segconf.has[INFO_HGVSG])   vcf_seg_hgvs_consolidate_stats (vb, INFO_HGVSG);
     if (segconf.has[INFO_ANN])     vcf_seg_hgvs_consolidate_stats (vb, INFO_ANN); // subfield HGVS_c
-
-    CTX(INFO_SVLEN)->ltype = CTX(INFO_DP4_RF)->ltype = CTX(INFO_DP4_AF)->ltype = LT_DYN_INT;
 }
 
 //--------
@@ -621,6 +625,8 @@ static inline void vcf_seg_INFO_RAW_MQandDP (VBlockVCFP vb, ContextP ctx, STRp(v
 // INFO container
 // --------------
 
+#define info_items CTX(VCF_INFO)->info_items
+
 // for dual coordinate files (Primary, Luft and --chain) - add DVCF depending on ostatus (run after
 // all INFO and FORMAT fields, so ostatus is final)
 static void vcf_seg_info_add_DVCF_to_InfoItems (VBlockVCFP vb)
@@ -647,8 +653,8 @@ static void vcf_seg_info_add_DVCF_to_InfoItems (VBlockVCFP vb)
             vb->line_coords==DC_PRIMARY ? "Missing INFO/LUFT or INFO/Lrej subfield" : "Missing INFO/PRIM or INFO/Prej subfield");
 
     // case: --chain and INFO is '.' - remove the '.' as we are adding a DVCF field
-    if (vb->info_items.len == 1 && B1ST (InfoItem, vb->info_items)->name_len == 1 && *B1ST (InfoItem, vb->info_items)->name == '.') {
-        vb->info_items.len = 0;
+    if (info_items.len == 1 && B1ST (InfoItem, info_items)->name_len == 1 && *B1ST (InfoItem, info_items)->name == '.') {
+        info_items.len = 0;
         vb->recon_size--;
         vb->recon_size_luft--;
     }
@@ -656,14 +662,14 @@ static void vcf_seg_info_add_DVCF_to_InfoItems (VBlockVCFP vb)
     // dual coordinate line - we seg both options and vcf_piz_filter will decide which to render
     if (LO_IS_OK (last_ostatus)) {
 
-        BNXT (InfoItem, vb->info_items) = (InfoItem) { 
+        BNXT (InfoItem, info_items) = (InfoItem) { 
             .name      = INFO_LUFT_NAME"=", 
             .name_len  = INFO_DVCF_LEN + 1, // +1 for the '='
             .ctx       = CTX (INFO_LUFT),
             .value     = "" // non-zero means value exists
         };  
         
-        BNXT (InfoItem, vb->info_items) = (InfoItem) { 
+        BNXT (InfoItem, info_items) = (InfoItem) { 
             .name      = INFO_PRIM_NAME"=", 
             .name_len  = INFO_DVCF_LEN + 1, // +1 for the '='
             .ctx       = CTX (INFO_PRIM),
@@ -672,21 +678,21 @@ static void vcf_seg_info_add_DVCF_to_InfoItems (VBlockVCFP vb)
 
         // case: --chain - we're adding ONE of these subfields to each of Primary and Luft reconstructions
         if (chain_is_loaded) {
-            uint32_t growth = INFO_DVCF_LEN + 1 + (vb->info_items.len32 > 2); // +1 for '=', +1 for ';' if we already have item(s)
+            uint32_t growth = INFO_DVCF_LEN + 1 + (info_items.len32 > 2); // +1 for '=', +1 for ';' if we already have item(s)
             vb->recon_size += growth;
             vb->recon_size_luft += growth;
         }
     }
 
     else { 
-        BNXT (InfoItem, vb->info_items) = (InfoItem) { 
+        BNXT (InfoItem, info_items) = (InfoItem) { 
             .name      = INFO_LREJ_NAME"=", 
             .name_len  = INFO_DVCF_LEN + 1, 
             .ctx       = CTX (INFO_LREJ),
             .value     = "" // non-zero means value exists
         };
 
-        BNXT (InfoItem, vb->info_items) = (InfoItem) { 
+        BNXT (InfoItem, info_items) = (InfoItem) { 
             .name      = INFO_PREJ_NAME"=", 
             .name_len  = INFO_DVCF_LEN + 1, 
             .ctx       = CTX (INFO_PREJ),
@@ -695,7 +701,7 @@ static void vcf_seg_info_add_DVCF_to_InfoItems (VBlockVCFP vb)
 
         // case: we added a REJX INFO field that wasn't in the TXT data: --chain or rolled back (see vcf_lo_seg_rollback_and_reject) or an added variant
         if (chain_is_loaded || rolled_back || added_variant) {
-            uint32_t growth = INFO_DVCF_LEN + 1 + (vb->info_items.len32 > 2); // +1 for '=', +1 for ';' if we already have item(s) execpt for the DVCF items
+            uint32_t growth = INFO_DVCF_LEN + 1 + (info_items.len32 > 2); // +1 for '=', +1 for ';' if we already have item(s) execpt for the DVCF items
 
             if (vb->line_coords == DC_PRIMARY) 
                 vb->recon_size += growth;
@@ -706,7 +712,7 @@ static void vcf_seg_info_add_DVCF_to_InfoItems (VBlockVCFP vb)
 
     // add tags for the DVCF info items
     if (!vb->is_rejects_vb) {
-        InfoItem *ii = BLST (InfoItem, vb->info_items) - 1;
+        InfoItem *ii = BLST (InfoItem, info_items) - 1;
         vcf_tags_add_tag (vb, ii[0].ctx, DTYPE_VCF_INFO, ii[0].ctx->tag_name, ii[0].name_len-1);
         vcf_tags_add_tag (vb, ii[1].ctx, DTYPE_VCF_INFO, ii[1].ctx->tag_name, ii[1].name_len-1);
     }
@@ -962,10 +968,30 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_CSQT:            CALL_IF (segconf.vcf_is_isaac, seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
         case _INFO_cosmic:          CALL_IF (segconf.vcf_is_isaac, seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
 
-        // Ultima Genomics Deep Variant
+        // Ultima Genomics 
         case _INFO_X_LM:
-        case _INFO_X_RM:            CALL_IF (segconf.vcf_is_ultima_dv, vcf_seg_INFO_X_LM_RM (vb, ctx, STRa(value)));
+        case _INFO_X_RM:            CALL_IF (segconf.vcf_is_ultima, vcf_seg_INFO_X_LM_RM (vb, ctx, STRa(value)));
+        case _INFO_X_IL:            CALL_IF (segconf.vcf_is_ultima, vcf_seg_INFO_X_IL (vb, ctx, STRa(value)));
+        case _INFO_X_IC:            CALL_IF (segconf.vcf_is_ultima, vcf_seg_INFO_X_IC (vb, ctx, STRa(value)));
+        case _INFO_X_HIN:           CALL_IF (segconf.vcf_is_ultima, vcf_seg_INFO_X_HIN (vb, ctx, STRa(value)));
+        case _INFO_X_HIL:           CALL_IF (segconf.vcf_is_ultima, vcf_seg_INFO_X_HIL (vb, ctx, STRa(value)));
+        case _INFO_TREE_SCORE:      CALL_IF (segconf.vcf_is_ultima, vcf_seg_INFO_X_HIL (vb, ctx, STRa(value)));
+        case _INFO_VARIANT_TYPE:    CALL_IF (segconf.vcf_is_ultima, vcf_seg_INFO_VARIANT_TYPE (vb, ctx, STRa(value)));
+        case _INFO_ASSEMBLED_HAPS:  CALL_IF (segconf.vcf_is_ultima, seg_integer_or_not (VB, ctx, STRa(value), value_len));
+        case _INFO_FILTERED_HAPS:   CALL_IF (segconf.vcf_is_ultima, vcf_seg_INFO_FILTERED_HAPS (vb, ctx, STRa(value)));
         
+        // Platypus
+        case _INFO_TR:
+        case _INFO_TC:
+        case _INFO_TCF:
+        case _INFO_PP:
+        case _INFO_MGOF:            CALL_IF (segconf.vcf_is_platypus, seg_integer_or_not (VB, ctx, STRa(value), value_len));
+        case _INFO_SC:              CALL_IF (segconf.vcf_is_platypus, vcf_seg_playpus_INFO_SC (vb, ctx, STRa(value)));
+        case _INFO_HP:              CALL_IF (segconf.vcf_is_platypus, vcf_seg_playpus_INFO_HP (vb, ctx, STRa(value)));
+        case _INFO_WS:
+        case _INFO_WE:              CALL_IF (segconf.vcf_is_platypus, vcf_seg_playpus_INFO_WS_WE (vb, ctx, STRa(value)));
+        case _INFO_TCR:             CALL_IF (segconf.vcf_is_platypus, vcf_seg_playpus_INFO_TCR (vb, ctx, STRa(value)));
+
         // manta
         // case _INFO_LEFT_SVINSSEQ: 
         // case _INFO_RIGHT_SVINSSEQ: // tried ACGT, better off without
@@ -993,7 +1019,7 @@ static SORTER (sort_by_subfield_name)
 
 void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
 {
-    vb->info_items.len = 0; // reset from previous line
+    info_items.len = 0; // reset from previous line
 
     // case: INFO field is '.' (empty) (but not in DVCF as we will need to deal with DVCF items)
     if (!z_is_dvcf && IS_PERIOD (info) && !segconf.vcf_is_isaac) { // note: in Isaac, it slightly better to mux the "."
@@ -1005,7 +1031,7 @@ void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
     str_split (info, info_len, MAX_FIELDS-2, ';', pair, false); // -2 - leave room for LUFT + PRIM
     ASSVCF (n_pairs, "Too many INFO subfields, Genozip supports up to %u", MAX_FIELDS-2);
 
-    buf_alloc (vb, &vb->info_items, 0, n_pairs + 2, InfoItem, CTX_GROWTH, "info_items");
+    buf_alloc (vb, &info_items, 0, n_pairs + 2, InfoItem, CTX_GROWTH, "info_items");
 
     int ac_i = -1; 
     InfoItem lift_ii = {}, rejt_ii = {};
@@ -1039,7 +1065,7 @@ void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
             if (str_get_int (STRa(ii.value), &ac))
                 ctx_set_last_value (VB, ii.ctx, ac); // needed for MLEAC        
 
-            ac_i = vb->info_items.len;
+            ac_i = info_items.len;
         }
 
         else if (dict_id.num == _INFO_LUFT || dict_id.num == _INFO_PRIM) 
@@ -1048,7 +1074,7 @@ void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
         else if (dict_id.num == _INFO_LREJ || dict_id.num == _INFO_PREJ) 
             { rejt_ii = ii; continue; } // dont add Lrej and Prej to Items yet
 
-        BNXT (InfoItem, vb->info_items) = ii;
+        BNXT (InfoItem, info_items) = ii;
     }
 
     // case: we have a LUFT or PRIM item - Seg it now, but don't add it yet to InfoItems
@@ -1074,7 +1100,7 @@ void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
     else if (rejt_ii.value)
         vcf_lo_seg_INFO_REJX (vb, rejt_ii.ctx, rejt_ii.value, rejt_ii.value_len); 
 
-    ARRAY (InfoItem, ii, vb->info_items);
+    ARRAY (InfoItem, ii, info_items);
 
     // pass 2: seg all subfields except AC (and PRIM/LUFT that weren't added)
     for (unsigned i=0; i < ii_len; i++) 
@@ -1089,7 +1115,7 @@ void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
 // Adds the DVCF items according to ostatus, finalizes INFO/SF, INFO/QD and segs the INFO container
 void vcf_finalize_seg_info (VBlockVCFP vb)
 {
-    if (!vb->info_items.len && !z_is_dvcf) return; // no INFO items on this line (except if dual-coords - we will add them in a sec)
+    if (!info_items.len && !z_is_dvcf) return; // no INFO items on this line (except if dual-coords - we will add them in a sec)
 
     Container con = { .repeats             = 1, 
                       .drop_final_item_sep = true,
@@ -1110,7 +1136,7 @@ void vcf_finalize_seg_info (VBlockVCFP vb)
     if (z_is_dvcf)
         vcf_seg_info_add_DVCF_to_InfoItems (vb);
 
-    ARRAY (InfoItem, ii, vb->info_items);
+    ARRAY (InfoItem, ii, info_items);
 
     con_set_nitems (con, ii_len);
 
@@ -1156,12 +1182,12 @@ void vcf_finalize_seg_info (VBlockVCFP vb)
 
     // --chain: if any tags need renaming we create a second, renames, prefixes string
     char ren_prefixes[con_nitems(con) * MAX_TAG_LEN]; 
-    unsigned ren_prefixes_len = z_is_dvcf && !vb->is_rejects_vb ? vcf_tags_rename (vb, con_nitems(con), 0, 0, 0, B1ST (InfoItem, vb->info_items), ren_prefixes) : 0;
+    unsigned ren_prefixes_len = z_is_dvcf && !vb->is_rejects_vb ? vcf_tags_rename (vb, con_nitems(con), 0, 0, 0, B1ST (InfoItem, info_items), ren_prefixes) : 0;
 
     // case GVCF: multiplex by has_RGQ or FILTER in Isaac
     if (!segconf.running && (segconf.has[FORMAT_RGQ] || segconf.vcf_is_isaac)) {
         ContextP channel_ctx = 
-            seg_mux_get_channel_ctx (VB, VCF_INFO, (MultiplexerP)&vb->mux_INFO, (segconf.has[FORMAT_RGQ] ? vb->line_has_RGQ : vcf_isaac_info_channel_i (VB)));
+            seg_mux_get_channel_ctx (VB, VCF_INFO, (MultiplexerP)&vb->mux_INFO, (segconf.has[FORMAT_RGQ] ? CTX(FORMAT_RGQ)->line_has_RGQ : vcf_isaac_info_channel_i (VB)));
         
         seg_by_did (VB, STRa(vb->mux_INFO.snip), VCF_INFO, 0);
 

@@ -69,7 +69,7 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
     MiniContainer gt = { .repeats   = 1, 
                          .nitems_lo = 1, 
                          .drop_final_repsep = true, 
-                         .callback = (vb->use_special_sf == USE_SF_YES || segconf.use_null_DP_method),
+                         .callback = (CTX(INFO_SF)->use_special_sf == yes || segconf.use_null_DP_method),
                          .items[0].dict_id.num = _FORMAT_GT_HT };
 
     unsigned save_cell_len = cell_len;
@@ -195,7 +195,7 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
     }
 
     // in case we have INFO/SF, we verify that it is indeed the list of samples for which the first ht is not '.'
-    if (vb->use_special_sf == USE_SF_YES && ht_data[0] != '.') 
+    if (CTX(INFO_SF)->use_special_sf == yes && ht_data[0] != '.') 
         vcf_seg_INFO_SF_one_sample (vb);
 
     ctx_set_last_value (VB, ctx, dosage); // to be used in vcf_seg_FORMAT_mux_by_dosage, vcf_seg_FORMAT_DP

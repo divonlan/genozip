@@ -20,7 +20,7 @@
 #define ABSOLUTE_MIN_VBLOCK_MEMORY ((uint64_t)1000) // in Bytes
 #define ABSOLUTE_MAX_VBLOCK_MEMORY ((uint64_t)MAX_VBLOCK_MEMORY MB)
 
-typedef enum __attribute__ ((__packed__)) { TECH_NONE=-1, TECH_ANY=-2, TECH_CONS=-3, TECH_UNKNOWN=0,   TECH_ILLUM, TECH_PACBIO, TECH_ONT,          TECH_454, TECH_MGI,   TECH_IONTORR, TECH_HELICOS, TECH_NCBI, TECH_ULTIMA, TECH_SINGLR, TECH_ELEMENT, TECH_ONSO, NUM_TECHS } SeqTech;
+typedef enum __attribute__ ((__packed__)) { TECH_NONE=-1, TECH_ANY=-2, TECH_CONS=-3, TECH_UNKNOWN=0,   TECH_ILLUM, TECH_PACBIO, TECH_NANOPORE,     TECH_454, TECH_MGI,   TECH_IONTORR, TECH_HELICOS, TECH_NCBI, TECH_ULTIMA, TECH_SINGLR, TECH_ELEMENT, TECH_ONSO, NUM_TECHS } SeqTech;
 #define TECH_NAME                         {                                          "Unknown_tech",   "Illumina", "PacBio",    "Oxford_Nanopore", "454",    "MGI_Tech", "IonTorrent", "Helicos",    "NCBI",    "Ultima",    "Singular",  "Element",    "Onso"               }
 #define TECH(x) (segconf.tech == TECH_##x)
 
@@ -112,10 +112,13 @@ typedef struct {
     bool is_bwa;                // aligner used is based on bwa
     bool is_minimap2;           // aligner used is based on minimap2
     bool is_bowtie2;            // aligner used is based on bowtie2
-    bool has_bwa_meth;           // file was treated with bwa-meth before and after alignment with bwa
+    bool has_bwa_meth;          // file was treated with bwa-meth before and after alignment with bwa
     bool pacbio_subreads;       // this is a pacbio subreads file
+    bool use_insertion_ctxs;    // use separate contexts for SEQ insertions
+    bool sam_semcol_in_contig;  // some contig names contain a semicolon, eg "ScxkALA_1850;HRSCAF=2697" (see: https://hgdownload.soe.ucsc.edu/hubs/GCF/005/870/125/GCF_005870125.1/GCF_005870125.1.chromAlias.txtwcs)
     bool sam_has_SA_Z;
     thool sam_has_BWA_XA_Z;
+    char sam_malformed_XA[256]; // ZIP: if sam_has_BWA_XA_Z=no: one example of XA:Z of an unrecognized format
     bool sam_has_BWA_XS_i;
     bool sam_has_XM_i_is_mismatches;
     bool sam_has_BWA_XT_A ;
@@ -183,6 +186,7 @@ typedef struct {
     bool vcf_is_pindel;
     bool vcf_is_caveman;
     bool vcf_is_vagrent;
+    bool vcf_is_platypus;
     bool vcf_is_gwas;           // GWAS-VCF format: https://github.com/MRCIEU/gwas-vcf-specification
     bool vcf_illum_gtyping;     // tags from Illumina GenCall genotyping software
     bool vcf_is_infinium;
@@ -196,7 +200,7 @@ typedef struct {
     bool vcf_is_mastermind;
     bool vcf_is_isaac;          // IsaacVariantCaller / starling
     bool vcf_is_deep_variant;   // Google Deep Variant
-    bool vcf_is_ultima_dv;      // Ultima Genomics version of Deep Variant
+    bool vcf_is_ultima;      // Ultima Genomics version of Deep Variant
     uint64_t count_dosage[2];   // used to calculate pc_has_dosage
     float pc_has_dosage;        // % of the samples x lines that have a valid (0-2) dosage value [0.0,1.0]
     bool use_null_DP_method;    // A method for predicting GT=./. by DP=.

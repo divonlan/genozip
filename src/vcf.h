@@ -288,7 +288,9 @@
 
 // Ultima Genomics
 #pragma GENDICT INFO_VARIANT_TYPE=DTYPE_1=VARIANT_TYPE // <ID=VARIANT_TYPE,Number=1,Type=String,Description="Flow: type of variant: SNP/NON-H-INDEL/H-INDEL">
+#pragma GENDICT INFO_SUSP_NOISY_ADJACENT_TP_VARIANT=DTYPE_1=SUSP_NOISY_ADJACENT_TP_VARIANT  // <ID=SUSP_NOISY_ADJACENT_TP_VARIANT,Number=0,Type=Flag,Description="Indicates a locus where false positive allele might be affecting a true positive allele">
 #pragma GENDICT INFO_UG_HCR=DTYPE_1=UG_HCR          // <ID=UG_HCR,Number=1,Type=String,Description="Genomic Region Annotation: High confidence regions as described in Almogy et al., 2022 (gs://concordanz/hg38/UG-High-Confidence-Regions/v1.3/ug_hcr.bed)">
+#pragma GENDICT INFO_XC=DTYPE_1=XC                  // <ID=XC,Number=1,Type=Integer,Description="Indicates longer hmer collapsing took place (this is a flow-based specific tag)">
 #pragma GENDICT INFO_X_CSS=DTYPE_1=X_CSS            // <ID=X_CSS,Number=A,Type=String,Description="Flow: cycle skip status: cycle-skip, possible-cycle-skip, non-skip">
 #pragma GENDICT INFO_X_GCC=DTYPE_1=X_GCC            // <ID=X_GCC,Number=1,Type=Float,Description="Flow: percentage of G or C in the window around hmer">
 #pragma GENDICT INFO_X_HIL=DTYPE_1=X_HIL            // <ID=X_HIL,Number=A,Type=Integer,Description="Flow: length of the hmer indel, if so">
@@ -297,6 +299,12 @@
 #pragma GENDICT INFO_X_IL=DTYPE_1=X_IL              // <ID=X_IL,Number=A,Type=Integer,Description="Flow: length of indel">
 #pragma GENDICT INFO_X_LM=DTYPE_1=X_LM              // <ID=X_LM,Number=A,Type=String,Description="Flow: motif to the left of the indel">
 #pragma GENDICT INFO_X_RM=DTYPE_1=X_RM              // <ID=X_RM,Number=A,Type=String,Description="Flow: motif to the right of the indel">
+#pragma GENDICT INFO_HPOL_RUN=DTYPE_1=HPOL_RUN      // <ID=HPOL_RUN,Number=1,Type=Flag,Description="In or close to homopolymer run">
+#pragma GENDICT INFO_BLACKLST=DTYPE_1=BLACKLST      // <ID=BLACKLST,Number=.,Type=String,Description="blacklist">
+#pragma GENDICT INFO_TREE_SCORE=DTYPE_1=TREE_SCORE  // <ID=TREE_SCORE,Number=1,Type=Float,Description="Filtering score">
+#pragma GENDICT INFO_ASSEMBLED_HAPS=DTYPE_1=ASSEMBLED_HAPS  // <ID=ASSEMBLED_HAPS,Number=1,Type=Integer,Description="Haplotypes detected by the assembly region before haplotype filtering is applied">
+#pragma GENDICT INFO_FILTERED_HAPS=DTYPE_1=FILTERED_HAPS    // <ID=FILTERED_HAPS,Number=1,Type=Integer,Description="Haplotypes filtered out by the haplotype filtering code">
+#pragma GENDICT INFO_GNOMAD_AF=DTYPE_1=GNOMAD_AF    // <ID=GNOMAD_AF,Number=A,Type=Float,Description="Allele Frequency, for each ALT allele, in the same order as listed (from /cromwell_root/gatk-best-practices/somatic-hg38/af-only-gnomad.hg38.vcf.gz)">
 
 // bcftools call
 #pragma GENDICT INFO_PV4=DTYPE_1=PV4                // <ID=PV4,Number=4,Type=Float,Description="P-values for strand bias, baseQ bias, mapQ bias and tail distance bias">
@@ -495,6 +503,36 @@
 #pragma GENDICT INFO_FATHMM_score=DTYPE_1=FATHMM_score                 // FATHMM default score (weighted for human inherited-disease mutations with Disease Ontology) (FATHMMori). Scores range from -16.13 to 10.64. The smaller the score the more likely the SNP has damaging effect.
 #pragma GENDICT INFO_SiPhy_29way_pi=DTYPE_1=SiPhy_29way_pi             // The estimated stationary distribution of A, C, G and T at the site, using SiPhy algorithm based on 29 mammals genomes. 
 
+// Platypus: https://github.com/andyrimmer/Platypus
+#pragma GENDICT INFO_BE=DTYPE_1=BE                  // <ID=BE,Number=.,Type=Integer,Description="End position of reference call block">
+#pragma GENDICT INFO_FR=DTYPE_1=FR                  // <ID=FR,Number=.,Type=Float,Description="Estimated population frequency of variant">
+#pragma GENDICT INFO_MMLQ=DTYPE_1=MMLQ              // <ID=MMLQ,Number=1,Type=Float,Description="Median minimum base quality for bases around variant">
+#pragma GENDICT INFO_TC=DTYPE_1=TC                  // <ID=TC,Number=1,Type=Integer,Description="Total coverage at this locus">
+#pragma GENDICT INFO_TCR=DTYPE_1=TCR                // <ID=TCR,Number=1,Type=Integer,Description="Total reverse strand coverage at this locus">
+#pragma GENDICT INFO_TCF=DTYPE_1=TCF                // <ID=TCF,Number=1,Type=Integer,Description="Total forward strand coverage at this locus">
+#pragma GENDICT INFO_HP=DTYPE_1=HP                  // <ID=HP,Number=1,Type=Integer,Description="Homopolymer run length around variant locus">
+#pragma GENDICT INFO_WS=DTYPE_1=WS                  // <ID=WS,Number=1,Type=Integer,Description="Starting position of calling window">
+#pragma GENDICT INFO_WE=DTYPE_1=WE                  // <ID=WE,Number=1,Type=Integer,Description="End position of calling window">
+#pragma GENDICT INFO_Source=DTYPE_1=Source          // <ID=Source,Number=.,Type=String,Description="Was this variant suggested by Playtypus, Assembler, or from a VCF?">
+#pragma GENDICT INFO_BS=DTYPE_1=BS                  // <ID=BS,Number=.,Type=Integer,Description="Start position of reference call block">
+#pragma GENDICT INFO_TR=DTYPE_1=TR                  // <ID=TR,Number=.,Type=Integer,Description="Total number of reads containing this variant">
+#pragma GENDICT INFO_NF=DTYPE_1=NF                  // <ID=NF,Number=.,Type=Integer,Description="Total number of forward reads containing this variant">
+#pragma GENDICT INFO_NR=DTYPE_1=NR                  // <ID=NR,Number=.,Type=Integer,Description="Total number of reverse reads containing this variant">
+#pragma GENDICT INFO_MGOF=DTYPE_1=MGOF              // <ID=MGOF,Number=.,Type=Integer,Description="Worst goodness-of-fit value reported across all samples">
+#pragma GENDICT INFO_SbPval=DTYPE_1=SbPval          // <ID=SbPval,Number=.,Type=Float,Description="Binomial P-value for strand bias test">
+#pragma GENDICT INFO_SC=DTYPE_1=SC                  // <ID=SC,Number=1,Type=String,Description="Genomic sequence 10 bases either side of variant position">
+#pragma GENDICT INFO_PP=DTYPE_1=PP                  // <ID=PP,Number=.,Type=Float,Description="Posterior probability (phred scaled) that this variant segregates">
+//#pragma GENDICT INFO_FS=DTYPE_1=FS                // (dup) <ID=FS,Number=.,Type=Float,Description="Fisher's exact test for strand bias (Phred scale)">
+//#pragma GENDICT INFO_ReadPosRankSum=DTYPE_1=ReadPosRankSum // (dup) <ID=ReadPosRankSum,Number=.,Type=Float,Description="Mann-Whitney Rank sum test for difference between in positions of variants in reads from ref and alt">
+//#pragma GENDICT INFO_MQ=DTYPE_1=MQ                // (dup) <ID=MQ,Number=.,Type=Float,Description="Root mean square of mapping qualities of reads at the variant position">
+//#pragma GENDICT INFO_QD=DTYPE_1=QD                // (dup) <ID=QD,Number=1,Type=Float,Description="Variant-quality/read-depth for this variant">
+#pragma GENDICT INFO_BRF=DTYPE_1=BRF                // <ID=BRF,Number=1,Type=Float,Description="Fraction of reads around this variant that failed filters">
+#pragma GENDICT INFO_HapScore=DTYPE_1=HapScore      // <ID=HapScore,Number=.,Type=Integer,Description="Haplotype score measuring the number of haplotypes the variant is segregating into in a window">
+#pragma GENDICT FORMAT_GOF=DTYPE_2=GOF              // <ID=GOF,Number=.,Type=Float,Description="Goodness of fit value">
+#pragma GENDICT FORMAT_NV=DTYPE_2=NV                // <ID=NV,Number=.,Type=Integer,Description="Number of reads containing variant in this sample">
+//#pragma GENDICT FORMAT_NR=DTYPE_2=NR              // (dup) <ID=NR,Number=.,Type=Integer,Description="Number of reads covering variant location in this sample">
+//#pragma GENDICT FORMAT_GL=DTYPE_2=GL              // (dup) <ID=GL,Number=.,Type=Float,Description="Genotype log10-likelihoods for AA,AB and BB genotypes, where A = ref and B = variant. Only applicable for bi-allelic sites">
+
 // Genozip INFO fields
 #pragma GENDICT INFO_LUFT=DTYPE_1=LUFT
 #pragma GENDICT INFO_PRIM=DTYPE_1=PRIM
@@ -594,7 +632,9 @@ extern void vcf_samples_add  (rom samples_str);
                       vcf_piz_special_MUX_BY_IGT_PHASE, vcf_piz_special_main_REFALT_DEL, vcf_piz_special_mutation, \
                       vcf_piz_special_SO_TERM, vcf_piz_special_MMURI, \
                       vcf_piz_special_MUX_GQX, vcf_piz_special_RU, vcf_piz_special_IDREP, vcf_piz_special_next_ALT, \
-                      vcf_piz_special_MUX_BY_END, vcf_piz_special_MUX_BY_ISAAC_FILTER, vcf_piz_special_X_LM_RM }
+                      vcf_piz_special_MUX_BY_END, vcf_piz_special_MUX_BY_ISAAC_FILTER, \
+                      vcf_piz_special_X_LM_RM, vcf_piz_special_X_IL, vcf_piz_special_X_IC, vcf_piz_special_X_HIN, vcf_piz_special_X_HIL, \
+                      vcf_piz_special_VARIANT_TYPE, vcf_piz_special_PLATYPUS_SC, vcf_piz_special_PLATYPUS_HP }
 
 SPECIAL (VCF, 0,  main_REFALT,         vcf_piz_special_main_REFALT);
 SPECIAL (VCF, 1,  FORMAT,              vcf_piz_special_FORMAT)
@@ -653,7 +693,14 @@ SPECIAL (VCF, 53, next_ALT,            vcf_piz_special_next_ALT);               
 SPECIAL (VCF, 54, MUX_BY_END,          vcf_piz_special_MUX_BY_END);               // added v15.0.26
 SPECIAL (VCF, 55, MUX_BY_ISAAC_FILTER, vcf_piz_special_MUX_BY_ISAAC_FILTER);      // added v15.0.26
 SPECIAL (VCF, 56, X_LM_RM,             vcf_piz_special_X_LM_RM);                  // added v15.0.28
-#define NUM_VCF_SPECIAL 57
+SPECIAL (VCF, 57, X_IL,                vcf_piz_special_X_IL);                     // added v15.0.29
+SPECIAL (VCF, 58, X_IC,                vcf_piz_special_X_IC);                     // added v15.0.29
+SPECIAL (VCF, 59, X_HIN,               vcf_piz_special_X_HIN);                    // added v15.0.29
+SPECIAL (VCF, 60, X_HIL,               vcf_piz_special_X_HIL);                    // added v15.0.29
+SPECIAL (VCF, 61, VARIANT_TYPE,        vcf_piz_special_VARIANT_TYPE);             // added v15.0.29
+SPECIAL (VCF, 62, PLATYPUS_SC,         vcf_piz_special_PLATYPUS_SC);              // added v15.0.29
+SPECIAL (VCF, 63, PLATYPUS_HP,         vcf_piz_special_PLATYPUS_HP);              // added v15.0.29
+#define NUM_VCF_SPECIAL 64
 
 // Translators for Luft (=secondary coordinates)
 TRANSLATOR (VCF, VCF,   1,  G,      vcf_piz_luft_G)       // same order as LiftOverStatus starting LO_CANT_G

@@ -82,7 +82,7 @@ void genols (rom z_filename, bool finalize, rom subdir, bool recursive)
         }
         
         ASSERTW (!files_ignored, "Ignored %u file%s that %s not have a " GENOZIP_EXT " extension, or are invalid.", 
-                 files_ignored, files_ignored==1 ? "" : "s", files_ignored==1 ? "does" : "do");
+                 STRfN(files_ignored), files_ignored==1 ? "does" : "do");
         
         goto finish;
     }
@@ -127,6 +127,8 @@ void genols (rom z_filename, bool finalize, rom subdir, bool recursive)
 
     DataType dt = z_file->z_flags.txt_is_bin ? DTPZ (bin_type) : z_file->data_type;
 
+    bool is_private = !z_file->section_list_buf.len; // non-accessible private file (compressed with --sendto of someone else)
+    
     if (flag.bytes) 
         bufprintf (evb, &str_buf, item_format_bytes, dt_name (dt), str_int_commas (z_file->num_lines).s, 
                    str_int_s (z_file->disk_size).s, str_int_s (z_file->txt_data_so_far_bind).s, ratio < 100, ratio, 
@@ -136,7 +138,7 @@ void genols (rom z_filename, bool finalize, rom subdir, bool recursive)
     else 
         bufprintf (evb, &str_buf, item_format, dt_name (dt), str_int_commas (z_file->num_lines).s,
                    str_size (z_file->disk_size).s, str_size (z_file->txt_data_so_far_bind).s, ratio < 100, ratio, 
-                   digest_display_ex (digest, DD_NORMAL).s,
+                   is_private ? "Private" : digest_display_ex (digest, DD_NORMAL).s,
                    (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
                    is_subdir ? -MAX_(1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH, TXT_FILENAME_LEN,
                    z_filename, header.created);
@@ -147,7 +149,8 @@ void genols (rom z_filename, bool finalize, rom subdir, bool recursive)
     files_listed++;
 
     // if --list, OR if the user did genols on one file (not a directory), show bound components, if there are any
-    if (flag.list || (!flag.multiple_files && !recursive && z_file->num_txt_files >= 2)) {
+    if (!is_private && 
+        (flag.list || (!flag.multiple_files && !recursive && z_file->num_txt_files >= 2))) {
         buf_append_string (evb, &str_buf, "Components:\n");
         Section sl_ent = NULL;
         uint64_t num_lines_count=0;

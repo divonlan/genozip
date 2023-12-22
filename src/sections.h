@@ -34,6 +34,7 @@
     {"SEC_COUNTS",          sizeof (SectionHeaderCounts)        }, \
     {"SEC_REF_IUPACS",      sizeof (SectionHeader)              }, \
     {"SEC_SUBDICTS",        sizeof (SectionHeaderSubDicts)      }, \
+    {"SEC_USER_MESSAGE",    sizeof (SectionHeader)              }, \
 }
 
 #define HEADER_IS(_st) (header->section_type == SEC_##_st)
@@ -124,7 +125,7 @@ typedef union SectionFlags {
         uint8_t all_the_same     : 1;  // SEC_B250: the b250 data contains only one element, and should be used to reconstruct any number of snips from this context
 
         #define same_line        ctx_specific_flag // v13.0.5: Valid for contexts that use SNIP_OTHER_DELTA and SNIP_DIFF: if true, reconstructs gets the value in the line (whether before or after). if false, it gets the last value.
-        #define no_textual_seq   ctx_specific_flag // v14.0.0: SAM_SQBITMAP: indicates that sam_piz_sam2bam_SEQ doesn't need to store textual_seq. 
+        #define no_textual_seq   ctx_specific_flag // v14.0.0: SAM_SQBITMAP: indicates that SEQ is NOT consumed by other fields, and therefore sam_piz_sam2bam_SEQ doesn't need to store textual_seq. 
         #define depn_clip_hard   ctx_specific_flag // v14.0.0: OPTION_SA_Z in SAM_COMP_MAIN: if true: depn lines, if their CIGAR has a clipping, it is hard clipping (H)
         #define lookback0_ok     ctx_specific_flag // v14.0.0: contexts that are items of a container with lookback. indicates that a SNIP_LOOKBACK when lookback=0 is not an error.
         #define trailing_zero_ok ctx_specific_flag // v14.0.17: INFO_QD: whether reconstruct with or without trailing zeros. 
@@ -188,12 +189,13 @@ typedef struct {
     EncryptionType encryption_type;    // one of EncryptionType
     uint16_t data_type;                // one of DataType
     uint64_t recon_size_prim;          // data size of reconstructed file, if uncompressing as a single file in primary coordinates
-    uint64_t genozip_minor_ver : 8;    // populated since 15.0.28
-    uint64_t unused8           : 8;
+    uint64_t genozip_minor_ver : 10;   // populated since 15.0.28
+    uint64_t unused8           : 5;
+    uint64_t private_file      : 1;    // this file can only be decompressed by user with the specified license_hash (15.0.29)
     uint64_t num_lines_bound   : 48;   // number of lines in a bound file. "line" is data_type-dependent. For FASTQ, it is a read.
     uint32_t num_sections;             // number sections in this file (including this one)
     union {
-        struct {                       // v14
+        struct {                       // since v14
             uint16_t vb_size;          // segconf.vb_size in MB (if not exact MB in zip - rounded up to nearest MB)
             char unused;                       
             CompIType num_txt_files;   // number of txt bound components in this file (1 if no binding). We don't count generated components (gencomp).
@@ -201,7 +203,7 @@ typedef struct {
         uint32_t v13_num_components;
     };
     union { // 16 bytes
-        Digest genome_digest;          // DT_REF: Digest of genome as loaded to memory (algorithm determined by genozip_header.adler) (v15)
+        Digest genome_digest;          // DT_REF: Digest of genome as loaded to memory (algorithm determined by genozip_header.adler) (since v15)
         Digest v14_REF_fasta_md5;      // DT_REF: MD5 of original FASTA file (v14, buggy)
         Digest FASTQ_v13_digest_bound; // DT_FASTQ: up to v13 "digest_bound": digest of concatenated pair of FQ (regarding other bound files in v13 - DVCF has digest 0, and other bound files are not reconstructable with v14+)    
     };
@@ -216,7 +218,7 @@ typedef struct {
     char fasta_filename[REF_FILENAME_LEN]; // DT_REF: fasta file used to generated this reference
     }; 
     union {
-        Digest ref_genome_digest;      // Uses REF_EXTERNAL: SectionHeaderGenozipHeader.genome_digest of the reference file
+        Digest ref_genome_digest;      // Used if REF_EXTERNAL: SectionHeaderGenozipHeader.genome_digest of the reference file
         Digest refhash_digest;         // DT_REF: digest of refhash (v15)
     };
     union { // 272 bytes - data-type specific
@@ -246,7 +248,8 @@ typedef struct {
             uint8_t segconf_deep_qname1  : 1; // SAM: v15
             uint8_t segconf_deep_qname2  : 1; // SAM: v15
             uint8_t segconf_deep_no_qual : 1; // SAM: v15
-            uint8_t unused_bits          : 7;
+            uint8_t segconf_use_ins_ctxs : 1; // 15.0.29
+            uint8_t unused_bits          : 6;
             uint8_t segconf_sam_factor;       // 15.0.28: BAM only: 64X estimated blow-up factor of SAM txt_data vs BAM 
             char unused[254];
         } sam;

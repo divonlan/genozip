@@ -101,11 +101,13 @@ void vcf_piz_insert_field (VBlockVCFP vb, Did did, STRp(value))
 
 bool vcf_piz_line_has_RGQ (VBlockVCFP vb)
 {
-    if (vb->line_has_RGQ == RGQ_UNKNOWN)
-        vb->line_has_RGQ = segconf.has[FORMAT_RGQ] && 
-                           container_peek_has_item (VB, CTX(VCF_SAMPLES), (DictId)_FORMAT_RGQ, false); // note: segconf.has[FORMAT_RGQ] is never set in PIZ prior to v14
+    decl_ctx (FORMAT_RGQ);
 
-    return vb->line_has_RGQ;
+    if (ctx->line_has_RGQ == unknown)
+        ctx->line_has_RGQ = segconf.has[FORMAT_RGQ] && 
+                            container_peek_has_item (VB, CTX(VCF_SAMPLES), (DictId)_FORMAT_RGQ, false); // note: segconf.has[FORMAT_RGQ] is never set in PIZ prior to v14
+
+    return ctx->line_has_RGQ;
 }
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_HAS_RGQ)
@@ -277,7 +279,7 @@ CONTAINER_ITEM_CALLBACK (vcf_piz_con_item_cb)
 
 CONTAINER_CALLBACK (vcf_piz_container_cb)
 {
-    #define have_INFO_SF (VB_VCF->sf_snip.len > 0)
+    #define have_INFO_SF (CTX(INFO_SF)->sf_snip.len > 0)
 
     // case: we have an INFO/SF field and we reconstructed and we reconstructed a repeat (i.e. one ht) GT field of a sample 
     if (dict_id.num == _FORMAT_GT) {

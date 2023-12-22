@@ -63,7 +63,7 @@ static inline void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char ref, char alt
     }
 
     switch (ref) {
-        #define NEW_ALT(p0,p1,p2,p3) ((alt=='.'&&vb->line_has_RGQ)||(alt==p0&&!vb->line_has_RGQ))?'+' : alt==p0?'3' : alt==p1?'0' : alt==p2?'1' : alt==p3?'2' : 0
+        #define NEW_ALT(p0,p1,p2,p3) ((alt=='.'&&CTX(FORMAT_RGQ)->line_has_RGQ)||(alt==p0&&!CTX(FORMAT_RGQ)->line_has_RGQ))?'+' : alt==p0?'3' : alt==p1?'0' : alt==p2?'1' : alt==p3?'2' : 0
         //                           +/3  0   1   2
         case 'G' : new_alt = NEW_ALT('A','C','T','G'); break; // G to: A=239681 C=46244 T=44084 (based on counting simple SNPs from from chr22 of 1000 genome project phase 3)
         case 'C' : new_alt = NEW_ALT('T','G','A','C'); break; // C to: T=238728 G=46508 A=43685
@@ -853,14 +853,45 @@ void vcf_parse_main_alt (VBlockVCFP vb)
 
     else 
         for (int alt_i=0; alt_i < vb->n_alts; alt_i++) {       
-            if (vb->main_ref_len == 1 && vb->alt_lens[alt_i] == 1 && IS_ACGT(vb->alts[alt_i][0])) 
+            // missing due upstream deletion
+            if (str_is_1chari (vb->alt, alt_i, '*'))
+                vb->var_types[alt_i] = VT_MISSING;
+
+            // symbolic alts e.g. "<DEL>"
+            else if (!str_is_ACGTN (STRi(vb->alt, alt_i)))
+                vb->var_types[alt_i] = VT_UNKNOWN; 
+            
+            // e.g. A C
+            else if (vb->main_ref_len == 1 && vb->alt_lens[alt_i] == 1) 
                 vb->var_types[alt_i] = VT_SNP;
 
+            // e.g. ACG A
             else if (vb->main_ref_len > 1 && vb->alt_lens[alt_i] == 1 && *vb->main_ref == *vb->alts[alt_i])
                 vb->var_types[alt_i] = VT_DEL;
 
-            else if (vb->main_ref_len == 1 && vb->alt_lens[alt_i] > 1 && str_is_ACGT (STRi(vb->alt, alt_i), NULL))
+            // e.g. A ACG
+            else if (vb->main_ref_len == 1 && vb->alt_lens[alt_i] > 1)
                 vb->var_types[alt_i] = VT_INS;
+
+            // e.g. ACGCG ACG
+            else if (vb->main_ref_len > vb->alt_lens[alt_i] && !memcmp (vb->main_ref, vb->alts[alt_i], vb->alt_lens[alt_i]))
+                vb->var_types[alt_i] = VT_DEL_LONG;
+                
+            // e.g. ACG ACGCG
+            else if (vb->main_ref_len < vb->alt_lens[alt_i] && !memcmp (vb->main_ref, vb->alts[alt_i], vb->main_ref_len))
+                vb->var_types[alt_i] = VT_INS_LONG;
+
+            // e.g. ACG TCG
+            else if (vb->main_ref_len == vb->alt_lens[alt_i] && !memcmp (vb->main_ref+1, vb->alts[alt_i]+1, vb->main_ref_len-1))
+                vb->var_types[alt_i] = VT_SNP_LONG;
+            
+            // e.g. ATATGTG ATG - left anchored, part of remaining bases after deletion are substituted 
+            else if (vb->main_ref_len > vb->alt_lens[alt_i] && *vb->main_ref == *vb->alts[alt_i])
+                vb->var_types[alt_i] = VT_SUBST_DEL;
+
+            // e.g. ATG ATATGTG - left anchored, part of ref is substituted, and then insertion 
+            else if (vb->main_ref_len < vb->alt_lens[alt_i] && *vb->main_ref == *vb->alts[alt_i])
+                vb->var_types[alt_i] = VT_SUBST_INS;
 
             else  // To do - identify additional types 
                 vb->var_types[alt_i] = VT_UNKNOWN; // need to reset as could be set by previous line

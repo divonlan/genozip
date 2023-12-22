@@ -266,7 +266,7 @@ rom kraken_seg_txt_line (VBlockP vb, rom field_start_line, uint32_t remaining_tx
                                                         .items     = { { .dict_id = { _KRAKEN_SEQLEN_1 }, .separator = {'|'} },  
                                                                        { .dict_id = { _KRAKEN_SEQLEN_2 },                    } } };
 
-            seg_array_of_struct (VB, CTX(KRAKEN_SEQLEN), con_SEQLEN, field_start, field_len, (SegCallback[]){seg_pos_field_cb, 0}, field_len); // first element is good to delta, second is not
+            seg_array_of_struct (VB, CTX(KRAKEN_SEQLEN), con_SEQLEN, field_start, field_len, (SegCallback[]){seg_pos_field_cb, 0}, NULL, field_len); // first element is good to delta, second is not
         }
         else 
             seg_pos_field_cb (VB, CTX(KRAKEN_SEQLEN), field_start, field_len, 0);
@@ -453,7 +453,6 @@ bool kraken_piz_initialize (CompIType comp_i __attribute__((unused)))
 
 static ASCENDING_SORTER (kraken_qname_nodes_cmp, QnameNode, hash)
 
-// Get reference file name from FASTA name, and if reference file does not exist, run a separate process to --make-reference
 static void kraken_get_genozip_file (void)
 {
     FileType ft = file_get_type (flag.reading_kraken);
@@ -467,7 +466,7 @@ static void kraken_get_genozip_file (void)
 
     rom z_filename = filename_z_normal (flag.reading_kraken, DT_KRAKEN, ft);
 
-    // if file reference doesn't exist yet - --make-reference now, in a separate process
+    // if file kraken file doesn't exist yet - generate it now, in a separate process
     if (!file_exists (z_filename)) {
 
         WARN ("FYI: cannot find kraken file %s: generating it now from %s", z_filename, flag.reading_kraken);
@@ -477,7 +476,7 @@ static void kraken_get_genozip_file (void)
         StreamP generate = stream_create (NULL, 0, 0, 0, 0, 0, 0, "Generating kraken",
                                           exec_path, flag.reading_kraken, 
                                           "--input", "kraken", "--no-tip", "--no-kmers",
-                                          flag.submit_stats ? "--submit"  : SKIP_ARG,
+                                          flag.stats_submit ? "--submit"  : SKIP_ARG,
                                           flag.no_test      ? "--no-test" : SKIP_ARG,
                                           NULL);
         

@@ -138,10 +138,10 @@ WordIndex chrom_2ref_seg_get (Reference ref, ConstVBlockP vb, WordIndex chrom_in
     int32_t ol_len = vb->ol_chrom2ref_map.len32;
     decl_const_ctx(CHROM);
 
-    WordIndex ref_index = (chrom_index == WORD_INDEX_NONE)                  ? WORD_INDEX_NONE
-                        : (chrom_index < ol_len)                            ? *B(WordIndex, vb->ol_chrom2ref_map, chrom_index)
-                        : (chrom_index < ol_len + ctx->chrom2ref_map.len32) ? *B(WordIndex, ctx->chrom2ref_map, chrom_index - ol_len)
-                        :                                                     WORD_INDEX_NONE; // not in reference
+    WordIndex ref_index = (chrom_index == WORD_INDEX_NONE)         ? WORD_INDEX_NONE
+                        : (chrom_index < ol_len)                   ? *B(WordIndex, vb->ol_chrom2ref_map, chrom_index)
+                        : (chrom_index < ctx->chrom2ref_map.len32) ? *B(WordIndex, ctx->chrom2ref_map, chrom_index) // possibly WORD_INDEX_NONE, see chrom_seg_ex
+                        :                                            WORD_INDEX_NONE;
 
     ASSSEG (ref_index >= WORD_INDEX_NONE && ref_index < (WordIndex)ref_num_contigs (ref), 
             "ref_index=%d out of range: ref->ranges.len=%u, chrom_index=%d", ref_index, ref_num_contigs (ref), chrom_index);
@@ -269,7 +269,9 @@ finalize:
 
     if (is_new) { 
         buf_alloc_255 (vb, &ctx->chrom2ref_map, 0, chrom_node_index+1, WordIndex, CTX_GROWTH, "chrom2ref_map");
-        *B(WordIndex, ctx->chrom2ref_map, chrom_node_index) = ref_index; // note: not a simple BNXT bc possibly nodes can be created outside of chrom_seg_ex, eg SNIP_SPECIAL
+        ctx->chrom2ref_map.len32 = MAX_(ctx->chrom2ref_map.len32, chrom_node_index+1);
+
+        *B(WordIndex, ctx->chrom2ref_map, chrom_node_index) = ref_index; // note: ref_index might be WORD_INDEX_NONE
     }
 
     return chrom_node_index;

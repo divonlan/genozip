@@ -451,7 +451,7 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     }
 
     // convert BAM seq format to SAM
-    buf_alloc (vb, &vb->textual_seq, 0, l_seq+1/* +1 for last half-byte */, char, 1.5, "textual_seq");    
+    buf_alloc (vb, &vb->textual_seq, 0, l_seq+2/* +1 for last half-byte and \0 */, char, 1.5, "textual_seq");    
     {
     START_TIMER; // time here and not in the function, because this is also called from the LongR codec
     bam_seq_to_sam (vb, seq, l_seq, false, true, &vb->textual_seq);

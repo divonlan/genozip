@@ -692,7 +692,8 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
     IF_IN_SOURCE ("ClinVar", vcf_is_clinvar);
     IF_IN_SOURCE ("IsaacVariantCaller", vcf_is_isaac);
     IF_IN_SOURCE ("starling", vcf_is_isaac);
-    IF_IN_SOURCE ("GenerateSVCandidates", vcf_is_manta); // https://www.google.com/url?q=https://github.com/Illumina/manta/blob/master/docs/userGuide/README.md&sa=D&source=editors&ust=1691772389670163&usg=AOvVaw0q6tSBscyNHJ4YyV-tu7R7
+    IF_IN_SOURCE ("Platypus", vcf_is_platypus); // https://github.com/andyrimmer/Platypus
+    IF_IN_SOURCE ("GenerateSVCandidates", vcf_is_manta); // https://github.com/Illumina/manta/blob/master/docs/userGuide/README.md
     IF_IN_HEADER ("GenotypeGVCFs", vcf_is_gvcf, "GenotypeGVCFs");
     IF_IN_HEADER ("CombineGVCFs", vcf_is_gvcf, "CombineGVCFs");
     if (segconf.vcf_is_isaac) IF_IN_HEADER ("gvcf", vcf_is_gvcf, "");
@@ -726,7 +727,7 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
     bool has_PROBE = !!strstr (txt_header->data, "##INFO=<ID=PROBE_A");
     SAFE_RESTORE;
 
-    if (!flag.reference && segconf.vcf_illum_gtyping && has_PROBE)
+    if (!flag.reference && segconf.vcf_illum_gtyping && !flag.seg_only && has_PROBE)
         TIP ("Compressing an Illumina Genotyping VCF file using a reference file can reduce the compressed file's size by 20%%.\n"
              "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
              arch_get_argv0(), txt_file->name);
@@ -863,18 +864,27 @@ static bool vcf_header_set_globals (rom filename, BufferP vcf_header, FailType s
     unsigned tab_count = 0;
     for (int i=vcf_header->len-1; i >= 0; i--) {
         
-        if (vcf_header->data[i] == '\t')
+        #define THIS (*Bc(*vcf_header, i))
+        #define PREV ((i>=1) ? *Bc(*vcf_header, i-1) : 0)
+
+        if (THIS == '\t')
             tab_count++;
         
         // some times files have spaces instead of \t 
-        else if (vcf_header->data[i] == ' ') {
+        else if (THIS == ' ') {
             tab_count++;
-            while (i >= 1 && vcf_header->data[i-1]==' ') i--; // skip run of spaces
+            while (PREV==' ') i--; // skip run of spaces
         }
 
         // if this is the beginning of field header line 
-        else if (vcf_header->data[i] == '#' && (i==0 || vcf_header->data[i-1] == '\n' || vcf_header->data[i-1] == '\r')) {
-        
+        else if (THIS == '#' && (i==0 || PREV == '\n' || PREV == '\r')) {
+
+            ASSINP0 (*Bc(*vcf_header, i+1) != '#', "Error: Missing VCF field/samples header line");  
+
+            // note: we don't memcmp to the entire VCF_FIELD_NAMES, bc some files have spaces instead of tabs
+            ASSINP (vcf_header->len - i > STRLEN(VCF_FIELD_NAMES) && !memcmp ("#CHROM", Bc(*vcf_header, i), 6), 
+                    "Error: Invalid VCF field/samples header line, found (partial): \"%.*s\"", (int)MIN_(vcf_header->len - i, STRLEN(VCF_FIELD_NAMES)), Bc(*vcf_header, i));
+
             // ZIP: if first vcf file ; PIZ: everytime - copy the header to the global
             if (!buf_is_alloc (&vcf_field_name_line) || IS_PIZ) 
                 buf_copy (evb, &vcf_field_name_line, vcf_header, char, i, vcf_header->len - i, "vcf_field_name_line");
@@ -885,7 +895,7 @@ static bool vcf_header_set_globals (rom filename, BufferP vcf_header, FailType s
             // note: a VCF file without samples may or may not have a "FORMAT" in the header, i.e. tab_count==7 or 8 (8 or 9 fields).
             // however, even if it has a FORMAT in the header, it won't have a FORMAT column in the data
 
-            ASSINP (tab_count >= 7, "Error: invalid VCF field/samples header line - it contains only %d fields, expecting at least 8", tab_count+1);
+            ASSINP (tab_count >= 7, "Error: Invalid VCF field/samples header line - it contains only %d fields, expecting at least 8", tab_count+1);
 
             return true; 
         }

@@ -33,7 +33,7 @@
 #include "contigs.h"
 
 static Buffer stats={}, STATS={};
-Buffer sbl_buf={}, features={}, hash_occ={}, internals={};
+Buffer sbl_buf={}, features={}, exceptions={}, internals={};
 Buffer stats_programs = {}; // data-type specific programs (eg @PG for SAM/BAM FORMAT/INFO tags for VCF)
 int64_t all_txt_len=0;
 float src_comp_ratio=0, all_comp_ratio=0;
@@ -58,7 +58,7 @@ bool stats_is_in_programs (rom signature)
     return found;
 }
 
-// calculate hash_occ before consolidating stats
+// calculate exceptions before consolidating stats
 static void stats_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
 {
     int need_sep=0;
@@ -70,15 +70,20 @@ static void stats_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
             (zctx && zctx->nodes.len > 1000000 && z_file->num_lines / zctx->nodes.len < 16)) { // more than 10% of num_lines (and at least 1M)
              
             // in case of an over-populated hash table, we send the first 3 and last 3 words in the dictionary, which will help debugging the issue
-            bufprintf (evb, &hash_occ, "%s%s%%2C%s%%2C%s%%2C%u%%25", 
+            bufprintf (evb, &exceptions, "%s%s%%2C%s%%2C%s%%2C%u%%25", 
                        need_sep++ ? "%3B" : "", url_esc_non_valid_charsS(s->name).s, url_esc_non_valid_charsS(s->type).s, 
                        url_esc_non_valid_charsS (str_size (s->global_hash_prime).s).s, (int)s->pc_hash_occupancy);
             
             uint32_t n_words = zctx->nodes.len32; // note: this can be a low number despite pc_hash_occupancy being large - if words ended up as singletons
             WordIndex words[NUM_COLLECTED_WORDS] = { 0, 1, 2, n_words-3, n_words-2, n_words-1 }; // first three and last threewords in the the dictionary of this field
-            for (int i=0; i < MIN_(NUM_COLLECTED_WORDS, n_words); i++)
-                // note: str_replace_letter modifies dict data, but its ok, since we have already written the dicts to z_file
-                bufprintf (evb, &hash_occ, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter ((char *)ctx_snip_from_zf_nodes (zctx, words[i], 0, 0), sizeof(UrlStr), ',', -127)).s); 
+            for (int i=0; i < MIN_(NUM_COLLECTED_WORDS, n_words); i++) {
+                STR(snip);
+                ctx_snip_from_zf_nodes (zctx, words[i], pSTRa(snip));
+                StrTextMegaLong s = dict_io_snip_to_str (STRa(snip), false);
+                s.s[64] = 0; // limit to 64 chars per snip
+
+                bufprintf (evb, &exceptions, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (s.s, strlen(s.s), ',', -127)).s); 
+            }
         }
     }
 
@@ -86,27 +91,30 @@ static void stats_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
     for (QType q=QNAME1; q < NUM_QTYPES; q++) {
         if (segconf.n_unk_flav_qnames[q]) {
 
-            bufprintf (evb, &hash_occ, "%s%s%%2C%%2C%%2C", need_sep++ ? "%3B" : "", qtype_name(q));
+            bufprintf (evb, &exceptions, "%s%s%%2C%%2C%%2C", need_sep++ ? "%3B" : "", qtype_name(q));
 
             for (int i=0; i < segconf.n_unk_flav_qnames[q]; i++)
                 if (segconf.unk_flav_qnames[q][i][0])
-                    bufprintf (evb, &hash_occ, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.unk_flav_qnames[q][i], strlen(segconf.unk_flav_qnames[q][i]), ',', -127)).s); 
+                    bufprintf (evb, &exceptions, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.unk_flav_qnames[q][i], strlen(segconf.unk_flav_qnames[q][i]), ',', -127)).s); 
         }
     }
 
     for (int id_i=0; id_i < NUM_UNK_ID_CTXS && segconf.unk_ids_tag_name[id_i][0]; id_i++) {
-            bufprintf (evb, &hash_occ, "%s%s%%2C%%2C%%2C", need_sep++ ? "%3B" : "", segconf.unk_ids_tag_name[id_i]);
+            bufprintf (evb, &exceptions, "%s%s%%2C%%2C%%2C", need_sep++ ? "%3B" : "", segconf.unk_ids_tag_name[id_i]);
 
             for (int i=0; i < NUM_COLLECTED_WORDS && segconf.unk_ids[id_i][i][0]; i++)
-                bufprintf (evb, &hash_occ, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.unk_ids[id_i][i], strlen(segconf.unk_ids[id_i][i]), ',', -127)).s); 
+                bufprintf (evb, &exceptions, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.unk_ids[id_i][i], strlen(segconf.unk_ids[id_i][i]), ',', -127)).s); 
     }
 
     // if Deep with QNONE, we send the first QNAME of the SAM file and the first read name of the FASTQ
     if (flag.deep && segconf.deep_qtype == QNONE) {
-        bufprintf (evb, &hash_occ, "%sQNONE_REASON%%2C%%2C%%2C", need_sep++ ? "%3B" : "");
-        bufprintf (evb, &hash_occ, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.deep_1st_qname, strlen(segconf.deep_1st_qname), ',', -127)).s); 
-        bufprintf (evb, &hash_occ, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.deep_1st_desc,  strlen(segconf.deep_1st_desc),  ',', -127)).s); 
+        bufprintf (evb, &exceptions, "%sQNONE_REASON%%2C%%2C%%2C", need_sep++ ? "%3B" : "");
+        bufprintf (evb, &exceptions, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.deep_1st_qname, strlen(segconf.deep_1st_qname), ',', -127)).s); 
+        bufprintf (evb, &exceptions, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.deep_1st_desc,  strlen(segconf.deep_1st_desc),  ',', -127)).s); 
     }
+
+    if (segconf.sam_malformed_XA[0]) 
+        bufprintf (evb, &exceptions, "%sBAD_XA%%2C%s", (need_sep++ ? "%3B" : ""), url_esc_non_valid_charsS (str_replace_letter (segconf.sam_malformed_XA, strlen(segconf.sam_malformed_XA),  ',', -127)).s); 
 }
 
 // stats of contexts and sections contribution to Z
@@ -323,8 +331,9 @@ static void stats_output_file_metadata (void)
                 bufprintf (evb, &features, "OQ_histo=%s;", segconf_get_qual_histo(QHT_OQ).s);
             }
 
-            bufprintf (evb, &features, "Qual_acgt=%s――%s――%s――%s;", // super long unicode hyphen 
-                       segconf_get_qual_histo('A').s, segconf_get_qual_histo('C').s, segconf_get_qual_histo('G').s, segconf_get_qual_histo('T').s);
+            if (TECH(UNKNOWN))
+                bufprintf (evb, &features, "Qual_acgt=%s――%s――%s――%s;", // super long unicode hyphen 
+                           segconf_get_qual_histo('A').s, segconf_get_qual_histo('C').s, segconf_get_qual_histo('G').s, segconf_get_qual_histo('T').s);
 
             FEATURE0 (segconf.sam_bisulfite, "Feature: Bisulfite", "Bisulfite");
             FEATURE0 (segconf.has_cellranger, "Feature: cellranger-style fields", "has_cellranger");
@@ -671,7 +680,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
     buf_alloc (evb, &stats,     0, 10000,  char, 1, "stats");
     buf_alloc (evb, &STATS,     0, 10000,  char, 1, "stats");
     buf_alloc (evb, &features,  0, 1000,   char, 1, "stats");
-    buf_alloc (evb, &hash_occ,  0, 1000,   char, 1, "stats");
+    buf_alloc (evb, &exceptions,  0, 1000,   char, 1, "stats");
     buf_alloc (evb, &internals, 0, 1000,   char, 1, "stats");
 
     if (flag.show_stats_comp_i == COMP_NONE) {
@@ -911,7 +920,7 @@ void stats_finalize (void)
     buf_destroy (stats);
     buf_destroy (STATS);
     buf_destroy (features);
-    buf_destroy (hash_occ);
+    buf_destroy (exceptions);
     buf_destroy (internals);
     buf_destroy (STATS);
     buf_destroy (sbl_buf);

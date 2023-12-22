@@ -22,31 +22,21 @@
 #include "buf_list.h"
 
 // pool of VBs allocated based on number of threads
-static VBlockPool *pools[NUM_POOL_TYPES] = {};
+static VBlockPoolP pools[NUM_POOL_TYPES] = {};
 
 VBlockP evb = NULL; // outside a pool
 
-rom pool_name (VBlockPoolType pool_type)
-{
-    static const rom pool_names[] = POOL_NAMES;
-    if (pool_type < -1 || pool_type >= NUM_POOL_TYPES) 
-        return "INVALID_POOL";
-    else if (pool_type == -1)
-        return "NO_POOL";
-    else
-        return pool_names[pool_type];
-}
-
 VBlockPool *vb_get_pool (VBlockPoolType type, FailType soft_fail)
 {
-    ASSERT (pools[type] || soft_fail, "VB Pool %s is not allocated", pool_name (type));
+    ASSERT (pools[type] || soft_fail, "VB Pool type=%u is not allocated", type);
     return pools[type];
 }
 
 VBlockP vb_get_from_pool (VBlockPoolP pool, int32_t vb_id) 
 {
     ASSERTNOTNULL (pool);
-    ASSERT (vb_id == VB_ID_EVB || vb_id < pool->num_vbs, "vb_id=%d out of range for pool %s [0,%d]", vb_id, pool_name (&pool - pools), pool->num_vbs-1);
+    ASSERT (vb_id == VB_ID_EVB || vb_id < pool->num_vbs, "vb_id=%d out of range for pool %s [0,%d]", 
+            vb_id, pool->name, pool->num_vbs-1);
 
     return (vb_id == VB_ID_EVB) ? evb : pool->vb[vb_id];
 }
@@ -146,7 +136,7 @@ void vb_dehoard_memory (bool release_to_kernel)
         buf_low_level_release_memory_back_to_kernel();
 }
 
-void vb_create_pool (VBlockPoolType type)
+void vb_create_pool (VBlockPoolType type, rom name)
 {
     // only main-thread dispatcher can create a pool. other dispatcher (eg writer's bgzf compression) can must existing pool
     uint32_t num_vbs = (type == POOL_MAIN) ? MAX_(1, global_max_threads) +               // compute thread VBs
@@ -155,7 +145,7 @@ void vb_create_pool (VBlockPoolType type)
                                            : writer_get_max_bgzf_threads();
     if (flag_is_show_vblocks (NULL)) 
         iprintf ("CREATING_VB_POOL: type=%s global_max_threads=%u max_conc_writing_vbs=%u num_vbs=%u\n", 
-                 pool_name (type), global_max_threads, z_file->max_conc_writing_vbs, num_vbs); 
+                 name, global_max_threads, z_file->max_conc_writing_vbs, num_vbs); 
 
     uint32_t size = sizeof (VBlockPool) + num_vbs * sizeof (VBlockP);
 
@@ -169,6 +159,7 @@ void vb_create_pool (VBlockPoolType type)
         memset (&pools[type]->vb[pools[type]->num_vbs], 0, (num_vbs - pools[type]->num_vbs) * sizeof (VBlockP)); // initialize new entries
     }
 
+    pools[type]->name    = name;
     pools[type]->size    = size; 
     pools[type]->num_vbs = num_vbs; 
 }

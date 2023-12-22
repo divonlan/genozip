@@ -345,7 +345,7 @@ void zfile_remove_ctx_group_from_z_data (VBlockP vb, Did remove_did_i)
     // sort indices to the to-be-removed sections in reverse order
     qsort (rm, num_rms, sizeof(RemovedSection), sort_removed_sections);
 
-    bool is_encrypted = crypt_have_password(); // we can't (easily) test magic if header is encrypted
+    bool is_encrypted = has_password(); // we can't (easily) test magic if header is encrypted
 
     for (unsigned i=0; i < num_rms; i++) {
         ASSERT (is_encrypted || ((SectionHeader*)B8 (vb->z_data, rm[i].start))->magic == BGEN32(GENOZIP_MAGIC),
@@ -736,7 +736,7 @@ uint64_t zfile_read_genozip_header_get_offset (bool as_is)
              z_name, offset, z_file->disk_size);
 
     SectionHeaderGenozipHeader top;
-    RETURNW (fread (&top, sizeof (SectionHeader) + 13/*only the needed bytes*/, 1, z_file->file) == 1, 0, "Error in %s: failed to read genozip header", z_name);
+    RETURNW (fread (&top, sizeof (SectionHeaderGenozipHeader), 1, z_file->file) == 1, 0, "Error in %s: failed to read genozip header", z_name);
 
     RETURNW (BGEN32 (top.magic) == GENOZIP_MAGIC, 0, "Error in %s: offset=%"PRIu64" of the GENOZIP_HEADER section as it appears in the Footer appears to be wrong, or the GENOZIP_HEADER section has bad magic (file_size=%"PRIu64").%s", 
              z_name, offset, z_file->disk_size, flag.debug_or_test ? " Try again with --recover." : "");
@@ -749,8 +749,8 @@ uint64_t zfile_read_genozip_header_get_offset (bool as_is)
     z_file->data_type = BGEN16 (top.data_type);
 
     // check that file version is at most this executable version, except for reference file for which only major version is tested
-    ASSINP (z_file->genozip_version < exec_version_major() || 
-            (z_file->genozip_version == exec_version_major() && (z_file->genozip_minor_ver <= exec_version_minor() || Z_DT(REF))),
+    ASSINP (z_file->genozip_version < code_version_major() || 
+            (z_file->genozip_version == code_version_major() && (z_file->genozip_minor_ver <= code_version_minor() || Z_DT(REF))),
             "Error: %s cannot be opened because it was compressed with genozip version %u.0.%u which is newer than the version running - %s.\n%s",
             z_name, z_file->genozip_version, z_file->genozip_minor_ver, GENOZIP_CODE_VERSION, genozip_update_msg());
 
@@ -802,7 +802,7 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header, FailType
 
     flag.genocat_no_ref_file |= (Z_DT(CHAIN) && !flag.reading_chain); // initialized in flags_update: we only need the reference when using the chain file with --chain
 
-    ASSINP (header->encryption_type != ENC_NONE || !crypt_have_password() || Z_DT(REF), 
+    ASSINP (header->encryption_type != ENC_NONE || !has_password() || Z_DT(REF), 
             "password provided, but file %s is not encrypted", z_name);
 
     ASSERT (VER(15) || BGEN32 (header->v14_compressed_offset) == st_header_size (SEC_GENOZIP_HEADER),
@@ -812,7 +812,7 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header, FailType
     // get & test password, if file is encrypted
     if (header->encryption_type != ENC_NONE) {
 
-        if (!crypt_have_password()) crypt_prompt_for_password();
+        if (!has_password()) crypt_prompt_for_password();
 
         crypt_do (evb, header->password_test, sizeof(header->password_test), 0, SEC_NONE, true); // decrypt password test
 
@@ -838,10 +838,16 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header, FailType
 
     DT_FUNC (z_file, piz_genozip_header)(header); // data-type specific processing of the Genozip Header
 
+    bool has_section_list = true; 
     if (!z_file->section_list_buf.param) { // not already initialized in a previous call to this function
-        zfile_uncompress_section (evb, header, &z_file->section_list_buf, "z_file->section_list_buf", 0, SEC_GENOZIP_HEADER);
+        
+        has_section_list = license_piz_prepare_genozip_header (header, IS_LIST || (IS_SHOW_HEADERS && flag.force));
 
-        sections_list_file_to_memory_format (header);
+        if (has_section_list) {
+            zfile_uncompress_section (evb, header, &z_file->section_list_buf, "z_file->section_list_buf", 0, SEC_GENOZIP_HEADER);
+
+            sections_list_file_to_memory_format (header);
+        }
 
         if (flag.show_gheader==1) {
             DO_ONCE sections_show_gheader (header);
@@ -884,7 +890,8 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header, FailType
 
         // create all contexts for B250/LOCAL/DICT data in the z_file (or predefined) - 
         // flags_update_piz_one_z_file and IS_SKIP functions may rely on Context.z_data_exists
-        ctx_piz_initialize_zctxs();
+        if (has_section_list) 
+            ctx_piz_initialize_zctxs();
     }
      
     return true;
@@ -899,7 +906,7 @@ error:
 // the bytes upfront, but if we're binding or compressing a eg .GZ, we will need to update it
 // when we're done. num_lines can only be known after we're done with this txt component.
 // if we cannot update the header - that's fine, these fields are only used for the progress indicator on --list
-bool zfile_update_txt_header_section_header (uint64_t offset_in_z_file, uint32_t max_lines_per_vb)
+bool zfile_update_txt_header_section_header (uint64_t offset_in_z_file)
 {
     // rewind to beginning of current (latest) vcf header - nothing to do if we can't
     if (!file_seek (z_file, offset_in_z_file, SEEK_SET, WARNING_FAIL)) return false;
@@ -913,7 +920,7 @@ bool zfile_update_txt_header_section_header (uint64_t offset_in_z_file, uint32_t
     SectionHeaderTxtHeaderP header = &z_file->txt_header_single;
     header->txt_data_size    = BGEN64 (txt_file->txt_data_so_far_single);
     header->txt_num_lines    = BGEN64 (txt_file->num_lines);
-    header->max_lines_per_vb = BGEN32 (max_lines_per_vb);
+    header->max_lines_per_vb = BGEN32 (txt_file->max_lines_per_vb);
 
     // qname stuff
     for (QType q=0; q < NUM_QTYPES; q++)
@@ -926,7 +933,7 @@ bool zfile_update_txt_header_section_header (uint64_t offset_in_z_file, uint32_t
         sections_show_header ((SectionHeaderP)header, NULL, offset_in_z_file, 'W'); 
 
     // encrypt if needed
-    if (crypt_have_password()) 
+    if (has_password()) 
         crypt_do (evb, (uint8_t *)header, len, 1 /*was 0 up to 14.0.8*/, header->section_type, true);
 
     file_write (z_file, header, len);
@@ -976,7 +983,7 @@ void zfile_update_compressed_vb_header (VBlockP vb)
                  BGEN32 (vb_header->z_data_bytes), BGEN32 (vb_header->longest_line_len));
 
     // now we can finally encrypt the header - if needed
-    if (crypt_have_password())  
+    if (has_password())  
         crypt_do (vb, (uint8_t*)vb_header, ROUNDUP16(sizeof(SectionHeaderVbHeader)),
                   BGEN32 (vb_header->vblock_i), vb_header->section_type, true);
 }

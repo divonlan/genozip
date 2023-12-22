@@ -13,24 +13,24 @@
 #include "md5.h"
 #include "strings.h"
 
-static char *password = NULL;
+static rom password = NULL;
 
-void crypt_set_password (char *new_password)
+void crypt_set_password (rom new_password)
 {
     password = new_password;
 }
 
-rom crypt_get_password()
+rom crypt_get_password (void)
 {
     return password;
 }
 
-bool crypt_have_password ()
+bool has_password (void)
 {
     return password != NULL;
 }
 
-bool crypt_prompt_for_password()
+bool crypt_prompt_for_password (void)
 {
     // to do: consider canceling tty echo while getting password: https://stackoverflow.com/questions/1196418/getting-a-password-in-c-without-using-getpass-3
 
@@ -39,7 +39,7 @@ bool crypt_prompt_for_password()
 
 #define MAX_PASSWORD_LEN 100
     password = CALLOC (MAX_PASSWORD_LEN+1); // allocated once, never freed
-    str_query_user ("\n\nPassword: ", password, MAX_PASSWORD_LEN, true, 0, 0);
+    str_query_user ("\n\nPassword: ", (char *)password, MAX_PASSWORD_LEN, true, 0, 0);
 
     if (!password[0]) { // exit if user clicked Enter only
         printf ("Goodbye!\n"); 

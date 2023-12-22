@@ -66,9 +66,13 @@
 #pragma GENDICT SAM_GPOS_DELTA=DTYPE_FIELD=G0POS  // v15
 #pragma GENDICT SAM_STRAND=DTYPE_FIELD=STRAND
 #pragma GENDICT SAM_SEQMIS_A=DTYPE_FIELD=SEQMIS_A // v14: mismatch bases vs the reference, when ref=A
-#pragma GENDICT SAM_SEQMIS_C=DTYPE_FIELD=SEQMIS_C // v14: mismatch bases vs the reference, when ref=A
-#pragma GENDICT SAM_SEQMIS_G=DTYPE_FIELD=SEQMIS_G // v14: mismatch bases vs the reference, when ref=A
-#pragma GENDICT SAM_SEQMIS_T=DTYPE_FIELD=SEQMIS_T // v14: mismatch bases vs the reference, when ref=A
+#pragma GENDICT SAM_SEQMIS_C=DTYPE_FIELD=SEQMIS_C 
+#pragma GENDICT SAM_SEQMIS_G=DTYPE_FIELD=SEQMIS_G 
+#pragma GENDICT SAM_SEQMIS_T=DTYPE_FIELD=SEQMIS_T 
+#pragma GENDICT SAM_SEQINS_A=DTYPE_FIELD=SEQINS_A // 15.0.29: insertion bases, where base after insertion is A
+#pragma GENDICT SAM_SEQINS_C=DTYPE_FIELD=SEQINS_C
+#pragma GENDICT SAM_SEQINS_G=DTYPE_FIELD=SEQINS_G
+#pragma GENDICT SAM_SEQINS_T=DTYPE_FIELD=SEQINS_T
 
 #pragma GENDICT SAM_QUAL=DTYPE_FIELD=QUAL 
 #pragma GENDICT SAM_DOMQRUNS=DTYPE_FIELD=DOMQRUNS // these 3 must be right after SAM_QUAL. DOMQRUNS is also used by LONGR. For backwards compatability, we can never change its name.

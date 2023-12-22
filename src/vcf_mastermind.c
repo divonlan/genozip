@@ -97,7 +97,7 @@ void vcf_seg_INFO_MMID3 (VBlockVCFP vb, ContextP ctx, STRp(value))
 
     SegCallback callbacks[2] = { vcf_seg_INFO_MMID3_gene, 0 };
 
-    seg_array_of_struct (VB, ctx, con, STRa(value), callbacks, value_len);
+    seg_array_of_struct (VB, ctx, con, STRa(value), callbacks, NULL, value_len);
 }
 
 // <ID=MMURI3,Number=1,Type=String,Description="Mastermind search URI for articles including other DNA-level variants resulting in the same amino acid change">

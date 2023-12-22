@@ -35,9 +35,9 @@ void vcf_reset_line (VBlockP vb_)
     VBlockVCFP vb = (VBlockVCFP)vb_;
 
     vb->sample_i = 0;
-    vb->line_has_RGQ = RGQ_UNKNOWN;
     vb->n_alts = 0; // = ALT not parsed yet
     
+    CTX(FORMAT_RGQ)->line_has_RGQ = unknown;
     CTX(INFO_DP)->ctx_specific = 0;
     CTX(INFO_QD)->ctx_specific = 0;
 

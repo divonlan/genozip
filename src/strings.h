@@ -240,6 +240,7 @@ static bool inline str_is_hex(STRp(str))       { for (int i=0; i<str_len; i++) i
 static bool inline str_is_hexlo(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_HEXDIGITlo(str[i]))       return false; return true; } 
 static bool inline str_is_hexup(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_HEXDIGITUP(str[i]))       return false; return true; } 
 static bool inline str_is_printable(STRp(str)) { for (int i=0; i<str_len; i++) if (!IS_PRINTABLE(str[i]))        return false; return true; } 
+extern bool str_is_utf8 (STRp(str));
 static bool inline str_is_no_ws(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_NON_WS_PRINTABLE(str[i])) return false; return true; } 
 static bool inline str_is_ACGT(STRp(str), uint32_t *bad_i) { for (int i=0; i<str_len; i++) if (!IS_ACGT(str[i])) { if(bad_i) *bad_i = i; return false; } return true; } 
 static bool inline str_is_ACGTN(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_ACGTN(str[i]))            return false; return true; } 
@@ -340,9 +341,11 @@ static inline void *mempcpy(void *restrict dest, const void *restrict src, size_
 }
 #endif
 
+extern rom str_win_error_(uint32_t error);
 extern rom str_win_error (void);
 
 static inline char base32(uint32_t n) { return (n) < 26 ? ('a' + (n))     // 97->122. 5bits: 1->26    <-- differentiated 5bits, so to work well with ALT_KEY
                                              : (n) < 31 ? ((n)-26 + '[')  // 91->95.  5bits: 27->31
                                              :            '@';          } // 64.      5bits: 0
 
+extern uint64_t p10[]; // powers of 10

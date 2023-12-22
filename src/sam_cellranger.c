@@ -704,7 +704,7 @@ void sam_seg_TX_AN_Z (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, STRp(value),
 
     int32_t repeats = seg_array_of_struct (VB, CTX(did_i), *con, STRa(value),
                                            use_lb ? callbacks_lb : callbacks_no_lb, 
-                                           add_bytes);
+                                           NULL, add_bytes);
 
     // case: we failed to seg as a container - flush lookbacks (rare condition, and complicated to rollback given the round-robin and unlimited repeats)
     if (use_lb && repeats == -1) 

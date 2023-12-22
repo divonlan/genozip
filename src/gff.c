@@ -419,7 +419,7 @@ static inline DictId gff_seg_attr_subfield (VBlockGFFP vb, STRp(tag), STRp(value
                              { .dict_id={.id="V2arEff" }, .separator = {' '} },
                              { .dict_id={.num=_ENSTid  },                    } }
         };
-        seg_array_of_struct (VB, CTX(ATTR_Variant_effect), Variant_effect, STRa(value), NULL, value_len);
+        seg_array_of_struct (VB, CTX(ATTR_Variant_effect), Variant_effect, STRa(value), NULL, NULL, value_len);
         break;
     }
 
@@ -433,7 +433,7 @@ static inline DictId gff_seg_attr_subfield (VBlockGFFP vb, STRp(tag), STRp(value
                              { .dict_id={.id="S2iftPr" }, .separator = {' '} },
                              { .dict_id={.num=_ENSTid  },                    } }
         };
-        seg_array_of_struct (VB, CTX(ATTR_sift_prediction), sift_prediction, STRa(value), NULL, value_len);
+        seg_array_of_struct (VB, CTX(ATTR_sift_prediction), sift_prediction, STRa(value), NULL, NULL, value_len);
         break;
     }
 
@@ -447,7 +447,7 @@ static inline DictId gff_seg_attr_subfield (VBlockGFFP vb, STRp(tag), STRp(value
                              { .dict_id={.id="P2olyPhP" }, .separator = {' '} },
                              { .dict_id={.num=_ENSTid   },                    } }
         };
-        seg_array_of_struct (VB, CTX(ATTR_polyphen_prediction), polyphen_prediction, STRa(value), NULL, value_len);
+        seg_array_of_struct (VB, CTX(ATTR_polyphen_prediction), polyphen_prediction, STRa(value), NULL, NULL, value_len);
         break;
     }
 
@@ -460,7 +460,7 @@ static inline DictId gff_seg_attr_subfield (VBlockGFFP vb, STRp(tag), STRp(value
                              { .dict_id={.id="v1arPep"  }, .separator = {' '} },
                              { .dict_id={.num=_ENSTid   },                    } }
         };
-        seg_array_of_struct (VB, CTX(ATTR_variant_peptide), variant_peptide, STRa(value), NULL, value_len);
+        seg_array_of_struct (VB, CTX(ATTR_variant_peptide), variant_peptide, STRa(value), NULL, NULL, value_len);
         break;
     }
 

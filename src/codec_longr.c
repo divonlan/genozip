@@ -29,7 +29,7 @@
 bool codec_longr_maybe_used (Did did_i)
 {
     return (did_i == SAM_QUAL/*==FASTQ_QUAL*/ || did_i == SAM_CQUAL|| did_i == OPTION_OQ_Z) && 
-           ((TECH(ONT) && segconf.nontrivial_qual && !flag.no_longr && !flag.fast) || flag.force_longr);
+           ((TECH(NANOPORE) && segconf.nontrivial_qual && !flag.no_longr && !flag.fast) || flag.force_longr);
 }
 
 // similar structure to DOMQUAL 

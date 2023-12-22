@@ -177,7 +177,7 @@ uint32_t comp_compress (VBlockP vb,
     z_data->len += total_z_len;
 
     // if we're compressing a global buffer in the main thread, we can write it immeidately
-    if (vb == evb && !in_assign_codec) 
+    if (vb == evb && !in_assign_codec && !HEADER_IS(GENOZIP_HEADER)) 
         zfile_output_processed_vb (vb);
 
 done:
@@ -187,7 +187,7 @@ done:
 // compress primary context of a complex codec, after codec code as prepared the data in ctx->local. The other contexts 
 // of the complex codec are marked with DEP_L* and will be compressed in the normal ctx->local compression loop
 bool comp_compress_complex_codec (VBlockP vb, ContextP ctx, SectionHeaderP header, bool is_2nd_try,
-                                  uint32_t *uncompressed_len, STRe (compressed), rom name)
+                                  uint32_t *uncompressed_len, STRe(compressed), rom name)
 {
     if (!is_2nd_try) {
         Codec save_lcodec = ctx->lcodec;

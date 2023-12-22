@@ -228,6 +228,7 @@ extern VBlockP vb_get_nonpool_vb (int vb_id);
 // -------------
 
 typedef struct VBlockPool {
+    rom name;
     uint32_t size;              // size of memory allocated for this struct
     uint32_t num_vbs;           // length of array of pointers to VBlock
     uint32_t num_allocated_vbs; // number of VBlocks allocated ( <= num_vbs )
@@ -235,7 +236,7 @@ typedef struct VBlockPool {
     VBlockP vb[];               // variable length
 } VBlockPool;
 
-extern void vb_create_pool (VBlockPoolType type);
+extern void vb_create_pool (VBlockPoolType type, rom name);
 extern VBlockPool *vb_get_pool (VBlockPoolType type, FailType soft_fail);
 extern VBlockP vb_get_from_pool (VBlockPoolP pool, int32_t vb_id);
 extern void vb_destroy_pool_vbs (VBlockPoolType type, bool destroy_pool);
@@ -252,7 +253,6 @@ extern void vb_set_is_processed (VBlockP vb);
 
 // NOT thread safe, use only in execution-terminating messages
 extern rom err_vb_pos (void *vb);
-extern rom pool_name (VBlockPoolType pool_type);
 extern bool vb_buf_locate (VBlockP vb, ConstBufferP buf);
 extern rom textual_assseg_line (VBlockP vb);
 

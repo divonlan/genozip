@@ -221,7 +221,7 @@ rom ref_fasta_to_ref (FileP file)
 
         StreamP make_ref = stream_create (NULL, 0, 0, 0, 0, 0, 0, "Make reference",
                                           arch_get_executable().s, "--make-reference", file->name, 
-                                          flag.submit_stats ? "--submit" : SKIP_ARG,
+                                          flag.stats_submit ? "--submit" : SKIP_ARG,
                                           "--no-tip", NULL);
         
         // wait for child process to finish

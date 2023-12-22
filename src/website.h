@@ -9,6 +9,7 @@
 #pragma once
 
 #define GENOZIP_URL "https://genozip.com"
+#define GENOZIP_WWW_URL "https://www.genozip.com"
 #define REPO        "/divonlan/genozip"
 #define GITHUB_RAW  "https://raw.githubusercontent.com" REPO "/master"
 #define GITHUB_REPO "https://github.com" REPO
@@ -35,19 +36,22 @@
 #define WEBSITE_COVERAGE     GENOZIP_URL "/coverage"
 #define WEBSITE_DOWNSAMPLING GENOZIP_URL "/downsampling"
 #define WEBSITE_ENCRYPTION   GENOZIP_URL "/encryption"
-#define WEBSITE_PIPELINE     GENOZIP_URL "/fastq-to-bam-pipeline" 
 #define WEBSITE_INSTITUTIONS GENOZIP_URL "/institutions"
-#define WEBSITE_PRICING_FAQ  GENOZIP_URL "/licensing-faq"
-#define WEBSITE_REFERRAL     GENOZIP_URL "/referral-program"
 #define WEBSITE_BUY          GENOZIP_URL "/checkout"
+#define WEBSITE_PREMIUM      GENOZIP_URL "/premium"
 
 #define EMAIL_SUPPORT  "support@genozip.com"
 #define EMAIL_SALES    "sales@genozip.com"
 #define EMAIL_REGISTER "register@genozip.com"
 
 #define GITHUB_LATEST_RELEASE    GITHUB_REPO "/releases/latest"
-#define GITHUB_WINDOWS_INSTALLER GITHUB_RAW  "/installers/genozip-installer.exe"
-#define GITHUB_LINUX_TARBALL     GITHUB_RAW  "/installers/genozip-linux-x86_64.tar"
+#define GITHUB_INSTALLERS        GITHUB_RAW  "/installers"  
+#define GITHUB_WINDOWS_INSTALLER GITHUB_INSTALLERS "/genozip-installer.exe"
+#define TARBALL_NAME             "genozip-linux-x86_64.tar"
+#define GITHUB_LINUX_TARBALL     GITHUB_INSTALLERS "/" TARBALL_NAME
+// #define WINDOWS_UPDATE_NAME      "genozip.windows"
+// #define GITHUB_WINDOWS_UPDATE    GITHUB_INSTALLERS "/" WINDOWS_UPDATE_NAME // .windows and not .exe to avoid antivirus blocking updates
+#define GITHUB_LICENSE_TXT       GITHUB_RAW "/LICENSE.txt"
 
 #define PAPER1 "https://www.researchgate.net/publication/341408805_genozip_a_fast_and_efficient_compression_tool_for_VCF_files"
 #define PAPER1_CITATION "Lan, D., et al. (2020) genozip: a fast and efficient compression tool for VCF files, Bioinformatics, 36, 4091-4092"

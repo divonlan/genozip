@@ -301,7 +301,7 @@ static void fasta_seg_finalize_segconf (VBlockP vb)
         ctx->lcodec = CODEC_LZMA;
         zfile_compress_local_data (vb, ctx, 0);
 
-        segconf.multiseq = (ctx->local.len32 / ctx->local_in_z_len >= 7); // expecting 4-4.5 for unrelated sequences and >10 for multiseq
+        segconf.multiseq = (ctx->local.len32 / ctx->local_in_z_len >= 6); // expecting 4-4.5 for unrelated sequences and >10 for multiseq
 
         if (segconf.multiseq)
             ctx_segconf_set_hard_coded_lcodec (FASTA_NONREF, CODEC_LZMA); 
@@ -309,10 +309,11 @@ static void fasta_seg_finalize_segconf (VBlockP vb)
 
     // limit the number of contigs, to avoid the FASTA_CONTIG dictionary becoming too big. note this also
     // sets a limit for fasta-to-phylip translation
-    #define MAX_CONTIGS_IN_FILE 100000 
-    segconf.fasta_has_contigs &= !segconf.multiseq &&
-                                 (num_contigs_this_vb == 1 || // the entire VB is a single contig
-                                  est_num_contigs_in_file <  MAX_CONTIGS_IN_FILE); 
+    if (!flag.prepare_for_taxid) 
+        #define MAX_CONTIGS_IN_FILE 100000 
+        segconf.fasta_has_contigs &= !segconf.multiseq &&
+                                     (num_contigs_this_vb == 1 || // the entire VB is a single contig
+                                     est_num_contigs_in_file <  MAX_CONTIGS_IN_FILE); 
 }
 
 void fasta_seg_finalize (VBlockP vb)
@@ -399,8 +400,8 @@ static void fasta_seg_desc_line (VBlockFASTAP vb, rom line, uint32_t line_len, b
         bool is_new;
         chrom_seg_no_b250 (VB, STRa(chrom_name), &is_new);
 
-        if (!is_new && segconf.running) {
-            segconf.fasta_has_contigs = false; // this FASTA is not of contigs. It might be just a collection of variants of a sequence.
+        if (!is_new && segconf.running && !flag.prepare_for_taxid) {
+            segconf.fasta_has_contigs = false; // this FASTA is not of contigs. It might be just a multiseq (collection of variants of a sequence).
             seg_rollback (VB);
         }
 
@@ -680,6 +681,15 @@ SPECIAL_RECONSTRUCTOR_DT (fasta_piz_special_COMMENT)
     vb->last_line = FASTA_LINE_COMMENT;
 
     return NO_NEW_VALUE;
+}
+
+// main thread: called for each txt file, after reading global area, before reading txt header
+bool fasta_piz_initialize (CompIType comp_i)
+{
+    ASSINP (!flag.kraken_taxid || ZCTX(FASTA_CONTIG)->word_list.len, 
+             "Cannot filter %s with --taxid because it was compressed without CONTIGs. To overcome this, compress the FASTA again with --prepare-for-taxid.", z_name);
+
+    return true;
 }
 
 bool fasta_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment)

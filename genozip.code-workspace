@@ -2,59 +2,46 @@
 	"folders": [
 		{
 			"path": "."
+		},
+		{
+			"path": "src/secure"
 		}
 	],
 	"settings": {
-		"files.associations": {
-			"string.h": "c",
-			"typeinfo": "c",
-			"types.h": "c",
-			"stdbool.h": "c",
-			"time.h": "c",
-			"bzlib.h": "c",
-			"genozip.h": "c",
-			"cstddef": "c",
-			"string": "c",
-			"optional": "c",
-			"limits": "c",
-			"memory": "c",
-			"new": "c",
-			"type_traits": "c",
-			"array": "c",
-			"string_view": "c",
-			"initializer_list": "c",
-			"utility": "c",
-			"license.h": "c",
-			"sstream": "c",
-			"rb_tree.h": "c",
-			"math.h": "c",
-			"stdlib.h": "c",
-			"zlib.h": "c",
-			"istream": "c",
-			"ostream": "c",
-			"tuple": "c",
-			"*.tcc": "c",
-			"deque": "c",
-			"unordered_map": "c",
-			"vector": "c",
-			"arch.h": "c",
-			"piz.h": "c",
-			"bases_filter.h": "c",
-			"endianness.h": "c",
-			"system_error": "cpp",
-			"context.h": "c",
-			"progress.h": "c",
-			"unistd.h": "c"
+		"terminal.integrated.profiles.windows": {
+			"msys64": {
+				"path": "C:\\msys64\\usr\\bin\\bash.exe",
+				"env": {
+					"CHERE_INVOKING": "1",
+					"MSYSTEM": "MINGW64"
+				}
+			}
 		},
-		"files.autoSave": "onFocusChange",
-		"files.exclude": {
-			"zlib/*.o": true,
-			"zlib/*.debug-o": true,
-			"bzip2/*.o": true,
-			"bzip2/*.debug-o": true,
-			"*.o": true,
-			"*.debug-o": true,
-			"*.exe": true
+		"files.associations": {
+			"*.eb": "python",
+			"genozip.h": "c",
+			"strings.h": "c",
+			"type_traits": "c",
+			"typeinfo": "c",
+			"piz.h": "c",
+			"sam_private.h": "c",
+			"errno.h": "c",
+			"*.data": "c",
+			"buffer.h": "c",
+			"profiler.h": "c",
+			"stats.h": "c",
+			"file.h": "c",
+			"*.tcc": "c",
+			"optional": "c",
+			"system_error": "c",
+			"array": "c",
+			"functional": "c",
+			"tuple": "c",
+			"utility": "c",
+			"endianness.h": "c",
+			"version.h": "c",
+			"libgen.h": "c",
+			"license.h": "c"
 		}
 	}
 }

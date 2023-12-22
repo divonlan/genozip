@@ -1008,6 +1008,7 @@ badly_formatted:
 // the field itself will contain the number of entries
 int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), 
                              const SegCallback *callbacks, // optional - either NULL, or contains a seg callback for each item (any callback may be NULL)
+                             void (*split_correction_callback) (uint32_t *n_repeats, rom *repeats, uint32_t *repeat_lens),
                              unsigned add_bytes)
 {
     if (!ctx->is_stats_parent) 
@@ -1023,6 +1024,10 @@ int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp
         if (repeat_lens[n_repeats-1]) goto badly_formatted; 
         n_repeats--;
     }
+    
+    if (split_correction_callback)
+        split_correction_callback (&n_repeats, repeats, repeat_lens);
+
     con.repeats = n_repeats;
 
     ASSSEG (n_repeats <= CONTAINER_MAX_REPEATS, "exceeded maximum repeats allowed (%u) while parsing %s",
@@ -1108,7 +1113,7 @@ void seg_array_of_array_of_struct (VBlockP vb, ContextP ctx,
     ctx_consolidate_stats (vb, ctx->did_i, inner_ctx->did_i, DID_EOL);
 
     for (int i=0; i < n_inners; i++)
-        seg_array_of_struct (vb, inner_ctx, inner_con, STRi(inner,i), callbacks, inner_lens[i]);
+        seg_array_of_struct (vb, inner_ctx, inner_con, STRi(inner,i), callbacks, NULL, inner_lens[i]);
 }                                   
 
 // returns true if successful

@@ -1308,7 +1308,7 @@ void vcf_FORMAT_PL_after_vbs (void)
     if (!ZCTX(FORMAT_PL)->nodes.len) return; // no FORMAT/PL in this file
 
     if (ZCTX(FORMAT_PL)->nodes.len > 1) {
-        dict_io_print (info_stream, STRb(ZCTX(FORMAT_PL)->dict), true, true, false);
+        dict_io_print (info_stream, STRb(ZCTX(FORMAT_PL)->dict), true, false, true, false);
         ABORT ("Expecting FORMAT_PL to have exactly one word in its dict, but it has %"PRIu64, ZCTX(FORMAT_PL)->nodes.len);
     }
 
@@ -1828,6 +1828,9 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
         case _FORMAT_SR    :
         case _FORMAT_PR    : COND (segconf.vcf_is_manta, seg_array (VB, ctx, ctx->did_i, STRi(sf, i), ',', 0, false, STORE_INT, DICT_ID_NONE, sf_lens[i]));
 
+        // Platypus fields
+        case _FORMAT_GOF   : COND (segconf.vcf_is_platypus, vcf_seg_platypus_FORMAT_GOF (vb, ctx, STRi(sf, i)));
+        
         default            :
         fallback           : seg_by_ctx (VB, STRi(sf, i), ctx, sf_lens[i]);
         }
@@ -1914,7 +1917,7 @@ rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t *len, char *next
     vb->sample_i = 0;
     
     ASSVCF (samples.repeats <= vcf_num_samples, "according the VCF header, there should be %u sample%s per line, but this line has %u samples - that's too many",
-            vcf_num_samples, vcf_num_samples==1 ? "" : "s", samples.repeats);
+            STRfN(vcf_num_samples), samples.repeats);
 
     // in some real-world files I encountered have too-short lines due to human errors. we pad them
     if (samples.repeats < vcf_num_samples) {

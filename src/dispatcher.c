@@ -113,7 +113,7 @@ Dispatcher dispatcher_init (rom task_name,
     ASSERT (max_threads <= global_max_threads, "expecting max_threads=%u <= global_max_threads=%u", max_threads, global_max_threads);
 
     // always create the pool based on global_max_threads, not max_threads, because it is the same pool for all fan-outs throughout the execution
-    vb_create_pool (pool_type);
+    vb_create_pool (pool_type, pool_type == POOL_MAIN ? "MAIN" : "BGZF");
 
     if (filename) // note: when unbinding, we print this in dispatcher_resume() 
         progress_new_component (filename, prog_msg, test_mode); 

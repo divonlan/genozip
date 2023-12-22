@@ -83,7 +83,7 @@ void vcf_seg_INFO_ANN (VBlockVCFP vb, ContextP ctx, STRp(value))
                                   [9]         = vcf_seg_INFO_HGVS,
                                   [11 ... 13] = vcf_seg_INFO_ANN_pos_len };
 
-    seg_array_of_struct (VB, ctx, ann, STRa(value), callbacks, value_len);
+    seg_array_of_struct (VB, ctx, ann, STRa(value), callbacks, NULL, value_len);
 }
 
 // See: https://pcingola.github.io/SnpEff/se_inputoutput/#eff-field-vcf-output-files
@@ -118,6 +118,6 @@ void vcf_seg_INFO_EFF (VBlockVCFP vb, ContextP ctx, STRp(value))
                         // { .dict_id={ _INFO_EFF_Warnings_Errors       }, .separator = {')'} }, 
                        } };
 
-    seg_array_of_struct (VB, ctx, eff, STRa(value), NULL, value_len);
+    seg_array_of_struct (VB, ctx, eff, STRa(value), NULL, NULL, value_len);
 #endif
 }

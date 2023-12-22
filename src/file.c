@@ -630,7 +630,7 @@ fallthrough_from_cram: {}
 
         case CODEC_BCF: {
             input_decompressor = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 
-                                                file->is_remote ? file->name : NULL,         // url                                        
+                                                file->is_remote ? file->name : NULL,        // url                                        
                                                 file->redirected,
                                                 "To compress a BCF file", 
                                                 "bcftools", "view", "--threads", "8", "-Ov",
@@ -969,8 +969,8 @@ FileP file_open_z_write (rom filename, FileMode mode, DataType data_type)
     if (chain_is_loaded)
         file->z_flags.has_gencomp = true; // dual-coordinate file
 
-    file->genozip_version   = exec_version_major(); // to allow the VER macro to operate consistently across ZIP/PIZ
-    file->genozip_minor_ver = exec_version_minor();
+    file->genozip_version   = code_version_major(); // to allow the VER macro to operate consistently across ZIP/PIZ
+    file->genozip_minor_ver = code_version_minor();
 
     file_initialize_z_file_data (file);
 
@@ -1321,7 +1321,7 @@ void file_mkdir (rom dirname)
 // reads an entire file into a buffer. if filename is "-", reads from stdin
 void file_get_file (VBlockP vb, rom filename, BufferP buf, rom buf_name,
                     uint64_t max_size, // 0 to read entire file, or specify for max size
-                    bool verify_textual/*plain ascii*/, bool add_string_terminator)
+                    FileContentVerificationType ver_type, bool add_string_terminator)
 {
     bool is_stdin = !strcmp (filename, "-");
     if (is_stdin && !max_size) max_size = 10000000; // max size for stdin
@@ -1336,7 +1336,8 @@ void file_get_file (VBlockP vb, rom filename, BufferP buf, rom buf_name,
     buf->len = fread (buf->data, 1, size, file);
     ASSERT (is_stdin || max_size || buf->len == size, "Error reading file %s: %s", filename, strerror (errno));
 
-    ASSINP (!verify_textual || str_is_printable (STRb(*buf)), "Expecting \"%s\" to be a textual file", filename);
+    ASSINP (ver_type != VERIFY_ASCII || str_is_printable (STRb(*buf)), "Expecting %s to contain text (ASCII)", filename);
+    ASSINP (ver_type != VERIFY_UTF8  || str_is_utf8      (STRb(*buf)), "Expecting %s to contain ASCII or UTF-8 text", filename);
 
     if (add_string_terminator) 
         *BAFTc (*buf) = 0;

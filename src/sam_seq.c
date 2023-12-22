@@ -263,6 +263,87 @@ static void sam_seg_bisulfite_M (VBlockSAMP vb,
     COPY_TIMER(sam_seg_bisulfite_M);
 }
 
+static uint64_t count_non_monochar_ins=0, count_S=0;
+static uint64_t count_ins[4] = {};           // monochar insertions by base
+static uint64_t count_ins_after [4][4] = {}; // monochar insertions: first index: base before insertion (A,C,G,T) second index: base inserted (A,C,G,T)
+static uint64_t count_ins_before[4][4] = {}; // monochar insertions: first index: base after insertion  (A,C,G,T) second index: base inserted (A,C,G,T)
+
+static void sam_seg_analyze_monochar_inserts (VBlockSAMP vb, STRp(seq))
+{
+    if (vb->cigar_missing) return;
+
+    uint32_t seq_i=0;
+    for_buf (BamCigarOp, op, vb->binary_cigar) {        
+        if (op->op == BC_I) {
+            if (IS_ACGT(seq[seq_i]) && str_is_monochar (&seq[seq_i], op->n)) {
+
+                if (seq_i > 0 && IS_ACGT(seq[seq_i-1]))
+                    count_ins_after[acgt_encode[(int8_t)seq[seq_i-1]]][acgt_encode[(int8_t)seq[seq_i]]] += op->n;
+
+                if (seq_i + op->n < seq_len && IS_ACGT(seq[seq_i+op->n]))
+                    count_ins_before[acgt_encode[(int8_t)seq[seq_i+op->n]]][acgt_encode[(int8_t)seq[seq_i]]] += op->n;
+
+                count_ins[acgt_encode[(int8_t)seq[seq_i]]] += op->n;
+            }
+
+            else
+                count_non_monochar_ins += op->n;
+        }
+
+        if (op->op == BC_S) // the other contributor to NONREF
+            count_S += op->n;
+
+        if (op->op == BC_M || op->op == BC_E || op->op == BC_X || op->op == BC_S || op->op == BC_I) 
+            seq_i += op->n;
+    }
+}
+
+// report for --analyze-insertions
+void sam_zip_report_monochar_inserts (void)
+{
+    decl_acgt_decode;
+    uint64_t count_monochar_ins = count_ins[0] + count_ins[1] + count_ins[2] + count_ins[3];
+
+    if (!count_monochar_ins) {
+        iprintf ("\n%s does not contain any monochar insertions.\n", txt_name);
+        return;
+    }
+
+    iprintf ("\nSequencing technology: %s\nAligner: %s\n", segconf_tech_name(), segconf_sam_mapper_name());
+
+    double total_nonref = count_monochar_ins + count_non_monochar_ins + count_S;
+    iprint0 ("\nBreakdown of NONREF data:\n");
+    iprintf ("Monochar insertions: %f%% (%"PRIu64")\n", 100.0 * (double)count_monochar_ins / total_nonref, count_monochar_ins);
+    iprintf ("Non-monochar insertions: %f%% (%"PRIu64")\n", 100.0 * count_non_monochar_ins / total_nonref, count_non_monochar_ins);
+    iprintf ("Soft clips: %f%% (%"PRIu64")\n", 100.0 * count_S / total_nonref, count_S);
+
+             
+    iprint0 ("\nBreakdown of monochar insertions by base: (monochar = single base or homopolymer)\n");
+    for (int b=0; b < 4; b++)
+        iprintf ("%c: %f%% (%"PRIu64"); of them: same_as_base_before=%f%% same_as_base_after=%f%%\n", 
+                 acgt_decode(b), 100.0 * (double)count_ins[b] / (double)count_monochar_ins, count_ins[b],
+                 count_ins[b] ? 100.0 *(double)count_ins_after[b][b] / (double)count_ins[b] : 0.0,
+                 count_ins[b] ? 100.0 *(double)count_ins_before[b][b] / (double)count_ins[b] : 0.0);
+
+    iprint0 ("\nBreakdown of monochar insertions by base and PREVIOUS base in sequence:\n");
+    for (int prev_b=0; prev_b < 4; prev_b++)
+        for (int b=0; b < 4; b++)
+            iprintf ("prev=%c insertion=%c: %f%% (%"PRIu64")\n", 
+                     acgt_decode(prev_b), acgt_decode(b), 100.0 * (double)count_ins_after[prev_b][b] / (double)count_monochar_ins, count_ins_after[prev_b][b]);
+
+    iprint0 ("\nBreakdown of monochar insertions by base and NEXT base in sequence:\n");
+    for (int next_b=0; next_b < 4; next_b++)
+        for (int b=0; b < 4; b++)
+            iprintf ("next=%c insertion=%c: %f%% (%"PRIu64")\n", 
+                     acgt_decode(next_b), acgt_decode(b), 100.0 * (double)count_ins_before[next_b][b] / (double)count_monochar_ins, count_ins_before[next_b][b]);
+
+    // reset for next file
+    memset (count_ins, 0, sizeof (count_ins));
+    memset (count_ins_after, 0, sizeof (count_ins_after));
+    memset (count_ins_before, 0, sizeof (count_ins_before));   
+    count_non_monochar_ins = count_S = 0; 
+}
+
 // Creates a bitmap from seq data - exactly one bit per base that consumes reference (i.e. not bases with CIGAR I/S)
 // - Normal SEQ: tracking CIGAR, we compare the sequence to the reference, indicating in a SAM_SQBITMAP whether this
 //   base in the same as the reference or not. In case of REF_INTERNAL, if the base is not already in the reference, we add it.
@@ -277,17 +358,20 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(s
     declare_seq_contexts;   
     START_TIMER;
 
+    if (flag.analyze_ins) 
+        sam_seg_analyze_monochar_inserts (vb, STRa(seq));
+
     BitsP bitmap = (BitsP)&bitmap_ctx->local;
     uint32_t bitmap_start = bitmap_ctx->next_local;        
 
     ASSERTW (seq_len < 100000 || segconf.running || segconf.is_long_reads, 
-                "%s: Warning: sam_seg_SEQ: seq_len=%u is suspiciously high and might indicate a bug", LN_NAME, seq_len);
+             "%s: Warning: sam_seg_SEQ: seq_len=%u is suspiciously high and might indicate a bug", LN_NAME, seq_len);
 
     // we don't need to lock if the entire ref_consumed of this read was already is_set by previous reads (speed optimization)
     no_lock = IS_REF_EXTERNAL || ((vb->chrom_node_index == vb->consec_is_set_chrom) && (pos >= vb->consec_is_set_pos) && (pos + ref_consumed <= vb->consec_is_set_pos + vb->consec_is_set_len));
 
     RefLock lock = REFLOCK_NONE;
-    Range *range = vb->cigar_missing ? NULL : ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, ref_consumed, WORD_INDEX_NONE, (no_lock ? NULL : &lock));
+    RangeP range = vb->cigar_missing ? NULL : ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, ref_consumed, WORD_INDEX_NONE, (no_lock ? NULL : &lock));
 
     // Cases where we don't consider the refernce and just copy the seq as-is
     // 1. (denovo:) this contig defined in @SQ went beyond the maximum genome size of 4B and is thus ignored
@@ -316,8 +400,10 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(s
         }
     }
 
-    for (int i=0; i < 4; i++)
+    for (int i=0; i < 4; i++) {
         buf_alloc (vb, &seqmis_ctx[i].local, ref_and_seq_consumed, 0, char, CTX_GROWTH, CTX_TAG_LOCAL); 
+        buf_alloc (vb, &seqins_ctx[i].local, vb->insertions,       0, char, CTX_GROWTH, CTX_TAG_LOCAL); 
+    }
 
     buf_alloc (vb, &nonref_ctx->local, seq_len + 3, 0, uint8_t, CTX_GROWTH, CTX_TAG_LOCAL); 
 
@@ -413,11 +499,17 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(s
                 break; // end if 'M', '=', 'X'
 
             // for Insertion or Soft clipping - this SEQ segment doesn't align with the reference - we leave it as is 
-            case BC_I: case BC_S: 
+            case BC_I: case BC_S:
                 ASSSEG (n > 0 && n <= (seq_len - i), 
                         "CIGAR %s implies seq_len longer than actual seq_len=%u", vb->last_cigar ? vb->last_cigar : "", seq_len);
 
-                buf_add (&nonref_ctx->local, &seq[i], n);
+                if (op == BC_I && segconf.use_insertion_ctxs) {
+                    ContextP ins_ctx = seqins_ctx + acgt_encode[(int8_t)seq[i + n]]; // mux by base after insertion in SEQ. note: if i+n is the end of SEQ, then the byte after is 0 in BAM (see bam_seq_to_sam) and \t in SAM - both mapped to 0.
+                    buf_add (&ins_ctx->local, &seq[i], n);
+                }
+                else 
+                    buf_add (&nonref_ctx->local, &seq[i], n);
+
                 i += n;
                 n = 0;
                 break;
@@ -502,7 +594,7 @@ static bool sam_seg_verify_saggy_line_SEQ (VBlockSAMP vb, ZipDataLineSAM *my_dl,
      // TO DO: compare BAM native-to-native without converting to textual
     if (IS_BAM_ZIP) {
         ASSERTNOTINUSE (vb->scratch);
-        buf_alloc (vb, &vb->scratch, 0, prim_dl->SEQ.len + 1/* +1 for last half-byte */, char, 0, "scratch");
+        buf_alloc (vb, &vb->scratch, 0, prim_dl->SEQ.len + 2/* +1 for last half-byte and \0 */, char, 0, "scratch");
         bam_seq_to_sam (vb, (bytes)STRtxtw (prim_dl->SEQ), false, false, &vb->scratch);
         prim_seq = Bc(vb->scratch, vb->hard_clip[xstrand]);
     }
@@ -805,7 +897,7 @@ COMPRESSOR_CALLBACK_DT (sam_zip_seq)
         *line_data = Btxt (dl->SEQ.index);
     else { // BAM
         vb->textual_seq.len = 0; // reset
-        buf_alloc (vb, &vb->textual_seq, 0, dl->SEQ.len+1 /* +1 for last half-byte */, char, 1.5, "textual_seq");
+        buf_alloc (vb, &vb->textual_seq, 0, dl->SEQ.len+2 /* +1 for last half-byte and \0 */, char, 1.5, "textual_seq");
 
         bam_seq_to_sam (vb, (uint8_t *)STRtxtw(dl->SEQ), false, false, &vb->textual_seq);
         *line_data = B1STc (VB_SAM->textual_seq);
@@ -965,6 +1057,9 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
 
     decl_acgt_decode;
 
+    bool save_reconstruct = reconstruct;
+    if (segconf.use_insertion_ctxs) reconstruct = true; // we need to reconstruct to consume seqins contexts
+
     while (seq_consumed < vb->seq_len || ref_consumed < vb->ref_consumed) {
         
         if (!op.n) {
@@ -1023,14 +1118,19 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
                     }
                     else {
                         vb->mismatch_bases_by_SEQ++;
+                        char base;
 
-                        if (!v14) goto nonref;
+                        if (v14) {
+                            verify_is_set (ref_consumed); 
+                            // note: a "not enough data" error here is often an indication that pos is wrong
+                            ContextP mis_ctx = &seqmis_ctx[ref[ref_consumed]];
+                            base = *Bc(mis_ctx->local, mis_ctx->next_local++);
+                        }
 
-                        verify_is_set (ref_consumed); 
-                        // note: a "not enough data" error here is often an indication that pos is wrong
-                        ContextP ctx = &seqmis_ctx[ref[ref_consumed]];
-                        char base = *Bc(ctx->local, ctx->next_local++);
-                        *recon++ = base;
+                        else 
+                            base = *nonref++;
+
+                        if (reconstruct) *recon++ = base;
 
                         if (bisulfite && base == acgt_decode(ref[ref_consumed])) { // uncoverted base = metyhlated
 
@@ -1038,7 +1138,7 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
                                 sam_bismark_piz_update_meth_call (vb, ref, ref_consumed, seq_consumed, save_n-op.n, save_n, cigar, bisulfite, true); 
 
                             if (MD_NM_by_unconverted) {
-                                vb->mismatch_bases_by_SEQ--; // this is actually a match vs the unconverted referenc, undo the mismatch counter
+                                vb->mismatch_bases_by_SEQ--; // this is actually a match vs the unconverted reference, undo the mismatch counter
                                 bits_set ((BitsP)&bitmap_ctx->local, bitmap_ctx->next_local-1); // adjust sqbitmap for use for reconstructing MD:Z                        
                             }
                         }
@@ -1048,14 +1148,32 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
                             first_mismatch_base   = base;
                         }
                     }
+    
+                    seq_consumed++;
                 }
-                                
-                else nonref: {
-                    if (reconstruct) *recon++ = (*nonref);
-                    nonref++;
+                
+                else if (op.op == BC_I && segconf.use_insertion_ctxs) { // most commonly op.n is 1 or 2
+                    recon += op.n; // skip for now, we will fill in the gaps later
+                    seq_consumed += op.n;
+                    op.n = 1; // so it is further decremented to 0 in a sec
                 }
 
-                seq_consumed++;
+                else if (op.n == 1) { // I or S with a small op.n
+                    if (reconstruct) *recon++ = *nonref;
+                    nonref++;
+                    seq_consumed++;
+                }
+
+                else { // larger op.n - we are better off with memcpy
+                    if (reconstruct) {
+                        memcpy (recon, nonref, op.n);
+                        recon += op.n;
+                    }
+                        
+                    nonref += op.n;
+                    seq_consumed += op.n;
+                    op.n = 1; // so it is further decremented to 0 in a sec
+                }
             }
 
             if (consumes_reference) 
@@ -1065,6 +1183,29 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
         }
     }
 
+    // case: insertions were muxed by the base after - we can fill them in now (since 15.0.29)
+    if (segconf.use_insertion_ctxs) {
+        SAFE_ASSIGN (recon, 0);           // in case last insertion goes to the end of SEQ - it will use this "base" for muxing
+        recon -= vb->seq_len; // go back to the start of the SEQ reconstruction
+
+        for_buf (BamCigarOp, op, vb->binary_cigar) {        
+            if (op->op == BC_I) {
+                ContextP ins_ctx = seqins_ctx + acgt_encode[(int8_t)recon[op->n]]; // mux by base after insertion in SEQ. 
+                
+                ASSPIZ (ins_ctx->next_local + op->n <= ins_ctx->local.len32, NEXT_ERRFMT, __FUNCTION__, ins_ctx->tag_name, ins_ctx->next_local, op->n, ins_ctx->local.len32); 
+       
+                memcpy (recon, Bc(ins_ctx->local, ins_ctx->next_local), op->n);
+                recon += op->n;
+                ins_ctx->next_local += op->n;
+            }
+
+            else if (op->op == BC_M || op->op == BC_S || op->op == BC_E || op->op == BC_X)
+                recon += op->n;
+        }
+
+        SAFE_RESTORE;
+    }
+    
     // For deep ents passed from SAM reconstruction to FASTQ reconstruction, we use a shortcut
     // if SEQ aligns with perfect CIGAR (eg "151M"), and up to 1 mismatch.
     if (flag.deep && !bisulfite                      && 
@@ -1079,7 +1220,8 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
                                      .mismatch_offset = (is_perfect ? 0 : first_mismatch_offset),
                                      .mismatch_base   = (is_perfect ? 0 : first_mismatch_base) };
 
-    Ltxt += vb->seq_len;
+    if (save_reconstruct)
+        Ltxt += vb->seq_len;
 
     ASSPIZ (seq_consumed == vb->seq_len,      "expecting seq_consumed(%u) == vb->seq_len(%u)", seq_consumed, vb->seq_len);
     ASSPIZ (ref_consumed == vb->ref_consumed, "expecting ref_consumed(%u) == vb->ref_consumed(%u)", ref_consumed, vb->ref_consumed);
@@ -1234,6 +1376,9 @@ static void reconstruct_SEQ_copy_saggy (VBlockSAMP vb, ContextP ctx, ReconType r
 SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SEQ)
 {
     VBlockSAMP vb = (VBlockSAMP)vb_;
+
+    if (!CTX(SAM_SQBITMAP)->flags.no_textual_seq)
+        reconstruct = true; // SEQ should always be reconstructed because it is consumed by other fields
 
     vb->bisulfite_strand = (!VER(14) || snip[SEQ_SNIP_BISULFATE]=='0') ? 0
                          : snip[SEQ_SNIP_BISULFATE] == '*'             ? "CG"[last_flags.rev_comp]

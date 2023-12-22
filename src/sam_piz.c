@@ -60,6 +60,7 @@ void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
                                       : header->sam.segconf_deep_qname2 ? QNAME2
                                       :                                   QNONE;
         segconf.deep_no_qual          = header->sam.segconf_deep_no_qual;
+        segconf.use_insertion_ctxs    = header->sam.segconf_use_ins_ctxs;
         segconf.est_sam_factor        = (double)header->sam.segconf_sam_factor / (double)SAM_FACTOR_MULT;
     }
 }
@@ -185,6 +186,7 @@ IS_SKIP (sam_piz_is_skip_section)
             
         case _SAM_NONREF   : case _SAM_NONREF_X : case _SAM_GPOS     : case _SAM_STRAND :
         case _SAM_SEQMIS_A : case _SAM_SEQMIS_C : case _SAM_SEQMIS_G : case _SAM_SEQMIS_T : 
+        case _SAM_SEQINS_A : case _SAM_SEQINS_C : case _SAM_SEQINS_G : case _SAM_SEQINS_T : 
             SKIPIF (is_prim); // in PRIM, we skip sections that we used for loading the SA Groups in sam_piz_load_sags, but not needed for reconstruction
                            // (during PRIM SA Group loading, skip function is temporarily changed to sam_plsg_only). see also: sam_load_groups_add_grps
             SKIPIFF ((cov || cnt) && !flag.bases && !has_sa);
@@ -299,7 +301,7 @@ static void qname_filter_initialize_from_file (rom filename)
 
     if (flag.qname_filter == -1) filename++; // negative filter
 
-    file_split_lines (filename, "qnames_file", true);
+    file_split_lines (filename, "qnames_file", VERIFY_ASCII);
 
     ARRAY_alloc (QnameFilterItem, qname, n_lines, true, qnames_filter, evb, "qnames_filter");
     for (int i=0; i < n_lines; i++) {
@@ -408,7 +410,7 @@ void seq_filter_initialize (rom filename)
 
     if (flag.seq_filter == -1) filename++; // negative filter
 
-    file_split_lines (filename, "seqs_file", true);
+    file_split_lines (filename, "seqs_file", VERIFY_ASCII);
 
     // 2 entries per requested seq - forward and revcomp
     ARRAY_alloc (SeqFilterItem, seq, n_lines * 2, true, seqs_filter, evb, "seqs_filter");

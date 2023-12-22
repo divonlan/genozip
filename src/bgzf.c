@@ -133,7 +133,13 @@ int32_t bgzf_read_block (FileP file, // txt_file is not yet assigned when called
 
     int ret = bgzf_read_block_raw ((FILE *)file->file, block, block_size, file->basename, file->is_remote, soft_fail);
     if (ret == BGZF_BLOCK_IS_NOT_GZIP || ret == BGZF_BLOCK_GZIP_NOT_BGZIP) return ret; // happens only if soft_fail
-    if (ret == BGZF_ABRUBT_EOF) return 0;
+    
+    if (ret == BGZF_ABRUBT_EOF) {
+        if (!txt_file->bgzf_truncated_last_block) // we arrive here twice - show warning only once
+            WARN ("FYI: %s is truncated - its final BGZF block in incomplete. Dropping this defective BGZF block.", txt_name);
+        txt_file->bgzf_truncated_last_block = true;
+        return 0;
+    }
 
     uint32_t isize_lt32 = *(uint32_t *)&block[*block_size - 4];
     uint32_t isize = LTEN32 (isize_lt32); // 0...65536 per spec
@@ -170,7 +176,7 @@ void bgzf_compress_bgzf_section (void)
     for_buf (uint16_t, isize_p, txt_file->bgzf_isizes)
         total_isize += BGEN16 (*isize_p) + 1; // values 0-65535 correspond to isize 1-65536
     
-    ASSERT (total_isize == txt_file->txt_data_so_far_single, "Expecting total_isize=%"PRId64" == txt_file->txt_data_so_far_single=%"PRId64,
+    ASSERT (total_isize == txt_file->txt_data_so_far_single + txt_file->last_truncated_line_len, "Expecting total_isize=%"PRId64" == txt_file->txt_data_so_far_single=%"PRId64,
             total_isize, txt_file->txt_data_so_far_single);
 
     // get the best codec for the SEC_BGZF section

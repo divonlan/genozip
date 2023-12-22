@@ -23,6 +23,7 @@ void tip_dt_encountered (DataType dt)
     dt_encountered[dt] = true;
 }
 
+// called in ZIP, or sometimes in PIZ if ZIP ends to non-returnable --test. 
 void tip_print (void)
 {
     #define E(dt) dt_encountered[DT_##dt]
@@ -30,19 +31,19 @@ void tip_print (void)
     if (flag.no_tip || // protect from spamming the user with more than one tip
         !license_allow_tip()) return; 
 
-    StrNotice notice = license_print_default_notice ();
+    StrTextLong acadmic_notice = license_academic_tip(); // empty unless acadmic license
 
     if (!is_info_stream_terminal) {
-        if (notice.s[0]) iprintf ("\n%s\n", notice.s);
+        if (acadmic_notice.s[0]) iprintf ("\n%s\n", acadmic_notice.s);
         return;
     }
 
     rom valid_tips[256];
     int n=0;
 
-    if (notice.s[0])
+    if (acadmic_notice.s[0])
         for (int i=0; i < 5; i++)
-            valid_tips[n++] = notice.s; // 5X more likely than other tips
+            valid_tips[n++] = acadmic_notice.s; // 5X more likely than other tips
 
     valid_tips[n++] = "Interested in how Genozip works? See the paper: " PAPER2;
     valid_tips[n++] = "Tip: you can use Genozip to downsample your data, see: " WEBSITE_DOWNSAMPLING;
@@ -62,9 +63,9 @@ void tip_print (void)
     if (E(SAM) || E(BAM) || E(FASTQ)) 
         valid_tips[n++] = "Tip: you can use Genozip to get coverage information, see: " WEBSITE_COVERAGE;
 
-    if (E(VCF) || E(BCF)) 
-        valid_tips[n++] = "Tip: you can use Genozip to generate a VCF that describes variants against two different references concurrently, see: " WEBSITE_DVCF;
-
+    if (E(BCF))
+        valid_tips[n++] = "Tip: genozip compresses VCF files 5-10X faster than it compresses BCF files";
+    
     if (E(SAM) || E(BAM) || E(VCF) || E(BCF) || E(GFF) || E(ME23) || E(CHAIN)) 
         valid_tips[n++] = "Tip: do the chromosomes have different names (eg 22 vs chr22)? Genozip can fix that: " WEBSITE_MATCH_CHROM;
 
@@ -93,7 +94,7 @@ void tip_print (void)
     if (arch_get_max_resident_set() > 100 GB || flag.is_windows || flag.is_wsl || flag.is_mac)
         valid_tips[n++] = "Tip: with --low-memory, genozip will consume considerably less RAM, at the expense of compression size and time";
 
-    iprintf ("\n%s\n", valid_tips[time(0) % n]); // "randomly" select one of the valid tips
+    iprintf ("\n%s\n", valid_tips[clock() % n]); // "randomly" select one of the valid tips
 
     flag.no_tip = true;
     sam_destroy_deep_tip();

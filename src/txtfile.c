@@ -188,7 +188,7 @@ static inline uint32_t txtfile_read_block_bgzf (VBlockP vb, int32_t max_uncomp /
             }
 
             // add block to list - including the EOF block (block_comp_len=BGZF_EOF_LEN block_uncomp_len=0)
-            if (block_comp_len) {
+            if (block_comp_len && block_uncomp_len/* 0 if truncated */) {
                 buf_alloc (vb, &vb->bgzf_blocks, 1, 1.2 * max_uncomp / BGZF_MAX_BLOCK_SIZE, BgzfBlockZip, 2, "bgzf_blocks");
                 BNXT (BgzfBlockZip, vb->bgzf_blocks) = (BgzfBlockZip)
                     { .txt_index        = Ltxt,  // after passed-down data and all previous blocks
@@ -422,8 +422,11 @@ static uint32_t txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb)
     // test remaining txt_data including passed-down data from previous VB
     pass_to_next_vb_len = (DT_FUNC(vb, unconsumed)(vb, 0, &last_i));
 
-    if (flag.truncate_partial_last_line && pass_to_next_vb_len < 0 && !segconf.running) 
+    if (flag.truncate_partial_last_line && pass_to_next_vb_len < 0 && !segconf.running) {
+        WARN ("FYI: %s is truncated - its final %s in incomplete. Dropping this final %s.", txt_name, DTPT(line_name), DTPT(line_name));
+        txt_file->last_truncated_line_len = Ltxt; 
         Ltxt = pass_to_next_vb_len = 0; // truncate last partial line
+    }
 
     ASSERT (pass_to_next_vb_len >= 0 ||
             segconf.running, // case: we're testing memory and this VB is too small for a single line - return and caller will try again with a larger VB 

@@ -60,7 +60,7 @@ void vcf_zip_finalize (bool is_last_user_txt_file)
     decl_zctx(VCF_REFALT);
     int refalt_z_pc = 100 * (zctx->dict.count + zctx->b250.count + zctx->local.count) / z_file->disk_size;
 
-    if (!flag.reference && refalt_z_pc > 10)
+    if (!flag.reference && refalt_z_pc > 10 && !flag.seg_only)
         TIP ("Compressing a this %s file using a reference file can reduce the compressed file's size by %d%%-%d%%.\n"
              "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
              z_dt_name(), refalt_z_pc / 3, (int)((float)refalt_z_pc / 1.5), arch_get_argv0(), txt_file->name);
@@ -258,6 +258,8 @@ void vcf_seg_initialize (VBlockP vb_)
     if (segconf.vcf_is_giab_trio)   vcf_giab_seg_initialize (vb);
     if (segconf.vcf_is_isaac)       vcf_isaac_seg_initialize (vb);
     if (segconf.vcf_is_manta)       vcf_manta_seg_initialize (vb);
+    if (segconf.vcf_is_ultima)      vcf_ultima_seg_initialize (vb);
+    if (segconf.vcf_is_platypus)    vcf_platypus_seg_initialize (vb);
 }             
 
 static void vcf_seg_finalize_segconf (VBlockVCFP vb)
@@ -275,21 +277,29 @@ static void vcf_seg_finalize_segconf (VBlockVCFP vb)
         !!segconf.has[INFO_dbSNPBuildID] + !!segconf.has[INFO_VC] + !!segconf.has[INFO_NSM] + !!segconf.has[INFO_U3] >= 3)
         segconf.vcf_is_dbSNP = true;
 
-    if (segconf.vcf_is_deep_variant && segconf.has[INFO_X_LM] && segconf.has[INFO_X_RM]) {
-        segconf.vcf_is_ultima_dv = true;
+    if (segconf.has[INFO_X_LM] && segconf.has[INFO_X_RM]) {
+        segconf.vcf_is_ultima = true;
 
-        if (!flag.reference)
-            TIP ("Compressing a Ultima Genomics Deep Variable file using a reference file can reduce the size by 8%%.\n"
-                "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
-                arch_get_argv0(), txt_file->name);
+        if (!flag.reference && !flag.seg_only)
+            TIP ("Compressing a Ultima Genomics VCF file using a reference file can reduce the size by 12%%.\n"
+                 "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
+                 arch_get_argv0(), txt_file->name);
     }
+
+    if (segconf.has[INFO_X_HIL] && segconf.has[INFO_X_HIN]) 
+        segconf.vcf_is_ultima = true; // another way to identify Ultima
 
     // in gnomAD, we have a huge number of INFO fields in various permutations - generating a huge INFO dictionary, but which compresses very very well
     if (segconf.vcf_is_gnomad)
         ZCTX(VCF_INFO)->dict_len_excessive = true; // don't warn if excessive
         
-    if (!flag.reference && segconf.vcf_is_gvcf)
+    if (!flag.reference && segconf.vcf_is_gvcf && !flag.seg_only)
         TIP ("Compressing a GVCF file using a reference file can reduce the compressed file's size by 10%%-30%%.\n"
+             "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
+             arch_get_argv0(), txt_file->name);
+
+    if (!flag.reference && segconf.vcf_is_platypus && (segconf.has[INFO_SC] || segconf.has[INFO_HP]) && !flag.seg_only)
+        TIP ("Compressing a Platypus VCF file using a reference file can reduce the compressed file's size by 30%%.\n"
              "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
              arch_get_argv0(), txt_file->name);
 
@@ -321,7 +331,7 @@ void vcf_seg_finalize (VBlockP vb_)
     SmallContainer top_level = { 
         .repeats      = vb->lines.len,
         .is_toplevel  = true,
-        .callback     = (vb->use_special_sf == USE_SF_YES) || z_is_dvcf, // cases where we need a callback
+        .callback     = (CTX(INFO_SF)->use_special_sf == yes) || z_is_dvcf,   // cases where we need a callback
         .filter_items = true,
         .nitems_lo    = 12,                                                                 
         .items        = { { .dict_id = { _VCF_COORDS },  .separator = "\t" }, // suppressed by vcf_piz_filter unless --show-dvcf                                   
@@ -356,7 +366,7 @@ void vcf_seg_finalize (VBlockP vb_)
     SmallContainer top_luft = { 
         .repeats      = vb->lines.len,
         .is_toplevel  = true,
-        .callback     = (vb->use_special_sf == USE_SF_YES) || z_is_dvcf, // cases where we need a callback
+        .callback     = (CTX(INFO_SF)->use_special_sf == yes) || z_is_dvcf, // cases where we need a callback
         .filter_items = true,
         .nitems_lo    = 13,                                                                 
         .items        = { { .dict_id = { _VCF_COORDS },  .separator = "\t" }, // suppressed by vcf_piz_filter unless --show-dvcf                                   
@@ -418,33 +428,41 @@ void vcf_zip_after_vbs (void)
 bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id)
 {
     return 
-        dict_id.num == _VCF_TOPLEVEL ||
-        dict_id.num == _VCF_TOPLUFT  ||
-        dict_id.num == _VCF_CHROM    ||
-        dict_id.num == _VCF_oCHROM   ||
-        dict_id.num == _VCF_FORMAT   || // note: NOT including _VCF_INFO - there are cases where it is not small
-        dict_id.num == _VCF_FILTER   || 
-        dict_id.num == _VCF_EOL      ||
-        dict_id.num == _VCF_SAMPLES  ||
-        dict_id.num == _VCF_oCHROM   ||
-        dict_id.num == _VCF_oXSTRAND ||
-        dict_id.num == _VCF_oSTATUS  ||
-        dict_id.num == _VCF_COORDS   ||
-        dict_id.num == _VCF_LIFT_REF ||
-        dict_id.num == _INFO_DP      ||
+        dict_id.num  == _VCF_TOPLEVEL ||
+        dict_id.num  == _VCF_TOPLUFT  ||
+        dict_id.num  == _VCF_CHROM    ||
+        dict_id.num  == _VCF_oCHROM   ||
+        dict_id.num  == _VCF_FORMAT   || // note: NOT including _VCF_INFO - there are cases where it is not small
+        dict_id.num  == _VCF_FILTER   || 
+        dict_id.num  == _VCF_EOL      ||
+        dict_id.num  == _VCF_SAMPLES  ||
+        dict_id.num  == _VCF_oCHROM   ||
+        dict_id.num  == _VCF_oXSTRAND ||
+        dict_id.num  == _VCF_oSTATUS  ||
+        dict_id.num  == _VCF_COORDS   ||
+        dict_id.num  == _VCF_LIFT_REF ||
+        (dict_id.num == _INFO_AC    && vcf_num_samples >= 1 && vcf_num_samples < 10) || // note: _INFO_AN, _INFO_AC, _INFO_AF, _INFO_MLEAC, _INFO_MLEAF - can be big (e.g. big in GWAS VCF, ExAC, gnomad...)
+        (dict_id.num == _INFO_AF    && vcf_num_samples >= 1 && vcf_num_samples < 10) ||
+        (dict_id.num == _INFO_AN    && vcf_num_samples >= 1 && vcf_num_samples < 10) ||
+        (dict_id.num == _INFO_MLEAC && vcf_num_samples >= 1 && vcf_num_samples < 10) ||
+        (dict_id.num == _INFO_MLEAF && vcf_num_samples >= 1 && vcf_num_samples < 10) ||
+        dict_id.num  == _INFO_DP      ||
         (dict_id.num == _INFO_AA && !segconf.vcf_is_cosmic) || // stored as a SPECIAL snip
-        dict_id.num == _INFO_LDAF    ||
-        dict_id.num == _INFO_MQ0     ||
-        dict_id.num == _INFO_LUFT    ||
-        dict_id.num == _INFO_PRIM    ||
-        dict_id.num == _INFO_LREJ    ||
-        dict_id.num == _INFO_PREJ;
-        // note: _INFO_AN, _INFO_AC, _INFO_AF, _INFO_MLEAC, _INFO_MLEAF - can be big (e.g. big in GWAS VCF, ExAC, gnomad...)
+        dict_id.num  == _INFO_LDAF    ||
+        dict_id.num  == _INFO_MQ0     ||
+        dict_id.num  == _INFO_LUFT    ||
+        dict_id.num  == _INFO_PRIM    ||
+        dict_id.num  == _INFO_LREJ    ||
+        dict_id.num  == _INFO_PREJ;       
 }
 
 bool vcf_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id/*dict_id of st_did_i*/)
 {
     return 
+        (dict_id.num   == _INFO_AC    && vcf_num_samples > 100) ||
+        (dict_id.num   == _INFO_AF    && vcf_num_samples > 100) ||
+        (dict_id.num   == _INFO_MLEAC && vcf_num_samples > 100) ||
+        (dict_id.num   == _INFO_MLEAF && vcf_num_samples > 100) ||
         dict_id.num    == _VCF_REFALT  ||
         dict_id.num    == _VCF_oREFALT ||
         dict_id.num    == _VCF_QUAL    || // QUAL is sometimes in upper tens of thousands, but hash calculated to 64K
@@ -527,7 +545,7 @@ static inline void vcf_seg_QUAL (VBlockVCFP vb, STRp(qual))
 
     // case: GVCF - multiplex by has_RGQ
     else if (!segconf.running && segconf.has[FORMAT_RGQ]) {
-        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, VCF_QUAL, (MultiplexerP)&vb->mux_QUAL, vb->line_has_RGQ);
+        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, VCF_QUAL, (MultiplexerP)&vb->mux_QUAL, CTX(FORMAT_RGQ)->line_has_RGQ);
         seg_by_ctx (VB, STRa(qual), channel_ctx, qual_len+1);
         seg_by_did (VB, STRa(vb->mux_QUAL.snip), VCF_QUAL, 0);
     }
@@ -621,7 +639,7 @@ rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
     vb->main_alt_len = VCF_ALT_len;
     vcf_parse_main_alt (vb);
 
-    vb->line_has_RGQ = !segconf.running && segconf.has[FORMAT_RGQ] && vcf_refalt_seg_ref_alt_line_has_RGQ (VCF_ALT_str);
+    CTX(FORMAT_RGQ)->line_has_RGQ = !segconf.running && segconf.has[FORMAT_RGQ] && vcf_refalt_seg_ref_alt_line_has_RGQ (VCF_ALT_str);
 
     // note: we treat REF+\t+ALT as a single field because REF and ALT are highly corrected, in the case of SNPs:
     // e.g. GG has a probability of 0 and GC has a higher probability than GA.

@@ -224,7 +224,7 @@ double arch_get_physical_mem_size (void)
 
 #ifdef __linux__    
     ASSERTNOTINUSE (evb->scratch);
-    file_get_file (evb, "/proc/meminfo", &evb->scratch, "meminfo", 100, false, true);
+    file_get_file (evb, "/proc/meminfo", &evb->scratch, "meminfo", 100, VERIFY_ASCII, true);
 
     int num_start = strcspn (B1STc(evb->scratch), "0123456789");
     mem_size = (double)atoll(Bc(evb->scratch, num_start)) / (1024.0*1024.0);
@@ -282,7 +282,8 @@ StrText arch_get_filesystem_type (void)
         NAME (0x01021997, "v9fs");     // Used by WSL
         NAME (0x0bd00bd0, "Lustre");   // HPC filesystem: https://www.lustre.org/
         NAME (0x65735546, "FUSE");     // Filesystem in user space: https://www.kernel.org/doc/html/next/filesystems/fuse.html
-
+        NAME (0xaad7aaea, "PanFS");    // Clustered filesystem: https://www.panasas.com/products/panfs/
+        NAME (0xc36400,   "CephFS");   // Distributed filesystem: https://docs.ceph.com/en/latest/cephfs/
         default: sprintf (s.s, "0x%lx", fs.f_type); 
     }
 
@@ -370,7 +371,7 @@ StrTextSuperLong arch_get_executable (void)
     DWORD path_len = GetModuleFileNameA (NULL, path.s, sizeof(path.s) - 1); 
     if (GetLastError() == ERROR_INSUFFICIENT_BUFFER) path_len = 0; // this is also an error
 
-    ASSGOTO (path_len, "GetModuleFileNameA() failed to get executable path from /proc/self/exe: %s", str_win_error());
+    ASSGOTO (path_len, "GetModuleFileNameA() failed: %s", str_win_error());
 
 #elif defined __APPLE__
     // see: https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/dyld.3.html

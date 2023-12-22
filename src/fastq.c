@@ -25,7 +25,6 @@
 #include "filename.h"
 #include "aligner.h"
 #include "zfile.h"
-#include "license.h"
 
 #define dict_id_is_fastq_qname_sf dict_id_is_type_1
 #define dict_id_is_fastq_aux      dict_id_is_type_2
@@ -262,9 +261,6 @@ void fastq_zip_initialize (void)
 
     if (flag.deep) 
         fastq_deep_zip_initialize();
-
-    else
-        license_show_pair_notice();    
 }
 
 // called by main thread after each txt file compressing is done
@@ -396,7 +392,7 @@ static void fastq_seg_finalize_segconf (VBlockP vb)
     }
 
     if (!segconf.multiseq) {
-        if (!flag.reference && !txt_file->redirected)
+        if (!flag.reference && !txt_file->redirected && !flag.seg_only)
             TIP ("Compressing a FASTQ file using a reference file can reduce the compressed file's size by 20%%-60%%.\n"
                 "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n", 
                 arch_get_argv0(), txt_file->name);
@@ -789,6 +785,12 @@ rom fastq_assseg_line (VBlockP vb)
 //-----------------
 // PIZ stuff
 //-----------------
+
+// main thread: called for each txt file, after reading global area, before reading txt header
+bool fastq_piz_initialize (CompIType comp_i)
+{
+    return true;
+}
 
 // PIZ: main thread: piz_process_recon callback: usually called in order of VBs, but out-of-order if --test with no writer
 void fastq_piz_process_recon (VBlockP vb)

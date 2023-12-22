@@ -1113,8 +1113,11 @@ static inline bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx, uint8_t *vb
             // note: chrom2ref_map is protected by ZMUTEX(zctx) (zctx is CHROM as we followed alias)
             if (chrom_2ref_seg_is_needed(zctx->did_i) && vctx->chrom2ref_map.len) { // SAM: it is ctx->chrom2ref_map.len=0 and nodes.len>0: in case of gencomp_len=2 will will have a SPECIAL snip node, but we don't use chrom2ref as all contigs must be in the SAM header
                 buf_alloc_255 (evb, &ZCTX(CHROM)->chrom2ref_map, 0, MAX_(INITIAL_NUM_NODES, zf_node_index+1), WordIndex, CTX_GROWTH, "ZCTX(CHROM)->chrom2ref_map");
-                *B(WordIndex, ZCTX(CHROM)->chrom2ref_map, zf_node_index) = *B(WordIndex, vctx->chrom2ref_map, i);
                 ZCTX(CHROM)->chrom2ref_map.len32 = MAX_(ZCTX(CHROM)->chrom2ref_map.len32, zf_node_index + 1);
+    
+                // if (*B(WordIndex, vctx->chrom2ref_map, vb_node->word_index) != WORD_INDEX_NONE)  xxx
+                *B(WordIndex, ZCTX(CHROM)->chrom2ref_map, zf_node_index) = *B(WordIndex, vctx->chrom2ref_map, vb_node->word_index); // possibly WORD_INDEX_NONE
+
             }
 
             vb_node->word_index = zf_node->word_index = zf_node_index;
@@ -1128,11 +1131,11 @@ static inline bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx, uint8_t *vb
     if (zctx->dict.len > EXCESSIVE_DICT_SIZE && !zctx->dict_len_excessive) {
         zctx->dict_len_excessive = true; // warn only once (per context)
         WARN ("WARNING: excessive zctx dictionary size - causing slow compression and decompression and reduced compression ratio. Please report this to " EMAIL_SUPPORT ".\n"
-              "%s %s data_type=%s ctx=%s vb=%s vb_size=%"PRIu64" zctx->dict.len=%"PRIu64" version=%s. First 1000 bytes: ", 
+              "%s %s data_type=%s ctx=%s vb=%s vb_size=%"PRIu64" zctx->dict.len=%"PRIu64" %s. First 1000 bytes: ", 
               cond_str (VB_DT(BAM) || VB_DT(SAM), "sam_mapper=", segconf_sam_mapper_name()), 
               cond_str (VB_DT(BAM) || VB_DT(SAM) || VB_DT(FASTQ) || VB_DT(KRAKEN), "segconf_qf_name=", segconf_qf_name(QNAME1)), 
-              z_dt_name(), zctx->tag_name, VB_NAME, segconf.vb_size, zctx->dict.len, GENOZIP_CODE_VERSION);
-        dict_io_print (stderr, zctx->dict.data, 1000, true, false, false);
+              z_dt_name(), zctx->tag_name, VB_NAME, segconf.vb_size, zctx->dict.len, version_str().s);
+        dict_io_print (stderr, zctx->dict.data, 1000, true, true, false, false);
     }
 
     if (flag.deep) {
@@ -1312,8 +1315,9 @@ void ctx_initialize_predefined_ctxs (ContextArray contexts,
     for (Did did_i=0; did_i < dt_fields[dt].num_fields; did_i++) {
         DictId dict_id = dt_fields[dt].predefined[did_i].dict_id;
 
-        // special case: if initializing FASTQ which shares Dids with SAM - [0] is "CONTIG" instead of "RNAME"
-        if (dt == DT_FASTQ && did_i == FASTQ_CONTIG) dict_id.num = DICT_ID_MAKEF_6 ("CONTIG");
+        // special case: if initializing FASTQ which shares Dids with SAM - [0] is "CONTIG" instead of "RNAME" - see also dt_initialize()
+        if (dt == DT_FASTQ && did_i == FASTQ_CONTIG) 
+            dict_id.num = DICT_ID_MAKEF_6 ("CONTIG");
 
         ASSERT (dict_id.num, "No did_i->dict_id mapping is defined for predefined did_i=%u in dt=%s", did_i, dt_name (dt));
 
@@ -1332,7 +1336,7 @@ void ctx_initialize_predefined_ctxs (ContextArray contexts,
             ctx_initialize_ctx (&contexts[did_i], did_i, dict_id, d2d_map, 
                                 dt_fields[dt].predefined[did_i].tag_name, dt_fields[dt].predefined[did_i].tag_name_len);
     }
-
+    
     // initialize alias contexts (note: all aliases and their destinations are predefined)
     // note: all alias destinations that ever existed in previous versions of Genozip must be defined in #pragma GENDICT for this to work
     for_buf2 (DictIdAlias, alias, alias_i, *aliases) {
@@ -1673,7 +1677,7 @@ static void ctx_show_counts (ContextP zctx)
     if (total)
         for (uint32_t i=0; i < counts_len; i++) {            
             iprint0 ("\"");
-            dict_io_print (info_stream, counts[i].snip, strlen(counts[i].snip), false, false, false);
+            dict_io_print (info_stream, counts[i].snip, strlen(counts[i].snip), false, true, false, false);
             iprintf ("\"(%d)\t%"PRIu64"\t%-4.2f%%\n", counts[i].word_index, counts[i].count, 
                      100 * (float)counts[i].count / (float)total);
         }

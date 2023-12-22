@@ -46,6 +46,8 @@
 #include "aliases.h"
 #include "buf_list.h"
 #include "arch.h"
+#include "user_message.h"
+#include "license.h"
 
 static void zip_display_compression_ratio (Digest md5)
 {
@@ -775,6 +777,9 @@ static void zip_write_global_area (void)
             random_access_compress (ref_get_stored_ra (gref), SEC_REF_RAND_ACC, codec, 0, flag.show_ref_index ? RA_MSG_REF : NULL);
     }
 
+    THREAD_DEBUG (user_message);
+    user_message_compress();
+
     THREAD_DEBUG (stats);
     stats_generate();
 
@@ -880,7 +885,6 @@ after_compress:
 
 // data sent through dispatcher fan out functions - to do: make this an opaque struct
 static VBIType prev_file_first_vb_i=0, prev_file_last_vb_i=0; // used if we're binding files - the vblock_i will continue from one file to the next
-static uint32_t max_lines_per_vb; // (resets in every file)
 
 // main thread: returns true if successfully prepared a vb 
 static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
@@ -953,7 +957,7 @@ static void zip_complete_processing_one_vb (VBlockP vb)
     // update z_data in memory (its not written to disk yet)
     zfile_update_compressed_vb_header (vb); 
 
-    max_lines_per_vb = MAX_(max_lines_per_vb, vb->lines.len);
+    txt_file->max_lines_per_vb = MAX_(txt_file->max_lines_per_vb, vb->lines.len);
 
     if (!flag.make_reference && !flag.seg_only)
         zfile_output_processed_vb (vb);
@@ -1011,8 +1015,6 @@ void zip_one_file (rom txt_basename,
 
     DT_FUNC (txt_file, zip_after_segconf)();
 
-    max_lines_per_vb=0;
-
     static uint64_t target_progress=0;
     if ((Z_DT(FASTQ) && flag.pair != PAIR_R2) ||   // note: if 2nd of a FASTQ file pair - we leave the target as it was in the first file as seggable_size is not calculated for the 2nd file
         (flag.deep && flag.zip_comp_i <= SAM_COMP_FQ00) ||
@@ -1044,7 +1046,7 @@ void zip_one_file (rom txt_basename,
 
     // go back and update some fields in the txt header's section header and genozip header 
     if (txt_header_offset >= 0) // note: this will be -1 if we didn't write a SEC_TXT_HEADER section for any reason
-        success = zfile_update_txt_header_section_header (txt_header_offset, max_lines_per_vb);
+        success = zfile_update_txt_header_section_header (txt_header_offset);
 
     ASSERT0 (!flag.biopsy || biopsy_is_done(), "Biopsy request not complete - some VBs missing");
 

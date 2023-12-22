@@ -17,7 +17,6 @@
 #include <stdnoreturn.h>
 
 #include "website.h"
-#include "version.h"
 
 #pragma GCC diagnostic ignored "-Wunknown-pragmas"    // needed for our #pragma GENDICT
 #ifdef __clang__ 
@@ -74,7 +73,6 @@ typedef enum __attribute__ ((__packed__)) {
                POOL_MAIN,  // used for all VBs, except non-pool VBs and BGZF VBs
                POOL_BGZF,  // PIZ only: used for BGZF-compression dispatcher
                NUM_POOL_TYPES } VBlockPoolType;
-#define POOL_NAMES { "MAIN", "BGZF" };
 
 // ------------------------------------------------------------------------------------------------------------------------
 // pointers used in header files - so we don't need to include the whole .h (and avoid cyclicity and save compilation time)
@@ -127,13 +125,9 @@ typedef struct { char s[1024];  } StrTextLong;
 typedef struct { char s[4096];  } StrTextSuperLong;
 typedef struct { char s[65536]; } StrTextMegaLong;
 
-#define VB ((VBlockP)(vb))
+#include "version.h" // must be after StrTxt definition
 
-typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT, NUM_EXE_TYPES } ExeType;
-#define is_genocat   (exe_type == EXE_GENOCAT)
-#define is_genozip   (exe_type == EXE_GENOZIP)
-#define is_genounzip (exe_type == EXE_GENOUNZIP)
-#define is_genols    (exe_type == EXE_GENOLS)
+#define VB ((VBlockP)(vb))
 
 // IMPORTANT: DATATYPES GO INTO THE FILE FORMAT - THEY CANNOT BE CHANGED
 typedef enum __attribute__ ((__packed__)) { 
@@ -230,7 +224,15 @@ extern uint32_t global_max_threads;
 #define MAX_GLOBAL_MAX_THREADS 10000
 
 extern char global_cmd[];            // set once in main()
+
+typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOCAT, EXE_GENOLS, NUM_EXE_TYPES } ExeType;
 extern ExeType exe_type;
+
+#define is_genozip   (exe_type == EXE_GENOZIP)
+#define is_genounzip (exe_type == EXE_GENOUNZIP)
+#define is_genocat   (exe_type == EXE_GENOCAT)
+#define is_genols    (exe_type == EXE_GENOLS)
+
 
 // global files (declared in file.c)
 extern FileP z_file, txt_file; 
@@ -284,7 +286,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     SEC_COUNTS          = 17, // Global section: introduced v12
     SEC_REF_IUPACS      = 18, // Global section: introduced v12
     SEC_SUBDICTS        = 19, // Global section: introduced 15.0.25
-
+    SEC_USER_MESSAGE    = 20, // Global section: introduced 15.0.29
     NUM_SEC_TYPES 
 } SectionType;
 
@@ -334,6 +336,7 @@ typedef int ThreadId;
 #define ROUNDUP8(x)    (((x) + 7)       & ~(typeof(x))0x7)
 #define ROUNDDOWN8(x)  ((x)             & ~(typeof(x))0x7)
 #define ROUNDUP16(x)   (((x) + 0xf)     & ~(typeof(x))0xf)
+#define ROUNDDOWN16(x) ((x)             & ~(typeof(x))0xf)
 #define ROUNDUP32(x)   (((x) + 0x1f)    & ~(typeof(x))0x1f)    
 #define ROUNDDOWN32(x) ((x)             & ~(typeof(x))0x1f)
 #define ROUNDUP64(x)   (((x) + 0x3f)    & ~(typeof(x))0x3f)
@@ -465,8 +468,10 @@ typedef SORTER ((*Sorter));
 #define STRfi(x,i) x##_lens[i], x##s[i]
 #define STRfb(buf) (int)(buf).len, (buf).data 
 #define STRfw(txtword) (txtword).len, Btxt ((txtword).index) // used with TxtWord
-#define STRtxtw(txtword) Btxt ((txtword).index), (txtword).len // used with TxtWord
 #define STRfBw(buf,txtword) (txtword).len, Bc ((buf), (txtword).index) // used with TxtWord or ZWord
+#define STRfN(x) (x), ((x)!=1 ? "s" : "") // to match format eg "%u file%s" - singular or plural 
+
+#define STRtxtw(txtword) Btxt ((txtword).index), (txtword).len // used with TxtWord
 #define STRtxt(x) Btxt (x), x##_len
 
 #define STRcpy(dst,src)    ({ if (src##_len) { memcpy(dst,src,src##_len) ; dst##_len = src##_len; } })
@@ -618,7 +623,7 @@ typedef struct { char s[256]; } StrTime; // long, in case of eg Chinese language
 extern StrTime str_time (void);
 
 #define SUPPORT "\nIf this is unexpected, please contact "EMAIL_SUPPORT".\n"
-#define ASSERT(condition, format, ...)       ( { if (!(condition)) { progress_newline(); fprintf (stderr, "%s Error in %s:%u %s: ", str_time().s, __FUNCLINE, GENOZIP_CODE_VERSION); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); fflush (stderr); exit_on_error(true); }} )
+#define ASSERT(condition, format, ...)       ( { if (!(condition)) { progress_newline(); fprintf (stderr, "%s Error in %s:%u %s: ", str_time().s, __FUNCLINE, version_str().s); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); fflush (stderr); exit_on_error(true); }} )
 #define ASSERT0(condition, string)           ASSERT (condition, string "%s", "")
 #define ASSERTISNULL(p)                      ASSERT0 (!p, "expecting "#p" to be NULL")
 #define ASSERTNOTNULL(p)                     ASSERT0 (p, #p" is NULL")

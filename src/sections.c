@@ -1003,12 +1003,13 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
                      digest_display_ex (h->chain.prim_genome_digest, DD_MD5).s);
 
         else if ((DT(SAM) || DT(BAM)) && v14)
-            sprintf (dt_specific, "%ssegconf=(sorted=%u,collated=%u,seq_len=%u,seq_len_to_cm=%u,ms_type=%u,has_MD_or_NM=%u,bisulfite=%u,MD_NM_by_unconverted=%u,predict_meth=%u,is_paired=%u,sag_type=%s,sag_has_AS=%u,pysam_qual=%u,cellranger=%u,SA_HtoS=%u,seq_len_dict_id=%s,deep_qname1=%u,deep_qname2=%u,deep_no_qual=%u,%uXsam_factor=%u)\n", 
+            sprintf (dt_specific, "%ssegconf=(sorted=%u,collated=%u,seq_len=%u,seq_len_to_cm=%u,ms_type=%u,has_MD_or_NM=%u,bisulfite=%u,MD_NM_by_unconverted=%u,predict_meth=%u,is_paired=%u,sag_type=%s,sag_has_AS=%u,pysam_qual=%u,cellranger=%u,SA_HtoS=%u,seq_len_dict_id=%s,deep_qname1=%u,deep_qname2=%u,deep_no_qual=%u,use_ins_ctx=%u,%uXsam_factor=%u)\n", 
                      SEC_TAB, h->sam.segconf_is_sorted, h->sam.segconf_is_collated, BGEN32 (h->sam.segconf_seq_len), h->sam.segconf_seq_len_cm, h->sam.segconf_ms_type, h->sam.segconf_has_MD_or_NM, 
                      h->sam.segconf_bisulfite, h->sam.segconf_MD_NM_by_un, h->sam.segconf_predict_meth, 
                      h->sam.segconf_is_paired, sag_type_name(h->sam.segconf_sag_type), h->sam.segconf_sag_has_AS, 
                      h->sam.segconf_pysam_qual, h->sam.segconf_cellranger, h->sam.segconf_SA_HtoS, dis_dict_id(h->sam.segconf_seq_len_dict_id).s,
-                     h->sam.segconf_deep_qname1, h->sam.segconf_deep_qname2, h->sam.segconf_deep_no_qual, SAM_FACTOR_MULT, h->sam.segconf_sam_factor);
+                     h->sam.segconf_deep_qname1, h->sam.segconf_deep_qname2, h->sam.segconf_deep_no_qual, 
+                     h->sam.segconf_use_ins_ctxs, SAM_FACTOR_MULT, h->sam.segconf_sam_factor);
 
         else if (DT(REF)) {
             if (v15) sprintf (dt_specific, "%sgenome_digest=%s\n", SEC_TAB, digest_display (h->genome_digest).s);
@@ -1019,11 +1020,11 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
             sprintf (dt_specific, "%sFASTQ_v13_digest_bound=%s segconf_seq_len_dict_id=%s\n", 
                      SEC_TAB, digest_display (h->FASTQ_v13_digest_bound).s, dis_dict_id(h->fastq.segconf_seq_len_dict_id).s);
 
-        sprintf (str, "\n%sver=%u.0.%u enc=%s dt=%s usize=%"PRIu64" lines=%"PRIu64" secs=%u txts=%u vb_size=%u\n" 
+        sprintf (str, "\n%sver=%u.0.%u private=%u enc=%s dt=%s usize=%"PRIu64" lines=%"PRIu64" secs=%u txts=%u vb_size=%u\n" 
                       "%s%s %s=\"%.*s\" %s=%s\n"
                       "%s" // dt_specific, if there is any
                       "%screated=\"%.*s\"\n",
-                 SEC_TAB, h->genozip_version, h->genozip_minor_ver/*15.0.28*/, encryption_name (h->encryption_type), dt_name (dt), 
+                 SEC_TAB, h->genozip_version, h->genozip_minor_ver/*15.0.28*/, h->private_file, encryption_name (h->encryption_type), dt_name (dt), 
                  BGEN64 (h->recon_size_prim), BGEN64 (h->num_lines_bound), BGEN32 (h->num_sections), h->num_txt_files,
                  BGEN16(h->vb_size), 
                  SEC_TAB, sections_dis_flags (f, st, dt).s,
@@ -1222,20 +1223,24 @@ void noreturn genocat_show_headers (rom z_filename)
                 continue;
             }
 
-            iprintf ("%5u ", sec_i);
+            if (flag.show_headers == SHOW_ALL_HEADERS || flag.show_headers-1 == header.section_type) 
+                iprintf ("%5u ", sec_i);
+            
             sections_show_header ((SectionHeaderP)&header, NULL, sec.offset, 'R');
 
             sec.offset += header_size + BGEN32 (header.data_compressed_len);
             accumulated_gap = 0;
         }
 
-        if (gap) iprintf ("ERROR: unexpected gap of %"PRIu64" bytes before Footer\n", gap);
+        if (flag.show_headers == SHOW_ALL_HEADERS) {
+            if (gap) iprintf ("ERROR: unexpected gap of %"PRIu64" bytes before Footer\n", gap);
 
-        if ((sec.offset = zfile_read_genozip_header_get_offset (true)))
-            iprintf ("R %9"PRIu64" FOOTER              genozip_header_offset=%"PRIu64"\n", 
-                    z_file->disk_size - sizeof (SectionFooterGenozipHeader), sec.offset);
-        else
-            iprint0 ("ERROR: no valid Footer\n");
+            if ((sec.offset = zfile_read_genozip_header_get_offset (true)))
+                iprintf ("R %9"PRIu64" FOOTER              genozip_header_offset=%"PRIu64"\n", 
+                        z_file->disk_size - sizeof (SectionFooterGenozipHeader), sec.offset);
+            else
+                iprint0 ("ERROR: no valid Footer\n");
+        }
     }
 
     exit_ok;
@@ -1298,6 +1303,7 @@ void sections_show_gheader (ConstSectionHeaderGenozipHeaderP header)
             iprintf ("  %s: %s\n", (v15 ? "genome_digest" : "REF_fasta_md5"), digest_display (header->genome_digest).s);
         iprintf ("  created: %*s\n",                -FILE_METADATA_LEN, header->created);
         iprintf ("  license_hash: %s\n",            digest_display (header->license_hash).s);
+        iprintf ("  private_file: %s\n",            TF(header->private_file));
         if (header->ref_filename[0]) {
             iprintf ("  reference filename: %s\n",  header->ref_filename);
             iprintf ("  reference file hash: %s\n", digest_display (header->ref_genome_digest).s);

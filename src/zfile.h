@@ -32,7 +32,7 @@ extern uint32_t zfile_compress_local_data (VBlockP vb, ContextP ctx, uint32_t sa
 extern void zfile_compress_vb_header (VBlockP vb);
 extern void zfile_update_compressed_vb_header (VBlockP vb);
 
-extern bool zfile_update_txt_header_section_header (uint64_t pos_of_current_vcf_header, uint32_t max_lines_per_vb);
+extern bool zfile_update_txt_header_section_header (uint64_t pos_of_current_vcf_header);
 
 extern void zfile_remove_ctx_group_from_z_data (VBlockP vb, Did did_i);
 

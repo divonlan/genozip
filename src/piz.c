@@ -39,6 +39,7 @@
 #include "base64.h"
 #include "dict_io.h"
 #include "buf_list.h"
+#include "user_message.h"
 
 // output coordinates of current line (for error printing) - very carefully as we are in an error condition - we can't assume anything
 PizDisCoords piz_dis_coords (VBlockP vb)
@@ -81,7 +82,11 @@ PizDisQname piz_dis_qname (VBlockP vb)
 void asspiz_text (VBlockP vb, FUNCLINE)
 {
     progress_newline(); 
-    fprintf (stderr, "%s %s/%s: Error in %s:%u line_in_file(1-based)=%"PRIu64" %s%s%s: ", str_time().s, LN_NAME, CTX(vb->curr_field)->tag_name, func, code_line, writer_get_txt_line_i ((VBlockP)(vb), vb->line_i), cond_int (Z_DT(VCF) || Z_DT(BCF), " sample_i=", vb->sample_i), piz_dis_coords((VBlockP)(vb)).s, piz_dis_qname((VBlockP)(vb)).s); 
+    fprintf (stderr, "%s %s/%s: Error in %s:%u line_in_file(1-based)=%"PRIu64" %s%s%s %s: ", 
+             str_time().s, LN_NAME, CTX(vb->curr_field)->tag_name, func, code_line, 
+             writer_get_txt_line_i ((VBlockP)(vb), vb->line_i), 
+             cond_int (Z_DT(VCF) || Z_DT(BCF), " sample_i=", vb->sample_i), 
+             piz_dis_coords((VBlockP)(vb)).s, piz_dis_qname((VBlockP)(vb)).s, version_str().s); 
 }
 
 bool piz_grep_match (rom start, rom after)
@@ -450,6 +455,8 @@ DataType piz_read_global_area (Reference ref)
         stats_read_and_display();
         if (is_genocat) return DT_NONE;
     }
+
+    user_message_display();
 
     if (!success) return DT_NONE;
 

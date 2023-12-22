@@ -302,7 +302,7 @@ bool buflist_locate (ConstBufferP buf, rom prefix /*NULL if silent*/)
 {
     for (VBlockPoolType pool_type=0; pool_type < NUM_POOL_TYPES; pool_type++) {
 
-        VBlockPool *vb_pool = vb_get_pool (pool_type, SOFT_FAIL);
+        VBlockPoolP vb_pool = vb_get_pool (pool_type, SOFT_FAIL);
         if (!vb_pool) continue;
 
         // note: we don't cover EVB (only in DEBUG and --show-mem) as it segfaults for an unknown reason (likely the Buffer structure itself resides with a structure
@@ -315,7 +315,7 @@ bool buflist_locate (ConstBufferP buf, rom prefix /*NULL if silent*/)
             if (vb_buf_locate (vb, buf)) {
                 if (prefix) 
                     fprintf (stderr, "%s %p located in pool=%s vb_id=%d: %s\n", 
-                             prefix, buf, pool_name(pool_type), vb_id, buf_desc (buf).s);
+                             prefix, buf, vb_pool->name, vb_id, buf_desc (buf).s);
                 return true;
             }
         }

@@ -158,6 +158,8 @@ void ref_finalize (bool also_free_filename)
 // PIZ: returns a range which is the entire contig
 ConstRangeP ref_piz_get_range (VBlockP vb, Reference ref, FailType soft_fail)
 {
+    ASSERT0 (IS_PIZ, "this is a PIZ-side function");
+
     ASSERTISALLOCED (ref->ranges);
 
     // caching
@@ -678,6 +680,8 @@ RangeP ref_seg_get_range (VBlockP vb, Reference ref, WordIndex chrom, STRp(chrom
     // sanity checks
     ASSERT0 (vb->chrom_name, "vb->chrom_name=NULL");
     
+    ASSERT0 (IS_ZIP, "this is a ZIP-side function");
+
     // case: no external reference and no header contigs
     ASSINP (ref->ranges.rtype, "No contigs specified in the %s header, use --reference", z_dt_name());
              
@@ -1306,14 +1310,14 @@ void ref_load_external_reference (Reference ref, ContextP chrom_ctx)
     flag.list_chroms = false;
     flag.show_gheader = false;
     flag.show_time_comp_i = COMP_NONE;
-
+    flag.t_offset = flag.t_size = 0; 
     ASSERTISNULL (z_file);
     z_file = file_open_z_read (ref->filename);    
     
     TEMP_VALUE (command, PIZ);
 
     // the reference file has no components or VBs - it consists of only a global area including reference sections
-    piz_read_global_area (ref);
+    ASSERT0 (piz_read_global_area (ref) == DT_REF, "Failed to read reference file"); // if error, detailed error was already outputted
     
     // case: we are requested the chrom context - word_list and dict
     if (chrom_ctx) {

@@ -18,6 +18,14 @@ DataTypeProperties dt_props [NUM_DATATYPES] = DATA_TYPE_PROPERTIES;
 DataTypeProperties dt_props_def             = DATA_TYPE_FUNCTIONS_DEFAULT;
 DataTypeFields     dt_fields[NUM_DATATYPES] = DATA_TYPE_FIELDS;
 
+void dt_initialize (void)
+{
+    // since V15, FASTQ_PREDEFINED is a copy of SAM PREDEFINED, except for FASTQ_CONTIG that remains "CONTIG" - see also ctx_initialize_predefined_ctxs
+    dt_fields[DT_FASTQ].predefined[FASTQ_CONTIG].dict_id = (DictId)DICT_ID_MAKEF_6 ("CONTIG");
+    dt_fields[DT_FASTQ].predefined[FASTQ_CONTIG].tag_name = "CONTIG";
+    dt_fields[DT_FASTQ].predefined[FASTQ_CONTIG].tag_name_len = 6;
+}
+
 // PIZ: gets the toplevel and factor, and returns true if translating
 const DtTranslation dt_get_translation (VBlockP vb) // vb=NULL relates to the txt header
 {
