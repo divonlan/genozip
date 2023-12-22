@@ -219,9 +219,9 @@ $(OBJDIR)/%.d: %.c | $(OBJDIR) # directory is an "order only prerequesite": http
 	@$(CC) $(CFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
 
 ifeq ($(OS),Windows_NT)
-objdir.mac/secure/license.o : secure/license.c secure/license_sys.c secure/license_stats.c secure/license_zfile.c  secure/license_buf.c
+objdir.mac/secure/license.o : secure/license.c secure/license_sys.c secure/license_stats.c secure/license_zfile.c secure/license_buf.c
 	@echo "getting $>"
-	@(cd ..; mac-get-license-o.sh)
+	@wsl mac-get-license-o.sh
 endif
 
 $(OBJDIR)/%.o: %.c $(OBJDIR)/%.d
