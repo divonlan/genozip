@@ -693,13 +693,13 @@ SPECIAL (VCF, 53, next_ALT,            vcf_piz_special_next_ALT);               
 SPECIAL (VCF, 54, MUX_BY_END,          vcf_piz_special_MUX_BY_END);               // added v15.0.26
 SPECIAL (VCF, 55, MUX_BY_ISAAC_FILTER, vcf_piz_special_MUX_BY_ISAAC_FILTER);      // added v15.0.26
 SPECIAL (VCF, 56, X_LM_RM,             vcf_piz_special_X_LM_RM);                  // added v15.0.28
-SPECIAL (VCF, 57, X_IL,                vcf_piz_special_X_IL);                     // added v15.0.29
-SPECIAL (VCF, 58, X_IC,                vcf_piz_special_X_IC);                     // added v15.0.29
-SPECIAL (VCF, 59, X_HIN,               vcf_piz_special_X_HIN);                    // added v15.0.29
-SPECIAL (VCF, 60, X_HIL,               vcf_piz_special_X_HIL);                    // added v15.0.29
-SPECIAL (VCF, 61, VARIANT_TYPE,        vcf_piz_special_VARIANT_TYPE);             // added v15.0.29
-SPECIAL (VCF, 62, PLATYPUS_SC,         vcf_piz_special_PLATYPUS_SC);              // added v15.0.29
-SPECIAL (VCF, 63, PLATYPUS_HP,         vcf_piz_special_PLATYPUS_HP);              // added v15.0.29
+SPECIAL (VCF, 57, X_IL,                vcf_piz_special_X_IL);                     // added v15.0.30
+SPECIAL (VCF, 58, X_IC,                vcf_piz_special_X_IC);                     // added v15.0.30
+SPECIAL (VCF, 59, X_HIN,               vcf_piz_special_X_HIN);                    // added v15.0.30
+SPECIAL (VCF, 60, X_HIL,               vcf_piz_special_X_HIL);                    // added v15.0.30
+SPECIAL (VCF, 61, VARIANT_TYPE,        vcf_piz_special_VARIANT_TYPE);             // added v15.0.30
+SPECIAL (VCF, 62, PLATYPUS_SC,         vcf_piz_special_PLATYPUS_SC);              // added v15.0.30
+SPECIAL (VCF, 63, PLATYPUS_HP,         vcf_piz_special_PLATYPUS_HP);              // added v15.0.30
 #define NUM_VCF_SPECIAL 64
 
 // Translators for Luft (=secondary coordinates)

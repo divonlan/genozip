@@ -286,7 +286,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     SEC_COUNTS          = 17, // Global section: introduced v12
     SEC_REF_IUPACS      = 18, // Global section: introduced v12
     SEC_SUBDICTS        = 19, // Global section: introduced 15.0.25
-    SEC_USER_MESSAGE    = 20, // Global section: introduced 15.0.29
+    SEC_USER_MESSAGE    = 20, // Global section: introduced 15.0.30
     NUM_SEC_TYPES 
 } SectionType;
 

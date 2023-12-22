@@ -191,7 +191,7 @@ typedef struct {
     uint64_t recon_size_prim;          // data size of reconstructed file, if uncompressing as a single file in primary coordinates
     uint64_t genozip_minor_ver : 10;   // populated since 15.0.28
     uint64_t unused8           : 5;
-    uint64_t private_file      : 1;    // this file can only be decompressed by user with the specified license_hash (15.0.29)
+    uint64_t private_file      : 1;    // this file can only be decompressed by user with the specified license_hash (15.0.30)
     uint64_t num_lines_bound   : 48;   // number of lines in a bound file. "line" is data_type-dependent. For FASTQ, it is a read.
     uint32_t num_sections;             // number sections in this file (including this one)
     union {
@@ -248,7 +248,7 @@ typedef struct {
             uint8_t segconf_deep_qname1  : 1; // SAM: v15
             uint8_t segconf_deep_qname2  : 1; // SAM: v15
             uint8_t segconf_deep_no_qual : 1; // SAM: v15
-            uint8_t segconf_use_ins_ctxs : 1; // 15.0.29
+            uint8_t segconf_use_ins_ctxs : 1; // 15.0.30
             uint8_t unused_bits          : 6;
             uint8_t segconf_sam_factor;       // 15.0.28: BAM only: 64X estimated blow-up factor of SAM txt_data vs BAM 
             char unused[254];

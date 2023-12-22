@@ -253,7 +253,7 @@ void sam_zip_genozip_header (SectionHeaderGenozipHeaderP header)
     header->sam.segconf_deep_qname1     = (segconf.deep_qtype == QNAME1);// v15
     header->sam.segconf_deep_qname2     = (segconf.deep_qtype == QNAME2);// v15
     header->sam.segconf_deep_no_qual    = segconf.deep_no_qual;          // v15
-    header->sam.segconf_use_ins_ctxs    = segconf.use_insertion_ctxs;    // 15.0.29
+    header->sam.segconf_use_ins_ctxs    = segconf.use_insertion_ctxs;    // 15.0.30
     
     unsigned est_sam_factor_mult = round (MAX_(segconf.est_sam_factor, 1) * (double)SAM_FACTOR_MULT);
     if (est_sam_factor_mult > 255) {

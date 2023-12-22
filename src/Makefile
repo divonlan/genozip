@@ -172,7 +172,8 @@ else
     ifeq ($(uname),Darwin) # Mac
 		MY_SRCS += mac_compat.c
     	OBJDIR=$(OBJDIR_MAC)
-
+		CFLAGS += -mmacosx-version-min=10.13
+		LDFLAGS += -mmacosx-version-min=10.13
 		ifeq ($(CC),gcc) 
 		LDFLAGS += -rdynamic
 		endif
@@ -217,7 +218,6 @@ $(OBJDIR)/%.d: %.c | $(OBJDIR) # directory is an "order only prerequesite": http
 	@echo Calculating dependencies $<
 	@$(CC) $(CFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
 
-objdir.mac/secure/license.o : CFLAGS += -mmacosx-version-min=10.13
 ifeq ($(OS),Windows_NT)
 objdir.mac/secure/license.o : secure/license.c secure/license_sys.c secure/license_stats.c secure/license_zfile.c  secure/license_buf.c
 	@echo "getting $>"
@@ -443,10 +443,9 @@ conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld
 	@echo "  (3) Click 'Resolve conflicts' -> select the top option in each of the 2 conflicts, then commit"
 	@echo "  (4) Wait for all 4 tests to pass (~8 minutes)"
 	@echo "  (5) Click 'Merge pull request' and the 'Confirm merge' (DONT CLICK 'Delete branch')"
-	@echo "  (6) In local terminal: cd ../genozip-feedstock/; git pull; cd -"
-	@echo "  (7) Open: https://github.com/divonlan/genozip/releases/new"
-	@echo "  (8) Set 'Tag version' and 'Release title' are both: genozip-$(version)"
-	@echo "  (9) Copy the notes for the version from RELEASE NOTES -> Publish release"
+	@echo "  (6) Open: https://github.com/divonlan/genozip/releases/new"
+	@echo "  (7) Set 'Tag version' and 'Release title' are both: genozip-$(version)"
+	@echo "  (8) Copy the notes for the version from RELEASE NOTES -> Publish release"
 
 # Building Windows InstallForge with distribution flag: we delete arch.o to force it to re-compile with DISTRIBUTION=InstallForge.
 windows/%.exe: CFLAGS += $(OPTFLAGS) # -DDISTRIBUTION=\"InstallForge\" # note: matches the name in version.c

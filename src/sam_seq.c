@@ -1183,7 +1183,7 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
         }
     }
 
-    // case: insertions were muxed by the base after - we can fill them in now (since 15.0.29)
+    // case: insertions were muxed by the base after - we can fill them in now (since 15.0.30)
     if (segconf.use_insertion_ctxs) {
         SAFE_ASSIGN (recon, 0);           // in case last insertion goes to the end of SEQ - it will use this "base" for muxing
         recon -= vb->seq_len; // go back to the start of the SEQ reconstruction

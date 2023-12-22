@@ -459,7 +459,7 @@ void dict_io_print (FILE *fp, STRp(data), bool with_word_index, bool add_quotati
 {
     rom word = data, after = data + data_len;
     
-    for (WordIndex word_index=0; word < after; word_index++) {
+    while (word < after) {
         int word_len = strlen (word);
 
         // in case we are showing chrom data in --list-chroms in SAM - don't show * and =
