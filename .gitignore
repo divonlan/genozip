@@ -8,6 +8,7 @@ launch.json
 .archive.tar.gz
 *.o
 !src/objdir.*/secure/license.o
+!src/objdir.mac/secure/license.old_mac.o
 *.debug-o
 *.opt-o
 *.d
