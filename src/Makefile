@@ -168,17 +168,9 @@ OBJDIR_MAC=objdir.mac
 
 ifneq ($(wildcard secure/.*),) # "secure" directory exists
 	MY_SRCS += secure/license.c
-	CONDA_LIC_OBJS := $(OBJDIR_LINUX)/secure/license.o $(OBJDIR_MAC)/secure/license.o # note: remotely building Mac's license.o also builds license.old_mac.o
+	CONDA_LIC_OBJS := $(OBJDIR_LINUX)/secure/license.o $(OBJDIR_MAC)/secure/license.o
 else
-	ifdef Mac
-		ifdef IS_CONDA
-			LDFLAGS += $(OBJDIR)/secure/license.old_mac.o
-		else
-			LDFLAGS += $(OBJDIR)/secure/license.o
-		endif
-	else
-		LDFLAGS += $(OBJDIR)/secure/license.o
-	endif
+	LDFLAGS += $(OBJDIR)/secure/license.o
 endif
 
 ifdef Windows
@@ -197,6 +189,7 @@ endif
 ifdef Mac # Mac
 	MY_SRCS += mac_compat.c
 	OBJDIR=$(OBJDIR_MAC)
+	CFLAGS += -mmacosx-version-min=10.9 -DNO_UTIMENSAT # Conda requires support from 10.9 but utimensat() was only introduced in MacOS 10.13
 	ifeq ($(CC),gcc) 
 		LDFLAGS += -rdynamic
 	endif
@@ -241,7 +234,7 @@ $(OBJDIR)/%.d: %.c | $(OBJDIR) # directory is an "order only prerequesite": http
 	@$(CC) $(CFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
 
 ifdef Windows
-objdir.mac/secure/license.o : secure/license.c secure/license_sys.c secure/license_stats.c secure/license_zfile.c secure/license_buf.c
+objdir.mac/secure/license.o : secure/license.c secure/license_buf.c secure/license_stats.c secure/license_sys.c secure/license_zfile.c
 	@echo "getting $>"
 	@wsl mac-get-license-o.sh
 endif
@@ -249,12 +242,6 @@ endif
 $(OBJDIR)/%.o: %.c $(OBJDIR)/%.d
 	@echo Compiling $<
 	@$(CC) -c -o $@ $< $(CFLAGS)
-
-ifdef Mac
-$(OBJDIR)/%.old_mac.o: %.c $(OBJDIR)/%.d
-	@echo Compiling $<
-	@$(CC) -c -o $@ $< $(CFLAGS) -mmacosx-version-min=10.9 -DNO_UTIMENSAT # Conda requires support of 10.9 (but utimensat() was only introduced in 10.13)
-endif
 
 $(OBJDIR)/%.debug-o: %.c $(OBJDIR)/%.d
 	@echo "Compiling $< (debug)"
@@ -516,7 +503,7 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@ssh `cat mac/.mac_ip_address` -l `cat mac/.mac_username`  "cd genozip ; echo "Pulling from git" ; git pull >& /dev/null ; make -j mac/.from_remote_timestamp" # pull before make as Makefile might have to be pulled
 	@touch $@
 
-BUILD_FILES = version.h genozip-installer.ifp ../LICENSE.txt Makefile objdir.linux/secure/license.o objdir.windows/secure/license.o objdir.mac/secure/license.o objdir.mac/secure/license.old_mac.o ../RELEASE_NOTES.txt
+BUILD_FILES = version.h genozip-installer.ifp ../LICENSE.txt Makefile objdir.linux/secure/license.o objdir.windows/secure/license.o objdir.mac/secure/license.o ../RELEASE_NOTES.txt
 
 INSTALLER_FILES = genozip-installer.exe genozip-linux-x86_64.tar LICENSE.html
 

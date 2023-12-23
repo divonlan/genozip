@@ -63,14 +63,21 @@ static void url_do_curl (rom url, char *stdout_data, unsigned *stdout_len/*in/ou
         ASSERT (!fcntl(fileno(data_stream), F_SETFL, fcntl (fileno(data_stream), F_GETFL) | O_NONBLOCK), "fcntl failed: %s", strerror (errno));
 #endif
 
-    for (int i=0; i < 100; i++) {
+    #define RETRIES 70
+    for (int i=0; i < RETRIES; i++) {
         int ret = fread (stdout_data, 1, *stdout_len - 1, data_stream); // -1 to leave room for \0
         if (ret == 0) {
-            if (errno == EAGAIN) { // doesn't happen on Windows
+            if (errno == EAGAIN && i < RETRIES-1) { // doesn't happen on Windows
                 usleep (100000); // 100ms
                 continue;
             }
-            ABORT ("failed to read() from the pipe to curl(%s): %s", url, strerror (errno));
+
+            strcpy (error, "Failed to read (possibly no connection)");
+            *error_len = strlen (error);
+            *stdout_len = 0;
+
+            stream_close (&curl, STREAM_DONT_WAIT_FOR_PROCESS);
+            return;
         }
     
         *stdout_len = (unsigned)ret;
