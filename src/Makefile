@@ -10,7 +10,22 @@
 # Mingw: http://mingw-w64.org/doku.php 
 # Cygwin: https://www.cygwin.com/
 
-uname := $(shell uname -s)
+ifeq ($(OS),Windows_NT)
+	Windows := 1
+else
+	uname := $(shell uname -s)
+
+	ifeq ($(uname),Linux)
+		Linux := 1
+	endif
+
+    ifeq ($(uname),Darwin) # Mac
+		Mac := 1
+    endif
+endif
+
+ifndef_any_of = $(filter undefined,$(foreach v,$(1),$(origin $(v))))
+ifdef_any_of  = $(filter-out undefined,$(foreach v,$(1),$(origin $(v))))
 
 ifdef BUILD_PREFIX
 IS_CONDA=1
@@ -25,7 +40,7 @@ ifdef IS_CONDA
 	CFLAGS += -DDISTRIBUTION=\"conda\" # note: matches the name in version.c -DIS_CONDA
 	CFLAGS += -Ofast 
 
-	ifeq ($(OS),Windows_NT)
+	ifdef Windows
 		CC=gcc # in Windows, override conda's default Visual C with gcc 
 		LDFLAGS += -L$(PREFIX)/Library/lib
 		CFLAGS  += -I$(PREFIX)/Library/include 
@@ -39,17 +54,18 @@ else
 	endif
 
 	# set -march. note: if conda, we leave it to conda to set
-	ifeq ($(OS),Windows_NT)
+	ifdef Windows
 		CFLAGS += -march=native 
-	else
-		ifeq ($(uname),Linux)
-			CFLAGS += -march=nocona # similar to conda - relatively low optimization, since different hosts in a cluster might have different capabilities
-			CFLAGS += -mtune=intel  # see https://gcc.gnu.org/onlinedocs/gcc/x86-Options.html
-		endif
+	endif
 
-		ifeq ($(uname),Darwin) # Mac
-			CFLAGS += -march=native # conda used "core2". We use the highest available optimizations, because it is typically compiled for use on a specific Mac
-		endif
+	ifdef Linux
+		CFLAGS += -march=nocona # similar to conda - relatively low optimization, since different hosts in a cluster might have different capabilities
+		CFLAGS += -mtune=intel  # see https://gcc.gnu.org/onlinedocs/gcc/x86-Options.html
+	endif
+
+	ifdef Mac
+		CFLAGS += -march=native # conda used "core2". We use the highest available optimizations, because it is typically compiled for use on a specific Mac
+		# CFLAGS += -mmacosx-version-min=10.13 # for utimensat (in conda we use utimes instead)
 	endif
 
 endif 
@@ -150,39 +166,45 @@ OBJDIR_LINUX=objdir.linux
 OBJDIR_WINDOWS=objdir.windows
 OBJDIR_MAC=objdir.mac
 
-ifneq ($(wildcard secure/.*),) # directory exists
+ifneq ($(wildcard secure/.*),) # "secure" directory exists
 	MY_SRCS += secure/license.c
-	CONDA_LIC_OBJS := $(OBJDIR_LINUX)/secure/license.o $(OBJDIR_MAC)/secure/license.o
+	CONDA_LIC_OBJS := $(OBJDIR_LINUX)/secure/license.o $(OBJDIR_MAC)/secure/license.o # note: remotely building Mac's license.o also builds license.old_mac.o
 else
-	LDFLAGS += $(OBJDIR)/secure/license.o
+	ifdef Mac
+		ifdef IS_CONDA
+			LDFLAGS += $(OBJDIR)/secure/license.old_mac.o
+		else
+			LDFLAGS += $(OBJDIR)/secure/license.o
+		endif
+	else
+		LDFLAGS += $(OBJDIR)/secure/license.o
+	endif
 endif
 
-ifeq ($(OS),Windows_NT)
+ifdef Windows
 	EXE = .exe
 #	LDFLAGS += -static -static-libgcc -lIPHLPAPI -lUrlmon
 	LDFLAGS += -static-libgcc -lIPHLPAPI -lUrlmon
 	OBJDIR=$(OBJDIR_WINDOWS)
 	WSL=wsl
-else
-    ifeq ($(uname),Linux)
-        LDFLAGS += -lrt -fuse-ld=gold -rdynamic # rt is required by pthreads ; rdynamic for backtrace_symbols_fd to show function names
-    	OBJDIR=$(OBJDIR_LINUX)
-	endif
+endif
 
-    ifeq ($(uname),Darwin) # Mac
-		MY_SRCS += mac_compat.c
-    	OBJDIR=$(OBJDIR_MAC)
-		CFLAGS += -mmacosx-version-min=10.13
-		LDFLAGS += -mmacosx-version-min=10.13
-		ifeq ($(CC),gcc) 
+ifdef Linux
+	LDFLAGS += -lrt -fuse-ld=gold -rdynamic # rt is required by pthreads ; rdynamic for backtrace_symbols_fd to show function names
+	OBJDIR=$(OBJDIR_LINUX)
+endif
+
+ifdef Mac # Mac
+	MY_SRCS += mac_compat.c
+	OBJDIR=$(OBJDIR_MAC)
+	ifeq ($(CC),gcc) 
 		LDFLAGS += -rdynamic
-		endif
-    endif
+	endif
 endif
 
 C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(BSC_SRCS) $(LZMA_SRCS) $(DEFLATE_SRCS) $(HTSCODECS_SRC) 
 
-ifeq ($(uname),Linux)
+ifdef Linux
 	C_SRCS += $(ONION_SRCS)
 endif
 
@@ -218,7 +240,7 @@ $(OBJDIR)/%.d: %.c | $(OBJDIR) # directory is an "order only prerequesite": http
 	@echo Calculating dependencies $<
 	@$(CC) $(CFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
 
-ifeq ($(OS),Windows_NT)
+ifdef Windows
 objdir.mac/secure/license.o : secure/license.c secure/license_sys.c secure/license_stats.c secure/license_zfile.c secure/license_buf.c
 	@echo "getting $>"
 	@wsl mac-get-license-o.sh
@@ -227,6 +249,12 @@ endif
 $(OBJDIR)/%.o: %.c $(OBJDIR)/%.d
 	@echo Compiling $<
 	@$(CC) -c -o $@ $< $(CFLAGS)
+
+ifdef Mac
+$(OBJDIR)/%.old_mac.o: %.c $(OBJDIR)/%.d
+	@echo Compiling $<
+	@$(CC) -c -o $@ $< $(CFLAGS) -DNO_UTIMENSAT # for Mac up to 10.12
+endif
 
 $(OBJDIR)/%.debug-o: %.c $(OBJDIR)/%.d
 	@echo "Compiling $< (debug)"
@@ -250,7 +278,7 @@ GENDICT_OBJS := $(addprefix $(OBJDIR)/, $(GENDICT_SRCS:.c=.o))
 # Step 1: dict_id_gen.sh generates dict_id_gen.c, including all the GENDICT definitions from the data type include files (eg vcf.h)
 # Step 2: dict_id_gen.sh compiles dict_id_gen.c and generate dict_id_gen[.exe]
 # Step 3. dict_id_gen.sh generates dict_id_gen.h: it uses dict_id_gen[.exe]to generate the field constant, and then adds the fields enum and mapping
-ifeq ($(OS),Windows_NT)
+ifdef Windows
 
 dict_id_gen.h : $(shell grep -w "pragma GENDICT" *.h | cut -d: -f1 | uniq) dict_id_gen.sh
 	@echo Generating $@
@@ -294,7 +322,7 @@ genounzip-opt$(EXE) genocat-opt$(EXE) genols-opt$(EXE): genozip-opt$(EXE)
 
 # WSL2 clock is out of sync with Windows (and hence the NTFS filesystem) every time the computer sleeps
 # For this to work, first "sudo chmod u+s /usr/sbin/hwclock"
-ifneq ($(OS),Windows_NT)
+ifndef Windows
 sync_wsl_clock:
 #	@if `uname -a | grep microsoft-standard > /dev/null`; then hwclock -s > /dev/null 2>&1; echo Syncing WSL clock; fi || echo -n 
 else
@@ -312,7 +340,7 @@ install: genozip$(EXE)
 	@echo Installing in $(PREFIX)/bin
 	@if ( test ! -d $(PREFIX)/bin ) ; then mkdir -p $(PREFIX)/bin ; fi
 	@cp -f genozip$(EXE) $(PREFIX)/bin/genozip$(EXE)
-ifneq ($(OS),Windows_NT)
+ifndef Windows
 	@chmod a+x $(PREFIX)/bin/genozip$(EXE)
 endif
 	@cp -f $(PREFIX)/bin/genozip$(EXE) $(PREFIX)/bin/genounzip$(EXE)
@@ -339,7 +367,7 @@ clean-debug:
 
 clean:  # careful not to delete license.o
 	@echo Cleaning up optimized
-	@rm -f $(EXECUTABLES) $(OBJS) $(DEPS) 
+	@rm -f $(EXECUTABLES) $(OBJS) $(DEPS) $(OBJDIR)/*.o $(OBJDIR)/*.d
 
 clean-distribution: # clean all platforms
 	@bash --norc --noprofile secure/prepare.sh # before clean removes executables
@@ -377,7 +405,7 @@ genozip-prod$(EXE):
 	@(cd $(PROD_SRC); rm -Rf $(OBJDIR) ; git reset --hard ; git pull ; $(MAKE) clean ; touch dict_id_gen.h ; $(MAKE))
 
 # currently, I build for conda from my Windows machine so I don't bother supporting other platforms
-ifeq ($(OS),Windows_NT)
+ifdef Windows
 
 # When running on Windows, builds prod for Linux
 genozip-prod:
@@ -388,7 +416,7 @@ genozip-prod:
 # and re-compile so that genozip --version gets updated
 # IMPORTANT: the first number in the version indicates the genozip file format version and goes into
 # the genozip file header SectionHeaderTxtHeader.genozip_version
-#increment-version: $(C_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
+#increment-version: $(C_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
 increment-version: # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
 	@echo "Incrementing version.h"
 	@bash $(SCRIPTS)/increment-version.sh
@@ -399,7 +427,7 @@ decrement-version:
 	c"
 	@echo "Change version.h to the last version that still has a tag"
 
-.archive.tar.gz : $(C_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_LIC_OBJS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) ../LICENSE.txt
+.archive.tar.gz : $(C_SRCS) $(CONDA_LIC_OBJS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) ../LICENSE.txt
 	@echo Creating github tag genozip-$(version) and archive
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@git push > /dev/null
@@ -499,7 +527,7 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@ssh `cat mac/.mac_ip_address` -l `cat mac/.mac_username`  "cd genozip ; echo "Pulling from git" ; git pull >& /dev/null ; make -j mac/.from_remote_timestamp" # pull before make as Makefile might have to be pulled
 	@touch $@
 
-BUILD_FILES = version.h genozip-installer.ifp ../LICENSE.txt Makefile objdir.linux/secure/license.o objdir.windows/secure/license.o ../RELEASE_NOTES.txt
+BUILD_FILES = version.h genozip-installer.ifp ../LICENSE.txt Makefile objdir.linux/secure/license.o objdir.windows/secure/license.o objdir.mac/secure/license.o objdir.mac/secure/license.old_mac.o ../RELEASE_NOTES.txt
 
 INSTALLER_FILES = genozip-installer.exe genozip-linux-x86_64.tar LICENSE.html
 
@@ -538,7 +566,7 @@ genozip-linux-x86_64/LICENSE.txt: ../LICENSE.txt
 endif # Windows
 
 # Building Linux pre-compiled binaries: we delete arch.o to force it to re-compile with DISTRIBUTION=linux-x86_64.
-ifeq ($(uname),Linux)
+ifdef Linux
 
 genozip-linux-x86_64/clean:
 	@rm -fR genozip-linux-x86_64
@@ -568,7 +596,7 @@ $(INSTALLERS)/genozip-linux-x86_64.tar: version.h genozip-linux-x86_64/clean $(L
 
 endif # Linux
 
-ifeq ($(uname),Darwin)
+ifdef Mac
 
 MACDWNDIR = mac/darwinpkg
 MACLIBDIR = $(MACDWNDIR)/Library/genozip
@@ -595,7 +623,7 @@ $(MACLIBDIR)/%: %
 
 pkg_identifier  := genozip-$(version)
 
-app_specific_pw := $(shell cat .altool_app_specifc_password)
+#app_specific_pw := $(shell cat .altool_app_specifc_password)
 
 apple_id        := $(shell /usr/libexec/PlistBuddy -c "print :Accounts:0:AccountID" ~/Library/Preferences/MobileMeAccounts.plist)
 

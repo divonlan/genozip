@@ -1115,9 +1115,7 @@ static inline bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx, uint8_t *vb
                 buf_alloc_255 (evb, &ZCTX(CHROM)->chrom2ref_map, 0, MAX_(INITIAL_NUM_NODES, zf_node_index+1), WordIndex, CTX_GROWTH, "ZCTX(CHROM)->chrom2ref_map");
                 ZCTX(CHROM)->chrom2ref_map.len32 = MAX_(ZCTX(CHROM)->chrom2ref_map.len32, zf_node_index + 1);
     
-                // if (*B(WordIndex, vctx->chrom2ref_map, vb_node->word_index) != WORD_INDEX_NONE)  xxx
                 *B(WordIndex, ZCTX(CHROM)->chrom2ref_map, zf_node_index) = *B(WordIndex, vctx->chrom2ref_map, vb_node->word_index); // possibly WORD_INDEX_NONE
-
             }
 
             vb_node->word_index = zf_node->word_index = zf_node_index;

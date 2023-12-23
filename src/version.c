@@ -67,8 +67,15 @@ static void *version_background_test_for_newer_do (void *unused)
         latest_version = strrchr (redirect_url, '-'); // url looks something like: "https://github.com/divonlan/genozip/releases/tag/genozip-13.0.18"
         if (latest_version) {
             latest_version++;
-            if (!flag.debug_latest && !strcmp (latest_version, GENOZIP_CODE_VERSION))
-                latest_version = NULL; // same as current version
+
+            char copy[100];
+            strcpy (copy, GENOZIP_CODE_VERSION); // bc str_split_ints doesn't work on string literals
+
+            str_split_ints (latest_version, strlen (latest_version), 3, '.', latest, true);
+            str_split_ints (copy, strlen (copy), 3, '.', this, true);
+
+            if (!flag.debug_latest && n_latests == 3 && n_thiss == 3 && latests[0] == thiss[0] && latests[2] <= thiss[2])
+                latest_version = NULL; // same or newer than current version
         } 
     }
 

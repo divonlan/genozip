@@ -893,7 +893,7 @@ uint32_t str_split_ints_do (STRp(str), uint32_t max_items, char sep, bool exactl
                        
 {
     rom after = &str[str_len];
-    SAFE_NUL (after);
+    SAFE_NUL (after); // this doesn't work on string literals
 
     uint32_t item_i;
     for (item_i=0; item_i < max_items && str < after; item_i++, str++) {
@@ -918,7 +918,7 @@ uint32_t str_split_floats_do (STRp(str), uint32_t max_items, char sep, bool exac
                        
 {
     rom after = &str[str_len];
-    SAFE_NUL (after);
+    SAFE_NUL (after); // this doesn't work on string literals
 
     uint32_t item_i;
     for (item_i=0; item_i < max_items && str < after; item_i++, str++) {
