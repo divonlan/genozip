@@ -253,7 +253,7 @@ $(OBJDIR)/%.o: %.c $(OBJDIR)/%.d
 ifdef Mac
 $(OBJDIR)/%.old_mac.o: %.c $(OBJDIR)/%.d
 	@echo Compiling $<
-	@$(CC) -c -o $@ $< $(CFLAGS) -DNO_UTIMENSAT # for Mac up to 10.12
+	@$(CC) -c -o $@ $< $(CFLAGS) -mmacosx-version-min=10.9 -DNO_UTIMENSAT # Conda requires support of 10.9 (but utimensat() was only introduced in 10.13)
 endif
 
 $(OBJDIR)/%.debug-o: %.c $(OBJDIR)/%.d
@@ -421,12 +421,6 @@ increment-version: # note: target name is not "version.h" so this is not invoked
 	@echo "Incrementing version.h"
 	@bash $(SCRIPTS)/increment-version.sh
 
-decrement-version:
-	@echo "Do manually:"
-	@echo "Remove tag: 
-	c"
-	@echo "Change version.h to the last version that still has a tag"
-
 .archive.tar.gz : $(C_SRCS) $(CONDA_LIC_OBJS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) ../LICENSE.txt
 	@echo Creating github tag genozip-$(version) and archive
 	@$(SH_VERIFY_ALL_COMMITTED)
@@ -455,13 +449,13 @@ conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@echo " "
 	@echo "Copying $^ to conda feedstock"
-	@(cd $(CONDA_FEEDSTOCK); git reset --hard)
+	@(cd $(CONDA_FEEDSTOCK); git reset --hard; git pull)
 	@cp conda/README.md $(CONDA_FEEDSTOCK)
 	@cp conda/meta.yaml conda/build.sh conda/bld.bat $(CONDA_RECIPE_DIR)
 	@echo "Committing my files to branch genozip on my fork"
 	@(cd $(CONDA_FEEDSTOCK); git pull; git commit -m "update" recipe/meta.yaml README.md recipe/build.sh recipe/bld.bat; git push) > /dev/null
 	@echo " "
-	@echo "Submitting pull request to conda-forge"
+#	@echo "Submitting pull request to conda-forge"
 #	@(cd $(CONDA_RECIPE_DIR); git request-pull master https://github.com://conda-forge/genozip-feedstock master)
 #	@(cd $(CONDA_RECIPE_DIR); git request-pull master https://github.com/divonlan/genozip-feedstock master)
 	@touch $@
@@ -469,11 +463,6 @@ conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld
 	@echo "  (1) Go to https://github.com/divonlan/genozip-feedstock/tree/genozip "
 	@echo "  (2) Click 'Contribute' -> 'Open pull request' OR 'Create pull request'"
 	@echo "  (3) Click 'Resolve conflicts' -> select the top option in each of the 2 conflicts, then commit"
-	@echo "  (4) Wait for all 4 tests to pass (~8 minutes)"
-	@echo "  (5) Click 'Merge pull request' and the 'Confirm merge' (DONT CLICK 'Delete branch')"
-	@echo "  (6) Open: https://github.com/divonlan/genozip/releases/new"
-	@echo "  (7) Set 'Tag version' and 'Release title' are both: genozip-$(version)"
-	@echo "  (8) Copy the notes for the version from RELEASE NOTES -> Publish release"
 
 # Building Windows InstallForge with distribution flag: we delete arch.o to force it to re-compile with DISTRIBUTION=InstallForge.
 windows/%.exe: CFLAGS += $(OPTFLAGS) # -DDISTRIBUTION=\"InstallForge\" # note: matches the name in version.c
@@ -533,24 +522,35 @@ INSTALLER_FILES = genozip-installer.exe genozip-linux-x86_64.tar LICENSE.html
 
 push-build: 
 	@(git stage $(BUILD_FILES) ; exit 0) > /dev/null
-	@(git commit -m $(version) ; exit 0) > /dev/null
-	@(cd secure; git commit -m $(version) ; exit 0) > /dev/null
-	@git push > /dev/null
 	@(cd $(INSTALLERS); git stage $(INSTALLER_FILES) ; exit 0) > /dev/null
 	@(git commit -m $(version) ; exit 0) > /dev/null
 	@git push > /dev/null
 
-distribution:             clean-distribution increment-version testfiles ../LICENSE.txt $(INSTALLERS)/LICENSE.html $(INSTALLERS)/genozip-linux-x86_64.tar.build $(INSTALLERS)/genozip-installer.exe \
+distribution:             clean-distribution increment-version testfiles ../LICENSE.txt $(INSTALLERS)/LICENSE.html \
+						  $(INSTALLERS)/genozip-linux-x86_64.tar.build $(INSTALLERS)/genozip-installer.exe objdir.mac/secure/license.o \
                           push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
 	@(printf "\nClick Enter after committing the feedstock conflict resolution: <Click>")
 	@(read x)
 	@(cd $(CONDA_FEEDSTOCK) ; git pull)
+	@echo "  Next:"
+	@echo "  (1) Wait for all 4 tests to pass (~8 minutes)"
+	@echo "  (2) Click 'Merge pull request' and the 'Confirm merge' (DONT CLICK 'Delete branch')"
+	@echo "  (3) Open: https://github.com/divonlan/genozip/releases/new"
+	@echo "  (4) Set 'Tag version' and 'Release title' are both: genozip-$(version)"
+	@echo "  (5) Copy the notes for the version from RELEASE NOTES -> Publish release"
 
-distribution-maintenance: clean-distribution increment-version testfiles ../LICENSE.txt $(INSTALLERS)/LICENSE.html $(INSTALLERS)/genozip-linux-x86_64.tar.build $(INSTALLERS)/genozip-installer.exe \
+distribution-maintenance: clean-distribution increment-version testfiles ../LICENSE.txt $(INSTALLERS)/LICENSE.html \
+                          $(INSTALLERS)/genozip-linux-x86_64.tar.build $(INSTALLERS)/genozip-installer.exe objdir.mac/secure/license.o \
                           push-build conda/.conda-timestamp 
 	@(printf "\nClick Enter after committing the feedstock conflict resolution: <Click>")
 	@(read x)
 	@(cd $(CONDA_FEEDSTOCK) ; git pull)
+	@echo "  Next:"
+	@echo "  (1) Wait for all 4 tests to pass (~8 minutes)"
+	@echo "  (2) Click 'Merge pull request' and the 'Confirm merge' (DONT CLICK 'Delete branch')"
+	@echo "  (3) Open: https://github.com/divonlan/genozip/releases/new"
+	@echo "  (4) Set 'Tag version' and 'Release title' are both: genozip-$(version)"
+	@echo "  (5) Copy the notes for the version from RELEASE NOTES -> Publish release"
 
 test-backup: genozip.exe
 	@echo "Compressing test/ files for in preparation for backup (except cram and bcf)"
