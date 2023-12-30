@@ -1,6 +1,6 @@
 This program, "Genozip", which includes four tools (genozip, genounzip, genocat and genols), source
 code, object code, executables, documentation and other files, was developed by Divon Lan (
-"Developer") and is copyright (C) 2019-2023 Genozip Limited ("Licensor"). All rights reserved.
+"Developer") and is copyright (C) 2019-2024 Genozip Limited ("Licensor"). All rights reserved.
 Patent pending.
 
 TERMS AND CONDITIONS FOR USE
@@ -154,5 +154,5 @@ ABOVE STATED REMEDY FAILS OF ITS ESSENTIAL PURPOSE.
 
 END OF TERMS AND CONDITIONS
 
-Genozip license version: 15.0.34
+Genozip license version: 15.0.35
 
