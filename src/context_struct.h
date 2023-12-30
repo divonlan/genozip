@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   context_struct.h
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -212,7 +212,7 @@ typedef struct Context {
 
     ValueType last_value;      // ZIP/PIZ: last value of this context (it can be a basis for a delta, used for BAM translation, and other uses)
     union {
-    int64_t last_delta;        // last delta value calculated
+    int64_t last_delta;        // ZIP/PIZ: last delta value calculated (always in PIZ, sometimes in ZIP)
     WordIndex last_con_wi;     // PIZ: word index of last container retrieved from this ctx
     };
 
@@ -296,7 +296,9 @@ typedef struct Context {
     union {
     #define CTX_TAG_CON_LEN "contexts->con_len"
     Buffer con_len;            // PIZ: use by contexts that might have containers: Array of uint16_t - length of item in cache
-    Buffer localR1;            // ZIP/PIZ: used by PAIR_2 FASTQ VBs (inc. in Deep SAM), for paired contexts: PAIR_1 local data from corresponding VB (in PIZ: only if fastq_use_pair_assisted).
+    Buffer localR1;            // ZIP/PIZ vctx: PAIR_2 FASTQ VBs (inc. in Deep SAM): for paired contexts: PAIR_1 local data from corresponding VB (in PIZ: only if fastq_use_pair_assisted).
+    Buffer ol_chrom2ref_map;   // ZIP vctx: SAM/BAM/VCF/CHAIN: CHROM: mapping from user file chrom to alternate chrom in reference file (cloned) - indices match vb->contexts[CHROM].ol_nodes. New nodes are stored in ctx->chrom2ref_map.
+    Buffer ref2chrom_map;      // ZIP zctx: reverse mapping from ref_index to chrom, created by ref_compress_ref
     };                         // Note: contexts with containers are always no_stons, so they have no local - therefore no issue with union conflict.
 } Context;
 

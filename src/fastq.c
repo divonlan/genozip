@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   fast.c
-//   Copyright (C) 2020-2023 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -25,6 +25,7 @@
 #include "filename.h"
 #include "aligner.h"
 #include "zfile.h"
+#include "zriter.h"
 
 #define dict_id_is_fastq_qname_sf dict_id_is_type_1
 #define dict_id_is_fastq_aux      dict_id_is_type_2
@@ -380,16 +381,9 @@ static void fastq_seg_finalize_segconf (VBlockP vb)
 
     if (flag.deep) fastq_deep_seg_finalize_segconf (vb->lines.len32);
 
-    // if no reference, compress NONREF to check if fastq is multiseq
-    if (!flag.reference && !flag.fast) {
-        ContextP ctx = CTX(FASTQ_NONREF);
-        ctx->lcodec = CODEC_LZMA;
-        zfile_compress_local_data (vb, ctx, 0);
-
-        segconf.multiseq = (ctx->local.len32 / ctx->local_in_z_len >= 6); // expecting ~4 for unrelated sequences and >10 for multiseq
-        if (segconf.multiseq) 
-            ctx_segconf_set_hard_coded_lcodec (FASTQ_NONREF, CODEC_LZMA); 
-    }
+    // if no reference, if fastq is multiseq
+    if (!flag.reference && !flag.fast) 
+        segconf_test_multiseq (VB, FASTQ_NONREF);
 
     if (!segconf.multiseq) {
         if (!flag.reference && !txt_file->redirected && !flag.seg_only)
@@ -521,10 +515,9 @@ void fastq_read_pair_1_data (VBlockP vb_, VBIType pair_vb_i)
 {
     START_TIMER;
 
-    fflush ((FILE*)z_file->file);
+    if (flag.is_windows) zriter_flush(); // bug 983
 
     VBlockFASTQP vb = (VBlockFASTQP)vb_;
-    uint64_t save_disk_so_far = z_file->disk_so_far;
 
     vb->pair_vb_i = pair_vb_i;
 
@@ -539,8 +532,8 @@ void fastq_read_pair_1_data (VBlockP vb_, VBIType pair_vb_i)
         
     piz_read_all_ctxs (VB, &sec, true);
     
-    file_seek (z_file, 0, SEEK_END, HARD_FAIL); // restore
-    z_file->disk_so_far = save_disk_so_far;
+    if (flag.is_windows)  // bug 983
+        file_seek (z_file, 0, SEEK_END, READ, HARD_FAIL); // restore
 
     COPY_TIMER (fastq_read_pair_1_data);
 }

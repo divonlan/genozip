@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   qname.c
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -382,7 +382,7 @@ void qname_segconf_finalize (VBlockP vb)
     for (QType q=QNAME1; q < NUM_QTYPES; q++) 
         if (segconf.qname_flavor[q])
             segconf.sorted_by_qname[q] = VB_DT(FASTQ) || VB_DT(KRAKEN) ||   
-                                         segconf.is_collated || segconf.qname_flavor[q]->sam_qname_sorted || 
+                                         segconf.is_collated || segconf.sam_is_unmapped || segconf.qname_flavor[q]->sam_qname_sorted || 
                                          (!segconf.is_sorted && !segconf.is_paired);
 
     // if only consensus reads exist, change tech to unknown

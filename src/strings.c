@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   strings.c
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -277,7 +277,7 @@ bool str_get_int (STRp(str),
         if (out < prev_out) return false; // number overflowed beyond maximum int64_t
     }
 
-    if (negative) out *= -1;
+    if (negative) out = -out;
 
     if (value) *value = out; // update only if successful
     return true;

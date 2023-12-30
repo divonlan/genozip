@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   context.h
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -40,7 +40,7 @@
 #define SNIP_SPECIAL              '\x8'   // Special algorithm followed by ID of the algorithm 
 #define SNIP_REDIRECTION          '\xB'   // Get the data from another dict_id (can be in b250, local...)
 #define SNIP_DONT_STORE           '\xC'   // Reconstruct the following value, but don't store it in last_value (overriding flags.store)
-#define SNIP_COPY                 '\xE'   // Copy the last_txt of dict_id (same or other)
+#define SNIP_COPY                 '\xE'   // Copy the last_txt of (optional) dict_id (self if no dict_id)
 #define SNIP_DUAL                 '\xF'   // A snip containing two snips separated by a SNIP_DUAL - for Primary and Luft reconstruction respectively
 #define SNIP_LOOKBACK             '\x10'  // Copy an earlier snip in the same context. Snip is dict_id from which to take the lookback offset, and an optional delta to be applied to the retrieved numeric value. note: line number of the previous snip is variable, but its offset back is fixed (introduced 12.0.41)
 #define v13_SNIP_COPY_BUDDY       '\x11'  // up to v13: Copy a snip on an earlier "buddy" line in the same or another context (note: offset back to the previous snip is variable, but its line number is fixed) (introduced 12.0.41)
@@ -83,7 +83,7 @@ typedef struct CtxNode {      // 128 bit
     };
 } CtxNode;
 
-typedef ZWord CtxWord;
+typedef ZWord CtxWord, *CtxWordP;
 
 // Interlaced integers are used for storing integers that might be positive or negative, while keeping
 // as many higher bits zero as possible.
@@ -217,14 +217,18 @@ extern void ctx_sort_dictionaries_vb_1(VBlockP vb);
 
 extern void ctx_update_stats (VBlockP vb);
 
+// PIZ - get snip
 extern CtxNode *ctx_get_node_by_word_index (ConstContextP ctx, WordIndex word_index);
 extern rom ctx_get_snip_by_word_index_do (ConstContextP ctx, WordIndex word_index, pSTRp(snip), FUNCLINE);
 #define ctx_get_snip_by_word_index(ctx,word_index,snip) ctx_get_snip_by_word_index_do ((ctx), (word_index), &snip, &snip##_len, __FUNCLINE)
 #define ctx_get_snip_by_word_index0(ctx,word_index) ctx_get_snip_by_word_index_do ((ctx), (word_index), 0,0, __FUNCLINE)
                                                 
+// ZIP - get snip
 extern rom ctx_get_vb_snip_ex (ConstContextP vctx, WordIndex vb_node_index, pSTRp(snip)); 
-static inline rom ctx_get_vb_snip (ConstContextP vctx, WordIndex vb_node_index) { return ctx_get_vb_snip_ex (vctx, vb_node_index, 0, 0); }
- 
+extern StrTextMegaLong ctx_get_vb_snip (ConstContextP vctx, WordIndex vb_node_index);
+extern rom ctx_get_z_snip_ex (ConstContextP zctx, WordIndex z_node_index, pSTRp(snip));
+extern StrTextMegaLong ctx_get_z_snip (ConstContextP zctx, WordIndex z_node_index); 
+
 static inline rom ctx_get_words_snip(ConstContextP ctx, WordIndex word_index)  // PIZ
     { return ctx_get_snip_by_word_index0 (ctx, word_index); }
 

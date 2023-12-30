@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   genols.c
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -91,7 +91,7 @@ void genols (rom z_filename, bool finalize, rom subdir, bool recursive)
         if (flag.bytes) 
             bufprintf (evb, &str_buf, head_format_bytes, "Type", "Lines", "Compressed", "Original", "Factor", -(int)FILENAME_WIDTH, "Name");
         else
-            bufprintf (evb, &str_buf, head_format, "Type", "Lines", "Compressed", "Original", "Factor", " Digest of original textual file ", -(int)FILENAME_WIDTH, "Name", "Creation");
+            bufprintf (evb, &str_buf, head_format, "Type", "Lines", "Compressed", "Original", "Factor", " MD5 of original textual file    ", -(int)FILENAME_WIDTH, "Name", "Creation");
         
         first_file = false;
     }
@@ -138,7 +138,7 @@ void genols (rom z_filename, bool finalize, rom subdir, bool recursive)
     else 
         bufprintf (evb, &str_buf, item_format, dt_name (dt), str_int_commas (z_file->num_lines).s,
                    str_size (z_file->disk_size).s, str_size (z_file->txt_data_so_far_bind).s, ratio < 100, ratio, 
-                   is_private ? "Private" : digest_display_ex (digest, DD_NORMAL).s,
+                   is_private ? "Private" : !digest.w128 ? "-" : digest_display_ex (digest, DD_NORMAL).s,
                    (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),
                    is_subdir ? -MAX_(1, FILENAME_WIDTH - 1 - strlen(subdir)) : -FILENAME_WIDTH, TXT_FILENAME_LEN,
                    z_filename, header.created);

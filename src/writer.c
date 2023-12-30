@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   writer.c
-//   Copyright (C) 2021-2023 Genozip Limited. Patent pending.
+//   Copyright (C) 2021-2024 Genozip Limited. Patent pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -13,7 +13,6 @@
 #include "context.h"
 #include "profiler.h"
 #include "strings.h"
-#include "file.h"
 #include "threads.h"
 #include "sections.h"
 #include "random_access.h"
@@ -1045,7 +1044,7 @@ static void writer_write (BufferP buf, uint64_t txt_data_len)
 
     if (!buf->len) return;
     
-    file_write (txt_file, STRb(*buf));
+    file_write_txt (STRb(*buf));
     
     txt_file->txt_data_so_far_single += txt_data_len;
     txt_file->disk_so_far            += buf->len;
@@ -1123,6 +1122,9 @@ static inline bool writer_line_survived_downsampling (VbInfo *v)
 // write lines one at a time, watching for dropped lines
 static void writer_write_line_range (VbInfo *v, uint32_t start_line, uint32_t num_lines)
 {
+    ASSERTNOTNULL (v);
+    ASSERTNOTNULL (v->vb);
+    
     ASSERT (!v->vb->scratch.len, "expecting vb=%s/%u data to be BGZF-compressed by writer at flush, but it is already compressed by reconstructor: txt_file->codec=%s compressed.len=%"PRIu64" txt_data.len=%"PRIu64,
             comp_name (v->vb->comp_i), v->vb->vblock_i, codec_name (txt_file->codec), v->vb->scratch.len, v->vb->txt_data.len);
 

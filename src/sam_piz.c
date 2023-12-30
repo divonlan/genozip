@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_piz.c
-//   Copyright (C) 2020-2023 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -695,7 +695,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_FLOAT)
 }
 
 // remove the comma from the prefix that contains the type, eg "i,"->"i"
-TRANSLATOR_FUNC (sam_piz_sam2bam_ARRAY_SELF)
+TRANSLATOR_FUNC (sam_piz_sam2bam_ARRAY_SELF_1) // single context, multi repeat array
 {
     ContainerP con = (ContainerP)recon;
     char *prefixes = &recon[con_sizeof (*con)];
@@ -705,6 +705,19 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_ARRAY_SELF)
     prefixes[1] = CON_PX_SEP_SHOW_REPEATS; // prefixes is now { type, CON_PX_SEP_SHOW_REPEATS }
     
     return con->repeats ? -1 : 0; // change in prefixes length (no change in length if repeats=0, because no comman in SAM eg "ML:B:C" - empty array)
+}
+
+// remove the comma from the prefix that contains the type, eg "i,"->"i"
+TRANSLATOR_FUNC (sam_piz_sam2bam_ARRAY_SELF_M) // multiple context, single repeat array (15.0.35)
+{
+    ContainerP con = (ContainerP)recon;
+    char *prefixes = &recon[con_sizeof (*con)];
+
+    // remove the ',' from the prefix, and terminate with CON_PX_SEP_SHOW_N_ITEMS - this will cause
+    // the number of items (in LTEN32) to be outputed after the prefix
+    prefixes[1] = CON_PX_SEP_SHOW_N_ITEMS; // prefixes is now { type, CON_PX_SEP_SHOW_N_ITEMS }
+    
+    return -1; 
 }
 
 //------------------------------------------------------------------------------------

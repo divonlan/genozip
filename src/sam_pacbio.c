@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_pacbio.c
-//   Copyright (C) 2023-2023 Genozip Limited. Patent pending.
+//   Copyright (C) 2023-2024 Genozip Limited. Patent pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -9,6 +9,7 @@
 #include "sam_private.h"
 #include "reconstruct.h"
 #include "piz.h"
+#include "qname.h"
 
 void sam_pacbio_seg_initialize (VBlockSAMP vb)
 {
@@ -27,6 +28,9 @@ void sam_pacbio_seg_initialize (VBlockSAMP vb)
         ctx_set_ltype (VB, LT_BLOB, OPTION_dq_Z, OPTION_iq_Z, OPTION_sq_Z, DID_EOL);        
         ctx_consolidate_stats (VB, OPTION_iq_sq_dq, OPTION_dq_Z, OPTION_iq_Z, OPTION_sq_Z, DID_EOL);
     }
+
+    if (segconf.sam_use_sn_mux)
+        seg_mux_init (VB, CTX(OPTION_sn_B_f), 2, SAM_SPECIAL_DEMUX_sn, false, (MultiplexerP)&vb->mux_sn);
 }
 
 // -------------
@@ -51,7 +55,10 @@ void sam_seg_pacbio_np (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t np, unsigned 
 {                     
     dl->np = np;
 
-    if (segconf.has[OPTION_ec_f] && ctx_has_value_in_line_(vb, CTX(OPTION_ec_f)))
+    if (segconf.pacbio_subreads && np == 1)
+        seg_by_did (VB, "1", 1, OPTION_np_i, add_bytes); // in subreads, we expect np=1 all-the-same
+
+    else if (segconf.has[OPTION_ec_f] && ctx_has_value_in_line_(vb, CTX(OPTION_ec_f)))
         seg_delta_vs_other_do (VB, CTX(OPTION_np_i), CTX(OPTION_ec_f), 0, 0, np, -1, add_bytes);
 
     else 
@@ -63,11 +70,80 @@ int32_t sam_zip_get_np (VBlockP vb, LineIType line_i)
     return DATA_LINE(line_i)->np;
 }
 
+// ----------------------------------------------
+// qs:i - 0-based start of query in the ZMW read
+// qe:i - 0-based end   of query in the ZMW read
+// ----------------------------------------------
+
+void sam_seg_pacbio_qs (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t qs, unsigned add_bytes)    
+{
+    decl_ctx (OPTION_qs_i);
+
+    // in subreads: e.g. QNAME=m54284U_210913_013042/0/6137_11205 qe=11205 qs=6137  
+    if (segconf.pacbio_subreads) {
+        if (segconf_qf_id (QNAME1) == QF_PACBIO_rng && ctx_has_value_in_line_(VB, CTX(SAM_Q2NAME)) && qs == CTX(SAM_Q2NAME)->last_value.i)
+            seg_by_ctx (VB, STRa(copy_Q2NAME_int), ctx, add_bytes);
+
+        else
+            seg_integer (VB, ctx, qs, true, add_bytes); 
+    }
+
+    // in ccs: qs has a small number of possible low values, often mono-value
+    else {
+        if (segconf.running) {
+            if (!vb->line_i) 
+                segconf.sam_first_qs = qs;
+            else             
+                segconf.sam_diverse_qs |= (qs != segconf.sam_first_qs);
+        }
+
+        if (segconf.sam_diverse_qs)
+            seg_integer (VB, ctx, qs, true, add_bytes); 
+
+        else 
+            seg_integer_as_snip_do (VB, ctx, qs, add_bytes); // this is usually all-the-same
+    }
+}
+
+void sam_seg_pacbio_qe (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t qe, unsigned add_bytes)    
+{
+    decl_ctx (OPTION_qe_i);
+
+    // in subreads: e.g. QNAME=m54284U_210913_013042/0/6137_11205 qe=11205 qs=6137  
+    if (segconf.pacbio_subreads) {
+        if (segconf_qf_id (QNAME1) == QF_PACBIO_rng && ctx_has_value_in_line_(VB, CTX(SAM_Q3NAME)) && qe == CTX(SAM_Q3NAME)->last_value.i)
+            seg_by_ctx (VB, STRa(copy_Q3NAME_int), ctx, add_bytes);
+
+        else
+            seg_integer (VB, ctx, qe, true, add_bytes); 
+    }
+
+    // in ccs: qe = qs + seq_len
+    else {
+        int32_t qs;
+        if (sam_seg_peek_int_field (vb, OPTION_qs_i, vb->idx_qs_i, 0, 0x7ffffff, true, &qs) && qs + dl->SEQ.len == qe) 
+            seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_PACBIO_qe }, 2, ctx, add_bytes);
+        
+        else
+            seg_integer (VB, ctx, qe, true, add_bytes); 
+    }
+}
+
+SPECIAL_RECONSTRUCTOR (sam_piz_special_PACBIO_qe)
+{
+    int64_t qs = reconstruct_peek_(vb, _OPTION_qs_i, 0, 0).i;
+    new_value->i = qs + vb->seq_len;
+
+    if (reconstruct) RECONSTRUCT_INT (new_value->i);
+
+    return HAS_NEW_VALUE;
+}
+
 //-------------------------------
 // QUAL - predicted by iq, sq, dq
 //-------------------------------
 
-static inline char prediction (char iq, char sq, char dq)
+static inline char qual_prediction (char iq, char sq, char dq)
 {
     // create sorted array - bubble sort in ascending order
     char s[3] = { iq, sq, dq };
@@ -100,7 +176,7 @@ bool sam_seg_pacbio_qual (VBlockSAMP vb, STRp(qual)/*textual*/, unsigned add_byt
     char *next = BAFTc(diff_ctx->local);
 
     for (int i=0; i < qual_len; i++) 
-        *next++ = qual[i] - prediction (iq[i], sq[i], dq[i]);
+        *next++ = qual[i] - qual_prediction (iq[i], sq[i], dq[i]);
     
     diff_ctx->local.len32 = BNUM (diff_ctx->local, next);
     diff_ctx->txt_len += add_bytes;
@@ -145,7 +221,7 @@ void sam_recon_pacbio_qual (VBlockSAMP vb, ContextP ctx, bool reconstruct)
         char *qual = BAFTtxt, *after = BAFTtxt + vb->seq_len;
 
         while (qual < after) { 
-            *qual++ = (*diff++) + prediction (il[0], il[1] - il[0], -il[2]);
+            *qual++ = (*diff++) + qual_prediction (il[0], il[1] - il[0], -il[2]);
             il += 3;
         }
 
@@ -251,6 +327,50 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_iq_sq_dq)
 done:
     return NO_NEW_VALUE;
 }
+
+// ---------------------------------------------------------------------------------------------------------
+// sn:B:f 4 floats for the average signal-to-noise ratio of A, C, G, and T (in that order) over the HQRegion
+// ---------------------------------------------------------------------------------------------------------
+
+static int get_sn_channel_i (VBlockSAMP vb)
+{
+    return ctx_encountered_in_prev_line (VB, OPTION_sn_B_f) && CTX(SAM_Q1NAME)->last_delta == 0;
+}
+
+void sam_seg_pacbio_sn (VBlockSAMP vb, ZipDataLineSAM *dl, rom sn, int/*signed*/ sn_len)
+{
+    decl_ctx (OPTION_sn_B_f);
+    ContextP channel_ctx = ctx; // fallback
+
+    // sn:B is identical for all subreads of a molecule
+    if (segconf.sam_use_sn_mux) {
+        channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_sn_B_f, (MultiplexerP)&vb->mux_sn, get_sn_channel_i (vb));
+
+        STRlast (prev_sn, OPTION_sn_B_f);
+        if (str_issame (sn, prev_sn)) {
+            unsigned add_bytes =  (IS_BAM_ZIP ? (sn_len * 4/*width of type 'f'*/ + 4/*count*/ + 1/*type*/) 
+                                              : (sn_len + 2/*type - eg "i,"*/ + 1/*\t or \n*/));
+
+            seg_by_ctx (VB, STRa(copy_sn_snip), channel_ctx, add_bytes);
+        }
+
+        else 
+            sam_seg_array_one_ctx (vb, dl, channel_ctx->dict_id, 'f', STRa(sn), 0, 0);
+
+        seg_by_did (VB, STRa(vb->mux_sn.snip), OPTION_sn_B_f, 0); // de-multiplexer
+    }
+
+    else 
+        sam_seg_array_one_ctx (vb, dl, _OPTION_sn_B_f, 'f', STRa(sn), 0, 0);
+
+    seg_set_last_txt (VB, ctx, STRa(sn));
+}
+
+SPECIAL_RECONSTRUCTOR (sam_piz_special_DEMUX_sn)
+{
+    return reconstruct_demultiplex (vb, ctx, STRa(snip), get_sn_channel_i (VB_SAM), new_value, reconstruct);
+}
+
 
 // SAM + FASTQ: callback defined in qname_flavor for QF_PACBIO_rng 
 void seg_qname_rng2seq_len_cb (VBlockP vb, ContextP ctx, STRp(value))

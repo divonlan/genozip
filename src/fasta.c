@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   fasta.c
-//   Copyright (C) 2020-2023 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -296,16 +296,8 @@ static void fasta_seg_finalize_segconf (VBlockP vb)
     ASSINP0 (!flag.make_reference || segconf.fasta_has_contigs, "Can't use --make-reference on this file, because Genozip can't find the contig names in the FASTA description lines");
 
     // if we have multiple shortish contigs in segconf data, this might be multiseq - test
-    if (num_contigs_this_vb >= 5 && !flag.make_reference && !flag.fast) {
-        ContextP ctx = CTX(FASTA_NONREF);
-        ctx->lcodec = CODEC_LZMA;
-        zfile_compress_local_data (vb, ctx, 0);
-
-        segconf.multiseq = (ctx->local.len32 / ctx->local_in_z_len >= 6); // expecting 4-4.5 for unrelated sequences and >10 for multiseq
-
-        if (segconf.multiseq)
-            ctx_segconf_set_hard_coded_lcodec (FASTA_NONREF, CODEC_LZMA); 
-    }
+    if (num_contigs_this_vb >= 5 && !flag.make_reference && !flag.fast) 
+        segconf_test_multiseq (VB, FASTA_NONREF);
 
     // limit the number of contigs, to avoid the FASTA_CONTIG dictionary becoming too big. note this also
     // sets a limit for fasta-to-phylip translation

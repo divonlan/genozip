@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   zip.c
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -48,6 +48,7 @@
 #include "arch.h"
 #include "user_message.h"
 #include "license.h"
+#include "zriter.h"
 
 static void zip_display_compression_ratio (Digest md5)
 {
@@ -722,14 +723,6 @@ static void zip_write_global_area (void)
     random_access_finalize_entries (&z_file->ra_buf); // sort RA, update entries that don't yet have a chrom_index
     random_access_finalize_entries (&z_file->ra_buf_luft); 
 
-    // if we used the aligner with REF_EXT_STORE, we make sure all the CHROMs referenced are in the CHROM context, so
-    // as SEC_REF_CONTIGS refers to them. We do this by seeing which contigs have any bit set in is_set.
-    // note: in REF_EXTERNAL we don't use is_set, so we populate all contigs in zip_initialize
-    if (flag.aligner_available && IS_REF_EXT_STORE) {
-        THREAD_DEBUG (populate_aligned_chroms);
-        ref_contigs_populate_aligned_chroms();
-    }
-
     THREAD_DEBUG (compress_dictionaries);
     dict_io_compress_dictionaries(); 
 
@@ -960,7 +953,7 @@ static void zip_complete_processing_one_vb (VBlockP vb)
     txt_file->max_lines_per_vb = MAX_(txt_file->max_lines_per_vb, vb->lines.len);
 
     if (!flag.make_reference && !flag.seg_only)
-        zfile_output_processed_vb (vb);
+        zfile_output_processed_vb_ext (vb, true);
     
     zip_update_txt_counters (vb);
 
@@ -1040,13 +1033,15 @@ void zip_one_file (rom txt_basename,
                                  zip_compress_one_vb, 
                                  zip_complete_processing_one_vb);
 
+    zriter_wait_for_bg_writing(); // complete writing VBs before moving on
+
     dispatcher_calc_avg_compute_vbs (dispatcher);
 
     dispatcher_increment_progress ("txt_header", txt_file->est_num_lines ? 3 : (txt_header_len * 3)); //  account for txt_header read, computed and written
 
     // go back and update some fields in the txt header's section header and genozip header 
-    if (txt_header_offset >= 0) // note: this will be -1 if we didn't write a SEC_TXT_HEADER section for any reason
-        success = zfile_update_txt_header_section_header (txt_header_offset);
+    if (txt_header_offset >= 0) // note: this will be -1 if we didn't write a SEC_TXT_HEADER section for any reason (e.g. SAM PRIM/DEPN, --make-reference...)
+        zfile_update_txt_header_section_header (txt_header_offset);
 
     ASSERT0 (!flag.biopsy || biopsy_is_done(), "Biopsy request not complete - some VBs missing");
 
@@ -1071,6 +1066,15 @@ finish:
         DTPZ(generate_recon_plan)(); // should set z_file->z_closes_after_me if we need to close after this component after all
 
     if (z_file->z_closes_after_me && !flag.seg_only) { // note: for SAM, z_closes_after_me might be updated in sam_zip_generate_recon_plan
+        // if we used the aligner with REF_EXT_STORE, we make sure all the CHROMs referenced are in the CHROM context, so
+        // as SEC_REF_CONTIGS refers to them. We do this by seeing which contigs have any bit set in is_set.
+        // note: in REF_EXTERNAL we don't use is_set, so we populate all contigs in zip_initialize
+        // note: must be before zip_after_vbs() bc sam_zip_after_vbs() removes unused dict words (they are marked as used in ref_contigs_populate_aligned_chroms)
+        if (flag.aligner_available && IS_REF_EXT_STORE) {
+            THREAD_DEBUG (populate_aligned_chroms);
+            ref_contigs_populate_aligned_chroms();
+        }
+
         DT_FUNC (txt_file, zip_after_vbs)();
     
         zip_write_global_area();
@@ -1092,7 +1096,7 @@ finish:
                        z_file->z_closes_after_me && !is_last_user_txt_file,
                        flag.show_memory && z_file->z_closes_after_me && is_last_user_txt_file); // show memory
 
-    if (!z_file->z_closes_after_me)
+    if (!z_file->z_closes_after_me) 
         ctx_reset_codec_commits(); 
 
     // no need to waste time freeing memory of the last file, the process termination will do that

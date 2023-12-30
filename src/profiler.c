@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   profiler.c
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -238,6 +238,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (fastq_txtfile_have_enough_lines, 2);
         PRINT (txtfile_get_unconsumed_to_pass_to_next_vb, 2);
         PRINT (bgzf_copy_unconsumed_blocks, 2);
+        PRINT (zriter_write, 1);
         PRINT (write, 1);
         PRINT (bgzf_io_thread, 1);
         PRINT (ref_make_calculate_digest, 1);
@@ -276,8 +277,10 @@ void profiler_add_evb_and_print_report (void)
         PRINT (sam_analyze_copied_SEQ, 3);
         PRINT (aligner_seg_seq, Z_DT(FASTQ) ? 2 : 3);
         PRINT (aligner_best_match, Z_DT(FASTQ) ? 3 : 4);
-        PRINT (aligner_get_match_len, Z_DT(FASTQ) ? 3 : 4);
-        PRINT (aligner_get_word_from_seq, Z_DT(FASTQ) ? 3 : 4);
+        PRINT (aligner_additional_layers, Z_DT(FASTQ) ? 4 : 5);
+        PRINT (aligner_update_best, Z_DT(FASTQ) ? 4 : 5);
+        PRINT (aligner_get_word_from_seq, Z_DT(FASTQ) ? 4 : 5);
+        PRINT (aligner_seq_to_bitmap, Z_DT(FASTQ) ? 4 : 5);
         PRINT (bam_seq_to_sam, 2);
         PRINT (fastq_seg_QUAL, 2);
         PRINT (sam_seg_QUAL, 2);
@@ -383,9 +386,11 @@ void profiler_add_evb_and_print_report (void)
     PRINT (vb_destroy_vb, 0);
     PRINT (dispatcher_recycle_vbs, 0);
     PRINT (refhash_generate_emoneg, 0);
-    
-    iprintf ("tmp1: %u tmp2: %u tmp3: %u tmp4: %u tmp5: %u\n\n", 
-             ms(profile.nanosecs.tmp1), ms(profile.nanosecs.tmp2), ms(profile.nanosecs.tmp3), ms(profile.nanosecs.tmp4), ms(profile.nanosecs.tmp5));
+    PRINT (tmp1, 0); 
+    PRINT (tmp2, 0); 
+    PRINT (tmp3, 0); 
+    PRINT (tmp4, 0); 
+    PRINT (tmp5, 0); 
 
     if (profile.num_vbs) {
         iprint0 ("\nVblock stats:\n");

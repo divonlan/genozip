@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   zfile.c
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -38,6 +38,7 @@
 #include "seg.h"
 #include "dispatcher.h"
 #include "qname.h"
+#include "zriter.h"
 #include "libdeflate/libdeflate.h"
 
 static void zfile_show_b250_section (SectionHeaderUnionP header_p, ConstBufferP b250_data)
@@ -370,12 +371,14 @@ static void *zfile_read_from_disk (FileP file, VBlockP vb, BufferP buf, uint32_t
             st_name (st), len, (uint32_t)(buf->size - buf->len));
 
     char *start = BAFTc (*buf);
-    uint32_t bytes = fread (start, 1, len, (FILE *)file->file);
+    uint32_t bytes = fread (start, 1, len, Z_READ_FP(file));
     ASSERT (bytes == len, "reading %s%s read only %u bytes out of len=%u: %s", 
             st_name (st), cond_str(dict_id.num, " dict_id=", dis_dict_id(dict_id).s), bytes, len, strerror(errno));
 
     buf->len += bytes;
-    file->disk_so_far += bytes; // consumed by dispatcher_increment_progress
+
+    if (file->mode == READ) // mode==WRITE in case reading pair data in ZIP
+        file->disk_so_far += bytes; // consumed by dispatcher_increment_progress
 
     COPY_TIMER (read);
 
@@ -419,7 +422,7 @@ int32_t zfile_read_section_do (FileP file,
     data->param = 1;
     
     // move the cursor to the section. file_seek is smart not to cause any overhead if no moving is needed
-    if (sec) file_seek (file, sec->offset, SEEK_SET, HARD_FAIL);
+    if (sec) file_seek (file, sec->offset, SEEK_SET, READ, HARD_FAIL);
 
     SectionHeaderP header = zfile_read_from_disk (file, vb, data, header_size, expected_sec_type, IS_DICTED_SEC(sec->st) ? sec->dict_id : DICT_ID_NONE); 
     uint32_t bytes_read = header_size;
@@ -502,14 +505,14 @@ SectionHeaderUnion zfile_read_section_header_do (VBlockP vb, Section sec,
     uint32_t header_size = st_header_size (sec->st);
     uint32_t unencrypted_header_size = header_size;
 
-    file_seek (z_file, sec->offset, SEEK_SET, HARD_FAIL);
+    file_seek (z_file, sec->offset, SEEK_SET, READ, HARD_FAIL);
 
     bool is_encrypted = (z_file->data_type != DT_REF)   && 
                         (sec->st != SEC_GENOZIP_HEADER) &&
                         crypt_get_encrypted_len (&header_size, NULL); // update header size if encrypted
     
     SectionHeaderUnion header;
-    uint32_t bytes = fread (&header, 1, header_size, (FILE *)z_file->file);
+    uint32_t bytes = fread (&header, 1, header_size, Z_READ_FP(z_file));
     
     ASSERT (bytes == header_size, "called from %s:%u: Failed to read header of section type %s from file %s: %s (bytes=%u header_size=%u)", 
             func, code_line, st_name(sec->st), z_name, strerror (errno), bytes, header_size);
@@ -576,14 +579,14 @@ static bool zfile_get_has_digest_up_to_v14 (SectionHeaderGenozipHeaderP header)
 bool zfile_advance_to_next_header (uint64_t *offset, uint64_t *gap)
 {
     uint64_t start_offset = *offset;
-    file_seek (z_file, start_offset, SEEK_SET, HARD_FAIL);
+    file_seek (z_file, start_offset, SEEK_SET, READ, HARD_FAIL);
 
     char data[128 KB + 4];
     while (1) {
         memset (data, 0, sizeof(data));
         
         uint32_t bytes;
-        if (!(bytes = fread (data+4, 1, 128 KB, (FILE *)z_file->file)))
+        if (!(bytes = fread (data+4, 1, 128 KB, Z_READ_FP(z_file))))
             return false; // possibly 4 bytes of the Footer magic remaining
 
         // note: we accept a magic in the final 4 bytes of data - this could be a Footer. We 
@@ -689,13 +692,13 @@ static void zfile_read_genozip_header_handle_ref_info (ConstSectionHeaderGenozip
 static uint64_t zfile_read_genozip_header_get_actual_offset (void)
 {
     uint32_t size = MIN_(z_file->disk_size, 16 MB);
-    file_seek (z_file, z_file->disk_size - size, SEEK_SET, HARD_FAIL);
+    file_seek (z_file, z_file->disk_size - size, SEEK_SET, READ, HARD_FAIL);
 
     ASSERTNOTINUSE (evb->scratch);
     buf_alloc_exact_zero (evb, evb->scratch, size + 100, char, "scratch");
     evb->scratch.len -= 100; // extra allocated memory to ease the scan loop
 
-    int ret = fread (evb->scratch.data, size, 1, (FILE *)z_file->file);
+    int ret = fread (evb->scratch.data, size, 1, Z_READ_FP(z_file));
     ASSERT (ret == 1, "Failed to read %u bytes from the end of %s", size, z_name);
 
     for_buf_back (uint8_t, p, evb->scratch)
@@ -711,13 +714,13 @@ uint64_t zfile_read_genozip_header_get_offset (bool as_is)
     // read the footer from the end of the file
     if (z_file->disk_size < sizeof(SectionFooterGenozipHeader) ||
         !z_file->file ||
-        !file_seek (z_file, -sizeof(SectionFooterGenozipHeader), SEEK_END, SOFT_FAIL))
+        !file_seek (z_file, -sizeof(SectionFooterGenozipHeader), SEEK_END, READ, SOFT_FAIL))
         return 0; // failed
 
     TEMP_FLAG(quiet, false);
 
     SectionFooterGenozipHeader footer;
-    int ret = fread (&footer, sizeof (footer), 1, (FILE *)z_file->file);
+    int ret = fread (&footer, sizeof (footer), 1, Z_READ_FP(z_file));
     ASSERTW (ret == 1, "Skipping empty file %s", z_name);
     if (!ret) return 0; // failed
     
@@ -732,11 +735,12 @@ uint64_t zfile_read_genozip_header_get_offset (bool as_is)
     if (as_is) return offset;
 
     // read genozip_version directly, needed to determine the section header size
-    RETURNW (file_seek (z_file, offset, SEEK_SET, WARNING_FAIL), 0, "Error in %s: corrupt offset=%"PRIu64" in Footer  (file_size=%"PRIu64")", 
+    RETURNW (file_seek (z_file, offset, SEEK_SET, READ, WARNING_FAIL), 0, 
+             "Error in %s: corrupt offset=%"PRIu64" in Footer  (file_size=%"PRIu64")", 
              z_name, offset, z_file->disk_size);
 
     SectionHeaderGenozipHeader top;
-    RETURNW (fread (&top, sizeof (SectionHeaderGenozipHeader), 1, z_file->file) == 1, 0, "Error in %s: failed to read genozip header", z_name);
+    RETURNW (fread (&top, sizeof (SectionHeaderGenozipHeader), 1, Z_READ_FP(z_file)) == 1, 0, "Error in %s: failed to read genozip header", z_name);
 
     RETURNW (BGEN32 (top.magic) == GENOZIP_MAGIC, 0, "Error in %s: offset=%"PRIu64" of the GENOZIP_HEADER section as it appears in the Footer appears to be wrong, or the GENOZIP_HEADER section has bad magic (file_size=%"PRIu64").%s", 
              z_name, offset, z_file->disk_size, flag.debug_or_test ? " Try again with --recover." : "");
@@ -902,22 +906,18 @@ error:
     return false;
 }
 
-// Update SEC_TXT_HEADER. If we're compressing a plain file, we will know
-// the bytes upfront, but if we're binding or compressing a eg .GZ, we will need to update it
-// when we're done. num_lines can only be known after we're done with this txt component.
-// if we cannot update the header - that's fine, these fields are only used for the progress indicator on --list
-bool zfile_update_txt_header_section_header (uint64_t offset_in_z_file)
+// Update the first SEC_TXT_HEADER fragment of the current txt file. 
+void zfile_update_txt_header_section_header (uint64_t offset_in_z_file)
 {
-    // rewind to beginning of current (latest) vcf header - nothing to do if we can't
-    if (!file_seek (z_file, offset_in_z_file, SEEK_SET, WARNING_FAIL)) return false;
-
-    uint32_t len = crypt_padded_len (sizeof (SectionHeaderTxtHeader));
-
     // sanity check - we skip empty files, so data is expected
     ASSERT (txt_file->txt_data_so_far_single > 0, "Expecting txt_file->txt_data_so_far_single=%"PRId64" > 0", txt_file->txt_data_so_far_single);
     
-    // update the first txt_header fragment of the single (current) txt file. 
-    SectionHeaderTxtHeaderP header = &z_file->txt_header_single;
+    ASSERTNOTINUSE (evb->scratch);
+    buf_alloc_exact_zero (evb, evb->scratch, sizeof (SectionHeaderTxtHeader) + AES_BLOCKLEN-1/*encryption padding*/, char, "scratch");
+    
+    SectionHeaderTxtHeaderP header = B1ST(SectionHeaderTxtHeader, evb->scratch);
+    *header = z_file->txt_header_hdr;
+
     header->txt_data_size    = BGEN64 (txt_file->txt_data_so_far_single);
     header->txt_num_lines    = BGEN64 (txt_file->num_lines);
     header->max_lines_per_vb = BGEN32 (txt_file->max_lines_per_vb);
@@ -932,16 +932,17 @@ bool zfile_update_txt_header_section_header (uint64_t offset_in_z_file)
     if (flag.show_headers)
         sections_show_header ((SectionHeaderP)header, NULL, offset_in_z_file, 'W'); 
 
+    evb->scratch.len = crypt_padded_len (sizeof (SectionHeaderTxtHeader));
+
     // encrypt if needed
-    if (has_password()) 
-        crypt_do (evb, (uint8_t *)header, len, 1 /*was 0 up to 14.0.8*/, header->section_type, true);
+    if (has_password()) {
+        crypt_pad ((uint8_t *)header, evb->scratch.len, evb->scratch.len - sizeof (SectionHeaderTxtHeader));
+        crypt_do (evb, (uint8_t *)header, evb->scratch.len, 1 /*was 0 up to 14.0.8*/, header->section_type, true);
+    }
 
-    file_write (z_file, header, len);
-    fflush ((FILE*)z_file->file); // its not clear why, but without this fflush the bytes immediately after the first header get corrupted (at least on Windows with gcc)
-    
-    file_seek (z_file, 0, SEEK_END, HARD_FAIL); // return to the end of the file
+    zriter_write (&evb->scratch, NULL, offset_in_z_file, false);  // note: cannot write in background with offset
 
-    return true; // success
+    buf_free (evb->scratch);
 }
 
 // ZIP compute thread - called from zip_compress_one_vb()
@@ -989,33 +990,24 @@ void zfile_update_compressed_vb_header (VBlockP vb)
 }
 
 // ZIP - main thread
-void zfile_output_processed_vb (VBlockP vb)
+void zfile_output_processed_vb_ext (VBlockP vb, bool background)
 {
-    START_TIMER;
     ASSERTMAINTHREAD;
-
-    sections_list_concat (vb);
     
-    if (!flag.zip_no_z_file) 
-        file_write (z_file, STRb(vb->z_data));
+    zriter_write (&vb->z_data, &vb->section_list_buf, -1, background);
 
-    COPY_TIMER (write);
-
-    z_file->disk_so_far += vb->z_data.len;
     if (vb->comp_i != COMP_NONE) z_file->disk_so_far_comp[vb->comp_i] += vb->z_data.len;
     vb->z_data.len = 0;
-
-    // sanity
-    if (!flag.zip_no_z_file) {
-        uint64_t actual_disk_so_far = file_tell (z_file, false);
-        ASSERT (actual_disk_so_far == z_file->disk_so_far, "%s: Expecting actual_disk_so_far=%"PRIu64" == z_file->disk_so_far=%"PRIu64,
-                VB_NAME, actual_disk_so_far, z_file->disk_so_far);
-    }
     
     ctx_update_stats (vb);
 
     if (flag.show_headers && buf_is_alloc (&vb->show_headers_buf))
         buf_print (&vb->show_headers_buf, false);
+}
+
+void zfile_output_processed_vb (VBlockP vb)
+{
+    zfile_output_processed_vb_ext (vb, false);
 }
 
 DataType zfile_get_file_dt (rom filename)
@@ -1030,11 +1022,11 @@ DataType zfile_get_file_dt (rom filename)
             goto done; // not a genozip file
 
         // read the footer from the end of the file
-        if (!file_seek (file, -sizeof(SectionFooterGenozipHeader), SEEK_END, WARNING_FAIL))
+        if (!file_seek (file, -sizeof(SectionFooterGenozipHeader), SEEK_END, READ, WARNING_FAIL))
             goto done;
 
         SectionFooterGenozipHeader footer;
-        int ret = fread (&footer, sizeof (footer), 1, (FILE *)file->file);
+        int ret = fread (&footer, sizeof (footer), 1, Z_READ_FP(file));
         ASSERTW (ret == 1, "Skipping empty file %s", z_name);    
         if (!ret) goto done; // empty file / cannot read
         
@@ -1043,11 +1035,11 @@ DataType zfile_get_file_dt (rom filename)
 
         // read genozip header
         uint64_t genozip_header_offset = BGEN64 (footer.genozip_header_offset);
-        if (!file_seek (file, genozip_header_offset, SEEK_SET, WARNING_FAIL))
+        if (!file_seek (file, genozip_header_offset, SEEK_SET, READ, WARNING_FAIL))
             goto done;
 
         SectionHeaderGenozipHeader header;
-        int bytes = fread ((char*)&header, 1, sizeof(SectionHeaderGenozipHeader), (FILE *)file->file);
+        int bytes = fread ((char*)&header, 1, sizeof(SectionHeaderGenozipHeader), Z_READ_FP(file));
         if (bytes < sizeof(SectionHeaderGenozipHeader)) goto done;
 
         ASSERTW (BGEN32 (header.magic) == GENOZIP_MAGIC, "Error reading %s: corrupt data", z_name);

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_private.h
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -247,7 +247,7 @@ typedef struct VBlockSAM {
             idx_UB_Z, idx_BX_Z, idx_CB_Z, idx_GX_Z, idx_CR_Z, idx_CY_Z,
             idx_XO_Z, idx_YS_Z, idx_XB_A, idx_XM_Z, idx_XB_Z,
             idx_dq_Z, idx_iq_Z, idx_sq_Z, idx_ZA_Z, idx_ZB_Z,
-            idx_pr_i;
+            idx_pr_i, idx_qs_i, idx_ac_B;
     #define has(f)   (vb->idx_##f  != -1)
     #define has_MD   (has(MD_Z) && segconf.has[OPTION_MD_Z])
 
@@ -267,7 +267,8 @@ typedef struct VBlockSAM {
     Multiplexer4 mux_PNEXT;
     Multiplexer3 mux_POS, mux_MAPQ;// ZIP: DEMUX_BY_MATE_PRIM multiplexers
     Multiplexer2 mux_FLAG, mux_MQ, mux_MC, mux_ms, mux_AS, mux_YS, mux_nM, // ZIP: DEMUX_BY_MATE or DEMUX_BY_BUDDY multiplexers
-                 mux_mated_z_fields[NUM_MATED_Z_TAGS], mux_ultima_c, mux_dragen_sd, mux_YY, mux_XO; 
+                 mux_mated_z_fields[NUM_MATED_Z_TAGS], mux_ultima_c, mux_dragen_sd, mux_YY, mux_XO,
+                 mux_sn;
     Multiplexer3 mux_NH;           // ZIP: DEMUX_BY_BUDDY_MAP
     Multiplexer7 mux_tp;           // ZIP: ULTIMA_tp (number of channels matches TP_NUM_BINS)
 
@@ -476,6 +477,8 @@ typedef struct __attribute__ ((__packed__)) Sag {
 #define IS_PRIM(x) ((x)->comp_i == SAM_COMP_PRIM)
 #define IS_DEPN(x) ((x)->comp_i == SAM_COMP_DEPN)
 
+#define DICT_ID_ARRAY(dict_id) (DictId){ .id = { (dict_id).id[0], (dict_id).id[1], type,  '_','A','R','R' } } // DTYPE_2
+
 extern void sam_seg_aux_field_fallback_int (VBlockSAMP vb, ContextP ctx, int64_t n, unsigned add_bytes);
 
 extern void      sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qname), unsigned add_additional_bytes);
@@ -510,8 +513,6 @@ static bool inline sam_line_is_prim (ZipDataLineSAM *dl) { return !sam_is_depn (
 #define piz_has_real_prim (piz_has_buddy && ((segconf.is_paired && sam_is_depn(last_flags)) || \
                                              (!segconf.is_paired && !sam_is_depn ((SamFlags){ .value = history64(SAM_FLAG, VB_SAM->buddy_line_i)}))))
 
-extern bool sam_seg_peek_int_field (VBlockSAMP vb, Did did_i, int16_t idx, int32_t min_value, int32_t max_value, bool set_last_value, int32_t *value);
-
 extern void sam_segconf_set_by_MP (void);
 
 // BUDDY stuff
@@ -539,6 +540,8 @@ extern uint32_t sam_seg_get_aux_float (VBlockSAMP vb, int16_t idx, double *numbe
 
 extern void sam_seg_get_aux_Z (VBlockSAMP vb, int16_t idx, pSTRp (snip), bool is_bam);
 extern char sam_seg_get_aux_A (VBlockSAMP vb, int16_t idx, bool is_bam);
+extern bool sam_seg_peek_int_field (VBlockSAMP vb, Did did_i, int16_t idx, int32_t min_value, int32_t max_value, bool set_last_value, int32_t *value);
+
 extern uint32_t bam_split_aux (VBlockSAMP vb, rom alignment, rom aux, rom after_aux, rom *auxs, uint32_t *aux_lens);
 
 typedef void (*SegBuddiedCallback)(VBlockSAMP, ContextP, STRp(value), unsigned add_bytes);
@@ -679,8 +682,11 @@ extern void sam_seg_cm_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t cm, unsigne
 extern void sam_pacbio_seg_initialize (VBlockSAMP vb);
 extern void sam_seg_pacbio_xq (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, TxtWord *dl_word, STRp(value), unsigned add_bytes);
 extern void sam_seg_pacbio_np (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t np, unsigned add_bytes);
+extern void sam_seg_pacbio_qs (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t qs, unsigned add_bytes);
+extern void sam_seg_pacbio_qe (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t qe, unsigned add_bytes);
 extern void sam_seg_pacbio_zm (VBlockSAMP vb, int64_t zm, unsigned add_bytes);
 extern bool sam_seg_pacbio_qual (VBlockSAMP vb, STRp(qual), unsigned add_bytes);
+extern void sam_seg_pacbio_sn (VBlockSAMP vb, ZipDataLineSAM *dl, rom sn, int sn_len);
 extern void sam_recon_pacbio_qual (VBlockSAMP vb, ContextP ctx, bool reconstruct);
 extern void sam_recon_skip_pacbio_qual (VBlockSAMP vb);
 
@@ -802,6 +808,9 @@ typedef struct { char s[1024]; } ShowAln;
 extern void sam_show_sag_one_grp (SAGroup grp_i);
 extern ShowAln sam_show_sag_one_aln (const Sag *g, const SAAln *a);
 
+typedef void (*ArrayItemCallback) (VBlockSAMP vb, ContextP ctx, void *cb_param, void *array, uint32_t array_len);
+extern void sam_seg_array_one_ctx (VBlockSAMP vb, ZipDataLineSAM *dl, DictId dict_id, uint8_t type, rom array, int array_len, ArrayItemCallback callback, void *cb_param);
+
 #define SAM_PIZ_HAS_SAG (((VBlockSAMP)vb)->sag && ((VBlockSAMP)vb)->sag_line_i == vb->line_i + 1)
 
 extern const char aux_sep_by_type[2][256];
@@ -863,8 +872,11 @@ extern rom ERR_ANALYZE_RANGE_NOT_AVAILABLE, ERR_ANALYZE_DEPN_NOT_IN_REF, ERR_ANA
 
 eSTRl(taxid_redirection_snip);
 eSTRl(copy_GX_snip);
+eSTRl(copy_sn_snip);
 eSTRl(copy_POS_snip);
 eSTRl(copy_Q1NAME_int);
+eSTRl(copy_Q2NAME_int);
+eSTRl(copy_Q3NAME_int);
 eSTRl(copy_mate_CIGAR_snip);
 eSTRl(copy_mate_MAPQ_snip);
 eSTRl(copy_mate_MQ_snip);

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   arch.c
-//   Copyright (C) 2020-2023 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -46,6 +46,10 @@ static rom argv0 = NULL, base_argv0 = NULL;
 Timestamp arch_start_time = 0;
 
 #ifdef _WIN32
+
+#ifdef _M_IX86
+#error Genozip does not work on 32-bit Windows
+#endif
 
 // add the genozip path to the user's Path environment variable, if its not already there. 
 // Note: We do all string operations in Unicode, so as to preserve any Unicode characters in the existing Path

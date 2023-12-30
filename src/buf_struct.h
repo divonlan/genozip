@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   buffer.h
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -17,8 +17,8 @@
 
 // Notes: 1 byte. BUF_UNALLOCATED must be 0. all values must be identical to 
 #define BUF_TYPE_BITS 3
-typedef enum __attribute__ ((__packed__)) { BUF_UNALLOCATED=0, BUF_REGULAR,   BITS_STANDALONE, BUF_SHM, BUF_DISOWNED, BUF_NUM_TYPES } BufferType; 
-#define BUFTYPE_NAMES {                        "UNALLOCATED",     "REGULAR", "BITS_STANDALONE",   "SHM",   "DISOWNED"               }
+typedef enum          { BUF_UNALLOCATED=0, BUF_REGULAR,   BITS_STANDALONE, BUF_SHM, BUF_DISOWNED, BUF_NUM_TYPES } BufferType; 
+#define BUFTYPE_NAMES { "UNALLOCATED",     "REGULAR", "BITS_STANDALONE",   "SHM",   "DISOWNED"                                                   }
 
 typedef struct { 
     bool lock;
@@ -57,10 +57,10 @@ typedef struct Buffer {        // 72 bytes
         };
     };
 
-    uint64_t type        : BUF_TYPE_BITS;  // BufferType
+    BufferType type      : BUF_TYPE_BITS;  // BufferType
     //------------------------------------------------------------------------------------------------------
     uint64_t can_be_big  : 1;  // do not display warning if buffer grows very big
-    uint64_t promiscuous : 1;  // used only in evb buffers: if true, a cpmpute thread may allocate the buffer (not just the main thread as with usual evb buffers), 
+    uint64_t promiscuous : 1;  // used only in evb buffers: if true, a compute thread may allocate the buffer (not just the main thread as with usual evb buffers), 
                                // but it needs to be first buf_set_promiscuous by the main thread
     uint64_t shared      : 1;  // "memory" of this Buffer may be shared with other Buffers
     uint64_t code_line   : 12; // the allocating line number in source code file (up to 4096)
@@ -138,10 +138,12 @@ static inline void buf_alloc_quick (BufferP buf, uint64_t req_size, rom name, FU
     buf_alloc((alloc_vb), &(buf), 0, (exact_len), type, 1, name); \
     (buf).len = (exact_len); })
 
+// note: the entire buffer is zeroed, not just the added bytes
 #define buf_alloc_exact_zero(alloc_vb, buf, exact_len, type, name) ({   \
     buf_alloc_exact (alloc_vb, buf, exact_len, type, name); \
     memset ((buf).data, 0, (exact_len) * sizeof(type)); })
 
+// note: the entire buffer is set to 255, not just the added bytes
 #define buf_alloc_exact_255(alloc_vb, buf, exact_len, type, name) ({   \
     buf_alloc_exact (alloc_vb, buf, exact_len, type, name); \
     memset ((buf).data, 255, (exact_len) * sizeof(type)); })
@@ -194,7 +196,7 @@ typedef struct {
 } MemStats;
 
 extern void buf_set_promiscuous_do (VBlockP vb, BufferP buf, rom buf_name, FUNCLINE);
-#define buf_set_promiscuous(buf, buf_name)     buf_set_promiscuous_do (evb, (buf), (buf_name), __FUNCLINE)
+#define buf_set_promiscuous(buf, buf_name) buf_set_promiscuous_do (evb, (buf), (buf_name), __FUNCLINE)
 
 extern void buf_low_level_free (void *p, FUNCLINE);
 #define FREE(p) ({ if (p) { buf_low_level_free (((void*)(p)), __FUNCLINE); (p)=NULL; } })

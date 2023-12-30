@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   zfile.h
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -32,11 +32,12 @@ extern uint32_t zfile_compress_local_data (VBlockP vb, ContextP ctx, uint32_t sa
 extern void zfile_compress_vb_header (VBlockP vb);
 extern void zfile_update_compressed_vb_header (VBlockP vb);
 
-extern bool zfile_update_txt_header_section_header (uint64_t pos_of_current_vcf_header);
+extern void zfile_update_txt_header_section_header (uint64_t pos_of_current_vcf_header);
 
 extern void zfile_remove_ctx_group_from_z_data (VBlockP vb, Did did_i);
 
 extern void zfile_output_processed_vb (VBlockP vb);
+extern void zfile_output_processed_vb_ext (VBlockP vb, bool background);
 
 // --------
 // PIZ side

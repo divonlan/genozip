@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sections.c
-//   Copyright (C) 2020-2023 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -128,19 +128,18 @@ void sections_remove_from_list (VBlockP vb, uint64_t offset, uint64_t len)
 
 // Called by ZIP main thread. concatenates a vb or dictionary section list to the z_file section list - just before 
 // writing those sections to the disk. we use the current disk position to update the offset
-void sections_list_concat (VBlockP vb)
+void sections_list_concat (BufferP section_list_buf)
 {
-    ASSERTMAINTHREAD;
-
-    ARRAY (SectionEntModifiable, vb_sec, vb->section_list_buf);
+    ARRAY (SectionEntModifiable, vb_sec, *section_list_buf);
 
     // update the offset
-    for (uint32_t i=0; i < vb_sec_len; i++)
+    for (uint32_t i=0; i < vb_sec_len; i++) 
         vb_sec[i].offset += z_file->disk_so_far;
 
-    // copy all entries
-    buf_add_buf (evb, &z_file->section_list_buf, &vb->section_list_buf, SectionEntModifiable, "z_file->section_list_buf");
-    buf_free (vb->section_list_buf);
+    // copy all entries. note: z_file->section_list_buf is protected by zriter_mutex 
+    buf_add_buf (evb, &z_file->section_list_buf, section_list_buf, SectionEntModifiable, "z_file->section_list_buf");
+
+    section_list_buf->len = 0;
 }
 
 // section iterator. returns true if a section of this type was found.
@@ -1197,7 +1196,7 @@ void noreturn genocat_show_headers (rom z_filename)
 
     // --show-headers --force - search for actual headers in case of file corruption
     else {
-        file_seek (z_file, 0, SET, HARD_FAIL);
+        file_seek (z_file, 0, SET, READ, HARD_FAIL);
         uint64_t gap; // gap before section
         uint64_t accumulated_gap = 0;
         SectionEntModifiable sec = { .st = SEC_GENOZIP_HEADER/*largest header*/ };

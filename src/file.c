@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   file.c
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -10,6 +10,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #ifdef _WIN32
+#include <windows.h>
 #include <direct.h>
 #endif
 #define Z_LARGE64
@@ -351,7 +352,7 @@ static bool file_open_txt_read_test_valid_dt (ConstFileP file)
             
                 // case: --tar - include .genozip files verbatim
                 if (tar_zip_is_tar()) {
-                    tar_copy_file (file->name);
+                    tar_copy_file (file->name, file->name);
                     RETURNW (false, true, "Copied %s to the tar file", file_printname(file));
                 }    
                 else
@@ -488,6 +489,9 @@ FileP file_open_txt_read (rom filename)
                        :                    fopen (file->name, READ);
             ASSERT (file->file, "failed to open %s: %s", file->name, strerror (errno));
 
+            if (!file->is_remote && !file->redirected)
+                stream_set_inheritability (fileno (file->file), false); // Windows: allow file_remove in case of --replace
+
 fallthrough_from_cram: {}
             // read the first potential BGZF block to test if this is GZ or BGZF
             uint8_t block[BGZF_MAX_BLOCK_SIZE]; 
@@ -534,7 +538,7 @@ fallthrough_from_cram: {}
 
             // Bug 490: if a gzip- pr bz2-compressed file appears to be uncompressed (CODEC_NONE =
             // no .gz or .bz2 extension), the user is unaware that this file is compressed. Since we can't 
-            // re-compress CODEC_GZ or CODEC_BZ2 upon decompressed, it will appear as if we're not recreating the original file. 
+            // re-compress CODEC_GZ or CODEC_BZ2 upon decompression, it will appear as if we're not recreating the original file. 
             
             // case: this is a non-BGZF gzip format - open with zlib and hack back the read bytes 
             // (note: we cannot re-read the bytes from the file as the file might be piped in)
@@ -594,8 +598,12 @@ fallthrough_from_cram: {}
             else if (file->redirected) 
                 file->file = BZ2_bzdopen (STDIN_FILENO, READ);
             
-            else
+            else {
                 file->file = BZ2_bzopen (file->name, READ);  // for local files we decompress ourselves   
+                
+                if (file->file)
+                    stream_set_inheritability (BZ2_get_fd (file->file), false); // Windows: allow file_remove in case of --replace
+            }
             break;
 
         case CODEC_XZ:
@@ -756,9 +764,8 @@ static void file_initialize_z_file_data (FileP file)
         Z_INIT (deep_index_by[BY_SEQ]);
         Z_INIT (deep_index_by[BY_QNAME]);
         Z_INIT (deep_ents);
-
+        Z_INIT (section_list_buf);
         Z_INIT (contexts[CHROM].chrom2ref_map);
-        buf_set_shared (&file->contexts[CHROM].chrom2ref_map);
     }
     else {
         Z_INIT (sag_qual);
@@ -797,8 +804,7 @@ FileP file_open_z_read (rom filename)
 
     file->supertype = Z_FILE;
     file->mode      = READ;
-    file->is_in_tar = !flag_loading_auxiliary && flag.t_size;
-    
+
     rom disk_filename = file->is_in_tar ? tar_get_tar_name() : filename;
     ASSINP (file_exists (disk_filename), "cannot open \"%s\" for reading: %s", disk_filename, strerror (errno));
 
@@ -837,16 +843,19 @@ FileP file_open_z_read (rom filename)
 
         if ((sb.st_mode & S_IFMT) != S_IFREG) cause=7; // not regular file
 
-        if (!cause)
+        if (!cause) {
             file->file = fopen (disk_filename, READ);
 
+            stream_set_inheritability (fileno (file->file), false); // Windows: allow file_remove in case of --replace
+        }
+        
         // verify that this is a genozip file 
         // we read the Magic at the end of the file (as the magic at the beginning may be encrypted)
         uint32_t magic;
         if (cause ||
             (cause = 1 * !file->file) ||
             (cause = 2 * !sb.st_size) ||
-            (cause = 3 * !file_seek (file, -(int)sizeof (magic), SEEK_END, SOFT_FAIL)) || 
+            (cause = 3 * !file_seek (file, -(int)sizeof (magic), SEEK_END, READ, SOFT_FAIL)) || 
             (cause = 4 * !fread (&magic, sizeof (magic), 1, file->file)) ||
             (cause = 5 * (BGEN32 (magic) != GENOZIP_MAGIC && !(flag.show_headers && flag.force)))) {
             
@@ -940,18 +949,24 @@ FileP file_open_z_write (rom filename, FileMode mode, DataType data_type)
 
     mutex_initialize (file->dicts_mutex);
     mutex_initialize (file->custom_merge_mutex);
+    mutex_initialize (file->zriter_mutex);
 
-    if (!flag.seg_only && !flag.show_bam) {
+    if (!flag.zip_no_z_file) {
 
         if (flag.force && !file->is_in_tar) 
             unlink (file->name); // delete file if it already exists (needed in weird cases, eg symlink to non-existing file)
 
         // if we're writing to a tar file, we get the already-openned tar file
         if (file->is_in_tar)
-            file->file = tar_open_file (file->name);
+            file->file = tar_open_file (file->name, file->name);
+            // note: tar doesn't have a z_reread_file bc --pair and --deep are not yet supported with --tar
 
-        else if (!flag.zip_no_z_file) {
+        else {
             file->file = fopen (file->name, file->mode);
+            
+            if (!flag.is_windows) // bug 983
+                file->z_reread_file = fopen (file->name, READ);
+
 #ifndef _WIN32
             // set z_file permissions to be the same as the txt_file permissions (if possible)
             if (file->file && txt_file && txt_file->name && !txt_file->is_remote) {
@@ -1076,9 +1091,10 @@ void file_close (FileP *file_p)
 
         if (file->is_in_tar && file->mode != READ)
             tar_close_file (&file->file);
-        else
+        else {
             FCLOSE (file->file, file_printname (file));
-
+            FCLOSE (file->z_reread_file, file_printname (file));
+        }
         serializer_destroy (file->digest_serializer);     
     }
 
@@ -1095,6 +1111,7 @@ void file_close (FileP *file_p)
 
         buflist_destroy_file_bufs (file);
 
+        mutex_destroy (file->zriter_mutex);
         mutex_destroy (file->dicts_mutex);
         mutex_destroy (file->custom_merge_mutex);
         mutex_destroy (file->qname_huf_mutex);
@@ -1108,34 +1125,38 @@ void file_close (FileP *file_p)
     COPY_TIMER_EVB (file_close);
 }
 
-void file_write (FileP file, const void *data, unsigned len)
+void file_write_txt (const void *data, unsigned len)
 {
     if (!len) return; // nothing to do
 
-    ASSERTNOTNULL (file);
-    ASSERTNOTNULL (file->file);
+    ASSERTNOTNULL (txt_file);
+    ASSERTNOTNULL (txt_file->file);
     ASSERTNOTNULL (data);
     
-    size_t bytes_written = fwrite (data, 1, len, (FILE *)file->file); // use fwrite - let libc manage write buffers for us
+    size_t bytes_written = fwrite (data, 1, len, (FILE *)txt_file->file); // use fwrite - let libc manage write buffers for us
 
     // if we're streaming our genounzip/genocat/genols output to another process and that process has 
     // ended prematurely then exit quietly. In genozip we display an error because this means the resulting
     // .genozip file will be corrupted
-    if (!file->name && command != ZIP && errno == EINVAL) exit (EXIT_DOWNSTREAM_LOST);
+    if (!txt_file->name && errno == EINVAL) exit (EXIT_DOWNSTREAM_LOST);
 
     // exit quietly if failed to write to stdout - likely downstream consumer (piped executable or terminal) was closed
-    if (bytes_written < len && !file->name) exit (EXIT_DOWNSTREAM_LOST);
+    if (bytes_written < len && !txt_file->name) exit (EXIT_DOWNSTREAM_LOST);
 
     // error if failed to write to file
-    ASSERT (bytes_written == len, "wrote only %u of the expected %u bytes to %s: %s", (int)bytes_written, len, file->name, strerror(errno));
+    ASSERT (bytes_written == len, "wrote only %u of the expected %u bytes to %s: %s", (int)bytes_written, len, txt_file->name, strerror(errno));
 }
 
 void file_remove (rom filename, bool fail_quietly)
 {
     chmod (filename, S_IRUSR | S_IWUSR); // make sure its +w so we don't get permission denied (ignore errors)
 
+#ifndef _WIN32
     int ret = remove (filename); 
     ASSERTW (!ret || fail_quietly, "Warning: failed to remove %s: %s", filename, strerror (errno));
+#else
+    ASSERTW (DeleteFile (filename), "Warning: failed to remove %s: %s", filename, str_win_error());
+#endif
 }
 
 bool file_rename (rom old_name, rom new_name, bool fail_quietly)
@@ -1227,6 +1248,7 @@ bool file_exists (rom filename)
 // (and exit) or a warning (and return).
 bool file_seek (FileP file, int64_t offset, 
                 int whence, // SEEK_SET, SEEK_CUR or SEEK_END
+                rom mode, // READ if seeking before reading, WRITE if before writing 
                 FailType fail_type) 
 {
     ASSERTNOTNULL (file);
@@ -1245,21 +1267,21 @@ bool file_seek (FileP file, int64_t offset,
             offset += (IS_ZIP ? tar_file_offset() : flag.t_offset); // 0 if not using tar
 
             test_already_there:
-            if (ftello64 ((FILE *)file->file) == offset) return true; // already at the right offset
+            if (ftello64 (GET_FP(file, mode)) == offset) return true; // already at the right offset
         }
     }
 
-    int ret = fseeko64 ((FILE *)file->file, offset, whence);
+    int ret = fseeko64 (GET_FP(file, mode), offset, whence);
 
     if (fail_type != HARD_FAIL) {
         if (!flag.to_stdout && fail_type==WARNING_FAIL) {
             ASSERTW (!ret, errno == EINVAL ? "Warning: Error while reading file %s (fseeko64 (whence=%d offset=%"PRId64")): it is too small%s" 
-                                           : "Warning: fseeko failed on file %s (whence=%d offset=%"PRId64"): %s", 
+                                           : "Warning: fseeko64 failed on file %s (whence=%d offset=%"PRId64"): %s", 
                      file_printname (file), whence, offset, errno == EINVAL ? "" : strerror (errno));
         }
     } 
     else
-        ASSERT (!ret, "fseeko(offset=%"PRId64" whence=%d) failed on file %s (FILE*=%p remote=%s redirected=%s): %s", 
+        ASSERT (!ret, "fseeko64(offset=%"PRId64" whence=%d) failed on file %s (FILE*=%p remote=%s redirected=%s): %s", 
                 offset, whence, file_printname (file), file->file, TF(file->is_remote), TF(file->redirected), strerror (errno));
 
     return !ret;

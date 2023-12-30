@@ -2,7 +2,7 @@
 
 # ------------------------------------------------------------------
 #   primary-to-luft.sed
-#   Copyright (C) 2021-2023 Genozip Limited
+#   Copyright (C) 2021-2024 Genozip Limited
 #   Please see terms and conditions in the file LICENSE.txt
 #
 #   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited

@@ -1,7 +1,7 @@
 
 // ------------------------------------------------------------------
 //   container.c
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -243,7 +243,7 @@ static inline void container_verify_line_integrity (VBlockP vb, ContextP debug_l
         iprintf ("Tip: To extract the original line for comparison use:\n   genozip --biopsy-line=%u/%u -B%u%s %s\n",
                 vb->vblock_i, vb->line_i, (int)segconf.vb_size >> 20, 
                 ((VB_DT(SAM) || VB_DT(BAM)) && !z_file->z_flags.has_gencomp) ? " --no-gencomp" : "",
-                z_file->txt_header_single.txt_filename);
+                z_file->txt_filename);
 
         // show data-type-specific information about defective line
         DT_FUNC (vb, piz_xtra_line_data)(vb);
@@ -259,7 +259,10 @@ static inline uint32_t container_reconstruct_prefix (VBlockP vb, ConstContainerP
     if (! (*prefixes_len)) return 0; // nothing to do
     
     rom start = *prefixes;
-    while (**prefixes != CON_PX_SEP && **prefixes != CON_PX_SEP_SHOW_REPEATS) (*prefixes)++; // prefixes are terminated by CON_PX_SEP
+    
+    while (**prefixes != CON_PX_SEP && **prefixes != CON_PX_SEP_SHOW_REPEATS && **prefixes != CON_PX_SEP_SHOW_N_ITEMS) 
+        (*prefixes)++; // prefixes are terminated by CON_PX_SEP
+    
     uint32_t len = (unsigned)((*prefixes) - start);
 
     if (!skip) {
@@ -273,6 +276,9 @@ static inline uint32_t container_reconstruct_prefix (VBlockP vb, ConstContainerP
         // if the separator is CON_PX_SEP_SHOW_REPEATS, output the number of repeats. This is for BAM 'B' array 'count' field.
         if (**prefixes == CON_PX_SEP_SHOW_REPEATS)
             RECONSTRUCT_BIN32 (con->repeats);
+
+        else if (**prefixes == CON_PX_SEP_SHOW_N_ITEMS)
+            RECONSTRUCT_BIN32 (con_nitems(*con) - 1);
     }
 
     (*prefixes)++; // skip separator

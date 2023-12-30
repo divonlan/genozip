@@ -1776,7 +1776,8 @@ batch_replace()
     local f2=${OUTDIR}/f2.fq
     local f3=${OUTDIR}/f3.sam
 
-    # single file
+    # single file - genozip
+    test_header "batch replace: single file - genozip"
     cp ${TESTDIR}/basic.fq $f1
     $genozip $f1 -fX || exit 1
     test_exists $f1
@@ -1784,12 +1785,27 @@ batch_replace()
     $genozip $f1 -fX --replace || exit 1
     test_not_exists $f1
 
-    # single file with --test (i.e. creating sub-processing and returning from it)
+    # single file - genounzip
+    test_header "batch replace: single file - genounzip"
+    $genounzip -f $f1.genozip || exit 1
+    test_exists $f1.genozip
+
+    $genounzip -f $f1.genozip --replace --test # expecting failure and no replacement
+    verify_failure genounzip $?
+    test_exists $f1.genozip
+
+    usleep 500000 # windows: without this, DeleteFile of genozip file sometimes fails as "file in use"
+    $genounzip -f $f1.genozip -^ || exit 1
+    test_not_exists $f1.genozip
+
+    # single file with --test (i.e. creating child process and returning from it)
+    test_header "batch replace: single file with --test"
     cp ${TESTDIR}/basic.fq $f1
     $genozip $f1 -ft --replace || exit 1
     test_not_exists $f1
 
     # multiple files
+    test_header "batch replace: multiple files"
     cp ${TESTDIR}/basic.fq $f1
     cp ${TESTDIR}/basic.fq $f2
     
@@ -1801,7 +1817,17 @@ batch_replace()
     test_not_exists $f1
     test_not_exists $f2
 
+    $genounzip -f $f1.genozip $f2.genozip || exit 1
+    test_exists $f1.genozip
+    test_exists $f2.genozip
+
+    usleep 500000
+    $genounzip -f $f1.genozip $f2.genozip -^ || exit 1
+    test_not_exists $f1.genozip
+    test_not_exists $f2.genozip
+
     # multiple files with --test
+    test_header "batch replace: multiple files with --test"
     cp ${TESTDIR}/basic.fq $f1
     cp ${TESTDIR}/basic.fq $f2
 
@@ -1810,46 +1836,62 @@ batch_replace()
     test_not_exists $f2
 
     # paired
-    cp ${TESTDIR}/basic.fq $f1
-    cp ${TESTDIR}/basic.fq $f2
+    test_header "batch replace: paired"
+    cp ${TESTDIR}/basic-deep.R1.fq $f1
+    cp ${TESTDIR}/basic-deep.R2.fq $f2
     
-    $genozip -fX $f1 $f2 -2e $hs37d5 || exit 1
+    $genozip -fX $f1 $f2 -2e $hs37d5 -o $output || exit 1
     test_exists $f1
     test_exists $f2
 
-    $genozip $f1 $f2 -fX^2e $hs37d5 || exit 1
+    $genozip $f1 $f2 -fX^2e $hs37d5 -o $output || exit 1
     test_not_exists $f1
     test_not_exists $f2
 
-    # paired with --test
-    cp ${TESTDIR}/basic.fq $f1
-    cp ${TESTDIR}/basic.fq $f2
+    $genounzip -f $output || exit 1
+    test_exists $output
 
-    $genozip $f1 $f2 -ft^2e $hs37d5 || exit 1
+    $genounzip -f $output -^ || exit 1
+    test_not_exists $output
+
+    # paired with --test
+    test_header "batch replace: paired with --test"
+    cp ${TESTDIR}/basic-deep.R1.fq $f1
+    cp ${TESTDIR}/basic-deep.R2.fq $f2
+
+    $genozip $f1 $f2 -ft^2e $hs37d5 -o $output || exit 1
     test_not_exists $f1
     test_not_exists $f2
 
     # deep
+    test_header "batch replace: deep"
     cp ${TESTDIR}/basic-deep.R1.fq $f1
     cp ${TESTDIR}/basic-deep.R2.fq $f2
     cp ${TESTDIR}/basic-deep.sam   $f3
 
-    $genozip $f1 $f2 $f3 -fX3e $GRCh38 || exit 1
+    $genozip $f1 $f2 $f3 -fX3e $GRCh38 -o $output || exit 1
     test_exists $f1
     test_exists $f2
     test_exists $f3
 
-    $genozip $f1 $f2 $f3 -^fX3e $GRCh38 || exit 1
+    $genozip $f1 $f2 $f3 -^fX3e $GRCh38 -o $output || exit 1
     test_not_exists $f1
     test_not_exists $f2
     test_not_exists $f3
 
+    $genounzip -f $output || exit 1
+    test_exists $output
+
+    $genounzip -f $output --replace || exit 1
+    test_not_exists $output
+
     # deep with --test
+    test_header "batch replace: deep with --test"
     cp ${TESTDIR}/basic-deep.R1.fq $f1
     cp ${TESTDIR}/basic-deep.R2.fq $f2
     cp ${TESTDIR}/basic-deep.sam   $f3
 
-    $genozip $f1 $f2 $f3 --test -^f3e $GRCh38 || exit 1
+    $genozip $f1 $f2 $f3 --test -^f3e $GRCh38 -o $output || exit 1
     test_not_exists $f1
     test_not_exists $f2
     test_not_exists $f3

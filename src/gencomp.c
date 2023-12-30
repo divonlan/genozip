@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   gencomp.c - "generated component"
-//   Copyright (C) 2021-2023 Genozip Limited. Patent pending.
+//   Copyright (C) 2021-2024 Genozip Limited. Patent pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -19,6 +19,7 @@
 #include "codec.h"
 #include "bgzf.h"
 #include "biopsy.h"
+#include "stream.h"
 
 //-----------------------
 // Types & macros
@@ -893,6 +894,8 @@ void gencomp_reread_lines_as_prescribed (VBlockP vb)
     // open a file handle private to this VB
     FILE *file = fopen (txt_file->name, "rb");
     ASSERT (file, "%s: Failed to open %s for rereading depn lines: %s", VB_NAME, txt_file->name, strerror(errno));
+
+    stream_set_inheritability (fileno (file), false); // Windows: allow file_remove in case of --replace
 
     if (txt_file->codec == CODEC_BGZF) 
         bgzf_reread_uncompress_vb_as_prescribed (vb, file);

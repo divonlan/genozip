@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   file.h
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -81,7 +81,8 @@ typedef struct File {
     CompIType num_txt_files;           // PIZ Z_FILE: set from genozip header (ZIP: see num_txts_so_far)
     CompIType num_txts_so_far;         // ZIP Z_FILE: number of txt files compressed into this z_file - each becomes one or more components
                                        // PIZ Z_FILE: number of txt files written from this z_file - each generated from one or more components 
-    
+    char txt_filename[TXT_FILENAME_LEN];// PIZ Z_FILE: name of txt filename (same length as in SectionHeaderTxtHeader)
+
     union {
     struct FlagsGenozipHeader z_flags; // Z_FILE PIZ: genozip file flags as read from SectionHeaderGenozipHeader.flags
     struct FlagsTxtHeader txt_flags;   // TXT_FILE PIZ: genozip file flags as read from SectionHeaderTxtHeader.flags
@@ -91,14 +92,16 @@ typedef struct File {
     Buffer comp_sections_index;        // PIZ Z_FILE: an index into Txt sections
 
     // Used for WRITING GENOZIP files
-    uint64_t disk_at_beginning_of_this_txt_file;     // z_file: the value of disk_size when starting to read this txt file
-    
-    uint8_t txt_header_enc_padding[AES_BLOCKLEN-1];  // just so we can overwrite txt_header with encryption padding
+    Mutex zriter_mutex;                // Z_FILE ZIP: forces one writer at a time
+    Buffer zriter_threads;             // Z_FILE ZIP: list of currently writing threads and their buffers
+    bool zriter_last_was_fg;
 
-    SectionHeaderTxtHeader txt_header_single;        // ZIP: store the txt header of single component in bound mode
-                                                     // PIZ: z_file: header of COMP_MAIN
-    uint8_t txt_header_enc_padding2[AES_BLOCKLEN-1]; // same
+    #define Z_READ_FP(f) (((f)->mode == READ || flag.is_windows) ? (FILE *)(f)->file : (f)->z_reread_file) // see bug 983
+    #define GET_FP(f,md) (((f)->mode == READ || (md) != READ || (f)->supertype != Z_FILE || flag.is_windows) ? (FILE *)(f)->file : (f)->z_reread_file)
 
+    FILE *z_reread_file;               // Z_FILE ZIP: file pointer for re-reading files as they are being writting (used for pair reading)
+
+    SectionHeaderTxtHeader txt_header_hdr; // Z_FILE ZIP: store the txt header of single component in bound mode
     bool z_closes_after_me;            // Z_FILE ZIP: this z_file will close after completing the current txt_file
     
     // dictionary information used for writing GENOZIP files - can be accessed only when holding mutex
@@ -110,8 +113,6 @@ typedef struct File {
     Buffer ra_buf;                     // ZIP/PIZ:  RAEntry records: ZIP: of DC_PRIMARY ; PIZ - PRIMARY or LUFT depending on flag.luft
     Buffer ra_buf_luft;                // ZIP only: RAEntry records of DC_LUFT
     
-    Buffer ref2chrom_map;              // ZIP: an inverted chrom2ref_map, created by ref_compress_ref
-
     // section list - used for READING and WRITING genozip files
     Buffer section_list_buf;           // section list to be written as the payload of the genotype header section
     Buffer section_list_save;          // a copy of the section_list in case it is modified due to recon plan.
@@ -229,8 +230,8 @@ extern rom file_get_z_run_time (FileP file);
 extern FileP file_open_txt_read (rom filename);
 extern FileP file_open_txt_write (rom filename, DataType data_type, int bgzf_level);
 extern void file_close (FileP *file_p);
-extern void file_write (FileP file, const void *data, unsigned len);
-extern bool file_seek (FileP file, int64_t offset, int whence, FailType soft_fail); // SEEK_SET, SEEK_CUR or SEEK_END
+extern void file_write_txt (const void *data, unsigned len);
+extern bool file_seek (FileP file, int64_t offset, int whence, rom mode, FailType soft_fail); // SEEK_SET, SEEK_CUR or SEEK_END
 extern int64_t file_tell_do (FileP file, FailType soft_fail, FUNCLINE);
 #define file_tell(file,soft_fail) file_tell_do ((file), (soft_fail), __FUNCLINE) 
 extern void file_set_input_type (rom type_str);

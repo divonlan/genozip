@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   fastq_seq.c
-//   Copyright (C) 2020-2023 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -129,6 +129,7 @@ void fastq_seg_pair2_gpos (VBlockP vb, PosType64 pair1_pos, PosType64 pair2_gpos
 
     // case: we are pair-2 ; pair-1 is aligned ; delta is small enough : store a delta
     PosType64 gpos_delta = pair2_gpos - pair1_pos; 
+
     if (pair1_pos != NO_GPOS && pair2_gpos != NO_GPOS && ABS(gpos_delta) <= MAX_GPOS_DELTA) {
         int16_t gpos_delta16 = gpos_delta;
         seg_integer_fixed (VB, gpos_d_ctx, &gpos_delta16, false, 0);

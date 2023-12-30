@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   bgzf.c
-//   Copyright (C) 2020-2023 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -121,7 +121,7 @@ static int32_t bgzf_read_block_raw (FILE *file, // txt_file is not yet assigned 
             (is_remote && save_errno == ESPIPE) ? "Disconnected from remote host" : strerror (save_errno),
             feof (file) ? "If file is expected to be truncated, you may use --truncate-partial-last-line to disregard the final partial BGZF block." : "");
     
-    return (bytes == body_size) ? BGZF_BLOCK_SUCCESS : BGZF_ABRUBT_EOF;
+    return (bytes == body_size) ? BGZF_BLOCK_SUCCESS : BGZF_BLOCK_TRUNCATED;
 }
 
 // ZIP: reads and validates a BGZF block, and returns the uncompressed size or (only if soft_fail) an error
@@ -132,10 +132,14 @@ int32_t bgzf_read_block (FileP file, // txt_file is not yet assigned when called
     START_TIMER;
 
     int ret = bgzf_read_block_raw ((FILE *)file->file, block, block_size, file->basename, file->is_remote, soft_fail);
-    if (ret == BGZF_BLOCK_IS_NOT_GZIP || ret == BGZF_BLOCK_GZIP_NOT_BGZIP) return ret; // happens only if soft_fail
+    if (ret == BGZF_BLOCK_IS_NOT_GZIP || ret == BGZF_BLOCK_GZIP_NOT_BGZIP) 
+        return ret; // happens only if soft_fail
     
-    if (ret == BGZF_ABRUBT_EOF) {
-        if (!txt_file->bgzf_truncated_last_block) // we arrive here twice - show warning only once
+    else if (ret == BGZF_ABRUBT_EOF) // no EOF block, that's fine
+        return 0;
+
+    else if (ret == BGZF_BLOCK_TRUNCATED) {
+        if (txt_file->bgzf_truncated_last_block) // we arrive here twice - show warning only on the second time
             WARN ("FYI: %s is truncated - its final BGZF block in incomplete. Dropping this defective BGZF block.", txt_name);
         txt_file->bgzf_truncated_last_block = true;
         return 0;

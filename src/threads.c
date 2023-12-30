@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   threads.c
-//   Copyright (C) 2020-2023 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -12,6 +12,13 @@
 #include <sys/types.h>
 #ifdef _WIN32
 #include <windows.h>
+#include <psapi.h>
+#pragma pack(push, imagehlp, 8)
+#include <imagehlp.h>
+// #ifdef DEBUG  
+// #include <backtrace.h> // pacman -S mingw-w64-x86_64-libbacktrace
+// #endif
+#pragma pack(pop, imagehlp)
 #else
 #include <execinfo.h>
 #include <signal.h>
@@ -36,6 +43,7 @@
 
 static Buffer threads = {};
 static Mutex threads_mutex = { .name = "threads_mutex-not-initialized" };
+static Mutex print_call_stack_mutex = { };
 pthread_t main_thread = 0; 
 static pthread_t writer_thread;
 static bool writer_thread_is_set = false;
@@ -63,25 +71,149 @@ static rom __attribute__((unused)) threads_get_task_name (void)
     return "unregistered";
 }
 
+#ifdef _WIN32
+
+// #ifdef DEBUG // requires debug info 
+
+// static void backtrace_error_cb (void *data, const char *msg, int errnum)
+// {
+//     WARN ("%s error: %s\n", (rom)data, msg);
+// }
+
+// static int frame;
+// static int backtrace_stackwalk_cb (void *data, uintptr_t pc, rom filename, int lineno, rom function)
+// {
+//     fprintf (stderr, "xxx #%u pc=%p %s at %s:%u\n", frame++, pc, function, filename, lineno);
+
+//     return 0;
+// }   
+
+// #endif
+
+// doesn't work properly yet
+static void threads_print_call_stack_do (CONTEXT thread_ctx)
+{
+// bug 985 
+// #ifdef DEBUG // requires debug info    
+//     static struct backtrace_state *state = NULL;
+//     static StrTextSuperLong exe_name; // must be static
+
+//     if (!state) {
+//         exe_name = arch_get_executable(); 
+//         state = backtrace_create_state (exe_name.s, true, backtrace_error_cb, "backtrace_create_state");
+//     }
+
+//     frame = 0;
+//     backtrace_full (state, 0, backtrace_stackwalk_cb, backtrace_error_cb, "backtrace_full");
+//     return;
+// #endif
+
+    // loosly following: https://theorangeduck.com/page/printing-stack-trace-mingw
+    // issue: shows only Windows DLL symbols, not ours
+
+    fprintf (stderr, "\nCall stack (%s thread):\n", 
+               threads_am_i_main_thread()   ? "MAIN" 
+             : threads_am_i_writer_thread() ? "WRITER"
+             :                                threads_get_task_name());
+
+    HANDLE process = GetCurrentProcess();
+    HANDLE thread  = GetCurrentThread();
+
+    ASSGOTO (SymInitialize (process, NULL, true), "SymInitialize failed: %s", str_win_error());
+
+    SymSetOptions (SymGetOptions() | SYMOPT_LOAD_LINES);
+
+#ifdef _M_X64 // most modern Intel and AMD processors
+    DWORD image_file = IMAGE_FILE_MACHINE_AMD64;
+    STACKFRAME64 sf = { .AddrPC     = { .Mode = AddrModeFlat, .Offset = thread_ctx.Rip },
+                        .AddrStack  = { .Mode = AddrModeFlat, .Offset = thread_ctx.Rsp },
+                        .AddrFrame  = { .Mode = AddrModeFlat, .Offset = thread_ctx.Rbp/* Rsp*/ } };
+
+#elif defined _M_IA64 // Intel Itanium processors
+    DWORD image_file = IMAGE_FILE_MACHINE_IA64;
+    STACKFRAME64 sf = { .AddrPC     = { .Mode = AddrModeFlat, .Offset = thread_ctx.StIIP },
+                        .AddrStack  = { .Mode = AddrModeFlat, .Offset = thread_ctx.IntSp },
+                        .AddrBStore = { .Mode = AddrModeFlat, .Offset = thread_ctx.RsBSP },
+                        .AddrFrame  = { .Mode = AddrModeFlat, .Offset = thread_ctx.IntSp } };
+#else
+    fprintf (stderr, "Stack tracing not available for this CPU architecture"); // eg _M_IX86
+#endif
+    
+    int frame=0; 
+    while (StackWalk64 (image_file, process, thread, &sf, &thread_ctx, NULL, SymFunctionTableAccess64, SymGetModuleBase64, NULL) &&
+           sf.AddrPC.Offset) {
+
+        union symbol {
+            IMAGEHLP_SYMBOL64;
+            char data[sizeof(IMAGEHLP_SYMBOL64) + MAX_SYM_NAME-1];
+        } symbol = { { .SizeOfStruct = sizeof (union symbol), .MaxNameLength = MAX_SYM_NAME } };
+
+        DWORD64 displacement = 0;
+        // ASSGOTO (
+        SymGetSymFromAddr64 (process, sf.AddrPC.Offset, &displacement, (PIMAGEHLP_SYMBOL64)&symbol);
+            // , "SymGetSymFromAddr64 failed: %s", str_win_error());
+
+        IMAGEHLP_LINE64 line = { .SizeOfStruct = sizeof (IMAGEHLP_LINE64) };
+        DWORD displacement2 = 0;
+        // ASSGOTO (
+        SymGetLineFromAddr64 (process, sf.AddrPC.Offset, &displacement2, &line);
+            // , "SymGetLineFromAddr64 failed: %s", str_win_error());
+
+        fprintf (stderr, "#%u %s at %s:%u\n", frame++, symbol.Name, line.FileName, (uint32_t)line.LineNumber);
+    }
+
+error: 
+    CloseHandle (thread);
+    SymCleanup (process);
+}
+
 void threads_print_call_stack (void) 
 {
-#ifndef _WIN32
+#if defined _M_X64 || defined _M_IA64
+    CONTEXT current_thread_ctx = { .ContextFlags = CONTEXT_FULL };
+    RtlCaptureContext (&current_thread_ctx); // note: GetThreadContext() doesn't work for the current thread
+
+    threads_print_call_stack_do (current_thread_ctx);
+#else
+    fprintf (stderr, "Stack tracing not available for this CPU architecture"); // RtlCaptureContext not supported on _M_IX86
+#endif
+
+}
+
+static LONG WINAPI windows_exception_handler (EXCEPTION_POINTERS *ep)
+{
+    threads_print_call_stack_do (*ep->ContextRecord);
+
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
+static void threads_init_signal_handlers (void)
+{
+    SetUnhandledExceptionFilter (windows_exception_handler);
+}
+
+#else
+
+void threads_print_call_stack (void) 
+{
+    mutex_lock (print_call_stack_mutex);
+
 #   define STACK_DEPTH 100
     void *array[STACK_DEPTH];
     size_t count = backtrace (array, STACK_DEPTH);
     
     // note: need to pass -rdynamic to the linker in order to see function names
     fprintf (stderr, "\nCall stack (%s thread):\n", 
-               threads_am_i_main_thread()   ? "MAIN" 
-             : threads_am_i_writer_thread() ? "WRITER"
-             :                                threads_get_task_name());
+               threads_am_i_main_thread()    ? "MAIN" 
+             : threads_am_i_writer_thread()  ? "WRITER"
+             // : zriter_am_i_a_zriter_thread() ? "ZRITER" // to be implemented
+             :                                 threads_get_task_name());
     backtrace_symbols_fd (array, count, STDERR_FILENO);
 
     fflush (stderr);
-#endif
-}
 
-#ifndef _WIN32
+    mutex_lock (print_call_stack_mutex);
+}
 
 // signal handler of SIGINT (CTRL-C) - debug only 
 static void noreturn threads_sigint_handler (int signum) 
@@ -136,11 +268,8 @@ static void threads_sigusr2_handler (int signum)
     threads_write_log (true);
 }
 
-#endif
-
 static void threads_init_signal_handlers (void)
 {
-#ifndef _WIN32
     signal (SIGSEGV, threads_bug_signal_handler);
     signal (SIGBUS,  threads_bug_signal_handler);
     signal (SIGFPE,  threads_bug_signal_handler);
@@ -152,14 +281,17 @@ static void threads_init_signal_handlers (void)
 
     if (flag.debug_or_test) 
         signal (SIGINT, threads_sigint_handler);
-#endif
 }
+
+#endif
 
 // called by main thread at system initialization
 void threads_initialize (void)
 {
     mutex_initialize (threads_mutex);
     mutex_initialize (log_mutex);
+    mutex_initialize (print_call_stack_mutex);
+
     main_thread = pthread_self(); 
 
     buf_set_promiscuous (&log, "log");

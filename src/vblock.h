@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   vblock.h
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -151,7 +151,6 @@
     \
     /* reference stuff */ \
     Reference ref;                /* used by VBs created by dispatchers for uncompressing / compressing internal or external references. NOT used by VBs of the data type itself. */ \
-    Buffer ol_chrom2ref_map;      /* ZIP: mapping from user file chrom to alternate chrom in reference file (chroms cloned) - incides match vb->contexts[CHROM].ol_nodes. New nodes are stored in ctx->chrom2ref_map, where ctx is CHROM and dict-aliases to it. */\
     \
     /* reference range lookup caching */ \
     RangeP prev_range[2];         /* previous range returned by ref_seg_get_range */ \

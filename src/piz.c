@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   piz.c
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -510,7 +510,7 @@ DataType piz_read_global_area (Reference ref)
         random_access_load_ra_section (SEC_REF_RAND_ACC, CHROM, ref_get_stored_ra (ref), "ref_stored_ra", 
                                        flag.show_ref_index && !flag.reading_reference ? RA_MSG_REF : NULL);
 
-        if ((flag.reference & REF_ZIP_CHROM2REF) && !flag.reading_reference && !flag.genocat_no_reconstruct)
+        if (IS_REF_CHROM2REF && !flag.reading_reference && !flag.genocat_no_reconstruct)
             // xxx is this actually used? 
             chrom_index_by_name (CHROM); // create alphabetically sorted index for user file (not reference) chrom word list
 
@@ -848,6 +848,9 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
             COPY_TIMER_EVB (piz_main_loop_idle);
         }
     }
+
+    // make sure memory writes by compute threads are visible to the main thread
+    __atomic_thread_fence (__ATOMIC_ACQUIRE); 
 
     if (flag_is_show_vblocks (PIZ_TASK_NAME)) 
         iprintf ("DISPATCHER is done for txt_file_i=%u: %s\n", z_file->num_txts_so_far, txt_file ? txt_file->name : "(no filename)");                

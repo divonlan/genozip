@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   txtheader.c
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -17,7 +17,6 @@
 #include "txtfile.h"
 #include "vblock.h"
 #include "zfile.h"
-#include "crypt.h"
 #include "bgzf.h"
 #include "writer.h"
 #include "strings.h"
@@ -65,7 +64,7 @@ static void txtheader_compress_one_fragment (VBlockP vb)
 
     // copy first fragment header, for updating in zfile_update_txt_header_section_header
     if (vb->vblock_i == 1)
-        memcpy (&z_file->txt_header_single, &my_header, sizeof (SectionHeaderTxtHeader));
+        z_file->txt_header_hdr = my_header;
 
     vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.
 
@@ -135,8 +134,6 @@ int64_t txtheader_zip_read_and_compress (int64_t *txt_header_offset, CompIType c
     Digest header_digest = DIGEST_NONE;
     evb->comp_i = comp_i; // used by def_is_header_done
     
-    z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
-
     TxtHeaderRequirement req = DTPT (txt_header_required); 
     if (req == HDR_MUST || req == HDR_OK || (comp_i==0 && (req == HDR_MUST_0 || req == HDR_OK_0))) {
         txtfile_read_header (is_first_txt); // reads into evb->txt_data and evb->lines.len
@@ -156,7 +153,7 @@ int64_t txtheader_zip_read_and_compress (int64_t *txt_header_offset, CompIType c
     }
 
     // note: we always write the txt_header for comp_i=0 even if we don't actually have a header, because the
-    // section header contains the data about the file. Special case: we don't write headers of SAM DEPN
+    // section header contains the data about the file. Special case: we don't write headers of SAM PRIM/DEPN
     if (z_file && !flag.zip_no_z_file && !flag.make_reference && !(z_sam_gencomp && (comp_i == SAM_COMP_PRIM || comp_i == SAM_COMP_DEPN))) {
         *txt_header_offset = z_file->disk_so_far; // offset of first (vb=1) TXT_HEADER fragment
         txtheader_compress (&evb->txt_data, txt_header_size, header_digest, is_first_txt, comp_i); 
@@ -306,8 +303,6 @@ void txtheader_piz_read_and_reconstruct (Section sec)
 {
     START_TIMER;
 
-    z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
-
     txtheader_sec = sec;
 
     txt_header_vb = vb_get_vb (POOL_MAIN, PIZ_TASK_NAME, 0, sec->comp_i);
@@ -320,7 +315,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
         txt_header_vb->txt_data.len += BGEN32 (frag_header.data_uncompressed_len);
 
         if (vb_i == 1 && sec->comp_i == COMP_MAIN) 
-            z_file->txt_header_single = frag_header;
+            memcpy (z_file->txt_filename, frag_header.txt_filename, TXT_FILENAME_LEN);
 
         if (vb_i == 1)
             header = frag_header;

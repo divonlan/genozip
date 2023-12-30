@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   flags.h
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -32,6 +32,7 @@ extern rom ref_type_name(void);
 #define IS_REF_LIFTOVER   (flag.reference == REF_LIFTOVER)
 
 #define IS_REF_LOADED_ZIP (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE)
+#define IS_REF_CHROM2REF  (flag.reference & REF_ZIP_CHROM2REF)
 
 #define IS_REF_STORED_PIZ (flag.reference == REF_STORED) // 2 bits set
 #define IS_REF_INTERNAL_PIZ ((Z_DT(SAM) || Z_DT(BAM)) && z_file->z_flags.dts_ref_internal)
@@ -106,6 +107,7 @@ typedef struct {
         subdirs,     // recursively traversing subdirectories
         list,        // a genols option
         no_bgzf,     // if this is a GZIP file, treat as normal GZIP, not BGZF
+        no_zriter,   // ZIP: don't use background threads to write z_file
         no_cache,    // don't load cache, or delete cache
         no_upgrade,  // disable upgrade checks
         no_eval;     // don't allow features on eval basis (used for testing permissions)

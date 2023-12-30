@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_seq.c
-//   Copyright (C) 2020-2023 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -638,10 +638,14 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_seq), unsigned
 
     // case segconf: we created the contexts for segconf_set_vb_size accounting. that's enough - actually segging will mark is_set and break sam_seg_MD_Z_analyze.
     if (segconf.running) {
-        if (!vb->line_i) segconf_mark_as_used (VB, 5, SAM_SQBITMAP, SAM_NONREF, SAM_NONREF_X, SAM_GPOS, SAM_STRAND);
-
         if ((vb->bisulfite_strand=='G') != dl->FLAG.rev_comp)
             segconf.bs_strand_not_by_rev_comp = true; // note: in files that bisulfite_strand is determined by rev_comp, it is true for all lines
+
+        if (!vb->line_i)
+            segconf_mark_as_used (VB, 4 + !segconf.sam_is_unmapped, SAM_SQBITMAP, SAM_NONREF_X, SAM_GPOS, SAM_STRAND, SAM_NONREF);
+
+        if (segconf.sam_is_unmapped)
+            goto add_seq_verbatim; // used to test multiseq in segconf_finalize
 
         return; 
     }

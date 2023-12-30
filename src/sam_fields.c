@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_fields.c
-//   Copyright (C) 2020-2023 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -801,14 +801,17 @@ void sam_seg_MAPQ (VBlockSAMP vb, ZipDataLineSAM *dl, unsigned add_bytes)
 
     ctx_set_last_value (VB, CTX(SAM_MAPQ), (int64_t)dl->MAPQ);
 
-    bool do_mux = IS_MAIN(vb) && segconf.is_paired; // for simplicity. To do: also for prim/depn components
+    bool do_mux = IS_MAIN(vb) && segconf.is_paired && !segconf.sam_is_unmapped; // for simplicity. To do: also for prim/depn components
     int channel_i = sam_has_mate?1 : sam_has_prim?2 : 0;
     ContextP channel_ctx = do_mux ? seg_mux_get_channel_ctx (VB, SAM_MAPQ, (MultiplexerP)&vb->mux_MAPQ, channel_i) 
                                   : CTX(SAM_MAPQ);
 
     ZipDataLineSAM *mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is -1
 
-    if (sam_seg_has_sag_by_SA (vb)) {
+    if (segconf.sam_is_unmapped) 
+        seg_integer_as_snip_do (VB, CTX(SAM_MAPQ), dl->MAPQ, add_bytes); // expecting all-the-same
+    
+    else if (sam_seg_has_sag_by_SA (vb)) {
         sam_seg_against_sa_group (vb, channel_ctx, add_bytes);
 
         // in PRIM, we also seg it as the first SA alignment (used for PIZ to load alignments to memory, not used for reconstructing SA)
@@ -1000,14 +1003,14 @@ static void sam_seg_initialize_for_float (VBlockSAMP vb, ContextP ctx)
     buf_alloc (VB, &ctx->local, 0, 16384, float, 0, CTX_TAG_LOCAL); // initial allocation, so we can use buf_append_one
 } 
 
-static inline SmallContainerP sam_seg_array_field_get_con (VBlockSAMP vb, ContextP con_ctx, uint8_t type, bool has_callback, bool is_bam,
-                                                           ContextP *elem_ctx) // out
+static inline SmallContainerP sam_seg_array_one_ctx_get_con (VBlockSAMP vb, ContextP con_ctx, uint8_t type, bool is_bam,
+                                                             ContextP *elem_ctx) // out
 {
     // case: cached with correct type
     if (con_ctx->con_cache.param == type) { // already initialized
         SmallContainerP con = B1ST (SmallContainer, con_ctx->con_cache);
         *elem_ctx = ctx_get_ctx (vb, con->items[1].dict_id);
-        return con; // note: we return a pointer into con_cache- sam_seg_array_field may modify the number of repeats. that's ok.
+        return con; // note: we return a pointer into con_cache- sam_seg_array_one_ctx may modify the number of repeats. that's ok.
     }
 
     buf_alloc (vb, &con_ctx->con_cache, 0, 1, SmallContainer, 0, "con_cache");
@@ -1016,12 +1019,11 @@ static inline SmallContainerP sam_seg_array_field_get_con (VBlockSAMP vb, Contex
     *con = (SmallContainer){ .nitems_lo = 2, 
                              .drop_final_item_sep_of_final_repeat = true, // TODO - get rid of this flag and move to making the seperators to be repeat seperators as they should have been, using drop_final_repsep and obsoleting this flag 
                              .repsep    = {0,0}, 
-                             .items     = { { .translator = SAM2BAM_ARRAY_SELF  },  // item[0] is translator-only item - to translate the Container itself in case of reconstructing BAM 
+                             .items     = { { .translator = SAM2BAM_ARRAY_SELF_1  },  // item[0] is translator-only item - to translate the Container itself in case of reconstructing BAM 
                                             { .separator  = {0, ','}            } } // item[1] is actual array item
                            };            
     
     // prepare context where array elements will go in
-    #define DICT_ID_ARRAY(dict_id) (DictId){ .id = { (dict_id).id[0], (dict_id).id[1], type,  '_','A','R','R' } } // DTYPE_2
     con->items[1].dict_id      = DICT_ID_ARRAY (con_ctx->dict_id);
     
     con->items[1].translator   = aux_field_translator (type); // instructions on how to transform array items if reconstructing as BAM (array[0] is the subtype of the array)
@@ -1032,8 +1034,9 @@ static inline SmallContainerP sam_seg_array_field_get_con (VBlockSAMP vb, Contex
     StoreType store_type = aux_field_store_flag[type];
     ASSERT (store_type, "%s: Invalid type \"%c\" in array of %s", LN_NAME, type, con_ctx->tag_name);
 
-    (*elem_ctx)->st_did_i = con_ctx->did_i;
     (*elem_ctx)->flags.store = store_type;
+
+    ctx_consolidate_stats_(VB, con_ctx, (ContainerP)con);
 
     if (store_type == STORE_INT || is_bam) {
         (*elem_ctx)->ltype = aux_field_to_ltype[type];
@@ -1049,10 +1052,9 @@ static inline SmallContainerP sam_seg_array_field_get_con (VBlockSAMP vb, Contex
 }
 
 // an array - all elements go into a single item context, multiple repeats. items are segged as dynamic integers or floats, or a callback is called to seg them.
-typedef void (*ArrayItemCallback) (VBlockSAMP vb, ContextP ctx, void *cb_param, void *array, uint32_t array_len);
-void sam_seg_array_field (VBlockSAMP vb, ZipDataLineSAM *dl, DictId dict_id, uint8_t type, 
-                          rom array, int/*signed*/ array_len, // SAM: comma separated array ; BAM : arrays original width and machine endianity
-                          ArrayItemCallback callback, void *cb_param) // optional - call back for each item to seg the item
+void sam_seg_array_one_ctx (VBlockSAMP vb, ZipDataLineSAM *dl, DictId dict_id, uint8_t type, 
+                            rom array, int/*signed*/ array_len, // SAM: comma separated array ; BAM : arrays original width and machine endianity
+                            ArrayItemCallback callback, void *cb_param) // optional - call back for each item to seg the item
 {   
     bool is_bam = IS_BAM_ZIP;
 
@@ -1060,14 +1062,14 @@ void sam_seg_array_field (VBlockSAMP vb, ZipDataLineSAM *dl, DictId dict_id, uin
 
     // prepare array container - a single item, with number of repeats of array element. array type is stored as a prefix
     ContextP con_ctx = ctx_get_ctx (vb, dict_id), elem_ctx;
-    SmallContainerP con = sam_seg_array_field_get_con (vb, con_ctx, type, !!callback, is_bam, &elem_ctx);
+    SmallContainerP con = sam_seg_array_one_ctx_get_con (vb, con_ctx, type, is_bam, &elem_ctx);
 
     int width = aux_width[type];
 
     int array_bytes = is_bam ? (width * array_len) : array_len;
     elem_ctx->txt_len += array_bytes;
 
-    // edge case note: if repeats==SEQ.len==0, we don't use CON_REPEATS_IS_SEQ_LEN because we have special handling of empty arrays in sam_piz_sam2bam_ARRAY_SELF
+    // edge case note: if repeats==SEQ.len==0, we don't use CON_REPEATS_IS_SEQ_LEN because we have special handling of empty arrays in sam_piz_sam2bam_ARRAY_SELF_1
     con->repeats = ((dl && repeats == dl->SEQ.len && repeats) ? CON_REPEATS_IS_SEQ_LEN : repeats);
 
     ASSERT (repeats < CONTAINER_MAX_REPEATS, "%s: array has too many elements, more than %u", LN_NAME, CONTAINER_MAX_REPEATS);
@@ -1128,6 +1130,111 @@ void sam_seg_array_field (VBlockSAMP vb, ZipDataLineSAM *dl, DictId dict_id, uin
     }
 }
 
+
+static inline SmallContainerP sam_seg_array_multi_ctx_get_con (VBlockSAMP vb, ContextP con_ctx, uint32_t n_items, uint8_t type, bool is_bam)
+{
+    // case: cached with correct type
+    if (con_ctx->con_cache.param == -(int8_t)type) { // already initialized
+        SmallContainerP con = B1ST (SmallContainer, con_ctx->con_cache);
+
+        if (con->nitems_lo == 1 + n_items) return con; // this is the container we need
+    }
+
+    ASSERT (n_items+1 <= SMALL_CON_NITEMS, "n_times=%u is too manyt", n_items);
+
+    buf_alloc (vb, &con_ctx->con_cache, 0, 1, SmallContainer, 0, "con_cache");
+
+    SmallContainerP con = B1ST (SmallContainer, con_ctx->con_cache);
+    *con = (SmallContainer){ .nitems_lo           = 1 + n_items, 
+                             .repeats             = 1,
+                             .drop_final_item_sep = true,
+                             .items[0]            = { .translator = SAM2BAM_ARRAY_SELF_M  } }; // item[0] is translator-only item - to translate the Container itself in case of reconstructing BAM 
+
+    StoreType store_type = aux_field_store_flag[type];
+    ASSERT (store_type, "%s: Invalid type \"%c\" in array of %s", LN_NAME, type, con_ctx->tag_name);
+
+    for (uint32_t i=0; i < n_items; i++) {
+        con->items[i+1] = (ContainerItem){ .dict_id    = sub_dict_id_(con_ctx->dict_id, '0'+i),
+                                           .separator  = { [0]=aux_sep_by_type[IS_BAM_ZIP][type], [1]=',' },
+                                           .translator = aux_field_translator (type) }; // instructions on how to transform array items if reconstructing as BAM (array[0] is the subtype of the array)
+        
+        ContextP item_ctx = ctx_get_ctx (vb, con->items[i+1].dict_id);
+        item_ctx->flags.store = store_type;
+
+        if (store_type == STORE_INT || is_bam) {
+            item_ctx->ltype = aux_field_to_ltype[type];
+            item_ctx->local_is_lten = true; // we store in local in LTEN (as in BAM) and *not* in machine endianity
+        }
+
+        if (store_type == STORE_FLOAT)
+            sam_seg_initialize_for_float (vb, item_ctx);
+    }
+
+    ctx_consolidate_stats_(VB, con_ctx, (ContainerP)con);
+
+    con_ctx->con_cache.param = -(int8_t)type; // this also used as "is_initialized". negative to indicate multi-context (positive is single-context)
+
+    return con;
+}
+
+// an array - each elements go into a its own context, multiple repeats. items are segged as dynamic integers or floats, or a callback is called to seg them.
+void sam_seg_array_multi_ctx (VBlockSAMP vb, ZipDataLineSAM *dl, ContextP con_ctx, uint8_t type, uint32_t expected_n_subctxs,
+                              rom array, int/*signed*/ array_len) // SAM: comma separated array ; BAM : arrays original width and machine endianity
+{   
+    ASSERT (expected_n_subctxs >= 2, "expecting n_subctxs=%u >= 2", expected_n_subctxs);
+
+    bool is_bam = IS_BAM_ZIP;
+
+    uint32_t n_subctxs = (is_bam || !array_len) ? array_len : (1 + str_count_char (STRa(array), ','));
+    
+    // if array does not have the expected length, seg as single-context array 
+    if (expected_n_subctxs != n_subctxs) {
+        sam_seg_array_one_ctx (vb, dl, con_ctx->dict_id, type, STRa(array), NULL, 0);
+        return;
+    }
+    
+    // prepare array container - a one context per element. array type is stored as a prefix
+    SmallContainerP con = sam_seg_array_multi_ctx_get_con (vb, con_ctx, n_subctxs, type, is_bam);
+
+    int width = aux_width[type];
+
+    if (is_bam)
+        for (uint32_t i=0; i < n_subctxs; i++) {
+            ContextP item_ctx = ctx_get_ctx (vb, con->items[i+1].dict_id);
+            
+            buf_insert_do (VB, &item_ctx->local, width, item_ctx->local.len, &array[i * width], 1, CTX_TAG_LOCAL, __FUNCLINE);
+            
+            item_ctx->txt_len += width;
+        }
+
+    else if (aux_field_store_flag[type] == STORE_INT) { // SAM - integers
+        str_split_ints (array, array_len, n_subctxs, ',', item, true);
+
+        for (uint32_t i=0; i < n_subctxs; i++) {
+            ContextP item_ctx = ctx_get_ctx (vb, con->items[i+1].dict_id);
+            
+            // note: &items[i] contains the data because in little endian LSB comes first. TO DO: verify that value fits in width
+            buf_insert_do (VB, &item_ctx->local, width, item_ctx->local.len, &items[i], 1, CTX_TAG_LOCAL, __FUNCLINE);
+        }
+
+        con_ctx->txt_len += array_len; // not ideal, but saves us the need to measure lengths of the items
+    }
+
+    else { // SAM - floats
+        str_split (array, array_len, n_subctxs, ',', item, true);
+
+        for (uint32_t i=0; i < n_subctxs; i++) {
+            ContextP item_ctx = ctx_get_ctx (vb, con->items[i+1].dict_id);
+            seg_float_or_not (VB, item_ctx, STRi(item, i), item_lens[i]);
+        }
+
+        con_ctx->txt_len += n_subctxs-1; // commas
+    }
+
+    unsigned container_add_bytes = is_bam ? (4/*count*/ + 1/*type*/) : (2/*type - eg "i,"*/ + 1/*\t or \n*/);
+    container_seg (vb, con_ctx, (ContainerP)con, ((char[]){ CON_PX_SEP, type, ',', CON_PX_SEP }), 4, container_add_bytes);
+}
+
 void sam_seg_float_as_snip (VBlockSAMP vb, ContextP ctx, STRp(sam_value), ValueType bam_value, unsigned add_bytes)
 {
     if (IS_BAM_ZIP) {
@@ -1181,7 +1288,7 @@ void sam_seg_aux_field_fallback (VBlockP vb, void *dl, DictId dict_id, char sam_
 
     // Numeric array
     else if (sam_type == 'B') 
-        sam_seg_array_field (VB_SAM, (ZipDataLineSAM *)dl, dict_id, array_subtype, STRa(value), NULL, NULL);
+        sam_seg_array_one_ctx (VB_SAM, (ZipDataLineSAM *)dl, dict_id, array_subtype, STRa(value), NULL, NULL);
 
     // Z,H,A - normal snips in their own dictionary
     else 
@@ -1373,13 +1480,10 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
 
         case _OPTION_Zs_Z: COND (MP(HISAT2), sam_seg_HISAT2_Zs_Z (vb, STRa(value), add_bytes));
 
-        case _OPTION_ZM_B_s: COND ((MP(TMAP/*mapped file*/) || MP(TORRENT_BC/*unmapped file*/)) && flag.optimize_ZM, sam_seg_array_field (vb, dl, _OPTION_ZM_B_s, array_subtype, STRa(value), sam_optimize_TMAP_ZM, 0));
+        case _OPTION_ZM_B_s: COND ((MP(TMAP/*mapped file*/) || MP(TORRENT_BC/*unmapped file*/)) && flag.optimize_ZM, sam_seg_array_one_ctx (vb, dl, _OPTION_ZM_B_s, array_subtype, STRa(value), sam_optimize_TMAP_ZM, 0));
 
         case _OPTION_YH_Z: COND (MP(NOVOALIGN), seg_add_to_local_string (VB, CTX(OPTION_YH_Z), STRa(value), LOOKUP_NONE, add_bytes)); break;
         case _OPTION_YQ_Z: COND (MP(NOVOALIGN), seg_add_to_local_string (VB, CTX(OPTION_YQ_Z), STRa(value), LOOKUP_NONE, add_bytes)); break;
-
-        case _OPTION_qs_i: COND (TECH(PACBIO), sam_seg_SEQ_END (vb, dl, CTX(OPTION_qs_i), numeric.i, "0+00", add_bytes));
-        case _OPTION_qe_i: COND (TECH(PACBIO), sam_seg_SEQ_END (vb, dl, CTX(OPTION_qe_i), numeric.i, "++00", add_bytes));
 
         case _OPTION_QS_i: COND (MP(NGMLR), sam_seg_SEQ_END (vb, dl, CTX(OPTION_QS_i), numeric.i, "00+0", add_bytes));
         case _OPTION_QE_i: COND (MP(NGMLR), sam_seg_SEQ_END (vb, dl, CTX(OPTION_QE_i), numeric.i, "+00-", add_bytes));
@@ -1400,8 +1504,12 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
         
         case _OPTION_sq_Z: COND0 (segconf.use_pacbio_iqsqdq, sam_seg_pacbio_xq (vb, dl, OPTION_sq_Z, &dl->sq, STRa(value), add_bytes))
                            COND (TECH(PACBIO), seg_add_to_local_string (VB, CTX(OPTION_sq_Z), STRa(value), LOOKUP_SIMPLE, add_bytes)); 
-        
+
+        case _OPTION_qs_i: COND (TECH(PACBIO), sam_seg_pacbio_qs (vb, dl, numeric.i, add_bytes));
+        case _OPTION_qe_i: COND (TECH(PACBIO), sam_seg_pacbio_qe (vb, dl, numeric.i, add_bytes));
         case _OPTION_np_i: COND (TECH(PACBIO), sam_seg_pacbio_np (vb, dl, numeric.i, add_bytes));
+
+        case _OPTION_sn_B_f : COND (TECH(PACBIO), sam_seg_pacbio_sn (vb, dl, STRa(value)));
 
         case _OPTION_ec_f: COND (TECH(PACBIO) && segconf.has[OPTION_ec_f], ({ sam_seg_set_last_value_f_from_aux (vb, OPTION_ec_f, is_bam, STRa(value), numeric); goto fallback; })); // consumed by np:i
 
@@ -1414,7 +1522,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
         case _OPTION_sd_f: COND (MP(DRAGEN), sam_dragen_seg_sd_f (vb, dl, STRa(value), numeric, add_bytes));
 
         // Ultima Genomics fields
-        case _OPTION_tp_B_c: COND (segconf.has[OPTION_tp_B_c] && !dl->no_qual && segconf.has[OPTION_tp_B_c], sam_seg_array_field (vb, dl, _OPTION_tp_B_c, array_subtype, STRa(value), sam_seg_ULTIMA_tp, dl));
+        case _OPTION_tp_B_c: COND (segconf.has[OPTION_tp_B_c] && !dl->no_qual && segconf.has[OPTION_tp_B_c], sam_seg_array_one_ctx (vb, dl, _OPTION_tp_B_c, array_subtype, STRa(value), sam_seg_ULTIMA_tp, dl));
         case _OPTION_bi_Z: COND (MP(ULTIMA), sam_seg_ultima_bi (vb, STRa(value), add_bytes));
         case _OPTION_a3_i: COND (MP(ULTIMA), sam_seg_ultima_a3 (vb, dl, numeric.i, add_bytes));
         case _OPTION_XV_Z: COND (MP(ULTIMA), sam_seg_ultima_XV (vb, STRa(value), add_bytes));

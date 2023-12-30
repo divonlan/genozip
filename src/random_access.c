@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   random_access.h
-//   Copyright (C) 2020-2023 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -65,7 +65,7 @@ static void random_access_show_index (ConstBufferP ra_buf, bool from_zip, Did ch
             }
         }
         else {
-            CtxWord *chrom_word = B(CtxWord, ctx->word_list, ra->chrom_index);
+            CtxWordP chrom_word = B(CtxWord, ctx->word_list, ra->chrom_index);
             chrom_snip = Bc (ctx->dict, chrom_word->index);
             chrom_snip_len = chrom_word->len;
         }

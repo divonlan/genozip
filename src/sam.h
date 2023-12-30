@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam.h
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -422,9 +422,10 @@
 #pragma GENDICT OPTION_XT_i=DTYPE_2=XT:i     // # of continues reads, always 1 for blasr
     
 // PacBio tags. Source: https://pacbiofileformats.readthedocs.io/en/12.0/SubreadsInternalBAM.html
-#pragma GENDICT OPTION_cx_i=DTYPE_2=cx:i     // per-read: Subread local context Flags: enum LocalContextFlags { ADAPTER_BEFORE = 1, ADAPTER_AFTER = 2, BARCODE_BEFORE = 4, BARCODE_AFTER = 8, FORWARD_PASS = 16, REVERSE_PASS = 32 }
-#pragma GENDICT OPTION_qs_i=DTYPE_2=qs:i     // per-read: 0-based start of query in the ZMW read (absent in CCS)
-#pragma GENDICT OPTION_qe_i=DTYPE_2=qe:i     // per-read: 0-based end of query in the ZMW read (absent in CCS)
+// and https://pacbiofileformats.readthedocs.io/en/11.0/BAM.html
+#pragma GENDICT OPTION_cx_i=DTYPE_2=cx:i     // per-read: Subread local context Flags: enum LocalContextFlags { ADAPTER_BEFORE = 1, ADAPTER_AFTER = 2, BARCODE_BEFORE = 4, BARCODE_AFTER = 8, FORWARD_PASS = 16, REVERSE_PASS = 32 ; 64 and 128 = observed by undocumented }
+#pragma GENDICT OPTION_qs_i=DTYPE_2=qs:i     // per-read: 0-based start of query in the ZMW read
+#pragma GENDICT OPTION_qe_i=DTYPE_2=qe:i     // per-read: 0-based end of query in the ZMW read 
 #pragma GENDICT OPTION_ws_i=DTYPE_2=ws:i     // per-read: Start of first base of the query (‘qs’) in approximate raw frame count since start of movie. For a CCS read, the start of the first base of the first incorporated subread.
 #pragma GENDICT OPTION_we_i=DTYPE_2=we:i     // per-read: Start of last base of the query (‘qe - 1’) in approximate raw frame count since start of movie. For a CCS read, the start of the last base of the last incorporated subread.
 #pragma GENDICT OPTION_zm_i=DTYPE_2=zm:i     // per-read: ZMW hole number
@@ -439,7 +440,10 @@
 #pragma GENDICT OPTION_iq_Z=DTYPE_2=iq:Z     // per-base: InsertionQV
 #pragma GENDICT OPTION_sq_Z=DTYPE_2=sq:Z     // per-base: SubstitutionQV
 #pragma GENDICT OPTION_iq_sq_dq=DTYPE_2=iq_sq_dq 
+
 #pragma GENDICT OPTION_ip_B_C=DTYPE_2=ip:B:C // per-base: Interpulse duration (IPD) measured in frames (raw frames or codec V1)
+#pragma GENDICT OPTION_ip_ARR=DTYPE_2=ipC_ARR 
+
 #pragma GENDICT OPTION_pw_B_C=DTYPE_2=pw:B:C // per-base: PulseWidth measured in frames (raw frames or codec V1)
 #pragma GENDICT OPTION_fi_B_C=DTYPE_2=fi:B:C // per-base (Hi-Fi kinetic info): Forward IPD (codec V1)
 #pragma GENDICT OPTION_ri_B_C=DTYPE_2=ri:B:C // per-base (Hi-Fi kinetic info): Reverse IPD (codec V1)
@@ -447,9 +451,11 @@
 #pragma GENDICT OPTION_rp_B_C=DTYPE_2=rp:B:C // per-base (Hi-Fi kinetic info): Reverse PulseWidth (codec V1)
 #pragma GENDICT OPTION_fn_i=DTYPE_2=fn:i     // per-base (Hi-Fi kinetic info): Forward number of complete passes (zero or more)
 #pragma GENDICT OPTION_rn_i=DTYPE_2=rn:i     // per-base (Hi-Fi kinetic info): Reverse number of complete passes (zero or more)
-#pragma GENDICT OPTION_sz_A=DTYPE_2=sz_A     // scrap read: ZMW classification annotation, one of N:=Normal, C:=Control, M:=Malformed, or S:=Sentinel
-#pragma GENDICT OPTION_sc_A=DTYPE_2=sc_A     // scrap read: Scrap region-type annotation, one of A:=Adapter, B:=Barcode, L:=LQRegion, or F:=Filtered
+#pragma GENDICT OPTION_sz_A=DTYPE_2=sz:A     // scrap read: ZMW classification annotation, one of N:=Normal, C:=Control, M:=Malformed, or S:=Sentinel
+#pragma GENDICT OPTION_sc_A=DTYPE_2=sc:A     // scrap read: Scrap region-type annotation, one of A:=Adapter, B:=Barcode, L:=LQRegion, or F:=Filtered
 #pragma GENDICT OPTION_ls_B_C=DTYPE_2=ls:B:C // ??
+#pragma GENDICT OPTION_ac_B_i=DTYPE_2=ac:B:i // Array containing four counts, in order: - detected adapters on left/start - missing adapters on left/start - detected adapters on right/end - missing adapter on right/end (based on the ADAPTER_BEFORE_BAD and ADAPTER_AFTER_BAD information in the subread cx tag): https://pacbiofileformats.readthedocs.io/en/11.0/BAM.html
+#pragma GENDICT OPTION_ma_i=DTYPE_2=ma:i     // Bitmask storing if an adapter is missing on either side of the molecule. A value of 0 indicates neither end has a confirmed missing adapter. - 0x1 if adapter is missing on left/start - 0x2 if adapter is missing on right/end (based on the ADAPTER_BEFORE_BAD and ADAPTER_AFTER_BAD information in the subread cx tag): https://pacbiofileformats.readthedocs.io/en/11.0/BAM.html
 
 // PacBio Lima tags: https://lima.how/output/bam.html
 #pragma GENDICT OPTION_bc_B_S=DTYPE_2=bc:B:S // Barcode pair indices, integer codes represent 0-based position in the FASTA file of barcodes.
@@ -750,7 +756,7 @@ extern void sam_reset_line (VBlockP vb);
                       ultima_c_piz_special_DEMUX_BY_Q4NAME, sam_piz_special_bi, sam_piz_special_sd, \
                       agilent_special_AGENT_RX, agilent_special_AGENT_QX, special_qname_rng2seq_len, sam_piz_special_DEMUX_BY_XX_0, \
                       sam_piz_special_DEMUX_BY_AS, piz_special_PLUS, \
-                      sam_piz_special_ULTIMA_tp, sam_piz_special_ULTIMA_MI, \
+                      sam_piz_special_ULTIMA_tp, sam_piz_special_ULTIMA_MI, sam_piz_special_PACBIO_qe, sam_piz_special_DEMUX_sn,\
                     }
 SPECIAL (SAM, 0,  CIGAR,                 sam_cigar_special_CIGAR);
 SPECIAL (SAM, 1,  TLEN_old,              sam_piz_special_TLEN_old);            // used up to 12.0.42
@@ -817,7 +823,9 @@ SPECIAL (SAM, 61, DEMUX_BY_AS,           sam_piz_special_DEMUX_BY_AS);         /
 SPECIAL (SAM, 62, PLUS,                  piz_special_PLUS);                    // introduced 15.0.27
 SPECIAL (SAM, 63, ULTIMA_tp,             sam_piz_special_ULTIMA_tp);           // introduced 15.0.28
 SPECIAL (SAM, 64, ULTIMA_mi,             sam_piz_special_ULTIMA_MI);           // introduced 15.0.28
-#define NUM_SAM_SPECIAL 65
+SPECIAL (SAM, 65, PACBIO_qe,             sam_piz_special_PACBIO_qe);           // introduced 15.0.35
+SPECIAL (SAM, 66, DEMUX_sn,              sam_piz_special_DEMUX_sn);            // introduced 15.0.35
+#define NUM_SAM_SPECIAL 67
  
 #define SAM_LOCAL_GET_LINE_CALLBACKS(dt)        \
     { dt, _OPTION_BD_BI,    sam_zip_BD_BI    }, \
@@ -835,31 +843,32 @@ SPECIAL (SAM, 64, ULTIMA_mi,             sam_piz_special_ULTIMA_MI);           /
 // Important: Numbers (and order) of translators cannot be changed, as they are part of the file format
 // (they are included in the TOP2BAM container)
 // translator numbers must start from 1 - 0 is reserved for "none"
-TRANSLATOR (SAM, BAM,   1,  I8,         container_translate_I8)     // reconstruct binary little endian functions
-TRANSLATOR (SAM, BAM,   2,  U8,         container_translate_U8)     // 
-TRANSLATOR (SAM, BAM,   3,  LTEN_I16,   container_translate_LTEN_I16) 
-TRANSLATOR (SAM, BAM,   4,  LTEN_U16,   container_translate_LTEN_U16) 
-TRANSLATOR (SAM, BAM,   5,  LTEN_I32,   container_translate_LTEN_I32) 
-TRANSLATOR (SAM, BAM,   6,  LTEN_U32,   container_translate_LTEN_U32) 
-TRANSLATOR (SAM, BAM,   7,  FLOAT,      sam_piz_sam2bam_FLOAT)      // reconstructs SAM-stored textual floating point as little endian 32bit float
-TRANSLATOR (SAM, BAM,   8,  ARRAY_SELF, sam_piz_sam2bam_ARRAY_SELF) // remove the comma from the prefix that contains the type, eg "i,"->"i"
-TRANSLATOR (SAM, BAM,   9,  RNAME,      sam_piz_sam2bam_RNAME)      // reconstructs the b250 index or -1 if "*"
-TRANSLATOR (SAM, BAM,   10, POS,        sam_piz_sam2bam_POS)        // reconstructs Little Endian U32 0-based POS. 
-TRANSLATOR (SAM, BAM,   11, SEQ,        sam_piz_sam2bam_SEQ)        // textual SEQ to BAM-format SEQ 
-TRANSLATOR (SAM, BAM,   12, QUAL,       sam_piz_sam2bam_QUAL)       // textual QUAL to BAM-format QUAL 
-TRANSLATOR (SAM, BAM,   13, TLEN,       sam_piz_sam2bam_TLEN)       // place TLEN last_value in BAM alignment 
-TRANSLATOR (SAM, BAM,   14, AUX,        sam_piz_sam2bam_AUX)        // used up to v11, kept for for backward compatability as old files expect it
-TRANSLATOR (SAM, BAM,   15, AUX_SELF,   sam_piz_sam2bam_AUX_SELF)   // transform prefixes in Aux Container from SAM to BAM format 
-TRANSLATOR (SAM, FASTQ, 16, SEQ,        sam_piz_sam2fastq_SEQ)      // reverse-complement the sequence if needed, and drop if "*"
-TRANSLATOR (SAM, FASTQ, 17, QUAL,       sam_piz_sam2fastq_QUAL)     // reverse the QUAL if reverse-complemented and drop fastq records with QUAL="*"
-TRANSLATOR (SAM, FASTQ, 18, FLAG,       sam_piz_sam2fastq_FLAG)     // emit 1 if (FLAGS & 0x40) or 2 of (FLAGS & 0x80)
-#define NUM_SAM_TRANS   19 // including "none"
+TRANSLATOR (SAM, BAM,   1,  I8,           container_translate_I8)       // reconstruct binary little endian functions
+TRANSLATOR (SAM, BAM,   2,  U8,           container_translate_U8)       // 
+TRANSLATOR (SAM, BAM,   3,  LTEN_I16,     container_translate_LTEN_I16) 
+TRANSLATOR (SAM, BAM,   4,  LTEN_U16,     container_translate_LTEN_U16) 
+TRANSLATOR (SAM, BAM,   5,  LTEN_I32,     container_translate_LTEN_I32) 
+TRANSLATOR (SAM, BAM,   6,  LTEN_U32,     container_translate_LTEN_U32) 
+TRANSLATOR (SAM, BAM,   7,  FLOAT,        sam_piz_sam2bam_FLOAT)        // reconstructs SAM-stored textual floating point as little endian 32bit float
+TRANSLATOR (SAM, BAM,   8,  ARRAY_SELF_1, sam_piz_sam2bam_ARRAY_SELF_1) // remove the comma from the prefix that contains the type, eg "i,"->"i"
+TRANSLATOR (SAM, BAM,   9,  RNAME,        sam_piz_sam2bam_RNAME)        // reconstructs the b250 index or -1 if "*"
+TRANSLATOR (SAM, BAM,   10, POS,          sam_piz_sam2bam_POS)          // reconstructs Little Endian U32 0-based POS. 
+TRANSLATOR (SAM, BAM,   11, SEQ,          sam_piz_sam2bam_SEQ)          // textual SEQ to BAM-format SEQ 
+TRANSLATOR (SAM, BAM,   12, QUAL,         sam_piz_sam2bam_QUAL)         // textual QUAL to BAM-format QUAL 
+TRANSLATOR (SAM, BAM,   13, TLEN,         sam_piz_sam2bam_TLEN)         // place TLEN last_value in BAM alignment 
+TRANSLATOR (SAM, BAM,   14, AUX,          sam_piz_sam2bam_AUX)          // used up to v11, kept for for backward compatability as old files expect it
+TRANSLATOR (SAM, BAM,   15, AUX_SELF,     sam_piz_sam2bam_AUX_SELF)     // transform prefixes in Aux Container from SAM to BAM format 
+TRANSLATOR (SAM, FASTQ, 16, SEQ,          sam_piz_sam2fastq_SEQ)        // reverse-complement the sequence if needed, and drop if "*"
+TRANSLATOR (SAM, FASTQ, 17, QUAL,         sam_piz_sam2fastq_QUAL)       // reverse the QUAL if reverse-complemented and drop fastq records with QUAL="*"
+TRANSLATOR (SAM, FASTQ, 18, FLAG,         sam_piz_sam2fastq_FLAG)       // emit 1 if (FLAGS & 0x40) or 2 of (FLAGS & 0x80)
+TRANSLATOR (SAM, BAM,   19, ARRAY_SELF_M, sam_piz_sam2bam_ARRAY_SELF_M) // 15.0.35: remove the comma from the prefix that contains the type, eg "i,"->"i"
+#define NUM_SAM_TRANS   20 // including "none"
 
 #define SAM_TRANSLATORS { NULL /* none */, container_translate_I8, container_translate_U8, container_translate_LTEN_I16, \
                           container_translate_LTEN_U16, container_translate_LTEN_I32, container_translate_LTEN_U32, \
-                          sam_piz_sam2bam_FLOAT, sam_piz_sam2bam_ARRAY_SELF, sam_piz_sam2bam_RNAME, sam_piz_sam2bam_POS, sam_piz_sam2bam_SEQ, \
+                          sam_piz_sam2bam_FLOAT, sam_piz_sam2bam_ARRAY_SELF_1, sam_piz_sam2bam_RNAME, sam_piz_sam2bam_POS, sam_piz_sam2bam_SEQ, \
                           sam_piz_sam2bam_QUAL, sam_piz_sam2bam_TLEN, sam_piz_sam2bam_AUX, sam_piz_sam2bam_AUX_SELF, \
-                          sam_piz_sam2fastq_SEQ, sam_piz_sam2fastq_QUAL, sam_piz_sam2fastq_FLAG }
+                          sam_piz_sam2fastq_SEQ, sam_piz_sam2fastq_QUAL, sam_piz_sam2fastq_FLAG, sam_piz_sam2bam_ARRAY_SELF_M }
 
 TXTHEADER_TRANSLATOR (sam_header_bam2sam);
 TXTHEADER_TRANSLATOR (sam_header_sam2bam);

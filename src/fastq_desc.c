@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   fastq_desc.c
-//   Copyright (C) 2020-2023 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -65,32 +65,23 @@ void fastq_seg_LINE3 (VBlockFASTQP vb, STRp(qline3), STRp(qline1), STRp(desc))
                 STRf(qline3));
 }
 
-//----------------------
-// AUX: eg "length=1234"
-//----------------------
+//--------------------------------------------
+// AUX: eg "length=1234" or "l:1234" 
+//--------------------------------------------
 
 static void fastq_seg_one_aux (VBlockFASTQP vb, STRp(tag_name), STRp(value))
 {
     DictId dict_id = dict_id_make (STRa(tag_name), DTYPE_2);
     ContextP ctx = ctx_get_ctx_tag (vb, dict_id, tag_name, tag_name_len); // create if it doesn't already exist
     
-    switch (dict_id.num) {
-        
-        case _FASTQ_AUX_LENGTH: 
-            seg_integer_or_not (VB, ctx, STRa(value), value_len); // also sets last_value
+    seg_integer_or_not (VB, ctx, STRa(value), value_len); // also sets last_value
 
-            // seq_len_dict_id must be detected in the first line, and if it appears, it must appear in all lines
-            if (segconf.running && !vb->line_i && str_is_int (STRa(value))) 
-                segconf.seq_len_dict_id = ctx->dict_id; // possibly overriding the value set in qname_segconf_discover_flavor
-
-            break;
-
-        default: 
-            seg_by_ctx (VB, STRa(value), ctx, value_len); // note: the tag and '=' are accounted for by the AUX container
-    }
+    // seq_len_dict_id must be detected in the first line, and if it appears, it must appear in all lines
+    if (segconf.running && dict_id.num == _FASTQ_AUX_LENGTH && !vb->line_i && str_is_int (STRa(value))) 
+        segconf.seq_len_dict_id = ctx->dict_id; // possibly overriding the value set in qname_segconf_discover_flavor
 }
 
-static void fastq_seg_aux_container (VBlockFASTQP vb, STRps(tag), uint32_t total_tag_len) // tags including '='
+static void fastq_seg_aux_container (VBlockFASTQP vb, STRps(tag), uint32_t total_tag_len) // tags including '='/':'
 {
     Container con = { .repeats = 1, .drop_final_item_sep = true };
     con_set_nitems (con, n_tags + kraken_is_loaded);
@@ -105,8 +96,8 @@ static void fastq_seg_aux_container (VBlockFASTQP vb, STRps(tag), uint32_t total
         con.items[tag_i] = (ContainerItem){ .dict_id = dict_id_make (STRi(tag, tag_i), DTYPE_2), .separator  = " " };
     
         mempcpy (&prefixes[prefixes_len], tags[tag_i], tag_lens[tag_i]); 
-        prefixes_len += tag_lens[tag_i]; // including '='
-        prefixes[prefixes_len++] = '=';
+        prefixes_len += tag_lens[tag_i]; // including '='/':'
+        prefixes[prefixes_len++] = segconf.aux_sep;
         prefixes[prefixes_len++] = CON_PX_SEP;
     }
 
@@ -114,7 +105,7 @@ static void fastq_seg_aux_container (VBlockFASTQP vb, STRps(tag), uint32_t total
     if (kraken_is_loaded) {
         con.items[n_tags] = (ContainerItem){ .dict_id = { _FASTQ_TAXID } };  
 
-        memcpy(&prefixes[prefixes_len], ((char[]){ 't','a','x','i','d','=',CON_PX_SEP }), 7);
+        memcpy(&prefixes[prefixes_len], ((char[]){ 't','a','x','i','d',segconf.aux_sep,CON_PX_SEP }), 7);
         prefixes_len += 7;
 
         vb->recon_size += 6; // "taxid="
@@ -135,10 +126,13 @@ void fastq_segconf_analyze_DESC (VBlockFASTQP vb, STRp(desc))
         return; // too many fields - entire desc will be treated as "extra" and added to DESC.local
     }
 
-    // count auxes (an aux is eg "length=151")
     int n_auxes=0;
+
+    segconf.aux_sep = (str_count_char (STRi(item, n_items-1), ':') == 1) ? ':' : '=';
+
+    // count auxes (an aux is eg "length=151")
     for (int i=n_items-1; i >= 0; i--, n_auxes++) {
-        str_split (items[i], item_lens[i], 2, '=', side, true); // an AUX field is a name=value pair, eg "length=151"
+        str_split (items[i], item_lens[i], 2, segconf.aux_sep, side, true); // an AUX field is a name=value pair, eg "length=151"
         if (n_sides != 2) break;
 
         // set segconf.has[]. 
@@ -172,7 +166,7 @@ void fastq_seg_DESC (VBlockFASTQP vb, STRp(desc), bool deep_qname2, uint32_t unc
     if (segconf.has_aux) { // we are allowed to seg AUX
         int n_auxes=0, total_tag_len=0;
         int i; for (i=n_items-1; i >= 0; i--, n_auxes++) {
-            str_split (items[i], item_lens[i], 2, '=', side, true); // an AUX field is a name=value pair, eg "length=151"
+            str_split (items[i], item_lens[i], 2, segconf.aux_sep, side, true); // an AUX field is a name=value pair, eg "length=151"
             if (n_sides != 2) break;
 
             fastq_seg_one_aux (vb, STRi(side,0), STRi(side,1));

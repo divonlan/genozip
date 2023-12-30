@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   ref_contigs.c
-//   Copyright (C) 2020-2023 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -53,16 +53,13 @@ void ref_contigs_populate_aligned_chroms (void)
         r->num_set = bits_num_set_bits (&r->is_set);
         if (!r->num_set) continue;
 
-        WordIndex chrom_index = chrom_get_by_name (STRa(r->chrom_name)); // exists eg in a case of a SAM with mixed aligned and unaligned reads
+        WordIndex chrom_index = chrom_get_by_name (STRa(r->chrom_name)); 
         decl_zctx(CHROM);
 
-        if (chrom_index == WORD_INDEX_NONE) {
-            chrom_index = ctx_populate_zf_ctx (CHROM, STRa(r->chrom_name), r->range_i); // add to dictionary
-
-            buf_alloc_255 (evb, &zctx->chrom2ref_map, 0, MAX_(1000, chrom_index+1), WordIndex, CTX_GROWTH, "ZCTX(CHROM)->chrom2ref_map");
-
-            *B(WordIndex, zctx->chrom2ref_map, chrom_index) = r->chrom;
-        }
+        // contig r->chrom_name was used by aligner, but it is not in CHROM.dict (it could have been in CHROM in a mixed mapped/mapped SAM file)
+        if (chrom_index == WORD_INDEX_NONE) 
+            // add it to the the CHROM.dict
+            chrom_index = ctx_populate_zf_ctx (CHROM, STRa(r->chrom_name), r->range_id); 
 
         // make sure count is at least 1 for ref_contigs_compress_stored to store 
         buf_alloc_zero (evb, &zctx->counts, 0, MAX_(chrom_index + 1, gref->ranges.len32), uint64_t, CTX_GROWTH, "counts");
@@ -210,6 +207,7 @@ static bool ref_contigs_compress_compact (BufferP created_contigs)
 void ref_contigs_compress_stored (Reference ref)
 {
     START_TIMER;
+    decl_zctx (CHROM);
 
     ARRAY (uint64_t, chrom_counts, ZCTX(CHROM)->counts);
 
@@ -230,7 +228,7 @@ void ref_contigs_compress_stored (Reference ref)
         // compacting, because the original contig had a 64-aligned gpos)
         PosType64 delta = r->gpos % 64;
 
-        WordIndex chrom = IS_REF_EXT_STORE ? *B(WordIndex, z_file->ref2chrom_map, r->chrom) : r->chrom; // the CHROM corresponding to this ref_index, even if a different version of the chrom name 
+        WordIndex chrom = IS_REF_EXT_STORE ? *B(WordIndex, zctx->ref2chrom_map, r->chrom) : r->chrom; // the CHROM corresponding to this ref_index, even if a different version of the chrom name 
 
         // don't store min_pos/max_pos/gpos (better compression) is this contig was not used explicitly (note: aligner doesn't use contigs, but GPOS)
         if (chrom == WORD_INDEX_NONE || !chrom_counts[chrom] || 
@@ -241,7 +239,7 @@ void ref_contigs_compress_stored (Reference ref)
         cn[chrom].max_pos   = r->last_pos;
 
         if (flag.show_ref_contigs) {
-            cn[chrom].char_index = ctx_get_char_index_of_snip (ZCTX(CHROM), STRa(r->chrom_name), false);
+            cn[chrom].char_index = ctx_get_char_index_of_snip (zctx, STRa(r->chrom_name), false);
             cn[chrom].snip_len   = r->chrom_name_len;
         }
 
@@ -270,11 +268,12 @@ void ref_contigs_compress_stored (Reference ref)
 
 static void ref_contigs_load_set_contig_names (Reference ref)
 {
-    ASSERT0 (ZCTX(CHROM)->dict.len, "CHROM dictionary is empty");
+    decl_zctx (CHROM);
+    ASSERT0 (zctx->dict.len, "CHROM dictionary is empty");
 
-    buf_copy (evb, &ref->ctgs.dict, &ZCTX(CHROM)->dict, char, 0, 0, "ContigPkg->dict");
+    buf_copy (evb, &ref->ctgs.dict, &zctx->dict, char, 0, 0, "ContigPkg->dict");
 
-    ARRAY (CtxWord, chrom, ZCTX(CHROM)->word_list);
+    ARRAY (CtxWord, chrom, zctx->word_list);
     ARRAY (Contig, contig, ref->ctgs.contigs);
 
     for (uint32_t i=0; i < contig_len; i++) {

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   buffer.h
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -154,6 +154,7 @@ extern void buf_insert_do (VBlockP vb, BufferP buf, unsigned width, uint64_t ins
 #define buf_append_one(buf, item) ({                                                    \
     typeof(item) item_ = (item); /* evaluate once */                                    \
     buf_insert_do (NULL, &(buf), sizeof(typeof(item)), (buf).len, &item_, 1, NULL, __FUNCLINE);\
+    BLST(typeof(item), (buf));                                                          \
 })
 
 #define buf_insert(vb, buf, type, insert_at, new_data, new_data_len, name) \

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   compressor.c
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -176,7 +176,7 @@ uint32_t comp_compress (VBlockP vb,
 
     z_data->len += total_z_len;
 
-    // if we're compressing a global buffer in the main thread, we can write it immeidately
+    // if we're compressing a global buffer in the main thread, we can write it immidiately
     if (vb == evb && !in_assign_codec && !HEADER_IS(GENOZIP_HEADER)) 
         zfile_output_processed_vb (vb);
 

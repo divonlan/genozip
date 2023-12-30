@@ -115,6 +115,7 @@ typedef struct {
     bool has_bwa_meth;          // file was treated with bwa-meth before and after alignment with bwa
     bool pacbio_subreads;       // this is a pacbio subreads file
     bool use_insertion_ctxs;    // use separate contexts for SEQ insertions
+    bool sam_use_sn_mux;
     bool sam_semcol_in_contig;  // some contig names contain a semicolon, eg "ScxkALA_1850;HRSCAF=2697" (see: https://hgdownload.soe.ucsc.edu/hubs/GCF/005/870/125/GCF_005870125.1/GCF_005870125.1.chromAlias.txtwcs)
     bool sam_has_SA_Z;
     thool sam_has_BWA_XA_Z;
@@ -128,6 +129,8 @@ typedef struct {
     bool sam_has_bismark_XM_XG_XR;
     bool sam_has_ultima_t0;
     bool sam_has_zm_by_Q1NAME;
+    int64_t sam_first_qs;       // qs:i value of the first line of segconf
+    bool sam_diverse_qs;        // true if not all qs:i values in segconf are equal sam_first_qs
     bool sam_has_xcons;
     bool sam_bisulfite;         // this BAM file is of reads that have been treated with bisulfite to detect methylation
     bool sam_predict_meth_call; // ZIP/PIZ: true if segging SEQ should also predict the methylation call in vb->meth_call
@@ -227,6 +230,7 @@ typedef struct {
         };
     };
 
+    char aux_sep;               // separator between name and value in aux fields (either '=' or ':')
     FastqLine3Type line3;       // format of line3
     int r1_or_r2;               // in case compression is WITHOUT --pair: our guess of whether this file is R1 or R2
     QType deep_qtype;           // Deep: QNAME1 or QNAME2 if for most segconf lines for which have Deep, SAM qname matches FASTQ's QNAME1 or QNAME2, or QNONE if not
@@ -268,4 +272,5 @@ extern rom segconf_sam_mapper_name (void);
 extern rom segconf_tech_name (void);
 extern rom segconf_deep_trimming_name (void);
 extern void segconf_test_sorted (VBlockP vb, WordIndex prev_line_chrom, PosType32 pos, PosType32 prev_line_pos);
+extern void segconf_test_multiseq (VBlockP vb, Did nonref);
 extern StrText segconf_get_qual_histo (QualHistType qht);

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   qname_flavors.h
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -480,6 +480,22 @@ static SmallContainer con_ultima_c_bc = {
                    { .dict_id = { _SAM_QENAME }                    },
                    { .dict_id = { _SAM_QmNAME }, I_AM_MATE         } }
 };
+
+// QF_ULTIMA_Z? format
+// Example: 012345678_1-Z0123-0123456789
+#define CON_ULTIMA_Z(n) \
+static SmallContainer con_ultima_Z##n = {                                                           \
+    .repeats             = 1,                                                                       \
+    .nitems_lo           = 5,                                                                       \
+    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_FIXED_0_PAD, n  } },  \
+                             { .dict_id = { _SAM_Q1NAME }, .separator = "-"                     },  \
+                             { .dict_id = { _SAM_Q2NAME }, .separator = { CI0_FIXED_0_PAD, 5  } },  \
+                             { .dict_id = { _SAM_Q3NAME }, .separator = { CI0_FIXED_0_PAD, 10 } },  \
+                             { .dict_id = { _SAM_QmNAME }, I_AM_MATE                            } } \
+};
+CON_ULTIMA_Z(9)
+
+#define PX_ULTIMA_Z { "", "_", "", "-", PX_MATE_FIXED_0_PAD }  
 
 // QF_ULTIMA_b? format
 // Example: 014214_2-UGAv1-143-9871314132
@@ -982,7 +998,7 @@ static QnameFlavorStruct qf[] = {
                                                                                           TECH_ELEMENT, TECH_NCBI,    QANY,   &con_element,       0,   6,  {3,4,-1},           {5,6,-1},       {5,6,-1},           {-1},           0,  5,6,   -1,-1, -1, -1, -1, 0,  PX_ELEMENT         },
     {},  { QF_ELEMENT_bc,  "Element-bc",    { "SDF-02:GFH-0166::1:13435:2311:1233:GTAGCCAATCA", "SDF-02:GFH-0166:2140948523:1:13435:2311:1233:GTAGCCAATCA"  }, 
                                                                                           TECH_ELEMENT, TECH_NCBI,    QANY,   &con_element_bc,    ':', 7,  {3,4,-1},           {5,6,-1},       {5,6,-1},           {-1},           0,  5,6,   -1,-1, -1, 7,  -1, 0,  PX_ELEMENT_BC     },
-/*  mate    id             name             example                                       tech          fq_qname1_tech   only_q  con_template       canon #sp integer_items       numeric_items   in-local            hex_items       srt ord1,2 rng    sqln bc cb  len px_strs           */
+/*  mate    id             name             example                                       tech          fq_qname1_tech  only_q con_template       canon #sp integer_items       numeric_items   in-local           hex_items       srt ord1,2 rng    sqln bc cb  len px_strs           */
     {},  { QF_MGI_varlen,  "MGI-varlen",    { "8A_V100004684L3C001R029311637", "V300022116L2C001R0012002968", "V300046476L1C001R00110001719" },          
                                                                                           TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_varlen,    0,   3,  {4,-1},             {1,2,3,-1},     {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, 0,  PX_mgi_varlen     },
     {},  { QF_MGI_r6,      "MGI-R6",        { "8A_V100004684L3C001R029011637", "V300014293BL2C001R027005967", "V300003413L4C001R016000000" },          
@@ -1002,6 +1018,7 @@ static QnameFlavorStruct qf[] = {
     {},  { QF_ULTIMA_b6,   "Ultima-b6",     { "012345_2-UGAv1-3-9871314132" },            TECH_ULTIMA,  TECH_NCBI,    QANY,   &con_ultima_b6,     0,   4,  {1,-1},             {4,-1},         {1,4,-1},           {-1},           0,  -1,-1, -1,-1, -1, -1, -1, 0,  PX_ULTIMA_B       },
     {},  { QF_ULTIMA_b6_bc,"Ultima-b6_bc",  { "012345_2-UGAv1-143-9871314132_AGTAC" },    TECH_ULTIMA,  TECH_NCBI,    QANY,   &con_ultima_b6_bc,  0,   5,  {1,-1},             {4,-1},         {1,4,-1},           {-1},           0,  -1,-1, -1,-1, -1, 5,  -1, 0,  PX_ULTIMA_B_BC    },
     {},  { QF_ULTIMA_b9,   "Ultima-b9",     { "012345678_2-UGAv3-3-9871314132" },         TECH_ULTIMA,  TECH_NCBI,    QANY,   &con_ultima_b9,     0,   4,  {1,-1},             {4,-1},         {1,4,-1},           {-1},           0,  -1,-1, -1,-1, -1, -1, -1, 0,  PX_ULTIMA_B       },
+    {},  { QF_ULTIMA_Z9,   "Ultima-Z9",     { "012345678_1-Z0123-0123456789" },           TECH_ULTIMA,  TECH_NCBI,    QANY,   &con_ultima_Z9,     0,   3,  {1,-1},             {3,-1},         {1,3,-1},           {-1},           0,  -1,-1, -1,-1, -1, -1, -1, 0,  PX_ULTIMA_Z       },
     {},  { QF_ULTIMA_b9_bc,"Ultima-b9_bc",  { "012345678_2-UGAv3-143-9871314132_AGTAC" }, TECH_ULTIMA,  TECH_NCBI,    QANY,   &con_ultima_b9_bc,  0,   5,  {1,-1},             {4,-1},         {1,4,-1},           {-1},           0,  -1,-1, -1,-1, -1, 5,  -1, 0,  PX_ULTIMA_B_BC    },
     {},  { QF_ULTIMA_d,    "Ultima-d",      { "012345-UGAv1-3-9871314132" },              TECH_ULTIMA,  TECH_NCBI,    QANY,   &con_ultima_d,      0,   3,  {-1},               {3,-1},         {1,3,-1},           {-1},           0,  -1,-1, -1,-1, -1, -1, -1, 0,  PX_ULTIMA_D       },
     {},  { QF_ULTIMA_d_bc, "Ultima-d_bc",   { "012345-UGAv1-143-9871314132_AGTAC" },      TECH_ULTIMA,  TECH_NCBI,    QANY,   &con_ultima_d_bc,   0,   4,  {-1},               {3,-1},         {1,3,-1},           {-1},           0,  -1,-1, -1,-1, -1, 4,  -1, 0,  PX_ULTIMA_D_BC    },
@@ -1022,9 +1039,9 @@ static QnameFlavorStruct qf[] = {
     {},  { QF_HELICOS,     "Helicos",       { "VHE-242383071011-15-1-0-2" },              TECH_HELICOS, TECH_NCBI,    QANY,   &con_helicos,       0,   5,  {2,3,4,5,-1},       {-1},           {-1},               {-1},           0,  -1,-1, -1,-1, -1, -1, -1,                       },
     {},  { QF_PACBIO_3,    "PacBio-3",      { "0ae26d65_70722_4787" },                    TECH_PACBIO,  TECH_NCBI,    QANY,   &con_pacbio_3,      0,   2,  {1,2,-1},           {0,-1},         {1,2,-1},           {0,-1},         0,  -1,-1, -1,-1, -1, -1, -1, 0,  PX_pacbio_3       },
          { QF_PACBIO_rng,  "PacBio-Range",  { "m130802_221257_00127_c100560082550000001823094812221334_s1_p0/128361/872_4288" },
-                                                                                          TECH_PACBIO,  TECH_NCBI,    QANY,   &con_pacbio_range,  0,   4,  {1,2,3,-1},         {-1},           {1,-1},             {-1},           0,  1,-1,  3,-1,  4,  -1, 4,  0,  PX_pacbio         }, // note: tried ord1=1 for pacbio flavors, we're worse off than in_local
-    {},  { QF_PACBIO_lbl,  "PacBio-Label",  { "m64136_200621_234916/18/ccs" },            TECH_PACBIO,  TECH_NCBI,    QANY,   &con_pacbio_label,  0,   3,  {1,-1},             {-1},           {1,-1},             {-1},           0,  1,-1,  -1,-1, -1, -1, -1, 0,  PX_pacbio         },
-    {},  { QF_PACBIO_pln,  "PacBio-Plain",  { "m64136_200621_234916/18" },                TECH_PACBIO,  TECH_NCBI,    QANY,   &con_pacbio_plain,  0,   2,  {1,-1},             {-1},           {1,-1},             {-1},           0,  1,-1,  -1,-1, -1, -1, -1, 0,  PX_pacbio         },
+                                                                                          TECH_PACBIO,  TECH_NCBI,    QANY,   &con_pacbio_range,  0,   4,  {1,2,3,-1},         {-1},           {1,-1},             {-1},           0,  1,-1,  3,-1,  4,  -1,  4,  0,  PX_pacbio         }, // note: tried ord1=1 for pacbio flavors, we're worse off than in_local
+    {},  { QF_PACBIO_lbl,  "PacBio-Label",  { "m64136_200621_234916/18/ccs" },            TECH_PACBIO,  TECH_NCBI,    QANY,   &con_pacbio_label,  0,   3,  {1,-1},             {-1},           {1,-1},             {-1},           0,  1,-1,  -1,-1, -1, -1,  -1, 0,  PX_pacbio         },
+    {},  { QF_PACBIO_pln,  "PacBio-Plain",  { "m64136_200621_234916/18" },                TECH_PACBIO,  TECH_NCBI,    QANY,   &con_pacbio_plain,  0,   2,  {1,-1},             {-1},           {1,-1},             {-1},           0,  1,-1,  -1,-1, -1, -1,  -1, 0,  PX_pacbio         },
     {},  { QF_NANOPORE,    "Nanopore",      { "af84b0c1-6945-4323-9193-d9f6f2c38f9a" },   TECH_NANOPORE,     TECH_NCBI,    QANY,   &con_nanopore,      0,   4,  {-1},               {0,1,2,3,4-1},  {0,1,2,3,4,-1},     {0,1,2,3,4,-1}, 0,  -1,-1, -1,-1, -1, -1, -1, 36, PX_nanopore       },
     {},  { QF_NANOPORE_rng,"Nanopore-rng",  { "2a228edf-218c-46b3-b1b8-3d613b8530dc_39-13665" },
                                                                                           TECH_NANOPORE,     TECH_NCBI,    QANY,   &con_nanopore_rng,  0,   6,  {5,6,-1},           {0,1,2,3,4,-1}, {0,1,2,3,4,5,6,-1}, {0,1,2,3,4,-1}, 0,  -1,-1, -1,-1, -1, -1, -1, 0,  PX_nanopore_rng   }, // 14.0.31

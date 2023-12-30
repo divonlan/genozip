@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   bgzf.h
-//   Copyright (C) 2020-2023 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -49,6 +49,7 @@ extern void bgzf_sign (uint64_t disk_size, uint8_t *signature);
 #define BGZF_BLOCK_GZIP_NOT_BGZIP -1
 #define BGZF_BLOCK_IS_NOT_GZIP    -2
 #define BGZF_ABRUBT_EOF           -3 // EOF without an EOF block
+#define BGZF_BLOCK_TRUNCATED      -4 // likely file is truncated
 extern int32_t bgzf_read_block (FileP file, uint8_t *block, uint32_t *block_size, FailType soft_fail);
 extern void bgzf_uncompress_vb (VBlockP vb);
 extern void bgzf_uncompress_one_block (VBlockP vb, BgzfBlockZip *bb);

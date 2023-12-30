@@ -260,9 +260,10 @@ BZ_EXTERN const char * BZ_API(BZ2_bzerror) (
       int    *errnum
    );
 
-// divon addition
+// divon additions
 BZ_EXTERN uint64_t BZ2_consumed (BZFILE* b);
 
+BZ_EXTERN int BZ2_get_fd (BZFILE* b);
 
 #endif
 

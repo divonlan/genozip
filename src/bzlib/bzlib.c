@@ -1539,6 +1539,12 @@ uint64_t BZ2_consumed (BZFILE *b)
    return strm->total_in - strm->avail_in; // don't include unconsumed data
 }
 
+int BZ2_get_fd (BZFILE* b)
+{
+   FILE *fp = ((bzFile *)b)->handle;
+   return fp ? fileno (fp) : -1;
+}
+
 /*-------------------------------------------------------------*/
 /*--- end                                           bzlib.c ---*/
 /*-------------------------------------------------------------*/

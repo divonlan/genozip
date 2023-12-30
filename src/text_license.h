@@ -1,12 +1,12 @@
 // ------------------------------------------------------------------
 //   text-license.h
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in LICENSE.txt
 
 #include "version.h"
 
 static rom license[] = {
-    "This program, \"Genozip\", which includes four tools (genozip, genounzip, genocat and genols), source code, object code, executables, documentation and other files, was developed by Divon Lan (\"Developer\") and is copyright (C) 2019-2023 Genozip Limited (\"Licensor\"). All rights reserved. Patent pending.",
+    "This program, \"Genozip\", which includes four tools (genozip, genounzip, genocat and genols), source code, object code, executables, documentation and other files, was developed by Divon Lan (\"Developer\") and is copyright (C) 2019-2024 Genozip Limited (\"Licensor\"). All rights reserved. Patent pending.",
     "TERMS AND CONDITIONS FOR USE",
     
     "1. Definitions.",

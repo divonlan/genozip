@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sections.h
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -539,7 +539,7 @@ typedef enum __attribute__ ((__packed__)) { ALIAS_NONE, ALIAS_CTX, ALIAS_DICT } 
 
 extern void sections_add_to_list (VBlockP vb, ConstSectionHeaderP header);
 extern void sections_remove_from_list (VBlockP vb, uint64_t offset, uint64_t len);
-extern void sections_list_concat (VBlockP vb);
+extern void sections_list_concat (BufferP section_list_buf);
 
 // ---------
 // PIZ stuff

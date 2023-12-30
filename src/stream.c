@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   stream.c
-//   Copyright (C) 2020-2023 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -124,7 +124,7 @@ static void stream_abort_cannot_exec (rom exec_name, rom reason)
 }
 
 #ifdef _WIN32
-static void stream_set_inheritability (int fd, bool is_inheritable)
+void stream_set_inheritability (int fd, bool is_inheritable)
 {
     ASSERT (SetHandleInformation ((HANDLE)_get_osfhandle (fd), HANDLE_FLAG_INHERIT, is_inheritable), 
             "SetHandleInformation failed: %s", stream_windows_error());
@@ -187,6 +187,9 @@ static HANDLE stream_exec_child (int *stream_stdout_to_genozip, int *stream_stde
 }
 
 #else // not Windows
+
+void stream_set_inheritability (int fd, bool is_inheritable) {} // does nothing
+
 static pid_t stream_exec_child (int *stream_stdout_to_genozip, int *stream_stderr_to_genozip, int *genozip_to_stream_stdin,
                                 FILE *redirect_stdout_file, FILE *redirect_stdin_pipe, 
                                 unsigned argc, char *const *argv, rom reason)

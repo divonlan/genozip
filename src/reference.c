@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   reference.c
-//   Copyright (C) 2020-2023 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -35,6 +35,7 @@
 #include "arch.h"
 #include "buf_list.h"
 #include "refhash.h"
+#include "zriter.h"
 
 static RefStruct refs[2] = { { .ctgs.name = "gref" }, { .ctgs.name = "prim_ref" } };
 Reference gref     = &refs[0]; // global reference 
@@ -753,16 +754,11 @@ static void ref_copy_one_compressed_section (Reference ref, FileP ref_file, cons
 
     // "manually" add the reference section to the section list - normally it is added in comp_compress()
     sections_add_to_list (evb, (SectionHeaderP)header);
-    sections_list_concat (evb); // must be called before disk_so_far is updated
 
     // Write header and body of the reference to z_file
     // Note on encryption: reference sections originating from an external reference are never encrypted - not
     // by us here, and not in the source reference fasta (because with disallow --make-reference in combination with --password)
-    START_TIMER;
-    file_write (z_file, STRb(evb->scratch));
-    COPY_TIMER_EVB (write);
-
-    z_file->disk_so_far += evb->scratch.len;   // length of GENOZIP data writen to disk
+    zriter_write (&evb->scratch, &evb->section_list_buf, -1, true);
 
     if (flag.show_reference) {
         decl_zctx (CHROM);
@@ -821,6 +817,8 @@ static void ref_copy_compressed_sections_from_reference_file (Reference ref)
     }
 
     file_close (&ref_file);
+
+    zriter_wait_for_bg_writing(); // complete writing copied sections before moving on
 
     COPY_TIMER_EVB (ref_copy_compressed_sections_from_reference_file);
 }
@@ -917,9 +915,9 @@ static void ref_compress_one_range (VBlockP vb)
     bool is_compacted = flag.make_reference ? false : ref_compact_ref (gref, r); // true if it is compacted beyong just the flanking regions
 
     // get the index into the ZCTX(CHROM) dictionary
-    WordIndex chrom_word_index = !r                                   ? WORD_INDEX_NONE
-                               : (flag.reference & REF_ZIP_CHROM2REF) ? *B(WordIndex, z_file->ref2chrom_map, r->chrom)
-                               :                                        r->chrom;
+    WordIndex chrom_word_index = !r               ? WORD_INDEX_NONE
+                               : IS_REF_CHROM2REF ? *B(WordIndex, ZCTX(CHROM)->ref2chrom_map, r->chrom)
+                               :                  r->chrom;
 
     ASSERT (!r || chrom_word_index != WORD_INDEX_NONE, "Range %s invalidly has chrom_word_index==WORD_INDEX_NONE",
             ref_display_range (r).s);
@@ -971,7 +969,7 @@ static void ref_compress_one_range (VBlockP vb)
 
         spin_lock (gref->stored_ra_spin);
         BNXT (RAEntry, gref->stored_ra) = (RAEntry){ .vblock_i    = vb->vblock_i, 
-                                                     .chrom_index = IS_REF_EXT_STORE ? *B(WordIndex, z_file->ref2chrom_map, r->chrom) : r->chrom,
+                                                     .chrom_index = IS_REF_EXT_STORE ? *B(WordIndex, ZCTX(CHROM)->ref2chrom_map, r->chrom) : r->chrom,
                                                      .min_pos     = r->first_pos,
                                                      .max_pos     = r->last_pos };
         spin_unlock (gref->stored_ra_spin);
@@ -1020,8 +1018,8 @@ void ref_compress_ref (void)
 
     START_TIMER;
 
-    // calculate z_file->ref2chrom_map, the inverse of ZCTX(CHROM)->chrom2ref_map
-    if (flag.reference & REF_ZIP_CHROM2REF)
+    // calculate ref2chrom_map, the inverse of chrom2ref_map
+    if (IS_REF_CHROM2REF)
         chrom_calculate_ref2chrom (ref_num_contigs(gref));
 
     // remove unused contigs
@@ -1444,7 +1442,7 @@ void ref_initialize_ranges (Reference ref, RangesType type)
 
     // note: genome_nbases must be full words, so that bits_reverse_complement doesn't need to shift
     // note: mirrors setting num_gap_bytes in ref_make_prepare_one_range_for_compress
-    ref->genome_nbases = ROUNDUP64 (ref_contigs_get_genome_nbases (ref)) + 64; // round up to the nearest 64 bases, and add one word, needed by aligner_get_match_len for bit shifting overflow
+    ref->genome_nbases = ROUNDUP64 (ref_contigs_get_genome_nbases (ref)) + 64; // round up to the nearest 64 bases, and add one word, needed by aligner_update_best for bit shifting overflow
 
     if (ref_has_is_set()) 
         ref->genome_is_set = buf_alloc_bits (evb, &ref->genome_is_set_buf, ref->genome_nbases, CLEAR, 0, "genome_is_set_buf");

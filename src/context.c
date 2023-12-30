@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   context.c
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -228,29 +228,29 @@ WordIndex ctx_get_next_snip (VBlockP vb, ContextP ctx, bool is_pair, pSTRp (snip
     Buffer *list           = zip_pair ? &ctx->ol_nodes               : &ctx->word_list;
     
     // if the entire b250 in a VB consisted of word_index=0, we don't output the b250 to the file, and just 
-    // consider it to always emit 0
+    // consider it to always emit 0 ("all-the-same")
     if (!b250->len) {
         if (snip) {
             if (!zip_pair) {
-                ASSERT (ctx->word_list.len32, "%s.word_list.len32=0", ctx->tag_name);
+                ASSERT (ctx->word_list.len32, "%s: %s.word_list.len32=0", LN_NAME, ctx->tag_name);
                 
-                CtxWord *dict_word = B1ST (CtxWord, ctx->word_list);
+                CtxWordP dict_word = B1ST (CtxWord, ctx->word_list);
 
                 ASSERT (dict_word->index + dict_word->len < ctx->dict.len, // < and not <= because seperator \0 is not included in word len
-                        "expecting: %s.dict_word->index=%"PRIu64" + len=%"PRIu64" < %s->dict.len=%"PRIu64,
-                        ctx->tag_name, (uint64_t)dict_word->index, (uint64_t)dict_word->len, ctx->tag_name, ctx->dict.len);
+                        "%s: expecting: %s.dict_word->index=%"PRIu64" + len=%"PRIu64" < %s->dict.len=%"PRIu64,
+                        LN_NAME, ctx->tag_name, (uint64_t)dict_word->index, (uint64_t)dict_word->len, ctx->tag_name, ctx->dict.len);
 
                 *snip = Bc (ctx->dict, dict_word->index);
                 *snip_len = dict_word->len;
             }
             else {
-                ASSERT (ctx->ol_nodes.len32, "%s.ol_nodes.len32=0", ctx->tag_name);
+                ASSERT (ctx->ol_nodes.len32, "%s: %s.ol_nodes.len32=0", LN_NAME, ctx->tag_name);
 
-                CtxNode *dict_word = B1ST (CtxNode, ctx->ol_nodes);
+                CtxNodeP dict_word = B1ST (CtxNode, ctx->ol_nodes);
 
                 ASSERT (dict_word->char_index + dict_word->snip_len < ctx->dict.len, // likewise, < and not <=
-                        "expecting: %s.dict_word->char_index=%"PRIu64" + snip_len=%u < %s->dict.len=%"PRIu64,
-                        ctx->tag_name, dict_word->char_index, dict_word->snip_len, ctx->tag_name, ctx->dict.len);
+                        "%s: expecting: %s.dict_word->char_index=%"PRIu64" + snip_len=%u < %s->dict.len=%"PRIu64". ctx->ol_nodes.len=%"PRIu64,
+                        LN_NAME, ctx->tag_name, dict_word->char_index, dict_word->snip_len, ctx->tag_name, ctx->dict.len, ctx->ol_nodes.len);
 
                 *snip = Bc (ctx->dict, dict_word->char_index);
                 *snip_len = dict_word->snip_len;
@@ -302,7 +302,7 @@ WordIndex ctx_get_next_snip (VBlockP vb, ContextP ctx, bool is_pair, pSTRp (snip
                 TF(is_pair), b250->len32, BNUM(*b250, iterator->next_b250));
 
         if (!zip_pair) {
-            CtxWord *dict_word = B(CtxWord, ctx->word_list, word_index);
+            CtxWordP dict_word = B(CtxWord, ctx->word_list, word_index);
             if (snip) {
                 *snip = Bc (ctx->dict, dict_word->index);
                 *snip_len = dict_word->len;
@@ -626,9 +626,12 @@ void ctx_clone (VBlockP vb)
 
             memcpy ((char*)vctx->tag_name, zctx->tag_name, sizeof (vctx->tag_name));
             
-            // note: ZCTX(CHROM)->chrom2ref_map is protected by ZCTX[CHROM]->mutex
-            if (chrom_2ref_seg_is_needed(did_i) && ZCTX(CHROM)->chrom2ref_map.len) 
-                buf_overlay (vb, &vb->ol_chrom2ref_map, &ZCTX(CHROM)->chrom2ref_map, "ol_chrom2ref_map");
+            // note: CHROM only. 
+            if (chrom_2ref_seg_is_needed(did_i) && zctx->chrom2ref_map.len) {
+                ASSERT (zctx->chrom2ref_map.len32 == zctx->nodes.len32, "expecting chrom2ref_map.len=%u == nodes.len=%u", zctx->chrom2ref_map.len32, zctx->nodes.len32);
+            
+                buf_overlay (vb, &vctx->ol_chrom2ref_map, &zctx->chrom2ref_map, "ol_chrom2ref_map");
+            }
 
             mutex_unlock (ZMUTEX(dict_ctx));
 
@@ -669,9 +672,10 @@ static void ctx_initialize_ctx (ContextP ctx, Did did_i, DictId dict_id, DictIdt
 
     if (tag_name_len) {
         ASSINP (tag_name_len <= MAX_TAG_LEN-1, "Tag name \"%.*s\" is of length=%u beyond the maximum tag length supported by Genozip=%u",
-                tag_name_len, tag_name, tag_name_len, MAX_TAG_LEN-1);
+                STRf(tag_name), tag_name_len, MAX_TAG_LEN-1);
 
         memcpy ((char*)ctx->tag_name, tag_name, tag_name_len);
+        ctx->tag_name[tag_name_len] = 0;
     }
     else
         strcpy ((char*)ctx->tag_name, dis_dict_id (dict_id).s);
@@ -689,6 +693,9 @@ static void ctx_initialize_ctx (ContextP ctx, Did did_i, DictId dict_id, DictIdt
             mutex_initialize (ZMUTEX(ctx));
             buf_set_shared (&ctx->dict);
             buf_set_shared (&ctx->nodes);
+
+            if (did_i == CHROM)
+                buf_set_shared (&ctx->chrom2ref_map);
         }
     } 
 }
@@ -707,7 +714,7 @@ WordIndex ctx_populate_zf_ctx (Did dst_did_i, STRp (contig_name), WordIndex ref_
     WordIndex zf_node_index = ctx_commit_node (NULL, zctx, NULL, STRa(contig_name), 0, &zf_node, NULL);
     zf_node->word_index = zf_node_index;
 
-    if (dst_did_i == CHROM/*primary*/ && (flag.reference & REF_ZIP_LOADED)) {
+    if (chrom_2ref_seg_is_needed (dst_did_i)) {
         buf_alloc_255 (evb, &zctx->chrom2ref_map, 0, MAX_(INITIAL_NUM_NODES, zf_node_index+1), WordIndex, CTX_GROWTH, "ZCTX(CHROM)->chrom2ref_map");
         *B(WordIndex, zctx->chrom2ref_map, zf_node_index) = ref_index;
         zctx->chrom2ref_map.len32 = MAX_(zctx->chrom2ref_map.len32, zf_node_index+1);
@@ -736,7 +743,7 @@ void ctx_populate_zf_ctx_from_contigs (Reference ref, Did dst_did_i, ConstContig
         hash_alloc_global (zctx, ctgs->contigs.len32);
     }
 
-    if (flag.reference & REF_ZIP_LOADED)
+    if (chrom_2ref_seg_is_needed (CHROM))
         buf_alloc_255 (evb, &ZCTX(CHROM)->chrom2ref_map, ctgs->contigs.len, INITIAL_NUM_NODES, WordIndex, 1, "ZCTX(CHROM)->chrom2ref_map");
 
     bool is_primary = (dst_did_i == DTFZ (prim_chrom)); // note: primary is not CHROM in the case of DT_CHAIN
@@ -1088,6 +1095,14 @@ static inline bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx, uint8_t *vb
         hash_alloc_global (zctx, estimated_entries);
     }
 
+    bool chrom_2ref_seg_needed = chrom_2ref_seg_is_needed(zctx->did_i);
+    
+    // allocate zctx->chrom2ref_map to its maximum of covering all nodes 
+    if (chrom_2ref_seg_needed && vctx->nodes.len) { // SAM: it is ctx->chrom2ref_map.len=0 and nodes.len>0: in case of gencomp_len=2 will will have a SPECIAL snip node, but we don't use chrom2ref as all contigs must be in the SAM header
+        zctx->chrom2ref_map.len32 = zctx->nodes.len32 + vctx->nodes.len32;
+        buf_alloc_255 (evb, &zctx->chrom2ref_map, 0, zctx->chrom2ref_map.len32, WordIndex, CTX_GROWTH, "ZCTX(CHROM)->chrom2ref_map"); 
+    }
+
     // merge in words that are potentially new (but may have been already added by other VBs since we cloned for this VB)
     // (vctx->nodes contains only new words, old words from previous vbs are in vctx->ol_nodes)
     for_buf2 (CtxNode, vb_node, i, vctx->nodes) {
@@ -1111,18 +1126,25 @@ static inline bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx, uint8_t *vb
         // set word_index to be indexing the global dict - to be used by zip_generate_b250_section()
         if (is_new) {
             // note: chrom2ref_map is protected by ZMUTEX(zctx) (zctx is CHROM as we followed alias)
-            if (chrom_2ref_seg_is_needed(zctx->did_i) && vctx->chrom2ref_map.len) { // SAM: it is ctx->chrom2ref_map.len=0 and nodes.len>0: in case of gencomp_len=2 will will have a SPECIAL snip node, but we don't use chrom2ref as all contigs must be in the SAM header
-                buf_alloc_255 (evb, &ZCTX(CHROM)->chrom2ref_map, 0, MAX_(INITIAL_NUM_NODES, zf_node_index+1), WordIndex, CTX_GROWTH, "ZCTX(CHROM)->chrom2ref_map");
-                ZCTX(CHROM)->chrom2ref_map.len32 = MAX_(ZCTX(CHROM)->chrom2ref_map.len32, zf_node_index + 1);
-    
-                *B(WordIndex, ZCTX(CHROM)->chrom2ref_map, zf_node_index) = *B(WordIndex, vctx->chrom2ref_map, vb_node->word_index); // possibly WORD_INDEX_NONE
+            // we add nodes encountered first in aliases to chrom2ref_map, bc when the snip appears later in CHROM
+            // it won't be new and hence won't be added 
+            if (chrom_2ref_seg_needed) { 
+                uint32_t ol_len = vctx->ol_chrom2ref_map.len32;
+
+                if (vb_node->word_index - ol_len < vctx->chrom2ref_map.len32)  // note: possibly chrom2ref_map is not of full length, final new nodes are eg SPECIAL
+                    *B(WordIndex, zctx->chrom2ref_map, zf_node_index) = *B(WordIndex, vctx->chrom2ref_map, vb_node->word_index - ol_len);
             }
 
             vb_node->word_index = zf_node->word_index = zf_node_index;
-        } else 
-            // a previous VB already already calculated the word index for this node. if it was done by vb_i=1,
-            // then it is also re-sorted and the word_index is no longer the same as the node_index
+
+        // case: a previous VB or alias ctx already calculated the word index for this node. 
+        // if it was done by vb_i=1, then it is also re-sorted and the word_index is no longer the same as the node_index
+        } else {
             vb_node->word_index = zf_node->word_index;
+
+            if (chrom_2ref_seg_needed)
+                zctx->chrom2ref_map.len32--;
+        }
     }
 
     // warn if dict size is excessive
@@ -1437,7 +1459,7 @@ rom ctx_get_snip_by_word_index_do (ConstContextP ctx, WordIndex word_index, STRp
         return empty;
     }
 
-    CtxWord *word = B(CtxWord, ctx->word_list, word_index);
+    CtxWordP word = B(CtxWord, ctx->word_list, word_index);
     rom my_snip = B(const char, ctx->dict, word->index);
     
     if (snip) *snip = my_snip;
@@ -1724,6 +1746,40 @@ rom ctx_get_vb_snip_ex (ConstContextP vctx, WordIndex vb_node_index, pSTRp(snip)
     if (snip_len) *snip_len = node->snip_len;
 
     return out_snip;
+}
+
+// ZIP
+rom ctx_get_z_snip_ex (ConstContextP zctx, WordIndex z_node_index, pSTRp(snip))
+{
+    ASSERT (z_node_index < zctx->nodes.len32, "Expecting z_node_index=%u < nodes.len=%u", 
+            z_node_index, zctx->nodes.len32);
+
+    CtxNodeP node = B(CtxNode, zctx->nodes, z_node_index);
+    rom out_snip = Bc (zctx->dict, node->char_index);
+
+    if (snip) *snip = out_snip;
+    if (snip_len) *snip_len = node->snip_len;
+
+    return out_snip;
+}
+
+StrTextMegaLong ctx_get_z_snip (ConstContextP zctx, WordIndex z_node_index) 
+{ 
+    if (z_node_index < 0 || z_node_index >= zctx->nodes.len32) 
+        return (StrTextMegaLong){ "(out-of-range)"};
+        
+    STR (snip);
+    ctx_get_z_snip_ex (zctx, z_node_index, pSTRa(snip));
+
+    return dict_io_snip_to_str (STRa(snip), true); 
+}
+
+StrTextMegaLong ctx_get_vb_snip (ConstContextP vctx, WordIndex vb_node_index)
+{ 
+    STR (snip);
+    ctx_get_vb_snip_ex (vctx, vb_node_index, pSTRa(snip));
+
+    return dict_io_snip_to_str (STRa(snip), true); 
 }
 
 void ctx_compress_counts (void)

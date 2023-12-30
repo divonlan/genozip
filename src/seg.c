@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   seg.c
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -513,8 +513,13 @@ bool seg_integer_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_byt
 
     // case: its an integer
     if (is_int && (IS_LT_DYN(ctx->ltype) || ctx->ltype == LT_SINGLETON)) { 
-        if (ctx->ltype == LT_SINGLETON) 
+        
+        // initialize on first call
+        if (ctx->ltype == LT_SINGLETON) {
             ctx->ltype = LT_DYN_INT; 
+            if ((VB_DT(BAM) || VB_DT(SAM)) && ctx->flags.store == STORE_NONE)
+                ctx->flags.store = STORE_INT; // needed for SAM->BAM translation
+        }
         
         seg_integer (vb, ctx, n, true, add_bytes);
         return true;
@@ -639,6 +644,8 @@ void seg_delta_vs_other_do (VBlockP vb, ContextP ctx, ContextP other_ctx,
         seg_by_ctx (VB, STRa(snip), ctx, add_bytes);
 
         seg_add_to_local_resizable (vb, ctx, delta, 0); 
+
+        ctx->last_delta = delta;
     }
 
     ctx_set_last_value (vb, ctx, value_n);
@@ -667,7 +674,9 @@ WordIndex seg_self_delta (VBlockP vb, ContextP ctx, int64_t value,
     unsigned delta_snip_len = 1 + !!format + !!fixed_len;
     delta_snip[delta_snip_len++] = '$'; // lookup delta from local
 
-    seg_add_to_local_resizable (vb, ctx, value - ctx->last_value.i, 0); 
+    ctx->last_delta = value - ctx->last_value.i;
+
+    seg_add_to_local_resizable (vb, ctx, ctx->last_delta, 0); 
 
     ctx_set_last_value (vb, ctx, value);
 

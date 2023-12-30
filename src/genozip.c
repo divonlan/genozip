@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   genozip.c
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -298,7 +298,7 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
         vb_destroy_vb (&wvb); 
 
     // case --replace: now that the file was reconstructed, we can remove the genozip file
-    if (flag.replace && (txt_filename || flag.unbind) && z_filename) 
+    if (flag.replace) // note: only available in genounzip, not genocat, and conflicting flags are already blocks
         file_remove (z_filename, false); 
 
 done:
@@ -874,7 +874,8 @@ int main (int argc, char **argv)
     }
 
     // if we're genozipping with tar, initialize tar file
-    if (IS_ZIP && tar_zip_is_tar()) tar_initialize();
+    if (IS_ZIP && tar_zip_is_tar()) 
+        tar_initialize (&input_files_buf);
 
     n_files = MAX_(input_files_len, 1);
     unsigned z_file_i=0;

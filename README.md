@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--                                                                                                      -->
 <!-- README.md                                                                                            -->
-<!-- Copyright (C) 2019-2023 Genozip Limited. Patent Pending.                                                -->
+<!-- Copyright (C) 2019-2024 Genozip Limited. Patent Pending.                                                -->
 <!-- Please see terms and conditions in the file LICENSE.txt
 <!--                                                                                                      -->
 <!-- This file needs to be compliant to both Markdown and HTML. It is:                                    -->

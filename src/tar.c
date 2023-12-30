@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   tar.c
-//   Copyright (C) 2021-2023 Genozip Limited. Patent pending.
+//   Copyright (C) 2021-2024 Genozip Limited. Patent pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -20,6 +20,9 @@
 #include "flags.h"
 #include "file.h"
 #include "endianness.h"
+#include "buffer.h"
+#include "arch.h"
+#include "tar.h"
 
 #define MAX_TAR_UID_GID 07777777 // must fit in 8 characters, inc. \0, printed in octal
 #define MAX_TAR_MODE 07777777
@@ -61,6 +64,10 @@ static rom tar_name = NULL;
 static int64_t t_offset = 0; // after tar_open_file: file start offset within tar (after the file tar header)
 static HeaderPosixUstar hdr = {};
 
+#define GENOZIP_TAR_DIR_NAME "genozip-linux-x86_64"
+
+static void tar_add_hard_link (rom fn_on_disk, rom fn_in_tar_src, rom fn_in_tar_dst); // forward
+
 void tar_set_tar_name (rom tar_filename)
 {
     tar_name = tar_filename;
@@ -71,7 +78,7 @@ rom tar_get_tar_name (void)
     return tar_name;
 }
 
-void tar_initialize (void)
+void tar_initialize (BufferP input_files_buf)
 {
     ASSERTNOTNULL (tar_name);
 
@@ -79,6 +86,22 @@ void tar_initialize (void)
 
     tar_file = fopen (tar_name, flag.pair ? "wb+" : "wb"); // if --pair, when compressing pair2, we go back and read pair1
     ASSINP (tar_file, "cannot create tar file %s: %s", tar_name, strerror (errno)); 
+
+    if (flag.is_linux) {
+        // verify that top-level no file or directory is named "genozip-linux-x86_64" 
+        for_buf (rom, fn_p, *input_files_buf) {
+            int fn_len = strlen (*fn_p);
+            if (str_issame_(*fn_p, fn_len, _S(GENOZIP_TAR_DIR_NAME)) || // filename is "genozip-linux-x86_64"
+                (fn_len > STRLEN(GENOZIP_TAR_DIR_NAME) && !memcmp (*fn_p, GENOZIP_TAR_DIR_NAME "/", STRLEN(GENOZIP_TAR_DIR_NAME "/")))) // filename starts with "genozip-linux-x86_64/"
+                return; // name already exist - we can't add our directory
+        }
+
+        rom exec = arch_get_executable().s;
+        tar_copy_file (exec, GENOZIP_TAR_DIR_NAME "/genozip");
+        tar_add_hard_link (exec, GENOZIP_TAR_DIR_NAME "/genozip", GENOZIP_TAR_DIR_NAME "/genocat");
+        tar_add_hard_link (exec, GENOZIP_TAR_DIR_NAME "/genozip", GENOZIP_TAR_DIR_NAME "/genounzip");
+        tar_add_hard_link (exec, GENOZIP_TAR_DIR_NAME "/genozip", GENOZIP_TAR_DIR_NAME "/genols");
+    }
 }
 
 static void tar_copy_metadata_from_file (rom fn)
@@ -139,7 +162,7 @@ static void tar_copy_metadata_from_file (rom fn)
 
 // filenames that have a last component longer than 99 characters don't fit in POSIX tar. Instead, we use a GNU-specific extension
 // of storing the filename as a pseudo-file in the tarball. See: https://itecnote.com/tecnote/r-what-exactly-is-the-gnu-tar-longlink-trick/
-static void tar_write_gnu_long_filename (const char *z_fn, unsigned z_fn_len/* including \0 */)
+static void tar_write_gnu_long_filename (STRp(fn_in_tar)/* length includes \0 */)
 {
     HeaderPosixUstar ll_hdr = {
         .name     = "././@LongLink",
@@ -154,27 +177,28 @@ static void tar_write_gnu_long_filename (const char *z_fn, unsigned z_fn_len/* i
         .gname    = "root",
         .checksum = {' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ' }, // required checksum value, while calculating the checksum (8 spaces)
     };
-    sprintf (ll_hdr.size.std, "%o", z_fn_len); // +1 for \0
+    sprintf (ll_hdr.size.std, "%o", fn_in_tar_len); // fn_in_tar_len includes \0
 
     // header checksum
     unsigned checksum = 0;
-    for (unsigned i=0; i < 512; i++) checksum += ((unsigned char*)&ll_hdr)[i];
+    for (unsigned i=0; i < 512; i++) checksum += ((bytes)&ll_hdr)[i];
     sprintf (ll_hdr.checksum, "%06o", checksum);
 
-    ASSERT (fwrite (&ll_hdr, 512,   1, tar_file) == 1, "failed to write LongLink header of %s to %s", z_fn, tar_name); 
-    ASSERT (fwrite (z_fn, z_fn_len, 1, tar_file) == 1, "failed to write long filename of %s to %s", z_fn, tar_name); 
+    ASSERT (fwrite (&ll_hdr, 512,    1, tar_file) == 1, "failed to write LongLink header of %s to %s", fn_in_tar, tar_name); 
+    ASSERT (fwrite (STRa(fn_in_tar), 1, tar_file) == 1, "failed to write long filename of %s to %s",   fn_in_tar, tar_name); 
 
     // pad to full block
-    if (z_fn_len % 512) {
+    if (fn_in_tar_len % 512) {
         char padding[512] = "";
-        ASSERT (fwrite (padding, ROUNDUP512(z_fn_len) - z_fn_len, 1, tar_file) == 1, "failed to write long filename padding of %s to %s", z_fn, tar_name); 
+        ASSERT (fwrite (padding, ROUNDUP512(fn_in_tar_len) - fn_in_tar_len, 1, tar_file) == 1, 
+                "failed to write long filename padding of %s to %s", fn_in_tar, tar_name); 
     }
 
-    t_offset += 512 + ROUNDUP512(z_fn_len);
+    t_offset += 512 + ROUNDUP512(fn_in_tar_len);
 }
 
 // open z_file within tar, for writing
-FILE *tar_open_file (rom z_fn)
+FILE *tar_open_file (rom fn_on_disk, rom fn_in_tar)
 {
     ASSERTNOTNULL (tar_file);
 
@@ -187,37 +211,64 @@ FILE *tar_open_file (rom z_fn)
     };
     
     // remove leading /
-    if (z_fn[0] == '/') {
+    if (fn_in_tar[0] == '/') {
         WARN_ONCE ("FYI: within the tar file, leading '/' are removed from file names%s", "");
-        z_fn++;
+        fn_in_tar++;
     }
 
     // filename: case: name is up to 99 characters 
-    unsigned z_fn_len = strlen (z_fn);
+    unsigned fn_in_tar_len = strlen (fn_in_tar);
     const char *sep;
-    if (z_fn_len <= 99) 
-        memcpy (hdr.name, z_fn, z_fn_len);
+    if (fn_in_tar_len <= 99) 
+        memcpy (hdr.name, fn_in_tar, fn_in_tar_len);
     
     // filename: case: filename is longer than 99, but last component is at most 99 - split between "name" and "prefix" field (separated at a '/', and excluding the seperating '/')
-    else if ((sep = strchr (&z_fn[z_fn_len-100], '/'))) {
-        memcpy (hdr.prefix, z_fn, sep - z_fn);
-        memcpy (hdr.name, sep+1, (&z_fn[z_fn_len] - (sep+1)));
+    else if ((sep = strchr (&fn_in_tar[fn_in_tar_len-100], '/'))) {
+        memcpy (hdr.prefix, fn_in_tar, sep - fn_in_tar);
+        memcpy (hdr.name, sep+1, (&fn_in_tar[fn_in_tar_len] - (sep+1)));
     }
 
     // filename: case: last component is longer than 99 - use Gnu LongLink extension
     else {
-        memcpy (hdr.name, z_fn, 99); // fallback for extracting using non-GNU tar: nul-terminated truncated filename 
-        tar_write_gnu_long_filename (z_fn, z_fn_len+1);
+        memcpy (hdr.name, fn_in_tar, 99); // fallback for extracting using non-GNU tar: nul-terminated truncated filename 
+        tar_write_gnu_long_filename (fn_in_tar, fn_in_tar_len+1);
     }
 
     // copy mode, uid, gid, uname, gname, mtime from an existing file
-    if (!txt_file) tar_copy_metadata_from_file (z_fn);     // case: we're copying an exiting genozip file - take from that genozip file
+    if (!txt_file) tar_copy_metadata_from_file (fn_on_disk);     // case: we're copying an exiting genozip file - take from that genozip file
     else           tar_copy_metadata_from_file (txt_name); // case: zipping a txt_file on disk - take from that txt file
 
-    ASSERT (fwrite (&hdr, 512, 1, tar_file) == 1, "failed to write header of %s to %s", z_fn, tar_name); // place holder - we will update this upon close
+    ASSERT (fwrite (&hdr, 512, 1, tar_file) == 1, "failed to write header of %s to %s", fn_in_tar, tar_name); 
     t_offset += 512; // past tar header
 
     return tar_file;
+}
+
+static void tar_add_hard_link (rom fn_on_disk, rom fn_in_tar_src, rom fn_in_tar_dst)
+{
+    ASSERTNOTNULL (tar_file);
+
+    // initialize - all unspecified fields are initialized to 0. this function initializes all fields except mtime and checksum
+    hdr = (HeaderPosixUstar){
+        .typeflag = { '1' }, // hard link
+        .magic    = "ustar",
+        .version  = {'0', '0'},
+        .checksum = {' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ' }, // required checksum value, while calculating the checksum (8 spaces)
+    };
+    
+    memcpy (hdr.linkname, fn_in_tar_src, strlen (fn_in_tar_src));
+    memcpy (hdr.name,     fn_in_tar_dst, strlen (fn_in_tar_dst));
+
+    // copy mode, uid, gid, uname, gname, mtime from an existing file
+    tar_copy_metadata_from_file (fn_on_disk);     // case: we're copying an exiting genozip file - take from that genozip file
+
+    // header checksum
+    unsigned checksum = 0;
+    for (unsigned i=0; i < 512; i++) checksum += ((bytes)&hdr)[i];
+    sprintf (hdr.checksum, "%06o", checksum);
+
+    ASSERT (fwrite (&hdr, 512, 1, tar_file) == 1, "failed to write header of %s to %s", fn_in_tar_dst, tar_name); 
+    t_offset += 512; // past tar header
 }
 
 bool tar_zip_is_tar (void)
@@ -262,7 +313,7 @@ void tar_close_file (void **file)
 
     // header checksum
     unsigned checksum = 0;
-    for (unsigned i=0; i < 512; i++) checksum += ((unsigned char*)&hdr)[i];
+    for (unsigned i=0; i < 512; i++) checksum += ((bytes)&hdr)[i];
     sprintf (hdr.checksum, "%06o", checksum);
     
     // update header
@@ -279,13 +330,13 @@ void tar_close_file (void **file)
     if (file) *file = NULL;
 }
 
-void tar_copy_file (rom z_fn)
+void tar_copy_file (rom fn_on_disk, rom fn_in_tar)
 {
     ASSERTNOTNULL (tar_file);
 
-    tar_open_file (z_fn);
+    tar_open_file (fn_on_disk, fn_in_tar);
 
-    FILE *src_file = fopen (z_fn, "rb");
+    FILE *src_file = fopen (fn_on_disk, "rb");
 
     #define BLOCK_SIZE (1 MB)
     char *data = MALLOC (BLOCK_SIZE);
@@ -293,17 +344,17 @@ void tar_copy_file (rom z_fn)
     int64_t size;
     int64_t bytes_copied = 0;
     while ((size = fread (data, 1, BLOCK_SIZE, src_file))) {
-        ASSERT (fwrite (data, 1, size, tar_file) == size, "failed to copy %s to %s - failed to write %"PRId64" bytes", z_fn, tar_name, size);
+        ASSERT (fwrite (data, 1, size, tar_file) == size, "failed to copy %s to %s - failed to write %"PRId64" bytes", fn_on_disk, tar_name, size);
         bytes_copied += size;
     }
 
     FREE (data);
-    FCLOSE (src_file, z_fn);
+    FCLOSE (src_file, fn_on_disk);
 
     tar_close_file(0);
 
-    ASSERT (bytes_copied == file_get_size (z_fn), "File %s has size %"PRId64" but copied only %"PRId64" bytes to the tar file", 
-            z_fn, file_get_size (z_fn), bytes_copied);
+    ASSERT (bytes_copied == file_get_size (fn_on_disk), "File %s has size %"PRId64" but copied only %"PRId64" bytes to the tar file", 
+            fn_on_disk, file_get_size (fn_on_disk), bytes_copied);
 }
 
 void tar_finalize (void)

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   qname.h
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -29,7 +29,7 @@ typedef enum __attribute__ ((__packed__)) {
     QF_NANOPORE, QF_NANOPORE_rng, QF_NANOPORE_ext,
     // Ultima flavors
     QF_ULTIMA_a, QF_ULTIMA_b6_bc, QF_ULTIMA_a_bc, QF_ULTIMA_c, QF_ULTIMA_c_bc, QF_ULTIMA_b6, QF_ULTIMA_d, QF_ULTIMA_d_bc, 
-    QF_ULTIMA_b9, QF_ULTIMA_b9_bc, QF_ULTIMA_n,
+    QF_ULTIMA_b9, QF_ULTIMA_b9_bc, QF_ULTIMA_n, QF_ULTIMA_Z9,
     // Other sequencer flavors
     QF_ION_TORR_3, QF_ROCHE_454, QF_HELICOS, QF_SINGULAR, QF_ELEMENT, QF_ELEMENT_bc, 
     // NCBI flavors

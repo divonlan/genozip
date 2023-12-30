@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   stream.h
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -20,6 +20,8 @@ typedef struct stream_ *StreamP;
 extern StreamP stream_create (StreamP parent_stream, uint32_t from_stream_stdout, uint32_t from_stream_stderr, uint32_t to_stream, 
                               FILE *redirect_stdout_file, rom input_url_name, bool input_stdin, rom reason,
                               rom exec_name, ...);
+
+extern void stream_set_inheritability (int fd, bool is_inheritable);
 
 extern void stream_close_pipes (StreamP stream);
 

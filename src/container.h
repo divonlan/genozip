@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   container.h
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -16,6 +16,7 @@
 #define CON_PX_SEP              '\x4'        // starts the prefix string and terminates every prefix within it
 #define CON_PX_SEP_             "\4"         // string version (careful not \x4 as it can combine with the next character to eg \x4F)
 #define CON_PX_SEP_SHOW_REPEATS '\x5'        // an alternative terminator - outputs the number of repeats in LTEN32 after the prefix (used for BAM 'B' array count field)
+#define CON_PX_SEP_SHOW_N_ITEMS '\x6'        // an alternative terminator - outputs the number of items in LTEN32 after the prefix (used for BAM 'B' array count field)
 
 #define CONTAINER_MAX_REPEATS  0xfffffe      // 3 byte unsigned int (up to 16M-2) 
 #define CON_REPEATS_IS_SEQ_LEN 0xffffff
@@ -58,7 +59,7 @@ typedef struct ContainerItem {
 // items actually used and optoinally followed by a prefix array.
 // The prefix array, if it exists, starts with CON_PX_SEP followed by the container-wide prefix, followed
 // by a prefix for each item. Every prefix, if provided, is terminated by CON_PX_SEP.
-// Only the container-wide prefix may alternatively be terminated by CON_PX_SEP_SHOW_REPEATS.
+// Only the container-wide prefix may alternatively be terminated by CON_PX_SEP_SHOW_REPEATS or CON_PX_SEP_SHOW_N_ITEMS.
 
 #define CON_REPEATS_BITS            24
 #define CON_MAX_REPEATS             ((1 << CON_REPEATS_BITS) - 1)

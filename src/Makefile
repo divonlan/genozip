@@ -1,6 +1,6 @@
 # ------------------------------------------------------------------
 #   Makefile
-#   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+#   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 #   Please see terms and conditions in the file LICENSE.txt
 #
 #   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -84,7 +84,7 @@ PROD_SRC = ../../genozip-prod/src
 SRC_DIRS = secure zlib bzlib lzma bsc libdeflate htscodecs
 
 MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.c seg_id.c 						\
-		  data_types.c bits.c progress.c writer.c tar.c chrom.c qname.c tokenizer.c mutex.c threads.c			\
+		  data_types.c bits.c progress.c writer.c zriter.c tar.c chrom.c qname.c tokenizer.c mutex.c threads.c	\
           zip.c piz.c reconstruct.c recon_history.c recon_peek.c seg.c zfile.c aligner.c flags.c digest.c    	\
 		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c ref_cache.c     	 	\
 		  vcf_piz.c vcf_seg.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c vcf_hgvs.c      \
@@ -123,35 +123,31 @@ CONDA_DEVS = Makefile ../.gitignore
 
 CONDA_DOCS = ../LICENSE.txt ../AUTHORS ../README.md
 
-CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h aliases.h txtfile.h zip.h bits.h progress.h website.h \
-             endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h huffman.h \
-             buffer.h buf_struct.h buf_list.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h \
-             crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h qname.h qname_flavors.h codec.h  \
-			 lookback.h tokenizer.h codec_longr_alg.c gencomp.h dict_io.h recon_plan_io.h tip.h deep.h filename.h stats.h multiplexer.h \
-			 reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h bgzf.h coverage.h threads.h local_type.h \
-			 arch.h license.h file_types.h data_types.h base64.h txtheader.h writer.h bases_filter.h genols.h contigs.h chrom.h \
-			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h gff.h bed.h phylip.h chain.h kraken.h locs.h generic.h \
-			 fastq.h fastq_private.h user_message.h \
-             mac_compat.h  \
-			 zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h \
-			 zlib/deflate.h zlib/trees.h \
-			 zlib/zlib.h zlib/zutil.h \
-			 lzma/7zTypes.h lzma/LzFind.h lzma/LzHash.h lzma/LzmaDec.h lzma/LzmaEnc.h \
-			 bzlib/bzlib.h bzlib/bzlib_private.h \
-			 htscodecs/rANS_static4x16.h htscodecs/rle.h htscodecs/pack.h htscodecs/arith_dynamic.h htscodecs/c_simple_model.h\
-			 htscodecs/rANS_word.h htscodecs/htscodecs_endian.h htscodecs/rANS_word.h htscodecs/utils.h htscodecs/varint.h \
-			 htscodecs/varint2.h htscodecs/utils.h \
-			 bsc/bwt.h bsc/coder.h bsc/divsufsort.h bsc/libbsc.h bsc/lzp.h bsc/platform.h \
-			 bsc/qlfc_model.h bsc/qlfc.h bsc/rangecoder.h bsc/tables.h \
- 			 libdeflate/adler32_vec_template.h  libdeflate/crc32_table.h          libdeflate/unaligned.h \
- 			 libdeflate/arm_adler32_impl.h      libdeflate/crc32_vec_template.h   libdeflate/x86_adler32_impl.h \
- 			 libdeflate/arm_cpu_features.h      libdeflate/decompress_template.h  libdeflate/x86_cpu_features.h \
-			 libdeflate/arm_crc32_impl.h        libdeflate/deflate_compress.h     libdeflate/x86_crc32_impl.h \
-			 libdeflate/arm_matchfinder_impl.h  libdeflate/deflate_constants.h    libdeflate/x86_crc32_pclmul_template.h \
-			 libdeflate/bt_matchfinder.h        libdeflate/hc_matchfinder.h       libdeflate/x86_decompress_impl.h \
-			 libdeflate/common_defs.h           libdeflate/lib_common.h           libdeflate/x86_matchfinder_impl.h \
-			 libdeflate/compiler_gcc.h          libdeflate/libdeflate.h \
-			 libdeflate/cpu_features_common.h   libdeflate/matchfinder_common.h
+CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h aliases.h txtfile.h zip.h bits.h progress.h website.h 		\
+             endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h huffman.h 				\
+             buffer.h buf_struct.h buf_list.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h 	\
+             crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h qname.h qname_flavors.h codec.h  		\
+			 lookback.h tokenizer.h codec_longr_alg.c gencomp.h dict_io.h recon_plan_io.h tip.h deep.h filename.h stats.h multiplexer.h 	\
+			 reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h bgzf.h coverage.h threads.h local_type.h 					\
+			 arch.h license.h file_types.h data_types.h base64.h txtheader.h writer.h zriter.h bases_filter.h genols.h contigs.h chrom.h 	\
+			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h gff.h bed.h phylip.h chain.h kraken.h locs.h generic.h 	\
+			 fastq.h fastq_private.h user_message.h mac_compat.h  																			\
+			 zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h zlib/deflate.h zlib/trees.h 			\
+			 zlib/zlib.h zlib/zutil.h 																										\
+			 lzma/7zTypes.h lzma/LzFind.h lzma/LzHash.h lzma/LzmaDec.h lzma/LzmaEnc.h 														\
+			 bzlib/bzlib.h bzlib/bzlib_private.h 																							\
+			 htscodecs/rANS_static4x16.h htscodecs/rle.h htscodecs/pack.h htscodecs/arith_dynamic.h htscodecs/c_simple_model.h				\
+			 htscodecs/rANS_word.h htscodecs/htscodecs_endian.h htscodecs/rANS_word.h htscodecs/utils.h htscodecs/varint.h 					\
+			 htscodecs/varint2.h htscodecs/utils.h 																							\
+			 bsc/bwt.h bsc/coder.h bsc/divsufsort.h bsc/libbsc.h bsc/lzp.h bsc/platform.h bsc/qlfc_model.h bsc/qlfc.h bsc/rangecoder.h 		\
+			 bsc/tables.h																													\
+ 			 libdeflate/adler32_vec_template.h libdeflate/crc32_table.h libdeflate/unaligned.h libdeflate/arm_adler32_impl.h 				\
+			 libdeflate/crc32_vec_template.h libdeflate/x86_adler32_impl.h libdeflate/arm_cpu_features.h libdeflate/decompress_template.h	\
+			 libdeflate/x86_cpu_features.h libdeflate/arm_crc32_impl.h libdeflate/deflate_compress.h libdeflate/x86_crc32_impl.h 			\
+			 libdeflate/arm_matchfinder_impl.h libdeflate/deflate_constants.h libdeflate/x86_crc32_pclmul_template.h 						\
+			 libdeflate/bt_matchfinder.h libdeflate/hc_matchfinder.h libdeflate/x86_decompress_impl.h libdeflate/common_defs.h				\
+			 libdeflate/lib_common.h libdeflate/x86_matchfinder_impl.h libdeflate/compiler_gcc.h libdeflate/libdeflate.h 					\
+			 libdeflate/cpu_features_common.h libdeflate/matchfinder_common.h
 
 LINUXDIR = genozip-linux-x86_64 # directory for creating the Linux binaries distribution
 
@@ -175,8 +171,7 @@ endif
 
 ifdef Windows
 	EXE = .exe
-#	LDFLAGS += -static -static-libgcc -lIPHLPAPI -lUrlmon
-	LDFLAGS += -static-libgcc -lIPHLPAPI -lUrlmon
+	LDFLAGS += -static-libgcc -lIPHLPAPI -lUrlmon -lDbgHelp
 	OBJDIR=$(OBJDIR_WINDOWS)
 	WSL=wsl
 endif
@@ -213,6 +208,10 @@ OPT_EXECUTABLES   = genozip-opt$(EXE)   genounzip-opt$(EXE)   genocat-opt$(EXE) 
 all   : CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"$(DISTRIBUTION)\" -DDISTUNZIPMSG=\"$(DISTUNZIPMSG)\"   
 all   : $(OBJDIR) $(EXECUTABLES) 
 	@chmod +x test.sh
+
+# ifdef Windows
+# debug opt : LDFLAGS += -lbacktrace
+# endif
 
 debug : CFLAGS += $(DEBUGFLAGS) -DDISTRIBUTION=\"debug\"
 debug : $(OBJDIR) $(DEBUG_EXECUTABLES)

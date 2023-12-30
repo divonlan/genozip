@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   dispatcher.c
-//   Copyright (C) 2020-2023 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -444,5 +444,8 @@ Dispatcher dispatcher_fan_out_task (rom task_name,
 
     if (free_when_done) FREE(d);
     
+    // make sure memory writes by compute threads are visible to the main thread (not sure if this is needed or does pthread_join already do this)
+    __atomic_thread_fence (__ATOMIC_ACQUIRE); 
+ 
     return d;
 }

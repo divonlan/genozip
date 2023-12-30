@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   profiler.h
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -17,7 +17,7 @@
 #define profiled \
         file_open_z, file_close, buf_low_level_free, buflist_find_buf, buflist_sort, buflist_test_overflows_do,\
         read, compute, compressor_bz2, compressor_lzma, compressor_bsc, \
-        write, piz_read_one_vb, codec_hapmat_piz_get_one_line, vb_get_vb,\
+        write, zriter_write, piz_read_one_vb, codec_hapmat_piz_get_one_line, vb_get_vb,\
         compressor_domq, compressor_actg, bgzf_io_thread, bgzf_compute_thread, bgzf_writer_thread,\
         bgzf_uncompress_vb, txtfile_read_block_bgzf_uncompress,\
         piz_get_line_subfields, zip_generate_b250, zip_generate_local, zip_compress_ctxs, ctx_merge_in_vb_ctx, wait_for_merge,\
@@ -50,7 +50,7 @@
         txtheader_zip_read_and_compress, txtheader_compress, txtheader_compress_one_fragment, txtheader_piz_read_and_reconstruct,\
         digest, digest_txt_header, ref_make_calculate_digest, refhash_load_digest, ref_load_digest, refhash_compress_digest, \
         dict_io_compress_dictionaries, dict_io_assign_codecs, dict_io_compress_one_fragment, \
-        aligner_best_match, aligner_get_word_from_seq, aligner_get_match_len, \
+        aligner_best_match, aligner_get_word_from_seq, aligner_update_best, aligner_seq_to_bitmap, aligner_additional_layers, \
         refhash_generate_emoneg, ref_contigs_compress,\
         vcf_linesort_compress_qsort, generate_recon_plan, \
         piz_read_global_area, ref_load_stored_reference, dict_io_read_all_dictionaries, dict_io_build_word_lists, \

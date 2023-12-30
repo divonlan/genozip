@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_pos.c
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -25,14 +25,17 @@ PosType32 sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM *dl, WordIndex prev_line_ch
 
     ContextP pos_ctx = CTX(SAM_POS);
 
-    bool do_mux = IS_MAIN(vb) && segconf.is_paired; // for simplicity. To do: also for prim/depn components
+    bool do_mux = IS_MAIN(vb) && segconf.is_paired && !segconf.sam_is_unmapped; // for simplicity. To do: also for prim/depn components
     int channel_i = sam_has_mate?1 : sam_has_prim?2 : 0;
     ContextP channel_ctx = do_mux ? seg_mux_get_channel_ctx (VB, SAM_POS, (MultiplexerP)&vb->mux_POS, channel_i) 
                                   : pos_ctx;
 
+    if (segconf.sam_is_unmapped && !dl->POS)
+        seg_by_ctx (VB, "0", 1, pos_ctx, add_bytes); // expecting all-the-same
+
     // case: DEPN or PRIM line.
     // Note: in DEPN, pos already verified in sam_sa_seg_depn_find_sagroup to be as in SA alignment
-    if (sam_seg_has_sag_by_SA (vb)) {
+    else if (sam_seg_has_sag_by_SA (vb)) {
         sam_seg_against_sa_group (vb, channel_ctx, add_bytes);
         ctx_set_last_value (VB, pos_ctx, (int64_t)pos);
 

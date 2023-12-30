@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   license.h
-//   Copyright (C) 2020-2023 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -20,6 +20,8 @@ extern void license_display (void);
 extern bool license_allow_tip (void);
 extern void license_eval_notice (void);
 extern bool license_is_eval (void);
+extern bool license_is_standard (void);
+extern bool license_is_enterprise (void);
 extern void license_prepare (rom arg);
 extern bool license_piz_prepare_genozip_header (SectionHeaderGenozipHeaderP header, FailType fail_type);
 extern StrTextLong license_academic_tip (void);

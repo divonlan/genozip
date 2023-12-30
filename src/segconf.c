@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   segconf.c
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -18,6 +18,7 @@
 #include "arch.h"
 #include "bgzf.h"
 #include "tip.h"
+#include "zfile.h"
 
 SegConf segconf = {}; // system-wide global
 static VBlockP segconf_vb = NULL;
@@ -37,6 +38,19 @@ void segconf_test_sorted (VBlockP vb, WordIndex prev_line_chrom, PosType32 pos, 
     // evidence of being sorted: same RNAME, increasing POS
     if (prev_line_chrom == vb->chrom_node_index && prev_line_pos <= pos)
         segconf.evidence_of_sorted = true;
+}
+
+// figure of the file is multiseq (run from segconf_finalize)
+void segconf_test_multiseq (VBlockP vb, Did nonref)
+{
+    ContextP ctx = CTX(nonref);
+    ctx->lcodec = CODEC_LZMA;
+    zfile_compress_local_data (vb, ctx, 0);
+
+    segconf.multiseq = (ctx->local.len32 / ctx->local_in_z_len >= 6); // expecting ~4 for unrelated sequences and >10 for multiseq
+
+    if (segconf.multiseq) 
+        ctx_segconf_set_hard_coded_lcodec (nonref, CODEC_LZMA); 
 }
 
 // mark contexts as used, for calculation of vb_size

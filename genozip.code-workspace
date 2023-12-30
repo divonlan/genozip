@@ -5,6 +5,9 @@
 		},
 		{
 			"path": "src/secure"
+		},
+		{
+			"path": "../genozip/private"
 		}
 	],
 	"settings": {
@@ -41,7 +44,8 @@
 			"endianness.h": "c",
 			"version.h": "c",
 			"libgen.h": "c",
-			"license.h": "c"
+			"license.h": "c",
+			"windows.h": "c"
 		}
 	}
 }

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_seg.c
-//   Copyright (C) 2020-2023 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -37,8 +37,11 @@ typedef enum { QNAME, FLAG, RNAME, POS, MAPQ, CIGAR, RNEXT, PNEXT, TLEN, SEQ, QU
 
 STRl(taxid_redirection_snip, 100);
 STRl(copy_GX_snip, 30);
+STRl(copy_sn_snip, 30);
 STRl(copy_POS_snip, 30);
 STRl(copy_Q1NAME_int, 30);
+STRl(copy_Q2NAME_int, 30);
+STRl(copy_Q3NAME_int, 30);
 STRl(copy_mate_CIGAR_snip, 30);
 STRl(copy_mate_MAPQ_snip, 30);
 STRl(copy_mate_MQ_snip, 30);
@@ -131,7 +134,10 @@ void sam_zip_initialize (void)
 
     seg_prepare_snip_other (SNIP_COPY, _SAM_POS, false, 0, copy_POS_snip);
     seg_prepare_snip_other (SNIP_OTHER_DELTA, _SAM_Q1NAME, true, 0, copy_Q1NAME_int);   
+    seg_prepare_snip_other (SNIP_OTHER_DELTA, _SAM_Q2NAME, true, 0, copy_Q2NAME_int);   
+    seg_prepare_snip_other (SNIP_OTHER_DELTA, _SAM_Q3NAME, true, 0, copy_Q3NAME_int);   
     seg_prepare_snip_other (SNIP_COPY, _OPTION_GX_Z, false, 0, copy_GX_snip);
+    seg_prepare_snip_other (SNIP_COPY, _OPTION_sn_B_f, false, 0, copy_sn_snip);
     seg_prepare_snip_other (SNIP_LOOKBACK, _OPTION_XA_LOOKBACK, false, 0, XA_lookback_snip);
     seg_prepare_snip_other (SNIP_LOOKBACK, _OPTION_TX_LOOKBACK, false, 0, TX_lookback_snip);
     seg_prepare_snip_other (SNIP_LOOKBACK, _OPTION_AN_LOOKBACK, false, 0, AN_lookback_snip);
@@ -419,7 +425,8 @@ void sam_seg_initialize (VBlockP vb_)
     else
         ctx_consolidate_stats (VB, OPTION_SA_Z, OPTION_SA_RNAME, OPTION_SA_POS, OPTION_SA_STRAND, OPTION_SA_CIGAR, OPTION_SA_MAPQ, OPTION_SA_NM, OPTION_SA_MAIN, DID_EOL);
 
-    codec_acgt_seg_initialize (VB, SAM_NONREF, true);
+    if (!(segconf.pacbio_subreads && flag.best) && !segconf.multiseq)
+        codec_acgt_seg_initialize (VB, SAM_NONREF, true);
 
     sam_seg_QNAME_initialize (vb);
     sam_seg_QUAL_initialize (vb);
@@ -733,6 +740,10 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
     if (segconf.seq_len_to_cm > 255)
         segconf.seq_len_to_cm = 0;
 
+    // if unmapped test if this might is multiseq
+    if (segconf.sam_is_unmapped && !flag.fast) 
+        segconf_test_multiseq (VB, SAM_NONREF);
+
     // 1. earlier Ultima files where bwa was used, 2. headerless files - if we have ultima fields treat as MP_ULTIMA
     if (TECH(ULTIMA) && (MP(BWA) || MP(UNKNOWN)) && segconf.has[OPTION_t0_Z] && segconf.has[OPTION_tp_B_c]) {
         segconf.sam_mapper = MP_ULTIMA;
@@ -768,8 +779,13 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
 
     segconf.sam_has_zm_by_Q1NAME = TECH(PACBIO) && segconf_qf_id (QNAME1) != QF_PACBIO_3;
 
-    segconf.pacbio_subreads = MP(BAZ2BAM) && segconf.has[OPTION_pw_B_C] && segconf.has[OPTION_ip_B_C];
-    
+    segconf.pacbio_subreads = TECH(PACBIO) && segconf.sam_is_unmapped && segconf.has[OPTION_pw_B_C] && segconf.has[OPTION_ip_B_C];
+
+    if (segconf.pacbio_subreads)
+        ctx_segconf_set_hard_coded_lcodec (OPTION_ip_ARR, CODEC_ARITH8); // as good as LZMA on ip:B:C and hugely faster - hard-code to prevent assigning LZMA  
+
+    segconf.sam_use_sn_mux = segconf.pacbio_subreads && segconf.sam_is_unmapped && segconf_qf_id (QNAME1) == QF_PACBIO_rng;
+
     segconf.AS_is_ref_consumed  = (segconf.AS_is_ref_consumed  > vb->lines.len32 / 2);
     segconf.AS_is_2ref_consumed = (segconf.AS_is_2ref_consumed > vb->lines.len32 / 2); // AS tends to be near 2 X ref_consumed, if at least half of the lines say so
 
@@ -875,9 +891,9 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
         segconf.use_pacbio_iqsqdq = true;
 
     // Aplogize to user for not doing a good job with PacBio subreads files
-    if ((MP(BAZ2BAM) || TECH(PACBIO)) && (segconf.has[OPTION_ip_B_C] || segconf.has[OPTION_pw_B_C])) {
+    if (segconf.pacbio_subreads) {
         TEMP_FLAG(quiet, flag.explicit_quiet); // note: quiet is set to true in segconf
-        WARN0 ("FYI: Genozip currently doesn't do a very good job at compressing PacBio subreads files. This is because we haven't figured out yet a good method to compress kinetic data - the ip:B and pw:B fields. Sorry!\n");
+        WARN0 ("FYI: Genozip currently doesn't do a very good job at compressing PacBio subreads files. This is because we haven't figured out yet a good method to compress PacBio kinetic data - the ip:B and pw:B fields. Sorry!\n");
         RESTORE_FLAG(quiet);
     }
 
@@ -1153,6 +1169,9 @@ void sam_seg_idx_aux (VBlockSAMP vb)
             TEST_AUX(ZA_Z, 'Z', 'A', 'Z');
             TEST_AUX(ZB_Z, 'Z', 'B', 'Z');
             TEST_AUX(pr_i, 'p', 'r', 'i');
+            TEST_AUX(qs_i, 'q', 's', 'i');
+            TEST_AUX(ac_B, 'a', 'c', 'B');
+
             default: {}
         }
     }

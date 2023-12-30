@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   tip.c
-//   Copyright (C) 2020-2023 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -91,6 +91,9 @@ void tip_print (void)
     if (license_is_eval() && !flag.show_stats)
         valid_tips[n++] = "Tip: to see detailed compression statistics, use --stats";
 
+    if (license_is_eval() || license_is_standard() || license_is_enterprise())
+        valid_tips[n++] = "Tip: \"genozip --sendto\" lets your clients send you compressed files using your Genozip license. See: " WEBSITE_PREMIUM;
+
     if (arch_get_max_resident_set() > 100 GB || flag.is_windows || flag.is_wsl || flag.is_mac)
         valid_tips[n++] = "Tip: with --low-memory, genozip will consume considerably less RAM, at the expense of compression size and time";
 
@@ -99,4 +102,3 @@ void tip_print (void)
     flag.no_tip = true;
     sam_destroy_deep_tip();
 }
-

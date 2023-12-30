@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   chrom.c
-//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -135,12 +135,13 @@ WordIndex chrom_2ref_seg_get (Reference ref, ConstVBlockP vb, WordIndex chrom_in
 { 
     ASSSEG (chrom_index >= WORD_INDEX_NONE, "invalid chrom_index=%d", chrom_index);
 
-    int32_t ol_len = vb->ol_chrom2ref_map.len32;
     decl_const_ctx(CHROM);
 
+    int32_t ol_len = ctx->ol_chrom2ref_map.len32;
+
     WordIndex ref_index = (chrom_index == WORD_INDEX_NONE)         ? WORD_INDEX_NONE
-                        : (chrom_index < ol_len)                   ? *B(WordIndex, vb->ol_chrom2ref_map, chrom_index)
-                        : (chrom_index < ctx->chrom2ref_map.len32) ? *B(WordIndex, ctx->chrom2ref_map, chrom_index) // possibly WORD_INDEX_NONE, see chrom_seg_ex
+                        : (chrom_index < ol_len)                   ? *B(WordIndex, ctx->ol_chrom2ref_map, chrom_index)
+                        : (chrom_index < ctx->chrom2ref_map.len32) ? *B(WordIndex, ctx->chrom2ref_map, chrom_index - ol_len) // possibly WORD_INDEX_NONE, see chrom_seg_ex
                         :                                            WORD_INDEX_NONE;
 
     ASSSEG (ref_index >= WORD_INDEX_NONE && ref_index < (WordIndex)ref_num_contigs (ref), 
@@ -151,15 +152,24 @@ WordIndex chrom_2ref_seg_get (Reference ref, ConstVBlockP vb, WordIndex chrom_in
 
 void chrom_calculate_ref2chrom (uint64_t num_ref_contigs)
 {
-    buf_alloc_255 (evb, &z_file->ref2chrom_map, 0, num_ref_contigs, WordIndex, 0, "ref2chrom_map");
-    z_file->ref2chrom_map.len = num_ref_contigs;
+    decl_zctx(CHROM);
 
-    ARRAY (WordIndex, r2c, z_file->ref2chrom_map);
-    ARRAY (WordIndex, c2r, ZCTX(CHROM)->chrom2ref_map);
+    buf_alloc_exact_255 (evb, zctx->ref2chrom_map, num_ref_contigs, WordIndex, "ZCTX(CHROM)->ref2chrom_map");
+
+    ARRAY (WordIndex, r2c, zctx->ref2chrom_map);
+    ARRAY (WordIndex, c2r, zctx->chrom2ref_map);
     
-    for (unsigned i=0; i < c2r_len; i++)
-        if (c2r[i] != WORD_INDEX_NONE)
-            r2c[c2r[i]] = i;
+    for (unsigned wi=0; wi < c2r_len; wi++)
+        if (c2r[wi] != WORD_INDEX_NONE) {
+            ASSERT (c2r[wi] >= 0 && c2r[wi] < r2c_len, "expecting 0<= c2r[%u]=%d < r2c_len=%u: ZCTX(CHROM)->node.len=%u ZCTX(CHROM)->chrom2ref_map.len=%u CHROM[%u]=%s", 
+                    wi, c2r[wi], (unsigned)r2c_len, zctx->nodes.len32, zctx->chrom2ref_map.len32, wi, ctx_get_z_snip (zctx, wi).s);
+            
+            // expecting only one chrom a be mapped to any particular ref_contig 
+            ASSERT (r2c[c2r[wi]] == WORD_INDEX_NONE, "trying to map ref=\"%s\"(%d) to chrom=%s(%d): but r2c[%u] is already set to %s(%u)", 
+                    ref_contigs_get_name (gref, c2r[wi], NULL), c2r[wi], ctx_get_z_snip (zctx, wi).s, wi, c2r[wi], ctx_get_z_snip (zctx, r2c[c2r[wi]]).s, r2c[c2r[wi]]);
+            
+            r2c[c2r[wi]] = wi;
+        }
 }
 
 //-------------
@@ -267,11 +277,13 @@ finalize:
             STRset (vb->chrom_name, chrom);
     }
 
-    if (is_new) { 
-        buf_alloc_255 (vb, &ctx->chrom2ref_map, 0, chrom_node_index+1, WordIndex, CTX_GROWTH, "chrom2ref_map");
-        ctx->chrom2ref_map.len32 = MAX_(ctx->chrom2ref_map.len32, chrom_node_index+1);
+    if (is_new && chrom_2ref_seg_is_needed (did_i)) { // CHROM context only (not RNEXT etc)
+        // note: not all new snips are included in chrom2ref_map - only those segged in this function. Others might be SPECIAL etc.
+        uint32_t new_snip_i = chrom_node_index - ctx->ol_chrom2ref_map.len32;
+        buf_alloc_255 (vb, &ctx->chrom2ref_map, 0, new_snip_i+1, WordIndex, CTX_GROWTH, "chrom2ref_map");
+        ctx->chrom2ref_map.len32 = MAX_(ctx->chrom2ref_map.len32, new_snip_i+1); 
 
-        *B(WordIndex, ctx->chrom2ref_map, chrom_node_index) = ref_index; // note: ref_index might be WORD_INDEX_NONE
+        *B(WordIndex, ctx->chrom2ref_map, new_snip_i) = ref_index; // note: ref_index might be WORD_INDEX_NONE
     }
 
     return chrom_node_index;
@@ -310,8 +322,8 @@ static SORTER (chrom_create_piz_sorter)
     uint32_t index_a = *(uint32_t *)a;
     uint32_t index_b = *(uint32_t *)b;
 
-    CtxWord *word_a = B(CtxWord, sorter_ctx->word_list, index_a);
-    CtxWord *word_b = B(CtxWord, sorter_ctx->word_list, index_b);
+    CtxWordP word_a = B(CtxWord, sorter_ctx->word_list, index_a);
+    CtxWordP word_b = B(CtxWord, sorter_ctx->word_list, index_b);
     
     return strcmp (Bc (sorter_ctx->dict, word_a->index),
                    Bc (sorter_ctx->dict, word_b->index));
@@ -387,7 +399,7 @@ WordIndex chrom_get_by_name (STRp (chrom_name))
     SAFE_NULT(chrom_name); 
     
     if (IS_ZIP) wi =  chrom_zip_get_by_name_do (chrom_name, 0, chrom_sorter.len-1); // not necessarily all of CHROM, just chrom_sorter.len
-    else                wi =  chrom_piz_get_by_name_do (STRa(chrom_name), 0, chrom_sorter.len-1);
+    else        wi =  chrom_piz_get_by_name_do (STRa(chrom_name), 0, chrom_sorter.len-1);
     
     SAFE_RESTORE;
     return wi;
