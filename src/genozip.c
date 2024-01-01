@@ -686,7 +686,7 @@ static void main_load_reference (rom filename, bool is_first_file, bool is_last_
                             (old_aligner_available || dt == DT_FASTQ || 
                              ((dt==DT_SAM || dt==DT_BAM) && (flag.best || flag.deep))); // SAM/BAM: load refhash only in --best or --deep
 
-    // no need to load the reference if not needed (unless its genocat of the refernece file itself)
+    // no need to load the reference if not needed (unless its genocat of the reference file itself)
     if (flag.genocat_no_ref_file && dt != DT_REF) return;
 
     // no need to load the reference if just collecting coverage except FASTQ for which we need the contigs

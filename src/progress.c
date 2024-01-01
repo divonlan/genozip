@@ -103,7 +103,7 @@ void progress_new_component (rom new_component_name,
 
             }
             else if (flag.make_reference)
-                sprintf (prefix.s, "%saking refernece file: %s %s : ", 
+                sprintf (prefix.s, "%saking reference file: %s %s : ",
                          txt_file->is_remote ? "Downloading & m" : "M", global_cmd, component_name);
             
             else

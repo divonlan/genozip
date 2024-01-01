@@ -798,14 +798,14 @@ static void ref_copy_compressed_sections_from_reference_file (Reference ref)
         RangeP contig_r = B(Range, ref->ranges, sec_reference[i].chrom_index);
         PosType64 SEC_REFERENCE_start_in_contig_r = sec_reference[i].min_pos - contig_r->first_pos; // the start of the SEC_REFERENCE section (a bit less than 1MB) within the full-contig range
 
-        PosType64 SEC_REFERNECE_len = sec_reference[i].max_pos - sec_reference[i].min_pos + 1;
-        PosType64 bits_is_set = contig_r->is_set.nbits ? bits_num_set_bits_region (&contig_r->is_set, SEC_REFERENCE_start_in_contig_r, SEC_REFERNECE_len) : 0;
+        PosType64 SEC_REFERENCE_len = sec_reference[i].max_pos - sec_reference[i].min_pos + 1;
+        PosType64 bits_is_set = contig_r->is_set.nbits ? bits_num_set_bits_region (&contig_r->is_set, SEC_REFERENCE_start_in_contig_r, SEC_REFERENCE_len) : 0;
 
         // if this at least 95% of the RA is covered, just copy the corresponding FASTA section to our file, and
         // mark all the ranges as is_set=false indicating that they don't need to be compressed individually
-        if ((float)bits_is_set / (float)SEC_REFERNECE_len >= 0.95) {
+        if ((float)bits_is_set / (float)SEC_REFERENCE_len >= 0.95) {
             ref_copy_one_compressed_section (ref, ref_file, &sec_reference[i]);
-            bits_clear_region (&contig_r->is_set, SEC_REFERENCE_start_in_contig_r, SEC_REFERNECE_len);
+            bits_clear_region (&contig_r->is_set, SEC_REFERENCE_start_in_contig_r, SEC_REFERENCE_len);
 
             if (contig_r->num_set != -1) {
                 ASSERT (bits_is_set <= contig_r->num_set, "Expecting bits_is_set=%"PRId64" <= %u(%.*s)->num_set=%"PRId64,
