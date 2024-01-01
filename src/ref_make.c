@@ -174,7 +174,7 @@ void ref_make_calculate_digest (void)
     COPY_TIMER_EVB (ref_make_calculate_digest);
 }
 
-// zip_after_compute callback: make-refernece called by main thread after completing compute thread of VB.
+// zip_after_compute callback: make-reference called by main thread after completing compute thread of VB.
 // must be called in order of VBs so that contigs are in the same order as the FASTA, resulting in GPOS being allocated
 // to contigs consistently across executions.
 void ref_make_after_compute (VBlockP vb_)
