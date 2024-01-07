@@ -151,6 +151,8 @@ COMPRESS (codec_pacb_compress)
 {
     START_TIMER;
     
+    __atomic_add_fetch (&z_file->pacb_lines[vb->comp_i], vb->lines.len, __ATOMIC_RELAXED);
+
     uint8_t max_np = get_max_np();
     uint8_t n_channels = max_np * NUM_Ks;
 

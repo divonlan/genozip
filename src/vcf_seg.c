@@ -79,6 +79,7 @@ bool is_vcf (STRp(header), bool *need_more)
 void vcf_zip_genozip_header (SectionHeaderGenozipHeaderP header)
 {
     header->vcf.segconf_has_RGQ = (segconf.has[FORMAT_RGQ] > 0); // introduced in v14
+    header->vcf.max_ploidy_for_mux = ZIP_MAX_PLOIDY_FOR_MUX;     // since 15.0.36
 }
 
 void vcf_zip_init_vb (VBlockP vb_)
@@ -122,6 +123,8 @@ void vcf_zip_after_compute (VBlockP vb)
     // note: VBs are out of order, impacting the neatness of the report. To solve, move to end of compute thread with serializer.
     if (chain_is_loaded && VB_VCF->rejects_report.len)
         buf_add_buf (evb, &z_file->rejects_report, &VB_VCF->rejects_report, char, "rejects_report");
+
+    z_file->max_ploidy = MAX_(z_file->max_ploidy, VB_VCF->ploidy);
 }   
 
 // ZIP main thread, called by zip_update_txt_counters after that vb has finished processing
@@ -260,6 +263,8 @@ void vcf_seg_initialize (VBlockP vb_)
     if (segconf.vcf_is_manta)       vcf_manta_seg_initialize (vb);
     if (segconf.vcf_is_ultima)      vcf_ultima_seg_initialize (vb);
     if (segconf.vcf_is_platypus)    vcf_platypus_seg_initialize (vb);
+
+    #undef T
 }             
 
 static void vcf_seg_finalize_segconf (VBlockVCFP vb)
@@ -305,9 +310,6 @@ static void vcf_seg_finalize_segconf (VBlockVCFP vb)
 
     // In case of dependency DAG: DP->(sum)AD->(mux)GT we can't have GT->(null)DP
     if (segconf.FORMAT_DP_method == by_AD) segconf.use_null_DP_method = false;
-
-    // percent of (samples x lines) that have a dosage value of 0,1 or 2 
-    segconf.pc_has_dosage = (float)segconf.count_dosage[1] / (float)(segconf.count_dosage[0] + segconf.count_dosage[1]);
 
     // whether we should seg GQ as a function of GP or PL (the better of the two) - only if this works for at least 20% of the samples
     segconf.GQ_by_GP = (segconf.count_GQ_by_GP > vb->lines.len * vcf_num_samples / 5) && (segconf.count_GQ_by_GP >  segconf.count_GQ_by_PL);

@@ -23,9 +23,11 @@ void vcf_piz_finalize (void)
 
 void vcf_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
 {
-    if (VER(14)) {
+    if (VER(14)) 
         segconf.has[FORMAT_RGQ] = header->vcf.segconf_has_RGQ;
-    }
+
+    if (VER(15)) 
+        z_file->max_ploidy_for_mux = header->vcf.max_ploidy_for_mux; // since 15.0.36
 }
 
 bool vcf_piz_init_vb (VBlockP vb_, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment)
@@ -85,7 +87,9 @@ IS_SKIP (vcf_piz_is_skip_section)
 // insert a field after following fields have already been reconstructed
 void vcf_piz_insert_field (VBlockVCFP vb, Did did, STRp(value))
 {
-    char *addr = last_txt (VB, did);
+    decl_ctx (did);
+
+    char *addr = last_txtx (VB, ctx);
     memmove (addr + value_len, addr, BAFTtxt - addr); // make room
     memcpy (addr, value, value_len); // copy
 
@@ -95,6 +99,14 @@ void vcf_piz_insert_field (VBlockVCFP vb, Did did, STRp(value))
     ASSPIZ (vb->txt_data.len <= vb->txt_data.size, "txt_data overflow: len=%"PRIu64" > size=%"PRIu64". vb->txt_data dumped to %s.gz", 
             vb->txt_data.len, (uint64_t)vb->txt_data.size, txtfile_dump_vb (VB, z_name));
     
+    // adjust last_txt of other contexts that might need insertion (and hence last_txt)
+    Did dids[] = { INFO_QD, INFO_SF, INFO_DP };
+    uint32_t last_txt_index = ctx->last_txt.index;
+
+    for (int i=0; i < ARRAY_LEN(dids); i++) 
+        if (CTX(dids[i])->last_txt.index > last_txt_index)
+            CTX(dids[i])->last_txt.index += value_len;
+
     // adjust lookback addresses that might be affected by this insertion
     vcf_piz_ps_pid_lookback_shift (VB, addr, value_len);
 }
@@ -296,24 +308,17 @@ CONTAINER_CALLBACK (vcf_piz_container_cb)
     }
 
     else if (is_top_level) {
+        // insert INFO fields who's value is determined by the sample fields that we just finished reconstructing
 
-        // case: we need to finalize INFO/DP
+        // note: DP must be inserted before vcf_piz_insert_INFO_QD, because QD needs DP.last_value
         if (CTX(INFO_DP)->dp.by_format_dp)
-            vcf_piz_finalize_DP_by_DP (VB_VCF);
+            vcf_piz_insert_INFO_DP (VB_VCF);
 
-        // case: insert INFO/SF and move rest of line forward - we have an INFO/SF field and we reconstructed one VCF line
-        int moved_sf_by = 0;
         if (have_INFO_SF)  
-            moved_sf_by = vcf_piz_TOPLEVEL_cb_insert_INFO_SF (VB_VCF); // cleans up allocations - call even if line will be dropped due oSTATUS
+            vcf_piz_insert_INFO_SF (VB_VCF); // cleans up allocations - call even if line will be dropped due oSTATUS
 
-        // case: insert INFO/QD and move rest of line forward
-        if (CTX(INFO_QD)->qd.pred_type) {
-            // adjust QD.last_txt if we inserted SF
-            if (moved_sf_by && last_txt (vb, INFO_SF) < last_txt (vb, INFO_QD))
-                CTX(INFO_QD)->last_txt.index += moved_sf_by;
-            
-            vcf_piz_insert_QD (VB_VCF);
-        }
+        if (CTX(INFO_QD)->qd.pred_type) 
+            vcf_piz_insert_INFO_QD (VB_VCF);
 
         // case: we are reconstructing with --luft and we reconstructed one VCF line
         if (z_is_dvcf) 

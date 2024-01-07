@@ -415,7 +415,7 @@ static inline bool container_is_of_fields (VBlockP vb, ContextP ctx, bool is_top
 {
     return is_toplevel || 
            (VB_DT(SAM) && ctx->did_i == SAM_AUX) || 
-           (VB_DT(VCF) && (ctx->did_i == VCF_INFO || ctx->did_i == VCF_FORMAT)) ||
+           ((VB_DT(VCF) || VB_DT(BCF)) && (ctx->did_i == VCF_INFO || ctx->did_i == VCF_FORMAT)) ||
            (VB_DT(GFF) && ctx->did_i == GFF_ATTRS);
 }
 
@@ -636,7 +636,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
         // call callback if needed now that repeat reconstruction is done (always callback for top level)
         if (con->callback || (is_toplevel && DTP (container_cb)))
             DT_FUNC(vb, container_cb)(vb, ctx->dict_id, is_toplevel, rep_i, con, rep_reconstruction_start, 
-                    BAFTtxt - rep_reconstruction_start, prefixes, prefixes_len);
+                    BAFTtxt - rep_reconstruction_start, STRa(prefixes));
 
         if (con->items[0].separator[1] == CI1_LOOKBACK)
             lookback_insert_container (vb, con, num_items, item_ctxs);
@@ -873,10 +873,8 @@ StrTextMegaLong container_to_json (ConstContainerP con, STRp (prefixes))
 
     str_split (prefixes, prefixes_len, 0, CON_PX_SEP, pr, false);
 
-    for (unsigned i=0; i < n_prs-1; i++) {
-        char out[pr_lens[i] * 2 + 1];
-        s_len += sprintf (&s.s[s_len], "\"%s\", ", str_to_printable (STRi(pr,i), out));
-    }
+    for (unsigned i=0; i < n_prs-1; i++) 
+        s_len += sprintf (&s.s[s_len], "\"%s\", ", str_to_printable_(prs[i], MIN_(pr_lens[i], sizeof(StrTextSuperLong)/2-1)).s);
 
     if (num_items) s_len -= 2; // remove last comma
     s_len += sprintf (&s.s[s_len], " ] }");

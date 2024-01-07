@@ -199,7 +199,7 @@ void vcf_piz_GT_cb_calc_INFO_SF (VBlockVCFP vb, unsigned rep, char *recon, int32
 }
 
 // Upon completing the line - insert the calculated INFO/SF field to its place
-int vcf_piz_TOPLEVEL_cb_insert_INFO_SF (VBlockVCFP vb)
+void vcf_piz_insert_INFO_SF (VBlockVCFP vb)
 {
     ARRAY (const char, sf_snip, sf_snip_buf);
 
@@ -214,8 +214,6 @@ int vcf_piz_TOPLEVEL_cb_insert_INFO_SF (VBlockVCFP vb)
 
     buf_free (sf_snip_buf);
     buf_free (vb->sf_txt);
-
-    return vb->sf_txt.len;
 }
 
 #undef sample_i

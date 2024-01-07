@@ -706,14 +706,14 @@ SPECIAL_RECONSTRUCTOR (fastq_special_deep_copy_QNAME)
 
     STRli (suffix, qname_len - prfx_len);
 
-    RECONSTRUCT (z_file->master_qname, prfx_len);
+    RECONSTRUCT (segconf.master_qname, prfx_len);
 
     int comp_len = 0;
     if (f.is_qname_comp) {
         comp_len = huffman_decompress (z_file->qname_huf, &deep_ent[3], (uint8_t *)suffix, suffix_len);
 
         for (int i=0; i < suffix_len; i++)
-            suffix[i] ^= z_file->master_qname[prfx_len + i];
+            suffix[i] ^= segconf.master_qname[prfx_len + i];
     }
 
     if (reconstruct)

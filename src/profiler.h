@@ -17,7 +17,7 @@
 #define profiled \
         file_open_z, file_close, buf_low_level_free, buflist_find_buf, buflist_sort, buflist_test_overflows_do,\
         read, compute, compressor_bz2, compressor_lzma, compressor_bsc, \
-        write, zriter_write, piz_read_one_vb, codec_hapmat_piz_get_one_line, vb_get_vb,\
+        write, write_fg, write_bg, zriter_write, piz_read_one_vb, codec_hapmat_piz_get_one_line, vb_get_vb,\
         compressor_domq, compressor_actg, bgzf_io_thread, bgzf_compute_thread, bgzf_writer_thread,\
         bgzf_uncompress_vb, txtfile_read_block_bgzf_uncompress,\
         piz_get_line_subfields, zip_generate_b250, zip_generate_local, zip_compress_ctxs, ctx_merge_in_vb_ctx, wait_for_merge,\

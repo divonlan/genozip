@@ -384,6 +384,39 @@ void codec_show_time (VBlockP vb, rom name, rom subname, Codec codec)
     }
 }
 
+void codec_qual_show_stats (void)
+{
+    if (!flag.show_qual || !z_file) return;
+
+    bool has_domq = false;
+    for (CompIType comp_i=0; comp_i < z_file->num_components; comp_i++) 
+        has_domq |= z_file->domq_lines[comp_i] || z_file->divr_lines[comp_i];
+
+    if (!has_domq) return;
+
+    iprint0 ("\nDOMQ codec stats (values are number of lines):\n");
+
+    for (CompIType comp_i=0; comp_i < z_file->num_components; comp_i++) {
+        uint32_t domq  = z_file->domq_lines[comp_i];
+        uint32_t divr  = z_file->divr_lines[comp_i];
+        uint32_t homp  = z_file->homp_lines[comp_i];
+        uint32_t pacb  = z_file->pacb_lines[comp_i];
+        uint32_t longr = z_file->longr_lines[comp_i];
+        uint32_t normq = z_file->normq_lines[comp_i];
+        uint32_t total = z_file->comp_num_lines[comp_i];
+        uint32_t other = total - domq - divr - homp - pacb - longr - normq; 
+
+        iprintf ("comp_i=%u DOMQ=%u (%.1f%%) DIVR=%u (%.1f%%) HOMP=%u (%.1f%%) PACB=%u (%.1f%%) LONGR=%u (%.1f%%) NORMQ=%u (%.1f%%) other=%u (%.1f%%)\n", comp_i,
+                  domq,  (double)domq / total * 100, 
+                  divr,  (double)divr / total * 100, 
+                  homp,  (double)homp / total * 100, 
+                  pacb,  (double)pacb / total * 100, 
+                  longr, (double)longr / total * 100, 
+                  normq, (double)normq / total * 100, 
+                  other, (double)other / total * 100);
+    }
+}
+
 UNCOMPRESS (codec_gtshark_uncompress)
 {
     ABORT0 ("Support for the gtshark codec has been discontinued. To decompress VCF files compressed with --gtshark, use Genozip v11.");

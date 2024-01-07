@@ -75,7 +75,7 @@ static void *zriter_thread_entry (void *zt_)
     ASSERT (actual_disk_so_far == z_file->disk_so_far, "Expecting actual_disk_so_far=%"PRIu64" == z_file->disk_so_far=%"PRIu64,
             actual_disk_so_far, z_file->disk_so_far);
 
-    COPY_TIMER_EVB (write); // "write" profiler resource protected by zriter_mutex
+    COPY_TIMER_EVB (write_bg); // "write" profiler resource protected by zriter_mutex
 
     __atomic_store_n (&zt->completed, true, __ATOMIC_RELEASE); // signal that thread is ready to be joined
 
@@ -87,17 +87,6 @@ static void *zriter_thread_entry (void *zt_)
 static void zriter_write_background (BufferP data, BufferP section_list)
 {
     ASSERTNOTNULL (section_list); // we must have section_list (even if empty) to write in background
-
-//     if (z_file->zriter_last_was_fg) {
-//         START_TIMER;
-// //xxx
-//         // fflush ((FILE *)z_file->file);
-
-//         // make sure changes to FILE will be visible to the background thread
-//         __atomic_thread_fence (__ATOMIC_RELEASE); 
-
-//         COPY_TIMER_EVB (write); // "write" profiler resource protected by zriter_mutex
-//     }
 
     // join all threads that have completed
     for (int32_t i=0; i < z_file->zriter_threads.len32; i++) { // note: can't use for_buf, bc data.len decreases in the loop
@@ -178,7 +167,7 @@ static void zriter_write_foreground (BufferP data, BufferP section_list, int64_t
                 actual_disk_so_far, z_file->disk_so_far);
     }
 
-    COPY_TIMER_EVB (write); // "write" profiler resource protected by zriter_mutex
+    COPY_TIMER_EVB (write_fg); // "write" profiler resource protected by zriter_mutex
 
     mutex_unlock (z_file->zriter_mutex);
 }
@@ -200,8 +189,7 @@ void zriter_write (BufferP data,
 
     // cases where we override a caller request for background writing
     if (data->shared || (section_list && section_list->shared) || // shared buffers cannot be grabbed (eg txt_data is shared in SAM PRIM)
-        global_max_threads==1 || flag.no_zriter ||                // user requested 
-        !flag.is_linux)                                           // still buggy on Windows (bug 983), not yet tested on Mac 
+        flag.no_zriter) // user requested or as set in flags_update(); 
         background = false; 
         
     // case: foreground write

@@ -106,10 +106,9 @@ static void digest_update_do (VBlockP vb, DigestContext *ctx, rom data, uint64_t
     ctx->bytes_digested += data_len;
 
     if (flag.show_digest) {
-        char str[65];
         iprintf ("vb=%10s %s update %s (len=%"PRIu64" so_far=%"PRIu64") 32chars=\"%s\": before=%s after=%s\n", 
                  VB_NAME, DIGEST_NAME, msg, data_len, ctx->bytes_digested, 
-                 str_to_printable (data, MIN_(32, data_len), str), 
+                 str_to_printable_(data, MIN_(32, data_len)).s, 
                  digest_display_ex (digest_snapshot (&before, NULL), DD_NORMAL).s, 
                  digest_display_ex (digest_snapshot (ctx, NULL),     DD_NORMAL).s);
     }

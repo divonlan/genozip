@@ -127,7 +127,7 @@ void vcf_seg_INFO_QD (VBlockVCFP vb)
 //------------
 
 // called from toplevel callback
-void vcf_piz_insert_QD (VBlockVCFP vb)
+void vcf_piz_insert_INFO_QD (VBlockVCFP vb)
 {
     decl_ctx (INFO_QD);
     QdPredType type = ctx->qd.pred_type;

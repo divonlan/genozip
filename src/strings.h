@@ -42,7 +42,7 @@ extern StrText char_to_printable (char c);
 
 extern char *str_print_snip (STRp(in), char *out);
 
-extern char *str_to_printable (STRp(in), char *out);
+extern uint32_t str_to_printable (STRp(in), char *out);
 static inline StrTextSuperLong str_to_printable_(STRp(in)) { // for bound-length short texts
     StrTextSuperLong s;
     str_to_printable (STRa(in), s.s);
@@ -303,6 +303,9 @@ extern uint32_t str_split_floats_do (STRp(str), uint32_t max_items, char sep, bo
     uint32_t n_##name##s = (max_items) ? (max_items) : str_count_char ((str), (str_len), (sep)) + 1; \
     double name##s[n_##name##s]; \
     n_##name##s = str_split_floats_do ((str), (str_len), n_##name##s, (sep), (exactly), name##s); 
+
+extern bool str_item_i (STRp(str), char sep, uint32_t requested_item_i, pSTRp(item));
+extern bool str_item_i_float (STRp(str), char sep, uint32_t requested_item_i, double *item);
 
 extern void str_remove_CR_do (uint32_t n_lines, pSTRp(line));
 #define str_remove_CR(name) str_remove_CR_do (n_##name##s, name##s, name##_lens)

@@ -70,6 +70,7 @@ typedef struct {
     bool qname_flavor_rediscovered[NUM_QTYPES]; // true if flavor has been modified (used only during segconf.running)
     QnameStr qname_line0[NUM_QTYPES];           // qname of line_i=0 (by which flavor is determined) (nul-terminated)
     SeqTech tech;
+    char master_qname[SAM_MAX_QNAME_LEN+1];     // ZIP/PIZ: one of the (ZIP: the first) QNAMEs in the SAM file, to which we compare all others 
     
     // FASTQ and FASTA
     bool multiseq;              // sequences in file are variants of each others 
@@ -129,6 +130,7 @@ typedef struct {
     bool sam_has_bismark_XM_XG_XR;
     bool sam_has_ultima_t0;
     bool sam_has_zm_by_Q1NAME;
+    bool sam_is_nanoseq;
     int64_t sam_first_qs;       // qs:i value of the first line of segconf
     bool sam_diverse_qs;        // true if not all qs:i values in segconf are equal sam_first_qs
     bool sam_has_xcons;
@@ -204,8 +206,6 @@ typedef struct {
     bool vcf_is_isaac;          // IsaacVariantCaller / starling
     bool vcf_is_deep_variant;   // Google Deep Variant
     bool vcf_is_ultima;      // Ultima Genomics version of Deep Variant
-    uint64_t count_dosage[2];   // used to calculate pc_has_dosage
-    float pc_has_dosage;        // % of the samples x lines that have a valid (0-2) dosage value [0.0,1.0]
     bool use_null_DP_method;    // A method for predicting GT=./. by DP=.
     FormatDPMethod FORMAT_DP_method;
     PLMuxByDP PL_mux_by_DP;
@@ -238,7 +238,6 @@ typedef struct {
     bool deep_has_trimmed;      // Deep: some FASTQ reads in segconf appear in SAM trimmed (beyond cropping)
     bool deep_has_trimmed_left; // Deep: some FASTQ reads in segconf are trimmed on the left too (not just the right)
     char deep_1st_desc[256];    // Deep: DESC line of first FASTQ read of first FASTQ file
-    char deep_1st_qname[256];   // Deep: QNAME of first SAM alignment in file
     unsigned n_full_mch[2];     // Deep: count segconf lines where hash matches with at least one SAM line - (QNAME1 or QNAME2), SEQ, QUAL
     unsigned n_seq_qual_mch;    // Deep: count segconf lines where hash matches with at least one SAM line - SEQ and QUAL
     unsigned n_seq_qname_mch[2];// Deep: count segconf lines where FASTQ (QNAME1 or QNAME2) hash matches with at least one SAM line - SEQ and QNAME 

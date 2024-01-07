@@ -104,7 +104,7 @@ typedef struct Context {
 
     // codecs
     uint8_t lcodec_count, bcodec_count; // ZIP z_file, --best: approximate number of VBs in a row that selected this codec
-    Codec lcodec;              // codec used to compress local and dict
+    Codec lcodec;              // codec used to compress local
     Codec bcodec;              // codec used to compress b250
     Codec dcodec;              // codec used to compress dict
     Codec lsubcodec_zip;       // zip to compress with this codec AFTER compressing with lcodec
@@ -247,7 +247,8 @@ typedef struct Context {
         } tp;
         struct {                    // INFO_DP:
             int32_t by_format_dp        : 1;   // ZIP/PIZ: segged vs sum of FORMAT/DP
-            int32_t sum_format_dp       : 31;  // ZIP/PIZ: sum of FORMAT/DP of samples in this line ('.' counts as 0).
+            int32_t reconstruct         : 1;   // PIZ: valid if by_format_dp=1: does this INFO/DP need to be reconstructed
+            int32_t sum_format_dp       : 30;  // ZIP/PIZ: sum of FORMAT/DP of samples in this line ('.' counts as 0).
         } dp;
         struct {                    // INFO_QD:         ZIP/PIZ: 
             uint32_t sum_dp_with_dosage : 28;  // sum of FORMAT/DP of samples in this line and dosage >= 1
@@ -268,18 +269,17 @@ typedef struct Context {
                                // ZIP FASTQ paired: iterating on pair-1 data while compressing pair-2
     // END: RECONSTRUCT STATE 
     // ----------------------------------------------------------------------------------------
-
+    
+    // ZIP/PIZ: context specific #1
     union {
     #define CTX_TAG_CON_CACHE "contexts->con_cache"        
     Buffer con_cache;          // PIZ: vctx: use by contexts that might have containers: Handled by container_reconstruct - an array of Container which includes the did_i. 
                                //      Each struct is truncated to used items, followed by prefixes. 
-                               // ZIP: seg_array, sam_seg_array_field_get_con cache a container.
+                               // ZIP: vctx: seg_array, sam_seg_array_field_get_con cache a container.
     Buffer ctx_cache;          // PIZ: vctx: used to cached Contexts of Multiplexers and other dict_id look ups
     Buffer packed;             // PIZ: vctx: used by contexts that compressed CODEC_ACTG               
-    
-    // ZIP: context specific
     Buffer zip_ctx_specific_buf;
-    Buffer subdicts;           // ZIP/PIZ: zctx: Used by contexts that set ctx->subdicts_section: QUAL in PACB codec, iq:Z
+    Buffer subdicts;           // ZIP/PIZ: zctx: Used by contexts that set ctx->subdicts_section: QUAL with PACB codec, iq:Z
     Buffer value_to_bin;       // ZIP: Used by LONGR codec on *_DOMQRUNS contexts
     Buffer longr_state;        // ZIP: Used by LONGR codec on QUAL contexts
     Buffer chrom2ref_map;      // ZIP (vctx & zctx), PIZ(zctx): Used by CHROM and contexts with a dict alias to it. Mapping from user file chrom to alternate chrom in reference file (for ZIP-VB: new chroms in this VB) - incides match ctx->nodes
@@ -290,16 +290,19 @@ typedef struct Context {
     Buffer info_items;         // ZIP: VCF: VCF_INFO
     Buffer sf_snip;            // ZIP/PIZ: VCF: INFO_SF
     };
+
+    // ZIP/PIZ: context specific #2
+    union {
+    #define CTX_TAG_CON_LEN "contexts->con_len"
+    Buffer con_len;            // PIZ vctx: use by contexts that might have containers: Array of uint16_t - length of item in cache
+    Buffer localR1;            // ZIP/PIZ vctx: PAIR_2 FASTQ VBs (inc. in Deep SAM): for paired contexts: PAIR_1 local data from corresponding VB (in PIZ: only if fastq_use_pair_assisted). Note: contexts with containers are always no_stons, so they have no local - therefore no issue with union conflict.
+    Buffer ol_chrom2ref_map;   // ZIP vctx: SAM/BAM/VCF/CHAIN: CHROM: mapping from user file chrom to alternate chrom in reference file (cloned) - indices match vb->contexts[CHROM].ol_nodes. New nodes are stored in ctx->chrom2ref_map.
+    Buffer ref2chrom_map;      // ZIP zctx: SAM/BAM/VCF/CHAIN: CHROM: reverse mapping from ref_index to chrom, created by ref_compress_ref
+    };
+
     #define CTX_TAG_CON_INDEX "contexts->con_index"
     Buffer con_index;          // PIZ: use by contexts that might have containers: Array of uint32_t - index into con_cache - Each item corresponds to word_index. 
                                // ZIP: used by: 1. seg_array_of_struct
-    union {
-    #define CTX_TAG_CON_LEN "contexts->con_len"
-    Buffer con_len;            // PIZ: use by contexts that might have containers: Array of uint16_t - length of item in cache
-    Buffer localR1;            // ZIP/PIZ vctx: PAIR_2 FASTQ VBs (inc. in Deep SAM): for paired contexts: PAIR_1 local data from corresponding VB (in PIZ: only if fastq_use_pair_assisted).
-    Buffer ol_chrom2ref_map;   // ZIP vctx: SAM/BAM/VCF/CHAIN: CHROM: mapping from user file chrom to alternate chrom in reference file (cloned) - indices match vb->contexts[CHROM].ol_nodes. New nodes are stored in ctx->chrom2ref_map.
-    Buffer ref2chrom_map;      // ZIP zctx: reverse mapping from ref_index to chrom, created by ref_compress_ref
-    };                         // Note: contexts with containers are always no_stons, so they have no local - therefore no issue with union conflict.
 } Context;
 
 typedef struct {

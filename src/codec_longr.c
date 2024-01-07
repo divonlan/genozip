@@ -174,6 +174,8 @@ COMPRESS (codec_longr_compress)
     STRw(seq); STRw (qual); 
     bool is_rev;
 
+    __atomic_add_fetch (&z_file->pacb_lines[vb->comp_i], vb->lines.len, __ATOMIC_RELAXED);
+
     // calculate state->base_chan - the channel for each base. reads are treated in their
     // original (FASTQ) orientation.
     uint32_t total_len=0;
@@ -287,7 +289,7 @@ static void codec_longr_recon_one_read (LongrState *state, STRp(seq), bool is_re
 // order of decompression: lens_ctx is decompressed, then baseq_ctx is decompressed with its codec, and then this function is called
 // as a subcodec for baseq_ctx. 
 // This function converts lens_ctx to be "next_of_chan" for each channel, and initializes LongrState
-static void codec_longr_reconstruct_init (VBlockP vb, Context *lens_ctx, Context *values_ctx)
+static void codec_longr_reconstruct_init (VBlockP vb, ContextP lens_ctx, ContextP values_ctx)
 {
     // we adjust the buffer here, since it didn't get adjusted in piz_uncompress_all_ctxs because its ltype is LT_CODEC
     lens_ctx->local.len /= sizeof (uint32_t); 

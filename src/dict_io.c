@@ -444,12 +444,9 @@ StrTextMegaLong dict_io_snip_to_str (STRp(snip), bool add_quote)
     if (add_quote && !op) *next++ = '\"';    
 
     uint32_t len = MIN_(snip_len - i, sizeof(s) - add_quote*2 - 1);
-    str_to_printable (snip+i, len, next); 
-    next += len;
+    next += str_to_printable (snip+i, len, next); // also nul-terminates
 
-    if (add_quote && !op) *next++ = '\"';    
-    
-    *next = 0;
+    if (add_quote && !op) { *next++ = '\"'; *next = 0; }  
 
     return s;
 }

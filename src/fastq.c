@@ -515,7 +515,7 @@ void fastq_read_pair_1_data (VBlockP vb_, VBIType pair_vb_i)
 {
     START_TIMER;
 
-    if (flag.is_windows) zriter_flush(); // bug 983
+    if (flag.no_zriter) zriter_flush(); 
 
     VBlockFASTQP vb = (VBlockFASTQP)vb_;
 
@@ -532,7 +532,7 @@ void fastq_read_pair_1_data (VBlockP vb_, VBIType pair_vb_i)
         
     piz_read_all_ctxs (VB, &sec, true);
     
-    if (flag.is_windows)  // bug 983
+    if (flag.no_zriter) 
         file_seek (z_file, 0, SEEK_END, READ, HARD_FAIL); // restore
 
     COPY_TIMER (fastq_read_pair_1_data);

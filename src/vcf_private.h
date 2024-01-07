@@ -31,7 +31,9 @@ typedef struct {
 
 typedef enum { VCF_v_UNKNOWN, VCF_v4_1, VCF_v4_2, VCF_v4_3, VCF_v4_4, VCF_v4_5 } VcfVersion;
 
-typedef Multiplexer4 DosageMultiplexer;
+#define ZIP_MAX_PLOIDY_FOR_MUX 4 // ZIP only. In PIZ use z_file->max_ploidy_for_mux
+#define ZIP_NUM_DOSAGES_FOR_MUX (ZIP_MAX_PLOIDY_FOR_MUX+1) // ZIP only: 0 to ZIP_MAX_PLOIDY_FOR_MUX
+typedef MULTIPLEXER(ZIP_NUM_DOSAGES_FOR_MUX) DosageMultiplexer, *DosageMultiplexerP;
 
 #define VCF_MAX_ARRAY_ITEMS SMALL_CON_NITEMS
 
@@ -84,17 +86,21 @@ typedef struct VBlockVCF {
     Buffer format_contexts;         // ZIP only: an array of format_mapper_buf.len of ContextBlock
     Buffer last_format;             // ZIP only: cache previous line's FORMAT string
 
+    #define first_idx idx_AN
+    int16_t idx_AN, idx_AF, idx_MLEAF, idx_AC_Hom, idx_AC_Het, idx_AC_Hemi;
+    #define has(f)   (vb->idx_##f  != -1)
+    #define after_idx mux_PLn
+
     // Multiplexers
     #define first_mux mux_PLn
     DosageMultiplexer mux_PLn, mux_GL, mux_GP, mux_PRI, mux_DS, mux_PP, mux_PVAL, mux_FREQ, mux_RD, 
-                      mux_BAF, mux_X, mux_Y, mux_VAF,
-                      mux_AD[2], mux_ADALL[2];
+                      mux_VAF, mux_AD[2], mux_ADALL[2];
 
     PLMuxByDP PL_mux_by_DP;
     
-    #define MAX_DP_FOR_MUX 60
-    MULTIPLEXER(1 + MAX_DP_FOR_MUX * 3) mux_PLy;
-    MULTIPLEXER(1 + 7 * 3) mux_GQ;
+    #define MAX_DP_FOR_MUX 51       // TODO: 60 would be better as it was up to 15.0.35, but mux is currently limited to 256 channels
+    MULTIPLEXER(MAX_DP_FOR_MUX * ZIP_NUM_DOSAGES_FOR_MUX) mux_PLy;
+    MULTIPLEXER(7 * ZIP_NUM_DOSAGES_FOR_MUX) mux_GQ;
     MULTIPLEXER(MAX_DP_FOR_MUX) mux_RGQ;   
 
     Multiplexer2 mux_POS;           // GVCF: multiplex by whether this field is END or POS
@@ -102,6 +108,7 @@ typedef struct VBlockVCF {
     Multiplexer2 mux_IGT, mux_IPS;  // multiplex by (sample_i>0)
     Multiplexer3 mux_VC;            // multiplex dbSNP's INFO/VC by VARTYPE
     Multiplexer3 mux_GQX;           // multiplex Isaac's FORMAT/GQX
+    Multiplexer3 mux_BAF, mux_X, mux_Y; // Illumina genotyping: by adjusted dosage 
 
     #define after_mux sort
 
@@ -281,9 +288,16 @@ extern char *vcf_samples_is_included;
 #define samples_am_i_included(sample_i) (!flag.samples || ((bool)(vcf_samples_is_included[sample_i]))) // macro for speed - this is called in the critical loop of reconstructing samples
 extern VcfVersion vcf_header_get_version (void);
 
+#define BII(x) B(InfoItem, CTX(VCF_INFO)->info_items, vb->idx_##x)
+
 // POS stuff
 extern void vcf_seg_pos (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(pos_str));
 extern void vcf_seg_INFO_END (VBlockVCFP vb, ContextP end_ctx, STRp(end_str));
+
+// AC / AF / AN
+extern void vcf_seg_INFO_AC (VBlockVCFP vb, ContextP ac_ctx, STRp(ac_str));
+extern void vcf_seg_INFO_MLEAC (VBlockVCFP vb, ContextP ac_ctx, STRp(ac_str));
+extern void vcf_seg_INFO_MLEAF (VBlockVCFP vb, ContextP ctx, STRp(mleaf));
 
 // Samples stuff
 extern void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt));
@@ -296,7 +310,7 @@ extern int vcf_seg_get_mux_channel_i (VBlockVCFP vb, bool fail_if_dvcf_refalt_sw
 extern int vcf_piz_get_mux_channel_i (VBlockP vb);
 extern ContextP vcf_seg_FORMAT_mux_by_dosage (VBlockVCFP vb, ContextP ctx, STRp(cell), const DosageMultiplexer *mux);
 
-eSTRl(af_snip);
+eSTRl(snip_copy_af);
 
 // FORMAT/GT stuff
 extern WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, STRp(cell), bool has_ps, bool has_null_dp);
@@ -330,7 +344,7 @@ extern bool vcf_seg_INFO_SF_init (VBlockVCFP vb, ContextP sf_ctx, STRp(value));
 extern void vcf_seg_INFO_SF_seg (VBlockVCFP vb);
 extern void vcf_seg_INFO_SF_one_sample (VBlockVCFP vb);
 extern void vcf_piz_GT_cb_calc_INFO_SF (VBlockVCFP vcf_vb, unsigned rep, char *recon, int32_t recon_len);
-extern int vcf_piz_TOPLEVEL_cb_insert_INFO_SF (VBlockVCFP vcf_vb);
+extern void vcf_piz_insert_INFO_SF (VBlockVCFP vcf_vb);
 
 // INFO/QD stuff
 typedef enum { QD_PRED_NONE, QD_PRED_INFO_DP, QD_PRED_INFO_DP_P001, QD_PRED_INFO_DP_M001, 
@@ -338,7 +352,7 @@ typedef enum { QD_PRED_NONE, QD_PRED_INFO_DP, QD_PRED_INFO_DP_P001, QD_PRED_INFO
 extern void vcf_seg_sum_DP_for_QD (VBlockVCFP vb, int64_t value);
 extern void vcf_seg_INFO_QD (VBlockVCFP vb);
 extern void vcf_piz_sum_DP_for_QD (VBlockP vb, STRp(recon));
-extern void vcf_piz_insert_QD (VBlockVCFP vb);
+extern void vcf_piz_insert_INFO_QD (VBlockVCFP vb);
 
 // INFO stuff
 
@@ -349,7 +363,7 @@ typedef struct { char name[MAX_TAG_LEN]; // not nul-terminated, including '=' if
 
 extern void vcf_info_zip_initialize (void);
 extern void vcf_info_seg_initialize (VBlockVCFP vb);
-extern void vcf_piz_finalize_DP_by_DP (VBlockVCFP vb);
+extern void vcf_piz_insert_INFO_DP (VBlockVCFP vb);
 
 extern void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info));
 extern void vcf_finalize_seg_info (VBlockVCFP vb);
@@ -380,7 +394,7 @@ extern void vcf_seg_ILLUMINA_POS (VBlockVCFP vb, ContextP ctx, STRp(pos));
 extern void vcf_seg_ILLUMINA_STRAND (VBlockVCFP vb, ContextP ctx, STRp(strand));
 extern void vcf_seg_ALLELE_A (VBlockVCFP vb, ContextP ctx, STRp(value));
 extern void vcf_seg_ALLELE_B (VBlockVCFP vb, ContextP ctx, STRp(value));
-extern void vcf_seg_mux_by_adjusted_dosage (VBlockVCFP vb, ContextP ctx, STRp(baf), const DosageMultiplexer *mux);
+extern void vcf_seg_mux_by_adjusted_dosage (VBlockVCFP vb, ContextP ctx, STRp(baf), const Multiplexer3 *mux);
 
 // dbSNP
 extern void vcf_dbsnp_zip_initialize (void);

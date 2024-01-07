@@ -964,7 +964,7 @@ FileP file_open_z_write (rom filename, FileMode mode, DataType data_type)
         else {
             file->file = fopen (file->name, file->mode);
             
-            if (!flag.is_windows) // bug 983
+            if (!flag.no_zriter) 
                 file->z_reread_file = fopen (file->name, READ);
 
 #ifndef _WIN32
@@ -1155,7 +1155,7 @@ void file_remove (rom filename, bool fail_quietly)
     int ret = remove (filename); 
     ASSERTW (!ret || fail_quietly, "Warning: failed to remove %s: %s", filename, strerror (errno));
 #else
-    ASSERTW (DeleteFile (filename), "Warning: failed to remove %s: %s", filename, str_win_error());
+    ASSERTW (DeleteFile (filename) || fail_quietly, "Warning: failed to remove %s: %s", filename, str_win_error());
 #endif
 }
 

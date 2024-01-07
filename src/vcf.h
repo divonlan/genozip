@@ -584,6 +584,8 @@ extern CONTAINER_ITEM_CALLBACK (vcf_piz_con_item_cb);
 extern void vcf_piz_header_init (void);
 extern bool vcf_inspect_txt_header (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags);
 extern uint32_t vcf_header_get_num_samples (void);
+extern uint32_t vcf_header_get_num_contigs (void);
+extern uint64_t vcf_header_get_nbases (void);
 extern bool vcf_header_get_has_fileformat (void);
 extern void vcf_piz_finalize (void);
 
@@ -634,11 +636,11 @@ extern void vcf_samples_add  (rom samples_str);
                       vcf_piz_special_MUX_GQX, vcf_piz_special_RU, vcf_piz_special_IDREP, vcf_piz_special_next_ALT, \
                       vcf_piz_special_MUX_BY_END, vcf_piz_special_MUX_BY_ISAAC_FILTER, \
                       vcf_piz_special_X_LM_RM, vcf_piz_special_X_IL, vcf_piz_special_X_IC, vcf_piz_special_X_HIN, vcf_piz_special_X_HIL, \
-                      vcf_piz_special_VARIANT_TYPE, vcf_piz_special_PLATYPUS_SC, vcf_piz_special_PLATYPUS_HP }
+                      vcf_piz_special_VARIANT_TYPE, vcf_piz_special_PLATYPUS_SC, vcf_piz_special_PLATYPUS_HP, vcf_piz_special_INFO_MLEAF }
 
 SPECIAL (VCF, 0,  main_REFALT,         vcf_piz_special_main_REFALT);
 SPECIAL (VCF, 1,  FORMAT,              vcf_piz_special_FORMAT)
-SPECIAL (VCF, 2,  AC,                  vcf_piz_special_INFO_AC);
+SPECIAL (VCF, 2,  INFO_AC,             vcf_piz_special_INFO_AC);
 SPECIAL (VCF, 3,  SVLEN,               vcf_piz_special_SVLEN);
 SPECIAL (VCF, 4,  DS_old,              vcf_piz_special_FORMAT_DS_old);            // used in files up to 12.0.42
 SPECIAL (VCF, 5,  BaseCounts,          vcf_piz_special_INFO_BaseCounts);
@@ -700,7 +702,8 @@ SPECIAL (VCF, 60, X_HIL,               vcf_piz_special_X_HIL);                  
 SPECIAL (VCF, 61, VARIANT_TYPE,        vcf_piz_special_VARIANT_TYPE);             // added v15.0.30
 SPECIAL (VCF, 62, PLATYPUS_SC,         vcf_piz_special_PLATYPUS_SC);              // added v15.0.30
 SPECIAL (VCF, 63, PLATYPUS_HP,         vcf_piz_special_PLATYPUS_HP);              // added v15.0.30
-#define NUM_VCF_SPECIAL 64
+SPECIAL (VCF, 64, INFO_MLEAF,          vcf_piz_special_INFO_MLEAF);               // added v15.0.36
+#define NUM_VCF_SPECIAL 65
 
 // Translators for Luft (=secondary coordinates)
 TRANSLATOR (VCF, VCF,   1,  G,      vcf_piz_luft_G)       // same order as LiftOverStatus starting LO_CANT_G

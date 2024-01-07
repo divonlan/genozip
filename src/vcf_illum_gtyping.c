@@ -27,9 +27,9 @@ void vcf_illum_gtyping_seg_initialize (VBlockVCFP vb)
 {
     ctx_set_store (VB, STORE_INT, INFO_ALLELE_A, INFO_ILLUMINA_POS, DID_EOL);
 
-    seg_mux_init (VB, CTX(FORMAT_BAF), 4, VCF_SPECIAL_MUX_BY_ADJ_DOSAGE, true, (MultiplexerP)&vb->mux_BAF);
-    seg_mux_init (VB, CTX(FORMAT_X),   4, VCF_SPECIAL_MUX_BY_ADJ_DOSAGE, true, (MultiplexerP)&vb->mux_X);
-    seg_mux_init (VB, CTX(FORMAT_Y),   4, VCF_SPECIAL_MUX_BY_ADJ_DOSAGE, true, (MultiplexerP)&vb->mux_Y);
+    seg_mux_init (VB, CTX(FORMAT_BAF), 3, VCF_SPECIAL_MUX_BY_ADJ_DOSAGE, true, (MultiplexerP)&vb->mux_BAF);
+    seg_mux_init (VB, CTX(FORMAT_X),   3, VCF_SPECIAL_MUX_BY_ADJ_DOSAGE, true, (MultiplexerP)&vb->mux_X);
+    seg_mux_init (VB, CTX(FORMAT_Y),   3, VCF_SPECIAL_MUX_BY_ADJ_DOSAGE, true, (MultiplexerP)&vb->mux_Y);
 
     ctx_set_ltype (VB, LT_BLOB, INFO_PROBE_A, INFO_PROBE_B, DID_EOL);
 
@@ -261,8 +261,13 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_ALLELE_B)
     return NO_NEW_VALUE;
 }    
 
+// returns 0, 1 or 2 (in old method also 3)
 static int vcf_seg_adjust_channel_i (VBlockP vb, int channel_i)
 {
+    bool new_method = IS_ZIP || (z_file->max_ploidy_for_mux > 0); // true iff version is 15.0.36 or newer
+
+    if (new_method && channel_i > 2) channel_i=2; // dosage>2 not expected on Illumina genotyping chips, but just in case
+
     char allele_a = ctx_has_value (vb, INFO_ALLELE_A) ? CTX(INFO_ALLELE_A)->last_value.i : 0;
 
     if (allele_a == 'A' && (channel_i==0 || channel_i==2))
@@ -274,7 +279,7 @@ static int vcf_seg_adjust_channel_i (VBlockP vb, int channel_i)
     return channel_i;
 }
 
-void vcf_seg_mux_by_adjusted_dosage (VBlockVCFP vb, ContextP ctx, STRp(baf), const DosageMultiplexer *mux) 
+void vcf_seg_mux_by_adjusted_dosage (VBlockVCFP vb, ContextP ctx, STRp(baf), const Multiplexer3 *mux) 
 {
     if (z_is_dvcf || !ctx_encountered_in_line (VB, FORMAT_GT))  // note: if a line fails this test, likely all other lines do too
         seg_by_ctx (VB, STRa(baf), ctx, baf_len); 

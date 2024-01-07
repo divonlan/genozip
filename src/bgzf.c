@@ -568,9 +568,9 @@ FlagsBgzf bgzf_piz_calculate_bgzf_flags (CompIType comp_i, Codec src_codec)
 
     // case: already set by command line (to a level or "exact")
     else if (flag.bgzf != BGZF_NOT_INITIALIZED) {
-        ASSINP (!flag.out_filename || flags_out_filename_implies_bgzf(), 
-                "using %s in combination with %s on a %s file, requires the output filename to end with %s.gz or .bgz", 
-                OT("output", "o"), OT("bgzf", "z"), z_dt_name(), Z_DT(SAM)?".bam, " : Z_DT(VCF)?".bcf, " : "");
+        ASSINP (!flag.out_filename || flags_out_filename_implies_bgzf() || bgzf_flags.level==0, 
+                "using %s in combination with %s for outputting a %s file, requires the output filename to end with %s", 
+                OT("output", "o"), OT("bgzf", "z"), dt_name(flag.out_dt), OUT_DT(BAM)?".bam" : OUT_DT(BCF)?".bcf" : ".gz");
     
         ASSINP0 (!OUT_DT(BCF) || flag.bgzf != BGZF_BY_ZFILE, "cannot use --bgzf=exact when outputing a BCF file"); // because we have no control over bcftools' BGZF block generation
     }

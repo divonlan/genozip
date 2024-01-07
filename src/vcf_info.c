@@ -6,7 +6,6 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
-#include <math.h>
 #include "vcf_private.h"
 #include "piz.h"
 #include "optimize.h"
@@ -15,6 +14,8 @@
 #include "codec.h"
 #include "reconstruct.h"
 #include "stats.h"
+
+#define info_items CTX(VCF_INFO)->info_items
 
 static inline bool vcf_is_use_DP_by_DP (void); // forward
 sSTRl(RAW_MQandDP_snip, 64 + 2 * 16);     
@@ -62,6 +63,8 @@ void vcf_info_seg_initialize (VBlockVCFP vb)
     if (segconf.has[INFO_CLNHGVS]) vcf_seg_hgvs_consolidate_stats (vb, INFO_CLNHGVS);
     if (segconf.has[INFO_HGVSG])   vcf_seg_hgvs_consolidate_stats (vb, INFO_HGVSG);
     if (segconf.has[INFO_ANN])     vcf_seg_hgvs_consolidate_stats (vb, INFO_ANN); // subfield HGVS_c
+
+    #undef T
 }
 
 //--------
@@ -106,38 +109,46 @@ static void vcf_seg_INFO_DP_by_FORMAT_DP (VBlockVCFP vb)
 
     int value_len = str_int_len (ctx->last_value.i);
 
-    SNIP(32) = { SNIP_SPECIAL, VCF_SPECIAL_DP_by_DP };
-    snip_len = 2 + str_int (value_len, &snip[2]);
-    snip[snip_len++] = '\t';
-
     // note: INFO/DP >= sum(FORMAT/DP) as the per-sample value is filtered, see: https://gatk.broadinstitute.org/hc/en-us/articles/360036891012-DepthPerSampleHC
-    snip_len += str_int (ctx->last_value.i - ctx->dp.sum_format_dp, &snip[snip_len]);
-
+    // note: up to 15.0.35, we had the value_len before the \t
+    SNIPi3 (SNIP_SPECIAL, VCF_SPECIAL_DP_by_DP, '\t', ctx->last_value.i - ctx->dp.sum_format_dp);
     seg_by_ctx (VB, STRa(snip), ctx, value_len); 
 }
 
 // initialize reconstructing INFO/DP by sum(FORMAT/DP) - save space in txt_data, and initialize delta
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_DP_by_DP)
 {
-    str_split (snip, snip_len, 2, '\t', item, 2);
+    str_split (snip, snip_len, 2, '\t', item, 2); // note: up to 15.0.35, items[0] was the length of the integer to be inserted. we ignore it now.
 
-    if (reconstruct) {
-        if (!flag.drop_genotypes && !flag.gt_only && !flag.samples) {
-            Ltxt += atoi (items[0]); // number of characters needed to reconstruct the INFO/DP integer
-            ctx->dp.sum_format_dp = atoi (items[1]); // initialize with delta
-            ctx->dp.by_format_dp = true;             // needs to be finalized
-        }
-        else
-            RECONSTRUCT ("-1", 2); // bc we can't calculate INFO/DP in these cases bc we need FORMAT/DP of all samples
+    if (!flag.drop_genotypes && !flag.gt_only && !flag.samples) {
+        ctx->dp.sum_format_dp = atoi (items[1]); // initialize with delta
+        ctx->dp.by_format_dp = true;             // DP needs to be inserted by vcf_piz_insert_INFO_DP
+        ctx->dp.reconstruct = reconstruct;
+
+        return NO_NEW_VALUE; // we don't have the value yet - it will be set in vcf_piz_insert_INFO_DP
     }
-
-    return NO_NEW_VALUE; 
+    else {
+        if (reconstruct) 
+            RECONSTRUCT ("-1", 2); // bc we can't calculate INFO/DP in these cases bc we need FORMAT/DP of all samples
+    
+        new_value->i = -1;
+        return HAS_NEW_VALUE;
+    }
 }
 
 // finalize reconstructing INFO/DP by sum(FORMAT/DP) - called after reconstructing all samples
-void vcf_piz_finalize_DP_by_DP (VBlockVCFP vb)
+void vcf_piz_insert_INFO_DP (VBlockVCFP vb)
 {
-    str_int_ex (CTX(INFO_DP)->dp.sum_format_dp, last_txt(VB, INFO_DP), false);
+    decl_ctx (INFO_DP);
+    
+    if (ctx->dp.reconstruct) {
+        STRl(info_dp,16);
+        info_dp_len = str_int_ex (ctx->dp.sum_format_dp, info_dp, false);
+
+        vcf_piz_insert_field (vb, INFO_DP, STRa(info_dp));
+    }
+
+    ctx_set_last_value (VB, ctx, (int64_t)ctx->dp.sum_format_dp); // consumed by eg vcf_piz_insert_INFO_QD
 }
 
 // used starting v13.0.5, replaced in v14 with a new vcf_piz_special_DP_by_DP
@@ -414,86 +425,6 @@ TRANSLATOR_FUNC (vcf_piz_luft_XREV)
     return true;
 }
 
-// -------
-// INFO/AC
-// -------
-
-static void vcf_seg_INFO_AC (VBlockVCFP vb, ContextP ac_ctx, STRp(ac_str))
-{
-    // case: AC = AN * AF (might not be, due to rounding errors, esp if AF is a very small fraction)
-    if (ctx_has_value_in_line_(vb, CTX(INFO_AC)) && // AC exists and is a valid int (set in vcf_seg_info_subfields if AC is a single int)
-        ctx_has_value_in_line_(vb, CTX(INFO_AN)) && // AN exists and is a valid int
-        ctx_has_value_in_line_(vb, CTX(INFO_AF)) && // AF exists and is a valid float
-        (int64_t)round (CTX(INFO_AF)->last_value.f * CTX(INFO_AN)->last_value.i) == ac_ctx->last_value.i) { // AF * AN == AC
-
-        ac_ctx->no_stons = true;
-        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_AC }), 2, ac_ctx, ac_str_len);
-    }
-
-    // GIAB: AC = AC_Hom + AC_Het + AC_Hemo
-    else if (ctx_has_value_in_line_(vb, CTX(INFO_AC_Hom)) &&
-             ctx_has_value_in_line_(vb, CTX(INFO_AC_Het)) &&
-             ctx_has_value_in_line_(vb, CTX(INFO_AC_Hemi)) &&
-             ac_ctx->last_value.i == CTX(INFO_AC_Hom)->last_value.i + CTX(INFO_AC_Het)->last_value.i + CTX(INFO_AC_Hemi)->last_value.i) {
-        ac_ctx->no_stons = true;
-        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_AC, '1' }), 3, ac_ctx, ac_str_len);
-    }
-
-    // case: AC is multi allelic, or an invalid value, or missing AN or AF or AF*AN != AC
-    else 
-        seg_by_ctx (VB, STRa(ac_str), ac_ctx, ac_str_len);
-}
-
-// reconstruct: AC = AN * AF
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_AC)
-{
-    // Backward compatability note: In files v6->11, snip has 2 bytes for AN, AF which mean: '0'=appears after AC, '1'=appears before AC. We ignore them.
-
-    // note: update last_value too, so its available to vcf_piz_luft_A_AN, which is called becore last_value is updated
-    if (!snip_len || !VER(15))
-        ctx->last_value.i = new_value->i = (int64_t)round (reconstruct_peek (vb, CTX(INFO_AN), 0, 0).i * reconstruct_peek(vb, CTX(INFO_AF), 0, 0).f);
-
-    else if (*snip == '1') 
-        ctx->last_value.i = new_value->i = 
-            reconstruct_peek (vb, CTX(INFO_AC_Hom),  0, 0).i +
-            reconstruct_peek (vb, CTX(INFO_AC_Het),  0, 0).i +
-            reconstruct_peek (vb, CTX(INFO_AC_Hemi), 0, 0).i;
-
-    else 
-        ABORT_PIZ ("unrecognized snip '%c'(%u). %s", *snip, (uint8_t)*snip, genozip_update_msg());
-
-    if (reconstruct) RECONSTRUCT_INT (new_value->i); 
-
-    return HAS_NEW_VALUE;
-}
-
-// Lift-over translator for INFO/AC fields, IF it is bi-allelic and we have a ALT<>REF switch AND we have an AN and AF field
-// We change the AC to AN - AC and return true if successful 
-TRANSLATOR_FUNC (vcf_piz_luft_A_AN)
-{
-    if (IS_TRIVAL_FORMAT_SUBFIELD) return true; // This is FORMAT field which is empty or "." - all good
-
-    int64_t an, ac;
-
-    if (IS_ZIP) {
-        if (!ctx_has_value_in_line_(vb, CTX(INFO_AN)) ||
-            !str_get_int_range64 (STRa(recon), 0, (an = CTX(INFO_AN)->last_value.i), &ac))
-            return false; // in Seg, AC is always segged last, so this means there is no AN in the line for sure
-        
-        if (validate_only) return true;  // Yay! AC can be lifted - all it needs in AN in the line, which it has 
-    }
-    else {
-        ac = ctx->last_value.i;
-        an = reconstruct_peek (vb, CTX(INFO_AN), 0, 0).i;
-    }
-
-    // re-reconstruct: AN-AC
-    Ltxt -= recon_len;
-    RECONSTRUCT_INT (an - ac);
-
-    return true;    
-}
-
 // ------------------------
 // INFO/SVLEN & INFO/REFLEN
 // ------------------------
@@ -624,8 +555,6 @@ static inline void vcf_seg_INFO_RAW_MQandDP (VBlockVCFP vb, ContextP ctx, STRp(v
 // --------------
 // INFO container
 // --------------
-
-#define info_items CTX(VCF_INFO)->info_items
 
 // for dual coordinate files (Primary, Luft and --chain) - add DVCF depending on ostatus (run after
 // all INFO and FORMAT fields, so ostatus is final)
@@ -821,27 +750,15 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_SF: 
             CALL_WITH_FALLBACK (vcf_seg_INFO_SF_init);
 
-        //##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes">
-        case _INFO_AN:
-            STORE_AND_SEG (STORE_INT);
-
-        // ##INFO=<ID=AF,Number=A,Type=Float,Description="Allele Frequency, for each ALT allele, in the same order as listed">
-        case _INFO_AF: 
-            STORE_AND_SEG (STORE_FLOAT);
-
         // ##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">
         case _INFO_AC:
             CALL (vcf_seg_INFO_AC (vb, ctx, STRa(value))); 
 
-        case _INFO_MLEAF:
-            CALL_IF (!z_is_dvcf && // this doesn't work for DVCF (bug 680)
-                     ctx_has_value_in_line_(vb, CTX(INFO_AF)) && str_issame_(STRa(value), STRtxtw(CTX(INFO_AF)->last_txt)), 
-                     seg_by_ctx (VB, STRa(af_snip), ctx, value_len)); // copy AF
-
         case _INFO_MLEAC:
-            CALL_IF (!z_is_dvcf && // this doesn't work for DVCF (bug 680)
-                     ctx_has_value_in_line_(vb, CTX(INFO_AC)),
-                     seg_delta_vs_other (VB, ctx, CTX(INFO_AC), STRa(value)));
+            CALL (vcf_seg_INFO_MLEAC (vb, ctx, STRa(value)));
+
+        case _INFO_MLEAF:
+            CALL (vcf_seg_INFO_MLEAF (vb, ctx, STRa(value)));
 
         // ##INFO=<ID=QD,Number=1,Type=Float,Description="Variant Confidence/Quality by Depth">
         case _INFO_QD:
@@ -1006,7 +923,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
             }
     }
 
-    ctx_set_encountered (VB, ctx);
+    seg_set_last_txt (VB, ctx, STRa(value));
 }
 
 static SORTER (sort_by_subfield_name)
@@ -1033,7 +950,6 @@ void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
 
     buf_alloc (vb, &info_items, 0, n_pairs + 2, InfoItem, CTX_GROWTH, "info_items");
 
-    int ac_i = -1; 
     InfoItem lift_ii = {}, rejt_ii = {};
 
     // pass 1: initialize info items + get indices of AC, and the DVCF items
@@ -1042,8 +958,8 @@ void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
         unsigned name_len = (unsigned)(equal_sign - pairs[i]); // nonsense if no equal sign
         unsigned tag_name_len = equal_sign ? name_len : pair_lens[i];
 
-        InfoItem ii = { .name_len  = equal_sign ? name_len + 1 : pair_lens[i], // including the '=' if there is one
-                        .value     = equal_sign ? equal_sign + 1 : NULL,
+        InfoItem ii = { .name_len  = equal_sign ? name_len + 1                : pair_lens[i], // including the '=' if there is one
+                        .value     = equal_sign ? equal_sign + 1              : NULL,
                         .value_len = equal_sign ? pair_lens[i] - name_len - 1 : 0  };
         memcpy (ii.name, pairs[i], ii.name_len); // note: we make a copy the name, because vcf_seg_FORMAT_GT might overwrite the INFO field
         
@@ -1060,19 +976,18 @@ void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
                    ((dict_id.num != _INFO_PRIM && dict_id.num != _INFO_PREJ) || vb->line_coords == DC_LUFT)),
                 "Not expecting INFO/%.*s in a %s-coordinate line", tag_name_len, pairs[i], vcf_coords_name (vb->line_coords));
 
-        if (dict_id.num == _INFO_AC) {
-            int64_t ac;
-            if (str_get_int (STRa(ii.value), &ac))
-                ctx_set_last_value (VB, ii.ctx, ac); // needed for MLEAC        
-
-            ac_i = info_items.len;
-        }
-
-        else if (dict_id.num == _INFO_LUFT || dict_id.num == _INFO_PRIM) 
+        if (dict_id.num == _INFO_LUFT || dict_id.num == _INFO_PRIM) 
             { lift_ii = ii; continue; } // dont add LUFT and PRIM to Items yet
 
         else if (dict_id.num == _INFO_LREJ || dict_id.num == _INFO_PREJ) 
             { rejt_ii = ii; continue; } // dont add Lrej and Prej to Items yet
+
+        #define X(x) case INFO_##x : vb->idx_##x = info_items.len32; break
+        switch (ii.ctx->did_i) {
+            X(AN); X(AF); X(MLEAF); X(AC_Hom); X(AC_Het); X(AC_Hemi);
+            default: {}
+        }
+        #undef X
 
         BNXT (InfoItem, info_items) = ii;
     }
@@ -1104,12 +1019,7 @@ void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
 
     // pass 2: seg all subfields except AC (and PRIM/LUFT that weren't added)
     for (unsigned i=0; i < ii_len; i++) 
-        if (ii[i].ctx->dict_id.num != _INFO_AC)
-            vcf_seg_info_one_subfield (vb, ii[i].ctx, ii[i].value, ii[i].value_len);
-    
-    // last, seg AC (delayed, as we needed to seg AN and AF before)
-    if (ac_i >= 0) 
-        vcf_seg_info_one_subfield (vb, ii[ac_i].ctx, ii[ac_i].value, ii[ac_i].value_len);
+        vcf_seg_info_one_subfield (vb, ii[i].ctx, STRa(ii[i].value));
 }
 
 // Adds the DVCF items according to ostatus, finalizes INFO/SF, INFO/QD and segs the INFO container

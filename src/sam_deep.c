@@ -315,7 +315,7 @@ static void inline sam_piz_alloc_deep_ents (VBlockSAMP vb, uint32_t size)
 
 #define NUM_QNAMES_TO_SAMPLE 100 // number of QNAMEs to sample for producing the huffman comressor
 
-static void sam_piz_deep_sample_qname (STRp(suffix), // if prfx_len>0 then this is just the suffix the suffix 
+static void sam_piz_deep_sample_qname (STRp(suffix), // if prfx_len>0 then this is just the suffix 
                                        int prfx_len)
 {
     // note: the mutex is not necessary locked in the order of z_file->qnames_sampled
@@ -324,7 +324,7 @@ static void sam_piz_deep_sample_qname (STRp(suffix), // if prfx_len>0 then this 
     // first thread that locked the mutex - initialize
     if (!z_file->qname_huf) {
         // this lucky qname is now our master_qname (note: at this point suffix is the whole qname)
-        memcpy (z_file->master_qname, suffix, suffix_len); // note: we verified already that qname_len <= SAM_MAX_QNAME_LEN
+        memcpy (segconf.master_qname, suffix, suffix_len); // note: we verified already that qname_len <= SAM_MAX_QNAME_LEN
 
         // We need to set qname_huf only after master_qname is is set. 
         __atomic_store_n (&z_file->qname_huf, huffman_initialize(), __ATOMIC_RELEASE); 
@@ -332,7 +332,7 @@ static void sam_piz_deep_sample_qname (STRp(suffix), // if prfx_len>0 then this 
 
     uint8_t sample[suffix_len];
     for (int i=0; i < suffix_len; i++)
-        sample[i] = suffix[i] ^ z_file->master_qname[prfx_len + i];
+        sample[i] = suffix[i] ^ segconf.master_qname[prfx_len + i];
 
     int sampled_so_far = huffman_chew_one_sample (z_file->qname_huf, sample, suffix_len);
 
@@ -367,7 +367,7 @@ static void sam_piz_deep_add_qname (VBlockSAMP vb)
     int prfx_len=0; 
     if (z_file->qname_huf) // case: master_qname is initialized
         for (; prfx_len < qname_len; prfx_len++)
-            if (qname[prfx_len] != z_file->master_qname[prfx_len]) break;
+            if (qname[prfx_len] != segconf.master_qname[prfx_len]) break;
     
     rom suffix = qname + prfx_len;
     int suffix_len = qname_len - prfx_len;
@@ -384,7 +384,7 @@ static void sam_piz_deep_add_qname (VBlockSAMP vb)
         // compress suffix XOR master_qname
         uint8_t uncomp[suffix_len];
         for (int i=0; i < suffix_len; i++)
-            uncomp[i] = suffix[i] ^ z_file->master_qname[prfx_len + i];
+            uncomp[i] = suffix[i] ^ segconf.master_qname[prfx_len + i];
 
         uint32_t comp_len = huffman_comp_len_required_allocation(suffix_len);
         uint8_t comp[comp_len];

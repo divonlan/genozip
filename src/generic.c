@@ -152,13 +152,11 @@ StrTextLong generic_get_magic (void)
 {
     StrTextLong s = {};
     s.s[0] = '"';
-    str_to_printable (magic, strlen(magic), &s.s[1]);
+    int len = 1 + str_to_printable (magic, strlen(magic), &s.s[1]);
+    s.s[len++] = '"';
+    s.s[len++] = ' ';
 
-    int len = strlen(s.s);
-    s.s[len] = '"';
-    s.s[len+1] = ' ';
-
-    str_to_hex ((bytes)magic, strlen(magic), &s.s[len+2], true);
+    str_to_hex ((bytes)magic, strlen(magic), &s.s[len], true);
 
     return s;
 }

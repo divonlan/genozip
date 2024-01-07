@@ -11,17 +11,17 @@
 
 static inline ContextP id_fallback_ctx (VBlockP vb, ContextP ctx)
 {
-    return ctx_get_ctx (vb, sub_dict_id_(ctx->dict_id, '0'));
+    return ctx_get_ctx (vb, sub_dict_id (ctx->dict_id, '0'));
 }
 
 static inline ContextP id_num1_ctx (VBlockP vb, ContextP ctx)
 {
-    return ctx_get_ctx (vb, sub_dict_id_(ctx->dict_id, '1'));
+    return ctx_get_ctx (vb, sub_dict_id (ctx->dict_id, '1'));
 }
 
 static inline ContextP id_num2_ctx (VBlockP vb, ContextP ctx)
 {
-    return ctx_get_ctx (vb, sub_dict_id_(ctx->dict_id, '2'));
+    return ctx_get_ctx (vb, sub_dict_id (ctx->dict_id, '2'));
 }
 
 static void seg_id_add_to_unknown (ContextP ctx, STRp(id))

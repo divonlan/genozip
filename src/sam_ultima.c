@@ -334,7 +334,7 @@ void sam_ultima_update_t0_len (VBlockP vb, uint32_t line_i, uint32_t new_len)
     DATA_LINE(line_i)->t0.len = new_len; 
 }
 
-// MI:Z - QNAME format: if its non-duplicate - same as QNAME. If its duplicate - equals to MI
+// MI:Z - QNAME format: if its non-duplicate - same as QNAME. If its duplicate - MI equals 
 // to the QNAME of the corresponding non-duplicate.
 void sam_seg_ultima_MI (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(mi), unsigned add_bytes)    
 {

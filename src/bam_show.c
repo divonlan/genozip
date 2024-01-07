@@ -77,8 +77,7 @@ rom bam_show_line (VBlockSAMP vb, rom alignment, uint32_t remaining_txt_len)
     iprintf ("pnext=%u ", 1+NEXT_UINT32);
     iprintf ("tlen=%u ", NEXT_UINT32);
 
-    char printable_qname[1024];
-    iprintf ("qname=\"%s\" cigar=\"", str_to_printable (next_field, MIN_(l_read_name-1,512), printable_qname)); // restrict to 512 in case l_read_name is corrupted
+    iprintf ("qname=\"%s\" cigar=\"", str_to_printable_(next_field, MIN_(l_read_name-1,512)).s); // restrict to 512 in case l_read_name is corrupted
     next_field += l_read_name; // note: l_read_name includes \0
 
     for (int i=0; i < n_cigar_op; i++) {
@@ -140,8 +139,7 @@ rom bam_assseg_line (VBlockP vb)
         bufprintf (vb, &show_buf, "pnext=%u ", 1+NEXT_UINT32);
         bufprintf (vb, &show_buf, "tlen=%u ", NEXT_UINT32);
 
-        char printable_qname[1024];
-        bufprintf (vb, &show_buf, "qname=\"%s\" cigar=\"", str_to_printable (next_field, MIN_(l_read_name-1,512), printable_qname)); // restrict to 512 in case l_read_name is corrupted
+        bufprintf (vb, &show_buf, "qname=\"%s\" cigar=\"", str_to_printable_(next_field, MIN_(l_read_name-1,512)).s); // restrict to 512 in case l_read_name is corrupted
         next_field += l_read_name; // note: l_read_name includes \0
 
         for (int i=0; i < n_cigar_op; i++) {

@@ -3,6 +3,11 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+15.0.36 7/1/2023
+- BAM: Better compression of files with NanoSeq tags
+- VCF: Better compression of polyploid (ploidy > 2) data
+- bug fixes
+
 15.0.35 30/12/2023
 - improvement in compression speed of very large files on systems with > 100 cores due to improved core scalability
 - PacBio BAM: improved compression of subreads BAMs and unaligned CCS BAMs in some cases, particularly when using --best

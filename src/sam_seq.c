@@ -1468,9 +1468,8 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_SEQ)
         // check for invalid characters - issue warning (only once per execution), and make then into an 'N'
         for (unsigned b=0; b < 2; b++)
             if (!base[b] && !(b==1 && (i+1)*2 > l_seq)) {
-                char printable[MIN_(1000,l_seq)+1]; // +1 for \0
                 WARN_ONCE ("Warning: when converting SAM sequence data to BAM (QNAME=%.*s): invalid character encountered, it will be converted as 'N': '%c' (ASCII %u) (this warning will appear only once). SEQ(first 1000 bases)=\"%s\" seq_i=%u", 
-                           vb->last_txt_len(SAM_QNAME), last_txt (vb, SAM_QNAME), base[b], base[b], str_to_printable (recon, MIN_(1000,l_seq), printable), i*2+b);
+                           vb->last_txt_len(SAM_QNAME), last_txt (vb, SAM_QNAME), base[b], base[b], str_to_printable_(recon, MIN_(1000,l_seq)).s, i*2+b);
                 base[b] = 0x0f;
             }
 

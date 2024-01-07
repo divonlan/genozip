@@ -32,6 +32,11 @@
 #include "reference.h"
 #include "contigs.h"
 
+#define SHORT_HEADER "NAME                   GENOZIP      %       TXT      %   RATIO\n"
+
+#define LONG_HEADER "did_i Name              Parent            #Words  Snips-(% of #Words)     Hash-table   uncomp      comp      comp    uncomp      comp      comp       txt    comp   % of   % of\n" \
+                    "                                         in file   Dict  Local FailSton   Size Occp      dict      dict      b250     local     local     TOTAL             ratio    txt    zip\n"
+
 static Buffer stats={}, STATS={};
 Buffer sbl_buf={}, features={}, exceptions={}, internals={};
 Buffer stats_programs = {}; // data-type specific programs (eg @PG for SAM/BAM FORMAT/INFO tags for VCF)
@@ -109,12 +114,31 @@ static void stats_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
     // if Deep with QNONE, we send the first QNAME of the SAM file and the first read name of the FASTQ
     if (flag.deep && segconf.deep_qtype == QNONE) {
         bufprintf (evb, &exceptions, "%sQNONE_REASON%%2C%%2C%%2C", need_sep++ ? "%3B" : "");
-        bufprintf (evb, &exceptions, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.deep_1st_qname, strlen(segconf.deep_1st_qname), ',', -127)).s); 
+        bufprintf (evb, &exceptions, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.master_qname, strlen(segconf.master_qname), ',', -127)).s); 
         bufprintf (evb, &exceptions, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.deep_1st_desc,  strlen(segconf.deep_1st_desc),  ',', -127)).s); 
     }
 
     if (segconf.sam_malformed_XA[0]) 
         bufprintf (evb, &exceptions, "%sBAD_XA%%2C%s", (need_sep++ ? "%3B" : ""), url_esc_non_valid_charsS (str_replace_letter (segconf.sam_malformed_XA, strlen(segconf.sam_malformed_XA),  ',', -127)).s); 
+}
+
+// substitute ; and , with their UTF-8 equivalents
+static StrText stats_subs_seps_in_name (rom name)
+{
+    ASSERT0 (sizeof (StrText) > MAX_TAG_LEN - 10, "bad string size");
+
+    StrText s = {};
+    char *next = s.s;
+
+    while (*name) {
+        if (*name == ',')      { strcpy (next, "⸲"); next += strlen ("⸲"); } // Unicode "Turned Comma"
+        else if (*name == ';') { strcpy (next, "；"); next += strlen ("；"); } // Unicode "Full-width" semicolon
+        else *next++ = *name;
+
+        name++;
+    }
+
+    return s;
 }
 
 // stats of contexts and sections contribution to Z
@@ -127,7 +151,7 @@ static void stats_prepare_internals (StatsByLine *sbl, unsigned num_stats, uint6
     for (StatsByLine *after=sbl + num_stats; sbl < after; sbl++) 
         if (sbl->z_size) {
             bufprintf (evb, &internals, "%s%s%%2C%s%%2C%.1f%%25%%2C", 
-                       need_sep++ ? "%3B" : "", url_esc_non_valid_charsS(sbl->name).s, url_esc_non_valid_charsS(sbl->type).s, sbl->pc_of_z);
+                       need_sep++ ? "%3B" : "", url_esc_non_valid_charsS (stats_subs_seps_in_name (sbl->name).s).s, url_esc_non_valid_charsS(sbl->type).s, sbl->pc_of_z);
 
             if (sbl->my_did_i != DID_NONE) {
                 ContextP zctx = ZCTX(sbl->my_did_i);
@@ -300,9 +324,8 @@ static void stats_output_file_metadata (void)
             else
                 REPORT_VBs;
 
-            bufprintf (evb, &features, "hdr_ncontigs=%u;", sam_num_header_contigs());
-            if (IS_REF_LOADED_ZIP) bufprintf (evb, &features, "ref_ncontigs=%u;", ref_get_ctgs (gref)->contigs.len32);
-            bufprintf (evb, &features, "ref_nbases=%"PRIu64";", contigs_get_nbases (IS_REF_INTERNAL ? sam_hdr_contigs : ref_get_ctgs (gref)));
+            if (sam_num_header_contigs()) bufprintf (evb, &features, "hdr_contigs=%u (%"PRIu64");", sam_num_header_contigs(), contigs_get_nbases (sam_hdr_contigs));
+            if (IS_REF_LOADED_ZIP) bufprintf (evb, &features, "ref_contigs=%u (%"PRIu64");", ref_get_ctgs (gref)->contigs.len32, contigs_get_nbases (ref_get_ctgs (gref)));
             if (flag.deep) bufprintf (evb, &features, "deep=%.1f%%;", deep_pc);
             if (flag.deep && segconf.sam_cropped_at) bufprintf (evb, &features, "deep_crop=%ubp;", segconf.sam_cropped_at);
             if (flag.deep) bufprintf (evb, &features, "deep_qtype=%s;", qtype_name (segconf.deep_qtype));
@@ -379,8 +402,11 @@ static void stats_output_file_metadata (void)
         case DT_BCF:
             bufprintf (evb, &stats, "Samples: %u   ", vcf_header_get_num_samples()); //  no newline
             bufprintf (evb, &features, "num_samples=%u;", vcf_header_get_num_samples());
-            if (IS_REF_LOADED_ZIP) bufprintf (evb, &features, "ref_ncontigs=%u;", ref_get_ctgs (gref)->contigs.len32);
-            if (IS_REF_LOADED_ZIP) bufprintf (evb, &features, "ref_nbases=%"PRIu64";", contigs_get_nbases (ref_get_ctgs (gref)));
+            if (vcf_header_get_num_contigs()) bufprintf (evb, &features, "hdr_contigs=%u (%"PRIu64");", vcf_header_get_num_contigs(), vcf_header_get_nbases());
+            if (IS_REF_LOADED_ZIP) bufprintf (evb, &features, "ref_contigs=%u (%"PRIu64");", ref_get_ctgs (gref)->contigs.len32, contigs_get_nbases (ref_get_ctgs (gref)));
+
+            if (z_file->max_ploidy != 2) 
+                bufprintf (evb, &features, "ploidy=%u;", z_file->max_ploidy);
 
             if (z_is_dvcf)
                 bufprintf (evb, &stats, "%ss: %s (Prim-only: %s Luft-only: %s)  Contexts: %u   Vblocks: %u x %u MB  Sections: %u\n", 
@@ -466,8 +492,7 @@ static void stats_output_file_metadata (void)
             
         case DT_REF: 
             bufprintf (evb, &stats, "%s of genome (in-memory): %s\n", digest_name(), digest_display (z_file->digest).s); 
-            FEATURE (true, "Contigs: %u", "num_contigs=%u", ref_contigs_get_num_contigs(gref));
-            FEATURE (true, "Bases: %"PRIu64, "num_bases=%"PRIu64, ref_contigs_get_genome_nbases(gref));
+            FEATURE (true, "Contigs: %u (%"PRIu64")", "ref_contigs=%u (%"PRIu64")", ref_contigs_get_num_contigs(gref), ref_contigs_get_genome_nbases(gref));
             break;
 
         case DT_GENERIC:
@@ -586,11 +611,11 @@ static void stats_output_stats (StatsByLine *s, unsigned num_stats, float src_co
                                 int64_t all_txt_len, int64_t all_txt_len_0, int64_t all_z_size, float all_pc_of_txt, float all_pc_of_z, float all_comp_ratio)
 {
     bufprintf (evb, &stats, "\nSections (sorted by %% of genozip file):%s\n", "");
-    bufprintf (evb, &stats, "NAME                   GENOZIP      %%       TXT      %%   RATIO\n%s", "");
+    bufprintf (evb, &stats, "%s", SHORT_HEADER);
 
     // if -W or -w appear multiple times, we print the stats header to stderr to allow use with "| grep"
     if (flag.show_stats == STATS_SHORT_GREP) { 
-        fprintf (stderr, "NAME                   GENOZIP      %%       TXT      %%   RATIO\n%s", "");
+        fprintf (stderr, "%s", SHORT_HEADER);
         fflush (stderr);
     }
 
@@ -643,15 +668,12 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
         bufprintf (evb, &STATS, "\nSections (sorted by %% of genozip file):%s\n", "");
     }
 
-    bufprint0 (evb, &STATS, "did_i Name              Parent            #Words  Snips-(% of #Words)     Hash-table   uncomp      comp      comp    uncomp      comp      comp       txt    comp   % of   % of\n");
-    bufprint0 (evb, &STATS, "                                         in file   Dict  Local FailSton   Size Occp      dict      dict      b250     local     local     TOTAL             ratio    txt    zip\n");
+    bufprintf (evb, &STATS, "%s", LONG_HEADER);
     // note: bufprint0 requires % to display a %, while fprintf requires %%.
     
     // if -W or -w appear multiple times, we print the stats header to stderr to allow use with "| grep"
-    if (flag.show_stats == STATS_LONG_GREP) {
-        fprintf (stderr,    "did_i Name              Parent            #Words  Snips-(%% of #Words)     Hash-table   uncomp      comp      comp    uncomp      comp      comp       txt    comp   %% of   %% of\n");
-        fprintf (stderr,    "                                         in file   Dict  Local FailSton   Size Occp      dict      dict      b250     local     local     TOTAL             ratio    txt    zip\n");
-    }
+    if (flag.show_stats == STATS_LONG_GREP) 
+        fprintf (stderr, "%s", LONG_HEADER);
 
     for (uint32_t i=0; i < num_stats; i++, s++)
         if (s->z_size)
@@ -893,12 +915,10 @@ void stats_read_and_display (void)
 
     // if -W or -w appear multiple times, we print the stats header to stderr to allow use with "| grep"
     if (flag.show_stats == STATS_SHORT_GREP) 
-        fprintf (stderr, "NAME                   GENOZIP      %%       TXT      %%   RATIO\n%s", "");
+        fprintf (stderr, "%s", SHORT_HEADER);
 
-    else if (flag.show_stats == STATS_LONG_GREP) {
-        fprintf (stderr, "did_i Name              Parent            #Words  Snips-(%% of #Words)    Hash-table    uncomp      comp      comp      comp      comp       txt    comp   %% of   %% of\n");
-        fprintf (stderr, "                                         in file   Dict  Local FailSton   Size Occp      dict      dict      b250     local     TOTAL             ratio    txt    zip\n");
-    }
+    else if (flag.show_stats == STATS_LONG_GREP) 
+        fprintf (stderr, "%s", LONG_HEADER);
 
     // read and uncompress the requested stats section
     zfile_get_global_section (SectionHeader, sec - (ABS(flag.show_stats)==1),

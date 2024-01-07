@@ -1696,9 +1696,8 @@ static void ctx_show_counts (ContextP zctx)
 
     if (total)
         for (uint32_t i=0; i < counts_len; i++) {            
-            iprint0 ("\"");
             dict_io_print (info_stream, counts[i].snip, strlen(counts[i].snip), false, true, false, false);
-            iprintf ("\"(%d)\t%"PRIu64"\t%-4.2f%%\n", counts[i].word_index, counts[i].count, 
+            iprintf ("(%d)\t%"PRIu64"\t%-4.2f%%\n", counts[i].word_index, counts[i].count, 
                      100 * (float)counts[i].count / (float)total);
         }
         

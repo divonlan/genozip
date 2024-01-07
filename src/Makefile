@@ -79,7 +79,7 @@ SCRIPTS  = $(DEV_DIR)/private/scripts
 UTILS    = $(DEV_DIR)/private/utils
 RELEASES = $(DEV_DIR)/private/releases
 DATA     = $(DEV_DIR)/data
-PROD_SRC = ../../genozip-prod/src
+LATEST_SRC = ../../genozip-latest/src
 
 SRC_DIRS = secure zlib bzlib lzma bsc libdeflate htscodecs
 
@@ -91,7 +91,7 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.
 		  vcf_format_GT.c vcf_format_PS_PID.c vcf_info_QD.c vcf_info_SF.c vcf_dbsnp.c vcf_giab.c vcf_vep.c      \
 		  vcf_refalt.c vcf_tags.c vcf_linesort.c vcf_format.c vcf_illum_gtyping.c vcf_gwas.c vcf_vagrent.c		\
 		  vcf_icgc.c vcf_snpeff.c vcf_cosmic.c vcf_mastermind.c vcf_isaac.c	vcf_manta.c vcf_pos.c vcf_ultima.c	\
-		  vcf_platypus.c																						\
+		  vcf_platypus.c vcf_ac_af_an.c																			\
 		  sam_seg.c sam_piz.c sam_shared.c sam_header.c sam_md.c sam_nm.c sam_tlen.c sam_cigar.c sam_fields.c  	\
 		  sam_sa.c bam_seg.c bam_seq.c bam_show.c sam_pacbio.c sam_ultima.c sam_xcons.c cram.c agilent.c   		\
 		  sam_seq.c sam_qual.c sam_sag_zip.c sam_sag_piz.c sam_sag_load.c sam_sag_ingest.c sam_sag_scan.c    	\
@@ -385,10 +385,10 @@ clean-dev: clean-installers clean-test # use only in dev - deletes license.o
 		objdir.linux objdir.windows objdir.mac \
 		push-build increment-version $(INSTALLERS)/LICENSE.html refresh_arch_o genozip-linux-x86_64/clean 
 
-# builds prod for local OS
-genozip-prod$(EXE): 
-	@echo "building prod"
-	@(cd $(PROD_SRC); rm -Rf $(OBJDIR) ; git reset --hard ; git pull ; $(MAKE) clean ; touch dict_id_gen.h ; $(MAKE))
+# builds latest for local OS
+genozip-latest$(EXE): 
+	@echo "building latest"
+	@(cd $(LATEST_SRC); rm -Rf $(OBJDIR) ; git reset --hard ; git pull ; $(MAKE) clean ; touch dict_id_gen.h ; $(MAKE))
 
 # currently, I build for conda from my Windows machine so I don't bother supporting other platforms
 ifdef Windows
@@ -396,6 +396,9 @@ ifdef Windows
 # When running on Windows, builds prod for Linux
 genozip-prod:
 	@run-on-wsl.sh make genozip-prod  # make -j doesn't work well on WSL - filesystem clock issues
+
+genozip-latest:
+	@run-on-wsl.sh make genozip-latest  # make -j doesn't work well on WSL - filesystem clock issues
 
 # increments minor version, eg. 1.0.1 -> 1.0.2. 
 # To increment a major version, manually edit version.h and set minor version to -1 e.g. 1.1.-1 (careful! no newlines or spaces)
@@ -512,22 +515,9 @@ push-build:
 	@(git commit -m $(version) ; exit 0) > /dev/null
 	@git push > /dev/null
 
-distribution:             clean-distribution increment-version testfiles ../LICENSE.txt $(INSTALLERS)/LICENSE.html \
-						  $(INSTALLERS)/genozip-linux-x86_64.tar.build $(INSTALLERS)/genozip-installer.exe objdir.mac/secure/license.o \
-                          push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
-	@(printf "\nClick Enter after committing the feedstock conflict resolution: <Click>")
-	@(read x)
-	@(cd $(CONDA_FEEDSTOCK) ; git pull)
-	@echo "  Next:"
-	@echo "  (1) Wait for all 4 tests to pass (~8 minutes)"
-	@echo "  (2) Click 'Merge pull request' and the 'Confirm merge' (DONT CLICK 'Delete branch')"
-	@echo "  (3) Open: https://github.com/divonlan/genozip/releases/new"
-	@echo "  (4) Set 'Tag version' and 'Release title' are both: genozip-$(version)"
-	@echo "  (5) Copy the notes for the version from RELEASE NOTES -> Publish release"
-
 distribution-maintenance: clean-distribution increment-version testfiles ../LICENSE.txt $(INSTALLERS)/LICENSE.html \
                           $(INSTALLERS)/genozip-linux-x86_64.tar.build $(INSTALLERS)/genozip-installer.exe objdir.mac/secure/license.o \
-                          push-build conda/.conda-timestamp 
+                          push-build conda/.conda-timestamp genozip-latest genozip-latest.exe
 	@(printf "\nClick Enter after committing the feedstock conflict resolution: <Click>")
 	@(read x)
 	@(cd $(CONDA_FEEDSTOCK) ; git pull)

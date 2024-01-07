@@ -29,6 +29,8 @@ COMPRESS(codec_normq_compress)
     // case: this is our second entry, after soft-failing. Just continue from where we stopped
     if (!soft_fail) goto do_compress;
 
+    __atomic_add_fetch (&z_file->normq_lines[vb->comp_i], vb->lines.len, __ATOMIC_RELAXED);
+
     buf_alloc_exact (vb, *qual_buf, qual_buf->len,  char, CTX_TAG_LOCAL); 
     
     uint32_t next = 0;

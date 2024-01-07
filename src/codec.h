@@ -152,6 +152,7 @@ extern void codec_hapmat_piz_calculate_columns (VBlockP vb);
 
 // DOMQ stuff
 extern bool codec_domq_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB callback);
+extern void codec_qual_show_stats (void);
 
 // HOMP stuff
 extern bool codec_homp_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB callback);

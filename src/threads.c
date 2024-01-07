@@ -212,7 +212,7 @@ void threads_print_call_stack (void)
 
     fflush (stderr);
 
-    mutex_lock (print_call_stack_mutex);
+    mutex_unlock (print_call_stack_mutex);
 }
 
 // signal handler of SIGINT (CTRL-C) - debug only 
@@ -221,7 +221,7 @@ static void noreturn threads_sigint_handler (int signum)
     fprintf (stderr, "\n%s process %u Received SIGINT (usually caused by Ctrl-C):", global_cmd, getpid()); 
 
     threads_print_call_stack(); // this works ok on mac, but seems to not print function names on Linux
-    
+
     // look for deadlocks
     if (!flag.show_time) fprintf (stderr, "Tip: use --show-time to see locked mutexes with Ctrl-C\n");
 
@@ -235,7 +235,7 @@ static void noreturn threads_sigint_handler (int signum)
     fflush (stdout);
     fflush (stderr);
 
-    exit (128 + SIGTERM); 
+    exit (128 + SIGINT); 
 }
 
 // signal handler of SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGSYS

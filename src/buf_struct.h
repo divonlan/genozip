@@ -101,12 +101,12 @@ extern void buf_alloc_do (VBlockP vb, BufferP buf, uint64_t requested_size, floa
 
 static inline void buf_alloc_quick (BufferP buf, uint64_t req_size, rom name, FUNCLINE)
 {
-    if (req_size && !(buf->data)) {
-        buf->func      = (func); 
-        buf->code_line = (code_line); 
+    if (!buf->data && req_size) {
+        buf->func      = func; 
+        buf->code_line = code_line; 
         buf->data      = buf->memory + sizeof (uint64_t); 
-        if (name) buf->name = (name); 
-        else ASSERT (buf->name, "%s:%u: no name", (func), (code_line)); 
+        if (name) buf->name = name; 
+        else ASSERT (buf->name, "%s:%u: no name", func, code_line); 
     }
 }
 

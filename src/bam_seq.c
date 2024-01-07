@@ -39,9 +39,8 @@ void sam_seq_to_bam (STRp (seq_sam), BufferP seq_bam_buf)
         // check for invalid characters 
         for (unsigned b=0; b < 2; b++)
             if (!base[b] && !(b==1 && (i+1)*2 > seq_sam_len)) {
-                char printable[MIN_(1000,seq_sam_len)+1]; // +1 for \0
                 ASSINP (false, "Invalid base: invalid character encountered in sequence: '%c' (ASCII %u). position %u SEQ(first 1000 bases)=\"%s\"", 
-                        base[b], base[b], i*2+b, str_to_printable (seq_sam, MIN_(1000,seq_sam_len), printable));
+                        base[b], base[b], i*2+b, str_to_printable_(seq_sam, MIN_(1000,seq_sam_len)).s);
                 base[b] = 0x0f;
             }
 

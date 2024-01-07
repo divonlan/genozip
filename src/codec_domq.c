@@ -384,10 +384,16 @@ COMPRESS (codec_domq_compress)
     buf_alloc (vb, qdomruns_buf,         0, 1 + vb_qual_len / 10, char, 1, CTX_TAG_LOCAL);
     buf_alloc (vb, &qualmplx_ctx->local, 0, 1 + vb->lines.len,      char, 0, CTX_TAG_LOCAL);
     
-    if (qual_ctx->local.prm8[1]) // has_diverse
-        buf_alloc (vb, &divrqual_ctx->local, 0, 1 + vb_qual_len / 5, char, 1, CTX_TAG_LOCAL);
+    // calculate exact allocation for divrqual
+    if (qual_ctx->local.prm8[1]) {  // has_diverse
+        uint32_t total_diverse = 0;
+        for_buf (QualLine, ql, ql_buf) 
+            if (ql->is_diverse) total_diverse += ql->qual_len;
 
-    uint32_t runlen = 0;
+        buf_alloc (vb, &divrqual_ctx->local, 0, total_diverse, char, 1, CTX_TAG_LOCAL);
+    }
+        
+    uint32_t runlen=0, n_divr_lines=0;
     
     for_buf2 (QualLine, ql, line_i, ql_buf) {
 
@@ -396,12 +402,12 @@ COMPRESS (codec_domq_compress)
 
         // case: diverse read (note: criteria may be changed without impacting file format)
         if (ql->is_diverse) {
-            buf_alloc (vb, &divrqual_ctx->local, ql->qual_len, 0, char, 1.5, CTX_TAG_LOCAL); // larger alloc than buf_add_more
-
             memcpy (BAFTc(divrqual_ctx->local), ql->qual, ql->qual_len);
             divrqual_ctx->local.len32 += ql->qual_len;
 
             BNXT8 (qualmplx_ctx->local) = 255; 
+
+            n_divr_lines++;
         }
 
         // case: quality string dominated by one particular quality score
@@ -451,6 +457,9 @@ COMPRESS (codec_domq_compress)
         buf_copy (vb, qual_buf, non_dom_buf, char, 0, 0, CTX_TAG_LOCAL);
         buf_free (vb->scratch);
     }
+
+    __atomic_add_fetch (&z_file->divr_lines[vb->comp_i], (uint64_t)n_divr_lines, __ATOMIC_RELAXED);
+    __atomic_add_fetch (&z_file->domq_lines[vb->comp_i], (uint64_t)(vb->lines.len - n_divr_lines), __ATOMIC_RELAXED);
 
     qual_ctx->lcodec = CODEC_UNKNOWN;
     

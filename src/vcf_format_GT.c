@@ -99,7 +99,9 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
     // note - ploidy of this sample might be smaller than vb->ploidy (eg a male sample in an X chromosesome that was preceded by a female sample, or "." sample)
     Allele *ht_data = B(Allele, CTX(FORMAT_GT_HT)->local, vb->line_i * vb->ht_per_line + vb->ploidy * vb->sample_i);
 
-    int64_t dosage=0; // sum of allele values
+    // number of allele other than REF (i.e. ht >= 1)
+    // note: up to 15.0.35, dosage was -1 if any allele was not '0' or '1', or if ploidy exceeded 2
+    int64_t dosage=0; 
 
     for (unsigned ht_i=0; ht_i < gt.repeats; ht_i++) {
 
@@ -112,12 +114,8 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
         // single-digit allele numbers
         ht_data[ht_i] = ht;
 
-        // calculate dosage contribution of this ht (to be used in vcf_seg_FORMAT_mux_by_dosage)
-        // note: only set for ploidy=1 or 2, and only if GT has 0 or 1, so values are: 0/0->0 ; 0/1->1 ; 1/0->1 ; 1/1->2 ; other->-1
-        if (dosage >= 0 && gt.repeats <= 2 && (ht == '0' || ht == '1'))
-            dosage += ht - '0'; // dosage only works if alleles are 0 or 1
-        else
-            dosage = -1; // no dosage
+        // calculate dosage contribution of this ht (to be used in vcf_seg_get_mux_channel_i)
+        if (ht != '0' && ht != '.') dosage++; 
     
         if (!cell_len) break;
 
@@ -130,8 +128,6 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
             ASSVCF (!cell_len || !IS_DIGIT (*cell), "VCF file sample %u - genozip currently supports only alleles up to 99", vb->sample_i+1);
 
             ht_data[ht_i] = '0' + allele; // use ascii 48->147
-
-            dosage = -1; // no dosage (since allele is not 0 or 1)
         }
 
         // read and verify phase
@@ -198,11 +194,8 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
     if (CTX(INFO_SF)->use_special_sf == yes && ht_data[0] != '.') 
         vcf_seg_INFO_SF_one_sample (vb);
 
-    ctx_set_last_value (VB, ctx, dosage); // to be used in vcf_seg_FORMAT_mux_by_dosage, vcf_seg_FORMAT_DP
-    
-    if (segconf.running) 
-        segconf.count_dosage[dosage >= 0 && dosage <= 2]++;
-    
+    ctx_set_last_value (VB, ctx, dosage); // to be used in vcf_seg_get_mux_channel_i
+
     ASSVCF (!cell_len, "Invalid GT data in sample_i=%u", vb->sample_i+1);
     
     // shortcut if we have the same ploidy and phase as previous GT (saves re-genetrating base64 in container_seg)
@@ -223,15 +216,24 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
 // return dosage derived from GT - equivalent to dosage calculation in vcf_seg_FORMAT_GT
 int vcf_piz_GT_get_last_dosage (VBlockP vb)
 {
-    STRlast (gt, FORMAT_GT);
-
-    for (unsigned i=1; i < gt_len; i += 2)
-        if (gt[i] != '/' && gt[i] != '|') return -1; // we have an allele >= 10 - dosage is -1
-
+    STRlast(gt, FORMAT_GT);
     int dosage = 0;
-    for (unsigned i=0; i < gt_len; i += 2) {
-        if (gt[i] != '0' && gt[i] != '1') return -1; // dosage only defined if all allele are 0 or 1
-        dosage += (gt[i] - '0');
+
+    if (z_file->max_ploidy_for_mux)  // since 15.0.36
+        for (unsigned i=0; i < gt_len; i++) {
+            if (gt[i] == '/' || gt[i] == '|') continue;
+            if (gt[i] >= '1' && gt[i] <= '9') dosage++;
+            if (i < gt_len-1 && IS_DIGIT(gt[i+1])) i++;
+        }
+    
+    else { // up to 15.0.35
+        for (unsigned i=1; i < gt_len; i += 2)
+            if (gt[i] != '/' && gt[i] != '|') return -1; // we have an allele >= 10 - dosage is -1
+
+        for (unsigned i=0; i < gt_len; i += 2) {
+            if (gt[i] != '0' && gt[i] != '1') return -1; // dosage only defined if all allele are 0 or 1
+            dosage += (gt[i] - '0');
+        }
     }
 
     return dosage;

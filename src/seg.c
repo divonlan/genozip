@@ -301,7 +301,7 @@ void seg_prepare_array_dict_id_special_snip (int num_dict_ids, DictId *dict_ids,
 void seg_mux_display (MultiplexerP mux)
 {
     iprintf ("ctx=%s num_channels=%u snip_len=%u snip=%.100s", 
-             mux->ctx->tag_name, mux->num_channels, MUX_SNIP_LEN(mux), MUX_SNIP(mux));
+             mux->ctx->tag_name, mux->num_channels, mux->snip_len, MUX_SNIP(mux));
 
     for (unsigned i=0; i < MIN_(mux->num_channels, 1024); i++)
         iprintf ("[%u] dict_id=%s channel_ctx=%p\n", i, dis_dict_id (mux->dict_ids[i]).s, MUX_CHANNEL_CTX(mux)[i]);
@@ -333,8 +333,8 @@ void seg_mux_init (VBlockP vb, ContextP ctx, unsigned num_channels, uint8_t spec
     }
 
     // prepare snip - a string consisting of num_channels x { special_code or \t , base64(dict_id.id) }
-    MUX_SNIP_LEN(mux) = BASE64_DICT_ID_LEN * (unsigned)num_channels;   
-    seg_prepare_multi_dict_id_special_snip (special_code, num_channels, mux->dict_ids, MUX_SNIP(mux), &MUX_SNIP_LEN(mux));
+    mux->snip_len = BASE64_DICT_ID_LEN * (unsigned)num_channels;   
+    seg_prepare_multi_dict_id_special_snip (special_code, num_channels, mux->dict_ids, MUX_SNIP(mux), MUX_SNIP_LEN_P(mux));
 
     // seg_mux_display (mux);
 }
@@ -702,7 +702,7 @@ WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_
     // first use in this VB - prepare context where array elements will go in
     if (!container_ctx->con_cache.len32) {
         if (!arr_dict_id.num)        
-            arr_dict_id = sub_dict_id (container_ctx->dict_id, 1);
+            arr_dict_id = sub_dict_id (container_ctx->dict_id, '0');
         
         buf_alloc (vb, &container_ctx->con_cache, 0, 1, MiniContainer, 1, CTX_TAG_CON_CACHE);
 
@@ -806,7 +806,7 @@ void seg_array_by_callback (VBlockP vb, ContextP container_ctx, STRp(arr), char 
 
     // first use in this VB - prepare context where array elements will go in
     if (!container_ctx->con_cache.len32) {
-        DictId arr_dict_id = sub_dict_id (container_ctx->dict_id, 1);
+        DictId arr_dict_id = sub_dict_id (container_ctx->dict_id, '0');
         
         buf_alloc (vb, &container_ctx->con_cache, 0, 1, MiniContainer, 1, CTX_TAG_CON_CACHE);
 

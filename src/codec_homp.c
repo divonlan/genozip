@@ -98,6 +98,8 @@ COMPRESS (codec_homp_compress)
     LocalGetLineCB *seq_callback = (VB_DT(FASTQ) ? fastq_zip_seq : sam_zip_seq);
     void (*update_qual_len)(VBlockP, uint32_t, uint32_t) = (VB_DT(FASTQ) ? fastq_update_qual_len : sam_update_qual_len);
 
+    __atomic_add_fetch (&z_file->homp_lines[vb->comp_i], vb->lines.len, __ATOMIC_RELAXED);
+
     // first pass - condese qual scores of homopolymers by removing redundant scores
     for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {   
         STRw(qual);

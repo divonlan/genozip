@@ -1081,6 +1081,13 @@ void flags_update (unsigned num_files, rom *filenames)
     flag.zip_no_z_file = IS_ZIP && 
                          (flag.seg_only || flag.biopsy || flag.biopsy_line.line_i != NO_LINE || flag.show_segconf_has || flag.show_bam);
 
+    if (IS_ZIP) {
+        // flag.explicit_no_zriter = flag.no_zriter;
+        // flag.no_zriter |= global_max_threads==1 || 
+        //                   flag.pair || flag.deep; // bug 983
+        flag.no_zriter = true;
+    }
+
     // if genocat --sex, we only need the X,Y,1 chromosomes
     if (flag.show_sex && !flag.show_coverage && is_genocat) {
         flag.regions = 2;    // set, but not to 1, to avoid CONFLICT error
@@ -1338,7 +1345,7 @@ static void flags_piz_set_out_dt (void)
 static bool flags_has_reconstructor_filter (void)
 {
     return is_genocat && 
-        ((Z_DT(VCF)   && (flag.snps_only || flag.indels_only || z_is_dvcf)) || // vcf_lo_piz_TOPLEVEL_cb_filter_line will drop lines of the wrong coordinate
+        (((Z_DT(VCF) || Z_DT(BCF)) && (flag.snps_only || flag.indels_only || z_is_dvcf)) || // vcf_lo_piz_TOPLEVEL_cb_filter_line will drop lines of the wrong coordinate
          // FASTA specific line droppers
          (Z_DT(FASTA) && (flag.sequential || flag.header_only_fast || flag.header_one || flag.no_header)) || 
          // FASTQ specific line droppers
@@ -1544,7 +1551,7 @@ void flags_update_piz_one_z_file (int z_file_i /* -1 if unknown - called form fi
 
     flag.maybe_txt_header_modified = is_genocat && 
         (flag.no_header || flag.lines_first != NO_LINE || // options that may cause dropping of the txt header
-         (Z_DT(VCF) && (flag.header_one || flag.samples || flag.drop_genotypes || flag.luft || flag.single_coord))); // VCF specific options that modify the txt header
+         ((Z_DT(VCF) || Z_DT(BCF)) && (flag.header_one || flag.samples || flag.drop_genotypes || flag.luft || flag.single_coord))); // VCF specific options that modify the txt header
 
     flag.maybe_vb_dropped_by_writer = is_genocat && // dropped by piz_dispatch_one_vb
         (flag.lines_first != NO_LINE || // decided by writer_create_plan
@@ -1572,7 +1579,7 @@ void flags_update_piz_one_z_file (int z_file_i /* -1 if unknown - called form fi
          // lines may be dropped by reconstructor
          flag.maybe_lines_dropped_by_reconstructor || 
          // VCF specific VB modifiers
-         (Z_DT(VCF)   && (flag.samples || flag.drop_genotypes || flag.gt_only || flag.show_dvcf || flag.show_ostatus)) || 
+         ((Z_DT(VCF) || Z_DT(BCF)) && (flag.samples || flag.drop_genotypes || flag.gt_only || flag.show_dvcf || flag.show_ostatus)) || 
          // FASTA specific modifiers
          (Z_DT(FASTA) && (false)) || 
          // FASTQ specific modifiers
@@ -1582,7 +1589,7 @@ void flags_update_piz_one_z_file (int z_file_i /* -1 if unknown - called form fi
 
     // cases where Writer may re-order lines resulting in different ordering that within the VBs
     flag.maybe_lines_out_of_order = is_genocat && 
-        ((Z_DT(VCF)   && (z_is_dvcf || sections_get_comp_recon_plan_sec(0,0))) || // DVCF or genozip --sort
+        (((Z_DT(VCF) || Z_DT(BCF))  && (z_is_dvcf || sections_get_comp_recon_plan_sec(0,0))) || // DVCF or genozip --sort
          (Z_DT(FASTQ) && flag.pair && flag.interleaved) || 
          (Z_DT(SAM)   && (z_file->z_flags.has_gencomp || flag.interleaved)));
 
@@ -1601,7 +1608,7 @@ void flags_update_piz_one_z_file (int z_file_i /* -1 if unknown - called form fi
 
     // calculation depends on flag.data_modified
     bool pg_line_added_to_header = ((OUT_DT(SAM) || OUT_DT(BAM)) && !flag.reconstruct_as_src)
-                                || (OUT_DT(VCF) && (flag.data_modified || z_is_dvcf));
+                                || ((OUT_DT(VCF) || OUT_DT(BCF)) && (flag.data_modified || z_is_dvcf));
 
     if (pg_line_added_to_header && !flag.no_pg && is_genocat) 
         flag.maybe_txt_header_modified = flag.data_modified = true;
@@ -1673,10 +1680,10 @@ void flags_update_piz_one_z_file (int z_file_i /* -1 if unknown - called form fi
     ASSINP0 ((!OUT_DT(SAM) && !OUT_DT(BAM)) || Z_DT(SAM) || Z_DT(BAM),
              "--sam and --bam are only allowed for SAM, BAM or CRAM files");
 
-    ASSINP0 (!OUT_DT(VCF) || Z_DT(VCF) || Z_DT(ME23),
+    ASSINP0 (!OUT_DT(VCF) || Z_DT(VCF) || Z_DT(BCF) || Z_DT(ME23),
              "--vcf is only allowed for 23andMe files");
 
-    ASSINP0 (!OUT_DT(VCF) || !Z_DT(ME23) || flag.reference, 
+    ASSINP0 ((!OUT_DT(VCF) && !OUT_DT(BCF)) || !Z_DT(ME23) || flag.reference, 
             "--reference must be specified when translating 23andMe to VCF");
 
     ASSINP0 (!OUT_DT(PHYLIP) || Z_DT(PHYLIP) || Z_DT(FASTA),

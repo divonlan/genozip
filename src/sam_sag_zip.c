@@ -632,7 +632,6 @@ static void sam_sa_seg_depn_find_sagroup_SAtag (VBlockSAMP vb, ZipDataLineSAM *d
             sam_seg_depn_find_SA_aln (vb, g, n_my_alns, my_alns, &my_aln_i)      &&
             sam_seg_depn_is_subseq_of_prim (vb, (uint8_t*)textual_seq, dl->SEQ.len, (revcomp != g->revcomp), g, is_bam)) { // this will fail if SEQ has non-ACGT or if DEPN sequence invalidly does not match the PRIM sequence (observed in the wild)
 
-
             // found - seg into local
             BNXT (SAGroup, CTX(SAM_SAG)->local) = ZGRP_I(g);
             BNXT16 (CTX(SAM_SAALN)->local) = my_aln_i;

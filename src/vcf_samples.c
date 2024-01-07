@@ -29,7 +29,7 @@ static SmallContainer con_AD={}, con_ADALL={}, con_ADF={}, con_ADR={}, con_SAC={
 static char sb_snips[2][32], mb_snips[2][32], f2r1_snips[VCF_MAX_ARRAY_ITEMS][32], adr_snips[VCF_MAX_ARRAY_ITEMS][32], adf_snips[VCF_MAX_ARRAY_ITEMS][32], 
     rdf_snip[32], rdr_snip[32], adf_snip[32], adr_snip[32], ad_varscan_snip[32], ab_snip[48], gq_by_pl[50], gq_by_gp[50],
     sac_snips[VCF_MAX_ARRAY_ITEMS/2][32], PL_to_PLn_redirect_snip[30], PL_to_PLy_redirect_snip[30];
-STRl(af_snip,32);
+STRl(snip_copy_af,32);
 
 static unsigned sb_snip_lens[2], mb_snip_lens[2], f2r1_snip_lens[VCF_MAX_ARRAY_ITEMS], adr_snip_lens[VCF_MAX_ARRAY_ITEMS], adf_snip_lens[VCF_MAX_ARRAY_ITEMS], 
     sac_snip_lens[VCF_MAX_ARRAY_ITEMS/2], rdf_snip_len, rdr_snip_len, adf_snip_len, adr_snip_len, ad_varscan_snip_len,
@@ -93,7 +93,7 @@ void vcf_samples_zip_initialize (void)
     seg_prepare_minus_snip (VCF, _FORMAT_AD, _FORMAT_ADF, adr_snip);
     seg_prepare_minus_snip (VCF, _FORMAT_DP, _FORMAT_RD,  ad_varscan_snip);
         
-    seg_prepare_snip_other (SNIP_COPY, _INFO_AF, 0, 0, af_snip);
+    seg_prepare_snip_other (SNIP_COPY, _INFO_AF, 0, 0, snip_copy_af);
 
     ab_snip_len = sizeof(ab_snip);
     DictId ad_dict_ids[3] = { make_array_item_dict_id(_FORMAT_AD, 0), 
@@ -150,7 +150,7 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
         : PL_mux_by_DP_NO;
 
     // initialize dosage multiplexers
-    #define init_mux_by_dosage(name) seg_mux_init ((VBlockP)vb, CTX(FORMAT_##name), 4, VCF_SPECIAL_MUX_BY_DOSAGE, CTX(FORMAT_##name)->no_stons, (MultiplexerP)&vb->mux_##name)
+    #define init_mux_by_dosage(name) seg_mux_init ((VBlockP)vb, CTX(FORMAT_##name), ZIP_NUM_DOSAGES_FOR_MUX, VCF_SPECIAL_MUX_BY_DOSAGE, CTX(FORMAT_##name)->no_stons, (MultiplexerP)&vb->mux_##name)
     init_mux_by_dosage(PRI);
     init_mux_by_dosage(GL);
     init_mux_by_dosage(DS);
@@ -173,6 +173,8 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
 
     // flags to send to PIZ
     vb->flags.vcf.use_null_DP_method = segconf.use_null_DP_method;
+
+    #undef T
 }
 
 void vcf_samples_seg_finalize (VBlockVCFP vb)
@@ -195,8 +197,7 @@ static inline bool vcf_seg_sample_has_null_value (uint64_t dnum, ContextP *ctxs,
 // Multiplex by dosage
 // -------------------
 
-// returns: 0,1,2 correspond to 0/0 0/1 1/1, 3 means "no dosage" - multi-allelic or '.' or ploidy > 2
-// -1 means caller should not use her SPECIAL
+// returns: channel=dosage up to a maximum. -1 means caller should not use her SPECIAL
 int vcf_seg_get_mux_channel_i (VBlockVCFP vb, bool fail_if_dvcf_refalt_switch)
 {
     // fail if this is a DVCF ref<>alt switch, if caller requested so,
@@ -208,9 +209,9 @@ int vcf_seg_get_mux_channel_i (VBlockVCFP vb, bool fail_if_dvcf_refalt_switch)
     if (!ctx_encountered_in_line (VB, FORMAT_GT))
         return -1;
 
-    int64_t dosage = CTX(FORMAT_GT)->last_value.i; // dosage stored here by vcf_seg_FORMAT_GT
+    int64_t dosage = CTX(FORMAT_GT)->last_value.i; // dosage stored here by vcf_seg_FORMAT_GT 
      
-    return (dosage >= 0 && dosage <= 2) ? dosage : 3; // 3 happens if sample has ploidy > 2, or if one of the alleles is not 0 or 1
+    return MIN_(dosage, ZIP_MAX_PLOIDY_FOR_MUX);
 }
 
 // if cell is NULL, leaves it up to the caller to seg to the channel 
@@ -259,21 +260,28 @@ static void vcf_seg_FORMAT_mux_by_dosage_int (VBlockVCFP vb, ContextP ctx, int64
 }
 
 // mirroring seg, we accept monoploid or diploid genotypes, with alleles 0 and 1.
-// there return 0/0,0->0 ; 0/1,1/0,1->1 ; 1/1->2 ; others->3
+// there 
 int vcf_piz_get_mux_channel_i (VBlockP vb)
 {
-    STRlast (gt, FORMAT_GT);
+    // since 15.0.36 - count ht that are not '0' or '.'
+    if (z_file->max_ploidy_for_mux)  
+        return MIN_(vcf_piz_GT_get_last_dosage (vb), z_file->max_ploidy_for_mux);
+    
+    // up to 15.0.35 - return 0/0,0->0 ; 0/1,1/0,1->1 ; 1/1->2 ; others->3
+    else { 
+        STRlast (gt, FORMAT_GT);
 
-    if (gt_len == 3) { // diploid
-        if ((gt[0]!='0' && gt[0]!='1') || (gt[2]!='0' && gt[2]!='1')) return 3; 
-        return (int)gt[0] + (int)gt[2] - 2*'0';
+        if (gt_len == 3) { // diploid
+            if ((gt[0]!='0' && gt[0]!='1') || (gt[2]!='0' && gt[2]!='1')) return 3; 
+            return (int)gt[0] + (int)gt[2] - 2*'0';
+        }
+        else if (gt_len == 1) { // monoploid
+            if (gt[0]!='0' && gt[0]!='1') return 3; 
+            return (int)gt[0]- '0';
+        }
+        else
+            return 3;
     }
-    else if (gt_len == 1) { // monoploid
-        if (gt[0]!='0' && gt[0]!='1') return 3; 
-        return (int)gt[0]- '0';
-    }
-    else
-        return 3;
 }
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_DOSAGE)
@@ -290,15 +298,15 @@ static void vcf_seg_FORMAT_mux_by_dosagexDP (VBlockVCFP vb, ContextP ctx, STRp(c
     if (!ctx_encountered (VB, FORMAT_DP)) goto cannot_use_special; // no DP in the FORMAT of this line
 
     int64_t DP;
-    if (!str_get_int (STRlst (FORMAT_DP), &DP)) // In some files, DP may be '.'
+    if (!str_get_int (STRlst (FORMAT_DP), &DP)) // in some files, DP may be '.'
         DP=0;
 
     int channel_i = vcf_seg_get_mux_channel_i (vb, true); // we don't use the multiplexer if its a DVCF REF⇆ALT switch variant as GT changes
     if (channel_i == -1) goto cannot_use_special;
 
-    unsigned num_dps = mux->num_channels / 3;
+    unsigned num_dps = mux->num_channels / ZIP_NUM_DOSAGES_FOR_MUX;
     DP = MAX_(0, MIN_(DP, num_dps-1));
-    channel_i = (channel_i == 3) ? (num_dps * 3) : (DP*3 + channel_i);
+    channel_i = (DP * ZIP_NUM_DOSAGES_FOR_MUX + channel_i);
 
     ContextP channel_ctx = seg_mux_get_channel_ctx (VB, ctx->did_i, MUX, channel_i);
 
@@ -308,7 +316,7 @@ static void vcf_seg_FORMAT_mux_by_dosagexDP (VBlockVCFP vb, ContextP ctx, STRp(c
         seg_by_ctx (VB, STRa(cell), channel_ctx, cell_len);
 
     // note: this is not necessarily all-the-same - there could be unmuxed snips due to REF⇆ALT switch, and/or WORD_INDEX_MISSING 
-    seg_by_ctx (VB, MUX_SNIP(mux), MUX_SNIP_LEN(mux), ctx, 0);
+    seg_by_ctx (VB, MUX_SNIP(mux), mux->snip_len, ctx, 0);
     return;
 
 cannot_use_special:
@@ -317,15 +325,19 @@ cannot_use_special:
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_DOSAGExDP)
 {
+    bool new_method = (z_file->max_ploidy_for_mux > 0); // true iff version is 15.0.36 or newer
+    
     unsigned num_channels = ctx->ctx_cache.len32 ? ctx->ctx_cache.len32 : (1 + str_count_char (STRa(snip), '\t'));
-    unsigned num_dps = num_channels / 3;
+    unsigned num_dosages = new_method ? (z_file->max_ploidy_for_mux + 1) : 3;
+    unsigned num_dps = num_channels / num_dosages;
 
     rom DP_str;
     int64_t DP = reconstruct_peek (vb, CTX(FORMAT_DP), &DP_str, 0).i;
     DP = (*DP_str=='.') ? 0 : MAX_(0, MIN_(DP, num_dps-1));
 
     int channel_i = vcf_piz_get_mux_channel_i (vb); 
-    channel_i = (channel_i == 3) ? (num_dps * 3) : (DP*3 + channel_i);
+
+    channel_i = (channel_i == 3 && !new_method) ? (num_dps * 3) : (DP*num_dosages + channel_i);
 
     ContextP channel_ctx = MCTX (channel_i, snip, snip_len);
     ASSPIZ (channel_ctx, "Cannot find channel context of channel_i=%d of multiplexed context %s", channel_i, ctx->tag_name);
@@ -424,10 +436,13 @@ static WordIndex vcf_seg_FORMAT_A_R (VBlockVCFP vb, ContextP ctx, SmallContainer
     if (seg_item_cb)
         seg_item_cb (vb, ctx, con.nitems_lo, items, item_lens, item_ctxs, values);
 
-    // case: seg items as normal snips
+    // case: seg items here
     else 
         for (unsigned i=0; i < con.nitems_lo; i++) 
-            seg_by_ctx (VB, STRi(item, i), item_ctxs[i], item_lens[i]);
+            if (item_store_type == STORE_INT)
+                seg_integer_or_not (VB, item_ctxs[i], STRi(item, i), item_lens[i]);
+            else
+                seg_by_ctx (VB, STRi(item, i), item_ctxs[i], item_lens[i]);
 
     ctx->last_txt.len = con.nitems_lo; // seg only: for use by vcf_seg_*_items callbacks
     
@@ -483,7 +498,7 @@ static void vcf_seg_AD_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP
             
             else if (i==0 || i==1) {
                 if (!vb->mux_AD[i].num_channels) 
-                    seg_mux_init (VB, item_ctxs[i], 4, VCF_SPECIAL_MUX_BY_DOSAGE, false, (MultiplexerP)&vb->mux_AD[i]);
+                    seg_mux_init (VB, item_ctxs[i], ZIP_NUM_DOSAGES_FOR_MUX, VCF_SPECIAL_MUX_BY_DOSAGE, false, (MultiplexerP)&vb->mux_AD[i]);
 
                 vcf_seg_FORMAT_mux_by_dosage_int (vb, item_ctxs[i], values[i], &vb->mux_AD[i], item_lens[i]);
             }
@@ -731,8 +746,8 @@ static inline WordIndex vcf_seg_FORMAT_AF (VBlockVCFP vb, ContextP ctx, STRp(cel
     if (vcf_num_samples == 1 && // very little hope that INFO/AF is equal to FORMAT/AF if we have more than one sample
         !z_is_dvcf &&       // note: we can't use SNIP_COPY in dual coordinates, because when translating, it will translate the already-translated INFO/AF
         ctx_encountered_in_line (VB, INFO_AF) && 
-        str_issame (cell, CTX(INFO_AF)->last_snip))
-        return seg_by_ctx (VB, af_snip, af_snip_len, ctx, cell_len);
+        str_issame_(STRa(cell), STRlst(INFO_AF)))
+        return seg_by_ctx (VB, STRa(snip_copy_af), ctx, cell_len);
     else
         return vcf_seg_FORMAT_A_R (vb, ctx, con_AF, STRa(cell), STORE_NONE, NULL);
 }
@@ -883,7 +898,7 @@ static inline void vcf_seg_FORMAT_RGQ (VBlockVCFP vb, ContextP ctx, STRp(rgq), C
         seg_integer_or_not (VB, channel_ctx, STRa(rgq), rgq_len);
     }
 
-    seg_by_ctx (VB, MUX_SNIP(mux), MUX_SNIP_LEN(mux), ctx, (gt[0] == '.' ? rgq_len : 0));
+    seg_by_ctx (VB, MUX_SNIP(mux), mux->snip_len, ctx, (gt[0] == '.' ? rgq_len : 0));
     return;
 
 fallback:

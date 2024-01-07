@@ -1233,10 +1233,15 @@ batch_real_world_1_adler32() # $1 extra genozip argument
         local filter_zip=.zip
     fi
 
+    local filter_bcf=nothing
+    if [ ! -x "$(command -v bcftools)" ] ; then # bcftools unavailable
+        local filter_bcf=.bcf
+    fi
+
     # without reference
-    local files=( `cd $TESTDIR; ls -1 test.*vcf* test.*sam* test.*bam test.*fq* test.*fa* basic.phy*    \
+    local files=( `cd $TESTDIR; ls -1 test.*vcf* test.*bcf* test.*sam* test.*bam test.*fq* test.*fa* basic.phy*    \
                    test.*gvf* test.*gtf* test.*gff* test.*locs* test.*bed* test.*txt* test.*kraken* test.*.pbi  \
-                   | grep -v "$filter_xz" | grep -v "$filter_zip" \
+                   | grep -v "$filter_xz" | grep -v "$filter_zip" | grep -v "$filter_bcf" \
                    | grep -v headerless | grep -vF .genozip | grep -vF .md5 | grep -vF .bad `) 
 
     # test genozip and genounzip --test
@@ -1794,7 +1799,10 @@ batch_replace()
     verify_failure genounzip $?
     test_exists $f1.genozip
 
-    usleep 500000 # windows: without this, DeleteFile of genozip file sometimes fails as "file in use"
+    if [ -n "$is_windows" ]; then
+        sleep 1 # windows: without this, DeleteFile of genozip file sometimes fails as "file in use"
+    fi
+
     $genounzip -f $f1.genozip -^ || exit 1
     test_not_exists $f1.genozip
 
@@ -1949,8 +1957,8 @@ batch_gencomp_depn_methods() # note: use --debug-gencomp for detailed tracking
     $genozip -fB1 -@3 -t $TESTDIR/test.pacbio.clr.bam.gz --force-gencomp || exit 1
 
     # invoke OFFLOAD method
-    $genozip -fB1 -@3 -t --force-gencomp file://${path}${TESTDIR}/test.pacbio.clr.bam || exit 1
-    cat $TESTDIR/test.pacbio.clr.bam.gz | $genozip -i bam -fB1 -@3 -t - -o $output || exit 1
+    $genozip -fB1 -@3 -t --force-gencomp file://${path}${TESTDIR}/test.pacbio.clr.bam -fo $output || exit 1
+    cat $TESTDIR/test.pacbio.clr.bam.gz | $genozip -i bam -fB1 -@3 -t - -fo $output || exit 1
 
     # SAG by SA
     $genozip -fB1 -@3 -t $TESTDIR/special.sag-by-sa.sam --force-gencomp || exit 1

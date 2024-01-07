@@ -620,6 +620,10 @@
 #pragma GENDICT OPTION_XY_i=DTYPE_2=XY:i
 #pragma GENDICT OPTION_YY_i=DTYPE_2=YY:i
 
+// NanoSeq: https://github.com/cancerit/NanoSeq
+#pragma GENDICT OPTION_rb_Z=DTYPE_2=rb:Z     // read barcode
+#pragma GENDICT OPTION_mb_Z=DTYPE_2=mb:Z     // mate barcode
+
 // Genozip-generated tags
 #pragma GENDICT OPTION_tx_i=DTYPE_2=tx:i     // Genozip tag for taxonomy ID
 

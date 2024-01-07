@@ -411,7 +411,7 @@ static void zip_generate_transposed_local (VBlockP vb, ContextP ctx)
         ctx->local_param = true;
     }
     else {
-        ASSERT (Z_DT(VCF), "%s: cols=0 for ctx=%s", VB_NAME, ctx->tag_name);
+        ASSERT (VB_DT(VCF) || VB_DT(BCF), "%s: cols=0 for ctx=%s", VB_NAME, ctx->tag_name);
         cols = vcf_header_get_num_samples(); // not restricted to 255
     } 
 
@@ -717,6 +717,8 @@ static void zip_update_txt_counters (VBlockP vb)
 static void zip_write_global_area (void)
 {
     #define THREAD_DEBUG(x) threads_log_by_vb (evb, "main_thread:global_area", #x, 0);
+
+    codec_qual_show_stats();
 
     // if we're making a reference, we need the RA data to populate the reference section chrome/first/last_pos ahead of ref_compress_ref
     THREAD_DEBUG (finalize_random_access);

@@ -780,7 +780,7 @@ uint64_t buflist_get_memory_usage (void)
     return mem_usage;
 }
 
-#define MAX_MEMORY_STATS 100
+#define MAX_MEMORY_STATS 128
 static MemStats stats[MAX_MEMORY_STATS]; // must be pre-allocated, because buflist_show_memory is called when malloc fails, so it cannot malloc
 static unsigned num_stats=0, num_buffers=0;
 
@@ -790,9 +790,11 @@ static bool buflist_show_memory_add_buf (ConstBufferP buf, VBlockPoolType pool_t
 
     bool found = false;
     for (unsigned st_i=0; st_i < num_stats && !found; st_i++) 
-        if (!strcmp (stats[st_i].name, buf->name) && (!buf->shared || buf->vb == evb)) {
-            stats[st_i].buffers++;
-            stats[st_i].bytes += buf_mem_size (buf);
+        if (!strcmp (stats[st_i].name, buf->name)) {
+            if (!buf->shared || buf->vb == evb) { // for a shared buf, increment only in evb so we don't double-count
+                stats[st_i].buffers++;
+                stats[st_i].bytes += buf_mem_size (buf);
+            }
             found = true;
         }
 

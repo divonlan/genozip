@@ -20,5 +20,3 @@ extern void huffman_compress (HuffmanP h, bytes uncomp, uint32_t uncomp_len, uin
 extern int huffman_decompress (HuffmanP h, bytes comp, uint8_t *uncomp, uint32_t uncomp_len);
 
 static inline int huffman_comp_len_required_allocation (int uncomp_len) { return uncomp_len * 8; }
-
-// decompression

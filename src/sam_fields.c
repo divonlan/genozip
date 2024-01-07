@@ -330,8 +330,8 @@ void sam_MM_zip_initialize (void)
     segconf.MM_con = (SmallContainer){ 
         .nitems_lo = 2, 
         .repeats   = 1,
-        .items[0]  = { .dict_id = sub_dict_id_(_OPTION_MM_Z, '0'), .separator = "," },
-        .items[1]  = { .dict_id = sub_dict_id_(_OPTION_MM_Z, '1')                   } 
+        .items[0]  = { .dict_id = sub_dict_id (_OPTION_MM_Z, 'T'), .separator = "," }, // not '0' as it is used by seg_array_by_callback
+        .items[1]  = { .dict_id = sub_dict_id (_OPTION_MM_Z, 'N')                   } 
     };
 
     segconf.MM_con_snip_len = sizeof (segconf.MM_con_snip);
@@ -349,18 +349,16 @@ static bool sam_seg_MM_Z_item (VBlockP vb, ContextP ctx,
         
         rom arr = comma + 1;
         uint32_t arr_len = mm_item_len + mm_item - arr;
-        seg_array (vb, ctx_get_ctx(vb, segconf.MM_con.items[1].dict_id), ctx->st_did_i, arr, arr_len, ',', 0, false, true, DICT_ID_NONE, arr_len);
-        
-        seg_by_ctx (vb, STRa(segconf.MM_con_snip), ctx, 1); // account for comma
+        seg_array (vb, ctx_get_ctx (vb, segconf.MM_con.items[1].dict_id), ctx->st_did_i, STRa(arr), ',', 0, false, true, sub_dict_id (_OPTION_MM_Z, 'A'), arr_len);
     }
 
     // trivial but legal MM:Z field: "MM:Z:C+m?;"
     else {
         seg_by_dict_id (vb, mm_item, mm_item_len, segconf.MM_con.items[0].dict_id, mm_item_len);
         seg_by_dict_id (vb, NULL, 0,              segconf.MM_con.items[1].dict_id, 0); // Note: NULL rather than "" causes the preceding ',' separator to be deleted by container_reconstruct, allowing us to keep the container intact
-
-        seg_by_ctx (vb, STRa(segconf.MM_con_snip), ctx, 0); // no accounting for comma
     }
+
+    seg_by_ctx (vb, STRa(segconf.MM_con_snip), ctx, !!comma); // account for comma is there is one
 
     return true;
 }
@@ -946,10 +944,33 @@ void sam_seg_buddied_i_fields (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i,
         else 
             seg_integer (VB, channel_ctx, my_value, true, add_bytes);    
 
-        seg_by_ctx (VB, MUX_SNIP(mux), MUX_SNIP_LEN(mux), ctx, 0); // de-multiplexer
+        seg_by_ctx (VB, MUX_SNIP(mux), mux->snip_len, ctx, 0); // de-multiplexer
     }
     else
         seg_integer (VB, ctx, my_value, true, add_bytes);        
+}
+
+// seg Z field which is expected to be equal to a different field on mate (eg rb:Z <> mb:Z)
+static void sam_seg_cross_mated_Z_fields (VBlockSAMP vb, Did did_i, ZipDataLineSAM *dl, STRp(value), 
+                                          TxtWord *my_value, // to be set
+                                          const TxtWord *mate_value, // pointer to CURRENT LINE value of other field in dl
+                                          const Multiplexer2 *mux,
+                                          STRp(copy_snip),  
+                                          unsigned add_bytes)
+{
+    *my_value = TXTWORD (value);
+
+    ZipDataLineSAM *mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is -1
+
+    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, did_i, (MultiplexerP)mux, sam_has_mate);
+
+    if (sam_has_mate && str_issame_(STRtxtw(*(TxtWord *)((rom)mate_value - (rom)dl + (rom)mate_dl)), STRa(value)))
+        seg_by_ctx (VB, STRa(copy_snip), channel_ctx, add_bytes);
+
+    else
+        seg_by_ctx (VB, STRa(value), channel_ctx, add_bytes);
+
+    seg_by_did (VB, STRa(mux->snip), did_i, 0); // de-multiplexer
 }
 
 // E2 - SEQ data. Currently broken. To do: fix (bug 403)
@@ -1154,7 +1175,7 @@ static inline SmallContainerP sam_seg_array_multi_ctx_get_con (VBlockSAMP vb, Co
     ASSERT (store_type, "%s: Invalid type \"%c\" in array of %s", LN_NAME, type, con_ctx->tag_name);
 
     for (uint32_t i=0; i < n_items; i++) {
-        con->items[i+1] = (ContainerItem){ .dict_id    = sub_dict_id_(con_ctx->dict_id, '0'+i),
+        con->items[i+1] = (ContainerItem){ .dict_id    = sub_dict_id (con_ctx->dict_id, '0'+i),
                                            .separator  = { [0]=aux_sep_by_type[IS_BAM_ZIP][type], [1]=',' },
                                            .translator = aux_field_translator (type) }; // instructions on how to transform array items if reconstructing as BAM (array[0] is the subtype of the array)
         
@@ -1535,6 +1556,10 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
         case _OPTION_ZA_Z: COND (segconf.has_agent_trimmer, sam_seg_buddied_Z_fields (vb, dl, MATED_ZA, STRa(value), 0, add_bytes));
         case _OPTION_ZB_Z: COND (segconf.has_agent_trimmer, sam_seg_buddied_Z_fields (vb, dl, MATED_ZB, STRa(value), 0, add_bytes));
 
+        // NanoSeq
+        case _OPTION_rb_Z: COND (segconf.sam_is_nanoseq, sam_seg_cross_mated_Z_fields (vb, OPTION_rb_Z, dl, STRa(value), &dl->rb, &dl->mb, &vb->mux_rb, STRa(copy_mate_mb_snip), add_bytes));
+        case _OPTION_mb_Z: COND (segconf.sam_is_nanoseq, sam_seg_cross_mated_Z_fields (vb, OPTION_mb_Z, dl, STRa(value), &dl->mb, &dl->rb, &vb->mux_mb, STRa(copy_mate_rb_snip), add_bytes));
+        
         default: fallback:
             sam_seg_aux_field_fallback (VB, dl, dict_id, sam_type, array_subtype, STRa(value), numeric, add_bytes);
     }

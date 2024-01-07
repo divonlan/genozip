@@ -180,6 +180,7 @@ typedef struct {
     TxtWord t0;                    // Ultima - coordinates in txt_data
     int32_t nM;                    // STAR - used in paired-end STAR files
     };
+    TxtWord rb, mb;                // NanoSeq - coordinates in txt_data
     TxtWord CIGAR;                 // SAM: coordinates in txt_data (always); BAM: coordinates in vb->line_textual_cigars
     TxtWord SEQ;                   // coordinates in txt_data. Note: len is actual sequence length in bases (not bytes) determined from any or or of: CIGAR, SEQ, QUAL. If more than one contains the length, they must all agree
     TxtWord BQ;
@@ -268,7 +269,7 @@ typedef struct VBlockSAM {
     Multiplexer3 mux_POS, mux_MAPQ;// ZIP: DEMUX_BY_MATE_PRIM multiplexers
     Multiplexer2 mux_FLAG, mux_MQ, mux_MC, mux_ms, mux_AS, mux_YS, mux_nM, // ZIP: DEMUX_BY_MATE or DEMUX_BY_BUDDY multiplexers
                  mux_mated_z_fields[NUM_MATED_Z_TAGS], mux_ultima_c, mux_dragen_sd, mux_YY, mux_XO,
-                 mux_sn;
+                 mux_sn, mux_rb, mux_mb;
     Multiplexer3 mux_NH;           // ZIP: DEMUX_BY_BUDDY_MAP
     Multiplexer7 mux_tp;           // ZIP: ULTIMA_tp (number of channels matches TP_NUM_BINS)
 
@@ -776,6 +777,10 @@ extern void sam_seg_xcons_YY_i (VBlockSAMP vb, int64_t yy, unsigned add_bytes);
 extern void sam_seg_xcons_XC_i (VBlockSAMP vb, int64_t xc, unsigned add_bytes);
 extern void sam_seg_xcons_XO_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t xo, unsigned add_bytes);
 
+// NanoSeq stuff
+extern void sam_seg_rb (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(rb), unsigned add_bytes);
+extern void sam_seg_mb (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(mb), unsigned add_bytes);
+
 // -----------------------------------
 // SAG stuff
 // -----------------------------------
@@ -891,6 +896,8 @@ eSTRl(copy_mate_POS_snip);
 eSTRl(copy_mate_ms_snip);
 eSTRl(copy_mate_nM_snip);
 eSTRl(copy_buddy_NH_snip);
+eSTRl(copy_mate_rb_snip);
+eSTRl(copy_mate_mb_snip);
 eSTRl(redirect_to_CR_X_snip);
 eSTRl(redirect_to_GR_X_snip);
 eSTRl(redirect_to_GY_X_snip);

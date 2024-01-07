@@ -55,10 +55,7 @@ PizDisCoords piz_dis_coords (VBlockP vb)
     ctx_get_snip_by_word_index (chrom_ctx, chrom, chrom_str);
     if (strlen (chrom_str) > sizeof(out.s)-20) return out;
 
-    char printable_chrom[2*chrom_str_len+1];
-    str_to_printable (STRa(chrom_str), printable_chrom);
-
-    sprintf (out.s, " CHROM=\"%s\"(%d)", printable_chrom, chrom); // with leading space
+    sprintf (out.s, " CHROM=\"%.64s\"(%d)", str_to_printable_(STRa(chrom_str)).s, chrom); // with leading space
 
     if (DTF(pos) == DID_NONE || !ctx_has_value (vb, DTF(pos))) return out;
     
@@ -702,7 +699,7 @@ static uint64_t piz_target_progress (CompIType comp_i)
     if (comp_i == COMP_MAIN && Z_DT(SAM))      
         return 3 * sections_get_num_vbs_(SAM_COMP_MAIN, SAM_COMP_DEPN) + sections_get_num_vbs (SAM_COMP_PRIM); // VBs pre-processed
     
-    if (comp_i == COMP_MAIN && Z_DT(VCF)) 
+    if (comp_i == COMP_MAIN && (Z_DT(VCF) || Z_DT(BCF))) 
         return 3 * sections_get_num_vbs_(VCF_COMP_MAIN, VCF_COMP_LUFT_ONLY);
     
     if (Z_DT(FASTQ) && flag.interleaved) 

@@ -323,7 +323,7 @@ void segconf_calculate (void)
     // segment this VB
     ctx_clone (vb);
 
-    int32_t save_luft_reject_bytes = Z_DT(VCF) ? vcf_vb_get_reject_bytes (vb) : 0;
+    int32_t save_luft_reject_bytes = (Z_DT(VCF) || Z_DT(BCF)) ? vcf_vb_get_reject_bytes (vb) : 0;
 
     SAVE_FLAGS;
     flag.show_alleles = flag.show_digest = flag.show_codec = flag.show_hash = flag.show_reference = false;

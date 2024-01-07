@@ -59,6 +59,8 @@ STRl(copy_mate_POS_snip, 100);
 STRl(copy_mate_ms_snip, 30);
 STRl(copy_mate_nM_snip, 30);
 STRl(copy_buddy_NH_snip, 30);
+STRl(copy_mate_rb_snip, 30);
+STRl(copy_mate_mb_snip, 30);
 STRl(redirect_to_CR_X_snip, 30);
 STRl(redirect_to_GR_X_snip, 30);
 STRl(redirect_to_GY_X_snip, 30);
@@ -158,6 +160,8 @@ void sam_zip_initialize (void)
     seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_YS_i, copy_mate_YS_snip, '0' + BUDDY_MATE);
     seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_AS_i, copy_mate_AS_snip, '0' + BUDDY_MATE);
     seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_NH_i, copy_buddy_NH_snip, '0' + BUDDY_EITHER);
+    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_rb_Z, copy_mate_rb_snip, '0' + BUDDY_MATE);
+    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_mb_Z, copy_mate_mb_snip, '0' + BUDDY_MATE);
     seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY_CIGAR, _SAM_CIGAR, copy_mate_CIGAR_snip, '0' + BUDDY_MATE);
     seg_prepare_plus_snip (SAM, 3, ((DictId[]){ {_OPTION_XX_i}, {_OPTION_YY_i}, {_OPTION_XY_i} }), XC_snip);
 
@@ -472,6 +476,12 @@ void sam_seg_initialize (VBlockP vb_)
     if (MP(STAR) && segconf.is_paired && !IS_DEPN(vb)) {
         seg_mux_init (VB, CTX(OPTION_nM_i), 2, SAM_SPECIAL_DEMUX_BY_MATE, false, (MultiplexerP)&vb->mux_nM);
         ctx_set_store_per_line (VB, OPTION_AS_i, OPTION_nM_i, DID_EOL);
+    }
+
+    if (segconf.sam_is_nanoseq) {
+        ctx_set_store_per_line (VB, OPTION_rb_Z, OPTION_mb_Z, DID_EOL);
+        seg_mux_init (VB, CTX(OPTION_rb_Z), 2, SAM_SPECIAL_DEMUX_BY_MATE, false, (MultiplexerP)&vb->mux_rb);
+        seg_mux_init (VB, CTX(OPTION_mb_Z), 2, SAM_SPECIAL_DEMUX_BY_MATE, false, (MultiplexerP)&vb->mux_mb);
     }
 
     if (segconf.sam_ms_type == ms_BIOBAMBAM) {
@@ -814,6 +824,9 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
         segconf.sam_has_xcons = true;
         segconf.sam_has_BWA_XC_i = false;
     }
+    
+    if (segconf.has[OPTION_rb_Z] && segconf.has[OPTION_rb_Z] == segconf.has[OPTION_mb_Z])
+        segconf.sam_is_nanoseq = true;
 
     // if we have @HD-SO "coordinate" or "queryname", then we take that as definitive. Otherwise, we go by our segconf sampling.
     if (sam_hd_so == HD_SO_COORDINATE) {
@@ -1505,8 +1518,7 @@ static inline void sam_seg_QNAME_segconf (VBlockSAMP vb, ContextP ctx, STRp (qna
     if (vb->line_i == 0) {
         qname_segconf_discover_flavor (VB, QNAME1, STRa (qname));
 
-        if (flag.deep) 
-            memcpy (segconf.deep_1st_qname, qname, MIN_(qname_len, sizeof (segconf.deep_1st_qname)-1));
+        memcpy (segconf.master_qname, qname, MIN_(qname_len, sizeof (segconf.master_qname)-1));
     }
 }
 

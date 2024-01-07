@@ -62,18 +62,24 @@ const uint8_t acgt_encode_comp[256] =
 void codec_acgt_seg_initialize (VBlockP vb, Did nonref_did_i,
                                 bool has_x) // caller declares that sequences contain strictly only A,C,G,T (uppercase) - verified by caller
 {
-        ContextP nonref_ctx     = CTX(nonref_did_i);
-        nonref_ctx->lcodec      = CODEC_ACGT; // ACGT is better than LZMA and BSC
-        nonref_ctx->ltype       = LT_BLOB;
-        nonref_ctx->no_stons    = true;       // we're storing the sequencing in local, so we can't also have singletons
-        nonref_ctx->flags.acgt_no_x = !has_x;
+    ContextP nonref_ctx     = CTX(nonref_did_i);
+    nonref_ctx->lcodec      = CODEC_ACGT; // ACGT is better than LZMA and BSC for "random" sequences
+    nonref_ctx->ltype       = LT_BLOB;
+    nonref_ctx->no_stons    = true;       // we're storing the sequencing in local, so we can't also have singletons
+    nonref_ctx->flags.acgt_no_x = !has_x;
 
-        if (has_x) {
-            ContextP nonref_x_ctx   = nonref_ctx + 1;
-            nonref_x_ctx->ltype     = LT_UINT8;
-            nonref_x_ctx->local_dep = DEP_L1;     // NONREF_X.local is created with NONREF.local is compressed
-            nonref_x_ctx->lcodec    = CODEC_XCGT; // prevent codec_assign_best from assigning it a different codec
-        }
+    if (vb->vblock_i == 1)
+
+    if (has_x) {
+        ContextP nonref_x_ctx   = nonref_ctx + 1;
+        nonref_x_ctx->ltype     = LT_UINT8;
+        nonref_x_ctx->local_dep = DEP_L1;     // NONREF_X.local is created with NONREF.local is compressed
+        nonref_x_ctx->lcodec    = CODEC_XCGT; // prevent codec_assign_best from assigning it a different codec
+    }
+
+    // note: assuming that this function is called for all VBs if segconf says so
+    if (vb->vblock_i == 1) // do once to avoid unnecessary mutex locks
+        ctx_commit_codec_to_zf_ctx (vb, nonref_ctx, true, false);
 }
 
 // packing of an array A,C,G,T characters into a 2-bit Bits, stored in vb->scratch. 

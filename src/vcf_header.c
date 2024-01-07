@@ -26,6 +26,8 @@
 // Globals
 static VcfVersion vcf_version;
 uint32_t vcf_num_samples = 0; // number of samples in the file
+static uint32_t vcf_num_hdr_contigs = 0;
+static uint64_t vcf_num_hdr_nbases = 0;
 static uint32_t vcf_num_displayed_samples = 0; // PIZ only: number of samples to be displayed - might be less that vcf_num_samples if --samples is used
 static Buffer vcf_field_name_line = {};  // header line of first VCF file read - use to compare to subsequent files to make sure they have the same header during bound
 
@@ -57,7 +59,8 @@ typedef struct { STR (key); STR (value); } Attr;
 
 void vcf_piz_header_init (void)
 {
-    vcf_num_samples = 0;
+    vcf_num_samples = vcf_num_hdr_contigs = 0;
+    vcf_num_hdr_nbases = 0;
     buf_free (vcf_field_name_line);
 
     // note: we don't re-initialize vcf_num_displayed_samples - this is calculated only once
@@ -65,7 +68,8 @@ void vcf_piz_header_init (void)
 
 void vcf_header_finalize (void)
 {
-    vcf_num_samples = 0;
+    vcf_num_samples = vcf_num_hdr_contigs = 0;
+    vcf_num_hdr_nbases = 0;
 
     buf_destroy (vcf_field_name_line);
     buf_destroy (vcf_header_liftover_dst_contigs);
@@ -611,6 +615,9 @@ static bool vcf_header_handle_contigs (STRp(line), void *new_txt_header_, void *
         }
 
         vcf_header_consume_contig (STRa (contig_name), &LN, false); // also verifies / updates length
+
+        vcf_num_hdr_contigs++;
+        vcf_num_hdr_nbases += LN;
     }
 
     // case: --chain: collect all vcf_header_liftover_dst_contigs. non sorted/unique buf for now, will fix in vcf_header_zip_update_to_dual_coords
@@ -921,6 +928,22 @@ uint32_t vcf_header_get_num_samples (void)
 {
     if (Z_DT(VCF) || Z_DT(BCF))
         return vcf_num_samples;
+    else
+        return 0;
+}
+
+uint32_t vcf_header_get_num_contigs (void)
+{
+    if (Z_DT(VCF) || Z_DT(BCF))
+        return vcf_num_hdr_contigs;
+    else
+        return 0;
+}
+
+uint64_t vcf_header_get_nbases (void)
+{
+    if (Z_DT(VCF) || Z_DT(BCF))
+        return vcf_num_hdr_nbases;
     else
         return 0;
 }

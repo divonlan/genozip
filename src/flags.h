@@ -107,7 +107,7 @@ typedef struct {
         subdirs,     // recursively traversing subdirectories
         list,        // a genols option
         no_bgzf,     // if this is a GZIP file, treat as normal GZIP, not BGZF
-        no_zriter,   // ZIP: don't use background threads to write z_file
+        no_zriter, explicit_no_zriter,  // ZIP: don't use background threads to write z_file
         no_cache,    // don't load cache, or delete cache
         no_upgrade,  // disable upgrade checks
         no_eval;     // don't allow features on eval basis (used for testing permissions)

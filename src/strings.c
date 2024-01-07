@@ -97,25 +97,26 @@ char *str_print_snip (STRp(in), char *out) // caller allocated - in_len+20
     return save_out;
 }
 
-// replaces \t, \n, \r, \b with "\t" etc, replaces unprintables with '?'. caller should allocate out. returns out.
-// out should be allocated by caller to (in_len*2 + 1), out is null-terminated
-char *str_to_printable (STRp(in), char *out)
+// replaces \t, \n, \r, \b, \ with "\t" etc, replaces unprintables with '?'. caller should allocate out. 
+// returns length (excluding \0). out should be allocated by caller to (in_len*2 + 1), out is null-terminated
+uint32_t str_to_printable (STRp(in), char *out)
 {
     char *start = out;
 
     for (uint32_t i=0; i < in_len; i++)
         switch (in[i]) {
-            case '\t' : *out++ = '\\'; *out++ = 't'; break;
-            case '\n' : *out++ = '\\'; *out++ = 'n'; break;
-            case '\r' : *out++ = '\\'; *out++ = 'r'; break;
-            case '\b' : *out++ = '\\'; *out++ = 'b'; break;
+            case '\t' : *out++ = '\\'; *out++ = 't' ; break;
+            case '\n' : *out++ = '\\'; *out++ = 'n' ; break;
+            case '\r' : *out++ = '\\'; *out++ = 'r' ; break;
+            case '\b' : *out++ = '\\'; *out++ = 'b' ; break;
+            case '\\' : *out++ = '\\'; *out++ = '\\'; break;
             case -128 ... 7: case 11 ... 12: case 14 ... 31: 
-                        *out++ = '?';                break;
+                        *out++ = '?';                 break;
             default:    *out++ = in[i];
         }
     
     *out = 0;
-    return start;
+    return out - start;
 }
 
 StrText str_size (uint64_t size)
@@ -631,6 +632,55 @@ uint32_t str_split_do (STRp(str),
             enforce_msg, max_items, str_len ? item_i : 0, MIN_(100, str_len), str);
     
     return (!exactly || item_i == max_items) ? item_i : 0; // 0 if requested exactly, but too few separators 
+}
+
+// get item_i in an array. true if successful, false if array is too short
+bool str_item_i (STRp(str), char sep, uint32_t requested_item_i, pSTRp(item))
+{
+    if (!str) return false; 
+
+    *item = str; // initialize, also to avoid compile warning
+    
+    uint32_t item_i = 1;
+    for (uint32_t str_i=0 ; str_i < str_len ; str_i++) 
+        if (str[str_i] == sep) {
+            if (item_i == requested_item_i)
+                *item = &str[str_i+1];
+            
+            else if (item_i == requested_item_i + 1) {
+                *item_len = &str[str_i] - *item;
+                return true;
+            }
+
+            item_i++;
+        }
+
+    if (item_i == requested_item_i + 1) {
+        *item_len = &str[str_len] - *item;
+        return true;
+    }
+
+    return false; 
+}
+
+// get item i from an array - expected to be a float. returns false if array is too short, or item is not a float
+bool str_item_i_float (STRp(str), char sep, uint32_t requested_item_i, double *item)
+{
+    STR(item_str);
+
+    if (!str_item_i (STRa(str), sep, requested_item_i, pSTRa(item_str)))
+        return false; // array too short
+
+    SAFE_NULT(item_str);
+    char *after;
+    double result = strtod (item_str, &after);
+    SAFE_RESTORE;
+
+    if (after != item_str + item_str_len)
+        return false; // not a float
+
+    *item = result; // set only if successful
+    return true;
 }
 
 // splits a string by tab, ending with the first \n or \r\n. 

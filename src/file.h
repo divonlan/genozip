@@ -96,8 +96,8 @@ typedef struct File {
     Buffer zriter_threads;             // Z_FILE ZIP: list of currently writing threads and their buffers
     bool zriter_last_was_fg;
 
-    #define Z_READ_FP(f) (((f)->mode == READ || flag.is_windows) ? (FILE *)(f)->file : (f)->z_reread_file) // see bug 983
-    #define GET_FP(f,md) (((f)->mode == READ || (md) != READ || (f)->supertype != Z_FILE || flag.is_windows) ? (FILE *)(f)->file : (f)->z_reread_file)
+    #define Z_READ_FP(f) (((f)->mode == READ || flag.no_zriter) ? (FILE *)(f)->file : (f)->z_reread_file) 
+    #define GET_FP(f,md) (((f)->mode == READ || (md) != READ || (f)->supertype != Z_FILE || flag.no_zriter) ? (FILE *)(f)->file : (f)->z_reread_file)
 
     FILE *z_reread_file;               // Z_FILE ZIP: file pointer for re-reading files as they are being writting (used for pair reading)
 
@@ -159,11 +159,11 @@ typedef struct File {
 
     #define BY_SEQ   0
     #define BY_QNAME 1
-    Buffer deep_index_by[2];            // Z_FILE: ZIP: hash table (BY_SEQ,BY_QNAME) - indices into deep ents, indexed by a subset of the hash(SEQ) bits 
+    Buffer deep_index_by[2];           // Z_FILE: ZIP: hash table (BY_SEQ,BY_QNAME) - indices into deep ents, indexed by a subset of the hash(SEQ) bits 
 
     Mutex qname_huf_mutex;             // Z_FILE: PIZ: Deep: mutex to protect qname_huf
     HuffmanP qname_huf;                // Z_FILE: PIZ: Deep: Used for compressing QNAME in deep_ents
-    char master_qname[SAM_MAX_QNAME_LEN+1]; // Z_FILE: PIZ: Deep: one of the QNAMEs in the SAM file, to which we compare all others
+    char master_qname[SAM_MAX_QNAME_LEN+1]; // Z_FILE: PIZ: Deep: 
     int qnames_sampled;                // Z_FILE: PIZ: Deep: Number of QNAMEs sampled for producing the huffman compressor
 
     // Z_FILE: DVCF stuff
@@ -206,8 +206,16 @@ typedef struct File {
     union {
     uint64_t num_sequences;            // Z_FILE: ZIP: FASTA: num "DESC" lines in this file. for stats
     uint64_t num_perfect_matches;      // Z_FILE: ZIP: SAM/BAM/FASTQ: number of perfect matches found by aligner. for stats 
+    Ploidy max_ploidy;                 // Z_FILE: ZIP: VCF 
+    Ploidy max_ploidy_for_mux;         // Z_FILE: PIZ: VCF: copied from SectionHeaderGenozipHeader.max_ploidy_for_mux
     };
     uint64_t num_aligned;              // Z_FILE: ZIP: SAM/BAM/FASTQ: number of alignments successfully found by aligner. for stats 
+    uint64_t domq_lines[MAX_NUM_COMPS];// Z_FILE: ZIP: number of lines per components of the various QUAL codecs (show in codec_qual_show_stats)
+    uint64_t divr_lines[MAX_NUM_COMPS];
+    uint64_t homp_lines[MAX_NUM_COMPS];
+    uint64_t pacb_lines[MAX_NUM_COMPS];
+    uint64_t longr_lines[MAX_NUM_COMPS];
+    uint64_t normq_lines[MAX_NUM_COMPS];
 
     // per-component data (ZIP)
     uint64_t comp_num_lines[MAX_NUM_COMPS];             // Z_FILE: PIZ/ZIP: number of lines in each component (note: includes DVCF reject components despite being duplicate lines)
