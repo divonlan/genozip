@@ -223,8 +223,8 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_ALLELE_A)
 
     if (reconstruct)
         switch (*snip) {
-            case 'R' : RECONSTRUCT (vb->main_ref, vb->main_ref_len); RECONSTRUCT1 ('*'); break;
-            case 'A' : RECONSTRUCT (vb->main_alt, vb->main_alt_len);                     break;
+            case 'R' : RECONSTRUCT_str (vb->main_ref); RECONSTRUCT1 ('*'); break;
+            case 'A' : RECONSTRUCT_str (vb->main_alt);                     break;
             default  : ABORT_PIZ ("Invalid snip=%.*s", STRf(snip));
         }
 

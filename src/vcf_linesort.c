@@ -67,7 +67,8 @@ static void vcf_linesort_merge_vb_do (VBlockP vb, bool is_luft)
     for (uint32_t line_i=0 ; line_i < vb->lines.len32 ; line_i++) {
         ZipDataLineVCF *dl = DATA_LINE(line_i);
         PosType64 pos = dl->pos[is_luft];
-        WordIndex chrom_word_index = node_word_index (vb, (is_luft ? DTF(luft_chrom) : DTF(prim_chrom)), dl->chrom[is_luft]);
+        WordIndex chrom_word_index = node_index_to_word_index (vb, CTX((is_luft ? DTF(luft_chrom) : DTF(prim_chrom))), dl->chrom[is_luft]);
+        //xxx WordIndex chrom_word_index = dl->chrom[is_luft];
 
         // exclude rejected lines (we exclude here if sorted, and in vcf_lo_piz_TOPLEVEL_cb_filter_line if not sorted)
         if (chrom_word_index != WORD_INDEX_NONE) 
@@ -80,7 +81,7 @@ static void vcf_linesort_merge_vb_do (VBlockP vb, bool is_luft)
                 .info.tie_breaker = dl->tie_breaker,
 
                 // Primary coord data (for duplicate detection in Luft)
-                .prim_chrom_wi    = is_luft ? node_word_index (vb, CHROM, dl->chrom[0]) : WORD_INDEX_NONE,
+                .prim_chrom_wi    = is_luft ? dl->chrom[0] : WORD_INDEX_NONE,
                 .prim_start_pos   = is_luft ? dl->pos[0] : 0,
             };
     }
@@ -177,7 +178,7 @@ static void line_sorter_detect_duplicates (ConstBufferP index_buf)
         if (is_dup_luft && !is_dup_prim) {
             if (last_dup != index_i-1) // not duplicate duplicate (i.e. 3 or more variants are the same)
                 bufprintf (evb, &dups, "%s\t%d\t%d\n", 
-                           ctx_snip_from_zf_nodes (ZCTX(DTFZ(luft_chrom)), this_li->info.chrom_wi, 0, 0), 
+                           ctx_get_z_snip_ex (ZCTX(DTFZ(luft_chrom)), this_li->info.chrom_wi, 0, 0), 
                            this_li->info.start_pos, this_li->info.start_pos);
 
             last_dup = index_i;

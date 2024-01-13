@@ -52,7 +52,7 @@ void chrom_2ref_compress (Reference ref)
 
     for_buf2 (WordIndex, ref_index, chrom_node_index, ZCTX(CHROM)->chrom2ref_map) {
         if (flag.show_chrom2ref) {
-            rom chrom_name = ctx_snip_from_zf_nodes (zctx, chrom_node_index, 0, 0);
+            rom chrom_name = ctx_get_z_snip_ex (zctx, chrom_node_index, 0, 0);
             rom ref_name = *ref_index >= 0 ? ref_contigs_get_name (ref, *ref_index, NULL) : "(none)";
 
             if (*ref_index != WORD_INDEX_NONE) 
@@ -310,8 +310,8 @@ static SORTER (chrom_create_zip_sorter)
     uint32_t index_a = *(uint32_t *)a;
     uint32_t index_b = *(uint32_t *)b;
 
-    CtxNode *word_a = B(CtxNode, sorter_ctx->nodes, index_a);
-    CtxNode *word_b = B(CtxNode, sorter_ctx->nodes, index_b);
+    CtxWord *word_a = B(CtxWord, sorter_ctx->nodes, index_a);
+    CtxWord *word_b = B(CtxWord, sorter_ctx->nodes, index_b);
 
     return strcmp (Bc (sorter_ctx->dict, word_a->char_index),  
                    Bc (sorter_ctx->dict, word_b->char_index));
@@ -325,8 +325,8 @@ static SORTER (chrom_create_piz_sorter)
     CtxWordP word_a = B(CtxWord, sorter_ctx->word_list, index_a);
     CtxWordP word_b = B(CtxWord, sorter_ctx->word_list, index_b);
     
-    return strcmp (Bc (sorter_ctx->dict, word_a->index),
-                   Bc (sorter_ctx->dict, word_b->index));
+    return strcmp (Bc (sorter_ctx->dict, word_a->char_index),
+                   Bc (sorter_ctx->dict, word_b->char_index));
 }
 
 // ZIP/PIZ MUST be run by the main thread only
@@ -341,12 +341,12 @@ void chrom_index_by_name (Did chrom_did_i)
     buf_alloc (evb, &chrom_sorter, 0, num_words, uint32_t, 1, "chrom_sorter");
     
     if (IS_ZIP) {
-        for_buf2 (CtxNode, node, i, sorter_ctx->nodes)
+        for_buf2 (CtxWord, node, i, sorter_ctx->nodes)
             if (node->snip_len) BNXT32(chrom_sorter) = i;
     }
     else
         for_buf2 (CtxWord, word, i, sorter_ctx->word_list)
-            if (word->len) BNXT32(chrom_sorter) = i;
+            if (word->snip_len) BNXT32(chrom_sorter) = i;
 
     qsort (STRb(chrom_sorter), sizeof(uint32_t), IS_ZIP ? chrom_create_zip_sorter : chrom_create_piz_sorter);
 }
@@ -360,7 +360,7 @@ static WordIndex chrom_zip_get_by_name_do (rom chrom_name, WordIndex first_sorte
     
     STR (snip);
     WordIndex node_index = *B(WordIndex, chrom_sorter, mid_sorted_index);
-    ctx_snip_from_zf_nodes (ZCTX(CHROM), node_index, pSTRa(snip));
+    ctx_get_z_snip_ex (ZCTX(CHROM), node_index, pSTRa(snip));
 
     int cmp = strcmp (snip, chrom_name);
     if (cmp < 0) return chrom_zip_get_by_name_do (chrom_name, mid_sorted_index+1, last_sorted_index);

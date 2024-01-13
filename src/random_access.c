@@ -48,16 +48,16 @@ static void random_access_show_index (ConstBufferP ra_buf, bool from_zip, Did ch
 {
     iprintf ("\n%s:\n", msg);
     
-    Context *ctx = ZCTX (chrom_did_i);
+    ContextP zctx = ZCTX (chrom_did_i);
 
     for_buf (const RAEntry, ra, *ra_buf) {
         
         STR(chrom_snip);
         if (from_zip) {
             if (ra->chrom_index != WORD_INDEX_NONE) {
-                CtxNode *chrom_node = ctx_get_node_by_word_index (ctx, ra->chrom_index);
-                chrom_snip     = Bc (ctx->dict, chrom_node->char_index);
-                chrom_snip_len = chrom_node->snip_len;
+                CtxWord chrom_node = *B(CtxWord, zctx->nodes, ra->chrom_index);
+                chrom_snip     = Bc (zctx->dict, chrom_node.char_index);
+                chrom_snip_len = chrom_node.snip_len;
             }
             else {
                 chrom_snip     = "CONT_FROM_PREV_VB";
@@ -65,9 +65,9 @@ static void random_access_show_index (ConstBufferP ra_buf, bool from_zip, Did ch
             }
         }
         else {
-            CtxWordP chrom_word = B(CtxWord, ctx->word_list, ra->chrom_index);
-            chrom_snip = Bc (ctx->dict, chrom_word->index);
-            chrom_snip_len = chrom_word->len;
+            CtxWordP chrom_word = B(CtxWord, zctx->word_list, ra->chrom_index);
+            chrom_snip = Bc (zctx->dict, chrom_word->char_index);
+            chrom_snip_len = chrom_word->snip_len;
         }
         iprintf ("vb_i=%u chrom='%.*s' (chrom_word_index=%d) min_pos=%"PRId64" max_pos=%"PRId64"\n",
                  ra->vblock_i, chrom_snip_len, chrom_snip, ra->chrom_index, ra->min_pos, ra->max_pos);
@@ -191,8 +191,10 @@ void random_access_merge_in_vb (VBlockP vb, int ra_i)
 
     buf_alloc (evb, z_buf, 0, z_buf->len + src_ra_len, RAEntry, 2, "z_file->ra_buf"); 
 
-    Context *chrom_ctx = CTX(ra_i==0 ? DTF(prim_chrom) : DTF(luft_chrom));
+    ContextP chrom_ctx = CTX(ra_i==0 ? DTF(prim_chrom) : DTF(luft_chrom));
     ASSERT0 (chrom_ctx, "cannot find chrom_ctx");
+
+    ASSERT (chrom_ctx->nodes_converted, "expecting nodes of %s to be converted", chrom_ctx->tag_name); // still index/len
 
     for (unsigned i=0; i < src_ra_len; i++) {
         
@@ -205,16 +207,14 @@ void random_access_merge_in_vb (VBlockP vb, int ra_i)
         dst_ra->max_pos  = src_ra[i].max_pos;
 
         if (src_ra[i].chrom_index != WORD_INDEX_NONE) {
-            CtxNode *chrom_node = ctx_node_vb (chrom_ctx, (WordIndex)src_ra[i].chrom_index, NULL, NULL);
+            CtxVbNode chrom_node = ctx_node_vb (chrom_ctx, (WordIndex)src_ra[i].chrom_index, NULL, NULL);
 
-            //if (chrom_node->word_index.n == WORD_INDEX_NONE) { // this contig was canceled by seg_rollback
-            if (chrom_node->word_index == WORD_INDEX_NONE) { // this contig was canceled by seg_rollback
+            if (chrom_node.canceled == VB_NODE_CANCELED) { // this contig was canceled by seg_rollback
                 z_buf->len--;
                 continue;
             }
             
-            // dst_ra->chrom_index = chrom_node->word_index.n; // note: in the VB we store the node index, while in zfile we store tha word index
-            dst_ra->chrom_index = chrom_node->word_index; // note: in the VB we store the node index, while in zfile we store tha word index
+            dst_ra->chrom_index = chrom_node.word_index; // note: in the VB we store the node index, while in zfile we store tha word index
         }
         else 
             dst_ra->chrom_index = WORD_INDEX_NONE; // to be updated in random_access_finalize_entries()

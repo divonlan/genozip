@@ -60,43 +60,6 @@ StrText char_to_printable (char c)
     }
 }
 
-char *str_print_snip (STRp(in), char *out) // caller allocated - in_len+20
-{
-    char *save_out = out;
-
-    if (!in) strcpy (out, "NULL");
-    
-    else if (!in_len) strcpy (out, "\"\"");
-    
-    else {
-        if (in[0] < NUM_SNIP_CODES) {
-            static rom snip_codes[NUM_SNIP_CODES] = SNIP_CODES;
-            uint32_t len = strlen (snip_codes[(int)in[0]]);
-            strcpy (out, snip_codes[(int)in[0]]);
-            out[len] = ' ';
-            out += len+1;
-            in++;
-            in_len--;
-        }
-
-        *(out++) = '\"';
-
-        for (uint32_t i=0; i < in_len; i++) 
-            switch ((uint8_t)in[i]) {
-                case 32 ... 126 :  *(out++) = in[i]; break;   // printable ASCII
-                case '\t'       : 
-                case '\n'       : 
-                case '\r'       :  *(out++) = ' '; break; // whitespace
-                default         :  *(out++) = '?'; 
-            }
-
-        *(out++) = '\"';
-        *(out++) = 0; // nul-terminate
-    }
-
-    return save_out;
-}
-
 // replaces \t, \n, \r, \b, \ with "\t" etc, replaces unprintables with '?'. caller should allocate out. 
 // returns length (excluding \0). out should be allocated by caller to (in_len*2 + 1), out is null-terminated
 uint32_t str_to_printable (STRp(in), char *out)
@@ -948,9 +911,10 @@ uint32_t str_split_ints_do (STRp(str), uint32_t max_items, char sep, bool exactl
     uint32_t item_i;
     for (item_i=0; item_i < max_items && str < after; item_i++, str++) {
         items[item_i] = strtoll (str, (char **)&str, 10);
-        if (item_i < max_items-1 && *str != sep) {
+
+        if (item_i < max_items-1 && *str != sep && *str != 0) {
             item_i=0;
-            break; // fail
+            break; // fail - not integer
         }
     }
 
@@ -964,8 +928,7 @@ uint32_t str_split_ints_do (STRp(str), uint32_t max_items, char sep, bool exactl
 // splits a string with up to (max_items-1) separators (doesn't need to be nul-terminated) to up to or exactly max_items floats
 // returns the actual number of items, or 0 is unsuccessful
 uint32_t str_split_floats_do (STRp(str), uint32_t max_items, char sep, bool exactly,
-                              double *items)  // out - array of floats
-                       
+                              double *items)  // out - array of floats                 
 {
     rom after = &str[str_len];
     SAFE_NUL (after); // this doesn't work on string literals
@@ -973,7 +936,7 @@ uint32_t str_split_floats_do (STRp(str), uint32_t max_items, char sep, bool exac
     uint32_t item_i;
     for (item_i=0; item_i < max_items && str < after; item_i++, str++) {
         items[item_i] = strtod (str, (char**)&str);
-        if (item_i < max_items-1 && *str != sep) {
+        if (item_i < max_items-1 && *str != sep && *str != 0) {
             item_i=0;
             break; // fail
         }

@@ -39,8 +39,6 @@ extern void seg_integer (VBlockP vb, ContextP ctx, int64_t n, bool with_lookup, 
 extern WordIndex seg_integer_as_snip_do (VBlockP vb, ContextP ctx, int64_t n, unsigned add_bytes); // segs integer as normal textual snip
 #define seg_integer_as_snip(vb,did_i,n,add_sizeof_n) seg_integer_as_snip_do((VBlockP)(vb), &vb->contexts[did_i], (n), (add_sizeof_n) ? sizeof(n) : 0)
 
-extern WordIndex seg_self_delta (VBlockP vb, ContextP ctx, int64_t value, char format, unsigned fixed_len, uint32_t add_bytes);
-
 extern void seg_simple_lookup (VBlockP vb, ContextP ctx, unsigned add_bytes);
 extern void seg_lookup_with_length (VBlockP vb, ContextP ctx, int32_t length, unsigned add_bytes);
 
@@ -88,6 +86,8 @@ extern void seg_integer_fixed (VBlockP vb, Context *ctx, void *number, bool with
 
 // requires setting ltype=LT_DYN_INT* in seg_initialize, but not need to set ltype as it will be set in zip_resize_local
 extern void seg_add_to_local_resizable (VBlockP vb, ContextP ctx, int64_t value, unsigned add_bytes);
+
+extern WordIndex seg_self_delta (VBlockP vb, ContextP ctx, int64_t value, char format, unsigned fixed_len, uint32_t add_bytes);
 
 extern void seg_delta_vs_other_do (VBlockP vb, ContextP ctx, ContextP other_ctx, STRp(value), int64_t value_n, int64_t max_delta, unsigned add_bytes);
 static inline void seg_delta_vs_other (VBlockP vb, ContextP ctx, ContextP other_ctx, STRp(value))

@@ -40,8 +40,6 @@ extern bool is_printable[256];
 
 extern StrText char_to_printable (char c);
 
-extern char *str_print_snip (STRp(in), char *out);
-
 extern uint32_t str_to_printable (STRp(in), char *out);
 static inline StrTextSuperLong str_to_printable_(STRp(in)) { // for bound-length short texts
     StrTextSuperLong s;

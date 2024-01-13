@@ -92,10 +92,10 @@ typedef struct Buffer {        // 72 bytes
 extern void buf_initialize(void);
 
 #define buf_is_alloc(buf_p) ((buf_p)->data != NULL && (buf_p)->type != BUF_UNALLOCATED)
-#define ASSERTNOTINUSE(buf) ASSERT (!buf_is_alloc (&(buf)) && !(buf).len && !(buf).param, "expecting "#buf" to be free, but it's not: %s", buf_desc (&(buf)).s)
-#define ASSERTISALLOCED(buf) ASSERT0 (buf_is_alloc (&(buf)), #buf" is not allocated")
-#define ASSERTISEMPTY(buf) ASSERT (buf_is_alloc (&(buf)) && !(buf).len, "expecting "#buf" to be be allocated and empty, but it isn't: %s", buf_desc (&(buf)).s)
-#define ASSERTNOTEMPTY(buf) ASSERT ((buf).len, "expecting "#buf" to be contain some data, but it doesn't: %s", buf_desc (&(buf)).s)
+#define ASSERTNOTINUSE(buf) ASSERT (!buf_is_alloc (&(buf)) && !(buf).len && !(buf).param, "expecting %s to be free, but it's not: %s", #buf, buf_desc (&(buf)).s)
+#define ASSERTISALLOCED(buf) ASSERT (buf_is_alloc (&(buf)), "%s is not allocated", #buf)
+#define ASSERTISEMPTY(buf) ASSERT (buf_is_alloc (&(buf)) && !(buf).len, "expecting %s to be be allocated and empty, but it isn't: %s", #buf, buf_desc (&(buf)).s)
+#define ASSERTNOTEMPTY(buf) ASSERT ((buf).len, "expecting %s to be contain some data, but it doesn't: %s", #buf, buf_desc (&(buf)).s)
 
 extern void buf_alloc_do (VBlockP vb, BufferP buf, uint64_t requested_size, float grow_at_least_factor, rom name, FUNCLINE);
 

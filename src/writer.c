@@ -1152,7 +1152,7 @@ static void writer_write_line_range (VbInfo *v, uint32_t start_line, uint32_t nu
                 buf_add_more (wvb, &wvb->txt_data, start, line_len, "txt_data");
             
             txt_file->lines_written_so_far++; // increment even if downsampled-out, but not if filtered out during reconstruction (for downsampling accounting)
-            v->vb->num_nondrop_lines--;       // update lines remaining to be written (initialized during reconstruction in container_reconstruct_do)
+            v->vb->num_nondrop_lines--;       // update lines remaining to be written (initialized during reconstruction in container_reconstruct)
         }
     }
 }
@@ -1199,7 +1199,7 @@ static void writer_write_lines_interleaves (Dispatcher dispatcher, VbInfo *v1, V
         bool is_dropped1 = v1->is_dropped && bits_get (v1->is_dropped, line_i);
         bool is_dropped2 = v2->is_dropped && bits_get (v2->is_dropped, line_i);
 
-        // skip lines dropped in container_reconstruct_do due to vb->drop_curr_line for either leaf
+        // skip lines dropped in container_reconstruct due to vb->drop_curr_line for either leaf
         if ((flag.interleaved == INTERLEAVE_BOTH && !is_dropped1 && !is_dropped2) || 
             (flag.interleaved == INTERLEAVE_EITHER && (!is_dropped1 || !is_dropped2))) {
             // TODO - INTERLEAVE_EITHER doesn't work yet, bug 396

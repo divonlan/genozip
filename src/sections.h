@@ -261,9 +261,16 @@ typedef struct {
 
         struct {
             uint8_t segconf_has_RGQ      : 1; // VCF: copied from segconf.has[FORMAT_RGQ]. added v14.
-            uint8_t unused_bits          : 7;
-            uint8_t max_ploidy_for_mux;       // VCF: 15.0.35
-            uint8_t unused[270];
+            uint8_t segconf_GQ_method    : 3; // VCF: 15.0.37
+            uint8_t segconf_FMT_DP_method: 2; // VCF: 15.0.37
+            uint8_t unused_bits          : 2;
+            uint8_t max_ploidy_for_mux;       // VCF: 15.0.36
+            uint16_t unused16;
+            struct {                          // VCF: 15.0.37
+                uint32_t AC:3, MLEAC:3, AN:3, AF:3, SF:3, QD:3, DP:3;
+                uint32_t unused : 11;
+            } width; 
+            uint8_t unused[264];
         } vcf;
     };    
 } SectionHeaderGenozipHeader, *SectionHeaderGenozipHeaderP;

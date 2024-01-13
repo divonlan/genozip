@@ -53,6 +53,17 @@ void segconf_test_multiseq (VBlockP vb, Did nonref)
         ctx_segconf_set_hard_coded_lcodec (nonref, CODEC_LZMA); 
 }
 
+// set width of a field to the most common width observed in segconf
+void segconf_set_width (FieldWidth *w)
+{
+    int max_count = -1;
+    for (int i=0; i <= SEGCONF_MAX_WIDTH; i++)
+        if ((int)w->count[i] > max_count) {
+            w->width = i;
+            max_count = w->count[i];
+        }
+}
+
 // mark contexts as used, for calculation of vb_size
 void segconf_mark_as_used (VBlockP vb, unsigned num_ctxs, ...)
 {
@@ -241,6 +252,7 @@ void segconf_initialize (void)
             .SA_HtoS               = unknown,
             .sam_XG_inc_S          = unknown,
             .sam_has_BWA_XA_Z      = unknown,
+            .PL_mux_by_DP          = flag.force_PLy ? yes : unknown,
             .CY_con_snip_len       = sizeof (segconf.CY_con_snip),
             .QT_con_snip_len       = sizeof (segconf.QT_con_snip),
             .CB_con_snip_len       = sizeof (segconf.CB_con_snip),
@@ -404,6 +416,28 @@ rom segconf_deep_trimming_name (void)
     return segconf.deep_has_trimmed_left ? "LeftRight"
          : segconf.deep_has_trimmed      ? "RightOnly"
          :                                 "None";
+}
+
+rom GQ_method_name (GQMethodType method)
+{
+    switch (method) {
+        case GQ_old        : return "OLD";
+        case BY_GP         : return "BY_GP";
+        case BY_PL         : return "BY_PL";
+        case MUX_DOSAGE    : return "DOSAGE";
+        case MUX_DOSAGExDP : return "DOSAGExDP";
+        default            : return "INVALID";
+    }
+}
+
+rom FMT_DP_method_name (FormatDPMethod method)
+{
+    switch (method) {
+        case BY_AD          : return "BY_AD";
+        case BY_SDP         : return "BY_SDP";
+        case FMT_DP_DEFAULT : return "DEFAULT";
+        default             : return "INVALID";
+    }
 }
 
 StrText segconf_get_qual_histo (QualHistType qht)

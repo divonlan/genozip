@@ -13,19 +13,17 @@
 #include "buffer.h"
 #include "qname.h"
 
-static Buffer aliases = {};
-
 static void show_aliases (void)
 {
-    if (!aliases.len)
+    if (!z_file->aliases.len)
         iprint0 ("No aliases in this file\n");
 
     else {
         static rom names[] = ALIAS_TYPE_NAMES;
 
-        iprintf ("Contents of SEC_DICT_ID_ALIASES section (num_aliases=%u):\n", aliases.len32);
+        iprintf ("Contents of SEC_DICT_ID_ALIASES section (num_aliases=%u):\n", z_file->aliases.len32);
         
-        for_buf (DictIdAlias, alias, aliases)
+        for_buf (DictIdAlias, alias, z_file->aliases)
             iprintf ("type=%-4s\talias=%s/%-8s\tdst=%s/%-8s\n", names[alias->alias_type],
                     dtype_name_z (alias->alias), dis_dict_id (alias->alias).s, 
                     dtype_name_z (alias->dst),   dis_dict_id (alias->dst).s);
@@ -42,13 +40,13 @@ static void aliases_zip_get_predefined (bool remove_if_no_data)
                     uint64_t dict_id_alias; 
                     uint64_t dict_id_dst; } aliases_def[] = DICT_ID_ALIASES;
 
-    buf_alloc (evb, &aliases, 0, ARRAY_LEN(aliases_def), DictIdAlias, 0, "aliases");
+    buf_alloc (evb, &z_file->aliases, 0, ARRAY_LEN(aliases_def), DictIdAlias, 0, "z_file->aliases");
 
     for (int i=0; i < ARRAY_LEN(aliases_def); i++)
         if ((aliases_def[i].dt == z_file->data_type && 
              (!remove_if_no_data || ctx_get_existing_zctx (aliases_def[i].dict_id_dst)->z_data_exists))) // to reduce size, keep only aliases used in this z_file: it would be better to test existance of the alias rather than dst, but that's not easy to do. testing dst will be a little harmlessly wasteful bc in some cases we will write an alias section when unneeded
 
-            BNXT (DictIdAlias, aliases) = (DictIdAlias){
+            BNXT (DictIdAlias, z_file->aliases) = (DictIdAlias){
                 .alias_type = aliases_def[i].alias_type,
                 .alias      = (DictId)aliases_def[i].dict_id_alias,
                 .dst        = (DictId)aliases_def[i].dict_id_dst
@@ -58,34 +56,29 @@ static void aliases_zip_get_predefined (bool remove_if_no_data)
 // ZIP main thread: write to global section
 void aliases_compress (void)
 {
-    ASSERTNOTINUSE (aliases);
-    aliases_zip_get_predefined (true);
-
     // add qname alias if there is one
-    buf_alloc (evb, &aliases, NUM_QTYPES, 0, DictIdAlias, 0, NULL);
+    buf_alloc (evb, &z_file->aliases, NUM_QTYPES, 0, DictIdAlias, 0, NULL);
     for (QType q=QNAME1; q < NUM_QTYPES; q++) 
         if (qname_get_alias(q).alias_type)
-            BNXT (DictIdAlias, aliases) = qname_get_alias(q);
+            BNXT (DictIdAlias, z_file->aliases) = qname_get_alias(q);
 
     if (flag.show_aliases) show_aliases();
 
-    if (aliases.len) {
-        aliases.len *= sizeof (DictIdAlias);
-        zfile_compress_section_data (evb, SEC_DICT_ID_ALIASES, &aliases);
+    if (z_file->aliases.len) {
+        z_file->aliases.len *= sizeof (DictIdAlias);
+        zfile_compress_section_data (evb, SEC_DICT_ID_ALIASES, &z_file->aliases);
     }
-
-    buf_destroy (aliases);
 }
 
 static void aliases_upgrade_to_v15 (void)
 {
     typedef struct { DictId alias, dst; } DictIdAliasV14; // up to v14
 
-    aliases.len /= sizeof (DictIdAliasV14);
-    buf_alloc (evb, &aliases, aliases.len, 0, char, 0, NULL); // add one byte per alias
+    z_file->aliases.len /= sizeof (DictIdAliasV14);
+    buf_alloc (evb, &z_file->aliases, z_file->aliases.len, 0, char, 0, NULL); // add one byte per alias
 
-    ARRAY (DictIdAliasV14, v14, aliases);
-    ARRAY (DictIdAlias,    v15, aliases);
+    ARRAY (DictIdAliasV14, v14, z_file->aliases);
+    ARRAY (DictIdAlias,    v15, z_file->aliases);
 
     for (int32_t i=v14_len-1; i >= 0; i--) {
         // note: explictly create a struct, then assign it. If done in a single operation, the compiler optimizer
@@ -103,27 +96,27 @@ void aliases_piz_read_aliases_section (void)
     Section sec = sections_last_sec (SEC_DICT_ID_ALIASES, SOFT_FAIL);
     if (!sec) return; // no aliases section
 
-    zfile_get_global_section (SectionHeader, sec, &aliases, "aliases");
+    zfile_get_global_section (SectionHeader, sec, &z_file->aliases, "z_file->aliases");
 
     if (!VER(15)) 
         aliases_upgrade_to_v15();
     else
-        aliases.len /= sizeof (DictIdAlias);
+        z_file->aliases.len /= sizeof (DictIdAlias);
 
-    for_buf (DictIdAlias, alias, aliases)
+    for_buf (DictIdAlias, alias, z_file->aliases)
         ASSERT0 (alias->dst.id[0] && alias->alias.id[0], "corrupted aliases buffer"); // id[0] can never be 0
 
     if (flag.show_aliases) show_aliases();
 }
 
 // gets buffer of aliases - caller needs to destroy it. NULL if there are no aliases.
-BufferP aliases_get (void) 
+ConstBufferP aliases_get (void) 
 { 
-    ASSERTNOTINUSE (aliases);
+    if (!z_file->aliases.len32) {
+        if (IS_ZIP) aliases_zip_get_predefined (false);
+        else        aliases_piz_read_aliases_section();
+    }
 
-    if (IS_ZIP) aliases_zip_get_predefined (false);
-    else        aliases_piz_read_aliases_section();
-
-    return &aliases;
+    return &z_file->aliases;
 }
 

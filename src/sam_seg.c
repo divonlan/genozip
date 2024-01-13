@@ -1314,8 +1314,9 @@ void sam_seg_verify_RNAME (VBlockSAMP vb)
     else {  // headerless SAM
         WordIndex ref_index = chrom_2ref_seg_get (gref, VB, vb->chrom_node_index); // possibly an alt contig
         if (ref_index == WORD_INDEX_NONE) {
-            WARN_ONCE("FYI: RNAME \"%.*s\" (and possibly others) is missing in the reference file. This might impact the compression ratio.",
-                      vb->chrom_name_len, vb->chrom_name);
+            if (IS_REF_LOADED_ZIP) 
+                WARN_ONCE("FYI: RNAME \"%.*s\" (and possibly others) is missing in the reference file. This might impact the compression ratio.",
+                          vb->chrom_name_len, vb->chrom_name);
             return; // the sequence will be segged as unaligned
         }
     }
@@ -1416,7 +1417,7 @@ void sam_seg_aux_all (VBlockSAMP vb, ZipDataLineSAM *dl)
     }
 
     else
-        // NULL means MISSING Container item (of the toplevel container) - will cause container_reconstruct_do of
+        // NULL means MISSING Container item (of the toplevel container) - will cause container_reconstruct of
         // the toplevel container to delete of previous separator (\t)
         container_seg (vb, CTX(SAM_AUX), 0, 0, 0, 0);
 

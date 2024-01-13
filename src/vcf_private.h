@@ -74,9 +74,6 @@ typedef struct VBlockVCF {
     VariantType var_types[MAX_ALLELES-1]; // of main ALT[] fields
 
     unsigned main_ref_len, main_alt_len;
-
-    // INFO/SF stuff
-    Buffer sf_txt;                  // ZIP/PIZ: INFO/SF data as it appears in the snip being constructed
         
     // FORMAT/AD
     int64_t ad_values[VCF_MAX_ARRAY_ITEMS];
@@ -86,8 +83,8 @@ typedef struct VBlockVCF {
     Buffer format_contexts;         // ZIP only: an array of format_mapper_buf.len of ContextBlock
     Buffer last_format;             // ZIP only: cache previous line's FORMAT string
 
-    #define first_idx idx_AN
-    int16_t idx_AN, idx_AF, idx_MLEAF, idx_AC_Hom, idx_AC_Het, idx_AC_Hemi;
+    #define first_idx idx_AN        // ZIP: INFO fields indices within INFO
+    int16_t idx_AN, idx_AC, idx_AF, idx_MLEAC, idx_MLEAF, idx_AC_Hom, idx_AC_Het, idx_AC_Hemi, idx_QD, idx_DP, idx_SF;
     #define has(f)   (vb->idx_##f  != -1)
     #define after_idx mux_PLn
 
@@ -96,7 +93,7 @@ typedef struct VBlockVCF {
     DosageMultiplexer mux_PLn, mux_GL, mux_GP, mux_PRI, mux_DS, mux_PP, mux_PVAL, mux_FREQ, mux_RD, 
                       mux_VAF, mux_AD[2], mux_ADALL[2];
 
-    PLMuxByDP PL_mux_by_DP;
+    thool PL_mux_by_DP;
     
     #define MAX_DP_FOR_MUX 51       // TODO: 60 would be better as it was up to 15.0.35, but mux is currently limited to 256 channels
     MULTIPLEXER(MAX_DP_FOR_MUX * ZIP_NUM_DOSAGES_FOR_MUX) mux_PLy;
@@ -105,6 +102,7 @@ typedef struct VBlockVCF {
 
     Multiplexer2 mux_POS;           // GVCF: multiplex by whether this field is END or POS
     Multiplexer2 mux_QUAL, mux_INFO;// GVCF: multiplex by has_RGQ
+    Multiplexer2 mux_FORMAT_DP;     // channel=1 by AD or SDP, channel=0 transposed if AD/SDP not available           
     Multiplexer2 mux_IGT, mux_IPS;  // multiplex by (sample_i>0)
     Multiplexer3 mux_VC;            // multiplex dbSNP's INFO/VC by VARTYPE
     Multiplexer3 mux_GQX;           // multiplex Isaac's FORMAT/GQX
@@ -296,8 +294,10 @@ extern void vcf_seg_INFO_END (VBlockVCFP vb, ContextP end_ctx, STRp(end_str));
 
 // AC / AF / AN
 extern void vcf_seg_INFO_AC (VBlockVCFP vb, ContextP ac_ctx, STRp(ac_str));
+extern void vcf_seg_INFO_AN (VBlockVCFP vb);
 extern void vcf_seg_INFO_MLEAC (VBlockVCFP vb, ContextP ac_ctx, STRp(ac_str));
 extern void vcf_seg_INFO_MLEAF (VBlockVCFP vb, ContextP ctx, STRp(mleaf));
+extern void vcf_piz_insert_INFO_AN (VBlockVCFP vb);
 
 // Samples stuff
 extern void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt));
@@ -309,6 +309,7 @@ extern rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t *len, cha
 extern int vcf_seg_get_mux_channel_i (VBlockVCFP vb, bool fail_if_dvcf_refalt_switch);
 extern int vcf_piz_get_mux_channel_i (VBlockP vb);
 extern ContextP vcf_seg_FORMAT_mux_by_dosage (VBlockVCFP vb, ContextP ctx, STRp(cell), const DosageMultiplexer *mux);
+extern void vcf_seg_FORMAT_mux_by_dosagexDP (VBlockVCFP vb, ContextP ctx, STRp(cell), void *mux_p);
 
 eSTRl(snip_copy_af);
 
@@ -339,9 +340,12 @@ extern void vcf_samples_seg_initialize_PS_PID (VBlockVCFP vb, ContextP ctx, STRp
 extern void vcf_piz_ps_pid_lookback_insert (VBlockP vb, Did did_i, STRp(recon)); 
 extern void vcf_piz_ps_pid_lookback_shift (VBlockP vb, STRp(insert));
 
+// FORMAT/GQ
+extern void vcf_segconf_finalize_GQ (VBlockVCFP vb);
+extern void vcf_seg_FORMAT_GQ (VBlockVCFP vb);
+
 // INFO/SF
 extern bool vcf_seg_INFO_SF_init (VBlockVCFP vb, ContextP sf_ctx, STRp(value));
-extern void vcf_seg_INFO_SF_seg (VBlockVCFP vb);
 extern void vcf_seg_INFO_SF_one_sample (VBlockVCFP vb);
 extern void vcf_piz_GT_cb_calc_INFO_SF (VBlockVCFP vcf_vb, unsigned rep, char *recon, int32_t recon_len);
 extern void vcf_piz_insert_INFO_SF (VBlockVCFP vcf_vb);
@@ -350,7 +354,7 @@ extern void vcf_piz_insert_INFO_SF (VBlockVCFP vcf_vb);
 typedef enum { QD_PRED_NONE, QD_PRED_INFO_DP, QD_PRED_INFO_DP_P001, QD_PRED_INFO_DP_M001, 
                              QD_PRED_SUM_DP,  QD_PRED_SUM_DP_P001,  QD_PRED_SUM_DP_M001, NUM_QD_PRED_TYPES } QdPredType;
 extern void vcf_seg_sum_DP_for_QD (VBlockVCFP vb, int64_t value);
-extern void vcf_seg_INFO_QD (VBlockVCFP vb);
+extern void vcf_seg_INFO_QD (VBlockP vb);
 extern void vcf_piz_sum_DP_for_QD (VBlockP vb, STRp(recon));
 extern void vcf_piz_insert_INFO_QD (VBlockVCFP vb);
 
@@ -366,7 +370,7 @@ extern void vcf_info_seg_initialize (VBlockVCFP vb);
 extern void vcf_piz_insert_INFO_DP (VBlockVCFP vb);
 
 extern void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info));
-extern void vcf_finalize_seg_info (VBlockVCFP vb);
+extern void vcf_seg_finalize_INFO_fields (VBlockVCFP vb);
 extern bool vcf_seg_INFO_allele (VBlockP vb_, ContextP ctx, STRp(value), uint32_t repeat);
 
 // Refalt stuff
@@ -534,5 +538,13 @@ extern void vcf_lo_piz_TOPLEVEL_cb_filter_line (VBlockVCFP vb);
 #define REJECT_MAPPING(reason)                    ({ if (!vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%d\t.\t"      reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0]); return; })
 #define REJECT_SUBFIELD(ostatus, ctx, reason,...) ({ if (!vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%d\t.\t"      reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], __VA_ARGS__); \
                                                        vcf_lo_seg_rollback_and_reject (vb, (ostatus), (ctx)); })
-// misc
-extern void vcf_piz_insert_field (VBlockVCFP vb, Did did, STRp(value));
+
+// inserting INFO fields after all Samples have been reconstructed
+extern void vcf_piz_insert_field (VBlockVCFP vb, ContextP ctx, STRp(value), int chars_reserved);
+
+#define vcf_piz_defer_to_after_samples(x) ({  \
+    ctx->recon_insertion = reconstruct;       \
+    ctx->special_res = SPEC_RES_DEFERRED;     \
+    if (reconstruct)                          \
+        Ltxt += segconf.wid_##x.width; /* our best guess - minimize memory moves during vcf_piz_insert_field */ \
+})

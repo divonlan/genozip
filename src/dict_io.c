@@ -82,7 +82,7 @@ void dict_io_assign_codecs (void)
 // -------------------------------------
 
 static Context *frag_ctx;
-static const CtxNode *frag_next_node;
+static const CtxWord *frag_next_node;
 static unsigned frag_size = 0;
 
 // compress the dictionary fragment - either an entire dict, or divide it to fragments if large to allow multi-threaded
@@ -98,7 +98,7 @@ static void dict_io_prepare_for_compress (VBlockP vb)
                 continue; // unused context
             }
 
-            frag_next_node = B1ST (const CtxNode, frag_ctx->nodes);
+            frag_next_node = B1ST (const CtxWord, frag_ctx->nodes);
 
             ASSERT (frag_next_node->char_index + frag_next_node->snip_len <= frag_ctx->dict.len, 
                     "Corrupt nodes in ctx=%.8s did_i=%u", frag_ctx->tag_name, (int)(frag_ctx - z_file->contexts));
@@ -108,9 +108,9 @@ static void dict_io_prepare_for_compress (VBlockP vb)
             // frag_size is set by default 1MB, but must be at least double the longest snip, or it will cause
             // mis-calculation of size_upper_bound in dict_io_read_one_vb
             frag_size = 1 MB;
-            for (const CtxNode *node=B1ST (CtxNode, frag_ctx->nodes); node <= BLST (CtxNode, frag_ctx->nodes); node++)
+            for (const CtxWord *node=B1ST (CtxWord, frag_ctx->nodes); node <= BLST (CtxWord, frag_ctx->nodes); node++)
                 if (node->snip_len * 2 > frag_size)
-                    frag_size = 2 * roundup2pow (node->snip_len); // must be power of 2 for dict_io_read_one_vb
+                    frag_size = 2 * roundup2pow ((uint64_t)node->snip_len); // must be power of 2 for dict_io_read_one_vb
         }
 
         vb->fragment_ctx   = frag_ctx;
@@ -118,7 +118,7 @@ static void dict_io_prepare_for_compress (VBlockP vb)
 
         ctx_zip_z_data_exist (frag_ctx);
 
-        while (frag_next_node < BAFT (CtxNode, frag_ctx->nodes) && 
+        while (frag_next_node < BAFT (CtxWord, frag_ctx->nodes) && 
                vb->fragment_len + frag_next_node->snip_len + 1 < frag_size) {
 
             vb->fragment_len += frag_next_node->snip_len + 1;
@@ -126,7 +126,7 @@ static void dict_io_prepare_for_compress (VBlockP vb)
             frag_next_node++;
         }
 
-        if (frag_next_node == BAFT (CtxNode, frag_ctx->nodes)) {
+        if (frag_next_node == BAFT (CtxWord, frag_ctx->nodes)) {
             frag_ctx++;
             frag_next_node = NULL;
             frag_size = 0;
@@ -252,7 +252,7 @@ static void dict_io_read_one_vb (VBlockP vb)
         // this allows us to calculate the frag_size with which this dictionary was compressed and hence an upper bound on the size
         uint64_t size_upper_bound = (num_fragments == 1) ? vb->fragment_len : ((uint64_t)roundup2pow (vb->fragment_len) * (uint64_t)num_fragments);
         
-        buf_alloc (evb, &dict_ctx->dict, 0, VER(9) ? size_upper_bound : v8_get_dict_size (vb, dict_sec), char, 0, "contexts->dict");
+        buf_alloc (evb, &dict_ctx->dict, 0, VER(9) ? size_upper_bound : v8_get_dict_size (vb, dict_sec), char, 0, CTX_TAG_DICT);
         dict_ctx->dict.prm32[0] = num_fragments;     // for error reporting
         dict_ctx->dict.prm32[1] = vb->fragment_len;
 
@@ -320,7 +320,7 @@ static void dict_io_dict_build_word_list_one (ContextP zctx)
                     zctx->tag_name, (uint64_t)index, (uint64_t)len);
         }       
 
-        *B(CtxWord, zctx->word_list, snip_i) = (CtxWord){ .index = index, .len = len };
+        *B(CtxWord, zctx->word_list, snip_i) = (CtxWord){ .char_index = index, .snip_len = len };
 
         word_start = c+1; // skip over the \0 separator
     }
@@ -376,9 +376,9 @@ void dict_io_read_all_dictionaries (void)
             if (flag.list_chroms && ((!flag.luft && ctx->did_i == CHROM) || (flag.luft && ctx->did_i == VCF_oCHROM)))
                 dict_io_print (info_stream, STRb(ctx->dict), true, false, true, Z_DT(SAM));
             
-            if (flag.show_dict) 
+            if (flag.show_dict || (flag.show_one_dict && dict_id_is_show (ctx->dict_id))) 
                 iprintf ("%-8s\tdid_i=%-3u\tnum_snips=%u\tdict_size=%s\n", 
-                         ctx->tag_name, did_i, ctx->word_list.len32, str_size (ctx->dict.len).s);
+                         ctx_tag_name_ex (ctx).s, did_i, ctx->word_list.len32, str_size (ctx->dict.len).s);
 
             if (dict_id_is_show (ctx->dict_id))
                 dict_io_print (info_stream, STRb(ctx->dict), true, true, true, false);
@@ -391,7 +391,7 @@ void dict_io_read_all_dictionaries (void)
     COPY_TIMER_EVB (dict_io_read_all_dictionaries);
 }
 
-StrTextMegaLong dict_io_snip_to_str (STRp(snip), bool add_quote)
+StrTextMegaLong str_snip (STRp(snip), bool add_quote)
 {
     StrTextMegaLong s;
     char *next = s.s;
@@ -461,7 +461,7 @@ void dict_io_print (FILE *fp, STRp(data), bool with_word_index, bool add_quotati
 
         // in case we are showing chrom data in --list-chroms in SAM - don't show * and =
         if (!remove_equal_asterisk || !(str_is_1char(word,'*') || str_is_1char(word,'='))) 
-            fprintf (fp, "%s", dict_io_snip_to_str (STRa(word), add_quotation_marks).s);
+            fprintf (fp, "%s", str_snip (STRa(word), add_quotation_marks).s);
 
         word += word_len + 1;
         fputc ((add_newline || word == after) ? '\n' : ' ', fp);

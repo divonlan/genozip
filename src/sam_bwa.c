@@ -309,8 +309,8 @@ void sam_seg_BWA_XT_A (VBlockSAMP vb, char XT, unsigned add_bytes)
     
     // predict based on the existance and value of X0
     char prediction = !has(X0_i) ? 'M'  // Mate Smith-Waterman used for mapping. Note: could also be 'N', but we set our prediction to 'M' as it is very much more common
-                    : X0 == 1 ? 'U'  // Unique mapping
-                    :           'R'; // Repeat (i.e. not unique)
+                    : X0 == 1    ? 'U'  // Unique mapping
+                    :              'R'; // Repeat (i.e. not unique)
 
     if (prediction == XT)
         seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_BWA_XT }, 2, OPTION_XT_A, add_bytes);
@@ -322,7 +322,7 @@ void sam_seg_BWA_XT_A (VBlockSAMP vb, char XT, unsigned add_bytes)
 SPECIAL_RECONSTRUCTOR (sam_piz_special_BWA_XT)
 {
     if (reconstruct) {
-        char prediction = !container_has_item (ctx, _OPTION_X0_i)   ? 'M'
+        char prediction = !curr_container_has (CTX(SAM_AUX), _OPTION_X0_i)   ? 'M'
                         : reconstruct_peek (vb, CTX(OPTION_X0_i), 0, 0).i == 1 ? 'U'
                         :                                                        'R';
         RECONSTRUCT1 (prediction);
@@ -364,7 +364,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_BWA_X1)
 {
     new_value->i = 0; // default if no XA
 
-    if (container_has_item (ctx, _OPTION_XA_Z)) {
+    if (curr_container_has (CTX(SAM_AUX), _OPTION_XA_Z)) {
         int64_t XA_repeats = container_peek_repeats (vb, CTX(OPTION_XA_Z), ';');
         int64_t X0 = reconstruct_peek (vb, CTX(OPTION_X0_i), 0, 0).i;
         

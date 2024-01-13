@@ -313,6 +313,8 @@ static void codec_longr_reconstruct_init (VBlockP vb, ContextP lens_ctx, Context
     BufferP value_to_bin = ZCTX(values_ctx->did_i)->counts.len ? &ZCTX(values_ctx->did_i)->counts 
                                                                : &ZCTX(lens_ctx->did_i)->counts;
 
+    ASSERTISALLOCED (*value_to_bin);
+    
     ARRAY (uint64_t, value_to_bin_src, *value_to_bin); 
     ARRAY (uint8_t,  value_to_bin_dst, values_ctx->value_to_bin);
 

@@ -62,7 +62,7 @@ void ref_iupacs_compress (void)
 
         if (flag.show_ref_iupacs)   
             iprintf ("IUPAC=%c\nCHROM=%s\tPOS=%"PRIu64"\tGPOS=%"PRIu64"\n", 
-                     make_iupacs[i].iupac, ctx_snip_from_zf_nodes (ZCTX(FASTA_CONTIG), r->chrom, 0, 0), r->first_pos + make_iupacs[i].idx, gpos);
+                     make_iupacs[i].iupac, ctx_get_z_snip_ex (ZCTX(FASTA_CONTIG), r->chrom, 0, 0), r->first_pos + make_iupacs[i].idx, gpos);
 
         iupacs[i] = (Iupac) { .gpos  = BGEN64 (gpos - last_gpos), // store delta
                               .iupac = make_iupacs[i].iupac };

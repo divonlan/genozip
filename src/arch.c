@@ -289,7 +289,8 @@ StrText arch_get_filesystem_type (void)
         NAME (0xaad7aaea, "PanFS");    // Clustered filesystem: https://www.panasas.com/products/panfs/
         NAME (0xc36400,   "CephFS");   // Distributed filesystem: https://docs.ceph.com/en/latest/cephfs/
         NAME (0x47504653, "GPFS");     // IBM Spectrum Scale GPFS: https://www.ibm.com/docs/en/storage-scale/4.2.0?topic=scale-overview-gpfs
-        
+        NAME (0xfe534d42, "SMB2");     // Windows file sharing
+
         default: sprintf (s.s, "0x%lx", fs.f_type); 
     }
 

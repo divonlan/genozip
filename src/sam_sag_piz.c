@@ -117,7 +117,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_pull_from_sag)
         case SAM_RNAME: {
             STR(rname);
             ctx_get_snip_by_word_index (CTX(OPTION_SA_RNAME), sa_aln->rname, rname);
-            if (reconstruct) RECONSTRUCT (rname, rname_len);
+            if (reconstruct) RECONSTRUCT_str (rname);
             new_value->i = ctx_get_word_index_by_snip (VB, CTX(SAM_RNAME), STRa(rname)); // SAM_RNAME has STORE_INDEX. Note: SAM_RNAME has different word indices than OPTION_SA_RNAME
             return HAS_NEW_VALUE;
         }

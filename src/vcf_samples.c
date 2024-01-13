@@ -27,13 +27,13 @@ static SmallContainer con_AD={}, con_ADALL={}, con_ADF={}, con_ADR={}, con_SAC={
     con_MB={}, con_SB={}, con_AF={};
 
 static char sb_snips[2][32], mb_snips[2][32], f2r1_snips[VCF_MAX_ARRAY_ITEMS][32], adr_snips[VCF_MAX_ARRAY_ITEMS][32], adf_snips[VCF_MAX_ARRAY_ITEMS][32], 
-    rdf_snip[32], rdr_snip[32], adf_snip[32], adr_snip[32], ad_varscan_snip[32], ab_snip[48], gq_by_pl[50], gq_by_gp[50],
+    rdf_snip[32], rdr_snip[32], adf_snip[32], adr_snip[32], ad_varscan_snip[32], gq_by_pl[50], gq_by_gp[50],
     sac_snips[VCF_MAX_ARRAY_ITEMS/2][32], PL_to_PLn_redirect_snip[30], PL_to_PLy_redirect_snip[30];
 STRl(snip_copy_af,32);
 
 static unsigned sb_snip_lens[2], mb_snip_lens[2], f2r1_snip_lens[VCF_MAX_ARRAY_ITEMS], adr_snip_lens[VCF_MAX_ARRAY_ITEMS], adf_snip_lens[VCF_MAX_ARRAY_ITEMS], 
     sac_snip_lens[VCF_MAX_ARRAY_ITEMS/2], rdf_snip_len, rdr_snip_len, adf_snip_len, adr_snip_len, ad_varscan_snip_len,
-    ab_snip_len, gq_by_pl_len, gq_by_gp_len, PL_to_PLn_redirect_snip_len, PL_to_PLy_redirect_snip_len;
+    gq_by_pl_len, gq_by_gp_len, PL_to_PLn_redirect_snip_len, PL_to_PLy_redirect_snip_len;
 
 static DictId make_array_item_dict_id (uint64_t dict_id_num, unsigned item_i)
 {
@@ -95,12 +95,6 @@ void vcf_samples_zip_initialize (void)
         
     seg_prepare_snip_other (SNIP_COPY, _INFO_AF, 0, 0, snip_copy_af);
 
-    ab_snip_len = sizeof(ab_snip);
-    DictId ad_dict_ids[3] = { make_array_item_dict_id(_FORMAT_AD, 0), 
-                              make_array_item_dict_id(_FORMAT_AD, 1),
-                              (DictId)_FORMAT_AB3 };
-    seg_prepare_multi_dict_id_special_snip (VCF_SPECIAL_AB, 3, ad_dict_ids, ab_snip, &ab_snip_len);
-
     gq_by_gp_len = sizeof (gq_by_gp);
     seg_prepare_multi_dict_id_special_snip (VCF_SPECIAL_GQ, 1, (DictId[]){ (DictId)_FORMAT_GP }, gq_by_gp, &gq_by_gp_len);
     gq_by_gp[gq_by_gp_len++] = '\t';
@@ -141,13 +135,12 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
         codec_pbwt_seg_init (VB, CTX(FORMAT_PBWT_RUNS), CTX(FORMAT_PBWT_FGRC));
 
     ctx_consolidate_stats (VB, FORMAT_GT, FORMAT_GT_HT, FORMAT_GT_HT_INDEX, FORMAT_PBWT_RUNS, FORMAT_PBWT_FGRC, DID_EOL);
-    ctx_consolidate_stats (VB, FORMAT_AB, FORMAT_AB3, DID_EOL);
 
     // determine which way to seg PL - Mux by dosage or Mux by dosageXDP, or test both options
     CTX(FORMAT_PL)->no_stons = true;
     vb->PL_mux_by_DP = (flag.best && !z_is_dvcf && !segconf.running && segconf.has_DP_before_PL) // only in --best, because it is very slow
-        ? segconf.PL_mux_by_DP // set by a previous VB in vcf_FORMAT_PL_decide or still in its initial value of PL_mux_by_DP_TEST
-        : PL_mux_by_DP_NO;
+        ? segconf.PL_mux_by_DP // set by a previous VB in vcf_FORMAT_PL_decide or still in its initial value of "unknown"
+        : no;
 
     // initialize dosage multiplexers
     #define init_mux_by_dosage(name) seg_mux_init ((VBlockP)vb, CTX(FORMAT_##name), ZIP_NUM_DOSAGES_FOR_MUX, VCF_SPECIAL_MUX_BY_DOSAGE, CTX(FORMAT_##name)->no_stons, (MultiplexerP)&vb->mux_##name)
@@ -164,11 +157,12 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
 
     seg_mux_init (VB, CTX(FORMAT_PLy), MUX_CAPACITY(vb->mux_PLy), VCF_SPECIAL_MUX_BY_DOSAGExDP, false, (MultiplexerP)&vb->mux_PLy);
     
-    if (segconf.has[FORMAT_DP]) {
-        seg_mux_init (VB, CTX(FORMAT_GQ),  MUX_CAPACITY(vb->mux_GQ),  VCF_SPECIAL_MUX_BY_DOSAGExDP, false, (MultiplexerP)&vb->mux_GQ);
+    if (segconf.has[FORMAT_DP]) 
         seg_mux_init (VB, CTX(FORMAT_RGQ), MUX_CAPACITY(vb->mux_RGQ), VCF_SPECIAL_RGQ, false, (MultiplexerP)&vb->mux_RGQ);
-    }
-    else
+    
+    if (segconf.GQ_method == MUX_DOSAGExDP)
+        seg_mux_init (VB, CTX(FORMAT_GQ),  MUX_CAPACITY(vb->mux_GQ),  VCF_SPECIAL_MUX_BY_DOSAGExDP, false, (MultiplexerP)&vb->mux_GQ);
+    else if (segconf.GQ_method == MUX_DOSAGE)
         init_mux_by_dosage(GQ);
 
     // flags to send to PIZ
@@ -291,7 +285,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_DOSAGE)
 }
 
 // if cell is NULL, leaves it up to the caller to seg to the channel 
-static void vcf_seg_FORMAT_mux_by_dosagexDP (VBlockVCFP vb, ContextP ctx, STRp(cell), void *mux_p) 
+void vcf_seg_FORMAT_mux_by_dosagexDP (VBlockVCFP vb, ContextP ctx, STRp(cell), void *mux_p) 
 {
     ConstMultiplexerP mux = (ConstMultiplexerP)mux_p;
 
@@ -374,8 +368,12 @@ static WordIndex vcf_seg_FORMAT_minus (VBlockVCFP vb, ContextP ctx,
         return seg_by_ctx (VB, STRa(str), ctx, str_len);
 }
 
-// used for DP, GQ, A0D and otheres - store in transposed matrix in local 
-static inline void vcf_seg_FORMAT_transposed (VBlockVCFP vb, ContextP ctx, STRp(cell), unsigned add_bytes)
+// used for DP, D0P0, A0D - store in transposed matrix in local 
+static void vcf_seg_FORMAT_transposed (VBlockVCFP vb, ContextP ctx, 
+                                       STRp(cell),     // option 1
+                                       uint32_t value, // option 2: used if cell=0
+                                       STRp(all_the_same_lookup),
+                                       unsigned add_bytes)
 {
     if (ctx->ltype != LT_UINT32_TR) {
         ASSERT (ctx->ltype == LT_SINGLETON, "Expecting ctx->ltype=%s to be SIN", lt_name(ctx->ltype));
@@ -384,22 +382,27 @@ static inline void vcf_seg_FORMAT_transposed (VBlockVCFP vb, ContextP ctx, STRp(
         ctx->flags.store = STORE_INT;
     }
 
-    // note: note just in initialization, as number of lines is an estimate and might change
+    // note: not just in initialization, as number of lines is an estimate and might change
     buf_alloc (vb, &ctx->local, 1, vb->lines.len * vcf_num_samples, uint32_t, 1, CTX_TAG_LOCAL);
 
     if (IS_PERIOD (cell)) 
         BNXT32 (ctx->local) = 0xffffffff;
     
     else {
-        ASSSEG (str_get_int (STRa(cell), &ctx->last_value.i) && ctx->last_value.i >= 0 && ctx->last_value.i <= 0xfffffffe, 
-                "While compressing %s expecting an integer in the range [0, 0xfffffffe] or a '.', but found: %.*s", 
-                ctx->tag_name, cell_len, cell);
+        ASSSEG (!cell || str_get_uint32 (STRa(cell), &value), 
+                "Expecting %s=\"%.*s\" to be an integer or '.'", ctx->tag_name, STRf(cell));
 
-        BNXT32 (ctx->local) = (uint32_t)ctx->last_value.i;
+        ASSSEG (value >= 0 && value <= 0xfffffffe, 
+                "Expecting %s=%u to be in [0, 0xfffffffe] or a '.'", ctx->tag_name, value);
+
+        ctx_set_last_value (VB, ctx, (int64_t)value);
+
+        BNXT32 (ctx->local) = value;
     }
 
-    // add a LOOKUP to b250
-    seg_by_ctx (VB, (char []){ SNIP_LOOKUP }, 1, ctx, add_bytes);
+    seg_by_ctx (VB, STRa(all_the_same_lookup), ctx, 0); // note: not all-the-same, because some values might be missing, causing canceling of transposition
+
+    ctx->txt_len += add_bytes;
 }
 
 // a comma-separated array - each element goes into its own item context, single repeat
@@ -420,6 +423,7 @@ static WordIndex vcf_seg_FORMAT_A_R (VBlockVCFP vb, ContextP ctx, SmallContainer
         
         if (!item_ctxs[i]->is_initialized) {
             item_ctxs[i]->flags.store = item_store_type;
+            item_ctxs[i]->flags.ctx_specific_flag = ctx->flags.ctx_specific_flag; // inherit - needed for same_line
             item_ctxs[i]->is_initialized = true;
             ctx_consolidate_stats (VB, ctx->did_i, item_ctxs[i]->did_i, DID_EOL);
         }
@@ -437,12 +441,20 @@ static WordIndex vcf_seg_FORMAT_A_R (VBlockVCFP vb, ContextP ctx, SmallContainer
         seg_item_cb (vb, ctx, con.nitems_lo, items, item_lens, item_ctxs, values);
 
     // case: seg items here
-    else 
+    else {
+        int64_t sum = 0; // since 15.0.37 we sum here too
         for (unsigned i=0; i < con.nitems_lo; i++) 
-            if (item_store_type == STORE_INT)
-                seg_integer_or_not (VB, item_ctxs[i], STRi(item, i), item_lens[i]);
+            if (item_store_type == STORE_INT) {
+                if (seg_integer_or_not (VB, item_ctxs[i], STRi(item, i), item_lens[i]))
+                    sum += item_ctxs[i]->last_value.i; //
+            }
+
             else
                 seg_by_ctx (VB, STRi(item, i), item_ctxs[i], item_lens[i]);
+    
+        if (ctx->flags.store == STORE_INT)
+            ctx_set_last_value (VB, ctx, sum);
+    }
 
     ctx->last_txt.len = con.nitems_lo; // seg only: for use by vcf_seg_*_items callbacks
     
@@ -476,25 +488,30 @@ static inline void vcf_seg_FORMAT_AD_varscan (VBlockVCFP vb, ContextP ctx, STRp(
 // <ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed">
 static void vcf_seg_AD_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP *item_ctxs, const int64_t *values)
 {       
-    bool has_adall_this_sample = segconf.has[FORMAT_ADALL] && ctx_encountered (VB, FORMAT_ADALL); // note: we can't delta vs ADALL unless segconf says so, bc it can ruin other fields that rely on peeking AD, eg AB
+    // calculate sum of AD items
     int64_t sum = 0; 
+    for (unsigned i=0; i < n_items; i++) 
+        sum += values[i];
 
-    for (unsigned i=0; i < n_items; i++) {
+    ctx_set_last_value (VB, ctx, sum); // AD value is sum of its items
 
-        // If we have ADALL in this file, we delta vs ADALL if we have it in this sample, or seg normally if not
-        if (segconf.has[FORMAT_ADALL]) {
+    // if we have ADALL in this file, we delta vs ADALL if we have it in this sample, or seg normally if not
+    if (segconf.has[FORMAT_ADALL]) {
+        bool has_adall_this_sample = segconf.has[FORMAT_ADALL] && ctx_encountered (VB, FORMAT_ADALL); // note: we can't delta vs ADALL unless segconf says so, bc it can ruin other fields that rely on peeking AD, eg AB
+    
+        for (unsigned i=0; i < n_items; i++) 
             // case: we had ADALL preceeding in this sample, seg as delta vs. ADALL 
             if (has_adall_this_sample)
                 seg_delta_vs_other (VB, item_ctxs[i], ECTX (con_ADALL.items[i].dict_id), NULL, item_lens[i]);
             else 
                 seg_by_ctx (VB, STRi(item, i), item_ctxs[i], item_lens[i]);
-        }
+    }
 
-        // case: Since item 0 (depth of REF) is usually somewhat related to the overall sample depth,
-        // and hence values within a sample are expected to be correlated - we store it transposed, and the other items - normally
-        else {
+    else 
+        for (unsigned i=0; i < n_items; i++) {
             if (i==0 && vcf_num_samples > 1)
-                vcf_seg_FORMAT_transposed (vb, item_ctxs[0], STRi(item, 0), item_lens[0]);
+                // we store the sum in the first item - it is expected to be roughly similar within each sample - hence transposing
+                vcf_seg_FORMAT_transposed (vb, item_ctxs[0], 0, 0, sum, (char []){ SNIP_SPECIAL, VCF_SPECIAL_FORMAT_AD0 }, 2, item_lens[0]);
             
             else if (i==0 || i==1) {
                 if (!vb->mux_AD[i].num_channels) 
@@ -503,15 +520,25 @@ static void vcf_seg_AD_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP
                 vcf_seg_FORMAT_mux_by_dosage_int (vb, item_ctxs[i], values[i], &vb->mux_AD[i], item_lens[i]);
             }
             else
-                seg_by_ctx (VB, STRi(item, i), item_ctxs[i], item_lens[i]);
+                seg_integer_or_not (VB, item_ctxs[i], STRi(item, i), item_lens[i]);
         }
-        sum += values[i];
-    }
-
-    // AD value is sum of its items
-    ctx_set_last_value (VB, ctx, sum);
 
     memcpy (vb->ad_values, values, n_items * sizeof (values[0]));
+}
+
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_AD0)
+{
+    reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, (char[]){ SNIP_LOOKUP }, 1, false);
+
+    new_value->i = ctx->last_value.i; // calculated by ^, equals sum(ADi)
+
+    // calculate: AD0 = sum(ADi) - AD1 - AD2...    
+    for (int i=1; i < con_nitems (*current_con.con); i++)
+        new_value->i -= reconstruct_peek_by_dict_id (vb, current_con.con->items[i].dict_id, 0, 0).i;
+
+    if (reconstruct) RECONSTRUCT_INT (new_value->i);
+
+    return HAS_NEW_VALUE;
 }
 
 //----------------------
@@ -752,120 +779,6 @@ static inline WordIndex vcf_seg_FORMAT_AF (VBlockVCFP vb, ContextP ctx, STRp(cel
         return vcf_seg_FORMAT_A_R (vb, ctx, con_AF, STRa(cell), STORE_NONE, NULL);
 }
 
-//----------
-// FORMAT/GQ
-// ---------
-
-static SORTER (value_sorter)
-{
-    return DESCENDING_RAW (*(int64_t *)a, *(int64_t*)b); // sort in reverse order - usually faster as GP[0] / PL[0] are usually the biggest (corresponding to GT=0/0)
-}
-
-static int64_t vcf_predict_GQ (VBlockVCFP vb, Did src_did_i)
-{
-    bool is_gp = (src_did_i == FORMAT_GP);
-    STR(src);
-
-    if (IS_ZIP)
-        SETlast (src, src_did_i);
-    else
-        reconstruct_peek (VB, CTX(src_did_i), pSTRa(src));
-
-    str_split (src, src_len, 30, ',', item, false);
-
-    int64_t values[n_items];
-    unsigned n_values=0;
-
-    for (int i=0; i < n_items; i++) {
-        if (item_lens[i]==1 && items[i][0]=='.')
-            values[n_values++] = 0; // consider a '.' to be 0
-
-        else if (is_gp) {
-            double f;
-            if (str_get_float (STRi(item,i), &f, 0, 0)) 
-                values[n_values++] = (int64_t)(f+0.5); // round to nearest integer
-        }
-        else
-            n_values += str_get_int (STRi(item, i), &values[n_values]); // increment if successfully read an int
-    }
-
-    if (!n_values) return 0; // array to long (n_item=0) or none is an integer
-
-
-    // now we have an array of integers that is the same or shorter that the GP/PL array. Now we sort it.
-    qsort (values, n_values, sizeof(values[0]), value_sorter);
-
-    int64_t mid_value = values[n_values/2];
-
-    if (!is_gp) mid_value = MIN_(mid_value, 99); // for PL, it is capped by 99
-
-    return mid_value;
-}
-
-static void vcf_seg_FORMAT_GQ_do_seg (VBlockVCFP vb, int64_t gq_value, int64_t prediction, STRp(template_snip), unsigned gq_len)
-{
-    STRl(snip, 50) = template_snip_len;
-    memcpy (snip, template_snip, template_snip_len);
-    snip_len += str_int (prediction - gq_value, &snip[snip_len]);
-
-    seg_by_did (VB, STRa (snip), FORMAT_GQ, gq_len);
-}
-
-static inline void vcf_seg_FORMAT_GQ (VBlockVCFP vb)
-{
-    ContextP gq_ctx = CTX(FORMAT_GQ);
-    STRlast (gq, FORMAT_GQ);
-
-    // second best: mux by dosage, and possibly DP
-    if (!segconf.running && !segconf.GQ_by_GP && !segconf.GQ_by_PL) {
-        if (segconf.has[FORMAT_DP]) 
-            vcf_seg_FORMAT_mux_by_dosagexDP (vb, gq_ctx, STRa(gq), &vb->mux_GQ);
-        else                        
-            vcf_seg_FORMAT_mux_by_dosage (vb, gq_ctx, STRa(gq), (DosageMultiplexer *)&vb->mux_GQ);
-        return;
-    }
-
-    int64_t gq_value;
-    if (!str_get_int (STRa(gq), &gq_value)) goto fallback;
-
-    if (segconf.running) {
-        if (ctx_encountered (VB, FORMAT_GP) && vcf_predict_GQ (vb, FORMAT_GP) == gq_value) segconf.count_GQ_by_GP++;
-        if (ctx_encountered (VB, FORMAT_PL) && vcf_predict_GQ (vb, FORMAT_PL) == gq_value) segconf.count_GQ_by_PL++;
-    }
-    
-    else {
-        if (segconf.GQ_by_GP && ctx_encountered (VB, FORMAT_GP)) {
-            int64_t prediction = vcf_predict_GQ (vb, FORMAT_GP);
-            vcf_seg_FORMAT_GQ_do_seg (vb, gq_value, prediction, STRa(gq_by_gp), gq_len);
-            return;
-        }
-
-        if (segconf.GQ_by_PL && ctx_encountered (VB, FORMAT_PL)) {
-            int64_t prediction = vcf_predict_GQ (vb, FORMAT_PL);
-            vcf_seg_FORMAT_GQ_do_seg (vb, gq_value, prediction, STRa(gq_by_pl), gq_len);
-            return;
-        }
-    }
-
-fallback:
-    // fallback if not match to GP or PL, or segconf.running
-    seg_by_ctx (VB, STRa(gq), gq_ctx, gq_len);    
-}
-
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_GQ)
-{
-    rom tab = memchr (snip, '\t', snip_len);
-
-    ContextP src_ctx = SCTX0 (snip);
-
-    int64_t prediction = vcf_predict_GQ (VB_VCF, src_ctx->did_i);
-    int64_t delta = atoi (tab+1);
-
-    new_value->i = prediction - delta;
-    RECONSTRUCT_INT (new_value->i);
-
-    return HAS_NEW_VALUE;
-}
 
 //-----------
 // FORMAT/RGQ
@@ -877,7 +790,7 @@ static inline void vcf_seg_FORMAT_RGQ (VBlockVCFP vb, ContextP ctx, STRp(rgq), C
 {
     ConstMultiplexerP mux = (ConstMultiplexerP)&vb->mux_RGQ;
         
-    // prediction: we have GT, and if GT[0]=. then RGQ=0. Fallback seg in case prediction fail
+    // prediction: we have GT, and if GT[0]=. then RGQ=0. Fallback seg in case prediction fails
     if (gt_ctx->did_i != FORMAT_GT ||                    // prediction failed: first subfield isn't GT
         (gt[0] == '.' && (rgq_len != 1 || *rgq != '0'))) // prediction failed: GT[0]=. and yet RGQ!="0"
         goto fallback;
@@ -938,70 +851,77 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_RGQ)
 // FORMAT/DP
 // ---------
 
-static inline void vcf_seg_FORMAT_DP (VBlockVCFP vb, ContextP ctx, STRp(cell))
+static inline void vcf_seg_FORMAT_DP (VBlockVCFP vb)
 {
+    decl_ctx(FORMAT_DP);
+    STRlast (dp, FORMAT_DP);
+
     int64_t value;
-    bool is_null = (cell_len==1 && *cell=='.');
-    bool has_value = !is_null && str_get_int (STRa(cell), &value);
+    bool is_null = IS_PERIOD(dp);
+    bool has_value = !is_null && str_get_int (STRa(dp), &value);
 
     if (segconf.running) {
         if (is_null) 
             segconf.use_null_DP_method = true;
         
-        if (!segconf.FORMAT_DP_method) {
-            if (ctx_has_value (VB, FORMAT_AD)) 
-                segconf.FORMAT_DP_method = by_AD;
-
-            else if (ctx_has_value (VB, FORMAT_SDP)) 
-                segconf.FORMAT_DP_method = by_SDP;
+        if (!segconf.FMT_DP_method) {
+            if (ctx_has_value (VB, FORMAT_SDP)) // SDP has priority of AD (in files with SDP, AD means something else)
+                segconf.FMT_DP_method = BY_SDP;
+            
+            else if (ctx_has_value (VB, FORMAT_AD)) 
+                segconf.FMT_DP_method = BY_AD;
         }
     }
 
-    seg_set_last_txt (VB, ctx, STRa(cell));
+    if (segconf.FMT_DP_method != FMT_DP_DEFAULT && !segconf.running) {
+        Did other_did_i = (segconf.FMT_DP_method == BY_AD ? FORMAT_AD : FORMAT_SDP);
 
-    // case - we have FORMAT/AD - calculate delta vs the sum of AD components
-    if (segconf.FORMAT_DP_method == by_AD) {
-        if (ctx_has_value (VB, FORMAT_AD))
-            seg_delta_vs_other (VB, ctx, CTX(FORMAT_AD), STRa(cell));
-        else {
-            seg_by_ctx (VB, STRa(cell), ctx, cell_len);
-            if (has_value) ctx_set_last_value (VB, ctx, value);
-        }
-    }
+        bool other_is_in_FORMAT = ctx_encountered (VB, other_did_i); // note: DP is always segged after AD and SDP, regardless of their order in FORMAT
+        int channel_i = other_is_in_FORMAT;
 
-    // case - we have FORMAT/SDP - calculate delta vs the sum of AD components
-    else if (segconf.FORMAT_DP_method == by_SDP) {
-        if (ctx_has_value (VB, FORMAT_SDP))
-            seg_delta_vs_other (VB, ctx, CTX(FORMAT_SDP), STRa(cell));
-        else {
-            seg_by_ctx (VB, STRa(cell), ctx, cell_len);
-            if (has_value) ctx_set_last_value (VB, ctx, value);
-        }
+        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, ctx->did_i, (MultiplexerP)&vb->mux_FORMAT_DP, channel_i);
+
+        if (channel_i) 
+            seg_delta_vs_other (VB, channel_ctx, CTX(other_did_i), STRa(dp));
+        
+        else
+            vcf_seg_FORMAT_transposed (vb, channel_ctx, STRa(dp), 0, (char []){ SNIP_LOOKUP }, 1, dp_len); // this handles DP that is an integer or '.'
+        
+        seg_by_ctx (VB, STRa(vb->mux_FORMAT_DP.snip), ctx, 0); 
+
+        ctx_set_last_value (VB, ctx, channel_ctx->last_value); // propagate up       
     }
     
-    // single-sample default: seg against INFO/DP
+    // single-sample default: seg against INFO/DP or not
     else if (vcf_num_samples == 1) {
         bool info_dp_is_int = ctx_has_value_in_line_(VB, CTX(INFO_DP));
 
         // special means: if FORMAT/DP>=1, INFO/DP is an integer, if FORMAT/DP==0, INFO/DP has no integer value
         if (has_value && ((value > 0) == info_dp_is_int)) {
             SNIPi2 (SNIP_SPECIAL, VCF_SPECIAL_DP_by_DP_single, info_dp_is_int ? (value - CTX(INFO_DP)->last_value.i) : 0);
-            seg_by_ctx (VB, STRa(snip), ctx, cell_len);
+            seg_by_ctx (VB, STRa(snip), ctx, dp_len);
         }
         else // value is not an integer or '.', or INFO and FORMAT don't agree on existance of an integer DP
-            seg_by_ctx (VB, STRa(cell), ctx, cell_len);
+            seg_by_ctx (VB, STRa(dp), ctx, dp_len);
     }
 
     // multi-sample default: store in transposed matrix (or just LOOKUP from local if not transposable)
     else 
-        vcf_seg_FORMAT_transposed (vb, ctx, STRa(cell), cell_len); // this handles DP that is an integer or '.'
+        vcf_seg_FORMAT_transposed (vb, ctx, STRa(dp), 0, (char []){ SNIP_LOOKUP }, 1, dp_len); // this handles DP that is an integer or '.'
 
-    if (*cell != '.' && CTX(INFO_DP)->dp.by_format_dp) 
+    if (!IS_PERIOD(dp) && CTX(INFO_DP)->dp.by_format_dp) 
         CTX(INFO_DP)->dp.sum_format_dp += ctx->last_value.i; // we may delta INFO/DP against this sum
 
     // add up DP's in certain conditions, for consumption by INFO/QD predictor
     if (has_value)
         vcf_seg_sum_DP_for_QD (vb, value);
+}
+
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_FORMAT_DP)
+{
+    bool other_is_in_FORMAT = curr_container_has (CTX(VCF_SAMPLES), segconf.FMT_DP_method == BY_AD ? _FORMAT_AD : _FORMAT_SDP);
+
+    return reconstruct_demultiplex (vb, ctx, STRa(snip), other_is_in_FORMAT, new_value, reconstruct);
 }
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_DP_by_DP_single)
@@ -1143,44 +1063,40 @@ static bool vcf_phred_optimize (rom snip, unsigned len, char *optimized_snip, un
 // ---------
 
 // <ID=AB,Number=1,Type=Float,Description="Allele balance for each het genotype",RendAlg="NONE">
-// Expecting: '.' if channel is 0 or 2, AD0/(AD0+AD1) if 1, and any value if 3 which is placed in AB3
+// Expecting: '.' if channel is 0 or 2,  if 1. 
 // If expectation is met, SPECIAL is segged in AB. 
 static inline void vcf_seg_FORMAT_AB (VBlockVCFP vb, ContextP ctx, STRp(ab))
 {
     int channel_i = vcf_seg_get_mux_channel_i (vb, false);
-    bool is_0_or_2 = (channel_i==0 || channel_i==2); // note: dos02 doesn't change in case of DVCF REF⇆ALT switch
-    bool ab_missing = ab_len==1 && *ab=='.';
 
-    if (channel_i==-1               || // GT didn't produce a mux channel
-        (channel_i==1 && z_is_dvcf) || // we can't handle channel 1 in dual coordinates (TODO: limit to REF⇆ALT switch)
-        segconf.has[FORMAT_ADALL]   || // we can't handle AD0/AD1 peeking in AD is a delta vs ADALL
-        (is_0_or_2 && !ab_missing)) {  // if channel is 0 or 2, we expected a '.' 
+    if (channel_i == -1                     || // GT didn't produce a mux channel
+        CTX(FORMAT_GT)->gt.prev_ploidy != 2 || // This method was tested only for ploidy == 2
+        vb->n_alts != 1                     || // This method was tested only for n_alts == 1
+        (channel_i == 1 && z_is_dvcf)       || // we can't handle channel 1 in dual coordinates (TODO: limit to REF⇆ALT switch)
+        (channel_i != 1 && !IS_PERIOD(ab))) {  // prediction: '.' for channel 0,2. fail if prediction is wrong.
     
         seg_by_ctx (VB, STRa(ab), ctx, ab_len);
         return;
     }
 
-    // prepare rollback data: we will verify channel 1 in vcf_seg_FORMAT_AB_verify_channel1 and rollback if necessary
-    if (channel_i==1) {
+    // prediction: AD0/(AD0+AD1) for channel 1. We will verify the prediction in 
+    // vcf_seg_FORMAT_AB_verify_channel1 and rollback if prediction is wrong
+    if (channel_i == 1) {
         seg_set_last_txt (VB, ctx, STRa(ab));
         ctx_set_last_value (VB, ctx, (ValueType){.i = 1}); // need verification
 
         seg_create_rollback_point (VB, NULL, 1, FORMAT_AB); 
     }
 
-    if (channel_i==3) { 
-        seg_by_ctx (VB, STRa(ab_snip), ctx, 0);
-        seg_by_did (VB, STRa(ab), FORMAT_AB3, ab_len);
-    }
+    seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_AB }, 2, ctx, ab_len);
 
-    else // channel 0,1,2
-        seg_by_ctx (VB, STRa(ab_snip), ctx, ab_len);
+    // note: up to 15.0.35, we segged channel_i=3 (exceptions channel) into FORMAT_AB3. Since 15.0.36 we no longer have an exception channel.
 }
 
-static inline void calculate_AB (double ad0, double ad1, char *snip)
+static inline void calculate_AB (double ad0, double ad1, qSTRp(snip))
 {
     double ab = 0.0000001 + ad0 / (ad0 + ad1); // +epsilon to bring number over the 0.01 mark if it is almost almost there 
-    sprintf (snip, "%.*g", ab < 0.1 ? 1 : 2, ab); 
+    *snip_len = sprintf (snip, "%.*g", ab < 0.1 ? 1 : 2, ab); 
 }
 
 // this is called if we segged AB channel 1 as a SPECIAL
@@ -1201,10 +1117,10 @@ static inline void vcf_seg_FORMAT_AB_verify_channel1 (VBlockVCFP vb)
     double ad1 = ad1_ctx->last_value.i;
     if (ad0==0 && ad1==0) goto rollback; // formula would be division by zero 
 
-    char recon_ab_str[32];
-    calculate_AB (ad0, ad1, recon_ab_str);
+    STRl(recon_ab_str,32);
+    calculate_AB (ad0, ad1, qSTRa(recon_ab_str));
 
-    if (!str_issame_(STRa(ab_str), recon_ab_str, strlen (recon_ab_str))) goto rollback;
+    if (!str_issame (ab_str, recon_ab_str)) goto rollback;
     
     ctx_unset_rollback (ab_ctx); // so we can ctx_set_rollback again in the next sample (note: we can't advance rback_id because it is set in vcf_seg_txt_line)
     return; // verified
@@ -1214,29 +1130,31 @@ rollback:
     seg_by_ctx (VB, STRa(ab_str), ab_ctx, ab_str_len); 
 }
 
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_AB)
+SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_FORMAT_AB)
 {
-    int channel_i = vcf_piz_get_mux_channel_i (vb);
+    VBlockVCFP vb = (VBlockVCFP)vb_;
+
+    int channel_i = vcf_piz_get_mux_channel_i (VB);
 
     if ((channel_i == 0 || channel_i == 2) && reconstruct) 
         RECONSTRUCT1 ('.');
 
     else if (channel_i == 1 && reconstruct) {
-        ContextP ad0_ctx = MCTX (0, snip, snip_len);
-        ContextP ad1_ctx = MCTX (1, snip, snip_len);
+        STR(ad);
+        reconstruct_peek (VB, CTX(FORMAT_AD), pSTRa(ad));
 
-        double ad0 = reconstruct_peek (vb, ad0_ctx, 0, 0).i;
-        double ad1 = reconstruct_peek (vb, ad1_ctx, 0, 0).i;
-        ASSPIZ0 (ad0 || ad1, "Unexpectedly, ad0=ad1=0");
+        // note: using MAX_ALLELES and not vb->n_alts, bc n_alts is not defined for files older than 14.0.12
+        str_split_ints (ad, ad_len, MAX_ALLELES + 1, ',', ad, false); // note: up to 15.0.36 we could arrive here even with n_alts > 1 
+        ASSPIZ (n_ads, "Failed to split AD=\"%.*s\" to %u integers", STRf(ad), VB_VCF->n_alts + 1);
 
-        char recon_ab_str[32];
-        calculate_AB (ad0, ad1, recon_ab_str);
-        RECONSTRUCT (recon_ab_str, strlen(recon_ab_str));
+        STRl(recon_ab_str, 32);
+        calculate_AB (ads[0], ads[1], qSTRa(recon_ab_str));
+        RECONSTRUCT_str (recon_ab_str);
     }
 
-    else if (channel_i == 3) {
-        ContextP ab3_ctx = MCTX (2, snip, snip_len);
-        reconstruct_from_ctx (vb, ab3_ctx->did_i, 0, reconstruct);
+    else if (channel_i == 3) { // back comp: only happens in files <= 15.0.35
+        ContextP ab3_ctx = MCTX (2, snip, snip_len); // in old files, snip contained the dict_ids of AD0,AD1,AB3
+        reconstruct_from_ctx (VB, ab3_ctx->did_i, 0, reconstruct);
     }
 
     return NO_NEW_VALUE;
@@ -1266,13 +1184,13 @@ static inline void vcf_seg_FORMAT_PL (VBlockVCFP vb, ContextP ctx, STRp(PL))
     }
         
     // seg into either PLy or PLn, or into both if we're testing (vcf_FORMAT_PL_decide will drop one of them) 
-    if (vb->PL_mux_by_DP == PL_mux_by_DP_YES || vb->PL_mux_by_DP == PL_mux_by_DP_TEST) 
+    if (vb->PL_mux_by_DP == yes || vb->PL_mux_by_DP == unknown) 
         vcf_seg_FORMAT_mux_by_dosagexDP (vb, CTX(FORMAT_PLy), STRa(PL), &vb->mux_PLy);
     
-    if (vb->PL_mux_by_DP == PL_mux_by_DP_NO  || vb->PL_mux_by_DP == PL_mux_by_DP_TEST) 
+    if (vb->PL_mux_by_DP == no  || vb->PL_mux_by_DP == unknown) 
         vcf_seg_FORMAT_mux_by_dosage (vb, CTX(FORMAT_PLn), STRa(PL), &vb->mux_PLn);
 
-    if (vb->PL_mux_by_DP == PL_mux_by_DP_TEST) 
+    if (vb->PL_mux_by_DP == unknown) 
         vb->recon_size += PL_len; // since we're segging twice, we need to pretent the recon_size is growing even thow it isn't (reversed in zfile_remove_ctx_group_from_z_data)
 
     // we seg "redirection to PLn" in all VBs regardless of PL_mux_by_DP, so that ZCTX(FORMAT_PL).dict has
@@ -1281,7 +1199,7 @@ static inline void vcf_seg_FORMAT_PL (VBlockVCFP vb, ContextP ctx, STRp(PL))
     seg_by_did (VB, STRa(PL_to_PLn_redirect_snip), FORMAT_PL, 0);
 }
 
-// in PL_mux_by_DP_TEST mode, this function is called to pick one of the two compressed options, and drop the others
+// in unknown (=test) mode, this function is called to pick one of the two compressed options, and drop the others
 void vcf_FORMAT_PL_decide (VBlockVCFP vb)
 {
     Did keep_did_i, remove_did_i;
@@ -1290,7 +1208,7 @@ void vcf_FORMAT_PL_decide (VBlockVCFP vb)
 
     // only first testing VB to lock this mutex gets here, to make the decision
     switch (segconf.PL_mux_by_DP) {
-        case PL_mux_by_DP_TEST : { 
+        case unknown : { 
             // get combined compress size of all contexts associated with GL (mux by dosage)
             uint64_t PLy_size = ctx_get_ctx_group_z_len (VB, FORMAT_PLy);
             uint64_t PLn_size = ctx_get_ctx_group_z_len (VB, FORMAT_PLn);
@@ -1300,16 +1218,16 @@ void vcf_FORMAT_PL_decide (VBlockVCFP vb)
             remove_did_i = (PLy_size >= PLn_size) ? FORMAT_PLy : FORMAT_PLn;
 
             // weigh in this VBs experience. New VBs will only test if the votes are still the same
-            segconf.PL_mux_by_DP = (keep_did_i == FORMAT_PLy) ? PL_mux_by_DP_YES : PL_mux_by_DP_NO;
+            segconf.PL_mux_by_DP = (keep_did_i == FORMAT_PLy) ? yes : no;
             
             if (flag.debug_generate) iprintf ("PL_mux_by_DP decision: %s\n", keep_did_i == FORMAT_PLy ? "YES" : "NO");
             
             break;
         }
-        case PL_mux_by_DP_YES : keep_did_i = FORMAT_PLy; remove_did_i = FORMAT_PLn; break;
+        case yes : keep_did_i = FORMAT_PLy; remove_did_i = FORMAT_PLn; break;
 
         default:
-        case PL_mux_by_DP_NO  : keep_did_i = FORMAT_PLn; remove_did_i = FORMAT_PLy;
+        case no  : keep_did_i = FORMAT_PLn; remove_did_i = FORMAT_PLy;
     }
 
     mutex_unlock (segconf.PL_mux_by_DP_mutex);
@@ -1327,7 +1245,7 @@ void vcf_FORMAT_PL_after_vbs (void)
         ABORT ("Expecting FORMAT_PL to have exactly one word in its dict, but it has %"PRIu64, ZCTX(FORMAT_PL)->nodes.len);
     }
 
-    if (segconf.PL_mux_by_DP == PL_mux_by_DP_YES) { // Tested, and selected YES
+    if (segconf.PL_mux_by_DP == yes) { // Tested, and selected YES
         ctx_declare_winning_group (FORMAT_PLy, FORMAT_PLn, FORMAT_PL); // update groups for stats
 
         // if we select "Yes", we change the (only) snip in the PL dictionary in place
@@ -1345,21 +1263,21 @@ void vcf_FORMAT_PL_after_vbs (void)
 // DS is a value [0,ploidy] which is a the sum of GP values that refer to allele!=0. Eg for bi-allelic diploid it is: GP[1] + 2*GP[2] (see: https://www.biostars.org/p/227346/)
 // the DS (allele DoSage) value is usually close to or exactly the sum of '1' alleles in GT. we store it as a delta from that,
 // along with the floating point format to allow exact reconstruction
-static inline WordIndex vcf_seg_FORMAT_DS (VBlockVCFP vb, ContextP ctx, rom cell, unsigned cell_len)
+static inline WordIndex vcf_seg_FORMAT_DS (VBlockVCFP vb, ContextP ctx, rom ds, unsigned ds_len)
 {
     int64_t dosage = ctx_has_value (VB, FORMAT_GT) ? CTX(FORMAT_GT)->last_value.i : -1; // dosage stored here by vcf_seg_FORMAT_GT
     double ds_val;
     unsigned format_len;
     char snip[FLOAT_FORMAT_LEN + 20] = { SNIP_SPECIAL, VCF_SPECIAL_DS }; 
 
-    if (dosage < 0 || !str_get_float (cell, cell_len, &ds_val, &snip[2], &format_len)) 
-        return seg_by_ctx (VB, cell, cell_len, ctx, cell_len);
+    if (dosage < 0 || !str_get_float (ds, ds_len, &ds_val, &snip[2], &format_len)) 
+        return seg_by_ctx (VB, ds, ds_len, ctx, ds_len);
 
     unsigned snip_len = 2 + format_len;
     snip[snip_len++] = ' ';
     snip_len += str_int ((int64_t)((ds_val - dosage) * 1000000), &snip[snip_len]);
 
-    return seg_by_ctx (VB, snip, snip_len, ctx, cell_len);
+    return seg_by_ctx (VB, snip, snip_len, ctx, ds_len);
 }
 */
 
@@ -1386,8 +1304,8 @@ TRANSLATOR_FUNC (vcf_piz_luft_PLOIDY)
 {
     if (!ctx_encountered (VB, FORMAT_GT)) return false; // we can't translate unless this variant as GT
 
-    // use gt_prev_ploidy: in Seg, set by vcf_seg_FORMAT_GT, in validate and piz set by vcf_piz_luft_GT 
-    return vcf_piz_luft_trans_complement_to_max_value (vb, ctx, STRa(recon), validate_only, CTX(FORMAT_GT)->gt_actual_last_ploidy);
+    // use gt.prev_ploidy: in Seg, set by vcf_seg_FORMAT_GT, in validate and piz set by vcf_piz_luft_GT 
+    return vcf_piz_luft_trans_complement_to_max_value (vb, ctx, STRa(recon), validate_only, CTX(FORMAT_GT)->gt.actual_last_ploidy);
 }
 
 //------------------------------------------------
@@ -1503,7 +1421,7 @@ static inline ContextP vcf_seg_validate_luft_trans_one_sample (VBlockVCFP vb, Co
 
     ContextP failed_ctx = NULL; // optimistic initialization - nothing failed
 
-    uint32_t save_ploidy = CTX(FORMAT_GT)->gt_prev_ploidy; // ruined by vcf_piz_luft_GT 
+    uint32_t save_ploidy = CTX(FORMAT_GT)->gt.prev_ploidy; // ruined by vcf_piz_luft_GT 
 
     for (unsigned i=0; i < n_items; i++) {
         if (needs_translation (ctxs[i]) && item_lens[i]) {
@@ -1518,7 +1436,7 @@ static inline ContextP vcf_seg_validate_luft_trans_one_sample (VBlockVCFP vb, Co
     }
 
     // restore values, in preparation for real Seg
-    CTX(FORMAT_GT)->gt_prev_ploidy = save_ploidy;
+    CTX(FORMAT_GT)->gt.prev_ploidy = save_ploidy;
     for (unsigned i=0; i < n_items; i++) 
         ctx_unset_encountered (VB, ctxs[i]); 
 
@@ -1736,14 +1654,16 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
 
         // standard: <ID=GQ,Number=1,Type=Integer,Description="Genotype Quality">
         // GIAB: <ID=GQ,Number=1,Type=Integer,Description="Net Genotype quality across all datasets, calculated from GQ scores of callsets supporting the consensus GT, using only one callset from each dataset">   
-        case _FORMAT_GQ   : if (segconf.vcf_is_isaac) seg_set_last_txt_store_value (VB, ctx, STRi(sf, i), STORE_INT);
-                            else                      seg_set_last_txt (VB, ctx, STRi(sf, i)); 
-                            break; // postpone to later
+        case _FORMAT_GQ   : if (segconf.has[FORMAT_GQ]) {
+                                if (segconf.vcf_is_isaac) seg_set_last_txt_store_value (VB, ctx, STRi(sf, i), STORE_INT);
+                                else seg_set_last_txt (VB, ctx, STRi(sf, i)); 
+                                break; // postpone to later
+                            }
+                            else goto fallback;
             
         case _FORMAT_RGQ  : vcf_seg_FORMAT_RGQ (vb, ctx, STRi(sf, i), ctxs[0], STRi(sf,0)); break;
 
-        // <ID=DP,Number=1,Type=Integer,Description="Approximate read depth (reads with MQ=255 or with bad mates are filtered)">
-        case _FORMAT_DP   : vcf_seg_FORMAT_DP (vb, ctx, STRi(sf, i)); break;
+        case _FORMAT_DP   : seg_set_last_txt (VB, ctx, STRi(sf, i)); break; // defer to later
             
         // <ID=MIN_DP,Number=1,Type=Integer,Description="Minimum DP observed within the GVCF block">
         // case: MIN_DP - it is slightly smaller and usually equal to DP - we store MIN_DP as the delta DP-MIN_DP
@@ -1866,7 +1786,7 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
         if (dnum == _FORMAT_PS || dnum == _FORMAT_PID) 
             vcf_seg_FORMAT_PS_PID_missing_value (vb, ctxs[i], &sample[sample_len]);
         
-        else
+        else 
             seg_by_ctx (VB, NULL, 0, ctxs[i], 0); // generates WORD_INDEX_MISSING
     }
     
@@ -1874,8 +1794,12 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
     if (ctx_has_value (VB, FORMAT_AB))
         vcf_seg_FORMAT_AB_verify_channel1 (vb);
 
-    // finally seg GQ if we have it (after GP, PL, DP)
-    if (ctx_encountered (VB, FORMAT_GQ))
+    // seg DP (must be after AD, SDP)
+    if (ctx_encountered (VB, FORMAT_DP))
+        vcf_seg_FORMAT_DP (vb); 
+
+    // finally seg GQ if we have it (must be after after GP, PL, DP)
+    if (segconf.has[FORMAT_GQ] && ctx_encountered (VB, FORMAT_GQ))
         vcf_seg_FORMAT_GQ (vb);
 
     return n_sfs - 1; // number of colons

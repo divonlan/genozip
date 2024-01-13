@@ -92,7 +92,7 @@ void sam_show_sag_one_grp (SAGroup grp_i)
     else if (IS_SAG_CC) {
         CCAln *aln = B(CCAln, z_file->sag_alns, grp_i);
         sprintf (extra, " rname=%s pos=%u", 
-                (command==ZIP) ? ctx_snip_from_zf_nodes (ZCTX(SAM_RNAME), aln->rname, 0, 0) 
+                (command==ZIP) ? ctx_get_z_snip_ex (ZCTX(SAM_RNAME), aln->rname, 0, 0) 
                                : ctx_get_snip_by_word_index0 (ZCTX(SAM_RNAME), aln->rname), 
                 aln->pos);
     }

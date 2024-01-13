@@ -141,7 +141,7 @@ static bool vcf_seg_INFO_HGVS_indel (VBlockVCFP vb, ContextP ctx, STRp(value), r
     SmallContainer con = { 
         .repeats   = 1,
         .nitems_lo = 3,
-        .items = { { .dict_id = dict_id_start_pos[t], .separator = "_" }, // separator deleted in container_reconstruct_do() if end_pos is missing
+        .items = { { .dict_id = dict_id_start_pos[t], .separator = "_" }, // separator deleted in container_reconstruct() if end_pos is missing
                    { .dict_id = dict_id_end_pos[t]                     },
                    { .dict_id = dict_id_payload[t]                     } } }; 
 
@@ -166,7 +166,7 @@ static bool vcf_seg_INFO_HGVS_indel (VBlockVCFP vb, ContextP ctx, STRp(value), r
     if (n_poss == 2)
         seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, special_end_pos[t] }), 2, CTX(did_i_end_pos[t]), pos_lens[1]);
     else
-        seg_by_ctx (VB, NULL, 0, CTX(did_i_end_pos[t]), 0); // becomes WORD_INDEX_MISSING - container_reconstruct_do will remove the preceding _
+        seg_by_ctx (VB, NULL, 0, CTX(did_i_end_pos[t]), 0); // becomes WORD_INDEX_MISSING - container_reconstruct will remove the preceding _
 
     // the del payload is optional - we may or may not have it ; dup never has payload
     if (payload_len)

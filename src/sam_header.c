@@ -432,6 +432,9 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
 
     if (MP(STAR) && strstr (first_PG, "--solo")) segconf.star_solo = true;
 
+    // cisCall uses bwa mem: https://www.ciscall.org/en/ciscall7.html
+    if (MP(UNKNOWN) && strstr (first_PG, "cisCall")) segconf.sam_mapper = MP_BWA;
+
     // build buffer of unique PN+ID fields, for stats
     sam_header_zip_build_stats_programs (first_PG, after_PGs);
 

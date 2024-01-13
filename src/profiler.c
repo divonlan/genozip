@@ -242,8 +242,9 @@ void profiler_add_evb_and_print_report (void)
         PRINT (write_fg, 2);
         PRINT (write_bg, 2);
         PRINT (bgzf_io_thread, 1);
-        PRINT (ref_make_calculate_digest, 1);
-        PRINT (ref_contigs_compress, 1);
+        PRINT (sam_sa_prim_finalize_ingest, 1);
+        PRINT (zip_main_loop_idle, 1);
+        PRINT (zip_free_undeeded_zctx_bufs_after_seg, 1);
         PRINT (generate_recon_plan, 1);
         PRINT (vcf_linesort_compress_qsort, 2);
         PRINT (sam_zip_recon_plan_add_gc_lines, 2);
@@ -251,8 +252,24 @@ void profiler_add_evb_and_print_report (void)
         PRINT (recon_plan_compress, 2);
         PRINT (recon_plan_deltify, 3);
         PRINT (recon_plan_compress_one_fragment, 3);
-        PRINT (sam_sa_prim_finalize_ingest, 1);
-        PRINT (zip_main_loop_idle, 1);
+        PRINT (zip_write_global_area, 1);
+        PRINT (dict_io_compress_dictionaries, 2); 
+        PRINT (dict_io_assign_codecs, 3); 
+        PRINT (dict_io_compress_one_fragment, 3);
+        PRINT (ref_compress_ref, 2);
+        PRINT (ref_compress_one_range, 3);
+        PRINT (refhash_calc_one_range, 4);
+        PRINT (refhash_compress_refhash, 2);
+        PRINT (refhash_compress_one_vb, 3);
+        PRINT (refhash_compress_digest, 3);
+        PRINT (ref_make_calculate_digest, 3);
+        PRINT (ref_contigs_compress, 3);
+        PRINT (ref_copy_compressed_sections_from_reference_file, 3);
+        PRINT (random_access_finalize_entries, 2);
+        PRINT (random_access_compress, 2);
+        PRINT (ctx_compress_counts, 2);
+        PRINT (zfile_compress_genozip_header, 2);
+
         iprintf ("GENOZIP compute threads %s\n", str_int_commas (ms(profile.nanosecs.compute)).s);
         PRINT (bgzf_uncompress_vb, 1);
         PRINT (ctx_clone, 1);
@@ -347,21 +364,6 @@ void profiler_add_evb_and_print_report (void)
         for_zctx 
             PRINT_(fields[zctx->did_i], zctx->tag_name, 2);
 
-        PRINT (codec_hapmat_count_alt_alleles, 2);
-        PRINT (dict_io_compress_dictionaries, 1); 
-        PRINT (dict_io_assign_codecs, 2); 
-        PRINT (dict_io_compress_one_fragment, 2);
-        PRINT (ref_compress_ref, 1);
-        PRINT (ref_compress_one_range, 2);
-        PRINT (refhash_calc_one_range, 3);
-        PRINT (refhash_compress_refhash, 1);
-        PRINT (refhash_compress_one_vb, 2);
-        PRINT (refhash_compress_digest, 2);
-        PRINT (ref_copy_compressed_sections_from_reference_file, 2);
-        PRINT (random_access_finalize_entries, 1);
-        PRINT (random_access_compress, 1);
-        PRINT (ctx_compress_counts, 1);
-        PRINT (zfile_compress_genozip_header, 1);
         PRINT (sam_zip_prim_ingest_vb, 1);
         PRINT (digest, 1);
     }    

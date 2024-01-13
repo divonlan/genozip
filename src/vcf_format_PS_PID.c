@@ -251,7 +251,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_PS_by_PID)
         
         // if this SPECIAL was used with PID='.'
         if (IS_PERIOD (pid)) 
-            ctx->value_is_missing = true;
+            ctx->special_res = SPEC_RES_IS_MISSING;
 
         else {
             unsigned ps_len = (char*)memchr (pid, '_', pid_len) - pid;

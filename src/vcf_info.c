@@ -17,7 +17,6 @@
 
 #define info_items CTX(VCF_INFO)->info_items
 
-static inline bool vcf_is_use_DP_by_DP (void); // forward
 sSTRl(RAW_MQandDP_snip, 64 + 2 * 16);     
 
 static SmallContainer RAW_MQandDP_con = {
@@ -52,10 +51,10 @@ void vcf_info_seg_initialize (VBlockVCFP vb)
     CTX(INFO_AF)->flags.store = STORE_FLOAT;
     // xxx (is this really needed for --indels-only?) CTX(INFO_SVTYPE)-> flags.store = STORE_INDEX; // since v13 - consumed by vcf_refalt_piz_is_variant_indel
 
-    CTX(INFO_SF)->use_special_sf = unknown;
+    CTX(INFO_SF)->sf.SF_by_GT = unknown;
     
     ctx_set_ltype (VB, LT_DYN_INT, INFO_SVLEN, INFO_DP4_RF, INFO_DP4_AF,
-                   T(!vcf_is_use_DP_by_DP(), INFO_DP),
+                   T(segconf.INFO_DP_method == INFO_DP_DEFAULT, INFO_DP),
                    DID_EOL);
 
     ctx_consolidate_stats (VB, INFO_RAW_MQandDP, INFO_RAW_MQandDP_MQ, INFO_RAW_MQandDP_DP, DID_EOL);
@@ -71,39 +70,37 @@ void vcf_info_seg_initialize (VBlockVCFP vb)
 // INFO/DP
 // -------
 
-static inline bool vcf_is_use_DP_by_DP (void)
-{
-    // note: this method causes genozip --drop-genotypes, --GT-only, --samples to show INFO/DP=-1
-    // user can specify --secure-DP to avoid this
-    return vcf_num_samples > 1 && !flag.secure_DP && segconf.has[FORMAT_DP];
-}
+static void vcf_seg_INFO_DP_by_FORMAT_DP (VBlockP vb); // forward
 
 // return true if caller still needs to seg 
-static void vcf_seg_INFO_DP (VBlockVCFP vb, ContextP ctx, STRp(value_str))
+static void vcf_seg_INFO_DP (VBlockVCFP vb, ContextP ctx, STRp(dp_str))
 {
+    SEGCONF_RECORD_WIDTH (DP, dp_str_len);
+
     // used in: vcf_seg_one_sample (for 1-sample files), vcf_seg_INFO_DP_by_FORMAT_DP (multi sample files)
-    int64_t value;
-    bool has_value = str_get_int (STRa(value_str), &value);
+    int64_t dp;
+    bool has_value = str_get_int (STRa(dp_str), &dp);
 
     // also tried delta vs DP4, but it made it worse
     ContextP ctx_basecounts;
     if (ctx_has_value_in_line (vb, _INFO_BaseCounts, &ctx_basecounts)) 
-        seg_delta_vs_other (VB, ctx, ctx_basecounts, STRa(value_str));
+        seg_delta_vs_other (VB, ctx, ctx_basecounts, STRa(dp_str));
 
-    // note: if we're doing multi-sample DP_by_DP, we will seg in vcf_seg_INFO_DP_by_FORMAT_DP
-    else if (!has_value || !vcf_is_use_DP_by_DP()) 
-        seg_integer_or_not (VB, ctx, STRa(value_str), value_str_len);
+    else if (!has_value || segconf.INFO_DP_method == INFO_DP_DEFAULT) 
+        seg_integer_or_not (VB, ctx, STRa(dp_str), dp_str_len);
 
-    // we're going to seg (in vcf_finalize_seg_info) INFO/DP against sum of FORMAT/DP (if it has a valid value)
-    else
-        ctx->dp.by_format_dp = has_value;
+    // defer segging to vcf_seg_INFO_DP_by_FORMAT_DP called after samples are done
+    else { // BY_FORMAT_DP
+        ctx->dp.by_format_dp = true;
+        vb_add_to_deferred_q (VB, ctx, vcf_seg_INFO_DP_by_FORMAT_DP, vb->idx_DP);
+    }
 
     if (has_value) 
-        ctx_set_last_value (VB, ctx, value);
+        ctx_set_last_value (VB, ctx, dp);
 }
 
 // used for multi-sample VCFs, IF FORMAT/DP is segged as a simple integer
-static void vcf_seg_INFO_DP_by_FORMAT_DP (VBlockVCFP vb)
+static void vcf_seg_INFO_DP_by_FORMAT_DP (VBlockP vb)
 {
     decl_ctx (INFO_DP);
 
@@ -123,7 +120,8 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_DP_by_DP)
     if (!flag.drop_genotypes && !flag.gt_only && !flag.samples) {
         ctx->dp.sum_format_dp = atoi (items[1]); // initialize with delta
         ctx->dp.by_format_dp = true;             // DP needs to be inserted by vcf_piz_insert_INFO_DP
-        ctx->dp.reconstruct = reconstruct;
+        
+        vcf_piz_defer_to_after_samples (DP);
 
         return NO_NEW_VALUE; // we don't have the value yet - it will be set in vcf_piz_insert_INFO_DP
     }
@@ -141,11 +139,11 @@ void vcf_piz_insert_INFO_DP (VBlockVCFP vb)
 {
     decl_ctx (INFO_DP);
     
-    if (ctx->dp.reconstruct) {
+    if (ctx->recon_insertion) {
         STRl(info_dp,16);
         info_dp_len = str_int_ex (ctx->dp.sum_format_dp, info_dp, false);
 
-        vcf_piz_insert_field (vb, INFO_DP, STRa(info_dp));
+        vcf_piz_insert_field (vb, ctx, STRa(info_dp), segconf.wid_DP.width);
     }
 
     ctx_set_last_value (VB, ctx, (int64_t)ctx->dp.sum_format_dp); // consumed by eg vcf_piz_insert_INFO_QD
@@ -713,6 +711,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         #define CALL_IF(cond,f)  if (cond) { (f); break; } else goto standard_seg 
         #define CALL_WITH_FALLBACK(f) if (f(vb, ctx, STRa(value))) { seg_by_ctx (VB, STRa(value), ctx, value_len); } break
         #define STORE_AND_SEG(store_type) ({ seg_set_last_txt_store_value (VB, ctx, STRa(value), store_type); seg_by_ctx (VB, STRa(value), ctx, value_len); break; })
+        #define DEFER(f) ({ vb_add_to_deferred_q (VB, ctx, vcf_seg_INFO_##f, vb->idx_##f); seg_set_last_txt (VB, ctx, STRa(value)); break; })
 
         // ##INFO=<ID=VQSLOD,Number=1,Type=Float,Description="Log odds of being a true variant versus being false under the trained gaussian mixture model">
         // Optimize VQSLOD
@@ -754,15 +753,17 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_AC:
             CALL (vcf_seg_INFO_AC (vb, ctx, STRa(value))); 
 
+        //xxx case _INFO_AN:// deferred seg to after samples
+        //     seg_set_last_txt (VB, CTX(INFO_AN), STRa(value)); break;
+
         case _INFO_MLEAC:
             CALL (vcf_seg_INFO_MLEAC (vb, ctx, STRa(value)));
 
         case _INFO_MLEAF:
             CALL (vcf_seg_INFO_MLEAF (vb, ctx, STRa(value)));
 
-        // ##INFO=<ID=QD,Number=1,Type=Float,Description="Variant Confidence/Quality by Depth">
-        case _INFO_QD:
-            seg_set_last_txt (VB, CTX(INFO_QD), STRa(value)); break;
+        case _INFO_QD: // deferred seg to after samples
+            DEFER (QD);
 
         // ##INFO=<ID=AA,Number=1,Type=String,Description="Ancestral Allele"> 
         case _INFO_AA: // But in COSMIC, INFO/AA is something entirely different
@@ -984,7 +985,7 @@ void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
 
         #define X(x) case INFO_##x : vb->idx_##x = info_items.len32; break
         switch (ii.ctx->did_i) {
-            X(AN); X(AF); X(MLEAF); X(AC_Hom); X(AC_Het); X(AC_Hemi);
+            X(AN); X(AF); X(AC); X(MLEAC); X(MLEAF); X(AC_Hom); X(AC_Het); X(AC_Hemi); X(DP); X(QD); X(SF);
             default: {}
         }
         #undef X
@@ -1022,8 +1023,8 @@ void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
         vcf_seg_info_one_subfield (vb, ii[i].ctx, STRa(ii[i].value));
 }
 
-// Adds the DVCF items according to ostatus, finalizes INFO/SF, INFO/QD and segs the INFO container
-void vcf_finalize_seg_info (VBlockVCFP vb)
+// Seg INFO fields that were deferred to after all samples are segged
+void vcf_seg_finalize_INFO_fields (VBlockVCFP vb)
 {
     if (!info_items.len && !z_is_dvcf) return; // no INFO items on this line (except if dual-coords - we will add them in a sec)
 
@@ -1032,16 +1033,6 @@ void vcf_finalize_seg_info (VBlockVCFP vb)
                       .filter_items        = z_is_dvcf,   // vcf_piz_filter chooses which (if any) DVCF item to show based on flag.luft and flag.single_coord
                       .callback            = z_is_dvcf }; // vcf_piz_container_cb appends oSTATUS to INFO if requested 
  
-    // seg INFO/SF, if there is one
-    if (vb->sf_txt.len) vcf_seg_INFO_SF_seg (vb);
-
-    // seg INFO/DP, if against sum of FORMAT/DP
-    if (CTX(INFO_DP)->dp.by_format_dp) 
-        vcf_seg_INFO_DP_by_FORMAT_DP (vb);
-
-    if (ctx_encountered_in_line (VB, INFO_QD))
-        vcf_seg_INFO_QD (vb);
-
     // now that we segged all INFO and FORMAT subfields, we have the final ostatus and can add the DVCF items
     if (z_is_dvcf)
         vcf_seg_info_add_DVCF_to_InfoItems (vb);
@@ -1093,6 +1084,10 @@ void vcf_finalize_seg_info (VBlockVCFP vb)
     // --chain: if any tags need renaming we create a second, renames, prefixes string
     char ren_prefixes[con_nitems(con) * MAX_TAG_LEN]; 
     unsigned ren_prefixes_len = z_is_dvcf && !vb->is_rejects_vb ? vcf_tags_rename (vb, con_nitems(con), 0, 0, 0, B1ST (InfoItem, info_items), ren_prefixes) : 0;
+
+    // seg deferred fields 
+    for (uint8_t i=0; i < vb->deferred_q_len; i++) 
+        vb->deferred_q[i].seg (VB);
 
     // case GVCF: multiplex by has_RGQ or FILTER in Isaac
     if (!segconf.running && (segconf.has[FORMAT_RGQ] || segconf.vcf_is_isaac)) {

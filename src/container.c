@@ -62,7 +62,7 @@ WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con,
 {
     ctx->no_stons = true; // we need the word index to for container caching
 
-    // con=NULL means MISSING Container (see container_reconstruct_do)
+    // con=NULL means MISSING Container (see container_reconstruct)
     if (!con) return seg_by_ctx (VB, NULL, 0, ctx, 0); 
     
     unsigned con_b64_size  = base64_size(con_sizeof (*con));
@@ -109,7 +109,7 @@ StrTextMegaLong container_stack (VBlockP vb)
     int len = 0;
 
     for (int i=0; i < vb->con_stack_len; i++)
-        len += sprintf (&s.s[len], "%s[%u]->", CTX(vb->con_stack[i])->tag_name, vb->con_repeat[i]);
+        len += sprintf (&s.s[len], "%s[%u]->", CTX(vb->con_stack[i].did_i)->tag_name, vb->con_stack[i].repeat);
 
     s.s[len-2] = 0; // remove final "->"
 
@@ -158,11 +158,14 @@ uint32_t container_peek_repeats (VBlockP vb, ContextP ctx, char repsep)
 }
 
 // true if parent container of ctx, also contains the item dict_id (i.e dict_id is a sibling of ctx)
-bool container_has_item (ContextP ctx, DictId dict_id)
+bool curr_container_has (ContextP container_ctx, DictId item_dict_id)
 {
-    for (unsigned i=0; i < con_nitems (*ctx->parent_container); i++) 
-        if (ctx->parent_container->items[i].dict_id.num == dict_id.num)
-            return true;
+    ConstContainerP con = container_ctx->curr_container;
+
+    if (con)
+        for (uint32_t i=0; i < con_nitems (*con); i++) 
+            if (con->items[i].dict_id.num == item_dict_id.num)
+                return true;
 
     return false;
 }
@@ -439,12 +442,12 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
 {
     TimeSpecType profiler_timer = {}; 
     bool is_toplevel = con->is_toplevel; // copy to automatic. note: it is possible that we are top of stack but not a toplevel container - eg when reconstructing for SAG loading
-    
+    vb->curr_item = DID_NONE;
+
     ASSPIZ (vb->con_stack_len < MAX_CON_STACK, "Container stack overflow: %s->%s", container_stack (vb).s, ctx->tag_name);
 
-    vb->con_stack [vb->con_stack_len] = ctx->did_i;
-    vb->con_repeat[vb->con_stack_len] = -1;
-    vb->con_stack_len++;
+    vb->con_stack[vb->con_stack_len++] = (ConStack){ .con=con, .did_i=ctx->did_i, .repeat=-1 };
+    ctx->curr_container = con;
 
     if (flag.show_time && is_toplevel) 
         clock_gettime (CLOCK_REALTIME, &profiler_timer);
@@ -494,7 +497,8 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
 
     for (uint32_t rep_i=0; rep_i < con->repeats; rep_i++) {
 
-        vb->con_repeat[vb->con_stack_len-1] = rep_i;
+        current_con.repeat = rep_i;
+        vb->curr_item = DID_NONE; // initialize again in each repeat, in case of an error before any item
 
         // case this is the top-level snip: initialize line
         if (is_toplevel) {
@@ -530,15 +534,13 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
         for (unsigned item_i=0; item_i < num_items; item_i++) {
             const ContainerItem *item = &con->items[item_i];
             Context *item_ctx = item_ctxs[item_i];
+            vb->curr_item = item_ctx ? item_ctx->did_i : DID_NONE; // for ASSPIZ
             ReconType reconstruct = !flag.genocat_no_reconstruct;
             bool trans_item = translating || IS_CI0_SET(CI0_TRANS_ALWAYS); 
             bool trans_nor = trans_item && IS_CI0_SET (CI0_TRANS_NOR); // check for prohibition on reconstructing when translating
 
             bool show_item = vb->show_containers && item_ctx && (!flag.dict_id_show_containers.num || dict_id_typeless (item_ctx->dict_id).num == flag.dict_id_show_containers.num || 
             dict_id_typeless (ctx->dict_id).num == flag.dict_id_show_containers.num);
-
-            if (is_container_of_fields && item_ctx)
-                vb->curr_field = item_ctx->did_i; // for ASSPIZ
 
             // an item filter may filter items in three ways:
             // - returns false - item is filtered out, and data is not consumed
@@ -577,18 +579,16 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
                 reconstruct &= !trans_nor; // check for prohibition on reconstructing when translating
                 reconstruct &= (item->separator[0] != CI0_INVISIBLE); // check if this item should never be reconstructed
 
-                item_ctx->parent_container = con;
-
                 START_TIMER;
 /*BRKPOINT*/    recon_len = reconstruct_from_ctx (vb, item_ctx->did_i, 0, reconstruct); // -1 if WORD_INDEX_MISSING
 
                 if (is_container_of_fields) COPY_TIMER (fields[item_ctx->did_i]);
 
                 // sum up items' values if needed (STORE_INDEX is handled at the end of this function)
-                if (ctx->flags.store == STORE_INT)
+                if (ctx->flags.store == STORE_INT && ctx_has_value (vb, item_ctx->did_i)) // ctx_has_value add to the test in 15.0.37, need to verify backcomp
                     new_value.i += item_ctx->last_value.i;
                 
-                else if (ctx->flags.store == STORE_FLOAT)
+                else if (ctx->flags.store == STORE_FLOAT && ctx_has_value (vb, item_ctx->did_i))
                     new_value.f += item_ctx->last_value.f;
 
                 // case: reconstructing to a translated format (eg SAM2BAM) - modify the reconstruction ("translate") this item
@@ -615,6 +615,8 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
                   /*len*/(flag.dict_id_show_containers.num ? (int)(BAFTtxt-reconstruction_start) : MIN_(10,(int)(BAFTtxt-reconstruction_start))), 
                          reconstruction_start);  
         } // items loop
+
+        vb->curr_item = DID_NONE; // finished with the items
 
         // repeat suffix 
         container_reconstruct_prefix (vb, con, &item_prefixes, &remaining_prefix_len, false, ctx->dict_id, DICT_ID_NONE, show_non_item); 
@@ -678,6 +680,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
     if (copy_rpts_from_seq_len) ((ContainerP)con)->repeats = CON_REPEATS_IS_SEQ_LEN; // restore
 
     vb->con_stack_len--;
+    ctx->curr_container = NULL;
     
     if (is_toplevel)   
         COPY_TIMER (reconstruct_vb);

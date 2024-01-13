@@ -21,6 +21,21 @@
 
 #define MAX_CON_STACK 32          // maximum depth of container recursion in PIZ
 
+#define DEFERRED_Q_SZ 6
+
+typedef void (*DeferredSeg)(VBlockP vb);
+typedef struct {
+    Did did_i;
+    int16_t idx;     // ZIP: index of this field within its container
+    DeferredSeg seg; // ZIP: function to call to complete seg at the end of the line
+} DeferredField;
+
+typedef struct { 
+    ConstContainerP con;  
+    Did did_i;      // of container 
+    int32_t repeat; // PIZ: current repeat being reconstructed in each container in the container stack
+} ConStack;
+
 #define VBLOCK_COMMON_FIELDS \
     /************* fields that survive buflist_free_vb *************/ \
     Buffer buffer_list;           /* a buffer containing an array of pointers to all buffers allocated or overlayed in this VB (either by the main thread or its compute thread). */\
@@ -41,14 +56,17 @@
     void (*compute_func)(VBlockP);/* compute thread entry point */\
     Mutex ready_for_compute;      /* threads_create finished initializeing this VB */\
     \
+    Timestamp start_compute_timestamp; \
     volatile DispatchStatus dispatch; /* line data is read, and dispatcher can dispatch this VB to a compute thread */\
     volatile bool is_processed;   /* thread completed processing this VB - it is ready for outputting */\
-    Timestamp start_compute_timestamp; \
+    \
+    uint8_t deferred_q_len;       \
+    DeferredField deferred_q[DEFERRED_Q_SZ];/* ZIP/PIZ: contexts who's seg/recon is deferred to the end of the line */ \
     \
     /* tracking lines */\
     Buffer lines;                 /* ZIP: An array of *DataLine* - the lines in this VB; in Deep: .count counts deepable lines in VB */\
                                   /* PIZ: array of (num_lines+1) x (char *) - pointer to within txt_data - start of each line. last item is BAFT(txt_data). */\
-    BitsP is_dropped;             /* PIZ: a bits with a bit set is the line is marked for dropping by container_reconstruct_do */ \
+    BitsP is_dropped;             /* PIZ: a bits with a bit set is the line is marked for dropping by container_reconstruct */ \
     uint32_t num_lines_at_1_3, num_lines_at_2_3; /* ZIP VB=1 the number of lines segmented when 1/3 + 2/3 of estimate was reached  */\
     uint32_t debug_line_hash;     /* Seg: adler32 of line, used if Seg modifies line */\
     bool debug_line_hash_skip;    /* Seg: don't calculate debug_line_hash as line is skipped */\
@@ -62,7 +80,7 @@
     uint32_t longest_line_len;    /* length of longest line of text line in this vb. calculated by seg_all_data_lines */\
     uint32_t sample_i;            /* ZIP/PIZ: VCF: current sample in line (0-based) */ \
     LineIType line_i;             /* ZIP/PIZ: current line in VB (0-based) being segmented/reconstructed */\
-    Did curr_field;               /* PIZ: current field (e.g. toplevel, SAM/AUX, VCF/INFO...) item being reconstructed */ \
+    Did curr_item;                /* PIZ: item being reconstructed */ \
     int64_t rback_id;             /* ZIP: sequential number of current rollback point */ \
     uint32_t line_start;          /* ZIP/PIZ: position of start of line currently being segged / reconstructed in vb->txt_data */\
     uint32_t line_bgzf_uoffset;   /* ZIP: offset in uncompressed bgzf block of the start of the current line (current_bb_i) */  \
@@ -86,9 +104,8 @@
     Did rollback_dids[MEDIUM_CON_NITEMS]; \
     }; \
     struct { /* PIZ */ \
-    uint32_t con_stack_len;       /* PIZ */ \
-    Did con_stack[MAX_CON_STACK]; /* PIZ: current containers being reconstructed ([0] is always a top level container) */ \
-    int32_t con_repeat[MAX_CON_STACK];/* PIZ: current repeat being reconstructed in each container in the container stack */ \
+    uint32_t con_stack_len;      \
+    ConStack con_stack[MAX_CON_STACK]; /* PIZ: current containers being reconstructed ([0] is always a top level container) */ \
     }; \
     }; \
     \
@@ -197,6 +214,8 @@ typedef struct VBlock {
     VBLOCK_COMMON_FIELDS
 } VBlock;
 
+#define current_con vb->con_stack[vb->con_stack_len-1]
+
 #define in_assign_codec vb->z_data_test.prm8[0] // vb is currently in codec_assign_best_codec
 #define peek_stack_level frozen_state.prm8[0]
 
@@ -259,3 +278,5 @@ static inline uint32_t get_vb_size (DataType dt)
 { 
     return (dt != DT_NONE && dt_props[dt].sizeof_vb) ? dt_props[dt].sizeof_vb(dt) : sizeof (VBlock); 
 }
+
+extern void vb_add_to_deferred_q (VBlockP vb, ContextP ctx, DeferredSeg seg, int16_t idx);

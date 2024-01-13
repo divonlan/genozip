@@ -153,7 +153,8 @@ typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, Did did_i, DictI
 #endif
 
 #define RECONSTRUCT1(c) ({ vb->txt_data.data[Ltxt++] = (c); }) // we don't use BNXTc bc it is too expensive
-#define RECONSTRUCT_snip RECONSTRUCT (snip, snip_len)
+#define RECONSTRUCT_str(str) RECONSTRUCT (str, str##_len)
+#define RECONSTRUCT_snip RECONSTRUCT_str(snip)
 #define RECONSTRUCT_SEP(s,len,sep) ({ RECONSTRUCT((s), (len)); RECONSTRUCT1 (sep); })
 #define RECONSTRUCT_TABBED(s,len) RECONSTRUCT_SEP (s, len, '\t')
 #define RECONSTRUCT_BUF(buf) RECONSTRUCT((buf).data,(buf).len32)

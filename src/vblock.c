@@ -412,3 +412,10 @@ rom textual_assseg_line (VBlockP vb)
     return Btxt(vb->line_start);
 }
 
+void vb_add_to_deferred_q (VBlockP vb, ContextP ctx, DeferredSeg seg, int16_t idx)
+{
+    ASSERT (vb->deferred_q_len+1 < DEFERRED_Q_SZ, "%s: deferred queue is full (deferred_q_len=%u) when adding %s", VB_NAME, vb->deferred_q_len, ctx->tag_name);
+    ASSERT (idx >= 0, "Invalid idx=%d when adding %s", idx, ctx->tag_name);
+
+    vb->deferred_q[vb->deferred_q_len++] = (DeferredField){ .did_i=ctx->did_i, .seg=seg, .idx=idx };
+}

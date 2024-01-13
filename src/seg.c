@@ -354,10 +354,12 @@ ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux, uint3
 
         channel_ctx->is_initialized = true;
         channel_ctx->flags.store    = mux->ctx->flags.store;
-        channel_ctx->ltype          = mux->ctx->ltype; 
         channel_ctx->no_stons       = mux->no_stons; // not inherited from parent
         channel_ctx->st_did_i       = (mux->ctx->st_did_i == DID_NONE) ? mux->ctx->did_i : mux->ctx->st_did_i;
         channel_ctx->flags.ctx_specific_flag = mux->ctx->flags.ctx_specific_flag; // inherit - needed for "same_line"        
+
+        if (channel_ctx->ltype == LT_SINGLETON) // individual channel might have been already set in seg_initialize to something else 
+            channel_ctx->ltype = mux->ctx->ltype; 
     }
 
     return channel_ctx;
@@ -651,7 +653,7 @@ void seg_delta_vs_other_do (VBlockP vb, ContextP ctx, ContextP other_ctx,
     ctx_set_last_value (vb, ctx, value_n);
 }
 
-// note: seg_initialize should set STORE_INT for this ctx
+// note: seg_initialize should set STORE_INT and LT_DYN* for this ctx
 WordIndex seg_self_delta (VBlockP vb, ContextP ctx, int64_t value, 
                           char format,        // 'd', 'x' or 'X'. 0 is normal, unformatted, number 
                           unsigned fixed_len, // >0 means zero-padded fixed len (legal values: 0-190) 

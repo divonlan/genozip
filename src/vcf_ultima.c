@@ -528,7 +528,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_VARIANT_TYPE)
         STR(prediction);
         VARIANT_TYPE_prediction (VB_VCF, pSTRa(prediction), use_reference);
 
-        RECONSTRUCT (prediction, prediction_len);
+        RECONSTRUCT_str (prediction);
     }
 
     return NO_NEW_VALUE;

@@ -3,10 +3,15 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+15.0.37 13/1/2023
+- VCF: Better compression for multi-sample files where sample data is not only GT
+- VCF: Better compression of GATK GVCF files
+- Core engine improvements: significant reduction in RAM consumption mostly for large BAM and VCF files.
+
 15.0.36 7/1/2023
 - BAM: Better compression of files with NanoSeq tags
 - VCF: Better compression of polyploid (ploidy > 2) data
-- bug fixes
+- Bug fixes
 
 15.0.35 30/12/2023
 - improvement in compression speed of very large files on systems with > 100 cores due to improved core scalability

@@ -1001,6 +1001,12 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
                      SEC_TAB, REF_FILENAME_LEN, h->chain.prim_filename, 
                      digest_display_ex (h->chain.prim_genome_digest, DD_MD5).s);
 
+        else if ((DT(VCF) || DT(BCF)) && v14)
+            sprintf (dt_specific, "%ssegconf=(has_RGQ=%s,GQ_method=%s,FMT_DP_method=%s) width=(AC=%u,AN=%u,MLEAC=%u,DP=%u,QD=%u,SF=%u) max_ploidy_for_mux=%u\n", 
+                     SEC_TAB, TF(h->vcf.segconf_has_RGQ), GQ_method_name (h->vcf.segconf_GQ_method), FMT_DP_method_name (h->vcf.segconf_FMT_DP_method), 
+                     h->vcf.width.AC, h->vcf.width.AN, h->vcf.width.MLEAC, h->vcf.width.DP, h->vcf.width.QD, h->vcf.width.SF, 
+                     h->vcf.max_ploidy_for_mux);
+
         else if ((DT(SAM) || DT(BAM)) && v14)
             sprintf (dt_specific, "%ssegconf=(sorted=%u,collated=%u,seq_len=%u,seq_len_to_cm=%u,ms_type=%u,has_MD_or_NM=%u,bisulfite=%u,MD_NM_by_unconverted=%u,predict_meth=%u,is_paired=%u,sag_type=%s,sag_has_AS=%u,pysam_qual=%u,cellranger=%u,SA_HtoS=%u,seq_len_dict_id=%s,deep_qname1=%u,deep_qname2=%u,deep_no_qual=%u,use_ins_ctx=%u,%uXsam_factor=%u)\n", 
                      SEC_TAB, h->sam.segconf_is_sorted, h->sam.segconf_is_collated, BGEN32 (h->sam.segconf_seq_len), h->sam.segconf_seq_len_cm, h->sam.segconf_ms_type, h->sam.segconf_has_MD_or_NM, 

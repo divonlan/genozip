@@ -807,7 +807,7 @@ IS_SKIP (fastq_piz_is_skip_section)
 
     // note that flags_update_piz_one_z_file rewrites --header-only as flag.header_only_fast: skip all items but DESC and E1L (except if we need them for --grep)
     if (flag.header_only_fast && 
-        dict_id_is_in (dict_id, _FASTQ_E2L, _FASTQ_DEBUG_LINES, LINE3_dicts,
+        dict_id_is_in (dict_id, _FASTQ_DEBUG_LINES, LINE3_dicts,
                        _FASTQ_SQBITMAP, _FASTQ_NONREF, _FASTQ_NONREF_X, _FASTQ_GPOS, _FASTQ_GPOS_DELTA, _FASTQ_STRAND,
                        _FASTQ_SEQMIS_A, _FASTQ_SEQMIS_C, _FASTQ_SEQMIS_G, _FASTQ_SEQMIS_T, 
                        _FASTQ_QUAL, _FASTQ_DOMQRUNS, _FASTQ_QUALMPLX, _FASTQ_DIVRQUAL, DICT_ID_NONE))
@@ -883,7 +883,7 @@ static inline void fastq_piz_initialize_item_filter (VBlockFASTQP vb, ConstConta
         vb->item_filter[con->nitems_lo-1] = (flag.seq_only || flag.qual_only); 
 }
 
-// filtering during reconstruction: called by container_reconstruct_do for each fastq record (repeat) and each toplevel item
+// filtering during reconstruction: called by container_reconstruct for each fastq record (repeat) and each toplevel item
 CONTAINER_FILTER_FUNC (fastq_piz_filter)
 {
     if (dict_id.num == _FASTQ_TOPLEVEL) {
@@ -904,7 +904,7 @@ CONTAINER_FILTER_FUNC (fastq_piz_filter)
     return true; // reconstruct
 }
 
-// filtering during reconstruction: called by container_reconstruct_do for each fastq record (repeat)
+// filtering during reconstruction: called by container_reconstruct for each fastq record (repeat)
 CONTAINER_CALLBACK (fastq_piz_container_cb)
 {
     // --taxid: filter out by Kraken taxid 

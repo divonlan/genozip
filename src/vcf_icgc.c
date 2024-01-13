@@ -91,7 +91,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_mutation)
     // case: Other
     else {
         char *start = BAFTtxt;
-        RECONSTRUCT (refalt, refalt_len);
+        RECONSTRUCT_str (refalt);
         str_replace_letter (start, refalt_len, '\t', '>');
     }
 

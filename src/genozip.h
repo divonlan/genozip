@@ -98,8 +98,6 @@ typedef const struct ContainerItem *ConstContainerItemP;
 typedef struct Context *ContextP;
 #define CTX_NONE ((ContextP)0)
 typedef const struct Context *ConstContextP;
-typedef struct CtxNode *CtxNodeP;
-typedef const struct CtxNode *ConstMtfNodeP;
 typedef struct SectionHeader *SectionHeaderP;
 typedef const struct SectionHeader *ConstSectionHeaderP;
 typedef const struct SectionEnt *Section;
@@ -198,8 +196,8 @@ typedef struct __attribute__ ((__packed__)) { uint32_t index, len; } TxtWord; //
 typedef struct __attribute__ ((__packed__)) { uint64_t index; uint32_t len; } BufWord; // see also ZWord
 
 // a reference into data in z_file 
-#define Z_MAX_DICT_LEN (1 TB - 1ULL)  // maximum length of a context.dict (v14)
-#define Z_MAX_WORD_LEN (16 MB - 1ULL) // maximum length of any word in a context.dict (excluding its \0 separator) (v14)
+#define Z_MAX_DICT_LEN (1 TB - 2ULL)  // maximum length of a context.dict (v14) (note: -2 and not -1, to avoid conflict with VB_NODE_CANCELED)
+#define Z_MAX_WORD_LEN (16 MB - 2ULL) // maximum length of any word in a context.dict (excluding its \0 separator) (v14)
 typedef struct __attribute__ ((__packed__)) { uint64_t index : 40; // up to Z_MAX_DICT_LEN
                                               uint64_t len   : 24; // up to Z_MAX_WORD_LEN
                                             } ZWord; 

@@ -78,7 +78,7 @@
 #pragma GENDICT FORMAT_FL=DTYPE_2=FL                // Seen in Reich's ancient DNA datasets: <ID=FL,Number=1,Type=Character,Description="filter level in range 0-9 or no value (non-integer: N,?) with zero being least reliable; to threshold at FL=n, use all levels n-9">
 
 #pragma GENDICT FORMAT_AB=DTYPE_2=AB                // <ID=AB,Number=1,Type=Float,Description="Allele balance for each het genotype",RendAlg="NONE">
-#pragma GENDICT FORMAT_AB3=DTYPE_2=AB3              // must be the next context after AB
+#pragma GENDICT FORMAT_AB3=DTYPE_2=AB3              // AB exceptions channel
 
 // PBWT fields - same dict_id for all data types using PBWT, as codec_pbwt_uncompress relies on it
 #pragma GENDICT FORMAT_GT_HT=DTYPE_2=@HT    
@@ -636,7 +636,8 @@ extern void vcf_samples_add  (rom samples_str);
                       vcf_piz_special_MUX_GQX, vcf_piz_special_RU, vcf_piz_special_IDREP, vcf_piz_special_next_ALT, \
                       vcf_piz_special_MUX_BY_END, vcf_piz_special_MUX_BY_ISAAC_FILTER, \
                       vcf_piz_special_X_LM_RM, vcf_piz_special_X_IL, vcf_piz_special_X_IC, vcf_piz_special_X_HIN, vcf_piz_special_X_HIL, \
-                      vcf_piz_special_VARIANT_TYPE, vcf_piz_special_PLATYPUS_SC, vcf_piz_special_PLATYPUS_HP, vcf_piz_special_INFO_MLEAF }
+                      vcf_piz_special_VARIANT_TYPE, vcf_piz_special_PLATYPUS_SC, vcf_piz_special_PLATYPUS_HP, vcf_piz_special_INFO_MLEAF, \
+                      vcf_piz_special_FORMAT_AD0, vcf_piz_special_MUX_FORMAT_DP, vcf_piz_special_INFO_AN }
 
 SPECIAL (VCF, 0,  main_REFALT,         vcf_piz_special_main_REFALT);
 SPECIAL (VCF, 1,  FORMAT,              vcf_piz_special_FORMAT)
@@ -703,7 +704,10 @@ SPECIAL (VCF, 61, VARIANT_TYPE,        vcf_piz_special_VARIANT_TYPE);           
 SPECIAL (VCF, 62, PLATYPUS_SC,         vcf_piz_special_PLATYPUS_SC);              // added v15.0.30
 SPECIAL (VCF, 63, PLATYPUS_HP,         vcf_piz_special_PLATYPUS_HP);              // added v15.0.30
 SPECIAL (VCF, 64, INFO_MLEAF,          vcf_piz_special_INFO_MLEAF);               // added v15.0.36
-#define NUM_VCF_SPECIAL 65
+SPECIAL (VCF, 65, FORMAT_AD0,          vcf_piz_special_FORMAT_AD0);               // added v15.0.37
+SPECIAL (VCF, 66, MUX_FORMAT_DP,       vcf_piz_special_MUX_FORMAT_DP);            // added v15.0.37
+SPECIAL (VCF, 67, AN,                  vcf_piz_special_INFO_AN);                  // added v15.0.37
+#define NUM_VCF_SPECIAL 68
 
 // Translators for Luft (=secondary coordinates)
 TRANSLATOR (VCF, VCF,   1,  G,      vcf_piz_luft_G)       // same order as LiftOverStatus starting LO_CANT_G

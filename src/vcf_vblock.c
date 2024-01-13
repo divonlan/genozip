@@ -36,8 +36,10 @@ void vcf_reset_line (VBlockP vb_)
 
     vb->sample_i = 0;
     vb->n_alts = 0; // = ALT not parsed yet
-    
+    vb->deferred_q_len = 0;
+
     CTX(FORMAT_RGQ)->line_has_RGQ = unknown;
+    CTX(INFO_AN)->an.count_ht = 0;
     CTX(INFO_DP)->ctx_specific = 0;
     CTX(INFO_QD)->ctx_specific = 0;
 

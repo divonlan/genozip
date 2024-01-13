@@ -62,7 +62,7 @@ void ref_contigs_populate_aligned_chroms (void)
             chrom_index = ctx_populate_zf_ctx (CHROM, STRa(r->chrom_name), r->range_id); 
 
         // make sure count is at least 1 for ref_contigs_compress_stored to store 
-        buf_alloc_zero (evb, &zctx->counts, 0, MAX_(chrom_index + 1, gref->ranges.len32), uint64_t, CTX_GROWTH, "counts");
+        buf_alloc_zero (evb, &zctx->counts, 0, MAX_(chrom_index + 1, gref->ranges.len32), uint64_t, CTX_GROWTH, "zctx->counts");
         *B64(zctx->counts, chrom_index) = MAX_(*B64(zctx->counts, chrom_index), 1);
     }
 }
@@ -281,8 +281,8 @@ static void ref_contigs_load_set_contig_names (Reference ref)
 
         WordIndex chrom_index = contig[i].ref_index;
         ASSERT (chrom_index >= 0 && chrom_index < chrom_len, "Expecting contig[%u].ref_index=%d to be in the range [0,%d]", i, chrom_index, (int)chrom_len-1);
-        contig[i].char_index = chrom[chrom_index].index;
-        contig[i].snip_len   = chrom[chrom_index].len;
+        contig[i].char_index = chrom[chrom_index].char_index;
+        contig[i].snip_len   = chrom[chrom_index].snip_len;
     }
 }
 

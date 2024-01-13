@@ -729,7 +729,7 @@ TXTHEADER_TRANSLATOR (txtheader_sam2fq)
     txtheader_buf->len = 0; // fastq has no header
 }
 
-// filtering during reconstruction: called by container_reconstruct_do for each sam alignment (repeat)
+// filtering during reconstruction: called by container_reconstruct for each sam alignment (repeat)
 CONTAINER_CALLBACK (sam_piz_container_cb)
 {    
     if (is_top_level) {
@@ -1033,7 +1033,7 @@ void sam_reconstruct_from_buddy_get_textual_snip (VBlockSAMP vb, ContextP ctx, B
     switch (word.lookup) {
         case LookupTxtData : buf = &vb->txt_data  ; break;
         case LookupDict    : buf = &ctx->dict; 
-                             char_index = B(CtxWord, ctx->word_list, word.index)->index; 
+                             char_index = B(CtxWord, ctx->word_list, word.index)->char_index; 
                              break;
         case LookupLocal   : buf = &ctx->local    ; break;
         case LookupPerLine : buf = &ctx->per_line ; break;

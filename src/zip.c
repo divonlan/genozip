@@ -97,12 +97,12 @@ static void zip_display_compression_ratio (Digest md5)
                      ratio_vs_comp, (uint64_t)comp_bytes, (uint64_t)z_bytes);
     }
 
-    // when making a reference, we don't care about the compression
-    if (flag.make_reference)
-        progress_finalize_component_time ("Done", md5);
-
     // in bound files, for the non-last components, we already printed "Done" above
-    else if (flag.bind && !z_file->z_closes_after_me) {}
+    if (flag.bind && !z_file->z_closes_after_me) {}
+
+    // when making a reference, we don't care about the compression
+    else if (flag.make_reference || flag.zip_no_z_file)
+        progress_finalize_component_time ("Done", md5);
 
     // Deep - to complicated to communicate compression vs FASTQ and BAM/SAM source files - show only vs  compression
     else if (flag.deep) 
@@ -209,7 +209,7 @@ static inline void zip_generate_one_b250 (VBlockP vb, ContextP ctx, uint32_t wor
         if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:EMPTY ", word_i);
     }
 
-    else ABORT ("invalid word_index=%u", word_index);        
+    else ABORT ("%s ctx=%s[%u] invalid word_index=%d", VB_NAME, ctx->tag_name, ctx->did_i, word_index);        
 
     *prev_word_index = word_index;
 }
@@ -226,6 +226,7 @@ static bool zip_generate_b250 (VBlockP vb, ContextP ctx)
     bool ret = true;
 
     ASSERT (ctx->dict_id.num, "tag_name=%s did_i=%u: ctx->dict_id=0 despite ctx->b250 containing data", ctx->tag_name, (unsigned)(ctx - vb->contexts));
+    ASSERT (ctx->nodes_converted, "expecting nodes of %s to be converted", ctx->tag_name); // still index/len
 
     bool show = flag.show_b250 || dict_id_typeless (ctx->dict_id).num == flag.dict_id_show_one_b250.num;
     if (show) bufprintf (vb, &vb->show_b250_buf, "%s %s: ", VB_NAME, ctx->tag_name);
@@ -245,13 +246,14 @@ static bool zip_generate_b250 (VBlockP vb, ContextP ctx)
             iprintf ("%s: %s[%u].b250 len=%"PRIu64" all_the_same=%s no_stons=%s\n", 
                      VB_NAME, ctx->tag_name, ctx->did_i, ctx->b250.len, TF(ctx->flags.all_the_same), TF(ctx->no_stons));
 
-    // replace node indices with word indices
     WordIndex largest_wi=0;
-    for_buf (WordIndex, ent, ctx->b250) 
-        if (*ent >= 0) 
-            if ((*ent = ctx_node_vb (ctx, *ent, NULL, NULL)->word_index) > largest_wi)
-                largest_wi = *ent;
-    
+    for_buf (WordIndex, ent, ctx->b250) {
+        WordIndex wi = node_index_to_word_index (vb, ctx, *ent);
+        if (wi != *ent) *ent = wi; // assign if changed needed 
+
+        if (wi > largest_wi) largest_wi = wi;
+    }
+
     // determine size of word_index elements
     ctx->b250_size = (largest_wi <= B250_MAX_WI_1BYTE ) ? B250_BYTES_1
                    : (largest_wi <= B250_MAX_WI_2BYTES) ? B250_BYTES_2
@@ -713,10 +715,43 @@ static void zip_update_txt_counters (VBlockP vb)
     // Note: no data-type-specific code here, instead, put in *_zip_after_compute
 }
 
+// ZIP: free z_file buffers no longer needed before global sections
+static void zip_free_undeeded_zctx_bufs_after_seg (void)
+{
+    START_TIMER;
+
+    for_zctx {
+        buf_destroy (zctx->stons);
+        buf_destroy (zctx->ston_nodes);
+        buf_destroy (zctx->ston_hash);
+        buf_destroy (zctx->global_ents);
+        buf_destroy (zctx->global_hash);
+    }
+
+    buf_destroy (z_file->sag_grps);
+    buf_destroy (z_file->sag_grps_index);
+    buf_destroy (z_file->sag_alns);
+    buf_destroy (z_file->sag_qnames);
+    buf_destroy (z_file->sag_depn_index);
+    buf_destroy (z_file->sag_cigars);
+    buf_destroy (z_file->sag_seq);
+    buf_destroy (z_file->sag_qual);
+    buf_destroy (z_file->vb_start_deep_line);
+    buf_destroy (z_file->deep_ents);
+
+    buf_low_level_release_memory_back_to_kernel();
+
+    COPY_TIMER_EVB (zip_free_undeeded_zctx_bufs_after_seg);
+}
+
 // write all the sections at the end of the file, after all VB stuff has been written
 static void zip_write_global_area (void)
 {
+    START_TIMER;
+
     #define THREAD_DEBUG(x) threads_log_by_vb (evb, "main_thread:global_area", #x, 0);
+
+    zip_free_undeeded_zctx_bufs_after_seg();
 
     codec_qual_show_stats();
 
@@ -782,8 +817,10 @@ static void zip_write_global_area (void)
     zfile_compress_genozip_header();    
 
     stats_finalize();
-
+    
     if (DTPZ(zip_free_end_of_z)) DTPZ(zip_free_end_of_z)();
+
+    COPY_TIMER_EVB (zip_write_global_area);
 }
 
 // entry point for ZIP compute thread
@@ -821,12 +858,6 @@ static void zip_compress_one_vb (VBlockP vb)
     // identify dictionaries that contain only singleton words (eg a unique id) and move the data from dict to local
     zip_handle_unique_words_ctxs (vb);
 
-    // for the first vb only - sort dictionaries so that the most frequent entries get single digit
-    // base-250 indices. This can be done only before any dictionary is written to disk, but likely
-    // beneficial to all vbs as they are likely to more-or-less have the same frequent entries
-    if (vb->vblock_i == 1) 
-        ctx_sort_dictionaries_vb_1(vb);
-
     zfile_compress_vb_header (vb); // vblock header
 
     if (flag.show_codec) {
@@ -842,15 +873,14 @@ static void zip_compress_one_vb (VBlockP vb)
     
     dispatcher_increment_progress ("compress1", PROGRESS_UNIT/2); // 1/2 compression done
 
-    // merge new words added in this vb into the z_file.contexts, ahead of zip_generate_b250().
-    // writing indices based on the merged dictionaries. dictionaries are compressed. 
-    // all this is done while holding exclusive access to the z_file dictionaries.
-    // note: vb>=2 will block here, until vb=1 is completed
     threads_log_by_vb (vb, "zip", "START MERGE", 0);
 
     // for --make-reference we serialize merging by VB, so that contigs get their word_index in the order of the reference file
     if (flag.make_reference) serializer_lock (make_ref_merge_serializer, vb->vblock_i);
 
+    // merge new words added in this vb into the z_file.contexts (zctx), ahead of zip_generate_b250().
+    // writing indices based on the merged dictionaries. all this is done while locking a mutex for each zctx.
+    // note: vb>=2 will block here, until vb=1 is completed
     ctx_merge_in_vb_ctx (vb);
 
     if (flag.make_reference) serializer_unlock (make_ref_merge_serializer);

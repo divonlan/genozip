@@ -701,8 +701,9 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
     IF_IN_SOURCE ("starling", vcf_is_isaac);
     IF_IN_SOURCE ("Platypus", vcf_is_platypus); // https://github.com/andyrimmer/Platypus
     IF_IN_SOURCE ("GenerateSVCandidates", vcf_is_manta); // https://github.com/Illumina/manta/blob/master/docs/userGuide/README.md
-    IF_IN_HEADER ("GenotypeGVCFs", vcf_is_gvcf, "GenotypeGVCFs");
-    IF_IN_HEADER ("CombineGVCFs", vcf_is_gvcf, "CombineGVCFs");
+    IF_IN_HEADER ("GenotypeGVCFs", vcf_is_gatk_gvcf, "GenotypeGVCFs");
+    IF_IN_HEADER ("CombineGVCFs", vcf_is_gatk_gvcf, "CombineGVCFs");
+    if (segconf.vcf_is_gatk_gvcf) segconf.vcf_is_gvcf = true;
     if (segconf.vcf_is_isaac) IF_IN_HEADER ("gvcf", vcf_is_gvcf, "");
     IF_IN_HEADER ("beagle", vcf_is_beagle, "beagle");
     IF_IN_HEADER ("Pindel", vcf_is_pindel, "Pindel");

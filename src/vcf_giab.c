@@ -56,7 +56,7 @@ void vcf_seg_FORMAT_IGT (VBlockVCFP vb, ContextP ctx, STRp(igt))
     seg_set_last_txt (VB, ctx, STRa(igt)); // consumed by vcf_seg_FORMAT_IPS
 
     if (!ctx_encountered (VB, FORMAT_GT) || vcf_num_samples != 3 || igt_len > 3 ||
-        igt_len != CTX(FORMAT_GT)->gt_prev_ploidy * 2 - 1) {
+        igt_len != CTX(FORMAT_GT)->gt.prev_ploidy * 2 - 1) {
         seg_by_ctx (VB, STRa(igt), ctx, igt_len);
         return;
     }
@@ -127,7 +127,6 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_IGT)
 // FORMAT/ADALL: <ID=ADALL,Number=R,Type=Integer,Description="Net allele depths across all datasets">
 //--------------------------------------------------------------------------------------------------------
 
-// Sepcial treatment for item 0
 void vcf_seg_ADALL_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP *item_ctxs, const int64_t *values)
 {
     for (unsigned i=0; i < n_items; i++) 

@@ -116,6 +116,7 @@ static int64_t reconstruct_from_delta (VBlockP vb,
 
     char *num_str = BAFTtxt;
     int64_t new_value = base_value + my_ctx->last_delta;  
+
     if (reconstruct)
         switch (format) {
             case 0   : 
@@ -141,13 +142,13 @@ static int64_t reconstruct_from_delta (VBlockP vb,
 
 #define ASSERT_IN_BOUNDS \
     ASSPIZ (ctx->next_local < ctx->local.len32, \
-            "unexpected end of ctx->local data in %s (len=%u next_local=%u ltype=%s lcodec=%s did_i=%u preprocessing=%u). %s", \
-            ctx->tag_name, ctx->local.len32, ctx->next_local, lt_name (ctx->ltype), codec_name (ctx->lcodec), ctx->did_i, vb->preprocessing, ctx->local.len ? "" : "since len=0, perhaps a Skip function issue?");
+            "unexpected end of ctx->local data in %s[%u] (len=%u next_local=%u ltype=%s lcodec=%s did_i=%u preprocessing=%u). %s", \
+            ctx->tag_name, ctx->did_i, ctx->local.len32, ctx->next_local, lt_name (ctx->ltype), codec_name (ctx->lcodec), ctx->did_i, vb->preprocessing, ctx->local.len ? "" : "since len=0, perhaps a Skip function issue?");
 
 #define ASSERT_IN_BOUNDS_BEFORE(recon_len) \
     ASSPIZ (ctx->next_local + (recon_len) <= ctx->local.len, \
-            "unexpected end of ctx->local data in %s (len=%u next_local=%u ltype=%s lcodec=%s did_i=%u, preprocessing=%u)", \
-            ctx->tag_name, ctx->local.len32, ctx->next_local, lt_name (ctx->ltype), codec_name (ctx->lcodec), ctx->did_i, vb->preprocessing)
+            "unexpected end of ctx->local data in %s[%u] (len=%u next_local=%u ltype=%s lcodec=%s did_i=%u, preprocessing=%u)", \
+            ctx->tag_name, ctx->did_i, ctx->local.len32, ctx->next_local, lt_name (ctx->ltype), codec_name (ctx->lcodec), ctx->did_i, vb->preprocessing)
 
 static uint32_t reconstruct_from_local_text (VBlockP vb, ContextP ctx, ReconType reconstruct)
 {
@@ -337,9 +338,9 @@ uint32_t reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, uint32_t len
 ContextP reconstruct_get_other_ctx_from_snip (VBlockP vb, ContextP ctx, pSTRp (snip))
 {
     unsigned b64_len = base64_sizeof (DictId);
-    char err[*snip_len+20];
-    ASSPIZ (b64_len + 1 <= *snip_len, "ctx=%s snip=\"%s\" snip_len=%u but expecting it to be >= %u", 
-            ctx->tag_name, str_print_snip(*snip, *snip_len, err), *snip_len, b64_len + 1);
+
+    ASSPIZ (b64_len + 1 <= *snip_len, "ctx=%s snip=%s snip_len=%u but expecting it to be >= %u", 
+            ctx->tag_name, str_snip(STRa(*snip), true).s, *snip_len, b64_len + 1);
 
     DictId dict_id;
     base64_decode ((*snip)+1, &b64_len, dict_id.id);
@@ -388,7 +389,7 @@ static ValueType reconstruct_from_lookback (VBlockP vb, ContextP ctx, STRp(snip)
         STR(back_snip);
         ctx_get_snip_by_word_index (ctx, value.i, back_snip);
 
-        if (reconstruct) RECONSTRUCT (back_snip, back_snip_len);
+        if (reconstruct) RECONSTRUCT_str (back_snip);
     }
 
     // a lookback by txt
@@ -422,11 +423,13 @@ HasNewValue reconstruct_demultiplex (VBlockP vb, ContextP ctx, STRp(snip), int c
 
     reconstruct_from_ctx (vb, channel_ctx->did_i, 0, reconstruct);
 
-    if (ctx->flags.store == STORE_NONE) return NO_NEW_VALUE;
-
     // propagate last_value up
-    new_value->i = channel_ctx->last_value.i; // note: last_value is a union, this copies the entire union
-    return HAS_NEW_VALUE; 
+    if (ctx_has_value (vb, channel_ctx->did_i)) {
+        *new_value = channel_ctx->last_value; 
+        return HAS_NEW_VALUE; 
+    }
+    else
+        return NO_NEW_VALUE;
 }
 
 static HasNewValue reconstruct_numeric (VBlockP vb, ContextP ctx, STRp(snip), ValueType *new_value, ReconType reconstruct)
@@ -475,6 +478,12 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
         }
         goto done;
     }
+
+    if (flag.show_snips)
+        iprintf ("%s %s[%u] %s%s%s%s\n", LN_NAME, snip_ctx->tag_name, snip_ctx->did_i, str_snip (STRa(snip), true).s,
+                 cond_int (word_index!=WORD_INDEX_NONE, " wi=", word_index), 
+                 cond_int (vb->peek_stack_level, " peek_level=", vb->peek_stack_level),
+                 reconstruct ? "" : " recon=false");
 
     switch (snip[0]) {
 
@@ -581,6 +590,7 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
                 base_ctx->tag_name, dt_name (vb->data_type), special, genozip_update_msg());
         ASSERT_DT_FUNC (vb, special);
 
+        snip_ctx->special_res = SPEC_RES_OK;
         has_new_value = ((PizSpecialReconstructor)(DT_FUNC(vb, special)[special]))(vb, snip_ctx, snip+2, snip_len-2, &new_value, reconstruct);  
         break;
 
@@ -708,10 +718,8 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i,
         reconstruct_one_snip (vb, ctx, word_index, STRa(snip), reconstruct);        
 
         // if SPECIAL function set value_is_missing (eg vcf_piz_special_PS_by_PID) - this treated as a WORD_INDEX_MISSING 
-        if (ctx->value_is_missing) {
-            ctx->value_is_missing = false;
+        if (ctx->special_res == SPEC_RES_IS_MISSING) 
             goto missing;
-        }
 
         // for backward compatability with v8-11 that didn't yet have flags.store = STORE_INDEX for CHROM
         if (did_i == DTF(prim_chrom)) { // NOTE: CHROM cannot have aliases, because looking up the did_i by dict_id will lead to CHROM, and this code will be executed for a non-CHROM field
@@ -779,7 +787,7 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i,
                                .len   = Ltxt - last_txt_index };
 
     ctx_set_encountered (vb, ctx); // this is the normal place in PIZ where we set encountered, but it was already set if we called ctx_set_last_value or in the case of a container
-    ctx->last_encounter_was_reconstructed = reconstruct;
+    ctx->last_encounter_was_reconstructed = reconstruct && ctx->special_res != SPEC_RES_DEFERRED;
 
     // in "store per line" mode, we save one entry per line (possibly a line has no entries if it is an optional field)
     if (ctx->flags.store_per_line) 

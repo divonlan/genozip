@@ -115,7 +115,7 @@ ValueType reconstruct_peek (VBlockP vb, ContextP ctx,
     if (ctx_encountered (vb, ctx->did_i) && (ctx->last_encounter_was_reconstructed || (!txt && !txt_len))) {
         if (txt) *txt = last_txtx (vb, ctx);
         if (txt_len) *txt_len = ctx->last_txt.len;
-        return ctx->last_value;
+        return ctx->last_value; // may or may not be set
     }
 
     if (flag.debug_peek) 

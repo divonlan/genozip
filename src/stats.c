@@ -83,8 +83,8 @@ static void stats_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
             WordIndex words[NUM_COLLECTED_WORDS] = { 0, 1, 2, n_words-3, n_words-2, n_words-1 }; // first three and last threewords in the the dictionary of this field
             for (int i=0; i < MIN_(NUM_COLLECTED_WORDS, n_words); i++) {
                 STR(snip);
-                ctx_snip_from_zf_nodes (zctx, words[i], pSTRa(snip));
-                StrTextMegaLong s = dict_io_snip_to_str (STRa(snip), false);
+                ctx_get_z_snip_ex (zctx, words[i], pSTRa(snip));
+                StrTextMegaLong s = str_snip (STRa(snip), false);
                 s.s[64] = 0; // limit to 64 chars per snip
 
                 bufprintf (evb, &exceptions, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (s.s, strlen(s.s), ',', -127)).s); 
@@ -355,7 +355,7 @@ static void stats_output_file_metadata (void)
                 bufprintf (evb, &features, "OQ_histo=%s;", segconf_get_qual_histo(QHT_OQ).s);
             }
 
-            if (TECH(UNKNOWN))
+            if (!TECH(ILLUM))
                 bufprintf (evb, &features, "Qual_acgt=%s――%s――%s――%s;", // super long unicode hyphen 
                            segconf_get_qual_histo('A').s, segconf_get_qual_histo('C').s, segconf_get_qual_histo('G').s, segconf_get_qual_histo('T').s);
 
@@ -408,6 +408,15 @@ static void stats_output_file_metadata (void)
             if (z_file->max_ploidy != 2) 
                 bufprintf (evb, &features, "ploidy=%u;", z_file->max_ploidy);
 
+            if (segconf.has[FORMAT_GQ])
+                bufprintf (evb, &features, "GQ_method=%s;", GQ_method_name (segconf.GQ_method));
+
+            if (segconf.has[FORMAT_DP])
+                bufprintf (evb, &features, "FMT_DP_method=%s;", FMT_DP_method_name (segconf.FMT_DP_method));
+
+            if (segconf.has[FORMAT_PL] && segconf.PL_mux_by_DP != unknown)
+                bufprintf (evb, &features, "PL_method=%s;",  segconf.PL_mux_by_DP==yes ? "DosageXDP" : "Dosage");
+            
             if (z_is_dvcf)
                 bufprintf (evb, &stats, "%ss: %s (Prim-only: %s Luft-only: %s)  Contexts: %u   Vblocks: %u x %u MB  Sections: %u\n", 
                         DTPZ (line_name), str_int_commas (z_file->num_lines).s, str_int_commas (z_file->comp_num_lines[VCF_COMP_PRIM_ONLY]).s, 

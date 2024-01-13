@@ -64,7 +64,7 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_next_ALT)
 {
     VBlockVCFP vb = (VBlockVCFP)vb_;
 
-    int8_t alt_i = vb->con_repeat[vb->con_stack_len-2];
+    int8_t alt_i = vb->con_stack[vb->con_stack_len-2].repeat;
 
     if (reconstruct) {
         if (vb->main_ref_len == 1 && vb->alt_lens[alt_i] == 1) // SNP

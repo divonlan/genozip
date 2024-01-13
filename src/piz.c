@@ -78,12 +78,20 @@ PizDisQname piz_dis_qname (VBlockP vb)
 
 void asspiz_text (VBlockP vb, FUNCLINE)
 {
+    StrTextSuperLong stack;
+
+    char *next = stack.s;
+    for (int i=0; i < vb->con_stack_len; i++)
+        next += sprintf (next, "%s[%u]->", CTX(vb->con_stack[i].did_i)->tag_name, vb->con_stack[i].repeat);
+
+    sprintf (next, "%s", (vb->curr_item != DID_NONE ? CTX(vb->curr_item)->tag_name : "N/A"));
+
     progress_newline(); 
-    fprintf (stderr, "%s %s/%s: Error in %s:%u line_in_file(1-based)=%"PRIu64" %s%s%s %s: ", 
-             str_time().s, LN_NAME, CTX(vb->curr_field)->tag_name, func, code_line, 
+    fprintf (stderr, "%s %s: Error in %s:%u line_in_file(1-based)=%"PRIu64" %s%s%s stack=%s %s: ", 
+             str_time().s, LN_NAME, func, code_line, 
              writer_get_txt_line_i ((VBlockP)(vb), vb->line_i), 
              cond_int (Z_DT(VCF) || Z_DT(BCF), " sample_i=", vb->sample_i), 
-             piz_dis_coords((VBlockP)(vb)).s, piz_dis_qname((VBlockP)(vb)).s, version_str().s); 
+             piz_dis_coords((VBlockP)(vb)).s, piz_dis_qname((VBlockP)(vb)).s, stack.s, version_str().s); 
 }
 
 bool piz_grep_match (rom start, rom after)
@@ -314,7 +322,7 @@ static void piz_reconstruct_one_vb (VBlockP vb)
 
     ASSERT (vb->recon_size >= 0, "Invalid vb->recon_size=%d", vb->recon_size);
 
-    // note: txt_data is fully allocated in advance and cannot be extended mid-reconstruction (container_reconstruct_do and possibly others rely on this)
+    // note: txt_data is fully allocated in advance and cannot be extended mid-reconstruction (container_reconstruct and possibly others rely on this)
     #define OVERFLOW_SIZE (1 MB) // allow some overflow space as sometimes we reconstruct unaccounted for data: 1. container templates 2. reconstruct_peek and others
     
     buf_alloc (vb, &vb->txt_data, 0, 

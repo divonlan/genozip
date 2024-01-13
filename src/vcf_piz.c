@@ -26,8 +26,18 @@ void vcf_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
     if (VER(14)) 
         segconf.has[FORMAT_RGQ] = header->vcf.segconf_has_RGQ;
 
-    if (VER(15)) 
+    if (VER(15)) {
         z_file->max_ploidy_for_mux = header->vcf.max_ploidy_for_mux; // since 15.0.36
+        segconf.GQ_method          = header->vcf.segconf_GQ_method;
+        segconf.FMT_DP_method      = header->vcf.segconf_FMT_DP_method;
+        segconf.wid_AC.width       = header->vcf.width.AC;
+        segconf.wid_AF.width       = header->vcf.width.AF;
+        segconf.wid_AN.width       = header->vcf.width.AN;
+        segconf.wid_DP.width       = header->vcf.width.DP;
+        segconf.wid_QD.width       = header->vcf.width.QD;
+        segconf.wid_SF.width       = header->vcf.width.SF;
+        segconf.wid_MLEAC.width    = header->vcf.width.MLEAC;
+    }
 }
 
 bool vcf_piz_init_vb (VBlockP vb_, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment)
@@ -85,30 +95,37 @@ IS_SKIP (vcf_piz_is_skip_section)
 }
 
 // insert a field after following fields have already been reconstructed
-void vcf_piz_insert_field (VBlockVCFP vb, Did did, STRp(value))
+void vcf_piz_insert_field (VBlockVCFP vb, ContextP ctx, STRp(value), int chars_reserved)
 {
-    decl_ctx (did);
-
-    char *addr = last_txtx (VB, ctx);
-    memmove (addr + value_len, addr, BAFTtxt - addr); // make room
-    memcpy (addr, value, value_len); // copy
-
-    Ltxt += value_len;
-
-    // note: keep txt_data.len 64b to detect bugs
-    ASSPIZ (vb->txt_data.len <= vb->txt_data.size, "txt_data overflow: len=%"PRIu64" > size=%"PRIu64". vb->txt_data dumped to %s.gz", 
-            vb->txt_data.len, (uint64_t)vb->txt_data.size, txtfile_dump_vb (VB, z_name));
+    if (!ctx->recon_insertion) return;
     
-    // adjust last_txt of other contexts that might need insertion (and hence last_txt)
-    Did dids[] = { INFO_QD, INFO_SF, INFO_DP };
-    uint32_t last_txt_index = ctx->last_txt.index;
+    char *addr = last_txtx (VB, ctx);
+    int move_by = (int)value_len - chars_reserved;
 
-    for (int i=0; i < ARRAY_LEN(dids); i++) 
-        if (CTX(dids[i])->last_txt.index > last_txt_index)
-            CTX(dids[i])->last_txt.index += value_len;
+    // actually insert or remove space in txt_data if different than what was reserved
+    if (move_by) {
+        if (move_by > 0) memmove (addr + move_by, addr, BAFTtxt - addr);             // make room if chars_reserved is not enough
+        else             memmove (addr, addr - move_by, BAFTtxt - (addr - move_by)); // shrink room added by vcf_piz_defer_to_after_samples if it was too much
 
-    // adjust lookback addresses that might be affected by this insertion
-    vcf_piz_ps_pid_lookback_shift (VB, addr, value_len);
+        Ltxt += move_by;
+
+        // note: keep txt_data.len 64b to detect bugs
+        ASSPIZ (vb->txt_data.len <= vb->txt_data.size, "txt_data overflow: len=%"PRIu64" > size=%"PRIu64". vb->txt_data dumped to %s.gz", 
+                vb->txt_data.len, (uint64_t)vb->txt_data.size, txtfile_dump_vb (VB, z_name));
+        
+        // adjust last_txt of other contexts that might need insertion (and hence last_txt)
+        Did dids[] = { INFO_QD, INFO_SF, INFO_DP };
+        uint32_t last_txt_index = ctx->last_txt.index;
+
+        for (int i=0; i < ARRAY_LEN(dids); i++) 
+            if (CTX(dids[i])->last_txt.index > last_txt_index)
+                CTX(dids[i])->last_txt.index += move_by;
+
+        // adjust lookback addresses that might be affected by this insertion
+        vcf_piz_ps_pid_lookback_shift (VB, addr, move_by);
+    }
+    
+    memcpy (addr, value, value_len); // copy
 }
 
 bool vcf_piz_line_has_RGQ (VBlockVCFP vb)
@@ -291,10 +308,12 @@ CONTAINER_ITEM_CALLBACK (vcf_piz_con_item_cb)
 
 CONTAINER_CALLBACK (vcf_piz_container_cb)
 {
-    #define have_INFO_SF (CTX(INFO_SF)->sf_snip.len > 0)
+    #define have_INFO_SF (CTX(INFO_SF)->deferred_snip.len > 0)
 
     // case: we have an INFO/SF field and we reconstructed and we reconstructed a repeat (i.e. one ht) GT field of a sample 
     if (dict_id.num == _FORMAT_GT) {
+        CTX(INFO_AN)->an.count_ht += (*recon != '.'); // used for reconstructing INFO/AN
+
         // after first HT is reconstructed, re-write the predictable phase (note: predictable phases are only used for ploidy=2)
         if (rep==0 && con->repsep[0] == '&') 
             vcf_piz_FORMAT_GT_rewrite_predicted_phase (vb, STRa (recon));
@@ -310,6 +329,9 @@ CONTAINER_CALLBACK (vcf_piz_container_cb)
     else if (is_top_level) {
         // insert INFO fields who's value is determined by the sample fields that we just finished reconstructing
 
+        if (ctx_encountered_in_line (vb, INFO_AN))
+            vcf_piz_insert_INFO_AN (VB_VCF);
+
         // note: DP must be inserted before vcf_piz_insert_INFO_QD, because QD needs DP.last_value
         if (CTX(INFO_DP)->dp.by_format_dp)
             vcf_piz_insert_INFO_DP (VB_VCF);
@@ -319,7 +341,7 @@ CONTAINER_CALLBACK (vcf_piz_container_cb)
 
         if (CTX(INFO_QD)->qd.pred_type) 
             vcf_piz_insert_INFO_QD (VB_VCF);
-
+        
         // case: we are reconstructing with --luft and we reconstructed one VCF line
         if (z_is_dvcf) 
             vcf_lo_piz_TOPLEVEL_cb_filter_line (VB_VCF);

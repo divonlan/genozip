@@ -108,18 +108,20 @@ static QdPredType vcf_seg_is_QD_predictable (VBlockVCFP vb, ContextP ctx, STRp(q
 }
 
 // called after all samples have been segged, and sum_dp_with_dosage is set
-void vcf_seg_INFO_QD (VBlockVCFP vb)
+void vcf_seg_INFO_QD (VBlockP vb)
 {
     decl_ctx (INFO_QD);
     STRlast (qd, INFO_QD);
     
+    SEGCONF_RECORD_WIDTH (QD, qd_len);
+
     // case: we can't generate a prediction or prediction is wrong - seg normally
     QdPredType pd;
-    if (!(pd = vcf_seg_is_QD_predictable (vb, ctx, STRa(qd)))) 
-        seg_by_ctx (VB, STRa(qd), ctx, qd_len);
+    if (!(pd = vcf_seg_is_QD_predictable (VB_VCF, ctx, STRa(qd)))) 
+        seg_by_ctx (vb, STRa(qd), ctx, qd_len);
 
     else
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_QD, '0' + pd }, 3, ctx, qd_len);
+        seg_by_ctx (vb, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_QD, '0' + pd }, 3, ctx, qd_len);
 }
 
 //------------
@@ -130,6 +132,8 @@ void vcf_seg_INFO_QD (VBlockVCFP vb)
 void vcf_piz_insert_INFO_QD (VBlockVCFP vb)
 {
     decl_ctx (INFO_QD);
+    if (!ctx->recon_insertion) return;
+
     QdPredType type = ctx->qd.pred_type;
 
     double qual_value = CTX(VCF_QUAL)->last_value.f;
@@ -150,7 +154,7 @@ void vcf_piz_insert_INFO_QD (VBlockVCFP vb)
     if (qd[qd_len-1] == '0' && !ctx->flags.trailing_zero_ok)
         qd_len -= (qd[qd_len-2] != '0') ? 1 : 3; // if both are 0, remove decimal point too
 
-    vcf_piz_insert_field (vb, INFO_QD, STRa(qd));
+    vcf_piz_insert_field (vb, ctx, STRa(qd), segconf.wid_QD.width);
 }
 
 void vcf_piz_sum_DP_for_QD (VBlockP vb, STRp(recon))
@@ -163,10 +167,12 @@ void vcf_piz_sum_DP_for_QD (VBlockP vb, STRp(recon))
 // just store pred_type - actual reconstruction is deferred to vcf_piz_reconstruct_QD
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_QD)
 {
-    if (reconstruct)
-        ctx->qd.pred_type = (uint32_t)(snip[0] - '0');
+    ctx->qd.pred_type = (uint32_t)(snip[0] - '0');
 
-    ASSPIZ (ctx->qd.pred_type < NUM_QD_PRED_TYPES, "Unknown pred_type=%d. %s", ctx->qd.pred_type, genozip_update_msg());
-    
+    ASSPIZ (ctx->qd.pred_type < NUM_QD_PRED_TYPES, 
+            "Unknown pred_type=%d. %s", ctx->qd.pred_type, genozip_update_msg());
+
+    vcf_piz_defer_to_after_samples (QD);
+
     return NO_NEW_VALUE;
 }

@@ -135,14 +135,15 @@ typedef struct {
     int debug, debug_or_test, show_sag, show_depn, show_dict, show_b250, show_aliases, show_digest, log_digest, show_recon_plan,
         show_index, show_gheader, show_ref_contigs, show_chain_contigs, show_ref_seq, show_ref_diff,
         show_reference, show_ref_hash, show_ref_index, show_chrom2ref, show_ref_iupacs, show_chain, show_ranges,
-        show_codec, show_cache, show_memory,
+        show_codec, show_cache, show_memory, show_snips,
         show_alleles, show_bgzf, show_txt_contigs, show_lines,
         show_threads, show_uncompress, biopsy, skip_segconf, show_data_type,
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
         debug_LONG, show_qual, debug_qname, debug_read_ctxs, debug_sag, debug_gencomp, debug_lines, debug_latest,
         debug_peek, stats_submit, debug_submit, show_deep, show_segconf_has, debug_huffman, debug_split,
         debug_debug, debug_valgrind, // ad-hoc debug printing in prod
-        no_gencomp, force_gencomp, force_deep, no_domqual, no_pacb, no_longr, force_longr, verify_codec, seg_only, show_bam, xthreads, show_rename_tags,
+        no_gencomp, force_gencomp, force_deep, force_PLy, no_domqual, no_pacb, no_longr, force_longr, verify_codec, 
+        seg_only, show_bam, xthreads, show_rename_tags,
         #define SHOW_CONTAINERS_ALL_VBs (-1)
         show_containers, show_aligner, show_buddy,
         echo,         // show the command line in case of an error
@@ -237,7 +238,7 @@ extern Flags flag;
     }                                                                                                                           \
     flag.test = flag.md5 = flag.show_memory = flag.show_stats = flag.no_header = flag.show_bgzf =                               \
     flag.header_one = flag.header_only = flag.regions = flag.show_index = flag.show_dict =                                      \
-    flag.show_b250 = flag.show_ref_contigs = flag.list_chroms = flag.count =                                                    \
+    flag.show_b250 = flag.show_ref_contigs = flag.list_chroms = flag.count =                                                   \
     flag.downsample = flag.shard = flag.one_vb = flag.one_component = flag.xthreads =                                           \
     flag.show_sex = flag.show_coverage = flag.idxstats = flag.collect_coverage = 0; /* int */                                   \
     flag.bases = IUP_NONE;                                                                                                      \

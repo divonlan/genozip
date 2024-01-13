@@ -531,7 +531,7 @@ finalize:
 // parse the of LUFT/PRIM record, seg the contained fields, and seg the LUFT and PRIM snips
 void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, ContextP ctx, STRp (value))
 {
-    TagNameEx tag_name_ex = ctx_tag_name_ex (ctx);
+    StrText tag_name_ex = ctx_tag_name_ex (ctx);
 
     ASSVCF (!chain_is_loaded, "%s: --chain cannot be used with this file because it is already a dual-coordinates VCF file - it contains INFO/"INFO_LUFT_NAME" or INFO/"INFO_PRIM_NAME" fields", txt_name);
     ASSVCF (txt_file->coords, "Found an %s subfield, but this is not a dual-coordinates VCF because it is missing \"" HK_DC_PRIMARY "\" or \"" HK_DC_LUFT "\" in the VCF header", tag_name_ex.s);

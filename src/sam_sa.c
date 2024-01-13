@@ -390,7 +390,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_COPY_PRIM)
 
     STR(item);
     sam_piz_SA_get_prim_item (vb, item_i, pSTRa(item));
-    if (reconstruct) RECONSTRUCT (item, item_len);   
+    if (reconstruct) RECONSTRUCT_str (item);   
 
     if (item_i == SA_POS || item_i == SA_MAPQ)
         str_get_int (STRa(item), &new_value->i);

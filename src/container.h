@@ -49,7 +49,7 @@ typedef struct ContainerItem {
     #define CI1_ITEM_CB      ((uint8_t)0x01) // item callback
     #define CI1_ITEM_PRIVATE ((uint8_t)0x02) // flag interpreted by the context logic, ignored by container code
     #define CI1_LOOKBACK     ((uint8_t)0x03) // item requires lookback initialize / insertion
-
+    
     uint8_t separator[2];                    // 2 byte separator reconstructed after the item (or flags)
     
     TranslatorId translator;                 // instructions how to translate this item, if this Container is reconstructed translating from one data type to another
@@ -100,6 +100,17 @@ typedef struct MediumContainer { CONTAINER_FIELDS(MEDIUM_CON_NITEMS) } MediumCon
 #define con_dec_nitems(con) con_set_nitems ((con), con_nitems (con) - 1)
 #define con_sizeof(con) (sizeof(con) - sizeof((con).items) + con_nitems (con) * sizeof((con).items[0]))
 
+static inline bool container_has (ContainerP con, DictId dict_id)
+{
+    for (uint32_t i=0; i < con_nitems(*con); i++)
+        if (con->items[i].dict_id.num == dict_id.num) return true;
+
+    return false;
+}
+
+// item in container currently in reconstruction stack.
+extern bool curr_container_has (ContextP container_ctx, DictId item_dict_id);
+
 // prefixes may be NULL, or:
 // [0] CON_PX_SEP - start
 //     container-wide-prefix (may be empty)  + CON_PX_SEP
@@ -114,7 +125,6 @@ extern WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con
 
 extern ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, STRp(prefixes));
 extern ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, STRp(snip), pSTRp(out_prefixes));
-extern bool container_has_item (ContextP ctx, DictId dict_id);
 extern uint32_t container_peek_repeats (VBlockP vb, ContextP ctx, char repsep);
 extern bool container_peek_has_item (VBlockP vb, ContextP container_ctx, DictId item_dict_id, bool consume);
 

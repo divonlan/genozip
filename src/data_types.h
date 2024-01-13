@@ -71,7 +71,7 @@ typedef struct DataTypeProperties {
     bool vb_end_nl;                             // the last character of every VB.txt_data is a newline
     bool uses_reference;                        // if --reference is given, it is needed for reconstruction
     DataType txt_type, bin_type;                // the textual and binary equivalents
-    unsigned line_height;                       // how many actual txt file lines are in one seg line (seg lines are counted in lines.len). drop_lines in container_reconstruct_do needs to match the maximum.
+    unsigned line_height;                       // how many actual txt file lines are in one seg line (seg lines are counted in lines.len). drop_lines in container_reconstruct needs to match the maximum.
     unsigned (*sizeof_vb)(DataType dt);
     unsigned (*sizeof_zip_dataline)(void);
 

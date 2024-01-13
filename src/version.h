@@ -1,4 +1,4 @@
-#define GENOZIP_CODE_VERSION "15.0.36"
+#define GENOZIP_CODE_VERSION "15.0.37"
 
 extern int code_version_major (void);
 extern int code_version_minor (void);

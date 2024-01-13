@@ -13,13 +13,51 @@
 #include "reconstruct.h"
 
 // -------
+// INFO/AN
+// -------
+
+void vcf_seg_INFO_AN (VBlockVCFP vb)
+{
+    decl_ctx (INFO_AN);
+    STRlast (an_str, INFO_AN);
+    
+    SEGCONF_RECORD_WIDTH (AN, an_str_len);
+
+    int64_t an;
+    if (str_get_int (STRa(an_str), &an) && an == ctx->an.count_ht)
+        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_AN }, 2, ctx, an_str_len);
+    else
+        seg_by_ctx (VB, STRa(an_str), ctx, an_str_len);
+}
+
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_AN)
+{
+    vcf_piz_defer_to_after_samples (AN);
+
+    return NO_NEW_VALUE;
+}
+
+// called from toplevel callback
+void vcf_piz_insert_INFO_AN (VBlockVCFP vb)
+{
+    decl_ctx (INFO_AN);
+    
+    if (ctx->recon_insertion) {
+        STRl(an_str, 12) = str_int (ctx->an.count_ht, an_str);
+        vcf_piz_insert_field (vb, ctx, STRa(an_str), segconf.wid_AN.width);
+    }
+
+    ctx_set_last_value (VB, ctx, (int64_t)ctx->an.count_ht);
+}
+
+// -------
 // INFO/AC
 // -------
 
 static bool vcf_seg_INFO_AC_item (VBlockP vb_, ContextP arr_ctx, STRp(ac_item), uint32_t alt_i)
 {
     VBlockVCFP vb = (VBlockVCFP)vb_;
-    bool is_mle = (arr_ctx->dict_id.id[1] == 'L'); // either AC or MLEAC
+    bool is_mle = (arr_ctx->did_i == INFO_MLEAC || arr_ctx->st_did_i == INFO_MLEAC); // MLEAC M0LEAC etc
     
     double af;
     int64_t ac;
@@ -43,13 +81,15 @@ static bool vcf_seg_INFO_AC_item (VBlockP vb_, ContextP arr_ctx, STRp(ac_item), 
     return true;
 }
 
-void vcf_seg_INFO_AC (VBlockVCFP vb, ContextP ac_ctx, STRp(ac_str))
+void vcf_seg_INFO_AC (VBlockVCFP vb, ContextP ctx, STRp(ac_str))
 {
+    SEGCONF_RECORD_WIDTH (AC, ac_str_len);
+
     int64_t ac, ac_hom, ac_het, ac_hemi;
 
     // case: expecting AC ≅ AN * AF for each alt allele (might not be exact due to rounding errors, esp if AF is a very small fraction)
     if (has(AN) && has(AF) && str_get_int (STRa(BII(AN)->value), &CTX(INFO_AN)->last_value.i)) 
-        seg_array_by_callback (VB, ac_ctx, STRa(ac_str), ',', vcf_seg_INFO_AC_item, ac_str_len); // since 15.0.36, we seg AC items as an array
+        seg_array_by_callback (VB, ctx, STRa(ac_str), ',', vcf_seg_INFO_AC_item, ac_str_len); // since 15.0.36, we seg AC items as an array
 
     // GIAB: AC = AC_Hom + AC_Het + AC_Hemo
     else if (has(AC_Hom) && has(AC_Het) && has(AC_Hemi) &&
@@ -59,36 +99,38 @@ void vcf_seg_INFO_AC (VBlockVCFP vb, ContextP ac_ctx, STRp(ac_str))
              str_get_int (STRa(BII(AC_Hemi)->value), &ac_hemi) &&
              ac == ac_hom + ac_het + ac_hemi) { 
              
-        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_INFO_AC, '1' }), 3, ac_ctx, ac_str_len);
+        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_INFO_AC, '1' }), 3, ctx, ac_str_len);
     }
 
     // fallback
     else 
-        seg_by_ctx (VB, STRa(ac_str), ac_ctx, ac_str_len);
+        seg_by_ctx (VB, STRa(ac_str), ctx, ac_str_len);
 }
 
-void vcf_seg_INFO_MLEAC (VBlockVCFP vb, ContextP ac_ctx, STRp(ac_str))
+void vcf_seg_INFO_MLEAC (VBlockVCFP vb, ContextP ctx, STRp(mleac))
 {
-    // case: expecting AC ≅ AN * AF for each alt allele (might not be exact due to rounding errors, esp if AF is a very small fraction)
+    SEGCONF_RECORD_WIDTH (MLEAC, mleac_len);
+
+    // case: expecting MLEAC ≅ AN * MLEAF for each alt allele (might not be exact due to rounding errors, esp if AF is a very small fraction)
     if (has(AN) && has(MLEAF) && str_get_int (STRa(BII(AN)->value), &CTX(INFO_AN)->last_value.i)) 
-        seg_array_by_callback (VB, ac_ctx, STRa(ac_str), ',', vcf_seg_INFO_AC_item, ac_str_len); 
+        seg_array_by_callback (VB, ctx, STRa(mleac), ',', vcf_seg_INFO_AC_item, mleac_len); 
 
     // fallback
     else 
-        seg_by_ctx (VB, STRa(ac_str), ac_ctx, ac_str_len);
+        seg_by_ctx (VB, STRa(mleac), ctx, mleac_len);
 }
 
 // reconstruct: AC = AN * AF 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_AC)
 {
-    // Backward compatability note: In files v6->11, snip has 2 bytes for AN, AF which mean: '0'=appears after AC, '1'=appears before AC. We ignore them.
+    // note: update last_value too, so its available to vcf_piz_luft_A_AN, which is called becore last_value is updated
 
     // case: called for item in AC / MLEAC array, possibly with a delta (since 15.0.36)
     if (snip_len && (*snip == 'D' || *snip == 'M')) {
         STR(af_str);
         reconstruct_peek (vb, CTX((*snip == 'D') ? INFO_AF : INFO_MLEAF), pSTRa(af_str));
 
-        uint32_t alt_i = vb->con_repeat[vb->con_stack_len-1];
+        uint32_t alt_i = current_con.repeat;
         
         double af;
         ASSPIZ (str_item_i_float (STRa(af_str), ',', alt_i, &af), "Failed get AF of alt_i=%u", alt_i);
@@ -98,7 +140,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_AC)
         ctx->last_value.i = new_value->i = delta + (int64_t)round (reconstruct_peek (vb, CTX(INFO_AN), 0, 0).i * af);
     }
 
-    // note: update last_value too, so its available to vcf_piz_luft_A_AN, which is called becore last_value is updated
+    // Backward compatability note: In files v6->11, snip has 2 bytes for AN, AF which mean: '0'=appears after AC, '1'=appears before AC. We ignore them.
     // used in files up to 15.0.35
     else if (!snip_len || !VER(15))
         ctx->last_value.i = new_value->i = (int64_t)round (reconstruct_peek (vb, CTX(INFO_AN), 0, 0).i * reconstruct_peek(vb, CTX(INFO_AF), 0, 0).f);
@@ -150,12 +192,12 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_MLEAF)
     STR(af_str);
     reconstruct_peek (vb, CTX(INFO_AF), pSTRa(af_str));
 
-    uint32_t alt_i = vb->con_repeat[vb->con_stack_len-1];
+    uint32_t alt_i = current_con.repeat;
     
     STR(af_item);
     ASSPIZ (str_item_i (STRa(af_str), ',', alt_i, pSTRa(af_item)), "Failed get AF of alt_i=%u", alt_i);
 
-    RECONSTRUCT (af_item, af_item_len);
+    RECONSTRUCT_str (af_item);
 
     return NO_NEW_VALUE;
 }

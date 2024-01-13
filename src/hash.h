@@ -10,18 +10,25 @@
 
 #include "genozip.h"
 
+typedef struct {              // 12 bytes
+    WordIndex word_index;     // index into zctx->nodes/vctx->ol_nodes or WORD_INDEX_NONE
+    uint32_t next;            // linked list - index into zctx/vctx->global_ents or NO_NEXT
+    int32_t merge_num;        // the merge_num in which the "word_index" field was set. when this global hash is overlayed 
+                              // to a vctx, that vctx is permitted use the word_index value if this merge_num is <= vctx->merge_num,
+                              // otherwise, it should treat it as WORD_INDEX_NONE.
+} GlobalHashEnt;
+
 extern uint32_t hash_get_estimated_entries (VBlockP merging_vb, ContextP zctx, ConstContextP first_merging_vb_ctx);
 
 extern void hash_alloc_global (ContextP zctx, uint32_t estimated_entries);
 extern uint32_t hash_next_size_up (uint64_t size, bool allow_huge);
 
-typedef enum { HASH_NEW_OK_SINGLETON_IN_VB, HASH_NEW_OK_NOT_SINGLETON, HASH_READ_ONLY } HashGlobalGetEntryMode; 
-extern WordIndex hash_global_get_entry (ContextP zctx, STRp(snip), HashGlobalGetEntryMode mode,
-                                        CtxNodeP *old_node);
+extern WordIndex hash_global_get_entry (ContextP zctx, STRp(snip), bool allow_singleton, bool snip_is_definitely_new, CtxWord **please_update_index);
 
-extern WordIndex hash_get_entry_for_seg (VBlockP segging_vb, ContextP vctx, STRp(snip), 
-                                         WordIndex new_node_i_if_no_old_one,
-                                         CtxNodeP *node);
+extern WordIndex hash_get_entry_for_seg (VBlockP segging_vb, ContextP vctx, STRp(snip), WordIndex new_node_i_if_no_old_one, rom *snip_in_dict_out);
+
+extern size_t sizeof_GlobalHashEnt (void);
+extern size_t sizeof_StonHashEnt (void);
 
 // tested hash table sizes up to 5M. turns out smaller tables (up to a point) are faster, despite having longer
 // average linked lists. probably bc the CPU can store the entire hash and nodes arrays in L1 or L2

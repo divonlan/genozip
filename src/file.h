@@ -190,9 +190,9 @@ typedef struct File {
     
     // Z_FILE 
     Buffer bound_txt_names;            // ZIP: Stats data: a concatenation of all bound txt_names that contributed to this genozip file
+    Buffer aliases;                    // ZIP/PIZ
     struct timespec start_time;        // Z_FILE: For stats: time z_file object was created in memory 
     Mutex ctx_mutex[MAX_DICTS];        // Z_FILE ZIP: Context z_file (only) is protected by a mutex 
-    Mutex wait_for_vb_1_mutex[MAX_DICTS]; // Z_FILE ZIP
     Mutex custom_merge_mutex;          // Z_FILE: ZIP: used to merge deep, but in the future could be used for other custom merges
 
     // Information content stats 

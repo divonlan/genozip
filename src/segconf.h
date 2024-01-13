@@ -26,12 +26,12 @@ typedef enum __attribute__ ((__packed__)) { TECH_NONE=-1, TECH_ANY=-2, TECH_CONS
 
 typedef enum __attribute__ ((__packed__)) { SQT_UNKNOWN, SQT_NUKE, SQT_AMINO, SQT_NUKE_OR_AMINO } SeqType;
 
-typedef enum __attribute__ ((__packed__)) { PL_mux_by_DP_TEST, PL_mux_by_DP_NO, PL_mux_by_DP_YES } PLMuxByDP;
-
 typedef enum __attribute__ ((__packed__)) { ms_NONE, ms_BIOBAMBAM, ms_MINIMAP2 } msType; // type of SAM ms:i field 
 #define ms_type_NAME { "None", "biobambam", "minimap2"}
 
-typedef enum __attribute__ ((__packed__)) { DP_DEFAULT, by_AD, by_SDP } FormatDPMethod;
+typedef enum __attribute__ ((__packed__)) { FMT_DP_DEFAULT=0, BY_AD=1, BY_SDP=2 } FormatDPMethod; // part of file format: values go into SectionHeaderGenozipHeader.segconf_FMT_DP_method
+
+typedef enum __attribute__ ((__packed__)) { INFO_DP_DEFAULT, BY_FORMAT_DP } InfoDPMethod;
 
 typedef enum __attribute__ ((__packed__)) { L3_UNKNOWN, L3_EMPTY, L3_COPY_LINE1, L3_NCBI, NUM_L3s } FastqLine3Type;
 
@@ -49,6 +49,15 @@ typedef enum  {                       MP_UNKNOWN,       MP_BSBOLT,             M
 typedef struct { char s[SAM_MAX_QNAME_LEN+1]; } QnameStr;
 
 typedef enum { QHT_QUAL, QHT_CONSENSUS, QHT_OQ, NUM_QHT } QualHistType;
+
+typedef enum __attribute__ ((__packed__)) { GQ_old=0/*up to 15.0.36*/, BY_PL=1, BY_GP=2, MUX_DOSAGExDP, MUX_DOSAGE } GQMethodType; // values go into SectionHeaderGenozipHeader.segconf_GQ_method (only 0,1,2 are used in PIZ)
+
+#define SEGCONF_MAX_WIDTH 7
+#define SEGCONF_RECORD_WIDTH(x, width) if (segconf.running && (width) <= SEGCONF_MAX_WIDTH) segconf.wid_##x.count[width]++
+typedef struct {
+    uint8_t width; // 0 to SEGCONF_MAX_WIDTH
+    uint32_t count[SEGCONF_MAX_WIDTH+1]; // number of appearance in segconf with width 0-SEGCONF_MAX_WIDTH
+} FieldWidth;
 
 // seg configuration set prior to starting to seg a file during segconfig_calculate or txtheader_zip_read_and_compress
 typedef struct {
@@ -183,6 +192,7 @@ typedef struct {
     // VCF stuff
     bool vcf_is_varscan;        // this VCF file was produced by VarScan
     bool vcf_is_gvcf;
+    bool vcf_is_gatk_gvcf;
     bool vcf_is_beagle;
     bool vcf_is_dragen;
     bool vcf_is_manta;
@@ -205,14 +215,16 @@ typedef struct {
     bool vcf_is_mastermind;
     bool vcf_is_isaac;          // IsaacVariantCaller / starling
     bool vcf_is_deep_variant;   // Google Deep Variant
-    bool vcf_is_ultima;      // Ultima Genomics version of Deep Variant
+    bool vcf_is_ultima;         // Ultima Genomics version of Deep Variant
     bool use_null_DP_method;    // A method for predicting GT=./. by DP=.
-    FormatDPMethod FORMAT_DP_method;
-    PLMuxByDP PL_mux_by_DP;
+    FormatDPMethod FMT_DP_method;
+    InfoDPMethod INFO_DP_method;
+    thool PL_mux_by_DP;
     Mutex PL_mux_by_DP_mutex;
     uint64_t count_GQ_by_PL, count_GQ_by_GP; // used tp calculate GQ_by_PL, GQ_by_GP
-    bool GQ_by_PL, GQ_by_GP;
-    
+    GQMethodType GQ_method;     // values go into SectionHeaderGenozipHeader.segconf_GQ_method (only 0,1,2 are used in PIZ)
+    FieldWidth wid_AC, wid_MLEAC, wid_AN, wid_AF, wid_SF, wid_QD, wid_DP; // most common width obversed in segconf, for VCF INFO fields that are inserted in vcf_piz_container_cb 
+
     // FASTQ
     union {
         struct {            
@@ -265,11 +277,14 @@ extern SegConf segconf; // ZIP: set based on segging a sample of a few first lin
 
 extern void segconf_initialize (void);
 extern void segconf_calculate (void);
+extern void segconf_set_width (FieldWidth *w);
 extern bool segconf_is_long_reads(void);
 extern void segconf_mark_as_used (VBlockP vb, unsigned num_ctxs, ...);
 extern rom segconf_sam_mapper_name (void);
 extern rom segconf_tech_name (void);
 extern rom segconf_deep_trimming_name (void);
+extern rom GQ_method_name (GQMethodType method);
+extern rom FMT_DP_method_name (FormatDPMethod method);
 extern void segconf_test_sorted (VBlockP vb, WordIndex prev_line_chrom, PosType32 pos, PosType32 prev_line_pos);
 extern void segconf_test_multiseq (VBlockP vb, Did nonref);
 extern StrText segconf_get_qual_histo (QualHistType qht);

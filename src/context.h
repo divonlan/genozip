@@ -73,17 +73,19 @@
 #define decl_const_ctx(did_i) ConstContextP ctx = CTX(did_i)
 #define decl_zctx(did_i) ContextP zctx = ZCTX(did_i)
 
-// ZIP only
-typedef struct CtxNode {      // 128 bit
-    CharIndex char_index;     // character index into dictionary array
-    uint32_t snip_len;        // not including \0 terminator present in dictionary array
-    union {
-        WordIndex word_index; // zctx, vctx->ol_nodes and vctx->nodes after ctx_merge_in_one_vctx 
-        WordIndex node_index; // vctx->nodes before ctx_merge_in_one_vctx
-    };
-} CtxNode;
+typedef struct __attribute__ ((__packed__)) { 
+    uint64_t char_index : 40; // up to Z_MAX_DICT_LEN
+    uint64_t snip_len   : 24; // up to Z_MAX_WORD_LEN
+} CtxWord, *CtxWordP; // 8 bytes
 
-typedef ZWord CtxWord, *CtxWordP;
+// ZIP only
+#define INITIAL_NUM_NODES 10000
+typedef union {           // 8 bytes
+    CtxWord;              // before merge: index and length into vctx->dict
+    #define VB_NODE_CANCELED ((uint64_t)-1)
+    uint64_t canceled;    // before and after merge: Set to VB_NODE_CANCELED if node is canceled in ctx_rollback (note that char_index/snip_len cannot produce 0xffffffff bc its beyond their max)
+    WordIndex word_index; // set in ctx_merge_in_one_vctx: index into zctx->nodes, which is the word number in the dict as will be seen in PIZ.
+} CtxVbNode, *CtxVbNodeP;
 
 // Interlaced integers are used for storing integers that might be positive or negative, while keeping
 // as many higher bits zero as possible.
@@ -100,7 +102,11 @@ static inline uint8_t NEXTLOCAL2BITS(ContextP ctx) { uint8_t ret = bits_get ((Bi
 #define CTX_GROWTH 1.75
 
 #define ctx_node_vb(ctx, node_index, snip_in_dict, snip_len) ctx_node_vb_do(ctx, node_index, snip_in_dict, snip_len, __FUNCLINE)
-#define node_word_index(vb,did_i,index) ((index)!=WORD_INDEX_NONE ? ctx_node_vb (&(vb)->contexts[did_i], (index), 0,0)->word_index : WORD_INDEX_NONE)
+
+#define node_index_to_word_index(vb, vctx, vb_node_index) /* use with vctx after conversion */  \
+    (((vb_node_index) >= (int32_t)(vctx)->ol_nodes.len32)                                       \
+        ? B(CtxVbNode, (vctx)->nodes, (vb_node_index) - (vctx)->ol_nodes.len32)->word_index     \
+        : (vb_node_index))
 
 #define CTX(did_i)   ({ Did my_did_i = (did_i); /* evaluate did_i only once */\
                         ASSERT (my_did_i < MAX_DICTS, "CTX(): did_i=%u out of range", my_did_i); /* optimized out for constant did_i */ \
@@ -149,9 +155,7 @@ extern WordIndex ctx_peek_next_snip (VBlockP vb, ContextP ctx, pSTRp (snip));
 
 extern WordIndex ctx_search_for_word_index (ContextP ctx, STRp(snip));
 extern void ctx_clone (VBlockP vb);
-extern CtxNode *ctx_node_vb_do (ConstContextP ctx, WordIndex node_index, rom *snip_in_dict, uint32_t *snip_len, FUNCLINE);
-extern CtxNode *ctx_node_zf_do (ConstContextP ctx, int32_t node_index, rom *snip_in_dict, uint32_t *snip_len, FUNCLINE);
-#define ctx_node_zf(ctx, node_index, snip_in_dict, snip_len) ctx_node_zf_do ((ctx), (node_index), (snip_in_dict), (snip_len), __FUNCLINE)
+extern CtxVbNode ctx_node_vb_do (ConstContextP ctx, WordIndex node_index, rom *snip_in_dict, uint32_t *snip_len, FUNCLINE);
 extern void ctx_merge_in_vb_ctx (VBlockP vb);
 extern void ctx_substract_txt_len (VBlockP vb, ContextP vctx);
 extern void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vctx, bool is_lcodec, bool is_lcodec_inherited);
@@ -213,12 +217,10 @@ extern ContextP ctx_get_zctx_from_vctx (ConstContextP vctx, bool create_if_missi
 extern ContextP ctx_add_new_zf_ctx_from_txtheader (STRp(tag_name), DictId dict_id, TranslatorId luft_translator);
 
 extern void ctx_overlay_dictionaries_to_vb (VBlockP vb);
-extern void ctx_sort_dictionaries_vb_1(VBlockP vb);
 
 extern void ctx_update_stats (VBlockP vb);
 
 // PIZ - get snip
-extern CtxNode *ctx_get_node_by_word_index (ConstContextP ctx, WordIndex word_index);
 extern rom ctx_get_snip_by_word_index_do (ConstContextP ctx, WordIndex word_index, pSTRp(snip), FUNCLINE);
 #define ctx_get_snip_by_word_index(ctx,word_index,snip) ctx_get_snip_by_word_index_do ((ctx), (word_index), &snip, &snip##_len, __FUNCLINE)
 #define ctx_get_snip_by_word_index0(ctx,word_index) ctx_get_snip_by_word_index_do ((ctx), (word_index), 0,0, __FUNCLINE)
@@ -234,14 +236,12 @@ static inline rom ctx_get_words_snip(ConstContextP ctx, WordIndex word_index)  /
 
 extern WordIndex ctx_get_word_index_by_snip (VBlockP vb, ContextP ctx, STRp(snip)); // PIZ
 
-extern rom ctx_snip_from_zf_nodes (ConstContextP zctx, WordIndex node_index, pSTRp(snip));
-
 extern WordIndex ctx_get_ol_node_index_by_snip (VBlockP vb, ContextP ctx, STRp(snip)); 
 
 extern CharIndex ctx_get_char_index_of_snip (ContextP zctx, STRp(snip), bool soft_fail); // ZIP
 
 extern void ctx_initialize_predefined_ctxs (ContextArray contexts, DataType dt, DictIdtoDidMap d2d_map, Did *num_contexts);
-extern void ctx_zip_init_promiscuous (ContextP ctx);
+extern void ctx_zip_init_promiscuous (ContextP zctx);
 extern void ctx_zip_z_data_exist (ContextP ctx);
 
 extern void ctx_shorten_unused_dict_words (Did did_i);
@@ -256,8 +256,7 @@ extern WordIndex ctx_populate_zf_ctx (Did dst_did_i, STRp (contig_name), WordInd
 
 extern void ctx_dump_binary (VBlockP vb, ContextP ctx, bool local);
 
-typedef struct { char s[MAX_TAG_LEN+8]; } TagNameEx;
-TagNameEx ctx_tag_name_ex (ConstContextP ctx);
+StrText ctx_tag_name_ex (ConstContextP ctx);
 
 // Seg: called before seg, to store the point to which we might roll back
 static inline bool ctx_set_rollback (VBlockP vb, ContextP ctx, bool override_id)
@@ -375,6 +374,7 @@ extern void ctx_consolidate_stats (VBlockP vb, int parent, ...);
 extern void ctx_consolidate_statsN(VBlockP vb, Did parent, Did first_dep, unsigned num_deps);
 extern void ctx_consolidate_stats_(VBlockP vb, ContextP parent_ctx, ContainerP con);
 extern ContextP buf_to_ctx (ContextArray ca, ConstBufferP buf);
+extern void ctx_show_zctx_big_consumers (FILE *out);
 
 extern rom dyn_type_name (DynType dyn_type);
 

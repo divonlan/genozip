@@ -16,4 +16,4 @@ typedef struct __attribute__ ((__packed__)) {
 } DictIdAlias;
 
 extern void aliases_compress (void);
-extern BufferP aliases_get (void);
+extern ConstBufferP aliases_get (void);

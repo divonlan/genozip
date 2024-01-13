@@ -455,7 +455,7 @@ rom chain_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_tx
     SmallContainer alignment_set = { 
         .repeats             = num_alignments,
         .nitems_lo           = 6,
-        .keep_empty_item_sep = true, // avoid double-deleting the space - only chain_piz_special_BACKSPACE should delete it, not container_reconstruct_do
+        .keep_empty_item_sep = true, // avoid double-deleting the space - only chain_piz_special_BACKSPACE should delete it, not container_reconstruct
         .filter_items        = true,
         .items               = { { .dict_id = { _CHAIN_SIZE } },
                                  { .dict_id = { _CHAIN_SEP  } }, 

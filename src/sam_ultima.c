@@ -342,7 +342,7 @@ void sam_seg_ultima_MI (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(mi), unsigned ad
     decl_ctx (OPTION_MI_Z);
 
     if (!ctx->mi_history.len32)
-        buf_alloc_exact (VB, ctx->mi_history, MI_HISTORY_LEN, TxtWord, "mi_history");
+        buf_alloc_exact_255 (VB, ctx->mi_history, MI_HISTORY_LEN, TxtWord, "mi_history");
 
     ARRAY (TxtWord, mi_history, ctx->mi_history);
 
@@ -381,7 +381,7 @@ void sam_seg_ultima_MI (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(mi), unsigned ad
 SPECIAL_RECONSTRUCTOR (sam_piz_special_ULTIMA_MI)
 {
     if (!ctx->history.len32)
-        buf_alloc_exact (VB, ctx->history, MI_HISTORY_LEN, TxtWord, "history");
+        buf_alloc_exact_255 (VB, ctx->history, MI_HISTORY_LEN, TxtWord, "history");
 
     ARRAY (TxtWord, mi_history, ctx->history);
 
@@ -390,11 +390,14 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_ULTIMA_MI)
     if (reconstruct) {
         if (!last_flags.duplicate && snip[0] == '0') {
             STRlast (qname, SAM_QNAME);
-            RECONSTRUCT (qname, qname_len);
+            RECONSTRUCT_str (qname);
         }
 
         else if (snip[0] != '/') {
-            int back = snip[0] - '0';  
+            int back = snip[0] - '0';
+            ASSPIZ (back < MI_HISTORY_LEN, "Expecting back=%u < MI_HISTORY_LEN=%u", back, MI_HISTORY_LEN);
+            ASSPIZ (mi_history[back].index != 0xffffffff, "MI history at back=%u is not populated yet", back);
+
             RECONSTRUCT (Btxt(mi_history[back].index), mi_history[back].len);   
         }
 

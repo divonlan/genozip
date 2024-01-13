@@ -1234,7 +1234,7 @@ batch_real_world_1_adler32() # $1 extra genozip argument
     fi
 
     local filter_bcf=nothing
-    if [ ! -x "$(command -v bcftools)" ] ; then # bcftools unavailable
+    if [ ! -x "$(command -v bcftools)" ] || [ -n "$is_exe" ]; then # bcftools unavailable
         local filter_bcf=.bcf
     fi
 
@@ -2078,7 +2078,7 @@ is_windows="`uname|grep -i mingw``uname|grep -i MSYS`"
 is_mac=`uname|grep -i Darwin`
 is_linux=`uname|grep -i Linux`
 
-if [ -n "$is_windows" ]; then
+if [ -n "$is_windows"] || [ -n "$is_exe" ]; then
 BASEDIR=../genozip
 else
 BASEDIR=.
@@ -2116,7 +2116,12 @@ if (( $# < 1 )); then
     exit 0
 fi
 
-# debug, opt, prod
+# debug, opt, prod, exe
+is_exe=`echo $1|grep exe`
+if [ -n "$is_exe" ]; then 
+    shift
+fi
+
 is_debug=`echo $1|grep debug`
 if [ -n "$is_debug" ]; then 
     debug=-debug
@@ -2147,7 +2152,7 @@ fi
 # -----------------
 # platform settings
 # -----------------
-if [ -n "$is_windows" ]; then
+if [ -n "$is_windows" ] || [ -n "$is_exe" ]; then
     exe=.exe
     path=`pwd| cut -c3-|tr / '\\\\'`\\
 #    zip_threads="-@3"

@@ -30,7 +30,7 @@
         dispatcher_recycle_vbs, sections_create_index, \
         txtfile_read_header, txtfile_read_vblock, txtfile_get_unconsumed_to_pass_to_next_vb, fastq_txtfile_have_enough_lines, \
         bgzf_copy_unconsumed_blocks, txtfile_read_block_bgzf, txtfile_read_block_gz, txtfile_read_block_bz2, bgzf_read_block,\
-        seg_all_data_lines, seg_get_next_line, seg_get_next_item, codec_hapmat_count_alt_alleles, seg_initialize,\
+        seg_all_data_lines, seg_get_next_line, seg_get_next_item, seg_initialize,\
         ctx_clone, qname_seg, sam_cigar_seg, sam_seg_BWA_XA_Z, sam_seg_BWA_XA_pos, sam_sa_prim_finalize_ingest, sam_zip_prim_ingest_vb,\
         sam_seg_SEQ, sam_seg_verify_saggy_line_SEQ, sam_seg_SEQ_vs_ref, sam_seg_bisulfite_M, reconstruct_SEQ_copy_sag_prim, \
         sam_analyze_copied_SEQ, sam_cigar_special_CIGAR, sam_piz_special_QUAL,\
@@ -52,7 +52,7 @@
         dict_io_compress_dictionaries, dict_io_assign_codecs, dict_io_compress_one_fragment, \
         aligner_best_match, aligner_get_word_from_seq, aligner_update_best, aligner_seq_to_bitmap, aligner_additional_layers, \
         refhash_generate_emoneg, ref_contigs_compress,\
-        vcf_linesort_compress_qsort, generate_recon_plan, \
+        vcf_linesort_compress_qsort, generate_recon_plan, zip_write_global_area, \
         piz_read_global_area, ref_load_stored_reference, dict_io_read_all_dictionaries, dict_io_build_word_lists, \
         ref_read_one_range, ref_uncompress_one_range, vb_release_vb_do, vb_destroy_vb,\
         sam_load_groups_add_one_prim_vb, recon_plan_compress, recon_plan_compress_one_fragment,\
@@ -63,7 +63,7 @@
         vcf_linesort_merge_vb, vcf_seg_PROBE_A,\
         random_access_finalize_entries, random_access_compress, ctx_compress_counts, zfile_compress_genozip_header,\
         ref_compress_ref, ref_compress_one_range, ref_copy_compressed_sections_from_reference_file,\
-        piz_main_loop_idle, zip_main_loop_idle, \
+        piz_main_loop_idle, zip_main_loop_idle, zip_free_undeeded_zctx_bufs_after_seg, \
         gencomp_absorb_add_to_queue, gencomp_flush, gencomp_offload_DEPN_to_disk, gencomp_reread_lines_as_prescribed, \
         bgzf_uncompress_one_prescribed_block, \
         tmp1, tmp2, tmp3, tmp4, tmp5, \

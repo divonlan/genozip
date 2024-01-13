@@ -746,10 +746,9 @@ static void file_initialize_z_file_data (FileP file)
     if (file->mode != READ) { // careful not to use IS_ZIP - which is set when reading aux files
         for (Did did_i=0; did_i < MAX_DICTS; did_i++) {
             ctx_zip_init_promiscuous (&file->contexts[did_i]); // must be done from main thread
-
-            mutex_initialize (file->wait_for_vb_1_mutex[did_i]);
-            mutex_lock (file->wait_for_vb_1_mutex[did_i]); 
+            file->contexts[did_i].vb_1_pending_merges = -1;    // uninitialized - will be initialized in ctx_set_vb_1_pending_merges
         }
+        __atomic_thread_fence (__ATOMIC_RELEASE); // release all vb_1_pending_merges
         
         // initialize evb "promiscuous" buffers - i.e. buffers that can be allocated by any thread (obviously protected by eg a mutex)
         // promiscuous buffers must be initialized by the main thread, and buffer.c does not verify their integrity.
@@ -1084,10 +1083,8 @@ void file_close (FileP *file_p)
 
         // ZIP note: we need to destory all even if unused, because they were initialized in file_initialize_z_file_data
         if (IS_ZIP)
-            for (Did did_i=0; did_i < (IS_ZIP ? MAX_DICTS : file->num_contexts); did_i++) {
+            for (Did did_i=0; did_i < (IS_ZIP ? MAX_DICTS : file->num_contexts); did_i++) 
                 mutex_destroy (file->ctx_mutex[did_i]); 
-                mutex_destroy (file->wait_for_vb_1_mutex[did_i]); 
-            }
 
         if (file->is_in_tar && file->mode != READ)
             tar_close_file (&file->file);

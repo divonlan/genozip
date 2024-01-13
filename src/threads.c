@@ -116,55 +116,55 @@ static void threads_print_call_stack_do (CONTEXT thread_ctx)
              : threads_am_i_writer_thread() ? "WRITER"
              :                                threads_get_task_name());
 
-    HANDLE process = GetCurrentProcess();
-    HANDLE thread  = GetCurrentThread();
+//     HANDLE process = GetCurrentProcess();
+//     HANDLE thread  = GetCurrentThread();
 
-    ASSGOTO (SymInitialize (process, NULL, true), "SymInitialize failed: %s", str_win_error());
+//     ASSGOTO (SymInitialize (process, NULL, true), "SymInitialize failed: %s", str_win_error());
 
-    SymSetOptions (SymGetOptions() | SYMOPT_LOAD_LINES);
+//     SymSetOptions (SymGetOptions() | SYMOPT_LOAD_LINES);
 
-#ifdef _M_X64 // most modern Intel and AMD processors
-    DWORD image_file = IMAGE_FILE_MACHINE_AMD64;
-    STACKFRAME64 sf = { .AddrPC     = { .Mode = AddrModeFlat, .Offset = thread_ctx.Rip },
-                        .AddrStack  = { .Mode = AddrModeFlat, .Offset = thread_ctx.Rsp },
-                        .AddrFrame  = { .Mode = AddrModeFlat, .Offset = thread_ctx.Rbp/* Rsp*/ } };
+// #ifdef _M_X64 // most modern Intel and AMD processors
+//     DWORD image_file = IMAGE_FILE_MACHINE_AMD64;
+//     STACKFRAME64 sf = { .AddrPC     = { .Mode = AddrModeFlat, .Offset = thread_ctx.Rip },
+//                         .AddrStack  = { .Mode = AddrModeFlat, .Offset = thread_ctx.Rsp },
+//                         .AddrFrame  = { .Mode = AddrModeFlat, .Offset = thread_ctx.Rbp/* Rsp*/ } };
 
-#elif defined _M_IA64 // Intel Itanium processors
-    DWORD image_file = IMAGE_FILE_MACHINE_IA64;
-    STACKFRAME64 sf = { .AddrPC     = { .Mode = AddrModeFlat, .Offset = thread_ctx.StIIP },
-                        .AddrStack  = { .Mode = AddrModeFlat, .Offset = thread_ctx.IntSp },
-                        .AddrBStore = { .Mode = AddrModeFlat, .Offset = thread_ctx.RsBSP },
-                        .AddrFrame  = { .Mode = AddrModeFlat, .Offset = thread_ctx.IntSp } };
-#else
-    fprintf (stderr, "Stack tracing not available for this CPU architecture"); // eg _M_IX86
-#endif
+// #elif defined _M_IA64 // Intel Itanium processors
+//     DWORD image_file = IMAGE_FILE_MACHINE_IA64;
+//     STACKFRAME64 sf = { .AddrPC     = { .Mode = AddrModeFlat, .Offset = thread_ctx.StIIP },
+//                         .AddrStack  = { .Mode = AddrModeFlat, .Offset = thread_ctx.IntSp },
+//                         .AddrBStore = { .Mode = AddrModeFlat, .Offset = thread_ctx.RsBSP },
+//                         .AddrFrame  = { .Mode = AddrModeFlat, .Offset = thread_ctx.IntSp } };
+// #else
+//     fprintf (stderr, "Stack tracing not available for this CPU architecture"); // eg _M_IX86
+// #endif
     
-    int frame=0; 
-    while (StackWalk64 (image_file, process, thread, &sf, &thread_ctx, NULL, SymFunctionTableAccess64, SymGetModuleBase64, NULL) &&
-           sf.AddrPC.Offset) {
+//     int frame=0; 
+//     while (StackWalk64 (image_file, process, thread, &sf, &thread_ctx, NULL, SymFunctionTableAccess64, SymGetModuleBase64, NULL) &&
+//            sf.AddrPC.Offset) {
 
-        union symbol {
-            IMAGEHLP_SYMBOL64;
-            char data[sizeof(IMAGEHLP_SYMBOL64) + MAX_SYM_NAME-1];
-        } symbol = { { .SizeOfStruct = sizeof (union symbol), .MaxNameLength = MAX_SYM_NAME } };
+//         union symbol {
+//             IMAGEHLP_SYMBOL64;
+//             char data[sizeof(IMAGEHLP_SYMBOL64) + MAX_SYM_NAME-1];
+//         } symbol = { { .SizeOfStruct = sizeof (union symbol), .MaxNameLength = MAX_SYM_NAME } };
 
-        DWORD64 displacement = 0;
-        // ASSGOTO (
-        SymGetSymFromAddr64 (process, sf.AddrPC.Offset, &displacement, (PIMAGEHLP_SYMBOL64)&symbol);
-            // , "SymGetSymFromAddr64 failed: %s", str_win_error());
+//         DWORD64 displacement = 0;
+//         // ASSGOTO (
+//         SymGetSymFromAddr64 (process, sf.AddrPC.Offset, &displacement, (PIMAGEHLP_SYMBOL64)&symbol);
+//             // , "SymGetSymFromAddr64 failed: %s", str_win_error());
 
-        IMAGEHLP_LINE64 line = { .SizeOfStruct = sizeof (IMAGEHLP_LINE64) };
-        DWORD displacement2 = 0;
-        // ASSGOTO (
-        SymGetLineFromAddr64 (process, sf.AddrPC.Offset, &displacement2, &line);
-            // , "SymGetLineFromAddr64 failed: %s", str_win_error());
+//         IMAGEHLP_LINE64 line = { .SizeOfStruct = sizeof (IMAGEHLP_LINE64) };
+//         DWORD displacement2 = 0;
+//         // ASSGOTO (
+//         SymGetLineFromAddr64 (process, sf.AddrPC.Offset, &displacement2, &line);
+//             // , "SymGetLineFromAddr64 failed: %s", str_win_error());
 
-        fprintf (stderr, "#%u %s at %s:%u\n", frame++, symbol.Name, line.FileName, (uint32_t)line.LineNumber);
-    }
+//         fprintf (stderr, "#%u %s at %s:%u\n", frame++, symbol.Name, line.FileName, (uint32_t)line.LineNumber);
+//     }
 
-error: 
-    CloseHandle (thread);
-    SymCleanup (process);
+// error: 
+//     CloseHandle (thread);
+//     SymCleanup (process);
 }
 
 void threads_print_call_stack (void) 
@@ -256,6 +256,8 @@ static void threads_sigusr1_handler (int signum)
     
     iprint0 ("\n\n");
     buflist_show_memory (false, 0, 0);
+
+    ctx_show_zctx_big_consumers (info_stream);
 }
 
 // signal handler of SIGUSR2 
