@@ -18,7 +18,7 @@
 #include "strings.h"
 #include "dict_io.h"
 
-#define MAX_WORDS_IN_CTX 0x7ffffff0 // limit on nodes.len, word_list.len - partly because hash uses signed int32_t + 2 for singlton using index-2
+#define MAX_WORDS_IN_CTX (1<<29) // limit on nodes.len, word_list.len - limited by VARL_MAX_4B
 
 #define MAX_WORD_INDEX (MAX_WORDS_IN_CTX-1)
 #define WORD_INDEX_NONE    -1
@@ -55,37 +55,39 @@
                      "SNIP_DONT_STORE", "<LF>", "SNIP_COPY", "SNIP_DUAL", "SNIP_LOOKBACK",\
                      "SNIP_COPY_BUDDY", "SNIP_DIFF", "SNIP_RESERVED", "SNIP_NUMERIC" }
 
-// Format on data in Context.b250: Each entry is either a single-byte special-code value 0xFA-0xFF, OR a 1, 2 or 4 big-endian integer.
-// The number of bytes is determined by Context.b250_size transmitted via SectionHeaderCtx.b250_size, its selection is done separately for each VB.
-// In FASTQ, for b250-pairing, b250 of the pair is stored in Context.pair and its size in Context.pair_b250_size
-#define BASE250_EMPTY_SF   0xFA // 250 empty string
-#define BASE250_MISSING_SF 0xFB // 251 container item missing, remove preceding separator
-#define BASE250_ONE_UP     0xFC // 252 value is one higher than previous value. 
-#define BASE250_MOST_FREQ0 0xFD // 253 this translates to 0,1,2 representing the most frequent values (according to vb_i=1 sorting).
-#define BASE250_MOST_FREQ1 0xFE // 254
-#define BASE250_MOST_FREQ2 0xFF // 255
-
-#define B250_MAX_WI_1BYTE  (0xFA         - 1) // maximal value in Context.b250 of non-special-code entries, for b250_size to be set to 1 byte
-#define B250_MAX_WI_2BYTES ((0xFA << 8)  - 1) // same, for 2 bytes
-#define B250_MAX_WI_3BYTES ((0xFA << 16) - 1) // same, for 3 bytes
-
 #define decl_ctx(did_i) ContextP ctx = CTX(did_i)
 #define decl_const_ctx(did_i) ConstContextP ctx = CTX(did_i)
 #define decl_zctx(did_i) ContextP zctx = ZCTX(did_i)
 
-typedef struct __attribute__ ((__packed__)) { 
-    uint64_t char_index : 40; // up to Z_MAX_DICT_LEN
-    uint64_t snip_len   : 24; // up to Z_MAX_WORD_LEN
-} CtxWord, *CtxWordP; // 8 bytes
+// PIZ
 
-// ZIP only
-#define INITIAL_NUM_NODES 10000
-typedef union {           // 8 bytes
-    CtxWord;              // before merge: index and length into vctx->dict
-    #define VB_NODE_CANCELED ((uint64_t)-1)
-    uint64_t canceled;    // before and after merge: Set to VB_NODE_CANCELED if node is canceled in ctx_rollback (note that char_index/snip_len cannot produce 0xffffffff bc its beyond their max)
-    WordIndex word_index; // set in ctx_merge_in_one_vctx: index into zctx->nodes, which is the word number in the dict as will be seen in PIZ.
-} CtxVbNode, *CtxVbNodeP;
+// type of elements of ctx->word_list 
+typedef struct { // 8 bytes 
+    uint64_t char_index : 39; // up to CTX_MAX_DICT_LEN (was 40 up to 15.0.37)
+    uint64_t snip_len   : 24; // up to CTX_MAX_SNIP_LEN
+} CtxWord, *CtxWordP; 
+
+// ZIP 
+#pragma pack(4) // note: MUST be at least 4 or 8 for prevs_next assignment in hash_global_add_node() to be thread-safe
+#define INITIAL_NUM_NODES 1024
+
+#define CTX_MAX_DICT_LEN (512 GB - 1ULL) // (39 bit) maximum length of a context.dict (was: 1TB (40bit) from v14 to 15.0.37) 
+#define CTX_MAX_SNIP_LEN (16 MB - 1ULL)  // (24 bit) maximum length of any snip in a context.dict (excluding its \0 separator) (v14)
+
+// type of elements of zctx->nodes, vctx->ol_nodes and vctx->nodes entries before conversion to WordIndex. 
+typedef struct {              // 12 bytes
+    uint64_t char_index : 39; // up to CTX_MAX_DICT_LEN
+    uint64_t snip_len   : 24; // up to CTX_MAX_SNIP_LEN
+    uint64_t canceled   : 1;  // set if node was canceled (only happens in vctx->nodes)
+    uint32_t next;            // linked list - index in buffer of next node in linked list or NO_NEXT (note: in vctx->nodes - this is NOT node_index, since we don't add ol_nodes.len)
+} CtxNode, *CtxNodeP;
+
+typedef struct {              // 8 bytes
+    uint32_t digest;          // crc32 digest of the singleton
+    uint32_t next;            // linked list - index of next entry on list in zctx->ston_ents or NO_NEXT
+} SingletonEnt, *SingletonEntP;
+
+#pragma pack()
 
 // Interlaced integers are used for storing integers that might be positive or negative, while keeping
 // as many higher bits zero as possible.
@@ -105,7 +107,7 @@ static inline uint8_t NEXTLOCAL2BITS(ContextP ctx) { uint8_t ret = bits_get ((Bi
 
 #define node_index_to_word_index(vb, vctx, vb_node_index) /* use with vctx after conversion */  \
     (((vb_node_index) >= (int32_t)(vctx)->ol_nodes.len32)                                       \
-        ? B(CtxVbNode, (vctx)->nodes, (vb_node_index) - (vctx)->ol_nodes.len32)->word_index     \
+        ? *B(WordIndex, (vctx)->nodes, (vb_node_index) - (vctx)->ol_nodes.len32)                \
         : (vb_node_index))
 
 #define CTX(did_i)   ({ Did my_did_i = (did_i); /* evaluate did_i only once */\
@@ -141,21 +143,18 @@ extern WordIndex ctx_create_node_do (VBlockP segging_vb, ContextP vctx, STRp (sn
 extern WordIndex ctx_create_node_is_new (VBlockP vb, Did did_i, STRp (snip), bool *is_new);
 static inline WordIndex ctx_create_node (VBlockP vb, Did did_i, STRp (snip)) { return ctx_create_node_is_new (vb, did_i, STRa(snip), NULL); }
 
-#define LASTb250(ctx) ((ctx)->flags.all_the_same ? *B1ST(WordIndex, (ctx)->b250) : *BLST(WordIndex, (ctx)->b250))
-extern void ctx_append_b250 (VBlockP vb, ContextP vctx, WordIndex node_index);
-
 extern uint32_t ctx_get_count (VBlockP vb, ContextP ctx, WordIndex node_index);
 extern void ctx_decrement_count (VBlockP vb, ContextP ctx, WordIndex node_index);
 extern void ctx_increment_count (VBlockP vb, ContextP ctx, WordIndex node_index);
 extern void ctx_protect_from_removal (VBlockP vb, ContextP ctx, WordIndex node_index);
 
-extern WordIndex ctx_decode_b250 (bytes *b, bool advance, B250Size b250_size, rom ctx_name);
 extern WordIndex ctx_get_next_snip (VBlockP vb, ContextP ctx, bool is_pair, pSTRp (snip));
+extern uint32_t ctx_get_next_snip_from_local (VBlockP vb, ContextP ctx, pSTRp (snip));
 extern WordIndex ctx_peek_next_snip (VBlockP vb, ContextP ctx, pSTRp (snip));  
 
 extern WordIndex ctx_search_for_word_index (ContextP ctx, STRp(snip));
 extern void ctx_clone (VBlockP vb);
-extern CtxVbNode ctx_node_vb_do (ConstContextP ctx, WordIndex node_index, rom *snip_in_dict, uint32_t *snip_len, FUNCLINE);
+extern CtxNode ctx_node_vb_do (ConstContextP ctx, WordIndex node_index, rom *snip_in_dict, uint32_t *snip_len, FUNCLINE);
 extern void ctx_merge_in_vb_ctx (VBlockP vb);
 extern void ctx_substract_txt_len (VBlockP vb, ContextP vctx);
 extern void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vctx, bool is_lcodec, bool is_lcodec_inherited);
@@ -263,7 +262,6 @@ static inline bool ctx_set_rollback (VBlockP vb, ContextP ctx, bool override_id)
 {
     if (ctx->rback_id == vb->rback_id && !override_id) return false; // ctx already in rollback point 
     
-    ctx->rback_b250_len        = ctx->b250.len32;
     ctx->rback_local_len       = ctx->local.len32;
     ctx->rback_nodes_len       = ctx->nodes.len32;
     ctx->rback_txt_len         = ctx->txt_len;
@@ -368,6 +366,7 @@ extern void ctx_set_store (VBlockP vb, int store_type, ...);
 extern void ctx_set_no_stons (VBlockP vb, ...);
 extern void ctx_set_same_line (VBlockP vb, ...);
 extern void ctx_set_store_per_line (VBlockP vb, ...);
+extern void ctx_set_dyn_int (VBlockP vb, ...);
 extern void ctx_set_ltype (VBlockP vb, int ltype, ...);
 extern void ctx_set_local_dep (VBlockP vb, LocalDepType ld, ...);
 extern void ctx_consolidate_stats (VBlockP vb, int parent, ...);

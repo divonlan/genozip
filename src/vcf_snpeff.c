@@ -32,11 +32,10 @@ static bool vcf_seg_INFO_ANN_pos_len (VBlockP vb, ContextP ctx, STRp(value), uin
             
         ctx->has_len = (slashes == 1);
         if (ctx->has_len)
-            ctx_get_ctx (vb, con.items[0].dict_id)->ltype = 
-            ctx_get_ctx (vb, con.items[0].dict_id)->ltype = LT_DYN_INT;
-            
+            ctx_set_dyn_int (vb, ctx_get_ctx (vb, con.items[0].dict_id)->did_i, 
+                                 ctx_get_ctx (vb, con.items[1].dict_id)->did_i, DID_EOL);
         else
-            ctx->ltype = LT_DYN_INT; 
+            ctx_set_dyn_int (vb, ctx->did_i, DID_EOL); 
 
         ctx->is_initialized = true; 
     }

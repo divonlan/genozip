@@ -17,6 +17,7 @@
 #include "sam_private.h"
 #include "reconstruct.h"
 #include "chrom.h"
+#include "b250.h"
 
 //---------
 // SEG
@@ -225,8 +226,7 @@ void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa), unsigned add_byt
     
         // PRIM: Remove the container b250 - Reconstruct will consume the SPECIAL_SAG, and sam_piz_load_sags will
         // consume OPTION_SA_* (to which we have already added the main fields of this line - RNAME, POS...)
-        ctx_decrement_count (VB, ctx, LASTb250(ctx));
-        ctx->b250.len32--;
+        b250_seg_remove_last (VB, ctx, WORD_INDEX_NONE);
 
         // build SA Group structure in VB, to be later ingested into z_file->sa_*
         sam_seg_prim_add_sag_SA (vb, dl, STRa (sa), dl->NM, IS_BAM_ZIP);

@@ -411,7 +411,7 @@ done:
 // QNAME
 // ------------------
 
-typedef struct __attribute__ ((__packed__)) { uint32_t qname_hash, grp_i; } SAGroupIndexEntry; 
+typedef struct { uint32_t qname_hash, grp_i; } SAGroupIndexEntry; 
 
 // ZIP DEPN: search for index entry by qname_hash 
 static int64_t sam_sa_binary_search_for_qname_hash (const SAGroupIndexEntry *index, uint64_t this_qname_hash, int64_t first, int64_t last)

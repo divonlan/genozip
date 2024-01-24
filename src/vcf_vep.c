@@ -173,10 +173,10 @@ void vcf_vep_seg_initialize (VBlockVCFP vb)
 {
     Did did_i;
     #define IF_HAS(dnum,action) if ((did_i = ctx_get_existing_did_i (vb, (DictId)(dnum))) != DID_NONE) action
-    IF_HAS (_INFO_cDNA_position     , CTX(did_i)->ltype = LT_DYN_INT); 
-    IF_HAS (_INFO_CDS_position      , CTX(did_i)->ltype = LT_DYN_INT); 
-    IF_HAS (_INFO_Protein_position  , CTX(did_i)->ltype = LT_DYN_INT); 
-    IF_HAS (_INFO_DISTANCE          , CTX(did_i)->ltype = LT_DYN_INT); 
+    IF_HAS (_INFO_cDNA_position   , ctx_set_dyn_int (VB, did_i, DID_EOL)); 
+    IF_HAS (_INFO_CDS_position    , ctx_set_dyn_int (VB, did_i, DID_EOL)); 
+    IF_HAS (_INFO_Protein_position, ctx_set_dyn_int (VB, did_i, DID_EOL)); 
+    IF_HAS (_INFO_DISTANCE        , ctx_set_dyn_int (VB, did_i, DID_EOL)); 
     #undef IF_HAS
 
     ctx_get_ctx (vb, maf_dict_id[0])->st_did_i = ctx_get_ctx (vb, maf_dict_id[1])->st_did_i = INFO_CSQ;

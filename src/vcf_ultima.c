@@ -16,9 +16,9 @@
 
 void vcf_ultima_seg_initialize (VBlockVCFP vb)
 {
-    ctx_set_store (VB, STORE_INT, INFO_ASSEMBLED_HAPS, INFO_FILTERED_HAPS, INFO_X_LM, INFO_X_RM, DID_EOL);
+    ctx_set_store (VB, STORE_INT, INFO_ASSEMBLED_HAPS, INFO_FILTERED_HAPS, DID_EOL);
 
-    ctx_set_ltype (VB, LT_DYN_INT, INFO_X_LM, INFO_X_RM, DID_EOL);
+    ctx_set_dyn_int (VB, INFO_X_LM, INFO_X_RM, DID_EOL);
 }
 
 //----------------------

@@ -30,7 +30,7 @@
 #include "filename.h"
 
 // all data in Little Endian. Defined in https://datatracker.ietf.org/doc/html/rfc1952 and https://samtools.github.io/hts-specs/SAMv1.pdf
-typedef struct __attribute__ ((__packed__)) BgzfHeader {
+typedef struct __attribute__ ((packed, aligned(2))) BgzfHeader {
     uint8_t id1;    // Gzip id - must be 31  (0x1f)
     uint8_t id2;    // Gzip id - must be 139 (0x8b)
     uint8_t cm;     // Compression Method - must be 8
@@ -45,7 +45,7 @@ typedef struct __attribute__ ((__packed__)) BgzfHeader {
     uint16_t bsize; // BGZF extra field - (compressed block size -1)
 } BgzfHeader;
 
-typedef struct __attribute__ ((__packed__)) BgzfFooter {
+typedef struct BgzfFooter {
     uint32_t crc32; // CRC32 of uncompressed data
     uint32_t isize; // Input (i.e. uncompressed) Size
 } BgzfFooter;

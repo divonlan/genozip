@@ -21,6 +21,7 @@
 #include "chrom.h"
 #include "stats.h"
 #include "generic.h"
+#include "zip_dyn_int.h"
 
 sSTRl(copy_TSTART_snip, 30);
 sSTRl(copy_TEND_snip, 30);
@@ -76,7 +77,7 @@ void bed_seg_initialize (VBlockP vb)
     if (!segconf.is_sorted || segconf.running) 
         ctx_set_ltype (vb, LT_UINT32, BED_START, DID_EOL);
 
-    ctx_set_ltype (vb, LT_DYN_INT, BED_SCORE, DID_EOL);
+    ctx_set_dyn_int (vb, BED_SCORE, DID_EOL);
 }
 
 void bed_seg_finalize (VBlockP vb)
@@ -198,7 +199,7 @@ rom bed_seg_txt_line (VBlockP vb, rom line, uint32_t remaining_txt_len, bool *ha
     // SCORE
     int64_t score;
     ASSSEG (str_get_int (STRfld(SCORE), &score), "Invalid SCORE=\"%.*s\"", STRfi(fld,SCORE));
-    seg_add_to_local_resizable (vb, CTX(BED_SCORE), score, fld_lens[SCORE]+1);
+    dyn_int_append (vb, CTX(BED_SCORE), score, fld_lens[SCORE]+1);
     MAYBE_END_HERE(SCORE);
 
     // STRAND

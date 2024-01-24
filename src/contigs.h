@@ -20,7 +20,7 @@
 // Accession Number: https://www.ncbi.nlm.nih.gov/genbank/acc_prefix/
 typedef struct {
     char version;                // version character is version , eg '1'. If version is not specified, then it is set to '1'. 
-    #define ACCESSION_LEN 15     // max by according to ^^^ is 12
+    #define ACCESSION_LEN 15     // max bytes according to ^^^ is 12
     char AC[ACCESSION_LEN];      // upper-case letters followed by numerals ; zero padded
     char version2;               // second digit of version (since v13)
 } AccessionNumber; 

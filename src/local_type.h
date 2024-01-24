@@ -11,7 +11,7 @@
 #include "genozip.h"
 
 // LT_* values are consistent with BAM optional 'B' types (and extend them)
-typedef enum __attribute__ ((__packed__)) { // 1 byte
+typedef enum __attribute__ ((packed)) { // 1 byte
     // LT values that are part of the file format - values can be added but not changed
     LT_SINGLETON = 0,   // nul-terminated singleton snips (note: ltype=0 was called LT_TEXT until 15.0.26 and included both SINGLETONs and STRINGs)
     LT_INT8      = 1,    
@@ -85,7 +85,7 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
    { "T8 ", 0,   1,  0,     0,                     0xffLL,                BGEN_transpose_u8_buf    }, \
    { "T16", 0,   2,  0,     0,                     0xffffLL,              BGEN_transpose_u16_buf   }, \
    { "T32", 0,   4,  0,     0,                     0xffffffffLL,          BGEN_transpose_u32_buf   }, \
-   { "T64", 0,   8,  0,     0,                     0x7fffffffffffffffLL,  BGEN_transpose_u64_buf   }, \
+   { "N/A", 0,   8,  0,     0,                     0x7fffffffffffffffLL,  0                        }, /* unused - can be repurposed - used to be T64, but this was never possible in the code */ \
    { "h8",  0,   1,  0,     0,                     0xffLL,                BGEN_u8_buf              }, /* lower-case UINT8 hex */ \
    { "H8",  0,   1,  0,     0,                     0xffLL,                BGEN_u8_buf              }, /* upper-case UINT8 hex */ \
    { "h16", 0,   2,  0,     0,                     0xffffLL,              BGEN_u16_buf             }, \
@@ -102,4 +102,7 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
    { "DYH" ,0,   8,  0,     0x8000000000000000LL,  0x7fffffffffffffffLL,  0                        }, \
 }
 
-#define lt_width(ctx) (lt_desc[(ctx)->ltype].width)
+#define lt_width(ctx)       (lt_desc[(ctx)->ltype].width)
+#define lt_min(ltype)       (lt_desc[ltype].min_int)
+#define lt_max(ltype)       (lt_desc[ltype].max_int)
+#define lt_is_signed(ltype) (lt_desc[ltype].is_signed)

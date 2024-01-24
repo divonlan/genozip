@@ -8,6 +8,7 @@
 
 #include "vcf_private.h"
 #include "reconstruct.h"
+#include "context.h"
 
 void vcf_isaac_seg_initialize (VBlockVCFP vb)
 {
@@ -17,7 +18,7 @@ void vcf_isaac_seg_initialize (VBlockVCFP vb)
     seg_mux_init (VB, CTX(FORMAT_GQX), 3, VCF_SPECIAL_MUX_GQX, false, (MultiplexerP)&vb->mux_GQX); 
     seg_by_did (VB, STRa(vb->mux_GQX.snip), FORMAT_GQX, 0); // all the same
 
-    CTX(INFO_REFREP)->ltype = LT_DYN_INT;
+    ctx_set_dyn_int (VB, INFO_REFREP, DID_EOL);
 }
 
 void vcf_seg_FORMAT_GQX (VBlockVCFP vb, ContextP ctx, STRp(gqx))

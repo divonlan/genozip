@@ -22,12 +22,13 @@
 #include "contigs.h"
 #include "reference.h"
 #include "version.h"
+#include "b250.h"
 
 static ContextP sorter_ctx = NULL; 
 static Buffer chrom_sorter = {}; // ZIP/PIZ: index into sorter_ctx->nodes/word_list, sorted alphabetically by snip
 
 // the data of SEC_CHROM2REF_MAP - this is part of the Genozip file format
-typedef struct __attribute__ ((__packed__)) { WordIndex chrom_index, ref_index; } Chrom2Ref; 
+typedef struct { WordIndex chrom_index, ref_index; } Chrom2Ref; 
 
 //-------------------------
 // chrom2ref mapping stuff
@@ -292,8 +293,7 @@ finalize:
 WordIndex chrom_seg_no_b250 (VBlockP vb, STRp(chrom_name), bool *is_new)
 {
     WordIndex chrom_node_index = chrom_seg_ex (VB, CHROM, STRa(chrom_name), 0, NULL, 0, false, is_new); // also adds to random access etc
-    ctx_decrement_count (VB, CTX(CHROM), chrom_node_index);
-    CTX(CHROM)->b250.len--;
+    b250_seg_remove_last (vb, CTX(CHROM), chrom_node_index);
 
     return chrom_node_index;
 }
@@ -310,8 +310,8 @@ static SORTER (chrom_create_zip_sorter)
     uint32_t index_a = *(uint32_t *)a;
     uint32_t index_b = *(uint32_t *)b;
 
-    CtxWord *word_a = B(CtxWord, sorter_ctx->nodes, index_a);
-    CtxWord *word_b = B(CtxWord, sorter_ctx->nodes, index_b);
+    CtxNode *word_a = B(CtxNode, sorter_ctx->nodes, index_a);
+    CtxNode *word_b = B(CtxNode, sorter_ctx->nodes, index_b);
 
     return strcmp (Bc (sorter_ctx->dict, word_a->char_index),  
                    Bc (sorter_ctx->dict, word_b->char_index));
@@ -341,7 +341,7 @@ void chrom_index_by_name (Did chrom_did_i)
     buf_alloc (evb, &chrom_sorter, 0, num_words, uint32_t, 1, "chrom_sorter");
     
     if (IS_ZIP) {
-        for_buf2 (CtxWord, node, i, sorter_ctx->nodes)
+        for_buf2 (CtxNode, node, i, sorter_ctx->nodes)
             if (node->snip_len) BNXT32(chrom_sorter) = i;
     }
     else

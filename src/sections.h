@@ -40,7 +40,7 @@
 #define HEADER_IS(_st) (header->section_type == SEC_##_st)
 #define ST(_st) (st == SEC_##_st)
 
-// Section headers - big endian
+// Section headers - integers are all big endian, unless mentioned otherwise
 
 #define GENOZIP_MAGIC 0x27052012
 
@@ -50,11 +50,13 @@
 // the reason for selecting big endian is that I am developing on little endian CPU (Intel) so
 // endianity bugs will be discovered more readily this way
 
-typedef enum __attribute__ ((__packed__)) { STORE_NONE, STORE_INT, STORE_FLOAT, STORE_INDEX        } StoreType; // values for SectionFlags.ctx.store
-typedef enum __attribute__ ((__packed__)) { B250_BYTES_4, B250_BYTES_3, B250_BYTES_2, B250_BYTES_1 } B250Size; // part of the file format - goes into SectionHeaderCtx.b250_size
+typedef enum __attribute__ ((packed)) { STORE_NONE, STORE_INT, STORE_FLOAT, STORE_INDEX        } StoreType; // values for SectionFlags.ctx.store
+typedef enum __attribute__ ((packed)) { B250_BYTES_4, B250_BYTES_3, B250_BYTES_2, B250_BYTES_1, // used in files 14 - 15.0.37
+                                        B250_VARL // used in files starting 15.0.38                                               
+                                      } B250Size; // part of the file format - goes into SectionHeaderCtx.b250_size
 
-typedef enum __attribute__ ((__packed__)) { SAG_NONE, SAG_BY_SA, SAG_BY_NH, SAG_BY_SOLO, SAG_BY_CC, SAG_BY_FLAG, NUM_SAG_TYPES } SagType;
-#define SAM_SAG_TYPE_NAMES                { "NONE",   "BY_SA",   "BY_NH",   "BY_SOLO",   "BY_CC",   "BY_FLAG" }
+typedef enum __attribute__ ((packed)) { SAG_NONE, SAG_BY_SA, SAG_BY_NH, SAG_BY_SOLO, SAG_BY_CC, SAG_BY_FLAG, NUM_SAG_TYPES } SagType;
+#define SAM_SAG_TYPE_NAMES            { "NONE",   "BY_SA",   "BY_NH",   "BY_SOLO",   "BY_CC",   "BY_FLAG" }
 #define IS_SAG_SA   (segconf.sag_type == SAG_BY_SA)
 #define IS_SAG_NH   (segconf.sag_type == SAG_BY_NH)
 #define IS_SAG_SOLO (segconf.sag_type == SAG_BY_SOLO)
@@ -251,7 +253,8 @@ typedef struct {
             uint8_t segconf_use_ins_ctxs : 1; // 15.0.30
             uint8_t unused_bits          : 6;
             uint8_t segconf_sam_factor;       // 15.0.28: BAM only: 64X estimated blow-up factor of SAM txt_data vs BAM 
-            char unused[254];
+            uint8_t segconf_deep_N_fq_score;  // 15.0.38: Deep: when copying QUAL from SAM, update scores of 'N' bases to this value
+            char unused[253];
         } sam;
 
         struct { 
@@ -282,13 +285,13 @@ typedef struct {
     uint32_t magic;
 } SectionFooterGenozipHeader, *SectionFooterGenozipHeaderP;
 
-typedef enum __attribute__ ((__packed__)) { // these values and their order are part of the file format
+typedef enum __attribute__ ((packed)) { // these values and their order are part of the file format
                       CNN_NONE, CNN_SEMICOLON, CNN_COLON, CNN_UNDERLINE, CNN_HYPHEN, CNN_HASH, CNN_SPACE, CNN_PIPE, NUM_CNN
 } QnameCNN /* 3 bits */;
 #define CNN_TO_CHAR { 0,        ';',           ':',       '_',           '-',        '#',      ' ',       '|' }
 #define CHAR_TO_CNN { [';']=CNN_SEMICOLON, [':']=CNN_COLON, ['_']=CNN_UNDERLINE, ['-']=CNN_HYPHEN, ['#']=CNN_HASH, [' ']=CNN_SPACE, ['|']=CNN_PIPE }
 
-typedef struct __attribute__ ((__packed__)) { // 3 bytes
+typedef struct { // 2 bytes
     uint8_t unused;                    // 15.0.0 to 15.0.25 : flavor_id (never used in PIZ)
     uint8_t has_seq_len  : 1;          // qname includes seq_len
     uint8_t is_consensus : 1;          // qname flavor is a "consensus read" flavor (15.0.26) (15.0.0 to 15.0.14 : is_mated: qname ends with /1 or /2 (never used in PIZ))
@@ -376,8 +379,13 @@ typedef struct {
     uint8_t param;             // Three options: 1. goes into ctx->local.param. (in PIZ: until v13: if flags.copy_local_param. since v14: always, except if ltype=LT_BITMAP) 
                                //                2. given to comp_uncompress as a codec parameter
                                //                3. starting 9.0.11 for ltype=LT_BITMAP: number of unused bits in top bits word
-    B250Size b250_size : 2;    // b250 sections only: size of each b250 element (v14)
-    uint8_t unused2    : 6;
+    union {
+    struct {
+    B250Size b250_size : 3;    // SEC_B250: size of each b250 element (v14, 2 bits up to 15.0.37)
+    uint8_t unused2    : 5;
+    };
+    uint8_t nothing_char;      // SEC_LOCAL for integer ltypes: if integer==max_int of its ltype, reconstruct this character instead. 0xff means ignore, 0 means fallback to the hard-coded logic used up to 15.0.37. see piz_uncompress_all_ctxs, reconstruct_from_local_int. (15.0.38)
+    };
     uint8_t unused;
     DictId dict_id;           
 } SectionHeaderCtx, *SectionHeaderCtxP;         
@@ -430,7 +438,7 @@ typedef struct {
 } ReconPlanItem, *ReconPlanItemP;
 
 // the data of SEC_SECTION_LIST is an array of the following type, as is the z_file->section_list_buf
-typedef struct __attribute__ ((__packed__)) SectionEntFileFormat { // 19 bytes (since v15)
+typedef struct __attribute__ ((packed)) SectionEntFileFormat { // 19 bytes (since v15)
     uint32_t offset_delta;     // delta vs previous offset (always positive)
     int32_t vblock_i_delta;    // delta vs previous section's vblock_i (may be negative) 
     CompIType comp_i_plus_1;   // stores 0 if same as prev section, COMP_NONE if COMP_NONE, and otherwise comp_i+1.
@@ -538,8 +546,8 @@ typedef const struct SectionEnt {
 } SectionEnt;
 
 // alias types in SEC_DICT_ID_ALIASES (since v15)
-typedef enum __attribute__ ((__packed__)) { ALIAS_NONE, ALIAS_CTX, ALIAS_DICT } AliasType;
-#define ALIAS_TYPE_NAMES                  { "NONE",     "CTX",      "DICT"    }
+typedef enum __attribute__ ((packed)) { ALIAS_NONE, ALIAS_CTX, ALIAS_DICT } AliasType;
+#define ALIAS_TYPE_NAMES              { "NONE",     "CTX",     "DICT"    }
 
 // ---------
 // ZIP stuff
@@ -590,7 +598,7 @@ extern void sections_list_memory_to_file_format (bool in_place);
 extern void sections_list_file_to_memory_format (SectionHeaderGenozipHeaderP genozip_header);
 extern bool sections_is_paired (void);
 
-extern SectionType sections_st_by_name (char *name);
+extern void sections_set_show_headers (char *name);
 extern uint32_t st_header_size (SectionType sec_type);
 
 // display functions

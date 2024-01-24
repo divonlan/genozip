@@ -24,7 +24,7 @@ typedef union { // 64 bit
 // vb->gencomp is an array of these:
 #define GENCOMP_LINE_LEN_BITS 30
 #define GENCOMP_MAX_LINE_LEN ((1<<GENCOMP_LINE_LEN_BITS)-1)
-typedef struct __attribute__ ((__packed__)) {
+typedef struct {
     uint32_t line_i;
     uint32_t line_index; // index into txt_data
     uint32_t line_len : GENCOMP_LINE_LEN_BITS;
@@ -44,7 +44,7 @@ typedef enum {
     NUM_GC_TYPES
 } GencompType;
 
-typedef struct __attribute__ ((__packed__)) {
+typedef struct __attribute__((packed, aligned(4))) {
     LineOffset offset;
     uint32_t line_len;
 } RereadLine;

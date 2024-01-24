@@ -397,8 +397,8 @@ bool regions_is_site_included (VBlockP vb)
 
     WordIndex chrom = vb->last_index (chrom_did_i);
     PosType64 pos = (pos_did_i == DID_NONE)          ? 1 
-                : CTX(pos_did_i)->rback_last_value.i ? CTX(pos_did_i)->rback_last_value.i // use saved value if one exists (used in VCF, bc VCF_POS.last_value might be modified by a INFO/END)
-                :                                      CTX(pos_did_i)->last_value.i;
+                : CTX(pos_did_i)->pos_last_value ? CTX(pos_did_i)->pos_last_value // use saved value if one exists (used in VCF, bc VCF_POS.last_value might be modified by a INFO/END)
+                :                                  CTX(pos_did_i)->last_value.i;
     
     if (chrom == WORD_INDEX_NONE ||  
         (vb->data_type==DT_VCF && (vcf_vb_is_luft(vb) != flag.luft))) return true; // always include all rejected variants in the vcf header

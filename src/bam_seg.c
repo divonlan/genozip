@@ -469,6 +469,7 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     // (aka Primary) - move the line to the appropriate component and skip it here (no segging done yet)
     if (vb->check_for_gc && sam_seg_is_gc_line (vb, dl, alignment, after - alignment, true)) {
         vb->debug_line_hash_skip = true;
+        memset (dl, 0, sizeof (ZipDataLineSAM));
         goto done;
     }
 

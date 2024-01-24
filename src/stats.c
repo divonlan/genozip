@@ -34,8 +34,8 @@
 
 #define SHORT_HEADER "NAME                   GENOZIP      %       TXT      %   RATIO\n"
 
-#define LONG_HEADER "did_i Name              Parent            #Words  Snips-(% of #Words)     Hash-table   uncomp      comp      comp    uncomp      comp      comp       txt    comp   % of   % of\n" \
-                    "                                         in file   Dict  Local FailSton   Size Occp      dict      dict      b250     local     local     TOTAL             ratio    txt    zip\n"
+#define LONG_HEADER "did_i Name              Parent           ----------- #Words -----------     Hash-table        uncomp      comp      comp    uncomp      comp      comp       txt    comp   % of   % of\n" \
+                    "                                         in file   Dict  Local FailSton   Size Occp SOccp     dict      dict      b250     local     local     TOTAL             ratio    txt    zip\n"
 
 static Buffer stats={}, STATS={};
 Buffer sbl_buf={}, features={}, exceptions={}, internals={};
@@ -71,23 +71,23 @@ static void stats_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
     for (StatsByLine *s=sbl, *after=sbl + num_stats; s < after; s++) {
         ContextP zctx = (s->my_did_i != DID_NONE) ? ZCTX(s->my_did_i) : NULL;
 
-        if (s->pc_hash_occupancy > 75 || // > 75%
-            (zctx && zctx->nodes.len > 1000000 && z_file->num_lines / zctx->nodes.len < 16)) { // more than 10% of num_lines (and at least 1M)
+        if (s->pc_hash_occupancy > 100 || // > 100%
+            (zctx && zctx->nodes.len > 1000000 && z_file->num_lines / zctx->nodes.len < 16)) { // more than 10% of num_lines (and at least 1M nodes)
              
             // in case of an over-populated hash table, we send the first 3 and last 3 words in the dictionary, which will help debugging the issue
             bufprintf (evb, &exceptions, "%s%s%%2C%s%%2C%s%%2C%u%%25", 
                        need_sep++ ? "%3B" : "", url_esc_non_valid_charsS(s->name).s, url_esc_non_valid_charsS(s->type).s, 
-                       url_esc_non_valid_charsS (str_size (s->global_hash_prime).s).s, (int)s->pc_hash_occupancy);
+                       url_esc_non_valid_charsS (s->hash.s).s, (int)s->pc_hash_occupancy);
             
             uint32_t n_words = zctx->nodes.len32; // note: this can be a low number despite pc_hash_occupancy being large - if words ended up as singletons
             WordIndex words[NUM_COLLECTED_WORDS] = { 0, 1, 2, n_words-3, n_words-2, n_words-1 }; // first three and last threewords in the the dictionary of this field
             for (int i=0; i < MIN_(NUM_COLLECTED_WORDS, n_words); i++) {
                 STR(snip);
                 ctx_get_z_snip_ex (zctx, words[i], pSTRa(snip));
-                StrTextMegaLong s = str_snip (STRa(snip), false);
-                s.s[64] = 0; // limit to 64 chars per snip
+                char *s = str_snip;
+                s[64] = 0; // limit to 64 chars per snip
 
-                bufprintf (evb, &exceptions, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (s.s, strlen(s.s), ',', -127)).s); 
+                bufprintf (evb, &exceptions, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (s, strlen(s), ',', -127)).s); 
             }
         }
     }
@@ -331,6 +331,8 @@ static void stats_output_file_metadata (void)
             if (flag.deep) bufprintf (evb, &features, "deep_qtype=%s;", qtype_name (segconf.deep_qtype));
             if (flag.deep) bufprintf (evb, &features, "deep_trimming=%s;", segconf_deep_trimming_name());
             if (flag.deep) bufprintf (evb, &features, "deep_qual=%s;", TF (!segconf.deep_no_qual));
+            if (segconf.deep_N_sam_score && segconf.deep_N_fq_score) 
+                bufprintf (evb, &features, "deep_N_qual=%c→%c;", segconf.deep_N_fq_score, segconf.deep_N_sam_score);
 
             if (num_alignments) {
                 FEATURE0 (segconf.is_sorted && !segconf.sam_is_unmapped, "Sorting: Sorted by POS", "Sorted_by=POS");        
@@ -381,15 +383,18 @@ static void stats_output_file_metadata (void)
                         sag_type_name (segconf.sag_type), PREC(mate_line_pc), mate_line_pc, PREC(saggy_near_pc), saggy_near_pc, PREC(prim_far_pc), prim_far_pc);
 
                 if (flag.deep)
-                    bufprintf (evb, &stats, "Deep: fq_reads_deeped=%.1f%%%s qtype=%s no_qual=%s trimming=%s\n", 
-                               deep_pc, cond_int(segconf.sam_cropped_at, " crop=", segconf.sam_cropped_at), qtype_name (segconf.deep_qtype), TF(segconf.deep_no_qual), segconf_deep_trimming_name());
+                    bufprintf (evb, &stats, "Deep: fq_reads_deeped=%.1f%%%s qtype=%s no_qual=%s trimming=%s%s%s\n", 
+                               deep_pc, cond_int(segconf.sam_cropped_at, " crop=", segconf.sam_cropped_at), 
+                               qtype_name (segconf.deep_qtype), TF(segconf.deep_no_qual), segconf_deep_trimming_name(),
+                               cond_str (segconf.deep_N_sam_score && segconf.deep_N_fq_score, " N_qual=", char_to_printable (segconf.deep_N_fq_score).s),
+                               cond_str (segconf.deep_N_sam_score && segconf.deep_N_fq_score, "→", char_to_printable (segconf.deep_N_sam_score).s));
 
                 if (z_file->num_aligned) {
                     bufprintf (evb, &features, "aligner_ok=%.1f%%;", 100.0 * (double)z_file->num_aligned / (double)z_file->num_lines);
                     bufprintf (evb, &features, "aligner_perfect=%.1f%%;", 100.0 * (double)z_file->num_perfect_matches / (double)z_file->num_lines);
                 }
 
-                if (flag.deep) 
+                if (flag.deep)
                     FEATURE (z_file->num_lines, "SAM qname: %s%s", "SAM_Qname=%s%s", 
                              segconf_qf_name (QSAM), cond_str(segconf.deep_sam_qname_flavor[1], "+", segconf_qf_name(QSAM2)))
 
@@ -686,10 +691,10 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
 
     for (uint32_t i=0; i < num_stats; i++, s++)
         if (s->z_size)
-            bufprintf (evb, &STATS, "%-2.2s    %-17.17s %-17.17s %6s  %4.*f%%  %4.*f%%  %4.*f%% %8s %3.0f%% %9s %9s %9s %9s %9s %9s %9s %6.*fX %5.1f%% %5.1f%%\n", 
+            bufprintf (evb, &STATS, "%-2.2s    %-17.17s %-17.17s %6s %6s %6s %6s %8s %3.0f%% %3.0f%% %9s %9s %9s %9s %9s %9s %9s %6.*fX %5.1f%% %5.1f%%\n", 
                        s->did_i.s, s->name, s->type, s->words.s, 
-                       PC (s->pc_dict), s->pc_dict, PC(s->pc_in_local), s->pc_in_local, PC(s->pc_failed_singletons), s->pc_failed_singletons, 
-                       (s->is_dict_alias ? "ALIAS  " : s->hash.s), s->pc_hash_occupancy, // Up to here - these don't appear in the total
+                       s->dict_words.s, s->local_words.s, s->failed_ston_words.s, 
+                       (s->is_dict_alias ? "ALIAS  " : s->hash.s), s->pc_hash_occupancy, s->pc_ston_hash_occup, // Up to here - these don't appear in the total
                        s->uncomp_dict.s, s->comp_dict.s, s->comp_b250.s, s->uncomp_local.s, s->comp_local.s, str_size (s->z_size).s, 
                        str_size ((float)s->txt_len).s, 
                        ((float)s->txt_len / (float)s->z_size) < 1000 ? 1 : 0, // precision
@@ -790,12 +795,12 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
         s->st_did_i             = zctx->st_did_i;
         s->did_i                = str_int_commas ((uint64_t)zctx->did_i); 
         s->words                = str_uint_commas_limit (n_words, 99999);
-        s->pc_dict              = !n_words ? 0 : 100.0 * (float)MIN_(zctx->nodes.len, n_words) / n_words; // MIN_ is a workaround - not sure why nodes.len sometimes exceeds the dictionary words on the file (eg in TOPLEVEL)
-        s->pc_in_local          = !n_words ? 0 : 100.0 * (float)zctx->local_num_words / n_words;
-        s->pc_failed_singletons = !zctx->b250.count ? 0 : 100.0 * (float)zctx->num_failed_singletons / (float)zctx->b250.len;
-        s->pc_hash_occupancy    = !zctx->global_hash_prime ? 0 : 100.0 * (float)(zctx->nodes.len + zctx->ston_nodes.len) / (float)zctx->global_hash_prime;
-        s->global_hash_prime    = zctx->global_hash_prime;
-        s->hash                 = str_size (zctx->global_hash_prime);
+        s->dict_words           = str_uint_commas_limit (MIN_(zctx->nodes.len, n_words), 99999); // MIN_ is a workaround - not sure why nodes.len sometimes exceeds the dictionary words on the file (eg in TOPLEVEL)
+        s->local_words          = str_uint_commas_limit (zctx->local_num_words, 99999);
+        s->failed_ston_words    = str_uint_commas_limit (zctx->num_failed_singletons, 99999);
+        s->pc_hash_occupancy    = !zctx->global_hash.len32 ? 0 : 100.0 * (float)zctx->nodes.len     / (float)zctx->global_hash.len32;
+        s->pc_ston_hash_occup   = !zctx->global_hash.len32 ? 0 : 100.0 * (float)zctx->ston_ents.len / (float)zctx->global_hash.len32;
+        s->hash                 = str_size (zctx->global_hash.len32);
         s->uncomp_dict          = str_size (zctx->dict.len);
         s->comp_dict            = str_size (zctx->dict.count);
         s->comp_b250            = str_size (zctx->b250.count);

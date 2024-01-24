@@ -22,7 +22,7 @@ void vcf_platypus_seg_initialize (VBlockVCFP vb)
                    INFO_TC, INFO_TCF, INFO_TCR, INFO_PP, INFO_HP, INFO_TR,
                    DID_EOL);
 
-    ctx_set_ltype (VB, LT_DYN_INT, INFO_HP, DID_EOL);
+    ctx_set_dyn_int (VB, INFO_HP, DID_EOL);
 }
 
 // ---------------------------------------------------------

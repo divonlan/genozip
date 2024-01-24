@@ -100,6 +100,7 @@ extern Multiplexer2P fastq_get_ultima_c_mux (VBlockP vb);
 
 // PIZ Stuff
 extern bool fastq_piz_initialize (CompIType comp_i);
+extern void fastq_piz_header_init (void);
 extern void fastq_piz_process_recon (VBlockP vb);
 extern void fastq_piz_before_read (VBlockP vb);
 extern bool fastq_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment);

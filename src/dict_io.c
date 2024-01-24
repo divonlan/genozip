@@ -65,7 +65,7 @@ void dict_io_assign_codecs (void)
             zctx->dcodec = CODEC_NONE;
 
         // assign CODEC_ARTB to dictionaries under 1KB (unless --best)
-        else if (!flag.best && zctx->dict.len < 1024) 
+        else if (!flag.best && zctx->dict.len < 1 KB) 
             zctx->dcodec = CODEC_ARITH8;
     }
 
@@ -82,7 +82,7 @@ void dict_io_assign_codecs (void)
 // -------------------------------------
 
 static Context *frag_ctx;
-static const CtxWord *frag_next_node;
+static const CtxNode *frag_next_node;
 static unsigned frag_size = 0;
 
 // compress the dictionary fragment - either an entire dict, or divide it to fragments if large to allow multi-threaded
@@ -93,12 +93,13 @@ static void dict_io_prepare_for_compress (VBlockP vb)
 
         if (!frag_next_node) {
             if (!frag_ctx->nodes.len ||
-                frag_ctx->please_remove_dict) { // this context belongs to a method that lost the test and is not used in this file
+                frag_ctx->please_remove_dict ||  // this context belongs to a method that lost the test and is not used in this file
+                (frag_ctx->rm_dict_all_the_same && !frag_ctx->override_rm_dict_ats)) { // if only word in dict is a SNIP_LOOKUP, we don't need the dict, as absent a dict, lookup will happen (unless any VB objects) 
                 frag_ctx++;
                 continue; // unused context
             }
 
-            frag_next_node = B1ST (const CtxWord, frag_ctx->nodes);
+            frag_next_node = B1ST (const CtxNode, frag_ctx->nodes);
 
             ASSERT (frag_next_node->char_index + frag_next_node->snip_len <= frag_ctx->dict.len, 
                     "Corrupt nodes in ctx=%.8s did_i=%u", frag_ctx->tag_name, (int)(frag_ctx - z_file->contexts));
@@ -108,7 +109,7 @@ static void dict_io_prepare_for_compress (VBlockP vb)
             // frag_size is set by default 1MB, but must be at least double the longest snip, or it will cause
             // mis-calculation of size_upper_bound in dict_io_read_one_vb
             frag_size = 1 MB;
-            for (const CtxWord *node=B1ST (CtxWord, frag_ctx->nodes); node <= BLST (CtxWord, frag_ctx->nodes); node++)
+            for (const CtxNode *node=B1ST (CtxNode, frag_ctx->nodes); node <= BLST (CtxNode, frag_ctx->nodes); node++)
                 if (node->snip_len * 2 > frag_size)
                     frag_size = 2 * roundup2pow ((uint64_t)node->snip_len); // must be power of 2 for dict_io_read_one_vb
         }
@@ -118,7 +119,7 @@ static void dict_io_prepare_for_compress (VBlockP vb)
 
         ctx_zip_z_data_exist (frag_ctx);
 
-        while (frag_next_node < BAFT (CtxWord, frag_ctx->nodes) && 
+        while (frag_next_node < BAFT (CtxNode, frag_ctx->nodes) && 
                vb->fragment_len + frag_next_node->snip_len + 1 < frag_size) {
 
             vb->fragment_len += frag_next_node->snip_len + 1;
@@ -126,7 +127,7 @@ static void dict_io_prepare_for_compress (VBlockP vb)
             frag_next_node++;
         }
 
-        if (frag_next_node == BAFT (CtxWord, frag_ctx->nodes)) {
+        if (frag_next_node == BAFT (CtxNode, frag_ctx->nodes)) {
             frag_ctx++;
             frag_next_node = NULL;
             frag_size = 0;
@@ -252,7 +253,7 @@ static void dict_io_read_one_vb (VBlockP vb)
         // this allows us to calculate the frag_size with which this dictionary was compressed and hence an upper bound on the size
         uint64_t size_upper_bound = (num_fragments == 1) ? vb->fragment_len : ((uint64_t)roundup2pow (vb->fragment_len) * (uint64_t)num_fragments);
         
-        buf_alloc (evb, &dict_ctx->dict, 0, VER(9) ? size_upper_bound : v8_get_dict_size (vb, dict_sec), char, 0, CTX_TAG_DICT);
+        buf_alloc (evb, &dict_ctx->dict, 0, VER(9) ? size_upper_bound : v8_get_dict_size (vb, dict_sec), char, 0, "zctx->dict");
         dict_ctx->dict.prm32[0] = num_fragments;     // for error reporting
         dict_ctx->dict.prm32[1] = vb->fragment_len;
 
@@ -297,11 +298,12 @@ done:
     vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.
 }
 
+// PIZ
 static void dict_io_dict_build_word_list_one (ContextP zctx)
 {
     if (!zctx->word_list.len || zctx->word_list.data) return; // skip if 1. no words, or 2. already built
 
-    buf_alloc (evb, &zctx->word_list, 0, zctx->word_list.len, CtxWord, 0, "contexts->word_list");
+    buf_alloc (evb, &zctx->word_list, 0, zctx->word_list.len, CtxWord, 0, "zctx->word_list");
     buf_set_shared (&zctx->word_list);
 
     rom word_start = zctx->dict.data;
@@ -312,7 +314,7 @@ static void dict_io_dict_build_word_list_one (ContextP zctx)
         uint64_t index = BNUM64 (zctx->dict, word_start); 
         uint64_t len   = c - word_start;
 
-        if (index > Z_MAX_DICT_LEN || len > Z_MAX_WORD_LEN) {
+        if (index > CTX_MAX_DICT_LEN || len > CTX_MAX_SNIP_LEN) {
             ASSERT (!VER(14), "A word was found in zctx=%s with index=%"PRIu64" amd len=%"PRIu64". This index/len is beyond current limits of Genozip. Use Genozip v13 to decompress this file.",
                     zctx->tag_name, (uint64_t)index, (uint64_t)len);
 
@@ -391,7 +393,7 @@ void dict_io_read_all_dictionaries (void)
     COPY_TIMER_EVB (dict_io_read_all_dictionaries);
 }
 
-StrTextMegaLong str_snip (STRp(snip), bool add_quote)
+StrTextMegaLong str_snip_ex (STRp(snip), bool add_quote)
 {
     StrTextMegaLong s;
     char *next = s.s;
@@ -420,7 +422,7 @@ StrTextMegaLong str_snip (STRp(snip), bool add_quote)
         default                        : next += sprintf (next, "\\x%x", (uint8_t)op);
     }
 
-    if (op == SNIP_OTHER_LOOKUP || op == SNIP_OTHER_DELTA || op == SNIP_COPY) {
+    if (op == SNIP_OTHER_LOOKUP || op == SNIP_OTHER_DELTA || op == SNIP_COPY || op == SNIP_REDIRECTION) {
         unsigned b64_len = base64_sizeof (DictId);
         DictId dict_id;
         base64_decode (&snip[1], &b64_len, dict_id.id);
@@ -439,6 +441,29 @@ StrTextMegaLong str_snip (STRp(snip), bool add_quote)
         unsigned prefixes_len = snip_len - i;
         next += sprintf (next, "%.*s", (int)sizeof(s)-20, container_to_json (&con, &snip[i+1], prefixes_len).s);
         i += prefixes_len;
+    }
+
+    // case: SPECIAL with base64-encodeded dictionaries: 
+    // last item in a \t-separated array should be eg "MUX0"SNIP_SPECIAL
+    // SNIP_SPECIAL tell us to print the dictionaries. 0 is the offset from the beginning.
+    else if (op == SNIP_SPECIAL && snip[snip_len-1] == SNIP_SPECIAL) {
+        unsigned start_at = i + (snip[snip_len-2] - '0');
+        str_split (snip + start_at, snip_len - start_at, 0, '\t', item, false);
+
+        DictId dict_id_1st, dict_id_lst;
+        unsigned b64_len = item_lens[0]; 
+        base64_decode (items[0], &b64_len, dict_id_1st.id);
+
+        if (n_items > 2) {
+            b64_len = item_lens[1]; 
+            base64_decode (items[n_items-2], &b64_len, dict_id_lst.id);
+        }
+
+        next += sprintf (next, " %.*s∈{%s%s}", STRfi (item, n_items-1),
+                         dis_dict_id (dict_id_1st).s, 
+                         cond_str (n_items > 2, " → ", dis_dict_id (dict_id_lst).s));
+
+        snip_len = start_at; // print the bytes before the dictionaries, if any
     }
 
     if (add_quote && !op) *next++ = '\"';    
@@ -461,7 +486,7 @@ void dict_io_print (FILE *fp, STRp(data), bool with_word_index, bool add_quotati
 
         // in case we are showing chrom data in --list-chroms in SAM - don't show * and =
         if (!remove_equal_asterisk || !(str_is_1char(word,'*') || str_is_1char(word,'='))) 
-            fprintf (fp, "%s", str_snip (STRa(word), add_quotation_marks).s);
+            fprintf (fp, "%s", str_snip_ex (STRa(word), add_quotation_marks).s);
 
         word += word_len + 1;
         fputc ((add_newline || word == after) ? '\n' : ' ', fp);

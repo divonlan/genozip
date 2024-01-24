@@ -10,7 +10,7 @@
 
 #include "sections.h"
 
-typedef struct __attribute__ ((__packed__)) { 
+typedef struct __attribute__ ((packed)) { 
     AliasType alias_type; // added v15 - up to v14 DictIdAlias contained only alias, dst
     DictId alias, dst; 
 } DictIdAlias;

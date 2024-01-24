@@ -45,11 +45,11 @@ extern void asspiz_text (VBlockP vb, FUNCLINE);
 #define ABORT_PIZ0(string) ABORT_PIZ (string "%s", "")
 
 // goes into ctx->history if not STORE_INT
-typedef enum __attribute__ ((__packed__)) { LookupTxtData, LookupDict, LookupLocal, LookupPerLine } LookupType;
-#define LOOKUP_TYPE_NAMES { "LookupTxtData", "LookupDict", "LookupLocal", "LookupPerLine" }
+typedef enum __attribute__ ((packed)) { LookupTxtData,   LookupDict,   LookupLocal,   LookupPerLine } LookupType;
+#define LOOKUP_TYPE_NAMES            { "LookupTxtData", "LookupDict", "LookupLocal", "LookupPerLine" }
 extern rom lookup_type_name (LookupType lookup);
 
-typedef struct __attribute__ ((__packed__)) { // 9 bytes
+typedef struct __attribute__ ((packed)) { // 9 bytes
     TxtWord;           // for TxtData, Local, PerLine - index into buffer. For Dict - word index (note: gcc/clang flag -fms-extensions is needed for this type of anonymous struct use)
     LookupType lookup    : 2;
     uint8_t ctx_specific : 6;
@@ -58,13 +58,15 @@ typedef struct __attribute__ ((__packed__)) { // 9 bytes
 extern int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i, char sep, ReconType reconstruct, rom func);
 #define reconstruct_from_ctx(vb,did_i,sep,reconstruct) reconstruct_from_ctx_do ((VBlockP)(vb),(did_i),(sep),(reconstruct), __FUNCTION__)
 
-extern void reconstruct_one_snip (VBlockP vb, ContextP ctx, WordIndex word_index, STRp(snip), ReconType reconstruct);
+extern void reconstruct_one_snip (VBlockP vb, ContextP ctx, WordIndex word_index, STRp(snip), ReconType reconstruct, FUNCLINE);
+
 extern uint32_t reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, uint32_t len, ReconType reconstruct);
 extern int64_t reconstruct_from_local_int (VBlockP vb, ContextP ctx, char separator /* 0 if none */, ReconType reconstruct);
 extern HasNewValue reconstruct_demultiplex (VBlockP vb, ContextP ctx, STRp(snip), int channel_i, ValueType *new_value, ReconType reconstruct);
 
 extern ContextP reconstruct_get_other_ctx_from_snip (VBlockP vb, ContextP ctx, pSTRp (snip));
 
+extern uint32_t recon_multi_dict_id_get_num_dicts (ContextP ctx, STRp(snip));
 extern ContextP recon_multi_dict_id_get_ctx_first_time (VBlockP vb, ContextP ctx, STRp(snip), unsigned ctx_i);
 #define MCTX(ctx_i,snip,snip_len) ((ctx->ctx_cache.len32 && *B(ContextP, ctx->ctx_cache, ctx_i)) \
                                         ? *B(ContextP, ctx->ctx_cache, ctx_i)                    \
@@ -114,19 +116,6 @@ typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, Did did_i, DictI
 // gets snip, snip_len from b250 data
 #define LOAD_SNIP(did_i) ctx_get_next_snip (VB, CTX(did_i), false, &snip, &snip_len) 
 #define PEEK_SNIP(did_i) ctx_peek_next_snip (VB, CTX(did_i), &snip, &snip_len)
-
-#define LOAD_SNIP_FROM_LOCAL(ctx) ( {                                   \
-    ASSPIZ (ctx->next_local < ctx->local.len32, "%s.local exhausted: next_local=%u len=%u%s", (ctx)->tag_name, (ctx)->next_local, (ctx)->local.len32, !(ctx)->local.len32 ? " (since len=0, perhaps it is not loaded? check IS_SKIP function)" : ""); \
-    uint32_t start = ctx->next_local;                                   \
-    ARRAY (char, data, ctx->local);                                     \
-    uint32_t next_local = ctx->next_local; /* automatic for speed */    \
-    uint32_t len = ctx->local.len32;                                    \
-    while (next_local < len && data[next_local]) next_local++;          \
-    snip = &data[start];                                                \
-    snip_len = next_local - start;                                      \
-    ctx->next_local = next_local + 1; /* skip the separator */          \
-    start;                                                              \
-} ) 
 
 #define NEXT_ERRFMT "%s: not enough data in %s.local: next_local=%u + recon_len=%u > local.len=%u"
 

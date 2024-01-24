@@ -20,7 +20,7 @@
         write, write_fg, write_bg, zriter_write, piz_read_one_vb, codec_hapmat_piz_get_one_line, vb_get_vb,\
         compressor_domq, compressor_actg, bgzf_io_thread, bgzf_compute_thread, bgzf_writer_thread,\
         bgzf_uncompress_vb, txtfile_read_block_bgzf_uncompress,\
-        piz_get_line_subfields, zip_generate_b250, zip_generate_local, zip_compress_ctxs, ctx_merge_in_vb_ctx, wait_for_merge,\
+        piz_get_line_subfields, b250_zip_generate, zip_generate_local, zip_compress_ctxs, ctx_merge_in_vb_ctx, wait_for_merge,\
         zfile_uncompress_section, codec_assign_best_codec, compressor_pbwt, compressor_longr, compressor_homp, compressor_t0, \
         compressor_rans, compressor_arith, compressor_normq, compressor_pacb,\
         codec_domq_reconstruct, codec_domq_reconstruct_dom_run, codec_longr_reconstruct, codec_homp_reconstruct, \
@@ -59,7 +59,7 @@
         sam_zip_recon_plan_add_gc_lines, sam_zip_recon_plan_count_writers, recon_plan_deltify,\
         sam_reconstruct_SEQ_vs_ref, aligner_reconstruct_seq,\
         sam_bismark_piz_update_meth_call,\
-        zip_handle_unique_words_ctxs, ctx_sort_dictionaries_vb_1, random_access_merge_in_vb, \
+        zip_handle_unique_words_ctxs, random_access_merge_in_vb, \
         vcf_linesort_merge_vb, vcf_seg_PROBE_A,\
         random_access_finalize_entries, random_access_compress, ctx_compress_counts, zfile_compress_genozip_header,\
         ref_compress_ref, ref_compress_one_range, ref_copy_compressed_sections_from_reference_file,\

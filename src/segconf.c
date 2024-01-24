@@ -19,6 +19,7 @@
 #include "bgzf.h"
 #include "tip.h"
 #include "zfile.h"
+#include "zip_dyn_int.h"
 
 SegConf segconf = {}; // system-wide global
 static VBlockP segconf_vb = NULL;
@@ -355,6 +356,19 @@ void segconf_calculate (void)
         segconf_show_has();
 
     segconf_set_vb_size (vb, save_vb_size);
+
+    segconf.line_len = (vb->lines.len32 ? ((double)Ltxt / (double)vb->lines.len32) : 500) + 0.999; // get average line length (rounded up ; arbitrary 500 if the segconf data ended up not having any lines (example: all lines were non-matching lines dropped by --match in a chain file))
+
+    // limitations: only pre-defined field
+    for (Did did_i=0; did_i < DTF(num_fields); did_i++) {
+        decl_ctx (did_i);
+
+        if (ctx->b250.len32 && !ctx->flags.all_the_same) 
+            segconf.b250_per_line[did_i] = (float)ctx->b250.len32 / (float)vb->lines.len32;
+
+        if (ctx->local.len32) 
+            segconf.local_per_line[did_i] = ((float)ctx->local.len32 / (float)vb->lines.len32) * (float)lt_desc[dyn_int_get_ltype(ctx)].width;
+    }
 
     // return the data to txt_file->unconsumed_txt - squeeze it in before the passed-up data
     buf_insert (evb, txt_file->unconsumed_txt, char, 0, txt_data_copy.data, txt_data_copy.len, "txt_file->unconsumed_txt");

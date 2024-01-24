@@ -18,7 +18,8 @@ void vcf_manta_seg_initialize (VBlockVCFP vb)
     for (char c='0'; c < '7'; c++) 
         id_ctx[(int)c-'0'] = ctx_get_ctx (vb, dict_id_make ((char[]){'I',c,'D'}, 3, DTYPE_FIELD));
 
-    id_ctx[1]->ltype = id_ctx[2]->ltype = id_ctx[4]->ltype = id_ctx[5]->ltype = id_ctx[6]->ltype = LT_DYN_INT;
+    ctx_set_dyn_int (VB, id_ctx[1]->did_i, id_ctx[2]->did_i, id_ctx[4]->did_i, id_ctx[5]->did_i, 
+                     id_ctx[6]->did_i, DID_EOL);
 
     id_ctx[2]->flags.store = id_ctx[3]->flags.store = STORE_INT;
 }

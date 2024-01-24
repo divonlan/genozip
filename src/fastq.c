@@ -26,6 +26,7 @@
 #include "aligner.h"
 #include "zfile.h"
 #include "zriter.h"
+#include "qname_filter.h"
 
 #define dict_id_is_fastq_qname_sf dict_id_is_type_1
 #define dict_id_is_fastq_aux      dict_id_is_type_2
@@ -302,6 +303,8 @@ void fastq_seg_initialize (VBlockP vb_)
 
         buf_alloc (vb, &gpos_ctx->local, 1, vb->lines.len, uint32_t, CTX_GROWTH, CTX_TAG_LOCAL); 
     }
+
+    ctx_set_ltype (VB, LT_UINT8, FASTQ_SEQMIS_A, FASTQ_SEQMIS_C, FASTQ_SEQMIS_G, FASTQ_SEQMIS_T, DID_EOL);
 
     if (!segconf.multiseq && !segconf.running)
         codec_acgt_seg_initialize (VB, FASTQ_NONREF, true);
@@ -785,6 +788,15 @@ bool fastq_piz_initialize (CompIType comp_i)
     return true;
 }
 
+void fastq_piz_header_init (void)
+{
+    if (flag.qnames_file)
+        qname_filter_initialize_from_file (flag.qnames_file); // note: uses SectionHeaderTxtHeader.flav_props to canonize qnames
+
+    if (flag.qnames_opt)
+        qname_filter_initialize_from_opt (flag.qnames_opt); 
+}
+
 // PIZ: main thread: piz_process_recon callback: usually called in order of VBs, but out-of-order if --test with no writer
 void fastq_piz_process_recon (VBlockP vb)
 {
@@ -907,13 +919,14 @@ CONTAINER_FILTER_FUNC (fastq_piz_filter)
 // filtering during reconstruction: called by container_reconstruct for each fastq record (repeat)
 CONTAINER_CALLBACK (fastq_piz_container_cb)
 {
-    // --taxid: filter out by Kraken taxid 
-    if (flag.kraken_taxid && is_top_level) {
+    if (is_top_level) {
+        #define DROP_LINE(reason) ({ vb->drop_curr_line = (reason); goto dropped; })
+
+        // --taxid: filter out by Kraken taxid           
+        if (flag.kraken_taxid && !kraken_is_loaded && !kraken_is_included_stored (vb, FASTQ_TAXID, !flag.seq_only && !flag.qual_only))
+            DROP_LINE ("taxid");
         
-        if (!kraken_is_loaded && !kraken_is_included_stored (vb, FASTQ_TAXID, !flag.seq_only && !flag.qual_only))
-            vb->drop_curr_line = "taxid";
-        
-        else if (kraken_is_loaded) {
+        if (flag.kraken_taxid && kraken_is_loaded) {
             STR(qname);
 
             if (VER(15)) 
@@ -925,14 +938,20 @@ CONTAINER_CALLBACK (fastq_piz_container_cb)
             }
 
             if (!kraken_is_included_loaded (vb, STRa(qname))) 
-                vb->drop_curr_line = "taxid";
+                DROP_LINE ("taxid");
         }
-    }
 
-    // --bases
-    if (flag.bases && is_top_level && !vb->drop_curr_line &&
-        !iupac_is_included_ascii (STRlst(FASTQ_SQBITMAP)))
-        vb->drop_curr_line = "bases";
+        // --bases
+        if (flag.bases && !vb->drop_curr_line &&
+            !iupac_is_included_ascii (STRlst(FASTQ_SQBITMAP)))
+            DROP_LINE ("bases");
+
+        // --qnames and --qnames-file
+        if (flag.qname_filter && !qname_filter_does_line_survive (STRlst (FASTQ_QNAME)))
+            DROP_LINE ("qname_filter");
+        
+        dropped: {}
+    }
 }
 
 // Used in R2: used for pair-assisted b250 reconstruction. copy parallel b250 snip from R1. 
@@ -946,7 +965,7 @@ SPECIAL_RECONSTRUCTOR (fastq_special_mate_lookup)
     if (ctx->did_i == FASTQ_SQBITMAP && VER(14))
         ctx->pair1_is_aligned = (snip_len && *snip == SNIP_LOOKUP) ? PAIR1_ALIGNED : PAIR1_NOT_ALIGNED;
 
-    reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE /* we can't cache pair items */, STRa(snip), reconstruct); // might include delta etc - works because in --pair, ALL the snips in a context are FASTQ_SPECIAL_mate_lookup
+    reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE /* we can't cache pair items */, STRa(snip), reconstruct, __FUNCLINE); // might include delta etc - works because in --pair, ALL the snips in a context are FASTQ_SPECIAL_mate_lookup
 
     return NO_NEW_VALUE; // last_value already set (if needed) in reconstruct_one_snip
 }

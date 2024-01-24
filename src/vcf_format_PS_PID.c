@@ -52,8 +52,8 @@ void vcf_samples_seg_initialize_LOOKBACK (VBlockVCFP vb)
 
     // note: we don't actually Seg anything into VCF_LOOKBACK as we get the lookback from the number of samples
     // this just carries the lb_size as an empty local section
-    lookback_ctx->flags.store    = STORE_INT;
-    lookback_ctx->ltype          = LT_DYN_INT;
+    
+    ctx_set_dyn_int (VB, lookback_ctx->did_i, DID_EOL);
     lookback_ctx->local_param    = true;
     lookback_ctx->local.prm8[0]  = lookback_size_to_local_param (PS_PID_LOOKBACK_LINES * vcf_num_samples + 1); // 1+ number of lookback values
     lookback_ctx->local_always   = (lookback_ctx->local.prm8[0] != 0); // no need for a SEC_LOCAL section if the parameter is 0 (which is the default anyway)

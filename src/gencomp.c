@@ -39,7 +39,7 @@ typedef struct {
 } QueueStruct;
 
 // overlays Buffer.param of queue[gct].gc_txts[buf_i]
-typedef struct __attribute__ ((__packed__)) {
+typedef struct {
     uint32_t num_lines : 27; // VB size is limited to 1GB and VCF spec mandates at least 16 characters per line (8 mandatory fields), SAM mandates 22 (11 fields)
     uint32_t comp_i    : 2;
     uint32_t unused    : 3;

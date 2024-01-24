@@ -13,23 +13,23 @@
 #include "genozip.h"
 
 #define BASE64_DICT_ID_LEN 14
-#define MULTIPLEXER(n_channels)                     \
-struct __attribute__ ((__packed__)) {               \
-    /* all 32b/64b fields must be word-aligned */   \
-    ContextP ctx;                                   \
-    bool no_stons;                                  \
-    uint8_t special_code;                           \
-    uint16_t num_channels;                          \
-    uint32_t snip_len;                              \
-    DictId dict_ids[n_channels];                    \
-    ContextP channel_ctx[n_channels];               \
-    char snip[BASE64_DICT_ID_LEN * (n_channels)];   \
+#define MULTIPLEXER(n_channels)                         \
+struct {                                                \
+    /* all fields ara aligned - padding only at end  */ \
+    ContextP ctx;                                       \
+    bool no_stons;                                      \
+    uint8_t special_code;                               \
+    uint16_t num_channels;                              \
+    uint32_t snip_len;                                  \
+    DictId dict_ids[n_channels];                        \
+    ContextP channel_ctx[n_channels];                   \
+    char snip[BASE64_DICT_ID_LEN * (n_channels) + 6];   \
 }                               
 #define MUX ((MultiplexerP)mux)
 #define MUX_CAPACITY(mux) (sizeof((mux).dict_ids)/sizeof(DictId)) // max number of channels this mux can contain
 #define MUX_CHANNEL_CTX(mux) ((ContextP *)((mux)->dict_ids + (mux)->num_channels))
-#define MUX_SNIP_LEN_P(mux)  ((uint32_t *)(mux) + 3) // a simple &mux->snip_len gives a compiler warning due to __packed__
 #define MUX_SNIP(mux)        ((char *)(MUX_CHANNEL_CTX(mux) + (mux)->num_channels))
+#define MUX_SIZEOF_SNIP(mux) (BASE64_DICT_ID_LEN * ((mux)->num_channels) + 6)
 
 typedef MULTIPLEXER(1000) *MultiplexerP;
 typedef const MULTIPLEXER(1000) *ConstMultiplexerP;

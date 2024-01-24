@@ -20,7 +20,7 @@
 
 static Mutex seq_mutex={}, qual_mutex={}, qname_mutex={}, aln_mutex={}, grp_mutex={};
 
-typedef struct __attribute__ ((__packed__)) { uint32_t qname_hash, grp_i; } SAGroupIndexEntry; 
+typedef struct { uint32_t qname_hash, grp_i; } SAGroupIndexEntry; 
 
 static ASCENDING_SORTER (group_index_sorter, SAGroupIndexEntry, qname_hash)
 

@@ -15,10 +15,8 @@ void sam_pacbio_seg_initialize (VBlockSAMP vb)
 {
     ctx_set_no_stons (VB, OPTION_dt_Z, OPTION_mq_Z, OPTION_st_Z, DID_EOL);
 
-    ctx_set_ltype (VB, LT_DYN_INT, OPTION_qs_i, OPTION_qe_i, OPTION_np_i, OPTION_zm_i, DID_EOL);
+    ctx_set_dyn_int (VB, OPTION_qs_i, OPTION_qe_i, OPTION_np_i, OPTION_zm_i, DID_EOL);
     
-    ctx_set_store (VB, STORE_INT, OPTION_qs_i, OPTION_qe_i, OPTION_zm_i, OPTION_np_i, DID_EOL);
-
     ctx_set_store (VB, STORE_FLOAT, OPTION_ec_f, DID_EOL);
 
     if (segconf.has[OPTION_ec_f]) 

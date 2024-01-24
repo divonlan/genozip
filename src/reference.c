@@ -762,10 +762,10 @@ static void ref_copy_one_compressed_section (Reference ref, FileP ref_file, cons
 
     if (flag.show_reference) {
         decl_zctx (CHROM);
-        CtxWord node = *B(CtxWord, zctx->nodes, BGEN32 (header->chrom_word_index));
+        CtxNodeP node = B(CtxNode, zctx->nodes, BGEN32 (header->chrom_word_index));
         iprintf ("Copying SEC_REFERENCE from %s: chrom=%u (%s) gpos=%"PRId64" pos=%"PRId64" num_bases=%u section_size=%u\n", 
                  ref->filename, BGEN32 (header->chrom_word_index), 
-                 Bc (zctx->dict, node.char_index), 
+                 Bc (zctx->dict, node->char_index), 
                  BGEN64 (header->gpos), BGEN64 (header->pos), 
                  BGEN32 (header->num_bases), 
                  BGEN32 (header->data_compressed_len) + st_header_size(SEC_REFERENCE));

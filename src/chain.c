@@ -199,9 +199,6 @@ void chain_seg_initialize (VBlockP vb)
 
     ctx_set_store (VB, STORE_INDEX, CHAIN_NAMEPRIM, CHAIN_NAMELUFT, DID_EOL);
 
-    CTX(CHAIN_NAMEPRIM)-> no_vb1_sort =
-    CTX(CHAIN_NAMELUFT)-> no_vb1_sort = true;
-
     CTX(CHAIN_NAMEPRIM)-> counts_section = 
     CTX(CHAIN_NAMELUFT)-> counts_section = true;
 }

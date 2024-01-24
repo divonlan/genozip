@@ -153,7 +153,6 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
                     (item_ctx->ltype == LT_DYN_INT || item_ctx->ltype == LT_SINGLETON)) { 
 
                     item_ctx->flags.store = STORE_INT;
-                    item_ctx->ltype = LT_DYN_INT;
                     seg_self_delta (vb, item_ctx, ci->value, 0, 0, ci->item_len);
                 }
                 else 
@@ -165,10 +164,8 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
                 if (item_ctx->ltype == LT_UINT8)  // already seg_diff in a previous line of this VB - cannot store in local
                     goto fallback;
 
-                else {
-                    item_ctx->ltype = LT_DYN_INT;
+                else 
                     seg_integer (vb, item_ctx, ci->value, true, ci->item_len);
-                }
             }
 
             ctx_set_last_value (vb, item_ctx, ci->value);

@@ -14,31 +14,17 @@
 #include "zfile.h"
 #include "crypt.h"
 #include "context.h"
-#include "file.h"
-#include "endianness.h"
-#include "version.h"
-#include "sections.h"
 #include "compressor.h"
-#include "codec.h"
 #include "piz.h"
 #include "zip.h"
 #include "license.h"
-#include "mutex.h"
-#include "strings.h"
-#include "dict_id.h"
-#include "reference.h"
-#include "bgzf.h"
-#include "digest.h"
-#include "md5.h"
-#include "flags.h"
-#include "website.h"
 #include "gencomp.h"
 #include "threads.h"
 #include "refhash.h"
 #include "seg.h"
 #include "dispatcher.h"
-#include "qname.h"
 #include "zriter.h"
+#include "b250.h"
 #include "libdeflate/libdeflate.h"
 
 static void zfile_show_b250_section (SectionHeaderUnionP header_p, ConstBufferP b250_data)
@@ -58,7 +44,7 @@ static void zfile_show_b250_section (SectionHeaderUnionP header_p, ConstBufferP 
     bytes after = BAFT (const uint8_t, *b250_data);
 
     while (data < after) {
-        WordIndex word_index = ctx_decode_b250 (&data, true, header->b250_size, "zfile_show_b250_section");
+        WordIndex word_index = b250_piz_decode (&data, true, header->b250_size, "zfile_show_b250_section");
         switch (word_index) {
             case WORD_INDEX_ONE_UP  : iprint0 ("ONE_UP " ) ; break ;
             case WORD_INDEX_EMPTY   : iprint0 ("EMPTY "  ) ; break ;
@@ -264,6 +250,9 @@ uint32_t zfile_compress_local_data (VBlockP vb, ContextP ctx, uint32_t sample_si
         .ltype                 = ctx->ltype,
         .param                 = ctx->local_param ? ctx->local.prm8[0] : 0,
     };
+
+    if (lt_max(ctx->ltype)) // integer ltype
+        header.nothing_char = ctx->nothing_char ? ctx->nothing_char : 0xff; // note: nothing_char=0 is trasmitted as 0xff in SectionHeaderCtx, because 0 means "logic up to version 15.0.37" 
 
     LocalGetLineCB *callback = zip_get_local_data_callback (vb->data_type, ctx);
 
@@ -739,8 +728,9 @@ uint64_t zfile_read_genozip_header_get_offset (bool as_is)
              "Error in %s: corrupt offset=%"PRIu64" in Footer  (file_size=%"PRIu64")", 
              z_name, offset, z_file->disk_size);
 
-    SectionHeaderGenozipHeader top;
-    RETURNW (fread (&top, sizeof (SectionHeaderGenozipHeader), 1, Z_READ_FP(z_file)) == 1, 0, "Error in %s: failed to read genozip header", z_name);
+    SectionHeaderGenozipHeader top = {};
+    RETURNW (fread (&top, 1, MIN_(sizeof (SectionHeaderGenozipHeader), z_file->disk_size - offset/*header was shorter in earlier verions*/), 
+                    Z_READ_FP(z_file)), 0, "Error in %s: failed to read genozip header", z_name);
 
     RETURNW (BGEN32 (top.magic) == GENOZIP_MAGIC, 0, "Error in %s: offset=%"PRIu64" of the GENOZIP_HEADER section as it appears in the Footer appears to be wrong, or the GENOZIP_HEADER section has bad magic (file_size=%"PRIu64").%s", 
              z_name, offset, z_file->disk_size, flag.debug_or_test ? " Try again with --recover." : "");
@@ -786,7 +776,10 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header, FailType
     SectionEnt sec = { .st     = SEC_GENOZIP_HEADER, 
                        .offset = zfile_read_genozip_header_get_offset (false) };
     
-    if (!sec.offset) goto error;
+    if (!sec.offset) {
+        fail_type = HARD_FAIL;
+        goto error;
+    }
 
     zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", SEC_GENOZIP_HEADER, &sec);
 

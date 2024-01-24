@@ -111,7 +111,7 @@ void noreturn main_exit (bool show_stack, bool is_error)
             url_kill_curl (NULL);  /* <--- BREAKPOINT BRK */
             file_kill_external_compressors(); 
         
-            // cancel all other threads before closing z_file, so other threads don't attempt to access it 
+            // cancel all other compute threads before closing z_file, so other threads don't attempt to access it 
             // (eg. z_file->data_type) and get a segmentation fault.
             threads_cancel_other_threads();
         }
@@ -154,6 +154,9 @@ void noreturn main_exit (bool show_stack, bool is_error)
             vb_destroy_vb (&evb);
         }
     }
+
+    else
+        sleep (10000); // wait to be killed by first thread that is executing in DO_ONCE
 
     exit (is_error ? EXIT_GENERAL_ERROR : EXIT_OK);
 } 
@@ -842,11 +845,6 @@ int main (int argc, char **argv)
     ASSINP (input_files_len || !isatty(0) || command != PIZ, "missing input file. Example: %s myfile.bam.genozip", global_cmd);
 
     primary_command = command; 
-
-#ifdef DISTUNZIPMSG
-    if (is_genounzip && strlen (DISTUNZIPMSG))
-        iprintf ("%s\n\n", DISTUNZIPMSG);
-#endif
 
     // we test for a newer version if its a single file compression (if --test is used, we test after PIZ - check_for_newer is set)
     if (!flag.quiet && !flag.no_upgrade && isatty(0) && isatty(1) && 

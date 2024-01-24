@@ -30,15 +30,15 @@ typedef _Bool bool;
 #define false 0
 #endif
 
-typedef enum __attribute__ ((__packed__)) { no=0, yes=1, unknown=2 } thool; // three-way "bool"
+typedef enum __attribute__ ((packed)) { no=0, yes=1, unknown=2 } thool; // three-way "bool"
 
-typedef enum __attribute__ ((__packed__)) { 
+typedef enum __attribute__ ((packed)) { 
     HARD_FAIL,   // display error and abort 
     SOFT_FAIL,   // silently return error
     WARNING_FAIL // display warning and return error
 } FailType;
 
-typedef enum __attribute__ ((__packed__)) { RECON_OFF, RECON_ON, RECON_PREFIX_ONLY } ReconType;
+typedef enum __attribute__ ((packed)) { RECON_OFF, RECON_ON, RECON_PREFIX_ONLY } ReconType;
 
 typedef unsigned __int128 uint128_t;
 typedef          __int128 int128_t;
@@ -68,7 +68,7 @@ typedef int32_t TaxonomyId;
 
 #define NO_CALLBACK NULL
 
-typedef enum __attribute__ ((__packed__)) { 
+typedef enum __attribute__ ((packed)) { 
                NO_POOL=-1, 
                POOL_MAIN,  // used for all VBs, except non-pool VBs and BGZF VBs
                POOL_BGZF,  // PIZ only: used for BGZF-compression dispatcher
@@ -128,7 +128,7 @@ typedef struct { char s[65536]; } StrTextMegaLong;
 #define VB ((VBlockP)(vb))
 
 // IMPORTANT: DATATYPES GO INTO THE FILE FORMAT - THEY CANNOT BE CHANGED
-typedef enum __attribute__ ((__packed__)) { 
+typedef enum __attribute__ ((packed)) { 
     DT_NONE=-1, // used in the code logic, never written to the file
     DT_REF=0, DT_VCF=1, DT_SAM=2, DT_FASTQ=3, DT_FASTA=4, DT_GFF=5, DT_ME23=6, // these values go into SectionHeaderGenozipHeader.data_type
     DT_BAM=7, DT_BCF=8, DT_GENERIC=9, DT_PHYLIP=10, DT_CHAIN=11, DT_KRAKEN=12, 
@@ -142,7 +142,6 @@ typedef enum __attribute__ ((__packed__)) {
 
 typedef enum { DTYPE_FIELD, DTYPE_1, DTYPE_2 } DictIdType;
 
-#pragma pack(1) // structures that are part of the genozip format are packed.
 #define DICT_ID_LEN    ((int)sizeof(uint64_t))    // VCF/GFF3 specs don't limit the field name (tag) length, we limit it to 8 chars. zero-padded. (note: if two fields have the same 8-char prefix - they will just share the same dictionary)
 typedef union DictId {
     uint64_t num;             // num is just for easy comparisons - it doesn't have a numeric value and endianity should not be changed
@@ -162,7 +161,6 @@ typedef union DictId {
         uint64_t unused5 : 32;
     } alt_key;
 } DictId __attribute__((__transparent_union__)); // DictId function parameters can receive arguments that are of the type of members of the union
-#pragma pack()
 
 typedef uint16_t Did;    // index of a context in vb->contexts or z_file->contexts / a counter of contexts
 #define DID_NONE ((Did)0xFFFF)
@@ -189,18 +187,14 @@ typedef const uint8_t *bytes; // read-only array of bytes
 typedef uint8_t Ploidy;       // ploidy of a genotype
 
 // a reference into txt_data
-typedef struct __attribute__ ((__packed__)) { uint32_t index, len; } TxtWord; // 32b as VBs are limited to 2GB (usually used as reference into txt_data)
+typedef struct { uint32_t index, len; } TxtWord; // 32b as VBs are limited to 2GB (usually used as reference into txt_data)
 #define TXTWORD(snip) ((TxtWord){ .index = BNUMtxt (snip),    .len = snip##_len }) // get coordinates in txt_data
 #define TXTWORDi(x,i) ((TxtWord){ .index = BNUMtxt (x##s[i]), .len = x##_lens[i] }) 
 
-typedef struct __attribute__ ((__packed__)) { uint64_t index; uint32_t len; } BufWord; // see also ZWord
+typedef struct __attribute__ ((packed,aligned(4))) { uint64_t index; uint32_t len; } BufWord; // see also ZWord
 
 // a reference into data in z_file 
-#define Z_MAX_DICT_LEN (1 TB - 2ULL)  // maximum length of a context.dict (v14) (note: -2 and not -1, to avoid conflict with VB_NODE_CANCELED)
-#define Z_MAX_WORD_LEN (16 MB - 2ULL) // maximum length of any word in a context.dict (excluding its \0 separator) (v14)
-typedef struct __attribute__ ((__packed__)) { uint64_t index : 40; // up to Z_MAX_DICT_LEN
-                                              uint64_t len   : 24; // up to Z_MAX_WORD_LEN
-                                            } ZWord; 
+typedef struct { uint64_t index : 40; uint64_t len : 24; } ZWord; 
 #define ZWORDtxt(snip) ((ZWord){ .index = BNUMtxt (snip), .len = snip##_len }) // get coordinates in txt_data
 
 typedef union { // 64 bit
@@ -237,7 +231,7 @@ extern FileP z_file, txt_file;
 
 // IMPORTANT: This is part of the genozip file format. Also update codec.h/codec_args
 // If making any changes, update arrays in 1. CODEC_ARGS in codec.h 2. (for codecs that have a public file format, eg .zip) txtfile_set_seggable_size
-typedef enum __attribute__ ((__packed__)) { // 1 byte
+typedef enum __attribute__ ((packed)) { // 1 byte
     CODEC_UNKNOWN=0, 
     CODEC_NONE=1, CODEC_GZ=2, CODEC_BZ2=3, CODEC_LZMA=4, CODEC_BSC=5, 
     CODEC_RANS8=6, CODEC_RANS32=7, CODEC_RANS8_pack=8, CODEC_RANS32_pack=9, 
@@ -261,7 +255,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
 } Codec; 
 
 // note: the numbering of the sections cannot be modified, for backward compatibility
-typedef enum __attribute__ ((__packed__)) { // 1 byte
+typedef enum __attribute__ ((packed)) { // 1 byte
     SEC_NONE            = -1, // doesn't appear in the file 
 
     SEC_RANDOM_ACCESS   = 0,  // Global section
@@ -348,6 +342,21 @@ typedef int ThreadId;
 
 #define SWAP(a,b)    ({ typeof(a) tmp = a; a = b; b = tmp; })
 #define SWAPbit(a,b) ({ uint8_t   tmp = a; a = b; b = tmp; })  // meant for bit fields 
+
+// getting and putting unaligned words
+// loading a Little Endian uint32_t from an unaligned memory location
+#define GET_UINT8(p)   ((uint8_t)(((uint8_t*)(p))[0]))
+#define GET_UINT16(p)  ((uint16_t)(((uint8_t*)(p))[0] | (((uint8_t*)(p))[1] << 8)))
+#define GET_UINT24(p)  ((uint32_t)(((uint8_t*)(p))[0] | (((uint8_t*)(p))[1] << 8))| (((uint8_t*)(p))[2] << 16))
+#define GET_UINT32(p)  ((uint32_t)(((uint8_t*)(p))[0] | (((uint8_t*)(p))[1] << 8) | (((uint8_t*)(p))[2] << 16) | (((uint8_t*)(p))[3] << 24)))
+#define GET_UINT64(p)  ((uint64_t)(((uint8_t*)(p))[0] | ((uint64_t)((uint8_t*)(p))[1] << 8) | ((uint64_t)((uint8_t*)(p))[2] << 16) | ((uint64_t)((uint8_t*)(p))[3] << 24) | ((uint64_t)((uint8_t*)(p))[4] << 32) | ((uint64_t)((uint8_t*)(p))[5] << 40) | ((uint64_t)((uint8_t*)(p))[6] << 48) | ((uint64_t)((uint8_t*)(p))[7] << 56)))
+#define GET_FLOAT32(p) ({ union { uint32_t i; float f; } n= {.i = GET_UINT32(p)}; n.f; })
+
+// storing a Little Endian integer in an unaligned memory location
+#define PUT_UINT8(p,n)  ({ ((uint8_t*)(p))[0] = (n); })
+#define PUT_UINT16(p,n) ({ uint16_t N=(n); uint8_t *P=(uint8_t *)(p); P[0]=N; P[1]=N>>8; }) 
+#define PUT_UINT24(p,n) ({ uint32_t N=(n); uint8_t *P=(uint8_t *)(p); P[0]=N; P[1]=N>>8; P[2]=N>>16; })
+#define PUT_UINT32(p,n) ({ uint32_t N=(n); uint8_t *P=(uint8_t *)(p); P[0]=N; P[1]=N>>8; P[2]=N>>16; P[3]=N>>24; })
 
 // used for qsort sort function - receives two integers of any type and returns -1/0/1 as required to sort in ascending order
 #define SORTER(func) int func (const void *a, const void *b)
@@ -543,12 +552,12 @@ typedef enum { QNONE   = -6,
 #define TXTHEADER_TRANSLATOR(func) void func (VBlockP comp_vb, BufferP txtheader_buf)
 
 // IMPORTANT: This is part of the genozip file format. 
-typedef enum __attribute__ ((__packed__)) {  ENC_NONE = 0, ENC_AES256 = 1, NUM_ENCRYPTION_TYPES } EncryptionType;
+typedef enum __attribute__ ((packed)) {  ENC_NONE = 0, ENC_AES256 = 1, NUM_ENCRYPTION_TYPES } EncryptionType;
 #define ENC_NAMES { "NO_ENC", "AES256" }
 
 // note: #pragma pack doesn't affect enums
-typedef enum __attribute__ ((__packed__)) { BGZF_LIBDEFLATE, BGZF_ZLIB, NUM_BGZF_LIBRARIES         } BgzfLibraryType; // constants for BGZF FlagsBgzf.library
-#define BGZF_LIB_NAMES                    { "libdeflate",    "zlib"                                }
+typedef enum __attribute__ ((packed)) { BGZF_LIBDEFLATE, BGZF_ZLIB, NUM_BGZF_LIBRARIES         } BgzfLibraryType; // constants for BGZF FlagsBgzf.library
+#define BGZF_LIB_NAMES                { "libdeflate",    "zlib"                                }
 
 #define COMPRESSOR_CALLBACK(func)                                   \
 void func (VBlockP vb,                                              \

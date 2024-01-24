@@ -22,21 +22,23 @@ static rom license[] = {
 
     "\"Your Computers\" shall mean computers You own and/or cloud accounts You own at 3rd party cloud providers.",
 
+    "\"Genozip Executables\" shall mean the executable files genozip, genounzip, genocat and genols (with or without an .exe file name suffix).",
+
     "Other words and terms in this License shall be interpreted as their usual meaning in the context of a software product.",
 
     "2. Grant of copyright license. Licensor hereby grants to You a limited non-exclusive, non-transferrable, non-sublicensable, revokable copyright license to use Genozip on Your Computers, if you meet the conditions attached to any of the License Types a through f below, for the limited purpose attached to that particular License Type, and subject to the terms and conditions of this License agreement:",
     
-    "   a. Academic License: For academic research, educational or training purposes provided that You are a recognized academic research institution which is not a hospital, or a registered student at such an institution, but excluding use with Your Commercial Data.",
+    "   a. Academic License: Using Genozip Executables for academic research, educational or training purposes provided that You are a recognized academic research institution which is not a hospital, or a registered student at such an institution, but excluding use with Your Commercial Data.",
     
-    "   b. Academic License: For another non-commercial purpose, if it has been pre-approved by Licensor in writing. Email "EMAIL_REGISTER" to seek such an approval.",
+    "   b. Academic License: Using Genozip Executables for another non-commercial purpose, if it has been pre-approved by Licensor in writing. Email "EMAIL_REGISTER" to seek such an approval.",
     
-    "   c. Standard, Enterprise or Premium License: For any legal purpose, if the license was purchased and paid for, and for the duration that it is in effect.",
+    "   c. Standard, Enterprise or Premium License: Using Genozip Executables for any legal purpose, if the license was purchased and paid for, and for the duration that it is in effect. In addition, for Premium License only: Distributing Genozip Executables to others.",
     
-    "   d. Decompression License: For any legal purpose, if use is limited to the three tools: genounzip, genocat, genols. A Decompression License is free of charge.",
+    "   d. Decompression License: Using a subset of Genozip Executables consisting of genounzip, genocat, genols for any legal purpose. A Decompression License is free of charge.",
     
-    "   e. Evaluation License: For the purpose of evaluating Genozip, free of charge, for a duration of 30 days, if You were not already granted an Evaluation License in the past. The duration of an Evaluation License may be extended by written email approval.",
+    "   e. Evaluation License: Using Genozip Executables for the purpose of evaluating Genozip, free of charge, for a duration of 30 days, if You were not already granted an Evaluation License in the past. The duration of an Evaluation License may be extended by written email approval.",
     
-    "   f. Distribution License: For the purpose of distributing Genozip to others via a platform that is free of charge, including (but not limited to) an Internet website, a package or container management system, or a module on an institutional HPC. A Distribution License is free of charge. Each end user must independently register to Genozip and be granted a Standard, Enterprise, Premium, Academic, Decompression or Evaluation License.",
+    "   f. Distribution License: For the purpose of distributing Genozip Executables to others via a platform that is free of charge, including (but not limited to) an Internet website, a package or container management system, or a module on an institutional HPC. A Distribution License is free of charge. Each end user must independently register to Genozip and be granted a Standard, Enterprise, Premium, Academic, Decompression or Evaluation License.",
     
     "3. Additional Terms and conditions",
     

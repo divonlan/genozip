@@ -22,6 +22,7 @@
 #include "zip.h"
 #include "lookback.h"
 #include "tip.h"
+#include "zip_dyn_int.h"
 
 static SmallContainer con_AD={}, con_ADALL={}, con_ADF={}, con_ADR={}, con_SAC={}, con_F1R2={}, con_F2R1={}, 
     con_MB={}, con_SB={}, con_AF={};
@@ -121,15 +122,26 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
     ctx_set_store (VB, STORE_INT, FORMAT_ADALL, FORMAT_DP, FORMAT_AD, FORMAT_RD, FORMAT_RDR, FORMAT_RDF,
                    FORMAT_ADR, FORMAT_ADF, FORMAT_SDP, DID_EOL);
 
-    ctx_set_ltype (VB, LT_DYN_INT, FORMAT_RD, FORMAT_GQ, FORMAT_RGQ, FORMAT_MIN_DP, FORMAT_SDP,
-                   DID_EOL);
+    ctx_set_dyn_int (VB, FORMAT_RD, FORMAT_GQ, FORMAT_RGQ, FORMAT_MIN_DP, FORMAT_SDP, DID_EOL);
     
     CTX(FORMAT_GT)->no_stons  = true; // we store the GT matrix in local, so cannot accomodate singletons
     
     vb->ht_matrix_ctx = CTX(FORMAT_GT_HT); // different for different data types
 
+    if (segconf.FMT_DP_method != FMT_DP_DEFAULT) {
+        seg_mux_init (VB, CTX(FORMAT_DP), 2, VCF_SPECIAL_MUX_FORMAT_DP, false, (MultiplexerP)&vb->mux_FORMAT_DP);
+    
+        seg_mux_get_channel_ctx (VB, FORMAT_DP, (MultiplexerP)&vb->mux_FORMAT_DP, 0)->dyn_transposed = true; // seg transposed for variants that don't have AD / SDP to seg against
+    }
+
+    else if (segconf.FMT_DP_method == FMT_DP_DEFAULT && vcf_num_samples > 1) 
+        CTX(FORMAT_DP)->dyn_transposed = true;
+
     CTX(FORMAT_DP)->flags.same_line = true; // DP value, when delta's against another ctx, is always relative to the other value in the current sample (regardless of whether DP or the other value are reconstructed first)
 
+    if (!segconf.vcf_is_varscan && vcf_num_samples > 1 && !segconf.has[FORMAT_ADALL])
+        ctx_get_ctx (vb, con_AD.items[0].dict_id)->dyn_transposed = true; // first item = Σ(ADᵢ) is transposed
+    
     // create additional contexts as needed for compressing FORMAT/GT - must be done before merge
     if (vcf_num_samples) 
         codec_pbwt_seg_init (VB, CTX(FORMAT_PBWT_RUNS), CTX(FORMAT_PBWT_FGRC));
@@ -246,7 +258,6 @@ static void vcf_seg_FORMAT_mux_by_dosage_int (VBlockVCFP vb, ContextP ctx, int64
 
     ContextP channel_ctx = seg_mux_get_channel_ctx (VB, ctx->did_i, MUX, channel_i);
     
-    channel_ctx->ltype = LT_DYN_INT;
     seg_integer (VB, channel_ctx, value, true, add_bytes);
 
     // note: this is not necessarily all-the-same - there could be unmuxed snips due to REF⇆ALT switch, and/or WORD_INDEX_MISSING 
@@ -321,7 +332,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_DOSAGExDP)
 {
     bool new_method = (z_file->max_ploidy_for_mux > 0); // true iff version is 15.0.36 or newer
     
-    unsigned num_channels = ctx->ctx_cache.len32 ? ctx->ctx_cache.len32 : (1 + str_count_char (STRa(snip), '\t'));
+    unsigned num_channels = recon_multi_dict_id_get_num_dicts (ctx, STRa(snip));
     unsigned num_dosages = new_method ? (z_file->max_ploidy_for_mux + 1) : 3;
     unsigned num_dps = num_channels / num_dosages;
 
@@ -334,7 +345,8 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_DOSAGExDP)
     channel_i = (channel_i == 3 && !new_method) ? (num_dps * 3) : (DP*num_dosages + channel_i);
 
     ContextP channel_ctx = MCTX (channel_i, snip, snip_len);
-    ASSPIZ (channel_ctx, "Cannot find channel context of channel_i=%d of multiplexed context %s", channel_i, ctx->tag_name);
+    ASSPIZ (channel_ctx, "Cannot find channel context of channel_i=%d of multiplexed context %s. snip=%s", 
+            channel_i, ctx->tag_name, str_snip_ex (snip-2, snip_len+2, true).s);
 
     reconstruct_from_ctx (vb, channel_ctx->did_i, 0, reconstruct);
 
@@ -372,43 +384,35 @@ static WordIndex vcf_seg_FORMAT_minus (VBlockVCFP vb, ContextP ctx,
 static void vcf_seg_FORMAT_transposed (VBlockVCFP vb, ContextP ctx, 
                                        STRp(cell),     // option 1
                                        uint32_t value, // option 2: used if cell=0
-                                       STRp(all_the_same_lookup),
+                                       STRp(lookup_snip),
                                        unsigned add_bytes)
 {
-    if (ctx->ltype != LT_UINT32_TR) {
-        ASSERT (ctx->ltype == LT_SINGLETON, "Expecting ctx->ltype=%s to be SIN", lt_name(ctx->ltype));
-
-        ctx->ltype = LT_UINT32_TR;
-        ctx->flags.store = STORE_INT;
-    }
-
-    // note: not just in initialization, as number of lines is an estimate and might change
-    buf_alloc (vb, &ctx->local, 1, vb->lines.len * vcf_num_samples, uint32_t, 1, CTX_TAG_LOCAL);
+#ifdef DEBUG
+    ASSERT (ctx->dyn_transposed, "expecting dyn_transposed=true in %s", ctx->tag_name);
+#endif
 
     if (IS_PERIOD (cell)) 
-        BNXT32 (ctx->local) = 0xffffffff;
+        dyn_int_append_nothing_char (VB, ctx, add_bytes);
     
     else {
         ASSSEG (!cell || str_get_uint32 (STRa(cell), &value), 
                 "Expecting %s=\"%.*s\" to be an integer or '.'", ctx->tag_name, STRf(cell));
 
-        ASSSEG (value >= 0 && value <= 0xfffffffe, 
-                "Expecting %s=%u to be in [0, 0xfffffffe] or a '.'", ctx->tag_name, value);
-
         ctx_set_last_value (VB, ctx, (int64_t)value);
 
-        BNXT32 (ctx->local) = value;
+        dyn_int_append (VB, ctx, value, add_bytes);
     }
 
-    seg_by_ctx (VB, STRa(all_the_same_lookup), ctx, 0); // note: not all-the-same, because some values might be missing, causing canceling of transposition
-
-    ctx->txt_len += add_bytes;
+    seg_by_ctx (VB, STRa(lookup_snip), ctx, 0); // note: not all-the-same, because some values might be missing with a b250 of WORD_INDEX_MISSING
 }
 
 // a comma-separated array - each element goes into its own item context, single repeat
 static WordIndex vcf_seg_FORMAT_A_R (VBlockVCFP vb, ContextP ctx, SmallContainer con /* by value */, STRp(value), StoreType item_store_type,
                                      void (*seg_item_cb)(VBlockVCFP, ContextP ctx, unsigned n_items, const char**, const uint32_t*, ContextP *item_ctxs, const int64_t*))
 {   
+    if (IS_PERIOD(value)) 
+        return seg_by_ctx (VB, ".", 1, ctx, value_len); // note: segging a '.' to ctx adds the same entropy as segging a 1-item container, so we refrain from adding entropy to the item_ctxs[0] too by not segging a container.
+
     str_split (value, value_len, VCF_MAX_ARRAY_ITEMS, ',', item, false);
     
     if (!(con.nitems_lo = n_items)) 
@@ -489,11 +493,11 @@ static inline void vcf_seg_FORMAT_AD_varscan (VBlockVCFP vb, ContextP ctx, STRp(
 static void vcf_seg_AD_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP *item_ctxs, const int64_t *values)
 {       
     // calculate sum of AD items
-    int64_t sum = 0; 
+    int64_t sum_ad = 0; 
     for (unsigned i=0; i < n_items; i++) 
-        sum += values[i];
+        sum_ad += values[i];
 
-    ctx_set_last_value (VB, ctx, sum); // AD value is sum of its items
+    ctx_set_last_value (VB, ctx, sum_ad); // AD value is sum of its items
 
     // if we have ADALL in this file, we delta vs ADALL if we have it in this sample, or seg normally if not
     if (segconf.has[FORMAT_ADALL]) {
@@ -511,7 +515,7 @@ static void vcf_seg_AD_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP
         for (unsigned i=0; i < n_items; i++) {
             if (i==0 && vcf_num_samples > 1)
                 // we store the sum in the first item - it is expected to be roughly similar within each sample - hence transposing
-                vcf_seg_FORMAT_transposed (vb, item_ctxs[0], 0, 0, sum, (char []){ SNIP_SPECIAL, VCF_SPECIAL_FORMAT_AD0 }, 2, item_lens[0]);
+                vcf_seg_FORMAT_transposed (vb, item_ctxs[0], 0, 0, sum_ad, (char []){ SNIP_SPECIAL, VCF_SPECIAL_FORMAT_AD0 }, 2, item_lens[0]);
             
             else if (i==0 || i==1) {
                 if (!vb->mux_AD[i].num_channels) 
@@ -528,11 +532,11 @@ static void vcf_seg_AD_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_AD0)
 {
-    reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, (char[]){ SNIP_LOOKUP }, 1, false);
+    reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, (char[]){ SNIP_LOOKUP }, 1, false, __FUNCLINE);
 
-    new_value->i = ctx->last_value.i; // calculated by ^, equals sum(ADi)
+    new_value->i = ctx->last_value.i; // calculated by ^, equals Σ(ADᵢ)
 
-    // calculate: AD0 = sum(ADi) - AD1 - AD2...    
+    // calculate: AD0 = Σ(ADᵢ) - AD₁ - AD₂...    
     for (int i=1; i < con_nitems (*current_con.con); i++)
         new_value->i -= reconstruct_peek_by_dict_id (vb, current_con.con->items[i].dict_id, 0, 0).i;
 
@@ -791,8 +795,8 @@ static inline void vcf_seg_FORMAT_RGQ (VBlockVCFP vb, ContextP ctx, STRp(rgq), C
     ConstMultiplexerP mux = (ConstMultiplexerP)&vb->mux_RGQ;
         
     // prediction: we have GT, and if GT[0]=. then RGQ=0. Fallback seg in case prediction fails
-    if (gt_ctx->did_i != FORMAT_GT ||                    // prediction failed: first subfield isn't GT
-        (gt[0] == '.' && (rgq_len != 1 || *rgq != '0'))) // prediction failed: GT[0]=. and yet RGQ!="0"
+    if (gt_ctx->did_i != FORMAT_GT ||               // prediction failed: first subfield isn't GT
+        (gt[0] == '.' && !str_is_1char (rgq, '0'))) // prediction failed: GT[0]=. and yet RGQ!="0"
         goto fallback;
 
     // case: GT[0] is not '.' - seg the value of RGQ multiplexed by DP
@@ -825,26 +829,20 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_RGQ)
     if (gt[0] == '.') {
         if (reconstruct) RECONSTRUCT1 ('0');
         new_value->i = 0;
+    
+        return HAS_NEW_VALUE; 
     }
     
     // gt[0] != '.' - demulitplex by FORMAT_DP
     else {
-        unsigned num_channels = ctx->ctx_cache.len32 ? ctx->ctx_cache.len32 : (1 + str_count_char (STRa(snip), '\t'));
+        unsigned num_channels = recon_multi_dict_id_get_num_dicts (ctx, STRa(snip));
 
         rom DP_str;
         int64_t DP = reconstruct_peek (vb, CTX(FORMAT_DP), &DP_str, 0).i;
         int channel_i = (*DP_str=='.') ? 0 : MAX_(0, MIN_(DP, num_channels-1));
 
-        ContextP channel_ctx = MCTX (channel_i, snip, snip_len);
-        ASSPIZ (channel_ctx, "Cannot find channel context of channel_i=%d of multiplexed context %s", channel_i, ctx->tag_name);
-
-        reconstruct_from_ctx (vb, channel_ctx->did_i, 0, reconstruct);
-
-        // propagate last_value up
-        new_value->i = channel_ctx->last_value.i; // note: last_value is a union, this copies the entire union
+        return reconstruct_demultiplex (vb, ctx, STRa(snip), channel_i, new_value, reconstruct);
     }
-
-    return HAS_NEW_VALUE; 
 }
 
 //----------

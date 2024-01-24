@@ -17,10 +17,9 @@ typedef struct {
     int64_t txt_len, z_size;
     char name[100];
     rom type;
-    StrText did_i, words, hash, uncomp_dict, comp_dict, comp_b250, uncomp_local, comp_local;
-    float pc_of_txt, pc_of_z, pc_dict, pc_in_local, pc_failed_singletons, pc_hash_occupancy;
+    StrText did_i, words, dict_words, local_words, failed_ston_words, hash, uncomp_dict, comp_dict, comp_b250, uncomp_local, comp_local;
+    float pc_of_txt, pc_of_z, pc_hash_occupancy, pc_ston_hash_occup;
     rom bcodec, lcodec, dcodec;
-    uint32_t global_hash_prime;
 } StatsByLine;
 
 extern void stats_generate (void);          

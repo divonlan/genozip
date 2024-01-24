@@ -152,8 +152,8 @@ void arch_initialize (rom my_argv0)
     // it might be endianity-dependent, and we haven't implemented big-endian yet, see: http://mjfrazer.org/mjfrazer/bitfields/
     union {
         uint8_t byte;
-        struct __attribute__ ((__packed__)) { uint8_t a : 1; uint8_t b : 1; } bit_1;
-        struct __attribute__ ((__packed__)) { uint8_t a : 3; } bit_3;
+        struct __attribute__ ((packed)) { uint8_t a : 1; uint8_t b : 1; } bit_1;
+        struct __attribute__ ((packed)) { uint8_t a : 3; } bit_3;
     } bittest = { .bit_1 = { .a = 1 } }; // we expect this to set the LSb of .byte and of .bit_3.a
     ASSERT0 (bittest.byte == 1, "unsupported bit order in a struct, please use gcc to compile (1)");
     ASSERT0 (bittest.bit_3.a == 1, "unsupported bit order in a struct, please use gcc to compile (2)");
@@ -355,6 +355,16 @@ rom arch_get_os (void)
     return os;
 }
 
+rom arch_get_scheduler (void)
+{
+    if (getenv ("SLURM_JOB_ID"))            return "slurm";
+    if (getenv ("KUBERNETES_SERVICE_HOST")) return "kubernetes";
+    if (getenv ("LSB_JOBID"))               return "LSF";
+    if (arch_is_docker())                   return "docker";
+
+    return NULL; // not scheduler identified
+}
+
 rom arch_get_glibc (void)
 {
 #if defined __GNUC__ && ! defined _WIN32 && ! defined __clang__ 
@@ -429,7 +439,9 @@ bool arch_is_valgrind (void)
 
 bool arch_is_docker (void)
 {
-    return !strcmp (arch_get_distribution(), "Docker");
+    static thool is_docker = unknown; 
+    
+    return (is_docker != unknown) ? is_docker : (is_docker = file_exists ("/.dockerinit"));
 }
 
 Timestamp inline arch_timestamp (void) 

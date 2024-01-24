@@ -10,6 +10,8 @@
 #include "reconstruct.h"
 #include "chrom.h"
 #include "lookback.h"
+#include "b250.h"
+#include "zip_dyn_int.h"
 
 // -------------------------------------------------------
 // XA:Z "Alternative alignments" (a BWA, gem3 feature)
@@ -28,17 +30,14 @@ static void sam_seg_BWA_XA_initialize (VBlockSAMP vb)
     ContextP pos_ctx      = CTX(OPTION_XA_POS);
     ContextP lookback_ctx = CTX(OPTION_XA_LOOKBACK); // invalid if lookback_did_i=DID_NONE, that's ok
  
-    pos_ctx->ltype       = LT_DYN_INT;
-    pos_ctx->flags.store = STORE_INT;
+    dyn_int_init_ctx (VB, pos_ctx, 0);
 
     if (!segconf.running && segconf.is_sorted) {
 
         // note: we need to allocate lookback even if reps_per_line=0, lest an XA shows up despite not being in segconf
         rname_ctx->no_stons         = true;  // as we store by index
         strand_ctx->no_stons        = true;
-        strand_ctx->no_vb1_sort     = true;
-        lookback_ctx->flags.store   = STORE_INT;
-        lookback_ctx->ltype         = LT_DYN_INT;
+        dyn_int_init_ctx (VB, lookback_ctx, 0);
         lookback_ctx->local_param   = true;
         lookback_ctx->local.prm8[0] = lookback_size_to_local_param (1024);
         lookback_ctx->local_always  = (lookback_ctx->local.param != 0); // no need for a SEC_LOCAL section if the parameter is 0 (which is the default anyway)
@@ -54,7 +53,6 @@ static void sam_seg_BWA_XA_initialize (VBlockSAMP vb)
         ctx_create_node (VB, OPTION_XA_STRAND, cSTR("+C")); // word_index=3
         ctx_create_node (VB, OPTION_XA_STRAND, cSTR("-G")); // word_index=4
         ctx_create_node (VB, OPTION_XA_STRAND, cSTR("+G")); // word_index=5
-        strand_ctx->no_vb1_sort = true; // keep them in this ^ order
     }
 
     // case: we're not going to use lookback - create an all-the-same XA_LOOKBACK dict
@@ -117,11 +115,11 @@ static bool sam_seg_BWA_XA_pos_cb (VBlockP vb, ContextP ctx, STRp(pos_str), uint
     ContextP lb_ctx     = CTX (OPTION_XA_LOOKBACK);
 
     // look back for a node with this index and a similar POS - we use word_index to store the original rname_node_index, pos
-    WordIndex rname_index = LASTb250(rname_ctx);
+    WordIndex rname_index = b250_seg_get_last (rname_ctx);
     int64_t lookback = 0;
     PosType32 pos = -MAX_POS_DISTANCE; // initial to "invalid pos" - value chosen so we can store it in poses, in lieu of an invalid non-integer value, without a future pos being considered close to it
 
-    WordIndex strand_wi = LASTb250(strand_ctx);
+    WordIndex strand_wi = b250_seg_get_last (strand_ctx);
 
     if (str_get_int_range32 (STRa(pos_str), 0, MAX_POS_SAM, &pos)) {
 
@@ -134,16 +132,13 @@ static bool sam_seg_BWA_XA_pos_cb (VBlockP vb, ContextP ctx, STRp(pos_str), uint
             if (ABS (pos-lookback_pos) < MAX_POS_DISTANCE) {
                 //    if (ABS (pos-lookback_pos) <= ABS(CTX(SAM_TLEN)->last_value.i)) { <-- better POS deltas but bigger index - its a wash
                 // replace rname with lookback
-                rname_ctx->b250.len--;
-                ctx_decrement_count (vb, rname_ctx, rname_index);
-                
+                b250_seg_remove_last (vb, rname_ctx, rname_index);
                 seg_by_ctx (vb, STRa(XA_lookback_snip), rname_ctx, 0); // add_bytes=0 bc we already added them when we segged rname the first time
 
                 // possibly replace strand with lookback
                 WordIndex lookback_strand_index = lookback_get_index (vb, lb_ctx, strand_ctx, lookback);
                 if (strand_wi == lookback_strand_index) {
-                    strand_ctx->b250.len--;
-                    ctx_decrement_count (vb, strand_ctx, lookback_strand_index);
+                    b250_seg_remove_last (vb, strand_ctx, lookback_strand_index);
                     seg_by_ctx (vb, STRa(XA_lookback_snip), strand_ctx, 0); // add_bytes=0 bc we already added them when we segged strand the first time
                 }
 
@@ -161,7 +156,7 @@ static bool sam_seg_BWA_XA_pos_cb (VBlockP vb, ContextP ctx, STRp(pos_str), uint
     if (!lookback) 
         seg_integer_or_not (vb, pos_ctx, STRa(pos_str), pos_str_len);
 
-    seg_add_to_local_resizable (vb, lb_ctx, lookback, 0);
+    dyn_int_append (vb, lb_ctx, lookback, 0);
 
     lookback_insert (vb, OPTION_XA_LOOKBACK, OPTION_XA_RNAME,  false, (int64_t)rname_index);
     lookback_insert (vb, OPTION_XA_LOOKBACK, OPTION_XA_POS,    false, (int64_t)pos);
@@ -281,8 +276,6 @@ void sam_seg_BWA_XC_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t XC, unsigned a
     }
 
     else {
-        ctx->ltype = LT_DYN_INT;
-        ctx->flags.store = STORE_INT; 
         seg_integer (VB, ctx, XC, true, add_bytes);
     }
 }

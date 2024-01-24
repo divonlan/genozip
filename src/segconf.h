@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
-//   segconf.c
-//   Copyright (C) 2021-2023 Genozip Limited. Patent pending.
+//   segconf.h
+//   Copyright (C) 2020-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -11,6 +11,8 @@
 #include "genozip.h"
 #include "container.h"
 #include "mutex.h"
+#include "data_types.h"
+#include "dict_id_gen.h"
 
 // Documented range for users
 #define MIN_VBLOCK_MEMORY  1    // in MB 
@@ -20,20 +22,20 @@
 #define ABSOLUTE_MIN_VBLOCK_MEMORY ((uint64_t)1000) // in Bytes
 #define ABSOLUTE_MAX_VBLOCK_MEMORY ((uint64_t)MAX_VBLOCK_MEMORY MB)
 
-typedef enum __attribute__ ((__packed__)) { TECH_NONE=-1, TECH_ANY=-2, TECH_CONS=-3, TECH_UNKNOWN=0,   TECH_ILLUM, TECH_PACBIO, TECH_NANOPORE,     TECH_454, TECH_MGI,   TECH_IONTORR, TECH_HELICOS, TECH_NCBI, TECH_ULTIMA, TECH_SINGLR, TECH_ELEMENT, TECH_ONSO, NUM_TECHS } SeqTech;
-#define TECH_NAME                         {                                          "Unknown_tech",   "Illumina", "PacBio",    "Oxford_Nanopore", "454",    "MGI_Tech", "IonTorrent", "Helicos",    "NCBI",    "Ultima",    "Singular",  "Element",    "Onso"               }
+typedef enum __attribute__ ((packed)) { TECH_NONE=-1, TECH_ANY=-2, TECH_CONS=-3, TECH_UNKNOWN=0,   TECH_ILLUM, TECH_PACBIO, TECH_NANOPORE,     TECH_454, TECH_MGI,   TECH_IONTORR, TECH_HELICOS, TECH_NCBI, TECH_ULTIMA, TECH_SINGLR, TECH_ELEMENT, TECH_ONSO, NUM_TECHS } SeqTech;
+#define TECH_NAME                     {                                          "Unknown_tech",   "Illumina", "PacBio",    "Oxford_Nanopore", "454",    "MGI_Tech", "IonTorrent", "Helicos",    "NCBI",    "Ultima",    "Singular",  "Element",    "Onso"               }
 #define TECH(x) (segconf.tech == TECH_##x)
 
-typedef enum __attribute__ ((__packed__)) { SQT_UNKNOWN, SQT_NUKE, SQT_AMINO, SQT_NUKE_OR_AMINO } SeqType;
+typedef enum __attribute__ ((packed)) { SQT_UNKNOWN, SQT_NUKE, SQT_AMINO, SQT_NUKE_OR_AMINO } SeqType;
 
-typedef enum __attribute__ ((__packed__)) { ms_NONE, ms_BIOBAMBAM, ms_MINIMAP2 } msType; // type of SAM ms:i field 
+typedef enum __attribute__ ((packed)) { ms_NONE, ms_BIOBAMBAM, ms_MINIMAP2 } msType; // type of SAM ms:i field 
 #define ms_type_NAME { "None", "biobambam", "minimap2"}
 
-typedef enum __attribute__ ((__packed__)) { FMT_DP_DEFAULT=0, BY_AD=1, BY_SDP=2 } FormatDPMethod; // part of file format: values go into SectionHeaderGenozipHeader.segconf_FMT_DP_method
+typedef enum __attribute__ ((packed)) { FMT_DP_DEFAULT=0, BY_AD=1, BY_SDP=2 } FormatDPMethod; // part of file format: values go into SectionHeaderGenozipHeader.segconf_FMT_DP_method
 
-typedef enum __attribute__ ((__packed__)) { INFO_DP_DEFAULT, BY_FORMAT_DP } InfoDPMethod;
+typedef enum __attribute__ ((packed)) { INFO_DP_DEFAULT, BY_FORMAT_DP } InfoDPMethod;
 
-typedef enum __attribute__ ((__packed__)) { L3_UNKNOWN, L3_EMPTY, L3_COPY_LINE1, L3_NCBI, NUM_L3s } FastqLine3Type;
+typedef enum __attribute__ ((packed)) { L3_UNKNOWN, L3_EMPTY, L3_COPY_LINE1, L3_NCBI, NUM_L3s } FastqLine3Type;
 
 // SamMapperType is part of the file format and values should not be changed (new ones can be added)
 typedef enum  {                       MP_UNKNOWN,       MP_BSBOLT,             MP_bwa,   MP_BWA,   MP_MINIMAP2,   MP_STAR,   MP_BOWTIE2,   MP_DRAGEN,    MP_GEM3,         MP_GEM2SAM,     MP_BISMARK,   MP_BSSEEKER2,     MP_WINNOWMAP,   MP_BAZ2BAM,    MP_BBMAP,   MP_TMAP,   MP_HISAT2,   MP_BOWTIE,   MP_NOVOALIGN,   MP_RAZER3,    MP_BLASR,   MP_NGMLR,           MP_DELVE,   MP_TOPHAT,   MP_CPU,   MP_LONGRANGER,          MP_CLC,              MP_PBMM2,   MP_CCS,  MP_SNAP,   MP_BWA_MEM2,   MP_PARABRICKS,     MP_ISAAC,   MP_ULTIMA, MP_TORRENT_BC,   MP_BIONANO,      NUM_MAPPERS } SamMapperType;
@@ -50,7 +52,7 @@ typedef struct { char s[SAM_MAX_QNAME_LEN+1]; } QnameStr;
 
 typedef enum { QHT_QUAL, QHT_CONSENSUS, QHT_OQ, NUM_QHT } QualHistType;
 
-typedef enum __attribute__ ((__packed__)) { GQ_old=0/*up to 15.0.36*/, BY_PL=1, BY_GP=2, MUX_DOSAGExDP, MUX_DOSAGE } GQMethodType; // values go into SectionHeaderGenozipHeader.segconf_GQ_method (only 0,1,2 are used in PIZ)
+typedef enum __attribute__ ((packed)) { GQ_old=0/*up to 15.0.36*/, BY_PL=1, BY_GP=2, MUX_DOSAGExDP, MUX_DOSAGE } GQMethodType; // values go into SectionHeaderGenozipHeader.segconf_GQ_method (only 0,1,2 are used in PIZ)
 
 #define SEGCONF_MAX_WIDTH 7
 #define SEGCONF_RECORD_WIDTH(x, width) if (segconf.running && (width) <= SEGCONF_MAX_WIDTH) segconf.wid_##x.count[width]++
@@ -67,8 +69,8 @@ typedef struct {
     bool running;                // currently in segconf_calculate()
     int has[MAX_DICTS];          // for select did_i's, counts the numner of times this field was encountered during segconf.running
     uint32_t line_len;           // approx line len
-    float b250_per_line[MAX_DICTS]; // b250.len / num_lines
-    #define AT_LEAST(did_i) ((uint64_t)(10.0 + (segconf.b250_per_line[did_i] * (float)(vb->lines.len32))))
+    float b250_per_line[MAX_NUM_PREDEFINED];    // b250.len / num_lines
+    float local_per_line[MAX_NUM_PREDEFINED];   // local.len / num_lines
     bool disable_random_acccess; // random_access section is not to be outputted
 
     // qname characteristics (SAM/BAM, KRAKEN and FASTQ)
@@ -249,6 +251,8 @@ typedef struct {
     bool deep_no_qual;          // Deep: true if for most segconf lines which have Deep, qual doesn't match (eg, bc of undocumented BQSR) 
     bool deep_has_trimmed;      // Deep: some FASTQ reads in segconf appear in SAM trimmed (beyond cropping)
     bool deep_has_trimmed_left; // Deep: some FASTQ reads in segconf are trimmed on the left too (not just the right)
+    char deep_N_sam_score;      // Deep: ZIP only: Base qualities of 'N' bases in the SAM are this value, regardless of their value in FASTQ
+    char deep_N_fq_score;       // Deep: ZIP/PIZ:  Base qualities of 'N' bases in the FASTQ are this value
     char deep_1st_desc[256];    // Deep: DESC line of first FASTQ read of first FASTQ file
     unsigned n_full_mch[2];     // Deep: count segconf lines where hash matches with at least one SAM line - (QNAME1 or QNAME2), SEQ, QUAL
     unsigned n_seq_qual_mch;    // Deep: count segconf lines where hash matches with at least one SAM line - SEQ and QUAL

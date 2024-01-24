@@ -175,6 +175,9 @@ void sam_seg_SEQ_initialize (VBlockSAMP vb)
     strand_ctx->ltype = LT_BITMAP;
     gpos_ctx->ltype   = LT_UINT32;
 
+    ctx_set_ltype (VB, LT_UINT8, SAM_SEQINS_A, SAM_SEQINS_C, SAM_SEQINS_G, SAM_SEQINS_T,
+                   SAM_SEQMIS_A, SAM_SEQMIS_C, SAM_SEQMIS_G, SAM_SEQMIS_T, DID_EOL);
+
     // MAIN: we may seg depn lines against in-VB prim lines
     if (IS_MAIN(vb))
         bitmap_ctx->flags.store_per_line = true; // 14.0.0
@@ -636,6 +639,8 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_seq), unsigned
     ZipDataLineSAM *saggy_dl;
     bool unmapped = dl->FLAG.unmapped || vb->cigar_missing || !dl->POS || str_issame_(STRa(vb->chrom_name), "*", 1);
 
+    ASSSEG (textual_seq[0] != '*' || textual_seq_len == 1, "Invalid SEQ - starts with '*' but length=%u", textual_seq_len);
+    
     // case segconf: we created the contexts for segconf_set_vb_size accounting. that's enough - actually segging will mark is_set and break sam_seg_MD_Z_analyze.
     if (segconf.running) {
         if ((vb->bisulfite_strand=='G') != dl->FLAG.rev_comp)
@@ -1028,9 +1033,10 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
     if (unmapped || force_verbatim) unmapped: {
         ASSPIZ (nonref_ctx->next_local + vb->seq_len <= nonref_ctx->local.len32, "nonref_ctx.local overflow: next_local=%u seq_len=%u local.len=%u",
                 nonref_ctx->next_local, vb->seq_len, nonref_ctx->local.len32);
-                
-        if (reconstruct) RECONSTRUCT (nonref, vb->seq_len); 
-        nonref_ctx->next_local += ROUNDUP4 (vb->seq_len);
+
+        uint32_t recon_len = (*nonref == '*') ? 1 : vb->seq_len;
+        if (reconstruct) RECONSTRUCT (nonref, recon_len); 
+        nonref_ctx->next_local += ROUNDUP4 (recon_len);
         goto done;
     }
 

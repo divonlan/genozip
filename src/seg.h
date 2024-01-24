@@ -82,10 +82,7 @@ static inline void seg_add_to_local_blob (VBlockP vb, ContextP ctx, STRp(blob), 
 static inline void seg_add_to_local_fixed (VBlockP vb, ContextP ctx, const void *data, uint32_t data_len, Lookup lookup_type, unsigned add_bytes)
     { seg_add_to_local_fixed_do (vb, ctx, STRa(data), false, lookup_type, false, add_bytes); }
 
-extern void seg_integer_fixed (VBlockP vb, Context *ctx, void *number, bool with_lookup, unsigned add_bytes);
-
-// requires setting ltype=LT_DYN_INT* in seg_initialize, but not need to set ltype as it will be set in zip_resize_local
-extern void seg_add_to_local_resizable (VBlockP vb, ContextP ctx, int64_t value, unsigned add_bytes);
+extern void seg_integer_fixed (VBlockP vb, ContextP ctx, void *number, bool with_lookup, unsigned add_bytes);
 
 extern WordIndex seg_self_delta (VBlockP vb, ContextP ctx, int64_t value, char format, unsigned fixed_len, uint32_t add_bytes);
 
@@ -112,8 +109,7 @@ extern void seg_array_of_array_of_struct (VBlockP vb, ContextP ctx, char outer_s
 
 extern bool seg_by_container (VBlockP vb, ContextP ctx, ContainerP con, STRp(value), STRp(container_snip), SegCallback item_seg, bool normal_seg_if_fail, unsigned add_bytes);
 
-extern void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, bool has_parameter, int64_t int_param, char char_param,
-                                       char *snip, unsigned *snip_len /* in / out */);
+extern void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, bool has_parameter, int64_t int_param, char char_param, qSTRp(snip));
 #define seg_prepare_snip_other(snip_code, other_dict_id, has_parameter, parameter, snip) \
     snip##_len = sizeof (snip);\
     seg_prepare_snip_other_do ((snip_code), (other_dict_id), (has_parameter), (parameter), 0, (snip), &snip##_len)
@@ -175,13 +171,6 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux
 // --------------------
 // handling binary data
 // --------------------
-
-// loading a Little Endian uint32_t from an unaligned buffer
-#define GET_UINT8(p)   ((uint8_t)(((uint8_t*)(p))[0]))
-#define GET_UINT16(p)  ((uint16_t)(((uint8_t*)(p))[0] | (((uint8_t*)(p))[1] << 8)))
-#define GET_UINT32(p)  ((uint32_t)(((uint8_t*)(p))[0] | (((uint8_t*)(p))[1] << 8) | (((uint8_t*)(p))[2] << 16) | (((uint8_t*)(p))[3] << 24)))
-#define GET_UINT64(p)  ((uint64_t)(((uint8_t*)(p))[0] | ((uint64_t)((uint8_t*)(p))[1] << 8) | ((uint64_t)((uint8_t*)(p))[2] << 16) | ((uint64_t)((uint8_t*)(p))[3] << 24) | ((uint64_t)((uint8_t*)(p))[4] << 32) | ((uint64_t)((uint8_t*)(p))[5] << 40) | ((uint64_t)((uint8_t*)(p))[6] << 48) | ((uint64_t)((uint8_t*)(p))[7] << 56)))
-#define GET_FLOAT32(p) ({ union { uint32_t i; float f; } n= {.i = GET_UINT32(p)}; n.f; })
 
 // getting integers from the BAM data
 #define NEXT_UINT8    ({ uint8_t  value = GET_UINT8   (next_field); next_field += sizeof (uint8_t ); value; })

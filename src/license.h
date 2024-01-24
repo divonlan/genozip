@@ -18,6 +18,7 @@ extern void license_load (void);
 extern rom license_get_one_line (void);
 extern void license_display (void);
 extern bool license_allow_tip (void);
+extern bool license_allow_distribution (void);
 extern void license_eval_notice (void);
 extern bool license_is_eval (void);
 extern bool license_is_standard (void);

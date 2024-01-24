@@ -65,7 +65,6 @@ void me23_seg_initialize (VBlockP vb)
 {
     ctx_set_no_stons (vb, ME23_CHROM, ME23_POS, ME23_TOPLEVEL, ME23_TOP2VCF, DID_EOL);
 
-    CTX(ME23_CHROM)->no_vb1_sort = true;
     CTX(ME23_CHROM)->flags.store = STORE_INDEX; // since v12
     CTX(ME23_POS)->flags.store   = STORE_INT;   // since v12
     CTX(ME23_GENOTYPE)->ltype    = LT_BLOB;

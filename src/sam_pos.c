@@ -57,7 +57,7 @@ PosType32 sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM *dl, WordIndex prev_line_ch
         seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_COPY_PRIM, '0'+SA_POS }, 3, channel_ctx, add_bytes); 
 
     else if (!segconf.is_sorted) 
-        seg_integer_fixed (VB, channel_ctx, &pos, true, add_bytes);
+        seg_integer (VB, channel_ctx, pos, true, add_bytes);
 
     else 
         pos = seg_pos_field (VB, channel_ctx->did_i, SAM_POS, 0, 0, 0, 0, pos, add_bytes);

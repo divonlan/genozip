@@ -191,16 +191,10 @@ void vcf_seg_initialize (VBlockP vb_)
                    T(segconf.vcf_is_dbSNP, INFO_FREQ),
                    INFO_FATHMM_score, INFO_VEST3_score, DID_EOL);
 
-    ctx_set_ltype (VB, LT_DYN_INT, 
-                   INFO_RAW_MQandDP_MQ, INFO_RAW_MQandDP_DP, 
-                   T(segconf.vcf_is_dbSNP, INFO_dbSNPBuildID), 
-                   DID_EOL);
+    ctx_set_dyn_int (VB, INFO_RAW_MQandDP_MQ, INFO_RAW_MQandDP_DP, 
+                     T(segconf.vcf_is_dbSNP, INFO_dbSNPBuildID), 
+                     DID_EOL);
     
-    CTX(VCF_oCHROM)->  no_vb1_sort = true;  // indices need to remain as in the Chain file
-    CTX(VCF_oSTATUS)-> no_vb1_sort = true;  // indices need to remaining matching to LiftOverStatus
-    CTX(VCF_COORDS)->  no_vb1_sort = true;  // indices need to remaining matching to Coords
-    CTX(VCF_oXSTRAND)->no_vb1_sort = true;  // indices need to order of ctx_create_node
-
     CTX(FORMAT_DP)->flags.same_line = true; // delta against AD or SDP regardless if before or after on line
     CTX(FORMAT_AD)->flags.same_line = true; // delta against ADALL regardless if before or after on line
     
@@ -266,9 +260,6 @@ void vcf_seg_initialize (VBlockP vb_)
 
     if (segconf.vcf_is_gvcf)
         seg_mux_init (VB, CTX(VCF_POS), 2, VCF_SPECIAL_MUX_BY_END, false, (MultiplexerP)&vb->mux_POS);
-
-    if (segconf.FMT_DP_method != FMT_DP_DEFAULT)
-        seg_mux_init (VB, CTX(FORMAT_DP), 2, VCF_SPECIAL_MUX_FORMAT_DP, false, (MultiplexerP)&vb->mux_FORMAT_DP);
 
     vcf_info_seg_initialize(vb);
     vcf_samples_seg_initialize(vb);

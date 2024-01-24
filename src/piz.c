@@ -9,36 +9,24 @@
 #include "genozip.h"
 #include "profiler.h"
 #include "zfile.h"
-#include "vblock.h"
 #include "dispatcher.h"
-#include "context.h"
-#include "file.h"
 #include "piz.h"
-#include "sections.h"
 #include "random_access.h"
 #include "regions.h"
-#include "dict_id.h"
-#include "reference.h"
 #include "ref_iupacs.h"
 #include "refhash.h"
 #include "progress.h"
 #include "profiler.h"
 #include "stats.h"
-#include "codec.h"
-#include "bgzf.h"
-#include "flags.h"
 #include "reconstruct.h"
 #include "coverage.h"
 #include "writer.h"
-#include "strings.h"
 #include "threads.h"
 #include "endianness.h"
-#include "website.h"
 #include "chrom.h"
 #include "txtheader.h"
 #include "base64.h"
 #include "dict_io.h"
-#include "buf_list.h"
 #include "user_message.h"
 
 // output coordinates of current line (for error printing) - very carefully as we are in an error condition - we can't assume anything
@@ -87,7 +75,7 @@ void asspiz_text (VBlockP vb, FUNCLINE)
     sprintf (next, "%s", (vb->curr_item != DID_NONE ? CTX(vb->curr_item)->tag_name : "N/A"));
 
     progress_newline(); 
-    fprintf (stderr, "%s %s: Error in %s:%u line_in_file(1-based)=%"PRIu64" %s%s%s stack=%s %s: ", 
+    fprintf (stderr, "%s %s: Error in %s:%u line_in_file(1-based)=%"PRIu64"%s %s%s stack=%s %s: ", 
              str_time().s, LN_NAME, func, code_line, 
              writer_get_txt_line_i ((VBlockP)(vb), vb->line_i), 
              cond_int (Z_DT(VCF) || Z_DT(BCF), " sample_i=", vb->sample_i), 
@@ -220,6 +208,10 @@ void piz_uncompress_all_ctxs (VBlockP vb)
             if (is_local) {
                 ctx->lcodec = header->codec;
                 ctx->ltype  = header->ltype; 
+                ctx->nothing_char = !lt_max(ctx->ltype)          ? 0  // nothing char is only relevant for integer ltypes   
+                                  : header->nothing_char == 0xff ? 0 // no nothing char
+                                  : header->nothing_char == 0    ? 1 // use hard-coded logic up to (0 always, and only, appears in files up to 15.0.37)
+                                  :                                header->nothing_char;
             }
 
             else { // b250
@@ -894,6 +886,10 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
     if (flag_is_show_vblocks (PIZ_TASK_NAME)) 
         iprintf ("Finished PIZ of %s\n", txt_file ? txt_file->name : "(no filename)");                
 
+    // if we're loading an aux file for ZIP - destroy VBs as contexts are unions of ZIP and PIZ
+    if (primary_command == ZIP && flag_loading_auxiliary)
+        vb_destroy_pool_vbs (POOL_MAIN, true);
+        
     file_close (&txt_file); 
 
     if (flag.show_time && ((flag.show_time_comp_i >= first_comp_i && flag.show_time_comp_i <= last_comp_i) || 

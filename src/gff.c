@@ -152,7 +152,7 @@ void gff_seg_initialize (VBlockP vb)
 
     ctx_set_ltype (vb, LT_STRING, ATTR_Variant_seq, ATTR_Reference_seq, ATTR_ancestral_allele, DID_EOL);
 
-    ctx_set_ltype (vb, LT_DYN_INT, ATTR_transcript_name_num, DID_EOL);
+    ctx_set_dyn_int (vb, ATTR_transcript_name_num, DID_EOL);
 
     ctx_consolidate_stats (vb, ATTR_transcript_name, ATTR_transcript_name_gene, ATTR_transcript_name_num, DID_EOL);
     ctx_consolidate_stats (vb, ATTR_Target, ATTR_Target_ID, ATTR_Target_POS, ATTR_Target_STRAND, DID_EOL);

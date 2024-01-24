@@ -234,10 +234,19 @@ int32_t url_read_string (rom url, STRc(data), bool blocking, bool follow_redirec
     response_len = data ? data_len : CURL_RESPONSE_LEN;
     url_do_curl (url, response, &response_len, error, &error_len, blocking, follow_redirects);
 
-    if (error_len && !response_len) return -1; // failure
+    if (error_len && !response_len) {
+        if (flag.debug_submit) 
+            fprintf (stderr, "Error in url_read_string: %.*s\n", STRf(error));
 
-    if (response_len && strstr (response, "Bad Request"))
+        return -1; // failure
+    }
+
+    if (response_len && strstr (response, "Bad Request")) {
+        if (flag.debug_submit) 
+            fprintf (stderr, "Error in url_read_string: Bad Request\n");
+
         return -2;
+    }
 
     return data ? response_len : 0;
 }

@@ -53,9 +53,9 @@ void vcf_info_seg_initialize (VBlockVCFP vb)
 
     CTX(INFO_SF)->sf.SF_by_GT = unknown;
     
-    ctx_set_ltype (VB, LT_DYN_INT, INFO_SVLEN, INFO_DP4_RF, INFO_DP4_AF,
-                   T(segconf.INFO_DP_method == INFO_DP_DEFAULT, INFO_DP),
-                   DID_EOL);
+    ctx_set_dyn_int (VB, INFO_SVLEN, INFO_DP4_RF, INFO_DP4_AF,
+                     T(segconf.INFO_DP_method == INFO_DP_DEFAULT, INFO_DP),
+                     DID_EOL);
 
     ctx_consolidate_stats (VB, INFO_RAW_MQandDP, INFO_RAW_MQandDP_MQ, INFO_RAW_MQandDP_DP, DID_EOL);
     
@@ -702,7 +702,6 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
     // many fields, for example: ##INFO=<ID=AN_amr_male,Number=1,Type=Integer,Description="Total number of alleles in male samples of Latino ancestry">
     else if ((ctx->tag_name[0] == 'A' && (ctx->tag_name[1] == 'N' || ctx->tag_name[1] == 'C') && (ctx->tag_name[2] == '_' || ctx->tag_name[2] == '-')) ||
              !memcmp (ctx->tag_name, "nhomalt", 7)) {
-        ctx->ltype = LT_DYN_INT;
         seg_integer_or_not (VB, ctx, STRa(value), value_len);
     }
 

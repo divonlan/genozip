@@ -213,7 +213,7 @@ extern void buf_low_level_release_memory_back_to_kernel (void);
 extern void buf_set_shared (BufferP buf);
 extern void buf_remove_spinlock (BufferP buf);
 
-extern void buf_overlay_do (VBlockP vb, BufferP top_buf, BufferP bottom_buf, uint64_t start_in_regular, FUNCLINE, rom name);
+extern void buf_overlay_do (VBlockP vb, BufferP top_buf, BufferP bottom_buf, uint64_t start_in_bottom, FUNCLINE, rom name);
 #define buf_overlay(vb, top_buf, bottom_buf, name) \
     buf_overlay_do((VBlockP)(vb), (top_buf), (bottom_buf), 0, __FUNCLINE, (name)) 
 

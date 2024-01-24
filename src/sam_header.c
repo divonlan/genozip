@@ -435,6 +435,19 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
     // cisCall uses bwa mem: https://www.ciscall.org/en/ciscall7.html
     if (MP(UNKNOWN) && strstr (first_PG, "cisCall")) segconf.sam_mapper = MP_BWA;
 
+    // DRAGEN optionally rewrites base quality scores of 'N' to a fixed value - this affects Deep
+    if (MP(DRAGEN) && flag.deep) {
+        rom fastq_n_quality = strstr (first_PG, "fastq-n-quality: "); // minimum Phread quality of 'N' bases, default 2. see: https://support.illumina.com/content/dam/illumina-support/help/Illumina_DRAGEN_Bio_IT_Platform_v3_7_1000000141465/Content/SW/Informatics/Dragen/SoftwareInpNBase_fDG.htm
+        rom fastq_offset    = strstr (first_PG, "fastq-offset: ");    // offset of byte value vs phred. default 33.
+        int fastq_n_quality_value = atoi (fastq_n_quality + STRLEN("fastq-n-quality: "));
+        int fastq_offset_value    = atoi (fastq_offset + STRLEN("fastq-offset: "));
+        if (fastq_n_quality_value && fastq_offset_value) {
+            segconf.deep_N_sam_score = fastq_n_quality_value + fastq_offset_value;
+
+            if (flag.show_deep) iprintf ("deep_N_sam_score='%c'(%u)\n", segconf.deep_N_sam_score, segconf.deep_N_sam_score);
+        }
+    }
+
     // build buffer of unique PN+ID fields, for stats
     sam_header_zip_build_stats_programs (first_PG, after_PGs);
 

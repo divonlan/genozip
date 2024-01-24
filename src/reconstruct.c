@@ -142,13 +142,13 @@ static int64_t reconstruct_from_delta (VBlockP vb,
 
 #define ASSERT_IN_BOUNDS \
     ASSPIZ (ctx->next_local < ctx->local.len32, \
-            "unexpected end of ctx->local data in %s[%u] (len=%u next_local=%u ltype=%s lcodec=%s did_i=%u preprocessing=%u). %s", \
-            ctx->tag_name, ctx->did_i, ctx->local.len32, ctx->next_local, lt_name (ctx->ltype), codec_name (ctx->lcodec), ctx->did_i, vb->preprocessing, ctx->local.len ? "" : "since len=0, perhaps a Skip function issue?");
+            "unexpected end of ctx->local data in %s[%u] (len=%u next_local=%u last_wi=%d ltype=%s lcodec=%s did_i=%u preprocessing=%u). %s", \
+            ctx->tag_name, ctx->did_i, ctx->local.len32, ctx->next_local, ctx->last_wi, lt_name (ctx->ltype), codec_name (ctx->lcodec), ctx->did_i, vb->preprocessing, ctx->local.len ? "" : "since len=0, perhaps a Skip function issue?");
 
 #define ASSERT_IN_BOUNDS_BEFORE(recon_len) \
     ASSPIZ (ctx->next_local + (recon_len) <= ctx->local.len, \
-            "unexpected end of ctx->local data in %s[%u] (len=%u next_local=%u ltype=%s lcodec=%s did_i=%u, preprocessing=%u)", \
-            ctx->tag_name, ctx->did_i, ctx->local.len32, ctx->next_local, lt_name (ctx->ltype), codec_name (ctx->lcodec), ctx->did_i, vb->preprocessing)
+            "unexpected end of ctx->local data in %s[%u] (len=%u next_local=%u last_wi=%d ltype=%s lcodec=%s did_i=%u, preprocessing=%u)", \
+            ctx->tag_name, ctx->did_i, ctx->local.len32, ctx->next_local, ctx->last_wi, lt_name (ctx->ltype), codec_name (ctx->lcodec), ctx->did_i, vb->preprocessing)
 
 static uint32_t reconstruct_from_local_text (VBlockP vb, ContextP ctx, ReconType reconstruct)
 {
@@ -162,7 +162,7 @@ static uint32_t reconstruct_from_local_text (VBlockP vb, ContextP ctx, ReconType
     uint32_t snip_len = ctx->next_local - start; 
     ctx->next_local++; // skip the separator 
 
-    reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, STRa(snip), reconstruct);
+    reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, STRa(snip), reconstruct, __FUNCLINE);
 
     return snip_len;
 }
@@ -235,10 +235,16 @@ int64_t reconstruct_from_local_int (VBlockP vb, ContextP ctx, char separator /* 
     }
 
     if (reconstruct) { 
-        if ((VB_DT(VCF) || VB_DT(BCF)) && num==lt_desc[ctx->ltype].max_int && dict_id_is_vcf_format_sf (ctx->dict_id)
-            && !lt_desc[ctx->ltype].is_signed) {
+        // logic applying to files up to 15.0.37 (nothing_char == 1 always in these files)
+        if (ctx->nothing_char == 1 && (VB_DT(VCF) || VB_DT(BCF)) && num==lt_desc[ctx->ltype].max_int && 
+            dict_id_is_vcf_format_sf (ctx->dict_id) && !lt_desc[ctx->ltype].is_signed) {
             RECONSTRUCT1 ('.');
             num = 0; // we consider FORMAT fields that are . to be 0.
+        }
+
+        else if (ctx->nothing_char > 1 && num == lt_desc[ctx->ltype].max_int) {
+            RECONSTRUCT1 (ctx->nothing_char);
+            num = 0; // we consider fields that are nothing_char to be 0.
         }
 
         else if (ctx->ltype >= LT_hex8)
@@ -340,7 +346,7 @@ ContextP reconstruct_get_other_ctx_from_snip (VBlockP vb, ContextP ctx, pSTRp (s
     unsigned b64_len = base64_sizeof (DictId);
 
     ASSPIZ (b64_len + 1 <= *snip_len, "ctx=%s snip=%s snip_len=%u but expecting it to be >= %u", 
-            ctx->tag_name, str_snip(STRa(*snip), true).s, *snip_len, b64_len + 1);
+            ctx->tag_name, str_snip_ex (STRa(*snip), true).s, *snip_len, b64_len + 1);
 
     DictId dict_id;
     base64_decode ((*snip)+1, &b64_len, dict_id.id);
@@ -362,18 +368,30 @@ ContextP reconstruct_get_other_ctx_from_snip (VBlockP vb, ContextP ctx, pSTRp (s
 ContextP recon_multi_dict_id_get_ctx_first_time (VBlockP vb, ContextP ctx, STRp(snip), unsigned ctx_i)
 {
     if (!ctx->ctx_cache.len) {
-        ctx->ctx_cache.len = str_count_char (STRa(snip), '\t') + 1;
+        ctx->ctx_cache.len = recon_multi_dict_id_get_num_dicts (ctx, STRa(snip));
         buf_alloc_zero (vb, &ctx->ctx_cache, 0, ctx->ctx_cache.len, ContextP, 1, "ctx_cache");
     }
 
     // note: we get past this point only once per VB, per ctx_i
-    str_split (snip, snip_len, ctx->ctx_cache.len32, '\t', item, true);
-    ASSPIZ (n_items, "Unable to decoded multi-dict-id snip for %s. snip=\"%.*s\"", ctx->tag_name, STRf(snip));
+    STR(dict_b64);
+    str_item_i (STRa(snip), '\t', ctx_i, pSTRa(dict_b64));
 
     DictId item_dict_id;
-    base64_decode (items[ctx_i], &item_lens[ctx_i], item_dict_id.id);
+    base64_decode (qSTRa(dict_b64), item_dict_id.id);
 
     return (*B(ContextP, ctx->ctx_cache, ctx_i) = ECTX (item_dict_id)); // NULL if no data was segged to this channel    
+}
+
+uint32_t recon_multi_dict_id_get_num_dicts (ContextP ctx, STRp(snip))
+{
+    if (ctx->ctx_cache.len32) 
+        return ctx->ctx_cache.len32;
+
+    else if (snip_len) 
+        return (1 + str_count_char (STRa(snip), '\t')) - 
+               (snip[snip_len-1] == SNIP_SPECIAL); // don't count extension for --show-snips (15.0.38) 
+    else        
+        return 0;
 }
 
 static ValueType reconstruct_from_lookback (VBlockP vb, ContextP ctx, STRp(snip), ReconType reconstruct)
@@ -419,7 +437,8 @@ static ValueType reconstruct_from_lookback (VBlockP vb, ContextP ctx, STRp(snip)
 HasNewValue reconstruct_demultiplex (VBlockP vb, ContextP ctx, STRp(snip), int channel_i, ValueType *new_value, ReconType reconstruct)
 {
     ContextP channel_ctx = MCTX (channel_i, snip, snip_len);
-    ASSPIZ (channel_ctx, "Cannot find channel context of channel_i=%d of multiplexed context %s", channel_i, ctx->tag_name);
+    ASSPIZ (channel_ctx, "Cannot find channel context of channel_i=%d of multiplexed context %s. snip=%s", 
+            channel_i, ctx->tag_name, str_snip_ex (snip-2, snip_len+2, true).s);
 
     reconstruct_from_ctx (vb, channel_ctx->did_i, 0, reconstruct);
 
@@ -461,7 +480,7 @@ static HasNewValue reconstruct_numeric (VBlockP vb, ContextP ctx, STRp(snip), Va
 
 void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx, 
                            WordIndex word_index, // WORD_INDEX_NONE if not used.
-                           STRp(snip), ReconType reconstruct) // if false, calculates last_value but doesn't output to vb->txt_data)
+                           STRp(snip), ReconType reconstruct, FUNCLINE) // if false, calculates last_value but doesn't output to vb->txt_data)
 {
     ValueType new_value = {};
     HasNewValue has_new_value = NO_NEW_VALUE;
@@ -469,6 +488,14 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
     ContextP base_ctx = snip_ctx; // this will change if the snip refers us to another data source
     StoreType store_type = snip_ctx->flags.store;
     bool store_delta = VER(12) && snip_ctx->flags.store_delta; // note: the flag was used for something else in v8
+    
+    if (flag.show_snips)
+        iprintf ("%s %s[%u] %s%s%s%s%s%s\n", LN_NAME, snip_ctx->tag_name, snip_ctx->did_i, str_snip,
+                 cond_int (word_index!=WORD_INDEX_NONE, " wi=", word_index), 
+                 cond_str (word_index==WORD_INDEX_NONE, " ", func), 
+                 cond_int (word_index==WORD_INDEX_NONE, ":", code_line), 
+                 cond_int (vb->peek_stack_level, " peek_level=", vb->peek_stack_level),
+                 reconstruct ? "" : " recon=false");
 
     // case: empty snip
     if (!snip_len) {
@@ -478,12 +505,6 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
         }
         goto done;
     }
-
-    if (flag.show_snips)
-        iprintf ("%s %s[%u] %s%s%s%s\n", LN_NAME, snip_ctx->tag_name, snip_ctx->did_i, str_snip (STRa(snip), true).s,
-                 cond_int (word_index!=WORD_INDEX_NONE, " wi=", word_index), 
-                 cond_int (vb->peek_stack_level, " peek_level=", vb->peek_stack_level),
-                 reconstruct ? "" : " recon=false");
 
     switch (snip[0]) {
 
@@ -608,9 +629,9 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
         ASSPIZ (n_subsnips==2, "Invalid SNIP_DUAL snip in ctx=%s", snip_ctx->tag_name);
 
         if (vcf_vb_is_primary(vb)) // recursively call for each side 
-        reconstruct_one_snip (vb, snip_ctx, word_index, STRi(subsnip,0), reconstruct);
+            reconstruct_one_snip (vb, snip_ctx, word_index, STRi(subsnip,0), reconstruct, __FUNCLINE);
         else
-            reconstruct_one_snip (vb, snip_ctx, word_index, STRi(subsnip,1), reconstruct);
+            reconstruct_one_snip (vb, snip_ctx, word_index, STRi(subsnip,1), reconstruct, __FUNCLINE);
         return;
     }
 
@@ -712,10 +733,11 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i,
         (!ctx->b250.len32 && !ctx->local.len32 && ctx->dict.len)) {  // all_the_same case - no b250 or local, but have dict      
         STR0(snip);
         WordIndex word_index = LOAD_SNIP(ctx->did_i); // note: if we have no b250, local but have dict, this will be word_index=0 (see ctx_get_next_snip)
+        ctx->last_wi = word_index; 
 
         if (!snip) goto missing;
 
-        reconstruct_one_snip (vb, ctx, word_index, STRa(snip), reconstruct);        
+        reconstruct_one_snip (vb, ctx, word_index, STRa(snip), reconstruct, __FUNCLINE);        
 
         // if SPECIAL function set value_is_missing (eg vcf_piz_special_PS_by_PID) - this treated as a WORD_INDEX_MISSING 
         if (ctx->special_res == SPEC_RES_IS_MISSING) 
@@ -736,44 +758,22 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i,
     
     // case: all data is only in local
     else if (ctx->local.len32) {
-        switch (ctx->ltype) {
-        case LT_INT8 ... LT_UINT64 : case LT_hex8 ... LT_HEX64: {
-            int64_t value = reconstruct_from_local_int (vb, ctx, 0, reconstruct); 
-
-            if (ctx->flags.store == STORE_INT) 
-                ctx_set_last_value (vb, ctx, value);
-
-            break;
-        }
-        case LT_CODEC:
-            codec_args[ctx->lcodec].reconstruct (vb, ctx->lcodec, ctx, vb->seq_len, reconstruct); break;
-
-        case LT_BLOB: 
-            reconstruct_from_local_sequence (vb, ctx, vb->seq_len, reconstruct); break;
-                
-        case LT_BITMAP:
-            ASSERT_DT_FUNC (vb, reconstruct_seq);
-            DT_FUNC (vb, reconstruct_seq) (vb, NULL, 0, reconstruct);
-            break;
-        
-        case LT_SINGLETON:
-        case LT_STRING:
-            reconstruct_from_local_text (vb, ctx, reconstruct); break;
-
-        default:
-            ABORT_PIZ ("Invalid ltype=%u in ctx=%s", ctx->ltype, ctx->tag_name);
-        }
+        ctx->last_wi = WORD_INDEX_NONE; // not reconstructed from b250
+        reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, (char[]){ SNIP_LOOKUP }, 1, reconstruct, __FUNCLINE);        
     }
 
     // in case of LT_BITMAP, it is it is ok if the bitmap is empty and all the data is in NONREF (e.g. unaligned SAM)
     else if (ctx->ltype == LT_BITMAP && (ctx+1)->local.len32) {
+        ctx->last_wi = WORD_INDEX_NONE; // not reconstructed from b250
         ASSERT_DT_FUNC (vb, reconstruct_seq);
         DT_FUNC (vb, reconstruct_seq) (vb, NULL, 0, reconstruct);
     }
 
     // case: the entire VB was just \n - so seg dropped the ctx
     // note: for backward compatability with 8.0. for files compressed by 8.1+, it will be handled via the all_the_same mechanism
+    // note: unintentionally, this is also executed in genocat --sam of a BAM file 
     else if (ctx->dict_id.num == DTF(eol).num) {
+        ctx->last_wi = WORD_INDEX_NONE; // not reconstructed from b250
         if (reconstruct) { RECONSTRUCT1('\n'); }
     }
 

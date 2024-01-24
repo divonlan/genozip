@@ -23,6 +23,7 @@
 #include "buffer.h"
 #include "arch.h"
 #include "tar.h"
+#include "license.h"
 
 #define MAX_TAR_UID_GID 07777777 // must fit in 8 characters, inc. \0, printed in octal
 #define MAX_TAR_MODE 07777777
@@ -48,7 +49,7 @@ typedef struct __attribute__ ((packed)){
     char mtime[12];     // nul-terminated octal in ASCII
     char checksum[8];   // sum of header bytes (as unsigned char), in six-digit zero-padded octal, followed by nul and space. checksum is calculated while the "checksum" field is all-spaces.
     char typeflag[1];   // always '0' - regular file (genozip doesn't support symlinks, directories etc)
-    char linkname[100]; // we don't support hard links, so this is always 0
+    char linkname[100]; // hard link destination - nul-termianted
     char magic[6];      // POSIX "ustar\0" (different from GNU which is "ustar ")
     char version[2];    // POSIX "00" (different from GNU which is " \0")
     char uname[32];
@@ -87,7 +88,7 @@ void tar_initialize (BufferP input_files_buf)
     tar_file = fopen (tar_name, flag.pair ? "wb+" : "wb"); // if --pair, when compressing pair2, we go back and read pair1
     ASSINP (tar_file, "cannot create tar file %s: %s", tar_name, strerror (errno)); 
 
-    if (flag.is_linux) {
+    if (flag.is_linux && license_allow_distribution()) {
         // verify that top-level no file or directory is named "genozip-linux-x86_64" 
         for_buf (rom, fn_p, *input_files_buf) {
             int fn_len = strlen (*fn_p);
@@ -235,8 +236,12 @@ FILE *tar_open_file (rom fn_on_disk, rom fn_in_tar)
     }
 
     // copy mode, uid, gid, uname, gname, mtime from an existing file
-    if (!txt_file) tar_copy_metadata_from_file (fn_on_disk);     // case: we're copying an exiting genozip file - take from that genozip file
-    else           tar_copy_metadata_from_file (txt_name); // case: zipping a txt_file on disk - take from that txt file
+    rom fn = txt_file ? txt_name : fn_on_disk/*copying an existing .genozip file*/;
+    tar_copy_metadata_from_file (fn); 
+
+    if (flag.debug_tar) 
+        iprintf ("tar_open_file: t_offset=%"PRIu64" ftell=%"PRIu64" data_start=%"PRIu64" %s\n", 
+                 t_offset, ftello64 (tar_file), t_offset + 512, fn);
 
     ASSERT (fwrite (&hdr, 512, 1, tar_file) == 1, "failed to write header of %s to %s", fn_in_tar, tar_name); 
     t_offset += 512; // past tar header
@@ -266,6 +271,9 @@ static void tar_add_hard_link (rom fn_on_disk, rom fn_in_tar_src, rom fn_in_tar_
     unsigned checksum = 0;
     for (unsigned i=0; i < 512; i++) checksum += ((bytes)&hdr)[i];
     sprintf (hdr.checksum, "%06o", checksum);
+
+    if (flag.debug_tar) 
+        iprintf ("tar_add_hard_link: t_offset=%"PRIu64" ftell=%"PRIu64" %s\n", t_offset, ftello64 (tar_file), hdr.name);
 
     ASSERT (fwrite (&hdr, 512, 1, tar_file) == 1, "failed to write header of %s to %s", fn_in_tar_dst, tar_name); 
     t_offset += 512; // past tar header
@@ -327,12 +335,18 @@ void tar_close_file (void **file)
 
     t_offset = tar_size; // next file start offset
 
+    if (flag.debug_tar) 
+        iprintf ("tar_close_file: t_offset=%"PRIu64" ftell=%"PRIu64"\n", t_offset, ftello64 (tar_file));
+
     if (file) *file = NULL;
 }
 
 void tar_copy_file (rom fn_on_disk, rom fn_in_tar)
 {
     ASSERTNOTNULL (tar_file);
+
+    if (flag.debug_tar) 
+        iprintf ("tar_copy_file: %s\n", fn_in_tar);
 
     tar_open_file (fn_on_disk, fn_in_tar);
 
@@ -360,6 +374,9 @@ void tar_copy_file (rom fn_on_disk, rom fn_in_tar)
 void tar_finalize (void)
 {
     ASSERTNOTNULL (tar_file);
+
+    if (flag.debug_tar) 
+        iprintf ("tar_finalize EOF block: t_offset=%"PRIu64" ftell=%"PRIu64"\n", t_offset, ftello64 (tar_file));
 
     // tar file format: two empty tar blocks as EOF
     char s[1024] = "";

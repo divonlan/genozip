@@ -641,7 +641,7 @@ SPECIAL_RECONSTRUCTOR_DT (fasta_piz_special_SEQ)
     if (flag.header_only_fast) // note that flags_update_piz_one_z_file rewrites --header-only as flag.header_only_fast
         vb->drop_curr_line = "header_only_fast";     
     else 
-        reconstruct_one_snip (VB, ctx, WORD_INDEX_NONE, snip+1, snip_len-1, RECON_ON);    
+        reconstruct_one_snip (VB, ctx, WORD_INDEX_NONE, snip+1, snip_len-1, RECON_ON, __FUNCLINE);    
 
     // case: --sequential, and this seq line is the last line in the vb, and it continues in the next vb
     if (  flag.sequential && // if we are asked for a sequential SEQ
@@ -668,7 +668,7 @@ SPECIAL_RECONSTRUCTOR_DT (fasta_piz_special_COMMENT)
     if (flag.header_only_fast)  // note that flags_update_piz_one_z_file rewrites --header-only as flag.header_only_fast
         vb->drop_curr_line = "header_only_fast";     
     else 
-        reconstruct_one_snip (VB, ctx, WORD_INDEX_NONE, snip, snip_len, RECON_ON);    
+        reconstruct_one_snip (VB, ctx, WORD_INDEX_NONE, snip, snip_len, RECON_ON, __FUNCLINE);    
 
     vb->last_line = FASTA_LINE_COMMENT;
 
@@ -779,7 +779,7 @@ SPECIAL_RECONSTRUCTOR_DT (fasta_piz_special_DESC)
     vb->contig_grepped_out = false;
 
     char *desc_start = BAFTtxt;
-    reconstruct_one_snip (VB, ctx, WORD_INDEX_NONE, snip, snip_len, RECON_ON);    
+    reconstruct_one_snip (VB, ctx, WORD_INDEX_NONE, snip, snip_len, RECON_ON, __FUNCLINE);    
     *BAFTtxt = 0; // for strstr and strcspn
 
     // if --grep: here we decide whether to show this contig or not

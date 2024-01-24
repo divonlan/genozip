@@ -32,6 +32,7 @@
 #include "deep.h"
 #include "arch.h"
 #include "threads.h"
+#include "zip_dyn_int.h"
 
 typedef enum { QNAME, FLAG, RNAME, POS, MAPQ, CIGAR, RNEXT, PNEXT, TLEN, SEQ, QUAL, AUX } SamFields __attribute__((unused)); // quick way to define constants
 
@@ -260,10 +261,12 @@ void sam_zip_genozip_header (SectionHeaderGenozipHeaderP header)
     header->sam.segconf_seq_len_dict_id = segconf.seq_len_dict_id;       // v14
     header->sam.segconf_MD_NM_by_un     = segconf.MD_NM_by_unconverted;  // v14
     header->sam.segconf_predict_meth    = segconf.sam_predict_meth_call; // v14
+    header->sam.segconf_use_ins_ctxs    = segconf.use_insertion_ctxs;    // 15.0.30
     header->sam.segconf_deep_qname1     = (segconf.deep_qtype == QNAME1);// v15
     header->sam.segconf_deep_qname2     = (segconf.deep_qtype == QNAME2);// v15
     header->sam.segconf_deep_no_qual    = segconf.deep_no_qual;          // v15
-    header->sam.segconf_use_ins_ctxs    = segconf.use_insertion_ctxs;    // 15.0.30
+    if (segconf.deep_N_fq_score && segconf.deep_N_sam_score)
+        header->sam.segconf_deep_N_fq_score = segconf.deep_N_fq_score;   // 15.0.38
     
     unsigned est_sam_factor_mult = round (MAX_(segconf.est_sam_factor, 1) * (double)SAM_FACTOR_MULT);
     if (est_sam_factor_mult > 255) {
@@ -279,7 +282,6 @@ static void sam_seg_0X_initialize (VBlockP vb, Did strand_did_i)
     // create strand nodes (nodes will be deleted in sam_seg_finalize if not used)
     ctx_create_node (vb, strand_did_i, cSTR("-"));
     ctx_create_node (vb, strand_did_i, cSTR("+"));
-    CTX(strand_did_i)->no_vb1_sort = true; // keep them in this ^ order
 }
 
 static void sam_seg_QNAME_initialize (VBlockSAMP vb)
@@ -360,16 +362,14 @@ void sam_seg_initialize (VBlockP vb_)
                    OPTION_CR_Z_X, OPTION_RX_Z_X, OPTION_2R_Z, OPTION_TR_Z, DID_EOL);
 
     // set ltype=LT_DYN_INT to allow use of seg_integer
-    ctx_set_ltype (VB, LT_DYN_INT, SAM_BUDDY, OPTION_HI_i, OPTION_NM_i, OPTION_NH_i, OPTION_XM_i, OPTION_X1_i,
-                   OPTION_AS_i, OPTION_XS_i, OPTION_ZS_i, OPTION_cm_i, OPTION_ms_i, OPTION_nM_i, OPTION_UQ_i,
-                   T(segconf.has_TLEN_non_zero, SAM_TLEN), // note: we don't set if !has_TLEN_non_zero, bc values are stored in b250 and may require singletons
-                   T(segconf.sam_has_xcons, OPTION_YY_i),
-                   T(segconf.sam_has_xcons, OPTION_XO_i),
-                   T(MP(BLASR), OPTION_XS_i), T(MP(BLASR), OPTION_XE_i), T(MP(BLASR), OPTION_XQ_i), T(MP(BLASR), OPTION_XL_i), T(MP(BLASR), OPTION_FI_i),
-                   T(MP(NGMLR), OPTION_QS_i), T(MP(NGMLR), OPTION_QE_i), T(MP(NGMLR), OPTION_XR_i),
-                   DID_EOL);
-
-    ctx_set_ltype (VB, LT_UINT32, SAM_POS, OPTION_CP_i, DID_EOL);
+    ctx_set_dyn_int (VB, SAM_BUDDY, OPTION_HI_i, OPTION_NM_i, OPTION_NH_i, OPTION_XM_i, OPTION_X1_i,
+                     OPTION_AS_i, OPTION_XS_i, OPTION_ZS_i, OPTION_cm_i, OPTION_ms_i, OPTION_nM_i, OPTION_UQ_i,
+                     T(segconf.has_TLEN_non_zero, SAM_TLEN), // note: we don't set if !has_TLEN_non_zero, bc values are stored in b250 and may require singletons
+                     T(segconf.sam_has_xcons, OPTION_YY_i),
+                     T(segconf.sam_has_xcons, OPTION_XO_i),
+                     T(MP(BLASR), OPTION_XS_i), T(MP(BLASR), OPTION_XE_i), T(MP(BLASR), OPTION_XQ_i), T(MP(BLASR), OPTION_XL_i), T(MP(BLASR), OPTION_FI_i),
+                     T(MP(NGMLR), OPTION_QS_i), T(MP(NGMLR), OPTION_QE_i), T(MP(NGMLR), OPTION_XR_i),
+                     DID_EOL);
 
     if (segconf.is_collated)
         CTX(SAM_POS)->flags.store_delta = true; // since v12.0.41
@@ -1461,7 +1461,7 @@ static inline BuddyType sam_seg_mate (VBlockSAMP vb, SamFlags f, STRp (qname), u
         vb->mate_line_i = candidate;
         vb->mate_line_count++; // for stats
 
-        seg_add_to_local_resizable (VB, CTX(SAM_BUDDY), vb->line_i - candidate, 0); // add buddy (delta) >= 1 .
+        dyn_int_append (VB, CTX(SAM_BUDDY), vb->line_i - candidate, 0); // add buddy (delta) >= 1 .
         return BUDDY_MATE;
     }
 
@@ -1493,7 +1493,7 @@ static inline BuddyType sam_seg_saggy (VBlockSAMP vb, SamFlags f, STRp (qname), 
         if (!vb->saggy_is_prim)
             *insert_to_hash = true;
 
-        seg_add_to_local_resizable (VB, CTX(SAM_BUDDY), vb->line_i - candidate, 0); // add buddy (delta) >= 1 .
+        dyn_int_append (VB, CTX(SAM_BUDDY), vb->line_i - candidate, 0); // add buddy (delta) >= 1 .
         return BUDDY_SAGGY;
     }
 

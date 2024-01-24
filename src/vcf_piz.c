@@ -178,7 +178,7 @@ CONTAINER_FILTER_FUNC (vcf_piz_filter)
         case _VCF_TOPLEVEL:
             // After reconstructing POS (next field is ID) - save POS.last_value, as it might be changed by an INFO/END. 
             if (dnum == _VCF_ID) {
-                CTX(VCF_POS)->rback_last_value = CTX(VCF_POS)->last_value; // consumed by regions_is_site_included
+                CTX(VCF_POS)->pos_last_value = CTX(VCF_POS)->last_value.i; // consumed by regions_is_site_included
                 break;
             }
             // fall through

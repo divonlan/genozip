@@ -2,7 +2,7 @@
 
 # ------------------------------------------------------------------
 #   test.sh
-#   Copyright (C) 2019-2023 Genozip Limited
+#   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 #   Please see terms and conditions in the file LICENSE.txt
 
 cleanup_cache()
@@ -1698,6 +1698,11 @@ batch_make_reference()
 
 update_latest()
 {
+    if [ ! -d ../genozip-latest ]; then
+        echo "can't find ../genozip-latest"
+        exit 1
+    fi
+
     pushd ../genozip-latest
     git reset --hard
     git pull
@@ -2041,6 +2046,16 @@ batch_deep() # note: use --debug-deep for detailed tracking
     local T=$TESTDIR/deep.illum.saux
     $genozip $T.R1.fq $T.R2.fq $T.sam -fe $hs37d5 -o $output -3t || exit 1
 
+    # qual scores corresponding to 'N' bases are replaced by DRAGEN
+    test_header deep.rewrite-N-qual
+    local T=$TESTDIR/deep.rewrite-N-qual
+    $genozip $T.R1.fq $T.R2.fq $T.sam -fe $hs37d5 -o $output -3t || exit 1
+
+    if (( `$genozip $T.R1.fq $T.R2.fq $T.sam -fe $hs37d5 -o $output -3X --show-deep | grep "n_full_mch=(24,0)" | wc -l` != 1 )); then
+        echo "expecting 24 full matches (including QUAL matches)"
+        exit 1
+    fi
+    
     # Illumina WGS - different FASTQ and SAM qname flavors
     cleanup_cache
     test_header "deep.qtype=QNAME2 - different FASTQ and SAM qname flavors"
@@ -2060,7 +2075,7 @@ batch_deep() # note: use --debug-deep for detailed tracking
     test_header deep.pacbio-ccs
     local T=$TESTDIR/deep.pacbio-ccs
     $genozip $T.fq.gz $T.bam -fe $mm10 -3t -o $output || exit 1
-
+    
     cleanup
 }
 

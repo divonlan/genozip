@@ -692,18 +692,22 @@ StrText line_name (VBlockP vb)
 }
 
 // called to parse the optional argument to --show-headers. we accept eg "REFERENCE" or "SEC_REFERENCE" or even "ref"
-SectionType sections_st_by_name (char *name)
+void sections_set_show_headers (char *name)
 {
-    if (!name) return -2; // all sections
-
-    str_toupper (name, name); // name is case insesitive (compare uppercase)
+    if (!name) {
+        flag.show_headers = -1; // all sections
+        return; 
+    }
+    
+    char upper_name[strlen(name)+1];
+    str_toupper_(name, upper_name, strlen(name)+1); // name is case insesitive (compare uppercase)
 
     SectionType candidate=-1;
     unsigned candidate_len=100000;
 
     // choose the shortest section for which name is a case-insensitive substring (eg "dict" will result in SEC_DICT not SEC_DICT_ID_ALIASES)
     for (SectionType st=0; st < NUM_SEC_TYPES; st++)
-        if (strstr (abouts[st].name, name)) { // found if name is a substring of the section name
+        if (strstr (abouts[st].name, upper_name)) { // found if name is a substring of the section name
             unsigned len = strlen (abouts[st].name);
             if (len < candidate_len) { // best candidate so far
                 candidate     = st;
@@ -711,9 +715,15 @@ SectionType sections_st_by_name (char *name)
             }
         }
 
-    ASSINP (candidate >= 0, "bad argument - \"%s\", is not a recognized section type (or a case-insensitive sub-string of a section type)", name);
-
-    return candidate;
+    // case: this is a section name
+    if (candidate >= 0) 
+        flag.show_headers = candidate + 1;
+    
+    // case: if not a section name, we assume it is a dict name
+    else {
+        flag.show_headers = -1; // all sections
+        flag.show_header_dict_name = name;
+    }
 }
 
 uint32_t st_header_size (SectionType sec_type)
@@ -952,12 +962,18 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
     #define DT(x) ((dt) == DT_##x)
 
     if (flag_loading_auxiliary && !flag.debug_read_ctxs) return; // don't show headers of an auxiliary file in --show-header, but show in --debug-read-ctx
-    
+
     if (  flag.show_headers   != SHOW_ALL_HEADERS &&     // we don't need to show all sections
           flag.show_headers-1 != header->section_type && // we don't need to show this section
           !flag.debug_read_ctxs)
         return;
 
+    SectionType st = header->section_type;
+
+    if (flag.show_header_dict_name && 
+        (!IS_DICTED_SEC(st) || strcmp (flag.show_header_dict_name, dis_dict_id (sections_get_dict_id (header)).s)))
+        return; // we requested a specific dict_id, and this is the wrong section
+        
     bool is_dict_offset = (HEADER_IS(DICT) && rw == 'W'); // at the point calling this function in zip, SEC_DICT offsets are not finalized yet and are relative to the beginning of the dictionary area in the genozip file
     bool v12 = (IS_ZIP || VER(12));
     bool v14 = (IS_ZIP || VER(14));
@@ -984,7 +1000,6 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
     PRINT;
 
     SectionFlags f = header->flags;
-    SectionType st = header->section_type;
     DataType dt = z_file->data_type;
 
     switch (st) {
@@ -1134,17 +1149,19 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
     
     case SEC_B250: {
         SectionHeaderCtxP h = (SectionHeaderCtxP)header;
-        sprintf (str, "%s/%-8s\tb250_size=%u param=%u %s\n",
+        sprintf (str, "%s/%-8s\tb250_size=%s param=%u %s\n",
                  dtype_name_z (h->dict_id), dis_dict_id (h->dict_id).s,  
-                 h->b250_size==B250_BYTES_1?1 : h->b250_size==B250_BYTES_2?2 : h->b250_size==B250_BYTES_3?3 : 4,
+                 h->b250_size==B250_BYTES_1?"1" : h->b250_size==B250_BYTES_2?"2" : h->b250_size==B250_BYTES_3?"3" : h->b250_size==B250_BYTES_4?"4" : h->b250_size==B250_VARL?"VARL" : "INVALID",
                  h->param, sections_dis_flags (f, st, dt).s);
         break;
     }
 
     case SEC_LOCAL: {
         SectionHeaderCtxP h = (SectionHeaderCtxP)header;
-        sprintf (str, "%s/%-8s\tltype=%s param=%u %s\n",
-                 dtype_name_z (h->dict_id), dis_dict_id (h->dict_id).s, lt_name (h->ltype), h->param, sections_dis_flags (f, st, dt).s);
+        sprintf (str, "%s/%-8s\tltype=%s param=%u%s %s\n",
+                 dtype_name_z (h->dict_id), dis_dict_id (h->dict_id).s, lt_name (h->ltype), h->param, 
+                 cond_str (lt_max(h->ltype), " nothing_char=", char_to_printable (h->nothing_char).s), // nothing_char only defined for integer ltypes
+                 sections_dis_flags (f, st, dt).s);
         break;
     }
 

@@ -21,6 +21,7 @@
 #include "file.h"
 #include "sam.h"
 #include "codec.h"
+#include "zip_dyn_int.h"
 
 sSTRl(copy_qname, 16);
 sSTRl(snip_redirect_to_QNAME2, 16);
@@ -323,12 +324,12 @@ void qname_seg_initialize (VBlockP vb, QType q, Did st_did_i)
 
     // set STORE_INT and ltype as appropriate
     if (segconf.sorted_by_qname[q]) {
-        #define INIT_ORDERED(field) ({ ContextP ctx = ctx_by_item (qfs->field); ctx->flags.store = STORE_INT; ctx->ltype = LT_DYN_INT; })
+        #define INIT_ORDERED(field) ({ ContextP ctx = ctx_by_item (qfs->field); ctx->flags.store = STORE_INT; dyn_int_init_ctx (vb, ctx, 0); })
         if (qfs->ordered_item1 != -1) INIT_ORDERED (ordered_item1);
         if (qfs->ordered_item2 != -1) INIT_ORDERED (ordered_item2);
     }
 
-    #define INIT_RANGE(field) ({ ContextP ctx = ctx_by_item (qfs->field); (ctx-1)->flags.store = ctx->flags.store = STORE_INT; ctx->ltype = LT_DYN_INT; })
+    #define INIT_RANGE(field) ({ ContextP ctx = ctx_by_item (qfs->field); (ctx-1)->flags.store = ctx->flags.store = STORE_INT; dyn_int_init_ctx (vb, ctx, 0); })
     if (qfs->range_end_item1 != -1) INIT_RANGE (range_end_item1);
     if (qfs->range_end_item2 != -1) INIT_RANGE (range_end_item2);
 
@@ -339,8 +340,8 @@ void qname_seg_initialize (VBlockP vb, QType q, Did st_did_i)
         ContextP item_ctx = ctx_by_item (qfs->in_local[i]);
 
         if (IS(integer) || IS(numeric)) {
-            item_ctx->ltype = IS(hex) ? LT_DYN_INT_h : LT_DYN_INT; // required by seg_integer_or_not / seg_numeric_or_not
-            item_ctx->flags.store = STORE_INT; // required by seg_integer_or_not / seg_numeric_or_not
+            dyn_int_init_ctx (vb, item_ctx, 0);  // required by seg_integer_or_not / seg_numeric_or_not
+            if (IS(hex)) item_ctx->ltype = LT_DYN_INT_h;
         }
         
         else // textual

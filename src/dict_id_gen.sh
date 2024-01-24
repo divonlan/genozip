@@ -26,10 +26,8 @@ cat > dict_id_gen.c << END
 
 typedef enum { DTYPE_FIELD, DTYPE_1, DTYPE_2 } DictIdType;
 
-#pragma pack(1) // structures that are part of the genozip format are packed.
 #define DICT_ID_LEN 8
 typedef union DictId { uint64_t num; uint8_t id[DICT_ID_LEN]; } DictId;
-#pragma pack()
 
 DictId dict_id_make (const char *str, unsigned str_len, DictIdType dict_id_type) 
 { 
@@ -123,7 +121,7 @@ END
         readarray -t vars <<< `egrep -w "^#pragma GENDICT" $f | cut -d" " -f3 | cut -d"=" -f1`
         readarray -t tags <<< `egrep -w "^#pragma GENDICT" $f | cut -d" " -f3 | cut -d"=" -f3 | cut -d"/" -f1 | sed 's/[^\!-~]//g'`
 
-        # calculate MAX_NUM_FIELDS_PER_DATA_TYPE
+        # calculate MAX_NUM_PREDEFINED
         if [ ${#vars[@]} -gt $max_fields ]; then max_fields=${#vars[@]}; fi
 
         # add enum: typedef enum { REF_CONTIG, ... , NUM_REF_FIELDS } REFFields;
@@ -144,8 +142,8 @@ END
         printf "} \n\n" >> dict_id_gen.h
     done
 
-    # add: MAX_NUM_FIELDS_PER_DATA_TYPE
-    printf "#define MAX_NUM_FIELDS_PER_DATA_TYPE %u\n\n" $max_fields >> dict_id_gen.h
+    # add: MAX_NUM_PREDEFINED
+    printf "#define MAX_NUM_PREDEFINED %u\n\n" $max_fields >> dict_id_gen.h
 }
 
 is_windows=`uname|grep -i mingw`

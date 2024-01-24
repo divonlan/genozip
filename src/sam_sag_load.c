@@ -332,7 +332,7 @@ static void sam_load_groups_add_aln_cigar (VBlockSAMP vb, PlsgVbInfo *plsg, Sag 
     if (is_lookup || is_squank) {
 
         if (is_lookup)
-            LOAD_SNIP_FROM_LOCAL (ctx); // updates snip, snip_len
+            ctx_get_next_snip_from_local (VB, ctx, pSTRa(snip)); 
 
         else { // squank - temporarily reconstruct into txt_data - just for compressing. note: prim cigar is never segged as squank
             sam_piz_special_SQUANK (VB, ctx, &snip[2], snip_len-2, NULL/*reconstruct to vb->scratch*/, true);

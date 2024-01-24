@@ -332,29 +332,6 @@ void BGEN_transpose_u32_buf (BufferP buf, LocalType *lt)
     *lt = LT_UINT32; // no longer transposed
 }
 
-void BGEN_transpose_u64_buf (BufferP buf, LocalType *lt)
-{
-    if (!buf->len) return;
-
-    uint32_t cols = BGEN_transpose_num_cols (buf);
-    uint32_t rows = buf->len / cols;
-
-    buf_alloc (buf->vb, &buf->vb->scratch, 0, buf->len, uint64_t, 1, "scratch");
-    ARRAY (uint64_t, target, buf->vb->scratch);
-    ARRAY (uint64_t, transposed, *buf);
-
-    for (uint32_t c=0; c < cols; c++) 
-        for (uint32_t r=0; r < rows; r++) 
-            target[r * cols + c] = BGEN64 (transposed[c * rows + r]);
-
-    buf->vb->scratch.len = buf->len;
-    buf_copy (buf->vb, buf, &buf->vb->scratch, uint64_t, 0, 0, CTX_TAG_LOCAL); // copy and not move, so we can keep local's memory for next vb
-
-    buf_free (buf->vb->scratch);
-
-    *lt = LT_UINT64; // no longer transposed
-}
-
 void BGEN_deinterlace_d8_buf (BufferP buf, LocalType *lt)
 {
     for (uint64_t i=0; i < buf->len; i++) {

@@ -9,6 +9,7 @@
 #include "sam_private.h"
 #include "reconstruct.h"
 #include "lookback.h"
+#include "zip_dyn_int.h"
 
 // fields used by STARsolo and 10xGenomics cellranger. Some are SAM-standard and some not.
 
@@ -478,15 +479,14 @@ void sam_seg_TX_AN_initialize (VBlockSAMP vb, Did did_i)
     ContextP sam_pos_ctx  = CTX(did_i + 7);
 
     cigar_ctx->no_stons = true;  // required by sam_seg_other_CIGAR
-    pos_ctx->ltype      = LT_DYN_INT;
+    dyn_int_init_ctx (VB, pos_ctx, 0);
 
     if (segconf.is_sorted) { // the lookback method is only for sorted files    
         gene_ctx->no_stons          = true;  // as we store by index
         negative_ctx->no_stons      = true;  // as we store by index
         negative_ctx->flags.lookback0_ok = true;  // a SNIP_LOOKBACK when there is no lookback is ok, since anyway we would not use this value
 
-        lookback_ctx->flags.store   = STORE_INT;
-        lookback_ctx->ltype         = LT_DYN_INT;
+        dyn_int_init_ctx (VB, lookback_ctx, 0);
         lookback_ctx->local_param   = true;
         lookback_ctx->local.prm8[0] = lookback_size_to_local_param (1024);
         lookback_ctx->local_always  = (lookback_ctx->local.param != 0); // no need for a SEC_LOCAL section if the parameter is 0 (which is the default anyway)
@@ -532,7 +532,7 @@ static bool sam_seg_TX_AN_gene (VBlockP vb, ContextP gene_ctx, STRp(gene), uint3
         // no lookback - seg normally. Note: we can't seg_id_field because we are looking back by index
         gene_index = seg_by_ctx (vb, STRa(gene), gene_ctx, gene_len); 
 
-    seg_add_to_local_resizable (vb, lb_ctx, lookback, 0);
+    dyn_int_append (vb, lb_ctx, lookback, 0);
 
     lookback_insert (vb, lb_ctx->did_i, gene_ctx->did_i, false, (int64_t)gene_index);
     

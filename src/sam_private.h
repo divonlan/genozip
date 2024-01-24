@@ -38,7 +38,6 @@
 #define SAM_FLAG_SUPPLEMENTARY ((uint16_t)0x0800) // 2048  1000 0000 0000
 #define SAM_MAX_FLAG           ((uint16_t)0x0FFF)
 
-#pragma pack(1) 
 typedef union SamFlags {
     struct {
         uint8_t multi_segs    : 1;
@@ -66,7 +65,7 @@ typedef union {
     uint32_t value;
 } BamCigarOp;
 
-typedef enum __attribute__ ((__packed__)) {
+typedef enum __attribute__ ((packed)) {
     BC_M=0, BC_I=1, BC_D=2, BC_N=3, BC_S=4, BC_H=5, BC_P=6, BC_E=7, BC_X=8, BC_NONE=15, BC_INVALID=255
 } BamCigarOpType;
 
@@ -74,10 +73,7 @@ typedef enum __attribute__ ((__packed__)) {
 
 extern const char cigar_op_to_char[16]; // BAM to SAM cigar op
 
-#pragma pack()
-
-
-typedef enum __attribute__ ((__packed__)) {
+typedef enum __attribute__ ((packed)) {
     DEPN_CLIP_UNKNOWN, DEPN_CLIP_HARD, DEPN_CLIP_SOFT
 } DepnClipping;
 
@@ -128,7 +124,7 @@ extern Did buddied_Z_dids[NUM_MATED_Z_TAGS];
 }
 
 // Alignment used from SAG_BY_SOLO
-typedef struct __attribute__ ((__packed__)) SoloAln {
+typedef struct SoloAln {
     ZWord word[NUM_SOLO_TAGS]; // references into vb->solo_data (we can add more at any time, but not remove)
 } SoloAln;
 
@@ -211,7 +207,7 @@ typedef struct {
     bool dont_compress_2Y   : 1;   // 
 } ZipDataLineSAM;
 
-// note: making VBlockSAM __packed__ will ruin the math in sam_seg_buddied_i_fields
+// note: making VBlockSAM packed will ruin the math in sam_seg_buddied_i_fields
 typedef struct VBlockSAM {
     VBLOCK_COMMON_FIELDS
     
@@ -349,7 +345,7 @@ typedef struct VBlockSAM {
 #define line_cigar(dl) Bc (*(IS_BAM_ZIP ? &vb->line_textual_cigars : &vb->txt_data), (dl)->CIGAR.index)
 
 // fixed-field part of a BAM alignment, see https://samtools.github.io/hts-specs/SAMv1.pdf
-typedef struct __attribute__ ((__packed__)) {
+typedef struct {
     uint32_t block_size;
     int32_t ref_id;
     PosType32 pos;
@@ -388,15 +384,15 @@ typedef enum { SA_RNAME, SA_POS, SA_STRAND, SA_CIGAR, SA_MAPQ, SA_NM, NUM_SA_ITE
 #define ALN_NM_BITS             23
 
 #define CIGAR_SIG_LEN 12
-typedef struct __attribute__ ((__packed__)) { 
+typedef struct { 
     uint8_t bytes[CIGAR_SIG_LEN]; 
 } CigarSignature;
 
 // Alignment used from SAG_BY_SA
-typedef struct __attribute__ ((__packed__)) SAAln {
+typedef struct SAAln {
     // 24 bytes
     union {
-        struct {
+        struct __attribute__ ((packed,aligned(4))) {
             uint64_t is_word  : 1;                       // Piz: true is CIGAR is in OPTION_SA_CIGAR.dict, false if it is in OPTION_SA_CIGAR.local    
             uint64_t index    : ALN_CIGAR_BITS;          // Piz: cigar_is_word ? WordIndex in OPTION_SA_CIGAR : index into OPTION_SA_CIGAR.local
             uint64_t len_hi   : ALN_CIGAR_LEN_BITS_HI;   // Piz: only if cigar_is_word=false
@@ -417,13 +413,13 @@ typedef struct __attribute__ ((__packed__)) SAAln {
 } SAAln;
 
 // Alignment used from SAG_BY_CC
-typedef struct __attribute__ ((__packed__)) CCAln {
+typedef struct CCAln {
     WordIndex rname;  // RNAME of prim alignment (alignment with NH>2 but no CC,CP) ; sometimes WORD_INDEX_NONE if rname is not in sam header / ref file
     PosType32 pos;   // POS of prim alignment
 } CCAln;
 
 // PIZ: history of cigar analysis - one item per line
-typedef struct __attribute__ ((__packed__)) CigarAnalItem {
+typedef struct CigarAnalItem {
     uint32_t seq_len      : 31;  // equivalent to dl->SEQ.len in ZIP - set if ANY of SEQ, QUAL, CIGAR-implied-seq-consumed have it
     uint32_t qual_missing : 1;   // this alignment has no QUAL (or '*')
     uint32_t ref_consumed;
@@ -436,7 +432,7 @@ typedef struct __attribute__ ((__packed__)) CigarAnalItem {
 #define GRP_AS_BITS       16
 
 // note: fields ordered so to be packed and word-aligned. These structures are NOT written to the genozip file.
-typedef struct __attribute__ ((__packed__)) Sag {
+typedef struct Sag {
     // 40 bytes
     uint64_t qname           : 60;                // index into: vb: txt_data ; z_file: zfile->sag_qnames
     uint64_t first_grp_in_vb : 1;                 // This group is the first group in its PRIM vb
@@ -479,8 +475,6 @@ typedef struct __attribute__ ((__packed__)) Sag {
 #define IS_DEPN(x) ((x)->comp_i == SAM_COMP_DEPN)
 
 #define DICT_ID_ARRAY(dict_id) (DictId){ .id = { (dict_id).id[0], (dict_id).id[1], type,  '_','A','R','R' } } // DTYPE_2
-
-extern void sam_seg_aux_field_fallback_int (VBlockSAMP vb, ContextP ctx, int64_t n, unsigned add_bytes);
 
 extern void      sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qname), unsigned add_additional_bytes);
 extern WordIndex sam_seg_RNAME (VBlockSAMP vb, ZipDataLineSAM *dl, STRp (chrom), bool against_sa_group_ok, unsigned add_bytes);
@@ -856,7 +850,7 @@ static inline char sam_seg_sam_type_to_bam_type (char type, int64_t n)
 
     // i converts to one of 6: C,c,S,s,I,i
     for (int i=0 ; i < 6; i++)
-        if (n >= lt_desc[test[i]].min_int && n <= lt_desc[test[i]].max_int)
+        if (n >= lt_min (test[i]) && n <= lt_max (test[i]))
             return lt_desc[test[i]].sam_type;
     
     return 0; // number out of range

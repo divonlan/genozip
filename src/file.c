@@ -407,9 +407,10 @@ FileP file_open_txt_read (rom filename)
     FileP file = (FileP)CALLOC (sizeof(File));
 
     file->supertype   = TXT_FILE;
-    file->is_remote   = filename && url_is_url (filename);
     file->redirected  = !filename; // later on, also CRAM, XZ, BCF will be set as redirected
     file->mode        = READ;
+    file->is_remote   = filename && url_is_url (filename);
+    flag.from_url     = file->is_remote;
 
     int64_t url_file_size = 0; // will be -1 if the web/ftp site does not provide the file size
     rom error = NULL;
@@ -803,6 +804,10 @@ FileP file_open_z_read (rom filename)
 
     file->supertype = Z_FILE;
     file->mode      = READ;
+    file->is_in_tar = (flag.t_offset > 0);
+
+    if (flag.debug_tar) 
+        iprintf ("file_open_z_read: t_offset=%"PRIu64" t_size=%"PRIu64" %s\n", flag.t_offset, flag.t_size, filename);
 
     rom disk_filename = file->is_in_tar ? tar_get_tar_name() : filename;
     ASSINP (file_exists (disk_filename), "cannot open \"%s\" for reading: %s", disk_filename, strerror (errno));

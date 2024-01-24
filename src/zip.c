@@ -11,44 +11,32 @@
 #include <sys/types.h>
 #include "genozip.h"
 #include "profiler.h"
-#include "vblock.h"
-#include "buffer.h"
-#include "file.h"
 #include "zfile.h"
-#include "txtfile.h"
-#include "vblock.h"
 #include "dispatcher.h"
-#include "context.h"
 #include "zip.h"
 #include "seg.h"
 #include "random_access.h"
-#include "dict_id.h"
 #include "reference.h"
 #include "refhash.h"
 #include "ref_iupacs.h"
 #include "progress.h"
-#include "mutex.h"
 #include "fastq.h"
 #include "stats.h"
-#include "codec.h"
 #include "compressor.h"
-#include "strings.h"
 #include "bgzf.h"
 #include "txtheader.h"
 #include "threads.h"
-#include "endianness.h"
-#include "segconf.h"
 #include "contigs.h"
 #include "chrom.h"
 #include "biopsy.h"
 #include "dict_io.h"
 #include "gencomp.h"
 #include "aliases.h"
-#include "buf_list.h"
 #include "arch.h"
 #include "user_message.h"
-#include "license.h"
 #include "zriter.h"
+#include "b250.h"
+#include "zip_dyn_int.h"
 
 static void zip_display_compression_ratio (Digest md5)
 {
@@ -144,325 +132,6 @@ void zip_set_no_stons_if_callback (VBlockP vb)
         }
 }
 
-// B250 generation means re-writing the b250 buffer with 2 modifications:
-// 1) We write the word_index (i.e. the sequential number of the word in the dict in z_file) instead
-// of the VB's node_index (that is private to this VB)
-// 2) We optimize the representation of word_index giving privilage to 3 popular words (the most popular
-//    words in VB=1) to be represented by a single byte
-static inline void zip_generate_one_b250 (VBlockP vb, ContextP ctx, uint32_t word_i, WordIndex word_index,
-                                          uint8_t **next, 
-                                          WordIndex *prev_word_index,  // in/out
-                                          bool show)
-{
-    if (word_index >= 0) { // normal index
-
-        bool one_up = (word_index == *prev_word_index + 1) && (word_i > 0);
-
-        if (one_up) {
-            (*next)[0] = BASE250_ONE_UP;
-            (*next)++;
-        }
-
-        else if (ctx->b250_size == B250_BYTES_1) {
-            (*next)[0] = word_index;
-            (*next)++;
-        }
-
-        else if (word_index <= 2) { // note: we don't use MOST_FREQ in case BYTES_1
-            (*next)[0] = BASE250_MOST_FREQ0 + word_index;
-            (*next)++;
-        }
-
-        else if (ctx->b250_size == B250_BYTES_2) {
-            (*next)[0] = word_index >> 8; // big endian. note: data not aligned to word boundary
-            (*next)[1] = word_index & 0xff;
-            (*next) += 2;
-        }
-            
-        else if (ctx->b250_size == B250_BYTES_3) {
-            (*next)[0] = (word_index >> 16); 
-            (*next)[1] = (word_index >> 8 ) & 0xff;
-            (*next)[2] = (word_index >> 0 ) & 0xff;
-            (*next) += 3;
-        }
-            
-        else { // 4 bytes
-            (*next)[0] = (word_index >> 24); 
-            (*next)[1] = (word_index >> 16) & 0xff;
-            (*next)[2] = (word_index >> 8 ) & 0xff;
-            (*next)[3] = (word_index >> 0 ) & 0xff;
-            (*next) += 4;
-        }
-
-        if (show) bufprintf (vb, &vb->show_b250_buf, one_up ? "L%u:ONE_UP " : "L%u:%u ", word_i, word_index);
-    }
-
-    else if (word_index == WORD_INDEX_MISSING) {
-        (*next)[0] = BASE250_MISSING_SF;
-        (*next)++;
-        if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:MISSING ", word_i);
-    }
-    
-    else if (word_index == WORD_INDEX_EMPTY) {
-        (*next)[0] = BASE250_EMPTY_SF;
-        (*next)++;
-        if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:EMPTY ", word_i);
-    }
-
-    else ABORT ("%s ctx=%s[%u] invalid word_index=%d", VB_NAME, ctx->tag_name, ctx->did_i, word_index);        
-
-    *prev_word_index = word_index;
-}
-
-// here we generate the b250 data: we convert the b250 buffer data from an index into context->nodes
-// to an index into the to-be-generated-in-piz context->word_index, encoded in base250.
-// Note that the word indices have changed since segmentation (which is why we needed this intermediate step)
-// because: 1. the dictionary got integrated into the global one - some values might have already been in the global
-// dictionary thanks to other threads working on other VBs  
-// 2. for the first VB, we sort the dictionary by frequency returns true if section should be dropped
-static bool zip_generate_b250 (VBlockP vb, ContextP ctx)
-{
-    START_TIMER;
-    bool ret = true;
-
-    ASSERT (ctx->dict_id.num, "tag_name=%s did_i=%u: ctx->dict_id=0 despite ctx->b250 containing data", ctx->tag_name, (unsigned)(ctx - vb->contexts));
-    ASSERT (ctx->nodes_converted, "expecting nodes of %s to be converted", ctx->tag_name); // still index/len
-
-    bool show = flag.show_b250 || dict_id_typeless (ctx->dict_id).num == flag.dict_id_show_one_b250.num;
-    if (show) bufprintf (vb, &vb->show_b250_buf, "%s %s: ", VB_NAME, ctx->tag_name);
-
-    ctx->b250.count = ctx->b250.len; // we move the number of words to count, as len will now contain the of bytes. used by ctx_update_stats()
-
-    // case: all-the-same b250 survived dropping (in ctx_drop_all_the_same) - we just shorten it to one entry
-    if (ctx->flags.all_the_same && ctx->b250.len > 1) { 
-        if (flag.debug_generate) 
-            iprintf ("%s: %s[%u].b250 is \"all_the_same\" - shortened b250 from len=%"PRIu64" to 1\n", 
-                     VB_NAME, ctx->tag_name, ctx->did_i, ctx->b250.len);
-        
-        ctx->b250.len = 1;
-    }
-    else
-        if (flag.debug_generate) 
-            iprintf ("%s: %s[%u].b250 len=%"PRIu64" all_the_same=%s no_stons=%s\n", 
-                     VB_NAME, ctx->tag_name, ctx->did_i, ctx->b250.len, TF(ctx->flags.all_the_same), TF(ctx->no_stons));
-
-    WordIndex largest_wi=0;
-    for_buf (WordIndex, ent, ctx->b250) {
-        WordIndex wi = node_index_to_word_index (vb, ctx, *ent);
-        if (wi != *ent) *ent = wi; // assign if changed needed 
-
-        if (wi > largest_wi) largest_wi = wi;
-    }
-
-    // determine size of word_index elements
-    ctx->b250_size = (largest_wi <= B250_MAX_WI_1BYTE ) ? B250_BYTES_1
-                   : (largest_wi <= B250_MAX_WI_2BYTES) ? B250_BYTES_2
-                   : (largest_wi <= B250_MAX_WI_3BYTES) ? B250_BYTES_3
-                   :                                      B250_BYTES_4;
-    
-    ARRAY (WordIndex, b250, ctx->b250);
-    ctx->b250.len = 0; // we are going to overwrite b250 with the converted indices
-
-    // convert b250 from an array of node_index (4 bytes each) to word_index (1-4 bytes each)    
-    WordIndex prev_word_index = WORD_INDEX_NONE; 
-    uint8_t *next = B1ST8 (ctx->b250);
-    for (uint64_t i=0; i < b250_len; i++) 
-        zip_generate_one_b250 (vb, ctx, i, b250[i], &next, &prev_word_index, show);
-    ctx->b250.len = BNUM (ctx->b250, next);
-
-    // in case we are using "pair identical", drop this section if it is an R2 section identical to its R1 counterpart
-    if (is_fastq_pair_2 (vb) && fastq_zip_use_pair_identical (ctx->dict_id) && buf_issame (&ctx->b250, &ctx->b250R1, 1)) {
-        ctx->b250.len = 0; 
-        
-        if (flag.debug_generate) iprintf ("%s: %s[%u].b250 dropped because it is an R2 section which is identical to its R1 counterpart\n", VB_NAME, ctx->tag_name, ctx->did_i);
-
-        ret = false;
-    }
-    
-    if (show && ret) {
-        bufprintf (vb, &vb->show_b250_buf, "%s", "\n");
-        iprintf ("%.*s", STRfb(vb->show_b250_buf));
-    }
-
-    if (show) buf_free (vb->show_b250_buf);
-    COPY_TIMER (zip_generate_b250); // codec_assign measures its own time
-
-    if (ret) codec_assign_best_codec (vb, ctx, NULL, SEC_B250);
-
-    return ret;
-}
-
-static void zip_resize_local (VBlockP vb, ContextP ctx)
-{
-    if (!ctx->local.len) {
-        ctx->ltype = LT_UINT8;
-        return;
-    }
-    
-    ARRAY (int64_t, src, ctx->local);
-
-    // search for the largest (stop if largest so far requires 32bit)
-    int64_t largest = *B1ST (int64_t, ctx->local);
-    int64_t smallest = largest;
-
-    for (uint64_t i=1; i < src_len; i++) 
-        if (src[i] > largest) largest = src[i];
-        else if (src[i] < smallest) smallest = src[i];
-
-    // in VCF FORMAT fields, a max_int value is reconstructed as . (see reconstruct_from_local_int), which is not applicable for dynamic size -
-    // therefore we increment largest by 1 to ensure that no actual value is max_int
-    if ((VB_DT(VCF) || VB_DT(BCF)) && dict_id_is_vcf_format_sf (ctx->dict_id)) largest++;
-
-    static const LocalType test_ltypes[3][8] = { { LT_UINT8, LT_UINT16, LT_UINT32, LT_INT8, LT_INT16, LT_INT32, LT_UINT64, LT_INT64 },  // LT_DYN_INT
-                                                 { LT_hex8, LT_hex16, LT_hex32, LT_hex64 },   // LT_DYN_INT_h
-                                                 { LT_HEX8, LT_HEX16, LT_HEX32, LT_HEX64 } }; // LT_DYN_INT_H
-
-    const LocalType *my_test_ltypes = test_ltypes[ctx->ltype - LT_DYN_INT];
-    for (LocalType lt_i=0; lt_i < (ctx->ltype == LT_DYN_INT ? 8 : 4); lt_i++)
-        if (smallest >= lt_desc[my_test_ltypes[lt_i]].min_int && largest <= lt_desc[my_test_ltypes[lt_i]].max_int) {
-            ctx->ltype = my_test_ltypes[lt_i];
-            break; // found
-        }
-
-    switch (ctx->ltype) {
-        case LT_UINT8: case LT_hex8: case LT_HEX8:  {
-            ARRAY (uint8_t, dst, ctx->local);
-            for (uint64_t i=0; i < src_len; i++)
-                dst[i] = (uint8_t)src[i];
-            break;
-        }
-
-        case LT_UINT16: case LT_hex16: case LT_HEX16: {
-            ARRAY (uint16_t, dst, ctx->local);
-            for (uint64_t i=0; i < src_len; i++)
-                dst[i] = BGEN16 ((uint16_t)src[i]);
-            break;
-        }
-
-        case LT_UINT32: case LT_hex32: case LT_HEX32: {
-            ARRAY (uint32_t, dst, ctx->local);
-            for (uint64_t i=0; i < src_len; i++)
-                dst[i] = BGEN32 ((uint32_t)src[i]);
-            break;
-        }
-
-        case LT_INT8: {
-            ARRAY (uint8_t, dst, ctx->local);
-            for (uint64_t i=0; i < src_len; i++)
-                dst[i] = INTERLACE(int8_t, src[i]);
-            break;
-        }
-
-        case LT_INT16: {
-            ARRAY (uint16_t, dst, ctx->local);
-            for (uint64_t i=0; i < src_len; i++)
-                dst[i] = BGEN16 (INTERLACE(int16_t, src[i]));
-            break;
-        }
-
-        case LT_INT32: {
-            ARRAY (uint32_t, dst, ctx->local);
-            for (uint64_t i=0; i < src_len; i++)
-                dst[i] = BGEN32 (INTERLACE(int32_t,src[i]));
-            break;
-        }
-
-        case LT_UINT64: case LT_hex64: case LT_HEX64: {
-            for (uint64_t i=0; i < src_len; i++)
-                src[i] = BGEN64 (src[i]);
-            break;
-        }
-
-        case LT_INT64: {\
-            for (uint64_t i=0; i < src_len; i++)
-                src[i] = BGEN64 (INTERLACE(int64_t, src[i]));
-            break;
-        }
-
-        default:
-            ABORT ("%s: Cannot find ltype for ctx=%s: value_range=[%"PRId64",%"PRId64"] ltype=%s",
-                   VB_NAME, ctx->tag_name, smallest, largest, lt_name (ctx->ltype));
-    }
-}
-
-// selects the smallest size (8, 16, 32) for the data, transposes, and BGENs
-// note: in PIZ, these are untransposed in eg BGEN_transpose_u32_buf
-static void zip_generate_transposed_local (VBlockP vb, ContextP ctx)
-{
-    ARRAY (uint32_t, data, ctx->local);
-
-    // get largest element (excluding 0xffffffff - representing a '.')
-    uint32_t largest=0;
-    for (uint64_t i=0; i < ctx->local.len; i++)
-        if (data[i] > largest && data[i] != 0xffffffff) largest = data[i];
-
-    if      (largest < 0xfe)   ctx->ltype = LT_UINT8_TR;  // -1 is reserved for "missing"
-    else if (largest < 0xfffe) ctx->ltype = LT_UINT16_TR;
-    
-    buf_alloc (vb, &vb->scratch, 0, ctx->local.len * lt_width(ctx), char, 1, "scratch");
-
-    uint32_t cols;
-
-    // note: caller needs to set local.n_cols to number of columns. or if it remains 0, it is interprets as vcf_num_samples
-    if (ctx->local.n_cols) {
-        cols = ctx->local.n_cols;
-
-        // we're restricted to 255 columns, because this number goes into uint8_t SectionHeaderCtx.param
-        ASSERT (cols >= 0 && cols <= 255, "columns=%u out of range [1,255] in transposed matrix %s", cols, ctx->tag_name);
-
-        ctx->local_param = true;
-    }
-    else {
-        ASSERT (VB_DT(VCF) || VB_DT(BCF), "%s: cols=0 for ctx=%s", VB_NAME, ctx->tag_name);
-        cols = vcf_header_get_num_samples(); // not restricted to 255
-    } 
-
-    // case: matrix is not transposable - just BGEN it
-    if (ctx->local.len32 % cols) {
-        ctx->ltype = LT_UINT32; // not transposed
-        ctx->local_param = false;
-
-        BGEN_u32_buf (&ctx->local, 0);
-        goto done;
-    }
-
-    uint32_t rows = ctx->local.len32 / cols;
-
-    switch (ctx->ltype) { // note: the casting also correctly converts 0xffffffff to eg 0xff
-        case LT_UINT8_TR: {
-            ARRAY (uint8_t, scratch, vb->scratch);
-            for (uint32_t r=0; r < rows; r++) 
-                for (uint32_t c=0; c < cols; c++) 
-                    scratch[c * rows + r] = (uint8_t)data[r * cols + c];
-            break;
-        }
-
-        case LT_UINT16_TR: {
-            ARRAY (uint16_t, scratch, vb->scratch);
-            for (uint32_t r=0; r < rows; r++) 
-                for (uint32_t c=0; c < cols; c++) 
-                    scratch[c * rows + r] = BGEN16 ((uint16_t)data[r * cols + c]);
-            break;
-        }
-
-        case LT_UINT32_TR: {
-            ARRAY (uint32_t, scratch, vb->scratch);
-            for (uint32_t r=0; r < rows; r++) 
-                for (uint32_t c=0; c < cols; c++) 
-                    scratch[c * rows + r] = BGEN32 (data[r * cols + c]);
-            break;
-        }
-
-        default: ABORT ("Bad ltype=%s", lt_name (ctx->ltype));
-    }
-
-    vb->scratch.len = ctx->local.len;
-    buf_copy_do (vb, &ctx->local, &vb->scratch, lt_width(ctx), 0, 0, __FUNCLINE, CTX_TAG_LOCAL); // copy and not move, so we can keep local's memory for next vb
-
-done:
-    buf_free (vb->scratch);
-}
-
 // after segging - if any context appears to contain only singleton snips (eg a unique ID),
 // we move it to local instead of needlessly cluttering the global dictionary
 static void zip_handle_unique_words_ctxs (VBlockP vb)
@@ -480,10 +149,10 @@ static void zip_handle_unique_words_ctxs (VBlockP vb)
         ctx->ltype = LT_SINGLETON; 
 
         if (!ctx->nodes.len                    || // no new words in this VB 
-            ctx->nodes.len != ctx->b250.len    || // not all new words in this VB are singletons
+            ctx->nodes.len != ctx->b250.count  || // not all new words in this VB are singletons
             ctx->nodes.len < vb->lines.len / 5 || // don't bother if this is a rare field less than 20% of the lines
             !ctx_can_have_singletons (ctx)     || // this context is not allowed to have singletons
-            ctx->b250.len == 1)                   // only one word - better to handle with all_the_same rather than singleton
+            ctx->b250.count == 1)                 // only one word - better to handle with all_the_same rather than singleton
             continue;
         
         buf_free (ctx->local); // possibly local was allocated, but then not utilized
@@ -501,56 +170,54 @@ static bool zip_generate_local (VBlockP vb, ContextP ctx)
     
     ASSERT (ctx->dict_id.num, "tag_name=%s did_i=%u: ctx->dict_id=0 despite ctx->local containing data", ctx->tag_name, (unsigned)(ctx - vb->contexts));
 
-    bool resizeable = IS_LT_DYN (ctx->ltype); 
-    if (resizeable) 
-        zip_resize_local (vb, ctx);
+    ctx->ltype = dyn_int_get_ltype (ctx);
 
-    else {
-        // case: local is LTEN (instead of native endianity) and machine is BGEN, so BGEN_*_buf ^ above did nothing.     
-        bool need_lten = (ctx->local_is_lten && !flag.is_lten);
-        
-        switch (ctx->ltype) {
-            case LT_BITMAP    : LTEN_bits ((BitsP)&ctx->local);    
-                                ctx->local.prm8[0] = ((uint8_t)64 - (uint8_t)(ctx->local.nbits % 64)) % (uint8_t)64;
-                                ctx->local_param   = true;
-                                break;
+    // case: local is LTEN (instead of native endianity) and machine is BGEN, so BGEN_*_buf ^ above did nothing.     
+    bool need_lten = (ctx->local_is_lten && !flag.is_lten);
+    
+    switch (ctx->ltype) {
+        case LT_BITMAP    : 
+            LTEN_bits ((BitsP)&ctx->local);    
+            ctx->local.prm8[0] = ((uint8_t)64 - (uint8_t)(ctx->local.nbits % 64)) % (uint8_t)64;
+            ctx->local_param   = true;
+            break;
 
-            case LT_UINT32_TR : zip_generate_transposed_local (vb, ctx);            
-                                break;
+        case LT_UINT32 : case LT_hex32 : case LT_HEX32 : case LT_FLOAT32 : 
+            if (need_lten) LTEN_u32_buf (&ctx->local, NULL);   
+            else           BGEN_u32_buf (&ctx->local, NULL);    
+            break;
 
-            case LT_FLOAT32   : 
+        case LT_UINT16 : case LT_hex16 : case LT_HEX16 : 
+            if (need_lten) LTEN_u16_buf (&ctx->local, NULL);   
+            else           BGEN_u16_buf (&ctx->local, NULL);    
+            break;
 
-            case LT_UINT32    : if (need_lten) LTEN_u32_buf (&ctx->local, NULL);   
-                                else           BGEN_u32_buf (&ctx->local, NULL);    
-                                break;
+        case LT_UINT64 : case LT_hex64 : case LT_HEX64 : case LT_FLOAT64 :
+            if (need_lten) LTEN_u64_buf (&ctx->local, NULL);   
+            else           BGEN_u64_buf (&ctx->local, NULL);    
+            break;
 
-            case LT_UINT16    : if (need_lten) LTEN_u16_buf (&ctx->local, NULL);   
-                                else           BGEN_u16_buf (&ctx->local, NULL);    
-                                break;
+        case LT_INT8      : interlace_d8_buf  (&ctx->local, NULL);              
+                            break;
 
-            case LT_FLOAT64   :
-            case LT_UINT64    : if (need_lten) LTEN_u64_buf (&ctx->local, NULL);   
-                                else           BGEN_u64_buf (&ctx->local, NULL);    
-                                break;
+        case LT_INT16     : if (need_lten) LTEN_interlace_d16_buf (&ctx->local, NULL);   
+                            else           BGEN_interlace_d16_buf (&ctx->local, NULL);    
+                            break;
 
-            case LT_INT8      : interlace_d8_buf  (&ctx->local, NULL);              
-                                break;
+        case LT_INT32     : if (need_lten) LTEN_interlace_d32_buf (&ctx->local, NULL);   
+                            else           BGEN_interlace_d32_buf (&ctx->local, NULL);    
+                            break;
 
-            case LT_INT16     : if (need_lten) LTEN_interlace_d16_buf (&ctx->local, NULL);   
-                                else           BGEN_interlace_d16_buf (&ctx->local, NULL);    
-                                break;
+        case LT_INT64     : if (need_lten) LTEN_interlace_d64_buf (&ctx->local, NULL);   
+                            else           BGEN_interlace_d64_buf (&ctx->local, NULL);    
+                            break;
 
-            case LT_INT32     : if (need_lten) LTEN_interlace_d32_buf (&ctx->local, NULL);   
-                                else           BGEN_interlace_d32_buf (&ctx->local, NULL);    
-                                break;
-
-            case LT_INT64     : if (need_lten) LTEN_interlace_d64_buf (&ctx->local, NULL);   
-                                else           BGEN_interlace_d64_buf (&ctx->local, NULL);    
-                                break;
-
-            default           : break;        
-        }
+        default           : break;        
     }
+
+    // transpose if needed AND local is rectangular
+    if (ctx->dyn_transposed)
+        dyn_int_transpose (vb, ctx);            
 
     COPY_TIMER (zip_generate_local); // codec_assign measures its own time
 
@@ -570,8 +237,8 @@ static bool zip_generate_local (VBlockP vb, ContextP ctx)
     codec_assign_best_codec (vb, ctx, NULL, SEC_LOCAL);
 
     if (flag.debug_generate) 
-        iprintf ("%s: %s[%u].local ltype=%s%s len=%"PRIu64" codec=%s\n", VB_NAME, ctx->tag_name, ctx->did_i,
-                 lt_name (ctx->ltype), resizeable ? " (resized)" : "", ctx->local.len, codec_name(ctx->lcodec));
+        iprintf ("%s: %s[%u].local ltype=%s len=%"PRIu64" codec=%s\n", VB_NAME, ctx->tag_name, ctx->did_i,
+                 lt_name (ctx->ltype), ctx->local.len, codec_name(ctx->lcodec));
 
     return true;
 }
@@ -597,7 +264,7 @@ void zip_compress_all_contexts_b250 (VBlockP vb)
 
         if (!ctx->b250.len || ctx->b250_compressed) continue;
 
-        if (!zip_generate_b250 (vb, ctx))  // generate the final b250 buffers from their intermediate form
+        if (!b250_zip_generate (vb, ctx))  // generate the final b250 buffers from their intermediate form
             continue; // dropped
 
         if (dict_id_typeless (ctx->dict_id).num == flag.dump_one_b250_dict_id.num) 
@@ -721,10 +388,8 @@ static void zip_free_undeeded_zctx_bufs_after_seg (void)
     START_TIMER;
 
     for_zctx {
-        buf_destroy (zctx->stons);
-        buf_destroy (zctx->ston_nodes);
         buf_destroy (zctx->ston_hash);
-        buf_destroy (zctx->global_ents);
+        buf_destroy (zctx->ston_ents);
         buf_destroy (zctx->global_hash);
     }
 
@@ -751,7 +416,8 @@ static void zip_write_global_area (void)
 
     #define THREAD_DEBUG(x) threads_log_by_vb (evb, "main_thread:global_area", #x, 0);
 
-    zip_free_undeeded_zctx_bufs_after_seg();
+    if (!flag.show_memory) // in show-mem, keep these, so we can report them.
+        zip_free_undeeded_zctx_bufs_after_seg();
 
     codec_qual_show_stats();
 
@@ -878,7 +544,7 @@ static void zip_compress_one_vb (VBlockP vb)
     // for --make-reference we serialize merging by VB, so that contigs get their word_index in the order of the reference file
     if (flag.make_reference) serializer_lock (make_ref_merge_serializer, vb->vblock_i);
 
-    // merge new words added in this vb into the z_file.contexts (zctx), ahead of zip_generate_b250().
+    // merge new words added in this vb into the z_file.contexts (zctx), ahead of b250_zip_generate().
     // writing indices based on the merged dictionaries. all this is done while locking a mutex for each zctx.
     // note: vb>=2 will block here, until vb=1 is completed
     ctx_merge_in_vb_ctx (vb);
@@ -988,6 +654,15 @@ static void zip_complete_processing_one_vb (VBlockP vb)
         zfile_output_processed_vb_ext (vb, true);
     
     zip_update_txt_counters (vb);
+
+    // destroy some buffers of "first generation" contexts (those that didn't clone any nodes)  
+    if (vb->vblock_i < 100) // don't bother checking for high vb_i 
+        for_ctx_that (ctx->nodes.len32 && !ctx->ol_nodes.len32) {
+            buf_destroy (ctx->b250);       // 1st generation likely to have excessive length due to being all-new 4B nodes
+            buf_destroy (ctx->local_hash); // 1st generation allocated based on wild guess
+            buf_destroy (ctx->nodes);      // 1st generation likely to have a lot more new nodes (+dict) that subsequent generations
+            buf_destroy (ctx->dict);       
+        }
 
     dispatcher_increment_progress ("z_write", PROGRESS_UNIT); // writing done.
 

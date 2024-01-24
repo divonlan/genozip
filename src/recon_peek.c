@@ -34,9 +34,9 @@
 
 #define stack_pointer (vb)->frozen_state.len32 // index of next item that will be pushed
 
-#define RECON_STATE_SIZE 80 // needs adjustment if Context changes
-typedef struct __attribute__ ((__packed__)) { 
-    char ctx_p[sizeof (ContextP)]; // not pointer bc struct is not going to be word-aligned (except for first entry - assumed by ASSPIZ in reconstruct_peek)
+#define RECON_STATE_SIZE 73 // needs adjustment if Context changes
+typedef struct __attribute__ ((packed)) { // struct members are not word-aligned 
+    ContextP ctx;
     uint8_t level;
     char state[RECON_STATE_SIZE]; 
 } Ice; // one item on the frozen stack
@@ -76,11 +76,10 @@ void recon_stack_pop (VBlockP vb, ContextP ctx, bool is_done_peek)
 
     // recover state of all downstream contexts - which have one level higher.
     // Note: Invariant: levels on the stack are always monotonously non-decreasing
-    ContextP ice_ctx;
+    ;
     while (stack_pointer && ice[stack_pointer-1].level > vb->peek_stack_level) {
         stack_pointer--;
-        memcpy (&ice_ctx, ice[stack_pointer].ctx_p, sizeof (ContextP));
-        memcpy (reconstruct_state_start(ice_ctx), ice[stack_pointer].state, RECON_STATE_SIZE);
+        memcpy (reconstruct_state_start(ice[stack_pointer].ctx), ice[stack_pointer].state, RECON_STATE_SIZE);
     }
 
     if (flag.debug_peek) 
@@ -95,7 +94,7 @@ void recon_stack_push (VBlockP vb, ContextP ctx)
 
     Ice *ice = BAFT (Ice, vb->frozen_state);
     ice->level = vb->peek_stack_level;
-    memcpy (ice->ctx_p, &ctx, sizeof (ContextP)); // copy pointer to context
+    ice->ctx   = ctx;
     memcpy (ice->state, reconstruct_state_start(ctx), RECON_STATE_SIZE); // actual reconstruction state
 
     stack_pointer++;

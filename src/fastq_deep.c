@@ -15,6 +15,7 @@
 #include "huffman.h"
 #include "container.h"
 #include "codec.h"
+#include "zip_dyn_int.h"
 #include "htscodecs/arith_dynamic.h"
 
 sSTRl(con_decanonize1_snip,96);
@@ -41,8 +42,7 @@ void fastq_deep_zip_after_compute (VBlockFASTQP vb)
 
 void fastq_deep_seg_initialize (VBlockFASTQP vb)
 {
-    ctx_set_store (VB, STORE_INT, FASTQ_DEEP, DID_EOL); // actually, we store a pointer into one of the Buffers in z_file->deep_ents, but we treat it as an int
-    ctx_set_ltype (VB, LT_DYN_INT, FASTQ_DEEP, DID_EOL); 
+    ctx_set_dyn_int (VB, FASTQ_DEEP, DID_EOL); // this also sets STORE_INT. actually, we store a pointer into one of the Buffers in z_file->deep_ents, but we treat it as an int
 
     if (flag.pair == PAIR_R1 || flag.pair == NOT_PAIRED) 
         seg_by_did (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_set_deep, '0' }, 3, FASTQ_DEEP, 0);  // all-the-same for FASTQ_DEEP
@@ -141,8 +141,10 @@ void fastq_deep_seg_finalize_segconf (uint32_t n_lines)
 
     // test: likewise, matching QUAL
     if ((segconf.n_seq_qual_mch + segconf.n_full_mch[0] < threashold) &&
-        (segconf.n_seq_qual_mch + segconf.n_full_mch[1] < threashold))
+        (segconf.n_seq_qual_mch + segconf.n_full_mch[1] < threashold)) {
         segconf.deep_no_qual = true;
+        segconf.deep_N_fq_score = segconf.deep_N_sam_score = 0;
+    }
 
     // we need at least 2 of the 3 (QNANE,SEQ,QUAL) to be comparable between FASTQ and SAM to have a total of 64 bit hash (32 from each)    
     ASSINP (segconf.deep_qtype != QNONE || !segconf.deep_no_qual, 
@@ -196,6 +198,45 @@ static bool fastq_deep_seg_find_subseq (VBlockFASTQP vb, STRp (fastq_seq),
     return found;
 }
 
+// if in SAM, all qual score of 'N's is set to a particular value, we adjust qual here, so that the hash may match
+static rom fastq_deep_set_N_qual (VBlockFASTQP vb, STRp(seq), STRp(qual))
+{
+    char *n;
+    if (!(n = memchr (seq, 'N', seq_len))) return qual; // quick return in common case: no 'N's, so no change in qual
+
+    // set deep_N_fq_score if not set already. note: if set, this is definitely the value. if 0, another thread might be attempting to set in concurrently.
+    if (!segconf.deep_N_fq_score) { 
+        char expected = 0;
+        __atomic_compare_exchange_n (&segconf.deep_N_fq_score, &expected, qual[n-seq], false, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED);
+    }
+
+    // at this point we can trust that segconf.deep_N_fq_score is non zero and immutable
+
+    char deep_N_sam_score = segconf.deep_N_sam_score; // make a copy in case another thread cancels in the middle of the if ↓. so we can avoid atomic.
+
+    // in case deep_N_fq_score is already the requested value - cancel for future lines and threads.
+    if (!deep_N_sam_score || // another thread canceled - nothing for us to do
+        deep_N_sam_score == segconf.deep_N_fq_score) {
+        segconf.deep_N_sam_score = 0; // release whenever, doesn't need to be atomic
+        return qual;
+    }
+
+    ASSERTNOTINUSE (vb->scratch);
+    ARRAY_alloc (char, new_qual, seq_len, false, vb->scratch, vb, "scratch");
+
+    for (uint32_t i=0; i < seq_len; i++)
+        if (seq[i] == 'N') {
+            if (qual[i] == segconf.deep_N_fq_score)
+                new_qual[i] = deep_N_sam_score;
+            else
+                return NULL; // unexpected inconsistent quality score of an 'N' base - don't Deep this read since in reconstruction quality of 'N' will be set to deep_N_fq_score          
+        }
+        else
+            new_qual[i] = qual[i];
+    
+    return new_qual;
+}
+
 static void fastq_deep_seg_segconf (VBlockFASTQP vb, STRp(qname), STRp(qname2), STRp(seq), STRp(qual))
 {
     ARRAY (ZipZDeep, deep_ents, z_file->deep_ents);
@@ -205,6 +246,15 @@ static void fastq_deep_seg_segconf (VBlockFASTQP vb, STRp(qname), STRp(qname2), 
     uint32_t qname_hash[2] = { deep_qname_hash (QNAME1, STRa(qname),  NULL),
                                ((num_qnames==2) ? deep_qname_hash (QNAME2, STRa(qname2), NULL) : 0) };
     uint32_t seq_hash  = deep_seq_hash (VB, STRa(seq), false);
+    
+    if (segconf.deep_N_sam_score) {
+        qual = fastq_deep_set_N_qual (vb, STRa(seq), STRa(qual));
+        if (!qual) {
+            segconf.n_no_mch++; // some qual scores of 'N' bases are of an inconsistent value - we don't be able to reconstruct them from segconf.deep_N_fq_score
+            return;
+        }
+    }
+
     uint32_t qual_hash = deep_qual_hash (VB, STRa(qual), false);
 
     bool seq_qual_matches=false, seq_qname_matches[2]={}, seq_matches=false;
@@ -234,7 +284,7 @@ static void fastq_deep_seg_segconf (VBlockFASTQP vb, STRp(qname), STRp(qname2), 
 
         next_ent: continue;
     }
-
+        
     // each segconf read increments exactly one category
     if      (seq_qname_matches[0]) segconf.n_seq_qname_mch[0]++; // if one match is seq+qname and another is seq+qual, then count the seq+qname 
     else if (seq_qname_matches[1]) segconf.n_seq_qname_mch[1]++; 
@@ -275,6 +325,9 @@ static void fastq_deep_seg_segconf (VBlockFASTQP vb, STRp(qname), STRp(qname2), 
         else if (seq_qname_matches[1]) segconf.n_seq_qname_mch[1]++; 
         else                           segconf.n_no_mch++; // no match - likely bc this read was filtered out in the SAM file
     }
+
+    if (segconf.deep_N_sam_score) 
+        buf_free (vb->scratch);
 }
 
 static inline uint64_t fastq_seg_deep_consume_unique_matching_ent (VBlockFASTQP vb, ZipZDeep *ent, DeepHash deep_hash,
@@ -421,6 +474,12 @@ void fastq_seg_deep (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qname), STRp(qn
         }
     }
 
+    if (segconf.deep_N_sam_score && !segconf.deep_no_qual) {
+        qual = fastq_deep_set_N_qual (vb, STRa(seq), STRa(qual));
+        if (!qual) 
+            goto no_match; // some qual scores of 'N' bases are of an inconsistent value - we don't be able to reconstruct them from segconf.deep_N_fq_score
+    }
+
     DeepHash deep_hash = { .qname = (segconf.deep_qtype == QNAME1) ? deep_qname_hash (QNAME1, STRa(qname),  uncanonical_suffix_len)
                                   : (segconf.deep_qtype == QNAME2) ? deep_qname_hash (QNAME2, STRa(qname2), uncanonical_suffix_len)
                                   :                                  0,
@@ -534,7 +593,7 @@ void fastq_seg_deep (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qname), STRp(qn
     }
 
     if (flag.pair == NOT_PAIRED || flag.pair == PAIR_R1)
-        seg_add_to_local_resizable (VB, ctx, deep_value, 0);
+        dyn_int_append (VB, ctx, deep_value, 0);
 
     else { // PAIR_R2
         uint64_t pair_1_deep_value = fastq_get_pair_deep_value (vb, ctx); // consume whether or not used
@@ -543,7 +602,7 @@ void fastq_seg_deep (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qname), STRp(qn
         uint64_t abs_delta = (pair_1_deep_value > deep_value) ? (pair_1_deep_value - deep_value)
                                                               : (deep_value - pair_1_deep_value);                                       
         if (abs_delta > 127) { 
-            seg_add_to_local_resizable (VB, ctx, deep_value, 0);
+            dyn_int_append (VB, ctx, deep_value, 0);
             seg_by_did (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_set_deep, '0' }, 3, FASTQ_DEEP, 0);
         }   
 
@@ -555,6 +614,9 @@ void fastq_seg_deep (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qname), STRp(qn
     }
 
 done:
+    if (segconf.deep_N_sam_score && !segconf.deep_no_qual) 
+        buf_free (vb->scratch);
+
     COPY_TIMER (fastq_seg_deep);
 }
 
@@ -858,6 +920,7 @@ static void fastq_recon_qual_trim (VBlockFASTQP vb, ContextP ctx, uint32_t len, 
 SPECIAL_RECONSTRUCTOR_DT (fastq_special_deep_copy_QUAL)
 {
     VBlockFASTQP vb = (VBlockFASTQP)vb_;
+    char *qual = BAFTtxt;
 
     START_TIMER;
 
@@ -908,6 +971,14 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_deep_copy_QUAL)
     // reconstruct right trim
     if (deep_seq_len + vb->sam_seq_offset < vb->seq_len) 
         fastq_recon_qual_trim (vb, ctx, vb->seq_len - vb->sam_seq_offset - deep_seq_len, reconstruct);
+
+    // case: correct qualities of 'N' bases
+    if (segconf.deep_N_fq_score && reconstruct) {
+        STRlast (seq, FASTQ_SQBITMAP);
+
+        for (unsigned i=0; i < seq_len; i++)
+            if (seq[i] == 'N') qual[i] = segconf.deep_N_fq_score;
+    }
 
     COPY_TIMER (fastq_special_deep_copy_QUAL);
     return NO_NEW_VALUE;

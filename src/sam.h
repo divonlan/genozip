@@ -326,6 +326,7 @@
 #pragma GENDICT OPTION_nM_i=DTYPE_2=nM:i     // the number of mismatches per (paired) alignment, not to be confused with NM, which is the number of mismatches in each mate.
 #pragma GENDICT OPTION_jM_B_c=DTYPE_2=jM:B:c // jM:B:c,M1,M2,... intron motifs for all junctions (i.e. N in CIGAR): 0: non-canonical; 1: GT/AG, 2: CT/AC, 3: GC/AG, 4: CT/GC, 5: AT/AC, 6: GT/AT. If splice junctions database is used, and a junction is annotated, 20 is added to its motif value.
 #pragma GENDICT OPTION_jI_B_I=DTYPE_2=jI:B:I // jI:B:I,Start1,End1,Start2,End2,... Start and End of introns for all junctions (1-based).
+#pragma GENDICT OPTION_rB_B_i=DTYPE_2=rB:B:i // alignment block read/genomic coordinates
 #pragma GENDICT OPTION_XS_A=DTYPE_2=XS:A     // Transcript strand (also hisat2), same as standard TS:A, minimap2's ts:A
 #pragma GENDICT OPTION_uT_A=DTYPE_2=uT:A     // Unmapped Type: 0='no acceptable seed/windows', 1='best alignment shorter than min allowed mapped length', 2='best alignment has more mismatches than max allowed number of mismatches', 3='read maps to more loci than the max number of multimappng loci', 4='unmapped mate of a mapped paired-end read'
 #pragma GENDICT OPTION_vA_i=DTYPE_2=vA:i     // Variant Allele: 1 or 2 match one of the genotype alleles, 3 - no match to genotype
@@ -614,6 +615,12 @@
 
 // Bionano
 #pragma GENDICT OPTION_ls_B_i=DTYPE_2=ls:B:i
+
+// Abra2 https://github.com/mozack/abra2
+#pragma GENDICT OPTION_YA_Z=DTYPE_2=YA:Z     // Contig alignment info: "rname:pos:cigar"
+#pragma GENDICT OPTION_YO_Z=DTYPE_2=YO:Z     // Original alignment info: "rname:pos:orientation:cigar" OR "N/A:pos"
+#pragma GENDICT OPTION_YX_i=DTYPE_2=YX:i     // Original edit distance
+#pragma GENDICT OPTION_YM_i=DTYPE_2=YM:i     // Number of mismatches to contig
 
 // xcons
 #pragma GENDICT OPTION_XX_i=DTYPE_2=XX:i

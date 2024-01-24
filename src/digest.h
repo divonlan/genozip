@@ -10,9 +10,6 @@
 
 #include "genozip.h"
 
-// Digest must be packed as it appears in a Section in the Genozip file format (will only be meaningful on CPUs with more than 128 bit though...)
-#pragma pack(1) 
-
 typedef union { 
     // used if the digest is MD5
     uint8_t bytes[16]; 
@@ -24,8 +21,6 @@ typedef union {
 } Digest;
 
 #define DIGEST_NONE ((Digest){})
-
-#pragma pack()
 
 typedef struct {
     bool is_adler; // always false

@@ -25,7 +25,7 @@ void sam_seg_xcons_XO_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t xo, unsigned
     }
 
     else
-        sam_seg_aux_field_fallback_int (vb, CTX(OPTION_XO_i), xo, add_bytes);
+        seg_integer (VB, CTX(OPTION_XO_i), xo, true, add_bytes);
 }
 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_DEMUX_BY_AS)
@@ -69,5 +69,5 @@ void sam_seg_xcons_XC_i (VBlockSAMP vb, int64_t xc, unsigned add_bytes)
         seg_by_did (VB, STRa(XC_snip), OPTION_XC_i, add_bytes);
 
     else
-        sam_seg_aux_field_fallback_int (vb, CTX(OPTION_XC_i), xc, add_bytes);
+        seg_integer (VB, CTX(OPTION_XC_i), xc, true, add_bytes);
 }

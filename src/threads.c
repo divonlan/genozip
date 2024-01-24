@@ -169,6 +169,8 @@ static void threads_print_call_stack_do (CONTEXT thread_ctx)
 
 void threads_print_call_stack (void) 
 {
+    fflush (stdout); fflush (stderr);
+
 #if defined _M_X64 || defined _M_IA64
     CONTEXT current_thread_ctx = { .ContextFlags = CONTEXT_FULL };
     RtlCaptureContext (&current_thread_ctx); // note: GetThreadContext() doesn't work for the current thread
@@ -196,6 +198,8 @@ static void threads_init_signal_handlers (void)
 
 void threads_print_call_stack (void) 
 {
+    fflush (stdout); fflush (stderr);
+    
     mutex_lock (print_call_stack_mutex);
 
 #   define STACK_DEPTH 100
@@ -529,6 +533,9 @@ void threads_join_do (ThreadId *thread_id, rom expected_task, rom expected_task2
 void threads_cancel_other_threads (void)
 {
 #ifndef _WIN32 // segfaults on Windows, see bug 708
+    if (!threads_am_i_main_thread())
+        pthread_cancel (main_thread);
+
     mutex_lock (threads_mutex);
 
     ARRAY (ThreadEnt, th, threads);
@@ -538,12 +545,15 @@ void threads_cancel_other_threads (void)
         if (th[i].in_use && th[i].pthread != pthread_self() && !pthread_cancel (th[i].pthread))
             th[i].canceled = true;
 
-    // join all threads, which happens after cancellation is processed 
-    for (unsigned i=0; i < th_len; i++) 
-        if (th[i].canceled) {
-            pthread_join (th[i].pthread, NULL);
-            th[i].in_use = th[i].canceled = false;
-        }
+    // give time for all threads to terminate. note: we don't use pthread_join() here because sometimes it hangs
+    usleep (500000);
+
+    // // join all threads, which happens after cancellation is processed 
+    // for (unsigned i=0; i < th_len; i++) 
+    //     if (th[i].canceled) {
+    //         pthread_join (th[i].pthread, NULL);
+    //         th[i].in_use = th[i].canceled = false;
+    //     }
         
     mutex_unlock (threads_mutex);
 #endif

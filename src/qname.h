@@ -13,7 +13,7 @@
 #include "aliases.h"
 
 // NOTE: values are ZIP-only, not part of file format
-typedef enum __attribute__ ((__packed__)) { 
+typedef enum __attribute__ ((packed)) { 
     QF_NO_ID=0, 
     // Illumina flavors
     QF_ILLUM_7, QF_ILLUM_7i, QF_ILLUM_7umi, QF_ILLUM_7_bc, QF_ILLUM_7gs, QF_ILLUM_5i, QF_ILLUM_5, QF_ILLUM_5rng,  

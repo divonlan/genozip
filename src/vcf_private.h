@@ -38,12 +38,12 @@ typedef MULTIPLEXER(ZIP_NUM_DOSAGES_FOR_MUX) DosageMultiplexer, *DosageMultiplex
 #define VCF_MAX_ARRAY_ITEMS SMALL_CON_NITEMS
 
 #define NUM_COORDS 4
-typedef enum __attribute__ ((__packed__)) { DC_NONE, DC_PRIMARY, DC_LUFT, DC_BOTH } Coords; // 2 bits, part of the file format, goes into FlagsTxtHeader, FlagsVbHeader
+typedef enum __attribute__ ((packed)) { DC_NONE, DC_PRIMARY, DC_LUFT, DC_BOTH } Coords; // 2 bits, part of the file format, goes into FlagsTxtHeader, FlagsVbHeader
 
 #define OTHER_COORDS(c) ((c)==DC_PRIMARY ? DC_LUFT : DC_PRIMARY)
 #define SEL(prim,luft) ((vb->line_coords == DC_PRIMARY) ? (prim) : (luft))
 
-typedef enum __attribute__ ((__packed__)) { 
+typedef enum __attribute__ ((packed)) { 
     VT_UNKNOWN, 
     VT_SNP,         // A G 
     VT_DEL,         // AGG A   - must be left anchored

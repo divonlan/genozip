@@ -68,7 +68,6 @@ static void vcf_linesort_merge_vb_do (VBlockP vb, bool is_luft)
         ZipDataLineVCF *dl = DATA_LINE(line_i);
         PosType64 pos = dl->pos[is_luft];
         WordIndex chrom_word_index = node_index_to_word_index (vb, CTX((is_luft ? DTF(luft_chrom) : DTF(prim_chrom))), dl->chrom[is_luft]);
-        //xxx WordIndex chrom_word_index = dl->chrom[is_luft];
 
         // exclude rejected lines (we exclude here if sorted, and in vcf_lo_piz_TOPLEVEL_cb_filter_line if not sorted)
         if (chrom_word_index != WORD_INDEX_NONE) 

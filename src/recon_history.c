@@ -96,7 +96,7 @@ void reconstruct_to_history (VBlockP vb, ContextP ctx)
         // not a textual snip (eg SNIP_SPECIAL) - reconstruct and then copy
         else { 
             rom txt = BAFTtxt;
-            reconstruct_one_snip (vb, ctx, wi, STRa(snip), RECON_ON);
+            reconstruct_one_snip (vb, ctx, wi, STRa(snip), RECON_ON, __FUNCLINE);
             
             *hw = (HistoryWord){ .index = ctx->per_line.len32, .len = (BAFTtxt - txt), .lookup = LookupPerLine };
 
@@ -109,7 +109,7 @@ void reconstruct_to_history (VBlockP vb, ContextP ctx)
     
     // case: snip is in local
     else snip_is_in_local: {
-        uint32_t char_index = LOAD_SNIP_FROM_LOCAL (ctx);
+        uint32_t char_index = ctx_get_next_snip_from_local (vb, ctx, pSTRa(snip));
         *hw = (HistoryWord){ .index = char_index, .len = snip_len, .lookup = LookupLocal }; 
     }
 }

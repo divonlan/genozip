@@ -65,7 +65,7 @@ else
 
 	ifdef Mac
 		CFLAGS += -march=native # conda used "core2". We use the highest available optimizations, because it is typically compiled for use on a specific Mac
-		# CFLAGS += -mmacosx-version-min=10.13 # for utimensat (in conda we use utimes instead)
+				# CFLAGS += -mmacosx-version-min=10.13 # for utimensat (in conda we use utimes instead)
 	endif
 
 endif 
@@ -83,7 +83,7 @@ LATEST_SRC = ../../genozip-latest/src
 
 SRC_DIRS = secure zlib bzlib lzma bsc libdeflate htscodecs
 
-MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.c seg_id.c 						\
+MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.c seg_id.c zip_dyn_int.c     	\
 		  data_types.c bits.c progress.c writer.c zriter.c tar.c chrom.c qname.c tokenizer.c mutex.c threads.c	\
           zip.c piz.c reconstruct.c recon_history.c recon_peek.c seg.c zfile.c aligner.c flags.c digest.c    	\
 		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c ref_cache.c     	 	\
@@ -104,9 +104,9 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.
 		  codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c codec_normq.c codec_homp.c codec_t0.c		\
 	      txtfile.c profiler.c file.c filename.c dispatcher.c crypt.c aes.c md5.c segconf.c biopsy.c gencomp.c	\
 		  vblock.c regions.c optimize.c dict_id.c aliases.c hash.c stream.c url.c bases_filter.c dict_io.c		\
-		  recon_plan_io.c version.c huffman.c user_message.c
-
-ZLIB_SRCS  = zlib/gzlib.c zlib/gzread.c zlib/inflate.c zlib/inffast.c zlib/zutil.c zlib/inftrees.c zlib/deflate.c zlib/trees.c
+		  recon_plan_io.c version.c huffman.c user_message.c b250.c qname_filter.c
+		  
+		  ZLIB_SRCS  = zlib/gzlib.c zlib/gzread.c zlib/inflate.c zlib/inffast.c zlib/zutil.c zlib/inftrees.c zlib/deflate.c zlib/trees.c
 
 BZLIB_SRCS = bzlib/blocksort.c bzlib/bzlib.c bzlib/compress.c bzlib/crctable.c bzlib/decompress.c bzlib/huffman.c bzlib/randtable.c
 
@@ -131,11 +131,11 @@ CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h al
 			 reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h bgzf.h coverage.h threads.h local_type.h 					\
 			 arch.h license.h file_types.h data_types.h base64.h txtheader.h writer.h zriter.h bases_filter.h genols.h contigs.h chrom.h 	\
 			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h gff.h bed.h phylip.h chain.h kraken.h locs.h generic.h 	\
-			 fastq.h fastq_private.h user_message.h mac_compat.h  																			\
+			 fastq.h fastq_private.h user_message.h mac_compat.h b250.h zip_dyn_int.h qname_filter.h 														\
 			 zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h zlib/deflate.h zlib/trees.h 			\
-			 zlib/zlib.h zlib/zutil.h 																										\
+			 zlib/zlib.h zlib/zutil.h																							\
 			 lzma/7zTypes.h lzma/LzFind.h lzma/LzHash.h lzma/LzmaDec.h lzma/LzmaEnc.h 														\
-			 bzlib/bzlib.h bzlib/bzlib_private.h 																							\
+			 bzlib/bzlib.h bzlib/bzlib_private.h																					\
 			 htscodecs/rANS_static4x16.h htscodecs/rle.h htscodecs/pack.h htscodecs/arith_dynamic.h htscodecs/c_simple_model.h				\
 			 htscodecs/rANS_word.h htscodecs/htscodecs_endian.h htscodecs/rANS_word.h htscodecs/utils.h htscodecs/varint.h 					\
 			 htscodecs/varint2.h htscodecs/utils.h 																							\
@@ -205,7 +205,7 @@ EXECUTABLES       = genozip$(EXE)       genounzip$(EXE)       genocat$(EXE)     
 DEBUG_EXECUTABLES = genozip-debug$(EXE) genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE)
 OPT_EXECUTABLES   = genozip-opt$(EXE)   genounzip-opt$(EXE)   genocat-opt$(EXE)   genols-opt$(EXE)
 
-all   : CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"$(DISTRIBUTION)\" -DDISTUNZIPMSG=\"$(DISTUNZIPMSG)\"   
+all   : CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"$(DISTRIBUTION)\" 
 all   : $(OBJDIR) $(EXECUTABLES) 
 	@chmod +x test.sh
 
@@ -238,6 +238,10 @@ objdir.mac/secure/license.o : secure/license.c secure/license_buf.c secure/licen
 	@wsl mac-get-license-o.sh
 endif
 
+ifdef Mac
+objdir.mac/secure/license.o : CFLAGS := $(patsubst -march=% ,-march=x86-64 ,$(CFLAGS)) # plain vanilla x86-64, so it runs on Rosetta x86-64 simulator on M1/M2/M3
+endif
+
 $(OBJDIR)/%.o: %.c $(OBJDIR)/%.d
 	@echo Compiling $<
 	@$(CC) -c -o $@ $< $(CFLAGS)
@@ -252,7 +256,7 @@ $(OBJDIR)/%.opt-o: %.c $(OBJDIR)/%.d
 
 %.S: %.c $(OBJDIR)/%.d
 	@echo "Generating $@"
-	@$(CC) -S -O3-o $@ $< $(CFLAGS)
+	@$(CC) -S -o $@ $< $(CFLAGS)
 
 %.E: %.c $(OBJDIR)/%.d
 	@echo "Generating $@"

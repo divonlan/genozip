@@ -110,7 +110,8 @@ typedef struct {
         no_zriter, explicit_no_zriter,  // ZIP: don't use background threads to write z_file
         no_cache,    // don't load cache, or delete cache
         no_upgrade,  // disable upgrade checks
-        no_eval;     // don't allow features on eval basis (used for testing permissions)
+        no_eval,     // don't allow features on eval basis (used for testing permissions)
+        from_url;    // used for stats
     rom test_i;      // test of test.sh currently running (undocumented)
     rom threads_str, out_filename, out_dirname, files_from, do_register;
     FileType stdin_type; // set by the --input command line option
@@ -141,7 +142,7 @@ typedef struct {
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
         debug_LONG, show_qual, debug_qname, debug_read_ctxs, debug_sag, debug_gencomp, debug_lines, debug_latest,
         debug_peek, stats_submit, debug_submit, show_deep, show_segconf_has, debug_huffman, debug_split,
-        debug_debug, debug_valgrind, // ad-hoc debug printing in prod
+        debug_debug, debug_valgrind, debug_tar, // ad-hoc debug printing in prod
         no_gencomp, force_gencomp, force_deep, force_PLy, no_domqual, no_pacb, no_longr, force_longr, verify_codec, 
         seg_only, show_bam, xthreads, show_rename_tags,
         #define SHOW_CONTAINERS_ALL_VBs (-1)
@@ -151,7 +152,7 @@ typedef struct {
 
         #define SHOW_ALL_HEADERS (-1)
         show_headers; // (1 + SectionType to display) or 0=flag off or -1=all sections
-    rom help, dump_section, show_is_set, show_time, show_mutex, show_vblocks;
+    rom help, dump_section, show_is_set, show_time, show_mutex, show_vblocks, show_header_dict_name;
     
     CompIType show_time_comp_i;   // comp_i for which to show time (possibly COMP_NONE or COMP_ALL)
     

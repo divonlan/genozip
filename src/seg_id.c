@@ -8,6 +8,7 @@
 
 #include "context.h"
 #include "seg.h"
+#include "zip_dyn_int.h"
 
 static inline ContextP id_fallback_ctx (VBlockP vb, ContextP ctx)
 {
@@ -73,7 +74,7 @@ static void seg_id_field_init (VBlockP vb, ContextP ctx, STRp(id), bool hint_zer
 
     if (an_len == id_len) {
         ctx->id_type = zero_padded ? IDT_ALPHA_NUM : IDT_ALPHA_INT;
-        ctx->ltype = LT_DYN_INT;
+        dyn_int_init_ctx (vb, ctx, 0);
 
         ctx_consolidate_stats (vb, st_did_id, id_fallback_ctx(vb, ctx)->did_i, DID_EOL);
     }
@@ -84,7 +85,7 @@ static void seg_id_field_init (VBlockP vb, ContextP ctx, STRp(id), bool hint_zer
         ContextP ctx_num1 = id_num1_ctx (vb, ctx);
         ContextP ctx_num2 = id_num2_ctx (vb, ctx);
 
-        ctx_set_ltype (vb, LT_DYN_INT, ctx_num1->did_i, ctx_num2->did_i, DID_EOL);
+        ctx_set_dyn_int (vb, ctx_num1->did_i, ctx_num2->did_i, DID_EOL);
         ctx_consolidate_stats (vb, st_did_id, ctx_num1->did_i, ctx_num2->did_i, id_fallback_ctx(vb, ctx)->did_i, DID_EOL);
     }
 
@@ -185,10 +186,10 @@ void seg_id_field (VBlockP vb, ContextP ctx, STRp(id),
 
             container_seg (vb, ctx, (ContainerP)&con, 0, 0, 0);
 
-            seg_add_to_local_resizable (vb, ctx_num2, num2, num2_len);
+            dyn_int_append (vb, ctx_num2, num2, num2_len);
         }
 
-        seg_add_to_local_resizable (vb, ctx_num1, num1, 0);
+        dyn_int_append (vb, ctx_num1, num1, 0);
         if (ctx->flags.store == STORE_INT) ctx_set_last_value (vb, ctx, num1);
 
         // case: not expecting leading zeros - if there are any, they will be part of alpha

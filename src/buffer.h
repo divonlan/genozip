@@ -79,6 +79,12 @@
     element_type2 *iterator2=B1ST(element_type2, (buf2)); \
     for (; iterator1 < fb_after; iterator1++, iterator2++)
 
+#define for_buf_tandem_back(element_type1, iterator1, buf1, element_type2, iterator2, buf2)  \
+    ASSERT ((buf1).len32 == (buf2).len32, "expecting %s.len=%u == %s.len=%u", (buf1).name, (buf1).len32, (buf2).name, (buf2).len32);\
+    element_type1 *iterator1=BLST(element_type1, (buf1)), *fb_first=B1ST(element_type1, (buf1)); \
+    element_type2 *iterator2=BLST(element_type2, (buf2)); \
+    for (; iterator1 >= fb_first; iterator1--, iterator2--)
+
 // remove entries from buffer that fail to meet the condition
 #define buf_remove_items_except_(type, buf, keep_predicate) \
     type *new_e = B1ST(type, (buf));                        \
@@ -252,7 +258,7 @@ typedef void BgEnBufFunc (BufferP buf, LocalType *lt);
 typedef BgEnBufFunc (*BgEnBuf);
 
 extern BgEnBufFunc BGEN_u8_buf, BGEN_u16_buf, BGEN_u32_buf, BGEN_u64_buf, 
-                   BGEN_transpose_u8_buf, BGEN_transpose_u16_buf, BGEN_transpose_u32_buf, BGEN_transpose_u64_buf,
+                   BGEN_transpose_u8_buf, BGEN_transpose_u16_buf, BGEN_transpose_u32_buf,
                    BGEN_deinterlace_d8_buf, BGEN_deinterlace_d16_buf, BGEN_deinterlace_d32_buf, BGEN_deinterlace_d64_buf,
                    interlace_d8_buf, BGEN_interlace_d16_buf, BGEN_interlace_d32_buf, BGEN_interlace_d64_buf,
                    LTEN_u16_buf, LTEN_u32_buf, LTEN_u64_buf, LTEN_interlace_d16_buf, LTEN_interlace_d32_buf, LTEN_interlace_d64_buf;

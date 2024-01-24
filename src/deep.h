@@ -87,20 +87,18 @@ typedef enum { ZDEEP_SEQ_PACKED,        // SEQ is packed to 2-bit
 
 // PIZ Deep: if SEQ is with a perfect CIGAR (eg 151M) a copy of the reference (possibly revcomp) with at most one mismatch,
 // this tells FASTQ how to reconstruct it from the reference. Two simple cases that cover most of the reads of a typical FASTQ
-typedef struct __attribute__ ((__packed__)) {
+typedef struct __attribute__ ((packed)) {
     uint32_t gpos;           // Start of this SEQ in the genome (support gpos up 1 - 0xffffffff)
     uint8_t mismatch_offset; // If SEQ has one mismatch - offset of mismatch in SEQ
     char mismatch_base;      // If SEQ has one mismatch - the different base
 } PizDeepSeq;
 
-#pragma pack(1) 
-typedef struct {
+typedef struct { // 1 byte
     uint8_t seq_encoding      : 3; // SEQ encoding according to PizZDeepSeqEncoding
     uint8_t is_long_seq       : 1; // is seq_len greater than 255
     uint8_t is_long_qual_comp : 1; // is qual_comp_len greater than 255
     uint8_t is_qname_comp     : 1; // QNAME suffix is compressed
     uint8_t unused            : 2;
 } PizZDeepFlags;
-#pragma pack()
 
 extern rom by_names[2];

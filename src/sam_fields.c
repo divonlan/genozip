@@ -585,7 +585,7 @@ static inline void sam_seg_CP_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t cp, 
 
     else {
         uint32_t cp32 = cp;
-        seg_integer_fixed (VB, CTX(OPTION_CP_i), &cp32, true, add_bytes);
+        seg_integer (VB, CTX(OPTION_CP_i), cp32, true, add_bytes);
     }
 }
 
@@ -1269,18 +1269,6 @@ void sam_seg_float_as_snip (VBlockSAMP vb, ContextP ctx, STRp(sam_value), ValueT
         seg_float_or_not (VB, ctx, STRa(sam_value), add_bytes);
 }
 
-void sam_seg_aux_field_fallback_int (VBlockSAMP vb, ContextP ctx, int64_t n, unsigned add_bytes)
-{
-
-    if (!ctx->is_initialized) {
-        ctx->ltype = LT_DYN_INT;
-        ctx->flags.store = STORE_INT; // needed in order to be reconstructable as BAM
-        ctx->is_initialized = true;
-    }
-
-    seg_integer (VB, ctx, n, true, add_bytes);
-}
-
 // note: also called from fastq_seg_one_saux()
 void sam_seg_aux_field_fallback (VBlockP vb, void *dl, DictId dict_id, char sam_type, char array_subtype,
                                  STRp(value), ValueType numeric, unsigned add_bytes)
@@ -1288,7 +1276,7 @@ void sam_seg_aux_field_fallback (VBlockP vb, void *dl, DictId dict_id, char sam_
     // all types of integer
     if (sam_type == 'i') {
         ContextP ctx = ctx_get_ctx (vb, dict_id);
-        sam_seg_aux_field_fallback_int (VB_SAM, ctx, numeric.i, add_bytes);
+        seg_integer (vb, ctx, numeric.i, true, add_bytes);
     }
 
     else if (sam_type == 'f') {

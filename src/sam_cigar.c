@@ -523,11 +523,10 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SQUANK) // new_value=NULL means recons
     int32_t seq_len_plus_H = is_main_cigar ? segconf.sam_seq_len // MAIN vs the "standard" seq_len (useful for short reads in which most reads are the same length)
                            : vb->seq_len + VB_SAM->hard_clip[0] + VB_SAM->hard_clip[1]; // SA/OA/XA vs MAIN: hard-clips in the MAIN CIGAR are counted as well
 
-    LOAD_SNIP_FROM_LOCAL (ctx); // segment1 of squank
     STR(segment1);
-    STRset (segment1, snip);    // copy since variable name in LOAD_SNIP_FROM_LOCAL is hard-coded to "snip"
+    ctx_get_next_snip_from_local (VB, ctx, pSTRa(segment1)); // segment1 of squank
 
-    LOAD_SNIP_FROM_LOCAL (ctx); // snip = segment2 of squank
+    ctx_get_next_snip_from_local (VB, ctx, pSTRa(snip)); // snip = segment2 of squank
 
     if (!is_main_cigar && !reconstruct) goto done; // nothing more to do 
 

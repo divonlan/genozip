@@ -64,7 +64,6 @@
 
 #define LONGR_NUM_CHANNELS (1 << CHAN_BITS)
 
-#pragma pack(1)
 typedef union { // 32 bit
     struct {
         uint32_t B      : B_BITS;      // 6 neighboring bases - ACGT encoding
@@ -96,7 +95,6 @@ typedef union { // 32 bit
 
     uint32_t value;
 } LongrChannel;
-#pragma pack()
 
 typedef struct {
     uint8_t *value_to_bin;

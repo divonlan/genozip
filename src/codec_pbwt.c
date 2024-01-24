@@ -37,7 +37,7 @@ typedef struct {
 } PbwtState;
 
 // this struct is part of the file format
-typedef struct __attribute__ ((__packed__)) {
+typedef struct {
     uint32_t fg_allele : 8;
     uint32_t count     : 24;   // number of consecutive runs in PbwtState->runs with fg_allele 
 } PbwtFgRunCount;
