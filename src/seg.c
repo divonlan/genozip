@@ -340,7 +340,7 @@ void seg_mux_init (VBlockP vb, ContextP ctx, unsigned num_channels, uint8_t spec
 
     // note: snips prepared with seg_prepare_multi_dict_id_special_snip can add 
     // an optional 3 chars + SNIP_SPECIAL in order to display the dicts in --show-snip 
-    memcpy (&MUX_SNIP(mux)[mux->snip_len], (char[]){'\t', 'M','U','X', '0', SNIP_SPECIAL }, 6); // for --show-snip
+    memcpy (&MUX_SNIP(mux)[mux->snip_len], ((char[]){'\t', 'M','U','X', '0', SNIP_SPECIAL }), 6); // for --show-snip
     mux->snip_len += 6;
 
     // seg_mux_display (mux);

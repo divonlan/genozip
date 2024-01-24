@@ -3,7 +3,7 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
-15.0.38 24/1/2023
+15.0.39 24/1/2023
 - Core engine improvements: significant reducion in RAM consumption during compression, along with modest compression gains.
 - Support for Mac Apple Silicon processors in osx64 simulated mode
 - Updated section 2 of the license, to grant Premium license holders the right to distribute Genozip to others.
