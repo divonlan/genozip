@@ -227,7 +227,7 @@ typedef struct File {
     Codec comp_source_codec[MAX_NUM_COMPS];             // Z_FILE ZIP: source codec used for every txt file component (i.e. excluding generated components)
 } File;
 
-#define z_has_gencomp (z_file && z_file->z_flags.has_gencomp)
+#define z_has_gencomp (z_file && z_file->z_flags.has_gencomp) // ZIP/PIZ
 #define z_is_dvcf (z_file && (Z_DT(VCF) || Z_DT(BCF)) && z_has_gencomp)
 #define z_sam_gencomp (z_file && (Z_DT(SAM) || Z_DT(BAM)) && z_has_gencomp) // note: is BAM file in piz are Z_DT(SAM) and in zip are Z_DT(BAM)
 

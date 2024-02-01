@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   generic.c
-//   Copyright (C) 2020-2024 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -39,15 +39,14 @@ int32_t generic_is_header_done (bool is_eof)
     
     SAFE_NUL(&header[header_len]);
     bool need_more = false;
-    bool is_cram = false;
 
     // search for a data type who's signature is in this header
     if (!flag.explicitly_generic) {
 
-        // test explicitly for CRAM - as it is not a data type
-        if (str_isprefix_(STRa(header), _S("CRAM"))) 
-            is_cram = true;
-
+        // test explicitly for CRAM - as it is not a data type. We will need to re-start - reading through an external decompressor
+        if (is_cram (STRa(header), &need_more)) 
+            ABORTINP0 ("This is CRAM file, but Genozip got confused because the file's name doesn't end with .cram. Solution: re-run and add the command line option \"--input cram\"");
+    
         else
             for (DataType dt=0; dt < NUM_DATATYPES; dt++) 
                 if (dt_props[dt].is_data_type && dt_props[dt].is_data_type (STRa(header), &need_more)) {
@@ -78,11 +77,8 @@ int32_t generic_is_header_done (bool is_eof)
     else if (tar_zip_is_tar() || !txt_file->redirected) 
         WARN_ONCE ("FYI: genozip doesn't recognize %s file's type, so it will be compressed as GENERIC. In the future, you may specify the type with \"--input <type>\". To suppress this warning, use \"--input generic\".", txt_name);
 
-    else if (!is_cram)
+    else 
         ABORTINP ("to pipe data in, please use --input (or -i) to specify its type, which can be one of the following:\n%s", file_compressible_extensions (true));
-    
-    else
-        ABORTINP0 ("This appears to be a CRAM file. Please re-run and add the command line option \"--input cram\"");
 
     return 0;
 }

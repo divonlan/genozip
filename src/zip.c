@@ -141,6 +141,7 @@ static void zip_handle_unique_words_ctxs (VBlockP vb)
     for_ctx {
         if (ctx->local.len ||  // local is not free to accept our singletons
             ctx->no_stons  ||  // don't change to LT_SINGLETON if we were explicitly forbidden having singletons
+            ctx->ltype == LT_SUPP || // local data might be created by codec (later)
             ((VB_DT(VCF) || VB_DT(BCF)) && dict_id_is_vcf_format_sf (ctx->dict_id))) // this doesn't work for FORMAT fields
             continue;
             

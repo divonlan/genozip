@@ -76,7 +76,7 @@ typedef struct {
         regions, gpos, samples, 
         qname_filter, seq_filter, // 1 positive, -1 negative filter
         drop_genotypes, gt_only, luft, sort, unsorted, snps_only, indels_only, // VCF options
-        sequential, no_pg, extended_translation, prepare_for_taxid,
+        sequential, no_pg, prepare_for_taxid,
         one_component; // 1-based ; 0=option unset (i.e. comp_i = one_component-1)
     TaxonomyId *kraken_taxid;
     rom regions_file, qnames_file, qnames_opt;
@@ -143,7 +143,7 @@ typedef struct {
         debug_LONG, show_qual, debug_qname, debug_read_ctxs, debug_sag, debug_gencomp, debug_lines, debug_latest,
         debug_peek, stats_submit, debug_submit, show_deep, show_segconf_has, debug_huffman, debug_split,
         debug_debug, debug_valgrind, debug_tar, // ad-hoc debug printing in prod
-        no_gencomp, force_gencomp, force_deep, force_PLy, no_domqual, no_pacb, no_longr, force_longr, verify_codec, 
+        no_gencomp, force_gencomp, force_deep, force_PLy, no_domqual, no_pacb, no_longr, no_homp, force_qual_codec, no_smux, verify_codec, 
         seg_only, show_bam, xthreads, show_rename_tags,
         #define SHOW_CONTAINERS_ALL_VBs (-1)
         show_containers, show_aligner, show_buddy,

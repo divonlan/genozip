@@ -397,7 +397,8 @@ void txtheader_piz_read_and_reconstruct (Section sec)
         // if we're translating from one data type to another (SAM->BAM, BAM->FASTQ, ME23->VCF etc) translate the txt header 
         // note: in a header-less SAM, after translating to BAM, we will have a header
         DtTranslation trans = dt_get_translation (NULL);
-        if (trans.txtheader_translator && !flag.no_header) trans.txtheader_translator (txt_header_vb, &txt_header_vb->txt_data); 
+        if (trans.txtheader_translator && !flag.no_header) 
+            trans.txtheader_translator (txt_header_vb, &txt_header_vb->txt_data); 
 
         // count textual lines in header, used for line= reporting in ASSPIZ
         if (txt_header_vb->txt_data.len && !DTPT (is_binary)) {

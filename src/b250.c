@@ -25,7 +25,7 @@
 #define B250_MAX_WI_2BYTES ((0xFA << 8)  - 1) // same, for 2 bytes
 #define B250_MAX_WI_3BYTES ((0xFA << 16) - 1) // same, for 3 bytes
 
-// var-length encording (since 15.0.38)
+// var-length encording (since 15.0.39)
 #define VARL_MIN_1B 0
 #define VARL_MAX_1B 126 // 127 reserved for WORD_INDEX_ONE_UP
 #define VARL_MIN_2B (VARL_MAX_1B + 1)
@@ -215,7 +215,7 @@ bool b250_zip_generate (VBlockP vb, ContextP ctx)
                      VB_NAME, ctx->tag_name, ctx->did_i, ctx->b250.count, TF(ctx->flags.all_the_same), TF(ctx->no_stons));
 
     // determine size of word_index elements
-    ctx->b250_size = B250_VARL; // since 15.0.38
+    ctx->b250_size = B250_VARL; // since 15.0.39
 
     // we modify in-place. Note that the converted b250 will be of length <= the original, this is
     // because words might be shortened (due to ONE_UP and ni->wi) but never lengthened
@@ -267,7 +267,7 @@ bool b250_zip_generate (VBlockP vb, ContextP ctx)
         ret = false;
     }
     
-    // xxx - print b250 if show
+    // xxx - print b250 if show_b250
 
     if (show && ret) {
         bufprintf (vb, &vb->show_b250_buf, "%s", "\n");
@@ -292,7 +292,7 @@ WordIndex b250_piz_decode (bytes *b, bool advance, B250Size b250_size, rom ctx_n
 
     #define RETURN(res,n) ({ if (advance) { *b += (n); } return (WordIndex)(res); })
 
-    // case: files starting 15.0.38
+    // case: files starting 15.0.39
     if (b250_size == B250_VARL) { 
         uint8_t msb = (*b)[0];
         

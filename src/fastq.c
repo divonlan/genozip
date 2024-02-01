@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   fast.c
-//   Copyright (C) 2020-2024 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -381,7 +381,7 @@ static void fastq_seg_finalize_segconf (VBlockP vb)
 {
     segconf.longest_seq_len = vb->longest_seq_len;
     segconf.is_long_reads = segconf_is_long_reads();
-
+    
     if (flag.deep) fastq_deep_seg_finalize_segconf (vb->lines.len32);
 
     // if no reference, if fastq is multiseq
@@ -409,9 +409,12 @@ static void fastq_seg_finalize_segconf (VBlockP vb)
     if (codec_pacb_maybe_used (FASTQ_QUAL)) 
         codec_pacb_segconf_finalize (VB);
 
-    if (codec_longr_maybe_used (FASTQ_QUAL)) 
+    if (codec_longr_maybe_used (VB, FASTQ_QUAL)) 
         codec_longr_segconf_calculate_bins (VB, CTX(FASTQ_QUAL + 1), fastq_zip_qual);
 
+    // note: we calculate the smux stdv to be reported in stats, even if SMUX is not used
+    codec_smux_calc_stats (vb);
+    
     qname_segconf_finalize (VB);
 }
 
@@ -816,6 +819,8 @@ IS_SKIP (fastq_piz_is_skip_section)
 
     // we always keep the seq_len context, if we have one
     if (dict_id.num && dict_id.num == segconf.seq_len_dict_id.num) return false;
+
+    if (codec_pacb_smux_is_qual (dict_id)) dict_id.num = _FASTQ_QUAL;
 
     // note that flags_update_piz_one_z_file rewrites --header-only as flag.header_only_fast: skip all items but DESC and E1L (except if we need them for --grep)
     if (flag.header_only_fast && 

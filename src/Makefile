@@ -46,6 +46,10 @@ ifdef IS_CONDA
 		CFLAGS  += -I$(PREFIX)/Library/include 
 	endif
 
+	ifeq ($(target_architecture),"osx-arm64")
+		$(error Genozip cannot yet be built for osx-arm64)
+	endif
+
 else
 	ifdef GCC 
 		CC=$(GCC) 
@@ -102,6 +106,7 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.
 		  buffer.c buf_struct.c buf_list.c random_access.c sections.c base64.c bgzf.c coverage.c txtheader.c  	\
 		  codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c	codec_pacb.c	\
 		  codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c codec_normq.c codec_homp.c codec_t0.c		\
+		  codec_smux.c																						\
 	      txtfile.c profiler.c file.c filename.c dispatcher.c crypt.c aes.c md5.c segconf.c biopsy.c gencomp.c	\
 		  vblock.c regions.c optimize.c dict_id.c aliases.c hash.c stream.c url.c bases_filter.c dict_io.c		\
 		  recon_plan_io.c version.c huffman.c user_message.c b250.c qname_filter.c

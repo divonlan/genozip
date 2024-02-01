@@ -752,9 +752,6 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_AC:
             CALL (vcf_seg_INFO_AC (vb, ctx, STRa(value))); 
 
-        //xxx case _INFO_AN:// deferred seg to after samples
-        //     seg_set_last_txt (VB, CTX(INFO_AN), STRa(value)); break;
-
         case _INFO_MLEAC:
             CALL (vcf_seg_INFO_MLEAC (vb, ctx, STRa(value)));
 

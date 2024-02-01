@@ -57,7 +57,7 @@ const DtTranslation dt_get_translation (VBlockP vb) // vb=NULL relates to the tx
                 return copy;
             }
             else
-                return translations[i + flag.extended_translation]; // get one of the following entries if extended
+                return translations[i]; // get one of the following entries if extended
         }
     }
 

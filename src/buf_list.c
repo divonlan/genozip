@@ -780,7 +780,7 @@ uint64_t buflist_get_memory_usage (void)
     return mem_usage;
 }
 
-#define MAX_MEMORY_STATS 128
+#define MAX_MEMORY_STATS 150
 static MemStats stats[MAX_MEMORY_STATS]; // must be pre-allocated, because buflist_show_memory is called when malloc fails, so it cannot malloc
 static unsigned num_stats=0, num_buffers=0;
 

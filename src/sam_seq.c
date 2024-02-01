@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_seq.c
-//   Copyright (C) 2020-2024 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -655,6 +655,9 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_seq), unsigned
         return; 
     }
 
+    if (textual_seq[0] == '*')
+        vb->seq_missing = dl->no_seq = true;
+
     if (flag.deep || flag.show_deep == 2)
         sam_deep_set_SEQ_hash (vb, dl, STRa(textual_seq));
 
@@ -695,7 +698,6 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_seq), unsigned
     else if (textual_seq[0] == '*') {
         vb->md_verified = false;    
         vb->mismatch_bases_by_SEQ = -1; 
-        vb->seq_missing = dl->no_seq = true;
     }
 
     // in case of DEPN line with SEQ confirmed by sam_seg_depn_is_subseq_of_prim to be a subset of the sag sequence, 
@@ -895,11 +897,12 @@ uint32_t sam_zip_get_seq_len (VBlockP vb, uint32_t line_i)
     return DATA_LINE (line_i)->SEQ.len;
 }
 
-// used by codec_longr and codec_homp
+// used by codec_longr, codec_homp, codec_pacb and codec_smux
 COMPRESSOR_CALLBACK_DT (sam_zip_seq) 
 {
     VBlockSAMP vb = (VBlockSAMP)vb_;
     ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
+        
     *line_data_len = dl->SEQ.len;
 
     if (VB_DT(SAM)) 
@@ -908,11 +911,18 @@ COMPRESSOR_CALLBACK_DT (sam_zip_seq)
         vb->textual_seq.len = 0; // reset
         buf_alloc (vb, &vb->textual_seq, 0, dl->SEQ.len+2 /* +1 for last half-byte and \0 */, char, 1.5, "textual_seq");
 
-        bam_seq_to_sam (vb, (uint8_t *)STRtxtw(dl->SEQ), false, false, &vb->textual_seq);
+        if (dl->no_seq) 
+            bam_seq_to_sam (vb, 0, 0, false, false, &vb->textual_seq);
+        else
+            bam_seq_to_sam (vb, (uint8_t *)STRtxtw(dl->SEQ), false, false, &vb->textual_seq);
+        
         *line_data = B1STc (VB_SAM->textual_seq);
     }
 
     if (is_rev) *is_rev = dl->FLAG.rev_comp;
+
+    if ((*line_data)[0] == '*')
+        *line_data_len = 1; // note: if we have a CIGAR but SEQ=*, SEQ.len is determined by the CIGAR
 }
 
 //---------
@@ -1489,22 +1499,6 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_SEQ)
     return 0;
 }
 
-// SAM-to-FASTQ translator: reverse-complement the sequence if needed, and drop if "*"
-TRANSLATOR_FUNC (sam_piz_sam2fastq_SEQ)
-{  
-    uint16_t sam_flag = (uint16_t)vb->last_int(SAM_FLAG);
-    
-    // case: SEQ is "*" - don't show this fastq record
-    if (recon_len==1 && *recon == '*') 
-        vb->drop_curr_line = "no_seq";
-
-    // case: this sequence is reverse complemented - reverse-complement it
-    else if (sam_flag & SAM_FLAG_REV_COMP) 
-        str_revcomp_in_place (STRa(recon));
-
-    return 0;
-}
-
 // PIZ
 rom sam_piz_get_textual_seq (VBlockP vb_)
 {
@@ -1520,3 +1514,4 @@ rom sam_piz_get_textual_seq (VBlockP vb_)
 
     return vb->textual_seq_str; // note: textual_seq_str is prepared in sam_piz_sam2bam_SEQ sam_load_groups_add_seq
 }
+

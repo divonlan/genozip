@@ -52,7 +52,7 @@
 
 typedef enum __attribute__ ((packed)) { STORE_NONE, STORE_INT, STORE_FLOAT, STORE_INDEX        } StoreType; // values for SectionFlags.ctx.store
 typedef enum __attribute__ ((packed)) { B250_BYTES_4, B250_BYTES_3, B250_BYTES_2, B250_BYTES_1, // used in files 14 - 15.0.37
-                                        B250_VARL // used in files starting 15.0.38                                               
+                                        B250_VARL // used in files starting 15.0.39                                               
                                       } B250Size; // part of the file format - goes into SectionHeaderCtx.b250_size
 
 typedef enum __attribute__ ((packed)) { SAG_NONE, SAG_BY_SA, SAG_BY_NH, SAG_BY_SOLO, SAG_BY_CC, SAG_BY_FLAG, NUM_SAG_TYPES } SagType;
@@ -253,7 +253,7 @@ typedef struct {
             uint8_t segconf_use_ins_ctxs : 1; // 15.0.30
             uint8_t unused_bits          : 6;
             uint8_t segconf_sam_factor;       // 15.0.28: BAM only: 64X estimated blow-up factor of SAM txt_data vs BAM 
-            uint8_t segconf_deep_N_fq_score;  // 15.0.38: Deep: when copying QUAL from SAM, update scores of 'N' bases to this value
+            uint8_t segconf_deep_N_fq_score;  // 15.0.39: Deep: when copying QUAL from SAM, update scores of 'N' bases to this value
             char unused[253];
         } sam;
 
@@ -384,7 +384,7 @@ typedef struct {
     B250Size b250_size : 3;    // SEC_B250: size of each b250 element (v14, 2 bits up to 15.0.37)
     uint8_t unused2    : 5;
     };
-    uint8_t nothing_char;      // SEC_LOCAL for integer ltypes: if integer==max_int of its ltype, reconstruct this character instead. 0xff means ignore, 0 means fallback to the hard-coded logic used up to 15.0.37. see piz_uncompress_all_ctxs, reconstruct_from_local_int. (15.0.38)
+    uint8_t nothing_char;      // SEC_LOCAL for integer ltypes: if integer==max_int of its ltype, reconstruct this character instead. 0xff means ignore, 0 means fallback to the hard-coded logic used up to 15.0.37. see piz_uncompress_all_ctxs, reconstruct_from_local_int. (15.0.39)
     };
     uint8_t unused;
     DictId dict_id;           

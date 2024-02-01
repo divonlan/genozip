@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   codec_domq.c
-//   Copyright (C) 2020-2024 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -14,6 +14,8 @@
 // DOMQRUNS - for each dom run we have a value 0-254 that is interpreted as a dom run of 1-255 doms,
 // or a value of 255 means a run of 255 and then continue the run with the next dom value, 
 // thereby allowing runs of over 255 (e.g. a run "255-255-5" would be a run of 255+255+5=515 doms)
+
+// WARNING: THIS FILE CONTAINS A METHOD THAT IS PATENT PENDING.
 
 #include "vblock.h"
 #include "reconstruct.h"
@@ -299,11 +301,11 @@ bool codec_domq_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB get_line_c
 {
     ContextP declare_domq_contexts (CTX(qual_did_i));
  
-    if (codec_domq_qual_data_is_a_fit_for_domq (vb, qual_ctx, get_line_cb)) {
-        qual_ctx->ltype         = LT_CODEC;
-        qual_ctx->lcodec        = CODEC_DOMQ;
+    if (flag.force_qual_codec == CODEC_DOMQ || codec_domq_qual_data_is_a_fit_for_domq (vb, qual_ctx, get_line_cb)) {
+        qual_ctx->ltype  = LT_CODEC;
+        qual_ctx->lcodec = CODEC_DOMQ;
 
-        ctx_set_ltype (vb, LT_UINT8, SAM_DOMQRUNS, SAM_QUALMPLX, SAM_DIVRQUAL, DID_EOL);
+        ctx_set_ltype (vb, LT_SUPP, SAM_DOMQRUNS, SAM_QUALMPLX, SAM_DIVRQUAL, DID_EOL);
         domqruns_ctx->local_dep = qualmplx_ctx->local_dep = divrqual_ctx->local_dep = DEP_L1;  
 
         // normalize quality scores in preparation for compression. note: we do it here in seg, as we need to seg the denormalization table

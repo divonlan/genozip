@@ -32,4 +32,6 @@ extern void piz_allow_out_of_order (void);
 
 extern bool piz_grep_match (rom start, rom after);
 
+extern TRANSLATOR_FUNC (piz_obsolete_translator);
+
 #define ASSISLOADED(ctx) ASSPIZ((ctx)->is_loaded, "%s is not loaded", ctx->tag_name)

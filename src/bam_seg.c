@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_bam.c
-//   Copyright (C) 2020-2024 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -26,7 +26,23 @@ void bam_seg_initialize (VBlockP vb)
 // detect if a generic file is actually a BAM
 bool is_bam (STRp(header), bool *need_more)
 {
+    if (header_len < STRLEN(BAM_MAGIC)) {
+        *need_more = true;
+        return false;
+    }
+
     return str_isprefix_(STRa(header), _S(BAM_MAGIC));
+}
+
+// detect if a generic file is actually a CRAM
+bool is_cram (STRp(header), bool *need_more)
+{
+    if (header_len < STRLEN(CRAM_MAGIC)) {
+        *need_more = true;
+        return false;
+    }
+
+    return str_isprefix_(STRa(header), _S(CRAM_MAGIC));
 }
 
 static int32_t bam_unconsumed_scan_forwards (VBlockP vb)

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   codec_longr.c
-//   Copyright (C) 2020-2024 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -26,15 +26,18 @@
 
 #include "codec_longr_alg.c" // seperate source file for this, as it derived from external code with a different license
 
-bool codec_longr_maybe_used (Did did_i)
+bool codec_longr_maybe_used (VBlockP vb, Did did_i)
 {
-    return (did_i == SAM_QUAL/*==FASTQ_QUAL*/ || did_i == SAM_CQUAL|| did_i == OPTION_OQ_Z) && 
-           ((TECH(NANOPORE) && segconf.nontrivial_qual && !flag.no_longr && !flag.fast) || flag.force_longr);
+    return (did_i == SAM_QUAL/*==FASTQ_QUAL*/ || did_i == SAM_CQUAL || did_i == OPTION_OQ_Z) && 
+               ((TECH(NANOPORE) && segconf.nontrivial_qual && !flag.no_longr && !flag.fast) || 
+                flag.force_qual_codec == CODEC_LONGR);
 }
 
 // similar structure to DOMQUAL 
-void codec_longr_comp_init (VBlockP vb, Did qual_did_i)
+bool codec_longr_comp_init (VBlockP vb, Did qual_did_i)
 {
+    if (!codec_longr_maybe_used (vb, qual_did_i)) return false;
+
     // lens_ctx contains the lens array - an array of uint32 - each entry is the length of the corresponding channel in values_ctx
     ContextP lens_ctx             = CTX(qual_did_i);
     lens_ctx->ltype               = LT_CODEC;    // causes reconstruction to go to codec_longr_reconstruct
@@ -42,13 +45,15 @@ void codec_longr_comp_init (VBlockP vb, Did qual_did_i)
 
     // values_ctx contains the base quality data, sorted by channel
     ContextP values_ctx           = lens_ctx+1;  // used
-    values_ctx->ltype             = LT_UINT8;
+    values_ctx->ltype             = LT_SUPP;
     values_ctx->local_dep         = DEP_L1; 
     values_ctx->lcodec            = CODEC_ARITH8;
     values_ctx->lcodec_hard_coded = true;
     values_ctx->counts_section    = true; // we store the global value-to-bin mapper in a SEC_COUNTS
     
     ctx_consolidate_stats (vb, qual_did_i, qual_did_i+1, DID_EOL);
+
+    return true;
 }
 
 // upper bound of compressed size of length array
@@ -82,13 +87,20 @@ void codec_longr_segconf_calculate_bins (VBlockP vb, ContextP ctx,
         for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {
             uint8_t *values; uint32_t values_len;
             callback (vb, ctx, line_i, (char **)pSTRa(values), Ltxt, NULL);
-            add_to_histogram (histogram, STRa(values));
-
-            num_values += values_len;
+            
+            if (!IS_SPACE (values)) {
+                add_to_histogram (histogram, STRa(values));
+                num_values += values_len;
+            }
         }
     else {
         add_to_histogram (histogram, B1ST8 (ctx->local), ctx->local.len);
         num_values = ctx->local.len;
+    }
+
+    if (!num_values) {
+        flag.no_longr = true;
+        return;
     }
 
     // create value_to_bin mapper in zctx->value_to_bin
@@ -130,7 +142,7 @@ void codec_longr_segconf_calculate_bins (VBlockP vb, ContextP ctx,
     zctx->longr_bins_calculated = true;
 }
 
-static void codec_longr_calc_channels (LongrState *state, STRp(seq), bytes qual, bool is_rev) 
+static void codec_longr_calc_channels (LongrState *state, STRp(seq), bytes qual, uint32_t qual_len, bool is_rev) 
 {
     codec_longr_alg_init_read (state, STRa(seq), is_rev);
 
@@ -146,10 +158,10 @@ static void codec_longr_calc_channels (LongrState *state, STRp(seq), bytes qual,
     })
 
     if (!is_rev)
-        for (uint32_t i=0; i < seq_len; i++) 
+        for (uint32_t i=0; i < qual_len; i++) 
             CALC_ONE (acgt_encode[(uint8_t)codec_longr_next_base (STRa(seq), i)]);
     else
-        for (int32_t i=seq_len-1; i >= 0; i--) 
+        for (int32_t i=qual_len-1; i >= 0; i--) 
             CALC_ONE (acgt_encode_comp[(uint8_t)codec_longr_next_base_rev (STRa(seq), i)]);
 }
 
@@ -186,9 +198,9 @@ COMPRESS (codec_longr_compress)
 
         seq_callback (vb, ctx, line_i,  pSTRa(seq), CALLBACK_NO_SIZE_LIMIT, &is_rev);
 
-        codec_longr_calc_channels (state, STRa(seq), (uint8_t*)qual, is_rev);
+        codec_longr_calc_channels (state, STRa(seq), (uint8_t*)STRa(qual), is_rev);
 
-        ASSERT (seq_len == qual_len || str_is_1char(qual, ' '), "%s: \"%s\": Expecting seq_len=%u == qual_len=%u. ctx=%s", 
+        ASSERT (seq_len == qual_len || IS_SPACE (qual), "%s: \"%s\": Expecting seq_len=%u == qual_len=%u. ctx=%s", 
                 LN_NAME, name, seq_len, qual_len, TAG_NAME);
 
         total_len += qual_len;
@@ -261,7 +273,7 @@ COMPRESS (codec_longr_compress)
 // PIZ side
 //--------------
 
-static void codec_longr_recon_one_read (LongrState *state, STRp(seq), bool is_rev,
+static bool codec_longr_recon_one_read (LongrState *state, STRp(seq), bool is_rev,
                                         bytes sorted_qual, uint32_t *next_of_chan, char *recon)
 {
     codec_longr_alg_init_read (state, STRa(seq), is_rev);
@@ -269,6 +281,7 @@ static void codec_longr_recon_one_read (LongrState *state, STRp(seq), bool is_re
 
     #define RECON_ONE_QUAL                              \
         codec_longr_update_state (state, b, q, prev_q); \
+        if (q == 255) return false; /* 255+'!' == ' ' == missing qual */ \
         prev_q = q;                                     \
         recon[i] = q  + '!';
 
@@ -284,6 +297,8 @@ static void codec_longr_recon_one_read (LongrState *state, STRp(seq), bool is_re
             uint8_t q = sorted_qual[next_of_chan[state->chan.channel.n]++];
             RECON_ONE_QUAL;
         }
+
+    return true; 
 }
 
 // order of decompression: lens_ctx is decompressed, then baseq_ctx is decompressed with its codec, and then this function is called
@@ -355,8 +370,10 @@ CODEC_RECONSTRUCT (codec_longr_reconstruct)
     else
         ASSPIZ (len == vb->seq_len, "expecting len=%u == vb->seq_len=%u", len, vb->seq_len);
     
-    codec_longr_recon_one_read (state, seq, len, is_rev, sorted_qual, next_of_chan, BAFTtxt);
-    Ltxt += len;
+    if (codec_longr_recon_one_read (state, seq, len, is_rev, sorted_qual, next_of_chan, BAFTtxt)) {
+        if (reconstruct) Ltxt += len;
+    } else // missing qual
+        sam_reconstruct_missing_quality (vb, reconstruct);
 
     COPY_TIMER(codec_longr_reconstruct);
 }

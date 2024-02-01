@@ -21,7 +21,8 @@
 #define DTYPE_QNAME   DTYPE_1
 #define DTYPE_SAM_AUX DTYPE_2
 
-#define BAM_MAGIC "BAM\1" // first 4 characters of a BAM file
+#define BAM_MAGIC  "BAM\1" // first 4 characters of a BAM file
+#define CRAM_MAGIC "CRAM"  // first 4 characters of a CRAM file
 
 // as defined in https://samtools.github.io/hts-specs/SAMv1.pdf section 1.4.2
 #define SAM_FLAG_MULTI_SEG     ((uint16_t)0x0001) // 1     0000 0000 0001
@@ -331,7 +332,6 @@ typedef struct VBlockSAM {
 
     // QUAL stuff
     bool has_qual;                 // Seg: This VB has at least one line with non-missing qual
-    bool has_missing_qual;         // Seg: This VB has at least one line with missing qual
     bool codec_requires_seq;       // Seg: one or more fields uses a codec that requires SEQ for reconstruction
 
     // stats
@@ -627,7 +627,7 @@ COMPRESSOR_CALLBACK (sam_zip_##tag)                             \
 extern void sam_seg_QUAL_initialize (VBlockSAMP vb);
 extern void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, rom qual, uint32_t qual_data_len, unsigned add_bytes);
 extern rom bam_qual_display (bytes qual, uint32_t l_seq); 
-extern void sam_seg_other_qual (VBlockSAMP vb, TxtWord *dl_word, Did did_i, STRp(qual), bool len_is_seq_len, unsigned add_bytes);
+extern void sam_seg_other_qual (VBlockSAMP vb, ZipDataLineSAM *dl, TxtWord *dl_word, Did did_i, STRp(qual), bool len_is_seq_len, unsigned add_bytes);
 
 // --deep stuff
 // Stuff that happens during SAM seg

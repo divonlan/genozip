@@ -65,7 +65,7 @@ typedef struct Context {
     bool z_data_exists;        // ZIP/PIZ: z_file has SEC_DICT, SEC_B250 and/or SEC_LOCAL sections of this context (not necessarily loaded)
     bool is_initialized;       // ZIP / PIZ: context-specific initialization has been done
     
-    uint8_t nothing_char;      // ZIP/PIZ: if non-zero, if local integer == max_int (for its ltype), nothing_char will be reconstructed instead. In PIZ, 0xff means fallback to pre-15.0.38
+    uint8_t nothing_char;      // ZIP/PIZ: if non-zero, if local integer == max_int (for its ltype), nothing_char will be reconstructed instead. In PIZ, 0xff means fallback to pre-15.0.39
 
     #define FIRST_BUFFER_IN_Context dict
     Buffer dict;               // tab-delimited list of all unique snips - in this VB that don't exist in ol_dict
@@ -179,6 +179,8 @@ typedef struct Context {
         
         enum __attribute__ ((packed)) { PAIR1_ALIGNED_UNKNOWN=-1, PAIR1_NOT_ALIGNED=0, PAIR1_ALIGNED=1 } pair1_is_aligned;  // FASTQ_SQBITMAP:  PIZ: used when reconstructing pair-2
         
+        bool saggy_seq_needs_fq_reversal; // PIZ: SAM_SQBITMAP: true if saggy copied is a reverse 
+        
         struct { // FORMAT_GT: ZIP/PIZ
             Ploidy prev_ploidy, actual_last_ploidy; 
             char prev_phase; 
@@ -259,7 +261,7 @@ typedef struct Context {
     bool local_compressed;     // ZIP: VB: local has been compressed
     bool b250_compressed;      // ZIP: VB: b250 has been compressed
     bool nodes_converted;      // ZIP vctx: nodes have been converted in ctx_merge_in_one_vctx from index/len to word_index
-    bool dict_merged;          // ZIP: VB: dict has been merged into zctx
+    bool dict_merged;          // ZIP vctx: dict has been merged into zctx
     int16_t sf_i;              // ZIP VCF sample fields: 0-based index of this context within the FORMAT of this line (only for fields defined in vcf.h); -1 if not context present in this line
     int tag_i;                 // ZIP VCF: dual-coordinates VB only: index into vb->tags for tag renaming 
     WordIndex last_snip_ni;    // ZIP

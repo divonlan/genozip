@@ -127,7 +127,8 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
     CTX(FORMAT_GT)->no_stons  = true; // we store the GT matrix in local, so cannot accomodate singletons
     
     vb->ht_matrix_ctx = CTX(FORMAT_GT_HT); // different for different data types
-
+    vb->ht_matrix_ctx->ltype = LT_SUPP;
+    
     if (segconf.FMT_DP_method != FMT_DP_DEFAULT) {
         seg_mux_init (VB, CTX(FORMAT_DP), 2, VCF_SPECIAL_MUX_FORMAT_DP, false, (MultiplexerP)&vb->mux_FORMAT_DP);
     

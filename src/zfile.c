@@ -321,7 +321,7 @@ void zfile_remove_ctx_group_from_z_data (VBlockP vb, Did remove_did_i)
 
         vb->recon_size -= ctx->txt_len; // it won't be reconstructed after all
 
-        ctx_substract_txt_len (vb, ctx); // substract txt_len added to zctx during merge
+        ctx_update_zctx_txt_len (vb, ctx, -(int64_t)ctx->txt_len); // substract txt_len added to zctx during merge
 
         buflist_free_ctx (vb, ctx);
     }

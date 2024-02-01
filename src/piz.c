@@ -29,6 +29,11 @@
 #include "dict_io.h"
 #include "user_message.h"
 
+TRANSLATOR_FUNC (piz_obsolete_translator)
+{
+    return 0;
+}
+
 // output coordinates of current line (for error printing) - very carefully as we are in an error condition - we can't assume anything
 PizDisCoords piz_dis_coords (VBlockP vb)
 {

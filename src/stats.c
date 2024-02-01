@@ -357,9 +357,9 @@ static void stats_output_file_metadata (void)
                 bufprintf (evb, &features, "OQ_histo=%s;", segconf_get_qual_histo(QHT_OQ).s);
             }
 
-            if (!TECH(ILLUM))
-                bufprintf (evb, &features, "Qual_acgt=%s――%s――%s――%s;", // super long unicode hyphen 
-                           segconf_get_qual_histo('A').s, segconf_get_qual_histo('C').s, segconf_get_qual_histo('G').s, segconf_get_qual_histo('T').s);
+            bufprintf (evb, &features, "smux_max_stdv=%2.1f%% '%s';",
+                       segconf.smux_max_stdv * 100, 
+                       segconf.smux_max_stdv_q=='='?"≐" : segconf.smux_max_stdv_q==';'?"；" : char_to_printable (segconf.smux_max_stdv_q).s); // Unicode ；and ≐ (in UTF-8) to avoid breaking spreadsheet
 
             FEATURE0 (segconf.sam_bisulfite, "Feature: Bisulfite", "Bisulfite");
             FEATURE0 (segconf.has_cellranger, "Feature: cellranger-style fields", "has_cellranger");
@@ -474,8 +474,9 @@ static void stats_output_file_metadata (void)
             bufprintf (evb, &features, "Qual=%s;", !segconf.nontrivial_qual ? "Trivial" : ZCTX(SAM_QUAL)->qual_codec != CODEC_UNKNOWN ? codec_name (ZCTX(SAM_QUAL)->qual_codec) : codec_name (ZCTX(SAM_QUAL)->lcodec));
             bufprintf (evb, &features, "Qual_histo=%s;", segconf_get_qual_histo(QHT_QUAL).s);
 
-            bufprintf (evb, &features, "Qual_acgt=%s――%s――%s――%s;", // super long unicode hyphens
-                       segconf_get_qual_histo('A').s, segconf_get_qual_histo('C').s, segconf_get_qual_histo('G').s, segconf_get_qual_histo('T').s);
+            bufprintf (evb, &features, "smux_max_stdv=%2.1f%% '%s'",
+                       segconf.smux_max_stdv, 
+                       segconf.smux_max_stdv_q=='='?"≐" : segconf.smux_max_stdv_q==';'?"；" : char_to_printable (segconf.smux_max_stdv_q).s); // Unicode ；and ≐ (in UTF-8) to avoid breaking spreadsheet
 
             REPORT_KRAKEN;
             if (segconf.r1_or_r2) bufprintf (evb, &features, "R1_or_R2=R%d;", (segconf.r1_or_r2 == PAIR_R1) ? 1 : 2);
@@ -765,7 +766,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
     for_zctx {    
         s->z_size = zctx->dict.count + zctx->b250.count + zctx->local.count;
 
-        if (!zctx->b250.count && !zctx->txt_len && !zctx->b250.len && !zctx->is_stats_parent && !s->z_size) 
+        if (!zctx->b250.count && !zctx->txt_len && !zctx->b250.len && !zctx->is_stats_parent && !zctx->txt_len && !s->z_size) 
             continue;
 
         s->txt_len = zctx->txt_len;

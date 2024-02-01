@@ -72,7 +72,7 @@ void codec_acgt_seg_initialize (VBlockP vb, Did nonref_did_i,
 
     if (has_x) {
         ContextP nonref_x_ctx   = nonref_ctx + 1;
-        nonref_x_ctx->ltype     = LT_UINT8;
+        nonref_x_ctx->ltype     = LT_SUPP;
         nonref_x_ctx->local_dep = DEP_L1;     // NONREF_X.local is created with NONREF.local is compressed
         nonref_x_ctx->lcodec    = CODEC_XCGT; // prevent codec_assign_best from assigning it a different codec
     }

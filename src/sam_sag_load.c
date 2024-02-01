@@ -269,7 +269,7 @@ static inline void sam_load_groups_add_seq (VBlockSAMP vb, PlsgVbInfo *plsg, Sag
     sam_seq_pack (vb, z_sa_seq, z_seq_start * 2, B1STc(vb->textual_seq), vb->seq_len, false, false, HARD_FAIL); 
 }
 
-// compress QUAL data for in-memory storage, using fast rans codec.
+// PIZ: loads QUAL data of PRIM, and compresses it for in-memory storage, using fast rans codec.
 static inline void sam_load_groups_add_qual (VBlockSAMP vb, PlsgVbInfo *plsg, Sag *g)
 {
     if (!CTX(SAM_QUAL)->is_loaded) return; // qual is skipped
@@ -278,11 +278,14 @@ static inline void sam_load_groups_add_qual (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
 
     // to reconstruct into codec_bufs[0], we exchange it with txt_data, as the reconstruct machinery reconstructs to txt_data 
     SWAP (vb->codec_bufs[0], vb->txt_data); // careful as this doesn't modify buffer_list 
-    reconstruct_from_ctx (vb, SAM_QUAL, 0, RECON_ON); // reconstructs into vb->txt_data
+    
+    // reconstructs into vb->txt_data. note that in PRIM we segged the SPECIAL into QUALSA, not QUAL.
+    // so this reconstructs as a LOOKUP from LT_CODEC / LT_BLOB, without going through sam_piz_special_QUAL.
+    reconstruct_from_ctx (vb, SAM_QUAL, 0, RECON_ON); 
     buf_verify (vb->txt_data, "SWAP-txt_data-qual");
     SWAP (vb->codec_bufs[0], vb->txt_data);
     
-    g->no_qual = vb->qual_missing;    
+    g->no_qual = (vb->codec_bufs[0].len32 == 1 && *B1STc(vb->codec_bufs[0]) == '*');
     if (g->no_qual) goto done; // no quality data for this group - we're done
 
     ASSERT (vb->codec_bufs[0].len == vb->seq_len, "Expecting Ltxt=%u == vb->seq_len=%u", Ltxt, vb->seq_len);

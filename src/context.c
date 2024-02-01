@@ -886,14 +886,22 @@ no_drop:
 }
 
 // in case we're dropping vctx after already merging it - substract txt_len added in ctx_merge_in_one_vctx
-void ctx_substract_txt_len (VBlockP vb, ContextP vctx)
+void ctx_update_zctx_txt_len (VBlockP vb, ContextP vctx, int64_t increment/*positive or negative*/)
 {
-    ContextP zctx = ctx_get_zctx_from_vctx (vctx, false, false);
-    if (!zctx) return;
+    if (!increment) return;
 
-    mutex_lock (ZMUTEX(zctx));
-    zctx->txt_len -= vctx->txt_len;
-    mutex_unlock (ZMUTEX(zctx));
+    ContextP zctx = ctx_get_zctx_from_vctx (vctx,true, false);
+
+    // case: already merged - update zctx->txt_len
+    if (vctx->dict_merged) {
+        mutex_lock (ZMUTEX(zctx));
+        zctx->txt_len = (int64_t)zctx->txt_len + increment;
+        mutex_unlock (ZMUTEX(zctx));
+    }
+
+    // case: not merged yet - update vctx->txt_len which will be added to zctx->txt_len at merge
+    else 
+        vctx->txt_len = (int64_t)vctx->txt_len + increment;
 }
 
 static inline bool vctx_needs_merge (VBlockP vb, ContextP vctx)
@@ -1886,6 +1894,21 @@ void ctx_consolidate_statsN (VBlockP vb, Did parent, Did first_dep, unsigned num
         CTX(parent)->is_stats_parent = true;
 }
 
+// consolidate an array of ContextP 
+void ctx_consolidate_statsA (VBlockP vb, Did parent, ContextP ctxs[], unsigned num_deps)
+{
+    // find the ultimate ancestor to be displayed in stats
+    if (CTX(parent)->st_did_i != DID_NONE) 
+        parent = CTX(parent)->st_did_i;
+
+    for (int i=0; i < num_deps; i++)
+        if (ctxs[i]->did_i != parent) 
+            ctxs[i]->st_did_i = parent;
+
+    if (CTX(parent)->st_did_i == DID_NONE)
+        CTX(parent)->is_stats_parent = true;
+}
+
 ContextP buf_to_ctx (ContextArray ca, ConstBufferP buf) 
 { 
     if (is_p_in_range (buf, ca, sizeof(ContextArray))) 
@@ -1896,8 +1919,10 @@ ContextP buf_to_ctx (ContextArray ca, ConstBufferP buf)
 
 // simple malloc bc we don't know which thread this is
 typedef struct {
-    rom tag_name, buf_name;
+    StrText tag_name;
+    rom buf_name;
     uint64_t size;
+    uint64_t n_words;
     LocalType ltype;
     uint8_t dyn_lt_order;
 } BigConsumers;
@@ -1911,7 +1936,7 @@ void ctx_show_zctx_big_consumers (FILE *out)
 
     uint32_t n_ctxs = z_file->num_contexts; // snapshot lest it grow
     int n_bufs_per_ctx =        IS_ZIP ? 6 : 3; // zctx buffers
-    if (pool) n_bufs_per_ctx += IS_ZIP ? 5 : 5; // vctx buffers
+    if (pool) n_bufs_per_ctx += IS_ZIP ? 5 : 6; // vctx buffers
 
     BigConsumers *bc = MALLOC (n_ctxs * n_bufs_per_ctx/*# buffers for context*/ * sizeof (BigConsumers));
     BigConsumers *next = bc;
@@ -1919,18 +1944,20 @@ void ctx_show_zctx_big_consumers (FILE *out)
     ContextP vctx = NULL;
 
     for (ContextP zctx = ZCTX(0); zctx < ZCTX(n_ctxs); zctx++) { // can't use for zctx for the same reason
-        *next++ = (BigConsumers){ .tag_name = zctx->tag_name, .buf_name = zctx->dict.name,        .size = zctx->dict.size };
-        *next++ = (BigConsumers){ .tag_name = zctx->tag_name, .buf_name = zctx->counts.name,      .size = zctx->counts.size };
+        StrText tag = ctx_tag_name_ex (zctx);
+        
+        *next++ = (BigConsumers){ .tag_name = tag, .buf_name = zctx->dict.name,        .size = zctx->dict.size };
+        *next++ = (BigConsumers){ .tag_name = tag, .buf_name = zctx->counts.name,      .size = zctx->counts.size };
 
         if (IS_ZIP) {
-            *next++ = (BigConsumers){ .tag_name = zctx->tag_name, .buf_name = zctx->global_hash.name, .size = zctx->global_hash.size };
-            *next++ = (BigConsumers){ .tag_name = zctx->tag_name, .buf_name = zctx->nodes.name,       .size = zctx->nodes.size };
-            *next++ = (BigConsumers){ .tag_name = zctx->tag_name, .buf_name = zctx->ston_hash.name,   .size = zctx->ston_hash.size };
-            *next++ = (BigConsumers){ .tag_name = zctx->tag_name, .buf_name = zctx->ston_ents.name,   .size = zctx->ston_ents.size };
+            *next++ = (BigConsumers){ .tag_name = tag, .buf_name = zctx->global_hash.name, .size = zctx->global_hash.size };
+            *next++ = (BigConsumers){ .tag_name = tag, .buf_name = zctx->nodes.name,       .size = zctx->nodes.size };
+            *next++ = (BigConsumers){ .tag_name = tag, .buf_name = zctx->ston_hash.name,   .size = zctx->ston_hash.size };
+            *next++ = (BigConsumers){ .tag_name = tag, .buf_name = zctx->ston_ents.name,   .size = zctx->ston_ents.size };
         }
         else 
-            *next++ = (BigConsumers){ .tag_name = zctx->tag_name, .buf_name = zctx->word_list.name,   .size = zctx->word_list.size };
-
+            *next++ = (BigConsumers){ .tag_name = tag, .buf_name = zctx->word_list.name,   .size = zctx->word_list.size };
+        
         if (pool) {
             // for this zctx, get total size of these 4 buffers across all VBs
             // note: we are assuming did_i is equal in vctx and zctx - this will not be true in 
@@ -1938,6 +1965,7 @@ void ctx_show_zctx_big_consumers (FILE *out)
             uint64_t dict=0, nodes=0, b250=0, local_hash=0, local=0, dyn_lt_order=0, 
                      per_line=0, piz_word_list_hash=0, history=0, piz_ctx_specific_buf=0;
             LocalType ltype=0;
+            uint32_t max_nodes = 0;
 
             for (uint32_t vb_id=0; vb_id < pool->num_vbs; vb_id++) {
                 if (!pool->vb[vb_id] || !pool->vb[vb_id]->in_use) continue;
@@ -1951,6 +1979,8 @@ void ctx_show_zctx_big_consumers (FILE *out)
                     local_hash += vctx->local_hash.size;
                     local      += vctx->local.size;
 
+                    max_nodes = MAX_(vctx->nodes.len32 + vctx->ol_nodes.len32, max_nodes);
+
                     if (vctx->local.len) {
                         dyn_lt_order = MAX_(dyn_lt_order, vctx->dyn_lt_order);
                         ltype = vctx->ltype;
@@ -1958,6 +1988,7 @@ void ctx_show_zctx_big_consumers (FILE *out)
                 }
 
                 else { // PIZ
+                    b250                 += vctx->b250.size;
                     local                += vctx->local.size;
                     per_line             += vctx->per_line.size;
                     piz_word_list_hash   += vctx->piz_word_list_hash.size;
@@ -1967,20 +1998,21 @@ void ctx_show_zctx_big_consumers (FILE *out)
                 
             }
 
-            *next++ =     (BigConsumers){ .tag_name = zctx->tag_name, .buf_name = CTX_TAG_LOCAL,      .size = local, .ltype =ltype, .dyn_lt_order = dyn_lt_order };
+            *next++ =     (BigConsumers){ .tag_name = tag, .buf_name = CTX_TAG_LOCAL,      .size = local, .ltype = ltype, .dyn_lt_order = dyn_lt_order };
 
             if (IS_ZIP) {
-                *next++ = (BigConsumers){ .tag_name = zctx->tag_name, .buf_name = CTX_TAG_DICT,       .size = dict };
-                *next++ = (BigConsumers){ .tag_name = zctx->tag_name, .buf_name = CTX_TAG_NODES,      .size = nodes };
-                *next++ = (BigConsumers){ .tag_name = zctx->tag_name, .buf_name = CTX_TAG_B250,       .size = b250 };
-                *next++ = (BigConsumers){ .tag_name = zctx->tag_name, .buf_name = CTX_TAG_LOCAL_HASH, .size = local_hash };
+                *next++ = (BigConsumers){ .tag_name = tag, .buf_name = CTX_TAG_DICT,       .size = dict };
+                *next++ = (BigConsumers){ .tag_name = tag, .buf_name = CTX_TAG_NODES,      .size = nodes };
+                *next++ = (BigConsumers){ .tag_name = tag, .buf_name = CTX_TAG_B250,       .size = b250, .n_words = max_nodes };
+                *next++ = (BigConsumers){ .tag_name = tag, .buf_name = CTX_TAG_LOCAL_HASH, .size = local_hash };
             }
             
             else {
-                *next++ = (BigConsumers){ .tag_name = zctx->tag_name, .buf_name = "per_line",             .size = per_line };
-                *next++ = (BigConsumers){ .tag_name = zctx->tag_name, .buf_name = "piz_word_list_hash",   .size = piz_word_list_hash };
-                *next++ = (BigConsumers){ .tag_name = zctx->tag_name, .buf_name = "history",              .size = history };
-                *next++ = (BigConsumers){ .tag_name = zctx->tag_name, .buf_name = "piz_ctx_specific_buf", .size = piz_ctx_specific_buf };
+                *next++ = (BigConsumers){ .tag_name = tag, .buf_name = CTX_TAG_B250,           .size = b250, .n_words = zctx->word_list.len };
+                *next++ = (BigConsumers){ .tag_name = tag, .buf_name = "per_line",             .size = per_line };
+                *next++ = (BigConsumers){ .tag_name = tag, .buf_name = "piz_word_list_hash",   .size = piz_word_list_hash };
+                *next++ = (BigConsumers){ .tag_name = tag, .buf_name = "history",              .size = history };
+                *next++ = (BigConsumers){ .tag_name = tag, .buf_name = "piz_ctx_specific_buf", .size = piz_ctx_specific_buf };
             }
         }
     }   
@@ -1994,8 +2026,10 @@ void ctx_show_zctx_big_consumers (FILE *out)
     if (IS_ZIP) fprintf (out, "Note: ideally this should be run within the ZIP main loop, at the 2nd+ generation of contexts - so not too close to the start or end of the execution\n");
 
     for (int i=0; i < NUM_TO_PRINT; i++)
-        fprintf (out, "%-9s: %-17s: %s%s%s\n", bc[i].tag_name, bc[i].buf_name, str_size (bc[i].size).s,
-                 cond_str (bc[i].ltype, " ltype=", lt_name (bc[i].ltype)),
+        fprintf (out, "%-*s: %-17s: %s%s%s%s\n", 
+                 (Z_DT(VCF) || Z_DT(BCF)) ? 15 : 9, bc[i].tag_name.s, bc[i].buf_name, str_size (bc[i].size).s,
+                 cond_int (bc[i].n_words, " n_words=", bc[i].n_words),
+                 cond_str (true, " ltype=", lt_name (bc[i].ltype)),
                  cond_str (bc[i].dyn_lt_order, " dyn_ltype=", dyn_int_lt_order_name (bc[i].dyn_lt_order)));
 
     FREE (bc);

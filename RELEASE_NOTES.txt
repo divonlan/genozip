@@ -3,18 +3,22 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
-15.0.39 24/1/2023
+15.0.40 1/2/2024
+- FASTQ/BAM: Better compression for some MGI Tech files
+- Remove the ability to convert SAM/BAM files to FASTQ. This added a layer of complexity and did not get a lot of usage. Use genocat | samtools view -OFASTQ instead.
+
+15.0.39 24/1/2024
 - Core engine improvements: significant reducion in RAM consumption during compression, along with modest compression gains.
 - Support for Mac Apple Silicon processors in osx64 simulated mode
 - Updated section 2 of the license, to grant Premium license holders the right to distribute Genozip to others.
 - improved diagnostics: new options: --show-snip, --debug-tar ; --show-headers can now take either a section name or dict_id
 
-15.0.37 13/1/2023
+15.0.37 13/1/2024
 - VCF: Better compression for multi-sample files where sample data is not only GT
 - VCF: Better compression of GATK GVCF files
 - Core engine improvements: significant reduction in RAM consumption mostly for large BAM and VCF files.
 
-15.0.36 7/1/2023
+15.0.36 7/1/2024
 - BAM: Better compression of files with NanoSeq tags
 - VCF: Better compression of polyploid (ploidy > 2) data
 - Bug fixes

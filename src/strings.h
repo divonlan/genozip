@@ -24,6 +24,7 @@
 #define IS_LETTER(c)       (IS_CLETTER(c) || IS_SLETTER(c))
 #define IS_ALPHANUMERIC(c) (IS_LETTER(c) || IS_DIGIT(c))
 #define IS_NON_WS_PRINTABLE(c) (((c)>=33) && ((c)<=126))
+#define IS_QUAL_SCORE(c)   IS_NON_WS_PRINTABLE(c)
 extern bool is_printable[256];
 #define IS_PRINTABLE(c)    is_printable[(uint8_t)(c)]
 #define IS_VALID_URL_CHAR(c) (IS_ALPHANUMERIC(c) || c=='-' || c=='_' || c=='.' || c=='~') // characters valid in a URL
@@ -33,6 +34,7 @@ extern bool is_printable[256];
 
 #define IS_ASTERISK(str)   str_is_1char(str, '*')
 #define IS_PERIOD(str)     str_is_1char(str, '.')
+#define IS_SPACE(str)      str_is_1char(str, ' ')
 #define IS_EQUAL_SIGN(str) str_is_1char(str, '=')
 
 #define TF(s) ((s) ? "true" : "false")

@@ -454,34 +454,27 @@ rom FMT_DP_method_name (FormatDPMethod method)
     }
 }
 
+static DESCENDING_SORTER (qual_sorter, QualHisto, count)
+
 StrText segconf_get_qual_histo (QualHistType qht)
 {
+    for (int q=0; q < 94; q++)
+        segconf.qual_histo[qht][q].q = q; // note: count is set during segconf.running 
+
+    qsort (segconf.qual_histo[qht], 94, sizeof(QualHisto), qual_sorter);  
+
     StrText s = {};
     char *next = s.s;
 
-    uint32_t *histo = IS_ACGT(qht) ? segconf.qual_histo_acgt[acgt_encode[qht]]
-                                   : segconf.qual_histo[qht];
-
-    // get the (up to) 16 qual scores with the highest count. O(N^2) method, but that's ok - only ~1500 iterations.
+    // get the (up to) 16 qual scores with the highest count. 
     for (int i=0; i < 16; i++) {
-        int max_score = 0;
-        uint32_t max_count = 0;
+        if (!segconf.qual_histo[i]->count) break;
 
-        for (int score=0; score < NUM_QUAL_SCORES; score++)
-            if (histo[score] > max_count) {
-                max_count = histo[score];
-                max_score = score + 33;
-            }
-
-        if (!max_count) break;
-
-        switch (max_score) {
+        switch (segconf.qual_histo[i]->q + '!') {
             case ';' : memcpy (next, "；", STRLEN("；")); next += STRLEN("；"); break; // Unicode ；and ≐ (in UTF-8) to avoid breaking spreadsheet
             case '=' : memcpy (next, "≐", STRLEN("≐")); next += STRLEN("≐"); break; 
-            default  : *next++ = max_score;
+            default  : *next++ = segconf.qual_histo[i]->q + '!';
         }
-
-        histo[max_score-33] = 0;
     }
 
     return s;

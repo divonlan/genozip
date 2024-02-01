@@ -35,8 +35,9 @@ VBlockPool *vb_get_pool (VBlockPoolType type, FailType soft_fail)
 VBlockP vb_get_from_pool (VBlockPoolP pool, int32_t vb_id) 
 {
     ASSERTNOTNULL (pool);
-    ASSERT (vb_id == VB_ID_EVB || vb_id < pool->num_vbs, "vb_id=%d out of range for pool %s [0,%d]", 
-            vb_id, pool->name, pool->num_vbs-1);
+
+    if (!(vb_id == VB_ID_EVB || (vb_id >= 0 && vb_id < pool->num_vbs)))
+        return NULL; // soft fail on invalid vb_id
 
     return (vb_id == VB_ID_EVB) ? evb : pool->vb[vb_id];
 }

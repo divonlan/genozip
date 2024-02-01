@@ -1,10 +1,12 @@
 // ------------------------------------------------------------------
 //   codec_homp.c
-//   Copyright (C) 2020-2024 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
+
+// WARNING: THIS FILE CONTAINS A METHOD THAT IS PATENT PENDING.
 
 #include "codec.h"
 #include "reconstruct.h"
@@ -74,7 +76,11 @@ bool codec_homp_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB get_line_c
 {
     ContextP qual_ctx = CTX(qual_did_i);
 
-    if ((!TECH(ULTIMA) && !TECH(UNKNOWN) && !MP(ULTIMA)) || // either the TECH or the mapper are an indication of potentially Ultima data 
+    if (flag.force_qual_codec == CODEC_HOMP) {
+        if (qual_did_i != FASTQ_QUAL) return false;
+    }
+
+    else if ((!TECH(ULTIMA) && !TECH(UNKNOWN) && !MP(ULTIMA)) || // either the TECH or the mapper are an indication of potentially Ultima data 
         qual_did_i != FASTQ_QUAL /* =SAM_QUAL */                         ||
         !codec_homp_qual_data_is_a_fit_for_homp (vb, qual_ctx, get_line_cb))
         return false;
@@ -190,6 +196,15 @@ CODEC_RECONSTRUCT (codec_homp_reconstruct)
     START_TIMER;
  
     rom seq = VB_DT(SAM) ? sam_piz_get_textual_seq(vb) : last_txtx (vb, CTX(FASTQ_SQBITMAP)); 
+
+    // case: translating to FASTQ, and alignment is revcomped in SAM - use reversed SEQ as in SAM file
+    bool out_to_fq_and_revcomp = (OUT_DT(FASTQ) && VB_DT(SAM) && sam_is_last_flags_rev_comp (vb));
+
+    if (out_to_fq_and_revcomp) {
+        buf_alloc (vb, &vb->scratch, 0, len, char, 0, "scratch");
+        str_reverse (B1STc(vb->scratch), seq, len);
+        seq = B1STc(vb->scratch);
+    }
 
     // case: Deep, and len is only the trimmed suffix as the rest if copied from SAM (see fastq_special_deep_copy_QUAL)
     if (flag.deep && len < vb->seq_len)

@@ -389,7 +389,7 @@ uint32_t recon_multi_dict_id_get_num_dicts (ContextP ctx, STRp(snip))
 
     else if (snip_len) 
         return (1 + str_count_char (STRa(snip), '\t')) - 
-               (snip[snip_len-1] == SNIP_SPECIAL); // don't count extension for --show-snips (15.0.38) 
+               (snip[snip_len-1] == SNIP_SPECIAL); // don't count extension for --show-snips (15.0.39) 
     else        
         return 0;
 }
@@ -740,8 +740,10 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i,
         reconstruct_one_snip (vb, ctx, word_index, STRa(snip), reconstruct, __FUNCLINE);        
 
         // if SPECIAL function set value_is_missing (eg vcf_piz_special_PS_by_PID) - this treated as a WORD_INDEX_MISSING 
-        if (ctx->special_res == SPEC_RES_IS_MISSING) 
+        if (ctx->special_res == SPEC_RES_IS_MISSING) {
+            ctx->special_res = SPEC_RES_OK; // reset for next sample
             goto missing;
+        }
 
         // for backward compatability with v8-11 that didn't yet have flags.store = STORE_INDEX for CHROM
         if (did_i == DTF(prim_chrom)) { // NOTE: CHROM cannot have aliases, because looking up the did_i by dict_id will lead to CHROM, and this code will be executed for a non-CHROM field

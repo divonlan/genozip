@@ -152,6 +152,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (compressor_homp,  2);
         PRINT (compressor_t0,    2);
         PRINT (compressor_pacb,  2);
+        PRINT (compressor_smux,  2);
         
         PRINT (reconstruct_vb, 1);
         for (Did did_i=0; did_i < z_file->num_contexts; did_i++) 
@@ -167,6 +168,7 @@ void profiler_add_evb_and_print_report (void)
             PRINT (codec_longr_reconstruct,3);
             PRINT (codec_homp_reconstruct, 3);
             PRINT (codec_t0_reconstruct,   3);
+            PRINT (codec_smux_reconstruct, 3);
             PRINT (codec_pacb_reconstruct, 3);
             PRINT (codec_domq_reconstruct, 3);
             PRINT (codec_domq_reconstruct_dom_run, 4);
@@ -197,6 +199,7 @@ void profiler_add_evb_and_print_report (void)
             PRINT (codec_domq_reconstruct, 2);
             PRINT (codec_domq_reconstruct_dom_run, 3);
             PRINT (codec_homp_reconstruct, 2);
+            PRINT (codec_smux_reconstruct, 2);
             PRINT (codec_pacb_reconstruct, 2);
         }
         
@@ -359,6 +362,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (compressor_homp,  2);
         PRINT (compressor_t0,    2);
         PRINT (compressor_pacb,  2);
+        PRINT (compressor_smux,  2);
 
         for_zctx 
             PRINT_(fields[zctx->did_i], zctx->tag_name, 2);

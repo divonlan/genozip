@@ -249,7 +249,7 @@ typedef enum __attribute__ ((packed)) { // 1 byte
     CODEC_BAM=23,       // in v8 BAM was a codec which was compressed using samtools as external compressor. Since v14 we use the codec name for displaying "BAM" in stats total line.
     CODEC_CRAM=24, CODEC_ZIP=25,
 
-    CODEC_LONGR=26, CODEC_NORMQ=27, CODEC_HOMP=28, CODEC_T0=29, CODEC_PACB=30,
+    CODEC_LONGR=26, CODEC_NORMQ=27, CODEC_HOMP=28, CODEC_T0=29, CODEC_PACB=30, CODEC_SMUX=31,
 
     NUM_CODECS,
 } Codec; 
@@ -320,6 +320,9 @@ typedef int ThreadId;
 #define MAX_(a, b) ({ __typeof__(a) _a_=(a); __typeof__(b) _b_=(b); (_a_ > _b_) ? _a_ : _b_; })
 #ifndef ABS
 #define ABS(a) ({ __typeof__(a) _a_=(a); (_a_ >= 0) ? _a_ : -_a_; })
+#endif
+#ifndef SQR 
+#define SQR(x) ((x)*(x)) 
 #endif
 
 // round up or down to the nearest

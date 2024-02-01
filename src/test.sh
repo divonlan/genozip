@@ -264,26 +264,6 @@ verify_is_fastq() # $1 fastq file name
     $genozip --seg-only $fastq || exit 1
 }
 
-# note: only runs it to see that it doesn't crash, doesn't validate results
-test_translate_sambam_to_fastq() # $1 sam or bam file $1
-{
-    test_header "$1 - translate SAM/BAM to FASTQ"
-
-    local sambam=$TESTDIR/$1
-    local fastq=$OUTDIR/copy.fastq
-    if [ ! -f $sambam ] ; then echo "$sambam: File not found"; exit 1; fi
-
-    $genozip -fX $sambam -o $output || exit 1
-    
-    $genocat $output -fo $fastq    || exit 1
-    verify_is_fastq $fastq
-
-    $genocat $output -fo $fastq --fq=all || exit 1
-    verify_is_fastq $fastq
-
-    cleanup
-}
-
 view_file()
 {
     if [[ $1 =~ \.gz$ ]]; then  
@@ -481,6 +461,27 @@ batch_special_algs()
 
     test_header "LONGR edge case regression test"
     $genozip ${TESTDIR}/regression.longr-issue.bam -ft || exit 1 
+
+    test_header "VCF empty sample fields regression test"
+    $genozip ${TESTDIR}/regression.empty-sample-fields.vcf -ft || exit 1 
+}
+
+batch_qual_codecs()
+{
+    batch_print_header
+
+    local codecs=( normq domq longr pacb smux homp )
+    local files=( special.depn.sam test.cigar-no-seq-qual.bam )
+
+    for file in ${files[@]}; do
+        for codec in ${codecs[@]}; do
+            test_header "Testing QUAL codec ${codec^^} in $file WITHOUT gencomp"
+            $genozip $TESTDIR/$file -ft --no-gencomp --force-$codec || exit 1
+
+            test_header "Testing QUAL codec ${codec^^} in $file WITH gencomp"
+            $genozip $TESTDIR/$file -ft --force-gencomp --force-$codec || exit 1
+        done
+    done
 }
 
 batch_dvcf()
@@ -772,29 +773,20 @@ batch_sam_bam_translations()
     done
 }
 
-# Test SAM/BAM->FQ translations
-batch_sam_fq_translations()
+# note: only runs it to see that it doesn't crash, doesn't validate results
+test_translate_sambam_to_fastq() # $1 sam or bam file ; $2 outfile fastq name ; $3 genozip command line options if any
 {
-    batch_print_header
+    local sambam=$TESTDIR/$1
+    local fastq=$OUTDIR/$2.fastq
+    if [ ! -f $sambam ] ; then echo "$sambam: File not found"; exit 1; fi
 
-    # note: we have these files in both sam and bam versions generated with samtools
-    local files=(special.buddy.bam 
-                 special.depn.bam              # depn/prim with/without QUAL
-                 special.NA12878.bam 
-                 special.pacbio.ccs.bam        # unaligned SAM/BAM with no SQ records
-                 special.human2.bam
-                 special.collated.bam
-                 test.starsolo.sam             # has PRIM and DEPN components
-                 special.pacbio.iq-dq-sq.sam   # QUAL depends on iq:Z, dq:Z, sq:Z
-                 special.CODEC_PACB+np+ec.sam) # QUAL depends on np:i, ec:i
-    local file
-    for file in ${files[@]}; do
-        test_translate_sambam_to_fastq $file
+    $genozip -fX $sambam -fo $output $3 || exit 1
+    
+    $genocat $output -fo $fastq    || exit 1
+    verify_is_fastq $fastq
 
-        if [ "${file##*.}" == bam ]; then
-            test_translate_sambam_to_fastq ${file%.bam}.sam
-        fi
-    done
+    $genocat $output -fo $fastq --fq=all || exit 1
+    verify_is_fastq $fastq
 }
 
 # Test --coverage, --idxstats and --sex - not testing correctness, only that it doesn't crash
@@ -2243,9 +2235,9 @@ case $GENOZIP_TEST in
 16)  batch_bgzf                   ;;
 17)  batch_subdirs                ;;
 18)  batch_special_algs           ;;
-19)  batch_dvcf                   ;;
-20)  batch_sam_bam_translations   ;;
-21)  batch_sam_fq_translations    ;;
+19)  batch_qual_codecs            ;;
+20)  batch_dvcf                   ;;
+21)  batch_sam_bam_translations   ;;
 22)  batch_23andMe_translations   ;;
 23)  batch_phylip_translations    ;;
 24)  batch_genocat_tests          ;;
@@ -2293,7 +2285,6 @@ case $GENOZIP_TEST in
 66)  batch_real_world_backcomp 13.0.21 ;; 
 67)  batch_real_world_backcomp 14.0.33 ;; 
 68)  batch_real_world_backcomp latest  ;;
-
 69)  batch_basic basic.vcf     latest  ;;
 70)  batch_basic basic.bam     latest  ;;
 71)  batch_basic basic.sam     latest  ;;

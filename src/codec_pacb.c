@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   codec_pacb.c
-//   Copyright (C) 2023-2024 Genozip Limited
+//   Copyright (C) 2023-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -14,6 +14,8 @@
 #include "container.h"
 #include "endianness.h"
 #include "piz.h"
+
+// WARNING: THIS FILE CONTAINS A METHOD THAT IS PATENT PENDING.
 
 // ZIP/PIZ: contribution of the SEQ environment (seq_i-1 to seq_i+2) to channel_i. This is part of codec / file format
 #define NUM_Ks 7
@@ -38,6 +40,7 @@ static void codec_pacb_init_ctxs (VBlockP vb, ContextP ctx, uint8_t n_channels, 
         if (IS_ZIP) {
             subctx->local_dep = DEP_L1;
             subctx->st_did_i  = ctx->did_i;
+            subctx->ltype     = LT_SUPP;
         }
 
         if (subctxs) subctxs[channel_i] = subctx;
@@ -70,6 +73,7 @@ void codec_pacb_segconf_finalize (VBlockP vb)
     // create dict_id for each channel  
     bytes id = dict_id_typeless (ctx->dict_id).id;
 
+    // note: dict_id compatible with codec_pacb_smux_is_qual()
     for (uint8_t channel_i = 0; channel_i < n_channels; channel_i++)
         subdicts[channel_i] = dict_id_make((char[]){ id[0], '0'+channel_i/10, '0'+channel_i%10, '-',id[0], id[1], id[2], id[3]}, 8, dict_id_type (ctx->dict_id));
 
@@ -79,9 +83,11 @@ void codec_pacb_segconf_finalize (VBlockP vb)
     zctx->subdicts_section = true; // we store the dict_id array in SEC_SUBDICTS (global section)
 }
 
-bool codec_pacb_comp_init (VBlockP vb, LocalGetLineCB get_line_cb)
+bool codec_pacb_comp_init (VBlockP vb, Did did_i, LocalGetLineCB get_line_cb)
 {
-    ContextP ctx = CTX(SAM_QUAL); // ==FASTQ_QUAL
+    if (!codec_pacb_maybe_used (did_i)) return false;
+
+    decl_ctx (did_i);
 
     uint32_t (*get_seq_len)(VBlockP, uint32_t) = (VB_DT(FASTQ) ? fastq_zip_get_seq_len : sam_zip_get_seq_len);
 
@@ -104,16 +110,18 @@ bool codec_pacb_comp_init (VBlockP vb, LocalGetLineCB get_line_cb)
 // ZIP: called for QUAL-like dids
 bool codec_pacb_maybe_used (Did did_i)
 {
-    return (TECH(PACBIO) && !flag.no_pacb && segconf.nontrivial_qual && !segconf.use_pacbio_iqsqdq &&
-            (did_i == SAM_QUAL/*==FASTQ_QUAL*/ || did_i == SAM_CQUAL || did_i == OPTION_OQ_Z));
+    return (flag.force_qual_codec == CODEC_PACB || (TECH(PACBIO) && !flag.no_pacb && segconf.nontrivial_qual && !segconf.use_pacbio_iqsqdq)) &&
+           (did_i == SAM_QUAL/*==FASTQ_QUAL*/ || did_i == SAM_CQUAL || did_i == OPTION_OQ_Z);
 }
 
 // ZIP: calculate the channel_i for each score on the line based on its environment (SEQ)
-static uint8_t *calc_channels_one_line (VBlockP vb, LineIType line_i, uint8_t np0, uint8_t *channel_i_p, uint32_t *lens)
+static uint8_t *calc_channels_one_line (VBlockP vb, LineIType line_i, uint8_t np0, bool is_missing_qual, uint8_t *channel_i_p, uint32_t *lens)
 {
     STRw(seq);
     (VB_DT(FASTQ) ? fastq_zip_seq : sam_zip_seq) (vb, NULL, line_i, pSTRa(seq), CALLBACK_NO_SIZE_LIMIT, NULL);
 
+    if (is_missing_qual) seq_len = 1;
+    
     for (uint32_t i=0; i < seq_len; i++) {
         uint8_t K = QUAL_get_K_value (STRa(seq), i);
 
@@ -140,11 +148,6 @@ static uint8_t *set_values_one_line (VBlockP vb, STRp(qual),
     }
 
     return channel_i_p;
-}
-
-uint32_t codec_pacb_est_size (Codec codec, uint64_t uncompressed_len)
-{
-    return 1; // QUAL.compressed_len is one byte
 }
 
 COMPRESS (codec_pacb_compress)
@@ -174,7 +177,7 @@ COMPRESS (codec_pacb_compress)
 
         uint8_t np0 = (max_np > 1) ? MIN_(sam_zip_get_np (vb, line_i), max_np) - 1 : 0; // notes: np0 is 0-based np, i.e. (np-1) ; np0 is always 0 for FASTQ and CLR
 
-        channel_i_p = calc_channels_one_line (vb, line_i, np0, channel_i_p, lens);
+        channel_i_p = calc_channels_one_line (vb, line_i, np0, IS_SPACE(score), channel_i_p, lens);
     }
 
     char *next[n_channels]; // pointer into next of each channel
@@ -276,16 +279,35 @@ CODEC_RECONSTRUCT (codec_pacb_reconstruct)
     // reconstruct 
     rom seq = VB_DT(SAM) ? sam_piz_get_textual_seq(vb) : last_txtx (vb, CTX(FASTQ_SQBITMAP)); 
 
+    // case: translating to FASTQ, and alignment is revcomped in SAM - use reversed SEQ as in SAM file
+    bool recon_fastq_sam_was_revcomp = (OUT_DT(FASTQ) && VB_DT(SAM) && sam_is_last_flags_rev_comp (vb));
+
+    if (recon_fastq_sam_was_revcomp) {
+        buf_alloc (vb, &vb->scratch, 0, len, char, 0, "scratch");
+        str_reverse (B1STc(vb->scratch), seq, len);
+        seq = B1STc(vb->scratch);
+    }
+
     char *next_recon = BAFTtxt;
     for (uint32_t i=0; i < len; i++) {
         uint8_t K = QUAL_get_K_value (seq, len, i);
         uint8_t channel_i = NUM_Ks * np0 + K;
         ASSPIZ (next[channel_i] < after[channel_i], "out of data in channel_i=%u i=%u", channel_i, i);
+        
+        char score = *next[channel_i]++;
 
-        *next_recon++ = *next[channel_i]++;
+        if (score == ' ') {
+            sam_reconstruct_missing_quality (vb, reconstruct);
+            goto done;
+        }
+
+        *next_recon++ = score;
     }
 
     if (reconstruct) Ltxt += len;
+
+done:
+    if (recon_fastq_sam_was_revcomp) buf_free (vb->scratch);
 
     COPY_TIMER(codec_pacb_reconstruct);
 }

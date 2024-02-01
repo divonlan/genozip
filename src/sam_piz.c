@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_piz.c
-//   Copyright (C) 2020-2024 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -168,7 +168,8 @@ IS_SKIP (sam_piz_is_skip_section)
     bool dict_needed_for_preproc = (is_dict && z_file->z_flags.has_gencomp);  // when loading a SEC_DICT in a file that has gencomp, don't skip dicts needed for loading SA
 
     if (dict_id_is_qname_sf(dict_id)) dnum = _SAM_Q1NAME; // treat all QNAME subfields as _SAM_Q1NAME
-    if (codec_pacb_is_qual (dict_id)) dnum = _SAM_QUAL;
+
+    if (codec_pacb_smux_is_qual (dict_id)) dnum = _SAM_QUAL;
 
     bool is_prim = (comp_i == SAM_COMP_PRIM) && !preproc;
     bool is_main = (comp_i == SAM_COMP_MAIN);
@@ -264,8 +265,6 @@ IS_SKIP (sam_piz_is_skip_section)
         case _SAM_TOPLEVEL : KEEPIF (flag.deep && is_dict); // needed to reconstruct the FASTQ components
                              SKIPIFF (preproc || OUT_DT(BAM) || OUT_DT(FASTQ));
         case _SAM_TOP2BAM  : SKIPIFF (preproc || OUT_DT(SAM) || OUT_DT(FASTQ));
-        case _SAM_TOP2FQ   : SKIPIFF (preproc || OUT_DT(SAM) || OUT_DT(BAM) || flag.extended_translation);
-        case _SAM_TOP2FQEX : SKIPIFF (preproc || OUT_DT(SAM) || OUT_DT(BAM) || !flag.extended_translation);
         case 0             : KEEPIFF (ST(VB_HEADER) || !preproc);
         
         default            : other :
@@ -637,11 +636,6 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
             alignment->block_size = LTEN32 (alignment->block_size);
         }
         
-        // case SAM to FASTQ translation: drop line if this is not a primary alignment (don't show its secondary or supplamentary alignments)
-        else if ((dict_id.num == _SAM_TOP2FQ || dict_id.num == _SAM_TOP2FQEX)
-        && ((uint16_t)vb->last_int(SAM_FLAG) & (SAM_FLAG_SECONDARY | SAM_FLAG_SUPPLEMENTARY)))
-            DROP_LINE ("not_primary");
-
         // --taxid: filter out by Kraken taxid (SAM, BAM, FASTQ)
         if (flag.kraken_taxid 
         && (   (kraken_is_loaded  && !kraken_is_included_loaded (vb, STRlst (SAM_QNAME)))// +1 in case of FASTQ to skip "@"
@@ -663,9 +657,6 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
 
         // --MAPQ
         if (flag.sam_mapq_filter) {     
-            if (dict_id.num == _SAM_TOP2FQ || dict_id.num == _SAM_TOP2FQEX)
-                reconstruct_from_ctx (vb, SAM_MAPQ, 0, false); // when translating to FASTQ, MAPQ is normally not reconstructed
-
             uint8_t this_mapq = (uint8_t)vb->last_int (SAM_MAPQ);
         
             if ((flag.sam_mapq_filter == SAM_MAPQ_INCLUDE_IF_AT_LEAST && this_mapq < flag.MAPQ) ||
@@ -783,26 +774,6 @@ bool sam_piz_line_has_aux_field (VBlockSAMP vb, DictId dict_id)
         if (vb->aux_con->items[i].dict_id.num == dict_id.num) return true;
 
     return false;
-}
-
-// emit 1 if (FLAGS & 0x40) or 2 of (FLAGS & 0x80) except if --FLAG is specified too (--FLAG can be
-// used to get only R1 or R2)
-TRANSLATOR_FUNC (sam_piz_sam2fastq_FLAG)
-{
-    if (flag.sam_flag_filter) return 0;
-    
-    uint16_t sam_flag = (uint16_t)vb->last_int(SAM_FLAG);
-
-    if (sam_flag & (SAM_FLAG_IS_FIRST | SAM_FLAG_IS_LAST)) {
-        
-        recon -= item_prefix_len + 1; // move to before prefix and previous field's separator (\n for regular fq or \t for extended)
-        memmove (recon+2, recon, recon_len + item_prefix_len + 1); // make room for /1 or /2 
-        recon[0] = '/';
-        recon[1] = (sam_flag & SAM_FLAG_IS_FIRST) ? '1' : '2';
-        Ltxt += 2; 
-    }
-
-    return 0;
 }
 
 // v14: De-multiplex by has_mate

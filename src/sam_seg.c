@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_seg.c
-//   Copyright (C) 2020-2024 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -266,7 +266,7 @@ void sam_zip_genozip_header (SectionHeaderGenozipHeaderP header)
     header->sam.segconf_deep_qname2     = (segconf.deep_qtype == QNAME2);// v15
     header->sam.segconf_deep_no_qual    = segconf.deep_no_qual;          // v15
     if (segconf.deep_N_fq_score && segconf.deep_N_sam_score)
-        header->sam.segconf_deep_N_fq_score = segconf.deep_N_fq_score;   // 15.0.38
+        header->sam.segconf_deep_N_fq_score = segconf.deep_N_fq_score;   // 15.0.39
     
     unsigned est_sam_factor_mult = round (MAX_(segconf.est_sam_factor, 1) * (double)SAM_FACTOR_MULT);
     if (est_sam_factor_mult > 255) {
@@ -610,74 +610,7 @@ static void sam_seg_toplevel (VBlockP vb)
                                            ' ', ' ', ' ', ' ', CON_PX_SEP}; // first item prefix - 4 spaces (place holder for block_size)
 
     container_seg (vb, CTX(SAM_TOP2BAM), (ContainerP)&top_level_bam, bam_line_prefix, sizeof (bam_line_prefix),
-                  IS_BAM_ZIP ? sizeof (uint32_t) * vb->lines.len : 0); // if BAM, account for block_size
-
-    // top level snip - reconstruction as FASTQ
-    SmallContainer top_level_fastq = {
-        .repeats     = vb->lines.len32,
-        .is_toplevel = true,
-        .callback    = true, // drop supplementary alignments and alignments without QUAL data
-        .nitems_lo   = 11,
-        .items       = { { .dict_id = { _SAM_BUDDY    }                                                  },
-                         { .dict_id = { qname_dict_id }, .separator = "\n"                               },
-                         { .dict_id = { _SAM_RNAME    }, .separator = { CI0_INVISIBLE }                  },// needed for reconstructing seq
-                         { .dict_id = { _SAM_POS      }, .separator = { CI0_INVISIBLE }                  },// needed for reconstructing seq
-                         { .dict_id = { _SAM_RNEXT    }, .separator = { CI0_INVISIBLE }                  },// needed for reconstructing PNEXT
-                         { .dict_id = { _SAM_PNEXT    }, .separator = { CI0_INVISIBLE }                  },// needed for reconstructing POS (in case of BUDDY)
-                         { .dict_id = { _SAM_FLAG     }, .separator = { CI0_INVISIBLE }, .translator = SAM2FASTQ_FLAG }, // need to know if seq is reverse complemented & if it is R2 ; reconstructs "1" for R1 and "2" for R2
-                         { .dict_id = { _SAM_CIGAR    }, .separator = { CI0_INVISIBLE }                  },// needed for reconstructing seq and also of SA_CIGAR (need vb->hard_clips[] for de-squanking)
-                         { .dict_id = { _SAM_FQ_AUX   }, .separator = { CI0_INVISIBLE }                  },// consumes OPTION_MC_Z (needed for mate CIGAR), OPTION_SA_Z (need for saggy RNAME, POS, CIGAR, NM, MAPQ), np:i, ec:f (needed in PacBio for QUAL) - see sam_piz_special_FASTQ_CONSUME_AUX
-                         { .dict_id = { _SAM_SQBITMAP }, .separator = { CI0_TRANS_ALWAYS, '\n' }, .translator = SAM2FASTQ_SEQ  },
-                         { .dict_id = { qual_dict_id  }, .separator = { CI0_TRANS_ALWAYS, '\n' }, .translator = SAM2FASTQ_QUAL }, // also moves fastq "line" to R2 (paired file) if needed
-                      }
-    };
-
-    // add a '@' to the description line, use a prefix to add the + line
-    static const char fastq_line_prefix[] = {CON_PX_SEP, CON_PX_SEP, '@', CON_PX_SEP, CON_PX_SEP, CON_PX_SEP, CON_PX_SEP, CON_PX_SEP,
-                                             CON_PX_SEP, CON_PX_SEP, CON_PX_SEP, CON_PX_SEP, CON_PX_SEP, '+', '\n', CON_PX_SEP};
-
-    container_seg (vb, CTX(SAM_TOP2FQ), (ContainerP)&top_level_fastq, fastq_line_prefix, sizeof (fastq_line_prefix), 0);
-
-    // top level snip - reconstruction as FASTQ "extended" - with all the SAM fields in the description line
-    SmallContainer top_level_fastq_ext = {
-        .repeats     = vb->lines.len32,
-        .is_toplevel = true,
-        .callback    = true, // drop non-primary chimeric reads and reads without QUAL data
-        .nitems_lo   = 13,
-        .items       = { { .dict_id = { _SAM_BUDDY    }                                                  },
-                         { .dict_id = { qname_dict_id }, .separator = "\t"                               },
-                         { .dict_id = { _SAM_FLAG     }, .separator = "\t", .translator = SAM2FASTQ_FLAG }, // need to know if seq is reverse complemented & if it is R2 ; reconstructs "1" for R1 and "2" for R2
-                         { .dict_id = { _SAM_RNAME    }, .separator = "\t"                               },
-                         { .dict_id = { _SAM_POS      }, .separator = "\t"                               },
-                         { .dict_id = { _SAM_MAPQ     }, .separator = "\t"                               },
-                         { .dict_id = { _SAM_CIGAR    }, .separator = "\t"                               },
-                         { .dict_id = { _SAM_RNEXT    }, .separator = "\t"                               },
-                         { .dict_id = { _SAM_PNEXT    }, .separator = "\t"                               },
-                         { .dict_id = { _SAM_TLEN     }, .separator = "\t"                               },
-                         { .dict_id = { _SAM_AUX      }, .separator = "\n"                               },
-                         { .dict_id = { _SAM_SQBITMAP }, .separator = { CI0_TRANS_ALWAYS, '\n' }, .translator = SAM2FASTQ_SEQ  },
-                         { .dict_id = { qual_dict_id  }, .separator = { CI0_TRANS_ALWAYS, '\n' }, .translator = SAM2FASTQ_QUAL }, // also moves fastq "line" to R2 (paired file) if needed
-                       }
-    };
-
-    // add a '@' to the description line, use a prefix to add the + line
-    static const char fastq_ext_line_prefix[] = {
-        CON_PX_SEP, CON_PX_SEP, CON_PX_SEP, 
-        '@', CON_PX_SEP, 
-        'F', 'L', 'A', 'G', ':', CON_PX_SEP,
-        'R', 'N', 'A', 'M', 'E', ':', CON_PX_SEP,
-        'P', 'O', 'S', ':', CON_PX_SEP,
-        'M', 'A', 'P', 'Q', ':', CON_PX_SEP,
-        'C', 'I', 'G', 'A', 'R', ':', CON_PX_SEP,
-        'R', 'N', 'E', 'X', 'T', ':', CON_PX_SEP,
-        'P', 'N', 'E', 'X', 'T', ':', CON_PX_SEP,
-        'T', 'L', 'E', 'N', ':', CON_PX_SEP,
-        CON_PX_SEP,             // AUX
-        CON_PX_SEP,             // SEQ
-        '+', '\n', CON_PX_SEP}; // QUAL
-
-    container_seg (vb, CTX(SAM_TOP2FQEX), (ContainerP)&top_level_fastq_ext,
-                  fastq_ext_line_prefix, sizeof (fastq_ext_line_prefix), 0);
+                   IS_BAM_ZIP ? sizeof (uint32_t) * vb->lines.len : 0); // if BAM, account for block_size
 }
 
 static uint32_t num_lines_at_max_len (VBlockSAMP vb)
@@ -900,7 +833,8 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
     if (z_file->num_txts_so_far == 1 && (flag.aligner_available || !sam_hdr_contigs) && IS_REF_LOADED_ZIP)
         ctx_populate_zf_ctx_from_contigs (gref, SAM_RNAME, ref_get_ctgs (gref));
 
-    if (TECH(PACBIO) && segconf.has[OPTION_dq_Z] == vb->lines.len32 && segconf.has[OPTION_iq_Z] == vb->lines.len32 && segconf.has[OPTION_sq_Z] == vb->lines.len32)
+    if (TECH(PACBIO) && segconf.has[OPTION_dq_Z] == vb->lines.len32 && segconf.has[OPTION_iq_Z] == vb->lines.len32 && segconf.has[OPTION_sq_Z] == vb->lines.len32
+        && flag.force_qual_codec != CODEC_PACB)
         segconf.use_pacbio_iqsqdq = true;
 
     // Aplogize to user for not doing a good job with PacBio subreads files
@@ -925,8 +859,11 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
     if (codec_pacb_maybe_used (SAM_QUAL)) 
         codec_pacb_segconf_finalize (VB);
     
-    if (codec_longr_maybe_used (SAM_QUAL))
+    if (codec_longr_maybe_used (VB, SAM_QUAL))
         codec_longr_segconf_calculate_bins (VB, CTX(SAM_QUAL + 1), sam_zip_qual);
+
+    // note: we calculate the smux stdv to be reported in stats, even if SMUX is not used
+    codec_smux_calc_stats (VB);
 
     qname_segconf_finalize (VB);
 }
@@ -1028,8 +965,6 @@ bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id)
         // typically small
         dict_id.num == _SAM_TOPLEVEL     ||
         dict_id.num == _SAM_TOP2BAM      ||
-        dict_id.num == _SAM_TOP2FQ       ||
-        dict_id.num == _SAM_TOP2FQEX     ||
         dict_id.num == _SAM_FLAG         ||
         dict_id.num == _SAM_MAPQ         ||
         dict_id.num == _SAM_QNAME        ||

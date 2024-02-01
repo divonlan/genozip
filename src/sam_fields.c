@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_fields.c
-//   Copyright (C) 2020-2024 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -1358,8 +1358,8 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
 
         case _OPTION_OP_i: seg_pos_field (VB, OPTION_OP_i, SAM_POS, 0, 0, 0, 0, numeric.i, add_bytes); break;
 
-        case _OPTION_OQ_Z: sam_seg_other_qual (vb, &dl->OQ, OPTION_OQ_Z, STRa(value), true, add_bytes); break;
-        case _OPTION_TQ_Z: sam_seg_other_qual (vb, &dl->TQ, OPTION_TQ_Z, STRa(value), false, add_bytes); break;
+        case _OPTION_OQ_Z: sam_seg_other_qual (vb, dl, &dl->OQ, OPTION_OQ_Z, STRa(value), true, add_bytes); break;
+        case _OPTION_TQ_Z: sam_seg_other_qual (vb, dl, &dl->TQ, OPTION_TQ_Z, STRa(value), false, add_bytes); break;
 
         //case _OPTION_CC_Z: see unused code, bug 609
 
@@ -1403,7 +1403,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
         case _OPTION_BC_Z: sam_seg_BC_Z (vb, dl, STRa(value), add_bytes); break;
         case _OPTION_MM_Z: sam_seg_MM_Z (vb, STRa(value), add_bytes); break;
 
-        case _OPTION_2Y_Z: COND (segconf.has_cellranger, sam_seg_other_qual (vb, &dl->_2Y, OPTION_2Y_Z, STRa(value), false, add_bytes));
+        case _OPTION_2Y_Z: COND (segconf.has_cellranger, sam_seg_other_qual (vb, dl, &dl->_2Y, OPTION_2Y_Z, STRa(value), false, add_bytes));
         
         case _OPTION_GR_Z: COND (segconf.has_cellranger, sam_seg_GR_Z (vb, dl, STRa(value), add_bytes));
         case _OPTION_GY_Z: COND (segconf.has_cellranger, sam_seg_GY_Z (vb, dl, STRa(value), add_bytes));

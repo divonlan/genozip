@@ -2,7 +2,7 @@
 
 # ------------------------------------------------------------------
 #   dict_id_gen.sh
-#   Copyright (C) 2021-2024 Genozip Limited
+#   Copyright (C) 2021-2024 Genozip Limited. Patent Pending.
 #   Please see terms and conditions in the file LICENSE.txt
 #
 #   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited

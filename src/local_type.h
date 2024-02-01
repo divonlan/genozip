@@ -40,6 +40,7 @@ typedef enum __attribute__ ((packed)) { // 1 byte
     LT_hex64     = 24,  // lower-case UINT64 hex
     LT_HEX64     = 25,  // upper-case UINT64 hex
     LT_STRING    = 26,  // nul-terminated strings
+    LT_SUPP      = 27,  // supplementary data used in reconstruction of another context. Data is not BGENed etc, and context is never reconstructed directly (15.0.40)
     NUM_LTYPES,         // counts LocalTypes that can appear in the Genozip file format
 
     // LT_DYN* - LT values that are NOT part of the file format, just used during seg 
@@ -95,8 +96,9 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
    { "h64", 0,   8,  0,     0,                     0x7fffffffffffffffLL,  BGEN_u64_buf             }, \
    { "H64", 0,   8,  0,     0,                     0x7fffffffffffffffLL,  BGEN_u64_buf             }, \
    { "STR", 0,   1,  0,     0,                     0,                     0                        }, \
+   { "SUP", 0,   1,  0,     0,                     0,                     0                        }, \
    { /* NUM_LTYPES */                                                                              }, \
-   /* after here - not part of the file format, just used during seg */                               \
+   /* from here - not part of the file format, just used during seg */                               \
    { "DYN", 0,   8,  0,     0x8000000000000000LL,  0x7fffffffffffffffLL,  0                        }, \
    { "DYh" ,0,   8,  0,     0x8000000000000000LL,  0x7fffffffffffffffLL,  0                        }, \
    { "DYH" ,0,   8,  0,     0x8000000000000000LL,  0x7fffffffffffffffLL,  0                        }, \

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   fastq_qual.c
-//   Copyright (C) 2020-2024 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -20,16 +20,8 @@
 static void fastq_seg_QUAL_segconf (VBlockFASTQP vb, STRp(qual))
 {
     for (uint32_t i=0; i < qual_len; i++)
-        if (IS_NON_WS_PRINTABLE(qual[i]))
-            segconf.qual_histo[0][qual[i]-33]++;
-
-    STRw(seq);
-    fastq_zip_seq (VB, NULL, vb->line_i,  pSTRa(seq), CALLBACK_NO_SIZE_LIMIT, NULL);
-    if (seq_len != qual_len) return;
-    
-    for (unsigned i=0; i < seq_len; i++)
-        if (IS_NON_WS_PRINTABLE(qual[i]) && IS_ACGT(seq[i]))
-            segconf.qual_histo_acgt[acgt_encode[(uint8_t)seq[i]]][qual[i]-33]++;
+        if (IS_QUAL_SCORE(qual[i]))
+            segconf.qual_histo[QHT_QUAL][qual[i]-33].count++;
 }
 
 void fastq_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qual))

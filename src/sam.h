@@ -150,8 +150,6 @@
 #pragma GENDICT SAM_EOL=DTYPE_FIELD=EOL
 #pragma GENDICT SAM_BAM_BIN=DTYPE_FIELD=BAM_BIN
 #pragma GENDICT SAM_TOP2BAM=DTYPE_FIELD=TOP2BAM
-#pragma GENDICT SAM_TOP2FQ=DTYPE_FIELD=TOP2FQ
-#pragma GENDICT SAM_TOP2FQEX=DTYPE_FIELD=TOP2FQEX
 #pragma GENDICT SAM_TOP2NONE=DTYPE_FIELD=TOP2NONE
 #pragma GENDICT SAM_SAG=DTYPE_FIELD=SAG      // PRIM and DEPN: the sag from which to copy data
 #pragma GENDICT SAM_SAALN=DTYPE_FIELD=SAALN  // DEPN: sags: the alignment within sag which is this line (not needed for PRIM, as the aln_i is always 0)
@@ -679,6 +677,7 @@ extern void sam_header_finalize (void);
 extern void sam_zip_free_end_of_z (void);
 extern bool is_sam (STRp(header), bool *need_more);
 extern bool is_bam (STRp(header), bool *need_more);
+extern bool is_cram (STRp(header), bool *need_more);
 extern void sam_piz_header_init (void);
 
 extern ContigPkgP sam_hdr_contigs;
@@ -869,9 +868,9 @@ TRANSLATOR (SAM, BAM,   12, QUAL,         sam_piz_sam2bam_QUAL)         // textu
 TRANSLATOR (SAM, BAM,   13, TLEN,         sam_piz_sam2bam_TLEN)         // place TLEN last_value in BAM alignment 
 TRANSLATOR (SAM, BAM,   14, AUX,          sam_piz_sam2bam_AUX)          // used up to v11, kept for for backward compatability as old files expect it
 TRANSLATOR (SAM, BAM,   15, AUX_SELF,     sam_piz_sam2bam_AUX_SELF)     // transform prefixes in Aux Container from SAM to BAM format 
-TRANSLATOR (SAM, FASTQ, 16, SEQ,          sam_piz_sam2fastq_SEQ)        // reverse-complement the sequence if needed, and drop if "*"
-TRANSLATOR (SAM, FASTQ, 17, QUAL,         sam_piz_sam2fastq_QUAL)       // reverse the QUAL if reverse-complemented and drop fastq records with QUAL="*"
-TRANSLATOR (SAM, FASTQ, 18, FLAG,         sam_piz_sam2fastq_FLAG)       // emit 1 if (FLAGS & 0x40) or 2 of (FLAGS & 0x80)
+TRANSLATOR (NONE, NONE, 16, SEQ,          piz_obsolete_translator)      // obsolete SAM->FASTQ translation: reverse-complement the sequence if needed, and drop if "*"
+TRANSLATOR (NONE, NONE, 17, QUAL,         piz_obsolete_translator)      // obsolete SAM->FASTQ translation: reverse the QUAL if reverse-complemented and drop fastq records with QUAL="*"
+TRANSLATOR (NONE, NONE, 18, FLAG,         piz_obsolete_translator)      // obsolete SAM->FASTQ translation: emit 1 if (FLAGS & 0x40) or 2 of (FLAGS & 0x80)
 TRANSLATOR (SAM, BAM,   19, ARRAY_SELF_M, sam_piz_sam2bam_ARRAY_SELF_M) // 15.0.35: remove the comma from the prefix that contains the type, eg "i,"->"i"
 #define NUM_SAM_TRANS   20 // including "none"
 
@@ -879,7 +878,7 @@ TRANSLATOR (SAM, BAM,   19, ARRAY_SELF_M, sam_piz_sam2bam_ARRAY_SELF_M) // 15.0.
                           container_translate_LTEN_U16, container_translate_LTEN_I32, container_translate_LTEN_U32, \
                           sam_piz_sam2bam_FLOAT, sam_piz_sam2bam_ARRAY_SELF_1, sam_piz_sam2bam_RNAME, sam_piz_sam2bam_POS, sam_piz_sam2bam_SEQ, \
                           sam_piz_sam2bam_QUAL, sam_piz_sam2bam_TLEN, sam_piz_sam2bam_AUX, sam_piz_sam2bam_AUX_SELF, \
-                          sam_piz_sam2fastq_SEQ, sam_piz_sam2fastq_QUAL, sam_piz_sam2fastq_FLAG, sam_piz_sam2bam_ARRAY_SELF_M }
+                          piz_obsolete_translator, piz_obsolete_translator, piz_obsolete_translator, sam_piz_sam2bam_ARRAY_SELF_M }
 
 TXTHEADER_TRANSLATOR (sam_header_bam2sam);
 TXTHEADER_TRANSLATOR (sam_header_sam2bam);

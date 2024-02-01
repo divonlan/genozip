@@ -327,22 +327,28 @@ void codec_assign_best_qual_codec (VBlockP vb, Did did_i,
 {
     decl_ctx (did_i);
 
-    if (flag.force_longr && did_i == SAM_QUAL)
-        codec_longr_comp_init (vb, did_i);
+    if (did_i == SAM_QUAL && flag.force_qual_codec)  // == FASTQ_QUAL
+        switch (flag.force_qual_codec) {
+            case CODEC_LONGR : codec_longr_comp_init (vb, did_i);           break;
+            case CODEC_SMUX  : codec_smux_comp_init  (vb, did_i, callback); break;
+            case CODEC_PACB  : codec_pacb_comp_init  (vb, did_i, callback); break;
+            case CODEC_HOMP  : codec_homp_comp_init  (vb, did_i, callback); break;
+            case CODEC_DOMQ  : codec_domq_comp_init  (vb, did_i, callback); break;
+            case CODEC_NORMQ : codec_normq_comp_init (vb, did_i, maybe_revcomped); break;
+            default          : ABORT ("Can't force codec %s", codec_name (flag.force_qual_codec));
+        }
 
-    else if (codec_pacb_maybe_used (did_i) && !no_seq_dependency && codec_pacb_comp_init (vb, callback));
+    else if (!no_seq_dependency && codec_pacb_comp_init (vb, did_i, callback));
     
-    else if (!no_seq_dependency && codec_longr_maybe_used (did_i))
-        codec_longr_comp_init (vb, did_i);
+    else if (!no_seq_dependency && codec_longr_comp_init (vb, did_i));
 
     else if (!no_seq_dependency && codec_homp_comp_init (vb, did_i, callback)); // only if Ultima, it might succeed. takes precedence of DOMQ
 
-    else if (!flag.no_domqual && codec_domq_comp_init (vb, did_i, callback));
-    
-    else if (maybe_revcomped) { // normq only makes sense where qual is revcomped according to the revcomp flag (SAM/BAM)
-        ctx->ltype  = LT_CODEC;
-        ctx->lcodec = CODEC_NORMQ;
-    }
+    else if (!no_seq_dependency && codec_smux_comp_init (vb, did_i, callback));
+        
+    else if (!flag.no_domqual   && codec_domq_comp_init (vb, did_i, callback));
+
+    else if (codec_normq_comp_init (vb, did_i, maybe_revcomped)); 
 
     else
         ctx->ltype = LT_BLOB;  // codec to be assigned by codec_assign_best_codec
@@ -350,7 +356,7 @@ void codec_assign_best_qual_codec (VBlockP vb, Did did_i,
     if (ctx->ltype != LT_BLOB && (did_i == SAM_QUAL/*==FASTQ_QUAL*/ || did_i == SAM_CQUAL || did_i == OPTION_OQ_Z)) 
         ZCTX(did_i)->qual_codec = ctx->lcodec; // used only for submitting stats (no atomic - last one wins)
 
-    if (codec_requires_seq && (ctx->lcodec == CODEC_PACB || ctx->lcodec == CODEC_LONGR || ctx->lcodec == CODEC_HOMP)) 
+    if (codec_requires_seq && (ctx->lcodec == CODEC_PACB || ctx->lcodec == CODEC_LONGR || ctx->lcodec == CODEC_HOMP || ctx->lcodec == CODEC_SMUX)) 
         *codec_requires_seq = true;
 
     if (flag.show_codec && ctx->lcodec != CODEC_UNKNOWN) // aligned to the output of codec_assign_best_codec
@@ -362,6 +368,11 @@ uint32_t codec_complex_est_size (Codec codec, uint64_t uncompressed_len)
 {
     uint64_t preprocessed_len = uncompressed_len * 1.1; 
     return MAX_(codec_ARTB_est_size (0, preprocessed_len), codec_ARTB_est_size (0, preprocessed_len)) + 10000;
+}
+
+uint32_t codec_trivial_size (Codec codec, uint64_t uncompressed_len)
+{
+    return 1; // QUAL.compressed_len is one byte
 }
 
 // print prefix to the string to be printed by COPY_TIMER in the codec compression functions in case

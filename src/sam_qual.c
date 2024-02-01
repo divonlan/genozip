@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_qual.c
-//   Copyright (C) 2020-2024 Genozip Limited
+//   Copyright (C) 2020-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -255,33 +255,23 @@ static void sam_seg_QUAL_segconf (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual)/
     if (!monochar && !vb->qual_missing) segconf.nontrivial_qual = true;
 
     for (uint32_t i=0; i < qual_len; i++)
-        if (IS_NON_WS_PRINTABLE(qual[i]))
-            segconf.qual_histo[dl->is_consensus ? QHT_CONSENSUS : QHT_QUAL][qual[i]-33]++;
-
-    if (!dl->is_consensus) {
-        STRw(seq);
-        sam_zip_seq (VB, NULL, vb->line_i,  pSTRa(seq), CALLBACK_NO_SIZE_LIMIT, NULL);
-        if (seq_len != qual_len) return;
-        
-        for (unsigned i=0; i < seq_len; i++)
-            if (IS_NON_WS_PRINTABLE(qual[i]) && IS_ACGT(seq[i]))
-                segconf.qual_histo_acgt[dl->FLAG.rev_comp ? acgt_encode_comp[(uint8_t)seq[i]] : acgt_encode[(uint8_t)seq[i]]][qual[i]-33]++;
-    }
+        if (IS_QUAL_SCORE(qual[i]))
+            segconf.qual_histo[dl->is_consensus ? QHT_CONSENSUS : QHT_QUAL][qual[i]-33].count++;
 }
 
 void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual)/*always textual*/, unsigned add_bytes)
 {
     START_TIMER;
 
-    ContextP qual_ctx = CTX(SAM_QUAL);
+    ContextP qual_ctx  = CTX(SAM_QUAL);
+    ContextP cqual_ctx = CTX(SAM_CQUAL);
     ZipDataLineSAM *saggy_dl;
     bool prim_has_qual_but_i_dont = false; // will be set if this line has no QUAL, but its prim line does (very rare)
     QualDiffType diff_type = QDT_DEFAULT;  // quality scores are too different, we're better off not diffing (added 14.0.10)
     bool pacbio_diff = false;
     char monochar = 0;
     
-    if (vb->qual_missing) vb->has_missing_qual = true;
-    else                  vb->has_qual = true;
+    if (!vb->qual_missing) vb->has_qual = true;
     
     // case --optimize_QUAL: optimize in place, must be done before sam_deep_set_QUAL_hash calculates a hash
     if (flag.optimize_QUAL && !vb->qual_missing) 
@@ -320,7 +310,8 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual)/*always textual
         dl->dont_compress_QUAL = true; // don't compress this line
     }
 
-    // case: MAIN component, the line has a corresponding saggy line in same VB, and saggy line has qual
+    // case: MAIN component (note: vb->saggy_line_i is only set in MAIN), the line has a corresponding 
+    // saggy line in same VB, and saggy line has qual
     else if (sam_has_saggy && // note: saggy_line_i is set by sam_seg_saggy only for lines in MAIN component
              ({ saggy_dl = DATA_LINE (vb->saggy_line_i); 
                 !saggy_dl->no_qual && 
@@ -341,8 +332,8 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual)/*always textual
 
     // 1. if we suspect entire file might be qual-less, seg as snip (without adding local) so that would become 
     // all-the-same in that. If we might have mixed qual/no-qual in the file, we add to local to not add entropy to b250
-    // 2. LONGR codec can't handle mising QUAL
-    else if (dl->no_qual && (!segconf.nontrivial_qual || segconf.is_long_reads)) {
+    // 2. LONGR codec can't handle missing QUAL
+    else if (!IS_PRIM(vb) && dl->no_qual && (!segconf.nontrivial_qual || codec_longr_maybe_used (VB, SAM_QUAL))) {
         seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_QUAL, '*' }, 3, SAM_QUAL, add_bytes); 
         dl->dont_compress_QUAL = true; // don't compress this line
         goto done;
@@ -360,7 +351,7 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual)/*always textual
     // Note: in PRIM, QUAL is not reconstructed (as QUAL is not in TOPLEVEL container) - it is consumed when loading SA Groups
     //       Instead, all-the-same QUALSA is reconstructed (SPECIAL copying from the SA Group)
     else standard: {
-        ContextP ctx = dl->is_consensus ? CTX(SAM_CQUAL) : qual_ctx;
+        ContextP ctx = dl->is_consensus ? cqual_ctx : qual_ctx;
         ctx->local.len32 += dl->QUAL.len;
         ctx->txt_len     += add_bytes;
     }   
@@ -387,19 +378,25 @@ done:
 // 2Y:Z - CellRanger - R2 qual?
 // TQ:Z - CellRanger & longranger: Quality values of the 7 trimmed bases following the barcode sequence at the start of R1. Can be used to reconstruct the original R1 quality values.
 //-----------------------------------------------------------------------------------------------------
-void sam_seg_other_qual (VBlockSAMP vb, TxtWord *dl_word, Did did_i, STRp(qual), bool len_is_seq_len, unsigned add_bytes)
+void sam_seg_other_qual (VBlockSAMP vb, ZipDataLineSAM *dl, TxtWord *dl_word, Did did_i, STRp(qual), bool len_is_seq_len, unsigned add_bytes)
 {
+    decl_ctx (did_i);
+
     *dl_word = TXTWORD(qual);
-    CTX(did_i)->local.len32 += qual_len;
-    CTX(did_i)->txt_len     += add_bytes;
+    ctx->local.len32 += qual_len;
+    ctx->txt_len     += add_bytes;
 
     if (!len_is_seq_len) 
-        seg_lookup_with_length (VB, CTX(did_i), qual_len, 0);
+        seg_lookup_with_length (VB, ctx, qual_len, 0);
+    else {
+        ASSSEG (qual_len == dl->SEQ.len, "Expecting %s to have length == SEQ.len=%u but its length is %u. %s=\"%.*s\"",
+                ctx->tag_name, dl->SEQ.len, qual_len, ctx->tag_name, STRf(qual));
+    }
 
     if (segconf.running && did_i == OPTION_OQ_Z) 
         for (uint32_t i=0; i < qual_len; i++)
-            if (IS_NON_WS_PRINTABLE(qual[i]))
-                segconf.qual_histo[QHT_OQ][qual[i]-33]++;
+            if (IS_QUAL_SCORE(qual[i]))
+                segconf.qual_histo[QHT_OQ][qual[i]-33].count++;
 }
 
 void sam_update_qual_len (VBlockP vb, uint32_t line_i, uint32_t new_len) 
@@ -520,6 +517,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
     QualDiffType diff_type        = (snip[1] - '0');
     bool pacbio_diff              = (snip_len >= 3 && snip[2] == '1'); // v15
     char monochar                 = (snip_len >= 4 ? snip[3] : 0);     // v15
+    char is_missing               = (snip[0] == '*');
 
     const CigarAnalItem *saggy_anal;
 
@@ -535,7 +533,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
         sam_recon_pacbio_qual (vb, ctx, reconstruct);
 
     // case: reconstruct by copying from sag (except if we are depn and group has no qual)
-    else if (SAM_PIZ_HAS_SAG && (IS_PRIM(vb) || (IS_DEPN(vb) && !g->no_qual))) {
+    else if (SAM_PIZ_HAS_SAG && (IS_PRIM(vb) || (IS_DEPN(vb) && !g->no_qual)) && !is_missing) {
       
         if (!reconstruct) {}
 
@@ -580,13 +578,13 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
         
     // case: reconstruct from data in local
     else no_diff: 
-        if (snip[0] == '*')  // case of seg suspecting entire file is qual-less
+        if (is_missing)  // case of seg suspecting entire file is qual-less
             sam_reconstruct_missing_quality (VB, reconstruct);
 
         else {
             bool is_consensus = (!IS_PRIM(vb)/*bug 949*/ && ctx_encountered_in_line (VB, SAM_QNAME2) && segconf.flav_prop[QNAME2].is_consensus);
             if (is_consensus) ctx = CTX(SAM_CQUAL);
-
+            
             switch (ctx->ltype) { // the relevant subset of ltypes from reconstruct_from_ctx_do
                 case LT_CODEC:
                     codec_args[ctx->lcodec].reconstruct (VB, ctx->lcodec, ctx, vb->seq_len, reconstruct); break;
@@ -594,7 +592,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
                 case LT_BLOB: 
                     reconstruct_from_local_sequence (VB, ctx, vb->seq_len, reconstruct); break;
 
-                default: ABORT_PIZ ("Invalid ltype=%s for %s", lt_name (ctx->ltype), ctx->tag_name);
+                default: ABORT_PIZ ("Invalid ltype=%s for %s. local.len=%u", lt_name (ctx->ltype), ctx->tag_name, ctx->local.len32);
             }
         }
 
@@ -606,7 +604,8 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
         
 #ifdef DEBUG
     for (uint32_t i=0; i < qual_len; i++)
-        ASSPIZ (IS_NON_WS_PRINTABLE(qual[i]), "Invalid QUAL character reconstructed: i=%u char=%u\n", i, (uint8_t)qual[i]);
+        ASSPIZ (IS_QUAL_SCORE(qual[i]), "Invalid QUAL character reconstructed: i=%u char='%c'(%u)\n", 
+                i, qual[i], (uint8_t)qual[i]);
 #endif
 
     // store quality score in ms:i history 
@@ -660,25 +659,3 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_QUAL)
     return 0;
 }
 
-// SAM-to-FASTQ translator: reverse the sequence if needed, and drop if "*"
-TRANSLATOR_FUNC (sam_piz_sam2fastq_QUAL)
-{
-    START_TIMER;
-
-    uint16_t sam_flag = (uint16_t)vb->last_int(SAM_FLAG);
-    
-    // case: QUAL is "*" - don't show this fastq record
-    if (recon_len==1 && *recon == '*') 
-        vb->drop_curr_line = "no_qual";
-
-    // case: this sequence is reverse complemented - reverse the QUAL string
-    else if (sam_flag & SAM_FLAG_REV_COMP) {
-
-        // we move from the outside in, switching the left and right bases 
-        for (unsigned i=0; i < recon_len / 2; i++) 
-            SWAP (recon[i], recon[recon_len-1-i]);
-    }
-
-    COPY_TIMER (sam_piz_sam2fastq_QUAL);
-    return 0;
-}
