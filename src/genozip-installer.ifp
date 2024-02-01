@@ -2,7 +2,7 @@
 ProjectFileVersion = "1.1"
 [General]
 Program name = Genozip
-Program version = 15.0.38
+Program version = 15.0.40
 Windows 2000 = 0
 Windows XP = 0
 Windows Server 2003 = 0
@@ -88,14 +88,14 @@ C:\Users\divon\genozip\src\windows\LICENSE.for-installer.txt
 9.9 KB
 txt
 [Licence_Begin]
-11919
-{\rtf1\ansi\deff0{\fonttbl{\f0\fnil\fcharset0 Arial;}}
+11517
+{\rtf1\ansi\ansicpg1252\deff0{\fonttbl{\f0\fnil\fcharset0 Arial;}}
 {\colortbl ;\red0\green0\blue0;}
 \viewkind4\uc1\pard\cf1\lang1033\fs20 This program, "Genozip", which includes four tools \par
 (genozip, genounzip, genocat and genols), source code,\par
 object code, executables, documentation and other files,\par
 was developed by Divon Lan ("Developer") and is copyright \par
-(C) 2019-2024 Genozip Limited ("Licensor"). All rights\par
+(C) 2019-2023 Genozip Limited ("Licensor"). All rights\par
 reserved. Patent pending.\par
 \par
 TERMS AND CONDITIONS FOR USE\par
@@ -138,10 +138,6 @@ Data.\par
 "Your Computers" shall mean computers You own and/or cloud\par
 accounts You own at 3rd party cloud providers.\par
 \par
-"Genozip Executables" shall mean the executable files\par
-genozip, genounzip, genocat and genols (with or without an \par
-.exe file name suffix).\par
-\par
 Other words and terms in this License shall be interpreted\par
 as their usual meaning in the context of a software product\par
 .\par
@@ -155,44 +151,38 @@ purpose attached to that particular License Type, and\par
 subject to the terms and conditions of this License\par
 agreement:\par
 \par
-   a. Academic License: Using Genozip Executables for\par
-academic research, educational or training purposes\par
-provided that You are a recognized academic research\par
-institution which is not a hospital, or a registered\par
-student at such an institution, but excluding use with Your\par
-Commercial Data.\par
+   a. Academic License: For academic research, educational\par
+or training purposes provided that You are a recognized\par
+academic research institution which is not a hospital, or a\par
+registered student at such an institution, but excluding\par
+use with Your Commercial Data.\par
 \par
-   b. Academic License: Using Genozip Executables for\par
-another non-commercial purpose, if it has been pre-approved\par
-by Licensor in writing. Email register@genozip.com to seek\par
-such an approval.\par
+   b. Academic License: For another non-commercial purpose,\par
+if it has been pre-approved by Licensor in writing. Email\par
+register@genozip.com to seek such an approval.\par
 \par
-   c. Standard, Enterprise or Premium License: Using\par
-Genozip Executables for any legal purpose, if the license\par
-was purchased and paid for, and for the duration that it is\par
-in effect. In addition, for Premium License only:\par
-Distributing Genozip Executables to others.\par
+   c. Standard, Enterprise or Premium License: For any\par
+legal purpose, if the license was purchased and paid for,\par
+and for the duration that it is in effect.\par
 \par
-   d. Decompression License: Using a subset of Genozip\par
-Executables consisting of genounzip, genocat, genols for\par
-any legal purpose. A Decompression License is free of\par
-charge.\par
+   d. Decompression License: For any legal purpose, if use\par
+is limited to the three tools: genounzip, genocat, genols.\par
+A Decompression License is free of charge.\par
 \par
-   e. Evaluation License: Using Genozip Executables for the\par
-purpose of evaluating Genozip, free of charge, for a\par
-duration of 30 days, if You were not already granted an\par
-Evaluation License in the past. The duration of an\par
-Evaluation License may be extended by written email\par
-approval.\par
+   e. Evaluation License: For the purpose of evaluating\par
+Genozip, free of charge, for a duration of 30 days, if You\par
+were not already granted an Evaluation License in the past.\par
+The duration of an Evaluation License may be extended by\par
+written email approval.\par
 \par
    f. Distribution License: For the purpose of distributing\par
-Genozip Executables to others via a platform that is free\par
-of charge, including (but not limited to) an Internet\par
-website, a package or container management system, or a\par
-module on an institutional HPC. A Distribution License is\par
-free of charge. Each end user must independently register\par
-to Genozip and be granted a Standard, Enterprise, Premium,\par
-Academic, Decompression or Evaluation License.\par
+Genozip to others via a platform that is free of charge,\par
+including (but not limited to) an Internet website, a\par
+package or container management system, or a module on an\par
+institutional HPC. A Distribution License is free of charge\par
+. Each end user must independently register to Genozip and\par
+be granted a Standard, Enterprise, Premium, Academic,\par
+Decompression or Evaluation License.\par
 \par
 3. Additional Terms and conditions\par
 \par
@@ -280,7 +270,7 @@ names of the Licensor, except as required for reasonable\par
 and customary use in describing the origin of the Genozip\par
 \par
 8. Survival. The limitations of liability and ownership\par
-rights of Genozip contained herein and Licensee\'e2\'80\'99s\par
+rights of Genozip contained herein and Licensee\rquote s\par
 obligations following termination of this Agreement will\par
 survive the termination of this Agreement for any reason.\par
 \par
@@ -293,7 +283,7 @@ Health or any other regulatory entity in any country for\par
 any specific intended use, whether research, commercial,\par
 diagnostic, or otherwise, and (ii) Licensee must ensure it\par
 has any regulatory approvals that are necessary for\par
-Licensee\'e2\'80\'99s intended uses of Genozip. Licensee will comply\par
+Licensee\rquote s intended uses of Genozip. Licensee will comply\par
 with all applicable laws and regulations when using and\par
 maintaining Genozip.\par
 \par
@@ -330,8 +320,7 @@ ESSENTIAL PURPOSE.\par
 \par
 END OF TERMS AND CONDITIONS\par
 \par
-Genozip license version: 15.0.38\par
-\par
+Genozip license version: 15.0.30\par
 \par
 }
  [Licence_End]
