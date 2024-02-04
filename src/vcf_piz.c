@@ -27,16 +27,18 @@ void vcf_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
         segconf.has[FORMAT_RGQ] = header->vcf.segconf_has_RGQ;
 
     if (VER(15)) {
-        z_file->max_ploidy_for_mux = header->vcf.max_ploidy_for_mux; // since 15.0.36
-        segconf.GQ_method          = header->vcf.segconf_GQ_method;
-        segconf.FMT_DP_method      = header->vcf.segconf_FMT_DP_method;
-        segconf.wid_AC.width       = header->vcf.width.AC;
-        segconf.wid_AF.width       = header->vcf.width.AF;
-        segconf.wid_AN.width       = header->vcf.width.AN;
-        segconf.wid_DP.width       = header->vcf.width.DP;
-        segconf.wid_QD.width       = header->vcf.width.QD;
-        segconf.wid_SF.width       = header->vcf.width.SF;
-        segconf.wid_MLEAC.width    = header->vcf.width.MLEAC;
+        z_file->max_ploidy_for_mux    = header->vcf.max_ploidy_for_mux; // since 15.0.36
+        segconf.GQ_method             = header->vcf.segconf_GQ_method;
+        segconf.FMT_DP_method         = header->vcf.segconf_FMT_DP_method;
+        segconf.wid_AC.width          = header->vcf.width.AC;
+        segconf.wid_AF.width          = header->vcf.width.AF;
+        segconf.wid_AN.width          = header->vcf.width.AN;
+        segconf.wid_DP.width          = header->vcf.width.DP;
+        segconf.wid_QD.width          = header->vcf.width.QD;
+        segconf.wid_SF.width          = header->vcf.width.SF;
+        segconf.wid_MLEAC.width       = header->vcf.width.MLEAC;
+        segconf.wid_MLEAC.width       = header->vcf.width.MLEAC;
+        segconf.wid_AS_SB_TABLE.width = header->vcf.width.AS_SB_TABLE;
     }
 }
 
@@ -97,7 +99,7 @@ IS_SKIP (vcf_piz_is_skip_section)
 // insert a field after following fields have already been reconstructed
 void vcf_piz_insert_field (VBlockVCFP vb, ContextP ctx, STRp(value), int chars_reserved)
 {
-    if (!ctx->recon_insertion) return;
+    if (!IS_RECON_INSERTION(ctx)) return;
     
     char *addr = last_txtx (VB, ctx);
     int move_by = (int)value_len - chars_reserved;
@@ -273,7 +275,8 @@ static void inline vcf_piz_append_ostatus_to_INFO (VBlockP vb)
 CONTAINER_ITEM_CALLBACK (vcf_piz_con_item_cb)
 {
     switch (con_item->dict_id.num) {
-
+        // IMPORTANT: when adding a "case", also update set CI1_ITEM_CB in vcf_seg_FORMAT
+        
         case _FORMAT_DP:
             if (ctx_has_value (vb, FORMAT_DP)) { // not '.' or missing
                 if (CTX(INFO_DP)->dp.by_format_dp) 
@@ -284,6 +287,10 @@ CONTAINER_ITEM_CALLBACK (vcf_piz_con_item_cb)
                 if (pd == QD_PRED_SUM_DP || pd == QD_PRED_SUM_DP_P001 || pd == QD_PRED_SUM_DP_M001)
                     vcf_piz_sum_DP_for_QD (vb, STRa(recon));
             }
+            break;
+            
+        case _FORMAT_SB:
+            vcf_piz_sum_SB_for_AS_SB_TABLE (vb, STRa(recon));
             break;
             
         case _FORMAT_PS: // since v13: PS has item_cb
@@ -341,7 +348,10 @@ CONTAINER_CALLBACK (vcf_piz_container_cb)
 
         if (CTX(INFO_QD)->qd.pred_type) 
             vcf_piz_insert_INFO_QD (VB_VCF);
-        
+
+        if (CTX(INFO_AS_SB_TABLE)) 
+            vcf_piz_insert_INFO_AS_SB_TABLE (VB_VCF);
+
         // case: we are reconstructing with --luft and we reconstructed one VCF line
         if (z_is_dvcf) 
             vcf_lo_piz_TOPLEVEL_cb_filter_line (VB_VCF);

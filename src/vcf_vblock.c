@@ -39,9 +39,11 @@ void vcf_reset_line (VBlockP vb_)
     vb->deferred_q_len = 0;
 
     CTX(FORMAT_RGQ)->line_has_RGQ = unknown;
-    CTX(INFO_AN)->an.count_ht = 0;
+    CTX(FORMAT_SB)->ctx_specific = 0;
+    CTX(INFO_AN)->ctx_specific = 0;
     CTX(INFO_DP)->ctx_specific = 0;
     CTX(INFO_QD)->ctx_specific = 0;
+    CTX(INFO_RU)->ctx_specific = 0;
 
     if (IS_ZIP) {
         for (Did did_i=0; did_i < NUM_VCF_FIELDS; did_i++)

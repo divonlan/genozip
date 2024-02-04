@@ -160,6 +160,8 @@ static inline void ref_assert_nucleotide_available (ConstRangeP range, PosType64
                     : ((idx) < 0)         ? ((idx) + range_len) \
                     :                        (idx)) // faster than mod (hopefully)
 
+extern void ref_verify_organism (VBlockP vb);
+
 // display
 extern StrTextLong ref_display_range (ConstRangeP r);
 extern void ref_display_all_ranges (Reference ref);

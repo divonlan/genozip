@@ -297,11 +297,13 @@ static uint8_t codec_domq_prepare_normalize (VBlockP vb, ContextP ctx, LocalGetL
 // This is typically with Illumina binning and "normal" samples where most scores are F
 // but might apply with other technologies too, including in combination with our optimize-QUAL
 // Returns the character that appears more than 50% of the sample lines tested, or -1 if there isn't one.
-bool codec_domq_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB get_line_cb)
+bool codec_domq_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB get_line_cb, bool force)
 {
     ContextP declare_domq_contexts (CTX(qual_did_i));
  
-    if (flag.force_qual_codec == CODEC_DOMQ || codec_domq_qual_data_is_a_fit_for_domq (vb, qual_ctx, get_line_cb)) {
+    if (force || flag.force_qual_codec == CODEC_DOMQ || 
+        (!flag.no_domqual && codec_domq_qual_data_is_a_fit_for_domq (vb, qual_ctx, get_line_cb))) {
+        
         qual_ctx->ltype  = LT_CODEC;
         qual_ctx->lcodec = CODEC_DOMQ;
 
@@ -313,10 +315,9 @@ bool codec_domq_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB get_line_c
 
         return true;
     }
-    else {
-        qual_ctx->lcodec = CODEC_UNKNOWN; // cancel possible inheritence from previous VB
+
+    else 
         return false; // sampled VB qual scores not a good fit for domqual
-    }
 }
 
 // normalize qual in lines, so that lines can have a different dom characters - doms are always normalized to 0

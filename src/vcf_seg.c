@@ -78,17 +78,18 @@ bool is_vcf (STRp(header), bool *need_more)
 // main thread: writing data-type specific fields to genozip header
 void vcf_zip_genozip_header (SectionHeaderGenozipHeaderP header)
 {
-    header->vcf.segconf_has_RGQ = (segconf.has[FORMAT_RGQ] > 0); // introduced in v14
-    header->vcf.segconf_GQ_method = segconf.GQ_method;           // since 15.0.37
-    header->vcf.segconf_FMT_DP_method = segconf.FMT_DP_method;   // since 15.0.37
-    header->vcf.max_ploidy_for_mux = ZIP_MAX_PLOIDY_FOR_MUX;     // since 15.0.36
-    header->vcf.width.MLEAC = segconf.wid_MLEAC.width;           // since 15.0.37
-    header->vcf.width.AC = segconf.wid_AC.width;                 // since 15.0.37
-    header->vcf.width.AF = segconf.wid_AF.width;                 // since 15.0.37
-    header->vcf.width.AN = segconf.wid_AN.width;                 // since 15.0.37
-    header->vcf.width.DP = segconf.wid_DP.width;                 // since 15.0.37
-    header->vcf.width.SF = segconf.wid_SF.width;                 // since 15.0.37
-    header->vcf.width.QD = segconf.wid_QD.width;                 // since 15.0.37
+    header->vcf.segconf_has_RGQ   = (segconf.has[FORMAT_RGQ] > 0); // introduced in v14
+    header->vcf.segconf_GQ_method = segconf.GQ_method;             // since 15.0.37
+    header->vcf.segconf_FMT_DP_method = segconf.FMT_DP_method;     // since 15.0.37
+    header->vcf.max_ploidy_for_mux = ZIP_MAX_PLOIDY_FOR_MUX;       // since 15.0.36
+    header->vcf.width.MLEAC       = segconf.wid_MLEAC.width;       // since 15.0.37
+    header->vcf.width.AC          = segconf.wid_AC.width;          // since 15.0.37
+    header->vcf.width.AF          = segconf.wid_AF.width;          // since 15.0.37
+    header->vcf.width.AN          = segconf.wid_AN.width;          // since 15.0.37
+    header->vcf.width.DP          = segconf.wid_DP.width;          // since 15.0.37
+    header->vcf.width.SF          = segconf.wid_SF.width;          // since 15.0.37
+    header->vcf.width.QD          = segconf.wid_QD.width;          // since 15.0.37
+    header->vcf.width.AS_SB_TABLE = segconf.wid_AS_SB_TABLE.width; // since 15.0.41
 }
 
 void vcf_zip_init_vb (VBlockP vb_)
@@ -264,6 +265,7 @@ void vcf_seg_initialize (VBlockP vb_)
     vcf_info_seg_initialize(vb);
     vcf_samples_seg_initialize(vb);
 
+    vcf_gatk_seg_initialize (vb);
     if (segconf.vcf_illum_gtyping)  vcf_illum_gtyping_seg_initialize (vb);
     if (segconf.vcf_is_gwas)        vcf_gwas_seg_initialize (vb);
     if (segconf.vcf_is_cosmic)      vcf_cosmic_seg_initialize (vb);
@@ -298,6 +300,8 @@ static void vcf_seg_finalize_segconf (VBlockVCFP vb)
         if (flag.best) segconf.PL_mux_by_DP = yes;
     }
 
+    if (segconf.has[INFO_AS_SB_TABLE] && segconf.has[FORMAT_SB]) 
+        segconf.AS_SB_TABLE_by_SB = true;
     
     if (vcf_num_samples > 1 && !flag.secure_DP && segconf.has[FORMAT_DP])
         segconf.INFO_DP_method = BY_FORMAT_DP;

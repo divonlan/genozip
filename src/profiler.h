@@ -95,7 +95,7 @@ typedef struct timespec TimeSpecType;
     if (HAS_SHOW_TIME(vb)) { \
         uint64_t delta = CHECK_TIMER; \
         if (flag.show_time[0] && strstr (#res, flag.show_time)) { \
-            iprintf ("%s %s%s%s: %"PRIu64" microsec\n", #res, \
+            iprintf ("%s %s%s%s: %"PRIu64" μsec\n", #res, \
                      ((vb)->profile.next_name    ? (vb)->profile.next_name : ""),\
                      ((vb)->profile.next_subname ? "." : ""),\
                      ((vb)->profile.next_subname ? (vb)->profile.next_subname : ""),\

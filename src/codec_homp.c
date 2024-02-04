@@ -72,13 +72,11 @@ static bool codec_homp_qual_data_is_a_fit_for_homp (VBlockP vb, ContextP qual_ct
     return success;
 }
 
-bool codec_homp_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB get_line_cb)
+bool codec_homp_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB get_line_cb, bool force)
 {
     ContextP qual_ctx = CTX(qual_did_i);
 
-    if (flag.force_qual_codec == CODEC_HOMP) {
-        if (qual_did_i != FASTQ_QUAL) return false;
-    }
+    if (force || flag.force_qual_codec == CODEC_HOMP) {}
 
     else if ((!TECH(ULTIMA) && !TECH(UNKNOWN) && !MP(ULTIMA)) || // either the TECH or the mapper are an indication of potentially Ultima data 
         qual_did_i != FASTQ_QUAL /* =SAM_QUAL */                         ||

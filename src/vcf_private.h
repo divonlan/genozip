@@ -38,12 +38,12 @@ typedef MULTIPLEXER(ZIP_NUM_DOSAGES_FOR_MUX) DosageMultiplexer, *DosageMultiplex
 #define VCF_MAX_ARRAY_ITEMS SMALL_CON_NITEMS
 
 #define NUM_COORDS 4
-typedef enum __attribute__ ((packed)) { DC_NONE, DC_PRIMARY, DC_LUFT, DC_BOTH } Coords; // 2 bits, part of the file format, goes into FlagsTxtHeader, FlagsVbHeader
+typedef packed_enum { DC_NONE, DC_PRIMARY, DC_LUFT, DC_BOTH } Coords; // 2 bits, part of the file format, goes into FlagsTxtHeader, FlagsVbHeader
 
 #define OTHER_COORDS(c) ((c)==DC_PRIMARY ? DC_LUFT : DC_PRIMARY)
 #define SEL(prim,luft) ((vb->line_coords == DC_PRIMARY) ? (prim) : (luft))
 
-typedef enum __attribute__ ((packed)) { 
+typedef packed_enum { 
     VT_UNKNOWN, 
     VT_SNP,         // A G 
     VT_DEL,         // AGG A   - must be left anchored
@@ -84,7 +84,8 @@ typedef struct VBlockVCF {
     Buffer last_format;             // ZIP only: cache previous line's FORMAT string
 
     #define first_idx idx_AN        // ZIP: INFO fields indices within INFO
-    int16_t idx_AN, idx_AC, idx_AF, idx_MLEAC, idx_MLEAF, idx_AC_Hom, idx_AC_Het, idx_AC_Hemi, idx_QD, idx_DP, idx_SF;
+    // IMPORTANT: when adding, add to X() in vcf_seg_info_subfields
+    int16_t idx_AN, idx_AC, idx_AF, idx_MLEAC, idx_MLEAF, idx_AC_Hom, idx_AC_Het, idx_AC_Hemi, idx_QD, idx_DP, idx_SF, idx_AS_SB_TABLE;
     #define has(f)   (vb->idx_##f  != -1)
     #define after_idx mux_PLn
 
@@ -344,6 +345,12 @@ extern void vcf_piz_ps_pid_lookback_shift (VBlockP vb, STRp(insert));
 extern void vcf_segconf_finalize_GQ (VBlockVCFP vb);
 extern void vcf_seg_FORMAT_GQ (VBlockVCFP vb);
 
+// -------------
+// GATK stuff
+// -------------
+extern void vcf_gatk_zip_initialize (void);
+extern void vcf_gatk_seg_initialize (VBlockVCFP vb);
+
 // INFO/SF
 extern bool vcf_seg_INFO_SF_init (VBlockVCFP vb, ContextP sf_ctx, STRp(value));
 extern void vcf_seg_INFO_SF_one_sample (VBlockVCFP vb);
@@ -351,12 +358,20 @@ extern void vcf_piz_GT_cb_calc_INFO_SF (VBlockVCFP vcf_vb, unsigned rep, char *r
 extern void vcf_piz_insert_INFO_SF (VBlockVCFP vcf_vb);
 
 // INFO/QD stuff
-typedef enum { QD_PRED_NONE, QD_PRED_INFO_DP, QD_PRED_INFO_DP_P001, QD_PRED_INFO_DP_M001, 
-                             QD_PRED_SUM_DP,  QD_PRED_SUM_DP_P001,  QD_PRED_SUM_DP_M001, NUM_QD_PRED_TYPES } QdPredType;
+typedef packed_enum { QD_PRED_NONE, QD_PRED_INFO_DP, QD_PRED_INFO_DP_P001, QD_PRED_INFO_DP_M001, 
+                      QD_PRED_SUM_DP,  QD_PRED_SUM_DP_P001,  QD_PRED_SUM_DP_M001, NUM_QD_PRED_TYPES } QdPredType;
 extern void vcf_seg_sum_DP_for_QD (VBlockVCFP vb, int64_t value);
 extern void vcf_seg_INFO_QD (VBlockP vb);
 extern void vcf_piz_sum_DP_for_QD (VBlockP vb, STRp(recon));
 extern void vcf_piz_insert_INFO_QD (VBlockVCFP vb);
+
+extern void vcf_seg_INFO_RAW_MQandDP (VBlockVCFP vb, ContextP ctx, STRp(value));
+extern bool vcf_seg_INFO_BaseCounts (VBlockVCFP vb, ContextP ctx_basecounts, STRp(value)); // returns true if caller still needs to seg 
+extern void vcf_seg_INFO_AS_SB_TABLE (VBlockP vb);
+extern void vcf_piz_sum_SB_for_AS_SB_TABLE (VBlockP vb, STRp(recon));
+extern void vcf_piz_insert_INFO_AS_SB_TABLE (VBlockVCFP vb);
+extern void vcf_seg_INFO_RU (VBlockVCFP vb, ContextP ctx, STRp(ru));
+extern void vcf_seg_INFO_RPA (VBlockVCFP vb, ContextP ctx, STRp(rpa_str));
 
 // INFO stuff
 
@@ -449,7 +464,6 @@ extern void vcf_seg_INFO_mutation (VBlockVCFP vb, ContextP ctx, STRp(mut));
 // ISAAC stuff
 extern void vcf_isaac_seg_initialize (VBlockVCFP vb);
 extern void vcf_seg_FORMAT_GQX (VBlockVCFP vb, ContextP ctx, STRp(gqx));
-extern void vcf_seg_INFO_RU (VBlockVCFP vb, ContextP ctx, STRp(ru));
 extern void vcf_seg_INFO_IDREP (VBlockVCFP vb, ContextP ctx, STRp(idrep));
 extern int vcf_isaac_info_channel_i (VBlockP vb);
 
@@ -542,9 +556,12 @@ extern void vcf_lo_piz_TOPLEVEL_cb_filter_line (VBlockVCFP vb);
 // inserting INFO fields after all Samples have been reconstructed
 extern void vcf_piz_insert_field (VBlockVCFP vb, ContextP ctx, STRp(value), int chars_reserved);
 
-#define vcf_piz_defer_to_after_samples(x) ({  \
-    ctx->recon_insertion = reconstruct;       \
-    ctx->special_res = SPEC_RES_DEFERRED;     \
-    if (reconstruct)                          \
+#define vcf_piz_defer_to_after_samples(x) ({    \
+    ctx->special_res = SPEC_RES_DEFERRED;       \
+    if (reconstruct) {                          \
+        ctx->recon_insertion = vb->line_i + 1;  \
         Ltxt += segconf.wid_##x.width; /* our best guess - minimize memory moves during vcf_piz_insert_field */ \
+    }                                           \
 })
+
+#define IS_RECON_INSERTION(ctx) ((ctx)->recon_insertion == vb->line_i + 1)

@@ -34,9 +34,9 @@ bool codec_longr_maybe_used (VBlockP vb, Did did_i)
 }
 
 // similar structure to DOMQUAL 
-bool codec_longr_comp_init (VBlockP vb, Did qual_did_i)
+bool codec_longr_comp_init (VBlockP vb, Did qual_did_i, bool force)
 {
-    if (!codec_longr_maybe_used (vb, qual_did_i)) return false;
+    if (!force && !codec_longr_maybe_used (vb, qual_did_i)) return false;
 
     // lens_ctx contains the lens array - an array of uint32 - each entry is the length of the corresponding channel in values_ctx
     ContextP lens_ctx             = CTX(qual_did_i);

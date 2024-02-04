@@ -42,7 +42,7 @@ void vcf_piz_insert_INFO_AN (VBlockVCFP vb)
 {
     decl_ctx (INFO_AN);
     
-    if (ctx->recon_insertion) {
+    if (IS_RECON_INSERTION(ctx)) {
         STRl(an_str, 12) = str_int (ctx->an.count_ht, an_str);
         vcf_piz_insert_field (vb, ctx, STRa(an_str), segconf.wid_AN.width);
     }

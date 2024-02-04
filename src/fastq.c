@@ -196,6 +196,8 @@ void fastq_zip_after_compute (VBlockP vb)
 
     z_file->num_perfect_matches += vb->num_perfect_matches; // for stats
     z_file->num_aligned         += vb->num_aligned;
+
+    DO_ONCE ref_verify_organism (vb);
 }
 
 // case of --optimize-DESC: generate the prefix of the read name from the txt file name
@@ -424,11 +426,13 @@ void fastq_seg_finalize (VBlockP vb)
         fastq_seg_finalize_segconf (vb);
 
     // assign the QUAL codec
-    codec_assign_best_qual_codec (vb, FASTQ_QUAL, fastq_zip_qual, segconf.deep_has_trimmed, false, NULL);
+    else {
+        codec_assign_best_qual_codec (vb, FASTQ_QUAL, fastq_zip_qual, segconf.deep_has_trimmed, false, NULL);
+        
+        if (segconf.has_agent_trimmer) 
+            codec_assign_best_qual_codec (vb, OPTION_QX_Z, NULL, true, false, NULL);
+    }
     
-    if (segconf.has_agent_trimmer) 
-        codec_assign_best_qual_codec (vb, OPTION_QX_Z, NULL, true, false, NULL);
-
     // top level snip
     SmallContainer top_level = { 
         .repeats        = vb->lines.len32,

@@ -50,12 +50,12 @@
 // the reason for selecting big endian is that I am developing on little endian CPU (Intel) so
 // endianity bugs will be discovered more readily this way
 
-typedef enum __attribute__ ((packed)) { STORE_NONE, STORE_INT, STORE_FLOAT, STORE_INDEX        } StoreType; // values for SectionFlags.ctx.store
-typedef enum __attribute__ ((packed)) { B250_BYTES_4, B250_BYTES_3, B250_BYTES_2, B250_BYTES_1, // used in files 14 - 15.0.37
-                                        B250_VARL // used in files starting 15.0.39                                               
-                                      } B250Size; // part of the file format - goes into SectionHeaderCtx.b250_size
+typedef packed_enum { STORE_NONE, STORE_INT, STORE_FLOAT, STORE_INDEX        } StoreType; // values for SectionFlags.ctx.store
+typedef packed_enum { B250_BYTES_4, B250_BYTES_3, B250_BYTES_2, B250_BYTES_1, // used in files 14 - 15.0.37
+                      B250_VARL // used in files starting 15.0.39                                               
+                    } B250Size; // part of the file format - goes into SectionHeaderCtx.b250_size
 
-typedef enum __attribute__ ((packed)) { SAG_NONE, SAG_BY_SA, SAG_BY_NH, SAG_BY_SOLO, SAG_BY_CC, SAG_BY_FLAG, NUM_SAG_TYPES } SagType;
+typedef packed_enum { SAG_NONE, SAG_BY_SA, SAG_BY_NH, SAG_BY_SOLO, SAG_BY_CC, SAG_BY_FLAG, NUM_SAG_TYPES } SagType;
 #define SAM_SAG_TYPE_NAMES            { "NONE",   "BY_SA",   "BY_NH",   "BY_SOLO",   "BY_CC",   "BY_FLAG" }
 #define IS_SAG_SA   (segconf.sag_type == SAG_BY_SA)
 #define IS_SAG_NH   (segconf.sag_type == SAG_BY_NH)
@@ -269,9 +269,10 @@ typedef struct {
             uint8_t unused_bits          : 2;
             uint8_t max_ploidy_for_mux;       // VCF: 15.0.36
             uint16_t unused16;
-            struct {                          // VCF: 15.0.37
-                uint32_t AC:3, MLEAC:3, AN:3, AF:3, SF:3, QD:3, DP:3;
-                uint32_t unused : 11;
+            struct {                         
+                uint32_t AC:3, MLEAC:3, AN:3, AF:3, SF:3, QD:3, DP:3;  // VCF: 15.0.37
+                uint32_t AS_SB_TABLE : 4;     // VCF: 15.0.41
+                uint32_t unused      : 7;
             } width; 
             uint8_t unused[264];
         } vcf;
@@ -285,7 +286,7 @@ typedef struct {
     uint32_t magic;
 } SectionFooterGenozipHeader, *SectionFooterGenozipHeaderP;
 
-typedef enum __attribute__ ((packed)) { // these values and their order are part of the file format
+typedef packed_enum { // these values and their order are part of the file format
                       CNN_NONE, CNN_SEMICOLON, CNN_COLON, CNN_UNDERLINE, CNN_HYPHEN, CNN_HASH, CNN_SPACE, CNN_PIPE, NUM_CNN
 } QnameCNN /* 3 bits */;
 #define CNN_TO_CHAR { 0,        ';',           ':',       '_',           '-',        '#',      ' ',       '|' }
@@ -546,7 +547,7 @@ typedef const struct SectionEnt {
 } SectionEnt;
 
 // alias types in SEC_DICT_ID_ALIASES (since v15)
-typedef enum __attribute__ ((packed)) { ALIAS_NONE, ALIAS_CTX, ALIAS_DICT } AliasType;
+typedef packed_enum { ALIAS_NONE, ALIAS_CTX, ALIAS_DICT } AliasType;
 #define ALIAS_TYPE_NAMES              { "NONE",     "CTX",     "DICT"    }
 
 // ---------

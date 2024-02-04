@@ -83,9 +83,9 @@ void codec_pacb_segconf_finalize (VBlockP vb)
     zctx->subdicts_section = true; // we store the dict_id array in SEC_SUBDICTS (global section)
 }
 
-bool codec_pacb_comp_init (VBlockP vb, Did did_i, LocalGetLineCB get_line_cb)
+bool codec_pacb_comp_init (VBlockP vb, Did did_i, LocalGetLineCB get_line_cb, bool force)
 {
-    if (!codec_pacb_maybe_used (did_i)) return false;
+    if (!force && !codec_pacb_maybe_used (did_i)) return false;
 
     decl_ctx (did_i);
 

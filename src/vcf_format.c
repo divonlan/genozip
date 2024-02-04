@@ -88,7 +88,8 @@ void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt))
 
         format_mapper.items[i] = (ContainerItem){ .dict_id = dict_id, .separator = {':'} };
 
-        if (dict_id.num == _FORMAT_PS || dict_id.num == _FORMAT_PID || dict_id.num == _FORMAT_DP)
+        if (dict_id.num == _FORMAT_PS || dict_id.num == _FORMAT_PID || dict_id.num == _FORMAT_DP ||
+            (dict_id.num == _FORMAT_SB && segconf.AS_SB_TABLE_by_SB))
             format_mapper.items[i].separator[1] = CI1_ITEM_CB;
 
         // case: GL_to_PL:  FORMAT field snip is changed here to GL. Note: dict_id remains _FORMAT_GL.

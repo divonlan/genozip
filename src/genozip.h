@@ -30,15 +30,17 @@ typedef _Bool bool;
 #define false 0
 #endif
 
-typedef enum __attribute__ ((packed)) { no=0, yes=1, unknown=2 } thool; // three-way "bool"
+#define packed_enum enum __attribute__ ((packed))
 
-typedef enum __attribute__ ((packed)) { 
+typedef packed_enum { no=0, yes=1, unknown=2 } thool; // three-way "bool"
+
+typedef packed_enum { 
     HARD_FAIL,   // display error and abort 
     SOFT_FAIL,   // silently return error
     WARNING_FAIL // display warning and return error
 } FailType;
 
-typedef enum __attribute__ ((packed)) { RECON_OFF, RECON_ON, RECON_PREFIX_ONLY } ReconType;
+typedef packed_enum { RECON_OFF, RECON_ON, RECON_PREFIX_ONLY } ReconType;
 
 typedef unsigned __int128 uint128_t;
 typedef          __int128 int128_t;
@@ -68,11 +70,11 @@ typedef int32_t TaxonomyId;
 
 #define NO_CALLBACK NULL
 
-typedef enum __attribute__ ((packed)) { 
-               NO_POOL=-1, 
-               POOL_MAIN,  // used for all VBs, except non-pool VBs and BGZF VBs
-               POOL_BGZF,  // PIZ only: used for BGZF-compression dispatcher
-               NUM_POOL_TYPES } VBlockPoolType;
+typedef packed_enum { 
+    NO_POOL=-1, 
+    POOL_MAIN,  // used for all VBs, except non-pool VBs and BGZF VBs
+    POOL_BGZF,  // PIZ only: used for BGZF-compression dispatcher
+    NUM_POOL_TYPES } VBlockPoolType;
 
 // ------------------------------------------------------------------------------------------------------------------------
 // pointers used in header files - so we don't need to include the whole .h (and avoid cyclicity and save compilation time)
@@ -128,7 +130,7 @@ typedef struct { char s[65536]; } StrTextMegaLong;
 #define VB ((VBlockP)(vb))
 
 // IMPORTANT: DATATYPES GO INTO THE FILE FORMAT - THEY CANNOT BE CHANGED
-typedef enum __attribute__ ((packed)) { 
+typedef packed_enum { 
     DT_NONE=-1, // used in the code logic, never written to the file
     DT_REF=0, DT_VCF=1, DT_SAM=2, DT_FASTQ=3, DT_FASTA=4, DT_GFF=5, DT_ME23=6, // these values go into SectionHeaderGenozipHeader.data_type
     DT_BAM=7, DT_BCF=8, DT_GENERIC=9, DT_PHYLIP=10, DT_CHAIN=11, DT_KRAKEN=12, 
@@ -230,8 +232,11 @@ extern ExeType exe_type;
 extern FileP z_file, txt_file; 
 
 // IMPORTANT: This is part of the genozip file format. Also update codec.h/codec_args
-// If making any changes, update arrays in 1. CODEC_ARGS in codec.h 2. (for codecs that have a public file format, eg .zip) txtfile_set_seggable_size
-typedef enum __attribute__ ((packed)) { // 1 byte
+// If making any changes, update arrays in 
+// 1. CODEC_ARGS in codec.h 
+// 2. (for codecs that have a public file format, eg .zip) txtfile_set_seggable_size
+// 3. codec_show_time
+typedef packed_enum { // 1 byte
     CODEC_UNKNOWN=0, 
     CODEC_NONE=1, CODEC_GZ=2, CODEC_BZ2=3, CODEC_LZMA=4, CODEC_BSC=5, 
     CODEC_RANS8=6, CODEC_RANS32=7, CODEC_RANS8_pack=8, CODEC_RANS32_pack=9, 
@@ -255,7 +260,7 @@ typedef enum __attribute__ ((packed)) { // 1 byte
 } Codec; 
 
 // note: the numbering of the sections cannot be modified, for backward compatibility
-typedef enum __attribute__ ((packed)) { // 1 byte
+typedef packed_enum { // 1 byte
     SEC_NONE            = -1, // doesn't appear in the file 
 
     SEC_RANDOM_ACCESS   = 0,  // Global section
@@ -555,11 +560,11 @@ typedef enum { QNONE   = -6,
 #define TXTHEADER_TRANSLATOR(func) void func (VBlockP comp_vb, BufferP txtheader_buf)
 
 // IMPORTANT: This is part of the genozip file format. 
-typedef enum __attribute__ ((packed)) {  ENC_NONE = 0, ENC_AES256 = 1, NUM_ENCRYPTION_TYPES } EncryptionType;
+typedef packed_enum {  ENC_NONE = 0, ENC_AES256 = 1, NUM_ENCRYPTION_TYPES } EncryptionType;
 #define ENC_NAMES { "NO_ENC", "AES256" }
 
 // note: #pragma pack doesn't affect enums
-typedef enum __attribute__ ((packed)) { BGZF_LIBDEFLATE, BGZF_ZLIB, NUM_BGZF_LIBRARIES         } BgzfLibraryType; // constants for BGZF FlagsBgzf.library
+typedef packed_enum { BGZF_LIBDEFLATE, BGZF_ZLIB, NUM_BGZF_LIBRARIES         } BgzfLibraryType; // constants for BGZF FlagsBgzf.library
 #define BGZF_LIB_NAMES                { "libdeflate",    "zlib"                                }
 
 #define COMPRESSOR_CALLBACK(func)                                   \
@@ -640,7 +645,7 @@ extern StrTime str_time (void);
 #define ASSERTNOTZEROn(n,name)               ASSERT ((n), "%s: %s=0", (name), #n)
 #define ASSERTNOTZERO(n)                     ASSERT ((n), "%s=0", #n)
 #define ASSERTISZERO(n)                      ASSERT (!(n), "%s!=0", #n)
-#define ASSERTW(condition, format, ...)      ( { if (!(condition) && !flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); }} )
+#define ASSERTW(condition, format, ...)      ( { if (!(condition) && !flag.quiet) { progress_newline(); fprintf (stderr, "\n%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n\n"); fflush (stderr); }} )
 #define WARN_IF(condition, format, ...)      ( { if ( (condition) && !flag.explicit_quiet) { progress_newline(); fprintf (stderr, "%s: WARNING: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n\n"); fflush (stderr); }} )
 #define ASSERTW0(condition, string)          ASSERTW ((condition), string "%s", "")
 #define WARN_IF0(condition, string)          WARN_IF ((condition), string "%s", "")

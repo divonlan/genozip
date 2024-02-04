@@ -529,7 +529,7 @@ static void zip_compress_one_vb (VBlockP vb)
 
     if (flag.show_codec) {
         DO_ONCE iprintf ("\n\nThe output of --show-codec-test: Testing a sample of up %u bytes on ctx.local of each context.\n"
-                         "Results in the format [codec size clock] are in order of quality - the first was selected.\n", CODEC_ASSIGN_SAMPLE_SIZE);
+                         "Results in the format [codec bytes μsec] are in order of quality - the first was selected.\n", CODEC_ASSIGN_SAMPLE_SIZE);
     }
 
     bool need_compress = !flag.make_reference && !flag.seg_only;

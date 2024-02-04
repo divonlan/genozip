@@ -11,7 +11,7 @@
 #include "genozip.h"
 
 // LT_* values are consistent with BAM optional 'B' types (and extend them)
-typedef enum __attribute__ ((packed)) { // 1 byte
+typedef packed_enum { // 1 byte
     // LT values that are part of the file format - values can be added but not changed
     LT_SINGLETON = 0,   // nul-terminated singleton snips (note: ltype=0 was called LT_TEXT until 15.0.26 and included both SINGLETONs and STRINGs)
     LT_INT8      = 1,    

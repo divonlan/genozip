@@ -211,7 +211,7 @@ void sam_zip_init_vb (VBlockP vb_)
     VBlockSAMP vb = (VBlockSAMP)vb_;
 
     vb->chrom_node_index = WORD_INDEX_NONE;
-    vb->XG_inc_S = unknown;
+    CTX(OPTION_XG_Z)->XG_inc_S = unknown;
 
     // note: we test for sorted and not collated, because we want non-sorted long read files (which are collated)
     // to seg depn against same-VB prim (i.e. not gencomp) - as the depn lines will follow the prim line
@@ -240,6 +240,10 @@ void sam_zip_after_compute (VBlockP vb)
 
     z_file->num_perfect_matches += vb->num_perfect_matches; // for stats
     z_file->num_aligned         += vb->num_aligned;
+
+    if (segconf.sam_is_unmapped) { 
+        DO_ONCE ref_verify_organism (vb);
+    }
 }
 
 // main thread: writing data-type specific fields to genozip header

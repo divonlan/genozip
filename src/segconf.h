@@ -22,20 +22,20 @@
 #define ABSOLUTE_MIN_VBLOCK_MEMORY ((uint64_t)1000) // in Bytes
 #define ABSOLUTE_MAX_VBLOCK_MEMORY ((uint64_t)MAX_VBLOCK_MEMORY MB)
 
-typedef enum __attribute__ ((packed)) { TECH_NONE=-1, TECH_ANY=-2, TECH_CONS=-3, TECH_UNKNOWN=0,   TECH_ILLUM, TECH_PACBIO, TECH_NANOPORE,     TECH_454, TECH_MGI,   TECH_IONTORR, TECH_HELICOS, TECH_NCBI, TECH_ULTIMA, TECH_SINGLR, TECH_ELEMENT, TECH_ONSO, NUM_TECHS } SeqTech;
+typedef packed_enum { TECH_NONE=-1, TECH_ANY=-2, TECH_CONS=-3, TECH_UNKNOWN=0,   TECH_ILLUM, TECH_PACBIO, TECH_NANOPORE,     TECH_454, TECH_MGI,   TECH_IONTORR, TECH_HELICOS, TECH_NCBI, TECH_ULTIMA, TECH_SINGLR, TECH_ELEMENT, TECH_ONSO, NUM_TECHS } SeqTech;
 #define TECH_NAME                     {                                          "Unknown_tech",   "Illumina", "PacBio",    "Oxford_Nanopore", "454",    "MGI_Tech", "IonTorrent", "Helicos",    "NCBI",    "Ultima",    "Singular",  "Element",    "Onso"               }
 #define TECH(x) (segconf.tech == TECH_##x)
 
-typedef enum __attribute__ ((packed)) { SQT_UNKNOWN, SQT_NUKE, SQT_AMINO, SQT_NUKE_OR_AMINO } SeqType;
+typedef packed_enum { SQT_UNKNOWN, SQT_NUKE, SQT_AMINO, SQT_NUKE_OR_AMINO } SeqType;
 
-typedef enum __attribute__ ((packed)) { ms_NONE, ms_BIOBAMBAM, ms_MINIMAP2 } msType; // type of SAM ms:i field 
+typedef packed_enum { ms_NONE, ms_BIOBAMBAM, ms_MINIMAP2 } msType; // type of SAM ms:i field 
 #define ms_type_NAME { "None", "biobambam", "minimap2"}
 
-typedef enum __attribute__ ((packed)) { FMT_DP_DEFAULT=0, BY_AD=1, BY_SDP=2 } FormatDPMethod; // part of file format: values go into SectionHeaderGenozipHeader.segconf_FMT_DP_method
+typedef packed_enum { FMT_DP_DEFAULT=0, BY_AD=1, BY_SDP=2 } FormatDPMethod; // part of file format: values go into SectionHeaderGenozipHeader.segconf_FMT_DP_method
 
-typedef enum __attribute__ ((packed)) { INFO_DP_DEFAULT, BY_FORMAT_DP } InfoDPMethod;
+typedef packed_enum { INFO_DP_DEFAULT, BY_FORMAT_DP } InfoDPMethod;
 
-typedef enum __attribute__ ((packed)) { L3_UNKNOWN, L3_EMPTY, L3_COPY_LINE1, L3_NCBI, NUM_L3s } FastqLine3Type;
+typedef packed_enum { L3_UNKNOWN, L3_EMPTY, L3_COPY_LINE1, L3_NCBI, NUM_L3s } FastqLine3Type;
 
 // SamMapperType is part of the file format and values should not be changed (new ones can be added)
 typedef enum  {                       MP_UNKNOWN,       MP_BSBOLT,             MP_bwa,   MP_BWA,   MP_MINIMAP2,   MP_STAR,   MP_BOWTIE2,   MP_DRAGEN,    MP_GEM3,         MP_GEM2SAM,     MP_BISMARK,   MP_BSSEEKER2,     MP_WINNOWMAP,   MP_BAZ2BAM,    MP_BBMAP,   MP_TMAP,   MP_HISAT2,   MP_BOWTIE,   MP_NOVOALIGN,   MP_RAZER3,    MP_BLASR,   MP_NGMLR,           MP_DELVE,   MP_TOPHAT,   MP_CPU,   MP_LONGRANGER,          MP_CLC,              MP_PBMM2,   MP_CCS,  MP_SNAP,   MP_BWA_MEM2,   MP_PARABRICKS,     MP_ISAAC,   MP_ULTIMA, MP_TORRENT_BC,   MP_BIONANO,      NUM_MAPPERS } SamMapperType;
@@ -54,7 +54,7 @@ typedef enum { QHT_QUAL, QHT_CONSENSUS, QHT_OQ, NUM_QHT } QualHistType;
 
 typedef struct { uint8_t q; int count; } QualHisto;
 
-typedef enum __attribute__ ((packed)) { GQ_old=0/*up to 15.0.36*/, BY_PL=1, BY_GP=2, MUX_DOSAGExDP, MUX_DOSAGE } GQMethodType; // values go into SectionHeaderGenozipHeader.segconf_GQ_method (only 0,1,2 are used in PIZ)
+typedef packed_enum { GQ_old=0/*up to 15.0.36*/, BY_PL=1, BY_GP=2, MUX_DOSAGExDP, MUX_DOSAGE } GQMethodType; // values go into SectionHeaderGenozipHeader.segconf_GQ_method (only 0,1,2 are used in PIZ)
 
 #define SEGCONF_MAX_WIDTH 7
 #define SEGCONF_RECORD_WIDTH(x, width) if (segconf.running && (width) <= SEGCONF_MAX_WIDTH) segconf.wid_##x.count[width]++
@@ -226,9 +226,10 @@ typedef struct {
     InfoDPMethod INFO_DP_method;
     thool PL_mux_by_DP;
     Mutex PL_mux_by_DP_mutex;
+    bool AS_SB_TABLE_by_SB;
     uint64_t count_GQ_by_PL, count_GQ_by_GP; // used tp calculate GQ_by_PL, GQ_by_GP
     GQMethodType GQ_method;     // values go into SectionHeaderGenozipHeader.segconf_GQ_method (only 0,1,2 are used in PIZ)
-    FieldWidth wid_AC, wid_MLEAC, wid_AN, wid_AF, wid_SF, wid_QD, wid_DP; // most common width obversed in segconf, for VCF INFO fields that are inserted in vcf_piz_container_cb 
+    FieldWidth wid_AC, wid_MLEAC, wid_AN, wid_AF, wid_SF, wid_QD, wid_DP, wid_AS_SB_TABLE; // most common width obversed in segconf, for VCF INFO fields that are inserted in vcf_piz_container_cb 
 
     // FASTQ
     union {

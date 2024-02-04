@@ -42,7 +42,6 @@ void sam_reset_line (VBlockP vb_)
     vb->textual_cigar.len = vb->binary_cigar.len = vb->binary_cigar.next = 0;
     vb->textual_seq.len = 0;
     vb->qual_missing = vb->seq_missing = vb->seq_is_monochar = vb->cigar_missing = vb->line_not_deepable = false;
-    vb->XG.len = 0;
     vb->seq_len = 0;
     vb->ref_consumed = vb->ref_and_seq_consumed = 0;
     vb->soft_clip[0] = vb->soft_clip[1] = 0;
@@ -53,7 +52,9 @@ void sam_reset_line (VBlockP vb_)
     vb->saggy_is_prim = false;
     vb->meth_call.len32 = 0;
     vb->bisulfite_strand = 0;
-    
+
+    CTX(OPTION_XG_Z)->XG.len = 0;
+
     if (IS_PIZ) {
         vb->textual_seq_str = NULL;
         vb->aux_con = NULL;

@@ -18,9 +18,9 @@
 // ZIP side
 //--------------
 
-bool codec_normq_comp_init (VBlockP vb, Did did_i, bool maybe_revcomped)
+bool codec_normq_comp_init (VBlockP vb, Did did_i, bool maybe_revcomped, bool force)
 {
-    if (!maybe_revcomped && flag.force_qual_codec != CODEC_NORMQ) return false; // normq only makes sense where qual is revcomped according to the revcomp flag (SAM/BAM)
+    if (!maybe_revcomped && !force && flag.force_qual_codec != CODEC_NORMQ) return false; // normq only makes sense where qual is revcomped according to the revcomp flag (SAM/BAM)
 
     decl_ctx (did_i);
 

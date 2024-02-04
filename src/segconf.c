@@ -339,7 +339,7 @@ void segconf_calculate (void)
     int32_t save_luft_reject_bytes = (Z_DT(VCF) || Z_DT(BCF)) ? vcf_vb_get_reject_bytes (vb) : 0;
 
     SAVE_FLAGS;
-    flag.show_alleles = flag.show_digest = flag.show_codec = flag.show_hash = flag.show_reference = false;
+    flag.show_alleles = flag.show_digest = flag.show_hash = flag.show_reference = false;
     flag.quiet = true;
     flag.show_vblocks = NULL;
 
@@ -468,12 +468,12 @@ StrText segconf_get_qual_histo (QualHistType qht)
 
     // get the (up to) 16 qual scores with the highest count. 
     for (int i=0; i < 16; i++) {
-        if (!segconf.qual_histo[i]->count) break;
+        if (!segconf.qual_histo[qht][i].count) break;
 
-        switch (segconf.qual_histo[i]->q + '!') {
+        switch (segconf.qual_histo[qht][i].q + '!') {
             case ';' : memcpy (next, "；", STRLEN("；")); next += STRLEN("；"); break; // Unicode ；and ≐ (in UTF-8) to avoid breaking spreadsheet
             case '=' : memcpy (next, "≐", STRLEN("≐")); next += STRLEN("≐"); break; 
-            default  : *next++ = segconf.qual_histo[i]->q + '!';
+            default  : *next++ = segconf.qual_histo[qht][i].q + '!';
         }
     }
 

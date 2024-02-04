@@ -70,7 +70,7 @@ static void set_stdv (double *histo, int histo_len)
 
     if (flag.show_qual)      
         iprintf ("SMUX threadshold: '%c' has the highest standard deviation: %2.1f%%\n", 
-                 segconf.smux_max_stdv_q + '!', 100.0 * segconf.smux_max_stdv);
+                 segconf.smux_max_stdv_q, 100.0 * segconf.smux_max_stdv);
 
 }
 
@@ -155,12 +155,12 @@ bool codec_smux_maybe_used (Did did_i)
     #define SMUX_STDV_THREADHOLD 0.08 // between 0 and 1. The higher this is, the more drastic differences between the quality histogram associated with each base is needed to qualify for SMUX
 
     return (flag.force_qual_codec == CODEC_SMUX || (!flag.no_smux && segconf.smux_max_stdv > SMUX_STDV_THREADHOLD)) &&
-           did_i == SAM_QUAL/*==FASTQ_QUAL*/; // we only calculated stats for SAM_QUAL (not OQ or CQUAL)
+            did_i == SAM_QUAL/*==FASTQ_QUAL*/; // we only calculated stats for SAM_QUAL (not OQ or CQUAL)
 }
 
-bool codec_smux_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB get_line_cb)
+bool codec_smux_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB get_line_cb, bool force)
 {
-    if (!codec_smux_maybe_used (qual_did_i)) return false;
+    if (!force && !codec_smux_maybe_used (qual_did_i)) return false;
 
     decl_ctx (qual_did_i);
     
@@ -278,8 +278,15 @@ CODEC_RECONSTRUCT (codec_smux_reconstruct)
     decl_smux_ctxs_piz (ctx->dict_id.id);
 
     rom seq = VB_DT(SAM) ? sam_piz_get_textual_seq(vb) : last_txtx (vb, CTX(FASTQ_SQBITMAP)); 
-    if (*seq == '*') len = 1;
+    if (*seq == '*') 
+        len = 1;
     
+    // case: Deep, and len is only the trimmed suffix as the rest if copied from SAM (see fastq_special_deep_copy_QUAL)
+    else if (flag.deep && len < vb->seq_len)
+        seq += (vb->seq_len - len); // advance seq to the trimmed part too
+    else
+        ASSPIZ (len == vb->seq_len, "expecting len=%u == vb->seq_len=%u", len, vb->seq_len);
+
     bool is_src_rev   = VB_DT(SAM) ? sam_is_last_flags_rev_comp (vb) : false;
     bool is_recon_rev = OUT_DT(FASTQ) ? false : is_src_rev;
 
@@ -299,8 +306,10 @@ CODEC_RECONSTRUCT (codec_smux_reconstruct)
                 recon[i] = ctx->local.param;
 
             else {
-                ASSPIZ (next_b[channel_i] < after_b[channel_i], "%s is out of data: len=%u",
-                        ctxs[channel_i]->tag_name, ctxs[channel_i]->local.len32);
+                ASSPIZ (next_b[channel_i] < after_b[channel_i], "%s is out of data: len=%u (channel_i=%u)",
+                        ctxs[channel_i] ? ctxs[channel_i]->tag_name    : "", 
+                        ctxs[channel_i] ? ctxs[channel_i]->local.len32 : 0, 
+                        channel_i);
 
                 recon[i] = *next_b[channel_i]++;
             }

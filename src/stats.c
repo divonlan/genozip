@@ -332,7 +332,9 @@ static void stats_output_file_metadata (void)
             if (flag.deep) bufprintf (evb, &features, "deep_trimming=%s;", segconf_deep_trimming_name());
             if (flag.deep) bufprintf (evb, &features, "deep_qual=%s;", TF (!segconf.deep_no_qual));
             if (segconf.deep_N_sam_score && segconf.deep_N_fq_score) 
-                bufprintf (evb, &features, "deep_N_qual=%c→%c;", segconf.deep_N_fq_score, segconf.deep_N_sam_score);
+                bufprintf (evb, &features, "deep_N_qual=%s%c→%c;", 
+                           segconf.deep_N_fq_score == '\'' ? "'" : "", // escape a ' at the beginning of a cell
+                           segconf.deep_N_fq_score, segconf.deep_N_sam_score);
 
             if (num_alignments) {
                 FEATURE0 (segconf.is_sorted && !segconf.sam_is_unmapped, "Sorting: Sorted by POS", "Sorted_by=POS");        
@@ -474,8 +476,8 @@ static void stats_output_file_metadata (void)
             bufprintf (evb, &features, "Qual=%s;", !segconf.nontrivial_qual ? "Trivial" : ZCTX(SAM_QUAL)->qual_codec != CODEC_UNKNOWN ? codec_name (ZCTX(SAM_QUAL)->qual_codec) : codec_name (ZCTX(SAM_QUAL)->lcodec));
             bufprintf (evb, &features, "Qual_histo=%s;", segconf_get_qual_histo(QHT_QUAL).s);
 
-            bufprintf (evb, &features, "smux_max_stdv=%2.1f%% '%s'",
-                       segconf.smux_max_stdv, 
+            bufprintf (evb, &features, "smux_max_stdv=%2.1f%% '%s';",
+                       segconf.smux_max_stdv * 100.0, 
                        segconf.smux_max_stdv_q=='='?"≐" : segconf.smux_max_stdv_q==';'?"；" : char_to_printable (segconf.smux_max_stdv_q).s); // Unicode ；and ≐ (in UTF-8) to avoid breaking spreadsheet
 
             REPORT_KRAKEN;

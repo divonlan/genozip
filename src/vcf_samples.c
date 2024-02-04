@@ -604,8 +604,8 @@ static void vcf_seg_SB_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP
     ContextP ad_ctx=CTX(FORMAT_AD);
     bool use_formula = ctx_encountered (VB, FORMAT_AD) && ad_ctx->last_txt.len == 2 && n_items == 4; // note: last_txt_len = # of items stored by vcf_seg_FORMAT_A_R
 
-    for (unsigned i=0; i < n_items; i++) {
-
+    for (int i=0; i < n_items; i++) {
+        
         // seg odd-numbered element as AD - (even element), if the sum is correct
         if (use_formula && i%2 && vb->ad_values[i/2] == values[i-1] + values[i]) 
             seg_by_ctx (VB, sb_snips[i/2], sb_snip_lens[i/2], item_ctxs[i], item_lens[i]); 
@@ -615,6 +615,10 @@ static void vcf_seg_SB_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP
             seg_by_ctx (VB, STRi(item, i), item_ctxs[i], item_lens[i]);
         }
     }
+
+    if (segconf.AS_SB_TABLE_by_SB && n_items == 4) // our method only works for bi-allelic (i.e. SB.n_items==4)
+        for (int i=0; i < 4; i++) 
+            ctx->sum_sb[i] += values[i]; // consumed by vcf_seg_INFO_AS_SB_TABLE
 }
 
 //-----------

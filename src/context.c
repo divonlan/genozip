@@ -561,14 +561,11 @@ void ctx_clone (VBlockP vb)
 
 static void ctx_initialize_ctx (ContextP ctx, Did did_i, DictId dict_id, DictIdtoDidMap d2d_map, STRp(tag_name))
 {
-    ctx->did_i            = did_i;
-    ctx->dict_did_i       = did_i;
-    ctx->st_did_i         = DID_NONE; // this is other_did_i in PIZ
-    ctx->dict_id          = dict_id;
-    ctx->last_line_i      = LAST_LINE_I_INIT;
-    ctx->tag_i            = -1;
-    ctx->dict.can_be_big  = true; // don't warn if dict buffers grow really big
-    ctx->pair_assist_type = SEC_NONE;
+    // common ZIP/PIZ fields
+    ctx->did_i       = did_i;
+    ctx->dict_did_i  = did_i;
+    ctx->dict_id     = dict_id;
+    ctx->last_line_i = LAST_LINE_I_INIT;
 
     if (tag_name_len) {
         ASSINP (tag_name_len <= MAX_TAG_LEN-1, "Tag name \"%.*s\" is of length=%u beyond the maximum tag length supported by Genozip=%u",
@@ -586,6 +583,10 @@ static void ctx_initialize_ctx (ContextP ctx, Did did_i, DictId dict_id, DictIdt
 
     // add a user-requested SEC_COUNTS section
     if (IS_ZIP) {
+        ctx->st_did_i = DID_NONE; 
+        ctx->tag_i    = -1;
+        ctx->dict.can_be_big = true; // don't warn if dict buffers grow really big
+    
         if (flag.show_one_counts.num == dict_id_typeless (ctx->dict_id).num) 
             ctx->counts_section = ctx->no_stons = true;
 
@@ -598,6 +599,11 @@ static void ctx_initialize_ctx (ContextP ctx, Did did_i, DictId dict_id, DictIdt
                 buf_set_shared (&ctx->chrom2ref_map);
         }
     } 
+
+    else if (IS_PIZ) {
+        ctx->pair_assist_type = SEC_NONE;
+        ctx->other_did_i = DID_NONE;
+    }
 }
 
 WordIndex ctx_populate_zf_ctx (Did dst_did_i, STRp (contig_name), WordIndex ref_index)

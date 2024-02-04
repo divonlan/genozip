@@ -45,7 +45,7 @@ extern void asspiz_text (VBlockP vb, FUNCLINE);
 #define ABORT_PIZ0(string) ABORT_PIZ (string "%s", "")
 
 // goes into ctx->history if not STORE_INT
-typedef enum __attribute__ ((packed)) { LookupTxtData,   LookupDict,   LookupLocal,   LookupPerLine } LookupType;
+typedef packed_enum { LookupTxtData,   LookupDict,   LookupLocal,   LookupPerLine } LookupType;
 #define LOOKUP_TYPE_NAMES            { "LookupTxtData", "LookupDict", "LookupLocal", "LookupPerLine" }
 extern rom lookup_type_name (LookupType lookup);
 

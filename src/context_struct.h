@@ -20,11 +20,11 @@ typedef struct { // initialize with ctx_init_iterator()
 
 typedef enum { DYN_DEC, DYN_hex, DYN_HEX } DynType;
 
-typedef enum __attribute__ ((packed)) { IDT_UNKNOWN, IDT_ALPHA_INT, IDT_ALPHA_NUM, IDT_ALPHA_INT_DOT_INT, IDT_ALPHA_NUM_DOT_INT, IDT_OTHER } IdType;
+typedef packed_enum { IDT_UNKNOWN, IDT_ALPHA_INT, IDT_ALPHA_NUM, IDT_ALPHA_INT_DOT_INT, IDT_ALPHA_NUM_DOT_INT, IDT_OTHER } IdType;
 
-typedef enum __attribute__ ((packed)) { DEP_L0, DEP_L1, DEP_L2, NUM_LOCAL_DEPENDENCY_LEVELS } LocalDepType;
+typedef packed_enum { DEP_L0, DEP_L1, DEP_L2, NUM_LOCAL_DEPENDENCY_LEVELS } LocalDepType;
 
-typedef enum __attribute__ ((packed)) {  // PIZ: set by a SPECIAL function, as if there was a WORD_INDEX_MISSING b250
+typedef packed_enum {  // PIZ: set by a SPECIAL function, as if there was a WORD_INDEX_MISSING b250
     SPEC_RES_OK,        
     SPEC_RES_IS_MISSING,  // value missing, as if there was a WORD_INDEX_MISSING b250
     SPEC_RES_DEFERRED     // not reconstructed - will be reconstructed from top level container callback
@@ -59,9 +59,11 @@ typedef struct Context {
     struct FlagsDict dict_flags;  // ZIP: zctx only ; PIZ: flags included in Dictionary section header (v15)
     B250Size b250_size;        // Size type of element in b250 data (PIZ and ZIP after generation) v14
     B250Size pair_b250_size;
-    Codec lcodec;              // ZIP/PIZ: codec used to compress local
-    Codec lsubcodec_piz;       // ZIP/PIZ: piz to decompress with this codec, AFTER decompressing with lcodec
-
+    Codec lcodec;              // ZIP/PIZ: vctx/zctx: codec used to compress local
+    union {
+    Codec lsubcodec_piz;       // ZIP/PIZ: vctx: piz to decompress with this codec, AFTER decompressing with lcodec
+    Codec qual_codec;          // ZIP zctx: QUAL codec selected in codec_assign_best_qual_codec
+    };
     bool z_data_exists;        // ZIP/PIZ: z_file has SEC_DICT, SEC_B250 and/or SEC_LOCAL sections of this context (not necessarily loaded)
     bool is_initialized;       // ZIP / PIZ: context-specific initialization has been done
     
@@ -88,8 +90,8 @@ typedef struct Context {
     union {
         #define CTX_TAG_CON_CACHE "contexts->con_cache"        
         Buffer con_cache;          // PIZ: vctx: use by contexts that might have containers: Handled by container_reconstruct - an array of Container which includes the did_i. 
-                                //      Each struct is truncated to used items, followed by prefixes. 
-                                // ZIP: vctx: seg_array, sam_seg_array_field_get_con cache a container.
+                                   //      Each struct is truncated to used items, followed by prefixes. 
+                                   // ZIP: vctx: seg_array, sam_seg_array_field_get_con cache a container.
         Buffer ctx_cache;          // PIZ: vctx: used to cached Contexts of Multiplexers and other dict_id look ups
         Buffer packed;             // PIZ: vctx: used by contexts that compressed CODEC_ACTG               
         Buffer zip_ctx_specific_buf;
@@ -103,6 +105,7 @@ typedef struct Context {
         Buffer mi_history;         // ZIP: SAM: used by OPTION_MI_Z in Ultima
         Buffer info_items;         // ZIP: VCF: VCF_INFO
         Buffer deferred_snip;      // ZIP/PIZ: VCF: snip of a field whose seg/recon is postponed to after samples: INFO_SF
+        Buffer XG;                 // ZIP/PIZ: OPTION_XG_Z in bsseeker2: XG:Z field with the underscores removed. ZIP: revcomped if FLAG.revcomp. PIZ: as reconstructed when peeking during XM:Z special recon
     };
 
     // ZIP/PIZ: context specific #2
@@ -120,7 +123,7 @@ typedef struct Context {
     #define reconstruct_state_start(ctx) ((char*)&(ctx)->last_value)
     #define reconstruct_state_size_formula  ((char*)(&evb->contexts[0].last_encounter_was_reconstructed + 1) - (char*)(&evb->contexts[0].last_value))
 
-    ValueType last_value;      // ZIP/PIZ: last value of this context (it can be a basis for a delta, used for BAM translation, and other uses)
+    ValueType last_value;          // ZIP/PIZ: last value of this context (it can be a basis for a delta, used for BAM translation, and other uses)
     union {
         int64_t last_delta;        // ZIP/PIZ: last delta value calculated (always in PIZ, sometimes in ZIP)
         WordIndex last_con_wi;     // PIZ: word index of last container retrieved from this ctx
@@ -134,50 +137,55 @@ typedef struct Context {
                                //          =(-vb->line_i-1) means ctx encountered in this line (so far) but last_value was not set 
     int32_t last_sample_i;     // ZIP/PIZ: Current sample in VCF/FORMAT ; must be set to 0 if not VCF/FORMAT
    
-    union { // 32 bit
-        int32_t ctx_specific;
+    union { // 64 bit
+        int64_t ctx_specific;
         uint32_t segconf_max;       // maximum value during segconf
         bool last_is_alt;           // CHROM (all DTs): ZIP: last CHROM was an alt
         bool last_is_new;           // SAM_QNAME:       ZIP: used in segconf.running
         bool has_len;               // ZIP: INFO_ANN subfields of cDNA, CDS, AA
+        thool XG_inc_S;             // ZIP: bsseeker2 OPTION_XG_Z: whether to include soft_clip[0]
 
         PosType32 pos_last_value;   // PIZ: VCF_POS: value for rolling back last_value after INFO/END
 
         struct {                    // ZIP: INFO_SF
-            uint32_t next     : 30;
-            uint32_t SF_by_GT : 2; 
+            uint32_t next;
+            uint32_t SF_by_GT; 
         } sf;    
 
         thool line_has_RGQ;         // ZIP/PIZ: FORMAT_RGQ : GVCF
         
         struct {                    // SAM_QUAL, SAM_CQUAL, OPTION_OQ_Z, FASTQ_QUAL: 
             bool longr_bins_calculated; // ZIP zctx: codec_longr: were LONGR bins calculated in segconf
-            Codec qual_codec;       // ZIP zctx: for displaying in stats
         };
         struct ctx_tp {             // PIZ: OPTION_tp_B_ARR (15.0.10-15.0.27: OPTION_tp_B_c)
-            #define TP_LEN_BITS 11
-            #define HP_LEN_BITS 9
-            uint32_t repeat    : TP_LEN_BITS; // repeat within tp:B
-            uint32_t hp_start  : TP_LEN_BITS; // start of current condensed homopolymer (-1 if this is not a condensed homopolymer)
-            uint32_t hp_len    : HP_LEN_BITS; // length of current homopolymer
-            uint32_t condensed : 1;           // current homopolymer is condensed
+            #define TP_LEN_BITS 23
+            #define HP_LEN_BITS 17
+            uint64_t repeat    : TP_LEN_BITS; // repeat within tp:B
+            uint64_t hp_start  : TP_LEN_BITS; // start of current condensed homopolymer (-1 if this is not a condensed homopolymer)
+            uint64_t hp_len    : HP_LEN_BITS; // length of current homopolymer
+            uint64_t condensed : 1;           // current homopolymer is condensed
         } tp;
         struct {                    // INFO_DP:
-            int32_t by_format_dp        : 1;   // ZIP/PIZ: segged vs sum of FORMAT/DP
-            int32_t sum_format_dp       : 31;  // ZIP/PIZ: sum of FORMAT/DP of samples in this line ('.' counts as 0).
+            int32_t by_format_dp;   // ZIP/PIZ: segged vs sum of FORMAT/DP
+            int32_t sum_format_dp;  // ZIP/PIZ: sum of FORMAT/DP of samples in this line ('.' counts as 0).
         } dp;
         struct {
-            uint32_t count_ht;                 // ZIP/PIZ: INFO/AN: sum of non-. haplotypes in FORMAT/GT, used to calculate INFO/AN
+            uint32_t count_ht;      // ZIP/PIZ: INFO/AN: sum of non-. haplotypes in FORMAT/GT, used to calculate INFO/AN
         } an;
-        struct {                    // INFO_QD:         ZIP/PIZ: 
-            uint32_t sum_dp_with_dosage : 28;  // sum of FORMAT/DP of samples in this line and dosage >= 1
-            uint32_t pred_type          : 4;   // predictor type;
+        struct {                    // INFO_QD: ZIP/PIZ: 
+            uint32_t sum_dp_with_dosage; // sum of FORMAT/DP of samples in this line and dosage >= 1
+            uint32_t pred_type;     // predictor type
         } qd;
-        int32_t last_end_line_i;    // INFO_END:        PIZ: last line on which INFO/END was encountered 
+        
+        uint16_t sum_sb[4];         // FORMAT_SB: ZIP/PIZ: sum_sb[i] is the sum of SBᵢ across all samples, where SBᵢ is the i'th component of a bi-allelic FORMAT/SB. 
+
+        int32_t last_end_line_i;    // INFO_END: PIZ: last line on which INFO/END was encountered 
 
         IdType id_type;             // ZIP: type of ID in fields segged with seg_id_field        
         
-        enum __attribute__ ((packed)) { PAIR1_ALIGNED_UNKNOWN=-1, PAIR1_NOT_ALIGNED=0, PAIR1_ALIGNED=1 } pair1_is_aligned;  // FASTQ_SQBITMAP:  PIZ: used when reconstructing pair-2
+        TxtWord predicted_RU;       // PIZ/ZIP: INFO_RU: pointer into REFALT field in this line in txt_data
+
+        packed_enum { PAIR1_ALIGNED_UNKNOWN=-1, PAIR1_NOT_ALIGNED=0, PAIR1_ALIGNED=1 } pair1_is_aligned;  // FASTQ_SQBITMAP:  PIZ: used when reconstructing pair-2
         
         bool saggy_seq_needs_fq_reversal; // PIZ: SAM_SQBITMAP: true if saggy copied is a reverse 
         
@@ -186,13 +194,13 @@ typedef struct Context {
             char prev_phase; 
         } gt; 
         
-        struct { enum __attribute__ ((packed)) { PS_NONE, PS_POS, PS_POS_REF_ALT, PS_UNKNOWN } ps_type; }; // FORMAT_PS, FORMAT_PID, FORMAT_IPSphased
+        struct { packed_enum { PS_NONE, PS_POS, PS_POS_REF_ALT, PS_UNKNOWN } ps_type; }; // FORMAT_PS, FORMAT_PID, FORMAT_IPSphased
     };
 
-    uint32_t next_local;       // PIZ: iterator on Context.local 
     SnipIterator iterator;     // PIZ: used to iterate on the ctx->b250, reading one b250 word_index at a time
-    SnipIterator pair_b250_iter; // PIZ: Iterator on pair, if it contains b250 data  <--- LAST in RECONSTRUCT START 
+    SnipIterator pair_b250_iter; // PIZ: Iterator on pair, if it contains b250 data 
                                // ZIP FASTQ paired: iterating on pair-1 data while compressing pair-2
+    uint32_t next_local;       // PIZ: iterator on Context.local 
     bool last_encounter_was_reconstructed; // PIZ: only valid if ctx_encountered() is true. Means last encountered was also reconstructed.
     // END: RECONSTRUCT STATE 
     // ----------------------------------------------------------------------------------------
@@ -308,10 +316,10 @@ typedef struct Context {
     ConstContainerP curr_container;// PIZ: current container in this context currently in the stack. NULL if none.
 
     WordIndex last_wi;         // PIZ: last word_index retrieved from b250 
+    LineIType recon_insertion; // PIZ VCF: for INFO fields inserted after samples - whether to reconstruct. if to reconstruct - set to vb->line_i+1. any other value means "don't reconstruct"
     Did other_did_i;           // PIZ: cache the other context needed for reconstructing this one
     SectionType pair_assist_type; // PIZ FASTQ R2: SEC_LOCAL, SEC_B250 is pair-assist, SEC_NONE if not.
     bool is_ctx_alias;         // PIZ: context is an alias            
-    bool recon_insertion;      // PIZ VCF: for INFO fields inserted after samples - whether to reconstruct
     bool local_uncompressed;   // PIZ: VB: local has been uncompressed
     bool b250_uncompressed;    // PIZ: VB: b250 has been uncompressed
     bool empty_lookup_ok;      // PIZ: 

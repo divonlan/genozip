@@ -34,7 +34,7 @@
 
 #define stack_pointer (vb)->frozen_state.len32 // index of next item that will be pushed
 
-#define RECON_STATE_SIZE 73 // needs adjustment if Context changes
+#define RECON_STATE_SIZE 77 // needs adjustment if Context changes
 typedef struct __attribute__ ((packed)) { // struct members are not word-aligned 
     ContextP ctx;
     uint8_t level;

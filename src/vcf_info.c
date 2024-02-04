@@ -17,21 +17,11 @@
 
 #define info_items CTX(VCF_INFO)->info_items
 
-sSTRl(RAW_MQandDP_snip, 64 + 2 * 16);     
-
-static SmallContainer RAW_MQandDP_con = {
-    .nitems_lo = 2, 
-    .repeats   = 1, 
-    .items     = { { .dict_id={ _INFO_RAW_MQandDP_MQ }, .separator = {','} },
-                   { .dict_id={ _INFO_RAW_MQandDP_DP }                     } }
-};
-
 // called after reading VCF header, before segconf
 void vcf_info_zip_initialize (void) 
 {
-    container_prepare_snip ((ContainerP)&RAW_MQandDP_con, 0, 0, qSTRa(RAW_MQandDP_snip));
-
     vcf_dbsnp_zip_initialize(); // called even if not in VCF header, because can be discovered in segconf too
+    vcf_gatk_zip_initialize();
     if (segconf.vcf_is_vagrent)    vcf_vagrent_zip_initialize();
     if (segconf.vcf_is_mastermind) vcf_mastermind_zip_initialize();
     if (segconf.vcf_is_vep)        vcf_vep_zip_initialize();
@@ -139,7 +129,7 @@ void vcf_piz_insert_INFO_DP (VBlockVCFP vb)
 {
     decl_ctx (INFO_DP);
     
-    if (ctx->recon_insertion) {
+    if (IS_RECON_INSERTION(ctx)) {
         STRl(info_dp,16);
         info_dp_len = str_int_ex (ctx->dp.sum_format_dp, info_dp, false);
 
@@ -310,119 +300,6 @@ TRANSLATOR_FUNC (vcf_piz_luft_ALLELE)
     return true;
 }
 
-// ---------------
-// INFO/BaseCounts
-// ---------------
-
-// ##INFO=<ID=genozip BugP.vcf -ft ,Number=4,Type=Integer,Description="Counts of each base">
-// Sorts BaseCounts vector with REF bases first followed by ALT bases, as they are expected to have the highest values
-static bool vcf_seg_INFO_BaseCounts (VBlockVCFP vb, ContextP ctx_basecounts, STRp(value)) // returns true if caller still needs to seg 
-{
-    if (vb->main_ref_len != 1 || vb->main_alt_len != 1 || vb->line_coords == DC_LUFT) 
-        return true; // not a bi-allelic SNP or line is a luft line without easy access to REFALT - caller should seg
-
-    char *str = (char *)value;
-    int64_t sum = 0;
-
-    uint32_t counts[4], sorted_counts[4] = {}; // corresponds to A, C, G, T
-
-    SAFE_NUL (&value[value_len]);
-    for (unsigned i=0; i < 4; i++) {
-        counts[i] = strtoul (str, &str, 10);
-        str++; // skip comma separator
-        sum += counts[i];
-    }
-    SAFE_RESTORE;
-
-    if (str - value != value_len + 1 /* +1 due to final str++ */) return true; // invalid BaseCounts data - caller should seg
-
-    unsigned ref_i = acgt_encode[(int)*vb->main_ref];
-    unsigned alt_i = acgt_encode[(int)*vb->main_alt];
-
-    bool used[4] = {};
-    sorted_counts[0] = counts[ref_i]; // first - the count of the REF base
-    sorted_counts[1] = counts[alt_i]; // second - the count of the ALT base
-    used[ref_i] = used[alt_i] = true;
-
-    // finally - the other two cases in their original order (usually these are 0)
-    for (unsigned sc_i=2; sc_i <= 3; sc_i++)
-        for (unsigned c_i=0; c_i <= 3; c_i++)
-            if (!used[c_i]) { // found a non-zero count
-                sorted_counts[sc_i] = counts[c_i];
-                used[c_i] = true;
-                break;
-            }
-
-    char snip[2 + value_len + 1]; // +1 for \0
-    sprintf (snip, "%c%c%u,%u,%u,%u", SNIP_SPECIAL, VCF_SPECIAL_BaseCounts, 
-             sorted_counts[0], sorted_counts[1], sorted_counts[2], sorted_counts[3]);
-
-    seg_by_ctx (VB, snip, value_len+2, ctx_basecounts, value_len); 
-    
-    ctx_basecounts->flags.store = STORE_INT;
-    ctx_set_last_value (VB, ctx_basecounts, sum);
-
-    return false; // we already segged - caller needn't seg
-}
-
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_BaseCounts)
-{
-    STR (refalt);
-    reconstruct_peek (vb, CTX (VCF_REFALT), pSTRa(refalt));
-
-    uint32_t counts[4], sorted_counts[4] = {}; // counts of A, C, G, T
-
-    new_value->i = 0;
-    char *str = (char *)snip;
-
-    for (unsigned i=0; i < 4; i++) {
-        sorted_counts[i] = strtoul (str, &str, 10);
-        str++; // skip comma separator
-        new_value->i += sorted_counts[i];
-    }
-
-    if (!reconstruct) goto done; // just return the new value
-
-    ASSVCF (str - snip == snip_len + 1, "expecting (str-snip)=%d == (snip_len+1)=%u", (int)(str - snip), snip_len+1);
-
-    unsigned ref_i = acgt_encode[(int)refalt[0]];
-    unsigned alt_i = acgt_encode[(int)refalt[2]];
-    
-    counts[ref_i] = sorted_counts[0];
-    counts[alt_i] = sorted_counts[1];
-    
-    unsigned sc_i=2;
-    for (unsigned i=0; i <= 3; i++)
-        if (ref_i != i && alt_i != i) counts[i] = sorted_counts[sc_i++];
-
-    bufprintf (vb, &vb->txt_data, "%u,%u,%u,%u", counts[0], counts[1], counts[2], counts[3]);
-
-done:
-    return HAS_NEW_VALUE;
-}
-
-// currently used only for CountBases - reverses the vector in case of XSTRAND
-TRANSLATOR_FUNC (vcf_piz_luft_XREV)
-{
-    if (validate_only) return true; // always possible
-
-    if (IS_TRIVAL_FORMAT_SUBFIELD) return true; // This is FORMAT field which is empty or "." - all good
-
-    char recon_copy[recon_len];
-    memcpy (recon_copy, recon, recon_len);
-
-    str_split_enforce (recon_copy, recon_len, 0, ',', item, true, "vcf_piz_luft_XREV");
-
-    // re-reconstruct in reverse order
-    Ltxt -= recon_len;
-    for (int i=n_items-1; i >= 1; i--)
-        RECONSTRUCT_SEP (items[i], item_lens[i], ',');
-        
-    RECONSTRUCT (items[0], item_lens[0]);
-
-    return true;
-}
-
 // ------------------------
 // INFO/SVLEN & INFO/REFLEN
 // ------------------------
@@ -542,13 +419,6 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_SVTYPE)
 
     return NO_NEW_VALUE;
 }    
-
-// ##INFO=<ID=RAW_MQandDP,Number=2,Type=Integer,Description="Raw data (sum of squared MQ and total depth) for improved RMS Mapping Quality calculation. Incompatible with deprecated RAW_MQ formulation.">
-// comma-seperated two numbers: RAW_MQandDP=720000,200: 1. sum of squared MQ values and 2. total reads over variant genotypes (note: INFO/MQ is sqrt(#1/#2))
-static inline void vcf_seg_INFO_RAW_MQandDP (VBlockVCFP vb, ContextP ctx, STRp(value))
-{
-    seg_by_container (VB, ctx, (ContainerP)&RAW_MQandDP_con, STRa(value), STRa(RAW_MQandDP_snip), NULL, true, value_len);
-}
 
 // --------------
 // INFO container
@@ -712,127 +582,109 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         #define STORE_AND_SEG(store_type) ({ seg_set_last_txt_store_value (VB, ctx, STRa(value), store_type); seg_by_ctx (VB, STRa(value), ctx, value_len); break; })
         #define DEFER(f) ({ vb_add_to_deferred_q (VB, ctx, vcf_seg_INFO_##f, vb->idx_##f); seg_set_last_txt (VB, ctx, STRa(value)); break; })
 
-        // ##INFO=<ID=VQSLOD,Number=1,Type=Float,Description="Log odds of being a true variant versus being false under the trained gaussian mixture model">
-        // Optimize VQSLOD
-        case _INFO_VQSLOD: 
+        // ---------------------------------------
+        // Fields defined in the VCF specification
+        // ---------------------------------------
+        case _INFO_AC:              CALL (vcf_seg_INFO_AC (vb, ctx, STRa(value))); 
+        case _INFO_AA:              CALL_IF (!segconf.vcf_is_cosmic, vcf_seg_INFO_allele (VB, ctx, STRa(value), 0)); // note: in COSMIC, INFO/AA is something entirely different
+        case _INFO_DP:              CALL (vcf_seg_INFO_DP (vb, ctx, STRa(value)));
+        case _INFO_END:             CALL (vcf_seg_INFO_END (vb, ctx, STRa(value))); // note: END is an alias of POS - they share the same delta stream - the next POS will be a delta vs this END)
+
+        // structural variation
+        case _INFO_CIEND:           CALL (seg_by_did (VB, STRa(value), INFO_CIPOS, value_len));  // alias of INFO/CIPOS
+        case _INFO_SVLEN:           CALL (vcf_seg_INFO_SVLEN (vb, ctx, STRa(value)));
+        case _INFO_SVTYPE:          CALL_WITH_FALLBACK (vcf_seg_SVTYPE);
+
+        // ---------------------------------------
+        // GATK fields
+        // ---------------------------------------
+        case _INFO_RAW_MQandDP:     CALL (vcf_seg_INFO_RAW_MQandDP (vb, ctx, STRa(value)));
+        case _INFO_HaplotypeScore:  CALL (seg_float_or_not (VB, ctx, STRa(value), value_len));
+        case _INFO_BaseCounts:      CALL_WITH_FALLBACK (vcf_seg_INFO_BaseCounts);
+        case _INFO_SF:              CALL_WITH_FALLBACK (vcf_seg_INFO_SF_init); // Source File
+        case _INFO_MLEAC:           CALL (vcf_seg_INFO_MLEAC (vb, ctx, STRa(value)));
+        case _INFO_MLEAF:           CALL (vcf_seg_INFO_MLEAF (vb, ctx, STRa(value)));
+        case _INFO_QD:              DEFER (QD); // deferred seg to after samples
+        case _INFO_RU:              CALL (vcf_seg_INFO_RU (vb, ctx, STRa(value)));
+        case _INFO_RPA:             CALL (vcf_seg_INFO_RPA (vb, ctx, STRa(value)));
+        case _INFO_MFRL:            
+        case _INFO_MBQ:
+        case _INFO_MMQ:             CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, STORE_INT, DICT_ID_NONE, value_len));
+        case _INFO_NALOD:
+        case _INFO_NLOD:
+        case _INFO_TLOD:            CALL (seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, value_len));
+        case _INFO_GERMQ:
+        case _INFO_CONTQ:
+        case _INFO_SEQQ:
+        case _INFO_STRANDQ:
+        case _INFO_STRQ:
+        case _INFO_ECNT:            CALL (seg_integer_or_not (VB, ctx, STRa(value), value_len));
+        case _INFO_AS_SB_TABLE:     CALL_IF (segconf.AS_SB_TABLE_by_SB, DEFER(AS_SB_TABLE));
+
+        case _INFO_VQSLOD: // Optimize VQSLOD 
             if (flag.optimize_VQSLOD && optimize_float_2_sig_dig (STRa(value), 0, modified, &modified_len)) 
                 ADJUST_FOR_MODIFIED;
             goto standard_seg;
-    
-        // ##INFO=<ID=END,Number=1,Type=Integer,Description="Stop position of the interval">
-        // END is an alias of POS - they share the same delta stream - the next POS will be a delta vs this END)
-        case _INFO_END:   // alias of POS
-            CALL (vcf_seg_INFO_END (vb, ctx, STRa(value)));
 
-        case _INFO_CIEND: // alias of INFO/CIPOS
-            CALL (seg_by_did (VB, STRa(value), INFO_CIPOS, value_len));
-
-        case _INFO_SVLEN:
-            CALL (vcf_seg_INFO_SVLEN (vb, ctx, STRa(value)));
-
-        case _INFO_SVTYPE:
-            CALL_WITH_FALLBACK (vcf_seg_SVTYPE);
-
-        case _INFO_REFLEN:
-            CALL (vcf_seg_INFO_REFLEN (vb, ctx, STRa(value)));
-
-        // ##INFO=<ID=BaseCounts,Number=4,Type=Integer,Description="Counts of each base">
-        case _INFO_BaseCounts: 
-            CALL_WITH_FALLBACK (vcf_seg_INFO_BaseCounts);
-    
-        // ##INFO=<ID=DP,Number=1,Type=Integer,Description="Approximate read depth; some reads may have been filtered">
-        case _INFO_DP: 
-            CALL (vcf_seg_INFO_DP (vb, ctx, STRa(value)));
-
-        // Source File
-        case _INFO_SF: 
-            CALL_WITH_FALLBACK (vcf_seg_INFO_SF_init);
-
-        // ##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">
-        case _INFO_AC:
-            CALL (vcf_seg_INFO_AC (vb, ctx, STRa(value))); 
-
-        case _INFO_MLEAC:
-            CALL (vcf_seg_INFO_MLEAC (vb, ctx, STRa(value)));
-
-        case _INFO_MLEAF:
-            CALL (vcf_seg_INFO_MLEAF (vb, ctx, STRa(value)));
-
-        case _INFO_QD: // deferred seg to after samples
-            DEFER (QD);
-
-        // ##INFO=<ID=AA,Number=1,Type=String,Description="Ancestral Allele"> 
-        case _INFO_AA: // But in COSMIC, INFO/AA is something entirely different
-            CALL_IF (!segconf.vcf_is_cosmic, vcf_seg_INFO_allele (VB, ctx, STRa(value), 0));
-
-        // ##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|Existing_variation|ALLELE_NUM|DISTANCE|STRAND|FLAGS|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|GMAF|AFR_MAF|AMR_MAF|EAS_MAF|EUR_MAF|SAS_MAF|AA_MAF|EA_MAF|ExAC_MAF|ExAC_Adj_MAF|ExAC_AFR_MAF|ExAC_AMR_MAF|ExAC_EAS_MAF|ExAC_FIN_MAF|ExAC_NFE_MAF|ExAC_OTH_MAF|ExAC_SAS_MAF|CLIN_SIG|SOMATIC|PHENO|PUBMED|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info|context|ancestral">
-        // Originating from the VEP software
+        // ---------------------------------------
+        // VEP fields
+        // ---------------------------------------
         case _INFO_CSQ:
-        case _INFO_vep:
-            CALL_IF (segconf.vcf_is_vep, vcf_seg_INFO_CSQ (vb, ctx, STRa(value)));
-        
-        // ##INFO=<ID=DP_HIST,Number=R,Type=String,Description="Histogram for DP; Mids: 2.5|7.5|12.5|17.5|22.5|27.5|32.5|37.5|42.5|47.5|52.5|57.5|62.5|67.5|72.5|77.5|82.5|87.5|92.5|97.5">
-        // ##INFO=<ID=GQ_HIST,Number=R,Type=String,Description="Histogram for GQ; Mids: 2.5|7.5|12.5|17.5|22.5|27.5|32.5|37.5|42.5|47.5|52.5|57.5|62.5|67.5|72.5|77.5|82.5|87.5|92.5|97.5">
-        // ##INFO=<ID=AGE_HISTOGRAM_HET,Number=A,Type=String,Description="Histogram of ages of allele carriers; Bins: <30|30|35|40|45|50|55|60|65|70|75|80+">
-        // ##INFO=<ID=AGE_HISTOGRAM_HOM,Number=A,Type=String,Description="Histogram of ages of homozygous allele carriers; Bins: <30|30|35|40|45|50|55|60|65|70|75|80+">
-        case _INFO_DP_HIST:
-        case _INFO_GQ_HIST:
+        case _INFO_vep:             CALL_IF (segconf.vcf_is_vep, vcf_seg_INFO_CSQ (vb, ctx, STRa(value)));
         case _INFO_AGE_HISTOGRAM_HET:
         case _INFO_AGE_HISTOGRAM_HOM: 
-            CALL (seg_uint32_matrix (VB, ctx, ctx->did_i, STRa(value), ',', '|', false, value_len));
-
-        case _INFO_DP4:
-            CALL (vcf_seg_INFO_DP4 (vb, ctx, STRa(value)));
-
-        // ##INFO=<ID=CLNDN,Number=.,Type=String,Description="ClinVar's preferred disease name for the concept specified by disease identifiers in CLNDISDB">
-        case _INFO_CLNDN:
-            CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), '|', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
-
-        // ##INFO=<ID=CLNHGVS,Number=.,Type=String,Description="Top-level (primary assembly, alt, or patch) HGVS expression.">
+        case _INFO_DP_HIST:
+        case _INFO_GQ_HIST:         CALL (seg_uint32_matrix (VB, ctx, ctx->did_i, STRa(value), ',', '|', false, value_len));
+        case _INFO_DP4:             CALL (vcf_seg_INFO_DP4 (vb, ctx, STRa(value)));
+        case _INFO_MC:              CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
+        case _INFO_CLNDN:           CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), '|', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
+        case _INFO_CLNID:           CALL (seg_integer_or_not (VB, ctx, STRa(value), value_len));
         case _INFO_CLNHGVS: // ClinVar & dbSNP
         case _INFO_HGVSG:   // COSMIC & Mastermind
-            if (segconf.vcf_is_mastermind) CALL (vcf_seg_mastermind_HGVSG (vb, ctx, STRa(value)));
-            else                           CALL (vcf_seg_INFO_HGVS (VB, ctx, STRa(value), 0)); 
+            if (segconf.vcf_is_mastermind) 
+                                    CALL (vcf_seg_mastermind_HGVSG (vb, ctx, STRa(value)));
+            else                    CALL (vcf_seg_INFO_HGVS (VB, ctx, STRa(value), 0)); 
 
         // ##INFO=<ID=CLNVI,Number=.,Type=String,Description="the variant's clinical sources reported as tag-value pairs of database and variant identifier">
         // example: CPIC:0b3ac4db1d8e6e08a87b6942|CPIC:647d4339d5c1ddb78daff52f|CPIC:9968ce1c4d35811e7175cd29|CPIC:PA166160951|CPIC:c6c73562e2b9e4ebceb0b8bc
         // I tried seg_array_of_struct - it is worse than simple seg
 
-        // ##INFO=<ID=ALLELEID,Number=1,Type=Integer,Description="the ClinVar Allele ID">
-        case _INFO_ALLELEID:
-            CALL (seg_integer_or_not (VB, ctx, STRa(value), value_len));
+        case _INFO_ALLELEID:        CALL (seg_integer_or_not (VB, ctx, STRa(value), value_len));
+        case _INFO_RSID:            CALL (seg_id_field (VB, ctx, STRa(value), false, value_len));
 
-        case _INFO_RSID:
-            CALL (seg_id_field (VB, ctx, STRa(value), false, value_len));
+        // bcftools csq
+        case _INFO_BCSQ:            CALL (seg_array (VB, ctx, INFO_BCSQ, STRa(value), ',', '|', false, STORE_NONE, DICT_ID_NONE, value_len));
 
-        // SnpEff
-        case _INFO_ANN: CALL (vcf_seg_INFO_ANN (vb, ctx, STRa(value)));
-        case _INFO_EFF: CALL (vcf_seg_INFO_EFF (vb, ctx, STRa(value)));
+        // ---------------------------------------
+        // SnpEff fields
+        // ---------------------------------------
+        case _INFO_ANN:             CALL (vcf_seg_INFO_ANN (vb, ctx, STRa(value)));
+        case _INFO_EFF:             CALL (vcf_seg_INFO_EFF (vb, ctx, STRa(value)));
 
-        // ##INFO=<ID=RAW_MQandDP,Number=2,Type=Integer,Description="Raw data (sum of squared MQ and total depth) for improved RMS Mapping Quality calculation. Incompatible with deprecated RAW_MQ formulation.">
-        case _INFO_RAW_MQandDP:
-            CALL (vcf_seg_INFO_RAW_MQandDP (vb, ctx, STRa(value)));
-
-        // ##INFO=<ID=HaplotypeScore,Number=1,Type=Float,Description="Consistency of the site with at most two segregating haplotypes">
-        case _INFO_HaplotypeScore:
-            CALL (seg_float_or_not (VB, ctx, STRa(value), value_len));
-
+        // ---------------------------------------
         // ICGC
+        // ---------------------------------------
         case _INFO_mutation:        CALL_IF (segconf.vcf_is_icgc, vcf_seg_INFO_mutation (vb, ctx, STRa(value)));
         case _INFO_CONSEQUENCE:     CALL_IF (segconf.vcf_is_icgc, seg_array (VB, ctx, INFO_CONSEQUENCE, STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
         case _INFO_OCCURRENCE:      CALL_IF (segconf.vcf_is_icgc, seg_array (VB, ctx, INFO_OCCURRENCE,  STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
 
+        // ---------------------------------------
         // COSMIC
+        // ---------------------------------------
         case _INFO_LEGACY_ID:       CALL_IF (segconf.vcf_is_cosmic, vcf_seg_INFO_LEGACY_ID   (vb, ctx, STRa(value)));
         case _INFO_SO_TERM:         CALL_IF (segconf.vcf_is_cosmic, vcf_seg_INFO_SO_TERM     (vb, ctx, STRa(value)));
 
+        // ---------------------------------------
         // Mastermind
+        // ---------------------------------------
         case _INFO_MMID3:           CALL_IF (segconf.vcf_is_mastermind, vcf_seg_INFO_MMID3   (vb, ctx, STRa(value)));
         case _INFO_MMURI3:          CALL_IF (segconf.vcf_is_mastermind, vcf_seg_INFO_MMURI3  (vb, ctx, STRa(value)));
         case _INFO_MMURI:           CALL_IF (segconf.vcf_is_mastermind, seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, value_len));
         case _INFO_GENE:            CALL_IF (segconf.vcf_is_mastermind, STORE_AND_SEG (STORE_NONE)); // consumed by vcf_seg_INFO_MMID3
 
+        // ---------------------------------------
         // Illumina genotyping
+        // ---------------------------------------
         case _INFO_PROBE_A:         CALL_IF (segconf.vcf_illum_gtyping, vcf_seg_PROBE_A      (vb, ctx, STRa(value)));
         case _INFO_PROBE_B:         CALL_IF (segconf.vcf_illum_gtyping, vcf_seg_PROBE_B      (vb, ctx, STRa(value)));
         case _INFO_ALLELE_A:        CALL_IF (segconf.vcf_illum_gtyping, vcf_seg_ALLELE_A     (vb, ctx, STRa(value)));
@@ -842,7 +694,9 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_ILLUMINA_STRAND: CALL_IF (segconf.vcf_illum_gtyping, vcf_seg_ILLUMINA_STRAND (vb, ctx, STRa(value)));
         case _INFO_refSNP:          CALL_IF (segconf.vcf_illum_gtyping, seg_id_field         (VB, ctx, STRa(value), false, value_len));
 
+        // ---------------------------------------
         // dbSNP
+        // ---------------------------------------
         case _INFO_dbSNPBuildID:    CALL_IF (segconf.vcf_is_dbSNP, seg_integer_or_not (VB, ctx, STRa(value), value_len));
         case _INFO_RS:              CALL_IF (segconf.vcf_is_dbSNP, vcf_seg_INFO_RS (vb, ctx, STRa(value)));
         case _INFO_RSPOS:           CALL_IF (segconf.vcf_is_dbSNP, vcf_seg_INFO_RSPOS (vb, ctx, STRa(value)));
@@ -851,17 +705,19 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_FREQ:            CALL_IF (segconf.vcf_is_dbSNP, seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, value_len));
         // case _INFO_TOPMED: // better leave as simple snip as the items are allele frequencies which are correleted
 
+        // ---------------------------------------
         // dbNSFP
+        // ---------------------------------------
         case _INFO_Polyphen2_HDIV_score : 
-        case _INFO_PUniprot_aapos       :
-        case _INFO_SiPhy_29way_pi       :
-            CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
+        case _INFO_PUniprot_aapos :
+        case _INFO_SiPhy_29way_pi : CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
 
-        case _INFO_VEST3_score  :
-        case _INFO_FATHMM_score :
-            CALL (seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, value_len));
+        case _INFO_VEST3_score    :
+        case _INFO_FATHMM_score   : CALL (seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, value_len));
 
+        // ---------------------------------------
         // gnomAD
+        // ---------------------------------------
         case _INFO_age_hist_het_bin_freq:
         //case _INFO_age_hist_hom_bin_freq: // same dict_id as _INFO_age_hist_het_bin_freq
         case _INFO_gq_hist_alt_bin_freq:
@@ -869,20 +725,30 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_dp_hist_alt_bin_freq:
         //case _INFO_dp_hist_all_bin_freq:
         case _INFO_ab_hist_alt_bin_freq:
-            CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), '|', 0, false, STORE_INT, DICT_ID_NONE, value_len));
+                                    CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), '|', 0, false, STORE_INT, DICT_ID_NONE, value_len));
 
+        // ---------------------------------------
         // VAGrENT
+        // ---------------------------------------
         case _INFO_VD:              CALL_IF (segconf.vcf_is_vagrent, vcf_seg_INFO_VD (vb, ctx, STRa(value)));
         case _INFO_VW:              CALL_IF (segconf.vcf_is_vagrent, vcf_seg_INFO_VW (vb, ctx, STRa(value)));
 
-        // IsaacVariantCaller / starling
-        case _INFO_RU:              CALL_IF (segconf.vcf_is_isaac, vcf_seg_INFO_RU (vb, ctx, STRa(value)));
+        // ---------------------------------------
+        // Illumina IsaacVariantCaller / starling
+        // ---------------------------------------
         case _INFO_REFREP:          CALL_IF (segconf.vcf_is_isaac, seg_integer_or_not (VB, ctx, STRa(value), value_len));
         case _INFO_IDREP:           CALL_IF (segconf.vcf_is_isaac, vcf_seg_INFO_IDREP (vb, ctx, STRa(value)));
         case _INFO_CSQT:            CALL_IF (segconf.vcf_is_isaac, seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
         case _INFO_cosmic:          CALL_IF (segconf.vcf_is_isaac, seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
 
+        // ---------------------------------------
+        // Illumina DRAGEN fields
+        // ---------------------------------------
+        case _INFO_REFLEN:          CALL (vcf_seg_INFO_REFLEN (vb, ctx, STRa(value)));
+
+        // ---------------------------------------
         // Ultima Genomics 
+        // ---------------------------------------
         case _INFO_X_LM:
         case _INFO_X_RM:            CALL_IF (segconf.vcf_is_ultima, vcf_seg_INFO_X_LM_RM (vb, ctx, STRa(value)));
         case _INFO_X_IL:            CALL_IF (segconf.vcf_is_ultima, vcf_seg_INFO_X_IL (vb, ctx, STRa(value)));
@@ -894,7 +760,9 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_ASSEMBLED_HAPS:  CALL_IF (segconf.vcf_is_ultima, seg_integer_or_not (VB, ctx, STRa(value), value_len));
         case _INFO_FILTERED_HAPS:   CALL_IF (segconf.vcf_is_ultima, vcf_seg_INFO_FILTERED_HAPS (vb, ctx, STRa(value)));
         
+        // ---------------------------------------
         // Platypus
+        // ---------------------------------------
         case _INFO_TR:
         case _INFO_TC:
         case _INFO_TCF:
@@ -906,7 +774,9 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_WE:              CALL_IF (segconf.vcf_is_platypus, vcf_seg_playpus_INFO_WS_WE (vb, ctx, STRa(value)));
         case _INFO_TCR:             CALL_IF (segconf.vcf_is_platypus, vcf_seg_playpus_INFO_TCR (vb, ctx, STRa(value)));
 
+        // ---------------------------------------
         // manta
+        // ---------------------------------------
         // case _INFO_LEFT_SVINSSEQ: 
         // case _INFO_RIGHT_SVINSSEQ: // tried ACGT, better off without
 
@@ -982,6 +852,7 @@ void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
         #define X(x) case INFO_##x : vb->idx_##x = info_items.len32; break
         switch (ii.ctx->did_i) {
             X(AN); X(AF); X(AC); X(MLEAC); X(MLEAF); X(AC_Hom); X(AC_Het); X(AC_Hemi); X(DP); X(QD); X(SF);
+            X(AS_SB_TABLE);
             default: {}
         }
         #undef X

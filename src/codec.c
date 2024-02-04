@@ -109,7 +109,7 @@ void codec_initialize (void)
 typedef struct {
     Codec codec;
     float size;
-    float clock;
+    float clock; // POSIX clock ticks (CLOCKS_PER_SEC=1000000)
 } CodecTest;
 
 static SORTER (codec_assign_sorter)
@@ -117,37 +117,41 @@ static SORTER (codec_assign_sorter)
     CodecTest *t1 = (CodecTest *)a;
     CodecTest *t2 = (CodecTest *)b;
     
-    // in --best mode, we take the smallest size, regardless of speed
-    if (flag.best) {
-        if (t1->size != t2->size) return ASCENDING (CodecTest, size);
-        else                      return ASCENDING (CodecTest, clock);
-    }
-
-    // in --fast mode - if one if significantly faster with a modest size hit, take it. Otherwise, take the best.
+    // in --fast mode - if one is significantly faster with a modest size hit, take it. Otherwise, take the best.
     if (flag.fast) {
         if (t1->clock < t2->clock * 0.80 && t1->size < t2->size * 1.3) return -1; // t1 has 20% or more better time with at most 30% size hit
         if (t2->clock < t1->clock * 0.80 && t2->size < t1->size * 1.3) return  1; 
     }
 
-    // case: select for significant difference in size (more than 2%)
-    if (t1->size  < t2->size  * 0.98) return -1; // t1 has significantly better size
-    if (t2->size  < t1->size  * 0.98) return  1; // t2 has significantly better size
+    // in --best mode, or in normal mode if speed is fast enough in both cases, we take the smallest size, regardless of speed
+    if (flag.best || (t1->clock <= 5000 && t2->clock <= 5000)) {
+        if (t1->size != t2->size) return ASCENDING (CodecTest, size);
+        else                      return ASCENDING (CodecTest, clock);
+    }
 
-    // case: size is similar, select for significant difference in time (more than 50%)
-    if (t1->clock < t2->clock * 0.50) return -1; // t1 has significantly better time
-    if (t2->clock < t1->clock * 0.50) return  1; // t2 has significantly better time
+    // if both are tiny, take the fastest
+    if (t1->size < 100 && t2->size < 100 && t1->clock != t2->clock)
+        return ASCENDING (CodecTest, clock);
 
-    // case: size and time are quite similar, check 2nd level 
+    static struct { float size, time; } threasholds[] = {
+    //    size   time
+        { 0.96,  0.20 }, 
+        { 0.97,  0.33 }, 
+        { 0.98,  0.50 }, 
+        { 0.985, 0.67 },
+        { 0.99,  0.85 } 
+    };
 
-    // case: select for smaller difference in size (more than 1%)
-    if (t1->size  < t2->size  * 0.99) return -1; // t1 has significantly better size
-    if (t2->size  < t1->size  * 0.99) return  1; // t2 has significantly better size
+    for (int level=0; level < ARRAY_LEN(threasholds); level++) {
+        if (t1->size  < t2->size  * threasholds[level].size) return -1; // t1 has significantly better size
+        if (t2->size  < t1->size  * threasholds[level].size) return  1; // t2 has significantly better size
 
-    // case: select for smaller difference in time (more than 15%)
-    if (t1->clock < t2->clock * 0.85) return -1; // t1 has significantly better time
-    if (t2->clock < t1->clock * 0.85) return  1; // t2 has significantly better time
+        // case: size is similar, select for significant difference in time 
+        if (t1->clock < t2->clock * threasholds[level].time) return -1; // t1 has significantly better time
+        if (t2->clock < t1->clock * threasholds[level].time) return  1; // t2 has significantly better time
+    }
 
-    // if size is exactly the same - choose the lower-index codex (so to pick non-packing version of RAN and ART)
+    // if size is exactly the same - choose the lower-index codec (so to pick non-packing version of RAN and ART)
     if (t1->size == t2->size)
         return ASCENDING(CodecTest, codec);
 
@@ -277,20 +281,20 @@ Codec codec_assign_best_codec (VBlockP vb,
             vb->z_data_test.len = 0;
         }
                                                            
-        tests[t].clock = (clock() - start_time);
+        tests[t].clock = (clock() - start_time) * (1000000 / CLOCKS_PER_SEC); // note: POSIX requires CLOCKS_PER_SEC=1000000. In Windows it is 1000.
     }
-    
+
     // sort codec by our selection criteria
     qsort (tests, num_tests, sizeof (CodecTest), codec_assign_sorter);
 
     if (flag.show_codec) {
-        iprintf ("%-8s %-12s %-5s %6.1fX  *[%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f]\n", 
+        iprintf ("%-8s %-12s %-5s %6.1fX   *[%-4s %5d B %6d μs]  [%-4s %5d B %6d μs]  [%-4s %5d B %6d μs]  [%-4s %5d B %6d μs]\n", 
                  VB_NAME, ctx ? ctx->tag_name : &st_name (st)[4], ctx ? &st_name (st)[4] : "SECT",
                  (float)data->len / tests[0].size,
-                 codec_name (tests[0].codec), (int)tests[0].size, tests[0].clock,
-                 codec_name (tests[1].codec), (int)tests[1].size, tests[1].clock,
-                 codec_name (tests[2].codec), (int)tests[2].size, tests[2].clock,
-                 codec_name (tests[3].codec), (int)tests[3].size, tests[3].clock);
+                 codec_name (tests[0].codec), (int)tests[0].size, (int)tests[0].clock,
+                 codec_name (tests[1].codec), (int)tests[1].size, (int)tests[1].clock,
+                 codec_name (tests[2].codec), (int)tests[2].size, (int)tests[2].clock,
+                 codec_name (tests[3].codec), (int)tests[3].size, (int)tests[3].clock);
         fflush (info_stream);
     }
 
@@ -326,40 +330,53 @@ void codec_assign_best_qual_codec (VBlockP vb, Did did_i,
                                    bool *codec_requires_seq)
 {
     decl_ctx (did_i);
+    ASSERT (did_i < DTF(num_fields), "%s is not predefined", ctx->tag_name); // because of ZCTX()
 
-    if (did_i == SAM_QUAL && flag.force_qual_codec)  // == FASTQ_QUAL
-        switch (flag.force_qual_codec) {
-            case CODEC_LONGR : codec_longr_comp_init (vb, did_i);           break;
-            case CODEC_SMUX  : codec_smux_comp_init  (vb, did_i, callback); break;
-            case CODEC_PACB  : codec_pacb_comp_init  (vb, did_i, callback); break;
-            case CODEC_HOMP  : codec_homp_comp_init  (vb, did_i, callback); break;
-            case CODEC_DOMQ  : codec_domq_comp_init  (vb, did_i, callback); break;
-            case CODEC_NORMQ : codec_normq_comp_init (vb, did_i, maybe_revcomped); break;
-            default          : ABORT ("Can't force codec %s", codec_name (flag.force_qual_codec));
+    Codec qual_codec = __atomic_load_n (&ZCTX(did_i)->qual_codec, __ATOMIC_ACQUIRE);
+
+    // case: a previous VB already determined that the did_i doesn't need one of the complex codec
+    if (qual_codec == CODEC_NONE) {
+        ctx->ltype = LT_BLOB;  
+        return;
+    }
+
+    Codec forced_codec = qual_codec        ? qual_codec 
+                       : did_i == SAM_QUAL ? flag.force_qual_codec // == FASTQ_QUAL
+                       :                     0;
+
+    if (forced_codec)  
+        switch (forced_codec) {
+            case CODEC_LONGR : codec_longr_comp_init (vb, did_i, true);           break;
+            case CODEC_SMUX  : codec_smux_comp_init  (vb, did_i, callback, true); break;
+            case CODEC_PACB  : codec_pacb_comp_init  (vb, did_i, callback, true); break;
+            case CODEC_HOMP  : codec_homp_comp_init  (vb, did_i, callback, true); break;
+            case CODEC_DOMQ  : codec_domq_comp_init  (vb, did_i, callback, true); break;
+            case CODEC_NORMQ : codec_normq_comp_init (vb, did_i, maybe_revcomped, true); break;
+            default          : ABORT ("Can't force codec %s", codec_name (forced_codec));
         }
 
-    else if (!no_seq_dependency && codec_pacb_comp_init (vb, did_i, callback));
+    else if (!no_seq_dependency && codec_pacb_comp_init (vb, did_i, callback, false));
     
-    else if (!no_seq_dependency && codec_longr_comp_init (vb, did_i));
+    else if (!no_seq_dependency && codec_longr_comp_init (vb, did_i, false));
 
-    else if (!no_seq_dependency && codec_homp_comp_init (vb, did_i, callback)); // only if Ultima, it might succeed. takes precedence of DOMQ
+    else if (!no_seq_dependency && codec_homp_comp_init (vb, did_i, callback, false)); // only if Ultima, it might succeed. takes precedence of DOMQ
 
-    else if (!no_seq_dependency && codec_smux_comp_init (vb, did_i, callback));
+    else if (!no_seq_dependency && codec_smux_comp_init (vb, did_i, callback, false));
         
-    else if (!flag.no_domqual   && codec_domq_comp_init (vb, did_i, callback));
+    else if (codec_domq_comp_init (vb, did_i, callback, false));
 
-    else if (codec_normq_comp_init (vb, did_i, maybe_revcomped)); 
+    else if (codec_normq_comp_init (vb, did_i, maybe_revcomped, false)); 
 
     else
         ctx->ltype = LT_BLOB;  // codec to be assigned by codec_assign_best_codec
     
-    if (ctx->ltype != LT_BLOB && (did_i == SAM_QUAL/*==FASTQ_QUAL*/ || did_i == SAM_CQUAL || did_i == OPTION_OQ_Z)) 
-        ZCTX(did_i)->qual_codec = ctx->lcodec; // used only for submitting stats (no atomic - last one wins)
+    if (!qual_codec)
+        __atomic_store_n (&ZCTX(did_i)->qual_codec, ctx->ltype == LT_BLOB ? CODEC_NONE : ctx->lcodec, __ATOMIC_RELEASE);
 
     if (codec_requires_seq && (ctx->lcodec == CODEC_PACB || ctx->lcodec == CODEC_LONGR || ctx->lcodec == CODEC_HOMP || ctx->lcodec == CODEC_SMUX)) 
         *codec_requires_seq = true;
 
-    if (flag.show_codec && ctx->lcodec != CODEC_UNKNOWN) // aligned to the output of codec_assign_best_codec
+    if (!qual_codec && (flag.show_codec || flag.show_qual) && ctx->lcodec) // printing aligned to the output of codec_assign_best_codec
         iprintf ("%-8s %-12s %-5s          *[%s]\n", VB_NAME, ctx->tag_name, "LOCAL", codec_name(CTX(did_i)->lcodec));
 }
 
@@ -379,13 +396,17 @@ uint32_t codec_trivial_size (Codec codec, uint64_t uncompressed_len)
 // of eg. --show-time=compressor_lzma
 void codec_show_time (VBlockP vb, rom name, rom subname, Codec codec)
 {
-    if ((strcmp (flag.show_time, "compressor_lzma"  ) && codec==CODEC_LZMA) ||
-        (strcmp (flag.show_time, "compressor_bsc"   ) && codec==CODEC_BSC ) || 
-        (strcmp (flag.show_time, "compressor_acgt"  ) && codec==CODEC_ACGT) || 
-        (strcmp (flag.show_time, "compressor_domq"  ) && codec==CODEC_DOMQ) || 
-        (strcmp (flag.show_time, "compressor_ulti"  ) && codec==CODEC_HOMP) || 
-        (strcmp (flag.show_time, "compressor_pbwt"  ) && codec==CODEC_PBWT) || 
+    if (!flag.show_time[0] || // --show-time with no argument
+        (strcmp (flag.show_time, "compressor_lzma"  ) && codec==CODEC_LZMA)  ||
+        (strcmp (flag.show_time, "compressor_bsc"   ) && codec==CODEC_BSC )  || 
+        (strcmp (flag.show_time, "compressor_acgt"  ) && codec==CODEC_ACGT)  || 
+        (strcmp (flag.show_time, "compressor_domq"  ) && codec==CODEC_DOMQ)  || 
+        (strcmp (flag.show_time, "compressor_ulti"  ) && codec==CODEC_HOMP)  || 
+        (strcmp (flag.show_time, "compressor_pbwt"  ) && codec==CODEC_PBWT)  || 
         (strcmp (flag.show_time, "compressor_longr" ) && codec==CODEC_LONGR) || 
+        (strcmp (flag.show_time, "compressor_smux"  ) && codec==CODEC_SMUX)  || 
+        (strcmp (flag.show_time, "compressor_pacb"  ) && codec==CODEC_PACB)  || 
+        (strcmp (flag.show_time, "compressor_t0"    ) && codec==CODEC_T0)    || 
         (strcmp (flag.show_time, "compressor_rans"  ) && (codec==CODEC_RANS32 || codec==CODEC_RANS32_pack || codec==CODEC_RANS8 || codec==CODEC_RANS32_pack)) || 
         (strcmp (flag.show_time, "compressor_arith" ) && (codec==CODEC_ARITH32 || codec==CODEC_ARITH32_pack || codec==CODEC_ARITH8 || codec==CODEC_ARITH32_pack)) || 
         (strcmp (flag.show_time, "compressor_bz2"   ) && codec==CODEC_BZ2 )) {

@@ -715,15 +715,15 @@ WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_
     
         if (arr_ctx->st_did_i == DID_NONE) // first time
             arr_ctx->st_did_i = container_ctx->st_did_i = stats_conslidation_did_i;
+
+        if (use_integer_delta || container_ctx->flags.store == STORE_INT) 
+            arr_ctx->flags.store = STORE_INT;
     }
     else { 
         con         = B1ST (MiniContainer, container_ctx->con_cache);
         arr_dict_id = con->items[0].dict_id;
         arr_ctx     = ctx_get_ctx (vb, arr_dict_id);
     }
-
-    if (use_integer_delta || container_ctx->flags.store == STORE_INT) 
-        arr_ctx->flags.store = STORE_INT;
 
     // case: value ends with a separator
     if (value[value_len-1] == sep) {

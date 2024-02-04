@@ -49,33 +49,6 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_GQX)
     return reconstruct_demultiplex (vb, ctx, STRa(snip), channel_i, new_value, reconstruct);
 }
 
-// Smallest repeating sequence unit extended or contracted in the indel allele relative to the reference. RUs longer than 20 bases are not reported.
-// example: REF=AC ALT=A RU=C
-void vcf_seg_INFO_RU (VBlockVCFP vb, ContextP ctx, STRp(ru))
-{
-    if (*vb->main_ref == *vb->main_alt && vb->line_coords==DC_PRIMARY && 
-        ((vb->main_alt_len > 1 && vb->main_ref_len == 1 && str_issame_(STRa(ru), vb->main_alt+1, vb->main_alt_len-1)) ||
-         (vb->main_ref_len > 1 && vb->main_alt_len == 1 && str_issame_(STRa(ru), vb->main_ref+1, vb->main_ref_len-1))))
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_RU }, 2, ctx, ru_len);
-
-    else
-        seg_by_ctx (VB, STRa(ru), ctx, ru_len); // possibly multiple ALT. TO DO: support multiple ALT
-}
-
-SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_RU)
-{
-    VBlockVCFP vb = (VBlockVCFP)vb_;
-
-    if (reconstruct) {
-        if (vb->main_ref_len > 1) 
-            RECONSTRUCT (vb->main_ref+1, vb->main_ref_len-1);
-        else
-            RECONSTRUCT (vb->main_alt+1, vb->main_alt_len-1);
-    }
-
-    return NO_NEW_VALUE;
-}
-
 void vcf_seg_INFO_IDREP (VBlockVCFP vb, ContextP ctx, STRp(idrep_str))
 {
     ContextP refrep_ctx = CTX(INFO_REFREP);

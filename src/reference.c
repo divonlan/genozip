@@ -36,6 +36,7 @@
 #include "buf_list.h"
 #include "refhash.h"
 #include "zriter.h"
+#include "tip.h"
 
 static RefStruct refs[2] = { { .ctgs.name = "gref" }, { .ctgs.name = "prim_ref" } };
 Reference gref     = &refs[0]; // global reference 
@@ -1646,4 +1647,12 @@ bool ref_buf_locate (Reference ref, ConstBufferP buf)
 {
     return ref && (char*)buf >= (char*)ref && 
                   (char*)buf <  (char*)(ref + 1);
+}
+
+void ref_verify_organism (VBlockP vb)
+{
+    double percent_aligned = (double)vb->num_aligned / (double)vb->lines.len32;
+
+    if (percent_aligned < 0.80)
+        TIP ("Only %u%% of the reads processed so far match the reference file. Using a reference file more representative of the organism(s) in the data will result in much better compression.", (int)(100 * percent_aligned));
 }

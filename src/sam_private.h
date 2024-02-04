@@ -66,7 +66,7 @@ typedef union {
     uint32_t value;
 } BamCigarOp;
 
-typedef enum __attribute__ ((packed)) {
+typedef packed_enum {
     BC_M=0, BC_I=1, BC_D=2, BC_N=3, BC_S=4, BC_H=5, BC_P=6, BC_E=7, BC_X=8, BC_NONE=15, BC_INVALID=255
 } BamCigarOpType;
 
@@ -74,7 +74,7 @@ typedef enum __attribute__ ((packed)) {
 
 extern const char cigar_op_to_char[16]; // BAM to SAM cigar op
 
-typedef enum __attribute__ ((packed)) {
+typedef packed_enum {
     DEPN_CLIP_UNKNOWN, DEPN_CLIP_HARD, DEPN_CLIP_SOFT
 } DepnClipping;
 
@@ -253,10 +253,6 @@ typedef struct VBlockSAM {
     #define after_idx md_verified
     bool md_verified;              // Seg: MD:Z is verified to be calculatable from CIGAR, SEQ and Reference
     Buffer md_M_is_ref;            // Seg: bitmap of length ref_and_seq_consumed (corresponding to M, X and = CIGAR ops): 1 for a base matching the reference, 0 for non-matching, according to MD:Z
-
-    Buffer XG;                     // Seg: bsseeker2 XG:Z field with the underscores removed. revcomped if FLAG.revcomp.
-                                   // PIZ: bsseeker2 XG:Z field with the underscores removed, as reconstructed when peeking during XM:Z special recon
-    thool XG_inc_S;                // Seg: whether to include soft_clip[0]
 
     Buffer deep_index;             // PIZ: entry per prim_line - uint32_t index into deep_ents
  

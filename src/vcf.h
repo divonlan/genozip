@@ -101,7 +101,6 @@
 #pragma GENDICT INFO_BaseCounts=DTYPE_1=BaseCounts
 #pragma GENDICT INFO_DP=DTYPE_1=DP                  // <ID=DP,Number=1,Type=Integer,Description="Approximate read depth; some reads may have been filtered">
 #pragma GENDICT INFO_SF=DTYPE_1=SF                  // <ID=SF,Number=.,Type=String,Description="Source File (index to sourceFiles, f when filtered)">
-#pragma GENDICT INFO_VQSLOD=DTYPE_1=VQSLOD          // <ID=VQSLOD,Number=1,Type=Float,Description="Log odds of being a true variant versus being false under the trained Gaussian mixture model">
 #pragma GENDICT INFO_MQ=DTYPE_1=MQ                  // <ID=MQ,Number=1,Type=Integer,Description="Root-mean-square mapping quality of covering reads">    
 #pragma GENDICT INFO_MQ0=DTYPE_1=MQ0                // <ID=MQ0,Number=1,Type=Integer,Description="Total Mapping Quality Zero Reads"> (VCF spec: "Number of MAPQ == 0 reads covering this record")
 #pragma GENDICT INFO_NS=DTYPE_1=NS                  // <ID=NS,Number=1,Type=Integer,Description="Number of Samples With Data">
@@ -123,11 +122,38 @@
 #pragma GENDICT INFO_ANN_Allele=DTYPE_1=@ANN_Allele // note: nice looking tag, as might be displayed in INFO/Lref
 
 #pragma GENDICT INFO_EFF=DTYPE_1=EFF                // See: https://pcingola.github.io/SnpEff/se_inputoutput/#eff-field-vcf-output-files
- 	 
+
+// GATK fields 
 // Added by GATK HaplotypeCaller in a gVCF: https://gatk.broadinstitute.org/hc/en-us/articles/360035531812-GVCF-Genomic-Variant-Call-Format
 #pragma GENDICT INFO_END=DTYPE_1=END                // <ID=END,Number=1,Type=Integer,Description="Stop position of the interval">
 #pragma GENDICT INFO_MLEAC=DTYPE_1=MLEAC            // <ID=MLEAC,Number=A,Type=Integer,Description="Maximum likelihood expectation (MLE) for the allele counts (not necessarily the same as the AC), for each ALT allele, in the same order as listed">
 #pragma GENDICT INFO_MLEAF=DTYPE_1=MLEAF            // <ID=MLEAF,Number=A,Type=Float,Description="Maximum likelihood expectation (MLE) for the allele frequency (not necessarily the same as the AF), for each ALT allele, in the same order as listed">
+
+#pragma GENDICT INFO_VQSLOD=DTYPE_1=VQSLOD          // <ID=VQSLOD,Number=1,Type=Float,Description="Log odds of being a true variant versus being false under the trained Gaussian mixture model">
+#pragma GENDICT INFO_AS_FilterStatus=DTYPE_1=AS_FilterStatus  // <ID=AS_FilterStatus,Number=A,Type=String,Description="Filter status for each allele, as assessed by ApplyRecalibration. Note that the VCF filter field will reflect the most lenient/sensitive status across all alleles.">
+#pragma GENDICT INFO_AS_SB_TABLE=DTYPE_1=AS_SB_TABLE// <ID=AS_SB_TABLE,Number=1,Type=String,Description="Allele-specific forward/reverse read counts for strand bias tests. Includes the reference and alleles separated by |.">
+#pragma GENDICT INFO_AS_UNIQ_ALT_READ_COUNT=DTYPE_1=AS_UNIQ_ALT_READ_COUNT // <ID=AS_UNIQ_ALT_READ_COUNT,Number=A,Type=Integer,Description="Number of reads with unique start and mate end positions for each alt at a variant site">
+#pragma GENDICT INFO_CONTQ=DTYPE_1=CONTQ            // <ID=CONTQ,Number=1,Type=Float,Description="Phred-scaled qualities that alt allele are not due to contamination">
+#pragma GENDICT INFO_ECNT=DTYPE_1=ECNT              // <ID=ECNT,Number=1,Type=Integer,Description="Number of events in this haplotype">
+#pragma GENDICT INFO_GERMQ=DTYPE_1=GERMQ            // <ID=GERMQ,Number=1,Type=Integer,Description="Phred-scaled quality that alt alleles are not germline variants">
+#pragma GENDICT INFO_MBQ=DTYPE_1=MBQ                // <ID=MBQ,Number=R,Type=Integer,Description="median base quality">
+#pragma GENDICT INFO_MFRL=DTYPE_1=MFRL              // <ID=MFRL,Number=R,Type=Integer,Description="median fragment length">
+#pragma GENDICT INFO_MMQ=DTYPE_1=MMQ                // <ID=MMQ,Number=R,Type=Integer,Description="median mapping quality">
+#pragma GENDICT INFO_MPOS=DTYPE_1=MPOS              // <ID=MPOS,Number=A,Type=Integer,Description="median distance from end of read">
+#pragma GENDICT INFO_NALOD=DTYPE_1=NALOD            // <ID=NALOD,Number=A,Type=Float,Description="Negative log 10 odds of artifact in normal with same allele fraction as tumor">
+#pragma GENDICT INFO_NCount=DTYPE_1=NCount          // <ID=NCount,Number=1,Type=Integer,Description="Count of N bases in the pileup">
+#pragma GENDICT INFO_NLOD=DTYPE_1=NLOD              // <ID=NLOD,Number=A,Type=Float,Description="Normal log 10 likelihood ratio of diploid het or hom alt genotypes">
+#pragma GENDICT INFO_OCM=DTYPE_1=OCM                // <ID=OCM,Number=1,Type=Integer,Description="Number of alt reads whose original alignment doesn't match the current contig.">
+#pragma GENDICT INFO_PON=DTYPE_1=PON                // <ID=PON,Number=0,Type=Flag,Description="site found in panel of normals">
+#pragma GENDICT INFO_POPAF=DTYPE_1=POPAF            // <ID=POPAF,Number=A,Type=Float,Description="negative log 10 population allele frequencies of alt alleles">
+#pragma GENDICT INFO_ROQ=DTYPE_1=ROQ                // <ID=ROQ,Number=1,Type=Float,Description="Phred-scaled qualities that alt allele are not due to read orientation artifact">
+#pragma GENDICT INFO_RPA=DTYPE_1=RPA                // <ID=RPA,Number=R,Type=Integer,Description="Number of times tandem repeat unit is repeated, for each allele (including reference)">
+// (dup) #pragma GENDICT INFO_RU=DTYPE_1=RU // <ID=RU,Number=1,Type=String,Description="Tandem repeat unit (bases)">
+#pragma GENDICT INFO_SEQQ=DTYPE_1=SEQQ              // <ID=SEQQ,Number=1,Type=Integer,Description="Phred-scaled quality that alt alleles are not sequencing errors">
+#pragma GENDICT INFO_STR=DTYPE_1=STR                // <ID=STR,Number=0,Type=Flag,Description="Variant is a short tandem repeat">
+#pragma GENDICT INFO_STRANDQ=DTYPE_1=STRANDQ        // <ID=STRANDQ,Number=1,Type=Integer,Description="Phred-scaled quality of strand bias artifact">
+#pragma GENDICT INFO_STRQ=DTYPE_1=STRQ              // <ID=STRQ,Number=1,Type=Integer,Description="Phred-scaled quality that alt alleles in STRs are not polymerase slippage errors">
+#pragma GENDICT INFO_TLOD=DTYPE_1=TLOD              // <ID=TLOD,Number=A,Type=Float,Description="Log 10 likelihood ratio score of variant existing versus not existing">
 
 // GATK Hard-filtering germline short variants : https://gatk.broadinstitute.org/hc/en-us/articles/360035890471-Hard-filtering-germline-short-variants
 #pragma GENDICT INFO_QD=DTYPE_1=QD                  // <ID=QD,Number=1,Type=Float,Description="Variant Confidence/Quality by Depth">. See: https://gatk.broadinstitute.org/hc/en-us/articles/360041414572-QualByDepth
@@ -224,8 +250,9 @@
 #pragma GENDICT INFO_MMURI3=DTYPE_1=MMURI3          // <ID=MMURI3,Number=1,Type=String,Description="Mastermind search URI for articles including other DNA-level variants resulting in the same amino acid change">
 #pragma GENDICT INFO_MMURI=DTYPE_1=MMURI
 
-// ClinVar (also in dbSNP)
+// ClinVar (also in dbSNP): https://cloud.tiledb.com/arrays/details/TileDB-Inc/clinvar-annotations-data/overview
 #pragma GENDICT INFO_ALLELEID=DTYPE_1=ALLELEID      // <ID=ALLELEID,Number=1,Type=Integer,Description="the ClinVar Allele ID">
+#pragma GENDICT INFO_CLNID=DTYPE_1=CLNID            // <ID=CLNID,Number=1,Type=Integer,Description="the ClinVar Variation ID">
 #pragma GENDICT INFO_CLNDN=DTYPE_1=CLNDN            // <ID=CLNDN,Number=.,Type=String,Description="ClinVar's preferred disease name for the concept specified by disease identifiers in CLNDISDB">
 #pragma GENDICT INFO_CLNHGVS=DTYPE_1=CLNHGVS        // <ID=CLNHGVS,Number=.,Type=String,Description="Top-level (primary assembly, alt, or patch) HGVS expression.">
 #pragma GENDICT INFO_CLNVI=DTYPE_1=CLNVI            // <ID=CLNVI,Number=.,Type=String,Description="the variant's clinical sources reported as tag-value pairs of database and variant identifier">
@@ -234,6 +261,7 @@
 #pragma GENDICT INFO_CLNDISDB=DTYPE_1=CLNDISDB      // <ID=CLNDISDB,Number=.,Type=String,Description="Variant disease database name and ID, separated by colon (:)">
 #pragma GENDICT INFO_CLNREVSTAT=DTYPE_1=CLNREVSTAT  // <ID=CLNREVSTAT,Number=.,Type=String,Description="ClinVar Review Status: no_assertion - No asserition provided by submitter, no_criteria - No assertion criteria provided by submitter, single - Classified by single submitter, mult - Classified by multiple submitters, conf - Criteria provided conflicting interpretations, exp - Reviewed by expert panel, guideline - Practice guideline">
 #pragma GENDICT INFO_CLNACC=DTYPE_1=CLNACC          // <ID=CLNACC,Number=.,Type=String,Description="For each allele (comma delimited), this is a pipe-delimited list of the Clinvar RCV phenotype accession.version strings associated with that allele.">
+#pragma GENDICT INFO_MC=DTYPE_1=MC                  // <ID=MC,Number=.,Type=String,Description="comma separated list of molecular consequence in the form of Sequence Ontology ID|molecular_consequence">
 
 // HGVS - used for CLNHGVS and and also INFO/ANN/HGVS
 #pragma GENDICT INFO_HGVS_snp_pos=DTYPE_1=H0GVS_snp_pos   
@@ -305,6 +333,9 @@
 #pragma GENDICT INFO_ASSEMBLED_HAPS=DTYPE_1=ASSEMBLED_HAPS  // <ID=ASSEMBLED_HAPS,Number=1,Type=Integer,Description="Haplotypes detected by the assembly region before haplotype filtering is applied">
 #pragma GENDICT INFO_FILTERED_HAPS=DTYPE_1=FILTERED_HAPS    // <ID=FILTERED_HAPS,Number=1,Type=Integer,Description="Haplotypes filtered out by the haplotype filtering code">
 #pragma GENDICT INFO_GNOMAD_AF=DTYPE_1=GNOMAD_AF    // <ID=GNOMAD_AF,Number=A,Type=Float,Description="Allele Frequency, for each ALT allele, in the same order as listed (from /cromwell_root/gatk-best-practices/somatic-hg38/af-only-gnomad.hg38.vcf.gz)">
+
+// bcftools csq
+#pragma GENDICT INFO_BCSQ=DTYPE_1=BCSQ              // <ID=BCSQ,Number=.,Type=String,Description="Local consequence annotation from BCFtools/csq, see http://samtools.github.io/bcftools/howtos/csq-calling.html for details. Format: Consequence|gene|transcript|biotype|strand|amino_acid_change|dna_change">
 
 // bcftools call
 #pragma GENDICT INFO_PV4=DTYPE_1=PV4                // <ID=PV4,Number=4,Type=Float,Description="P-values for strand bias, baseQ bias, mapQ bias and tail distance bias">
@@ -637,7 +668,8 @@ extern void vcf_samples_add  (rom samples_str);
                       vcf_piz_special_MUX_BY_END, vcf_piz_special_MUX_BY_ISAAC_FILTER, \
                       vcf_piz_special_X_LM_RM, vcf_piz_special_X_IL, vcf_piz_special_X_IC, vcf_piz_special_X_HIN, vcf_piz_special_X_HIL, \
                       vcf_piz_special_VARIANT_TYPE, vcf_piz_special_PLATYPUS_SC, vcf_piz_special_PLATYPUS_HP, vcf_piz_special_INFO_MLEAF, \
-                      vcf_piz_special_FORMAT_AD0, vcf_piz_special_MUX_FORMAT_DP, vcf_piz_special_INFO_AN }
+                      vcf_piz_special_FORMAT_AD0, vcf_piz_special_MUX_FORMAT_DP, vcf_piz_special_INFO_AN, vcf_piz_special_AS_SB_TABLE, \
+                      vcf_piz_special_RPA }
 
 SPECIAL (VCF, 0,  main_REFALT,         vcf_piz_special_main_REFALT);
 SPECIAL (VCF, 1,  FORMAT,              vcf_piz_special_FORMAT)
@@ -707,7 +739,9 @@ SPECIAL (VCF, 64, INFO_MLEAF,          vcf_piz_special_INFO_MLEAF);             
 SPECIAL (VCF, 65, FORMAT_AD0,          vcf_piz_special_FORMAT_AD0);               // added v15.0.37
 SPECIAL (VCF, 66, MUX_FORMAT_DP,       vcf_piz_special_MUX_FORMAT_DP);            // added v15.0.37
 SPECIAL (VCF, 67, AN,                  vcf_piz_special_INFO_AN);                  // added v15.0.37
-#define NUM_VCF_SPECIAL 68
+SPECIAL (VCF, 68, AS_SB_TABLE,         vcf_piz_special_AS_SB_TABLE);              // added v15.0.41
+SPECIAL (VCF, 69, RPA,                 vcf_piz_special_RPA);                      // added v15.0.41
+#define NUM_VCF_SPECIAL 70
 
 // Translators for Luft (=secondary coordinates)
 TRANSLATOR (VCF, VCF,   1,  G,      vcf_piz_luft_G)       // same order as LiftOverStatus starting LO_CANT_G

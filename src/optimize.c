@@ -99,8 +99,8 @@ bool optimize_vector_2_sig_dig (rom snip, unsigned len, char *optimized_snip, un
 // change the quality scores to be in a small number of bins, similar to Illumina: https://sapac.illumina.com/content/dam/illumina-marketing/documents/products/technotes/technote_understanding_quality_scores.pdf
 // This is assuming standard Sanger format of Phred scores between 0 and 93 encoded in ASCII 33->126
 // See here: https://pythonhosted.org/OBITools/fastq.html
-// 0,1,2 - unchanged
-// 2–9   -> 6
+// 0,1,2  -  unchanged : note regarding 2: according to the documentation, Illumina bins 2->6 but it does not modify scores of an 'N' base. In practice, in Illumina data, a 2 ('#') can only be a score of a N base, so it effectively also never changes.
+// 3–9   -> 6
 // 10–19 -> 15
 // 20–24 -> 22
 // 25–29 -> 27
@@ -115,7 +115,7 @@ void optimize_phred_quality_string (char *str, unsigned len)
         0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32, 
         
         // Phread values 0-93 -> ASCII 33-126
-        P(0),  P(1),  P(6),  P(6),  P(6),  // Phred 0-4: same as Illumina
+        P(0),  P(1),  P(2),  P(6),  P(6),  // Phred 0-4: same as Illumina
         P(6),  P(6),  P(6),  P(6),  P(6),  // Phred 5-9: same as Illumina
         P(15), P(15), P(15), P(15), P(15), // Phred 10-14: same as Illumina
         P(15), P(15), P(15), P(15), P(15), // Phred 14-19: same as Illumina
