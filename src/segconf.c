@@ -55,10 +55,11 @@ void segconf_test_multiseq (VBlockP vb, Did nonref)
 }
 
 // set width of a field to the most common width observed in segconf
-void segconf_set_width (FieldWidth *w)
+void segconf_set_width (FieldWidth *w, 
+                        int bits) // bits used for this field in SectionHeaderGenozipHeader
 {
     int max_count = -1;
-    for (int i=0; i <= SEGCONF_MAX_WIDTH; i++)
+    for (int i=0; i < (1 << bits); i++)
         if ((int)w->count[i] > max_count) {
             w->width = i;
             max_count = w->count[i];
@@ -336,8 +337,6 @@ void segconf_calculate (void)
     // segment this VB
     ctx_clone (vb);
 
-    int32_t save_luft_reject_bytes = (Z_DT(VCF) || Z_DT(BCF)) ? vcf_vb_get_reject_bytes (vb) : 0;
-
     SAVE_FLAGS;
     flag.show_alleles = flag.show_digest = flag.show_hash = flag.show_reference = false;
     flag.quiet = true;
@@ -357,7 +356,7 @@ void segconf_calculate (void)
 
     segconf_set_vb_size (vb, save_vb_size);
 
-    segconf.line_len = (vb->lines.len32 ? ((double)Ltxt / (double)vb->lines.len32) : 500) + 0.999; // get average line length (rounded up ; arbitrary 500 if the segconf data ended up not having any lines (example: all lines were non-matching lines dropped by --match in a chain file))
+    segconf.line_len = (vb->lines.len32 ? ((double)Ltxt / (double)vb->lines.len32) : 500) + 0.999; // get average line length (rounded up ; arbitrary 500 if the segconf data ended up not having any lines)
 
     // limitations: only pre-defined field
     for (Did did_i=0; did_i < DTF(num_fields); did_i++) {
@@ -379,9 +378,6 @@ void segconf_calculate (void)
 
     // in case of generated component data - undo
     vb->gencomp_lines.len = 0;
-
-    if (Z_DT(VCF) || Z_DT(BCF))
-        txt_file->reject_bytes += save_luft_reject_bytes; // return reject bytes to txt_file, to be reassigned to VB
 
     ASSINP (!flag.best                    // no --best specified
          || flag.force                    // --force overrides requirement for a reference with --best
@@ -430,6 +426,26 @@ rom segconf_deep_trimming_name (void)
     return segconf.deep_has_trimmed_left ? "LeftRight"
          : segconf.deep_has_trimmed      ? "RightOnly"
          :                                 "None";
+}
+
+rom VCF_QUAL_method_name (VcfQualMethodType method)
+{
+    switch (method) {
+        case VCF_QUAL_DEFAULT : return "DEFAULT";
+        case VCF_QUAL_by_RGQ  : return "BY_RGQ";
+        case VCF_QUAL_local   : return "local";
+        default               : return "INVALID";
+    }
+}
+
+rom VCF_INFO_method_name (VcfInfoMethodType method)
+{
+    switch (method) {
+        case VCF_INFO_DEFAULT   : return "DEFAULT";
+        case VCF_INFO_by_RGQ    : return "BY_RGQ";
+        case VCF_INFO_by_FILTER : return "BY_FILTER";
+        default                 : return "INVALID";
+    }
 }
 
 rom GQ_method_name (GQMethodType method)

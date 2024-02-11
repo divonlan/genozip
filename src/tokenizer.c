@@ -15,7 +15,7 @@
 
 #define MAX_TOKENS 32
 
-// We break down the field (eg QNAME in SAM/BAM/Kraken or Description in FASTA/FASTQ) into subfields separated by / and/or : - and/or whitespace 
+// We break down the field (eg QNAME in SAM/BAM or Description in FASTA/FASTQ) into subfields separated by / and/or : - and/or whitespace 
 // these are vendor-defined strings.
 // Up to MAX_TOKENS subfields are permitted - if there are more, then all the trailing part is just
 // consider part of the last component.

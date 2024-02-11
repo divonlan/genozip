@@ -142,7 +142,7 @@ void sam_deep_zip_finalize (void)
 #define MAX_ENTRIES 0xfffffffe // our current implementation is limited to 4G reads
 
 // ZIP compute thread while segging SEQ
-void sam_deep_set_QNAME_hash (VBlockSAMP vb, ZipDataLineSAM *dl, QType q, STRp(qname))
+void sam_deep_set_QNAME_hash (VBlockSAMP vb, ZipDataLineSAMP dl, QType q, STRp(qname))
 {
     // note: we must drop consensus reads, because Deep has an assumption, used to prove uniqueness by hash,
     // that there are no BAM alignments except those in the FASTQ files provided
@@ -160,7 +160,7 @@ void sam_deep_set_QNAME_hash (VBlockSAMP vb, ZipDataLineSAM *dl, QType q, STRp(q
 }
 
 // ZIP compute thread while segging SEQ: set hash of forward SEQ (i.e. as it would appear in the FASTQ file) 
-void sam_deep_set_SEQ_hash (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_seq))
+void sam_deep_set_SEQ_hash (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(textual_seq))
 {
     if (!dl->is_deepable) return; 
     
@@ -181,7 +181,7 @@ void sam_deep_set_SEQ_hash (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_seq)
 }
 
 // ZIP: compute thread while segging QUAL: hash of forward QUAL (i.e. as it would appear in the FASTQ file) for Deep 
-void sam_deep_set_QUAL_hash (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual))
+void sam_deep_set_QUAL_hash (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qual))
 {
     if (!dl->is_deepable || 
         !vb->has_qual || segconf.has_bqsr) return; // case: deepable, but without QUAL: dl->deep_qual_hash remains 0

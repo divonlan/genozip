@@ -18,7 +18,6 @@
 #define VCF_BZ2_       ".vcf.bz2"
 #define VCF_XZ_        ".vcf.xz"
 #define VCF_GENOZIP_   ".vcf" GENOZIP_EXT
-#define DVCF_GENOZIP_  ".d.vcf" GENOZIP_EXT
 
 // SAM file variations
 #define SAM_           ".sam"
@@ -140,27 +139,6 @@
 #define ME23_ZIP_      ".zip" 
 #define ME23_GENOZIP_  ".txt" GENOZIP_EXT
 
-// PHYLIP files
-#define PHY_           ".phy"
-#define PHY_GZ_        ".phy.gz"
-#define PHY_BZ2_       ".phy.bz2"
-#define PHY_XZ_        ".phy.xz"
-#define PHY_GENOZIP_   ".phy" GENOZIP_EXT
-
-// chain files
-#define CHAIN_         ".chain"
-#define CHAIN_GZ_      ".chain.gz"
-#define CHAIN_BZ2_     ".chain.bz2"
-#define CHAIN_XZ_      ".chain.xz"
-#define CHAIN_GENOZIP_ ".chain" GENOZIP_EXT
-
-// kraken files
-#define KRAKEN_         ".kraken" // kraken files have no standard extension, we make one up to avoid irregularities
-#define KRAKEN_GZ_      ".kraken.gz"
-#define KRAKEN_BZ2_     ".kraken.bz2"
-#define KRAKEN_XZ_      ".kraken.xz"
-#define KRAKEN_GENOZIP_ ".kraken" GENOZIP_EXT
-
 // locs files
 #define LOCS_           ".locs" 
 #define LOCS_GZ_        ".locs.gz"
@@ -210,9 +188,6 @@ typedef enum FileType { UNKNOWN_FILE_TYPE,
                         GVF,   GVF_GZ,   GVF_BZ2,   GVF_XZ,                     GVF_GENOZIP,
                         GTF,   GTF_GZ,   GTF_BZ2,   GTF_XZ,                     GTF_GENOZIP,
                         ME23,  ME23_ZIP,                                        ME23_GENOZIP, 
-                        PHY,   PHY_GZ,   PHY_BZ2,   PHY_XZ,                     PHY_GENOZIP,
-                        CHAIN, CHAIN_GZ, CHAIN_BZ2, CHAIN_XZ,                   CHAIN_GENOZIP,
-                        KRAKEN, KRAKEN_GZ, KRAKEN_BZ2, KRAKEN_XZ,               KRAKEN_GENOZIP,
                         LOCS,  LOCS_GZ,  LOCS_BZ2,  LOCS_XZ,                    LOCS_GENOZIP,
                         BAM,   BAM_GZ,   BAM_BGZF, CRAM,                        BAM_GENOZIP,
                         BCF,   BCF_GZ,   BCF_BGZF,                              BCF_GENOZIP,  
@@ -242,9 +217,6 @@ typedef enum FileType { UNKNOWN_FILE_TYPE,
                    GVF_,      GVF_GZ_,            GVF_BZ2_,    GVF_XZ_,                 GVF_GENOZIP_,           \
                    GTF_,      GTF_GZ_,            GTF_BZ2_,    GTF_XZ_,                 GTF_GENOZIP_,           \
                    ME23_,                                                   ME23_ZIP_,  ME23_GENOZIP_,          \
-                   PHY_,      PHY_GZ_,            PHY_BZ2_,    PHY_XZ_,                 PHY_GENOZIP_,           \
-                   CHAIN_,    CHAIN_GZ_,          CHAIN_BZ2_,  CHAIN_XZ_,               CHAIN_GENOZIP_,         \
-                   KRAKEN_,   KRAKEN_GZ_,         KRAKEN_BZ2_, KRAKEN_XZ_,              KRAKEN_GENOZIP_,        \
                    LOCS_,     LOCS_GZ_,           LOCS_BZ2_,   LOCS_XZ_,                LOCS_GENOZIP_,          \
                    BAM_,      BAM_GZ_, BAM_BGZF_, CRAM_,                                BAM_GENOZIP_,           \
                    BCF_,      BCF_GZ_, BCF_BGZF_,                                       BCF_GENOZIP_,           \
@@ -307,12 +279,9 @@ extern rom file_exts[];
                            { { GNRIC,      CODEC_NONE, GNRIC_GENOZIP  }, { GNRIC_GZ,  CODEC_GZ,  GNRIC_GENOZIP  },\
                              { GNRIC_BZ2,  CODEC_BZ2,  GNRIC_GENOZIP  }, { GNRIC_XZ,  CODEC_XZ,  GNRIC_GENOZIP  },\
                              { GNRIC_ZIP,  CODEC_ZIP,  GNRIC_GENOZIP  }, { } },\
-                           { { PHY,        CODEC_NONE, PHY_GENOZIP    }, { PHY_GZ,    CODEC_GZ,  PHY_GENOZIP    },\
-                             { PHY_BZ2,    CODEC_BZ2,  PHY_GENOZIP    }, { PHY_XZ,    CODEC_XZ,  PHY_GENOZIP    }, { } },\
-                           { { CHAIN,      CODEC_NONE, CHAIN_GENOZIP  }, { CHAIN_GZ,  CODEC_GZ,  CHAIN_GENOZIP  },\
-                             { CHAIN_BZ2,  CODEC_BZ2,  CHAIN_GENOZIP  }, { CHAIN_XZ,  CODEC_XZ,  CHAIN_GENOZIP  }, { } },\
-                           { { KRAKEN,     CODEC_NONE, KRAKEN_GENOZIP }, { KRAKEN_GZ, CODEC_GZ,  KRAKEN_GENOZIP },\
-                             { KRAKEN_BZ2, CODEC_BZ2,  KRAKEN_GENOZIP }, { KRAKEN_XZ, CODEC_XZ,  KRAKEN_GENOZIP }, { } },\
+                           { /* obsolete PHYLIP */ },\
+                           { /* obsolete CHAIN  */ },\
+                           { /* obsolete KRAKEN */ },\
                            { { LOCS,       CODEC_NONE, LOCS_GENOZIP   }, { LOCS_GZ,   CODEC_GZ,  LOCS_GENOZIP   },\
                              { LOCS_BZ2,   CODEC_BZ2,  LOCS_GENOZIP   }, { LOCS_XZ,   CODEC_XZ,  LOCS_GENOZIP   }, { } },\
                            { { BED,        CODEC_NONE, BED_GENOZIP    }, { BED_GZ,    CODEC_GZ,  BED_GENOZIP    },\
@@ -334,9 +303,9 @@ extern rom file_exts[];
                            { BAM }, /* There are no data_type=DT_BAM genozip files - .bam.genozip have data_type=DT_SAM */ \
                            { 0 }, /* There are no data_type=DT_BCF genozip files - .bam.genozip have data_type=DT_VCF */ \
                            { GNRIC, GNRIC_GZ, 0 },                  \
-                           { PHY, PHY_GZ, 0 },                      \
-                           { CHAIN, CHAIN_GZ, 0 },                  \
-                           { KRAKEN, KRAKEN_GZ, 0 },                \
+                           { /* obsolete PHYLIP */ 0 },             \
+                           { /* obsolete CHAIN  */ 0 },             \
+                           { /* obsolete KRAKEN */ 0 },             \
                            { LOCS, LOCS_GZ, 0 },                    \
                            { BED, BED_GZ, TRACK, TRACK_GZ, 0 },     \
                          }                        
@@ -352,9 +321,9 @@ extern rom file_exts[];
                      { 0 }, /* There are no data_type=DT_BAM genozip files - .bam.genozip have data_type=DT_SAM */ \
                      { 0 }, /* There are no data_type=DT_BCF genozip files - .bam.genozip have data_type=DT_VCF */ \
                      { GNRIC_GENOZIP, 0 },                  \
-                     { PHY_GENOZIP, 0 },                    \
-                     { CHAIN_GENOZIP, 0 },                  \
-                     { KRAKEN_GENOZIP, 0 },                 \
+                     { /* obsolete PHYLIP */ 0 },           \
+                     { /* obsolete CHAIN  */ 0 },                  \
+                     { /* obsolete KRAKEN */ 0 },           \
                      { LOCS_GENOZIP, 0 },                   \
                      { BED_GENOZIP, TRACK_GENOZIP, 0 },     \
                    } 

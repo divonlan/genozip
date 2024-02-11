@@ -141,7 +141,7 @@ static void bed_seg_START (VBlockP vb, STRp(start), WordIndex prev_line_chrom)
 
     ctx_set_last_value (vb, ctx, (int64_t)start_val);
 
-    random_access_update_pos (vb, 0, BED_START); // after setting last_value
+    random_access_update_pos (vb, BED_START); // after setting last_value
 }
 
 static void bed_seg_TSTART_TEND (VBlockP vb, Did did_i, Did base_did_i, STRp(value), STRp(copy_snip))

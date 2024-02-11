@@ -71,7 +71,6 @@ typedef union SectionFlags {
         // note: if updating dts_* flags, update in zfile_compress_genozip_header, sections_show_header too
         #define dts_ref_internal dt_specific // SAM: REF_INTERNAL was used for compressing (i.e. SAM file without reference) (introduced v6)
         #define v14_dts_paired   dt_specific // FASTQ: This z_file contains one or more pairs of FASTQs compressed with --pair (introduced v9.0.13 until v14, since v15 moved to TxtHeader)
-        #define dts_mismatch     dt_specific // CHAIN: This chain file's contigs mismatch its references, so it cannot be used with --chain (introduced v12.0.35)
         uint8_t dt_specific      : 1;  // this flag has a different meaning depending on the data_type, may be one of the above ^ 
         uint8_t aligner          : 1;  // SAM, FASTQ: our aligner may have used to align sequences to the reference (always with FASTQ if compressed with a reference, sometimes with SAM)
         uint8_t txt_is_bin       : 1;  // BAM: Source file is binary 
@@ -80,7 +79,7 @@ typedef union SectionFlags {
         uint8_t adler            : 1;  // true if Adler32 is used, false if MD5 is used 
         uint8_t has_gencomp      : 1;  // VCF: file supports dual coordinates - last two components are the "liftover rejects" data (v12)
                                        // SAM/BAM: PRIM and/or DEPN components exist (v14)
-        uint8_t has_taxid        : 1;  // each line in the file has Taxonomic ID information (v12)
+        uint8_t has_taxid        : 1;  // obsolete: each line in the file has Taxonomic ID information (v12 to 15.0.41)
         #define dts2_deep        dt_specific2 // SAM: this file is compressed with --deep (v15)
         uint8_t dt_specific2     : 1;  // this flag has a different meaning depending on the data_type, may be one of the above ^ (v15, "unused" up to v14)
     } genozip_header;
@@ -88,14 +87,14 @@ typedef union SectionFlags {
     struct FlagsTxtHeader {
         uint8_t pair             : 2;  // FASTQ component (inc. in a Deep SAM): PAIR_R1 or PAIR_R2 if this component is a paired FASTQ component (v15)
         #define v13_dvcf_comp_i pair   // v12-13: DVCF: 0=Main 1=Primary-only rejects 2=Luft-only rejects (in v14, this moved to SectionEnt.comp_i)
-        uint8_t is_txt_luft      : 1;  // VCF: true if original source file was a dual-coordinates file in Luft rendition (v12)
+        uint8_t is_txt_luft      : 1;  // v12-15.0.41: DVCF: true if original source file was a dual-coordinates file in Luft rendition (v12)
         uint8_t no_gz_ext        : 1;  // source file was compressed with GZ/BGZF AND it did not have a .gz/.bgz extension (15.0.23) 
         uint8_t unused           : 4;
     } txt_header;
 
     union FlagsVbHeader {
         struct FlagsVbHeaderVcf {
-            uint8_t coords             : 2; // DC_PRIMARY if it contains TOPLEVEL container, DC_LUFT if LUFT toplevel container, or DC_BOTH if both (DC_NONE prior to v12)
+            uint8_t coords             : 2; // DC_PRIMARY if it contains TOPLEVEL container, DC_LUFT if LUFT toplevel container, or DC_BOTH if both (used 12.0.0 - 15.0.41)
             uint8_t use_null_DP_method : 1; // "null_DP" method is used (13.0.5)
             uint8_t unused             : 5;
         } vcf;
@@ -181,7 +180,10 @@ typedef struct SectionHeader {         // 28 bytes
     uint32_t     vblock_i;             // VB with in file starting from 1 ; 0 for non-VB sections
     SectionType  section_type;         // 1 byte
     Codec        codec;                // 1 byte - primary codec in which this section is compressed
-    Codec        sub_codec;            // 1 byte - sub codec, in case primary codec invokes another codec
+    union { // 1 byte: section_type specific
+    Codec        sub_codec;            // SEC_LOCAL : sub codec, in case primary codec invokes another codec
+    uint8_t      dict_helper;          // SEC_DICT  : value passed to/from ctx->dict_helper (since 15.0.42).
+    };
     SectionFlags flags;                // 1 byte
 } SectionHeader, *SectionHeaderP; 
 
@@ -216,7 +218,7 @@ typedef struct {
     Digest   license_hash;             // MD5(license_num)
 #define REF_FILENAME_LEN 256
     union {
-    char ref_filename[REF_FILENAME_LEN];   // external reference filename, nul-terimated. ref_filename[0]=0 if there is no external reference. DT_CHAIN: LUFT reference filename.
+    char ref_filename[REF_FILENAME_LEN];   // external reference filename, nul-terimated. ref_filename[0]=0 if there is no external reference. DT_CHAIN (up to 15.0.41): LUFT reference filename.
     char fasta_filename[REF_FILENAME_LEN]; // DT_REF: fasta file used to generated this reference
     }; 
     union {
@@ -224,11 +226,6 @@ typedef struct {
         Digest refhash_digest;         // DT_REF: digest of refhash (v15)
     };
     union { // 272 bytes - data-type specific
-        struct {
-            char prim_filename[REF_FILENAME_LEN]; // external primary coordinates reference file, nul-terimated. added v12.
-            Digest prim_genome_digest; // SectionHeaderGenozipHeader.genome_digest of the primary reference file. added v12.
-            char unused[0];
-        } chain;
         struct {
             // copied from their respective values in segconf, and copied back to segconf in PIZ
             DictId segconf_seq_len_dict_id;   // SAM: dict_id of one of the Q?NAME contexts (the "length=" item), which is expected to hold the seq_len for this read. 0 if there is no such item. v14.
@@ -314,7 +311,7 @@ typedef struct {
 #define TXT_FILENAME_LEN 256
     char     txt_filename[TXT_FILENAME_LEN];// filename of this single component. without path, 0-terminated. always in base form like .vcf or .sam, even if the original is compressed .vcf.gz or .bam
     uint64_t txt_header_size;          // size of header in original txt file (likely different than reconstructed size if dual-coordinates)  (v12)
-    QnameFlavorProp flav_prop[NUM_QTYPES]; // SAM/BAM/FASTQ/KRAKEN. properties of QNAME flavor (v15)
+    QnameFlavorProp flav_prop[NUM_QTYPES]; // SAM/BAM/FASTQ. properties of QNAME flavor (v15)
 } SectionHeaderTxtHeader, *SectionHeaderTxtHeaderP; 
 
 typedef struct {
@@ -342,7 +339,7 @@ typedef struct {
     };
 
     union {
-        uint32_t dvcf_recon_size_luft; // DVCF: size of vblock as it appears in the default LUFT reconstruction (v12)
+        uint32_t dvcf_recon_size_luft; // DVCF (12 to 15.0.41): size of vblock as it appears in the default LUFT reconstruction (v12)
         uint32_t sam_prim_qname_len;   // SAM PRIM: total length of QUAL in this VB (v14)
     };
 
@@ -582,7 +579,7 @@ extern VBIType sections_get_num_vbs (CompIType comp_i);
 extern VBIType sections_get_num_vbs_(CompIType first_comp_i, CompIType last_comp_i);
 extern VBIType sections_get_first_vb_i (CompIType comp_i);
 extern Section sections_get_comp_txt_header_sec (CompIType comp_i);
-extern Section sections_get_comp_recon_plan_sec (CompIType comp_i, bool is_luft_plan);
+extern Section sections_get_comp_recon_plan_sec (CompIType comp_i);
 extern Section sections_get_comp_bgzf_sec (CompIType comp_i);
 extern Section sections_get_next_vb_header_sec (CompIType comp_i, Section *vb_sec);
 extern Section sections_one_before (Section sec);

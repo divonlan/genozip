@@ -161,15 +161,13 @@ void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STR
     // case: not the same as previous line - seg according to ps_type
     else {
         // PS_POS (only applicable to PS, not PID): delta vs POS
-        if (ctx->ps_type == PS_POS && vb->line_coords == DC_PRIMARY &&
-            str_get_int (STRa(value), &ps_value)) {
-
-            SNIPi2 (SNIP_SPECIAL, VCF_SPECIAL_COPYPOS, ps_value - dl->pos[0]);
+        if (ctx->ps_type == PS_POS && str_get_int (STRa(value), &ps_value)) {
+            SNIPi2 (SNIP_SPECIAL, VCF_SPECIAL_COPYPOS, ps_value - dl->pos);
             seg_by_ctx (VB, STRa(snip), ctx, value_len);
         }
 
         // PS_POS_REF_ALT: copy POS, REF, ALT1 in a container
-        else if (ctx->ps_type == PS_POS_REF_ALT && vb->line_coords == DC_PRIMARY) {
+        else if (ctx->ps_type == PS_POS_REF_ALT) {
             str_split (value, value_len, 3, '_', item, true);
 
             if (n_items && 

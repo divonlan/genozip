@@ -75,7 +75,7 @@ void sam_seg_ULTIMA_tp (VBlockSAMP vb, ContextP arr_ctx, void *dl_, void *tp_, u
     START_TIMER;
 
     char *tp = (char *)tp_; // this is OPTION_tp_B_ARR.local - we transfer it to the channels and free it
-    ZipDataLineSAM *dl = (ZipDataLineSAM *)dl_;
+    ZipDataLineSAMP dl = (ZipDataLineSAMP )dl_;
 
     // note: flags.no_textual_seq is set to false, in sam_seg_finalize, as required by sam_piz_special_ULTIMA_tp
     ASSSEG (tp_len == dl->SEQ.len, "Expecting length of TP:B:c to be seq_len=%u but it is %u", dl->SEQ.len, tp_len);
@@ -290,8 +290,8 @@ void sam_seg_ultima_XW (VBlockSAMP vb, STRp(xw), unsigned add_bytes)
         .nitems_lo    = 4, 
         .items        = { { .dict_id.num = DICT_ID_MAKE2_L("X0W_RNAME"), .separator = "," }, 
                           { .dict_id.num = DICT_ID_MAKE2_7("X1W_POS"),   .separator = "," }, 
-                          { .dict_id.num = DICT_ID_MAKE2_6("X2V_REF"),   .separator = "," }, 
-                          { .dict_id.num = DICT_ID_MAKE2_L("X3V_ALT")                     } } };
+                          { .dict_id.num = DICT_ID_MAKE2_6("X2W_REF"),   .separator = "," }, 
+                          { .dict_id.num = DICT_ID_MAKE2_L("X3W_ALT")                     } } };
 
     SegCallback callbacks[4] = { 0, sam_seg_ultima_delta_POS }; 
 
@@ -302,7 +302,7 @@ void sam_seg_ultima_XW (VBlockSAMP vb, STRp(xw), unsigned add_bytes)
 
 // t0:Z : supplemental base quality information
 // example: =77+**1119955))),,,..=I///;;;222888*****:;;>>>>AA<<<<IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII@@@@IIAAAA<<<<
-void sam_seg_ultima_t0 (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(t0), unsigned add_bytes)    
+void sam_seg_ultima_t0 (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(t0), unsigned add_bytes)    
 {                                                          
     decl_ctx (OPTION_t0_Z);
 
@@ -319,7 +319,7 @@ void sam_seg_ultima_t0 (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(t0), unsigned ad
 // callback function for compress to get data of one line (used by T0 codec)
 COMPRESSOR_CALLBACK (sam_zip_t0) 
 {
-    ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
+    ZipDataLineSAMP dl = DATA_LINE (vb_line_i);
 
     // note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec
     *line_data_len  = MIN_(maximum_size, dl->t0.len);
@@ -336,7 +336,7 @@ void sam_ultima_update_t0_len (VBlockP vb, uint32_t line_i, uint32_t new_len)
 
 // MI:Z - QNAME format: if its non-duplicate - same as QNAME. If its duplicate - MI equals 
 // to the QNAME of the corresponding non-duplicate.
-void sam_seg_ultima_MI (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(mi), unsigned add_bytes)    
+void sam_seg_ultima_MI (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(mi), unsigned add_bytes)    
 {
     #define MI_HISTORY_LEN 64
     decl_ctx (OPTION_MI_Z);
@@ -413,7 +413,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_ULTIMA_MI)
 }
 
 // a3:Z
-void sam_seg_ultima_a3 (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t a3, unsigned add_bytes)    
+void sam_seg_ultima_a3 (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t a3, unsigned add_bytes)    
 {
     SNIPi2 (SNIP_SPECIAL, SAM_SPECIAL_delta_seq_len, (int64_t)dl->SEQ.len - a3);
     seg_by_did (VB, STRa(snip), OPTION_a3_i, add_bytes);

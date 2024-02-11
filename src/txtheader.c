@@ -112,13 +112,10 @@ void txtheader_compress (BufferP txt_header,
                              txtheader_compress_one_fragment, 
                              zfile_output_processed_vb);
 
-    // VCF note: we don't account for DVCF rejects components - the added header lines are duplicates of the main header
-    if (!(Z_DT(VCF) || Z_DT(BCF)) || comp_i == VCF_COMP_MAIN) {        
-        z_file->txt_data_so_far_single   += txt_header->len; // length of txt header as it would be reconstructed (possibly afer modifications)
-        z_file->txt_data_so_far_bind     += txt_header->len;
-        z_file->txt_data_so_far_single_0 += unmodified_txt_header_len; // length of the original txt header as read from the file
-        z_file->txt_data_so_far_bind_0   += unmodified_txt_header_len;
-    }
+    z_file->txt_data_so_far_single   += txt_header->len; // length of txt header as it would be reconstructed (possibly afer modifications)
+    z_file->txt_data_so_far_bind     += txt_header->len;
+    z_file->txt_data_so_far_single_0 += unmodified_txt_header_len; // length of the original txt header as read from the file
+    z_file->txt_data_so_far_bind_0   += unmodified_txt_header_len;
 
     z_file->txt_data_so_far_bind_comp[comp_i] += txt_header->len;
     z_file->txt_data_so_far_bind_0_comp[comp_i] += unmodified_txt_header_len;
@@ -241,14 +238,6 @@ static rom txtheader_piz_get_filename (rom orig_name, rom prefix, bool is_orig_n
                             + EXT2_MATCHES_TRANSLATE (DT_SAM,   DT_FASTQ,  ".sam")
                             + EXT2_MATCHES_TRANSLATE (DT_SAM,   DT_FASTQ,  ".bam")
                             + EXT2_MATCHES_TRANSLATE (DT_VCF,   DT_BCF,    ".vcf")
-                            + EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".fa" )
-                            + EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".faa")
-                            + EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".ffn")
-                            + EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".fna")
-                            + EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".frn")
-                            + EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".fas")
-                            + EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".fsa")
-                            + EXT2_MATCHES_TRANSLATE (DT_FASTA, DT_PHYLIP, ".fasta")
                             + EXT2_MATCHES_TRANSLATE (DT_ME23,  DT_VCF,    ".txt");
 
     // case: new directory - take only the basename
@@ -362,7 +351,10 @@ void txtheader_piz_read_and_reconstruct (Section sec)
     // while VB verification relies on v13_commulative_digest_ctx which is commulative across components.
     z_file->digest_ctx = DIGEST_CONTEXT_NONE; // reset digest
 
-    evb->comp_i                = !VER(14) ? header.flags.txt_header.v13_dvcf_comp_i/*v12,13*/ : sec->comp_i/*since v14*/;
+    if (!VER(14) && header.flags.txt_header.v13_dvcf_comp_i)
+        ABORT0 ("DVCF files can be accessed with Genozip up to version 15.0.41");
+
+    evb->comp_i                = VER(14) ? sec->comp_i/*since v14*/ : 0;
     txt_file->max_lines_per_vb = BGEN32 (header.max_lines_per_vb);
     txt_file->txt_flags        = header.flags.txt_header;
     txt_file->num_vbs          = sections_count_sections_until (SEC_VB_HEADER, sec, SEC_TXT_HEADER);    
@@ -422,7 +414,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
     if (!writer_handover_txtheader (&txt_header_vb))   // handover data to writer thread (even if the header is empty, as the writer thread is waiting for it)
         vb_release_vb (&txt_header_vb, PIZ_TASK_NAME); // not handing over, so release here  
     
-    if (!flag.reading_chain && !flag.reading_reference)
+    if (!flag.reading_reference)
         is_first_txt = false;
 
     COPY_TIMER_EVB (txtheader_piz_read_and_reconstruct);

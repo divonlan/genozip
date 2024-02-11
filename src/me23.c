@@ -123,7 +123,7 @@ rom me23_seg_txt_line (VBlockP vb, rom field_start_line, uint32_t remaining_txt_
 
     GET_NEXT_ITEM (ME23_POS);
     seg_pos_field (vb, ME23_POS, ME23_POS, 0, 0, field_start, field_len, 0, field_len+1);
-    random_access_update_pos (vb, 0, ME23_POS);
+    random_access_update_pos (vb, ME23_POS);
 
     // Genotype (a combination of one or two bases or "--")
     GET_LAST_ITEM (ME23_GENOTYPE);

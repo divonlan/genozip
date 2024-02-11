@@ -231,7 +231,7 @@ bool vcf_seg_INFO_allele (VBlockP vb_, ContextP ctx, STRp(value), uint32_t repea
 
     // case: this is one of the alleles in REF/ALT - our special alg will just copy from that allele
     if (allele >= 0) {
-        char snip[] = { SNIP_SPECIAL, VCF_SPECIAL_ALLELE, '0' + vb->line_coords, '0' + allele /* ASCII 48...147 */ };
+        char snip[] = { SNIP_SPECIAL, VCF_SPECIAL_ALLELE, '0', '0' + allele /* ASCII 48...147 */ };
         seg_by_ctx (VB, snip, sizeof (snip), ctx, value_len);
     }
 
@@ -239,65 +239,24 @@ bool vcf_seg_INFO_allele (VBlockP vb_, ContextP ctx, STRp(value), uint32_t repea
     else
         seg_by_ctx (VB, STRa(value), ctx, value_len); 
 
-    // validate that the primary value (as received from caller or lifted back) can be luft-translated 
-    // note: for INFO/AA, but not for INFO/CSQ/Allele and INFO/ANN/Allele, this is done already in vcf_seg_info_one_subfield (no harm in redoing)
-    if (vb->line_coords == DC_PRIMARY && needs_translation (ctx)) {
-        if (allele != -1) 
-            ctx->line_is_luft_trans = true; // assign translator to this item in the container, to be activated with --luft
-        else 
-            REJECT_SUBFIELD (LO_INFO, ctx, ".\tCannot cross-render INFO subfield %s: \"%.*s\"", ctx->tag_name, value_len, value);            
-    }
-
     return true; // segged successfully
 }
 
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_ALLELE)
+SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_ALLELE)
 {
-    Coords seg_line_coord = snip[0] - '0';
-    int allele = snip[1] - '0';
-    LiftOverStatus ostatus = last_ostatus;
+    VBlockVCFP vb = (VBlockVCFP)vb_;
 
-    if (LO_IS_OK_SWITCH (ostatus) && seg_line_coord != VB_VCF->vb_coords) {
-        ASSPIZ (allele >= 0 && allele <= 1, "unexpected allele=%d with REF<>ALT switch", allele);
-        allele = 1 - allele;
-    }
+    int allele = snip[1] - '0'; // note: snip[0] was used by DVCF for coordinate, up to 15.0.41
 
-    ContextP refalt_ctx = VB_VCF->vb_coords == DC_PRIMARY ? CTX (VCF_REFALT) : CTX (VCF_oREFALT); 
-
-    STRlast (refalt, refalt_ctx->did_i);
-
-    if (!refalt_len) goto done; // variant is single coordinate in the other coordinate
-
-    char *tab = memchr (refalt, '\t', refalt_len);
-    ASSPIZ (tab, "Invalid refalt: \"%.*s\"", MIN_(refalt_len, 100), refalt);
-
-    // case: the allele is REF
     if (allele == 0)
-        RECONSTRUCT (refalt, tab - refalt);
+        RECONSTRUCT (vb->main_ref, vb->main_ref_len);
     
-    // case: the allele is one of the alts
     else {
-        str_split (tab+1, &refalt[refalt_len] - (tab+1), 0, ',', alt, false);
-        RECONSTRUCT (alts[allele-1], alt_lens[allele-1]);
+        ASSPIZ (allele <= vb->n_alts, "allele=%d but there are only %d ALTs", allele, vb->n_alts);
+        RECONSTRUCT (vb->alts[allele-1], vb->alt_lens[allele-1]);
     }
 
-done:
     return NO_NEW_VALUE;
-}
-
-// translator only validates - as vcf_piz_special_ALLELE copies verbatim (revcomp, if xstrand, is already done in REF/ALT)
-TRANSLATOR_FUNC (vcf_piz_luft_ALLELE)
-{
-    VBlockVCFP vcf_vb = VB_VCF;
-
-    // reject if LO_OK_REF_NEW_SNP and value is equal to REF
-    if (validate_only && last_ostatus == LO_OK_REF_NEW_SNP && str_issame (recon, vcf_vb->main_ref)) 
-        return false;
-
-    // reject if the value is not equal to REF, any ALT or '.'
-    if (validate_only && vcf_INFO_ALLELE_get_allele (vcf_vb, STRa(recon)) == -1) return false;
-
-    return true;
 }
 
 // ------------------------
@@ -365,11 +324,8 @@ static inline bool vcf_seg_SVTYPE (VBlockVCFP vb, ContextP ctx, STRp(svtype))
     uint32_t ref_len = vb->main_ref_len;
     rom alt = vb->main_alt;
 
-    // TODO: need careful testing to see this is handled correctly in case of a REF/ALT switch
-    if (z_is_dvcf) goto fallback;
-
     // prediction: ALT has a '[' or a ']', then SVTYPE is "BND"
-    else if (memchr (alt, '[', alt_len) || memchr (alt, ']', alt_len)) 
+    if (memchr (alt, '[', alt_len) || memchr (alt, ']', alt_len)) 
         { if (memcmp (svtype, "BND", 3)) goto fallback; }
 
     // prediction: if ALT starts/ends with <>, then its the same as SVTYPE except <>
@@ -424,97 +380,6 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_SVTYPE)
 // INFO container
 // --------------
 
-// for dual coordinate files (Primary, Luft and --chain) - add DVCF depending on ostatus (run after
-// all INFO and FORMAT fields, so ostatus is final)
-static void vcf_seg_info_add_DVCF_to_InfoItems (VBlockVCFP vb)
-{
-    // case: Dual coordinates file line has no PRIM, Lrej or Prej - this can happen if variants were added to the file,
-    // for example, as a result of a "bcftools merge" with a non-DVCF file
-    bool added_variant = false;
-    if (!ctx_encountered_in_line (VB, INFO_LUFT) && // note: no need to check PRIM because LUFT and PRIM always appear together
-        !ctx_encountered_in_line (VB, INFO_LREJ) &&
-        !ctx_encountered_in_line (VB, INFO_PREJ)) {
-        vcf_lo_seg_rollback_and_reject (vb, LO_ADDED_VARIANT, NULL); // note: we don't report this reject because it doesn't happen during --chain
-        added_variant = true; // we added a REJX field in a variant that will be reconstructed in the current coordintes
-    }
-
-    // case: line originally had LIFTOVER or LIFTBACK. These can be fields from the txt files, or created by --chain
-    bool has_luft    = ctx_encountered_in_line (VB, INFO_LUFT);
-    bool has_prim    = ctx_encountered_in_line (VB, INFO_PRIM);
-    bool has_lrej    = ctx_encountered_in_line (VB, INFO_LREJ);
-    bool has_prej    = ctx_encountered_in_line (VB, INFO_PREJ);
-    bool rolled_back = LO_IS_REJECTED (last_ostatus) && (has_luft || has_prim); // rejected in the Seg process
-           
-    // make sure we have either both LIFT/PRIM or both Lrej/Prej subfields in Primary and Luft
-    ASSVCF ((has_luft && has_prim) || (has_lrej && has_prej), "%s", 
-            vb->line_coords==DC_PRIMARY ? "Missing INFO/LUFT or INFO/Lrej subfield" : "Missing INFO/PRIM or INFO/Prej subfield");
-
-    // case: --chain and INFO is '.' - remove the '.' as we are adding a DVCF field
-    if (info_items.len == 1 && B1ST (InfoItem, info_items)->name_len == 1 && *B1ST (InfoItem, info_items)->name == '.') {
-        info_items.len = 0;
-        vb->recon_size--;
-        vb->recon_size_luft--;
-    }
-
-    // dual coordinate line - we seg both options and vcf_piz_filter will decide which to render
-    if (LO_IS_OK (last_ostatus)) {
-
-        BNXT (InfoItem, info_items) = (InfoItem) { 
-            .name      = INFO_LUFT_NAME"=", 
-            .name_len  = INFO_DVCF_LEN + 1, // +1 for the '='
-            .ctx       = CTX (INFO_LUFT),
-            .value     = "" // non-zero means value exists
-        };  
-        
-        BNXT (InfoItem, info_items) = (InfoItem) { 
-            .name      = INFO_PRIM_NAME"=", 
-            .name_len  = INFO_DVCF_LEN + 1, // +1 for the '='
-            .ctx       = CTX (INFO_PRIM),
-            .value     = "" // non-zero means value exists
-        };  
-
-        // case: --chain - we're adding ONE of these subfields to each of Primary and Luft reconstructions
-        if (chain_is_loaded) {
-            uint32_t growth = INFO_DVCF_LEN + 1 + (info_items.len32 > 2); // +1 for '=', +1 for ';' if we already have item(s)
-            vb->recon_size += growth;
-            vb->recon_size_luft += growth;
-        }
-    }
-
-    else { 
-        BNXT (InfoItem, info_items) = (InfoItem) { 
-            .name      = INFO_LREJ_NAME"=", 
-            .name_len  = INFO_DVCF_LEN + 1, 
-            .ctx       = CTX (INFO_LREJ),
-            .value     = "" // non-zero means value exists
-        };
-
-        BNXT (InfoItem, info_items) = (InfoItem) { 
-            .name      = INFO_PREJ_NAME"=", 
-            .name_len  = INFO_DVCF_LEN + 1, 
-            .ctx       = CTX (INFO_PREJ),
-            .value     = "" // non-zero means value exists
-        };
-
-        // case: we added a REJX INFO field that wasn't in the TXT data: --chain or rolled back (see vcf_lo_seg_rollback_and_reject) or an added variant
-        if (chain_is_loaded || rolled_back || added_variant) {
-            uint32_t growth = INFO_DVCF_LEN + 1 + (info_items.len32 > 2); // +1 for '=', +1 for ';' if we already have item(s) execpt for the DVCF items
-
-            if (vb->line_coords == DC_PRIMARY) 
-                vb->recon_size += growth;
-            else 
-                vb->recon_size_luft += growth;
-        }
-    }
-
-    // add tags for the DVCF info items
-    if (!vb->is_rejects_vb) {
-        InfoItem *ii = BLST (InfoItem, info_items) - 1;
-        vcf_tags_add_tag (vb, ii[0].ctx, DTYPE_VCF_INFO, ii[0].ctx->tag_name, ii[0].name_len-1);
-        vcf_tags_add_tag (vb, ii[1].ctx, DTYPE_VCF_INFO, ii[1].ctx->tag_name, ii[1].name_len-1);
-    }
-}
-
 static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
 {
     unsigned modified_len = value_len + 20;
@@ -527,51 +392,12 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
     
     #define ADJUST_FOR_MODIFIED ({                                  \
         int32_t growth = (int32_t)modified_len - (int32_t)value_len;\
-        if (growth) {                                               \
-            vb->recon_size      += growth;                          \
-            vb->recon_size_luft += growth;                          \
-        }                                                           \
+        if (growth) vb->recon_size += growth;                       \
         STRset (value, modified); })                                       
 
-    // --chain: if this is RendAlg=A_1 subfield in a REF⇆ALT variant, convert a eg 4.31e-03 to e.g. 0.00431. This is to
-    // ensure primary->luft->primary is lossless (4.31e-03 cannot be converted losslessly as we can't preserve format info)
-    if (chain_is_loaded && ctx->luft_trans == VCF2VCF_A_1 && LO_IS_OK_SWITCH (last_ostatus) && 
-        str_scientific_to_decimal (STRa(value), qSTRa(modified), NULL)) {
-        ADJUST_FOR_MODIFIED;
-    }        
-
-    // Translatable item on a Luft line: attempt to lift-back the value, so we can seg it as primary
-    if (vb->line_coords == DC_LUFT && needs_translation (ctx)) {
-
-        // If cross-rendering to Primary is successful - proceed to Seg this value in primary coords, and assign a translator for reconstructing if --luft
-        if (vcf_lo_seg_cross_render_to_primary (vb, ctx, STRa(value), qSTRa(modified), false)) {
-            STRset (value, modified); 
-            ctx->line_is_luft_trans = true; // assign translator to this item in the container, to be activated with --luft
-        } 
-
-        // This item in Luft coordinates is not translatable to primary. It is therefore a luft-only line, and we seg the remainder of it items in
-        // luft coords, and only ever reconstruct it in luft (as the line with have Coord=LUFT). Since this item is already in LUFT coords
-        else 
-            vcf_lo_seg_rollback_and_reject (vb, LO_INFO, ctx);
-    }
-
-    // validate that the primary value (as received from caller or lifted back) can be luft-translated 
-    // note: looks at snips before optimization, we're counting on the optimization not changing the validation outcome
-    if (vb->line_coords == DC_PRIMARY && needs_translation (ctx)) {
-
-        if (DT_FUNC(vb, translator)[ctx->luft_trans](VB, ctx, (char *)value, value_len, 0, true)) 
-            ctx->line_is_luft_trans = true; // assign translator to this item in the container, to be activated with --luft
-        else 
-            REJECT_SUBFIELD (LO_INFO, ctx, ".\tCannot cross-render INFO subfield %s: \"%.*s\"", ctx->tag_name, value_len, value);            
-    }
-
-    // ##INFO=<ID=AA,Number=1,Type=String,Description="Ancestral Allele">
-    if (z_is_dvcf && ctx->luft_trans == VCF2VCF_ALLELE && !(segconf.vcf_is_cosmic && ctx->dict_id.num == _INFO_AA)) // INFO/AA in COSMIC is something else
-        vcf_seg_INFO_allele (VB, ctx, STRa(value), 0);
-
     // many fields, for example: ##INFO=<ID=AN_amr_male,Number=1,Type=Integer,Description="Total number of alleles in male samples of Latino ancestry">
-    else if ((ctx->tag_name[0] == 'A' && (ctx->tag_name[1] == 'N' || ctx->tag_name[1] == 'C') && (ctx->tag_name[2] == '_' || ctx->tag_name[2] == '-')) ||
-             !memcmp (ctx->tag_name, "nhomalt", 7)) {
+    if ((ctx->tag_name[0] == 'A' && (ctx->tag_name[1] == 'N' || ctx->tag_name[1] == 'C') && (ctx->tag_name[2] == '_' || ctx->tag_name[2] == '-')) ||
+        !memcmp (ctx->tag_name, "nhomalt", 7)) {
         seg_integer_or_not (VB, ctx, STRa(value), value_len);
     }
 
@@ -805,8 +631,8 @@ void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
 {
     info_items.len = 0; // reset from previous line
 
-    // case: INFO field is '.' (empty) (but not in DVCF as we will need to deal with DVCF items)
-    if (!z_is_dvcf && IS_PERIOD (info) && !segconf.vcf_is_isaac) { // note: in Isaac, it slightly better to mux the "."
+    // case: INFO field is '.' (empty) 
+    if (IS_PERIOD (info) && !segconf.vcf_is_isaac) { // note: in Isaac, it slightly better to mux the "."
         seg_by_did (VB, ".", 1, VCF_INFO, 2); // + 1 for \t or \n
         return;
     }
@@ -817,9 +643,7 @@ void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
 
     buf_alloc (vb, &info_items, 0, n_pairs + 2, InfoItem, CTX_GROWTH, "info_items");
 
-    InfoItem lift_ii = {}, rejt_ii = {};
-
-    // pass 1: initialize info items + get indices of AC, and the DVCF items
+    // pass 1: initialize info items + get indices of AC
     for (unsigned i=0; i < n_pairs; i++) {
         rom equal_sign = memchr (pairs[i], '=', pair_lens[i]);
         unsigned name_len = (unsigned)(equal_sign - pairs[i]); // nonsense if no equal sign
@@ -834,20 +658,7 @@ void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
         DictId dict_id = dict_id_make (pairs[i], tag_name_len, DTYPE_1);
         ii.ctx = ctx_get_ctx_tag (vb, dict_id, pairs[i], tag_name_len); // create if it doesn't already exist
         
-        if (z_is_dvcf && !vb->is_rejects_vb) vcf_tags_add_tag (vb, ii.ctx, DTYPE_VCF_INFO, pairs[i], tag_name_len);
-
         if (segconf.running) segconf.has[ii.ctx->did_i]++;
-
-        ASSVCF (!z_is_dvcf || 
-                  (((dict_id.num != _INFO_LUFT && dict_id.num != _INFO_LREJ) || vb->line_coords == DC_PRIMARY) && 
-                   ((dict_id.num != _INFO_PRIM && dict_id.num != _INFO_PREJ) || vb->line_coords == DC_LUFT)),
-                "Not expecting INFO/%.*s in a %s-coordinate line", tag_name_len, pairs[i], vcf_coords_name (vb->line_coords));
-
-        if (dict_id.num == _INFO_LUFT || dict_id.num == _INFO_PRIM) 
-            { lift_ii = ii; continue; } // dont add LUFT and PRIM to Items yet
-
-        else if (dict_id.num == _INFO_LREJ || dict_id.num == _INFO_PREJ) 
-            { rejt_ii = ii; continue; } // dont add Lrej and Prej to Items yet
 
         #define X(x) case INFO_##x : vb->idx_##x = info_items.len32; break
         switch (ii.ctx->did_i) {
@@ -860,29 +671,6 @@ void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
         BNXT (InfoItem, info_items) = ii;
     }
 
-    // case: we have a LUFT or PRIM item - Seg it now, but don't add it yet to InfoItems
-    if (lift_ii.value) { 
-        vcf_lo_seg_INFO_LUFT_and_PRIM (vb, lift_ii.ctx, lift_ii.value, lift_ii.value_len); 
-
-        // case: we have both LIFT and REJT - could happen as a result of bcftools merge - discard the REJT for now, and let our Seg
-        // decide if to reject it
-        if (rejt_ii.value) {
-            uint32_t shrinkage = rejt_ii.name_len + rejt_ii.value_len + 1; // unaccount for name, value and  
-            vb->recon_size      -= shrinkage;
-            vb->recon_size_luft -= shrinkage; // since its read from TXT, it is accounted for initialially in both recon_size and recon_size_luft
-        }
-
-        // case: line was reject - PRIM/LUFT changed to REJx (note: vcf_lo_seg_rollback_and_reject didn't decrement recon_size* in this case, bc PRIM/LUFT was not "encountered" yet)
-        if (LO_IS_REJECTED (last_ostatus)) {
-            vb->recon_size      -= lift_ii.value_len;
-            vb->recon_size_luft -= lift_ii.value_len; // since its read from TXT, it is accounted for initialially in both recon_size and recon_size_luft
-        }
-    }
-        
-    // case: we have a *rej item - Seg it now, but don't add it yet to InfoItems
-    else if (rejt_ii.value)
-        vcf_lo_seg_INFO_REJX (vb, rejt_ii.ctx, rejt_ii.value, rejt_ii.value_len); 
-
     ARRAY (InfoItem, ii, info_items);
 
     // pass 2: seg all subfields except AC (and PRIM/LUFT that weren't added)
@@ -893,17 +681,11 @@ void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
 // Seg INFO fields that were deferred to after all samples are segged
 void vcf_seg_finalize_INFO_fields (VBlockVCFP vb)
 {
-    if (!info_items.len && !z_is_dvcf) return; // no INFO items on this line (except if dual-coords - we will add them in a sec)
+    if (!info_items.len) return; // no INFO items on this line (except if dual-coords - we will add them in a sec)
 
     Container con = { .repeats             = 1, 
-                      .drop_final_item_sep = true,
-                      .filter_items        = z_is_dvcf,   // vcf_piz_filter chooses which (if any) DVCF item to show based on flag.luft and flag.single_coord
-                      .callback            = z_is_dvcf }; // vcf_piz_container_cb appends oSTATUS to INFO if requested 
+                      .drop_final_item_sep = true }; 
  
-    // now that we segged all INFO and FORMAT subfields, we have the final ostatus and can add the DVCF items
-    if (z_is_dvcf)
-        vcf_seg_info_add_DVCF_to_InfoItems (vb);
-
     ARRAY (InfoItem, ii, info_items);
 
     con_set_nitems (con, ii_len);
@@ -925,14 +707,6 @@ void vcf_seg_finalize_INFO_fields (VBlockVCFP vb)
                                                    : ii[i].ctx->dict_id.num == _INFO_END ? (DictId)_VCF_POS
                                                    :                                       ii[i].ctx->dict_id,
                                         .separator = { ';' } }; 
-
-        // if we're preparing a dual-coordinate VCF and this line needs translation to Luft - assign the liftover-translator for this item,
-        if (ii[i].ctx && ii[i].ctx->line_is_luft_trans) { // item was segged in Primary coords and needs a luft translator to be reconstruced in --luft
-            con.items[i].translator = ii[i].ctx->luft_trans;
-
-            if (ii[i].ctx->luft_trans == VCF2VCF_A_AN)
-                ii[i].ctx->flags.store = STORE_INT; // consumed by vcf_piz_luft_A_AN
-        }
             
         // add to the prefixes
         ASSVCF (prefixes_len + ii[i].name_len + 1 <= CONTAINER_MAX_PREFIXES_LEN, 
@@ -942,41 +716,25 @@ void vcf_seg_finalize_INFO_fields (VBlockVCFP vb)
         prefixes_len += ii[i].name_len;
         prefixes[prefixes_len++] = CON_PX_SEP;
 
-        // don't include LIFTBACK or LIFTREJT because they are not reconstructed by default (genounzip) 
-        // note: vcf_lo_seg_INFO_REJX / vcf_lo_seg_INFO_LUFT_and_PRIM already verified that this is a dual-coord file
-        if (!ii[i].ctx || (ii[i].ctx->dict_id.num != _INFO_PRIM && ii[i].ctx->dict_id.num != _INFO_PREJ))
-            total_names_len += ii[i].name_len + 1; // +1 for ; \t or \n separator
+        total_names_len += ii[i].name_len + 1; // +1 for ; \t or \n separator
     }
-
-    // --chain: if any tags need renaming we create a second, renames, prefixes string
-    char ren_prefixes[con_nitems(con) * MAX_TAG_LEN]; 
-    unsigned ren_prefixes_len = z_is_dvcf && !vb->is_rejects_vb ? vcf_tags_rename (vb, con_nitems(con), 0, 0, 0, B1ST (InfoItem, info_items), ren_prefixes) : 0;
 
     // seg deferred fields 
     for (uint8_t i=0; i < vb->deferred_q_len; i++) 
         vb->deferred_q[i].seg (VB);
 
-    // case GVCF: multiplex by has_RGQ or FILTER in Isaac
+    // case INFO is muxed: multiplex by has_RGQ or FILTER in Isaac
     if (!segconf.running && (segconf.has[FORMAT_RGQ] || segconf.vcf_is_isaac)) {
         ContextP channel_ctx = 
             seg_mux_get_channel_ctx (VB, VCF_INFO, (MultiplexerP)&vb->mux_INFO, (segconf.has[FORMAT_RGQ] ? CTX(FORMAT_RGQ)->line_has_RGQ : vcf_isaac_info_channel_i (VB)));
         
         seg_by_did (VB, STRa(vb->mux_INFO.snip), VCF_INFO, 0);
 
-        // if we're compressing a Luft rendition, swap the prefixes
-        if (vb->line_coords == DC_LUFT && ren_prefixes_len) 
-            container_seg_with_rename (vb, channel_ctx, &con, ren_prefixes, ren_prefixes_len, prefixes, prefixes_len, total_names_len /* names inc. = and separator */, NULL);
-        else 
-            container_seg_with_rename (vb, channel_ctx, &con, prefixes, prefixes_len, ren_prefixes, ren_prefixes_len, total_names_len /* names inc. = and separator */, NULL);
+        container_seg (vb, channel_ctx, &con, prefixes, prefixes_len, total_names_len /* names inc. = and separator */);
     }
 
-    // case: not GVCF
-    else {
-        // if we're compressing a Luft rendition, swap the prefixes
-        if (vb->line_coords == DC_LUFT && ren_prefixes_len) 
-            container_seg_with_rename (vb, CTX(VCF_INFO), &con, ren_prefixes, ren_prefixes_len, prefixes, prefixes_len, total_names_len /* names inc. = and separator */, NULL);
-        else 
-            container_seg_with_rename (vb, CTX(VCF_INFO), &con, prefixes, prefixes_len, ren_prefixes, ren_prefixes_len, total_names_len /* names inc. = and separator */, NULL);
-    }
+    // case: INFO not muxed
+    else 
+        container_seg (vb, CTX(VCF_INFO), &con, prefixes, prefixes_len, total_names_len /* names inc. = and separator */);
 }
 

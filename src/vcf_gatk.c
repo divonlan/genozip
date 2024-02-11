@@ -210,7 +210,7 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_RPA)
 // Sorts BaseCounts vector with REF bases first followed by ALT bases, as they are expected to have the highest values
 bool vcf_seg_INFO_BaseCounts (VBlockVCFP vb, ContextP ctx_basecounts, STRp(value)) // returns true if caller still needs to seg 
 {
-    if (vb->main_ref_len != 1 || vb->main_alt_len != 1 || vb->line_coords == DC_LUFT) 
+    if (vb->main_ref_len != 1 || vb->main_alt_len != 1) 
         return true; // not a bi-allelic SNP or line is a luft line without easy access to REFALT - caller should seg
 
     char *str = (char *)value;
@@ -291,28 +291,6 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_BaseCounts)
 
 done:
     return HAS_NEW_VALUE;
-}
-
-// currently used only for CountBases - reverses the vector in case of XSTRAND
-TRANSLATOR_FUNC (vcf_piz_luft_XREV)
-{
-    if (validate_only) return true; // always possible
-
-    if (IS_TRIVAL_FORMAT_SUBFIELD) return true; // This is FORMAT field which is empty or "." - all good
-
-    char recon_copy[recon_len];
-    memcpy (recon_copy, recon, recon_len);
-
-    str_split_enforce (recon_copy, recon_len, 0, ',', item, true, "vcf_piz_luft_XREV");
-
-    // re-reconstruct in reverse order
-    Ltxt -= recon_len;
-    for (int i=n_items-1; i >= 1; i--)
-        RECONSTRUCT_SEP (items[i], item_lens[i], ',');
-        
-    RECONSTRUCT (items[0], item_lens[0]);
-
-    return true;
 }
 
 // ---------------
@@ -612,7 +590,7 @@ static QdPredType vcf_seg_is_QD_predictable (VBlockVCFP vb, ContextP ctx, STRp(q
     }
 
     // prediction based on sum of FORMAT/DP, excluding samples with 0/0 or ./.
-    if ((vcf_num_samples + !has_info_dp >= 2) && !LO_IS_OK_SWITCH (last_ostatus) &&  // can't use this in case of a REF⇆ALT switch, because GT changes)
+    if ((vcf_num_samples + !has_info_dp >= 2) &&  
          ctx->qd.sum_dp_with_dosage >= ratio-1 && ctx->qd.sum_dp_with_dosage <= ratio+1) {
         if (vcf_seg_QD_verify_prediction (ctx, qual_value, ctx->qd.sum_dp_with_dosage, STRa(qd), 0 )) return QD_PRED_SUM_DP;
         if (vcf_seg_QD_verify_prediction (ctx, qual_value, ctx->qd.sum_dp_with_dosage, STRa(qd), 1 )) return QD_PRED_SUM_DP_P001;

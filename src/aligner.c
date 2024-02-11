@@ -249,8 +249,7 @@ done:
     return best_gpos;
 }
 
-MappingType aligner_seg_seq (VBlockP vb, STRp(seq), bool no_bitmap_if_perfect,
-                             bool is_pair_2, PosType64 pair_gpos, bool pair_is_forward)
+MappingType aligner_seg_seq (VBlockP vb, STRp(seq), bool is_pair_2, PosType64 pair_gpos, bool pair_is_forward)
 {
     START_TIMER;
     
@@ -272,17 +271,6 @@ MappingType aligner_seg_seq (VBlockP vb, STRp(seq), bool no_bitmap_if_perfect,
 
     if (flag.show_aligner)
         iprintf ("%s: gpos=%"PRId64" forward=%s\n", LN_NAME, gpos, TF(is_forward));
-
-    BitsP bitmap = (BitsP)&bitmap_ctx->local;
-
-    // allocate bitmaps - don't provide name to avoid re-writing param which would overwrite nbits that overlays it 
-    if (!no_bitmap_if_perfect || !is_all_ref) {
-        int64_t missing_bits = (int64_t)seq_len - ((int64_t)bitmap_ctx->local.nbits - (int64_t)bitmap_ctx->next_local);
-        if (missing_bits > 0) {
-            buf_alloc_do (vb, &bitmap_ctx->local,roundup_bits2bytes64 (bitmap_ctx->local.nbits + seq_len), CTX_GROWTH, NULL, __FUNCLINE); 
-            buf_extend_bits (&bitmap_ctx->local, missing_bits);
-        }
-    }
 
     if ((strand_ctx->local.size & ~3ULL) * 8 == strand_ctx->local.nbits)
         buf_alloc_do (vb, &strand_ctx->local, strand_ctx->local.size + sizeof(uint64_t), CTX_GROWTH, NULL, __FUNCLINE);
@@ -310,14 +298,18 @@ MappingType aligner_seg_seq (VBlockP vb, STRp(seq), bool no_bitmap_if_perfect,
 
     // shortcut if we have a full reference match
     if (is_all_ref) {
-        if (!no_bitmap_if_perfect) {
-            bits_set_region (bitmap, bitmap_ctx->next_local, seq_len); // all bases match the reference
-            bitmap_ctx->next_local += seq_len;
-        }
-
         vb->num_perfect_matches++; // for stats
         
         goto done;
+    }
+
+    BitsP bitmap = (BitsP)&bitmap_ctx->local;
+
+    // allocate bitmaps - don't provide name to avoid re-writing param which would overwrite nbits that overlays it 
+    int64_t missing_bits = (int64_t)seq_len - ((int64_t)bitmap_ctx->local.nbits - (int64_t)bitmap_ctx->next_local);
+    if (missing_bits > 0) {
+        buf_alloc_do (vb, &bitmap_ctx->local,roundup_bits2bytes64 (bitmap_ctx->local.nbits + seq_len), CTX_GROWTH, NULL, __FUNCLINE); 
+        buf_extend_bits (&bitmap_ctx->local, missing_bits);
     }
 
     for (int i=0; i < 4; i++)

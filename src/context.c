@@ -634,7 +634,6 @@ WordIndex ctx_populate_zf_ctx (Did dst_did_i, STRp (contig_name), WordIndex ref_
 // 1. when starting to zip a new file, with pre-loaded external reference, we integrate the reference's FASTA CONTIG
 //    dictionary as the chrom dictionary of the new file
 // 2. in SAM, DENOVO: after creating contigs from SQ records, we copy them to the RNAME dictionary
-// 3. When loading a chain file - copy tName word_list/dict read from the chain file to a context
 void ctx_populate_zf_ctx_from_contigs (Reference ref, Did dst_did_i, ConstContigPkgP ctgs)
 {
     if (!ctgs->contigs.len) return; // nothing to do
@@ -977,10 +976,8 @@ static inline bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx, ContextP *z
         zctx_alias->flags = vctx->flags; // vb_1 flags will be the default flags for this context, used by piz in case there are no b250 or local sections due to all_the_same. see b250_zip_generate_section and piz_read_all_ctxs
 
     uint32_t ol_len = vctx->ol_nodes.len32;
-    bool has_count = !DTP(zip_vb_has_count) || DTP(zip_vb_has_count)(vb); // normally we count, but callback can override
 
-    if ((flag.show_stats_comp_i == COMP_NONE && (vb->data_type != DT_VCF || vb->comp_i != VCF_COMP_PRIM_ONLY)) // we don't include ##primary_only VBs as they are not in the primary reconstruction, but we do include ##luft_only
-        || flag.show_stats_comp_i == vb->comp_i)
+    if (flag.show_stats_comp_i == COMP_NONE || flag.show_stats_comp_i == vb->comp_i)
         zctx_alias->txt_len += vctx->txt_len; // for stats
 
     if (vctx->st_did_i != DID_NONE && zctx_alias->st_did_i == DID_NONE) {
@@ -1032,8 +1029,7 @@ static inline bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx, ContextP *z
 
         ASSERT (word_index <= MAX_WORD_INDEX, "%s: zctx of %s is full (MAX_WORD_INDEX=%u): nodes.len=%u", VB_NAME, zctx->tag_name, MAX_WORDS_IN_CTX, zctx->nodes.len32);
 
-        if (has_count) 
-            add_count (B64(zctx->counts, word_index), count);
+        add_count (B64(zctx->counts, word_index), count);
 
         // note: chrom2ref_map is protected by ZMUTEX(zctx) (zctx is CHROM as we followed alias)
         // we add nodes encountered first in aliases to chrom2ref_map, bc when the snip appears later in CHROM
@@ -1057,7 +1053,7 @@ static inline bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx, ContextP *z
         WARN ("WARNING: excessive zctx dictionary size - causing slow compression and decompression and reduced compression ratio. Please report this to " EMAIL_SUPPORT ".\n"
               "%s %s data_type=%s ctx=%s vb=%s vb_size=%"PRIu64" zctx->dict.len=%"PRIu64" %s. First 1000 bytes: ", 
               cond_str (VB_DT(BAM) || VB_DT(SAM), "sam_mapper=", segconf_sam_mapper_name()), 
-              cond_str (VB_DT(BAM) || VB_DT(SAM) || VB_DT(FASTQ) || VB_DT(KRAKEN), "segconf_qf_name=", segconf_qf_name(QNAME1)), 
+              cond_str (VB_DT(BAM) || VB_DT(SAM) || VB_DT(FASTQ), "segconf_qf_name=", segconf_qf_name(QNAME1)), 
               z_dt_name(), zctx->tag_name, VB_NAME, segconf.vb_size, zctx->dict.len, version_str().s);
         dict_io_print (stderr, zctx->dict.data, 1000, true, true, false, false);
     }
@@ -1071,16 +1067,14 @@ finish:
     vctx->nodes_converted = true; // vctx->nodes has been converted from index/len to word_index
 
     // just update counts for ol_node (i.e. known to be existing) snips
-    if (has_count) {
-        ARRAY32 (uint32_t, vcounts, vctx->counts);
-        ARRAY32 (uint64_t, zcounts, zctx->counts);
+    ARRAY32 (uint32_t, vcounts, vctx->counts);
+    ARRAY32 (uint64_t, zcounts, zctx->counts);
 
-        ASSERT (zcounts_len >= ol_len, "%s ctx=%s: Expecting zcounts_len=%u >= ol_len=%u", 
-                VB_NAME, zctx->tag_name, zcounts_len, ol_len);
+    ASSERT (zcounts_len >= ol_len, "%s ctx=%s: Expecting zcounts_len=%u >= ol_len=%u", 
+            VB_NAME, zctx->tag_name, zcounts_len, ol_len);
 
-        for (WordIndex ni=0; ni < ol_len; ni++) 
-            add_count (&zcounts[ni], vcounts[ni]);
-    }
+    for (WordIndex ni=0; ni < ol_len; ni++) 
+        add_count (&zcounts[ni], vcounts[ni]);
     
     int vb_1_pending_merges = (vb->vblock_i == 1) ? __atomic_load_n (&zctx->vb_1_pending_merges, __ATOMIC_ACQUIRE) : 0;
 
@@ -1317,6 +1311,7 @@ void ctx_overlay_dictionaries_to_vb (VBlockP vb)
         vctx->other_did_i  = DID_NONE;
         vctx->last_line_i  = LAST_LINE_I_INIT;
         vctx->pair_assist_type = SEC_NONE;
+        vctx->dict_helper  = zctx->dict_helper;
 
         memcpy ((char*)vctx->tag_name, zctx->tag_name, sizeof (vctx->tag_name));
 

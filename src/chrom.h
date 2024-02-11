@@ -30,7 +30,7 @@ extern WordIndex chrom_get_by_name (STRp (chrom_name)); // ZIP and PIZ
 extern void chrom_calculate_ref2chrom (uint64_t num_ref_contigs);
 extern void chrom_2ref_compress (Reference ref);
 extern WordIndex chrom_2ref_seg_get (Reference ref, ConstVBlockP vb, WordIndex chrom_index);
-#define chrom_2ref_seg_is_needed(did_i) ((did_i) == CHROM && IS_REF_CHROM2REF && !z_is_dvcf)
+#define chrom_2ref_seg_is_needed(did_i) ((did_i) == CHROM && IS_REF_CHROM2REF)
 
 extern void chrom_2ref_load (Reference ref);
 static inline WordIndex chrom_2ref_piz_get (WordIndex chrom_index) 

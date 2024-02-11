@@ -84,9 +84,9 @@ static void fastq_seg_one_aux (VBlockFASTQP vb, STRp(tag_name), STRp(value))
 static void fastq_seg_aux_container (VBlockFASTQP vb, STRps(tag), uint32_t total_tag_len) // tags including '='/':'
 {
     Container con = { .repeats = 1, .drop_final_item_sep = true };
-    con_set_nitems (con, n_tags + kraken_is_loaded);
+    con_set_nitems (con, n_tags);
 
-    char prefixes[n_tags + total_tag_len + 3 + 7];        // each name is tag= followed CON_PX_SEP ; +3 for the initial CON_PX_SEP. +7 for kraken
+    char prefixes[n_tags + total_tag_len + 3];        // each name is tag= followed CON_PX_SEP ; +3 for the initial CON_PX_SEP.
     prefixes[0] = prefixes[1] = CON_PX_SEP; // initial CON_PX_SEP follow by separator of empty Container-wide prefix followed by separator for empty prefix for translator-only item[0]
     unsigned prefixes_len = 2;
     
@@ -101,18 +101,8 @@ static void fastq_seg_aux_container (VBlockFASTQP vb, STRps(tag), uint32_t total
         prefixes[prefixes_len++] = CON_PX_SEP;
     }
 
-    // add taxid= tag if needed
-    if (kraken_is_loaded) {
-        con.items[n_tags] = (ContainerItem){ .dict_id = { _FASTQ_TAXID } };  
-
-        memcpy(&prefixes[prefixes_len], ((char[]){ 't','a','x','i','d',segconf.aux_sep,CON_PX_SEP }), 7);
-        prefixes_len += 7;
-
-        vb->recon_size += 6; // "taxid="
-    }
-
     container_seg (vb, CTX(FASTQ_AUX), &con, prefixes, prefixes_len, 
-                   total_tag_len + (kraken_is_loaded ? 6 : 0) + n_tags/*leading and internal ' '*/); 
+                   total_tag_len + n_tags/*leading and internal ' '*/); 
 }
 
 // called for segconf line_i=0. DESC = QNAME2 + EXTRA + AUX <or> DESC = SAUX
@@ -146,7 +136,7 @@ void fastq_segconf_analyze_DESC (VBlockFASTQP vb, STRp(desc))
 
     segconf.has_qname2 |= (segconf.qname_flavor[QNAME2] != 0);      // first item, apart from the auxes is the QNAME2 - but only if it has a flavor
     segconf.has_extra  |= (n_items - n_auxes > segconf.has_qname2); // extra info that is not the QNAME2 and not AUX
-    segconf.has_aux    |= (n_auxes > 0) || kraken_is_loaded;        // with --kraken, we add an aux field taxid=
+    segconf.has_aux    |= (n_auxes > 0);        
 }
 
 void fastq_seg_DESC (VBlockFASTQP vb, STRp(desc), bool deep_qname2, uint32_t uncanonical_suffix_len)
@@ -175,7 +165,7 @@ void fastq_seg_DESC (VBlockFASTQP vb, STRp(desc), bool deep_qname2, uint32_t unc
             total_tag_len += item_lens[i] + 1; // +1 for '='
         }
         
-        if (n_auxes || kraken_is_loaded) 
+        if (n_auxes) 
             fastq_seg_aux_container (vb, n_auxes, &items[i+1], &item_lens[i+1], total_tag_len);
         
         // case: we expected to have aux - but we don't. delete the ' ' added by the toplevel container prefix

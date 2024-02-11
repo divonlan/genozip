@@ -21,7 +21,6 @@
 #include "codec.h"
 #include "container.h"
 #include "stats.h"
-#include "kraken.h"
 #include "segconf.h"
 #include "contigs.h"
 #include "chrom.h"
@@ -36,7 +35,6 @@
 
 typedef enum { QNAME, FLAG, RNAME, POS, MAPQ, CIGAR, RNEXT, PNEXT, TLEN, SEQ, QUAL, AUX } SamFields __attribute__((unused)); // quick way to define constants
 
-STRl(taxid_redirection_snip, 100);
 STRl(copy_GX_snip, 30);
 STRl(copy_sn_snip, 30);
 STRl(copy_POS_snip, 30);
@@ -131,8 +129,6 @@ void sam_zip_initialize (void)
     if (z_file->num_txts_so_far == 1 && has_hdr_contigs) 
         ctx_populate_zf_ctx_from_contigs (gref, SAM_RNAME, sam_hdr_contigs);
 
-    seg_prepare_snip_other (SNIP_REDIRECTION, _SAM_TAXID, false, 0, taxid_redirection_snip);
-
     qname_zip_initialize();
 
     seg_prepare_snip_other (SNIP_COPY, _SAM_POS, false, 0, copy_POS_snip);
@@ -179,6 +175,10 @@ void sam_zip_initialize (void)
     sam_MM_zip_initialize();
 
     if (MP(ULTIMA)) sam_ultima_zip_initialize();
+    
+    if (MP(STAR)) sam_star_zip_initialize();
+
+    if (segconf.sam_has_abra2) sam_abra2_zip_initialize();
     
     if (flag.deep && txt_file->name)
         strncpy (segconf.sam_deep_filename, txt_file->name, sizeof(segconf.sam_deep_filename)-1);
@@ -326,7 +326,6 @@ void sam_seg_initialize (VBlockP vb_)
                    T(MP(BLASR), OPTION_XS_i), T(MP(BLASR), OPTION_XE_i), T(MP(BLASR), OPTION_XQ_i), T(MP(BLASR), OPTION_XL_i), T(MP(BLASR), OPTION_FI_i),
                    T(MP(NGMLR), OPTION_QS_i), T(MP(NGMLR), OPTION_QE_i), T(MP(NGMLR), OPTION_XR_i),
                    T(segconf.is_minimap2, OPTION_s1_i), OPTION_ZS_i, OPTION_nM_i,
-                   T(kraken_is_loaded, SAM_TAXID),
                    DID_EOL);
 
     ctx_set_store (VB, STORE_INDEX, SAM_RNAME, SAM_RNEXT, // when reconstructing BAM, we output the word_index instead of the string
@@ -343,7 +342,6 @@ void sam_seg_initialize (VBlockP vb_)
                       SAM_RNAME, SAM_RNEXT, // BAM reconstruction needs RNAME, RNEXT word indices. also needed for random access.
                       SAM_POS, SAM_PNEXT, OPTION_mc_i, OPTION_OP_i, OPTION_Z5_i, OPTION_CP_i, // required by seg_pos_field
                       T(IS_PRIM(vb), OPTION_SA_CIGAR), // index needed by sam_load_groups_add_aln_cigar
-                      T(kraken_is_loaded, SAM_TAXID),
                       DID_EOL);
 
     ctx_set_ltype (VB, LT_STRING, OPTION_MD_Z,
@@ -399,9 +397,6 @@ void sam_seg_initialize (VBlockP vb_)
             CTX(OPTION_RX_Z)->flags.store_per_line = CTX(OPTION_RX_Z)->flags.ctx_specific_flag = false;
     }
 
-    if (kraken_is_loaded)
-        CTX(SAM_TAXID)->counts_section = true;
-
     // in --stats, consolidate stats
     ctx_consolidate_stats (VB, SAM_SQBITMAP, SAM_NONREF, SAM_NONREF_X, SAM_GPOS, SAM_STRAND, 
                            SAM_SEQMIS_A, SAM_SEQMIS_C, SAM_SEQMIS_G, SAM_SEQMIS_T, 
@@ -449,16 +444,19 @@ void sam_seg_initialize (VBlockP vb_)
         sam_seg_TX_AN_initialize (vb, OPTION_AN_Z);
     }
 
-    if (segconf.has_agent_trimmer) 
-        agilent_seg_initialize (VB);
+    if (segconf.has_agent_trimmer) agilent_seg_initialize (VB);
+
+    if (segconf.sam_has_abra2) sam_abra2_seg_initialize (vb);
 
     if (MP(ULTIMA) || segconf.running) // note: need also in segconf, so we can identify Ultima parameters in case it is Ultima (no harm if it is not)
         sam_ultima_seg_initialize (vb);
     else
         CTX(OPTION_t0_Z)->no_callback = true; // override Ultima's sam_zip_t0
     
-    if (MP(DRAGEN)) sam_dragen_initialize (vb);
+    if (MP(DRAGEN)) sam_dragen_seg_initialize (vb);
     
+    if (MP(STAR)) sam_star_seg_initialize (vb);
+
     if (TECH(PACBIO)) sam_pacbio_seg_initialize (vb);
 
     ctx_set_store (VB, STORE_INDEX, OPTION_XA_Z, DID_EOL); // for containers this stores repeats - used by sam_piz_special_X1->container_peek_repeats
@@ -977,7 +975,6 @@ bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id)
         dict_id.num == _SAM_TLEN         ||
         dict_id.num == _SAM_AUX          ||
         dict_id.num == _SAM_EOL          ||
-        dict_id.num == _SAM_TAXID        ||
         dict_id.num == _SAM_BUDDY        ||
 
         // standard tags, see here: https://samtools.github.io/hts-specs/SAMtags.pdf
@@ -1261,29 +1258,13 @@ void sam_seg_verify_RNAME (VBlockSAMP vb)
     }
 }
 
-static void sam_seg_get_kraken (VBlockSAMP vb, bool *has_kraken,
-                                char *taxid_str, rom *tag, char *sam_type,
-                                pSTRp (value), ValueType *numeric, // out - value for SAM, numeric for BAM
-                                bool is_bam)
-{
-    *tag = "tx"; // genozip introduced tag (=taxid)
-    *sam_type = 'i';
-    *value = taxid_str;
-    *has_kraken = false;
-    *value_len = kraken_seg_taxid_do (VB, SAM_TAXID, last_txt (VB, SAM_QNAME), vb->last_txt_len (SAM_QNAME),
-                                      taxid_str, true);
-    *numeric = CTX(SAM_TAXID)->last_value;
-
-    vb->recon_size += is_bam ? 7 : (*value_len + 6); // txt modified
-}
-
-void sam_seg_aux_all (VBlockSAMP vb, ZipDataLineSAM *dl)
+void sam_seg_aux_all (VBlockSAMP vb, ZipDataLineSAMP dl)
 {
     START_TIMER;
 
     const bool is_bam = IS_BAM_ZIP;
     Container con = { .repeats = 1, .filter_repeats = true /* v14 */};
-    char prefixes[(vb->n_auxs + 1) * 6 + 3];                // each name is 5 characters per SAM specification, eg "MC:Z:" followed by CON_PX_SEP ; +3 for the initial CON_PX_SEP. +1 for kraken
+    char prefixes[vb->n_auxs * 6 + 3];                // each name is 5 characters per SAM specification, eg "MC:Z:" followed by CON_PX_SEP ; +3 for the initial CON_PX_SEP. 
     prefixes[0] = prefixes[1] = prefixes[2] = CON_PX_SEP; // initial CON_PX_SEP follow by separator of empty Container-wide prefix followed by separator for empty prefix for translator-only item[0]
     unsigned prefixes_len = 3;
 
@@ -1291,19 +1272,14 @@ void sam_seg_aux_all (VBlockSAMP vb, ZipDataLineSAM *dl)
     con.items[con_nitems (con)] = (ContainerItem){ .translator = SAM2BAM_AUX_SELF };
     con_inc_nitems (con);
 
-    bool has_kraken = kraken_is_loaded;
-
-    for (int16_t idx = 0; idx < vb->n_auxs + has_kraken; idx++) {
+    for (int16_t idx = 0; idx < vb->n_auxs; idx++) {
 
         STR0(value);
         ValueType numeric = {};
         rom tag;
         char sam_type = 0, bam_type = 0, array_subtype = 0;
-        char taxid_str[20];
 
-        if (idx == vb->n_auxs)
-            sam_seg_get_kraken (vb, &has_kraken, taxid_str, &tag, &bam_type, pSTRa (value), &numeric, is_bam);
-        else if (is_bam)
+        if (is_bam)
             bam_get_one_aux (vb, idx, &tag, &bam_type, &array_subtype, pSTRa (value), &numeric);
         else
             sam_get_one_aux (vb, idx, &tag, &sam_type, &array_subtype, pSTRa (value));
@@ -1462,7 +1438,7 @@ static inline void sam_seg_QNAME_segconf (VBlockSAMP vb, ContextP ctx, STRp (qna
     }
 }
 
-void sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAM *dl, STRp (qname), unsigned add_additional_bytes)
+void sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAMP dl, STRp (qname), unsigned add_additional_bytes)
 {
     decl_ctx (SAM_QNAME);
 
@@ -1521,7 +1497,7 @@ void sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAM *dl, STRp (qname), unsigned ad
         seg_by_did (VB, (char[]){SNIP_SPECIAL, SAM_SPECIAL_PRIM_QNAME}, 2, SAM_QNAMESA, 0); // consumed when reconstructing PRIM vb
 }
 
-WordIndex sam_seg_RNAME (VBlockSAMP vb, ZipDataLineSAM *dl, STRp (chrom),
+WordIndex sam_seg_RNAME (VBlockSAMP vb, ZipDataLineSAMP dl, STRp (chrom),
                          bool against_sa_group_ok, // if true, vb->chrom_node_index must already be set
                          unsigned add_bytes)
 {
@@ -1546,7 +1522,7 @@ WordIndex sam_seg_RNAME (VBlockSAMP vb, ZipDataLineSAM *dl, STRp (chrom),
         }
 
         STRset (vb->chrom_name, chrom);
-        random_access_update_chrom (VB, 0, vb->chrom_node_index, STRa (chrom));
+        random_access_update_chrom (VB, vb->chrom_node_index, STRa (chrom));
 
         node_index = vb->chrom_node_index;
     }
@@ -1561,7 +1537,7 @@ WordIndex sam_seg_RNAME (VBlockSAMP vb, ZipDataLineSAM *dl, STRp (chrom),
 
         seg_by_did (VB, STRa (copy_mate_RNEXT_snip), SAM_RNAME, add_bytes); // copy POS from earlier-line mate PNEXT
         STRset (vb->chrom_name, chrom);
-        random_access_update_chrom (VB, 0, dl->RNAME, STRa (chrom));
+        random_access_update_chrom (VB, dl->RNAME, STRa (chrom));
         node_index = dl->RNAME;
     }
 
@@ -1582,7 +1558,7 @@ WordIndex sam_seg_RNAME (VBlockSAMP vb, ZipDataLineSAM *dl, STRp (chrom),
     return node_index;
 }
 
-WordIndex sam_seg_RNEXT (VBlockSAMP vb, ZipDataLineSAM *dl, STRp (chrom), unsigned add_bytes)
+WordIndex sam_seg_RNEXT (VBlockSAMP vb, ZipDataLineSAMP dl, STRp (chrom), unsigned add_bytes)
 {
     bool normal_seg = false;
 
@@ -1646,7 +1622,7 @@ bool sam_seg_test_biopsy_line (VBlockP vb, STRp (line))
     return true;
 }
 
-void sam_seg_init_bisulfite (VBlockSAMP vb, ZipDataLineSAM *dl)
+void sam_seg_init_bisulfite (VBlockSAMP vb, ZipDataLineSAMP dl)
 {
     // the converted reference to which this read was mapped (C->T conversion or G->A conversion)
     // note: we calculate it always to avoid needless adding entropy in the snip
@@ -1682,7 +1658,7 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
 
     WordIndex prev_line_chrom = vb->chrom_node_index;
 
-    ZipDataLineSAM *dl = DATA_LINE(vb->line_i);
+    ZipDataLineSAMP dl = DATA_LINE(vb->line_i);
 
     str_split_by_tab (next_line, remaining_txt_len, MAX_FIELDS + AUX, has_13, false, true); // also advances next_line to next line
     

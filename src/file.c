@@ -387,8 +387,7 @@ static void file_initialize_txt_file_data (FileP file)
     #define TXT_INIT(buf) ({ buf_set_promiscuous (&file->buf, "txt_file->" #buf); })
 
     if (IS_ZIP) {
-        mutex_initialize (file->recon_plan_mutex[0]);
-        mutex_initialize (file->recon_plan_mutex[1]);
+        mutex_initialize (file->recon_plan_mutex);
 
         // initialize evb "promiscuous" buffers - i.e. buffers that can be allocated by any thread
         // promiscuous buffers must be initialized by the main thread, and buffer.c does not verify their integrity.
@@ -754,7 +753,6 @@ static void file_initialize_z_file_data (FileP file)
         // initialize evb "promiscuous" buffers - i.e. buffers that can be allocated by any thread (obviously protected by eg a mutex)
         // promiscuous buffers must be initialized by the main thread, and buffer.c does not verify their integrity.
         Z_INIT (ra_buf);
-        Z_INIT (ra_buf_luft);
         Z_INIT (sag_grps);
         Z_INIT (sag_alns);
         Z_INIT (sag_qnames);
@@ -829,11 +827,6 @@ FileP file_open_z_read (rom filename)
             "You specified file \"%s\", however with --reference or --REFERENCE, you must specify a reference file (%s file or FASTA file)\n"
             "Tip: To create a genozip reference file from a FASTA file, use 'genozip --make-reference myfasta.fa'",
             file->name, REF_GENOZIP_);
-
-    ASSINP (!flag.reading_chain || filename_has_ext (file->name, GENOZIP_EXT), 
-            "You specified file \"%s\", however with %s, you must specify a genozip chain file (%s extension)\n"
-            "Tip: To create a genozip chain file from a chain file, use e.g. 'genozip my-chain-file.chain.gz --reference target-coord-ref.ref.genozip'",
-            file->name, (command==ZIP) ? "--chain" : "--show-chain", GENOZIP_EXT);
 
     if ((!flag.seg_only && !flag.show_bam) || flag_loading_auxiliary) {
 
@@ -985,9 +978,6 @@ FileP file_open_z_write (rom filename, FileMode mode, DataType data_type)
         }
     }
     
-    if (chain_is_loaded)
-        file->z_flags.has_gencomp = true; // dual-coordinate file
-
     file->genozip_version   = code_version_major(); // to allow the VER macro to operate consistently across ZIP/PIZ
     file->genozip_minor_ver = code_version_minor();
 
@@ -1117,7 +1107,7 @@ void file_close (FileP *file_p)
         mutex_destroy (file->dicts_mutex);
         mutex_destroy (file->custom_merge_mutex);
         mutex_destroy (file->qname_huf_mutex);
-        mutex_destroy (file->recon_plan_mutex[0]);
+        mutex_destroy (file->recon_plan_mutex);
         
         FREE (file->name);
         FREE (file->basename);

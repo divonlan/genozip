@@ -21,7 +21,7 @@
 // XO:Z: BSSeeker2: Orientation, from forward/reverted
 // ----------------------------------------------------------------------------------------------
 
-void sam_seg_bsseeker2_XO_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XO), unsigned add_bytes)
+void sam_seg_bsseeker2_XO_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(XO), unsigned add_bytes)
 {
     // predicting XO to be one of 4 values: +FR -FR +FW -FW, based on a combination of FLAG.rev_comp and multi_segs
     
@@ -90,7 +90,7 @@ static rom sam_seg_XG_Z_analyze_test_lens (VBlockSAMP vb, STRp(XG))
 // called for analyzing XG before segging SEQ and later XG
 // - Verifies the bases in XG are identical to the reference, or if not in the reference yet (in REF_INTERNAL), adds them
 // Example: XG:Z:AC_CCCGTCCCTACTAAAATACAAAAATTAGCCCAGCTTGGTGGTGGGCACCTGTAATCTTAGCTACTGCAGAGACTGAGGCAGGAGAATCGCTTGAACCCAGGAGGTGGAGGTT_GC
-void sam_seg_bsseeker2_XG_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XG), PosType32 line_pos)
+void sam_seg_bsseeker2_XG_Z_analyze (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(XG), PosType32 line_pos)
 {
     START_TIMER;
     decl_ctx (OPTION_XG_Z);
@@ -181,7 +181,7 @@ done:
     #undef FAIL
 }
 
-void sam_seg_bsseeker2_XG_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XG), unsigned add_bytes)
+void sam_seg_bsseeker2_XG_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(XG), unsigned add_bytes)
 {
     decl_ctx (OPTION_XG_Z);
 
@@ -271,7 +271,7 @@ static inline char XM_predict_rev (BamCigarOpType op, char xg0, char xg1, char x
         } \
     }
 
-void sam_seg_bsseeker2_XM_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XM), unsigned add_bytes)
+void sam_seg_bsseeker2_XM_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(XM), unsigned add_bytes)
 {
     if (segconf.running || vb->cigar_missing || vb->seq_missing) goto fallback;
 

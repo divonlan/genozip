@@ -52,7 +52,7 @@
         dict_io_compress_dictionaries, dict_io_assign_codecs, dict_io_compress_one_fragment, \
         aligner_best_match, aligner_get_word_from_seq, aligner_update_best, aligner_seq_to_bitmap, aligner_additional_layers, \
         refhash_generate_emoneg, ref_contigs_compress,\
-        vcf_linesort_compress_qsort, generate_recon_plan, zip_write_global_area, \
+        generate_recon_plan, zip_write_global_area, \
         piz_read_global_area, ref_load_stored_reference, dict_io_read_all_dictionaries, dict_io_build_word_lists, \
         ref_read_one_range, ref_uncompress_one_range, vb_release_vb_do, vb_destroy_vb,\
         sam_load_groups_add_one_prim_vb, recon_plan_compress, recon_plan_compress_one_fragment,\
@@ -60,7 +60,7 @@
         sam_reconstruct_SEQ_vs_ref, aligner_reconstruct_seq,\
         sam_bismark_piz_update_meth_call,\
         zip_handle_unique_words_ctxs, random_access_merge_in_vb, \
-        vcf_linesort_merge_vb, vcf_seg_PROBE_A,\
+        vcf_seg_PROBE_A,\
         random_access_finalize_entries, random_access_compress, ctx_compress_counts, zfile_compress_genozip_header,\
         ref_compress_ref, ref_compress_one_range, ref_copy_compressed_sections_from_reference_file,\
         piz_main_loop_idle, zip_main_loop_idle, zip_free_undeeded_zctx_bufs_after_seg, \

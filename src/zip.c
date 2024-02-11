@@ -354,20 +354,17 @@ static void zip_update_txt_counters (VBlockP vb)
         txt_file->num_lines += vb->lines.len; // lines in this txt file
 
     // counters of data AS IT APPEARS IN THE TXT FILE
-    if (!(z_is_dvcf && vb->comp_i))  // in DVCF, the generated to components contain copied data so we don't need to count it again
-        z_file->num_lines += vb->lines.len; // lines in all bound files in this z_file
+    z_file->num_lines += vb->lines.len; // lines in all bound files in this z_file
 
     z_file->comp_num_lines[vb->comp_i] += vb->lines.len; // set also for DVCF rejects
 
-    if (vb->comp_i==COMP_MAIN || !z_is_dvcf) { // DVCF, vb->txt_size of the main file, as read from disk, contains all the data
-        z_file->txt_data_so_far_single_0 += (int64_t)vb->txt_size;  // length of data before any modifications
-        z_file->txt_data_so_far_bind_0   += (int64_t)vb->txt_size;
-    }
+    z_file->txt_data_so_far_single_0 += (int64_t)vb->txt_size;  // length of data before any modifications
+    z_file->txt_data_so_far_bind_0   += (int64_t)vb->txt_size;
 
     // counter of data FOR PROGRESS DISPLAY
     z_file->txt_data_so_far_single += (int64_t)vb->txt_size;   
 
-    // counter of data in DEFAULT RECONSTRUCTION (For DVCF, this is corrected in vcf_zip_update_txt_counters)
+    // counter of data in DEFAULT RECONSTRUCTION 
     z_file->txt_data_so_far_bind += vb->recon_size;
 
     // per-component data for stats
@@ -425,7 +422,6 @@ static void zip_write_global_area (void)
     // if we're making a reference, we need the RA data to populate the reference section chrome/first/last_pos ahead of ref_compress_ref
     THREAD_DEBUG (finalize_random_access);
     random_access_finalize_entries (&z_file->ra_buf); // sort RA, update entries that don't yet have a chrom_index
-    random_access_finalize_entries (&z_file->ra_buf_luft); 
 
     THREAD_DEBUG (compress_dictionaries);
     dict_io_compress_dictionaries(); 
@@ -465,13 +461,10 @@ static void zip_write_global_area (void)
     if (!segconf.disable_random_acccess) {
         THREAD_DEBUG (compress_random_access);
         // if this data has random access (i.e. it has chrom and pos), compress all random access records into evb->z_data
-        Codec codec = random_access_compress (&z_file->ra_buf, SEC_RANDOM_ACCESS, CODEC_UNKNOWN, 0, flag.show_index ? RA_MSG_PRIM : NULL);
+        Codec codec = random_access_compress (&z_file->ra_buf, SEC_RANDOM_ACCESS, CODEC_UNKNOWN, flag.show_index ? RA_MSG_PRIM : NULL);
     
-        if (z_is_dvcf)
-            random_access_compress (&z_file->ra_buf_luft, SEC_RANDOM_ACCESS, codec, 1, flag.show_index ? RA_MSG_LUFT : NULL);
-
         if (store_ref) 
-            random_access_compress (ref_get_stored_ra (gref), SEC_REF_RAND_ACC, codec, 0, flag.show_ref_index ? RA_MSG_REF : NULL);
+            random_access_compress (ref_get_stored_ra (gref), SEC_REF_RAND_ACC, codec, flag.show_ref_index ? RA_MSG_REF : NULL);
     }
 
     THREAD_DEBUG (user_message);
@@ -560,10 +553,8 @@ static void zip_compress_one_vb (VBlockP vb)
     dispatcher_increment_progress ("compress2", PROGRESS_UNIT-(PROGRESS_UNIT/2)); // 1/2 compression done
 
     // merge in random access - IF it is used
-    if (!segconf.disable_random_acccess) {
-        random_access_merge_in_vb (vb, 0);
-        random_access_merge_in_vb (vb, 1);
-    }
+    if (!segconf.disable_random_acccess) 
+        random_access_merge_in_vb (vb);
     
 after_compress:
     // examples: compress data-type specific sections ; absorb gencomp lines
@@ -734,7 +725,7 @@ void zip_one_file (rom txt_basename,
         dispatcher_fan_out_task (ZIP_TASK_NAME, txt_basename, 
                                  target_progress, // target progress: 1 for each read, compute, write
                                  target_progress ? NULL : txt_file->is_remote ? "Downloading & compressing..." : "Compressing...",
-                                 !flag.make_reference && !z_is_dvcf,   // allow callbacks to zip_complete_processing_one_vb not in order of VBs (not allowed for make-reference as contigs need to be in consistent order; not supported yet for DVCF)
+                                 !flag.make_reference,   // allow callbacks to zip_complete_processing_one_vb not in order of VBs (not allowed for make-reference as contigs need to be in consistent order)
                                  false,           // not test mode
                                  flag.xthreads, prev_file_last_vb_i, 5000, false,
                                  zip_prepare_one_vb_for_dispatching, 
@@ -758,13 +749,11 @@ void zip_one_file (rom txt_basename,
 
     // if this a non-bound file, or the last component of a bound file - write the genozip header, random access and dictionaries
 finish:   
-    if (!(z_is_dvcf && flag.zip_comp_i)) { // in DVCF, the generated to components contain copied data so we don't need to count it again
-        z_file->txt_file_disk_sizes[flag.zip_comp_i] = txt_file->disk_size ? txt_file->disk_size // actual file size on disk, if we know it (we don't if its a remote or stdin file)
-                                                                           : (int64_t)txt_file->disk_so_far + (txt_file->codec==CODEC_BGZF ? BGZF_EOF_LEN : 0); // data (plain, BGZF, GZ or BZ2) read from the file descriptor (we won't have correct src data here if reading through an external decompressor - but luckily txt_file->disk_size will capture that case)
-        z_file->txt_file_disk_sizes_sum += z_file->txt_file_disk_sizes[flag.zip_comp_i];
+    z_file->txt_file_disk_sizes[flag.zip_comp_i] = txt_file->disk_size ? txt_file->disk_size // actual file size on disk, if we know it (we don't if its a remote or stdin file)
+                                                                        : (int64_t)txt_file->disk_so_far + (txt_file->codec==CODEC_BGZF ? BGZF_EOF_LEN : 0); // data (plain, BGZF, GZ or BZ2) read from the file descriptor (we won't have correct src data here if reading through an external decompressor - but luckily txt_file->disk_size will capture that case)
+    z_file->txt_file_disk_sizes_sum += z_file->txt_file_disk_sizes[flag.zip_comp_i];
 
-        z_file->comp_source_codec[flag.zip_comp_i] = txt_file->source_codec;
-    }
+    z_file->comp_source_codec[flag.zip_comp_i] = txt_file->source_codec;
 
     // (re-)index sections after adding this txt_file 
     sections_create_index(); 
@@ -786,15 +775,13 @@ finish:
         DT_FUNC (txt_file, zip_after_vbs)();
     
         zip_write_global_area();
-
-        if (chain_is_loaded && !Z_DT(CHAIN)) vcf_liftover_display_lift_report();
     }
 
     zip_display_compression_ratio (digest_snapshot (&z_file->digest_ctx, NULL)); // Done for reference + final compression ratio calculation
     
     if (flag.md5 && flag.bind && z_file->z_closes_after_me &&
         ((flag.bind == BIND_FQ_PAIR && z_file->num_txts_so_far == 2) ||
-         ((flag.bind == BIND_DVCF || flag.bind == BIND_SAM) && z_file->num_txts_so_far == 3)))
+         (flag.bind == BIND_SAM && z_file->num_txts_so_far == 3)))
         progress_concatenated_md5 (z_dt_name(), digest_snapshot (&z_file->digest_ctx, "file"));
 
     z_file->disk_size = z_file->disk_so_far;

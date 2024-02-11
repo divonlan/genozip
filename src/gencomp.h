@@ -35,7 +35,7 @@ typedef struct {
 typedef enum { 
     GCT_NONE,
     // VBs of generated component are accumulated in memory, and compressed (out-of-band) when have enough data
-    // in parallel with compression of MAIN data (DVCF PRIM and LUFT components, SAM PRIM component)
+    // in parallel with compression of MAIN data (SAM PRIM component)
     GCT_OOB,  // out-of-band
 
     // VBs are accumulated in memory, and when the in-memory queue is full, they are offloaded to disk. They

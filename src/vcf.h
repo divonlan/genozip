@@ -583,14 +583,10 @@ extern void vcf_zip_initialize (void);
 extern void vcf_zip_finalize (bool is_last_user_txt_file);
 extern void vcf_zip_genozip_header (SectionHeaderGenozipHeaderP header);
 extern void vcf_zip_init_vb (VBlockP vb);
-extern void vcf_liftover_display_lift_report (void);
 extern void vcf_zip_after_compress (VBlockP vb);
 extern void vcf_zip_after_vbs (void);
 extern void vcf_zip_set_txt_header_flags (struct FlagsTxtHeader *f);
 extern void vcf_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeaderP vb_header);
-extern bool vcf_zip_vb_has_count (VBlockP vb);
-extern void vcf_zip_generate_recon_plan (void);
-extern void vcf_zip_update_txt_counters (VBlockP vb);
 extern bool is_vcf (STRp(header), bool *need_more);
 
 // SEG stuff
@@ -600,7 +596,6 @@ extern void vcf_zip_after_compute (VBlockP vb);
 extern void vcf_seg_finalize (VBlockP vb_);
 extern bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern bool vcf_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id);
-extern uint32_t vcf_seg_get_vb_recon_size (VBlockP vb);
 
 // PIZ stuff
 extern void vcf_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header);
@@ -626,10 +621,6 @@ extern unsigned vcf_vb_size (DataType dt);
 extern unsigned vcf_vb_zip_dl_size (void);
 extern void vcf_reset_line (VBlockP vb);
 extern bool vcf_vb_has_haplotype_data (VBlockP vb);
-extern bool vcf_vb_is_primary (VBlockP vb);
-extern bool vcf_vb_is_luft (VBlockP vb);
-extern int32_t vcf_vb_get_reject_bytes (VBlockP vb);
-extern rom vcf_coords_name (int coord);
 
 // Liftover - INFO fields
 #define INFO_LUFT_NAME  "LUFT"
@@ -649,7 +640,7 @@ extern void vcf_samples_add  (rom samples_str);
 
 #define VCF_SPECIAL { vcf_piz_special_main_REFALT, vcf_piz_special_FORMAT, vcf_piz_special_INFO_AC, vcf_piz_special_SVLEN, \
                       vcf_piz_special_FORMAT_DS_old, vcf_piz_special_INFO_BaseCounts, vcf_piz_special_INFO_SF, piz_special_MINUS,  \
-                      vcf_piz_special_LIFT_REF, vcf_piz_special_COPYSTAT, vcf_piz_special_other_REFALT, vcf_piz_special_COPYPOS, vcf_piz_special_ALLELE, \
+                      vcf_piz_special_obsolete_dvcf, vcf_piz_special_obsolete_dvcf, vcf_piz_special_obsolete_dvcf, vcf_piz_special_COPYPOS, vcf_piz_special_ALLELE, \
                       vcf_piz_special_INFO_HGVS_SNP_POS, vcf_piz_special_INFO_HGVS_SNP_REFALT, \
                       vcf_piz_special_INFO_HGVS_DEL_END_POS, vcf_piz_special_INFO_HGVS_DEL_PAYLOAD, \
                       vcf_piz_special_INFO_HGVS_INS_END_POS, vcf_piz_special_INFO_HGVS_INS_PAYLOAD, \
@@ -679,9 +670,9 @@ SPECIAL (VCF, 4,  DS_old,              vcf_piz_special_FORMAT_DS_old);          
 SPECIAL (VCF, 5,  BaseCounts,          vcf_piz_special_INFO_BaseCounts);
 SPECIAL (VCF, 6,  SF,                  vcf_piz_special_INFO_SF);
 SPECIAL (VCF, 7,  MINUS,               piz_special_MINUS);                        // added v12.0.0 
-SPECIAL (VCF, 8,  LIFT_REF,            vcf_piz_special_LIFT_REF);                 // added v12.0.0
-SPECIAL (VCF, 9,  COPYSTAT,            vcf_piz_special_COPYSTAT);                 // added v12.0.0
-SPECIAL (VCF, 10, other_REFALT,        vcf_piz_special_other_REFALT);             // added v12.0.0
+SPECIAL (VCF, 8,  LIFT_REF,            vcf_piz_special_obsolete_dvcf);            // added v12.0.0 up to 15.0.41
+SPECIAL (VCF, 9,  COPYSTAT,            vcf_piz_special_obsolete_dvcf);            // added v12.0.0 up to 15.0.41
+SPECIAL (VCF, 10, other_REFALT,        vcf_piz_special_obsolete_dvcf);            // added v12.0.0 up to 15.0.41
 SPECIAL (VCF, 11, COPYPOS,             vcf_piz_special_COPYPOS);                  // added v12.0.0
 SPECIAL (VCF, 12, ALLELE,              vcf_piz_special_ALLELE);                   // added v12.0.0
 SPECIAL (VCF, 13, HGVS_SNP_POS,        vcf_piz_special_INFO_HGVS_SNP_POS);        // added v12.0.15
@@ -743,50 +734,6 @@ SPECIAL (VCF, 68, AS_SB_TABLE,         vcf_piz_special_AS_SB_TABLE);            
 SPECIAL (VCF, 69, RPA,                 vcf_piz_special_RPA);                      // added v15.0.41
 #define NUM_VCF_SPECIAL 70
 
-// Translators for Luft (=secondary coordinates)
-TRANSLATOR (VCF, VCF,   1,  G,      vcf_piz_luft_G)       // same order as LiftOverStatus starting LO_CANT_G
-TRANSLATOR (VCF, VCF,   2,  R,      vcf_piz_luft_R)
-TRANSLATOR (VCF, VCF,   3,  R2,     vcf_piz_luft_R2)
-TRANSLATOR (VCF, VCF,   4,  A_AN,   vcf_piz_luft_A_AN)
-TRANSLATOR (VCF, VCF,   5,  A_1,    vcf_piz_luft_A_1)
-TRANSLATOR (VCF, VCF,   6,  PLOIDY, vcf_piz_luft_PLOIDY)
-TRANSLATOR (VCF, VCF,   7,  GT,     vcf_piz_luft_GT)      
-TRANSLATOR (VCF, VCF,   8,  END,    vcf_piz_luft_END)      
-TRANSLATOR (VCF, VCF,   9,  XREV,   vcf_piz_luft_XREV)      
-TRANSLATOR (VCF, VCF,   10, ALLELE, vcf_piz_luft_ALLELE)      
-TRANSLATOR (VCF, VCF,   11, NEG,    vcf_piz_luft_NEG)      
-
-#define NUM_VCF_TRANS   12 // including "none"
-#define VCF_TRANSLATORS { NULL /* none */, vcf_piz_luft_G, vcf_piz_luft_R, vcf_piz_luft_R2, vcf_piz_luft_A_AN,         \
-                          vcf_piz_luft_A_1, vcf_piz_luft_PLOIDY, vcf_piz_luft_GT, vcf_piz_luft_END, vcf_piz_luft_XREV, \
-                          vcf_piz_luft_ALLELE, vcf_piz_luft_NEG }
-
-typedef struct {
-    rom alg_name;
-    enum { TW_NEVER, TW_ALWAYS, TW_REF_ALT_SWITCH, TW_XSTRAND } upon;
-} LuftTransLateProp;
-
-// names of INFO / FORMAT algorithms, goes into VCF header's ##INFO / ##FORMAT "RendAlg" attribute
-                           /* Algorithm   Trigger          */
-#define DVCF_TRANS_PROPS { { "NONE",      TW_NEVER          },   /* never translate */\
-                           { "G",         TW_REF_ALT_SWITCH },   /* reshuffle a  'G' vector (one element per genotype) if REF⇆ALT changed */\
-                           { "R",         TW_REF_ALT_SWITCH },   /* reshuffle an 'R' vector (one element per ref/alt allele) if REF⇆ALT changed */\
-                           { "R2",        TW_REF_ALT_SWITCH },   /* reshuffle a vector with 2 elements per ref/alt allele, if REF⇆ALT changed */\
-                           { "A_AN",      TW_REF_ALT_SWITCH },   /* recalculate an 'A' vector (one element per ALT allele) if REF⇆ALT changed, who's elements, including a missing element for REF, add up to AN (example: AC). */ \
-                           { "A_1",       TW_REF_ALT_SWITCH },   /* recalculate an 'A' vector (one element per ALT allele) if REF⇆ALT changed, who's elements, including a missing element for REF, add up to 1 (example: AF). */ \
-                           { "PLOIDY",    TW_REF_ALT_SWITCH },   /* recalculate a float to (ploidy-value) */ \
-                           { "GT",        TW_REF_ALT_SWITCH },   /* recalculate the allele numbers FORMAT/GT if REF⇆ALT changed */ \
-                           { "END",       TW_ALWAYS         },   /* recalculate INFO/END */\
-                           { "XREV",      TW_XSTRAND        },   /* reverse the elements of a vector if XSTRAND. Example: INFO/BaseCounts */\
-                           { "ALLELE",    TW_ALWAYS         },   /* copy an allele verbatim including if changes or changes order. example: INFO/AA */ \
-                           { "NEG",       TW_REF_ALT_SWITCH } }  /* negate numeric value if REF⇆ALT */
-extern const LuftTransLateProp ltrans_props[NUM_VCF_TRANS];
-
-#define needs_translation(ctx)  (z_is_dvcf && (ctx)->luft_trans && \
-    ((ltrans_props[(ctx)->luft_trans].upon == TW_REF_ALT_SWITCH && LO_IS_OK_SWITCH (last_ostatus)) || \
-     (ltrans_props[(ctx)->luft_trans].upon == TW_ALWAYS         && LO_IS_OK (last_ostatus))        || \
-     (ltrans_props[(ctx)->luft_trans].upon == TW_XSTRAND        && LO_IS_OK (last_ostatus) && *CTX(VCF_oXSTRAND)->last_snip != '-')))
-
 #define VCF_DICT_ID_ALIASES                           \
     /*        type       alias        maps to     */  \
     { DT_VCF, ALIAS_CTX, _INFO_END,   _VCF_POS    },  \
@@ -794,6 +741,3 @@ extern const LuftTransLateProp ltrans_props[NUM_VCF_TRANS];
 
 #define dict_id_is_vcf_info_sf   dict_id_is_type_1
 #define dict_id_is_vcf_format_sf dict_id_is_type_2
-
-typedef enum { VCF_COMP_MAIN, VCF_COMP_PRIM_ONLY, VCF_COMP_LUFT_ONLY } VcfComponentType;
-#define VCF_COMP_NAMES { "MAIN", "PRIM", "LUFT" }

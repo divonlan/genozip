@@ -49,7 +49,7 @@ void sam_seg_pacbio_zm (VBlockSAMP vb, int64_t zm, unsigned add_bytes)
 // np:i
 // -------------
 
-void sam_seg_pacbio_np (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t np, unsigned add_bytes)    
+void sam_seg_pacbio_np (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t np, unsigned add_bytes)    
 {                     
     dl->np = np;
 
@@ -73,7 +73,7 @@ int32_t sam_zip_get_np (VBlockP vb, LineIType line_i)
 // qe:i - 0-based end   of query in the ZMW read
 // ----------------------------------------------
 
-void sam_seg_pacbio_qs (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t qs, unsigned add_bytes)    
+void sam_seg_pacbio_qs (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t qs, unsigned add_bytes)    
 {
     decl_ctx (OPTION_qs_i);
 
@@ -103,7 +103,7 @@ void sam_seg_pacbio_qs (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t qs, unsigned 
     }
 }
 
-void sam_seg_pacbio_qe (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t qe, unsigned add_bytes)    
+void sam_seg_pacbio_qe (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t qe, unsigned add_bytes)    
 {
     decl_ctx (OPTION_qe_i);
 
@@ -244,7 +244,7 @@ void sam_recon_skip_pacbio_qual (VBlockSAMP vb)
 // iq, sq and dq
 // -------------
 
-void sam_seg_pacbio_xq (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, TxtWord *dl_word, STRp(value), unsigned add_bytes)    
+void sam_seg_pacbio_xq (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, TxtWord *dl_word, STRp(value), unsigned add_bytes)    
 {                                                          
     decl_ctx (did_i);
 
@@ -262,7 +262,7 @@ void sam_seg_pacbio_xq (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, TxtWord *d
 // interlaced line containing a character from iq followed by a character from sq followed by dq 
 COMPRESSOR_CALLBACK (sam_zip_iq_sq_dq)
 {
-    ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
+    ZipDataLineSAMP dl = DATA_LINE (vb_line_i);
     
     rom iq = dl->iq.index ? Btxt (dl->iq.index) : NULL;
     rom sq = dl->sq.index ? Btxt (dl->sq.index) : NULL;
@@ -335,7 +335,7 @@ static int get_sn_channel_i (VBlockSAMP vb)
     return ctx_encountered_in_prev_line (VB, OPTION_sn_B_f) && CTX(SAM_Q1NAME)->last_delta == 0;
 }
 
-void sam_seg_pacbio_sn (VBlockSAMP vb, ZipDataLineSAM *dl, rom sn, int/*signed*/ sn_len)
+void sam_seg_pacbio_sn (VBlockSAMP vb, ZipDataLineSAMP dl, rom sn, int/*signed*/ sn_len)
 {
     decl_ctx (OPTION_sn_B_f);
     ContextP channel_ctx = ctx; // fallback
@@ -353,13 +353,13 @@ void sam_seg_pacbio_sn (VBlockSAMP vb, ZipDataLineSAM *dl, rom sn, int/*signed*/
         }
 
         else 
-            sam_seg_array_one_ctx (vb, dl, channel_ctx->dict_id, 'f', STRa(sn), 0, 0);
+            sam_seg_array_one_ctx (vb, dl, channel_ctx->dict_id, 'f', STRa(sn), 0, 0, NULL);
 
         seg_by_did (VB, STRa(vb->mux_sn.snip), OPTION_sn_B_f, 0); // de-multiplexer
     }
 
     else 
-        sam_seg_array_one_ctx (vb, dl, _OPTION_sn_B_f, 'f', STRa(sn), 0, 0);
+        sam_seg_array_one_ctx (vb, dl, _OPTION_sn_B_f, 'f', STRa(sn), 0, 0, NULL);
 
     seg_set_last_txt (VB, ctx, STRa(sn));
 }

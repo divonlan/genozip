@@ -128,7 +128,7 @@ bool piz_default_skip_section (SectionType st, DictId dict_id)
     // B250, LOCAL, COUNT sections
     bool skip = is_genocat && dict_id.num 
                 && dict_id.num != DTFZ(predefined)[CHROM].dict_id.num 
-                && (!flag.luft || dict_id.num != DTFZ(predefined)[DTFZ(luft_chrom)].dict_id.num) && (
+                && (
     
     // sometimes we don't need dictionaries. but we always load CHROM.
         (flag.genocat_no_dicts && dict_id_typeless (dict_id).num != flag.show_one_counts.num)
@@ -224,8 +224,8 @@ void piz_uncompress_all_ctxs (VBlockP vb)
                 if (!VER(15) && !ctx->ltype) 
                     ctx->ltype = header->ltype; 
 
-                ctx->iterator  = (SnipIterator){ .next_b250 = B1ST8 (ctx->b250), .prev_word_index = WORD_INDEX_NONE };
-                ctx->b250_size = header->b250_size; // note: for files<=v13, this was always 0, ie B250_BYTES_4
+                ctx->iterator    = (SnipIterator){ .next_b250 = B1ST8 (ctx->b250), .prev_word_index = WORD_INDEX_NONE };
+                ctx->b250_size   = header->b250_size; // note: for files<=v13, this was always 0, ie B250_BYTES_4
             }
         }
 
@@ -323,7 +323,7 @@ static void piz_reconstruct_one_vb (VBlockP vb)
     #define OVERFLOW_SIZE (1 MB) // allow some overflow space as sometimes we reconstruct unaccounted for data: 1. container templates 2. reconstruct_peek and others
     
     buf_alloc (vb, &vb->txt_data, 0, 
-               vb->recon_size * vb->translation.factor/*see TRANSLATIONS*/ + OVERFLOW_SIZE + flag.recon_per_line_overhead * vb->lines.len32, 
+               vb->recon_size * vb->translation.factor/*see TRANSLATIONS*/ + OVERFLOW_SIZE, 
                char, 1.1, "txt_data"); 
 
     piz_uncompress_all_ctxs (vb);
@@ -479,8 +479,7 @@ DataType piz_read_global_area (Reference ref)
     // Note: some dictionaries are skipped based on skip() and all flag logic should implemented there
     dict_io_read_all_dictionaries(); 
 
-    if (!flag.header_only || z_is_dvcf) { // dual coordinates need this stuff of for the rejects part of the header
-
+    if (!flag.header_only) {
         // mapping of the file's chroms to the reference chroms (for files originally compressed with REF_EXTERNAL/EXT_STORE and have alternative chroms)
         chrom_2ref_load (ref); 
 
@@ -495,8 +494,8 @@ DataType piz_read_global_area (Reference ref)
         ctx_read_all_subdicts(); // read all SEC_SUBDICTS sections
 
         // update chrom node indices using the CHROM dictionary, for the user-specified regions (in case -r/-R were specified)
-        if (flag.regions && ZCTX(flag.luft ? DTFZ(luft_chrom) : DTFZ(prim_chrom))->word_list.len) // FASTQ compressed without reference, has no CHROMs 
-            regions_make_chregs (ZCTX(flag.luft ? DTFZ(luft_chrom) : DTFZ(prim_chrom)));
+        if (flag.regions && ZCTX(DTFZ(prim_chrom))->word_list.len) // FASTQ compressed without reference, has no CHROMs 
+            regions_make_chregs (ZCTX(DTFZ(prim_chrom)));
 
         // if the regions are negative, transform them to the positive complement instead
         regions_transform_negative_to_positive_complement();
@@ -506,8 +505,8 @@ DataType piz_read_global_area (Reference ref)
         // note: in case of a data file with stored reference - SEC_REF_RAND_ACC will contain the random access of the reference
         // and SEC_RANDOM_ACCESS will contain the random access of the data. In case of a .ref.genozip file, both sections exist 
         // and are identical. It made the coding easier and their size is negligible.
-        random_access_load_ra_section (SEC_RANDOM_ACCESS, flag.luft ? DTFZ(luft_chrom) : DTFZ(prim_chrom), &z_file->ra_buf, "z_file->ra_buf", 
-                                       !flag.show_index ? NULL : flag.luft ? RA_MSG_LUFT : RA_MSG_PRIM);
+        random_access_load_ra_section (SEC_RANDOM_ACCESS, DTFZ(prim_chrom), &z_file->ra_buf, "z_file->ra_buf", 
+                                       !flag.show_index ? NULL : RA_MSG_PRIM);
 
         random_access_load_ra_section (SEC_REF_RAND_ACC, CHROM, ref_get_stored_ra (ref), "ref_stored_ra", 
                                        flag.show_ref_index && !flag.reading_reference ? RA_MSG_REF : NULL);
@@ -519,8 +518,8 @@ DataType piz_read_global_area (Reference ref)
         // case: reading reference file
         if (flag.reading_reference) {
 
-            // when reading the reference for genocat --sex/coverage/idxstats, don't need the actual REF sections 
-            if (is_genocat && (flag.show_sex || flag.show_coverage || flag.idxstats)) 
+            // when reading the reference for genocat --coverage/idxstats, don't need the actual REF sections 
+            if (is_genocat && (flag.show_coverage || flag.idxstats)) 
                 goto done;  
 
             bool ref_loaded_from_disk = !flag.genocat_no_ref_file && ref_load_stored_reference (ref);
@@ -571,7 +570,7 @@ bool piz_read_one_vb (VBlockP vb, bool for_reconstruction)
 
     // any of these might be overridden by callback
     vb->flags            = header.flags.vb_header;
-    vb->recon_size       = BGEN32 (header.recon_size_prim);   // might be modified by callback (if DVCF Luft)
+    vb->recon_size       = BGEN32 (header.recon_size_prim);   
     vb->longest_line_len = BGEN32 (header.longest_line_len);
     vb->longest_seq_len  = VER(15) ? BGEN32 (header.longest_seq_len) : 0;
     vb->expected_digest  = header.digest;
@@ -703,14 +702,11 @@ static uint64_t piz_target_progress (CompIType comp_i)
 {
     if (comp_i == COMP_MAIN && Z_DT(SAM))      
         return 3 * sections_get_num_vbs_(SAM_COMP_MAIN, SAM_COMP_DEPN) + sections_get_num_vbs (SAM_COMP_PRIM); // VBs pre-processed
-    
-    if (comp_i == COMP_MAIN && (Z_DT(VCF) || Z_DT(BCF))) 
-        return 3 * sections_get_num_vbs_(VCF_COMP_MAIN, VCF_COMP_LUFT_ONLY);
-    
-    if (Z_DT(FASTQ) && flag.interleaved) 
+        
+    else if (Z_DT(FASTQ) && flag.interleaved) 
         return 3 * sections_get_num_vbs_(FQ_COMP_R1, FQ_COMP_R2);
     
-    if (Z_DT(SAM) && flag.deep && flag.interleaved)
+    else if (Z_DT(SAM) && flag.deep && flag.interleaved)
         return 3 * sections_get_num_vbs_(SAM_COMP_FQ00, SAM_COMP_FQ01);
 
     else {
@@ -738,10 +734,7 @@ Dispatcher piz_z_file_initialize (void)
         ASSINP0 (dt_get_translation(NULL).is_src_dt, "Error: --test or --md5 cannot be used when converting a file to another format"); 
 
     // note: if --unbind, we will recalculate the target progress in dispatcher_resume()
-    Dispatcher dispatcher = dispatcher_init (flag.reading_chain     ? "piz-chain"
-                                            :flag.reading_reference ? "piz-ref"
-                                            :flag.reading_kraken    ? "piz-kraken"
-                                            :                         PIZ_TASK_NAME, // also referred to in dispatcher_recycle_vbs()
+    Dispatcher dispatcher = dispatcher_init (flag.reading_reference ? "piz-ref" : PIZ_TASK_NAME, // also referred to in dispatcher_recycle_vbs()
                                              PREPROCESSING_TASK_NAME, 
                                              POOL_MAIN,
                                              flag.xthreads ? 1 : global_max_threads, 0, 
@@ -874,7 +867,6 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
     // --sex and --coverage - output results
     if (txt_file && !flag_loading_auxiliary) {
         if (flag.show_coverage) coverage_show_coverage();
-        if (flag.show_sex) coverage_sex_classifier (is_first_z_file);
         if (flag.idxstats) coverage_show_idxstats();
         if (flag.count == CNT_TOTAL) iprintf ("%"PRIu64"\n", num_nondrop_lines);
     }

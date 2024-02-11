@@ -92,7 +92,7 @@ void vcf_seg_INFO_X_LM_RM (VBlockVCFP vb, ContextP ctx, STRp(seq))
         if (!str_issame_(seqs[0], seq_lens[0], seqs[alt_i], seq_lens[alt_i]))
             goto fallback;
 
-    PosType64 line_pos = DATA_LINE(vb->line_i)->pos[0];
+    PosType64 line_pos = DATA_LINE(vb->line_i)->pos;
 
     RangeP range = ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), line_pos, seq_lens[0], WORD_INDEX_NONE, 
                                       (IS_REF_EXT_STORE ? &lock : NULL));
@@ -357,7 +357,7 @@ static int X_HIL_hmer_length (VBlockVCFP vb, char hmer)
     int hmer_len = 0;
 
     if (IS_ZIP) {    
-        PosType64 pos = DATA_LINE(vb->line_i)->pos[0] + 1; // hmer starts after anchor base
+        PosType64 pos = DATA_LINE(vb->line_i)->pos + 1; // hmer starts after anchor base
 
         RefLock lock = REFLOCK_NONE;
 
@@ -458,7 +458,7 @@ static bool VARIANT_TYPE_ref_confirms_hmer (VBlockVCFP vb, STRp(seq), bool use_r
 
     if (IS_ZIP) {    
         bool confirm = true; // confirmed unless proven incorrect
-        PosType64 pos = DATA_LINE(vb->line_i)->pos[0];
+        PosType64 pos = DATA_LINE(vb->line_i)->pos;
 
         RefLock lock = REFLOCK_NONE;
 

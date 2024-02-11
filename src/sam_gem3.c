@@ -24,7 +24,7 @@
 // ----------------------------------------------------------------------------------------------
 
 // 2 possible values: G C
-void sam_seg_gem3_XB_A (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(xb), unsigned add_bytes)
+void sam_seg_gem3_XB_A (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(xb), unsigned add_bytes)
 {
     ASSSEG (xb_len==1 && (xb[0]=='C' || xb[0]=='G'), "Invalid XB:A=%.*s, expecting C or G", STRf(xb));
 

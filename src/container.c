@@ -56,7 +56,7 @@ WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con,
                             // - then the container-wide prefix terminated by CON_PX_SEP 
                             // - then one prefix per item terminated by CON_PX_SEP
                             // all prefixes may be empty; empty prefixes at the end of the prefix string maybe omitted.
-                            STRp (prefixes), STRp (ren_prefixes),
+                            STRp (prefixes), 
                             unsigned add_bytes,
                             bool *is_new) // optional out
 {
@@ -66,22 +66,11 @@ WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con,
     if (!con) return seg_by_ctx (VB, NULL, 0, ctx, 0); 
     
     unsigned con_b64_size  = base64_size(con_sizeof (*con));
-    unsigned con1_snip_len = 1 + con_b64_size + prefixes_len;
-    unsigned con2_snip_len = 1 + con_b64_size + ren_prefixes_len;
+    unsigned snip_len = 1 + con_b64_size + prefixes_len;
 
-    unsigned snip_len = ren_prefixes_len ? 2 + con1_snip_len + con2_snip_len : con1_snip_len;
     char snip[snip_len];
 
-    // case: we have renamed prefixes due to dual-coordinates with tag renaming
-    if (ren_prefixes_len) {
-        snip[0] = SNIP_DUAL;
-        container_prepare_snip (con, prefixes, prefixes_len, &snip[1], &con1_snip_len);
-        snip[1 + con1_snip_len] = SNIP_DUAL;
-        container_prepare_snip (con, ren_prefixes, ren_prefixes_len, &snip[2+con1_snip_len], &con2_snip_len);
-        snip_len = 2 + con1_snip_len + con2_snip_len;
-    }
-    else 
-        container_prepare_snip (con, prefixes, prefixes_len, snip, &snip_len);
+    container_prepare_snip (con, prefixes, prefixes_len, snip, &snip_len);
 
     if (flag.show_containers) { 
         iprintf ("%s%sVB=%u Line=%d Ctx=%u:%s Repeats=%u RepSep=%u,%u Items=", 
@@ -452,8 +441,17 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
     if (flag.show_time && is_toplevel) 
         clock_gettime (CLOCK_REALTIME, &profiler_timer);
     
-    bool copy_rpts_from_seq_len = (con->repeats == CON_REPEATS_IS_SEQ_LEN);
-    if (copy_rpts_from_seq_len) ((ContainerP)con)->repeats = vb->seq_len;
+    uint32_t save_repeats = con->repeats;
+
+    // get repeats if not explicit
+    if (con->repeats == CON_REPEATS_IS_SEQ_LEN) 
+        ((ContainerP)con)->repeats = vb->seq_len;
+
+    else if (con->repeats == CON_REPEATS_IS_SPECIAL) {
+        ASSPIZ0 (ctx->con_rep_special, "ctx->con_rep_special not set");
+        reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, (char[]){ SNIP_SPECIAL, ctx->con_rep_special }, 2, false, __FUNCLINE);
+        ((ContainerP)con)->repeats = ctx->last_value.i;
+    }
 
     int32_t last_item_reconstructed = -1; 
 
@@ -469,7 +467,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
             dt_name (vb->data_type), genozip_update_msg());
 
     uint32_t num_items = con_nitems(*con);
-    Context *item_ctxs[num_items];
+    ContextP item_ctxs[num_items];
     
     // we can cache did_i up to 254. dues historical reasons the field is only 8 bit. that's enough in most cases anyway.
     for (unsigned i=0; i < num_items; i++) 
@@ -533,7 +531,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
 
         for (unsigned item_i=0; item_i < num_items; item_i++) {
             const ContainerItem *item = &con->items[item_i];
-            Context *item_ctx = item_ctxs[item_i];
+            ContextP item_ctx = item_ctxs[item_i];
             vb->curr_item = item_ctx ? item_ctx->did_i : DID_NONE; // for ASSPIZ
             ReconType reconstruct = !flag.genocat_no_reconstruct;
             bool trans_item = translating || IS_CI0_SET(CI0_TRANS_ALWAYS); 
@@ -677,7 +675,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
     if (ctx->flags.store == STORE_INDEX) // STORE_INDEX for a container means store number of repeats (since 13.0.5)
         new_value.i += con->repeats;
 
-    if (copy_rpts_from_seq_len) ((ContainerP)con)->repeats = CON_REPEATS_IS_SEQ_LEN; // restore
+    ((ContainerP)con)->repeats = save_repeats; // restore
 
     vb->con_stack_len--;
     ctx->curr_container = NULL;
@@ -861,7 +859,7 @@ StrTextMegaLong container_to_json (ConstContainerP con, STRp (prefixes))
     uint32_t num_items = con_nitems (*con);
 
     s_len = sprintf (s.s,"{ \"repeats\": %s, \"num_items\": %u, \"flags\": %s, \"repsep\": [ '%.5s', '%.5s' ], \"items\": [ ",
-                     (con->repeats == CON_REPEATS_IS_SEQ_LEN ? "SEQ_LEN" : str_int_s (con->repeats).s),
+                     (con->repeats == CON_REPEATS_IS_SEQ_LEN?"SEQ_LEN" : con->repeats == CON_REPEATS_IS_SPECIAL?"SPECIAL" : str_int_s (con->repeats).s),
                      num_items,container_flags(con).s,
                      char_to_printable (con->repsep[0]).s, char_to_printable(con->repsep[1]).s);
     

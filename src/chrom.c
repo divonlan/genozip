@@ -187,9 +187,7 @@ WordIndex chrom_seg_ex (VBlockP vb, Did did_i,
 {
     ASSERTNOTZERO (chrom_len);
     decl_ctx (did_i);
-    bool is_primary = did_i == DTF(prim_chrom); // note: possibly neither primary or luft, eg SA_RNAME
-    bool is_luft    = did_i == DTF(luft_chrom);
-    bool has_chain  = chain_is_loaded || IS_REF_MAKE_CHAIN;
+    bool is_primary = did_i == DTF(prim_chrom); // note: possibly not primary, eg SA_RNAME
 
     WordIndex chrom_node_index = WORD_INDEX_NONE, ref_index = WORD_INDEX_NONE;
     int32_t chrom_name_growth=0;
@@ -198,12 +196,10 @@ WordIndex chrom_seg_ex (VBlockP vb, Did did_i,
     uint32_t save_chrom_len = chrom_len;
     
     Reference ref = !(flag.reference & REF_ZIP_LOADED) ? NULL
-                  : (has_chain && is_primary)          ? prim_ref // DT_VCF --chain or DT_CHAIN 
                   :                                      gref;
     
     // case match_chrom_to_reference: rather than segging the chrom as in the txt_data, we seg the matching name in the reference, if there is one.
-    if (flag.match_chrom_to_reference && 
-        (!is_luft || has_chain)) { // note: can't match the Luft reference of a DVCF (can only match Luft with --chain)
+    if (flag.match_chrom_to_reference) {
 
         // case: chrom is the same as previous line 
         #define last_growth last_delta
@@ -248,28 +244,23 @@ WordIndex chrom_seg_ex (VBlockP vb, Did did_i,
     // warn if the file's contigs are called by a different name in the reference (eg 22/chr22)
     static bool once[2]={};
     if (ref_index != WORD_INDEX_NONE && is_alt && // a new chrom that matched to the reference with an alternative name
-        (is_primary || is_luft) &&
+        is_primary &&
         !segconf.running  &&              // segconf runs with flag.quiet so the user won't see the warning
         !flag.match_chrom_to_reference && // we didn't already attempt to match to the reference
-        !__atomic_test_and_set (&once[is_primary], __ATOMIC_RELAXED)) {  // skip if we've shown the warning already
+        !__atomic_test_and_set (&once[is_primary], __ATOMIC_RELAXED))   // skip if we've shown the warning already
             
-            if (VB_DT(CHAIN))
-                WARN ("Warning: Contig name mismatch between %s and reference file %s. For example: %s file: \"%.*s\" Reference file: \"%.*s\". "
-                      "You may use --match-chrom-to-reference to create %s with contigs matching those of the reference. This is required, if this file is for use with 'genozip --chain'. More info: %s\n",
-                      txt_name, ref_get_filename (ref), dt_name (vb->data_type), STRf(chrom), STRf(ref_contig), z_name, WEBSITE_CHAIN);
-            else
-                WARN ("FYI: Contigs name mismatch between %s and reference file %s. For example: %s file: \"%.*s\" Reference file: \"%.*s\". "
-                      "You may use --match-chrom-to-reference to create %s with contigs matching those of the reference. This makes no difference for the compression. More info: %s",
-                      txt_name, ref_get_filename (ref), dt_name (vb->data_type), STRf(chrom), STRf(ref_contig), z_name, WEBSITE_MATCH_CHROM);
-    } // we don't use WARN_ONCE bc we want the "once" to also include ref_contigs_get_matching
+        WARN ("FYI: Contigs name mismatch between %s and reference file %s. For example: %s file: \"%.*s\" Reference file: \"%.*s\". "
+                "You may use --match-chrom-to-reference to create %s with contigs matching those of the reference. This makes no difference for the compression. More info: %s",
+                txt_name, ref_get_filename (ref), dt_name (vb->data_type), STRf(chrom), STRf(ref_contig), z_name, WEBSITE_MATCH_CHROM);
+        // we don't use WARN_ONCE bc we want the "once" to also include ref_contigs_get_matching
 
     if (is_alt_out) *is_alt_out = false;
 
 finalize:
     if (is_new_out) *is_new_out = is_new;        
 
-    if (is_primary || is_luft)
-        random_access_update_chrom (vb, !is_primary, chrom_node_index, STRa(chrom)); 
+    if (is_primary)
+        random_access_update_chrom (vb, chrom_node_index, STRa(chrom)); 
 
     if (is_primary) {
         vb->chrom_node_index = chrom_node_index;

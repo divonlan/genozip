@@ -38,9 +38,8 @@
 #include "zriter.h"
 #include "tip.h"
 
-static RefStruct refs[2] = { { .ctgs.name = "gref" }, { .ctgs.name = "prim_ref" } };
-Reference gref     = &refs[0]; // global reference 
-Reference prim_ref = &refs[1]; // chain file primary coordinates reference
+static RefStruct refs[1] = { { .ctgs.name = "gref" } };
+Reference gref = &refs[0]; // global reference 
 
 #define CHROM_GENOME 0
 #define CHROM_NAME_GENOME "GENOME"
@@ -138,7 +137,7 @@ void ref_destroy_reference (Reference ref)
 
     // note: we keep ref->filename, in case it needs to be loaded again
     rom save_filename  = ref->filename;
-    rom save_ctgs_name = ref->ctgs.name; // "gref" or "prim_ref"
+    rom save_ctgs_name = ref->ctgs.name; 
 
     // ref contig stuff
     contigs_destroy (&ref->ctgs);
@@ -152,9 +151,6 @@ void ref_finalize (bool also_free_filename)
 {
     ref_destroy_reference (gref); 
     if (also_free_filename) FREE (gref->filename);
-
-    ref_destroy_reference (prim_ref); 
-    if (also_free_filename) FREE (prim_ref->filename);
 }
 
 // PIZ: returns a range which is the entire contig
@@ -165,8 +161,8 @@ ConstRangeP ref_piz_get_range (VBlockP vb, Reference ref, FailType soft_fail)
     ASSERTISALLOCED (ref->ranges);
 
     // caching
-    if (vb->prev_range[0] && vb->prev_range_chrom_node_index[0] == vb->chrom_node_index)
-        return vb->prev_range[0];
+    if (vb->prev_range && vb->prev_range_chrom_node_index == vb->chrom_node_index)
+        return vb->prev_range;
 
     ASSPIZ0 (vb->chrom_node_index != WORD_INDEX_NONE, "Unexpectedly, vb->chrom_node_index=WORD_INDEX_NONE");
 
@@ -186,8 +182,8 @@ ConstRangeP ref_piz_get_range (VBlockP vb, Reference ref, FailType soft_fail)
     ASSPIZ (r->ref.nwords || soft_fail, "No reference data for chrom=\"%s\"", vb->chrom_name);
     if (!r->ref.nwords) return NULL; // this can ligitimately happen if entire chromosome is verbatim in SAM, eg. unaligned (pos=4) or SEQ or CIGAR are unavailable
 
-    vb->prev_range[0] = r;
-    vb->prev_range_chrom_node_index[0] = vb->chrom_node_index;
+    vb->prev_range = r;
+    vb->prev_range_chrom_node_index = vb->chrom_node_index;
 
     return r;
 }
@@ -710,8 +706,8 @@ RangeP ref_seg_get_range (VBlockP vb, Reference ref, WordIndex chrom, STRp(chrom
         *lock = ref_lock (ref, gpos, ref_consumed);
     }
 
-    vb->prev_range[ref==prim_ref] = range;
-    vb->prev_range_chrom_node_index[ref==prim_ref] = chrom; // the chrom that started this search, leading to this range
+    vb->prev_range = range;
+    vb->prev_range_chrom_node_index = chrom; // the chrom that started this search, leading to this range
 
     return range; 
 }
@@ -1104,43 +1100,26 @@ void ref_set_reference (Reference ref, rom filename, ReferenceType ref_type, boo
         rom env = getenv ("GENOZIP_REFERENCE");
         if (!env || !env[0]) return; // nothing to set
 
-        str_split (env, strlen (env), 2, (flag.is_windows && strchr (env, ';')) ? ';' : ':', ref_fn, false); // sometimes in Windows : is replaced with ; 
-        ASSERT (n_ref_fns, "Invalid value in $GENOZIP_REFERENCE=\"%s\"- expecting a reference file name or two file names separated by a ':'", env);
-
-        ASSERT (ref == gref || n_ref_fns==2, "Invalid value in $GENOZIP_REFERENCE=\"%s\"- expecting two reference file names (Primary and Luft) separated by a ':'. See" WEBSITE_DVCF, env);
-
-        filename     = ref_fns    [(n_ref_fns==2) ? (ref==gref) : 0]; // first name is primary, second is luft
-        filename_len = ref_fn_lens[(n_ref_fns==2) ? (ref==gref) : 0];
+        filename     = env;
+        filename_len = strlen (env);
         WARN ("Note: Using the reference file \"%.*s\" set in $GENOZIP_REFERENCE. You can override this with --reference", STRf(filename));
     }
     else
         filename_len = strlen (filename);
 
-    static int num_explicit = 0; // user can have up to 2 --reference arguments
-    ASSINP0 (!is_explicit || (++num_explicit <= 2), "More than two --reference arguments");
-    ASSINP0 (!is_explicit || is_genozip || num_explicit == 1, "More than one --reference argument"); // two references only needed in ZIP of a chain file
+    static int num_explicit = 0; // user can have up to 1 --reference arguments
+    ASSINP0 (!is_explicit || (++num_explicit <= 1), "More than one --reference argument");
     
-    // no need for a reference if we're just doing "genocat --show-chain myfile.chain.genozip" (--show-chain only works for genocat and chain files)
-    if (!flag.show_chain) {
+    // case: pizzing subsequent files with implicit reference (reference from file header)
+    if (!is_explicit && ref->filename) {
+        if (!strcmp (filename, ref->filename)) return; // same file - we're done
 
-        // case two --reference arguments: we move the first to prim_ref, and the second will be gref (destpination ref)
-        // note: we we read the first argument, we didn't yet know if there is another one
-        if (num_explicit == 2) {
-            SWAP (gref, prim_ref);
-            ref = gref;
-        }
-
-        // case: pizzing subsequent files with implicit reference (reference from file header)
-        if (!is_explicit && ref->filename) {
-            if (!strcmp (filename, ref->filename)) return; // same file - we're done
-
-            // in case a different reference is loaded - destroy it
-            ref_destroy_reference (ref);
-        }
-    
-        flag.reference    = ref_type; 
-        flag.explicit_ref = is_explicit;
+        // in case a different reference is loaded - destroy it
+        ref_destroy_reference (ref);
     }
+
+    flag.reference    = ref_type; 
+    flag.explicit_ref = is_explicit;
 
     ref->filename = CALLOC (filename_len + 1);
     memcpy ((char*)ref->filename, filename, filename_len);
@@ -1221,71 +1200,6 @@ void ref_display_ref (Reference ref)
     buflist_free_ctx (evb, &chrom_ctx);
 }
 
-// show diff between two reference files
-void ref_diff_ref (void)
-{
-    static Context gref_chrom_ctx = {}, prim_chrom_ctx = {}; // static because the contained buffers cannot be on the stack as they are added to buf_list
-    ref_load_external_reference (gref, &gref_chrom_ctx);
-    ref_load_external_reference (prim_ref, &prim_chrom_ctx);
-
-    printf ("Comparing two references:\nR1 = %s\nR2 = %s\n", gref->filename, prim_ref->filename);
-    if (gref->ranges.len != prim_ref->ranges.len) {
-        printf ("*** References have a different number of contigs: R1=%u R2=%u\n", (int)gref->ranges.len, (int)prim_ref->ranges.len);
-        exit_ok;
-    }
-
-    decl_acgt_decode;
-    for (uint32_t range_i=0; range_i < gref->ranges.len32; range_i++) {
-        ConstRangeP r1 = B(Range, gref->ranges, range_i); 
-        ConstRangeP r2 = B(Range, prim_ref->ranges, range_i); 
-
-        if (!str_issame(r1->chrom_name, r2->chrom_name)) {
-            printf ("*** range_i=%u has a different contig name: R1=\"%.*s\" R2=\"%.*s\"\n", range_i, STRf(r1->chrom_name), STRf(r2->chrom_name));
-            continue;
-        }
-
-        if (r1->first_pos != r2->first_pos || r1->last_pos != r2->last_pos) {
-            printf ("*** range_i=%u has a different POS: R1=[%"PRIu64",%"PRIu64"] R2=[%"PRIu64",%"PRIu64"]\n", 
-                    range_i, r1->first_pos, r1->last_pos, r2->first_pos, r2->last_pos);
-            continue;
-        }
-
-        if (r1->gpos != r2->gpos) {
-            printf ("*** range_i=%u has a different GPOS: R1=%"PRIu64" R2=%"PRIu64"\n", range_i, r1->gpos, r2->gpos);
-            continue;
-        }
-        
-        uint32_t num_diffs=0;
-        PosType64 next_iupac_pos1=r1->first_pos;
-        PosType64 next_iupac_pos2=r2->first_pos;
-        
-        #define MAX_NUM_DIFFS 100
-        for (PosType64 pos=r1->first_pos ; pos <= r1->last_pos ; pos++) {
-            char iupac1 = (pos==next_iupac_pos1) ? ref_iupacs_get (gref,     r1, pos, false, &next_iupac_pos1) : 0;
-            char iupac2 = (pos==next_iupac_pos2) ? ref_iupacs_get (prim_ref, r2, pos, false, &next_iupac_pos2) : 0;
-
-            char b1 = ref_base_by_pos (r1, pos);
-            char b2 = ref_base_by_pos (r2, pos);
-
-            if (b1 != b2 || iupac1 != iupac2) {
-                if (!iupac1 && !iupac2)
-                    printf ("*** %.*s:%"PRIu64" differ: R1=%c R2=%c\n", STRf(r1->chrom_name), pos, b1, b2);
-                else
-                    printf ("*** %.*s:%"PRIu64" differ: R1=%c (IUPAC=%c) R2=%c (IUPAC=%c)\n", 
-                            STRf(r1->chrom_name), pos, b1, iupac1 ? iupac1 : '-', b2, iupac2 ? iupac2 : '-');
-
-                if (num_diffs++ == MAX_NUM_DIFFS) {
-                    printf ("Shown %u first differences. Moving on to next range.", MAX_NUM_DIFFS);
-                    break;
-                }
-            }
-        }
-    }
-
-    buflist_free_ctx (evb, &gref_chrom_ctx);
-    buflist_free_ctx (evb, &prim_chrom_ctx);
-}
-
 bool ref_is_external_loaded (Reference ref)
 {
     return ref->external_ref_is_loaded;
@@ -1305,7 +1219,6 @@ void ref_load_external_reference (Reference ref, ContextP chrom_ctx)
 
     flag.reading_reference = ref; // tell file.c, fasta.c and ref_fasta_to_ref that this is a reference
     flag.no_writer = flag.no_writer_thread = true;
-    flag.luft = false;
     flag.list_chroms = false;
     flag.show_gheader = false;
     flag.show_time_comp_i = COMP_NONE;
@@ -1637,8 +1550,6 @@ rom ref_type_name (void)
         case REF_INTERNAL   : return "INTERNAL"; 
         case REF_EXTERNAL   : return "EXTERNAL";
         case REF_EXT_STORE  : return "EXT_STORE";
-        case REF_MAKE_CHAIN : return "MAKE_CHAIN";
-        case REF_LIFTOVER   : return "LIFTOVER";
         default             : return "Invalid_reference_type"; 
     }
 }

@@ -41,7 +41,7 @@
 #define SNIP_REDIRECTION          '\xB'   // Get the data from another dict_id (can be in b250, local...)
 #define SNIP_DONT_STORE           '\xC'   // Reconstruct the following value, but don't store it in last_value (overriding flags.store)
 #define SNIP_COPY                 '\xE'   // Copy the last_txt of (optional) dict_id (self if no dict_id)
-#define SNIP_DUAL                 '\xF'   // A snip containing two snips separated by a SNIP_DUAL - for Primary and Luft reconstruction respectively
+#define dvcf_SNIP_DUAL            '\xF'   // up to 15.0.41: A snip containing two snips separated by a SNIP_DUAL - for Primary and Luft reconstruction respectively
 #define SNIP_LOOKBACK             '\x10'  // Copy an earlier snip in the same context. Snip is dict_id from which to take the lookback offset, and an optional delta to be applied to the retrieved numeric value. note: line number of the previous snip is variable, but its offset back is fixed (introduced 12.0.41)
 #define v13_SNIP_COPY_BUDDY       '\x11'  // up to v13: Copy a snip on an earlier "buddy" line in the same or another context (note: offset back to the previous snip is variable, but its line number is fixed) (introduced 12.0.41)
 #define SNIP_DIFF                 '\x12'  // XOR a string vs. previous string (introduced 13.0.5)    

@@ -30,7 +30,7 @@ static inline Did did_by_q (QType q)
 {
     ASSERT (q >= 0 && q < NUM_QTYPES, "Invalid q=%d", q);
 
-    return (Did[]){ FASTQ_QNAME, FASTQ_QNAME2, FASTQ_LINE3 }[q]; // note: SAM, KRAKEN and FASTQ have the same dids for QNAMEs
+    return (Did[]){ FASTQ_QNAME, FASTQ_QNAME2, FASTQ_LINE3 }[q]; // note: SAM and FASTQ have the same dids for QNAMEs
 }
 
 static inline unsigned qname_get_px_str_len (QnameFlavorStruct *qfs)
@@ -302,7 +302,7 @@ void qname_zip_initialize (void)
             }
         }
 
-        seg_prepare_snip_other (SNIP_COPY, (DictId)_SAM_QNAME, false, 0, copy_qname); // QNAME dict_id is the same for SAM, FASTQ, KRAKEN
+        seg_prepare_snip_other (SNIP_COPY, (DictId)_SAM_QNAME, false, 0, copy_qname); // QNAME dict_id is the same for SAM, FASTQ
 
         seg_prepare_snip_other (SNIP_REDIRECTION, _SAM_QNAME2, false, 0, snip_redirect_to_QNAME2);
 
@@ -382,7 +382,7 @@ void qname_segconf_finalize (VBlockP vb)
 
     for (QType q=QNAME1; q < NUM_QTYPES; q++) 
         if (segconf.qname_flavor[q])
-            segconf.sorted_by_qname[q] = VB_DT(FASTQ) || VB_DT(KRAKEN) ||   
+            segconf.sorted_by_qname[q] = VB_DT(FASTQ) ||
                                          segconf.is_collated || segconf.sam_is_unmapped || segconf.qname_flavor[q]->sam_qname_sorted || 
                                          (!segconf.is_sorted && !segconf.is_paired);
 
@@ -441,6 +441,9 @@ QnameTestResult qname_test_flavor (STRp(qname), QType q, QnameFlavor qfs, bool q
     for (const int *item_i = qfs->integer_items; *item_i != -1; item_i++)
         if (!qfs->is_hex[*item_i] && !str_is_int (STRi(item, *item_i))) 
             return QTR_BAD_INTEGER;
+
+    if (!qfs->validate_flavor (STRas(item)))
+        return QTR_FAILED_VALIDATE_FUNC;
 
     return QTR_SUCCESS; // yes, qname is of this flavor
 }
@@ -701,7 +704,7 @@ bool qname_seg (VBlockP vb, QType q, STRp (qname), unsigned add_additional_bytes
     }
 
 done:
-    seg_set_last_txt (vb, qname_ctx, STRa(qname)); // needed also bi:Z and for kraken in sam
+    seg_set_last_txt (vb, qname_ctx, STRa(qname)); // needed also bi:Z 
     COPY_TIMER (qname_seg);
 
     return false;

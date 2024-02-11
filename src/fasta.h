@@ -72,15 +72,4 @@ SPECIAL (FASTA, 2, DESC, fasta_piz_special_DESC);
 #define FASTA_LOCAL_GET_LINE_CALLBACKS  \
     { DT_FASTA, _FASTA_NONREF, fasta_zip_seq }, 
 
-// Multifasta to Phylip translation stuff
-
-// Important: Numbers (and order) of translators cannot be changed, as they are part of the file format
-// (they are included in the TOPLEVEL container)
-// translator numbers must start from 1 - 0 is reserved for "none"
-TRANSLATOR (FASTA, PHYLIP, 1, EOL, fasta_piz_fa2phy_EOL)   // drop EOL after DESC
-
-#define NUM_FASTA_TRANS 2 // including "none"
-#define FASTA_TRANSLATORS { NULL /* none */, fasta_piz_fa2phy_EOL }
-
-TXTHEADER_TRANSLATOR (txtheader_fa2phy);
 CONTAINER_FILTER_FUNC (fasta_piz_filter);

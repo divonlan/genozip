@@ -261,7 +261,7 @@ void sam_piz_XA_field_insert_lookback_v13 (VBlockP vb)
 // ----------------------------------------------------------------------------------------------------------
 // XC:i (bwa) Undocumented: usually seq_len minus the final soft-clip (right if forward and left if rev-comp) 
 // ----------------------------------------------------------------------------------------------------------
-void sam_seg_BWA_XC_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t XC, unsigned add_bytes)
+void sam_seg_BWA_XC_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t XC, unsigned add_bytes)
 {
     decl_ctx (OPTION_XC_i);
     int64_t prediction = dl->SEQ.len - vb->soft_clip[!dl->FLAG.rev_comp || dl->FLAG.unmapped];
@@ -385,7 +385,7 @@ static inline int sam_XS_get_mux_channel (uint8_t MAPQ)
 }
 
 // usually XS:i, but ZS:i in hisat2
-void sam_seg_BWA_XS_i (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, int64_t xs, unsigned add_bytes)
+void sam_seg_BWA_XS_i (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, int64_t xs, unsigned add_bytes)
 {
     START_TIMER;
 

@@ -17,9 +17,9 @@
 #include "segconf.h"
 #include "codec.h"
 
-PosType32 sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM *dl, WordIndex prev_line_chrom, unsigned add_bytes)
+PosType32 sam_seg_POS (VBlockSAMP vb, ZipDataLineSAMP dl, WordIndex prev_line_chrom, unsigned add_bytes)
 {
-    ZipDataLineSAM *mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is -1
+    ZipDataLineSAMP mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is -1
     PosType32 pos = dl->POS;
     PosType32 prev_line_pos = vb->line_i ? (dl-1)->POS : 0;
 
@@ -67,7 +67,7 @@ PosType32 sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM *dl, WordIndex prev_line_ch
     if (do_mux)
         seg_by_did (VB, STRa(vb->mux_POS.snip), SAM_POS, 0); // de-multiplexer
 
-    random_access_update_pos (VB, 0, SAM_POS);
+    random_access_update_pos (VB, SAM_POS);
 
     if (segconf.running) segconf_test_sorted (VB, prev_line_chrom, pos, prev_line_pos);
 
@@ -79,7 +79,7 @@ static inline int sam_PNEXT_get_mux_channel (VBlockSAMP vb, bool rnext_is_equal)
     return sam_has_mate?0 : sam_has_prim?1 : rnext_is_equal?2 : 3;
 }
 
-void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(pnext_str)/* option 1 */, PosType32 pnext/* option 2 */, unsigned add_bytes)
+void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(pnext_str)/* option 1 */, PosType32 pnext/* option 2 */, unsigned add_bytes)
 {
     if (pnext_str) 
         ASSSEG (str_get_int_range32 (STRa(pnext_str), 0, MAX_POS_SAM, &pnext),

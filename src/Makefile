@@ -91,9 +91,9 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.
 		  data_types.c bits.c progress.c writer.c zriter.c tar.c chrom.c qname.c tokenizer.c mutex.c threads.c	\
           zip.c piz.c reconstruct.c recon_history.c recon_peek.c seg.c zfile.c aligner.c flags.c digest.c    	\
 		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c ref_cache.c     	 	\
-		  vcf_piz.c vcf_seg.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c vcf_hgvs.c      \
+		  vcf_piz.c vcf_seg.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_hgvs.c      				\
 		  vcf_format_GT.c vcf_format_PS_PID.c vcf_dbsnp.c vcf_giab.c vcf_vep.c      							\
-		  vcf_refalt.c vcf_tags.c vcf_linesort.c vcf_format.c vcf_illum_gtyping.c vcf_gwas.c vcf_vagrent.c		\
+		  vcf_refalt.c vcf_format.c vcf_illum_gtyping.c vcf_gwas.c vcf_vagrent.c								\
 		  vcf_icgc.c vcf_snpeff.c vcf_cosmic.c vcf_mastermind.c vcf_isaac.c	vcf_manta.c vcf_pos.c vcf_ultima.c	\
 		  vcf_platypus.c vcf_info_AC_AF_AN.c vcf_format_GQ.c vcf_gatk.c											\
 		  sam_seg.c sam_piz.c sam_shared.c sam_header.c sam_md.c sam_nm.c sam_tlen.c sam_cigar.c sam_fields.c  	\
@@ -101,12 +101,13 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.
 		  sam_seq.c sam_qual.c sam_sag_zip.c sam_sag_piz.c sam_sag_load.c sam_sag_ingest.c sam_sag_scan.c    	\
 		  sam_bwa.c sam_bowtie2.c sam_bsseeker2.c sam_bsbolt.c sam_bismark.c sam_gem3.c sam_tmap.c sam_hisat2.c \
 		  sam_blasr.c sam_dragen.c sam_minimap2.c sam_cellranger.c sam_biobambam.c sam_pos.c sam_deep.c 		\
+		  sam_star.c sam_abra2.c																				\
 		  fastq.c fastq_desc.c fastq_seq.c fastq_qual.c fastq_deep.c fastq_saux.c deep.c						\
-		  fasta.c gff.c bed.c me23.c phylip.c chain.c kraken.c locs.c generic.c lookback.c compressor.c			\
+		  fasta.c gff.c bed.c me23.c locs.c generic.c lookback.c compressor.c									\
 		  buffer.c buf_struct.c buf_list.c random_access.c sections.c base64.c bgzf.c coverage.c txtheader.c  	\
 		  codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c	codec_pacb.c	\
 		  codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c codec_normq.c codec_homp.c codec_t0.c		\
-		  codec_smux.c																						\
+		  codec_smux.c																							\
 	      txtfile.c profiler.c file.c filename.c dispatcher.c crypt.c aes.c md5.c segconf.c biopsy.c gencomp.c	\
 		  vblock.c regions.c optimize.c dict_id.c aliases.c hash.c stream.c url.c bases_filter.c dict_io.c		\
 		  recon_plan_io.c version.c huffman.c user_message.c b250.c qname_filter.c
@@ -135,12 +136,12 @@ CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h al
 			 lookback.h tokenizer.h codec_longr_alg.c gencomp.h dict_io.h recon_plan_io.h tip.h deep.h filename.h stats.h multiplexer.h 	\
 			 reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h bgzf.h coverage.h threads.h local_type.h 					\
 			 arch.h license.h file_types.h data_types.h base64.h txtheader.h writer.h zriter.h bases_filter.h genols.h contigs.h chrom.h 	\
-			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h gff.h bed.h phylip.h chain.h kraken.h locs.h generic.h 	\
+			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h gff.h bed.h locs.h generic.h 					\
 			 fastq.h fastq_private.h user_message.h mac_compat.h b250.h zip_dyn_int.h qname_filter.h 														\
 			 zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h zlib/deflate.h zlib/trees.h 			\
-			 zlib/zlib.h zlib/zutil.h																							\
+			 zlib/zlib.h zlib/zutil.h																										\
 			 lzma/7zTypes.h lzma/LzFind.h lzma/LzHash.h lzma/LzmaDec.h lzma/LzmaEnc.h 														\
-			 bzlib/bzlib.h bzlib/bzlib_private.h																					\
+			 bzlib/bzlib.h bzlib/bzlib_private.h																							\
 			 htscodecs/rANS_static4x16.h htscodecs/rle.h htscodecs/pack.h htscodecs/arith_dynamic.h htscodecs/c_simple_model.h				\
 			 htscodecs/rANS_word.h htscodecs/htscodecs_endian.h htscodecs/rANS_word.h htscodecs/utils.h htscodecs/varint.h 					\
 			 htscodecs/varint2.h htscodecs/utils.h 																							\
@@ -478,7 +479,7 @@ refresh_arch_o :
 	@if [ -f $(OBJDIR)/arch.o ]; then rm -f $(OBJDIR)/arch.o >& /dev/null ; fi # remove this arch.o which contains DISTRIBUTION
 	@DISTRIBUTION=InstallForge $(MAKE) $(OBJDIR)/arch.o
 
-WINDOWS_INSTALLER_OBJS = windows/genozip.exe windows/genounzip.exe windows/genocat.exe windows/genols.exe windows/LICENSE.for-installer.txt ../LICENSE.txt
+WINDOWS_INSTALLER_OBJS = windows/genozip.exe windows/genounzip.exe windows/genocat.exe windows/genols.exe windows/LICENSE.for-installer.txt ../LICENSE.txt genozip.ico
 
 $(INSTALLERS)/LICENSE.html: genozip$(EXE)
 	@./genozip$(EXE) --license=-5000 --force > $@
@@ -494,8 +495,8 @@ $(INSTALLERS)/genozip-installer.exe: refresh_arch_o $(WINDOWS_INSTALLER_OBJS)
 	@echo '  (3) Click Save, then click Build'
 	@echo '  (4) Optionally: Click Yes, and copy the resulting files to releases/* and also c:\bin'	
 	@echo '  (5) Exit the UI (close the window)'
-	@if [ `cd ..; basename $$PWD` != genozip ] ; then cp $(WINDOWS_INSTALLER_OBJS) $(DEV_SRC)/windows ; cp $(DEV_SRC)/genozip-installer.ifp $(DEV_SRC)/genozip-installer.ifp.save ; fi # so this works for genozip-prod too - because InstallForge uses absolute paths 
-	@($(UTILS)/InstallForge/InstallForge.exe ; exit 0)
+	@if [ `cd ..; basename $$PWD` != genozip ] ; then cp $(WINDOWS_INSTALLER_OBJS) $(DEV_SRC)/windows ; cp $(DEV_SRC)/genozip-installer.ifp $(DEV_SRC)/genozip-installer.ifp.save ; cp genozip-installer.ifp $(DEV_SRC) ; fi # so this works for genozip-prod too - because InstallForge uses absolute paths 
+	@("../../../../Program Files (x86)/solicus/InstallForge/bin/ifbuilderenvx86.exe" ; exit 0)
 	@if [ -f $(OBJDIR)/arch.o ]; then rm -f $(OBJDIR)/arch.o >& /dev/null ; fi # remove this arch.o which contains DISTRIBUTION
 	@# we always edit the version in the genozip dir. we copy it to the current dir so it gets committed on git. we revert to old version in DEV_SRC to avoid problems with git merge
 	@if [ `cd ..; basename $$PWD` != genozip ] ; then mv $(DEV_SRC)/genozip-installer.ifp . ; mv $(DEV_SRC)/genozip-installer.ifp.save $(DEV_SRC)/genozip-installer.ifp ; fi

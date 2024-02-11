@@ -128,7 +128,7 @@ typedef struct {
                                   /* PIZ: an array of BgzfBlockPiz */ \
     \
     /* random access, chrom, pos */ \
-    Buffer ra_buf[2];             /* ZIP only: array of RAEntry [primary, luft] - copied to z_file at the end of each vb compression, then written as a SEC_RANDOM_ACCESS section at the end of the genozip file */\
+    Buffer ra_buf;                /* ZIP only: array of RAEntry - copied to z_file at the end of each vb compression, then written as a SEC_RANDOM_ACCESS section at the end of the genozip file */\
     WordIndex chrom_node_index;   /* ZIP and PIZ: index and name of chrom of the current line. Note: since v12, this is redundant with last_int (CHROM) */ \
     STR(chrom_name);              /* since v12, this redundant with last_txtx/last_txt_len (CHROM) */ \
     uint32_t seq_len;             /* PIZ - last calculated seq_len (as defined by each data_type) */\
@@ -170,13 +170,13 @@ typedef struct {
     Reference ref;                /* used by VBs created by dispatchers for uncompressing / compressing internal or external references. NOT used by VBs of the data type itself. */ \
     \
     /* reference range lookup caching */ \
-    RangeP prev_range[2];         /* previous range returned by ref_seg_get_range */ \
+    RangeP prev_range;            /* previous range returned by ref_seg_get_range */ \
     uint32_t prev_range_range_i;  /* range_i used to calculate previous range */ \
-    WordIndex prev_range_chrom_node_index[2]; /* chrom used to calculate previous range */ \
+    WordIndex prev_range_chrom_node_index; /* chrom used to calculate previous range */ \
     \
     /* ref_iupac quick lookup */\
-    ConstRangeP iupacs_last_range[2]; /* [0]=prim_ref [1]=gref */ \
-    PosType64 iupacs_last_pos[2], iupacs_next_pos[2]; \
+    ConstRangeP iupacs_last_range; \
+    PosType64 iupacs_last_pos, iupacs_next_pos; \
     \
     union { \
     Buffer gencomp_lines;         /* ZIP: array of GencompLineIEntry: DVCF: lines rejected for liftover ; SAM-SA: primary/dependent lines */ \

@@ -64,7 +64,6 @@ extern void ref_load_external_reference (Reference ref, ContextP chrom_ctx);
 extern bool ref_load_stored_reference (Reference ref);
 extern bool ref_is_loaded (const Reference ref);
 extern bool ref_is_external_loaded (const Reference ref);
-extern void ref_diff_ref (void);
 extern void ref_set_reference (Reference ref, rom filename, ReferenceType ref_type, bool is_explicit);
 extern void ref_set_ref_file_info (Reference ref, Digest genome_digest, bool is_adler, rom fasta_name, uint8_t genozip_version);
 extern void ref_unload_reference (Reference ref);
@@ -173,6 +172,6 @@ extern void ref_display_ref (const Reference ref);
 extern bool ref_buf_locate (Reference ref, ConstBufferP buf);
 
 // globals
-extern Reference gref, prim_ref;
+extern Reference gref;
 extern Serializer make_ref_merge_serializer;
  

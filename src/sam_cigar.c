@@ -270,7 +270,7 @@ CigarStr dis_binary_cigar (VBlockSAMP vb, const BamCigarOp *cigar, uint32_t ciga
     return out;
 }
 
-// calculate the expected length of SEQ and QUAL from the CIGAR string
+// ZIP/PIZ: calculate the expected length of SEQ and QUAL from the CIGAR string
 // A CIGAR looks something like: "109S19M23S", See: https://samtools.github.io/hts-specs/SAMv1.pdf 
 void sam_cigar_analyze (VBlockSAMP vb, STRp(cigar)/* textual */, bool cigar_is_in_textual_cigar, uint32_t *seq_consumed)
 {
@@ -328,7 +328,7 @@ do_analyze:
 }
 
 // analyze the binary cigar 
-void bam_seg_cigar_analyze (VBlockSAMP vb, ZipDataLineSAM *dl/*NULL if PIZ*/, uint32_t *seq_consumed)
+void bam_seg_cigar_analyze (VBlockSAMP vb, ZipDataLineSAMP dl/*NULL if PIZ*/, uint32_t *seq_consumed)
 {
     *seq_consumed = 0; // everything else is initialized in sam_reset_line
     ARRAY (BamCigarOp, cigar, vb->binary_cigar);
@@ -362,7 +362,7 @@ void bam_seg_cigar_analyze (VBlockSAMP vb, ZipDataLineSAM *dl/*NULL if PIZ*/, ui
             case BC_X    : SEQ_CONSUMED ; REF_CONSUMED ; SEQ_REF_CONSUMED       ; break ;
             case BC_I    : SEQ_CONSUMED ; COUNT(insertions)                     ; break ;
             case BC_D    : REF_CONSUMED ; COUNT(deletions)                      ; break ;
-            case BC_N    : REF_CONSUMED                                         ; break ;
+            case BC_N    : REF_CONSUMED ; vb->introns++                         ; break ;
             case BC_S    : VERIFY_S ; SEQ_CONSUMED ; COUNT(soft_clip[op_i > 0]) ; break ; // Note: a "121S" (just one op S or H) is considered a left-clip (eg as expected by sam_seg_bsseeker2_XG_Z_analyze)
             case BC_H    : VERIFY_H ; COUNT(hard_clip[op_i > 0])                ; break ;
             case BC_P    :                                                        break ;
@@ -649,14 +649,14 @@ done:
     return is_same;
 }
 
-static void sam_cigar_update_random_access (VBlockSAMP vb, ZipDataLineSAM *dl)
+static void sam_cigar_update_random_access (VBlockSAMP vb, ZipDataLineSAMP dl)
 {
     if (segconf.disable_random_acccess || IS_ASTERISK (vb->chrom_name) || dl->POS <= 0) return;
 
     PosType32 last_pos = dl->POS + vb->ref_consumed - 1;
 
     if (IS_REF_INTERNAL && last_pos >= 1)
-        random_access_update_last_pos (VB, 0, last_pos);
+        random_access_update_last_pos (VB, last_pos);
 
     else { // external ref
         WordIndex ref_index = chrom_2ref_seg_get (gref, VB, vb->chrom_node_index); 
@@ -667,10 +667,10 @@ static void sam_cigar_update_random_access (VBlockSAMP vb, ZipDataLineSAM *dl)
         if (LN == -1) {}
             
         else if (last_pos >= 1 && last_pos <= LN)
-            random_access_update_last_pos (VB, 0, last_pos);
+            random_access_update_last_pos (VB, last_pos);
         
         else  // we circled back to the beginning for the chromosome - i.e. this VB RA is the entire chromosome
-            random_access_update_to_entire_chrom (VB, 0, 1, LN); 
+            random_access_update_to_entire_chrom (VB, 1, LN); 
     }
 }
 
@@ -682,7 +682,7 @@ static inline bool sam_cigar_seggable_by_qname (VBlockSAMP vb)
            B1ST(BamCigarOp, vb->binary_cigar)->n == ECTX(segconf.seq_len_dict_id)->last_value.i; // length is equal to CIGAR op
 }
 
-void sam_seg_CIGAR (VBlockSAMP vb, ZipDataLineSAM *dl, uint32_t last_cigar_len, STRp(seq_data), STRp(qual_data), uint32_t add_bytes)
+void sam_seg_CIGAR (VBlockSAMP vb, ZipDataLineSAMP dl, uint32_t last_cigar_len, STRp(seq_data), STRp(qual_data), uint32_t add_bytes)
 {
     START_TIMER
     
@@ -830,9 +830,9 @@ uint32_t sam_cigar_get_MC_ref_consumed (STRp(mc))
 }
 
 // MC:Z "CIGAR string for mate/next segment" (https://samtools.github.io/hts-specs/SAMtags.pdf)
-void sam_cigar_seg_MC_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(mc), uint32_t add_bytes)
+void sam_cigar_seg_MC_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(mc), uint32_t add_bytes)
 {
-    ZipDataLineSAM *mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is -1
+    ZipDataLineSAMP mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is -1
 
     ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_MC_Z, (MultiplexerP)&vb->mux_MC, sam_has_mate);
 

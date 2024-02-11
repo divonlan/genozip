@@ -152,7 +152,9 @@ void zfile_uncompress_section (VBlockP vb,
             uncompressed_data->len = data_uncompressed_len;
         }
 
-        comp_uncompress (vb, ctx, header->codec, header->sub_codec, codec_param,
+        comp_uncompress (vb, ctx, header->codec, 
+                         header->section_type == SEC_LOCAL ? header->sub_codec : 0, 
+                         codec_param,
                          (char*)header + compressed_offset, data_compressed_len, 
                          uncompressed_data, data_uncompressed_len,
                          dict_id.num ? dis_dict_id(dict_id).s : st_name(expected_section_type));
@@ -209,7 +211,7 @@ uint32_t zfile_compress_b250_data (VBlockP vb, ContextP ctx)
         .vblock_i              = BGEN32 (vb->vblock_i),
         .flags.ctx             = flags,
         .dict_id               = ctx->dict_id,
-        .b250_size             = ctx->b250_size
+        .b250_size             = ctx->b250_size,
     };
 
     ctx->b250_in_z = vb->z_data.len32;
@@ -633,30 +635,10 @@ static void zfile_read_genozip_header_handle_ref_info (ConstSectionHeaderGenozip
 
         rom gref_fn = ref_get_filename (gref);
 
-        // case --chain which requires the prim_ref, but an external reference isn't provided (these fields didn't exist before v12)
-        if (flag.reading_chain && !flag.explicit_ref && VER(12)) {
-
-            rom prim_ref_filename = zfile_read_genozip_header_get_ref_filename (header->chain.prim_filename);
-            rom luft_ref_filename = zfile_read_genozip_header_get_ref_filename (header->ref_filename);
-
-            if (file_exists (prim_ref_filename) && file_exists (luft_ref_filename)) {
-
-                if (!flag.show_chain) 
-                    WARN_ONCE ("Note: using the reference files PRIMARY=%s LUFT=%s. You can override this with --reference, see: " WEBSITE_DVCF,
-                            prim_ref_filename, luft_ref_filename);
-                    
-                ref_set_reference (gref,     luft_ref_filename, REF_LIFTOVER, false);
-                ref_set_reference (prim_ref, prim_ref_filename, REF_LIFTOVER, false);
-            }
-            else 
-                ASSINP (flag.genocat_no_ref_file, "Please use two --reference arguments to specify the paths to the PRIMAY and LUFT coordinates reference file. Original paths were: PRIMARY=%.*s LUFT=%.*s",
-                        REF_FILENAME_LEN, header->chain.prim_filename, REF_FILENAME_LEN, header->ref_filename);
-        }
-
         // case: this file requires an external reference, but command line doesn't include --reference - attempt to use the
         // reference specified in the header. 
         // Note: this code will be executed when zfile_read_genozip_header is called from main_genounzip.
-        else if (!flag.explicit_ref && !getenv ("GENOZIP_REFERENCE") && // reference NOT was specified on command line
+        if (!flag.explicit_ref && !getenv ("GENOZIP_REFERENCE") && // reference NOT was specified on command line
                  !Z_DT(REF) && // for reference files, this field is actual fasta_filename
                  !(gref_fn && !strcmp (gref_fn, header->ref_filename))) { // ref_filename already set from a previous file with the same reference
 
@@ -673,7 +655,7 @@ static void zfile_read_genozip_header_handle_ref_info (ConstSectionHeaderGenozip
 
         // test for matching digest between specified external reference and reference in the header
         // note: for --chain, we haven't read the reference yet, so we will check this separately in chain_load
-        if (flag.explicit_ref && !flag.reading_chain) 
+        if (flag.explicit_ref) 
             digest_verify_ref_is_equal (gref, header->ref_filename, header->ref_genome_digest);
     }
 }
@@ -796,8 +778,6 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header, FailType
     else
         ASSINP (z_file->data_type == data_type, "%s - file extension indicates this is a %s file, but according to its contents it is a %s", 
                 z_name, z_dt_name(), dt_name (data_type));
-
-    flag.genocat_no_ref_file |= (Z_DT(CHAIN) && !flag.reading_chain); // initialized in flags_update: we only need the reference when using the chain file with --chain
 
     ASSINP (header->encryption_type != ENC_NONE || !has_password() || Z_DT(REF), 
             "password provided, but file %s is not encrypted", z_name);
@@ -971,9 +951,9 @@ void zfile_update_compressed_vb_header (VBlockP vb)
     vb_header->z_data_bytes = BGEN32 (vb->z_data.len32);
 
     if (flag_is_show_vblocks (ZIP_TASK_NAME)) 
-        iprintf ("UPDATE_VB_HEADER(id=%d) vb_i=%u comp_i=%u recon_size_prim=%u recon_size_luft=%u genozip_size=%u longest_line_len=%u\n",
+        iprintf ("UPDATE_VB_HEADER(id=%d) vb_i=%u comp_i=%u recon_size_prim=%u genozip_size=%u longest_line_len=%u\n",
                  vb->id, vb->vblock_i, vb->comp_i, 
-                 BGEN32 (vb_header->recon_size_prim), BGEN32 (vb_header->dvcf_recon_size_luft), 
+                 BGEN32 (vb_header->recon_size_prim), 
                  BGEN32 (vb_header->z_data_bytes), BGEN32 (vb_header->longest_line_len));
 
     // now we can finally encrypt the header - if needed

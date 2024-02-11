@@ -147,6 +147,7 @@ static void dict_io_compress_one_fragment (VBlockP vb)
     SectionHeaderDictionary header = (SectionHeaderDictionary){ 
         .magic                 = BGEN32 (GENOZIP_MAGIC),
         .section_type          = SEC_DICT,
+        .dict_helper           = vb->fragment_ctx->dict_helper, // 15.0.42
         .data_uncompressed_len = BGEN32 (vb->fragment_len),
         .codec                 = vb->fragment_ctx->dcodec,
         .vblock_i              = BGEN32 (vb->vblock_i),
@@ -160,7 +161,7 @@ static void dict_io_compress_one_fragment (VBlockP vb)
                  vb->fragment_ctx->tag_name, vb->vblock_i, vb->fragment_ctx->did_i, vb->fragment_num_words);
     
     if (dict_id_is_show (vb->fragment_ctx->dict_id))
-        dict_io_print (info_stream, vb->fragment_start, vb->fragment_len, true, true, flag.show_dict, false);
+        dict_io_print (info_stream, vb->fragment_start, vb->fragment_len, true, true, true, false);
 
     if (flag.list_chroms && vb->fragment_ctx->did_i == CHROM)
         dict_io_print (info_stream, vb->fragment_start, vb->fragment_len, true, true, false, VB_DT(SAM) || VB_DT(BAM));
@@ -230,8 +231,8 @@ static void dict_io_read_one_vb (VBlockP vb)
         goto done;
     }
 
-    dict_ctx->dict_flags = dict_sec->flags.dictionary; // v15
-
+    dict_ctx->dict_flags  = dict_sec->flags.dictionary; // v15
+    
     int32_t offset = zfile_read_section (z_file, vb, dict_sec->vblock_i, &vb->z_data, "z_data", SEC_DICT, dict_sec);    
     SectionHeaderDictionaryP header = 
         (offset != SECTION_SKIPPED) ? (SectionHeaderDictionaryP)vb->z_data.data : NULL;
@@ -265,6 +266,7 @@ static void dict_io_read_one_vb (VBlockP vb)
         vb->fragment_start       = Bc (dict_ctx->dict, dict_ctx->dict.len);
         dict_ctx->word_list.len += header ? BGEN32 (header->num_snips) : 0;
         dict_ctx->dict.len      += (uint64_t)vb->fragment_len;
+        dict_ctx->dict_helper    = header->dict_helper; // 15.0.42
 
         ASSERT (dict_ctx->dict.len <= dict_ctx->dict.size, "%s: Dict %s vb=%u len=%"PRIu64" exceeds allocated size=%"PRIu64" (num_fragments=%u fragment_1_len=%u)", 
                 z_name, dict_ctx->tag_name, vb->vblock_i, dict_ctx->dict.len, (uint64_t)dict_ctx->dict.size, dict_ctx->dict.prm32[0], dict_ctx->dict.prm32[1]);
@@ -351,10 +353,7 @@ void dict_io_read_all_dictionaries (void)
     dict_sec = NULL;
     dict_ctx = NULL;
 
-    dispatcher_fan_out_task (flag.reading_reference ? "read_dicts_ref" 
-                            :flag.reading_chain     ? "read_dicts_chain" 
-                            :flag.reading_kraken    ? "read_dicts_kraken" 
-                            :                         "read_dicts",
+    dispatcher_fan_out_task (flag.reading_reference ? "read_dicts_ref" : "read_dicts",
                              NULL, 0, 0, 
                              true, flag.test,
                              false,
@@ -375,7 +374,7 @@ void dict_io_read_all_dictionaries (void)
             Context *ctx = ZCTX(did_i);
             if (!ctx->dict.len) continue;
 
-            if (flag.list_chroms && ((!flag.luft && ctx->did_i == CHROM) || (flag.luft && ctx->did_i == VCF_oCHROM)))
+            if (flag.list_chroms && ctx->did_i == CHROM)
                 dict_io_print (info_stream, STRb(ctx->dict), true, false, true, Z_DT(SAM));
             
             if (flag.show_dict || (flag.show_one_dict && dict_id_is_show (ctx->dict_id))) 
@@ -413,7 +412,7 @@ StrTextMegaLong str_snip_ex (STRp(snip), bool add_quote)
         case SNIP_REDIRECTION          : next  = mempcpy (next, "[REDIRECTION]", STRLEN("[REDIRECTION]")); break;
         case SNIP_DONT_STORE           : next  = mempcpy (next, "[DONT_STORE]",  STRLEN("[DONT_STORE]"));  break;
         case SNIP_COPY                 : next  = mempcpy (next, "[COPY]",        STRLEN("[COPY]"));        break;
-        case SNIP_DUAL                 : next  = mempcpy (next, "[DUAL]",        STRLEN("[DUAL]"));        break;
+        case dvcf_SNIP_DUAL            : next  = mempcpy (next, "[DUAL]",        STRLEN("[DUAL]"));        break;
         case SNIP_LOOKBACK             : next  = mempcpy (next, "[LOOKBACK]",    STRLEN("[LOOKBACK]"));    break;
         case v13_SNIP_COPY_BUDDY       : next  = mempcpy (next, "[BCOPY]",       STRLEN("[BCOPY]"));       break;
         case SNIP_DIFF                 : next  = mempcpy (next, "[DIFF]",        STRLEN("[DIFF]"));        break;
@@ -481,12 +480,14 @@ void dict_io_print (FILE *fp, STRp(data), bool with_word_index, bool add_quotati
 {
     rom word = data, after = data + data_len;
     
-    while (word < after) {
+    for (WordIndex wi=0; word < after; wi++) {
         int word_len = strlen (word);
 
         // in case we are showing chrom data in --list-chroms in SAM - don't show * and =
-        if (!remove_equal_asterisk || !(str_is_1char(word,'*') || str_is_1char(word,'='))) 
+        if (!remove_equal_asterisk || !(str_is_1char(word,'*') || str_is_1char(word,'='))) {
+            if (add_newline) fprintf (fp, "[%u] ", wi);
             fprintf (fp, "%s", str_snip_ex (STRa(word), add_quotation_marks).s);
+        }
 
         word += word_len + 1;
         fputc ((add_newline || word == after) ? '\n' : ' ', fp);

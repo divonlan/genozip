@@ -12,7 +12,7 @@
 #include "reconstruct.h"
 
 // in consensus reads XO:i is sometimes close to AS:i
-void sam_seg_xcons_XO_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t xo, unsigned add_bytes)
+void sam_seg_xcons_XO_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t xo, unsigned add_bytes)
 {
     int32_t as;
 

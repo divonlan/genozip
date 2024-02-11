@@ -47,7 +47,6 @@ typedef struct {
     bool is_loaded;        // has data moving to txt_data completed
     bool needs_recon;      // VB/TXT_HEADER should be reconstructed, but writing it depends on needs_write
     bool needs_write;      // VB/TXT_HEADER is written to output file, and hence is in recon_plan
-    bool no_ordinal_filter;// Never filter out lines from this VB due to head/tail/lines/downsample
     bool full_vb;
     bool encountered;      // used by writer_update_section_list
     bool fasta_contig_grepped_out; // FASTA: a VB that starts with SEQ data, inherits this from the last contig of the previous VB 
@@ -222,10 +221,6 @@ static VBIType writer_init_txt_header_info (void)
 
         // conditions entire txt header should be read 
         comp->needs_recon = 
-            (  !(Z_DT(VCF) || Z_DT(BCF)) // This clause only limits VCF files  
-            || ( flag.luft && (comp_i == VCF_COMP_MAIN || (comp_i == VCF_COMP_PRIM_ONLY && !flag.header_one))) 
-            || (!flag.luft && (comp_i == VCF_COMP_MAIN || (comp_i == VCF_COMP_LUFT_ONLY && !flag.header_one)))) // --header-one - we don't need the ##primary_only / ##luft_only lines 
-        &&
             (  !Z_DT(SAM) // This clause only limits SAM/BAM files  
             || comp_i == SAM_COMP_MAIN // SAM file is reconstructed
             || (comp_i >= SAM_COMP_FQ00 && flag.deep)); // FQ files are reconstructed only if flag.deep set in flags_update_piz_one_z_file
@@ -237,11 +232,6 @@ static VBIType writer_init_txt_header_info (void)
            comp->needs_recon
         &&
            !flag.no_header
-        &&
-           (  !(Z_DT(VCF) || Z_DT(BCF)) // This clause only limits VCF files 
-           || ( flag.luft && comp_i == VCF_COMP_PRIM_ONLY)  // if luft rendition, show ##primary_only rejects components (appears in the vcf header)
-           || (!flag.luft && comp_i == VCF_COMP_LUFT_ONLY)  // if primary rendtion, show ##luft_only rejects components (appears in the vcf header)
-           || comp_i == VCF_COMP_MAIN)
         &&
            (  !Z_DT(SAM) // This clause only limits SAM/BAM
            || (comp_i != SAM_COMP_PRIM && comp_i != SAM_COMP_DEPN)); // Show only the txt header of the MAIN and any (deep) FASTQ components
@@ -288,7 +278,6 @@ static void writer_init_vb_info (void)
         v->comp_i   = sec->comp_i;
         
         // since v14, num_lines is carried by Section. 
-        // Note: in DVCF, this is different than the number of lines in the default reconstruction which drops luft_only lines.
         if (VER(14))
             v->num_lines = sec->num_lines;
 
@@ -302,10 +291,6 @@ static void writer_init_vb_info (void)
         // create the plan, for VBs on the boundary of head/tail/lines, otherwise in reconstruction compute thread.
         if (flag.maybe_lines_dropped_by_reconstructor || flag.maybe_lines_dropped_by_writer)
             buf_set_promiscuous_do (wvb, &v->is_dropped_buf, "is_dropped_buf", __FUNCLINE);
-
-        // head/tail/lines/downsample don't apply to DVCF reject components which are part of the VCF header
-        if (z_is_dvcf && v->comp_i != VCF_COMP_MAIN)
-            v->no_ordinal_filter = true;
 
         // set pairs (used even if not interleaving)
         if (t->pair == PAIR_R1) 
@@ -348,20 +333,8 @@ static void writer_init_vb_info (void)
                 break;
 
             case DT_VCF:
-                // --header-one or --no-header: we don't show ##primary_only/##luft_only components as they are part of theader            
-                if ((flag.header_one || flag.no_header) && v->comp_i != VCF_COMP_MAIN) DROP;
-
-                // in DVCF primary rendition, we don't need ##primary_only lines
-                else if (!flag.luft && v->comp_i == VCF_COMP_PRIM_ONLY) DROP;
-
-                // in DVCF luft rendition, we don't need ##luft_only lines
-                else if (flag.luft && v->comp_i == VCF_COMP_LUFT_ONLY) DROP;
-
-                // --single-coord:  we don't need the ##primary_only / ##luft_only lines (we do need the TXT_HEADER tough as it contains the ##fileformat line)
-                else if (flag.single_coord && v->comp_i != VCF_COMP_MAIN) DROP;
-
-                // --header-only VCF - drop MAIN comp VBs (we DO still show reject VBs as they are part of the VCF header)
-                else if (flag.header_only && v->comp_i == VCF_COMP_MAIN) DROP;
+                // --header-only VCF - drop VBs
+                if (flag.header_only) DROP;
 
                 break;
 
@@ -813,10 +786,10 @@ static void writer_add_interleaved_plan (CompIType comp_1, CompIType comp_2)
 }
 
 // PIZ main thread: for each VB in the component pointed by sec, sort VBs according to first appearance in recon plan
-static void writer_add_plan_from_recon_section (CompIType comp_i, bool is_luft,
+static void writer_add_plan_from_recon_section (CompIType comp_i,
                                                 VBIType *conc_writing_vbs, uint32_t *vblock_mb) // out
 {
-    Section recon_plan_sec = sections_get_comp_recon_plan_sec (comp_i, is_luft);
+    Section recon_plan_sec = sections_get_comp_recon_plan_sec (comp_i);
     if (!recon_plan_sec) {
         writer_add_trivial_plan (comp_i);
         return;
@@ -890,7 +863,7 @@ bool writer_create_plan (void)
     // case: SAM with PRIM/DEPN (i.e. gencomp) - either non-deep or deep and --sam or --bam specified
     if (Z_DT(SAM) && z_sam_gencomp && (!flag.deep || flag.one_component==1)) {         
         writer_add_txtheader_plan (SAM_COMP_MAIN);
-        writer_add_plan_from_recon_section (SAM_COMP_MAIN, false, &z_file->max_conc_writing_vbs, &vblock_mb);
+        writer_add_plan_from_recon_section (SAM_COMP_MAIN, &z_file->max_conc_writing_vbs, &vblock_mb);
     }
 
     // case: unbinding --deep
@@ -899,7 +872,7 @@ bool writer_create_plan (void)
         if (!(flag.deep_fq_only && flags_writer_counts())) {
             writer_add_txtheader_plan (SAM_COMP_MAIN);
             if (z_sam_gencomp) 
-                writer_add_plan_from_recon_section (SAM_COMP_MAIN, false, &z_file->max_conc_writing_vbs, &vblock_mb);
+                writer_add_plan_from_recon_section (SAM_COMP_MAIN, &z_file->max_conc_writing_vbs, &vblock_mb);
             else
                 writer_add_trivial_plan (COMP_MAIN);
 
@@ -923,24 +896,6 @@ bool writer_create_plan (void)
 
         start_comp_in_plan[z_file->num_txt_files + 2] = z_file->recon_plan.len; // "after" all components
     }
-
-    // case: DVCF
-    else if (z_is_dvcf) {
-        // rejected variants that are reconstructed to be the first part of the VCF header
-        CompIType reject_comp_i = flag.luft ? VCF_COMP_PRIM_ONLY : VCF_COMP_LUFT_ONLY;
-        writer_add_txtheader_plan (reject_comp_i);
-        writer_add_trivial_plan (reject_comp_i); // note: in DVCF we don't allow out-of-order so no need to sort 
-
-        // main TXT_HEADER is reconstructed after the rejects
-        writer_add_txtheader_plan (VCF_COMP_MAIN);
-
-        // main component (lines with rejected variants are dropped by reconstructor)
-        writer_add_plan_from_recon_section (VCF_COMP_MAIN, flag.luft, &z_file->max_conc_writing_vbs, &vblock_mb);
-    }
-
-    // case: VCF with --sort, other than DVCF
-    else if ((Z_DT(VCF) || Z_DT(BCF)) && flag.sort) 
-        writer_add_plan_from_recon_section (VCF_COMP_MAIN, false, &z_file->max_conc_writing_vbs, &vblock_mb);
 
     // case: paired FASTQ to be written interleaved 
     else if (Z_DT(FASTQ) && flag.interleaved) 
@@ -1018,7 +973,7 @@ bool writer_create_plan (void)
     z_file->max_conc_writing_vbs = MIN_(vb_info.len, MAX_(3, z_file->max_conc_writing_vbs));
 
     if (flag.show_recon_plan) {
-        recon_plan_show (z_file, flag.luft, z_file->max_conc_writing_vbs, vblock_mb);    
+        recon_plan_show (z_file, z_file->max_conc_writing_vbs, vblock_mb);    
         if (is_genocat) exit_ok;
     }
 

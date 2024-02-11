@@ -16,20 +16,16 @@ typedef enum {
     REF_INTERNAL      = 1,  // ZIP SAM only: use did not specify an external reference - reference is calculated from file(s) data
     REF_EXTERNAL      = 2,  // ZIP & PIZ: user specified --reference
     REF_EXT_STORE     = 4,  // ZIP: user specified --REFERENCE
-    REF_MAKE_CHAIN    = 8,  // ZIP of a chain file
-    REF_LIFTOVER      = 16, // ZIP: user specified --chain which uses a reference
 
-    REF_STORED        = REF_INTERNAL | REF_EXT_STORE,                                 // ZIP/PIZ: file contains REFERENCE sections (==REF_STORED is only in PIZ; in ZIP only one of the bits is set)
-    REF_ZIP_LOADED    = REF_EXTERNAL | REF_EXT_STORE | REF_MAKE_CHAIN | REF_LIFTOVER, // ZIP: external reference is loaded
-    REF_ZIP_CHROM2REF = REF_EXTERNAL | REF_EXT_STORE | REF_LIFTOVER,                  // ZIP: chrom2ref mapping is stored
+    REF_STORED        = REF_INTERNAL | REF_EXT_STORE, // ZIP/PIZ: file contains REFERENCE sections (==REF_STORED is only in PIZ; in ZIP only one of the bits is set)
+    REF_ZIP_LOADED    = REF_EXTERNAL | REF_EXT_STORE, // ZIP: external reference is loaded
+    REF_ZIP_CHROM2REF = REF_EXTERNAL | REF_EXT_STORE, // ZIP: chrom2ref mapping is stored
 } ReferenceType;
 extern rom ref_type_name(void);
 
 #define IS_REF_INTERNAL   (flag.reference == REF_INTERNAL)
 #define IS_REF_EXTERNAL   (flag.reference == REF_EXTERNAL)
 #define IS_REF_EXT_STORE  (flag.reference == REF_EXT_STORE)
-#define IS_REF_MAKE_CHAIN (flag.reference == REF_MAKE_CHAIN)
-#define IS_REF_LIFTOVER   (flag.reference == REF_LIFTOVER)
 
 #define IS_REF_LOADED_ZIP (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE)
 #define IS_REF_CHROM2REF  (flag.reference & REF_ZIP_CHROM2REF)
@@ -56,12 +52,10 @@ typedef struct {
     // ZIP: data modifying options
     int optimize, optimize_sort, optimize_phred, GL_to_PL, GP_to_PP, optimize_VQSLOD,  // optimize flags
         optimize_QUAL, optimize_Vf, optimize_ZM, optimize_DESC,
-        allow_ambiguous, add_line_numbers, match_chrom_to_reference, no_kmers;
+        allow_ambiguous, add_line_numbers, match_chrom_to_reference;
         
     int truncate_partial_last_line; // we don't consider this option data modifying as its used for debugging - digest is calculated only after truncation
-    
-    char *dvcf_rename, *dvcf_drop;
-    
+        
     PairType pair; 
 
     // piz options
@@ -72,13 +66,12 @@ typedef struct {
 
     // PIZ: data-modifying genocat options for showing only a subset of the file, or otherwise modify the file 
     int header_one, header_only_fast, no_header, header_only, // how to handle the txt header
-        seq_only, qual_only, single_coord, 
+        seq_only, qual_only,  
         regions, gpos, samples, 
         qname_filter, seq_filter, // 1 positive, -1 negative filter
-        drop_genotypes, gt_only, luft, sort, unsorted, snps_only, indels_only, // VCF options
-        sequential, no_pg, prepare_for_taxid,
+        drop_genotypes, gt_only, snps_only, indels_only, // VCF options
+        sequential, no_pg,
         one_component; // 1-based ; 0=option unset (i.e. comp_i = one_component-1)
-    TaxonomyId *kraken_taxid;
     rom regions_file, qnames_file, qnames_opt;
     int64_t lines_first, lines_last, tail;  // set by --head, --tail, --lines 
     rom grep; int grepw; unsigned grep_len; // set by --grep and --grep-w
@@ -121,21 +114,20 @@ typedef struct {
     ReferenceType reference;
 
     // stats / metadata flags for end users
-    int show_dvcf, show_ostatus, show_lift, show_wrong_md, show_wrong_xg, show_wrong_xm, show_wrong_xb; 
+    int show_wrong_md, show_wrong_xg, show_wrong_xm, show_wrong_xb; 
     enum { VLD_NONE, VLD_REPORT_INVALID, VLD_REPORT_VALID, VLD_INVALID_FOUND } validate; // genocat: tests if this is a valid genozip file (z_file opens correctly)
     StatsType show_stats;
     CompIType show_stats_comp_i;
 
     // analysis
-    int list_chroms, show_sex, idxstats;
+    int list_chroms, idxstats;
     enum { CNT_NONE, CNT_TOTAL, CNT_VBs } count; 
     enum { COV_NONE, COV_ALL, COV_CHROM, COV_ONE } show_coverage;
-    enum { KRK_NONE, KRK_ALL, KRK_INCLUDED, KRK_EXCLUDED } show_kraken;
     
     // stats / debug useful mostly for developers
     int debug, debug_or_test, show_sag, show_depn, show_dict, show_b250, show_aliases, show_digest, log_digest, show_recon_plan,
-        show_index, show_gheader, show_ref_contigs, show_chain_contigs, show_ref_seq, show_ref_diff,
-        show_reference, show_ref_hash, show_ref_index, show_chrom2ref, show_ref_iupacs, show_chain, show_ranges,
+        show_index, show_gheader, show_ref_contigs, show_ref_seq,
+        show_reference, show_ref_hash, show_ref_index, show_chrom2ref, show_ref_iupacs, show_ranges,
         show_codec, show_cache, show_memory, show_snips,
         show_alleles, show_bgzf, show_txt_contigs, show_lines,
         show_threads, show_uncompress, biopsy, skip_segconf, show_data_type,
@@ -144,7 +136,7 @@ typedef struct {
         debug_peek, stats_submit, debug_submit, show_deep, show_segconf_has, debug_huffman, debug_split,
         debug_debug, debug_valgrind, debug_tar, // ad-hoc debug printing in prod
         no_gencomp, force_gencomp, force_deep, force_PLy, no_domqual, no_pacb, no_longr, no_homp, force_qual_codec, no_smux, verify_codec, 
-        seg_only, show_bam, xthreads, show_rename_tags,
+        seg_only, show_bam, xthreads,
         #define SHOW_CONTAINERS_ALL_VBs (-1)
         show_containers, show_aligner, show_buddy,
         echo,         // show the command line in case of an error
@@ -198,25 +190,22 @@ typedef struct {
          data_modified,      // PIZ: output is NOT precisely identical to the compressed source, and hence we cannot use its BZGF blocks
                              // ZIP: txt data is modified during Seg
          explicit_ref,       // ref->filename was set by --reference or --REFERENCE (as opposed to being read from the genozip header)
-         collect_coverage,   // PIZ: collect coverage data for show_sex/show_coverage/idxstats
+         collect_coverage,   // PIZ: collect coverage data for show_coverage/idxstats
          deep_fq_only,       // PIZ: SAM data is reconstructed by not written, only FASTQ data is written
          removing_cache,     // genocat: running --no-cache with only -e <ref-file> to remove cache
          let_OS_cleanup_on_exit; // don't release resources as we are about to exit - the OS does it faster
          
     int only_headers,        // genocat --show_headers (not genounzip) show only headers (value is section_type+1 or SHOW_ALL_HEADERS)
-        recon_per_line_overhead, // genocat - additional per-line reconstruction txt_data space needed, due to flags
         check_latest;        // PIZ: run with "genozip --decompress --test": ZIP passes this to PIZ upon testing of the last file
 
-    Reference reading_reference;  // system is currently reading a reference  as a result of --chain (not normal PIZ of a .chain.genozip)
+    Reference reading_reference;  // system is currently reading a reference
 
-#define flag_loading_auxiliary (flag.reading_reference || flag.reading_chain || flag.reading_kraken) // PIZ: currently reading auxiliary file (reference, chain etc)
+#define flag_loading_auxiliary (flag.reading_reference) // PIZ: currently reading auxiliary file (reference etc)
 
-    rom reading_chain; // system is currently loading a chain file by this name
-    rom reading_kraken;// system is currently loading a kraken file by this name
     rom unbind;
     rom log_filename;  // output to info_stream goes here
 
-    enum { BIND_NONE, BIND_FQ_PAIR, BIND_DVCF, BIND_SAM, BIND_DEEP } bind; // ZIP: cases where we have more than one txt_file bound in a z_file
+    enum { BIND_NONE, BIND_FQ_PAIR, BIND_SAM, BIND_DEEP } bind; // ZIP: cases where we have more than one txt_file bound in a z_file
     uint64_t stdin_size;
     unsigned longest_filename; // length of longest filename of the txt/z files on the command line
     
@@ -241,7 +230,7 @@ extern Flags flag;
     flag.header_one = flag.header_only = flag.regions = flag.show_index = flag.show_dict =                                      \
     flag.show_b250 = flag.show_ref_contigs = flag.list_chroms = flag.count =                                                   \
     flag.downsample = flag.shard = flag.one_vb = flag.one_component = flag.xthreads =                                           \
-    flag.show_sex = flag.show_coverage = flag.idxstats = flag.collect_coverage = 0; /* int */                                   \
+    flag.show_coverage = flag.idxstats = flag.collect_coverage = 0; /* int */                                   \
     flag.bases = IUP_NONE;                                                                                                      \
     flag.interleaved = INTERLEAVE_NONE;                                                                                         \
     flag.grep = flag.unbind = flag.show_one_dict = flag.out_filename = NULL; /* char* */                                        \

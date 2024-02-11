@@ -111,8 +111,7 @@ void progress_new_component (rom new_component_name,
         }
     }
 
-    if (!flag.reading_chain) 
-        progress_update_status (prefix.s, message ? message : "");
+    progress_update_status (prefix.s, message ? message : "");
 }
 
 void progress_update (rom task, uint64_t sofar, uint64_t total, bool done)

@@ -947,7 +947,6 @@ bool seg_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip),
 
     seg_create_rollback_point (vb, (ContainerP)&con, 0);
 
-    // get items in each repeat
     str_split_by_container (snip, snip_len, &con, NULL, 0, item, NULL);
     
     if (n_items != con.nitems_lo) 
@@ -1009,7 +1008,7 @@ badly_formatted:
 // the field itself will contain the number of entries
 int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), 
                              const SegCallback *callbacks, // optional - either NULL, or contains a seg callback for each item (any callback may be NULL)
-                             void (*split_correction_callback) (uint32_t *n_repeats, rom *repeats, uint32_t *repeat_lens),
+                             SplitCorrectionCallback split_correction_callback, 
                              unsigned add_bytes)
 {
     if (!ctx->is_stats_parent) 
@@ -1295,19 +1294,17 @@ static void seg_verify_file_size (VBlockP vb)
     for (Did sf_i=0; sf_i < vb->num_contexts; sf_i++) 
         recon_size += CTX(sf_i)->txt_len;
     
-    uint32_t vb_recon_size = DTP(seg_get_vb_recon_size) ? DTP(seg_get_vb_recon_size)(vb) : vb->recon_size; // normally vb->recon_size, but callback can override
-
-    if ((vb_recon_size != recon_size || flag.debug_recon_size) && !flag.show_bam) { 
+    if ((vb->recon_size != recon_size || flag.debug_recon_size) && !flag.show_bam) { 
 
         fprintf (stderr, "context.txt_len for vb=%s:\n", VB_NAME);
         for_ctx_that (ctx->nodes.len || ctx->local.len || ctx->txt_len)
             fprintf (stderr, "%s: %u\n", ctx_tag_name_ex (ctx).s, (uint32_t)ctx->txt_len);
 
-        fprintf (stderr, "%s: reconstructed_vb_size=%s (calculated by adding up ctx.txt_len after segging) but vb->recon_size%s=%s (initialized when reading the file and adjusted for modifications) (diff=%d) (vblock_memory=%s)\n",
-                 VB_NAME, str_int_commas (recon_size).s, (VB_DT(VCF) && vcf_vb_is_luft(vb)) ? "_luft" : "", str_int_commas (vb_recon_size).s, 
-                 (int32_t)recon_size - (int32_t)vb_recon_size, str_size (segconf.vb_size).s);
+        fprintf (stderr, "%s: reconstructed_vb_size=%s (calculated by adding up ctx.txt_len after segging) but vb->recon_size=%s (initialized when reading the file and adjusted for modifications) (diff=%d) (vblock_memory=%s)\n",
+                 VB_NAME, str_int_commas (recon_size).s, str_int_commas (vb->recon_size).s, 
+                 (int32_t)recon_size - (int32_t)vb->recon_size, str_size (segconf.vb_size).s);
 
-        ASSERT (vb_recon_size == recon_size, "Error while verifying reconstructed size.\n"
+        ASSERT (vb->recon_size == recon_size, "Error while verifying reconstructed size.\n"
                 "To get vblock: genozip --biopsy %u %s", vb->vblock_i, txt_name);
     }
 }

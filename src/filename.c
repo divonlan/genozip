@@ -48,9 +48,6 @@ rom filename_z_normal (rom txt_filename, DataType dt, FileType txt_ft)
     // if the file has an extension matching its type, replace it with the genozip extension, if not, just add the genozip extension
     rom genozip_ext = file_exts[file_get_z_ft_by_txt_in_ft (dt, txt_ft)];
 
-    if (chain_is_loaded && (TXT_DT(VCF) || TXT_DT(BCF)))
-        genozip_ext = DVCF_GENOZIP_;
-
     if (filename_has_ext (local_txt_filename, file_exts[txt_ft]))
         sprintf (z_filename, "%s%s%.*s%s", 
                  (dn_len ? flag.out_dirname : ""), (dn_len ? "/" : ""), 

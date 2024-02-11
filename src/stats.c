@@ -248,19 +248,7 @@ static void stats_output_file_metadata (void)
                    (flag.deep && flag.pair)?" (deep & paired)" : flag.deep?" (deep)" : flag.pair?" (paired)" : "", 
                    (int)z_file->bound_txt_names.len, z_file->bound_txt_names.data);
     
-    if (IS_REF_MAKE_CHAIN) {
-        bufprintf (evb, &stats, "PRIM reference: %s %s=%s ref_genozip_version=%u\n", 
-                   ref_get_filename (prim_ref), ref_get_digest_name (prim_ref), 
-                   digest_display_(ref_get_genome_digest (prim_ref), ref_get_genozip_version (prim_ref)).s, 
-                   ref_get_genozip_version (prim_ref));
-
-        bufprintf (evb, &stats, "LUFT reference: %s %s=%s ref_genozip_version=%u\n", 
-                   ref_get_filename (gref), ref_get_digest_name (gref), 
-                   digest_display_(ref_get_genome_digest (gref), ref_get_genozip_version (gref)).s, 
-                   ref_get_genozip_version (gref));
-    }
-
-    else if (IS_REF_EXTERNAL || IS_REF_EXT_STORE || IS_REF_LIFTOVER) 
+    else if (IS_REF_EXTERNAL || IS_REF_EXT_STORE) 
         bufprintf (evb, &stats, "Reference: %s %s=%s ref_genozip_version=%u\n", 
                    ref_get_filename (gref),  ref_get_digest_name (gref), 
                    digest_display_(ref_get_genome_digest (gref), ref_is_digest_adler (gref)).s, 
@@ -277,9 +265,6 @@ static void stats_output_file_metadata (void)
     #define REPORT_QNAME \
         FEATURE (z_file->num_lines, "Read name style: %s%s", "Qname=%s%s", \
                  segconf_qf_name (0), cond_str(segconf.qname_flavor[1], "+", segconf_qf_name(1))) // no space surrounding the '+' as expected by batch_qname_flavors
-
-    #define REPORT_KRAKEN \
-        FEATURE0 (kraken_is_loaded, "Features: Per-line taxonomy ID data", "taxonomy_data")
 
     switch (z_file->data_type) {
 
@@ -365,7 +350,6 @@ static void stats_output_file_metadata (void)
 
             FEATURE0 (segconf.sam_bisulfite, "Feature: Bisulfite", "Bisulfite");
             FEATURE0 (segconf.has_cellranger, "Feature: cellranger-style fields", "has_cellranger");
-            REPORT_KRAKEN;
 
             if (segconf.sam_ms_type && segconf.has[OPTION_ms_i]) {
                 rom names[] = ms_type_NAME;
@@ -415,53 +399,23 @@ static void stats_output_file_metadata (void)
             if (z_file->max_ploidy != 2) 
                 bufprintf (evb, &features, "ploidy=%u;", z_file->max_ploidy);
 
+            bufprintf (evb, &features, "QUAL_method=%s;", VCF_QUAL_method_name (segconf.vcf_QUAL_method));
+
+            bufprintf (evb, &features, "INFO_method=%s;", VCF_INFO_method_name (segconf.vcf_INFO_method));
+
             if (segconf.has[FORMAT_GQ])
                 bufprintf (evb, &features, "GQ_method=%s;", GQ_method_name (segconf.GQ_method));
 
             if (segconf.has[FORMAT_DP])
                 bufprintf (evb, &features, "FMT_DP_method=%s;", FMT_DP_method_name (segconf.FMT_DP_method));
 
-            if (segconf.has[FORMAT_PL] && segconf.PL_mux_by_DP != unknown)
+            if (segconf.has[FORMAT_PL])
                 bufprintf (evb, &features, "PL_method=%s;",  segconf.PL_mux_by_DP==yes ? "DosageXDP" : "Dosage");
-            
-            if (z_is_dvcf)
-                bufprintf (evb, &stats, "%ss: %s (Prim-only: %s Luft-only: %s)  Contexts: %u   Vblocks: %u x %u MB  Sections: %u\n", 
-                        DTPZ (line_name), str_int_commas (z_file->num_lines).s, str_int_commas (z_file->comp_num_lines[VCF_COMP_PRIM_ONLY]).s, 
-                        str_int_commas (z_file->comp_num_lines[VCF_COMP_LUFT_ONLY]).s, num_used_ctxs, 
-                        z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), z_file->section_list_buf.len32);
-           
+                       
             REPORT_VBs;
 
-            if (z_is_dvcf) {
-                bufprintf (evb, &stats, "Features: Dual-coordinates: Main VBs: %u Prim-only VBs: %u Luft-only VBs: %u\n", 
-                        sections_get_num_vbs(VCF_COMP_MAIN), sections_get_num_vbs(VCF_COMP_PRIM_ONLY), sections_get_num_vbs(VCF_COMP_LUFT_ONLY));
-                bufprint0 (evb, &features, "DVCF;");
-            }
-
             break;
-
-        case DT_KRAKEN: {
-            REPORT_VBs;
-
-            int64_t dominant_taxid_count;
-            rom dominant_taxid = ctx_get_snip_with_largest_count (KRAKEN_TAXID, &dominant_taxid_count);
-
-            if (dominant_taxid_count != -1)
-                bufprintf (evb, &stats, "Dominant TaxID: %s  %s: %s (%-5.2f%%)\n", dominant_taxid, DTPZ (line_name),
-                        str_int_commas (dominant_taxid_count).s, 100.0 * (float)dominant_taxid_count / (float)z_file->num_lines); 
-            else
-                bufprint0 (evb, &stats, "Dominant TaxID: No dominant organism\n"); 
-
-            REPORT_QNAME;
-            break;
-        }
         
-        case DT_CHAIN: 
-            REPORT_VBs;
-            if (IS_REF_MAKE_CHAIN && !segconf.chain_mismatches_ref)
-                bufprint0 (evb, &stats, "Features: Chain file suitable for use with genozip --chain\n");
-            break;
-
         case DT_FASTQ:
             REPORT_VBs;
             REPORT_QNAME;
@@ -480,7 +434,6 @@ static void stats_output_file_metadata (void)
                        segconf.smux_max_stdv * 100.0, 
                        segconf.smux_max_stdv_q=='='?"≐" : segconf.smux_max_stdv_q==';'?"；" : char_to_printable (segconf.smux_max_stdv_q).s); // Unicode ；and ≐ (in UTF-8) to avoid breaking spreadsheet
 
-            REPORT_KRAKEN;
             if (segconf.r1_or_r2) bufprintf (evb, &features, "R1_or_R2=R%d;", (segconf.r1_or_r2 == PAIR_R1) ? 1 : 2);
 
             break;
@@ -491,7 +444,6 @@ static void stats_output_file_metadata (void)
             FEATURE0 (segconf.multiseq, "Multiseq", "multiseq");
             FEATURE (true, "Sequences: %"PRIu64, "num_sequences=%"PRIu64, z_file->num_sequences);
             REPORT_VBs;
-            REPORT_KRAKEN;
             break;
 
         case DT_GFF:
@@ -662,14 +614,12 @@ static void stats_output_stats (StatsByLine *s, unsigned num_stats, float src_co
                    all_comp_ratio / src_comp_ratio);
     }
 
-    // note: no point showing this per component in DVCF, bc all_txt_len_0 is fully accounted for in the MAIN component and it is 0 in the others
-    if (flag.show_stats_comp_i == COMP_NONE || !z_is_dvcf)
-        bufprintf (evb, &stats, 
-                   "%-20s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
-                   src_comp_ratio != 1 ? "GENOZIP vs TXT" : "TOTAL",
-                   str_size (all_z_size).s, all_pc_of_z, // total z size and sum of all % of z (should be 100)
-                   str_size (all_txt_len_0).s, all_pc_of_txt, // total txt fize and ratio z vs txt
-                   all_comp_ratio);
+    bufprintf (evb, &stats, 
+                "%-20s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
+                src_comp_ratio != 1 ? "GENOZIP vs TXT" : "TOTAL",
+                str_size (all_z_size).s, all_pc_of_z, // total z size and sum of all % of z (should be 100)
+                str_size (all_txt_len_0).s, all_pc_of_txt, // total txt fize and ratio z vs txt
+                all_comp_ratio);
 }
 
 static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
@@ -857,8 +807,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
         
     stats_consolidate_non_ctx (sbl, sbl_buf.len32, "RandomAccessIndex", 2, ST_NAME (SEC_RANDOM_ACCESS), ST_NAME (SEC_REF_RAND_ACC));
     
-    ASSERTW (all_txt_len == txt_size || flag.make_reference || // all_txt_len=0 in make-ref as there are no contexts
-             z_is_dvcf, // temporarily remove DVCF - our header data accounting is wrong (bug 681)
+    ASSERTW (all_txt_len == txt_size || flag.make_reference, // all_txt_len=0 in make-ref as there are no contexts
              "Expecting all_txt_len(sum of txt_len of all contexts)=%"PRId64" == txt_size(modified txt_file size)=%"PRId64" (diff=%"PRId64")", all_txt_len, txt_size, (int64_t)txt_size - all_txt_len);
 
     // short form stats from --stats    
@@ -880,7 +829,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
     // note: we use txt_data_so_far_bind is the sum of recon_sizes - see zip_update_txt_counters - which is
     // expected to be the sum of txt_len. However, this NOT the size of the original file which is stored in
     // z_file->txt_data_so_far_bind_0.
-    ASSERT (!flag.debug_or_test || flag.show_stats_comp_i != COMP_NONE || all_txt_len == txt_size || flag.data_modified || z_is_dvcf || flag.make_reference, 
+    ASSERT (!flag.debug_or_test || flag.show_stats_comp_i != COMP_NONE || all_txt_len == txt_size || flag.data_modified || flag.make_reference, 
             "Hmm... incorrect calculation for %s sizes: total section sizes=%s but file size is %s (diff=%d)", 
             z_dt_name(), str_int_commas (all_txt_len).s, str_int_commas (txt_size).s, 
             (int32_t)(txt_size - all_txt_len)); 

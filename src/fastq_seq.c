@@ -72,7 +72,7 @@ void fastq_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(seq), bool deep)
 
     // case: aligner - lookup from SQBITMAP
     MappingType aln_res;
-    if (aligner_ok && ((aln_res = aligner_seg_seq (VB, STRa(seq), true, (vb->pair_vb_i > 0), pair_gpos, pair_is_forward)))) {
+    if (aligner_ok && ((aln_res = aligner_seg_seq (VB, STRa(seq), (vb->pair_vb_i > 0), pair_gpos, pair_is_forward)))) {
     
         int32_t pseudo_seq_len = seq_len_by_qname (vb, seq_len) ? SEQ_LEN_BY_QNAME : seq_len;    
 
@@ -233,7 +233,7 @@ static void fastq_update_coverage_aligned (VBlockFASTQP vb)
     WordIndex ref_index = ref_contig_get_by_gpos (gref, gpos, 0, NULL);
     ASSPIZ0 (ref_index != WORD_INDEX_NONE, "expecting ref_index, because sequence is aligned");
 
-    if (flag.show_coverage || flag.show_sex)
+    if (flag.show_coverage)
         *B64 (vb->coverage, ref_index) += vb->seq_len;
 
     if (flag.show_coverage || flag.idxstats)
@@ -282,7 +282,7 @@ SPECIAL_RECONSTRUCTOR (fastq_special_unaligned_SEQ)
 
     // just update coverage (unaligned)
     if (flag.collect_coverage) {
-        if (flag.show_coverage || flag.show_sex)
+        if (flag.show_coverage)
             *(BAFT64 (vb->coverage) - NUM_COVER_TYPES + CVR_UNMAPPED) += vb->seq_len;
 
         if (flag.show_coverage || flag.idxstats)

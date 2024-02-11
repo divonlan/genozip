@@ -18,7 +18,6 @@
 #include "codec.h"
 #include "stats.h"
 #include "reconstruct.h"
-#include "kraken.h"
 #include "reference.h"
 #include "segconf.h"
 #include "chrom.h"
@@ -260,12 +259,6 @@ void fasta_seg_initialize (VBlockP vb)
     if (segconf.seq_type == SQT_AMINO || Z_DT(GFF)) 
         CTX(FASTA_DESC)->ltype = LT_STRING;
 
-    if (kraken_is_loaded) {
-        CTX(FASTA_TAXID)->flags.store    = STORE_INT;
-        CTX(FASTA_TAXID)->no_stons       = true; // must be no_stons the SEC_COUNTS data needs to mirror the dictionary words
-        CTX(FASTA_TAXID)->counts_section = true; 
-    }
-
     // if this neocleotide FASTA of unrelated contigs, we're better off with ACGT        
     if (!segconf.running && !segconf.multiseq && segconf.seq_type == SQT_NUKE)
         codec_acgt_seg_initialize (VB, FASTA_NONREF, true);
@@ -299,13 +292,11 @@ static void fasta_seg_finalize_segconf (VBlockP vb)
     if (num_contigs_this_vb >= 5 && !flag.make_reference && !flag.fast) 
         segconf_test_multiseq (VB, FASTA_NONREF);
 
-    // limit the number of contigs, to avoid the FASTA_CONTIG dictionary becoming too big. note this also
-    // sets a limit for fasta-to-phylip translation
-    if (!flag.prepare_for_taxid) 
-        #define MAX_CONTIGS_IN_FILE 100000 
-        segconf.fasta_has_contigs &= !segconf.multiseq &&
-                                     (num_contigs_this_vb == 1 || // the entire VB is a single contig
-                                     est_num_contigs_in_file <  MAX_CONTIGS_IN_FILE); 
+    // limit the number of contigs, to avoid the FASTA_CONTIG dictionary becoming too big
+    #define MAX_CONTIGS_IN_FILE 100000 
+    segconf.fasta_has_contigs &= !segconf.multiseq &&
+                                 (num_contigs_this_vb == 1 || // the entire VB is a single contig
+                                 est_num_contigs_in_file <  MAX_CONTIGS_IN_FILE); 
 }
 
 void fasta_seg_finalize (VBlockP vb)
@@ -321,7 +312,7 @@ void fasta_seg_finalize (VBlockP vb)
             .callback     = true,
             .nitems_lo    = 2,
             .items        = { { .dict_id = { _FASTA_LINEMETA }  },
-                              { .dict_id = { _FASTA_EOL      }, .translator = FASTA2PHYLIP_EOL } }
+                              { .dict_id = { _FASTA_EOL      }  } }
         };
 
         container_seg (vb, CTX(FASTA_TOPLEVEL), (ContainerP)&top_level, 0, 0, 0);
@@ -333,7 +324,6 @@ bool fasta_seg_is_small (ConstVBlockP vb, DictId dict_id)
     return dict_id.num == _FASTA_TOPLEVEL ||
            dict_id.num == _FASTA_DESC     ||
            dict_id.num == _FASTA_LINEMETA ||
-           dict_id.num == _FASTA_TAXID    ||
            dict_id.num == _FASTA_EOL;
 }
 
@@ -392,7 +382,7 @@ static void fasta_seg_desc_line (VBlockFASTAP vb, rom line, uint32_t line_len, b
         bool is_new;
         chrom_seg_no_b250 (VB, STRa(chrom_name), &is_new);
 
-        if (!is_new && segconf.running && !flag.prepare_for_taxid) {
+        if (!is_new && segconf.running) {
             segconf.fasta_has_contigs = false; // this FASTA is not of contigs. It might be just a multiseq (collection of variants of a sequence).
             seg_rollback (VB);
         }
@@ -526,13 +516,13 @@ static void fasta_seg_seq_line (VBlockFASTAP vb, STRp(line),
     // case: this sequence is continuation from the previous VB - we don't yet know the chrom - we will update it,
     // and increment the min/max_pos relative to the beginning of the seq in the vb later, in random_access_finalize_entries
     if (segconf.fasta_has_contigs && !vb->chrom_name && !vb->ra_initialized) {
-        random_access_update_chrom (VB, 0, WORD_INDEX_NONE, 0, 0);
+        random_access_update_chrom (VB, WORD_INDEX_NONE, 0, 0);
         vb->ra_initialized = true;
         vb->chrom_node_index = WORD_INDEX_NONE; // the chrom started in a previous VB, we don't yet know its index
     }
 
     if (segconf.fasta_has_contigs)
-        random_access_increment_last_pos (VB, 0, line_len); 
+        random_access_increment_last_pos (VB, line_len); 
 }
 
 // Fasta format(s): https://en.wikipedia.org/wiki/FASTA_format
@@ -557,14 +547,8 @@ rom fasta_seg_txt_line (VBlockP vb_, rom line, uint32_t remaining_txt_len, bool 
     rom next_field = seg_get_next_line (VB, line, &remaining_vb_txt_len, &line_len, !vb->vb_has_no_newline, has_13, "FASTA line");
 
     // case: description line - we segment it to its components
-    if (*line == '>' || (*line == ';' && vb->last_line == FASTA_LINE_SEQ)) {
+    if (*line == '>' || (*line == ';' && vb->last_line == FASTA_LINE_SEQ))
         fasta_seg_desc_line (vb, line, line_len, has_13);
-
-        if (kraken_is_loaded) {
-            unsigned qname_len = strcspn (line + 1, " \t\r\n"); // +1 to skip the '>' or ';'
-            kraken_seg_taxid (VB, FASTA_TAXID, line + 1, qname_len, true);
-        }
-    }
 
     // case: comment line - stored in the comment buffer
     else if (*line == ';' || !line_len) 
@@ -601,9 +585,7 @@ IS_SKIP (fasta_piz_is_skip_section)
         dict_id.num != _FASTA_DESC && !dict_id_is_fasta_desc_sf (dict_id))
         return true;
 
-    // no need for the TAXID data if user didn't specify --taxid
-    if (!flag.kraken_taxid && dict_id.num == _FASTA_TAXID)
-        return true;
+    if (dict_id.num == _FASTA_TAXID) return true; // skip TAXID in old files
 
     return false;
 }
@@ -660,8 +642,7 @@ SPECIAL_RECONSTRUCTOR_DT (fasta_piz_special_COMMENT)
     VBlockFASTAP vb = (VBlockFASTAP)vb_;
 
     // skip showing comment line in case cases - but consume it anyway:
-    if (  vb->contig_grepped_out || // 1. if this contig is grepped out
-          OUT_DT(PHYLIP))           // 2. if we're outputting in Phylis format
+    if (vb->contig_grepped_out) // 1. if this contig is grepped out
         vb->drop_curr_line = "grep";
 
     // in case of not showing the COMMENT in the entire file (--header-only or this is a --reference) - we can skip consuming it
@@ -678,9 +659,6 @@ SPECIAL_RECONSTRUCTOR_DT (fasta_piz_special_COMMENT)
 // main thread: called for each txt file, after reading global area, before reading txt header
 bool fasta_piz_initialize (CompIType comp_i)
 {
-    ASSINP (!flag.kraken_taxid || ZCTX(FASTA_CONTIG)->word_list.len, 
-             "Cannot filter %s with --taxid because it was compressed without CONTIGs. To overcome this, compress the FASTA again with --prepare-for-taxid.", z_name);
-
     return true;
 }
 
@@ -747,22 +725,6 @@ bool fasta_piz_is_vb_needed (VBIType vb_i)
     return needed;
 }
 
-// Phylip format mandates exactly 10 space-padded characters: http://scikit-bio.org/docs/0.2.3/generated/skbio.io.phylip.html
-static inline void fasta_piz_translate_desc_to_phylip (VBlockFASTAP vb, char *desc_start)
-{
-    uint32_t recon_len = BAFTtxt - desc_start;
-    *BAFTtxt = 0; // nul-terminate
-
-    rom chrom_name = desc_start + 1;
-    unsigned chrom_name_len = strcspn (desc_start + 1, " \t\r\n");
-
-    memmove (desc_start, chrom_name, MIN_(chrom_name_len, 10));
-    if (chrom_name_len < 10) memcpy (desc_start + chrom_name_len, "          ", 10-chrom_name_len); // pad with spaces
-
-    if (recon_len > 10) Ltxt -= recon_len - 10; // we do it this way to avoid signed problems
-    else                Ltxt += 10 - recon_len;
-}
-
 // shorten DESC to the first white space
 static inline void fasta_piz_desc_header_one (VBlockFASTAP vb, char *desc_start)
 {
@@ -789,12 +751,6 @@ SPECIAL_RECONSTRUCTOR_DT (fasta_piz_special_DESC)
     unsigned chrom_name_len = strcspn (desc_start + 1, " \t\r\n"); // +1 to skip the '>'
     
     if (CTX(FASTA_CONTIG)->is_loaded) { // some FASTAs may not have contigs
-        // --taxid: grep out by Kraken taxid 
-        if (flag.kraken_taxid) 
-            vb->contig_grepped_out |= 
-                ((!kraken_is_loaded && !kraken_is_included_stored (VB, FASTA_TAXID, false)) ||
-                ( kraken_is_loaded && !kraken_is_included_loaded (VB, desc_start + 1, chrom_name_len)));
-        
         vb->chrom_node_index = vb->last_index(CHROM) = ctx_search_for_word_index (CTX(CHROM), desc_start + 1, chrom_name_len);
 
         // note: this logic allows the to grep contigs even if --no-header 
@@ -805,40 +761,12 @@ SPECIAL_RECONSTRUCTOR_DT (fasta_piz_special_DESC)
     if (flag.no_header)
         vb->drop_curr_line = "no_header";     
 
-    if (OUT_DT(PHYLIP)) 
-        fasta_piz_translate_desc_to_phylip (vb, desc_start);
-
     if (flag.header_one)
         fasta_piz_desc_header_one (vb, desc_start);
 
     vb->last_line = FASTA_LINE_DESC;
 
     return NO_NEW_VALUE;
-}
-
-//---------------------------------------
-// Multifasta -> PHYLIP translation stuff
-//---------------------------------------
-
-// create Phylip header line
-TXTHEADER_TRANSLATOR (txtheader_fa2phy)
-{
-    // get length of contigs and error if they are not all the same length
-    uint32_t contig_len = random_access_verify_all_contigs_same_length();
-
-    bufprintf (comp_vb, txtheader_buf, "%"PRIu64" %u\n", ZCTX(FASTA_CONTIG)->word_list.len, contig_len);
-}
-
-// Translating FASTA->PHYLIP: drop EOL after DESC + don't allow multiple consecutive EOL
-TRANSLATOR_FUNC (fasta_piz_fa2phy_EOL)
-{
-    if (VB_FASTA->last_line == FASTA_LINE_DESC // line is a DESC
-    ||  recon == vb->txt_data.data     // initial EOL - not allowed in Phylip)
-    ||  recon[-1] == '\n')             // previous item was an EOL - remove this one then
-    
-        Ltxt -= recon_len;
-    
-    return 0;
 }
 
 CONTAINER_FILTER_FUNC (fasta_piz_filter)

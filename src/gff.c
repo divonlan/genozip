@@ -691,7 +691,7 @@ static void gff_seg_gff3_attrs_field (VBlockGFFP vb, STRp(field))
 static void gff_seg_START (VBlockGFFP vb, STRp(start))
 {
     seg_pos_field (VB, GFF_START, GFF_START, 0, 0, STRa(start), 0, start_len+1);
-    random_access_update_pos (VB, 0, GFF_START);
+    random_access_update_pos (VB, GFF_START);
 }
 
 static void gff_seg_TYPE (VBlockGFFP vb, STRp(type))

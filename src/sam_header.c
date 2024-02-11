@@ -448,6 +448,8 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
         }
     }
 
+    if (strstr (first_PG, "ABRA2")) segconf.sam_has_abra2 = true;
+
     // build buffer of unique PN+ID fields, for stats
     sam_header_zip_build_stats_programs (first_PG, after_PGs);
 
@@ -599,7 +601,7 @@ bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
             ref_initialize_ranges (gref, RT_DENOVO); 
 
         // evb buffers must be alloced by the main thread, since other threads cannot modify evb's buf_list
-        random_access_alloc_ra_buf (evb, 0, 0);
+        random_access_alloc_ra_buf (evb, SAM_RNAME);
     }
 
     else { // PIZ

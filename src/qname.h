@@ -37,7 +37,7 @@ typedef packed_enum {
     // Consensus alignments flavors
     QF_CONSENSUS, QF_CONS, 
     // Other syntheic (i.e. non-sequencer) flavors
-    QF_GENOZIP_OPT, QF_INTEGER, QF_HEX_CHR, QF_BAMSURGEON, QF_SEQAN, QF_CLC_GW, QF_STR_INT, QF_Sint,
+    QF_GENOZIP_OPT, QF_INTEGER, QF_HEX_CHR, QF_BAMSURGEON, QF_SEQAN, QF_CLC_GW, QF_STR_INT, QF_Sint, QF_GENERATED,
     NUM_FLAVORS
 } QnameFlavorId;
 
@@ -53,8 +53,8 @@ extern void qname_zip_initialize (void);
 extern void qname_seg_initialize (VBlockP vb, QType q, Did st_did_i);
 extern void qname_segconf_finalize (VBlockP vb);
 
-typedef enum  { QTR_SUCCESS, QTR_QNAME_LEN_0, QTR_FIXED_LEN_MISMATCH, QTR_WRONG_Q, QTR_CONTAINER_MISMATCH, QTR_BAD_INTEGER, QTR_BAD_CHARS, QTR_BAD_NUMERIC, QTR_BAD_HEX, QTR_TECH_MISMATCH, QTR_NOT_BARCODE, QTR_NOT_BARCODE2, QTR_NO_MATE, NUM_QTRs } QnameTestResult;
-#define QTR_NAME { "SUCCESS",   "QNAME_LEN=0",   "FIXED_LEN_MISMATCH",   "WRONG_Q",   "CONTAINER_MISMATCH",   "BAD_INTEGER",   "BAD_CHARS",   "BAD_NUMERIC",   "BAD_HEX",   "TECH_MISMATCH",   "NOT_BARCODE",   "NOT_BARCODE2",   "NO_MATE" }
+typedef enum  { QTR_SUCCESS, QTR_QNAME_LEN_0, QTR_FIXED_LEN_MISMATCH, QTR_WRONG_Q, QTR_CONTAINER_MISMATCH, QTR_BAD_INTEGER, QTR_BAD_CHARS, QTR_BAD_NUMERIC, QTR_BAD_HEX, QTR_TECH_MISMATCH, QTR_NOT_BARCODE, QTR_NOT_BARCODE2, QTR_NO_MATE,  QTR_FAILED_VALIDATE_FUNC, NUM_QTRs } QnameTestResult;
+#define QTR_NAME { "SUCCESS",   "QNAME_LEN=0",   "FIXED_LEN_MISMATCH",   "WRONG_Q",   "CONTAINER_MISMATCH",   "BAD_INTEGER",   "BAD_CHARS",   "BAD_NUMERIC",   "BAD_HEX",   "TECH_MISMATCH",   "NOT_BARCODE",   "NOT_BARCODE2",   "NO_MATE", "FAILED_VALIDATE_FUNC"}
 extern QnameTestResult qname_test_flavor (STRp(qname), QType q, QnameFlavor qf, bool quiet);
 
 extern uint32_t qname_calc_hash (QType q, STRp(qname), thool is_last, bool canonical, uint32_t *uncanonical_suffix_len);

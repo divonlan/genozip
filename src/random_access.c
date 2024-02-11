@@ -19,7 +19,7 @@
 #include "sections.h"
 #include "codec.h"
 
-static Mutex ra_mutex[2] = {};
+static Mutex ra_mutex = {};
 
 #define RA_UNKNOWN_CHROM_SKIP_POS 1
 
@@ -29,8 +29,7 @@ static Mutex ra_mutex[2] = {};
 
 void random_access_initialize(void)
 {    
-    mutex_initialize (ra_mutex[0]);
-    mutex_initialize (ra_mutex[1]);
+    mutex_initialize (ra_mutex);
 }
 
 // Called by PIZ main thread (piz_read_global_area) and ZIP main thread (zip_write_global_area)
@@ -79,32 +78,32 @@ static void random_access_show_index (ConstBufferP ra_buf, bool from_zip, Did ch
 // --------------------
 
 // ZIP only
-void random_access_alloc_ra_buf (VBlockP vb, int ra_i, int32_t chrom_node_index)
+void random_access_alloc_ra_buf (VBlockP vb, int32_t chrom_node_index)
 {
-    vb->ra_buf[ra_i].len = MAX_(vb->ra_buf[ra_i].len, chrom_node_index + 2);
-    buf_alloc_zero (vb, &vb->ra_buf[ra_i], 0, MAX_(vb->ra_buf[ra_i].len, 500), RAEntry, 2, "ra_buf");
+    vb->ra_buf.len = MAX_(vb->ra_buf.len, chrom_node_index + 2);
+    buf_alloc_zero (vb, &vb->ra_buf, 0, MAX_(vb->ra_buf.len, 500), RAEntry, 2, "ra_buf");
 }
 
 // ZIP only: called from Seg when the CHROM changed - this might be a new chrom, or
 // might be an exiting chrom (for example, in an unsorted SAM or VCF). we maitain one ra field per chrom per vb
 // chrom_node_index==WORD_INDEX_NONE if we don't yet know what chrom this is and we will update it later (see fasta_seg_txt_line)
-void random_access_update_chrom (VBlockP vb, int ra_i, WordIndex chrom_node_index, STRp (chrom_name))
+void random_access_update_chrom (VBlockP vb, WordIndex chrom_node_index, STRp (chrom_name))
 {
     // note: when FASTA calls this for a sequence that started in the previous vb, and hence chrom is unknown, chrom_node_index==-1.
     ASSERT (chrom_node_index >= -1, "chrom_node_index=%d in vb_i=%u", chrom_node_index, vb->vblock_i);
 
     // if this is an "unavailable" chrom ("*" in SAM, "." in VCF) we don't store it and signal not to store POS either
     if (segconf.disable_random_acccess || IS_ASTERISK (chrom_name) || IS_PERIOD (chrom_name)) {
-        vb->ra_buf[ra_i].param = RA_UNKNOWN_CHROM_SKIP_POS;
+        vb->ra_buf.param = RA_UNKNOWN_CHROM_SKIP_POS;
         vb->chrom_name       = chrom_name;
         vb->chrom_name_len   = chrom_name_len;
         return;
     }
 
     // allocate
-    random_access_alloc_ra_buf (vb, ra_i, chrom_node_index);
+    random_access_alloc_ra_buf (vb, chrom_node_index);
 
-    RAEntry *ra_ent = B(RAEntry, vb->ra_buf[ra_i], chrom_node_index + 1); // chrom_node_index=-1 goes into entry 0 etc
+    RAEntry *ra_ent = B(RAEntry, vb->ra_buf, chrom_node_index + 1); // chrom_node_index=-1 goes into entry 0 etc
     if (!ra_ent->vblock_i) { // first occurance of this chrom
         ra_ent->chrom_index = chrom_node_index;
         ra_ent->vblock_i    = vb->vblock_i;
@@ -112,11 +111,11 @@ void random_access_update_chrom (VBlockP vb, int ra_i, WordIndex chrom_node_inde
 }
 
 // ZIP only: update the pos in the existing chrom entry
-void random_access_update_pos (VBlockP vb, int ra_i, Did did_i_pos)
+void random_access_update_pos (VBlockP vb, Did did_i_pos)
 {
     // if the last chrom was unknown ("*"), we do nothing with pos either
-    if (vb->ra_buf[ra_i].param == RA_UNKNOWN_CHROM_SKIP_POS) {
-        vb->ra_buf[ra_i].param = 0; // reset
+    if (vb->ra_buf.param == RA_UNKNOWN_CHROM_SKIP_POS) {
+        vb->ra_buf.param = 0; // reset
         return;
     }
     
@@ -124,7 +123,7 @@ void random_access_update_pos (VBlockP vb, int ra_i, Did did_i_pos)
 
     if (this_pos <= 0) return; // ignore pos<=0 (in SAM, 0 means unmapped POS)
 
-    RAEntry *ra_ent = B(RAEntry, vb->ra_buf[ra_i], vb->chrom_node_index + 1); // chrom_node_index=-1 goes into entry 0 etc
+    RAEntry *ra_ent = B(RAEntry, vb->ra_buf, vb->chrom_node_index + 1); // chrom_node_index=-1 goes into entry 0 etc
 
     if (!ra_ent->min_pos) // first line this chrom is encountered in this vb - initialize pos
         ra_ent->min_pos = ra_ent->max_pos = this_pos;
@@ -135,63 +134,62 @@ void random_access_update_pos (VBlockP vb, int ra_i, Did did_i_pos)
 }
 
 // ZIP: update increment reference pos
-void random_access_increment_last_pos (VBlockP vb, int ra_i, PosType64 increment)
+void random_access_increment_last_pos (VBlockP vb, PosType64 increment)
 {
-    ASSERTISALLOCED (vb->ra_buf[ra_i]);
+    ASSERTISALLOCED (vb->ra_buf);
 
-    RAEntry *ra_ent = B(RAEntry, vb->ra_buf[ra_i], vb->chrom_node_index + 1); // chrom_node_index=-1 goes into entry 0 etc
+    RAEntry *ra_ent = B(RAEntry, vb->ra_buf, vb->chrom_node_index + 1); // chrom_node_index=-1 goes into entry 0 etc
 
     if (!ra_ent->min_pos) ra_ent->min_pos = 1; 
     ra_ent->max_pos += increment;
 }
 
 // ZIP: update last reference pos
-void random_access_update_last_pos (VBlockP vb, int ra_i, PosType64 last_pos)
+void random_access_update_last_pos (VBlockP vb, PosType64 last_pos)
 {
-    ASSERTISALLOCED (vb->ra_buf[ra_i]);
+    ASSERTISALLOCED (vb->ra_buf);
     
-    RAEntry *ra_ent = B(RAEntry, vb->ra_buf[ra_i], vb->chrom_node_index + 1); // chrom_node_index=-1 goes into entry 0 etc
+    RAEntry *ra_ent = B(RAEntry, vb->ra_buf, vb->chrom_node_index + 1); // chrom_node_index=-1 goes into entry 0 etc
     if (last_pos > ra_ent->max_pos) ra_ent->max_pos = last_pos;
 }
 
-void random_access_update_first_last_pos (VBlockP vb, int ra_i, WordIndex chrom_node_index, STRp (first_pos), STRp (last_pos))
+void random_access_update_first_last_pos (VBlockP vb, WordIndex chrom_node_index, STRp (first_pos), STRp (last_pos))
 {
-    ASSERTISALLOCED (vb->ra_buf[ra_i]);
+    ASSERTISALLOCED (vb->ra_buf);
 
     PosType64 first_pos_value, last_pos_value;    
     if (!str_get_int (STRa(first_pos), &first_pos_value)) return; // fail silently
     if (!str_get_int (STRa(last_pos),  &last_pos_value )) return; 
     
-    RAEntry *ra_ent = B(RAEntry, vb->ra_buf[ra_i], chrom_node_index + 1); // chrom_node_index=-1 goes into entry 0 etc
+    RAEntry *ra_ent = B(RAEntry, vb->ra_buf, chrom_node_index + 1); // chrom_node_index=-1 goes into entry 0 etc
     if (first_pos_value < ra_ent->min_pos) ra_ent->min_pos = first_pos_value;
     if (last_pos_value  > ra_ent->max_pos) ra_ent->max_pos = last_pos_value;
 }
 
-void random_access_update_to_entire_chrom (VBlockP vb, int ra_i, PosType64 first_pos_of_chrom, PosType64 last_pos_of_chrom)
+void random_access_update_to_entire_chrom (VBlockP vb, PosType64 first_pos_of_chrom, PosType64 last_pos_of_chrom)
 {
-    ASSERTISALLOCED (vb->ra_buf[ra_i]);
+    ASSERTISALLOCED (vb->ra_buf);
     
-    RAEntry *ra_ent = B(RAEntry, vb->ra_buf[ra_i], vb->chrom_node_index + 1); // chrom_node_index=-1 goes into entry 0 etc
+    RAEntry *ra_ent = B(RAEntry, vb->ra_buf, vb->chrom_node_index + 1); // chrom_node_index=-1 goes into entry 0 etc
     ra_ent->min_pos = first_pos_of_chrom;
     ra_ent->max_pos = last_pos_of_chrom;
 }
 
 // called by ZIP compute thread, while holding the z_file mutex: merge in the VB's ra_buf in the global z_file one
 // note: the order of the merge is not necessarily the sequential order of VBs
-void random_access_merge_in_vb (VBlockP vb, int ra_i)
+void random_access_merge_in_vb (VBlockP vb)
 {
-    if (!vb->ra_buf[ra_i].len) return; // nothing to merge
+    if (!vb->ra_buf.len) return; // nothing to merge
 
-    BufferP z_buf  = ra_i==0 ? &z_file->ra_buf : &z_file->ra_buf_luft;
-    ARRAY (const RAEntry, src_ra, vb->ra_buf[ra_i]);
+    ARRAY (const RAEntry, src_ra, vb->ra_buf);
      
-    mutex_lock (ra_mutex[ra_i]);
+    mutex_lock (ra_mutex);
 
     START_TIMER; // not including mutex wait time
 
-    buf_alloc (evb, z_buf, 0, z_buf->len + src_ra_len, RAEntry, 2, "z_file->ra_buf"); 
+    buf_alloc (evb, &z_file->ra_buf, 0, z_file->ra_buf.len + src_ra_len, RAEntry, 2, "z_file->ra_buf"); 
 
-    ContextP chrom_ctx = CTX(ra_i==0 ? DTF(prim_chrom) : DTF(luft_chrom));
+    ContextP chrom_ctx = CTX(DTF(prim_chrom));
     ASSERT0 (chrom_ctx, "cannot find chrom_ctx");
 
     ASSERT (chrom_ctx->nodes_converted, "expecting nodes of %s to be converted", chrom_ctx->tag_name); // still index/len
@@ -200,7 +198,7 @@ void random_access_merge_in_vb (VBlockP vb, int ra_i)
         
         if (!src_ra[i].vblock_i) continue; // not used in this VB
 
-        RAEntry *dst_ra = &BNXT (RAEntry, *z_buf);
+        RAEntry *dst_ra = &BNXT (RAEntry, z_file->ra_buf);
 
         dst_ra->vblock_i = vb->vblock_i;
         dst_ra->min_pos  = src_ra[i].min_pos;
@@ -210,7 +208,7 @@ void random_access_merge_in_vb (VBlockP vb, int ra_i)
             WordIndex wi = node_index_to_word_index (vb, chrom_ctx, src_ra[i].chrom_index);
 
             if (wi == WORD_INDEX_NONE) { // this contig was canceled by seg_rollback
-                z_buf->len--;
+                z_file->ra_buf.len--;
                 continue;
             }
             
@@ -222,7 +220,7 @@ void random_access_merge_in_vb (VBlockP vb, int ra_i)
 
     COPY_TIMER(random_access_merge_in_vb);
 
-    mutex_unlock (ra_mutex[ra_i]);
+    mutex_unlock (ra_mutex);
 }
 
 // ZIP
@@ -290,7 +288,7 @@ void random_access_finalize_entries (BufferP ra_buf)
     COPY_TIMER_EVB (random_access_finalize_entries);
 }
 
-Codec random_access_compress (ConstBufferP ra_buf_, SectionType sec_type, Codec codec, int ra_i, rom msg)
+Codec random_access_compress (ConstBufferP ra_buf_, SectionType sec_type, Codec codec, rom msg)
 {
     START_TIMER;
 
@@ -298,12 +296,11 @@ Codec random_access_compress (ConstBufferP ra_buf_, SectionType sec_type, Codec 
 
     BufferP ra_buf = (BufferP)ra_buf_; // we will restore everything so that Const is honoured
 
-    if (msg) random_access_show_index (ra_buf, true, ra_i ? DTFZ(luft_chrom) : DTFZ(prim_chrom), msg);
+    if (msg) random_access_show_index (ra_buf, true, DTFZ(prim_chrom), msg);
     
     BGEN_random_access (ra_buf); // make ra_buf into big endian
 
     SectionFlags sec_flags = {};
-    if (ra_i) sec_flags.random_access.luft = true;
 
     // assigned codec to lens buffer (lens_ctx.local)
     ra_buf->len *= sizeof (RAEntry); // change len to count bytes
@@ -395,42 +392,11 @@ uint32_t random_access_num_chroms_start_in_this_vb (VBIType vb_i)
 }
 
 
-// FASTA PIZ main thread: check if all contigs have the same max pos, and return it
-uint32_t random_access_verify_all_contigs_same_length (void)
-{
-    static Buffer max_lens_buf = {};
-    const Context *ctx = ZCTX(CHROM);
-    buf_alloc (evb, &max_lens_buf, 0, ctx->word_list.len, PosType64, 1, "max_lens");
-    buf_zero (&max_lens_buf);
-
-    ARRAY (PosType64, max_lens, max_lens_buf);
-
-    PosType64 max_of_maxes=0;
-    for_buf (const RAEntry, ra, z_file->ra_buf) {
-        max_lens[ra->chrom_index] = MAX_(ra->max_pos, max_lens[ra->chrom_index]);
-        max_of_maxes = MAX_(max_of_maxes, max_lens[ra->chrom_index]);
-    }
-
-    for (uint32_t contig_i=0; contig_i < ctx->word_list.len32; contig_i++) 
-        ASSINP (max_lens[contig_i] == max_of_maxes, "file %s cannot be displayed in Phylip format because not all contigs are the same length: contig %s has length=%"PRIu64" which is shorter than other contigs of length=%"PRIu64,
-                z_name, ctx_get_words_snip (ctx, contig_i), max_lens[contig_i], max_of_maxes);
-
-    buf_free (max_lens_buf);
-
-    return max_of_maxes;
-}
-
-// PIZ: read SEC_RANDOM_ACCESS. If --luft - read the luft section instead.
+// PIZ: read SEC_RANDOM_ACCESS.
 void random_access_load_ra_section (SectionType sec_type, Did chrom_did_i, BufferP ra_buf, rom buf_name, rom show_index_msg)
 {
     Section ra_sl = sections_first_sec (sec_type, SOFT_FAIL);
     if (!ra_sl) return; // section doesn't exist
-
-    // if we're pizzing as lift-over, get the next section which has the Luft random access info (zfile_get_global_section will verify)
-    if (flag.luft) {
-        ra_sl++; 
-        if (ra_sl->st != sec_type) return; // no luft over section
-    }
     
     zfile_get_global_section (SectionHeader, ra_sl, ra_buf, buf_name);
     

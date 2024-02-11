@@ -600,7 +600,7 @@ FlagsBgzf bgzf_piz_calculate_bgzf_flags (CompIType comp_i, Codec src_codec)
     if (bgzf_flags.level == BGZF_COMP_LEVEL_UNKNOWN)
         #define C(cdc) (src_codec == CODEC_##cdc)
         // note: for bz2, xz, and zip - we reconstruct as gz too. better choice than plain.
-        bgzf_flags.level = (C(BGZF) || C(GZ) || C(BZ2) || C(XZ) || C(ZIP)) ? BGZF_COMP_LEVEL_DEFAULT : 0; // note: similar logic to txtheader_get_txt_filename_from_section
+        bgzf_flags.level = (C(BGZF) || C(BAM) || C(GZ) || C(BZ2) || C(XZ) || C(ZIP)) ? BGZF_COMP_LEVEL_DEFAULT : 0; // note: similar logic to txtheader_get_txt_filename_from_section
         #undef C
         
     return bgzf_flags;

@@ -33,7 +33,7 @@
 #pragma GENDICT SAM_QBNAME=DTYPE_1=QBNAME 
 #pragma GENDICT SAM_QCNAME=DTYPE_1=QCNAME 
 #pragma GENDICT SAM_QDNAME=DTYPE_1=QDNAME 
-#pragma GENDICT SAM_QENAME=DTYPE_1=QENAME // if adding more Q*NAMEs - add to fastq.h and kraken.h too, and update MAX_QNAME_ITEMS
+#pragma GENDICT SAM_QENAME=DTYPE_1=QENAME // if adding more Q*NAMEs - add to fastq.h too, and update MAX_QNAME_ITEMS
 #pragma GENDICT SAM_QmNAME=DTYPE_1=QmNAME // QmNAME reserved for mate number (always the last dict_id in the container)
 
 // Fields prefixed with "FASTQ_" are not used in SAM, but are here so that the did's are the same for SAM and FASTQ
@@ -323,7 +323,7 @@
 // full list according to the source code Parameters.h:  NH,HI,AS,NM,MD,nM,jM,jI,RG,XS,rB,vG,vA,vW,ha,ch,MC,CR,CY,UR,UY,CB,UB,GX,GN,gx,gn,sM,sS,sQ,cN
 #pragma GENDICT OPTION_nM_i=DTYPE_2=nM:i     // the number of mismatches per (paired) alignment, not to be confused with NM, which is the number of mismatches in each mate.
 #pragma GENDICT OPTION_jM_B_c=DTYPE_2=jM:B:c // jM:B:c,M1,M2,... intron motifs for all junctions (i.e. N in CIGAR): 0: non-canonical; 1: GT/AG, 2: CT/AC, 3: GC/AG, 4: CT/GC, 5: AT/AC, 6: GT/AT. If splice junctions database is used, and a junction is annotated, 20 is added to its motif value.
-#pragma GENDICT OPTION_jI_B_I=DTYPE_2=jI:B:I // jI:B:I,Start1,End1,Start2,End2,... Start and End of introns for all junctions (1-based).
+#pragma GENDICT OPTION_jI_B_i=DTYPE_2=jI:B:i // jI:B:i,Start1,End1,Start2,End2,... Start and End of introns for all junctions (1-based).
 #pragma GENDICT OPTION_rB_B_i=DTYPE_2=rB:B:i // alignment block read/genomic coordinates
 #pragma GENDICT OPTION_XS_A=DTYPE_2=XS:A     // Transcript strand (also hisat2), same as standard TS:A, minimap2's ts:A
 #pragma GENDICT OPTION_uT_A=DTYPE_2=uT:A     // Unmapped Type: 0='no acceptable seed/windows', 1='best alignment shorter than min allowed mapped length', 2='best alignment has more mismatches than max allowed number of mismatches', 3='read maps to more loci than the max number of multimappng loci', 4='unmapped mate of a mapped paired-end read'
@@ -758,7 +758,7 @@ extern void sam_reset_line (VBlockP vb);
                       sam_piz_special_BWA_XC, sam_piz_special_BWA_XT, sam_piz_special_BWA_X1, sam_piz_special_BWA_XS, \
                       sam_piz_special_SM, sam_piz_special_AM, sam_piz_special_PNEXT, \
                       sam_piz_special_DEMUX_BY_MATE, sam_piz_special_DEMUX_BY_MATE_PRIM, sam_piz_special_DEMUX_BY_BUDDY, \
-                      sam_piz_special_GEM3_XB, sam_piz_special_BSBOLT_YS, sam_piz_special_OA_RNAME, \
+                      sam_piz_special_GEM3_XB, sam_piz_special_BSBOLT_YS, sam_piz_special_0A_RNAME, \
                       sam_piz_special_BISMARK_XG, sam_piz_special_HI, sam_piz_special_DEMUX_BY_BUDDY_MAP, sam_piz_special_SEQ_LEN,\
                       sam_piz_special_FI, sam_piz_special_cm, sam_piz_special_COPY_BUDDY, sam_piz_special_SET_BUDDY, \
                       sam_piz_special_TX_AN_POS, sam_piz_special_COPY_TEXTUAL_CIGAR, sam_piz_special_BISMARK_XM, \
@@ -767,6 +767,7 @@ extern void sam_reset_line (VBlockP vb);
                       agilent_special_AGENT_RX, agilent_special_AGENT_QX, special_qname_rng2seq_len, sam_piz_special_DEMUX_BY_XX_0, \
                       sam_piz_special_DEMUX_BY_AS, piz_special_PLUS, \
                       sam_piz_special_ULTIMA_tp, sam_piz_special_ULTIMA_MI, sam_piz_special_PACBIO_qe, sam_piz_special_DEMUX_sn,\
+                      sam_piz_special_jI, sam_piz_special_jM_length, \
                     }
 SPECIAL (SAM, 0,  CIGAR,                 sam_cigar_special_CIGAR);
 SPECIAL (SAM, 1,  TLEN_old,              sam_piz_special_TLEN_old);            // used up to 12.0.42
@@ -806,7 +807,7 @@ SPECIAL (SAM, 34, DEMUX_BY_MATE_PRIM,    sam_piz_special_DEMUX_BY_MATE_PRIM);  /
 SPECIAL (SAM, 35, DEMUX_BY_BUDDY,        sam_piz_special_DEMUX_BY_BUDDY);      // introduced 14.0.0
 SPECIAL (SAM, 36, GEM3_XB,               sam_piz_special_GEM3_XB);             // introduced 14.0.0
 SPECIAL (SAM, 37, BSBOLT_YS,             sam_piz_special_BSBOLT_YS);           // introduced 14.0.0
-SPECIAL (SAM, 38, OA_RNAME,              sam_piz_special_OA_RNAME);            // introduced 14.0.0
+SPECIAL (SAM, 38, 0A_RNAME,              sam_piz_special_0A_RNAME);            // introduced 14.0.0
 SPECIAL (SAM, 39, BISMARK_XG,            sam_piz_special_BISMARK_XG);          // introduced 14.0.0
 SPECIAL (SAM, 40, HI,                    sam_piz_special_HI);                  // introduced 14.0.0
 SPECIAL (SAM, 41, DEMUX_BY_BUDDY_MAP,    sam_piz_special_DEMUX_BY_BUDDY_MAP);  // introduced 14.0.0
@@ -835,7 +836,9 @@ SPECIAL (SAM, 63, ULTIMA_tp,             sam_piz_special_ULTIMA_tp);           /
 SPECIAL (SAM, 64, ULTIMA_mi,             sam_piz_special_ULTIMA_MI);           // introduced 15.0.28
 SPECIAL (SAM, 65, PACBIO_qe,             sam_piz_special_PACBIO_qe);           // introduced 15.0.35
 SPECIAL (SAM, 66, DEMUX_sn,              sam_piz_special_DEMUX_sn);            // introduced 15.0.35
-#define NUM_SAM_SPECIAL 67
+SPECIAL (SAM, 67, jI,                    sam_piz_special_jI);                  // introduced 15.0.42
+SPECIAL (SAM, 68, jM_length,             sam_piz_special_jM_length);           // introduced 15.0.42
+#define NUM_SAM_SPECIAL 69
  
 #define SAM_LOCAL_GET_LINE_CALLBACKS(dt)        \
     { dt, _OPTION_BD_BI,    sam_zip_BD_BI    }, \

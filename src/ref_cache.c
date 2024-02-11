@@ -150,10 +150,6 @@ void noreturn ref_cache_hold (rom handle_str)
 // returns true if ref_cache can be used
 bool ref_cache_initialize_genome (Reference ref)
 {
-    // case: DVCF we don't use refhash in DVCF anyway, destroy the one that might have been loaded if we
-    // just populated gref, so that we can load it with prim_ref now
-    if (ref == prim_ref) refhash_destroy(); 
-
     uint64_t refhash_size = refhash_get_refhash_size();    
     uint64_t genome_size  = roundup_bits2bytes64 (ref->genome_nbases * 2);
 

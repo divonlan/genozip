@@ -149,23 +149,21 @@ static const char IUPAC_IS_INCLUDED[128][128] = { ['R']={ ['A']=1, ['G']=1, ['a'
 bool ref_iupacs_is_included_do (Reference ref, VBlockP vb, const Range *r, PosType64 pos, char vcf_base)
 {
     PosType64 gpos = r->gpos + (pos - r->first_pos);
-    unsigned ref_i = (ref==gref); // [0]=prim_ref [1]=gref
 
     ARRAY (Iupac, iupacs, ref->iupacs_buf);
     const Iupac *iupac_ent = ref_iupacs_find (iupacs, 0, (int64_t)iupacs_len-1, gpos);
     bool is_after = !ref->iupacs_buf.data || BISAFT (ref->iupacs_buf, iupac_ent);
 
-    vb->iupacs_last_range[ref_i] = r;
+    vb->iupacs_last_range = r;
 
     // case: iupac is found at GPOS - now test if it includes vcf_base
     if (!is_after && iupac_ent->gpos == gpos) {
-        vb->iupacs_last_pos[ref_i] = pos;
-        vb->iupacs_next_pos[ref_i] = BISLST (ref->iupacs_buf, iupac_ent) ? 1000000000000000LL : ((iupac_ent+1)->gpos - gpos) + pos;
+        vb->iupacs_last_pos = pos;
+        vb->iupacs_next_pos = BISLST (ref->iupacs_buf, iupac_ent) ? 1000000000000000LL : ((iupac_ent+1)->gpos - gpos) + pos;
         bool is_included = IUPAC_IS_INCLUDED[(int)iupac_ent->iupac][(int)vcf_base];
 
         if (flag.show_ref_iupacs) 
-            iprintf (ref_i ? "Luft: oCHROM=%s oPOS=%"PRIu64" REF=%c reference=%c is_considered_same_REF=%s\n" 
-                           : "Primary: CHROM=%s POS=%"PRIu64" REF=%c reference=%c is_considered_same_REF=%s\n",
+            iprintf ("CHROM=%s POS=%"PRIu64" REF=%c reference=%c is_considered_same_REF=%s\n",
                      r->chrom_name, pos, vcf_base, iupac_ent->iupac, is_included ? "YES" : "NO");
 
         return is_included;
@@ -174,8 +172,8 @@ bool ref_iupacs_is_included_do (Reference ref, VBlockP vb, const Range *r, PosTy
     // case: the reference base at GPOS is not a IUPAC
     else {
         bool is_before = !ref->iupacs_buf.data || BISBEFORE(ref->iupacs_buf, iupac_ent-1);
-        vb->iupacs_last_pos[ref_i] = is_before ? 0 : ((iupac_ent-1)->gpos - gpos) + pos;
-        vb->iupacs_next_pos[ref_i] = is_after ? 1000000000000000LL : (iupac_ent->gpos - gpos) + pos;
+        vb->iupacs_last_pos = is_before ? 0 : ((iupac_ent-1)->gpos - gpos) + pos;
+        vb->iupacs_next_pos = is_after ? 1000000000000000LL : (iupac_ent->gpos - gpos) + pos;
         return false;
     }   
 }

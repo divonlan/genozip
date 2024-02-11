@@ -284,7 +284,7 @@ batch_print_header()
 batch_minimal()
 {
     batch_print_header
-    local files=(minimal.vcf minimal.sam minimal.fq minimal.fa minimal.gvf minimal.me23 minimal.kraken)
+    local files=( minimal.vcf minimal.sam minimal.fq minimal.fa minimal.gvf minimal.me23 )
     local file
     for file in ${files[@]}; do
         test_standard " " " " $file
@@ -484,57 +484,6 @@ batch_qual_codecs()
     done
 }
 
-batch_dvcf()
-{
-    batch_print_header
-
-    local files=(minimal.vcf basic-dvcf-source.vcf basic-dvcf-luft.vcf test.NA12878.sorted.vcf test.gwas-v1.0.vcf.gz \
-                 test.clinvar37.vcf.gz test.1KG-37.indels.vcf test.chr17.SS6004478.vcf test.ExAC.vcf.gz)
-    local file
-
-    # prepare chain file
-    test_header "${files[0]} - DVCF test - preparing chain file"
-    $genozip -e $hs37d5 -e $GRCh38 $chain37_38 -Xfqo $chain --match-chrom || exit 1
-
-    # test explicit reference
-    test_header "${files[0]} - DVCF test - explicit reference"
-    $genozip ${TESTDIR}/${files[0]} -Xfo $output -C $chain -e $hs37d5 -e $GRCh38 || exit 1
-
-    for file in ${files[@]}; do
-        test_header "$file - DVCF test"
-
-        local src=$OUTDIR/${file}
-        local primary=$OUTDIR/primary.vcf
-        local luft=$OUTDIR/luft.vcf
-        local primary2=$OUTDIR/primary2.vcf
-        local dvcf=${primary%%.vcf}.d.vcf.genozip
-        
-        # compare src to primary (ignoring header and INFO fields)
-        echo -n "Step 1: make $dvcf from $file : " 
-        if [ "$file" == basic-dvcf-luft.vcf ]; then # this file is already a Luft rendition
-            $genozip ${TESTDIR}/$file -Xfo $dvcf || exit 1
-        else
-            $genozip -C $chain ${TESTDIR}/$file -Xfo $dvcf --dvcf-rename="FORMAT/QDF:STRAND>QDR,QDR:STRAND>QDF" --dvcf-drop="INFO/CLN:REFALT" || exit 1
-        fi
-    
-        echo -n "Step 2: make ${primary} from $dvcf : " 
-        $genocat $dvcf --no-pg -fo ${primary} || exit 1
-
-        # convert primary -> luft -> primary
-        echo -n "Step 3: make ${luft} from $dvcf : " 
-        $genocat --luft --no-pg $dvcf -fo ${luft} || exit 1
-        echo -n "Step 4: make ${luft}.genozip from ${luft} : " 
-        $genozip $luft -Xfo ${luft}.genozip || exit 1
-        echo -n "Step 5: make ${primary2} from ${luft}.genozip : " 
-        $genocat ${luft}.genozip --no-pg -fo ${primary2} || exit 1
-        echo "Step 6: compare $primary to $primary2" 
-        cmp_2_files $primary $primary2 
-
-        rm -f ${src}.noinfo $dvcf ${primary}.noinfo ${luft} ${luft}.genozip ${primary2}
-    done
-    cleanup
-}
-
 batch_match_chrom()
 {
     batch_print_header
@@ -568,97 +517,6 @@ batch_match_chrom()
     cleanup
 }
 
-test_kraken() { # $1 file and genozip args ; $2 1st genocat arguments ; $3 2nd genocat arguments
-    test_header "$file - kraken test (genozip $1 ; genocat $2 ; genocat $3)"
-
-    local zip_args=$1
-    local cat1_args=$2
-    local cat2_args=$3
-    local lines_plus lines_minus fastq lines 
-    
-    $genozip $1 -Xfo $output --prepare-for-taxid || exit 1 # note: --prepare_for_taxid is a FASTA option, ignored for other data types
-
-    lines_plus=`$genocat_no_echo $output -Hq ${cat1_args[*]} --count` || exit $? 
-    if [ "$lines_plus" == "" ] || [ "$lines_plus" -eq 0 ]; then echo "genocat error - \$lines_plus=\"$lines_plus\""; exit 1; fi
-
-    lines_minus=`$genocat_no_echo $output -Hq $3 --count` || exit $? 
-    if [ "$lines_minus" == "" ] || [ "$lines_minus" -eq 0 ]; then echo "genocat error - \$lines_minus=\"$lines_minus\""; exit 1; fi
-    
-    fastq=`echo $2 | tr " " "\n" | grep "\-\-fastq"` # this is "--fastq" if it appears in $2 or "" if not
-    lines=`$genocat_no_echo $fastq -Hq $output --count` || exit $? 
-    if [ "$lines" == "" ] || [ "$lines" -eq 0 ]; then echo "genocat error - \$lines=\"$lines\""; exit 1; fi
-    
-    echo "$file : lines_plus=$lines_plus lines_minus=$lines_minus lines=$lines"
-    if (( $lines_plus == 0 )) || (( $lines_minus == 0 )) || [ $(($lines_plus + $lines_minus)) -ne $lines ]; then
-        echo "$file: adding up kraken positive- and negative- filtered data, isn't the size of the original file"
-        exit 1
-    fi        
-}
-
-batch_kraken() # $1 genozip arguments #2 genocat (optional $3="latest") (one of $1 or $2 must include --kraken)
-{
-    batch_print_header
-
-    local save_genozip=$genozip
-    if [ "$3" == latest ]; then genozip="$genozip_latest"; fi
-
-    local files=(${TESTDIR}/basic.bam ${TESTDIR}/basic-test-kraken.fq ${TESTDIR}/basic-test-kraken.fa ${TESTDIR}/basic.kraken \
-                 ${TESTDIR}/basic.sam)
-    local file
-
-    # note: here we test with --no-kmers, below we test without. 
-    $genozip ${TESTDIR}/basic.kraken -Xfo $kraken --no-kmers 
-
-    # testing filtering FASTA, FASTQ, SAM and KRAKEN itself with --taxid 
-    for file in ${files[@]}; do
-        test_kraken "$file $1" "$2 -k570" "$2 -k^570"
-    done
-
-    # testing filtering SAM translated to FASTQ with --taxid 
-    test_kraken "${TESTDIR}/basic.bam $1" \
-                "--fastq -k570 $2" \
-                "--fastq -k^570 $2"
-    
-    # testing filtering SAM translated to FASTQ with --taxid and +0 
-    test_kraken "${TESTDIR}/basic.bam $1" \
-                "--fastq -k570+0 $2" \
-                "--fastq -k^570+0 $2"
-    
-    # testing filtering SAM with a concatenated KRAKEN file (representing slightly different classifications
-    # originating from separate kraken2 of R1 and R2 FASTQ files)
-    cat ${TESTDIR}/basic.kraken ${TESTDIR}/basic-2nd-file.kraken | $genozip -i kraken -Xfo $kraken
-
-    test_kraken "${TESTDIR}/basic.bam $1"\
-                "-k570 $2" \
-                "-k^570 $2"
-
-    test_kraken "${TESTDIR}/basic.bam $1"\
-                "-k570+0 $2" \
-                "-k^570+0 $2"
-
-    # testing multiple taxids
-    test_kraken "${TESTDIR}/basic.bam $1"\
-                "-k570,500 $2" \
-                "-k^570,500 $2"
-
-    test_kraken "${TESTDIR}/basic.bam $1"\
-                "-k570,500+0 $2" \
-                "-k^570,500+0 $2"
-                
-    # testing multiple taxids
-    test_kraken "${TESTDIR}/basic.bam $1"\
-                "-k570,500 $2" \
-                "-k^570,500 $2"
-
-    test_kraken "${TESTDIR}/basic.bam $1"\
-                "-k570,500+0 $2" \
-                "-k^570,500+0 $2"
-
-    genozip=$save_genozip
-                    
-    cleanup
-}
-
 # unit test for ref_copy_compressed_sections_from_reference_file. 
 batch_copy_ref_section()
 {
@@ -681,17 +539,8 @@ batch_single_thread()
     test_standard "-@1" "-@1" basic.vcf 
     
     # with reference
-    test_standard "-@1 -e$hs37d5 -e$GRCh38" "-@1" basic.chain 
-    cleanup_cache
-
-    # with chain and reference (note: cannot --test dual-coord files)
-    $genozip -e $hs37d5 -e $GRCh38 $chain37_38 -Xfqo $chain --match-chrom || exit 1
-    $genozip -@1 -C $chain -e $hs37d5 -e $GRCh38  ${TESTDIR}/basic-dvcf-source.vcf -Xf || exit 1
-    cleanup_cache
-
-    # with kraken aux file - genozip with kraken, not kraken.genozip
-    cp ${TESTDIR}/basic.kraken ${OUTDIR}/kraken.data || exit 1
-    test_kraken "-@1 -K ${OUTDIR}/kraken.data ${TESTDIR}/basic.bam" "-@1 -k570" "-@1 -k^570" 
+    # $genozip -e $hs37d5 -e $GRCh38 $chain37_38 -Xfqo $chain --match-chrom || exit 1
+    # cleanup_cache
 
     cleanup
 }
@@ -789,8 +638,8 @@ test_translate_sambam_to_fastq() # $1 sam or bam file ; $2 outfile fastq name ; 
     verify_is_fastq $fastq
 }
 
-# Test --coverage, --idxstats and --sex - not testing correctness, only that it doesn't crash
-batch_coverage_idxstats_sex()
+# Test --coverage, --idxstats- not testing correctness, only that it doesn't crash
+batch_coverage_idxstats()
 {
     batch_print_header
 
@@ -803,10 +652,9 @@ batch_coverage_idxstats_sex()
                  special.collated.bam)
     local file
     for file in ${files[@]}; do
-        $genozip -Xf $TESTDIR/$file -o $output                || exit 1
+        $genozip -Xf $TESTDIR/$file -o $output               || exit 1
         $genocat $output --idxstats > $OUTDIR/$file.idxstats || exit 1
         $genocat $output --coverage > $OUTDIR/$file.coverage || exit 1
-        $genocat $output --sex      > $OUTDIR/$file.sex      || exit 1
     done
 
     cleanup
@@ -982,28 +830,6 @@ batch_23andMe_translations()
     cleanup
 }
 
-batch_phylip_translations()
-{
-    batch_print_header
-
-    local multifasta=$TESTDIR/basic-multifasta.fa
-    local phylip=$OUTDIR/phylip.phy
-    local seq=$OUTDIR/seq.fa
-    local multifasta2=$OUTDIR/multifasta2.fa
-
-    test_header "$file - translate multifasta to phylip and back"
- 
-    $genozip $multifasta -Xfo $output          || exit 1 # compress multifasta
-    $genocat $output --sequential --header-one \
-        | tr -d "\r" > $seq                    || exit 1 # reconstruct as phylip
-    $genocat $output --phylip -fo $phylip      || exit 1 # reconstruct as phylip
-    $genozip $phylip -Xfo $output2             || exit 1 # compress the phylip
-    $genocat $output2 --fasta -fo $multifasta2 || exit 1 # reconstruct as multifasta
-    cmp_2_files $multifasta2 $seq                        # compare
-
-    cleanup
-}
-
 batch_genocat_tests()
 {
     batch_print_header
@@ -1018,14 +844,6 @@ batch_genocat_tests()
     test_count_genocat_lines $file "--grep cytochrome" 6
     test_count_genocat_lines $file "--grep cytochrome --sequential " 2
     test_count_genocat_lines $file "--grep cytochrome --sequential --no-header " 1
-
-    # Multi-FASTA to Phylip
-    local file=$TESTDIR/basic-multifasta.fa
-    test_count_genocat_lines $file "--phylip" 4
-
-    # Phylip to Multi-fasta
-    local file=$TESTDIR/basic.phy
-    test_count_genocat_lines $file "--fasta" 9
 
     # FASTQ genocat tests
     local file=$TESTDIR/basic.fq
@@ -1091,16 +909,9 @@ batch_grep_count_lines()
     for file in ${basics[@]}; do
         if [ $file == basic.fa ] || [ $file == basic.bam ] || [ $file == basic.locs ] || [ $file == basic.generic ]; then continue; fi
 
-        if [ $file == basic.chain ]; then
-            export GENOZIP_REFERENCE=${hs37d5}:${GRCh38}
-        else
-            unset GENOZIP_REFERENCE
-        fi
-
         # number of expected lines
         local lines=1
-        if [ $file == basic.fq ];    then lines=4; fi
-        if [ $file == basic.chain ]; then lines=3; fi
+        if [ $file == basic.fq ]; then lines=4; fi
 
         # grep        
         test_count_genocat_lines $TESTDIR/$file "--grep PRFX --no-header" $lines
@@ -1155,7 +966,6 @@ batch_bam_subsetting()
     $genozip $TESTDIR/test.human2.bam -fXB4 --force-gencomp || exit 1
 
     # (almost) all SAM/BAM subseting options according to: https://www.genozip.com/compressing-bam
-    # the one missing, --taxid, is tested in batch_kraken
     assert "`$genocat $file --header-only | wc -l`" 93
     assert "`$genocat $file -r 1 --no-header | wc -l`" 99909 # test --regions in presence of gencomp, but entire file is one contig
     assert "`$genocat $file -r 1 --count`" 99909
@@ -1231,8 +1041,8 @@ batch_real_world_1_adler32() # $1 extra genozip argument
     fi
 
     # without reference
-    local files=( `cd $TESTDIR; ls -1 test.*vcf* test.*bcf* test.*sam* test.*bam test.*fq* test.*fa* basic.phy*    \
-                   test.*gvf* test.*gtf* test.*gff* test.*locs* test.*bed* test.*txt* test.*kraken* test.*.pbi  \
+    local files=( `cd $TESTDIR; ls -1 test.*vcf* test.*bcf* test.*sam* test.*bam test.*fq* test.*fa*    \
+                   test.*gvf* test.*gtf* test.*gff* test.*locs* test.*bed* test.*txt* test.*.pbi  \
                    | grep -v "$filter_xz" | grep -v "$filter_zip" | grep -v "$filter_bcf" \
                    | grep -v headerless | grep -vF .genozip | grep -vF .md5 | grep -vF .bad `) 
 
@@ -1251,9 +1061,9 @@ batch_real_world_genounzip_single_process() # $1 extra genozip argument
 
     local files=( `cd $TESTDIR; ls -1 test.*.vcf.genozip test.*.sam.genozip test.*.bam.genozip \
                    test.*.fq.genozip test.*.fa.genozip \
-                   basic.phy.genozip test.*.gvf.genozip test.*.gtf.genozip test.*gff*.genozip \
+                   test.*.gvf.genozip test.*.gtf.genozip test.*gff*.genozip \
                    test.*.locs.genozip test.*.bed.genozip \
-                   test.*txt.genozip test.*kraken.genozip test.*.pbi.genozip |
+                   test.*txt.genozip test.*.pbi.genozip |
                    grep -vF .d.vcf`)
 
     $genounzip ${files[@]/#/$TESTDIR/} --test || exit 1
@@ -1278,8 +1088,8 @@ batch_real_world_genounzip_compare_file() # $1 extra genozip argument
     # without reference
     local files=( `cd $TESTDIR; ls -1 test.*vcf* test.*sam* test.*bam \
                    test.*fq* test.*fa* \
-                   basic.phy* test.*gvf* test.*gtf* test.*gff* test.*locs* test.*bed* \
-                   test.*txt* test.*kraken* test.*pbi \
+                   test.*gvf* test.*gtf* test.*gff* test.*locs* test.*bed* \
+                   test.*txt* test.*pbi \
                    | grep -v "$filter_xz" | grep -v "$filter_zip" \
                    | grep -v headerless | grep -vF .genozip | grep -Fv .md5 | grep -Fv .bad ` )
     
@@ -1331,9 +1141,6 @@ batch_real_world_with_ref_md5() # $1 extra genozip argument
 
     cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
 
-    # with two references
-    test_standard "-mf $1 -e $GRCh38 -e $hs37d5" " " test.GRCh38_to_GRCh37.chain 
-
     local files37=( test.IonXpress.sam.gz \
                     test.human.fq.gz test.human2.bam test.pacbio.clr.bam \
                     test.human2-R1.fq.bz2 test.pacbio.ccs.10k.bam test.unmapped.sam.gz \
@@ -1356,7 +1163,7 @@ batch_real_world_with_ref_md5() # $1 extra genozip argument
     cleanup_cache
     test_standard "-mf $1 -E $T2T1_1 --show-filename" " " ${filesT2T1_1[*]}
     
-    for f in ${files37[@]} ${files19[@]} ${files38[@]} ${filesT2T1_1[@]} test.GRCh38_to_GRCh37.chain; do rm -f ${TESTDIR}/${f}.genozip ; done
+    for f in ${files37[@]} ${files19[@]} ${files38[@]} ${filesT2T1_1[@]} ; do rm -f ${TESTDIR}/${f}.genozip ; done
     cleanup_cache
 }
 
@@ -2105,10 +1912,8 @@ fi
 output=${OUTDIR}/output.genozip
 output2=${OUTDIR}/output2.genozip
 recon=${OUTDIR}/recon.txt
-kraken=${OUTDIR}/kraken.genozip
-chain=${OUTDIR}/chain.genozip
 
-# reference and chain files
+# reference files
 hg19=$REFDIR/hg19.v15.ref.genozip
 hg19_plusMT=$REFDIR/hg19_plusMT.v15.ref.genozip
 hs37d5=$REFDIR/hs37d5.v15.ref.genozip
@@ -2116,7 +1921,6 @@ GRCh38=$REFDIR/GRCh38.v15.ref.genozip
 T2T1_1=$REFDIR/chm13_1.1.v15.ref.genozip
 mm10=$REFDIR/mm10.v15.ref.genozip
 chinese_spring=$REFDIR/Chinese_Spring.v15.ref.genozip
-chain37_38=$REFDIR/GRCh37_to_GRCh38.chain
 
 if (( $# < 1 )); then
     echo "Usage: test.sh [debug|opt|prod] <GENOZIP_TEST-test> [optional-genozip-arg]"
@@ -2187,8 +1991,8 @@ genocat_no_echo="$genocat_exe $@ $piz_threads"
 genocat="$genocat_exe --echo $@ $piz_threads"
 genols=$genols_exe 
 
-basics=(basic.vcf basic.chain basic.sam basic.vcf basic.bam basic.fq basic.fa basic.gvf basic.gtf basic.me23 \
-        basic.kraken basic.phy basic.locs basic.bed basic.generic)
+basics=(basic.vcf basic.sam basic.vcf basic.bam basic.fq basic.fa basic.gvf basic.gtf basic.me23 \
+        basic.locs basic.bed basic.generic)
 
 exes=($genozip_exe $genounzip_exe $genocat_exe $genols_exe)
 for exe in ${exes[@]}; do
@@ -2224,81 +2028,70 @@ case $GENOZIP_TEST in
 5 )  batch_basic basic.fq         ;;
 6 )  batch_basic basic.fa         ;;
 7 )  batch_basic basic.bed        ;;
-8 )  batch_basic basic.chain      ;;
-9 )  batch_basic basic.gvf        ;;
-10)  batch_basic basic.gtf        ;;
-11)  batch_basic basic.me23       ;;
-12)  batch_basic basic.kraken     ;;
-13)  batch_basic basic.phy        ;;
-14)  batch_basic basic.generic    ;;
-15)  batch_precompressed          ;;
-16)  batch_bgzf                   ;;
-17)  batch_subdirs                ;;
-18)  batch_special_algs           ;;
-19)  batch_qual_codecs            ;;
-20)  batch_dvcf                   ;;
-21)  batch_sam_bam_translations   ;;
-22)  batch_23andMe_translations   ;;
-23)  batch_phylip_translations    ;;
-24)  batch_genocat_tests          ;;
-25)  batch_grep_count_lines       ;;
-26)  batch_bam_subsetting         ;;
-27)  batch_backward_compatability ;;
-28)  batch_match_chrom            ;;
-29)  batch_kraken " " "-K$kraken" ;;   # genocat loads kraken data
-30)  batch_kraken "-K$kraken" " " ;;   # genozip loads kraken data
-31)  batch_single_thread          ;; 
-32)  batch_copy_ref_section       ;; 
-33)  batch_iupac                  ;; 
-34)  batch_genols                 ;;
-35)  batch_tar_files_from         ;;
-36)  batch_gencomp_depn_methods   ;; 
-37)  batch_deep                   ;; 
-38)  batch_real_world_small_vbs   ;; 
-39)  batch_real_world_1_adler32   ;; 
-40)  batch_real_world_genounzip_single_process ;; 
-41)  batch_real_world_genounzip_compare_file   ;; 
-42)  batch_real_world_1_adler32 "--best -f" ;; 
-43)  batch_real_world_1_adler32 "--fast --force-gencomp" ;; 
-44)  batch_real_world_with_ref_md5;; 
-45)  batch_real_world_with_ref_md5 "--best --no-cache --force-gencomp" ;; 
-46)  batch_multiseq               ;;
-47)  batch_external_cram          ;;
-48)  batch_external_bcf           ;;
-49)  batch_external_unzip         ;;
-50)  batch_reference_fastq        ;;
-51)  batch_reference_sam          ;;
-52)  batch_reference_vcf          ;;
-53)  batch_many_small_files       ;;
-54)  batch_make_reference         ;;
-55)  batch_headerless_wrong_ref   ;;
-56)  batch_replace                ;;
-57)  batch_coverage_idxstats_sex  ;;
-58)  batch_qname_flavors          ;;
-59)  batch_piz_no_license         ;;
-60)  batch_sendto                 ;;
-61)  batch_user_message_permissions    ;;
-62)  batch_password_permissions   ;;
-63)  batch_reference_backcomp     ;;
-64)  batch_real_world_backcomp 11.0.11 ;; # note: versions must match VERSIONS in test/Makefile
-65)  batch_real_world_backcomp 12.0.42 ;; 
-66)  batch_real_world_backcomp 13.0.21 ;; 
-67)  batch_real_world_backcomp 14.0.33 ;; 
-68)  batch_real_world_backcomp latest  ;;
-69)  batch_basic basic.vcf     latest  ;;
-70)  batch_basic basic.bam     latest  ;;
-71)  batch_basic basic.sam     latest  ;;
-72)  batch_basic basic.fq      latest  ;;
-73)  batch_basic basic.fa      latest  ;;
-74)  batch_basic basic.bed     latest  ;;
-75)  batch_basic basic.chain   latest  ;;
-76)  batch_basic basic.gvf     latest  ;;
-77)  batch_basic basic.gtf     latest  ;;
-78)  batch_basic basic.me23    latest  ;;
-79)  batch_basic basic.kraken  latest  ;;
-80)  batch_basic basic.phy     latest  ;;
-81)  batch_basic basic.generic latest  ;;
-82)  batch_kraken " " "-K$kraken"  latest ;;   # genocat loads kraken data
+8 )  batch_basic basic.gvf        ;;
+9 )  batch_basic basic.gtf        ;;
+10)  batch_basic basic.me23       ;;
+11)  batch_basic basic.generic    ;;
+12)  batch_precompressed          ;;
+13)  batch_bgzf                   ;;
+14)  batch_subdirs                ;;
+15)  batch_special_algs           ;;
+16)  batch_qual_codecs            ;;
+17)  batch_sam_bam_translations   ;;
+18)  batch_23andMe_translations   ;;
+19)  batch_genocat_tests          ;;
+20)  batch_grep_count_lines       ;;
+21)  batch_bam_subsetting         ;;
+22)  batch_backward_compatability ;;
+23)  batch_match_chrom            ;;
+24)  batch_single_thread          ;; 
+25)  batch_copy_ref_section       ;; 
+26)  batch_iupac                  ;; 
+27)  batch_genols                 ;;
+28)  batch_tar_files_from         ;;
+29)  batch_gencomp_depn_methods   ;; 
+30)  batch_deep                   ;; 
+31)  batch_real_world_small_vbs   ;; 
+32)  batch_real_world_1_adler32   ;; 
+33)  batch_real_world_genounzip_single_process ;; 
+34)  batch_real_world_genounzip_compare_file   ;; 
+35)  batch_real_world_1_adler32 "--best -f" ;; 
+36)  batch_real_world_1_adler32 "--fast --force-gencomp" ;; 
+37)  batch_real_world_with_ref_md5;; 
+38)  batch_real_world_with_ref_md5 "--best --no-cache --force-gencomp" ;; 
+39)  batch_multiseq               ;;
+40)  batch_external_cram          ;;
+41)  batch_external_bcf           ;;
+42)  batch_external_unzip         ;;
+43)  batch_reference_fastq        ;;
+44)  batch_reference_sam          ;;
+45)  batch_reference_vcf          ;;
+46)  batch_many_small_files       ;;
+47)  batch_make_reference         ;;
+48)  batch_headerless_wrong_ref   ;;
+49)  batch_replace                ;;
+50)  batch_coverage_idxstats  ;;
+51)  batch_qname_flavors          ;;
+52)  batch_piz_no_license         ;;
+53)  batch_sendto                 ;;
+54)  batch_user_message_permissions    ;;
+55)  batch_password_permissions   ;;
+56)  batch_reference_backcomp     ;;
+57)  batch_real_world_backcomp 11.0.11 ;; # note: versions must match VERSIONS in test/Makefile
+58)  batch_real_world_backcomp 12.0.42 ;; 
+59)  batch_real_world_backcomp 13.0.21 ;; 
+60)  batch_real_world_backcomp 14.0.33 ;; 
+61)  batch_real_world_backcomp latest  ;;
+62)  batch_basic basic.vcf     latest  ;;
+63)  batch_basic basic.bam     latest  ;;
+64)  batch_basic basic.sam     latest  ;;
+65)  batch_basic basic.fq      latest  ;;
+66)  batch_basic basic.fa      latest  ;;
+67)  batch_basic basic.bed     latest  ;;
+68)  batch_basic basic.gvf     latest  ;;
+69)  batch_basic basic.gtf     latest  ;;
+70)  batch_basic basic.me23    latest  ;;
+71)  batch_basic basic.generic latest  ;;
 
 * ) break; # break out of loop
 

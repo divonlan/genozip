@@ -18,7 +18,8 @@
 #define CON_PX_SEP_SHOW_REPEATS '\x5'        // an alternative terminator - outputs the number of repeats in LTEN32 after the prefix (used for BAM 'B' array count field)
 #define CON_PX_SEP_SHOW_N_ITEMS '\x6'        // an alternative terminator - outputs the number of items in LTEN32 after the prefix (used for BAM 'B' array count field)
 
-#define CONTAINER_MAX_REPEATS  0xfffffe      // 3 byte unsigned int (up to 16M-2) 
+#define CONTAINER_MAX_REPEATS  0xfffff0      // 3 byte unsigned int (up to 16M-2) 
+#define CON_REPEATS_IS_SPECIAL 0xfffffe
 #define CON_REPEATS_IS_SEQ_LEN 0xffffff
 #define CONTAINER_MAX_SELF_TRANS_CHANGE 50
 
@@ -118,9 +119,8 @@ extern bool curr_container_has (ContextP container_ctx, DictId item_dict_id);
 //     a suffix for each repeat + CON_PX_SEP
 // empty prefixes of trailing items may be omitted
 extern void container_prepare_snip (ConstContainerP con, STRp(prefixes), STRe (snip));
-extern WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con, STRp(prefixes), STRp(ren_prefixes), unsigned add_bytes, bool *is_new);
-#define container_seg(vb, ctx, con, prefixes, prefixes_len, add_bytes) container_seg_do ((VBlockP)(vb), (ctx), (con), (prefixes), (prefixes_len), 0, 0, (add_bytes), NULL)
-#define container_seg_with_rename(vb, ctx, con, prefixes, prefixes_len, ren_prefixes, ren_prefixes_len, add_bytes, is_new) container_seg_do ((VBlockP)(vb), (ctx), (con), (prefixes), (prefixes_len), (ren_prefixes), (ren_prefixes_len), (add_bytes), (is_new))
+extern WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con, STRp(prefixes), unsigned add_bytes, bool *is_new);
+#define container_seg(vb, ctx, con, prefixes, prefixes_len, add_bytes) container_seg_do ((VBlockP)(vb), (ctx), (con), (prefixes), (prefixes_len), (add_bytes), NULL)
 #define container_seg_by_dict_id(vb,dict_id,con,add_bytes) container_seg (vb, ctx_get_ctx (vb, dict_id), con, NULL, 0, add_bytes)
 
 extern ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, STRp(prefixes));

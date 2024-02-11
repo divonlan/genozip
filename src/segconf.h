@@ -35,6 +35,10 @@ typedef packed_enum { FMT_DP_DEFAULT=0, BY_AD=1, BY_SDP=2 } FormatDPMethod; // p
 
 typedef packed_enum { INFO_DP_DEFAULT, BY_FORMAT_DP } InfoDPMethod;
 
+typedef packed_enum { VCF_QUAL_DEFAULT, VCF_QUAL_local, VCF_QUAL_by_RGQ } VcfQualMethodType;
+
+typedef packed_enum { VCF_INFO_DEFAULT, VCF_INFO_by_RGQ, VCF_INFO_by_FILTER } VcfInfoMethodType;
+
 typedef packed_enum { L3_UNKNOWN, L3_EMPTY, L3_COPY_LINE1, L3_NCBI, NUM_L3s } FastqLine3Type;
 
 // SamMapperType is part of the file format and values should not be changed (new ones can be added)
@@ -56,7 +60,7 @@ typedef struct { uint8_t q; int count; } QualHisto;
 
 typedef packed_enum { GQ_old=0/*up to 15.0.36*/, BY_PL=1, BY_GP=2, MUX_DOSAGExDP, MUX_DOSAGE } GQMethodType; // values go into SectionHeaderGenozipHeader.segconf_GQ_method (only 0,1,2 are used in PIZ)
 
-#define SEGCONF_MAX_WIDTH 7
+#define SEGCONF_MAX_WIDTH 15
 #define SEGCONF_RECORD_WIDTH(x, width) if (segconf.running && (width) <= SEGCONF_MAX_WIDTH) segconf.wid_##x.count[width]++
 typedef struct {
     uint8_t width; // 0 to SEGCONF_MAX_WIDTH
@@ -75,7 +79,7 @@ typedef struct {
     float local_per_line[MAX_NUM_PREDEFINED];   // local.len / num_lines
     bool disable_random_acccess; // random_access section is not to be outputted
 
-    // qname characteristics (SAM/BAM, KRAKEN and FASTQ)
+    // qname characteristics (SAM/BAM and FASTQ)
     QnameFlavor qname_flavor[NUM_QTYPES+1];     // 0-QNAME 1-QNAME2(FASTQ) 1=secondary flavor(SAM) 2=NCBI LINE3 (FASTQ)
     QnameFlavor deep_sam_qname_flavor[2];       // save for stats, in --deep (SAM's QNAME and QNAME2)
     QnameFlavorProp flav_prop[NUM_QTYPES];      // flavor properties
@@ -145,6 +149,7 @@ typedef struct {
     bool sam_has_ultima_t0;
     bool sam_has_zm_by_Q1NAME;
     bool sam_is_nanoseq;
+    bool sam_has_abra2;
     int64_t sam_first_qs;       // qs:i value of the first line of segconf
     bool sam_diverse_qs;        // true if not all qs:i values in segconf are equal sam_first_qs
     bool sam_has_xcons;
@@ -229,6 +234,8 @@ typedef struct {
     bool AS_SB_TABLE_by_SB;
     uint64_t count_GQ_by_PL, count_GQ_by_GP; // used tp calculate GQ_by_PL, GQ_by_GP
     GQMethodType GQ_method;     // values go into SectionHeaderGenozipHeader.segconf_GQ_method (only 0,1,2 are used in PIZ)
+    VcfQualMethodType vcf_QUAL_method;
+    VcfInfoMethodType vcf_INFO_method;
     FieldWidth wid_AC, wid_MLEAC, wid_AN, wid_AF, wid_SF, wid_QD, wid_DP, wid_AS_SB_TABLE; // most common width obversed in segconf, for VCF INFO fields that are inserted in vcf_piz_container_cb 
 
     // FASTQ
@@ -273,9 +280,6 @@ typedef struct {
     int gff_version;
     bool has_embedded_fasta;
 
-    // Chain stuff
-    bool chain_mismatches_ref;  // Some contigs mismatch the reference files, so this chain file cannot be used with --chain
-
     // BED stuff
     int bed_num_flds;
 } SegConf;
@@ -285,12 +289,14 @@ extern SegConf segconf; // ZIP: set based on segging a sample of a few first lin
 
 extern void segconf_initialize (void);
 extern void segconf_calculate (void);
-extern void segconf_set_width (FieldWidth *w);
+extern void segconf_set_width (FieldWidth *w, int bits);
 extern bool segconf_is_long_reads(void);
 extern void segconf_mark_as_used (VBlockP vb, unsigned num_ctxs, ...);
 extern rom segconf_sam_mapper_name (void);
 extern rom segconf_tech_name (void);
 extern rom segconf_deep_trimming_name (void);
+extern rom VCF_QUAL_method_name (VcfQualMethodType method);
+extern rom VCF_INFO_method_name (VcfInfoMethodType method);
 extern rom GQ_method_name (GQMethodType method);
 extern rom FMT_DP_method_name (FormatDPMethod method);
 extern void segconf_test_sorted (VBlockP vb, WordIndex prev_line_chrom, PosType32 pos, PosType32 prev_line_pos);

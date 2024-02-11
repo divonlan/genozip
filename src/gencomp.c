@@ -108,7 +108,7 @@ static enum { DEPN_NONE,
 // --------------------------------------------------------------------------------------
 static bool finished_absorbingP = false;
 static VBIType num_MAIN_vbs_absorbedP = 0; 
-static QueueStruct queueP[NUM_GC_TYPES] = {}; // queue of txt_data's [1] out-of-band (used for SAM PRIM, DVCF PRIM + LUFT) [2] DEPN (used for SAM DEPN)
+static QueueStruct queueP[NUM_GC_TYPES] = {}; // queue of txt_data's [1] out-of-band (used for SAM PRIM) [2] DEPN (used for SAM DEPN)
 static CompStruct componentsP[MAX_GEN_COMP+1] = {};
 
 // --------------------------------------------------------------------------------------
@@ -217,7 +217,7 @@ void gencomp_initialize (CompIType comp_i, GencompType gct)
     // add to buffer list. we can't allocate yet because segconf.vb_size is not known yet
     buf_set_promiscuous (&componentsP[comp_i].txt_data, "componentsP[]");
 
-    // initialize queue. note: same-type components share a queue: in DVCF, LUFT and PRIM are both out-of-band.
+    // initialize queue. note: same-type components share a queue
     #if MAX_QUEUE_SIZE < MAX_GLOBAL_MAX_THREADS 
     #error MAX_GLOBAL_MAX_THREADS must be at most MAX_QUEUE_SIZE or else the queue_size might overflow
     #endif

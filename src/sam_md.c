@@ -107,8 +107,12 @@ static inline rom sam_md_consume_M (VBlockSAMP vb, bool is_depn, char **md_in_ou
         // if we still need more M_bases, the next one should be a mismatch nucleotide. Note that the SAM standard permits IUPAC
         // "bases" (eg N), but we apply the MD special alg only for ACGT.
         if (M_bases) {
+            if (*md == '\0') {
+                *critical_error = true; 
+                return "MD string implies a shorter SEQ than CIGAR does"; 
+            }
 
-            if (!IS_ACGT (*md))
+            else if (!IS_ACGT (*md))
                 error = (*md=='N' ? "Encountered 'N' base while parsing M" : "Not A,C,G,T,N while parsing M"); // Genozip reference supports only A,C,G,T, but this "base" in the MD string is not one of them
 
             else { // set base (if A,C,G,T) even if previous bases had an error

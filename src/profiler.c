@@ -249,7 +249,6 @@ void profiler_add_evb_and_print_report (void)
         PRINT (zip_main_loop_idle, 1);
         PRINT (zip_free_undeeded_zctx_bufs_after_seg, 1);
         PRINT (generate_recon_plan, 1);
-        PRINT (vcf_linesort_compress_qsort, 2);
         PRINT (sam_zip_recon_plan_add_gc_lines, 2);
         PRINT (sam_zip_recon_plan_count_writers, 3);
         PRINT (recon_plan_compress, 2);
@@ -340,7 +339,6 @@ void profiler_add_evb_and_print_report (void)
         PRINT (gencomp_offload_DEPN_to_disk, 3);
         PRINT (gencomp_reread_lines_as_prescribed, 1);
         PRINT (bgzf_uncompress_one_prescribed_block, 2);
-        PRINT (vcf_linesort_merge_vb, 1);
         PRINT (ctx_merge_in_vb_ctx, 1);
         PRINT (wait_for_merge, 2);
         PRINT (sam_deep_merge, 2);

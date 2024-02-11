@@ -355,7 +355,7 @@ void sam_zip_report_monochar_inserts (void)
 // - Edge case: no CIGAR (it is "*") - we just store the sequence in SAM_NONREF
 // - Edge case: no SEQ (it is "*") - we '*' in SAM_NONREF and indicate "different from reference" in the bitmap. We store a
 //   single entry, regardless of the number of entries indicated by CIGAR
-static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(seq), const PosType32 pos, bool is_revcomp,
+static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(seq), const PosType32 pos, bool is_revcomp,
                                        uint32_t ref_consumed, uint32_t ref_and_seq_consumed, bool no_lock)
 {
     declare_seq_contexts;   
@@ -586,7 +586,7 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(s
 }
 
 // verify that the depn line is identical (modulo rev_comp and hard_clips) to the prim line
-static bool sam_seg_verify_saggy_line_SEQ (VBlockSAMP vb, ZipDataLineSAM *my_dl, ZipDataLineSAM *prim_dl, rom my_seq/*textual*/)
+static bool sam_seg_verify_saggy_line_SEQ (VBlockSAMP vb, ZipDataLineSAMP my_dl, ZipDataLineSAMP prim_dl, rom my_seq/*textual*/)
 {
     START_TIMER;
 
@@ -625,7 +625,7 @@ static bool sam_seg_verify_saggy_line_SEQ (VBlockSAMP vb, ZipDataLineSAM *my_dl,
     return success;
 }
 
-void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_seq), unsigned add_bytes)
+void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(textual_seq), unsigned add_bytes)
 {
     START_TIMER;
 
@@ -636,7 +636,7 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_seq), unsigned
     bool perfect = false;
     bool vs_prim = false;
 
-    ZipDataLineSAM *saggy_dl;
+    ZipDataLineSAMP saggy_dl;
     bool unmapped = dl->FLAG.unmapped || vb->cigar_missing || !dl->POS || str_issame_(STRa(vb->chrom_name), "*", 1);
 
     ASSSEG (textual_seq[0] != '*' || textual_seq_len == 1, "Invalid SEQ - starts with '*' but length=%u", textual_seq_len);
@@ -666,7 +666,7 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_seq), unsigned
     // case: unmapped line and we have refhash: align to reference
     if (unmapped && aligner_ok) {
         use_aligner:
-        switch (aligner_seg_seq (VB, STRa(textual_seq), true, false, NO_GPOS, false)) {
+        switch (aligner_seg_seq (VB, STRa(textual_seq), false, NO_GPOS, false)) {
             case MAPPING_NO_MAPPING : force_verbatim = true; goto add_seq_verbatim; 
             case MAPPING_PERFECT    : perfect        = true; // fallthrough
             case MAPPING_ALIGNED    : aligner_used   = true; break;
@@ -901,7 +901,7 @@ uint32_t sam_zip_get_seq_len (VBlockP vb, uint32_t line_i)
 COMPRESSOR_CALLBACK_DT (sam_zip_seq) 
 {
     VBlockSAMP vb = (VBlockSAMP)vb_;
-    ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
+    ZipDataLineSAMP dl = DATA_LINE (vb_line_i);
         
     *line_data_len = dl->SEQ.len;
 

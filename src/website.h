@@ -15,8 +15,6 @@
 #define GITHUB_REPO "https://github.com" REPO
 
 #define WEBSITE_QUICK_GUIDE  GENOZIP_URL "/compression"
-#define WEBSITE_RENDERING    GENOZIP_URL "/dvcf-rendering" // link in manuscript
-#define WEBSITE_KRAKEN       GENOZIP_URL "/kraken"
 #define WEBSITE_GENOZIP      GENOZIP_URL "/genozip"
 #define WEBSITE_GENOUNZIP    GENOZIP_URL "/genounzip"
 #define WEBSITE_GENOCAT      GENOZIP_URL "/genocat"
@@ -26,8 +24,6 @@
 #define WEBSITE_LICENSE      GENOZIP_URL "/license"
 #define WEBSITE_GET_GENOZIP  GENOZIP_URL "/get-genozip"
 #define WEBSITE_PUBLICATIONS GENOZIP_URL "/publications"
-#define WEBSITE_DVCF         GENOZIP_URL "/dvcf"
-#define WEBSITE_CHAIN        GENOZIP_URL "/chain"
 #define WEBSITE_MATCH_CHROM  GENOZIP_URL "/match-chrom"
 #define WEBSITE_INSTALLING   GENOZIP_URL "/installing"
 #define WEBSITE_USING_ON_HPC GENOZIP_URL "/using-on-hpc"

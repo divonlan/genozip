@@ -45,27 +45,3 @@ void vcf_gwas_seg_FORMAT_ID (VBlockVCFP vb, ContextP ctx, STRp(id))
 // ---------------
 // PIZ
 // ---------------
-
-// used for FORMAT/ES and FORMAT/EZ
-TRANSLATOR_FUNC (vcf_piz_luft_NEG)  
-{
-    if (validate_only) return true;
-
-    // case: negative to positive
-    if (recon[0] == '-') { 
-        memmove (recon, recon+1, recon_len-1); // delete '-'
-        if (!validate_only) Ltxt--;
-    }
-
-    else if (str_is_1char (recon, '0') || IS_PERIOD (recon)) {
-    } // "0" and "." are unchanged
-
-    // case: positive to negative
-    else {
-        memmove (recon+1, recon, recon_len); 
-        *recon = '-'; // insert '-'
-        Ltxt++;
-    }
-
-    return true; // translation successful
-}

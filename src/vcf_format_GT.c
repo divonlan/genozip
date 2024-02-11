@@ -289,25 +289,3 @@ void vcf_piz_GT_cb_null_GT_if_null_DP (VBlockP vb , char *recon)
     }
 }
 
-// Lift-over translator assigned to a FORMAT/GT item, IF it is bi-allelic and we have a ALT<>REF switch. No limitations on ploidy.
-// We switch 0<>1. If its unphased (only /) - we list the 0s first, then the 1s
-TRANSLATOR_FUNC (vcf_piz_luft_GT)
-{
-    // validate. make sure this is a bi-allelic genotype (no ploidy limitation)
-    for (uint32_t i=0; i < recon_len; i += 2)  
-        if (recon[i] != '0' && recon[i] != '1' && recon[i] != '.') return false;
-
-    for (uint32_t i=1; i < recon_len; i += 2)  
-        if (recon[i] != '/' && recon[i] != '|') return false;
-
-    ctx->gt.actual_last_ploidy = (recon_len+1) / 2; // consumed by vcf_piz_luft_PLOIDY
-
-    if (validate_only) return true;
-
-    // exchange 0 <> 1
-    for (uint32_t i=0; i < recon_len; i += 2)
-        if      (recon[i] == '0') recon[i] = '1';
-        else if (recon[i] == '1') recon[i] = '0';
-
-    return true;    
-}

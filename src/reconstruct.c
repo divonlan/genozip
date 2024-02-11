@@ -624,17 +624,6 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
         reconstruct_from_ctx (vb, base_ctx->did_i, 0, reconstruct);
         break;
     
-    case SNIP_DUAL: {
-        str_split (&snip[1], snip_len-1, 2, SNIP_DUAL, subsnip, true);
-        ASSPIZ (n_subsnips==2, "Invalid SNIP_DUAL snip in ctx=%s", snip_ctx->tag_name);
-
-        if (vcf_vb_is_primary(vb)) // recursively call for each side 
-            reconstruct_one_snip (vb, snip_ctx, word_index, STRi(subsnip,0), reconstruct, __FUNCLINE);
-        else
-            reconstruct_one_snip (vb, snip_ctx, word_index, STRi(subsnip,1), reconstruct, __FUNCLINE);
-        return;
-    }
-
     case SNIP_LOOKBACK: 
         new_value = reconstruct_from_lookback (vb, base_ctx, STRa(snip), reconstruct);
         has_new_value = HAS_NEW_VALUE;

@@ -30,7 +30,6 @@ const uint8_t acgt_encode[256] = { ['A']=0, ['C']=1, ['G']=2, ['T']=3,  // all o
                                    
                                    // IUPAC codes are mapped to one of their bases: http://www.bioinformatics.org/sms/iupac.html
                                    // the base to which a IUPAC is mapped, is the lowest alphanetically of its participating bases, per 1.6.1-REF in the VCF specification: https://samtools.github.io/hts-specs/VCFv4.3.pdf
-                                   // (expected by vcf_refalt_lift_snp)
                                    ['U']=3, ['R']=0, ['Y']=1, ['S']=1,
                                    ['W']=0, ['K']=2, ['M']=0, ['B']=1,
                                    ['D']=0, ['H']=0, ['V']=0, ['N']=0,

@@ -23,13 +23,13 @@
 // we will reconstruct precisely even at the .gz level
 #define BGZF_NOT_INITIALIZED    -100 
 #define BGZF_BY_ZFILE           -1
-#define BGZF_COMP_LEVEL_DEFAULT 6 
+#define BGZF_COMP_LEVEL_DEFAULT 1         // default genounzip BGZF compression level if -z is not specified
 #define BGZF_COMP_LEVEL_UNKNOWN 15 
     
 // data type of VBlock.bgzf_blocks
 typedef struct BgzfBlockZip {
     uint32_t txt_index;                   // index of uncompressed block within vb->txt_data. The first block doesn't necessarily have index=0 bc there could be passed-down data
-    uint32_t txt_size : 17;               // max value is BGZF_MAX_BLOCK_SIZE
+    uint32_t txt_size        : 17;        // max value is BGZF_MAX_BLOCK_SIZE
     uint32_t is_decompressed : 1;         // has data been BGZF-decompressed by main thread
     uint32_t compressed_index, comp_size; // index within vb->scratch
 } BgzfBlockZip;

@@ -12,7 +12,7 @@
 #include "seg.h"
 #include "reconstruct.h"
 
-void sam_dragen_initialize (VBlockSAMP vb)
+void sam_dragen_seg_initialize (VBlockSAMP vb)
 {
     seg_mux_init (VB, CTX(OPTION_sd_f), 2, SAM_SPECIAL_sd, false, (MultiplexerP)&vb->mux_dragen_sd);
 }
@@ -22,7 +22,7 @@ static int sd_channel_i (int seq_len, int as)
     return (seq_len == as);
 }
 
-void sam_dragen_seg_sd_f (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sd), ValueType numeric, unsigned add_bytes)
+void sam_dragen_seg_sd_f (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(sd), ValueType numeric, unsigned add_bytes)
 {
     if (dl->AS) { 
         int channel_i = sd_channel_i (dl->SEQ.len, dl->AS);

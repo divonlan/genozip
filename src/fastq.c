@@ -14,7 +14,6 @@
 #include "optimize.h"
 #include "codec.h"
 #include "writer.h"
-#include "kraken.h"
 #include "bases_filter.h"
 #include "qname.h"
 #include "tip.h"
@@ -96,7 +95,7 @@ bool fastq_zip_use_pair_identical (DictId dict_id)
 {
     return dict_id_is_fastq_qname_sf (dict_id) || dict_id_is_fastq_aux (dict_id) || 
            DNUM(QNAME) || DNUM(QNAME2) || DNUM(LINE3) || DNUM(EXTRA) ||
-           DNUM(AUX) || DNUM(E1L) || DNUM (E2L) || DNUM(TAXID) || DNUM(TOPLEVEL);
+           DNUM(AUX) || DNUM(E1L) || DNUM (E2L) || DNUM(TOPLEVEL);
 }
 
 // returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
@@ -350,12 +349,6 @@ void fastq_seg_initialize (VBlockP vb_)
     if (flag.optimize_DESC) 
         fastq_get_optimized_desc_read_name (vb);
 
-    if (kraken_is_loaded) {
-        CTX(FASTQ_TAXID)->flags.store    = STORE_INT;
-        CTX(FASTQ_TAXID)->no_stons       = true; // must be no_stons the SEC_COUNTS data needs to mirror the dictionary words
-        CTX(FASTQ_TAXID)->counts_section = true; 
-    }
-
     // when pairing, we cannot have singletons, bc a singleton in R1, when appearing in R2 will not
     // be a singleton (since not the first appearance), causing both b250 and local to differ between the R's. 
     if (flag.pair)
@@ -514,7 +507,6 @@ bool fastq_seg_is_small (ConstVBlockP vb, DictId dict_id)
 {
     return dict_id.num == _FASTQ_TOPLEVEL ||
            dict_id.num == _FASTQ_QNAME    ||
-           dict_id.num == _FASTQ_TAXID    ||
            dict_id.num == _FASTQ_E1L      ||
            dict_id.num == _FASTQ_E2L;
 }
@@ -570,21 +562,6 @@ bool fastq_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header, uint32_t
         fastq_read_pair_1_data (vb, VB_FASTQ->pair_vb_i);
 
     return true;
-}
-
-// seg taxid, or abort
-static void fastq_seg_kraken_tax_id (VBlockFASTQP vb, STRp(qname))
-{
-    unsigned taxid_found = kraken_seg_taxid (VB, FASTQ_TAXID, STRa(qname), false);
-
-    // if not found tax id for this read, try again, perhaps removing /1 or /2
-    if (!taxid_found) {
-        if (qname_len > 2 && qname[qname_len-2] == '/' &&
-            (qname[qname_len-1] == '1' || qname[qname_len-1] == '2'))
-            qname_len -= 2;
-
-        kraken_seg_taxid (VB, FASTQ_TAXID, STRa(qname), true); // this fails if missing
-    }
 }
 
 static rom fastq_seg_get_lines (VBlockFASTQP vb, rom line, int32_t remaining, 
@@ -723,9 +700,6 @@ rom fastq_seg_txt_line (VBlockP vb_, rom line_start, uint32_t remaining, bool *h
     dl->seq  = TXTWORD(seq); 
     dl->qual = TXTWORD(qual);
 
-    if (kraken_is_loaded) 
-        fastq_seg_kraken_tax_id (vb, STRa(qname));
-
     // case --optimize_QUAL: optimize in place, must be done before fastq_seg_deep calculates a hash
     if (flag.optimize_QUAL) optimize_phred_quality_string ((char *)STRa(qual));
 
@@ -816,8 +790,6 @@ IS_SKIP (fastq_piz_is_skip_section)
 {
     if (!ST(LOCAL) && !ST(B250) && !ST(DICT)) return false; // we only consider context data for skipping
 
-    if (dict_id.num == _FASTA_TAXID && flag.kraken_taxid) return false; // TAXID normally skipped in --seq-only etc, but not if filtering for taxid
-
     #define LINE3_dicts _FASTQ_LINE3,  _FASTQ_T0HIRD, _FASTQ_T1HIRD, _FASTQ_T2HIRD, _FASTQ_T3HIRD, _FASTQ_T4HIRD, _FASTQ_T5HIRD, \
                         _FASTQ_T6HIRD, _FASTQ_T7HIRD, _FASTQ_T8HIRD, _FASTQ_T9HIRD, _FASTQ_TAHIRD, _FASTQ_TBHIRD, _FASTQ_TmHIRD /* just line3, not all qnames */
 
@@ -835,31 +807,32 @@ IS_SKIP (fastq_piz_is_skip_section)
         return true;
 
     if (flag.seq_only && 
-        (   dict_id_is_in (dict_id, _FASTQ_E1L, _FASTQ_QNAME, _FASTQ_QNAME2, _FASTQ_LINE3, _FASTQ_EXTRA, _FASTQ_TAXID, _FASTQ_DEBUG_LINES, _FASTQ_LINE3,
+        (   dict_id_is_in (dict_id, _FASTQ_E1L, _FASTQ_QNAME, _FASTQ_QNAME2, _FASTQ_LINE3, _FASTQ_EXTRA, _FASTQ_DEBUG_LINES, _FASTQ_LINE3,
                            _FASTQ_QUAL, _FASTQ_DOMQRUNS, _FASTQ_QUALMPLX, _FASTQ_DIVRQUAL, DICT_ID_NONE)  
          || dict_id_is_fastq_qname_sf(dict_id) || dict_id_is_fastq_aux(dict_id))) // we don't need the DESC line 
         return true;
 
     // note: we need SQBITMAP to extract seq_len. We even needs its local, bc otherwise SNIP_LOOKUP won't work.
     if (flag.qual_only && 
-        (   dict_id_is_in (dict_id, _FASTQ_E1L, _FASTQ_QNAME, _FASTQ_QNAME2, _FASTQ_LINE3, _FASTQ_EXTRA, _FASTQ_TAXID, _FASTQ_DEBUG_LINES, DICT_ID_NONE) 
+        (   dict_id_is_in (dict_id, _FASTQ_E1L, _FASTQ_QNAME, _FASTQ_QNAME2, _FASTQ_LINE3, _FASTQ_EXTRA, _FASTQ_DEBUG_LINES, DICT_ID_NONE) 
          || dict_id_is_fastq_qname_sf(dict_id) || dict_id_is_fastq_aux(dict_id)
          || dict_id_is_in (dict_id, _FASTQ_NONREF, _FASTQ_NONREF_X, _FASTQ_GPOS, _FASTQ_GPOS_DELTA, _FASTQ_STRAND, _FASTQ_SEQMIS_A, _FASTQ_SEQMIS_C, _FASTQ_SEQMIS_G, _FASTQ_SEQMIS_T, DICT_ID_NONE))) // we don't need the SEQ line 
         return true;
 
     // if we're doing --sex/coverage, we only need TOPLEVEL, FASTQ_SQBITMAP and GPOS
     if (flag.collect_coverage && 
-        (   dict_id_is_in (dict_id, _FASTQ_QNAME, _FASTQ_QNAME2, _FASTQ_LINE3, _FASTQ_EXTRA, _FASTQ_TAXID, _FASTQ_DEBUG_LINES,
+        (   dict_id_is_in (dict_id, _FASTQ_QNAME, _FASTQ_QNAME2, _FASTQ_LINE3, _FASTQ_EXTRA, _FASTQ_DEBUG_LINES,
                            _FASTQ_QUAL, _FASTQ_DOMQRUNS, _FASTQ_QUALMPLX, _FASTQ_DIVRQUAL, DICT_ID_NONE)
          || dict_id_is_fastq_qname_sf(dict_id) || dict_id_is_fastq_aux(dict_id)
          || (!flag.bases && dict_id_is_in (dict_id, _FASTQ_NONREF, _FASTQ_NONREF_X, _FASTQ_STRAND, _FASTQ_SEQMIS_A, _FASTQ_SEQMIS_C, _FASTQ_SEQMIS_G, _FASTQ_SEQMIS_T, DICT_ID_NONE))))
         return true;
 
     // note: we don't SKIP for --count with an additional filter. Logic is too complicated and bug-prone.
-    if (flag.count && !flag.grep && IS_DICTED_SEC (st) && 
-        !flag.bases && !flag.regions && !flag.kraken_taxid && !kraken_is_loaded &&
+    if (flag.count && !flag.grep && IS_DICTED_SEC (st) && !flag.bases && !flag.regions && 
         dict_id.num != _FASTQ_TOPLEVEL) 
         return true;
+
+    if (dict_id.num == _FASTQ_TAXID) return true; // skip TAXID in old files
 
     return false;
 }
@@ -930,26 +903,7 @@ CONTAINER_CALLBACK (fastq_piz_container_cb)
 {
     if (is_top_level) {
         #define DROP_LINE(reason) ({ vb->drop_curr_line = (reason); goto dropped; })
-
-        // --taxid: filter out by Kraken taxid           
-        if (flag.kraken_taxid && !kraken_is_loaded && !kraken_is_included_stored (vb, FASTQ_TAXID, !flag.seq_only && !flag.qual_only))
-            DROP_LINE ("taxid");
         
-        if (flag.kraken_taxid && kraken_is_loaded) {
-            STR(qname);
-
-            if (VER(15)) 
-                SETlast (qname, FASTQ_QNAME);
-            
-            else { // up to 14 the entire line1 was segged in FASTQ_EXTRA
-                qname = last_txt (vb, FASTQ_EXTRA) + !prefixes_len; // +1 to skip the "@", if '@' is in DESC and not in prefixes (for files up to version 12.0.13)
-                qname_len = strcspn (qname, " \t\n\r");
-            }
-
-            if (!kraken_is_included_loaded (vb, STRa(qname))) 
-                DROP_LINE ("taxid");
-        }
-
         // --bases
         if (flag.bases && !vb->drop_curr_line &&
             !iupac_is_included_ascii (STRlst(FASTQ_SQBITMAP)))

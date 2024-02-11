@@ -202,29 +202,3 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_MLEAF)
     return NO_NEW_VALUE;
 }
 
-// Lift-over translator for INFO/AC fields, IF it is bi-allelic and we have a ALT<>REF switch AND we have an AN and AF field
-// We change the AC to AN - AC and return true if successful 
-TRANSLATOR_FUNC (vcf_piz_luft_A_AN)
-{
-    if (IS_TRIVAL_FORMAT_SUBFIELD) return true; // This is FORMAT field which is empty or "." - all good
-
-    int64_t an, ac;
-
-    if (IS_ZIP) {
-        if (!ctx_has_value_in_line_(vb, CTX(INFO_AN)) ||
-            !str_get_int_range64 (STRa(recon), 0, (an = CTX(INFO_AN)->last_value.i), &ac))
-            return false; // in Seg, AC is always segged last, so this means there is no AN in the line for sure
-        
-        if (validate_only) return true;  // Yay! AC can be lifted - all it needs in AN in the line, which it has 
-    }
-    else {
-        ac = ctx->last_value.i;
-        an = reconstruct_peek (vb, CTX(INFO_AN), 0, 0).i;
-    }
-
-    // re-reconstruct: AN-AC
-    Ltxt -= recon_len;
-    RECONSTRUCT_INT (an - ac);
-
-    return true;    
-}

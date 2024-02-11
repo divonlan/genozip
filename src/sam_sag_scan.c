@@ -346,7 +346,7 @@ static uint32_t sam_sag_get_qname_counts_this_vb (QnameCount *counts, uint32_t c
 //---------------------------------------------------
 
 // ZIP: true if this prim or depn sag line *might* have saggies in other VBs
-bool sam_might_have_saggies_in_other_VBs (VBlockSAMP vb, ZipDataLineSAM *dl, int32_t n_alns)
+bool sam_might_have_saggies_in_other_VBs (VBlockSAMP vb, ZipDataLineSAMP dl, int32_t n_alns)
 {
     if (!vb->qname_count.len32) return true; // we didn't count qnames, so we don't have proof that there aren't any saggies in other VBs
 

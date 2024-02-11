@@ -290,6 +290,7 @@ StrText arch_get_filesystem_type (void)
         NAME (0xc36400,   "CephFS");   // Distributed filesystem: https://docs.ceph.com/en/latest/cephfs/
         NAME (0x47504653, "GPFS");     // IBM Spectrum Scale GPFS: https://www.ibm.com/docs/en/storage-scale/4.2.0?topic=scale-overview-gpfs
         NAME (0xfe534d42, "SMB2");     // Windows file sharing
+        NAME (0x2fc12fc1, "ZFS");      // Oracle ZFS (originally in Solaris) https://docs.oracle.com/cd/E19253-01/819-5461/zfsover-2/
 
         default: sprintf (s.s, "0x%lx", fs.f_type); 
     }

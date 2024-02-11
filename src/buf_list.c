@@ -334,7 +334,6 @@ bool buflist_locate (ConstBufferP buf, rom prefix /*NULL if silent*/)
     OBJECT_TEST(file_buf_locate, z_file);
     OBJECT_TEST(file_buf_locate, txt_file);
     OBJECT_TEST(ref_buf_locate, gref);
-    OBJECT_TEST(ref_buf_locate, prim_ref);
 
     void *depn=0, *componentsP=0, *queueP=0, *preabsorb_queue=0; // dummies
     OBJECT_TEST(gencomp_buf_locate_depn, depn);

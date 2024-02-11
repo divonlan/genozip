@@ -33,7 +33,7 @@ uint32_t sam_get_QUAL_score (VBlockSAMP vb, STRp(qual))
 //       also output of samtools fixmate -m: See calc_mate_score in samtools source.
 //       It is the sum of phred values of mate's QUAL, but only phred values >= 15
 // ----------------------------------------------------------------------------------------------
-void sam_seg_ms_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t ms, unsigned add_bytes)
+void sam_seg_ms_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t ms, unsigned add_bytes)
 {
     int32_t save = dl->QUAL_score;
     sam_seg_buddied_i_fields (vb, dl, OPTION_ms_i, ms, &dl->QUAL_score, (MultiplexerP)&vb->mux_ms, STRa(copy_mate_ms_snip), add_bytes);

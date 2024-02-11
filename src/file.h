@@ -56,11 +56,11 @@ typedef struct File {
     int64_t header_size_bgzf;          // TXT_FILE ZIP: compressed size of header - or 0 if not whole BGZF blocks
     
     int64_t txt_data_so_far_bind;      // Z_FILE only: uncompressed txt data represented in the GENOZIP data written so far for all bound files
-                                       // note: txt_data_so_far_single/bind accounts for txt modifications due to --optimize or --chain or compressing a Luft file
+                                       // note: txt_data_so_far_single/bind accounts for txt modifications due to e.g. --optimize 
     int64_t txt_data_so_far_single_0;  // TXT_FILE PIZ: accounting for data as it was in the original source file, as reading TxtHeader and VbHeader sections from the genozip file
-                                       // Z_FILE & ZIP only: same as txt_data_so_far_single/bind, but original sizes without modifications due to --chain/--optimize/Luft
+                                       // Z_FILE & ZIP only: same as txt_data_so_far_single/bind, but original sizes without modifications due to e.g. --optimize
     int64_t txt_data_so_far_bind_0;    // Z_FILE & ZIP only: similar to txt_data_so_far_single_0, but for bound
-    int64_t num_lines;                 // Z_FILE: number of lines in all txt files bound into this z_file (sum of comp_num_lines, except DVCF reject components)
+    int64_t num_lines;                 // Z_FILE: number of lines in all txt files bound into this z_file (sum of comp_num_lines)
                                        // TXT_FILE: number of lines, in source file terms, (read so far) in single txt file
 
     // Digest stuff - stored in z_file (ZIP & PIZ)
@@ -110,8 +110,7 @@ typedef struct File {
     
     DictIdtoDidMap d2d_map; // map for quick look up of did_i from dict_id : 64K for key_map, 64K for alt_map 
     ContextArray contexts;             // Z_FILE ZIP/PIZ: a merge of dictionaries of all VBs
-    Buffer ra_buf;                     // ZIP/PIZ:  RAEntry records: ZIP: of DC_PRIMARY ; PIZ - PRIMARY or LUFT depending on flag.luft
-    Buffer ra_buf_luft;                // ZIP only: RAEntry records of DC_LUFT
+    Buffer ra_buf;                     // ZIP/PIZ:  RAEntry records
     
     // section list - used for READING and WRITING genozip files
     Buffer section_list_buf;           // section list to be written as the payload of the genotype header section
@@ -166,16 +165,8 @@ typedef struct File {
     char master_qname[SAM_MAX_QNAME_LEN+1]; // Z_FILE: PIZ: Deep: 
     int qnames_sampled;                // Z_FILE: PIZ: Deep: Number of QNAMEs sampled for producing the huffman compressor
 
-    // Z_FILE: DVCF stuff
-    Buffer rejects_report;             // Z_FILE ZIP --chain: human readable report about rejects
-    Buffer apriori_tags;               // Z_FILE ZIP DVCF: used for INFO/FORMAT tag renaming. Data from command line options if --chain, or VCF header if DVCF
-    
-    // TXT_FILE: DVCF stuff
-    uint8_t coords;                    // TXT_FILE ZIP: DVCF: Set from ##dual_coordinates and immutable thereafter
-    uint64_t reject_bytes;             // ZIP DVCF: number of bytes in lines originating from ##primary_only/##luft_only, not yet assigned to a VB
-
     // Reconstruction plan, for reconstructing in sorted order if --sort: [0] is primary coords, [1] is luft coords
-    Mutex recon_plan_mutex[2];         // TXT_FILE ZIP: VCF: protect vb_info and line_info during merging of VB data
+    Mutex recon_plan_mutex;            // TXT_FILE ZIP: VCF: protect vb_info and line_info during merging of VB data
     Buffer vb_info[2];                 // TXT_FILE ZIP: VCF: array of ZipVbInfo per VB, indexed by (vb_i-1), 0:PRIMARY, 1:LUFT
                                        // Z_FILE   ZIP: SAM: array of SamGcVbInfo for: 0:PRIM 1:DEPN
                                        // Z_FILE   PIZ: [0]: used by writer [1]: used to load SAM SA Groups - array of PlsgVbInfo - entry per PRIM vb 
@@ -218,7 +209,7 @@ typedef struct File {
     uint64_t normq_lines[MAX_NUM_COMPS];
 
     // per-component data (ZIP)
-    uint64_t comp_num_lines[MAX_NUM_COMPS];             // Z_FILE: PIZ/ZIP: number of lines in each component (note: includes DVCF reject components despite being duplicate lines)
+    uint64_t comp_num_lines[MAX_NUM_COMPS];             // Z_FILE: PIZ/ZIP: number of lines in each component 
     int64_t txt_file_disk_sizes_sum;                    // Z_FILE ZIP: sum of txt_file_disk_sizes[*]
     int64_t txt_file_disk_sizes[MAX_NUM_COMPS];         // Z_FILE ZIP: size of original txt file (whether or not compressed) of each component. 
     int64_t disk_so_far_comp[MAX_NUM_COMPS];            // Z_FILE ZIP: per-component size if z_file VB sections (note: global area sections, including SEC_DICT, are not accounted for)
@@ -228,7 +219,6 @@ typedef struct File {
 } File;
 
 #define z_has_gencomp (z_file && z_file->z_flags.has_gencomp) // ZIP/PIZ
-#define z_is_dvcf (z_file && (Z_DT(VCF) || Z_DT(BCF)) && z_has_gencomp)
 #define z_sam_gencomp (z_file && (Z_DT(SAM) || Z_DT(BAM)) && z_has_gencomp) // note: is BAM file in piz are Z_DT(SAM) and in zip are Z_DT(BAM)
 
 // methods

@@ -147,8 +147,6 @@ void noreturn main_exit (bool show_stack, bool is_error)
             chrom_finalize();
             ref_finalize (true);
             refhash_destroy();
-            kraken_destroy();
-            chain_destroy();
             vb_destroy_pool_vbs (POOL_MAIN, true);
             vb_destroy_pool_vbs (POOL_BGZF, true);
             vb_destroy_vb (&evb);
@@ -310,7 +308,7 @@ done:
 
 // run the test genounzip after genozip - for the most reliable testing that is nearly-perfectly indicative of actually 
 // genounzipping, we create a new genounzip process
-static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last_txt_file, bool is_chain,
+static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last_txt_file, 
                                      int64_t t_offset, int64_t t_size) // offset and size of z_file with in tar (0 if not tar)
 {
     rom password = crypt_get_password();
@@ -319,8 +317,6 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
     if (arch_get_max_resident_set() > arch_get_physical_mem_size() GB / 4) {
         ref_finalize (false);
         refhash_destroy();
-        kraken_destroy();
-        chain_destroy();
         vb_dehoard_memory (true);
     }
 
@@ -381,8 +377,8 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
                                       flag.sendto        ? sendto_str         : SKIP_ARG,
                                       flag.license_filename        ? "--licfile"            : SKIP_ARG,
                                       flag.license_filename        ? flag.license_filename  : SKIP_ARG,
-                                      IS_REF_EXTERNAL && !is_chain ? "--reference"          : SKIP_ARG, // normal pizzing of a chain file doesn't require a reference
-                                      IS_REF_EXTERNAL && !is_chain ? ref_get_filename(gref) : SKIP_ARG, 
+                                      IS_REF_EXTERNAL    ? "--reference"          : SKIP_ARG, 
+                                      IS_REF_EXTERNAL    ? ref_get_filename(gref) : SKIP_ARG, 
                                       // note: no need for --check-latest as this call returns, and we check-latest and print the tip it in ZIP
                                       NULL);
                                       // ↓↓↓ Don't forget to add below too ↓↓↓
@@ -435,8 +431,7 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
                                 argv[argc++] = "--licfile"; 
                                 argv[argc++] = flag.license_filename; }
 
-        if (IS_REF_EXTERNAL && !is_chain) { 
-                                argv[argc++] = "--reference"; 
+        if (IS_REF_EXTERNAL) {  argv[argc++] = "--reference"; 
                                 argv[argc++] = ref_get_filename(gref); }
         argv[argc] = NULL;
                                 // ↑↑↑ Don't forget to add above too ↑↑↑
@@ -523,8 +518,6 @@ static void main_genozip (rom txt_filename,
     
     file_close (&txt_file);  
 
-    bool is_chain = (Z_DT(CHAIN));
-    
     // close the file if its an open disk file AND we need to close it
     if (!flag.to_stdout && z_file && z_file->z_closes_after_me) {
 
@@ -539,7 +532,7 @@ static void main_genozip (rom txt_filename,
 
         // test the compression, if the user requested --test
         if (flag.test) 
-            main_test_after_genozip (z_filename, z_dt, is_last_user_txt_file, is_chain, t_offset, t_size);
+            main_test_after_genozip (z_filename, z_dt, is_last_user_txt_file, t_offset, t_size);
 
         FREE (z_filename); // allocated in filename_z_*
     }
@@ -702,18 +695,6 @@ static void main_load_reference (rom filename, bool is_first_file, bool is_last_
         ref_load_external_reference (gref, NULL); // also loads refhash if needed
     }
 
-    if (dt == DT_CHAIN && !ref_is_external_loaded (prim_ref)) {
-
-        ref_set_reference (prim_ref, NULL, REF_EXTERNAL, false); // set the prim_ref from $GENOZIP_REFERENCE if applicable
-
-        ASSINP0 (ref_get_filename (prim_ref), 
-                "When compressing a chain file, you must also specify two --reference arguments: the first is the reference file in Primary coordinates "
-                "(i.e. those of the VCF files to be lifted), and the second is the reference file in Luft coordinates (i.e. the coordinates aftering lifting). See "WEBSITE_DVCF);
-
-        MAIN ("Loading external reference to prim_ref: %s", ref_get_filename (prim_ref));
-        ref_load_external_reference (prim_ref, NULL);
-    }
-
     // Read the refhash and calculate the reverse compliment genome for the aligner algorithm - it was not used before and now it is
     if (!old_aligner_available && flag.aligner_available && !refhash_buf.count) {
         MAIN0 ("Loading refhash");
@@ -760,12 +741,7 @@ static void main_no_files (int argc)
     // case: requesting to display the reference: genocat --reference <ref-file> and optionally --regions
     else if (is_genocat && IS_REF_LOADED_ZIP) {
         flags_update (0, NULL);
-
-        if (flag.show_ref_diff) 
-            ref_diff_ref();                    
-        
-        else
-            ref_display_ref (gref);
+        ref_display_ref (gref);
     }
 
     // genozip with no parameters and not registered yet - register now
@@ -855,21 +831,6 @@ int main (int argc, char **argv)
     // and might put you personally as well as your organization at legal and financial risk - see "Severly unauthorized use of Genozip"
     // section of the license. Rather, please contact sales@genozip.com to discuss which license would be appropriate for your case.
     if (IS_ZIP) license_load(); 
-
-    if (flag.reading_chain) {
-        vcf_tags_cmdline_rename_option(); 
-        vcf_tags_cmdline_drop_option();
-
-        MAIN0 ("Loading chain file");
-        chain_load();
-
-        if (is_genocat) exit(0);
-    }
-
-    if (flag.reading_kraken) {
-        MAIN0 ("Loading kraken file");
-        kraken_load();
-    }
 
     // if we're genozipping with tar, initialize tar file
     if (IS_ZIP && tar_zip_is_tar()) 

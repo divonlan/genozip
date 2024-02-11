@@ -52,6 +52,11 @@ typedef struct Context {
                                // PIZ: b250 section of this VB found in file (used to determined if pair-identical R1 section should be loaded)
     uint32_t b250_in_z_len;    
 
+    union {
+    uint8_t dict_helper;       // ZIP zctx / PIZ zctx+vctx: context-specific value passed through SectionHeaderDictionary.dict_helper (since 15.0.42)
+    uint8_t con_rep_special;   // ZIP/PIZ: zctx: SPECIAL for getting container repeats in case of CON_REPEATS_IS_SPECIAL
+    };
+
     LocalType ltype;           // LT_* - type of local data - included in the section header
     LocalType pair_ltype;      // LT_* - Used if this file is a PAIR_2 - type of local data of PAIR_1
     struct FlagsCtx flags;     // flags to be included in section header
@@ -301,7 +306,6 @@ typedef struct Context {
     // PIZ: context-specific buffer
     union {
         Buffer piz_ctx_specific_buf;
-        Buffer qname_nodes;        // PIZ: used in KRAKEN_QNAME
         Buffer cigar_anal_history; // PIZ: used in SAM_CIGAR - items of type CigarAnalItem
         Buffer line_sqbitmap;      // PIZ: used in SAM_SQBITMAP
         Buffer domq_denorm;        // PIZ SAM/BAM/FASTQ: DomQual codec denormalization table for contexts with QUAL data 

@@ -18,7 +18,7 @@
 #include "reconstruct.h"
 
 // read alignment start position (1 based)
-void sam_seg_blasr_FI_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t fi, unsigned add_bytes)
+void sam_seg_blasr_FI_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t fi, unsigned add_bytes)
 {
     decl_ctx (OPTION_FI_i);
 

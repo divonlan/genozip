@@ -136,7 +136,7 @@ void sam_seg_gc_initialize (VBlockSAMP vb)
 // Call in seg PRIM line (both in MAIN and PRIM vb): 
 // MAIN: test that line is a valid prim before moving it to the PRIM gencomp file
 // PRIM: add SA Group (not alignments) to the data structure in VB 
-bool sam_seg_prim_add_sag (VBlockSAMP vb, ZipDataLineSAM *dl, uint16_t num_alns/* inc primary aln*/, bool is_bam)
+bool sam_seg_prim_add_sag (VBlockSAMP vb, ZipDataLineSAMP dl, uint16_t num_alns/* inc primary aln*/, bool is_bam)
 {
     rom seq = vb->textual_seq_str;
     uint32_t seq_len = dl->SEQ.len;
@@ -187,7 +187,7 @@ bool sam_seg_prim_add_sag (VBlockSAMP vb, ZipDataLineSAM *dl, uint16_t num_alns/
 // MAIN: called in sam_seg_is_gc_line to test that line is a valid prim before moving it to the PRIM gencomp file
 // PRIM: call in seg of seg of SA:Z add SA Group (including alignments) to the data structure in VB
 // return n_alns if successful and 0 if not
-int32_t sam_seg_prim_add_sag_SA (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa), int64_t this_nm, bool is_bam)
+int32_t sam_seg_prim_add_sag_SA (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(sa), int64_t this_nm, bool is_bam)
 {
     str_split (sa, sa_len, 0, ';', aln, false); // n_alns is 1+number of repeats in SA, because of terminating ';'. so it is the total number of alignments, including the primary
     FAILIF (n_alns < 2 || n_alns > MAX_SA_NUM_ALNS, "n_alns=%d is not in [2,%u]", n_alns, MAX_SA_NUM_ALNS); // we cannot add this SA - either invalid or over the max number of alignments
@@ -272,14 +272,14 @@ int32_t sam_seg_prim_add_sag_SA (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa), in
 }       
 
 // PRIM: call in seg of seg of NH:i add SA Group to the data structure in VB 
-void sam_seg_prim_add_sag_NH (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t nh)
+void sam_seg_prim_add_sag_NH (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t nh)
 {
     sam_seg_prim_add_sag (vb, dl, nh, IS_BAM_ZIP);
     vb->sag_alns.count += nh;
 }
 
 // PRIM: call in seg of seg of NH:i add SA Group to the data structure in VB 
-void sam_seg_prim_add_sag_CC (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t nh)
+void sam_seg_prim_add_sag_CC (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t nh)
 {
     sam_seg_prim_add_sag (vb, dl, nh, IS_BAM_ZIP);
 
@@ -294,7 +294,7 @@ void sam_seg_prim_add_sag_CC (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t nh)
 }
 
 // PRIM: called to ingested a segged VB data into solo "alignments" 
-void sam_seg_prim_add_sag_SOLO (VBlockSAMP vb, ZipDataLineSAM *dl)
+void sam_seg_prim_add_sag_SOLO (VBlockSAMP vb, ZipDataLineSAMP dl)
 {
     sam_seg_prim_add_sag (vb, dl, dl->NH, IS_BAM_ZIP);
 
@@ -305,7 +305,7 @@ void sam_seg_prim_add_sag_SOLO (VBlockSAMP vb, ZipDataLineSAM *dl)
 
 // Seg MAIN: returns true if this line is a Primary or Dependent line of a supplementary/secondary group - 
 // and should be moved to a generated component. Called by compute thread in seg of Normal VB.
-bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(alignment), bool is_bam)
+bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(alignment), bool is_bam)
 {
     START_TIMER;
 
@@ -579,7 +579,7 @@ static inline bool sam_sa_seg_depn_get_my_SA_alns (VBlockSAMP vb,
 // Seg of DEPN by SA:Z tag: find matching SAGroup and seg SAM_SAG. We identify the group by matching (qname,rname,pos,cigar,revcomp,nm) 
 // and matching flags and SEQ
 // sets vb->sag (NULL if not found).
-static void sam_sa_seg_depn_find_sagroup_SAtag (VBlockSAMP vb, ZipDataLineSAM *dl, 
+static void sam_sa_seg_depn_find_sagroup_SAtag (VBlockSAMP vb, ZipDataLineSAMP dl, 
                                                 STRp(textual_cigar), rom textual_seq, bool is_bam)
 {
     #define DONE ({ sam_cigar_restore_H (htos); return; })
@@ -654,7 +654,7 @@ static void sam_sa_seg_depn_find_sagroup_SAtag (VBlockSAMP vb, ZipDataLineSAM *d
 // Seg of DEPN by NH:Z tag: find matching SAGroup and seg SAM_SAG. We identify the group by matching (qname,rname,pos,cigar,revcomp,nm) 
 // and matching flags and SEQ
 // sets vb->sag (NULL if not found).
-static void sam_sa_seg_depn_find_sagroup_noSA (VBlockSAMP vb, ZipDataLineSAM *dl, rom textual_seq, bool is_bam)
+static void sam_sa_seg_depn_find_sagroup_noSA (VBlockSAMP vb, ZipDataLineSAMP dl, rom textual_seq, bool is_bam)
 {
     vb->sag = NULL; // initialize to "not found"
 
@@ -731,7 +731,7 @@ static void sam_sa_seg_depn_find_sagroup_noSA (VBlockSAMP vb, ZipDataLineSAM *dl
 }
 
 // Seg compute VB: called when segging PRIM/DEPN VBs
-void sam_seg_sag_stuff (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_cigar), rom textual_seq, bool is_bam)
+void sam_seg_sag_stuff (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(textual_cigar), rom textual_seq, bool is_bam)
 {
     START_TIMER;
 
@@ -851,7 +851,7 @@ void sam_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeaderP vb_heade
     if (IS_PRIM(vb)) {
         uint32_t total_seq_len=0, total_qname_len=0;
         for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) {
-            ZipDataLineSAM *dl = DATA_LINE (line_i);
+            ZipDataLineSAMP dl = DATA_LINE (line_i);
             total_seq_len   += dl->SEQ.len;   // length in bases, not bytes
             total_qname_len += dl->QNAME.len;
         }
@@ -1014,7 +1014,7 @@ void sam_zip_generate_recon_plan (void)
         uint32_t conc_writing_vbs = sam_zip_recon_plan_count_writers();
 
         // output the SEC_RECON_PLAN section
-        recon_plan_compress (conc_writing_vbs, false);
+        recon_plan_compress (conc_writing_vbs);
     }
 
     // case: recon_plan is just FULL_VBs, meaning we have no PRIM or DEPN lines. 

@@ -46,20 +46,10 @@ bool vcf_piz_init_vb (VBlockP vb_, ConstSectionHeaderVbHeaderP header, uint32_t 
 { 
     VBlockVCFP vb = (VBlockVCFP)vb_;
 
-    // calculate the coordinates in which this VB will be rendered - PRIMARY or LUFT
-    vb->vb_coords = !z_is_dvcf ? DC_PRIMARY // non dual-coordinates file - always PRIMARY
-                    : header->flags.vb_header.vcf.coords == DC_PRIMARY ? DC_PRIMARY // reject component ##primary_only
-                    : header->flags.vb_header.vcf.coords == DC_LUFT    ? DC_LUFT    // reject component ##luft_only
-                    : flag.luft ? DC_LUFT // dual component - render as LUFT
-                    : DC_PRIMARY;         // dual component - render as PRIMARY
-
-    vb->recon_size = BGEN32 (vb->vb_coords==DC_PRIMARY ? header->recon_size_prim : header->dvcf_recon_size_luft); 
-
-    vb->is_rejects_vb = z_is_dvcf && header->flags.vb_header.vcf.coords != DC_BOTH;
+    vb->recon_size = BGEN32 (header->recon_size_prim); 
 
     // accounting for data as in the original source file 
-    *txt_data_so_far_single_0_increment = BGEN32 (txt_file->txt_flags.is_txt_luft ? header->dvcf_recon_size_luft 
-                                                                                  : header->recon_size_prim); 
+    *txt_data_so_far_single_0_increment = BGEN32 (header->recon_size_prim); 
 
     CTX(INFO_END)->last_end_line_i = LAST_LINE_I_INIT;
 
@@ -145,30 +135,6 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_HAS_RGQ)
 {
     return reconstruct_demultiplex (vb, ctx, STRa(snip), vcf_piz_line_has_RGQ (VB_VCF), new_value, reconstruct);
 }
-
-static void vcf_piz_replace_pos_with_gpos (VBlockVCFP vb)
-{
-    Did chrom_did_i = (vb->vb_coords == DC_LUFT ? VCF_oCHROM : VCF_CHROM);
-    Context *pos_ctx = CTX (vb->vb_coords == DC_LUFT ? VCF_oPOS : VCF_POS);
-
-    WordIndex ref_chrom_index = ref_contigs_get_by_name (gref, last_txt(VB, chrom_did_i), vb->last_txt_len (chrom_did_i), true, true);
-    Range *r = ref_get_range_by_ref_index (VB, gref, ref_chrom_index); // possibly NULL
-
-    // remove CHROM and POS and two \t
-    Ltxt -= pos_ctx->last_txt.len + vb->last_txt_len (chrom_did_i) + 2; // remove main CHROM\tPOS\t
-
-    PosType64 pos = pos_ctx->last_value.i;
-    PosType64 gpos = (r && pos >= r->first_pos && pos <= r->last_pos) ? r->gpos + (pos - r->first_pos) : 0; 
-
-    // if CHROM exists in the reference, POS must fit withing it
-    ASSPIZ (!r || (pos >= r->first_pos && pos <= r->last_pos), "POS=%"PRId64" is out of bounds for reference of CHROM: [%"PRId64",%"PRId64"]", 
-            pos, r->first_pos, r->last_pos);
-
-    RECONSTRUCT ("GPOS\t", 5); 
-    RECONSTRUCT_INT (gpos);
-    RECONSTRUCT1('\t');
-}
-
 // filter is called before reconstruction of a repeat or an item, and returns false if item should 
 // not be reconstructed. contexts are not consumed.
 CONTAINER_FILTER_FUNC (vcf_piz_filter)
@@ -183,59 +149,28 @@ CONTAINER_FILTER_FUNC (vcf_piz_filter)
                 CTX(VCF_POS)->pos_last_value = CTX(VCF_POS)->last_value.i; // consumed by regions_is_site_included
                 break;
             }
-            // fall through
-            
-        case _VCF_TOPLUFT:
-            if (flag.drop_genotypes) {
-                // --drop-genotypes: remove the two tabs at the end of the line
-                if (dnum == _VCF_EOL)
-                    Ltxt -= 2;
 
-                // --drop-genotypes: drop SAMPLES (might be loaded if has[RGQ], as needed for vcf_piz_special_main_REFALT)
-                else if (dnum == _VCF_SAMPLES)
-                    return false;
+            else if (dnum == _VCF_QUAL) {
+                if (!VER(15)) vcf_piz_refalt_parse (VB_VCF); // starting 14.0.12, called from vcf_piz_con_item_cb (no harm if called twice)
             }
 
-            // in dual-coordinates files - get the COORDS and oSTATUS at the beginning of each line
-            else if (dnum == _VCF_oSTATUS || dnum == _VCF_COORDS) {
-                if (flag.show_dvcf)
-                    return true; // show
-                else if (z_is_dvcf)
-                    *reconstruct = RECON_PREFIX_ONLY; // set last_index, without reconstructing, but reconstruct ##primary_only if needed
-                else
-                    return false; // filter out entirely without consuming (non-DC files have no oStatus data)
+            // --drop-genotypes: remove the two tabs at the end of the line
+            else if (dnum == _VCF_EOL) { 
+                if (flag.drop_genotypes) Ltxt -= 2;
             }
 
-            // --gpos: after main POS or oPOS reconstructed - re-write POS as GPOS
-            else if (item == 4 && flag.gpos) 
-                vcf_piz_replace_pos_with_gpos (VB_VCF);
+            // --drop-genotypes: drop SAMPLES (might be loaded if has[RGQ], as needed for vcf_piz_special_main_REFALT)
+            else if (dnum == _VCF_SAMPLES) {
+                if (flag.drop_genotypes) return false;
+            }
 
-            break;
-
-        case _VCF_INFO:
-            // for dual-coordinates genozip files - select which DVCF item to show based on flag.luft
-            if ((VB_VCF->vb_coords == DC_LUFT    && (dnum == _INFO_LUFT || dnum == _INFO_LREJ)) ||
-                (VB_VCF->vb_coords == DC_PRIMARY && (dnum == _INFO_PRIM || dnum == _INFO_PREJ)))
-                return false;
+            // DVCF-related fields that exist if files compressed 12.0.0 - 15.0.41
+            else if (dnum == _VCF_oSTATUS || dnum == _VCF_COORDS) 
+                return false; // filter out entirely without consuming 
         
-            // case: --single-coord - get rid of the DVCF INFO item that would be displayed (this kills the prefixes, but not the values)
-            if (flag.single_coord && (dnum == _INFO_PRIM || dnum == _INFO_LUFT || dnum == _INFO_LREJ || dnum == _INFO_PREJ)) {
-                if (con_nitems (*con) == 2 && z_is_dvcf) RECONSTRUCT1 ('.'); // if this variant's only INFO fields are DVCF - replace with '.'
-                *reconstruct = RECON_OFF; // consume but don't reconstruct
-            }
             break;
-
-        case _INFO_PRIM: 
-        case _INFO_LUFT:
-        case _INFO_LREJ:
-        case _INFO_PREJ:
-            // case: --single-coord - get rid of all of the DVCF INFO item's subitems (needed, since the "reconstruct" in _VCF_INFO for the _INFO_PRIM item, doesn't propagate to the _INFO_PRIM container)
-            if (flag.single_coord)
-                *reconstruct = RECON_OFF; // consume but don't reconstruct
-            break;
-
+            
         case _VCF_SAMPLES:
-
             // Set sample_i before reconstructing each sample
             if (item == -1) 
                 vb->sample_i = rep;
@@ -261,15 +196,6 @@ static void inline vcf_piz_SAMPLES_subset_samples (VBlockVCFP vb, unsigned rep, 
 {
     if (!samples_am_i_included (rep))
         Ltxt -= recon_len + (rep == num_reps - 1); // if last sample, we also remove the preceeding \t (recon_len includes the sample's separator \t, except for the last sample that doesn't have a separator)
-}
-
-static void inline vcf_piz_append_ostatus_to_INFO (VBlockP vb)
-{
-    STR0(snip);
-    ContextP ostatus_ctx = CTX (VCF_oSTATUS);
-    ctx_get_snip_by_word_index (ostatus_ctx, ostatus_ctx->last_value.i, snip);
-    RECONSTRUCT (";oSTATUS=", 9);
-    RECONSTRUCT_snip;
 }
 
 CONTAINER_ITEM_CALLBACK (vcf_piz_con_item_cb)
@@ -304,7 +230,7 @@ CONTAINER_ITEM_CALLBACK (vcf_piz_con_item_cb)
         // note: for _FORMAT_IPS we insert in vcf_piz_special_MUX_BY_IGT_PHASE
         
         case _VCF_REFALT: // files compress starting v14.0.12
-            vcf_piz_refalt_parse (VB_VCF, STRa(recon));
+            vcf_piz_refalt_parse (VB_VCF);
             break;
 
         default:
@@ -352,10 +278,6 @@ CONTAINER_CALLBACK (vcf_piz_container_cb)
         if (CTX(INFO_AS_SB_TABLE)) 
             vcf_piz_insert_INFO_AS_SB_TABLE (VB_VCF);
 
-        // case: we are reconstructing with --luft and we reconstructed one VCF line
-        if (z_is_dvcf) 
-            vcf_lo_piz_TOPLEVEL_cb_filter_line (VB_VCF);
-
         if (flag.snps_only && !vcf_refalt_piz_is_variant_snp (VB_VCF))
             vb->drop_curr_line = "snps_only";
 
@@ -363,12 +285,7 @@ CONTAINER_CALLBACK (vcf_piz_container_cb)
             vb->drop_curr_line = "indels_only";
     }
 
-    // if requested, add oSTATUS at thend of INFO
-    else if (flag.show_ostatus && dict_id.num == _VCF_INFO) 
-        vcf_piz_append_ostatus_to_INFO (vb);
-
     else if (dict_id.num == _VCF_SAMPLES) {
-
         ctx_set_last_value (vb, CTX(VCF_LOOKBACK), (ValueType){ .i = con->repeats });
 
         if (flag.samples) 

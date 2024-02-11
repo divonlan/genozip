@@ -218,7 +218,7 @@ void comp_uncompress (VBlockP vb,
 {
     ASSERTNOTZEROn (compressed_len, name);
     ASSERTNOTZEROn (uncompressed_len, name);
-    ASSERT (codec != sub_codec, "vb=%s \"%s\": Expectedly, codec=%s == sub_codec=%s", VB_NAME, name, codec_name(codec), codec_name(sub_codec));
+    ASSERT (codec != sub_codec, "vb=%s \"%s\": Unexpectedly, codec=%s == sub_codec=%s", VB_NAME, name, codec_name(codec), codec_name(sub_codec));
 
     // if this is (1) a simple codec (including CODEC_UNKNOWN) that has a sub-codec or
     // (2) or no codec uncompressor - run the sub-codec uncompressor directly

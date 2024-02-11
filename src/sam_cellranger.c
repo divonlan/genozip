@@ -63,7 +63,7 @@ static void sam_seg_CB_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(cb), un
         seg_add_to_local_string (VB, channel_ctx, STRa(cb), LOOKUP_SIMPLE, add_bytes); // requires no_stons
 }
 
-void sam_seg_CB_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(cb), unsigned add_bytes)
+void sam_seg_CB_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(cb), unsigned add_bytes)
 {
     START_TIMER;
 
@@ -105,7 +105,7 @@ static void sam_seg_CR_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(cr), un
     }
 }
 
-void sam_seg_CR_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(cr), unsigned add_bytes)
+void sam_seg_CR_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(cr), unsigned add_bytes)
 {
     START_TIMER;
 
@@ -129,7 +129,7 @@ void sam_seg_CR_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(cr), unsigned add_byt
 // Note: Seggable against prim, but not against mate (since each mate might have different quality for its barcode sequence)
 // Note: Might be multiple elements seperated by a space (spec recommentation) or '_' (observed in STARsolo) 
 // Requirements: 1. array did, 2. zip callback function
-bool sam_seg_barcode_qual (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, SoloTags solo, uint8_t n_seps, 
+bool sam_seg_barcode_qual (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, SoloTags solo, uint8_t n_seps, 
                            STRp(qual), qSTRp (con_snip), MiniContainerP con, unsigned add_bytes)
 {
     START_TIMER;
@@ -216,7 +216,7 @@ static void sam_seg_RX_array (VBlockSAMP vb, ContextP ctx, STRp(rx), unsigned ad
     seg_array (VB, ctx, OPTION_RX_Z, STRa(rx), segconf.RX_sep, 0, false, STORE_NONE, _OPTION_RX_Z_X, add_bytes);
 }
 
-void sam_seg_RX_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(rx), unsigned add_bytes)
+void sam_seg_RX_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(rx), unsigned add_bytes)
 {
     START_TIMER;
 
@@ -246,7 +246,7 @@ void sam_seg_RX_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(rx), unsigned add_byt
     COPY_TIMER (sam_seg_RX_Z);
 }
 
-void sam_seg_BX_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(bx), unsigned add_bytes)
+void sam_seg_BX_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(bx), unsigned add_bytes)
 {
     START_TIMER;
 
@@ -265,7 +265,7 @@ void sam_seg_BX_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(bx), unsigned add_byt
 // QX:Z (longranger, novoalign, AGeNT Trimmer) UY:Z (cellranger) - "Chromium molecular barcode read quality. Phred scores as reported by sequencer"
 //-----------------------------------------------------------------------------------------------------
 
-void sam_seg_QX_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qx), unsigned add_bytes)
+void sam_seg_QX_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qx), unsigned add_bytes)
 {
     START_TIMER;
 
@@ -297,7 +297,7 @@ static void sam_seg_BC_array (VBlockSAMP vb, ContextP ctx, STRp(bc), unsigned ad
     seg_array (VB, ctx, OPTION_BC_Z, STRa(bc), segconf.BC_sep, 0, false, STORE_NONE, _OPTION_BC_ARR, add_bytes);
 }
 
-void sam_seg_BC_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(bc), unsigned add_bytes)
+void sam_seg_BC_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(bc), unsigned add_bytes)
 {
     START_TIMER;
 
@@ -329,7 +329,7 @@ void sam_seg_BC_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(bc), unsigned add_byt
 // gx:z - STARsolo: Gene IDs for unique- and multi-gene reads (;-seperated list)
 //-----------------------------------------------------------------------------------------------------
 
-void sam_seg_gene_name_id (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, STRp(value), unsigned add_bytes)
+void sam_seg_gene_name_id (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, STRp(value), unsigned add_bytes)
 {
     START_TIMER;
 
@@ -345,7 +345,7 @@ void sam_seg_gene_name_id (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, STRp(va
 // fx:Z - CellRanger: Feature identifier matched to this Feature Barcode read. Specified in the id column of the feature reference.
 //-----------------------------------------------------------------------------------------------------
 
-void sam_seg_fx_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(fx), unsigned add_bytes)
+void sam_seg_fx_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(fx), unsigned add_bytes)
 {
     START_TIMER;
 
@@ -369,7 +369,7 @@ void sam_seg_fx_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(fx), unsigned add_byt
 // TQ:Z - longranger & cellranger: Sequence of the 7 trimmed bases following the barcode sequence at the start of R1. Can be used to reconstruct the original R1 sequence.
 //-----------------------------------------------------------------------------------------------------
 
-void sam_seg_other_seq (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, STRp(seq), unsigned add_bytes)
+void sam_seg_other_seq (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, STRp(seq), unsigned add_bytes)
 {
     START_TIMER;
 
@@ -382,7 +382,7 @@ void sam_seg_other_seq (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, STRp(seq),
 // GR:Z
 //-----------------------------------------------------------------------------------------------------
 
-void sam_seg_GR_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(gr), unsigned add_bytes)
+void sam_seg_GR_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(gr), unsigned add_bytes)
 {
     START_TIMER;
 
@@ -414,7 +414,7 @@ void sam_seg_GR_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(gr), unsigned add_byt
 // GY:Z
 //-----------------------------------------------------------------------------------------------------
 
-void sam_seg_GY_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(gy), unsigned add_bytes)
+void sam_seg_GY_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(gy), unsigned add_bytes)
 {
     START_TIMER;
 
@@ -665,7 +665,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_COPY_TEXTUAL_CIGAR)
 
 // eg: TX:Z:hg19_ENST00000456328,+1336,91M;hg19_ENST00000515242,+1329,91M;hg19_ENST00000518655,+1162,91M
 //     AN:Z:hg19_ENST00000456328,-1400,91M;hg19_ENST00000515242,-1393,91M;hg19_ENST00000518655,-1226,91M
-void sam_seg_TX_AN_Z (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, STRp(value), unsigned add_bytes)
+void sam_seg_TX_AN_Z (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, STRp(value), unsigned add_bytes)
 {
     START_TIMER;
 

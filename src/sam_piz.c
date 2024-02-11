@@ -636,12 +636,6 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
             alignment->block_size = LTEN32 (alignment->block_size);
         }
         
-        // --taxid: filter out by Kraken taxid (SAM, BAM, FASTQ)
-        if (flag.kraken_taxid 
-        && (   (kraken_is_loaded  && !kraken_is_included_loaded (vb, STRlst (SAM_QNAME)))// +1 in case of FASTQ to skip "@"
-            || (!kraken_is_loaded && !kraken_is_included_stored (vb, SAM_TAXID, !flag.collect_coverage && !flag.count)))) 
-            DROP_LINE ("taxid");
-
         // --FLAG
         if (flag.sam_flag_filter) {
 
@@ -679,7 +673,7 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
             DROP_LINE ("seq_filter");
 
         // count coverage, if needed    
-        if (flag.show_sex || flag.show_coverage)
+        if (flag.show_coverage)
             sam_piz_update_coverage (vb, vb->last_int(SAM_FLAG), VB_SAM->soft_clip[0] + VB_SAM->soft_clip[1]);
 
         if (flag.idxstats) {

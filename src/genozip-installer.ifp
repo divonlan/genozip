@@ -1,18 +1,21 @@
+﻿
 [Header]
-ProjectFileVersion = "1.1"
+ProjectFileVersion = 1.1
 [General]
 Program name = Genozip
-Program version = 15.0.41
-Windows 2000 = 0
+Program version = 15.0.42
 Windows XP = 0
 Windows Server 2003 = 0
 Windows Vista = 0
 Windows Server 2008 = 0
 Windows 7 = 0
 Windows 8 = 0
-Windows 10 = 0
-Windows Server 2016 = 0
-DoNotCheckOS = 1
+Windows 10 = 1
+Windows Server 2016 = 1
+Windows Server 2019 = 1
+Windows Server 2022 = 1
+Windows 11 = 1
+DoNotCheckOS = 0
 Company name = Genozip
 Website = http://www.genozip.com
 SFA = 0
@@ -21,35 +24,32 @@ Comp = 1
 [Graphics]
 Wizard image = <main>
 Header image = <main>
-Install-icon image = <main>
 Show Label = 1
-Windows style = 1
-XpStyle = 1
+VisualStylesEnabled = 1
 [Files]
-Include Zipfile = 0
-Zipfile = 
-Installation path = <programfiles>\<company>\<appname>\
+Installation path = <ProgramFiles>\<Company>\<AppName>\
 Autcip = 1
 [Uninstall]
 Vwau = 1
-Website = www.genozip.com
+Website = https://genozip.com
 Include uninstaller = 1
 Uninstaller filename = Uninstall
+UseCustomDisplayIcon = 0
+CustomDisplayIcon = <InstallPath>\
 [Licence]
-Licence dialog = 1
+Licence dialog = 0
 [Finish]
 Sart program = 0
-Reboot computer = 0
-Execute DLL: = 0
-Program = <installpath>\
+Reboot computer = 1
+Program = <InstallPath>\
 ProgramArguments = 
-Dll = 
 [Shortcuts]
 Allowtc = 0
-Shortcut path = <company>\<appname>\
+Shortcut path = <Company>\<AppName>\
 [Serialoptions]
 Allows = 0
-Number = 20
+Number = 1000
+Mask = #####-#####-#####-#####
 [SplashScreen]
 Image = C:\Users\divon\genozip\src\genozip-installer.jpg
 Sound = 
@@ -58,10 +58,14 @@ PlaySound = 0
 Allow = 1
 [Build]
 File = C:\Users\divon\genozip\src\windows\genozip-installer.exe
+SetupIconPath = 
+UninstallIconPath = 
+CompressionMethod = 0
+CompressionLevel = 2
 [Updater]
 Allow = 0
-1 = <appname>
-2 = <appversion>
+1 = <AppName>
+2 = <AppVersion>
 3 = http://
 4 = http://
 5 = http://
@@ -71,27 +75,31 @@ RunProg =
 RunProgs = 0
 Execdlls = 0
 [Languages]
+2
 [Files/Dirs]
-C:\Users\divon\genozip\src\windows\genocat.exe
-5 MB
-exe
-C:\Users\divon\genozip\src\windows\genols.exe
-5 MB
+C:\Users\divon\genozip\src\windows\genozip.exe
+5.6 MB
 exe
 C:\Users\divon\genozip\src\windows\genounzip.exe
-5 MB
+5.6 MB
 exe
-C:\Users\divon\genozip\src\windows\genozip.exe
-5 MB
+C:\Users\divon\genozip\src\windows\genocat.exe
+5.6 MB
 exe
-C:\Users\divon\genozip\src\windows\LICENSE.for-installer.txt
-9.9 KB
+C:\Users\divon\genozip\src\windows\genols.exe
+5.6 MB
+exe
+C:\Users\divon\genozip\src\windows\genozip.ico
+156.7 KB
+ico
+C:\Users\divon\genozip\src\windows\LICENSE.txt
+10.3 KB
 txt
 [Licence_Begin]
-11919
-{\rtf1\ansi\deff0{\fonttbl{\f0\fnil\fcharset0 Arial;}}
-{\colortbl ;\red0\green0\blue0;}
-\viewkind4\uc1\pard\cf1\lang1033\fs20 This program, "Genozip", which includes four tools \par
+12011
+{\rtf1\ansi\ansicpg1252\deff0\nouicompat{\fonttbl{\f0\fswiss\fcharset0 Calibri;}{\f1\fswiss Calibri;}{\f2\fswiss\fcharset134 Microsoft YaHei;}}
+{\*\generator Riched20 10.0.22621}\viewkind4\uc1 
+\pard\f0\fs20\lang2057 This program, "Genozip", which includes four tools \par
 (genozip, genounzip, genocat and genols), source code,\par
 object code, executables, documentation and other files,\par
 was developed by Divon Lan ("Developer") and is copyright \par
@@ -280,7 +288,7 @@ names of the Licensor, except as required for reasonable\par
 and customary use in describing the origin of the Genozip\par
 \par
 8. Survival. The limitations of liability and ownership\par
-rights of Genozip contained herein and Licensee\'e2\'80\'99s\par
+rights of Genozip contained herein and Licensee\f1\rquote\f0 s\par
 obligations following termination of this Agreement will\par
 survive the termination of this Agreement for any reason.\par
 \par
@@ -293,7 +301,7 @@ Health or any other regulatory entity in any country for\par
 any specific intended use, whether research, commercial,\par
 diagnostic, or otherwise, and (ii) Licensee must ensure it\par
 has any regulatory approvals that are necessary for\par
-Licensee\'e2\'80\'99s intended uses of Genozip. Licensee will comply\par
+Licensee\f1\rquote\f0 s intended uses of Genozip. Licensee will comply\par
 with all applicable laws and regulations when using and\par
 maintaining Genozip.\par
 \par
@@ -331,22 +339,36 @@ ESSENTIAL PURPOSE.\par
 END OF TERMS AND CONDITIONS\par
 \par
 Genozip license version: 15.0.41\par
-\par
-\par
+\f2\par
 }
  [Licence_End]
 [Registry]
+HKEY_CURRENT_USER
+Software\Classes\.genozip
+
+genozip
+1
+HKEY_CURRENT_USER
+Software\Classes\genozip\Shell\Open\Command
+
+"<InstallPath>\genounzip.exe" "%1" "-fz1"
+1
+HKEY_CURRENT_USER
+Software\Classes\genozip\DefaultIcon
+
+<InstallPath>\genozip.ico
+1
 [Variables]
 [SCs]
 [IFP_End]
 [Serials]
 [Serials_End]
 [Commands]
-Execute application
+Execute Application
 explorer
 http://genozip.com
 
-Execute application
+Execute Application
 explorer
-<installpath>
+<InstallPath>
 

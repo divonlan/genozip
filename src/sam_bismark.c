@@ -18,7 +18,7 @@
 #include "reconstruct.h"
 
 // Bismark: The converted reference used to align this read: 2 possible values: "CT" or "GA"
-void sam_seg_bismark_XG_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(xg), unsigned add_bytes)
+void sam_seg_bismark_XG_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(xg), unsigned add_bytes)
 {
     ASSSEG (xg_len==2 && ((xg[0]=='C' && xg[1]=='T') || (xg[0]=='G' && xg[1]=='A')), "Invalid XG:Z=%.*s, expecting CT or GA", STRf(xg));
 
@@ -41,7 +41,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_BISMARK_XG)
 
 // enter methylatble bases into the INTERNAL reference in their unconverted form 
 // (not currently used as bisulfite features are disabled for REF_INTERNAL (bug 648), and not thoroughly tested)
-void sam_seg_bismark_XM_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl)
+void sam_seg_bismark_XM_Z_analyze (VBlockSAMP vb, ZipDataLineSAMP dl)
 {
     if (!IS_REF_INTERNAL || // analyzing sets bases in an internal reference - not needed if not internal
         has_MD ||           // analyzing MD sets the same bases
@@ -85,7 +85,7 @@ void sam_seg_bismark_XM_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl)
 typedef enum { XM_AS_PREDICTED, XM_DIFF, XM_IN_LOCAL } XmSnip; // v14 - part of the file format
 
 // Z/z=methylated/unmethylated CpG ; X/x=CHG ; H/h=CHH ; U/u=undetermined methylation type
-void sam_seg_bismark_XM_Z (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, int special_code, STRp(xm), unsigned add_bytes)
+void sam_seg_bismark_XM_Z (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, int special_code, STRp(xm), unsigned add_bytes)
 {
     START_TIMER
 

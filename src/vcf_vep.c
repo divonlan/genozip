@@ -142,17 +142,16 @@ void vcf_vep_zip_initialize (void) // nul-terminated string containing list of f
         CB (_INFO_Protein_position,   seg_integer_or_not_cb  )
         CB (_INFO_DISTANCE,           seg_integer_or_not_cb  )
 
-        if (!z_is_dvcf) {
-            CB (_INFO_AFR_MAF,  vcf_vep_af_field)
-            CB (_INFO_AMR_MAF,  vcf_vep_af_field)
-            CB (_INFO_EAS_MAF,  vcf_vep_af_field)
-            CB (_INFO_EUR_MAF,  vcf_vep_af_field)
-            CB (_INFO_SAS_MAF,  vcf_vep_af_field)
-            CB (_INFO_AA_MAF,   vcf_vep_af_field)
-            CB (_INFO_EA_MAF,   vcf_vep_af_field)
-            CB (_INFO_ExAC_MAF, vcf_vep_af_field)
-            /* else */          {};
-        }
+        CB (_INFO_AFR_MAF,  vcf_vep_af_field)
+        CB (_INFO_AMR_MAF,  vcf_vep_af_field)
+        CB (_INFO_EAS_MAF,  vcf_vep_af_field)
+        CB (_INFO_EUR_MAF,  vcf_vep_af_field)
+        CB (_INFO_SAS_MAF,  vcf_vep_af_field)
+        CB (_INFO_AA_MAF,   vcf_vep_af_field)
+        CB (_INFO_EA_MAF,   vcf_vep_af_field)
+        CB (_INFO_ExAC_MAF, vcf_vep_af_field)
+        /* else */          {};
+
         #undef CB
     }
 

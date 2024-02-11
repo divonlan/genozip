@@ -31,7 +31,7 @@ bool sam_seg_SA_get_prim_item (VBlockSAMP vb, int sa_item_i, pSTRp(out))
     int predicted_aln_i = segconf.is_sorted ? 0 : (vb->line_i - vb->saggy_line_i) - 1; // mirrors prediction in sam_seg_SA_get_prim_item
 
     // split SA:Z into alignments
-    ZipDataLineSAM *prim_dl = DATA_LINE (vb->saggy_line_i);
+    ZipDataLineSAMP prim_dl = DATA_LINE (vb->saggy_line_i);
     if (!prim_dl->SA.len) return false; // prim line has no SA:Z
 
     str_split (Btxt (prim_dl->SA.index), prim_dl->SA.len, MAX_SA_NUM_ALNS, ';', prim_aln, false);
@@ -58,7 +58,7 @@ bool sam_seg_is_item_predicted_by_prim_SA (VBlockSAMP vb, int sa_item_i, int64_t
            sa_item == value;
 }
 
-static inline bool sam_seg_SA_field_is_line_matches_aln (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(aln), bool is_bam)
+static inline bool sam_seg_SA_field_is_line_matches_aln (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(aln), bool is_bam)
 {
     if (dl->RNAME == WORD_INDEX_NONE) return false; // RNAME="*" for this line
 
@@ -104,12 +104,12 @@ static inline void sam_seg_set_depn_clip_hard (VBlockSAMP vb)
     // note: if CIGAR has neither S or H, depn_clipping_type remains DEPN_CLIP_UNKNOWN
 }
 
-static bool sam_seg_SA_field_is_depn_from_prim (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(depn_sa))
+static bool sam_seg_SA_field_is_depn_from_prim (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(depn_sa))
 {
     bool is_bam = IS_BAM_ZIP;
 
     // parse primary SA
-    ZipDataLineSAM *prim_dl = DATA_LINE (vb->saggy_line_i);
+    ZipDataLineSAMP prim_dl = DATA_LINE (vb->saggy_line_i);
     str_split (Btxt (prim_dl->SA.index), prim_dl->SA.len, MAX_SA_NUM_ALNS, ';', prim_aln, false);
     if (n_prim_alns < 2) return false;
     n_prim_alns--; // remove last empty alignment due terminal ';'
@@ -155,7 +155,7 @@ static bool sam_seg_SA_field_is_depn_from_prim (VBlockSAMP vb, ZipDataLineSAM *d
     return true; // indeed, this depn line is in the same SA group as the prim line
 }
 
-void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa), unsigned add_bytes)
+void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(sa), unsigned add_bytes)
 {
     START_TIMER;
 

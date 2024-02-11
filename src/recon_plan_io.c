@@ -28,10 +28,9 @@
 
 rom recon_plan_flavors[8] = PLAN_FLAVOR_NAMES;
 
-void recon_plan_show (FileP file, bool is_luft, uint32_t conc_writing_vbs, uint32_t vblock_mb)
+void recon_plan_show (FileP file, uint32_t conc_writing_vbs, uint32_t vblock_mb)
 {
-    iprintf ("\nReconstruction plan%s: entries=%"PRIu64" conc_writing_vbs=%u x %u MB\n", 
-             !z_is_dvcf ? "" : is_luft ? " of LUFT rendition" : " of PRIMARY rendition", 
+    iprintf ("\nReconstruction plan: entries=%"PRIu64" conc_writing_vbs=%u x %u MB\n", 
              file->recon_plan.len, conc_writing_vbs, vblock_mb);
 
     for (uint32_t i=0; i < file->recon_plan.len32; i++) {
@@ -128,7 +127,6 @@ static void recon_plan_dedeltify (void)
 // constants used for all fragments
 static Codec frag_codec = CODEC_UNKNOWN;
 static uint32_t conc_writing_vbs = 0, vblock_mb = 0;
-static bool is_luft = 0;
 
 // compress the fragment - either an entire recon_plan, or divide it to fragments if large to allow multi-threaded
 // compression and decompression
@@ -158,7 +156,6 @@ static void recon_plan_compress_one_fragment (VBlockP vb)
         .section_type          = SEC_RECON_PLAN,
         .data_uncompressed_len = BGEN32 (vb->fragment_len),
         .codec                 = frag_codec,
-        .flags.recon_plan.luft = is_luft,
         .flags.recon_plan.frag_len_bits = FRAG_SIZE_BITS - MIN_FRAG_LEN_BITS, 
         .conc_writing_vbs      = BGEN32 (conc_writing_vbs),
         .vblock_mb             = BGEN32 ((uint32_t)(segconf.vb_size >> 20))
@@ -166,7 +163,7 @@ static void recon_plan_compress_one_fragment (VBlockP vb)
 
     if (flag.show_time) codec_show_time (vb, st_name(SEC_RECON_PLAN), NULL, frag_codec);
 
-    vb->comp_i = 0; // goes into SectionEnt.comp_i (this is correct for DVCF and SAM)
+    vb->comp_i = 0; // goes into SectionEnt.comp_i (this is correct for SAM)
     comp_compress (vb, NULL, &vb->z_data, &header, vb->fragment_start, NO_CALLBACK, "SEC_RECON_PLAN");
 
     COPY_TIMER (recon_plan_compress_one_fragment)    
@@ -175,13 +172,12 @@ static void recon_plan_compress_one_fragment (VBlockP vb)
 }
 
 // called by main thread in zip_write_global_area
-void recon_plan_compress (uint32_t my_conc_writing_vbs,
-                          bool my_is_luft)
+void recon_plan_compress (uint32_t my_conc_writing_vbs)
 {
     START_TIMER;
 
     if (flag.show_recon_plan && txt_file->recon_plan.len)
-        recon_plan_show (txt_file, my_is_luft, my_conc_writing_vbs, (uint32_t)(segconf.vb_size >> 20));
+        recon_plan_show (txt_file, my_conc_writing_vbs, (uint32_t)(segconf.vb_size >> 20));
 
     // replace ReconPlanItem.start_line with delta vs last line of same ReconPlanItem.vb_i
     recon_plan_deltify();
@@ -196,7 +192,6 @@ void recon_plan_compress (uint32_t my_conc_writing_vbs,
     frag_codec = CODEC_BSC; 
 
     conc_writing_vbs = my_conc_writing_vbs;
-    is_luft = my_is_luft;
 
     // divvy up recon_plan to fragments of about ~1MB and compress in parallel
     dispatcher_fan_out_task ("compress_recon_plan", NULL, 0, "Writing reconstruction plan...", false, false, false, 0, 20000, true,
@@ -217,9 +212,9 @@ static Section next_sec = NULL;
 // PIZ main thread
 static void recon_plan_read_one_vb (VBlockP vb)
 {
-    if (next_sec->st != SEC_RECON_PLAN || next_sec->flags.recon_plan.luft != is_luft)
-        return; // we're done - no more SEC_RECON_PLAN sections of the requested luft
-    
+    if (next_sec->st != SEC_RECON_PLAN)
+        return; // we're done - no more SEC_RECON_PLAN sections 
+
     zfile_read_section (z_file, vb, next_sec->vblock_i, &vb->z_data, "z_data", SEC_RECON_PLAN, next_sec);    
     SectionHeaderReconPlanP header =  B1ST(SectionHeaderReconPlan, vb->z_data);
 
@@ -229,7 +224,6 @@ static void recon_plan_read_one_vb (VBlockP vb)
     if (vb->vblock_i == 1) {
         conc_writing_vbs = BGEN32 (header->conc_writing_vbs);
         vblock_mb        = BGEN32 (header->vblock_mb);
-        is_luft          = header->flags.recon_plan.luft;
 
         ASSERTNOTINUSE (evb->scratch);
 
@@ -282,7 +276,6 @@ void recon_plan_uncompress (Section sec, uint32_t *out_conc_writing_vbs, uint32_
     ASSERT (sec && sec->st == SEC_RECON_PLAN, "sec=%p is not SEC_RECON_PLAN", sec);
 
     next_sec = sec;
-    is_luft = sec->flags.recon_plan.luft;
 
     dispatcher_fan_out_task ("uncompress_recon_plan", NULL, 0, 0, true, flag.test, false, 0, 1000, true,
                              recon_plan_read_one_vb, recon_plan_uncompress_one_vb, NO_CALLBACK);

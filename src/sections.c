@@ -33,7 +33,7 @@ typedef struct SectionsVbIndexEnt {
 } SectionsVbIndexEnt;
 
 typedef struct {
-    int32_t txt_header_sec_i, bgzf_sec_i, recon_plan_sec_i[2];
+    int32_t txt_header_sec_i, bgzf_sec_i, recon_plan_sec_i;
     VBIType first_vb_i, num_vbs;
     SectionsVbIndexEnt *first_vb_of_comp, *last_vb_of_comp; // first and last VB in this component - in the order the appear in the section list (not necessarily consecutive vb_i)
 } SectionsCompIndexEnt;
@@ -239,7 +239,7 @@ void sections_create_index (void)
 
     for (int i=0; i < comp_index_len; i++)
         comp_index[i].bgzf_sec_i = comp_index[i].txt_header_sec_i = 
-        comp_index[i].recon_plan_sec_i[0] = comp_index[i].recon_plan_sec_i[1] = -1;
+        comp_index[i].recon_plan_sec_i = -1;
 
     // populate index
     SectionsVbIndexEnt *vbinx = NULL; // if non-NULL, we're within a VB section block
@@ -265,9 +265,8 @@ void sections_create_index (void)
                 break;
 
             case SEC_RECON_PLAN : {
-                bool is_luft_plan = sec->flags.recon_plan.luft;
-                if (comp->recon_plan_sec_i[is_luft_plan] == -1) // save first fragment
-                    comp->recon_plan_sec_i[is_luft_plan] = sec_i; 
+                if (comp->recon_plan_sec_i == -1) // save first fragment
+                    comp->recon_plan_sec_i = sec_i; 
                 break;
             }
 
@@ -623,10 +622,9 @@ rom st_name (SectionType sec_type)
 
 StrText comp_name_(CompIType comp_i)
 {
-    static int max_comps_by_dt[NUM_DATATYPES] = { [DT_VCF]=3, [DT_BCF]=3, [DT_SAM]=3/*except if --deep*/, [DT_BAM]=3, [DT_FASTQ]=2 };
+    static int max_comps_by_dt[NUM_DATATYPES] = { [DT_SAM]=3/*except if --deep*/, [DT_BAM]=3, [DT_FASTQ]=2 };
     
-    static rom comp_names[NUM_DATATYPES][5]   = { [DT_VCF] = VCF_COMP_NAMES, [DT_BCF] = VCF_COMP_NAMES,
-                                                  [DT_SAM] = SAM_COMP_NAMES, [DT_BAM] = SAM_COMP_NAMES,
+    static rom comp_names[NUM_DATATYPES][5]   = { [DT_SAM] = SAM_COMP_NAMES, [DT_BAM] = SAM_COMP_NAMES,
                                                   [DT_FASTQ] = FASTQ_COMP_NAMES };
     
     DataType dt = z_file ? z_file->data_type : DT_NONE;
@@ -810,9 +808,9 @@ Section sections_get_comp_bgzf_sec (CompIType comp_i)
     return Bsec(Bcompindex(comp_i)->bgzf_sec_i);
 }
 
-Section sections_get_comp_recon_plan_sec (CompIType comp_i, bool is_luft_plan)
+Section sections_get_comp_recon_plan_sec (CompIType comp_i)
 {
-    return Bsec(Bcompindex(comp_i)->recon_plan_sec_i[is_luft_plan]);
+    return Bsec(Bcompindex(comp_i)->recon_plan_sec_i);
 }
 
 // get next VB_HEADER in the order they appear in the section list (not necessarily consecutive vb_i)
@@ -885,7 +883,7 @@ rom store_type_name (StoreType store)
 typedef struct { char s[128]; } FlagStr;
 static FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt)
 {
-    rom dts[NUM_DATATYPES]  = { [DT_FASTQ]=(!VER(15) ? "v14_dts_paired" : 0), [DT_SAM]="dts_ref_internal", [DT_CHAIN]="dts_mismatch" };
+    rom dts[NUM_DATATYPES]  = { [DT_FASTQ]=(!VER(15) ? "v14_dts_paired" : 0), [DT_SAM]="dts_ref_internal" };
     rom dts2[NUM_DATATYPES] = { [DT_SAM]="dts2_deep" };
 
     FlagStr str = {};
@@ -902,16 +900,15 @@ static FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt)
 
         case SEC_TXT_HEADER: {
             char extra[64] = {};
-            if (dt==DT_VCF && !VER(14)) sprintf (extra, " dvcf_comp_i=%u", f.txt_header.v13_dvcf_comp_i);
             if ((dt==DT_SAM || dt==DT_BAM || dt==DT_FASTQ) && VER(15)) sprintf (extra, " pair=%s", pair_type_name (f.txt_header.pair));
-            sprintf (str.s, "is_txt_luft=%u no_gz_ext=%u %s", f.txt_header.is_txt_luft, f.txt_header.no_gz_ext, extra);
+            sprintf (str.s, "no_gz_ext=%u %s", f.txt_header.no_gz_ext, extra);
             break;
         }
 
         case SEC_VB_HEADER:
             switch (dt) {
                 case DT_VCF: 
-                    sprintf (str.s, "coords=%s null_DP=%u", vcf_coords_name (f.vb_header.vcf.coords), f.vb_header.vcf.use_null_DP_method);
+                    sprintf (str.s, "null_DP=%u", f.vb_header.vcf.use_null_DP_method);
                     break;
                 
                 case DT_SAM: case DT_BAM:
@@ -984,11 +981,13 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
     
     rom SEC_TAB = isatty(1) ? "            ++  " : " "; // single line if not terminal - eg for grepping
 
-    sprintf (str, "%c %s%-*"PRIu64" %-19s %-4.4s %-4.4s vb=%-3u %s=%*u txt_len=%-7u z_len=%-7u enc_len=%-7u%s ",
+    sprintf (str, "%c %s%-*"PRIu64" %-19s %-4.4s %.8s%.15s vb=%-3u %s=%*u txt_len=%-7u z_len=%-7u enc_len=%-7u%s ",
              rw, 
              is_dict_offset ? "~" : "", 9-is_dict_offset, offset, 
              st_name(header->section_type), 
-             codec_name (header->codec), codec_name (header->sub_codec),
+             codec_name (header->codec), 
+             cond_str (header->section_type == SEC_LOCAL && header->sub_codec, "sub=", codec_name (header->sub_codec)),
+             cond_int (header->section_type == SEC_DICT, "dict_helper=", header->dict_helper),
              BGEN32 (header->vblock_i), 
              VER(15) ? "z_digest" : "comp_off",
              VER(15) ? -10 : -4,
@@ -1011,15 +1010,10 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
         dt = BGEN16 (h->data_type); // for GENOZIP_HEADER, go by what header declares
         if (dt >= NUM_DATATYPES) dt = DT_NONE;
 
-        if (DT(CHAIN))
-            sprintf (dt_specific, "%sprim=\"%.*s\" md5=%s\n", 
-                     SEC_TAB, REF_FILENAME_LEN, h->chain.prim_filename, 
-                     digest_display_ex (h->chain.prim_genome_digest, DD_MD5).s);
-
-        else if ((DT(VCF) || DT(BCF)) && v14)
-            sprintf (dt_specific, "%ssegconf=(has_RGQ=%s,GQ_method=%s,FMT_DP_method=%s) width=(AC=%u,AN=%u,MLEAC=%u,DP=%u,QD=%u,SF=%u) max_ploidy_for_mux=%u\n", 
+        if ((DT(VCF) || DT(BCF)) && v14)
+            sprintf (dt_specific, "%ssegconf=(has_RGQ=%s,GQ_method=%s,FMT_DP_method=%s) width=(AC=%u,AN=%u,MLEAC=%u,DP=%u,QD=%u,SF=%u,AS_SB_TABLE=%u) max_ploidy_for_mux=%u\n", 
                      SEC_TAB, TF(h->vcf.segconf_has_RGQ), GQ_method_name (h->vcf.segconf_GQ_method), FMT_DP_method_name (h->vcf.segconf_FMT_DP_method), 
-                     h->vcf.width.AC, h->vcf.width.AN, h->vcf.width.MLEAC, h->vcf.width.DP, h->vcf.width.QD, h->vcf.width.SF, 
+                     h->vcf.width.AC, h->vcf.width.AN, h->vcf.width.MLEAC, h->vcf.width.DP, h->vcf.width.QD, h->vcf.width.SF, h->vcf.width.AS_SB_TABLE, 
                      h->vcf.max_ploidy_for_mux);
 
         else if ((DT(SAM) || DT(BAM)) && v14)
@@ -1331,15 +1325,6 @@ void sections_show_gheader (ConstSectionHeaderGenozipHeaderP header)
             iprintf ("  reference file hash: %s\n", digest_display (header->ref_genome_digest).s);
         }
         iprintf ("  flags: %s\n",                   sections_dis_flags (header->flags, SEC_GENOZIP_HEADER, dt).s);
-
-        switch (dt) {
-            case DT_CHAIN:
-                iprintf ("  primary-coordinates reference filename: %s\n", header->chain.prim_filename);
-                iprintf ("  primary-coordinates reference file hash: %s\n", digest_display (header->chain.prim_genome_digest).s);
-                break;
-
-            default: break;
-        }
     }
 
     iprint0 ("  sections:\n");

@@ -84,7 +84,7 @@ void vcf_seg_PROBE_A (VBlockVCFP vb, ContextP ctx, STRp(probe))
     RefLock lock = REFLOCK_NONE;
 
     // if we have a reference, we use it 
-    if (IS_REF_LOADED_ZIP && !z_is_dvcf       &&           // to do: test this for DVCF
+    if (IS_REF_LOADED_ZIP &&
         ctx_has_value (VB, INFO_ILLUMINA_POS) &&           // we go by ILLUMINA_POS, not POS
         ctx_encountered_in_line (VB, INFO_ILLUMINA_CHR) && // verified that CHR is the same as CHROM, so vb->chrom_node_index is correct
         ctx_has_value (VB, INFO_ILLUMINA_STRAND)) {
@@ -281,11 +281,11 @@ static int vcf_seg_adjust_channel_i (VBlockP vb, int channel_i)
 
 void vcf_seg_mux_by_adjusted_dosage (VBlockVCFP vb, ContextP ctx, STRp(baf), const Multiplexer3 *mux) 
 {
-    if (z_is_dvcf || !ctx_encountered_in_line (VB, FORMAT_GT))  // note: if a line fails this test, likely all other lines do too
+    if (!ctx_encountered_in_line (VB, FORMAT_GT))  // note: if a line fails this test, likely all other lines do too
         seg_by_ctx (VB, STRa(baf), ctx, baf_len); 
 
     else {
-        int channel_i = vcf_seg_adjust_channel_i (VB, vcf_seg_get_mux_channel_i (vb, true));
+        int channel_i = vcf_seg_adjust_channel_i (VB, vcf_seg_get_mux_channel_i (vb));
         ContextP channel_ctx = seg_mux_get_channel_ctx (VB, ctx->did_i, (MultiplexerP)mux, channel_i);
 
         seg_by_ctx (VB, STRa(baf), channel_ctx, baf_len);

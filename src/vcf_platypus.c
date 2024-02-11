@@ -39,7 +39,7 @@ void vcf_seg_playpus_INFO_SC (VBlockVCFP vb, ContextP ctx, STRp(seq))
         !str_is_ACGT (STRa(seq), NULL))  // reference doesn't support N or IUPACs
         goto fallback;
 
-    PosType64 pos = DATA_LINE(vb->line_i)->pos[0] - 10; // 10 before to 10 after
+    PosType64 pos = DATA_LINE(vb->line_i)->pos - 10; // 10 before to 10 after
 
     RangeP range = ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, seq_len, WORD_INDEX_NONE, 
                                       (IS_REF_EXT_STORE ? &lock : NULL));
@@ -118,7 +118,7 @@ void vcf_seg_playpus_INFO_HP (VBlockVCFP vb, ContextP ctx, STRp(hp_str))
 
     if (!flag.reference || segconf.running) goto fallback;
 
-    PosType64 pos = DATA_LINE(vb->line_i)->pos[0]; 
+    PosType64 pos = DATA_LINE(vb->line_i)->pos; 
 
     RangeP range = ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos - HP_MAX_SPAN, 2*HP_MAX_SPAN+1, WORD_INDEX_NONE, 
                                       (IS_REF_EXT_STORE ? &lock : NULL));

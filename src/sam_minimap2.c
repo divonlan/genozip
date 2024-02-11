@@ -15,7 +15,7 @@
 // s1:i Chaining score
 // -------------------------------------------------------
 
-void sam_seg_s1_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t s1, unsigned add_bytes)
+void sam_seg_s1_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t s1, unsigned add_bytes)
 {
     int32_t as;
     if (sam_seg_peek_int_field (vb, OPTION_AS_i, vb->idx_AS_i, -0x8000000, 0x7fffffff, true/*needed for delta*/, &as)) 
@@ -29,7 +29,7 @@ void sam_seg_s1_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t s1, unsigned add_b
 // s2:i Chaining score of the best secondary chain
 // -------------------------------------------------------
 
-void sam_seg_s2_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t s2, unsigned add_bytes)
+void sam_seg_s2_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t s2, unsigned add_bytes)
 {
 }
 
@@ -37,7 +37,7 @@ void sam_seg_s2_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t s2, unsigned add_b
 // cm:i Number of minimizers on the chain
 // -------------------------------------------------------
 
-void sam_seg_cm_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t cm, unsigned add_bytes)
+void sam_seg_cm_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t cm, unsigned add_bytes)
 {
     if (segconf.running) {
         // calculate average SEQ.len / cm:i

@@ -392,17 +392,14 @@ bool regions_get_range_intersection (WordIndex chrom_word_index, PosType64 min_p
 // a specific ra (i.e. chromosome)
 bool regions_is_site_included (VBlockP vb)
 {
-    Did chrom_did_i = flag.luft ? DTF(luft_chrom) : DTF(prim_chrom);
-    Did pos_did_i   = flag.luft ? DTF(luft_pos)   : DTF(pos);
+    Did chrom_did_i = DTF(prim_chrom);
+    Did pos_did_i   = DTF(pos);
 
     WordIndex chrom = vb->last_index (chrom_did_i);
     PosType64 pos = (pos_did_i == DID_NONE)          ? 1 
                 : CTX(pos_did_i)->pos_last_value ? CTX(pos_did_i)->pos_last_value // use saved value if one exists (used in VCF, bc VCF_POS.last_value might be modified by a INFO/END)
                 :                                  CTX(pos_did_i)->last_value.i;
     
-    if (chrom == WORD_INDEX_NONE ||  
-        (vb->data_type==DT_VCF && (vcf_vb_is_luft(vb) != flag.luft))) return true; // always include all rejected variants in the vcf header
-
     ASSPIZ (chrom >= 0 && chrom < num_chroms, "chrom=%d is out of range: num_chroms=%u chrom_did_i=%u", 
             chrom, num_chroms, chrom_did_i);
 

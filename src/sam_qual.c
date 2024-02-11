@@ -68,7 +68,7 @@ rom sam_display_qual_from_SA_Group (const Sag *g)
 // callback function for compress to get data of one line
 COMPRESSOR_CALLBACK (sam_zip_qual) 
 {
-    ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
+    ZipDataLineSAMP dl = DATA_LINE (vb_line_i);
 
     // note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec
     *line_data_len  = (dl->dont_compress_QUAL || dl->is_consensus) ? 0 : MIN_(maximum_size, dl->QUAL.len);
@@ -86,7 +86,7 @@ COMPRESSOR_CALLBACK (sam_zip_qual)
 
 COMPRESSOR_CALLBACK (sam_zip_cqual) 
 {
-    ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
+    ZipDataLineSAMP dl = DATA_LINE (vb_line_i);
 
     // note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec
     *line_data_len  = (dl->dont_compress_QUAL || !dl->is_consensus) ? 0 : MIN_(maximum_size, dl->QUAL.len);
@@ -101,7 +101,7 @@ COMPRESSOR_CALLBACK (sam_zip_cqual)
 #define QUAL_ZIP_CALLBACK(tag, f, may_be_revcomped)             \
 COMPRESSOR_CALLBACK (sam_zip_##tag)                             \
 {                                                               \
-    ZipDataLineSAM *dl = DATA_LINE (vb_line_i);                 \
+    ZipDataLineSAMP dl = DATA_LINE (vb_line_i);                 \
     *line_data_len = dl->dont_compress_##tag ? 0 : MIN_(maximum_size, dl->f.len); /* note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec */ \
     if (!line_data || ! *line_data_len) return; /* no dat, or only lengths were requested */   \
     *line_data = Btxt (dl->f.index);                             \
@@ -184,7 +184,7 @@ static bool sam_seg_QUAL_diff_do (VBlockSAMP vb, rom my_qual, rom other_qual, ui
 
 // diff current QUAL against prim or saggy's QUAL. return false if diff was aborted
 typedef enum { QDT_DEFAULT=0, QDT_ABORTED=1, QDT_REVERSED=2/*v15*/ } QualDiffType; // this values are part of the file format
-static QualDiffType sam_seg_QUAL_diff (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(my_qual), 
+static QualDiffType sam_seg_QUAL_diff (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(my_qual), 
                                STRp (other_qual), bool other_revcomp, uint32_t *other_hard_clip, unsigned add_bytes)
 {
     QualDiffType diff_type = QDT_DEFAULT; // optimistic
@@ -250,7 +250,7 @@ static QualDiffType sam_seg_QUAL_diff (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(m
     return diff_type; // all good
 }
 
-static void sam_seg_QUAL_segconf (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual)/*always textual*/, bool monochar)
+static void sam_seg_QUAL_segconf (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qual)/*always textual*/, bool monochar)
 {
     if (!monochar && !vb->qual_missing) segconf.nontrivial_qual = true;
 
@@ -259,13 +259,13 @@ static void sam_seg_QUAL_segconf (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual)/
             segconf.qual_histo[dl->is_consensus ? QHT_CONSENSUS : QHT_QUAL][qual[i]-33].count++;
 }
 
-void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual)/*always textual*/, unsigned add_bytes)
+void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qual)/*always textual*/, unsigned add_bytes)
 {
     START_TIMER;
 
     ContextP qual_ctx  = CTX(SAM_QUAL);
     ContextP cqual_ctx = CTX(SAM_CQUAL);
-    ZipDataLineSAM *saggy_dl;
+    ZipDataLineSAMP saggy_dl;
     bool prim_has_qual_but_i_dont = false; // will be set if this line has no QUAL, but its prim line does (very rare)
     QualDiffType diff_type = QDT_DEFAULT;  // quality scores are too different, we're better off not diffing (added 14.0.10)
     bool pacbio_diff = false;
@@ -378,7 +378,7 @@ done:
 // 2Y:Z - CellRanger - R2 qual?
 // TQ:Z - CellRanger & longranger: Quality values of the 7 trimmed bases following the barcode sequence at the start of R1. Can be used to reconstruct the original R1 quality values.
 //-----------------------------------------------------------------------------------------------------
-void sam_seg_other_qual (VBlockSAMP vb, ZipDataLineSAM *dl, TxtWord *dl_word, Did did_i, STRp(qual), bool len_is_seq_len, unsigned add_bytes)
+void sam_seg_other_qual (VBlockSAMP vb, ZipDataLineSAMP dl, TxtWord *dl_word, Did did_i, STRp(qual), bool len_is_seq_len, unsigned add_bytes)
 {
     decl_ctx (did_i);
 

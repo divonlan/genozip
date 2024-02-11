@@ -24,7 +24,7 @@ void vcf_seg_hgvs_consolidate_stats (VBlockVCFP vb, Did parent)
 // SNP case: "NC_000023.10:g.154507173T>G"
 static bool vcf_seg_INFO_HGVS_snp (VBlockVCFP vb, ContextP ctx, STRp(value))
 {
-    PosType64 pos = DATA_LINE (vb->line_i)->pos[0]; // data in variant
+    PosType64 pos = DATA_LINE (vb->line_i)->pos; // data in variant
     char pos_str[30];
     unsigned pos_str_len = str_int (pos, pos_str);
 
@@ -63,12 +63,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_SNP_POS)
 {
     ContextP pos_ctx = CTX (VCF_POS);
     
-    if (VB_VCF->vb_coords == DC_PRIMARY)
-        RECONSTRUCT_LAST_TXT (pos_ctx); // faster than RECONSTRUCT_INT
-    
-    else  // if reconstructing Luft, VCF_POS just consumed and last_int set if in Luft coords (see top_luft container)
-        RECONSTRUCT_INT (pos_ctx->last_value.i);
-    
+    RECONSTRUCT_LAST_TXT (pos_ctx); // faster than RECONSTRUCT_INT    
     return NO_NEW_VALUE;
 }
 
@@ -185,10 +180,6 @@ bool vcf_seg_INFO_HGVS (VBlockP vb_, ContextP ctx, STRp(value), uint32_t repeat)
 
     if (ctx_encountered_in_line (VB, INFO_END)) 
         goto fail; // we can't use this if there is an END before CLNHGVS, as it will change last_int(VCF_POS) during reconstruction
-
-    // if main->refalt is different than REFALT then we can't use this function, as reconstruction is based on VCF_REFALT
-    if (vb->line_coords == DC_LUFT && (LO_IS_OK_SWITCH (last_ostatus) || LO_IS_REJECTED (last_ostatus) || *CTX(VCF_oXSTRAND)->last_snip != '-'))
-        goto fail;
 
     SAFE_NULT (value);
 

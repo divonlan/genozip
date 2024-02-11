@@ -66,7 +66,7 @@ typedef int32_t TaxonomyId;
 
 #define MEMORY_WARNING_THREASHOLD 0x100000000  // (4 GB) warning in some cases that we predict that user choices would cause us to consume more than this
 
-#define MAX_QNAME_ITEMS 16 // mate + normal (matching Q?NAME defined in sam.h, fastq.h, kraken.h) 
+#define MAX_QNAME_ITEMS 16 // mate + normal (matching Q?NAME defined in sam.h, fastq.h) 
 
 #define NO_CALLBACK NULL
 
@@ -131,9 +131,12 @@ typedef struct { char s[65536]; } StrTextMegaLong;
 
 // IMPORTANT: DATATYPES GO INTO THE FILE FORMAT - THEY CANNOT BE CHANGED
 typedef packed_enum { 
-    DT_NONE=-1, // used in the code logic, never written to the file
+    DT_NONE=-1,   // used in the code logic, never written to the file
     DT_REF=0, DT_VCF=1, DT_SAM=2, DT_FASTQ=3, DT_FASTA=4, DT_GFF=5, DT_ME23=6, // these values go into SectionHeaderGenozipHeader.data_type
-    DT_BAM=7, DT_BCF=8, DT_GENERIC=9, DT_PHYLIP=10, DT_CHAIN=11, DT_KRAKEN=12, 
+    DT_BAM=7, DT_BCF=8, DT_GENERIC=9, 
+    DT_PHYLIP=10, // OBSOLETE: 9.0.11 - 15.0.41 
+    DT_CHAIN=11,  // OBSOLETE: 11.0.8 - 15.0.41
+    DT_KRAKEN=12, // OBSOLETE: 12.0.2 - 15.0.41
     DT_LOCS=13, DT_BED=14, NUM_DATATYPES 
 } DataType; 
 
@@ -173,7 +176,7 @@ typedef uint8_t CompIType;    // comp_i
 #define COMP_ALL  ((CompIType)254)
 #define COMP_NONE ((CompIType)255)
 #define MAX_NUM_COMPS 254 
-#define MAX_NUM_TXT_FILES_IN_ZFILE (MAX_NUM_COMPS-2) // A high number to support many FASTQs in Deep. This is the maximum bc CompIType is uint8_t. 2 components reserved for generated components (in SAM and DVCF).
+#define MAX_NUM_TXT_FILES_IN_ZFILE (MAX_NUM_COMPS-2) // A high number to support many FASTQs in Deep. This is the maximum bc CompIType is uint8_t. 2 components reserved for generated components (in SAM).
 
 typedef uint32_t VBIType;     // vblock_i
 typedef uint64_t CharIndex;   // index within dictionary
@@ -535,7 +538,7 @@ typedef enum { QNONE   = -6,
                Q2orSAM = -3, // may appear as QNAME2 (eg in line3 if QNAME1 is NCBI) or in SAM
                Q1or3   = -2, // used in "only_q"
                QANY    = -1, 
-               QNAME1  = 0,  // QNAME is SAM/BAM, KRAKEN, line1 of FASTQ up to first space
+               QNAME1  = 0,  // QNAME is SAM/BAM, line1 of FASTQ up to first space
                QNAME2  = 1,  // FASTQ: either: the remainder of line1, but excluding AUX (name=value) data, OR the second (original) QNAME on an NCBI line3, but only if different than line1  
                              // SAM/BAM: A second flavor (eg of consensus reads)
                QLINE3  = 2,  // FASTQ: The NCBI QNAME on line3, but only if different than line1 

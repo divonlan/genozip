@@ -197,7 +197,7 @@ uint32_t bam_split_aux (VBlockSAMP vb, rom alignment, rom aux, rom after_aux, ro
     return n_auxs;
 }
 
-void bam_seg_BIN (VBlockSAMP vb, ZipDataLineSAM *dl, uint16_t bin /* used only in bam */, bool is_bam)
+void bam_seg_BIN (VBlockSAMP vb, ZipDataLineSAMP dl, uint16_t bin /* used only in bam */, bool is_bam)
 {
     PosType32 this_pos = dl->POS;
     PosType32 last_pos = dl->FLAG.unmapped ? this_pos : (this_pos + vb->ref_consumed - 1);
@@ -216,7 +216,7 @@ void bam_seg_BIN (VBlockSAMP vb, ZipDataLineSAM *dl, uint16_t bin /* used only i
     }
 }
 
-static inline void bam_seg_ref_id (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, int32_t ref_id, int32_t compare_to_ref_i)
+static inline void bam_seg_ref_id (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, int32_t ref_id, int32_t compare_to_ref_i)
 {
     ASSERT (ref_id == -1 || (sam_hdr_contigs && ref_id >= 0 && ref_id < (int32_t)sam_hdr_contigs->contigs.len), 
             "%s: encountered %s.ref_id=%d but header has only %u contigs%s", 
@@ -330,7 +330,7 @@ void bam_get_one_aux (VBlockSAMP vb, int16_t idx,
 }
 
 // segconf
-static uint32_t bam_segconf_get_transated_sam_line_len (VBlockSAMP vb, ZipDataLineSAM *dl, SamTlenType tlen)
+static uint32_t bam_segconf_get_transated_sam_line_len (VBlockSAMP vb, ZipDataLineSAMP dl, SamTlenType tlen)
 {
     unsigned rname_len, rnext_len;
 
@@ -402,7 +402,7 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     // case: --show - only print BAM lines, no segging
     if (flag.show_bam) return bam_show_line (vb, alignment, remaining_txt_len);
 
-    ZipDataLineSAM *dl = DATA_LINE (vb->line_i);
+    ZipDataLineSAMP dl = DATA_LINE (vb->line_i);
     rom next_field = alignment;
    
     // BAM alignment fixed-length fields 

@@ -13,7 +13,7 @@
 // SEG
 //---------
 
-static inline bool sam_seg_predict_TLEN (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_rname_rnext_same,
+static inline bool sam_seg_predict_TLEN (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_rname_rnext_same,
                                          SamTlenType *predicted_tlen)
 {
     PosType32 pnext_pos_delta = dl->PNEXT - dl->POS;
@@ -63,7 +63,7 @@ static inline bool sam_seg_predict_TLEN (VBlockSAMP vb, ZipDataLineSAM *dl, bool
 // 2. case: a non-zero value that is the negative of the previous line (usually a mate in a collated file) - a SNIP_DELTA & "-" (= value negation)
 // 3. case: tlen>0 and pnext_pos_delta>0 and seq_len>0 tlen is stored as SNIP_SPECIAL & tlen-pnext_pos_delta-seq_len
 // 4. otherwise: stored as is
-void sam_seg_TLEN (VBlockSAMP vb, ZipDataLineSAM *dl, 
+void sam_seg_TLEN (VBlockSAMP vb, ZipDataLineSAMP dl, 
                    STRp(tlen), SamTlenType tlen_value, // option 1 and 2
                    bool is_rname_rnext_same)
 {

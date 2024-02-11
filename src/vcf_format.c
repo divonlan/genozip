@@ -46,11 +46,8 @@ void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt))
     dl->has_haplotype_data = (fmt[0] == 'G' && fmt[1] == 'T' && (fmt[2] == ':' || fmt_len==2)); // GT tag in FORMAT field - must always appear first per VCF spec (if it appears)
     dl->has_genotype_data  = (fmt_len > 2 || !dl->has_haplotype_data);
 
-    bool possibly_rename = z_is_dvcf && !vb->is_rejects_vb;
-    bool possible_conditional_renaming = possibly_rename && (vb->last_index (VCF_oXSTRAND) || LO_IS_OK_SWITCH (last_ostatus));
-
     // case: FORMAT is the same as previous line - just use the same node_index, but only if there is no chance of conditional renaming
-    if (str_issame_(STRa(fmt), STRb(vb->last_format)) && !possible_conditional_renaming) {
+    if (str_issame_(STRa(fmt), STRb(vb->last_format))) {
         seg_duplicate_last (VB, CTX(VCF_FORMAT), fmt_len + 1 /* \t or \n */);
         dl->format_node_i = (dl-1)->format_node_i;
         return;
@@ -58,8 +55,7 @@ void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt))
 
     // save FORMAT field for potential duplication on the next line - only if we are certain there is no conditional renaming
     vb->last_format.len = 0; // reset 
-    if (!possible_conditional_renaming)
-        buf_add_moreS (vb, &vb->last_format, fmt, "last_format");
+    buf_add_moreS (vb, &vb->last_format, fmt, "last_format");
 
     str_split (fmt, fmt_len, 0, ':', sf_name, false);
 
@@ -84,8 +80,6 @@ void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt))
         DictId dict_id = vcf_seg_get_format_sf_dict_id (sf_names[i], sf_name_lens[i]);
         ctxs[i] = ctx_get_ctx_tag (vb, dict_id, sf_names[i], sf_name_lens[i]);
 
-        if (possibly_rename) vcf_tags_add_tag (vb, ctxs[i], DTYPE_VCF_FORMAT, sf_names[i], sf_name_lens[i]);
-
         format_mapper.items[i] = (ContainerItem){ .dict_id = dict_id, .separator = {':'} };
 
         if (dict_id.num == _FORMAT_PS || dict_id.num == _FORMAT_PID || dict_id.num == _FORMAT_DP ||
@@ -102,37 +96,13 @@ void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt))
             *((char *)sf_names[i]) = 'P'; // change GP to PP (note: FORMAT changes and field changes, but still stored in dict_id=GP)
     } 
     
-    char renamed_data[n_sf_names * MAX_TAG_LEN];
-    rom renamed = renamed_data;
-    uint32_t renamed_len = possibly_rename ? vcf_tags_rename (vb, n_sf_names, ctxs, sf_names, sf_name_lens, NULL, renamed_data) : 0;
+    // note: fmt_len needs to be int64_t to avoid -Wstringop-overflow warning in gcc 10
+    SNIP(6 + fmt_len); 
 
-    // note: fmt_len and renamed_len need to be int64_t to avoid -Wstringop-overflow warning in gcc 10
-    SNIP(6 + fmt_len + renamed_len); // maximum length in case of dual-snip with renaming
-
-    if (renamed_len) {
-
-        if (vb->line_coords == DC_LUFT) {
-            vb->recon_size += (int)renamed_len - (int)fmt_len;
-            SWAP (fmt, renamed);
-            SWAP (fmt_len, renamed_len);
-        }
-
-        ASSERT0 (6 + fmt_len + renamed_len == snip_len, "String index out of range");
-
-        snip[0] = snip[3+fmt_len] = SNIP_DUAL;
-        snip[1] = snip[4+fmt_len] = SNIP_SPECIAL;
-        snip[2] = snip[5+fmt_len] = VCF_SPECIAL_FORMAT;
-        memcpy (&snip[3], fmt, fmt_len);
-        memcpy (&snip[6+fmt_len], renamed, renamed_len);
-    }
-
-    // case: not tag renaming
-    else {
-        snip[0] = SNIP_SPECIAL;
-        snip[1] = VCF_SPECIAL_FORMAT;
-        memcpy (&snip[2], fmt, fmt_len);
-        snip_len = 2 + fmt_len;
-    }
+    snip[0] = SNIP_SPECIAL;
+    snip[1] = VCF_SPECIAL_FORMAT;
+    memcpy (&snip[2], fmt, fmt_len);
+    snip_len = 2 + fmt_len;
 
     bool is_new;
     uint32_t node_index = seg_by_did_i_ex (VB, STRa(snip), VCF_FORMAT, fmt_len + 1 /* \t or \n */, &is_new);
