@@ -37,7 +37,7 @@ OPTFLAGS   += -Ofast
 DEBUGFLAGS += -DDEBUG -ggdb3 -O0  
 
 ifdef IS_CONDA 
-	CFLAGS += -DDISTRIBUTION=\"conda\" # note: matches the name in version.c -DIS_CONDA
+	DISTOBJ = $(OBJDIR)/distribution.conda.o # note: matches the name in version.c 
 	CFLAGS += -Ofast 
 
 	ifdef Windows
@@ -51,6 +51,12 @@ ifdef IS_CONDA
 	endif
 
 else
+	ifdef DISTRIBUTION # custom destribution, run eg: DISTRIBUTION=special make genozip
+		DISTOBJ = $(OBJDIR)/distribution.$(DISTRIBUTION).o 
+	else
+		DISTOBJ = $(OBJDIR)/distribution.github.o # note: matches the name in version.c 
+	endif
+
 	ifdef GCC 
 		CC=$(GCC) 
 	else
@@ -63,7 +69,7 @@ else
 	endif
 
 	ifdef Linux
-		CFLAGS += -march=nocona # similar to conda - relatively low optimization, since different hosts in a cluster might have different capabilities
+		CFLAGS += -march=nocona # similar to conda - relatively low optimization, since different hosts in a cluster might have different capabilities. change to -march=native if compiling for a specific machine
 		CFLAGS += -mtune=intel  # see https://gcc.gnu.org/onlinedocs/gcc/x86-Options.html
 	endif
 
@@ -75,9 +81,9 @@ else
 endif 
 
 WSL_GCC_8_5 = /home_local_fs/divon/miniconda3/envs/distribution/bin/x86_64-conda-linux-gnu-gcc # path to gcc 8.5 on WSL (generate with: conda create -n distribution gcc_linux-64=8.5.0)
+WSL_GCC_DEFAULT = /home_local_fs/divon/miniconda3/bin/gcc
 
 DEV_DIR  = ../../genozip
-DEV_SRC  = $(DEV_DIR)/src
 TEST_DIR = $(DEV_DIR)/private/test
 SCRIPTS  = $(DEV_DIR)/private/scripts
 UTILS    = $(DEV_DIR)/private/utils
@@ -155,8 +161,6 @@ CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h al
 			 libdeflate/lib_common.h libdeflate/x86_matchfinder_impl.h libdeflate/compiler_gcc.h libdeflate/libdeflate.h 					\
 			 libdeflate/cpu_features_common.h libdeflate/matchfinder_common.h
 
-LINUXDIR = genozip-linux-x86_64 # directory for creating the Linux binaries distribution
-
 INSTALLERS = ../installers
 
 ifeq ($(CC),cl) # Microsoft Visual C
@@ -211,7 +215,7 @@ EXECUTABLES       = genozip$(EXE)       genounzip$(EXE)       genocat$(EXE)     
 DEBUG_EXECUTABLES = genozip-debug$(EXE) genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE)
 OPT_EXECUTABLES   = genozip-opt$(EXE)   genounzip-opt$(EXE)   genocat-opt$(EXE)   genols-opt$(EXE)
 
-all   : CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"$(DISTRIBUTION)\" 
+all   : CFLAGS += $(OPTFLAGS) 
 all   : $(OBJDIR) $(EXECUTABLES) 
 	@chmod +x test.sh
 
@@ -219,14 +223,11 @@ all   : $(OBJDIR) $(EXECUTABLES)
 # debug opt : LDFLAGS += -lbacktrace
 # endif
 
-debug : CFLAGS += $(DEBUGFLAGS) -DDISTRIBUTION=\"debug\"
+debug : CFLAGS += $(DEBUGFLAGS) 
 debug : $(OBJDIR) $(DEBUG_EXECUTABLES)
 
-opt   : CFLAGS += -ggdb3 $(OPTFLAGS) -DDEBUG -DDISTRIBUTION=\"opt\"
+opt   : CFLAGS += -ggdb3 $(OPTFLAGS) -DDEBUG 
 opt   : $(OBJDIR) $(OPT_EXECUTABLES)
-
-docker : CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"Docker\"
-docker : $(OBJDIR) $(EXECUTABLES) ../LICENSE.txt
 
 -include $(DEPS)
 
@@ -247,6 +248,10 @@ endif
 ifdef Mac
 objdir.mac/secure/license.o : CFLAGS := $(patsubst -march=% ,-march=x86-64 ,$(CFLAGS)) # plain vanilla x86-64, so it runs on Rosetta x86-64 simulator on M1/M2/M3
 endif
+
+$(OBJDIR)/distribution.%.o : distribution.c 
+	@echo Compiling $< to $@
+	@$(CC) -c -o $@ $< $(CFLAGS) -DDISTRIBUTION=\"$*\"
 
 $(OBJDIR)/%.o: %.c $(OBJDIR)/%.d
 	@echo Compiling $<
@@ -282,19 +287,19 @@ dict_id_gen.h : $(shell grep -w "pragma GENDICT" *.h | cut -d: -f1 | uniq) dict_
 
 endif # ugly hack to avoid conda failure due to bash issues in dict_id_gen.sh - pre-generate on Windows and check in to github
 
-genozip$(EXE): dict_id_gen.h $(OBJS)
+genozip$(EXE): dict_id_gen.h $(OBJS) $(DISTOBJ)
 	@echo Linking $@
-	@$(CC) -o $@ $(OBJS) $(CFLAGS) $(LDFLAGS)
+	@$(CC) -o $@ $(OBJS) $(DISTOBJ) $(CFLAGS) $(LDFLAGS) 
 	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi  # hard linking not possible on some filesystems
  
-genozip-debug$(EXE): dict_id_gen.h $(DEBUG_OBJS)
+genozip-debug$(EXE): dict_id_gen.h $(DEBUG_OBJS) $(DISTOBJ)
 	@echo Linking $@
-	@$(CC) -o $@ $(DEBUG_OBJS) $(CFLAGS) $(LDFLAGS)
+	@$(CC) -o $@ $(DEBUG_OBJS) $(CFLAGS) $(LDFLAGS) $(DISTOBJ)
 	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
 
-genozip-opt$(EXE): dict_id_gen.h $(OPT_OBJS)
+genozip-opt$(EXE): dict_id_gen.h $(OPT_OBJS) $(DISTOBJ)
 	@echo Linking $@
-	@$(CC) -o $@ $(OPT_OBJS) $(CFLAGS) $(LDFLAGS)
+	@$(CC) -o $@ $(OPT_OBJS) $(CFLAGS) $(LDFLAGS) $(DISTOBJ)
 	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
 
 genounzip$(EXE) genocat$(EXE) genols$(EXE): genozip$(EXE)
@@ -316,20 +321,10 @@ genounzip-opt$(EXE) genocat-opt$(EXE) genols-opt$(EXE): genozip-opt$(EXE)
 	@if ! ln -f $^ $@; then ln -fs $^ $@; fi
 	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
 
-# WSL2 clock is out of sync with Windows (and hence the NTFS filesystem) every time the computer sleeps
-# For this to work, first "sudo chmod u+s /usr/sbin/hwclock"
-ifndef Windows
-sync_wsl_clock:
-#	@if `uname -a | grep microsoft-standard > /dev/null`; then hwclock -s > /dev/null 2>&1; echo Syncing WSL clock; fi || echo -n 
-else
-sync_wsl_clock:
-endif
-
 ../LICENSE.txt: text_license.h version.h # not dependent on genozip.exe, so we don't generate it every compilation
-	@$(MAKE) genozip$(EXE) # recursive call to make genozip.exe with the latest version
+	@$(MAKE) -j genozip$(EXE) # recursive call to make genozip.exe with the latest version
 	@echo Generating $@
-	@./genozip$(EXE) --license=100 --force > $@
-	@rm -f $(OBJDIR)/arch.o
+	@./genozip$(EXE) --license=txt,100 > $@
 	
 # this is used by build.sh to install on conda for Linux and Mac. Installation for Windows in in bld.bat
 install: genozip$(EXE)
@@ -391,24 +386,20 @@ clean-dev: clean-installers clean-test # use only in dev - deletes license.o
 
 .PHONY: clean clean-debug clean-optimized clean-installers clean-distribution \
         git-pull macos mac/.remote_mac_timestamp delete-arch testfiles test-backup \
-		genozip-linux-x86_64/clean genozip-prod genozip-prod.exe dict_id_gen$(EXE) sync_wsl_clock \
+		dict_id_gen$(EXE) \
 		objdir.linux objdir.windows objdir.mac \
-		push-build increment-version $(INSTALLERS)/LICENSE.html refresh_arch_o genozip-linux-x86_64/clean 
+		push-build increment-version $(INSTALLERS)/LICENSE.html  
 
 # builds latest for local OS
 genozip-latest$(EXE): 
 	@echo "building latest"
-	@(cd $(LATEST_SRC); rm -Rf $(OBJDIR) ; git reset --hard ; git pull ; $(MAKE) clean ; touch dict_id_gen.h ; $(MAKE))
+	@(cd $(LATEST_SRC); rm -Rf $(OBJDIR) ; if [[ `pwd` = *genozip-latest* ]]; then git reset --hard ; git pull ; $(MAKE) clean ; touch dict_id_gen.h ; $(MAKE); fi )
 
 # currently, I build for conda from my Windows machine so I don't bother supporting other platforms
 ifdef Windows
 
-# When running on Windows, builds prod for Linux
-genozip-prod:
-	@run-on-wsl.sh make genozip-prod  # make -j doesn't work well on WSL - filesystem clock issues
-
 genozip-latest:
-	@run-on-wsl.sh make genozip-latest  # make -j doesn't work well on WSL - filesystem clock issues
+	@run-on-wsl.sh GCC=$(WSL_GCC_DEFAULT) make genozip-latest  # make -j doesn't work well on WSL - filesystem clock issues
 
 # increments minor version, eg. 1.0.1 -> 1.0.2. 
 # To increment a major version, manually edit version.h and set minor version to -1 e.g. 1.1.-1 (careful! no newlines or spaces)
@@ -463,44 +454,34 @@ conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld
 	@echo "  (2) Click 'Contribute' -> 'Open pull request' OR 'Create pull request'"
 	@echo "  (3) Click 'Resolve conflicts' -> select the top option in each of the 2 conflicts, then commit"
 
-# Building Windows InstallForge with distribution flag: we delete arch.o to force it to re-compile with DISTRIBUTION=InstallForge.
-windows/%.exe: CFLAGS += $(OPTFLAGS) # -DDISTRIBUTION=\"InstallForge\" # note: matches the name in version.c
-windows/%.exe: $(OBJS) %.exe
+windows/genozip.exe: CFLAGS += $(OPTFLAGS)
+windows/genozip.exe: $(OBJS) $(OBJDIR)/distribution.InstallForge.o 
 	@echo Linking $@
-	@(mkdir windows >& /dev/null ; exit 0)
-	@$(CC) -o $@ $(OBJS) $(CFLAGS) $(LDFLAGS)
+	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
+
+windows/genounzip.exe windows/genocat.exe windows/genols.exe: windows/genozip.exe 
+	@echo Generating $@
+	@cp $< $@
 
 windows/LICENSE.for-installer.txt: genozip$(EXE) version.h
 	@echo Generating $@
-	@(mkdir windows >& /dev/null ; exit 0)
-	@./genozip$(EXE) --license=60 --force > $@
+	@./genozip$(EXE) --license=txt,60 > $@
 
-refresh_arch_o : 
-	@if [ -f $(OBJDIR)/arch.o ]; then rm -f $(OBJDIR)/arch.o >& /dev/null ; fi # remove this arch.o which contains DISTRIBUTION
-	@DISTRIBUTION=InstallForge $(MAKE) $(OBJDIR)/arch.o
+windows/genozip-installer.ifp: windows/genozip-installer.template.ifp windows/generate-ifp.sh windows/genozip.exe ../LICENSE.txt
+	@echo "Generating $@"
+	@(cd windows ; bash generate-ifp.sh)
 
-WINDOWS_INSTALLER_OBJS = windows/genozip.exe windows/genounzip.exe windows/genocat.exe windows/genols.exe windows/LICENSE.for-installer.txt ../LICENSE.txt genozip.ico
-
-$(INSTALLERS)/LICENSE.html: genozip$(EXE)
-	@./genozip$(EXE) --license=-5000 --force > $@
+WINDOWS_INSTALLER_OBJS = windows/genozip.exe windows/genounzip.exe windows/genocat.exe windows/genols.exe windows/LICENSE.for-installer.txt ../LICENSE.txt windows/genozip.ico windows/genozip-installer.ifp
 
 # this must be run ONLY has part of "make distribution" or else versions will be out of sync
-$(INSTALLERS)/genozip-installer.exe: refresh_arch_o $(WINDOWS_INSTALLER_OBJS) 
-	@(mkdir windows >& /dev/null ; exit 0)
+$(INSTALLERS)/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS) 
 	@echo 'Creating Windows installer'
 	@echo 'WINDOWS: Using the UI:'
-	@echo '  (1) Open genozip-installer.ifp - OPEN FROM genozip/src DIRECTORY EVEN WHEN BUILDING PROD'
-	@echo '  (2) Set General-Program version to $(version)'
-	@echo '  (3) In Dialogs->License upload license from windows/LICENSE-for-installer.txt'
-	@echo '  (3) Click Save, then click Build'
-	@echo '  (4) Optionally: Click Yes, and copy the resulting files to releases/* and also c:\bin'	
-	@echo '  (5) Exit the UI (close the window)'
-	@if [ `cd ..; basename $$PWD` != genozip ] ; then cp $(WINDOWS_INSTALLER_OBJS) $(DEV_SRC)/windows ; cp $(DEV_SRC)/genozip-installer.ifp $(DEV_SRC)/genozip-installer.ifp.save ; cp genozip-installer.ifp $(DEV_SRC) ; fi # so this works for genozip-prod too - because InstallForge uses absolute paths 
+	@echo '  (1) Open windows/genozip-installer.ifp'
+	@echo '  (2) Click Build'
+	@echo '  (3) Exit the UI (close the window)'
+	@rm -f ../installers/genozip-installer.exe
 	@("../../../../Program Files (x86)/solicus/InstallForge/bin/ifbuilderenvx86.exe" ; exit 0)
-	@if [ -f $(OBJDIR)/arch.o ]; then rm -f $(OBJDIR)/arch.o >& /dev/null ; fi # remove this arch.o which contains DISTRIBUTION
-	@# we always edit the version in the genozip dir. we copy it to the current dir so it gets committed on git. we revert to old version in DEV_SRC to avoid problems with git merge
-	@if [ `cd ..; basename $$PWD` != genozip ] ; then mv $(DEV_SRC)/genozip-installer.ifp . ; mv $(DEV_SRC)/genozip-installer.ifp.save $(DEV_SRC)/genozip-installer.ifp ; fi
-	@cp $(DEV_SRC)/windows/genozip-installer.exe $(INSTALLERS)
 
 $(INSTALLERS)/genozip-linux-x86_64.tar.build: genozip-linux-x86_64/LICENSE.txt 
 	@(mkdir genozip-linux-x86_64 >& /dev/null ; exit 0)
@@ -514,6 +495,9 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@[ -f mac/.mac_username ] || ( echo ERROR: file mac/.mac_username missing && exit 1 )
 	@ssh `cat mac/.mac_ip_address` -l `cat mac/.mac_username`  "cd genozip ; echo "Pulling from git" ; git pull >& /dev/null ; make -j mac/.from_remote_timestamp" # pull before make as Makefile might have to be pulled
 	@touch $@
+
+$(INSTALLERS)/LICENSE.html: genozip$(EXE)
+	@./genozip$(EXE) --license=html,5000 > $@
 
 BUILD_FILES = version.h genozip-installer.ifp ../LICENSE.txt Makefile objdir.linux/secure/license.o objdir.windows/secure/license.o objdir.mac/secure/license.o ../RELEASE_NOTES.txt
 
@@ -551,18 +535,13 @@ genozip-linux-x86_64/LICENSE.txt: ../LICENSE.txt
 
 endif # Windows
 
-# Building Linux pre-compiled binaries: we delete arch.o to force it to re-compile with DISTRIBUTION=linux-x86_64.
 ifdef Linux
 
-genozip-linux-x86_64/clean:
-	@rm -fR genozip-linux-x86_64
-	@mkdir genozip-linux-x86_64
-
 # note: getpwuid and getgrgid will cause dymanically loading of the locally installed glibc in the --tar option, or segfault. that's normally fine.
-genozip-linux-x86_64/genozip: CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"linux-x86_64\" # note: matches the name in version.c
-genozip-linux-x86_64/genozip: clean-optimized $(OBJS)  # clean first, as we will compile without march=native
+genozip-linux-x86_64/genozip: CFLAGS += $(OPTFLAGS)
+genozip-linux-x86_64/genozip: $(OBJS) $(OBJDIR)/distribution.linux-x86_64.o
 	@echo Linking $@
-	@$(CC) -o $@ $(OBJS) $(CFLAGS) $(LDFLAGS)
+	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
 genozip-linux-x86_64/genounzip genozip-linux-x86_64/genocat genozip-linux-x86_64/genols: genozip-linux-x86_64/genozip 
 	@echo Generating $@
@@ -575,10 +554,9 @@ LINUX_TARGZ_OBJS = genozip-linux-x86_64/genozip genozip-linux-x86_64/genounzip g
 
 # this must be run ONLY as part of "make distribution" or else versions will be out of sync
 # this is run on Linux by run-on-wsl.sh
-$(INSTALLERS)/genozip-linux-x86_64.tar: version.h genozip-linux-x86_64/clean $(LINUX_TARGZ_OBJS) 
+$(INSTALLERS)/genozip-linux-x86_64.tar: $(LINUX_TARGZ_OBJS) 
 	@echo "Creating $@"
 	@tar cf $@ -z genozip-linux-x86_64
-	@rm -f $(OBJDIR)/arch.o # remove this arch.o which contains DISTRIBUTION
 
 endif # Linux
 

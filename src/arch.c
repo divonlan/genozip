@@ -291,7 +291,7 @@ StrText arch_get_filesystem_type (void)
         NAME (0x47504653, "GPFS");     // IBM Spectrum Scale GPFS: https://www.ibm.com/docs/en/storage-scale/4.2.0?topic=scale-overview-gpfs
         NAME (0xfe534d42, "SMB2");     // Windows file sharing
         NAME (0x2fc12fc1, "ZFS");      // Oracle ZFS (originally in Solaris) https://docs.oracle.com/cd/E19253-01/819-5461/zfsover-2/
-
+        NAME (0x19830326, "FhGFS");    // https://www.beegfs.io/docs/SC13_FHGFS_Presentation.pdf
         default: sprintf (s.s, "0x%lx", fs.f_type); 
     }
 
@@ -415,14 +415,6 @@ error:
 rom arch_get_argv0 (void)
 {
     return base_argv0;
-}
-
-#ifndef DISTRIBUTION
-    #define DISTRIBUTION "unknown" // this occurs if the code is built not using the genozip Makefile
-#endif    
-rom arch_get_distribution (void)
-{
-    return DISTRIBUTION[0] ? DISTRIBUTION : "github"; // DISTRIBUTION is "" if genozip is built with "make" without defining DISTRIBUTION - re-write as "github"
 }
  
 // true if running under valgrind

@@ -899,7 +899,7 @@ void zfile_update_txt_header_section_header (uint64_t offset_in_z_file)
     for (QType q=0; q < NUM_QTYPES; q++)
         header->flav_prop[q] = segconf.flav_prop[q];
 
-    if (flag.md5 && !flag.data_modified && gencomp_comp_eligible_for_digest(NULL))
+    if (flag.md5 && !flag.zip_txt_modified && gencomp_comp_eligible_for_digest(NULL))
         header->digest = digest_snapshot (&z_file->digest_ctx, "file");
 
     if (flag.show_headers)
@@ -931,7 +931,7 @@ void zfile_compress_vb_header (VBlockP vb)
         .recon_size_prim   = BGEN32 (vb->recon_size),
         .longest_line_len  = BGEN32 (vb->longest_line_len),
         .longest_seq_len   = BGEN32 (vb->longest_seq_len), // since v15 (non-0 for SAM, BAM, FASTQ)
-        .digest            = flag.data_modified ? DIGEST_NONE : vb->digest,
+        .digest            = flag.zip_txt_modified ? DIGEST_NONE : vb->digest,
     };
 
     DT_FUNC (vb, zip_set_vb_header_specific)(vb, &vb_header);

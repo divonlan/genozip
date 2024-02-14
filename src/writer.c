@@ -90,7 +90,7 @@ void writer_set_num_txtheader_lines (CompIType comp_i, uint32_t num_txtheader_li
 // To do: return line according to recon plan even if modified. challenge: lines dropped by reconstructor and not known yet to writer
 uint64_t writer_get_txt_line_i (VBlockP vb, LineIType line_in_vb/*0-based*/)
 {
-    if (flag.data_modified || !vb->lines.len32) return 0;
+    if (flag.piz_txt_modified || !vb->lines.len32) return 0;
 
     // since data is unmodified, we have only FULL_VB, RANGE, END_OF_VB and TXTHEADER plan items 
     int64_t txt_num_lines  = 0;
@@ -1044,7 +1044,7 @@ static void writer_flush_vb (Dispatcher dispatcher, VBlockP vb, bool is_txt_head
                 if (vb_pool_is_full (POOL_BGZF))
                     writer_output_one_processed_bgzf (dispatcher, true); 
 
-                bgzf_dispatch_compress (dispatcher, Btxt (i), MIN_(chunk_size, Ltxt - i), 
+                bgzf_dispatch_compress (dispatcher, Btxt (i), MIN_(chunk_size, Ltxt - i), vb->comp_i,
                                         is_last && (i+chunk_size >= Ltxt));
             
                 is_last = false; // if is is_last, we enter the loop once if txt_data.len=0

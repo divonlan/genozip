@@ -173,7 +173,8 @@ void bgzf_compress_bgzf_section (void)
     // cases where we don't write the BGZF blocks section
     if (!txt_file->bgzf_isizes.len ||  // this txt file is not compressed with BGZF - we don't need a BGZF section
         txt_file->bgzf_flags.level == BGZF_COMP_LEVEL_UNKNOWN ||  // we don't know the level - so PIZ will reconstruct at default level
-        flag.data_modified) return;     // we have data_modified-  the file has changed and we can't reconstruct to the same blocks
+        flag.zip_txt_modified)         // the file has changed and we can't reconstruct to the same blocks
+        return;
 
     // sanity check
     int64_t total_isize = 0;
@@ -589,7 +590,7 @@ FlagsBgzf bgzf_piz_calculate_bgzf_flags (CompIType comp_i, Codec src_codec)
         {}
 
     // case: attempt to reconstruct the BGZF following the instructions from the z_file
-    if (flag.bgzf == BGZF_BY_ZFILE) // note: flags_update_piz_one_z_file enforce that !flag.data_modified in this case
+    if (flag.bgzf == BGZF_BY_ZFILE) // note: flags_update_piz_one_z_file enforce that !flag.zip_txt_modified in this case
         bgzf_flags = bgzf_load_isizes (comp_i, false); 
     
     // case: user wants to see this section header, despite not needing BGZF data
@@ -625,7 +626,7 @@ void bgzf_piz_set_txt_file_bgzf_info (FlagsBgzf bgzf_flags, bytes codec_info)
 }
 
 //-----------------------------------------------------
-// PIZ SIDE - compressing put txt_file with BGZF
+// PIZ SIDE - compressing txt_file with BGZF
 //-----------------------------------------------------
 
 static void bgzf_alloc_compressor (VBlockP vb, FlagsBgzf bgzf_flags)
@@ -639,6 +640,11 @@ static void bgzf_alloc_compressor (VBlockP vb, FlagsBgzf bgzf_flags)
         vb->gzip_compressor = bgzf_alloc (vb, 1, sizeof (z_stream), __FUNCLINE);
         *(z_stream *)vb->gzip_compressor = (z_stream){ .zalloc = bgzf_alloc, .zfree  = codec_free_do, .opaque = vb };
     }
+
+    if (flag.show_bgzf)
+        iprintf ("BGZF: initialized compressor %s level %u%s\n", 
+                 bgzf_library_name (bgzf_flags.library), bgzf_flags.level,
+                 flag.bgzf == BGZF_BY_ZFILE ? " EXACT" : ""); 
 }
 
 static void bgzf_free_compressor (VBlockP vb, FlagsBgzf bgzf_flags)
@@ -698,14 +704,6 @@ static uint32_t bgzf_compress_one_block (VBlockP vb, rom in, uint32_t isize,
         #undef strm
     }
 
-    if (flag.show_bgzf)
-        #define C(i) (i < isize ? char_to_printable (in[i]).s : "")
-        iprintf ("%-7s vb=%s i=%d compressed_index=%u size=%u txt_index=%d size=%u txt_data[5]=%1s%1s%1s%1s%1s %s\n",
-                threads_am_i_main_thread() ? "MAIN" : threads_am_i_writer_thread() ? "WRITER" : "COMPUTE", VB_NAME, block_i,
-                comp_index, (unsigned)out_size, txt_index, isize, C(0), C(1), C(2), C(3), C(4),
-                out_size == BGZF_EOF_LEN ? "EOF" : "");
-        #undef C
-
     ASSERT (out_size, "cannot compress block with %u bytes into a BGZF block with %u bytes", isize, BGZF_MAX_BLOCK_SIZE);
     compressed->len += out_size;
 
@@ -714,6 +712,14 @@ static uint32_t bgzf_compress_one_block (VBlockP vb, rom in, uint32_t isize,
     BgzfFooter footer = { .crc32 = LTEN32 (crc32 (0, in, isize)),
                           .isize = LTEN32 (isize) };
     buf_add (compressed, &footer, sizeof (BgzfFooter));
+
+    if (flag.show_bgzf)
+        #define C(i) (i < isize ? char_to_printable (in[i]).s : "")
+        iprintf ("%-7s vb=%s i=%d compressed_index=%u size=%u txt_index=%d size=%u txt_data[5]=%1s%1s%1s%1s%1s %s\n",
+                threads_am_i_main_thread() ? "MAIN" : threads_am_i_writer_thread() ? "WRITER" : "COMPUTE", VB_NAME, block_i,
+                comp_index - (int)sizeof (BgzfHeader), (unsigned)out_size + (int)sizeof (BgzfHeader) + (int)sizeof (BgzfFooter), txt_index, isize, C(0), C(1), C(2), C(3), C(4),
+                out_size == BGZF_EOF_LEN ? "EOF" : "");
+        #undef C
 
     return (uint32_t)out_size;
 } 
@@ -814,7 +820,7 @@ static uint32_t bgzf_calculate_blocks_one_vb (VBlockP vb, bool is_last)
     return remaining;    
 }
 
-void bgzf_dispatch_compress (Dispatcher dispatcher, STRp (uncomp), bool is_last)
+void bgzf_dispatch_compress (Dispatcher dispatcher, STRp (uncomp), CompIType comp_i, bool is_last)
 {
     // uncompressed data to be dealt with by next call to this function (buffer belongs to writer thread)
     static Buffer intercall_txt = {}; // belongs to wvb
@@ -830,6 +836,7 @@ void bgzf_dispatch_compress (Dispatcher dispatcher, STRp (uncomp), bool is_last)
     if (uncomp_len || intercall_txt.len) { // might be 0 if is_last, in some cases
 
         VBlockP vb = dispatcher_generate_next_vb (dispatcher, wvb->vblock_i, COMP_NONE);
+        vb->comp_i = comp_i;
 
         // build uncompressed data for this VB - some data left over from previous VB + data from wvb
         buf_alloc_exact (vb, vb->txt_data, intercall_txt.len + uncomp_len, char, "txt_data");

@@ -84,7 +84,7 @@ void txtheader_compress (BufferP txt_header,
         .section_type      = SEC_TXT_HEADER,
         .codec             = (codec == CODEC_UNKNOWN) ? CODEC_NONE : codec,
         .src_codec         = txt_file->source_codec, 
-        .digest_header     = flag.data_modified ? DIGEST_NONE : header_md5,
+        .digest_header     = flag.zip_txt_modified ? DIGEST_NONE : header_md5,
         .txt_header_size   = BGEN64 (unmodified_txt_header_len),
     };
 

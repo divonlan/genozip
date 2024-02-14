@@ -55,6 +55,7 @@ typedef enum  {                       MP_UNKNOWN,       MP_BSBOLT,             M
 typedef struct { char s[SAM_MAX_QNAME_LEN+1]; } QnameStr;
 
 typedef enum { QHT_QUAL, QHT_CONSENSUS, QHT_OQ, NUM_QHT } QualHistType;
+extern QualHistType did_i_to_qht (Did did_i);
 
 typedef struct { uint8_t q; int count; } QualHisto;
 

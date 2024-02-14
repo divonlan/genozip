@@ -666,7 +666,7 @@ static void piz_dispatch_one_vb (Dispatcher dispatcher, Section sec)
 static void piz_handle_reconstructed_vb (Dispatcher dispatcher, VBlockP vb, uint64_t *num_nondrop_lines)
 {
     // verify that files are the same size, unless we intended to modify the data
-    ASSERTW (Ltxt == vb->recon_size || flag.data_modified || (flag.deep_fq_only && !VB_DT(FASTQ)),
+    ASSERTW (Ltxt == vb->recon_size || flag.piz_txt_modified || (flag.deep_fq_only && !VB_DT(FASTQ)),
             "Warning: vblock_i=%s/%u (num_lines=%u) had %s bytes in the original %s file but %s bytes in the reconstructed file (diff=%d)", 
             comp_name (vb->comp_i), vb->vblock_i, vb->lines.len32, str_int_commas (vb->recon_size).s, dt_name (txt_file->data_type), 
             str_int_commas (Ltxt).s, 

@@ -232,19 +232,19 @@ void version_print_notice_if_has_newer (void)
             //     udpate_do();
             
 #elif defined __linux__            
-            else if (strcmp (arch_get_distribution(), "conda") && // anything but conda. note: distribution names are defined in the Makefile
+            else if (strcmp (get_distribution(), "conda") && // anything but conda. note: distribution names are defined in the Makefile
                 is_updatable() &&                      
                 str_query_user_yn ("Do you want to update Genozip now?", QDEF_YES)) 
                 udpate_do();
 #endif            
 
 #ifndef _WIN32
-            else if (!strcmp (arch_get_distribution(), "conda") &&
+            else if (!strcmp (get_distribution(), "conda") &&
                      str_query_user_yn ("Do you want to update Genozip now?", QDEF_YES)) {
                 my_system ("conda update genozip");
             }
 #endif
-            else if (!strcmp (arch_get_distribution(), "InstallForge")) 
+            else if (!strcmp (get_distribution(), "InstallForge")) 
                 iprintf ("You can install the latest version from here: %s\n", GITHUB_WINDOWS_INSTALLER);
 
             else 

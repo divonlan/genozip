@@ -94,7 +94,6 @@ typedef struct {
     int force, quiet, explicit_quiet, noisy, no_tip, show_filename, analyze_ins,
         to_stdout,   // set implicitly if genocat without --output
         replace, 
-        lic_width,   // width of license output, 0=dynamic (undocumented parameter of --license)
         test, no_test, explicit_test,       
         index_txt,   // create an index
         subdirs,     // recursively traversing subdirectories
@@ -107,6 +106,7 @@ typedef struct {
         from_url;    // used for stats
     rom test_i;      // test of test.sh currently running (undocumented)
     rom threads_str, out_filename, out_dirname, files_from, do_register;
+    rom lic_param;   // format: width,type - invoked by Makefile
     FileType stdin_type; // set by the --input command line option
     bool explicitly_generic; // user explicitly set the type to generic
     rom license_filename;
@@ -178,17 +178,14 @@ typedef struct {
          preprocessing,      // PIZ: we're currently dispatching compute threads for preprocessing (= loading SA Groups)
          multiple_files,     // Command line includes multiple files
          reconstruct_as_src, // the reconstructed data type is the same as the source data type
-         maybe_txt_header_modified,
          maybe_lines_dropped_by_reconstructor,
          has_reconstructor_filter,
          maybe_lines_dropped_by_writer,
          maybe_vb_modified_by_reconstructor,
          maybe_lines_out_of_order,
-         maybe_vb_dropped_by_writer,
-         maybe_vb_dropped_after_read,
          missing_contexts_allowed, // PIZ: its not an error if contexts are missing - just reconstruct as an empty string
-         data_modified,      // PIZ: output is NOT precisely identical to the compressed source, and hence we cannot use its BZGF blocks
-                             // ZIP: txt data is modified during Seg
+         piz_txt_modified,   // PIZ: output is NOT precisely identical to the compressed source, and hence we cannot use its BZGF blocks or verify digest
+         zip_txt_modified,   // ZIP: txt data is modified during Seg
          explicit_ref,       // ref->filename was set by --reference or --REFERENCE (as opposed to being read from the genozip header)
          collect_coverage,   // PIZ: collect coverage data for show_coverage/idxstats
          deep_fq_only,       // PIZ: SAM data is reconstructed by not written, only FASTQ data is written

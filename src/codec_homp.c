@@ -19,8 +19,29 @@
 // ZIP side
 //--------------
 
+static bool is_illumina_binned_qual (Did did_i)
+{
+    QualHistType qht = did_i_to_qht (did_i);
+    if (qht < 0) return false;
+
+    for (int i=0; i < 94; i++)
+        if (segconf.qual_histo[qht][i].count && i != 'F'-33 && i != ':'-33 && i != ','-33 && i != '#'-33)
+            return false; // contains qual score other than F : , # - definitely not Illumina binned
+
+    return segconf.qual_histo[qht]['F'-33].count && 
+           segconf.qual_histo[qht][':'-33].count && 
+           segconf.qual_histo[qht][','-33].count;
+}
+
 static bool codec_homp_qual_data_is_a_fit_for_homp (VBlockP vb, ContextP qual_ctx, LocalGetLineCB qual_callback)
 {
+    // special case: if this is illumina binned, it may look like HOMP bc of long dom runs,
+    // but we're better off with DOMQ
+    if (TECH(UNKNOWN) && is_illumina_binned_qual (qual_ctx->did_i)) {
+        segconf.tech = TECH_ILLUM; // if QUAL data of any did_i has this illumina signature and TECH is unknown (eg bc qname is SRA), then the data is Illumina data
+        return false;
+    }
+
     LocalGetLineCB *seq_callback = (VB_DT(FASTQ) ? fastq_zip_seq : sam_zip_seq);
 
     #define NUM_HPS_IN_SAMPLE 100  // test at least this number of HPs (or as many as are available)

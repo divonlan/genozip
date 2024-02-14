@@ -197,7 +197,7 @@ static void main_print_help (bool explicit)
 
 static void main_print_version()
 {
-    iprintf ("version=%s distribution=%s\n", GENOZIP_CODE_VERSION, arch_get_distribution());  
+    iprintf ("version=%s distribution=%s\n", GENOZIP_CODE_VERSION, get_distribution());  
 }
 
 static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool is_last_z_file)
@@ -560,14 +560,14 @@ static void main_genozip (rom txt_filename,
 done: 
     // if next file is a fresh file, restore flags
     if (flag.zip_comp_i == COMP_MAIN) { // next file
-        SAVE_FLAG (data_modified); // propagate up
+        SAVE_FLAG (zip_txt_modified); // propagate up
         SAVE_FLAG (aligner_available);
         SAVE_FLAG (no_tip);
         SAVE_FLAG (bind);
         
         RESTORE_FLAGS; // overwrite all flags with saved flag struct
 
-        if (flag.bind) RESTORE_FLAG (data_modified); 
+        if (flag.bind) RESTORE_FLAG (zip_txt_modified); 
         RESTORE_FLAG (aligner_available);
         RESTORE_FLAG (no_tip);
         RESTORE_FLAG (bind);

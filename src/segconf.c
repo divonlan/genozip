@@ -470,6 +470,15 @@ rom FMT_DP_method_name (FormatDPMethod method)
     }
 }
 
+QualHistType did_i_to_qht (Did did_i)
+{
+    if (                                did_i == SAM_QUAL   ) return QHT_QUAL;
+    if ((TXT_DT(SAM) || TXT_DT(BAM)) && did_i == SAM_CQUAL  ) return QHT_CONSENSUS;
+    if ((TXT_DT(SAM) || TXT_DT(BAM)) && did_i == OPTION_OQ_Z) return QHT_OQ;    
+
+    return -1;
+}
+
 static DESCENDING_SORTER (qual_sorter, QualHisto, count)
 
 StrText segconf_get_qual_histo (QualHistType qht)

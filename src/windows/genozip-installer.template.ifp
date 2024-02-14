@@ -1,0 +1,136 @@
+﻿
+[Header]
+ProjectFileVersion = 1.1
+[General]
+Program name = Genozip
+Program version = __VERSION__
+Windows XP = 0
+Windows Server 2003 = 0
+Windows Vista = 0
+Windows Server 2008 = 0
+Windows 7 = 0
+Windows 8 = 0
+Windows 10 = 1
+Windows Server 2016 = 1
+Windows Server 2019 = 1
+Windows Server 2022 = 1
+Windows 11 = 1
+DoNotCheckOS = 0
+Company name = Genozip
+Website = http://www.genozip.com
+SFA = 0
+DFA = 0
+Comp = 1
+[Graphics]
+Wizard image = <main>
+Header image = <main>
+Show Label = 1
+VisualStylesEnabled = 1
+[Files]
+Installation path = <ProgramFiles>\<Company>\<AppName>\
+Autcip = 1
+[Uninstall]
+Vwau = 1
+Website = https://genozip.com
+Include uninstaller = 1
+Uninstaller filename = Uninstall
+UseCustomDisplayIcon = 0
+CustomDisplayIcon = <InstallPath>\
+[Licence]
+Licence dialog = 1
+[Finish]
+Sart program = 0
+Reboot computer = 1
+Program = <InstallPath>\
+ProgramArguments = 
+[Shortcuts]
+Allowtc = 0
+Shortcut path = <Company>\<AppName>\
+[Serialoptions]
+Allows = 0
+Number = 1000
+Mask = #####-#####-#####-#####
+[SplashScreen]
+Image = __WINDOWS_DIR__\genozip-installer.jpg
+Sound = 
+Time = 2
+PlaySound = 0
+Allow = 1
+[Build]
+File = __INSTALLERS__\genozip-installer.exe
+SetupIconPath = 
+UninstallIconPath = 
+CompressionMethod = 0
+CompressionLevel = 2
+[Updater]
+Allow = 0
+1 = <AppName>
+2 = <AppVersion>
+3 = http://
+4 = http://
+5 = http://
+6 = Update
+Language = 0
+RunProg = 
+RunProgs = 0
+Execdlls = 0
+[Languages]
+2
+[Files/Dirs]
+__WINDOWS_DIR__\genozip.exe
+__EXE_MB__ MB
+exe
+__WINDOWS_DIR__\genounzip.exe
+__EXE_MB__ MB
+exe
+__WINDOWS_DIR__\genocat.exe
+__EXE_MB__ MB
+exe
+__WINDOWS_DIR__\genols.exe
+__EXE_MB__ MB
+exe
+__WINDOWS_DIR__\genozip.ico
+156.7 KB
+ico
+__ROOT_DIR__\LICENSE.txt
+__LICENSE_KB__ KB
+txt
+[Licence_Begin]
+12011
+{\rtf1\ansi\ansicpg1252\deff0\nouicompat{\fonttbl{\f0\fswiss\fcharset0 Calibri;}{\f1\fswiss Calibri;}{\f2\fswiss\fcharset134 Microsoft YaHei;}}
+{\*\generator Riched20 10.0.22621}\viewkind4\uc1 
+\pard\f0\fs20\lang2057 
+__LICENSE__
+\f2\par
+}
+[Licence_End]
+[Registry]
+HKEY_CURRENT_USER
+Software\Classes\.genozip
+
+genozip
+1
+HKEY_CURRENT_USER
+Software\Classes\genozip\Shell\Open\Command
+
+"<InstallPath>\genounzip.exe" "%1" "-fz1"
+1
+HKEY_CURRENT_USER
+Software\Classes\genozip\DefaultIcon
+
+<InstallPath>\genozip.ico
+1
+[Variables]
+[SCs]
+[IFP_End]
+[Serials]
+[Serials_End]
+[Commands]
+Execute Application
+explorer
+http://genozip.com
+
+Execute Application
+explorer
+<InstallPath>
+

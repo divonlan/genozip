@@ -22,7 +22,6 @@ launch.json
 !installers/*.exe
 *.new
 *.crdownload
-windows
 genozip-linux-x86_64
 genozip-installer.ifp.save
 geno*-prod
@@ -42,6 +41,8 @@ notes.txt
 to do.txt
 junk*
 meta.yaml
+src/windows/genozip-installer.ifp
+src/windows/LICENSE.for-installer.txt
 src/mac/darwinpkg/Library/genozip/*
 !src/mac/darwinpkg/Library/genozip
 src/mac/Resources/*

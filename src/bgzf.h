@@ -71,7 +71,7 @@ extern void bgzf_return_segconf_blocks (VBlockP vb);
 
 extern FlagsBgzf bgzf_piz_calculate_bgzf_flags (CompIType comp_i, Codec src_codec);
 extern void bgzf_piz_set_txt_file_bgzf_info (FlagsBgzf bgzf_flags, bytes codec_info);
-extern void bgzf_dispatch_compress (Dispatcher dispatcher, STRp (uncomp), bool is_last);
+extern void bgzf_dispatch_compress (Dispatcher dispatcher, STRp (uncomp), CompIType comp_i, bool is_last);
 extern void bgzf_write_finalize (void);
 
 extern rom bgzf_library_name (BgzfLibraryType library);

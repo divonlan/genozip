@@ -20,7 +20,7 @@ extern void arch_set_locale (void);
 extern rom arch_get_os (void);
 extern rom arch_get_scheduler (void);
 extern rom arch_get_glibc (void);
-extern rom arch_get_distribution (void);
+extern rom get_distribution (void);
 extern StrTextSuperLong arch_get_executable (void);
 extern rom arch_get_argv0 (void);
 extern bool arch_is_valgrind (void);

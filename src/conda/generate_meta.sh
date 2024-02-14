@@ -1,5 +1,13 @@
 #/bin/bash --norc
 
+# ------------------------------------------------------------------
+#   generate-meta.sh
+#   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
+#   Please see terms and conditions in the file LICENSE.txt
+#
+#   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
+#   and subject to penalties specified in the license.
+
 # This script is invoked by Makefile
 
 version=$(head -n1 version.h |cut -d\" -f2)

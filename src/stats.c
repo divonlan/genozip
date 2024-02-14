@@ -488,7 +488,7 @@ static void stats_output_file_metadata (void)
     }
 
     bufprintf (evb, &stats, "Genozip version: %s %s\nDate compressed: %s\n", 
-               GENOZIP_CODE_VERSION, arch_get_distribution(), str_time().s);
+               GENOZIP_CODE_VERSION, get_distribution(), str_time().s);
 
     bufprint0 (evb, &stats, "Command line: ");
     buf_append_string (evb, &stats, flags_command_line()); // careful not to use bufprintf with command_line as it can exceed the maximum length in bufprintf
@@ -829,7 +829,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
     // note: we use txt_data_so_far_bind is the sum of recon_sizes - see zip_update_txt_counters - which is
     // expected to be the sum of txt_len. However, this NOT the size of the original file which is stored in
     // z_file->txt_data_so_far_bind_0.
-    ASSERT (!flag.debug_or_test || flag.show_stats_comp_i != COMP_NONE || all_txt_len == txt_size || flag.data_modified || flag.make_reference, 
+    ASSERT (!flag.debug_or_test || flag.show_stats_comp_i != COMP_NONE || all_txt_len == txt_size || flag.zip_txt_modified || flag.make_reference, 
             "Hmm... incorrect calculation for %s sizes: total section sizes=%s but file size is %s (diff=%d)", 
             z_dt_name(), str_int_commas (all_txt_len).s, str_int_commas (txt_size).s, 
             (int32_t)(txt_size - all_txt_len)); 

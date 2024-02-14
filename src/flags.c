@@ -540,7 +540,7 @@ void flags_init_from_command_line (int argc, char **argv)
                 goto verify_command;
 
             case LICENSE :
-                flag.lic_width = optarg ? atoi (optarg) : 0; // negative width - output as HTML (e.g. --license=-80)
+                flag.lic_param = optarg;
                 goto verify_command;
 
             case PIZ :  
@@ -1109,7 +1109,7 @@ void flags_update_zip_one_file (void)
 
     // cases where txt data is modified during Seg - digest is not stored, it cannot be tested with --test and other limitations 
     // note: this flag is also set when the file header indicates that it's a Luft file. See vcf_header_get_dual_coords().
-    flag.data_modified = flag.data_modified  // this is needed, eg, so when compressing a Luft file, the rejects file inherits data_modified 
+    flag.zip_txt_modified = flag.zip_txt_modified  // this is needed, eg, so when compressing a Luft file, the rejects file inherits data_modified 
                       || flag.optimize       // we're modifying data to make it more compressible
                       || flag.match_chrom_to_reference
                       || (flag.add_line_numbers && dt == DT_VCF)
@@ -1118,11 +1118,11 @@ void flags_update_zip_one_file (void)
 
     // add v14: --test if user selected --test, OR this condition is true
     flag.explicit_test = flag.test;
-    flag.test |= !flag.no_test && !flag.make_reference && !flag.data_modified && !flag.biopsy && flag.biopsy_line.line_i == NO_LINE &&
+    flag.test |= !flag.no_test && !flag.make_reference && !flag.zip_txt_modified && !flag.biopsy && flag.biopsy_line.line_i == NO_LINE &&
                  !flag.show_bam && !flag.seg_only && 
                  !flag.debug && !flag.show_time && !flag.show_memory;
 
-    ASSINP0 (!flag.test_i || flag.test || flag.no_test || flag.debug || flag.make_reference || flag.zip_no_z_file || flag.data_modified, 
+    ASSINP0 (!flag.test_i || flag.test || flag.no_test || flag.debug || flag.make_reference || flag.zip_no_z_file || flag.zip_txt_modified, 
              "When running with GENOZIP_TEST one of: --test, --no-test, --debug, --make-reference must be set");
 
     ASSINP0 (!flag.match_chrom_to_reference || flag.reference, "--match-chrom-to-reference requires using --reference as well"); 
@@ -1442,20 +1442,19 @@ void flags_update_piz_one_z_file (int z_file_i /* -1 if unknown - called form fi
         (z_file_i >= 1 && !flag.no_writer && !flag.header_only))) // when using genocat to concatenate multiple files - don't show the header for the 2nd+ file
         flag.no_header = 2; // 2 = assigned here and not from command line
 
-    flag.maybe_txt_header_modified = is_genocat && 
+    bool maybe_txt_header_modified = is_genocat && 
         (flag.no_header || flag.lines_first != NO_LINE || // options that may cause dropping of the txt header
          ((Z_DT(VCF) || Z_DT(BCF)) && (flag.header_one || flag.samples || flag.drop_genotypes))); // VCF specific options that modify the txt header
 
-    flag.maybe_vb_dropped_by_writer = is_genocat && // dropped by piz_dispatch_one_vb
+    bool maybe_vb_dropped_by_writer = is_genocat && // dropped by piz_dispatch_one_vb
         (flag.lines_first != NO_LINE || // decided by writer_create_plan
          flag.tail             || // decided by writer_create_plan
          flag.downsample       || // decided by writer_create_plan
          flag.regions          || // decided by writer_create_plan
-         flag.one_component    || // decided by writer_init_comp_info 
          flag.one_vb           || // decided by writer_init_vb_info
          flag.header_only);       // decided by writer_init_vb_info
 
-    flag.maybe_vb_dropped_after_read = is_genocat && // dropped by piz_dispatch_one_vb
+    bool maybe_vb_dropped_after_read = is_genocat && // dropped by piz_dispatch_one_vb
         ((flag.grep && (Z_DT(FASTQ) || Z_DT(FASTA))) || // decided by piz_read_one_vb
          (flag.regions && Z_DT(FASTA))); // decided by piz_read_one_vb
 
@@ -1486,25 +1485,25 @@ void flags_update_piz_one_z_file (int z_file_i /* -1 if unknown - called form fi
           (Z_DT(SAM)   && (z_file->z_flags.has_gencomp || flag.interleaved)));
 
     // true if the PIZ output txt file will NOT be identical to the source file as recorded in z_file
-    flag.data_modified = flag.maybe_txt_header_modified             || 
-                         flag.maybe_vb_dropped_after_read           ||
-                         flag.maybe_vb_dropped_by_writer            ||
-                         flag.maybe_lines_dropped_by_reconstructor  ||
-                         flag.maybe_vb_modified_by_reconstructor    || 
-                         flag.maybe_lines_out_of_order;
+    flag.piz_txt_modified = maybe_txt_header_modified                  || 
+                            maybe_vb_dropped_after_read                ||
+                            maybe_vb_dropped_by_writer                 ||
+                            flag.maybe_lines_dropped_by_reconstructor  ||
+                            flag.maybe_vb_modified_by_reconstructor    || 
+                            flag.maybe_lines_out_of_order;
 
-    // calculation depends on flag.data_modified
+    // calculation depends on flag.piz_txt_modified
     bool pg_line_added_to_header = ((OUT_DT(SAM) || OUT_DT(BAM)) && !flag.reconstruct_as_src)
-                                || ((OUT_DT(VCF) || OUT_DT(BCF)) && flag.data_modified);
+                                || ((OUT_DT(VCF) || OUT_DT(BCF)) && flag.piz_txt_modified);
 
     if (pg_line_added_to_header && !flag.no_pg && is_genocat) 
-        flag.maybe_txt_header_modified = flag.data_modified = true;
+        flag.piz_txt_modified = true;
 
-    ASSINP0 (!is_genounzip || !flag.data_modified, "Data modification flags are not allowed in genounzip, use genocat instead");
+    ASSINP0 (!is_genounzip || !flag.piz_txt_modified, "Data modification flags are not allowed in genounzip, use genocat instead");
 
-    ASSINP0 (!flag.test || !flag.data_modified, "--test cannot be used when other flags specify data modification. See " WEBSITE_DIGEST);
+    ASSINP0 (!flag.test || !flag.piz_txt_modified, "--test cannot be used when other flags specify data modification. See " WEBSITE_DIGEST);
 
-    ASSINP0 (!flag.data_modified || flag.bgzf != BGZF_BY_ZFILE, "Cannot use --bgzf=exact, because other flags might cause output file to differ from original file");
+    ASSINP0 (!flag.piz_txt_modified || flag.bgzf != BGZF_BY_ZFILE, "Cannot use --bgzf=exact, because other flags might cause output file to differ from original file");
 
     // cases where we don't read unnecessary contexts, and should just reconstruct them as an empty
     // string (in other cases, it would be an error)
