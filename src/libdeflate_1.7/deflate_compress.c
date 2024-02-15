@@ -2687,8 +2687,8 @@ deflate_init_offset_slot_fast(struct libdeflate_compressor *c)
 	}
 }
 
-LIBDEFLATEEXPORT struct libdeflate_compressor * LIBDEFLATEAPI
-libdeflate_alloc_compressor(int compression_level, void *opaque)
+LIBDEFLATEEXPORT struct libdeflate_compressor * LIBDEFLATEAPI_1_7
+libdeflate_alloc_compressor_1_7(int compression_level, void *opaque)
 {
 	struct libdeflate_compressor *c;
 	size_t size = offsetof(struct libdeflate_compressor, p);
@@ -2706,7 +2706,7 @@ libdeflate_alloc_compressor(int compression_level, void *opaque)
 		size += sizeof(c->p.g);
 #endif
 
-	c = libdeflate_aligned_malloc(MATCHFINDER_MEM_ALIGNMENT, size, opaque);
+	c = libdeflate_aligned_malloc_1_7 (MATCHFINDER_MEM_ALIGNMENT, size, opaque);
 	if (!c)
 		return NULL;
 
@@ -2809,8 +2809,8 @@ libdeflate_alloc_compressor(int compression_level, void *opaque)
 	return c;
 }
 
-LIBDEFLATEEXPORT size_t LIBDEFLATEAPI
-libdeflate_deflate_compress(struct libdeflate_compressor *c,
+LIBDEFLATEEXPORT size_t LIBDEFLATEAPI_1_7
+libdeflate_deflate_compress_1_7(struct libdeflate_compressor *c,
 			    const void *in, size_t in_nbytes,
 			    void *out, size_t out_nbytes_avail)
 {
@@ -2830,10 +2830,10 @@ libdeflate_deflate_compress(struct libdeflate_compressor *c,
 	return (*c->impl)(c, in, in_nbytes, out, out_nbytes_avail);
 }
 
-LIBDEFLATEEXPORT void LIBDEFLATEAPI
-libdeflate_free_compressor(struct libdeflate_compressor *c)
+LIBDEFLATEEXPORT void LIBDEFLATEAPI_1_7
+libdeflate_free_compressor_1_7(struct libdeflate_compressor *c)
 {
-	libdeflate_aligned_free(c, c ? c->opaque : NULL);
+	libdeflate_aligned_free_1_7 (c, c ? c->opaque : NULL);
 }
 
 unsigned int
@@ -2842,8 +2842,8 @@ deflate_get_compression_level(struct libdeflate_compressor *c)
 	return c->compression_level;
 }
 
-LIBDEFLATEEXPORT size_t LIBDEFLATEAPI
-libdeflate_deflate_compress_bound(struct libdeflate_compressor *c,
+LIBDEFLATEEXPORT size_t LIBDEFLATEAPI_1_7
+libdeflate_deflate_compress_bound_1_7(struct libdeflate_compressor *c,
 				  size_t in_nbytes)
 {
 	/*

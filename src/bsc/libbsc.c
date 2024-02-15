@@ -36,7 +36,7 @@ See also the bsc and libbsc web site:
 #include <stdlib.h>
 #include <string.h>
 #include <memory.h>
-#include "../libdeflate/libdeflate.h"
+#include "../libdeflate_1.19/libdeflate.h"
 
 #include "platform.h"
 #include "libbsc.h"

@@ -16,7 +16,7 @@
 #include "strings.h"
 #include "dict_id.h"
 #include "segconf.h"
-#include "libdeflate/libdeflate.h"
+#include "libdeflate_1.19/libdeflate.h"
 
 #define ENT_NONE 0xffffffffUL // no global_hash/stons_hash entry
 #define ENT_HEAD 0xfffffffeUL // the head rather than ents buffer

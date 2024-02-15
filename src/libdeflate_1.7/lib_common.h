@@ -36,8 +36,8 @@ void *libdeflate_malloc_do(size_t size, void *opaque, const char *func, uint32_t
 void libdeflate_free_do(void *ptr, void *opaque, const char *func, uint32_t code_line);
 #define libdeflate_free(ptr, opaque) libdeflate_free_do ((ptr), (opaque), __FUNCTION__, __LINE__)
 
-void *libdeflate_aligned_malloc(size_t alignment, size_t size, void *opaque);
-void libdeflate_aligned_free(void *ptr, void *opaque);
+void *libdeflate_aligned_malloc_1_7(size_t alignment, size_t size, void *opaque);
+void libdeflate_aligned_free_1_7(void *ptr, void *opaque);
 
 #ifdef FREESTANDING
 /*

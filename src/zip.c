@@ -639,7 +639,7 @@ static void zip_complete_processing_one_vb (VBlockP vb)
 
     // update z_data in memory (its not written to disk yet)
     zfile_update_compressed_vb_header (vb); 
-
+        
     txt_file->max_lines_per_vb = MAX_(txt_file->max_lines_per_vb, vb->lines.len);
 
     if (!flag.make_reference && !flag.seg_only)
@@ -731,6 +731,9 @@ void zip_one_file (rom txt_basename,
                                  zip_prepare_one_vb_for_dispatching, 
                                  zip_compress_one_vb, 
                                  zip_complete_processing_one_vb);
+
+    if (txt_file->codec == CODEC_BGZF)
+        bgzf_finalize_discovery();
 
     zriter_wait_for_bg_writing(); // complete writing VBs before moving on
 

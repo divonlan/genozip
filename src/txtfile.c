@@ -26,7 +26,7 @@
 #include "zip.h"
 #include "dispatcher.h"
 #include "zlib/zlib.h"
-#include "libdeflate/libdeflate.h"
+#include "libdeflate_1.19/libdeflate.h"
 #include "bzlib/bzlib.h"
 
 #define MAX_TXT_HEADER_LEN ((uint64_t)0xffffffff) // maximum length of txt header - one issue with enlarging it is that we digest it in one go, and the digest module is 32 bit
@@ -138,7 +138,7 @@ static inline uint32_t txtfile_read_block_bgzf (VBlockP vb, int32_t max_uncomp /
     uint32_t block_comp_len, block_uncomp_len, this_uncomp_len=0;
 
     if (uncompress)
-        vb->gzip_compressor = libdeflate_alloc_decompressor(vb);
+        vb->gzip_compressor = libdeflate_alloc_decompressor(vb, __FUNCLINE);
         
     int64_t start_uncomp_len = vb->scratch.uncomp_len;
 
@@ -199,7 +199,7 @@ static inline uint32_t txtfile_read_block_bgzf (VBlockP vb, int32_t max_uncomp /
 
                 vb->scratch.len32 += block_comp_len;   // compressed size
             }
-
+            
             // case EOF - happens in 2 cases: 1. EOF block (block_comp_len=BGZF_EOF_LEN) or 2. no EOF block (block_comp_len=0)
             if (!block_uncomp_len) {
                 txt_file->is_eof = true;
@@ -224,7 +224,7 @@ static inline uint32_t txtfile_read_block_bgzf (VBlockP vb, int32_t max_uncomp /
 
     if (uncompress) {
         buf_free (evb->scratch); 
-        libdeflate_free_decompressor ((struct libdeflate_decompressor **)&vb->gzip_compressor);
+        libdeflate_free_decompressor ((struct libdeflate_decompressor **)&vb->gzip_compressor, __FUNCLINE);
     }
 
     COPY_TIMER (txtfile_read_block_bgzf);
@@ -408,7 +408,7 @@ static uint32_t txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb)
     // uncompress one block at a time to see if its sufficient. usually, one block is enough
     if (txt_file->codec == CODEC_BGZF && vb->scratch.len) {
 
-        vb->gzip_compressor = libdeflate_alloc_decompressor(vb);
+        vb->gzip_compressor = libdeflate_alloc_decompressor (vb, __FUNCLINE);
 
         for (int block_i=vb->bgzf_blocks.len32 - 1; block_i >= 0; block_i--) {
             BgzfBlockZip *bb = B(BgzfBlockZip, vb->bgzf_blocks, block_i);
@@ -442,7 +442,8 @@ static uint32_t txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb)
             txtfile_dump_vb (vb, txt_name));
 
 done:
-    libdeflate_free_decompressor ((struct libdeflate_decompressor **)&vb->gzip_compressor);
+    if (vb->gzip_compressor)
+        libdeflate_free_decompressor ((struct libdeflate_decompressor **)&vb->gzip_compressor, __FUNCLINE);
     
     COPY_TIMER (txtfile_get_unconsumed_to_pass_to_next_vb);
     return (uint32_t)pass_to_next_vb_len;

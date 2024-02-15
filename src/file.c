@@ -515,15 +515,9 @@ fallthrough_from_cram: {}
                 file->codec = CODEC_BGZF;
                 
                 evb->scratch.count = bgzf_uncompressed_size; // pass uncompressed size in param
-                buf_add_more (evb, &evb->scratch, (char*)block, block_size, "scratch");
-                
-                file->bgzf_flags = bgzf_get_compression_level (file->name ? file->name : FILENAME_STDIN, 
-                                                               block, block_size, (uint32_t)bgzf_uncompressed_size);
-
-                // if we're compressing an level-0 BGZF (eg produced by samtools view -u), we don't record its
-                // value so that PIZ reconstructs at the default level
-                if (file->bgzf_flags.level == 0) 
-                    file->bgzf_flags.level = BGZF_COMP_LEVEL_UNKNOWN;
+                buf_add_more (evb, &evb->scratch, (char*)block, block_size, "scratch");                
+            
+                bgzf_initialize_discovery (file);
             }
 
             // for regulars files, we already skipped 0 size files. This can happen in STDIN
@@ -555,6 +549,11 @@ fallthrough_from_cram: {}
                 
                 file->file  = gzdopen (fd, READ); 
                 gzinject (file->file, block, block_size); // a hack - adds a 18 bytes of compressed data to the in stream, which will be consumed next, instead of reading from disk
+
+                if (flag.show_gz) {
+                    iprintf ("%s: is GZIP but not BGZF\n", file->name);
+                    exit_ok;
+                }
             } 
 
             // case: this is not GZIP format at all. treat as a plain file, and put the data read in vb->scratch 
@@ -583,6 +582,11 @@ fallthrough_from_cram: {}
 
                 file->codec = CODEC_NONE;
                 buf_add_more (evb, &evb->scratch, (char*)block, block_size, "scratch");
+
+                if (flag.show_gz) {
+                    iprintf ("%s: is not GZIP\n", file->name);
+                    exit_ok;
+                }
             }
 
             ASSINP (!file->redirected || file->codec == CODEC_NONE || file->codec == CODEC_BGZF, 
@@ -671,7 +675,7 @@ fail:
     return NULL;
 }
 
-FileP file_open_txt_write (rom filename, DataType data_type, int bgzf_level)
+FileP file_open_txt_write (rom filename, DataType data_type, BgzfLevel bgzf_level)
 {
     ASSERT (data_type > DT_NONE && data_type < NUM_DATATYPES ,"invalid data_type=%u", data_type);
 
@@ -1108,6 +1112,7 @@ void file_close (FileP *file_p)
         mutex_destroy (file->custom_merge_mutex);
         mutex_destroy (file->qname_huf_mutex);
         mutex_destroy (file->recon_plan_mutex);
+        mutex_destroy (file->bgzf_flags_mutex);
         
         FREE (file->name);
         FREE (file->basename);

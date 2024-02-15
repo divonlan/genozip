@@ -25,7 +25,7 @@
 #include "dispatcher.h"
 #include "zriter.h"
 #include "b250.h"
-#include "libdeflate/libdeflate.h"
+#include "libdeflate_1.19/libdeflate.h"
 
 static void zfile_show_b250_section (SectionHeaderUnionP header_p, ConstBufferP b250_data)
 {

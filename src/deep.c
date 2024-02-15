@@ -11,7 +11,7 @@
 #include "strings.h"
 #include "deep.h"
 #include "vblock.h"
-#include "libdeflate/libdeflate.h"
+#include "libdeflate_1.19/libdeflate.h"
 
 #define MAX_AUTO_READ_LEN 20000 // not too long, so that the "longer reads" code path also gets some mileage
 

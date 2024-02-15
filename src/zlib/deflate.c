@@ -49,7 +49,7 @@
 
 /* @(#) $Id$ */
 
-#include "../libdeflate/libdeflate.h"
+#include "../libdeflate_1.19/libdeflate.h"
 #include "deflate.h"
 
 const char deflate_copyright[] =

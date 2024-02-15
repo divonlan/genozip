@@ -16,7 +16,7 @@
 #include "piz.h"
 #include "writer.h"
 #include "lookback.h"
-#include "libdeflate/libdeflate.h"
+#include "libdeflate_1.19/libdeflate.h"
 
 //----------------------
 // Segmentation

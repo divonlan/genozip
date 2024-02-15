@@ -34,7 +34,7 @@
 #include "buf_list.h"
 #include "b250.h"
 #include "zip_dyn_int.h"
-#include "libdeflate/libdeflate.h"
+#include "libdeflate_1.19/libdeflate.h"
 
 WordIndex seg_by_ctx_ex (VBlockP vb, STRp(snip), ContextP ctx, uint32_t add_bytes,
                          bool *is_new) // optional out

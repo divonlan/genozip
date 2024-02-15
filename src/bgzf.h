@@ -18,13 +18,6 @@
 // BGZF EOF marker is simply an empty block, see https://samtools.github.io/hts-specs/SAMv1.pdf section 4.1.2
 #define BGZF_EOF_LEN 28
 #define BGZF_EOF BGZF_PREFIX "\x1b\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-
-// use level 6 - same as samtools and bgzip default level. if we're lucky (same gzip library and user used default level),
-// we will reconstruct precisely even at the .gz level
-#define BGZF_NOT_INITIALIZED    -100 
-#define BGZF_BY_ZFILE           -1
-#define BGZF_COMP_LEVEL_DEFAULT 1         // default genounzip BGZF compression level if -z is not specified
-#define BGZF_COMP_LEVEL_UNKNOWN 15 
     
 // data type of VBlock.bgzf_blocks
 typedef struct BgzfBlockZip {
@@ -55,12 +48,15 @@ extern void bgzf_uncompress_vb (VBlockP vb);
 extern void bgzf_uncompress_one_block (VBlockP vb, BgzfBlockZip *bb);
 extern void bgzf_reread_uncompress_vb_as_prescribed (VBlockP vb, FILE *file);
 extern void bgzf_compress_bgzf_section (void);
-extern struct FlagsBgzf bgzf_get_compression_level (rom filename, bytes comp_block, uint32_t comp_block_size, uint32_t uncomp_block_size);
 extern void bgzf_zip_advance_index (VBlockP vb, uint32_t line_len);
 extern int64_t bgzf_copy_unconsumed_blocks (VBlockP vb);
 extern void bgzf_zip_init_vb (VBlockP vb);
 extern void bgzf_insert_back_segconf_blocks (VBlockP vb);
 extern void bgzf_return_segconf_blocks (VBlockP vb);
+
+// library / level discovery
+extern void bgzf_initialize_discovery (FileP file);
+extern void bgzf_finalize_discovery (void);
 
 #define consumed_by_prev_vb prm32[0] // bytes of the first BGZF block consumed by the prev VB or txt_header
 #define current_bb_i        prm32[1] // index into vb->bgzf_blocks of first bgzf block of current line

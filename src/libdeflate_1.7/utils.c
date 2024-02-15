@@ -52,7 +52,7 @@ libdeflate_free_do(void *ptr, void *opaque, const char *func, uint32_t code_line
 }
 
 void *
-libdeflate_aligned_malloc(size_t alignment, size_t size, void *opaque)  // function modified by divon
+libdeflate_aligned_malloc_1_7(size_t alignment, size_t size, void *opaque)  // function modified by divon
 {
 	void *ptr = libdeflate_malloc(sizeof(void *) + alignment - 1 + size, opaque);
 	if (ptr) {
@@ -64,14 +64,14 @@ libdeflate_aligned_malloc(size_t alignment, size_t size, void *opaque)  // funct
 }
 
 void
-libdeflate_aligned_free(void *ptr, void *opaque)
+libdeflate_aligned_free_1_7(void *ptr, void *opaque)
 {
 	if (ptr)
 		libdeflate_free(((void **)ptr)[-1], opaque);
 }
 
-LIBDEFLATEEXPORT void LIBDEFLATEAPI
-libdeflate_set_memory_allocator(void *(*malloc_func)(void *, unsigned, unsigned, const char*, uint32_t), // function modified by divon
+LIBDEFLATEEXPORT void LIBDEFLATEAPI_1_7
+libdeflate_set_memory_allocator_1_7 (void *(*malloc_func)(void *, unsigned, unsigned, const char*, uint32_t), // function modified by divon
 				void (*free_func)(void *, void *, const char*, uint32_t))
 {
 	libdeflate_malloc_func = malloc_func;

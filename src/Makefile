@@ -91,7 +91,7 @@ RELEASES = $(DEV_DIR)/private/releases
 DATA     = $(DEV_DIR)/data
 LATEST_SRC = ../../genozip-latest/src
 
-SRC_DIRS = secure zlib bzlib lzma bsc libdeflate htscodecs
+SRC_DIRS = secure zlib bzlib lzma bsc libdeflate_1.7 libdeflate_1.19 libdeflate_1.19/x86 libdeflate_1.19/arm htscodecs
 
 MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.c seg_id.c zip_dyn_int.c     	\
 		  data_types.c bits.c progress.c writer.c zriter.c tar.c chrom.c qname.c tokenizer.c mutex.c threads.c	\
@@ -118,7 +118,7 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.
 		  vblock.c regions.c optimize.c dict_id.c aliases.c hash.c stream.c url.c bases_filter.c dict_io.c		\
 		  recon_plan_io.c version.c huffman.c user_message.c b250.c qname_filter.c
 		  
-		  ZLIB_SRCS  = zlib/gzlib.c zlib/gzread.c zlib/inflate.c zlib/inffast.c zlib/zutil.c zlib/inftrees.c zlib/deflate.c zlib/trees.c
+ZLIB_SRCS  = zlib/gzlib.c zlib/gzread.c zlib/inflate.c zlib/inffast.c zlib/zutil.c zlib/inftrees.c zlib/deflate.c zlib/trees.c
 
 BZLIB_SRCS = bzlib/blocksort.c bzlib/bzlib.c bzlib/compress.c bzlib/crctable.c bzlib/decompress.c bzlib/huffman.c bzlib/randtable.c
 
@@ -128,8 +128,10 @@ BSC_SRCS   = bsc/divsufsort.c bsc/bwt.c bsc/coder.c bsc/libbsc.c bsc/lzp.c bsc/q
 
 HTSCODECS_SRC = htscodecs/rANS_static4x16pr.c htscodecs/rle.c htscodecs/pack.c htscodecs/arith_dynamic.c
 
-DEFLATE_SRCS = libdeflate/deflate_compress.c libdeflate/deflate_decompress.c libdeflate/utils.c libdeflate/x86_cpu_features.c \
-             libdeflate/arm_cpu_features.c libdeflate/crc32.c libdeflate/adler32.c
+LIBDEFLATE_1_7_SRCS = libdeflate_1.7/deflate_compress.c libdeflate_1.7/utils.c  
+
+LIBDEFLATE_1_19_SRCS = libdeflate_1.19/deflate_compress.c libdeflate_1.19/deflate_decompress.c libdeflate_1.19/utils.c \
+			 libdeflate_1.19/x86/cpu_features.c libdeflate_1.19/arm/cpu_features.c libdeflate_1.19/crc32.c libdeflate_1.19/adler32.c
 
 CONDA_DEVS = Makefile ../.gitignore 
 
@@ -142,8 +144,8 @@ CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h al
 			 lookback.h tokenizer.h codec_longr_alg.c gencomp.h dict_io.h recon_plan_io.h tip.h deep.h filename.h stats.h multiplexer.h 	\
 			 reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h bgzf.h coverage.h threads.h local_type.h 					\
 			 arch.h license.h file_types.h data_types.h base64.h txtheader.h writer.h zriter.h bases_filter.h genols.h contigs.h chrom.h 	\
-			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h gff.h bed.h locs.h generic.h 					\
-			 fastq.h fastq_private.h user_message.h mac_compat.h b250.h zip_dyn_int.h qname_filter.h 														\
+			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h gff.h bed.h locs.h generic.h 							\
+			 fastq.h fastq_private.h user_message.h mac_compat.h b250.h zip_dyn_int.h qname_filter.h 										\
 			 zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h zlib/deflate.h zlib/trees.h 			\
 			 zlib/zlib.h zlib/zutil.h																										\
 			 lzma/7zTypes.h lzma/LzFind.h lzma/LzHash.h lzma/LzmaDec.h lzma/LzmaEnc.h 														\
@@ -153,13 +155,19 @@ CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h al
 			 htscodecs/varint2.h htscodecs/utils.h 																							\
 			 bsc/bwt.h bsc/coder.h bsc/divsufsort.h bsc/libbsc.h bsc/lzp.h bsc/platform.h bsc/qlfc_model.h bsc/qlfc.h bsc/rangecoder.h 		\
 			 bsc/tables.h																													\
- 			 libdeflate/adler32_vec_template.h libdeflate/crc32_table.h libdeflate/unaligned.h libdeflate/arm_adler32_impl.h 				\
-			 libdeflate/crc32_vec_template.h libdeflate/x86_adler32_impl.h libdeflate/arm_cpu_features.h libdeflate/decompress_template.h	\
-			 libdeflate/x86_cpu_features.h libdeflate/arm_crc32_impl.h libdeflate/deflate_compress.h libdeflate/x86_crc32_impl.h 			\
-			 libdeflate/arm_matchfinder_impl.h libdeflate/deflate_constants.h libdeflate/x86_crc32_pclmul_template.h 						\
-			 libdeflate/bt_matchfinder.h libdeflate/hc_matchfinder.h libdeflate/x86_decompress_impl.h libdeflate/common_defs.h				\
-			 libdeflate/lib_common.h libdeflate/x86_matchfinder_impl.h libdeflate/compiler_gcc.h libdeflate/libdeflate.h 					\
-			 libdeflate/cpu_features_common.h libdeflate/matchfinder_common.h
+ 			 libdeflate_1.7/unaligned.h libdeflate_1.7/deflate_compress.h libdeflate_1.7/arm_matchfinder_impl.h 							\
+			 libdeflate_1.7/deflate_constants.h libdeflate_1.7/bt_matchfinder.h libdeflate_1.7/hc_matchfinder.h libdeflate_1.7/common_defs.h\
+			 libdeflate_1.7/lib_common.h libdeflate_1.7/x86_matchfinder_impl.h libdeflate_1.7/compiler_gcc.h libdeflate_1.7/libdeflate.h 	\
+			 libdeflate_1.7/matchfinder_common.h 																							\
+ 			 libdeflate_1.19/adler32_vec_template.h libdeflate_1.19/crc32_table.h libdeflate_1.19/unaligned.h 								\
+			 libdeflate_1.19/arm_adler32_impl.h libdeflate_1.19/crc32_vec_template.h libdeflate_1.19/x86_adler32_impl.h 					\
+			 libdeflate_1.19/arm_cpu_features.h libdeflate_1.19/decompress_template.h libdeflate_1.19/x86_cpu_features.h 					\
+			 libdeflate_1.19/arm_crc32_impl.h libdeflate_1.19/deflate_compress.h libdeflate_1.19/x86_crc32_impl.h 							\
+			 libdeflate_1.19/arm_matchfinder_impl.h libdeflate_1.19/deflate_constants.h libdeflate_1.19/x86_crc32_pclmul_template.h			\
+			 libdeflate_1.19/bt_matchfinder.h libdeflate_1.19/hc_matchfinder.h libdeflate_1.19/x86_decompress_impl.h						\
+			 libdeflate_1.19/common_defs.h libdeflate_1.19/lib_common.h libdeflate_1.19/x86_matchfinder_impl.h								\
+			 libdeflate_1.19/compiler_gcc.h libdeflate_1.19/libdeflate.h libdeflate_1.19/cpu_features_common.h 								\
+			 libdeflate_1.19/matchfinder_common.h
 
 INSTALLERS = ../installers
 
@@ -200,7 +208,7 @@ ifdef Mac # Mac
 	endif
 endif
 
-C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(BSC_SRCS) $(LZMA_SRCS) $(DEFLATE_SRCS) $(HTSCODECS_SRC) 
+C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(BSC_SRCS) $(LZMA_SRCS) $(LIBDEFLATE_1_7_SRCS) $(LIBDEFLATE_1_19_SRCS) $(HTSCODECS_SRC) 
 
 ifdef Linux
 	C_SRCS += $(ONION_SRCS)

@@ -37,7 +37,8 @@ extern bool is_printable[256];
 #define IS_SPACE(str)      str_is_1char(str, ' ')
 #define IS_EQUAL_SIGN(str) str_is_1char(str, '=')
 
-#define TF(s) ((s) ? "true" : "false")
+#define TF(x) ((x) ? "true" : "false")
+#define YN(x) ((x) ? "Yes" : "No")
 #define S(s)  ((s) ? (s) : "(none)")
 
 extern StrText char_to_printable (char c);

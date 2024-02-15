@@ -129,7 +129,7 @@ typedef struct {
         show_index, show_gheader, show_ref_contigs, show_ref_seq,
         show_reference, show_ref_hash, show_ref_index, show_chrom2ref, show_ref_iupacs, show_ranges,
         show_codec, show_cache, show_memory, show_snips,
-        show_alleles, show_bgzf, show_txt_contigs, show_lines,
+        show_alleles, show_bgzf, show_gz, show_txt_contigs, show_lines,
         show_threads, show_uncompress, biopsy, skip_segconf, show_data_type,
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
         debug_LONG, show_qual, debug_qname, debug_read_ctxs, debug_sag, debug_gencomp, debug_lines, debug_latest,
@@ -223,7 +223,7 @@ extern Flags flag;
         flag.show_threads = flag.debug_memory = false;                                                                          \
         flag.show_vblocks = NULL;                                                                                               \
     }                                                                                                                           \
-    flag.test = flag.md5 = flag.show_memory = flag.show_stats = flag.no_header = flag.show_bgzf =                               \
+    flag.test = flag.md5 = flag.show_memory = flag.show_stats = flag.no_header = flag.show_bgzf = flag.show_gz =                               \
     flag.header_one = flag.header_only = flag.regions = flag.show_index = flag.show_dict =                                      \
     flag.show_b250 = flag.show_ref_contigs = flag.list_chroms = flag.count =                                                   \
     flag.downsample = flag.shard = flag.one_vb = flag.one_component = flag.xthreads =                                           \

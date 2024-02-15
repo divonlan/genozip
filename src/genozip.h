@@ -567,8 +567,14 @@ typedef packed_enum {  ENC_NONE = 0, ENC_AES256 = 1, NUM_ENCRYPTION_TYPES } Encr
 #define ENC_NAMES { "NO_ENC", "AES256" }
 
 // note: #pragma pack doesn't affect enums
-typedef packed_enum { BGZF_LIBDEFLATE, BGZF_ZLIB, NUM_BGZF_LIBRARIES         } BgzfLibraryType; // constants for BGZF FlagsBgzf.library
-#define BGZF_LIB_NAMES                { "libdeflate",    "zlib"                                }
+typedef packed_enum { BGZF_LIBDEFLATE_1_7, BGZF_ZLIB, BGZF_LIBDEFLATE_1_19, NUM_BGZF_LIBRARIES } BgzfLibraryType; // constants for BGZF FlagsBgzf.library
+#define BGZF_LIB_NAMES { "libdeflate_1.7", "zlib",    "libdeflate_1.19"                        }
+
+typedef packed_enum { BGZF_NOT_INITIALIZED=-100, 
+                      BGZF_BY_ZFILE=-1,          // PIZ: use BGZF compression recorded in .genozip file 
+                      BGZF_COMP_LEVEL_DEFAULT=1, // default genounzip BGZF compression level if -z is not specified
+                                                 // 0->14 are valid compression levels
+                      BGZF_COMP_LEVEL_UNKNOWN=15 } BgzfLevel;
 
 #define COMPRESSOR_CALLBACK(func)                                   \
 void func (VBlockP vb,                                              \
@@ -630,8 +636,12 @@ static inline void progress_newline(void) {
 
 static inline void stall (void) { while (1) sleep (1); }
 
+#if !defined(__GNUC__) && !__has_builtin(__builtin_expect)
+#define __builtin_expect(exp,c) (exp)
+#endif
+
 // check for a user error
-#define ASSINP(condition, format, ...)       ( { if (!(condition)) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); if (flags_command_line()) fprintf (stderr, "\n\ncommand: %s\n", flags_command_line()); else fprintf (stderr, "\n"); fflush (stderr); exit_on_error(false); }} )
+#define ASSINP(condition, format, ...)       ( { if (__builtin_expect(!(condition), 0)) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); if (flags_command_line()) fprintf (stderr, "\n\ncommand: %s\n", flags_command_line()); else fprintf (stderr, "\n"); fflush (stderr); exit_on_error(false); }} )
 #define ASSINP0(condition, string)           ASSINP (condition, string "%s", "")
 #define ABORTINP(format, ...)                ( { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); exit_on_error(false);} )
 #define ABORTINP0(string)                    ABORTINP (string "%s", "")
@@ -641,25 +651,25 @@ typedef struct { char s[256]; } StrTime; // long, in case of eg Chinese language
 extern StrTime str_time (void);
 
 #define SUPPORT "\nIf this is unexpected, please contact "EMAIL_SUPPORT".\n"
-#define ASSERT(condition, format, ...)       ( { if (!(condition)) { progress_newline(); fprintf (stderr, "%s Error in %s:%u %s: ", str_time().s, __FUNCLINE, version_str().s); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); fflush (stderr); exit_on_error(true); }} )
+#define ASSERT(condition, format, ...)       ( { if (__builtin_expect (!(condition), 0)) { progress_newline(); fprintf (stderr, "%s Error in %s:%u %s: ", str_time().s, __FUNCLINE, version_str().s); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); fflush (stderr); exit_on_error(true); }} )
 #define ASSERT0(condition, string)           ASSERT (condition, string "%s", "")
 #define ASSERTISNULL(p)                      ASSERT0 (!p, "expecting "#p" to be NULL")
 #define ASSERTNOTNULL(p)                     ASSERT0 (p, #p" is NULL")
 #define ASSERTNOTZEROn(n,name)               ASSERT ((n), "%s: %s=0", (name), #n)
 #define ASSERTNOTZERO(n)                     ASSERT ((n), "%s=0", #n)
 #define ASSERTISZERO(n)                      ASSERT (!(n), "%s!=0", #n)
-#define ASSERTW(condition, format, ...)      ( { if (!(condition) && !flag.quiet) { progress_newline(); fprintf (stderr, "\n%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n\n"); fflush (stderr); }} )
-#define WARN_IF(condition, format, ...)      ( { if ( (condition) && !flag.explicit_quiet) { progress_newline(); fprintf (stderr, "%s: WARNING: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n\n"); fflush (stderr); }} )
+#define ASSERTW(condition, format, ...)      ( { if (__builtin_expect (!(condition), 0) && !flag.quiet) { progress_newline(); fprintf (stderr, "\n%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n\n"); fflush (stderr); }} )
+#define WARN_IF(condition, format, ...)      ( { if ( __builtin_expect ((condition), 0) && !flag.explicit_quiet) { progress_newline(); fprintf (stderr, "%s: WARNING: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n\n"); fflush (stderr); }} )
 #define ASSERTW0(condition, string)          ASSERTW ((condition), string "%s", "")
 #define WARN_IF0(condition, string)          WARN_IF ((condition), string "%s", "")
-#define ASSERTWD(condition, format, ...)     ( { if (!(condition) && flag.debug && !flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); }} )
+#define ASSERTWD(condition, format, ...)     ( { if (__builtin_expect (!(condition), 0) && flag.debug && !flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); }} )
 #define ASSERTWD0(condition, string)         ASSERTWD (condition, string "%s", "")
-#define ASSRET(condition, ret, format, ...)  ( { if (!(condition)) { progress_newline(); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); return ret; }} )
+#define ASSRET(condition, ret, format, ...)  ( { if (__builtin_expect (!(condition), 0)) { progress_newline(); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); return ret; }} )
 #define ASSRET0(condition, ret, string)      ASSRET (condition, ret, string "%s", "")
 #define ASSERTRUNONCE(string)                ( { static bool once = false; /* this code path should run only once */ \
                                                  ASSINP0 (!__atomic_test_and_set (&once, __ATOMIC_RELAXED), string); } )
-#define RETURNW(condition, ret, format, ...) ( { if (!(condition)) { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); } return ret; }} )
-#define RETURNW0(condition, ret, string)     ( { if (!(condition)) { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: %s\n", global_cmd, string); fflush (stderr); } return ret; } } )
+#define RETURNW(condition, ret, format, ...) ( { if (__builtin_expect (!(condition), 0)) { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); } return ret; }} )
+#define RETURNW0(condition, ret, string)     ( { if (__builtin_expect (!(condition), 0)) { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: %s\n", global_cmd, string); fflush (stderr); } return ret; } } )
 #define ABORT(format, ...)                   ( { progress_newline(); fprintf (stderr, "%s Error in %s:%u: ", str_time().s, __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); fflush (stderr); exit_on_error(true);} )
 #define ABORT0(string)                       ABORT (string "%s", "")
 #define WARN(format, ...)                    ( { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); } } )
@@ -672,7 +682,7 @@ extern StrTime str_time (void);
 
 #define WARN_ONCE0(string)                   WARN_ONCE (string "%s", "")
 
-#define ASSGOTO(condition, format, ...)      ( { if (!(condition)) { progress_newline(); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); goto error; }} )
+#define ASSGOTO(condition, format, ...)      ( { if (__builtin_expect (!(condition), 0)) { progress_newline(); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); goto error; }} )
 #define ASSGOTO0(condition, string)          ASSGOTO ((condition), string "%s", "")
 
 // exit codes

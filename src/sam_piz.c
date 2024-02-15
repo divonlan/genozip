@@ -20,7 +20,7 @@
 #include "writer.h"
 #include "codec.h"
 #include "qname_filter.h"
-#include "libdeflate/libdeflate.h"
+#include "libdeflate_1.19/libdeflate.h"
 
 void sam_piz_xtra_line_data (VBlockP vb_)
 {

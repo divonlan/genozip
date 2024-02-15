@@ -8,7 +8,7 @@
 
 #include "sam_private.h"
 #include "txtfile.h"
-#include "libdeflate/libdeflate.h"
+#include "libdeflate_1.19/libdeflate.h"
 
 void bam_seg_initialize (VBlockP vb)
 {

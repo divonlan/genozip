@@ -16,7 +16,7 @@
 #include "strings.h"
 #include "compressor.h"
 #include "zfile.h"
-#include "libdeflate/libdeflate.h"
+#include "libdeflate_1.19/libdeflate.h"
 
 // compresses data - either a contiguous block or one line at a time. If both are NULL that there is no data to compress.
 // returns data_compressed_len

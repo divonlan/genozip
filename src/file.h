@@ -123,6 +123,7 @@ typedef struct File {
     Buffer unconsumed_bgzf_blocks;     // ZIP: unconsumed or partially consumed bgzf blocks - moved to the next VB
     Buffer bgzf_isizes;                // ZIP/PIZ: uncompressed size of the bgzf blocks in which this txt file is compressed (in BGEN16)
     Buffer bgzf_starts;                // ZIP: offset in txt_file of each BGZF block
+    Mutex bgzf_flags_mutex;            // ZIP: txt_file: protect txt_file->bgzf_flags
     struct FlagsBgzf bgzf_flags;       // corresponds to SectionHeader.flags in SEC_BGZF
     uint8_t bgzf_signature[3];         // PIZ: 3 LSB of size of source BGZF-compressed file, as passed in SectionHeaderTxtHeader.codec_info
     
@@ -226,7 +227,7 @@ extern FileP file_open_z_read (rom filename);
 extern FileP file_open_z_write (rom filename, FileMode mode, DataType data_type /* only needed for WRITE */);
 extern rom file_get_z_run_time (FileP file);
 extern FileP file_open_txt_read (rom filename);
-extern FileP file_open_txt_write (rom filename, DataType data_type, int bgzf_level);
+extern FileP file_open_txt_write (rom filename, DataType data_type, BgzfLevel bgzf_level);
 extern void file_close (FileP *file_p);
 extern void file_write_txt (const void *data, unsigned len);
 extern bool file_seek (FileP file, int64_t offset, int whence, rom mode, FailType soft_fail); // SEEK_SET, SEEK_CUR or SEEK_END

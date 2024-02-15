@@ -21,7 +21,7 @@ extern PizDisQname piz_dis_qname (VBlockP vb); // for ASSPIZ
 extern void asspiz_text (VBlockP vb, FUNCLINE);
 
 #define ASSPIZ(condition, format, ...) ({ \
-    if (!(condition)) { \
+    if (__builtin_expect (!(condition), 0)) { \
         DO_ONCE { /* first thread to fail at this point prints error and starts exit flow, other threads stall */ \
             asspiz_text ((VBlockP)vb, __FUNCLINE);\
             fprintf (stderr, format "\n", __VA_ARGS__); \
