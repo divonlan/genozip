@@ -636,7 +636,7 @@ static inline void progress_newline(void) {
 
 static inline void stall (void) { while (1) sleep (1); }
 
-#if !defined(__GNUC__) && !__has_builtin(__builtin_expect)
+#if !defined(__GNUC__) // && !__has_builtin(__builtin_expect)
 #define __builtin_expect(exp,c) (exp)
 #endif
 
