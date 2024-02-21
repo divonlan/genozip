@@ -114,8 +114,8 @@ else
 	endif
 
 	ifdef Linux
-		CFLAGS += -march=nocona # similar to conda - relatively low optimization, since different hosts in a cluster might have different capabilities. change to -march=native if compiling for a specific machine
-		CFLAGS += -mtune=intel  # see https://gcc.gnu.org/onlinedocs/gcc/x86-Options.html
+		CFLAGS += -march=nocona  # same as conda - relatively low optimization, since different hosts in a cluster might have different capabilities. change to -march=native if compiling for a specific machine
+		CFLAGS += -mtune=haswell # same as conda see https://gcc.gnu.org/onlinedocs/gcc/x86-Options.html
 	endif
 
 	ifdef Mac
@@ -219,21 +219,32 @@ CONDA_INCS += dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h a
 			libdeflate_1.19/x86/adler32_impl.h libdeflate_1.19/x86/crc32_impl.h libdeflate_1.19/x86/matchfinder_impl.h						\
 			libdeflate_1.19/x86/cpu_features.h libdeflate_1.19/x86/crc32_pclmul_template.h libdeflate_1.19/x86/decompress_impl.h			\
 			libdeflate_1.19/arm/adler32_impl.h libdeflate_1.19/arm/cpu_features.h libdeflate_1.19/arm/crc32_impl.h                          \
-			libdeflate_1.19/arm/matchfinder_impl.h libdeflate_1.19/arm/crc32_pmull_helpers.h libdeflate_1.19/arm/crc32_pmull_wide.h
-        
-INSTALLERS = ../installers
+			libdeflate_1.19/arm/matchfinder_impl.h libdeflate_1.19/arm/crc32_pmull_helpers.h libdeflate_1.19/arm/crc32_pmull_wide.h			\
+			\
+			igzip/bitbuf2.h igzip/crc.h igzip/encode_df.h igzip/flatten_ll.h igzip/huff_codes.h igzip/huffman.h igzip/igzip_checksums.h 	\
+		  	igzip/igzip_level_buf_structs.h igzip/igzip_lib.h igzip/igzip_wrapper.h igzip/repeated_char_result.h igzip/static_inflate.h 	\
+		  	igzip/unaligned.h																												\
+			\
+			igzip/x86_64/bitbuf2.asm igzip/x86_64/data_struct2.asm igzip/x86_64/heap_macros.asm igzip/x86_64/huffman.asm 					\
+			igzip/x86_64/igzip_compare_types.asm igzip/x86_64/igzip_decode_block_stateless.asm igzip/x86_64/igzip_update_histogram.asm 		\
+			igzip/x86_64/inflate_data_structs.asm igzip/x86_64/lz0a_const.asm igzip/x86_64/multibinary.asm igzip/x86_64/options.asm 		\
+			igzip/x86_64/reg_sizes.asm igzip/x86_64/stdmac.asm																				\
+			\
+			igzip/aarch64/aarch64_label.h igzip/aarch64/aarch64_multibinary.h igzip/aarch64/bitbuf2_aarch64.h 								\
+			igzip/aarch64/crc32_aarch64_common.h igzip/aarch64/crc32_gzip_refl_pmull.h igzip/aarch64/crc32_norm_common_pmull.h 				\
+			igzip/aarch64/crc32_refl_common_pmull.h igzip/aarch64/crc_common_pmull.h igzip/aarch64/data_struct_aarch64.h 					\
+			igzip/aarch64/huffman_aarch64.h igzip/aarch64/lz0a_const_aarch64.h igzip/aarch64/options_aarch64.h 								\
+			igzip/aarch64/stdmac_aarch64.h igzip/aarch64/crc32_common_crc_ext_cortex_a72.S igzip/aarch64/crc32_common_mix_neoverse_n1.S 	\
+			igzip/aarch64/crc32_gzip_refl_3crc_fold.S igzip/aarch64/crc32_gzip_refl_crc_ext.S igzip/aarch64/crc32_gzip_refl_pmull.S			\
+			igzip/aarch64/crc32_mix_default.S igzip/aarch64/crc32_mix_default_common.S igzip/aarch64/crc32_mix_neoverse_n1.S 				\
+			igzip/aarch64/crc32c_mix_default.S igzip/aarch64/crc32c_mix_neoverse_n1.S igzip/aarch64/crc_multibinary_arm.S 
 
-IGZIP_DIR=igzip
+INSTALLERS := ../installers
+
 IGZIP_SRCS = igzip/igzip.c igzip/hufftables_c.c igzip/igzip_base.c igzip/igzip_icf_base.c igzip/adler32_base.c igzip/flatten_ll.c 			\
 		  igzip/encode_df.c igzip/igzip_icf_body.c igzip/crc_base.c igzip/huff_codes.c igzip/igzip_inflate.c 
 
-CONDA_INCS += igzip/bitbuf2.h igzip/crc.h igzip/encode_df.h igzip/flatten_ll.h igzip/huff_codes.h igzip/huffman.h igzip/igzip_checksums.h 	\
-		  igzip/igzip_level_buf_structs.h igzip/igzip_lib.h igzip/igzip_wrapper.h igzip/repeated_char_result.h igzip/static_inflate.h 		\
-		  igzip/unaligned.h
-
-ifdef x86_64
-IGZIP_ARCH_DIR = $(IGZIP_DIR)/x86_64
-IGZIP_ARCH_ASM_SRCS = igzip/x86_64/igzip_body.asm igzip/x86_64/igzip_finish.asm igzip/x86_64/igzip_icf_body_h1_gr_bt.asm 					\
+IGZIP_X86_ASM_SRCS := igzip/x86_64/igzip_body.asm igzip/x86_64/igzip_finish.asm igzip/x86_64/igzip_icf_body_h1_gr_bt.asm 					\
 		  igzip/x86_64/igzip_icf_finish.asm igzip/x86_64/rfc1951_lookup.asm igzip/x86_64/adler32_sse.asm 									\
 		  igzip/x86_64/adler32_avx2_4.asm igzip/x86_64/igzip_multibinary.asm igzip/x86_64/igzip_update_histogram_01.asm 					\
 		  igzip/x86_64/igzip_update_histogram_04.asm igzip/x86_64/igzip_decode_block_stateless_01.asm 										\
@@ -243,41 +254,22 @@ IGZIP_ARCH_ASM_SRCS = igzip/x86_64/igzip_body.asm igzip/x86_64/igzip_finish.asm 
 		  igzip/x86_64/igzip_set_long_icf_fg_06.asm igzip/x86_64/crc_multibinary.asm igzip/x86_64/crc32_gzip_refl_by8.asm 					\
 		  igzip/x86_64/crc32_gzip_refl_by8_02.asm igzip/x86_64/crc32_gzip_refl_by16_10.asm
 
-IGZIP_ASM_OBJS := $(addprefix $(OBJDIR)/,$(IGZIP_ARCH_ASM_SRCS:.asm=.o)) 
-IGZIP_ASM_DEPS := $(addprefix $(OBJDIR)/,$(IGZIP_ARCH_ASM_SRCS:.asm=.d)) 
-
-CONDA_INCS += igzip/x86_64/bitbuf2.asm igzip/x86_64/data_struct2.asm igzip/x86_64/heap_macros.asm igzip/x86_64/huffman.asm 					\
-		  igzip/x86_64/igzip_compare_types.asm igzip/x86_64/igzip_decode_block_stateless.asm igzip/x86_64/igzip_update_histogram.asm 		\
-		  igzip/x86_64/inflate_data_structs.asm igzip/x86_64/lz0a_const.asm igzip/x86_64/multibinary.asm igzip/x86_64/options.asm 			\
-		  igzip/x86_64/reg_sizes.asm igzip/x86_64/stdmac.asm
-endif
-
-ifdef aarch64
-IGZIP_ARCH_DIR = $(IGZIP_DIR)/aarch64
-IGZIP_ARCH_ASM_SRCS = igzip/aarch64/igzip_inflate_multibinary_arm64.S igzip/aarch64/igzip_multibinary_arm64.S 								\
+IGZIP_ARM_ASM_SRCS := igzip/aarch64/igzip_inflate_multibinary_arm64.S igzip/aarch64/igzip_multibinary_arm64.S 								\
 		  igzip/aarch64/igzip_isal_adler32_neon.S igzip/aarch64/igzip_deflate_body_aarch64.S igzip/aarch64/igzip_deflate_finish_aarch64.S	\
 		  igzip/aarch64/isal_deflate_icf_body_hash_hist.S igzip/aarch64/isal_deflate_icf_finish_hash_hist.S									\
 		  igzip/aarch64/igzip_set_long_icf_fg.S igzip/aarch64/encode_df.S igzip/aarch64/isal_update_histogram.S igzip/aarch64/gen_icf_map.S \
 		  igzip/aarch64/igzip_deflate_hash_aarch64.S igzip/aarch64/igzip_decode_huffman_code_block_aarch64.S 
 
-IGZIP_SRCS += igzip/aarch64/crc_aarch64_dispatcher.c igzip/aarch64/igzip_multibinary_aarch64_dispatcher.c igzip/proc_heap_base.c
-
-IGZIP_ASM_OBJS := $(addprefix $(OBJDIR)/,$(IGZIP_ARCH_ASM_SRCS:.S=.o)) 
-IGZIP_ASM_DEPS := $(addprefix $(OBJDIR)/,$(IGZIP_ARCH_ASM_SRCS:.S=.d)) 
-
-CONDA_INCS += igzip/aarch64/aarch64_label.h igzip/aarch64/aarch64_multibinary.h igzip/aarch64/bitbuf2_aarch64.h 							\
-		  igzip/aarch64/crc32_aarch64_common.h igzip/aarch64/crc32_gzip_refl_pmull.h igzip/aarch64/crc32_norm_common_pmull.h 				\
-		  igzip/aarch64/crc32_refl_common_pmull.h igzip/aarch64/crc_common_pmull.h igzip/aarch64/data_struct_aarch64.h 						\
-		  igzip/aarch64/huffman_aarch64.h igzip/aarch64/lz0a_const_aarch64.h igzip/aarch64/options_aarch64.h igzip/aarch64/stdmac_aarch64.h \
-		  igzip/aarch64/crc32_common_crc_ext_cortex_a72.S igzip/aarch64/crc32_common_mix_neoverse_n1.S 										\
-		  igzip/aarch64/crc32_gzip_refl_3crc_fold.S igzip/aarch64/crc32_gzip_refl_crc_ext.S igzip/aarch64/crc32_gzip_refl_pmull.S			\
-		  igzip/aarch64/crc32_mix_default.S igzip/aarch64/crc32_mix_default_common.S igzip/aarch64/crc32_mix_neoverse_n1.S 					\
-		  igzip/aarch64/crc32c_mix_default.S igzip/aarch64/crc32c_mix_neoverse_n1.S igzip/aarch64/crc_multibinary_arm.S 
+ifdef x86_64
+IGZIP_ARCH_DIR := igzip/x86_64
 endif
-
+ifdef aarch64
+IGZIP_ARCH_DIR := igzip/aarch64
+IGZIP_SRCS     += igzip/aarch64/crc_aarch64_dispatcher.c igzip/aarch64/igzip_multibinary_aarch64_dispatcher.c igzip/proc_heap_base.c
+endif
 ifdef noarch
-IGZIP_ARCH_DIR = $(IGZIP_DIR)/noarch
-IGZIP_SRCS += igzip/noarch/igzip_base_aliases.c igzip/noarch/proc_heap_base.c igzip/noarch/crc_base_aliases.c
+IGZIP_ARCH_DIR := igzip/noarch
+IGZIP_SRCS     += igzip/noarch/igzip_base_aliases.c igzip/noarch/proc_heap_base.c igzip/noarch/crc_base_aliases.c
 endif
 
 ifeq ($(CC),cl) # Microsoft Visual C
@@ -311,16 +303,34 @@ endif
 C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(BSC_SRCS) $(LZMA_SRCS) $(LIBDEFLATE_1_7_SRCS) $(LIBDEFLATE_1_19_SRCS) \
 		 $(HTSCODECS_SRC) $(IGZIP_SRCS)	
 
+X86_SRCS = $(IGZIP_X86_ASM_SRCS) # note: these are the sources which pass to the compiler - they may include other .asm files. These other files are only included in CONDA_INCS.
+
+ARM_SRCS = $(IGZIP_ARM_ASM_SRCS)
+
 ASFLAGS += -I$(IGZIP_ARCH_DIR)
 
 # ifdef Linux
 # 	C_SRCS += $(ONION_SRCS)
 # endif
  
-OBJS       := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.o)) $(IGZIP_ASM_OBJS)
-DEBUG_OBJS := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.debug-o)) $(IGZIP_ASM_OBJS)
-OPT_OBJS   := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.opt-o)) $(IGZIP_ASM_OBJS)   # optimized but with debug info, for debugging issues that only manifest with compiler optimization
-DEPS       := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.d)) $(IGZIP_ASM_DEPS)
+OBJS       := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.o)) 
+DEBUG_OBJS := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.debug-o)) 
+OPT_OBJS   := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.opt-o))    # optimized but with debug info, for debugging issues that only manifest with compiler optimization
+DEPS       := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.d)) 
+
+ifdef x86_64
+OBJS       += $(addprefix $(OBJDIR)/,$(X86_SRCS:.asm=.o)) 
+DEBUG_OBJS += $(addprefix $(OBJDIR)/,$(X86_SRCS:.asm=.o)) 
+OPT_OBJS   += $(addprefix $(OBJDIR)/,$(X86_SRCS:.asm=.o)) 
+DEPS       += $(addprefix $(OBJDIR)/,$(X86_SRCS:.asm=.d)) 
+endif
+
+ifdef aarch64
+OBJS       += $(addprefix $(OBJDIR)/,$(ARM_SRCS:.S=.o)) 
+DEBUG_OBJS += $(addprefix $(OBJDIR)/,$(ARM_SRCS:.S=.o)) 
+OPT_OBJS   += $(addprefix $(OBJDIR)/,$(ARM_SRCS:.S=.o)) 
+DEPS       += $(addprefix $(OBJDIR)/,$(ARM_SRCS:.S=.d)) 
+endif
 
 EXECUTABLES       = genozip$(EXE)       genounzip$(EXE)       genocat$(EXE)       genols$(EXE)
 DEBUG_EXECUTABLES = genozip-debug$(EXE) genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE)
@@ -366,7 +376,7 @@ $(OBJDIR)/distribution.%.o : distribution.c
 
 $(OBJDIR)/%.o: %.c $(OBJDIR)/%.d
 	@echo Compiling $<
-	$(CC) -c -o $@ $< $(CFLAGS) 
+	@$(CC) -c -o $@ $< $(CFLAGS) 
 
 $(OBJDIR)/%.debug-o: %.c $(OBJDIR)/%.d
 	@echo "Compiling $< (debug)"
@@ -537,7 +547,7 @@ increment-version: # note: target name is not "version.h" so this is not invoked
 	@echo "Incrementing version.h"
 	@bash $(SCRIPTS)/increment-version.sh
 
-.archive.tar.gz : $(C_SRCS) $(CONDA_LIC_OBJS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) ../LICENSE.txt
+.archive.tar.gz : $(C_SRCS) $(X86_SRCS) $(ARM_SRCS) $(CONDA_LIC_OBJS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) ../LICENSE.txt
 	@echo Creating github tag genozip-$(version) and archive
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@git push > /dev/null
