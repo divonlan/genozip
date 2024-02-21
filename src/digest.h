@@ -57,7 +57,7 @@ typedef union {
 #define DIGEST_CONTEXT_NONE (DigestContext){}
 
 extern Digest digest_snapshot (const DigestContext *ctx, rom msg);
-extern Digest digest_txt_header (BufferP data, Digest piz_expected_digest);
+extern Digest digest_txt_header (BufferP data, Digest piz_expected_digest, CompIType comp_i);
 extern bool digest_one_vb (VBlockP vb, bool is_compute_thread, BufferP data);
 extern void digest_piz_verify_one_txt_file (unsigned txt_file_i);
 extern bool digest_piz_has_it_failed (void);
@@ -82,4 +82,4 @@ extern void digest_verify_ref_is_equal (const Reference ref, rom header_ref_file
 // backward compatability note: in v8 files compressed without --md5 or --test, we had no digest. starting v9, we have Adler32
 #define piz_need_digest (z_file->z_flags.has_digest && !flag.piz_txt_modified && !flag.genocat_no_reconstruct && !flag_loading_auxiliary) 
 
-#define zip_need_digest (!flag.make_reference && !flag.zip_txt_modified && !flag.biopsy && flag.biopsy_line.line_i == NO_LINE)
+#define zip_need_digest (!flag.make_reference && !flag.zip_txt_modified && !flag.biopsy && flag.no_biopsy_line)

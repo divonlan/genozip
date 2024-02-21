@@ -203,8 +203,11 @@ void profiler_add_evb_and_print_report (void)
             PRINT (codec_pacb_reconstruct, 2);
         }
         
-        if (profile.nanosecs.bgzf_compute_thread)
-            iprintf ("GENOUNZIP bgzf threads: %s\n", str_int_commas (ms(profile.nanosecs.bgzf_compute_thread)).s);
+        if (profile.nanosecs.bgzf_compute_thread) {
+            iprintf ("GENOUNZIP BGZF threads: %s\n", str_int_commas (ms(profile.nanosecs.bgzf_compute_thread)).s);
+            PRINT (bgzf_compute_thread, 1);
+            PRINT (bgzf_compress_one_block, 2);
+        }
     }
 
     else { // compress
@@ -233,6 +236,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (piz_read_all_ctxs, 2);
         PRINT (txtfile_read_vblock, 1);
         PRINT (read, 2);
+        PRINT (txtfile_read_block_zlib, 3);
         PRINT (txtfile_read_block_gz, 3);
         PRINT (txtfile_read_block_bz2, 3);
         PRINT (txtfile_read_block_bgzf, 3);
@@ -368,14 +372,15 @@ void profiler_add_evb_and_print_report (void)
         PRINT (sam_zip_prim_ingest_vb, 1);
         PRINT (digest, 1);
     }    
-        // ZIP and PIZ compute thread
-        PRINT (bgzf_compute_thread, 1);
-        PRINT (buf_alloc_compute, 1);
-        PRINT (buflist_add_buf, 2);
-        PRINT (buf_destroy_do_do_compute, 1);
-        PRINT (buf_free_compute, 1);
-        PRINT (buflist_remove_buf, 2)
-        PRINT (buf_overlay_do, 1);
+    
+    // ZIP and PIZ compute thread
+    iprint0 ("COMPUTE THREADS ADMIN\n");
+    PRINT (buf_alloc_compute, 1);
+    PRINT (buflist_add_buf, 2);
+    PRINT (buf_destroy_do_do_compute, 1);
+    PRINT (buf_free_compute, 1);
+    PRINT (buflist_remove_buf, 2)
+    PRINT (buf_overlay_do, 1);
 
     PRINT (file_open_z, 0);
     PRINT (file_close, 0);

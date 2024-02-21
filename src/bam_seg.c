@@ -492,7 +492,7 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     // case: biopsy (only arrives here in MAIN VBs if gencomp) biopsy_line: 
     // we just need to pass sam_seg_is_gc_line and we're done
     if ((flag.biopsy && !segconf.running) ||
-        (flag.biopsy_line.line_i != NO_LINE && sam_seg_test_biopsy_line (VB, alignment, block_size + 4)) )
+        (flag.has_biopsy_line && sam_seg_test_biopsy_line (VB, alignment, block_size + 4)) )
         goto done;  
 
     sam_cigar_binary_to_textual (vb, n_cigar_op, cigar, &vb->textual_cigar); // re-write BAM format CIGAR as SAM textual format in vb->textual_cigar

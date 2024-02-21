@@ -925,7 +925,7 @@ static FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt)
             break;
 
         case SEC_BGZF:
-            sprintf (str.s, "library=%s level=%u has_eof=%u", bgzf_library_name(f.bgzf.library), f.bgzf.level, f.bgzf.has_eof_block); 
+            sprintf (str.s, "library=%s level=%u has_eof=%u", bgzf_library_name(f.bgzf.library, false), f.bgzf.level, f.bgzf.has_eof_block); 
             break;
 
         case SEC_LOCAL:
@@ -1194,7 +1194,7 @@ void noreturn genocat_show_headers (rom z_filename)
     z_file = file_open_z_read (z_filename);    
     SectionHeaderGenozipHeader header;
 
-    flag.genocat_no_ref_file = true;
+    flag.dont_load_ref_file = true;
 
     TEMP_FLAG (show_headers, 0);
     TEMP_FLAG (genocat_no_reconstruct, 1);

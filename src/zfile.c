@@ -644,12 +644,12 @@ static void zfile_read_genozip_header_handle_ref_info (ConstSectionHeaderGenozip
 
             rom ref_filename = zfile_read_genozip_header_get_ref_filename (header->ref_filename);
 
-            if (!flag.genocat_no_ref_file && ref_filename) {
+            if (!flag.dont_load_ref_file && ref_filename) {
                 WARN ("Note: using the reference file %s. You can override this with --reference or $GENOZIP_REFERENCE", ref_filename);
                 ref_set_reference (gref, ref_filename, REF_EXTERNAL, false);
             }
             else 
-                ASSINP (flag.genocat_no_ref_file, "Please use --reference to specify the path to the %sreference file. Original path was: %.*s",
+                ASSINP (flag.dont_load_ref_file, "Please use --reference to specify the path to the %sreference file. Original path was: %.*s",
                         (Z_DT(CHAIN) ? "LUFT (target) coordinates " : ""), REF_FILENAME_LEN, header->ref_filename);
         }
 
@@ -860,7 +860,7 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header, FailType
         // handle reference file info
         flags_update_piz_no_ref_file();
         
-        if (!flag.genocat_no_ref_file && data_type != DT_REF)
+        if (!flag.dont_load_ref_file && data_type != DT_REF)
             zfile_read_genozip_header_handle_ref_info (header);
 
         buf_free (evb->z_data); // free before ctx_piz_initialize_zctxs that might read aliases - header not valid after freeing
@@ -951,7 +951,7 @@ void zfile_update_compressed_vb_header (VBlockP vb)
     vb_header->z_data_bytes = BGEN32 (vb->z_data.len32);
 
     if (flag_is_show_vblocks (ZIP_TASK_NAME)) 
-        iprintf ("UPDATE_VB_HEADER(id=%d) vb_i=%u comp_i=%u recon_size_prim=%u genozip_size=%u longest_line_len=%u\n",
+        iprintf ("UPDATE_VB_HEADER(id=%d) vb_i=%u comp_i=%u recon_size=%u genozip_size=%u longest_line_len=%u\n",
                  vb->id, vb->vblock_i, vb->comp_i, 
                  BGEN32 (vb_header->recon_size_prim), 
                  BGEN32 (vb_header->z_data_bytes), BGEN32 (vb_header->longest_line_len));

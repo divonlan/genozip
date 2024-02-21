@@ -10,18 +10,62 @@
 # Mingw: http://mingw-w64.org/doku.php 
 # Cygwin: https://www.cygwin.com/
 
+OBJDIR         := objdir         # fallback if not win, linux, mac
+OBJDIR_LINUX   := objdir.linux
+OBJDIR_WINDOWS := objdir.windows
+OBJDIR_MAC     := objdir.mac
+
+
 ifeq ($(OS),Windows_NT)
 	Windows := 1
+	OBJDIR=$(OBJDIR_WINDOWS)
+	WSL=wsl
 else
 	uname := $(shell uname -s)
 
 	ifeq ($(uname),Linux)
 		Linux := 1
+		OBJDIR=$(OBJDIR_LINUX)
 	endif
 
     ifeq ($(uname),Darwin) # Mac
 		Mac := 1
+		OBJDIR=$(OBJDIR_MAC)
     endif
+endif
+
+# note: modern nasm/yasm have AS_FEATURE_LEVEL=10. HAVE_AS_KNOWS_AVX512 is true if level 10.
+ASFLAGS = -DAS_FEATURE_LEVEL=10 -DHAVE_AS_KNOWS_AVX512
+
+CPU = $(shell uname -m | sed -e 's/amd/x86_/')
+
+ifeq ($(CPU),x86_64) # or amd64
+	AS = nasm
+
+	ifdef Windows
+		x86_64 := 1
+		ASFLAGS += -f win64
+	endif
+
+	ifdef Linux
+		x86_64 := 1
+		ASFLAGS += -f elf64 -DINTEL_CET_ENABLED
+	endif
+
+	ifdef Mac
+		# Mac is not tested yet with .asm - fix this after testing
+		noarch := 1
+# 		x86_64 := 1   
+#		ASFLAGS += -f macho64 --prefix=_
+	endif	
+else 
+	ifeq ($(CPU),aarch64) # ARM 64
+		aarch64 := 1
+		AS = $(CC) -D__ASSEMBLY__ -c
+		DEBUGFLAGS_AS = -g 
+	else 
+		noarch := 1
+	endif
 endif
 
 ifndef_any_of = $(filter undefined,$(foreach v,$(1),$(origin $(v))))
@@ -32,13 +76,13 @@ IS_CONDA=1
 endif
 
 LDFLAGS    += -lpthread -lm 
-CFLAGS     += -Wall -D_LARGEFILE64_SOURCE=1 -D_7ZIP_ST -D_GNU_SOURCE -std=gnu11 -fms-extensions 
-OPTFLAGS   += -Ofast 
+CFLAGS     += -Wall -D_LARGEFILE64_SOURCE=1 -D_7ZIP_ST -D_GNU_SOURCE -std=gnu11 -fms-extensions
+OPTFLAGS   += -O3 
 DEBUGFLAGS += -DDEBUG -ggdb3 -O0  
 
 ifdef IS_CONDA 
 	DISTOBJ = $(OBJDIR)/distribution.conda.o # note: matches the name in version.c 
-	CFLAGS += -Ofast 
+	CFLAGS += -O3 
 
 	ifdef Windows
 		CC=gcc # in Windows, override conda's default Visual C with gcc 
@@ -61,6 +105,7 @@ else
 		CC=$(GCC) 
 	else
 		CC=gcc
+
 	endif
 
 	# set -march. note: if conda, we leave it to conda to set
@@ -91,7 +136,8 @@ RELEASES = $(DEV_DIR)/private/releases
 DATA     = $(DEV_DIR)/data
 LATEST_SRC = ../../genozip-latest/src
 
-SRC_DIRS = secure zlib bzlib lzma bsc libdeflate_1.7 libdeflate_1.19 libdeflate_1.19/x86 libdeflate_1.19/arm htscodecs
+SRC_DIRS = secure zlib bzlib lzma bsc libdeflate_1.7 libdeflate_1.19 libdeflate_1.19/x86 libdeflate_1.19/arm 	\
+		  htscodecs igzip igzip/aarch64 igzip/x86_64 igzip/noarch
 
 MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.c seg_id.c zip_dyn_int.c     	\
 		  data_types.c bits.c progress.c writer.c zriter.c tar.c chrom.c qname.c tokenizer.c mutex.c threads.c	\
@@ -118,7 +164,7 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.
 		  vblock.c regions.c optimize.c dict_id.c aliases.c hash.c stream.c url.c bases_filter.c dict_io.c		\
 		  recon_plan_io.c version.c huffman.c user_message.c b250.c qname_filter.c
 		  
-ZLIB_SRCS  = zlib/gzlib.c zlib/gzread.c zlib/inflate.c zlib/inffast.c zlib/zutil.c zlib/inftrees.c zlib/deflate.c zlib/trees.c
+ZLIB_SRCS  = zlib/gzlib.c zlib/zutil.c zlib/deflate.c zlib/trees.c
 
 BZLIB_SRCS = bzlib/blocksort.c bzlib/bzlib.c bzlib/compress.c bzlib/crctable.c bzlib/decompress.c bzlib/huffman.c bzlib/randtable.c
 
@@ -130,55 +176,106 @@ HTSCODECS_SRC = htscodecs/rANS_static4x16pr.c htscodecs/rle.c htscodecs/pack.c h
 
 LIBDEFLATE_1_7_SRCS = libdeflate_1.7/deflate_compress.c libdeflate_1.7/utils.c  
 
-LIBDEFLATE_1_19_SRCS = libdeflate_1.19/deflate_compress.c libdeflate_1.19/deflate_decompress.c libdeflate_1.19/utils.c \
-			 libdeflate_1.19/x86/cpu_features.c libdeflate_1.19/arm/cpu_features.c libdeflate_1.19/crc32.c libdeflate_1.19/adler32.c
+LIBDEFLATE_1_19_SRCS = libdeflate_1.19/deflate_compress.c libdeflate_1.19/deflate_decompress.c libdeflate_1.19/utils.c 						\
+		  libdeflate_1.19/x86/cpu_features.c libdeflate_1.19/arm/cpu_features.c libdeflate_1.19/crc32.c libdeflate_1.19/adler32.c
 
 CONDA_DEVS = Makefile ../.gitignore 
 
 CONDA_DOCS = ../LICENSE.txt ../AUTHORS ../README.md
 
-CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h aliases.h txtfile.h zip.h bits.h progress.h website.h 		\
-             endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h huffman.h 				\
-             buffer.h buf_struct.h buf_list.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h 	\
-             crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h qname.h qname_flavors.h codec.h  		\
-			 lookback.h tokenizer.h codec_longr_alg.c gencomp.h dict_io.h recon_plan_io.h tip.h deep.h filename.h stats.h multiplexer.h 	\
-			 reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h bgzf.h coverage.h threads.h local_type.h 					\
-			 arch.h license.h file_types.h data_types.h base64.h txtheader.h writer.h zriter.h bases_filter.h genols.h contigs.h chrom.h 	\
-			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h gff.h bed.h locs.h generic.h 							\
-			 fastq.h fastq_private.h user_message.h mac_compat.h b250.h zip_dyn_int.h qname_filter.h 										\
-			 zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h zlib/deflate.h zlib/trees.h 			\
-			 zlib/zlib.h zlib/zutil.h																										\
-			 lzma/7zTypes.h lzma/LzFind.h lzma/LzHash.h lzma/LzmaDec.h lzma/LzmaEnc.h 														\
-			 bzlib/bzlib.h bzlib/bzlib_private.h																							\
-			 htscodecs/rANS_static4x16.h htscodecs/rle.h htscodecs/pack.h htscodecs/arith_dynamic.h htscodecs/c_simple_model.h				\
-			 htscodecs/rANS_word.h htscodecs/htscodecs_endian.h htscodecs/rANS_word.h htscodecs/utils.h htscodecs/varint.h 					\
-			 htscodecs/varint2.h htscodecs/utils.h 																							\
-			 bsc/bwt.h bsc/coder.h bsc/divsufsort.h bsc/libbsc.h bsc/lzp.h bsc/platform.h bsc/qlfc_model.h bsc/qlfc.h bsc/rangecoder.h 		\
-			 bsc/tables.h																													\
- 			 libdeflate_1.7/unaligned.h libdeflate_1.7/deflate_compress.h libdeflate_1.7/arm_matchfinder_impl.h 							\
-			 libdeflate_1.7/deflate_constants.h libdeflate_1.7/bt_matchfinder.h libdeflate_1.7/hc_matchfinder.h libdeflate_1.7/common_defs.h\
-			 libdeflate_1.7/lib_common.h libdeflate_1.7/x86_matchfinder_impl.h libdeflate_1.7/compiler_gcc.h libdeflate_1.7/libdeflate.h 	\
-			 libdeflate_1.7/matchfinder_common.h 																							\
- 			 libdeflate_1.19/adler32_vec_template.h libdeflate_1.19/crc32_table.h libdeflate_1.19/unaligned.h 								\
-			 libdeflate_1.19/arm_adler32_impl.h libdeflate_1.19/crc32_vec_template.h libdeflate_1.19/x86_adler32_impl.h 					\
-			 libdeflate_1.19/arm_cpu_features.h libdeflate_1.19/decompress_template.h libdeflate_1.19/x86_cpu_features.h 					\
-			 libdeflate_1.19/arm_crc32_impl.h libdeflate_1.19/deflate_compress.h libdeflate_1.19/x86_crc32_impl.h 							\
-			 libdeflate_1.19/arm_matchfinder_impl.h libdeflate_1.19/deflate_constants.h libdeflate_1.19/x86_crc32_pclmul_template.h			\
-			 libdeflate_1.19/bt_matchfinder.h libdeflate_1.19/hc_matchfinder.h libdeflate_1.19/x86_decompress_impl.h						\
-			 libdeflate_1.19/common_defs.h libdeflate_1.19/lib_common.h libdeflate_1.19/x86_matchfinder_impl.h								\
-			 libdeflate_1.19/compiler_gcc.h libdeflate_1.19/libdeflate.h libdeflate_1.19/cpu_features_common.h 								\
-			 libdeflate_1.19/matchfinder_common.h
+CONDA_INCS += dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h aliases.h txtfile.h zip.h bits.h progress.h website.h 		\
+            endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h huffman.h 					\
+            buffer.h buf_struct.h buf_list.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h 		\
+            crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h qname.h qname_flavors.h codec.h  		\
+		 	lookback.h tokenizer.h codec_longr_alg.c gencomp.h dict_io.h recon_plan_io.h tip.h deep.h filename.h stats.h multiplexer.h 		\
+		 	reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h bgzf.h coverage.h threads.h local_type.h 					\
+			arch.h license.h file_types.h data_types.h base64.h txtheader.h writer.h zriter.h bases_filter.h genols.h contigs.h chrom.h 	\
+			vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h gff.h bed.h locs.h generic.h 							\
+			fastq.h fastq_private.h user_message.h mac_compat.h b250.h zip_dyn_int.h qname_filter.h 										\
+			zlib/gzguts.h zlib/zconf.h zlib/deflate.h zlib/trees.h zlib/zlib.h zlib/zutil.h													\
+			lzma/7zTypes.h lzma/LzFind.h lzma/LzHash.h lzma/LzmaDec.h lzma/LzmaEnc.h 														\
+			bzlib/bzlib.h bzlib/bzlib_private.h																								\
+			htscodecs/rANS_static4x16.h htscodecs/rle.h htscodecs/pack.h htscodecs/arith_dynamic.h htscodecs/c_simple_model.h				\
+			htscodecs/rANS_word.h htscodecs/htscodecs_endian.h htscodecs/rANS_word.h htscodecs/utils.h htscodecs/varint.h 					\
+			htscodecs/varint2.h htscodecs/utils.h 																							\
+			bsc/bwt.h bsc/coder.h bsc/divsufsort.h bsc/libbsc.h bsc/lzp.h bsc/platform.h bsc/qlfc_model.h bsc/qlfc.h bsc/rangecoder.h 		\
+			bsc/tables.h																													\
+ 			libdeflate_1.7/unaligned.h libdeflate_1.7/deflate_compress.h libdeflate_1.7/arm_matchfinder_impl.h 								\
+			libdeflate_1.7/deflate_constants.h libdeflate_1.7/bt_matchfinder.h libdeflate_1.7/hc_matchfinder.h libdeflate_1.7/common_defs.h	\
+			libdeflate_1.7/lib_common.h libdeflate_1.7/x86_matchfinder_impl.h libdeflate_1.7/compiler_gcc.h libdeflate_1.7/libdeflate.h 	\
+			libdeflate_1.7/matchfinder_common.h 																							\
+ 			libdeflate_1.19/adler32_vec_template.h libdeflate_1.19/crc32_table.h libdeflate_1.19/unaligned.h 								\
+			libdeflate_1.19/arm_adler32_impl.h libdeflate_1.19/crc32_vec_template.h libdeflate_1.19/x86_adler32_impl.h 						\
+			libdeflate_1.19/arm_cpu_features.h libdeflate_1.19/decompress_template.h libdeflate_1.19/x86_cpu_features.h 					\
+			libdeflate_1.19/arm_crc32_impl.h libdeflate_1.19/deflate_compress.h libdeflate_1.19/x86_crc32_impl.h 							\
+			libdeflate_1.19/arm_matchfinder_impl.h libdeflate_1.19/deflate_constants.h libdeflate_1.19/x86_crc32_pclmul_template.h			\
+			libdeflate_1.19/bt_matchfinder.h libdeflate_1.19/hc_matchfinder.h libdeflate_1.19/x86_decompress_impl.h						 	\
+			libdeflate_1.19/common_defs.h libdeflate_1.19/lib_common.h libdeflate_1.19/x86_matchfinder_impl.h								\
+			libdeflate_1.19/compiler_gcc.h libdeflate_1.19/libdeflate.h libdeflate_1.19/cpu_features_common.h 								\
+			libdeflate_1.19/matchfinder_common.h
 
 INSTALLERS = ../installers
 
-ifeq ($(CC),cl) # Microsoft Visual C
-	$(error Only the gcc compiler is currently supported)
+IGZIP_DIR=igzip
+IGZIP_SRCS = igzip/igzip.c igzip/hufftables_c.c igzip/igzip_base.c igzip/igzip_icf_base.c igzip/adler32_base.c igzip/flatten_ll.c 			\
+		  igzip/encode_df.c igzip/igzip_icf_body.c igzip/crc_base.c igzip/huff_codes.c igzip/igzip_inflate.c 
+
+CONDA_INCS += igzip/bitbuf2.h igzip/crc.h igzip/encode_df.h igzip/flatten_ll.h igzip/huff_codes.h igzip/huffman.h igzip/igzip_checksums.h 	\
+		  igzip/igzip_level_buf_structs.h igzip/igzip_lib.h igzip/igzip_wrapper.h igzip/repeated_char_result.h igzip/static_inflate.h 		\
+		  igzip/unaligned.h
+
+ifdef x86_64
+IGZIP_ARCH_DIR = $(IGZIP_DIR)/x86_64
+IGZIP_ARCH_ASM_SRCS = igzip/x86_64/igzip_body.asm igzip/x86_64/igzip_finish.asm igzip/x86_64/igzip_icf_body_h1_gr_bt.asm 					\
+		  igzip/x86_64/igzip_icf_finish.asm igzip/x86_64/rfc1951_lookup.asm igzip/x86_64/adler32_sse.asm 									\
+		  igzip/x86_64/adler32_avx2_4.asm igzip/x86_64/igzip_multibinary.asm igzip/x86_64/igzip_update_histogram_01.asm 					\
+		  igzip/x86_64/igzip_update_histogram_04.asm igzip/x86_64/igzip_decode_block_stateless_01.asm 										\
+		  igzip/x86_64/igzip_decode_block_stateless_04.asm igzip/x86_64/igzip_inflate_multibinary.asm 										\
+		  igzip/x86_64/encode_df_04.asm igzip/x86_64/encode_df_06.asm igzip/x86_64/proc_heap.asm igzip/x86_64/igzip_deflate_hash.asm 		\
+		  igzip/x86_64/igzip_gen_icf_map_lh1_06.asm igzip/x86_64/igzip_gen_icf_map_lh1_04.asm igzip/x86_64/igzip_set_long_icf_fg_04.asm 	\
+		  igzip/x86_64/igzip_set_long_icf_fg_06.asm igzip/x86_64/crc_multibinary.asm igzip/x86_64/crc32_gzip_refl_by8.asm 					\
+		  igzip/x86_64/crc32_gzip_refl_by8_02.asm igzip/x86_64/crc32_gzip_refl_by16_10.asm
+
+IGZIP_ASM_OBJS := $(addprefix $(OBJDIR)/,$(IGZIP_ARCH_ASM_SRCS:.asm=.o)) 
+IGZIP_ASM_DEPS := $(addprefix $(OBJDIR)/,$(IGZIP_ARCH_ASM_SRCS:.asm=.d)) 
+
+CONDA_INCS += igzip/x86_64/bitbuf2.asm igzip/x86_64/data_struct2.asm igzip/x86_64/heap_macros.asm igzip/x86_64/huffman.asm 					\
+		  igzip/x86_64/igzip_compare_types.asm igzip/x86_64/igzip_decode_block_stateless.asm igzip/x86_64/igzip_update_histogram.asm 		\
+		  igzip/x86_64/inflate_data_structs.asm igzip/x86_64/lz0a_const.asm igzip/x86_64/multibinary.asm igzip/x86_64/options.asm 			\
+		  igzip/x86_64/reg_sizes.asm igzip/x86_64/stdmac.asm
 endif
 
-OBJDIR=objdir # fallback if not win, linux, mac
-OBJDIR_LINUX=objdir.linux
-OBJDIR_WINDOWS=objdir.windows
-OBJDIR_MAC=objdir.mac
+ifdef aarch64
+IGZIP_ARCH_DIR = $(IGZIP_DIR)/aarch64
+IGZIP_ARCH_ASM_SRCS = igzip/aarch64/igzip_inflate_multibinary_arm64.S igzip/aarch64/igzip_multibinary_arm64.S 								\
+		  igzip/aarch64/igzip_isal_adler32_neon.S igzip/aarch64/igzip_deflate_body_aarch64.S igzip/aarch64/igzip_deflate_finish_aarch64.S	\
+		  igzip/aarch64/isal_deflate_icf_body_hash_hist.S igzip/aarch64/isal_deflate_icf_finish_hash_hist.S									\
+		  igzip/aarch64/igzip_set_long_icf_fg.S igzip/aarch64/encode_df.S igzip/aarch64/isal_update_histogram.S igzip/aarch64/gen_icf_map.S \
+		  igzip/aarch64/igzip_deflate_hash_aarch64.S igzip/aarch64/igzip_decode_huffman_code_block_aarch64.S 
+
+IGZIP_SRCS += igzip/aarch64/crc_aarch64_dispatcher.c igzip/aarch64/igzip_multibinary_aarch64_dispatcher.c igzip/proc_heap_base.c
+
+IGZIP_ASM_OBJS := $(addprefix $(OBJDIR)/,$(IGZIP_ARCH_ASM_SRCS:.S=.o)) 
+IGZIP_ASM_DEPS := $(addprefix $(OBJDIR)/,$(IGZIP_ARCH_ASM_SRCS:.S=.d)) 
+
+CONDA_INCS += igzip/aarch64/aarch64_label.h igzip/aarch64/aarch64_multibinary.h igzip/aarch64/bitbuf2_aarch64.h 							\
+		  igzip/aarch64/crc32_aarch64_common.h igzip/aarch64/crc32_gzip_refl_pmull.h igzip/aarch64/crc32_norm_common_pmull.h 				\
+		  igzip/aarch64/crc32_refl_common_pmull.h igzip/aarch64/crc_common_pmull.h igzip/aarch64/data_struct_aarch64.h 						\
+		  igzip/aarch64/huffman_aarch64.h igzip/aarch64/lz0a_const_aarch64.h igzip/aarch64/options_aarch64.h igzip/aarch64/stdmac_aarch64.h \
+		  igzip/aarch64/crc32_common_crc_ext_cortex_a72.S igzip/aarch64/crc32_common_mix_neoverse_n1.S 										\
+		  igzip/aarch64/crc32_gzip_refl_3crc_fold.S igzip/aarch64/crc32_gzip_refl_crc_ext.S igzip/aarch64/crc32_gzip_refl_pmull.S			\
+		  igzip/aarch64/crc32_mix_default.S igzip/aarch64/crc32_mix_default_common.S igzip/aarch64/crc32_mix_neoverse_n1.S 					\
+		  igzip/aarch64/crc32c_mix_default.S igzip/aarch64/crc32c_mix_neoverse_n1.S igzip/aarch64/crc_multibinary_arm.S 
+endif
+
+ifdef noarch
+IGZIP_ARCH_DIR = $(IGZIP_DIR)/noarch
+IGZIP_SRCS += igzip/noarch/igzip_base_aliases.c igzip/noarch/proc_heap_base.c igzip/noarch/crc_base_aliases.c
+endif
+
+ifeq ($(CC),cl) # Microsoft Visual C
+	$(error Only the gcc and clang compilers are currently supported)
+endif
 
 ifneq ($(wildcard secure/.*),) # "secure" directory exists
 	MY_SRCS += secure/license.c
@@ -190,34 +287,33 @@ endif
 ifdef Windows
 	EXE = .exe
 	LDFLAGS += -static-libgcc -lIPHLPAPI -lUrlmon -lDbgHelp
-	OBJDIR=$(OBJDIR_WINDOWS)
-	WSL=wsl
 endif
 
 ifdef Linux
 	LDFLAGS += -lrt -fuse-ld=gold -rdynamic # rt is required by pthreads ; rdynamic for backtrace_symbols_fd to show function names
-	OBJDIR=$(OBJDIR_LINUX)
 endif
 
 ifdef Mac # Mac
 	MY_SRCS += mac_compat.c
-	OBJDIR=$(OBJDIR_MAC)
 	CFLAGS += -mmacosx-version-min=10.9 -DNO_UTIMENSAT # Conda requires support from 10.9 but utimensat() was only introduced in MacOS 10.13
 	ifeq ($(CC),gcc) 
 		LDFLAGS += -rdynamic
 	endif
 endif
 
-C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(BSC_SRCS) $(LZMA_SRCS) $(LIBDEFLATE_1_7_SRCS) $(LIBDEFLATE_1_19_SRCS) $(HTSCODECS_SRC) 
+C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(BSC_SRCS) $(LZMA_SRCS) $(LIBDEFLATE_1_7_SRCS) $(LIBDEFLATE_1_19_SRCS) \
+		 $(HTSCODECS_SRC) $(IGZIP_SRCS)	
 
-ifdef Linux
-	C_SRCS += $(ONION_SRCS)
-endif
+ASFLAGS += -I$(IGZIP_ARCH_DIR)
 
-OBJS       := $(addprefix $(OBJDIR)/, $(C_SRCS:.c=.o))       
-DEBUG_OBJS := $(addprefix $(OBJDIR)/, $(C_SRCS:.c=.debug-o)) 
-OPT_OBJS   := $(addprefix $(OBJDIR)/, $(C_SRCS:.c=.opt-o))    # optimized but with debug info, for debugging issues that only manifest with compiler optimization
-DEPS       := $(addprefix $(OBJDIR)/, $(C_SRCS:.c=.d))       
+# ifdef Linux
+# 	C_SRCS += $(ONION_SRCS)
+# endif
+ 
+OBJS       := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.o)) $(IGZIP_ASM_OBJS)
+DEBUG_OBJS := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.debug-o)) $(IGZIP_ASM_OBJS)
+OPT_OBJS   := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.opt-o)) $(IGZIP_ASM_OBJS)   # optimized but with debug info, for debugging issues that only manifest with compiler optimization
+DEPS       := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.d)) $(IGZIP_ASM_DEPS)
 
 EXECUTABLES       = genozip$(EXE)       genounzip$(EXE)       genocat$(EXE)       genols$(EXE)
 DEBUG_EXECUTABLES = genozip-debug$(EXE) genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE)
@@ -237,16 +333,6 @@ debug : $(OBJDIR) $(DEBUG_EXECUTABLES)
 opt   : CFLAGS += -ggdb3 $(OPTFLAGS) -DDEBUG 
 opt   : $(OBJDIR) $(OPT_EXECUTABLES)
 
--include $(DEPS)
-
-$(OBJDIR):
-	@echo Making directory $@ and its subdirs
-	@mkdir -p $@ $(addprefix $@/, $(SRC_DIRS)) 
-
-$(OBJDIR)/%.d: %.c | $(OBJDIR) # directory is an "order only prerequesite": https://www.gnu.org/savannah-checkouts/gnu/make/manual/html_node/Prerequisite-Types.html#Prerequisite-Types
-	@echo Calculating dependencies $<
-	@$(CC) $(CFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
-
 ifdef Windows
 objdir.mac/secure/license.o : secure/license.c secure/license_buf.c secure/license_stats.c secure/license_sys.c secure/license_zfile.c
 	@echo "getting $>"
@@ -257,13 +343,23 @@ ifdef Mac
 objdir.mac/secure/license.o : CFLAGS := $(patsubst -march=% ,-march=x86-64 ,$(CFLAGS)) # plain vanilla x86-64, so it runs on Rosetta x86-64 simulator on M1/M2/M3
 endif
 
+-include $(DEPS)
+
+$(OBJDIR):
+	@echo Making directory $@ and its subdirs
+	@mkdir -p $@ $(addprefix $@/,$(SRC_DIRS)) 
+
+$(OBJDIR)/%.d: %.c | $(OBJDIR) # directory is an "order only prerequesite": https://www.gnu.org/savannah-checkouts/gnu/make/manual/html_node/Prerequisite-Types.html#Prerequisite-Types
+	@echo Calculating dependencies $<
+	@$(CC) $(CFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
+
 $(OBJDIR)/distribution.%.o : distribution.c 
 	@echo Compiling $< to $@
 	@$(CC) -c -o $@ $< $(CFLAGS) -DDISTRIBUTION=\"$*\"
 
 $(OBJDIR)/%.o: %.c $(OBJDIR)/%.d
 	@echo Compiling $<
-	@$(CC) -c -o $@ $< $(CFLAGS)
+	$(CC) -c -o $@ $< $(CFLAGS) 
 
 $(OBJDIR)/%.debug-o: %.c $(OBJDIR)/%.d
 	@echo "Compiling $< (debug)"
@@ -273,6 +369,22 @@ $(OBJDIR)/%.opt-o: %.c $(OBJDIR)/%.d
 	@echo "Compiling $< (opt)"
 	@$(CC) -c -o $@ $< $(CFLAGS)
 
+$(OBJDIR)/%.d: %.asm
+	@echo Calculating dependencies $<
+	@$(AS) $(ASFLAGS) -M $< > $@
+
+$(OBJDIR)/%.d: %.S
+	@echo Calculating dependencies $<
+	@$(AS) $(ASFLAGS) -M $< > $@
+
+$(OBJDIR)/%.o: %.asm # nasm or yasm
+	@echo Compiling $<
+	@$(AS) $(ASFLAGS) -o $@ $< 
+
+$(OBJDIR)/%.o: %.S   # GNU Assembler 
+	@echo Compiling $<
+	@$(AS) $(ASFLAGS) -o $@ $< 
+
 %.S: %.c $(OBJDIR)/%.d
 	@echo "Generating $@"
 	@$(CC) -S -o $@ $< $(CFLAGS)
@@ -281,14 +393,13 @@ $(OBJDIR)/%.opt-o: %.c $(OBJDIR)/%.d
 	@echo "Generating $@"
 	@$(CC) -E -o $@ $< $(CFLAGS)
 
-GENDICT_OBJS := $(addprefix $(OBJDIR)/, $(GENDICT_SRCS:.c=.o))
+GENDICT_OBJS := $(addprefix $(OBJDIR)/,$(GENDICT_SRCS:.c=.o))
 
 # dict_id_gen.h generation:
 # Step 1: dict_id_gen.sh generates dict_id_gen.c, including all the GENDICT definitions from the data type include files (eg vcf.h)
 # Step 2: dict_id_gen.sh compiles dict_id_gen.c and generate dict_id_gen[.exe]
 # Step 3. dict_id_gen.sh generates dict_id_gen.h: it uses dict_id_gen[.exe]to generate the field constant, and then adds the fields enum and mapping
 ifdef Windows
-
 dict_id_gen.h : $(shell grep -w "pragma GENDICT" *.h | cut -d: -f1 | uniq) dict_id_gen.sh
 	@echo Generating $@
 	@./dict_id_gen.sh $(CC)
@@ -389,7 +500,7 @@ clean-dev: clean-installers clean-test # use only in dev - deletes license.o
 	@rm -f $(DEPS) $(filter-out LICENSE.txt,$(WINDOWS_INSTALLER_OBJS)) *.d .archive.tar.gz *.stackdump $(EXECUTABLES) $(OPT_EXECUTABLES) $(DEBUG_EXECUTABLES) 
 	@rm -f *.S *.good *.bad $(DATA)/*.good $(DATA)/*.bad *.local genozip.threads-log.* *.b250 vgcore.*
 	@rm -R $(OBJDIR)
-	@mkdir $(OBJDIR) $(addprefix $(OBJDIR)/, $(SRC_DIRS))
+	@mkdir $(OBJDIR) $(addprefix $(OBJDIR)/,$(SRC_DIRS))
 	@touch $(OBJDIR)/.gitkeep
 
 .PHONY: clean clean-debug clean-optimized clean-installers clean-distribution \
@@ -407,7 +518,7 @@ genozip-latest$(EXE):
 ifdef Windows
 
 genozip-latest:
-	@run-on-wsl.sh GCC=$(WSL_GCC_DEFAULT) make genozip-latest  # make -j doesn't work well on WSL - filesystem clock issues
+	@run-on-wsl.sh GCC=$(WSL_GCC_DEFAULT) make genozip-latest  # make -j doesn't work well on WSL - filesystem clock issues (try: hwclock -s)
 
 # increments minor version, eg. 1.0.1 -> 1.0.2. 
 # To increment a major version, manually edit version.h and set minor version to -1 e.g. 1.1.-1 (careful! no newlines or spaces)

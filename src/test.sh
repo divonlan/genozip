@@ -1883,6 +1883,7 @@ sparkling_clean()
 {
     batch_print_header
     rm -f ${hg19}.*cache* ${hs37d5}.*cache* ${GRCh38}.*cache* ${TESTDIR}/*.genozip ${TESTDIR}/*.bad ${TESTDIR}/*.bad.gz ${TESTDIR}/basic-subdirs/*.genozip ${TESTDIR}/*rejects* ${TESTDIR}/*.DEPN
+    unset GENOZIP_REFERENCE
 }
 
 set -o pipefail # if any command in a pipe fails, then the pipe exit code is failure 
@@ -1892,7 +1893,9 @@ is_windows="`uname|grep -i mingw``uname|grep -i MSYS`"
 is_mac=`uname|grep -i Darwin`
 is_linux=`uname|grep -i Linux`
 
-if [ -n "$is_windows"] || [ -n "$is_exe" ]; then
+unset GENOZIP_REFERENCE
+
+if [ -n "$is_windows" ] || [ -n "$is_exe" ]; then
 BASEDIR=../genozip
 else
 BASEDIR=.
@@ -2059,24 +2062,24 @@ case $GENOZIP_TEST in
 36)  batch_real_world_1_adler32 "--fast --force-gencomp" ;; 
 37)  batch_real_world_with_ref_md5;; 
 38)  batch_real_world_with_ref_md5 "--best --no-cache --force-gencomp" ;; 
-39)  batch_multiseq               ;;
-40)  batch_external_cram          ;;
-41)  batch_external_bcf           ;;
-42)  batch_external_unzip         ;;
-43)  batch_reference_fastq        ;;
-44)  batch_reference_sam          ;;
-45)  batch_reference_vcf          ;;
-46)  batch_many_small_files       ;;
-47)  batch_make_reference         ;;
-48)  batch_headerless_wrong_ref   ;;
-49)  batch_replace                ;;
-50)  batch_coverage_idxstats  ;;
-51)  batch_qname_flavors          ;;
-52)  batch_piz_no_license         ;;
-53)  batch_sendto                 ;;
+39)  batch_multiseq                    ;;
+40)  batch_external_cram               ;;
+41)  batch_external_bcf                ;;
+42)  batch_external_unzip              ;;
+43)  batch_reference_fastq             ;;
+44)  batch_reference_sam               ;;
+45)  batch_reference_vcf               ;;
+46)  batch_many_small_files            ;;
+47)  batch_make_reference              ;;
+48)  batch_headerless_wrong_ref        ;;
+49)  batch_replace                     ;;
+50)  batch_coverage_idxstats           ;;
+51)  batch_qname_flavors               ;;
+52)  batch_piz_no_license              ;;
+53)  batch_sendto                      ;;
 54)  batch_user_message_permissions    ;;
-55)  batch_password_permissions   ;;
-56)  batch_reference_backcomp     ;;
+55)  batch_password_permissions        ;;
+56)  batch_reference_backcomp          ;;
 57)  batch_real_world_backcomp 11.0.11 ;; # note: versions must match VERSIONS in test/Makefile
 58)  batch_real_world_backcomp 12.0.42 ;; 
 59)  batch_real_world_backcomp 13.0.21 ;; 

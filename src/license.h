@@ -15,6 +15,7 @@ extern void license_register (bool);
 extern bool license_is_registered (void);
 extern void license_set_filename (rom filename);
 extern void license_load (void);
+extern StrText license_get_number (void);
 extern rom license_get_one_line (void);
 extern void license_display (void);
 extern bool license_allow_tip (void);

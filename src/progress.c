@@ -169,7 +169,8 @@ void progress_update (rom task, uint64_t sofar, uint64_t total, bool done)
 
 void progress_finalize_component (rom status)
 {
-    if (!flag.quiet) {
+    if (!flag.quiet
+        && component_name /* not already finalized */) {
         progress_update_status (NULL, status);
         iprint0 ("\n");
     }

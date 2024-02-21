@@ -732,8 +732,7 @@ void zip_one_file (rom txt_basename,
                                  zip_compress_one_vb, 
                                  zip_complete_processing_one_vb);
 
-    if (txt_file->codec == CODEC_BGZF)
-        bgzf_finalize_discovery();
+    bgzf_finalize_discovery();
 
     zriter_wait_for_bg_writing(); // complete writing VBs before moving on
 
@@ -748,7 +747,8 @@ void zip_one_file (rom txt_basename,
     ASSERT0 (!flag.biopsy || biopsy_is_done(), "Biopsy request not complete - some VBs missing");
 
     // write the BGZF section containing BGZF block sizes, if this txt file is compressed with BGZF
-    bgzf_compress_bgzf_section();
+    if (txt_file->codec == CODEC_BGZF)
+        bgzf_compress_bgzf_section();
 
     // if this a non-bound file, or the last component of a bound file - write the genozip header, random access and dictionaries
 finish:   
@@ -756,6 +756,7 @@ finish:
                                                                         : (int64_t)txt_file->disk_so_far + (txt_file->codec==CODEC_BGZF ? BGZF_EOF_LEN : 0); // data (plain, BGZF, GZ or BZ2) read from the file descriptor (we won't have correct src data here if reading through an external decompressor - but luckily txt_file->disk_size will capture that case)
     z_file->txt_file_disk_sizes_sum += z_file->txt_file_disk_sizes[flag.zip_comp_i];
 
+    z_file->comp_codec[flag.zip_comp_i]        = txt_file->codec;
     z_file->comp_source_codec[flag.zip_comp_i] = txt_file->source_codec;
 
     // (re-)index sections after adding this txt_file 

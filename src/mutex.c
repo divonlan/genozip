@@ -121,23 +121,12 @@ void serializer_initialize_do (SerializerP ser, rom name, rom func)
 {
     ASSERT (!ser->initialized, "called from %s: serializer already initialized", func);
     mutex_initialize_do ((MutexP)ser, name, func);
-
-    ser->vb_i_last = 0; // reset
-
-    if (buf_is_alloc (&ser->skips)) { // buffer allocated from previous file - reset it
-        memset (ser->skips.data, 0, ser->skips.size);
-        ser->skips.len = 0;
-    }
-
-    else
-        buf_set_promiscuous (&ser->skips, "Serializer.skips"); // so that it can be later alloced in compute threads
 }
 
 void serializer_destroy_do (SerializerP ser, rom func)
 {
     if (!ser->initialized) return; // nothing to do
 
-    buf_destroy (ser->skips);
     mutex_destroy_do ((MutexP)ser, func);
 }
 
@@ -152,10 +141,6 @@ void serializer_lock_do (SerializerP ser, VBIType vb_i, FUNCLINE)
         ASSERT (ser->vb_i_last < vb_i, "called from %s:%u: Expecting vb_i_last=%u < vb->vblock_i=%u. serializer=%s", 
                 func, code_line, ser->vb_i_last, vb_i, ser->name);
         
-        // skip as instructed by skips bytemap
-        while ((ser->vb_i_last < vb_i-1) && (ser->skips.len32 >= ser->vb_i_last + 2) && *Bc(ser->skips, ser->vb_i_last + 1)) 
-            ser->vb_i_last++;
-
         if (ser->vb_i_last == vb_i - 1) { // its our turn now
             ser->vb_i_last++; // next please
             return;           // return with mutex locked
@@ -169,19 +154,6 @@ void serializer_lock_do (SerializerP ser, VBIType vb_i, FUNCLINE)
         ASSERT (i < TIMEOUT * (1000000 / WAIT_TIME_USEC), "called from %s:%u: Timeout (%u sec) while waiting for serializer %s in vb=%u. vb_i_last=%u", 
                 func, code_line, TIMEOUT, ser->name, vb_i, ser->vb_i_last);
     }
-}
-
-// tell serializer we are not going to lock this vb_i and it can be skipped
-void serializer_skip_do (SerializerP ser, VBIType vb_i, FUNCLINE)
-{
-    mutex_lock_do ((MutexP)ser, true, func, code_line);
-
-    buf_alloc_zero (NULL, &ser->skips, 0, MAX_(vb_i+1, 1000), bool, 2, NULL);
-    *Bc(ser->skips, vb_i) = true;
-    
-    ser->skips.len32 = MAX_(ser->skips.len32, vb_i+1);
-
-    mutex_unlock_do ((MutexP)ser, func, code_line);
 }
 
 static DESCENDING_SORTER (mutex_sort_by_accumulator, LockPoint, accumulator)

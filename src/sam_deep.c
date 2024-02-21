@@ -108,7 +108,7 @@ void sam_deep_zip_finalize (void)
 {
     threads_log_by_vb (evb, "main_thread", "sam_deep_zip_finalize", 0);
     
-    if (flag.biopsy || flag.biopsy_line.line_i != NO_LINE) return;
+    if (flag.biopsy || flag.has_biopsy_line) return;
 
     // return unused memory to libc
     buf_trim (z_file->deep_ents, ZipZDeep);
@@ -196,7 +196,7 @@ void sam_deep_set_QUAL_hash (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qual))
 // ZIP compute thread: mutex-protected callback from ctx_merge_in_vb_ctx during merge: add VB's deep_hash to z_file->deep_index_by_*/deep_ents
 void sam_deep_merge (VBlockP vb_)
 {
-    if (!flag.deep || flag.biopsy || flag.biopsy_line.line_i != NO_LINE) return;
+    if (!flag.deep || flag.biopsy || flag.has_biopsy_line) return;
 
     VBlockSAMP vb = (VBlockSAMP)vb_;
     START_TIMER;
@@ -280,12 +280,12 @@ void sam_piz_deep_initialize (void)
 {
     mutex_initialize (z_file->qname_huf_mutex);
 
-    // In Deep, if we have gencomp, we digest the SAM VBs in writer (during which the serializer is not used), and the 
-    // FASTQ VBs in their compute threads (with the serializer). Therefore, the serializer needs to be
-    // initialized to skip the SAM VBs 
-    if (!z_file->z_flags.adler && // serializer is only used for md5 (considering Deep files only exist since v15)
-         z_has_gencomp)           // if no gencomp, we digest all VBs in the compute thread
-        z_file->digest_serializer.vb_i_last = sections_get_first_vb_i (SAM_COMP_FQ00) - 1;
+    // // In Deep, if we have gencomp, we digest the SAM VBs in writer (during which the serializer is not used), and the 
+    // // FASTQ VBs in their compute threads (with the serializer). Therefore, the serializer needs to be
+    // // initialized to skip the SAM VBs 
+    // if (!z_file->z_flags.adler && // serializer is only used for md5 (considering Deep files only exist since v15)
+    //      z_has_gencomp)           // if no gencomp, we digest all VBs in the compute thread
+    //     z_file->digest_serializer.vb_i_last = sections_get_first_vb_i (SAM_COMP_FQ00) - 1;
 }
 
 void sam_piz_deep_init_vb (VBlockSAMP vb, ConstSectionHeaderVbHeaderP header)

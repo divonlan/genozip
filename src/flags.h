@@ -59,7 +59,8 @@ typedef struct {
     PairType pair; 
 
     // piz options
-    int32_t bgzf;   // PIZ: can be set by --bgzf, or by various other conditions. values 0-12 indicate the level of libdeflate, BGZF_BY_ZFILE means use SEC_BGZF or default level if it is absent
+    #define MAX_FLAG_BGZF 5
+    int32_t bgzf;   // PIZ: can be set by --bgzf, or by various other conditions. values 0-MAX_FLAG_BGZF indicate the level of libdeflate, BGZF_BY_ZFILE means use SEC_BGZF or default level if it is absent
     
     int out_dt; // used to indicate the desired dt of the output txt - consumed by file_open_z, and thereafter equal to txt_file->data_type
     #define out_dt_is_binary dt_props[flag.out_dt].is_binary
@@ -134,7 +135,8 @@ typedef struct {
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
         debug_LONG, show_qual, debug_qname, debug_read_ctxs, debug_sag, debug_gencomp, debug_lines, debug_latest,
         debug_peek, stats_submit, debug_submit, show_deep, show_segconf_has, debug_huffman, debug_split,
-        debug_debug, debug_valgrind, debug_tar, // ad-hoc debug printing in prod
+        debug_debug,  // a flag with no functionality - used for ad-hoc debugging  
+        debug_valgrind, debug_tar, // ad-hoc debug printing in prod
         no_gencomp, force_gencomp, force_deep, force_PLy, no_domqual, no_pacb, no_longr, no_homp, force_qual_codec, no_smux, verify_codec, 
         seg_only, show_bam, xthreads,
         #define SHOW_CONTAINERS_ALL_VBs (-1)
@@ -148,6 +150,8 @@ typedef struct {
     
     CompIType show_time_comp_i;   // comp_i for which to show time (possibly COMP_NONE or COMP_ALL)
     
+    #define has_biopsy_line biopsy_line.line_i != NO_LINE
+    #define no_biopsy_line  biopsy_line.line_i == NO_LINE
     struct biopsy_line { VBIType vb_i; int32_t line_i/*within vb*/; } biopsy_line; // argument of --biopsy-line (line_i=-1 means: not used)
     DeepHash debug_deep_hash; // qname, seq, qual hashes
     
@@ -168,7 +172,7 @@ typedef struct {
          is_lten,            // set according to endianness   
          explicit_out_dt,    // genocat - out txt file data type set explicitly from command line
          aligner_available,  // ZIP: compression requires using the aligner
-         genocat_no_ref_file,// PIZ (genocat): we don't need to load the reference data
+         dont_load_ref_file,// PIZ (genocat): we don't need to load the reference data
          genocat_no_dicts,   // PIZ (genocat): we don't need to read the dicts
          genocat_global_area_only, // PIZ (genocat): we quit after processing the global area
          genocat_no_reconstruct,   // PIZ: User requested to genocat with only metadata to be shown, not file contents

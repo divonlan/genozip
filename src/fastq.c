@@ -122,8 +122,8 @@ int32_t fastq_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i_out /* in/out
             n++;
         }
 
-    ASSINP (n < 8, "Examined 7 textual lines and could not find a valid FASTQ read, it appears that this is not a valid FASTQ file. Data examined:\n%.*s",
-            (int)(nl[0] - nl[7]), nl[7] + 1); // 7 lines and their newlines
+    ASSINP (n < 8, "%s: Examined 7 textual lines at the end of the VB and could not find a valid FASTQ read, it appears that this is not a valid FASTQ file. Data examined:\n%.*s",
+            VB_NAME, (int)(nl[0] - nl[7]), nl[7] + 1); // 7 lines and their newlines
 
     // case: the data provided has less than 8 newlines, and within it we didn't find a read. need more data.
     *i_out = (int32_t)first_i - 1; // next index to test - one before first_i
@@ -238,10 +238,15 @@ static void fastq_tip_if_should_be_pair (void)
     while (!segconf.r1_or_r2 && (ent = readdir(dir))) 
         segconf.r1_or_r2 = filename_is_fastq_pair (STRa(bn), ent->d_name, strlen (ent->d_name));
 
-    if (segconf.r1_or_r2)
+    if (segconf.r1_or_r2 == PAIR_R1) 
         TIP ("Using --pair to compress paired-end FASTQs can reduce the compressed file's size by 10%%. E.g.:\n"
              "%s --reference %s --pair %s %s%s%s\n",
              arch_get_argv0(), ref_get_filename (gref), txt_name, (is_cd ? "" : dir_name), (is_cd ? "" : "/"), ent->d_name);
+
+    else if (segconf.r1_or_r2 == PAIR_R2) 
+        TIP ("Using --pair to compress paired-end FASTQs can reduce the compressed file's size by 10%%. E.g.:\n"
+             "%s --reference %s --pair %s%s%s %s\n",
+             arch_get_argv0(), ref_get_filename (gref), (is_cd ? "" : dir_name), (is_cd ? "" : "/"), ent->d_name, txt_name);
 
     closedir(dir);    
 }

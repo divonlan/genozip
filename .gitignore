@@ -13,6 +13,7 @@ launch.json
 *.opt-o
 *.d
 *.S
+!src/igzip/aarch64/*.S
 *.genozip
 *.gz
 *.bgz

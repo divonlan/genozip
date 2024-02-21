@@ -22,6 +22,10 @@ extern int64_t txtfile_get_seggable_size (void);
 typedef bool (*TxtIteratorCallback)(rom line, unsigned line_len, void *cb_param1, void *cb_param2, unsigned cb_param3);
 extern char *txtfile_foreach_line (BufferP txt_header, bool reverse, TxtIteratorCallback callback, void *cb_param1, void *cb_param2, unsigned cb_param3, int64_t *line_len);
 
+// igzip
+extern void txtfile_init_read_igzip (FileP file);
+extern rom isal_error (int ret);
+
 // callbacks
 extern int32_t def_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
 extern int32_t def_is_header_done (bool is_eof);

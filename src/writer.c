@@ -88,34 +88,46 @@ void writer_set_num_txtheader_lines (CompIType comp_i, uint32_t num_txtheader_li
 // or record in binary file (eg alignment in BAM). In case of a text file, it also includes the header lines.
 // For now: returns 0 if reconstruction modifies the file, and therefore recon_plan doesn't reconstruct the original file
 // To do: return line according to recon plan even if modified. challenge: lines dropped by reconstructor and not known yet to writer
-uint64_t writer_get_txt_line_i (VBlockP vb, LineIType line_in_vb/*0-based*/)
+int64_t writer_get_txt_line_i (VBlockP vb, LineIType line_in_vb/*0-based*/)
 {
-    if (flag.piz_txt_modified || !vb->lines.len32) return 0;
+    if (flag.maybe_lines_dropped_by_reconstructor) return -1;
+    if (!vb->lines.len32) return 0;
 
     // since data is unmodified, we have only FULL_VB, RANGE, END_OF_VB and TXTHEADER plan items 
     int64_t txt_num_lines  = 0;
     LineIType vb_num_lines = 0;
     int64_t factor = VB_DT(FASTQ) ? 4 : 1; // in FASTQ, each plan line is 4 txt lines
 
-    ARRAY (ReconPlanItem, plan, z_file->recon_plan);
-    
-    for (uint64_t i=0; i < plan_len; i++) {
-        if (plan[i].vb_i == vb->vblock_i) {
-            // case: plan item containing this line
-            if (vb_num_lines + plan[i].num_lines > line_in_vb) 
+    for_buf (ReconPlanItem, p, z_file->recon_plan) {
+        // case: interleaved plan  
+        if (p->flavor == PLAN_INTERLEAVE) {
+            if (p->vb_i == vb->vblock_i && p->num_lines/2 > line_in_vb) // R1
+                return txt_num_lines + 2 * line_in_vb * factor + 1; // +1 because 1-based 
+
+            else if (p->vb2_i == vb->vblock_i && p->num_lines/2 > line_in_vb) // R2
+                return txt_num_lines + (2 * line_in_vb + 1) * factor + 1; // +1 because 1-based
+        }
+
+        else if (p->vb_i == vb->vblock_i) {
+            // case: non-interleaved plan item containing this line
+            if (vb_num_lines + p->num_lines > line_in_vb) 
                 return txt_num_lines + (line_in_vb - vb_num_lines) * factor + 1; // +1 because 1-based 
 
             // case: plan item is from current VB, but we have not yet reached the current line
             else
-                vb_num_lines += plan[i].num_lines;
+                vb_num_lines += p->num_lines;
         }
 
         // note: txtheader lines are not included in the plan item, bc they are not counted for --header, --downsample etc
-        txt_num_lines += (plan[i].flavor == PLAN_TXTHEADER) ? TXTINFO(plan[i].comp_i)->num_lines
-                                                            : (factor * plan[i].num_lines); 
+        bool no_write = (p->vb_i && !writer_does_vb_need_write (p->vb_i)) ||
+                        (p->flavor == PLAN_TXTHEADER && !writer_does_txtheader_need_write (p->comp_i));
+
+        if (!no_write)
+            txt_num_lines += (p->flavor == PLAN_TXTHEADER) ? TXTINFO(p->comp_i)->num_lines
+                                                           : (factor * p->num_lines); 
     }
 
-    WARN_ONCE0 ("Unexpectedly, unable to find current vb/line_i in recon_plan");
+    WARN_ONCE ("Unexpectedly, unable to find current line %s/%u in recon_plan", VB_NAME, line_in_vb);
     return 0;
 }
 
@@ -383,10 +395,8 @@ static void writer_init_vb_info (void)
 static int64_t writer_get_plan_num_lines (void)
 {
     int64_t num_lines = 0;
-    ARRAY (ReconPlanItem, plan, z_file->recon_plan);
-    
-    for (uint64_t i=0; i < plan_len; i++) 
-        num_lines += plan[i].num_lines;
+    for_buf (ReconPlanItem, p, z_file->recon_plan) 
+        num_lines += p->num_lines;
 
     return num_lines;
 }
@@ -880,8 +890,10 @@ bool writer_create_plan (void)
         }
 
         // casee: Single FASTQ component: --R1, --R2 or --one-vb of a FASTQ VB
-        if (flag.one_component && flag.one_component-1 >= SAM_COMP_FQ00)
+        if (flag.one_component && flag.one_component-1 >= SAM_COMP_FQ00) {
+            writer_add_txtheader_plan (flag.one_component-1);
             writer_add_trivial_plan (flag.one_component-1); // one_component is copm_i+1
+        }
 
         // case: FASTQ to be written interleaved (flags_piz_set_flags_for_deep enforces: exactly two FQ components)
         else if (flag.interleaved) 

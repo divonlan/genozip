@@ -1052,7 +1052,9 @@ void ref_compress_ref (void)
     SAVE_FLAGS;
     
     if (flag.show_reference) flag.quiet = true; // show references instead of progress
-                
+
+    uint64_t z_size_before = z_file->disk_so_far;
+               
     // proceed to compress all ranges that have still have data in them after copying
     Dispatcher dispatcher = 
         dispatcher_fan_out_task ("compress_ref", NULL, 0, "Writing reference...", true, false, false, 0, 5000, false,
@@ -1076,13 +1078,22 @@ void ref_compress_ref (void)
     // compress reference random access (note: in case of a reference file, SEC_REF_RAND_ACC will be identical to SEC_RANDOM_ACCESS. That's ok, its tiny)
     random_access_finalize_entries (&gref->stored_ra); // sort in order of vb_i
 
+    if ((Z_DT(SAM) || Z_DT(BAM)) && flag.reference == REF_INTERNAL) {
+        uint64_t ref_bytes = z_file->disk_so_far - z_size_before;
+        int ref_pc = 100 * ref_bytes / z_file->disk_so_far;
+
+        if (ref_pc >= 10)
+            TIP ("Compressing this %s file using a reference will save at least %s (%u%%).\n"
+                 "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
+                 dt_name (txt_file->data_type), str_size (ref_bytes).s, ref_pc, arch_get_argv0(), txt_file->name);
+    }
+
     // range data needed for contigs is set in ref_make_prepare_one_range_for_compress, called from dispatcher_fan_out_task
     if (flag.make_reference) {
         ref_contigs_compress_ref_make (gref); 
 
         ref_make_calculate_digest();
     }
-
 
     COPY_TIMER_EVB (ref_compress_ref);
 }
@@ -1562,8 +1573,9 @@ bool ref_buf_locate (Reference ref, ConstBufferP buf)
 
 void ref_verify_organism (VBlockP vb)
 {
-    double percent_aligned = (double)vb->num_aligned / (double)vb->lines.len32;
+    double percent_aligned = vb->lines.len32 ? 100.0 * (double)vb->num_aligned / (double)vb->lines.len32 : 0;
 
-    if (percent_aligned < 0.80)
-        TIP ("Only %u%% of the reads processed so far match the reference file. Using a reference file more representative of the organism(s) in the data will result in much better compression.", (int)(100 * percent_aligned));
+    if (percent_aligned < 80)
+        TIP ("Only %2.1f%% of the %s reads processed so far match the reference file. Using a reference file more representative of the organism(s) in the data will result in much better compression (tested: %s).", 
+             percent_aligned, str_int_commas (vb->lines.len32).s, VB_NAME);
 }

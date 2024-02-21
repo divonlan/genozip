@@ -308,7 +308,9 @@ MappingType aligner_seg_seq (VBlockP vb, STRp(seq), bool is_pair_2, PosType64 pa
     // allocate bitmaps - don't provide name to avoid re-writing param which would overwrite nbits that overlays it 
     int64_t missing_bits = (int64_t)seq_len - ((int64_t)bitmap_ctx->local.nbits - (int64_t)bitmap_ctx->next_local);
     if (missing_bits > 0) {
-        buf_alloc_do (vb, &bitmap_ctx->local,roundup_bits2bytes64 (bitmap_ctx->local.nbits + seq_len), CTX_GROWTH, NULL, __FUNCLINE); 
+        buf_alloc (vb, &bitmap_ctx->local, roundup_bits2bytes64 (missing_bits + 64), 
+                   seq_len * vb->lines.len32 / 10, // 8 for bits-to-bytes, but up to 10 due to perfect matches 
+                   char, CTX_GROWTH, CTX_TAG_LOCAL); 
         buf_extend_bits (&bitmap_ctx->local, missing_bits);
     }
 

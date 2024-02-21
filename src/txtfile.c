@@ -28,6 +28,7 @@
 #include "zlib/zlib.h"
 #include "libdeflate_1.19/libdeflate.h"
 #include "bzlib/bzlib.h"
+#include "igzip/igzip_lib.h"
 
 #define MAX_TXT_HEADER_LEN ((uint64_t)0xffffffff) // maximum length of txt header - one issue with enlarging it is that we digest it in one go, and the digest module is 32 bit
 
@@ -93,21 +94,75 @@ static inline uint32_t txtfile_read_block_plain (VBlockP vb, uint32_t max_bytes)
     return (uint32_t)bytes_read;
 }
 
-static inline uint32_t txtfile_read_block_gz (VBlockP vb, uint32_t max_bytes)
+rom isal_error (int ret)
+{
+    switch (ret) {
+        case ISAL_DECOMP_OK          : return "Ok";
+        case ISAL_END_INPUT          : return "EndInput";
+        case ISAL_OUT_OVERFLOW       : return "OutOverflow";
+        case ISAL_NAME_OVERFLOW      : return "NameOverflow";
+        case ISAL_COMMENT_OVERFLOW   : return "CommentOverflow";
+        case ISAL_EXTRA_OVERFLOW     : return "ExtraOverflow";
+        case ISAL_NEED_DICT          : return "NeedDict";
+        case ISAL_INVALID_BLOCK  	 : return "InvalidBlock";
+        case ISAL_INVALID_SYMBOL     : return "InvalidSymbol";
+        case ISAL_INVALID_LOOKBACK   : return "InvalidLookback";
+        case ISAL_INVALID_WRAPPER    : return "InvalidWrapper";
+        case ISAL_UNSUPPORTED_METHOD : return "UnsupportedMethod";
+        case ISAL_INCORRECT_CHECKSUM : return "IncorrectChecksum";
+        default                      : return "InvalidReturnCode";
+    }
+}
+
+#define IGZIP_CHUNK (32 KB)
+
+void txtfile_init_read_igzip (FileP file)
+{
+    ASSERTNOTINUSE (file->igzip_state);
+
+    buf_alloc_exact_zero (evb, file->igzip_state, 1, struct inflate_state, "txt_file->igzip_state");
+    struct inflate_state *state = B1ST (struct inflate_state, file->igzip_state);
+
+    isal_inflate_init (state);
+    state->crc_flag = ISAL_GZIP;
+
+    buf_alloc (evb, &file->igzip_data, 0, IGZIP_CHUNK, char, 0, "txt_file->igzip_data");
+}
+
+// runs in main thread, populates txt_data for vb
+static uint32_t txtfile_read_block_gz (VBlockP vb, uint32_t max_bytes)
 {
     START_TIMER;
+    ASSERTISALLOCED (txt_file->igzip_data);
 
-    uint32_t bytes_read = gzfread (BAFTtxt, 1, max_bytes, (gzFile)txt_file->file);
-    Ltxt += bytes_read;
+    struct inflate_state *state = B1ST (struct inflate_state, txt_file->igzip_state);
 
-    if (bytes_read)
-        txt_file->disk_so_far = gzconsumed64 ((gzFile)txt_file->file); // this is actually all the data uncompressed so far, some of it not yet read by us and still waiting in zlib's output buffer
-    else
-        txt_file->is_eof = true;
+    // top up igzip_data
+    int32_t bytes_read = read (fileno((FILE *)txt_file->file), BAFTc(txt_file->igzip_data), IGZIP_CHUNK - txt_file->igzip_data.len32); // -1 if error in libc
+    ASSERT (bytes_read >= 0, "read failed from %s: %s", txt_name, strerror(errno));
+    
+    txt_file->igzip_data.len32 += bytes_read;
+
+    state->next_in   = B1ST8 (txt_file->igzip_data);
+    state->avail_in  = txt_file->igzip_data.len32;
+    state->next_out  = BAFT8 (vb->txt_data);
+    state->avail_out = max_bytes;
+
+    int ret = isal_inflate (state);
+    ASSERT (ret == ISAL_DECOMP_OK || ret == ISAL_END_INPUT, "isal_inflate error: %s avail_in=%u avail_out=%u",
+            isal_error (ret), txt_file->igzip_data.len32, max_bytes);
+
+    uint32_t gz_data_consumed = BNUM (txt_file->igzip_data, state->next_in);
+    buf_remove (txt_file->igzip_data, char, 0, gz_data_consumed);
+
+    txt_file->disk_so_far += gz_data_consumed;
+    txt_file->is_eof = (ret == ISAL_END_INPUT);
+
+    Ltxt = BNUMtxt (state->next_out);
 
     COPY_TIMER (txtfile_read_block_gz);
 
-    return bytes_read;
+    return max_bytes - state->avail_out; // uncompressed data length
 }
 
 static inline uint32_t txtfile_read_block_bz2 (VBlockP vb, uint32_t max_bytes)
@@ -535,7 +590,9 @@ void txtfile_read_vblock (VBlockP vb)
         buf_remove (txt_file->unconsumed_txt, char, 0, bytes_moved);
     }
 
-    bgzf_zip_init_vb (vb); 
+    if (txt_file->codec == CODEC_BGZF)
+        bgzf_zip_init_vb (vb); 
+    
     vb->comp_i = flag.zip_comp_i;  // needed for VB_NAME
 
     bool always_uncompress = flag.pair == PAIR_R2 || // if we're reading the 2nd paired file, fastq_txtfile_have_enough_lines needs the whole data
@@ -611,7 +668,8 @@ void txtfile_read_vblock (VBlockP vb)
         Ltxt -= pass_to_next_vb_len; 
 
         // copy unconsumed or partially consumed bgzf_blocks to txt_file->unconsumed_bgzf_blocks
-        bgzf_copy_unconsumed_blocks (vb); 
+        if (txt_file->codec == CODEC_BGZF)
+            bgzf_copy_unconsumed_blocks (vb); 
 
         // if is possible we reached eof but still have pass_up_data - this happens eg in make-reference when a
         // VB takes only one contig from txt_data and pass up the rest - reset eof so that we come back here to process the rest

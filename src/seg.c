@@ -1444,7 +1444,7 @@ void seg_all_data_lines (VBlockP vb)
 
     DT_FUNC (vb, seg_finalize)(vb); // data-type specific finalization
 
-     if (!flag.make_reference && !segconf.running && !flag.biopsy && flag.biopsy_line.line_i == NO_LINE) 
+     if (!flag.make_reference && !segconf.running && !flag.biopsy && flag.no_biopsy_line) 
         seg_verify_file_size (vb);
 
     // txt_size and lines.len exclude lines moved to gencomp. increment might be negative

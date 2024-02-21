@@ -134,9 +134,10 @@ void digest_piz_verify_one_txt_file (unsigned txt_file_i/* 0-based */)
     // now, we just confirm that all VBs were verified as expected.
     if (VER(14) && z_file->z_flags.adler) {
         
-        CompIType comp_i = (flag.deep && txt_file_i >= 1) ? (txt_file_i - 1 + SAM_COMP_FQ00)
+        CompIType comp_i = ((flag.deep || flag.pair) && flag.one_component) ? flag.one_component-1
+                         : (flag.deep && txt_file_i >= 1) ? (txt_file_i - 1 + SAM_COMP_FQ00)
                          : (flag.pair && txt_file_i ==1 ) ? FQ_COMP_R2
-                         :                                COMP_MAIN;
+                         :                                  COMP_MAIN;
 
         uint32_t expected_vbs_verified = sections_get_num_vbs (comp_i);
 
@@ -161,9 +162,9 @@ void digest_piz_verify_one_txt_file (unsigned txt_file_i/* 0-based */)
         Digest decompressed_file_digest = digest_snapshot (&z_file->digest_ctx, "file"); 
 
         if (digest_recon_is_equal (decompressed_file_digest, z_file->digest)) {
-            if (flag.test) { 
+            if (flag.test || !IS_ADLER) { 
                 sprintf (s, "verified as identical to the original %s (%s=%s)", 
-                        dt_name (txt_file->data_type), digest_name(), digest_display (decompressed_file_digest).s);
+                         dt_name (txt_file->data_type), digest_name(), digest_display (decompressed_file_digest).s);
                 progress_finalize_component (s); 
             }
         }
@@ -171,15 +172,15 @@ void digest_piz_verify_one_txt_file (unsigned txt_file_i/* 0-based */)
         else if (flag.test) {
             progress_finalize_component ("FAILED!");
             ABORT ("Error: %s of original file=%s is different than decompressed file=%s (txt_file=%s txt_file_i=%u)\n",
-                digest_name(), digest_display (z_file->digest).s, digest_display (decompressed_file_digest).s, txt_name, txt_file_i);
+                   digest_name(), digest_display (z_file->digest).s, digest_display (decompressed_file_digest).s, txt_name, txt_file_i);
         }
 
         // if decompressed incorrectly - warn, but still give user access to the decompressed file
         else { 
             piz_digest_failed = true; // inspected by main_genounzip
             WARN ("File integrity error: %s of decompressed file %s is %s, but %s of the original %s file was %s (txt_file=%s txt_file_i=%u)", 
-                digest_name(), txt_file->name, digest_display (decompressed_file_digest).s, digest_name(), 
-                dt_name (txt_file->data_type), digest_display (z_file->digest).s, txt_name, txt_file_i);
+                  digest_name(), txt_file->name, digest_display (decompressed_file_digest).s, digest_name(), 
+                  dt_name (txt_file->data_type), digest_display (z_file->digest).s, txt_name, txt_file_i);
         }
     }
 }
@@ -208,7 +209,7 @@ static void digest_piz_verify_one_vb (VBlockP vb)
             if (vb->recon_size != vb->txt_data.len) // note: leave vb->txt_data.len 64bit to detect bugs
                 sprintf (recon_size_warn, "Expecting: VB_HEADER.recon_size=%u == txt_data.len=%"PRIu64"\n", vb->recon_size, vb->txt_data.len);
 
-            WARN ("reconstructed vblock=%s/%u (vb_line_i=0 -> txt_line_i(1-based)=%"PRIu64" num_lines=%u), (%s=%s) differs from original file (%s=%s).\n%s",
+            WARN ("reconstructed vblock=%s/%u (vb_line_i=0 -> txt_line_i(1-based)=%"PRId64" num_lines=%u), (%s=%s) differs from original file (%s=%s).\n%s",
                   comp_name (vb->comp_i), vb->vblock_i, writer_get_txt_line_i (vb, 0), vb->lines.len32,
                   DIGEST_NAME, digest_display (piz_digest).s, 
                   DIGEST_NAME, digest_display (vb->expected_digest).s, 
@@ -292,7 +293,7 @@ bool digest_one_vb (VBlockP vb, bool is_compute_thread,
 }
 
 // ZIP and PIZ: called by main thread to calculate MD5 or Adler32 of the txt header
-Digest digest_txt_header (BufferP data, Digest piz_expected_digest)
+Digest digest_txt_header (BufferP data, Digest piz_expected_digest, CompIType comp_i)
 {
     START_TIMER;
 
@@ -301,6 +302,10 @@ Digest digest_txt_header (BufferP data, Digest piz_expected_digest)
         z_file->digest_ctx.log = true;
         file_remove (DIGEST_LOG_FILENAME, true);    
     }
+
+    // serialize VBs of this txt file (if MD5, or if v13 or earlier)
+    if (IS_PIZ && (!IS_ADLER || !VER(14)) && sections_get_num_vbs (comp_i)) 
+        z_file->digest_serializer.vb_i_last = sections_get_first_vb_i (comp_i) - 1; 
 
     if (!data->len) return DIGEST_NONE;
 

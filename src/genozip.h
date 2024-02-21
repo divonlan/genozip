@@ -567,13 +567,13 @@ typedef packed_enum {  ENC_NONE = 0, ENC_AES256 = 1, NUM_ENCRYPTION_TYPES } Encr
 #define ENC_NAMES { "NO_ENC", "AES256" }
 
 // note: #pragma pack doesn't affect enums
-typedef packed_enum { BGZF_LIBDEFLATE_1_7, BGZF_ZLIB, BGZF_LIBDEFLATE_1_19, NUM_BGZF_LIBRARIES } BgzfLibraryType; // constants for BGZF FlagsBgzf.library
-#define BGZF_LIB_NAMES { "libdeflate_1.7", "zlib",    "libdeflate_1.19"                        }
+typedef packed_enum { BGZF_LIBDEFLATE7, BGZF_ZLIB, BGZF_LIBDEFLATE19, BGZF_IGZIP, NUM_BGZF_LIBRARIES } BgzfLibraryType; // constants for BGZF FlagsBgzf.library
+#define BGZF_LIB_NAMES_LONG { "libdeflate_1.7", "zlib", "libdeflate_1.19", "igzip" }
+#define BGZF_LIB_NAMES_SHRT { "libdef7",        "zlib", "libdef19",        "igzip" }
 
 typedef packed_enum { BGZF_NOT_INITIALIZED=-100, 
                       BGZF_BY_ZFILE=-1,          // PIZ: use BGZF compression recorded in .genozip file 
-                      BGZF_COMP_LEVEL_DEFAULT=1, // default genounzip BGZF compression level if -z is not specified
-                                                 // 0->14 are valid compression levels
+                      // 0->14 are valid compression levels in a library-dependent level-space
                       BGZF_COMP_LEVEL_UNKNOWN=15 } BgzfLevel;
 
 #define COMPRESSOR_CALLBACK(func)                                   \
@@ -650,8 +650,10 @@ static inline void stall (void) { while (1) sleep (1); }
 typedef struct { char s[256]; } StrTime; // long, in case of eg Chinese language time zone strings
 extern StrTime str_time (void);
 
+extern StrText license_get_number (void);
+
 #define SUPPORT "\nIf this is unexpected, please contact "EMAIL_SUPPORT".\n"
-#define ASSERT(condition, format, ...)       ( { if (__builtin_expect (!(condition), 0)) { progress_newline(); fprintf (stderr, "%s Error in %s:%u %s: ", str_time().s, __FUNCLINE, version_str().s); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); fflush (stderr); exit_on_error(true); }} )
+#define ASSERT(condition, format, ...)       ( { if (__builtin_expect (!(condition), 0)) { progress_newline(); fprintf (stderr, "%s Error in %s:%u %s%s: ", str_time().s, __FUNCLINE, version_str().s, license_get_number().s); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); fflush (stderr); exit_on_error(true); }} )
 #define ASSERT0(condition, string)           ASSERT (condition, string "%s", "")
 #define ASSERTISNULL(p)                      ASSERT0 (!p, "expecting "#p" to be NULL")
 #define ASSERTNOTNULL(p)                     ASSERT0 (p, #p" is NULL")

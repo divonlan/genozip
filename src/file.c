@@ -497,10 +497,7 @@ fallthrough_from_cram: {}
             uint8_t block[BGZF_MAX_BLOCK_SIZE]; 
             uint32_t block_size;
 
-            // we can't use libc read buffer unfortunately, because when reading the test bgzf block, if it turns out to be GZIP 
-            // we will do gzdopen discarding the internal FILE buffer. We also cannot use setvbuf after the file is already partly read (?).
-            // TO DO: this doesn't work over a pipe - so we can't pipe-in non-BGZF GZIP files (bug 243)
-            setvbuf (file->file, 0, _IONBF, 0); 
+            setvbuf (file->file, 0, _IONBF, 0); // no buffering 
 
             ASSERTNOTINUSE (evb->scratch);
 
@@ -514,10 +511,8 @@ fallthrough_from_cram: {}
 
                 file->codec = CODEC_BGZF;
                 
-                evb->scratch.count = bgzf_uncompressed_size; // pass uncompressed size in param
+                evb->scratch.count = bgzf_uncompressed_size; 
                 buf_add_more (evb, &evb->scratch, (char*)block, block_size, "scratch");                
-            
-                bgzf_initialize_discovery (file);
             }
 
             // for regulars files, we already skipped 0 size files. This can happen in STDIN
@@ -529,31 +524,13 @@ fallthrough_from_cram: {}
 
                 ABORTINP ("No data exists in input file %s", file->name ? file->name : FILENAME_STDIN);
             }
-
-            // Bug 490: if a gzip- pr bz2-compressed file appears to be uncompressed (CODEC_NONE =
-            // no .gz or .bz2 extension), the user is unaware that this file is compressed. Since we can't 
-            // re-compress CODEC_GZ or CODEC_BZ2 upon decompression, it will appear as if we're not recreating the original file. 
             
-            // case: this is a non-BGZF gzip format - open with zlib and hack back the read bytes 
-            // (note: we cannot re-read the bytes from the file as the file might be piped in)
-            else if (bgzf_uncompressed_size == BGZF_BLOCK_GZIP_NOT_BGZIP) {
-                
-                ASSERT0 (!file->redirected, "genozip can't read gzip data from a pipe - piped data must be either plain or in BGZF format - i.e. compressed with bgzip, htslib etc");
-
+            // case: this is non-BGZF GZIP format 
+            else if (bgzf_uncompressed_size == BGZF_BLOCK_GZIP_NOT_BGZIP) {      
                 file->codec = file->source_codec = CODEC_GZ;
-                
-                int fd = dup (fileno((FILE *)file->file));
-                ASSERT (fd >= 0, "dup failed: %s", strerror (errno));
 
-                FCLOSE (file->file, file_printname (file));
-                
-                file->file  = gzdopen (fd, READ); 
-                gzinject (file->file, block, block_size); // a hack - adds a 18 bytes of compressed data to the in stream, which will be consumed next, instead of reading from disk
-
-                if (flag.show_gz) {
-                    iprintf ("%s: is GZIP but not BGZF\n", file->name);
-                    exit_ok;
-                }
+                txtfile_init_read_igzip (file);
+                buf_add_more (evb, &file->igzip_data, block, block_size, "igzip_data");
             } 
 
             // case: this is not GZIP format at all. treat as a plain file, and put the data read in vb->scratch 
@@ -568,13 +545,13 @@ fallthrough_from_cram: {}
                 if (str_isprefix_((rom)block, block_size, BZ2_MAGIC, 3)) 
                     ABORTINP0 ("The data seems to be in bz2 format. Please use --input to specify the type (eg: \"genozip --input sam.bz2\")");
 
-                if (str_isprefix_((rom)block, block_size, XZ_MAGIC, 6)) {
+                else if (str_isprefix_((rom)block, block_size, XZ_MAGIC, 6)) {
                     if (file->redirected) ABORTINP0 ("Compressing piped-in data in xz format is not currently supported");
                     if (file->is_remote) ABORTINP0 ("The data seems to be in xz format. Please use --input to specify the type (eg: \"genozip --input sam.xz\")");
                     ABORTINP0 ("The data seems to be in xz format. Please use --input to specify the type (eg: \"genozip --input sam.xz\")");
                 }
 
-                if (str_isprefix_((rom)block, block_size, ZIP_MAGIC, 4)) {
+                else if (str_isprefix_((rom)block, block_size, ZIP_MAGIC, 4)) {
                     if (file->redirected) ABORTINP0 ("Compressing piped-in data in zip format is not currently supported");
                     if (file->is_remote) ABORTINP0 ("The data seems to be in zip format. Please use --input to specify the type (eg: \"genozip --input generic.zip\")");
                     ABORTINP0 ("The data seems to be in zip format. Please use --input to specify the type (eg: \"genozip --input generic.zip\")");
@@ -582,15 +559,10 @@ fallthrough_from_cram: {}
 
                 file->codec = CODEC_NONE;
                 buf_add_more (evb, &evb->scratch, (char*)block, block_size, "scratch");
-
-                if (flag.show_gz) {
-                    iprintf ("%s: is not GZIP\n", file->name);
-                    exit_ok;
-                }
             }
 
-            ASSINP (!file->redirected || file->codec == CODEC_NONE || file->codec == CODEC_BGZF, 
-                    "genozip only supports piping in data that is either plain (uncompressed) or compressed in BGZF format (typically with .gz extension) (codec=%s)", 
+            ASSINP (!file->redirected || file->codec == CODEC_NONE || file->codec == CODEC_BGZF || file->codec == CODEC_GZ, 
+                    "genozip only supports piping in data that is either plain (uncompressed) or compressed in GZIP format (typically with .gz extension) (codec=%s)", 
                     codec_name (file->codec));
             break;
         }
@@ -658,6 +630,8 @@ fallthrough_from_cram: {}
         default:
             ABORT ("%s: invalid filename extension for %s files: %s", global_cmd, dt_name (file->data_type), file->name);
     }
+    
+    bgzf_initialize_discovery (file);
 
     if (flag.show_codec) 
         iprintf ("%s: source_code=%s\n", file->basename, codec_name (file->source_codec));
@@ -774,7 +748,7 @@ static void file_initialize_z_file_data (FileP file)
         Z_INIT (sag_cigars);
     }
 
-    if (flag.biopsy_line.line_i == NO_LINE) // no need to initialize in --biopsy-line (as destroying it later will error)
+    if (flag.no_biopsy_line) // no need to initialize in --biopsy-line (as destroying it later will error)
         serializer_initialize (file->digest_serializer); 
 
     clock_gettime (CLOCK_REALTIME, &file->start_time);
@@ -1051,10 +1025,7 @@ void file_close (FileP *file_p)
 
     if (file->file && file->supertype == TXT_FILE) {
 
-        if (file->mode == READ && (file->codec == CODEC_GZ))
-            ASSERTW (!gzclose_r((gzFile)file->file), "%s: warning: failed to close file: %s", global_cmd, file_printname (file));
-
-        else if (file->mode == READ && file->codec == CODEC_BZ2)
+        if (file->mode == READ && file->codec == CODEC_BZ2)
             BZ2_bzclose((BZFILE *)file->file);
         
         else if (file->mode == READ && file_is_read_via_ext_decompressor (file)) 
@@ -1112,7 +1083,6 @@ void file_close (FileP *file_p)
         mutex_destroy (file->custom_merge_mutex);
         mutex_destroy (file->qname_huf_mutex);
         mutex_destroy (file->recon_plan_mutex);
-        mutex_destroy (file->bgzf_flags_mutex);
         
         FREE (file->name);
         FREE (file->basename);
@@ -1290,10 +1260,11 @@ int64_t file_tell_do (FileP file, FailType soft_fail, rom func, unsigned line)
     ASSERTNOTNULL (file->file);
 
     if (IS_ZIP && file->supertype == TXT_FILE && file->codec == CODEC_GZ)
-        return gzconsumed64 ((gzFile)file->file); 
-    
+        return txt_file->disk_so_far;
+        
     if (IS_ZIP && file->supertype == TXT_FILE && file->codec == CODEC_BZ2)
         return BZ2_consumed ((BZFILE *)file->file); 
+    
     int64_t offset = ftello64 ((FILE *)file->file);
     ASSERT (offset >= 0 || soft_fail, "called from %s:%u: ftello64 failed for %s (FILE*=%p remote=%s redirected=%s): %s", 
             func, line, file->name, file->file, TF(file->is_remote), TF(file->redirected), strerror (errno));
@@ -1471,7 +1442,7 @@ PutLineFn file_put_line (VBlockP vb, STRp(line), rom msg)
     file_put_data (fn.s, STRa(line), 0);
 
     if (IS_PIZ)
-        WARN ("\n%s line=%s line_in_file(1-based)=%"PRIu64". Dumped %s (dumping first occurance only)", 
+        WARN ("\n%s line=%s line_in_file(1-based)=%"PRId64". Dumped %s (dumping first occurance only)", 
                 msg, line_name(vb).s, writer_get_txt_line_i (vb, vb->line_i), fn.s);
     else
         WARN ("\n%s line=%s vb_size=%u MB. Dumped %s", msg, line_name(vb).s, (int)(segconf.vb_size >> 20), fn.s);

@@ -187,8 +187,8 @@ static void flags_set_explicit_bgzf (rom level_str)
         flag.bgzf = BGZF_BY_ZFILE; 
     
     else 
-        ASSINP0 (level_str && str_get_int_range32 (level_str, strlen (level_str), 0, 12, &flag.bgzf),
-                "--bgzf expects a value between 0 (no compression) and 12 (best, yet slowest, compression), or \"exact\" (without the quotes: try to recover compression level of original file). If you're not sure what value to choose, 6 is a popular option.");
+        ASSINP (level_str && str_get_int_range32 (level_str, strlen (level_str), 0, MAX_FLAG_BGZF, &flag.bgzf),
+                "--bgzf expects a value between 0 (no recompression) and %u (best, yet slowest, recompression), or \"exact\" (without the quotes: try to recover compression level of original file).", MAX_FLAG_BGZF);
 
     // note: flag.bgzf is immutable from now onwards
 }
@@ -517,7 +517,7 @@ void flags_init_from_command_line (int argc, char **argv)
         static Option genozip_lo[]    = { _lg, _i, _I, _d, _f, _h,     _D,    _L1, _L2, _q, _Q, _qq, _t, _Nt, _DL, _nb, _nz, _nc,_nu,  _V, _z,                                                             _m, _th,     _o, _p, _e, _E,                                                                       _H1,                                         _sL, _ss, _SS,      _sd, _sT, _sb, _Sb, _lc, _lh, _lH, _s2, _s7, _S7, _S0, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv, _sn, _ai,                    _B, _xt, _dm, _dp, _dL, _dD, _dq, _dB, _dt, _dw, _dM, _dr, _dR, _dP, _dG, _dN, _dF, _DF, _dQ, _dH, _dO, _dC, _fQ, _fC, _fO, _fS, _fH, _fN, _dU, _dl, _dc, _dg,      _dh,_dS, _bS, _9, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _8, _8s, _8P, _8V, _8Q, _8f, _8Z, _8D, _pe, _fa, _bs, _lm,                        _nh, _rg, _sR,      _sC, _hC, _rA, _rI, _rS, _me, _s5, _S5, _sM, _sA, _sB, _sP, _sc, _Sc, _AL, _sI, _cn,                               _s6,          _oe, _aa, _al, _Lf, _dd, _T, _TT, _MR, _TL, _wM, _wm, _WM, _WB, _bi, _bl, _sk, _VV, _DV,           _Ds, _DS, _sp, _DD, _DP, _SH, _Dd,      _to, _ts,      _hc, _dv, _TR, _NE, _lp, _Sd, _St, _um,      _fP, _00 };
         static Option genounzip_lo[]  = { _lg,         _d, _f, _h, _x, _D,    _L1, _L2, _q, _Q, _qq, _t,      _DL,           _nc,      _V, _z,                                                             _m, _th, _u, _o, _p, _e,                                                                                                                        _sL, _ss, _SS, _sG, _sd, _sT, _sb,      _lc, _lh, _lH, _s2, _s7, _S7, _S0, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv, _sn,      _ov,                   _xt, _dm, _dp,      _dD,      _dB, _dt,                _dR,                                                                                      _dc,                                                                                                                                _lm,                                  _sR,      _sC, _hC, _rA,      _rS, _me, _s5, _S5, _sM, _sA, _sB,           _Sc, _AL, _sI, _cn, _pg,                          _s6,          _oe,                _dd, _T, _TT,                                                        _Dp, _Dh,           _sp, _DD,           _Dd,      _to, _ts, _RC, _hc, _dv, _TR, _NE,                     _np,      _00 };
         static Option genocat_lo[]    = { _lg,         _d, _f, _h,     _D,    _L1, _L2, _q, _Q, _qq,                         _nc,      _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _zf, _zF, _zc, _zC, _zv, _zV,     _th,     _o, _p, _e,     _il, _r, _R, _Rg, _qf, _qF, _Qf, _QF, _SF, _s, _sf, _sq, _G, _1, _H0, _H1, _H2, _H3, _Gt, _So, _Io, _IU, _iu, _GT, _sL, _ss, _SS, _sG, _sd, _sT, _sb,      _lc, _lh, _lH, _s2, _s7, _S7, _S0, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv, _sn,      _ov, _R1, _R2, _RX,    _xt, _dm, _dp,      _dD,      _dB, _dt,                _dR,                                                                                      _dc,      _ds,                                                                                                                      _lm, _fs, _g, _gw, _n, _nt, _nh,      _sR,      _sC, _hC, _rA, _rI, _rS, _me, _s5, _S5, _sM, _sA, _sB,           _Sc, _AL, _sI, _cn, _pg, _PG, _SX, _ix, _ct, _vl, _s6,          _oe,      _al,      _dd, _T,                                                             _Dp, _Dh,           _sp, _DD,           _Dd, _DT,           _RC, _hc, _dv, _TR, _NE,                     _np,      _00 };
-        static Option genols_lo[]     = { _lg,             _f, _h,        _l, _L1, _L2, _q,                                            _V,                                                                                  _p,                                                                                                                                                                                                                 _st, _sm,                                                                          _dm,                          _dt,                                                                                                                                                                                                                                                                                                                                 _S5, _sM,                                                                            _b, _LC, _oe,                _dd, _T,                                                                                 _sp, _DD,                                         _dv,      _NE,                               _00 };
+        static Option genols_lo[]     = { _lg,             _f, _h,        _l, _L1, _L2, _q,                                            _V,                                                                                  _p,                                                                                                                                                                                                                      _st, _sm,                                                                          _dm,                          _dt,                                                                                                                                                                                                                                                                                                                                 _S5, _sM,                                                                            _b, _LC, _oe,                _dd, _T,                                                                                 _sp, _DD,                                         _dv,      _NE,                               _00 };
         static Option *long_options[NUM_EXE_TYPES] = { genozip_lo, genounzip_lo, genocat_lo, genols_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -728,7 +728,7 @@ static void flags_test_conflicts (unsigned num_files /* optional */)
         CONFLICT (flag.reference,   flag.make_reference, "--make-reference",   OT("reference", "e"));
         CONFLICT (flag.no_gencomp,  flag.force_gencomp,  "--no-gencomp",       "--force-gencomp");
         CONFLICT (flag.biopsy,      flag.out_filename,   "--biopsy",           OT("output", "o"));
-        CONFLICT (flag.biopsy_line.line_i>=0, flag.out_filename, "--biopsy-line", OT("output", "o"));
+        CONFLICT (flag.has_biopsy_line, flag.out_filename, "--biopsy-line", OT("output", "o"));
         CONFLICT (flag.deep,        flag.pair,           OT("deep", "3"),      OT("pair", "2"));
         CONFLICT (flag.deep,        flag.subdirs,        OT("deep", "3"),      OT("subdirs", "D"));
         CONFLICT (flag.deep,        tar_zip_is_tar(),    OT("deep", "3"),      "--tar");
@@ -996,7 +996,7 @@ void flags_update (unsigned num_files, rom *filenames)
         is_info_stream_terminal = isatty (fileno (info_stream)); 
     }
 
-    if (flag.biopsy || flag.biopsy_line.line_i != NO_LINE) {
+    if (flag.biopsy || flag.has_biopsy_line) {
         ASSERTW (!flag.test,         "FYI: the %s option is ignored when taking a biopsy", OT("test",   "t"));
         ASSERTW (!flag.show_stats,   "FYI: the %s option is ignored when taking a biopsy", OT("stats",  "w"));
         ASSERTW (!flag.out_filename, "FYI: the %s option is ignored when taking a biopsy", OT("output", "o"));
@@ -1026,7 +1026,7 @@ void flags_update (unsigned num_files, rom *filenames)
 
     // note: must be here and not in flags_update_zip_one_file, so its before the z_file creation
     flag.zip_no_z_file = IS_ZIP && 
-                         (flag.seg_only || flag.biopsy || flag.biopsy_line.line_i != NO_LINE || flag.show_segconf_has || flag.show_bam || flag.show_gz);
+                         (flag.seg_only || flag.biopsy || flag.has_biopsy_line || flag.show_segconf_has || flag.show_bam || flag.show_gz);
 
     if (IS_ZIP) {
         // flag.explicit_no_zriter = flag.no_zriter;
@@ -1043,8 +1043,23 @@ void flags_update (unsigned num_files, rom *filenames)
     // will overwrite each other if extracted genounzip
     if (IS_ZIP && flag.out_filename && !flag.quiet) flags_warn_if_duplicates (num_files, filenames);
 
+    // cases where we don't need to load the reference file, even if the genozip file normally needs it
+    // note: we don't exclude due to collect_coverage here, instead we do it in main_load_reference
+    // note: this is here and not in flags_update_piz_one_z_file bc it is consumed by main_load_reference
+    // note: this is in flags_update and not flags_update_piz, bc reference file is loaded first 
+    flag.dont_load_ref_file |= is_genocat &&
+        (flag.show_stats || flag.show_dict || flag.show_b250 || flag.list_chroms || flag.show_one_dict ||
+         flag.dump_one_b250_dict_id.num || // all other sections (except CHROM) are blocked from reading in piz_default_skip_section
+         flag.show_index || flag.dump_section || flag.show_one_counts.num || flag.show_data_type ||
+         flag.show_aliases || flag.show_txt_contigs || flag.show_gheader || flag.show_recon_plan || flag.show_ref_contigs ||
+        (flag.count && !flag.bases && !flag.grep) ||
+         flag.collect_coverage); // note: this is updated in flags_update_piz_one_z_file
+
+    flag.dont_load_ref_file |= is_genozip &&
+        (flag.make_reference || flag.biopsy || flag.has_biopsy_line || flag.show_gz || flag.show_bam);
+
     // if reference is not specified, attempt to set it from env var $GENOZIP_REFERENCE
-    if (!flag.reference) 
+    if (!flag.reference && !flag.dont_load_ref_file) 
         ref_set_reference (gref, NULL, REF_EXTERNAL, false);
 
     ASSINP (!flag.make_reference || num_files <= 1, "you can specify only one FASTA file when using --make-reference.\n"
@@ -1061,20 +1076,8 @@ void flags_update (unsigned num_files, rom *filenames)
 
     if (is_genocat) flag.only_headers = flag.show_headers;
 
-    // cases where we don't need to load the reference file, even if the genozip file normally needs it
-    // note: we don't exclude due to collect_coverage here, instead we do it in main_load_reference
-    // note: this is here and not in flags_update_piz_one_z_file bc it is consumed by main_load_reference
-    // note: this is in flags_update and not flags_update_piz, bc reference file is loaded first 
-    flag.genocat_no_ref_file = is_genocat &&
-        (flag.show_stats || flag.show_dict || flag.show_b250 || flag.list_chroms || flag.show_one_dict ||
-         flag.dump_one_b250_dict_id.num || // all other sections (except CHROM) are blocked from reading in piz_default_skip_section
-         flag.show_index || flag.dump_section || flag.show_one_counts.num || flag.show_data_type ||
-         flag.show_aliases || flag.show_txt_contigs || flag.show_gheader || flag.show_recon_plan || flag.show_ref_contigs ||
-        (flag.count && !flag.bases && !flag.grep) ||
-         flag.collect_coverage); // note: this is updated in flags_update_piz_one_z_file
-
     flag.no_tip |= flag.quiet || (flag.test_i && !flag.noisy) || tar_zip_is_tar() || !isatty(0) || !isatty (1) ||
-                   flag.show_bam || flag.biopsy || flag.biopsy_line.line_i != NO_LINE;
+                   flag.show_bam || flag.biopsy || flag.has_biopsy_line;
 }
 
 // ZIP: called ONCE, only for the MAIN component, after opening txt and z files, but before calling zip_one_file 
@@ -1115,11 +1118,11 @@ void flags_update_zip_one_file (void)
                       || flag.match_chrom_to_reference
                       || (flag.add_line_numbers && dt == DT_VCF)
                       || flag.lines_last != NO_LINE  // --head advanced option to compress only a few lines
-                      || flag.biopsy_line.line_i != NO_LINE;
+                      || flag.has_biopsy_line;
 
     // add v14: --test if user selected --test, OR this condition is true
     flag.explicit_test = flag.test;
-    flag.test |= !flag.no_test && !flag.make_reference && !flag.zip_txt_modified && !flag.biopsy && flag.biopsy_line.line_i == NO_LINE &&
+    flag.test |= !flag.no_test && !flag.make_reference && !flag.zip_txt_modified && !flag.biopsy && flag.no_biopsy_line &&
                  !flag.show_bam && !flag.seg_only && 
                  !flag.debug && !flag.show_time && !flag.show_memory;
 
@@ -1134,7 +1137,7 @@ void flags_update_zip_one_file (void)
               :                                     BIND_NONE;
 
     // if biopsy, we seg only for speed. current limitation: in paired files we do the whole thing. TO DO: fix this.
-    if (flag.biopsy_line.line_i != NO_LINE && flag.bind != BIND_FQ_PAIR)
+    if (flag.has_biopsy_line && flag.bind != BIND_FQ_PAIR)
         flag.seg_only = true;
 
     flags_zip_verify_dt_specific (dt);
@@ -1171,7 +1174,7 @@ static void flags_piz_set_flags_for_deep (void)
                         flag.interleaved;                                     // --interleaved
 
         ASSINP0 (sam || bam || fastq || flags_is_genocat_global_area_only(), 
-                 "This file was compressed with --deep. Therefore, genocat requires one of these options: --R1, --R2, --R, --interleaved, --fastq, --sam, --bam, --one-vb");
+                 "This file was compressed with --deep. Therefore, genocat requires one of these options: --R1, --R2, --R=n, --interleaved, --fastq, --sam, --bam, --one-vb=n");
 
         flag.one_component = (flag.one_vb && 
                               flag.one_vb_comp_i <= SAM_COMP_DEPN) ? (SAM_COMP_MAIN + 1)      // even for a PRIM / DEPN VB
@@ -1289,13 +1292,13 @@ void flags_update_piz_no_ref_file (void)
 
     // this affects reading an implicit reference specified in the file's SEC_GENOZIP_HEADER. We do it here instead of flags_update because
     // we first need to unset header_only for FASTA and FASTQ
-    flag.genocat_no_ref_file |= never_need_ref || (is_genocat && flag.header_only);
+    flag.dont_load_ref_file |= never_need_ref || (is_genocat && flag.header_only);
 
     // In SAM with SA:Z: RNAME/POS etc might be reconstructed from SA:Z (saggy); SA:Z requires NM:I ; 
     // NM:I requires MD:Z ; and MD:Z requires SQBITMAP. If SQBITMAP is loaded then SEQ is reconstructed which 
     // requires a reference (see bug 804)
-    if (flag.genocat_no_ref_file && !never_need_ref && Z_DT(SAM) && is_there_any_section_with_dict_id (_OPTION_SA_Z))
-        flag.genocat_no_ref_file = false;
+    if (flag.dont_load_ref_file && !never_need_ref && Z_DT(SAM) && is_there_any_section_with_dict_id (_OPTION_SA_Z))
+        flag.dont_load_ref_file = false;
 }
 
 // PIZ: called after opening a z_file and reading the header before opening first txt_file. 
@@ -1456,7 +1459,7 @@ void flags_update_piz_one_z_file (int z_file_i /* -1 if unknown - called form fi
          flag.header_only);       // decided by writer_init_vb_info
 
     bool maybe_vb_dropped_after_read = is_genocat && // dropped by piz_dispatch_one_vb
-        ((flag.grep && (Z_DT(FASTQ) || Z_DT(FASTA))) || // decided by piz_read_one_vb
+        ((flag.grep && (OUT_DT(FASTQ) || Z_DT(FASTA))) || // decided by piz_read_one_vb
          (flag.regions && Z_DT(FASTA))); // decided by piz_read_one_vb
 
     flag.maybe_lines_dropped_by_reconstructor = is_genocat && 
@@ -1476,14 +1479,13 @@ void flags_update_piz_one_z_file (int z_file_i /* -1 if unknown - called form fi
          // FASTA specific modifiers
          (Z_DT(FASTA) && (false)) || 
          // FASTQ specific modifiers
-         (Z_DT(FASTQ) && (flag.header_only_fast || flag.seq_only || flag.qual_only)) || // FASTQ "line" is for lines, so these are line modifications, not drops
+         (OUT_DT(FASTQ)/*inc. deep*/ && (flag.header_only_fast || flag.seq_only || flag.qual_only)) || // FASTQ "line" is for lines, so these are line modifications, not drops
          // SAM specific modifiers
          (Z_DT(SAM)   && (flag.add_line_numbers)));
 
-    // cases where Writer may re-order lines resulting in different ordering that within the VBs
+    // cases where Writer may re-order lines resulting in different ordering than within the VBs
     flag.maybe_lines_out_of_order = is_genocat && 
-         ((Z_DT(FASTQ) && flag.pair && flag.interleaved) || 
-          (Z_DT(SAM)   && (z_file->z_flags.has_gencomp || flag.interleaved)));
+         (OUT_DT(FASTQ)/*inc. deep*/ && flag.pair && flag.interleaved);
 
     // true if the PIZ output txt file will NOT be identical to the source file as recorded in z_file
     flag.piz_txt_modified = maybe_txt_header_modified                  || 

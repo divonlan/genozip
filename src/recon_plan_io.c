@@ -50,7 +50,7 @@ void recon_plan_show (FileP file, uint32_t conc_writing_vbs, uint32_t vblock_mb)
 
         switch (p->flavor) {
             case PLAN_RANGE      : iprintf ("%-10s vb=%s/%u\tstart_line=%u\tnum_lines=%u%s%s\n", flav, comp, p->vb_i, p->start_line, p->num_lines, no_recon, no_write); break;
-            case PLAN_FULL_VB    : iprintf ("%-10s vb=%s/%u%s%s\n", flav, comp, p->vb_i, no_recon, no_write); break;
+            case PLAN_FULL_VB    : iprintf ("%-10s vb=%s/%u%s%s%s\n", flav, comp, p->vb_i, cond_int (IS_PIZ, "\t\t\tnum_lines=", p->num_lines), no_recon, no_write); break;
             case PLAN_TXTHEADER  : iprintf ("%-10s %s%s%s\n", flav, comp_name(p->comp_i), no_recon, no_write); break;
             case PLAN_REMOVE_ME  : iprintf ("%-10s\n", flav); break;
             case PLAN_DOWNSAMPLE : iprintf ("%-10s vb=%s/%u\tnum_lines=%u%s%s\n", flav, comp, p->vb_i, p->num_lines, no_recon, no_write); break;

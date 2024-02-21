@@ -114,24 +114,24 @@ extern bool seg_by_container (VBlockP vb, ContextP ctx, ContainerP con, STRp(val
 extern void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, bool has_parameter, int64_t int_param, char char_param, qSTRp(snip));
 #define seg_prepare_snip_other(snip_code, other_dict_id, has_parameter, parameter, snip) \
     snip##_len = sizeof (snip);\
-    seg_prepare_snip_other_do ((snip_code), (other_dict_id), (has_parameter), (parameter), 0, (snip), &snip##_len)
+    seg_prepare_snip_other_do ((snip_code), (DictId)(other_dict_id), (has_parameter), (parameter), 0, (snip), &snip##_len)
 
 #define seg_prepare_snip_other_char(snip_code, other_dict_id, char_param, snip) \
     ({ snip##_len = sizeof (snip);\
-       seg_prepare_snip_other_do ((snip_code), (other_dict_id), true, 0, (char_param), (snip), &snip##_len); })
+       seg_prepare_snip_other_do ((snip_code), (DictId)(other_dict_id), true, 0, (char_param), (snip), &snip##_len); })
 
 #define seg_prepare_snip_other_chari(snip_code, other_dict_id, char_param, snip, i) \
     ({ snip##_lens[i] = sizeof (snip##s);\
-       seg_prepare_snip_other_do ((snip_code), (other_dict_id), true, 0, (char_param), (snip##s)[i], &snip##_lens[i]); })
+       seg_prepare_snip_other_do ((snip_code), (DictId)(other_dict_id), true, 0, (char_param), (snip##s)[i], &snip##_lens[i]); })
 
 #define seg_prepare_snip_special_other(special_code, other_dict_id, snip, char_param/*0=no parameter*/) \
     ({ snip[0]=SNIP_SPECIAL; snip##_len=sizeof(snip)-1; \
-       seg_prepare_snip_other_do ((special_code), (other_dict_id), char_param, 0, char_param, &snip[1], &snip##_len); \
+       seg_prepare_snip_other_do ((special_code), (DictId)(other_dict_id), char_param, 0, char_param, &snip[1], &snip##_len); \
        snip##_len++; })
 
 #define seg_prepare_snip_special_other_int(special_code, other_dict_id, snip, int_param) \
     ({ snip[0]=SNIP_SPECIAL; snip##_len=sizeof(snip)-1; \
-       seg_prepare_snip_other_do ((special_code), (other_dict_id), true, int_param, 0, &snip[1], &snip##_len); \
+       seg_prepare_snip_other_do ((special_code), (DictId)(other_dict_id), true, int_param, 0, &snip[1], &snip##_len); \
        snip##_len++; })
 
 extern void seg_prepare_multi_dict_id_special_snip (uint8_t special_code, unsigned num_dict_ids, DictId *dict_ids, char *out_snip, unsigned *out_snip_len);

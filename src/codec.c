@@ -33,7 +33,7 @@ void *codec_alloc_do (VBlockP vb, uint64_t size, float grow_at_least_factor, FUN
         if (!buf_is_alloc (&vb->codec_bufs[i])) {
             vb->codec_bufs[i].can_be_big = true; // LZMA, for example, can allocate ~4GB buffers in --best
             buf_alloc_(vb, &vb->codec_bufs[i], 0, size, 1, grow_at_least_factor, names[i], func, code_line);
-            // printf ("codec_alloc: %u bytes buf=%u\n", size, i);
+            // printf ("%s:%u codec_alloc: buf=%u %"PRIu64" bytes\n", func, code_line, i, size);
             return vb->codec_bufs[i].data;
         }
     ABORT ("%s: called from %s:%u codec_alloc could not find a free buffer", VB_NAME, func, code_line);
@@ -47,6 +47,7 @@ void codec_free_do (void *vb_, void *addr, FUNCLINE)
 
     for (unsigned i=0; i < NUM_CODEC_BUFS ; i++) 
         if (vb->codec_bufs[i].data == addr) {
+            // printf ("%s:%u codec_free:buf=%u\n", func, code_line, i);
             buf_free_do (&vb->codec_bufs[i], func, code_line);
             return;
         }

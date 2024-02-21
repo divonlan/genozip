@@ -132,13 +132,12 @@ int64_t txtheader_zip_read_and_compress (int64_t *txt_header_offset, CompIType c
     evb->comp_i = comp_i; // used by def_is_header_done
     
     TxtHeaderRequirement req = DTPT (txt_header_required); 
-    if (req == HDR_MUST || req == HDR_OK || (comp_i==0 && (req == HDR_MUST_0 || req == HDR_OK_0))) {
+    if (req == HDR_MUST || req == HDR_OK || (comp_i==0 && (req == HDR_MUST_0 || req == HDR_OK_0))) 
         txtfile_read_header (is_first_txt); // reads into evb->txt_data and evb->lines.len
 
-        // get header digest if needed
-        if (zip_need_digest) 
-            header_digest = digest_txt_header (&evb->txt_data, DIGEST_NONE);
-    }
+    // get header digest and initialize component digest
+    if (zip_need_digest) 
+        header_digest = digest_txt_header (&evb->txt_data, DIGEST_NONE, comp_i);
 
     // for VCF, we need to check if the samples are the same before approving binding (other data types can bind without restriction)
     //          also: header is modified if --chain or compressing a Luft file
@@ -405,7 +404,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
         if (!digest_is_zero(header.digest)) 
             z_file->digest = header.digest; 
 
-        digest_txt_header (&txt_header_vb->txt_data, header.digest_header); // verify txt header digest
+        digest_txt_header (&txt_header_vb->txt_data, header.digest_header, sec->comp_i); // verify txt header digest
     }
 
     // accounting for data as in original source file - affects vb->vb_position_txt_file of next VB

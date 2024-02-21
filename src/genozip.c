@@ -240,7 +240,7 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
     RESTORE_FLAG(genocat_no_reconstruct);
 
     // case: reference not loaded yet bc --reference wasn't specified, and we got the ref name from zfile_read_genozip_header()   
-    if (IS_REF_EXTERNAL && !flag.genocat_no_ref_file && !ref_is_external_loaded(gref)) {
+    if (IS_REF_EXTERNAL && !flag.dont_load_ref_file && !ref_is_external_loaded(gref)) {
         ASSINP0 (!IS_REF_EXTERNAL || !flag.show_ref_seq, "--show-ref-seq cannot be used on a file that requires a reference file: use genocat --show-ref-seq on the reference file itself instead");
 
         if (!flag.genocat_no_reconstruct || 
@@ -295,8 +295,10 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
 
     if (digest_piz_has_it_failed()) exit_on_error (false); // error message already displayed in piz_verify_digest_one_txt_file
 
-    if (wvb && wvb->in_use) 
-        vb_destroy_vb (&wvb); 
+    if (wvb && wvb->in_use) {
+        profiler_add (wvb);
+        vb_destroy_vb (&wvb);
+    } 
 
     // case --replace: now that the file was reconstructed, we can remove the genozip file
     if (flag.replace) // note: only available in genounzip, not genocat, and conflicting flags are already blocks
@@ -679,11 +681,11 @@ static void main_load_reference (rom filename, bool is_first_file, bool is_last_
     int old_aligner_available = flag.aligner_available;
     DataType dt = main_get_file_dt (filename);
     flag.aligner_available = primary_command == ZIP && 
-                            (old_aligner_available || dt == DT_FASTQ || 
-                             ((dt==DT_SAM || dt==DT_BAM) && (flag.best || flag.deep))); // SAM/BAM: load refhash only in --best or --deep
+                            (old_aligner_available || dt == DT_FASTQ || dt == DT_GENERIC || // GENERIC might end up being FASTQ/SAM/BAM (in generic_is_header_done), initialize refhash just in case
+                             ((dt==DT_SAM || dt==DT_BAM) && (flag.best || flag.deep)));     // SAM/BAM: load refhash only in --best or --deep
 
     // no need to load the reference if not needed (unless its genocat of the reference file itself)
-    if (flag.genocat_no_ref_file && dt != DT_REF) return;
+    if (flag.dont_load_ref_file && dt != DT_REF) return;
 
     // no need to load the reference if just collecting coverage except FASTQ for which we need the contigs
     if (flag.collect_coverage && dt != DT_FASTQ) return;
@@ -904,7 +906,7 @@ int main (int argc, char **argv)
 
     if (flag.biopsy) biopsy_finalize();
 
-    ASSINP0 (flag.biopsy_line.line_i == NO_LINE, "biopsy line not found, try a lower number");
+    ASSINP0 (flag.no_biopsy_line, "biopsy line not found, try a lower number");
 
     if (arch_is_valgrind()) // when testing with valgrind, release memory we normally intentionally leak, to expose true leaks
         buf_destroy (input_files_buf);

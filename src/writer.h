@@ -31,7 +31,7 @@ extern BitsP writer_get_is_dropped (VBIType vb_i);
 extern void writer_destroy_is_vb_info (void);
 extern bool writer_get_fasta_contig_grepped_out (VBIType vb_i);
 extern void writer_set_fasta_contig_grepped_out (VBIType vb_i);
-extern uint64_t writer_get_txt_line_i (VBlockP vb, LineIType line_in_vb);
+extern int64_t writer_get_txt_line_i (VBlockP vb, LineIType line_in_vb);
 extern void writer_set_num_txtheader_lines (CompIType comp_i, uint32_t num_txtheader_lines);
 
 extern VBlockP wvb;

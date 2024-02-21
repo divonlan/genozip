@@ -849,11 +849,10 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
     if (MP(ULTIMA))
         sam_ultima_finalize_segconf (vb);
 
-    if (flag.reference == REF_INTERNAL && !txt_file->redirected && !flag.seg_only && (!segconf.sam_is_unmapped || !segconf.is_long_reads))
-        TIP ("Compressing a %s file using a reference file can reduce the size by 7%%-30%%%s.\n"
+    if (flag.reference == REF_INTERNAL && !txt_file->redirected && !flag.seg_only && (segconf.sam_is_unmapped && !segconf.is_long_reads))
+        TIP ("Compressing this unmapped %s file using a reference would shrink it by an additional 20%%-50%%.\n"
              "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
-             dt_name (txt_file->data_type), MP(UNKNOWN) ? " (even for unaligned files)" : "", 
-             arch_get_argv0(), txt_file->name);
+             dt_name (txt_file->data_type), arch_get_argv0(), txt_file->name);
     
     ASSERT (!flag.debug_or_test || !segconf.has[OPTION_SA_Z] || segconf.sam_has_SA_Z || MP(LONGRANGER) || MP(UNKNOWN),
             "%s produces SA:Z, expecting segconf.sam_has_SA_Z to be set", segconf_sam_mapper_name()); // should be set in sam_header_zip_inspect_PG_lines
@@ -918,7 +917,7 @@ void sam_seg_finalize (VBlockP vb_)
                                               segconf.sam_mapper != MP_BSSEEKER2 &&
                                               !segconf.has[OPTION_tp_B_c];
 
-    if (flag.biopsy_line.line_i == NO_LINE) // no --biopsy-line
+    if (flag.no_biopsy_line) 
         sam_seg_toplevel (VB);
 
     // get rid of some contexts if we ended up not have using them
@@ -1720,7 +1719,7 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
     // case: biopsy (only arrives here in MAIN VBs if gencomp) 
     //       or biopsy_line: we just needed to pass sam_seg_is_gc_line and we're done
     if ((flag.biopsy && !segconf.running) ||
-        (flag.biopsy_line.line_i != NO_LINE && sam_seg_test_biopsy_line (VB, flds[0], next_line - flds[0])))
+        (flag.has_biopsy_line && sam_seg_test_biopsy_line (VB, flds[0], next_line - flds[0])))
         goto rollback_and_done;
 
     vb->last_cigar = flds[CIGAR];

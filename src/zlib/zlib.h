@@ -28,8 +28,7 @@
   (zlib format), rfc1951 (deflate format) and rfc1952 (gzip format).
 */
 
-#ifndef ZLIB_H
-#define ZLIB_H
+#pragma once 
 
 #include <inttypes.h>
 #include "zconf.h"
@@ -84,9 +83,9 @@ typedef void   (*free_func)  OF((voidpf opaque, voidpf address, const char *func
 
 struct internal_state;
 
+// divon: moved avail_in within struct, to make struct naturally packed on 64 bit architecture
 typedef struct z_stream_s {
     z_const Bytef *next_in;     /* next input byte */
-    uInt     avail_in;  /* number of bytes available at next_in */
 
     z_off64_t total_in;  /* total number of input bytes read so far */ // modified by Divon Lan (was: uLong)
     uLongLong total_ever_in; /* total number of input bytes ever - across concatenated gzip sections (as in BGZF). added by Divon Lan */
@@ -101,6 +100,7 @@ typedef struct z_stream_s {
     free_func  zfree;   /* used to free the internal state */
     voidpf     opaque;  /* private data object passed to zalloc and zfree */
 
+    uInt     avail_in;  /* number of bytes available at next_in */
     int     data_type;  /* best guess about the data type: binary or text
                            for deflate, or the decoding state for inflate */
     uLong   adler;      /* Adler-32 or CRC-32 value of the uncompressed data */
@@ -122,8 +122,8 @@ typedef struct gz_header_s {
     uInt    extra_len;  /* extra field length (valid if extra != Z_NULL) */
     uInt    extra_max;  /* space at extra (only when reading header) */
     Bytef   *name;      /* pointer to zero-terminated file name or Z_NULL */
-    uInt    name_max;   /* space at name (only when reading header) */
     Bytef   *comment;   /* pointer to zero-terminated comment or Z_NULL */
+    uInt    name_max;   /* space at name (only when reading header) */
     uInt    comm_max;   /* space at comment (only when reading header) */
     int     hcrc;       /* true if there was or will be a header crc */
     int     done;       /* true when done reading gzip header (not used
@@ -1654,12 +1654,6 @@ ZEXTERN int ZEXPORT gzclose_w OF((gzFile file));
    zlib library.
 */
 
-/* Added by Divon - adds a 18 bytes of compressed data to the in stream, which will 
-be consumed next, instead of reading from disk
- */
-#define INJECTION_SIZE 18
-ZEXTERN int ZEXPORT gzinject OF((gzFile file, const unsigned char *injection, uInt injection_size));
-
 ZEXTERN const char * ZEXPORT gzerror OF((gzFile file, int *errnum));
 /*
      Returns the error message for the last error which occurred on the given
@@ -1848,7 +1842,6 @@ ZEXTERN int ZEXPORT gzgetc_ OF((gzFile file));  /* backward compatibility */
    ZEXTERN z_off64_t ZEXPORT gzseek64 OF((gzFile, z_off64_t, int));
    ZEXTERN z_off64_t ZEXPORT gztell64 OF((gzFile));
    ZEXTERN z_off64_t ZEXPORT gzoffset64 OF((gzFile));
-   ZEXTERN uLongLong ZEXPORT gzconsumed64 OF((gzFile)); // added by Divon Lan
   //  ZEXTERN uLong ZEXPORT adler32_combine64 OF((uLong, uLong, z_off64_t));
   //  ZEXTERN uLong ZEXPORT crc32_combine64 OF((uLong, uLong, z_off64_t));
 #endif
@@ -1918,4 +1911,3 @@ ZEXTERN int            ZEXPORTVA gzvprintf Z_ARG((gzFile file,
 }
 #endif
 
-#endif /* ZLIB_H */

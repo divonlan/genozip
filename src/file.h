@@ -117,16 +117,20 @@ typedef struct File {
     Buffer section_list_save;          // a copy of the section_list in case it is modified due to recon plan.
 
     // TXT file: reading
-    Buffer unconsumed_txt;             // ZIP: excess data read from the txt file - moved to the next VB
+    Buffer unconsumed_txt;             // ZIP: excess uncompressed data read from the txt file - moved to the next VB
 
-    // TXT file: stuff reading and writing txt files compressed with BGZF
-    Buffer unconsumed_bgzf_blocks;     // ZIP: unconsumed or partially consumed bgzf blocks - moved to the next VB
-    Buffer bgzf_isizes;                // ZIP/PIZ: uncompressed size of the bgzf blocks in which this txt file is compressed (in BGEN16)
-    Buffer bgzf_starts;                // ZIP: offset in txt_file of each BGZF block
-    Mutex bgzf_flags_mutex;            // ZIP: txt_file: protect txt_file->bgzf_flags
-    struct FlagsBgzf bgzf_flags;       // corresponds to SectionHeader.flags in SEC_BGZF
-    uint8_t bgzf_signature[3];         // PIZ: 3 LSB of size of source BGZF-compressed file, as passed in SectionHeaderTxtHeader.codec_info
-    
+    // TXT file: BGZF stuff reading and writing compressed txt files 
+    Buffer unconsumed_bgzf_blocks;  // ZIP TXT BGZF: unconsumed or partially consumed bgzf blocks - moved to the next VB
+    Buffer bgzf_isizes;             // ZIP/PIZ: uncompressed size of the bgzf blocks in which this txt file is compressed (in BGEN16)
+    Buffer bgzf_starts;             // ZIP: offset in txt_file of each BGZF block
+    Buffer bgzf_plausible_levels;   // ZIP: discovering library/level. .count = number of BGZF blocks tested so far
+    struct FlagsBgzf bgzf_flags;    // corresponds to SectionHeader.flags in SEC_BGZF
+    uint8_t bgzf_signature[3];      // PIZ: 3 LSB of size of source BGZF-compressed file, as passed in SectionHeaderTxtHeader.codec_info
+
+    // TXT file: IGZIP stuff reading and writing compressed txt files 
+    Buffer igzip_data;              // ZIP TXT GZ (with igzip): yet-uncompressed data read from disk
+    Buffer igzip_state;             // ZIP TXT GZ (with igzip)
+
     // TXT FILE: accounting for truncation when --truncate-partial-last-line is used
     bool bgzf_truncated_last_block;    // ZIP: detected a truncated last block
     uint32_t last_truncated_line_len;  // ZIP: bytes truncated due to incomplete final line. note that if file is BGZF, then this truncated data is contained in the final intact BGZF blocks, after already discarding the final incomplete BGZF block
@@ -216,7 +220,9 @@ typedef struct File {
     int64_t disk_so_far_comp[MAX_NUM_COMPS];            // Z_FILE ZIP: per-component size if z_file VB sections (note: global area sections, including SEC_DICT, are not accounted for)
     int64_t txt_data_so_far_bind_comp[MAX_NUM_COMPS];   // Z_FILE ZIP: per-component txt_size after modifications (due to --optimzie etc)
     int64_t txt_data_so_far_bind_0_comp[MAX_NUM_COMPS]; // Z_FILE ZIP: per-component txt_size before modifications 
+    Codec comp_codec[MAX_NUM_COMPS];                    // Z_FILE ZIP: codec used for every txt file component (i.e. excluding generated components)
     Codec comp_source_codec[MAX_NUM_COMPS];             // Z_FILE ZIP: source codec used for every txt file component (i.e. excluding generated components)
+    FlagsBgzf comp_bgzf[MAX_NUM_COMPS];                 // Z_FILE ZIP: library and level of BGZF of each comp
 } File;
 
 #define z_has_gencomp (z_file && z_file->z_flags.has_gencomp) // ZIP/PIZ

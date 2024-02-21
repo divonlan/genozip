@@ -80,7 +80,7 @@ void asspiz_text (VBlockP vb, FUNCLINE)
     sprintf (next, "%s", (vb->curr_item != DID_NONE ? CTX(vb->curr_item)->tag_name : "N/A"));
 
     progress_newline(); 
-    fprintf (stderr, "%s %s: Error in %s:%u line_in_file(1-based)=%"PRIu64"%s %s%s stack=%s %s: ", 
+    fprintf (stderr, "%s %s: Error in %s:%u line_in_file(1-based)=%"PRId64"%s %s%s stack=%s %s: ", 
              str_time().s, LN_NAME, func, code_line, 
              writer_get_txt_line_i ((VBlockP)(vb), vb->line_i), 
              cond_int (Z_DT(VCF) || Z_DT(BCF), " sample_i=", vb->sample_i), 
@@ -141,7 +141,7 @@ bool piz_default_skip_section (SectionType st, DictId dict_id)
     ||  (flag.count && !DTPZ(is_skip_section) && dict_id.num != DTFZ(toplevel).num) 
     );
 
-    skip |= flag.genocat_no_ref_file && (ST(REFERENCE) || st == SEC_REF_HASH || ST(REF_IS_SET));
+    skip |= flag.dont_load_ref_file && (ST(REFERENCE) || st == SEC_REF_HASH || ST(REF_IS_SET));
 
     if (skip && is_genocat && dict_id.num && (dict_id.num == flag.show_singletons_dict_id.num || dict_id.num == flag.dump_one_local_dict_id.num))
         skip = false;
@@ -314,7 +314,7 @@ static void piz_reconstruct_one_vb (VBlockP vb)
     ASSERT (vb->vblock_i, "vb->vblock_i is 0: vb->compute_thread_id=%d pthread=%"PRIu64, 
             vb->compute_thread_id, (uint64_t)pthread_self());
 
-    ASSERT (!flag.reference || ref_is_loaded (gref) || flag.genocat_no_ref_file,
+    ASSERT (!flag.reference || ref_is_loaded (gref) || flag.dont_load_ref_file,
             "%s: reference is not loaded correctly", VB_NAME);
 
     ASSERT (vb->recon_size >= 0, "Invalid vb->recon_size=%d", vb->recon_size);
@@ -522,7 +522,7 @@ DataType piz_read_global_area (Reference ref)
             if (is_genocat && (flag.show_coverage || flag.idxstats)) 
                 goto done;  
 
-            bool ref_loaded_from_disk = !flag.genocat_no_ref_file && ref_load_stored_reference (ref);
+            bool ref_loaded_from_disk = !flag.dont_load_ref_file && ref_load_stored_reference (ref);
 
             // load the IUPACs list of the reference (rare non-ACGT "bases")
             ref_iupacs_load (ref);
@@ -541,7 +541,7 @@ DataType piz_read_global_area (Reference ref)
 
         // case: non-reference file has stored reference sections
         else if (has_ref_sections) {
-            if (!flag.genocat_no_ref_file) { 
+            if (!flag.dont_load_ref_file) { 
                 ref_load_stored_reference (gref);
 
                 // exit now if all we wanted was just to see the reference (we've already shown it)

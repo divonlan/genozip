@@ -8,5 +8,5 @@ The modifications are as follows:
 2) change z_stream.total_in from uLong to z_off64_t
 3) added a counter z_stream.total_ever_in - counting the total number of bytes in, even across inflateReset
    that occurs when gzip blocks are deflated separately and concatenated, as in the BGZF format
-4) added the function gzconsumed64
+4) added the functions gzconsumed64 and gzinject (canceled in 15.0.43)
 5) replaced adler32 and crc32 with calls to libdeflate
