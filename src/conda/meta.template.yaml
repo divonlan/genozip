@@ -3,11 +3,9 @@
 #   Copyright (C) 2020-2024 Genozip Limited. Patent Pending.
 #   Please see terms and conditions in the file LICENSE.txt
 #
-# See: https://docs.conda.io/projects/conda-build/en/latest/resources/build-scripts.html
-# See: https://docs.ligo.org/lscsoft/conda/packaging/
 # Note: VERSION and SHA256 are replaced by Makefile
 {% set version = "__VERSION__" %}
-#
+
 # Example of building Windows with gcc: https://github.com/conda-forge/r-dplyr-feedstock/tree/master/recipe
 {% set posix = 'm2-' if win else '' %}
 {% set native = 'm2w64-' if win else '' %}
@@ -22,15 +20,15 @@ source:
  
 build:
 # Windows builds & tests successfully, but then the test fails in Appveyor - it seems the executable is not loading (maybe missing gcc libraries? just a hunch)
-  skip: True  # [win]
+  # skip: True  # [win]
   number: 0
 
 requirements:
   build:    
-# Example of a C project: https://github.com/conda-forge/bzip2-feedstock/tree/b49b6b5ecc0035d2e947a4e3f720a3f24519d19e/recipe
+    - {{posix}}make
+    - nasm
     - {{ compiler('c') }}        # [not win]
     - {{ compiler('m2w64_c') }}  # [win]
-    - {{posix}}make
     - {{posix}}sed               # [win]
     - {{posix}}coreutils         # [win]
   host:
@@ -40,21 +38,9 @@ requirements:
     - curl
 
 test:
-#  source_files: 
-#    - test-file.vcf
-
   commands:
-    {% set genozip_executables = [
-      "genozip",
-      "genounzip",
-      "genocat",
-      "genols"
-    ] %}
-#    {% for executable in genozip_executables %}
-#    - genozip --version
-#    {% endfor %}
-#    - which genozip.exe  # [win]
-    - genozip --version
+    - genozip --version          # [not win]
+    - genozip.exe --version      # [win]
 
 about:
   home: https://genozip.com

@@ -54,9 +54,9 @@ ifeq ($(CPU),x86_64) # or amd64
 
 	ifdef Mac
 		# Mac is not tested yet with .asm - fix this after testing
-		noarch := 1
-# 		x86_64 := 1   
-#		ASFLAGS += -f macho64 --prefix=_
+		# noarch := 1
+		x86_64 := 1   
+		ASFLAGS += -f macho64 --prefix=_
 	endif	
 else 
 	ifeq ($(CPU),aarch64) # ARM 64
@@ -529,7 +529,7 @@ clean-dev: clean-installers clean-test # use only in dev - deletes license.o
 # builds latest for local OS
 genozip-latest$(EXE): 
 	@echo "building latest"
-	@(cd $(LATEST_SRC); rm -Rf $(OBJDIR) ; if [[ `pwd` = *genozip-latest* ]]; then git reset --hard ; git pull ; $(MAKE) clean ; touch dict_id_gen.h ; $(MAKE); fi )
+	@(cd $(LATEST_SRC); rm -Rf $(OBJDIR) ; if [[ `pwd` = *genozip-latest* ]]; then git reset --hard ; git pull ; $(MAKE) clean ; touch dict_id_gen.h ; $(MAKE) -j; cp $@ ../genozip/private/releases/genozip-$(version)$(EXE) ; fi )
 
 # currently, I build for conda from my Windows machine so I don't bother supporting other platforms
 ifdef Windows
