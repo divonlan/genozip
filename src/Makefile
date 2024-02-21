@@ -192,28 +192,35 @@ CONDA_INCS += dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h a
 			arch.h license.h file_types.h data_types.h base64.h txtheader.h writer.h zriter.h bases_filter.h genols.h contigs.h chrom.h 	\
 			vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h gff.h bed.h locs.h generic.h 							\
 			fastq.h fastq_private.h user_message.h mac_compat.h b250.h zip_dyn_int.h qname_filter.h 										\
+			\
 			zlib/gzguts.h zlib/zconf.h zlib/deflate.h zlib/trees.h zlib/zlib.h zlib/zutil.h													\
+			\
 			lzma/7zTypes.h lzma/LzFind.h lzma/LzHash.h lzma/LzmaDec.h lzma/LzmaEnc.h 														\
+			\
 			bzlib/bzlib.h bzlib/bzlib_private.h																								\
+			\
 			htscodecs/rANS_static4x16.h htscodecs/rle.h htscodecs/pack.h htscodecs/arith_dynamic.h htscodecs/c_simple_model.h				\
 			htscodecs/rANS_word.h htscodecs/htscodecs_endian.h htscodecs/rANS_word.h htscodecs/utils.h htscodecs/varint.h 					\
 			htscodecs/varint2.h htscodecs/utils.h 																							\
+			\
 			bsc/bwt.h bsc/coder.h bsc/divsufsort.h bsc/libbsc.h bsc/lzp.h bsc/platform.h bsc/qlfc_model.h bsc/qlfc.h bsc/rangecoder.h 		\
 			bsc/tables.h																													\
- 			libdeflate_1.7/unaligned.h libdeflate_1.7/deflate_compress.h libdeflate_1.7/arm_matchfinder_impl.h 								\
+ 			\
+			libdeflate_1.7/unaligned.h libdeflate_1.7/deflate_compress.h libdeflate_1.7/arm_matchfinder_impl.h 								\
 			libdeflate_1.7/deflate_constants.h libdeflate_1.7/bt_matchfinder.h libdeflate_1.7/hc_matchfinder.h libdeflate_1.7/common_defs.h	\
 			libdeflate_1.7/lib_common.h libdeflate_1.7/x86_matchfinder_impl.h libdeflate_1.7/compiler_gcc.h libdeflate_1.7/libdeflate.h 	\
 			libdeflate_1.7/matchfinder_common.h 																							\
- 			libdeflate_1.19/adler32_vec_template.h libdeflate_1.19/crc32_table.h libdeflate_1.19/unaligned.h 								\
-			libdeflate_1.19/arm_adler32_impl.h libdeflate_1.19/crc32_vec_template.h libdeflate_1.19/x86_adler32_impl.h 						\
-			libdeflate_1.19/arm_cpu_features.h libdeflate_1.19/decompress_template.h libdeflate_1.19/x86_cpu_features.h 					\
-			libdeflate_1.19/arm_crc32_impl.h libdeflate_1.19/deflate_compress.h libdeflate_1.19/x86_crc32_impl.h 							\
-			libdeflate_1.19/arm_matchfinder_impl.h libdeflate_1.19/deflate_constants.h libdeflate_1.19/x86_crc32_pclmul_template.h			\
-			libdeflate_1.19/bt_matchfinder.h libdeflate_1.19/hc_matchfinder.h libdeflate_1.19/x86_decompress_impl.h						 	\
-			libdeflate_1.19/common_defs.h libdeflate_1.19/lib_common.h libdeflate_1.19/x86_matchfinder_impl.h								\
-			libdeflate_1.19/compiler_gcc.h libdeflate_1.19/libdeflate.h libdeflate_1.19/cpu_features_common.h 								\
-			libdeflate_1.19/matchfinder_common.h
-
+ 			\
+			libdeflate_1.19/adler32_vec_template.h libdeflate_1.19/crc32_tables.h 									 						\
+			libdeflate_1.19/crc32_multipliers.h libdeflate_1.19/deflate_constants.h libdeflate_1.19/lib_common.h 							\
+			libdeflate_1.19/bt_matchfinder.h libdeflate_1.19/hc_matchfinder.h libdeflate_1.19/common_defs.h	libdeflate_1.19/libdeflate.h	\
+			libdeflate_1.19/gzip_constants.h libdeflate_1.19/decompress_template.h libdeflate_1.19/cpu_features_common.h					\
+			libdeflate_1.19/matchfinder_common.h libdeflate_1.19/deflate_compress.h libdeflate_1.19/ht_matchfinder.h 						\
+			libdeflate_1.19/x86/adler32_impl.h libdeflate_1.19/x86/crc32_impl.h libdeflate_1.19/x86/matchfinder_impl.h						\
+			libdeflate_1.19/x86/cpu_features.h libdeflate_1.19/x86/crc32_pclmul_template.h libdeflate_1.19/x86/decompress_impl.h			\
+			libdeflate_1.19/arm/adler32_impl.h libdeflate_1.19/arm/cpu_features.h libdeflate_1.19/arm/crc32_impl.h                          \
+			libdeflate_1.19/arm/matchfinder_impl.h libdeflate_1.19/arm/crc32_pmull_helpers.h libdeflate_1.19/arm/crc32_pmull_wide.h
+        
 INSTALLERS = ../installers
 
 IGZIP_DIR=igzip
