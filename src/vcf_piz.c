@@ -51,12 +51,12 @@ bool vcf_piz_init_vb (VBlockP vb_, ConstSectionHeaderVbHeaderP header)
 
     vb->recon_size = BGEN32 (header->recon_size); 
     
-    // HT_n_lines: number of lines that are included in HT_MATRIX. Since 15.0.47, we don't
+    // HT_n_lines: number of lines that are included in HT_MATRIX. Since 15.0.48, we don't
     // include lines with no FORMAT/GT or lines copied in vcf_seg_sv_SAMPLES. Prior to that, 
     // all lines were always included.
     decl_ctx (FORMAT_GT_HT); 
     if (VER(15)) {
-        ctx->HT_n_lines = BGEN32 (header->vcf_HT_n_lines); // since 15.0.47.
+        ctx->HT_n_lines = BGEN32 (header->vcf_HT_n_lines); // since 15.0.48.
         
         // case: vcf_zip_set_vb_header_specific set header->vcf_HT_n_lines, but truly no lines have GT
         if (ctx->HT_n_lines == 0xffffffff) 

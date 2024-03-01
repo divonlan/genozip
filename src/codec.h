@@ -76,7 +76,7 @@ typedef struct {
     { 1, "RANw", "+",      codec_RANw_compress,      codec_rans_uncompress,    NA3,                       codec_RANw_est_size      }, /* STRIPE & PACK */\
     { 0, "ACGT", "+",      codec_acgt_compress,      codec_acgt_uncompress,    NA3,                       codec_complex_est_size   }, \
     { 0, "XCGT", "+",      USE_SUBCODEC,             codec_xcgt_uncompress,    NA3,                       NA4                      }, \
-    { 0, "HAPM", "+",      NA1,                      codec_hapmat_uncompress,  NA3,                       NA4,                     }, /* HapMat used for compressing in versions v1 to v10, and supported for decompression up to v14. Code removed 15.0.47. */ \
+    { 0, "HAPM", "+",      NA1,                      codec_hapmat_uncompress,  NA3,                       NA4,                     }, /* HapMat used for compressing in versions v1 to v10, and supported for decompression up to v14. Code removed 15.0.48. */ \
     { 0, "DOMQ", "+",      codec_domq_compress,      USE_SUBCODEC,             codec_domq_reconstruct,    codec_complex_est_size,  }, \
     { 0, "GTSH", "+",      NA1,                      codec_gtshark_uncompress, NA3,                       NA4,                     }, /* gtshark discontinued in v12. keep for displaying an error */\
     { 0, "PBWT", "+",      codec_pbwt_compress,      codec_pbwt_uncompress,    codec_pbwt_reconstruct,    codec_complex_est_size   }, \

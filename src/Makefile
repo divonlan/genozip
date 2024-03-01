@@ -570,7 +570,7 @@ clean-dev: clean-installers clean-test # use only in dev - deletes license.o
 # builds latest for local OS
 genozip-latest$(EXE): 
 	@echo "building latest"
-	@(cd $(LATEST_SRC); rm -Rf $(OBJDIR) ; if [[ `pwd` = *genozip-latest* ]]; then git reset --hard ; git pull ; $(MAKE) clean ; touch dict_id_gen.h ; $(MAKE) -j; cp $@ ../..	/genozip/private/releases/genozip-$(version)$(EXE) ; fi )
+	@(cd $(LATEST_SRC); rm -Rf $(OBJDIR) ; if [[ `pwd` = *genozip-latest* ]]; then git reset --hard ; git pull ; $(MAKE) clean ; touch dict_id_gen.h ; $(MAKE) -j; cp $@ ../../genozip/private/releases/genozip-$(version)$(EXE) ; fi )
 
 # currently, I build for conda from my Windows machine so I don't bother supporting other platforms
 ifdef Windows

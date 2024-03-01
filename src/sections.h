@@ -125,7 +125,7 @@ typedef union SectionFlags {
         uint8_t spl_custom       : 1;  // introduced v14: similar to store_per_line, but storing is done by the context's SPECIAL function, instead of in reconstruct_store_history
         uint8_t all_the_same     : 1;  // SEC_B250: the b250 data contains only one element, and should be used to reconstruct any number of snips from this context
 
-        #define same_line        ctx_specific_flag // v13.0.5: Valid for contexts that use SNIP_OTHER_DELTA, SNIP_DIFF, SNIP_COPY(from other)(15.0.47): if true, reconstructs gets the value in the line (whether before or after). if false, it gets the last value.
+        #define same_line        ctx_specific_flag // v13.0.5: Valid for contexts that use SNIP_OTHER_DELTA, SNIP_DIFF, SNIP_COPY(from other)(15.0.48): if true, reconstructs gets the value in the line (whether before or after). if false, it gets the last value.
         #define no_textual_seq   ctx_specific_flag // v14.0.0: SAM_SQBITMAP: indicates that SEQ is NOT consumed by other fields, and therefore sam_piz_sam2bam_SEQ doesn't need to store textual_seq. 
         #define depn_clip_hard   ctx_specific_flag // v14.0.0: OPTION_SA_Z in SAM_COMP_MAIN: if true: depn lines, if their CIGAR has a clipping, it is hard clipping (H)
         #define lookback0_ok     ctx_specific_flag // v14.0.0: contexts that are items of a container with lookback. indicates that a SNIP_LOOKBACK when lookback=0 is not an error.
@@ -263,16 +263,16 @@ typedef struct {
             uint32_t segconf_has_RGQ      : 1; // VCF: copied from segconf.has[FORMAT_RGQ]. added v14.
             uint32_t segconf_GQ_method    : 3; // VCF: 15.0.37
             uint32_t segconf_FMT_DP_method: 2; // VCF: 15.0.37
-            uint32_t segconf_del_svlen_is_neg : 1; // VCF: 15.0.47
+            uint32_t segconf_del_svlen_is_neg : 1; // VCF: 15.0.48
             uint32_t unused2              : 1;
             uint32_t max_ploidy_for_mux   : 8; // VCF: 15.0.36
-            uint32_t segconf_MATEID_method: 3; // VCF: 15.0.47
+            uint32_t segconf_MATEID_method: 3; // VCF: 15.0.48
             uint32_t unused13             : 13;
             
             struct { // 32 bits                 
                 uint32_t AC:3, MLEAC:3, AN:3, AF:3, SF:3, QD:3, DP:3;  // VCF: 15.0.37
                 uint32_t AS_SB_TABLE : 4;     // VCF: 15.0.41
-                uint32_t ID          : 6;     // VCF: 15.0.47
+                uint32_t ID          : 6;     // VCF: 15.0.48
                 uint32_t unused      : 1;
             } width; 
             
@@ -324,7 +324,7 @@ typedef struct {
     union {
         uint32_t v11_first_line;       // up to v11 - first_line; if 0, this is the terminating section of the components
         uint32_t sam_prim_seq_len;     // SAM PRIM: total number of bases of SEQ in this VB (v14) 
-        uint32_t vcf_HT_n_lines;        // VCF starting 15.0.47: number of lines that 1. have FORMAT/GT 2. Samples were segged (i.e. not copy-from-mate)
+        uint32_t vcf_HT_n_lines;        // VCF starting 15.0.48: number of lines that 1. have FORMAT/GT 2. Samples were segged (i.e. not copy-from-mate)
     };    
     union {
         uint32_t v13_top_level_repeats;// v12/13: repeats of TOPLEVEL container in this VB. Up to v12 - called num_lines.

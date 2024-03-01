@@ -63,7 +63,7 @@ SPECIAL_RECONSTRUCTOR (piz_special_MINUS)
                    (*B(ContextP, ctx->ctx_cache, 1))->last_value.i;
 
     if (str_is_1char (snip, 'A')) 
-        new_value->i = ABS (new_value->i); // ABS option since 15.0.47
+        new_value->i = ABS (new_value->i); // ABS option since 15.0.48
 
     if (reconstruct)
         RECONSTRUCT_INT (new_value->i); 

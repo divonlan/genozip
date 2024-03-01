@@ -255,7 +255,7 @@ void vcf_seg_INFO_SVLEN (VBlockVCFP vb, ContextP ctx, STRp(svlen_str))
     if (segconf.running && !segconf.vcf_del_svlen_is_neg && svlen == -predicted_sv_len)
         segconf.vcf_del_svlen_is_neg = true;
 
-    // prediction based on variant type (since 15.0.47)
+    // prediction based on variant type (since 15.0.48)
     if (svlen == predicted_sv_len)
         seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_SVLEN, 'P' }), 3, ctx, svlen_str_len);
     
@@ -282,7 +282,7 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_SVLEN)
     if (!snip_len) 
         new_value->i = -CTX(VCF_POS)->last_delta; // END is a alias of POS - they share the same data stream - so last_delta would be the delta between END and POS
 
-    else if (*snip == 'P')  // introduced 15.0.47
+    else if (*snip == 'P')  // introduced 15.0.48
         new_value->i = vcf_INFO_SVLEN_prediction (vb);
 
     else if (*snip == '2') // introduced 15.0.13 (used for REFLEN ; used for SVLEN up to 15.0.46)

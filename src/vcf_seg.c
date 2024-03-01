@@ -71,8 +71,8 @@ void vcf_zip_genozip_header (SectionHeaderGenozipHeaderP header)
     header->vcf.segconf_GQ_method     = segconf.GQ_method;             // since 15.0.37
     header->vcf.segconf_FMT_DP_method = segconf.FMT_DP_method;         // since 15.0.37
     header->vcf.max_ploidy_for_mux    = ZIP_MAX_PLOIDY_FOR_MUX;        // since 15.0.36
-    header->vcf.segconf_MATEID_method = segconf.MATEID_method;         // since 15.0.47
-    header->vcf.segconf_del_svlen_is_neg = segconf.vcf_del_svlen_is_neg; // since 15.0.47
+    header->vcf.segconf_MATEID_method = segconf.MATEID_method;         // since 15.0.48
+    header->vcf.segconf_del_svlen_is_neg = segconf.vcf_del_svlen_is_neg; // since 15.0.48
     header->vcf.width.MLEAC           = segconf.wid_MLEAC.width;       // since 15.0.37
     header->vcf.width.AC              = segconf.wid_AC.width;          // since 15.0.37
     header->vcf.width.AF              = segconf.wid_AF.width;          // since 15.0.37
@@ -81,7 +81,7 @@ void vcf_zip_genozip_header (SectionHeaderGenozipHeaderP header)
     header->vcf.width.SF              = segconf.wid_SF.width;          // since 15.0.37
     header->vcf.width.QD              = segconf.wid_QD.width;          // since 15.0.37
     header->vcf.width.AS_SB_TABLE     = segconf.wid_AS_SB_TABLE.width; // since 15.0.41
-    header->vcf.width.ID              = segconf.wid_ID.width;          // since 15.0.47
+    header->vcf.width.ID              = segconf.wid_ID.width;          // since 15.0.48
 }
 
 void vcf_zip_init_vb (VBlockP vb_)
@@ -111,10 +111,10 @@ void vcf_zip_set_txt_header_flags (struct FlagsTxtHeader *f)
 
 void vcf_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeaderP vb_header)
 {
-    // note: we write 0xffffffff instead of 0, to differentiate from the case where we didn't write at all prior to 15.0.47
+    // note: we write 0xffffffff instead of 0, to differentiate from the case where we didn't write at all prior to 15.0.48
     decl_ctx (FORMAT_GT_HT); 
     vb_header->vcf_HT_n_lines = 
-        ctx->HT_n_lines ? BGEN32 (ctx->HT_n_lines) : 0xffffffff; // since 15.0.47
+        ctx->HT_n_lines ? BGEN32 (ctx->HT_n_lines) : 0xffffffff; // since 15.0.48
 }
 
 // called by Compute threadfrom seg_all_data_lines

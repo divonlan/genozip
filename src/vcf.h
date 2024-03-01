@@ -817,17 +817,17 @@ SPECIAL (VCF, 66, MUX_FORMAT_DP,       vcf_piz_special_MUX_FORMAT_DP);          
 SPECIAL (VCF, 67, AN,                  vcf_piz_special_INFO_AN);                  // added v15.0.37
 SPECIAL (VCF, 68, DEFER,               vcf_piz_special_DEFER);                    // added v15.0.41
 SPECIAL (VCF, 69, RPA,                 vcf_piz_special_RPA);                      // added v15.0.41
-SPECIAL (VCF, 70, SVABA_MATEID,        vcf_piz_special_SVABA_MATEID);             // added v15.0.47
-SPECIAL (VCF, 71, MAPQ,                vcf_piz_special_MAPQ);                     // added v15.0.47
-SPECIAL (VCF, 72, SPAN,                vcf_piz_special_SPAN);                     // added v15.0.47
-SPECIAL (VCF, 73, COPY_MATE,           vcf_piz_special_COPY_MATE);                // added v15.0.47
-SPECIAL (VCF, 74, DEMUX_BY_MATE,       vcf_piz_special_DEMUX_BY_MATE);            // added v15.0.47
-SPECIAL (VCF, 75, PBSV_MATEID,         vcf_piz_special_PBSV_MATEID);              // added v15.0.47
-SPECIAL (VCF, 76, DEMUX_BY_VARTYPE,    vcf_piz_special_DEMUX_BY_VARTYPE);         // added v15.0.47
-SPECIAL (VCF, 77, PBSV_ID_BND,         vcf_piz_special_PBSV_ID_BND);              // added v15.0.47
-SPECIAL (VCF, 78, MANTA_CIGAR,         vcf_piz_special_manta_CIGAR);              // added v15.0.47
-SPECIAL (VCF, 79, LEN_OF,              vcf_piz_special_LEN_OF);                   // added v15.0.47
-SPECIAL (VCF, 80, HOMSEQ,              vcf_piz_special_HOMSEQ);                   // added v15.0.47
+SPECIAL (VCF, 70, SVABA_MATEID,        vcf_piz_special_SVABA_MATEID);             // added v15.0.48
+SPECIAL (VCF, 71, MAPQ,                vcf_piz_special_MAPQ);                     // added v15.0.48
+SPECIAL (VCF, 72, SPAN,                vcf_piz_special_SPAN);                     // added v15.0.48
+SPECIAL (VCF, 73, COPY_MATE,           vcf_piz_special_COPY_MATE);                // added v15.0.48
+SPECIAL (VCF, 74, DEMUX_BY_MATE,       vcf_piz_special_DEMUX_BY_MATE);            // added v15.0.48
+SPECIAL (VCF, 75, PBSV_MATEID,         vcf_piz_special_PBSV_MATEID);              // added v15.0.48
+SPECIAL (VCF, 76, DEMUX_BY_VARTYPE,    vcf_piz_special_DEMUX_BY_VARTYPE);         // added v15.0.48
+SPECIAL (VCF, 77, PBSV_ID_BND,         vcf_piz_special_PBSV_ID_BND);              // added v15.0.48
+SPECIAL (VCF, 78, MANTA_CIGAR,         vcf_piz_special_manta_CIGAR);              // added v15.0.48
+SPECIAL (VCF, 79, LEN_OF,              vcf_piz_special_LEN_OF);                   // added v15.0.48
+SPECIAL (VCF, 80, HOMSEQ,              vcf_piz_special_HOMSEQ);                   // added v15.0.48
 #define NUM_VCF_SPECIAL 81
 
 #define VCF_DICT_ID_ALIASES                                 \
