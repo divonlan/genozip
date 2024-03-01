@@ -178,8 +178,8 @@ static inline Did get_matching_did_i_from_map (const ContextArray contexts, cons
 }
 
 // inline function for quick operation typically called several billion times in a typical file and > 99.9% can be served by the inline
-#define ctx_get_ctx(vb,dict_id) ctx_get_ctx_do (((VBlockP)(vb))->contexts, ((VBlockP)(vb))->data_type, ((VBlockP)(vb))->d2d_map, &((VBlockP)(vb))->num_contexts, (dict_id), 0, 0)
-#define ctx_get_ctx_tag(vb,dict_id,tag_name,tag_name_len) ctx_get_ctx_do (((VBlockP)(vb))->contexts, ((VBlockP)(vb))->data_type, ((VBlockP)(vb))->d2d_map, &((VBlockP)(vb))->num_contexts, (dict_id), (tag_name), (tag_name_len))
+#define ctx_get_ctx(vb,dict_id) ctx_get_ctx_do (((VBlockP)(vb))->contexts, ((VBlockP)(vb))->data_type, ((VBlockP)(vb))->d2d_map, &((VBlockP)(vb))->num_contexts, (DictId)(dict_id), 0, 0)
+#define ctx_get_ctx_tag(vb,dict_id,tag_name,tag_name_len) ctx_get_ctx_do (((VBlockP)(vb))->contexts, ((VBlockP)(vb))->data_type, ((VBlockP)(vb))->d2d_map, &((VBlockP)(vb))->num_contexts, (DictId)(dict_id), (tag_name), (tag_name_len))
 static inline ContextP ctx_get_ctx_do (ContextArray contexts, DataType dt, DictIdtoDidMap d2d_map, Did *num_contexts, DictId dict_id, STRp(tag_name))
 {
     Did did_i = get_matching_did_i_from_map (contexts, d2d_map, dict_id);
@@ -207,7 +207,7 @@ static inline ContextP ctx_get_existing_ctx_do (VBlockP vb, DictId dict_id)  // 
     Did did_i = ctx_get_existing_did_i (vb, dict_id); 
     return (did_i == DID_NONE) ? NULL : CTX(did_i); 
 }
-#define ECTX(dict_id) ctx_get_existing_ctx_do ((VBlockP)(vb), (dict_id))
+#define ECTX(dict_id) ctx_get_existing_ctx_do ((VBlockP)(vb), (DictId)(dict_id))
 
 extern ContextP ctx_get_existing_zctx (DictId dict_id);
 
@@ -293,7 +293,7 @@ static inline bool ctx_has_value_in_line_do (VBlockP vb, DictId dict_id, Context
     if (p_ctx) *p_ctx = ctx;
     return ctx && ctx_has_value_in_line_(vb, ctx);
 }
-#define ctx_has_value_in_line(vb, dict_id, p_ctx) ctx_has_value_in_line_do ((VBlockP)(vb), (dict_id), (p_ctx))
+#define ctx_has_value_in_line(vb, dict_id, p_ctx) ctx_has_value_in_line_do ((VBlockP)(vb), (DictId)(dict_id), (p_ctx))
 
 static inline void ctx_set_last_value (VBlockP vb, ContextP ctx, ValueType last_value)
 {

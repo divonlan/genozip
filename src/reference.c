@@ -672,7 +672,7 @@ bool ref_load_stored_reference (Reference ref)
 // if range is found, returns a locked range, and its the responsibility of the caller to unlock it. otherwise, returns NULL
 RangeP ref_seg_get_range (VBlockP vb, Reference ref, WordIndex chrom, STRp(chrom_name), 
                           PosType64 pos, uint32_t ref_consumed, 
-                          WordIndex ref_index, // if known (mandatory if not prim_chrom), WORD_INDEX_NONE if not                                
+                          WordIndex ref_index, // if known (mandatory if not chrom), WORD_INDEX_NONE if not                                
                           RefLock *lock) // optional if RT_LOADED
 {
     // sanity checks
@@ -684,7 +684,7 @@ RangeP ref_seg_get_range (VBlockP vb, Reference ref, WordIndex chrom, STRp(chrom
     ASSINP (ref->ranges.rtype, "No contigs specified in the %s header, use --reference", z_dt_name());
              
     if (ref_index == WORD_INDEX_NONE)
-        ref_index = IS_REF_INTERNAL ? chrom :  chrom_2ref_seg_get (ref, vb, chrom)/*only works for prim_chrom*/;
+        ref_index = IS_REF_INTERNAL ? chrom :  chrom_2ref_seg_get (ref, vb, chrom);
 
     if (ref_index == WORD_INDEX_NONE) return NULL;
 

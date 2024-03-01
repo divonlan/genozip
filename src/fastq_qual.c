@@ -72,7 +72,7 @@ COMPRESSOR_CALLBACK (fastq_zip_qual)
     // note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec
     *line_data_len  = dl->dont_compress_QUAL ? 0 : MIN_(maximum_size, dl->qual.len);
     
-    if (!line_data) return; // only lengths were requested
+    if (__builtin_expect (!line_data, false)) return; // only lengths were requested
 
     *line_data = qual;
     

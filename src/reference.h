@@ -152,7 +152,7 @@ static inline void ref_assert_nucleotide_available (ConstRangeP range, PosType64
 }
 
 #define REF(idx)  ref_base_by_idx (range, (idx))
-#define REFp(pos) ref_base_by_idx (range, (pos)-range->first_pos)
+#define REFp(pos) ref_base_by_pos (range, (pos))
 
 // round-robin around range
 #define RR_IDX(idx) ( ((idx) > range_len) ? ((idx) - range_len) \

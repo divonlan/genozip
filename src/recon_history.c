@@ -120,3 +120,35 @@ rom lookup_type_name (LookupType lookup)
 
     return (lookup < 0 || lookup >= ARRAY_LEN(names)) ? "Invalid" : names[lookup];
 }
+
+void recon_history_get_historical_snip (VBlockP vb, ContextP ctx, LineIType buddy_line_i, pSTRp(snip))
+{
+    ASSPIZ (buddy_line_i != NO_LINE, "No buddy line is set for the current line, while reconstructing %s", ctx->tag_name);
+    ASSPIZ (ctx->history.len32, "ctx->history not allocated for ctx=%s, perhaps seg_initialize did't set store_per_line?", ctx->tag_name);
+
+    HistoryWord word = *B(HistoryWord, ctx->history, buddy_line_i);
+    BufferP buf=NULL; 
+    CharIndex char_index = word.index;
+
+    ASSPIZ (word.index != 0xffffffff, "Attempting reconstruct from %s.history, but word at line_i=%u doesn't exist",
+            ctx->tag_name, buddy_line_i);
+            
+    ASSPIZ (word.len > 0 || ctx->empty_lookup_ok, "Attempting reconstruct from %s.history, but snip_len=0 at line_i=%u lookup=%s",
+            ctx->tag_name, buddy_line_i, lookup_type_name(word.lookup));
+
+    switch (word.lookup) {
+        case LookupTxtData : buf = &vb->txt_data  ; break;
+        case LookupDict    : buf = &ctx->dict; 
+                             char_index = B(CtxWord, ctx->word_list, word.index)->char_index; 
+                             break;
+        case LookupLocal   : buf = &ctx->local    ; break;
+        case LookupPerLine : buf = &ctx->per_line ; break;
+        default : ABORT_PIZ ("Invalid value word.lookup=%d", word.lookup);
+    }
+
+    ASSPIZ (char_index < buf->len, "buddy word ctx=%s buddy_line_i=%d char_index=%"PRIu64" is out of range of buffer %s len=%"PRIu64, 
+            ctx->tag_name, buddy_line_i, char_index, buf->name, buf->len);
+
+    *snip = Bc (*buf, char_index);
+    *snip_len = word.len;
+}

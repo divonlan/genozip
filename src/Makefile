@@ -76,9 +76,15 @@ IS_CONDA=1
 endif
 
 LDFLAGS    += -lpthread -lm 
-CFLAGS     += -Wall -D_LARGEFILE64_SOURCE=1 -D_7ZIP_ST -D_GNU_SOURCE -std=gnu11 -fms-extensions
+CFLAGS     += -Wall -D_LARGEFILE64_SOURCE=1 -D_7ZIP_ST -D_GNU_SOURCE -std=gnu11 -fms-extensions -msse4.1
+CXXFLAGS   += -Wall -D_LARGEFILE64_SOURCE=1 -D_GNU_SOURCE -I. -O3 -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_SSE41 -msse4.1
 OPTFLAGS   += -O3 
 DEBUGFLAGS += -DDEBUG -ggdb3 -O0  
+
+ifdef x86_64
+	CFLAGS += -DGENOZIP_ALLOW_UNALIGNED_ACCESS 
+	CXXFLAGS += -DLIBBSC_ALLOW_UNALIGNED_ACCESS
+endif
 
 ifdef IS_CONDA 
 	DISTOBJ = $(OBJDIR)/distribution.conda.o # note: matches the name in version.c 
@@ -86,6 +92,7 @@ ifdef IS_CONDA
 
 	ifdef Windows
 		CC=gcc # in Windows, override conda's default Visual C with gcc 
+		CC=g++
 		LDFLAGS += -L$(PREFIX)/Library/lib
 		CFLAGS  += -I$(PREFIX)/Library/include 
 	endif
@@ -105,17 +112,21 @@ else
 		CC=$(GCC) 
 	else
 		CC=gcc
+	endif
 
+	ifdef GXX 
+		CXX=$(GXX) 
+	else
+		CXX=g++
 	endif
 
 	# set -march. note: if conda, we leave it to conda to set
 	ifdef Windows
-		CFLAGS += -march=native 
+		CFLAGS += -march=haswell 
 	endif
 
 	ifdef Linux
-		CFLAGS += -march=nocona  # same as conda - relatively low optimization, since different hosts in a cluster might have different capabilities. change to -march=native if compiling for a specific machine
-		CFLAGS += -mtune=haswell # same as conda see https://gcc.gnu.org/onlinedocs/gcc/x86-Options.html
+		CFLAGS += -march=haswell # see: https://gcc.gnu.org/onlinedocs/gcc/x86-Options.html  
 	endif
 
 	ifdef Mac
@@ -145,9 +156,9 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.
 		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c ref_cache.c     	 	\
 		  vcf_piz.c vcf_seg.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_hgvs.c      				\
 		  vcf_format_GT.c vcf_format_PS_PID.c vcf_dbsnp.c vcf_giab.c vcf_vep.c      							\
-		  vcf_refalt.c vcf_format.c vcf_illum_gtyping.c vcf_gwas.c vcf_vagrent.c								\
+		  vcf_refalt.c vcf_format.c vcf_illum_gtyping.c vcf_gwas.c vcf_vagrent.c vcf_svaba.c vcf_pbsv.c			\
 		  vcf_icgc.c vcf_snpeff.c vcf_cosmic.c vcf_mastermind.c vcf_isaac.c	vcf_manta.c vcf_pos.c vcf_ultima.c	\
-		  vcf_platypus.c vcf_info_AC_AF_AN.c vcf_format_GQ.c vcf_gatk.c											\
+		  vcf_platypus.c vcf_info_AC_AF_AN.c vcf_format_GQ.c vcf_gatk.c vcf_sv.c								\
 		  sam_seg.c sam_piz.c sam_shared.c sam_header.c sam_md.c sam_nm.c sam_tlen.c sam_cigar.c sam_fields.c  	\
 		  sam_sa.c bam_seg.c bam_seq.c bam_show.c sam_pacbio.c sam_ultima.c sam_xcons.c cram.c agilent.c   		\
 		  sam_seq.c sam_qual.c sam_sag_zip.c sam_sag_piz.c sam_sag_load.c sam_sag_ingest.c sam_sag_scan.c    	\
@@ -157,7 +168,7 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.
 		  fastq.c fastq_desc.c fastq_seq.c fastq_qual.c fastq_deep.c fastq_saux.c deep.c						\
 		  fasta.c gff.c bed.c me23.c locs.c generic.c lookback.c compressor.c									\
 		  buffer.c buf_struct.c buf_list.c random_access.c sections.c base64.c bgzf.c coverage.c txtheader.c  	\
-		  codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c	codec_pacb.c	\
+		  codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_bsc.c codec_pacb.c					\
 		  codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c codec_normq.c codec_homp.c codec_t0.c		\
 		  codec_smux.c																							\
 	      txtfile.c profiler.c file.c filename.c dispatcher.c crypt.c aes.c md5.c segconf.c biopsy.c gencomp.c	\
@@ -170,14 +181,18 @@ BZLIB_SRCS = bzlib/blocksort.c bzlib/bzlib.c bzlib/compress.c bzlib/crctable.c b
 
 LZMA_SRCS  = lzma/LzmaEnc.c lzma/LzmaDec.c lzma/LzFind.c
 
-BSC_SRCS   = bsc/divsufsort.c bsc/bwt.c bsc/coder.c bsc/libbsc.c bsc/lzp.c bsc/qlfc_model.c bsc/qlfc.c
+BSC_C_SRCS = bsc/libsais.c
+
+BSC_CXX_SRCS   = bsc/bwt.cpp bsc/coder.cpp bsc/detectors.cpp bsc/libbsc.cpp bsc/lzp.cpp 						\
+		  bsc/platform.cpp bsc/preprocessing.cpp bsc/qlfc.cpp bsc/qlfc_model.cpp bsc/adler32.cpp
 
 HTSCODECS_SRC = htscodecs/rANS_static4x16pr.c htscodecs/rle.c htscodecs/pack.c htscodecs/arith_dynamic.c
 
 LIBDEFLATE_1_7_SRCS = libdeflate_1.7/deflate_compress.c libdeflate_1.7/utils.c  
 
-LIBDEFLATE_1_19_SRCS = libdeflate_1.19/deflate_compress.c libdeflate_1.19/deflate_decompress.c libdeflate_1.19/utils.c 						\
-		  libdeflate_1.19/x86/cpu_features.c libdeflate_1.19/arm/cpu_features.c libdeflate_1.19/crc32.c libdeflate_1.19/adler32.c
+LIBDEFLATE_1_19_SRCS = libdeflate_1.19/deflate_compress.c libdeflate_1.19/deflate_decompress.c 					\
+		  libdeflate_1.19/utils.c libdeflate_1.19/x86/cpu_features.c libdeflate_1.19/arm/cpu_features.c 		\
+		  libdeflate_1.19/crc32.c libdeflate_1.19/adler32.c
 
 CONDA_DEVS = Makefile ../.gitignore 
 
@@ -203,8 +218,8 @@ CONDA_INCS += dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h a
 			htscodecs/rANS_word.h htscodecs/htscodecs_endian.h htscodecs/rANS_word.h htscodecs/utils.h htscodecs/varint.h 					\
 			htscodecs/varint2.h htscodecs/utils.h 																							\
 			\
-			bsc/bwt.h bsc/coder.h bsc/divsufsort.h bsc/libbsc.h bsc/lzp.h bsc/platform.h bsc/qlfc_model.h bsc/qlfc.h bsc/rangecoder.h 		\
-			bsc/tables.h																													\
+			bsc/adler.h bsc/bwt.h bsc/coder.h bsc/coder_tables.h bsc/filter_tables.h bsc/filters.h bsc/libbsc.h bsc/libsais.h bsc/lzp.h 	\
+			bsc/platform.h bsc/predictor.h bsc/qlfc.h bsc/qlfc_model.h bsc/rangecoder.h											\
  			\
 			libdeflate_1.7/unaligned.h libdeflate_1.7/deflate_compress.h libdeflate_1.7/arm_matchfinder_impl.h 								\
 			libdeflate_1.7/deflate_constants.h libdeflate_1.7/bt_matchfinder.h libdeflate_1.7/hc_matchfinder.h libdeflate_1.7/common_defs.h	\
@@ -300,8 +315,10 @@ ifdef Mac # Mac
 	endif
 endif
 
-C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(BSC_SRCS) $(LZMA_SRCS) $(LIBDEFLATE_1_7_SRCS) $(LIBDEFLATE_1_19_SRCS) \
+C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(LZMA_SRCS) $(LIBDEFLATE_1_7_SRCS) $(LIBDEFLATE_1_19_SRCS) $(BSC_C_SRCS) \
 		 $(HTSCODECS_SRC) $(IGZIP_SRCS)	
+
+CXX_SRCS = $(BSC_CXX_SRCS) 
 
 X86_SRCS = $(IGZIP_X86_ASM_SRCS) # note: these are the sources which pass to the compiler - they may include other .asm files. These other files are only included in CONDA_INCS.
 
@@ -312,31 +329,30 @@ ASFLAGS += -I$(IGZIP_ARCH_DIR)
 # ifdef Linux
 # 	C_SRCS += $(ONION_SRCS)
 # endif
- 
-OBJS       := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.o)) 
-DEBUG_OBJS := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.debug-o)) 
-OPT_OBJS   := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.opt-o))    # optimized but with debug info, for debugging issues that only manifest with compiler optimization
-DEPS       := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.d)) 
 
 ifdef x86_64
-OBJS       += $(addprefix $(OBJDIR)/,$(X86_SRCS:.asm=.o)) 
-DEBUG_OBJS += $(addprefix $(OBJDIR)/,$(X86_SRCS:.asm=.o)) 
-OPT_OBJS   += $(addprefix $(OBJDIR)/,$(X86_SRCS:.asm=.o)) 
-DEPS       += $(addprefix $(OBJDIR)/,$(X86_SRCS:.asm=.d)) 
+IGZIP_DEPS   = $(addprefix $(OBJDIR)/,$(X86_SRCS:.asm=.d)) 
+IGZIP_OBJS   = $(addprefix $(OBJDIR)/,$(X86_SRCS:.asm=.o))
+# BSC_OPT_OBJS = $(addprefix $(OBJDIR)/,bsc/qlfc_AVX2.o bsc/qlfc_AVX.o bsc/qlfc_SSE41.o bsc/adler32_AVX.o bsc/adler32_SSSE3.o)
 endif
 
 ifdef aarch64
-OBJS       += $(addprefix $(OBJDIR)/,$(ARM_SRCS:.S=.o)) 
-DEBUG_OBJS += $(addprefix $(OBJDIR)/,$(ARM_SRCS:.S=.o)) 
-OPT_OBJS   += $(addprefix $(OBJDIR)/,$(ARM_SRCS:.S=.o)) 
-DEPS       += $(addprefix $(OBJDIR)/,$(ARM_SRCS:.S=.d)) 
+IGZIP_DEPS   = $(addprefix $(OBJDIR)/,$(ARM_SRCS:.S=.d)) 
+IGZIP_OBJS   = $(addprefix $(OBJDIR)/,$(ARM_SRCS:.S=.o))
+# BSC_OPT_OBJS = $(addprefix $(OBJDIR)/,bsc/qlfc_A64.o bsc/adler32_A64.o)
 endif
+
+OBJS       := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.o))       $(addprefix $(OBJDIR)/,$(CXX_SRCS:.cpp=.o))       $(IGZIP_OBJS) $(BSC_OPT_OBJS)
+DEBUG_OBJS := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.debug-o)) $(addprefix $(OBJDIR)/,$(CXX_SRCS:.cpp=.debug-o)) $(IGZIP_OBJS) 
+OPT_OBJS   := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.opt-o))   $(addprefix $(OBJDIR)/,$(CXX_SRCS:.cpp=.opt-o))   $(IGZIP_OBJS) $(BSC_OPT_OBJS)  # optimized but with debug info, for debugging issues that only manifest with compiler optimization
+DEPS       := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.d))       $(addprefix $(OBJDIR)/,$(CXX_SRCS:.cpp=.d))       $(IGZIP_DEPS)
 
 EXECUTABLES       = genozip$(EXE)       genounzip$(EXE)       genocat$(EXE)       genols$(EXE)
 DEBUG_EXECUTABLES = genozip-debug$(EXE) genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE)
 OPT_EXECUTABLES   = genozip-opt$(EXE)   genounzip-opt$(EXE)   genocat-opt$(EXE)   genols-opt$(EXE)
 
 all   : CFLAGS += $(OPTFLAGS) 
+all   : CXXFLAGS += $(OPTFLAGS) 
 all   : $(OBJDIR) $(EXECUTABLES) 
 	@chmod +x test.sh
 
@@ -345,6 +361,7 @@ all   : $(OBJDIR) $(EXECUTABLES)
 # endif
 
 debug : CFLAGS += $(DEBUGFLAGS) 
+debug : CXXFLAGS += $(DEBUGFLAGS) 
 debug : $(OBJDIR) $(DEBUG_EXECUTABLES)
 
 opt   : CFLAGS += -ggdb3 $(OPTFLAGS) -DDEBUG 
@@ -370,9 +387,21 @@ $(OBJDIR)/%.d: %.c | $(OBJDIR) # directory is an "order only prerequesite": http
 	@echo Calculating dependencies $<
 	@$(CC) $(CFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
 
+$(OBJDIR)/%.d: %.cpp | $(OBJDIR) # directory is an "order only prerequesite": https://www.gnu.org/savannah-checkouts/gnu/make/manual/html_node/Prerequisite-Types.html#Prerequisite-Types
+	@echo Calculating dependencies $<
+	@$(CXX) $(CXXFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
+
 $(OBJDIR)/distribution.%.o : distribution.c 
 	@echo Compiling $< to $@
 	@$(CC) -c -o $@ $< $(CFLAGS) -DDISTRIBUTION=\"$*\"
+
+# $(OBJDIR)/bsc/qlfc_%.o : bsc/qlfc.cpp 
+# 	@echo Compiling $< to $@
+# 	$(CXX) -c -o $@ $< $(CXXFLAGS) -DLIBBSC_DYNAMIC_CPU_DISPATCH -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_$*
+
+# $(OBJDIR)/bsc/adler32_%.o : bsc/adler32.cpp 
+# 	@echo Compiling $< to $@
+# 	$(CXX) -c -o $@ $< $(CXXFLAGS) -DLIBBSC_DYNAMIC_CPU_DISPATCH -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_$*
 
 $(OBJDIR)/%.o: %.c $(OBJDIR)/%.d
 	@echo Compiling $<
@@ -385,6 +414,18 @@ $(OBJDIR)/%.debug-o: %.c $(OBJDIR)/%.d
 $(OBJDIR)/%.opt-o: %.c $(OBJDIR)/%.d
 	@echo "Compiling $< (opt)"
 	@$(CC) -c -o $@ $< $(CFLAGS)
+
+$(OBJDIR)/%.o: %.cpp $(OBJDIR)/%.d
+	@echo Compiling $<
+	@$(CXX) -c -o $@ $< $(CXXFLAGS) 
+
+$(OBJDIR)/%.debug-o: %.cpp $(OBJDIR)/%.d
+	@echo "Compiling $< (debug)"
+	@$(CXX) -c -o $@ $< $(CXXFLAGS)
+
+$(OBJDIR)/%.opt-o: %.cpp $(OBJDIR)/%.d
+	@echo "Compiling $< (opt)"
+	@$(CXX) -c -o $@ $< $(CXXFLAGS)
 
 $(OBJDIR)/%.d: %.asm
 	@echo Calculating dependencies $<
@@ -529,7 +570,7 @@ clean-dev: clean-installers clean-test # use only in dev - deletes license.o
 # builds latest for local OS
 genozip-latest$(EXE): 
 	@echo "building latest"
-	@(cd $(LATEST_SRC); rm -Rf $(OBJDIR) ; if [[ `pwd` = *genozip-latest* ]]; then git reset --hard ; git pull ; $(MAKE) clean ; touch dict_id_gen.h ; $(MAKE) -j; cp $@ ../genozip/private/releases/genozip-$(version)$(EXE) ; fi )
+	@(cd $(LATEST_SRC); rm -Rf $(OBJDIR) ; if [[ `pwd` = *genozip-latest* ]]; then git reset --hard ; git pull ; $(MAKE) clean ; touch dict_id_gen.h ; $(MAKE) -j; cp $@ ../..	/genozip/private/releases/genozip-$(version)$(EXE) ; fi )
 
 # currently, I build for conda from my Windows machine so I don't bother supporting other platforms
 ifdef Windows
@@ -586,6 +627,7 @@ conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld
 #	@(cd $(CONDA_RECIPE_DIR); git request-pull master https://github.com/divonlan/genozip-feedstock master)
 	@touch $@
 	@echo "CONDA: Using a browser:"
+# 'into conda-forge:master from divonlan:genozip'"
 	@echo "  (1) Go to https://github.com/divonlan/genozip-feedstock/tree/genozip "
 	@echo "  (2) Click 'Contribute' -> 'Open pull request' OR 'Create pull request'"
 	@echo "  (3) Click 'Resolve conflicts' -> select the top option in each of the 2 conflicts, then commit"

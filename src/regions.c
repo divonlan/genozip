@@ -392,7 +392,7 @@ bool regions_get_range_intersection (WordIndex chrom_word_index, PosType64 min_p
 // a specific ra (i.e. chromosome)
 bool regions_is_site_included (VBlockP vb)
 {
-    Did chrom_did_i = DTF(prim_chrom);
+    Did chrom_did_i = DTF(chrom);
     Did pos_did_i   = DTF(pos);
 
     WordIndex chrom = vb->last_index (chrom_did_i);

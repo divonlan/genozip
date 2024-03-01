@@ -497,8 +497,6 @@ fallthrough_from_cram: {}
             uint8_t block[BGZF_MAX_BLOCK_SIZE]; 
             uint32_t block_size;
 
-            setvbuf (file->file, 0, _IONBF, 0); // no buffering 
-
             ASSERTNOTINUSE (evb->scratch);
 
             int32_t bgzf_uncompressed_size = bgzf_read_block (file, block, &block_size, SOFT_FAIL);

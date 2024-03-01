@@ -85,7 +85,7 @@ void sam_piz_header_init (void)
         qname_filter_initialize_from_opt (flag.qnames_opt); 
 }
 
-bool sam_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment)
+bool sam_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header)
 {
     if (IS_PRIM(vb))
         VB_SAM->plsg_i = sam_piz_get_plsg_i (vb->vblock_i);
@@ -764,8 +764,8 @@ bool sam_piz_line_has_aux_field (VBlockSAMP vb, DictId dict_id)
 {
     ASSPIZ0 (vb->aux_con, "this function can only be called while reconstructing the AUX container");
 
-    for (int i=0; i < con_nitems (*vb->aux_con); i++)
-        if (vb->aux_con->items[i].dict_id.num == dict_id.num) return true;
+    for_con (vb->aux_con)
+        if (item->dict_id.num == dict_id.num) return true;
 
     return false;
 }
@@ -872,34 +872,7 @@ void sam_reconstruct_from_buddy_get_textual_snip (VBlockSAMP vb, ContextP ctx, B
 {
     LineIType buddy_line_i = (bt == BUDDY_MATE) ? vb->mate_line_i : vb->saggy_line_i;
 
-    ASSPIZ (buddy_line_i != NO_LINE, "No buddy line of type %s is set for the current line, while reconstructing %s", buddy_type_name (bt), ctx->tag_name);
-    ASSPIZ (ctx->history.len32, "ctx->history not allocated for ctx=%s, perhaps seg_initialize did't set store_per_line?", ctx->tag_name);
-
-    HistoryWord word = *B(HistoryWord, ctx->history, buddy_line_i);
-    BufferP buf=NULL; 
-    CharIndex char_index = word.index;
-
-    ASSPIZ (word.index != 0xffffffff, "Attempting reconstruct from %s.history, but word at %s_line_i=%u doesn't exist",
-        ctx->tag_name, buddy_type_name (bt), buddy_line_i);
-            
-    ASSPIZ (word.len > 0 || ctx->empty_lookup_ok, "Attempting reconstruct from %s.history, but snip_len=0 at %s_line_i=%u lookup=%s",
-            ctx->tag_name, buddy_type_name (bt), buddy_line_i, lookup_type_name(word.lookup));
-
-    switch (word.lookup) {
-        case LookupTxtData : buf = &vb->txt_data  ; break;
-        case LookupDict    : buf = &ctx->dict; 
-                             char_index = B(CtxWord, ctx->word_list, word.index)->char_index; 
-                             break;
-        case LookupLocal   : buf = &ctx->local    ; break;
-        case LookupPerLine : buf = &ctx->per_line ; break;
-        default : ABORT_PIZ ("Invalid value word.lookup=%d", word.lookup);
-    }
-
-    ASSPIZ (char_index < buf->len, "buddy (of type %s) word ctx=%s buddy_line_i=%d char_index=%"PRIu64" is out of range of buffer %s len=%"PRIu64, 
-            buddy_type_name (bt), ctx->tag_name, buddy_line_i, char_index, buf->name, buf->len);
-
-    *snip = Bc (*buf, char_index);
-    *snip_len = word.len;
+    recon_history_get_historical_snip (VB, ctx, buddy_line_i, snip, snip_len);
 }
 
 // Copy from buddy: buddy is data that appears on a specific "buddy line", in this context or another one. Not all lines need
@@ -922,10 +895,8 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_COPY_BUDDY)
     }
 
     // optional: base context is different than ctx
-    if (snip_len > 1) {
-        snip--; snip_len++; // reconstruct_get_other_ctx_from_snip skips the first char
-        base_ctx = reconstruct_get_other_ctx_from_snip (VB, ctx, pSTRa(snip));
-    }
+    if (snip_len > 1) 
+        base_ctx = reconstruct_special_get_base_ctx (VB, ctx, pSTRa(snip));
 
     LineIType buddy_line_i = buddy_type == BUDDY_MATE   ? vb->mate_line_i
                            : buddy_type == BUDDY_SAGGY  ? vb->saggy_line_i

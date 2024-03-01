@@ -290,15 +290,17 @@ static void sam_seg_0X_initialize (VBlockP vb, Did strand_did_i)
 
 static void sam_seg_QNAME_initialize (VBlockSAMP vb)
 {
-    CTX(SAM_QNAME)->no_stons = true;              // no singletons, because sam_piz_special_SET_BUDDY uses PEEK_SNIP 
-    CTX(SAM_QNAME)->flags.store_per_line = true;  // 12.0.41
+    decl_ctx (SAM_QNAME);
+
+    ctx->no_stons = true;              // no singletons, because sam_piz_special_SET_BUDDY uses PEEK_SNIP 
+    ctx->flags.store_per_line = true;  // 12.0.41
 
     qname_seg_initialize (VB, QNAME1, SAM_QNAME); 
     qname_seg_initialize (VB, QNAME2, SAM_QNAME); // we support up to two flavors (eg 2nd flavor can be consensus reads) 
 
     // initial allocations based on segconf data
-    vb->qname_hash.prm8[0] = MIN_(20, MAX_(14, 32 - __builtin_clz (vb->lines.len32 * 5))); // between 14 and 20 bits - tested - no additional compression benefit beyond 20 bits
-    buf_alloc_255(vb, &vb->qname_hash, 0, (1ULL << vb->qname_hash.prm8[0]), int32_t, 1, "qname_hash");
+    ctx->qname_hash.prm8[0] = MIN_(20, MAX_(14, 32 - __builtin_clz (vb->lines.len32 * 5))); // between 14 and 20 bits - tested - no additional compression benefit beyond 20 bits
+    buf_alloc_255(vb, &ctx->qname_hash, 0, (1ULL << ctx->qname_hash.prm8[0]), int32_t, 1, "contexts->qname_hash");
 
     // all-the-same for SAM_BUDDY
     seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_SET_BUDDY}, 2, SAM_BUDDY, 0);
@@ -936,9 +938,9 @@ void sam_seg_finalize (VBlockP vb_)
 
     // collect stats
     if (!segconf.running) {
-        __atomic_add_fetch(&z_file->mate_line_count,  (uint64_t)vb->mate_line_count,  __ATOMIC_RELAXED);
-        __atomic_add_fetch(&z_file->saggy_near_count, (uint64_t)vb->saggy_near_count, __ATOMIC_RELAXED);
-        __atomic_add_fetch(&z_file->prim_far_count,   (uint64_t)vb->prim_far_count,   __ATOMIC_RELAXED);
+        __atomic_add_fetch (&z_file->mate_line_count,  (uint64_t)vb->mate_line_count,  __ATOMIC_RELAXED);
+        __atomic_add_fetch (&z_file->saggy_near_count, (uint64_t)vb->saggy_near_count, __ATOMIC_RELAXED);
+        __atomic_add_fetch (&z_file->prim_far_count,   (uint64_t)vb->prim_far_count,   __ATOMIC_RELAXED);
     }
 
     // VB1: if we've not found depn lines in the VB, abort gencomp (likely the depn lines were filtered out)
@@ -1356,14 +1358,14 @@ static inline bool has_same_qname (VBlockSAMP vb, STRp (qname), LineIType buddy_
     }
 }
 
-#define LINE_BY_HASH(hash) *B(LineIType, vb->qname_hash, (hash))
+#define LINE_BY_HASH(hash) *B(LineIType, CTX(SAM_QNAME)->qname_hash, (hash))
 
 // seg mate as buddy and return true if this line has one
 static inline BuddyType sam_seg_mate (VBlockSAMP vb, SamFlags f, STRp (qname), uint32_t my_hash, bool *insert_to_hash)
 {
     if (sam_is_depn (f) || !segconf.is_paired) return BUDDY_NONE;
 
-    uint32_t mate_hash = qname_calc_hash (QNAME1, STRa(qname), !f.is_last, true, NULL) & MAXB(vb->qname_hash.prm8[0]);
+    uint32_t mate_hash = qname_calc_hash (QNAME1, STRa(qname), !f.is_last, true, NULL) & MAXB(CTX(SAM_QNAME)->qname_hash.prm8[0]);
     LineIType candidate = LINE_BY_HASH(mate_hash);
     SamFlags mate_f = DATA_LINE(candidate)->FLAG;
 
@@ -1450,7 +1452,7 @@ void sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAMP dl, STRp (qname), unsigned ad
     QType q = qname_sam_get_qtype (STRa(qname)); // QNAME2 if we have QNAME2 and qname matches, else QNAME1
 
     uint32_t qname_hash = qname_calc_hash (q, STRa(qname), dl->FLAG.is_last, true, NULL); // note: canonical=true as we use the same hash for find a mate and a saggy
-    uint32_t my_hash    = qname_hash & MAXB(vb->qname_hash.prm8[0]);
+    uint32_t my_hash    = qname_hash & MAXB(CTX(SAM_QNAME)->qname_hash.prm8[0]);
     bool insert_to_hash = false;
 
     if (flag.deep || flag.show_deep == 2) 

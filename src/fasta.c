@@ -28,6 +28,11 @@
 #define dict_id_is_fasta_desc_sf dict_id_is_type_1
 #define dict_id_fasta_desc_sf dict_id_type_1
 
+#define DC segconf.fasta_desc_char
+
+sSTRl(desc_redirect_snip, 24);
+sSTRl(comment_redirect_snip, 24);
+
 typedef struct {
     uint32_t seq_data_start, seq_len; // regular fasta and make-reference: start & length within vb->txt_data
     bool has_13;
@@ -66,7 +71,7 @@ bool is_fasta (STRp(data), bool *need_more/*optional*/)
                                   ['n']=true, ['r']=true, ['s']=true, ['t']=true, ['v']=true, ['w']=true, ['y']=true, ['u']=true, ['b']=true,
                                   ['-']=true, ['*']=true };
 
-    if (!data_len || data[0] != '>' || !str_is_printable (STRa(data))) return false; // fail fast
+    if (!data_len || data[0] != DC || !str_is_printable (STRa(data))) return false; // fail fast
 
     #define NUM_TEST_LINES 10
     str_split_by_lines (data, data_len, NUM_TEST_LINES);
@@ -81,7 +86,7 @@ bool is_fasta (STRp(data), bool *need_more/*optional*/)
     if (!n_lines) CANT_TELL;
 
     // first line must be the sequence description
-    if (lines[0][0] != '>') return false;
+    if (lines[0][0] != DC) return false;
 
     // skip comment and empty lines
     int line_i=1; 
@@ -90,18 +95,18 @@ bool is_fasta (STRp(data), bool *need_more/*optional*/)
     // we need at least one sequence line
     if (n_lines - line_i < 1) CANT_TELL;
     
-    // next lines must contain sequence (specifically, not '>')
+    // next lines must contain sequence (specifically, not DC)
     if (!line_lens[line_i] || !seq_char[(int)lines[line_i][0]]) return false;
     
     int seq_line_len = line_lens[line_i];
 
     for (; line_i < n_lines; line_i++) {
         // we arrived at a line beyond the contig - we're done
-        if (!line_lens[line_i] || lines[line_i][0] == '>') break;
+        if (!line_lens[line_i] || lines[line_i][0] == DC) break;
 
         // all sequence lines, except for the last of the contig, must be equal length
         if (line_lens[line_i] != seq_line_len && // line is different length than first line of contig
-            line_i != n_lines-1 && line_lens[line_i+1] && lines[line_i+1][0] != '>') // and we are sure that it is not the last line of the contig
+            line_i != n_lines-1 && line_lens[line_i+1] && lines[line_i+1][0] != DC) // and we are sure that it is not the last line of the contig
             return false;
 
         // entire line must be nukes or aminos or '-' (gap) or '*' (end of sequence)
@@ -122,13 +127,13 @@ static inline int fasta_is_end_of_contig (VBlockP vb, uint32_t first_i,
 
     // if we're not at the end of the data - we can just look at the next character
     if (txt_i < Ltxt-1)
-        return txt[txt_i+1] == '>';
+        return txt[txt_i+1] == DC;
 
     // if we're at the end of the line, we scan back to the previous \n and check if it NOT the >
     bool newline_run = true;
     for (int32_t i=txt_i-1; i >= first_i; i--) {
         if (txt[i] == '\n' && !newline_run) // ASSUMES NO COMMENT LINES (starting with ;), To do: fix this
-            return txt[i+1] != '>'; // this row is a sequence row, not a description row
+            return txt[i+1] != DC; // this row is a sequence row, not a description row
         
         else if (newline_run && txt[i] != '\n' && txt[i] != '\r')
             newline_run = false; // newline run ends when we encounter the first non newline
@@ -156,7 +161,7 @@ int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *last_i)
         
             // if we've encountered a new DESC line after already seeing sequence data, move this DESC line and
             // everything following to the next VB
-            if (data_found && txt[i]=='>' && txt[i-1]=='\n') 
+            if (data_found && txt[i]==DC && txt[i-1]=='\n') 
                 return Ltxt - i;
 
             if (!data_found && (txt[i] != '\n' && txt[i] != '\r')) data_found = true; // anything, except for empty lines, is considered data
@@ -184,7 +189,7 @@ int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *last_i)
 
             // otherwise - tolerate a VB that ends part way through a SEQ
             else if (is_entire_vb && i+1 < Ltxt &&
-                     txt[i+1] != ';' && txt[i+1] != '>') { // partial line isn't a Description or a Comment, hence its a Sequence
+                     txt[i+1] != ';' && txt[i+1] != DC) { // partial line isn't a Description or a Comment, hence its a Sequence
                 ((VBlockFASTAP)vb)->vb_has_no_newline = true;
                 return 0;                
             }
@@ -214,6 +219,16 @@ out_of_data:
 void fasta_zip_initialize (void)
 {
     tokenizer_zip_initialize();
+
+    seg_prepare_snip_other_do (SNIP_REDIRECTION, (DictId)_FASTA_DESC, false, 0, 0, &desc_redirect_snip[2], &desc_redirect_snip_len);
+    desc_redirect_snip[0] = SNIP_SPECIAL;
+    desc_redirect_snip[1] = FASTA_SPECIAL_DESC;
+    desc_redirect_snip_len += 2;
+
+    seg_prepare_snip_other_do (SNIP_OTHER_LOOKUP, (DictId)_FASTA_COMMENT, false, 0, 0, &comment_redirect_snip[2], &comment_redirect_snip_len);
+    comment_redirect_snip[0] = SNIP_SPECIAL;
+    comment_redirect_snip[1] = FASTA_SPECIAL_COMMENT;
+    comment_redirect_snip_len += 2;
 }
 
 void fasta_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeaderP vb_header)
@@ -246,6 +261,10 @@ void fasta_seg_initialize (VBlockP vb)
 {
     START_TIMER;
 
+    // NSBI FASTA download files might have "@" instead of ">"
+    if (segconf.running && *B1STtxt == '@')
+        DC = '@';
+        
     if (vb->vblock_i == 1)
         ASSINP (is_fasta (STRb(vb->txt_data), NULL), "Error: %s is not a valid FASTA file. Solution: use --input generic", txt_name);
 
@@ -356,12 +375,7 @@ static void fasta_seg_desc_line (VBlockFASTAP vb, rom line, uint32_t line_len, b
         else
             seg_add_to_local_string (VB, CTX(FASTA_DESC), STRa(line), LOOKUP_SIMPLE, line_len);
 
-        STRli(special_snip, 100);
-        seg_prepare_snip_other_do (SNIP_REDIRECTION, _FASTA_DESC, false, 0, 0, &special_snip[2], &special_snip_len);
-        special_snip[0] = SNIP_SPECIAL;
-        special_snip[1] = FASTA_SPECIAL_DESC;
-
-        seg_by_did (VB, special_snip, special_snip_len+2, FASTA_LINEMETA, 0);
+        seg_by_did (VB, STRa(desc_redirect_snip), FASTA_LINEMETA, 0);
         SEG_EOL (FASTA_EOL, true);
     }
 
@@ -403,13 +417,7 @@ static void fast_seg_comment_line (VBlockFASTAP vb, STRp (line), bool *has_13)
     if (!flag.make_reference) {
         seg_add_to_local_string (VB, CTX(FASTA_COMMENT), STRa(line), LOOKUP_NONE, line_len); 
 
-        STRli (special_snip, 100);
-        seg_prepare_snip_other_do (SNIP_OTHER_LOOKUP, _FASTA_COMMENT, false, 0, 0, &special_snip[2], &special_snip_len);
-
-        special_snip[0] = SNIP_SPECIAL;
-        special_snip[1] = FASTA_SPECIAL_COMMENT;
-
-        seg_by_did (VB, special_snip, special_snip_len+2, FASTA_LINEMETA, 0);
+        seg_by_did (VB, STRa(comment_redirect_snip), FASTA_LINEMETA, 0);
         SEG_EOL (FASTA_EOL, true);
     }
 
@@ -547,7 +555,7 @@ rom fasta_seg_txt_line (VBlockP vb_, rom line, uint32_t remaining_txt_len, bool 
     rom next_field = seg_get_next_line (VB, line, &remaining_vb_txt_len, &line_len, !vb->vb_has_no_newline, has_13, "FASTA line");
 
     // case: description line - we segment it to its components
-    if (*line == '>' || (*line == ';' && vb->last_line == FASTA_LINE_SEQ))
+    if (*line == DC || (*line == ';' && vb->last_line == FASTA_LINE_SEQ))
         fasta_seg_desc_line (vb, line, line_len, has_13);
 
     // case: comment line - stored in the comment buffer
@@ -558,7 +566,7 @@ rom fasta_seg_txt_line (VBlockP vb_, rom line, uint32_t remaining_txt_len, bool 
     else 
         fasta_seg_seq_line (vb, STRa(line), 
                             remaining_txt_len == line_len + *has_13, // true if this is the last line in the VB with no newline (but may or may not have \r)
-                            !remaining_vb_txt_len || *next_field == '>' || *next_field == ';' || *next_field == '\n' || *next_field == '\r', // is_last_line_in_contig
+                            !remaining_vb_txt_len || *next_field == DC || *next_field == ';' || *next_field == '\n' || *next_field == '\r', // is_last_line_in_contig
                             *has_13);
 
     return next_field;
@@ -662,7 +670,7 @@ bool fasta_piz_initialize (CompIType comp_i)
     return true;
 }
 
-bool fasta_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment)
+bool fasta_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header)
 {
     VB_FASTA->contig_grepped_out = writer_get_fasta_contig_grepped_out (vb->vblock_i);
     return true;
@@ -741,7 +749,7 @@ SPECIAL_RECONSTRUCTOR_DT (fasta_piz_special_DESC)
     vb->contig_grepped_out = false;
 
     char *desc_start = BAFTtxt;
-    reconstruct_one_snip (VB, ctx, WORD_INDEX_NONE, snip, snip_len, RECON_ON, __FUNCLINE);    
+    reconstruct_one_snip (VB, ctx, WORD_INDEX_NONE, STRa(snip), RECON_ON, __FUNCLINE);    
     *BAFTtxt = 0; // for strstr and strcspn
 
     // if --grep: here we decide whether to show this contig or not

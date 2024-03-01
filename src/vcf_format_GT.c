@@ -19,34 +19,14 @@
 // ZIP
 //------------------
 
-// complete haplotypes of lines that don't have GT, if any line in the vblock does have GT.
-// In this case, the haplotype matrix must include the lines without GT too
-void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCFP vb)
-{
-    buf_alloc (vb, &CTX(FORMAT_GT_HT)->local, 0, vb->lines.len * vb->ht_per_line, char, CTX_GROWTH, CTX_TAG_LOCAL);
-
-    for (vb->line_i=0; vb->line_i < vb->lines.len32; vb->line_i++) {
-
-        if (CTX(FORMAT_GT_HT) && !DATA_LINE (vb->line_i)->has_haplotype_data) {
-            char *ht_data = Bc (CTX(FORMAT_GT_HT)->local, vb->line_i * vb->ht_per_line);
-            memset (ht_data, '*', vb->ht_per_line);
-
-            // NOTE: we DONT set dl->has_haplotype_data to true bc downstream we still
-            // count this row as having no GT field when analyzing gt data
-        }
-    }
-
-    CTX(FORMAT_GT_HT)->local.len = vb->lines.len * vb->ht_per_line;
-}
-
 // increase ploidy of the previous lines, if higher ploidy was encountered
-static void vcf_seg_FORMAT_GT_increase_ploidy (VBlockVCFP vb, unsigned new_ploidy)
+static void vcf_seg_FORMAT_GT_increase_ploidy (VBlockVCFP vb, ContextP ht_ctx, unsigned new_ploidy)
 {
-    buf_alloc (vb, &CTX(FORMAT_GT_HT)->local, 0, new_ploidy * vcf_num_samples * vb->line_i, 
+    buf_alloc (vb, &ht_ctx->local, 0, new_ploidy * vcf_num_samples * vb->lines.len, 
                char, CTX_GROWTH, CTX_TAG_LOCAL);
 
-    uint32_t num_samples = vb->line_i * vcf_num_samples + vb->sample_i; // all samples in previous lines + previous samples in current line
-    char *ht_data = B1STc (CTX(FORMAT_GT_HT)->local);
+    uint32_t num_samples = ht_ctx->HT_n_lines * vcf_num_samples + vb->sample_i; // all samples in previous lines + previous samples in current line
+    char *ht_data = B1STc (ht_ctx->local);
 
     // copy the haplotypes backwards (to avoid overlap), padding with '*' (which are NOT counted in .repeats of the GT container)
     for (int sam_i = num_samples-1; sam_i >= 0; sam_i--) {
@@ -59,11 +39,13 @@ static void vcf_seg_FORMAT_GT_increase_ploidy (VBlockVCFP vb, unsigned new_ploid
     }
 
     vb->ploidy = new_ploidy;
-    vb->ht_per_line = vb->ploidy * vcf_num_samples;
+    ht_ctx->ht_per_line = vb->ploidy * vcf_num_samples;
 }
 
 WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, STRp(gt), bool has_ps, bool has_null_dp)
 {
+    ContextP ht_ctx = CTX(FORMAT_GT_HT);
+
     // the GT field is represented as a Container, with a single item repeating as required by poidy, and the separator 
     // determined by the phase
     MiniContainer con = { .repeats   = 1, 
@@ -87,17 +69,17 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
     // we have to increase ploidy of all the haplotypes read in in this VB so far. This can happen for example in 
     // the X chromosome if initial samples are male with ploidy=1 and then a female sample with ploidy=2
     if (vb->ploidy && con.repeats > vb->ploidy) 
-        vcf_seg_FORMAT_GT_increase_ploidy (vb, con.repeats);
+        vcf_seg_FORMAT_GT_increase_ploidy (vb, ht_ctx, con.repeats);
 
     if (!vb->ploidy) {
         vb->ploidy = con.repeats; // very first sample in the vb
-        vb->ht_per_line = vb->ploidy * vcf_num_samples;
+        ht_ctx->ht_per_line = vb->ploidy * vcf_num_samples;
     }
 
-    buf_alloc (vb, &CTX(FORMAT_GT_HT)->local, vb->ploidy, vb->ht_per_line * vb->lines.len, char, CTX_GROWTH, CTX_TAG_LOCAL);
+    buf_alloc (vb, &ht_ctx->local, vb->ploidy, ht_ctx->ht_per_line * vb->lines.len, char, CTX_GROWTH, CTX_TAG_LOCAL);
 
     // note - ploidy of this sample might be smaller than vb->ploidy (eg a male sample in an X chromosesome that was preceded by a female sample, or "." sample)
-    Allele *ht_data = B(Allele, CTX(FORMAT_GT_HT)->local, vb->line_i * vb->ht_per_line + vb->ploidy * vb->sample_i);
+    Allele *ht_data = B(Allele, ht_ctx->local, ht_ctx->HT_n_lines * ht_ctx->ht_per_line + vb->ploidy * vb->sample_i);
 
     // number of allele other than REF (i.e. ht >= 1)
     // note: up to 15.0.35, dosage was -1 if any allele was not '0' or '1', or if ploidy exceeded 2
@@ -209,6 +191,22 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
         ctx->gt.prev_phase  = con.repsep[0];
         return container_seg (vb, ctx, (ContainerP)&con, 0, 0, save_gt_len); 
     }
+}
+
+void vcf_seg_FORMAT_GT_finalize_line (VBlockVCFP vb, uint32_t line_n_samples)
+{
+    ContextP ht_ctx = CTX(FORMAT_GT_HT);
+    if (!ht_ctx->use_HT_matrix) return;
+
+    // some real-world files encountered have too-short lines due to human errors. we pad them
+    if (line_n_samples < vcf_num_samples) {
+        char *ht_data = Bc(ht_ctx->local, ht_ctx->HT_n_lines * vb->ploidy * vcf_num_samples + vb->ploidy * line_n_samples);
+        uint32_t num_missing = vb->ploidy * (vcf_num_samples - line_n_samples); 
+        memset (ht_data, '*', num_missing);
+    }
+
+    ht_ctx->HT_n_lines++;
+    ht_ctx->local.len32 = ht_ctx->HT_n_lines * ht_ctx->ht_per_line; // not just "+=ht_per_line", so this also works if ploidy has increased
 }
 
 //------------------

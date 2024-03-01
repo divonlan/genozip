@@ -76,9 +76,9 @@ typedef struct {
     { 1, "RANw", "+",      codec_RANw_compress,      codec_rans_uncompress,    NA3,                       codec_RANw_est_size      }, /* STRIPE & PACK */\
     { 0, "ACGT", "+",      codec_acgt_compress,      codec_acgt_uncompress,    NA3,                       codec_complex_est_size   }, \
     { 0, "XCGT", "+",      USE_SUBCODEC,             codec_xcgt_uncompress,    NA3,                       NA4                      }, \
-    { 0, "HAPM", "+",      NA1,                      USE_SUBCODEC,             codec_hapmat_reconstruct,  NA4,                     }, /* HapMat was discontinued and replaced by PBWT. We keep it for decompressing old VCF files */ \
+    { 0, "HAPM", "+",      NA1,                      codec_hapmat_uncompress,  NA3,                       NA4,                     }, /* HapMat used for compressing in versions v1 to v10, and supported for decompression up to v14. Code removed 15.0.47. */ \
     { 0, "DOMQ", "+",      codec_domq_compress,      USE_SUBCODEC,             codec_domq_reconstruct,    codec_complex_est_size,  }, \
-    { 0, "GTSH", "+",      NA1,                      codec_gtshark_uncompress, codec_pbwt_reconstruct,    NA4,                     }, /* gtshark discontinued in v12. keep for displaying an error */\
+    { 0, "GTSH", "+",      NA1,                      codec_gtshark_uncompress, NA3,                       NA4,                     }, /* gtshark discontinued in v12. keep for displaying an error */\
     { 0, "PBWT", "+",      codec_pbwt_compress,      codec_pbwt_uncompress,    codec_pbwt_reconstruct,    codec_complex_est_size   }, \
     { 1, "ARTB", "+",      codec_ARTB_compress,      codec_arith_uncompress,   NA3,                       codec_ARTB_est_size      }, \
     { 1, "ARTW", "+",      codec_ARTW_compress,      codec_arith_uncompress,   NA3,                       codec_ARTW_est_size      }, /* STRIPE */\
@@ -109,13 +109,13 @@ extern CodecCompress codec_bz2_compress, codec_lzma_compress, codec_domq_compres
 
 extern CodecUncompress codec_bz2_uncompress, codec_lzma_uncompress, codec_acgt_uncompress, codec_xcgt_uncompress,
                        codec_bsc_uncompress, codec_none_uncompress, codec_gtshark_uncompress, codec_pbwt_uncompress,
-                       codec_rans_uncompress, codec_arith_uncompress;
+                       codec_rans_uncompress, codec_arith_uncompress, codec_hapmat_uncompress;
 
-extern CodecReconstruct codec_hapmat_reconstruct, codec_domq_reconstruct, codec_pbwt_reconstruct, 
+extern CodecReconstruct codec_domq_reconstruct, codec_pbwt_reconstruct, 
                         codec_longr_reconstruct, codec_normq_reconstruct, codec_homp_reconstruct,
                         codec_t0_reconstruct, codec_pacb_reconstruct, codec_smux_reconstruct;
 
-extern CodecEstSizeFunc codec_none_est_size, codec_bsc_est_size, codec_hapmat_est_size, codec_domq_est_size,
+extern CodecEstSizeFunc codec_none_est_size, codec_bsc_est_size, codec_domq_est_size,
                         codec_RANB_est_size, codec_RANW_est_size, codec_RANb_est_size, codec_RANw_est_size, 
                         codec_ARTB_est_size, codec_ARTW_est_size, codec_ARTb_est_size, codec_ARTw_est_size,
                         codec_complex_est_size, codec_trivial_size, codec_longr_est_size;
@@ -152,11 +152,8 @@ extern rom codec_bsc_errstr (int err);
 extern uint64_t BZ2_consumed (void *bz_file); // a hacky addition to bzip2
 
 // PBWT stuff
-extern void codec_pbwt_seg_init (VBlockP vb, ContextP runs_ctx, ContextP fgrc_ctx);
+extern void codec_pbwt_seg_init (VBlockP vb);
 extern void codec_pbwt_display_ht_matrix (VBlockP vb, uint32_t max_rows);
-
-// HAPMAT stuff - retired, used for compressing old files
-extern void codec_hapmat_piz_calculate_columns (VBlockP vb);
 
 // T0 stuff
 extern void codec_t0_comp_init (VBlockP vb);

@@ -609,6 +609,19 @@ bool is_there_any_section_with_dict_id (DictId dict_id)
     return false;
 }
 
+// get a section with a specific vb_i, section type and dict_id, or return NULL
+SectionEnt *section_get_section (VBIType vb_i, SectionType st, DictId dict_id)
+{
+    const SectionsVbIndexEnt *vbent = Bvbindex(vb_i);
+    ARRAY (SectionEnt, sec, z_file->section_list_buf);
+
+    for (uint32_t i=vbent->vb_header_sec_i+1; i <= vbent->last_sec_i; i++) 
+        if (sec[i].dict_id.num == dict_id.num && sec[i].st == st)
+            return &sec[i];
+
+    return NULL; // not found
+}
+
 rom st_name (SectionType sec_type)
 {
     static char invalid[24]; // not thread safe, but not expected except in error situations
@@ -1011,8 +1024,8 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
         if (dt >= NUM_DATATYPES) dt = DT_NONE;
 
         if ((DT(VCF) || DT(BCF)) && v14)
-            sprintf (dt_specific, "%ssegconf=(has_RGQ=%s,GQ_method=%s,FMT_DP_method=%s) width=(AC=%u,AN=%u,MLEAC=%u,DP=%u,QD=%u,SF=%u,AS_SB_TABLE=%u) max_ploidy_for_mux=%u\n", 
-                     SEC_TAB, TF(h->vcf.segconf_has_RGQ), GQ_method_name (h->vcf.segconf_GQ_method), FMT_DP_method_name (h->vcf.segconf_FMT_DP_method), 
+            sprintf (dt_specific, "%ssegconf=(has_RGQ=%s,del_svlen_is_neg=%s,GQ_method=%s,FMT_DP_method=%s,mate_id_chars=%s) width=(AC=%u,AN=%u,MLEAC=%u,DP=%u,QD=%u,SF=%u,AS_SB_TABLE=%u) max_ploidy_for_mux=%u\n", 
+                     SEC_TAB, TF(h->vcf.segconf_has_RGQ), TF(h->vcf.segconf_del_svlen_is_neg), GQ_method_name (h->vcf.segconf_GQ_method), FMT_DP_method_name (h->vcf.segconf_FMT_DP_method), (rom[])MATEID_METHOD_NAMES[h->vcf.segconf_MATEID_method], 
                      h->vcf.width.AC, h->vcf.width.AN, h->vcf.width.MLEAC, h->vcf.width.DP, h->vcf.width.QD, h->vcf.width.SF, h->vcf.width.AS_SB_TABLE, 
                      h->vcf.max_ploidy_for_mux);
 
@@ -1039,7 +1052,7 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
                       "%s" // dt_specific, if there is any
                       "%screated=\"%.*s\"\n",
                  SEC_TAB, h->genozip_version, h->genozip_minor_ver/*15.0.28*/, h->private_file, encryption_name (h->encryption_type), dt_name (dt), 
-                 BGEN64 (h->recon_size_prim), BGEN64 (h->num_lines_bound), BGEN32 (h->num_sections), h->num_txt_files,
+                 BGEN64 (h->recon_size), BGEN64 (h->num_lines_bound), BGEN32 (h->num_sections), h->num_txt_files,
                  BGEN16(h->vb_size), 
                  SEC_TAB, sections_dis_flags (f, st, dt).s,
                  DT(REF) ? "fasta" : "ref", REF_FILENAME_LEN, h->ref_filename, 
@@ -1077,14 +1090,13 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
         SectionHeaderVbHeaderP h = (SectionHeaderVbHeaderP)header;
         if (Z_DT(VCF) || Z_DT(BCF)) 
             sprintf (str, 
-                    "\n%srecon_size=(PRIM:%u, LUFT:%u) longest_line=%u z_data_bytes=%u digest=%s %s\n",
-                    SEC_TAB, BGEN32 (h->recon_size_prim), v12 ? BGEN32 (h->dvcf_recon_size_luft) : 0, 
-                    BGEN32 (h->longest_line_len), 
+                    "\n%srecon_size=%u longest_line=%u HT_n_lines=%u z_data_bytes=%u digest=%s %s\n",
+                    SEC_TAB, BGEN32 (h->recon_size), BGEN32 (h->longest_line_len), BGEN32 (h->vcf_HT_n_lines),
                     BGEN32 (h->z_data_bytes), digest_display (h->digest).s, sections_dis_flags (f, st, dt).s);
         else if (Z_DT(SAM))
             sprintf (str, 
                     "\n%srecon_size=%u longest_line=%u longest_seq=%u z_data_bytes=%u digest=%s prim=(seq=%u comp_qual=%u qname=%u num_alns=%u first_grp_i=%u %s=%u) %s\n", 
-                    SEC_TAB, BGEN32 (h->recon_size_prim),  
+                    SEC_TAB, BGEN32 (h->recon_size),  
                     BGEN32 (h->longest_line_len), BGEN32(h->longest_seq_len),
                     BGEN32 (h->z_data_bytes), digest_display (h->digest).s, 
                     v14 ? BGEN32 (h->sam_prim_seq_len)          : 0,
@@ -1098,12 +1110,12 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
         else if (Z_DT(FASTQ))
             sprintf (str, 
                     "\n%srecon_size=%u longest_line=%u longest_seq=%u z_data_bytes=%u digest=%s %s\n",
-                    SEC_TAB, BGEN32 (h->recon_size_prim),BGEN32 (h->longest_line_len), BGEN32(h->longest_seq_len),
+                    SEC_TAB, BGEN32 (h->recon_size),BGEN32 (h->longest_line_len), BGEN32(h->longest_seq_len),
                     BGEN32 (h->z_data_bytes), digest_display (h->digest).s, sections_dis_flags (f, st, dt).s);
         else
             sprintf (str, 
                     "\n%srecon_size=%u longest_line=%u z_data_bytes=%u digest=%s %s\n",
-                    SEC_TAB, BGEN32 (h->recon_size_prim),BGEN32 (h->longest_line_len), 
+                    SEC_TAB, BGEN32 (h->recon_size),BGEN32 (h->longest_line_len), 
                     BGEN32 (h->z_data_bytes), digest_display (h->digest).s, sections_dis_flags (f, st, dt).s);
 
         break;
@@ -1311,7 +1323,7 @@ void sections_show_gheader (ConstSectionHeaderGenozipHeaderP header)
         iprintf ("  genozip_version: %u.0.%u\n",    header->genozip_version, header->genozip_minor_ver); // note: minor version always 0 before 15.0.28
         iprintf ("  data_type: %s\n",               dt_name (dt));
         iprintf ("  encryption_type: %s\n",         encryption_name (header->encryption_type)); 
-        iprintf ("  recon_size_prim: %s\n",         str_int_commas (BGEN64 (header->recon_size_prim)).s);
+        iprintf ("  recon_size: %s\n",         str_int_commas (BGEN64 (header->recon_size)).s);
         iprintf ("  num_lines_bound: %"PRIu64"\n",  BGEN64 (header->num_lines_bound));
         iprintf ("  num_sections: %u\n",            z_file->section_list_buf.len32);
         iprintf ("  num_txt_files: %u\n",           header->num_txt_files);

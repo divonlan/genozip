@@ -66,7 +66,7 @@ void tip_print (void)
     if (E(BCF))
         valid_tips[n++] = "Tip: genozip compresses VCF files 5-10X faster than it compresses BCF files";
     
-    if (E(SAM) || E(BAM) || E(VCF) || E(BCF) || E(GFF) || E(ME23) || E(CHAIN)) 
+    if (E(SAM) || E(BAM) || E(VCF) || E(BCF) || E(GFF) || E(ME23)) 
         valid_tips[n++] = "Tip: do the chromosomes have different names (eg 22 vs chr22)? Genozip can fix that: " WEBSITE_MATCH_CHROM;
 
     if (E(SAM) || E(BAM))

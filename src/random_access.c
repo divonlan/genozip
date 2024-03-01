@@ -189,7 +189,7 @@ void random_access_merge_in_vb (VBlockP vb)
 
     buf_alloc (evb, &z_file->ra_buf, 0, z_file->ra_buf.len + src_ra_len, RAEntry, 2, "z_file->ra_buf"); 
 
-    ContextP chrom_ctx = CTX(DTF(prim_chrom));
+    ContextP chrom_ctx = CTX(DTF(chrom));
     ASSERT0 (chrom_ctx, "cannot find chrom_ctx");
 
     ASSERT (chrom_ctx->nodes_converted, "expecting nodes of %s to be converted", chrom_ctx->tag_name); // still index/len
@@ -296,7 +296,7 @@ Codec random_access_compress (ConstBufferP ra_buf_, SectionType sec_type, Codec 
 
     BufferP ra_buf = (BufferP)ra_buf_; // we will restore everything so that Const is honoured
 
-    if (msg) random_access_show_index (ra_buf, true, DTFZ(prim_chrom), msg);
+    if (msg) random_access_show_index (ra_buf, true, DTFZ(chrom), msg);
     
     BGEN_random_access (ra_buf); // make ra_buf into big endian
 

@@ -421,7 +421,7 @@ COMPRESS (codec_domq_compress)
             BNXTc (qualmplx_ctx->local) = ql->dom; // this is dom_i - i.e. the line in the denormalization table
 
             for (uint32_t i=0; i < ql->qual_len; i++) {    
-                if (ql->qual[i] == 0) // dom
+                if (__builtin_expect (ql->qual[i] == 0, true)) // dom
                     runlen++;
                 
                 else {

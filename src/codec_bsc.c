@@ -56,7 +56,7 @@ COMPRESS (codec_bsc_compress)
         uncompressed = vb->scratch.data;
     }
 
-    int ret = bsc_compress (vb, (bytes )uncompressed, (uint8_t *)compressed, *uncompressed_len,
+    int ret = bsc_compress ((bytes )uncompressed, (uint8_t *)compressed, *uncompressed_len,
                             16,  // lzp hash size
                             128, // lzp min size
                             LIBBSC_BLOCKSORTER_BWT, // block sorter 
@@ -64,7 +64,7 @@ COMPRESS (codec_bsc_compress)
                             LIBBSC_FEATURE_FASTMODE); // flags ("features")
 
     if (ret == LIBBSC_NOT_COMPRESSIBLE) {
-        ret = bsc_store (vb, (bytes )uncompressed, (uint8_t *)compressed, *uncompressed_len, LIBBSC_FEATURE_FASTMODE);
+        ret = bsc_store ((bytes )uncompressed, (uint8_t *)compressed, *uncompressed_len, LIBBSC_FEATURE_FASTMODE);
 
         ASSERT (ret >= LIBBSC_NO_ERROR, "%s: \"%s\": bsc_store returned %s. ctx=%s uncompressed_len=%u", 
                 VB_NAME, name, codec_bsc_errstr (ret), TAG_NAME, *uncompressed_len);
@@ -85,7 +85,7 @@ COMPRESS (codec_bsc_compress)
 UNCOMPRESS (codec_bsc_uncompress) 
 { 
     START_TIMER;
-    int ret = bsc_decompress (vb, (bytes )compressed, compressed_len, (uint8_t *)uncompressed_buf->data, uncompressed_len, LIBBSC_FEATURE_FASTMODE);
+    int ret = bsc_decompress ((bytes )compressed, compressed_len, (uint8_t *)uncompressed_buf->data, uncompressed_len, LIBBSC_FEATURE_FASTMODE);
 
     ASSERT (ret >= LIBBSC_NO_ERROR, "%s: \"%s\": %s", VB_NAME, name, codec_bsc_errstr (ret));    
 
@@ -97,14 +97,8 @@ uint32_t codec_bsc_est_size (Codec codec, uint64_t uncompressed_len)
     return (uint32_t)uncompressed_len + LIBBSC_HEADER_SIZE; // as required by libbsc
 }
 
-static void *codec_bsc_malloc (void *vb, size_t size, FUNCLINE)
-{
-    void *mem =  codec_alloc_do (VB, size, 1.5, func, code_line); 
-    return mem;
-}
-
 void codec_bsc_initialize (void)
 {
-    bsc_init_full (LIBBSC_FEATURE_FASTMODE, codec_bsc_malloc, codec_free_do);
+    bsc_init_full (LIBBSC_FEATURE_FASTMODE, NULL, NULL, NULL);
 }
 

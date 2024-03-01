@@ -140,7 +140,7 @@ typedef struct {
         no_gencomp, force_gencomp, force_deep, force_PLy, no_domqual, no_pacb, no_longr, no_homp, force_qual_codec, no_smux, verify_codec, 
         seg_only, show_bam, xthreads,
         #define SHOW_CONTAINERS_ALL_VBs (-1)
-        show_containers, show_aligner, show_buddy,
+        show_containers, show_stack, show_aligner, show_buddy,
         echo,         // show the command line in case of an error
         recover,      // PIZ: attempted recovery from data corruption
 

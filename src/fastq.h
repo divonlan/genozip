@@ -103,7 +103,7 @@ extern bool fastq_piz_initialize (CompIType comp_i);
 extern void fastq_piz_header_init (void);
 extern void fastq_piz_process_recon (VBlockP vb);
 extern void fastq_piz_before_read (VBlockP vb);
-extern bool fastq_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment);
+extern bool fastq_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header);
 CONTAINER_FILTER_FUNC (fastq_piz_filter);
 extern IS_SKIP (fastq_piz_is_skip_section);
 extern void fastq_recon_aligned_SEQ (VBlockP vb, STRp(seq_len_str), ReconType reconstruct);

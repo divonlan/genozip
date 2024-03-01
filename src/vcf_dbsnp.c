@@ -71,11 +71,11 @@ typedef enum { VARTYPE_SNP=0,
                VARTYPE_NONSNP_1REF=1,    // non-SNP, single-base REF - usually an insertion
                VARTYPE_MREF=2 } VarType; // multi-base REF - usually a deletion
 
-static VarType get_vartype (STRp(ref), STRp(alt))
+static VarType get_vartype (VBlockVCFP vb)
 {
-    if (ref_len > 1) return VARTYPE_MREF;
+    if (vb->REF_len > 1) return VARTYPE_MREF;
 
-    else if (alt_len == 1 || alt_len == str_count_char (STRa(alt), ',') * 2 + 1) return VARTYPE_SNP;
+    else if (vb->ALT_len == 1 || vb->ALT_len == str_count_char (STRa(vb->ALT), ',') * 2 + 1) return VARTYPE_SNP;
 
     else return VARTYPE_NONSNP_1REF;
 }
@@ -85,7 +85,7 @@ static VarType get_vartype (STRp(ref), STRp(alt))
 void vcf_seg_INFO_VC (VBlockVCFP vb, ContextP ctx, STRp(vc))
 {
     if (!segconf.running) {
-        VarType vartype = get_vartype (STRa(vb->main_ref), STRa(vb->main_alt));
+        VarType vartype = get_vartype (vb);
         ContextP channel_ctx = seg_mux_get_channel_ctx (VB, INFO_VC, (MultiplexerP)&vb->mux_VC, vartype);
 
         seg_by_ctx (VB, STRa(vc), channel_ctx, vc_len);
@@ -98,10 +98,7 @@ void vcf_seg_INFO_VC (VBlockVCFP vb, ContextP ctx, STRp(vc))
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_VARTYPE)
 {
-    STRlast (refalt, VCF_REFALT);
-    str_split (refalt, refalt_len, 2, '\t', ra, true);
+    VarType vartype = get_vartype (VB_VCF);
 
-    VarType vartype = get_vartype (STRi(ra,0), STRi(ra,1));
-
-    return reconstruct_demultiplex (vb, ctx, STRa(snip), vartype , new_value, reconstruct);
+    return reconstruct_demultiplex (vb, ctx, STRa(snip), vartype, new_value, reconstruct);
 }

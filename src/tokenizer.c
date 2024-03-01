@@ -132,13 +132,12 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
 
     bool is_ordered = !((VB_DT(BAM) || VB_DT(SAM)) && segconf.is_sorted);
 
-    for (uint8_t i=0; i < con.nitems_lo; i++) {
-        Token *ci = &items[i];
-        ContainerItem *CI = &con.items[i];
+    for_con2 (&con) {
+        Token *ci = &items[item_i];
 
         // process the subfield that just ended
-        Context *item_ctx = ctx_get_ctx (vb, CI->dict_id);
-        ASSERT (item_ctx, "item_ctx for %s is NULL", dis_dict_id (CI->dict_id).s);
+        Context *item_ctx = ctx_get_ctx (vb, item->dict_id);
+        ASSERT (item_ctx, "item_ctx for %s is NULL", dis_dict_id (item->dict_id).s);
 
         item_ctx->st_did_i = (field_ctx->st_did_i != DID_NONE) ? field_ctx->st_did_i : field_ctx->did_i;
 
@@ -184,8 +183,8 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
         }
 
         // set separators
-        CI->separator[0] = ci->sep;
-        CI->separator[1] = ci->sep2;
+        item->separator[0] = ci->sep;
+        item->separator[1] = ci->sep2;
         num_seps += (ci->sep != 0) + (ci->sep2 != 0);
 
         // add the leading zeros to the container prefixes

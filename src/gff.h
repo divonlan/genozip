@@ -144,7 +144,7 @@ extern void gff_reset_line (VBlockP vb);
 extern unsigned gff_vb_size (DataType dt);
 
 // PIZ stuff
-extern bool gff_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment);
+extern bool gff_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header);
 extern CONTAINER_FILTER_FUNC (gff_piz_filter);
 extern CONTAINER_CALLBACK (gff_piz_container_cb);
 

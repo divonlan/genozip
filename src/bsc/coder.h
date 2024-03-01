@@ -8,7 +8,7 @@
 This file is a part of bsc and/or libbsc, a program and a library for
 lossless, block-sorting data compression.
 
-   Copyright (c) 2009-2012 Ilya Grebnov <ilya.grebnov@gmail.com>
+   Copyright (c) 2009-2024 Ilya Grebnov <ilya.grebnov@gmail.com>
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -30,10 +30,8 @@ See also the bsc and libbsc web site:
 
 --*/
 
-// ------------------------------------------------------------------
-//   This file was extensively modified to adapt it to genozip. 
-
-#pragma once
+#ifndef _LIBBSC_CODER_H
+#define _LIBBSC_CODER_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -55,7 +53,7 @@ extern "C" {
     * @param features   - the set of additional features.
     * @return the length of compressed memory block if no error occurred, error code otherwise.
     */
-    int bsc_coder_compress(void *vb, const unsigned char * input, unsigned char * output, int n, int coder, int features);
+    int bsc_coder_compress(const unsigned char * input, unsigned char * output, int n, int coder, int features);
 
     /**
     * Decompress a memory block using Quantized Local Frequency Coding.
@@ -65,10 +63,12 @@ extern "C" {
     * @param features   - the set of additional features.
     * @return the length of decompressed memory block if no error occurred, error code otherwise.
     */
-    int bsc_coder_decompress(void *vb, const unsigned char * input, unsigned char * output, int coder, int features);
+    int bsc_coder_decompress(const unsigned char * input, unsigned char * output, int coder, int features);
 
 #ifdef __cplusplus
 }
+#endif
+
 #endif
 
 /*-----------------------------------------------------------*/

@@ -196,7 +196,9 @@ void fastq_zip_after_compute (VBlockP vb)
     z_file->num_perfect_matches += vb->num_perfect_matches; // for stats
     z_file->num_aligned         += vb->num_aligned;
 
-    DO_ONCE ref_verify_organism (vb);
+    if (!flag.deep) {
+        DO_ONCE ref_verify_organism (vb);
+    }
 }
 
 // case of --optimize-DESC: generate the prefix of the read name from the txt file name
@@ -391,8 +393,8 @@ static void fastq_seg_finalize_segconf (VBlockP vb)
     if (!segconf.multiseq) {
         if (!flag.reference && !txt_file->redirected && !flag.seg_only)
             TIP ("Compressing a FASTQ file using a reference file can reduce the compressed file's size by 20%%-60%%.\n"
-                "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n", 
-                arch_get_argv0(), txt_file->name);
+                 "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n", 
+                 arch_get_argv0(), txt_file->name);
 
         else
             fastq_tip_if_should_be_pair();          
@@ -532,7 +534,7 @@ void fastq_read_pair_1_data (VBlockP vb_, VBIType pair_vb_i)
     vb->pair_num_lines = sec->num_lines;
 
     if (flag.debug)  // use --debug to access - displays in errors in txtfile_read_vblock
-        vb->pair_txt_data_len = BGEN32 (zfile_read_section_header (vb, sec, SEC_VB_HEADER).vb_header.recon_size_prim);
+        vb->pair_txt_data_len = BGEN32 (zfile_read_section_header (vb, sec, SEC_VB_HEADER).vb_header.recon_size);
     
     // read into ctx->pair the data we need from our pair: QNAME,QNAME2,LINE3 and its components, GPOS and STRAND
     buf_alloc (vb, &vb->z_section_headers, MAX_DICTS * 2, 0, uint32_t, 0, "z_section_headers"); // indices into vb->z_data of section headers
@@ -560,7 +562,7 @@ void fastq_piz_before_read (VBlockP vb)
 }
 
 // main thread: called from piz_read_one_vb as DTP(piz_init_vb)
-bool fastq_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment)
+bool fastq_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header)
 {
     // in case of this is a R2 of a paired fastq file, get the R1 data
     if (vb && VB_FASTQ->pair_vb_i > 0)

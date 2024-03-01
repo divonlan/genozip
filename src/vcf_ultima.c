@@ -34,8 +34,8 @@ static PosType64 X_LM_RM_predict_pos (VBlockVCFP vb, ConstRangeP range, PosType6
     if (is_del || is_ins) {
         int n_reps = 0;
         if (is_rm) {
-            rom payload     = (is_del ? vb->main_ref     : vb->alts[alt_i]    ) + 1;
-            int payload_len = (is_del ? vb->main_ref_len : vb->alt_lens[alt_i]) - 1;
+            rom payload     = (is_del ? vb->REF     : vb->alts[alt_i]    ) + 1;
+            int payload_len = (is_del ? vb->REF_len : vb->alt_lens[alt_i]) - 1;
 
             PosType64 pos = line_pos + 1;
             int payload_i=0;
@@ -101,7 +101,7 @@ void vcf_seg_INFO_X_LM_RM (VBlockVCFP vb, ContextP ctx, STRp(seq))
         goto fallback;
 
     bool is_rm = (ctx->did_i == INFO_X_RM);
-    PosType64 pos = X_LM_RM_predict_pos (vb, range, line_pos, is_rm, seq_lens[0], (vb->var_types[0] == VT_MISSING) ? 1 : 0);
+    PosType64 pos = X_LM_RM_predict_pos (vb, range, line_pos, is_rm, seq_lens[0], ALT0(UPSTRM_DEL) ? 1 : 0);
 
     // check again, with pos
     if (!pos || pos < range->first_pos || pos + seq_lens[0] - 1 > range->last_pos)
@@ -148,7 +148,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_X_LM_RM)
 
     ConstRangeP range = ref_piz_get_range (vb, gref, HARD_FAIL);
 
-    PosType64 pos = delta + X_LM_RM_predict_pos (VB_VCF, range, CTX(VCF_POS)->last_value.i, (ctx->did_i == INFO_X_RM), seq_len, (VB_VCF->var_types[0] == VT_MISSING) ? 1 : 0);
+    PosType64 pos = delta + X_LM_RM_predict_pos (VB_VCF, range, CTX(VCF_POS)->last_value.i, (ctx->did_i == INFO_X_RM), seq_len, ALT0(UPSTRM_DEL) ? 1 : 0);
     
     char *next = BAFTtxt;
     char *start = next;
@@ -177,7 +177,7 @@ static rom X_IC_prediction (VBlockVCFP vb, int alt_i)
     #define DELorNA(vt) ((vt)==VT_DEL || (vt)==VT_DEL_LONG) ? (vt) : VT_SNP;
 
     VariantType vt = vb->var_types[alt_i];
-    if (vt == VT_MISSING) {
+    if (vt == VT_UPSTRM_DEL) {
         if (alt_i == 0 && vb->n_alts > 1)   
             vt = DELorNA (vb->var_types[1]);
         if (alt_i > 0) 
@@ -187,6 +187,7 @@ static rom X_IC_prediction (VBlockVCFP vb, int alt_i)
     switch (vt) {
         case VT_DEL_LONG  :
         case VT_SUBST_DEL :
+        case VT_UPSTRM_DEL :
         case VT_DEL       : return "del";
         case VT_SUBST_INS : 
         case VT_INS_LONG  :
@@ -243,10 +244,10 @@ static int X_IL_prediction (VBlockVCFP vb, int alt_i)
     switch (vb->var_types[alt_i]) {
         case VT_DEL_LONG :
         case VT_SUBST_DEL:
-        case VT_DEL      : return vb->main_ref_len - vb->alt_lens[alt_i];
+        case VT_DEL      : return vb->REF_len - vb->alt_lens[alt_i];
         case VT_INS_LONG :
         case VT_SUBST_INS:
-        case VT_INS      : return vb->alt_lens[alt_i] - vb->main_ref_len;
+        case VT_INS      : return vb->alt_lens[alt_i] - vb->REF_len;
         default          : return 0;  // '.'
     }
 }
@@ -307,13 +308,14 @@ static char X_HIN_prediction (VBlockVCFP vb, int alt_i)
         return '.';
 
     else switch (vb->var_types[alt_i]) {
-        case VT_DEL_LONG :
-        case VT_SUBST_DEL:
-        case VT_DEL      : return vb->main_ref[vb->main_ref_len-1];
-        case VT_INS_LONG :
-        case VT_SUBST_INS:
-        case VT_INS      : return vb->alts[alt_i][vb->alt_lens[alt_i]-1];
-        default          : return 0;  
+        case VT_DEL_LONG   :
+        case VT_SUBST_DEL  :
+        case VT_UPSTRM_DEL :
+        case VT_DEL        : return vb->REF[vb->REF_len-1];
+        case VT_INS_LONG   :
+        case VT_SUBST_INS  :
+        case VT_INS        : return vb->alts[alt_i][vb->alt_lens[alt_i]-1];
+        default            : return 0;  
     }
 }
 
@@ -397,8 +399,8 @@ static int X_HIL_prediction (VBlockVCFP vb, int alt_i, bool use_reference)
 
     if (!VT(DEL) && !VT(INS)) return 0;
 
-    rom payload     = (VT(DEL) ? vb->main_ref     : vb->alts[alt_i]    ) + 1;
-    int payload_len = (VT(DEL) ? vb->main_ref_len : vb->alt_lens[alt_i]) - 1;
+    rom payload     = (VT(DEL) ? vb->REF     : vb->alts[alt_i]    ) + 1;
+    int payload_len = (VT(DEL) ? vb->REF_len : vb->alt_lens[alt_i]) - 1;
 
     if (is_non_h_indel) // non-h-indel can be determined by the payload
         return str_is_monochar (STRa(payload)) ? payload_len : 0;
@@ -465,12 +467,12 @@ static bool VARIANT_TYPE_ref_confirms_hmer (VBlockVCFP vb, STRp(seq), bool use_r
         RangeP range = ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, seq_len, WORD_INDEX_NONE, 
                                         (IS_REF_EXT_STORE ? &lock : NULL));
 
-        if (range && pos >= range->first_pos && pos + vb->main_ref_len <= range->last_pos && // range usable
-            REFp(pos + vb->main_ref_len) != seq[seq_len-1]) // homopolymer does not continue one more base
+        if (range && pos >= range->first_pos && pos + vb->REF_len <= range->last_pos && // range usable
+            REFp(pos + vb->REF_len) != seq[seq_len-1]) // homopolymer does not continue one more base
             confirm = false;
 
         if (IS_REF_EXT_STORE)
-            bits_set (&range->is_set, pos + vb->main_ref_len - range->first_pos);
+            bits_set (&range->is_set, pos + vb->REF_len - range->first_pos);
 
         ref_unlock (gref, &lock); // does nothing if REFLOCK_NONE
         return confirm; // actually, we can't use the reference
@@ -479,7 +481,7 @@ static bool VARIANT_TYPE_ref_confirms_hmer (VBlockVCFP vb, STRp(seq), bool use_r
     else {
         ConstRangeP range = ref_piz_get_range (VB, gref, HARD_FAIL);
 
-        return REFp(CTX(VCF_POS)->last_value.i + vb->main_ref_len) == seq[seq_len-1];
+        return REFp(CTX(VCF_POS)->last_value.i + vb->REF_len) == seq[seq_len-1];
     }
 }
 
@@ -490,11 +492,11 @@ static void VARIANT_TYPE_prediction (VBlockVCFP vb, pSTRp(prediction), bool use_
     int count_hmers = 0;
 
     for (int alt_i=0; alt_i < vb->n_alts; alt_i++)    
-        if (VT(SNP) || VT(MISSING)) 
+        if (VT(SNP) || VT(UPSTRM_DEL)) 
             count_snps++;
 
-        else if (VT(DEL) && str_is_monochar (vb->main_ref+1, vb->main_ref_len-1) &&
-                 VARIANT_TYPE_ref_confirms_hmer (vb, STRa(vb->main_ref), use_reference))
+        else if (VT(DEL) && str_is_monochar (vb->REF+1, vb->REF_len-1) &&
+                 VARIANT_TYPE_ref_confirms_hmer (vb, STRa(vb->REF), use_reference))
             count_hmers++;
             
         else if (VT(INS) && str_is_monochar (vb->alts[alt_i]+1, vb->alt_lens[alt_i]-1) &&

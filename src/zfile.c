@@ -649,8 +649,8 @@ static void zfile_read_genozip_header_handle_ref_info (ConstSectionHeaderGenozip
                 ref_set_reference (gref, ref_filename, REF_EXTERNAL, false);
             }
             else 
-                ASSINP (flag.dont_load_ref_file, "Please use --reference to specify the path to the %sreference file. Original path was: %.*s",
-                        (Z_DT(CHAIN) ? "LUFT (target) coordinates " : ""), REF_FILENAME_LEN, header->ref_filename);
+                ASSINP (flag.dont_load_ref_file, "Please use --reference to specify the path to the reference file. Original path was: %.*s",
+                        REF_FILENAME_LEN, header->ref_filename);
         }
 
         // test for matching digest between specified external reference and reference in the header
@@ -726,7 +726,7 @@ uint64_t zfile_read_genozip_header_get_offset (bool as_is)
 
     // check that file version is at most this executable version, except for reference file for which only major version is tested
     ASSINP (z_file->genozip_version < code_version_major() || 
-            (z_file->genozip_version == code_version_major() && (z_file->genozip_minor_ver <= code_version_minor() || Z_DT(REF))),
+            (z_file->genozip_version == code_version_major() && (z_file->genozip_minor_ver <= code_version_minor() || Z_DT(REF) || (is_genocat && flag.show_stats))),
             "Error: %s cannot be opened because it was compressed with genozip version %u.0.%u which is newer than the version running - %s.\n%s",
             z_name, z_file->genozip_version, z_file->genozip_minor_ver, GENOZIP_CODE_VERSION, genozip_update_msg());
 
@@ -805,7 +805,7 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header, FailType
 
     z_file->z_flags.dt_specific |= dts; 
     z_file->num_lines = BGEN64 (header->num_lines_bound);
-    z_file->txt_data_so_far_bind = BGEN64 (header->recon_size_prim);
+    z_file->txt_data_so_far_bind = BGEN64 (header->recon_size);
     segconf.vb_size = (uint64_t)BGEN16 (header->vb_size) MB;
 
     if (flag.show_data_type) {
@@ -928,7 +928,7 @@ void zfile_compress_vb_header (VBlockP vb)
         .vblock_i          = BGEN32 (vb->vblock_i),
         .codec             = CODEC_NONE,
         .flags.vb_header   = vb->flags,
-        .recon_size_prim   = BGEN32 (vb->recon_size),
+        .recon_size   = BGEN32 (vb->recon_size),
         .longest_line_len  = BGEN32 (vb->longest_line_len),
         .longest_seq_len   = BGEN32 (vb->longest_seq_len), // since v15 (non-0 for SAM, BAM, FASTQ)
         .digest            = flag.zip_txt_modified ? DIGEST_NONE : vb->digest,
@@ -953,7 +953,7 @@ void zfile_update_compressed_vb_header (VBlockP vb)
     if (flag_is_show_vblocks (ZIP_TASK_NAME)) 
         iprintf ("UPDATE_VB_HEADER(id=%d) vb_i=%u comp_i=%u recon_size=%u genozip_size=%u longest_line_len=%u\n",
                  vb->id, vb->vblock_i, vb->comp_i, 
-                 BGEN32 (vb_header->recon_size_prim), 
+                 BGEN32 (vb_header->recon_size), 
                  BGEN32 (vb_header->z_data_bytes), BGEN32 (vb_header->longest_line_len));
 
     // now we can finally encrypt the header - if needed

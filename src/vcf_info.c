@@ -20,13 +20,6 @@
 // called after reading VCF header, before segconf
 void vcf_info_zip_initialize (void) 
 {
-    vcf_dbsnp_zip_initialize(); // called even if not in VCF header, because can be discovered in segconf too
-    vcf_gatk_zip_initialize();
-    if (segconf.vcf_is_vagrent)    vcf_vagrent_zip_initialize();
-    if (segconf.vcf_is_mastermind) vcf_mastermind_zip_initialize();
-    if (segconf.vcf_is_vep)        vcf_vep_zip_initialize();
-    if (segconf.vcf_illum_gtyping) vcf_illum_gtyping_zip_initialize();
-    if (segconf.vcf_is_platypus)   vcf_platypus_zip_initialize();
 }
 
 void vcf_info_seg_initialize (VBlockVCFP vb) 
@@ -208,10 +201,10 @@ static int vcf_INFO_ALLELE_get_allele (VBlockVCFP vb, STRp (value))
     if (IS_PERIOD (value)) return -2;
 
     // check if its equal main REF (which can by REF or oREF)
-    if (str_issame (value, vb->main_ref)) return 0;
+    if (str_issame (value, vb->REF)) return 0;
 
     // check if its equal one of the ALTs
-    str_split (vb->main_alt, vb->main_alt_len, 0, ',', alt, false);
+    str_split (vb->ALT, vb->ALT_len, 0, ',', alt, false);
 
     for (int alt_i=0; alt_i < n_alts; alt_i++) 
         if (str_issame_(STRa(value), STRi(alt, alt_i)))
@@ -249,7 +242,7 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_ALLELE)
     int allele = snip[1] - '0'; // note: snip[0] was used by DVCF for coordinate, up to 15.0.41
 
     if (allele == 0)
-        RECONSTRUCT (vb->main_ref, vb->main_ref_len);
+        RECONSTRUCT (vb->REF, vb->REF_len);
     
     else {
         ASSPIZ (allele <= vb->n_alts, "allele=%d but there are only %d ALTs", allele, vb->n_alts);
@@ -258,123 +251,6 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_ALLELE)
 
     return NO_NEW_VALUE;
 }
-
-// ------------------------
-// INFO/SVLEN & INFO/REFLEN
-// ------------------------
-
-static inline void vcf_seg_INFO_SVLEN (VBlockVCFP vb, ContextP ctx, STRp(svlen_str))
-{
-    int64_t svlen;
-    if (!str_get_int (STRa(svlen_str), &svlen)) 
-        seg_by_ctx (VB, STRa(svlen_str), ctx, svlen_str_len);
-
-    // if SVLEN is negative, it is expected to be minus the delta between END and POS
-    else if (-svlen == CTX(VCF_POS)->last_delta) // INFO_END is an alias of POS - so the last delta would be between END and POS
-        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_SVLEN }), 2, ctx, svlen_str_len);
-
-    // for left-anchored deletions or insertions, SVLEN might be the length of the payload
-    else if (svlen == MAX_(vb->main_alt_len, vb->main_ref_len) - 1)
-        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_SVLEN, '1' }), 3, ctx, svlen_str_len);
-
-    else
-        seg_integer_or_not (VB, ctx, STRa(svlen_str), svlen_str_len);
-}
-
-static inline void vcf_seg_INFO_REFLEN (VBlockVCFP vb, ContextP ctx, STRp(reflen_str)) // note: ctx is INFO/END *not* POS (despite being an alias)
-{
-    int64_t reflen;
-
-    if (CTX(VCF_POS)->last_delta && str_get_int (STRa(reflen_str), &reflen) && reflen == CTX(VCF_POS)->last_delta)
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_SVLEN, '2' }, 3, ctx, reflen_str_len);
-    else
-        seg_by_ctx (VB, STRa(reflen_str), ctx, reflen_str_len);
-}
-
-
-// the case where SVLEN is minus the delta between END and POS
-SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_SVLEN)
-{
-    VBlockVCFP vb = (VBlockVCFP)vb_;
-    
-    if (!snip_len) 
-        new_value->i = -CTX(VCF_POS)->last_delta; // END is a alias of POS - they share the same data stream - so last_delta would be the delta between END and POS
-
-    else if (*snip == '2') // introduced 15.0.13
-        new_value->i = CTX(VCF_POS)->last_delta;
-
-    else if (*snip == '1') // introduced 15.0.13
-        new_value->i = MAX_(vb->main_alt_len, vb->main_ref_len) - 1;
-
-    else
-        ABORT_PIZ ("unrecognized snip '%c'(%u). %s", *snip, (uint8_t)*snip, genozip_update_msg());
-
-    if (reconstruct) RECONSTRUCT_INT (new_value->i);
-
-    return HAS_NEW_VALUE;
-}
-
-// -----------
-// INFO/SVTYPE
-// -----------
-
-static inline bool vcf_seg_SVTYPE (VBlockVCFP vb, ContextP ctx, STRp(svtype))
-{
-    uint32_t alt_len = vb->main_alt_len;
-    uint32_t ref_len = vb->main_ref_len;
-    rom alt = vb->main_alt;
-
-    // prediction: ALT has a '[' or a ']', then SVTYPE is "BND"
-    if (memchr (alt, '[', alt_len) || memchr (alt, ']', alt_len)) 
-        { if (memcmp (svtype, "BND", 3)) goto fallback; }
-
-    // prediction: if ALT starts/ends with <>, then its the same as SVTYPE except <>
-    else if (alt[0] == '<' && alt[alt_len-1] == '>') 
-        { if (!str_issame_(STRa(svtype), alt+1, alt_len-2)) goto fallback; }
-
-    // prediction: if ref_len>1 and alt_len=1, then SVTYPE is <DEL>
-    else if (ref_len > 1 && alt_len == 1) 
-        { if (memcmp (svtype, "DEL", 3)) goto fallback; }
-
-    // prediction: if ref_len=1 and alt_len>1, then SVTYPE is <INS>
-    else if (ref_len == 1 && alt_len > 1) 
-        { if (memcmp (svtype, "INS", 3)) goto fallback; }
-
-    else fallback:
-        return true;
-
-    // prediction succeeded
-    seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_SVTYPE }, 2, ctx, svtype_len);
-    return false;  // no need for fallback
-}
-
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_SVTYPE)
-{    
-    rom alt = VB_VCF->main_alt;
-    uint32_t alt_len = VB_VCF->main_alt_len;
-    uint32_t ref_len = VB_VCF->main_ref_len;
-
-    // prediction: ALT has a '[' or a ']', then SVTYPE is "BND"
-    if (memchr (alt, '[', alt_len) || memchr (alt, ']', alt_len)) 
-        RECONSTRUCT ("BND", 3);
-    
-    // prediction: if ALT has 2 characters more than SVTYPE, starting/end with <>, then its the same as SVTYPE except <>
-    else if (alt[0] == '<' && alt[alt_len-1] == '>') 
-        RECONSTRUCT (alt+1, alt_len-2);
-
-    // prediction: if ref_len>1 and alt_len=1, then SVTYPE is <DEL>
-    else if (ref_len > 1 && alt_len == 1) 
-        RECONSTRUCT ("DEL", 3);
-
-    // prediction: if ref_len=1 and alt_len>1, then SVTYPE is <INS>
-    else if (ref_len == 1 && alt_len > 1) 
-        RECONSTRUCT ("INS", 3);
-
-    else
-        ABORT_PIZ ("failed to reconstruct SVTYPE: ref_len=%u alt=\"%.*s\"", ref_len, STRf(alt));
-
-    return NO_NEW_VALUE;
-}    
 
 // --------------
 // INFO container
@@ -404,6 +280,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
     else switch (ctx->dict_id.num) {
         #define CALL(f) ({ (f); break; })
         #define CALL_IF(cond,f)  if (cond) { (f); break; } else goto standard_seg 
+        #define CALL_IF0(cond,f) if (cond) { (f); break; } else 
         #define CALL_WITH_FALLBACK(f) if (f(vb, ctx, STRa(value))) { seg_by_ctx (VB, STRa(value), ctx, value_len); } break
         #define STORE_AND_SEG(store_type) ({ seg_set_last_txt_store_value (VB, ctx, STRa(value), store_type); seg_by_ctx (VB, STRa(value), ctx, value_len); break; })
         #define DEFER(f) ({ vb_add_to_deferred_q (VB, ctx, vcf_seg_INFO_##f, vb->idx_##f); seg_set_last_txt (VB, ctx, STRa(value)); break; })
@@ -416,11 +293,6 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_DP:              CALL (vcf_seg_INFO_DP (vb, ctx, STRa(value)));
         case _INFO_END:             CALL (vcf_seg_INFO_END (vb, ctx, STRa(value))); // note: END is an alias of POS - they share the same delta stream - the next POS will be a delta vs this END)
 
-        // structural variation
-        case _INFO_CIEND:           CALL (seg_by_did (VB, STRa(value), INFO_CIPOS, value_len));  // alias of INFO/CIPOS
-        case _INFO_SVLEN:           CALL (vcf_seg_INFO_SVLEN (vb, ctx, STRa(value)));
-        case _INFO_SVTYPE:          CALL_WITH_FALLBACK (vcf_seg_SVTYPE);
-
         // ---------------------------------------
         // GATK fields
         // ---------------------------------------
@@ -430,7 +302,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_SF:              CALL_WITH_FALLBACK (vcf_seg_INFO_SF_init); // Source File
         case _INFO_MLEAC:           CALL (vcf_seg_INFO_MLEAC (vb, ctx, STRa(value)));
         case _INFO_MLEAF:           CALL (vcf_seg_INFO_MLEAF (vb, ctx, STRa(value)));
-        case _INFO_QD:              DEFER (QD); // deferred seg to after samples
+        case _INFO_QD:              CALL_IF (segconf.has[INFO_QD], DEFER (QD)); // deferred seg to after samples - then call vcf_seg_INFO_QD
         case _INFO_RU:              CALL (vcf_seg_INFO_RU (vb, ctx, STRa(value)));
         case _INFO_RPA:             CALL (vcf_seg_INFO_RPA (vb, ctx, STRa(value)));
         case _INFO_MFRL:            
@@ -467,9 +339,8 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_CLNID:           CALL (seg_integer_or_not (VB, ctx, STRa(value), value_len));
         case _INFO_CLNHGVS: // ClinVar & dbSNP
         case _INFO_HGVSG:   // COSMIC & Mastermind
-            if (segconf.vcf_is_mastermind) 
-                                    CALL (vcf_seg_mastermind_HGVSG (vb, ctx, STRa(value)));
-            else                    CALL (vcf_seg_INFO_HGVS (VB, ctx, STRa(value), 0)); 
+                                    CALL_IF0 (segconf.vcf_is_mastermind, vcf_seg_mastermind_HGVSG (vb, ctx, STRa(value)))
+                                    CALL (vcf_seg_INFO_HGVS (VB, ctx, STRa(value), 0)); 
 
         // ##INFO=<ID=CLNVI,Number=.,Type=String,Description="the variant's clinical sources reported as tag-value pairs of database and variant identifier">
         // example: CPIC:0b3ac4db1d8e6e08a87b6942|CPIC:647d4339d5c1ddb78daff52f|CPIC:9968ce1c4d35811e7175cd29|CPIC:PA166160951|CPIC:c6c73562e2b9e4ebceb0b8bc
@@ -601,10 +472,32 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_TCR:             CALL_IF (segconf.vcf_is_platypus, vcf_seg_playpus_INFO_TCR (vb, ctx, STRa(value)));
 
         // ---------------------------------------
-        // manta
+        // Structural variants
         // ---------------------------------------
-        // case _INFO_LEFT_SVINSSEQ: 
-        // case _INFO_RIGHT_SVINSSEQ: // tried ACGT, better off without
+        case _INFO_CIPOS:           CALL (vcf_seg_INFO_CIPOS (vb, ctx, STRa(value)));
+        case _INFO_CIEND:           CALL (vcf_seg_INFO_CIEND (vb, ctx, STRa(value)));
+        case _INFO_SVLEN:           CALL (vcf_seg_INFO_SVLEN (vb, ctx, STRa(value)));
+        case _INFO_SVTYPE:          CALL (vcf_seg_SVTYPE (vb, ctx, STRa(value)));
+        case _INFO_HOMSEQ:          CALL (vcf_seg_HOMSEQ (vb, ctx, STRa(value)));
+        case _INFO_MATEID:          CALL_IF0(segconf.vcf_is_svaba, vcf_seg_svaba_MATEID (vb, ctx, STRa(value)))
+                                    CALL_IF (segconf.vcf_is_pbsv,  vcf_seg_pbsv_MATEID (vb, ctx, STRa(value)));
+        case _INFO_MAPQ:            CALL_IF (segconf.vcf_is_svaba, vcf_seg_svaba_MAPQ (vb, ctx, STRa(value)));
+        case _INFO_SPAN:            CALL_IF (segconf.vcf_is_svaba, vcf_seg_svaba_SPAN (vb, ctx, STRa(value)));
+        case _INFO_SCTG:            CALL_IF (segconf.vcf_is_svaba, vcf_seg_sv_copy_mate (vb, ctx, STRa(value), TW_SCTG,           TW_SCTG,      false, value_len));
+        case _INFO_INSERTION:       CALL_IF (segconf.vcf_is_svaba, vcf_seg_sv_copy_mate (vb, ctx, STRa(value), TW_INSERTION,      TW_INSERTION, false, value_len));
+        case _INFO_EVDNC:           CALL_IF (segconf.vcf_is_svaba, vcf_seg_sv_copy_mate (vb, ctx, STRa(value), TW_EVDNC,          TW_EVDNC,     false, value_len));
+        case _INFO_NUMPARTS:        CALL_IF (segconf.vcf_is_svaba, vcf_seg_sv_copy_mate (vb, ctx, STRa(value), TW_NUMPARTS,       TW_NUMPARTS,  false, value_len));
+        case _INFO_NM:              CALL_IF (segconf.vcf_is_svaba, vcf_seg_sv_copy_mate (vb, ctx, STRa(value), TW_NM,             TW_MATENM,    false, value_len));
+        case _INFO_MATENM:          CALL_IF (segconf.vcf_is_svaba, vcf_seg_sv_copy_mate (vb, ctx, STRa(value), TW_MATENM,         TW_NM,        false, value_len));
+        case _INFO_MATEMAPQ:        CALL_IF (segconf.vcf_is_svaba, vcf_seg_sv_copy_mate (vb, ctx, STRa(value), TW_HOMSEQ,         TW_HOMSEQ,    false, value_len));
+
+        case _INFO_HOMLEN:          CALL_IF (segconf.vcf_is_sv    && has(HOMSEQ),      vcf_seg_LEN_OF (vb, ctx, STRa(value), vb->idx_HOMSEQ,      STRa(homlen_snip)));
+        case _INFO_DUPHOMLEN:       CALL_IF (segconf.vcf_is_manta && has(DUPHOMSEQ),   vcf_seg_LEN_OF (vb, ctx, STRa(value), vb->idx_DUPHOMSEQ,   STRa(duphomlen_snip)));
+        case _INFO_SVINSLEN:        CALL_IF (segconf.vcf_is_manta && has(SVINSSEQ),    vcf_seg_LEN_OF (vb, ctx, STRa(value), vb->idx_SVINSSEQ,    STRa(svinslen_snip)));
+        case _INFO_DUPSVINSLEN:     CALL_IF (segconf.vcf_is_manta && has(DUPSVINSSEQ), vcf_seg_LEN_OF (vb, ctx, STRa(value), vb->idx_DUPSVINSSEQ, STRa(dupsvinslen_snip)));
+        case _INFO_CIGAR:           CALL_IF (segconf.vcf_is_manta, vcf_seg_manta_CIGAR (vb, ctx, STRa(value)));
+        case _INFO_BND_DEPTH:       CALL_IF (segconf.vcf_is_manta, vcf_seg_sv_copy_mate (vb, ctx, STRa(value), TW_BND_DEPTH, TW_MATE_BND_DEPTH, false, value_len));
+        case _INFO_MATE_BND_DEPTH:  CALL_IF (segconf.vcf_is_manta, vcf_seg_sv_copy_mate (vb, ctx, STRa(value), TW_MATE_BND_DEPTH, TW_BND_DEPTH, false, value_len));
 
         default: standard_seg:
             seg_by_ctx (VB, STRa(value), ctx, value_len);
@@ -623,6 +516,10 @@ static SORTER (sort_by_subfield_name)
 { 
     InfoItem *ina = (InfoItem *)a;
     InfoItem *inb = (InfoItem *)b;
+    
+    // END comes first (as eg vcf_INFO_SVLEN_prediction depends on POS.last_delta)
+    if (str_issame_(STRa(ina->name), "END=", 4)) return -1;
+    if (str_issame_(STRa(inb->name), "END=", 4)) return 1;
     
     return strncmp (ina->name, inb->name, MIN_(ina->name_len, inb->name_len));
 }
@@ -663,7 +560,7 @@ void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
         #define X(x) case INFO_##x : vb->idx_##x = info_items.len32; break
         switch (ii.ctx->did_i) {
             X(AN); X(AF); X(AC); X(MLEAC); X(MLEAF); X(AC_Hom); X(AC_Het); X(AC_Hemi); X(DP); X(QD); X(SF);
-            X(AS_SB_TABLE);
+            X(AS_SB_TABLE); X(SVINSSEQ) ; X(HOMSEQ); X(END) ; X(SVLEN); X(CIPOS); X(LEFT_SVINSSEQ);
             default: {}
         }
         #undef X
@@ -674,8 +571,9 @@ void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
     ARRAY (InfoItem, ii, info_items);
 
     // pass 2: seg all subfields except AC (and PRIM/LUFT that weren't added)
-    for (unsigned i=0; i < ii_len; i++) 
-        vcf_seg_info_one_subfield (vb, ii[i].ctx, STRa(ii[i].value));
+    for (unsigned i=0; i < ii_len; i++)
+        if (ii[i].value) 
+            vcf_seg_info_one_subfield (vb, ii[i].ctx, STRa(ii[i].value));
 }
 
 // Seg INFO fields that were deferred to after all samples are segged

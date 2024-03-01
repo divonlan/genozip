@@ -65,6 +65,7 @@ extern int64_t reconstruct_from_local_int (VBlockP vb, ContextP ctx, char separa
 extern HasNewValue reconstruct_demultiplex (VBlockP vb, ContextP ctx, STRp(snip), int channel_i, ValueType *new_value, ReconType reconstruct);
 
 extern ContextP reconstruct_get_other_ctx_from_snip (VBlockP vb, ContextP ctx, pSTRp (snip));
+extern ContextP reconstruct_special_get_base_ctx (VBlockP vb, ContextP ctx, pSTRp (snip));
 
 extern uint32_t recon_multi_dict_id_get_num_dicts (ContextP ctx, STRp(snip));
 extern ContextP recon_multi_dict_id_get_ctx_first_time (VBlockP vb, ContextP ctx, STRp(snip), unsigned ctx_i);
@@ -110,6 +111,7 @@ extern void reconstruct_store_history (VBlockP vb, ContextP ctx);
 extern void reconstruct_store_history_rollback_recon (VBlockP vb, ContextP ctx, rom recon_start);
 extern void reconstruct_copy_dropped_line_history (VBlockP vb);
 extern void reconstruct_to_history (VBlockP vb, ContextP ctx);
+extern void recon_history_get_historical_snip (VBlockP vb, ContextP ctx, LineIType buddy_line_i, pSTRp(snip));
 
 typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, Did did_i, DictId dict_id);
 

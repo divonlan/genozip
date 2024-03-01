@@ -22,6 +22,12 @@
 #include "context.h"
 #include "endianness.h"
 #include "piz.h"
+#include "vcf_private.h"
+
+#define decl_pbwt_contexts                                              \
+    ContextP runs_ctx __attribute__((unused)) = CTX(FORMAT_PBWT_RUNS);  \
+    ContextP fgrc_ctx __attribute__((unused)) = CTX(FORMAT_PBWT_FGRC);  \
+    ContextP ht_ctx   __attribute__((unused)) = CTX(FORMAT_GT_HT);
 
 typedef struct {
     Allele allele;      // copied from line on which permutation is applied
@@ -46,9 +52,11 @@ typedef struct {
 
 void codec_pbwt_display_ht_matrix (VBlockP vb, uint32_t max_rows)
 {
-    ARRAY (Allele, ht, vb->ht_matrix_ctx->local);
-    uint32_t cols = vb->ht_per_line;
-    uint32_t rows = ht_len / vb->ht_per_line;
+    decl_pbwt_contexts;
+
+    ARRAY (Allele, ht, ht_ctx->local);
+    uint32_t cols = ht_ctx->ht_per_line;
+    uint32_t rows = ht_len / ht_ctx->ht_per_line;
     max_rows = max_rows ? MIN_(rows, max_rows) : rows;
 
     iprint0 ("\nht_matrix:\n");
@@ -84,15 +92,17 @@ static void show_runs (const PbwtState *state)
 
 #define SHOW(msg, cmd) ({ \
     fprintf (info_stream, msg " %-2u: ", line_i); \
-    for (uint32_t i=0; i < vb->ht_per_line; i++) cmd; \
+    for (uint32_t i=0; i < ht_ctx->ht_per_line; i++) cmd; \
     iprint0 ("\n"); }) // flush
 
-#define show_line    if (flag.show_alleles) SHOW ("LINE", (htputc (*B(Allele, vb->ht_matrix_ctx->local, line_i * vb->ht_per_line + i))))
+#define show_line    if (flag.show_alleles) SHOW ("LINE", (htputc (*B(Allele, ht_ctx->local, line_i * ht_ctx->ht_per_line + i))))
 #define show_perm(s) if (flag.show_alleles) SHOW ("PERM", (fprintf (info_stream, "%d ", (s)->perm[i].index)));       
 
-static PbwtState codec_pbwt_initialize_state (VBlockP vb, BufferP runs, BufferP fgrc)
+static PbwtState codec_pbwt_initialize_state (VBlockP vb, BufferP runs, BufferP fgrc, uint32_t ht_per_line)
 {
-    buf_alloc (vb, &vb->codec_bufs[0], 0, vb->ht_per_line * 2, PermEnt, 1, "codec_bufs");
+    decl_pbwt_contexts;
+
+    buf_alloc (vb, &vb->codec_bufs[0], 0, ht_per_line * 2, PermEnt, 1, "codec_bufs");
     buf_zero (&vb->codec_bufs[0]); // re-zero every time
     ARRAY (PermEnt, state_data, vb->codec_bufs[0]);
 
@@ -100,7 +110,7 @@ static PbwtState codec_pbwt_initialize_state (VBlockP vb, BufferP runs, BufferP 
         .runs = runs,
         .fgrc = fgrc,
         .perm = &state_data[0],               // size: ht_per_line X PermEnt
-        .temp = &state_data[vb->ht_per_line], // size: ht_per_line X PermEnt
+        .temp = &state_data[ht_per_line], // size: ht_per_line X PermEnt
     };
         
     return state;
@@ -159,15 +169,12 @@ static void inline codec_pbwt_calculate_permutation (PbwtState *state, const All
 // -------------
 
 // called by vcf_seg_finalize to create all contexts - must be done before merge
-void codec_pbwt_seg_init (VBlockP vb, Context *runs_ctx, Context *fgrc_ctx)
+void codec_pbwt_seg_init (VBlockP vb)
 {
-    vb->runs_ctx = runs_ctx;
-    vb->fgrc_ctx = fgrc_ctx;
-    
-    vb->ht_matrix_ctx->lcodec = CODEC_PBWT; // this will trigger codec_pbwt_compress even though the section is not written to the file
+    decl_pbwt_contexts;
 
-    // create a contexts (if one doesn't exist already) for all alleles observed in this VB. 
-    // Note: we can't do this in codec_pbwt_compress because it must be done before merge, do be copied to z_file->contexts
+    ht_ctx->lcodec          = CODEC_PBWT; // this will trigger codec_pbwt_compress even though the section is not written to the file
+    ht_ctx->ltype           = LT_SUPP;
 
     // this context will contain alternate run lengths of the background allele and any forward allele
     runs_ctx->ltype         = LT_UINT32;
@@ -178,6 +185,8 @@ void codec_pbwt_seg_init (VBlockP vb, Context *runs_ctx, Context *fgrc_ctx)
     fgrc_ctx->ltype         = LT_UINT32;
     fgrc_ctx->lsubcodec_piz = CODEC_PBWT;
     fgrc_ctx->local_dep     = DEP_L2; // FGRC.local is generated when PBWT_HT_MATRIX.local is compressed, and *must* be after RUNS in z_file
+
+    ctx_consolidate_stats (VB, FORMAT_GT, FORMAT_PBWT_RUNS, FORMAT_PBWT_FGRC, DID_EOL);
 }
 
 // updates FGRC - our list of foreground run alleles. Each entry represents "count" consecutive runs of this same "fg_allele"
@@ -248,42 +257,41 @@ static void inline codec_pbwt_run_len_encode (PbwtState *state, uint32_t line_le
 COMPRESS (codec_pbwt_compress)
 {
     START_TIMER;
-
-    PbwtState state = codec_pbwt_initialize_state (vb, &vb->runs_ctx->local, &vb->fgrc_ctx->local); 
- 
-    buf_alloc (vb, &vb->runs_ctx->local, 0, MAX_(vb->ht_per_line, vb->ht_matrix_ctx->local.len / 5 ), char, CTX_GROWTH, CTX_TAG_LOCAL); // initial allocation
-    buf_alloc (vb, &vb->fgrc_ctx->local, 0, MAX_(vb->ht_per_line, vb->ht_matrix_ctx->local.len / 30), char, CTX_GROWTH, CTX_TAG_LOCAL);
-        
-    ARRAY (Allele, ht_data, vb->ht_matrix_ctx->local);
+    decl_pbwt_contexts;
     
-    uint32_t num_lines = ht_data_len / vb->ht_per_line;
+    PbwtState state = codec_pbwt_initialize_state (vb, &runs_ctx->local, &fgrc_ctx->local, ht_ctx->ht_per_line); 
+ 
+    buf_alloc (vb, &runs_ctx->local, 0, MAX_((uint64_t)ht_ctx->ht_per_line, ht_ctx->local.len / 5 ), char, CTX_GROWTH, CTX_TAG_LOCAL); // initial allocation
+    buf_alloc (vb, &fgrc_ctx->local, 0, MAX_((uint64_t)ht_ctx->ht_per_line, ht_ctx->local.len / 30), char, CTX_GROWTH, CTX_TAG_LOCAL);
+        
+    ARRAY (Allele, ht_data, ht_ctx->local);
+    
+    for (uint32_t line_i=0; line_i < ht_ctx->HT_n_lines; line_i++) {
 
-    for (uint32_t line_i=0; line_i < num_lines; line_i++) {
-
-        codec_pbwt_calculate_permutation (&state, &ht_data[line_i * vb->ht_per_line], vb->ht_per_line, line_i==0);
+        codec_pbwt_calculate_permutation (&state, &ht_data[line_i * ht_ctx->ht_per_line], ht_ctx->ht_per_line, line_i==0);
 
         // grow local if needed (unlikely) to the worst case scenario - all ht foreground, no two consecutive are similar -> 2xlen runs, half of them fg runs
-        buf_alloc (vb, &vb->runs_ctx->local, 2 * vb->ht_per_line, 0, uint32_t, CTX_GROWTH, CTX_TAG_LOCAL); 
-        buf_alloc (vb, &vb->fgrc_ctx->local,     vb->ht_per_line, 0, uint32_t, CTX_GROWTH, CTX_TAG_LOCAL); 
+        buf_alloc (vb, &runs_ctx->local, 2 * ht_ctx->ht_per_line, 0, uint32_t, CTX_GROWTH, CTX_TAG_LOCAL); 
+        buf_alloc (vb, &fgrc_ctx->local,     ht_ctx->ht_per_line, 0, uint32_t, CTX_GROWTH, CTX_TAG_LOCAL); 
 
         show_line; show_perm(&state); 
         bool backward_permuted_ht_line = line_i % 2; // even rows are forward, odd are backward - better run length encoding 
 
-        codec_pbwt_run_len_encode (&state, vb->ht_per_line, backward_permuted_ht_line);
+        codec_pbwt_run_len_encode (&state, ht_ctx->ht_per_line, backward_permuted_ht_line);
     }
   
     if (flag.show_alleles) show_runs (&state);   
     
     // add ht_matrix_ctx.len to the end of fgrc_ctx.local (this should really be in the section header, but we don't
     // want to change SectionHeaderCtx (now in genozip v11)
-    buf_alloc (vb, &vb->fgrc_ctx->local, 2, 0, uint32_t, 1, CTX_TAG_LOCAL);
-    BNXT32 (vb->fgrc_ctx->local) = vb->ht_matrix_ctx->local.len & 0xffffffffULL; // 32 LSb
-    BNXT32 (vb->fgrc_ctx->local) = vb->ht_matrix_ctx->local.len >> 32;           // 32 MSb
+    buf_alloc (vb, &fgrc_ctx->local, 2, 0, uint32_t, 1, CTX_TAG_LOCAL);
+    BNXT32 (fgrc_ctx->local) = ht_ctx->local.len & 0xffffffffULL; // 32 LSb
+    BNXT32 (fgrc_ctx->local) = ht_ctx->local.len >> 32;           // 32 MSb
 
     buf_free (vb->codec_bufs[0]); // allocated in codec_pbwt_initialize_state
 
     // note: we created the data in PBWT contexts - no section should be created for the ht_matrix context it in the file
-    buf_free (vb->ht_matrix_ctx->local); 
+    buf_free (ht_ctx->local); 
     *compressed_len = 0;
 
     COPY_TIMER_COMPRESS (compressor_pbwt);
@@ -297,7 +305,7 @@ COMPRESS (codec_pbwt_compress)
 
 static void codec_pbwt_decode_init_ht_matrix (VBlockP vb, const uint32_t *rc_data, uint32_t *rc_data_len)
 {
-    vb->ht_matrix_ctx = ECTX (_PBWT_HT_MATRIX);
+    ContextP ht_ctx = CTX(FORMAT_GT_HT);
 
     // extract the HT matrix size from the last 2 words (64 bits) of rc_data
     *rc_data_len -= 2;
@@ -307,18 +315,19 @@ static void codec_pbwt_decode_init_ht_matrix (VBlockP vb, const uint32_t *rc_dat
     ASSERT (vb->lines.len && uncompressed_len, 
             "%s: Expecting num_lines=%u and uncompressed_len=%"PRIu64" to be >0", VB_NAME, vb->lines.len32, uncompressed_len);
 
-    buf_alloc (vb, &vb->ht_matrix_ctx->local, 0, uncompressed_len, char, 1, CTX_TAG_LOCAL);
+    buf_alloc (vb, &ht_ctx->local, 0, uncompressed_len, char, 1, CTX_TAG_LOCAL);
 
-    vb->ht_matrix_ctx->local.len = uncompressed_len;
-    vb->ht_matrix_ctx->lcodec    = CODEC_PBWT;
-    vb->ht_matrix_ctx->ltype     = LT_CODEC; // reconstruction will go to codec_pbwt_reconstruct as defined in codec_args for CODEC_PBWT
+    ht_ctx->local.len = uncompressed_len;
+    ht_ctx->lcodec    = CODEC_PBWT;
+    ht_ctx->ltype     = LT_CODEC; // reconstruction will go to codec_pbwt_reconstruct as defined in codec_args for CODEC_PBWT
 
-    vb->ht_per_line = uncompressed_len / vb->lines.len; // note: the matrix always includes data for every line, even for lines without a GT field (it would be '*')
+    ASSERTNOTZERO (ht_ctx->HT_n_lines);
+    ht_ctx->ht_per_line = uncompressed_len / ht_ctx->HT_n_lines; // note: the matrix always includes data for every line, even for lines without a GT field (it would be '*')
 }
 
 #define next param // decode use param as "next";
 
-static inline void pbwt_decode_one_line (VBlockP vb, PbwtState *state, uint32_t line_i)
+static inline void pbwt_decode_one_line (VBlockVCFP vb, ContextP ht_ctx, PbwtState *state, uint32_t line_i)
 {
     ASSPIZ0 (state->runs->len, "No runs found");
 
@@ -328,19 +337,19 @@ static inline void pbwt_decode_one_line (VBlockP vb, PbwtState *state, uint32_t 
     if (!state->run_allele) state->run_allele = '0'; // first run in VB - always start with background
 
     // de-permute one line onto the ht_matrix
-    Allele *ht_one_line = B(Allele, vb->ht_matrix_ctx->local, line_i * vb->ht_per_line);
+    Allele *ht_one_line = B(Allele, ht_ctx->local, line_i * ht_ctx->ht_per_line);
 
-    codec_pbwt_calculate_permutation (state, ht_one_line, vb->ht_per_line, line_i==0);
+    codec_pbwt_calculate_permutation (state, ht_one_line, ht_ctx->ht_per_line, line_i==0);
     
     bool backwards = line_i % 2;
 
-    for (uint32_t ht_i=0; ht_i < vb->ht_per_line; ) { 
+    for (uint32_t ht_i=0; ht_i < ht_ctx->ht_per_line; ) { 
         uint32_t run_len = *runs;
 
-        uint32_t line_part_of_run = MIN_(run_len, vb->ht_per_line - ht_i); // the run could be shared with the next line
+        uint32_t line_part_of_run = MIN_(run_len, ht_ctx->ht_per_line - ht_i); // the run could be shared with the next line
         
         for (uint32_t i=0; i < line_part_of_run; i++, ht_i++) {
-            uint32_t oriented_ht_i = backwards ? vb->ht_per_line - ht_i - 1 : ht_i;
+            uint32_t oriented_ht_i = backwards ? ht_ctx->ht_per_line - ht_i - 1 : ht_i;
             ht_one_line[state->perm[oriented_ht_i].index] = state->perm[oriented_ht_i].allele = state->run_allele;
         }
 
@@ -376,6 +385,7 @@ static inline void pbwt_decode_one_line (VBlockP vb, PbwtState *state, uint32_t 
 UNCOMPRESS (codec_pbwt_uncompress)
 {
     START_TIMER;
+    decl_pbwt_contexts;
 
     uint32_t *rc_data = (uint32_t *)compressed;
     uint32_t rc_data_len = compressed_len / sizeof (PbwtFgRunCount);
@@ -386,18 +396,17 @@ UNCOMPRESS (codec_pbwt_uncompress)
     // retrieve uncompressed_len stored at the end of the compressed data, initiatlize ht_matrix_ctx
     codec_pbwt_decode_init_ht_matrix (vb, rc_data, &rc_data_len);
 
-    Context *runs_ctx = ECTX (_PBWT_RUNS); // might be different did_i for different data types
-    ASSERT (runs_ctx, "%s: \"%s\": Cannot find context for PBWT_RUNS", VB_NAME, name);
-
-    PbwtState state = codec_pbwt_initialize_state (vb, &runs_ctx->local, &vb->scratch); // background allele is provided to us in param ; this is a subcodec, so vb->scratch.data == compressed
+    PbwtState state = codec_pbwt_initialize_state (vb, &runs_ctx->local, &vb->scratch, ht_ctx->ht_per_line); // background allele is provided to us in param ; this is a subcodec, so vb->scratch.data == compressed
 
     if (flag.show_alleles) show_runs (&state);
 
     state.runs->next = state.fgrc->next = 0; 
 
     // generate ht_matrix
-    for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) 
-        pbwt_decode_one_line (vb, &state, line_i); 	
+    uint32_t n_lines = ht_ctx->local.len / ht_ctx->ht_per_line; // possibly less that vb->lines.len if some were copied with vcf_seg_sv_SAMPLES
+    
+    for (uint32_t line_i=0; line_i < n_lines; line_i++) 
+        pbwt_decode_one_line (VB_VCF, ht_ctx, &state, line_i); 	
 
     buf_free (vb->codec_bufs[0]); // free state data  
     buf_free (vb->scratch);    // free PBWT_ALLELES data
@@ -409,11 +418,13 @@ UNCOMPRESS (codec_pbwt_uncompress)
 
 CODEC_RECONSTRUCT (codec_pbwt_reconstruct)
 {
+    decl_pbwt_contexts;
+
     // find next allele - skipping unused spots ('*')
     Allele ht = '*';
     do { 
-        ht = NEXTLOCAL (Allele, vb->ht_matrix_ctx);
-    } while (ht == '*' && vb->ht_matrix_ctx->next_local < vb->ht_matrix_ctx->local.len32);
+        ht = NEXTLOCAL (Allele, ht_ctx);
+    } while (ht == '*' && ht_ctx->next_local < ht_ctx->local.len32);
 
     if (vb->drop_curr_line) return;
 

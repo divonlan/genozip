@@ -59,6 +59,12 @@ static bool inline str_issame_(STRp(str1), STRp(str2)) // true if the same
 }
 #define str_issame(str1,str2) str_issame_ (str1, str1##_len, str2, str2##_len)
 
+static bool inline str_issubstr_(STRp(str), STRp(substr))
+{
+    return substr_len <= str_len && !memcmp (str, substr, substr_len);
+}
+#define str_issubstr(str1,str2) str_issubstr_ (str1, str1##_len, str2, str2##_len)
+
 static bool inline str_isprefix_(STRp(long_str), STRp(short_str)) // true short_str is a prefix of long_str
 {
     return (long_str_len >= short_str_len) && !memcmp (long_str, short_str, short_str_len);

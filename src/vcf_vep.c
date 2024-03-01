@@ -35,7 +35,7 @@ static bool vcf_vep_af_item (VBlockP vb_, ContextP ctx, STRp(af_item), uint32_t 
 
     str_split (af_item, af_item_len, 2, ':', item, true);
     
-    bool is_snp = vb->main_ref_len == 1 && vb->alt_lens[repeat] == 1;
+    bool is_snp = vb->REF_len == 1 && vb->alt_lens[repeat] == 1;
     
     if (n_items == 2 && item_lens[0] == 1 &&
           ((is_snp  && *af_item == *vb->alts[repeat]) || 
@@ -67,7 +67,7 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_next_ALT)
     int8_t alt_i = vb->con_stack[vb->con_stack_len-2].repeat;
 
     if (reconstruct) {
-        if (vb->main_ref_len == 1 && vb->alt_lens[alt_i] == 1) // SNP
+        if (vb->REF_len == 1 && vb->alt_lens[alt_i] == 1) // SNP
             RECONSTRUCT1 (*vb->alts[alt_i]);
         else
             RECONSTRUCT1('-');

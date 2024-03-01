@@ -14,7 +14,6 @@
 
 unsigned vcf_vb_size (DataType dt) { return sizeof (VBlockVCF); }
 unsigned vcf_vb_zip_dl_size (void) { return sizeof (ZipDataLineVCF); }
-bool vcf_vb_has_haplotype_data (VBlockP vb) { return !!VB_VCF->ht_matrix_ctx; }
 
 // ZIP/PIZ: called before segging / reconstructing each line
 void vcf_reset_line (VBlockP vb_)
@@ -24,7 +23,9 @@ void vcf_reset_line (VBlockP vb_)
     vb->sample_i = 0;
     vb->n_alts = 0; // = ALT not parsed yet
     vb->deferred_q_len = 0;
+    vb->mate_line_i = NO_LINE;
 
+    CTX(FORMAT_GT_HT)->use_HT_matrix = false; 
     CTX(FORMAT_RGQ)->line_has_RGQ = unknown;
     CTX(FORMAT_SB)->ctx_specific = 0;
     CTX(INFO_AN)->ctx_specific = 0;

@@ -111,7 +111,7 @@ COMPRESSOR_CALLBACK (fastq_zip_seq)
     *line_data_len  = trimmed ? MIN_(maximum_size, dl->seq.len - dl->sam_seq_len) // compress only trimmed bases, other bases will be copied from Deep
                     :           MIN_(maximum_size, dl->seq.len);
     
-    if (!line_data) return; // only lengths were requested
+    if (__builtin_expect (!line_data, false)) return; // only lengths were requested
 
     *line_data = Btxt (dl->seq.index) + (trimmed ? dl->sam_seq_len : 0);
 

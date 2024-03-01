@@ -116,7 +116,7 @@ typedef struct DataTypeProperties {
     bool (*piz_initialize)(CompIType comp_i);   // called at the beginning of each output txt_file (after the global sections have been read already)
     void (*piz_finalize)(void);                 // called by main thread after each txt file reconstruction is done
     void (*piz_before_read)(VBlockP);           // called by main thread after reading VB_HEADER and before reading local/b250 sections from z_file
-    bool (*piz_init_vb)(VBlockP, ConstSectionHeaderVbHeaderP , uint32_t *);  // called by main thread after all sections of a VB have been read, before dispatching the compute thread
+    bool (*piz_init_vb)(VBlockP, ConstSectionHeaderVbHeaderP);  // called by main thread after all sections of a VB have been read, before dispatching the compute thread
     void (*piz_recon_init)(VBlockP);            // called by the compute thread after uncompressing and before reconstructing
     void (*piz_init_line)(VBlockP);             // called before starting reconstruction of each line
     void (*piz_after_recon)(VBlockP);           // called by the compute thread after reconstruction from piz_reconstruct_one_vb. order of VBs is arbitrary
@@ -164,7 +164,7 @@ typedef struct DataTypeProperties {
     { "BED",       false, true,  false,  DT_BED,      DT_NONE,    1, 0,              0,                    HDR_OK,     NULL,           -1,  bed_is_header_done,     NULL,               NULL,                   is_bed,       bed_zip_initialize,     NULL,              NULL,              NULL,                NULL,                  NULL,              NULL,                      NULL,                 NULL,                             NULL,                            bed_seg_initialize,     bed_seg_txt_line,     NULL,                NULL,                 bed_seg_is_small,     bed_seg_finalize,     NULL,            false,       NULL,                     NULL,                        NULL,                   NULL,                     NULL,                     NULL,                   NULL,                                   NULL,                  NULL,                   NULL,                NULL,                  NULL,                NULL,                       NULL,               NULL,                       NULL,                     NULL,                  NULL,                   NULL,                       NULL,                      NULL,                  NULL,                     0,                   NUM_BED_SPECIAL,    BED_SPECIAL,    0,               {},                 "line",          { "FIELD", "ERROR!", "ERROR!"         } }, \
 }  
 #define DATA_TYPE_FUNCTIONS_DEFAULT /* only applicable to (some) functions */ \
-    { "DEFAULT",   false, false, false,  DT_NONE,     DT_NONE,    0, def_vb_size,    0,                    0,          0,              0,   def_is_header_done,     def_unconsumed,     0,                      NULL,         0,                      NULL,              0,                 0,                   0,                     0,                 0,                         0,                    NULL,                             NULL,                            0,                      0,                    textual_assseg_line, NULL,                 0,                    0,                    NULL,            false,       NULL,                     0,                           NULL,                   NULL,                     NULL,                     NULL,                   NULL,                                   0,                     0,                      NULL,                0,                     0,                   0,                          NULL,               0,                          NULL,                     NULL,                  NULL,                   0,                          0,                         container_no_filter,   0,                        0,                   0,                  {},             0,               {},                 "",              { "FIELD", "DTYPE1", "DTYPE2"         } }
+    { "DEFAULT",   false, false, false,  DT_NONE,     DT_NONE,    0, def_vb_size,    0,                    0,          0,              0,   def_is_header_done,     def_unconsumed,     0,                      NULL,         0,                      NULL,              0,                 0,                   0,                     0,                 0,                         0,                    NULL,                             NULL,                            0,                      0,                    textual_assseg_line, NULL,                 0,                    0,                    NULL,            false,       NULL,                     0,                           NULL,                   NULL,                     NULL,                     NULL,                   NULL,                                   0,                     0,                      NULL,                0,                     0,                   0,                          NULL,               0,                          NULL,                     NULL,                  NULL,                   0,                          0,                         default_piz_filter,    0,                        0,                   0,                  {},             0,               {},                 "",              { "FIELD", "DTYPE1", "DTYPE2"         } }
 
 extern DataTypeProperties dt_props[NUM_DATATYPES], dt_props_def;
 
@@ -185,7 +185,7 @@ extern DataTypeProperties dt_props[NUM_DATATYPES], dt_props_def;
 
 typedef struct DataTypeFields {
     const unsigned num_fields;
-    const Did pos, prim_chrom; // the fields, or DID_NONE if this data type doesn't have them
+    const Did pos, chrom; // the fields, or DID_NONE if this data type doesn't have them
     const Did qname; // some ID of the line (in addition to CHROM and POS) to be printed by ASSPIZ in case of an error
     DictId eol, toplevel;
     struct { 
@@ -198,7 +198,7 @@ typedef struct DataTypeFields {
 #define TOPLEVEL "TOPLEVEL"
 
 #define DATA_TYPE_FIELDS { \
-/* num_fields        pos              prim_chrom      qname            eol             toplevel             predefined        */ \
+/* num_fields        pos              chrom           qname            eol             toplevel             predefined        */ \
   {NUM_REF_FIELDS,   DID_NONE,        CHROM,          DID_NONE,        {},             {},                  REF_PREDEFINED    }, \
   {NUM_VCF_FIELDS,   VCF_POS,         CHROM,          DID_NONE,        {_VCF_EOL},     {_VCF_TOPLEVEL},     VCF_PREDEFINED    }, \
   {NUM_SAM_FIELDS,   SAM_POS,         CHROM,          SAM_QNAME,       {_SAM_EOL},     {_SAM_TOPLEVEL},     SAM_PREDEFINED    }, \

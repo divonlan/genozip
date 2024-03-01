@@ -200,15 +200,15 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_PROBE_B)
 void vcf_seg_ALLELE_A (VBlockVCFP vb, ContextP ctx, STRp(value))
 {
     // short cut for common case of SNP - 'R'
-    if ((value_len == 2 && vb->main_ref_len ==1 && value[0] == vb->main_ref[0] && value[1] == '*') || // short cut for common case of a SNP
-        (value_len > 2 && value_len == vb->main_ref_len + 1 && str_issame_(STRa(vb->main_ref), STRa(value)-1) && value[value_len-1] == '*')) {
+    if ((value_len == 2 && vb->REF_len ==1 && value[0] == vb->REF[0] && value[1] == '*') || // short cut for common case of a SNP
+        (value_len > 2 && value_len == vb->REF_len + 1 && str_issame_(STRa(vb->REF), STRa(value)-1) && value[value_len-1] == '*')) {
         seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_ALLELE_A, 'R' }, 3, ctx, value_len);
         ctx_set_last_value (VB, ctx, (int64_t)'R'); 
     }
 
     // short cut for common case of SNP - 'A'
-    else if ((value_len == 1 && vb->main_alt_len == 1 && value[0] == vb->main_alt[0]) || // short cut for common case of a SNP
-             (value_len > 1 && str_issame_(STRa(vb->main_alt), STRa(value)))) {
+    else if ((value_len == 1 && vb->ALT_len == 1 && value[0] == vb->ALT[0]) || // short cut for common case of a SNP
+             (value_len > 1 && str_issame_(STRa(vb->ALT), STRa(value)))) {
         seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_ALLELE_A, 'A' }, 3, ctx, value_len);
         ctx_set_last_value (VB, ctx, (int64_t)'A'); 
     }
@@ -223,8 +223,8 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_ALLELE_A)
 
     if (reconstruct)
         switch (*snip) {
-            case 'R' : RECONSTRUCT_str (vb->main_ref); RECONSTRUCT1 ('*'); break;
-            case 'A' : RECONSTRUCT_str (vb->main_alt);                     break;
+            case 'R' : RECONSTRUCT_str (vb->REF); RECONSTRUCT1 ('*'); break;
+            case 'A' : RECONSTRUCT_str (vb->ALT);                     break;
             default  : ABORT_PIZ ("Invalid snip=%.*s", STRf(snip));
         }
 
@@ -238,8 +238,8 @@ void vcf_seg_ALLELE_B (VBlockVCFP vb, ContextP ctx, STRp(value))
         goto fallback;
 
     // prediction ALLELE_B will the other allele out of REF or ALT, than ALLELE_A
-    if ((CTX(INFO_ALLELE_A)->last_value.i == 'R' && value_len == 1 && value[0] == vb->main_alt[0]) ||
-        (CTX(INFO_ALLELE_A)->last_value.i == 'A' && value_len == 2 && value[0] == vb->main_ref[0] && value[1] == '*'))
+    if ((CTX(INFO_ALLELE_A)->last_value.i == 'R' && value_len == 1 && value[0] == vb->ALT[0]) ||
+        (CTX(INFO_ALLELE_A)->last_value.i == 'A' && value_len == 2 && value[0] == vb->REF[0] && value[1] == '*'))
 
         seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_ALLELE_B }, 2, ctx, value_len);
 
@@ -253,8 +253,8 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_ALLELE_B)
 
     if (reconstruct)
         switch (CTX(INFO_ALLELE_A)->last_value.i) {
-            case 'A' : RECONSTRUCT1 (vb->main_ref[0]); RECONSTRUCT1 ('*'); break;
-            case 'R' : RECONSTRUCT1 (vb->main_alt[0]);                     break;
+            case 'A' : RECONSTRUCT1 (vb->REF[0]); RECONSTRUCT1 ('*'); break;
+            case 'R' : RECONSTRUCT1 (vb->ALT[0]);                     break;
             default  : ABORT_PIZ ("Invalid INFO_ALLELE_A.last_value=%"PRId64, CTX(INFO_ALLELE_A)->last_value.i);
         }
 

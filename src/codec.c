@@ -450,6 +450,11 @@ void codec_qual_show_stats (void)
     }
 }
 
+UNCOMPRESS (codec_hapmat_uncompress)
+{
+    ABORT0 ("Support for the hapmat codec has been discontinued. To decompress this VCF file, use Genozip v14.");
+}
+
 UNCOMPRESS (codec_gtshark_uncompress)
 {
     ABORT0 ("Support for the gtshark codec has been discontinued. To decompress VCF files compressed with --gtshark, use Genozip v11.");

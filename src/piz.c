@@ -38,9 +38,9 @@ TRANSLATOR_FUNC (piz_obsolete_translator)
 PizDisCoords piz_dis_coords (VBlockP vb)
 {
     PizDisCoords out = {};
-    if (DTF(prim_chrom) == DID_NONE || !ctx_has_value (vb, DTF(prim_chrom))) return out;
+    if (DTF(chrom) == DID_NONE || !ctx_has_value (vb, DTF(chrom))) return out;
     
-    ContextP chrom_ctx = CTX(DTF(prim_chrom));
+    ContextP chrom_ctx = CTX(DTF(chrom));
     WordIndex chrom = chrom_ctx->last_value.i;
     if (chrom < 0 || chrom >= chrom_ctx->word_list.len) return out; // not a valid chrom value
 
@@ -494,8 +494,8 @@ DataType piz_read_global_area (Reference ref)
         ctx_read_all_subdicts(); // read all SEC_SUBDICTS sections
 
         // update chrom node indices using the CHROM dictionary, for the user-specified regions (in case -r/-R were specified)
-        if (flag.regions && ZCTX(DTFZ(prim_chrom))->word_list.len) // FASTQ compressed without reference, has no CHROMs 
-            regions_make_chregs (ZCTX(DTFZ(prim_chrom)));
+        if (flag.regions && ZCTX(DTFZ(chrom))->word_list.len) // FASTQ compressed without reference, has no CHROMs 
+            regions_make_chregs (ZCTX(DTFZ(chrom)));
 
         // if the regions are negative, transform them to the positive complement instead
         regions_transform_negative_to_positive_complement();
@@ -505,7 +505,7 @@ DataType piz_read_global_area (Reference ref)
         // note: in case of a data file with stored reference - SEC_REF_RAND_ACC will contain the random access of the reference
         // and SEC_RANDOM_ACCESS will contain the random access of the data. In case of a .ref.genozip file, both sections exist 
         // and are identical. It made the coding easier and their size is negligible.
-        random_access_load_ra_section (SEC_RANDOM_ACCESS, DTFZ(prim_chrom), &z_file->ra_buf, "z_file->ra_buf", 
+        random_access_load_ra_section (SEC_RANDOM_ACCESS, DTFZ(chrom), &z_file->ra_buf, "z_file->ra_buf", 
                                        !flag.show_index ? NULL : RA_MSG_PRIM);
 
         random_access_load_ra_section (SEC_REF_RAND_ACC, CHROM, ref_get_stored_ra (ref), "ref_stored_ra", 
@@ -570,7 +570,7 @@ bool piz_read_one_vb (VBlockP vb, bool for_reconstruction)
 
     // any of these might be overridden by callback
     vb->flags            = header.flags.vb_header;
-    vb->recon_size       = BGEN32 (header.recon_size_prim);   
+    vb->recon_size       = BGEN32 (header.recon_size);   
     vb->longest_line_len = BGEN32 (header.longest_line_len);
     vb->longest_seq_len  = VER(15) ? BGEN32 (header.longest_seq_len) : 0;
     vb->expected_digest  = header.digest;
@@ -583,8 +583,6 @@ bool piz_read_one_vb (VBlockP vb, bool for_reconstruction)
         vb->vb_position_txt_file = txt_file->txt_data_so_far_single_0; // position in original txt file (before any ZIP or PIZ modifications)
         txt_file->num_lines += vb->lines.len; // source file lines
     }
-
-    uint32_t txt_data_so_far_single_0_increment = BGEN32 (header.recon_size_prim); // might be modified by callback
 
     // in case of unbind, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher
     // because the dispatcher is re-initialized for every txt component
@@ -607,12 +605,12 @@ bool piz_read_one_vb (VBlockP vb, bool for_reconstruction)
     // read all b250 and local of all fields and subfields
     piz_read_all_ctxs (vb, &sec, false);
 
-    bool ok_to_compute = DT_FUNC_OPTIONAL (vb, piz_init_vb, true)(vb, &header, &txt_data_so_far_single_0_increment);
+    bool ok_to_compute = DT_FUNC_OPTIONAL (vb, piz_init_vb, true)(vb, &header);
 
     vb->translation = dt_get_translation (vb); // must be after piz_init_vb, as in VCF we set vb->vb_chords there, needed for dt_get_translation
 
     if (txt_file) 
-        txt_file->txt_data_so_far_single_0 += txt_data_so_far_single_0_increment;
+        txt_file->txt_data_so_far_single_0 += BGEN32 (header.recon_size); // cumulative expected recon size without piz-side modifications
 
     if (ok_to_compute && for_reconstruction && flag.collect_coverage) 
         coverage_initialize (vb);
@@ -631,6 +629,10 @@ static void piz_handover_or_discard_vb (Dispatcher dispatcher, VBlockP *vb)
     
     else if (!flag.no_writer_thread)  // note: in SAM with gencomp - writer does the digest calculation
         is_handed_over = writer_handover_data (vb);
+
+    if (!is_handed_over && !(*vb)->preprocessing &&
+        (!flag.one_component || writer_does_vb_need_write ((*vb)->vblock_i)))
+        txt_file->txt_data_so_far_single += (*vb)->txt_data.len; // note: if writing (or SAM with gencomp), this is done in writer_flush_vb, caputring the processing in writer too
 
     dispatcher_recycle_vbs (dispatcher, !is_handed_over); // don't release VB if handed over - it will be released in writer_release_vb when writing is completed
 }
@@ -856,6 +858,12 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
 
     // finish writing the txt_file (note: the writer thread also calculates digest in SAM/BAM with PRIM/DEPN)
     writer_finish_writing (z_file->num_txts_so_far == z_file->num_txt_files || is_genocat);
+
+    // verify amount of data written (if writing) or reconstructed (if --test) sizes adds up as expected 
+    ASSINP (txt_file->txt_data_so_far_single/*accumulated when reconstructing/writing*/ == 
+            txt_file->txt_data_so_far_single_0/*accummulated from section headers    */ || flag.piz_txt_modified,
+            "Data integrity error: Size of original file (without source compression) was %"PRIu64", but reconstructed file is %"PRIu64,
+            txt_file->txt_data_so_far_single_0, txt_file->txt_data_so_far_single);
 
     // verifies reconstructed file against MD5 or Adler2 and/or codec_args (if bgzf)
     if (piz_need_digest)

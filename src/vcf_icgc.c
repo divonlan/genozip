@@ -19,36 +19,34 @@ void vcf_seg_INFO_mutation (VBlockVCFP vb, ContextP ctx, STRp(mut))
 {
     thool keep_delins_anchor = unknown;
   
-    if (vb->main_alt_len == 1 && vb->main_alt[0] == '.' && 
-        mut_len == vb->main_ref_len * 2 + 1 && mut[vb->main_ref_len] == '>' &&
-        !memcmp (mut, vb->main_ref, vb->main_ref_len) &&
-        !memcmp (mut + vb->main_ref_len + 1, vb->main_ref, vb->main_ref_len))
+    if (IS_PERIOD(vb->ALT) && 
+        mut_len == vb->REF_len * 2 + 1 && mut[vb->REF_len] == '>' &&
+        !memcmp (mut, vb->REF, vb->REF_len) &&
+        !memcmp (mut + vb->REF_len + 1, vb->REF, vb->REF_len))
         keep_delins_anchor = no; // ALT='.'
   
     else 
-    if (mut_len == 3 && mut[1] == '>' && vb->main_ref_len == 1 && vb->main_alt_len == 1 && 
-        vb->main_ref[0] == mut[0] && vb->main_alt[0] == mut[2])
+    if (mut_len == 3 && mut[1] == '>' && ALT0(SNP) && 
+        vb->REF[0] == mut[0] && vb->ALT[0] == mut[2])
         keep_delins_anchor = no; // SNP
 
     else 
-    if (vb->main_ref_len == 1 && vb->main_alt_len > 1 && 
-        vb->main_ref[0] == vb->main_alt[0] && // left anchored
-        mut_len == vb->main_alt_len + 1 && mut[0] == '-' && mut[1] == '>' &&
-        !memcmp (mut+2, vb->main_alt + 1, vb->main_alt_len - 1))
+    if (ALT0(INS) && 
+        mut_len == vb->ALT_len + 1 && mut[0] == '-' && mut[1] == '>' &&
+        !memcmp (mut+2, vb->ALT + 1, vb->ALT_len - 1))
         keep_delins_anchor = no; // Insertion
 
     else 
-    if (vb->main_ref_len > 1 && vb->main_alt_len == 1 &&
-        vb->main_ref[0] == vb->main_alt[0] && // left anchored
-        mut_len == vb->main_ref_len + 1 && mut[mut_len-1] == '-' && mut[mut_len-2] == '>' &&
-        !memcmp (mut, vb->main_ref + 1, vb->main_ref_len - 1))
+    if (ALT0(DEL) &&
+        mut_len == vb->REF_len + 1 && mut[mut_len-1] == '-' && mut[mut_len-2] == '>' &&
+        !memcmp (mut, vb->REF + 1, vb->REF_len - 1))
         keep_delins_anchor = no; // Deletion
         
     else 
-    if (vb->main_ref_len + 1 + vb->main_alt_len == mut_len && mut[vb->main_ref_len] == '>' &&
-        !memcmp (mut, vb->main_ref, vb->main_ref_len) &&
-        !memcmp (mut + vb->main_ref_len + 1, vb->main_alt, vb->main_alt_len))
-        keep_delins_anchor = (vb->main_ref[0] == vb->main_alt[0]); // Other
+    if (vb->REF_len + 1 + vb->ALT_len == mut_len && mut[vb->REF_len] == '>' &&
+        !memcmp (mut, vb->REF, vb->REF_len) &&
+        !memcmp (mut + vb->REF_len + 1, vb->ALT, vb->ALT_len))
+        keep_delins_anchor = (vb->REF[0] == vb->ALT[0]); // Other
 
     if (keep_delins_anchor != unknown)
         seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_mutation, '0' + keep_delins_anchor }, 3, ctx, mut_len);
@@ -57,42 +55,44 @@ void vcf_seg_INFO_mutation (VBlockVCFP vb, ContextP ctx, STRp(mut))
 }
 }
 
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_mutation)
+SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_mutation)
 {
-    STRlast (refalt, VCF_REFALT);
+    VBlockVCFP vb = (VBlockVCFP)vb_;
+
     bool keep_delins_anchor = snip[0] - '0';
 
     // case: SNP
     // case: ALT=.
-    if (!keep_delins_anchor && refalt[refalt_len-1] == '.' && refalt[refalt_len-2] == '\t') {
-        RECONSTRUCT (refalt, refalt_len-2);
+    // if (!keep_delins_anchor && refalt[refalt_len-1] == '.' && refalt[refalt_len-2] == '\t') {
+    if (!keep_delins_anchor && ALT0(NO_ALT)) {
+        RECONSTRUCT_str (vb->REF);
         RECONSTRUCT1 ('>');
-        RECONSTRUCT (refalt, refalt_len-2);
+        RECONSTRUCT_str (vb->REF);
     }
 
-    else if (!keep_delins_anchor && refalt_len == 3) {
-        RECONSTRUCT1 (refalt[0]);
+    else if (!keep_delins_anchor && ALT0(SNP)) {
+        RECONSTRUCT1 (*vb->REF);
         RECONSTRUCT1 ('>');
-        RECONSTRUCT1 (refalt[2]);
+        RECONSTRUCT1 (*vb->alts[0]);
     }
 
     // case: Insertion (left-anchored)
-    else if (!keep_delins_anchor && refalt[1] == '\t' && refalt[0] == refalt[2]) {
+    else if (!keep_delins_anchor && ALT0(INS)) {
         RECONSTRUCT ("->", 2);
-        RECONSTRUCT (refalt + 3, refalt_len - 3);
+        RECONSTRUCT (vb->alts[0]+1, vb->alt_lens[0]-1);
     }
 
     // case: Deletion (left-anchored)
-    else if (!keep_delins_anchor && refalt[refalt_len-2] == '\t' && refalt[0] == refalt[refalt_len-1]) {
-        RECONSTRUCT (refalt + 1, refalt_len - 3);
+    else if (!keep_delins_anchor && ALT0(DEL)) {
+        RECONSTRUCT (vb->REF+1, vb->REF_len-1);
         RECONSTRUCT (">-", 2);
     }
 
     // case: Other
     else {
-        char *start = BAFTtxt;
-        RECONSTRUCT_str (refalt);
-        str_replace_letter (start, refalt_len, '\t', '>');
+        RECONSTRUCT_str (vb->REF);
+        RECONSTRUCT1 ('>');
+        RECONSTRUCT (vb->alts[0], vb->alt_lens[0]);
     }
 
     return NO_NEW_VALUE;

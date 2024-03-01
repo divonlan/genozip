@@ -8,7 +8,7 @@
 This file is a part of bsc and/or libbsc, a program and a library for
 lossless, block-sorting data compression.
 
-   Copyright (c) 2009-2012 Ilya Grebnov <ilya.grebnov@gmail.com>
+   Copyright (c) 2009-2024 Ilya Grebnov <ilya.grebnov@gmail.com>
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -30,16 +30,16 @@ See also the bsc and libbsc web site:
 
 --*/
 
-
-// ------------------------------------------------------------------
-//   This file was extensively modified to adapt it to genozip. 
-
-#pragma once
+#ifndef _LIBBSC_CODER_RANGECODER_H
+#define _LIBBSC_CODER_RANGECODER_H
 
 #include "platform.h"
 
-typedef struct 
+class RangeCoder
 {
+
+private:
+
     union ari
     {
         struct u
@@ -55,155 +55,223 @@ typedef struct
     unsigned int ari_cache;
     unsigned int ari_range;
 
-    const unsigned short * restrict ari_input;
-          unsigned short * restrict ari_output;
-          unsigned short * restrict ari_outputEOB;
-          unsigned short * restrict ari_outputStart;
-} RangeCoder;
+    const unsigned short * RESTRICT ari_input;
+          unsigned short * RESTRICT ari_output;
+          unsigned short * RESTRICT ari_outputEOB;
+          unsigned short * RESTRICT ari_outputStart;
 
-// private functions
-
-static inline void OutputShort (RangeCoder *coder, unsigned short s)
-{
-    *coder->ari_output++ = s;
-};
-
-static inline unsigned short InputShort (RangeCoder *coder)
-{
-    return *coder->ari_input++;
-};
-
-static inline void ShiftLow (RangeCoder *coder)
-{
-    if (coder->ari.u.low32 < 0xffff0000U || coder->ari.u.carry)
+    INLINE void OutputShort(unsigned short s)
     {
-        OutputShort(coder, coder->ari_cache + coder->ari.u.carry);
-        if (coder->ari_ffnum)
+#if defined(LIBBSC_ALLOW_UNALIGNED_ACCESS)
+        *ari_output++ = s;
+#else
+        memcpy(ari_output++, &s, sizeof(unsigned short));
+#endif
+    };
+
+    INLINE unsigned short InputShort()
+    {
+#if defined(LIBBSC_ALLOW_UNALIGNED_ACCESS)
+        return *ari_input++;
+#else
+        unsigned short ret;
+        memcpy(&ret, ari_input++, sizeof(unsigned short));
+        return ret;
+#endif
+    };
+
+    NOINLINE unsigned int ShiftLowSlow()
+    {
+        if (ari.u.low32 < 0xffff0000U || ari.u.carry)
         {
-            unsigned short s = coder->ari.u.carry - 1;
-            do { OutputShort(coder, s); } while (--coder->ari_ffnum);
-        }
-        coder->ari_cache = coder->ari.u.low32 >> 16; coder->ari.u.carry = 0;
-    } else coder->ari_ffnum++;
-    coder->ari.u.low32 <<= 16;
-}
+            OutputShort(ari_cache + ari.u.carry);
+            if (ari_ffnum)
+            {
+                unsigned short s = ari.u.carry - 1;
+                do { OutputShort(s); } while (--ari_ffnum);
+            }
+            ari_cache = ari.u.low32 >> 16; ari.u.carry = 0;
+        } else ari_ffnum++;
+        ari.u.low32 <<= 16;
 
-// public functions
-
-static inline bool CheckEOB (RangeCoder *coder)
-{
-    return coder->ari_output >= coder->ari_outputEOB;
-}
-
-static inline void InitEncoder (RangeCoder *coder, unsigned char * output, int outputSize)
-{
-    coder->ari_outputStart = (unsigned short *)output;
-    coder->ari_output      = (unsigned short *)output;
-    coder->ari_outputEOB   = (unsigned short *)(output + outputSize - 16);
-    coder->ari.low         = 0;
-    coder->ari_ffnum       = 0;
-    coder->ari_cache       = 0;
-    coder->ari_range       = 0xffffffff;
-};
-
-static inline int FinishEncoder (RangeCoder *coder)
-{
-    ShiftLow(coder); ShiftLow(coder); ShiftLow(coder);
-    return (int)(coder->ari_output - coder->ari_outputStart) * sizeof(coder->ari_output[0]);
-}
-
-static inline void EncodeBit0 (RangeCoder *coder, int probability)
-{
-    coder->ari_range = (coder->ari_range >> 12) * probability;
-    if (coder->ari_range < 0x10000)
-    {
-        coder->ari_range <<= 16; ShiftLow(coder);
+        return ari_range << 16;
     }
-}
 
-static inline void EncodeBit1 (RangeCoder *coder, int probability)
-{
-    unsigned int range = (coder->ari_range >> 12) * probability;
-    coder->ari.low += range; coder->ari_range -= range;
-    if (coder->ari_range < 0x10000)
+    NOINLINE unsigned int ShiftLow()
     {
-        coder->ari_range <<= 16; ShiftLow(coder);
-    }
-}
+        unsigned int ari_low32 = ari.u.low32;
 
-static inline void EncodeBit (RangeCoder *coder, unsigned int bit)
-{
-    if (bit) EncodeBit1(coder, 2048); else EncodeBit0(coder, 2048);
-};
-
-static inline void EncodeByte (RangeCoder *coder, unsigned int byte)
-{
-    for (int bit = 7; bit >= 0; --bit)
-    {
-        EncodeBit(coder, byte & (1 << bit));
-    }
-};
-
-static inline void EncodeWord (RangeCoder *coder, unsigned int word)
-{
-    for (int bit = 31; bit >= 0; --bit)
-    {
-        EncodeBit(coder, word & (1 << bit));
-    }
-};
-
-static inline void InitDecoder (RangeCoder *coder, const unsigned char * input)
-{
-    coder->ari_input = (unsigned short *)input;
-    coder->ari_code  = 0;
-    coder->ari_range = 0xffffffff;
-    coder->ari_code  = (coder->ari_code << 16) | InputShort(coder);
-    coder->ari_code  = (coder->ari_code << 16) | InputShort(coder);
-    coder->ari_code  = (coder->ari_code << 16) | InputShort(coder);
-};
-
-static inline int DecodeBitProb (RangeCoder *coder, int probability)
-{
-    unsigned int range = (coder->ari_range >> 12) * probability;
-    if (coder->ari_code >= range)
-    {
-        coder->ari_code -= range; coder->ari_range -= range;
-        if (coder->ari_range < 0x10000)
+        if (!ari_ffnum && ari_low32 < 0xffff0000U)
         {
-            coder->ari_range <<= 16; coder->ari_code = (coder->ari_code << 16) | InputShort(coder);
+            OutputShort(ari_cache + ari.u.carry);
+
+            ari_cache = ari_low32 >> 16; ari.low = (unsigned int)(ari_low32 << 16);
+
+            return ari_range << 16;
         }
-        return 1;
+
+        return ShiftLowSlow();
     }
-    coder->ari_range = range;
-    if (coder->ari_range < 0x10000)
+
+public:
+
+    INLINE bool CheckEOB()
     {
-        coder->ari_range <<= 16; coder->ari_code = (coder->ari_code << 16) | InputShort(coder);
+        return ari_output >= ari_outputEOB;
     }
-    return 0;
-}
 
-static inline unsigned int DecodeBit (RangeCoder *coder)
-{
-    return DecodeBitProb(coder, 2048);
-}
-
-static inline unsigned int DecodeByte (RangeCoder *coder)
-{
-    unsigned int byte = 0;
-    for (int bit = 7; bit >= 0; --bit)
+    INLINE void InitEncoder(unsigned char * output, int outputSize)
     {
-        byte += byte + DecodeBit(coder);
-    }
-    return byte;
-}
+        ari_outputStart = (unsigned short *)output;
+        ari_output      = (unsigned short *)output;
+        ari_outputEOB   = (unsigned short *)(output + outputSize - 16);
+        ari.low         = 0;
+        ari_ffnum       = 0;
+        ari_cache       = 0;
+        ari_range       = 0xffffffff;
+    };
 
-static inline unsigned int DecodeWord (RangeCoder *coder)
-{
-    unsigned int word = 0;
-    for (int bit = 31; bit >= 0; --bit)
+    INLINE int FinishEncoder()
     {
-        word += word + DecodeBit (coder);
-    }
-    return word;
-}
+        if (ari_range < 0x10000)
+        {
+            ShiftLow();
+        }
 
+        ShiftLow(); ShiftLow(); ShiftLow();
+        return (int)(ari_output - ari_outputStart) * sizeof(ari_output[0]);
+    }
+
+    template <int P = 12> INLINE void EncodeBit0(int probability)
+    {
+        if (ari_range < 0x10000)
+        {
+            ari_range = ShiftLow();
+        }
+
+        ari_range = (ari_range >> P) * probability;
+    }
+
+    template <int P = 12> INLINE void EncodeBit1(int probability)
+    {
+        if (ari_range < 0x10000)
+        {
+            ari_range = ShiftLow();
+        }
+
+        unsigned int range = (ari_range >> P) * probability;
+        ari.low += range; ari_range -= range;
+    }
+
+    template <int P = 12> INLINE void EncodeBit(unsigned int bit, int probability)
+    {
+        if (ari_range < 0x10000)
+        {
+            ari_range = ShiftLow();
+        }
+
+        unsigned int range = (ari_range >> P) * probability;
+
+        ari.low   = ari.low + ((~bit + 1u) & range);
+        ari_range = range   + ((~bit + 1u) & (ari_range - range - range));
+    }
+
+    INLINE void EncodeBit(unsigned int bit)
+    {
+        if (bit) EncodeBit1(2048); else EncodeBit0(2048);
+    };
+
+    INLINE void EncodeByte(unsigned int byte)
+    {
+        for (int bit = 7; bit >= 0; --bit)
+        {
+            EncodeBit(byte & (1 << bit));
+        }
+    };
+
+    INLINE void EncodeWord(unsigned int word)
+    {
+        for (int bit = 31; bit >= 0; --bit)
+        {
+            EncodeBit(word & (1 << bit));
+        }
+    };
+
+    INLINE void InitDecoder(const unsigned char * input)
+    {
+        ari_input = (unsigned short *)input;
+        ari_code  = 0;
+        ari_range = 0xffffffff;
+        ari_code  = (ari_code << 16) | InputShort();
+        ari_code  = (ari_code << 16) | InputShort();
+        ari_code  = (ari_code << 16) | InputShort();
+    };
+
+    template <int P = 12> INLINE int PeakBit(int probability)
+    {
+        if (ari_range < 0x10000)
+        {
+            ari_range <<= 16; ari_code = (ari_code << 16) | InputShort();
+        }
+
+        return ari_code >= (ari_range >> P) * probability;
+    }
+
+    template <int P = 12> INLINE int DecodeBit(int probability)
+    {
+        if (ari_range < 0x10000)
+        {
+            ari_range <<= 16; ari_code = (ari_code << 16) | InputShort();
+        }
+
+        unsigned int range = (ari_range >> P) * probability;
+        int bit = ari_code >= range;
+
+        ari_range = bit ? ari_range - range : range;
+        ari_code  = bit ? ari_code  - range : ari_code;
+
+        return bit;
+    }
+
+    template <int P = 12> INLINE void DecodeBit0(int probability)
+    {
+        ari_range = (ari_range >> P) * probability;
+    }
+
+    template <int P = 12> INLINE void DecodeBit1(int probability)
+    {
+        unsigned int range = (ari_range >> P) * probability;
+        ari_code -= range; ari_range -= range;
+    }
+
+    INLINE unsigned int DecodeBit()
+    {
+        return DecodeBit(2048);
+    }
+
+    INLINE unsigned int DecodeByte()
+    {
+        unsigned int byte = 0;
+        for (int bit = 7; bit >= 0; --bit)
+        {
+            byte += byte + DecodeBit();
+        }
+        return byte;
+    }
+
+    INLINE unsigned int DecodeWord()
+    {
+        unsigned int word = 0;
+        for (int bit = 31; bit >= 0; --bit)
+        {
+            word += word + DecodeBit();
+        }
+        return word;
+    }
+};
+
+#endif
+
+/*-----------------------------------------------------------*/
+/* End                                          rangecoder.h */
+/*-----------------------------------------------------------*/

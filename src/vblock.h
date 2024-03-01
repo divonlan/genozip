@@ -72,7 +72,7 @@ typedef struct {
     bool debug_line_hash_skip;    /* Seg: don't calculate debug_line_hash as line is skipped */\
     \
     /* tracking execution */\
-    uint64_t vb_position_txt_file;/* ZIP/PIZ: position of this VB's data in the plain text file (i.e after decompression if the txt_file is compressed) */\
+    uint64_t vb_position_txt_file;/* ZIP/PIZ: position of this VB's data in the plain text file (without source compression): ZIP: as read before any ZIP-side modifications ; PIZ: as reconstructed with all modifications */\
     uint64_t vb_bgzf_i;           /* ZIP: index into txt_file->bgzf_isizes of the first BGZF block of this VB */ \
     int32_t recon_size;           /* ZIP: actual size of txt if this VB is reconstructed in PRIMARY coordinates (inc. as ##primary_only in --luft) */\
                                   /* PIZ: expected reconstruction size in the coordinates of reconstruction */\
@@ -179,7 +179,7 @@ typedef struct {
     PosType64 iupacs_last_pos, iupacs_next_pos; \
     \
     union { \
-    Buffer gencomp_lines;         /* ZIP: array of GencompLineIEntry: DVCF: lines rejected for liftover ; SAM-SA: primary/dependent lines */ \
+    Buffer gencomp_lines;         /* ZIP: array of GencompLineIEntry: SAM-SA: primary/dependent lines */ \
     Buffer flusher_blocks;        /* PIZ writer vb */ \
     }; \
     \
@@ -192,13 +192,6 @@ typedef struct {
     uint32_t num_perfect_matches; /* ZIP only: SAM/BAM/FASTQ: number of perfect matches found by aligner */ \
     }; \
     uint32_t num_aligned;         /* ZIP only: number of lines successfully aligned by the aligner. for stats */ \
-    \
-    /* used by CODEC_PBWT */ \
-    ContextP runs_ctx, fgrc_ctx;  /* possibly diffrent did_i for different data types */\
-    \
-    /* used by CODEC_PBWT, CODEC_HAPMAT */ \
-    ContextP ht_matrix_ctx; \
-    uint32_t ht_per_line; \
     \
     /* copies of the values in flag, for flags that may change during the execution */\
     bool preprocessing;           /* PIZ: this VB is preprocessing, not reconstructing (SAM: loading SA Groups FASTA/FASTQ: grepping) */ \

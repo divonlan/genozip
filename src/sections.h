@@ -125,7 +125,7 @@ typedef union SectionFlags {
         uint8_t spl_custom       : 1;  // introduced v14: similar to store_per_line, but storing is done by the context's SPECIAL function, instead of in reconstruct_store_history
         uint8_t all_the_same     : 1;  // SEC_B250: the b250 data contains only one element, and should be used to reconstruct any number of snips from this context
 
-        #define same_line        ctx_specific_flag // v13.0.5: Valid for contexts that use SNIP_OTHER_DELTA and SNIP_DIFF: if true, reconstructs gets the value in the line (whether before or after). if false, it gets the last value.
+        #define same_line        ctx_specific_flag // v13.0.5: Valid for contexts that use SNIP_OTHER_DELTA, SNIP_DIFF, SNIP_COPY(from other)(15.0.47): if true, reconstructs gets the value in the line (whether before or after). if false, it gets the last value.
         #define no_textual_seq   ctx_specific_flag // v14.0.0: SAM_SQBITMAP: indicates that SEQ is NOT consumed by other fields, and therefore sam_piz_sam2bam_SEQ doesn't need to store textual_seq. 
         #define depn_clip_hard   ctx_specific_flag // v14.0.0: OPTION_SA_Z in SAM_COMP_MAIN: if true: depn lines, if their CIGAR has a clipping, it is hard clipping (H)
         #define lookback0_ok     ctx_specific_flag // v14.0.0: contexts that are items of a container with lookback. indicates that a SNIP_LOOKBACK when lookback=0 is not an error.
@@ -192,7 +192,7 @@ typedef struct {
     uint8_t  genozip_version;
     EncryptionType encryption_type;    // one of EncryptionType
     uint16_t data_type;                // one of DataType
-    uint64_t recon_size_prim;          // data size of reconstructed file, if uncompressing as a single file in primary coordinates
+    uint64_t recon_size;               // data size of reconstructed file, if uncompressing as a single file in primary coordinates
     uint64_t genozip_minor_ver : 10;   // populated since 15.0.28
     uint64_t unused8           : 5;
     uint64_t private_file      : 1;    // this file can only be decompressed by user with the specified license_hash (15.0.30)
@@ -260,17 +260,22 @@ typedef struct {
         } fastq;
 
         struct {
-            uint8_t segconf_has_RGQ      : 1; // VCF: copied from segconf.has[FORMAT_RGQ]. added v14.
-            uint8_t segconf_GQ_method    : 3; // VCF: 15.0.37
-            uint8_t segconf_FMT_DP_method: 2; // VCF: 15.0.37
-            uint8_t unused_bits          : 2;
-            uint8_t max_ploidy_for_mux;       // VCF: 15.0.36
-            uint16_t unused16;
-            struct {                         
+            uint32_t segconf_has_RGQ      : 1; // VCF: copied from segconf.has[FORMAT_RGQ]. added v14.
+            uint32_t segconf_GQ_method    : 3; // VCF: 15.0.37
+            uint32_t segconf_FMT_DP_method: 2; // VCF: 15.0.37
+            uint32_t segconf_del_svlen_is_neg : 1; // VCF: 15.0.47
+            uint32_t unused2              : 1;
+            uint32_t max_ploidy_for_mux   : 8; // VCF: 15.0.36
+            uint32_t segconf_MATEID_method: 3; // VCF: 15.0.47
+            uint32_t unused13             : 13;
+            
+            struct { // 32 bits                 
                 uint32_t AC:3, MLEAC:3, AN:3, AF:3, SF:3, QD:3, DP:3;  // VCF: 15.0.37
                 uint32_t AS_SB_TABLE : 4;     // VCF: 15.0.41
-                uint32_t unused      : 7;
+                uint32_t ID          : 6;     // VCF: 15.0.47
+                uint32_t unused      : 1;
             } width; 
+            
             uint8_t unused[264];
         } vcf;
     };    
@@ -301,7 +306,7 @@ typedef struct { // 2 bytes
 // The text file header section appears once in the file (or multiple times in case of bound file), and includes the txt file header 
 typedef struct {
     SectionHeader;
-    uint64_t txt_data_size;            // number of bytes in the original txt file
+    uint64_t txt_data_size;            // number of bytes in the original txt file (without source compression, potentially after ZIP modifications eg --optimize)
     uint64_t txt_num_lines;            // number of data (non-header) lines in the original txt file. Concat mode: entire file for first SectionHeaderTxtHeader, and only for that txt if not first
     uint32_t max_lines_per_vb;         // upper bound on how many data lines a VB can have in this file
     Codec    src_codec;                // codec of original txt file (none, bgzf, gz, bz2...)
@@ -310,7 +315,7 @@ typedef struct {
     Digest   digest_header;            // MD5 or Adler32 of header
 #define TXT_FILENAME_LEN 256
     char     txt_filename[TXT_FILENAME_LEN];// filename of this single component. without path, 0-terminated. always in base form like .vcf or .sam, even if the original is compressed .vcf.gz or .bam
-    uint64_t txt_header_size;          // size of header in original txt file (likely different than reconstructed size if dual-coordinates)  (v12)
+    uint64_t txt_header_size;          // size of header in original txt file before any zip-side modifications. note: use Σdata_uncompress_len(fragᵢ) for the size after zip-size modifications (v12)
     QnameFlavorProp flav_prop[NUM_QTYPES]; // SAM/BAM/FASTQ. properties of QNAME flavor (v15)
 } SectionHeaderTxtHeader, *SectionHeaderTxtHeaderP; 
 
@@ -319,12 +324,13 @@ typedef struct {
     union {
         uint32_t v11_first_line;       // up to v11 - first_line; if 0, this is the terminating section of the components
         uint32_t sam_prim_seq_len;     // SAM PRIM: total number of bases of SEQ in this VB (v14) 
+        uint32_t vcf_HT_n_lines;        // VCF starting 15.0.47: number of lines that 1. have FORMAT/GT 2. Samples were segged (i.e. not copy-from-mate)
     };    
     union {
         uint32_t v13_top_level_repeats;// v12/13: repeats of TOPLEVEL container in this VB. Up to v12 - called num_lines.
         uint32_t sam_prim_num_sag_alns;// SAM PRIM: number of alns (prim + depn) in SAGs this VB (v14)
     };
-    uint32_t recon_size_prim;          // size of vblock as it appears in the default PRIMARY reconstruction
+    uint32_t recon_size;               // size of vblock as it appears in the default reconstruction (i.e. after ZIP-side modifications)
     uint32_t z_data_bytes;             // total bytes of this vblock in the genozip file including all sections and their headers 
     uint32_t longest_line_len;         // length of the longest line in this vblock 
     Digest   digest;                   // stand-alone Adler32 or commulative MD5 up to and including this VB. Up to v13: Adler32 was commulative too.
@@ -584,6 +590,7 @@ extern Section sections_get_comp_bgzf_sec (CompIType comp_i);
 extern Section sections_get_next_vb_header_sec (CompIType comp_i, Section *vb_sec);
 extern Section sections_one_before (Section sec);
 extern bool is_there_any_section_with_dict_id (DictId dict_id);
+extern SectionEnt *section_get_section (VBIType vb_i, SectionType st, DictId dict_id);
 
 // API for writer to create modified section list
 extern void sections_new_list_add_vb (BufferP new_list, VBIType vb_i);

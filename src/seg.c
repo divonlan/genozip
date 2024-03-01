@@ -973,8 +973,8 @@ bool seg_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip),
 
     // count printable item separators
     unsigned num_printable_separators=0;
-    for (unsigned i=0; i < con.nitems_lo; i++) 
-        num_printable_separators += is_printable[con.items[i].separator[0]] + is_printable[con.items[i].separator[1]];
+    for_con (&con)
+        num_printable_separators += is_printable[item->separator[0]] + is_printable[item->separator[1]];
 
     WordIndex node_index = *B1ST(WordIndex, ctx->con_index);
     unsigned account_for = account_in_subfields ? (num_printable_separators + ((int)add_bytes - snip_len)) 
@@ -1063,8 +1063,8 @@ int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp
 
     // count printable item separators
     unsigned num_printable_separators=0;
-    for (unsigned i=0; i < con.nitems_lo; i++) 
-        num_printable_separators += is_printable[con.items[i].separator[0]] + is_printable[con.items[i].separator[1]];
+    for_con (&con)
+        num_printable_separators += is_printable[item->separator[0]] + is_printable[item->separator[1]];
 
     WordIndex node_index = *B(WordIndex, ctx->con_index, n_repeats);
     unsigned account_for = con.repeats * num_printable_separators /* item seperators */ + con.repeats - con.drop_final_repsep /* repeat separators */ + ((int)add_bytes - snip_len);

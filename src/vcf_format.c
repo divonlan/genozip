@@ -36,6 +36,9 @@ static DictId vcf_seg_get_format_sf_dict_id (STRp (sf_name))
 
 void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt))
 {
+    ContextP format_ctx  = CTX(VCF_FORMAT);
+    ContextP samples_ctx = CTX(VCF_SAMPLES);
+
     ASSVCF0 (fmt_len >= 1, "missing or invalid FORMAT field");
 
     if (!vcf_num_samples) {
@@ -43,19 +46,20 @@ void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt))
         return; // if we're not expecting any samples, no need to analyze the FORMAT field
     }
 
-    dl->has_haplotype_data = (fmt[0] == 'G' && fmt[1] == 'T' && (fmt[2] == ':' || fmt_len==2)); // GT tag in FORMAT field - must always appear first per VCF spec (if it appears)
-    dl->has_genotype_data  = (fmt_len > 2 || !dl->has_haplotype_data);
+    // if we have GT, we assume that we will place the data in the HT_matrix, unless we change our mind (eg in vcf_seg_sv_SAMPLES)
+    // note: GT tag in FORMAT field - must always appear first per VCF spec (if it appears)
+    CTX(FORMAT_GT_HT)->use_HT_matrix = (fmt[0] == 'G' && fmt[1] == 'T' && (fmt[2] == ':' || fmt_len==2)); 
 
     // case: FORMAT is the same as previous line - just use the same node_index, but only if there is no chance of conditional renaming
-    if (str_issame_(STRa(fmt), STRb(vb->last_format))) {
-        seg_duplicate_last (VB, CTX(VCF_FORMAT), fmt_len + 1 /* \t or \n */);
+    if (str_issame_(STRa(fmt), STRb(format_ctx->last_format))) {
+        seg_duplicate_last (VB, format_ctx, fmt_len + 1 /* \t or \n */);
         dl->format_node_i = (dl-1)->format_node_i;
         return;
     }   
 
     // save FORMAT field for potential duplication on the next line - only if we are certain there is no conditional renaming
-    vb->last_format.len = 0; // reset 
-    buf_add_moreS (vb, &vb->last_format, fmt, "last_format");
+    format_ctx->last_format.len = 0; // reset 
+    buf_add_moreS (vb, &format_ctx->last_format, fmt, "contexts->last_format");
 
     str_split (fmt, fmt_len, 0, ':', sf_name, false);
 
@@ -110,18 +114,18 @@ void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt))
     dl->format_node_i = node_index;
 
     if (is_new) {
-        ASSVCF (node_index == vb->format_mapper_buf.len32, 
-                "node_index=%d different than vb->format_mapper_buf.len=%u", node_index, vb->format_mapper_buf.len32);
+        ASSVCF (node_index == samples_ctx->format_mapper_buf.len32, 
+                "node_index=%d different than format_mapper_buf.len=%u", node_index, samples_ctx->format_mapper_buf.len32);
 
-        buf_alloc (vb, &vb->format_mapper_buf, 1, 0, Container, CTX_GROWTH, "format_mapper_buf");
-        buf_alloc (vb, &vb->format_contexts, 1, 0, ContextPBlock, CTX_GROWTH, "format_contexts");
-        vb->format_contexts.len =vb->format_mapper_buf.len = vb->format_mapper_buf.len + 1;
+        buf_alloc (vb, &samples_ctx->format_mapper_buf, 1, 0, Container, CTX_GROWTH, "format_mapper_buf");
+        buf_alloc (vb, &samples_ctx->format_contexts, 1, 0, ContextPBlock, CTX_GROWTH, "format_contexts");
+        samples_ctx->format_contexts.len = samples_ctx->format_mapper_buf.len = samples_ctx->format_mapper_buf.len + 1;
     }    
 
-    ContainerP con = B(Container, vb->format_mapper_buf, node_index);
+    ContainerP con = B(Container, samples_ctx->format_mapper_buf, node_index);
     if (is_new || !con_nitems (*con)) { // assign if not already assigned (con->nitem=0 if format_mapper was already segged in another VB (so it is in ol_nodes), but not yet this VB) 
         *con = format_mapper; 
-        memcpy (B(ContextPBlock, vb->format_contexts, node_index), ctxs, sizeof (ctxs));
+        memcpy (B(ContextPBlock, samples_ctx->format_contexts, node_index), ctxs, sizeof (ctxs));
     }
 }
 
@@ -142,10 +146,6 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT)
         else 
             RECONSTRUCT_snip;
     }
-
-    // initialize haplotype stuff
-    if (!VER(14) && has_GT && !vb->ht_matrix_ctx) 
-        codec_hapmat_piz_calculate_columns (vb);
 
     return NO_NEW_VALUE;
 }

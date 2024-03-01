@@ -8,7 +8,7 @@
 This file is a part of bsc and/or libbsc, a program and a library for
 lossless, block-sorting data compression.
 
-   Copyright (c) 2009-2012 Ilya Grebnov <ilya.grebnov@gmail.com>
+   Copyright (c) 2009-2024 Ilya Grebnov <ilya.grebnov@gmail.com>
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -30,25 +30,52 @@ See also the bsc and libbsc web site:
 
 --*/
 
-// ------------------------------------------------------------------
-//   This file was extensively modified to adapt it to genozip. 
-
-#pragma once
+#ifndef _LIBBSC_CODER_PREDICTOR_H
+#define _LIBBSC_CODER_PREDICTOR_H
 
 #include "platform.h"
-#include "tables.h"
 
-static inline void ProbCounter_UpdateBit0(short *probability, const int threshold, const int adaptationRate)
+#include "coder_tables.h"
+
+struct ProbabilityCounter
 {
-    *probability += (((4096 - threshold - *probability) * adaptationRate) >> 12);
+
+public:
+
+    static INLINE void UpdateBit(unsigned int bit, short & probability, const int threshold0, const int adaptationRate0, const int threshold1, const int adaptationRate1)
+    {
+        int delta0 = probability * adaptationRate0 - ((4096 - threshold0) * adaptationRate0 - 4095);
+        int delta1 = probability * adaptationRate1 - (threshold1 * adaptationRate1);
+        
+        probability = probability - ((bit ? delta1 : delta0) >> 12);
+    }
+
+    static INLINE void UpdateBit0(short & probability, const int threshold, const int adaptationRate)
+    {
+        probability = probability + (((4096 - threshold - probability) * adaptationRate) >> 12);
+    };
+
+    static INLINE void UpdateBit1(short & probability, const int threshold, const int adaptationRate)
+    {
+        probability = probability - (((probability - threshold) * adaptationRate) >> 12);
+    };
+
+    template <int R> static INLINE void UpdateBit(unsigned int bit, short & probability, const int threshold0, const int threshold1)
+    {
+        probability = probability - ((probability - (bit ? threshold1 : threshold0)) >> R);
+    }
+
+    template <int R> static INLINE void UpdateBit(short & probability, const int threshold)
+    {
+        probability = probability - ((probability - threshold) >> R);
+    };
 };
 
-static inline void ProbCounter_UpdateBit1(short *probability, const int threshold, const int adaptationRate)
+struct ProbabilityMixer
 {
-    *probability -= (((*probability - threshold) * adaptationRate) >> 12);
-};
 
-typedef struct {
+private:
+
     short stretchedProbability0;
     short stretchedProbability1;
     short stretchedProbability2;
@@ -60,131 +87,134 @@ typedef struct {
     int weight0;
     int weight1;
     int weight2;
-} ProbabilityMixer;
 
-static inline void MixerInit(ProbabilityMixer *mixer)
-{
-    mixer->weight0 = mixer->weight1 = 2048 << 5; mixer->weight2 = 0;
-    for (int p = 0; p < 17; ++p)
+public:
+
+    INLINE void Init()
     {
-        mixer->probabilityMap[p] = bsc_squash((p - 8) * 256);
+        weight0 = weight1 = 2048 << 5; weight2 = 0;
+        for (int p = 0; p < 17; ++p)
+        {
+            probabilityMap[p] = bsc_squash((p - 8) * 256);
+        }
     }
-}
 
-static inline int Mixup(ProbabilityMixer *mixer, const int probability0, const int probability1, const int probability2)
-{
-    mixer->stretchedProbability0 = bsc_stretch(probability0);
-    mixer->stretchedProbability1 = bsc_stretch(probability1);
-    mixer->stretchedProbability2 = bsc_stretch(probability2);
+    INLINE int Mixup(const int probability0, const int probability1, const int probability2)
+    {
+        stretchedProbability0 = bsc_stretch(probability0);
+        stretchedProbability1 = bsc_stretch(probability1);
+        stretchedProbability2 = bsc_stretch(probability2);
 
-    short stretchedProbability = (mixer->stretchedProbability0 * mixer->weight0 + 
-                                  mixer->stretchedProbability1 * mixer->weight1 + 
-                                  mixer->stretchedProbability2 * mixer->weight2) >> 17;
+        short stretchedProbability = (stretchedProbability0 * weight0 + stretchedProbability1 * weight1 + stretchedProbability2 * weight2) >> 17;
 
-    if (stretchedProbability < -2047) stretchedProbability = -2047;
-    if (stretchedProbability >  2047) stretchedProbability =  2047;
+        if (stretchedProbability < -2047) stretchedProbability = -2047;
+        if (stretchedProbability >  2047) stretchedProbability =  2047;
 
-    mixer->index                = (stretchedProbability + 2048) >> 8;
-    const int weight            = stretchedProbability & 255;
-    const int probability       = bsc_squash(stretchedProbability);
-    const int mappedProbability = mixer->probabilityMap[mixer->index] + (((mixer->probabilityMap[mixer->index + 1] - mixer->probabilityMap[mixer->index]) * weight) >> 8);
+        index                       = (stretchedProbability + 2048) >> 8;
+        const int weight            = stretchedProbability & 255;
+        const int probability       = bsc_squash(stretchedProbability);
+        const int mappedProbability = probabilityMap[index] + (((probabilityMap[index + 1] - probabilityMap[index]) * weight) >> 8);
 
-    return mixer->mixedProbability = (3 * probability + mappedProbability) >> 2;
+        return mixedProbability = (3 * probability + mappedProbability) >> 2;
+    };
+
+    INLINE int MixupAndUpdateBit0(const int probability0,  const int probability1,  const int probability2,
+                                  const int learningRate0, const int learningRate1, const int learningRate2,
+                                  const int threshold,     const int adaptationRate
+    )
+    {
+        const short stretchedProbability0 = bsc_stretch(probability0);
+        const short stretchedProbability1 = bsc_stretch(probability1);
+        const short stretchedProbability2 = bsc_stretch(probability2);
+
+        short stretchedProbability = (stretchedProbability0 * weight0 + stretchedProbability1 * weight1 + stretchedProbability2 * weight2) >> 17;
+
+        if (stretchedProbability < -2047) stretchedProbability = -2047;
+        if (stretchedProbability >  2047) stretchedProbability =  2047;
+
+        const int weight            = stretchedProbability & 255;
+        const int index             = (stretchedProbability + 2048) >> 8;
+        const int probability       = bsc_squash(stretchedProbability);
+        const int mappedProbability = probabilityMap[index] + (((probabilityMap[index + 1] - probabilityMap[index]) * weight) >> 8);
+        const int mixedProbability  = (3 * probability + mappedProbability) >> 2;
+
+        ProbabilityCounter::UpdateBit0(probabilityMap[index], threshold, adaptationRate);
+        ProbabilityCounter::UpdateBit0(probabilityMap[index + 1], threshold, adaptationRate);
+
+        const int eps = mixedProbability - 4095;
+
+        weight0 -= (learningRate0 * eps * stretchedProbability0) >> 16;
+        weight1 -= (learningRate1 * eps * stretchedProbability1) >> 16;
+        weight2 -= (learningRate2 * eps * stretchedProbability2) >> 16;
+
+        return mixedProbability;
+    };
+
+    INLINE int MixupAndUpdateBit1(const int probability0,  const int probability1,  const int probability2,
+                                  const int learningRate0, const int learningRate1, const int learningRate2,
+                                  const int threshold,     const int adaptationRate
+    )
+    {
+        const short stretchedProbability0 = bsc_stretch(probability0);
+        const short stretchedProbability1 = bsc_stretch(probability1);
+        const short stretchedProbability2 = bsc_stretch(probability2);
+
+        short stretchedProbability = (stretchedProbability0 * weight0 + stretchedProbability1 * weight1 + stretchedProbability2 * weight2) >> 17;
+
+        if (stretchedProbability < -2047) stretchedProbability = -2047;
+        if (stretchedProbability >  2047) stretchedProbability =  2047;
+
+        const int weight            = stretchedProbability & 255;
+        const int index             = (stretchedProbability + 2048) >> 8;
+        const int probability       = bsc_squash(stretchedProbability);
+        const int mappedProbability = probabilityMap[index] + (((probabilityMap[index + 1] - probabilityMap[index]) * weight) >> 8);
+        const int mixedProbability  = (3 * probability + mappedProbability) >> 2;
+
+        ProbabilityCounter::UpdateBit1(probabilityMap[index], threshold, adaptationRate);
+        ProbabilityCounter::UpdateBit1(probabilityMap[index + 1], threshold, adaptationRate);
+
+        const int eps = mixedProbability - 1;
+
+        weight0 -= (learningRate0 * eps * stretchedProbability0) >> 16;
+        weight1 -= (learningRate1 * eps * stretchedProbability1) >> 16;
+        weight2 -= (learningRate2 * eps * stretchedProbability2) >> 16;
+
+        return mixedProbability;
+    };
+
+    INLINE void UpdateBit0(const int learningRate0, const int learningRate1, const int learningRate2,
+                           const int threshold,     const int adaptationRate
+    )
+    {
+        ProbabilityCounter::UpdateBit0(probabilityMap[index], threshold, adaptationRate);
+        ProbabilityCounter::UpdateBit0(probabilityMap[index + 1], threshold, adaptationRate);
+
+        const int eps = mixedProbability - 4095;
+
+        weight0 -= (learningRate0 * eps * stretchedProbability0) >> 16;
+        weight1 -= (learningRate1 * eps * stretchedProbability1) >> 16;
+        weight2 -= (learningRate2 * eps * stretchedProbability2) >> 16;
+    };
+
+    INLINE void UpdateBit1(const int learningRate0, const int learningRate1, const int learningRate2,
+                           const int threshold,     const int adaptationRate
+    )
+    {
+        ProbabilityCounter::UpdateBit1(probabilityMap[index], threshold, adaptationRate);
+        ProbabilityCounter::UpdateBit1(probabilityMap[index + 1], threshold, adaptationRate);
+
+        const int eps = mixedProbability - 1;
+
+        weight0 -= (learningRate0 * eps * stretchedProbability0) >> 16;
+        weight1 -= (learningRate1 * eps * stretchedProbability1) >> 16;
+        weight2 -= (learningRate2 * eps * stretchedProbability2) >> 16;
+    };
+
 };
 
-static inline int MixupAndUpdateBit0(ProbabilityMixer * restrict mixer, 
-                                     const int probability0,  const int probability1,  const int probability2,
-                                     const int learningRate0, const int learningRate1, const int learningRate2,
-                                     const int threshold,     const int adaptationRate
-)
-{
-    const short stretchedProbability0 = bsc_stretch(probability0);
-    const short stretchedProbability1 = bsc_stretch(probability1);
-    const short stretchedProbability2 = bsc_stretch(probability2);
 
-    short stretchedProbability = (stretchedProbability0 * mixer->weight0 + stretchedProbability1 * mixer->weight1 + stretchedProbability2 * mixer->weight2) >> 17;
+#endif
 
-    if (stretchedProbability < -2047) stretchedProbability = -2047;
-    if (stretchedProbability >  2047) stretchedProbability =  2047;
-
-    const int weight            = stretchedProbability & 255;
-    const int index             = (stretchedProbability + 2048) >> 8;
-    const int probability       = bsc_squash(stretchedProbability);
-    const int mappedProbability = mixer->probabilityMap[index] + (((mixer->probabilityMap[index + 1] - mixer->probabilityMap[index]) * weight) >> 8);
-    const int mixedProbability  = (3 * probability + mappedProbability) >> 2;
-
-    ProbCounter_UpdateBit0(&mixer->probabilityMap[index], threshold, adaptationRate);
-    ProbCounter_UpdateBit0(&mixer->probabilityMap[index + 1], threshold, adaptationRate);
-
-    const int eps = mixedProbability - 4095;
-
-    mixer->weight0 -= (learningRate0 * eps * stretchedProbability0) >> 16;
-    mixer->weight1 -= (learningRate1 * eps * stretchedProbability1) >> 16;
-    mixer->weight2 -= (learningRate2 * eps * stretchedProbability2) >> 16;
-
-    return mixedProbability;
-};
-
-static inline int MixupAndUpdateBit1(ProbabilityMixer *mixer, 
-                                     const int probability0,  const int probability1,  const int probability2,
-                                     const int learningRate0, const int learningRate1, const int learningRate2,
-                                     const int threshold,     const int adaptationRate
-)
-{
-    const short stretchedProbability0 = bsc_stretch(probability0);
-    const short stretchedProbability1 = bsc_stretch(probability1);
-    const short stretchedProbability2 = bsc_stretch(probability2);
-
-    short stretchedProbability = (stretchedProbability0 * mixer->weight0 + stretchedProbability1 * mixer->weight1 + stretchedProbability2 * mixer->weight2) >> 17;
-
-    if (stretchedProbability < -2047) stretchedProbability = -2047;
-    if (stretchedProbability >  2047) stretchedProbability =  2047;
-
-    const int weight            = stretchedProbability & 255;
-    const int index             = (stretchedProbability + 2048) >> 8;
-    const int probability       = bsc_squash(stretchedProbability);
-    const int mappedProbability = mixer->probabilityMap[index] + (((mixer->probabilityMap[index + 1] - mixer->probabilityMap[index]) * weight) >> 8);
-    const int mixedProbability  = (3 * probability + mappedProbability) >> 2;
-
-    ProbCounter_UpdateBit1(&mixer->probabilityMap[index], threshold, adaptationRate);
-    ProbCounter_UpdateBit1(&mixer->probabilityMap[index + 1], threshold, adaptationRate);
-
-    const int eps = mixedProbability - 1;
-
-    mixer->weight0 -= (learningRate0 * eps * stretchedProbability0) >> 16;
-    mixer->weight1 -= (learningRate1 * eps * stretchedProbability1) >> 16;
-    mixer->weight2 -= (learningRate2 * eps * stretchedProbability2) >> 16;
-
-    return mixedProbability;
-};
-
-static inline void UpdateBit0(ProbabilityMixer *mixer, 
-                              const int learningRate0, const int learningRate1, const int learningRate2,
-                              const int threshold,     const int adaptationRate
-)
-{
-    ProbCounter_UpdateBit0(&mixer->probabilityMap[mixer->index], threshold, adaptationRate);
-    ProbCounter_UpdateBit0(&mixer->probabilityMap[mixer->index + 1], threshold, adaptationRate);
-
-    const int eps = mixer->mixedProbability - 4095;
-
-    mixer->weight0 -= (learningRate0 * eps * mixer->stretchedProbability0) >> 16;
-    mixer->weight1 -= (learningRate1 * eps * mixer->stretchedProbability1) >> 16;
-    mixer->weight2 -= (learningRate2 * eps * mixer->stretchedProbability2) >> 16;
-};
-
-static inline void UpdateBit1(ProbabilityMixer *mixer, 
-                              const int learningRate0, const int learningRate1, const int learningRate2,
-                              const int threshold,     const int adaptationRate
-)
-{
-    ProbCounter_UpdateBit1(&mixer->probabilityMap[mixer->index], threshold, adaptationRate);
-    ProbCounter_UpdateBit1(&mixer->probabilityMap[mixer->index + 1], threshold, adaptationRate);
-
-    const int eps = mixer->mixedProbability - 1;
-
-    mixer->weight0 -= (learningRate0 * eps * mixer->stretchedProbability0) >> 16;
-    mixer->weight1 -= (learningRate1 * eps * mixer->stretchedProbability1) >> 16;
-    mixer->weight2 -= (learningRate2 * eps * mixer->stretchedProbability2) >> 16;
-};
-
+/*-----------------------------------------------------------*/
+/* End                                           predictor.h */
+/*-----------------------------------------------------------*/

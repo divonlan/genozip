@@ -649,8 +649,6 @@ void ctx_populate_zf_ctx_from_contigs (Reference ref, Did dst_did_i, ConstContig
     if (chrom_2ref_seg_is_needed (CHROM))
         buf_alloc_255 (evb, &ZCTX(CHROM)->chrom2ref_map, ctgs->contigs.len, INITIAL_NUM_NODES, WordIndex, 1, "ZCTX(CHROM)->chrom2ref_map");
 
-    bool is_primary = (dst_did_i == DTFZ (prim_chrom)); // note: primary is not CHROM in the case of DT_CHAIN
-
     for_buf2 (Contig, contig, i, ctgs->contigs) {
         STR(contig_name);
         contig_name = contigs_get_name (ctgs, i, &contig_name_len);
@@ -658,7 +656,7 @@ void ctx_populate_zf_ctx_from_contigs (Reference ref, Did dst_did_i, ConstContig
         bool is_new;
         ctx_commit_node (NULL, zctx, NULL, STRa(contig_name), false, &is_new);
         
-        if (is_new && is_primary && (flag.reference & REF_ZIP_LOADED)) {
+        if (is_new && (flag.reference & REF_ZIP_LOADED)) {
             if (contig->ref_index >= 0) buf_add_int (evb, ZCTX(CHROM)->chrom2ref_map, contig->ref_index); // header contigs also know the ref_index
             else                        buf_add_int (evb, ZCTX(CHROM)->chrom2ref_map, ref_contigs_get_matching (ref, 0, STRa(contig_name), NULL, NULL, false, NULL, NULL));
         }
@@ -958,7 +956,7 @@ static inline bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx, ContextP *z
 {
     // get the zctx or create a new one. note: ctx_add_new_zf_ctx() must be called before mutex_lock() because it locks the z_file mutex (avoid a deadlock)
     ContextP zctx       = ctx_get_zctx_from_vctx (vctx, true, true);
-    ContextP zctx_alias = ctx_get_zctx_from_vctx (vctx, true, false);
+    ContextP zctx_alias = ctx_get_zctx_from_vctx ( vctx, true, false);
 
     if ((vb->vblock_i != 1 && __atomic_load_n (&zctx->vb_1_pending_merges, __ATOMIC_ACQUIRE)) || // let vb_i=1 merge first and sorts dictionaries, other VBs can go in arbitrary order. 
         !mutex_trylock (ZMUTEX(zctx))) // also implies locking all its aliases including zctx_alias
@@ -969,7 +967,7 @@ static inline bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx, ContextP *z
     zctx->num_new_entries_prev_merged_vb = vctx->nodes.len; // number of new words in this dict from this VB
     
     zctx->counts_section     |= vctx->counts_section;   // compress ctx->counts in ctx_compress_counts
-    zctx->subdicts_section   |= vctx->subdicts_section; // compress ctx->zip_ctx_specific_buf in ctx_compress_subdicts
+    zctx->subdicts_section   |= vctx->subdicts_section; // compress zctx->subdicts in ctx_compress_subdicts
     zctx_alias->counts.count += vctx->counts.count;     // context-specific counter (not passed to PIZ)
     
     if (vb->vblock_i == 1 && (vctx->b250.len || vctx->local.len))  // vb=1 must have either a b250 or local section to carry the flags, otherwise the default flags are 0

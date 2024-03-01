@@ -125,7 +125,7 @@ typedef struct { char s[1024];  } StrTextLong;
 typedef struct { char s[4096];  } StrTextSuperLong;
 typedef struct { char s[65536]; } StrTextMegaLong;
 
-#include "version.h" // must be after StrTxt definition
+#include "version.h" // must be after StrText definition
 
 #define VB ((VBlockP)(vb))
 
@@ -206,6 +206,7 @@ typedef union { // 64 bit
     int64_t i;
     double f;
     struct { float f, unused; } f32;  // used by bam_get_one_aux (note: struct due to clang)
+
     TxtWord;    // index into in txt_data (note: gcc/clang flag -fms-extensions is needed for this type of anonymous struct use)
     void *p; 
 } ValueType __attribute__((__transparent_union__));
@@ -333,6 +334,9 @@ typedef int ThreadId;
 #define SQR(x) ((x)*(x)) 
 #endif
 
+#define MAXB64(x) ((1ULL<<(x))-1)
+#define MAXB(x) ((uint32_t)MAXB64(x))  // eg: MAXB(3) == 0b111 == 7
+
 // round up or down to the nearest
 #define ROUNDUP2(x)    (((x) + 1)       & ~(typeof(x))0x1) 
 #define ROUNDUP4(x)    (((x) + 3)       & ~(typeof(x))0x3)
@@ -355,19 +359,31 @@ typedef int ThreadId;
 #define SWAPbit(a,b) ({ uint8_t   tmp = a; a = b; b = tmp; })  // meant for bit fields 
 
 // getting and putting unaligned words
-// loading a Little Endian uint32_t from an unaligned memory location
-#define GET_UINT8(p)   ((uint8_t)(((uint8_t*)(p))[0]))
-#define GET_UINT16(p)  ((uint16_t)(((uint8_t*)(p))[0] | (((uint8_t*)(p))[1] << 8)))
-#define GET_UINT24(p)  ((uint32_t)(((uint8_t*)(p))[0] | (((uint8_t*)(p))[1] << 8))| (((uint8_t*)(p))[2] << 16))
-#define GET_UINT32(p)  ((uint32_t)(((uint8_t*)(p))[0] | (((uint8_t*)(p))[1] << 8) | (((uint8_t*)(p))[2] << 16) | (((uint8_t*)(p))[3] << 24)))
-#define GET_UINT64(p)  ((uint64_t)(((uint8_t*)(p))[0] | ((uint64_t)((uint8_t*)(p))[1] << 8) | ((uint64_t)((uint8_t*)(p))[2] << 16) | ((uint64_t)((uint8_t*)(p))[3] << 24) | ((uint64_t)((uint8_t*)(p))[4] << 32) | ((uint64_t)((uint8_t*)(p))[5] << 40) | ((uint64_t)((uint8_t*)(p))[6] << 48) | ((uint64_t)((uint8_t*)(p))[7] << 56)))
-#define GET_FLOAT32(p) ({ union { uint32_t i; float f; } n= {.i = GET_UINT32(p)}; n.f; })
+#ifdef GENOZIP_ALLOW_UNALIGNED_ACCESS
+    #define GET_UINT16(p)  *((uint16_t *)(p))
+    #define GET_UINT32(p)  *((uint32_t *)(p))
+    #define GET_UINT64(p)  *((uint64_t *)(p))
+    #define GET_FLOAT32(p) *((float *)(p))
 
-// storing a Little Endian integer in an unaligned memory location
+    #define PUT_UINT16(p,n) *((uint16_t *)(p)) = (n)
+    #define PUT_UINT32(p,n) *((uint32_t *)(p)) = (n)
+#else
+    // loading a Little Endian uint32_t from an unaligned memory location
+    #define GET_UINT16(p)  ((uint16_t)(((uint8_t*)(p))[0] | (((uint8_t*)(p))[1] << 8)))
+    #define GET_UINT32(p)  ((uint32_t)(((uint8_t*)(p))[0] | (((uint8_t*)(p))[1] << 8) | (((uint8_t*)(p))[2] << 16) | (((uint8_t*)(p))[3] << 24)))
+    #define GET_UINT64(p)  ((uint64_t)(((uint8_t*)(p))[0] | ((uint64_t)((uint8_t*)(p))[1] << 8) | ((uint64_t)((uint8_t*)(p))[2] << 16) | ((uint64_t)((uint8_t*)(p))[3] << 24) | ((uint64_t)((uint8_t*)(p))[4] << 32) | ((uint64_t)((uint8_t*)(p))[5] << 40) | ((uint64_t)((uint8_t*)(p))[6] << 48) | ((uint64_t)((uint8_t*)(p))[7] << 56)))
+    #define GET_FLOAT32(p) ({ union { uint32_t i; float f; } n= {.i = GET_UINT32(p)}; n.f; })
+
+    // storing a Little Endian integer in an unaligned memory location
+    #define PUT_UINT16(p,n) ({ uint16_t N=(n); uint8_t *P=(uint8_t *)(p); P[0]=N; P[1]=N>>8; }) 
+    #define PUT_UINT32(p,n) ({ uint32_t N=(n); uint8_t *P=(uint8_t *)(p); P[0]=N; P[1]=N>>8; P[2]=N>>16; P[3]=N>>24; })
+#endif
+
+#define GET_UINT8(p)   ((uint8_t)(((uint8_t*)(p))[0]))
+#define GET_UINT24(p)  ((uint32_t)(((uint8_t*)(p))[0] | (((uint8_t*)(p))[1] << 8))| (((uint8_t*)(p))[2] << 16))
+
 #define PUT_UINT8(p,n)  ({ ((uint8_t*)(p))[0] = (n); })
-#define PUT_UINT16(p,n) ({ uint16_t N=(n); uint8_t *P=(uint8_t *)(p); P[0]=N; P[1]=N>>8; }) 
 #define PUT_UINT24(p,n) ({ uint32_t N=(n); uint8_t *P=(uint8_t *)(p); P[0]=N; P[1]=N>>8; P[2]=N>>16; })
-#define PUT_UINT32(p,n) ({ uint32_t N=(n); uint8_t *P=(uint8_t *)(p); P[0]=N; P[1]=N>>8; P[2]=N>>16; P[3]=N>>24; })
 
 // used for qsort sort function - receives two integers of any type and returns -1/0/1 as required to sort in ascending order
 #define SORTER(func) int func (const void *a, const void *b)
@@ -634,7 +650,7 @@ static inline void progress_newline(void) {
     }
 }
 
-static inline void stall (void) { while (1) sleep (1); }
+extern noreturn void stall (void);
 
 #if !defined(__GNUC__) // && !__has_builtin(__builtin_expect)
 #define __builtin_expect(exp,c) (exp)

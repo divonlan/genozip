@@ -22,7 +22,7 @@
 #include "aligner.h"
 
 // decode and store the the contexts in the first call for ctx (only one MINUS snip allowed per ctx)
-static void decode_dicts (VBlockP vb, ContextP ctx, STRp(snip))
+static uint32_t decode_dicts (VBlockP vb, ContextP ctx, STRp(snip))
 {
     #define MAX_SNIP_DICTS 3 // increase if needed
     buf_alloc_zero (vb, &ctx->ctx_cache, 0, MAX_SNIP_DICTS, ContextP, 1, "ctx_cache");
@@ -32,6 +32,8 @@ static void decode_dicts (VBlockP vb, ContextP ctx, STRp(snip))
 
     for (int i=0; i < ctx->ctx_cache.len32; i++)
         *B(ContextP, ctx->ctx_cache, i) = ECTX (dicts[i]);
+
+    return snip_len;
 }
 
 // parameter is two or more dict_id's (in base64). reconstructs sum(dict[i].last_value)
@@ -55,10 +57,13 @@ SPECIAL_RECONSTRUCTOR (piz_special_PLUS)
 SPECIAL_RECONSTRUCTOR (piz_special_MINUS)
 {
     if (!ctx->ctx_cache.len32) 
-        decode_dicts (vb, ctx, STRa(snip));
+        snip += decode_dicts (vb, ctx, STRa(snip));
 
     new_value->i = (*B(ContextP, ctx->ctx_cache, 0))->last_value.i - 
                    (*B(ContextP, ctx->ctx_cache, 1))->last_value.i;
+
+    if (str_is_1char (snip, 'A')) 
+        new_value->i = ABS (new_value->i); // ABS option since 15.0.47
 
     if (reconstruct)
         RECONSTRUCT_INT (new_value->i); 
@@ -341,7 +346,7 @@ uint32_t reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, uint32_t len
     return len;
 }
 
-ContextP reconstruct_get_other_ctx_from_snip (VBlockP vb, ContextP ctx, pSTRp (snip))
+ContextP reconstruct_get_other_ctx_from_snip (VBlockP vb, ContextP ctx, pSTRp(snip))
 {
     unsigned b64_len = base64_sizeof (DictId);
 
@@ -361,6 +366,12 @@ ContextP reconstruct_get_other_ctx_from_snip (VBlockP vb, ContextP ctx, pSTRp (s
     ctx->other_did_i = other_ctx->did_i;
 
     return other_ctx;
+}
+
+ContextP reconstruct_special_get_base_ctx (VBlockP vb, ContextP ctx, pSTRp(snip))
+{
+    (*snip)--; (*snip_len)++; // reconstruct_get_other_ctx_from_snip skips the first char
+    return reconstruct_get_other_ctx_from_snip (VB, ctx, STRa(snip));
 }
 
 // get ctx from a multi-dict_id special snip. note that we're careful to only ECTX the ctx_i requested, and not all,
@@ -583,22 +594,21 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
     case SNIP_COPY: 
         base_ctx = (snip_len==1) ? snip_ctx : reconstruct_get_other_ctx_from_snip (vb, snip_ctx, pSTRa(snip)); 
 
-        // xxx possible improvement of SNIP_COPY - needs extensive testing to make sure there are conflicts with other settings of ctx_specific_flag
         // if same_line=true, we copy value on the line whether before or after
-        // if (snip_ctx->flags.same_line && snip_ctx != base_ctx) { 
-        //     STR(snip);
-        //     new_value = reconstruct_peek (vb, base_ctx, pSTRa(snip)); // value of this line/sample - whether already encountered or peek a future value
-        //     if (snip == BAFTtxt)
-        //         Ltxt += snip_len;
-        //     else
-        //         RECONSTRUCT_snip;
-        // }
+        if (snip_ctx->flags.same_line && snip_ctx != base_ctx) { 
+            STR(snip);
+            new_value = reconstruct_peek (vb, base_ctx, pSTRa(snip)); // value of this line/sample - whether already encountered or peek a future value
+            if (snip == BAFTtxt)
+                Ltxt += snip_len;
+            else
+                RECONSTRUCT_snip;
+        }
 
         // if same_line=false, we copy previous value, whether on this line or previous line
-        // else {
+        else {
             RECONSTRUCT_LAST_TXT (base_ctx);
             new_value = base_ctx->last_value; 
-        // }
+        }
         has_new_value = HAS_NEW_VALUE;
         break;
 
@@ -735,7 +745,7 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i,
         }
 
         // for backward compatability with v8-11 that didn't yet have flags.store = STORE_INDEX for CHROM
-        if (did_i == DTF(prim_chrom)) { // NOTE: CHROM cannot have aliases, because looking up the did_i by dict_id will lead to CHROM, and this code will be executed for a non-CHROM field
+        if (did_i == DTF(chrom)) { // NOTE: CHROM cannot have aliases, because looking up the did_i by dict_id will lead to CHROM, and this code will be executed for a non-CHROM field
             if (!ctx_has_value_in_line_(vb, CTX(did_i))) 
                 vb->last_index (did_i) = word_index;
             

@@ -92,16 +92,16 @@ typedef struct Buffer {        // 72 bytes
 extern void buf_initialize(void);
 
 #define buf_is_alloc(buf_p) ((buf_p)->data != NULL && (buf_p)->type != BUF_UNALLOCATED)
-#define ASSERTNOTINUSE(buf) ASSERT (!buf_is_alloc (&(buf)) && !(buf).len && !(buf).param, "expecting %s to be free, but it's not: %s", #buf, buf_desc (&(buf)).s)
+#define ASSERTNOTINUSE(buf)  ASSERT (!buf_is_alloc (&(buf)) && !(buf).len && !(buf).param, "expecting %s to be free, but it's not: %s", #buf, buf_desc (&(buf)).s)
 #define ASSERTISALLOCED(buf) ASSERT (buf_is_alloc (&(buf)), "%s is not allocated", #buf)
-#define ASSERTISEMPTY(buf) ASSERT (buf_is_alloc (&(buf)) && !(buf).len, "expecting %s to be be allocated and empty, but it isn't: %s", #buf, buf_desc (&(buf)).s)
-#define ASSERTNOTEMPTY(buf) ASSERT ((buf).len, "expecting %s to be contain some data, but it doesn't: %s", #buf, buf_desc (&(buf)).s)
+#define ASSERTISEMPTY(buf)   ASSERT (buf_is_alloc (&(buf)) && !(buf).len, "expecting %s to be be allocated and empty, but it isn't: %s", #buf, buf_desc (&(buf)).s)
+#define ASSERTNOTEMPTY(buf)  ASSERT ((buf).len, "expecting %s to be contain some data, but it doesn't: %s", #buf, buf_desc (&(buf)).s)
 
 extern void buf_alloc_do (VBlockP vb, BufferP buf, uint64_t requested_size, float grow_at_least_factor, rom name, FUNCLINE);
 
 static inline void buf_alloc_quick (BufferP buf, uint64_t req_size, rom name, FUNCLINE)
 {
-    if (!buf->data && req_size) {
+    if (__builtin_expect (!buf->data && req_size, false)) {
         buf->func      = func; 
         buf->code_line = code_line; 
         buf->data      = buf->memory + sizeof (uint64_t); 
@@ -111,13 +111,13 @@ static inline void buf_alloc_quick (BufferP buf, uint64_t req_size, rom name, FU
 }
 
 #define buf_alloc_(alloc_vb, buf, more, at_least, width, grow_at_least_factor, name, func, code_line) ({\
-    uint64_t new_more = (more); /* avoid evaluating twice */        \
-    uint64_t if_more = new_more ? ((buf)->len + new_more) : 0; /* in units of type */      \
-    uint64_t new_req_size = MAX_((at_least), if_more) * width; /* make copy to allow ++ */ \
-    if (new_req_size <= (buf)->size)                                \
-        buf_alloc_quick ((buf), new_req_size, (name), func, code_line);  \
-    else                                                            \
-        buf_alloc_do (((alloc_vb) ? ((VBlockP)alloc_vb) : (buf)->vb), (buf), (new_req_size), (grow_at_least_factor), (name), func, code_line); \
+    uint64_t new_more = (more); /* avoid evaluating twice */                                \
+    uint64_t if_more = new_more ? ((buf)->len + new_more) : 0; /* in units of type */       \
+    uint64_t new_req_size = MAX_((at_least), if_more) * width; /* make copy to allow ++ */  \
+    if (__builtin_expect(new_req_size <= (buf)->size, true))                                \
+        buf_alloc_quick ((buf), new_req_size, (name), func, code_line);                     \
+    else                                                                                    \
+        buf_alloc_do (((alloc_vb) ? ((VBlockP)alloc_vb) : (buf)->vb), (buf), new_req_size, (grow_at_least_factor), (name), func, code_line); \
 })
 
 #define buf_alloc(alloc_vb, buf, more, at_least, type, grow_at_least_factor, name) \

@@ -101,18 +101,6 @@ void vcf_samples_seg_finalize_PS_PID (VBlockVCFP vb)
         ctx_consolidate_stats (VB, FORMAT_PS, VCF_LOOKBACK, FORMAT_PSref, FORMAT_PSalt, FORMAT_PSpos, DID_EOL);
 }
 
-static inline bool vcf_seg_FORMAT_PS_PID_is_same_alt1 (VBlockVCFP vb, STRp(alt))
-{
-    if (alt_len == vb->main_alt_len)
-        return !memcmp (alt, vb->main_alt, alt_len);
-
-    // case: possibly multi-alt - compare to first ALT (ALT1)
-    else {
-        str_split (vb->main_alt, vb->main_alt_len, MAX_ALLELES, ',', alt, false);
-        return str_issame_(STRa(alt), STRi(alt,0));
-    }
-}
-
 // returns number ([1,PS_PID_LOOKBACK_LINES]) of lines back, or 0 if none
 static inline unsigned vcf_seg_FORMAT_PS_PID_test_lookback (VBlockVCFP vb, ContextP ctx, STRp(value), uint32_t lookback)
 {
@@ -172,8 +160,8 @@ void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STR
 
             if (n_items && 
                 str_issame_(STRi(item,0), last_txt(VB, VCF_POS), vb->last_txt_len(VCF_POS)) &&
-                str_issame_(STRi(item,1), vb->main_ref, vb->main_ref_len) &&
-                vcf_seg_FORMAT_PS_PID_is_same_alt1(vb, STRi(item,2))) {
+                str_issame_(STRi(item,1), STRa(vb->REF)) &&
+                str_issame_(STRi(item,2), STRi(vb->alt,0))) {
 
                 // replace PS with COPY_POS, COPY_REF, COPY_ALT container 
                 seg_by_ctx (VB, STRa(ps_pra_snip), ctx, value_len); 

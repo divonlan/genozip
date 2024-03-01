@@ -320,7 +320,6 @@ typedef struct VBlockSAM {
     uint64_t x_bases, y_bases, a_bases;  // counters of number chromosome X, Y and chr1 bases
 
     // buddied Seg
-    Buffer qname_hash;             // Seg: each entry i contains a line number for which the hash(qname)=i (or -1). prm8[0] is log2(len) (i.e., the number of bits)
     Buffer line_textual_cigars;    // Seg of BAM (not SAM): an array of textual CIGARs referred to from DataLine->CIGAR
     uint32_t saggy_near_count, mate_line_count, prim_far_count; // for stats
     LineIType mate_line_i;         // Seg/PIZ: the mate of this line. Goes into vb->buddy_line_i in Piz.
@@ -452,8 +451,6 @@ typedef struct Sag {
 #define ZALN_I(a) (BNUM64 (z_file->sag_alns, (a)))  // aln pointer to aln_i
 #define GRP_QNAME(g) Bc (z_file->sag_qnames, (g)->qname)
 
-#define MAXB64(x) ((1ULL<<(x))-1)
-#define MAXB(x) ((uint32_t)MAXB64(x))
 #define MAX_SA_NUM_ALNS       MAXB(ALN_NUM_ALNS_BITS)  // our limit
 #define MAX_SA_POS            MAXB(31)                 // BAM limit
 #define MAX_SA_NM             MAXB(ALN_NM_BITS)        // our limit

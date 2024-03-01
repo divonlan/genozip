@@ -22,9 +22,9 @@ void vcf_seg_INFO_LEGACY_ID (VBlockVCFP vb, ContextP ctx, STRp(lid))
 
 void vcf_seg_INFO_SO_TERM (VBlockVCFP vb, ContextP ctx, STRp(st))
 {
-    if ((vb->main_ref_len == 1 && vb->main_alt_len == 1 && str_issame_(st, st_len, "SNV"      , 3)) ||
-        (vb->main_ref_len == 1 && vb->main_alt_len >  1 && str_issame_(st, st_len, "insertion", 9)) ||
-        (vb->main_ref_len >  1 && vb->main_alt_len == 1 && str_issame_(st, st_len, "deletion" , 8)))
+    if ((vb->REF_len == 1 && vb->ALT_len == 1 && str_issame_(st, st_len, "SNV"      , 3)) ||
+        (vb->REF_len == 1 && vb->ALT_len >  1 && str_issame_(st, st_len, "insertion", 9)) ||
+        (vb->REF_len >  1 && vb->ALT_len == 1 && str_issame_(st, st_len, "deletion" , 8)))
         seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_SO_TERM }, 2, ctx, st_len);
 
     else
@@ -33,11 +33,9 @@ void vcf_seg_INFO_SO_TERM (VBlockVCFP vb, ContextP ctx, STRp(st))
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_SO_TERM)
 {
-    STRlast (refalt, VCF_REFALT);
-
-    if (refalt_len == 3)        RECONSTRUCT ("SNV"      , 3);
-    else if (refalt[1] == '\t') RECONSTRUCT ("insertion", 9);
-    else                        RECONSTRUCT ("deletion" , 8);
+    if (ALT0(SNP))      RECONSTRUCT ("SNV"      , 3);
+    else if (ALT0(INS)) RECONSTRUCT ("insertion", 9);
+    else                RECONSTRUCT ("deletion" , 8);
     
     return NO_NEW_VALUE;
 }

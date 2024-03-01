@@ -190,11 +190,11 @@ void qname_zip_initialize (void)
             for (QType q=QNAME1; q < NUM_QTYPES; q++) {
                 Did first_did_i = did_by_q (q);
                 
-                for (unsigned item_i=0; item_i < con_no_skip.nitems_lo; item_i++) 
-                    if (con_no_skip.items[item_i].dict_id.num != _SAM_QmNAME) 
-                        con_no_skip.items[item_i].dict_id = dt_fields[DT_FASTQ].predefined[first_did_i + item_i + 1].dict_id; 
+                for_con2 (&con_no_skip)
+                    if (item->dict_id.num != _SAM_QmNAME) 
+                        item->dict_id = dt_fields[DT_FASTQ].predefined[first_did_i + item_i + 1].dict_id; 
                     else
-                        con_no_skip.items[item_i].dict_id = dt_fields[DT_FASTQ].predefined[first_did_i + MAX_QNAME_ITEMS].dict_id; 
+                        item->dict_id = dt_fields[DT_FASTQ].predefined[first_did_i + MAX_QNAME_ITEMS].dict_id; 
 
                 // prepare container snip for this QF
                 qfs->con_snip_lens[q] = sizeof (qfs->con_snips[0]);            

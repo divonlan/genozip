@@ -19,8 +19,21 @@ static MiniContainer line_number_container = {};
 // called by main thread after reading the header
 void vcf_zip_initialize (void)
 {
+    vcf_refalt_zip_initialize();
     vcf_samples_zip_initialize ();
     vcf_info_zip_initialize ();
+
+    vcf_dbsnp_zip_initialize(); // called even if not in VCF header, because can be discovered in segconf too
+    vcf_gatk_zip_initialize();
+    if (segconf.vcf_is_vagrent)    vcf_vagrent_zip_initialize();
+    if (segconf.vcf_is_mastermind) vcf_mastermind_zip_initialize();
+    if (segconf.vcf_is_vep)        vcf_vep_zip_initialize();
+    if (segconf.vcf_illum_gtyping) vcf_illum_gtyping_zip_initialize();
+    if (segconf.vcf_is_platypus)   vcf_platypus_zip_initialize();
+    if (segconf.vcf_is_svaba)      vcf_svaba_zip_initialize();
+    if (segconf.vcf_is_manta)      vcf_manta_zip_initialize();
+    if (segconf.vcf_is_pbsv)       vcf_pbsv_zip_initialize();
+    if (!segconf.vcf_is_sv)        vcf_sv_zip_initialize (0, 0); // if not any known SV caller (manta, pbsv, svaba), we still initialize for the non-specific stuff
 
     // container just for adding a prefix to the delta-encoded line number (the container is all_the_same)
     if (flag.add_line_numbers && !line_number_container.repeats) { // possibly already initialized by previous files
@@ -35,7 +48,7 @@ void vcf_zip_initialize (void)
 // called after each file
 void vcf_zip_finalize (bool is_last_user_txt_file)
 {
-    // if REFALT takes more than 10% of z_file, advise on using --reference (note: if GVCF, we already advised in vcf_seg_finalize_segconf)
+    // if REFALT takes more than 10% of z_file, advise on using --reference (note: if some cases, we already advised in vcf_seg_finalize_segconf)
     decl_zctx(VCF_REFALT);
     int refalt_z_pc = flag.zip_no_z_file ? 0 : (100 * (zctx->dict.count + zctx->b250.count + zctx->local.count) / z_file->disk_size);
 
@@ -54,18 +67,21 @@ bool is_vcf (STRp(header), bool *need_more)
 // main thread: writing data-type specific fields to genozip header
 void vcf_zip_genozip_header (SectionHeaderGenozipHeaderP header)
 {
-    header->vcf.segconf_has_RGQ   = (segconf.has[FORMAT_RGQ] > 0); // introduced in v14
-    header->vcf.segconf_GQ_method = segconf.GQ_method;             // since 15.0.37
-    header->vcf.segconf_FMT_DP_method = segconf.FMT_DP_method;     // since 15.0.37
-    header->vcf.max_ploidy_for_mux = ZIP_MAX_PLOIDY_FOR_MUX;       // since 15.0.36
-    header->vcf.width.MLEAC       = segconf.wid_MLEAC.width;       // since 15.0.37
-    header->vcf.width.AC          = segconf.wid_AC.width;          // since 15.0.37
-    header->vcf.width.AF          = segconf.wid_AF.width;          // since 15.0.37
-    header->vcf.width.AN          = segconf.wid_AN.width;          // since 15.0.37
-    header->vcf.width.DP          = segconf.wid_DP.width;          // since 15.0.37
-    header->vcf.width.SF          = segconf.wid_SF.width;          // since 15.0.37
-    header->vcf.width.QD          = segconf.wid_QD.width;          // since 15.0.37
-    header->vcf.width.AS_SB_TABLE = segconf.wid_AS_SB_TABLE.width; // since 15.0.41
+    header->vcf.segconf_has_RGQ       = (segconf.has[FORMAT_RGQ] > 0); // introduced in v14
+    header->vcf.segconf_GQ_method     = segconf.GQ_method;             // since 15.0.37
+    header->vcf.segconf_FMT_DP_method = segconf.FMT_DP_method;         // since 15.0.37
+    header->vcf.max_ploidy_for_mux    = ZIP_MAX_PLOIDY_FOR_MUX;        // since 15.0.36
+    header->vcf.segconf_MATEID_method = segconf.MATEID_method;         // since 15.0.47
+    header->vcf.segconf_del_svlen_is_neg = segconf.vcf_del_svlen_is_neg; // since 15.0.47
+    header->vcf.width.MLEAC           = segconf.wid_MLEAC.width;       // since 15.0.37
+    header->vcf.width.AC              = segconf.wid_AC.width;          // since 15.0.37
+    header->vcf.width.AF              = segconf.wid_AF.width;          // since 15.0.37
+    header->vcf.width.AN              = segconf.wid_AN.width;          // since 15.0.37
+    header->vcf.width.DP              = segconf.wid_DP.width;          // since 15.0.37
+    header->vcf.width.SF              = segconf.wid_SF.width;          // since 15.0.37
+    header->vcf.width.QD              = segconf.wid_QD.width;          // since 15.0.37
+    header->vcf.width.AS_SB_TABLE     = segconf.wid_AS_SB_TABLE.width; // since 15.0.41
+    header->vcf.width.ID              = segconf.wid_ID.width;          // since 15.0.47
 }
 
 void vcf_zip_init_vb (VBlockP vb_)
@@ -95,6 +111,10 @@ void vcf_zip_set_txt_header_flags (struct FlagsTxtHeader *f)
 
 void vcf_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeaderP vb_header)
 {
+    // note: we write 0xffffffff instead of 0, to differentiate from the case where we didn't write at all prior to 15.0.47
+    decl_ctx (FORMAT_GT_HT); 
+    vb_header->vcf_HT_n_lines = 
+        ctx->HT_n_lines ? BGEN32 (ctx->HT_n_lines) : 0xffffffff; // since 15.0.47
 }
 
 // called by Compute threadfrom seg_all_data_lines
@@ -104,17 +124,22 @@ void vcf_seg_initialize (VBlockP vb_)
 
     VBlockVCFP vb = (VBlockVCFP)vb_;
 
-    ctx_set_no_stons (VB, VCF_CHROM, VCF_FORMAT, VCF_INFO, VCF_TOPLEVEL, VCF_COPYPOS, 
+    ctx_consolidate_stats (VB, VCF_ID, VCF_MATE, DID_EOL);
+
+    ctx_set_no_stons (VB, VCF_CHROM, VCF_FORMAT, VCF_INFO, VCF_TOPLEVEL, 
                       VCF_POS, VCF_LINE_NUM, INFO_HGVS_del_start_pos, INFO_HGVS_ins_start_pos, INFO_HGVS_ins_start_pos, // as required by seg_pos_field
                       DID_EOL);
 
     ctx_set_store (VB, STORE_INDEX, VCF_CHROM, DID_EOL);
 
-    ctx_set_store (VB, STORE_INT, VCF_POS, VCF_ID, VCF_LINE_NUM, 
+    ctx_set_store (VB, STORE_INT, VCF_POS, VCF_LINE_NUM, 
+                   T(!segconf.vcf_is_sv, VCF_ID),    // svaba/manta needs to store history as text and segs ID differently
+                   T(segconf.vcf_is_sv, VCF_QUAL),
                    FORMAT_DP, FORMAT_MIN_DP, 
-                   INFO_DP, DID_EOL); 
+                   INFO_DP, 
+                   DID_EOL); 
 
-    ctx_set_store (VB, STORE_FLOAT, VCF_QUAL, DID_EOL); // consumed by vcf_piz_special_QD
+    ctx_set_store (VB, STORE_FLOAT, T(segconf.has[INFO_QD], VCF_QUAL), DID_EOL); // consumed by vcf_piz_insert_INFO_QD
 
     ctx_set_ltype (VB, LT_STRING, 
                    T(segconf.vcf_QUAL_method == VCF_QUAL_local, VCF_QUAL), 
@@ -132,13 +157,11 @@ void vcf_seg_initialize (VBlockP vb_)
     // counts sections
     CTX(VCF_CHROM)-> counts_section = true;
 
-    // consolidate stats
-    ctx_consolidate_stats (VB, VCF_POS,    VCF_COPYPOS, DID_EOL);
-
     // room for already existing FORMATs from previous VBs
-    vb->format_mapper_buf.len = vb->format_contexts.len = CTX(VCF_FORMAT)->ol_nodes.len;
-    buf_alloc_zero (vb, &vb->format_mapper_buf, 0, vb->format_mapper_buf.len, Container, CTX_GROWTH, "format_mapper_buf");
-    buf_alloc_zero (vb, &vb->format_contexts, 0, vb->format_contexts.len, ContextPBlock, CTX_GROWTH, "format_contexts");
+    ContextP samples_ctx = CTX(VCF_SAMPLES);
+    samples_ctx->format_mapper_buf.len = samples_ctx->format_contexts.len = CTX(VCF_FORMAT)->ol_nodes.len;
+    buf_alloc_zero (vb, &samples_ctx->format_mapper_buf, 0, samples_ctx->format_mapper_buf.len, Container, CTX_GROWTH, "contexts->format_mapper_buf");
+    buf_alloc_zero (vb, &samples_ctx->format_contexts, 0, samples_ctx->format_contexts.len, ContextPBlock, CTX_GROWTH, "contexts->format_contexts");
     
     if (flag.add_line_numbers) {
         // create a b250 and dict entry for VCF_LINE_NUM, VCF_ID - these become "all_the_same" so no need to seg them explicitly hereinafter        
@@ -151,11 +174,6 @@ void vcf_seg_initialize (VBlockP vb_)
         ctx_decrement_count (vb_, CTX(VCF_ID), 0);
         CTX(VCF_ID)->no_stons = true;
     }
-
-    // create a nodes and dict entry for LIFT_REF, COPYSTAT and COPYPOS - these become "all_the_same" so no need to seg them explicitly hereinafter
-    ctx_create_node (VB, VCF_LIFT_REF, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_LIFT_REF }, 2);
-    ctx_create_node (VB, VCF_COPYSTAT, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPYSTAT }, 2);
-    ctx_create_node (VB, VCF_COPYPOS,  (char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPYPOS  }, 2);
         
     if (segconf.vcf_QUAL_method == VCF_QUAL_by_RGQ) {
         seg_mux_init (VB, CTX(VCF_QUAL), 2, VCF_SPECIAL_MUX_BY_HAS_RGQ, false, (MultiplexerP)&vb->mux_QUAL);
@@ -173,6 +191,7 @@ void vcf_seg_initialize (VBlockP vb_)
     if (segconf.vcf_is_gvcf)
         seg_mux_init (VB, CTX(VCF_POS), 2, VCF_SPECIAL_MUX_BY_END, false, (MultiplexerP)&vb->mux_POS);
 
+    vcf_refalt_seg_initialize (vb);
     vcf_info_seg_initialize(vb);
     vcf_samples_seg_initialize(vb);
 
@@ -185,10 +204,12 @@ void vcf_seg_initialize (VBlockP vb_)
     if (segconf.vcf_is_dbSNP)       vcf_dbsnp_seg_initialize (vb);
     if (segconf.vcf_is_giab_trio)   vcf_giab_seg_initialize (vb);
     if (segconf.vcf_is_isaac)       vcf_isaac_seg_initialize (vb);
-    if (segconf.vcf_is_manta)       vcf_manta_seg_initialize (vb);
     if (segconf.vcf_is_ultima)      vcf_ultima_seg_initialize (vb);
     if (segconf.vcf_is_platypus)    vcf_platypus_seg_initialize (vb);
-
+    if (segconf.vcf_is_svaba)       vcf_svaba_seg_initialize (vb);
+    if (segconf.vcf_is_manta)       vcf_manta_seg_initialize (vb);
+    if (segconf.vcf_is_pbsv)        vcf_pbsv_seg_initialize (vb);
+    if (!segconf.vcf_is_sv)         vcf_sv_seg_initialize (vb, 0, 0); // not known SV caller - initialize generic stuff
     #undef T
 }             
 
@@ -224,7 +245,7 @@ static void vcf_seg_finalize_segconf (VBlockVCFP vb)
     if (segconf.has[INFO_AS_SB_TABLE] && segconf.has[FORMAT_SB]) 
         segconf.AS_SB_TABLE_by_SB = true;
     
-    if (vcf_num_samples > 1 && !flag.secure_DP && segconf.has[FORMAT_DP])
+    if (vcf_num_samples > 1 && !flag.secure_DP && segconf.has[INFO_DP] && segconf.has[FORMAT_DP])
         segconf.INFO_DP_method = BY_FORMAT_DP;
         
     if (segconf.has[FORMAT_IGT] && segconf.has[FORMAT_IPS] && segconf.has[FORMAT_ADALL])
@@ -261,6 +282,11 @@ static void vcf_seg_finalize_segconf (VBlockVCFP vb)
              "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
              arch_get_argv0(), txt_file->name);
 
+    if (!flag.reference && segconf.vcf_is_sv && !flag.seg_only)
+        TIP ("Compressing a structrual variants VCF file using a reference file can reduce the compressed file's size by 20%%-60%%.\n"
+            "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n", 
+            arch_get_argv0(), txt_file->name);
+
     // In case of dependency DAG: DP->(sum)AD->(mux)GT we can't have GT->(null)DP
     if (segconf.FMT_DP_method == BY_AD) segconf.use_null_DP_method = false;
 
@@ -271,6 +297,7 @@ static void vcf_seg_finalize_segconf (VBlockVCFP vb)
     if (segconf.has_DP_before_PL && !flag.best)
         TIP0 ("Compressing this particular VCF with --best could result in significantly better compression");
 
+    segconf_set_width (&segconf.wid_ID, 6); // non-zero only in PBSV
     segconf_set_width (&segconf.wid_AF, 3);
     segconf_set_width (&segconf.wid_AC, 3);
     segconf_set_width (&segconf.wid_AN, 3);
@@ -284,16 +311,10 @@ static void vcf_seg_finalize_segconf (VBlockVCFP vb)
 void vcf_seg_finalize (VBlockP vb_)
 {
     VBlockVCFP vb = (VBlockVCFP)vb_;
-    
-    if (vb->ht_matrix_ctx) 
-        vcf_seg_FORMAT_GT_complete_missing_lines (vb);
-
-    // for a dual-coordinates VCF, we offer 2 ways to reconstruct it: normally, it is reconstructed in the
-    // primary coordinates. --luft invokes top_level_luft in translated mode, which reconstructs in luft coordintes.
-    
-    // Toplevel snip for reconstructing this VB a PRIMARY
+        
+    // Toplevel snip for reconstructing this VBp
     SmallContainer top_level = { 
-        .repeats      = vb->lines.len,
+        .repeats      = vb->lines.len32,
         .is_toplevel  = true,
         .callback     = (CTX(INFO_SF)->sf.SF_by_GT == yes),   // cases where we need a callback
         .filter_items = true,
@@ -318,6 +339,9 @@ void vcf_seg_finalize (VBlockP vb_)
 
     if (segconf.running)
         vcf_seg_finalize_segconf (vb);
+
+    else
+        __atomic_add_fetch (&z_file->mate_line_count, (uint64_t)vb->mate_line_count,  __ATOMIC_RELAXED);
 }
 
 // after each VB is compressed and merge (VB order is arbitrary)
@@ -415,6 +439,10 @@ static void vcf_segconf_finalize_QUAL (VBlockVCFP vb)
     else if (segconf.has[FORMAT_RGQ] || segconf.vcf_is_gatk_gvcf)
         segconf.vcf_QUAL_method = VCF_QUAL_by_RGQ;
     
+    // SvABA - copy from mate, or store in local
+    else if (segconf.vcf_is_svaba || segconf.vcf_is_manta) // note: in pbsv, QUAL="."
+        segconf.vcf_QUAL_method = VCF_QUAL_mated;
+
     else
         segconf.vcf_QUAL_method = VCF_QUAL_DEFAULT;
 }
@@ -441,6 +469,10 @@ static void vcf_seg_QUAL (VBlockVCFP vb, STRp(qual))
             break;
         }
 
+        case VCF_QUAL_mated: 
+            vcf_seg_sv_copy_mate (vb, ctx, STRa(qual), TW_QUAL, TW_QUAL, false, qual_len+1);
+            break;
+
         case VCF_QUAL_DEFAULT:
             seg_by_ctx (VB, STRa(qual), ctx, qual_len+1);
             break;
@@ -448,6 +480,17 @@ static void vcf_seg_QUAL (VBlockVCFP vb, STRp(qual))
         default:
             ABORT ("invalid QUAL method %u", segconf.vcf_QUAL_method);
     }
+}
+
+static void vcf_seg_FILTER (VBlockVCFP vb, STRp(filter))
+{
+    decl_ctx (VCF_FILTER);
+
+    if (segconf.vcf_is_manta || segconf.vcf_is_pbsv)
+        vcf_seg_sv_copy_mate (vb, ctx, STRa(filter), TW_FILTER, TW_FILTER, false, filter_len+1);
+    
+    else
+        seg_by_ctx (VB, STRa(filter), ctx, filter_len+1);
 }
 
 static inline void vcf_seg_ID (VBlockVCFP vb, STRp(id))
@@ -461,6 +504,12 @@ static inline void vcf_seg_ID (VBlockVCFP vb, STRp(id))
         if (segconf.vcf_is_manta)
             vcf_seg_manta_ID (vb, STRa(id));
         
+        else if (segconf.vcf_is_svaba)
+            vcf_seg_svaba_ID (vb, STRa(id));
+
+        else if (segconf.vcf_is_pbsv)
+            vcf_seg_pbsv_ID (vb, STRa(id));
+
         else if (IS_PERIOD(id))
             seg_by_ctx (VB, STRa(id), ctx, id_len+1); // often - all the same
 
@@ -493,30 +542,36 @@ rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
     GET_NEXT_ITEM (VCF_POS);
     vcf_seg_pos (vb, dl, STRd(VCF_POS));
 
+    // set the tw here (for mating BND lines) (normally set in vcf_seg_sv_copy_mate)
+    DATA_LINE (vb->line_i)->tw[TW_CHROM] = TXTWORD (vb->chrom_name); 
+    DATA_LINE (vb->line_i)->tw[TW_POS]   = ((TxtWord){ .index = BNUMtxt (VCF_POS_str), .len = VCF_POS_len });
+
     GET_NEXT_ITEM (VCF_ID);
-    vcf_seg_ID (vb, STRd(VCF_ID));
 
     // REF + ALT 
     GET_NEXT_ITEM (VCF_REF);
     GET_NEXT_ITEM (VCF_ALT);
 
     // save REF and ALT (in primary or luft coordinates) to be used for INFO fields
-    vb->main_ref     = VCF_REF_str;
-    vb->main_alt     = VCF_ALT_str;
-    vb->main_ref_len = VCF_REF_len;
-    vb->main_alt_len = VCF_ALT_len;
-    vcf_parse_main_alt (vb);
+    vb->REF     = VCF_REF_str;
+    vb->ALT     = VCF_ALT_str;
+    vb->REF_len = VCF_REF_len;
+    vb->ALT_len = VCF_ALT_len;
+    vb_parse_ALT (vb);
+
+    // ID: seg after REFALT is parsed as in PBSV is predicted based on ALT
+    vcf_seg_ID (vb, STRd(VCF_ID));
 
     CTX(FORMAT_RGQ)->line_has_RGQ = !segconf.running && segconf.has[FORMAT_RGQ] && vcf_refalt_seg_ref_alt_line_has_RGQ (VCF_ALT_str);
 
     // note: we treat REF+\t+ALT as a single field because REF and ALT are highly corrected, in the case of SNPs:
     // e.g. GG has a probability of 0 and GC has a higher probability than GA.
-    vcf_refalt_seg_main_ref_alt (vb, STRd(VCF_REF), STRd(VCF_ALT));
+    vcf_refalt_seg_REF_ALT (vb, STRd(VCF_REF), STRd(VCF_ALT));
     
     GET_NEXT_ITEM (VCF_QUAL);
     seg_set_last_txt (VB, CTX(VCF_QUAL), field_start, field_len); // consumed by vcf_seg_INFO_QD
 
-    SEG_NEXT_ITEM (VCF_FILTER);
+    GET_NEXT_ITEM (VCF_FILTER);
     seg_set_last_txt (VB, CTX(VCF_FILTER), field_start, field_len);
         
     // INFO
@@ -530,6 +585,8 @@ rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
 
     vcf_seg_QUAL (vb, STRd (VCF_QUAL)); // seg after INFO as it might depends on DP
 
+    vcf_seg_FILTER (vb, STRd (VCF_FILTER)); // seg after INFO as it might depends on DP
+
     bool has_samples = false;
     if (separator != '\n') { // has a FORMAT field
 
@@ -542,13 +599,8 @@ rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
 
         vcf_seg_FORMAT (vb, dl, field_start, field_len);
 
-        if ((has_samples = (separator != '\n'))) { 
-
-            ASSVCF0 (dl->has_genotype_data || dl->has_haplotype_data, "expecting line to end as it has no sample data, but it has not");
-            
-            // seg all samples. note that this is destructive: Samples are first lift-back to PRIMARY if needed 
-            next_field = vcf_seg_samples (vb, dl, &len, (char*)next_field, has_13); 
-        }
+        if ((has_samples = (separator != '\n')))          
+            next_field = vcf_seg_samples (vb, dl, len, (char*)next_field, has_13); 
         else 
             seg_by_did (VB, NULL, 0, VCF_SAMPLES, 0); // case no samples: WORD_INDEX_MISSING
     }

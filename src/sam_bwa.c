@@ -315,7 +315,7 @@ void sam_seg_BWA_XT_A (VBlockSAMP vb, char XT, unsigned add_bytes)
 SPECIAL_RECONSTRUCTOR (sam_piz_special_BWA_XT)
 {
     if (reconstruct) {
-        char prediction = !curr_container_has (CTX(SAM_AUX), _OPTION_X0_i)   ? 'M'
+        char prediction = !curr_container_has (vb, _OPTION_X0_i)   ? 'M'
                         : reconstruct_peek (vb, CTX(OPTION_X0_i), 0, 0).i == 1 ? 'U'
                         :                                                        'R';
         RECONSTRUCT1 (prediction);
@@ -357,7 +357,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_BWA_X1)
 {
     new_value->i = 0; // default if no XA
 
-    if (curr_container_has (CTX(SAM_AUX), _OPTION_XA_Z)) {
+    if (curr_container_has (vb, _OPTION_XA_Z)) {
         int64_t XA_repeats = container_peek_repeats (vb, CTX(OPTION_XA_Z), ';');
         int64_t X0 = reconstruct_peek (vb, CTX(OPTION_X0_i), 0, 0).i;
         

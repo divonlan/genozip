@@ -434,7 +434,7 @@ static void zip_write_global_area (void)
 
     // store a mapping of the file's chroms to the reference's contigs, if they are any different
     // note: not needed in REF_EXT_STORE, as we convert the stored ref_contigs to use chrom_index of the file's CHROM
-    if (IS_REF_EXTERNAL && DTFZ(prim_chrom) != DID_NONE) {
+    if (IS_REF_EXTERNAL && DTFZ(chrom) != DID_NONE) {
         THREAD_DEBUG (compress_chrom_2ref);
         chrom_2ref_compress(gref);
     }
@@ -732,6 +732,11 @@ void zip_one_file (rom txt_basename,
                                  zip_compress_one_vb, 
                                  zip_complete_processing_one_vb);
 
+    // verify that entire file was read (if file size is known)
+    ASSERT (txt_file->disk_so_far == txt_file->disk_size || !txt_file->disk_size || file_is_read_via_ext_decompressor (txt_file),
+            "Failed to compress entire file: file size is %"PRIu64", but only %"PRIu64" bytes were compressed",
+            txt_file->disk_size, txt_file->disk_so_far);
+
     bgzf_finalize_discovery();
 
     zriter_wait_for_bg_writing(); // complete writing VBs before moving on
@@ -753,7 +758,7 @@ void zip_one_file (rom txt_basename,
     // if this a non-bound file, or the last component of a bound file - write the genozip header, random access and dictionaries
 finish:   
     z_file->txt_file_disk_sizes[flag.zip_comp_i] = txt_file->disk_size ? txt_file->disk_size // actual file size on disk, if we know it (we don't if its a remote or stdin file)
-                                                                        : (int64_t)txt_file->disk_so_far + (txt_file->codec==CODEC_BGZF ? BGZF_EOF_LEN : 0); // data (plain, BGZF, GZ or BZ2) read from the file descriptor (we won't have correct src data here if reading through an external decompressor - but luckily txt_file->disk_size will capture that case)
+                                                                       : (int64_t)txt_file->disk_so_far + (txt_file->codec==CODEC_BGZF ? BGZF_EOF_LEN : 0); // data (plain, BGZF, GZ or BZ2) read from the file descriptor (we won't have correct src data here if reading through an external decompressor - but luckily txt_file->disk_size will capture that case)
     z_file->txt_file_disk_sizes_sum += z_file->txt_file_disk_sizes[flag.zip_comp_i];
 
     z_file->comp_codec[flag.zip_comp_i]        = txt_file->codec;

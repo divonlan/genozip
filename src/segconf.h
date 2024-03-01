@@ -23,7 +23,7 @@
 #define ABSOLUTE_MAX_VBLOCK_MEMORY ((uint64_t)MAX_VBLOCK_MEMORY MB)
 
 typedef packed_enum { TECH_NONE=-1, TECH_ANY=-2, TECH_CONS=-3, TECH_UNKNOWN=0,   TECH_ILLUM, TECH_PACBIO, TECH_NANOPORE,     TECH_454, TECH_MGI,   TECH_IONTORR, TECH_HELICOS, TECH_NCBI, TECH_ULTIMA, TECH_SINGLR, TECH_ELEMENT, TECH_ONSO, NUM_TECHS } SeqTech;
-#define TECH_NAME                     {                                          "Unknown_tech",   "Illumina", "PacBio",    "Oxford_Nanopore", "454",    "MGI_Tech", "IonTorrent", "Helicos",    "NCBI",    "Ultima",    "Singular",  "Element",    "Onso"               }
+#define TECH_NAME                     {                        "Unknown_tech",   "Illumina", "PacBio",    "Oxford_Nanopore", "454",    "MGI_Tech", "IonTorrent", "Helicos",    "NCBI",    "Ultima",    "Singular",  "Element",    "Onso"               }
 #define TECH(x) (segconf.tech == TECH_##x)
 
 typedef packed_enum { SQT_UNKNOWN, SQT_NUKE, SQT_AMINO, SQT_NUKE_OR_AMINO } SeqType;
@@ -35,7 +35,7 @@ typedef packed_enum { FMT_DP_DEFAULT=0, BY_AD=1, BY_SDP=2 } FormatDPMethod; // p
 
 typedef packed_enum { INFO_DP_DEFAULT, BY_FORMAT_DP } InfoDPMethod;
 
-typedef packed_enum { VCF_QUAL_DEFAULT, VCF_QUAL_local, VCF_QUAL_by_RGQ } VcfQualMethodType;
+typedef packed_enum { VCF_QUAL_DEFAULT, VCF_QUAL_local, VCF_QUAL_by_RGQ, VCF_QUAL_mated } VcfQualMethodType;
 
 typedef packed_enum { VCF_INFO_DEFAULT, VCF_INFO_by_RGQ, VCF_INFO_by_FILTER } VcfInfoMethodType;
 
@@ -61,7 +61,9 @@ typedef struct { uint8_t q; int count; } QualHisto;
 
 typedef packed_enum { GQ_old=0/*up to 15.0.36*/, BY_PL=1, BY_GP=2, MUX_DOSAGExDP, MUX_DOSAGE } GQMethodType; // values go into SectionHeaderGenozipHeader.segconf_GQ_method (only 0,1,2 are used in PIZ)
 
-#define SEGCONF_MAX_WIDTH 15
+typedef packed_enum         { MATE_NONE, MATE_01, MATE_12, MATE_PBSV } MateIDMethodType;
+#define MATEID_METHOD_NAMES { "NONE",    "01",    "12",    "PBSV"    }
+#define SEGCONF_MAX_WIDTH 63
 #define SEGCONF_RECORD_WIDTH(x, width) if (segconf.running && (width) <= SEGCONF_MAX_WIDTH) segconf.wid_##x.count[width]++
 typedef struct {
     uint8_t width; // 0 to SEGCONF_MAX_WIDTH
@@ -227,7 +229,11 @@ typedef struct {
     bool vcf_is_isaac;          // IsaacVariantCaller / starling
     bool vcf_is_deep_variant;   // Google Deep Variant
     bool vcf_is_ultima;         // Ultima Genomics version of Deep Variant
+    bool vcf_is_svaba;
+    bool vcf_is_pbsv;
+    bool vcf_is_sv;
     bool use_null_DP_method;    // A method for predicting GT=./. by DP=.
+    bool vcf_del_svlen_is_neg;
     FormatDPMethod FMT_DP_method;
     InfoDPMethod INFO_DP_method;
     thool PL_mux_by_DP;
@@ -235,9 +241,10 @@ typedef struct {
     bool AS_SB_TABLE_by_SB;
     uint64_t count_GQ_by_PL, count_GQ_by_GP; // used tp calculate GQ_by_PL, GQ_by_GP
     GQMethodType GQ_method;     // values go into SectionHeaderGenozipHeader.segconf_GQ_method (only 0,1,2 are used in PIZ)
+    MateIDMethodType MATEID_method; // method to convert between VCF_ID and the BND mate's VCF_ID
     VcfQualMethodType vcf_QUAL_method;
     VcfInfoMethodType vcf_INFO_method;
-    FieldWidth wid_AC, wid_MLEAC, wid_AN, wid_AF, wid_SF, wid_QD, wid_DP, wid_AS_SB_TABLE; // most common width obversed in segconf, for VCF INFO fields that are inserted in vcf_piz_container_cb 
+    FieldWidth wid_AC, wid_MLEAC, wid_AN, wid_AF, wid_SF, wid_QD, wid_DP, wid_AS_SB_TABLE, wid_ID; // most common width obversed in segconf, for VCF INFO fields that are inserted in vcf_piz_container_cb 
 
     // FASTQ
     union {
@@ -276,7 +283,8 @@ typedef struct {
     bool fasta_has_contigs;     // the sequences in this FASTA represent contigs (as opposed to reads) - in which case we have a FASTA_CONTIG dictionary and RANDOM_ACCESS
     SeqType seq_type;           // nucleotide or protein
     unsigned seq_type_counter;  // used for calculating seq_type 
-
+    char fasta_desc_char;       // '>' by default, but can also be '@'
+    
     // GFF stuff
     int gff_version;
     bool has_embedded_fasta;

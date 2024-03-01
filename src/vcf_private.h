@@ -16,17 +16,27 @@
 #define VCF_FIELD_NAMES "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO"
 #define VCF_FIELD_NAMES_LONG VCF_FIELD_NAMES "\tFORMAT"
 
-typedef struct {
-    WordIndex chrom;             // Seg: enter as node_index ; Merge: convert to word_index
-    PosType32 pos;               // 
-    PosType32 end_delta;         // Delta of INFO/END vs POS (same in both coordinates) - used in case chrom and pos are the same
-    uint32_t tie_breaker;        // tie-breaker in case chrom, pos and end are the same
-    
-    bool has_haplotype_data : 1; // FORMAT field contains GT
-    bool has_genotype_data  : 1; // FORMAT field contains subfields other than GT
+// note: whenever the same field is used (eg VCF_QUAL), it has to have the same tw
+typedef enum          { TW_CHROM,  TW_MATE_CHROM,  TW_POS,  TW_MATE_POS,  TW_QUAL,  TW_SAMPLES,  TW_EVDNC,   TW_NUMPARTS,   TW_HOMSEQ,   TW_INSERTION,   TW_SCTG,   TW_NM,   TW_MATENM,   TW_MAPQ,   TW_MATEMAPQ, NUM_SVABA_TWs } MateCopiesSvaba;
+#define SVABA_TW_DIDS { VCF_CHROM, VCF_MATE_CHROM, VCF_POS, VCF_MATE_POS, VCF_QUAL, VCF_SAMPLES, INFO_EVDNC, INFO_NUMPARTS, INFO_HOMSEQ, INFO_INSERTION, INFO_SCTG, INFO_NM, INFO_MATENM, INFO_MAPQ, INFO_MATEMAPQ              }
 
-    WordIndex format_node_i;     // the node_index into contexts[VCF_FORMAT].nodes and also format_mapper_buf that applies to this line. Data on the fields is in vb->format_mapper_buf[dl.format_node_i]
+typedef enum          { TW_CHROM0, TW_MATE_CHROM0, TW_POS0, TW_MATE_POS0, TW_QUAL0, TW_SAMPLES0, TW_FILTER,  TW_BND_DEPTH,   TW_MATE_BND_DEPTH,  NUM_MANTA_TWs } MateCopiesManta;
+#define MANTA_TW_DIDS { VCF_CHROM, VCF_MATE_CHROM, VCF_POS, VCF_MATE_POS, VCF_QUAL, VCF_SAMPLES, VCF_FILTER, INFO_BND_DEPTH, INFO_MATE_BND_DEPTH               }
+
+typedef enum          { TW_CHROM1, TW_MATE_CHROM1, TW_POS1, TW_MATE_POS1, TW_unused1, TW_unused2, TW_FILTER0, NUM_PBSV_TWs } MateCopiesPbsv;
+#define PBSV_TW_DIDS  { VCF_CHROM, VCF_MATE_CHROM, VCF_POS, VCF_MATE_POS, DID_NONE,   DID_NONE,   VCF_FILTER,              } 
+
+#define NUM_TWs NUM_SVABA_TWs // the maximal one
+
+typedef struct {
+    WordIndex chrom;        // Seg: enter as node_index ; Merge: convert to word_index
+    WordIndex format_node_i;// the node_index into contexts[VCF_FORMAT].nodes and also format_mapper_buf that applies to this line. Data on the fields is in format_mapper_buf[dl.format_node_i]
+    PosType32 pos;          // 
+    PosType32 end_delta;    // Delta of INFO/END vs POS (same in both coordinates) - used in case chrom and pos are the same
+    TxtWord BND_id;      // BND variants: a number as close as possible to unique of a BND event
+    TxtWord tw[NUM_TWs];    // used by vcf_seg_sv_copy_mate 
 } ZipDataLineVCF;
+
 #define DATA_LINE(i) B(ZipDataLineVCF, vb->lines, i)
 
 typedef enum { VCF_v_UNKNOWN, VCF_v4_1, VCF_v4_2, VCF_v4_3, VCF_v4_4, VCF_v4_5 } VcfVersion;
@@ -47,48 +57,108 @@ typedef packed_enum {
     VT_INS_LONG,    // AG AGG 
     VT_SUBST_DEL,   // ATATGTG ATG - left anchored, part of remaining bases after deletion are substituted 
     VT_SUBST_INS,   // ATG ATATGTG - left anchored, part of ref is substituted, and then insertion 
-    VT_MISSING      // A *
+    VT_SUBST,       // ATG ACG - left anchored
+    VT_UPSTRM_DEL,  // A * - upstream deletion
+    VT_BND,         // eg ]11:69541170]T or G[11:69485520[
+    VT_SYM_DEL,     // <DEL> or <DEL:ME>
+    VT_SYM_INS,     // <INS> or <INS:ME> or <INS:ME:ALU>, <INS:ME:LINE1>, <INS:ME:SVA>, <INS:UNK>
+    VT_SYM_DUP,     // <DUP> or <DUP:TANDEM> Duplication
+    VT_SYM_INV,     // <INV> Inversion
+    VT_SYM_CNV,     // <CNV> Copy Number Polymorphism
+    VT_SYM_CPX,     // <CPX> Complex SV - see https://gatk.broadinstitute.org/hc/en-us/articles/5334587352219-How-to-interpret-SV-VCFs
+    VT_SYM_CTX,     // <CTX> Reciprocal chromosomal translocation - see https://gatk.broadinstitute.org/hc/en-us/articles/5334587352219-How-to-interpret-SV-VCFs
+    VT_SYM_BND,     // <BND> Translocation - see https://gatk.broadinstitute.org/hc/en-us/articles/5334587352219-How-to-interpret-SV-VCFs
+    VT_NO_ALT,      // A .
+    NUM_VTs
+    // Symbolic variants observed:
+    // 1000 Genome conventions: https://www.internationalgenome.org/wiki/Analysis/Variant%20Call%20Format/VCF%20(Variant%20Call%20Format)%20version%204.0/encoding-structural-variants/
+    // ##ALT=<ID=DEL,Description="Deletion">
+    // ##ALT=<ID=DEL:ME:ALU,Description="Deletion of ALU element">
+    // ##ALT=<ID=DEL:ME:L1,Description="Deletion of L1 element">
+    // ##ALT=<ID=DUP,Description="Duplication">
+    // ##ALT=<ID=DUP:TANDEM,Description="Tandem Duplication">
+    // ##ALT=<ID=INS,Description="Insertion of novel sequence">
+    // ##ALT=<ID=INS:ME:ALU,Description="Insertion of ALU element">
+    // ##ALT=<ID=INS:ME:L1,Description="Insertion of L1 element">
+    // ##ALT=<ID=INV,Description="Inversion">
+    // ##ALT=<ID=CNV,Description="Copy number variable region">
+
+    // GATK:
+    // ALT=<ID=BND,Description="Translocation">
+    // ALT=<ID=CPX,Description="Complex SV">
+    // ALT=<ID=CTX,Description="Reciprocal chromosomal translocation">
+    // ALT=<ID=DEL,Description="Deletion">
+    // ALT=<ID=DUP,Description="Duplication">
+    // ALT=<ID=INS,Description="Insertion">
+    // ALT=<ID=INS:ME,Description="Mobile element insertion of unspecified ME class">
+    // ALT=<ID=INS:ME:LINE1,Description="LINE1 element insertion">
+    // ALT=<ID=INS:ME:SVA,Description="SVA element insertion">
+    // ALT=<ID=INS:UNK,Description="Sequence insertion of unspecified origin">
+
+    // https://forgemia.inra.fr/genotoul-bioinfo/jflow-toolshed/blob/b1c02354bad4e40cb429edb90356d7516e81a8eb/cnv_detection/lib/svreader/resources/template.vcf
+    // ##ALT=<ID=IDP,Description="Interspersed Duplication">
+    // ##ALT=<ID=ITX,Description="Intra-chromosomal translocation">
+
 } VariantType;
+#define ALT0(x) (VB_VCF->var_types[0] == VT_##x)
+
+#define SVTYPE_BY_VT {                                              \
+    [VT_BND]="BND",                                                 \
+    [VT_DEL]="DEL",     [VT_SYM_DEL]="DEL", [VT_SUBST_DEL]="DEL",   \
+    [VT_INS]="INS",     [VT_SYM_INS]="INS", [VT_SUBST_INS]="INS",   \
+    [VT_SYM_INV]="INV", [VT_SYM_DUP]="DUP", [VT_SYM_BND]="BND",     \
+    [VT_SYM_CPX]="CPX", [VT_SYM_CTX]="CTX", [VT_SYM_CNV]="CNV", /* note: in pbsv this is "cnv" */ \
+    /* [VT_UPSTRM_SEL]=? not encountered yet */                     \
+}
 
 typedef struct VBlockVCF {
     VBLOCK_COMMON_FIELDS
 
     // charactaristics of the data
-    Ploidy ploidy;           // ZIP only
+    Ploidy ploidy;           // ZIP
     VcfVersion vcf_version;
     uint64_t first_line;     // ZIP: used for --add_line_numbers  
     
-    rom main_ref;            // Seg: pointer into txt_data of REF in main field, set by vcf_seg_txt_line
-    rom main_alt;
-
-    // ZIP/PIZ details alts -  
-    int8_t n_alts; // generated by vcf_parse_main_alt: 0 means not parsed yet, -1 means parse fails (eg bc too many alts)
+    // This line's REFALT
+    rom REF, ALT;            // Seg: pointer into txt_data of REF in main field, set by vcf_seg_txt_line
+    uint32_t REF_len, ALT_len;
+    int8_t n_alts;           // generated by vb_parse_ALT: 0 means not parsed yet, -1 means parse fails (eg bc too many alts)
     rom alts[MAX_ALLELES-1];
     uint32_t alt_lens[MAX_ALLELES-1];
     VariantType var_types[MAX_ALLELES-1]; // of main ALT[] fields
 
-    unsigned main_ref_len, main_alt_len;
-        
+    // BND type 0, eg: REF=A ALT="AAACTCCT[hs37d5:33588521["
+    // BND type 1: eg: REF=A ALT="AAACTCCT]hs37d5:33588521]"
+    // BND type 2: REF=G ALT="[hs37d5:35428323[TAAGAGCCGCTGGCTGGCTGTCCGGGCAGGCCTCCTGGCTGCACCTGCCACAGTGCACAGGCTGACTGAGGTGCACG"
+    // BND type 3: REF=G ALT="]hs37d5:35428323]TAAGAGCCGCTGGCTGGCTGTCCGGGCAGGCCTCCTGGCTGCACCTGCCACAGTGCACAGGCTGACTGAGGTGCACG"
+    uint8_t BND_type;        // type of BND variant (0 to 3) - valid only if var_types[0]==VT_BND 
+    
+    TxtWord BND_INS;         // insertion (if any) included in the BND variant
+
+    // structural variants
+    STR(mate_chrom_name);    // ZIP/PIZ: mate's chrom in case of VT_BND (valid only if n_alts>0 and var_tyeps[0]==VT_BND)
+    PosType32 mate_pos;      // ZIP/PIZ: mate's pos in case of VT_BND
+    LineIType mate_line_i;   // Seg/PIZ: the mate of this line.
+    uint32_t mate_line_count;// for stats
+    Multiplexer2 mate_mux[NUM_TWs]; // BND variants: mux by mate 
+    Multiplexer6 pbsv_I0D_mux;
+    Multiplexer3 pbsv_I1D_mux;
+
     // FORMAT/AD
     int64_t ad_values[VCF_MAX_ARRAY_ITEMS];
     
-    // FORMAT stuff 
-    Buffer format_mapper_buf;       // ZIP only: an array of type Container - one entry per entry in CTX(VCF_FORMAT)->nodes   
-    Buffer format_contexts;         // ZIP only: an array of format_mapper_buf.len of ContextBlock
-    Buffer last_format;             // ZIP only: cache previous line's FORMAT string
-
     #define first_idx idx_AN        // ZIP: INFO fields indices within INFO
     // IMPORTANT: when adding, add to X() in vcf_seg_info_subfields
-    int16_t idx_AN, idx_AC, idx_AF, idx_MLEAC, idx_MLEAF, idx_AC_Hom, idx_AC_Het, idx_AC_Hemi, idx_QD, idx_DP, idx_SF, idx_AS_SB_TABLE;
-    #define has(f)   (vb->idx_##f  != -1)
+    int16_t idx_AN, idx_AC, idx_AF, idx_MLEAC, idx_MLEAF, idx_AC_Hom, idx_AC_Het, idx_AC_Hemi, idx_QD, idx_DP, idx_SF, 
+            idx_AS_SB_TABLE, idx_END, idx_SVLEN, idx_CIPOS, 
+            idx_HOMSEQ, idx_DUPHOMSEQ, idx_SVINSSEQ, idx_DUPSVINSSEQ, idx_LEFT_SVINSSEQ;  
+    #define has(f)   (vb->idx_##f != -1)
     #define after_idx mux_PLn
 
     // Multiplexers
     #define first_mux mux_PLn
     DosageMultiplexer mux_PLn, mux_GL, mux_GP, mux_PRI, mux_DS, mux_PP, mux_PVAL, mux_FREQ, mux_RD, 
                       mux_VAF, mux_AD[2], mux_ADALL[2];
-
-    thool PL_mux_by_DP;
     
     #define MAX_DP_FOR_MUX 51       // TODO: 60 would be better as it was up to 15.0.35, but mux is currently limited to 256 channels
     MULTIPLEXER(MAX_DP_FOR_MUX * ZIP_NUM_DOSAGES_FOR_MUX) mux_PLy;
@@ -103,11 +173,9 @@ typedef struct VBlockVCF {
     Multiplexer3 mux_GQX;           // multiplex Isaac's FORMAT/GQX
     Multiplexer3 mux_BAF, mux_X, mux_Y; // Illumina genotyping: by adjusted dosage 
 
-    #define after_mux is_del_sv
+    #define after_mux PL_mux_by_DP
 
-    // DVCF stuff
-    bool is_del_sv;                 // is ALT == "<DEL>"
-    bool is_unsorted;               // ZIP: line order of this VB is unsorted 
+    thool PL_mux_by_DP;
 } VBlockVCF;
 
 typedef VBlockVCF *VBlockVCFP;
@@ -145,7 +213,7 @@ extern void vcf_samples_zip_initialize (void);
 extern void vcf_samples_seg_initialize (VBlockVCFP vb);
 extern void vcf_samples_seg_finalize (VBlockVCFP vb);
 
-extern rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t *len, char *next_field, bool *has_13);
+extern rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t len, char *next_field, bool *has_13);
 extern int vcf_seg_get_mux_channel_i (VBlockVCFP vb);
 extern int vcf_piz_get_mux_channel_i (VBlockP vb);
 extern ContextP vcf_seg_FORMAT_mux_by_dosage (VBlockVCFP vb, ContextP ctx, STRp(cell), const DosageMultiplexer *mux);
@@ -155,10 +223,15 @@ eSTRl(snip_copy_af);
 
 // FORMAT/GT stuff
 extern WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, STRp(cell), bool has_ps, bool has_null_dp);
-extern void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCFP vb);
+extern void vcf_seg_FORMAT_GT_finalize_line (VBlockVCFP vb, uint32_t line_n_samples);
 extern void vcf_piz_FORMAT_GT_rewrite_predicted_phase (VBlockP vb, char *recon, uint32_t recon_len);
 extern void vcf_piz_GT_cb_null_GT_if_null_DP (VBlockP vb , char *recon);
 extern int vcf_piz_GT_get_last_dosage (VBlockP vb);
+
+static inline Allele *this_sample_GT (VBlockVCFP vb) {
+    ContextP ht_ctx = CTX(FORMAT_GT_HT);
+    return B(Allele, ht_ctx->local, ht_ctx->HT_n_lines * ht_ctx->ht_per_line + vb->ploidy * vb->sample_i);
+}
 
 // GIAB trio stuff
 extern void vcf_giab_seg_initialize (VBlockVCFP vb);
@@ -184,9 +257,7 @@ extern void vcf_piz_ps_pid_lookback_shift (VBlockP vb, STRp(insert));
 extern void vcf_segconf_finalize_GQ (VBlockVCFP vb);
 extern void vcf_seg_FORMAT_GQ (VBlockVCFP vb);
 
-// -------------
 // GATK stuff
-// -------------
 extern void vcf_gatk_zip_initialize (void);
 extern void vcf_gatk_seg_initialize (VBlockVCFP vb);
 
@@ -227,13 +298,15 @@ extern void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info));
 extern void vcf_seg_finalize_INFO_fields (VBlockVCFP vb);
 extern bool vcf_seg_INFO_allele (VBlockP vb_, ContextP ctx, STRp(value), uint32_t repeat);
 
-// Refalt stuff
-extern void vcf_refalt_seg_main_ref_alt (VBlockVCFP vb, STRp(ref), STRp(alt));
+// REFALT stuff
+extern void vcf_refalt_zip_initialize (void);
+extern void vcf_refalt_seg_initialize (VBlockVCFP vb);
+extern void vcf_refalt_seg_REF_ALT (VBlockVCFP vb, STRp(ref), STRp(alt));
 typedef enum { EQUALS_NEITHER, EQUALS_REF, EQUALS_ALT, EQUALS_MISSING } RefAltEquals;
 extern bool vcf_refalt_piz_is_variant_snp (VBlockVCFP vb);
 extern bool vcf_refalt_piz_is_variant_indel (VBlockVCFP vb);
 extern void vcf_piz_refalt_parse (VBlockVCFP vb);
-extern void vcf_parse_main_alt (VBlockVCFP vb);
+extern void vb_parse_ALT (VBlockVCFP vb);
 
 // GVCF stuff
 extern bool vcf_piz_line_has_RGQ (VBlockVCFP vb);
@@ -302,9 +375,44 @@ extern void vcf_seg_FORMAT_GQX (VBlockVCFP vb, ContextP ctx, STRp(gqx));
 extern void vcf_seg_INFO_IDREP (VBlockVCFP vb, ContextP ctx, STRp(idrep));
 extern int vcf_isaac_info_channel_i (VBlockP vb);
 
+// structural variants stuff
+extern rom svtype_by_vt[];
+extern void vcf_sv_zip_initialize (Did *tw_dids, int num_tw_dids);
+extern void vcf_sv_seg_initialize (VBlockVCFP vb, Did *tw_dids, int num_tw_dids);
+extern void vcf_seg_SVTYPE (VBlockVCFP vb, ContextP ctx, STRp(svtype));
+extern void vcf_seg_INFO_SVLEN (VBlockVCFP vb, ContextP ctx, STRp(svlen_str));
+extern void vcf_seg_INFO_REFLEN (VBlockVCFP vb, ContextP ctx, STRp(reflen_str));
+extern void vcf_seg_INFO_CIPOS (VBlockVCFP vb, ContextP ctx, STRp(cipos));
+extern void vcf_seg_INFO_CIEND (VBlockVCFP vb, ContextP ctx, STRp(ciend));
+extern void vcf_seg_HOMSEQ (VBlockVCFP vb, ContextP ctx, STRp(homseq));
+extern void vcf_seg_BND_mate (VBlockVCFP vb, STRp(id), STRp(mate_id), uint64_t hash);
+extern ContextP vcf_seg_sv_SAMPLES (VBlockVCFP vb, rom samples, uint32_t remaining_txt_len, ContextP *ctxs, uint32_t n_ctxs);
+extern ContextP vcf_seg_sv_copy_mate (VBlockVCFP vb, ContextP ctx, STRp(value), int tw, int her_tw, bool seg_only_if_mated, unsigned add_bytes);
+
 // manta stuff
+eSTRl(homlen_snip); eSTRl(duphomlen_snip); eSTRl(svinslen_snip); eSTRl(dupsvinslen_snip);
+
+extern void vcf_manta_zip_initialize (void);
 extern void vcf_manta_seg_initialize (VBlockVCFP vb);
 extern void vcf_seg_manta_ID (VBlockVCFP vb, STRp(id));
+extern void vcf_seg_manta_CIGAR (VBlockVCFP vb, ContextP ctx, STRp(cigar));
+extern void vcf_seg_LEN_OF (VBlockVCFP vb, ContextP ctx, STRp(len_str), int16_t idx, STRp(special_snip));
+
+// SvABA stuff
+#define vcf_has_mate (VB_VCF->mate_line_i != NO_LINE)
+extern void vcf_svaba_zip_initialize (void);
+extern void vcf_svaba_seg_initialize (VBlockVCFP vb);
+extern void vcf_seg_svaba_ID (VBlockVCFP vb, STRp(id));
+extern void vcf_seg_svaba_MATEID (VBlockVCFP vb, ContextP ctx, STRp(mate_id));
+extern void vcf_seg_svaba_MAPQ (VBlockVCFP vb, ContextP ctx, STRp(mapq));
+extern void vcf_seg_svaba_SPAN (VBlockVCFP vb, ContextP ctx, STRp(span_str));
+
+// PBSV stuff
+extern void vcf_pbsv_zip_initialize (void);
+extern void vcf_pbsv_seg_initialize (VBlockVCFP vb);
+extern void vcf_seg_pbsv_ID (VBlockVCFP vb, STRp(id));
+extern void vcf_piz_insert_pbsv_ID (VBlockVCFP vb);
+extern void vcf_seg_pbsv_MATEID (VBlockVCFP vb, ContextP ctx, STRp(mate_id));
 
 // Ultima Genomics stuff
 extern void vcf_ultima_seg_initialize (VBlockVCFP vb);
@@ -336,12 +444,14 @@ extern void vcf_lo_piz_TOPLEVEL_cb_filter_line (VBlockVCFP vb);
 // inserting INFO fields after all Samples have been reconstructed
 extern void vcf_piz_insert_field (VBlockVCFP vb, ContextP ctx, STRp(value), int chars_reserved);
 
-#define vcf_piz_defer_to_after_samples(x) ({    \
+#define vcf_piz_defer_to_later(x) ({    \
     ctx->special_res = SPEC_RES_DEFERRED;       \
     if (reconstruct) {                          \
         ctx->recon_insertion = vb->line_i + 1;  \
         Ltxt += segconf.wid_##x.width; /* our best guess - minimize memory moves during vcf_piz_insert_field */ \
     }                                           \
 })
+
+#define vcf_piz_defer_to_after_samples(x) vcf_piz_defer_to_later(x)
 
 #define IS_RECON_INSERTION(ctx) ((ctx)->recon_insertion == vb->line_i + 1)

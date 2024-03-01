@@ -129,6 +129,11 @@ extern void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, 
        seg_prepare_snip_other_do ((special_code), (DictId)(other_dict_id), char_param, 0, char_param, &snip[1], &snip##_len); \
        snip##_len++; })
 
+#define seg_prepare_snip_special_otheri(special_code, other_dict_id, snip, i, char_param/*0=no parameter*/) \
+    ({ snip##s[i][0]=SNIP_SPECIAL; snip##_lens[i]=sizeof(snip##s[i])-1; \
+       seg_prepare_snip_other_do ((special_code), (DictId)(other_dict_id), char_param, 0, char_param, &snip##s[i][1], &snip##_lens[i]); \
+       snip##_lens[i]++; })
+
 #define seg_prepare_snip_special_other_int(special_code, other_dict_id, snip, int_param) \
     ({ snip[0]=SNIP_SPECIAL; snip##_len=sizeof(snip)-1; \
        seg_prepare_snip_other_do ((special_code), (DictId)(other_dict_id), true, int_param, 0, &snip[1], &snip##_len); \
@@ -145,6 +150,11 @@ extern void seg_prepare_array_dict_id_special_snip (int num_dict_ids, DictId *di
 #define seg_prepare_minus_snip(dt, dict_id_a, dict_id_b, snip) \
     ({ snip##_len = sizeof (snip);\
        seg_prepare_array_dict_id_special_snip (2, (DictId[]){(DictId)(dict_id_a), (DictId)(dict_id_b)}, dt##_SPECIAL_MINUS, (snip), &snip##_len); })
+
+#define seg_prepare_abs_minus_snip(dt, dict_id_a, dict_id_b, snip) \
+    ({ snip##_len = sizeof (snip) - 1;\
+       seg_prepare_array_dict_id_special_snip (2, (DictId[]){(DictId)(dict_id_a), (DictId)(dict_id_b)}, dt##_SPECIAL_MINUS, (snip), &snip##_len); \
+       snip[snip##_len++] = 'A' /* ABS() */})
 
 #define seg_prepare_minus_snip_i(dt, dict_id_a, dict_id_b, snip, i) \
     ({ snip##_lens[i] = sizeof (snip##s[i]);\

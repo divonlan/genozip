@@ -73,8 +73,8 @@ static void predict_RU (VBlockVCFP vb)
 
     if (predicted_RU->index) return; // already predicted
 
-    rom seq = vb->main_ref + 1; // payload only (without anchor base)
-    int seq_len = vb->main_ref_len - 1;
+    rom seq = vb->REF + 1; // payload only (without anchor base)
+    int seq_len = vb->REF_len - 1;
 
     // set seq to longest allele (REF or one of the ALTs)
     for (int alt_i=0; alt_i < vb->n_alts; alt_i++)
@@ -125,10 +125,10 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_RU)
 
     if (reconstruct) {
         if (!snip_len) { // 15.0.13 to 15.0.40
-            if (vb->main_ref_len > 1) 
-                RECONSTRUCT (vb->main_ref+1, vb->main_ref_len-1);
+            if (vb->REF_len > 1) 
+                RECONSTRUCT (vb->REF+1, vb->REF_len-1);
             else
-                RECONSTRUCT (vb->main_alt+1, vb->main_alt_len-1);
+                RECONSTRUCT (vb->ALT+1, vb->ALT_len-1);
         }
 
         else { // since 15.0.41
@@ -164,7 +164,7 @@ void vcf_seg_INFO_RPA (VBlockVCFP vb, ContextP ctx, STRp(rpa_str))
     str_split_ints (rpa_str, rpa_str_len, vb->n_alts + 1, ',', rpa, true);
     if (!n_rpas) goto fallback;
 
-    int visible_reps = get_n_repeats (STRa(vb->main_ref), STRa(ru));
+    int visible_reps = get_n_repeats (STRa(vb->REF), STRa(ru));
     if (visible_reps == -1) goto fallback;
 
     int delta = rpas[0] - visible_reps;
@@ -191,7 +191,7 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_RPA)
     int delta = reconstruct_from_local_int (VB, ctx, 0, false);
 
     if (reconstruct) {
-        RECONSTRUCT_INT (get_n_repeats (STRa(vb->main_ref), STRa(ru)) + delta);
+        RECONSTRUCT_INT (get_n_repeats (STRa(vb->REF), STRa(ru)) + delta);
 
         for (int alt_i=0; alt_i < vb->n_alts; alt_i++) {
             RECONSTRUCT1 (',');
@@ -210,7 +210,7 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_RPA)
 // Sorts BaseCounts vector with REF bases first followed by ALT bases, as they are expected to have the highest values
 bool vcf_seg_INFO_BaseCounts (VBlockVCFP vb, ContextP ctx_basecounts, STRp(value)) // returns true if caller still needs to seg 
 {
-    if (vb->main_ref_len != 1 || vb->main_alt_len != 1) 
+    if (vb->REF_len != 1 || vb->ALT_len != 1) 
         return true; // not a bi-allelic SNP or line is a luft line without easy access to REFALT - caller should seg
 
     char *str = (char *)value;
@@ -228,8 +228,8 @@ bool vcf_seg_INFO_BaseCounts (VBlockVCFP vb, ContextP ctx_basecounts, STRp(value
 
     if (str - value != value_len + 1 /* +1 due to final str++ */) return true; // invalid BaseCounts data - caller should seg
 
-    unsigned ref_i = acgt_encode[(int)*vb->main_ref];
-    unsigned alt_i = acgt_encode[(int)*vb->main_alt];
+    unsigned ref_i = acgt_encode[(int)*vb->REF];
+    unsigned alt_i = acgt_encode[(int)*vb->ALT];
 
     bool used[4] = {};
     sorted_counts[0] = counts[ref_i]; // first - the count of the REF base
@@ -259,9 +259,6 @@ bool vcf_seg_INFO_BaseCounts (VBlockVCFP vb, ContextP ctx_basecounts, STRp(value
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_BaseCounts)
 {
-    STR (refalt);
-    reconstruct_peek (vb, CTX (VCF_REFALT), pSTRa(refalt));
-
     uint32_t counts[4], sorted_counts[4] = {}; // counts of A, C, G, T
 
     new_value->i = 0;
@@ -277,8 +274,8 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_BaseCounts)
 
     ASSVCF (str - snip == snip_len + 1, "expecting (str-snip)=%d == (snip_len+1)=%u", (int)(str - snip), snip_len+1);
 
-    unsigned ref_i = acgt_encode[(int)refalt[0]];
-    unsigned alt_i = acgt_encode[(int)refalt[2]];
+    unsigned ref_i = acgt_encode[(uint8_t)VB_VCF->REF[0]];
+    unsigned alt_i = acgt_encode[(uint8_t)VB_VCF->alts[0][0]];
     
     counts[ref_i] = sorted_counts[0];
     counts[alt_i] = sorted_counts[1];
@@ -697,7 +694,7 @@ void vcf_seg_INFO_AS_SB_TABLE (VBlockP vb)
 
     if (next-1 != as_sb_table + as_sb_table_len) goto fallback; // verify that entire string was consumed
 
-    seg_by_ctx (vb, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_AS_SB_TABLE }, 2, ctx, as_sb_table_len);
+    seg_by_ctx (vb, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_DEFER }, 2, ctx, as_sb_table_len);
     goto done;
 
 fallback:
@@ -731,9 +728,13 @@ void vcf_piz_insert_INFO_AS_SB_TABLE (VBlockVCFP vb)
 }
 
 // defer reconstruction after reconstruction of FORMAT/SB - happens in vcf_piz_insert_INFO_AS_SB_TABLE
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_AS_SB_TABLE)
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_DEFER)
 {
-    vcf_piz_defer_to_after_samples (AS_SB_TABLE);
+    switch (ctx->did_i) {
+        case INFO_AS_SB_TABLE : vcf_piz_defer_to_after_samples (AS_SB_TABLE); break;
+        case VCF_ID           : vcf_piz_defer_to_later (ID); break;
+        default               : ABORT_PIZ ("unsupported ctx=%s", ctx->tag_name);
+    }
 
     return NO_NEW_VALUE;
 }

@@ -73,12 +73,12 @@ COMPRESSOR_CALLBACK (sam_zip_qual)
     // note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec
     *line_data_len  = (dl->dont_compress_QUAL || dl->is_consensus) ? 0 : MIN_(maximum_size, dl->QUAL.len);
 
-    if (!line_data) return; // only lengths were requested
+    if (__builtin_expect (!line_data, false)) return; // only lengths were requested
 
     *line_data = Btxt (dl->QUAL.index);
 
     // if QUAL is just "*" (i.e. unavailable) replace it by " " because '*' is a legal PHRED quality value that will confuse PIZ
-    if (dl->QUAL.len == 1 && (*line_data)[0] == '*') 
+    if (__builtin_expect (dl->QUAL.len == 1 && (*line_data)[0] == '*', false))
         *line_data = " "; // pointer to static string
 
     if (is_rev) *is_rev = dl->FLAG.rev_comp;

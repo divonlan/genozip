@@ -8,7 +8,7 @@
 This file is a part of bsc and/or libbsc, a program and a library for
 lossless, block-sorting data compression.
 
-   Copyright (c) 2009-2012 Ilya Grebnov <ilya.grebnov@gmail.com>
+   Copyright (c) 2009-2024 Ilya Grebnov <ilya.grebnov@gmail.com>
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -30,14 +30,19 @@ See also the bsc and libbsc web site:
 
 --*/
 
-// ------------------------------------------------------------------
-//   This file was extensively modified to adapt it to genozip. 
-
-#pragma once
+#ifndef _LIBBSC_BWT_H
+#define _LIBBSC_BWT_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+    /**
+    * You should call this function before you call any of the other functions in bwt.
+    * @param features       - the set of additional features.
+    * @return LIBBSC_NO_ERROR if no error occurred, error code otherwise.
+    */
+    int bsc_bwt_init(int features);
 
     /**
     * Constructs the burrows wheeler transformed string of a given string.
@@ -48,7 +53,7 @@ extern "C" {
     * @param features       - the set of additional features.
     * @return the primary index if no error occurred, error code otherwise.
     */
-    int bsc_bwt_encode(void *vb, unsigned char * T, int n, unsigned char * num_indexes, int * indexes, int features);
+    int bsc_bwt_encode(unsigned char * T, int n, unsigned char * num_indexes, int * indexes, int features);
 
     /**
     * Reconstructs the original string from burrows wheeler transformed string.
@@ -60,10 +65,12 @@ extern "C" {
     * @param features       - the set of additional features.
     * @return LIBBSC_NO_ERROR if no error occurred, error code otherwise.
     */
-    int bsc_bwt_decode(void *vb, unsigned char * T, int n, int index, unsigned char num_indexes, int * indexes, int features);
+    int bsc_bwt_decode(unsigned char * T, int n, int index, unsigned char num_indexes, int * indexes, int features);
 
 #ifdef __cplusplus
 }
+#endif
+
 #endif
 
 /*-----------------------------------------------------------*/

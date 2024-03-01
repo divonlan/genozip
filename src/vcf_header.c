@@ -291,6 +291,8 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
     IF_IN_SOURCE ("starling", vcf_is_isaac);
     IF_IN_SOURCE ("Platypus", vcf_is_platypus); // https://github.com/andyrimmer/Platypus
     IF_IN_SOURCE ("GenerateSVCandidates", vcf_is_manta); // https://github.com/Illumina/manta/blob/master/docs/userGuide/README.md
+    IF_IN_SOURCE ("svaba", vcf_is_svaba);
+    IF_IN_SOURCE ("pbsv", vcf_is_pbsv);
     IF_IN_HEADER ("GenotypeGVCFs", vcf_is_gatk_gvcf, "GenotypeGVCFs");
     IF_IN_HEADER ("CombineGVCFs", vcf_is_gatk_gvcf, "CombineGVCFs");
     if (segconf.vcf_is_gatk_gvcf) segconf.vcf_is_gvcf = true;
@@ -310,6 +312,11 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
     IF_IN_HEADER ("DRAGEN", vcf_is_dragen, "DRAGEN");
     IF_IN_HEADER ("DeepVariant", vcf_is_deep_variant, "DeepVariant");
     
+    if (segconf.vcf_is_svaba) 
+        stats_remove_data_after_program_name ("svaba"); // remove the command line that appears after "svaba"
+
+    segconf.vcf_is_sv = segconf.vcf_is_svaba || segconf.vcf_is_manta || segconf.vcf_is_pbsv;
+
     #define VEP_SIGNATURE "VEP. Format: "
     IF_IN_HEADER (VEP_SIGNATURE, vcf_is_vep, "VEP");
     if (segconf.vcf_is_vep) {

@@ -59,8 +59,10 @@ static inline uint32_t txtfile_read_block_plain (VBlockP vb, uint32_t max_bytes)
 
     // case: normal read
     else {
-        bytes_read = read (fileno((FILE *)txt_file->file), data, max_bytes); // -1 if error in libc
+        bytes_read = fread (data, 1, max_bytes, (FILE *)txt_file->file); // -1 if error in libc
         ASSERT (bytes_read >= 0, "read failed from %s: %s", txt_name, strerror(errno));
+
+        txt_file->disk_so_far += (int64_t)bytes_read;
 
         if (!bytes_read) { 
             // case external decompressor: inspect its stderr to make sure this is just an EOF and not an error 
@@ -70,8 +72,6 @@ static inline uint32_t txtfile_read_block_plain (VBlockP vb, uint32_t max_bytes)
             txt_file->is_eof = true;
         }
     }
-
-    txt_file->disk_so_far += (int64_t)bytes_read;
 
 #ifdef _WIN32
     // in Windows using Powershell, the first 3 characters on an stdin pipe are BOM: 0xEF,0xBB,0xBF https://en.wikipedia.org/wiki/Byte_order_mark
@@ -86,7 +86,6 @@ static inline uint32_t txtfile_read_block_plain (VBlockP vb, uint32_t max_bytes)
         // Bomb the BOM
         bytes_read -= 3;
         memmove (data, data + 3, bytes_read);
-        txt_file->disk_so_far -= 3;
     }
 #endif
     Ltxt += bytes_read;
@@ -114,7 +113,7 @@ rom isal_error (int ret)
     }
 }
 
-#define IGZIP_CHUNK (32 KB)
+#define IGZIP_CHUNK (128 KB)
 
 void txtfile_init_read_igzip (FileP file)
 {
@@ -138,27 +137,49 @@ static uint32_t txtfile_read_block_gz (VBlockP vb, uint32_t max_bytes)
     struct inflate_state *state = B1ST (struct inflate_state, txt_file->igzip_state);
 
     // top up igzip_data
-    int32_t bytes_read = read (fileno((FILE *)txt_file->file), BAFTc(txt_file->igzip_data), IGZIP_CHUNK - txt_file->igzip_data.len32); // -1 if error in libc
-    ASSERT (bytes_read >= 0, "read failed from %s: %s", txt_name, strerror(errno));
+    int32_t bytes_read = fread (BAFTc(txt_file->igzip_data), 1, IGZIP_CHUNK - txt_file->igzip_data.len32, (FILE *)txt_file->file); // -1 if error in libc
     
-    txt_file->igzip_data.len32 += bytes_read;
+    txt_file->igzip_data.len32 += bytes_read; // yet-uncompressed data read from disk
+
+    txt_file->disk_so_far += bytes_read;
 
     state->next_in   = B1ST8 (txt_file->igzip_data);
     state->avail_in  = txt_file->igzip_data.len32;
     state->next_out  = BAFT8 (vb->txt_data);
     state->avail_out = max_bytes;
 
-    int ret = isal_inflate (state);
+    if (state->block_state == ISAL_BLOCK_FINISH) 
+        isal_inflate_reset (state);
+
+    int ret = isal_inflate (state); // new gzip header in a file that has concatented gzip compressions
     ASSERT (ret == ISAL_DECOMP_OK || ret == ISAL_END_INPUT, "isal_inflate error: %s avail_in=%u avail_out=%u",
             isal_error (ret), txt_file->igzip_data.len32, max_bytes);
 
     uint32_t gz_data_consumed = BNUM (txt_file->igzip_data, state->next_in);
     buf_remove (txt_file->igzip_data, char, 0, gz_data_consumed);
 
-    txt_file->disk_so_far += gz_data_consumed;
-    txt_file->is_eof = (ret == ISAL_END_INPUT);
+    txt_file->is_eof = (!state->avail_in && feof ((FILE *)txt_file->file));
 
     Ltxt = BNUMtxt (state->next_out);
+
+    // stats for the case of multiple concatenated gzip sections
+    if (!txt_file->is_eof && state->block_state == ISAL_BLOCK_FINISH) {
+        uint64_t after_gzip_section = txt_file->txt_data_so_far_single/*previous VBs*/ + Ltxt/*this VB*/;
+        uint64_t gzip_section_size = after_gzip_section - txt_file->gzip_start_Ltxt;
+
+        if (!txt_file->gzip_start_Ltxt) {
+            z_file->gzip_section_size[flag.zip_comp_i] = gzip_section_size;
+            z_file->gzip_section_size_single_block[flag.zip_comp_i] = true;
+        }
+
+        else if (gzip_section_size != z_file->gzip_section_size[flag.zip_comp_i])
+            z_file->gzip_section_size[flag.zip_comp_i] = 0; // not equal size
+
+        else
+            z_file->gzip_section_size_single_block[flag.zip_comp_i] = false; // more than one block has the same size
+
+        txt_file->gzip_start_Ltxt = after_gzip_section;
+    }
 
     COPY_TIMER (txtfile_read_block_gz);
 
@@ -267,7 +288,6 @@ static inline uint32_t txtfile_read_block_bgzf (VBlockP vb, int32_t max_uncomp /
         this_uncomp_len        += block_uncomp_len; // total uncompressed length of data read by this function call
         vb->scratch.uncomp_len += block_uncomp_len; // total uncompressed length of data in vb->compress
         Ltxt                   += block_uncomp_len; // total length of txt_data after adding decompressed vb->scratch (may also include pass-down data)
-        txt_file->disk_so_far  += block_comp_len;   
 
         // we decompress one block a time in the loop so that the decompression is parallel with the disk reading into cache
         if (uncompress) {

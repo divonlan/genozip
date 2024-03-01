@@ -65,7 +65,7 @@ void vcf_seg_FORMAT_IGT (VBlockVCFP vb, ContextP ctx, STRp(igt))
         seg_mux_get_channel_ctx (VB, FORMAT_IGT, (MultiplexerP)&vb->mux_IGT, (vb->sample_i > 0));
 
     if (vb->sample_i == 0) {
-        Allele *gt = B(Allele, CTX(FORMAT_GT_HT)->local, vb->line_i * vb->ht_per_line + vb->ploidy * vb->sample_i);
+        Allele *gt = this_sample_GT (vb);
         
         // case monoploid: predicting GT=IGT
         if (str_is_1char (igt, *gt))

@@ -72,7 +72,7 @@ static void txtheader_compress_one_fragment (VBlockP vb)
 }
 
 void txtheader_compress (BufferP txt_header, 
-                         uint64_t unmodified_txt_header_len, // length of header before modifications, eg due to --chain or compressing a Luft file
+                         uint64_t unmodified_txt_header_len, // length of header before modifications, eg due to --optimize
                          Digest header_md5, bool is_first_txt, CompIType comp_i)
 {
     START_TIMER;
@@ -85,7 +85,7 @@ void txtheader_compress (BufferP txt_header,
         .codec             = (codec == CODEC_UNKNOWN) ? CODEC_NONE : codec,
         .src_codec         = txt_file->source_codec, 
         .digest_header     = flag.zip_txt_modified ? DIGEST_NONE : header_md5,
-        .txt_header_size   = BGEN64 (unmodified_txt_header_len),
+        .txt_header_size   = BGEN64 (unmodified_txt_header_len), // length before zip-side modifications
     };
 
     // data type (of txt file!) specific fields
@@ -112,9 +112,9 @@ void txtheader_compress (BufferP txt_header,
                              txtheader_compress_one_fragment, 
                              zfile_output_processed_vb);
 
-    z_file->txt_data_so_far_single   += txt_header->len; // length of txt header as it would be reconstructed (possibly afer modifications)
+    z_file->txt_data_so_far_single   += txt_header->len; // length of txt header as it would be reconstructed (possibly after modifications)
     z_file->txt_data_so_far_bind     += txt_header->len;
-    z_file->txt_data_so_far_single_0 += unmodified_txt_header_len; // length of the original txt header as read from the file
+    z_file->txt_data_so_far_single_0 += unmodified_txt_header_len; // length of txt header without applying piz-side modifications
     z_file->txt_data_so_far_bind_0   += unmodified_txt_header_len;
 
     z_file->txt_data_so_far_bind_comp[comp_i] += txt_header->len;
@@ -182,6 +182,7 @@ int64_t txtheader_zip_read_and_compress (int64_t *txt_header_offset, CompIType c
 
 static Section txtheader_sec = NULL; 
 static VBlockP txt_header_vb = NULL;
+static uint64_t sum_fragment_len = 0;
 
 static void txtheader_read_one_vb (VBlockP vb)
 {
@@ -195,6 +196,10 @@ static void txtheader_read_one_vb (VBlockP vb)
 
     vb->fragment_len   = BGEN32 (header->data_uncompressed_len);
     vb->fragment_start = Bc (txt_header_vb->txt_data, txt_header_vb->txt_data.next);
+
+    // accounting for data after zip-side modifications but before piz-side modifications - 
+    // affects vb->vb_position_txt_file of next VB
+    sum_fragment_len += vb->fragment_len; 
 
     ASSERT (txt_header_vb->txt_data.next + vb->fragment_len <= txt_header_vb->txt_data.len, "TxtHeader fragments exceed length=%"PRIu64, txt_header_vb->txt_data.len); 
 
@@ -318,6 +323,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
     bool needs_recon = writer_does_txtheader_need_recon (sec->comp_i);
     FlagsBgzf bgzf_flags = {};
     rom filename = NULL;
+    sum_fragment_len = 0;
 
     if (needs_recon) {
         dispatcher_fan_out_task ("read_txt_header", NULL, 0, 0, true, flag.test, false, 0, 1000, true,
@@ -357,7 +363,9 @@ void txtheader_piz_read_and_reconstruct (Section sec)
     txt_file->max_lines_per_vb = BGEN32 (header.max_lines_per_vb);
     txt_file->txt_flags        = header.flags.txt_header;
     txt_file->num_vbs          = sections_count_sections_until (SEC_VB_HEADER, sec, SEC_TXT_HEADER);    
-    
+    txt_file->txt_data_size    = BGEN64 (header.txt_data_size);
+    txt_file->txt_data_so_far_single_0 = sum_fragment_len;
+
     if (VER(15)) 
         for (QType q=0; q < NUM_QTYPES; q++)
             segconf.flav_prop[q] = header.flav_prop[q];
@@ -407,12 +415,12 @@ void txtheader_piz_read_and_reconstruct (Section sec)
         digest_txt_header (&txt_header_vb->txt_data, header.digest_header, sec->comp_i); // verify txt header digest
     }
 
-    // accounting for data as in original source file - affects vb->vb_position_txt_file of next VB
-    txt_file->txt_data_so_far_single_0 = !VER(12) ? BGEN32 (header.data_uncompressed_len) : BGEN64 (header.txt_header_size); 
+    if (!writer_handover_txtheader (&txt_header_vb)) {  // handover data to writer thread (even if the header is empty, as the writer thread is waiting for it)
+        txt_file->txt_data_so_far_single += txt_header_vb->txt_data.len; // if writing, this is done in writer_write, caputring the processing in writer too
 
-    if (!writer_handover_txtheader (&txt_header_vb))   // handover data to writer thread (even if the header is empty, as the writer thread is waiting for it)
-        vb_release_vb (&txt_header_vb, PIZ_TASK_NAME); // not handing over, so release here  
-    
+        vb_release_vb (&txt_header_vb, PIZ_TASK_NAME); // not handing over, so release here      
+    }
+
     if (!flag.reading_reference)
         is_first_txt = false;
 

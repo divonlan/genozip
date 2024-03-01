@@ -114,7 +114,6 @@ void vcf_samples_zip_initialize (void)
     vcf_gwas_zip_initialize(); // no harm if not GWAS
 }
 
-
 void vcf_samples_seg_initialize (VBlockVCFP vb)
 {
     #define T(cond, did_i) ((cond) ? (did_i) : DID_NONE)
@@ -123,12 +122,7 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
                    FORMAT_ADR, FORMAT_ADF, FORMAT_SDP, DID_EOL);
 
     ctx_set_dyn_int (VB, FORMAT_RD, FORMAT_GQ, FORMAT_RGQ, FORMAT_MIN_DP, FORMAT_SDP, DID_EOL);
-    
-    CTX(FORMAT_GT)->no_stons  = true; // we store the GT matrix in local, so cannot accomodate singletons
-    
-    vb->ht_matrix_ctx = CTX(FORMAT_GT_HT); // different for different data types
-    vb->ht_matrix_ctx->ltype = LT_SUPP;
-    
+            
     if (segconf.FMT_DP_method != FMT_DP_DEFAULT) {
         seg_mux_init (VB, CTX(FORMAT_DP), 2, VCF_SPECIAL_MUX_FORMAT_DP, false, (MultiplexerP)&vb->mux_FORMAT_DP);
     
@@ -145,9 +139,7 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
     
     // create additional contexts as needed for compressing FORMAT/GT - must be done before merge
     if (vcf_num_samples) 
-        codec_pbwt_seg_init (VB, CTX(FORMAT_PBWT_RUNS), CTX(FORMAT_PBWT_FGRC));
-
-    ctx_consolidate_stats (VB, FORMAT_GT, FORMAT_GT_HT, FORMAT_GT_HT_INDEX, FORMAT_PBWT_RUNS, FORMAT_PBWT_FGRC, DID_EOL);
+        codec_pbwt_seg_init (VB);
 
     // determine which way to seg PL - Mux by dosage or Mux by dosageXDP, or test both options
     CTX(FORMAT_PL)->no_stons = true;
@@ -261,7 +253,6 @@ static void vcf_seg_FORMAT_mux_by_dosage_int (VBlockVCFP vb, ContextP ctx, int64
 }
 
 // mirroring seg, we accept monoploid or diploid genotypes, with alleles 0 and 1.
-// there 
 int vcf_piz_get_mux_channel_i (VBlockP vb)
 {
     // since 15.0.36 - count ht that are not '0' or '.'
@@ -916,7 +907,7 @@ static inline void vcf_seg_FORMAT_DP (VBlockVCFP vb)
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_FORMAT_DP)
 {
-    bool other_is_in_FORMAT = curr_container_has (CTX(VCF_SAMPLES), segconf.FMT_DP_method == BY_AD ? _FORMAT_AD : _FORMAT_SDP);
+    bool other_is_in_FORMAT = curr_container_has (vb, (segconf.FMT_DP_method == BY_AD) ? _FORMAT_AD : _FORMAT_SDP);
 
     return reconstruct_demultiplex (vb, ctx, STRa(snip), other_is_in_FORMAT, new_value, reconstruct);
 }
@@ -1272,10 +1263,6 @@ static inline void vcf_seg_FORMAT_BX (VBlockVCFP vb, ContextP ctx, STRp(BX))
     seg_array_of_array_of_struct (VB, CTX(FORMAT_BX), ',', con, STRa(BX), NULL);
 }
 
-//------------------------------------------------------------------------
-// Validate that ALL subfields in ALL samples can luft-translate as needed
-//------------------------------------------------------------------------
-
 static rom error_format_field (unsigned n_items, ContextP *ctxs)
 {
     static char format[256];
@@ -1321,19 +1308,19 @@ static inline bool vcf_seg_sample_has_PS (VBlockVCFP vb, ContextP *ctxs, STRps(s
 }
 
 // returns the number of colons in the sample
-static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP *ctxs, ContainerP samples, STRp(sample))
+static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP *ctxs, ContainerP format, STRp(sample))
 {
     #define COND0(condition, seg) if (condition) { seg; break; } else  
     #define COND(condition,  seg) if (condition) { seg; break; } else goto fallback; 
 
-    str_split (sample, sample_len, con_nitems (*samples), ':', sf, false);
+    str_split (sample, sample_len, con_nitems (*format), ':', sf, false);
 
     ASSVCF (n_sfs, "Sample %u has too many subfields - FORMAT field \"%s\" specifies only %u: \"%.*s\"", 
-            vb->sample_i+1, error_format_field (con_nitems (*samples), ctxs), con_nitems (*samples), STRf(sample));
+            vb->sample_i+1, error_format_field (con_nitems (*format), ctxs), con_nitems (*format), STRf(sample));
 
     for (unsigned i=0; i < n_sfs; i++) { 
 
-        DictId dict_id = samples->items[i].dict_id;
+        DictId dict_id = format->items[i].dict_id;
         ContextP ctx = ctxs[i];
 
         STRli(optimized,  sf_lens[i]*2 + 10); // for optimizations - separate space - we can optimize a "translated" string
@@ -1409,6 +1396,8 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
                 vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_PRI);
             break;
         
+        case _FORMAT_CN   : seg_integer_or_not (VB, ctx, STRi(sf, i), sf_lens[i]); break;
+
         // <ID=DS,Number=1,Type=Float,Description="Genotype dosage from MaCH/Thunder"> (1000 Genome Project phase1 data)
         // See: https://genome.sph.umich.edu/wiki/Thunder
         case _FORMAT_DS   : vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_DS)   ; break;
@@ -1543,13 +1532,12 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
 
         // DRAGEN fields
         case _FORMAT_PE    : COND (segconf.vcf_is_dragen, seg_array (VB, ctx, ctx->did_i, STRi(sf, i), ',', 0, false, STORE_INT, DICT_ID_NONE, sf_lens[i]));
-        case _FORMAT_BC    : 
-        case _FORMAT_CN    : COND (segconf.vcf_is_dragen, seg_integer_or_not (VB, ctx, STRi(sf, i), sf_lens[i]));
+        case _FORMAT_BC    : COND (segconf.vcf_is_dragen, seg_integer_or_not (VB, ctx, STRi(sf, i), sf_lens[i]));
 
         // manta fields
         case _FORMAT_SR    :
         case _FORMAT_PR    : COND (segconf.vcf_is_manta, seg_array (VB, ctx, ctx->did_i, STRi(sf, i), ',', 0, false, STORE_INT, DICT_ID_NONE, sf_lens[i]));
-
+        
         // Platypus fields
         case _FORMAT_GOF   : COND (segconf.vcf_is_platypus, vcf_seg_platypus_FORMAT_GOF (vb, ctx, STRi(sf, i)));
         
@@ -1566,8 +1554,8 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
     }
 
     // missing subfields - defined in FORMAT but missing (not merely empty) in sample
-    for (unsigned i=n_sfs; i < con_nitems (*samples); i++) {
-        uint64_t dnum = samples->items[i].dict_id.num;
+    for (unsigned i=n_sfs; i < con_nitems (*format); i++) {
+        uint64_t dnum = format->items[i].dict_id.num;
 
         // special handling for PS and PID
         if (dnum == _FORMAT_PS || dnum == _FORMAT_PID) 
@@ -1596,17 +1584,30 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
 // All samples
 //------------
 
-rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t *len, char *next_field, bool *has_13)
+rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t len, char *next_field, bool *has_13)
 {
     // Container for samples - we have:
     // - repeats as the number of samples in the line (<= vcf_num_samples)
     // - n_items as the number of FORMAT subfields (inc. GT)
+    decl_ctx (VCF_SAMPLES);
+    Container format = *B(Container, ctx->format_mapper_buf, dl->format_node_i); // make a copy of the template
+    ContextP *ctxs = B(ContextP, ctx->format_contexts, dl->format_node_i * MAX_FIELDS);
 
-    Container samples = *B(Container, vb->format_mapper_buf, dl->format_node_i); // make a copy of the template
-    ContextP *ctxs = B(ContextP, vb->format_contexts, dl->format_node_i * MAX_FIELDS);
-        
+    // structural variants: entire samples data is expected to be identical between BND mates
+    if (segconf.vcf_is_svaba || segconf.vcf_is_manta) {
+        SAFE_NUL (next_field + len);
+        uint32_t samples_len = strcspn (next_field, "\n\r");
+        SAFE_RESTORE;
+
+        ContextP channel_ctx = vcf_seg_sv_SAMPLES (vb, next_field, len, ctxs, con_nitems(format));
+        if (!channel_ctx)  
+            return next_field + samples_len + (next_field[samples_len]=='\r') + 1/*\n*/; // segged as copy from mate
+        else
+            ctx = channel_ctx;
+    }
+
     // set ctx->sf_i - for the line's FORMAT fields
-    for (int sf_i=0; sf_i < con_nitems(samples); sf_i++) {
+    for (int sf_i=0; sf_i < con_nitems(format); sf_i++) {
         ctxs[sf_i]->sf_i = sf_i;
 
         if (segconf.running) segconf.has[ctxs[sf_i]->did_i]++;
@@ -1619,43 +1620,36 @@ rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t *len, char *next
     rom field_start;
     unsigned field_len=0, num_colons=0;
 
-    // 0 or more samples
-    for (char separator=0 ; separator != '\n'; samples.repeats++) {
+    // 0 or more samples (note: we don't use str_split, because samples can be very numerous)
+    for (char separator=0 ; separator != '\n'; format.repeats++) {
 
         field_start = next_field;
-        next_field = (char *)seg_get_next_item (VB, field_start, len, GN_SEP, GN_SEP, GN_IGNORE, &field_len, &separator, has_13, "sample-subfield");
+        next_field = (char *)seg_get_next_item (VB, field_start, &len, GN_SEP, GN_SEP, GN_IGNORE, &field_len, &separator, has_13, "sample-subfield");
 
         ASSVCF (field_len, "Error: invalid VCF file - expecting sample data for sample # %u, but found a tab character", 
-                samples.repeats+1);
+                format.repeats+1);
 
-        vb->sample_i = samples.repeats;
-        num_colons += vcf_seg_one_sample (vb, dl, ctxs, &samples, (char *)field_start, field_len);
+        vb->sample_i = format.repeats;
+        num_colons += vcf_seg_one_sample (vb, dl, ctxs, &format, (char *)field_start, field_len);
 
-        ASSVCF (samples.repeats < vcf_num_samples || separator == '\n',
+        ASSVCF (format.repeats < vcf_num_samples || separator == '\n',
                 "invalid VCF file - expecting a newline after the last sample (sample #%u)", vcf_num_samples);
     }
     vb->sample_i = 0;
     
-    ASSVCF (samples.repeats <= vcf_num_samples, "according the VCF header, there should be %u sample%s per line, but this line has %u samples - that's too many",
-            STRfN(vcf_num_samples), samples.repeats);
+    ASSVCF (format.repeats <= vcf_num_samples, "according the VCF header, there should be %u sample%s per line, but this line has %u samples - that's too many",
+            STRfN(vcf_num_samples), format.repeats);
 
     // in some real-world files I encountered have too-short lines due to human errors. we pad them
-    if (samples.repeats < vcf_num_samples) {
+    if (format.repeats < vcf_num_samples) 
         WARN_ONCE ("FYI: the number of samples in variant CHROM=%.*s POS=%"PRId64" is %u, different than the VCF column header line which has %u samples",
-                   vb->chrom_name_len, vb->chrom_name, vb->last_int (VCF_POS), samples.repeats, vcf_num_samples);
+                   vb->chrom_name_len, vb->chrom_name, vb->last_int (VCF_POS), format.repeats, vcf_num_samples);
 
-        if (dl->has_haplotype_data) {
-            char *ht_data = Bc (CTX(FORMAT_GT_HT)->local, vb->line_i * vb->ploidy * vcf_num_samples + vb->ploidy * samples.repeats);
-            unsigned num_missing = vb->ploidy * (vcf_num_samples - samples.repeats); 
-            memset (ht_data, '*', num_missing);
-        }
-    }
-    
-    container_seg (vb, CTX(VCF_SAMPLES), &samples, 0, 0, samples.repeats + num_colons); // account for : and \t \r \n separators
+    vcf_seg_FORMAT_GT_finalize_line (vb, format.repeats);
 
-    ctx_set_last_value (VB, CTX(VCF_SAMPLES), (ValueType){ .i = samples.repeats });
+    container_seg (vb, ctx, &format, 0, 0, format.repeats + num_colons); // account for : and \t \r \n separators
 
-    CTX(FORMAT_GT_HT)->local.len32 = (vb->line_i+1) * vb->ht_per_line;
+    ctx_set_last_value (VB, CTX(VCF_SAMPLES), (ValueType){ .i = format.repeats });
  
     return next_field;
 }

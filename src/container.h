@@ -101,16 +101,23 @@ typedef struct MediumContainer { CONTAINER_FIELDS(MEDIUM_CON_NITEMS) } MediumCon
 #define con_dec_nitems(con) con_set_nitems ((con), con_nitems (con) - 1)
 #define con_sizeof(con) (sizeof(con) - sizeof((con).items) + con_nitems (con) * sizeof((con).items[0]))
 
+#define for_con(con) \
+    for (ContainerItem *item=(ContainerItemP)&(con)->items[0], *after=(ContainerItemP)&(con)->items[con_nitems(*(con))]; item < after; item++)
+
+#define for_con2(con) \
+    for (uint32_t item_i=0, _n_items=con_nitems(*(con)); item_i < _n_items;)  \
+        for (ContainerItem *item=(ContainerItemP)&(con)->items[0]; item < &(con)->items[_n_items]; item++, item_i++)
+
 static inline bool container_has (ContainerP con, DictId dict_id)
 {
-    for (uint32_t i=0; i < con_nitems(*con); i++)
-        if (con->items[i].dict_id.num == dict_id.num) return true;
+    for_con (con)
+        if (item->dict_id.num == dict_id.num) return true;
 
     return false;
 }
 
 // item in container currently in reconstruction stack.
-extern bool curr_container_has (ContextP container_ctx, DictId item_dict_id);
+extern bool curr_container_has (VBlockP vb, DictId item_dict_id);
 
 // prefixes may be NULL, or:
 // [0] CON_PX_SEP - start
@@ -133,7 +140,7 @@ extern ContainerP container_peek_get_idxs (VBlockP vb, ContextP ctx, Did n_items
 
 extern StrTextMegaLong container_to_json (ConstContainerP con, STRp (prefixes));
 
-CONTAINER_FILTER_FUNC (container_no_filter);
+CONTAINER_FILTER_FUNC (default_piz_filter);
 
 // Translators reconstructing last_value as a little endian binary
 TRANSLATOR_FUNC (container_translate_I8);   

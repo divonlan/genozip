@@ -52,15 +52,29 @@ void stats_add_one_program (STRp(prog_name))
     BNXTc (stats_programs) = ';'; // note: buf_append allocates one extra character
 }
 
-bool stats_is_in_programs (rom signature)
+rom stats_find_in_programs (rom signature)
 {
     if (!stats_programs.len) return false;
 
     SAFE_NULB(stats_programs);
-    bool found = strstr (B1STc(stats_programs), signature);
+    rom found = strstr (B1STc(stats_programs), signature);
     SAFE_RESTORE;
 
     return found;
+}
+
+void stats_remove_data_after_program_name (rom program)
+{
+    rom prog = stats_find_in_programs (program);
+
+    if (!program || (prog != B1STc (stats_programs) && prog[-1] != '\n')) return;
+
+    rom sep = strpbrk (prog, " \t;"); // note: programs always end with a ;
+    if (*sep == ';') return; // no data after program name 
+
+    rom end = strchr (sep, ';');
+
+    buf_remove (stats_programs, char, BNUM (stats_programs, sep), end - sep);
 }
 
 // calculate exceptions before consolidating stats
@@ -395,6 +409,12 @@ static void stats_output_file_metadata (void)
             bufprintf (evb, &features, "num_samples=%u;", vcf_header_get_num_samples());
             if (vcf_header_get_num_contigs()) bufprintf (evb, &features, "hdr_contigs=%u (%"PRIu64");", vcf_header_get_num_contigs(), vcf_header_get_nbases());
             if (IS_REF_LOADED_ZIP) bufprintf (evb, &features, "ref_contigs=%u (%"PRIu64");", ref_get_ctgs (gref)->contigs.len32, contigs_get_nbases (ref_get_ctgs (gref)));
+
+            if (z_file->mate_line_count) {
+                double mate_line_pc = 100.0 * (double)z_file->mate_line_count  / (double)z_file->num_lines;
+                bufprintf (evb, &stats, "Mated: %.*f%%   ", PREC(mate_line_pc), mate_line_pc); //  no newline
+                bufprintf (evb, &features, "mated=%.*f%%;", PREC(mate_line_pc), mate_line_pc);
+            }
 
             if (z_file->max_ploidy != 2) 
                 bufprintf (evb, &features, "ploidy=%u;", z_file->max_ploidy);

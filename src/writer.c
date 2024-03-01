@@ -1013,8 +1013,7 @@ static void writer_write (BufferP buf, uint64_t txt_data_len)
     
     file_write_txt (STRb(*buf));
     
-    txt_file->txt_data_so_far_single += txt_data_len;
-    txt_file->disk_so_far            += buf->len;
+    txt_file->disk_so_far += buf->len;
 
     buf_free (*buf);
 
@@ -1044,6 +1043,8 @@ static void writer_flush_vb (Dispatcher dispatcher, VBlockP vb, bool is_txt_head
     ASSERTNOTNULL(vb);
     
     if (!Ltxt && !is_last) return; // no data to flush
+
+    txt_file->txt_data_so_far_single += vb->txt_data.len;
 
     if (!flag.no_writer) { // note: we might have a writer thread despite no writing - eg for calculated the digest if we have SAM gencomp
         // case: BGZF compression - offload compression to compute threads (a max of BGZF_FLUSH_THRESHOLD per thread)

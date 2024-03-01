@@ -710,7 +710,7 @@ extern void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header);
 extern bool sam_piz_initialize (CompIType comp_i);
 extern void sam_piz_finalize (void);
 extern IS_SKIP (sam_piz_is_skip_section);
-extern bool sam_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment);
+extern bool sam_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header);
 extern void sam_piz_recon_init (VBlockP vb);
 extern void sam_piz_after_recon (VBlockP vb);
 extern void sam_piz_process_recon (VBlockP vb);

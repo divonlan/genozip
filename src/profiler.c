@@ -192,7 +192,6 @@ void profiler_add_evb_and_print_report (void)
         PRINT (sam_zip_prim_ingest_vb, 1);
         PRINT (digest, 1); // note: in SAM/BAM digest is done in the writer thread, otherwise its done in the compute thread. TODO: change level to 0 in case of SAM/BAM
         PRINT (piz_get_line_subfields, 2);
-        PRINT (codec_hapmat_piz_get_one_line, 2);
         PRINT (sam_load_groups_add_one_prim_vb, 1);
         if (Z_DT(FASTQ)) {
             PRINT (codec_longr_reconstruct, 3);

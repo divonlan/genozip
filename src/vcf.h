@@ -20,13 +20,17 @@
 // Fields
 #pragma GENDICT VCF_CHROM=DTYPE_FIELD=CHROM         // CHROM must be first
 #pragma GENDICT VCF_POS=DTYPE_FIELD=POS    
+#pragma GENDICT VCF_MATE_POS=DTYPE_FIELD=MATEPOS    // POS that appears in a BND ALT (mate's POS)
 #pragma GENDICT VCF_ID=DTYPE_FIELD=ID
 #pragma GENDICT VCF_REFALT=DTYPE_FIELD=REF+ALT
+#pragma GENDICT VCF_MATE_CHROM=DTYPE_FIELD=MATECROM // CHROM that appears in a BND ALT (mate's CHROM)
+#pragma GENDICT VCF_MATE_CHROM0=DTYPE_FIELD=M0ATECRO// define channel=0 of mux so we can use in alias
 #pragma GENDICT VCF_QUAL=DTYPE_FIELD=QUAL
 #pragma GENDICT VCF_FILTER=DTYPE_FIELD=FILTER
 #pragma GENDICT VCF_INFO=DTYPE_FIELD=INFO
 #pragma GENDICT VCF_FORMAT=DTYPE_FIELD=FORMAT
 #pragma GENDICT VCF_SAMPLES=DTYPE_FIELD=SAMPLES
+#pragma GENDICT VCF_SAMPLES_0=DTYPE_FIELD=S0AMPLES  // channel_i=0 ("no mate" channel) of SAMPLES multiplexing by mate
 #pragma GENDICT VCF_LOOKBACK=DTYPE_FIELD=LOOKBACK   // samples lookback
 #pragma GENDICT VCF_EOL=DTYPE_FIELD=EOL
 #pragma GENDICT VCF_TOPLEVEL=DTYPE_FIELD=TOPLEVEL   // must be called TOPLEVEL
@@ -41,6 +45,7 @@
 #pragma GENDICT VCF_COPYSTAT=DTYPE_FIELD=CoPYSTAT
 #pragma GENDICT VCF_TOPLUFT=DTYPE_FIELD=ToPLUFT
 #pragma GENDICT VCF_LINE_NUM=DTYPE_FIELD=LINE_NUM
+#pragma GENDICT VCF_MATE=DTYPE_FIELD=MATE           // mate of this variant (used by svaba) 
 #pragma GENDICT VCF_DEBUG_LINES=DTYPE_FIELD=DBGLINES// used by --debug-lines
 
 // FORMAT fields
@@ -80,18 +85,10 @@
 #pragma GENDICT FORMAT_AB=DTYPE_2=AB                // <ID=AB,Number=1,Type=Float,Description="Allele balance for each het genotype",RendAlg="NONE">
 #pragma GENDICT FORMAT_AB3=DTYPE_2=AB3              // AB exceptions channel
 
-// PBWT fields - same dict_id for all data types using PBWT, as codec_pbwt_uncompress relies on it
+// PBWT fields 
 #pragma GENDICT FORMAT_GT_HT=DTYPE_2=@HT    
-#pragma GENDICT FORMAT_GT_HT_INDEX=DTYPE_2=@INDEXHT // different first 2 letters
 #pragma GENDICT FORMAT_PBWT_RUNS=DTYPE_2=@1BWTRUN   // PBWT runs - MUST have a did_i higher that FORMAT_GT_HT's
 #pragma GENDICT FORMAT_PBWT_FGRC=DTYPE_2=@2BWTFGR   // PBWT foreground run count - MUST be right after FORMAT_PBWT_RUNS
-
-#ifndef _PBWT_RUNS
-#define _PBWT_RUNS        _FORMAT_PBWT_RUNS       
-#define _PBWT_FGRC        _FORMAT_PBWT_FGRC       
-#define _PBWT_HT_MATRIX   _FORMAT_GT_HT           
-#define _PBWT_GT_HT_INDEX _FORMAT_GT_HT_INDEX     
-#endif
 
 // INFO fields
 #pragma GENDICT INFO_AC=DTYPE_1=AC                  // <ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">
@@ -182,16 +179,10 @@
 #pragma GENDICT FORMAT_ICNT=DTYPE_2=ICNT            // <ID=ICNT,Number=2,Type=Integer,Description="Counts of INDEL informative reads based on the reference confidence model">
 
 // DRAGEN CNV files
+// also: FORMAT/CN
 #pragma GENDICT INFO_REFLEN=DTYPE_1=REFLEN          // <ID=REFLEN,Number=1,Type=Integer,Description="Number of REF positions included in this record"> (observed in DRAGEN)
 #pragma GENDICT FORMAT_PE=DTYPE_2=PE                // <ID=PE,Number=2,Type=Integer,Description="Number of improperly paired end reads at start and stop breakpoints">
 #pragma GENDICT FORMAT_BC=DTYPE_2=BC                // <ID=BC,Number=1,Type=Integer,Description="Number of bins in the region">
-//#pragma GENDICT FORMAT_CN=DTYPE_2=CN              // (duplicate) <ID=CN,Number=1,Type=Integer,Description="Estimated copy number">
-
-// DRAGEN manta
-//#pragma GENDICT FORMAT_PR=DTYPE_2=PR              // (duplicate) <ID=PR,Number=.,Type=Integer,Description="Spanning paired-read support for the ref and alt alleles in the order listed">
-#pragma GENDICT FORMAT_SR=DTYPE_2=SR                // <ID=SR,Number=.,Type=Integer,Description="Split reads for the ref and alt alleles in the order listed, for reads where P(allele|read)>0.999">
-#pragma GENDICT INFO_LEFT_SVINSSEQ=DTYPE_1=LEFT_SVINSSEQ   // <ID=LEFT_SVINSSEQ,Number=.,Type=String,Description="Known left side of insertion for an insertion of unknown length">
-#pragma GENDICT INFO_RIGHT_SVINSSEQ=DTYPE_1=RIGHT_SVINSSEQ // <ID=RIGHT_SVINSSEQ,Number=.,Type=String,Description="Known right side of insertion for an insertion of unknown length">
 
 // Illumina IsaacVariantCaller (discontinued) : https://support.illumina.com/content/dam/illumina-support/documents/documentation/software_documentation/basespace/isaac-wgs-user-guide-15050954b.pdf
 // Also: https://github.com/sequencing/isaac_variant_caller
@@ -300,19 +291,111 @@
 //#pragma GENDICT INFO_dp_hist_all_bin_freq=DTYPE_1=dp_hist_all_bin_freq     // <ID=dp_hist_all_bin_freq,Number=A,Type=String,Description="Histogram for DP calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100">
 #pragma GENDICT INFO_ab_hist_alt_bin_freq=DTYPE_1=ab_hist_alt_bin_freq       // <ID=ab_hist_alt_bin_freq,Number=A,Type=String,Description="Histogram for AB in heterozygous individuals calculated on high quality genotypes; bin edges are: 0.00|0.05|0.10|0.15|0.20|0.25|0.30|0.35|0.40|0.45|0.50|0.55|0.60|0.65|0.70|0.75|0.80|0.85|0.90|0.95|1.00">
 
-// Structural variants (also uses INFO/END): https://www.internationalgenome.org/wiki/Analysis/Variant%20Call%20Format/VCF%20(Variant%20Call%20Format)%20version%204.0/encoding-structural-variants/
-#pragma GENDICT INFO_SVLEN=DTYPE_1=SVLEN
-#pragma GENDICT INFO_SVTYPE=DTYPE_1=SVTYPE
+// Structural variants - 1000 Genome Project conventions : https://www.internationalgenome.org/wiki/Analysis/Variant%20Call%20Format/VCF%20(Variant%20Call%20Format)%20version%204.0/encoding-structural-variants/
+#pragma GENDICT INFO_SVLEN=DTYPE_1=SVLEN            // <ID=SVLEN,Number=1,Type=Integer,Description="Difference in length between REF and ALT alleles"> 
+#pragma GENDICT INFO_SVTYPE=DTYPE_1=SVTYPE          // <ID=SVTYPE,Number=1,Type=String,Description="Type of structural variant"> 
+// (dup) #pragma GENDICT INFO_END=DTYPE_1=END       // <ID=END,Number=1,Type=Integer,Description="End position of the variant described in this record"> 
 #pragma GENDICT INFO_CIPOS=DTYPE_1=CIPOS            // <ID=CIPOS,Number=2,Type=Integer,Description="Confidence interval around POS for imprecise variants">
 #pragma GENDICT INFO_CIEND=DTYPE_1=CIEND            // <ID=CIEND,Number=2,Type=Integer,Description="Confidence interval around END for imprecise variants">
+#pragma GENDICT INFO_HOMSEQ=DTYPE_1=HOMSEQ          // <ID=HOMSEQ,Number=1,Type=String,Description="Sequence of base pair identical micro-homology at event breakpoints. Plus strand sequence displayed.">
+#pragma GENDICT INFO_HOMLEN=DTYPE_1=HOMLEN          // <ID=HOMLEN,Number=1,Type=Integer,Description="Length of base pair identical micro-homology at event breakpoints">
+#pragma GENDICT INFO_BKPTID=DTYPE_1=BKPTID          // <ID=BKPTID,Number=-1,Type=String,Description="ID of the assembled alternate allele in the assembly file">
+#pragma GENDICT INFO_MEINFO=DTYPE_1=MEINFO          // <ID=MEINFO,Number=4,Type=String,Description="Mobile element info of the form NAME,START,END,POLARITY">
+#pragma GENDICT INFO_METRANS=DTYPE_1=METRANS        // <ID=METRANS,Number=4,Type=String,Description="Mobile element transduction info of the form CHR,START,END,POLARITY">
+#pragma GENDICT INFO_DGVID=DTYPE_1=DGVID            // <ID=DGVID,Number=1,Type=String,Description="ID of this element in Database of Genomic Variation">
+#pragma GENDICT INFO_DBVARID=DTYPE_1=DBVARID        // <ID=DBVARID,Number=1,Type=String,Description="ID of this element in DBVARID of this element in DBVAR">
+#pragma GENDICT INFO_DBRIPID=DTYPE_1=DBRIPID        // <ID=DBRIPID,Number=1,Type=String,Description="ID of this element in DBRIP">
+#pragma GENDICT FORMAT_CN=DTYPE_2=CN                // <ID=CN,Number=1,Type=Integer,Description="Copy number genotype for imprecise events">
+#pragma GENDICT FORMAT_CNQ=DTYPE_2=CNQ              // <ID=CNQ,Number=1,Type=Float,Description="Copy number genotype quality for imprecise events">
+#pragma GENDICT INFO_IMPRECISE=DTYPE_1=IMPRECISE    // <ID=IMPRECISE,Number=0,Type=Flag,Description="Imprecise structural variation">
 
 // PacBio pbsv
 #pragma GENDICT INFO_SVANN=DTYPE_1=SVANN            // <ID=SVANN,Number=.,Type=String,Description="Repeat annotation of structural variant">
 #pragma GENDICT INFO_MATEID=DTYPE_1=MATEID          // <ID=MATEID,Number=.,Type=String,Description="ID of mate breakends">
 #pragma GENDICT INFO_MATEDIST=DTYPE_1=MATEDIST      // <ID=MATEDIST,Number=1,Type=Integer,Description="Distance to the mate breakend for mates on the same contig">
-#pragma GENDICT INFO_IMPRECISE=DTYPE_1=IMPRECISE    // <ID=IMPRECISE,Number=0,Type=Flag,Description="Imprecise structural variation">
 #pragma GENDICT INFO_SHADOWED=DTYPE_1=SHADOWED      // <ID=SHADOWED,Number=0,Type=Flag,Description="CNV overlaps with or is encapsulated by deletion">
-#pragma GENDICT FORMAT_CN=DTYPE_2=CN                // <ID=CN,Number=1,Type=Integer,Description="Copy number genotype for imprecise events">
+
+// SvABA https://github.com/walaj/svaba
+// Also dup with similar semantics: INFO/BX INFO/SVTYPE INFO/IMPRECISE INFO/MATEID
+#pragma GENDICT INFO_REPSEQ=DTYPE_1=REPSEQ          // <ID=REPSEQ,Number=1,Type=String,Description="Repeat sequence near the event">
+#pragma GENDICT INFO_READNAMES=DTYPE_1=READNAMES    // <ID=READNAMES,Number=.,Type=String,Description="IDs of ALT reads">
+#pragma GENDICT INFO_NM=DTYPE_1=NM                  // <ID=NM,Number=1,Type=Integer,Description="Number of mismatches of this alignment fragment to reference">
+#pragma GENDICT INFO_MATENM=DTYPE_1=MATENM          // <ID=MATENM,Number=1,Type=Integer,Description="Number of mismatches of partner alignment fragment to reference">
+#pragma GENDICT INFO_SECONDARY=DTYPE_1=SECONDARY    // <ID=SECONDARY,Number=0,Type=Flag,Description="SV calls comes from a secondary alignment">
+#pragma GENDICT INFO_MAPQ=DTYPE_1=MAPQ              // <ID=MAPQ,Number=1,Type=Integer,Description="Mapping quality (BWA-MEM) of this fragement of the contig (-1 if discordant only)">
+#pragma GENDICT INFO_MATEMAPQ=DTYPE_1=MATEMAPQ      // <ID=MATEMAPQ,Number=1,Type=Integer,Description="Mapping quality of the partner fragment of the contig">
+#pragma GENDICT INFO_SUBN=DTYPE_1=SUBN              // <ID=SUBN,Number=1,Type=Integer,Description="Number of secondary alignments associated with this contig fragment">
+#pragma GENDICT INFO_NUMPARTS=DTYPE_1=NUMPARTS      // <ID=NUMPARTS,Number=1,Type=Integer,Description=">
+#pragma GENDICT INFO_EVDNC=DTYPE_1=EVDNC            // <ID=EVDNC,Number=1,Type=String,Description="Evidence for variant. ASSMB assembly only, ASDIS assembly+discordant. DSCRD discordant only, TSI_L templated-sequence insertion (local, e.g. AB or BC of an ABC), TSI_G global (e.g. AC of ABC)">
+#pragma GENDICT INFO_SCTG=DTYPE_1=SCTG              // <ID=SCTG,Number=1,Type=String,Description="Identifier for the contig assembled by svaba to make the SV call"> (or indel instead of SV)
+#pragma GENDICT INFO_INSERTION=DTYPE_1=INSERTION    // <ID=INSERTION,Number=1,Type=String,Description="Sequence insertion at the breakpoint.">
+#pragma GENDICT INFO_SPAN=DTYPE_1=SPAN              // <ID=SPAN,Number=1,Type=Integer,Description="Distance between the breakpoints. -1 for interchromosomal">
+#pragma GENDICT INFO_DISC_MAPQ=DTYPE_1=DISC_MAPQ    // <ID=DISC_MAPQ,Number=1.,Type=Integer,Description="Mean mapping quality of discordant reads mapped here">
+// (dup) #pragma GENDICT FORMAT_SR=DTYPE_2=SR       // <ID=SR,Number=1,Type=Integer,Description="Number of spanning reads for this variant">
+#pragma GENDICT FORMAT_CR=DTYPE_2=CR                // <ID=CR,Number=1,Type=Integer,Description="Number of cigar-supported reads for this variant">
+#pragma GENDICT FORMAT_LR=DTYPE_2=LR                // <ID=LR,Number=1,Type=Float,Description="Log-odds that this variant is AF=0 vs AF>=0.5">
+#pragma GENDICT FORMAT_LO=DTYPE_2=LO                // <ID=LO,Number=1,Type=Float,Description="Log-odds that this variant is real vs artifact">
+#pragma GENDICT FORMAT_SL=DTYPE_2=SL                // <ID=SL,Number=1,Type=Float,Description="Alignment-quality Scaled log-odds, where LO is LO * (MAPQ - 2*NM)/60">
+// (dup) #pragma GENDICT INFO_PON=DTYPE_1=PON       // <ID=PON,Number=1,Type=Integer,Description="Number of normal samples that have this indel present">
+#pragma GENDICT INFO_DBSNP=DTYPE_1=DBSNP            // <ID=DBSNP,Number=0,Type=Flag,Description="Variant found in dbSNP">
+#pragma GENDICT INFO_LOD=DTYPE_1=LOD                // <ID=LOD,Number=1,Type=Float,Description="Log-odds that this variant is real vs artifact">
+
+// DRAGEN manta : https://support-docs.illumina.com/SW/DRAGEN_v38/Content/SW/DRAGEN/MantaVCFINFOFields_fDG.htm
+// (also: IMPRECISE, SVTYPE, SVLEN, END, CIPOS, CIEND, CIGAR, MATEID, HOMSEQ, HOMLEN)
+#pragma GENDICT FORMAT_FT=DTYPE_2=FT                // <ID=FT,Number=1,Type=String,Description="Sample filter, 'PASS' indicates that all filters have passed for this sample">
+#pragma GENDICT FORMAT_SR=DTYPE_2=SR                // <ID=SR,Number=.,Type=Integer,Description="Split reads for the ref and alt alleles in the order listed, for reads where P(allele|read)>0.999">
+// (dup) #pragma GENDICT FORMAT_PR=DTYPE_2=PR       // <ID=PR,Number=.,Type=Integer,Description="Spanning paired-read support for the ref and alt alleles in the order listed">
+#pragma GENDICT INFO_EVENT=DTYPE_1=EVENT            // <ID=EVENT,Number=1,Type=String,Description="ID of event associated to breakend">
+#pragma GENDICT INFO_SVINSLEN=DTYPE_1=SVINSLEN      // <ID=SVINSLEN,Number=.,Type=Integer,Description="Length of insertion">
+#pragma GENDICT INFO_SVINSSEQ=DTYPE_1=SVINSSEQ      // <ID=SVINSSEQ,Number=.,Type=String,Description="Sequence of insertion">
+#pragma GENDICT INFO_DUPSVINSLEN=DTYPE_1=DUPSVINSLEN// <ID=DUPSVINSLEN,Number=.,Type=Integer,Description="Length of inserted sequence after duplicated reference sequence">
+#pragma GENDICT INFO_DUPSVINSSEQ=DTYPE_1=DUPSVINSSEQ// <ID=DUPSVINSSEQ,Number=.,Type=String,Description="Inserted sequence after duplicated reference sequence">
+#pragma GENDICT INFO_DUPHOMLEN=DTYPE_1=DUPHOMLEN    // <ID=DUPHOMLEN,Number=.,Type=Integer,Description="Length of base pair identical homology at event breakpoints excluding duplicated reference sequence">
+#pragma GENDICT INFO_DUPHOMSEQ=DTYPE_1=DUPHOMSEQ    // <ID=DUPHOMSEQ,Number=.,Type=String,Description="Sequence of base pair identical homology at event breakpoints excluding duplicated reference sequence">
+#pragma GENDICT INFO_BND_DEPTH=DTYPE_1=BND_DEPTH    // <ID=BND_DEPTH,Number=1,Type=Integer,Description="Read depth at local translocation breakend">
+#pragma GENDICT INFO_MATE_BND_DEPTH=DTYPE_1=MATE_BND_DEPTH // <ID=MATE_BND_DEPTH,Number=1,Type=Integer,Description="Read depth at remote translocation mate breakend">
+#pragma GENDICT INFO_LEFT_SVINSSEQ=DTYPE_1=LEFT_SVINSSEQ   // <ID=LEFT_SVINSSEQ,Number=.,Type=String,Description="Known left side of insertion for an insertion of unknown length">
+#pragma GENDICT INFO_RIGHT_SVINSSEQ=DTYPE_1=RIGHT_SVINSSEQ // <ID=RIGHT_SVINSSEQ,Number=.,Type=String,Description="Known right side of insertion for an insertion of unknown length">
+#pragma GENDICT INFO_JUNCTION_QUAL=DTYPE_1=JUNCTION_QUAL   // <ID=JUNCTION_QUAL,Number=1,Type=Integer,Description="If the SV junction is part of an EVENT (ie. a multi-adjacency variant), this field provides the QUAL value for the adjacency in question only">
+
+// Delly: https://github.com/dellytools/delly
+// Also: INFO: CIEND, CIPOS, END, MAPQ, SVLEN, IMPRECISE, SVTYPE, HOMLEN, MAPQ. FORMAT: GT, CN, GQ, FT. 
+#pragma GENDICT INFO_SOMATIC=DTYPE_1=SOMATIC        // <ID=SOMATIC,Number=0,Type=Flag,Description=\"Somatic copy-number variant.\">
+#pragma GENDICT INFO_PGERM=DTYPE_1=PGERM            // <ID=PGERM,Number=1,Type=Float,Description=\"Probability of being germline.\">
+#pragma GENDICT INFO_CNDIFF=DTYPE_1=CNDIFF          // <ID=CNDIFF,Number=1,Type=Float,Description=\"Absolute tumor-normal CN difference.\">
+#pragma GENDICT INFO_CNSHIFT=DTYPE_1=CNSHIFT        // <ID=CNSHIFT,Number=1,Type=Float,Description=\"Estimated CN shift.\">
+#pragma GENDICT INFO_CNSD=DTYPE_1=CNSD              // <ID=CNSD,Number=1,Type=Float,Description=\"Estimated CN standard deviation.\">
+// (dup) #pragma GENDICT INFO_MP=DTYPE_1=MP         // <ID=MP,Number=1,Type=Float,Description=\"Mappable fraction of CNV\">
+#pragma GENDICT INFO_SVMETHOD=DTYPE_1=SVMETHOD      // <ID=SVMETHOD,Number=1,Type=String,Description=\"Type of approach used to detect CNV\">
+#pragma GENDICT INFO_LINKID=DTYPE_1=LINKID          // <ID=LINKID,Number=2,Type=String,Description=\"Linked paired-end IDs.\">
+#pragma GENDICT INFO_REGION=DTYPE_1=REGION          // <ID=REGION,Number=3,Type=String,Description=\"Entire spanning region of the complex SV as chr, start, end.\">
+#pragma GENDICT INFO_REGION1=DTYPE_1=REGION1        // <ID=REGION1,Number=3,Type=String,Description=\"Sub-Region1 of the complex SV as chr, start, end.\">
+#pragma GENDICT INFO_REGION2=DTYPE_1=REGION2        // <ID=REGION1,Number=3,Type=String,Description=\"Sub-Region2 of the complex SV as chr, start, end.\">
+#pragma GENDICT INFO_REGION3=DTYPE_1=REGION3        // <ID=REGION1,Number=3,Type=String,Description=\"Sub-Region3 of the complex SV as chr, start, end.\">
+#pragma GENDICT INFO_CARCONC=DTYPE_1=CARCONC        // <ID=CARCONC,Number=1,Type=Float,Description=\"Carrier concordance of the linked paired-end calls.\">
+#pragma GENDICT INFO_RDRATIO=DTYPE_1=RDRATIO        // <ID=RDRATIO,Number=1,Type=Float,Description=\"Read-depth ratio of tumor vs. normal.\">" or: "of carrier vs. non-carrier." or: "of SV"
+#pragma GENDICT INFO_CHR2=DTYPE_1=CHR2              // <ID=CHR2,Number=1,Type=String,Description=\"Chromosome for POS2 coordinate in case of an inter-chromosomal translocation\">
+#pragma GENDICT INFO_POS2=DTYPE_1=POS2              // <ID=POS2,Number=1,Type=Integer,Description=\"Genomic position for CHR2 in case of an inter-chromosomal translocation\">
+#pragma GENDICT INFO_PE=DTYPE_1=PE                  // <ID=PE,Number=1,Type=Integer,Description=\"Paired-end support of the structural variant\">
+#pragma GENDICT INFO_SRMAPQ=DTYPE_1=SRMAPQ          // <ID=SRMAPQ,Number=1,Type=Integer,Description=\"Median mapping quality of split-reads\">
+#pragma GENDICT INFO_SR=DTYPE_1=SR                  // <ID=SR,Number=1,Type=Integer,Description=\"Split-read support\">
+#pragma GENDICT INFO_SRQ=DTYPE_1=SRQ                // <ID=SRQ,Number=1,Type=Float,Description=\"Split-read consensus alignment quality\">
+#pragma GENDICT INFO_CONSENSUS=DTYPE_1=CONSENSUS    // <ID=CONSENSUS,Number=1,Type=String,Description=\"Split-read consensus sequence\">
+#pragma GENDICT INFO_CONSBP=DTYPE_1=CONSBP          // <ID=CONSENSUS,Number=1,Type=String,Description=\"Split-read consensus sequence\">
+#pragma GENDICT INFO_CE=DTYPE_1=CE                  // <ID=CE,Number=1,Type=Float,Description=\"Consensus sequence entropy\">
+#pragma GENDICT INFO_CT=DTYPE_1=CT                  // <ID=CT,Number=1,Type=String,Description=\"Paired-end signature induced connection type\">
+#pragma GENDICT INFO_PRECISE=DTYPE_1=PRECISE        // <ID=PRECISE,Number=0,Type=Flag,Description=\"Precise structural variation\">
+#pragma GENDICT INFO_INSLEN=DTYPE_1=INSLEN          // <ID=INSLEN,Number=1,Type=Integer,Description=\"Predicted length of the insertion\">
+#pragma GENDICT FORMAT_CNL=DTYPE_2=CNL              // <ID=CNL,Number=.,Type=Float,Description=\"Log10-scaled copy-number likelihoods\">
+#pragma GENDICT FORMAT_RDCN=DTYPE_2=RDCN            // <ID=RDCN,Number=1,Type=Float,Description=\"Read-depth based copy-number estimate\"> or: "... for autosomal sites"
+#pragma GENDICT FORMAT_RDSD=DTYPE_2=RDSD            // <ID=RDSD,Number=1,Type=Float,Description=\"Read-depth standard deviation\">
+// (dup) #pragma GENDICT FORMAT_RC=DTYPE_2=RC       // <ID=RC,Number=1,Type=Integer,Description=\"Raw high-quality read counts or base counts for the SV\">
+#pragma GENDICT FORMAT_RCL=DTYPE_2=RCL              // <ID=RCL,Number=1,Type=Integer,Description=\"Raw high-quality read counts or base counts for the left control region\">
+#pragma GENDICT FORMAT_RCR=DTYPE_2=RCR              // <ID=RCR,Number=1,Type=Integer,Description=\"Raw high-quality read counts or base counts for the right control region\">
+#pragma GENDICT FORMAT_DR=DTYPE_2=DR                // <ID=DR,Number=1,Type=Integer,Description=\"# high-quality reference pairs\">
+// (dup) #pragma GENDICT FORMAT_DV=DTYPE_2=DV       // <ID=DV,Number=1,Type=Integer,Description=\"# high-quality variant pairs\">
+#pragma GENDICT FORMAT_RR=DTYPE_2=RR                // <ID=,Number=1,Type=Integer,Description=\"# high-quality reference junction reads\">
+#pragma GENDICT FORMAT_RV=DTYPE_2=RV                // <ID=,Number=1,Type=Integer,Description=\"# high-quality variant junction reads\">
 
 // Ultima Genomics
 #pragma GENDICT INFO_VARIANT_TYPE=DTYPE_1=VARIANT_TYPE // <ID=VARIANT_TYPE,Number=1,Type=String,Description="Flow: type of variant: SNP/NON-H-INDEL/H-INDEL">
@@ -599,7 +682,7 @@ extern bool vcf_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id);
 
 // PIZ stuff
 extern void vcf_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header);
-extern bool vcf_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment);
+extern bool vcf_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header);
 extern void vcf_piz_recon_init (VBlockP vb);
 extern IS_SKIP (vcf_piz_is_skip_section);
 extern CONTAINER_FILTER_FUNC (vcf_piz_filter);
@@ -620,7 +703,6 @@ extern void vcf_header_finalize(void);
 extern unsigned vcf_vb_size (DataType dt);
 extern unsigned vcf_vb_zip_dl_size (void);
 extern void vcf_reset_line (VBlockP vb);
-extern bool vcf_vb_has_haplotype_data (VBlockP vb);
 
 // Liftover - INFO fields
 #define INFO_LUFT_NAME  "LUFT"
@@ -659,8 +741,11 @@ extern void vcf_samples_add  (rom samples_str);
                       vcf_piz_special_MUX_BY_END, vcf_piz_special_MUX_BY_ISAAC_FILTER, \
                       vcf_piz_special_X_LM_RM, vcf_piz_special_X_IL, vcf_piz_special_X_IC, vcf_piz_special_X_HIN, vcf_piz_special_X_HIL, \
                       vcf_piz_special_VARIANT_TYPE, vcf_piz_special_PLATYPUS_SC, vcf_piz_special_PLATYPUS_HP, vcf_piz_special_INFO_MLEAF, \
-                      vcf_piz_special_FORMAT_AD0, vcf_piz_special_MUX_FORMAT_DP, vcf_piz_special_INFO_AN, vcf_piz_special_AS_SB_TABLE, \
-                      vcf_piz_special_RPA }
+                      vcf_piz_special_FORMAT_AD0, vcf_piz_special_MUX_FORMAT_DP, vcf_piz_special_INFO_AN, vcf_piz_special_DEFER, \
+                      vcf_piz_special_RPA, vcf_piz_special_SVABA_MATEID, vcf_piz_special_MAPQ, vcf_piz_special_SPAN, vcf_piz_special_COPY_MATE, \
+                      vcf_piz_special_DEMUX_BY_MATE, vcf_piz_special_PBSV_MATEID, vcf_piz_special_DEMUX_BY_VARTYPE, vcf_piz_special_PBSV_ID_BND, \
+                      vcf_piz_special_manta_CIGAR, vcf_piz_special_LEN_OF, vcf_piz_special_HOMSEQ, \
+                   }
 
 SPECIAL (VCF, 0,  main_REFALT,         vcf_piz_special_main_REFALT);
 SPECIAL (VCF, 1,  FORMAT,              vcf_piz_special_FORMAT)
@@ -730,14 +815,26 @@ SPECIAL (VCF, 64, INFO_MLEAF,          vcf_piz_special_INFO_MLEAF);             
 SPECIAL (VCF, 65, FORMAT_AD0,          vcf_piz_special_FORMAT_AD0);               // added v15.0.37
 SPECIAL (VCF, 66, MUX_FORMAT_DP,       vcf_piz_special_MUX_FORMAT_DP);            // added v15.0.37
 SPECIAL (VCF, 67, AN,                  vcf_piz_special_INFO_AN);                  // added v15.0.37
-SPECIAL (VCF, 68, AS_SB_TABLE,         vcf_piz_special_AS_SB_TABLE);              // added v15.0.41
+SPECIAL (VCF, 68, DEFER,               vcf_piz_special_DEFER);                    // added v15.0.41
 SPECIAL (VCF, 69, RPA,                 vcf_piz_special_RPA);                      // added v15.0.41
-#define NUM_VCF_SPECIAL 70
+SPECIAL (VCF, 70, SVABA_MATEID,        vcf_piz_special_SVABA_MATEID);             // added v15.0.47
+SPECIAL (VCF, 71, MAPQ,                vcf_piz_special_MAPQ);                     // added v15.0.47
+SPECIAL (VCF, 72, SPAN,                vcf_piz_special_SPAN);                     // added v15.0.47
+SPECIAL (VCF, 73, COPY_MATE,           vcf_piz_special_COPY_MATE);                // added v15.0.47
+SPECIAL (VCF, 74, DEMUX_BY_MATE,       vcf_piz_special_DEMUX_BY_MATE);            // added v15.0.47
+SPECIAL (VCF, 75, PBSV_MATEID,         vcf_piz_special_PBSV_MATEID);              // added v15.0.47
+SPECIAL (VCF, 76, DEMUX_BY_VARTYPE,    vcf_piz_special_DEMUX_BY_VARTYPE);         // added v15.0.47
+SPECIAL (VCF, 77, PBSV_ID_BND,         vcf_piz_special_PBSV_ID_BND);              // added v15.0.47
+SPECIAL (VCF, 78, MANTA_CIGAR,         vcf_piz_special_manta_CIGAR);              // added v15.0.47
+SPECIAL (VCF, 79, LEN_OF,              vcf_piz_special_LEN_OF);                   // added v15.0.47
+SPECIAL (VCF, 80, HOMSEQ,              vcf_piz_special_HOMSEQ);                   // added v15.0.47
+#define NUM_VCF_SPECIAL 81
 
-#define VCF_DICT_ID_ALIASES                           \
-    /*        type       alias        maps to     */  \
-    { DT_VCF, ALIAS_CTX, _INFO_END,   _VCF_POS    },  \
-    { DT_VCF, ALIAS_CTX, _INFO_CIEND, _INFO_CIPOS },  \
-
+#define VCF_DICT_ID_ALIASES                                 \
+    /*        type        alias             maps to     */  \
+    { DT_VCF, ALIAS_CTX,  _INFO_END,        _VCF_POS    },  \
+    { DT_VCF, ALIAS_DICT, _INFO_CIEND,      _INFO_CIPOS },  \
+    { DT_VCF, ALIAS_DICT, _VCF_MATE_CHROM0, _VCF_CHROM  },  \
+ 
 #define dict_id_is_vcf_info_sf   dict_id_is_type_1
 #define dict_id_is_vcf_format_sf dict_id_is_type_2

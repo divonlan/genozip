@@ -44,20 +44,21 @@ typedef struct File {
     Codec codec;                       // TXT_FILE ZIP: generic codec used with this file. If redirected - as read by txtfile (eg for cram files this is BGZF)
 
     // these relate to actual bytes on the disk
-    int64_t disk_size;                 // 0 if not known (eg stdin or http stream). 
-    int64_t disk_so_far;               // data read/write to/from "disk" (using fread/fwrite) (possibley gz/bz2 compressed)
+    int64_t disk_size;                 // ZIP: size of actual file on disk. 0 if not known (eg stdin or http stream). 
+    int64_t disk_so_far;               // ZIP: Z/TXT_FILE: data actually read/write to/from "disk" (using fread/fwrite), (TXT_FILE: possibley bgzf/gz/bz2 compressed ; 0 if external compressor is used for reading).
     int64_t est_seggable_size;         // TXT_FILE ZIP, access via txtfile_get_seggable_size(). Estimated size of txt_data in file, i.e. excluding the header. It is exact for plain files, or based on test_vb if the file has source compression
     int64_t est_num_lines;             // TXT_FILE ZIP, an alternative for progress bar - by lines instead of bytes
     
     // this relate to the textual data represented. In case of READ - only data that was picked up from the read buffer.
-    int64_t txt_data_so_far_single;    // TXT_FILE: data read (ZIP) or written (PIZ) to/from txt file so far
+    int64_t txt_data_size;             // TXT_FILE: PIZ: value copied from SectionHeaderTxtHeader.txt_data_size. At the end of piz, expected to be equal to txt_data_so_far_single if no PIZ modifications (eg filters) 
+    int64_t txt_data_so_far_single;    // TXT_FILE: data read (ZIP) or written (PIZ with writer) to/from txt file so far or reconsturcted (PIZ with --test)
                                        // Z_FILE: txt data represented in the GENOZIP data written (ZIP) or read (PIZ) to/from the genozip file so far for the current txt file
     int64_t header_size;               // TXT_FILE ZIP: size of txt header  z_file ZIP: size of MAIN txt header
     int64_t header_size_bgzf;          // TXT_FILE ZIP: compressed size of header - or 0 if not whole BGZF blocks
     
     int64_t txt_data_so_far_bind;      // Z_FILE only: uncompressed txt data represented in the GENOZIP data written so far for all bound files
                                        // note: txt_data_so_far_single/bind accounts for txt modifications due to e.g. --optimize 
-    int64_t txt_data_so_far_single_0;  // TXT_FILE PIZ: accounting for data as it was in the original source file, as reading TxtHeader and VbHeader sections from the genozip file
+    int64_t txt_data_so_far_single_0;  // TXT_FILE PIZ: accounting for expected recon size (so far) as reported by TxtHeader and VbHeader sections, without any piz-side modifications
                                        // Z_FILE & ZIP only: same as txt_data_so_far_single/bind, but original sizes without modifications due to e.g. --optimize
     int64_t txt_data_so_far_bind_0;    // Z_FILE & ZIP only: similar to txt_data_so_far_single_0, but for bound
     int64_t num_lines;                 // Z_FILE: number of lines in all txt files bound into this z_file (sum of comp_num_lines)
@@ -130,6 +131,7 @@ typedef struct File {
     // TXT file: IGZIP stuff reading and writing compressed txt files 
     Buffer igzip_data;              // ZIP TXT GZ (with igzip): yet-uncompressed data read from disk
     Buffer igzip_state;             // ZIP TXT GZ (with igzip)
+    uint64_t gzip_start_Ltxt;       // ZIP TXT GZ: Ltxt at the beginning for this gzip_section
 
     // TXT FILE: accounting for truncation when --truncate-partial-last-line is used
     bool bgzf_truncated_last_block;    // ZIP: detected a truncated last block
@@ -222,7 +224,9 @@ typedef struct File {
     int64_t txt_data_so_far_bind_0_comp[MAX_NUM_COMPS]; // Z_FILE ZIP: per-component txt_size before modifications 
     Codec comp_codec[MAX_NUM_COMPS];                    // Z_FILE ZIP: codec used for every txt file component (i.e. excluding generated components)
     Codec comp_source_codec[MAX_NUM_COMPS];             // Z_FILE ZIP: source codec used for every txt file component (i.e. excluding generated components)
-    FlagsBgzf comp_bgzf[MAX_NUM_COMPS];                 // Z_FILE ZIP: library and level of BGZF of each comp
+    FlagsBgzf comp_bgzf[MAX_NUM_COMPS];                 // Z_FILE ZIP BGZF: library and level of BGZF of each comp
+    bool gzip_section_size_single_block[MAX_NUM_COMPS];  // Z_FILE ZIP GZ: if true, disregard gzip_section_size as it represents just one block
+    uint64_t gzip_section_size[MAX_NUM_COMPS];          // Z_FILE ZIP GZ: size of one gzip section (in uncompressed terms) in case of concatenated gzip. -1 if they are not equal size.
 } File;
 
 #define z_has_gencomp (z_file && z_file->z_flags.has_gencomp) // ZIP/PIZ

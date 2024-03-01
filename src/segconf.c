@@ -264,6 +264,7 @@ void segconf_initialize (void)
 
             // FASTA stuff
             .fasta_has_contigs     = true, // initialize optimistically
+            .fasta_desc_char       = '>',
         };
 
     // Deep - 1st FASTQ file
@@ -434,6 +435,7 @@ rom VCF_QUAL_method_name (VcfQualMethodType method)
         case VCF_QUAL_DEFAULT : return "DEFAULT";
         case VCF_QUAL_by_RGQ  : return "BY_RGQ";
         case VCF_QUAL_local   : return "local";
+        case VCF_QUAL_mated   : return "mated";
         default               : return "INVALID";
     }
 }

@@ -31,7 +31,7 @@ static bool vcf_seg_INFO_HGVS_snp (VBlockVCFP vb, ContextP ctx, STRp(value))
     if (value_len < 3 + pos_str_len) return false;
 
     rom v = &value[value_len - 3];
-    if (v[0] != vb->main_ref[0] || v[1] != '>' || v[2] != vb->main_alt[0]) return false; // REF/ALT differs
+    if (v[0] != vb->REF[0] || v[1] != '>' || v[2] != vb->ALT[0]) return false; // REF/ALT differs
 
     v -= pos_str_len;
     if (memcmp (v, pos_str, pos_str_len)) return false; // POS differs
@@ -69,12 +69,9 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_SNP_POS)
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_SNP_REFALT)
 {
-    rom refalt;
-    reconstruct_peek (vb, CTX (VCF_REFALT), &refalt, NULL); // this special works only on SNPs, so length is always 3
-
-    RECONSTRUCT1 (refalt[0]); // this might overwrite the "peeked" data, but that's ok
+    RECONSTRUCT1 (*VB_VCF->REF); // this might overwrite the "peeked" data, but that's ok
     RECONSTRUCT1 ('>');
-    RECONSTRUCT1 (refalt[2]);
+    RECONSTRUCT1 (*VB_VCF->alts[0]);
 
     return NO_NEW_VALUE;
 }
@@ -94,13 +91,13 @@ static bool vcf_seg_INFO_HGVS_indel (VBlockVCFP vb, ContextP ctx, STRp(value), r
 
     if (payload_len) switch (t) {
         case DEL    : // Payload is expected to be the same as the REF field, without the first, left-anchor, base
-                      if (!str_issame_(STRa(payload), vb->main_ref+1, vb->main_ref_len-1)) return false;
+                      if (!str_issame_(STRa(payload), vb->REF+1, vb->REF_len-1)) return false;
                       break;
         case INS    : // Payload is expected to be the same as the ALT field, without the first, left-anchor, base
-                      if (!str_issame_(STRa(payload), vb->main_alt+1, vb->main_alt_len-1)) return false;
+                      if (!str_issame_(STRa(payload), vb->ALT+1, vb->ALT_len-1)) return false;
                       break;
                       // Payload is expected to be the same as the entire ALT field
-        case DELINS : if (!str_issame (payload, vb->main_alt)) return false;
+        case DELINS : if (!str_issame (payload, vb->ALT)) return false;
                       break;
         case DUP    : 
         case INV    : return false; // dup and inv are not expected to have a payload
@@ -185,12 +182,12 @@ bool vcf_seg_INFO_HGVS (VBlockP vb_, ContextP ctx, STRp(value), uint32_t repeat)
 
     bool success = false;
     rom op;
-    if      (vb->main_ref_len == 1 && vb->main_alt_len == 1) success = vcf_seg_INFO_HGVS_snp   (vb, ctx, STRa(value));
-    else if ((op = strstr (value, "delins")))                success = vcf_seg_INFO_HGVS_indel (vb, ctx, STRa(value), op, DELINS); // must be before del and ins
-    else if ((op = strstr (value, "del")))                   success = vcf_seg_INFO_HGVS_indel (vb, ctx, STRa(value), op, DEL);
-    else if ((op = strstr (value, "ins")))                   success = vcf_seg_INFO_HGVS_indel (vb, ctx, STRa(value), op, INS);
-    else if ((op = strstr (value, "dup")))                   success = vcf_seg_INFO_HGVS_indel (vb, ctx, STRa(value), op, DUP);
-    else if ((op = strstr (value, "inv")))                   success = vcf_seg_INFO_HGVS_indel (vb, ctx, STRa(value), op, INV);
+    if      (vb->REF_len == 1 && vb->ALT_len == 1) success = vcf_seg_INFO_HGVS_snp   (vb, ctx, STRa(value));
+    else if ((op = strstr (value, "delins")))      success = vcf_seg_INFO_HGVS_indel (vb, ctx, STRa(value), op, DELINS); // must be before del and ins
+    else if ((op = strstr (value, "del")))         success = vcf_seg_INFO_HGVS_indel (vb, ctx, STRa(value), op, DEL);
+    else if ((op = strstr (value, "ins")))         success = vcf_seg_INFO_HGVS_indel (vb, ctx, STRa(value), op, INS);
+    else if ((op = strstr (value, "dup")))         success = vcf_seg_INFO_HGVS_indel (vb, ctx, STRa(value), op, DUP);
+    else if ((op = strstr (value, "inv")))         success = vcf_seg_INFO_HGVS_indel (vb, ctx, STRa(value), op, INV);
     
     SAFE_RESTORE;
     
@@ -201,60 +198,38 @@ fail:
     return true; // indeed segged
 }
 
-static void vcf_piz_special_INFO_HGVS_INDEL_END_POS (VBlockP vb, HgvsType t)
+static void vcf_piz_special_INFO_HGVS_INDEL_END_POS (VBlockVCFP vb, HgvsType t)
 {
-    STR (refalt);
-    reconstruct_peek (vb, CTX (VCF_REFALT), pSTRa(refalt)); // this special works only on SNPs, so length is always 3
-
-    SAFE_NULT (refalt);
-    rom tab = strchr (refalt, '\t');
-    ASSPIZ (tab, "invalid REF+ALT=\"%.*s\"", STRf(refalt));
-    SAFE_RESTORE;
-
     // reconstruct the DEL payload - this is the REF except for the first (anchor) base. reconstruct with one (possibly overlapping) copy
     static uint64_t start_pos_dnum[NUM_HGVS_TYPES] = { _INFO_HGVS_del_start_pos, _INFO_HGVS_ins_start_pos, _INFO_HGVS_ins_start_pos, _INFO_HGVS_del_start_pos }; // ins and delins share start_pos
-    rom alt   = tab + 1;
-    rom after = &refalt[refalt_len];
 
     PosType64 start_pos = ECTX (start_pos_dnum[t])->last_value.i;
-    PosType64 end_pos = (t == DEL) ? (start_pos + tab - refalt - 2)
-                      : (t == INS) ? (start_pos + after - alt - 2)
-                      : /* DELINS */ (start_pos + after - alt - 1);
+    PosType64 end_pos = (t == DEL) ? (start_pos + vb->REF_len - 2)
+                      : (t == INS) ? (start_pos + vb->alt_lens[0] - 2)
+                      : /* DELINS */ (start_pos + vb->alt_lens[0] - 1);
 
     RECONSTRUCT_INT (end_pos);
 }
 
 // three separate SPECIAL snips, so that they each because all_the_same
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_DEL_END_POS)    { vcf_piz_special_INFO_HGVS_INDEL_END_POS (vb, DEL);    return NO_NEW_VALUE; }
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_INS_END_POS)    { vcf_piz_special_INFO_HGVS_INDEL_END_POS (vb, INS);    return NO_NEW_VALUE; }
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_DELINS_END_POS) { vcf_piz_special_INFO_HGVS_INDEL_END_POS (vb, DELINS); return NO_NEW_VALUE; }
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_DEL_END_POS)    { vcf_piz_special_INFO_HGVS_INDEL_END_POS (VB_VCF, DEL);    return NO_NEW_VALUE; }
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_INS_END_POS)    { vcf_piz_special_INFO_HGVS_INDEL_END_POS (VB_VCF, INS);    return NO_NEW_VALUE; }
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_DELINS_END_POS) { vcf_piz_special_INFO_HGVS_INDEL_END_POS (VB_VCF, DELINS); return NO_NEW_VALUE; }
 
-static void vcf_piz_special_INFO_HGVS_INDEL_PAYLOAD (VBlockP vb, HgvsType t)
+static void vcf_piz_special_INFO_HGVS_INDEL_PAYLOAD (VBlockVCFP vb, HgvsType t)
 {
-    STR (refalt);
-    reconstruct_peek (vb, CTX (VCF_REFALT), pSTRa(refalt)); // this special works only on SNPs, so length is always 3
+    rom payload = (t == DEL) ? (vb->REF     + 1) // REF except for the anchor base
+                : (t == INS) ? (vb->alts[0] + 1) // ALT except for the anchor base
+                : /* DELINS */ vb->alts[0];      // the entire ALT
 
-    SAFE_NULT (refalt);
-    rom tab = strchr (refalt, '\t');
-    SAFE_RESTORE;
-
-    ASSPIZ (tab, "invalid REF+ALT=\"%.*s\"", STRf(refalt));
-
-    rom alt   = tab + 1;
-    rom after = &refalt[refalt_len];
-
-    rom payload = (t == DEL) ? (refalt + 1) // REF except for the anchor base
-                : (t == INS) ? (alt + 1)    // ALT except for the anchor base
-                : /* DELINS */ alt;         // the entire ALT
-
-    PosType64 payload_len = (t == DEL) ? (tab - refalt - 1)
-                          : (t == INS) ? (after - alt - 1)
-                          : /* DELINS */ (after - alt);
+    PosType64 payload_len = (t == DEL) ? (vb->REF_len - 1)
+                          : (t == INS) ? (vb->alt_lens[0] - 1)
+                          : /* DELINS */ (vb->alt_lens[0]);
 
     memmove (BAFTtxt, payload, payload_len);
     Ltxt += payload_len;
 }
 
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_DEL_PAYLOAD)    { vcf_piz_special_INFO_HGVS_INDEL_PAYLOAD (vb, DEL);    return false; }
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_INS_PAYLOAD)    { vcf_piz_special_INFO_HGVS_INDEL_PAYLOAD (vb, INS);    return false; }
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_DELINS_PAYLOAD) { vcf_piz_special_INFO_HGVS_INDEL_PAYLOAD (vb, DELINS); return false; }
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_DEL_PAYLOAD)    { vcf_piz_special_INFO_HGVS_INDEL_PAYLOAD (VB_VCF, DEL);    return false; }
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_INS_PAYLOAD)    { vcf_piz_special_INFO_HGVS_INDEL_PAYLOAD (VB_VCF, INS);    return false; }
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_DELINS_PAYLOAD) { vcf_piz_special_INFO_HGVS_INDEL_PAYLOAD (VB_VCF, DELINS); return false; }

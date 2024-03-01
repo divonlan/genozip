@@ -121,6 +121,8 @@ int32_t gff_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
                     segconf.has_embedded_fasta = true;
                     segconf.fasta_has_contigs  = false; // GFF3-embedded FASTA doesn't have contigs, because did=0 is reserved for GFF's SEQID
                     segconf.seq_type           = SQT_NUKE;
+
+                    DO_ONCE fasta_zip_initialize();
                 }
 
                 break; // terminate VB (and component) at this newline - next line is FASTA
@@ -764,7 +766,7 @@ eol:
 // PIZ stuff
 //----------
 
-bool gff_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment)
+bool gff_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header)
 {
     if (VER(15) && vb->flags.gff.embedded_fasta) 
         vb->data_type = DT_FASTA;
@@ -775,6 +777,8 @@ bool gff_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header, uint32_t *
 // filter is called before reconstruction of a repeat or an item, and returns true if item should be reconstructed. if not reconstructed, contexts are not consumed.
 CONTAINER_FILTER_FUNC (gff_piz_filter)
 {
+    if (!VER(12)) return true;
+    
     if (item < 1 || item == 10) return true; // we filter all items except COMMENT and EOL
 
     return CTX(GFF_COMMENT)->last_value.i == WORD_INDEX_MISSING; // reconstruct non-comment contexts only if this isn't a comment line

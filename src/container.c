@@ -77,11 +77,10 @@ WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con,
                  vb->preprocessing    ? "preproc " : "",
                  vb->peek_stack_level ? "peeking " : "",
                  vb->vblock_i, vb->line_i, ctx->did_i, ctx->tag_name, con->repeats, con->repsep[0], con->repsep[1]);
-        for (unsigned i=0; i < con_nitems (*con); i++) {
-            const ContainerItem *item = &con->items[i];
+        for_con (con) 
             if (item->dict_id.num) 
-                iprintf ("%u:%s ", ctx->did_i, dis_dict_id (item->dict_id).s); 
-        }
+                iprintf ("%s(%u) ", dis_dict_id (item->dict_id).s, ctx->did_i); 
+        
         iprint0 ("\n");
     }
 
@@ -146,14 +145,15 @@ uint32_t container_peek_repeats (VBlockP vb, ContextP ctx, char repsep)
         return count_repsep (STRa(snip), repsep);
 }
 
-// true if parent container of ctx, also contains the item dict_id (i.e dict_id is a sibling of ctx)
-bool curr_container_has (ContextP container_ctx, DictId item_dict_id)
+// true if the container currently being reconstructed (i.e. at the top of the container stack), 
+// contains the item dict_id
+bool curr_container_has (VBlockP vb, DictId item_dict_id)
 {
-    ConstContainerP con = container_ctx->curr_container;
+    ConstContainerP con = vb->con_stack[vb->con_stack_len-1].con;
 
     if (con)
-        for (uint32_t i=0; i < con_nitems (*con); i++) 
-            if (con->items[i].dict_id.num == item_dict_id.num)
+        for_con (con)
+            if (item->dict_id.num == item_dict_id.num)
                 return true;
 
     return false;
@@ -174,8 +174,8 @@ bool container_peek_has_item (VBlockP vb, ContextP ctx, DictId item_dict_id, boo
 
     ContainerP con = container_retrieve (vb, ctx, wi, snip+1, snip_len-1, 0, 0);
 
-    for (int i=0; i < con_nitems(*con); i++)
-        if (con->items[i].dict_id.num == item_dict_id.num) return true; // found item
+    for_con (con)
+        if (item->dict_id.num == item_dict_id.num) return true; // found item
 
     return false; // item doesn't exist in this container
 }
@@ -200,9 +200,9 @@ ContainerP container_peek_get_idxs (VBlockP vb, ContextP ctx, uint16_t n_items,
         con = container_retrieve (vb, ctx, wi, snip+1, snip_len-1, 0, 0);
     }
 
-    for (uint16_t item_i=0; item_i < con_nitems(*con); item_i++) 
+    for_con2 (con)
         for (uint16_t req_i=0 ; req_i < n_items; req_i++) {
-            ContextP ctx = con->items[item_i].dict_id.num ? ECTX(con->items[item_i].dict_id) : NULL;
+            ContextP ctx = item->dict_id.num ? ECTX(item->dict_id) : NULL;
             if (ctx) {
                 if (ctx->is_ctx_alias) ctx = CTX(ctx->did_i); // ctx->did_i is different than did_i if its an ALIAS_CTX
 
@@ -321,10 +321,8 @@ static inline void container_toplevel_filter (VBlockP vb, uint32_t rep_i, rom re
                     vb->vblock_i, vb->line_i, vb->drop_curr_line);
 }
 
-CONTAINER_FILTER_FUNC (container_no_filter)
+CONTAINER_FILTER_FUNC (default_piz_filter)
 {
-    ABORT ("File %s requires a filter for dict_id=%s item=%u. %s", z_name, dis_dict_id (dict_id).s, item, genozip_update_msg());
-
     return true;    
 }
 
@@ -435,12 +433,20 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
 
     ASSPIZ (vb->con_stack_len < MAX_CON_STACK, "Container stack overflow: %s->%s", container_stack (vb).s, ctx->tag_name);
 
+    if (flag.show_stack)
+        iprintf ("%s: PUSH[%u] %s\n", LN_NAME, vb->con_stack_len, ctx->tag_name);
+
     vb->con_stack[vb->con_stack_len++] = (ConStack){ .con=con, .did_i=ctx->did_i, .repeat=-1 };
     ctx->curr_container = con;
 
-    if (flag.show_time && is_toplevel) 
-        clock_gettime (CLOCK_REALTIME, &profiler_timer);
-    
+    if (is_toplevel) {
+        if (flag.show_time) 
+            clock_gettime (CLOCK_REALTIME, &profiler_timer);
+
+        if (!VER(12)) // up to v11 TOPLEVEL didn't have filter_items, however now PIZ relies on it, so we set it here
+            ((ContainerP)con)->filter_items = true;
+    }
+
     uint32_t save_repeats = con->repeats;
 
     // get repeats if not explicit
@@ -461,10 +467,6 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
 
     // container wide prefix - it will be missing if Container has no prefixes, or empty if it has only items prefixes
     container_reconstruct_prefix (vb, con, pSTRa(prefixes), false, ctx->dict_id, DICT_ID_NONE, show_non_item); 
-
-    ASSERT (DTP (container_filter) || (!con->filter_repeats && !con->filter_items), 
-            "data_type=%s doesn't support container_filter, despite being specified in the Container. %s", 
-            dt_name (vb->data_type), genozip_update_msg());
 
     uint32_t num_items = con_nitems(*con);
     ContextP item_ctxs[num_items];
@@ -679,7 +681,10 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
 
     vb->con_stack_len--;
     ctx->curr_container = NULL;
-    
+
+    if (flag.show_stack)
+        iprintf ("%s: POP [%u] %s\n", LN_NAME, vb->con_stack_len, ctx->tag_name);
+
     if (is_toplevel)   
         COPY_TIMER (reconstruct_vb);
 
@@ -715,18 +720,18 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
                 ctx->tag_name, con_nitems (con), MAX_FIELDS, genozip_update_msg());
 
         // get the did_i for each dict_id - unfortunately we can only store did_i up to 254 (changing this would be a change in the file format)
-        for (uint32_t item_i=0; item_i < con_nitems (con); item_i++)
-            if (con.items[item_i].dict_id.num) { // not a prefix-only item
-                Did did_i = ctx_get_existing_did_i (vb, con.items[item_i].dict_id);
+        for_con (&con)
+            if (item->dict_id.num) { // not a prefix-only item
+                Did did_i = ctx_get_existing_did_i (vb, item->dict_id);
                 
                 // note: we possibly won't have did_i if all instances of this container had repeats=0 (and hence items were not segged)
                 ASSERT (did_i != DID_NONE || !con.repeats, "analyzing a %s container in vb=%s: unable to find did_i for item %s/%s",
-                        ctx->tag_name, VB_NAME, dtype_name_z(con.items[item_i].dict_id), dis_dict_id (con.items[item_i].dict_id).s);
+                        ctx->tag_name, VB_NAME, dtype_name_z(item->dict_id), dis_dict_id (item->dict_id).s);
 
-                con.items[item_i].did_i_small = (did_i <= 254 ? (uint8_t)did_i : 255);
+                item->did_i_small = (did_i <= 254 ? (uint8_t)did_i : 255);
             }
             else 
-                con.items[item_i].did_i_small = 255;
+                item->did_i_small = 255;
  
         // get prefixes
         unsigned st_size = con_sizeof (con);
@@ -746,7 +751,7 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
         // first encounter with Container for this context - allocate the cache index
         if (!cache_exists) {
             buf_alloc (vb, &ctx->con_index,    0, ctx->word_list.len, uint32_t, 1, CTX_TAG_CON_INDEX);
-            buf_alloc_zero (vb, &ctx->con_len, 0, ctx->word_list.len, uint16_t, 1, CTX_TAG_CON_LEN);
+            buf_alloc_zero (vb, &ctx->con_len, 0, ctx->word_list.len, uint16_t, 1, "contexts->con_len");
         }
 
         // case: add container to cache index - only if it is not a singleton (i.e. has word_index). 

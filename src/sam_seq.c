@@ -905,13 +905,14 @@ COMPRESSOR_CALLBACK_DT (sam_zip_seq)
         
     *line_data_len = dl->SEQ.len;
 
-    if (VB_DT(SAM)) 
+    if (__builtin_expect (VB_DT(SAM), false)) 
         *line_data = Btxt (dl->SEQ.index);
+    
     else { // BAM
         vb->textual_seq.len = 0; // reset
         buf_alloc (vb, &vb->textual_seq, 0, dl->SEQ.len+2 /* +1 for last half-byte and \0 */, char, 1.5, "textual_seq");
 
-        if (dl->no_seq) 
+        if (__builtin_expect (dl->no_seq, false)) 
             bam_seq_to_sam (vb, 0, 0, false, false, &vb->textual_seq);
         else
             bam_seq_to_sam (vb, (uint8_t *)STRtxtw(dl->SEQ), false, false, &vb->textual_seq);

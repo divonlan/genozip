@@ -22,8 +22,8 @@ void vcf_isaac_seg_initialize (VBlockVCFP vb)
 }
 
 void vcf_seg_FORMAT_GQX (VBlockVCFP vb, ContextP ctx, STRp(gqx))
-{
-    Allele *ht_data = B(Allele, CTX(FORMAT_GT_HT)->local, vb->line_i * vb->ht_per_line + vb->ploidy * vb->sample_i);
+{        
+    Allele *ht_data = this_sample_GT (vb);
 
     int channel_i = (!ctx_encountered (VB, FORMAT_GT) || *ht_data == '.') ? 0
                   : !ctx_encountered (VB, FORMAT_GQ)                      ? 1
@@ -56,7 +56,7 @@ void vcf_seg_INFO_IDREP (VBlockVCFP vb, ContextP ctx, STRp(idrep_str))
     int64_t idrep;
 
     if (ctx_has_value_in_line_(VB, refrep_ctx) && str_get_int (STRa(idrep_str), &idrep)) {
-        SNIPi2 (SNIP_SPECIAL, VCF_SPECIAL_IDREP, (vb->main_alt_len > vb->main_ref_len ? (idrep - refrep) : (refrep - idrep)));
+        SNIPi2 (SNIP_SPECIAL, VCF_SPECIAL_IDREP, (vb->ALT_len > vb->REF_len ? (idrep - refrep) : (refrep - idrep)));
         seg_by_ctx (VB, STRa(snip), ctx, idrep_str_len);
     }
     else 
@@ -69,7 +69,7 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_IDREP)
 
     int64_t delta = atoi (snip);
     int64_t refrep = CTX(INFO_REFREP)->last_value.i;
-    new_value->i = (vb->main_alt_len > vb->main_ref_len) ? (refrep + delta) : (refrep - delta) ;
+    new_value->i = (vb->ALT_len > vb->REF_len) ? (refrep + delta) : (refrep - delta) ;
 
     if (reconstruct) RECONSTRUCT_INT (new_value->i);
 

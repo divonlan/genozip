@@ -28,6 +28,8 @@ extern void stats_add_txt_name (rom fn);
 extern void stats_finalize (void);      
     
 extern void stats_add_one_program (STRp(prog_name));
-extern bool stats_is_in_programs (rom signature);
+extern void stats_remove_data_after_program_name (rom program);
+extern rom stats_find_in_programs (rom signature);
+static inline bool stats_is_in_programs (rom signature) { return (bool)stats_find_in_programs (signature); }
 
 extern Buffer stats_programs;

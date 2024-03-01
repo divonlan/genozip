@@ -49,7 +49,7 @@ void chrom_2ref_compress (Reference ref)
     
     ASSERTNOTINUSE (evb->scratch);
     buf_alloc (evb, &evb->scratch, 0, ZCTX(CHROM)->chrom2ref_map.len, Chrom2Ref, 1, "scratch");
-    ContextP zctx = ZCTX(DTFZ(prim_chrom));
+    ContextP zctx = ZCTX(DTFZ(chrom));
 
     for_buf2 (WordIndex, ref_index, chrom_node_index, ZCTX(CHROM)->chrom2ref_map) {
         if (flag.show_chrom2ref) {
@@ -187,7 +187,7 @@ WordIndex chrom_seg_ex (VBlockP vb, Did did_i,
 {
     ASSERTNOTZERO (chrom_len);
     decl_ctx (did_i);
-    bool is_primary = did_i == DTF(prim_chrom); // note: possibly not primary, eg SA_RNAME
+    bool is_primary = did_i == DTF(chrom); // note: possibly not primary, eg SA_RNAME
 
     WordIndex chrom_node_index = WORD_INDEX_NONE, ref_index = WORD_INDEX_NONE;
     int32_t chrom_name_growth=0;

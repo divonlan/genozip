@@ -91,36 +91,46 @@ typedef struct Context {
     Buffer con_index;          // PIZ: use by contexts that might have containers: Array of uint32_t - index into con_cache - Each item corresponds to word_index. 
                                // ZIP: used by: 1. seg_array_of_struct
 
-    // ZIP/PIZ: context specific #1
+    // ZIP/PIZ: context specific buffer #1
     union {
+        // GENERAL
         #define CTX_TAG_CON_CACHE "contexts->con_cache"        
         Buffer con_cache;          // PIZ: vctx: use by contexts that might have containers: Handled by container_reconstruct - an array of Container which includes the did_i. 
                                    //      Each struct is truncated to used items, followed by prefixes. 
                                    // ZIP: vctx: seg_array, sam_seg_array_field_get_con cache a container.
         Buffer ctx_cache;          // PIZ: vctx: used to cached Contexts of Multiplexers and other dict_id look ups
+        Buffer chrom2ref_map;      // ZIP (vctx & zctx), PIZ(zctx): Used by CHROM and contexts with a dict alias to it. Mapping from user file chrom to alternate chrom in reference file (for ZIP-VB: new chroms in this VB) - incides match ctx->nodes
+        // CODECs
         Buffer packed;             // PIZ: vctx: used by contexts that compressed CODEC_ACTG               
-        Buffer zip_ctx_specific_buf;
         Buffer subdicts;           // ZIP/PIZ: zctx: Used by contexts that set ctx->subdicts_section: QUAL with PACB codec, iq:Z
         Buffer value_to_bin;       // ZIP: Used by LONGR codec on *_DOMQRUNS contexts
         Buffer longr_state;        // ZIP: Used by LONGR codec on QUAL contexts
-        Buffer chrom2ref_map;      // ZIP (vctx & zctx), PIZ(zctx): Used by CHROM and contexts with a dict alias to it. Mapping from user file chrom to alternate chrom in reference file (for ZIP-VB: new chroms in this VB) - incides match ctx->nodes
         Buffer qual_line;          // ZIP: used by DOMQ codec on *_DOMQRUNS contexts
         Buffer normalize_buf;      // ZIP: used by DOMQ codec on QUAL contexts
+        // SAM/BAM
+        Buffer qname_hash;         // ZIP: vctx: SAM_QNAME: each entry i contains a line number for which the hash(qname)=i (or -1). prm8[0] is log2(len) (i.e., the number of bits)
         Buffer interlaced;         // ZIP: SAM: used to interlace BD/BI and iq/dq/sq line data
         Buffer mi_history;         // ZIP: SAM: used by OPTION_MI_Z in Ultima
-        Buffer info_items;         // ZIP: VCF: VCF_INFO
-        Buffer deferred_snip;      // ZIP/PIZ: VCF: snip of a field whose seg/recon is postponed to after samples: INFO_SF
         Buffer XG;                 // ZIP/PIZ: OPTION_XG_Z in bsseeker2: XG:Z field with the underscores removed. ZIP: revcomped if FLAG.revcomp. PIZ: as reconstructed when peeking during XM:Z special recon
+        // VCF
+        Buffer format_mapper_buf;  // ZIP: vctx: VCF_SAMPLES: an array of type Container - one entry per entry in CTX(VCF_FORMAT)->nodes   
+        Buffer last_format;        // ZIP: vctx: VCF_FORMAT: cache previous line's FORMAT string
+        Buffer id_hash;            // ZIP: vctx: VCF_ID (BND mates): each entry i contains a line number for which the hash(ID₀)=i (or -1). prm8[0] is log2(len) (i.e., the number of bits)
+        Buffer info_items;         // ZIP: vctx: VCF_INFO
+        Buffer deferred_snip;      // ZIP/PIZ: VCF: snip of a field whose seg/recon is postponed to after samples: INFO_SF
     };
 
     // ZIP/PIZ: context specific #2
     union {
-        #define CTX_TAG_CON_LEN "contexts->con_len"
-        Buffer con_len;            // PIZ vctx: use by contexts that might have containers: Array of uint16_t - length of item in cache
+        // GENERAL
+        Buffer ol_chrom2ref_map;   // ZIP: vctx: SAM/BAM/VCF: CHROM: mapping from user file chrom to alternate chrom in reference file (cloned) - indices match vb->contexts[CHROM].ol_nodes. New nodes are stored in ctx->chrom2ref_map.
+        Buffer ref2chrom_map;      // ZIP: zctx: SAM/BAM/VCF: CHROM: reverse mapping from ref_index to chrom, created by ref_compress_ref
+        Buffer con_len;            // PIZ: vctx: use by contexts that might have containers: Array of uint16_t - length of item in cache
+        // FASTQ
         Buffer localR1;            // ZIP/PIZ vctx: PAIR_2 FASTQ VBs (inc. in Deep SAM): for paired contexts: PAIR_1 local data from corresponding VB (in PIZ: only if fastq_use_pair_assisted). Note: contexts with containers are always no_stons, so they have no local - therefore no issue with union conflict.
-        Buffer ol_chrom2ref_map;   // ZIP vctx: SAM/BAM/VCF/CHAIN: CHROM: mapping from user file chrom to alternate chrom in reference file (cloned) - indices match vb->contexts[CHROM].ol_nodes. New nodes are stored in ctx->chrom2ref_map.
-        Buffer ref2chrom_map;      // ZIP zctx: SAM/BAM/VCF/CHAIN: CHROM: reverse mapping from ref_index to chrom, created by ref_compress_ref
-        Buffer insertion;          // PIZ vctx inserted INFO fields reconstructed after samples: INFO_SF
+        // VCF
+        Buffer format_contexts;    // ZIP: vctx: VCF_SAMPLES: an array of format_mapper_buf.len of ContextPBlock
+        Buffer insertion;          // PIZ: vctx: INFO_SF: inserted INFO fields reconstructed after samples
     };
                 
     // ------------------------------------------------------------------------------------------------
@@ -145,20 +155,12 @@ typedef struct Context {
     union { // 64 bit
         int64_t ctx_specific;
         uint32_t segconf_max;       // maximum value during segconf
-        bool last_is_alt;           // CHROM (all DTs): ZIP: last CHROM was an alt
+        bool last_is_alt;           // CHROM (all DTs): ZIP: last CHROM was has an alternative name
+        IdType id_type;             // ZIP: type of ID in fields segged with seg_id_field        
+
+        // SAM / BAM
         bool last_is_new;           // SAM_QNAME:       ZIP: used in segconf.running
-        bool has_len;               // ZIP: INFO_ANN subfields of cDNA, CDS, AA
         thool XG_inc_S;             // ZIP: bsseeker2 OPTION_XG_Z: whether to include soft_clip[0]
-
-        PosType32 pos_last_value;   // PIZ: VCF_POS: value for rolling back last_value after INFO/END
-
-        struct {                    // ZIP: INFO_SF
-            uint32_t next;
-            uint32_t SF_by_GT; 
-        } sf;    
-
-        thool line_has_RGQ;         // ZIP/PIZ: FORMAT_RGQ : GVCF
-        
         struct {                    // SAM_QUAL, SAM_CQUAL, OPTION_OQ_Z, FASTQ_QUAL: 
             bool longr_bins_calculated; // ZIP zctx: codec_longr: were LONGR bins calculated in segconf
         };
@@ -170,36 +172,43 @@ typedef struct Context {
             uint64_t hp_len    : HP_LEN_BITS; // length of current homopolymer
             uint64_t condensed : 1;           // current homopolymer is condensed
         } tp;
-        struct {                    // INFO_DP:
-            int32_t by_format_dp;   // ZIP/PIZ: segged vs sum of FORMAT/DP
-            int32_t sum_format_dp;  // ZIP/PIZ: sum of FORMAT/DP of samples in this line ('.' counts as 0).
+
+        // VCF
+        struct {                    // ZIP/PIZ: FORMAT_GT 
+            Ploidy prev_ploidy, actual_last_ploidy; 
+            char prev_phase; 
+        } gt; 
+        struct {                    // ZIP/PIZ: FORMAT_GT_HT
+            uint32_t use_HT_matrix : 1;  // ZIP: GT data from this line is placed in the HT matrix
+            uint32_t ht_per_line   : 31; // number of haplotypes (columns) in the matrix
+            uint32_t HT_n_lines;         // number of lines included in the matrix (not included: lines with no GT, lines copied in vcf_seg_sv_SAMPLES)
+        };
+        PosType32 pos_last_value;   // PIZ: VCF_POS: value for rolling back last_value after INFO/END
+        bool has_len;               // ZIP: INFO_ANN subfields of cDNA, CDS, AA
+        struct {                    // ZIP: INFO_SF
+            uint32_t next;
+            uint32_t SF_by_GT; 
+        } sf;    
+        thool line_has_RGQ;         // ZIP/PIZ: FORMAT_RGQ : GVCF
+        struct {                    // ZIP/PIZ: INFO_DP:
+            int32_t by_format_dp;   //   segged vs sum of FORMAT/DP
+            int32_t sum_format_dp;  //   sum of FORMAT/DP of samples in this line ('.' counts as 0).
         } dp;
         struct {
             uint32_t count_ht;      // ZIP/PIZ: INFO/AN: sum of non-. haplotypes in FORMAT/GT, used to calculate INFO/AN
         } an;
-        struct {                    // INFO_QD: ZIP/PIZ: 
+        struct {                    // ZIP/PIZ: INFO_QD:  
             uint32_t sum_dp_with_dosage; // sum of FORMAT/DP of samples in this line and dosage >= 1
             uint32_t pred_type;     // predictor type
         } qd;
-        
-        uint16_t sum_sb[4];         // FORMAT_SB: ZIP/PIZ: sum_sb[i] is the sum of SBᵢ across all samples, where SBᵢ is the i'th component of a bi-allelic FORMAT/SB. 
-
-        int32_t last_end_line_i;    // INFO_END: PIZ: last line on which INFO/END was encountered 
-
-        IdType id_type;             // ZIP: type of ID in fields segged with seg_id_field        
-        
+        uint16_t sum_sb[4];         // ZIP/PIZ: FORMAT_SB: sum_sb[i] is the sum of SBᵢ across all samples, where SBᵢ is the i'th component of a bi-allelic FORMAT/SB. 
+        int32_t last_end_line_i;    // PIZ: INFO_END: last line on which INFO/END was encountered 
         TxtWord predicted_RU;       // PIZ/ZIP: INFO_RU: pointer into REFALT field in this line in txt_data
-
-        packed_enum { PAIR1_ALIGNED_UNKNOWN=-1, PAIR1_NOT_ALIGNED=0, PAIR1_ALIGNED=1 } pair1_is_aligned;  // FASTQ_SQBITMAP:  PIZ: used when reconstructing pair-2
-        
-        bool saggy_seq_needs_fq_reversal; // PIZ: SAM_SQBITMAP: true if saggy copied is a reverse 
-        
-        struct { // FORMAT_GT: ZIP/PIZ
-            Ploidy prev_ploidy, actual_last_ploidy; 
-            char prev_phase; 
-        } gt; 
-        
+        bool saggy_seq_needs_fq_reversal; // PIZ: SAM_SQBITMAP: true if saggy copied is a reverse         
         struct { packed_enum { PS_NONE, PS_POS, PS_POS_REF_ALT, PS_UNKNOWN } ps_type; }; // FORMAT_PS, FORMAT_PID, FORMAT_IPSphased
+
+        // FASTQ
+        packed_enum { PAIR1_ALIGNED_UNKNOWN=-1, PAIR1_NOT_ALIGNED=0, PAIR1_ALIGNED=1 } pair1_is_aligned;  // FASTQ_SQBITMAP:  PIZ: used when reconstructing pair-2
     };
 
     SnipIterator iterator;     // PIZ: used to iterate on the ctx->b250, reading one b250 word_index at a time
@@ -312,15 +321,12 @@ typedef struct Context {
         Buffer piz_lookback_buf;   // PIZ: SAM: used by contexts with lookback 
         Buffer channel_data;       // PIZ: SAM: QUAL/OPTION_iq_Z/OPTION_dq_Z/OPTION_sq_Z : used by PACB codec
         Buffer homopolymer;        // PIZ: SAM: OPTION_tp_B_c
-        Buffer columns_data;       // PIZ: VCF: FORMAT_GT_HT with CODEC_HAPMAT
-        Buffer column_of_zeros;    // PIZ: VCF: FORMAT_GT_HT_INDEX with CODEC_HAPMAT
-        Buffer one_array;          // PIZ: VCF: FORMAT_PBWT_RUNS with CODEC_HAPMAT
     };
 
     ConstContainerP curr_container;// PIZ: current container in this context currently in the stack. NULL if none.
 
     WordIndex last_wi;         // PIZ: last word_index retrieved from b250 
-    LineIType recon_insertion; // PIZ VCF: for INFO fields inserted after samples - whether to reconstruct. if to reconstruct - set to vb->line_i+1. any other value means "don't reconstruct"
+    LineIType recon_insertion; // PIZ VCF: for deferred fields (mostly INFO fields inserted after samples) - whether to reconstruct. if to reconstruct - set to vb->line_i+1. any other value means "don't reconstruct"
     Did other_did_i;           // PIZ: cache the other context needed for reconstructing this one
     SectionType pair_assist_type; // PIZ FASTQ R2: SEC_LOCAL, SEC_B250 is pair-assist, SEC_NONE if not.
     bool is_ctx_alias;         // PIZ: context is an alias            

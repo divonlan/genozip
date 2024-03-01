@@ -243,13 +243,16 @@ static void bgzf_discover_library_and_level (VBlockP vb, int test_block_i, STRp(
 // ZIP: reads and validates a BGZF block, and returns the uncompressed size or (only if soft_fail) an error
 static int32_t bgzf_read_block_raw (FILE *file, // txt_file is not yet assigned when called from file_open_txt_read
                                     uint8_t *block /* must be BGZF_MAX_BLOCK_SIZE in size */, uint32_t *block_size /* out */,
-                                    rom basename, bool is_remote, FailType soft_fail) 
+                                    rom basename, bool is_remote, FailType soft_fail,
+                                    int64_t *disk_so_far) 
 {
     BgzfHeader *h = (BgzfHeader *)block;
 
     // read the header
     *block_size = fread (h, 1, sizeof (struct BgzfHeader), file);
     if (! *block_size) return BGZF_ABRUBT_EOF; // EOF without an EOF block
+
+    if (disk_so_far) *disk_so_far += *block_size;   
 
     if (*block_size < 12) {
         ASSERT (soft_fail, "file %s appears truncated - it ends with a partial gzip block header", basename); // less than the minimal gz block header size
@@ -276,6 +279,8 @@ static int32_t bgzf_read_block_raw (FILE *file, // txt_file is not yet assigned 
     uint32_t body_size = *block_size - sizeof (struct BgzfHeader);
     uint32_t bytes = fread (h+1, 1, body_size, file);
 
+    if (disk_so_far) *disk_so_far += bytes;   
+
     int save_errno = errno; // we want to report errno of fread, not ftell.
 
     // if failed, always error, even if soft_fail
@@ -297,7 +302,7 @@ int32_t bgzf_read_block (FileP file, // txt_file is not yet assigned when called
 {
     START_TIMER;
 
-    int ret = bgzf_read_block_raw ((FILE *)file->file, block, block_size, file->basename, file->is_remote, soft_fail);
+    int ret = bgzf_read_block_raw ((FILE *)file->file, block, block_size, file->basename, file->is_remote, soft_fail, &file->disk_so_far);
     if (ret == BGZF_BLOCK_IS_NOT_GZIP || ret == BGZF_BLOCK_GZIP_NOT_BGZIP) 
         return ret; // happens only if soft_fail
     
@@ -324,7 +329,7 @@ int32_t bgzf_read_block (FileP file, // txt_file is not yet assigned when called
         }
 
         buf_append_one (file->bgzf_isizes, BGEN16 ((uint16_t)(isize - 1))); // -1 to make the range 0..65535
-        buf_append_one (file->bgzf_starts, txt_file ? txt_file->disk_so_far : 0); // not BGEN bc not written to z_file. note: first block is read from file_open_txt_read before txt_file is assigned
+        buf_append_one (file->bgzf_starts, txt_file ? txt_file->disk_so_far - *block_size : 0); // not BGEN bc not written to z_file. note: first block is read from file_open_txt_read before txt_file is assigned
     }
     else 
         if (txt_file) 
@@ -487,7 +492,7 @@ void bgzf_reread_uncompress_vb_as_prescribed (VBlockP vb, FILE *file)
                         "%s: fseeko64 on %s failed while rereading BGZF depn lines: %s", VB_NAME, txt_file->name, strerror(errno));
 
                 STRl (bgzf_block, BGZF_MAX_BLOCK_SIZE);
-                bgzf_read_block_raw (file, (uint8_t*)qSTRa(bgzf_block), txt_file->basename, false, HARD_FAIL);
+                bgzf_read_block_raw (file, (uint8_t*)qSTRa(bgzf_block), txt_file->basename, false, HARD_FAIL, NULL);
             
                 bgzf_uncompress_one_prescribed_block (vb, STRa(bgzf_block), uncomp_block, isize, line->offset.bb_i);
             

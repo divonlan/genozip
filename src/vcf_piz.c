@@ -30,6 +30,8 @@ void vcf_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
         z_file->max_ploidy_for_mux    = header->vcf.max_ploidy_for_mux; // since 15.0.36
         segconf.GQ_method             = header->vcf.segconf_GQ_method;
         segconf.FMT_DP_method         = header->vcf.segconf_FMT_DP_method;
+        segconf.MATEID_method         = header->vcf.segconf_MATEID_method;
+        segconf.vcf_del_svlen_is_neg  = header->vcf.segconf_del_svlen_is_neg;
         segconf.wid_AC.width          = header->vcf.width.AC;
         segconf.wid_AF.width          = header->vcf.width.AF;
         segconf.wid_AN.width          = header->vcf.width.AN;
@@ -39,17 +41,37 @@ void vcf_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
         segconf.wid_MLEAC.width       = header->vcf.width.MLEAC;
         segconf.wid_MLEAC.width       = header->vcf.width.MLEAC;
         segconf.wid_AS_SB_TABLE.width = header->vcf.width.AS_SB_TABLE;
+        segconf.wid_ID.width          = header->vcf.width.ID;
     }
 }
 
-bool vcf_piz_init_vb (VBlockP vb_, ConstSectionHeaderVbHeaderP header, uint32_t *txt_data_so_far_single_0_increment)
+bool vcf_piz_init_vb (VBlockP vb_, ConstSectionHeaderVbHeaderP header)
 { 
     VBlockVCFP vb = (VBlockVCFP)vb_;
 
-    vb->recon_size = BGEN32 (header->recon_size_prim); 
-
-    // accounting for data as in the original source file 
-    *txt_data_so_far_single_0_increment = BGEN32 (header->recon_size_prim); 
+    vb->recon_size = BGEN32 (header->recon_size); 
+    
+    // HT_n_lines: number of lines that are included in HT_MATRIX. Since 15.0.47, we don't
+    // include lines with no FORMAT/GT or lines copied in vcf_seg_sv_SAMPLES. Prior to that, 
+    // all lines were always included.
+    decl_ctx (FORMAT_GT_HT); 
+    if (VER(15)) {
+        ctx->HT_n_lines = BGEN32 (header->vcf_HT_n_lines); // since 15.0.47.
+        
+        // case: vcf_zip_set_vb_header_specific set header->vcf_HT_n_lines, but truly no lines have GT
+        if (ctx->HT_n_lines == 0xffffffff) 
+            ctx->HT_n_lines = 0;
+        
+        // case: file is 15.0.0 to 15.0.46 where this field was not set
+        else if (ctx->HT_n_lines == 0)  
+            goto fallback; 
+    }
+    
+    else fallback: {
+        // in older files, we always included all lines in the HT matrix if any line was included
+        if (section_get_section (vb->vblock_i, SEC_LOCAL, _FORMAT_PBWT_RUNS)) 
+            ctx->HT_n_lines = vb->lines.len32; 
+    }
 
     CTX(INFO_END)->last_end_line_i = LAST_LINE_I_INIT;
 
@@ -73,8 +95,7 @@ IS_SKIP (vcf_piz_is_skip_section)
         && dict_id.num != _FORMAT_GT
         && dict_id.num != _FORMAT_GT_HT
         && dict_id.num != _FORMAT_PBWT_RUNS
-        && dict_id.num != _FORMAT_PBWT_FGRC
-        && dict_id.num != _FORMAT_GT_HT_INDEX)
+        && dict_id.num != _FORMAT_PBWT_FGRC)
         return true;
 
     // if --count, we only need TOPLEVEL and the fields needed for the available filters (--regions)
@@ -105,19 +126,28 @@ void vcf_piz_insert_field (VBlockVCFP vb, ContextP ctx, STRp(value), int chars_r
         ASSPIZ (vb->txt_data.len <= vb->txt_data.size, "txt_data overflow: len=%"PRIu64" > size=%"PRIu64". vb->txt_data dumped to %s.gz", 
                 vb->txt_data.len, (uint64_t)vb->txt_data.size, txtfile_dump_vb (VB, z_name));
         
-        // adjust last_txt of other contexts that might need insertion (and hence last_txt)
-        Did dids[] = { INFO_QD, INFO_SF, INFO_DP };
-        uint32_t last_txt_index = ctx->last_txt.index;
+        // adjust last_txt of other INFO contexts that might need insertion (and hence last_txt)
+        if (dict_id_is_vcf_info_sf (ctx->dict_id)) {
+            Did dids[] = { INFO_QD, INFO_SF, INFO_DP, INFO_AN, INFO_AS_SB_TABLE };
+            uint32_t last_txt_index = ctx->last_txt.index;
 
-        for (int i=0; i < ARRAY_LEN(dids); i++) 
-            if (CTX(dids[i])->last_txt.index > last_txt_index)
-                CTX(dids[i])->last_txt.index += move_by;
+            bool found_me = false;
+            for (int i=0; i < ARRAY_LEN(dids); i++) {
+                if (CTX(dids[i])->last_txt.index > last_txt_index)
+                    CTX(dids[i])->last_txt.index += move_by;
+                
+                if (dids[i] == ctx->did_i) found_me = true;
+            }
 
+            ASSPIZ (found_me, "Missing ctx=%s in dids[]", ctx->tag_name);   
+        }
+        
         // adjust lookback addresses that might be affected by this insertion
         vcf_piz_ps_pid_lookback_shift (VB, addr, move_by);
     }
     
     memcpy (addr, value, value_len); // copy
+    ctx->last_txt.len = value_len;
 }
 
 bool vcf_piz_line_has_RGQ (VBlockVCFP vb)
@@ -171,6 +201,7 @@ CONTAINER_FILTER_FUNC (vcf_piz_filter)
             break;
             
         case _VCF_SAMPLES:
+        case _VCF_SAMPLES_0: // "no mate" channel of SAMPLES multiplexor
             // Set sample_i before reconstructing each sample
             if (item == -1) 
                 vb->sample_i = rep;
