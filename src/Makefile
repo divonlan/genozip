@@ -218,8 +218,8 @@ CONDA_INCS += dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h a
 			htscodecs/rANS_word.h htscodecs/htscodecs_endian.h htscodecs/rANS_word.h htscodecs/utils.h htscodecs/varint.h 					\
 			htscodecs/varint2.h htscodecs/utils.h 																							\
 			\
-			bsc/adler.h bsc/bwt.h bsc/coder.h bsc/coder_tables.h bsc/filter_tables.h bsc/filters.h bsc/libbsc.h bsc/libsais.h bsc/lzp.h 	\
-			bsc/platform.h bsc/predictor.h bsc/qlfc.h bsc/qlfc_model.h bsc/rangecoder.h											\
+			bsc/adler32.h bsc/bwt.h bsc/coder.h bsc/coder_tables.h bsc/filter_tables.h bsc/filters.h bsc/libbsc.h bsc/libsais.h bsc/lzp.h 	\
+			bsc/platform.h bsc/predictor.h bsc/qlfc.h bsc/qlfc_model.h bsc/rangecoder.h														\
  			\
 			libdeflate_1.7/unaligned.h libdeflate_1.7/deflate_compress.h libdeflate_1.7/arm_matchfinder_impl.h 								\
 			libdeflate_1.7/deflate_constants.h libdeflate_1.7/bt_matchfinder.h libdeflate_1.7/hc_matchfinder.h libdeflate_1.7/common_defs.h	\
