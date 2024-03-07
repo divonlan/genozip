@@ -50,6 +50,7 @@ extern DisplayPrintId dis_dict_id (DictId dict_id);
 #define DICT_ID_MAKE1_5(s) ((((uint64_t)(s[0] | 0xc0)) | ((uint64_t)s[1] << 8) | ((uint64_t)s[2] << 16) | ((uint64_t)s[3] << 24) | ((uint64_t)s[4] << 32)))
 #define DICT_ID_MAKE1_6(s) ((((uint64_t)(s[0] | 0xc0)) | ((uint64_t)s[1] << 8) | ((uint64_t)s[2] << 16) | ((uint64_t)s[3] << 24) | ((uint64_t)s[4] << 32) | ((uint64_t)s[5] << 40)))
 #define DICT_ID_MAKE1_7(s) ((((uint64_t)(s[0] | 0xc0)) | ((uint64_t)s[1] << 8) | ((uint64_t)s[2] << 16) | ((uint64_t)s[3] << 24) | ((uint64_t)s[4] << 32) | ((uint64_t)s[5] << 40) | ((uint64_t)s[6] << 48)))
+#define DICT_ID_MAKE1_8(s) ((((uint64_t)(s[0] | 0xc0)) | ((uint64_t)s[1] << 8) | ((uint64_t)s[2] << 16) | ((uint64_t)s[3] << 24) | ((uint64_t)s[4] << 32) | ((uint64_t)s[5] << 40) | ((uint64_t)s[6] << 48) | ((uint64_t)s[7] << 56)))
 #define DICT_ID_MAKE1_L(s/*nul-terminated*/) ((((uint64_t)(s[0] | 0xc0)) | ((uint64_t)s[1] << 8) | ((uint64_t)s[2] << 16) | ((uint64_t)s[3] << 24) | ((uint64_t)s[sizeof s-5] << 32) | ((uint64_t)s[sizeof s-4] << 40) | ((uint64_t)s[sizeof s-3] << 48) | ((uint64_t)s[sizeof s-2] << 56)))
 
 // Type 2 - first character is unchanged - 64-127 (lower or uppercase, but not numbers)
@@ -60,6 +61,7 @@ extern DisplayPrintId dis_dict_id (DictId dict_id);
 #define DICT_ID_MAKE2_5(s) (((uint64_t)s[0] | ((uint64_t)s[1] << 8) | ((uint64_t)s[2] << 16) | ((uint64_t)s[3] << 24) | ((uint64_t)s[4] << 32)))
 #define DICT_ID_MAKE2_6(s) (((uint64_t)s[0] | ((uint64_t)s[1] << 8) | ((uint64_t)s[2] << 16) | ((uint64_t)s[3] << 24) | ((uint64_t)s[4] << 32) | ((uint64_t)s[5] << 40)))
 #define DICT_ID_MAKE2_7(s) (((uint64_t)s[0] | ((uint64_t)s[1] << 8) | ((uint64_t)s[2] << 16) | ((uint64_t)s[3] << 24) | ((uint64_t)s[4] << 32) | ((uint64_t)s[5] << 40) | ((uint64_t)s[6] << 48)))
+#define DICT_ID_MAKE2_8(s) (((uint64_t)s[0] | ((uint64_t)s[1] << 8) | ((uint64_t)s[2] << 16) | ((uint64_t)s[3] << 24) | ((uint64_t)s[4] << 32) | ((uint64_t)s[5] << 40) | ((uint64_t)s[6] << 48) | ((uint64_t)s[7] << 56)))
 #define DICT_ID_MAKE2_L(s/*nul-terminated*/) (((uint64_t)s[0] | ((uint64_t)s[1] << 8) | ((uint64_t)s[2] << 16) | ((uint64_t)s[3] << 24) | ((uint64_t)s[sizeof s-5] << 32) | ((uint64_t)s[sizeof s-4] << 40) | ((uint64_t)s[sizeof s-3] << 48) | ((uint64_t)s[sizeof s-2] << 56)))
 
 // Field - first character is 0->63
@@ -70,6 +72,7 @@ extern DisplayPrintId dis_dict_id (DictId dict_id);
 #define DICT_ID_MAKEF_5(s) ((((uint64_t)(s[0] & 0x3f)) | ((uint64_t)s[1] << 8) | ((uint64_t)s[2] << 16) | ((uint64_t)s[3] << 24) | ((uint64_t)s[4] << 32)))
 #define DICT_ID_MAKEF_6(s) ((((uint64_t)(s[0] & 0x3f)) | ((uint64_t)s[1] << 8) | ((uint64_t)s[2] << 16) | ((uint64_t)s[3] << 24) | ((uint64_t)s[4] << 32) | ((uint64_t)s[5] << 40)))
 #define DICT_ID_MAKEF_7(s) ((((uint64_t)(s[0] & 0x3f)) | ((uint64_t)s[1] << 8) | ((uint64_t)s[2] << 16) | ((uint64_t)s[3] << 24) | ((uint64_t)s[4] << 32) | ((uint64_t)s[5] << 40) | ((uint64_t)s[6] << 48)))
+#define DICT_ID_MAKEF_8(s) ((((uint64_t)(s[0] & 0x3f)) | ((uint64_t)s[1] << 8) | ((uint64_t)s[2] << 16) | ((uint64_t)s[3] << 24) | ((uint64_t)s[4] << 32) | ((uint64_t)s[5] << 40) | ((uint64_t)s[6] << 48) | ((uint64_t)s[7] << 56)))
 #define DICT_ID_MAKEF_L(s/*nul-terminated*/) ((((uint64_t)(s[0] & 0x3f)) | ((uint64_t)s[1] << 8) | ((uint64_t)s[2] << 16) | ((uint64_t)s[3] << 24) | ((uint64_t)s[sizeof s-5] << 32) | ((uint64_t)s[sizeof s-4] << 40) | ((uint64_t)s[sizeof s-3] << 48) | ((uint64_t)s[sizeof s-2] << 56)))
 
 static inline DictId sub_dict_id (DictId dict_id, char ordinal)

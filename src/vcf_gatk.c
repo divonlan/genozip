@@ -6,6 +6,7 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
+#include <math.h>
 #include "vcf_private.h"
 #include "seg.h"
 #include "piz.h"
@@ -16,18 +17,26 @@
 
 #define adjustment ctx->last_delta
 
+#define _RAW_DP  DICT_ID_MAKE1_7("R0AW_DP")  
+#define _RAW_MQ  DICT_ID_MAKE1_7("R1AW_MQ")    
+#define _RAW_DP2 DICT_ID_MAKE1_8("R2AW_DP2")  
+
 static SmallContainer RAW_MQandDP_con = {
-    .nitems_lo = 2, 
+    .nitems_lo = 3, 
     .repeats   = 1, 
-    .items     = { { .dict_id={ _INFO_RAW_MQandDP_MQ }, .separator = {','} },
-                   { .dict_id={ _INFO_RAW_MQandDP_DP }                     } }
+    .items     = { { .dict_id={ _RAW_DP }, .separator = { CI0_INVISIBLE } },
+                   { .dict_id={ _RAW_MQ }, .separator = {','            } },
+                   { .dict_id={ _RAW_DP2 }                                } }
 };
 
-sSTRl(RAW_MQandDP_snip, 64 + 2 * 16);     
+sSTRl(RAW_MQandDP_snip, 64 + 3 * 16);     
+sSTRl(copy_RAW_DP_int, 30);
 
 void vcf_gatk_zip_initialize (void)
 {
     container_prepare_snip ((ContainerP)&RAW_MQandDP_con, 0, 0, qSTRa(RAW_MQandDP_snip));
+
+    seg_prepare_snip_other (SNIP_OTHER_DELTA, _RAW_DP, true, 0, copy_RAW_DP_int);   
 }
 
 void vcf_gatk_seg_initialize (VBlockVCFP vb)
@@ -35,6 +44,13 @@ void vcf_gatk_seg_initialize (VBlockVCFP vb)
     ctx_set_ltype (VB, LT_STRING, INFO_TLOD, INFO_NALOD, INFO_NLOD, DID_EOL);
 
     ctx_set_dyn_int (VB, INFO_RPA, DID_EOL);
+
+    if (segconf.has[INFO_RAW_MQandDP]) { // create contexts only if they're needed
+        ctx_set_dyn_int (VB, ctx_get_ctx (vb, _RAW_DP)->did_i, ctx_get_ctx (vb, _RAW_MQ)->did_i, DID_EOL);
+        ctx_get_ctx (vb, _RAW_DP)->flags.same_line = true; // INFO/DP may be before after RAW_MQandDP
+
+        ctx_consolidate_stats_(VB, CTX(INFO_RAW_MQandDP), (ContainerP)&RAW_MQandDP_con);
+    }
 }
 
 // ------------------
@@ -42,10 +58,75 @@ void vcf_gatk_seg_initialize (VBlockVCFP vb)
 // ------------------
 
 // ##INFO=<ID=RAW_MQandDP,Number=2,Type=Integer,Description="Raw data (sum of squared MQ and total depth) for improved RMS Mapping Quality calculation. Incompatible with deprecated RAW_MQ formulation.">
-// comma-seperated two numbers: RAW_MQandDP=720000,200: 1. sum of squared MQ values and 2. total reads over variant genotypes (note: INFO/MQ is sqrt(#1/#2))
+// comma-seperated two numbers: RAW_MQandDP=720000,200: 1. sum of squared MAPQ values of alignments that contributed to the variant and 2. total reads over variant genotypes (note: INFO/MQ is sqrt(#1/#2))
 void vcf_seg_INFO_RAW_MQandDP (VBlockVCFP vb, ContextP ctx, STRp(value))
 {
-    seg_by_container (VB, ctx, (ContainerP)&RAW_MQandDP_con, STRa(value), STRa(RAW_MQandDP_snip), NULL, true, value_len);
+    str_split_ints (value, value_len, 2, ',', item, true);
+    int64_t mq=items[0], dp=items[1]; // for readability
+
+    if (!n_items || !dp) { // expecting DP>0
+        seg_by_ctx (VB, STRa(value), ctx, value_len); 
+        return;
+    }
+    
+    // segconf: calculate max_MAPQ. MQ=Σ{DP}(MAPQ²)
+    if (segconf.running) 
+        segconf.vcf_max_MAPQ = MIN_(223, MAX_((double)segconf.vcf_max_MAPQ, ceil (sqrt ((double)mq / (double)dp)))); // 223 bc in SPECIAL we send it 32+
+
+    int mq_str_len = (rom)memchr (value, ',', value_len) - value;
+    int dp_str_len = value_len - mq_str_len - 1;
+
+    ContextP dp_ctx  = ctx_get_ctx (VB, _RAW_DP);
+    ContextP mq_ctx  = ctx_get_ctx (VB, _RAW_MQ);
+    ContextP dp2_ctx = ctx_get_ctx (VB, _RAW_DP2);
+    ContextP info_dp_ctx = CTX(INFO_DP);
+    int64_t info_dp;
+
+    // 1st container item: DP. It is consumed without reconstruction - just setting last_value 
+    // for use of MQ. Seg as delta of INFO_DP if possible.    
+    if (has(DP) && segconf.INFO_DP_method != BY_FORMAT_DP/*bug 1040*/ && 
+        ctx_has_value_in_line_(VB, info_dp_ctx))   
+        
+        seg_delta_vs_other_do (VB, dp_ctx, info_dp_ctx, 0, 0, dp, -1, dp_str_len);
+
+    else if (has(DP) && segconf.INFO_DP_method != BY_FORMAT_DP && 
+             !ctx_encountered_in_line (VB, INFO_DP) && 
+             str_get_int (STRa(BII(DP)->value), &info_dp)) {
+        int64_t save = info_dp_ctx->last_value.i;
+        info_dp_ctx->last_value.i = info_dp;
+
+        seg_delta_vs_other_do (VB, dp_ctx, info_dp_ctx, 0, 0, dp, -1, dp_str_len);
+
+        info_dp_ctx->last_value.i = save;
+    }
+
+    else
+        seg_integer (VB, dp_ctx, dp, true, dp_str_len);
+
+    // 2nd container item: MQ - use special for common case that all alignments had maximal MAPQ
+    if (mq == dp * segconf.vcf_max_MAPQ * segconf.vcf_max_MAPQ)
+        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_RAW_MQandDP_MQ, 32 + segconf.vcf_max_MAPQ }, 3, mq_ctx, mq_str_len);
+
+    else
+        seg_integer (VB, mq_ctx, mq, true, mq_str_len);
+
+    // 3rd container item: copy DP (as delta=0 from first container item) - this item gets reconstructed
+    seg_by_ctx (VB, STRa(copy_RAW_DP_int), dp2_ctx, 0);
+
+    // container snip
+    seg_by_ctx (VB, STRa(RAW_MQandDP_snip), ctx, 1); // account for ',' separator
+}
+
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_RAW_MQandDP_MQ)
+{
+    int64_t max_MAPQ = snip[0] - 32;
+    int64_t dp = ECTX(_RAW_DP)->last_value.i;
+
+    new_value->i = dp * max_MAPQ * max_MAPQ;
+
+    if (reconstruct) RECONSTRUCT_INT (new_value->i);
+
+    return HAS_NEW_VALUE;
 }
 
 // -----------------

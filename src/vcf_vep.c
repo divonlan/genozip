@@ -155,8 +155,8 @@ void vcf_vep_zip_initialize (void) // nul-terminated string containing list of f
         #undef CB
     }
 
-    maf_dict_id[0] = (DictId)DICT_ID_MAKE1_L("VEP_MAF0");
-    maf_dict_id[1] = (DictId)DICT_ID_MAKE1_L("VEP_MAF0");
+    maf_dict_id[0] = (DictId)DICT_ID_MAKE1_8("VEP_MAF0");
+    maf_dict_id[1] = (DictId)DICT_ID_MAKE1_8("VEP_MAF0");
     
     SmallContainer con = { .repeats   = 1, 
                            .nitems_lo = 2,

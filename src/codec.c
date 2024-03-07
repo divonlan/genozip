@@ -100,7 +100,7 @@ rom codec_name (Codec codec)
 void codec_initialize (void)
 {
     codec_bsc_initialize();
-    bgzf_libdeflate_initialize();
+    bgzf_libdeflate_1_7_initialize();
 }
 
 // ------------------------------

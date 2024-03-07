@@ -664,6 +664,9 @@ void sam_segconf_set_by_MP (void)
     segconf.sam_has_BWA_X01_i = segconf.is_bwa || MP(DRAGEN);
 
     segconf.sam_has_bowtie2_YS_i = MP(BOWTIE2) || MP(BSSEEKER2) || MP(HISAT2);
+
+    if ((!MP(TMAP/*mapped file*/) && !MP(TORRENT_BC/*unmapped file*/)) || !segconf.has[OPTION_ZM_B_s])
+        flag.optimize_ZM = false; // optimize_ZM is for IonTorrent ZM:B data, but is set automatically with --optimize
 }
 
 // finalize Seg configuration parameters

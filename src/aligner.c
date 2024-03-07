@@ -27,7 +27,7 @@
 // Foward example: If seq is: G-AGGGCT  (G is the hook)  -- matches reference AGGGCT       - function returns 110110101000 (A=00 is the LSb)
 // Reverse       : If seq is: CGCCCT-C  (C is the hook)  -- also matches reference AGGGCT  - function returns 110110101000 - the same
 // calculates a refhash word from 14 nucleotides following a 'G' (only last G in a sequenece of GGGG...)
-static inline bool aligner_get_word_from_seq (VBlockP vb, rom seq, uint32_t *refhash_word, int direction /* 1 forward, -1 reverse */)                                              
+static inline PosType64 aligner_get_word_from_seq (VBlockP vb, rom seq, uint32_t *refhash_word, int direction /* 1 forward, -1 reverse */)                                              
 {   
     // START_TIMER; // this has a small performance impact as it is called in a tight loop - uncomment when needed
 
@@ -47,8 +47,11 @@ static inline bool aligner_get_word_from_seq (VBlockP vb, rom seq, uint32_t *ref
     if (bits_per_hash_is_odd) 
         *refhash_word &= layer_bitmask[0]; 
 
+    // Performance note: 50% of the aligner time is taken by memory latency - looking up from 
+    // refhashs[] - ~0.28 lookups every base in the sequence.
+    PosType64 gpos = (PosType64)BGEN32 (refhashs[0][*refhash_word & layer_bitmask[0]]);
     // COPY_TIMER (aligner_get_word_from_seq);
-    return true;
+    return gpos;
 }
 
 // converts a string sequence to a 2-bit bitmap
@@ -77,7 +80,7 @@ static inline Bits aligner_seq_to_bitmap (VBlockP vb, rom seq, uint64_t seq_len,
         bits_assign2 (&seq_bits, (base_i << 1), encoding);
     }
 
-    bits_clear_excess_bits_in_top_word (&seq_bits);
+    bits_clear_excess_bits_in_top_word (&seq_bits); // bc bitmap_words is uninitialized
 
     COPY_TIMER (aligner_seq_to_bitmap);
 
@@ -99,9 +102,8 @@ static inline bool aligner_update_best (VBlockP vb, PosType64 gpos, PosType64 pa
     if (gpos == *best_gpos) goto not_near_perfect;
     
     uint64_t genome_start_bit = (fwd ? gpos : genome_nbases-1 - (gpos + seq_bits->nbits/2 -1)) * 2;                            
-
-    int32_t distance = bits_hamming_distance (fwd ? genome : emoneg, genome_start_bit, seq_bits, 0, seq_bits->nbits);
     
+    int32_t distance = bits_hamming_distance (fwd ? genome : emoneg, genome_start_bit, seq_bits, 0, seq_bits->nbits);
     int32_t match_len = (uint32_t)seq_bits->nbits - distance;     
                                                                                                                                                                                                                                                  
     if (pair_gpos != NO_GPOS && ABS(gpos-pair_gpos) > 500) match_len -= 17; // penalty for remote GPOS in 2nd pair
@@ -114,7 +116,7 @@ static inline bool aligner_update_best (VBlockP vb, PosType64 gpos, PosType64 pa
         // note: we allow 2 snps and we still consider the match good enough and stop looking further    
         // compared to stopping only if match_len==seq_len, this adds about 1% to the file size, but is significantly faster 
         if (match_len >= (seq_len - max_snps_for_perfection) * 2) { // we found (almost) the best possible match             
-            *is_all_ref = maybe_perfect_match && (match_len == seq_len*2); // perfect match                 
+            if (maybe_perfect_match && (match_len == seq_len*2)) *is_all_ref = true; // perfect match                 
             // COPY_TIMER (aligner_update_best); 
             return true; // we're done                                                                                                          
         }                                                                                                                       
@@ -168,72 +170,64 @@ static inline PosType64 aligner_best_match (VBlockP vb, STRp(seq), PosType64 pai
     uint32_t density = (flag.fast ? 3 : 1);
     uint32_t max_snps_for_perfection = (flag.fast ? 10 : 2); // note: this is only approximately SNPs as we actually measure mismatched bits, not bases
 
+    {START_TIMER;
     // we search - checking both forward hooks and reverse hooks, we check only the first layer for now
     for (uint32_t i=0; i < seq_len; i += density) {          
         Direction found = NOT_FOUND;
 
         if (i < seq_len - nukes_per_hash && // room for the hash word
             seq[i] == HOOK && seq[i+1] != HOOK &&  // take the G - if there is a homopolymer GGGG... take the last one
-            aligner_get_word_from_seq (vb, &seq[i+1], &refhash_word, 1)) { 
+            (gpos = aligner_get_word_from_seq (vb, &seq[i+1], &refhash_word, 1)) != NO_GPOS) { 
 
-            // Performance note: 50% of the aligner time is taken by memory latency - looking up from 
-            // refhashs[] (in the 3 code locations we do so) - ~0.28 lookups every base in the sequence.
-            gpos = (PosType64)BGEN32 (refhashs[0][refhash_word & layer_bitmask[0]]); // position of the start of the G... sequence in the genome
-            
-            if (gpos != NO_GPOS) {
-                gpos -= i; // gpos is the first base on the reference, that aligns to the first base of seq
-                found = FORWARD;
-            }
+            gpos -= i; // gpos is the first base on the reference, that aligns to the first base of seq
+            found = FORWARD;
         }
 
         // note: if the previous condition is true, then seq[i]==HOOK and no need to check this condition. hence the "else"
         else if (i >= nukes_per_hash && // room for the hash word
             seq[i] == HOOK_REV && seq[i-1] != HOOK_REV &&  // take the G - if there is a polymer GGGG... take the last one
-            aligner_get_word_from_seq (vb, &seq[i-1], &refhash_word, -1)) { 
+            (gpos = aligner_get_word_from_seq (vb, &seq[i-1], &refhash_word, -1)) != NO_GPOS) { 
 
-            gpos = (PosType64)BGEN32 (refhashs[0][refhash_word & layer_bitmask[0]]); // position of the start of the G... sequence in the FORWARD genome
-            
-            if (gpos != NO_GPOS) {
-                gpos -= seq_len_64-1 - i; // gpos is the first base of the reference, that aligns wit the LAST base of seq
-                found = REVERSE;
-            }
+            gpos -= seq_len_64-1 - i; // gpos is the first base of the reference, that aligns wit the LAST base of seq
+            found = REVERSE;
         }
 
-        if (found != NOT_FOUND && (gpos >= 0) && (gpos != NO_GPOS) && (gpos + seq_len_64 < genome_nbases)) { // ignore this gpos if the seq wouldn't fall completely within reference genome
+        if (found != NOT_FOUND && (gpos >= 0) && (gpos + seq_len_64 < genome_nbases)) { // ignore this gpos if the seq wouldn't fall completely within reference genome
             finds[num_finds++] = (struct Finds){ .refhash_word = refhash_word, .i = i, .found = found };
             
             if (aligner_update_best (vb, gpos, pair_gpos, &seq_bits, seq_len, found, maybe_perfect_match, 
                                      genome, emoneg, genome_nbases, max_snps_for_perfection, 
-                                     &best_gpos, &longest_len, &best_is_forward, is_all_ref))
+                                     &best_gpos, &longest_len, &best_is_forward, is_all_ref)) {
+                COPY_TIMER(aligner_first_layer);
                 goto done; // near-perfect match, search no longer
+            }
         }
     }
+    COPY_TIMER(aligner_first_layer);}
 
     // if still no near-perfect matches found, search the additional layers 
     // (each refhash_word can have up to num_layers corresponding GPOSes - we already tested one, now we test the rest)
     {START_TIMER;
-    for (unsigned layer_i=1; layer_i < num_layers; layer_i++) {
-        for (uint32_t find_i=0; find_i < num_finds; find_i++) {
+    for (uint32_t find_i=0; find_i < num_finds; find_i++) {
+        // amount to adjust gpos, which was found for base #i of seq, to correspond to the beginning of seq
+        int64_t gpos_shift = (finds[find_i].found == FORWARD ? finds[find_i].i : seq_len_64-1 - finds[find_i].i);
 
-            if (finds[find_i].found == NOT_FOUND) continue; // a previous layer had no GPOS for this refhash_word, so this layer will definitely not have one either
-
+        for (unsigned layer_i=1; layer_i < num_layers; layer_i++) {
             gpos = (PosType64)BGEN32 (refhashs[layer_i][finds[find_i].refhash_word & layer_bitmask[layer_i]]); 
 
             // case: no more GPOSes for this refhash_word - this layer and all subsequent are NO_GPOS
-            if (gpos == NO_GPOS) {
-                finds[find_i].found = NOT_FOUND; 
-                continue;
-            }
+            if (gpos == NO_GPOS) break;
 
-            // adjust gpos, which was found for base #i of seq, to correspond to the beginning of seq
-            gpos -= (finds[find_i].found == FORWARD ? finds[find_i].i : seq_len_64-1 - finds[find_i].i);
+            gpos -= gpos_shift;
 
             // check if this gpos results in a better match than the one we already have
             if ((gpos >= 0) && (gpos + seq_len_64 < genome_nbases) &&
                 aligner_update_best (vb, gpos, pair_gpos, &seq_bits, seq_len, finds[find_i].found, maybe_perfect_match, 
                                      genome, emoneg, genome_nbases, max_snps_for_perfection, 
-                                     &best_gpos, &longest_len, &best_is_forward, is_all_ref))  
+                                     &best_gpos, &longest_len, &best_is_forward, is_all_ref)) {
+                COPY_TIMER(aligner_additional_layers);
                 goto done; // near-perfect match, search no longer       
+            }
         }
     }
     COPY_TIMER(aligner_additional_layers);}

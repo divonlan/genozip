@@ -10,14 +10,14 @@
 #include "container.h"
 
 
-#define _YA_RNAME  DICT_ID_MAKE2_L("Y0A_RNAME")  
+#define _YA_RNAME  DICT_ID_MAKE2_8("Y0A_RNAM")  
 #define _YA_POS    DICT_ID_MAKE2_7("Y1A_POS")    
-#define _YA_CIGAR  DICT_ID_MAKE2_L("Y2A_CIGAR")  
+#define _YA_CIGAR  DICT_ID_MAKE2_8("Y2A_CIGR")  
 
-#define _YO_RNAME  DICT_ID_MAKE2_L("Y0O_RNAME")  
+#define _YO_RNAME  DICT_ID_MAKE2_8("Y0O_RNAM")  
 #define _YO_POS    DICT_ID_MAKE2_7("Y1O_POS")    
-#define _YO_STRAND DICT_ID_MAKE2_7("Y2O_STRAND") 
-#define _YO_CIGAR  DICT_ID_MAKE2_L("Y3O_CIGAR")  
+#define _YO_STRAND DICT_ID_MAKE2_8("Y2O_SRND") 
+#define _YO_CIGAR  DICT_ID_MAKE2_8("Y3O_CIGR")  
 
 sSTRl (YO_NA_con_snip, 100);
 

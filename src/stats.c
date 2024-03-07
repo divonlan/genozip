@@ -881,7 +881,7 @@ static void stats_display (void)
 
     buf_print (buf , false);
 
-    if (stats.count && z_file->disk_size < 1 MB && command==ZIP)  // no need to print this note if z size > 1MB, as the 2-4KB of overhead is rounded off anyway
+    if (stats.count && z_file->disk_so_far < 1 MB && command==ZIP)  // no need to print this note if z size > 1MB, as the 2-4KB of overhead is rounded off anyway
         // stats text doesn't include SEC_STATS and SEC_GENOZIP_HEADER - the last 3 sections in the file - since stats text is generated before these sections are compressed
         iprintf ("\nNote: ZIP total file size excludes overhead of %s\n", str_size (stats.count).s);
 

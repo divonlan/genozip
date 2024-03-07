@@ -245,7 +245,7 @@ static inline uint32_t txtfile_read_block_bgzf (VBlockP vb, int32_t max_uncomp /
             // note: this is the first BGZF block of the file, so vb->bgzf_i remains 0
         }
         else {
-            if (!vb->bgzf_blocks.len)
+            if (!vb->bgzf_blocks.len) // possibly bgzf_blocks already contains bgzf blocks unconsumed by the previous VB (see bgzf_zip_init_vb)
                 vb->vb_bgzf_i = txt_file->bgzf_isizes.len; // first bgzf block number for this VB
 
             block_uncomp_len = (uint32_t)bgzf_read_block (txt_file, BAFT8 (vb->scratch), &block_comp_len, HARD_FAIL);
@@ -615,11 +615,11 @@ void txtfile_read_vblock (VBlockP vb)
     
     vb->comp_i = flag.zip_comp_i;  // needed for VB_NAME
 
-    bool always_uncompress = flag.pair == PAIR_R2 || // if we're reading the 2nd paired file, fastq_txtfile_have_enough_lines needs the whole data
-                             flag.make_reference      || // unconsumed callback for make-reference needs to inspect the whole data
-                             segconf.running          ||
-                             flag.optimize_DESC       || // fastq_zip_init_vb needs to count lines
-                             flag.add_line_numbers    || // vcf_zip_init_vb   needs to count lines
+    bool always_uncompress = flag.pair == PAIR_R2  || // if we're reading the 2nd paired file, fastq_txtfile_have_enough_lines needs the whole data
+                             flag.make_reference   || // unconsumed callback for make-reference needs to inspect the whole data
+                             segconf.running       ||
+                             flag.optimize_DESC    || // fastq_zip_init_vb needs to count lines
+                             flag.add_line_numbers || // vcf_zip_init_vb   needs to count lines
                              flag.biopsy;
 
     txt_file->header_only = false; // optimistic initialization

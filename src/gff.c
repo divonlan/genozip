@@ -68,6 +68,8 @@ void gff_zip_initialize (void)
                           { .dict_id = { _ATTR_DBXid }                     } } // 1
     };
     container_prepare_snip ((ContainerP)&con, 0, 0, qSTRa (dbx_container_snip));
+
+    fasta_zip_initialize(); // for a potential embedded fasta
 }
 
 // detect if a generic file is actually a GFF3/GVF/GTF (but cannot detect non-GTF GFF2)
@@ -121,8 +123,6 @@ int32_t gff_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
                     segconf.has_embedded_fasta = true;
                     segconf.fasta_has_contigs  = false; // GFF3-embedded FASTA doesn't have contigs, because did=0 is reserved for GFF's SEQID
                     segconf.seq_type           = SQT_NUKE;
-
-                    DO_ONCE fasta_zip_initialize();
                 }
 
                 break; // terminate VB (and component) at this newline - next line is FASTA

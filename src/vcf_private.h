@@ -160,9 +160,9 @@ typedef struct VBlockVCF {
     DosageMultiplexer mux_PLn, mux_GL, mux_GP, mux_PRI, mux_DS, mux_PP, mux_PVAL, mux_FREQ, mux_RD, 
                       mux_VAF, mux_AD[2], mux_ADALL[2];
     
-    #define MAX_DP_FOR_MUX 51       // TODO: 60 would be better as it was up to 15.0.35, but mux is currently limited to 256 channels
-    MULTIPLEXER(MAX_DP_FOR_MUX * ZIP_NUM_DOSAGES_FOR_MUX) mux_PLy;
+    MULTIPLEXER(51 * ZIP_NUM_DOSAGES_FOR_MUX) mux_PLy; // TODO: 60 would be better than 51 as it was up to 15.0.35, but mux is currently limited to 256 channels
     MULTIPLEXER(7 * ZIP_NUM_DOSAGES_FOR_MUX) mux_GQ;
+    #define MAX_DP_FOR_MUX 60       
     MULTIPLEXER(MAX_DP_FOR_MUX) mux_RGQ;   
 
     Multiplexer2 mux_POS;           // GVCF: multiplex by whether this field is END or POS
@@ -260,6 +260,13 @@ extern void vcf_seg_FORMAT_GQ (VBlockVCFP vb);
 // GATK stuff
 extern void vcf_gatk_zip_initialize (void);
 extern void vcf_gatk_seg_initialize (VBlockVCFP vb);
+extern void vcf_seg_INFO_RAW_MQandDP (VBlockVCFP vb, ContextP ctx, STRp(value));
+extern bool vcf_seg_INFO_BaseCounts (VBlockVCFP vb, ContextP ctx_basecounts, STRp(value)); // returns true if caller still needs to seg 
+extern void vcf_seg_INFO_AS_SB_TABLE (VBlockP vb);
+extern void vcf_piz_sum_SB_for_AS_SB_TABLE (VBlockP vb, STRp(recon));
+extern void vcf_piz_insert_INFO_AS_SB_TABLE (VBlockVCFP vb);
+extern void vcf_seg_INFO_RU (VBlockVCFP vb, ContextP ctx, STRp(ru));
+extern void vcf_seg_INFO_RPA (VBlockVCFP vb, ContextP ctx, STRp(rpa_str));
 
 // INFO/SF
 extern bool vcf_seg_INFO_SF_init (VBlockVCFP vb, ContextP sf_ctx, STRp(value));
@@ -274,14 +281,6 @@ extern void vcf_seg_sum_DP_for_QD (VBlockVCFP vb, int64_t value);
 extern void vcf_seg_INFO_QD (VBlockP vb);
 extern void vcf_piz_sum_DP_for_QD (VBlockP vb, STRp(recon));
 extern void vcf_piz_insert_INFO_QD (VBlockVCFP vb);
-
-extern void vcf_seg_INFO_RAW_MQandDP (VBlockVCFP vb, ContextP ctx, STRp(value));
-extern bool vcf_seg_INFO_BaseCounts (VBlockVCFP vb, ContextP ctx_basecounts, STRp(value)); // returns true if caller still needs to seg 
-extern void vcf_seg_INFO_AS_SB_TABLE (VBlockP vb);
-extern void vcf_piz_sum_SB_for_AS_SB_TABLE (VBlockP vb, STRp(recon));
-extern void vcf_piz_insert_INFO_AS_SB_TABLE (VBlockVCFP vb);
-extern void vcf_seg_INFO_RU (VBlockVCFP vb, ContextP ctx, STRp(ru));
-extern void vcf_seg_INFO_RPA (VBlockVCFP vb, ContextP ctx, STRp(rpa_str));
 
 // INFO stuff
 

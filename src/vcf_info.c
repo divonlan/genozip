@@ -39,8 +39,6 @@ void vcf_info_seg_initialize (VBlockVCFP vb)
     ctx_set_dyn_int (VB, INFO_SVLEN, INFO_DP4_RF, INFO_DP4_AF,
                      T(segconf.INFO_DP_method == INFO_DP_DEFAULT, INFO_DP),
                      DID_EOL);
-
-    ctx_consolidate_stats (VB, INFO_RAW_MQandDP, INFO_RAW_MQandDP_MQ, INFO_RAW_MQandDP_DP, DID_EOL);
     
     if (segconf.has[INFO_CLNHGVS]) vcf_seg_hgvs_consolidate_stats (vb, INFO_CLNHGVS);
     if (segconf.has[INFO_HGVSG])   vcf_seg_hgvs_consolidate_stats (vb, INFO_HGVSG);
@@ -296,7 +294,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         // ---------------------------------------
         // GATK fields
         // ---------------------------------------
-        case _INFO_RAW_MQandDP:     CALL (vcf_seg_INFO_RAW_MQandDP (vb, ctx, STRa(value)));
+        case _INFO_RAW_MQandDP:     CALL_IF (segconf.has[INFO_RAW_MQandDP], vcf_seg_INFO_RAW_MQandDP (vb, ctx, STRa(value)));
         case _INFO_HaplotypeScore:  CALL (seg_float_or_not (VB, ctx, STRa(value), value_len));
         case _INFO_BaseCounts:      CALL_WITH_FALLBACK (vcf_seg_INFO_BaseCounts);
         case _INFO_SF:              CALL_WITH_FALLBACK (vcf_seg_INFO_SF_init); // Source File

@@ -11,7 +11,7 @@
 #include "genozip.h"
 #include "file.h"
 
-#define MAX_BB_I (uint64_t)((1ULL << 48) - 1ULL) // 256 T blocks
+#define MAX_BB_I (uint64_t)((1ULL << 48) - 1ULL) // 256 Tera blocks
 
 typedef union { // 64 bit
     struct {             // used if file codec is BGZF

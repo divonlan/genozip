@@ -1494,7 +1494,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam,
 
         case _OPTION_Zs_Z: COND (MP(HISAT2), sam_seg_HISAT2_Zs_Z (vb, STRa(value), add_bytes));
 
-        case _OPTION_ZM_B_s: COND ((MP(TMAP/*mapped file*/) || MP(TORRENT_BC/*unmapped file*/)) && flag.optimize_ZM, sam_seg_array_one_ctx (vb, dl, _OPTION_ZM_B_s, array_subtype, STRa(value), sam_optimize_TMAP_ZM, 0, NULL));
+        case _OPTION_ZM_B_s: COND (flag.optimize_ZM, sam_seg_array_one_ctx (vb, dl, _OPTION_ZM_B_s, array_subtype, STRa(value), sam_optimize_TMAP_ZM, 0, NULL));
 
         case _OPTION_YH_Z: COND (MP(NOVOALIGN), seg_add_to_local_string (VB, CTX(OPTION_YH_Z), STRa(value), LOOKUP_NONE, add_bytes)); break;
         case _OPTION_YQ_Z: COND (MP(NOVOALIGN), seg_add_to_local_string (VB, CTX(OPTION_YQ_Z), STRa(value), LOOKUP_NONE, add_bytes)); break;

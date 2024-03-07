@@ -166,10 +166,7 @@
 #pragma GENDICT INFO_InbreedingCoeff=DTYPE_1=InbreedingCoeff       // Likelihood-based test for the consanguinity among samples : https://gatk.broadinstitute.org/hc/en-us/articles/360036351032-InbreedingCoeff
 #pragma GENDICT INFO_AS_InbreedingCoeff=DTYPE_1=AS_InbreedingCoeff // Allele-specific likelihood-based test for the consanguinity among samples : https://gatk.broadinstitute.org/hc/en-us/articles/360036827291-AS-InbreedingCoeff
 #pragma GENDICT INFO_RAW_MQ=DTYPE_1=RAW_MQ          // <ID=RAW_MQ,Number=1,Type=Float,Description="Raw data for RMS Mapping Quality">
-
 #pragma GENDICT INFO_RAW_MQandDP=DTYPE_1=RAW_MQandDP// <ID=RAW_MQandDP,Number=2,Type=Integer,Description="Raw data (sum of squared MQ and total depth) for improved RMS Mapping Quality calculation. Incompatible with deprecated RAW_MQ formulation.">
-#pragma GENDICT INFO_RAW_MQandDP_MQ=DTYPE_1=R0AW_MQandDP
-#pragma GENDICT INFO_RAW_MQandDP_DP=DTYPE_1=R1AW_MQandDP
 
 #pragma GENDICT FORMAT_RGQ=DTYPE_2=RGQ              // <ID=RGQ,Number=1,Type=Integer,Description="Unconditional reference genotype confidence, encoded as a phred quality -10*log10 p(genotype call is wrong)">
 #pragma GENDICT FORMAT_MIN_DP=DTYPE_2=MIN_DP        // <ID=MIN_DP,Number=1,Type=Integer,Description="Minimum DP observed within the GVCF block">
@@ -744,7 +741,7 @@ extern void vcf_samples_add  (rom samples_str);
                       vcf_piz_special_FORMAT_AD0, vcf_piz_special_MUX_FORMAT_DP, vcf_piz_special_INFO_AN, vcf_piz_special_DEFER, \
                       vcf_piz_special_RPA, vcf_piz_special_SVABA_MATEID, vcf_piz_special_MAPQ, vcf_piz_special_SPAN, vcf_piz_special_COPY_MATE, \
                       vcf_piz_special_DEMUX_BY_MATE, vcf_piz_special_PBSV_MATEID, vcf_piz_special_DEMUX_BY_VARTYPE, vcf_piz_special_PBSV_ID_BND, \
-                      vcf_piz_special_manta_CIGAR, vcf_piz_special_LEN_OF, vcf_piz_special_HOMSEQ, \
+                      vcf_piz_special_manta_CIGAR, vcf_piz_special_LEN_OF, vcf_piz_special_HOMSEQ, vcf_piz_special_RAW_MQandDP_MQ, \
                    }
 
 SPECIAL (VCF, 0,  main_REFALT,         vcf_piz_special_main_REFALT);
@@ -828,7 +825,8 @@ SPECIAL (VCF, 77, PBSV_ID_BND,         vcf_piz_special_PBSV_ID_BND);            
 SPECIAL (VCF, 78, MANTA_CIGAR,         vcf_piz_special_manta_CIGAR);              // added v15.0.48
 SPECIAL (VCF, 79, LEN_OF,              vcf_piz_special_LEN_OF);                   // added v15.0.48
 SPECIAL (VCF, 80, HOMSEQ,              vcf_piz_special_HOMSEQ);                   // added v15.0.48
-#define NUM_VCF_SPECIAL 81
+SPECIAL (VCF, 81, RAW_MQandDP_MQ,      vcf_piz_special_RAW_MQandDP_MQ);           // added v15.0.49
+#define NUM_VCF_SPECIAL 82
 
 #define VCF_DICT_ID_ALIASES                                 \
     /*        type        alias             maps to     */  \

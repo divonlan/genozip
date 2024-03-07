@@ -267,8 +267,6 @@ extern void bits_set_region (BitsP bits, uint64_t start, uint64_t len);
 #define bits_clear_region(bits,start,len) bits_clear_region_do (bits, start, len, __FUNCLINE)
 extern void bits_clear_region_do (BitsP bits, uint64_t start, uint64_t len, rom func, unsigned code_line);
 
-extern uint32_t bits_hamming_distance (ConstBitsP bits1, uint64_t index1, ConstBitsP bits2, uint64_t index2, uint64_t len);
-
 //
 // Set, clear and toggle all bits at once
 //
@@ -456,6 +454,49 @@ void bits_truncate (BitsP bits, uint64_t new_num_of_bits);
 // get number of bits in an array, excluding trailing zeros (divon)
 uint64_t bits_effective_length (BitsP bits);
 
+// create words - if the word is not aligned to the bitmap word boundaries, and hence spans 2 bitmap words, 
+// we take the MSb's from the left word and the LSb's from the right word, to create shift_1 (divon)
+static inline uint64_t _bits_combined_word (uint64_t word_a, uint64_t word_b, uint8_t shift)
+{
+    return shift ? ( (word_a >> shift)       // first  word's MSb are the LSb of our combined word
+                   | (word_b << (64-shift))) // second word's LSb are the MSb of our combined word
+                 : word_a;
+}         
+
+// calculate the number of bits that are different between two Bits' at arbitrary positions (divon)
+// note: static inline because in the tight loop of aligner
+static inline uint32_t bits_hamming_distance (ConstBitsP bits_1, uint64_t index_1, 
+                                              ConstBitsP bits_2, uint64_t index_2, 
+                                              uint64_t len)
+{
+    const uint64_t *words_1 = &bits_1->words[index_1 >> 6];
+    uint8_t shift_1 = index_1 & bitmask64(6); // word 1 contributes (64-shift) most-significant bits, word 2 contribute (shift) least significant bits
+    uint64_t *after_1 = bits_1->words + bits_1->nwords;
+
+    const uint64_t *words_2 = &bits_2->words[index_2 >> 6];
+    uint8_t shift_2 = index_2 & bitmask64(6); // word 1 contributes (64-shift) most-significant bits, word 2 contribute (shift) least significant bits
+    uint64_t *after_2 = bits_2->words + bits_2->nwords;
+
+    uint64_t word=0;
+    uint32_t nonmatches=0; 
+    uint32_t nwords = roundup_bits2words64 (len);
+
+    for (uint32_t i=0; i < nwords; i++) {
+        uint64_t word_1 = _bits_combined_word (words_1[i], (&words_1[i+1] < after_1 ? words_1[i+1] : 0), shift_1);
+        uint64_t word_2 = _bits_combined_word (words_2[i], (&words_2[i+1] < after_2 ? words_2[i+1] : 0), shift_2);
+        word = word_1 ^ word_2; // xor the words - resulting in 1 in each position they differ and 0 where they're equal
+
+        // we count the number of different bits. note that identical nucleotides results in 2 equal bits while
+        // different nucleotides results in 0 or 1 equal bits (a 64 bit word contains 32 nucleotides x 2 bit each)
+        nonmatches += __builtin_popcountll (word); // note: expected to be _mm_popcnt_u64 with SSE4.2
+    }
+
+    // remove non-matches due to the unused part of the last word
+    if (len % 64)
+        nonmatches -= __builtin_popcountll (word & ~bitmask64 (len % 64));
+
+    return nonmatches; // this is the "hamming distance" between the two Bits' - number of non-matches
+}
 
 // iterator on bases (2 bits)
 #define BASE_ITER_INIT(bits, base_i, n_bases, is_fwd)       \

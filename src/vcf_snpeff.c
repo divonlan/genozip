@@ -22,8 +22,8 @@ static bool vcf_seg_INFO_ANN_pos_len (VBlockP vb, ContextP ctx, STRp(value), uin
     static const MediumContainer con = {
         .repeats      = 1, 
         .nitems_lo    = 2, 
-        .items        = { { .dict_id.num = DICT_ID_MAKE2_L("A0NN_pos"), .separator = "/" }, 
-                          { .dict_id.num = DICT_ID_MAKE2_L("A1NN_len")                   } } };
+        .items        = { { .dict_id.num = DICT_ID_MAKE2_8("A0NN_pos"), .separator = "/" }, 
+                          { .dict_id.num = DICT_ID_MAKE2_8("A1NN_len")                   } } };
 
     // check if format is "pos" or "pos/len"
     if (!ctx->is_initialized && value_len) {
@@ -75,7 +75,7 @@ void vcf_seg_INFO_ANN (VBlockVCFP vb, ContextP ctx, STRp(value))
                          { .dict_id.num=DICT_ID_MAKE1_4("cDNA"),                .separator = {'|'} }, 
                          { .dict_id.num=DICT_ID_MAKE1_3("CDS"),                 .separator = {'|'} }, 
                          { .dict_id.num=DICT_ID_MAKE1_2("AA"),                  .separator = {'|'} }, 
-                         { .dict_id.num=DICT_ID_MAKE1_L("Distance"),            .separator = {'|'} }, 
+                         { .dict_id.num=DICT_ID_MAKE1_8("Distance"),            .separator = {'|'} }, 
                          { .dict_id.num=DICT_ID_MAKE1_6("Errors")                                  } } };
 
     SegCallback callbacks[16] = { [0]         = vcf_seg_INFO_allele,

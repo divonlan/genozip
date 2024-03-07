@@ -21,7 +21,7 @@
 #include "dict_id_gen.h"
 
 #define _ALT_BND_REF      DICT_ID_MAKEF_7("BND_REF")
-#define _ALT_BND_REF2     DICT_ID_MAKEF_L("BND_REF2")
+#define _ALT_BND_REF2     DICT_ID_MAKEF_8("BND_REF2")
 #define _ALT_BND_INS      DICT_ID_MAKEF_7("BND_INS")
 // note: VCF_MATE_CHROM and VCF_MATE_POS are defined in vcf.h 
 

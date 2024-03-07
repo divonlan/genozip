@@ -513,7 +513,7 @@ void bgzf_reread_uncompress_vb_as_prescribed (VBlockP vb, FILE *file)
     libdeflate_free_decompressor ((struct libdeflate_decompressor **)&vb->gzip_compressor, __FUNCLINE);
 }
 
-void bgzf_libdeflate_initialize (void)
+void bgzf_libdeflate_1_7_initialize (void)
 {
     libdeflate_set_memory_allocator_1_7 (bgzf_alloc, codec_free_do);
 }

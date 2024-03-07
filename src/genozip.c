@@ -817,7 +817,7 @@ int main (int argc, char **argv)
 
     else global_max_threads = MIN_(MAX_GLOBAL_MAX_THREADS,
                                    ((flag.is_windows || flag.is_mac || flag.is_wsl || flag.low_memory) 
-                                        ? ((float)arch_get_num_cores() * 0.75)    // under-subscribe on Windows / Mac to maintain UI interactivity
+                                        ? ((float)MAX_(arch_get_num_cores() * 0.75, arch_get_num_cores()-3))  // under-subscribe on Windows / Mac to maintain UI interactivity
                                         : ((float)arch_get_num_cores() * 1.1 ))); // over-subscribe to keep all cores busy even when some threads are waiting on mutex or join
 
     ASSINP (input_files_len || !isatty(0) || command != ZIP, "missing input file. Example: %s myfile.bam", global_cmd);

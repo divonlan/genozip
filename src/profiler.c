@@ -298,6 +298,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (sam_analyze_copied_SEQ, 3);
         PRINT (aligner_seg_seq, 3);
         PRINT (aligner_best_match, 4);
+        PRINT (aligner_first_layer, 5);
         PRINT (aligner_additional_layers, 5);
         PRINT (aligner_update_best, 5);
         PRINT (aligner_get_word_from_seq, 5);

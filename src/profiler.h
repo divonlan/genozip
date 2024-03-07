@@ -51,7 +51,7 @@
         txtheader_zip_read_and_compress, txtheader_compress, txtheader_compress_one_fragment, txtheader_piz_read_and_reconstruct,\
         digest, digest_txt_header, ref_make_calculate_digest, refhash_load_digest, ref_load_digest, refhash_compress_digest, \
         dict_io_compress_dictionaries, dict_io_assign_codecs, dict_io_compress_one_fragment, \
-        aligner_best_match, aligner_get_word_from_seq, aligner_update_best, aligner_seq_to_bitmap, aligner_additional_layers, \
+        aligner_best_match, aligner_get_word_from_seq, aligner_update_best, aligner_seq_to_bitmap, aligner_first_layer, aligner_additional_layers, \
         refhash_generate_emoneg, ref_contigs_compress,\
         generate_recon_plan, zip_write_global_area, \
         piz_read_global_area, ref_load_stored_reference, dict_io_read_all_dictionaries, dict_io_build_word_lists, \
@@ -113,7 +113,7 @@ typedef struct timespec TimeSpecType;
     } \
 }
 
-#define COPY_TIMER(res)     COPY_TIMER_FULL(vb, res, false)
+#define COPY_TIMER(res) COPY_TIMER_FULL(vb, res, false)
 #define COPY_TIMER_EVB(res) ({ if (evb) COPY_TIMER_FULL(evb, res, true); })
 #define COPY_TIMER_COMPRESS(res)  ({ if (!in_assign_codec) COPY_TIMER(res); }) // account only if not running from codec_assign_best_codec, because it accounts for itself
 

@@ -39,6 +39,8 @@ typedef packed_enum { VCF_QUAL_DEFAULT, VCF_QUAL_local, VCF_QUAL_by_RGQ, VCF_QUA
 
 typedef packed_enum { VCF_INFO_DEFAULT, VCF_INFO_by_RGQ, VCF_INFO_by_FILTER } VcfInfoMethodType;
 
+typedef packed_enum { INFO_MQRankSum_DEFAULT, INFO_MQRankSum_by_DP } InfoMQRankSumMethod;
+
 typedef packed_enum { L3_UNKNOWN, L3_EMPTY, L3_COPY_LINE1, L3_NCBI, NUM_L3s } FastqLine3Type;
 
 // SamMapperType is part of the file format and values should not be changed (new ones can be added)
@@ -234,8 +236,10 @@ typedef struct {
     bool vcf_is_sv;
     bool use_null_DP_method;    // A method for predicting GT=./. by DP=.
     bool vcf_del_svlen_is_neg;
+    uint8_t vcf_max_MAPQ;       // maximum MAPQ of BAM alignments that contributed to this variant, as derived from RAW_MQandDP, but not more than 223
     FormatDPMethod FMT_DP_method;
     InfoDPMethod INFO_DP_method;
+    InfoMQRankSumMethod INFO_MQRankSum_method;
     thool PL_mux_by_DP;
     Mutex PL_mux_by_DP_mutex;
     bool AS_SB_TABLE_by_SB;

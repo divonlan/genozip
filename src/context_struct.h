@@ -191,7 +191,7 @@ typedef struct Context {
         } sf;    
         thool line_has_RGQ;         // ZIP/PIZ: FORMAT_RGQ : GVCF
         struct {                    // ZIP/PIZ: INFO_DP:
-            int32_t by_format_dp;   //   segged vs sum of FORMAT/DP
+            int32_t by_format_dp;   //   this line was segged vs sum of FORMAT/DP
             int32_t sum_format_dp;  //   sum of FORMAT/DP of samples in this line ('.' counts as 0).
         } dp;
         struct {

@@ -13,7 +13,7 @@
 #include "reconstruct.h"
 #include "libdeflate_1.19/libdeflate.h"
 
-#define _ID0  DICT_ID_MAKEF_L("I0D_VTYP")
+#define _ID0  DICT_ID_MAKEF_8("I0D_VTYP")
 #define _ID1  DICT_ID_MAKEF_7("I1D_SPC")
 #define _ID_BND0 DICT_ID_MAKEF_7("I1chrom")
 #define _ID_BND1 DICT_ID_MAKEF_5("I1pos")

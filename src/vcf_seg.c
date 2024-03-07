@@ -147,8 +147,7 @@ void vcf_seg_initialize (VBlockP vb_)
                    T(segconf.vcf_is_dbSNP, INFO_FREQ),
                    INFO_FATHMM_score, INFO_VEST3_score, DID_EOL);
 
-    ctx_set_dyn_int (VB, INFO_RAW_MQandDP_MQ, INFO_RAW_MQandDP_DP, 
-                     T(segconf.vcf_is_dbSNP, INFO_dbSNPBuildID), 
+    ctx_set_dyn_int (VB, T(segconf.vcf_is_dbSNP, INFO_dbSNPBuildID), 
                      DID_EOL);
     
     CTX(FORMAT_DP)->flags.same_line = true; // delta against AD or SDP regardless if before or after on line

@@ -31,7 +31,7 @@ typedef struct BgzfBlockPiz {
     int32_t txt_index, txt_size;          // index of uncompressed block within vb->txt_data. The first block index will be negative if there is passed-down unconsumed data
 } BgzfBlockPiz;
 
-extern void bgzf_libdeflate_initialize (void);
+extern void bgzf_libdeflate_1_7_initialize (void);
 extern void bgzf_sign (uint64_t disk_size, uint8_t *signature);
 
 //---------

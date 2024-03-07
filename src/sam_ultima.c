@@ -271,10 +271,10 @@ void sam_seg_ultima_XV (VBlockSAMP vb, STRp(xv), unsigned add_bytes)
     static const MediumContainer container_XV = {
         .repeats      = 1, 
         .nitems_lo    = 4, 
-        .items        = { { .dict_id.num = DICT_ID_MAKE2_L("X0V_RNAME"), .separator = "," }, 
-                          { .dict_id.num = DICT_ID_MAKE2_7("X1V_POS"),   .separator = "," }, 
-                          { .dict_id.num = DICT_ID_MAKE2_6("X2V_AS"),    .separator = "," }, 
-                          { .dict_id.num = DICT_ID_MAKE2_L("X3V_MAPQ")                    } } };
+        .items        = { { .dict_id.num = DICT_ID_MAKE2_8("X0V_RNAM"), .separator = "," }, 
+                          { .dict_id.num = DICT_ID_MAKE2_7("X1V_POS"),  .separator = "," }, 
+                          { .dict_id.num = DICT_ID_MAKE2_6("X2V_AS"),   .separator = "," }, 
+                          { .dict_id.num = DICT_ID_MAKE2_8("X3V_MAPQ")                   } } };
 
     SegCallback callbacks[4] = { 0, sam_seg_ultima_delta_POS, sam_seg_ultima_XV_AS, sam_seg_ultima_XV_MAPQ }; 
 
@@ -288,10 +288,10 @@ void sam_seg_ultima_XW (VBlockSAMP vb, STRp(xw), unsigned add_bytes)
     static const MediumContainer container_XW = { // bug 892
         .repsep       = ";", 
         .nitems_lo    = 4, 
-        .items        = { { .dict_id.num = DICT_ID_MAKE2_L("X0W_RNAME"), .separator = "," }, 
-                          { .dict_id.num = DICT_ID_MAKE2_7("X1W_POS"),   .separator = "," }, 
-                          { .dict_id.num = DICT_ID_MAKE2_6("X2W_REF"),   .separator = "," }, 
-                          { .dict_id.num = DICT_ID_MAKE2_L("X3W_ALT")                     } } };
+        .items        = { { .dict_id.num = DICT_ID_MAKE2_8("X0W_RNAM"), .separator = "," }, 
+                          { .dict_id.num = DICT_ID_MAKE2_7("X1W_POS"),  .separator = "," }, 
+                          { .dict_id.num = DICT_ID_MAKE2_7("X2W_REF"),  .separator = "," }, 
+                          { .dict_id.num = DICT_ID_MAKE2_7("X3W_ALT")                     } } };
 
     SegCallback callbacks[4] = { 0, sam_seg_ultima_delta_POS }; 
 

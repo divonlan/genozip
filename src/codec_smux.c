@@ -16,19 +16,19 @@
 #include "reference.h"
 
 // note: dict_id compatible with codec_pacb_smux_is_qual()
-#define decl_smux_ctxs_zip(id)                                                                                                                  \
-    ContextP ctxs[5] = { ctx_get_ctx (vb, DICT_ID_MAKEF_L(((char[]){'A','A','A','-',(id[0] & 0x7f) | 0x40, id[1], id[2], id[3], 0}))),  \
-                         ctx_get_ctx (vb, DICT_ID_MAKEF_L(((char[]){'C','C','C','-',(id[0] & 0x7f) | 0x40, id[1], id[2], id[3], 0}))),  \
-                         ctx_get_ctx (vb, DICT_ID_MAKEF_L(((char[]){'G','G','G','-',(id[0] & 0x7f) | 0x40, id[1], id[2], id[3], 0}))),  \
-                         ctx_get_ctx (vb, DICT_ID_MAKEF_L(((char[]){'T','T','T','-',(id[0] & 0x7f) | 0x40, id[1], id[2], id[3], 0}))),  \
-                         ctx_get_ctx (vb, DICT_ID_MAKEF_L(((char[]){'N','N','N','-',(id[0] & 0x7f) | 0x40, id[1], id[2], id[3], 0}))) }; // N and other IUPACs
+#define decl_smux_ctxs_zip(id)                                                                                                       \
+    ContextP ctxs[5] = { ctx_get_ctx (vb, DICT_ID_MAKEF_8(((char[]){'A','A','A','-',(id[0] & 0x7f) | 0x40, id[1], id[2], id[3]}))),  \
+                         ctx_get_ctx (vb, DICT_ID_MAKEF_8(((char[]){'C','C','C','-',(id[0] & 0x7f) | 0x40, id[1], id[2], id[3]}))),  \
+                         ctx_get_ctx (vb, DICT_ID_MAKEF_8(((char[]){'G','G','G','-',(id[0] & 0x7f) | 0x40, id[1], id[2], id[3]}))),  \
+                         ctx_get_ctx (vb, DICT_ID_MAKEF_8(((char[]){'T','T','T','-',(id[0] & 0x7f) | 0x40, id[1], id[2], id[3]}))),  \
+                         ctx_get_ctx (vb, DICT_ID_MAKEF_8(((char[]){'N','N','N','-',(id[0] & 0x7f) | 0x40, id[1], id[2], id[3]}))) }; // N and other IUPACs
 
-#define decl_smux_ctxs_piz(id)                                                                                                                  \
-    ContextP ctxs[5] = { ECTX(DICT_ID_MAKEF_L(((char[]){'A','A','A','-',(id[0] & 0x7f) | 0x40, id[1], id[2], id[3], 0}))),              \
-                         ECTX(DICT_ID_MAKEF_L(((char[]){'C','C','C','-',(id[0] & 0x7f) | 0x40, id[1], id[2], id[3], 0}))),              \
-                         ECTX(DICT_ID_MAKEF_L(((char[]){'G','G','G','-',(id[0] & 0x7f) | 0x40, id[1], id[2], id[3], 0}))),              \
-                         ECTX(DICT_ID_MAKEF_L(((char[]){'T','T','T','-',(id[0] & 0x7f) | 0x40, id[1], id[2], id[3], 0}))),              \
-                         ECTX(DICT_ID_MAKEF_L(((char[]){'N','N','N','-',(id[0] & 0x7f) | 0x40, id[1], id[2], id[3], 0}))) }; // NULL if not data for this base
+#define decl_smux_ctxs_piz(id)                                                                                                       \
+    ContextP ctxs[5] = { ECTX(DICT_ID_MAKEF_8(((char[]){'A','A','A','-',(id[0] & 0x7f) | 0x40, id[1], id[2], id[3]}))),              \
+                         ECTX(DICT_ID_MAKEF_8(((char[]){'C','C','C','-',(id[0] & 0x7f) | 0x40, id[1], id[2], id[3]}))),              \
+                         ECTX(DICT_ID_MAKEF_8(((char[]){'G','G','G','-',(id[0] & 0x7f) | 0x40, id[1], id[2], id[3]}))),              \
+                         ECTX(DICT_ID_MAKEF_8(((char[]){'T','T','T','-',(id[0] & 0x7f) | 0x40, id[1], id[2], id[3]}))),              \
+                         ECTX(DICT_ID_MAKEF_8(((char[]){'N','N','N','-',(id[0] & 0x7f) | 0x40, id[1], id[2], id[3]}))) }; // NULL if not data for this base
 
 
 //--------------
