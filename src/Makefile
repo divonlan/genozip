@@ -517,10 +517,13 @@ endif
 
 version = $(shell head -n1 version.h |cut -d\" -f2)
 
-SH_VERIFY_ALL_COMMITTED = (( `git status |grep 'modified\|Untracked files'|grep -v .gitkeep |wc -l` == 0 )) || 				\
-                          (echo ERROR: there are some uncommitted changes: ; echo ; git status ; exit 1) ;     				\
-						  (( `cd secure; git status |grep 'modified\|Untracked files'|grep -v .gitkeep |wc -l` == 0 )) || 	\
-                          (echo ERROR: there are some uncommitted changes: ; echo ; cd secure ; git status ; exit 1) 
+SH_VERIFY_ALL_COMMITTED = 																																				\
+	if (( `           git status -s | wc -l` != 0 )); then echo "ERROR: there are some UNCOMMITTED changes:" ; echo ; git status -s ; exit 1; fi;  						\
+	if (( `cd secure; git status -s | wc -l` != 0 )); then echo "ERROR: there are some UNCOMMITTED changes:" ; echo ; git status -s ; exit 1; fi
+
+SH_VERIFY_ALL_STAGED = 																																					\
+	if (( `           git status -s | cut -c2 | grep -v " " | wc -l` != 0 )); then echo "ERROR: there are some UNSTAGED changes:" ; echo ; git status -s ; exit 1; fi;  \
+	if (( `cd secure; git status -s | cut -c2 | grep -v " " | wc -l` != 0 )); then echo "ERROR: there are some UNSTAGED changes:" ; echo ; git status -s ; exit 1; fi
 
 test:
 	@cat test.sh | tr -d "\r" | bash -
@@ -537,17 +540,15 @@ clean:  # careful not to delete license.o
 	@echo Cleaning up optimized
 	@rm -f $(EXECUTABLES) $(OBJS) $(DEPS) $(OBJDIR)/*.o $(OBJDIR)/*.d
 
-clean-distribution: # clean all platforms
+initialize-build-distribution: # clean all platforms
+	@$(SH_VERIFY_ALL_STAGED)
 	@bash --norc --noprofile secure/prepare.sh # before clean removes executables
-	@(cd secure ; git stage secure.data ; exit 0) > /dev/null
-	@(cd secure ; git commit -m $(version) ; exit 0) > /dev/null
-	@(cd secure ; git push > /dev/null)
-	@$(SH_VERIFY_ALL_COMMITTED)
+	@(cd secure ; git stage secure.data ; git commit -m $(version) ; git push) 
 	@echo Cleaning up all platforms for distribution
 	@rm -f $(OBJDIR_LINUX)/*.o $(OBJDIR_LINUX)/*.d $(OBJDIR_WINDOWS)/*.o $(OBJDIR_WINDOWS)/*.d $(OBJDIR_MAC)/*.o $(OBJDIR_MAC)/*.d
 	
 clean-opt:
-	@echo Cleaning up opt
+	@echo Cleaning up opt 
 	@rm -f $(OPT_OBJS) $(EXECUTABLES) $(OPT_EXECUTABLES)/*.opt-o
 
 clean-test:
@@ -561,7 +562,7 @@ clean-dev: clean-installers clean-test # use only in dev - deletes license.o
 	@mkdir $(OBJDIR) $(addprefix $(OBJDIR)/,$(SRC_DIRS))
 	@touch $(OBJDIR)/.gitkeep
 
-.PHONY: clean clean-debug clean-optimized clean-installers clean-distribution \
+.PHONY: clean clean-debug clean-optimized clean-installers initialize-build-distribution \
         git-pull macos mac/.remote_mac_timestamp delete-arch testfiles test-backup \
 		dict_id_gen$(EXE) \
 		objdir.linux objdir.windows objdir.mac \
@@ -682,12 +683,12 @@ BUILD_FILES = version.h Makefile \
 	../RELEASE_NOTES.txt ../LICENSE.txt \
 	$(INSTALLERS)/genozip-installer.exe $(INSTALLERS)/genozip-linux-x86_64.tar $(INSTALLERS)/LICENSE.html
 
-push-build: 
+push-build: # push files modified during the build process
 	@git stage $(BUILD_FILES)
 	@git commit -m $(version) 
-	@git push > /dev/null
+	@git push
 
-distribution-maintenance: clean-distribution increment-version testfiles ../LICENSE.txt $(INSTALLERS)/LICENSE.html \
+distribution-maintenance: initialize-build-distribution increment-version testfiles ../LICENSE.txt $(INSTALLERS)/LICENSE.html \
                           $(INSTALLERS)/genozip-linux-x86_64.tar.build $(INSTALLERS)/genozip-installer.exe objdir.mac/secure/license.o \
                           push-build conda/.conda-timestamp genozip-latest genozip-latest.exe
 	@(printf "\nClick Enter after committing the feedstock conflict resolution: <Click>")
