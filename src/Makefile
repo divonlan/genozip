@@ -677,14 +677,14 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 $(INSTALLERS)/LICENSE.html: genozip$(EXE)
 	@./genozip$(EXE) --license=html,5000 > $@
 
-BUILD_FILES = version.h genozip-installer.ifp ../LICENSE.txt Makefile objdir.linux/secure/license.o objdir.windows/secure/license.o objdir.mac/secure/license.o ../RELEASE_NOTES.txt
-
-INSTALLER_FILES = genozip-installer.exe genozip-linux-x86_64.tar LICENSE.html
+BUILD_FILES = version.h Makefile \
+	objdir.linux/secure/license.o objdir.windows/secure/license.o objdir.mac/secure/license.o \
+	../RELEASE_NOTES.txt ../LICENSE.txt \
+	$(INSTALLERS)/genozip-installer.exe $(INSTALLERS)/genozip-linux-x86_64.tar $(INSTALLERS)/LICENSE.html
 
 push-build: 
-	@(git stage $(BUILD_FILES) ; exit 0) > /dev/null
-	@(cd $(INSTALLERS); git stage $(INSTALLER_FILES) ; exit 0) > /dev/null
-	@(git commit -m $(version) ; exit 0) > /dev/null
+	@git stage $(BUILD_FILES)
+	@git commit -m $(version) 
 	@git push > /dev/null
 
 distribution-maintenance: clean-distribution increment-version testfiles ../LICENSE.txt $(INSTALLERS)/LICENSE.html \
