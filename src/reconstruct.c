@@ -574,6 +574,7 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
     case SNIP_CONTAINER: {
         STR(prefixes);
         ContainerP con_p = container_retrieve (vb, snip_ctx, word_index, snip+1, snip_len-1, pSTRa(prefixes));
+
         ctx_set_encountered (vb, snip_ctx); // indicate this container was encountered, in case it is queried in container_peek_get_idxs
         new_value = container_reconstruct (vb, snip_ctx, con_p, prefixes, prefixes_len); 
         has_new_value = HAS_NEW_VALUE;
@@ -598,15 +599,18 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
         if (snip_ctx->flags.same_line && snip_ctx != base_ctx) { 
             STR(snip);
             new_value = reconstruct_peek (vb, base_ctx, pSTRa(snip)); // value of this line/sample - whether already encountered or peek a future value
-            if (snip == BAFTtxt)
-                Ltxt += snip_len;
-            else
-                RECONSTRUCT_snip;
+            if (reconstruct) {
+                if (snip == BAFTtxt)
+                    Ltxt += snip_len;
+                else
+                    RECONSTRUCT_snip;
+            }
         }
 
         // if same_line=false, we copy previous value, whether on this line or previous line
         else {
-            RECONSTRUCT_LAST_TXT (base_ctx);
+            if (reconstruct)
+                RECONSTRUCT_LAST_TXT (base_ctx);
             new_value = base_ctx->last_value; 
         }
         has_new_value = HAS_NEW_VALUE;
@@ -665,7 +669,7 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
         break;
 
     default: normal_snip: {
-        if (reconstruct) RECONSTRUCT_snip; // simple reconstruction
+            if (reconstruct) RECONSTRUCT_snip; // simple reconstruction
 
         switch (store_type) {
             case STORE_INT: 
@@ -731,7 +735,7 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i,
     if (ctx->b250.len32 ||
         (!ctx->b250.len32 && !ctx->local.len32 && ctx->dict.len)) {  // all_the_same case - no b250 or local, but have dict      
         STR0(snip);
-        WordIndex word_index = LOAD_SNIP(ctx->did_i); // note: if we have no b250, local but have dict, this will be word_index=0 (see ctx_get_next_snip)
+        WordIndex word_index = LOAD_SNIP(ctx->did_i); // note: if we have no b250, local but have dict, this will be word_index=dict_flags.all_the_same_wi (see ctx_get_next_snip)
         ctx->last_wi = word_index; 
 
         if (!snip) goto missing;

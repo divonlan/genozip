@@ -56,7 +56,7 @@ WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con,
                             // - then the container-wide prefix terminated by CON_PX_SEP 
                             // - then one prefix per item terminated by CON_PX_SEP
                             // all prefixes may be empty; empty prefixes at the end of the prefix string maybe omitted.
-                            STRp (prefixes), 
+                            STRp(prefixes), 
                             unsigned add_bytes,
                             bool *is_new) // optional out
 {
@@ -70,7 +70,7 @@ WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con,
 
     char snip[snip_len];
 
-    container_prepare_snip (con, prefixes, prefixes_len, snip, &snip_len);
+    container_prepare_snip (con, STRa(prefixes), qSTRa(snip));
 
     if (flag.show_containers) { 
         iprintf ("%s%sVB=%u Line=%d Ctx=%u:%s Repeats=%u RepSep=%u,%u Items=", 
@@ -455,7 +455,12 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
 
     else if (con->repeats == CON_REPEATS_IS_SPECIAL) {
         ASSPIZ0 (ctx->con_rep_special, "ctx->con_rep_special not set");
+        StoreType save_store = ctx->flags.store;
+        ctx->flags.store = STORE_INT;
+        
         reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, (char[]){ SNIP_SPECIAL, ctx->con_rep_special }, 2, false, __FUNCLINE);
+        
+        ctx->flags.store = save_store;
         ((ContainerP)con)->repeats = ctx->last_value.i;
     }
 
@@ -695,7 +700,7 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
                                pSTRp(out_prefixes))
 {
     Container con, *con_p=NULL;
-    STR(prefixes);
+    STR0(prefixes);
 
     bool cache_exists = (ctx->con_cache.len32 > 0);
     uint16_t cache_item_len;
@@ -760,7 +765,7 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
             *B32 (ctx->con_index, word_index) = ctx->con_cache.len32;
 
         // place Container followed by prefix in the cache (even if its a singleton)
-        buf_alloc (vb, &ctx->con_cache, st_size + prefixes_len + CONTAINER_MAX_SELF_TRANS_CHANGE, 0, char, 2, "contexts->con_cache");
+        buf_alloc (vb, &ctx->con_cache, st_size + prefixes_len + CONTAINER_MAX_SELF_TRANS_CHANGE, 0, char, 2, CTX_TAG_CON_CACHE);
         
         char *cached_con = BAFTc (ctx->con_cache);
         buf_add (&ctx->con_cache, con_p, st_size);

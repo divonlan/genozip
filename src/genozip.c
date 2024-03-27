@@ -694,7 +694,7 @@ static void main_load_reference (rom filename, bool is_first_file, bool is_last_
     RESET_VALUE (txt_file); // save and reset - for use by reference loader
 
     if (!ref_is_external_loaded (gref)) {
-        MAIN ("Loading external reference to gref: %s", ref_get_filename(gref));
+        MAIN ("Loading external reference: %s", ref_get_filename(gref));
         ref_load_external_reference (gref, NULL); // also loads refhash if needed
     }
 
@@ -757,7 +757,7 @@ static void main_no_files (int argc)
 }
 
 int main (int argc, char **argv)
-{        
+{      
     flag.test_i = getenv ("GENOZIP_TEST");
     flag.debug_or_test = flag.debug || flag.test_i;
     buf_initialize(); 

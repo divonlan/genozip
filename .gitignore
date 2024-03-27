@@ -19,7 +19,9 @@ launch.json
 *.bgz
 *.bz2
 *.xz
+*.ora
 *.exe
+*.mac
 !installers/*.exe
 *.new
 *.crdownload

@@ -19,7 +19,7 @@ static void sam_sa_reconstruct_SA_from_SA_Group (VBlockSAMP vb)
 
     for (uint32_t aln_i=0; aln_i < vb->sag->num_alns; aln_i++) {
         SAAln *a = &vb_alns[aln_i];
-        if (a == vb->sa_aln) continue; // skip my own alignment - already reconstruct in main SAM fields
+        if (a == vb->sa_aln) continue; // skip my own alignment - already reconstructed in main SAM fields
 
         // rname
         STR(rname);

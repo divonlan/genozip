@@ -175,6 +175,10 @@ void qname_zip_initialize (void)
 
                 for (rom *px = qfs->px_strs; *px ; px++) {
                     unsigned len = strlen (*px);
+
+                    ASSERT (qfs->con_prefix_len + len + 1 <= MAX_PREFIX_LEN, "Prefix too long (MAX_PREFIX_LEN=%u): item=%d qfs->con_prefix_len(after)=%d",
+                            MAX_PREFIX_LEN, (int)(px - qfs->px_strs), qfs->con_prefix_len + len + 1);
+
                     memcpy (&qfs->con_prefix[qfs->con_prefix_len], *px, len);
                     qfs->con_prefix_len += len;
                     qfs->con_prefix[qfs->con_prefix_len++] = CON_PX_SEP; 
@@ -300,9 +304,27 @@ void qname_zip_initialize (void)
                         "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both an is_in_local and callback_item",
                         qfs->name, qfs->callback_item);
             }
+
+            if (qfs->callback_item2 != -1) {
+                ASSERT (qf_callbacks[qfs->id], "QNAME flavor=%s defines a callback, but the callback is not listed in qf_callbacks", qfs->name);
+
+                ASSERT (qfs->callback_item2 != qfs->range_end_item1 && qfs->callback_item2 != qfs->range_end_item2, 
+                        "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both a range_item and callback_item2",
+                        qfs->name, qfs->callback_item2);
+
+                ASSERT (qfs->callback_item2 != qfs->ordered_item1 && qfs->callback_item2 != qfs->ordered_item2, 
+                        "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both an ordered_item and callback_item2",
+                        qfs->name, qfs->callback_item2);
+
+                ASSERT (!qfs->is_in_local[qfs->callback_item2], 
+                        "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both an is_in_local and callback_item2",
+                        qfs->name, qfs->callback_item2);
+            }
         }
 
-        seg_prepare_snip_other (SNIP_COPY, (DictId)_SAM_QNAME, false, 0, copy_qname); // QNAME dict_id is the same for SAM, FASTQ
+        seg_prepare_snip_other (SNIP_COPY, _SAM_QNAME,  false, 0, copy_qname); // QNAME dict_id is the same for SAM, FASTQ
+        seg_prepare_snip_other (SNIP_COPY, _SAM_Q5NAME, false, 0, copy_q5name);
+        seg_prepare_snip_other (SNIP_COPY, _SAM_Q6NAME, false, 0, copy_q6name);
 
         seg_prepare_snip_other (SNIP_REDIRECTION, _SAM_QNAME2, false, 0, snip_redirect_to_QNAME2);
 
@@ -633,7 +655,7 @@ static bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additio
                 seg_add_to_local_string (vb, item_ctx, STRa(str), LOOKUP_SIMPLE, str_len);
         }
 
-        else if (qfs->callback_item == item_i)
+        else if (qfs->callback_item == item_i || qfs->callback_item2 == item_i)
             qf_callbacks[qfs->id](vb, item_ctx, STRa(str));
 
         else if (item->separator[0] == CI0_SKIP)
@@ -647,7 +669,9 @@ static bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additio
         // if qname is not parsed and just copied from elsewhere (previous line, buddy, pair, deep, sag...)
         if (item_ctx->flags.store == STORE_INT && !ctx_has_value_in_line_(vb, item_ctx) &&
             (value >= 0 || str_get_int (STRa(str), &value)))
-            ctx_set_last_value (vb, item_ctx, value);  
+            ctx_set_last_value (vb, item_ctx, value); 
+
+        set_last_txtC (item_ctx, str, str_len); 
     }
 
     return true;
@@ -786,4 +810,3 @@ rom qtype_name (QType q)
           :(q < 0 && -q < ARRAY_LEN (qtype_neg_names)) ? qtype_neg_names[-q]
           :                                              "Invalid_qtype";
 }
-

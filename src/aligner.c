@@ -35,9 +35,9 @@ static inline PosType64 aligner_get_word_from_seq (VBlockP vb, rom seq, uint32_t
 
     for (int i=0; direction * i < nukes_per_hash; i += direction) {   
         uint32_t base = (direction == -1) ? nuke_encode_comp (seq[i]) : nuke_encode (seq[i]);
-        if (base == 4) {
+        if (__builtin_expect (base == 4, false)) {
             // COPY_TIMER (aligner_get_word_from_seq);
-            return false; // not a A,C,G,T
+            return NO_GPOS; // not a A,C,G,T
         }
 
         *refhash_word |= (base << ((direction==-1 ? -i : i) * 2)); // 2-LSb of word is the first base
@@ -72,7 +72,7 @@ static inline Bits aligner_seq_to_bitmap (VBlockP vb, rom seq, uint64_t seq_len,
     for (uint64_t base_i=0; base_i < seq_len; base_i++) {
         uint8_t encoding = nuke_encode (seq[base_i]);
     
-        if (encoding == 4) { // not A, C, G or T - usually N
+        if (__builtin_expect (encoding == 4, false)) { // not A, C, G or T - usually N
             *seq_is_all_acgt = false;
             encoding = 0;    // arbitrarily convert 4 (any non-ACGT is 4) to 0 ('A')
         }

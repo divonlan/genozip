@@ -158,7 +158,7 @@ WordIndex ctx_get_next_snip (VBlockP vb, ContextP ctx, bool is_pair, pSTRp (snip
     B250Size b250_size     = is_pair  ? ctx->pair_b250_size          : ctx->b250_size;
     SnipIterator *iterator = is_pair  ? &ctx->pair_b250_iter         : &ctx->iterator;
     bool all_the_same      = is_pair  ? ctx->pair_flags.all_the_same : ctx->flags.all_the_same;
-    Buffer *list           = zip_pair ? &ctx->ol_nodes               : &ctx->word_list;
+    BufferP list           = zip_pair ? &ctx->ol_nodes               : &ctx->word_list;
     
     // if the entire b250 in a VB consisted of word_index=0, we don't output the b250 to the file, and just 
     // consider it to always emit 0 ("all-the-same")
@@ -167,11 +167,12 @@ WordIndex ctx_get_next_snip (VBlockP vb, ContextP ctx, bool is_pair, pSTRp (snip
             if (!zip_pair) {
                 ASSERT (ctx->word_list.len32, "%s: %s.word_list.len32=0", LN_NAME, ctx->tag_name);
                 
-                CtxWordP dict_word = B1ST (CtxWord, ctx->word_list);
+                CtxWordP dict_word = B(CtxWord, ctx->word_list, ctx->dict_flags.all_the_same_wi);
 
                 ASSERT (dict_word->char_index + dict_word->snip_len < ctx->dict.len, // < and not <= because seperator \0 is not included in word len
-                        "%s: expecting: %s.dict_word->char_index=%"PRIu64" + len=%"PRIu64" < %s->dict.len=%"PRIu64,
-                        LN_NAME, ctx->tag_name, (uint64_t)dict_word->char_index, (uint64_t)dict_word->snip_len, ctx->tag_name, ctx->dict.len);
+                        "%s: all_the_same_wi=%u expecting: %s.dict_word->char_index=%"PRIu64" + len=%"PRIu64" < %s->dict.len=%"PRIu64,
+                        LN_NAME, ctx->dict_flags.all_the_same_wi, ctx->tag_name, 
+                        (uint64_t)dict_word->char_index, (uint64_t)dict_word->snip_len, ctx->tag_name, ctx->dict.len);
 
                 *snip = Bc (ctx->dict, dict_word->char_index);
                 *snip_len = dict_word->snip_len;
@@ -179,7 +180,7 @@ WordIndex ctx_get_next_snip (VBlockP vb, ContextP ctx, bool is_pair, pSTRp (snip
             else {
                 ASSERT (ctx->ol_nodes.len32, "%s: %s.ol_nodes.len32=0", LN_NAME, ctx->tag_name);
 
-                CtxWordP dict_word = B1ST (CtxWord, ctx->ol_nodes);
+                CtxWordP dict_word = B(CtxWord, ctx->ol_nodes, ctx->dict_flags.all_the_same_wi);
 
                 ASSERT (dict_word->char_index + dict_word->snip_len < ctx->dict.len, // likewise, < and not <=
                         "%s: expecting: %s.dict_word->char_index=%"PRIu64" + snip_len=%u < %s->dict.len=%"PRIu64". ctx->ol_nodes.len=%"PRIu64,
@@ -189,7 +190,7 @@ WordIndex ctx_get_next_snip (VBlockP vb, ContextP ctx, bool is_pair, pSTRp (snip
                 *snip_len = dict_word->snip_len;
             }
         }
-        return 0;
+        return ctx->dict_flags.all_the_same_wi;
     }
     
     if (!iterator->next_b250)  // initialize
@@ -566,7 +567,7 @@ static void ctx_initialize_ctx (ContextP ctx, Did did_i, DictId dict_id, DictIdt
     ctx->dict_did_i  = did_i;
     ctx->dict_id     = dict_id;
     ctx->last_line_i = LAST_LINE_I_INIT;
-
+    
     if (tag_name_len) {
         ASSINP (tag_name_len <= MAX_TAG_LEN-1, "Tag name \"%.*s\" is of length=%u beyond the maximum tag length supported by Genozip=%u",
                 STRf(tag_name), tag_name_len, MAX_TAG_LEN-1);
@@ -606,17 +607,18 @@ static void ctx_initialize_ctx (ContextP ctx, Did did_i, DictId dict_id, DictIdt
     }
 }
 
-WordIndex ctx_populate_zf_ctx (Did dst_did_i, STRp (contig_name), WordIndex ref_index)
+WordIndex ctx_populate_zf_ctx (Did dst_did_i, STRp (snip), 
+                               WordIndex ref_index) // only relevant for CHROM
 {
     decl_zctx(dst_did_i);
     
-    // zctx is already initialized, but this is the first call to populate it with a contig
+    // zctx is already initialized, but this is the first call to populate it with a snip
     if (!buf_is_alloc (&zctx->global_hash)) { 
         zctx->no_stons = true;
         hash_alloc_global (zctx, 0);
     }
 
-    WordIndex word_index = ctx_commit_node (NULL, zctx, NULL, STRa(contig_name), false, NULL);
+    WordIndex word_index = ctx_commit_node (NULL, zctx, NULL, STRa(snip), false, NULL);
 
     if (chrom_2ref_seg_is_needed (dst_did_i)) {
         buf_alloc_255 (evb, &zctx->chrom2ref_map, 0, MAX_(INITIAL_NUM_NODES, word_index+1), WordIndex, CTX_GROWTH, "ZCTX(CHROM)->chrom2ref_map");
@@ -819,6 +821,7 @@ void ctx_segconf_set_hard_coded_lcodec (Did did_i, Codec codec)
     zctx->lcodec_hard_coded = true; 
 }
 
+// called by compute threads during merge, with zctx locked
 static inline void ctx_drop_all_the_same (VBlockP vb, ContextP zctx, ContextP vctx)
 {
     ASSERT (vctx->nodes_converted, "expecting nodes of %s to be converted", vctx->tag_name); // still index/len
@@ -843,16 +846,16 @@ static inline void ctx_drop_all_the_same (VBlockP vb, ContextP zctx, ContextP vc
     }
 
     ASSERTISALLOCED (vctx->b250);
-    WordIndex node_index = b250_seg_get_last (vctx); // the only b250 in this context, as it is all_the_same
-    WordIndex word_index = node_index_to_word_index (vb, vctx, node_index);
+    WordIndex vb_node_index = b250_seg_get_last (vctx); // the only b250 in this context, as it is all_the_same
+    WordIndex word_index = node_index_to_word_index (vb, vctx, vb_node_index);
 
     // - if we have ol_node - we can only drop the existing word_index=0
     // - if we don't have ol_node - we can only drop new node_index=0 (possibly we have ctx_create_node'd several)
     // - a special WORD_INDEX_* - not droppable
-    if (word_index != 0) NO_DROP ("word_index is not 0"); 
+    if (word_index > MAX_ALL_THE_SAME_WI) NO_DROP ("word_index is too big"); 
+    if (word_index < 0) NO_DROP ("word_index is negative"); 
 
-    // if (*snip == SNIP_SELF_DELTA) NO_DROP ("snip is SNIP_SELF_DELTA");
-    rom dict = B1STc(zctx->dict); 
+    rom dict = ctx_get_z_snip_ex (zctx, word_index, 0, 0); 
     if (dict[0] == SNIP_SELF_DELTA) NO_DROP ("snip is SNIP_SELF_DELTA");
 
     bool is_simple_lookup = (dict[0] == SNIP_LOOKUP) && !dict[1];
@@ -866,6 +869,15 @@ static inline void ctx_drop_all_the_same (VBlockP vb, ContextP zctx, ContextP vc
 
     // we can't drop if vctx has flags that need to be passed to piz (unless its vb_i>1 and flags are same as vb_i=1)
     if (((SectionFlags)my_flags).flags != ((SectionFlags)vb_1_flags).flags) NO_DROP (vb->vblock_i==1 ? "this is vb_i=1, and vctx has flags" : "vctx has flags, different from those set by vb_i=1");
+
+    // case: we are the first VB to consider all-the-same for this context
+    if (!zctx->all_the_same_wi_is_set) { 
+        zctx->dict_flags.all_the_same_wi = word_index;
+        zctx->all_the_same_wi_is_set = true;
+    } 
+
+    // case: zctx->dict_flags.all_the_same_wi already set by a previous VB: make sure its the same word_index
+    else if (word_index != zctx->dict_flags.all_the_same_wi) NO_DROP ("all_the_same_wi set to a different word_index");
 
     // we survived all tests - we can now drop the b250 and maybe also dict
 
@@ -956,7 +968,7 @@ static inline bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx, ContextP *z
 {
     // get the zctx or create a new one. note: ctx_add_new_zf_ctx() must be called before mutex_lock() because it locks the z_file mutex (avoid a deadlock)
     ContextP zctx       = ctx_get_zctx_from_vctx (vctx, true, true);
-    ContextP zctx_alias = ctx_get_zctx_from_vctx ( vctx, true, false);
+    ContextP zctx_alias = ctx_get_zctx_from_vctx (vctx, true, false);
 
     if ((vb->vblock_i != 1 && __atomic_load_n (&zctx->vb_1_pending_merges, __ATOMIC_ACQUIRE)) || // let vb_i=1 merge first and sorts dictionaries, other VBs can go in arbitrary order. 
         !mutex_trylock (ZMUTEX(zctx))) // also implies locking all its aliases including zctx_alias
@@ -969,7 +981,9 @@ static inline bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx, ContextP *z
     zctx->counts_section     |= vctx->counts_section;   // compress ctx->counts in ctx_compress_counts
     zctx->subdicts_section   |= vctx->subdicts_section; // compress zctx->subdicts in ctx_compress_subdicts
     zctx_alias->counts.count += vctx->counts.count;     // context-specific counter (not passed to PIZ)
-    
+
+    if (vctx->dict_helper) zctx->dict_helper = vctx->dict_helper; // union with con_rep_special
+
     if (vb->vblock_i == 1 && (vctx->b250.len || vctx->local.len))  // vb=1 must have either a b250 or local section to carry the flags, otherwise the default flags are 0
         zctx_alias->flags = vctx->flags; // vb_1 flags will be the default flags for this context, used by piz in case there are no b250 or local sections due to all_the_same. see b250_zip_generate_section and piz_read_all_ctxs
 
@@ -1309,8 +1323,7 @@ void ctx_overlay_dictionaries_to_vb (VBlockP vb)
         vctx->other_did_i  = DID_NONE;
         vctx->last_line_i  = LAST_LINE_I_INIT;
         vctx->pair_assist_type = SEC_NONE;
-        vctx->dict_helper  = zctx->dict_helper;
-
+        
         memcpy ((char*)vctx->tag_name, zctx->tag_name, sizeof (vctx->tag_name));
 
         set_d2d_map (vb->d2d_map, vctx->dict_id, did_i);
@@ -1324,6 +1337,9 @@ void ctx_overlay_dictionaries_to_vb (VBlockP vb)
         
         if (buf_is_alloc (&dict_ctx->word_list))
             buf_overlay (vb, &vctx->word_list, &dict_ctx->word_list, "contexts->word_list");
+
+        vctx->dict_helper  = dict_ctx->dict_helper; // union with con_rep_special
+        vctx->dict_flags   = dict_ctx->dict_flags;  // note: if zctx is an alias, will copy from dst of the alias
     }
 
     vb->num_contexts = z_file->num_contexts;

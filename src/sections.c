@@ -957,7 +957,8 @@ static FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt)
             break;
 
         case SEC_DICT:
-            sprintf (str.s, "deep_sam=%u deep_fq=%u", f.dictionary.deep_sam, f.dictionary.deep_fastq);
+            sprintf (str.s, "deep_sam=%u deep_fq=%u all_the_same_wi=%u", 
+                     f.dictionary.deep_sam, f.dictionary.deep_fastq, f.dictionary.all_the_same_wi);
             break;
 
         default: 
@@ -1024,9 +1025,9 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
         if (dt >= NUM_DATATYPES) dt = DT_NONE;
 
         if ((DT(VCF) || DT(BCF)) && v14)
-            sprintf (dt_specific, "%ssegconf=(has_RGQ=%s,del_svlen_is_neg=%s,GQ_method=%s,FMT_DP_method=%s,mate_id_chars=%s) width=(AC=%u,AN=%u,MLEAC=%u,DP=%u,QD=%u,SF=%u,AS_SB_TABLE=%u) max_ploidy_for_mux=%u\n", 
+            sprintf (dt_specific, "%ssegconf=(has_RGQ=%s,del_svlen_is_neg=%s,GQ_method=%s,FMT_DP_method=%s,mate_id_chars=%s) width=(AC=%u,AN=%u,MLEAC=%u,DP=%u,QD=%u,SF=%u,AS_SB_TABLE=%u,QUAL=%u) max_ploidy_for_mux=%u\n", 
                      SEC_TAB, TF(h->vcf.segconf_has_RGQ), TF(h->vcf.segconf_del_svlen_is_neg), GQ_method_name (h->vcf.segconf_GQ_method), FMT_DP_method_name (h->vcf.segconf_FMT_DP_method), (rom[])MATEID_METHOD_NAMES[h->vcf.segconf_MATEID_method], 
-                     h->vcf.width.AC, h->vcf.width.AN, h->vcf.width.MLEAC, h->vcf.width.DP, h->vcf.width.QD, h->vcf.width.SF, h->vcf.width.AS_SB_TABLE, 
+                     h->vcf.width.AC, h->vcf.width.AN, h->vcf.width.MLEAC, h->vcf.width.DP, h->vcf.width.QD, h->vcf.width.SF, h->vcf.width.AS_SB_TABLE, h->vcf.width.QUAL, 
                      h->vcf.max_ploidy_for_mux);
 
         else if ((DT(SAM) || DT(BAM)) && v14)

@@ -200,8 +200,6 @@ static void digest_piz_verify_one_vb (VBlockP vb)
                           : (!VER(14) && flag.unbind) ? multi_comp_commulative_digest
                           :                             single_comp_commulative_digest;
 
-        TEMP_FLAG (quiet, false);
-
         // warn if VB is bad, but don't exit, so file reconstruction is complete and we can debug it
         if (!digest_recon_is_equal (piz_digest, vb->expected_digest)) { 
 
@@ -209,21 +207,21 @@ static void digest_piz_verify_one_vb (VBlockP vb)
             if (vb->recon_size != vb->txt_data.len) // note: leave vb->txt_data.len 64bit to detect bugs
                 sprintf (recon_size_warn, "Expecting: VB_HEADER.recon_size=%u == txt_data.len=%"PRIu64"\n", vb->recon_size, vb->txt_data.len);
 
-            WARN ("reconstructed vblock=%s/%u (vb_line_i=0 -> txt_line_i(1-based)=%"PRId64" num_lines=%u), (%s=%s) differs from original file (%s=%s).\n%s",
-                  comp_name (vb->comp_i), vb->vblock_i, writer_get_txt_line_i (vb, 0), vb->lines.len32,
-                  DIGEST_NAME, digest_display (piz_digest).s, 
-                  DIGEST_NAME, digest_display (vb->expected_digest).s, 
-                  recon_size_warn);
+            NOISYWARN ("reconstructed vblock=%s/%u (vb_line_i=0 -> txt_line_i(1-based)=%"PRId64" num_lines=%u), (%s=%s) differs from original file (%s=%s).\n%s",
+                       comp_name (vb->comp_i), vb->vblock_i, writer_get_txt_line_i (vb, 0), vb->lines.len32,
+                       DIGEST_NAME, digest_display (piz_digest).s, 
+                       DIGEST_NAME, digest_display (vb->expected_digest).s, 
+                       recon_size_warn);
 
             // case: first bad VB: dump bad VB to disk and maybe exit
             if (!__atomic_test_and_set (&txt_file->vb_digest_failed, __ATOMIC_RELAXED)) { // not WARN_ONCE because we might be genounzipping multiple files - we want to show this for every failed file (see also note in digest_piz_verify_one_txt_file)
-                WARN ("Bad reconstructed vblock has been dumped to: %s.gz\n"
-                      "To see the same data in the original file:\n"
-                      "genozip --biopsy %u -B%u %s%s%s",
-                      txtfile_dump_vb (vb, z_name), vb->vblock_i, (unsigned)(segconf.vb_size >> 20), 
-                      (Z_DT(SAM) && !z_file->z_flags.has_gencomp) ? "--no-gencomp " : "",
-                      (txt_file && txt_file->name) ? filename_guess_original (txt_file) : IS_PIZ ? txtheader_get_txt_filename_from_section().s : "(uncalculable)",
-                      SUPPORT);
+                NOISYWARN ("Bad reconstructed vblock has been dumped to: %s.gz\n"
+                           "To see the same data in the original file:\n"
+                           "genozip --biopsy %u -B%u %s%s%s",
+                           txtfile_dump_vb (vb, z_name), vb->vblock_i, (unsigned)(segconf.vb_size >> 20), 
+                           (Z_DT(SAM) && !z_file->z_flags.has_gencomp) ? "--no-gencomp " : "",
+                           (txt_file && txt_file->name) ? filename_guess_original (txt_file) : IS_PIZ ? txtheader_get_txt_filename_from_section().s : "(uncalculable)",
+                           SUPPORT);
 
                 if (flag.test) exit_on_error (false); // must be inside the atomic test, otherwise another thread will exit before we completed dumping
             }
@@ -235,8 +233,6 @@ static void digest_piz_verify_one_vb (VBlockP vb)
 
             __atomic_fetch_add (&z_file->num_vbs_verified, (uint32_t)1, __ATOMIC_RELAXED); // count VBs verified so far
         }
-
-        RESTORE_FLAG (quiet);
     }
 }
 

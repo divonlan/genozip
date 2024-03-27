@@ -198,25 +198,27 @@ static void threads_init_signal_handlers (void)
 
 void threads_print_call_stack (void) 
 {
-    fflush (stdout); fflush (stderr);
-    
-    mutex_lock (print_call_stack_mutex);
+    DO_ONCE {
+        fflush (stdout); fflush (stderr);
+        
+#       define STACK_DEPTH 100
+        void *array[STACK_DEPTH];
+        size_t count = backtrace (array, STACK_DEPTH);
+        
+        // note: need to pass -rdynamic to the linker in order to see function names
+        fprintf (stderr, "\nCall stack "); // separate printing, in case next fprintf hangs if stack is bad
+        fflush (stderr);
 
-#   define STACK_DEPTH 100
-    void *array[STACK_DEPTH];
-    size_t count = backtrace (array, STACK_DEPTH);
-    
-    // note: need to pass -rdynamic to the linker in order to see function names
-    fprintf (stderr, "\nCall stack (%s thread):\n", 
-               threads_am_i_main_thread()    ? "MAIN" 
-             : threads_am_i_writer_thread()  ? "WRITER"
-             // : zriter_am_i_a_zriter_thread() ? "ZRITER" // to be implemented
-             :                                 threads_get_task_name());
-    backtrace_symbols_fd (array, count, STDERR_FILENO);
+        fprintf (stderr, "(%s thread):\n", 
+                threads_am_i_main_thread()    ? "MAIN" 
+              : threads_am_i_writer_thread()  ? "WRITER"
+           // : zriter_am_i_a_zriter_thread() ? "ZRITER" // to be implemented
+              :                                 threads_get_task_name());
+        fflush (stderr);
 
-    fflush (stderr);
-
-    mutex_unlock (print_call_stack_mutex);
+        backtrace_symbols_fd (array, count, STDERR_FILENO);
+        fflush (stderr);
+    }
 }
 
 // signal handler of SIGINT (CTRL-C) - debug only 
@@ -247,7 +249,10 @@ static void noreturn threads_bug_signal_handler (int signum)
 {
     iprintf ("\n\nSignal \"%s\" received, exiting. Time: %s%s%s", 
              strsignal (signum), str_time().s, cond_str(flags_command_line(), "\nCommand line: ", flags_command_line()), SUPPORT);
-    threads_print_call_stack(); // this works ok on mac, but seems to not print function names on Linux
+    
+    threads_print_call_stack(); // this works ok on mac (in debug only), but seems to not print function names on Linux
+
+    buflist_test_overflows_all_vbs ("threads_bug_signal_handler");
 
     exit (128 + signum); // convention for exit code due to signal - both Linux and MacOS
 }

@@ -297,8 +297,10 @@ extern bool file_buf_locate (FileP file, ConstBufferP buf);
 // tests for compression types
 // ---------------------------
 
+#define SOURCE_CODEC(x) (txt_file->source_codec == CODEC_##x)
+
 static inline bool file_is_read_via_ext_decompressor(ConstFileP file) { 
-    return file->supertype == TXT_FILE && (file->source_codec == CODEC_XZ || file->source_codec == CODEC_ZIP || file->source_codec == CODEC_BCF || file->source_codec == CODEC_CRAM);
+    return file->supertype == TXT_FILE && (file->source_codec == CODEC_XZ || file->source_codec == CODEC_ZIP || file->source_codec == CODEC_BCF || file->source_codec == CODEC_CRAM || file->source_codec == CODEC_ORA);
 }
 
 static inline bool file_is_read_via_int_decompressor(ConstFileP file) {

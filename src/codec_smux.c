@@ -154,8 +154,9 @@ bool codec_smux_maybe_used (Did did_i)
 {
     #define SMUX_STDV_THREADHOLD 0.08 // between 0 and 1. The higher this is, the more drastic differences between the quality histogram associated with each base is needed to qualify for SMUX
 
-    return (flag.force_qual_codec == CODEC_SMUX || (!flag.no_smux && segconf.smux_max_stdv > SMUX_STDV_THREADHOLD)) &&
-            did_i == SAM_QUAL/*==FASTQ_QUAL*/; // we only calculated stats for SAM_QUAL (not OQ or CQUAL)
+    return did_i == SAM_QUAL/*==FASTQ_QUAL*/ && // we only calculated stats for SAM_QUAL (not OQ or CQUAL)
+               (flag.force_qual_codec == CODEC_SMUX || 
+                (TECH(MGI) && segconf.nontrivial_qual && !flag.no_smux && segconf.smux_max_stdv > SMUX_STDV_THREADHOLD)); // not yet seen benefit for non-MGI files);
 }
 
 bool codec_smux_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB get_line_cb, bool force)

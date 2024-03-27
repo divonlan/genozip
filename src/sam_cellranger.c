@@ -246,6 +246,11 @@ void sam_seg_RX_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(rx), unsigned add_byt
     COPY_TIMER (sam_seg_RX_Z);
 }
 
+static void seg_add_to_local_blob_cb (VBlockSAMP vb, ContextP ctx, STRp(blob), uint32_t add_bytes)
+{
+    seg_add_to_local_blob (VB, ctx, STRa(blob), add_bytes);
+}
+
 void sam_seg_BX_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(bx), unsigned add_bytes)
 {
     START_TIMER;
@@ -256,7 +261,7 @@ void sam_seg_BX_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(bx), unsigned add_byt
         sam_seg_against_sa_group (vb, CTX(OPTION_BX_Z), add_bytes);
 
     else
-        sam_seg_buddied_Z_fields (vb, dl, MATED_BX, STRa(bx), 0, add_bytes);
+        sam_seg_buddied_Z_fields (vb, dl, MATED_BX, STRa(bx), seg_add_to_local_blob_cb, add_bytes);
 
     COPY_TIMER (sam_seg_BX_Z);
 }

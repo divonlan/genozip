@@ -61,7 +61,7 @@ typedef struct Context {
     LocalType pair_ltype;      // LT_* - Used if this file is a PAIR_2 - type of local data of PAIR_1
     struct FlagsCtx flags;     // flags to be included in section header
     struct FlagsCtx pair_flags;// Used if this file is a PAIR_2 - contains ctx->flags of the PAIR_1
-    struct FlagsDict dict_flags;  // ZIP: zctx only ; PIZ: flags included in Dictionary section header (v15)
+    struct FlagsDict dict_flags;  // ZIP zctx ; PIZ: zctx+vctx . Tramsmiited via SectionFlags.dictinonary (v15)
     B250Size b250_size;        // Size type of element in b250 data (PIZ and ZIP after generation) v14
     B250Size pair_b250_size;
     Codec lcodec;              // ZIP/PIZ: vctx/zctx: codec used to compress local
@@ -201,6 +201,12 @@ typedef struct Context {
             uint32_t sum_dp_with_dosage; // sum of FORMAT/DP of samples in this line and dosage >= 1
             uint32_t pred_type;     // predictor type
         } qd;
+        struct {                    // PIZ: VCF_QUAL
+            bool by_GP;             // QUAL_BY_GP used for this line 
+            uint8_t decimals;
+            bool is_rounddown;
+            bool truncate_trailing_zeros;     
+        } QUAL;
         uint16_t sum_sb[4];         // ZIP/PIZ: FORMAT_SB: sum_sb[i] is the sum of SBᵢ across all samples, where SBᵢ is the i'th component of a bi-allelic FORMAT/SB. 
         int32_t last_end_line_i;    // PIZ: INFO_END: last line on which INFO/END was encountered 
         TxtWord predicted_RU;       // PIZ/ZIP: INFO_RU: pointer into REFALT field in this line in txt_data
@@ -300,6 +306,7 @@ typedef struct Context {
     bool please_remove_dict;   // zctx: one or more of the VBs request NOT compressing this dict (will be dropped unless another VB insists on keeping it)
     bool rm_dict_all_the_same; // zctx: we can remove the dict bc it is all-the-same
     bool override_rm_dict_ats; // zctx: don't remove dict, even if rm_dict_all_the_same is set
+    bool all_the_same_wi_is_set; // zctx: zctx->dict_flags.all_the_same_wi is set 
     int8_t vb_1_pending_merges;// ZIP zctx: count of vb=1 merges still pending for this context (>1 if it has aliases). Other VBs can merge only if this is 0.
     }; // ------ End of ZIP-only fields - zctx only -------
     };

@@ -122,7 +122,8 @@ uint64_t cram_estimated_num_alignments (rom filename)
     int64_t est_num_records = 0; // return 0 if failed
 
     evb->scratch.len32 = fread (B1STc(evb->scratch), 1, evb->scratch.len32, fp);
-
+    ASSERT (!ferror (fp), "Failed to read file %s", filename);
+        
     if (!cram_verify_file_definition()) goto done;
 
     // parse the SAM Header container

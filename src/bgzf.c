@@ -250,10 +250,15 @@ static int32_t bgzf_read_block_raw (FILE *file, // txt_file is not yet assigned 
 
     // read the header
     *block_size = fread (h, 1, sizeof (struct BgzfHeader), file);
-    if (! *block_size) return BGZF_ABRUBT_EOF; // EOF without an EOF block
 
     if (disk_so_far) *disk_so_far += *block_size;   
 
+    if (*block_size != sizeof (struct BgzfHeader)) {
+        ASSERT (!ferror (file), //|| (disk_so_far && *disk_so_far == *block_size), 
+                "Error while reading %s: %s", basename, strerror (errno));
+        return (disk_so_far && *disk_so_far == *block_size) ? BGZF_BLOCK_IS_NOT_GZIP : BGZF_ABRUBT_EOF ; // EOF without an EOF block (possibly a very short non-GZ file)
+    }
+    
     if (*block_size < 12) {
         ASSERT (soft_fail, "file %s appears truncated - it ends with a partial gzip block header", basename); // less than the minimal gz block header size
         return BGZF_BLOCK_IS_NOT_GZIP;
@@ -284,12 +289,12 @@ static int32_t bgzf_read_block_raw (FILE *file, // txt_file is not yet assigned 
     int save_errno = errno; // we want to report errno of fread, not ftell.
 
     // if failed, always error, even if soft_fail
-    ASSERT (bytes == body_size || flag.truncate_partial_last_line, 
-            "%s %s (ftell=%"PRId64" err=\"%s\" bytes_read=%u but expecting=%u). %s\n", 
+    ASSERT (bytes == body_size || flag.truncate, 
+            "%s %s (ftell=%"PRId64" err=\"%s\" bytes_read=%u but expecting=%u filesystem=%s). %s\n", 
             feof (file) ? "Unexpected end of file while reading" : "Failed to read body", 
             basename, ftello64 (file), 
             (is_remote && save_errno == ESPIPE) ? "Disconnected from remote host" : strerror (save_errno),
-            bytes, body_size,
+            bytes, body_size, arch_get_filesystem_type().s,
             feof (file) ? "If file is expected to be truncated, you may use --truncate-partial-last-line to disregard the final partial BGZF block." : "");
     
     return (bytes == body_size) ? BGZF_BLOCK_SUCCESS : BGZF_BLOCK_TRUNCATED;
@@ -306,8 +311,15 @@ int32_t bgzf_read_block (FileP file, // txt_file is not yet assigned when called
     if (ret == BGZF_BLOCK_IS_NOT_GZIP || ret == BGZF_BLOCK_GZIP_NOT_BGZIP) 
         return ret; // happens only if soft_fail
     
-    else if (ret == BGZF_ABRUBT_EOF) // no EOF block, that's fine
-        return 0;
+    if (ret == BGZF_ABRUBT_EOF) {
+        ASSERT (!file->disk_size                ||    // redirected or remote 
+                flag.truncate ||    // possibly compressing while downloading
+                file->disk_so_far == file->disk_size, // entire file was read
+                "Abrupt EOF in BGZF file %s: disk_so_far=%s disk_size=%s filesystem=%s", 
+                file->name, str_int_commas (file->disk_so_far).s, str_int_commas (file->disk_size).s, arch_get_filesystem_type().s);
+
+        return 0; // no EOF block, that's fine
+    }
 
     else if (ret == BGZF_BLOCK_TRUNCATED) {
         if (txt_file->bgzf_truncated_last_block) // we arrive here twice - show warning only on the second time
@@ -331,9 +343,20 @@ int32_t bgzf_read_block (FileP file, // txt_file is not yet assigned when called
         buf_append_one (file->bgzf_isizes, BGEN16 ((uint16_t)(isize - 1))); // -1 to make the range 0..65535
         buf_append_one (file->bgzf_starts, txt_file ? txt_file->disk_so_far - *block_size : 0); // not BGEN bc not written to z_file. note: first block is read from file_open_txt_read before txt_file is assigned
     }
-    else 
+    else {
+        // if isize is 0, we're expecting an EOF block
+        ASSERT (str_issame_((rom)block, *block_size, BGZF_EOF, BGZF_EOF_LEN),
+                "Corrupt BGZF block in %s offset=%"PRIu64" bgzf_block_size=%u: isize=0 but this is not an EOF block",
+                file->name, file->disk_so_far - *block_size, *block_size);
+
+        ASSERT (file->disk_so_far == file->disk_size || // expected
+                !file->disk_size || file_is_read_via_ext_decompressor (file) || file->redirected || file->is_remote, // cases in which we can't reliably test this condition
+                "Corrupt BGZF file %s (size=%"PRIu64"): BGZF EOF block encountered at offset=%"PRIu64" length=%u, but this is not the end of the file",
+                file->name, file->disk_size, file->disk_so_far - *block_size, *block_size);
+
         if (txt_file) 
             txt_file->bgzf_flags.has_eof_block = true;
+    }
 
     COPY_TIMER_EVB (bgzf_read_block);
     return isize;
@@ -402,18 +425,18 @@ void bgzf_uncompress_one_block (VBlockP vb, BgzfBlockZip *bb)
         iprintf ("txt_data[5]=%1s%1s%1s%1s%1s %s\n", C(0), C(1), C(2), C(3), C(4), bb->comp_size == BGZF_EOF_LEN ? "EOF" : "");
         #undef C
 
-    // discover which gzip library and compression level were used (only in vb=1)
-    int test_block_i;
+    // discover which gzip library and compression level were used (testing the first few BGZF blocks)
+    int test_block_i=0;
     if (txt_file->bgzf_plausible_levels.len32 &&
         txt_file->bgzf_plausible_levels.count < BGZF_DISCOVERY_MAX_TESTS && // fail fast without atomic
         (test_block_i = __atomic_fetch_add (&txt_file->bgzf_plausible_levels.count, 1, __ATOMIC_RELAXED)) < BGZF_DISCOVERY_MAX_TESTS) { // note: if multiple threads test in parallel, count might be incremented beyond BGZF_DISCOVERY_MAX_TESTS - that's ok
         
         bgzf_discover_library_and_level (vb, test_block_i, (rom)h, bb->comp_size, Btxt (bb->txt_index), bb->txt_size);        
-
-        // in case of --show_gz: report and exit (otherwise, we finalize in the main thread to avoid thread issues with updating txt_file->bgzf_flags)
-        if (flag.show_gz && test_block_i == BGZF_DISCOVERY_MAX_TESTS-1) 
-            bgzf_finalize_discovery();
     }
+
+    // in case of --show_gz: report and exit (otherwise, we finalize in the main thread to avoid thread issues with updating txt_file->bgzf_flags)
+    if (flag.show_gz && (test_block_i == BGZF_DISCOVERY_MAX_TESTS-1 || !txt_file->bgzf_plausible_levels.len32)) 
+        bgzf_finalize_discovery();
 }
 
 // ZIP: called from the compute thread: zip_compress_one_vb and main thread: txtfile_read_block_bgzf
@@ -489,11 +512,13 @@ void bgzf_reread_uncompress_vb_as_prescribed (VBlockP vb, FILE *file)
 
             if (offset != last_offset) {
                 ASSERT (!fseeko64 (file, offset, SEEK_SET),
-                        "%s: fseeko64 on %s failed while rereading BGZF depn lines: %s", VB_NAME, txt_file->name, strerror(errno));
+                        "%s: fseeko64 on %s failed while rereading BGZF depn lines: %s", VB_NAME, txt_name, strerror(errno));
 
                 STRl (bgzf_block, BGZF_MAX_BLOCK_SIZE);
-                bgzf_read_block_raw (file, (uint8_t*)qSTRa(bgzf_block), txt_file->basename, false, HARD_FAIL, NULL);
-            
+                int32_t ret = bgzf_read_block_raw (file, (uint8_t*)qSTRa(bgzf_block), txt_file->basename, false, HARD_FAIL, NULL); 
+                ASSERT (ret != BGZF_ABRUBT_EOF, "Unexpected BGZF_ABRUBT_EOF while re-reading BGZF block in %s: filesystem=%s offset=%"PRIu64" uncomp_block_size=%u", 
+                        txt_name, arch_get_filesystem_type().s, offset, isize);
+
                 bgzf_uncompress_one_prescribed_block (vb, STRa(bgzf_block), uncomp_block, isize, line->offset.bb_i);
             
                 last_offset = offset;
@@ -916,7 +941,7 @@ void bgzf_write_finalize (void)
         // level in the first place
         // ASSERTW (!memcmp (signature, txt_file->bgzf_signature, 3), 
         //          "FYI: %s is recompressed with BGZF (.gz). However, it seems that the original file was compressed with a different compression library than genozip uses, resulting in a slightly different level of compression. Rest assured that the actual data is identical.", 
-        //          txt_file->name);
+        //          txt_name);
     }
 }
 

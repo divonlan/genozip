@@ -144,6 +144,50 @@ END
 
     # add: MAX_NUM_PREDEFINED
     printf "#define MAX_NUM_PREDEFINED %u\n\n" $max_fields >> dict_id_gen.h
+
+    # SPECIAL stuff
+    IFS=" "
+    local max_num_specials=0
+    for f in ${files_with_special[@]} ; do
+        local dt=`echo ${f%.h} | tr '[:lower:]' '[:upper:]'`
+
+        # SPECIAL names
+        local specials_str=$(grep "^SPECIAL" $f | cut -d, -f3 | tr -d " " | tr "\n" " " )
+        local names=""
+        read -a specials <<< "$specials_str"
+
+        for special in ${specials[@]} ; do 
+            names="${names}\"$special\", "
+        done
+
+        printf "#define ${dt}_SPECIAL_NAMES { ${names}}\n\n" >> dict_id_gen.h
+    
+        # SPECIAL function list
+        local specials_str=$(grep "^SPECIAL" $f | cut -d, -f4 | cut -d\) -f1 | tr -d " " | tr "\n" " " )
+        local names=""
+        read -a specials <<< "$specials_str"
+
+        for special in ${specials[@]} ; do 
+            names="${names}$special, "
+        done
+
+        printf "#define ${dt}_SPECIAL { ${names}}\n\n" >> dict_id_gen.h
+
+        local num_specials=$(grep "^SPECIAL" $f | wc -l)
+        
+        # integrity check
+        local last_special=$(grep "^SPECIAL" $f | tail -1 | cut -d, -f2 | tr -d " " )
+        if (( $num_specials != $(( $last_special + 1 )) )); then
+            echo "Counted $num_specials SPECIALs in $f, but last SPECIAL is $last_special. Expecting $(( $num_specials - 1 ))"
+            exit 1
+        fi
+
+        printf "#define NUM_${dt}_SPECIAL $num_specials\n\n" >> dict_id_gen.h
+
+        max_num_specials=$(( $num_specials > $max_num_specials ? $num_specials : $max_num_specials))
+    done
+
+    printf "#define MAX_NUM_SPECIAL $max_num_specials\n\n" >> dict_id_gen.h
 }
 
 is_windows=`uname|grep -i mingw`
@@ -155,6 +199,7 @@ fi
 
 headers=(`egrep "^#include" data_types.h | cut -d\" -f2`)
 files=(`egrep "^#pragma GENDICT" ${headers[*]} | cut -d: -f1 | uniq`)
+files_with_special=(`egrep "^SPECIAL" ${headers[*]} | cut -d: -f1 | uniq`)
 
 generate_dict_id_gen_c
 

@@ -276,6 +276,15 @@ void fastq_zip_initialize (void)
 // called by main thread after each txt file compressing is done
 void fastq_zip_finalize (bool is_last_user_txt_file)
 {
+    // TO DO: bug 1044
+    // double deep_pc = z_file->deep_stats[NDP_FQ_READS] ? (double)(z_file->deep_stats[NDP_DEEPABLE] + z_file->deep_stats[NDP_DEEPABLE_TRIM]) / (double)z_file->deep_stats[NDP_FQ_READS] : 0;
+
+    // after compressing R1, if it turns out that almost all reads were deeped, no need to
+    // pair (this saves loading paired sections from z_file, and if BGZF - we can decompress in the compute thread)
+    // if (!is_last_user_txt_file && flag.deep && flag.pair && 
+    //     ((!flag.best && deep_pc > 0.99) || (flag.best && deep_pc > 0.998)))
+    //     flag.pair = PAIR_DEEP_ONLY;
+    
     if (is_last_user_txt_file && flag.deep)
         fastq_deep_zip_finalize();
 }

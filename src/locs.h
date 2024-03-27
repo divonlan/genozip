@@ -23,9 +23,8 @@ extern void locs_seg_initialize (VBlockP vb);
 extern void locs_seg_finalize (VBlockP vb);
 extern rom locs_seg_txt_line (VBlockP vb, rom field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
 
-#define LOCS_SPECIAL { locs_piz_special_DELTA_FLOAT }
+// SPECIALs
 SPECIAL (LOCS, 0, DELTA_FLOAT, locs_piz_special_DELTA_FLOAT);
-#define NUM_LOCS_SPECIAL 1
 
 // Important: Numbers (and order) of translators cannot be changed, as they are part of the file format
 // (they are included in the TOPLEVEL container)

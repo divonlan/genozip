@@ -139,7 +139,9 @@ typedef union SectionFlags {
     struct FlagsDict {
         uint8_t deep_sam         : 1;  // v15: Deep: dictionary used by a SAM   
         uint8_t deep_fastq       : 1;  // v15: Deep: dictionary used by a FASTQ 
-        uint8_t unused           : 6;
+        #define MAX_ALL_THE_SAME_WI 15
+        uint8_t all_the_same_wi  : 4;  // snip of this word_index to be reconstructed in no b250 and no local sections. can be non-zero (0-15) since 15.0.51.
+        uint8_t unused           : 2;
     } dictionary;
 
     struct FlagsRandomAccess {
@@ -194,7 +196,7 @@ typedef struct {
     uint16_t data_type;                // one of DataType
     uint64_t recon_size;               // data size of reconstructed file, if uncompressing as a single file in primary coordinates
     uint64_t genozip_minor_ver : 10;   // populated since 15.0.28
-    uint64_t unused8           : 5;
+    uint64_t unused8           : 5;    // reserved for future extension of genozip_minor_ver (if needed)
     uint64_t private_file      : 1;    // this file can only be decompressed by user with the specified license_hash (15.0.30)
     uint64_t num_lines_bound   : 48;   // number of lines in a bound file. "line" is data_type-dependent. For FASTQ, it is a read.
     uint32_t num_sections;             // number sections in this file (including this one)
@@ -269,14 +271,15 @@ typedef struct {
             uint32_t segconf_MATEID_method: 3; // VCF: 15.0.48
             uint32_t unused13             : 13;
             
-            struct { // 32 bits                 
-                uint32_t AC:3, MLEAC:3, AN:3, AF:3, SF:3, QD:3, DP:3;  // VCF: 15.0.37
-                uint32_t AS_SB_TABLE : 4;     // VCF: 15.0.41
-                uint32_t ID          : 6;     // VCF: 15.0.48
-                uint32_t unused      : 1;
+            struct { // 64 bits. Note: number of bits must match argument of segconf_set_width()
+                uint64_t AC:3, MLEAC:3, AN:3, AF:3, SF:3, QD:3, DP:3;  // VCF: 15.0.37
+                uint64_t AS_SB_TABLE : 4;     // VCF: 15.0.41
+                uint64_t ID          : 6;     // VCF: 15.0.48
+                uint64_t QUAL        : 4;     // VCF: 15.0.51
+                uint64_t unused      : 29;
             } width; 
             
-            uint8_t unused[264];
+            uint8_t unused[260];
         } vcf;
     };    
 } SectionHeaderGenozipHeader, *SectionHeaderGenozipHeaderP;

@@ -47,11 +47,13 @@
 #define FASTQ_GZ_      ".fastq.gz"
 #define FASTQ_BZ2_     ".fastq.bz2"
 #define FASTQ_XZ_      ".fastq.xz"
+#define FASTQ_ORA_     ".fastq.ora"
 #define FASTQ_GENOZIP_ ".fastq" GENOZIP_EXT
 #define FQ_            ".fq"
 #define FQ_GZ_         ".fq.gz"
 #define FQ_BZ2_        ".fq.bz2"
 #define FQ_XZ_         ".fq.xz"
+#define FQ_ORA_        ".fq.ora"
 #define FQ_GENOZIP_    ".fq" GENOZIP_EXT
 
 // FASTA file variations
@@ -172,8 +174,8 @@ typedef enum FileType { UNKNOWN_FILE_TYPE,
                         REF_GENOZIP,
                         VCF, VCF_GZ, VCF_BGZF, VCF_BZ2, VCF_XZ,                 VCF_GENOZIP, 
                         SAM, SAM_GZ, SAM_BGZF, SAM_BZ2, SAM_XZ,                 SAM_GENOZIP,
-                        FASTQ, FASTQ_GZ, FASTQ_BZ2, FASTQ_XZ,                   FASTQ_GENOZIP,
-                        FQ,    FQ_GZ,    FQ_BZ2,    FQ_XZ,                      FQ_GENOZIP,
+                        FASTQ, FASTQ_GZ, FASTQ_BZ2, FASTQ_XZ,     FASTQ_ORA,    FASTQ_GENOZIP,
+                        FQ,    FQ_GZ,    FQ_BZ2,    FQ_XZ,        FQ_ORA,       FQ_GENOZIP,
                         FASTA, FASTA_GZ, FASTA_BZ2, FASTA_XZ,     FASTA_ZIP,    FASTA_GENOZIP,
                         FA,    FA_GZ,    FA_BZ2,    FA_XZ,        FA_ZIP,       FA_GENOZIP,
                         FAA,   FAA_GZ,   FAA_BZ2,   FAA_XZ,       FAA_ZIP,      FAA_GENOZIP,
@@ -189,7 +191,7 @@ typedef enum FileType { UNKNOWN_FILE_TYPE,
                         GTF,   GTF_GZ,   GTF_BZ2,   GTF_XZ,                     GTF_GENOZIP,
                         ME23,  ME23_ZIP,                                        ME23_GENOZIP, 
                         LOCS,  LOCS_GZ,  LOCS_BZ2,  LOCS_XZ,                    LOCS_GENOZIP,
-                        BAM,   BAM_GZ,   BAM_BGZF, CRAM,                        BAM_GENOZIP,
+                        BAM,   BAM_GZ,   BAM_BGZF,  CRAM,                       BAM_GENOZIP,
                         BCF,   BCF_GZ,   BCF_BGZF,                              BCF_GENOZIP,  
                         BED,   BED_GZ,   BED_BZ2,   BED_XZ,                     BED_GENOZIP,
                         TRACK, TRACK_GZ, TRACK_BZ2, TRACK_XZ,                   TRACK_GENOZIP,
@@ -201,8 +203,8 @@ typedef enum FileType { UNKNOWN_FILE_TYPE,
                                                                                         REF_GENOZIP_,           \
                    VCF_,      VCF_GZ_, VCF_BGZF_, VCF_BZ2_,    VCF_XZ_,                 VCF_GENOZIP_,           \
                    SAM_,      SAM_GZ_, SAM_BGZF_, SAM_BZ2_,    SAM_XZ_,                 SAM_GENOZIP_,           \
-                   FASTQ_,    FASTQ_GZ_,          FASTQ_BZ2_,  FASTQ_XZ_,               FASTQ_GENOZIP_,         \
-                   FQ_,       FQ_GZ_,             FQ_BZ2_,     FQ_XZ_,                  FQ_GENOZIP_,            \
+                   FASTQ_,    FASTQ_GZ_,          FASTQ_BZ2_,  FASTQ_XZ_,   FASTQ_ORA_, FASTQ_GENOZIP_,         \
+                   FQ_,       FQ_GZ_,             FQ_BZ2_,     FQ_XZ_,      FQ_ORA_,    FQ_GENOZIP_,            \
                    FASTA_,    FASTA_GZ_,          FASTA_BZ2_,  FASTA_XZ_,   FASTA_ZIP_, FASTA_GENOZIP_,         \
                    FA_,       FA_GZ_,             FA_BZ2_,     FA_XZ_,      FA_ZIP_,    FA_GENOZIP_,            \
                    FAA_,      FAA_GZ_,            FAA_BZ2_,    FAA_XZ_,     FAA_ZIP_,   FAA_GENOZIP_,           \
@@ -239,14 +241,14 @@ extern rom file_exts[];
                              { FSA_BZ2,    CODEC_BZ2,  REF_GENOZIP    }, { FSA_XZ,    CODEC_XZ,  REF_GENOZIP    },\
                              { FA,         CODEC_NONE, REF_GENOZIP    }, { FA_GZ,     CODEC_GZ,  REF_GENOZIP    },\
                              { FA_BZ2,     CODEC_BZ2,  REF_GENOZIP    }, { FA_XZ,     CODEC_XZ,  REF_GENOZIP    }, { } }, \
-                           { { VCF,        CODEC_NONE, VCF_GENOZIP    }, { VCF_GZ,    CODEC_GZ,  VCF_GENOZIP    }, { VCF_BGZF, CODEC_GZ,  VCF_GENOZIP  },\
+                           { { VCF,        CODEC_NONE, VCF_GENOZIP    }, { VCF_GZ,    CODEC_GZ,  VCF_GENOZIP    }, { VCF_BGZF,  CODEC_GZ,  VCF_GENOZIP  },\
                              { VCF_BZ2,    CODEC_BZ2,  VCF_GENOZIP    }, { VCF_XZ,    CODEC_XZ,  VCF_GENOZIP    }, { } },\
-                           { { SAM,        CODEC_NONE, SAM_GENOZIP    }, { SAM_GZ,    CODEC_GZ,  SAM_GENOZIP    }, { SAM_BGZF, CODEC_GZ,  SAM_GENOZIP  },\
+                           { { SAM,        CODEC_NONE, SAM_GENOZIP    }, { SAM_GZ,    CODEC_GZ,  SAM_GENOZIP    }, { SAM_BGZF,  CODEC_GZ,  SAM_GENOZIP  },\
                              { SAM_BZ2,    CODEC_BZ2,  SAM_GENOZIP    }, { SAM_XZ,    CODEC_XZ,  SAM_GENOZIP    }, { }, },\
                            { { FASTQ,      CODEC_NONE, FASTQ_GENOZIP  }, { FASTQ_GZ,  CODEC_GZ,  FASTQ_GENOZIP  },\
-                             { FASTQ_BZ2,  CODEC_BZ2,  FASTQ_GENOZIP  }, { FASTQ_XZ,  CODEC_XZ,  FASTQ_GENOZIP  },\
+                             { FASTQ_BZ2,  CODEC_BZ2,  FASTQ_GENOZIP  }, { FASTQ_XZ,  CODEC_XZ,  FASTQ_GENOZIP  }, { FASTQ_ORA, CODEC_ORA, FASTQ_GENOZIP  },\
                              { FQ,         CODEC_NONE, FQ_GENOZIP     }, { FQ_GZ,     CODEC_GZ,  FQ_GENOZIP     },\
-                             { FQ_BZ2,     CODEC_BZ2,  FQ_GENOZIP     }, { FQ_XZ,     CODEC_XZ,  FQ_GENOZIP     }, { } },\
+                             { FQ_BZ2,     CODEC_BZ2,  FQ_GENOZIP     }, { FQ_XZ,     CODEC_XZ,  FQ_GENOZIP     }, { FQ_ORA,    CODEC_ORA, FASTQ_GENOZIP  }, { } },\
                            { { FASTA,      CODEC_NONE, FASTA_GENOZIP  }, { FASTA_GZ,  CODEC_GZ,  FASTA_GENOZIP  },\
                              { FASTA_BZ2,  CODEC_BZ2,  FASTA_GENOZIP  }, { FASTA_XZ,  CODEC_XZ,  FASTA_GENOZIP  }, { FASTA_ZIP, CODEC_ZIP, FASTA_GENOZIP  }, \
                              { FAA,        CODEC_NONE, FAA_GENOZIP    }, { FAA_GZ,    CODEC_GZ,  FAA_GENOZIP    },\

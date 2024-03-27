@@ -36,6 +36,8 @@ extern FILE *stream_from_stream_stdout (StreamP stream);
 extern FILE *stream_from_stream_stderr (StreamP stream);
 extern FILE *stream_to_stream_stdin    (StreamP stream);
 
+extern rom stream_get_exec_name (StreamP stream);
+
 extern rom exit_code_name (int exit_code);
 
 extern bool stream_is_exec_in_path (rom exec);

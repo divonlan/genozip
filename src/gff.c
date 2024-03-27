@@ -49,6 +49,10 @@ unsigned gff_vb_size (DataType dt) { return sizeof (VBlockGFF);  }
 sSTRl(copy_gene_name_snip,32);
 sSTRl(dbx_container_snip,100);
 sSTRl(transcript_name_container_snip,100);
+sSTRl(copy_END_snip, 16);
+sSTRl(START_minus_1_snip, 32);
+sSTRl(Stop_minus_Start_snip, 32);
+
 void gff_zip_initialize (void)
 {
     // transcript_name staff
@@ -68,6 +72,12 @@ void gff_zip_initialize (void)
                           { .dict_id = { _ATTR_DBXid }                     } } // 1
     };
     container_prepare_snip ((ContainerP)&con, 0, 0, qSTRa (dbx_container_snip));
+
+    seg_prepare_snip_other (SNIP_COPY, _GFF_END, false, 0, copy_END_snip);
+
+    seg_prepare_snip_other (SNIP_OTHER_DELTA, _GFF_START, true, -1, START_minus_1_snip);   
+
+    seg_prepare_minus_snip (GFF, _ATTR_Stop, _ATTR_Start, Stop_minus_Start_snip);
 
     fasta_zip_initialize(); // for a potential embedded fasta
 }
@@ -143,7 +153,8 @@ int32_t gff_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 // called from seg_all_data_lines
 void gff_seg_initialize (VBlockP vb)
 {
-    ctx_set_store (VB, STORE_INT, GFF_START/*since v12*/, GFF_END/*14.0.18*/, ATTR_Target_POS, ATTR_ID, ATTR_exon_number, DID_EOL);
+    ctx_set_store (VB, STORE_INT, GFF_START/*since v12*/, GFF_END/*14.0.18*/, ATTR_Target_POS, ATTR_ID, ATTR_exon_number, 
+                   ATTR_Start, ATTR_Stop, DID_EOL);
 
     ctx_set_store (VB, STORE_INDEX, GFF_SEQID/*v12*/, GFF_COMMENT/*12.0.12*/, DID_EOL);
 
@@ -273,13 +284,13 @@ static void gff_seg_dbxref (VBlockGFFP vb, ContextP ctx, STRp(value))
         seg_by_ctx (VB, (char[]){ SNIP_COPY }, 1, ctx, value_len);
 
     else
-        seg_array_by_callback (VB, ctx, STRa(value), ',', gff_seg_dbxref_one, value_len);
+        seg_array_by_callback (VB, ctx, STRa(value), ',', gff_seg_dbxref_one, 0, 0, value_len);
 
     seg_set_last_txt (VB, ctx, STRa(value));
 }
 
 // returns true if successful
-static bool gff_seg_target (VBlockGFFP vb, STRp(value))
+static bool gff_seg_target (VBlockGFFP vb, ContextP ctx, STRp(value))
 {
     str_split (value, value_len, 4, ' ', item, false);
     if (n_items != 3 && n_items != 4) return false; // not standard Target format
@@ -302,7 +313,7 @@ static bool gff_seg_target (VBlockGFFP vb, STRp(value))
         seg_by_did (VB, items[3], item_lens[3], ATTR_Target_STRAND, item_lens[3]);
 
     // TO DO: use seg_duplicate_last if n_items hasn't changed
-    container_seg (vb, CTX (ATTR_Target), (ContainerP)&con, NULL, 0, n_items-1); // account for space separators
+    container_seg (vb, ctx, (ContainerP)&con, NULL, 0, n_items-1); // account for space separators
 
     return true;
 }
@@ -340,10 +351,8 @@ static void gff_seg_transcript_name (VBlockGFFP vb, STRp(transcript_name))
         seg_by_ctx (VB, STRa(transcript_name), ctx, transcript_name_len); 
 }
 
-static void gff_seg_exon_number (VBlockGFFP vb, STRp(exon_number))
+static void gff_seg_exon_number (VBlockGFFP vb, ContextP ctx, STRp(exon_number))
 {
-    decl_ctx (ATTR_exon_number);
-
     int64_t en;
     ASSSEG (str_get_int (STRa(exon_number), &en), "expecting exon_number=\"%.*s\" to be an integer", STRf(exon_number));
 
@@ -366,8 +375,35 @@ SPECIAL_RECONSTRUCTOR (gff_piz_special_exon_number)
     return HAS_NEW_VALUE;
 }
 
+static void gff_seg_ATTR_Start (VBlockGFFP vb, ContextP ctx, STRp(start_str))
+{
+    int64_t Start;
+    if (str_get_int (STRa(start_str), &Start) && Start+1 == CTX(GFF_START)->last_value.i)
+        seg_by_ctx (VB, STRa(START_minus_1_snip), ctx, start_str_len);
+    else
+        seg_integer_or_not (VB, ctx, STRa(start_str), start_str_len);
+
+    ctx_set_last_value (VB, ctx, Start);
+}
+
+static void gff_seg_ATTR_Length (VBlockGFFP vb, ContextP ctx, STRp(length_str))
+{
+    int64_t Start = CTX(ATTR_Start)->last_value.i, Stop, Length;
+    
+    if (ctx_has_value_in_line_(VB, CTX(ATTR_Start)) &&
+        ctx_encountered_in_line (VB, ATTR_Stop) && str_get_int (STRlst(ATTR_Stop), &Stop) &&
+        str_get_int (STRa(length_str), &Length) &&
+        Length == Stop - Start)
+        seg_by_ctx (VB, STRa(Stop_minus_Start_snip), ctx, length_str_len);
+    else
+        seg_integer_or_not (VB, ctx, STRa(length_str), length_str_len);
+}
+
 static inline DictId gff_seg_attr_subfield (VBlockGFFP vb, STRp(tag), STRp(value))
 {
+    #define CALL(f) ({ (f); break; })
+    #define CALL_WITH_FALLBACK(f) if (!f(vb, ctx, STRa(value))) { goto plain_seg; } break
+
     DictId dict_id = dict_id_make (STRa(tag), DTYPE_GFF_ATTR);
 
     ContextP ctx = ctx_get_ctx_tag (vb, dict_id, tag, tag_len);
@@ -388,24 +424,15 @@ static inline DictId gff_seg_attr_subfield (VBlockGFFP vb, STRp(tag), STRp(value
 
     // example: "GeneID:100287102,GenBank:NR_046018.2,HGNC:HGNC:37102"
     case _ATTR_Dbxref:
-    case _ATTR_db_xref: 
-        gff_seg_dbxref (vb, ctx, STRa(value));
-        break;
+    case _ATTR_db_xref: CALL (gff_seg_dbxref (vb, ctx, STRa(value)));
 
-    case _ATTR_Target:
-        if (!gff_seg_target (vb, STRa(value)))
-            goto plain_seg;
-        break;
+    case _ATTR_Target:  CALL_WITH_FALLBACK (gff_seg_target);
 
     // example: { "gene021872.2" } { "HG-1885", "HG-789" }
-    case _ATTR_Name:
-        seg_id_field (VB, CTX(ATTR_Name), STRa(value), false, value_len);
-        break;
+    case _ATTR_Name:    CALL (seg_id_field (VB, CTX(ATTR_Name), STRa(value), false, value_len));
 
     // example: Parent=mRNA00001,mRNA00002,mRNA00003
-    case _ATTR_Parent:
-        seg_array (VB, CTX(ATTR_Parent), ATTR_Parent, STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len);
-        break;
+    case _ATTR_Parent:  CALL (seg_array (VB, CTX(ATTR_Parent), ATTR_Parent, STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
 
     //case _ATTR_Gap: // I tried: 1. array (no improvement) ; 2. string of op-codes in b250 + integers in local (negligible improvement)
 
@@ -421,8 +448,7 @@ static inline DictId gff_seg_attr_subfield (VBlockGFFP vb, STRp(tag), STRp(value
                              { .dict_id={.id="V2arEff" }, .separator = {' '} },
                              { .dict_id={.num=_ENSTid  },                    } }
         };
-        seg_array_of_struct (VB, CTX(ATTR_Variant_effect), Variant_effect, STRa(value), NULL, NULL, value_len);
-        break;
+        CALL (seg_array_of_struct (VB, CTX(ATTR_Variant_effect), Variant_effect, STRa(value), NULL, NULL, value_len));
     }
 
     case _ATTR_sift_prediction: {
@@ -435,8 +461,7 @@ static inline DictId gff_seg_attr_subfield (VBlockGFFP vb, STRp(tag), STRp(value
                              { .dict_id={.id="S2iftPr" }, .separator = {' '} },
                              { .dict_id={.num=_ENSTid  },                    } }
         };
-        seg_array_of_struct (VB, CTX(ATTR_sift_prediction), sift_prediction, STRa(value), NULL, NULL, value_len);
-        break;
+        CALL (seg_array_of_struct (VB, CTX(ATTR_sift_prediction), sift_prediction, STRa(value), NULL, NULL, value_len));
     }
 
     case _ATTR_polyphen_prediction: {
@@ -449,8 +474,7 @@ static inline DictId gff_seg_attr_subfield (VBlockGFFP vb, STRp(tag), STRp(value
                              { .dict_id={.id="P2olyPhP" }, .separator = {' '} },
                              { .dict_id={.num=_ENSTid   },                    } }
         };
-        seg_array_of_struct (VB, CTX(ATTR_polyphen_prediction), polyphen_prediction, STRa(value), NULL, NULL, value_len);
-        break;
+        CALL (seg_array_of_struct (VB, CTX(ATTR_polyphen_prediction), polyphen_prediction, STRa(value), NULL, NULL, value_len));
     }
 
     case _ATTR_variant_peptide: {
@@ -462,8 +486,7 @@ static inline DictId gff_seg_attr_subfield (VBlockGFFP vb, STRp(tag), STRp(value
                              { .dict_id={.id="v1arPep"  }, .separator = {' '} },
                              { .dict_id={.num=_ENSTid   },                    } }
         };
-        seg_array_of_struct (VB, CTX(ATTR_variant_peptide), variant_peptide, STRa(value), NULL, NULL, value_len);
-        break;
+        CALL (seg_array_of_struct (VB, CTX(ATTR_variant_peptide), variant_peptide, STRa(value), NULL, NULL, value_len));
     }
 
     // we store these 3 in one dictionary, as they are correlated and will compress better together
@@ -471,12 +494,10 @@ static inline DictId gff_seg_attr_subfield (VBlockGFFP vb, STRp(tag), STRp(value
     case _ATTR_Reference_seq:
     case _ATTR_ancestral_allele: 
         // note: all three are stored together in _ATTR_Reference_seq as they are correlated
-        seg_add_to_local_string (VB, CTX(ATTR_Reference_seq), STRa(value), LOOKUP_NONE, value_len); 
-        break;
+        CALL (seg_add_to_local_string (VB, CTX(ATTR_Reference_seq), STRa(value), LOOKUP_NONE, value_len)); 
 
     case _ATTR_chr:
-        chrom_seg_by_did_i (VB, ATTR_chr, STRa(value), value_len);
-        break;
+        CALL (chrom_seg_by_did_i (VB, ATTR_chr, STRa(value), value_len));
 
     // Optimize Variant_freq
     case _ATTR_Variant_freq:
@@ -495,9 +516,7 @@ static inline DictId gff_seg_attr_subfield (VBlockGFFP vb, STRp(tag), STRp(value
         set_last_txt (ctx->did_i, value); // consumed by gff_seg_transcript_name
         goto plain_seg;
 
-    case _ATTR_transcript_name:
-        gff_seg_transcript_name (vb, STRa(value));
-        break;
+    case _ATTR_transcript_name: CALL (gff_seg_transcript_name (vb, STRa(value)));
 
     case _ATTR_gene_id:
     case _ATTR_havana_gene: 
@@ -506,21 +525,26 @@ static inline DictId gff_seg_attr_subfield (VBlockGFFP vb, STRp(tag), STRp(value
     case _ATTR_ccds_id: 
     case _ATTR_ccdsid: 
     case _ATTR_protein_id: 
-    case _ATTR_exon_id: 
-        seg_id_field (VB, ctx, STRa(value), true, value_len);
-        break;
+    case _ATTR_exon_id:     CALL (seg_id_field (VB, ctx, STRa(value), true, value_len));
 
-    case _ATTR_exon_number:
-        gff_seg_exon_number (vb, STRa(value));
-        break;
+    case _ATTR_exon_number: CALL (gff_seg_exon_number (vb, ctx, STRa(value)));
+        
+    // Dragen CNV fields
+    case _ATTR_Start:       CALL (gff_seg_ATTR_Start (vb, ctx, STRa(value)));
+    case _ATTR_Stop:        CALL (seg_maybe_copy (VB, ctx, GFF_END, STRa(value), STRa(copy_END_snip)));
+    case _ATTR_Length:      CALL (gff_seg_ATTR_Length (vb, ctx, STRa(value)));
+    case _ATTR_CopyNumber:
+    case _ATTR_Qual:
+    case _ATTR_BinCount:    CALL (seg_integer_or_not (VB, ctx, STRa(value), value_len));
+    case _ATTR_ImproperPairsCount: CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, STORE_INT, DICT_ID_NONE, value_len));
 
     default:
     plain_seg:
         seg_by_ctx (VB, STRa(value), ctx, value_len);
     }
 
-    ctx_set_encountered (VB, ctx);
-
+    seg_set_last_txt (VB, ctx, STRa(value));
+    
     return dict_id;
 }
 
@@ -675,14 +699,19 @@ static void gff_seg_gff3_attrs_field (VBlockGFFP vb, STRp(field))
 
     for (unsigned i=0; i < n_attrs; i++) {
 
-        str_split (attrs[i], attr_lens[i], 2, '=', tag_val, true);
-        ASSSEG (n_tag_vals == 2 && tag_val_lens[0] > 0 && tag_val_lens[1] > 0, "Invalid attribute: %.*s", STRfi (attr, i));
+        str_split (attrs[i], attr_lens[i], 2, '=', tag_val, false);
 
-        memcpy (&prefixes[prefixes_len], tag_vals[0], tag_val_lens[0] + 1);
-        prefixes_len += tag_val_lens[0] + 2; // including the '=' and CON_PX_SEP
+        ASSSEG (n_tag_vals && tag_val_lens[0] > 0 && (n_tag_vals == 1 || tag_val_lens[1] > 0), 
+                "Invalid attribute: %.*s", STRfi (attr, i));
+
+        memcpy (&prefixes[prefixes_len], tag_vals[0], tag_val_lens[0] + (n_tag_vals == 2)); // including the '=' if there is one 
+        prefixes_len += tag_val_lens[0] + (n_tag_vals == 2) + 1; // including the '=' (if needed) and CON_PX_SEP
         prefixes[prefixes_len-1] = CON_PX_SEP;
 
-        con.items[i].dict_id = gff_seg_attr_subfield (vb, STRi(tag_val, 0), STRi (tag_val, 1));
+        // case: attribute has a value (otherwise item's dict_id remains DICT_ID_NONE - a "prefix-only item")
+        if (n_tag_vals == 2) 
+            con.items[i].dict_id = gff_seg_attr_subfield (vb, STRi(tag_val, 0), STRi (tag_val, 1));
+
         con.items[i].separator[0] = ';'; 
     }
 
@@ -694,6 +723,8 @@ static void gff_seg_START (VBlockGFFP vb, STRp(start))
 {
     seg_pos_field (VB, GFF_START, GFF_START, 0, 0, STRa(start), 0, start_len+1);
     random_access_update_pos (VB, GFF_START);
+
+    set_last_txt (GFF_START, start);
 }
 
 static void gff_seg_TYPE (VBlockGFFP vb, STRp(type))
@@ -736,8 +767,11 @@ rom gff_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
 
     GET_NEXT_ITEM (GFF_END);
     seg_pos_field (VB, GFF_END, GFF_START, 0, 0, STRd(GFF_END), 0, GFF_END_len+1);
+    set_last_txt_ (GFF_END, GFF_END_str, GFF_END_len);
 
-    SEG_NEXT_ITEM (GFF_SCORE);
+    GET_NEXT_ITEM (GFF_SCORE);
+    seg_integer_or_not (VB, CTX(GFF_SCORE), STRd(GFF_SCORE), GFF_SCORE_len+1);
+
     SEG_NEXT_ITEM (GFF_STRAND);
     SEG_MAYBE_LAST_ITEM (GFF_PHASE);
 

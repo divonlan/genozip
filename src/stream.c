@@ -265,7 +265,7 @@ StreamP stream_create (StreamP parent_stream, uint32_t from_stream_stdout, uint3
     if (from_stream_stderr) stream_pipe (stream_stderr_to_genozip, from_stream_stderr, true);
     if (to_stream_stdin)    stream_pipe (genozip_to_stream_stdin,  to_stream_stdin, false);
 
-    Stream *stream = CALLOC (sizeof (Stream));
+    StreamP stream = CALLOC (sizeof (Stream));
     stream->exec_name = exec_name;
     if (parent_stream) parent_stream->substream = stream;
 
@@ -331,7 +331,7 @@ StreamP stream_create (StreamP parent_stream, uint32_t from_stream_stdout, uint3
     return stream;
 }
 
-void stream_close_pipes (Stream *stream)
+void stream_close_pipes (StreamP stream)
 {
     // fclose and fail silently (pipes might be gone already after we killed the counter part process?)
     if (stream->from_stream_stdout) FCLOSE (stream->from_stream_stdout, "stream->from_stream_stdout");
@@ -339,7 +339,7 @@ void stream_close_pipes (Stream *stream)
     if (stream->to_stream_stdin)    FCLOSE (stream->to_stream_stdin,    "stream->to_stream_stdin");
 }
 
-int stream_close (Stream **stream, StreamCloseMode close_mode)
+int stream_close (StreamP *stream, StreamCloseMode close_mode)
 {
     if (! *stream) return 0; // nothing to do
 
@@ -367,7 +367,7 @@ int stream_close (Stream **stream, StreamCloseMode close_mode)
 }
 
 // returns exit status of child
-int stream_wait_for_exit (Stream *stream)
+int stream_wait_for_exit (StreamP stream)
 {
     if (!stream->pid) return stream->exit_status; // we've already waited for this process and already have the exit status;
 
@@ -400,9 +400,14 @@ int stream_wait_for_exit (Stream *stream)
     return (int)stream->exit_status;
 }
 
-FILE *stream_from_stream_stdout (Stream *stream) { return stream->from_stream_stdout; }
-FILE *stream_from_stream_stderr (Stream *stream) { return stream->from_stream_stderr; }
-FILE *stream_to_stream_stdin    (Stream *stream) { return stream->to_stream_stdin;    }
+FILE *stream_from_stream_stdout (StreamP stream) { return stream->from_stream_stdout; }
+FILE *stream_from_stream_stderr (StreamP stream) { return stream->from_stream_stderr; }
+FILE *stream_to_stream_stdin    (StreamP stream) { return stream->to_stream_stdin;    }
+
+rom stream_get_exec_name (StreamP stream)
+{
+    return stream->exec_name;
+}
 
 void stream_abort_if_cannot_run (rom exec_name, rom reason)
 {

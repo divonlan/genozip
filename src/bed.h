@@ -37,6 +37,5 @@ extern void bed_seg_initialize (VBlockP vb_);
 extern void bed_seg_finalize (VBlockP vb);
 extern bool bed_seg_is_small (ConstVBlockP vb, DictId dict_id);
 
-#define BED_SPECIAL {  bed_piz_special_BCOUNT }
+// SPECIALs
 SPECIAL (BED, 0, BCOUNT, bed_piz_special_BCOUNT);
-#define NUM_BED_SPECIAL 1

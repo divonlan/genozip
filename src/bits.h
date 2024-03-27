@@ -470,11 +470,11 @@ static inline uint32_t bits_hamming_distance (ConstBitsP bits_1, uint64_t index_
                                               uint64_t len)
 {
     const uint64_t *words_1 = &bits_1->words[index_1 >> 6];
-    uint8_t shift_1 = index_1 & bitmask64(6); // word 1 contributes (64-shift) most-significant bits, word 2 contribute (shift) least significant bits
+    uint8_t shift_1 = index_1 & bitmask64(6); 
     uint64_t *after_1 = bits_1->words + bits_1->nwords;
 
     const uint64_t *words_2 = &bits_2->words[index_2 >> 6];
-    uint8_t shift_2 = index_2 & bitmask64(6); // word 1 contributes (64-shift) most-significant bits, word 2 contribute (shift) least significant bits
+    uint8_t shift_2 = index_2 & bitmask64(6); 
     uint64_t *after_2 = bits_2->words + bits_2->nwords;
 
     uint64_t word=0;

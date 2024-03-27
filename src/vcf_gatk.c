@@ -745,6 +745,23 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_QD)
     return NO_NEW_VALUE;
 }
 
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_DEMUX_BY_DP)
+{
+    unsigned num_dps = recon_multi_dict_id_get_num_dicts (ctx, STRa(snip));
+
+    rom DP_str;
+    int64_t DP = reconstruct_peek (vb, CTX(FORMAT_DP), &DP_str, 0).i;
+    int channel_i = (*DP_str=='.') ? 0 : MAX_(0, MIN_(DP, num_dps-1));
+
+    ContextP channel_ctx = MCTX (channel_i, snip, snip_len);
+    ASSPIZ (channel_ctx, "Cannot find channel context of channel_i=%d of multiplexed context %s. snip=%s", 
+            channel_i, ctx->tag_name, str_snip_ex (snip-2, snip_len+2, true).s);
+
+    reconstruct_from_ctx (vb, channel_ctx->did_i, 0, reconstruct);
+
+    return NO_NEW_VALUE; 
+}
+
 // -------------------
 // INFO/AS_SB_TABLE
 // -------------------

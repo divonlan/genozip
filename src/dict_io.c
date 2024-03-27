@@ -182,7 +182,7 @@ void dict_io_compress_dictionaries (void)
 
     frag_ctx = ZCTX(0);
     frag_next_node = NULL;
-
+        
     dict_io_assign_codecs(); // assign codecs to all contexts' dicts
 
     dispatcher_fan_out_task ("compress_dicts", NULL, 0, "Writing dictionaries...", false, false, false, 0, 20000, true,
@@ -266,7 +266,7 @@ static void dict_io_read_one_vb (VBlockP vb)
         vb->fragment_start       = Bc (dict_ctx->dict, dict_ctx->dict.len);
         dict_ctx->word_list.len += header ? BGEN32 (header->num_snips) : 0;
         dict_ctx->dict.len      += (uint64_t)vb->fragment_len;
-        dict_ctx->dict_helper    = header->dict_helper; // 15.0.42
+        dict_ctx->dict_helper    = header->dict_helper; // 15.0.42 (union with con_rep_special)
 
         ASSERT (dict_ctx->dict.len <= dict_ctx->dict.size, "%s: Dict %s vb=%u len=%"PRIu64" exceeds allocated size=%"PRIu64" (num_fragments=%u fragment_1_len=%u)", 
                 z_name, dict_ctx->tag_name, vb->vblock_i, dict_ctx->dict.len, (uint64_t)dict_ctx->dict.size, dict_ctx->dict.prm32[0], dict_ctx->dict.prm32[1]);
@@ -371,15 +371,16 @@ void dict_io_read_all_dictionaries (void)
     // output the dictionaries if we're asked to
     if (flag.show_dict || flag.show_one_dict || flag.list_chroms) {
         for (uint32_t did_i=0; did_i < z_file->num_contexts; did_i++) {
-            Context *ctx = ZCTX(did_i);
+            ContextP ctx = ZCTX(did_i);
             if (!ctx->dict.len) continue;
 
             if (flag.list_chroms && ctx->did_i == CHROM)
                 dict_io_print (info_stream, STRb(ctx->dict), true, false, true, Z_DT(SAM));
             
             if (flag.show_dict || (flag.show_one_dict && dict_id_is_show (ctx->dict_id))) 
-                iprintf ("%-8s\tdid_i=%-3u\tnum_snips=%u\tdict_size=%s\n", 
-                         ctx_tag_name_ex (ctx).s, did_i, ctx->word_list.len32, str_size (ctx->dict.len).s);
+                iprintf ("%-8s\tdid_i=%-3u\tnum_snips=%u\tdict_size=%s\tall_the_same_wi=%u\tdeep_sam=%s\tdeep_fastq=%s\n", 
+                         ctx_tag_name_ex (ctx).s, did_i, ctx->word_list.len32, str_size (ctx->dict.len).s,
+                         ctx->dict_flags.all_the_same_wi, TF(ctx->dict_flags.deep_sam), TF(ctx->dict_flags.deep_fastq));
 
             if (dict_id_is_show (ctx->dict_id))
                 dict_io_print (info_stream, STRb(ctx->dict), true, true, true, false);
@@ -400,6 +401,11 @@ StrTextMegaLong str_snip_ex (STRp(snip), bool add_quote)
     char op = (snip_len && snip[0] > 0 && snip[0] < 32) ? snip[0] : 0;
     int i=1;
 
+    static rom special_names[NUM_DATATYPES][MAX_NUM_SPECIAL] = 
+        { [DT_VCF]=VCF_SPECIAL_NAMES,         [DT_SAM]=SAM_SPECIAL_NAMES,     [DT_BAM]=SAM_SPECIAL_NAMES,
+          [DT_FASTQ]=FASTQ_SPECIAL_NAMES,     [DT_FASTA]=FASTA_SPECIAL_NAMES, [DT_GFF]=GFF_SPECIAL_NAMES, 
+          [DT_GENERIC]=GENERIC_SPECIAL_NAMES, [DT_LOCS]=LOCS_SPECIAL_NAMES,   [DT_BED]=BED_SPECIAL_NAMES };
+
     switch (op) {
         case 0                         : i--;                                                              break;
         case SNIP_LOOKUP               : next  = mempcpy (next, "[LOOKUP]",      STRLEN("[LOOKUP]"));      break;
@@ -417,7 +423,9 @@ StrTextMegaLong str_snip_ex (STRp(snip), bool add_quote)
         case v13_SNIP_COPY_BUDDY       : next  = mempcpy (next, "[BCOPY]",       STRLEN("[BCOPY]"));       break;
         case SNIP_DIFF                 : next  = mempcpy (next, "[DIFF]",        STRLEN("[DIFF]"));        break;
         case SNIP_NUMERIC              : next  = mempcpy (next, "[NUMERIC]",     STRLEN("[NUMERIC]"));     break;
-        case SNIP_SPECIAL              : next += sprintf (next, "[SPECIAL-%u]", snip[1]-32); i++;          break;
+        case SNIP_SPECIAL              : next += (z_file && special_names[z_file->data_type][snip[1]-32]) 
+                                               ? sprintf (next, "[%s_SPECIAL_%s]", dt_name(z_file->data_type), special_names[z_file->data_type][snip[1]-32]) 
+                                               : sprintf (next, "[SPECIAL-%u]", snip[1]-32); i++;          break;
         default                        : next += sprintf (next, "\\x%x", (uint8_t)op);
     }
 

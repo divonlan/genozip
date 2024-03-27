@@ -25,6 +25,5 @@ extern StrTextLong generic_get_magic (void);
 extern rom generic_get_ext (void);
 extern rom fallback_to_generic (VBlockP vb);
 
-#define GNRIC_SPECIAL { generic_piz_TOPLEVEL }
+// SPECIALS
 SPECIAL (GNRIC, 0, TOPLEVEL, generic_piz_TOPLEVEL);
-#define NUM_GNRIC_SPECIAL 1

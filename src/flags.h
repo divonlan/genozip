@@ -54,7 +54,7 @@ typedef struct {
         optimize_QUAL, optimize_Vf, optimize_ZM, optimize_DESC,
         allow_ambiguous, add_line_numbers, match_chrom_to_reference;
         
-    int truncate_partial_last_line; // we don't consider this option data modifying as its used for debugging - digest is calculated only after truncation
+    int truncate; // allow truncated file - compress only available full lines. note: we don't consider this option data modifying as its used for debugging - digest is calculated only after truncation
         
     PairType pair; 
 

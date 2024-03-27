@@ -13,7 +13,7 @@
 #include "profiler.h" // for TimeSpecType
 #include "flags.h"
 
-bool progress_newline_since_update = false; // global: might be not 100% with threads, but that's ok
+static bool progress_newline_since_update = false; // note: might be not 100% with threads, but that's ok
 
 static bool ever_start_time_initialized = false, test_mode;
 static TimeSpecType ever_start_time, component_start_time;
@@ -52,6 +52,15 @@ static void progress_update_status (rom prefix, rom status)
     last_len = strlen (status);
 
     progress_newline_since_update = false;
+}
+
+// bring the cursor down to a newline, if needed
+void progress_newline(void) 
+{
+    if (!flag.quiet && !progress_newline_since_update) { 
+        fputc ('\n', stderr);
+        progress_newline_since_update = true;
+    }
 }
 
 void progress_erase (void)

@@ -125,19 +125,30 @@
 #define _INFO_STRANDQ ((uint64_t)22874576007615699)
 #define _INFO_STRQ ((uint64_t)1364350163)
 #define _INFO_TLOD ((uint64_t)1146047700)
+#define _INFO_R2_5P_bias ((uint64_t)8314042257625789138)
 #define _INFO_QD ((uint64_t)17617)
 #define _INFO_FS ((uint64_t)21446)
 #define _INFO_SOR ((uint64_t)5394387)
 #define _INFO_MQRankSum ((uint64_t)7887302043068682701)
 #define _INFO_ReadPosRankSum ((uint64_t)7887302043120002514)
-#define _INFO_HaplotypeScore ((uint64_t)7310027617987486152)
-#define _INFO_ExcessHet ((uint64_t)8387189541506873541)
-#define _INFO_AS_QD ((uint64_t)293422977985)
 #define _INFO_BaseQRankSum ((uint64_t)7887302043137958338)
+#define _INFO_ClippingRankSum ((uint64_t)7887302043321855171)
+#define _INFO_HaplotypeScore ((uint64_t)7310027617987486152)
 #define _INFO_InbreedingCoeff ((uint64_t)7378696568827965129)
 #define _INFO_AS_InbreedingCoeff ((uint64_t)7378696568139895745)
+#define _INFO_ExcessHet ((uint64_t)8387189541506873541)
 #define _INFO_RAW_MQ ((uint64_t)89392753885650)
 #define _INFO_RAW_MQandDP ((uint64_t)5783858246659293650)
+#define _INFO_QUALapprox ((uint64_t)8678280833607488977)
+#define _INFO_VarDP ((uint64_t)344745730518)
+#define _INFO_AS_QD ((uint64_t)293422977985)
+#define _INFO_AS_SOR ((uint64_t)90500654650305)
+#define _INFO_AS_MQ ((uint64_t)349190443969)
+#define _INFO_AS_MQRankSum ((uint64_t)7887302042733990849)
+#define _INFO_AS_FS ((uint64_t)357662938049)
+#define _INFO_AS_QUALapprox ((uint64_t)8678280833693340609)
+#define _INFO_AS_ReadPosRankSum ((uint64_t)7887302042817876929)
+#define _INFO_AS_VarDP ((uint64_t)5783873583837041601)
 #define _FORMAT_RGQ ((uint64_t)5326674)
 #define _FORMAT_MIN_DP ((uint64_t)88254586964301)
 #define _FORMAT_SPL ((uint64_t)5001299)
@@ -172,6 +183,7 @@
 #define _INFO_AGE_HISTOGRAM_HET ((uint64_t)6072339247036450753)
 #define _INFO_AGE_HISTOGRAM_HOM ((uint64_t)5570750838538061761)
 #define _INFO_MAX_AF ((uint64_t)77246586438093)
+#define _INFO_NCC ((uint64_t)4408270)
 #define _INFO_CSQ ((uint64_t)5329859)
 #define _INFO_vep ((uint64_t)7366134)
 #define _INFO_MMCNT ((uint64_t)362090286541)
@@ -217,6 +229,11 @@
 #define _INFO_gq_hist_alt_bin_freq ((uint64_t)8171062883096949223)
 #define _INFO_dp_hist_alt_bin_freq ((uint64_t)8171062883096948964)
 #define _INFO_ab_hist_alt_bin_freq ((uint64_t)8171062883096945377)
+#define _INFO_VRS_Allele_IDs ((uint64_t)8305844286748054230)
+#define _INFO_VRS_Starts ((uint64_t)8319400174196839126)
+#define _INFO_VRS_Ends ((uint64_t)8314892056263873238)
+#define _INFO_VRS_States ((uint64_t)8315180248569434838)
+#define _INFO_Genes ((uint64_t)495622972871)
 #define _INFO_SVLEN ((uint64_t)336170079955)
 #define _INFO_SVTYPE ((uint64_t)76211398399699)
 #define _INFO_CIPOS ((uint64_t)357812947395)
@@ -303,6 +320,7 @@
 #define _FORMAT_DR ((uint64_t)21060)
 #define _FORMAT_RR ((uint64_t)21074)
 #define _FORMAT_RV ((uint64_t)22098)
+#define _INFO_TSD ((uint64_t)4477908)
 #define _INFO_VARIANT_TYPE ((uint64_t)4994590205296132566)
 #define _INFO_SUSP_NOISY_ADJACENT_TP_VARIANT ((uint64_t)6074864730505434579)
 #define _INFO_UG_HCR ((uint64_t)90448930490325)
@@ -990,6 +1008,9 @@
 #define _ATTR_ccds_id ((uint64_t)28263356349834211)
 #define _ATTR_exon_id ((uint64_t)28263356266674405)
 #define _ATTR_exon_number ((uint64_t)8243102915115317477)
+#define _ATTR_TPM ((uint64_t)5066964)
+#define _ATTR_FPKM ((uint64_t)1296781510)
+#define _ATTR_ref_gene_name ((uint64_t)7308604896967026162)
 #define _ATTR_havana_gene ((uint64_t)7308890739960078824)
 #define _ATTR_havana_transcript ((uint64_t)8390322045773570536)
 #define _ATTR_ccdsid ((uint64_t)110404070302691)
@@ -1016,6 +1037,14 @@
 #define _ATTR_rscore ((uint64_t)111542169465842)
 #define _ATTR_uscore ((uint64_t)111542169465845)
 #define _ATTR_tscore ((uint64_t)111542169465844)
+#define _ATTR_Start ((uint64_t)500135195859)
+#define _ATTR_Stop ((uint64_t)1886352595)
+#define _ATTR_Length ((uint64_t)114849160783308)
+#define _ATTR_CopyNumber ((uint64_t)8243102915299930051)
+#define _ATTR_Qual ((uint64_t)1818326481)
+#define _ATTR_BinCount ((uint64_t)8389772276570941890)
+#define _ATTR_ImproperPairsCount ((uint64_t)8389772277359603145)
+#define _ATTR_LinearCopyRatio ((uint64_t)8028075772427004364)
 #define _ATTR_chr ((uint64_t)7497955)
 #define _ENSTid ((uint64_t)110403549089349)
 #define _ME23_CHROM ((uint64_t)332043274243)
@@ -1054,7 +1083,7 @@ typedef enum { REF_CONTIG, NUM_REF_FIELDS } REFFields;
     [REF_CONTIG] = { { _REF_CONTIG }, TAG(CONTIG) }, \
 } 
 
-typedef enum { VCF_CHROM, VCF_POS, VCF_MATE_POS, VCF_ID, VCF_REFALT, VCF_MATE_CHROM, VCF_MATE_CHROM0, VCF_QUAL, VCF_FILTER, VCF_INFO, VCF_FORMAT, VCF_SAMPLES, VCF_SAMPLES_0, VCF_LOOKBACK, VCF_EOL, VCF_TOPLEVEL, VCF_oCHROM, VCF_oPOS, VCF_oREFALT, VCF_oXSTRAND, VCF_COORDS, VCF_oSTATUS, VCF_COPYPOS, VCF_LIFT_REF, VCF_COPYSTAT, VCF_TOPLUFT, VCF_LINE_NUM, VCF_MATE, VCF_DEBUG_LINES, FORMAT_AD, FORMAT_ADF, FORMAT_ADR, FORMAT_AF, FORMAT_DP, FORMAT_DS, FORMAT_GL, FORMAT_GP, FORMAT_GQ, FORMAT_GT, FORMAT_PL, FORMAT_PLy, FORMAT_PLn, FORMAT_PRI, FORMAT_F1R2, FORMAT_F2R1, FORMAT_MB, FORMAT_PP, FORMAT_SAC, FORMAT_VAF, FORMAT_SB, FORMAT_PS, FORMAT_PSpos, FORMAT_PSalt, FORMAT_PSref, FORMAT_PID, FORMAT_PGT, FORMAT_FL, FORMAT_AB, FORMAT_AB3, FORMAT_GT_HT, FORMAT_PBWT_RUNS, FORMAT_PBWT_FGRC, INFO_AC, INFO_AF, INFO_AN, INFO_AA, INFO_BaseCounts, INFO_DP, INFO_SF, INFO_MQ, INFO_MQ0, INFO_NS, INFO_DP4, INFO_DP4_RF, INFO_DP4_RR, INFO_DP4_AF, INFO_DP4_AR, INFO_LDAF, INFO_AVGPOST, INFO_RSQ, INFO_ERATE, INFO_THETA, INFO_ANN, INFO_ANN_Allele, INFO_EFF, INFO_END, INFO_MLEAC, INFO_MLEAF, INFO_VQSLOD, INFO_AS_FilterStatus, INFO_AS_SB_TABLE, INFO_AS_UNIQ_ALT_READ_COUNT, INFO_CONTQ, INFO_ECNT, INFO_GERMQ, INFO_MBQ, INFO_MFRL, INFO_MMQ, INFO_MPOS, INFO_NALOD, INFO_NCount, INFO_NLOD, INFO_OCM, INFO_PON, INFO_POPAF, INFO_ROQ, INFO_RPA, INFO_SEQQ, INFO_STR, INFO_STRANDQ, INFO_STRQ, INFO_TLOD, INFO_QD, INFO_FS, INFO_SOR, INFO_MQRankSum, INFO_ReadPosRankSum, INFO_HaplotypeScore, INFO_ExcessHet, INFO_AS_QD, INFO_BaseQRankSum, INFO_InbreedingCoeff, INFO_AS_InbreedingCoeff, INFO_RAW_MQ, INFO_RAW_MQandDP, FORMAT_RGQ, FORMAT_MIN_DP, FORMAT_SPL, FORMAT_ICNT, INFO_REFLEN, FORMAT_PE, FORMAT_BC, INFO_SNVSB, INFO_SNVHPOL, INFO_CIGAR, INFO_RU, INFO_REFREP, INFO_IDREP, INFO_TI, INFO_GI, INFO_FC, FORMAT_GQX, FORMAT_DPF, FORMAT_DPI, INFO_cosmic, INFO_phyloP, INFO_AF1000G, INFO_GMAF, INFO_clinvar, INFO_EVS, INFO_CSQT, INFO_CSQR, FORMAT_VF, FORMAT_BX, FORMAT_PQ, FORMAT_JQ, INFO_AGE_HISTOGRAM_HET, INFO_AGE_HISTOGRAM_HOM, INFO_MAX_AF, INFO_CSQ, INFO_vep, INFO_MMCNT, INFO_MMCNT1, INFO_MMCNT2, INFO_MMCNT3, INFO_MMID3, INFO_MMURI3, INFO_MMURI, INFO_ALLELEID, INFO_CLNID, INFO_CLNDN, INFO_CLNHGVS, INFO_CLNVI, INFO_CLNORIGIN, INFO_CLNSIG, INFO_CLNDISDB, INFO_CLNREVSTAT, INFO_CLNACC, INFO_MC, INFO_HGVS_snp_pos, INFO_HGVS_snp_refalt, INFO_HGVS_del_start_pos, INFO_HGVS_del_end_pos, INFO_HGVS_del_payload, INFO_HGVS_ins_start_pos, INFO_HGVS_ins_end_pos, INFO_HGVS_ins_payload, INFO_HGVS_delins_end_pos, INFO_HGVS_delins_payload, INFO_HGVS_dup_end_pos, INFO_HGVS_no_payload, INFO_CONSEQUENCE, INFO_OCCURRENCE, INFO_mutation, INFO_studies, INFO_affected_donors, INFO_project_count, INFO_tested_donors, INFO_DP_HIST, INFO_GQ_HIST, INFO_age_hist_het_bin_freq, INFO_gq_hist_alt_bin_freq, INFO_dp_hist_alt_bin_freq, INFO_ab_hist_alt_bin_freq, INFO_SVLEN, INFO_SVTYPE, INFO_CIPOS, INFO_CIEND, INFO_HOMSEQ, INFO_HOMLEN, INFO_BKPTID, INFO_MEINFO, INFO_METRANS, INFO_DGVID, INFO_DBVARID, INFO_DBRIPID, FORMAT_CN, FORMAT_CNQ, INFO_IMPRECISE, INFO_SVANN, INFO_MATEID, INFO_MATEDIST, INFO_SHADOWED, INFO_REPSEQ, INFO_READNAMES, INFO_NM, INFO_MATENM, INFO_SECONDARY, INFO_MAPQ, INFO_MATEMAPQ, INFO_SUBN, INFO_NUMPARTS, INFO_EVDNC, INFO_SCTG, INFO_INSERTION, INFO_SPAN, INFO_DISC_MAPQ, FORMAT_CR, FORMAT_LR, FORMAT_LO, FORMAT_SL, INFO_DBSNP, INFO_LOD, FORMAT_FT, FORMAT_SR, INFO_EVENT, INFO_SVINSLEN, INFO_SVINSSEQ, INFO_DUPSVINSLEN, INFO_DUPSVINSSEQ, INFO_DUPHOMLEN, INFO_DUPHOMSEQ, INFO_BND_DEPTH, INFO_MATE_BND_DEPTH, INFO_LEFT_SVINSSEQ, INFO_RIGHT_SVINSSEQ, INFO_JUNCTION_QUAL, INFO_SOMATIC, INFO_PGERM, INFO_CNDIFF, INFO_CNSHIFT, INFO_CNSD, INFO_SVMETHOD, INFO_LINKID, INFO_REGION, INFO_REGION1, INFO_REGION2, INFO_REGION3, INFO_CARCONC, INFO_RDRATIO, INFO_CHR2, INFO_POS2, INFO_PE, INFO_SRMAPQ, INFO_SR, INFO_SRQ, INFO_CONSENSUS, INFO_CONSBP, INFO_CE, INFO_CT, INFO_PRECISE, INFO_INSLEN, FORMAT_CNL, FORMAT_RDCN, FORMAT_RDSD, FORMAT_RCL, FORMAT_RCR, FORMAT_DR, FORMAT_RR, FORMAT_RV, INFO_VARIANT_TYPE, INFO_SUSP_NOISY_ADJACENT_TP_VARIANT, INFO_UG_HCR, INFO_XC, INFO_X_CSS, INFO_X_GCC, INFO_X_HIL, INFO_X_HIN, INFO_X_IC, INFO_X_IL, INFO_X_LM, INFO_X_RM, INFO_HPOL_RUN, INFO_BLACKLST, INFO_TREE_SCORE, INFO_ASSEMBLED_HAPS, INFO_FILTERED_HAPS, INFO_GNOMAD_AF, INFO_BCSQ, INFO_PV4, INFO_RPB, INFO_MQB, INFO_BQB, INFO_MQSB, INFO_INDEL, INFO_IDV, INFO_IMF, INFO_VDB, INFO_RPB2, INFO_MQB2, INFO_BQB2, INFO_MQSB2, INFO_SGB, INFO_MQ0F, INFO_I16, INFO_QS, INFO_DPR, INFO_AD, INFO_ADF, INFO_ADR, FORMAT_SP, FORMAT_DV, FORMAT_DPR, FORMAT_RDF, FORMAT_RDR, FORMAT_SDP, FORMAT_RD, FORMAT_FREQ, FORMAT_PVAL, FORMAT_RBQ, FORMAT_ABQ, INFO_ADP, INFO_WT, INFO_HET, INFO_HOM, INFO_NC, INFO_RS, INFO_RSPOS, INFO_TOPMED, INFO_GENEINFO, INFO_dbSNPBuildID, INFO_PSEUDOGENEINFO, INFO_SAO, INFO_SSR, INFO_VC, INFO_PM, INFO_NSF, INFO_NSM, INFO_NSN, INFO_SYN, INFO_U3, INFO_U5, INFO_ASS, INFO_DSS, INFO_INT, INFO_R3, INFO_R5, INFO_GNO, INFO_PUB, INFO_FREQ, INFO_COMMON, INFO_VP, INFO_CAF, INFO_G5A, INFO_G5, FORMAT_FRQ, INFO_PROBE_A, INFO_PROBE_B, INFO_ALLELE_A, INFO_ALLELE_B, INFO_refSNP, INFO_ILLUMINA_CHR, INFO_ILLUMINA_POS, INFO_ILLUMINA_STRAND, FORMAT_BAF, FORMAT_X, FORMAT_Y, INFO_INFINIUM_CR, INFO_INFINIUM_GentrainScore, INFO_INFINIUM_HW, INFO_AR2, INFO_DR2, INFO_IMP, FORMAT_RC, FORMAT_AC, INFO_CDS, INFO_GENE, INFO_HGVSC, INFO_HGVSG, INFO_HGVSP, INFO_LEGACY_ID, INFO_SO_TERM, INFO_STRAND, INFO_TIER, INFO_TRANSCRIPT, INFO_CNT, INFO_IS_CANONICAL, INFO_OLD_VARIANT, INFO_SAMPLE_COUNT, INFO_MP, INFO_GP, INFO_TG, INFO_TP, INFO_SG, INFO_SP, INFO_DS, INFO_CA, INFO_SNP, FORMAT_AA, FORMAT_CA, FORMAT_GA, FORMAT_TA, FORMAT_PM, INFO_PC, INFO_RE, INFO_LEN, INFO_S1, INFO_S2, INFO_PA, INFO_NA, INFO_REP, INFO_PRV, INFO_F017, FORMAT_NP, FORMAT_PB, FORMAT_NB, FORMAT_PD, FORMAT_ND, FORMAT_PR, FORMAT_NR, FORMAT_PU, FORMAT_NU, INFO_VD, INFO_VW, INFO_VDVW_ARR, INFO_VT, INFO_RSID, FORMAT_NS, FORMAT_EZ, FORMAT_SI, FORMAT_NC, FORMAT_ES, FORMAT_SE, FORMAT_LP, FORMAT_ID, FORMAT_ADALL, FORMAT_IGT, FORMAT_IPS, INFO_AC_Hom, INFO_AC_Het, INFO_AC_Hemi, INFO_Polyphen2_HDIV_score, INFO_PUniprot_aapos, INFO_VEST3_score, INFO_FATHMM_score, INFO_SiPhy_29way_pi, INFO_BE, INFO_FR, INFO_MMLQ, INFO_TC, INFO_TCR, INFO_TCF, INFO_HP, INFO_WS, INFO_WE, INFO_Source, INFO_BS, INFO_TR, INFO_NF, INFO_NR, INFO_MGOF, INFO_SbPval, INFO_SC, INFO_PP, INFO_BRF, INFO_HapScore, FORMAT_GOF, FORMAT_NV, INFO_LUFT, INFO_PRIM, INFO_LREJ, INFO_PREJ, NUM_VCF_FIELDS } VCFFields;
+typedef enum { VCF_CHROM, VCF_POS, VCF_MATE_POS, VCF_ID, VCF_REFALT, VCF_MATE_CHROM, VCF_MATE_CHROM0, VCF_QUAL, VCF_FILTER, VCF_INFO, VCF_FORMAT, VCF_SAMPLES, VCF_SAMPLES_0, VCF_LOOKBACK, VCF_EOL, VCF_TOPLEVEL, VCF_oCHROM, VCF_oPOS, VCF_oREFALT, VCF_oXSTRAND, VCF_COORDS, VCF_oSTATUS, VCF_COPYPOS, VCF_LIFT_REF, VCF_COPYSTAT, VCF_TOPLUFT, VCF_LINE_NUM, VCF_MATE, VCF_DEBUG_LINES, FORMAT_AD, FORMAT_ADF, FORMAT_ADR, FORMAT_AF, FORMAT_DP, FORMAT_DS, FORMAT_GL, FORMAT_GP, FORMAT_GQ, FORMAT_GT, FORMAT_PL, FORMAT_PLy, FORMAT_PLn, FORMAT_PRI, FORMAT_F1R2, FORMAT_F2R1, FORMAT_MB, FORMAT_PP, FORMAT_SAC, FORMAT_VAF, FORMAT_SB, FORMAT_PS, FORMAT_PSpos, FORMAT_PSalt, FORMAT_PSref, FORMAT_PID, FORMAT_PGT, FORMAT_FL, FORMAT_AB, FORMAT_AB3, FORMAT_GT_HT, FORMAT_PBWT_RUNS, FORMAT_PBWT_FGRC, INFO_AC, INFO_AF, INFO_AN, INFO_AA, INFO_BaseCounts, INFO_DP, INFO_SF, INFO_MQ, INFO_MQ0, INFO_NS, INFO_DP4, INFO_DP4_RF, INFO_DP4_RR, INFO_DP4_AF, INFO_DP4_AR, INFO_LDAF, INFO_AVGPOST, INFO_RSQ, INFO_ERATE, INFO_THETA, INFO_ANN, INFO_ANN_Allele, INFO_EFF, INFO_END, INFO_MLEAC, INFO_MLEAF, INFO_VQSLOD, INFO_AS_FilterStatus, INFO_AS_SB_TABLE, INFO_AS_UNIQ_ALT_READ_COUNT, INFO_CONTQ, INFO_ECNT, INFO_GERMQ, INFO_MBQ, INFO_MFRL, INFO_MMQ, INFO_MPOS, INFO_NALOD, INFO_NCount, INFO_NLOD, INFO_OCM, INFO_PON, INFO_POPAF, INFO_ROQ, INFO_RPA, INFO_SEQQ, INFO_STR, INFO_STRANDQ, INFO_STRQ, INFO_TLOD, INFO_R2_5P_bias, INFO_QD, INFO_FS, INFO_SOR, INFO_MQRankSum, INFO_ReadPosRankSum, INFO_BaseQRankSum, INFO_ClippingRankSum, INFO_HaplotypeScore, INFO_InbreedingCoeff, INFO_AS_InbreedingCoeff, INFO_ExcessHet, INFO_RAW_MQ, INFO_RAW_MQandDP, INFO_QUALapprox, INFO_VarDP, INFO_AS_QD, INFO_AS_SOR, INFO_AS_MQ, INFO_AS_MQRankSum, INFO_AS_FS, INFO_AS_QUALapprox, INFO_AS_ReadPosRankSum, INFO_AS_VarDP, FORMAT_RGQ, FORMAT_MIN_DP, FORMAT_SPL, FORMAT_ICNT, INFO_REFLEN, FORMAT_PE, FORMAT_BC, INFO_SNVSB, INFO_SNVHPOL, INFO_CIGAR, INFO_RU, INFO_REFREP, INFO_IDREP, INFO_TI, INFO_GI, INFO_FC, FORMAT_GQX, FORMAT_DPF, FORMAT_DPI, INFO_cosmic, INFO_phyloP, INFO_AF1000G, INFO_GMAF, INFO_clinvar, INFO_EVS, INFO_CSQT, INFO_CSQR, FORMAT_VF, FORMAT_BX, FORMAT_PQ, FORMAT_JQ, INFO_AGE_HISTOGRAM_HET, INFO_AGE_HISTOGRAM_HOM, INFO_MAX_AF, INFO_NCC, INFO_CSQ, INFO_vep, INFO_MMCNT, INFO_MMCNT1, INFO_MMCNT2, INFO_MMCNT3, INFO_MMID3, INFO_MMURI3, INFO_MMURI, INFO_ALLELEID, INFO_CLNID, INFO_CLNDN, INFO_CLNHGVS, INFO_CLNVI, INFO_CLNORIGIN, INFO_CLNSIG, INFO_CLNDISDB, INFO_CLNREVSTAT, INFO_CLNACC, INFO_MC, INFO_HGVS_snp_pos, INFO_HGVS_snp_refalt, INFO_HGVS_del_start_pos, INFO_HGVS_del_end_pos, INFO_HGVS_del_payload, INFO_HGVS_ins_start_pos, INFO_HGVS_ins_end_pos, INFO_HGVS_ins_payload, INFO_HGVS_delins_end_pos, INFO_HGVS_delins_payload, INFO_HGVS_dup_end_pos, INFO_HGVS_no_payload, INFO_CONSEQUENCE, INFO_OCCURRENCE, INFO_mutation, INFO_studies, INFO_affected_donors, INFO_project_count, INFO_tested_donors, INFO_DP_HIST, INFO_GQ_HIST, INFO_age_hist_het_bin_freq, INFO_gq_hist_alt_bin_freq, INFO_dp_hist_alt_bin_freq, INFO_ab_hist_alt_bin_freq, INFO_VRS_Allele_IDs, INFO_VRS_Starts, INFO_VRS_Ends, INFO_VRS_States, INFO_Genes, INFO_SVLEN, INFO_SVTYPE, INFO_CIPOS, INFO_CIEND, INFO_HOMSEQ, INFO_HOMLEN, INFO_BKPTID, INFO_MEINFO, INFO_METRANS, INFO_DGVID, INFO_DBVARID, INFO_DBRIPID, FORMAT_CN, FORMAT_CNQ, INFO_IMPRECISE, INFO_SVANN, INFO_MATEID, INFO_MATEDIST, INFO_SHADOWED, INFO_REPSEQ, INFO_READNAMES, INFO_NM, INFO_MATENM, INFO_SECONDARY, INFO_MAPQ, INFO_MATEMAPQ, INFO_SUBN, INFO_NUMPARTS, INFO_EVDNC, INFO_SCTG, INFO_INSERTION, INFO_SPAN, INFO_DISC_MAPQ, FORMAT_CR, FORMAT_LR, FORMAT_LO, FORMAT_SL, INFO_DBSNP, INFO_LOD, FORMAT_FT, FORMAT_SR, INFO_EVENT, INFO_SVINSLEN, INFO_SVINSSEQ, INFO_DUPSVINSLEN, INFO_DUPSVINSSEQ, INFO_DUPHOMLEN, INFO_DUPHOMSEQ, INFO_BND_DEPTH, INFO_MATE_BND_DEPTH, INFO_LEFT_SVINSSEQ, INFO_RIGHT_SVINSSEQ, INFO_JUNCTION_QUAL, INFO_SOMATIC, INFO_PGERM, INFO_CNDIFF, INFO_CNSHIFT, INFO_CNSD, INFO_SVMETHOD, INFO_LINKID, INFO_REGION, INFO_REGION1, INFO_REGION2, INFO_REGION3, INFO_CARCONC, INFO_RDRATIO, INFO_CHR2, INFO_POS2, INFO_PE, INFO_SRMAPQ, INFO_SR, INFO_SRQ, INFO_CONSENSUS, INFO_CONSBP, INFO_CE, INFO_CT, INFO_PRECISE, INFO_INSLEN, FORMAT_CNL, FORMAT_RDCN, FORMAT_RDSD, FORMAT_RCL, FORMAT_RCR, FORMAT_DR, FORMAT_RR, FORMAT_RV, INFO_TSD, INFO_VARIANT_TYPE, INFO_SUSP_NOISY_ADJACENT_TP_VARIANT, INFO_UG_HCR, INFO_XC, INFO_X_CSS, INFO_X_GCC, INFO_X_HIL, INFO_X_HIN, INFO_X_IC, INFO_X_IL, INFO_X_LM, INFO_X_RM, INFO_HPOL_RUN, INFO_BLACKLST, INFO_TREE_SCORE, INFO_ASSEMBLED_HAPS, INFO_FILTERED_HAPS, INFO_GNOMAD_AF, INFO_BCSQ, INFO_PV4, INFO_RPB, INFO_MQB, INFO_BQB, INFO_MQSB, INFO_INDEL, INFO_IDV, INFO_IMF, INFO_VDB, INFO_RPB2, INFO_MQB2, INFO_BQB2, INFO_MQSB2, INFO_SGB, INFO_MQ0F, INFO_I16, INFO_QS, INFO_DPR, INFO_AD, INFO_ADF, INFO_ADR, FORMAT_SP, FORMAT_DV, FORMAT_DPR, FORMAT_RDF, FORMAT_RDR, FORMAT_SDP, FORMAT_RD, FORMAT_FREQ, FORMAT_PVAL, FORMAT_RBQ, FORMAT_ABQ, INFO_ADP, INFO_WT, INFO_HET, INFO_HOM, INFO_NC, INFO_RS, INFO_RSPOS, INFO_TOPMED, INFO_GENEINFO, INFO_dbSNPBuildID, INFO_PSEUDOGENEINFO, INFO_SAO, INFO_SSR, INFO_VC, INFO_PM, INFO_NSF, INFO_NSM, INFO_NSN, INFO_SYN, INFO_U3, INFO_U5, INFO_ASS, INFO_DSS, INFO_INT, INFO_R3, INFO_R5, INFO_GNO, INFO_PUB, INFO_FREQ, INFO_COMMON, INFO_VP, INFO_CAF, INFO_G5A, INFO_G5, FORMAT_FRQ, INFO_PROBE_A, INFO_PROBE_B, INFO_ALLELE_A, INFO_ALLELE_B, INFO_refSNP, INFO_ILLUMINA_CHR, INFO_ILLUMINA_POS, INFO_ILLUMINA_STRAND, FORMAT_BAF, FORMAT_X, FORMAT_Y, INFO_INFINIUM_CR, INFO_INFINIUM_GentrainScore, INFO_INFINIUM_HW, INFO_AR2, INFO_DR2, INFO_IMP, FORMAT_RC, FORMAT_AC, INFO_CDS, INFO_GENE, INFO_HGVSC, INFO_HGVSG, INFO_HGVSP, INFO_LEGACY_ID, INFO_SO_TERM, INFO_STRAND, INFO_TIER, INFO_TRANSCRIPT, INFO_CNT, INFO_IS_CANONICAL, INFO_OLD_VARIANT, INFO_SAMPLE_COUNT, INFO_MP, INFO_GP, INFO_TG, INFO_TP, INFO_SG, INFO_SP, INFO_DS, INFO_CA, INFO_SNP, FORMAT_AA, FORMAT_CA, FORMAT_GA, FORMAT_TA, FORMAT_PM, INFO_PC, INFO_RE, INFO_LEN, INFO_S1, INFO_S2, INFO_PA, INFO_NA, INFO_REP, INFO_PRV, INFO_F017, FORMAT_NP, FORMAT_PB, FORMAT_NB, FORMAT_PD, FORMAT_ND, FORMAT_PR, FORMAT_NR, FORMAT_PU, FORMAT_NU, INFO_VD, INFO_VW, INFO_VDVW_ARR, INFO_VT, INFO_RSID, FORMAT_NS, FORMAT_EZ, FORMAT_SI, FORMAT_NC, FORMAT_ES, FORMAT_SE, FORMAT_LP, FORMAT_ID, FORMAT_ADALL, FORMAT_IGT, FORMAT_IPS, INFO_AC_Hom, INFO_AC_Het, INFO_AC_Hemi, INFO_Polyphen2_HDIV_score, INFO_PUniprot_aapos, INFO_VEST3_score, INFO_FATHMM_score, INFO_SiPhy_29way_pi, INFO_BE, INFO_FR, INFO_MMLQ, INFO_TC, INFO_TCR, INFO_TCF, INFO_HP, INFO_WS, INFO_WE, INFO_Source, INFO_BS, INFO_TR, INFO_NF, INFO_NR, INFO_MGOF, INFO_SbPval, INFO_SC, INFO_PP, INFO_BRF, INFO_HapScore, FORMAT_GOF, FORMAT_NV, INFO_LUFT, INFO_PRIM, INFO_LREJ, INFO_PREJ, NUM_VCF_FIELDS } VCFFields;
 
 #define VCF_PREDEFINED { \
     [VCF_CHROM] = { { _VCF_CHROM }, TAG(CHROM) }, \
@@ -1169,19 +1198,30 @@ typedef enum { VCF_CHROM, VCF_POS, VCF_MATE_POS, VCF_ID, VCF_REFALT, VCF_MATE_CH
     [INFO_STRANDQ] = { { _INFO_STRANDQ }, TAG(STRANDQ) }, \
     [INFO_STRQ] = { { _INFO_STRQ }, TAG(STRQ) }, \
     [INFO_TLOD] = { { _INFO_TLOD }, TAG(TLOD) }, \
+    [INFO_R2_5P_bias] = { { _INFO_R2_5P_bias }, TAG(R2_5P_bias) }, \
     [INFO_QD] = { { _INFO_QD }, TAG(QD) }, \
     [INFO_FS] = { { _INFO_FS }, TAG(FS) }, \
     [INFO_SOR] = { { _INFO_SOR }, TAG(SOR) }, \
     [INFO_MQRankSum] = { { _INFO_MQRankSum }, TAG(MQRankSum) }, \
     [INFO_ReadPosRankSum] = { { _INFO_ReadPosRankSum }, TAG(ReadPosRankSum) }, \
-    [INFO_HaplotypeScore] = { { _INFO_HaplotypeScore }, TAG(HaplotypeScore) }, \
-    [INFO_ExcessHet] = { { _INFO_ExcessHet }, TAG(ExcessHet) }, \
-    [INFO_AS_QD] = { { _INFO_AS_QD }, TAG(AS_QD) }, \
     [INFO_BaseQRankSum] = { { _INFO_BaseQRankSum }, TAG(BaseQRankSum) }, \
+    [INFO_ClippingRankSum] = { { _INFO_ClippingRankSum }, TAG(ClippingRankSum) }, \
+    [INFO_HaplotypeScore] = { { _INFO_HaplotypeScore }, TAG(HaplotypeScore) }, \
     [INFO_InbreedingCoeff] = { { _INFO_InbreedingCoeff }, TAG(InbreedingCoeff) }, \
     [INFO_AS_InbreedingCoeff] = { { _INFO_AS_InbreedingCoeff }, TAG(AS_InbreedingCoeff) }, \
+    [INFO_ExcessHet] = { { _INFO_ExcessHet }, TAG(ExcessHet) }, \
     [INFO_RAW_MQ] = { { _INFO_RAW_MQ }, TAG(RAW_MQ) }, \
     [INFO_RAW_MQandDP] = { { _INFO_RAW_MQandDP }, TAG(RAW_MQandDP) }, \
+    [INFO_QUALapprox] = { { _INFO_QUALapprox }, TAG(QUALapprox) }, \
+    [INFO_VarDP] = { { _INFO_VarDP }, TAG(VarDP) }, \
+    [INFO_AS_QD] = { { _INFO_AS_QD }, TAG(AS_QD) }, \
+    [INFO_AS_SOR] = { { _INFO_AS_SOR }, TAG(AS_SOR) }, \
+    [INFO_AS_MQ] = { { _INFO_AS_MQ }, TAG(AS_MQ) }, \
+    [INFO_AS_MQRankSum] = { { _INFO_AS_MQRankSum }, TAG(AS_MQRankSum) }, \
+    [INFO_AS_FS] = { { _INFO_AS_FS }, TAG(AS_FS) }, \
+    [INFO_AS_QUALapprox] = { { _INFO_AS_QUALapprox }, TAG(AS_QUALapprox) }, \
+    [INFO_AS_ReadPosRankSum] = { { _INFO_AS_ReadPosRankSum }, TAG(AS_ReadPosRankSum) }, \
+    [INFO_AS_VarDP] = { { _INFO_AS_VarDP }, TAG(AS_VarDP) }, \
     [FORMAT_RGQ] = { { _FORMAT_RGQ }, TAG(RGQ) }, \
     [FORMAT_MIN_DP] = { { _FORMAT_MIN_DP }, TAG(MIN_DP) }, \
     [FORMAT_SPL] = { { _FORMAT_SPL }, TAG(SPL) }, \
@@ -1216,6 +1256,7 @@ typedef enum { VCF_CHROM, VCF_POS, VCF_MATE_POS, VCF_ID, VCF_REFALT, VCF_MATE_CH
     [INFO_AGE_HISTOGRAM_HET] = { { _INFO_AGE_HISTOGRAM_HET }, TAG(AGE_HISTOGRAM_HET) }, \
     [INFO_AGE_HISTOGRAM_HOM] = { { _INFO_AGE_HISTOGRAM_HOM }, TAG(AGE_HISTOGRAM_HOM) }, \
     [INFO_MAX_AF] = { { _INFO_MAX_AF }, TAG(MAX_AF) }, \
+    [INFO_NCC] = { { _INFO_NCC }, TAG(NCC) }, \
     [INFO_CSQ] = { { _INFO_CSQ }, TAG(CSQ) }, \
     [INFO_vep] = { { _INFO_vep }, TAG(vep) }, \
     [INFO_MMCNT] = { { _INFO_MMCNT }, TAG(MMCNT) }, \
@@ -1261,6 +1302,11 @@ typedef enum { VCF_CHROM, VCF_POS, VCF_MATE_POS, VCF_ID, VCF_REFALT, VCF_MATE_CH
     [INFO_gq_hist_alt_bin_freq] = { { _INFO_gq_hist_alt_bin_freq }, TAG(gq_hist_alt_bin_freq) }, \
     [INFO_dp_hist_alt_bin_freq] = { { _INFO_dp_hist_alt_bin_freq }, TAG(dp_hist_alt_bin_freq) }, \
     [INFO_ab_hist_alt_bin_freq] = { { _INFO_ab_hist_alt_bin_freq }, TAG(ab_hist_alt_bin_freq) }, \
+    [INFO_VRS_Allele_IDs] = { { _INFO_VRS_Allele_IDs }, TAG(VRS_Allele_IDs) }, \
+    [INFO_VRS_Starts] = { { _INFO_VRS_Starts }, TAG(VRS_Starts) }, \
+    [INFO_VRS_Ends] = { { _INFO_VRS_Ends }, TAG(VRS_Ends) }, \
+    [INFO_VRS_States] = { { _INFO_VRS_States }, TAG(VRS_States) }, \
+    [INFO_Genes] = { { _INFO_Genes }, TAG(Genes) }, \
     [INFO_SVLEN] = { { _INFO_SVLEN }, TAG(SVLEN) }, \
     [INFO_SVTYPE] = { { _INFO_SVTYPE }, TAG(SVTYPE) }, \
     [INFO_CIPOS] = { { _INFO_CIPOS }, TAG(CIPOS) }, \
@@ -1347,6 +1393,7 @@ typedef enum { VCF_CHROM, VCF_POS, VCF_MATE_POS, VCF_ID, VCF_REFALT, VCF_MATE_CH
     [FORMAT_DR] = { { _FORMAT_DR }, TAG(DR) }, \
     [FORMAT_RR] = { { _FORMAT_RR }, TAG(RR) }, \
     [FORMAT_RV] = { { _FORMAT_RV }, TAG(RV) }, \
+    [INFO_TSD] = { { _INFO_TSD }, TAG(TSD) }, \
     [INFO_VARIANT_TYPE] = { { _INFO_VARIANT_TYPE }, TAG(VARIANT_TYPE) }, \
     [INFO_SUSP_NOISY_ADJACENT_TP_VARIANT] = { { _INFO_SUSP_NOISY_ADJACENT_TP_VARIANT }, TAG(SUSP_NOISY_ADJACENT_TP_VARIANT) }, \
     [INFO_UG_HCR] = { { _INFO_UG_HCR }, TAG(UG_HCR) }, \
@@ -1990,7 +2037,7 @@ typedef enum { FASTA_CONTIG, FASTA_LINEMETA, FASTA_EOL, FASTA_DESC, FASTA_COMMEN
     [FASTA_DEBUG_LINES] = { { _FASTA_DEBUG_LINES }, TAG(DBGLINES) }, \
 } 
 
-typedef enum { GFF_SEQID, GFF_FASTA_LINEMETA, GFF_EOL, GFF_FASTA_DESC, GFF_COMMENT, GFF_FASTA_NONREF, GFF_FASTA_NONREF_X, GFF_TOPLEVEL, GFF_FASTA_TAXID, GFF_DEBUG_LINES, GFF_SOURCE, GFF_TYPE, GFF_START, GFF_END, GFF_SCORE, GFF_STRAND, GFF_PHASE, GFF_ATTRS, ATTR_ID, ATTR_Name, ATTR_Alias, ATTR_Parent, ATTR_ParentItem, ATTR_Target, ATTR_Target_ID, ATTR_Target_POS, ATTR_Target_STRAND, ATTR_Gap, ATTR_Derives_from, ATTR_Note, ATTR_Dbxref, ATTR_db_xref, ATTR_DBXdb, ATTR_DBXid, ATTR_Ontology_term, ATTR_Is_circular, ATTR_Variant_seq, ATTR_Reference_seq, ATTR_Variant_freq, ATTR_ancestral_allele, ATTR_Variant_effect, ATTR_sift_prediction, ATTR_polyphen_prediction, ATTR_variant_peptide, ATTR_gene_id, ATTR_gene_type, ATTR_gene_status, ATTR_gene_name, ATTR_transcript_id, ATTR_transcript_name, ATTR_transcript_name_gene, ATTR_transcript_name_num, ATTR_protein_id, ATTR_ccds_id, ATTR_exon_id, ATTR_exon_number, ATTR_havana_gene, ATTR_havana_transcript, ATTR_ccdsid, ATTR_db, ATTR_taxon_db, ATTR_dbq, ATTR_taxon_id, ATTR_uid, ATTR_cov, ATTR_exp_syn, ATTR_exp_nonsyn, ATTR_taxon_name, ATTR_lineage, ATTR_EC, ATTR_partial, ATTR_start_type, ATTR_rbs_motif, ATTR_rbs_spacer, ATTR_gc_cont, ATTR_conf, ATTR_score, ATTR_cscore, ATTR_sscore, ATTR_rscore, ATTR_uscore, ATTR_tscore, ATTR_chr, ENSTid, NUM_GFF_FIELDS } GFFFields;
+typedef enum { GFF_SEQID, GFF_FASTA_LINEMETA, GFF_EOL, GFF_FASTA_DESC, GFF_COMMENT, GFF_FASTA_NONREF, GFF_FASTA_NONREF_X, GFF_TOPLEVEL, GFF_FASTA_TAXID, GFF_DEBUG_LINES, GFF_SOURCE, GFF_TYPE, GFF_START, GFF_END, GFF_SCORE, GFF_STRAND, GFF_PHASE, GFF_ATTRS, ATTR_ID, ATTR_Name, ATTR_Alias, ATTR_Parent, ATTR_ParentItem, ATTR_Target, ATTR_Target_ID, ATTR_Target_POS, ATTR_Target_STRAND, ATTR_Gap, ATTR_Derives_from, ATTR_Note, ATTR_Dbxref, ATTR_db_xref, ATTR_DBXdb, ATTR_DBXid, ATTR_Ontology_term, ATTR_Is_circular, ATTR_Variant_seq, ATTR_Reference_seq, ATTR_Variant_freq, ATTR_ancestral_allele, ATTR_Variant_effect, ATTR_sift_prediction, ATTR_polyphen_prediction, ATTR_variant_peptide, ATTR_gene_id, ATTR_gene_type, ATTR_gene_status, ATTR_gene_name, ATTR_transcript_id, ATTR_transcript_name, ATTR_transcript_name_gene, ATTR_transcript_name_num, ATTR_protein_id, ATTR_ccds_id, ATTR_exon_id, ATTR_exon_number, ATTR_TPM, ATTR_FPKM, ATTR_ref_gene_name, ATTR_havana_gene, ATTR_havana_transcript, ATTR_ccdsid, ATTR_db, ATTR_taxon_db, ATTR_dbq, ATTR_taxon_id, ATTR_uid, ATTR_cov, ATTR_exp_syn, ATTR_exp_nonsyn, ATTR_taxon_name, ATTR_lineage, ATTR_EC, ATTR_partial, ATTR_start_type, ATTR_rbs_motif, ATTR_rbs_spacer, ATTR_gc_cont, ATTR_conf, ATTR_score, ATTR_cscore, ATTR_sscore, ATTR_rscore, ATTR_uscore, ATTR_tscore, ATTR_Start, ATTR_Stop, ATTR_Length, ATTR_CopyNumber, ATTR_Qual, ATTR_BinCount, ATTR_ImproperPairsCount, ATTR_LinearCopyRatio, ATTR_chr, ENSTid, NUM_GFF_FIELDS } GFFFields;
 
 #define GFF_PREDEFINED { \
     [GFF_SEQID] = { { _GFF_SEQID }, TAG(SEQID) }, \
@@ -2049,6 +2096,9 @@ typedef enum { GFF_SEQID, GFF_FASTA_LINEMETA, GFF_EOL, GFF_FASTA_DESC, GFF_COMME
     [ATTR_ccds_id] = { { _ATTR_ccds_id }, TAG(ccds_id) }, \
     [ATTR_exon_id] = { { _ATTR_exon_id }, TAG(exon_id) }, \
     [ATTR_exon_number] = { { _ATTR_exon_number }, TAG(exon_number) }, \
+    [ATTR_TPM] = { { _ATTR_TPM }, TAG(TPM) }, \
+    [ATTR_FPKM] = { { _ATTR_FPKM }, TAG(FPKM) }, \
+    [ATTR_ref_gene_name] = { { _ATTR_ref_gene_name }, TAG(ref_gene_name) }, \
     [ATTR_havana_gene] = { { _ATTR_havana_gene }, TAG(havana_gene) }, \
     [ATTR_havana_transcript] = { { _ATTR_havana_transcript }, TAG(havana_transcript) }, \
     [ATTR_ccdsid] = { { _ATTR_ccdsid }, TAG(ccdsid) }, \
@@ -2075,6 +2125,14 @@ typedef enum { GFF_SEQID, GFF_FASTA_LINEMETA, GFF_EOL, GFF_FASTA_DESC, GFF_COMME
     [ATTR_rscore] = { { _ATTR_rscore }, TAG(rscore) }, \
     [ATTR_uscore] = { { _ATTR_uscore }, TAG(uscore) }, \
     [ATTR_tscore] = { { _ATTR_tscore }, TAG(tscore) }, \
+    [ATTR_Start] = { { _ATTR_Start }, TAG(Start) }, \
+    [ATTR_Stop] = { { _ATTR_Stop }, TAG(Stop) }, \
+    [ATTR_Length] = { { _ATTR_Length }, TAG(Length) }, \
+    [ATTR_CopyNumber] = { { _ATTR_CopyNumber }, TAG(CopyNumber) }, \
+    [ATTR_Qual] = { { _ATTR_Qual }, TAG(Qual) }, \
+    [ATTR_BinCount] = { { _ATTR_BinCount }, TAG(BinCount) }, \
+    [ATTR_ImproperPairsCount] = { { _ATTR_ImproperPairsCount }, TAG(ImproperPairsCount) }, \
+    [ATTR_LinearCopyRatio] = { { _ATTR_LinearCopyRatio }, TAG(LinearCopyRatio) }, \
     [ATTR_chr] = { { _ATTR_chr }, TAG(chr) }, \
     [ENSTid] = { { _ENSTid }, TAG(ENSTid) }, \
 } 
@@ -2128,5 +2186,55 @@ typedef enum { BED_CHROM, BED_START, BED_END, BED_NAME, BED_SCORE, BED_STRAND, B
     [BED_DEBUG_LINES] = { { _BED_DEBUG_LINES }, TAG(DBGLINES) }, \
 } 
 
-#define MAX_NUM_PREDEFINED 492
+#define MAX_NUM_PREDEFINED 510
+
+#define VCF_SPECIAL_NAMES { "main_REFALT", "FORMAT", "INFO_AC", "SVLEN", "DS_old", "BaseCounts", "SF", "MINUS", "LIFT_REF", "COPYSTAT", "other_REFALT", "COPYPOS", "ALLELE", "HGVS_SNP_POS", "HGVS_SNP_REFALT", "HGVS_DEL_END_POS", "HGVS_DEL_PAYLOAD", "HGVS_INS_END_POS", "HGVS_INS_PAYLOAD", "HGVS_DELINS_END_POS", "HGVS_DELINS_PAYLOAD", "MUX_BY_DOSAGE", "AB", "GQ", "MUX_BY_DOSAGExDP", "COPY_REForALT", "DP_by_DP_v13", "PS_BY_PID", "PGT", "DP_by_DP", "DP_by_DP_single", "RGQ", "MUX_BY_HAS_RGQ", "SVTYPE", "ALLELE_A", "ALLELE_B", "MUX_BY_ADJ_DOSAGE", "PROBE_A", "PROBE_B", "QD", "MUX_BY_VARTYPE", "ICNT", "SPL", "MUX_BY_SAMPLE_I", "IGT", "MUX_BY_IGT_PHASE", "main_REFALT_DEL", "mutation", "SO_TERM", "MMURI", "MUX_GQX", "RU", "IDREP", "next_ALT", "MUX_BY_END", "MUX_BY_ISAAC_FILTER", "X_LM_RM", "X_IL", "X_IC", "X_HIN", "X_HIL", "VARIANT_TYPE", "PLATYPUS_SC", "PLATYPUS_HP", "INFO_MLEAF", "FORMAT_AD0", "MUX_FORMAT_DP", "AN", "DEFER", "RPA", "SVABA_MATEID", "MAPQ", "SPAN", "COPY_MATE", "DEMUX_BY_MATE", "PBSV_MATEID", "DEMUX_BY_VARTYPE", "PBSV_ID_BND", "MANTA_CIGAR", "LEN_OF", "HOMSEQ", "RAW_MQandDP_MQ", "VT", "VRS_Starts", "QUAL_BY_GP", "N_ALTS", "N_ALLELES", }
+
+#define VCF_SPECIAL { vcf_piz_special_main_REFALT, vcf_piz_special_FORMAT, vcf_piz_special_INFO_AC, vcf_piz_special_SVLEN, vcf_piz_special_FORMAT_DS_old, vcf_piz_special_INFO_BaseCounts, vcf_piz_special_INFO_SF, piz_special_MINUS, vcf_piz_special_obsolete_dvcf, vcf_piz_special_obsolete_dvcf, vcf_piz_special_obsolete_dvcf, vcf_piz_special_COPYPOS, vcf_piz_special_ALLELE, vcf_piz_special_INFO_HGVS_SNP_POS, vcf_piz_special_INFO_HGVS_SNP_REFALT, vcf_piz_special_INFO_HGVS_DEL_END_POS, vcf_piz_special_INFO_HGVS_DEL_PAYLOAD, vcf_piz_special_INFO_HGVS_INS_END_POS, vcf_piz_special_INFO_HGVS_INS_PAYLOAD, vcf_piz_special_INFO_HGVS_DELINS_END_POS, vcf_piz_special_INFO_HGVS_DELINS_PAYLOAD, vcf_piz_special_MUX_BY_DOSAGE, vcf_piz_special_FORMAT_AB, vcf_piz_special_FORMAT_GQ, vcf_piz_special_MUX_BY_DOSAGExDP, vcf_piz_special_COPY_REForALT, vcf_piz_special_DP_by_DP_v13, vcf_piz_special_PS_by_PID, vcf_piz_special_PGT, vcf_piz_special_DP_by_DP, vcf_piz_special_DP_by_DP_single, vcf_piz_special_RGQ, vcf_piz_special_MUX_BY_HAS_RGQ, vcf_piz_special_SVTYPE, vcf_piz_special_ALLELE_A, vcf_piz_special_ALLELE_B, vcf_piz_special_MUX_BY_ADJ_DOSAGE, vcf_piz_special_PROBE_A, vcf_piz_special_PROBE_B, vcf_piz_special_QD, vcf_piz_special_MUX_BY_VARTYPE, vcf_piz_special_ICNT, vcf_piz_special_SPL, vcf_piz_special_MUX_BY_SAMPLE_I, vcf_piz_special_IGT, vcf_piz_special_MUX_BY_IGT_PHASE, vcf_piz_special_main_REFALT_DEL, vcf_piz_special_mutation, vcf_piz_special_SO_TERM, vcf_piz_special_MMURI, vcf_piz_special_MUX_GQX, vcf_piz_special_RU, vcf_piz_special_IDREP, vcf_piz_special_next_ALT, vcf_piz_special_MUX_BY_END, vcf_piz_special_MUX_BY_ISAAC_FILTER, vcf_piz_special_X_LM_RM, vcf_piz_special_X_IL, vcf_piz_special_X_IC, vcf_piz_special_X_HIN, vcf_piz_special_X_HIL, vcf_piz_special_VARIANT_TYPE, vcf_piz_special_PLATYPUS_SC, vcf_piz_special_PLATYPUS_HP, vcf_piz_special_INFO_MLEAF, vcf_piz_special_FORMAT_AD0, vcf_piz_special_MUX_FORMAT_DP, vcf_piz_special_INFO_AN, vcf_piz_special_DEFER, vcf_piz_special_RPA, vcf_piz_special_SVABA_MATEID, vcf_piz_special_MAPQ, vcf_piz_special_SPAN, vcf_piz_special_COPY_MATE, vcf_piz_special_DEMUX_BY_MATE, vcf_piz_special_PBSV_MATEID, vcf_piz_special_DEMUX_BY_VARTYPE, vcf_piz_special_PBSV_ID_BND, vcf_piz_special_manta_CIGAR, vcf_piz_special_LEN_OF, vcf_piz_special_HOMSEQ, vcf_piz_special_RAW_MQandDP_MQ, vcf_piz_special_VT, vcf_piz_special_VRS_Starts, vcf_piz_special_QUAL_BY_GP, vcf_piz_special_N_ALTS, vcf_piz_special_N_ALLELES, }
+
+#define NUM_VCF_SPECIAL 87
+
+#define SAM_SPECIAL_NAMES { "CIGAR", "TLEN_old", "BDBI", "delta_seq_len", "MD_old", "FLOAT", "BIN", "NM", "MD", "REF_CONSUMED", "PNEXT_IS_PREV_POS_old", "COPY_MATE_FLAG", "COPY_MATE_TLEN_old", "COPY_BUDDY_CIGAR", "FASTQ_CONSUME_AUX", "TLEN", "QUAL", "SAG", "SEQ", "PRIM_QNAME", "SQUANK", "BSSEEKER2_XO", "BSSEEKER2_XG", "BSSEEKER2_XM", "SA_main", "COPY_PRIM", "BWA_XC", "BWA_XT", "BWA_X1", "BWA_XS", "SM", "AM", "PNEXT", "DEMUX_BY_MATE", "DEMUX_BY_MATE_PRIM", "DEMUX_BY_BUDDY", "GEM3_XB", "BSBOLT_YS", "0A_RNAME", "BISMARK_XG", "HI", "DEMUX_BY_BUDDY_MAP", "SEQ_LEN", "FI", "cm", "COPY_BUDDY", "SET_BUDDY", "TX_AN_POS", "COPY_TEXTUAL_CIGAR", "BISMARK_XM", "BSBOLT_XB", "UQ", "iqsqdq", "ULTIMA_tp_old", "ULTIMA_C", "bi", "sd", "AGENT_RX", "AGENT_QX", "qname_rng2seq_len", "DEMUX_BY_XX_0", "DEMUX_BY_AS", "PLUS", "ULTIMA_tp", "ULTIMA_mi", "PACBIO_qe", "DEMUX_sn", "jI", "jM_length", "RG_by_QNAME", }
+
+#define SAM_SPECIAL { sam_cigar_special_CIGAR, sam_piz_special_TLEN_old, sam_piz_special_BD_BI, sam_piz_special_delta_seq_len, sam_piz_special_MD_old, bam_piz_special_FLOAT, bam_piz_special_BIN, sam_piz_special_NM, sam_piz_special_MD, sam_piz_special_REF_CONSUMED, sam_piz_special_PNEXT_IS_PREV_POS_old, sam_piz_special_COPY_MATE_FLAG, sam_piz_special_COPY_MATE_TLEN_old, sam_piz_special_COPY_BUDDY_CIGAR, sam_piz_special_FASTQ_CONSUME_AUX, sam_piz_special_TLEN, sam_piz_special_QUAL, sam_piz_special_pull_from_sag, sam_piz_special_SEQ, sam_piz_special_PRIM_QNAME, sam_piz_special_SQUANK, sam_piz_special_BSSEEKER2_XO, sam_piz_special_BSSEEKER2_XG, sam_piz_special_BSSEEKER2_XM, sam_piz_special_SA_main, sam_piz_special_COPY_PRIM, sam_piz_special_BWA_XC, sam_piz_special_BWA_XT, sam_piz_special_BWA_X1, sam_piz_special_BWA_XS, sam_piz_special_SM, sam_piz_special_AM, sam_piz_special_PNEXT, sam_piz_special_DEMUX_BY_MATE, sam_piz_special_DEMUX_BY_MATE_PRIM, sam_piz_special_DEMUX_BY_BUDDY, sam_piz_special_GEM3_XB, sam_piz_special_BSBOLT_YS, sam_piz_special_0A_RNAME, sam_piz_special_BISMARK_XG, sam_piz_special_HI, sam_piz_special_DEMUX_BY_BUDDY_MAP, sam_piz_special_SEQ_LEN, sam_piz_special_FI, sam_piz_special_cm, sam_piz_special_COPY_BUDDY, sam_piz_special_SET_BUDDY, sam_piz_special_TX_AN_POS, sam_piz_special_COPY_TEXTUAL_CIGAR, sam_piz_special_BISMARK_XM, sam_piz_special_BSBOLT_XB, sam_piz_special_UQ, sam_piz_special_iq_sq_dq, sam_piz_special_ULTIMA_tp_old, ultima_c_piz_special_DEMUX_BY_Q4NAME, sam_piz_special_bi, sam_piz_special_sd, agilent_special_AGENT_RX, agilent_special_AGENT_QX, special_qname_rng2seq_len, sam_piz_special_DEMUX_BY_XX_0, sam_piz_special_DEMUX_BY_AS, piz_special_PLUS, sam_piz_special_ULTIMA_tp, sam_piz_special_ULTIMA_MI, sam_piz_special_PACBIO_qe, sam_piz_special_DEMUX_sn, sam_piz_special_jI, sam_piz_special_jM_length, sam_piz_special_RG_by_QNAME, }
+
+#define NUM_SAM_SPECIAL 70
+
+#define FASTQ_SPECIAL_NAMES { "unaligned_SEQ", "PAIR2_GPOS", "mate_lookup", "set_deep", "deep_copy_QNAME", "deep_copy_SEQ", "deep_copy_QUAL", "backspace", "copy_line1", "monochar_QUAL", "ULTIMA_C", "AGENT_RX", "AGENT_QX", "qname_rng2seq_len", }
+
+#define FASTQ_SPECIAL { fastq_special_unaligned_SEQ, fastq_special_PAIR2_GPOS, fastq_special_mate_lookup, fastq_special_set_deep, fastq_special_deep_copy_QNAME, fastq_special_deep_copy_SEQ, fastq_special_deep_copy_QUAL, fastq_special_backspace, fastq_special_copy_line1, fastq_special_monochar_QUAL, ultima_c_piz_special_DEMUX_BY_Q4NAME, agilent_special_AGENT_RX, agilent_special_AGENT_QX, special_qname_rng2seq_len, }
+
+#define NUM_FASTQ_SPECIAL 14
+
+#define FASTA_SPECIAL_NAMES { "SEQ", "COMMENT", "DESC", }
+
+#define FASTA_SPECIAL { fasta_piz_special_SEQ, fasta_piz_special_COMMENT, fasta_piz_special_DESC, }
+
+#define NUM_FASTA_SPECIAL 3
+
+#define GFF_SPECIAL_NAMES { "exon_number", "MINUS", }
+
+#define GFF_SPECIAL { gff_piz_special_exon_number, piz_special_MINUS, }
+
+#define NUM_GFF_SPECIAL 2
+
+#define GENERIC_SPECIAL_NAMES { "TOPLEVEL", }
+
+#define GENERIC_SPECIAL { generic_piz_TOPLEVEL, }
+
+#define NUM_GENERIC_SPECIAL 1
+
+#define LOCS_SPECIAL_NAMES { "DELTA_FLOAT", }
+
+#define LOCS_SPECIAL { locs_piz_special_DELTA_FLOAT, }
+
+#define NUM_LOCS_SPECIAL 1
+
+#define BED_SPECIAL_NAMES { "BCOUNT", }
+
+#define BED_SPECIAL { bed_piz_special_BCOUNT, }
+
+#define NUM_BED_SPECIAL 1
+
+#define MAX_NUM_SPECIAL 87
 

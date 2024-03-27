@@ -207,11 +207,19 @@ rom filename_base (rom filename, bool remove_exe, rom default_basename,
 // eg "file.fastq.gz" -> "file.fastq"
 void filename_remove_codec_ext (char *filename, FileType ft)
 {
+    unsigned fn_len = strlen (filename);
+
+    // .cram -> .bam
+    if (ft == CRAM && fn_len > 5 && !strcmp (&filename[fn_len-5], ".cram")) {
+        strcpy (&filename[fn_len-4], "bam");
+        return;
+    }
+    
+    // codec extension removed eg .fq.gz -> .fq
     rom codec_ext;
     if (!((codec_ext = strchr (&file_exts[ft][1], '.')))) return; // this file type's extension doesn't have a codec ext (it is, eg ".fastq" not ".fastq.gz")
     
     unsigned codec_ext_len = strlen (codec_ext);
-    unsigned fn_len = strlen (filename);
 
     // make sure filename actually has the codec (eg its not eg "(stdin)")
     if (fn_len > codec_ext_len && !strcmp (&filename[fn_len-codec_ext_len], codec_ext))

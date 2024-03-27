@@ -14,15 +14,15 @@
 #include "strings.h"
 
 // optimize numbers in the range (-99.5,99.5) to 2 significant digits
-bool optimize_float_2_sig_dig (rom snip, unsigned len, float cap_value_at /* 0 if no cap */,
-                               char *optimized_snip, unsigned *optimized_snip_len)
+bool optimize_float_2_sig_dig (STRp(snip), float cap_value_at /* 0 if no cap */,
+                               STRe(optimized_snip))
 {
     if (!IS_DIGIT(snip[0]) && snip[0] != '.' && snip[0] != '-') return false; // not a number
 
     bool negative = (snip[0] == '-');
 
     // temporarily nul-terminate string and get number
-    SAFE_NUL (&snip[len]);
+    SAFE_NULT (snip);
     float fp = atof (snip);
     SAFE_RESTORE;
 
@@ -69,13 +69,13 @@ bool optimize_float_2_sig_dig (rom snip, unsigned len, float cap_value_at /* 0 i
     return true;
 }
 
-bool optimize_vector_2_sig_dig (rom snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len /* in / out */)
+bool optimize_vector_2_sig_dig (STRp(snip), STRe(optimized_snip) /* in / out */)
 {
     char *writer = optimized_snip;
     unsigned digit_i=0;
-    for (unsigned i=0; i <= len; i++) { 
+    for (unsigned i=0; i <= snip_len; i++) { 
 
-        if (snip[i] == ',' || i == len) { // end of number
+        if (snip[i] == ',' || i == snip_len) { // end of number
 
             // optimize might actually increase the length in edge cases, e.g. -.1 -> -0.1, so we
             // make sure we have enough room for another number
@@ -86,7 +86,7 @@ bool optimize_vector_2_sig_dig (rom snip, unsigned len, char *optimized_snip, un
             if (!ret) return false;
             writer += one_number_len;
 
-            if (i < len) *(writer++) = ',';
+            if (i < snip_len) *(writer++) = ',';
             digit_i=0;
         }
         else digit_i++;
@@ -107,7 +107,7 @@ bool optimize_vector_2_sig_dig (rom snip, unsigned len, char *optimized_snip, un
 // 30–34 -> 33
 // 35–39 -> 37
 // ≥ 40  -> 40
-void optimize_phred_quality_string (char *str, unsigned len)
+void optimize_phred_quality_string (STRc(qual))
 {
 #   define P(x) ((x)+33)
     static uint8_t phred_mapper[256] = {
@@ -145,6 +145,6 @@ void optimize_phred_quality_string (char *str, unsigned len)
     };
 
     // do the mapping
-    for (; len; str++, len--) *str = (char)phred_mapper[(uint8_t)*str];
+    for (; qual_len; qual++, qual_len--) *qual = (char)phred_mapper[(uint8_t)*qual];
 }
 

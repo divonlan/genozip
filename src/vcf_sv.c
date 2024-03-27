@@ -442,9 +442,9 @@ void vcf_seg_HOMSEQ (VBlockVCFP vb, ContextP ctx, STRp(homseq))
     }
 
     // method 3: based on other fields
-    else if ((ALT0(DEL) && !str_issubstr_(vb->REF+1, vb->REF_len-1, STRa(homseq))) ||
-            (ALT0(INS) && !str_issubstr_(vb->alts[0]+1, vb->alt_lens[0]-1, STRa(homseq))) ||
-            (ALT0(SYM_INS) && (!has(LEFT_SVINSSEQ) || !str_issubstr (BII(LEFT_SVINSSEQ)->value, homseq))) ||
+    else if ((ALT0(DEL) && !str_isprefix_(vb->REF+1, vb->REF_len-1, STRa(homseq))) ||
+            (ALT0(INS) && !str_isprefix_(vb->alts[0]+1, vb->alt_lens[0]-1, STRa(homseq))) ||
+            (ALT0(SYM_INS) && (!has(LEFT_SVINSSEQ) || !str_isprefix (BII(LEFT_SVINSSEQ)->value, homseq))) ||
             (!ALT0(DEL) && !ALT0(INS) && !ALT0(SYM_INS)))
         goto fallback;
     else

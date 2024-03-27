@@ -175,11 +175,12 @@ static void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
             
             // assuming infinite cores, estimate the max number of concurrent threads based on I/O and source-decompression constraints
             // TO DO: make this more accurate taking into account the type of filesystem (eg nfs) etc
-            uint32_t est_max_threads = txt_file->source_codec == CODEC_BGZF ? 60  // bottleneck is disk I/O - but less that CODEC_NONE as less data is read
-                                     : txt_file->source_codec == CODEC_BAM  ? 60  // bottleneck is disk I/O - but less that CODEC_NONE as less data is read
-                                     : txt_file->source_codec == CODEC_CRAM ? 40  // bottleneck is samtools
-                                     : txt_file->source_codec == CODEC_GZ   ? 20  // bottleneck is GZ-decompression in main thread
-                                     : txt_file->source_codec == CODEC_NONE ? 30  // bottleneck is disk I/O
+            uint32_t est_max_threads = SOURCE_CODEC(BGZF) ? 60  // bottleneck is disk I/O - but less that CODEC_NONE as less data is read
+                                     : SOURCE_CODEC(BAM)  ? 60  // bottleneck is disk I/O - but less that CODEC_NONE as less data is read
+                                     : SOURCE_CODEC(CRAM) ? 40  // bottleneck is samtools
+                                     : SOURCE_CODEC(ORA)  ? 40  // bottleneck is orad
+                                     : SOURCE_CODEC(GZ)   ? 20  // bottleneck is GZ-decompression in main thread
+                                     : SOURCE_CODEC(NONE) ? 30  // bottleneck is disk I/O
                                      :                                        30; // arbitrary
 
             uint64_t new_vb_size = MAX_(VBLOCK_MEMORY_MIN_SMALL, est_seggable_size * 1.2 / MIN_(est_max_threads, global_max_threads));
@@ -429,18 +430,19 @@ rom segconf_deep_trimming_name (void)
          :                                 "None";
 }
 
-rom VCF_QUAL_method_name (VcfQualMethodType method)
+rom VCF_QUAL_method_name (VcfQualMethod method)
 {
     switch (method) {
         case VCF_QUAL_DEFAULT : return "DEFAULT";
         case VCF_QUAL_by_RGQ  : return "BY_RGQ";
         case VCF_QUAL_local   : return "local";
         case VCF_QUAL_mated   : return "mated";
+        case VCF_QUAL_by_GP   : return "BY_GP";
         default               : return "INVALID";
     }
 }
 
-rom VCF_INFO_method_name (VcfInfoMethodType method)
+rom VCF_INFO_method_name (VcfInfoMethod method)
 {
     switch (method) {
         case VCF_INFO_DEFAULT   : return "DEFAULT";
@@ -469,6 +471,15 @@ rom FMT_DP_method_name (FormatDPMethod method)
         case BY_SDP         : return "BY_SDP";
         case FMT_DP_DEFAULT : return "DEFAULT";
         default             : return "INVALID";
+    }
+}
+
+rom RG_method_name (RGMethod method)
+{
+    switch (method) {
+        case RG_CELLRANGER : return "BY_ILLUM_QNAME";
+        case RG_DEFAULT        : return "DEFAULT";
+        default                : return "INVALID";
     }
 }
 

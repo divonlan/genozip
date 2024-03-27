@@ -19,8 +19,9 @@ source:
   sha256: __SHA256__
  
 build:
+  # Selector (e.g [win]) list: https://docs.conda.io/projects/conda-build/en/latest/resources/define-metadata.html#preprocessing-selectors
 # Windows builds & tests successfully, but then the test fails in Appveyor - it seems the executable is not loading (maybe missing gcc libraries? just a hunch)
-  skip: True  # [win]
+  # skip: True  # [win]
   number: 0
 
 requirements:

@@ -745,30 +745,7 @@ extern unsigned sam_vb_size (DataType dt);
 extern unsigned sam_vb_zip_dl_size (void);
 extern void sam_reset_line (VBlockP vb);
 
-// Special - used for SAM & BAM
-#define SAM_SPECIAL { sam_cigar_special_CIGAR, sam_piz_special_TLEN_old, sam_piz_special_BD_BI, sam_piz_special_delta_seq_len, \
-                      sam_piz_special_MD_old, bam_piz_special_FLOAT, bam_piz_special_BIN, sam_piz_special_NM,   \
-                      sam_piz_special_MD, sam_piz_special_REF_CONSUMED, \
-                      sam_piz_special_PNEXT_IS_PREV_POS_old, sam_piz_special_COPY_MATE_FLAG, sam_piz_special_COPY_MATE_TLEN_old, \
-                      sam_piz_special_COPY_BUDDY_CIGAR, sam_piz_special_FASTQ_CONSUME_AUX, sam_piz_special_TLEN, sam_piz_special_QUAL,\
-                      sam_piz_special_pull_from_sag, sam_piz_special_SEQ, \
-                      sam_piz_special_PRIM_QNAME, sam_piz_special_SQUANK, \
-                      sam_piz_special_BSSEEKER2_XO, sam_piz_special_BSSEEKER2_XG, sam_piz_special_BSSEEKER2_XM,\
-                      sam_piz_special_SA_main, sam_piz_special_COPY_PRIM, \
-                      sam_piz_special_BWA_XC, sam_piz_special_BWA_XT, sam_piz_special_BWA_X1, sam_piz_special_BWA_XS, \
-                      sam_piz_special_SM, sam_piz_special_AM, sam_piz_special_PNEXT, \
-                      sam_piz_special_DEMUX_BY_MATE, sam_piz_special_DEMUX_BY_MATE_PRIM, sam_piz_special_DEMUX_BY_BUDDY, \
-                      sam_piz_special_GEM3_XB, sam_piz_special_BSBOLT_YS, sam_piz_special_0A_RNAME, \
-                      sam_piz_special_BISMARK_XG, sam_piz_special_HI, sam_piz_special_DEMUX_BY_BUDDY_MAP, sam_piz_special_SEQ_LEN,\
-                      sam_piz_special_FI, sam_piz_special_cm, sam_piz_special_COPY_BUDDY, sam_piz_special_SET_BUDDY, \
-                      sam_piz_special_TX_AN_POS, sam_piz_special_COPY_TEXTUAL_CIGAR, sam_piz_special_BISMARK_XM, \
-                      sam_piz_special_BSBOLT_XB, sam_piz_special_UQ, sam_piz_special_iq_sq_dq, sam_piz_special_ULTIMA_tp_old, \
-                      ultima_c_piz_special_DEMUX_BY_Q4NAME, sam_piz_special_bi, sam_piz_special_sd, \
-                      agilent_special_AGENT_RX, agilent_special_AGENT_QX, special_qname_rng2seq_len, sam_piz_special_DEMUX_BY_XX_0, \
-                      sam_piz_special_DEMUX_BY_AS, piz_special_PLUS, \
-                      sam_piz_special_ULTIMA_tp, sam_piz_special_ULTIMA_MI, sam_piz_special_PACBIO_qe, sam_piz_special_DEMUX_sn,\
-                      sam_piz_special_jI, sam_piz_special_jM_length, \
-                    }
+// SPECIALs - used for SAM & BAM
 SPECIAL (SAM, 0,  CIGAR,                 sam_cigar_special_CIGAR);
 SPECIAL (SAM, 1,  TLEN_old,              sam_piz_special_TLEN_old);            // used up to 12.0.42
 SPECIAL (SAM, 2,  BDBI,                  sam_piz_special_BD_BI);
@@ -838,7 +815,7 @@ SPECIAL (SAM, 65, PACBIO_qe,             sam_piz_special_PACBIO_qe);           /
 SPECIAL (SAM, 66, DEMUX_sn,              sam_piz_special_DEMUX_sn);            // introduced 15.0.35
 SPECIAL (SAM, 67, jI,                    sam_piz_special_jI);                  // introduced 15.0.42
 SPECIAL (SAM, 68, jM_length,             sam_piz_special_jM_length);           // introduced 15.0.42
-#define NUM_SAM_SPECIAL 69
+SPECIAL (SAM, 69, RG_by_QNAME,           sam_piz_special_RG_by_QNAME);         // introduced 15.0.51
  
 #define SAM_LOCAL_GET_LINE_CALLBACKS(dt)        \
     { dt, _OPTION_BD_BI,    sam_zip_BD_BI    }, \

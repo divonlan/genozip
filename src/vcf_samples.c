@@ -1359,7 +1359,7 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
                 vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_GL);
             break;
 
-        // note: GP and PL - for non-optimized, I tested segging as A_R and seg_array - they are worse or not better than the default. likely because the values are correlated.
+        // note: GP and PL - for non-optimized, I tested segging as A_R and seg_array - they are worse or not better than the default, because the values are correlated.
         case _FORMAT_GP:
             // convert GP (probabilities) to PP (phred values). PP was introduced in VCF v4.3.
             if (flag.GP_to_PP && vb->vcf_version >= VCF_v4_3) {

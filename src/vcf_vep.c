@@ -25,7 +25,7 @@ sSTRl(maf_container_snip,100);
            
 static bool vcf_vep_Existing_var_cb (VBlockP vb, ContextP ctx, STRp(ev), uint32_t repeat)
 {
-    seg_array_by_callback (VB, ctx, STRa(ev), '&', seg_id_field_varlen_int_cb, ev_len);
+    seg_array_by_callback (VB, ctx, STRa(ev), '&', seg_id_field_varlen_int_cb, 0, 0, ev_len);
     return true;
 }
 
@@ -56,7 +56,7 @@ static bool vcf_vep_af_item (VBlockP vb_, ContextP ctx, STRp(af_item), uint32_t 
 
 static bool vcf_vep_af_field (VBlockP vb, ContextP ctx, STRp(af_arr), uint32_t repeat)
 {
-    seg_array_by_callback (VB, ctx, STRa(af_arr), '&', vcf_vep_af_item, af_arr_len);
+    seg_array_by_callback (VB, ctx, STRa(af_arr), '&', vcf_vep_af_item, VCF_SPECIAL_N_ALTS, VB_VCF->n_alts, af_arr_len);
     return true;
 }
 
@@ -86,7 +86,7 @@ void vcf_vep_zip_initialize (void) // nul-terminated string containing list of f
     _INFO_cDNA_position      = dict_id_make (_S("cDNA_position"),      DTYPE_VCF_INFO).num;
     _INFO_CDS_position       = dict_id_make (_S("CDS_position"),       DTYPE_VCF_INFO).num;
     _INFO_Protein_position   = dict_id_make (_S("Protein_position"),   DTYPE_VCF_INFO).num;
-    _INFO_DISTANCE           = dict_id_make (_S("CSQ_DISTANCE"),       DTYPE_VCF_INFO).num;
+    _INFO_DISTANCE           = dict_id_make (_S("DISTANCE"),           DTYPE_VCF_INFO).num;
     _INFO_AFR_MAF            = dict_id_make (_S("AFR_MAF"),            DTYPE_VCF_INFO).num;
     _INFO_AMR_MAF            = dict_id_make (_S("AMR_MAF"),            DTYPE_VCF_INFO).num;
     _INFO_EAS_MAF            = dict_id_make (_S("EAS_MAF"),            DTYPE_VCF_INFO).num;

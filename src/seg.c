@@ -537,10 +537,6 @@ bool seg_integer_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_byt
 // segs a fixed width, 0-padded, non-negative integer - decimal, hex or HEX
 void seg_numeric_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_bytes)
 {
-#ifdef DEBUG
-    ASSERT (segconf.running || IS_LT_DYN (ctx->ltype), "Expecting %s.ltype to be DYN_INT* but found %s", ctx->tag_name, lt_name(ctx->ltype));
-#endif
-
     if (segconf.running) goto fallback;
 
     bool has_zero_x = (ctx->ltype == LT_DYN_INT_h || ctx->ltype == LT_DYN_INT_H) && value_len > 2 && value[0] == '0' && value[1] == 'x';
@@ -793,7 +789,10 @@ WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_
 }
 
 
-void seg_array_by_callback (VBlockP vb, ContextP container_ctx, STRp(arr), char sep, SegCallback item_seg, unsigned add_bytes)
+void seg_array_by_callback (VBlockP vb, ContextP container_ctx, STRp(arr), char sep, 
+                            SegCallback item_seg, 
+                            uint8_t con_rep_special, uint32_t expected_num_repeats, // optional: if expected_num_repeats is correct, then use con_rep_special
+                            unsigned add_bytes)
 {
     MiniContainerP con;
     ContextP arr_ctx;
@@ -815,6 +814,8 @@ void seg_array_by_callback (VBlockP vb, ContextP container_ctx, STRp(arr), char 
                                 .items[0].dict_id = arr_dict_id }; // only one item
 
         ctx_consolidate_stats_(vb, container_ctx, (ContainerP)con);
+
+        container_ctx->con_rep_special = con_rep_special;
     }
     else 
         con = B1ST (MiniContainer, container_ctx->con_cache);
@@ -832,16 +833,19 @@ void seg_array_by_callback (VBlockP vb, ContextP container_ctx, STRp(arr), char 
         sum_lens += item_lens[i];
     }
 
-    con->repeats = n_items;
+    con->repeats = (con_rep_special && expected_num_repeats == n_items) ? CON_REPEATS_IS_SPECIAL : n_items;
     container_seg (vb, container_ctx, (ContainerP)con, 0, 0, add_bytes - sum_lens); // acount for separators and additional bytes
 }
 
-// segs an 2-dimentional array (e.g. "0|0|0,1|2|3") of uint32_t so that it is stored in local transposed. 
+// segs an 2-dimentional array (e.g. "0|0|0,1|2|3") of integers so that it is stored in local (possibly transposed). 
+// Stored in a single (n_items=cols, repeats=rows) container, but all items are the same array context. 
 // The number of columns (3 in this example) must be identical for the entire VB or its an seg error.
 // its also a seg error if any item is not a uint32 integer. The number of lines may vary.
 // note: dyn_int_transpose might later reduce it to uint16 or uint8.
-void seg_uint32_matrix (VBlockP vb, ContextP container_ctx, Did stats_conslidation_did_i, 
-                        STRp(value), char row_sep/*255 if always single row*/, char col_sep, bool is_transposed, int add_bytes)
+void seg_integer_matrix (VBlockP vb, ContextP container_ctx, Did stats_conslidation_did_i, 
+                         STRp(value), char row_sep/*255 if always single row*/, char col_sep, bool is_transposed, 
+                         uint8_t con_rep_special, uint32_t expected_num_repeats, // optional
+                         int add_bytes)
 {
     bytes id = container_ctx->dict_id.id;
     DictId arr_dict_id = { .id = { id[0], 
@@ -854,13 +858,23 @@ void seg_uint32_matrix (VBlockP vb, ContextP container_ctx, Did stats_conslidati
     if (!arr_ctx->local.n_cols) {
         ctx_consolidate_stats (vb, stats_conslidation_did_i, container_ctx->did_i, arr_ctx->did_i, DID_EOL);
 
+        container_ctx->con_rep_special = con_rep_special;
+
         dyn_int_init_ctx (vb, arr_ctx, 0);
-        arr_ctx->flags.store = STORE_INT; // also need for BAM translation
+        arr_ctx->flags.store    = STORE_INT; // also need for BAM translation
         arr_ctx->dyn_transposed = is_transposed;
 
         rom first_row_sep = memchr (value, row_sep, value_len);
-        
-        arr_ctx->local.n_cols = 1 + str_count_char (value, first_row_sep ? (first_row_sep - value) : value_len, col_sep); // n_cols
+        uint32_t row_len = first_row_sep ? (first_row_sep - value) : value_len;
+
+        // don't initialize yet if by chance, the first value in VB is e.g. '.' (as it would initialize with an incorrect n_cols)
+        if (row_len == 1 && *value == container_ctx->nothing_char) {
+            seg_by_ctx (VB, STRa(value), container_ctx, add_bytes);
+            return;
+        }
+
+        arr_ctx->local.n_cols = 1 + str_count_char (value, row_len, col_sep); // n_cols
+        ASSSEG (arr_ctx->local.n_cols <= MEDIUM_CON_NITEMS, "expecting n_cols=%"PRIu64" <= MEDIUM_CON_NITEMS=%u", arr_ctx->local.n_cols, MEDIUM_CON_NITEMS);
 
         ASSERT (!is_transposed || arr_ctx->local.n_cols <= 255, "%s: n_cols=%d greater than max allowed 255", VB_NAME, (int)arr_ctx->local.n_cols);
     }
@@ -890,20 +904,19 @@ void seg_uint32_matrix (VBlockP vb, ContextP container_ctx, Did stats_conslidati
     // finally, the Container snip itself - we attempt to use the known node_index if it is cached in con_index
 
     // in our specific case, element i of con_index contains the node_index of the snip of the container with i repeats, or WORD_INDEX_NONE.
-    if (container_ctx->con_index.len32 < n_rows+1) {
-        buf_alloc_255 (vb, &container_ctx->con_index, 0, n_rows+1, WordIndex, 0, CTX_TAG_CON_INDEX);
-        container_ctx->con_index.len32 = container_ctx->con_index.len32 / sizeof (WordIndex);
-    }
+    if (container_ctx->con_index.len32 < n_rows+1) 
+        buf_alloc_exact_255 (vb, container_ctx->con_index, n_rows+2, WordIndex, CTX_TAG_CON_INDEX);
 
-    WordIndex node_index = *B(WordIndex, container_ctx->con_index, n_rows);
+    bool use_special = (con_rep_special && n_rows == expected_num_repeats);
+    uint32_t cache_index =  use_special ? 0 : (n_rows + 1);
+    WordIndex node_index = *B(WordIndex, container_ctx->con_index, cache_index);
+    
     unsigned account_in_container_ctx = add_bytes - account_in_arr_ctx;
 
     // case: first container with this many repeats - seg and add to cache
     if (node_index == WORD_INDEX_NONE) {
-        ASSSEG (n_cols_ <= MEDIUM_CON_NITEMS, "expecting n_cols=%u <= MEDIUM_CON_NITEMS=%u", n_cols_, MEDIUM_CON_NITEMS);
-
         MediumContainer con = { .nitems_lo           = n_cols_,
-                                .repeats             = n_rows,
+                                .repeats             = use_special ? CON_REPEATS_IS_SPECIAL : n_rows,
                                 .repsep[0]           = row_sep,
                                 .drop_final_repsep   = true,
                                 .drop_final_item_sep = true     };
@@ -912,7 +925,7 @@ void seg_uint32_matrix (VBlockP vb, ContextP container_ctx, Did stats_conslidati
         for (uint32_t c=0; c < n_cols_; c++)
             con.items[c] = con_item;
 
-        *B(WordIndex, container_ctx->con_index, n_rows) = 
+        *B(WordIndex, container_ctx->con_index, cache_index) = 
             container_seg (vb, container_ctx, (ContainerP)&con, NULL, 0, account_in_container_ctx);
     }
 
@@ -933,6 +946,37 @@ badly_formatted:
 bool seg_do_nothing_cb (VBlockP vb, ContextP ctx, STRp(field), uint32_t rep)
 {
     return true; // "segged successfully" - do nothing
+}
+
+void seg_add_to_local_string (VBlockP vb, ContextP ctx, STRp(snip), Lookup lookup_type, unsigned add_bytes) 
+{ 
+    if (ctx->ltype == LT_SINGLETON)
+        ctx->ltype = LT_STRING; // initialize
+
+    ASSERT (ctx->ltype == LT_STRING, "%s: Expecting %s.ltype=LT_STRING but found %s", LN_NAME, ctx->tag_name, lt_name (ctx->ltype));
+#ifdef DEBUG
+    ASSERT (lookup_type==LOOKUP_NONE || lookup_type==LOOKUP_SIMPLE, "%s: expecting LOOKUP_NONE or LOOKUP_SIMPLE in ctx=%s", LN_NAME, ctx->tag_name);
+#endif
+
+    seg_add_to_local_fixed_do (vb, ctx, STRa(snip), true, lookup_type, false, add_bytes); 
+}
+
+bool seg_add_to_local_string_cb (VBlockP vb, ContextP ctx, STRp(str), uint32_t repeat)
+{
+    seg_add_to_local_string (vb, ctx, STRa(str), LOOKUP_SIMPLE, str_len);
+    return true;
+}
+
+bool seg_add_to_local_fixed_len_cb (VBlockP vb, ContextP ctx, STRp(str), uint32_t repeat)
+{
+    if (ctx->ltype == LT_SINGLETON)
+        ctx->ltype = LT_BLOB; // initialize
+
+    ASSERT (ctx->ltype == LT_BLOB, "%s: Expecting %s.ltype=LT_BLOB but found %s", LN_NAME, ctx->tag_name, lt_name (ctx->ltype));
+
+    seg_add_to_local_fixed_do (vb, ctx, STRa(str), false, LOOKUP_WITH_LENGTH, false, str_len); 
+
+    return true;
 }
 
 bool seg_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), 
@@ -1006,10 +1050,12 @@ badly_formatted:
 // The last item is treated as an ENST_ID (format: ENST00000399012) while the other items are regular dictionaries
 // the names of the dictionaries are the same as the ctx, with the 2nd character replaced by 1,2,3...
 // the field itself will contain the number of entries
-int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), 
-                             const SegCallback *callbacks, // optional - either NULL, or contains a seg callback for each item (any callback may be NULL)
-                             SplitCorrectionCallback split_correction_callback, 
-                             unsigned add_bytes)
+int32_t seg_array_of_struct_with_prefixes (VBlockP vb, ContextP ctx, 
+                                           MediumContainer con, STRp(prefixes), 
+                                           STRp(snip), 
+                                           const SegCallback *callbacks, // optional - either NULL, or contains a seg callback for each item (any callback may be NULL)
+                                           SplitCorrectionCallback split_correction_callback, 
+                                           unsigned add_bytes)
 {
     if (!ctx->is_stats_parent) 
         ctx_consolidate_stats_(vb, ctx, (ContainerP)&con);
@@ -1033,10 +1079,11 @@ int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp
     ASSSEG (n_repeats <= CONTAINER_MAX_REPEATS, "exceeded maximum repeats allowed (%u) while parsing %s",
             CONTAINER_MAX_REPEATS, ctx->tag_name);
 
+    uint32_t accounted_so_far = 0;
     for (uint32_t r=0; r < n_repeats; r++) {
 
         // get items in each repeat 
-        str_split_by_container (repeats[r], repeat_lens[r], &con, NULL, 0, item, NULL);
+        str_split_by_container (repeats[r], repeat_lens[r], &con, prefixes, prefixes_len, item, NULL);
         
         if (n_items != con.nitems_lo) 
             goto badly_formatted;
@@ -1050,6 +1097,8 @@ int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp
             }
             else
                 seg_by_ctx (VB, STRi(item,i), item_ctx, item_lens[i]);
+        
+            accounted_so_far += item_lens[i];
         }
     }
 
@@ -1067,15 +1116,15 @@ int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp
         num_printable_separators += is_printable[item->separator[0]] + is_printable[item->separator[1]];
 
     WordIndex node_index = *B(WordIndex, ctx->con_index, n_repeats);
-    unsigned account_for = con.repeats * num_printable_separators /* item seperators */ + con.repeats - con.drop_final_repsep /* repeat separators */ + ((int)add_bytes - snip_len);
+    // unsigned account_for = con.repeats * num_printable_separators /* item seperators */ + con.repeats - con.drop_final_repsep /* repeat separators */ + ((int)add_bytes - snip_len);
 
     // case: first container with this many repeats - seg and add to cache
     if (node_index == WORD_INDEX_NONE) 
-        *B(WordIndex, ctx->con_index, n_repeats) = container_seg (vb, ctx, (ContainerP)&con, NULL, 0, account_for);
+        *B(WordIndex, ctx->con_index, n_repeats) = container_seg (vb, ctx, (ContainerP)&con, prefixes, prefixes_len, add_bytes - accounted_so_far);
     
     // case: we already know the node index of the container with this many repeats
     else 
-        seg_known_node_index (vb, ctx, node_index, account_for);
+        seg_known_node_index (vb, ctx, node_index, add_bytes - accounted_so_far);
 
     return n_repeats;
 
@@ -1185,7 +1234,6 @@ void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, const void *const data
         seg_lookup_with_length (vb, ctx, data_len, 0);
 }
 
-
 void seg_integer_fixed (VBlockP vb, ContextP ctx, void *number, bool with_lookup, unsigned add_bytes) 
 {
     buf_alloc (vb, &ctx->local, 0, MAX_(ctx->local.len+1, 32768) * lt_width(ctx), char, CTX_GROWTH, CTX_TAG_LOCAL);
@@ -1206,6 +1254,15 @@ void seg_integer_fixed (VBlockP vb, ContextP ctx, void *number, bool with_lookup
 
     if (with_lookup)     
         seg_by_ctx (vb, (char[]){ SNIP_LOOKUP }, 1, ctx, 0);
+}
+
+void seg_maybe_copy (VBlockP vb, ContextP ctx, Did other_did, STRp(value), STRp(copy_snip))
+{
+    if (ctx_encountered_in_line (VB, other_did) && str_issame_(STRa(value), STRlst(other_did)))
+        seg_by_ctx (VB, STRa(copy_snip), ctx, value_len);
+
+    else
+        seg_by_ctx (VB, STRa(value), ctx, value_len);
 }
 
 void seg_diff (VBlockP vb, ContextP ctx, 

@@ -91,6 +91,12 @@
 #pragma GENDICT ATTR_exon_id=DTYPE_1=exon_id                // eg "ENSMUSE00000485541.3"
 #pragma GENDICT ATTR_exon_number=DTYPE_1=exon_number        // eg "1"
 
+// RNA-seq GTF stuff (e.g. stringtie: https://ccb.jhu.edu/software/stringtie/index.shtml?t=manual)
+// also: gene_id, transcript_id, gene_name, exon_number, cov
+#pragma GENDICT ATTR_TPM=DTYPE_1=TPM                        // Transcripts per million. This is the number of transcripts from this particular gene normalized first by gene length, and then by sequencing depth (in millions) in the sample. A detailed explanation and a comparison of TPM and FPKM can be found here, and TPM was defined by B. Li and C. Dewey here.
+#pragma GENDICT ATTR_FPKM=DTYPE_1=FPKM                      // Fragments per kilobase of transcript per million read pairs. This is the number of pairs of reads aligning to this feature, normalized by the total number of fragments sequenced (in millions) and the length of the transcript (in kilobases).
+#pragma GENDICT ATTR_ref_gene_name=DTYPE_1=ref_gene_name    // The gene_name in the reference annotation (optional) that the instance matched. 
+
 // Gencode GTF: https://www.gencodegenes.org/pages/data_format.html
 #pragma GENDICT ATTR_havana_gene=DTYPE_1=havana_gene        // eg "OTTMUSG00000026353.2" 
 #pragma GENDICT ATTR_havana_transcript=DTYPE_1=havana_transcript    // eg "OTTMUST00000065166.1"
@@ -123,6 +129,16 @@
 #pragma GENDICT ATTR_uscore=DTYPE_1=uscore
 #pragma GENDICT ATTR_tscore=DTYPE_1=tscore
 
+// Dragen CNV 
+#pragma GENDICT ATTR_Start=DTYPE_1=Start
+#pragma GENDICT ATTR_Stop=DTYPE_1=Stop
+#pragma GENDICT ATTR_Length=DTYPE_1=Length
+#pragma GENDICT ATTR_CopyNumber=DTYPE_1=CopyNumber
+#pragma GENDICT ATTR_Qual=DTYPE_1=Qual
+#pragma GENDICT ATTR_BinCount=DTYPE_1=BinCount
+#pragma GENDICT ATTR_ImproperPairsCount=DTYPE_1=ImproperPairsCount
+#pragma GENDICT ATTR_LinearCopyRatio=DTYPE_1=LinearCopyRatio
+
 // other fields
 #pragma GENDICT ATTR_chr=DTYPE_1=chr
 
@@ -148,9 +164,9 @@ extern bool gff_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header);
 extern CONTAINER_FILTER_FUNC (gff_piz_filter);
 extern CONTAINER_CALLBACK (gff_piz_container_cb);
 
-#define GFF_SPECIAL {  gff_piz_special_exon_number }
+// SPECIALs
 SPECIAL (GFF, 0,  exon_number, gff_piz_special_exon_number);
-#define NUM_GFF_SPECIAL 1
+SPECIAL (GFF, 1,  MINUS,       piz_special_MINUS);  // 15.0.51 
 
 #define GFF_DICT_ID_ALIASES                                              \
     /*        type        alias                   maps to this ctx   */  \

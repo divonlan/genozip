@@ -20,10 +20,10 @@ typedef packed_enum { // 1 byte
     LT_UINT16    = 4,
     LT_INT32     = 5,
     LT_UINT32    = 6,
-    LT_INT64     = 7,   // ffu
-    LT_UINT64    = 8,   // ffu
+    LT_INT64     = 7,   
+    LT_UINT64    = 8,   
     LT_FLOAT32   = 9,   
-    LT_FLOAT64   = 10,  // ffu
+    LT_FLOAT64   = 10,  
     LT_BLOB      = 11,  // length of data extracted is determined by vb->seq_len or provided in the LOOKUP snip (until 15.0.26 called LT_SEQUENCE)
     LT_BITMAP    = 12,  // a bitmap
     LT_CODEC     = 13,  // codec specific type with its codec specific reconstructor
@@ -67,41 +67,41 @@ typedef struct LocalTypeDesc {
 } LocalTypeDesc;
 
 extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
-#define LOCALTYPE_DESC {                                                                              \
-/*   name   sam  wid signed min_int                max_int                file_to_native           */ \
-   { "SIN", 0,   1,  0,     0,                     0,                     0                        }, \
-   { "I8 ", 'c', 1,  1,     -0x80LL,               0x7fLL,                BGEN_deinterlace_d8_buf  }, \
-   { "U8 ", 'C', 1,  0,     0,                     0xffLL,                BGEN_u8_buf              }, \
-   { "I16", 's', 2,  1,     -0x8000LL,             0x7fffLL,              BGEN_deinterlace_d16_buf }, \
-   { "U16", 'S', 2,  0,     0,                     0xffffLL,              BGEN_u16_buf             }, \
-   { "I32", 'i', 4,  1,     -0x80000000LL,         0x7fffffffLL,          BGEN_deinterlace_d32_buf }, \
-   { "U32", 'I', 4,  0,     0,                     0xffffffffLL,          BGEN_u32_buf             }, \
-   { "I64", 0,   8,  1,     -0x8000000000000000LL, 0x7fffffffffffffffLL,  BGEN_deinterlace_d64_buf }, \
-   { "U64", 0,   8,  0,     0,                     0x7fffffffffffffffLL,  BGEN_u64_buf             }, /* note: our internal representation is int64_t so max is limited by that */ \
-   { "F32", 'f', 4,  0,     0,                     0,                     BGEN_u32_buf             }, \
-   { "F64", 0,   8,  0,     0,                     0,                     BGEN_u64_buf             }, \
-   { "BLB", 0,   1,  0,     0,                     0,                     0                        }, \
-   { "BMP", 0,   8,  0,     0,                     0,                     0                        }, \
-   { "COD", 0,   1,  0,     0,                     0,                     0                        }, \
-   { "T8 ", 0,   1,  0,     0,                     0xffLL,                BGEN_transpose_u8_buf    }, \
-   { "T16", 0,   2,  0,     0,                     0xffffLL,              BGEN_transpose_u16_buf   }, \
-   { "T32", 0,   4,  0,     0,                     0xffffffffLL,          BGEN_transpose_u32_buf   }, \
-   { "N/A", 0,   8,  0,     0,                     0x7fffffffffffffffLL,  0                        }, /* unused - can be repurposed - used to be T64, but this was never possible in the code */ \
-   { "h8",  0,   1,  0,     0,                     0xffLL,                BGEN_u8_buf              }, /* lower-case UINT8 hex */ \
-   { "H8",  0,   1,  0,     0,                     0xffLL,                BGEN_u8_buf              }, /* upper-case UINT8 hex */ \
-   { "h16", 0,   2,  0,     0,                     0xffffLL,              BGEN_u16_buf             }, \
-   { "H16", 0,   2,  0,     0,                     0xffffLL,              BGEN_u16_buf             }, \
-   { "h32", 0,   4,  0,     0,                     0xffffffffLL,          BGEN_u32_buf             }, \
-   { "H32", 0,   4,  0,     0,                     0xffffffffLL,          BGEN_u32_buf             }, \
-   { "h64", 0,   8,  0,     0,                     0x7fffffffffffffffLL,  BGEN_u64_buf             }, \
-   { "H64", 0,   8,  0,     0,                     0x7fffffffffffffffLL,  BGEN_u64_buf             }, \
-   { "STR", 0,   1,  0,     0,                     0,                     0                        }, \
-   { "SUP", 0,   1,  0,     0,                     0,                     0                        }, \
-   { /* NUM_LTYPES */                                                                              }, \
-   /* from here - not part of the file format, just used during seg */                               \
-   { "DYN", 0,   8,  0,     0x8000000000000000LL,  0x7fffffffffffffffLL,  0                        }, \
-   { "DYh" ,0,   8,  0,     0x8000000000000000LL,  0x7fffffffffffffffLL,  0                        }, \
-   { "DYH" ,0,   8,  0,     0x8000000000000000LL,  0x7fffffffffffffffLL,  0                        }, \
+#define LOCALTYPE_DESC {                                                       \
+/*   name   sam  wid signed min_int    max_int     file_to_native           */ \
+   { "SIN", 0,   1,  0,     0,         0,          0                        }, \
+   { "I8 ", 'c', 1,  1,     INT8_MIN,  INT8_MAX,   BGEN_deinterlace_d8_buf  }, \
+   { "U8 ", 'C', 1,  0,     0,         UINT8_MAX,  BGEN_u8_buf              }, \
+   { "I16", 's', 2,  1,     INT16_MIN, INT16_MAX,  BGEN_deinterlace_d16_buf }, \
+   { "U16", 'S', 2,  0,     0,         UINT16_MAX, BGEN_u16_buf             }, \
+   { "I32", 'i', 4,  1,     INT32_MIN, INT32_MAX,  BGEN_deinterlace_d32_buf }, \
+   { "U32", 'I', 4,  0,     0,         UINT32_MAX, BGEN_u32_buf             }, \
+   { "I64", 0,   8,  1,     INT64_MIN, INT64_MAX,  BGEN_deinterlace_d64_buf }, \
+   { "U64", 0,   8,  0,     0,         INT64_MAX,  BGEN_u64_buf             }, /* note: our internal representation is int64_t so max is limited by that */ \
+   { "F32", 'f', 4,  0,     0,         0,          BGEN_u32_buf             }, \
+   { "F64", 0,   8,  0,     0,         0,          BGEN_u64_buf             }, \
+   { "BLB", 0,   1,  0,     0,         0,          0                        }, \
+   { "BMP", 0,   8,  0,     0,         0,          0                        }, \
+   { "COD", 0,   1,  0,     0,         0,          0                        }, \
+   { "T8 ", 0,   1,  0,     0,         UINT8_MAX,  BGEN_transpose_u8_buf    }, \
+   { "T16", 0,   2,  0,     0,         UINT16_MAX, BGEN_transpose_u16_buf   }, \
+   { "T32", 0,   4,  0,     0,         UINT32_MAX, BGEN_transpose_u32_buf   }, \
+   { "N/A", 0,   8,  0,     0,         INT64_MAX,  0                        }, /* unused - can be repurposed - used to be T64, but this was never possible in the code */ \
+   { "h8",  0,   1,  0,     0,         UINT8_MAX,  BGEN_u8_buf              }, /* lower-case UINT8 hex */ \
+   { "H8",  0,   1,  0,     0,         UINT8_MAX,  BGEN_u8_buf              }, /* upper-case UINT8 hex */ \
+   { "h16", 0,   2,  0,     0,         UINT16_MAX, BGEN_u16_buf             }, \
+   { "H16", 0,   2,  0,     0,         UINT16_MAX, BGEN_u16_buf             }, \
+   { "h32", 0,   4,  0,     0,         UINT32_MAX, BGEN_u32_buf             }, \
+   { "H32", 0,   4,  0,     0,         UINT32_MAX, BGEN_u32_buf             }, \
+   { "h64", 0,   8,  0,     0,         INT64_MAX,  BGEN_u64_buf             }, \
+   { "H64", 0,   8,  0,     0,         INT64_MAX,  BGEN_u64_buf             }, \
+   { "STR", 0,   1,  0,     0,         0,          0                        }, \
+   { "SUP", 0,   1,  0,     0,         0,          0                        }, \
+   { /* NUM_LTYPES */                                                       }, \
+   /* from here - not part of the file format, just used during seg */         \
+   { "DYN", 0,   8,  0,     INT64_MIN, INT64_MAX,  0                        }, \
+   { "DYh" ,0,   8,  0,     INT64_MIN, INT64_MAX,  0                        }, \
+   { "DYH" ,0,   8,  0,     INT64_MIN, INT64_MAX,  0                        }, \
 }
 
 #define lt_width(ctx)       (lt_desc[(ctx)->ltype].width)

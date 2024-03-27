@@ -132,13 +132,7 @@ extern void fastq_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header);
 typedef enum { FQ_COMP_R1, FQ_COMP_R2 } FastqComponentType;
 #define FASTQ_COMP_NAMES { "FQR1", "FQR2" }
  
-#define FASTQ_SPECIAL { fastq_special_unaligned_SEQ, fastq_special_PAIR2_GPOS, fastq_special_mate_lookup, \
-                        fastq_special_set_deep, fastq_special_deep_copy_QNAME, fastq_special_deep_copy_SEQ, fastq_special_deep_copy_QUAL,\
-                        fastq_special_backspace, fastq_special_copy_line1, fastq_special_monochar_QUAL, \
-                        ultima_c_piz_special_DEMUX_BY_Q4NAME, agilent_special_AGENT_RX, agilent_special_AGENT_QX, \
-                        special_qname_rng2seq_len, \
-                      }
-
+// SPECIALs
 SPECIAL (FASTQ, 0,  unaligned_SEQ,     fastq_special_unaligned_SEQ);          // v14
 SPECIAL (FASTQ, 1,  PAIR2_GPOS,        fastq_special_PAIR2_GPOS);             // v14
 SPECIAL (FASTQ, 2,  mate_lookup,       fastq_special_mate_lookup);            // v14
@@ -153,4 +147,3 @@ SPECIAL (FASTQ, 10, ULTIMA_C,          ultima_c_piz_special_DEMUX_BY_Q4NAME); //
 SPECIAL (FASTQ, 11, AGENT_RX,          agilent_special_AGENT_RX);             // introduced 15.0.23
 SPECIAL (FASTQ, 12, AGENT_QX,          agilent_special_AGENT_QX);             // introduced 15.0.23
 SPECIAL (FASTQ, 13, qname_rng2seq_len, special_qname_rng2seq_len);            // introduced 15.0.26
-#define NUM_FASTQ_SPECIAL 14

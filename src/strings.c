@@ -218,6 +218,32 @@ uint32_t str_hex_ex (int64_t n, char *str /* out */, bool uppercase, bool add_nu
     if (add_nul_terminator) str[len] = '\0'; // string terminator
     return len;
 }
+
+// returns true if string is a valid "simple" float (i.e. not exponential notation, no leading zeros, must begin and end with a digit, may be an integer)
+bool str_is_simple_float (STRp(str), 
+                          uint32_t *decimals) // optional out, set only if true is returned   
+{ 
+    // enforce: leading zeros not allowed; cannot start or end with a period
+    if (!str_len || str[0] == '0' || str[0] == '.' || str[str_len-1] == '.') 
+        return false; 
+    
+    bool period_encountered = false;
+    for (uint32_t i=0; i < str_len; i++) {
+        if (!IS_DIGIT(str[i]) && str[i] != '.') return false; 
+        
+        if (str[i] == '.') {
+            if (period_encountered) return false; // enforce: at most one period allowed
+            if (decimals) *decimals = str_len - i - 1;
+            period_encountered = true;
+        }
+    } 
+
+    if (!period_encountered && decimals)
+        *decimals = 0;
+        
+    return true;
+} 
+
 // similar to strtoull, except it rejects numbers that are shorter than str_len, or that their reconstruction would be different
 // the the original string.
 // returns true if successfully parsed an integer of the full length of the string
@@ -487,7 +513,7 @@ bool str_scientific_to_decimal (STRp(float_str), char *modified, uint32_t *modif
     if (has_decimal && float_str_len < 7 + negative) return false; // short circuit common normal numbers eg 0.885
     if (!has_decimal && float_str[negative+1] != 'e' && float_str[negative+1] != 'E') return false; // expecting [-]3. or [-]3e or [-]3E (single digit mantissa)
 
-    SAFE_NUL (&float_str[float_str_len]);  // no "return" until SAFE_RESTORE
+    SAFE_NULT (float_str);  // no "return" until SAFE_RESTORE
 
         int mantissa_len = strcspn (float_str, "eE");
         if (mantissa_len == float_str_len) goto not_scientific_float; // no e or E
@@ -626,6 +652,17 @@ bool str_item_i (STRp(str), char sep, uint32_t requested_item_i, pSTRp(item))
     }
 
     return false; 
+}
+
+// get item i from an array - expected to be a float. returns false if array is too short, or item is not a float
+bool str_item_i_int (STRp(str), char sep, uint32_t requested_item_i, int64_t *item)
+{
+    STR(item_str);
+
+    if (!str_item_i (STRa(str), sep, requested_item_i, pSTRa(item_str)))
+        return false; // array too short
+
+    return str_get_int (STRa(item_str), item);
 }
 
 // get item i from an array - expected to be a float. returns false if array is too short, or item is not a float

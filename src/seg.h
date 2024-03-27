@@ -44,8 +44,10 @@ extern void seg_lookup_with_length (VBlockP vb, ContextP ctx, int32_t length, un
 
 extern bool seg_integer_or_not (VBlockP vb, ContextP ctx, STRp(this_value), unsigned add_bytes); // segs integer in local if possible
 extern bool seg_integer_or_not_cb (VBlockP vb, ContextP ctx, STRp(int_str), uint32_t repeat);
-extern bool seg_float_or_not (VBlockP vb, ContextP ctx, STRp(this_value), unsigned add_bytes);
 extern void seg_numeric_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_bytes);
+extern bool seg_float_or_not (VBlockP vb, ContextP ctx, STRp(this_value), unsigned add_bytes);
+
+extern void seg_maybe_copy (VBlockP vb, ContextP ctx, Did other_did, STRp(value), STRp(copy_snip));
 
 #define SPF_BAD_SNIPS_TOO   1  // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
 #define SPF_ZERO_IS_BAD     2  // whether 0 is considered a bad POS (if true and POS is 0, to be handled according to seg_bad_snips_too)
@@ -62,14 +64,9 @@ extern bool seg_id_field_fixed_int_cb (VBlockP vb, ContextP ctx, STRp(id), uint3
 typedef enum { LOOKUP_NONE, LOOKUP_SIMPLE, LOOKUP_WITH_LENGTH } Lookup;
 extern void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, const void *const data, uint32_t data_len, bool add_nul, Lookup lookup_type, bool is_singleton, unsigned add_bytes);
 
-static inline void seg_add_to_local_string (VBlockP vb, ContextP ctx, STRp(snip), Lookup lookup_type, unsigned add_bytes) 
-{ 
-#ifdef DEBUG
-    ASSERT (segconf.running || ctx->ltype == LT_STRING, "%s: Expecting %s.ltype=LT_STRING but found %s", LN_NAME, ctx->tag_name, lt_name (ctx->ltype));
-    ASSERT (lookup_type==LOOKUP_NONE || lookup_type==LOOKUP_SIMPLE, "%s: expecting LOOKUP_NONE or LOOKUP_SIMPLE in ctx=%s", LN_NAME, ctx->tag_name);
-#endif
-    seg_add_to_local_fixed_do (vb, ctx, STRa(snip), true, lookup_type, false, add_bytes); 
-}
+extern void seg_add_to_local_string (VBlockP vb, ContextP ctx, STRp(snip), Lookup lookup_type, unsigned add_bytes);
+extern bool seg_add_to_local_string_cb (VBlockP vb, ContextP ctx, STRp(str), uint32_t repeat);
+extern bool seg_add_to_local_fixed_len_cb (VBlockP vb, ContextP ctx, STRp(str), uint32_t repeat);
 
 static inline void seg_add_to_local_blob (VBlockP vb, ContextP ctx, STRp(blob), unsigned add_bytes) 
 { 
@@ -96,16 +93,22 @@ typedef bool (*SegCallback) (VBlockP vb, ContextP ctx, STRp(value), uint32_t rep
 
 extern WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_did_i, rom value, int32_t value_len, char sep, char subarray_sep, bool use_integer_delta, StoreType store_in_local, DictId arr_dict_id, int add_bytes);
 
-extern void seg_array_by_callback (VBlockP vb, ContextP container_ctx, STRp(arr), char sep, SegCallback item_seg, unsigned add_bytes);
+extern void seg_array_by_callback (VBlockP vb, ContextP container_ctx, STRp(arr), char sep, SegCallback item_seg, uint8_t con_rep_special, uint32_t expected_num_repeats, unsigned add_bytes);
 
-extern void seg_uint32_matrix (VBlockP vb, ContextP container_ctx, Did stats_conslidation_did_i, STRp(value), char row_sep/*255 if always single row*/, char col_sep, bool is_transposed, int add_bytes);
+extern void seg_integer_matrix (VBlockP vb, ContextP container_ctx, Did stats_conslidation_did_i, STRp(value), char row_sep/*255 if always single row*/, char col_sep, bool is_transposed, uint8_t con_rep_special, uint32_t expected_num_repeats, int add_bytes);
 
 extern bool seg_do_nothing_cb (VBlockP vb, ContextP ctx, STRp(field), uint32_t rep);
 
 typedef void (*SplitCorrectionCallback) (uint32_t *n_repeats, rom *repeats, uint32_t *repeat_lens);
 
 extern bool seg_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), const SegCallback *callbacks, unsigned add_bytes, bool account_in_subfields);
-extern int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), const SegCallback *callbacks, SplitCorrectionCallback split_correction_callback, unsigned add_bytes);
+
+extern int32_t seg_array_of_struct_with_prefixes (VBlockP vb, ContextP ctx, MediumContainer con, STRp(prefixes), STRp(snip), const SegCallback *callbacks, SplitCorrectionCallback split_correction_callback, unsigned add_bytes);
+
+static inline int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), const SegCallback *callbacks, SplitCorrectionCallback split_correction_callback, unsigned add_bytes)
+{
+    return seg_array_of_struct_with_prefixes (vb, ctx, con, 0, 0, STRa(snip), callbacks, split_correction_callback, add_bytes);
+}
 
 extern void seg_array_of_array_of_struct (VBlockP vb, ContextP ctx, char outer_sep, MediumContainer inner_con, STRp(snip), const SegCallback *callbacks);
 

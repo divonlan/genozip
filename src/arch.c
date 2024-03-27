@@ -27,8 +27,6 @@
 #else // LINUX
 #include <sys/sysinfo.h>
 #include <sys/vfs.h>
-#endif
-#if defined __GNUC__ && !defined __clang__ 
 #include <gnu/libc-version.h>
 #endif
 #endif
@@ -232,6 +230,7 @@ double arch_get_physical_mem_size (void)
 
     int num_start = strcspn (B1STc(evb->scratch), "0123456789");
     mem_size = (double)atoll(Bc(evb->scratch, num_start)) / (1024.0*1024.0);
+
     buf_free (evb->scratch);
 
 #elif defined _WIN32
@@ -369,7 +368,7 @@ rom arch_get_scheduler (void)
 
 rom arch_get_glibc (void)
 {
-#if defined __GNUC__ && ! defined _WIN32 && ! defined __clang__ 
+#ifdef __linux__
     return gnu_get_libc_version();
 #else
     return "not_glibc";

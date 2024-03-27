@@ -20,11 +20,12 @@ static MiniContainer line_number_container = {};
 void vcf_zip_initialize (void)
 {
     vcf_refalt_zip_initialize();
-    vcf_samples_zip_initialize ();
-    vcf_info_zip_initialize ();
-
+    vcf_samples_zip_initialize();
+    vcf_info_zip_initialize();
+    vcf_AC_AF_AN_zip_initialize();
     vcf_dbsnp_zip_initialize(); // called even if not in VCF header, because can be discovered in segconf too
     vcf_gatk_zip_initialize();
+    vcf_gnomad_zip_initialize();
     if (segconf.vcf_is_vagrent)    vcf_vagrent_zip_initialize();
     if (segconf.vcf_is_mastermind) vcf_mastermind_zip_initialize();
     if (segconf.vcf_is_vep)        vcf_vep_zip_initialize();
@@ -82,6 +83,7 @@ void vcf_zip_genozip_header (SectionHeaderGenozipHeaderP header)
     header->vcf.width.QD              = segconf.wid_QD.width;          // since 15.0.37
     header->vcf.width.AS_SB_TABLE     = segconf.wid_AS_SB_TABLE.width; // since 15.0.41
     header->vcf.width.ID              = segconf.wid_ID.width;          // since 15.0.48
+    header->vcf.width.QUAL            = segconf.wid_QUAL.width;        // since 15.0.51
 }
 
 void vcf_zip_init_vb (VBlockP vb_)
@@ -145,7 +147,7 @@ void vcf_seg_initialize (VBlockP vb_)
                    T(segconf.vcf_QUAL_method == VCF_QUAL_local, VCF_QUAL), 
                    T(segconf.vcf_is_mastermind, INFO_MMURI), 
                    T(segconf.vcf_is_dbSNP, INFO_FREQ),
-                   INFO_FATHMM_score, INFO_VEST3_score, DID_EOL);
+                   INFO_FATHMM_score, INFO_VEST3_score, INFO_MEINFO, DID_EOL);
 
     ctx_set_dyn_int (VB, T(segconf.vcf_is_dbSNP, INFO_dbSNPBuildID), 
                      DID_EOL);
@@ -195,6 +197,7 @@ void vcf_seg_initialize (VBlockP vb_)
     vcf_samples_seg_initialize(vb);
 
     vcf_gatk_seg_initialize (vb);
+    vcf_gnomad_seg_initialize (vb);
     if (segconf.vcf_illum_gtyping)  vcf_illum_gtyping_seg_initialize (vb);
     if (segconf.vcf_is_gwas)        vcf_gwas_seg_initialize (vb);
     if (segconf.vcf_is_cosmic)      vcf_cosmic_seg_initialize (vb);
@@ -211,8 +214,6 @@ void vcf_seg_initialize (VBlockP vb_)
     if (!segconf.vcf_is_sv)         vcf_sv_seg_initialize (vb, 0, 0); // not known SV caller - initialize generic stuff
     #undef T
 }             
-
-static void vcf_segconf_finalize_QUAL (VBlockVCFP vb); // forward
 
 static void vcf_seg_finalize_segconf (VBlockVCFP vb)
 {
@@ -296,7 +297,7 @@ static void vcf_seg_finalize_segconf (VBlockVCFP vb)
     if (segconf.has_DP_before_PL && !flag.best)
         TIP0 ("Compressing this particular VCF with --best could result in significantly better compression");
 
-    segconf_set_width (&segconf.wid_ID, 6); // non-zero only in PBSV
+    segconf_set_width (&segconf.wid_ID, 6);   // non-zero only in PBSV
     segconf_set_width (&segconf.wid_AF, 3);
     segconf_set_width (&segconf.wid_AC, 3);
     segconf_set_width (&segconf.wid_AN, 3);
@@ -305,6 +306,9 @@ static void vcf_seg_finalize_segconf (VBlockVCFP vb)
     segconf_set_width (&segconf.wid_SF, 3);
     segconf_set_width (&segconf.wid_MLEAC, 3);
     segconf_set_width (&segconf.wid_AS_SB_TABLE, 4);
+
+    if (segconf.vcf_QUAL_method == VCF_QUAL_by_GP) 
+        segconf_set_width (&segconf.wid_QUAL, 4); // should be non-zero only if VCF_QUAL_by_GP
 }
 
 void vcf_seg_finalize (VBlockP vb_)
@@ -428,59 +432,6 @@ static inline bool vcf_refalt_seg_ref_alt_line_has_RGQ (rom str)
     return false; // no RGQ in this FORMAT
 }
 
-static void vcf_segconf_finalize_QUAL (VBlockVCFP vb)
-{
-    // gnomAD, dbSNP - store in local
-    if (segconf.vcf_is_gnomad || segconf.vcf_is_dbSNP)
-        segconf.vcf_QUAL_method = VCF_QUAL_local;
-
-    // GVCF - multiplex by has_RGQ
-    else if (segconf.has[FORMAT_RGQ] || segconf.vcf_is_gatk_gvcf)
-        segconf.vcf_QUAL_method = VCF_QUAL_by_RGQ;
-    
-    // SvABA - copy from mate, or store in local
-    else if (segconf.vcf_is_svaba || segconf.vcf_is_manta) // note: in pbsv, QUAL="."
-        segconf.vcf_QUAL_method = VCF_QUAL_mated;
-
-    else
-        segconf.vcf_QUAL_method = VCF_QUAL_DEFAULT;
-}
-
-static void vcf_seg_QUAL (VBlockVCFP vb, STRp(qual))
-{
-    decl_ctx (VCF_QUAL);
-
-    switch (segconf.vcf_QUAL_method) {
-        case VCF_QUAL_local :
-            seg_add_to_local_string (VB, ctx, STRa(qual), LOOKUP_NONE, qual_len+1);
-            break;
-
-        case VCF_QUAL_by_RGQ: {
-            bool has_rgq = CTX(FORMAT_RGQ)->line_has_RGQ;
-            ContextP channel_ctx = seg_mux_get_channel_ctx (VB, VCF_QUAL, (MultiplexerP)&vb->mux_QUAL, has_rgq);
-            
-            if (!has_rgq && vcf_num_samples > 1) // too many unique QUAL values when there are many samples
-                seg_add_to_local_string (VB, channel_ctx, STRa(qual), LOOKUP_SIMPLE, qual_len+1);
-            else
-                seg_by_ctx (VB, STRa(qual), channel_ctx, qual_len+1);
-            
-            seg_by_ctx (VB, STRa(vb->mux_QUAL.snip), ctx, 0);
-            break;
-        }
-
-        case VCF_QUAL_mated: 
-            vcf_seg_sv_copy_mate (vb, ctx, STRa(qual), TW_QUAL, TW_QUAL, false, qual_len+1);
-            break;
-
-        case VCF_QUAL_DEFAULT:
-            seg_by_ctx (VB, STRa(qual), ctx, qual_len+1);
-            break;
-
-        default:
-            ABORT ("invalid QUAL method %u", segconf.vcf_QUAL_method);
-    }
-}
-
 static void vcf_seg_FILTER (VBlockVCFP vb, STRp(filter))
 {
     decl_ctx (VCF_FILTER);
@@ -582,8 +533,6 @@ rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
 
     vcf_seg_info_subfields (vb, field_start, field_len);
 
-    vcf_seg_QUAL (vb, STRd (VCF_QUAL)); // seg after INFO as it might depends on DP
-
     vcf_seg_FILTER (vb, STRd (VCF_FILTER)); // seg after INFO as it might depends on DP
 
     bool has_samples = false;
@@ -610,7 +559,9 @@ rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
         seg_by_did (VB, NULL, 0, VCF_SAMPLES, 0);
     }
 
-    // Adds DVCF items according to ostatus, finalizes INFO/SF and segs the INFO container
+    vcf_seg_QUAL (vb, STRd (VCF_QUAL)); // seg after samples as it might depends on FORMAT/GP or INFO/DP
+
+    // segs deferred INFO fields and the INFO container
     vcf_seg_finalize_INFO_fields (vb);
 
     if (!has_samples && vcf_num_samples)

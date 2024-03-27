@@ -15,12 +15,10 @@
 #include "bits.h"
 
 sSTRl(copy_CHROM_snip, 30);
-sSTRl(copy_POS_snip, 30);
 
 void vcf_illum_gtyping_zip_initialize (void)
 {
     seg_prepare_snip_other (SNIP_COPY, _VCF_CHROM, false, 0, copy_CHROM_snip);
-    seg_prepare_snip_other (SNIP_COPY, _VCF_POS, false,   0, copy_POS_snip);
 }
 
 void vcf_illum_gtyping_seg_initialize (VBlockVCFP vb)
@@ -65,7 +63,7 @@ void vcf_seg_ILLUMINA_CHR (VBlockVCFP vb, ContextP ctx, STRp(chr))
 void vcf_seg_ILLUMINA_POS (VBlockVCFP vb, ContextP ctx, STRp(pos))
 {
     if (str_issame_(STRa(pos), STRtxtw(CTX(VCF_POS)->last_txt)))
-        seg_by_ctx (VB, STRa(copy_POS_snip), ctx, pos_len);
+        seg_by_ctx (VB, STRa(copy_VCF_POS_snip), ctx, pos_len);
 
     else
         seg_by_ctx (VB, STRa(pos), ctx, pos_len);

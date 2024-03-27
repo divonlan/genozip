@@ -151,22 +151,35 @@
 #pragma GENDICT INFO_STRANDQ=DTYPE_1=STRANDQ        // <ID=STRANDQ,Number=1,Type=Integer,Description="Phred-scaled quality of strand bias artifact">
 #pragma GENDICT INFO_STRQ=DTYPE_1=STRQ              // <ID=STRQ,Number=1,Type=Integer,Description="Phred-scaled quality that alt alleles in STRs are not polymerase slippage errors">
 #pragma GENDICT INFO_TLOD=DTYPE_1=TLOD              // <ID=TLOD,Number=A,Type=Float,Description="Log 10 likelihood ratio score of variant existing versus not existing">
+#pragma GENDICT INFO_R2_5P_bias=DTYPE_1=R2_5P_bias  // <ID=R2_5P_bias,Number=1,Type=Float,Description="Score based on mate bias and distance from 5 prime end">
 
 // GATK Hard-filtering germline short variants : https://gatk.broadinstitute.org/hc/en-us/articles/360035890471-Hard-filtering-germline-short-variants
 #pragma GENDICT INFO_QD=DTYPE_1=QD                  // <ID=QD,Number=1,Type=Float,Description="Variant Confidence/Quality by Depth">. See: https://gatk.broadinstitute.org/hc/en-us/articles/360041414572-QualByDepth
 #pragma GENDICT INFO_FS=DTYPE_1=FS                  // Strand bias estimated using Fisher's exact test : https://gatk.broadinstitute.org/hc/en-us/articles/360037592371-FisherStrand
 #pragma GENDICT INFO_SOR=DTYPE_1=SOR                // <ID=SOR,Number=1,Type=Float,Description="Symmetric Odds Ratio of 2x2 contingency table to detect strand bias">. See: https://gatk.broadinstitute.org/hc/en-us/articles/360036361772-StrandOddsRatio
-#pragma GENDICT INFO_MQRankSum=DTYPE_1=MQRankSum    // Rank sum test for mapping qualities of REF versus ALT reads : https://gatk.broadinstitute.org/hc/en-us/articles/360037426091-MappingQualityRankSumTest
-#pragma GENDICT INFO_ReadPosRankSum=DTYPE_1=ReadPosRankSum         // Rank sum test for relative positioning of REF versus ALT alleles within read : https://gatk.broadinstitute.org/hc/en-us/articles/360036367052-ReadPosRankSumTest
+#pragma GENDICT INFO_MQRankSum=DTYPE_1=MQRankSum    // <ID=MQRankSum,Number=1,Type=Float,Description="Z-score From Wilcoxon rank sum test of Alt vs. Ref read mapping qualities"> : https://gatk.broadinstitute.org/hc/en-us/articles/360037426091-MappingQualityRankSumTest
+#pragma GENDICT INFO_ReadPosRankSum=DTYPE_1=ReadPosRankSum         // <ID=ReadPosRankSum,Number=1,Type=Float,Description="Z-score from Wilcoxon rank sum test of Alt vs. Ref read position bias"> : https://gatk.broadinstitute.org/hc/en-us/articles/360036367052-ReadPosRankSumTest
+#pragma GENDICT INFO_BaseQRankSum=DTYPE_1=BaseQRankSum             // <ID=BaseQRankSum,Number=1,Type=Float,Description="Z-score from Wilcoxon rank sum test of Alt Vs. Ref base qualities"> : https://gatk.broadinstitute.org/hc/en-us/articles/360036863231-BaseQualityRankSumTest
+#pragma GENDICT INFO_ClippingRankSum=DTYPE_1=ClippingRankSum       // <ID=ClippingRankSum,Number=1,Type=Float,Description="Z-score From Wilcoxon rank sum test of Alt vs. Ref number of hard clipped bases">
 
-#pragma GENDICT INFO_HaplotypeScore=DTYPE_1=HaplotypeScore // <ID=HaplotypeScore,Number=1,Type=Float,Description="Consistency of the site with at most two segregating haplotypes">
-#pragma GENDICT INFO_ExcessHet=DTYPE_1=ExcessHet    // Phred-scaled p-value for exact test of excess heterozygosity : https://gatk.broadinstitute.org/hc/en-us/articles/360037261311-ExcessHet
-#pragma GENDICT INFO_AS_QD=DTYPE_1=AS_QD            // Allele-specific call confidence normalized by depth of sample reads supporting the allele : https://gatk.broadinstitute.org/hc/en-us/articles/360036485832-AS-QualByDepth
-#pragma GENDICT INFO_BaseQRankSum=DTYPE_1=BaseQRankSum             // Rank sum test of REF versus ALT base quality scores : https://gatk.broadinstitute.org/hc/en-us/articles/360036863231-BaseQualityRankSumTest
+#pragma GENDICT INFO_HaplotypeScore=DTYPE_1=HaplotypeScore         // <ID=HaplotypeScore,Number=1,Type=Float,Description="Consistency of the site with at most two segregating haplotypes">
 #pragma GENDICT INFO_InbreedingCoeff=DTYPE_1=InbreedingCoeff       // Likelihood-based test for the consanguinity among samples : https://gatk.broadinstitute.org/hc/en-us/articles/360036351032-InbreedingCoeff
 #pragma GENDICT INFO_AS_InbreedingCoeff=DTYPE_1=AS_InbreedingCoeff // Allele-specific likelihood-based test for the consanguinity among samples : https://gatk.broadinstitute.org/hc/en-us/articles/360036827291-AS-InbreedingCoeff
+#pragma GENDICT INFO_ExcessHet=DTYPE_1=ExcessHet    // Phred-scaled p-value for exact test of excess heterozygosity : https://gatk.broadinstitute.org/hc/en-us/articles/360037261311-ExcessHet
 #pragma GENDICT INFO_RAW_MQ=DTYPE_1=RAW_MQ          // <ID=RAW_MQ,Number=1,Type=Float,Description="Raw data for RMS Mapping Quality">
 #pragma GENDICT INFO_RAW_MQandDP=DTYPE_1=RAW_MQandDP// <ID=RAW_MQandDP,Number=2,Type=Integer,Description="Raw data (sum of squared MQ and total depth) for improved RMS Mapping Quality calculation. Incompatible with deprecated RAW_MQ formulation.">
+
+#pragma GENDICT INFO_QUALapprox=DTYPE_1=QUALapprox  // <ID=QUALapprox,Number=1,Type=Integer,Description="Sum of PL[0] values; used to approximate the QUAL score">
+#pragma GENDICT INFO_VarDP=DTYPE_1=VarDP            // <ID=VarDP,Number=1,Type=Integer,Description="Depth over variant genotypes (does not include depth of reference samples)">
+
+#pragma GENDICT INFO_AS_QD=DTYPE_1=AS_QD            // Allele-specific call confidence normalized by depth of sample reads supporting the allele : https://gatk.broadinstitute.org/hc/en-us/articles/360036485832-AS-QualByDepth
+#pragma GENDICT INFO_AS_SOR=DTYPE_1=AS_SOR          // <ID=AS_SOR,Number=A,Type=Float,Description="Allele-specific strand bias estimated by the symmetric odds ratio test">
+#pragma GENDICT INFO_AS_MQ=DTYPE_1=AS_MQ            // <ID=AS_MQ,Number=A,Type=Float,Description="Allele-specific root mean square of the mapping quality of reads across all samples">
+#pragma GENDICT INFO_AS_MQRankSum=DTYPE_1=AS_MQRankSum    // <ID=AS_MQRankSum,Number=A,Type=Float,Description="Allele-specific z-score from Wilcoxon rank sum test of alternate vs. reference read mapping qualities">
+#pragma GENDICT INFO_AS_FS=DTYPE_1=AS_FS            // <ID=AS_FS,Number=A,Type=Float,Description="Allele-specific phred-scaled p-value of Fisher's exact test for strand bias">
+#pragma GENDICT INFO_AS_QUALapprox=DTYPE_1=AS_QUALapprox  // <ID=AS_QUALapprox,Number=A,Type=Integer,Description="Allele-specific sum of PL[0] values; used to approximate the QUAL score">
+#pragma GENDICT INFO_AS_ReadPosRankSum=DTYPE_1=AS_ReadPosRankSum  // <ID=AS_ReadPosRankSum,Number=A,Type=Float,Description="Allele-specific z-score from Wilcoxon rank sum test of alternate vs. reference read position bias">
+#pragma GENDICT INFO_AS_VarDP=DTYPE_1=AS_VarDP     // <ID=AS_VarDP,Number=A,Type=Integer,Description="Allele-specific depth over variant genotypes (does not include depth of reference samples)">
 
 #pragma GENDICT FORMAT_RGQ=DTYPE_2=RGQ              // <ID=RGQ,Number=1,Type=Integer,Description="Unconditional reference genotype confidence, encoded as a phred quality -10*log10 p(genotype call is wrong)">
 #pragma GENDICT FORMAT_MIN_DP=DTYPE_2=MIN_DP        // <ID=MIN_DP,Number=1,Type=Integer,Description="Minimum DP observed within the GVCF block">
@@ -222,6 +235,7 @@
 #pragma GENDICT INFO_AGE_HISTOGRAM_HET=DTYPE_1=AGE_HISTOGRAM_HET 
 #pragma GENDICT INFO_AGE_HISTOGRAM_HOM=DTYPE_1=AGE_HISTOGRAM_HOM
 #pragma GENDICT INFO_MAX_AF=DTYPE_1=MAX_AF          // highest allele frequency observed in any population from 1000 genomes, ESP or gnomAD
+#pragma GENDICT INFO_NCC=DTYPE_1=NCC                // <ID=NCC,Number=1,Type=Integer,Description="Number of no-called samples">
 
 #pragma GENDICT INFO_CSQ=DTYPE_1=CSQ                // <ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|Existing_variation|ALLELE_NUM|DISTANCE|STRAND|FLAGS|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|GMAF|AFR_MAF|AMR_MAF|EAS_MAF|EUR_MAF|SAS_MAF|AA_MAF|EA_MAF|ExAC_MAF|ExAC_Adj_MAF|ExAC_AFR_MAF|ExAC_AMR_MAF|ExAC_EAS_MAF|ExAC_FIN_MAF|ExAC_NFE_MAF|ExAC_OTH_MAF|ExAC_SAS_MAF|CLIN_SIG|SOMATIC|PHENO|PUBMED|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info|context|ancestral">
 #pragma GENDICT INFO_vep=DTYPE_1=vep/*in gnomAD*/   // <ID=vep,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|Existing_variation|ALLELE_NUM|DISTANCE|STRAND|FLAGS|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|GMAF|AFR_MAF|AMR_MAF|EAS_MAF|EUR_MAF|SAS_MAF|AA_MAF|EA_MAF|ExAC_MAF|ExAC_Adj_MAF|ExAC_AFR_MAF|ExAC_AMR_MAF|ExAC_EAS_MAF|ExAC_FIN_MAF|ExAC_NFE_MAF|ExAC_OTH_MAF|ExAC_SAS_MAF|CLIN_SIG|SOMATIC|PHENO|PUBMED|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info">
@@ -287,6 +301,11 @@
 #pragma GENDICT INFO_dp_hist_alt_bin_freq=DTYPE_1=dp_hist_alt_bin_freq       // <ID=dp_hist_alt_bin_freq,Number=A,Type=String,Description="Histogram for DP in heterozygous individuals calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100">
 //#pragma GENDICT INFO_dp_hist_all_bin_freq=DTYPE_1=dp_hist_all_bin_freq     // <ID=dp_hist_all_bin_freq,Number=A,Type=String,Description="Histogram for DP calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100">
 #pragma GENDICT INFO_ab_hist_alt_bin_freq=DTYPE_1=ab_hist_alt_bin_freq       // <ID=ab_hist_alt_bin_freq,Number=A,Type=String,Description="Histogram for AB in heterozygous individuals calculated on high quality genotypes; bin edges are: 0.00|0.05|0.10|0.15|0.20|0.25|0.30|0.35|0.40|0.45|0.50|0.55|0.60|0.65|0.70|0.75|0.80|0.85|0.90|0.95|1.00">
+#pragma GENDICT INFO_VRS_Allele_IDs=DTYPE_1=VRS_Allele_IDs                   // <ID=VRS_Allele_IDs,Number=R,Type=String,Description="The computed identifiers for the GA4GH VRS Alleles corresponding to the values in the REF and ALT fields">
+#pragma GENDICT INFO_VRS_Starts=DTYPE_1=VRS_Starts                           // <ID=VRS_Starts,Number=R,Type=Integer,Description="Interresidue coordinates used as the location starts for the GA4GH VRS Alleles corresponding to the values in the REF and ALT fields">
+#pragma GENDICT INFO_VRS_Ends=DTYPE_1=VRS_Ends                               // <ID=VRS_Ends,Number=R,Type=Integer,Description="Interresidue coordinates used as the location ends for the GA4GH VRS Alleles corresponding to the values in the REF and ALT fields">
+#pragma GENDICT INFO_VRS_States=DTYPE_1=VRS_States                           // <ID=VRS_States,Number=.,Type=String,Description="The literal sequence states used for the GA4GH VRS Alleles corresponding to the values in the REF and ALT fields">
+#pragma GENDICT INFO_Genes=DTYPE_1=Genes            // <ID=Genes,Number=1,Type=String,Description="Genes predicted to be impacted by varian">
 
 // Structural variants - 1000 Genome Project conventions : https://www.internationalgenome.org/wiki/Analysis/Variant%20Call%20Format/VCF%20(Variant%20Call%20Format)%20version%204.0/encoding-structural-variants/
 #pragma GENDICT INFO_SVLEN=DTYPE_1=SVLEN            // <ID=SVLEN,Number=1,Type=Integer,Description="Difference in length between REF and ALT alleles"> 
@@ -393,6 +412,10 @@
 // (dup) #pragma GENDICT FORMAT_DV=DTYPE_2=DV       // <ID=DV,Number=1,Type=Integer,Description=\"# high-quality variant pairs\">
 #pragma GENDICT FORMAT_RR=DTYPE_2=RR                // <ID=,Number=1,Type=Integer,Description=\"# high-quality reference junction reads\">
 #pragma GENDICT FORMAT_RV=DTYPE_2=RV                // <ID=,Number=1,Type=Integer,Description=\"# high-quality variant junction reads\">
+
+// Melt - Mobile Element Locator Tool: https://melt.igs.umaryland.edu/manual.php
+// Also: MEINFO, SVTYPE, SVLEN
+#pragma GENDICT INFO_TSD=DTYPE_1=TSD                // <ID=TSD,Number=1,Type=String,Description="Precise Target Site Duplication for bases, if unknown, value will be "null"">
 
 // Ultima Genomics
 #pragma GENDICT INFO_VARIANT_TYPE=DTYPE_1=VARIANT_TYPE // <ID=VARIANT_TYPE,Number=1,Type=String,Description="Flow: type of variant: SNP/NON-H-INDEL/H-INDEL">
@@ -584,8 +607,10 @@
 #pragma GENDICT INFO_VW=DTYPE_1=VW                  // <ID=VW,Number=1,Type=String,Description="Vagrent Most Deleterious Annotation">
 #pragma GENDICT INFO_VDVW_ARR=DTYPE_1=VDVW_ARR
 //#pragma GENDICT INFO_VC=DTYPE_1=VC                // (dup) <ID=VW,Number=1,Type=String,Description="Variant consequence based on Vagrent default annotation">
-#pragma GENDICT INFO_VT=DTYPE_1=VT                  // <ID=VW,Number=1,Type=String,Description="Variant type based on Vagrent default annotation">
-
+#pragma GENDICT INFO_VT=DTYPE_1=VT                  // <ID=VT,Number=1,Type=String,Description="Variant type based on Vagrent default annotation">
+                        /* callMom version */       // <ID=VT,Number=.,Type=String,Description="Alternate allele type. S=SNP, M=MNP, I=Indel"> 
+                        /* 1KGP version    */       // <ID=VT,Number=1,Type=String,Description="indicates what type of variant the line represents">
+                        
 // Gwas2VCF: https://github.com/MRCIEU/gwas-vcf-specification
 #pragma GENDICT INFO_RSID=DTYPE_1=RSID              // <ID=RSID,Number=1,Type=String,Description="dbSNP identifier">
 #pragma GENDICT FORMAT_NS=DTYPE_2=NS                // <ID=NS,Number=A,Type=Float,Description="Variant-specific number of samples/individuals with called genotypes used to test association with specified trait">
@@ -717,33 +742,7 @@ extern void vcf_tags_cmdline_rename_option(void);
 // Samples stuff
 extern void vcf_samples_add  (rom samples_str);
 
-#define VCF_SPECIAL { vcf_piz_special_main_REFALT, vcf_piz_special_FORMAT, vcf_piz_special_INFO_AC, vcf_piz_special_SVLEN, \
-                      vcf_piz_special_FORMAT_DS_old, vcf_piz_special_INFO_BaseCounts, vcf_piz_special_INFO_SF, piz_special_MINUS,  \
-                      vcf_piz_special_obsolete_dvcf, vcf_piz_special_obsolete_dvcf, vcf_piz_special_obsolete_dvcf, vcf_piz_special_COPYPOS, vcf_piz_special_ALLELE, \
-                      vcf_piz_special_INFO_HGVS_SNP_POS, vcf_piz_special_INFO_HGVS_SNP_REFALT, \
-                      vcf_piz_special_INFO_HGVS_DEL_END_POS, vcf_piz_special_INFO_HGVS_DEL_PAYLOAD, \
-                      vcf_piz_special_INFO_HGVS_INS_END_POS, vcf_piz_special_INFO_HGVS_INS_PAYLOAD, \
-                      vcf_piz_special_INFO_HGVS_DELINS_END_POS, vcf_piz_special_INFO_HGVS_DELINS_PAYLOAD,\
-                      vcf_piz_special_MUX_BY_DOSAGE, vcf_piz_special_FORMAT_AB, vcf_piz_special_FORMAT_GQ, \
-                      vcf_piz_special_MUX_BY_DOSAGExDP, vcf_piz_special_COPY_REForALT, vcf_piz_special_DP_by_DP_v13, \
-                      vcf_piz_special_PS_by_PID, vcf_piz_special_PGT, vcf_piz_special_DP_by_DP, vcf_piz_special_DP_by_DP_single,\
-                      vcf_piz_special_RGQ, vcf_piz_special_MUX_BY_HAS_RGQ, vcf_piz_special_SVTYPE, \
-                      vcf_piz_special_ALLELE_A, vcf_piz_special_ALLELE_B, vcf_piz_special_MUX_BY_ADJ_DOSAGE,\
-                      vcf_piz_special_PROBE_A, vcf_piz_special_PROBE_B, vcf_piz_special_QD, \
-                      vcf_piz_special_MUX_BY_VARTYPE, vcf_piz_special_ICNT, vcf_piz_special_SPL,\
-                      vcf_piz_special_MUX_BY_SAMPLE_I, vcf_piz_special_IGT, \
-                      vcf_piz_special_MUX_BY_IGT_PHASE, vcf_piz_special_main_REFALT_DEL, vcf_piz_special_mutation, \
-                      vcf_piz_special_SO_TERM, vcf_piz_special_MMURI, \
-                      vcf_piz_special_MUX_GQX, vcf_piz_special_RU, vcf_piz_special_IDREP, vcf_piz_special_next_ALT, \
-                      vcf_piz_special_MUX_BY_END, vcf_piz_special_MUX_BY_ISAAC_FILTER, \
-                      vcf_piz_special_X_LM_RM, vcf_piz_special_X_IL, vcf_piz_special_X_IC, vcf_piz_special_X_HIN, vcf_piz_special_X_HIL, \
-                      vcf_piz_special_VARIANT_TYPE, vcf_piz_special_PLATYPUS_SC, vcf_piz_special_PLATYPUS_HP, vcf_piz_special_INFO_MLEAF, \
-                      vcf_piz_special_FORMAT_AD0, vcf_piz_special_MUX_FORMAT_DP, vcf_piz_special_INFO_AN, vcf_piz_special_DEFER, \
-                      vcf_piz_special_RPA, vcf_piz_special_SVABA_MATEID, vcf_piz_special_MAPQ, vcf_piz_special_SPAN, vcf_piz_special_COPY_MATE, \
-                      vcf_piz_special_DEMUX_BY_MATE, vcf_piz_special_PBSV_MATEID, vcf_piz_special_DEMUX_BY_VARTYPE, vcf_piz_special_PBSV_ID_BND, \
-                      vcf_piz_special_manta_CIGAR, vcf_piz_special_LEN_OF, vcf_piz_special_HOMSEQ, vcf_piz_special_RAW_MQandDP_MQ, \
-                   }
-
+// SPECIALs
 SPECIAL (VCF, 0,  main_REFALT,         vcf_piz_special_main_REFALT);
 SPECIAL (VCF, 1,  FORMAT,              vcf_piz_special_FORMAT)
 SPECIAL (VCF, 2,  INFO_AC,             vcf_piz_special_INFO_AC);
@@ -826,13 +825,20 @@ SPECIAL (VCF, 78, MANTA_CIGAR,         vcf_piz_special_manta_CIGAR);            
 SPECIAL (VCF, 79, LEN_OF,              vcf_piz_special_LEN_OF);                   // added v15.0.48
 SPECIAL (VCF, 80, HOMSEQ,              vcf_piz_special_HOMSEQ);                   // added v15.0.48
 SPECIAL (VCF, 81, RAW_MQandDP_MQ,      vcf_piz_special_RAW_MQandDP_MQ);           // added v15.0.49
-#define NUM_VCF_SPECIAL 82
+SPECIAL (VCF, 82, VT,                  vcf_piz_special_VT);                       // added v15.0.51
+SPECIAL (VCF, 83, VRS_Starts,          vcf_piz_special_VRS_Starts);               // added v15.0.51
+SPECIAL (VCF, 84, QUAL_BY_GP,          vcf_piz_special_QUAL_BY_GP);               // added v15.0.51
+SPECIAL (VCF, 85, N_ALTS,              vcf_piz_special_N_ALTS);                   // added v15.0.51
+SPECIAL (VCF, 86, N_ALLELES,           vcf_piz_special_N_ALLELES);                // added v15.0.51
 
-#define VCF_DICT_ID_ALIASES                                 \
-    /*        type        alias             maps to     */  \
-    { DT_VCF, ALIAS_CTX,  _INFO_END,        _VCF_POS    },  \
-    { DT_VCF, ALIAS_DICT, _INFO_CIEND,      _INFO_CIPOS },  \
-    { DT_VCF, ALIAS_DICT, _VCF_MATE_CHROM0, _VCF_CHROM  },  \
+#define VCF_DICT_ID_ALIASES                                                 \
+    /*        type        alias                   maps to               */  \
+    { DT_VCF, ALIAS_CTX,  _INFO_END,              _VCF_POS              },  \
+    { DT_VCF, ALIAS_DICT, _INFO_CIEND,            _INFO_CIPOS           },  \
+    { DT_VCF, ALIAS_DICT, _VCF_MATE_CHROM0,       _VCF_CHROM            },  \
+    { DT_VCF, ALIAS_DICT, _INFO_MQRankSum,        _INFO_ReadPosRankSum  },  \
+    { DT_VCF, ALIAS_DICT, _INFO_ClippingRankSum,  _INFO_ReadPosRankSum  },  \
+    { DT_VCF, ALIAS_DICT, _INFO_BaseQRankSum,     _INFO_ReadPosRankSum  },  \
  
 #define dict_id_is_vcf_info_sf   dict_id_is_type_1
 #define dict_id_is_vcf_format_sf dict_id_is_type_2

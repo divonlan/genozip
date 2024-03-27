@@ -361,7 +361,7 @@ void sam_seg_initialize (VBlockP vb_)
 
     // initialize these to LT_BLOB, the qual-type ones might be changed later to LT_CODEC (eg domq, longr)
     ctx_set_ltype (VB, LT_BLOB, SAM_QUAL, SAM_QUAL_FLANK, OPTION_BD_BI, OPTION_BQ_Z, OPTION_iq_sq_dq,
-                   OPTION_QX_Z, OPTION_CY_ARR, OPTION_QT_ARR, OPTION_CR_Z_X,
+                   OPTION_QX_Z, OPTION_CY_ARR, OPTION_QT_ARR, OPTION_CR_Z_X, OPTION_BX_Z,
                    OPTION_BI_Z, OPTION_BD_Z,
                    OPTION_CR_Z_X, OPTION_RX_Z_X, OPTION_2R_Z, OPTION_TR_Z, DID_EOL);
 
@@ -389,7 +389,7 @@ void sam_seg_initialize (VBlockP vb_)
                                 OPTION_SA_Z, OPTION_NM_i, DID_EOL);
 
     ctx_set_store_per_line (VB, SAM_CIGAR, OPTION_NH_i, T(segconf.is_paired && segconf.sam_multi_RG, OPTION_RG_Z), DID_EOL);
-
+    
     if (segconf.is_paired) {
         for (MatedZFields f = 1; f < NUM_MATED_Z_TAGS; f++) // note: f starts from 1, bc RG is set above with T()
             ctx_set_store_per_line (VB, buddied_Z_dids[f], DID_EOL);
@@ -674,7 +674,6 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
 {
     segconf.longest_seq_len = vb->longest_seq_len;
     segconf.is_long_reads   = segconf_is_long_reads();
-    segconf.sam_multi_RG    = CTX(OPTION_RG_Z)->nodes.len32 >= 2;
     segconf.sam_cigar_len   = 1 + ((segconf.sam_cigar_len - 1) / vb->lines.len32);                   // set to the average CIGAR len (rounded up)
     segconf.est_sam_factor  = (double)segconf.est_segconf_sam_size / (double)Ltxt;
 
@@ -867,6 +866,10 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
     
     if (codec_longr_maybe_used (VB, SAM_QUAL))
         codec_longr_segconf_calculate_bins (VB, CTX(SAM_QUAL + 1), sam_zip_qual);
+
+    // RG method - QNAME - if successful, we expect all RGs to have been added to dict in sam_header_zip_inspect_RG_lines, and on the SPECIAL segged in this VB 
+    if (segconf.sam_multi_RG && CTX(OPTION_RG_Z)->nodes.len32 == 1 && *Bc(CTX(OPTION_RG_Z)->dict, 1) == SAM_SPECIAL_RG_by_QNAME)
+        segconf.RG_method = RG_CELLRANGER; // set if all segconf lines agree
 
     // note: we calculate the smux stdv to be reported in stats, even if SMUX is not used
     codec_smux_calc_stats (VB);

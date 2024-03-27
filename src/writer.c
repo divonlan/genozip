@@ -248,7 +248,7 @@ static VBIType writer_init_txt_header_info (void)
            (  !Z_DT(SAM) // This clause only limits SAM/BAM
            || (comp_i != SAM_COMP_PRIM && comp_i != SAM_COMP_DEPN)); // Show only the txt header of the MAIN and any (deep) FASTQ components
 
-        if (comp->needs_write) {
+        if (comp->needs_write && !flag.no_writer_thread) {
             // mutex: locked:    here (at initialization)
             //        waited on: writer thread, wanting the data
             //        unlocked:  by main thread after txtheader data is handed over.
@@ -379,7 +379,7 @@ static void writer_init_vb_info (void)
         &&  !(flag.deep && flag.deep_fq_only && v->comp_i <= SAM_COMP_DEPN) // in Deep: --R1/--R2/--interleaved/--fq: reconstruct MAIN/PRIM/DEPN components but don't write them
         &&  !(flag.deep && flag.no_writer && !flag.show_recon_plan && v->comp_i >= SAM_COMP_FQ00); // in Deep with no_writer (eg --test): no need to write FASTQ components as unlike gencomp SAM components, these are digested in the compute thread, not in writer
 
-        if (v->needs_write) {
+        if (v->needs_write && !flag.no_writer_thread) {
             // mutex: locked:    here (at initialization)
             //        waited on: writer thread, wanting the data
             //        unlocked:  by main thread after vb data is handed over.
@@ -387,7 +387,7 @@ static void writer_init_vb_info (void)
             mutex_lock (v->wait_for_data);
         }
 
-        else 
+        else if (!v->needs_write)
             writer_release_vb (v);            
     }
 }

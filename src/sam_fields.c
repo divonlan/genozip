@@ -365,7 +365,7 @@ static bool sam_seg_MM_Z_item (VBlockP vb, ContextP ctx,
 
 static void sam_seg_MM_Z (VBlockSAMP vb, STRp(mm), unsigned add_bytes)
 {
-    seg_array_by_callback (VB, CTX(OPTION_MM_Z), STRa(mm), ';', sam_seg_MM_Z_item, add_bytes);
+    seg_array_by_callback (VB, CTX(OPTION_MM_Z), STRa(mm), ';', sam_seg_MM_Z_item, 0, 0, add_bytes);
 }
 
 // ----------------------------------------------------------------------------------------------------------
@@ -1001,6 +1001,63 @@ static void sam_seg_U2_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(field), unsign
     CTX(OPTION_U2_Z)->local.len += field_len;
 }
 
+static void sam_seg_RG_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(rg), unsigned add_bytes)
+{
+    decl_ctx (OPTION_RG_Z);
+    
+    // this pattern was observed in CellRanger files, but we don't limit it to only CellRanger 
+    if (segconf.RG_method == RG_CELLRANGER ||
+        (segconf.running && segconf.tech == TECH_ILLUM && segconf.sam_multi_RG)) {
+        STRlast (qname, SAM_QNAME);
+        int64_t wi_plus_1;
+        if (!str_item_i_int (qname, qname_len, ':', 3, &wi_plus_1)) // note: we use str_item_i and not Q3NAME.last_value because QNAME might be segged by copy buddy, and different Illumina flavors have the RG in different items
+            goto fallback;
+
+        if (wi_plus_1 < 1 || wi_plus_1 > ctx->ol_nodes.len)
+            goto fallback;
+            
+        STR0(snip);
+        ctx_get_vb_snip_ex (ctx, wi_plus_1-1, pSTRa(snip));
+
+        if (!str_issame (snip, rg)) goto fallback;
+
+        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_RG_by_QNAME, '0' + segconf.RG_method }, 3, ctx, add_bytes);
+    }
+    
+    else fallback: {
+        if (segconf.sam_multi_RG)
+            sam_seg_buddied_Z_fields (vb, dl, MATED_RG, STRa(rg), 0, add_bytes);
+
+        else
+            seg_by_ctx (VB, STRa(rg), ctx, add_bytes);
+    }
+
+}
+
+SPECIAL_RECONSTRUCTOR (sam_piz_special_RG_by_QNAME)
+{
+    if (reconstruct) {
+        switch (snip[0] - '0') { // RG_method
+            case RG_CELLRANGER: {
+                STRlast (qname, SAM_QNAME);
+
+                int64_t wi_plus_1;
+                str_item_i_int (qname, qname_len, ':', 3, &wi_plus_1); // note: we use str_item_i and not Q3NAME.last_value because QNAME might be segged by copy buddy, and different Illumina flavors have the RG in different items
+
+                STR0(snip);
+
+                ctx_get_snip_by_word_index (ctx, wi_plus_1-1, snip);
+                RECONSTRUCT_snip;
+                break;
+            }
+
+            default: ABORT_PIZ ("Invalid RG_method=%u", snip[0] - '0');
+        }
+    }
+
+    return NO_NEW_VALUE; 
+}
+
 static inline unsigned sam_seg_aux_add_bytes (char type, unsigned value_len, bool is_bam)
 {
     if (!is_bam || type=='Z' || type=='H')
@@ -1380,7 +1437,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam,
         case _OPTION_BD_Z:
         case _OPTION_BI_Z: sam_seg_BD_BI_Z (vb, dl, STRa(value), dict_id, add_bytes); break;
         
-        case _OPTION_RG_Z: COND (segconf.sam_multi_RG, sam_seg_buddied_Z_fields (vb, dl, MATED_RG, STRa(value), 0, add_bytes));
+        case _OPTION_RG_Z: sam_seg_RG_Z (vb, dl, STRa(value), add_bytes); break;
 
         case _OPTION_PG_Z: sam_seg_buddied_Z_fields (vb, dl, MATED_PG, STRa(value), 0, add_bytes); break;
         case _OPTION_PU_Z: sam_seg_buddied_Z_fields (vb, dl, MATED_PU, STRa(value), 0, add_bytes); break;

@@ -134,7 +134,7 @@ char *file_compressible_extensions (bool plain_only)
         if (plain_only) 
             for (unsigned i=0; txt_in_ft_by_dt[dt][i].in; i++) {
                 Codec codec = txt_in_ft_by_dt[dt][i].codec;
-                if (codec != CODEC_BGZF && codec != CODEC_GZ && codec != CODEC_BZ2 && codec != CODEC_XZ && codec != CODEC_ZIP)
+                if (codec != CODEC_BGZF && codec != CODEC_GZ && codec != CODEC_BZ2 && codec != CODEC_XZ && codec != CODEC_ZIP && codec != CODEC_ORA)
                     len += sprintf (&s[len], "%s ", &file_exts[txt_in_ft_by_dt[dt][i].in][1]);
             }
             // sprintf (&s[strlen(s)], "%s ", &file_exts[txt_in_ft_by_dt[dt][0].in][1]);
@@ -538,6 +538,7 @@ fallthrough_from_cram: {}
                 #define BZ2_MAGIC "BZh"
                 #define XZ_MAGIC  (char[]){ 0xFD, '7', 'z', 'X', 'Z', 0 }
                 #define ZIP_MAGIC (char[]){ 0x50, 0x4b, 0x03, 0x04 }
+                #define ORA_MAGIC (char[]){ 0x49, 0x7c } // https://support-docs.illumina.com/SW/ORA_Format_Specification/Content/SW/ORA/ORAFormatSpecification.htm
 
                 // we already open the file, so not easy to re-open with BZ2_bzopen as it would require injecting the read data into the BZ2 buffers
                 if (str_isprefix_((rom)block, block_size, BZ2_MAGIC, 3)) 
@@ -553,6 +554,12 @@ fallthrough_from_cram: {}
                     if (file->redirected) ABORTINP0 ("Compressing piped-in data in zip format is not currently supported");
                     if (file->is_remote) ABORTINP0 ("The data seems to be in zip format. Please use --input to specify the type (eg: \"genozip --input generic.zip\")");
                     ABORTINP0 ("The data seems to be in zip format. Please use --input to specify the type (eg: \"genozip --input generic.zip\")");
+                }
+
+                else if (str_isprefix_((rom)block, block_size, ORA_MAGIC, 2)) {
+                    if (file->redirected) ABORTINP0 ("Compressing piped-in data in ora format is not currently supported");
+                    if (file->is_remote) ABORTINP0 ("The data seems to be in ora format. Please use --input to specify the type (eg: \"genozip --input fastq.ora\")");
+                    ABORTINP0 ("The data seems to be in ora format. Please use --input to specify the type (eg: \"genozip --input fastq.ora\")");
                 }
 
                 file->codec = CODEC_NONE;
@@ -618,6 +625,22 @@ fallthrough_from_cram: {}
                                                 "bcftools", "view", "--threads", "8", "-Ov",
                                                 file->is_remote ? SKIP_ARG : file->name,    // local file name 
                                                 "--no-version", // BCF: do not append version and command line to the header
+                                                NULL);
+            file->file = stream_from_stream_stdout (input_decompressor);
+            file->redirected = true;
+            file->codec = CODEC_NONE;
+            break;
+        }
+
+        case CODEC_ORA: {
+            input_decompressor = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 
+                                                file->is_remote ? file->name : NULL,        // url                                        
+                                                file->redirected,
+                                                "To compress an Ora file", 
+                                                "orad", 
+                                                "--raw", "--quiet", "--stdout",
+                                                "--threads", str_int_s (global_max_threads).s, 
+                                                (file->is_remote || file->redirected) ? "-" : file->name,    // local file name 
                                                 NULL);
             file->file = stream_from_stream_stdout (input_decompressor);
             file->redirected = true;
@@ -1314,7 +1337,12 @@ void file_get_file (VBlockP vb, rom filename, BufferP buf, rom buf_name,
     bool is_stdin = !strcmp (filename, "-");
     if (is_stdin && !max_size) max_size = 10000000; // max size for stdin
     
-    uint64_t size = max_size ? max_size : file_get_size (filename);
+    uint64_t file_size = is_stdin ? 0 : file_get_size (filename);
+
+    uint64_t size = is_stdin   ? max_size
+                  : !file_size ? max_size
+                  : max_size   ? MIN_(max_size, file_size) 
+                  :              file_size;
 
     buf_alloc (vb, buf, 0, size + add_string_terminator, char, 1, buf_name);
 
@@ -1452,6 +1480,8 @@ void file_assert_ext_decompressor (void)
 {
     if (!stream_wait_for_exit (input_decompressor)) return; // just a normal EOF - all good!
 
+    if (flag.truncate) return; // truncated as requested - all good
+
     // read error from stderr
     #define INPUT_DECOMPRESSOR_RESPSONSE_LEN 4096
     char error_str[INPUT_DECOMPRESSOR_RESPSONSE_LEN];
@@ -1460,7 +1490,8 @@ void file_assert_ext_decompressor (void)
     int bytes_read = fread (error_str, 1, INPUT_DECOMPRESSOR_RESPSONSE_LEN-1, stderr_pipe);
     error_str[bytes_read] = 0; // string terminator
 
-    ABORT ("%s: failed to read file: %s", global_cmd, error_str);
+    ABORT ("%s: failed to read file: %s\n%s: %s", 
+           global_cmd, txt_name, stream_get_exec_name (input_decompressor), error_str);
 }
 
 // used when aborting due to an error. avoid the compressors outputting their own errors after our process is gone

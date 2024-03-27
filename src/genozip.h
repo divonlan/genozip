@@ -256,10 +256,11 @@ typedef packed_enum { // 1 byte
     // external compressors (used by executing an external application)
     CODEC_BGZF=20, CODEC_XZ=21, CODEC_BCF=22, 
     CODEC_BAM=23,       // in v8 BAM was a codec which was compressed using samtools as external compressor. Since v14 we use the codec name for displaying "BAM" in stats total line.
-    CODEC_CRAM=24, CODEC_ZIP=25,
+    CODEC_CRAM=24, CODEC_ZIP=25, 
 
     CODEC_LONGR=26, CODEC_NORMQ=27, CODEC_HOMP=28, CODEC_T0=29, CODEC_PACB=30, CODEC_SMUX=31,
-
+    
+    CODEC_ORA=32, // external compressor
     NUM_CODECS,
 } Codec; 
 
@@ -641,20 +642,13 @@ static inline void iputc(char c) { fputc ((c), info_stream); } // no flushing
 #define iprintf(format, ...)     ( { fprintf (info_stream, (format), __VA_ARGS__); fflush (info_stream); } )
 static inline void iprint0 (rom str) { fprintf (info_stream, "%s", str); fflush (info_stream); } 
 
-// bring the cursor down to a newline, if needed
-extern bool progress_newline_since_update;
-static inline void progress_newline(void) {
-    if (!progress_newline_since_update) { 
-        fputc ('\n', stderr);
-        progress_newline_since_update = true;
-    }
-}
-
 extern noreturn void stall (void);
 
 #if !defined(__GNUC__) // && !__has_builtin(__builtin_expect)
 #define __builtin_expect(exp,c) (exp)
 #endif
+
+extern void progress_newline(void);
 
 // check for a user error
 #define ASSINP(condition, format, ...)       ( { if (__builtin_expect(!(condition), 0)) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); if (flags_command_line()) fprintf (stderr, "\n\ncommand: %s\n", flags_command_line()); else fprintf (stderr, "\n"); fflush (stderr); exit_on_error(false); }} )
@@ -677,7 +671,7 @@ extern StrText license_get_number (void);
 #define ASSERTNOTZERO(n)                     ASSERT ((n), "%s=0", #n)
 #define ASSERTISZERO(n)                      ASSERT (!(n), "%s!=0", #n)
 #define ASSERTW(condition, format, ...)      ( { if (__builtin_expect (!(condition), 0) && !flag.quiet) { progress_newline(); fprintf (stderr, "\n%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n\n"); fflush (stderr); }} )
-#define WARN_IF(condition, format, ...)      ( { if ( __builtin_expect ((condition), 0) && !flag.explicit_quiet) { progress_newline(); fprintf (stderr, "%s: WARNING: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n\n"); fflush (stderr); }} )
+#define WARN_IF(condition, format, ...)      ( { if (__builtin_expect ((condition), 0) && !flag.explicit_quiet) { progress_newline(); fprintf (stderr, "%s: WARNING: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n\n"); fflush (stderr); }} )
 #define ASSERTW0(condition, string)          ASSERTW ((condition), string "%s", "")
 #define WARN_IF0(condition, string)          WARN_IF ((condition), string "%s", "")
 #define ASSERTWD(condition, format, ...)     ( { if (__builtin_expect (!(condition), 0) && flag.debug && !flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); }} )
@@ -692,6 +686,8 @@ extern StrText license_get_number (void);
 #define ABORT0(string)                       ABORT (string "%s", "")
 #define WARN(format, ...)                    ( { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); } } )
 #define WARN0(string)                        WARN (string "%s", "")
+#define NOISYWARN(format, ...)               ( { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); } )
+#define NOISYWARN0(string)                   NOISYWARN (string "%s", "")
 
 #define WARN_ONCE(format, ...)               ( { static bool warning_shown = false; \
                                                  if (!flag.quiet && !__atomic_test_and_set (&warning_shown, __ATOMIC_RELAXED)) \

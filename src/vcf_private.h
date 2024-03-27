@@ -151,7 +151,7 @@ typedef struct VBlockVCF {
     // IMPORTANT: when adding, add to X() in vcf_seg_info_subfields
     int16_t idx_AN, idx_AC, idx_AF, idx_MLEAC, idx_MLEAF, idx_AC_Hom, idx_AC_Het, idx_AC_Hemi, idx_QD, idx_DP, idx_SF, 
             idx_AS_SB_TABLE, idx_END, idx_SVLEN, idx_CIPOS, 
-            idx_HOMSEQ, idx_DUPHOMSEQ, idx_SVINSSEQ, idx_DUPSVINSSEQ, idx_LEFT_SVINSSEQ;  
+            idx_SVTYPE, idx_HOMSEQ, idx_DUPHOMSEQ, idx_SVINSSEQ, idx_DUPSVINSSEQ, idx_LEFT_SVINSSEQ;  
     #define has(f)   (vb->idx_##f != -1)
     #define after_idx mux_PLn
 
@@ -200,7 +200,13 @@ extern VcfVersion vcf_header_get_version (void);
 extern void vcf_seg_pos (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(pos_str));
 extern void vcf_seg_INFO_END (VBlockVCFP vb, ContextP end_ctx, STRp(end_str));
 
+// QUAL stuff
+extern void vcf_seg_QUAL (VBlockVCFP vb, STRp(qual));
+extern void vcf_segconf_finalize_QUAL (VBlockVCFP vb);
+extern void vcf_piz_insert_QUAL_by_GP (VBlockVCFP vb);
+
 // AC / AF / AN
+extern void vcf_AC_AF_AN_zip_initialize (void);
 extern void vcf_seg_INFO_AC (VBlockVCFP vb, ContextP ac_ctx, STRp(ac_str));
 extern void vcf_seg_INFO_AN (VBlockVCFP vb);
 extern void vcf_seg_INFO_MLEAC (VBlockVCFP vb, ContextP ac_ctx, STRp(ac_str));
@@ -218,8 +224,6 @@ extern int vcf_seg_get_mux_channel_i (VBlockVCFP vb);
 extern int vcf_piz_get_mux_channel_i (VBlockP vb);
 extern ContextP vcf_seg_FORMAT_mux_by_dosage (VBlockVCFP vb, ContextP ctx, STRp(cell), const DosageMultiplexer *mux);
 extern void vcf_seg_FORMAT_mux_by_dosagexDP (VBlockVCFP vb, ContextP ctx, STRp(cell), void *mux_p);
-
-eSTRl(snip_copy_af);
 
 // FORMAT/GT stuff
 extern WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, STRp(cell), bool has_ps, bool has_null_dp);
@@ -365,6 +369,22 @@ extern void vcf_seg_mastermind_HGVSG (VBlockVCFP vb, ContextP ctx, STRp(value));
 extern void vcf_seg_INFO_MMID3 (VBlockVCFP vb, ContextP ctx, STRp(value));
 extern void vcf_seg_INFO_MMURI3 (VBlockVCFP vb, ContextP ctx, STRp(value));
 
+// gnomAD stuff
+extern void vcf_gnomad_zip_initialize (void);
+extern void vcf_gnomad_seg_initialize (VBlockVCFP vb);
+extern void vcf_seg_INFO_VRS_Starts (VBlockVCFP vb, ContextP ctx, STRp(arr));
+extern void vcf_seg_INFO_VRS_Ends (VBlockVCFP vb, ContextP ctx, STRp(arr));
+extern void vcf_seg_INFO_VRS_States (VBlockVCFP vb, ContextP ctx, STRp(arr));
+extern void vcf_seg_INFO_VRS_Allele_IDs (VBlockVCFP vb, ContextP ctx, STRp(ids));
+extern void vcf_seg_INFO_AS_QD (VBlockVCFP vb, ContextP ctx, STRp(as_qd));
+extern void vcf_seg_INFO_AS_SOR (VBlockVCFP vb, ContextP ctx, STRp(as_sor));
+extern void vcf_seg_INFO_AS_MQ (VBlockVCFP vb, ContextP ctx, STRp(as_mq));
+extern void vcf_seg_INFO_AS_MQRankSum (VBlockVCFP vb, ContextP ctx, STRp(as_mqranksum));
+extern void vcf_seg_INFO_AS_FS (VBlockVCFP vb, ContextP ctx, STRp(as_fs));
+extern void vcf_seg_INFO_AS_VarDP (VBlockVCFP vb, ContextP ctx, STRp(as_vardp));
+extern void vcf_seg_INFO_AS_QUALapprox (VBlockVCFP vb, ContextP ctx, STRp(as_qualapprox));
+extern void vcf_seg_INFO_AS_ReadPosRankSum (VBlockVCFP vb, ContextP ctx, STRp(as_readposranksum));
+
 // ICGC stuff
 extern void vcf_seg_INFO_mutation (VBlockVCFP vb, ContextP ctx, STRp(mut));
 
@@ -434,6 +454,9 @@ extern void vcf_seg_platypus_FORMAT_GOF (VBlockVCFP vb, ContextP ctx, STRp(gof_s
 
 // Liftover Piz
 extern void vcf_lo_piz_TOPLEVEL_cb_filter_line (VBlockVCFP vb);
+
+eSTRl(snip_copy_af);
+eSTRl(copy_VCF_POS_snip);
 
 #define VCF_ERR_PREFIX { progress_newline(); fprintf (stderr, "Error %s:%u in variant %.*s:%"PRId64": ", __FUNCLINE, STRf(vb->chrom_name), vb->last_int (VCF_POS)); }
 #define ASSVCF(condition, format, ...) ({ if (!(condition)) { VCF_ERR_PREFIX; fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); }})

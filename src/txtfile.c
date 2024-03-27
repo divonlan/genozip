@@ -24,6 +24,7 @@
 #include "segconf.h"
 #include "biopsy.h"
 #include "zip.h"
+#include "arch.h"
 #include "dispatcher.h"
 #include "zlib/zlib.h"
 #include "libdeflate_1.19/libdeflate.h"
@@ -60,7 +61,8 @@ static inline uint32_t txtfile_read_block_plain (VBlockP vb, uint32_t max_bytes)
     // case: normal read
     else {
         bytes_read = fread (data, 1, max_bytes, (FILE *)txt_file->file); // -1 if error in libc
-        ASSERT (bytes_read >= 0, "read failed from %s: %s", txt_name, strerror(errno));
+        ASSERT (!ferror((FILE *)txt_file->file) && bytes_read >= 0, "Error reading PLAIN file %s on filesystem=%s: %s", 
+                txt_name, arch_get_filesystem_type().s, strerror (errno));
 
         txt_file->disk_so_far += (int64_t)bytes_read;
 
@@ -137,8 +139,10 @@ static uint32_t txtfile_read_block_gz (VBlockP vb, uint32_t max_bytes)
     struct inflate_state *state = B1ST (struct inflate_state, txt_file->igzip_state);
 
     // top up igzip_data
-    int32_t bytes_read = fread (BAFTc(txt_file->igzip_data), 1, IGZIP_CHUNK - txt_file->igzip_data.len32, (FILE *)txt_file->file); // -1 if error in libc
-    
+    int32_t bytes_read = fread (BAFTc(txt_file->igzip_data), 1, IGZIP_CHUNK - txt_file->igzip_data.len32, (FILE *)txt_file->file); 
+    ASSERT (!ferror((FILE *)txt_file->file) && bytes_read >= 0, "Error reading GZ file %s on filesystem=%s: %s", 
+            txt_name, arch_get_filesystem_type().s, strerror (errno));
+
     txt_file->igzip_data.len32 += bytes_read; // yet-uncompressed data read from disk
 
     txt_file->disk_so_far += bytes_read;
@@ -497,7 +501,7 @@ static uint32_t txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb)
     // test remaining txt_data including passed-down data from previous VB
     pass_to_next_vb_len = (DT_FUNC(vb, unconsumed)(vb, 0, &last_i));
 
-    if (flag.truncate_partial_last_line && pass_to_next_vb_len < 0 && !segconf.running) {
+    if (flag.truncate && pass_to_next_vb_len < 0 && !segconf.running) {
         WARN ("FYI: %s is truncated - its final %s in incomplete. Dropping this final %s.", txt_name, DTPT(line_name), DTPT(line_name));
         txt_file->last_truncated_line_len = Ltxt; 
         Ltxt = pass_to_next_vb_len = 0; // truncate last partial line
@@ -563,6 +567,7 @@ static void txtfile_set_seggable_size (void)
         case CODEC_BCF:  source_comp_ratio = 10; break; // note: .bcf files might be compressed or uncompressed - we have no way of knowing as "bcftools view" always serves them to us in plain VCF format. These ratios are assuming the bcf is compressed as it normally is.
         case CODEC_XZ:   source_comp_ratio = 15; break;
         case CODEC_CRAM: source_comp_ratio = 25; break;
+        case CODEC_ORA:  source_comp_ratio = 25; break;
         case CODEC_ZIP:  source_comp_ratio = 3;  break;
 
         case CODEC_NONE: source_comp_ratio = 1;  break;

@@ -93,7 +93,7 @@ void txtheader_compress (BufferP txt_header,
 
     // true if filename is compressed with gz/bgzf but does not have a .gz/.bgz extension (e.g. usually true for BAM files)
     section_header.flags.txt_header.no_gz_ext = 
-        (txt_file->source_codec == CODEC_GZ || txt_file->source_codec == CODEC_BGZF || txt_file->source_codec == CODEC_BAM) &&
+        (SOURCE_CODEC(GZ) || SOURCE_CODEC(BGZF) || SOURCE_CODEC(BAM) || SOURCE_CODEC(CRAM)/*reconstructed as BAM*/) &&
         txt_file->basename && !filename_has_ext (txt_file->basename, ".gz") && !filename_has_ext (txt_file->basename, ".bgz");
 
     // In BGZF, we store the 3 least significant bytes of the file size, so check if the reconstructed BGZF file is likely the same

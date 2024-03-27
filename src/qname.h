@@ -22,7 +22,7 @@ typedef packed_enum {
     // Illumina-style FASTQ QNAME2 flavors (also appears in Ultima, Singular...)
     QF_ILLUM_2bc, QF_ILLUM_1bc, QF_ILLUM_0bc, 
     // MGI flavors
-    QF_MGI_varlen, QF_MGI_r6, QF_MGI_r7, QF_MGI_r8, QF_MGI_ll7, QF_MGI_cl, QF_MGI_rgs8, QF_MGI_rgs8FQ, 
+    QF_MGI_NEW6, QF_MGI_NEW7, QF_MGI_NEW8, QF_MGI_varlen, QF_MGI_r6, QF_MGI_r7, QF_MGI_r8, QF_MGI_ll7, QF_MGI_cl, QF_MGI_rgs8, QF_MGI_rgs8FQ, 
     // PacBio flavors 
     QF_PACBIO_3, QF_PACBIO_rng, QF_PACBIO_lbl, QF_PACBIO_pln, QF_ONSO,
     // Nanopore flavors

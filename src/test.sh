@@ -1,4 +1,5 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# ^ finds bash according to $PATH
 
 # ------------------------------------------------------------------
 #   test.sh
@@ -938,20 +939,22 @@ batch_grep_count_lines()
     test_count_genocat_lines "$TESTDIR/basic.vcf" "--regions 13:207237509-207237510,1:207237250 -H" 7
 }
 
-assert() # $1 result $2 expected
+ass_eq_num() # $1 result $2 expected
 {
-    echo \"$1\" \"$2\"
-    if ! [[ "$1" =~ ^[0-9]+$ ]] ; then
-        echo "Failed" # genocat failed and hence didn't return a number - error message is already displayed
+    local res=`echo "$1" | tr -d " "` # on mac, wc -l includes leading spaces
+
+    echo \"$res\" \"$2\"
+    if ! [[ "$res" =~ ^[0-9]+$ ]] ; then
+        echo "Failed: result \"$res\" is not a number" # genocat failed and hence didn't return a number - error message is already displayed
         exit 1
     fi
 
-    if ! [[ "$2" =~ ^[0-9]+$ ]] ; then
+    if ! [[ "$res" =~ ^[0-9]+$ ]] ; then
         echo "Bad comparison argument, expecting \$2 to be an integer" # genocat failed and hence didn't return a number - error message is already displayed
         exit 1
     fi
 
-    if (( "$1" != "$2" )); then 
+    if (( $res != $2 )); then 
         echo "Failed: result is $1 but expecting $2"
         exit 1
     fi
@@ -966,30 +969,30 @@ batch_bam_subsetting()
     $genozip $TESTDIR/test.human2.bam -fXB4 --force-gencomp || exit 1
 
     # (almost) all SAM/BAM subseting options according to: https://www.genozip.com/compressing-bam
-    assert "`$genocat $file --header-only | wc -l`" 93
-    assert "`$genocat $file -r 1 --no-header | wc -l`" 99909 # test --regions in presence of gencomp, but entire file is one contig
-    assert "`$genocat $file -r 1 --count`" 99909
-    assert "`$genocat $file --grep AS:i:150 --count`" 12297
-    assert "`$genocat $file --grep-w 1000 --count`" 24
-    assert "`$genocat $file --bases N --count`" 2              
-    assert "`$genocat $file --bases ^ACGT --count`" 76
-    assert "`$genocat $file --downsample 2 --no-header | wc -l`" 49955  # note: --downsample, --head, --tail, --lines are incomptaible with --count
-    assert "`$genocat $file --downsample 2,1 --no-header | wc -l`" 49954
-    assert "`$genocat $file --lines 5000-19999 --no-header | wc -l`" 15000 # spans more than one VB
-    assert "`$genocat $file --head=15000 --no-header | wc -l`" 15000       # spans more than one VB
-    assert "`$genocat $file --tail=15000 --no-header | wc -l`" 15000       # spans more than one VB
-    assert "`$genocat $file --FLAG=+SUPPLEMENTARY --count`" 58 # should be the same as samtools' "-f SUPPLEMENTARY"
-    assert "`$genocat $file --FLAG=^48 --count`" 99816         # should be the same as samtools' "-G 48"
-    assert "`$genocat $file --FLAG=-0x0030 --count`" 315       # should be the same as samtools' "-F 0x0030"
-    assert "`$genocat $file --MAPQ 20 --count`" 8753
-    assert "`$genocat $file --MAPQ ^20 --count`" 91156
+    ass_eq_num "`$genocat $file --header-only | wc -l`" 93
+    ass_eq_num "`$genocat $file -r 1 --no-header | wc -l`" 99909 # test --regions in presence of gencomp, but entire file is one contig
+    ass_eq_num "`$genocat $file -r 1 --count`" 99909
+    ass_eq_num "`$genocat $file --grep AS:i:150 --count`" 12297
+    ass_eq_num "`$genocat $file --grep-w 1000 --count`" 24
+    ass_eq_num "`$genocat $file --bases N --count`" 2              
+    ass_eq_num "`$genocat $file --bases ^ACGT --count`" 76
+    ass_eq_num "`$genocat $file --downsample 2 --no-header | wc -l`" 49955  # note: --downsample, --head, --tail, --lines are incomptaible with --count
+    ass_eq_num "`$genocat $file --downsample 2,1 --no-header | wc -l`" 49954
+    ass_eq_num "`$genocat $file --lines 5000-19999 --no-header | wc -l`" 15000 # spans more than one VB
+    ass_eq_num "`$genocat $file --head=15000 --no-header | wc -l`" 15000       # spans more than one VB
+    ass_eq_num "`$genocat $file --tail=15000 --no-header | wc -l`" 15000       # spans more than one VB
+    ass_eq_num "`$genocat $file --FLAG=+SUPPLEMENTARY --count`" 58 # should be the same as samtools' "-f SUPPLEMENTARY"
+    ass_eq_num "`$genocat $file --FLAG=^48 --count`" 99816         # should be the same as samtools' "-G 48"
+    ass_eq_num "`$genocat $file --FLAG=-0x0030 --count`" 315       # should be the same as samtools' "-F 0x0030"
+    ass_eq_num "`$genocat $file --MAPQ 20 --count`" 8753
+    ass_eq_num "`$genocat $file --MAPQ ^20 --count`" 91156
 
     local file=$TESTDIR/test.human3-collated.bam.genozip
     $genozip $TESTDIR/test.human3-collated.bam -fXB4 --force-gencomp || exit 1
 
     if [ ! -f $file ]; then $genozip $TESTDIR/test.human3-collated.bam -fXB4 || exit 1; fi
-    assert "`$genocat $file -r chr1 --no-header | wc -l`" 4709 # test --regions - real subsetting, but no gencomp as it is collated
-    assert "`$genocat $file -r chr1 --count`" 4709
+    ass_eq_num "`$genocat $file -r chr1 --no-header | wc -l`" 4709 # test --regions - real subsetting, but no gencomp as it is collated
+    ass_eq_num "`$genocat $file -r chr1 --count`" 4709
 
     # TO DO: combinations of subsetting flags
 }
@@ -1329,6 +1332,18 @@ batch_external_unzip()
     cleanup
 }
 
+# ORA
+batch_external_ora()
+{
+    # Commented out because its very slow - uncomment if needed
+    # batch_print_header
+    # if `command -v orad >& /dev/null`; then
+    #     ORA_REF_PATH=$REFDIR $genozip --truncate -ft -e data/hs37d5.v15.ref.genozip test.fastq.ora || exit $?
+    # fi
+
+    # cleanup
+}
+
 batch_reference_fastq()
 {
     batch_print_header
@@ -1591,7 +1606,7 @@ batch_replace()
     $genozip $f1 -fX || exit 1
     test_exists $f1
 
-    $genozip $f1 -fX --replace || exit 1
+    $genozip $f1 -ft --replace || exit 1
     test_not_exists $f1
 
     # single file - genounzip
@@ -1610,12 +1625,6 @@ batch_replace()
     $genounzip -f $f1.genozip -^ || exit 1
     test_not_exists $f1.genozip
 
-    # single file with --test (i.e. creating child process and returning from it)
-    test_header "batch replace: single file with --test"
-    cp ${TESTDIR}/basic.fq $f1
-    $genozip $f1 -ft --replace || exit 1
-    test_not_exists $f1
-
     # multiple files
     test_header "batch replace: multiple files"
     cp ${TESTDIR}/basic.fq $f1
@@ -1625,7 +1634,7 @@ batch_replace()
     test_exists $f1
     test_exists $f2
 
-    $genozip $f1 $f2 -fX -^ || exit 1
+    $genozip $f1 $f2 -ft -^ || exit 1
     test_not_exists $f1
     test_not_exists $f2
 
@@ -1638,15 +1647,6 @@ batch_replace()
     test_not_exists $f1.genozip
     test_not_exists $f2.genozip
 
-    # multiple files with --test
-    test_header "batch replace: multiple files with --test"
-    cp ${TESTDIR}/basic.fq $f1
-    cp ${TESTDIR}/basic.fq $f2
-
-    $genozip $f1 $f2 -ft -^ || exit 1
-    test_not_exists $f1
-    test_not_exists $f2
-
     # paired
     test_header "batch replace: paired"
     cp ${TESTDIR}/basic-deep.R1.fq $f1
@@ -1656,7 +1656,7 @@ batch_replace()
     test_exists $f1
     test_exists $f2
 
-    $genozip $f1 $f2 -fX^2e $hs37d5 -o $output || exit 1
+    $genozip $f1 $f2 -ft^2e $hs37d5 -o $output || exit 1
     test_not_exists $f1
     test_not_exists $f2
 
@@ -1665,15 +1665,6 @@ batch_replace()
 
     $genounzip -f $output -^ || exit 1
     test_not_exists $output
-
-    # paired with --test
-    test_header "batch replace: paired with --test"
-    cp ${TESTDIR}/basic-deep.R1.fq $f1
-    cp ${TESTDIR}/basic-deep.R2.fq $f2
-
-    $genozip $f1 $f2 -ft^2e $hs37d5 -o $output || exit 1
-    test_not_exists $f1
-    test_not_exists $f2
 
     # deep
     test_header "batch replace: deep"
@@ -1686,7 +1677,7 @@ batch_replace()
     test_exists $f2
     test_exists $f3
 
-    $genozip $f1 $f2 $f3 -^fX3e $GRCh38 -o $output || exit 1
+    $genozip $f1 $f2 $f3 -^ft3e $GRCh38 -o $output || exit 1
     test_not_exists $f1
     test_not_exists $f2
     test_not_exists $f3
@@ -1696,17 +1687,6 @@ batch_replace()
 
     $genounzip -f $output --replace || exit 1
     test_not_exists $output
-
-    # deep with --test
-    test_header "batch replace: deep with --test"
-    cp ${TESTDIR}/basic-deep.R1.fq $f1
-    cp ${TESTDIR}/basic-deep.R2.fq $f2
-    cp ${TESTDIR}/basic-deep.sam   $f3
-
-    $genozip $f1 $f2 $f3 --test -^f3e $GRCh38 -o $output || exit 1
-    test_not_exists $f1
-    test_not_exists $f2
-    test_not_exists $f3
 }
 
 batch_genols()
@@ -1807,6 +1787,7 @@ batch_deep() # note: use --debug-deep for detailed tracking
     $genozip $T.two.fq.gz $T.bam $T.one.fq.gz -fE $GRCh38 -o $output -3t || exit 1
     
     # gem3 (bisulfite), multiple (>2) FASTQ
+    test_header deep.gem3.multi-fastq
     local T=$TESTDIR/deep.gem3.multi-fastq
     $genozip $T.1.fq $T.sam $T.2.fq $T.3.fq -fe $GRCh38 -o $output -3t || exit 1
     test_count_genocat_lines "" "--R 1" 20
@@ -1814,6 +1795,7 @@ batch_deep() # note: use --debug-deep for detailed tracking
     test_count_genocat_lines "" "--R 3" 20
 
     # SAM has cropped one base at the end of every read (101 bases in FQ vs 100 in SAM)
+    test_header deep.crop-100
     local T=$TESTDIR/deep.crop-100
     $genozip $T.fq $T.sam -fe $GRCh38 -o $output -3t || exit 1
     test_count_genocat_lines "" "--fq --seq-only" 1000
@@ -1831,6 +1813,7 @@ batch_deep() # note: use --debug-deep for detailed tracking
     $genozip $T.fq $T.sam -fe $GRCh38 -o $output -3t || exit 1
 
     # trimmed with LONG (codec consumes trimmed SEQ)
+    cleanup_cache
     test_header deep.trim+longr
     local T=$TESTDIR/deep.trim+longr
     $genozip $T.fq $T.sam -fe $hs37d5 -o $output -3t || exit 1
@@ -1955,6 +1938,12 @@ if [ -n "$is_prod" ]; then
     shift
 fi
 
+is_conda=`echo $1|grep conda`
+if [ -n "$is_conda" ]; then 
+    dir=$CONDA_PREFIX/bin
+    shift
+fi
+
 if [ ! -n "$dir" ]; then 
     dir=$PWD
 fi
@@ -1971,7 +1960,10 @@ if [ -n "$is_windows" ] || [ -n "$is_exe" ]; then
     path=`pwd| cut -c3-|tr / '\\\\'`\\
 #    zip_threads="-@3"
 #    piz_threads="-@5"
-else
+elif [ -n "$is_mac" ]; then
+    exe=.mac
+    path=$PWD/
+else # linux
     exe=""
     path=$PWD/
 fi
@@ -2020,8 +2012,7 @@ inc() {
     GENOZIP_TEST=$((GENOZIP_TEST + 1)) 
 }
 
-# loop bc unfortunately Mac's bash doesn't support "case" with fall-through ( ;& )
-for GENOZIP_TEST in `seq $GENOZIP_TEST 1000`; do 
+for GENOZIP_TEST in `seq $GENOZIP_TEST 200`; do 
 case $GENOZIP_TEST in
 0 )  sparkling_clean              ;;
 1 )  batch_minimal                ;;
@@ -2058,7 +2049,7 @@ case $GENOZIP_TEST in
 32)  batch_real_world_1_adler32   ;; 
 33)  batch_real_world_genounzip_single_process ;; 
 34)  batch_real_world_genounzip_compare_file   ;; 
-35)  batch_real_world_1_adler32 "--best -f" ;; 
+35)  batch_real_world_1_adler32 "--best -f"    ;; 
 36)  batch_real_world_1_adler32 "--fast --force-gencomp" ;; 
 37)  batch_real_world_with_ref_md5;; 
 38)  batch_real_world_with_ref_md5 "--best --no-cache --force-gencomp" ;; 
@@ -2066,35 +2057,36 @@ case $GENOZIP_TEST in
 40)  batch_external_cram               ;;
 41)  batch_external_bcf                ;;
 42)  batch_external_unzip              ;;
-43)  batch_reference_fastq             ;;
-44)  batch_reference_sam               ;;
-45)  batch_reference_vcf               ;;
-46)  batch_many_small_files            ;;
-47)  batch_make_reference              ;;
-48)  batch_headerless_wrong_ref        ;;
-49)  batch_replace                     ;;
-50)  batch_coverage_idxstats           ;;
-51)  batch_qname_flavors               ;;
-52)  batch_piz_no_license              ;;
-53)  batch_sendto                      ;;
-54)  batch_user_message_permissions    ;;
-55)  batch_password_permissions        ;;
-56)  batch_reference_backcomp          ;;
-57)  batch_real_world_backcomp 11.0.11 ;; # note: versions must match VERSIONS in test/Makefile
-58)  batch_real_world_backcomp 12.0.42 ;; 
-59)  batch_real_world_backcomp 13.0.21 ;; 
-60)  batch_real_world_backcomp 14.0.33 ;; 
-61)  batch_real_world_backcomp latest  ;;
-62)  batch_basic basic.vcf     latest  ;;
-63)  batch_basic basic.bam     latest  ;;
-64)  batch_basic basic.sam     latest  ;;
-65)  batch_basic basic.fq      latest  ;;
-66)  batch_basic basic.fa      latest  ;;
-67)  batch_basic basic.bed     latest  ;;
-68)  batch_basic basic.gvf     latest  ;;
-69)  batch_basic basic.gtf     latest  ;;
-70)  batch_basic basic.me23    latest  ;;
-71)  batch_basic basic.generic latest  ;;
+43)  batch_external_ora                ;;
+44)  batch_reference_fastq             ;;
+45)  batch_reference_sam               ;;
+46)  batch_reference_vcf               ;;
+47)  batch_many_small_files            ;;
+48)  batch_make_reference              ;;
+49)  batch_headerless_wrong_ref        ;;
+50)  batch_replace                     ;;
+51)  batch_coverage_idxstats           ;;
+52)  batch_qname_flavors               ;;
+53)  batch_piz_no_license              ;;
+54)  batch_sendto                      ;;
+55)  batch_user_message_permissions    ;;
+56)  batch_password_permissions        ;;
+57)  batch_reference_backcomp          ;;
+58)  batch_real_world_backcomp 11.0.11 ;; # note: versions must match VERSIONS in test/Makefile
+59)  batch_real_world_backcomp 12.0.42 ;; 
+60)  batch_real_world_backcomp 13.0.21 ;; 
+61)  batch_real_world_backcomp 14.0.33 ;; 
+62)  batch_real_world_backcomp latest  ;;
+63)  batch_basic basic.vcf     latest  ;;
+64)  batch_basic basic.bam     latest  ;;
+65)  batch_basic basic.sam     latest  ;;
+66)  batch_basic basic.fq      latest  ;;
+67)  batch_basic basic.fa      latest  ;;
+68)  batch_basic basic.bed     latest  ;;
+69)  batch_basic basic.gvf     latest  ;;
+70)  batch_basic basic.gtf     latest  ;;
+71)  batch_basic basic.me23    latest  ;;
+72)  batch_basic basic.generic latest  ;;
 
 * ) break; # break out of loop
 

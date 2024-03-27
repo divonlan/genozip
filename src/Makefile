@@ -15,93 +15,62 @@ OBJDIR_LINUX   := objdir.linux
 OBJDIR_WINDOWS := objdir.windows
 OBJDIR_MAC     := objdir.mac
 
+ifdef BUILD_PREFIX # conda 
+	DISTOBJ = $(OBJDIR)/distribution.conda.o # note: matches the name in version.c 
+	CFLAGS += -O3 
 
-ifeq ($(OS),Windows_NT)
-	Windows := 1
-	OBJDIR=$(OBJDIR_WINDOWS)
-	WSL=wsl
-else
-	uname := $(shell uname -s)
-
-	ifeq ($(uname),Linux)
+	ifeq ($(target_architecture),"linux-64")
 		Linux := 1
 		OBJDIR=$(OBJDIR_LINUX)
 	endif
 
-    ifeq ($(uname),Darwin) # Mac
-		Mac := 1
-		OBJDIR=$(OBJDIR_MAC)
-    endif
-endif
-
-# note: modern nasm/yasm have AS_FEATURE_LEVEL=10. HAVE_AS_KNOWS_AVX512 is true if level 10.
-ASFLAGS = -DAS_FEATURE_LEVEL=10 -DHAVE_AS_KNOWS_AVX512
-
-CPU = $(shell uname -m | sed -e 's/amd/x86_/')
-
-ifeq ($(CPU),x86_64) # or amd64
-	AS = nasm
-
-	ifdef Windows
-		x86_64 := 1
-		ASFLAGS += -f win64
-	endif
-
-	ifdef Linux
-		x86_64 := 1
-		ASFLAGS += -f elf64 -DINTEL_CET_ENABLED
-	endif
-
-	ifdef Mac
-		# Mac is not tested yet with .asm - fix this after testing
-		# noarch := 1
-		x86_64 := 1   
-		ASFLAGS += -f macho64 --prefix=_
-	endif	
-else 
-	ifeq ($(CPU),aarch64) # ARM 64
-		aarch64 := 1
-		AS = $(CC) -D__ASSEMBLY__ -c
-		DEBUGFLAGS_AS = -g 
-	else 
-		noarch := 1
-	endif
-endif
-
-ifndef_any_of = $(filter undefined,$(foreach v,$(1),$(origin $(v))))
-ifdef_any_of  = $(filter-out undefined,$(foreach v,$(1),$(origin $(v))))
-
-ifdef BUILD_PREFIX
-IS_CONDA=1
-endif
-
-LDFLAGS    += -lpthread -lm 
-CFLAGS     += -Wall -D_LARGEFILE64_SOURCE=1 -D_7ZIP_ST -D_GNU_SOURCE -std=gnu11 -fms-extensions -msse4.1 -msse4.2
-CXXFLAGS   += -Wall -D_LARGEFILE64_SOURCE=1 -D_GNU_SOURCE -Ibsc -O3 -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_SSE41 -msse4.1
-OPTFLAGS   += -O3 
-DEBUGFLAGS += -DDEBUG -ggdb3 -O0  
-
-ifdef x86_64
-	CFLAGS += -DGENOZIP_ALLOW_UNALIGNED_ACCESS 
-	CXXFLAGS += -DLIBBSC_ALLOW_UNALIGNED_ACCESS
-endif
-
-ifdef IS_CONDA 
-	DISTOBJ = $(OBJDIR)/distribution.conda.o # note: matches the name in version.c 
-	CFLAGS += -O3 
-
-	ifdef Windows
+	ifeq ($(target_architecture),"win-64")
+		Windows := 1
+		OBJDIR=$(OBJDIR_WINDOWS)
+		WSL=wsl
 		CC=gcc # in Windows, override conda's default Visual C with gcc 
 		CC=g++
 		LDFLAGS += -L$(PREFIX)/Library/lib
 		CFLAGS  += -I$(PREFIX)/Library/include 
 	endif
 
+	ifeq ($(target_architecture),"osx-64")
+		Mac := 1
+		OBJDIR=$(OBJDIR_MAC)
+		CFLAGS += -mmacosx-version-min=10.9 -DNO_UTIMENSAT # Conda requires support from 10.9 but utimensat() was only introduced in MacOS 10.13
+	endif
+
 	ifeq ($(target_architecture),"osx-arm64")
 		$(error Genozip cannot yet be built for osx-arm64)
 	endif
 
-else
+else # not conda
+	ifeq ($(OS),Windows_NT)
+		Windows := 1
+		WSL=wsl
+		OBJDIR=$(OBJDIR_WINDOWS)
+		CFLAGS   += -march=haswell 
+		CXXFLAGS += -march=haswell 
+	else
+		uname := $(shell uname -s)
+
+		ifeq ($(uname),Linux)
+			Linux := 1
+			OBJDIR=$(OBJDIR_LINUX)
+			CFLAGS   += -march=haswell # see: https://gcc.gnu.org/onlinedocs/gcc/x86-Options.html  
+			CXXFLAGS += -march=haswell
+		endif
+
+		ifeq ($(uname),Darwin) # Mac
+			Mac := 1
+			OBJDIR=$(OBJDIR_MAC)
+			CFLAGS   += -march=native # conda used "core2". We use the highest available optimizations, because it is typically compiled for use on a specific Mac
+			CXXFLAGS += -march=native
+			# GCC=gcc-13  # installed by brew
+			# GXX=g++-13
+		endif
+	endif
+
 	ifdef DISTRIBUTION # custom destribution, run eg: DISTRIBUTION=special make genozip
 		DISTOBJ = $(OBJDIR)/distribution.$(DISTRIBUTION).o 
 	else
@@ -119,22 +88,52 @@ else
 	else
 		CXX=g++
 	endif
+endif 
 
-	# set -march. note: if conda, we leave it to conda to set
+# note: modern nasm/yasm have AS_FEATURE_LEVEL=10. HAVE_AS_KNOWS_AVX512 is true if level 10.
+ASFLAGS = -DAS_FEATURE_LEVEL=10 -DHAVE_AS_KNOWS_AVX512
+
+CPU = $(shell uname -m | sed -e 's/amd/x86_/')
+
+ifeq ($(CPU),x86_64) # or amd64
+	AS := nasm
+	x86_64 := 1
+
 	ifdef Windows
-		CFLAGS += -march=haswell 
+		ASFLAGS += -f win64
 	endif
 
 	ifdef Linux
-		CFLAGS += -march=haswell # see: https://gcc.gnu.org/onlinedocs/gcc/x86-Options.html  
+		ASFLAGS += -f elf64 -DINTEL_CET_ENABLED
 	endif
 
 	ifdef Mac
-		CFLAGS += -march=native # conda used "core2". We use the highest available optimizations, because it is typically compiled for use on a specific Mac
-				# CFLAGS += -mmacosx-version-min=10.13 # for utimensat (in conda we use utimes instead)
+		AS := /usr/local/bin/$(AS)
+		ASFLAGS += -f macho64 --prefix=_
+	endif	
+else 
+	ifeq ($(CPU),aarch64) # ARM 64
+		aarch64 := 1
+		AS = $(CC) -D__ASSEMBLY__ -c
+		DEBUGFLAGS_AS = -g 
+	else 
+		noarch := 1
 	endif
+endif
 
-endif 
+ifndef_any_of = $(filter undefined,$(foreach v,$(1),$(origin $(v))))
+ifdef_any_of  = $(filter-out undefined,$(foreach v,$(1),$(origin $(v))))
+
+LDFLAGS    += -lpthread -lm 
+CFLAGS     += -Wall -D_LARGEFILE64_SOURCE=1 -D_GNU_SOURCE -std=gnu11 -D_7ZIP_ST -fms-extensions -msse4.1 -msse4.2
+CXXFLAGS   += -Wall -D_LARGEFILE64_SOURCE=1 -D_GNU_SOURCE -std=gnu++11 -Ibsc -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_SSE41 -msse4.1
+OPTFLAGS   += -O3 
+DEBUGFLAGS += -DDEBUG -ggdb3 -O0  
+
+ifdef x86_64
+	CFLAGS += -DGENOZIP_ALLOW_UNALIGNED_ACCESS 
+	CXXFLAGS += -DLIBBSC_ALLOW_UNALIGNED_ACCESS
+endif
 
 WSL_GCC_8_5 = /home_local_fs/divon/miniconda3/envs/distribution/bin/x86_64-conda-linux-gnu-gcc # path to gcc 8.5 on WSL (generate with: conda create -n distribution gcc_linux-64=8.5.0)
 WSL_GCC_DEFAULT = /home_local_fs/divon/miniconda3/bin/gcc
@@ -155,10 +154,10 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.
           zip.c piz.c reconstruct.c recon_history.c recon_peek.c seg.c zfile.c aligner.c flags.c digest.c    	\
 		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c ref_cache.c     	 	\
 		  vcf_piz.c vcf_seg.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_hgvs.c      				\
-		  vcf_format_GT.c vcf_format_PS_PID.c vcf_dbsnp.c vcf_giab.c vcf_vep.c      							\
+		  vcf_format_GT.c vcf_format_PS_PID.c vcf_dbsnp.c vcf_giab.c vcf_vep.c vcf_qual.c						\
 		  vcf_refalt.c vcf_format.c vcf_illum_gtyping.c vcf_gwas.c vcf_vagrent.c vcf_svaba.c vcf_pbsv.c			\
 		  vcf_icgc.c vcf_snpeff.c vcf_cosmic.c vcf_mastermind.c vcf_isaac.c	vcf_manta.c vcf_pos.c vcf_ultima.c	\
-		  vcf_platypus.c vcf_info_AC_AF_AN.c vcf_format_GQ.c vcf_gatk.c vcf_sv.c								\
+		  vcf_platypus.c vcf_info_AC_AF_AN.c vcf_format_GQ.c vcf_gatk.c vcf_sv.c vcf_gnomad.c					\
 		  sam_seg.c sam_piz.c sam_shared.c sam_header.c sam_md.c sam_nm.c sam_tlen.c sam_cigar.c sam_fields.c  	\
 		  sam_sa.c bam_seg.c bam_seq.c bam_show.c sam_pacbio.c sam_ultima.c sam_xcons.c cram.c agilent.c   		\
 		  sam_seq.c sam_qual.c sam_sag_zip.c sam_sag_piz.c sam_sag_load.c sam_sag_ingest.c sam_sag_scan.c    	\
@@ -308,11 +307,9 @@ ifdef Linux
 endif
 
 ifdef Mac # Mac
+	# EXE = .mac
 	MY_SRCS += mac_compat.c
-	CFLAGS += -mmacosx-version-min=10.9 -DNO_UTIMENSAT # Conda requires support from 10.9 but utimensat() was only introduced in MacOS 10.13
-	ifeq ($(CC),gcc) 
-		LDFLAGS += -rdynamic
-	endif
+	LDFLAGS += -rdynamic
 endif
 
 C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(LZMA_SRCS) $(LIBDEFLATE_1_7_SRCS) $(LIBDEFLATE_1_19_SRCS) $(BSC_C_SRCS) \
@@ -365,6 +362,7 @@ debug : CXXFLAGS += $(DEBUGFLAGS)
 debug : $(OBJDIR) $(DEBUG_EXECUTABLES)
 
 opt   : CFLAGS += -ggdb3 $(OPTFLAGS) -DDEBUG 
+opt   : CXXFLAGS += $(OPTFLAGS) 
 opt   : $(OBJDIR) $(OPT_EXECUTABLES)
 
 ifdef Windows
@@ -467,36 +465,35 @@ endif # ugly hack to avoid conda failure due to bash issues in dict_id_gen.sh - 
 genozip$(EXE): dict_id_gen.h $(OBJS) $(DISTOBJ)
 	@echo Linking $@
 	@$(CC) -o $@ $(OBJS) $(DISTOBJ) $(CFLAGS) $(LDFLAGS) 
-	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi  # hard linking not possible on some filesystems
+	@ln -sf src/$@ ../$@
  
 genozip-debug$(EXE): dict_id_gen.h $(DEBUG_OBJS) $(DISTOBJ)
 	@echo Linking $@
 	@$(CC) -o $@ $(DEBUG_OBJS) $(CFLAGS) $(LDFLAGS) $(DISTOBJ)
-	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
+	@ln -sf src/$@ ../$@
 
 genozip-opt$(EXE): dict_id_gen.h $(OPT_OBJS) $(DISTOBJ)
 	@echo Linking $@
 	@$(CC) -o $@ $(OPT_OBJS) $(CFLAGS) $(LDFLAGS) $(DISTOBJ)
-	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
+	@ln -sf src/$@ ../$@
 
 genounzip$(EXE) genocat$(EXE) genols$(EXE): genozip$(EXE)
-	@echo Hard linking $@
+	@echo Soft linking $@
 	@rm -f $@ 
-	@ln -f $^ $@
-	@if ! ln -f $^ $@; then ln -fs $^ $@; fi
-	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
+	@ln -sf $^ $@
+	@ln -sf src/$^ ../$@
 
 genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE): genozip-debug$(EXE)
-	@echo Hard linking $@
+	@echo Soft linking $@
 	@rm -f $@ 
-	@if ! ln -f $^ $@; then ln -fs $^ $@; fi
-	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
+	@ln -sf $^ $@
+	@ln -sf src/$@ ../$@
 
 genounzip-opt$(EXE) genocat-opt$(EXE) genols-opt$(EXE): genozip-opt$(EXE)
-	@echo Hard linking $@
+	@echo Soft linking $@
 	@rm -f $@ 
-	@if ! ln -f $^ $@; then ln -fs $^ $@; fi
-	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
+	@ln -sf $^ $@
+	@ln -sf src/$@ ../$@
 
 ../LICENSE.txt: text_license.h version.h # not dependent on genozip.exe, so we don't generate it every compilation
 	@$(MAKE) -j genozip$(EXE) # recursive call to make genozip.exe with the latest version
@@ -569,12 +566,14 @@ clean-dev: clean-installers clean-test # use only in dev - deletes license.o
 		push-build increment-version $(INSTALLERS)/LICENSE.html  
 
 # builds latest for local OS
-genozip-latest$(EXE): 
-	@echo "building latest"
-	@(cd $(LATEST_SRC); rm -Rf $(OBJDIR) ; if [[ `pwd` = *genozip-latest* ]]; then git reset --hard ; git pull ; $(MAKE) clean ; touch dict_id_gen.h ; $(MAKE) -j; cp $@ ../../genozip/private/releases/genozip-$(version)$(EXE) ; fi )
 
 # currently, I build for conda from my Windows machine so I don't bother supporting other platforms
 ifdef Windows
+
+genozip-latest.exe: 
+	@echo "building latest for Windows"
+	@(cd $(LATEST_SRC); (mkdir $(OBJDIR) >& /dev/null || exit 0) ; cd $(OBJDIR) ; (mkdir $(SRC_DIRS) >& /dev/null || exit 0) )
+	@(cd $(LATEST_SRC); if [[ `pwd` = *genozip-latest* ]]; then git reset --hard ; git pull ; $(MAKE) -j clean ; touch dict_id_gen.h ; $(MAKE) -j; cp $(LATEST_SRC)/genozip.exe ../../genozip/private/releases/genozip-$(version).exe ; ln -sf $(LATEST_SRC)/genozip.exe $@ ; fi )
 
 genozip-latest:
 	@run-on-wsl.sh GCC=$(WSL_GCC_DEFAULT) make genozip-latest  # make -j doesn't work well on WSL - filesystem clock issues (try: hwclock -s)
@@ -666,6 +665,10 @@ $(INSTALLERS)/genozip-linux-x86_64.tar.build: genozip-linux-x86_64/LICENSE.txt
 	@(mkdir genozip-linux-x86_64 >& /dev/null ; exit 0)
 	@run-on-wsl.sh GCC=$(WSL_GCC_8_5) make $(INSTALLERS)/genozip-linux-x86_64.tar # make -j doesn't work well on WSL - filesystem clock issues
 
+$(INSTALLERS)/genozip-osx-x86.tar.build: genozip-osx-x86/LICENSE.txt 
+	@(mkdir genozip-osx-x86 >& /dev/null ; exit 0)
+	@run-on-wsl.sh GCC=$(WSL_GCC_8_5) make -j $(INSTALLERS)/genozip-osx-x86.tar 
+
 mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@echo "Creating Mac installer"
 	@echo "Logging in to remote mac" 
@@ -684,13 +687,14 @@ BUILD_FILES = version.h Makefile \
 	$(INSTALLERS)/genozip-installer.exe $(INSTALLERS)/genozip-linux-x86_64.tar $(INSTALLERS)/LICENSE.html
 
 push-build: # push files modified during the build process
-	@git stage $(BUILD_FILES)
+	@git stage $(BUILD_FILES) -f
 	@git commit -m $(version) 
 	@git push
 
 distribution-maintenance: initialize-build-distribution increment-version testfiles ../LICENSE.txt $(INSTALLERS)/LICENSE.html \
                           $(INSTALLERS)/genozip-linux-x86_64.tar.build $(INSTALLERS)/genozip-installer.exe objdir.mac/secure/license.o \
-                          push-build conda/.conda-timestamp genozip-latest genozip-latest.exe
+                          push-build conda/.conda-timestamp \
+						  genozip-latest.exe genozip-latest  
 	@(printf "\nClick Enter after committing the feedstock conflict resolution: <Click>")
 	@(read x)
 	@(cd $(CONDA_FEEDSTOCK) ; git pull)
@@ -712,13 +716,23 @@ genozip-linux-x86_64/LICENSE.txt: ../LICENSE.txt
 	@(mkdir genozip-linux-x86_64 >& /dev/null ; exit 0)
 	@cp -f $< $@
 
+genozip-osx-x86/LICENSE.txt: ../LICENSE.txt
+	@echo Generating $@
+	@(mkdir genozip-osx-x86 >& /dev/null ; exit 0)
+	@cp -f $< $@
+
 endif # Windows
 
 ifdef Linux
 
+genozip-latest: 
+	@echo "building latest for Linux"
+	@(cd $(LATEST_SRC); (mkdir $(OBJDIR) 2> /dev/null || exit 0); cd $(OBJDIR) ; (mkdir $(SRC_DIRS) 2> /dev/null || exit 0))
+	@(cd $(LATEST_SRC); $(MAKE) -j clean ; $(MAKE) -j; cp $(LATEST_SRC)/genozip ../../genozip/private/releases/genozip-$(version) ; ln -sf $(LATEST_SRC)/genozip $@ )
+
 # note: getpwuid and getgrgid will cause dymanically loading of the locally installed glibc in the --tar option, or segfault. that's normally fine.
 genozip-linux-x86_64/genozip: CFLAGS += $(OPTFLAGS)
-genozip-linux-x86_64/genozip: $(OBJS) $(OBJDIR)/distribution.linux-x86_64.o
+genozip-linux-x86_64/genozip: $(OBJS) $(OBJDIR)/distribution.osx-x86.o
 	@echo Linking $@
 	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
@@ -735,11 +749,29 @@ LINUX_TARGZ_OBJS = genozip-linux-x86_64/genozip genozip-linux-x86_64/genounzip g
 # this is run on Linux by run-on-wsl.sh
 $(INSTALLERS)/genozip-linux-x86_64.tar: $(LINUX_TARGZ_OBJS) 
 	@echo "Creating $@"
-	@tar cf $@ -z genozip-linux-x86_64
+	@tar cf $@ --lzma genozip-linux-x86_64
 
 endif # Linux
 
 ifdef Mac
+
+genozip-osx-x86/genozip: CFLAGS += $(OPTFLAGS)
+genozip-osx-x86/genozip: $(OBJS) $(OBJDIR)/distribution.linux-x86_64.o
+	@echo Linking $@
+	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
+
+genozip-osx-x86/genounzip genozip-osx-x86/genocat genozip-osx-x86/genols: genozip-osx-x86/genozip 
+	@echo Generating $@
+	@cp -f $< $@ # ln doesn't work on SMB shares
+
+genozip-osx-x86/LICENSE.txt: ../LICENSE.txt
+	@cp -f $< $@
+
+OSX_X86_TARGZ_OBJS = genozip-osx-x86/genozip genozip-osx-x86/genounzip genozip-osx-x86/genocat genozip-osx-x86/genols genozip-osx-x86/LICENSE.txt
+
+$(INSTALLERS)/genozip-osx-x86.tar: $(OSX_X86_TARGZ_OBJS) 
+	@echo "Creating $@"
+	@tar -cf $@ --lzma genozip-osx-x86
 
 MACDWNDIR = mac/darwinpkg
 MACLIBDIR = $(MACDWNDIR)/Library/genozip

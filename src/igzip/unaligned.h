@@ -30,9 +30,9 @@
 #ifndef UNALIGNED_H
 #define UNALIGNED_H
 
-#include "stdint.h"
-#include "stdlib.h"
-#include "string.h"
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 
 #ifdef __FreeBSD__
 #include <sys/types.h>

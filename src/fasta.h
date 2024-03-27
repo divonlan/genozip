@@ -63,11 +63,10 @@ extern unsigned fasta_vb_size (DataType dt);
 extern unsigned fasta_vb_zip_dl_size (void);
 extern void fasta_get_data_line (VBlockP vb_, uint32_t line_i, uint32_t *seq_data_start, uint32_t *seq_len);
 
-#define FASTA_SPECIAL { fasta_piz_special_SEQ, fasta_piz_special_COMMENT, fasta_piz_special_DESC }
+// SPECIALs
 SPECIAL (FASTA, 0, SEQ, fasta_piz_special_SEQ);
 SPECIAL (FASTA, 1, COMMENT, fasta_piz_special_COMMENT);
 SPECIAL (FASTA, 2, DESC, fasta_piz_special_DESC);
-#define NUM_FASTA_SPECIAL 3
 
 #define FASTA_LOCAL_GET_LINE_CALLBACKS  \
     { DT_FASTA, _FASTA_NONREF, fasta_zip_seq }, 

@@ -163,7 +163,7 @@ void dyn_int_init_ctx (VBlockP vb, ContextP ctx, int64_t value)
     ctx->dyn_int_min = ctx->dyn_int_max = value;
 
     // if set, segger *may* call dyn_int_append_nothing_char 
-    if ((VB_DT(VCF) || VB_DT(BCF)) && dict_id_is_vcf_format_sf (ctx->dict_id))
+    if (VB_DT(VCF) || VB_DT(BCF))
         ctx->nothing_char = '.';
 
     ASSERT (!ctx->local.len, "%s: expecting %s.local to be empty", LN_NAME, ctx->tag_name);

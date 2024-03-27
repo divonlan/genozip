@@ -496,7 +496,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _bl {"biopsy-line",      required_argument, 0, 137,                   }
         #define _sk {"skip-segconf",     no_argument,       &flag.skip_segconf,     1 }
         #define _MR {"match-chrom-to-reference",   no_argument, &flag.match_chrom_to_reference,   1 }
-        #define _TL {"truncate-partial-last-line", no_argument, &flag.truncate_partial_last_line, 1 }
+        #define _TL {"truncate",         no_argument,       &flag.truncate, 1 }
         #define _VV {"check-latest",     no_argument,       &flag.check_latest,     1 }
         #define _DV {"debug-latest",     no_argument,       &flag.debug_latest,     1 }
         #define _Dp {"debug-peek",       no_argument,       &flag.debug_peek,       1 }
@@ -699,6 +699,7 @@ static void flags_test_conflicts (unsigned num_files /* optional */)
     CONFLICT (flag.subdirs,     flag.out_filename,   OT("subdirs", "D"),   OT("output", "o")); 
     CONFLICT (flag.to_stdout,   flag.index_txt,      OT("stdout", "c"),    OT("index", "x"));
     CONFLICT (flag.quiet,       flag.noisy,          OT("quiet", "q"),     OT("noisy", "Q"));
+    CONFLICT (flag.replace,     flag.no_test,        OT("replace", "^"),   OT("no-test", "X"));
     CONFLICT (flag.test,        flag.no_test,        OT("test", "t"),      OT("no-test", "X"));
     CONFLICT (flag.test,        flag.bgzf != BGZF_NOT_INITIALIZED, OT("test", "t"),      OT("bgzf", "z"));
     CONFLICT (flag.dump_one_b250_dict_id.num, flag.dump_one_local_dict_id.num, "--dump-one-b250", "--dump-one-local");

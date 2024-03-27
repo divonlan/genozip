@@ -399,7 +399,7 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
     SAFE_NULT(hdr);
 
     // advance to point to first @PG line
-    #define IS_PG(s) (s[1] == 'P' && s[2] == 'G')
+    #define IS_PG(s) (s[1] == 'P' && s[2] == 'G' && s[3] == '\t')
 
     rom s = hdr - 1;
     while ((s = strchr (s+1, '@'))) 
@@ -463,6 +463,42 @@ done:
     sam_header_create_deep_tip (hdr, after); 
 
     COPY_TIMER_EVB (sam_header_zip_inspect_PG_lines); 
+}
+
+static void sam_header_zip_inspect_RG_lines (BufferP txt_header) 
+{
+    START_TIMER;
+
+    uint32_t hdr_len = IS_BAM_ZIP ? *B32(*txt_header, 1)     : txt_header->len32;
+    rom hdr          = IS_BAM_ZIP ? (rom)B32(*txt_header, 2) : txt_header->data;
+    rom after        = hdr + hdr_len;
+    
+    if (!hdr_len) return; // no header
+    
+    SAFE_NULT(hdr);
+
+    // advance to point to first @RG line
+    #define IS_RG(s) (s[1] == 'R' && s[2] == 'G' && s[3] == '\t')
+    #define IS_ID(s) (s[0] == 'I' && s[1] == 'D' && s[2] == ':')
+
+    while ((hdr = strchr (hdr, '@'))) 
+        if (IS_RG(hdr)) {
+            str_split_by_tab (hdr, after - hdr, 32, NULL, false, false); // also advances hdr to after the newline
+
+            if (n_flds) 
+                for (int i=1; i < n_flds; i++)
+                    if (IS_ID (flds[i])) {
+                        ctx_populate_zf_ctx (OPTION_RG_Z, flds[i]+3, fld_lens[i]-3, WORD_INDEX_NONE);
+                        break;
+                    }
+        }
+        else hdr++;
+
+    SAFE_RESTORE;
+
+    segconf.sam_multi_RG = ZCTX(OPTION_RG_Z)->nodes.len32 >= 2;
+
+    COPY_TIMER_EVB (sam_header_zip_inspect_RG_lines); 
 }
 
 typedef struct { uint32_t n_contigs, dict_len; } ContigsCbParam;
@@ -592,9 +628,9 @@ bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
 
         if (!IS_BAM_ZIP) *BAFTc (*txt_header) = 0; // nul-terminate as required by foreach_textual_SQ_line
 
-        sam_header_zip_inspect_HD_line (txt_header);
-
+        sam_header_zip_inspect_HD_line  (txt_header);
         sam_header_zip_inspect_PG_lines (txt_header);
+        sam_header_zip_inspect_RG_lines (txt_header);
 
         // in case of internal reference, we need to initialize. in case of --reference, it was initialized by ref_load_external_reference()
         if (IS_REF_INTERNAL && sam_hdr_contigs) 

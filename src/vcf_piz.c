@@ -39,9 +39,9 @@ void vcf_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
         segconf.wid_QD.width          = header->vcf.width.QD;
         segconf.wid_SF.width          = header->vcf.width.SF;
         segconf.wid_MLEAC.width       = header->vcf.width.MLEAC;
-        segconf.wid_MLEAC.width       = header->vcf.width.MLEAC;
         segconf.wid_AS_SB_TABLE.width = header->vcf.width.AS_SB_TABLE;
         segconf.wid_ID.width          = header->vcf.width.ID;
+        segconf.wid_QUAL.width        = header->vcf.width.QUAL;
     }
 }
 
@@ -108,6 +108,7 @@ IS_SKIP (vcf_piz_is_skip_section)
 }
 
 // insert a field after following fields have already been reconstructed
+// IMPORTANT: if calling this function on a new ctx, add to dids array below 
 void vcf_piz_insert_field (VBlockVCFP vb, ContextP ctx, STRp(value), int chars_reserved)
 {
     if (!IS_RECON_INSERTION(ctx)) return;
@@ -127,8 +128,8 @@ void vcf_piz_insert_field (VBlockVCFP vb, ContextP ctx, STRp(value), int chars_r
                 vb->txt_data.len, (uint64_t)vb->txt_data.size, txtfile_dump_vb (VB, z_name));
         
         // adjust last_txt of other INFO contexts that might need insertion (and hence last_txt)
-        if (dict_id_is_vcf_info_sf (ctx->dict_id)) {
-            Did dids[] = { INFO_QD, INFO_SF, INFO_DP, INFO_AN, INFO_AS_SB_TABLE };
+        if (ctx->did_i != VCF_ID) { // no need to adjust after inserting ID, as it is inserted during REFALT reconstruction (not at end of TOPLEVEL like the rest)
+            Did dids[] = { VCF_QUAL, INFO_QD, INFO_SF, INFO_DP, INFO_AN, INFO_AS_SB_TABLE };
             uint32_t last_txt_index = ctx->last_txt.index;
 
             bool found_me = false;
@@ -165,6 +166,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_HAS_RGQ)
 {
     return reconstruct_demultiplex (vb, ctx, STRa(snip), vcf_piz_line_has_RGQ (VB_VCF), new_value, reconstruct);
 }
+
 // filter is called before reconstruction of a repeat or an item, and returns false if item should 
 // not be reconstructed. contexts are not consumed.
 CONTAINER_FILTER_FUNC (vcf_piz_filter)
@@ -291,7 +293,10 @@ CONTAINER_CALLBACK (vcf_piz_container_cb)
     }
 
     else if (is_top_level) {
-        // insert INFO fields who's value is determined by the sample fields that we just finished reconstructing
+        // insert QUAL, INFO fields who's value is determined by the sample fields that we just finished reconstructing
+
+        if (CTX(VCF_QUAL)->QUAL.by_GP)
+            vcf_piz_insert_QUAL_by_GP (VB_VCF); // must be inserted before vcf_piz_insert_INFO_QD that might depend on QUAL
 
         if (ctx_encountered_in_line (vb, INFO_AN))
             vcf_piz_insert_INFO_AN (VB_VCF);

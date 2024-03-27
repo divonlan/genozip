@@ -99,10 +99,10 @@ static void zip_display_compression_ratio (Digest md5)
     // when compressing BAM report only ratio_vs_comp (compare to BGZF-compress BAM - we don't care about the underlying plain BAM)
     // Likewise, doesn't have a compression extension (eg .gz), even though it may actually be compressed eg .tbi (which is actually BGZF)
     else if (Z_DT(BAM) || (txt_file && file_get_codec_by_txt_ft (txt_file->data_type, txt_file->type, false) == CODEC_NONE)) 
-        progress_finalize_component_time_ratio (txt_file->source_codec == CODEC_CRAM ? "CRAM" : z_dt_name(), ratio_vs_comp, md5);
+        progress_finalize_component_time_ratio (SOURCE_CODEC(CRAM) ? "CRAM" : z_dt_name(), ratio_vs_comp, md5);
 
     else if (ratio_vs_comp >= 0) {
-        if (txt_file->codec == CODEC_NONE || ratio_vs_comp < 1.05) // disk_so_far doesn't give us the true txt file size 
+        if (SOURCE_CODEC(NONE) || ratio_vs_comp < 1.05) // disk_so_far doesn't give us the true txt file size 
             progress_finalize_component_time_ratio (z_dt_name(), ratio_vs_plain, md5);
         
         else // source was compressed
@@ -733,11 +733,12 @@ void zip_one_file (rom txt_basename,
                                  zip_complete_processing_one_vb);
 
     // verify that entire file was read (if file size is known)
-    ASSERT (txt_file->disk_so_far == txt_file->disk_size || !txt_file->disk_size || file_is_read_via_ext_decompressor (txt_file),
-            "Failed to compress entire file: file size is %"PRIu64", but only %"PRIu64" bytes were compressed",
-            txt_file->disk_size, txt_file->disk_so_far);
+    ASSERT (txt_file->disk_so_far == txt_file->disk_size || !txt_file->disk_size || file_is_read_via_ext_decompressor (txt_file) ||
+            (txt_file->disk_so_far > txt_file->disk_size && flag.truncate), // case of compressing a file while it is still downloading - we will likely compress more than the disk_size bytes recorded upon file open
+            "Failed to compress entire file: file size is %s, but only %s bytes were compressed",
+            str_int_commas (txt_file->disk_size).s, str_int_commas (txt_file->disk_so_far).s);
 
-    bgzf_finalize_discovery();
+    bgzf_finalize_discovery(); 
 
     zriter_wait_for_bg_writing(); // complete writing VBs before moving on
 

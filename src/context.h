@@ -38,7 +38,7 @@
 #define SNIP_OTHER_DELTA          '\x6'   // The value is a uint32_t which is a result of the last value of another field + the delta value. following this char, {DictId dict_id, int32_t delta, bool update_other} in base64)
 #define v13_SNIP_FASTQ_PAIR2_GPOS '\x7'   // up to v13: (replaced by FASTQ_SPECIAL_PAIR2_GPOS) The value is a uint32_t which is a result of the equivalent value in the paired file + the delta value (when using --pair)
 #define SNIP_SPECIAL              '\x8'   // Special algorithm followed by ID of the algorithm 
-#define SNIP_REDIRECTION          '\xB'   // Get the data from another dict_id (can be in b250, local...)
+#define SNIP_REDIRECTION          '\xB'   // Get the data from another context (can be in b250, local...)
 #define SNIP_DONT_STORE           '\xC'   // Reconstruct the following value, but don't store it in last_value (overriding flags.store)
 #define SNIP_COPY                 '\xE'   // Copy the last_txt of (optional) dict_id (self if no dict_id)
 #define dvcf_SNIP_DUAL            '\xF'   // up to 15.0.41: A snip containing two snips separated by a SNIP_DUAL - for Primary and Luft reconstruction respectively
@@ -251,7 +251,7 @@ extern void ctx_read_all_subdicts (void);
 extern void ctx_compress_subdicts (void);
 extern rom ctx_get_snip_with_largest_count (Did did_i, int64_t *count);
 extern void ctx_populate_zf_ctx_from_contigs (Reference ref, Did dst_did_i, ConstContigPkgP ctgs);
-extern WordIndex ctx_populate_zf_ctx (Did dst_did_i, STRp (contig_name), WordIndex ref_index);
+extern WordIndex ctx_populate_zf_ctx (Did dst_did_i, STRp (snip), WordIndex ref_index);
 
 extern void ctx_dump_binary (VBlockP vb, ContextP ctx, bool local);
 

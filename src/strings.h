@@ -53,22 +53,24 @@ static inline StrTextSuperLong str_to_printable_(STRp(in)) { // for bound-length
 extern char *str_tolower (rom in, char *out /* out allocated by caller - can be the same as in */);
 extern char *str_toupper (rom in, char *out);
 
+static inline bool str_islower (STRp (str))
+{
+    for (int i=0; i < str_len; i++)
+        if (!IS_SLETTER(str[i])) return false;
+    return true;
+}
+
 static bool inline str_issame_(STRp(str1), STRp(str2)) // true if the same
 {
     return (str1_len == str2_len) && !memcmp (str1, str2, str1_len);
 }
 #define str_issame(str1,str2) str_issame_ (str1, str1##_len, str2, str2##_len)
 
-static bool inline str_issubstr_(STRp(str), STRp(substr))
-{
-    return substr_len <= str_len && !memcmp (str, substr, substr_len);
-}
-#define str_issubstr(str1,str2) str_issubstr_ (str1, str1##_len, str2, str2##_len)
-
 static bool inline str_isprefix_(STRp(long_str), STRp(short_str)) // true short_str is a prefix of long_str
 {
     return (long_str_len >= short_str_len) && !memcmp (long_str, short_str, short_str_len);
 }
+#define str_isprefix(long_str,short_str) str_isprefix_ (long_str, long_str##_len, short_str, short_str##_len)
 
 // same as str_issame, but internally it searches in reverse - good for strings that are known to differ at their end
 static bool inline str_issameR_ (STRp(str1), STRp(str2)) // true if the same
@@ -169,6 +171,14 @@ static inline bool str_is_monochar (STRp(str))
     return true;
 }
 
+static inline bool str_is_monochar_(STRp(str), char mono)
+{
+    for (int i=0; i < str_len; i++)
+        if (str[i] != mono) return false;
+    
+    return true;
+}
+
 static inline unsigned homopolymer_len (STRp(seq), unsigned start)
 {
     char base = seq[start];
@@ -243,7 +253,7 @@ extern bool str_get_int_range_allow_hex64 (STRp(str), uint64_t min_val, uint64_t
 
 static bool inline str_is_int(STRp(str))       { return str_get_int (STRa(str), NULL); } // integer - leading zeros not allowed
 static bool inline str_is_numeric(STRp(str))   { for (int i=0; i<str_len; i++) if (!IS_DIGIT(str[i]))            return false; return true; } // numeric - leading zeros ok
-static bool inline str_is_hex(STRp(str))       { for (int i=0; i<str_len; i++) if (!IS_HEXDIGIT(str[i]))         return false; return true; } 
+extern bool str_is_simple_float (STRp(str), uint32_t *decimals);
 static bool inline str_is_hexlo(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_HEXDIGITlo(str[i]))       return false; return true; } 
 static bool inline str_is_hexup(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_HEXDIGITUP(str[i]))       return false; return true; } 
 static bool inline str_is_printable(STRp(str)) { for (int i=0; i<str_len; i++) if (!IS_PRINTABLE(str[i]))        return false; return true; } 
@@ -312,6 +322,7 @@ extern uint32_t str_split_floats_do (STRp(str), uint32_t max_items, char sep, bo
     n_##name##s = str_split_floats_do ((str), (str_len), n_##name##s, (sep), (exactly), name##s); 
 
 extern bool str_item_i (STRp(str), char sep, uint32_t requested_item_i, pSTRp(item));
+extern bool str_item_i_int (STRp(str), char sep, uint32_t requested_item_i, int64_t *item);
 extern bool str_item_i_float (STRp(str), char sep, uint32_t requested_item_i, double *item);
 
 extern void str_remove_CR_do (uint32_t n_lines, pSTRp(line));

@@ -96,6 +96,7 @@ typedef struct {
     { 0, "T0",   "+",      codec_t0_compress,        USE_SUBCODEC,             codec_t0_reconstruct,      codec_complex_est_size,  }, \
     { 0, "PACB", "+",      codec_pacb_compress,      USE_SUBCODEC,             codec_pacb_reconstruct,    codec_trivial_size,      }, \
     { 0, "SMUX", "+",      codec_smux_compress,      USE_SUBCODEC,             codec_smux_reconstruct,    codec_trivial_size,      }, \
+    { 0, "ORA",  "+.ora",  NA1,                      NA2,                      NA3,                       NA4                      }, \
 }
 
 extern CodecArgs codec_args[NUM_CODECS];

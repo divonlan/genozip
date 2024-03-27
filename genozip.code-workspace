@@ -45,7 +45,9 @@
 			"version.h": "c",
 			"libgen.h": "c",
 			"license.h": "c",
-			"windows.h": "c"
+			"windows.h": "c",
+			"cstdlib": "c",
+			"reconstruct.h": "c"
 		}
 	}
 }

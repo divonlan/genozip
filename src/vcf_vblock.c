@@ -32,7 +32,8 @@ void vcf_reset_line (VBlockP vb_)
     CTX(INFO_DP)->ctx_specific = 0;
     CTX(INFO_QD)->ctx_specific = 0;
     CTX(INFO_RU)->ctx_specific = 0;
-
+    CTX(VCF_QUAL)->ctx_specific = 0;
+    
     if (IS_ZIP) {
         for (Did did_i=0; did_i < NUM_VCF_FIELDS; did_i++)
             CTX(did_i)->sf_i = -1; // initialize

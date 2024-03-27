@@ -373,6 +373,9 @@ static void stats_output_file_metadata (void)
             if (segconf.sam_XG_inc_S != unknown) 
                 bufprintf (evb, &features, "XG_include_S=%s;", TF(segconf.sam_XG_inc_S));
 
+            if (segconf.has[OPTION_RG_Z])
+                bufprintf (evb, &features, "RG_method=%s;", RG_method_name (segconf.RG_method));
+
             if (num_alignments) {
                 double mate_line_pc  = 100.0 * (double)z_file->mate_line_count  / (double)num_alignments;
                 double saggy_near_pc = 100.0 * (double)z_file->saggy_near_count / (double)num_alignments;
