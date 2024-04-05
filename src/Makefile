@@ -10,64 +10,67 @@
 # Mingw: http://mingw-w64.org/doku.php 
 # Cygwin: https://www.cygwin.com/
 
-OBJDIR         := objdir         # fallback if not win, linux, mac
 OBJDIR_LINUX   := objdir.linux
 OBJDIR_WINDOWS := objdir.windows
 OBJDIR_MAC     := objdir.mac
 
+uname_sm := $(shell uname -sm | sed -e 's/amd/x86_/')
+
+ifeq ($(OS),Windows_NT)
+	Windows := 1
+	OBJDIR=$(OBJDIR_WINDOWS)
+	WSL=wsl
+endif
+
+ifeq ($(uname_sm),Linux x86_64)
+	linux_x86 := 1
+	OBJDIR=$(OBJDIR_LINUX)
+endif
+
+ifeq ($(uname_sm),Darwin x86_64)
+	osx_x86 := 1		
+	OBJDIR=$(OBJDIR_MAC)
+endif
+
+ifndef OBJDIR
+	fail := $(error "Architecture unsupported or could not be identified: $(uname_sm)") 
+endif
+
 ifdef BUILD_PREFIX # conda 
-	DISTOBJ = $(OBJDIR)/distribution.conda.o # note: matches the name in version.c 
-
-	ifeq ($(target_architecture),"linux-64")
-		Linux := 1
-		OBJDIR=$(OBJDIR_LINUX)
-	endif
-
-	ifeq ($(target_architecture),"win-64")
-		Windows := 1
-		OBJDIR=$(OBJDIR_WINDOWS)
-		WSL=wsl
+	ifdef Windows
 		CC=gcc # in Windows, override conda's default Visual C with gcc 
 		CC=g++
-		LDFLAGS += -L$(PREFIX)/Library/lib
-		CFLAGS  += -I$(PREFIX)/Library/include 
+		LDFLAGS  += -L$(PREFIX)/Library/lib
+		CFLAGS   += -I$(PREFIX)/Library/include 
+		CFLAGS   += -march=nehalem 
+		CXXFLAGS += -march=nehalem 
 	endif
 
-	ifeq ($(target_architecture),"osx-64")
-		Mac := 1
-		OBJDIR=$(OBJDIR_MAC)
-		CFLAGS += -mmacosx-version-min=10.9 -DNO_UTIMENSAT # Conda requires support from 10.9 but utimensat() was only introduced in MacOS 10.13
+	ifdef osx_x86
+		CFLAGS   += -mmacosx-version-min=10.9 -DNO_UTIMENSAT # Conda requires support from 10.9 but utimensat() was only introduced in MacOS 10.13
+		CFLAGS   += -march=nehalem 
+		CXXFLAGS += -march=nehalem 
 	endif
 
-	ifeq ($(target_architecture),"osx-arm64")
-		$(error Genozip cannot yet be built for osx-arm64)
+	ifdef linux_x86
+		CFLAGS   += -march=nehalem 
+		CXXFLAGS += -march=nehalem 
 	endif
+
+	DISTOBJ = $(OBJDIR)/distribution.conda.o # note: matches the name in version.c 
 
 else # not conda
-	ifeq ($(OS),Windows_NT)
-		Windows := 1
-		WSL=wsl
-		OBJDIR=$(OBJDIR_WINDOWS)
-		CFLAGS   += -march=haswell 
-		CXXFLAGS += -march=haswell 
-	else
-		uname := $(shell uname -s)
+	ifdef Windows
+		CFLAGS   += -march=nehalem 
+		CXXFLAGS += -march=nehalem 
+	
+	else ifdef linux_x86
+		CFLAGS   += -march=nehalem # see: https://gcc.gnu.org/onlinedocs/gcc/x86-Options.html  
+		CXXFLAGS += -march=nehalem
 
-		ifeq ($(uname),Linux)
-			Linux := 1
-			OBJDIR=$(OBJDIR_LINUX)
-			CFLAGS   += -march=haswell # see: https://gcc.gnu.org/onlinedocs/gcc/x86-Options.html  
-			CXXFLAGS += -march=haswell
-		endif
-
-		ifeq ($(uname),Darwin) # Mac
-			Mac := 1
-			OBJDIR=$(OBJDIR_MAC)
-			CFLAGS   += -march=native # conda used "core2". We use the highest available optimizations, because it is typically compiled for use on a specific Mac
-			CXXFLAGS += -march=native
-			# GCC=gcc-13  # installed by brew
-			# GXX=g++-13
-		endif
+	else ifdef osx_x86
+		CFLAGS   += -march=native # conda used "core2". We use the highest available optimizations, because it is typically compiled for use on a specific Mac
+		CXXFLAGS += -march=native
 	endif
 
 	ifdef DISTRIBUTION # custom destribution, run eg: DISTRIBUTION=special make genozip
@@ -103,13 +106,13 @@ ifeq ($(CPU),x86_64) # or amd64
 		# -lasan needed for -fsanitize=address is not supported by MinGW: https://stackoverflow.com/questions/55018627/cannot-find-lasan-using-address-sanitizer-in-mingw-in-windows-mingw
 	endif
 
-	ifdef Linux
+	ifdef linux_x86
 		ASFLAGS += -f elf64 -DINTEL_CET_ENABLED
 		# DEBUGFLAGS += -fsanitize=undefined
 		DEBUGFLAGS += -fsanitize=address -Dsanitize_address
 	endif
 
-	ifdef Mac
+	ifdef osx_x86
 		ASFLAGS += -f macho64 --prefix=_
 		DEBUGFLAGS += -fsanitize=address -Dsanitize_address
 	endif	
@@ -146,7 +149,7 @@ RELEASES = $(DEV_DIR)/private/releases
 DATA     = $(DEV_DIR)/data
 LATEST_SRC = ../../genozip-latest/src
 
-SRC_DIRS = secure zlib bzlib lzma bsc libdeflate_1.7 libdeflate_1.19 libdeflate_1.19/x86 libdeflate_1.19/arm 	\
+SRC_DIRS = secure zlib bzlib nehalem bsc libdeflate_1.7 libdeflate_1.19 libdeflate_1.19/x86 libdeflate_1.19/arm 	\
 		  htscodecs igzip igzip/aarch64 igzip/x86_64 igzip/noarch
 
 MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.c seg_id.c zip_dyn_int.c     	\
@@ -299,14 +302,14 @@ endif
 
 ifdef Windows
 	EXE = .exe
-	LDFLAGS += -static-libgcc -lIPHLPAPI -lUrlmon -lDbgHelp
+	LDFLAGS += -static -static-libgcc -lIPHLPAPI -lUrlmon -lDbgHelp # link MingW DLLs staticly
 endif
 
-ifdef Linux
+ifdef linux_x86
 	LDFLAGS += -lrt -fuse-ld=gold -rdynamic # rt is required by pthreads ; rdynamic for backtrace_symbols_fd to show function names
 endif
 
-ifdef Mac # Mac
+ifdef osx_x86 # Mac
 	MY_SRCS += mac_compat.c
 	LDFLAGS += -rdynamic
 endif
@@ -322,7 +325,7 @@ ARM_SRCS = $(IGZIP_ARM_ASM_SRCS)
 
 ASFLAGS += -I$(IGZIP_ARCH_DIR)
 
-# ifdef Linux
+# ifdef linux_x86
 # 	C_SRCS += $(ONION_SRCS)
 # endif
 
@@ -364,7 +367,7 @@ opt   : CFLAGS += -ggdb3 $(OPTFLAGS) -DDEBUG
 opt   : CXXFLAGS += $(OPTFLAGS) 
 opt   : $(OBJDIR) $(OPT_EXECUTABLES)
 
-ifdef Mac
+ifdef osx_x86
 objdir.mac/secure/license.o : CFLAGS := $(patsubst -march=% ,-march=x86-64 ,$(CFLAGS)) # plain vanilla x86-64, so it runs on Rosetta x86-64 simulator on M1/M2/M3
 endif
 
@@ -396,7 +399,7 @@ $(OBJDIR)/distribution.%.o : distribution.c
 
 $(OBJDIR)/%.o: %.c $(OBJDIR)/%.d
 	@echo Compiling $<
-	@$(CC) -c -o $@ $< $(CFLAGS) 
+	$(CC) -c -o $@ $< $(CFLAGS) 
 
 $(OBJDIR)/%.debug-o: %.c $(OBJDIR)/%.d
 	@echo "Compiling $< (debug)"
@@ -698,7 +701,7 @@ genozip-linux-x86_64/LICENSE.txt: ../LICENSE.txt
 
 endif # Windows
 
-ifdef Linux
+ifdef linux_x86
 
 genozip-latest: 
 	@echo "building latest for Linux"
@@ -724,11 +727,11 @@ LINUX_TARGZ_OBJS = genozip-linux-x86_64/genozip genozip-linux-x86_64/genounzip g
 # this is run on Linux by run-on-wsl.sh
 $(INSTALLERS)/genozip-linux-x86_64.tar: $(LINUX_TARGZ_OBJS) 
 	@echo "Creating $@"
-	@tar cf $@ --lzma genozip-linux-x86_64
+	@tar cf $@ -z genozip-linux-x86_64
 
-endif # Linux
+endif # linux_x86
 
-ifdef Mac
+ifdef osx_x86
 
 genozip-osx-x86/genozip: CFLAGS += $(OPTFLAGS)
 genozip-osx-x86/genozip: $(OBJS) $(OBJDIR)/distribution.osx-x86.o
@@ -748,7 +751,7 @@ OSX_X86_TARGZ_OBJS = genozip-osx-x86/genozip genozip-osx-x86/genounzip genozip-o
 
 $(INSTALLERS)/genozip-osx-x86.tar: $(OSX_X86_TARGZ_OBJS) 
 	@echo "Creating $@"
-	@tar -cf $@ --lzma genozip-osx-x86
+	@tar -cf $@ -z genozip-osx-x86
 
 MACDWNDIR = mac/darwinpkg
 MACLIBDIR = $(MACDWNDIR)/Library/genozip

@@ -3,7 +3,7 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
-15.0.52 5/4//2024
+15.0.53 5/4/2024
 - FASTQ: Support for compressing .fastq.ora files (files produced by Illumina Ora).
 - VCF: Incrementally better compression of VCF 
 - Bug fixes
