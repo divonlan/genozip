@@ -32,7 +32,7 @@ VBlockPool *vb_get_pool (VBlockPoolType type, FailType soft_fail)
     return pools[type];
 }
 
-VBlockP vb_get_from_pool (VBlockPoolP pool, int32_t vb_id) 
+VBlockP vb_get_from_pool (VBlockPoolP pool, VBID vb_id) 
 {
     ASSERTNOTNULL (pool);
 
@@ -162,10 +162,10 @@ void vb_create_pool (VBlockPoolType type, rom name)
 
     pools[type]->name    = name;
     pools[type]->size    = size; 
-    pools[type]->num_vbs = num_vbs; 
+    pools[type]->num_vbs = MAX_(num_vbs, pools[type]->num_vbs); 
 }
 
-VBlockP vb_initialize_nonpool_vb (int vb_id, DataType dt, rom task)
+VBlockP vb_initialize_nonpool_vb (VBID vb_id, DataType dt, rom task)
 {
     VBlockP vb            = CALLOC (get_vb_size (dt));
     vb->data_type         = DT_NONE;
@@ -190,7 +190,7 @@ VBlockP vb_initialize_nonpool_vb (int vb_id, DataType dt, rom task)
     return vb;
 }
 
-VBlockP vb_get_nonpool_vb (int vb_id)
+VBlockP vb_get_nonpool_vb (VBID vb_id)
 {
     return nonpool_vbs[NUM_NONPOOL_VBs + vb_id]; // may be NULL
 }
@@ -206,7 +206,7 @@ static VBlockP vb_update_data_type (VBlockP vb, DataType dt, DataType alloc_dt, 
         // to allocate different contexts with a different memory usage profile (eg b250 vs local) for each
         if (vb->data_type_alloced != DT_NONE) 
             buflist_destroy_private_and_context_vb_bufs (vb); 
-
+        
         buflist_compact (vb); // remove buffer_list entries marked for removal
 
         // calloc private part of new data_type
@@ -258,7 +258,7 @@ VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompITy
         dt = DT_GFF; // return GFF dt to its true dt after getting the size, otherwise it won't work   
 
     // circle around until a VB becomes available (busy wait)
-    uint32_t vb_id; for (vb_id=0; ; vb_id = (vb_id+1) % pool->num_vbs) {
+    VBID vb_id; for (vb_id=0; ; vb_id = (vb_id+1) % pool->num_vbs) {
         if (!pool->vb[vb_id]) { // VB is not allocated - allocate it
             pool->vb[vb_id] = CALLOC (sizeof_vb); 
             pool->num_allocated_vbs++;
@@ -315,19 +315,19 @@ VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompITy
     return vb;
 }
 
-uint32_t vb_pool_get_num_in_use (VBlockPoolType type, int32_t *id/*optional out*/)
+uint32_t vb_pool_get_num_in_use (VBlockPoolType type, VBID *id/*optional out*/)
 {
     VBlockPool *pool = vb_get_pool (type, HARD_FAIL);
     int num_in_use = __atomic_load_n (&pool->num_in_use, __ATOMIC_ACQUIRE); // atomic, bc for POOL_MAIN, writer thread might update concurrently.
 
     if (id) {
-        *id = -999;
+        *id = VB_ID_NONE;
         if (num_in_use) {
-            for (uint32_t vb_id=0; vb_id < pool->num_vbs; vb_id++)
+            for (VBID vb_id=0; vb_id < pool->num_vbs; vb_id++)
                 if (pool->vb[vb_id] && pool->vb[vb_id]->in_use) 
                     return *id = vb_id;
 
-            if (*id == -999) // all lost use while we were checking
+            if (*id == VB_ID_NONE) // all lost use while we were checking
                 num_in_use = 0;
         }
     }
@@ -351,7 +351,7 @@ bool vb_pool_is_empty (VBlockPoolType type)
 bool vb_is_valid (VBlockP vb)
 {
     if (vb->pool != NO_POOL)
-        for (uint32_t vb_id=0; vb_id < pools[vb->pool]->num_vbs; vb_id++)
+        for (VBID vb_id=0; vb_id < pools[vb->pool]->num_vbs; vb_id++)
             if (vb == pools[vb->pool]->vb[vb_id]) return true;
 
     for (int i=0; i < NUM_NONPOOL_VBs; i++)
@@ -360,12 +360,12 @@ bool vb_is_valid (VBlockP vb)
     return false;
 }
 
-// frees memory of all VBs, except for non-pool VBs (evb, segconf...)
+// frees memory of all VBs, except for non-pool VBs (evb, segconf, writer,...)
 void vb_destroy_pool_vbs (VBlockPoolType type, bool destroy_pool)
 {
     if (!pools[type]) return;
 
-    for (uint32_t vb_id=0; vb_id < pools[type]->num_vbs; vb_id++) 
+    for (VBID vb_id=0; vb_id < pools[type]->num_vbs; vb_id++) 
         vb_destroy_vb (&pools[type]->vb[vb_id]);
 
     if (destroy_pool)
@@ -376,7 +376,7 @@ void vb_destroy_pool_vbs (VBlockPoolType type, bool destroy_pool)
 rom err_vb_pos (void *vb)
 {
     static char s[80];
-    sprintf (s, "vb i=%u position in %s file=%"PRIu64, 
+    snprintf (s, sizeof (s), "vb i=%u position in %s file=%"PRIu64, 
              (VB)->vblock_i, dt_name (txt_file->data_type), (VB)->vb_position_txt_file);
     return s;
 }
@@ -413,10 +413,43 @@ rom textual_assseg_line (VBlockP vb)
     return Btxt(vb->line_start);
 }
 
-void vb_add_to_deferred_q (VBlockP vb, ContextP ctx, DeferredSeg seg, int16_t idx)
+static void vb_deferred_q_reorder (VBlockP vb, Did did_i, int q_index, int depth)
+{
+    ASSERT (depth < 10, "Cyclic seg order requirements, ctx=%s", CTX(did_i)->tag_name);
+
+    for (int i=0; i < q_index; i++)
+        if (vb->deferred_q[i].seg_after_did_i == did_i) {
+            // move element i to after element q_index
+            // example start: [A, B, C, D] (B.seg_after_did_i=D). result: [A, C, D, B]
+            DeferredField df = vb->deferred_q[i];
+            memmove (&vb->deferred_q[i], &vb->deferred_q[i+1], (q_index - i) * sizeof (DeferredField));
+            vb->deferred_q[q_index] = df;
+
+            // now, move any element that needs to be after i (B in the example)
+            vb_deferred_q_reorder (vb, df.did_i, q_index, depth+1);
+        }
+}
+
+void vb_add_to_deferred_q (VBlockP vb, ContextP ctx, DeferredSeg seg, int16_t idx,
+                           Did seg_after_did_i) // optional (DID_NONE if not) - ctx cannot be segged before seg_after_did_i (= another context that might be in the deferred queue)
 {
     ASSERT (vb->deferred_q_len+1 < DEFERRED_Q_SZ, "%s: deferred queue is full (deferred_q_len=%u) when adding %s", VB_NAME, vb->deferred_q_len, ctx->tag_name);
     ASSERT (idx >= 0, "Invalid idx=%d when adding %s", idx, ctx->tag_name);
 
-    vb->deferred_q[vb->deferred_q_len++] = (DeferredField){ .did_i=ctx->did_i, .seg=seg, .idx=idx };
+    vb->deferred_q[vb->deferred_q_len++] = (DeferredField){ .did_i=ctx->did_i, .seg=seg, .idx=idx, .seg_after_did_i = seg_after_did_i };
+
+    // change order of segging if needed
+    vb_deferred_q_reorder (vb, ctx->did_i, vb->deferred_q_len-1, 1);
+}
+
+void vb_display_deferred_q (VBlockP vb, rom func)
+{
+    if (!vb->deferred_q_len) return;
+
+    iprintf ("%s: %s Deferred seg queue: ", func, LN_NAME);
+
+    for (int i=0; i < vb->deferred_q_len; i++)
+        iprintf ("%s ", CTX(vb->deferred_q[i].did_i)->tag_name);
+
+    iprint0 ("\n");
 }

@@ -113,7 +113,7 @@ static void stream_pipe (int *fds, uint32_t pipe_size, bool is_stream_to_genozip
 
 static void stream_abort_cannot_exec (rom exec_name, rom reason)
 {
-    url_kill_curl(NULL);
+    url_close_remote_file_stream(NULL);
 
     fprintf (stderr, "\n%s: %s, %s needs to be in the execution path.\n", global_cmd, reason, exec_name);  
 
@@ -146,7 +146,7 @@ static HANDLE stream_exec_child (int *stream_stdout_to_genozip, int *stream_stde
 
     // surround each argument with quotes just in case it contains spaces
 #   define Q(i) argv[i] ? "\"" : "", argv[i], argv[i] ? "\"" : ""
-    sprintf (cmd_line, fmt, Q(0), Q(1), Q(2), Q(3), Q(4), Q(5), Q(6), Q(7), Q(8), Q(9), Q(10), Q(11), Q(12), Q(13), Q(14), 
+    snprintf (cmd_line, sizeof (cmd_line), fmt, Q(0), Q(1), Q(2), Q(3), Q(4), Q(5), Q(6), Q(7), Q(8), Q(9), Q(10), Q(11), Q(12), Q(13), Q(14), 
              Q(15), Q(16), Q(17), Q(18), Q(19), Q(20), Q(21), Q(22), Q(23), Q(24), Q(25), Q(26), Q(27), Q(28), Q(29));
 #   undef Q
 
@@ -251,7 +251,7 @@ static pid_t stream_exec_child (int *stream_stdout_to_genozip, int *stream_stder
 
 StreamP stream_create (StreamP parent_stream, uint32_t from_stream_stdout, uint32_t from_stream_stderr, uint32_t to_stream_stdin,
                        FILE *redirect_stdout_file, 
-                       rom input_url_name, // input to exec is coming from a URL
+                       rom input_url_name, // input to exec is coming from a URL: should only be used for reading remote file for compression, as url_open_remote_file  can only be used for that purpose
                        bool input_stdin,   // input to exec is coming from stdin 
                        rom reason,
                        rom exec_name, ...)
@@ -266,6 +266,7 @@ StreamP stream_create (StreamP parent_stream, uint32_t from_stream_stdout, uint3
     if (to_stream_stdin)    stream_pipe (genozip_to_stream_stdin,  to_stream_stdin, false);
 
     StreamP stream = CALLOC (sizeof (Stream));
+
     stream->exec_name = exec_name;
     if (parent_stream) parent_stream->substream = stream;
 
@@ -290,7 +291,7 @@ StreamP stream_create (StreamP parent_stream, uint32_t from_stream_stdout, uint3
 
     FILE *input_pipe = NULL;
     if (input_url_name) 
-        input_pipe = url_open (stream, input_url_name);
+        input_pipe = url_open_remote_file (stream, input_url_name);
     else if (input_stdin)
         input_pipe = fdopen (STDIN_FILENO,  "rb");
 
@@ -306,9 +307,11 @@ StreamP stream_create (StreamP parent_stream, uint32_t from_stream_stdout, uint3
     if (redirect_stdout_file) 
         FCLOSE (redirect_stdout_file, "redirect_stdout_file"); // the child has this file open, we don't need it
 
-    if (input_pipe && input_url_name) 
-        url_disconnect_from_curl (&input_pipe); // curl now belongs to the child process - we can close the stream to it 
-
+    if (input_pipe && input_url_name) {
+        url_disconnect_from_remote_file_stream (&input_pipe); // curl now belongs to the child process - we can close the stream to it 
+        stream->substream = NULL;
+    }
+    
     if (input_pipe && !input_url_name) 
         FCLOSE (input_pipe, "input_pipe"); // the child has this pipe open, we don't need it
 
@@ -358,16 +361,19 @@ int stream_close (StreamP *stream, StreamCloseMode close_mode)
     int exit_code = 0; 
     if ((*stream)->pid && close_mode != STREAM_DONT_WAIT_FOR_PROCESS)
         // TerminateProcess is asynchronous - we need to wait to make sure the process is terminated (not sure about kill)
-        exit_code = stream_wait_for_exit (*stream);
+        exit_code = stream_wait_for_exit (*stream, close_mode == STREAM_KILL_PROCESS);
 
-    url_reset_if_curl (*stream);
+    StreamP stream_copy = *stream;
     FREE (*stream);
+
+    url_reset_if_remote_file_stream (stream_copy); // must be after FREE
 
     return exit_code;
 }
 
 // returns exit status of child
-int stream_wait_for_exit (StreamP stream)
+int stream_wait_for_exit (StreamP stream,
+                          bool killed) // if true - process was killed - don't expect a normal exit
 {
     if (!stream->pid) return stream->exit_status; // we've already waited for this process and already have the exit status;
 
@@ -386,7 +392,7 @@ int stream_wait_for_exit (StreamP stream)
     
     stream->exit_status = WIFEXITED (exit_status) ? WEXITSTATUS (exit_status) : exit_status;
 
-    ASSERTW (WIFEXITED (exit_status), "Child process pid=%d exited abnormally (i.e. not via exit()). I waited for it %u milliseconds",          
+    ASSERTW (killed || WIFEXITED (exit_status), "Child process pid=%d exited abnormally (i.e. not via exit()). I waited for it %u milliseconds",          
              stream->pid, (unsigned)(CHECK_TIMER / 1000000ULL));
 
     // in Windows, the main process fails to CreateProcess it exits. In Unix, it is the child process that 
@@ -416,7 +422,7 @@ void stream_abort_if_cannot_run (rom exec_name, rom reason)
 // in Windows, the main process fails to CreateProcess and exits. In Unix, it is the child process that 
 // fails to execv, and exits and code EXIT_STREAM. The main process catches it in stream_wait_for_exit, and exits.
 #ifndef _WIN32
-    stream_wait_for_exit (stream); // exits if child process exited with code EXIT_STREAM
+    stream_wait_for_exit (stream, false); // exits if child process exited with code EXIT_STREAM
 #endif
 
     // if we reach here, everything's good - the exec can run.
@@ -428,7 +434,7 @@ void stream_abort_if_cannot_run (rom exec_name, rom reason)
 bool stream_is_exec_in_path (rom exec)
 {
 #ifdef _WIN32
-    // our own instance of curl - to not conflict with url_open
+    // our own instance of curl - to not conflict with url_open_remote_file 
     StreamP curl = stream_create (0, 0, 0, 0, 0, 0, 0,
                                   "where.exe", // reason in case of failure to execute curl
                                   "where.exe", "/Q", exec, NULL); 
@@ -437,7 +443,7 @@ bool stream_is_exec_in_path (rom exec)
 
 #else
     char run[32 + strlen(exec)];
-    sprintf (run, "which %s > /dev/null 2>&1", exec);
+    snprintf (run, sizeof (run), "which %s > /dev/null 2>&1", exec);
     return !system ("which wget > /dev/null 2>&1") && file_exists ("/dev/stdout");
 #endif
 }

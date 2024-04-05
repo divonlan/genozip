@@ -10,7 +10,7 @@
 
 #include "genozip.h"
 
-extern void regions_add (rom reg_str);
+extern void regions_add (char *reg_str);
 extern void regions_add_by_file (rom regions_filename);
 extern void regions_make_chregs (ContextP chrom_ctx);
 extern void regions_transform_negative_to_positive_complement(void);

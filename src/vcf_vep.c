@@ -163,6 +163,7 @@ void vcf_vep_zip_initialize (void) // nul-terminated string containing list of f
                            .items[0]  = { .dict_id = maf_dict_id[0], .separator = ":" },
                            .items[1]  = { .dict_id = maf_dict_id[1]                   } };
 
+    maf_container_snip_len = sizeof (maf_container_snip); // re-initialize for every file
     container_prepare_snip ((ContainerP)&con, 0, 0, qSTRa (maf_container_snip));
 
     FREE (segconf.vcf_vep_spec); // allocated in vcf_inspect_txt_header_zip

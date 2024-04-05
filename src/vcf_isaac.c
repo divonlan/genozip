@@ -32,7 +32,7 @@ void vcf_seg_FORMAT_GQX (VBlockVCFP vb, ContextP ctx, STRp(gqx))
     ContextP chan_ctx = seg_mux_get_channel_ctx (VB, FORMAT_GQX, (MultiplexerP)&vb->mux_GQX, channel_i);
     
     if (channel_i == 2) 
-        seg_delta_vs_other (VB, chan_ctx, CTX(FORMAT_GQ), STRa(gqx));
+        seg_delta_vs_other_localS (VB, chan_ctx, CTX(FORMAT_GQ), STRa(gqx), -1);
 
     else
         seg_by_ctx (VB, STRa(gqx), chan_ctx, gqx_len);

@@ -220,15 +220,17 @@ void fasta_zip_initialize (void)
 {
     tokenizer_zip_initialize();
 
-    seg_prepare_snip_other_do (SNIP_REDIRECTION, (DictId)_FASTA_DESC, false, 0, 0, &desc_redirect_snip[2], &desc_redirect_snip_len);
-    desc_redirect_snip[0] = SNIP_SPECIAL;
-    desc_redirect_snip[1] = FASTA_SPECIAL_DESC;
-    desc_redirect_snip_len += 2;
+    DO_ONCE {
+        seg_prepare_snip_other_do (SNIP_REDIRECTION, (DictId)_FASTA_DESC, false, 0, 0, &desc_redirect_snip[2], &desc_redirect_snip_len);
+        desc_redirect_snip[0] = SNIP_SPECIAL;
+        desc_redirect_snip[1] = FASTA_SPECIAL_DESC;
+        desc_redirect_snip_len += 2;
 
-    seg_prepare_snip_other_do (SNIP_OTHER_LOOKUP, (DictId)_FASTA_COMMENT, false, 0, 0, &comment_redirect_snip[2], &comment_redirect_snip_len);
-    comment_redirect_snip[0] = SNIP_SPECIAL;
-    comment_redirect_snip[1] = FASTA_SPECIAL_COMMENT;
-    comment_redirect_snip_len += 2;
+        seg_prepare_snip_other_do (SNIP_OTHER_LOOKUP, (DictId)_FASTA_COMMENT, false, 0, 0, &comment_redirect_snip[2], &comment_redirect_snip_len);
+        comment_redirect_snip[0] = SNIP_SPECIAL;
+        comment_redirect_snip[1] = FASTA_SPECIAL_COMMENT;
+        comment_redirect_snip_len += 2;
+    }
 }
 
 void fasta_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeaderP vb_header)

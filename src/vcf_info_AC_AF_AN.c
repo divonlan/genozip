@@ -16,10 +16,6 @@
 // INFO/AN
 // -------
 
-void vcf_AC_AF_AN_zip_initialize (void) 
-{
-}
-
 void vcf_seg_INFO_AN (VBlockVCFP vb)
 {
     decl_ctx (INFO_AN);

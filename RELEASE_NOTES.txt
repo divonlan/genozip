@@ -3,9 +3,10 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
-15.0.51 27/3/2024
+15.0.52 5/4//2024
 - FASTQ: Support for compressing .fastq.ora files (files produced by Illumina Ora).
-- VCF: Incrementally better compression of VCF files produced by DRAGEN.
+- VCF: Incrementally better compression of VCF 
+- Bug fixes
 
 15.0.50 8/3/2024
 - FASTQ: ~10% improvement in compression time and CPU consumption, without affecting compression ratio

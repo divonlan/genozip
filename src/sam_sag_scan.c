@@ -245,8 +245,9 @@ void sam_sag_by_flag_scan_for_depn (void)
     buf_free (evb->txt_data);   // discard the header
     RESTORE_FLAG (biopsy);
     
-    dispatcher_fan_out_task (task_name, txt_file->basename, 
-                             0, "Preprocessing...", // this is not the same as the preprocessing that happens in PIZ - loading sags'
+    dispatcher_fan_out_task (task_name, 
+                             save_txt_file->basename, // not txt_file-> bc it will be closed in a sec, while the progress component will continue to the main zip fan_out 
+                             0, "Preprocessing...",   // this is not the same as the preprocessing that happens in PIZ - loading sags'
                              false, false, flag.xthreads, 0, 5000, true,
                              scan_read_one_vb, 
                              scan_index_qnames_preprocessing, 

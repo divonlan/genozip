@@ -1105,7 +1105,7 @@ rom sam_piz_display_aln_cigar (const SAAln *a)
             memcpy (cigar, cigarS, MIN_(cigarS_len, SA_CIGAR_DISPLAY_LEN));
         }
         else {
-            sprintf (cigar, "BAD_WORD(%s.len=%u)", zctx->tag_name, zctx->word_list.len32);
+            snprintf (cigar, sizeof (cigar), "BAD_WORD(%s.len=%u)", zctx->tag_name, zctx->word_list.len32);
         }
     }
 

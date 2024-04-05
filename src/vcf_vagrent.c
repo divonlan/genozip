@@ -16,7 +16,9 @@ sSTRl(copy_VD_snip, 30);
 
 void vcf_vagrent_zip_initialize (void)
 {
-    seg_prepare_snip_other (SNIP_COPY, _INFO_VD, false, 0, copy_VD_snip);
+    DO_ONCE {
+        seg_prepare_snip_other (SNIP_COPY, _INFO_VD, false, 0, copy_VD_snip);
+    }
 }
 
 static void vcf_seg_VD_VW (VBlockVCFP vb, ContextP ctx, STRp(value))

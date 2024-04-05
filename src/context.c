@@ -1239,7 +1239,7 @@ void ctx_initialize_predefined_ctxs (ContextArray contexts,
     init_dict_id_to_did_map (d2d_map); // reset, in case data_type changed
 
     ConstBufferP aliases = aliases_get(); // NULL if no aliases
-    Did alias_dids[aliases->len]; // entry i corresponds to alias i
+    Did alias_dids[aliases->len+1]; // entry i corresponds to alias i (+1 just to avoid array of length 0 which causes an error with -fsanitize=undefined)
     memset (alias_dids, 0xff, sizeof (alias_dids)); // initialize to DID_NONE to detect duplicates
 
     for (Did did_i=0; did_i < dt_fields[dt].num_fields; did_i++) {
@@ -1432,7 +1432,7 @@ void ctx_update_stats (VBlockP vb)
 void ctx_dump_binary (VBlockP vb, ContextP ctx, bool local /* true = local, false = b250 */)
 {
     char dump_fn[MAX_TAG_LEN + 50];
-    sprintf (dump_fn, "%s.%05u.%s", ctx->tag_name, vb->vblock_i, local ? "local" : "b250");
+    snprintf (dump_fn, sizeof (dump_fn), "%s.%05u.%s", ctx->tag_name, vb->vblock_i, local ? "local" : "b250");
     
     bool success = local ? buf_dump_to_file (dump_fn, &ctx->local, lt_width(ctx), false, true, true, false)
                          : buf_dump_to_file (dump_fn, &ctx->b250, 1, false, true, true, false);
@@ -1514,7 +1514,7 @@ static void ctx_show_counts (ContextP zctx)
     if (!maybe_longr)
         qsort (counts, counts_len, sizeof (ShowCountsEnt), show_counts_cmp);
 
-    iprintf ("Showing counts of %s (did_i=%u). Occurances=%"PRIu64" Snips=%u\n", zctx->tag_name, zctx->did_i, sum_count, (unsigned)counts_len);    
+    iprintf ("\nShowing counts of %s (did_i=%u). Occurances=%"PRIu64" Snips=%u\n", zctx->tag_name, zctx->did_i, sum_count, (unsigned)counts_len);    
 
     if (sum_count)
         for (uint32_t i=0; i < counts_len; i++) {            
@@ -1982,7 +1982,7 @@ void ctx_show_zctx_big_consumers (FILE *out)
             LocalType ltype=0;
             uint32_t max_nodes = 0;
 
-            for (uint32_t vb_id=0; vb_id < pool->num_vbs; vb_id++) {
+            for (VBID vb_id=0; vb_id < pool->num_vbs; vb_id++) {
                 if (!pool->vb[vb_id] || !pool->vb[vb_id]->in_use) continue;
 
                 vctx = &pool->vb[vb_id]->contexts[zctx->did_i];

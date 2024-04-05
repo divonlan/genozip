@@ -30,6 +30,7 @@ void vcf_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
         z_file->max_ploidy_for_mux    = header->vcf.max_ploidy_for_mux; // since 15.0.36
         segconf.GQ_method             = header->vcf.segconf_GQ_method;
         segconf.FMT_DP_method         = header->vcf.segconf_FMT_DP_method;
+        segconf.INFO_DP_method        = header->vcf.segconf_INF_DP_method;
         segconf.MATEID_method         = header->vcf.segconf_MATEID_method;
         segconf.vcf_del_svlen_is_neg  = header->vcf.segconf_del_svlen_is_neg;
         segconf.wid_AC.width          = header->vcf.width.AC;
@@ -42,6 +43,7 @@ void vcf_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
         segconf.wid_AS_SB_TABLE.width = header->vcf.width.AS_SB_TABLE;
         segconf.wid_ID.width          = header->vcf.width.ID;
         segconf.wid_QUAL.width        = header->vcf.width.QUAL;
+        segconf.wid_BaseCounts.width  = header->vcf.width.BaseCounts;
     }
 }
 
@@ -129,7 +131,7 @@ void vcf_piz_insert_field (VBlockVCFP vb, ContextP ctx, STRp(value), int chars_r
         
         // adjust last_txt of other INFO contexts that might need insertion (and hence last_txt)
         if (ctx->did_i != VCF_ID) { // no need to adjust after inserting ID, as it is inserted during REFALT reconstruction (not at end of TOPLEVEL like the rest)
-            Did dids[] = { VCF_QUAL, INFO_QD, INFO_SF, INFO_DP, INFO_AN, INFO_AS_SB_TABLE };
+            Did dids[] = { VCF_QUAL, INFO_QD, INFO_SF, INFO_DP, INFO_AN, INFO_AS_SB_TABLE, INFO_BaseCounts };
             uint32_t last_txt_index = ctx->last_txt.index;
 
             bool found_me = false;
@@ -238,7 +240,7 @@ CONTAINER_ITEM_CALLBACK (vcf_piz_con_item_cb)
         
         case _FORMAT_DP:
             if (ctx_has_value (vb, FORMAT_DP)) { // not '.' or missing
-                if (CTX(INFO_DP)->dp.by_format_dp) 
+                if (segconf.INFO_DP_method == BY_FORMAT_DP) 
                     CTX(INFO_DP)->dp.sum_format_dp += CTX(FORMAT_DP)->last_value.i;
             
                 // add up DP's of samples with GT!=0/0, for consumption by INFO/QD predictor
@@ -301,14 +303,16 @@ CONTAINER_CALLBACK (vcf_piz_container_cb)
         if (ctx_encountered_in_line (vb, INFO_AN))
             vcf_piz_insert_INFO_AN (VB_VCF);
 
-        // note: DP must be inserted before vcf_piz_insert_INFO_QD, because QD needs DP.last_value
-        if (CTX(INFO_DP)->dp.by_format_dp)
-            vcf_piz_insert_INFO_DP (VB_VCF);
+        if (CTX(INFO_BaseCounts)->BaseCounts.is_deferred)
+            vcf_piz_insert_INFO_BaseCounts_by_AD (VB_VCF); 
+
+        if (CTX(INFO_DP)->dp.is_deferred)
+            vcf_piz_insert_INFO_DP (VB_VCF); // must be after BaseCounts (might depends on BaseCounts.last_value)
 
         if (have_INFO_SF)  
             vcf_piz_insert_INFO_SF (VB_VCF); // cleans up allocations - call even if line will be dropped due oSTATUS
 
-        if (CTX(INFO_QD)->qd.pred_type) 
+        if (CTX(INFO_QD)->qd.pred_type)  // must be after DP (depends on DP.last_value)
             vcf_piz_insert_INFO_QD (VB_VCF);
 
         if (CTX(INFO_AS_SB_TABLE)) 

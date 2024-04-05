@@ -41,10 +41,11 @@ void profiler_set_avg_compute_vbs (float avg_compute_vbs)
 StrTextSuperLong profiler_get_avg_compute_vbs (char sep)
 {
     StrTextSuperLong s = {};
+    int s_len = 0;
     for (int i=0; i < profile.num_txt_files; i++)
-        sprintf (&s.s[strlen(s.s)], "%.1f%c", profile.avg_compute_vbs[i], sep);
+        s_len += snprintf (&s.s[s_len], sizeof (s.s)-s_len, "%.1f%c", profile.avg_compute_vbs[i], sep);
 
-    if (s.s[0]) s.s[strlen(s.s)-1] = 0; // remove final separator
+    if (s.s[0]) s.s[s_len-1] = 0; // remove final separator
 
     return s;
 }
@@ -87,7 +88,7 @@ static inline uint32_t ms(uint64_t ns) { return (uint32_t)(ns / 1000000);}
 rom profiler_print_short (const ProfilerRec *p)
 {
     static char str[300]; // not thread safe
-    sprintf (str, "read: %s compute:%s write: %s", str_int_commas (ms(p->nanosecs.read)).s, str_int_commas (ms(p->nanosecs.compute)).s, str_int_commas (ms(p->nanosecs.write)).s);
+    snprintf (str, sizeof (str), "read: %s compute:%s write: %s", str_int_commas (ms(p->nanosecs.read)).s, str_int_commas (ms(p->nanosecs.compute)).s, str_int_commas (ms(p->nanosecs.write)).s);
     return str;
 }
 
@@ -125,6 +126,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (dict_io_read_all_dictionaries, 2);
         PRINT (dict_io_build_word_lists, 3);
         PRINT (txtheader_piz_read_and_reconstruct, 1);
+        PRINT (sam_header_inspect, 2);
         PRINT (digest_txt_header, 2);
         PRINT (vb_get_vb, 1);
         PRINT (piz_read_one_vb, 1);
@@ -222,11 +224,13 @@ void profiler_add_evb_and_print_report (void)
         PRINT (refhash_uncompress_one_vb, 2);
         PRINT (txtheader_zip_read_and_compress, 1);
         PRINT (txtfile_read_header, 2);
-        PRINT (sam_header_add_contig, 2); 
-        PRINT (contigs_create_index, 2);
-        PRINT (sam_header_zip_inspect_PG_lines, 2); 
-        PRINT (sam_header_zip_inspect_RG_lines, 2); 
-        PRINT (sam_header_zip_inspect_HD_line, 2);
+        PRINT (sam_header_inspect, 2);
+        PRINT (sam_header_zip_inspect_SQ_lines, 3); 
+        PRINT (sam_header_add_contig, 4); 
+        PRINT (contigs_create_index, 4);
+        PRINT (sam_header_zip_inspect_PG_lines, 3); 
+        PRINT (sam_header_zip_inspect_RG_lines, 3); 
+        PRINT (sam_header_zip_inspect_HD_line, 3);
         PRINT (ref_initialize_ranges, 2);
         PRINT (txtheader_compress, 2);
         PRINT (txtheader_compress_one_fragment, 3); 

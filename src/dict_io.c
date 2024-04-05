@@ -294,7 +294,7 @@ static void dict_io_uncompress_one_vb (VBlockP vb)
     // non-overlappying regions in the same buffer in parallel
     buf_overlay_partial (vb, &vb->scratch, &vb->fragment_ctx->dict, BNUM64(vb->fragment_ctx->dict, vb->fragment_start), "scratch");
     zfile_uncompress_section (vb, header, &vb->scratch, NULL, 0, SEC_DICT); // NULL name prevents buf_alloc
-    buf_free (vb->scratch);
+    buf_destroy (vb->scratch);
 
 done:
     vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.

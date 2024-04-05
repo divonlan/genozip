@@ -28,6 +28,7 @@ void vcf_reset_line (VBlockP vb_)
     CTX(FORMAT_GT_HT)->use_HT_matrix = false; 
     CTX(FORMAT_RGQ)->line_has_RGQ = unknown;
     CTX(FORMAT_SB)->ctx_specific = 0;
+    CTX(INFO_BaseCounts)->ctx_specific = 0;
     CTX(INFO_AN)->ctx_specific = 0;
     CTX(INFO_DP)->ctx_specific = 0;
     CTX(INFO_QD)->ctx_specific = 0;

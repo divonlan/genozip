@@ -426,11 +426,14 @@ static void stats_output_file_metadata (void)
 
             bufprintf (evb, &features, "INFO_method=%s;", VCF_INFO_method_name (segconf.vcf_INFO_method));
 
-            if (segconf.has[FORMAT_GQ])
-                bufprintf (evb, &features, "GQ_method=%s;", GQ_method_name (segconf.GQ_method));
+            if (segconf.has[INFO_DP])
+                bufprintf (evb, &features, "INFO_DP_method=%s;", INFO_DP_method_name (segconf.INFO_DP_method));
 
             if (segconf.has[FORMAT_DP])
                 bufprintf (evb, &features, "FMT_DP_method=%s;", FMT_DP_method_name (segconf.FMT_DP_method));
+
+            if (segconf.has[FORMAT_GQ])
+                bufprintf (evb, &features, "GQ_method=%s;", GQ_method_name (segconf.GQ_method));
 
             if (segconf.has[FORMAT_PL])
                 bufprintf (evb, &features, "PL_method=%s;",  segconf.PL_mux_by_DP==yes ? "DosageXDP" : "Dosage");
@@ -754,7 +757,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
         all_txt_len     += s->txt_len;
 
         if ((Z_DT(VCF) || Z_DT(BCF) || Z_DT(GFF)) && dict_id_type(zctx->dict_id) != DTYPE_FIELD)
-            sprintf (s->name, "%s/%s", dtype_name_z(zctx->dict_id), zctx->tag_name);
+            snprintf (s->name, sizeof (s->name), "%s/%s", dtype_name_z(zctx->dict_id), zctx->tag_name);
         else  
             strcpy (s->name, zctx->tag_name);
 

@@ -43,8 +43,9 @@
         fastq_read_pair_1_data, piz_read_all_ctxs, fastq_seg_get_lines, fastq_seg_SEQ, fastq_seg_QUAL, \
         fastq_seg_deep, fastq_deep_seg_find_subseq, fastq_seg_DESC, fastq_seg_saux, fastq_seg_deep_consume_unique_matching_ent,\
         ref_initialize_ranges,\
-        sam_seg_sag_stuff, sam_cigar_binary_to_textual, squank_seg, bam_seq_to_sam, aligner_seg_seq,\
+        sam_seg_sag_stuff, sam_cigar_binary_to_textual, squank_seg, bam_seq_to_sam, aligner_seg_seq, sam_header_inspect,\
         sam_header_add_contig, contigs_create_index, sam_header_zip_inspect_PG_lines, sam_header_zip_inspect_RG_lines, sam_header_zip_inspect_HD_line, \
+        sam_header_zip_inspect_SQ_lines, \
         sam_deep_merge, sam_piz_con_item_cb, sam_piz_deep_compress, sam_piz_deep_add_qname, sam_piz_deep_add_seq, sam_piz_deep_add_qual,\
         sam_piz_deep_finalize_ents, sam_piz_deep_grab_deep_ents, \
         fastq_special_set_deep, fastq_special_deep_copy_QNAME, fastq_special_deep_copy_SEQ, fastq_special_deep_copy_QUAL, fastq_special_monochar_QUAL, \

@@ -18,7 +18,8 @@
 // SEG
 //---------
 
-// called when segging SEQ
+// called when segging SEQ: if MD is already verified as consistent with CIGAR,
+// we now verify that the mismatches are consistent with SEQ.
 void sam_MD_Z_verify_due_to_seq (VBlockSAMP vb, STRp(seq), PosType32 pos, BitsP sqbitmap, uint64_t sqbitmap_start)
 {
     BitsP M_is_ref = (BitsP)&vb->md_M_is_ref;
@@ -46,15 +47,20 @@ static inline rom sam_md_consume_D (VBlockSAMP vb, bool is_depn, char **md_in_ou
 
     if (! *md || *md != '^' || !IS_ACGT(md[1])) {
         *critical_error = true;
-        return "Malformed MD while parsing D - expecting '^'"; // expecting a deletion (must include at least one base)
+        return "Malformed MD while parsing D - expecting '^'"; // expecting a deletion (must include at least one base).
     }
 
+    if (!IS_DIGIT (md[-1])) {
+        *critical_error = true;
+        return "Malformed MD while parsing D - expecting preceding character to be a digit"; 
+    }
+    
     md++;
 
     rom error=NULL;
     while (IS_ACGT(*md) && D_bases) {
         if (!error)
-            error = sam_seg_analyze_set_one_ref_base (vb, is_depn, *pos, *md, *M_D_bases, range_p, lock); // // continue counting mismatch_bases_by_MD despite error
+            error = sam_seg_analyze_set_one_ref_base (vb, is_depn, *pos, *md, *M_D_bases, range_p, lock); 
             
         D_bases--;
         (*M_D_bases)--;
@@ -143,7 +149,7 @@ static inline rom sam_md_consume_M (VBlockSAMP vb, bool is_depn, char **md_in_ou
 //   sam_seg_SEQ will conduct the final verification step of comparing this bitmap to the one calculated from the SEQ data.
 // Note: a correct MD:Z may still appear sometimes as "unverified" in REF_INTERNAL, if the locus in the internal reference was populated
 // by an earlier read with a base different than the base in the reference with which this SAM file was generated.
-void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(md), PosType32 pos)
+void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, rom md_orig, uint32_t md_len, PosType32 pos)
 {
     START_TIMER;
 
@@ -158,12 +164,12 @@ void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(md), PosType3
     bool is_depn = (IS_DEPN(vb) && vb->sag) || sam_has_saggy; 
 
     if (flag.show_wrong_md)
-        seg_set_last_txt (VB, CTX(OPTION_MD_Z), STRa(md)); // consumed in sam_seg_SEQ
+        seg_set_last_txt (VB, CTX(OPTION_MD_Z), md_orig, md_len); // consumed in sam_seg_SEQ
 
     // copy of MD as we are going to modify it (but we still need the original intact for sam_seg_MD_Z)
-    char md_data[md_len+1];
-    md = memcpy (md_data, md, md_len);
-    md_data[md_len] = 0;
+    char md_data[md_len+2];
+    char *md = memcpy (md_data+1, md_orig, md_len);
+    md[-1] = md[md_len] = 0; // nul-terminator on both ends (so we can test preceding character with md[-1])
 
     if (!pos) not_verified ("No POS")
     if (IS_ASTERISK (vb->chrom_name)) not_verified ("No RNAME");
@@ -187,17 +193,15 @@ void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(md), PosType3
 
         rom error=NULL;
         if (op->op==BC_M || op->op==BC_E || op->op==BC_X) { 
-            if ((error = sam_md_consume_M (vb, is_depn, (char**)&md, &M_D_bases, &pos, op->n, M_is_ref, &M_is_ref_i, &range, &lock, &critical_error))
+            if ((error = sam_md_consume_M (vb, is_depn, &md, &M_D_bases, &pos, op->n, M_is_ref, &M_is_ref_i, &range, &lock, &critical_error))
                 && critical_error) // break loop now if critical error, else continue to count mismatch_bases_by_MD despite error
-                goto not_verified;
+                not_verified (error);
         }
 
         else if (op->op==BC_D) {
-            if (!IS_DIGIT (md[-1])) not_verified ("No digit before D");
-
-            if ((error = sam_md_consume_D (vb, is_depn, (char**)&md, &M_D_bases, &pos, op->n, &range, &lock, &critical_error)) 
+            if ((error = sam_md_consume_D (vb, is_depn, &md, &M_D_bases, &pos, op->n, &range, &lock, &critical_error)) 
                 && critical_error)
-                goto not_verified;
+                not_verified (error);
         }
 
         else if (op->op==BC_N) { 
@@ -208,7 +212,8 @@ void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(md), PosType3
         if (!reason) reason = error;
     }
 
-    if (*md && !(*md=='0' && !md[1])) not_verified ("Failed to consume entire MD"); // case: we didn't consume the entire MD (except an allowed trailing '0')
+    // case: we didn't consume the entire MD (except an allowed trailing '0')
+    if (*md && !(*md=='0' && !md[1])) not_verified ("Failed to consume entire MD"); 
 
     if (reason) goto not_verified_buf_mismatch_count_ok; // now we can handle the non-critical error raised in sam_md_consume_M
 

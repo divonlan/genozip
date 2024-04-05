@@ -13,7 +13,8 @@ sSTRl (tcr_snip, 32);
 
 void vcf_platypus_zip_initialize (void)
 {
-    seg_prepare_minus_snip (VCF, _INFO_TC, _INFO_TCF, tcr_snip);
+    DO_ONCE 
+        seg_prepare_minus_snip (VCF, _INFO_TC, _INFO_TCF, tcr_snip);
 }
 
 void vcf_platypus_seg_initialize (VBlockVCFP vb)
@@ -163,7 +164,7 @@ void vcf_seg_platypus_FORMAT_GOF (VBlockVCFP vb, ContextP ctx, STRp(gof_str))
     if (ctx_has_value_in_line_(VB, CTX(INFO_MGOF)) && str_get_int (STRa(gof_str), &gof) &&
         gof == CTX(INFO_MGOF)->last_value.i)
 
-        seg_delta_vs_other_do (VB, ctx, CTX(INFO_MGOF), 0, 0, gof, -1, gof_str_len); // always delta 0. TO DO: more effecient to use SNIP_COPY
+        seg_delta_vs_other_localN (VB, ctx, CTX(INFO_MGOF), gof, -1, gof_str_len); // always delta 0. TO DO: more effecient to use SNIP_COPY
 
     else 
         seg_integer_or_not (VB, ctx, STRa(gof_str), gof_str_len);
@@ -179,9 +180,9 @@ void vcf_seg_playpus_INFO_WS_WE (VBlockVCFP vb, ContextP ctx, STRp(value))
     ContextP other_ctx = CTX(ctx->did_i == INFO_WS ? INFO_WE : INFO_WS);
 
     if (ctx_has_value_in_line_(VB, other_ctx))
-        seg_delta_vs_other_do (VB, ctx, other_ctx, STRa(value), 0, 128, value_len);
+        seg_delta_vs_other_localS (VB, ctx, other_ctx, STRa(value), 128);
     else
-        seg_delta_vs_other_do (VB, ctx, CTX(VCF_POS), STRa(value), 0, 128, value_len);
+        seg_delta_vs_other_localS (VB, ctx, CTX(VCF_POS), STRa(value), 128);
 }
 
 // ---------------------------------------------------------

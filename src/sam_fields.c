@@ -84,20 +84,20 @@ bool sam_seg_peek_int_field (VBlockSAMP vb, Did did_i, int16_t idx, int32_t min_
 SamFlagStr sam_dis_FLAG (SamFlags f)
 {
     SamFlagStr result;
-    char *next = result.s;
+    char *next = result.s, *after = result.s + sizeof (result.s);
 
-    if (f.multi_segs) next += sprintf (next, "MultiSeg,");
-    if (f.is_aligned)     next += sprintf (next, "Aligned,");
-    if (f.unmapped)       next += sprintf (next, "Unmapped,");
-    if (f.next_unmapped)  next += sprintf (next, "NextUnmapped,");
-    if (f.rev_comp)       next += sprintf (next, "Revcomp,");
-    if (f.next_rev_comp)  next += sprintf (next, "NextRevcomp,");
-    if (f.is_first)       next += sprintf (next, "First,");
-    if (f.is_last)        next += sprintf (next, "Last,");
-    if (f.secondary)      next += sprintf (next, "Secondary,");
-    if (f.filtered)       next += sprintf (next, "Filtered,");
-    if (f.duplicate)      next += sprintf (next, "Duplicate,");
-    if (f.supplementary)  next += sprintf (next, "Supplementary,");
+    if (f.multi_segs)     next += snprintf (next, after - next, "MultiSeg,");
+    if (f.is_aligned)     next += snprintf (next, after - next, "Aligned,");
+    if (f.unmapped)       next += snprintf (next, after - next, "Unmapped,");
+    if (f.next_unmapped)  next += snprintf (next, after - next, "NextUnmapped,");
+    if (f.rev_comp)       next += snprintf (next, after - next, "Revcomp,");
+    if (f.next_rev_comp)  next += snprintf (next, after - next, "NextRevcomp,");
+    if (f.is_first)       next += snprintf (next, after - next, "First,");
+    if (f.is_last)        next += snprintf (next, after - next, "Last,");
+    if (f.secondary)      next += snprintf (next, after - next, "Secondary,");
+    if (f.filtered)       next += snprintf (next, after - next, "Filtered,");
+    if (f.duplicate)      next += snprintf (next, after - next, "Duplicate,");
+    if (f.supplementary)  next += snprintf (next, after - next, "Supplementary,");
     
     if (next != result.s) *(next-1) = 0; // removal comma separator from final item
 
@@ -706,7 +706,7 @@ static inline void sam_seg_AS_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t as, 
 
     // if we have minimap2-produced ms:i, AS is close to it
     else if (segconf.sam_ms_type == ms_MINIMAP2 && sam_seg_peek_int_field (vb, OPTION_ms_i, vb->idx_ms_i, -0x8000000, 0x7fffffff, true/*needed for delta*/, NULL)) 
-        seg_delta_vs_other (VB, CTX(OPTION_AS_i), CTX(OPTION_ms_i), NULL, add_bytes);
+        seg_delta_vs_other_localN (VB, CTX(OPTION_AS_i), CTX(OPTION_ms_i), as, -1, add_bytes);
 
     else
         seg_integer (VB, CTX (OPTION_AS_i), as, true, add_bytes);
@@ -857,7 +857,7 @@ static inline void sam_seg_MQ_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t mq, 
         seg_by_ctx (VB, STRa(copy_mate_MAPQ_snip), channel_ctx, add_bytes); // copy MAPQ from earlier-line mate 
 
     else 
-        seg_delta_vs_other_do (VB, channel_ctx, CTX(SAM_MAPQ), 0, 0, mq, -1, add_bytes);
+        seg_delta_vs_other_localN (VB, channel_ctx, CTX(SAM_MAPQ), mq, -1, add_bytes);
 
     seg_by_did (VB, STRa(vb->mux_MQ.snip), OPTION_MQ_i, 0); // de-multiplexer
 }
@@ -1072,7 +1072,7 @@ static inline unsigned sam_seg_aux_add_bytes (char type, unsigned value_len, boo
 static void sam_seg_initialize_for_float (VBlockSAMP vb, ContextP ctx)
 {
     ctx->flags.store = STORE_FLOAT; // needs this be reconstructable as BAM
-    ctx->ltype = LT_FLOAT32;
+    ctx->ltype = IS_BAM_ZIP ? LT_FLOAT32 : LT_STRING;
     ctx->is_initialized = true;
 
     // case BAM: add all-the-same special (note: since we have local, we must seg one b250, its not enough to just add it to dict)
@@ -1186,8 +1186,8 @@ void sam_seg_array_one_ctx (VBlockSAMP vb, ZipDataLineSAMP dl, DictId dict_id, u
                 value = LTEN64 (value); // consistent with BAM and avoid a condition before the memcpy below 
                 memcpy (&local_start[i*width], &value, width);
             }
-            else 
-                seg_float_or_not (VB, elem_ctx, STRa(snip), 0);
+            else // float
+                seg_add_to_local_string (VB, elem_ctx, STRa(snip), LOOKUP_NONE, 0);
             
             array_len--; // skip comma
             array++;
@@ -1307,7 +1307,7 @@ void sam_seg_array_multi_ctx (VBlockSAMP vb, ZipDataLineSAMP dl, ContextP con_ct
 
         for (uint32_t i=0; i < n_subctxs; i++) {
             ContextP item_ctx = ctx_get_ctx (vb, con->items[i+1].dict_id);
-            seg_float_or_not (VB, item_ctx, STRi(item, i), item_lens[i]);
+            seg_add_to_local_string (VB, item_ctx, STRi(item, i), LOOKUP_NONE, item_lens[i]);
         }
 
         con_ctx->txt_len += n_subctxs-1; // commas
@@ -1327,7 +1327,7 @@ void sam_seg_float_as_snip (VBlockSAMP vb, ContextP ctx, STRp(sam_value), ValueT
     
     else 
         // in case of SAM, we seg the string so we maintain the precise textual representation. 
-        seg_float_or_not (VB, ctx, STRa(sam_value), add_bytes);
+        seg_by_ctx (VB, STRa(sam_value), ctx, add_bytes);
 }
 
 // note: also called from fastq_seg_one_saux()
@@ -1353,7 +1353,7 @@ void sam_seg_aux_field_fallback (VBlockP vb, void *dl, DictId dict_id, char sam_
         }
         
         else // sam
-            seg_float_or_not (VB, ctx, STRa(value), add_bytes);
+            seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, add_bytes);
     }
 
     // Numeric array

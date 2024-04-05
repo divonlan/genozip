@@ -31,52 +31,54 @@ sSTRl (copy_ALT_BND_REF_snip, 32);
 
 void vcf_refalt_zip_initialize (void)
 {
-    SmallContainer con_BND[4];
+    DO_ONCE {
+        SmallContainer con_BND[4];
 
-    // REF=A ALT="AAACTCCT[hs37d5:33588521["
-    con_BND[0] = (SmallContainer){
-        .repeats   = 1,
-        .nitems_lo = 5,
-        .items     = { { .dict_id.num = _ALT_BND_REF,    .separator[0] = '\t' },
-                       { .dict_id.num = _ALT_BND_REF2,                        },
-                       { .dict_id.num = _ALT_BND_INS,    .separator[0] = '['  },
-                       { .dict_id.num = _VCF_MATE_CHROM, .separator[0] = ':'  },
-                       { .dict_id.num = _VCF_MATE_POS,   .separator[0] = '['  } } };
+        // REF=A ALT="AAACTCCT[hs37d5:33588521["
+        con_BND[0] = (SmallContainer){
+            .repeats   = 1,
+            .nitems_lo = 5,
+            .items     = { { .dict_id.num = _ALT_BND_REF,    .separator[0] = '\t' },
+                        { .dict_id.num = _ALT_BND_REF2,                        },
+                        { .dict_id.num = _ALT_BND_INS,    .separator[0] = '['  },
+                        { .dict_id.num = _VCF_MATE_CHROM, .separator[0] = ':'  },
+                        { .dict_id.num = _VCF_MATE_POS,   .separator[0] = '['  } } };
 
-    // REF=A ALT="AAACTCCT]hs37d5:33588521]"
-    con_BND[1] = (SmallContainer){
-        .repeats   = 1,
-        .nitems_lo = 5,
-        .items     = { { .dict_id.num = _ALT_BND_REF,    .separator[0] = '\t' },
-                       { .dict_id.num = _ALT_BND_REF2,                        },
-                       { .dict_id.num = _ALT_BND_INS,    .separator[0] = ']'  },
-                       { .dict_id.num = _VCF_MATE_CHROM, .separator[0] = ':'  },
-                       { .dict_id.num = _VCF_MATE_POS,   .separator[0] = ']'  } } };
+        // REF=A ALT="AAACTCCT]hs37d5:33588521]"
+        con_BND[1] = (SmallContainer){
+            .repeats   = 1,
+            .nitems_lo = 5,
+            .items     = { { .dict_id.num = _ALT_BND_REF,    .separator[0] = '\t' },
+                        { .dict_id.num = _ALT_BND_REF2,                        },
+                        { .dict_id.num = _ALT_BND_INS,    .separator[0] = ']'  },
+                        { .dict_id.num = _VCF_MATE_CHROM, .separator[0] = ':'  },
+                        { .dict_id.num = _VCF_MATE_POS,   .separator[0] = ']'  } } };
 
-    // REF=G       ALT="[hs37d5:35428323[TAAGAGCCGCTGGCTGGCTGTCCGGGCAGGCCTCCTGGCTGCACCTGCCACAGTGCACAGGCTGACTGAGGTGCACG"
-    con_BND[2] = (SmallContainer){
-        .repeats   = 1,
-        .nitems_lo = 5,
-        .items     = { { .dict_id.num = _ALT_BND_REF,    .separator  = "\t["  },
-                       { .dict_id.num = _VCF_MATE_CHROM, .separator[0] = ':'  },
-                       { .dict_id.num = _VCF_MATE_POS,   .separator[0] = '['  },
-                       { .dict_id.num = _ALT_BND_INS,                         },
-                       { .dict_id.num = _ALT_BND_REF2                         } } };
+        // REF=G       ALT="[hs37d5:35428323[TAAGAGCCGCTGGCTGGCTGTCCGGGCAGGCCTCCTGGCTGCACCTGCCACAGTGCACAGGCTGACTGAGGTGCACG"
+        con_BND[2] = (SmallContainer){
+            .repeats   = 1,
+            .nitems_lo = 5,
+            .items     = { { .dict_id.num = _ALT_BND_REF,    .separator  = "\t["  },
+                        { .dict_id.num = _VCF_MATE_CHROM, .separator[0] = ':'  },
+                        { .dict_id.num = _VCF_MATE_POS,   .separator[0] = '['  },
+                        { .dict_id.num = _ALT_BND_INS,                         },
+                        { .dict_id.num = _ALT_BND_REF2                         } } };
 
-    // REF=G       ALT="]hs37d5:35428323]TAAGAGCCGCTGGCTGGCTGTCCGGGCAGGCCTCCTGGCTGCACCTGCCACAGTGCACAGGCTGACTGAGGTGCACG"
-    con_BND[3] = (SmallContainer){
-        .repeats   = 1,
-        .nitems_lo = 5,
-        .items     = { { .dict_id.num = _ALT_BND_REF,    .separator  = "\t]"  },
-                       { .dict_id.num = _VCF_MATE_CHROM, .separator[0] = ':'  },
-                       { .dict_id.num = _VCF_MATE_POS,   .separator[0] = ']'  },
-                       { .dict_id.num = _ALT_BND_INS,                         },
-                       { .dict_id.num = _ALT_BND_REF2                         } } };
+        // REF=G       ALT="]hs37d5:35428323]TAAGAGCCGCTGGCTGGCTGTCCGGGCAGGCCTCCTGGCTGCACCTGCCACAGTGCACAGGCTGACTGAGGTGCACG"
+        con_BND[3] = (SmallContainer){
+            .repeats   = 1,
+            .nitems_lo = 5,
+            .items     = { { .dict_id.num = _ALT_BND_REF,    .separator  = "\t]"  },
+                        { .dict_id.num = _VCF_MATE_CHROM, .separator[0] = ':'  },
+                        { .dict_id.num = _VCF_MATE_POS,   .separator[0] = ']'  },
+                        { .dict_id.num = _ALT_BND_INS,                         },
+                        { .dict_id.num = _ALT_BND_REF2                         } } };
 
-    for (int i=0; i < 4; i++)
-        container_prepare_snip ((ContainerP)&con_BND[i], 0, 0, con_BND_snips[i], &con_BND_snip_lens[i]);
+        for (int i=0; i < 4; i++)
+            container_prepare_snip ((ContainerP)&con_BND[i], 0, 0, con_BND_snips[i], &con_BND_snip_lens[i]);
 
-    seg_prepare_snip_other (SNIP_COPY, _ALT_BND_REF, false, 0, copy_ALT_BND_REF_snip);
+        seg_prepare_snip_other (SNIP_COPY, _ALT_BND_REF, false, 0, copy_ALT_BND_REF_snip);
+    }
 }
 
 void vcf_refalt_seg_initialize (VBlockVCFP vb)

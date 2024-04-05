@@ -14,15 +14,26 @@
 #include "codec.h"
 #include "reconstruct.h"
 #include "stats.h"
+#include "zip_dyn_int.h"
 
 #define info_items CTX(VCF_INFO)->info_items
 
 STRl(copy_VCF_POS_snip, 16);
+sSTRl(copy_BaseCounts_sum, 32);
 
 // called after reading VCF header, before segconf
 void vcf_info_zip_initialize (void) 
 {
-    seg_prepare_snip_other (SNIP_COPY, _VCF_POS, false, 0, copy_VCF_POS_snip);
+    DO_ONCE {
+        seg_prepare_snip_other (SNIP_COPY, _VCF_POS, false, 0, copy_VCF_POS_snip);
+        
+        // copy_BaseCounts_sum is a DELTA-0 of BaseCounts (=copy) prefixes with SPECIAL
+        copy_BaseCounts_sum[0] = SNIP_SPECIAL;
+        copy_BaseCounts_sum[1] = VCF_SPECIAL_deferred_DP;
+        copy_BaseCounts_sum_len -= 2;
+        seg_prepare_snip_other_do (SNIP_OTHER_DELTA, _INFO_BaseCounts, true, 0, 0, copy_BaseCounts_sum + 2, &copy_BaseCounts_sum_len);   
+        copy_BaseCounts_sum_len += 2;
+    }
 }
 
 void vcf_info_seg_initialize (VBlockVCFP vb) 
@@ -45,6 +56,9 @@ void vcf_info_seg_initialize (VBlockVCFP vb)
                      T(segconf.INFO_DP_method == INFO_DP_DEFAULT, INFO_DP),
                      DID_EOL);
     
+    if (segconf.INFO_DP_method == BY_BaseCounts)
+        ctx_set_same_line (VB, INFO_DP, DID_EOL);
+
     if (segconf.has[INFO_CLNHGVS]) vcf_seg_hgvs_consolidate_stats (vb, INFO_CLNHGVS);
     if (segconf.has[INFO_HGVSG])   vcf_seg_hgvs_consolidate_stats (vb, INFO_HGVSG);
     if (segconf.has[INFO_ANN])     vcf_seg_hgvs_consolidate_stats (vb, INFO_ANN); // subfield HGVS_c
@@ -57,6 +71,7 @@ void vcf_info_seg_initialize (VBlockVCFP vb)
 // -------
 
 static void vcf_seg_INFO_DP_by_FORMAT_DP (VBlockP vb); // forward
+static void vcf_seg_INFO_DP_by_BaseCounts (VBlockP vb);
 
 // return true if caller still needs to seg 
 static void vcf_seg_INFO_DP (VBlockVCFP vb, ContextP ctx, STRp(dp_str))
@@ -67,25 +82,23 @@ static void vcf_seg_INFO_DP (VBlockVCFP vb, ContextP ctx, STRp(dp_str))
     int64_t dp;
     bool has_value = str_get_int (STRa(dp_str), &dp);
 
-    // also tried delta vs DP4, but it made it worse
-    ContextP ctx_basecounts;
-    if (ctx_has_value_in_line (vb, _INFO_BaseCounts, &ctx_basecounts)) 
-        seg_delta_vs_other (VB, ctx, ctx_basecounts, STRa(dp_str));
-
-    else if (!has_value || segconf.INFO_DP_method == INFO_DP_DEFAULT) 
+    if (!has_value || segconf.INFO_DP_method == INFO_DP_DEFAULT || segconf.running) 
         seg_integer_or_not (VB, ctx, STRa(dp_str), dp_str_len);
 
+    else if (segconf.INFO_DP_method == BY_BaseCounts) 
+        vb_add_to_deferred_q (VB, ctx, vcf_seg_INFO_DP_by_BaseCounts, vb->idx_DP, INFO_BaseCounts);
+
     // defer segging to vcf_seg_INFO_DP_by_FORMAT_DP called after samples are done
-    else { // BY_FORMAT_DP
-        ctx->dp.by_format_dp = true;
-        vb_add_to_deferred_q (VB, ctx, vcf_seg_INFO_DP_by_FORMAT_DP, vb->idx_DP);
-    }
+    else if (segconf.INFO_DP_method == BY_FORMAT_DP)  
+        vb_add_to_deferred_q (VB, ctx, vcf_seg_INFO_DP_by_FORMAT_DP, vb->idx_DP, DID_NONE);
+
+    else
+        ABOSEG ("Unknown method INFO_DP_method=%d", segconf.INFO_DP_method);
 
     if (has_value) 
         ctx_set_last_value (VB, ctx, dp);
 }
 
-// used for multi-sample VCFs, IF FORMAT/DP is segged as a simple integer
 static void vcf_seg_INFO_DP_by_FORMAT_DP (VBlockP vb)
 {
     decl_ctx (INFO_DP);
@@ -94,19 +107,55 @@ static void vcf_seg_INFO_DP_by_FORMAT_DP (VBlockP vb)
 
     // note: INFO/DP >= sum(FORMAT/DP) as the per-sample value is filtered, see: https://gatk.broadinstitute.org/hc/en-us/articles/360036891012-DepthPerSampleHC
     // note: up to 15.0.35, we had the value_len before the \t
-    SNIPi3 (SNIP_SPECIAL, VCF_SPECIAL_DP_by_DP, '\t', ctx->last_value.i - ctx->dp.sum_format_dp);
+    SNIPi3 (SNIP_SPECIAL, VCF_SPECIAL_deferred_DP, '\t', ctx->last_value.i - ctx->dp.sum_format_dp);
     seg_by_ctx (VB, STRa(snip), ctx, value_len); 
 }
 
-// initialize reconstructing INFO/DP by sum(FORMAT/DP) - save space in txt_data, and initialize delta
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_DP_by_DP)
+static void vcf_seg_INFO_DP_by_BaseCounts (VBlockP vb)
 {
-    str_split (snip, snip_len, 2, '\t', item, 2); // note: up to 15.0.35, items[0] was the length of the integer to be inserted. we ignore it now.
+    ContextP ctx_dp = CTX(INFO_DP);
+    ContextP ctx_basecounts = CTX(INFO_BaseCounts);
+    unsigned add_bytes = ctx_dp->last_txt.len;
 
-    if (!flag.drop_genotypes && !flag.gt_only && !flag.samples) {
-        ctx->dp.sum_format_dp = atoi (items[1]); // initialize with delta
-        ctx->dp.by_format_dp = true;             // DP needs to be inserted by vcf_piz_insert_INFO_DP
+    if (ctx_has_value_in_line_(vb, ctx_basecounts) && ctx_has_value_in_line_(vb, ctx_dp)) {
+        if (ctx_basecounts->last_value.i == ctx_dp->last_value.i) // expected: big majority of cases
+            seg_by_ctx (VB, STRa(copy_BaseCounts_sum), ctx_dp, add_bytes);
         
+        else {
+            int64_t delta = ctx_dp->last_value.i - ctx_basecounts->last_value.i; 
+
+            if (!ctx_dp->snip_cache.len32) {
+                buf_alloc_exact (vb, ctx_dp->snip_cache, 48, uint8_t, "snip_cache");
+                *Bc(ctx_dp->snip_cache, 0) = SNIP_SPECIAL;
+                *Bc(ctx_dp->snip_cache, 1) = VCF_SPECIAL_deferred_DP;
+
+                uint32_t snip2_len = ctx_dp->snip_cache.len32 - 2;
+                seg_prepare_snip_other_do (SNIP_OTHER_DELTA, ctx_basecounts->dict_id, true, 0, '$', Bc(ctx_dp->snip_cache, 2), &snip2_len);
+                ctx_dp->snip_cache.len32 = snip2_len + 2;
+            }
+
+            seg_by_ctx (VB, STRb(ctx_dp->snip_cache), ctx_dp, add_bytes);
+
+            dyn_int_append (vb, ctx_dp, delta, 0); 
+        }
+    }
+
+    else
+        seg_integer_or_not (VB, ctx_dp, STRtxtw(ctx_dp->last_txt), add_bytes);
+}
+
+// initialize reconstructing INFO/DP by sum(FORMAT/DP) - save space in txt_data, and initialize delta
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_deferred_DP)
+{
+    if (!flag.drop_genotypes && !flag.gt_only && !flag.samples) {
+        ctx->dp.is_deferred = true;             // DP needs to be inserted by vcf_piz_insert_INFO_DP
+
+        if (segconf.INFO_DP_method == BY_FORMAT_DP) {
+            int64_t sum_format_dp;
+            str_item_i_int (STRa(snip), '\t', 1, &sum_format_dp); // note: up to 15.0.35, items[0] was the length of the integer to be inserted. we ignore it now.
+            ctx->dp.sum_format_dp = sum_format_dp; // initialize with delta
+        }
+
         vcf_piz_defer_to_after_samples (DP);
 
         return NO_NEW_VALUE; // we don't have the value yet - it will be set in vcf_piz_insert_INFO_DP
@@ -127,15 +176,33 @@ void vcf_piz_insert_INFO_DP (VBlockVCFP vb)
     
     if (IS_RECON_INSERTION(ctx)) {
         STRl(info_dp,16);
-        info_dp_len = str_int_ex (ctx->dp.sum_format_dp, info_dp, false);
+
+        if (segconf.INFO_DP_method == BY_FORMAT_DP) {
+            info_dp_len = str_int_ex (ctx->dp.sum_format_dp, info_dp, false);
+            ctx_set_last_value (VB, ctx, (int64_t)ctx->dp.sum_format_dp); // consumed by eg vcf_piz_insert_INFO_QD
+        }
+        
+        else { // BY_BaseCounts
+            rom recon = BAFTtxt;
+            STR(snip);
+            ctx_get_snip_by_word_index (ctx, ctx->last_wi, snip);
+            reconstruct_one_snip (VB, ctx, WORD_INDEX_NONE, snip+2, snip_len-2, true, __FUNCTION__, __LINE__);
+
+            info_dp_len = BAFTtxt - recon;
+            memcpy (info_dp, recon, info_dp_len);
+            Ltxt -= info_dp_len;
+
+            int64_t info_dp_value;
+            ASSPIZ (str_get_int (STRa(info_dp), &info_dp_value), "bad INFO_DP=\"%.*s\"", STRf(info_dp));
+
+            ctx_set_last_value (VB, ctx, info_dp_value);
+        } 
 
         vcf_piz_insert_field (vb, ctx, STRa(info_dp), segconf.wid_DP.width);
     }
-
-    ctx_set_last_value (VB, ctx, (int64_t)ctx->dp.sum_format_dp); // consumed by eg vcf_piz_insert_INFO_QD
 }
 
-// used starting v13.0.5, replaced in v14 with a new vcf_piz_special_DP_by_DP
+// used starting v13.0.5, replaced in v14 with a new vcf_piz_special_deferred_DP
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_DP_by_DP_v13)
 {
     str_split (snip, snip_len, 2, '\t', item, 2);
@@ -169,7 +236,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_DP_by_DP_v13)
 static bool vcf_seg_INFO_DP4_delta (VBlockP vb, ContextP ctx, STRp(value), uint32_t unused_rep)
 {
     if (ctx_encountered_in_line (vb, (ctx-1)->did_i)) {
-        seg_delta_vs_other (VB, ctx, ctx-1, STRa(value));
+        seg_delta_vs_other_localS (VB, ctx, ctx-1, STRa(value), -1);
         return true; // segged successfully
     }
     else
@@ -339,54 +406,6 @@ done:
     return NO_NEW_VALUE;
 }    
 
-// --------------------------------------------------------
-// Seg array of integers, expected to be of length n_alt
-// --------------------------------------------------------
-
-static void vcf_seg_array_of_N_ALTS_integers (VBlockVCFP vb, ContextP ctx, STRp(value))
-{
-    str_split (value, value_len, vb->n_alts, ',', ac_item, true);
-
-    if (!n_ac_items) {
-        seg_by_ctx (VB, STRa(value), ctx, value_len); // fallback
-        return;
-    }
-
-    MiniContainer con = { .repeats           = CON_REPEATS_IS_SPECIAL,
-                          .repsep            = ",",
-                          .drop_final_repsep = true,
-                          .nitems_lo         = 1, 
-                          .items             = { { .dict_id = sub_dict_id (ctx->dict_id, '0') } } };
-
-    if (!ctx->is_initialized) { 
-        ctx_consolidate_stats_(VB, ctx, (ContainerP)&con);
-        ctx->con_rep_special = VCF_SPECIAL_N_ALTS;
-        ctx->is_initialized  = true;
-        ctx->nothing_char = '.';
-    }
-
-    ContextP item_ctx = ctx_get_ctx (vb, con.items[0].dict_id);
-
-    for (int i=0; i < n_ac_items; i++)
-        seg_integer_or_not (VB, item_ctx, STRi(ac_item,i), 0); // an integer or '.'
-
-    container_seg (VB, ctx, (ContainerP)&con, 0, 0, value_len);
-}
-
-// used by container_reconstruct to retrieve the number of repeats
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_N_ALTS)
-{
-    new_value->i = VB_VCF->n_alts;
-    return HAS_NEW_VALUE;
-}
-
-// used by container_reconstruct to retrieve the number of repeats
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_N_ALLELES)
-{
-    new_value->i = VB_VCF->n_alts + 1;
-    return HAS_NEW_VALUE;
-}
-
 static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
 {
     unsigned modified_len = value_len + 20;
@@ -412,7 +431,10 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
     else if ((T(0,'A') && T(1,'C') && (T(2,'_') || T(2,'-'))) ||
              (T(0,'H') && T(1,'o') && T(2,'m') && T(3,'_')))
 
-        vcf_seg_array_of_N_ALTS_integers (vb, ctx, STRa(value));
+        vcf_seg_array_of_N_ALTS_numbers (vb, ctx, STRa(value), STORE_INT);
+
+    else if ((T(0,'A') && T(1,'F') && (T(2,'_') || T(2,'-'))))
+        vcf_seg_array_of_N_ALTS_numbers (vb, ctx, STRa(value), STORE_FLOAT);
 
     #undef T
 
@@ -422,31 +444,50 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         #define CALL_IF0(cond,f) if (cond) { (f); break; } else 
         #define CALL_WITH_FALLBACK(f) if (f(vb, ctx, STRa(value))) { seg_by_ctx (VB, STRa(value), ctx, value_len); } break
         #define STORE_AND_SEG(store_type) ({ seg_set_last_txt_store_value (VB, ctx, STRa(value), store_type); seg_by_ctx (VB, STRa(value), ctx, value_len); break; })
-        #define DEFER(f) ({ vb_add_to_deferred_q (VB, ctx, vcf_seg_INFO_##f, vb->idx_##f); seg_set_last_txt (VB, ctx, STRa(value)); break; })
+        #define DEFER(f,seg_after_did_i) ({ vb_add_to_deferred_q (VB, ctx, vcf_seg_INFO_##f, vb->idx_##f, seg_after_did_i); break; })
 
         // ---------------------------------------
         // Fields defined in the VCF specification
         // ---------------------------------------
         case _INFO_AC:              CALL (vcf_seg_INFO_AC (vb, ctx, STRa(value))); 
+        case _INFO_AF:              CALL (vcf_seg_array_of_N_ALTS_numbers (vb, ctx, STRa(value), STORE_FLOAT));
         case _INFO_AA:              CALL_IF (!segconf.vcf_is_cosmic, vcf_seg_INFO_allele (VB, ctx, STRa(value), 0)); // note: in COSMIC, INFO/AA is something entirely different
         case _INFO_DP:              CALL (vcf_seg_INFO_DP (vb, ctx, STRa(value)));
         case _INFO_END:             CALL (vcf_seg_INFO_END (vb, ctx, STRa(value))); // note: END is an alias of POS - they share the same delta stream - the next POS will be a delta vs this END)
 
         // ---------------------------------------
+        // Population AF fields
+        // ---------------------------------------
+        case _INFO_AMR_AF:
+        case _INFO_AFR_AF:
+        case _INFO_EUR_AF:
+        case _INFO_ASN_AF:
+        case _INFO_GNOMAD_AF:       CALL (seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, value_len));
+        
+        // ---------------------------------------
         // GATK fields
         // ---------------------------------------
         case _INFO_RAW_MQandDP:     CALL_IF (segconf.has[INFO_RAW_MQandDP], vcf_seg_INFO_RAW_MQandDP (vb, ctx, STRa(value)));
-        case _INFO_HaplotypeScore:  CALL (seg_float_or_not (VB, ctx, STRa(value), value_len));
-        case _INFO_BaseCounts:      CALL_WITH_FALLBACK (vcf_seg_INFO_BaseCounts);
+        case _INFO_BaseCounts:      DEFER(BaseCounts, DID_NONE);
         case _INFO_SF:              CALL_WITH_FALLBACK (vcf_seg_INFO_SF_init); // Source File
         case _INFO_MLEAC:           CALL (vcf_seg_INFO_MLEAC (vb, ctx, STRa(value)));
         case _INFO_MLEAF:           CALL (vcf_seg_INFO_MLEAF (vb, ctx, STRa(value)));
-        case _INFO_QD:              CALL_IF (segconf.has[INFO_QD], DEFER (QD)); // deferred seg to after samples - then call vcf_seg_INFO_QD
+        case _INFO_QD:              CALL_IF (segconf.has[INFO_QD], DEFER (QD, INFO_DP)); // deferred seg to after samples - then call vcf_seg_INFO_QD
         case _INFO_RU:              CALL (vcf_seg_INFO_RU (vb, ctx, STRa(value)));
         case _INFO_RPA:             CALL (vcf_seg_INFO_RPA (vb, ctx, STRa(value)));
         case _INFO_MFRL:            
         case _INFO_MBQ:
         case _INFO_MMQ:             CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, STORE_INT, DICT_ID_NONE, value_len));
+        case _INFO_HaplotypeScore:
+        case _INFO_R2_5P_bias:
+        case _INFO_BaseQRankSum:
+        case _INFO_ReadPosRankSum:
+        case _INFO_MQRankSum:
+        case _INFO_ClippingRankSum:
+        case _INFO_SOR:
+        case _INFO_FS:
+        case _INFO_ExcessHet:
+        case _INFO_InbreedingCoeff:
         case _INFO_NALOD:
         case _INFO_NLOD:
         case _INFO_TLOD:            CALL (seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, value_len));
@@ -456,12 +497,12 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_STRANDQ:
         case _INFO_STRQ:
         case _INFO_ECNT:            CALL (seg_integer_or_not (VB, ctx, STRa(value), value_len));
-        case _INFO_AS_SB_TABLE:     CALL_IF (segconf.AS_SB_TABLE_by_SB, DEFER(AS_SB_TABLE));
-
+        case _INFO_AS_SB_TABLE:     CALL_IF (segconf.AS_SB_TABLE_by_SB, DEFER(AS_SB_TABLE, DID_NONE));
+        
         case _INFO_VQSLOD: // Optimize VQSLOD 
             if (flag.optimize_VQSLOD && optimize_float_2_sig_dig (STRa(value), 0, qSTRa(modified))) 
                 ADJUST_FOR_MODIFIED;
-            goto standard_seg;
+            CALL (seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, value_len));
 
         // ---------------------------------------
         // VEP fields
@@ -608,8 +649,11 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_X_IC:            CALL_IF (segconf.vcf_is_ultima, vcf_seg_INFO_X_IC (vb, ctx, STRa(value)));
         case _INFO_X_HIN:           CALL_IF (segconf.vcf_is_ultima, vcf_seg_INFO_X_HIN (vb, ctx, STRa(value)));
         case _INFO_X_HIL:           CALL_IF (segconf.vcf_is_ultima, vcf_seg_INFO_X_HIL (vb, ctx, STRa(value)));
-        case _INFO_TREE_SCORE:      CALL_IF (segconf.vcf_is_ultima, vcf_seg_INFO_X_HIL (vb, ctx, STRa(value)));
+        case _INFO_X_GCC:           
+        case _INFO_HAPDOM:
+        case _INFO_TREE_SCORE:      CALL_IF (segconf.vcf_is_ultima, seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, value_len));
         case _INFO_VARIANT_TYPE:    CALL_IF (segconf.vcf_is_ultima, vcf_seg_INFO_VARIANT_TYPE (vb, ctx, STRa(value)));
+        case _INFO_HAPCOMP:
         case _INFO_ASSEMBLED_HAPS:  CALL_IF (segconf.vcf_is_ultima, seg_integer_or_not (VB, ctx, STRa(value), value_len));
         case _INFO_FILTERED_HAPS:   CALL_IF (segconf.vcf_is_ultima, vcf_seg_INFO_FILTERED_HAPS (vb, ctx, STRa(value)));
         
@@ -720,6 +764,7 @@ void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
         switch (ii.ctx->did_i) {
             X(AN); X(AF); X(AC); X(MLEAC); X(MLEAF); X(AC_Hom); X(AC_Het); X(AC_Hemi); X(DP); X(QD); X(SF);
             X(AS_SB_TABLE); X(SVINSSEQ) ; X(SVTYPE); X(HOMSEQ); X(END) ; X(SVLEN); X(CIPOS); X(LEFT_SVINSSEQ);
+            X(BaseCounts);
             default: {}
         }
         #undef X
@@ -729,7 +774,7 @@ void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
 
     ARRAY (InfoItem, ii, info_items);
 
-    // pass 2: seg all subfields except AC (and PRIM/LUFT that weren't added)
+    // pass 2: seg all subfields except AC
     for (unsigned i=0; i < ii_len; i++)
         if (ii[i].value) 
             vcf_seg_info_one_subfield (vb, ii[i].ctx, STRa(ii[i].value));
@@ -777,6 +822,8 @@ void vcf_seg_finalize_INFO_fields (VBlockVCFP vb)
     }
 
     // seg deferred fields 
+    if (flag.debug_seg) vb_display_deferred_q (VB, __FUNCTION__);
+
     for (uint8_t i=0; i < vb->deferred_q_len; i++) 
         vb->deferred_q[i].seg (VB);
 

@@ -30,8 +30,10 @@ sSTRl(con_id_snip, 128);
 
 void vcf_manta_zip_initialize (void)
 {
-    container_prepare_snip ((ContainerP)&id_con, 0, 0, qSTRa(con_id_snip));
+    DO_ONCE
+        container_prepare_snip ((ContainerP)&id_con, 0, 0, qSTRa(con_id_snip));
 
+    // re-initialize for every file, as SV type might change
     segconf.MATEID_method = MATE_01;
 
     vcf_sv_zip_initialize (tw_dids, NUM_MANTA_TWs);
@@ -60,7 +62,7 @@ void vcf_manta_seg_initialize (VBlockVCFP vb)
 
 static bool vcf_seg_manta_ID_cb_3 (VBlockP vb, ContextP ctx, STRp(value), uint32_t unused_rep)
 {
-    seg_delta_vs_other (VB, ctx, ctx-1, STRa(value));
+    seg_delta_vs_other_localS (VB, ctx, ctx-1, STRa(value), -1);
     return true; // segged successfully
 }
 

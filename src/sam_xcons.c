@@ -20,7 +20,7 @@ void sam_seg_xcons_XO_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t xo, unsigned
         int channel_i = (as == dl->SEQ.len);
         ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_XO_i, (MultiplexerP)&vb->mux_XO, channel_i);
 
-        seg_delta_vs_other_do (VB, channel_ctx, CTX(OPTION_AS_i), 0, 0, xo, -1, add_bytes);
+        seg_delta_vs_other_localN (VB, channel_ctx, CTX(OPTION_AS_i), xo, -1, add_bytes);
         seg_by_did (VB, STRa(vb->mux_XO.snip), OPTION_XO_i, 0); // de-multiplexer
     }
 

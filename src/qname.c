@@ -174,13 +174,15 @@ void qname_zip_initialize (void)
                 qfs->con_prefix[qfs->con_prefix_len++] = CON_PX_SEP; // no container-wide prefix
 
                 for (rom *px = qfs->px_strs; *px ; px++) {
-                    unsigned len = strlen (*px);
+                    unsigned len = strnlen (*px, 100);
+                    ASSERT (len < 100, "px not nul-terminated in qfs=%s", qfs->name);
 
-                    ASSERT (qfs->con_prefix_len + len + 1 <= MAX_PREFIX_LEN, "Prefix too long (MAX_PREFIX_LEN=%u): item=%d qfs->con_prefix_len(after)=%d",
-                            MAX_PREFIX_LEN, (int)(px - qfs->px_strs), qfs->con_prefix_len + len + 1);
+                    ASSERT (qfs->con_prefix_len + len + 1 <= MAX_PREFIX_LEN, "Prefix too long in qfs=%s: item=%d qfs->con_prefix_len(after)=%d",
+                            qfs->name, (int)(px - qfs->px_strs), qfs->con_prefix_len + len + 1);
 
                     memcpy (&qfs->con_prefix[qfs->con_prefix_len], *px, len);
                     qfs->con_prefix_len += len;
+
                     qfs->con_prefix[qfs->con_prefix_len++] = CON_PX_SEP; 
                 }
             } 

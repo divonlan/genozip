@@ -131,45 +131,47 @@ void sam_zip_initialize (void)
 
     qname_zip_initialize();
 
-    seg_prepare_snip_other (SNIP_COPY, _SAM_POS, false, 0, copy_POS_snip);
-    seg_prepare_snip_other (SNIP_OTHER_DELTA, _SAM_Q1NAME, true, 0, copy_Q1NAME_int);   
-    seg_prepare_snip_other (SNIP_OTHER_DELTA, _SAM_Q2NAME, true, 0, copy_Q2NAME_int);   
-    seg_prepare_snip_other (SNIP_OTHER_DELTA, _SAM_Q3NAME, true, 0, copy_Q3NAME_int);   
-    seg_prepare_snip_other (SNIP_COPY, _OPTION_GX_Z, false, 0, copy_GX_snip);
-    seg_prepare_snip_other (SNIP_COPY, _OPTION_sn_B_f, false, 0, copy_sn_snip);
-    seg_prepare_snip_other (SNIP_LOOKBACK, _OPTION_XA_LOOKBACK, false, 0, XA_lookback_snip);
-    seg_prepare_snip_other (SNIP_LOOKBACK, _OPTION_TX_LOOKBACK, false, 0, TX_lookback_snip);
-    seg_prepare_snip_other (SNIP_LOOKBACK, _OPTION_AN_LOOKBACK, false, 0, AN_lookback_snip);
-    seg_prepare_snip_other (SNIP_REDIRECTION, _OPTION_CR_Z_X, false, 0, redirect_to_CR_X_snip);
-    seg_prepare_snip_other (SNIP_REDIRECTION, _OPTION_GR_Z_X, false, 0, redirect_to_GR_X_snip);
-    seg_prepare_snip_other (SNIP_REDIRECTION, _OPTION_GY_Z_X, false, 0, redirect_to_GY_X_snip);
-    seg_prepare_snip_other (SNIP_REDIRECTION, _OPTION_RX_Z_X, false, 0, redirect_to_RX_X_snip);
-    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _SAM_PNEXT, copy_mate_PNEXT_snip, '0' + BUDDY_MATE);
-    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _SAM_PNEXT, copy_saggy_PNEXT_snip, '0' + BUDDY_SAGGY);
-    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _SAM_POS, copy_mate_POS_snip, '0' + BUDDY_MATE);
-    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _SAM_RNAME, copy_mate_RNAME_snip, '0' + BUDDY_MATE);
-    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _SAM_RNAME, copy_saggy_RNAME_snip, '0' + BUDDY_SAGGY);
-    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _SAM_RNEXT, copy_mate_RNEXT_snip, '0' + BUDDY_MATE);
-    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _SAM_MAPQ, copy_mate_MAPQ_snip, '0' + BUDDY_MATE);
-    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_MQ_i, copy_mate_MQ_snip, '0' + BUDDY_MATE);
-    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_ms_i, copy_mate_ms_snip, '0' + BUDDY_MATE);
-    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_nM_i, copy_mate_nM_snip, '0' + BUDDY_MATE);
-    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_YS_i, copy_mate_YS_snip, '0' + BUDDY_MATE);
-    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_AS_i, copy_mate_AS_snip, '0' + BUDDY_MATE);
-    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_NH_i, copy_buddy_NH_snip, '0' + BUDDY_EITHER);
-    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_rb_Z, copy_mate_rb_snip, '0' + BUDDY_MATE);
-    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_mb_Z, copy_mate_mb_snip, '0' + BUDDY_MATE);
-    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY_CIGAR, _SAM_CIGAR, copy_mate_CIGAR_snip, '0' + BUDDY_MATE);
-    seg_prepare_plus_snip (SAM, 3, ((DictId[]){ {_OPTION_XX_i}, {_OPTION_YY_i}, {_OPTION_XY_i} }), XC_snip);
+    DO_ONCE {
+        seg_prepare_snip_other (SNIP_COPY, _SAM_POS, false, 0, copy_POS_snip);
+        seg_prepare_snip_other (SNIP_OTHER_DELTA, _SAM_Q1NAME, true, 0, copy_Q1NAME_int);   
+        seg_prepare_snip_other (SNIP_OTHER_DELTA, _SAM_Q2NAME, true, 0, copy_Q2NAME_int);   
+        seg_prepare_snip_other (SNIP_OTHER_DELTA, _SAM_Q3NAME, true, 0, copy_Q3NAME_int);   
+        seg_prepare_snip_other (SNIP_COPY, _OPTION_GX_Z, false, 0, copy_GX_snip);
+        seg_prepare_snip_other (SNIP_COPY, _OPTION_sn_B_f, false, 0, copy_sn_snip);
+        seg_prepare_snip_other (SNIP_LOOKBACK, _OPTION_XA_LOOKBACK, false, 0, XA_lookback_snip);
+        seg_prepare_snip_other (SNIP_LOOKBACK, _OPTION_TX_LOOKBACK, false, 0, TX_lookback_snip);
+        seg_prepare_snip_other (SNIP_LOOKBACK, _OPTION_AN_LOOKBACK, false, 0, AN_lookback_snip);
+        seg_prepare_snip_other (SNIP_REDIRECTION, _OPTION_CR_Z_X, false, 0, redirect_to_CR_X_snip);
+        seg_prepare_snip_other (SNIP_REDIRECTION, _OPTION_GR_Z_X, false, 0, redirect_to_GR_X_snip);
+        seg_prepare_snip_other (SNIP_REDIRECTION, _OPTION_GY_Z_X, false, 0, redirect_to_GY_X_snip);
+        seg_prepare_snip_other (SNIP_REDIRECTION, _OPTION_RX_Z_X, false, 0, redirect_to_RX_X_snip);
+        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _SAM_PNEXT, copy_mate_PNEXT_snip, '0' + BUDDY_MATE);
+        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _SAM_PNEXT, copy_saggy_PNEXT_snip, '0' + BUDDY_SAGGY);
+        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _SAM_POS, copy_mate_POS_snip, '0' + BUDDY_MATE);
+        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _SAM_RNAME, copy_mate_RNAME_snip, '0' + BUDDY_MATE);
+        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _SAM_RNAME, copy_saggy_RNAME_snip, '0' + BUDDY_SAGGY);
+        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _SAM_RNEXT, copy_mate_RNEXT_snip, '0' + BUDDY_MATE);
+        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _SAM_MAPQ, copy_mate_MAPQ_snip, '0' + BUDDY_MATE);
+        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_MQ_i, copy_mate_MQ_snip, '0' + BUDDY_MATE);
+        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_ms_i, copy_mate_ms_snip, '0' + BUDDY_MATE);
+        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_nM_i, copy_mate_nM_snip, '0' + BUDDY_MATE);
+        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_YS_i, copy_mate_YS_snip, '0' + BUDDY_MATE);
+        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_AS_i, copy_mate_AS_snip, '0' + BUDDY_MATE);
+        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_NH_i, copy_buddy_NH_snip, '0' + BUDDY_EITHER);
+        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_rb_Z, copy_mate_rb_snip, '0' + BUDDY_MATE);
+        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_mb_Z, copy_mate_mb_snip, '0' + BUDDY_MATE);
+        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY_CIGAR, _SAM_CIGAR, copy_mate_CIGAR_snip, '0' + BUDDY_MATE);
+        seg_prepare_plus_snip (SAM, 3, ((DictId[]){ {_OPTION_XX_i}, {_OPTION_YY_i}, {_OPTION_XY_i} }), XC_snip);
 
-    // we seg into mux channels, but we copy from the parent
-    for (MatedZFields f = 0; f < NUM_MATED_Z_TAGS; f++)
-    {
-        copy_buddy_Z_snips[f][0] = SNIP_SPECIAL;
-        copy_buddy_Z_snip_lens[f] = sizeof (copy_buddy_Z_snips[f]) - 1;
-        seg_prepare_snip_other_do (SAM_SPECIAL_COPY_BUDDY, ZCTX(buddied_Z_dids[f])->dict_id,
-                                  true, 0, '0' + BUDDY_EITHER, &copy_buddy_Z_snips[f][1], &copy_buddy_Z_snip_lens[f]);
-        copy_buddy_Z_snip_lens[f]++;
+        // we seg into mux channels, but we copy from the parent
+        for (MatedZFields f = 0; f < NUM_MATED_Z_TAGS; f++)
+        {
+            copy_buddy_Z_snips[f][0] = SNIP_SPECIAL;
+            copy_buddy_Z_snip_lens[f] = sizeof (copy_buddy_Z_snips[f]) - 1;
+            seg_prepare_snip_other_do (SAM_SPECIAL_COPY_BUDDY, ZCTX(buddied_Z_dids[f])->dict_id,
+                                       true, 0, '0' + BUDDY_EITHER, &copy_buddy_Z_snips[f][1], &copy_buddy_Z_snip_lens[f]);
+            copy_buddy_Z_snip_lens[f]++;
+        }
     }
 
     sam_MM_zip_initialize();

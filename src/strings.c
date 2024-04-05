@@ -56,7 +56,7 @@ StrText char_to_printable (char c)
         case '\r'           : return (StrText) { .s = "\\r"  };
         default             : { // unprintable - output eg \xf 
             StrText p = {};
-            sprintf (p.s, "\\x%x", (uint8_t)c);
+            snprintf (p.s, sizeof(p.s), "\\x%x", (uint8_t)c);
             return p;
         }
     }
@@ -88,13 +88,13 @@ StrText str_size (uint64_t size)
 {
     StrText s = {};
 
-    if      (size >= 1 PB) sprintf (s.s, "%3.1lf PB", ((double)size) / (double)(1 PB));
-    else if (size >= 1 TB) sprintf (s.s, "%3.1lf TB", ((double)size) / (double)(1 TB));
-    else if (size >= 1 GB) sprintf (s.s, "%3.1lf GB", ((double)size) / (double)(1 GB));
-    else if (size >= 1 MB) sprintf (s.s, "%3.1lf MB", ((double)size) / (double)(1 MB));
-    else if (size >= 1 KB) sprintf (s.s, "%3.1lf KB", ((double)size) / (double)(1 KB));
-    else if (size >  0          ) sprintf (s.s, "%3d B"    ,     (int)size)                       ;
-    else                          sprintf (s.s, "-"                       )                       ;
+    if      (size >= 1 PB) snprintf (s.s, sizeof (s.s), "%3.1lf PB", ((double)size) / (double)(1 PB));
+    else if (size >= 1 TB) snprintf (s.s, sizeof (s.s), "%3.1lf TB", ((double)size) / (double)(1 TB));
+    else if (size >= 1 GB) snprintf (s.s, sizeof (s.s), "%3.1lf GB", ((double)size) / (double)(1 GB));
+    else if (size >= 1 MB) snprintf (s.s, sizeof (s.s), "%3.1lf MB", ((double)size) / (double)(1 MB));
+    else if (size >= 1 KB) snprintf (s.s, sizeof (s.s), "%3.1lf KB", ((double)size) / (double)(1 KB));
+    else if (size >  0          ) snprintf (s.s, sizeof (s.s), "%3d B"    ,     (int)size)                       ;
+    else                          snprintf (s.s, sizeof (s.s), "-"                       )                       ;
 
     return s;
 }
@@ -103,13 +103,13 @@ StrText str_bases (uint64_t num_bases)
 {
     StrText s = {};
 
-    if      (num_bases >= 1000000000000000) sprintf (s.s, "%.1lf Pb", ((double)num_bases) / 1000000000000000.0);
-    else if (num_bases >= 1000000000000)    sprintf (s.s, "%.1lf Tb", ((double)num_bases) / 1000000000000.0);
-    else if (num_bases >= 1000000000)       sprintf (s.s, "%.1lf Gb", ((double)num_bases) / 1000000000.0);
-    else if (num_bases >= 1000000)          sprintf (s.s, "%.1lf Mb", ((double)num_bases) / 1000000.0);
-    else if (num_bases >= 1000)             sprintf (s.s, "%.1lf Kb", ((double)num_bases) / 1000.0);
-    else if (num_bases >  0   )             sprintf (s.s, "%u b",    (uint32_t)num_bases);
-    else                                    sprintf (s.s, "-");
+    if      (num_bases >= 1000000000000000) snprintf (s.s, sizeof (s.s), "%.1lf Pb", ((double)num_bases) / 1000000000000000.0);
+    else if (num_bases >= 1000000000000)    snprintf (s.s, sizeof (s.s), "%.1lf Tb", ((double)num_bases) / 1000000000000.0);
+    else if (num_bases >= 1000000000)       snprintf (s.s, sizeof (s.s), "%.1lf Gb", ((double)num_bases) / 1000000000.0);
+    else if (num_bases >= 1000000)          snprintf (s.s, sizeof (s.s), "%.1lf Mb", ((double)num_bases) / 1000000.0);
+    else if (num_bases >= 1000)             snprintf (s.s, sizeof (s.s), "%.1lf Kb", ((double)num_bases) / 1000.0);
+    else if (num_bases >  0   )             snprintf (s.s, sizeof (s.s), "%u b",    (uint32_t)num_bases);
+    else                                    snprintf (s.s, sizeof (s.s), "-");
 
     return s;
 }
@@ -174,7 +174,7 @@ StrTextLong str_str_s_(rom label, rom str)
     bool truncated = (label_len + str_len > sizeof(s)-1);
 
     if (truncated)
-        sprintf (s.s, "%.17s%.*s...", label, (int)(sizeof(s)-4-label_len), str);
+        snprintf (s.s, sizeof (s.s), "%.17s%.*s...", label, (int)(sizeof(s)-4-label_len), str);
     else {
         memcpy (s.s, label, label_len);
         memcpy (s.s + label_len, str, str_len);
@@ -431,13 +431,13 @@ StrText str_uint_commas_limit (uint64_t n, uint64_t limit)
 
     StrText s = {};
 
-    if      (n >= 1000000000000000ULL) sprintf (s.s, "%3.1lfP", ((double)n) / 1000000000000000.0);
-    else if (n >=    1000000000000ULL) sprintf (s.s, "%3.1lfT", ((double)n) / 1000000000000.0);
-    else if (n >=       1000000000ULL) sprintf (s.s, "%3.1lfG", ((double)n) / 1000000000.0);
-    else if (n >=          1000000ULL) sprintf (s.s, "%3.1lfM", ((double)n) / 1000000.0);
-    else if (n >=                1000) sprintf (s.s, "%3.1lfK", ((double)n) / 1000.0);
-    else if (n >                    0) sprintf (s.s, "%3d",     (int)n);
-    else                               sprintf (s.s, "-");
+    if      (n >= 1000000000000000ULL) snprintf (s.s, sizeof (s.s), "%3.1lfP", ((double)n) / 1000000000000000.0);
+    else if (n >=    1000000000000ULL) snprintf (s.s, sizeof (s.s), "%3.1lfT", ((double)n) / 1000000000000.0);
+    else if (n >=       1000000000ULL) snprintf (s.s, sizeof (s.s), "%3.1lfG", ((double)n) / 1000000000.0);
+    else if (n >=          1000000ULL) snprintf (s.s, sizeof (s.s), "%3.1lfM", ((double)n) / 1000000.0);
+    else if (n >=                1000) snprintf (s.s, sizeof (s.s), "%3.1lfK", ((double)n) / 1000.0);
+    else if (n >                    0) snprintf (s.s, sizeof (s.s), "%3d",     (int)n);
+    else                               snprintf (s.s, sizeof (s.s), "-");
 
     return s;
 }
@@ -994,7 +994,7 @@ rom type_name (uint32_t item,
 {
     if (item > num_names) {
         static char str[50];
-        sprintf (str, "%d (out of range)", item);
+        snprintf (str, sizeof(str), "%d (out of range)", item);
         return str;
     }
     
@@ -1061,8 +1061,9 @@ static bool str_verify_y_n (char *response, uint32_t len, rom def_res)
 
 bool str_query_user_yn (rom query, DefAnswerType def_answer)
 {
-    char query_str[strlen(query)+32];
-    sprintf (query_str, "%s (%sy%s or %sn%s) ", query, 
+    int query_str_len = strlen(query)+32; 
+    char query_str[query_str_len];
+    snprintf (query_str, query_str_len, "%s (%sy%s or %sn%s) ", query, 
              def_answer==QDEF_YES?"[":"",  def_answer==QDEF_YES?"]":"",  
              def_answer==QDEF_NO ?"[":"",  def_answer==QDEF_NO ?"]":"");
 
@@ -1211,7 +1212,7 @@ StrTime str_time (void)
     localtime_r (&now, &lnow);
 
     static rom month[12] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
-    sprintf (s.s, "%02u-%s-%04u %02u:%02u:%02u %s", 
+    snprintf (s.s, sizeof (s.s), "%02u-%s-%04u %02u:%02u:%02u %s", 
              lnow.tm_mday, month[lnow.tm_mon], lnow.tm_year+1900, lnow.tm_hour, lnow.tm_min, lnow.tm_sec, tzname[daylight != 0]);
 #endif
 

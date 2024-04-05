@@ -229,7 +229,8 @@ static rom txtheader_piz_get_filename (rom orig_name, rom prefix, bool is_orig_n
     unsigned dn_len = flag.out_dirname ? strlen (flag.out_dirname) : 0;
     unsigned px_len = prefix ? strlen (prefix) : 0;
     unsigned genozip_ext_len = is_orig_name_genozip ? (sizeof GENOZIP_EXT - 1) : 0;
-    char *txt_filename = (char *)CALLOC(fn_len + dn_len + px_len + 10);
+    int txt_filename_size = fn_len + dn_len + px_len + 10;
+    char *txt_filename = (char *)CALLOC(txt_filename_size);
 
     #define EXT2_MATCHES_TRANSLATE(from,to,ext)  \
         ((z_file->data_type==(from) && flag.out_dt==(to) && \
@@ -251,7 +252,7 @@ static rom txtheader_piz_get_filename (rom orig_name, rom prefix, bool is_orig_n
     // if original gz/bgzf-compressed file did not have a .gz/.bgz extension (since 15.0.23) or when outputing BAM or BCF
     no_gz_ext |= OUT_DT(BCF) || OUT_DT(BAM); 
 
-    sprintf ((char *)txt_filename, "%s%s%s%.*s%s%s", prefix ? prefix : "",
+    snprintf ((char *)txt_filename, txt_filename_size, "%s%s%s%.*s%s%s", prefix ? prefix : "",
              (dn_len ? flag.out_dirname : ""), (dn_len ? "/" : ""), 
              fn_len - genozip_ext_len - old_ext_removed_len, orig_name,
              old_ext_removed_len ? file_plain_ext_by_dt (flag.out_dt) : "", // add translated extension if needed

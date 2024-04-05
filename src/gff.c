@@ -55,29 +55,31 @@ sSTRl(Stop_minus_Start_snip, 32);
 
 void gff_zip_initialize (void)
 {
-    // transcript_name staff
-    SmallContainer con = { 
-        .repeats      = 1,
-        .nitems_lo    = 2,
-        .items        = { { .dict_id = { _ATTR_transcript_name_gene }, .separator = {'-'} },  // 0
-                          { .dict_id = { _ATTR_transcript_name_num  }                     } } // 1
-    };
-    container_prepare_snip ((ContainerP)&con, 0, 0, qSTRa (transcript_name_container_snip));
-    seg_prepare_snip_other (SNIP_COPY, _ATTR_gene_name, false, 0, copy_gene_name_snip);
+    DO_ONCE {
+        // transcript_name staff
+        SmallContainer con = { 
+            .repeats      = 1,
+            .nitems_lo    = 2,
+            .items        = { { .dict_id = { _ATTR_transcript_name_gene }, .separator = {'-'} },  // 0
+                              { .dict_id = { _ATTR_transcript_name_num  }                     } } // 1
+        };
+        container_prepare_snip ((ContainerP)&con, 0, 0, qSTRa (transcript_name_container_snip));
+        seg_prepare_snip_other (SNIP_COPY, _ATTR_gene_name, false, 0, copy_gene_name_snip);
 
-    con = (SmallContainer){
-        .repeats      = 1,
-        .nitems_lo    = 2,
-        .items        = { { .dict_id = { _ATTR_DBXdb }, .separator = {':'} },  // 0
-                          { .dict_id = { _ATTR_DBXid }                     } } // 1
-    };
-    container_prepare_snip ((ContainerP)&con, 0, 0, qSTRa (dbx_container_snip));
+        con = (SmallContainer){
+            .repeats      = 1,
+            .nitems_lo    = 2,
+            .items        = { { .dict_id = { _ATTR_DBXdb }, .separator = {':'} },  // 0
+                              { .dict_id = { _ATTR_DBXid }                     } } // 1
+        };
+        container_prepare_snip ((ContainerP)&con, 0, 0, qSTRa (dbx_container_snip));
 
-    seg_prepare_snip_other (SNIP_COPY, _GFF_END, false, 0, copy_END_snip);
+        seg_prepare_snip_other (SNIP_COPY, _GFF_END, false, 0, copy_END_snip);
 
-    seg_prepare_snip_other (SNIP_OTHER_DELTA, _GFF_START, true, -1, START_minus_1_snip);   
+        seg_prepare_snip_other (SNIP_OTHER_DELTA, _GFF_START, true, -1, START_minus_1_snip);   
 
-    seg_prepare_minus_snip (GFF, _ATTR_Stop, _ATTR_Start, Stop_minus_Start_snip);
+        seg_prepare_minus_snip (GFF, _ATTR_Stop, _ATTR_Start, Stop_minus_Start_snip);
+    }
 
     fasta_zip_initialize(); // for a potential embedded fasta
 }

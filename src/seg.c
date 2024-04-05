@@ -566,6 +566,7 @@ bool seg_integer_or_not_cb (VBlockP vb, ContextP ctx, STRp(int_str), uint32_t re
 
 // seg a textual snip that is expected to be a float, so that reconstruction reconstructs
 // the exact textual representation without floating point issues
+// NOTE: it is usually better to store a textual float as a string in local
 bool seg_float_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_bytes)
 {
     // TO DO: implement reconstruction in reconstruct_one_snip-SNIP_LOOKUP
@@ -580,7 +581,7 @@ bool seg_float_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_bytes
         // as the textual float may exceed float precision)
         float f = (float)ctx->last_value.f; // 64bit -> 32bit
         char recon[value_len+1];
-        sprintf (recon, &snip[1], f);
+        snprintf (recon, sizeof (recon), &snip[1], f);
 
         if (memcmp (value, recon, value_len)) goto fallback;
 
@@ -609,6 +610,7 @@ void seg_delta_vs_other_do (VBlockP vb, ContextP ctx, ContextP other_ctx,
                             STRp(value), // if value==NULL, we use value_n
                             int64_t value_n,
                             int64_t max_delta /* max abs value of delta - beyond that, seg as is, ignored if < 0 */,
+                            bool delta_in_local, 
                             unsigned add_bytes)
 {
 #ifdef DEBUG
@@ -632,13 +634,24 @@ void seg_delta_vs_other_do (VBlockP vb, ContextP ctx, ContextP other_ctx,
     if (max_delta >= 0 && ABS(delta) > max_delta) 
         seg_integer (vb, ctx, value_n, true, add_bytes);
 
-    else {
-        SNIP(32);
-        seg_prepare_snip_other (SNIP_OTHER_DELTA, other_ctx->dict_id, false, 0, snip);
-        snip[snip_len++] = '$'; // lookup delta from local
-        seg_by_ctx (VB, STRa(snip), ctx, add_bytes);
+    else if (delta_in_local) {
+        // cache snip upon first entry in this VB
+        if (!ctx->snip_cache.len32) {
+            buf_alloc_exact (vb, ctx->snip_cache, 32, uint8_t, "snip_cache");
+            seg_prepare_snip_other_do (SNIP_OTHER_DELTA, other_ctx->dict_id, true, 0, '$', B1STc(ctx->snip_cache), &ctx->snip_cache.len32);
+        }
+
+        seg_by_ctx (VB, STRb(ctx->snip_cache), ctx, add_bytes);
 
         dyn_int_append (vb, ctx, delta, 0); 
+
+        ctx->last_delta = delta;
+    }
+
+    else {
+        SNIP(32);
+        seg_prepare_snip_other (SNIP_OTHER_DELTA, other_ctx->dict_id, true, delta, snip);
+        seg_by_ctx (VB, STRa(snip), ctx, add_bytes);
 
         ctx->last_delta = delta;
     }
@@ -762,7 +775,7 @@ WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_
             }
 
             else if (store_in_local == STORE_FLOAT) 
-                seg_float_or_not (vb, arr_ctx, STRa(this_item), this_item_len);
+                seg_add_to_local_string (VB, arr_ctx, STRa(this_item), LOOKUP_NONE, this_item_len);
             
             else {
                 seg_by_ctx (VB, STRa(this_item), arr_ctx, this_item_len);
@@ -1110,13 +1123,7 @@ int32_t seg_array_of_struct_with_prefixes (VBlockP vb, ContextP ctx,
         ctx->con_index.len32 = ctx->con_index.len32 / sizeof (WordIndex);
     }
 
-    // count printable item separators
-    unsigned num_printable_separators=0;
-    for_con (&con)
-        num_printable_separators += is_printable[item->separator[0]] + is_printable[item->separator[1]];
-
     WordIndex node_index = *B(WordIndex, ctx->con_index, n_repeats);
-    // unsigned account_for = con.repeats * num_printable_separators /* item seperators */ + con.repeats - con.drop_final_repsep /* repeat separators */ + ((int)add_bytes - snip_len);
 
     // case: first container with this many repeats - seg and add to cache
     if (node_index == WORD_INDEX_NONE) 

@@ -308,8 +308,10 @@ extern CommandType command, primary_command;
 #define IS_LIST (command == LIST)
 #define IS_SHOW_HEADERS (command == SHOW_HEADERS)
 
-// external vb - used when an operation is needed outside of the context of a specific VB;
-extern VBlockP evb;
+typedef enum { VB_ID_EVB=-1, VB_ID_WRITER=-2, VB_ID_SEGCONF=-3, VB_ID_DEPN_SCAN=-4, VB_ID_COMPRESS_DEPN=-5, VB_ID_NONE=-999 } VBID;
+#define NUM_NONPOOL_VBs 5
+
+extern VBlockP evb; // External VB
 
 // threads
 typedef int ThreadId;
@@ -370,9 +372,9 @@ typedef int ThreadId;
     #define PUT_UINT32(p,n) *((uint32_t *)(p)) = (n)
 #else
     // loading a Little Endian uint32_t from an unaligned memory location
-    #define GET_UINT16(p)  ((uint16_t)(((uint8_t*)(p))[0] | (((uint8_t*)(p))[1] << 8)))
-    #define GET_UINT32(p)  ((uint32_t)(((uint8_t*)(p))[0] | (((uint8_t*)(p))[1] << 8) | (((uint8_t*)(p))[2] << 16) | (((uint8_t*)(p))[3] << 24)))
-    #define GET_UINT64(p)  ((uint64_t)(((uint8_t*)(p))[0] | ((uint64_t)((uint8_t*)(p))[1] << 8) | ((uint64_t)((uint8_t*)(p))[2] << 16) | ((uint64_t)((uint8_t*)(p))[3] << 24) | ((uint64_t)((uint8_t*)(p))[4] << 32) | ((uint64_t)((uint8_t*)(p))[5] << 40) | ((uint64_t)((uint8_t*)(p))[6] << 48) | ((uint64_t)((uint8_t*)(p))[7] << 56)))
+    #define GET_UINT16(p)  ((uint16_t)((uint8_t*)(p))[0] | ((uint16_t)((uint8_t*)(p))[1] << 8))
+    #define GET_UINT32(p)  ((uint32_t)((uint8_t*)(p))[0] | ((uint32_t)((uint8_t*)(p))[1] << 8) | ((uint32_t)((uint8_t*)(p))[2] << 16) | ((uint32_t)((uint8_t*)(p))[3] << 24))
+    #define GET_UINT64(p)  ((uint64_t)((uint8_t*)(p))[0] | ((uint64_t)((uint8_t*)(p))[1] << 8) | ((uint64_t)((uint8_t*)(p))[2] << 16) | ((uint64_t)((uint8_t*)(p))[3] << 24) | ((uint64_t)((uint8_t*)(p))[4] << 32) | ((uint64_t)((uint8_t*)(p))[5] << 40) | ((uint64_t)((uint8_t*)(p))[6] << 48) | ((uint64_t)((uint8_t*)(p))[7] << 56)))
     #define GET_FLOAT32(p) ({ union { uint32_t i; float f; } n= {.i = GET_UINT32(p)}; n.f; })
 
     // storing a Little Endian integer in an unaligned memory location
@@ -514,7 +516,7 @@ typedef SORTER ((*Sorter));
 #define STRset(dst,src)    ({ dst=src; dst##_len=src##_len; })
 #define STRinc(x,n)          ({ x += (n); x##_len -= (n); })
 #define STRdec(x,n)          ({ x -= (n); x##_len += (n); })
-#define STRLEN(string_literal) (sizeof string_literal - 1)
+#define STRLEN(string_literal) ((unsigned)(sizeof string_literal - 1))
 #define _S(x) x, STRLEN(x)
 #define STRBw(buf,txtword) Bc ((buf), (txtword).index), (txtword).len // used with TxtWord
 #define FUNCLINE rom func, uint32_t code_line

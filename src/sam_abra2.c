@@ -23,11 +23,13 @@ sSTRl (YO_NA_con_snip, 100);
 
 void sam_abra2_zip_initialize (void)
 {
-    MiniContainer container_YO_NA = { .nitems_lo = 1, .repeats = 1, .items[0].dict_id = { _YO_POS } };
+    DO_ONCE {
+        MiniContainer container_YO_NA = { .nitems_lo = 1, .repeats = 1, .items[0].dict_id = { _YO_POS } };
 
-    container_prepare_snip ((ContainerP)&container_YO_NA, 
-                            (char[]){ CON_PX_SEP, 'N', '/', 'A', ':', CON_PX_SEP }, 6, 
-                            qSTRa (YO_NA_con_snip));
+        container_prepare_snip ((ContainerP)&container_YO_NA, 
+                                (char[]){ CON_PX_SEP, 'N', '/', 'A', ':', CON_PX_SEP }, 6, 
+                                qSTRa (YO_NA_con_snip));
+    }
 }
 
 void sam_abra2_seg_initialize (VBlockSAMP vb)

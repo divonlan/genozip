@@ -58,60 +58,55 @@ static SmallContainer vcf_samples_init_container_array (uint64_t dict_id_num)
 
 void vcf_samples_zip_initialize (void) 
 {
-    static bool done = false;
-    if (done) return; // already initialized (in previous files)
-    done = true;
+    DO_ONCE {
+        con_AF    = vcf_samples_init_container_array (_FORMAT_AF);    
+        con_AD    = vcf_samples_init_container_array (_FORMAT_AD);    
+        con_ADALL = vcf_samples_init_container_array (_FORMAT_ADALL);    
+        con_ADF   = vcf_samples_init_container_array (_FORMAT_ADF);    
+        con_ADR   = vcf_samples_init_container_array (_FORMAT_ADR);    
+        con_F1R2  = vcf_samples_init_container_array (_FORMAT_F1R2);    
+        con_F2R1  = vcf_samples_init_container_array (_FORMAT_F2R1);    
+        con_MB    = vcf_samples_init_container_array (_FORMAT_MB);    
+        con_SB    = vcf_samples_init_container_array (_FORMAT_SB);    
+        con_SAC   = vcf_samples_init_container_array (_FORMAT_SAC);    
 
-    con_AF    = vcf_samples_init_container_array (_FORMAT_AF);    
-    con_AD    = vcf_samples_init_container_array (_FORMAT_AD);    
-    con_ADALL = vcf_samples_init_container_array (_FORMAT_ADALL);    
-    con_ADF   = vcf_samples_init_container_array (_FORMAT_ADF);    
-    con_ADR   = vcf_samples_init_container_array (_FORMAT_ADR);    
-    con_F1R2  = vcf_samples_init_container_array (_FORMAT_F1R2);    
-    con_F2R1  = vcf_samples_init_container_array (_FORMAT_F2R1);    
-    con_MB    = vcf_samples_init_container_array (_FORMAT_MB);    
-    con_SB    = vcf_samples_init_container_array (_FORMAT_SB);    
-    con_SAC   = vcf_samples_init_container_array (_FORMAT_SAC);    
+        // prepare special snips for the odd elements of SB and MB - (AD minus even item 0) 
+        for (unsigned i=0; i < 2; i++) {
+            seg_prepare_minus_snip_i (VCF, con_AD.items[i].dict_id, con_SB.items[i*2].dict_id, sb_snip, i);
+            seg_prepare_minus_snip_i (VCF, con_AD.items[i].dict_id, con_MB.items[i*2].dict_id, mb_snip, i);
+        }
 
-    // prepare special snips for the odd elements of SB and MB - (AD minus even item 0) 
-    for (unsigned i=0; i < 2; i++) {
-        seg_prepare_minus_snip_i (VCF, con_AD.items[i].dict_id, con_SB.items[i*2].dict_id, sb_snip, i);
-        seg_prepare_minus_snip_i (VCF, con_AD.items[i].dict_id, con_MB.items[i*2].dict_id, mb_snip, i);
-    }
+        for (unsigned i=0; i < VCF_MAX_ARRAY_ITEMS/2; i++) 
+            seg_prepare_minus_snip_i (VCF, con_AD.items[i].dict_id, con_SAC.items[i*2].dict_id, sac_snip, i);
 
-    for (unsigned i=0; i < VCF_MAX_ARRAY_ITEMS/2; i++) 
-        seg_prepare_minus_snip_i (VCF, con_AD.items[i].dict_id, con_SAC.items[i*2].dict_id, sac_snip, i);
+        for (unsigned i=0; i < VCF_MAX_ARRAY_ITEMS; i++) {
+            seg_prepare_minus_snip_i (VCF, con_AD.items[i].dict_id, con_F1R2.items[i].dict_id, f2r1_snip, i);
+            seg_prepare_minus_snip_i (VCF, con_AD.items[i].dict_id, con_ADF.items[i].dict_id,  adr_snip,  i);
+            seg_prepare_minus_snip_i (VCF, con_AD.items[i].dict_id, con_ADR.items[i].dict_id,  adf_snip,  i);
+        }
 
-    for (unsigned i=0; i < VCF_MAX_ARRAY_ITEMS; i++) {
-        seg_prepare_minus_snip_i (VCF, con_AD.items[i].dict_id, con_F1R2.items[i].dict_id, f2r1_snip, i);
-        seg_prepare_minus_snip_i (VCF, con_AD.items[i].dict_id, con_ADF.items[i].dict_id,  adr_snip,  i);
-        seg_prepare_minus_snip_i (VCF, con_AD.items[i].dict_id, con_ADR.items[i].dict_id,  adf_snip,  i);
-    }
+        seg_prepare_minus_snip (VCF, _FORMAT_RD, _FORMAT_RDR, rdf_snip);
+        seg_prepare_minus_snip (VCF, _FORMAT_RD, _FORMAT_RDF, rdr_snip);
+        seg_prepare_minus_snip (VCF, _FORMAT_AD, _FORMAT_ADR, adf_snip);
+        seg_prepare_minus_snip (VCF, _FORMAT_AD, _FORMAT_ADF, adr_snip);
+        seg_prepare_minus_snip (VCF, _FORMAT_DP, _FORMAT_RD,  ad_varscan_snip);
+            
+        seg_prepare_snip_other (SNIP_COPY, _INFO_AF, 0, 0, snip_copy_af);
 
-    seg_prepare_minus_snip (VCF, _FORMAT_RD, _FORMAT_RDR, rdf_snip);
-    seg_prepare_minus_snip (VCF, _FORMAT_RD, _FORMAT_RDF, rdr_snip);
-    seg_prepare_minus_snip (VCF, _FORMAT_AD, _FORMAT_ADR, adf_snip);
-    seg_prepare_minus_snip (VCF, _FORMAT_AD, _FORMAT_ADF, adr_snip);
-    seg_prepare_minus_snip (VCF, _FORMAT_DP, _FORMAT_RD,  ad_varscan_snip);
+        gq_by_gp_len = sizeof (gq_by_gp);
+        seg_prepare_multi_dict_id_special_snip (VCF_SPECIAL_GQ, 1, (DictId[]){ (DictId)_FORMAT_GP }, gq_by_gp, &gq_by_gp_len);
+        gq_by_gp[gq_by_gp_len++] = '\t';
         
-    seg_prepare_snip_other (SNIP_COPY, _INFO_AF, 0, 0, snip_copy_af);
+        gq_by_pl_len = sizeof (gq_by_pl);
+        seg_prepare_multi_dict_id_special_snip (VCF_SPECIAL_GQ, 1, (DictId[]){ (DictId)_FORMAT_PL }, gq_by_pl, &gq_by_pl_len);
+        gq_by_pl[gq_by_pl_len++] = '\t';
 
-    gq_by_gp_len = sizeof (gq_by_gp);
-    seg_prepare_multi_dict_id_special_snip (VCF_SPECIAL_GQ, 1, (DictId[]){ (DictId)_FORMAT_GP }, gq_by_gp, &gq_by_gp_len);
-    gq_by_gp[gq_by_gp_len++] = '\t';
-    
-    gq_by_pl_len = sizeof (gq_by_pl);
-    seg_prepare_multi_dict_id_special_snip (VCF_SPECIAL_GQ, 1, (DictId[]){ (DictId)_FORMAT_PL }, gq_by_pl, &gq_by_pl_len);
-    gq_by_pl[gq_by_pl_len++] = '\t';
-
-    // two redirection snips that must be the same length - we might interchange them in-place in the dictionary
-    PL_to_PLy_redirect_snip_len = PL_to_PLn_redirect_snip_len = sizeof (PL_to_PLy_redirect_snip);
-    seg_prepare_snip_other (SNIP_REDIRECTION, _FORMAT_PLy, false, 0, PL_to_PLy_redirect_snip);
-    seg_prepare_snip_other (SNIP_REDIRECTION, _FORMAT_PLn, false, 0, PL_to_PLn_redirect_snip);
-    ASSERT (PL_to_PLy_redirect_snip_len == PL_to_PLn_redirect_snip_len, "Expecting PL_to_PLy_redirect_snip_len%u == PL_to_PLn_redirect_snip_len=%u", PL_to_PLy_redirect_snip_len, PL_to_PLn_redirect_snip_len);
-
-    vcf_samples_zip_initialize_PS_PID();
-    vcf_gwas_zip_initialize(); // no harm if not GWAS
+        // two redirection snips that must be the same length - we might interchange them in-place in the dictionary
+        PL_to_PLy_redirect_snip_len = PL_to_PLn_redirect_snip_len = sizeof (PL_to_PLy_redirect_snip);
+        seg_prepare_snip_other (SNIP_REDIRECTION, _FORMAT_PLy, false, 0, PL_to_PLy_redirect_snip);
+        seg_prepare_snip_other (SNIP_REDIRECTION, _FORMAT_PLn, false, 0, PL_to_PLn_redirect_snip);
+        ASSERT (PL_to_PLy_redirect_snip_len == PL_to_PLn_redirect_snip_len, "Expecting PL_to_PLy_redirect_snip_len%u == PL_to_PLn_redirect_snip_len=%u", PL_to_PLy_redirect_snip_len, PL_to_PLn_redirect_snip_len);
+    }
 }
 
 void vcf_samples_seg_initialize (VBlockVCFP vb)
@@ -440,6 +435,9 @@ static WordIndex vcf_seg_FORMAT_A_R (VBlockVCFP vb, ContextP ctx, SmallContainer
                     sum += item_ctxs[i]->last_value.i; //
             }
 
+            else if (item_store_type == STORE_FLOAT) 
+                seg_add_to_local_string (VB, item_ctxs[i], STRi(item, i), LOOKUP_NONE, item_lens[i]);
+
             else
                 seg_by_ctx (VB, STRi(item, i), item_ctxs[i], item_lens[i]);
     
@@ -470,7 +468,7 @@ static inline void vcf_seg_FORMAT_AD_varscan (VBlockVCFP vb, ContextP ctx, STRp(
 
     // case: we have only one sample, and INFO/ADP - we expect FORMAT/AD and INFO/ADP to be related
     else if (ctx_has_value_in_line_(vb, CTX(INFO_ADP)) && vcf_num_samples==1)
-        seg_delta_vs_other (VB, ctx, CTX(INFO_ADP), STRa(ad_str));
+        seg_delta_vs_other_localS (VB, ctx, CTX(INFO_ADP), STRa(ad_str), -1);
 
     else
         seg_by_ctx (VB, STRa(ad_str), ctx, ad_str_len);
@@ -493,7 +491,7 @@ static void vcf_seg_AD_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP
         for (unsigned i=0; i < n_items; i++) 
             // case: we had ADALL preceeding in this sample, seg as delta vs. ADALL 
             if (has_adall_this_sample)
-                seg_delta_vs_other (VB, item_ctxs[i], ECTX (con_ADALL.items[i].dict_id), NULL, item_lens[i]);
+                seg_delta_vs_other_localN (VB, item_ctxs[i], ECTX (con_ADALL.items[i].dict_id), values[i], -1, item_lens[i]);
             else 
                 seg_by_ctx (VB, STRi(item, i), item_ctxs[i], item_lens[i]);
     }
@@ -519,7 +517,7 @@ static void vcf_seg_AD_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_AD0)
 {
-    reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, (char[]){ SNIP_LOOKUP }, 1, false, __FUNCLINE);
+    reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, (char[]){ SNIP_LOOKUP, 0 }, 1, false, __FUNCLINE); // note: nul-termianted as expected of a dictionary snip
 
     new_value->i = ctx->last_value.i; // calculated by ^, equals Σ(ADᵢ)
 
@@ -744,7 +742,7 @@ static void vcf_seg_MB_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP
 
         // if possible, seg even-numbered element delta vs the corresponding element in F2R1
         if (use_formula_even && !(i%2)) { 
-            seg_delta_vs_other (VB, item_ctxs[i], ECTX (con_F2R1.items[i/2].dict_id), NULL, item_lens[i]);
+            seg_delta_vs_other_localN (VB, item_ctxs[i], ECTX (con_F2R1.items[i/2].dict_id), values[i], -1, item_lens[i]);
             item_ctxs[i]->flags.store = STORE_INT; // consumed by the odd items (below)
         }
 
@@ -770,7 +768,7 @@ static inline WordIndex vcf_seg_FORMAT_AF (VBlockVCFP vb, ContextP ctx, STRp(cel
         str_issame_(STRa(cell), STRlst(INFO_AF)))
         return seg_by_ctx (VB, STRa(snip_copy_af), ctx, cell_len);
     else
-        return vcf_seg_FORMAT_A_R (vb, ctx, con_AF, STRa(cell), STORE_NONE, NULL);
+        return vcf_seg_FORMAT_A_R (vb, ctx, con_AF, STRa(cell), STORE_FLOAT, NULL);
 }
 
 
@@ -858,10 +856,15 @@ static inline void vcf_seg_FORMAT_DP (VBlockVCFP vb)
             
             else if (ctx_has_value (VB, FORMAT_AD)) 
                 segconf.FMT_DP_method = BY_AD;
+
+            else if (vcf_num_samples == 1 && ctx_has_value (VB, INFO_DP))
+                segconf.FMT_DP_method = BY_INFO_DP;
         }
+
+        goto fallback;
     }
 
-    if (segconf.FMT_DP_method != FMT_DP_DEFAULT && !segconf.running) {
+    else if ((segconf.FMT_DP_method == BY_AD || segconf.FMT_DP_method == BY_SDP) && !segconf.running) {
         Did other_did_i = (segconf.FMT_DP_method == BY_AD ? FORMAT_AD : FORMAT_SDP);
 
         bool other_is_in_FORMAT = ctx_encountered (VB, other_did_i); // note: DP is always segged after AD and SDP, regardless of their order in FORMAT
@@ -870,7 +873,7 @@ static inline void vcf_seg_FORMAT_DP (VBlockVCFP vb)
         ContextP channel_ctx = seg_mux_get_channel_ctx (VB, ctx->did_i, (MultiplexerP)&vb->mux_FORMAT_DP, channel_i);
 
         if (channel_i) 
-            seg_delta_vs_other (VB, channel_ctx, CTX(other_did_i), STRa(dp));
+            seg_delta_vs_other_localS (VB, channel_ctx, CTX(other_did_i), STRa(dp), -1);
         
         else
             vcf_seg_FORMAT_transposed (vb, channel_ctx, STRa(dp), 0, (char []){ SNIP_LOOKUP }, 1, dp_len); // this handles DP that is an integer or '.'
@@ -880,8 +883,8 @@ static inline void vcf_seg_FORMAT_DP (VBlockVCFP vb)
         ctx_set_last_value (VB, ctx, channel_ctx->last_value); // propagate up       
     }
     
-    // single-sample default: seg against INFO/DP or not
-    else if (vcf_num_samples == 1) {
+    // case: seg against INFO/DP or not
+    else if (segconf.FMT_DP_method == BY_INFO_DP) {
         bool info_dp_is_int = ctx_has_value_in_line_(VB, CTX(INFO_DP));
 
         // special means: if FORMAT/DP>=1, INFO/DP is an integer, if FORMAT/DP==0, INFO/DP has no integer value
@@ -889,7 +892,8 @@ static inline void vcf_seg_FORMAT_DP (VBlockVCFP vb)
             SNIPi2 (SNIP_SPECIAL, VCF_SPECIAL_DP_by_DP_single, info_dp_is_int ? (value - CTX(INFO_DP)->last_value.i) : 0);
             seg_by_ctx (VB, STRa(snip), ctx, dp_len);
         }
-        else // value is not an integer or '.', or INFO and FORMAT don't agree on existance of an integer DP
+
+        else fallback: // value is not an integer or '.', or INFO and FORMAT don't agree on existance of an integer DP
             seg_by_ctx (VB, STRa(dp), ctx, dp_len);
     }
 
@@ -897,7 +901,7 @@ static inline void vcf_seg_FORMAT_DP (VBlockVCFP vb)
     else 
         vcf_seg_FORMAT_transposed (vb, ctx, STRa(dp), 0, (char []){ SNIP_LOOKUP }, 1, dp_len); // this handles DP that is an integer or '.'
 
-    if (!IS_PERIOD(dp) && CTX(INFO_DP)->dp.by_format_dp) 
+    if (!IS_PERIOD(dp) && segconf.INFO_DP_method == BY_FORMAT_DP) 
         CTX(INFO_DP)->dp.sum_format_dp += ctx->last_value.i; // we may delta INFO/DP against this sum
 
     // add up DP's in certain conditions, for consumption by INFO/QD predictor
@@ -1445,22 +1449,24 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
         // case: MIN_DP - it is slightly smaller and usually equal to DP - we store MIN_DP as the delta DP-MIN_DP
         // note: the delta is vs. the DP field that preceeds MIN_DP - we take the DP as 0 there is no DP that preceeds
         case _FORMAT_MIN_DP :
-            COND (ctx_has_value (VB, FORMAT_DP), seg_delta_vs_other (VB, ctx, CTX(FORMAT_DP), STRi(sf, i)));
+            COND (ctx_has_value (VB, FORMAT_DP), seg_delta_vs_other_localS (VB, ctx, CTX(FORMAT_DP), STRi(sf, i), -1));
 
         case _FORMAT_SDP   :
             if (ctx_has_value_in_line_(VB, CTX(INFO_ADP)))
-                seg_delta_vs_other (VB, ctx, CTX(INFO_ADP), STRi(sf, i));
+                seg_delta_vs_other_localS (VB, ctx, CTX(INFO_ADP), STRi(sf, i), -1);
             else goto fallback;
             break;
             
         case _FORMAT_AF    : vcf_seg_FORMAT_AF (vb, ctx, STRi(sf, i)); break;
 
         // standard: <ID=AD,Number=.,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed">  
-        // GIAB: <ID=AD,Number=R,Type=Integer,Description="Net allele depths across all unfiltered datasets with called genotype">
+        // GIAB:     <ID=AD,Number=R,Type=Integer,Description="Net allele depths across all unfiltered datasets with called genotype">
         case _FORMAT_AD    : if (segconf.vcf_is_varscan)
                                 vcf_seg_FORMAT_AD_varscan (vb, ctx, STRi(sf, i));
-                             else
+                             else {
                                 vcf_seg_FORMAT_A_R (vb, ctx, con_AD, STRi(sf, i), STORE_INT, vcf_seg_AD_items); 
+                                if (segconf.has[INFO_BaseCounts]) seg_set_last_txt (VB, ctx, STRi(sf, i)); // consumed by vcf_seg_INFO_BaseCounts
+                             }
                              break;
 
         // <ID=PGT,Number=1,Type=String,Description="Physical phasing haplotype information, describing how the alternate alleles are phased in relation to one another">

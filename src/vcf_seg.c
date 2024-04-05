@@ -22,10 +22,12 @@ void vcf_zip_initialize (void)
     vcf_refalt_zip_initialize();
     vcf_samples_zip_initialize();
     vcf_info_zip_initialize();
-    vcf_AC_AF_AN_zip_initialize();
     vcf_dbsnp_zip_initialize(); // called even if not in VCF header, because can be discovered in segconf too
     vcf_gatk_zip_initialize();
     vcf_gnomad_zip_initialize();
+    vcf_samples_zip_initialize_PS_PID();
+    vcf_gwas_zip_initialize(); 
+
     if (segconf.vcf_is_vagrent)    vcf_vagrent_zip_initialize();
     if (segconf.vcf_is_mastermind) vcf_mastermind_zip_initialize();
     if (segconf.vcf_is_vep)        vcf_vep_zip_initialize();
@@ -57,6 +59,11 @@ void vcf_zip_finalize (bool is_last_user_txt_file)
         TIP ("Compressing a this %s file using a reference file can reduce the compressed file's size by %d%%-%d%%.\n"
              "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
              z_dt_name(), refalt_z_pc / 3, (int)((float)refalt_z_pc / 1.5), arch_get_argv0(), txt_file->name);
+
+    if (!flag.let_OS_cleanup_on_exit) {
+        if (IS_REF_EXT_STORE)
+            ref_destroy_reference (gref);
+    }
 }
 
 // detect if a generic file is actually a vcf
@@ -68,22 +75,24 @@ bool is_vcf (STRp(header), bool *need_more)
 // main thread: writing data-type specific fields to genozip header
 void vcf_zip_genozip_header (SectionHeaderGenozipHeaderP header)
 {
-    header->vcf.segconf_has_RGQ       = (segconf.has[FORMAT_RGQ] > 0); // introduced in v14
-    header->vcf.segconf_GQ_method     = segconf.GQ_method;             // since 15.0.37
-    header->vcf.segconf_FMT_DP_method = segconf.FMT_DP_method;         // since 15.0.37
-    header->vcf.max_ploidy_for_mux    = ZIP_MAX_PLOIDY_FOR_MUX;        // since 15.0.36
-    header->vcf.segconf_MATEID_method = segconf.MATEID_method;         // since 15.0.48
-    header->vcf.segconf_del_svlen_is_neg = segconf.vcf_del_svlen_is_neg; // since 15.0.48
-    header->vcf.width.MLEAC           = segconf.wid_MLEAC.width;       // since 15.0.37
-    header->vcf.width.AC              = segconf.wid_AC.width;          // since 15.0.37
-    header->vcf.width.AF              = segconf.wid_AF.width;          // since 15.0.37
-    header->vcf.width.AN              = segconf.wid_AN.width;          // since 15.0.37
-    header->vcf.width.DP              = segconf.wid_DP.width;          // since 15.0.37
-    header->vcf.width.SF              = segconf.wid_SF.width;          // since 15.0.37
-    header->vcf.width.QD              = segconf.wid_QD.width;          // since 15.0.37
-    header->vcf.width.AS_SB_TABLE     = segconf.wid_AS_SB_TABLE.width; // since 15.0.41
-    header->vcf.width.ID              = segconf.wid_ID.width;          // since 15.0.48
-    header->vcf.width.QUAL            = segconf.wid_QUAL.width;        // since 15.0.51
+    header->vcf.segconf_has_RGQ          = (segconf.has[FORMAT_RGQ] > 0); // introduced in v14
+    header->vcf.segconf_GQ_method        = segconf.GQ_method;             // since 15.0.37
+    header->vcf.segconf_INF_DP_method    = segconf.INFO_DP_method;        // since 15.0.52
+    header->vcf.segconf_FMT_DP_method    = segconf.FMT_DP_method;         // since 15.0.37
+    header->vcf.max_ploidy_for_mux       = ZIP_MAX_PLOIDY_FOR_MUX;        // since 15.0.36
+    header->vcf.segconf_MATEID_method    = segconf.MATEID_method;         // since 15.0.48
+    header->vcf.segconf_del_svlen_is_neg = segconf.vcf_del_svlen_is_neg;  // since 15.0.48
+    header->vcf.width.MLEAC              = segconf.wid_MLEAC.width;       // since 15.0.37
+    header->vcf.width.AC                 = segconf.wid_AC.width;          // since 15.0.37
+    header->vcf.width.AF                 = segconf.wid_AF.width;          // since 15.0.37
+    header->vcf.width.AN                 = segconf.wid_AN.width;          // since 15.0.37
+    header->vcf.width.DP                 = segconf.wid_DP.width;          // since 15.0.37
+    header->vcf.width.SF                 = segconf.wid_SF.width;          // since 15.0.37
+    header->vcf.width.QD                 = segconf.wid_QD.width;          // since 15.0.37
+    header->vcf.width.AS_SB_TABLE        = segconf.wid_AS_SB_TABLE.width; // since 15.0.41
+    header->vcf.width.ID                 = segconf.wid_ID.width;          // since 15.0.48
+    header->vcf.width.QUAL               = segconf.wid_QUAL.width;        // since 15.0.51
+    header->vcf.width.BaseCounts         = segconf.wid_BaseCounts.width;  // since 15.0.52
 }
 
 void vcf_zip_init_vb (VBlockP vb_)
@@ -138,7 +147,7 @@ void vcf_seg_initialize (VBlockP vb_)
                    T(!segconf.vcf_is_sv, VCF_ID),    // svaba/manta needs to store history as text and segs ID differently
                    T(segconf.vcf_is_sv, VCF_QUAL),
                    FORMAT_DP, FORMAT_MIN_DP, 
-                   INFO_DP, 
+                   INFO_DP,
                    DID_EOL); 
 
     ctx_set_store (VB, STORE_FLOAT, T(segconf.has[INFO_QD], VCF_QUAL), DID_EOL); // consumed by vcf_piz_insert_INFO_QD
@@ -150,6 +159,7 @@ void vcf_seg_initialize (VBlockP vb_)
                    INFO_FATHMM_score, INFO_VEST3_score, INFO_MEINFO, DID_EOL);
 
     ctx_set_dyn_int (VB, T(segconf.vcf_is_dbSNP, INFO_dbSNPBuildID), 
+                     T(segconf.INFO_DP_method == BY_BaseCounts, INFO_DP), // we store deltas in local. also, we can't have stons bc piz relies on ctx->last_wi.
                      DID_EOL);
     
     CTX(FORMAT_DP)->flags.same_line = true; // delta against AD or SDP regardless if before or after on line
@@ -245,9 +255,17 @@ static void vcf_seg_finalize_segconf (VBlockVCFP vb)
     if (segconf.has[INFO_AS_SB_TABLE] && segconf.has[FORMAT_SB]) 
         segconf.AS_SB_TABLE_by_SB = true;
     
-    if (vcf_num_samples > 1 && !flag.secure_DP && segconf.has[INFO_DP] && segconf.has[FORMAT_DP])
-        segconf.INFO_DP_method = BY_FORMAT_DP;
-        
+    if (segconf.has[INFO_DP]) {
+        if (segconf.has[INFO_BaseCounts] && !flag.secure_DP)
+            segconf.INFO_DP_method = BY_BaseCounts;
+            
+        else if (segconf.has[FORMAT_DP] && segconf.FMT_DP_method != BY_INFO_DP && !flag.secure_DP)
+            segconf.INFO_DP_method = BY_FORMAT_DP;
+
+        else 
+            segconf.INFO_DP_method = INFO_DP_DEFAULT; // note: INFO_DP_DEFAULT≠0, so set explicitly 
+    }
+
     if (segconf.has[FORMAT_IGT] && segconf.has[FORMAT_IPS] && segconf.has[FORMAT_ADALL])
         segconf.vcf_is_giab_trio = true;
         
@@ -297,15 +315,18 @@ static void vcf_seg_finalize_segconf (VBlockVCFP vb)
     if (segconf.has_DP_before_PL && !flag.best)
         TIP0 ("Compressing this particular VCF with --best could result in significantly better compression");
 
-    segconf_set_width (&segconf.wid_ID, 6);   // non-zero only in PBSV
-    segconf_set_width (&segconf.wid_AF, 3);
+    // set width: number of bits come from SectionHeaderGenozipHeader
     segconf_set_width (&segconf.wid_AC, 3);
-    segconf_set_width (&segconf.wid_AN, 3);
-    segconf_set_width (&segconf.wid_DP, 3);
-    segconf_set_width (&segconf.wid_QD, 3);
-    segconf_set_width (&segconf.wid_SF, 3);
     segconf_set_width (&segconf.wid_MLEAC, 3);
+    segconf_set_width (&segconf.wid_AN, 3);
+    segconf_set_width (&segconf.wid_AF, 3);
+    segconf_set_width (&segconf.wid_SF, 3);
+    segconf_set_width (&segconf.wid_QD, 3);
+    segconf_set_width (&segconf.wid_DP, 3);
     segconf_set_width (&segconf.wid_AS_SB_TABLE, 4);
+    segconf_set_width (&segconf.wid_ID, 6);   // non-zero only in PBSV
+    segconf_set_width (&segconf.wid_QUAL, 4); 
+    segconf_set_width (&segconf.wid_BaseCounts, 5);
 
     if (segconf.vcf_QUAL_method == VCF_QUAL_by_GP) 
         segconf_set_width (&segconf.wid_QUAL, 4); // should be non-zero only if VCF_QUAL_by_GP
@@ -416,6 +437,57 @@ static void vcf_seg_add_line_number (VBlockVCFP vb, unsigned VCF_ID_len)
     
     int shrinkage = (int)VCF_ID_len - line_num_len - LN_PREFIX_LEN;
     vb->recon_size -= shrinkage;
+}
+
+// --------------------------------------------------------
+// Seg array of integers, expected to be of length n_alt
+// --------------------------------------------------------
+
+void vcf_seg_array_of_N_ALTS_numbers (VBlockVCFP vb, ContextP ctx, STRp(value), StoreType type)
+{
+    str_split (value, value_len, vb->n_alts, ',', number, true);
+
+    if (!n_numbers) {
+        seg_by_ctx (VB, STRa(value), ctx, value_len); // fallback
+        return;
+    }
+
+    MiniContainer con = { .repeats           = CON_REPEATS_IS_SPECIAL,
+                          .repsep            = ",",
+                          .drop_final_repsep = true,
+                          .nitems_lo         = 1, 
+                          .items             = { { .dict_id = sub_dict_id (ctx->dict_id, '0') } } };
+
+    if (!ctx->is_initialized) { 
+        ctx_consolidate_stats_(VB, ctx, (ContainerP)&con);
+        ctx->con_rep_special = VCF_SPECIAL_N_ALTS;
+        ctx->is_initialized  = true;
+        ctx->nothing_char = '.';
+    }
+
+    ContextP item_ctx = ctx_get_ctx (vb, con.items[0].dict_id);
+
+    for (int i=0; i < n_numbers; i++) 
+        if (type == STORE_INT)
+            seg_integer_or_not (VB, item_ctx, STRi(number,i), 0); // an integer or '.'
+        else // float
+            seg_add_to_local_string (VB, item_ctx, STRi(number,i), LOOKUP_SIMPLE, 0);
+
+    container_seg (VB, ctx, (ContainerP)&con, 0, 0, value_len);
+}
+
+// used by container_reconstruct to retrieve the number of repeats
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_N_ALTS)
+{
+    new_value->i = VB_VCF->n_alts;
+    return HAS_NEW_VALUE;
+}
+
+// used by container_reconstruct to retrieve the number of repeats
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_N_ALLELES)
+{
+    new_value->i = VB_VCF->n_alts + 1;
+    return HAS_NEW_VALUE;
 }
 
 static inline bool vcf_refalt_seg_ref_alt_line_has_RGQ (rom str)

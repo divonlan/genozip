@@ -427,7 +427,7 @@ SPECIAL_RECONSTRUCTOR (bam_piz_special_BIN)
 }
 
 // note of float reconstruction:
-// When compressing SAM, floats are stored with seg_float_or_not (or a a textual string in earlier version), reconstruced 
+// When compressing SAM, floats are stored as textual string in earlier version, reconstruced 
 //    natively for SAM and via sam_piz_sam2bam_FLOAT for BAM. This way, the correct (as in the SAM file) number of textual digits is reconstructed.
 // When compressing BAM, floats are stored as 32-bit binaries (in local since v15 and encoded as uint32 in the snip up to v14), 
 //    They are reconstructed, either as textual for SAM or binary for BAM via bam_piz_special_FLOAT. This way, the BAM binary float is reconstructed precisely.

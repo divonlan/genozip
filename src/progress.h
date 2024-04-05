@@ -11,12 +11,13 @@
 #include "genozip.h"
 #include "digest.h"
 
-extern void progress_new_component (rom component_name, rom message, bool test_mode);
+extern void progress_new_component (rom component_name, rom message, bool test_mode, TimeSpecType *start_time);
 extern void progress_update (rom task, uint64_t sofar, uint64_t total, bool done);
 extern void progress_finalize_component (rom status);
 extern void progress_finalize_component_time (rom status, Digest md5);
 extern void progress_finalize_component_time_ratio (rom me, float ratio, Digest md5);
 extern void progress_finalize_component_time_ratio_better (rom me, float ratio, rom better_than, float ratio_than, Digest md5);
+extern bool progress_has_component (void);
 extern void progress_concatenated_md5 (rom me, Digest md5);
 extern void progress_erase (void);
 extern void progress_newline(void);

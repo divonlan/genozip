@@ -52,6 +52,9 @@ Flags flag = {
 #elif defined __linux__
     .is_linux     = true,
 #endif
+#ifdef sanitize_address
+    .debug_valgrind = true, // force freeing of all memory, so sanity address reports only true leaks
+#endif
     .out_dt       = DT_NONE, 
     .bgzf         = BGZF_NOT_INITIALIZED, 
     .lines_first  = NO_LINE, 
@@ -141,7 +144,7 @@ static void flags_set_head (rom optarg)
                  "The optional argument of --head must be a positive integer value");
 
         char s[strlen(optarg) + 4];
-        sprintf (s, "1-%s", optarg);
+        snprintf (s, sizeof (s), "1-%s", optarg);
         flags_set_lines (s);
     }
 }
@@ -1589,15 +1592,18 @@ static void flags_store_piped_in_details (void)
 #ifdef __linux__    
     char cmd[200];
     unsigned pid = getpid();
-    sprintf (cmd, "lsof -n -P 2> /dev/null | grep $(ls /proc/%u/fd/0 -l | cut -d[ -f2| cut -d] -f1) 2> /dev/null | grep -v %u", pid, pid);
+    snprintf (cmd, sizeof (cmd), "lsof -n -P 2> /dev/null | grep $(ls /proc/%u/fd/0 -l | cut -d[ -f2| cut -d] -f1) 2> /dev/null | grep -v %u", pid, pid);
     StreamP strm = stream_create (0, DEFAULT_PIPE_SIZE, 0, 0, 0, 0, 0, "to get counter-process details", 
                                   "bash", "-c", cmd, NULL);
     char str[500];
     unsigned len = fread (str, 1, sizeof (str)-1, stream_from_stream_stdout (strm));
+    
+    stream_close (&strm, STREAM_DONT_WAIT_FOR_PROCESS);
+
     str[len] = 0;
 
     char format[20];
-    sprintf (format, "%%%us %%u", (unsigned)sizeof (pipe_in_process_name)-1);
+    snprintf (format, sizeof (format), "%%%us %%u", (unsigned)sizeof (pipe_in_process_name)-1);
     sscanf (str, format, pipe_in_process_name, &pipe_in_pid);
 #endif
 }

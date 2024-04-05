@@ -78,7 +78,7 @@ typedef struct { char s[100]; } BgzfBlockStr;
 static BgzfBlockStr display_bb (BgzfBlockZip *bb)
 {
     BgzfBlockStr s;
-    sprintf (s.s, "{txt_index=%u txt_size=%u compressed_index=%u comp_size=%u is_decompressed=%u}",
+    snprintf (s.s, sizeof (s.s), "{txt_index=%u txt_size=%u compressed_index=%u comp_size=%u is_decompressed=%u}",
              bb->txt_index, bb->txt_size, bb->compressed_index, bb->comp_size, bb->is_decompressed);
     return s;
 }

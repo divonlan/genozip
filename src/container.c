@@ -97,7 +97,7 @@ StrTextMegaLong container_stack (VBlockP vb)
     int len = 0;
 
     for (int i=0; i < vb->con_stack_len; i++)
-        len += sprintf (&s.s[len], "%s[%u]->", CTX(vb->con_stack[i].did_i)->tag_name, vb->con_stack[i].repeat);
+        len += snprintf (&s.s[len], sizeof (s.s) - len, "%s[%u]->", CTX(vb->con_stack[i].did_i)->tag_name, vb->con_stack[i].repeat);
 
     s.s[len-2] = 0; // remove final "->"
 
@@ -458,7 +458,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
         StoreType save_store = ctx->flags.store;
         ctx->flags.store = STORE_INT;
         
-        reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, (char[]){ SNIP_SPECIAL, ctx->con_rep_special }, 2, false, __FUNCLINE);
+        reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, (char[]){ SNIP_SPECIAL, ctx->con_rep_special, 0 }, 2, false, __FUNCLINE); // note: nul-termianted as expected of a dictionary snip
         
         ctx->flags.store = save_store;
         ((ContainerP)con)->repeats = ctx->last_value.i;
@@ -709,9 +709,9 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
     if (cache_exists && word_index != WORD_INDEX_NONE && ((cache_item_len = *B16 (ctx->con_len, word_index)))) {
         con_p = (ContainerP)Bc (ctx->con_cache, *B32 (ctx->con_index, word_index));
         
-        unsigned st_size = con_sizeof (*con_p);
-        prefixes = (char *)con_p + st_size; // prefixes are stored after the Container
-        prefixes_len = cache_item_len - st_size;
+        unsigned con_size = con_sizeof (*con_p);
+        prefixes = (char *)con_p + con_size; // prefixes are stored after the Container
+        prefixes_len = cache_item_len - con_size;
     }
 
     // case: not cached - decode and cache it
@@ -739,8 +739,7 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
                 item->did_i_small = 255;
  
         // get prefixes
-        unsigned st_size = con_sizeof (con);
-        con_p        = &con;
+        unsigned con_size = con_sizeof (con);
         prefixes     = (b64_len < snip_len) ? &snip[b64_len+1]       : NULL;
         prefixes_len = (b64_len < snip_len) ? snip_len - (b64_len+1) : 0;
 
@@ -750,8 +749,8 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
         ASSERT (!prefixes_len || prefixes[prefixes_len-1] == CON_PX_SEP, 
                 "ctx=%s: prefixes array does end with a CON_PX_SEP: %.*s", ctx->tag_name, prefixes_len, prefixes);
 
-        ASSERT (st_size + prefixes_len <= 65535, "ctx=%s: st_size=%u + prefixes_len=%u too large", 
-                ctx->tag_name, st_size, prefixes_len);
+        ASSERT (con_size + prefixes_len <= 65535, "ctx=%s: con_size=%u + prefixes_len=%u too large", 
+                ctx->tag_name, con_size, prefixes_len);
 
         // first encounter with Container for this context - allocate the cache index
         if (!cache_exists) {
@@ -765,20 +764,22 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
             *B32 (ctx->con_index, word_index) = ctx->con_cache.len32;
 
         // place Container followed by prefix in the cache (even if its a singleton)
-        buf_alloc (vb, &ctx->con_cache, st_size + prefixes_len + CONTAINER_MAX_SELF_TRANS_CHANGE, 0, char, 2, CTX_TAG_CON_CACHE);
+        buf_alloc (vb, &ctx->con_cache, con_size + prefixes_len + CONTAINER_MAX_SELF_TRANS_CHANGE, 0, char, 2, CTX_TAG_CON_CACHE);
         
         char *cached_con = BAFTc (ctx->con_cache);
-        buf_add (&ctx->con_cache, con_p, st_size);
+        buf_add (&ctx->con_cache, &con, con_size);
         if (prefixes_len) buf_add (&ctx->con_cache, prefixes, prefixes_len);
 
+        // IMPORTANT! we are returning a pointer into the cache buffer which might have just been realloced ^. 
+        // We don't handle reallocs, so we cannot have a recursive calls into the same container context, as earlier pointers might be invalidated by the realloc
         con_p    = (ContainerP)cached_con; // update so we reconstruct from translated cached item
-        prefixes = cached_con + st_size;
+        prefixes = cached_con + con_size;
 
         // if item[0] is a translator-only item, use it to translate the Container itself (used by SAM_AUX)
-        ContainerItem *item0 = &con.items[0];
+        ContainerItemP item0 = &con.items[0];
         
         if (vb->translation.trans_containers && !item0->dict_id.num && item0->translator) {
-            int32_t prefixes_len_change = (DT_FUNC(vb, translator)[item0->translator](vb, ctx, cached_con, st_size + prefixes_len, 0, false));  
+            int32_t prefixes_len_change = (DT_FUNC(vb, translator)[item0->translator](vb, ctx, cached_con, con_size + prefixes_len, 0, false));  
             ASSERT (prefixes_len_change <= CONTAINER_MAX_SELF_TRANS_CHANGE, 
                     "ctx=%s: prefixes_len_change=%d exceeds range maximum %u", 
                     ctx->tag_name, prefixes_len_change, CONTAINER_MAX_SELF_TRANS_CHANGE);
@@ -789,7 +790,7 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
 
         // finally, record the length (possibly updated by the translator) - but not for singletons
         if (word_index != WORD_INDEX_NONE) 
-            *B16 (ctx->con_len, word_index) = (uint16_t)(st_size + prefixes_len);
+            *B16 (ctx->con_len, word_index) = (uint16_t)(con_size + prefixes_len);
     }
 
     if (out_prefixes) 
@@ -805,11 +806,11 @@ static StrText item_sep_name0 (uint8_t sep)
 
     if (sep & 0x80) {
         int s_len = 0;
-        if ((sep & 0x7f) & CI0_TRANS_NUL)    s_len += sprintf (&s.s[s_len], "TRANS_NUL|");
-        if ((sep & 0x7f) & CI0_TRANS_NOR)    s_len += sprintf (&s.s[s_len], "TRANS_NOR|");
-        if ((sep & 0x7f) & CI0_TRANS_MOVE)   s_len += sprintf (&s.s[s_len], "TRANS_MOVE|");
-        if ((sep & 0x7f) & CI0_NATIVE_NEXT)  s_len += sprintf (&s.s[s_len], "NATIVE_NEXT|");
-        if ((sep & 0x7f) & CI0_TRANS_ALWAYS) s_len += sprintf (&s.s[s_len], "TRANS_ALWAYS|");
+        if ((sep & 0x7f) & CI0_TRANS_NUL)    s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "TRANS_NUL|");
+        if ((sep & 0x7f) & CI0_TRANS_NOR)    s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "TRANS_NOR|");
+        if ((sep & 0x7f) & CI0_TRANS_MOVE)   s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "TRANS_MOVE|");
+        if ((sep & 0x7f) & CI0_NATIVE_NEXT)  s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "NATIVE_NEXT|");
+        if ((sep & 0x7f) & CI0_TRANS_ALWAYS) s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "TRANS_ALWAYS|");
 
         if (s_len) s.s[s_len-1] = 0; // remove final |
     }
@@ -820,7 +821,7 @@ static StrText item_sep_name0 (uint8_t sep)
         case CI0_FIXED_0_PAD  : strcpy (s.s, "FIXED_0_PAD");  break;
         case CI0_SKIP         : strcpy (s.s, "SKIP");         break;
         case CI0_DIGIT        : strcpy (s.s, "DIGIT");        break;
-        default               : sprintf (s.s, "'%.5s'", char_to_printable (sep).s); 
+        default               : snprintf (s.s, sizeof (s.s), "'%.5s'", char_to_printable (sep).s); 
     }
 
     return s;
@@ -835,7 +836,7 @@ static StrText item_sep_name1 (uint8_t sep)
         case CI1_ITEM_CB      : strcpy (s.s, "ITEM_CB");      break;
         case CI1_ITEM_PRIVATE : strcpy (s.s, "ITEM_PRIVATE"); break;
         case CI1_LOOKBACK     : strcpy (s.s, "LOOKBACK");     break;
-        default               : sprintf (s.s, "'%.5s'", char_to_printable (sep).s); 
+        default               : snprintf (s.s, sizeof (s.s), "'%.5s'", char_to_printable (sep).s); 
     }
 
     return s;
@@ -846,15 +847,15 @@ static StrTextLong container_flags (ConstContainerP con)
     StrTextLong s = {};
     int s_len = 0;
 
-    if (con->drop_final_repsep)                   s_len += sprintf (&s.s[s_len], "drop_final_repsep|");
-    if (con->drop_final_item_sep)                 s_len += sprintf (&s.s[s_len], "drop_final_item_sep|");
-    if (con->drop_final_item_sep_of_final_repeat) s_len += sprintf (&s.s[s_len], "drop_final_item_sep_of_final_repeat|");
-    if (con->keep_empty_item_sep)                 s_len += sprintf (&s.s[s_len], "keep_empty_item_sep|");
-    if (con->filter_repeats)                      s_len += sprintf (&s.s[s_len], "filter_repeats|");
-    if (con->filter_items)                        s_len += sprintf (&s.s[s_len], "filter_items|");
-    if (con->is_toplevel)                         s_len += sprintf (&s.s[s_len], "is_toplevel|");
-    if (con->callback)                            s_len += sprintf (&s.s[s_len], "callback|");
-    if (con->no_translation)                      s_len += sprintf (&s.s[s_len], "no_translation|");
+    if (con->drop_final_repsep)                   s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "drop_final_repsep|");
+    if (con->drop_final_item_sep)                 s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "drop_final_item_sep|");
+    if (con->drop_final_item_sep_of_final_repeat) s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "drop_final_item_sep_of_final_repeat|");
+    if (con->keep_empty_item_sep)                 s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "keep_empty_item_sep|");
+    if (con->filter_repeats)                      s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "filter_repeats|");
+    if (con->filter_items)                        s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "filter_items|");
+    if (con->is_toplevel)                         s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "is_toplevel|");
+    if (con->callback)                            s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "callback|");
+    if (con->no_translation)                      s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "no_translation|");
 
     if (s_len) s.s[s_len-1] = 0; // remove final |
 
@@ -868,27 +869,27 @@ StrTextMegaLong container_to_json (ConstContainerP con, STRp (prefixes))
     
     uint32_t num_items = con_nitems (*con);
 
-    s_len = sprintf (s.s,"{ \"repeats\": %s, \"num_items\": %u, \"flags\": %s, \"repsep\": [ '%.5s', '%.5s' ], \"items\": [ ",
+    s_len = snprintf (s.s, sizeof (s.s), "{ \"repeats\": %s, \"num_items\": %u, \"flags\": %s, \"repsep\": [ '%.5s', '%.5s' ], \"items\": [ ",
                      (con->repeats == CON_REPEATS_IS_SEQ_LEN?"SEQ_LEN" : con->repeats == CON_REPEATS_IS_SPECIAL?"SPECIAL" : str_int_s (con->repeats).s),
                      num_items,container_flags(con).s,
                      char_to_printable (con->repsep[0]).s, char_to_printable(con->repsep[1]).s);
     
     for (unsigned i=0; i < num_items; i++)
-        s_len += sprintf (&s.s[s_len], "{ \"dict_id\": \"%s\", \"separator\": [ %s, %s ], \"translator\": %u }, ",
+        s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "{ \"dict_id\": \"%s\", \"separator\": [ %s, %s ], \"translator\": %u }, ",
                           dis_dict_id (con->items[i].dict_id).s,  
                           item_sep_name0 (con->items[i].separator[0]).s, item_sep_name1 (con->items[i].separator[1]).s, 
                           con->items[i].translator);
     
     if (num_items) s_len -= 2; // remove last com
-    s_len += sprintf (&s.s[s_len], " }, prefixes=[ ");
+    s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, " }, prefixes=[ ");
 
     str_split (prefixes, prefixes_len, 0, CON_PX_SEP, pr, false);
 
     for (unsigned i=0; i < n_prs-1; i++) 
-        s_len += sprintf (&s.s[s_len], "\"%s\", ", str_to_printable_(prs[i], MIN_(pr_lens[i], sizeof(StrTextSuperLong)/2-1)).s);
+        s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "\"%s\", ", str_to_printable_(prs[i], MIN_(pr_lens[i], sizeof(StrTextSuperLong)/2-1)).s);
 
     if (num_items) s_len -= 2; // remove last comma
-    s_len += sprintf (&s.s[s_len], " ] }");
+    s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, " ] }");
 
     return s;
 }

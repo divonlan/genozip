@@ -77,7 +77,7 @@ BufListEnt *buflist_find_buf (VBlockP vb, ConstBufferP buf, FailType soft_fail)
     return ent;
 }
 
-static void buflist_foreach_buffer (VBlockP vb, bool (*callback)(ConstBufferP, VBlockPoolType pool_type, int vb_id, void *arg), VBlockPoolType pool_type, void *arg)
+static void buflist_foreach_buffer (VBlockP vb, bool (*callback)(ConstBufferP, VBlockPoolType pool_type, VBID vb_id, void *arg), VBlockPoolType pool_type, void *arg)
 {
     buf_lock (&vb->buffer_list);
 
@@ -99,7 +99,7 @@ static void buflist_foreach_buffer (VBlockP vb, bool (*callback)(ConstBufferP, V
     buf_unlock;
 }
 
-static void buflist_foreach_buffer_in_each_vbs (bool (*callback)(ConstBufferP, VBlockPoolType pool_type, int vb_id, void *arg), void *arg)
+static void buflist_foreach_buffer_in_each_vbs (bool (*callback)(ConstBufferP, VBlockPoolType pool_type, VBID vb_id, void *arg), void *arg)
 {
     for (VBlockPoolType pool_type=0; pool_type < NUM_POOL_TYPES; pool_type++) {
 
@@ -108,7 +108,7 @@ static void buflist_foreach_buffer_in_each_vbs (bool (*callback)(ConstBufferP, V
 
         // note: we don't cover EVB (only in DEBUG and --show-mem) as it segfaults for an unknown reason (likely the Buffer structure itself resides with a structure
         // that is freed (eg File)). TODO: debug this.
-        for (int vb_id=0; vb_id < (int)vb_pool->num_allocated_vbs; vb_id++) {
+        for (VBID vb_id=0; vb_id < (int)vb_pool->num_allocated_vbs; vb_id++) {
 
             VBlockP vb = vb_get_from_pool (vb_pool, vb_id);
             if (!vb) continue;
@@ -119,7 +119,7 @@ static void buflist_foreach_buffer_in_each_vbs (bool (*callback)(ConstBufferP, V
 
     // non-pool VBs 
     if (threads_am_i_main_thread() || flag.debug || flag.show_memory) 
-        for (int vb_id=-1; vb_id >= -NUM_NONPOOL_VBs; vb_id--) {
+        for (VBID vb_id=-1; vb_id >= -NUM_NONPOOL_VBs; vb_id--) {
             VBlockP vb = vb_get_nonpool_vb (vb_id);
             if (vb) buflist_foreach_buffer (vb, callback, -1, arg);
         }
@@ -135,7 +135,7 @@ void buflist_who_is_locked (void)
 
         // note: we don't cover EVB (only in DEBUG and --show-mem) as it segfaults for an unknown reason (likely the Buffer structure itself resides with a structure
         // that is freed (eg File)). TODO: debug this.
-        for (int vb_id=0; vb_id < (int)vb_pool->num_allocated_vbs; vb_id++) {
+        for (VBID vb_id=0; vb_id < (int)vb_pool->num_allocated_vbs; vb_id++) {
 
             VBlockP vb = vb_get_from_pool (vb_pool, vb_id);
             if (!vb) continue;
@@ -147,7 +147,7 @@ void buflist_who_is_locked (void)
 
     // non-pool VBs 
     if (threads_am_i_main_thread() || flag.debug || flag.show_memory) 
-        for (int vb_id=-1; vb_id >= -NUM_NONPOOL_VBs; vb_id--) {
+        for (VBID vb_id=-1; vb_id >= -NUM_NONPOOL_VBs; vb_id--) {
             VBlockP vb = vb_get_nonpool_vb (vb_id);
             if (vb && vb->buffer_list.spinlock && vb->buffer_list.spinlock->lock)
                 fprintf (stderr, "non-pool vb_id=%d buffer_list is locked\n", vb_id);
@@ -158,7 +158,7 @@ void buflist_display (VBlockP vb) // for debugging
 {
     uint32_t vb_size = get_vb_size (vb->data_type);
 
-    iprintf ("Buffers of vblock_i=%d id=%u range=[%p - %p]:\n", vb->vblock_i, vb->id, vb, (rom)vb + vb_size - 1);
+    iprintf ("Buffers of vblock_i=%d id=%d range=[%p - %p]:\n", vb->vblock_i, vb->id, vb, (rom)vb + vb_size - 1);
     for_buf2 (BufListEnt, ent, ent_i, vb->buffer_list)
         iprintf ("%3u\tin_vb=%s\t%-20s\t%s:%u\t%p%s\n", 
                  ent_i, TF(is_p_in_range (ent->buf, vb, vb_size)), ent->name, ent->func, ent->code_line, ent->buf,
@@ -307,7 +307,7 @@ bool buflist_locate (ConstBufferP buf, rom prefix /*NULL if silent*/)
 
         // note: we don't cover EVB (only in DEBUG and --show-mem) as it segfaults for an unknown reason (likely the Buffer structure itself resides with a structure
         // that is freed (eg File)). TODO: debug this.
-        for (int vb_id=0; vb_id < (int)vb_pool->num_allocated_vbs; vb_id++) {
+        for (VBID vb_id=0; vb_id < (int)vb_pool->num_allocated_vbs; vb_id++) {
 
             VBlockP vb = vb_get_from_pool (vb_pool, vb_id);
             if (!vb) continue;
@@ -328,7 +328,7 @@ bool buflist_locate (ConstBufferP buf, rom prefix /*NULL if silent*/)
             return true;                                                                                \
         }
 
-    for (int i=1; i <= NUM_NONPOOL_VBs; i++) 
+    for (VBID i=1; i <= NUM_NONPOOL_VBs; i++) 
         OBJECT_TEST(vb_buf_locate, vb_get_nonpool_vb (-i));
 
     OBJECT_TEST(file_buf_locate, z_file);
@@ -369,7 +369,7 @@ void buflist_free_vb (VBlockP vb)
     
     uint32_t sizeof_vb = get_vb_size (vb->data_type); // note: buffers are expected in current data_type part of buffer, not in the unused portion due to an historical alloced_data_type
     
-    ASSERT (sizeof_vb <= get_vb_size (vb->data_type_alloced), "Expecting vb_i=%u vb->id=%u data_type=%s to be of size >= %u, but it is allocated as %s of size %u",
+    ASSERT (sizeof_vb <= get_vb_size (vb->data_type_alloced), "Expecting vb_i=%u vb->id=%d data_type=%s to be of size >= %u, but it is allocated as %s of size %u",
             vb->vblock_i, vb->id, dt_name (vb->data_type), sizeof_vb, dt_name (vb->data_type_alloced), get_vb_size (vb->data_type_alloced));
 
     VBIType vb_i = vb->vblock_i; // save before it is erased
@@ -554,7 +554,7 @@ static void buflist_find_underflow_culprit (ConstVBlockP calling_vb, rom memory,
         VBlockPool *vb_pool = vb_get_pool (type, SOFT_FAIL);
         if (!vb_pool) continue;
     
-        for (int vb_id=-1; vb_id < (int)vb_pool->num_vbs; vb_id++) {
+        for (VBID vb_id=-1; vb_id < (int)vb_pool->num_vbs; vb_id++) {
             VBlockP vb = vb_get_from_pool (vb_pool, vb_id);
             if (!vb) continue;
             
@@ -567,7 +567,7 @@ static void buflist_find_underflow_culprit (ConstVBlockP calling_vb, rom memory,
                 if (!ent->buf || BL_IS_REMOVED(ent->buf)) continue;
 
                 BufferP buf = ent->buf;         
-                BufferSpinlock *spinlock = buf->promiscuous ? buf_lock_promiscuous (buf, __FUNCLINE) : NULL; // prevent frees or reallocs while we're testing
+                BufferSpinlockP spinlock = buf->promiscuous ? buf_lock_promiscuous (buf, __FUNCLINE) : NULL; // prevent frees or reallocs while we're testing
                 if (buf->promiscuous && !spinlock) continue; // by the time we acquired the lock, buf was already freed
                 
                 // memory=0 could be a buffer that has been buf_moved, or a promiscous evb buffer current being realloced by a compute thread
@@ -648,7 +648,7 @@ static bool buflist_test_overflows_do (VBlockP vb, bool primary, rom msg)
         }
 #endif
 
-        BufferSpinlock *spinlock = buf->promiscuous ? buf_lock_promiscuous (buf, __FUNCLINE) : NULL; // prevent frees or reallocs while we're testing
+        BufferSpinlockP spinlock = buf->promiscuous ? buf_lock_promiscuous (buf, __FUNCLINE) : NULL; // prevent frees or reallocs while we're testing
         if (buf->promiscuous && !spinlock) return false; // by the time we acquired the lock, buf was already freed
 
         // memory=0 could be a buffer that has been buf_moved, or a promiscous evb buffer current being 
@@ -663,27 +663,27 @@ static bool buflist_test_overflows_do (VBlockP vb, bool primary, rom msg)
         }
         else if (buf->data && buf->vb->vblock_i != vb->vblock_i) { // buffers might still be here from the previous incarnation of this vb - its ok if they're not allocated yet
                     fprintf (stderr, "%s%s: Memory corruption in vb_id=%d: buf_vb_i=%d differs from thread_vb_i=%d: buffer: %s %p func: %s:%u \"%s\" memory: %p-%p name: %s vb_i=%u buf_i=%u\n",
-                             nl[primary], msg, vb ? vb->id : -999, buf->vb->vblock_i, vb->vblock_i, buf_type_name(buf), 
+                             nl[primary], msg, vb ? vb->id : VB_ID_NONE, buf->vb->vblock_i, vb->vblock_i, buf_type_name(buf), 
                              buf, fcn, buf->memory, buf->memory + buf_mem_size (buf)-1,
                              buf_desc (buf).s, buf->vb->vblock_i, buf_i);
             corruption = "vblock_i mismatch";
         }
         else if (buf->type < 0 || buf->type > BUF_NUM_TYPES) {
             fprintf (stderr, "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d) buffer=%p func=%s:%u \"%s\" (buf_i=%u): Corrupt Buffer structure OR invalid buffer pointer - invalid buf->type", 
-                        nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, buf, fcn, buf_i);
+                        nl[primary], msg, vb ? vb->id : VB_ID_NONE, vb->vblock_i, buf, fcn, buf_i);
             fprintf (stderr, " Buffer=%s\n", buf_desc(buf).s);  // separate fprintf in case it seg faults
             corruption = "invalid type";
         }
         else if (!buf->name) {
             fprintf (stderr, "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d): buffer=%p func=%s:%u \"%s\" (buf_i=%u): Corrupt Buffer structure - null name", 
-                     nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, buf, fcn, buf_i);
+                     nl[primary], msg, vb ? vb->id : VB_ID_NONE, vb->vblock_i, buf, fcn, buf_i);
             fprintf (stderr, " Buffer=%s\n", buf_desc(buf).s);  // separate fprintf in case it seg faults
             corruption = "missing name";
         }
         else if (BUNDERFLOW(buf) != UNDERFLOW_TRAP) {
             fprintf (stderr, 
                      "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d): Underflow: buffer: %s %p func: %s:%u memory: %p-%p name: %s vb_i=%u buf_i=%u. Fence=%c%c%c%c%c%c%c%c\n",
-                     nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, buf_type_name(buf), buf, func, code_line, buf->memory, buf->memory+buf_mem_size(buf)-1, 
+                     nl[primary], msg, vb ? vb->id : VB_ID_NONE, vb->vblock_i, buf_type_name(buf), buf, func, code_line, buf->memory, buf->memory+buf_mem_size(buf)-1, 
                      buf_desc (buf).s, buf->vb->vblock_i, buf_i, 
                      buf->memory[0], buf->memory[1], buf->memory[2], buf->memory[3], buf->memory[4], buf->memory[5], buf->memory[6], buf->memory[7]);
 
@@ -700,7 +700,7 @@ static bool buflist_test_overflows_do (VBlockP vb, bool primary, rom msg)
             char *of = &buf->memory[buf->size + sizeof(uint64_t)];
             fprintf (stderr,
                      "%s%s: Memory corruption in vb_id=%d (vb_i=%d): Overflow: buffer: %s %p func: %s:%u memory: %p-%p name: %s vb_i=%u buf_i=%u Fence=%c%c%c%c%c%c%c%c\n",
-                     nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, buf_type_name(buf), buf, func, code_line, buf->memory, buf->memory+buf_mem_size(buf)-1, 
+                     nl[primary], msg, vb ? vb->id : VB_ID_NONE, vb->vblock_i, buf_type_name(buf), buf, func, code_line, buf->memory, buf->memory+buf_mem_size(buf)-1, 
                      buf_desc (buf).s, buf->vb->vblock_i, buf_i, of[0], of[1], of[2], of[3], of[4], of[5], of[6], of[7]);
             
             if (primary) buflist_test_overflows_all_other_vb (vb, msg, false);
@@ -737,7 +737,7 @@ void buflist_test_overflows_all_other_vb (VBlockP caller_vb, rom msg, bool force
         VBlockPool *vb_pool = vb_get_pool (type, SOFT_FAIL);
         if (!vb_pool) continue;
 
-        for (int vb_id=-1; vb_id < (int)vb_pool->num_vbs; vb_id++) {
+        for (VBID vb_id=-1; vb_id < (int)vb_pool->num_vbs; vb_id++) {
             VBlockP vb = vb_get_from_pool (vb_pool, vb_id);
             if (!vb || vb == caller_vb) continue; // skip caller's VB
             corruption_detected |= buflist_test_overflows_do (vb, false, msg);
@@ -765,7 +765,7 @@ bool buflist_test_overflows (VBlockP vb, rom msg)
 
 static DESCENDING_SORTER (buf_stats_sort_by_bytes, MemStats, bytes)
 
-static bool buf_count_mem_usage (ConstBufferP buf, VBlockPoolType pool_type, int vb_id, void *mem_usage)
+static bool buf_count_mem_usage (ConstBufferP buf, VBlockPoolType pool_type, VBID vb_id, void *mem_usage)
 {
     *((uint64_t *)mem_usage) += buf_mem_size (buf);
 
@@ -783,7 +783,7 @@ uint64_t buflist_get_memory_usage (void)
 static MemStats stats[MAX_MEMORY_STATS]; // must be pre-allocated, because buflist_show_memory is called when malloc fails, so it cannot malloc
 static unsigned num_stats=0, num_buffers=0;
 
-static bool buflist_show_memory_add_buf (ConstBufferP buf, VBlockPoolType pool_type, int vb_id, void *unused)
+static bool buflist_show_memory_add_buf (ConstBufferP buf, VBlockPoolType pool_type, VBID vb_id, void *unused)
 {
     ASSERTW (buf->name && strlen (buf->name) > 0, "FYI: buffer allocated in %s:%u has no name", buf->func, buf->code_line);
 
@@ -834,17 +834,21 @@ void buflist_show_memory (bool memory_full, unsigned max_threads, unsigned used_
     uint32_t num_allocated_vbs = (vb_get_pool (POOL_MAIN, SOFT_FAIL) ? vb_get_pool (POOL_MAIN, HARD_FAIL)->num_allocated_vbs : 0)
                                + (vb_get_pool (POOL_BGZF, SOFT_FAIL) ? vb_get_pool (POOL_BGZF, HARD_FAIL)->num_allocated_vbs : 0);
 
-    fprintf (memory_full ? stderr : info_stream, "Total bytes: %s in %u buffers in %u buffer lists. global_max_threads=%u max_resident_size=%s\n", 
+    FILE *print = memory_full ? stderr : info_stream;
+
+    fprintf (print, "Total bytes: %s in %u buffers in %u buffer lists. global_max_threads=%u max_resident_size=%s\n", 
              str_size (total_bytes).s, num_buffers, num_allocated_vbs, global_max_threads, str_size (arch_get_max_resident_set()).s);
     if (IS_ZIP) 
-        fprintf (memory_full ? stderr : info_stream, "vb_size = %u MB\n", (unsigned)(segconf.vb_size >> 20));
+        fprintf (print, "vb_size = %u MB\n", (unsigned)(segconf.vb_size >> 20));
     
     if (max_threads)
-        fprintf (memory_full ? stderr : info_stream, "Compute threads: max_permitted=%u actually_used=%u\n", max_threads, used_threads);
+        fprintf (print, "Compute threads: max_permitted=%u actually_used=%u\n", max_threads, used_threads);
 
     for (unsigned i=0; i < num_stats; i++)
-        fprintf (memory_full ? stderr : info_stream, "%-30s: %-8s (%4.1f%%) in %u buffers\n", stats[i].name, str_size (stats[i].bytes).s, 100.0 * (float)stats[i].bytes / (float)total_bytes, stats[i].buffers);
+        fprintf (print, "%-30s: %-8s (%4.1f%%) in %u buffers\n", stats[i].name, str_size (stats[i].bytes).s, 100.0 * (float)stats[i].bytes / (float)total_bytes, stats[i].buffers);
 
-    fprintf (memory_full ? stderr : info_stream, "\n");
+    fprintf (print, "\n");
+
+    fflush (print);
 }
 

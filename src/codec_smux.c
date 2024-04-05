@@ -101,19 +101,21 @@ void codec_smux_calc_stats (VBlockP vb)
         bool is_rev;
         seq_callback (vb, NULL, line_i,  pSTRa(seq), CALLBACK_NO_SIZE_LIMIT, &is_rev);
 
-        if (!is_rev)
-            for (unsigned i=0; i < qual_len; i++) { // note: qual_len==1 if missing qual
-                count_base[nuke_encode(seq[i])]++;
-                histo[qual[i]-'!']++;
-                histo_by_seq[nuke_encode(seq[i])][qual[i]-33]++;
-            }
-        else
-            for (unsigned i=0; i < qual_len; i++) {
-                count_base[nuke_encode_comp(seq[i])]++;
-                histo[qual[i]-'!']++;
-                histo_by_seq[nuke_encode_comp(seq[i])][qual[i]-33]++;
-            }
-
+        if (qual[0] != ' ') { // ignore missing qual
+            if (!is_rev)
+                for (unsigned i=0; i < qual_len; i++) { // note: qual_len==1 if missing qual
+                    count_base[nuke_encode(seq[i])]++;
+                    histo[qual[i]-'!']++;
+                    histo_by_seq[nuke_encode(seq[i])][qual[i]-33]++;
+                }
+            else
+                for (unsigned i=0; i < qual_len; i++) {
+                    count_base[nuke_encode_comp(seq[i])]++;
+                    histo[qual[i]-'!']++;
+                    histo_by_seq[nuke_encode_comp(seq[i])][qual[i]-33]++;
+                }
+        }
+        
         num_bp += qual_len;
     }
 

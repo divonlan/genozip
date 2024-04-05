@@ -231,8 +231,9 @@ void gencomp_initialize (CompIType comp_i, GencompType gct)
         if ((txt_file->codec != CODEC_BGZF && txt_file->codec != CODEC_NONE) || txt_file->redirected || txt_file->is_remote) {
             depn_method = DEPN_OFFLOAD;
 
-            depn.name = MALLOC (strlen (z_file->name) + 20);
-            sprintf (depn.name, "%s.DEPN", z_file->name);
+            int depn_name_size = strlen (z_file->name) + 20;
+            depn.name = MALLOC (depn_name_size);
+            snprintf (depn.name, depn_name_size, "%s.DEPN", z_file->name);
             buf_set_promiscuous (&depn.offload_info, "depn.offload_info");
         }
 

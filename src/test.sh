@@ -1018,7 +1018,6 @@ batch_backward_compatability()
         $genounzip --no-cache -t $file $ref_opt || exit 1
     done
 
-
     cleanup # to do: change loop ^ to double loop, clean up after each version (to remove shm)
 }
     
@@ -1043,11 +1042,16 @@ batch_real_world_1_adler32() # $1 extra genozip argument
         local filter_bcf=.bcf
     fi
 
+    local debug_filter=nothing
+    if [ -n "$is_debug" ]; then 
+        local debug_filter="test.1M-@SQ.sam" # -fsanitize=address hangs on this file
+    fi
+
     # without reference
-    local files=( `cd $TESTDIR; ls -1 test.*vcf* test.*bcf* test.*sam* test.*bam test.*fq* test.*fa*    \
-                   test.*gvf* test.*gtf* test.*gff* test.*locs* test.*bed* test.*txt* test.*.pbi  \
-                   | grep -v "$filter_xz" | grep -v "$filter_zip" | grep -v "$filter_bcf" \
-                   | grep -v headerless | grep -vF .genozip | grep -vF .md5 | grep -vF .bad `) 
+    local files=( `cd $TESTDIR; ls -1 test.*vcf* test.*bcf* test.*sam* test.*bam test.*fq* test.*fa*                \
+                   test.*gvf* test.*gtf* test.*gff* test.*locs* test.*bed* test.*txt* test.*.pbi                    \
+                   | grep -v "$filter_xz" | grep -v "$filter_zip" | grep -v "$filter_bcf" | grep -v "$debug_filter" \
+                   | grep -vE "headerless|\.genozip|\.md5|\.bad|\.ora" ` )
 
     # test genozip and genounzip --test
     echo "subsets of real world files (without reference)"
@@ -1088,13 +1092,18 @@ batch_real_world_genounzip_compare_file() # $1 extra genozip argument
         local filter_zip=.zip
     fi
 
+    local debug_filter=nothing
+    if [ -n "$is_debug" ]; then 
+        local debug_filter="test.1M-@SQ.sam" # -fsanitize=address hangs on this file
+    fi
+
     # without reference
     local files=( `cd $TESTDIR; ls -1 test.*vcf* test.*sam* test.*bam \
                    test.*fq* test.*fa* \
                    test.*gvf* test.*gtf* test.*gff* test.*locs* test.*bed* \
                    test.*txt* test.*pbi \
-                   | grep -v "$filter_xz" | grep -v "$filter_zip" \
-                   | grep -v headerless | grep -vF .genozip | grep -Fv .md5 | grep -Fv .bad ` )
+                   | grep -v "$filter_xz" | grep -v "$filter_zip" | grep -v "$debug_filter" \
+                   | grep -vE "headerless|\.genozip|\.md5|\.bad|\.ora"` )
     
     # test full genounzip (not --test), including generation of BZGF
     for f in ${files[@]}; do 
@@ -1332,7 +1341,7 @@ batch_external_unzip()
     cleanup
 }
 
-# ORA
+# # ORA
 batch_external_ora()
 {
     # Commented out because its very slow - uncomment if needed
@@ -1341,7 +1350,7 @@ batch_external_ora()
     #     ORA_REF_PATH=$REFDIR $genozip --truncate -ft -e data/hs37d5.v15.ref.genozip test.fastq.ora || exit $?
     # fi
 
-    # cleanup
+    cleanup
 }
 
 batch_reference_fastq()
@@ -1884,6 +1893,10 @@ else
 BASEDIR=.
 fi
 
+if [[ ! -v GENOZIP_HOME ]]; then
+    export GENOZIP_HOME=$BASEDIR
+fi
+
 TESTDIR=$BASEDIR/private/test
 SCRIPTSDIR=$BASEDIR/private/scripts
 LICENSESDIR=$BASEDIR/private/licenses
@@ -1891,6 +1904,10 @@ OUTDIR=$TESTDIR/tmp
 REFDIR=$BASEDIR/data
 if [ -n "$is_windows" ]; then
     LICFILE=$APPDATA/genozip/.genozip_license.v15
+
+    if [[ ! -v APPDATA ]]; then
+        export APPDATA="$BASEDIR/../AppData/Roaming"
+    fi
 else
     LICFILE=$HOME/.genozip_license.v15
 fi
@@ -1955,13 +1972,18 @@ fi
 # -----------------
 # platform settings
 # -----------------
-if [ -n "$is_windows" ] || [ -n "$is_exe" ]; then
+if [ -n "$is_windows" ]; then
     exe=.exe
     path=`pwd| cut -c3-|tr / '\\\\'`\\
+
+elif [ -n "$is_exe" ]; then
+    exe=.exe
+    path=$PWD/
+
 #    zip_threads="-@3"
 #    piz_threads="-@5"
 elif [ -n "$is_mac" ]; then
-    exe=.mac
+#    exe=.mac
     path=$PWD/
 else # linux
     exe=""

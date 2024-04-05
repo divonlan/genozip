@@ -23,7 +23,7 @@ typedef enum          { BUF_UNALLOCATED=0, BUF_REGULAR,   BITS_STANDALONE, BUF_S
 typedef struct { 
     bool lock;
     uint16_t link_count;       // # of buffers pointing to this spinlock. >= Buffer user count, bc if buffer splits, spinlock doesn't.
-} BufferSpinlock;              // see internal-docs/overlay-logic.txt
+} BufferSpinlock, *BufferSpinlockP; // see internal-docs/overlay-logic.txt
 
 typedef struct Buffer {        // 72 bytes
     //------------------------------------------------------------------------------------------------------
@@ -72,9 +72,9 @@ typedef struct Buffer {        // 72 bytes
     rom name;                  // name of allocator - used for memory debugging & statistics.
     rom func;                  // the allocating function
 
-    char *memory;              // memory allocated to this buffer - amount is: size + 2*sizeof(longlong) to allow for OVERFLOW and UNDERFLOW)
+    char *memory;              // memory allocated to this buffer - amount is: size + CTL_SIZE to allow for UNDERFLOW, OVERFLOW and user_count)
 
-    BufferSpinlock *spinlock;  // see internal-docs/overlay-logic.txt
+    BufferSpinlockP spinlock;  // see internal-docs/overlay-logic.txt
 } Buffer; 
 
 #define UNDERFLOW_TRAP 0x574F4C4652444E55ULL // "UNDRFLOW" - inserted at the begining of each memory block to detected underflows
@@ -230,7 +230,7 @@ extern uint64_t buf_mem_size (ConstBufferP buf);
 extern void buf_init_lock (BufferP buf);
 
 #define buf_lock_if(buf, cond) \
-    BufferSpinlock *spinlock = (cond) ? (buf)->spinlock : NULL; \
+    BufferSpinlockP spinlock = (cond) ? (buf)->spinlock : NULL; \
     ASSERT (!(cond) || spinlock, "spinlock not initialized for %s", buf_desc(buf).s); \
     if (spinlock) while (({ bool expected = (bool)false; !__atomic_compare_exchange_n (&spinlock->lock, &expected, (bool)true, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE); })); /* spinlock */ 
 
@@ -241,7 +241,7 @@ extern void buf_init_lock (BufferP buf);
                                       spinlock = NULL; \
                                       /* printf ("unlocked %s\n", func); */}; })
 
-extern BufferSpinlock *buf_lock_promiscuous (ConstBufferP buf, FUNCLINE);
+extern BufferSpinlockP buf_lock_promiscuous (ConstBufferP buf, FUNCLINE);
 
 static inline uint16_t buf_user_count (ConstBufferP buf) 
 {

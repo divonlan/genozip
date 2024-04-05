@@ -93,7 +93,7 @@ static int64_t reconstruct_from_delta (VBlockP vb,
     else if (base_ctx->flags.store == STORE_FLOAT) // since 15.0.25
         base_value = (my_ctx->flags.same_line && my_ctx != base_ctx)
             ? (int64_t)reconstruct_peek (vb, base_ctx, 0, 0).f
-            : (int64_t)base_ctx->last_value.f; // simple cast to int64_t (not rounding) as in seg_delta_vs_other_do
+            : (int64_t)base_ctx->last_value.f; // simple cast to int64_t (not rounding) as in seg_delta_vs_other_localN
 
     else 
         ABORT_PIZ ("reconstructing %s - calculating delta \"%.*s\" from a base of %s, but %s, doesn't have STORE_INT or STORE_FLOAT",
@@ -493,6 +493,8 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
                            WordIndex word_index, // WORD_INDEX_NONE if not used.
                            STRp(snip), ReconType reconstruct, FUNCLINE) // if false, calculates last_value but doesn't output to vb->txt_data)
 {
+    ASSERT (snip[snip_len] == 0, "expecting snip to be nul-terminated: %s", str_snip);
+
     ValueType new_value = {};
     HasNewValue has_new_value = NO_NEW_VALUE;
     int64_t prev_value = snip_ctx->last_value.i;
@@ -764,7 +766,7 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i,
     // case: all data is only in local
     else if (ctx->local.len32) {
         ctx->last_wi = WORD_INDEX_NONE; // not reconstructed from b250
-        reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, (char[]){ SNIP_LOOKUP }, 1, reconstruct, __FUNCLINE);        
+        reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, (char[]){ SNIP_LOOKUP, 0 }, 1, reconstruct, __FUNCLINE); // note: nul-termianted as expected of a dictionary snip  
     }
 
     // in case of LT_BITMAP, it is it is ok if the bitmap is empty and all the data is in NONREF (e.g. unaligned SAM)

@@ -59,20 +59,20 @@ ShowAln sam_show_sag_one_aln (const Sag *g, const SAAln *a)
     if (command==PIZ) {
         char cigar_info[64];
         if (a->cigar.piz.is_word) 
-            sprintf (cigar_info, "word=%u", (WordIndex)a->cigar.piz.index);
+            snprintf (cigar_info, sizeof (cigar_info), "word=%u", (WordIndex)a->cigar.piz.index);
         else
-            sprintf (cigar_info, "in=%"PRIu64" l=%u comp=%u", (uint64_t)a->cigar.piz.index, ALN_CIGAR_LEN(a), (int)a->cigar.piz.comp_len);
+            snprintf (cigar_info, sizeof (cigar_info), "in=%"PRIu64" l=%u comp=%u", (uint64_t)a->cigar.piz.index, ALN_CIGAR_LEN(a), (int)a->cigar.piz.comp_len);
 
         char rname_str[64]; // should be big enough...
-        sprintf (rname_str, "\"%.48s\"(%u)", ctx_get_snip_by_word_index0 (ZCTX(VER(15) ? SAM_RNAME/*alias since v15*/ : OPTION_SA_RNAME), a->rname), a->rname);
+        snprintf (rname_str, sizeof (rname_str), "\"%.48s\"(%u)", ctx_get_snip_by_word_index0 (ZCTX(VER(15) ? SAM_RNAME/*alias since v15*/ : OPTION_SA_RNAME), a->rname), a->rname);
 
-        sprintf (s.s, "aln_i=%u.%u: sa_rname=%-13s pos=%-10u mapq=%-3u strand=%c nm=%-3u cigar[%u]=\"%s\"(%s)",
+        snprintf (s.s, sizeof (s.s), "aln_i=%u.%u: sa_rname=%-13s pos=%-10u mapq=%-3u strand=%c nm=%-3u cigar[%u]=\"%s\"(%s)",
                 ZGRP_I(g), (unsigned)(ZALN_I(a) - g->first_aln_i), rname_str,
                 a->pos, a->mapq, "+-"[a->revcomp], a->nm,
                 SA_CIGAR_DISPLAY_LEN, sam_piz_display_aln_cigar (a), cigar_info);
     }
     else 
-        sprintf (s.s, "aln_i=%u.%u: cigar_sig=%-12.12s rname=%-4u pos=%-10u mapq=%-3u strand=%c  nm=%-3u",
+        snprintf (s.s, sizeof (s.s), "aln_i=%u.%u: cigar_sig=%-12.12s rname=%-4u pos=%-10u mapq=%-3u strand=%c  nm=%-3u",
                 ZGRP_I(g), (unsigned)(ZALN_I(a) - g->first_aln_i), cigar_display_signature(a->cigar.signature).s, 
                 a->rname, a->pos, a->mapq, "+-"[a->revcomp], a->nm);
     
@@ -87,11 +87,11 @@ void sam_show_sag_one_grp (SAGroup grp_i)
     unsigned extra_len=0;
 
     if (IS_SAG_SA)
-        sprintf (extra, " first_aln=%"PRIu64, (uint64_t)g->first_aln_i);
+        snprintf (extra, sizeof (extra), " first_aln=%"PRIu64, (uint64_t)g->first_aln_i);
 
     else if (IS_SAG_CC) {
         CCAln *aln = B(CCAln, z_file->sag_alns, grp_i);
-        sprintf (extra, " rname=%s pos=%u", 
+        snprintf (extra, sizeof (extra), " rname=%s pos=%u", 
                 (command==ZIP) ? ctx_get_z_snip_ex (ZCTX(SAM_RNAME), aln->rname, 0, 0) 
                                : ctx_get_snip_by_word_index0 (ZCTX(SAM_RNAME), aln->rname), 
                 aln->pos);
@@ -171,7 +171,7 @@ static inline void sam_load_groups_add_qname (VBlockSAMP vb, PlsgVbInfo *plsg, S
         if (seq_len_ctx) vb_grps[vb->line_i].seq_len = seq_len_ctx->last_value.i;
     }
 
-    buf_free (vb->txt_data);
+    buf_destroy (vb->txt_data);
 
     reset_iterators (vb);
 }
@@ -456,7 +456,7 @@ static inline void sam_load_groups_add_solo_data (VBlockSAMP vb, PlsgVbInfo *pls
     }
 
     CTX(SAM_AUX)->iterator = (SnipIterator){}; // reset as it might be needed for AS
-    buf_free (vb->txt_data); // un-overlay
+    buf_destroy (vb->txt_data); // un-overlay
 
     reset_iterators (vb);
 }

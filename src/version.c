@@ -25,6 +25,7 @@ static rom latest_version = NULL;
 static bool thread_running = false;
 static pthread_t thread_id;
 static char redirect_url[128];
+static StreamP github_stream = NULL;
 
 // version of the genozip executable running
 int code_version_major (void)
@@ -43,11 +44,11 @@ StrText version_str (void)
     StrText s={};
 
     if (IS_ZIP || !z_file)  
-        sprintf (s.s, "version=%s", GENOZIP_CODE_VERSION);
+        snprintf (s.s, sizeof (s.s), "version=%s", GENOZIP_CODE_VERSION);
     else if (!VER2(15,28))
-        sprintf (s.s, "code_version=%s file_version=%u", GENOZIP_CODE_VERSION, z_file->genozip_version);
+        snprintf (s.s, sizeof (s.s), "code_version=%s file_version=%u", GENOZIP_CODE_VERSION, z_file->genozip_version);
     else        
-        sprintf (s.s, "code_version=%s file_version=%u.0.%u", GENOZIP_CODE_VERSION, z_file->genozip_version, z_file->genozip_minor_ver);
+        snprintf (s.s, sizeof (s.s), "code_version=%s file_version=%u.0.%u", GENOZIP_CODE_VERSION, z_file->genozip_version, z_file->genozip_minor_ver);
 
     return s;
 }
@@ -60,10 +61,11 @@ rom genozip_update_msg (void)
 // thread entry
 static void *version_background_test_for_newer_do (void *unused)
 {
-    thread_running = true;
+    __atomic_store_n (&thread_running, (bool)true, __ATOMIC_RELEASE); // stamp our merge_num as the ones that set the word_index
+
     pthread_setcanceltype (PTHREAD_CANCEL_ASYNCHRONOUS, NULL); // thread can be canceled at any time
 
-    if (url_get_redirect (GITHUB_LATEST_RELEASE, redirect_url, sizeof redirect_url)) {
+    if (url_get_redirect (GITHUB_LATEST_RELEASE, redirect_url, sizeof redirect_url, &github_stream)) {
         latest_version = strrchr (redirect_url, '-'); // url looks something like: "https://github.com/divonlan/genozip/releases/tag/genozip-13.0.18"
         if (latest_version) {
             latest_version++;
@@ -79,7 +81,7 @@ static void *version_background_test_for_newer_do (void *unused)
         } 
     }
 
-    thread_running = false;
+    __atomic_store_n (&thread_running, (bool)false, __ATOMIC_RELEASE); // stamp our merge_num as the ones that set the word_index
     return NULL;
 }
 
@@ -136,22 +138,23 @@ static void udpate_do (void)
 
     // untar
     char cmd1[100 + STRLEN(TARBALL_NAME)];
-    sprintf (cmd1, "tar xf %s", TARBALL_NAME);
+    snprintf (cmd1, sizeof (cmd1), "tar xf %s", TARBALL_NAME);
     my_system (cmd1);
 
     // mv to destination 
     rom dir_name = dirname (arch_get_executable().s);
-    char cmd2[strlen(dir_name) + 100];
+    int cmd2_size = strlen(dir_name) + 100; 
+    char cmd2[cmd2_size];
 
     rom exe_names[] = { "genozip", "genounzip", "genocat", "genols" };
     for (int exe_i=0; exe_i < ARRAY_LEN(exe_names); exe_i++) {    
         // note: mv better than cp because it preserves the hard links ; mv better than rename because it works across filesystems
-        sprintf (cmd2, "mv genozip-linux-x86_64/%s %s", exe_names[exe_i], dir_name);
+        snprintf (cmd2, cmd2_size, "mv genozip-linux-x86_64/%s %s", exe_names[exe_i], dir_name);
         my_system (cmd2);
     }
 
     // cleanup
-    sprintf (cmd1, "rm -Rf genozip-linux-x86_64 %s", TARBALL_NAME); // note: "genozip-linux-x86_64" is defined in the Makefile
+    snprintf (cmd1, sizeof (cmd1), "rm -Rf genozip-linux-x86_64 %s", TARBALL_NAME); // note: "genozip-linux-x86_64" is defined in the Makefile
     my_system (cmd1);
 
     // revert current directory
@@ -216,8 +219,15 @@ static void udpate_do (void)
 void version_print_notice_if_has_newer (void)
 {
     // case: Genozip finished its work while thread is still running - kill it
-    if (thread_running) 
+    if (__atomic_load_n (&thread_running, __ATOMIC_ACQUIRE)) {
         pthread_cancel (thread_id);
+        pthread_join (thread_id, NULL); // wait for cancelation to complete
+
+        __atomic_thread_fence (__ATOMIC_ACQUIRE); // make sure github_stream is updated      
+        
+        if (github_stream) 
+            stream_close (&github_stream, STREAM_KILL_PROCESS);
+    }
     
     // case: thread completed, and there is a new version
     else if (latest_version) {

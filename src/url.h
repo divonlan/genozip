@@ -13,19 +13,19 @@
 #include "stream.h"
 #include "buffer.h"
 
-extern bool url_is_url (rom filename);
+// remote file stream
+extern FILE *url_open_remote_file  (StreamP parent_stream, rom url);
+extern void url_reset_if_remote_file_stream (StreamP maybe_remote_file_stream);
+extern void url_close_remote_file_stream (FILE **copy_of_input_pipe);
+extern void url_disconnect_from_remote_file_stream (FILE **copy_of_input_pipe);
 
+// access URLs
 extern rom url_get_status (rom url, thool *is_file_exists, int64_t *file_size);
-
-extern FILE *url_open (StreamP parent_stream, rom url);
-extern void url_reset_if_curl (StreamP maybe_curl_stream);
-
 extern int32_t url_read_string (rom url, STRc(STRc), bool blocking, bool follow_redirects);
+extern bool url_get_redirect (rom url, STRc(redirect_url), StreamP *redirect_stream);
 
-extern bool url_get_redirect (rom url, STRc(redirect_url));
-
-extern void url_kill_curl (FILE **copy_of_input_pipe);
-extern void url_disconnect_from_curl (FILE **copy_of_input_pipe);
+// string operations
+extern bool url_is_url (rom filename);
 
 extern char *url_esc_non_valid_chars_(rom in, char *out, bool esc_all_or_none);
 static inline char *url_esc_non_valid_chars (rom in) { return url_esc_non_valid_chars_ (in, NULL, false); } // on heap

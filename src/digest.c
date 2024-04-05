@@ -150,7 +150,7 @@ void digest_piz_verify_one_txt_file (unsigned txt_file_i/* 0-based */)
             iprintf ("Txt file #%u: %u VBs verified\n", txt_file_i, z_file->num_vbs_verified);
 
         if (flag.test) { 
-            sprintf (s, "verified as identical to the original %s", dt_name (txt_file->data_type));
+            snprintf (s, sizeof (s), "verified as identical to the original %s", dt_name (txt_file->data_type));
             progress_finalize_component (s); 
         }
 
@@ -163,7 +163,7 @@ void digest_piz_verify_one_txt_file (unsigned txt_file_i/* 0-based */)
 
         if (digest_recon_is_equal (decompressed_file_digest, z_file->digest)) {
             if (flag.test || !IS_ADLER) { 
-                sprintf (s, "verified as identical to the original %s (%s=%s)", 
+                snprintf (s, sizeof (s), "verified as identical to the original %s (%s=%s)", 
                          dt_name (txt_file->data_type), digest_name(), digest_display (decompressed_file_digest).s);
                 progress_finalize_component (s); 
             }
@@ -205,7 +205,7 @@ static void digest_piz_verify_one_vb (VBlockP vb)
 
             char recon_size_warn[100] = "";
             if (vb->recon_size != vb->txt_data.len) // note: leave vb->txt_data.len 64bit to detect bugs
-                sprintf (recon_size_warn, "Expecting: VB_HEADER.recon_size=%u == txt_data.len=%"PRIu64"\n", vb->recon_size, vb->txt_data.len);
+                snprintf (recon_size_warn, sizeof (recon_size_warn), "Expecting: VB_HEADER.recon_size=%u == txt_data.len=%"PRIu64"\n", vb->recon_size, vb->txt_data.len);
 
             NOISYWARN ("reconstructed vblock=%s/%u (vb_line_i=0 -> txt_line_i(1-based)=%"PRId64" num_lines=%u), (%s=%s) differs from original file (%s=%s).\n%s",
                        comp_name (vb->comp_i), vb->vblock_i, writer_get_txt_line_i (vb, 0), vb->lines.len32,
@@ -394,20 +394,20 @@ DigestDisplay digest_display_ex_(const Digest digest, DigestDisplayMode mode, th
     if ((mode == DD_NORMAL && !is_adler && digest_is_zero (digest)) ||
         (mode == DD_MD5                 && digest_is_zero (digest)) || 
         (mode == DD_MD5_IF_MD5 && (is_adler || digest_is_zero (digest)))) 
-        sprintf (dis.s, "N/A                                    ");
+        snprintf (dis.s, sizeof (dis.s), "N/A                                    ");
 
     else if ((mode == DD_NORMAL || mode == DD_SHORT) && is_adler)
-        sprintf (dis.s, "%s%s%-10u", alg, alg_eq, BGEN32 (digest.adler_bgen));
+        snprintf (dis.s, sizeof (dis.s), "%s%s%-10u", alg, alg_eq, BGEN32 (digest.adler_bgen));
 
     else if ((mode == DD_NORMAL && !is_adler     && !digest_is_zero (digest)) ||
              (mode == DD_MD5                     && !digest_is_zero (digest)) || 
              (mode == DD_MD5_IF_MD5 && !is_adler && !digest_is_zero (digest)))
-        sprintf (dis.s, "%s%s%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x", 
+        snprintf (dis.s, sizeof (dis.s), "%s%s%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x", 
                  alg, alg_eq,
                  b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]);    
     
     else if (mode == DD_SHORT && !is_adler)
-        sprintf (dis.s, "%s%s%2.2x%2.2x%2.2x%2.2x", alg, alg_eq, b[0], b[1], b[2], b[3]);    
+        snprintf (dis.s, sizeof (dis.s), "%s%s%2.2x%2.2x%2.2x%2.2x", alg, alg_eq, b[0], b[1], b[2], b[3]);    
 
     return dis;
 }

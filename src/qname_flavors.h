@@ -14,7 +14,7 @@
 #include "aliases.h"
 #include "qname.h" // for editor
 
-#define PX_MATE_FIXED_0_PAD (char[]){ CI0_SKIP } // add to prefix for mate item IFF preceeding item has CI0_FIXED_0_PAD
+#define PX_MATE_FIXED_0_PAD (char[]){ CI0_SKIP, 0 } // add to prefix for mate item IFF preceeding item has CI0_FIXED_0_PAD
 #define I_AM_MATE .separator = { CI0_SKIP }
 
 //-----------------------------------------------------------------------------------------

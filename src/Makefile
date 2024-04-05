@@ -17,7 +17,6 @@ OBJDIR_MAC     := objdir.mac
 
 ifdef BUILD_PREFIX # conda 
 	DISTOBJ = $(OBJDIR)/distribution.conda.o # note: matches the name in version.c 
-	CFLAGS += -O3 
 
 	ifeq ($(target_architecture),"linux-64")
 		Linux := 1
@@ -101,34 +100,35 @@ ifeq ($(CPU),x86_64) # or amd64
 
 	ifdef Windows
 		ASFLAGS += -f win64
+		# -lasan needed for -fsanitize=address is not supported by MinGW: https://stackoverflow.com/questions/55018627/cannot-find-lasan-using-address-sanitizer-in-mingw-in-windows-mingw
 	endif
 
 	ifdef Linux
 		ASFLAGS += -f elf64 -DINTEL_CET_ENABLED
+		# DEBUGFLAGS += -fsanitize=undefined
+		DEBUGFLAGS += -fsanitize=address -Dsanitize_address
 	endif
 
 	ifdef Mac
-		AS := /usr/local/bin/$(AS)
 		ASFLAGS += -f macho64 --prefix=_
+		DEBUGFLAGS += -fsanitize=address -Dsanitize_address
 	endif	
 else 
 	ifeq ($(CPU),aarch64) # ARM 64
 		aarch64 := 1
 		AS = $(CC) -D__ASSEMBLY__ -c
 		DEBUGFLAGS_AS = -g 
+		DEBUGFLAGS += -fsanitize=address -Dsanitize_address
 	else 
 		noarch := 1
 	endif
 endif
 
-ifndef_any_of = $(filter undefined,$(foreach v,$(1),$(origin $(v))))
-ifdef_any_of  = $(filter-out undefined,$(foreach v,$(1),$(origin $(v))))
-
 LDFLAGS    += -lpthread -lm 
 CFLAGS     += -Wall -D_LARGEFILE64_SOURCE=1 -D_GNU_SOURCE -std=gnu11 -D_7ZIP_ST -fms-extensions -msse4.1 -msse4.2
 CXXFLAGS   += -Wall -D_LARGEFILE64_SOURCE=1 -D_GNU_SOURCE -std=gnu++11 -Ibsc -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_SSE41 -msse4.1
 OPTFLAGS   += -O3 
-DEBUGFLAGS += -DDEBUG -ggdb3 -O0  
+DEBUGFLAGS += -DDEBUG -ggdb3 -O0 -fstack-check -fstack-protector-strong
 
 ifdef x86_64
 	CFLAGS += -DGENOZIP_ALLOW_UNALIGNED_ACCESS 
@@ -197,7 +197,7 @@ CONDA_DEVS = Makefile ../.gitignore
 
 CONDA_DOCS = ../LICENSE.txt ../AUTHORS ../README.md
 
-CONDA_INCS += dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h aliases.h txtfile.h zip.h bits.h progress.h website.h 		\
+INCLUDES += dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h aliases.h txtfile.h zip.h bits.h progress.h website.h 			\
             endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h huffman.h 					\
             buffer.h buf_struct.h buf_list.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h 		\
             crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h qname.h qname_flavors.h codec.h  		\
@@ -292,7 +292,7 @@ endif
 
 ifneq ($(wildcard secure/.*),) # "secure" directory exists
 	MY_SRCS += secure/license.c
-	CONDA_LIC_OBJS := $(OBJDIR_LINUX)/secure/license.o $(OBJDIR_MAC)/secure/license.o
+	CONDA_LIC_OBJS := $(OBJDIR_LINUX)/secure/license.o $(OBJDIR_MAC)/secure/license.o $(OBJDIR_WINDOWS)/secure/license.o
 else
 	LDFLAGS += $(OBJDIR)/secure/license.o
 endif
@@ -307,7 +307,6 @@ ifdef Linux
 endif
 
 ifdef Mac # Mac
-	# EXE = .mac
 	MY_SRCS += mac_compat.c
 	LDFLAGS += -rdynamic
 endif
@@ -317,7 +316,7 @@ C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(LZMA_SRCS) $(LIBDEFLATE_1_7_SRC
 
 CXX_SRCS = $(BSC_CXX_SRCS) 
 
-X86_SRCS = $(IGZIP_X86_ASM_SRCS) # note: these are the sources which pass to the compiler - they may include other .asm files. These other files are only included in CONDA_INCS.
+X86_SRCS = $(IGZIP_X86_ASM_SRCS) # note: these are the sources which pass to the compiler - they may include other .asm files. These other files are only included in INCLUDES.
 
 ARM_SRCS = $(IGZIP_ARM_ASM_SRCS)
 
@@ -364,12 +363,6 @@ debug : $(OBJDIR) $(DEBUG_EXECUTABLES)
 opt   : CFLAGS += -ggdb3 $(OPTFLAGS) -DDEBUG 
 opt   : CXXFLAGS += $(OPTFLAGS) 
 opt   : $(OBJDIR) $(OPT_EXECUTABLES)
-
-ifdef Windows
-objdir.mac/secure/license.o : secure/license.c secure/license_buf.c secure/license_stats.c secure/license_sys.c secure/license_zfile.c
-	@echo "getting $>"
-	@wsl mac-get-license-o.sh
-endif
 
 ifdef Mac
 objdir.mac/secure/license.o : CFLAGS := $(patsubst -march=% ,-march=x86-64 ,$(CFLAGS)) # plain vanilla x86-64, so it runs on Rosetta x86-64 simulator on M1/M2/M3
@@ -465,35 +458,36 @@ endif # ugly hack to avoid conda failure due to bash issues in dict_id_gen.sh - 
 genozip$(EXE): dict_id_gen.h $(OBJS) $(DISTOBJ)
 	@echo Linking $@
 	@$(CC) -o $@ $(OBJS) $(DISTOBJ) $(CFLAGS) $(LDFLAGS) 
-	@ln -sf src/$@ ../$@
+	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi  # hard linking not possible on some filesystems
  
 genozip-debug$(EXE): dict_id_gen.h $(DEBUG_OBJS) $(DISTOBJ)
 	@echo Linking $@
 	@$(CC) -o $@ $(DEBUG_OBJS) $(CFLAGS) $(LDFLAGS) $(DISTOBJ)
-	@ln -sf src/$@ ../$@
+	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
 
 genozip-opt$(EXE): dict_id_gen.h $(OPT_OBJS) $(DISTOBJ)
 	@echo Linking $@
 	@$(CC) -o $@ $(OPT_OBJS) $(CFLAGS) $(LDFLAGS) $(DISTOBJ)
-	@ln -sf src/$@ ../$@
+	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
 
 genounzip$(EXE) genocat$(EXE) genols$(EXE): genozip$(EXE)
-	@echo Soft linking $@
+	@echo Hard linking $@
 	@rm -f $@ 
-	@ln -sf $^ $@
-	@ln -sf src/$^ ../$@
+	@ln -f $^ $@
+	@if ! ln -f $^ $@; then ln -fs $^ $@; fi
+	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
 
 genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE): genozip-debug$(EXE)
-	@echo Soft linking $@
+	@echo Hard linking $@
 	@rm -f $@ 
-	@ln -sf $^ $@
-	@ln -sf src/$@ ../$@
+	@if ! ln -f $^ $@; then ln -fs $^ $@; fi
+	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
 
 genounzip-opt$(EXE) genocat-opt$(EXE) genols-opt$(EXE): genozip-opt$(EXE)
-	@echo Soft linking $@
+	@echo Hard linking $@
 	@rm -f $@ 
-	@ln -sf $^ $@
-	@ln -sf src/$@ ../$@
+	@if ! ln -f $^ $@; then ln -fs $^ $@; fi
+	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
 
 ../LICENSE.txt: text_license.h version.h # not dependent on genozip.exe, so we don't generate it every compilation
 	@$(MAKE) -j genozip$(EXE) # recursive call to make genozip.exe with the latest version
@@ -560,7 +554,6 @@ clean-dev: clean-installers clean-test # use only in dev - deletes license.o
 	@touch $(OBJDIR)/.gitkeep
 
 .PHONY: clean clean-debug clean-optimized clean-installers initialize-build-distribution \
-        git-pull macos mac/.remote_mac_timestamp delete-arch testfiles test-backup \
 		dict_id_gen$(EXE) \
 		objdir.linux objdir.windows objdir.mac \
 		push-build increment-version $(INSTALLERS)/LICENSE.html  
@@ -583,12 +576,12 @@ genozip-latest:
 # and re-compile so that genozip --version gets updated
 # IMPORTANT: the first number in the version indicates the genozip file format version and goes into
 # the genozip file header SectionHeaderTxtHeader.genozip_version
-#increment-version: $(C_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
+#increment-version: $(C_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(INCLUDES) # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
 increment-version: # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
 	@echo "Incrementing version.h"
 	@bash $(SCRIPTS)/increment-version.sh
 
-.archive.tar.gz : $(C_SRCS) $(X86_SRCS) $(ARM_SRCS) $(CONDA_LIC_OBJS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) ../LICENSE.txt
+.archive.tar.gz : $(C_SRCS) $(X86_SRCS) $(ARM_SRCS) $(CONDA_LIC_OBJS) $(CONDA_DEVS) $(CONDA_DOCS) $(INCLUDES) ../LICENSE.txt
 	@echo Creating github tag genozip-$(version) and archive
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@git push > /dev/null
@@ -665,18 +658,10 @@ $(INSTALLERS)/genozip-linux-x86_64.tar.build: genozip-linux-x86_64/LICENSE.txt
 	@(mkdir genozip-linux-x86_64 >& /dev/null ; exit 0)
 	@run-on-wsl.sh GCC=$(WSL_GCC_8_5) make $(INSTALLERS)/genozip-linux-x86_64.tar # make -j doesn't work well on WSL - filesystem clock issues
 
-$(INSTALLERS)/genozip-osx-x86.tar.build: genozip-osx-x86/LICENSE.txt 
-	@(mkdir genozip-osx-x86 >& /dev/null ; exit 0)
-	@run-on-wsl.sh GCC=$(WSL_GCC_8_5) make -j $(INSTALLERS)/genozip-osx-x86.tar 
-
-mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
-	@echo "Creating Mac installer"
-	@echo "Logging in to remote mac" 
-	@# Get IP address - check if the previous IP address still works or ask for a new one. Assuming a LAN on an Android hotspot.
-	@ip=`cat mac/.mac_ip_address` ; a=`echo $$ip|cut -d. -f4`; (( `ping  -n 1 $$ip | grep "round trip times" | wc -l` > 0 )) || read -p "IP Address: 192.168.43." a ; ip=192.168.43.$$a ; echo $$ip > mac/.mac_ip_address
-	@[ -f mac/.mac_username ] || ( echo ERROR: file mac/.mac_username missing && exit 1 )
-	@ssh `cat mac/.mac_ip_address` -l `cat mac/.mac_username`  "cd genozip ; echo "Pulling from git" ; git pull >& /dev/null ; make -j mac/.from_remote_timestamp" # pull before make as Makefile might have to be pulled
-	@touch $@
+# get Mac files: ../installers/genozip-osx-x86.tar and objdir.mac/secure/license.o
+$(INSTALLERS)/genozip-osx-x86.tar : $(C_SRCS) $(X86_SRCS) $(INCLUDES) $(wildcard secure/*.c) $(wildcard secure/*.h) ../LICENSE.txt
+	@echo "getting $>"
+	@wsl mac-build-and-fetch.sh 
 
 $(INSTALLERS)/LICENSE.html: genozip$(EXE)
 	@./genozip$(EXE) --license=html,5000 > $@
@@ -684,17 +669,17 @@ $(INSTALLERS)/LICENSE.html: genozip$(EXE)
 BUILD_FILES = version.h Makefile \
 	objdir.linux/secure/license.o objdir.windows/secure/license.o objdir.mac/secure/license.o \
 	../RELEASE_NOTES.txt ../LICENSE.txt \
-	$(INSTALLERS)/genozip-installer.exe $(INSTALLERS)/genozip-linux-x86_64.tar $(INSTALLERS)/LICENSE.html
+	$(INSTALLERS)/genozip-installer.exe $(INSTALLERS)/genozip-linux-x86_64.tar $(INSTALLERS)/genozip-osx-x86.tar $(INSTALLERS)/LICENSE.html
 
 push-build: # push files modified during the build process
 	@git stage $(BUILD_FILES) -f
 	@git commit -m $(version) 
 	@git push
 
-distribution-maintenance: initialize-build-distribution increment-version testfiles ../LICENSE.txt $(INSTALLERS)/LICENSE.html \
-                          $(INSTALLERS)/genozip-linux-x86_64.tar.build $(INSTALLERS)/genozip-installer.exe objdir.mac/secure/license.o \
-                          push-build conda/.conda-timestamp \
-						  genozip-latest.exe genozip-latest  
+distribution: initialize-build-distribution increment-version ../LICENSE.txt $(INSTALLERS)/LICENSE.html \
+              $(INSTALLERS)/genozip-linux-x86_64.tar.build $(INSTALLERS)/genozip-installer.exe $(INSTALLERS)/genozip-osx-x86.tar \
+              push-build conda/.conda-timestamp \
+			  genozip-latest.exe genozip-latest  
 	@(printf "\nClick Enter after committing the feedstock conflict resolution: <Click>")
 	@(read x)
 	@(cd $(CONDA_FEEDSTOCK) ; git pull)
@@ -705,20 +690,10 @@ distribution-maintenance: initialize-build-distribution increment-version testfi
 	@echo "  (4) Set 'Tag version' and 'Release title' are both: genozip-$(version)"
 	@echo "  (5) Copy the notes for the version from RELEASE NOTES -> Publish release"
 
-test-backup: genozip.exe
-	@echo "Compressing test/ files for in preparation for backup (except cram and bcf)"
-	@rm -f test/*.genozip
-	@(cd test; genozip.exe -f `ls -1d *|grep -v / |grep -v cram | grep -v bcf`)
-
 # license copied on Windows, not Linux due to file mode issues on NTFS causing git to think LICENSE.txt has changed
 genozip-linux-x86_64/LICENSE.txt: ../LICENSE.txt
 	@echo Generating $@
 	@(mkdir genozip-linux-x86_64 >& /dev/null ; exit 0)
-	@cp -f $< $@
-
-genozip-osx-x86/LICENSE.txt: ../LICENSE.txt
-	@echo Generating $@
-	@(mkdir genozip-osx-x86 >& /dev/null ; exit 0)
 	@cp -f $< $@
 
 endif # Windows
@@ -732,7 +707,7 @@ genozip-latest:
 
 # note: getpwuid and getgrgid will cause dymanically loading of the locally installed glibc in the --tar option, or segfault. that's normally fine.
 genozip-linux-x86_64/genozip: CFLAGS += $(OPTFLAGS)
-genozip-linux-x86_64/genozip: $(OBJS) $(OBJDIR)/distribution.osx-x86.o
+genozip-linux-x86_64/genozip: $(OBJS) $(OBJDIR)/distribution.linux-x86_64.o
 	@echo Linking $@
 	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
@@ -756,7 +731,7 @@ endif # Linux
 ifdef Mac
 
 genozip-osx-x86/genozip: CFLAGS += $(OPTFLAGS)
-genozip-osx-x86/genozip: $(OBJS) $(OBJDIR)/distribution.linux-x86_64.o
+genozip-osx-x86/genozip: $(OBJS) $(OBJDIR)/distribution.osx-x86.o
 	@echo Linking $@
 	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
@@ -765,6 +740,8 @@ genozip-osx-x86/genounzip genozip-osx-x86/genocat genozip-osx-x86/genols: genozi
 	@cp -f $< $@ # ln doesn't work on SMB shares
 
 genozip-osx-x86/LICENSE.txt: ../LICENSE.txt
+	@(mkdir genozip-osx-x86 >& /dev/null ; exit 0)
+	@echo Generating $@
 	@cp -f $< $@
 
 OSX_X86_TARGZ_OBJS = genozip-osx-x86/genozip genozip-osx-x86/genounzip genozip-osx-x86/genocat genozip-osx-x86/genols genozip-osx-x86/LICENSE.txt

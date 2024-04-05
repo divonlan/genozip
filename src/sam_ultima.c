@@ -22,8 +22,10 @@ static const uint8_t tp_bins[256] = { [0 ... 38]=0, [39 ... 41]=1, [42 ... 59]=2
 
 void sam_ultima_zip_initialize (void)
 {
-    seg_prepare_snip_other (SNIP_COPY, _SAM_RNAME, 0, 0, copy_RNAME_snip);
-    seg_prepare_snip_other (SNIP_COPY, _SAM_QNAME, 0, 0, copy_QNAME_snip);
+    DO_ONCE {
+        seg_prepare_snip_other (SNIP_COPY, _SAM_RNAME, 0, 0, copy_RNAME_snip);
+        seg_prepare_snip_other (SNIP_COPY, _SAM_QNAME, 0, 0, copy_QNAME_snip);
+    }
 }
 
 void sam_ultima_seg_initialize (VBlockSAMP vb)

@@ -43,17 +43,18 @@ rom filename_z_normal (rom txt_filename, DataType dt, FileType txt_ft)
 
     unsigned fn_len = strlen (local_txt_filename);
 
-    char *z_filename = (char *)MALLOC (fn_len + dn_len + 30); // add enough the genozip extension e.g. 23andme.genozip
+    int z_filename_size = fn_len + dn_len + 30;
+    char *z_filename = (char *)MALLOC (z_filename_size); // add enough the genozip extension e.g. 23andme.genozip
 
     // if the file has an extension matching its type, replace it with the genozip extension, if not, just add the genozip extension
     rom genozip_ext = file_exts[file_get_z_ft_by_txt_in_ft (dt, txt_ft)];
 
     if (filename_has_ext (local_txt_filename, file_exts[txt_ft]))
-        sprintf (z_filename, "%s%s%.*s%s", 
+        snprintf (z_filename, z_filename_size, "%s%s%.*s%s", 
                  (dn_len ? flag.out_dirname : ""), (dn_len ? "/" : ""), 
                  (int)(fn_len - strlen (file_exts[txt_ft])), local_txt_filename, genozip_ext); 
     else 
-        sprintf (z_filename, "%s%s%s%s", 
+        snprintf (z_filename, z_filename_size, "%s%s%s%s", 
                  (dn_len ? flag.out_dirname : ""), (dn_len ? "/" : ""), 
                  local_txt_filename, genozip_ext); 
 
@@ -98,8 +99,9 @@ char *filename_z_pair (rom fn1, rom fn2, bool test_only)
     if (test_only) 
         MY_RET ((char *)1);
 
-    char *pair_fn = MALLOC (len + dn_len + 20);
-    sprintf (pair_fn, "%s%s%.*s1+2%s" FASTQ_GENOZIP_, 
+    int pair_fn_size = len + dn_len + 20;
+    char *pair_fn = MALLOC (pair_fn_size);
+    snprintf (pair_fn, pair_fn_size, "%s%s%.*s1+2%s" FASTQ_GENOZIP_, 
              (dn_len ? flag.out_dirname : ""), (dn_len ? "/" : ""), 
              df, rn1, &rn1[df+1]);
     
@@ -116,8 +118,9 @@ char *filename_z_deep (rom sam_name)
     rom raw_name = 0;
     file_get_raw_name_and_type (bn ? bn : sam_name, &raw_name, NULL);
     
-    char *deep_fn = MALLOC (strlen (raw_name) + dn_len + 20);
-    sprintf (deep_fn, "%s%s%s" DEEP_GENOZIP_, 
+    int deep_fn_size = strlen (raw_name) + dn_len + 20;
+    char *deep_fn = MALLOC (deep_fn_size);
+    snprintf (deep_fn, deep_fn_size, "%s%s%s" DEEP_GENOZIP_, 
              (dn_len ? flag.out_dirname : ""), (dn_len ? "/" : ""), raw_name);
     
     FREE (raw_name);
@@ -199,7 +202,8 @@ rom filename_base (rom filename, bool remove_exe, rom default_basename,
         len = strlen (default_basename);
     }
 
-    sprintf (basename, "%.*s", (int)len, start);
+    memcpy (basename, start, len);
+    basename[len] = '\0';
 
     return basename;
 }
@@ -217,7 +221,7 @@ void filename_remove_codec_ext (char *filename, FileType ft)
     
     // codec extension removed eg .fq.gz -> .fq
     rom codec_ext;
-    if (!((codec_ext = strchr (&file_exts[ft][1], '.')))) return; // this file type's extension doesn't have a codec ext (it is, eg ".fastq" not ".fastq.gz")
+    if (file_exts[ft][0] == '\0' || !((codec_ext = strchr (&file_exts[ft][1], '.')))) return; // this file type's extension doesn't have a codec ext (it is, eg ".fastq" not ".fastq.gz")
     
     unsigned codec_ext_len = strlen (codec_ext);
 
@@ -240,8 +244,9 @@ char *filename_make_unix (char *filename)
         !getcwd (path, sizeof (path))) // path too long
         path[0] = 0;  // don't store path
 
-    char *full_fn = MALLOC (strlen (z_name) + strlen (path) + 2);
-    sprintf (full_fn, "%s%s%s", path, *path ? "/" : "", z_name);
+    int full_fn_size = strlen (z_name) + strlen (path) + 2;
+    char *full_fn = MALLOC (full_fn_size);
+    snprintf (full_fn, full_fn_size, "%s%s%s", path, *path ? "/" : "", z_name);
 
 #ifdef _WIN32 // convert to Unix-style filename
     len = strlen (full_fn);

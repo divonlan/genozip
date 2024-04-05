@@ -25,8 +25,11 @@ sSTRl(con_id_snip, 64);
 
 void vcf_svaba_zip_initialize (void)
 {
-    container_prepare_snip ((ContainerP)&id_con, 0, 0, qSTRa(con_id_snip));
+    DO_ONCE {
+        container_prepare_snip ((ContainerP)&id_con, 0, 0, qSTRa(con_id_snip));
+    }
 
+    // re-initialize for every file, as SV type might change
     vcf_sv_zip_initialize (tw_dids, NUM_SVABA_TWs);
 }   
 

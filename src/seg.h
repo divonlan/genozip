@@ -83,9 +83,19 @@ extern void seg_integer_fixed (VBlockP vb, ContextP ctx, void *number, bool with
 
 extern WordIndex seg_self_delta (VBlockP vb, ContextP ctx, int64_t value, char format, unsigned fixed_len, uint32_t add_bytes);
 
-extern void seg_delta_vs_other_do (VBlockP vb, ContextP ctx, ContextP other_ctx, STRp(value), int64_t value_n, int64_t max_delta, unsigned add_bytes);
-static inline void seg_delta_vs_other (VBlockP vb, ContextP ctx, ContextP other_ctx, STRp(value))
-    { seg_delta_vs_other_do (vb, ctx, other_ctx, STRa(value), ctx->last_value.i, -1, value_len); }
+extern void seg_delta_vs_other_do (VBlockP vb, ContextP ctx, ContextP other_ctx, STRp(value), int64_t value_n, int64_t max_delta, bool delta_in_local, unsigned add_bytes);
+
+static inline void seg_delta_vs_other_localN (VBlockP vb, ContextP ctx, ContextP other_ctx, int64_t value, int64_t max_delta, unsigned add_bytes) 
+    { seg_delta_vs_other_do (vb, ctx, other_ctx, 0, 0, value, max_delta, true, add_bytes); }
+
+static inline void seg_delta_vs_other_localS (VBlockP vb, ContextP ctx, ContextP other_ctx, STRp(value), int64_t max_delta)
+    { seg_delta_vs_other_do (vb, ctx, other_ctx, STRa(value), 0, max_delta, true, value_len); }
+
+static inline void seg_delta_vs_other_dictN (VBlockP vb, ContextP ctx, ContextP other_ctx, int64_t value, int64_t max_delta, unsigned add_bytes) 
+    { seg_delta_vs_other_do (vb, ctx, other_ctx, 0, 0, value, max_delta, false, add_bytes); }
+
+static inline void seg_delta_vs_other_dictS (VBlockP vb, ContextP ctx, ContextP other_ctx, STRp(value), int64_t max_delta)
+    { seg_delta_vs_other_do (vb, ctx, other_ctx, STRa(value), 0, max_delta, false, value_len); }
 
 extern void seg_diff (VBlockP vb, ContextP ctx, ContextP base_ctx, STRp(value), bool entire_snip_if_same, unsigned add_bytes);
 

@@ -98,9 +98,13 @@ static bool regions_is_valid_chrom (rom str)
 }
 
 // called from main when parsing the command line to add the argument of --regions
-void regions_add (rom region_str)
+void regions_add (char *region_str) // note: modifies region_str
 {
     ASSERTNOTNULL (region_str);
+
+    // make a copy in case its needed for the error message
+    char *copy_regions_str = MALLOC (strlen (region_str)+1);
+    strcpy (copy_regions_str, region_str); 
 
     bool is_negated = region_str[0] == '^';
 
@@ -109,12 +113,7 @@ void regions_add (rom region_str)
 
     is_negative_regions = is_negated;
 
-    // make a copy of the string and leave the original one for error message. 
-    // we don't free this memory as chrom fields in regions will be pointing to it
-    char *rs = MALLOC (strlen (region_str)+1); // heap memoery, as reg->chrom points into this
-    strcpy (rs, region_str + is_negated); // drop the ^ if there is one
-
-    char *next_region_token = rs;
+    char *next_region_token = region_str + is_negated; // skip the ^ if there is one
 
     while (1) {
         char *one_rs = strtok_r (next_region_token, ",", &next_region_token);
@@ -125,7 +124,7 @@ void regions_add (rom region_str)
         char *after_colon;
         char *before_colon = strtok_r (one_rs, ":", &after_colon);
 
-        ASSINP (before_colon, "Error: invalid region string: %s", region_str);
+        ASSINP (before_colon, "Error: invalid region string: %s", copy_regions_str);
 
         Region *reg = &BNXT (Region, regions_buf);
         *reg = (Region){ .chrom = NULL, .start_pos = 0, .end_pos = MAX_POS };
@@ -148,7 +147,7 @@ void regions_add (rom region_str)
             bool has_pos = regions_parse_pos (before_colon, reg);
 
             // make sure at least one of them is valid
-            ASSINP (reg->chrom || has_pos, "Error: Invalid region string: %s", region_str);
+            ASSINP (reg->chrom || has_pos, "Error: Invalid region string: %s", copy_regions_str);
 
             // if both are valid, but the number is <= MAX_NUM_THAT_WE_ASSUME_IS_A_CHROM_AND_NOT_POS, we assume it is a chromosome.
             // Otherwise, we create two regions. Note: the user can always force a region with 10-10 or 1:10
@@ -171,6 +170,8 @@ void regions_add (rom region_str)
 
         //regions_display ("After regions_add"); 
     }
+
+    FREE (copy_regions_str);
 }
 
 // called from main when parsing the command line to add the argument of --regions

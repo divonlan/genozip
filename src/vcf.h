@@ -95,7 +95,7 @@
 #pragma GENDICT INFO_AF=DTYPE_1=AF                  // <ID=AF,Number=A,Type=Float,Description="Allele Frequency, for each ALT allele, in the same order as listed">
 #pragma GENDICT INFO_AN=DTYPE_1=AN                  // <ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes">
 #pragma GENDICT INFO_AA=DTYPE_1=AA                  // <ID=AA,Number=1,Type=String,Description="Ancestral Allele"> - defined in the VCF specification
-#pragma GENDICT INFO_BaseCounts=DTYPE_1=BaseCounts
+#pragma GENDICT INFO_BaseCounts=DTYPE_1=BaseCounts  // <ID=BaseCounts,Number=4,Type=Integer,Description="Counts of each base">
 #pragma GENDICT INFO_DP=DTYPE_1=DP                  // <ID=DP,Number=1,Type=Integer,Description="Approximate read depth; some reads may have been filtered">
 #pragma GENDICT INFO_SF=DTYPE_1=SF                  // <ID=SF,Number=.,Type=String,Description="Source File (index to sourceFiles, f when filtered)">
 #pragma GENDICT INFO_MQ=DTYPE_1=MQ                  // <ID=MQ,Number=1,Type=Integer,Description="Root-mean-square mapping quality of covering reads">    
@@ -435,7 +435,15 @@
 #pragma GENDICT INFO_TREE_SCORE=DTYPE_1=TREE_SCORE  // <ID=TREE_SCORE,Number=1,Type=Float,Description="Filtering score">
 #pragma GENDICT INFO_ASSEMBLED_HAPS=DTYPE_1=ASSEMBLED_HAPS  // <ID=ASSEMBLED_HAPS,Number=1,Type=Integer,Description="Haplotypes detected by the assembly region before haplotype filtering is applied">
 #pragma GENDICT INFO_FILTERED_HAPS=DTYPE_1=FILTERED_HAPS    // <ID=FILTERED_HAPS,Number=1,Type=Integer,Description="Haplotypes filtered out by the haplotype filtering code">
+#pragma GENDICT INFO_HAPDOM=DTYPE_1=HAPDOM          // <ID=HAPDOM,Number=A,Type=Float,Description="For each alt allele, fraction of read support that best fits the most-supported haplotype containing the allele">
+#pragma GENDICT INFO_HAPCOMP=DTYPE_1=HAPCOMP        // <ID=HAPCOMP,Number=A,Type=Integer,Description="Edit distances of each alt allele's most common supporting haplotype from closest germline haplotype, excluding differences at the site in question.">
+
+// population AF (always single value)
 #pragma GENDICT INFO_GNOMAD_AF=DTYPE_1=GNOMAD_AF    // <ID=GNOMAD_AF,Number=A,Type=Float,Description="Allele Frequency, for each ALT allele, in the same order as listed (from /cromwell_root/gatk-best-practices/somatic-hg38/af-only-gnomad.hg38.vcf.gz)">
+#pragma GENDICT INFO_AFR_AF=DTYPE_1=AFR_AF          // <ID=AMR_AF,Number=1,Type=Float,Description="Allele Frequency for samples from AFR based on AC/AN">
+#pragma GENDICT INFO_AMR_AF=DTYPE_1=AMR_AF          // <ID=AMR_AF,Number=1,Type=Float,Description="Allele Frequency for samples from AMR based on AC/AN">
+#pragma GENDICT INFO_EUR_AF=DTYPE_1=EUR_AF          // <ID=AMR_AF,Number=1,Type=Float,Description="Allele Frequency for samples from EUR based on AC/AN">
+#pragma GENDICT INFO_ASN_AF=DTYPE_1=ASN_AF          // <ID=AMR_AF,Number=1,Type=Float,Description="Allele Frequency for samples from ASN based on AC/AN">
 
 // bcftools csq
 #pragma GENDICT INFO_BCSQ=DTYPE_1=BCSQ              // <ID=BCSQ,Number=.,Type=String,Description="Local consequence annotation from BCFtools/csq, see http://samtools.github.io/bcftools/howtos/csq-calling.html for details. Format: Consequence|gene|transcript|biotype|strand|amino_acid_change|dna_change">
@@ -772,7 +780,7 @@ SPECIAL (VCF, 25, COPY_REForALT,       vcf_piz_special_COPY_REForALT);          
 SPECIAL (VCF, 26, DP_by_DP_v13,        vcf_piz_special_DP_by_DP_v13);             // added v13.0.5, removed in v14
 SPECIAL (VCF, 27, PS_BY_PID,           vcf_piz_special_PS_by_PID);                // added v13.0.11
 SPECIAL (VCF, 28, PGT,                 vcf_piz_special_PGT);                      // added v14.0.0
-SPECIAL (VCF, 29, DP_by_DP,            vcf_piz_special_DP_by_DP);                 // added v14.0.0 - multiple samples: INFO/DP by sum(FORMAT/DP)
+SPECIAL (VCF, 29, deferred_DP,         vcf_piz_special_deferred_DP);              // added v14.0.0 - multiple samples: INFO/DP by sum(FORMAT/DP) or sum(BaseCounts). Called DP_by_DP until 15.0.51.
 SPECIAL (VCF, 30, DP_by_DP_single,     vcf_piz_special_DP_by_DP_single);          // added v14.0.0 - single sample: FORMAT/DP by INFO/DP
 SPECIAL (VCF, 31, RGQ,                 vcf_piz_special_RGQ);                      // added v14.0.0
 SPECIAL (VCF, 32, MUX_BY_HAS_RGQ,      vcf_piz_special_MUX_BY_HAS_RGQ);           // added v14.0.0

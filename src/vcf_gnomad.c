@@ -28,29 +28,31 @@ sSTRl(con_VRS_States_snip, 48);
 
 void vcf_gnomad_zip_initialize (void)
 {
-    seg_prepare_snip_other (SNIP_COPY, _INFO_QD,             false, 0, copy_QD_snip);
-    seg_prepare_snip_other (SNIP_COPY, _INFO_SOR,            false, 0, copy_SOR_snip);
-    seg_prepare_snip_other (SNIP_COPY, _INFO_MQ,             false, 0, copy_MQ_snip);
-    seg_prepare_snip_other (SNIP_COPY, _INFO_MQRankSum,      false, 0, copy_MQRankSum_snip);
-    seg_prepare_snip_other (SNIP_COPY, _INFO_FS,             false, 0, copy_FS_snip);
-    seg_prepare_snip_other (SNIP_COPY, _INFO_VarDP,          false, 0, copy_VarDP_snip);
-    seg_prepare_snip_other (SNIP_COPY, _INFO_QUALapprox,     false, 0, copy_QUALapprox_snip);
-    seg_prepare_snip_other (SNIP_COPY, _INFO_ReadPosRankSum, false, 0, copy_ReadPosRankSum_snip);
+    DO_ONCE {
+        seg_prepare_snip_other (SNIP_COPY, _INFO_QD,             false, 0, copy_QD_snip);
+        seg_prepare_snip_other (SNIP_COPY, _INFO_SOR,            false, 0, copy_SOR_snip);
+        seg_prepare_snip_other (SNIP_COPY, _INFO_MQ,             false, 0, copy_MQ_snip);
+        seg_prepare_snip_other (SNIP_COPY, _INFO_MQRankSum,      false, 0, copy_MQRankSum_snip);
+        seg_prepare_snip_other (SNIP_COPY, _INFO_FS,             false, 0, copy_FS_snip);
+        seg_prepare_snip_other (SNIP_COPY, _INFO_VarDP,          false, 0, copy_VarDP_snip);
+        seg_prepare_snip_other (SNIP_COPY, _INFO_QUALapprox,     false, 0, copy_QUALapprox_snip);
+        seg_prepare_snip_other (SNIP_COPY, _INFO_ReadPosRankSum, false, 0, copy_ReadPosRankSum_snip);
 
-    SmallContainer con = { .nitems_lo = 2,
-                           .repeats   = 1,
-                           .items[0]  = { .dict_id.num = _INFO_VRS_Ends_REF, .separator[0] = ',' },
-                           .items[1]  = { .dict_id.num = _INFO_VRS_Ends_ALT                      } };
-
-    container_prepare_snip ((ContainerP)&con, 0, 0, qSTRa(con_VRS_End_snip));
-
-    con = (SmallContainer){ .nitems_lo = 2,
+        SmallContainer con = { .nitems_lo = 2,
                             .repeats   = 1,
-                            .items[0]  = { .dict_id.num = _INFO_VRS_States_REF, .separator[0] = ',' },
-                            .items[1]  = { .dict_id.num = _INFO_VRS_States_ALT                      } };
+                            .items[0]  = { .dict_id.num = _INFO_VRS_Ends_REF, .separator[0] = ',' },
+                            .items[1]  = { .dict_id.num = _INFO_VRS_Ends_ALT                      } };
+
+        container_prepare_snip ((ContainerP)&con, 0, 0, qSTRa(con_VRS_End_snip));
+
+        con = (SmallContainer){ .nitems_lo = 2,
+                                .repeats   = 1,
+                                .items[0]  = { .dict_id.num = _INFO_VRS_States_REF, .separator[0] = ',' },
+                                .items[1]  = { .dict_id.num = _INFO_VRS_States_ALT                      } };
 
 
-    container_prepare_snip ((ContainerP)&con, 0, 0, qSTRa(con_VRS_States_snip));
+        container_prepare_snip ((ContainerP)&con, 0, 0, qSTRa(con_VRS_States_snip));
+    }
 }
 
 void vcf_gnomad_seg_initialize (VBlockVCFP vb)
@@ -124,8 +126,8 @@ void vcf_seg_INFO_VRS_Ends (VBlockVCFP vb, ContextP ctx, STRp(arr))
     else { 
         seg_by_ctx (VB, STRa(con_VRS_End_snip), ctx, arr_len); 
 
-        seg_delta_vs_other_do (VB, ctx_get_ctx(vb, _INFO_VRS_Ends_REF), CTX(VCF_POS), 0, 0, ends[0], -1, 0);
-        seg_delta_vs_other_do (VB, ctx_get_ctx(vb, _INFO_VRS_Ends_ALT), CTX(VCF_POS), 0, 0, ends[1], -1, 0);
+        seg_delta_vs_other_localN (VB, ctx_get_ctx(vb, _INFO_VRS_Ends_REF), CTX(VCF_POS), ends[0], -1, 0);
+        seg_delta_vs_other_localN (VB, ctx_get_ctx(vb, _INFO_VRS_Ends_ALT), CTX(VCF_POS), ends[1], -1, 0);
     }
 }
 

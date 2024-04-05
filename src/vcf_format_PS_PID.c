@@ -30,19 +30,21 @@ static unsigned ps_lookback_snip_lens[MAX_PS_PID_LOOKBACK_LINES], ps_pra_snip_le
 
 void vcf_samples_zip_initialize_PS_PID (void)
 {
-    // FORMAT/PS related stuff (0=lookback 1 line, 1=lookback 2 lines etc)
-    for (int i=0; i < PS_PID_LOOKBACK_LINES; i++)
-        seg_prepare_snip_other_chari (SNIP_LOOKBACK, _VCF_LOOKBACK, 'T'+i, ps_lookback_snip, i);
+    DO_ONCE {
+        // FORMAT/PS related stuff (0=lookback 1 line, 1=lookback 2 lines etc)
+        for (int i=0; i < PS_PID_LOOKBACK_LINES; i++)
+            seg_prepare_snip_other_chari (SNIP_LOOKBACK, _VCF_LOOKBACK, 'T'+i, ps_lookback_snip, i);
 
-    SmallContainer con_PS_pos_ref_alt = {
-        .repeats   = 1,
-        .nitems_lo = 3,
-        .items     = { { .dict_id.num = _FORMAT_PSpos, .separator = "_"},
-                       { .dict_id.num = _FORMAT_PSref, .separator = "_"},
-                       { .dict_id.num = _FORMAT_PSalt                  } } };                       
+        SmallContainer con_PS_pos_ref_alt = {
+            .repeats   = 1,
+            .nitems_lo = 3,
+            .items     = { { .dict_id.num = _FORMAT_PSpos, .separator = "_"},
+                        { .dict_id.num = _FORMAT_PSref, .separator = "_"},
+                        { .dict_id.num = _FORMAT_PSalt                  } } };                       
 
-    ps_pra_snip_len = sizeof (ps_pra_snip);
-    container_prepare_snip ((ContainerP)&con_PS_pos_ref_alt, 0, 0, ps_pra_snip, &ps_pra_snip_len); 
+        ps_pra_snip_len = sizeof (ps_pra_snip);
+        container_prepare_snip ((ContainerP)&con_PS_pos_ref_alt, 0, 0, ps_pra_snip, &ps_pra_snip_len); 
+    }
 }
 
 // initialize VCF_LOOKBACK used by PS and PID

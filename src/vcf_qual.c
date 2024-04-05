@@ -113,7 +113,7 @@ static StrText str_round (STRp(in),
         in_value = atof (in); // float string terminated by comma (or colon or newline) (add epsilon so that sprintf rounds up - eg .005 to .01)
         SAFE_RESTORE; 
 
-        *out_len = sprintf (out.s, "%.*f", out_decimals, in_value + (boundary_round_down ? -0.000000001 : 0.000000001));
+        *out_len = snprintf (out.s, sizeof (out.s), "%.*f", out_decimals, in_value + (boundary_round_down ? -0.000000001 : 0.000000001));
 
         // remove trailing zeros
         if (out_decimals && truncate_trailing_zeros) 

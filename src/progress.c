@@ -15,21 +15,19 @@
 
 static bool progress_newline_since_update = false; // note: might be not 100% with threads, but that's ok
 
-static bool ever_start_time_initialized = false, test_mode;
-static TimeSpecType ever_start_time, component_start_time;
+static bool test_mode;
+static TimeSpecType component_start_time;
 static float last_percent=0;
 static int last_seconds_so_far=-1;
 static rom component_name=NULL;
 static unsigned last_len=0; // so we know how many characters to erase on next update
 
-static rom progress_ellapsed_time (bool ever)
+static rom progress_ellapsed_time (void)
 {
     TimeSpecType tb; 
-    clock_gettime(CLOCK_REALTIME, &tb); 
+    clock_gettime (CLOCK_REALTIME, &tb); 
     
-    TimeSpecType start = ever ? ever_start_time : component_start_time;
-
-    int seconds_so_far = ((tb.tv_sec - start.tv_sec)*1000 + ((int64_t)tb.tv_nsec - (int64_t)start.tv_nsec) / 1000000) / 1000; 
+    int seconds_so_far = ((tb.tv_sec - component_start_time.tv_sec)*1000 + ((int64_t)tb.tv_nsec - (int64_t)component_start_time.tv_nsec) / 1000000) / 1000; 
 
     static char time_str[70];
     str_human_time (seconds_so_far, false, time_str);
@@ -42,12 +40,14 @@ static void progress_update_status (rom prefix, rom status)
     if (flag.quiet) return;
 
     static rom eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
-    static rom spaces = "                                                                                ";
+    static rom spaces = "                                                                                                                                                                ";
 
+    ASSERT (STRLEN(eraser) == STRLEN(spaces), "eraser.len=%u != spaces.len=%u", STRLEN(eraser), STRLEN(spaces)); // will be optimized out
+    
     if (prefix && prefix[0]) 
         iprintf ("%s", prefix);
 
-    iprintf ("%.*s%.*s%.*s%s", last_len, eraser, last_len, spaces, last_len, eraser, status);
+    iprintf ("%.*s%.*s%.*s%s", MIN_(last_len, STRLEN(eraser)), eraser, MIN_(last_len, STRLEN(spaces)), spaces, last_len, eraser, status);
 
     last_len = strlen (status);
 
@@ -70,18 +70,17 @@ void progress_erase (void)
 
 void progress_new_component (rom new_component_name, 
                              rom message, // can be NULL
-                             bool new_test_mode)
+                             bool new_test_mode,
+                             TimeSpecType *start_time) // optional: if time already started (e.g. when reading txt_header)
 {
     StrTextSuperLong prefix = {};
 
     // (re) initialize if new component
     if (!component_name || strcmp (new_component_name, component_name)) {
-        clock_gettime (CLOCK_REALTIME, &component_start_time); 
-
-        if (!ever_start_time_initialized) {
-            ever_start_time = component_start_time;
-            ever_start_time_initialized = true;
-        }
+        if (start_time)
+            component_start_time = *start_time;
+        else
+            clock_gettime (CLOCK_REALTIME, &component_start_time); 
 
         test_mode = new_test_mode;
         component_name = new_component_name; 
@@ -93,18 +92,18 @@ void progress_new_component (rom new_component_name,
                 int component_name_len = strlen (component_name);
 
                 if (64 + global_cmd_len + component_name_len < sizeof(prefix)) { // fits in prefix 
-                    char genounzip_str[component_name_len + 3];
+                    char genounzip_str[component_name_len + 32];
                     if (strstr (global_cmd, "genozip")) {
                         char *zip = strstr (global_cmd, "zip");
-                        sprintf (genounzip_str, "%.*sun%s", (int)(zip-global_cmd), global_cmd, zip);
+                        snprintf (genounzip_str, sizeof(genounzip_str), "%.*sun%s", (int)(zip-global_cmd), global_cmd, zip);
                     }
                     else 
                         strcpy (genounzip_str, global_cmd);
 
                     if (component_name_len > 4 && !memcmp (&component_name[component_name_len-5], ".cram", 5))
-                        sprintf (prefix.s, "testing: %s %.*s.bam : ", genounzip_str, component_name_len-5, component_name);                
+                        snprintf (prefix.s, sizeof (prefix.s), "testing: %s %.*s.bam : ", genounzip_str, component_name_len-5, component_name);                
                     else
-                        sprintf (prefix.s, "testing: %s %s : ", genounzip_str, component_name);
+                        snprintf (prefix.s, sizeof (prefix.s), "testing: %s %s : ", genounzip_str, component_name);
                 }
 
                 else
@@ -112,11 +111,11 @@ void progress_new_component (rom new_component_name,
 
             }
             else if (flag.make_reference)
-                sprintf (prefix.s, "%saking reference file: %s %s : ",
+                snprintf (prefix.s, sizeof(prefix.s), "%saking reference file: %s %s : ",
                          txt_file->is_remote ? "Downloading & m" : "M", global_cmd, component_name);
             
             else
-                sprintf (prefix.s, "%s %s : ", global_cmd, component_name); 
+                snprintf (prefix.s, sizeof(prefix.s),"%s %s : ", global_cmd, component_name); 
         }
     }
 
@@ -146,7 +145,7 @@ void progress_update (rom task, uint64_t sofar, uint64_t total, bool done)
         if (!flag.debug_progress)
             progress_update_status (NULL, "Finalizing...");
         else {
-            sprintf (progress_str, "Finalizing... %u%% task=%s sofar=%"PRIu64" total=%"PRIu64, (unsigned)percent, task, sofar, total);            
+            snprintf (progress_str, sizeof(progress_str), "Finalizing... %u%% task=%s sofar=%"PRIu64" total=%"PRIu64, (unsigned)percent, task, sofar, total);            
             progress_update_status (NULL, progress_str);
         }
     }
@@ -160,9 +159,9 @@ void progress_update (rom task, uint64_t sofar, uint64_t total, bool done)
             str_human_time (secs, false, time_str);
 
             if (!flag.debug_progress)
-                sprintf (progress_str, "%u%% (%s)", (unsigned)percent, time_str);
+                snprintf (progress_str, sizeof(progress_str), "%u%% (%s)", (unsigned)percent, time_str);
             else
-                sprintf (progress_str, "%u%% (%s) task=%s sofar=%"PRIu64" total=%"PRIu64" seconds_so_far=%d", 
+                snprintf (progress_str, sizeof(progress_str), "%u%% (%s) task=%s sofar=%"PRIu64" total=%"PRIu64" seconds_so_far=%d", 
                          (unsigned)percent, time_str, task, sofar, total, seconds_so_far);            
 
             progress_update_status (NULL, progress_str);
@@ -188,34 +187,39 @@ void progress_finalize_component (rom status)
     last_len = 0;
 }
 
+bool progress_has_component (void)
+{
+    return component_name != NULL;
+}
+
 #define FINALIZE(format, ...) { \
     char s[500]; \
-    sprintf (s, format, __VA_ARGS__);  \
-    if (IS_ZIP && flag.md5) sprintf (&s[strlen(s)], "\t%s = %s", digest_name(), digest_display (md5).s); \
+    int s_len = snprintf (s, sizeof(s), format, __VA_ARGS__);  \
+    if (IS_ZIP && flag.md5) snprintf (&s[s_len], sizeof(s)-s_len, "\t%s = %s", digest_name(), digest_display (md5).s); \
     progress_finalize_component (s);  \
 }
 
 void progress_finalize_component_time (rom status, Digest md5/*ZIP only*/)
 {
-    FINALIZE ("%s (%s)", status, progress_ellapsed_time (false));
+    FINALIZE ("%s (%s)", status, progress_ellapsed_time());
 }
 
 void progress_finalize_component_time_ratio (rom me, float ratio, Digest md5)
 {
     if (component_name)
-        FINALIZE ("Done (%s, %s compression ratio: %1.1f)", progress_ellapsed_time (false), me, ratio)
+        FINALIZE ("Done (%s, %s compression ratio: %1.1f)", progress_ellapsed_time(), me, ratio)
     else
-        FINALIZE ("Time: %s, %s compression ratio: %1.1f", progress_ellapsed_time (false), me, ratio);
+        FINALIZE ("Time: %s, %s compression ratio: %1.1f", progress_ellapsed_time(), me, ratio);
 }
 
 void progress_finalize_component_time_ratio_better (rom me, float ratio, rom better_than, float ratio_than, Digest md5)
 {
     if (component_name) 
         FINALIZE ("Done (%s, %s compression ratio: %1.1f - better than %s by a factor of %1.1f)", 
-                  progress_ellapsed_time (false), me, ratio, better_than, ratio_than)
+                  progress_ellapsed_time(), me, ratio, better_than, ratio_than)
     else
         FINALIZE ("Time: %s, %s compression ratio: %1.1f - better than %s by a factor of %1.1f", 
-                  progress_ellapsed_time (false), me, ratio, better_than, ratio_than)
+                  progress_ellapsed_time(), me, ratio, better_than, ratio_than)
 }
 
 void progress_concatenated_md5 (rom me, Digest md5)

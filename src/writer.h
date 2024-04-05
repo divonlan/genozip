@@ -28,7 +28,6 @@ extern bool writer_does_txtheader_need_recon (CompIType comp_i);
 extern bool writer_does_vb_need_recon (VBIType vb_i);
 extern bool writer_does_vb_need_write (VBIType vb_i);
 extern BitsP writer_get_is_dropped (VBIType vb_i);
-extern void writer_destroy_is_vb_info (void);
 extern bool writer_get_fasta_contig_grepped_out (VBIType vb_i);
 extern void writer_set_fasta_contig_grepped_out (VBIType vb_i);
 extern int64_t writer_get_txt_line_i (VBlockP vb, LineIType line_in_vb);

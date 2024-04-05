@@ -107,7 +107,7 @@ uint16_t bam_reg2bin (int32_t first_pos, int32_t last_pos)
 DisFlagsStr sam_dis_flags (SamFlags f)
 {
     DisFlagsStr s;
-    sprintf (s.s, "multi_segs=%u is_aligned=%u unmapped=%u:%u revcomp=%u:%u mate#=%u:%u secondary=%u failfilt=%u dup=%u supp=%u",
+    snprintf (s.s, sizeof (s.s), "multi_segs=%u is_aligned=%u unmapped=%u:%u revcomp=%u:%u mate#=%u:%u secondary=%u failfilt=%u dup=%u supp=%u",
              f.multi_segs, f.is_aligned, f.unmapped, f.next_unmapped, f.rev_comp, f.next_rev_comp, 
              f.is_first, f.is_last, f.secondary, f.filtered, f.duplicate, f.supplementary);
     return s;

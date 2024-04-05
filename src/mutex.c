@@ -18,11 +18,11 @@ typedef struct {
     rom func; 
     int64_t accumulator;
     uint32_t code_line; 
-    bool is_locked;
+    uint32_t lock_count; // multiple muteces (e.g. same mutex in different contexts of VBs) can be locked concurrently
 } LockPoint;
 
 #define MAX_CODE_LINE 4095
-static LockPoint lp[MAX_CODE_LINE+1]; // hard to use Buffer, because it uses muteces...
+static LockPoint lp[MAX_CODE_LINE+1]; // note: a static array, becauses its hard to use a Buffer, because it uses muteces...
 
 void mutex_initialize_do (Mutex *mutex, rom name, rom func)
 { 
@@ -77,7 +77,7 @@ bool mutex_lock_do (Mutex *mutex, bool blocking, rom func, uint32_t code_line)
         if (ret == EBUSY) return false;
     }
 
-    lp[code_line].is_locked = true; 
+    __atomic_add_fetch (&lp[code_line].lock_count, (uint32_t)1, __ATOMIC_RELAXED);
 
     ASSERT (!ret, "called from %s by thread=%"PRIu64": pthread_mutex_lock failed on mutex->name=%s: %s", 
             func, (uint64_t)pthread_self(), mutex && mutex->name ? mutex->name : "(null)", strerror (ret)); 
@@ -97,7 +97,7 @@ void mutex_unlock_do (Mutex *mutex, FUNCLINE)
 
     mutex->lock_func = NULL; // mutex->lock_func is protected by the mutex
 
-    lp[code_line].is_locked = false;
+    __atomic_sub_fetch (&lp[code_line].lock_count, (uint32_t)1, __ATOMIC_RELAXED);
 
     int ret = pthread_mutex_unlock (&mutex->mutex); 
     ASSERT (!ret, "called from %s:%u: pthread_mutex_unlock failed for %s: %s", func, code_line, mutex->name, strerror (ret)); 
@@ -182,7 +182,9 @@ void mutex_who_is_locked (void)
 {
     for (int i=0; i <= MAX_CODE_LINE; i++) {
         LockPoint my_lp = lp[i]; // make a copy for a bit of thread safety
-        if (my_lp.mutex_name && my_lp.is_locked)
-            printf ("Mutex locked: %s locked in %s:%u\n", my_lp.mutex_name, (my_lp.func ? my_lp.func : ""), my_lp.code_line);
+        if (my_lp.mutex_name && my_lp.lock_count)
+            printf ("Mutex locked: %s locked in %s:%u. %s\n", 
+                    my_lp.mutex_name, (my_lp.func ? my_lp.func : ""), my_lp.code_line, 
+                    cond_int (my_lp.lock_count > 1, "num_locks_from_different_objects=", my_lp.lock_count));
     }
 }

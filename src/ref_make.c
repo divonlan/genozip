@@ -224,7 +224,7 @@ rom ref_fasta_to_ref (FileP file)
                                           "--no-tip", NULL);
         
         // wait for child process to finish
-        ASSINP (!stream_wait_for_exit (make_ref), "Failed to make reference file %s. Try making it explicitly with \"genozip --make-reference %s\"", 
+        ASSINP (!stream_wait_for_exit (make_ref, false), "Failed to make reference file %s. Try making it explicitly with \"genozip --make-reference %s\"", 
                 ref_filename, file->name); 
     }
 

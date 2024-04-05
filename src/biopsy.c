@@ -52,8 +52,9 @@ void biopsy_init (rom optarg)
         }
     }
 
-    biopsy_fn = MALLOC (strlen(optarg)+50);
-    sprintf (biopsy_fn, "%s.biopsy", optarg);
+    int biopsy_fn_size = strlen(optarg)+50; 
+    biopsy_fn = MALLOC (biopsy_fn_size);
+    snprintf (biopsy_fn, biopsy_fn_size, "%s.biopsy", optarg);
 
     flag.biopsy   = true;
     flag.seg_only = true; // no need to write the genozip file (+ we don't even seg, see zip_compress_one_vb)

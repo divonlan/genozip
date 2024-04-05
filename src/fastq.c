@@ -256,11 +256,13 @@ static void fastq_tip_if_should_be_pair (void)
 // called by main thread at the beginning of zipping this txt file  
 void fastq_zip_initialize (void)
 {
+    DO_ONCE {
+        seg_prepare_snip_other (SNIP_COPY, _FASTQ_QNAME, 0, 0, copy_qname_snip);
+    }
+    
     // reset lcodec for STRAND and GPOS, as these may change between PAIR_1 and PAIR_2 files
     ZCTX(FASTQ_STRAND)->lcodec = CODEC_UNKNOWN;
     ZCTX(FASTQ_GPOS  )->lcodec = CODEC_UNKNOWN;
-
-    seg_prepare_snip_other (SNIP_COPY, _FASTQ_QNAME, 0, 0, copy_qname_snip);
 
     // with REF_EXTERNAL, we don't know which chroms are seen (bc unlike REF_EXT_STORE, we don't use is_set), so
     // we just copy all reference contigs. this are not needed for decompression, just for --coverage/--sex/--idxstats
@@ -287,6 +289,11 @@ void fastq_zip_finalize (bool is_last_user_txt_file)
     
     if (is_last_user_txt_file && flag.deep)
         fastq_deep_zip_finalize();
+
+    if (!flag.let_OS_cleanup_on_exit && flag.pair != PAIR_R1 && !flag.deep) {
+        if (IS_REF_EXT_STORE)
+            ref_destroy_reference (gref);
+    }
 }
 
 // called by Compute thread at the beginning of this VB
@@ -442,6 +449,8 @@ void fastq_seg_finalize (VBlockP vb)
             codec_assign_best_qual_codec (vb, OPTION_QX_Z, NULL, true, false, NULL);
     }
     
+    FREE (VB_FASTQ->optimized_desc);
+
     // top level snip
     SmallContainer top_level = { 
         .repeats        = vb->lines.len32,

@@ -620,7 +620,7 @@ bool ref_load_stored_reference (Reference ref)
 
     // case: using REF_EXT_STORE with a cached reference file: generate a private genome, as it will be compacted for writing to SEC_REFERENCE
     if (flag.reading_reference && IS_REF_EXT_STORE && ref->genome_buf.type == BUF_SHM) {
-        buf_free (ref->genome_buf);
+        buf_free (ref->genome_buf); // free SHM buffer
         buf_alloc_bits (evb, &ref->genome_buf, ref->genome_nbases * 2, NOINIT, 0, "ref->genome_buf");
 
         memcpy (B1ST8(ref->genome_buf), ref->cache->genome_data, ref->genome_buf.nwords * sizeof(uint64_t));
@@ -1401,7 +1401,7 @@ StrTextLong ref_display_range (ConstRangeP r)
 {
     StrTextLong s;
 
-    sprintf (s.s, "chrom=\"%.*s\"(%d) ref.num_bits=%"PRIu64" is_set.num_bits=%"PRIu64" first_pos=%"PRId64
+    snprintf (s.s, sizeof (s.s), "chrom=\"%.*s\"(%d) ref.num_bits=%"PRIu64" is_set.num_bits=%"PRIu64" first_pos=%"PRId64
              " last_pos=%"PRId64" gpos=%"PRId64,
              STRf(r->chrom_name), r->chrom, r->ref.nbits, r->is_set.nbits, r->first_pos, r->last_pos, r->gpos);
     return s;
@@ -1527,11 +1527,12 @@ rom ref_get_cram_ref (Reference ref)
     ASSINP (ref->ref_fasta_name, "Genozip limitation: Reference file %s cannot be used to compress CRAM files because it was created by piping a fasta file from from a url or stdin, or because the name of the fasta file exceeds %u characters",
             ref->filename, REF_FILENAME_LEN-1);
 
-    samtools_T_option = MALLOC (MAX_(strlen (ref->ref_fasta_name), strlen (ref->filename)) + 10);
+    int samtools_T_option_size = MAX_(strlen (ref->ref_fasta_name), strlen (ref->filename)) + 10;
+    samtools_T_option = MALLOC (samtools_T_option_size);
 
     // case: fasta file is in its original location
     if (file_exists (ref->ref_fasta_name)) 
-        sprintf (samtools_T_option, "-T%s", ref->ref_fasta_name);
+        snprintf (samtools_T_option, samtools_T_option_size, "-T%s", ref->ref_fasta_name);
 
     // try: fasta file is in directory of reference file
     else {
@@ -1543,7 +1544,7 @@ rom ref_get_cram_ref (Reference ref)
         if (!slash) slash = strrchr (ref->filename, '\\'); 
         unsigned dirname_len = slash ? ((slash+1) - ref->filename) : 0;
 
-        sprintf (samtools_T_option, "-T%.*s%s", dirname_len, ref->filename, basename);
+        snprintf (samtools_T_option, samtools_T_option_size, "-T%.*s%s", dirname_len, ref->filename, basename);
 
         ASSINP (file_exists (&samtools_T_option[2]), 
                 "Searching of the fasta file used to create %s. It was not found in %s or %s. Note: it is needed for passing to samtools as a reference file (-T option) for reading the CRAM file", 

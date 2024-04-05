@@ -62,7 +62,7 @@ COMPRESSOR_CALLBACK (fastq_zip_qual)
     if (dl->deep_qual && !dl->qual_is_trims_only && !dl->dont_compress_QUAL) {
         uint32_t trim_1_len = dl->sam_seq_offset;
         uint32_t trim_2_len = dl->qual.len - dl->sam_seq_offset - dl->sam_seq_len;
-        memcpy (qual + trim_1_len, qual + dl->qual.len - trim_2_len, trim_2_len);
+        memmove (qual + trim_1_len, qual + dl->qual.len - trim_2_len, trim_2_len);
 
         dl->qual.len = trim_1_len + trim_2_len;
 

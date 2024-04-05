@@ -11,6 +11,7 @@
 #include "reference.h"
 #include "seg.h"
 #include "context.h"
+#include "zip_dyn_int.h"
 
 #define VT(x) (vb->var_types[alt_i] == VT_##x)
 
@@ -543,7 +544,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_VARIANT_TYPE)
 void vcf_seg_INFO_FILTERED_HAPS (VBlockVCFP vb, ContextP ctx, STRp(value))
 {
     if (ctx_has_value_in_line_(vb, CTX(INFO_ASSEMBLED_HAPS))) 
-        seg_delta_vs_other (VB, ctx, CTX(INFO_ASSEMBLED_HAPS), STRa(value));
+        seg_delta_vs_other_localS (VB, ctx, CTX(INFO_ASSEMBLED_HAPS), STRa(value), -1);
 
     else
         seg_integer_or_not (VB, ctx, STRa(value), value_len);

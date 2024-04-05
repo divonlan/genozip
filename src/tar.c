@@ -138,10 +138,10 @@ static void tar_copy_metadata_from_file (rom fn)
     }
 
     // convert to nul-terminated octal in ASCII
-    sprintf (hdr.uid,   "%.*o", (int)sizeof(hdr.uid)-1,  st.st_uid);
-    sprintf (hdr.gid,   "%.*o", (int)sizeof(hdr.gid)-1,  st.st_gid);
-    sprintf (hdr.mode,  "%.*o", (int)sizeof(hdr.mode)-1, st.st_mode);
-    sprintf (hdr.mtime, "%.*"PRIo64, (int)sizeof(hdr.mtime)-1, (uint64_t)st.st_mtime); // mtime is 64b on Windows and Linux, 32b on MacOS
+    snprintf (hdr.uid,   sizeof (hdr.uid),   "%.*o", (int)sizeof(hdr.uid)-1,  st.st_uid);
+    snprintf (hdr.gid,   sizeof (hdr.gid),   "%.*o", (int)sizeof(hdr.gid)-1,  st.st_gid);
+    snprintf (hdr.mode,  sizeof (hdr.mode),  "%.*o", (int)sizeof(hdr.mode)-1, st.st_mode);
+    snprintf (hdr.mtime, sizeof (hdr.mtime), "%.*"PRIo64, (int)sizeof(hdr.mtime)-1, (uint64_t)st.st_mtime); // mtime is 64b on Windows and Linux, 32b on MacOS
 
     // case: windows - use current username, no gname
     #ifdef _WIN32        
@@ -178,12 +178,12 @@ static void tar_write_gnu_long_filename (STRp(fn_in_tar)/* length includes \0 */
         .gname    = "root",
         .checksum = {' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ' }, // required checksum value, while calculating the checksum (8 spaces)
     };
-    sprintf (ll_hdr.size.std, "%o", fn_in_tar_len); // fn_in_tar_len includes \0
+    snprintf (ll_hdr.size.std, sizeof (ll_hdr.size.std), "%o", fn_in_tar_len); // fn_in_tar_len includes \0
 
     // header checksum
     unsigned checksum = 0;
     for (unsigned i=0; i < 512; i++) checksum += ((bytes)&ll_hdr)[i];
-    sprintf (ll_hdr.checksum, "%06o", checksum);
+    snprintf (ll_hdr.checksum, sizeof (ll_hdr.checksum), "%06o", checksum);
 
     ASSERT (fwrite (&ll_hdr, 512,    1, tar_file) == 1, "failed to write LongLink header of %s to %s", fn_in_tar, tar_name); 
     ASSERT (fwrite (STRa(fn_in_tar), 1, tar_file) == 1, "failed to write long filename of %s to %s",   fn_in_tar, tar_name); 
@@ -270,7 +270,7 @@ static void tar_add_hard_link (rom fn_on_disk, rom fn_in_tar_src, rom fn_in_tar_
     // header checksum
     unsigned checksum = 0;
     for (unsigned i=0; i < 512; i++) checksum += ((bytes)&hdr)[i];
-    sprintf (hdr.checksum, "%06o", checksum);
+    snprintf (hdr.checksum, sizeof (hdr.checksum), "%06o", checksum);
 
     if (flag.debug_tar) 
         iprintf ("tar_add_hard_link: t_offset=%"PRIu64" ftell=%"PRIu64" %s\n", t_offset, ftello64 (tar_file), hdr.name);
@@ -310,7 +310,7 @@ void tar_close_file (void **file)
 
     // size - case < 8GB store in nul-terminated octal in ASCII (33 bits = 11 octal numerals x 3 bits each) - standard tar
     if (z_size < (1ULL << 33))
-        sprintf (hdr.size.std, "%.*"PRIo64, (int)sizeof(hdr.size)-1, z_size);
+        snprintf (hdr.size.std, sizeof (hdr.size.std), "%.*"PRIo64, (int)sizeof(hdr.size)-1, z_size);
     
     // case >= 8GB: store as binary
     else { 
@@ -322,7 +322,7 @@ void tar_close_file (void **file)
     // header checksum
     unsigned checksum = 0;
     for (unsigned i=0; i < 512; i++) checksum += ((bytes)&hdr)[i];
-    sprintf (hdr.checksum, "%06o", checksum);
+    snprintf (hdr.checksum, sizeof (hdr.checksum), "%06o", checksum);
     
     // update header
     ASSERT (!fseeko64 (tar_file, t_offset-512, SEEK_SET), "fseek(%"PRId64") of %s failed (1): %s", t_offset-512, tar_name, strerror (errno));

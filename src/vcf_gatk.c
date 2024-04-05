@@ -34,16 +34,28 @@ sSTRl(copy_RAW_DP_int, 30);
 
 void vcf_gatk_zip_initialize (void)
 {
-    container_prepare_snip ((ContainerP)&RAW_MQandDP_con, 0, 0, qSTRa(RAW_MQandDP_snip));
+    DO_ONCE {
+        container_prepare_snip ((ContainerP)&RAW_MQandDP_con, 0, 0, qSTRa(RAW_MQandDP_snip));
 
-    seg_prepare_snip_other (SNIP_OTHER_DELTA, _RAW_DP, true, 0, copy_RAW_DP_int);   
+        seg_prepare_snip_other (SNIP_OTHER_DELTA, _RAW_DP, true, 0, copy_RAW_DP_int);   
+    }
 }
 
 void vcf_gatk_seg_initialize (VBlockVCFP vb)
 {
+    #define T(cond, did_i) ((cond) ? (did_i) : DID_NONE)
+
     ctx_set_ltype (VB, LT_STRING, INFO_TLOD, INFO_NALOD, INFO_NLOD, DID_EOL);
 
     ctx_set_dyn_int (VB, INFO_RPA, DID_EOL);
+
+    ctx_set_store (VB, STORE_INT, 
+                   T(segconf.INFO_DP_method == BY_BaseCounts, INFO_BaseCounts), 
+                   DID_EOL); 
+
+    ctx_set_no_stons (VB, 
+                      INFO_BaseCounts, // bc we rely on ctx->last_wi for reconstruction
+                      DID_EOL);
 
     if (segconf.has[INFO_RAW_MQandDP]) { // create contexts only if they're needed
         ctx_set_dyn_int (VB, ctx_get_ctx (vb, _RAW_DP)->did_i, ctx_get_ctx (vb, _RAW_MQ)->did_i, DID_EOL);
@@ -82,20 +94,21 @@ void vcf_seg_INFO_RAW_MQandDP (VBlockVCFP vb, ContextP ctx, STRp(value))
     ContextP info_dp_ctx = CTX(INFO_DP);
     int64_t info_dp;
 
+    // case: DP is deferred to after samples. See bug 1050. 
+    bool dp_deferred = (segconf.INFO_DP_method == BY_FORMAT_DP || segconf.INFO_DP_method == BY_BaseCounts);
+
     // 1st container item: DP. It is consumed without reconstruction - just setting last_value 
     // for use of MQ. Seg as delta of INFO_DP if possible.    
-    if (has(DP) && segconf.INFO_DP_method != BY_FORMAT_DP/*bug 1040*/ && 
-        ctx_has_value_in_line_(VB, info_dp_ctx))   
-        
-        seg_delta_vs_other_do (VB, dp_ctx, info_dp_ctx, 0, 0, dp, -1, dp_str_len);
+    if (has(DP) && !dp_deferred && ctx_has_value_in_line_(VB, info_dp_ctx))   
+        seg_delta_vs_other_localN (VB, dp_ctx, info_dp_ctx, dp, -1, dp_str_len);
 
-    else if (has(DP) && segconf.INFO_DP_method != BY_FORMAT_DP && 
+    else if (has(DP) && !dp_deferred && 
              !ctx_encountered_in_line (VB, INFO_DP) && 
              str_get_int (STRa(BII(DP)->value), &info_dp)) {
         int64_t save = info_dp_ctx->last_value.i;
         info_dp_ctx->last_value.i = info_dp;
 
-        seg_delta_vs_other_do (VB, dp_ctx, info_dp_ctx, 0, 0, dp, -1, dp_str_len);
+        seg_delta_vs_other_localN (VB, dp_ctx, info_dp_ctx, dp, -1, dp_str_len);
 
         info_dp_ctx->last_value.i = save;
     }
@@ -287,88 +300,160 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_RPA)
 // INFO/BaseCounts
 // ---------------
 
-// ##INFO=<ID=genozip BugP.vcf -ft ,Number=4,Type=Integer,Description="Counts of each base">
+// ##INFO=<ID=BaseCounts,Number=4,Type=Integer,Description="Counts of each base">
 // Sorts BaseCounts vector with REF bases first followed by ALT bases, as they are expected to have the highest values
-bool vcf_seg_INFO_BaseCounts (VBlockVCFP vb, ContextP ctx_basecounts, STRp(value)) // returns true if caller still needs to seg 
+void vcf_seg_INFO_BaseCounts (VBlockP vb_) // returns true if caller still needs to seg 
 {
-    if (vb->REF_len != 1 || vb->ALT_len != 1) 
-        return true; // not a bi-allelic SNP or line is a luft line without easy access to REFALT - caller should seg
+    VBlockVCFP vb = (VBlockVCFP)vb_;
+    decl_ctx(INFO_BaseCounts);
+    STRlast (bc, INFO_BaseCounts);
 
-    char *str = (char *)value;
-    int64_t sum = 0;
+    SEGCONF_RECORD_WIDTH (BaseCounts, bc_len);
 
-    uint32_t counts[4], sorted_counts[4] = {}; // corresponds to A, C, G, T
-
-    SAFE_NUL (&value[value_len]);
-    for (unsigned i=0; i < 4; i++) {
-        counts[i] = strtoul (str, &str, 10);
-        str++; // skip comma separator
-        sum += counts[i];
+    // up to 3 ALTS, and all ALTs must be unique SNPs
+    if (vb->n_alts < 1 || vb->n_alts > 3) fallback: {
+        seg_by_ctx (VB, STRa(bc), ctx, bc_len); 
+        return;
     }
-    SAFE_RESTORE;
+    for (int8_t alt_i=0; alt_i < vb->n_alts; alt_i++) {
+        if (vb->var_types[alt_i] != VT_SNP) goto fallback;
 
-    if (str - value != value_len + 1 /* +1 due to final str++ */) return true; // invalid BaseCounts data - caller should seg
+        // alleles must be unique
+        if (*vb->alts[alt_i] == *vb->REF) goto fallback;
 
-    unsigned ref_i = acgt_encode[(int)*vb->REF];
-    unsigned alt_i = acgt_encode[(int)*vb->ALT];
+        for (int alt_j=0; alt_j < alt_i; alt_j++)
+            if (*vb->alts[alt_i] == *vb->alts[alt_j]) goto fallback;
+    }
 
-    bool used[4] = {};
-    sorted_counts[0] = counts[ref_i]; // first - the count of the REF base
-    sorted_counts[1] = counts[alt_i]; // second - the count of the ALT base
-    used[ref_i] = used[alt_i] = true;
+    str_split_ints (bc, bc_len, 4, ',', count, true); // counts[] corresponds to A,C,G,T
+    if (n_counts != 4 || counts[0] < 0 || counts[1] < 0 || counts[1] < 0 || counts[3] < 0) 
+        goto fallback;
 
-    // finally - the other two cases in their original order (usually these are 0)
-    for (unsigned sc_i=2; sc_i <= 3; sc_i++)
-        for (unsigned c_i=0; c_i <= 3; c_i++)
-            if (!used[c_i]) { // found a non-zero count
-                sorted_counts[sc_i] = counts[c_i];
-                used[c_i] = true;
+    ctx_set_last_value (VB, ctx, counts[0] + counts[1] + counts[2] + counts[3]);
+    
+    int32_t sorted_counts[4] = {}; // sorted_counts[] corresponds to REF,ALT0,ALT1,ALT2
+    
+    STRlast (ad, FORMAT_AD);
+    bool use_ad = vcf_num_samples == 1 && ctx_encountered_in_line (VB, FORMAT_AD) &&
+                  !flag.secure_DP && // if secure_DP, then we need to reconstruct even when samples are dropped, as we can't rely on FORMAT_AD
+                  segconf.has[INFO_BaseCounts] && !segconf.vcf_is_varscan; // AD.last_txt is set in these conditions
+    int64_t ad_i;
+
+    #define SET_SORTED_COUNTS(sc_i,b) ({                    \
+        sorted_counts[sc_i] = counts[acgt_encode[(int)b]];  \
+        counts[acgt_encode[(int)b]] = -1/*= consumed*/;     \
+        if (use_ad && str_item_i_int (STRa(ad), ',', sc_i, &ad_i) && ad_i == sorted_counts[sc_i]) \
+            sorted_counts[sc_i] = -9; /*predicted by AD*/   \
+    })
+
+    // set sorted_counts: first values are the BaseCount values corresponding to alleles (REF and ALTs)    
+    SET_SORTED_COUNTS(0, *vb->REF); 
+    for (int8_t alt_i=0; alt_i < vb->n_alts; alt_i++)
+        SET_SORTED_COUNTS (alt_i + 1, *vb->alts[alt_i]); 
+        
+    // the remaining sorted_counts of the non-allele bases - in the order of the basess
+    for (unsigned sc_i=vb->n_alts + 1; sc_i <= 3; sc_i++)
+        for (unsigned c_i=0; c_i <= 3; c_i++) // search for first base that is not yet consumed
+            if (counts[c_i] != -1) { // not consumed yet
+                SET_SORTED_COUNTS (sc_i, "ACGT"[c_i]);
                 break;
             }
 
-    char snip[2 + value_len + 1]; // +1 for \0
-    sprintf (snip, "%c%c%u,%u,%u,%u", SNIP_SPECIAL, VCF_SPECIAL_BaseCounts, 
-             sorted_counts[0], sorted_counts[1], sorted_counts[2], sorted_counts[3]);
+    char snip[3 + bc_len + 1 + 4]; // +1 for \0 ; +4 for bc "-9" might be up to one character longer than original values
+    int snip_len = snprintf (snip, sizeof(snip), "%c%c%s%d,%d,%d,%d", SNIP_SPECIAL, VCF_SPECIAL_BaseCounts, 
+                             use_ad ? "X" : "", // note: up to 15.0.51 use_ad is always false
+                             sorted_counts[0], sorted_counts[1], sorted_counts[2], sorted_counts[3]);
 
-    seg_by_ctx (VB, snip, value_len+2, ctx_basecounts, value_len); 
-    
-    ctx_basecounts->flags.store = STORE_INT;
-    ctx_set_last_value (VB, ctx_basecounts, sum);
+    seg_by_ctx (VB, STRa(snip), ctx, bc_len); 
+    #undef SET_SORTED_COUNTS
+}
 
-    return false; // we already segged - caller needn't seg
+static int64_t vcf_piz_calculate_BaseCounts (VBlockVCFP vb, STRp(snip), qSTRp(out))
+{
+    str_split_ints (snip, snip_len, 4, ',', sorted_count, true); // sorted_counts correspond to REF,ALT0,ALT1,ALT2
+    ASSPIZ (n_sorted_counts == 4, "invalid snip: \"%.*s\"", snip_len, snip);
+
+    // copy values from AD if needed
+    if (sorted_counts[0] == -9 || sorted_counts[1] == -9 || sorted_counts[2] == -9 || sorted_counts[3] == -9) {
+        STRlast (ad_str, FORMAT_AD);
+        str_split_ints (ad_str, ad_str_len, vb->n_alts + 1, ',', ad, false); // exactly=false bc we don't enforce this in seg
+        ASSPIZ (ctx_encountered_in_line (VB, FORMAT_AD) && n_ads, "cannot find AD needed for reconstructing BaseCounts. snip=\"%.*s\"", STRf(snip));
+
+        for (int sc_i=0; sc_i < 4; sc_i++)
+            if (sorted_counts[sc_i] == -9) 
+                sorted_counts[sc_i] = ads[sc_i];
+    }
+
+    if (out) { // reconstruction needed
+        int32_t counts[4] = { -1, -1, -1, -1 }; // counts correspond to A, C, G, T
+
+        #define SET_COUNTS(b,sc_i) counts[acgt_encode[(uint8_t)b]] = sorted_counts[sc_i]
+
+        // set counts corresponding to REF and ALT alleles    
+        SET_COUNTS (*vb->REF, 0);
+        for (int8_t alt_i=0; alt_i < vb->n_alts; alt_i++)
+            SET_COUNTS (*vb->alts[alt_i], alt_i + 1);
+
+        // set counts corresponding to the remaining bases that are not alleles
+        unsigned sc_i = vb->n_alts + 1;
+        for (unsigned c_i=0; c_i <= 3; c_i++) 
+            if (counts[c_i] == -1/*not set yet*/) 
+                SET_COUNTS("ACGT"[c_i], sc_i++);
+
+        *out_len = snprintf (out, *out_len, "%u,%u,%u,%u", counts[0], counts[1], counts[2], counts[3]);
+        #undef SET_COUNTS
+    }
+
+    return sorted_counts[0] + sorted_counts[1] + sorted_counts[2] + sorted_counts[3];
 }
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_BaseCounts)
 {
-    uint32_t counts[4], sorted_counts[4] = {}; // counts of A, C, G, T
+    STRli(recon,256);
 
-    new_value->i = 0;
-    char *str = (char *)snip;
+    // case: reconstruct now
+    if (snip[0] != 'X') { // no deferring because not dependent on AD
+        new_value->i = vcf_piz_calculate_BaseCounts (VB_VCF, STRa(snip), (reconstruct ? recon : NULL), &recon_len);
 
-    for (unsigned i=0; i < 4; i++) {
-        sorted_counts[i] = strtoul (str, &str, 10);
-        str++; // skip comma separator
-        new_value->i += sorted_counts[i];
+        if (reconstruct) RECONSTRUCT_str (recon);
+    
+        return HAS_NEW_VALUE;
     }
 
-    if (!reconstruct) goto done; // just return the new value
-
-    ASSVCF (str - snip == snip_len + 1, "expecting (str-snip)=%d == (snip_len+1)=%u", (int)(str - snip), snip_len+1);
-
-    unsigned ref_i = acgt_encode[(uint8_t)VB_VCF->REF[0]];
-    unsigned alt_i = acgt_encode[(uint8_t)VB_VCF->alts[0][0]];
+    // we need to reconstruct by FORMAT_AD, but we don't have it due to flags
+    else if (flag.drop_genotypes || flag.gt_only || flag.samples) {
+        if (reconstruct) 
+            RECONSTRUCT1 ('.'); 
     
-    counts[ref_i] = sorted_counts[0];
-    counts[alt_i] = sorted_counts[1];
+        new_value->i = -1;
+        return HAS_NEW_VALUE;
+    }
+
+    // case: defer reconstruction to after samples, as we need FORMAT_AD
+    else {
+        ctx->BaseCounts.is_deferred = true;
+        vcf_piz_defer_to_after_samples (BaseCounts);
+
+        return NO_NEW_VALUE;
+    }
+}
+
+void vcf_piz_insert_INFO_BaseCounts_by_AD (VBlockVCFP vb)
+{
+    decl_ctx (INFO_BaseCounts);
+    bool reconstruct = IS_RECON_INSERTION(ctx);
+
+    STR(snip);
+    ctx_get_snip_by_word_index (ctx, ctx->last_wi, snip);
+
+    STRli(recon,256);
+    int64_t value = 
+        vcf_piz_calculate_BaseCounts (vb, snip+3, snip_len-3, reconstruct ? recon : NULL, &recon_len);
     
-    unsigned sc_i=2;
-    for (unsigned i=0; i <= 3; i++)
-        if (ref_i != i && alt_i != i) counts[i] = sorted_counts[sc_i++];
+    if (reconstruct)
+        vcf_piz_insert_field (vb, ctx, STRa(recon), segconf.wid_BaseCounts.width);
 
-    bufprintf (vb, &vb->txt_data, "%u,%u,%u,%u", counts[0], counts[1], counts[2], counts[3]);
-
-done:
-    return HAS_NEW_VALUE;
+    ctx_set_last_value (VB, ctx, value);
 }
 
 // ---------------
@@ -396,7 +481,7 @@ bool vcf_seg_INFO_SF_init (VBlockVCFP vb, ContextP ctx, STRp(sf))
         case yes: 
             seg_set_last_txt (VB, ctx, STRa(sf));
 
-            vb_add_to_deferred_q (VB, ctx, vcf_seg_INFO_SF_seg, vb->idx_SF);
+            vb_add_to_deferred_q (VB, ctx, vcf_seg_INFO_SF_seg, vb->idx_SF, DID_NONE);
 
             ctx->sf.next = 0; // relative to last_txt
             adjustment = 0;      
@@ -612,7 +697,7 @@ static bool vcf_seg_QD_verify_prediction (ContextP ctx, double qual_value, doubl
         return false;
 
     int pred = 100.0 * qual_value / sum_dp + add + 0.5; // note: if (100.0 * qual_value / sum_dp) decimal is exactly 0.xx5, it is rounded inconsistently in the data - some times up and sometimes down
-    qd_pred_len = sprintf (qd_pred, "%.2f", (double)pred / 100.0); // with trailing zeros if number is round
+    qd_pred_len = snprintf (qd_pred, sizeof (qd_pred), "%.2f", (double)pred / 100.0); // with trailing zeros if number is round
 
     bool pred_has_trailing_zeros = (qd_pred[qd_pred_len-1] == '0');
 
@@ -690,7 +775,7 @@ void vcf_seg_INFO_QD (VBlockP vb)
     // case: we can't generate a prediction or prediction is wrong - seg normally
     QdPredType pd;
     if (!(pd = vcf_seg_is_QD_predictable (VB_VCF, ctx, STRa(qd)))) 
-        seg_by_ctx (vb, STRa(qd), ctx, qd_len);
+        seg_add_to_local_string (vb, ctx, STRa(qd), LOOKUP_SIMPLE, qd_len);
 
     else
         seg_by_ctx (vb, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_QD, '0' + pd }, 3, ctx, qd_len);
@@ -714,9 +799,8 @@ void vcf_piz_insert_INFO_QD (VBlockVCFP vb)
             : (type == QD_PRED_INFO_DP_M001 || type == QD_PRED_SUM_DP_M001) ? -1
             :                                                                 0;
 
-
     int pred = 100.0 * qual_value / sum_dp + 0.5 + add; 
-    qd_len = sprintf (qd, "%.2f", (double)pred / 100.0); // with trailing zeros if number is round
+    qd_len = snprintf (qd, sizeof (qd), "%.2f", (double)pred / 100.0); // with trailing zeros if number is round
 
     // remove trailing zeros if we are obliged to
     if (qd[qd_len-1] == '0' && !ctx->flags.trailing_zero_ok)
@@ -740,7 +824,17 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_QD)
     ASSPIZ (ctx->qd.pred_type < NUM_QD_PRED_TYPES, 
             "Unknown pred_type=%d. %s", ctx->qd.pred_type, genozip_update_msg());
 
-    vcf_piz_defer_to_after_samples (QD);
+    if ((segconf.INFO_DP_method == BY_FORMAT_DP || segconf.INFO_DP_method == BY_BaseCounts) &&
+        (flag.drop_genotypes || flag.gt_only || flag.samples)) {
+        if (reconstruct) 
+            RECONSTRUCT ("-1", 2); 
+    
+        new_value->i = -1;
+        return HAS_NEW_VALUE;
+    }
+
+    else
+        vcf_piz_defer_to_after_samples (QD);
 
     return NO_NEW_VALUE;
 }
@@ -820,7 +914,7 @@ void vcf_piz_insert_INFO_AS_SB_TABLE (VBlockVCFP vb)
     uint16_t *sb = CTX(FORMAT_SB)->sum_sb;
 
     char as_sb_table[64];
-    int as_sb_table_len = sprintf (as_sb_table, "%u,%u|%u,%u", sb[0], sb[1], sb[2], sb[3]);
+    int as_sb_table_len = snprintf (as_sb_table, sizeof(as_sb_table), "%u,%u|%u,%u", sb[0], sb[1], sb[2], sb[3]);
 
     vcf_piz_insert_field (vb, ctx, STRa(as_sb_table), segconf.wid_AS_SB_TABLE.width);
 }

@@ -31,9 +31,9 @@ typedef packed_enum { SQT_UNKNOWN, SQT_NUKE, SQT_AMINO, SQT_NUKE_OR_AMINO } SeqT
 typedef packed_enum { ms_NONE, ms_BIOBAMBAM, ms_MINIMAP2 } msType; // type of SAM ms:i field 
 #define ms_type_NAME { "None", "biobambam", "minimap2"}
 
-typedef packed_enum { FMT_DP_DEFAULT=0, BY_AD=1, BY_SDP=2 } FormatDPMethod; // part of file format: values go into SectionHeaderGenozipHeader.segconf_FMT_DP_method
+typedef packed_enum { FMT_DP_DEFAULT=0, BY_AD=1, BY_SDP=2, BY_INFO_DP=3 } FormatDPMethod; // part of file format: values go into SectionHeaderGenozipHeader.segconf_FMT_DP_method
 
-typedef packed_enum { INFO_DP_DEFAULT, BY_FORMAT_DP } InfoDPMethod;
+typedef packed_enum { BY_FORMAT_DP=0, INFO_DP_DEFAULT=1, BY_BaseCounts=2 } InfoDPMethod; // part of file format: values go into SectionHeaderGenozipHeader.segconf_INF_DP_method since 15.0.52
 
 typedef packed_enum { VCF_QUAL_DEFAULT, VCF_QUAL_local, VCF_QUAL_by_RGQ, VCF_QUAL_mated, VCF_QUAL_by_GP } VcfQualMethod;
 
@@ -255,7 +255,7 @@ typedef struct {
     VcfQualMethod vcf_QUAL_method;
     uint8_t vcf_QUAL_decimals;
     bool vcf_QUAL_truncate_trailing_zeros;
-    FieldWidth wid_AC, wid_MLEAC, wid_AN, wid_AF, wid_SF, wid_QD, wid_DP, wid_AS_SB_TABLE, wid_ID, wid_QUAL; // most common width obversed in segconf, for VCF INFO fields that are inserted in vcf_piz_container_cb 
+    FieldWidth wid_AC, wid_MLEAC, wid_AN, wid_AF, wid_SF, wid_QD, wid_DP, wid_AS_SB_TABLE, wid_ID, wid_QUAL, wid_BaseCounts; // most common width obversed in segconf, for VCF INFO fields that are inserted in vcf_piz_container_cb 
 
     // FASTQ
     union {
@@ -319,6 +319,7 @@ extern rom VCF_QUAL_method_name (VcfQualMethod method);
 extern rom VCF_INFO_method_name (VcfInfoMethod method);
 extern rom GQ_method_name (GQMethodType method);
 extern rom FMT_DP_method_name (FormatDPMethod method);
+extern rom INFO_DP_method_name (InfoDPMethod method);
 extern rom RG_method_name (RGMethod method);
 extern void segconf_test_sorted (VBlockP vb, WordIndex prev_line_chrom, PosType32 pos, PosType32 prev_line_pos);
 extern void segconf_test_multiseq (VBlockP vb, Did nonref);

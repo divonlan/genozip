@@ -50,7 +50,8 @@ typedef struct DispatcherData {
 } DispatcherData;
 
 // variables that persist across multiple dispatchers run sequentially
-static TimeSpecType profiler_timer; // wallclock
+static TimeSpecType start_time; // wallclock
+static bool start_time_initialized = false;
 
 static Dispatcher main_dispatcher = 0; // dispatcher that updates percentage progress
 
@@ -78,7 +79,8 @@ void dispatcher_increment_progress (rom where, int64_t increment)
 
 void dispatcher_start_wallclock (void)
 {
-    clock_gettime (CLOCK_REALTIME, &profiler_timer);
+    clock_gettime (CLOCK_REALTIME, &start_time);
+    start_time_initialized = true;
 }
 
 Dispatcher dispatcher_init (rom task_name, 
@@ -116,7 +118,7 @@ Dispatcher dispatcher_init (rom task_name,
     vb_create_pool (pool_type, pool_type == POOL_MAIN ? "MAIN" : "BGZF");
 
     if (filename) // note: when unbinding, we print this in dispatcher_resume() 
-        progress_new_component (filename, prog_msg, test_mode); 
+        progress_new_component (filename, prog_msg, test_mode, start_time_initialized ? &start_time : NULL); 
 
     d->pool_in_use_at_init = vb_pool_get_num_in_use (pool_type, NULL); // we need to return the pool after dispatcher in the condition we received it...
 
@@ -131,9 +133,13 @@ void dispatcher_allow_out_of_order (Dispatcher d)
 
 void dispatcher_pause (Dispatcher d)
 {
+    ASSERT0 (!progress_has_component(), "expecting progress to be finalized");
+
     d->paused = true;
     d->input_exhausted = false;
     d->next_vb_i--;
+
+    start_time_initialized = false;
 }
 
 // PIZ: reinit dispatcher, used when splitting a genozip file to its components, using a single dispatcher object
@@ -145,7 +151,7 @@ void dispatcher_resume (Dispatcher d, uint32_t target_progress)
     d->target_progress = target_progress;
 
     if (d->paused) 
-        progress_new_component (d->filename, "0\%", flag.test);    
+        progress_new_component (d->filename, "0\%", flag.test, start_time_initialized ? &start_time : NULL);    
 
     d->paused          = false;
 }
@@ -196,10 +202,12 @@ void dispatcher_finish (Dispatcher *dd_p, uint32_t *last_vb_i, bool cleanup_afte
     int32_t id_in_use;
     uint32_t pool_in_use_at_finish = vb_pool_get_num_in_use (d->pool_type, &id_in_use);
     // note for piz: we have 1 at start (wvb) and 0 at finish
-    ASSERT (pool_in_use_at_finish <= d->pool_in_use_at_init, "Dispatcher \"%s\" leaked VBs: pool_in_use_at_init=%u pool_in_use_at_finish=%u (one VB in use is vb_id=%u)",
+    ASSERT (pool_in_use_at_finish <= d->pool_in_use_at_init, "Dispatcher \"%s\" leaked VBs: pool_in_use_at_init=%u pool_in_use_at_finish=%u (one VB in use is vb_id=%d)",
             d->task_name, d->pool_in_use_at_init, pool_in_use_at_finish, id_in_use);
 
     FREE (*dd_p);
+
+    start_time_initialized = false;
 }
 
 VBlockP dispatcher_generate_next_vb (Dispatcher d, VBIType vb_i, CompIType comp_i)

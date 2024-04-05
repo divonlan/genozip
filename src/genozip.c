@@ -57,6 +57,8 @@ CommandType command = NO_COMMAND, primary_command = NO_COMMAND;
 
 uint32_t global_max_threads = DEFAULT_MAX_THREADS; 
 
+static Buffer input_files_buf = { .name = "input_files" };
+
 #define MAIN(format, ...) ({ if (!flag.explicit_quiet && (flag.echo || flag.test_i)) { progress_newline(); fprintf (stderr, "%s[%u]: ",     command_name(), getpid()); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } })
 #define MAIN0(string)     ({ if (!flag.explicit_quiet && (flag.echo || flag.test_i)) { progress_newline(); fprintf (stderr, "%s[%u]: %s\n", command_name(), getpid(), string); } })
 
@@ -109,7 +111,7 @@ void noreturn main_exit (bool show_stack, bool is_error)
         if (is_error) {
             close (1);   // prevent other threads from outputting to terminal (including buffered output), obscuring our error message
             close (2);
-            url_kill_curl (NULL);  /* <--- BREAKPOINT BRK */
+            url_close_remote_file_stream (NULL);  // <--- BREAKPOINT BRK
             file_kill_external_compressors(); 
         
             // cancel all other compute threads before closing z_file, so other threads don't attempt to access it 
@@ -291,15 +293,17 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
     // no need to waste time freeing memory of the last file, the process termination will do that
     flag.let_OS_cleanup_on_exit = is_last_z_file && !arch_is_valgrind(); 
 
-    file_close (&z_file);
-    is_first_z_file = false;
-
-    if (digest_piz_has_it_failed()) exit_on_error (false); // error message already displayed in piz_verify_digest_one_txt_file
-
+    // note: must be before file_close, bc is_dropped_buf are Buffers embedded in is in z_file->vb_info, 
+    // but in the wvb buffer list, so they must be destroyed first
     if (wvb && wvb->in_use) {
         profiler_add (wvb);
         vb_destroy_vb (&wvb);
     } 
+
+    file_close (&z_file);
+    is_first_z_file = false;
+
+    if (digest_piz_has_it_failed()) exit_on_error (false); // error message already displayed in piz_verify_digest_one_txt_file
 
     // case --replace: now that the file was reconstructed, we can remove the genozip file
     if (flag.replace) // note: only available in genounzip, not genocat, and conflicting flags are already blocks
@@ -328,12 +332,12 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
     char t_offset_str[24]={}, t_size_str[24]={}, sendto_str[24]={};
     
     if (t_size) {
-        sprintf (t_offset_str, "%"PRId64, t_offset);
-        sprintf (t_size_str,   "%"PRId64, t_size);
+        snprintf (t_offset_str, sizeof (t_offset_str), "%"PRId64, t_offset);
+        snprintf (t_size_str, sizeof (t_size_str), "%"PRId64, t_size);
     }
 
     if (flag.sendto)
-        sprintf (sendto_str, "%"PRId64, flag.sendto);
+        snprintf (sendto_str, sizeof (sendto_str), "%"PRId64, flag.sendto);
 
     // case: we need to execute logic after the test - run in a separate process and wait for its completion
     if (!is_last_txt_file || // come back - we have more files to compress
@@ -367,6 +371,7 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
                                       flag.show_aligner  ? "--show-aligner"   : SKIP_ARG,
                                       flag.show_threads  ? "--show-threads"   : SKIP_ARG,
                                       flag.debug_threads ? "--debug-threads"  : SKIP_ARG,
+                                      flag.debug_valgrind? "--debug-valgrind" : SKIP_ARG,
                                       flag.echo          ? "--echo"           : SKIP_ARG,
                                       flag.verify_codec  ? "--verify-codec"   : SKIP_ARG,
                                       flag.debug_lines   ? "--debug-lines"    : SKIP_ARG,
@@ -387,8 +392,8 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
                                       // ↓↓↓ Don't forget to add below too ↓↓↓
         
         // wait for child process to finish, so that the shell doesn't print its prompt until the test is done
-        int exit_code = stream_wait_for_exit (test);
-
+        int exit_code = stream_close (&test, STREAM_WAIT_FOR_PROCESS);
+    
         TEMP_VALUE (primary_command, TEST_AFTER_ZIP); // make exit_on_error NOT delete the genozip file in this case, so its available for debugging
         ASSERT (!exit_code, "%s: test exited with status: \"%s\"\n", global_cmd, exit_code_name (exit_code)); // exit with error status 
         RESTORE_VALUE (primary_command); // recover in case of more non-concatenated files
@@ -416,6 +421,7 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
         if (flag.show_aligner)  argv[argc++] = "--show-aligner";
         if (flag.show_threads)  argv[argc++] = "--show-threads";
         if (flag.debug_threads) argv[argc++] = "--debug-threads";
+        if (flag.debug_valgrind)argv[argc++] = "--debug-valgrind";
         if (flag.echo)          argv[argc++] = "--echo";
         if (flag.verify_codec)  argv[argc++] = "--verify-codec";
         if (flag.debug_lines)   argv[argc++] = "--debug-lines";
@@ -604,7 +610,7 @@ static int main_sort_input_filenames (const void *fn1, const void *fn2)
 }
 
 static void main_get_filename_list (unsigned num_files, char **filenames,  // in 
-                                    unsigned *num_z_files, BufferP fn_buf) // out
+                                    unsigned *num_z_files) // out
 {
     if (!num_files && !flag.files_from) {
         flags_update (0, NULL);
@@ -612,7 +618,7 @@ static void main_get_filename_list (unsigned num_files, char **filenames,  // in
     }
 
     // add names from command line
-    buf_append (evb, *fn_buf, char *, filenames, num_files, NULL);
+    buf_append (evb, input_files_buf, char *, filenames, num_files, NULL);
 
     // set argv to file names
     if (flag.files_from) {
@@ -624,13 +630,13 @@ static void main_get_filename_list (unsigned num_files, char **filenames,  // in
             for (int i=0; i < n_lines; i++)
                 lines[i] += 2;
 
-        buf_append (evb, *fn_buf, char *, lines, n_lines, NULL);
+        buf_append (evb, input_files_buf, char *, lines, n_lines, NULL);
     }
 
     // expand directories if --subdirs 
-    for (unsigned i=0; i < fn_buf->len; i++) { // len increases during the loop as we add more files which may themselves be directories
+    for (unsigned i=0; i < input_files_buf.len; i++) { // len increases during the loop as we add more files which may themselves be directories
 
-        char *fn = *B(char *, *fn_buf, i);
+        char *fn = *B(char *, input_files_buf, i);
         unsigned fn_len = strlen (fn);
         if (fn[fn_len-1] == '/') 
             fn[--fn_len] = 0; // change "mydir/" to "mydir"
@@ -646,9 +652,10 @@ static void main_get_filename_list (unsigned num_files, char **filenames,  // in
             while ((ent = readdir(dir))) {
                 if (ent->d_name[0] =='.') continue; // skip . ..  and hidden files
 
-                char *ent_fn = MALLOC (strlen(ent->d_name) + fn_len + 2);
-                sprintf (ent_fn, "%.*s/%s", fn_len, fn, ent->d_name);
-                buf_append (evb, *fn_buf, char *, &ent_fn, 1, NULL);
+                int ent_fn_size = strlen(ent->d_name) + fn_len + 3;
+                char *ent_fn = MALLOC (ent_fn_size);
+                snprintf (ent_fn, ent_fn_size, "\1%.*s/%s", fn_len, fn, ent->d_name); // \1 to mark it as MALLOCed
+                buf_append (evb, input_files_buf, char *, &ent_fn, 1, NULL);
             }
             closedir(dir);    
         } 
@@ -657,22 +664,32 @@ static void main_get_filename_list (unsigned num_files, char **filenames,  // in
 
 
         // remove the directory from the list of files to compress
-        buf_remove (*fn_buf, char *, i, 1);
+        buf_remove (input_files_buf, char *, i, 1);
+        if (i < input_files_buf.count) input_files_buf.count--; 
         i--;
     }
 
-    ASSINP0 (fn_buf->len, "No work for me :( all files listed are directories.");
+    ASSINP0 (input_files_buf.len, "No work for me :( all files listed are directories.");
 
-    flags_update (fn_buf->len, B1ST (rom , *fn_buf));
+    flags_update (input_files_buf.len, B1ST (rom , input_files_buf));
 
-    *num_z_files = flag.pair ? (fn_buf->len / 2) : fn_buf->len; // note: flag.pair is only available in ZIP
+    *num_z_files = (IS_ZIP && flag.pair) ? (input_files_buf.len / 2) 
+                 : (IS_ZIP && flag.deep) ? 1
+                 : input_files_buf.len; 
 
     // sort files by data type to improve VB re-using, and refhash-using files in the end to improve reference re-using
     if (!flag.deep) {
         SET_FLAG (quiet); // suppress warnings
-        qsort (B1ST (char *, *fn_buf), fn_buf->len, sizeof (char *), main_sort_input_filenames);
+        qsort (B1ST (char *, input_files_buf), input_files_buf.len, sizeof (char *), main_sort_input_filenames);
         RESTORE_FLAG (quiet);
     }
+}
+
+void main_destroy_filename_list (void)
+{
+    for_buf (rom, fn, input_files_buf)
+        if ((*fn)[0] == '\1') // MALLOCed
+            FREE (*fn);
 }
 
 static void main_load_reference (rom filename, bool is_first_file, bool is_last_z_file)
@@ -805,9 +822,10 @@ int main (int argc, char **argv)
     }
 
     unsigned num_z_files=0;
-    static Buffer input_files_buf = { .name = "input_files" };
     
-    if (IS_ZIP || IS_PIZ || IS_SHOW_HEADERS || IS_LIST) main_get_filename_list (argc - optind, &argv[optind], &num_z_files, &input_files_buf);
+    if (IS_ZIP || IS_PIZ || IS_SHOW_HEADERS || IS_LIST) 
+        main_get_filename_list (argc - optind, &argv[optind], &num_z_files);
+
     ARRAY (rom , input_files, input_files_buf);
 
     // determine how many threads we have - either as specified by the user, or by the number of cores
@@ -849,6 +867,8 @@ int main (int argc, char **argv)
         if (flag.show_filename) iprintf ("%s:\n", next_input_file ? next_input_file : "(standard input)");
 
         if (next_input_file && !strcmp (next_input_file, "-")) next_input_file = NULL; // "-" is stdin too
+
+        if (next_input_file && next_input_file[0] == '\1') next_input_file++; // skip "MALLOC indicator"
 
         // // (bug 339) On Windows, we redirect files from stdin - For binary files \n is converted to \r\n. For
         // // textual files, if a \r\n appears in the first characters read directly in file_open_txt_read, then we wierdly
@@ -909,8 +929,8 @@ int main (int argc, char **argv)
 
     ASSINP0 (flag.no_biopsy_line, "biopsy line not found, try a lower number");
 
-    if (arch_is_valgrind()) // when testing with valgrind, release memory we normally intentionally leak, to expose true leaks
-        buf_destroy (input_files_buf);
-
+    if (arch_is_valgrind())  // when testing with valgrind, release memory we normally intentionally leak, to expose true leaks
+        main_destroy_filename_list();
+ 
     exit_ok;
 }

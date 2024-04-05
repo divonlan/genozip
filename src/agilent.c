@@ -85,9 +85,9 @@ void agilent_seg_QX (VBlockP vb, ContextP ctx, STRp(qx), unsigned add_bytes)
 // e.g. "FFF FDF" (used for SAM and FASTQ)
 SPECIAL_RECONSTRUCTOR (agilent_special_AGENT_QX)
 {
-    reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, (char[]){ SNIP_LOOKUP, '3'}, 2, reconstruct, __FUNCLINE);
+    reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, (char[]){ SNIP_LOOKUP, '3', 0}, 2, reconstruct, __FUNCLINE); // note: nul-termianted as expected of a dictionary snip
     if (reconstruct) RECONSTRUCT1 (' ');
-    reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, (char[]){ SNIP_LOOKUP, '3'}, 2, reconstruct, __FUNCLINE);
+    reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, (char[]){ SNIP_LOOKUP, '3', 0}, 2, reconstruct, __FUNCLINE);
     
     return NO_NEW_VALUE;
 }

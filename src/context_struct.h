@@ -100,6 +100,8 @@ typedef struct Context {
                                    // ZIP: vctx: seg_array, sam_seg_array_field_get_con cache a container.
         Buffer ctx_cache;          // PIZ: vctx: used to cached Contexts of Multiplexers and other dict_id look ups
         Buffer chrom2ref_map;      // ZIP (vctx & zctx), PIZ(zctx): Used by CHROM and contexts with a dict alias to it. Mapping from user file chrom to alternate chrom in reference file (for ZIP-VB: new chroms in this VB) - incides match ctx->nodes
+        Buffer snip_cache;         // ZIP: vctx: used by contexts that call seg_delta_vs_other_local*
+
         // CODECs
         Buffer packed;             // PIZ: vctx: used by contexts that compressed CODEC_ACTG               
         Buffer subdicts;           // ZIP/PIZ: zctx: Used by contexts that set ctx->subdicts_section: QUAL with PACB codec, iq:Z
@@ -190,9 +192,9 @@ typedef struct Context {
             uint32_t SF_by_GT; 
         } sf;    
         thool line_has_RGQ;         // ZIP/PIZ: FORMAT_RGQ : GVCF
-        struct {                    // ZIP/PIZ: INFO_DP:
-            int32_t by_format_dp;   //   this line was segged vs sum of FORMAT/DP
-            int32_t sum_format_dp;  //   sum of FORMAT/DP of samples in this line ('.' counts as 0).
+        struct {                    // 
+            bool is_deferred;       //   PIZ: reconstruction deferred to after samples
+            int32_t sum_format_dp;  //   ZIP/PIZ: sum of FORMAT/DP of samples in this line ('.' counts as 0).
         } dp;
         struct {
             uint32_t count_ht;      // ZIP/PIZ: INFO/AN: sum of non-. haplotypes in FORMAT/GT, used to calculate INFO/AN
@@ -201,6 +203,9 @@ typedef struct Context {
             uint32_t sum_dp_with_dosage; // sum of FORMAT/DP of samples in this line and dosage >= 1
             uint32_t pred_type;     // predictor type
         } qd;
+        struct {
+            bool is_deferred;       // PIZ: reconstruction deferred to after samples
+        } BaseCounts;
         struct {                    // PIZ: VCF_QUAL
             bool by_GP;             // QUAL_BY_GP used for this line 
             uint8_t decimals;

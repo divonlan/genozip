@@ -35,7 +35,7 @@ void vcf_sv_zip_initialize (Did *tw_dids, int num_tw_dids)
     seg_prepare_snip_special_other (VCF_SPECIAL_LEN_OF, _INFO_DUPSVINSSEQ, dupsvinslen_snip, 0);
     seg_prepare_snip_other (SNIP_COPY, _INFO_CIPOS, 0, 0, snip_copy_cipos);
 
-    cipos_snip_len = sprintf (cipos_snip, "%.*s%s", STRf(homlen_snip), "0,"); // LEN_OF with "0," prefix
+    cipos_snip_len = snprintf (cipos_snip, sizeof (cipos_snip), "%.*s%s", STRf(homlen_snip), "0,"); // LEN_OF with "0," prefix
 }   
 
 void vcf_sv_seg_initialize (VBlockVCFP vb, Did *tw_dids, int num_tw_dids)

@@ -150,7 +150,7 @@ typedef struct VBlockVCF {
     #define first_idx idx_AN        // ZIP: INFO fields indices within INFO
     // IMPORTANT: when adding, add to X() in vcf_seg_info_subfields
     int16_t idx_AN, idx_AC, idx_AF, idx_MLEAC, idx_MLEAF, idx_AC_Hom, idx_AC_Het, idx_AC_Hemi, idx_QD, idx_DP, idx_SF, 
-            idx_AS_SB_TABLE, idx_END, idx_SVLEN, idx_CIPOS, 
+            idx_AS_SB_TABLE, idx_END, idx_SVLEN, idx_CIPOS, idx_BaseCounts,
             idx_SVTYPE, idx_HOMSEQ, idx_DUPHOMSEQ, idx_SVINSSEQ, idx_DUPSVINSSEQ, idx_LEFT_SVINSSEQ;  
     #define has(f)   (vb->idx_##f != -1)
     #define after_idx mux_PLn
@@ -196,6 +196,8 @@ extern VcfVersion vcf_header_get_version (void);
 
 #define BII(x) B(InfoItem, CTX(VCF_INFO)->info_items, vb->idx_##x)
 
+extern void vcf_seg_array_of_N_ALTS_numbers (VBlockVCFP vb, ContextP ctx, STRp(value), StoreType type);
+
 // POS stuff
 extern void vcf_seg_pos (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(pos_str));
 extern void vcf_seg_INFO_END (VBlockVCFP vb, ContextP end_ctx, STRp(end_str));
@@ -206,7 +208,6 @@ extern void vcf_segconf_finalize_QUAL (VBlockVCFP vb);
 extern void vcf_piz_insert_QUAL_by_GP (VBlockVCFP vb);
 
 // AC / AF / AN
-extern void vcf_AC_AF_AN_zip_initialize (void);
 extern void vcf_seg_INFO_AC (VBlockVCFP vb, ContextP ac_ctx, STRp(ac_str));
 extern void vcf_seg_INFO_AN (VBlockVCFP vb);
 extern void vcf_seg_INFO_MLEAC (VBlockVCFP vb, ContextP ac_ctx, STRp(ac_str));
@@ -265,7 +266,7 @@ extern void vcf_seg_FORMAT_GQ (VBlockVCFP vb);
 extern void vcf_gatk_zip_initialize (void);
 extern void vcf_gatk_seg_initialize (VBlockVCFP vb);
 extern void vcf_seg_INFO_RAW_MQandDP (VBlockVCFP vb, ContextP ctx, STRp(value));
-extern bool vcf_seg_INFO_BaseCounts (VBlockVCFP vb, ContextP ctx_basecounts, STRp(value)); // returns true if caller still needs to seg 
+extern void vcf_seg_INFO_BaseCounts (VBlockP vb);
 extern void vcf_seg_INFO_AS_SB_TABLE (VBlockP vb);
 extern void vcf_piz_sum_SB_for_AS_SB_TABLE (VBlockP vb, STRp(recon));
 extern void vcf_piz_insert_INFO_AS_SB_TABLE (VBlockVCFP vb);
@@ -285,6 +286,7 @@ extern void vcf_seg_sum_DP_for_QD (VBlockVCFP vb, int64_t value);
 extern void vcf_seg_INFO_QD (VBlockP vb);
 extern void vcf_piz_sum_DP_for_QD (VBlockP vb, STRp(recon));
 extern void vcf_piz_insert_INFO_QD (VBlockVCFP vb);
+extern void vcf_piz_insert_INFO_BaseCounts_by_AD (VBlockVCFP vb);
 
 // INFO stuff
 
@@ -442,6 +444,7 @@ extern void vcf_seg_INFO_X_HIN (VBlockVCFP vb, ContextP ctx, STRp(hin_str));
 extern void vcf_seg_INFO_X_HIL (VBlockVCFP vb, ContextP ctx, STRp(hil_str));
 extern void vcf_seg_INFO_FILTERED_HAPS (VBlockVCFP vb, ContextP ctx, STRp(value));
 extern void vcf_seg_INFO_VARIANT_TYPE (VBlockVCFP vb, ContextP ctx, STRp(vt));
+extern void vcf_seg_INFO_X_GCC (VBlockVCFP vb, ContextP ctx, STRp(x));
 
 // Platypus stuff
 extern void vcf_platypus_zip_initialize (void);

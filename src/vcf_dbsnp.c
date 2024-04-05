@@ -14,8 +14,10 @@ sSTRl(delta_POS_snip, 32);
 
 void vcf_dbsnp_zip_initialize (void)
 {
-    seg_prepare_snip_other (SNIP_OTHER_DELTA, _VCF_ID,  true, 0, delta_ID_snip);   // copies numeric part of ID, expecting delta to be 0
-    seg_prepare_snip_other (SNIP_OTHER_DELTA, _VCF_POS, true, 0, delta_POS_snip);
+    DO_ONCE {
+        seg_prepare_snip_other (SNIP_OTHER_DELTA, _VCF_ID,  true, 0, delta_ID_snip);   // copies numeric part of ID, expecting delta to be 0
+        seg_prepare_snip_other (SNIP_OTHER_DELTA, _VCF_POS, true, 0, delta_POS_snip);
+    }
 }
 
 void vcf_dbsnp_seg_initialize (VBlockVCFP vb)

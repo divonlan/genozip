@@ -299,11 +299,6 @@ static void writer_init_vb_info (void)
             v->num_lines = BGEN32 (header.v13_top_level_repeats);
         }
 
-        // we add is_dropped_buf to the evb buffer list. allocation will occur in main thread when writer 
-        // create the plan, for VBs on the boundary of head/tail/lines, otherwise in reconstruction compute thread.
-        if (flag.maybe_lines_dropped_by_reconstructor || flag.maybe_lines_dropped_by_writer)
-            buf_set_promiscuous_do (wvb, &v->is_dropped_buf, "is_dropped_buf", __FUNCLINE);
-
         // set pairs (used even if not interleaving)
         if (t->pair == PAIR_R1) 
             v->pair_vb_i = vb_i + num_vbs_R;
@@ -371,6 +366,12 @@ static void writer_init_vb_info (void)
         }
 
         #undef DROP
+
+        // we add is_dropped_buf to the wvb buffer list. allocation will occur in main thread when writer 
+        // create the plan, for VBs on the boundary of head/tail/lines, otherwise in reconstruction compute thread.
+        if (v->needs_recon && !flag.show_recon_plan && 
+            (flag.maybe_lines_dropped_by_reconstructor || flag.maybe_lines_dropped_by_writer))
+            buf_set_promiscuous_do (wvb, &v->is_dropped_buf, "is_dropped_buf", __FUNCLINE);
         
         // conditions in which VB should be written. if false, but needs_recon, VB is still read, but not written (eg reading aux files)
         v->needs_write = 
@@ -1367,10 +1368,6 @@ static void writer_start_writing (CompIType unbind_comp_i)
     writer_thread = threads_create (writer_main_loop, wvb);
 }
 
-void writer_destroy_is_vb_info (void)
-{
-}
-
 // PIZ main thread: wait for writer thread to finish writing a single txt_file
 void writer_finish_writing (bool is_last_txt_file)
 {
@@ -1406,7 +1403,7 @@ static bool writer_handover (VbInfo *v, VBlockP vb)
     mutex_unlock (v->wait_for_data); 
 
     if (flag_is_show_vblocks (PIZ_TASK_NAME)) 
-        iprintf ("HANDED_OVER(task=%s id=%u) vb_i=%s/%u txt_data.len=%u\n", PIZ_TASK_NAME, vb->id, comp_name(v->comp_i), vb->vblock_i, Ltxt);
+        iprintf ("HANDED_OVER(task=%s id=%d) vb_i=%s/%u txt_data.len=%u\n", PIZ_TASK_NAME, vb->id, comp_name(v->comp_i), vb->vblock_i, Ltxt);
 
     return true;
 }

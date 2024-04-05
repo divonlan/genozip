@@ -51,9 +51,11 @@ uint16_t buf_decrement_user_count (BufferP buf)
 
 #define buf_unlock_and_decrement_lock_links                                             \
     if (spinlock) {                                                                     \
-        ASSERT ((buf)->spinlock->link_count, "spinlock->link_count is 0 for %s", buf->name); \
-        if (__atomic_sub_fetch (&spinlock->link_count, 1, __ATOMIC_RELAXED) == 0)       \
+        ASSERT ((buf)->spinlock->link_count, "spinlock->link_count is 0 for %s", buf->name);            \
+        if (__atomic_sub_fetch (&spinlock->link_count, 1, __ATOMIC_RELAXED) == 0) {\
             FREE ((buf)->spinlock);                                                     \
+            (buf)->shared = false;                                                      \
+        }                                                                               \
         else                                                                            \
             __atomic_clear (&spinlock->lock, __ATOMIC_RELEASE);                         \
         spinlock = NULL;                                                                \
@@ -80,7 +82,7 @@ rom buf_type_name (ConstBufferP buf)
         return names[buf->type];
     else {
         char *s = malloc (32); // used for error printing
-        sprintf (s, "invalid_buf_type=%u", buf->type);
+        snprintf (s, 32, "invalid_buf_type=%u", buf->type);
         return s;
     }
 }
@@ -100,7 +102,7 @@ const BufDescType buf_desc (ConstBufferP buf)
         tag_name = TAG_NAME (z_file->contexts);
 
     BufDescType desc; // use static memory instead of malloc since we could be in the midst of a memory issue when this is called
-    sprintf (desc.s, "\"%s\"%.20s memory=%p data=%p param=%"PRId64"(0x%016"PRIx64") len=%"PRIu64" size=%"PRId64" type=%s shared=%s%.16s promiscuous=%s spinlock=%p%.20s%.20s allocated in %s:%u%.20s", 
+    snprintf (desc.s, sizeof (desc.s), "\"%s\"%.20s memory=%p data=%p param=%"PRId64"(0x%016"PRIx64") len=%"PRIu64" size=%"PRId64" type=%s shared=%s%.16s promiscuous=%s spinlock=%p%.20s%.20s allocated in %s:%u%.20s", 
              buf->name ? buf->name : "(no name)", cond_str (tag_name, " ctx=", tag_name), 
              buf->memory, buf->data, buf->param, buf->param, buf->len, (uint64_t)buf->size, buf_type_name (buf), 
              TF(buf->shared), cond_int (buf->memory && buf->vb, " users=", BOLCOUNTER(buf)), TF(buf->promiscuous),
@@ -140,7 +142,7 @@ void buf_verify_do (ConstBufferP buf, rom msg, FUNCLINE)
 {
     if (!buf || !buf->memory) return;
 
-    BufferSpinlock *spinlock = buf->promiscuous ? buf_lock_promiscuous (buf, func, code_line) : NULL; // prevent frees or reallocs while we're testing
+    BufferSpinlockP spinlock = buf->promiscuous ? buf_lock_promiscuous (buf, func, code_line) : NULL; // prevent frees or reallocs while we're testing
     if (buf->promiscuous && !spinlock) return; // by the time we acquired the lock, buf was already freed
 
     buf_verify_integrity (buf, __FUNCLINE, msg);
@@ -221,7 +223,7 @@ void buf_alloc_do (VBlockP vb, BufferP buf, uint64_t requested_size,
 
     // if this happens: either 1. the wrong VB was given now, or when initially allocating this buffer OR
     // 2. VB was REALLOCed in vb_get_vb, but for some reason this buf->vb was not updated because it was not on the buffer list
-    ASSERT (!buf->vb || vb == buf->vb, "called from %s:%u: buffer=%p has wrong VB: vb=%p (id=%u vblock_i=%u) but buf->vb=%p", 
+    ASSERT (!buf->vb || vb == buf->vb, "called from %s:%u: buffer=%p has wrong VB: vb=%p (id=%d vblock_i=%u) but buf->vb=%p", 
             func, code_line, buf, vb, vb->id, vb->vblock_i, buf->vb);
 
     ASSERT (vb != evb || buf->promiscuous || threads_am_i_main_thread(), "called from %s:%u: A non-main thread is attempting to allocate an evb buffer \"%s\" with promiscuous=false", 
@@ -231,14 +233,17 @@ void buf_alloc_do (VBlockP vb, BufferP buf, uint64_t requested_size,
 
     // CASE 2: initial allocation: exactly at requested size
     if (!buf->memory) {
-        ASSERT (requested_size <= MAX_BUFFER_SIZE, "called from %s:%u: Requested %s bytes which is beyond the Buffer maximum of %s",
-                func, code_line, str_int_commas (requested_size).s, str_int_commas (MAX_BUFFER_SIZE).s);
+        // round up to 64 bit boundary to avoid aliasing errors with the overflow indicator
+        uint64_t new_size = MIN_(MAX_BUFFER_SIZE, ROUNDUP8(requested_size));
 
-        char *memory = (char *)buf_low_level_malloc (requested_size + CTL_SIZE, false, func, code_line);
+        ASSERT (new_size >= requested_size, "called from %s:%u: requested too much memory=%s for buf=%s. vb->vblock_i=%u", 
+                func, code_line, buf_desc(buf).s, str_int_commas (requested_size).s, vb->vblock_i); 
+
+        char *memory = (char *)buf_low_level_malloc (new_size + CTL_SIZE, false, func, code_line);
 
         buf->type = BUF_REGULAR;
 
-        buf_init (buf, memory, requested_size, func, code_line, name);
+        buf_init (buf, memory, new_size, func, code_line, name);
         
         if (buf != &vb->buffer_list) { // buffer_list buffer is added in vb_get_vb / vb_initialize_nonpool_vb
             if (!buf->promiscuous) // if promiscuous or buffer_list, already added
@@ -258,8 +263,8 @@ void buf_alloc_do (VBlockP vb, BufferP buf, uint64_t requested_size,
     // grow us requested - rounding up to 64 bit boundary to avoid aliasing errors with the overflow indicator
     uint64_t new_size = MIN_(MAX_BUFFER_SIZE, ROUNDUP8((uint64_t)(requested_size * grow_at_least_factor)));
 
-    ASSERT (new_size >= requested_size, "called from %s:%u: allocated too little memory for buffer %s: requested=%"PRIu64", allocated=%"PRIu64". vb->vblock_i=%u", 
-            func, code_line, buf_desc (buf).s, requested_size, new_size, vb->vblock_i); // floating point paranoia
+    ASSERT (new_size >= requested_size, "called from %s:%u: allocated too little memory for buffer %s: requested=%s, allocated=%s. vb->vblock_i=%u", 
+            func, code_line, buf_desc (buf).s, str_int_commas (requested_size).s, str_int_commas (new_size).s, vb->vblock_i); // floating point paranoia
 
     // CASE 3: realloc of a non-shared - use realloc that will extend instead of malloc & copy if possible 
     if (!buf->shared) {    
@@ -459,6 +464,8 @@ void buf_free_do (BufferP buf, FUNCLINE)
         
             buf_lock_if (buf, buf->spinlock);
 
+            ASSERT (!buf->spinlock || buf->spinlock->link_count == 1, "Cannot buf_free and overlaid buffer: use buf_destroy: %s", buf_desc (buf).s);
+
             buf_verify_integrity (buf, func, code_line, "buf_free_do");
 
             uint16_t user_count = buf_user_count (buf);
@@ -499,7 +506,7 @@ void buf_free_do (BufferP buf, FUNCLINE)
             break;
 
         case BUF_SHM:
-            buf_reset (buf);
+            *buf = (Buffer){}; // note: SHM buffers are not in buffer_list, so we must zero buf->vb
             break;
 
         default:

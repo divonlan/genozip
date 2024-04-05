@@ -42,8 +42,11 @@ sSTRl(con_id_bnd_snip, 64);
 
 void vcf_pbsv_zip_initialize (void)
 {
-    container_prepare_snip ((ContainerP)&id_bnd_con, 0, 0, qSTRa(con_id_bnd_snip));
-
+    DO_ONCE {
+        container_prepare_snip ((ContainerP)&id_bnd_con, 0, 0, qSTRa(con_id_bnd_snip));
+    }
+    
+    // re-initialize for every file, as SV type might change
     segconf.MATEID_method = MATE_PBSV;
 
     vcf_sv_zip_initialize (tw_dids, NUM_PBSV_TWs);
@@ -77,7 +80,7 @@ StrTextLong vcf_pbsv_get_mate_id (STRp(id), uint32_t *len/*out*/)
     str_split (id+9, id_len-9, 2, '-', id_item, true);
     if (!n_id_items) return mate_id; // failed   
 
-    *len = sprintf (mate_id.s, "pbsv.BND.%.*s-%.*s", STRfi(id_item, 1), STRfi(id_item, 0));
+    *len = snprintf (mate_id.s, sizeof(mate_id.s), "pbsv.BND.%.*s-%.*s", STRfi(id_item, 1), STRfi(id_item, 0));
 
     return mate_id;
 }

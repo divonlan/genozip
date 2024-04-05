@@ -218,7 +218,7 @@ bool ref_cache_initialize_genome (Reference ref)
         PROCESS_INFORMATION pi = {};
         rom exec = arch_get_executable().s;
         char cmd[strlen(exec) + 64];
-        sprintf (cmd, "%s --hold-cache=%"PRIu64, exec, (uint64_t)ref->cache_shm);
+        snprintf (cmd, sizeof (cmd), "%s --hold-cache=%"PRIu64, exec, (uint64_t)ref->cache_shm);
         
         ASSERT (SetHandleInformation (ref->cache_shm, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT), "SetHandleInformation failed: %s", str_win_error());
 

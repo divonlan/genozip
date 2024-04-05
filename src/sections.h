@@ -269,14 +269,17 @@ typedef struct {
             uint32_t unused2              : 1;
             uint32_t max_ploidy_for_mux   : 8; // VCF: 15.0.36
             uint32_t segconf_MATEID_method: 3; // VCF: 15.0.48
-            uint32_t unused13             : 13;
+            uint32_t segconf_INF_DP_method: 3; // VCF: 15.0.52
+            uint32_t unused13             : 10;
             
-            struct { // 64 bits. Note: number of bits must match argument of segconf_set_width()
+            struct { // Note: number of bits must match argument of segconf_set_width()
+                // when adding, also add to: 1.SegConf 2.vcf_seg_finalize_segconf 3.vcf_piz_genozip_header 4.vcf_zip_genozip_header 5.(maybe)vcf_piz_insert_field.dids
                 uint64_t AC:3, MLEAC:3, AN:3, AF:3, SF:3, QD:3, DP:3;  // VCF: 15.0.37
-                uint64_t AS_SB_TABLE : 4;     // VCF: 15.0.41
-                uint64_t ID          : 6;     // VCF: 15.0.48
-                uint64_t QUAL        : 4;     // VCF: 15.0.51
-                uint64_t unused      : 29;
+                uint64_t AS_SB_TABLE : 4;      // VCF: 15.0.41
+                uint64_t ID          : 6;      // VCF: 15.0.48
+                uint64_t QUAL        : 4;      // VCF: 15.0.51
+                uint64_t BaseCounts  : 5;      // VCF: 15.0.52
+                uint64_t unused      : 24;
             } width; 
             
             uint8_t unused[260];

@@ -19,7 +19,7 @@ void sam_seg_s1_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t s1, unsigned add_b
 {
     int32_t as;
     if (sam_seg_peek_int_field (vb, OPTION_AS_i, vb->idx_AS_i, -0x8000000, 0x7fffffff, true/*needed for delta*/, &as)) 
-        seg_delta_vs_other_do (VB, CTX(OPTION_s1_i), CTX(OPTION_AS_i), NULL, 0, s1, 255, add_bytes);
+        seg_delta_vs_other_localN (VB, CTX(OPTION_s1_i), CTX(OPTION_AS_i), s1, 255, add_bytes);
 
     else
         seg_integer_as_snip_do (VB, CTX(OPTION_s1_i), s1, add_bytes); // unlikely to be ever reached - seg as text to keep context as LT_SINGLETON

@@ -469,7 +469,18 @@ rom FMT_DP_method_name (FormatDPMethod method)
     switch (method) {
         case BY_AD          : return "BY_AD";
         case BY_SDP         : return "BY_SDP";
+        case BY_INFO_DP     : return "BY_INFO_DP";
         case FMT_DP_DEFAULT : return "DEFAULT";
+        default             : return "INVALID";
+    }
+}
+
+rom INFO_DP_method_name (InfoDPMethod method)
+{
+    switch (method) {
+        case BY_FORMAT_DP   : return "BY_FORMAT_DP";
+        case BY_BaseCounts  : return "BY_BaseCounts";
+        case INFO_DP_DEFAULT: return "DEFAULT";
         default             : return "INVALID";
     }
 }
@@ -477,9 +488,9 @@ rom FMT_DP_method_name (FormatDPMethod method)
 rom RG_method_name (RGMethod method)
 {
     switch (method) {
-        case RG_CELLRANGER : return "BY_ILLUM_QNAME";
-        case RG_DEFAULT        : return "DEFAULT";
-        default                : return "INVALID";
+        case RG_CELLRANGER : return "CELLRANGER";
+        case RG_DEFAULT    : return "DEFAULT";
+        default            : return "INVALID";
     }
 }
 

@@ -56,7 +56,8 @@ typedef struct {
     bool canceled;
     pthread_t pthread;
     rom task_name;
-    VBIType vb_i, vb_id;
+    VBIType vb_i;
+    VBID vb_id;
 } ThreadEnt;
 
 static rom __attribute__((unused)) threads_get_task_name (void)
@@ -350,7 +351,7 @@ void threads_write_log (bool to_info_stream)
     
     else {
         char filename[100];
-        sprintf (filename, "genozip.threads-log.%u", getpid());
+        snprintf (filename, sizeof (filename), "genozip.threads-log.%u", getpid());
         buf_dump_to_file (filename, &log, 1, false, false, true, false);
     }
 }

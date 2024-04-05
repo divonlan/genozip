@@ -43,7 +43,7 @@
 FileP z_file   = NULL;
 FileP txt_file = NULL;
 
-static StreamP input_decompressor = NULL; // bcftools or xz, unzip or samtools - only one at a time
+static StreamP input_decompressor = NULL; // bcftools, xz, unzip, samtools or orad - only one at a time
 static StreamP output_compressor  = NULL; // samtools (for cram), bcftools
 
 // global pointers - so the can be compared eg "if (mode == READ)"
@@ -238,7 +238,7 @@ void file_set_input_size (rom size_str)
 void file_set_input_type (rom type_str)
 {
     char ext[strlen (type_str) + 2]; // +1 for . +1 for \0
-    sprintf (ext, ".%s", type_str);
+    snprintf (ext, sizeof (ext), ".%s", type_str);
 
     str_tolower (ext, ext); // lower-case to allow case-insensitive --input argument (eg vcf or VCF)
 
@@ -285,7 +285,7 @@ static void file_redirect_output_to_stream (FileP file, char *exec_name,
                                             rom stdout_option, rom format_option_1, rom format_option_2, rom format_option_3)
 {
     char threads_str[20];
-    sprintf (threads_str, "%u", global_max_threads);
+    snprintf (threads_str, sizeof (threads_str), "%u", global_max_threads);
 
     FILE *redirected_stdout_file = NULL;
     if (!flag.to_stdout) {
@@ -293,7 +293,7 @@ static void file_redirect_output_to_stream (FileP file, char *exec_name,
         ASSINP (redirected_stdout_file, "cannot open file \"%s\": %s", file->name, strerror(errno));
     }
     char reason[100];
-    sprintf (reason, "To output a %s file", file_exts[file->type]);
+    snprintf (reason, sizeof (reason), "To output a %s file", file_exts[file->type]);
     output_compressor = stream_create (0, 0, 0, DEFAULT_PIPE_SIZE, 
                                        redirected_stdout_file, // output is redirected unless flag.to_stdout
                                        0, false, reason,
@@ -484,7 +484,7 @@ FileP file_open_txt_read (rom filename)
         case CODEC_GZ:   // we test the first few bytes of the file to differentiate between NONE, GZ and BGZIP
         case CODEC_BGZF: 
         case CODEC_NONE: {
-            file->file = file->is_remote  ? url_open (NULL, file->name)  
+            file->file = file->is_remote  ? url_open_remote_file (NULL, file->name)  
                        : file->redirected ? fdopen (STDIN_FILENO,  "rb") 
                        :                    fopen (file->name, READ);
             ASSERT (file->file, "failed to open %s: %s", file->name, strerror (errno));
@@ -573,7 +573,7 @@ fallthrough_from_cram: {}
         }
         case CODEC_BZ2:
             if (file->is_remote) {            
-                FILE *url_fp = url_open (NULL, file->name);
+                FILE *url_fp = url_open_remote_file (NULL, file->name);
                 file->file = BZ2_bzdopen (fileno(url_fp), READ); // we're abandoning the FILE structure (and leaking it, if libc implementation dynamically allocates it) and working only with the fd
             }
             else if (file->redirected) 
@@ -666,6 +666,8 @@ fallthrough_from_cram: {}
 
 fail:
     if (file->is_remote) FREE (error); 
+    FREE (file->name);
+    FREE (file->basename);
     FREE (file);
     return NULL;
 }
@@ -755,7 +757,7 @@ static void file_initialize_z_file_data (FileP file)
         Z_INIT (sag_grps);
         Z_INIT (sag_alns);
         Z_INIT (sag_qnames);
-        Z_INIT (sag_cigars);
+        Z_INIT (sag_cigars); // union with solo_data
         Z_INIT (sag_seq);
         Z_INIT (sag_qual);
         Z_INIT (deep_index_by[BY_SEQ]);
@@ -766,7 +768,7 @@ static void file_initialize_z_file_data (FileP file)
     }
     else {
         Z_INIT (sag_qual);
-        Z_INIT (sag_cigars);
+        Z_INIT (sag_cigars); // union with solo_data
     }
 
     if (flag.no_biopsy_line) // no need to initialize in --biopsy-line (as destroying it later will error)
@@ -1022,9 +1024,9 @@ static void file_index_txt (ConstFileP file)
     }
 
     if (indexing) {
-        progress_new_component (file->basename, "Indexing", false);
+        progress_new_component (file->basename, "Indexing", false, NULL);
 
-        stream_wait_for_exit (indexing);
+        stream_wait_for_exit (indexing, false);
 
         progress_finalize_component_time ("Done indexing", DIGEST_NONE);
     }
@@ -1060,7 +1062,7 @@ void file_close (FileP *file_p)
             fflush ((FILE *)file->file);
 
         else if (file->is_remote)
-            url_kill_curl ((FILE**)&file->file);
+            url_close_remote_file_stream ((FILE**)&file->file);
 
         else
             FCLOSE (file->file, file_printname (file));
@@ -1167,12 +1169,12 @@ void file_gzip (char *filename)
     int ret = 1;
 
     if (!flag.is_windows) {
-        sprintf (command, "bgzip -@%u -f \"%s\"", global_max_threads, filename);
+        snprintf (command, sizeof (command), "bgzip -@%u -f \"%s\"", global_max_threads, filename);
         ret = system (command);
     }
     
     if ((ret && errno == ENOENT) || flag.is_windows) { // no bgzip - try pigz
-        sprintf (command, "pigz -f \"%s\"", filename);
+        snprintf (command, sizeof (command), "pigz -f \"%s\"", filename);
         ret = system (command);
     }
 
@@ -1187,7 +1189,7 @@ void file_gzip (char *filename)
         // special case: rename .bam.gz -> .bam
         if (fn_len >= 4 && !memcmp (&filename[fn_len-4], ".bam", 4)) {
             char gz_filename[fn_len + 10];
-            sprintf (gz_filename, "%s.gz", filename);
+            snprintf (gz_filename, sizeof (gz_filename), "%s.gz", filename);
             file_remove (filename, true);
             file_rename (gz_filename, filename, false);
         }
@@ -1378,10 +1380,11 @@ bool file_put_data (rom filename, const void *data, uint64_t len,
         for (char *c=(char*)filename ; *c ; c++)
             if (*c == ':' && (c-filename != 1)) *c = '-'; // ':' exist eg in SAM AUX names 
 
-    char *tmp_filename = MALLOC (fn_len+5);
+    int tmp_filename_size = fn_len + 5;
+    char *tmp_filename = MALLOC (tmp_filename_size);
     // we first write to tmp_filename, and after we complete and flush, we rename to the final name
     // so that if a file exists (in its final name) - then its guaranteed to be fully written
-    sprintf (tmp_filename, "%s.tmp", filename);
+    snprintf (tmp_filename, tmp_filename_size, "%s.tmp", filename);
 
     file_remove (filename, true);
     file_remove (tmp_filename, true);
@@ -1462,7 +1465,7 @@ void file_put_data_reset_after_fork (void)
 PutLineFn file_put_line (VBlockP vb, STRp(line), rom msg)
 {
     PutLineFn fn;
-    sprintf (fn.s, "line.%u.%d.%s%s", vb->vblock_i, vb->line_i, command==ZIP ? "zip" : "piz",
+    snprintf (fn.s, sizeof (fn.s), "line.%u.%d.%s%s", vb->vblock_i, vb->line_i, command==ZIP ? "zip" : "piz",
              file_plain_ext_by_dt ((VB_DT(SAM) && z_file->z_flags.txt_is_bin) ? DT_BAM : vb->data_type));
     
     file_put_data (fn.s, STRa(line), 0);
@@ -1478,7 +1481,7 @@ PutLineFn file_put_line (VBlockP vb, STRp(line), rom msg)
 
 void file_assert_ext_decompressor (void)
 {
-    if (!stream_wait_for_exit (input_decompressor)) return; // just a normal EOF - all good!
+    if (!stream_wait_for_exit (input_decompressor, false)) return; // just a normal EOF - all good!
 
     if (flag.truncate) return; // truncated as requested - all good
 

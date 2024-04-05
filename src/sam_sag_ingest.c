@@ -316,8 +316,8 @@ void sam_zip_prim_ingest_vb (VBlockSAMP vb)
     buf_add_buf (evb, &z_file->sag_grps, &vb->sag_grps, Sag, NULL); 
     mutex_unlock (grp_mutex);    
 
-    buf_free (packed_seq_buf); 
-    buf_free (comp_qual_buf);
+    buf_destroy (packed_seq_buf); 
+    buf_destroy (comp_qual_buf);
     buf_free (vb->z_data);
 
     COPY_TIMER_EVB (sam_zip_prim_ingest_vb); 

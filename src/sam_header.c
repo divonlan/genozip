@@ -547,6 +547,42 @@ static void sam_header_alloc_contigs (BufferP txt_header)
     }
 }
 
+static void sam_header_zip_inspect_SQ_lines (VBlockP txt_header_vb, BufferP txt_header) 
+{
+    START_TIMER;
+    
+    #define new_txt_header txt_header_vb->codec_bufs[0]
+
+    sam_header_alloc_contigs (txt_header); 
+    if (sam_hdr_contigs) {
+
+        if (flag.match_chrom_to_reference) 
+            buf_alloc (txt_header_vb, &new_txt_header, 0, txt_header->len + 100, char, 0, "codec_bufs[0]"); // initial allocation (might be a bit bigger due to label changes)
+
+        START_TIMER;
+
+        if (sam_hdr_contigs->contigs.param) // contigs originate from textual header
+            foreach_textual_SQ_line (txt_header->data, IS_SRC_BAM ? txt_header->len32 : 0, sam_header_add_contig, NULL, flag.match_chrom_to_reference ? &new_txt_header : NULL);
+        else
+            foreach_binary_SQ_line  (STRb(*txt_header), sam_header_add_contig, NULL, flag.match_chrom_to_reference ? &new_txt_header : NULL);
+
+        COPY_TIMER_EVB (sam_header_add_contig);
+
+        // replace txt_header with the updated one
+        if (flag.match_chrom_to_reference) {
+            buf_free (*txt_header);
+            buf_copy (txt_header_vb, txt_header, &new_txt_header, char, 0, 0, "txt_data");
+            buf_free (new_txt_header);
+        }
+
+        if (IS_ZIP)            
+            contigs_create_index (sam_hdr_contigs, SORT_BY_NAME); // used by sam_sa_add_sa_group
+    }
+
+    COPY_TIMER_EVB (sam_header_zip_inspect_SQ_lines);
+    #undef new_txt_header
+}
+
 void sam_header_finalize (void)
 {    
     if (!IS_REF_INTERNAL) {
@@ -586,7 +622,7 @@ bool sam_header_has_string (ConstBufferP txt_header, rom substr)
 // constructs hdr_contigs, and in ZIP, also initialzes refererence ranges and random_access
 bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags)
 {    
-    #define new_txt_header txt_header_vb->codec_bufs[0]
+    START_TIMER;
 
     // if there is no external reference provided, then we create our internal one, and store it
     // (if an external reference IS provided, the user can decide whether to store it or not, with --reference vs --REFERENCE)
@@ -595,34 +631,8 @@ bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
     if (flag.show_txt_contigs && is_genocat) exit_ok;
 
     // get contigs from @SQ lines
-    if (IS_ZIP || flag.collect_coverage) { // note: up to v13, contigs were carried by SEC_REF_CONTIG for REF_INTERNAL too 
-
-        sam_header_alloc_contigs (txt_header); 
-        if (sam_hdr_contigs) {
-
-            if (flag.match_chrom_to_reference) 
-                buf_alloc (txt_header_vb, &new_txt_header, 0, txt_header->len + 100, char, 0, "codec_bufs[0]"); // initial allocation (might be a bit bigger due to label changes)
-
-            START_TIMER;
-
-            if (sam_hdr_contigs->contigs.param) // contigs originate from textual header
-                foreach_textual_SQ_line (txt_header->data, IS_SRC_BAM ? txt_header->len32 : 0, sam_header_add_contig, NULL, flag.match_chrom_to_reference ? &new_txt_header : NULL);
-            else
-                foreach_binary_SQ_line  (STRb(*txt_header), sam_header_add_contig, NULL, flag.match_chrom_to_reference ? &new_txt_header : NULL);
-
-            COPY_TIMER_EVB (sam_header_add_contig);
-
-            // replace txt_header with the updated one
-            if (flag.match_chrom_to_reference) {
-                buf_free (*txt_header);
-                buf_copy (txt_header_vb, txt_header, &new_txt_header, char, 0, 0, "txt_data");
-                buf_free (new_txt_header);
-            }
-
-            if (IS_ZIP)            
-                contigs_create_index (sam_hdr_contigs, SORT_BY_NAME); // used by sam_sa_add_sa_group
-        }
-    }
+    if (IS_ZIP || flag.collect_coverage)  // note: up to v13, contigs were carried by SEC_REF_CONTIG for REF_INTERNAL too 
+        sam_header_zip_inspect_SQ_lines (txt_header_vb, txt_header);
 
     if (IS_ZIP) {
 
@@ -648,8 +658,8 @@ bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
         sam_header_create_deep_tip (hdr, hdr + hdr_len);
     }
 
+    COPY_TIMER_EVB (sam_header_inspect);
     return true;
-    #undef new_txt_header
 }
 
 // ZIP: called from txtfile_read_header

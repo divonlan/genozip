@@ -28,15 +28,17 @@ void vcf_mastermind_zip_initialize (void)
     hgvsg_did_accession = ctx_add_new_zf_ctx_from_txtheader ("HGVSG_ACCESSION", 15, hgvsg_dict_id_accession, 0)->did_i;
     hgvsg_did_hgvs = ctx_add_new_zf_ctx_from_txtheader ("HGVSG_HGVS", 10, hgvsg_dict_id_hgvs,  0)->did_i;
     
-    SmallContainer con = { .repeats   = 1,
-                           .nitems_lo = 2,
-                           .items     = { { .dict_id = hgvsg_dict_id_accession, .separator[0] = ':' },
-                                          { .dict_id = hgvsg_dict_id_hgvs                           } } };
+    DO_ONCE {
+        SmallContainer con = { .repeats   = 1,
+                               .nitems_lo = 2,
+                               .items     = { { .dict_id = hgvsg_dict_id_accession, .separator[0] = ':' },
+                                              { .dict_id = hgvsg_dict_id_hgvs                           } } };
 
-    container_prepare_snip ((ContainerP)&con, 0, 0, qSTRa(hgvsg_con_snip));
+        container_prepare_snip ((ContainerP)&con, 0, 0, qSTRa(hgvsg_con_snip));
 
-    seg_prepare_snip_other (SNIP_COPY, _VCF_CHROM, false, 0, copy_chrom_snip);
-    seg_prepare_snip_other (SNIP_COPY, _INFO_GENE, false, 0, copy_gene_snip);
+        seg_prepare_snip_other (SNIP_COPY, _VCF_CHROM, false, 0, copy_chrom_snip);
+        seg_prepare_snip_other (SNIP_COPY, _INFO_GENE, false, 0, copy_gene_snip);
+    }
 }
 
 void vcf_mastermind_seg_initialize (VBlockVCFP vb)

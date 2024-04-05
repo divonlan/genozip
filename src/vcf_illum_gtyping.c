@@ -18,7 +18,9 @@ sSTRl(copy_CHROM_snip, 30);
 
 void vcf_illum_gtyping_zip_initialize (void)
 {
-    seg_prepare_snip_other (SNIP_COPY, _VCF_CHROM, false, 0, copy_CHROM_snip);
+    DO_ONCE {
+        seg_prepare_snip_other (SNIP_COPY, _VCF_CHROM, false, 0, copy_CHROM_snip);
+    }
 }
 
 void vcf_illum_gtyping_seg_initialize (VBlockVCFP vb)

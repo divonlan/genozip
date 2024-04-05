@@ -26,8 +26,9 @@
 typedef void (*DeferredSeg)(VBlockP vb);
 typedef struct {
     Did did_i;
-    int16_t idx;     // ZIP: index of this field within its container
-    DeferredSeg seg; // ZIP: function to call to complete seg at the end of the line
+    Did seg_after_did_i;// ZIP: did_i context cannot be segged before seg_after_did_i
+    int16_t idx;        // ZIP: index of this field within its container
+    DeferredSeg seg;    // ZIP: function to call to complete seg at the end of the line
 } DeferredField;
 
 typedef struct { 
@@ -39,7 +40,7 @@ typedef struct {
 #define VBLOCK_COMMON_FIELDS \
     /************* fields that survive buflist_free_vb *************/ \
     Buffer buffer_list;           /* a buffer containing an array of pointers to all buffers allocated or overlayed in this VB (either by the main thread or its compute thread). */\
-    int32_t id;                   /* id of vb within the vb pool (-1 is the external vb) */\
+    VBID id;                      /* id of vb within the vb pool (-1 is the external vb) */\
     DataType data_type;           /* type of this VB. In PIZ, this is the z_file data_type, NOT flag.out_dt */\
     DataType data_type_alloced;   /* type of this VB was allocated as. could be different that data_type, see vb_get_vb */\
     VBlockPoolType pool;          /* the VB pool to which this VB belongs */ \
@@ -225,14 +226,8 @@ extern void vb_destroy_vb_do (VBlockP *vb_p, rom func);
 
 extern void vb_dehoard_memory (bool release_to_kernel);
 
-#define VB_ID_EVB           -1  // ID of VB used by main thread 
-#define VB_ID_WRITER        -2
-#define VB_ID_SEGCONF       -3  // ID of VB used by segconf_calculate
-#define VB_ID_DEPN_SCAN     -4
-#define VB_ID_COMPRESS_DEPN -5
-#define NUM_NONPOOL_VBs      5
-extern VBlockP vb_initialize_nonpool_vb (int vb_id, DataType dt, rom task);
-extern VBlockP vb_get_nonpool_vb (int vb_id);
+extern VBlockP vb_initialize_nonpool_vb (VBID vb_id, DataType dt, rom task);
+extern VBlockP vb_get_nonpool_vb (VBID vb_id);
 
 // -------------
 // vb_pool stuff
@@ -249,9 +244,9 @@ typedef struct VBlockPool {
 
 extern void vb_create_pool (VBlockPoolType type, rom name);
 extern VBlockPool *vb_get_pool (VBlockPoolType type, FailType soft_fail);
-extern VBlockP vb_get_from_pool (VBlockPoolP pool, int32_t vb_id);
+extern VBlockP vb_get_from_pool (VBlockPoolP pool, VBID vb_id);
 extern void vb_destroy_pool_vbs (VBlockPoolType type, bool destroy_pool);
-extern uint32_t vb_pool_get_num_in_use (VBlockPoolType type, int32_t *id_in_use);
+extern uint32_t vb_pool_get_num_in_use (VBlockPoolType type, VBID *id_in_use);
 extern bool vb_pool_is_full (VBlockPoolType type);
 extern bool vb_pool_is_empty (VBlockPoolType type);
 
@@ -272,4 +267,5 @@ static inline uint32_t get_vb_size (DataType dt)
     return (dt != DT_NONE && dt_props[dt].sizeof_vb) ? dt_props[dt].sizeof_vb(dt) : sizeof (VBlock); 
 }
 
-extern void vb_add_to_deferred_q (VBlockP vb, ContextP ctx, DeferredSeg seg, int16_t idx);
+extern void vb_add_to_deferred_q (VBlockP vb, ContextP ctx, DeferredSeg seg, int16_t idx, Did seg_after_did_i);
+extern void vb_display_deferred_q (VBlockP vb, rom func);

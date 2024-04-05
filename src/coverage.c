@@ -128,7 +128,7 @@ void coverage_show_coverage (void)
 
     char all_coverage[7] = "0";
     if (genome_nbases) // avoid division by 0
-        sprintf (all_coverage, "%*.2f", (int)sizeof(all_coverage)-1, (float)coverage_special[CVR_ALL_CONTIGS] / (float)genome_nbases);
+        snprintf (all_coverage, sizeof (all_coverage), "%*.2f", (int)sizeof(all_coverage)-1, (float)coverage_special[CVR_ALL_CONTIGS] / (float)genome_nbases);
 
     if (flag.show_coverage == COV_ONE) 
         iprintf ("%s:\t%s\n", z_name, all_coverage);

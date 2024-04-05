@@ -17,7 +17,9 @@ sSTRl(copy_ID_snip, 30);
 
 void vcf_gwas_zip_initialize (void)
 {
-    seg_prepare_snip_other (SNIP_COPY, _VCF_ID, false, 0, copy_ID_snip);
+    DO_ONCE {
+        seg_prepare_snip_other (SNIP_COPY, _VCF_ID, false, 0, copy_ID_snip);
+    }
 }
 
 void vcf_gwas_seg_initialize (VBlockVCFP vb)

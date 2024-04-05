@@ -65,12 +65,12 @@ static void zfile_dump_section (BufferP uncompressed_data, SectionHeaderP header
     VBIType vb_i = BGEN32 (header->vblock_i);
 
     // header
-    sprintf (filename, "%s.%u.%s.header", st_name (header->section_type), vb_i, dis_dict_id (dict_id).s);
+    snprintf (filename, sizeof(filename), "%s.%u.%s.header", st_name (header->section_type), vb_i, dis_dict_id (dict_id).s);
     file_put_data (filename, header, section_len, 0);
 
     // body
     if (uncompressed_data->len) {
-        sprintf (filename, "%s.%u.%s.body", st_name (header->section_type), vb_i, dis_dict_id (dict_id).s);
+        snprintf (filename, sizeof(filename),"%s.%u.%s.body", st_name (header->section_type), vb_i, dis_dict_id (dict_id).s);
         buf_dump_to_file (filename, uncompressed_data, 1, false, false, true, false);
     }
 }
@@ -188,6 +188,8 @@ void zfile_uncompress_section_into_buf (VBlockP vb, SectionHeaderUnionP header_p
                                         BufferP dst_buf,
                                         char *dst) // pointer into dst_buf.data
 {
+    if (!header_p.common->data_uncompressed_len) return;
+    
     ASSERT (dst >= B1STc(*dst_buf) && dst <= BLSTc(*dst_buf), "expecting dst=%p to be within dst_buf=%s", dst, buf_desc(dst_buf).s);
 
     Buffer copy = *dst_buf;
@@ -281,7 +283,9 @@ void zfile_compress_section_data_ex (VBlockP vb,
                                      Codec codec, SectionFlags flags, 
                                      rom name) 
 {
-    SectionHeader header = (SectionHeader){
+    ASSERT (st_header_size (section_type) == sizeof (SectionHeader), "cannot use this for section_type=%s", st_name (section_type));
+
+    SectionHeader header = { 
         .magic                 = BGEN32 (GENOZIP_MAGIC),
         .section_type          = section_type,
         .data_uncompressed_len = BGEN32 (section_data ? section_data->len : total_len),
@@ -594,12 +598,15 @@ bool zfile_advance_to_next_header (uint64_t *offset, uint64_t *gap)
     }
 }
 
-// check if reference filename exists in the absolute or relative path from the chain header, and if not, 
-// check the relative path from the chain file
+// check if reference filename exists in the absolute or relative path 
 static rom zfile_read_genozip_header_get_ref_filename (rom header_fn)
 {
     // if header_filename exists, use it
-    if (file_exists (header_fn)) return header_fn;
+    if (file_exists (header_fn)) {
+        char *fn = MALLOC (strlen (header_fn) +  1); 
+        strcpy (fn, header_fn);
+        return fn;
+    }
 
     // case absolute path and it doesn't exist 
     if (header_fn[0] == '/' || header_fn[0] == '\\') return NULL;
@@ -609,10 +616,16 @@ static rom zfile_read_genozip_header_get_ref_filename (rom header_fn)
     if (!slash) return NULL; // chain file is in the current dir
 
     unsigned dirname_len = slash - z_name + 1; // including slash
-    char *fn = MALLOC (strlen (header_fn) + dirname_len + 1); // we're going to leak this memory (+1 for \0)
-    sprintf (fn, "%.*s%s", dirname_len, z_name, header_fn);
+    int fn_size = strlen (header_fn) + dirname_len + 1;
+    char *fn = MALLOC (fn_size);
+    snprintf (fn, fn_size, "%.*s%s", dirname_len, z_name, header_fn);
 
-    return file_exists (fn) ? fn :NULL;
+    if (file_exists (fn))
+        return fn;
+    else {
+        FREE (fn);
+        return NULL;
+    }
 }
 
 // reference data when NOT reading a reference file
@@ -651,6 +664,8 @@ static void zfile_read_genozip_header_handle_ref_info (ConstSectionHeaderGenozip
             else 
                 ASSINP (flag.dont_load_ref_file, "Please use --reference to specify the path to the reference file. Original path was: %.*s",
                         REF_FILENAME_LEN, header->ref_filename);
+
+            FREE (ref_filename);
         }
 
         // test for matching digest between specified external reference and reference in the header

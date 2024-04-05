@@ -265,7 +265,7 @@ static void recon_plan_uncompress_one_vb (VBlockP vb)
     vb->scratch.len = uncomp_len / sizeof (uint32_t);
     BGEN_u32_buf (&vb->scratch, 0);
 
-    buf_free (vb->scratch); // un-overlay
+    buf_destroy (vb->scratch); // un-overlay
 
     vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.
 }

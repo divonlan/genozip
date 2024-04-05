@@ -36,7 +36,8 @@ uint32_t comp_compress (VBlockP vb,
 
     ASSERT (header->codec < NUM_CODECS, "\"%s\": unsupported section compressor=%u", name, header->codec);
              
-    uint32_t compressed_offset     = st_header_size (header->section_type); 
+    uint32_t header_size           = st_header_size (header->section_type); 
+    uint32_t compressed_offset     = header_size; 
     uint32_t data_uncompressed_len = BGEN32 (header->data_uncompressed_len);
     uint32_t data_compressed_len   = 0;
     uint32_t data_encrypted_len=0, data_padding=0, header_padding=0;
@@ -130,10 +131,11 @@ uint32_t comp_compress (VBlockP vb,
     // finalize & copy header
     header->data_compressed_len = BGEN32 (data_compressed_len);   
     header->data_encrypted_len  = BGEN32 (data_encrypted_len); 
-    memcpy (BAFT8(*z_data), header, compressed_offset);
     
     uint8_t *section = BAFT8(*z_data);
     uint8_t *data = section + compressed_offset;
+
+    memcpy (section, header, header_size); // possibly less bytes than compressed_offset, if encrypted
 
     // encrypt if needed - header & body separately
     unsigned total_z_len;

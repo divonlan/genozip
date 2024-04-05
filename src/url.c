@@ -26,8 +26,7 @@
 #include "file.h"
 #include "strings.h"
 
-// our instance of curl for url_open - only one at a time is permitted
-static StreamP curl = NULL;
+static StreamP remote_file_stream = NULL;
 
 bool url_is_url (rom filename)
 {
@@ -46,7 +45,6 @@ static void url_do_curl (rom url, char *stdout_data, unsigned *stdout_len/*in/ou
                          char *error, unsigned *error_len,
                          bool blocking, bool follow_redirects) 
 {
-    // our own instance of curl - to not conflict with url_open
     StreamP curl = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
                                   "To read from a URL", // reason in case of failure to execute curl
                                   "curl", 
@@ -128,7 +126,6 @@ static int url_do_curl_head (rom url,
     ASSERT (stream_is_exec_in_path ("curl"),
             "Failed to open URL %s because curl was not found in the execution path", url);
 
-    // our own instance of curl - to not conflict with url_open
     StreamP curl = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
                                   "To compress files from a URL",
                                   "curl", 
@@ -251,19 +248,29 @@ int32_t url_read_string (rom url, STRc(data), bool blocking, bool follow_redirec
     return data ? response_len : 0;
 }
 
-bool url_get_redirect (rom url, STRc(redirect_url))
+bool url_get_redirect (rom url, STRc(redirect_url),
+                       StreamP *redirect_stream) // optional: used to free the stream if the running thread is canceled. 
 {
     if (!stream_is_exec_in_path ("curl")) return false;
 
-    // our own instance of curl - to not conflict with url_open
+    StreamP no_stream = NULL;
+    if (redirect_stream) __atomic_store_n (redirect_stream, no_stream, __ATOMIC_RELEASE);                      \
+
     StreamP curl = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
                                   "To get a URL's redirect", // reason in case of failure to execute curl
                                   "curl", url, "--location", "--silent", "--output", "/dev/null",
                                   flag.is_windows ? "--ssl-no-revoke" : SKIP_ARG,                          
                                   "--write-out", "%{url_effective}", NULL); 
 
+    if (redirect_stream) __atomic_store_n (redirect_stream, curl, __ATOMIC_RELEASE);                      \
+
     redirect_url_len = fread (redirect_url, 1, redirect_url_len - 1, stream_from_stream_stdout (curl));
     redirect_url[redirect_url_len] = '\0'; // terminate string
+
+    // resetting redirect_stream before stream_close risks leaking the Stream object in case
+    // of a race condition, which is better than resetting after, which would risk the caller
+    // attempting to free an already-freed pointer
+    if (redirect_stream) __atomic_store_n (redirect_stream, no_stream, __ATOMIC_RELEASE);                      \
 
     stream_close (&curl, STREAM_WAIT_FOR_PROCESS);
 
@@ -272,10 +279,12 @@ bool url_get_redirect (rom url, STRc(redirect_url))
 
 // returns a FILE* which streams the content of a URL 
 // Note: FILE* returned is a *copy* of the FILE* in the curl stream - it should not be FCLOSEd
-// directly, rather call url_kill_curl or url_disconnect_from_curl
-FILE *url_open (StreamP parent_stream, rom url)
+// directly, rather call url_close_remote_file_stream or url_disconnect_from_remote_file_stream
+// Note: only one open URL file is possible at any time, as it goes into the global "curl".
+//       This is reserved for reading a remote file and should not be used for other purposes.
+FILE *url_open_remote_file (StreamP parent_stream, rom url)
 {
-    ASSERT0 (!curl, "Error url_open failed because curl is already running");
+    ASSERTISNULL (remote_file_stream);
 
     char str5[6] = "";
     strncpy (str5, url, 5);
@@ -289,40 +298,42 @@ FILE *url_open (StreamP parent_stream, rom url)
             url, (flag.is_windows || is_file) ? "curl was" : "wget or curl were");
 
     if (has_wget && !is_file) // note: stream_create doesn't support soft_fail (yet)
-        curl = stream_create (parent_stream, DEFAULT_PIPE_SIZE, 0, 0, 0, 0, 0,
-                              "To compress files from a URL", "wget", "--tries=16", "--quiet", "--waitretry=3", "--output-document=/dev/stdout", 
-                              url, NULL);
+        remote_file_stream = 
+            stream_create (parent_stream, DEFAULT_PIPE_SIZE, 0, 0, 0, 0, 0,
+                           "To compress files from a URL", "wget", "--tries=16", "--quiet", "--waitretry=3", "--output-document=/dev/stdout", 
+                           url, NULL);
     else // curl
-        curl = stream_create (parent_stream, DEFAULT_PIPE_SIZE, 0, 0, 0, 0, 0,
-                              "To compress files from a URL", "curl", "--silent", 
-                              flag.is_windows ? "--ssl-no-revoke" : SKIP_ARG,                          
-                              url, NULL);
+        remote_file_stream = 
+            stream_create (parent_stream, DEFAULT_PIPE_SIZE, 0, 0, 0, 0, 0,
+                           "To compress files from a URL", "curl", "--silent", 
+                           flag.is_windows ? "--ssl-no-revoke" : SKIP_ARG,                          
+                           url, NULL);
 
-    return stream_from_stream_stdout (curl);
+    return stream_from_stream_stdout (remote_file_stream);
 }
 
-void url_reset_if_curl (StreamP maybe_curl_stream)
+void url_reset_if_remote_file_stream (StreamP maybe_remote_file_stream)
 {
-    if (curl == maybe_curl_stream) curl = NULL;
+    if (remote_file_stream == maybe_remote_file_stream) remote_file_stream = NULL;
 }
 
 // kill curl - used in case of an
-void url_kill_curl (FILE **copy_of_input_pipe)
+void url_close_remote_file_stream (FILE **copy_of_input_pipe)
 {
-    if (!curl) return; // nothing to do
+    if (!remote_file_stream) return; // nothing to do
     
     if (copy_of_input_pipe) *copy_of_input_pipe = NULL;
-    stream_close (&curl, STREAM_KILL_PROCESS);
+
+    stream_close (&remote_file_stream, STREAM_KILL_PROCESS);
 }
 
 // close stream without killing curl process - used if stream is used by forked sub-process
-void url_disconnect_from_curl (FILE **copy_of_input_pipe)
+void url_disconnect_from_remote_file_stream (FILE **copy_of_input_pipe)
 {
-    if (!curl) return; // nothing to do
+    if (!remote_file_stream) return; // nothing to do
     
     if (copy_of_input_pipe) *copy_of_input_pipe = NULL;
-    stream_close (&curl, STREAM_DONT_WAIT_FOR_PROCESS);
-
+    stream_close (&remote_file_stream, STREAM_DONT_WAIT_FOR_PROCESS);
 }
 
 // make a string into a a string containing only valid url characters, eg "first last" -> "first%20last"

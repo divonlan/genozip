@@ -48,11 +48,11 @@ PizDisCoords piz_dis_coords (VBlockP vb)
     ctx_get_snip_by_word_index (chrom_ctx, chrom, chrom_str);
     if (strlen (chrom_str) > sizeof(out.s)-20) return out;
 
-    sprintf (out.s, " CHROM=\"%.64s\"(%d)", str_to_printable_(STRa(chrom_str)).s, chrom); // with leading space
+    int out_len = snprintf (out.s, sizeof (out.s), " CHROM=\"%.64s\"(%d)", str_to_printable_(STRa(chrom_str)).s, chrom); // with leading space
 
     if (DTF(pos) == DID_NONE || !ctx_has_value (vb, DTF(pos))) return out;
     
-    sprintf (&out.s[strlen(out.s)], " POS=%"PRId64, CTX(DTF(pos))->last_value.i);
+    snprintf (&out.s[out_len], sizeof (out.s)-out_len, " POS=%"PRId64, CTX(DTF(pos))->last_value.i);
     return out;
 }
 
@@ -63,7 +63,7 @@ PizDisQname piz_dis_qname (VBlockP vb)
 
     if (DTF(qname) != DID_NONE && ctx_encountered_in_line (vb, DTF(qname)) && !vb->preprocessing) {
         ContextP ctx = CTX(DTF(qname));
-        sprintf (out.s, " %.10s=\"%.*s\"", ctx->tag_name, MIN_(80, ctx->last_txt.len), last_txtx(vb, ctx));
+        snprintf (out.s, sizeof (out.s), " %.10s=\"%.*s\"", ctx->tag_name, MIN_(80, ctx->last_txt.len), last_txtx(vb, ctx));
     }
 
     return out;
@@ -869,8 +869,7 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
     if (piz_need_digest)
         digest_piz_verify_one_txt_file (z_file->num_txts_so_far - 1);
 
-    if (!flag.test) 
-        progress_finalize_component_time ("Done", DIGEST_NONE);
+    progress_finalize_component_time ("Done", DIGEST_NONE);
 
     // --sex and --coverage - output results
     if (txt_file && !flag_loading_auxiliary) {

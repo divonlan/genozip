@@ -105,7 +105,7 @@ static void contigs_calculate_accession_numbers (BufferP contigs, ConstBufferP c
 AccNumText display_acc_num (const AccessionNumber *ac)
 {
     AccNumText s = {};
-    if (ac->AC[0]) sprintf (s.s, "AC=%s.%c%c", ac->AC, ac->version, ac->version2);
+    if (ac->AC[0]) snprintf (s.s, sizeof (s.s), "AC=%s.%c%c", ac->AC, ac->version, ac->version2);
     return s;
 }
 

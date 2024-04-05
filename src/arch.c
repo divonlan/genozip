@@ -292,7 +292,7 @@ StrText arch_get_filesystem_type (void)
         NAME (0x2fc12fc1, "ZFS");      // Oracle ZFS (originally in Solaris) https://docs.oracle.com/cd/E19253-01/819-5461/zfsover-2/
         NAME (0x19830326, "FhGFS");    // https://www.beegfs.io/docs/SC13_FHGFS_Presentation.pdf
         NAME (0x53464846, "wslfs");    // WSL1: https://github.com/MicrosoftDocs/WSL/issues/465
-        default: sprintf (s.s, "0x%lx", fs.f_type); 
+        default: snprintf (s.s, sizeof (s.s), "0x%lx", fs.f_type); 
     }
 
     if (name) strcpy (s.s, name);
@@ -338,18 +338,18 @@ uint64_t arch_get_max_resident_set (void)
 
 rom arch_get_os (void)
 {
-    static char os[1024];
+    static char os[64];
 
 #ifdef _WIN32
     uint32_t windows_version = GetVersion();
 
-    sprintf (os, "Windows_%u.%u.%u", LOBYTE(LOWORD(windows_version)), HIBYTE(LOWORD(windows_version)), HIWORD(windows_version));
+    snprintf (os, sizeof (os), "Windows_%u.%u.%u", LOBYTE(LOWORD(windows_version)), HIBYTE(LOWORD(windows_version)), HIWORD(windows_version));
 #else
 
     struct utsname uts;
     ASSERT (!uname (&uts), "uname failed: %s", strerror (errno));
 
-    sprintf (os, "%s_%s", uts.sysname, uts.release);
+    snprintf (os, sizeof (os), "%.30s_%.30s", uts.sysname, uts.release);
 
 #endif
 
