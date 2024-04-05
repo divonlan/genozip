@@ -69,6 +69,7 @@ else # not conda
 		CXXFLAGS += -march=nehalem
 
 	else ifdef osx_x86
+		CFLAGS   += -mmacosx-version-min=10.9 -DNO_UTIMENSAT # needed for building license.o, and also installer
 		CFLAGS   += -march=native # conda used "core2". We use the highest available optimizations, because it is typically compiled for use on a specific Mac
 		CXXFLAGS += -march=native
 	endif
@@ -727,7 +728,7 @@ LINUX_TARGZ_OBJS = genozip-linux-x86_64/genozip genozip-linux-x86_64/genounzip g
 # this is run on Linux by run-on-wsl.sh
 $(INSTALLERS)/genozip-linux-x86_64.tar: $(LINUX_TARGZ_OBJS) 
 	@echo "Creating $@"
-	@tar cf $@ -z genozip-linux-x86_64
+	@tar cf $@ --lzma genozip-linux-x86_64
 
 endif # linux_x86
 
@@ -751,7 +752,7 @@ OSX_X86_TARGZ_OBJS = genozip-osx-x86/genozip genozip-osx-x86/genounzip genozip-o
 
 $(INSTALLERS)/genozip-osx-x86.tar: $(OSX_X86_TARGZ_OBJS) 
 	@echo "Creating $@"
-	@tar -cf $@ -z genozip-osx-x86
+	@tar -cf $@ --lzma genozip-osx-x86
 
 MACDWNDIR = mac/darwinpkg
 MACLIBDIR = $(MACDWNDIR)/Library/genozip
