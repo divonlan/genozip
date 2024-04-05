@@ -215,27 +215,6 @@
         },
         {
             "type": "shell",
-            "label": "Test",
-            "command": "src/test.sh",
-            "args": [
-                "1", "-@3"
-            ],
-            "options": {
-                "cwd": "${workspaceRoot}"
-            },
-            "problemMatcher": [
-                "$gcc"
-            ],
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "presentation": {
-                "clear": true
-            }
-        },
-        {
-            "type": "shell",
             "label": "Distribution",
             "command": "make.exe",
             "args": [

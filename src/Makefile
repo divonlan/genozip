@@ -22,19 +22,20 @@ ifeq ($(OS),Windows_NT)
 	WSL=wsl
 endif
 
-ifeq (\($(architecture)\),Linux x86_64)
+ifeq ($(architecture),Linux x86_64)
 	linux_x86 := 1
 	OBJDIR=$(OBJDIR_LINUX)
 endif
 
-ifeq (\($(architecture)\),Darwin x86_64)
+ifeq ($(architecture),Darwin x86_64)
 	osx_x86 := 1		
 	OBJDIR=$(OBJDIR_MAC)
-	CFLAGS += -mmacosx-version-min=10.9 -DNO_UTIMENSAT # Conda requires support from 10.9 but utimensat() was only introduced in MacOS 10.13
+	CFLAGS   += -mmacosx-version-min=10.9 -DNO_UTIMENSAT # Conda requires support from 10.9 but utimensat() was only introduced in MacOS 10.13
+	CXXFLAGS += -mmacosx-version-min=10.9 
 endif
 
 ifndef OBJDIR
-	fail := $(error "Architecture unsupported or could not be identified: \($(architecture)\)") 
+	fail := $(error "Architecture unsupported or could not be identified: $(architecture)") 
 endif
 
 ifdef BUILD_PREFIX # conda 
@@ -511,13 +512,13 @@ clean:  # careful not to delete license.o
 	@echo Cleaning up optimized
 	@rm -f $(EXECUTABLES) $(OBJS) $(DEPS) $(OBJDIR)/*.o $(OBJDIR)/*.d
 
-initialize-build-distribution: # clean all platforms
+initialize-build-distribution: # clean Linux, Windows
 	@$(SH_VERIFY_ALL_STAGED)
 	@bash --norc --noprofile secure/prepare.sh # before clean removes executables
 	@(cd secure ; git stage secure.data ; git commit -m $(version) ; git push) 
-	@echo Cleaning up all platforms for distribution
-	@rm -f $(OBJDIR_LINUX)/*.o $(OBJDIR_LINUX)/*.d $(OBJDIR_WINDOWS)/*.o $(OBJDIR_WINDOWS)/*.d $(OBJDIR_MAC)/*.o $(OBJDIR_MAC)/*.d \
-	       $(OBJDIR_LINUX)/secure/*.o $(OBJDIR_LINUX)/secure/*.d $(OBJDIR_WINDOWS)/secure/*.o $(OBJDIR_WINDOWS)/secure/*.d $(OBJDIR_MAC)/secure/*.o $(OBJDIR_MAC)/secure/*.d \
+	@echo Cleaning up Linux, Windows for distribution
+	@rm -f $(OBJDIR_LINUX)/*.o $(OBJDIR_LINUX)/*.d $(OBJDIR_WINDOWS)/*.o $(OBJDIR_WINDOWS)/*.d \
+	       $(OBJDIR_LINUX)/*/*.o $(OBJDIR_LINUX)/*/*.d $(OBJDIR_WINDOWS)/*/*.o $(OBJDIR_WINDOWS)/*/*.d \
 	       $(INSTALLERS)/*
 	
 clean-opt:
@@ -536,7 +537,7 @@ clean-dev: clean-installers clean-test # use only in dev - deletes license.o
 	@touch $(OBJDIR)/.gitkeep
 
 .PHONY: clean clean-debug clean-optimized clean-installers initialize-build-distribution \
-		dict_id_gen$(EXE) \
+		finalize-distribution dict_id_gen$(EXE) \
 		objdir.linux objdir.windows objdir.mac \
 		push-build increment-version $(INSTALLERS)/LICENSE.html  
 
@@ -658,10 +659,7 @@ push-build: # push files modified during the build process
 	@git commit -m $(version) 
 	@git push
 
-distribution: initialize-build-distribution increment-version ../LICENSE.txt $(INSTALLERS)/LICENSE.html \
-              $(INSTALLERS)/genozip-linux-x86_64.tar.build $(INSTALLERS)/genozip-installer.exe $(INSTALLERS)/genozip-osx-x86.tar \
-              push-build conda/.conda-timestamp \
-			  genozip-latest.exe genozip-latest  
+finalize-distribution:
 	@(printf "\nClick Enter after committing the feedstock conflict resolution: <Click>")
 	@(read x)
 	@(cd $(CONDA_FEEDSTOCK) ; git pull)
@@ -671,6 +669,10 @@ distribution: initialize-build-distribution increment-version ../LICENSE.txt $(I
 	@echo "  (3) Open: https://github.com/divonlan/genozip/releases/new"
 	@echo "  (4) Set 'Tag version' and 'Release title' are both: genozip-$(version)"
 	@echo "  (5) Copy the notes for the version from RELEASE NOTES -> Publish release"
+
+distribution: initialize-build-distribution increment-version ../LICENSE.txt $(INSTALLERS)/LICENSE.html \
+              $(INSTALLERS)/genozip-linux-x86_64.tar.build $(INSTALLERS)/genozip-osx-x86.tar $(INSTALLERS)/genozip-installer.exe \
+              push-build conda/.conda-timestamp genozip-latest.exe genozip-latest finalize-distribution
 
 # license copied on Windows, not Linux due to file mode issues on NTFS causing git to think LICENSE.txt has changed
 genozip-linux-x86_64/LICENSE.txt: ../LICENSE.txt
@@ -711,6 +713,10 @@ $(INSTALLERS)/genozip-linux-x86_64.tar: $(LINUX_TARGZ_OBJS)
 endif # linux_x86
 
 ifdef osx_x86
+
+initialize-build-mac: # clean Mac
+	@echo Cleaning up Mac for distribution
+	@rm -f $(OBJDIR_MAC)/*.o $(OBJDIR_MAC)/*.d $(OBJDIR_MAC)/*/*.o $(OBJDIR_MAC)/*/*.d $(INSTALLERS)/*
 
 genozip-osx-x86/genozip: CFLAGS += $(OPTFLAGS)
 genozip-osx-x86/genozip: $(OBJS) $(OBJDIR)/distribution.osx-x86.o
