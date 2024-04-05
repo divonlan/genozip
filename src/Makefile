@@ -14,7 +14,7 @@ OBJDIR_LINUX   := objdir.linux
 OBJDIR_WINDOWS := objdir.windows
 OBJDIR_MAC     := objdir.mac
 
-uname_sm := $(shell uname -sm | sed -e 's/amd/x86_/')
+architecture := $(shell uname -sm | sed -e 's/amd/x86_/')
 
 ifeq ($(OS),Windows_NT)
 	Windows := 1
@@ -22,18 +22,19 @@ ifeq ($(OS),Windows_NT)
 	WSL=wsl
 endif
 
-ifeq ($(uname_sm),Linux x86_64)
+ifeq (\($(architecture)\),Linux x86_64)
 	linux_x86 := 1
 	OBJDIR=$(OBJDIR_LINUX)
 endif
 
-ifeq ($(uname_sm),Darwin x86_64)
+ifeq (\($(architecture)\),Darwin x86_64)
 	osx_x86 := 1		
 	OBJDIR=$(OBJDIR_MAC)
+	CFLAGS += -mmacosx-version-min=10.9 -DNO_UTIMENSAT # Conda requires support from 10.9 but utimensat() was only introduced in MacOS 10.13
 endif
 
 ifndef OBJDIR
-	fail := $(error "Architecture unsupported or could not be identified: $(uname_sm)") 
+	fail := $(error "Architecture unsupported or could not be identified: \($(architecture)\)") 
 endif
 
 ifdef BUILD_PREFIX # conda 
@@ -42,38 +43,11 @@ ifdef BUILD_PREFIX # conda
 		CC=g++
 		LDFLAGS  += -L$(PREFIX)/Library/lib
 		CFLAGS   += -I$(PREFIX)/Library/include 
-		CFLAGS   += -march=nehalem 
-		CXXFLAGS += -march=nehalem 
-	endif
-
-	ifdef osx_x86
-		CFLAGS   += -mmacosx-version-min=10.9 -DNO_UTIMENSAT # Conda requires support from 10.9 but utimensat() was only introduced in MacOS 10.13
-		CFLAGS   += -march=nehalem 
-		CXXFLAGS += -march=nehalem 
-	endif
-
-	ifdef linux_x86
-		CFLAGS   += -march=nehalem 
-		CXXFLAGS += -march=nehalem 
 	endif
 
 	DISTOBJ = $(OBJDIR)/distribution.conda.o # note: matches the name in version.c 
 
 else # not conda
-	ifdef Windows
-		CFLAGS   += -march=nehalem 
-		CXXFLAGS += -march=nehalem 
-	
-	else ifdef linux_x86
-		CFLAGS   += -march=nehalem # see: https://gcc.gnu.org/onlinedocs/gcc/x86-Options.html  
-		CXXFLAGS += -march=nehalem
-
-	else ifdef osx_x86
-		CFLAGS   += -mmacosx-version-min=10.9 -DNO_UTIMENSAT # needed for building license.o, and also installer
-		CFLAGS   += -march=native # conda used "core2". We use the highest available optimizations, because it is typically compiled for use on a specific Mac
-		CXXFLAGS += -march=native
-	endif
-
 	ifdef DISTRIBUTION # custom destribution, run eg: DISTRIBUTION=special make genozip
 		DISTOBJ = $(OBJDIR)/distribution.$(DISTRIBUTION).o 
 	else
@@ -129,8 +103,10 @@ else
 endif
 
 LDFLAGS    += -lpthread -lm 
-CFLAGS     += -Wall -D_LARGEFILE64_SOURCE=1 -D_GNU_SOURCE -std=gnu11 -D_7ZIP_ST -fms-extensions -msse4.1 -msse4.2
-CXXFLAGS   += -Wall -D_LARGEFILE64_SOURCE=1 -D_GNU_SOURCE -std=gnu++11 -Ibsc -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_SSE41 -msse4.1
+CFLAGS     += -Wall -D_LARGEFILE64_SOURCE=1 -D_GNU_SOURCE -std=gnu11 -D_7ZIP_ST -fms-extensions \
+		      -march=nehalem -msse4.1 -msse4.2 # relatively low CPU for installer and conda, change to -mnative if building locally 
+CXXFLAGS   += -Wall -D_LARGEFILE64_SOURCE=1 -D_GNU_SOURCE -std=gnu++11 -Ibsc -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_SSE41 \
+              -march=nehalem -msse4.1
 OPTFLAGS   += -O3 
 DEBUGFLAGS += -DDEBUG -ggdb3 -O0 -fstack-check -fstack-protector-strong
 
@@ -387,39 +363,39 @@ $(OBJDIR)/%.d: %.cpp | $(OBJDIR) # directory is an "order only prerequesite": ht
 	@$(CXX) $(CXXFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
 
 $(OBJDIR)/distribution.%.o : distribution.c 
-	@echo Compiling $< to $@
+	@echo Compiling \($(architecture)\) $< to $@
 	@$(CC) -c -o $@ $< $(CFLAGS) -DDISTRIBUTION=\"$*\"
 
 # $(OBJDIR)/bsc/qlfc_%.o : bsc/qlfc.cpp 
-# 	@echo Compiling $< to $@
+# 	@echo Compiling \($(architecture)\) $< to $@
 # 	$(CXX) -c -o $@ $< $(CXXFLAGS) -DLIBBSC_DYNAMIC_CPU_DISPATCH -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_$*
 
 # $(OBJDIR)/bsc/adler32_%.o : bsc/adler32.cpp 
-# 	@echo Compiling $< to $@
+# 	@echo Compiling \($(architecture)\) $< to $@
 # 	$(CXX) -c -o $@ $< $(CXXFLAGS) -DLIBBSC_DYNAMIC_CPU_DISPATCH -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_$*
 
 $(OBJDIR)/%.o: %.c $(OBJDIR)/%.d
-	@echo Compiling $<
-	$(CC) -c -o $@ $< $(CFLAGS) 
+	@echo Compiling \($(architecture)\) $<
+	@$(CC) -c -o $@ $< $(CFLAGS) 
 
 $(OBJDIR)/%.debug-o: %.c $(OBJDIR)/%.d
-	@echo "Compiling $< (debug)"
+	@echo "Compiling \($(architecture)\) $< (debug)"
 	@$(CC) -c -o $@ $< $(CFLAGS)
 
 $(OBJDIR)/%.opt-o: %.c $(OBJDIR)/%.d
-	@echo "Compiling $< (opt)"
+	@echo "Compiling \($(architecture)\) $< (opt)"
 	@$(CC) -c -o $@ $< $(CFLAGS)
 
 $(OBJDIR)/%.o: %.cpp $(OBJDIR)/%.d
-	@echo Compiling $<
+	@echo Compiling \($(architecture)\) $<
 	@$(CXX) -c -o $@ $< $(CXXFLAGS) 
 
 $(OBJDIR)/%.debug-o: %.cpp $(OBJDIR)/%.d
-	@echo "Compiling $< (debug)"
+	@echo "Compiling \($(architecture)\) $< (debug)"
 	@$(CXX) -c -o $@ $< $(CXXFLAGS)
 
 $(OBJDIR)/%.opt-o: %.cpp $(OBJDIR)/%.d
-	@echo "Compiling $< (opt)"
+	@echo "Compiling \($(architecture)\) $< (opt)"
 	@$(CXX) -c -o $@ $< $(CXXFLAGS)
 
 $(OBJDIR)/%.d: %.asm
@@ -431,11 +407,11 @@ $(OBJDIR)/%.d: %.S
 	@$(AS) $(ASFLAGS) -M $< > $@
 
 $(OBJDIR)/%.o: %.asm # nasm or yasm
-	@echo Compiling $<
+	@echo Compiling \($(architecture)\) $<
 	@$(AS) $(ASFLAGS) -o $@ $< 
 
 $(OBJDIR)/%.o: %.S   # GNU Assembler 
-	@echo Compiling $<
+	@echo Compiling \($(architecture)\) $<
 	@$(AS) $(ASFLAGS) -o $@ $< 
 
 %.S: %.c $(OBJDIR)/%.d
@@ -540,7 +516,9 @@ initialize-build-distribution: # clean all platforms
 	@bash --norc --noprofile secure/prepare.sh # before clean removes executables
 	@(cd secure ; git stage secure.data ; git commit -m $(version) ; git push) 
 	@echo Cleaning up all platforms for distribution
-	@rm -f $(OBJDIR_LINUX)/*.o $(OBJDIR_LINUX)/*.d $(OBJDIR_WINDOWS)/*.o $(OBJDIR_WINDOWS)/*.d $(OBJDIR_MAC)/*.o $(OBJDIR_MAC)/*.d
+	@rm -f $(OBJDIR_LINUX)/*.o $(OBJDIR_LINUX)/*.d $(OBJDIR_WINDOWS)/*.o $(OBJDIR_WINDOWS)/*.d $(OBJDIR_MAC)/*.o $(OBJDIR_MAC)/*.d \
+	       $(OBJDIR_LINUX)/secure/*.o $(OBJDIR_LINUX)/secure/*.d $(OBJDIR_WINDOWS)/secure/*.o $(OBJDIR_WINDOWS)/secure/*.d $(OBJDIR_MAC)/secure/*.o $(OBJDIR_MAC)/secure/*.d \
+	       $(INSTALLERS)/*
 	
 clean-opt:
 	@echo Cleaning up opt 
@@ -663,7 +641,7 @@ $(INSTALLERS)/genozip-linux-x86_64.tar.build: genozip-linux-x86_64/LICENSE.txt
 	@run-on-wsl.sh GCC=$(WSL_GCC_8_5) make $(INSTALLERS)/genozip-linux-x86_64.tar # make -j doesn't work well on WSL - filesystem clock issues
 
 # get Mac files: ../installers/genozip-osx-x86.tar and objdir.mac/secure/license.o
-$(INSTALLERS)/genozip-osx-x86.tar : $(C_SRCS) $(X86_SRCS) $(INCLUDES) $(wildcard secure/*.c) $(wildcard secure/*.h) ../LICENSE.txt
+$(INSTALLERS)/genozip-osx-x86.tar : $(C_SRCS) $(X86_SRCS) $(INCLUDES) $(wildcard secure/*.c) $(wildcard secure/*.h) ../LICENSE.txt Makefile
 	@echo "getting $>"
 	@wsl mac-build-and-fetch.sh 
 
