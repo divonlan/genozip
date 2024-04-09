@@ -761,7 +761,7 @@ void sam_seg_CIGAR (VBlockSAMP vb, ZipDataLineSAMP dl, uint32_t last_cigar_len, 
     // case: we mate non-trival CIGARs with MC:Z. We don't mate eg "151M" bc this will add rather than reduce entropy in b250
     else if (last_cigar_len > 4 && sam_has_mate && segconf.has[OPTION_MC_Z] && !segconf.running && 
              cigar_snip_len == 2 && // we don't mate if CIGAR or SEQ are "*"
-             str_issame_(vb->last_cigar, last_cigar_len, STRtxtw(DATA_LINE (vb->mate_line_i)->MC))) {
+             str_issame_(vb->last_cigar, last_cigar_len, STRtxt(DATA_LINE (vb->mate_line_i)->MC))) {
 
         cigar_snip[cigar_snip_len++] = COPY_MATE_MC_Z; // always at cigar_snip[2]        
         seg_by_did (VB, STRa(cigar_snip), SAM_CIGAR, add_bytes); 
@@ -951,9 +951,9 @@ SPECIAL_RECONSTRUCTOR_DT (sam_cigar_special_CIGAR)
     else if (OUT_DT(BAM) && !vb->preprocessing) {
         // now we have the info needed to reconstruct bin, l_read_name, n_cigar_op and l_seq
         BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)Btxt (vb->line_start);
-        alignment->l_read_name = BAFTtxt - alignment->read_name;
-        alignment->n_cigar_op  = LTEN16 (vb->binary_cigar.len);
-        alignment->l_seq       = (snip[0] == '-') ? 0 : LTEN32 (vb->seq_len);
+        alignment->l_read_name = BAFTtxt - &alignment->read_name[0];
+        PUT_UINT16_(alignment, n_cigar_op, LTEN16 (vb->binary_cigar.len));
+        PUT_UINT32_(alignment, l_seq, (snip[0] == '-') ? 0 : LTEN32 (vb->seq_len));
 
         LTEN_u32_buf (&vb->binary_cigar, NULL);
         RECONSTRUCT (vb->binary_cigar.data, vb->binary_cigar.len * sizeof (BamCigarOp));
@@ -968,7 +968,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_cigar_special_CIGAR)
             PosType32 last_pos = last_flags.unmapped ? pos : (pos + vb->ref_consumed - 1);
             
             uint16_t bin = bam_reg2bin (pos, last_pos); // zero-based, half-closed half-open [start,end)
-            alignment->bin = LTEN16 (bin); // override the -1 previously set by the translator
+            PUT_UINT16_(alignment, bin, LTEN16 (bin)); // override the -1 previously set by the translator
         }
     }
     
@@ -1003,6 +1003,12 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_COPY_BUDDY_CIGAR)
     STR(bam_cigar);
     sam_reconstruct_from_buddy_get_textual_snip (vb, CTX(SAM_CIGAR), bt, pSTRa(bam_cigar));
     
+#ifndef GENOZIP_ALLOW_UNALIGNED_ACCESS
+    char bam_cigar_copy[bam_cigar_len];
+    memcpy (bam_cigar_copy, bam_cigar, bam_cigar_len);
+    bam_cigar = bam_cigar_copy;
+#endif
+
     // convert binary CIGAR to textual MC:Z
     uint32_t n_cigar_op = bam_cigar_len / sizeof (uint32_t);
     sam_cigar_binary_to_textual (vb, n_cigar_op, (BamCigarOp *)bam_cigar, &vb->txt_data);

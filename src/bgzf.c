@@ -156,7 +156,7 @@ void bgzf_finalize_discovery (void)
 
         if (flag.show_bgzf || flag.show_gz) 
             iprintf ("%s: %s %s level %u\n", txt_name, 
-                     (n_levels == 1) ? "Identified as generated with" : "Multiple plausible levels, arbitrarily selecting",
+                     (n_levels == 1) ? "Identified as BGZF generated with" : "Multiple plausible levels, arbitrarily selecting",
                      bgzf_library_name (txt_file->bgzf_flags.library, true), txt_file->bgzf_flags.level);
     }    
 
@@ -566,11 +566,13 @@ void bgzf_zip_advance_index (VBlockP vb, uint32_t line_len)
 int64_t bgzf_copy_unconsumed_blocks (VBlockP vb)
 {
     START_TIMER;
+    ASSERTISZERO (txt_file->unconsumed_bgzf_blocks.len32);
 
     if (!vb->bgzf_blocks.len) return 0; // not a BGZF-compressed file
 
-    int32_t consumed = Ltxt +   // amount of data consumed by this VB
-                       vb->bgzf_blocks.consumed_by_prev_vb; 
+    int32_t consumed = // amount of data in vb->bgzf_blocks that does NOT need to be copied to next VB bc it was consumed by this VB or the previous one 
+        Ltxt +         // amount of data consumed by this VB
+        vb->bgzf_blocks.consumed_by_prev_vb; // amount of data in first BGZF block was conusmed by the previous VB
 
     ARRAY (BgzfBlockZip, bb, vb->bgzf_blocks);
 
@@ -600,6 +602,14 @@ int64_t bgzf_copy_unconsumed_blocks (VBlockP vb)
 
     // sanity check
     ASSERT (-consumed == txt_file->unconsumed_txt.len32, "Expecting (-consumed)=%d == unconsumed_txt.len=%u", -consumed, txt_file->unconsumed_txt.len32);
+
+    // update bb.txt_index for next VB
+    // note: first bb.txt_data of the next VB is possibly negative if some of its data was consumed by the current VB
+    int32_t txt_index = -txt_file->unconsumed_bgzf_blocks.consumed_by_prev_vb;
+    for_buf (BgzfBlockZip, bb, txt_file->unconsumed_bgzf_blocks) {
+        bb->txt_index = txt_index; 
+        txt_index += bb->txt_size;
+    }
 
     COPY_TIMER (bgzf_copy_unconsumed_blocks);
     return consumed_full_bgzf_blocks ? compressed_size : 0;
@@ -908,7 +918,7 @@ static void bgzf_compress_one_block (VBlockP vb, rom in, uint32_t isize,
 
     BgzfFooter footer = { .crc32 = LTEN32 (crc32 (0, in, isize)),
                           .isize = LTEN32 (isize) };
-    buf_add (compressed, &footer, sizeof (BgzfFooter));
+    buf_add (compressed, (rom)&footer, sizeof (BgzfFooter));
 
     if (flag.show_bgzf)
         #define C(i) (i < isize ? char_to_printable (in[i]).s : "")

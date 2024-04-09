@@ -632,8 +632,7 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
         // case SAM to BAM translation: set alignment.block_size (was in sam_piz_sam2bam_AUX until v11)
         if (dict_id.num == _SAM_TOP2BAM) { 
             BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)Btxt (vb->line_start);
-            alignment->block_size = Ltxt - vb->line_start - sizeof (uint32_t); // block_size doesn't include the block_size field itself
-            alignment->block_size = LTEN32 (alignment->block_size);
+            PUT_UINT32_(alignment, block_size, LTEN32 (Ltxt - vb->line_start - sizeof (uint32_t))); // block_size doesn't include the block_size field itself
         }
         
         // --FLAG

@@ -141,7 +141,7 @@ static void vcf_seg_INFO_DP_by_BaseCounts (VBlockP vb)
     }
 
     else
-        seg_integer_or_not (VB, ctx_dp, STRtxtw(ctx_dp->last_txt), add_bytes);
+        seg_integer_or_not (VB, ctx_dp, STRtxt(ctx_dp->last_txt), add_bytes);
 }
 
 // initialize reconstructing INFO/DP by sum(FORMAT/DP) - save space in txt_data, and initialize delta

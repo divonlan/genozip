@@ -368,8 +368,13 @@ typedef int ThreadId;
     #define GET_UINT64(p)  *((uint64_t *)(p))
     #define GET_FLOAT32(p) *((float *)(p))
 
+    #define GET_UINT32_(st_p, member) ((st_p)->member)
+
     #define PUT_UINT16(p,n) *((uint16_t *)(p)) = (n)
     #define PUT_UINT32(p,n) *((uint32_t *)(p)) = (n)
+
+    #define PUT_UINT16_(st_p, member, n) (st_p)->member = (n)
+    #define PUT_UINT32_(st_p, member, n) (st_p)->member = (n)
 #else
     // loading a Little Endian uint32_t from an unaligned memory location
     #define GET_UINT16(p)  ((uint16_t)((uint8_t*)(p))[0] | ((uint16_t)((uint8_t*)(p))[1] << 8))
@@ -377,16 +382,22 @@ typedef int ThreadId;
     #define GET_UINT64(p)  ((uint64_t)((uint8_t*)(p))[0] | ((uint64_t)((uint8_t*)(p))[1] << 8) | ((uint64_t)((uint8_t*)(p))[2] << 16) | ((uint64_t)((uint8_t*)(p))[3] << 24) | ((uint64_t)((uint8_t*)(p))[4] << 32) | ((uint64_t)((uint8_t*)(p))[5] << 40) | ((uint64_t)((uint8_t*)(p))[6] << 48) | ((uint64_t)((uint8_t*)(p))[7] << 56)))
     #define GET_FLOAT32(p) ({ union { uint32_t i; float f; } n= {.i = GET_UINT32(p)}; n.f; })
 
+    #define GET_UINT32_(st_p, member) ({ typeof(*st_p) dummy; bytes _P=(bytes)(st_p) + ((bytes)&dummy.member - (bytes)&dummy); ((uint32_t)_P[0] | ((uint32_t)_P[1] << 8) | ((uint32_t)_P[2] << 16) | ((uint32_t)_P[3] << 24)); })
+
     // storing a Little Endian integer in an unaligned memory location
-    #define PUT_UINT16(p,n) ({ uint16_t N=(n); uint8_t *P=(uint8_t *)(p); P[0]=N; P[1]=N>>8; }) 
-    #define PUT_UINT32(p,n) ({ uint32_t N=(n); uint8_t *P=(uint8_t *)(p); P[0]=N; P[1]=N>>8; P[2]=N>>16; P[3]=N>>24; })
+    #define PUT_UINT16(p,n) ({ uint16_t _N=(n); uint8_t *_P=(uint8_t *)(p); _P[0]=_N; _P[1]=_N>>8; }) 
+    #define PUT_UINT32(p,n) ({ uint32_t _N=(n); uint8_t *_P=(uint8_t *)(p); _P[0]=_N; _P[1]=_N>>8; _P[2]=_N>>16; _P[3]=_N>>24; })
+
+    // storing as a struct member
+    #define PUT_UINT16_(st_p, member, n) ({ typeof(*st_p) dummy; PUT_UINT16 ((rom)(st_p) + ((rom)&dummy.member - (rom)&dummy), (n)); })
+    #define PUT_UINT32_(st_p, member, n) ({ typeof(*st_p) dummy; PUT_UINT32 ((rom)(st_p) + ((rom)&dummy.member - (rom)&dummy), (n)); })
 #endif
 
 #define GET_UINT8(p)   ((uint8_t)(((uint8_t*)(p))[0]))
 #define GET_UINT24(p)  ((uint32_t)(((uint8_t*)(p))[0] | (((uint8_t*)(p))[1] << 8))| (((uint8_t*)(p))[2] << 16))
 
 #define PUT_UINT8(p,n)  ({ ((uint8_t*)(p))[0] = (n); })
-#define PUT_UINT24(p,n) ({ uint32_t N=(n); uint8_t *P=(uint8_t *)(p); P[0]=N; P[1]=N>>8; P[2]=N>>16; })
+#define PUT_UINT24(p,n) ({ uint32_t _N=(n); uint8_t *_P=(uint8_t *)(p); _P[0]=_N; _P[1]=_N>>8; _P[2]=_N>>16; })
 
 // used for qsort sort function - receives two integers of any type and returns -1/0/1 as required to sort in ascending order
 #define SORTER(func) int func (const void *a, const void *b)
@@ -508,8 +519,7 @@ typedef SORTER ((*Sorter));
 #define STRfBw(buf,txtword) (txtword).len, Bc ((buf), (txtword).index) // used with TxtWord or ZWord
 #define STRfN(x) (x), ((x)!=1 ? "s" : "") // to match format eg "%u file%s" - singular or plural 
 
-#define STRtxtw(txtword) Btxt ((txtword).index), (txtword).len // used with TxtWord
-#define STRtxt(x) Btxt (x), x##_len
+#define STRtxt(txtword) Btxt ((txtword).index), (txtword).len // used with TxtWord
 
 #define STRcpy(dst,src)    ({ if (src##_len) { memcpy(dst,src,src##_len) ; dst##_len = src##_len; } })
 #define STRcpyi(dst,i,src) ({ if (src##_len) { memcpy(dst##s[i],src,src##_len) ; dst##_lens[i] = src##_len; } })

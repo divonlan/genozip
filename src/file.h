@@ -36,7 +36,6 @@ typedef struct File {
     bool is_remote;                    // true if file is downloaded from a url
     bool redirected;                   // TXT_FILE: true if this file is redirected from stdin/stdout or a pipe
     bool is_eof;                       // we've read the entire file
-    bool header_only;                  // ZIP txt_file: file has only the data-type header and no data
     bool is_in_tar;                    // z_file: file is embedded in tar file
     bool is_scanned;                   // TXT_FILE: sam_sag_by_flag_scan_for_depn has been performed for this file
     DataType data_type;
@@ -53,7 +52,7 @@ typedef struct File {
     int64_t txt_data_size;             // TXT_FILE: PIZ: value copied from SectionHeaderTxtHeader.txt_data_size. At the end of piz, expected to be equal to txt_data_so_far_single if no PIZ modifications (eg filters) 
     int64_t txt_data_so_far_single;    // TXT_FILE: data read (ZIP) or written (PIZ with writer) to/from txt file so far or reconsturcted (PIZ with --test)
                                        // Z_FILE: txt data represented in the GENOZIP data written (ZIP) or read (PIZ) to/from the genozip file so far for the current txt file
-    int64_t header_size;               // TXT_FILE ZIP: size of txt header  z_file ZIP: size of MAIN txt header
+    int64_t header_size;               // TXT_FILE ZIP: size of txt header z_file ZIP: size of MAIN txt header
     int64_t header_size_bgzf;          // TXT_FILE ZIP: compressed size of header - or 0 if not whole BGZF blocks
     
     int64_t txt_data_so_far_bind;      // Z_FILE only: uncompressed txt data represented in the GENOZIP data written so far for all bound files

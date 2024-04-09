@@ -146,7 +146,7 @@ static void bed_seg_START (VBlockP vb, STRp(start), WordIndex prev_line_chrom)
 
 static void bed_seg_TSTART_TEND (VBlockP vb, Did did_i, Did base_did_i, STRp(value), STRp(copy_snip))
 {
-    if (str_issame_(STRa(value), STRtxtw(CTX(did_i)->last_txt)))
+    if (str_issame_(STRa(value), STRtxt(CTX(did_i)->last_txt)))
         seg_by_did (vb, STRa(copy_snip), did_i, value_len + 1);
 
     else 

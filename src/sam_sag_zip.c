@@ -595,7 +595,7 @@ static void sam_sa_seg_depn_find_sagroup_SAtag (VBlockSAMP vb, ZipDataLineSAMP d
 
     int64_t grp_index_i=-1;
     uint32_t qname_hash;
-    const Sag *g = sam_sa_get_first_group_by_qname_hash (vb, STRtxtw(dl->QNAME), dl->FLAG.is_last, &grp_index_i, &qname_hash);
+    const Sag *g = sam_sa_get_first_group_by_qname_hash (vb, STRtxt(dl->QNAME), dl->FLAG.is_last, &grp_index_i, &qname_hash);
     if (!g) return; // no PRIM with this qname
 
     // temporarily replace H with S if needed
@@ -628,7 +628,7 @@ static void sam_sa_seg_depn_find_sagroup_SAtag (VBlockSAMP vb, ZipDataLineSAMP d
             dl->FLAG.is_last    == g->is_last                                    &&
             dl->FLAG.multi_segs == g->multi_segs                                 &&
             n_my_alns           == g->num_alns                                   && 
-            str_issame_(STRtxtw(dl->QNAME), GRP_QNAME(g), g->qname_len)          && 
+            str_issame_(STRtxt(dl->QNAME), GRP_QNAME(g), g->qname_len)          && 
             sam_seg_depn_find_SA_aln (vb, g, n_my_alns, my_alns, &my_aln_i)      &&
             sam_seg_depn_is_subseq_of_prim (vb, (uint8_t*)textual_seq, dl->SEQ.len, (revcomp != g->revcomp), g, is_bam)) { // this will fail if SEQ has non-ACGT or if DEPN sequence invalidly does not match the PRIM sequence (observed in the wild)
 
@@ -665,7 +665,7 @@ static void sam_sa_seg_depn_find_sagroup_noSA (VBlockSAMP vb, ZipDataLineSAMP dl
 
     int64_t grp_index_i=-1;
     uint32_t qname_hash;
-    const Sag *g = sam_sa_get_first_group_by_qname_hash (vb, STRtxtw(dl->QNAME), dl->FLAG.is_last, &grp_index_i, &qname_hash);
+    const Sag *g = sam_sa_get_first_group_by_qname_hash (vb, STRtxt(dl->QNAME), dl->FLAG.is_last, &grp_index_i, &qname_hash);
 
     PosType32 cp = -1;
     STR0(cc); cc="";
@@ -701,7 +701,7 @@ static void sam_sa_seg_depn_find_sagroup_noSA (VBlockSAMP vb, ZipDataLineSAMP dl
             g->seq_len          == vb->hard_clip[0] + seq_len + vb->hard_clip[1] &&
             dl->FLAG.is_last    == g->is_last    &&
             dl->FLAG.multi_segs == g->multi_segs &&
-            str_issame_(STRtxtw(dl->QNAME), GRP_QNAME(g), g->qname_len) && 
+            str_issame_(STRtxt(dl->QNAME), GRP_QNAME(g), g->qname_len) && 
             sam_seg_depn_is_subseq_of_prim (vb, (uint8_t*)textual_seq, dl->SEQ.len, (revcomp != g->revcomp), g, is_bam)) {
 
             // found - seg into local

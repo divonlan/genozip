@@ -767,7 +767,7 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
         buf_alloc (vb, &ctx->con_cache, con_size + prefixes_len + CONTAINER_MAX_SELF_TRANS_CHANGE, 0, char, 2, CTX_TAG_CON_CACHE);
         
         char *cached_con = BAFTc (ctx->con_cache);
-        buf_add (&ctx->con_cache, &con, con_size);
+        buf_add (&ctx->con_cache, (rom)&con, con_size);
         if (prefixes_len) buf_add (&ctx->con_cache, prefixes, prefixes_len);
 
         // IMPORTANT! we are returning a pointer into the cache buffer which might have just been realloced ^. 

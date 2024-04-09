@@ -100,6 +100,16 @@ void buf_remove_do (BufferP buf, unsigned sizeof_item, uint64_t remove_start, ui
     buf->len -= remove_len;
 }
 
+void buf_add (BufferP buf, STRp(data))
+{
+    if (!data_len) return; // don't test for space (and "data" pointer) if length is 0
+
+    ASSERT (buf_has_space (buf, data_len),
+            "buf_add: buffer %s is out of space: len=%u size=%u data_len=%u",
+            buf_desc (buf).s, (uint32_t)buf->len, (uint32_t)buf->size, data_len);
+    buf_add_do (buf, data, data_len);
+}
+
 void buf_insert_do (VBlockP vb, BufferP buf, unsigned width, uint64_t insert_at, const void *new_data, uint64_t new_data_len, rom name, FUNCLINE) 
 { 
     if (!new_data_len) return;

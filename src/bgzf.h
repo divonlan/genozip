@@ -21,7 +21,7 @@
     
 // data type of VBlock.bgzf_blocks
 typedef struct BgzfBlockZip {
-    uint32_t txt_index;                   // index of uncompressed block within vb->txt_data. The first block doesn't necessarily have index=0 bc there could be passed-down data
+    int32_t txt_index;                    // index of uncompressed block within vb->txt_data. If there is passed-down data from previous VB/txt_header, then txt_index of the first block will be negative (see bgzf_copy_unconsumed_blocks)
     uint32_t txt_size        : 17;        // max value is BGZF_MAX_BLOCK_SIZE
     uint32_t is_decompressed : 1;         // has data been BGZF-decompressed by main thread
     uint32_t compressed_index, comp_size; // index within vb->scratch

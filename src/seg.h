@@ -285,13 +285,11 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux
 
 #define SEG_EOL(f,account_for_ascii10) ({ seg_by_did (VB, *(has_13) ? "\r\n" : "\n", 1 + *(has_13), (f), (account_for_ascii10) + *(has_13)); })
 
-#define ASSSEG(condition, format, ...)                                                                      \
-    ASSINP ((condition), "%s %s:%s: " format "\nTechnical details: pos_in_vb: %u pos_in_file: %"PRIu64"\n"  \
-                         "To get vblock: \"genozip --biopsy %d %s\". Offending line:\n"                      \
-                         "%s\n",     str_time().s, txt_name, LN_NAME, __VA_ARGS__,                          \
-            /* pos_in_vb/file:    */ vb->line_start, vb->vb_position_txt_file + vb->line_start,             \
-            /* biopsy parameters: */ vb->vblock_i, txt_name,                                                \
-            /* \0-term textual    */ DT_FUNC (vb, assseg_line)((VBlockP)(vb)))
+extern StrTextLong seg_error (VBlockP vb);
+
+#define ASSSEG(condition, format, ...)                                                                  \
+    ASSINP ((condition), "%s %s:%s: " format "%s%s\n", str_time().s, txt_name, LN_NAME, __VA_ARGS__,    \
+            seg_error(VB).s, DT_FUNC (vb, assseg_line)((VBlockP)(vb)))
 
 #define ASSSEG0(condition, err_str) ASSSEG (condition, err_str "%s", "")
 

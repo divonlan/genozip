@@ -395,13 +395,13 @@ static void sam_piz_deep_add_qname (VBlockSAMP vb)
         if (comp_len >= suffix_len) goto uncompressed_suffix;
 
         suffix_is_compressed = true;
-        buf_add (&vb->deep_ents, comp, comp_len);
+        buf_add (&vb->deep_ents, (rom)comp, comp_len);
 
         vb->deep_stats[QNAME_BYTES] += 2 + comp_len;
     }
 
     else uncompressed_suffix: {
-        buf_add (&vb->deep_ents, suffix, suffix_len);
+        buf_add (&vb->deep_ents, STRa(suffix));
 
         vb->deep_stats[QNAME_BYTES] += 2 + suffix_len;
     }

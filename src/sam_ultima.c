@@ -349,7 +349,7 @@ void sam_seg_ultima_MI (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(mi), unsigned ad
     ARRAY (TxtWord, mi_history, ctx->mi_history);
 
     if (!dl->FLAG.duplicate) {
-        if (str_issame_(STRa(mi), STRtxtw(dl->QNAME)))
+        if (str_issame_(STRa(mi), STRtxt(dl->QNAME)))
             seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_ULTIMA_mi, '0' }, 3, ctx, add_bytes);
         else
             goto fallback;
@@ -358,7 +358,7 @@ void sam_seg_ultima_MI (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(mi), unsigned ad
     else {
         // search for a non-duplicaete or duplicate in the same MI-group that appears before
         int i=0; for (; i < MI_HISTORY_LEN; i++)
-            if (str_issame_(STRa(mi), STRtxtw(mi_history[i]))) {
+            if (str_issame_(STRa(mi), STRtxt(mi_history[i]))) {
                 seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_ULTIMA_mi, '0' + i }, 3, ctx, add_bytes);
                 break;
             }

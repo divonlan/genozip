@@ -322,7 +322,7 @@ static bool gff_seg_target (VBlockGFFP vb, ContextP ctx, STRp(value))
 
 static int exon_number_prediction (VBlockGFFP vb, ContextP ctx)
 {
-    bool is_exon = str_issame_(STRtxtw(CTX(GFF_TYPE)->last_txt), "exon", 4);
+    bool is_exon = str_issame_(STRtxt(CTX(GFF_TYPE)->last_txt), "exon", 4);
     bool prev_is_transcript = str_issame_(STRa(vb->prev_type), "transcript", 10);
 
     int prediction = (is_exon && !prev_is_transcript) ? ctx->last_value.i + 1
@@ -341,7 +341,7 @@ static void gff_seg_transcript_name (VBlockGFFP vb, STRp(transcript_name))
     
     if (n_items == 2 && 
         ctx_encountered_in_line (VB, ATTR_gene_name) &&
-        str_issame_(STRi(item,0), STRtxtw(CTX(ATTR_gene_name)->last_txt)) &&
+        str_issame_(STRi(item,0), STRtxt(CTX(ATTR_gene_name)->last_txt)) &&
         str_is_int (STRi(item,1))) {
 
         seg_by_ctx (VB, STRa(copy_gene_name_snip), CTX(ATTR_transcript_name_gene), item_lens[0]);

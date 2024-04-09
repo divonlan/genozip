@@ -45,24 +45,26 @@ void fastq_seg_LINE3 (VBlockFASTQP vb, STRp(qline3), STRp(qline1), STRp(desc))
         CTX(FASTQ_LINE3)->txt_len++;     // account for the '+' (it is segged in the toplevel container)
     }
     
-    else if (segconf.line3 == L3_EMPTY) { // no segging - we will drop the line from top_level
-        ASSSEG (!qline3_len, "Invalid FASTQ file format: expecting middle line to be a \"+\", but it is \"%.*s\"", STRf(qline3));
-        CTX(FASTQ_LINE3)->txt_len++;      // account for the '+' (it is segged in the toplevel container)
+    else switch (segconf.line3) {
+        case L3_EMPTY:  // no segging - we will drop the line from top_level
+            ASSSEG (!qline3_len, "Invalid FASTQ file format: expecting middle line to be a \"+\", but it is \"%.*s\"", STRf(qline3));
+            CTX(FASTQ_LINE3)->txt_len++;      // account for the '+' (it is segged in the toplevel container)
+            break;
+
+        case L3_COPY_LINE1:
+            ASSSEG (fastq_is_line3_copy_of_line1 (STRa(qline1), STRa(qline3), desc_len),
+                    "Invalid FASTQ file format: expecting middle line to be a \"+\" followed by a copy of the description line, but it is \"%.*s\"", STRf(qline3)); 
+            seg_by_did (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_copy_line1 }, 2, FASTQ_LINE3, 1 + qline3_len); // +1 - account for the '+' (segged as a toplevel container prefix)
+            break;
+
+        case L3_NCBI: 
+            // note: we only need to seg QLINE3, DESC (if exists) was already segged in fastq_seg_txt_line
+            qname_seg (VB, QLINE3, STRa(qline3), 1);
+            break;
+
+        default:
+            ABOSEG ("Invalid segconf.line3=%d. Perhaps segconf failed to run?", segconf.line3);
     }
-
-    else if (segconf.line3 == L3_COPY_LINE1) {
-        ASSSEG (fastq_is_line3_copy_of_line1 (STRa(qline1), STRa(qline3), desc_len),
-                "Invalid FASTQ file format: expecting middle line to be a \"+\" followed by a copy of the description line, but it is \"%.*s\"", STRf(qline3)); 
-        seg_by_did (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_copy_line1 }, 2, FASTQ_LINE3, 1 + qline3_len); // +1 - account for the '+' (segged as a toplevel container prefix)
-    }
-
-    else if (segconf.line3 == L3_NCBI) 
-        // note: we only need to seg QLINE3, DESC (if exists) was already segged in fastq_seg_txt_line
-        qname_seg (VB, QLINE3, STRa(qline3), 1);
-
-    else 
-        ABOSEG ("Invalid FASTQ file format: expecting middle line to be a \"+\" with or without a copy of the description, but it is \"%.*s\"",
-                STRf(qline3));
 }
 
 //--------------------------------------------

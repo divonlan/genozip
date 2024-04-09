@@ -465,6 +465,14 @@ batch_special_algs()
 
     test_header "VCF empty sample fields regression test"
     $genozip ${TESTDIR}/regression.empty-sample-fields.vcf -ft || exit 1 
+
+    # bug was: compression failed, bc failed to identify a read in the VB when there is only one, with part of it in unconsumed_txt from previous VB, and part in a BGZF block (fixed 15.0.56)
+    test_header "vb=2 is single read" 
+    $genozip -B32 ${TESTDIR}/regression.vb2-is-single-read.fq.gz -ft || exit 1 
+
+    # bug was: compression failed, bc igzip would not decompress a 128K GZ chunk into the small vb_sizes[0] of first segconf attempt, and segconf gave up instead of attempting vb_sizes[1]
+    test_header "segconf vb_sizes[0] too small, try with vb_size[1]" 
+    $genozip -B32 ${TESTDIR}/regression.no_small_segconf_vb_size.fq.gz -ft --truncate || exit 1 
 }
 
 batch_qual_codecs()

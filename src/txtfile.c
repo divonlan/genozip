@@ -141,6 +141,7 @@ static uint32_t txtfile_read_block_gz (VBlockP vb, uint32_t max_bytes)
 
     // top up igzip_data
     int32_t bytes_read = fread (BAFTc(txt_file->igzip_data), 1, IGZIP_CHUNK - txt_file->igzip_data.len32, (FILE *)txt_file->file); 
+    
     ASSERT (!ferror((FILE *)txt_file->file) && bytes_read >= 0, "Error reading GZ file %s on filesystem=%s: %s", 
             txt_name, arch_get_filesystem_type().s, strerror (errno));
 
@@ -482,7 +483,6 @@ static uint32_t txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb)
     START_TIMER;
 
     int32_t pass_to_next_vb_len;
-    int32_t last_i = Ltxt-1; // next index to test (going backwards)
 
     // case: the data is BGZF-compressed in vb->scratch, except for passed down data from prev VB        
     // uncompress one block at a time to see if its sufficient. usually, one block is enough
@@ -494,12 +494,14 @@ static uint32_t txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb)
             BgzfBlockZip *bb = B(BgzfBlockZip, vb->bgzf_blocks, block_i);
             bgzf_uncompress_one_block (vb, bb);
 
-            pass_to_next_vb_len = (DT_FUNC(txt_file, unconsumed)(vb, bb->txt_index, &last_i));
+            int32_t last_i = Ltxt-1; // test from end of data
+            pass_to_next_vb_len = (DT_FUNC(txt_file, unconsumed)(vb, MAX_(bb->txt_index, 0), &last_i)); // note: bb->txt_index might be negative if part of this bb was consumed by the previous VB
             if (pass_to_next_vb_len >= 0) goto done; // we have the answer (callback returns -1 if it needs more data)
         }
     }
 
     // test remaining txt_data including passed-down data from previous VB
+    int32_t last_i = Ltxt-1; // test from end of data
     pass_to_next_vb_len = (DT_FUNC(vb, unconsumed)(vb, 0, &last_i));
 
     if (flag.truncate && pass_to_next_vb_len < 0 && !segconf.running) {
@@ -628,8 +630,6 @@ void txtfile_read_vblock (VBlockP vb)
                              flag.add_line_numbers || // vcf_zip_init_vb   needs to count lines
                              flag.biopsy;
 
-    txt_file->header_only = false; // optimistic initialization
-
     for (bool first=true; ; first=false) {
 
         bool is_bgzf = (txt_file->codec == CODEC_BGZF);
@@ -639,11 +639,7 @@ void txtfile_read_vblock (VBlockP vb)
 
         uint32_t len = (max_memory_per_vb > Ltxt) ? txtfile_read_block (vb, bytes_requested, always_uncompress) : 0;
         
-        if (!len && first && !Ltxt) {
-            if (vb->vblock_i <= 1) txt_file->header_only = true; // header-only file (the header was already read, and there is no additional data)
-                                                                 // note: this doesn't capture header-only 2nd+ bound file
-            return;
-        }
+        if (!len && first && !Ltxt) return;
 
         // when reading BGZF, we might be filled up even without completely filling max_memory_per_vb 
         // if there is room left for only a partial BGZF block (we can't read partial blocks)
@@ -694,8 +690,8 @@ void txtfile_read_vblock (VBlockP vb)
         Ltxt -= pass_to_next_vb_len; 
 
         // copy unconsumed or partially consumed bgzf_blocks to txt_file->unconsumed_bgzf_blocks
-        if (txt_file->codec == CODEC_BGZF)
-            bgzf_copy_unconsumed_blocks (vb); 
+        if (txt_file->codec == CODEC_BGZF) 
+            bgzf_copy_unconsumed_blocks (vb);
 
         // if is possible we reached eof but still have pass_up_data - this happens eg in make-reference when a
         // VB takes only one contig from txt_data and pass up the rest - reset eof so that we come back here to process the rest

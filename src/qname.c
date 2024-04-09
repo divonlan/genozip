@@ -721,11 +721,12 @@ bool qname_seg (VBlockP vb, QType q, STRp (qname), unsigned add_additional_bytes
             if (VB_DT(SAM) || VB_DT(BAM)) q = QNAME1; 
 
             // collect the first 6 qnames / q2names, if flavor is unknown OR not successful in segging by flavor 
-            if (segconf.n_unk_flav_qnames[q] < NUM_COLLECTED_WORDS) // unrecognized flavor
+            if (segconf.n_unk_flav_qnames[q] < NUM_COLLECTED_WORDS) { // unrecognized flavor
                 memcpy (segconf.unk_flav_qnames[q][segconf.n_unk_flav_qnames[q]], qname, MIN_(qname_len, UNK_QNANE_LEN));
         
-            if (!segconf.n_unk_flav_qnames[q] || memcmp (segconf.unk_flav_qnames[q][segconf.n_unk_flav_qnames[q]], segconf.unk_flav_qnames[q][segconf.n_unk_flav_qnames[q]-1], UNK_QNANE_LEN))
-                segconf.n_unk_flav_qnames[q]++; // advance iff qname is different than previous line (not always the case if collated)
+                if (!segconf.n_unk_flav_qnames[q] || memcmp (segconf.unk_flav_qnames[q][segconf.n_unk_flav_qnames[q]], segconf.unk_flav_qnames[q][segconf.n_unk_flav_qnames[q]-1], UNK_QNANE_LEN))
+                    segconf.n_unk_flav_qnames[q]++; // advance iff qname is different than previous line (not always the case if collated)
+            }
         }
     }
 

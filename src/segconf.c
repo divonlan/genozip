@@ -215,9 +215,10 @@ static void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
     if (flag.low_memory && !flag.vblock)
         segconf.vb_size = MIN_(segconf.vb_size, VBLOCK_MEMORY_LOW_MEM);
 
-    if (flag.show_memory && num_used_contexts) 
-        iprintf ("\nvblock size set to %u MB (num_used_contexts=%u%s)\n", 
-                 (unsigned)(segconf.vb_size >> 20), num_used_contexts, 
+    if (flag.show_memory) 
+        iprintf ("\nvblock size set to %u MB %s%s\n", 
+                 (unsigned)(segconf.vb_size >> 20), 
+                 cond_int (num_used_contexts, "num_used_contexts", num_used_contexts),
                  cond_int (Z_DT(VCF) || Z_DT(BCF), " num_vcf_samples=", vcf_header_get_num_samples()));
 }
 
@@ -322,11 +323,11 @@ void segconf_calculate (void)
     for (int s = (txt_file->codec == CODEC_BZ2); s < ARRAY_LEN(vb_sizes) && !Ltxt; s++) {
         segconf.vb_size = vb_sizes[s];
         txtfile_read_vblock (vb);
-        if (txt_file->header_only) break;
     }
 
     if (!Ltxt) {
-        ASSERTW (txt_file->header_only, "FYI: Segconf didn't run because either there is not even one full line, OR first line is larger than %u", vb_sizes[ARRAY_LEN(vb_sizes)-1]);
+        // error unless this is a header-only file
+        ASSERT0 (txt_file->header_size, "Failed to segconf. Possible reasons: cannot find a single valid line");
     
         segconf_set_vb_size (vb, save_vb_size);
         goto done; // cannot find a single line - vb_size set to default and other segconf fields remain default, or previous file's setting

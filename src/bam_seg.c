@@ -53,7 +53,7 @@ static int32_t bam_unconsumed_scan_forwards (VBlockP vb)
 
     uint32_t aln_size=0, i;
     for (i=0 ; i < txt_len-3; i += aln_size) 
-        aln_size = LTEN32 ((BAMAlignmentFixed *)&txt[i])->block_size + 4;
+        aln_size = GET_UINT32_((BAMAlignmentFixed *)&txt[i], block_size) + 4;
 
     if (aln_size > txt_len) 
         return -1; // this VB doesn't not even contain one single full alignment
@@ -435,11 +435,11 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     dl->FLAG.value       = NEXT_UINT16;              // not to be confused with our global var "flag"
     uint32_t l_seq       = NEXT_UINT32;              // note: we stick with the same logic as SAM for consistency - dl->SEQ.len is determined by CIGAR 
     dl->RNEXT            = (int32_t)NEXT_UINT32;     // corresponding to CHROMs in the BAM header
-    PosType32 next_pos  = 1 + (int32_t)NEXT_UINT32; // pos in BAM is 0 based, -1 for unknown
+    PosType32 next_pos  = 1 + (int32_t)NEXT_UINT32;  // pos in BAM is 0 based, -1 for unknown
     SamTlenType tlen     = (SamTlenType)NEXT_UINT32;
     rom read_name        = next_field;
     dl->QNAME            = (TxtWord){ .index = BNUMtxt (read_name), .len = l_read_name-1 }; // -1 don't count \0
-    BamCigarOp *cigar    = (BamCigarOp *)(read_name + l_read_name);
+    BamCigarOp *cigar    = (BamCigarOp *)(read_name + l_read_name); // note: the "cigar" pointer might be mis-aligned, but we don't de-reference it
     bytes seq            = (uint8_t *)(cigar + n_cigar_op);
     dl->SEQ.index        = BNUMtxt (seq);
     rom qual             = (rom)seq + (l_seq+1)/2;
@@ -495,7 +495,8 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
         (flag.has_biopsy_line && sam_seg_test_biopsy_line (VB, alignment, block_size + 4)) )
         goto done;  
 
-    sam_cigar_binary_to_textual (vb, n_cigar_op, cigar, &vb->textual_cigar); // re-write BAM format CIGAR as SAM textual format in vb->textual_cigar
+    sam_cigar_binary_to_textual (vb, n_cigar_op, B1ST(BamCigarOp, vb->binary_cigar), // binary_cigar and not "cigar", as the latter is mis-aligned 
+                                 &vb->textual_cigar); // re-write BAM format CIGAR as SAM textual format in vb->textual_cigar
 
     // SEQ - calculate diff vs. reference (denovo or loaded)
     ASSERT (dl->SEQ.len == l_seq || (vb->textual_cigar.len == 1 && *B1STc(vb->textual_cigar) == '*') || !l_seq, 

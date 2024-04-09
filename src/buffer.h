@@ -138,18 +138,15 @@ extern void buf_remove_do (BufferP buf, unsigned sizeof_item, uint64_t remove_st
 
 extern void buf_insert_do (VBlockP vb, BufferP buf, unsigned width, uint64_t insert_at, const void *new_data, uint64_t new_data_len, rom name, FUNCLINE);
 
-#define buf_has_space(buf, new_len) ((buf)->len + (new_len) <= (buf)->size)
+#define buf_has_space(buf, new_len) ((buf)->data && (buf)->len + (new_len) <= (buf)->size)
 
-#define buf_add_do(buf, new_data, new_len)                                              \
-    ({ memcpy (&(buf)->data[(buf)->len], (new_data), (new_len));                        \
-       (buf)->len += (new_len); })
+static inline void buf_add_do (BufferP buf, STRp(data))
+{
+    memcpy (&buf->data[buf->len], data, data_len);
+    buf->len += data_len;
+}
 
-#define buf_add(buf, new_data, new_data_len)                                            \
-    ({ uint32_t new_len = (uint32_t)(new_data_len); /* copy in case caller uses ++ */   \
-       ASSERT (buf_has_space(buf, new_len),                                             \
-            "buf_add: buffer %s is out of space: len=%u size=%u new_data_len=%u",       \
-            buf_desc (buf).s, (uint32_t)(buf)->len, (uint32_t)(buf)->size, new_len);    \
-       buf_add_do ((buf), (new_data), new_len); })
+extern void buf_add (BufferP buf, STRp(data));
 
 #define buf_add_more(vb, buf, new_data, new_data_len, name)                             \
     buf_insert_do ((VBlockP)(vb), (buf), 1, (buf)->len, (new_data), (new_data_len), (name), __FUNCLINE)

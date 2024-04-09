@@ -19,6 +19,7 @@ architecture := $(shell uname -sm | sed -e 's/amd/x86_/')
 ifeq ($(OS),Windows_NT)
 	Windows := 1
 	OBJDIR=$(OBJDIR_WINDOWS)
+	architecture := Windows $(shell uname -m)
 	WSL=wsl
 endif
 
@@ -84,7 +85,7 @@ ifeq ($(CPU),x86_64) # or amd64
 
 	ifdef linux_x86
 		ASFLAGS += -f elf64 -DINTEL_CET_ENABLED
-		# DEBUGFLAGS += -fsanitize=undefined
+		# DEBUGFLAGS += -fsanitize=undefined 
 		DEBUGFLAGS += -fsanitize=address -Dsanitize_address
 	endif
 
@@ -364,39 +365,39 @@ $(OBJDIR)/%.d: %.cpp | $(OBJDIR) # directory is an "order only prerequesite": ht
 	@$(CXX) $(CXXFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
 
 $(OBJDIR)/distribution.%.o : distribution.c 
-	@echo Compiling \($(architecture)\) $< to $@
+	@echo "Compiling ($(architecture)) $< to $@"
 	@$(CC) -c -o $@ $< $(CFLAGS) -DDISTRIBUTION=\"$*\"
 
 # $(OBJDIR)/bsc/qlfc_%.o : bsc/qlfc.cpp 
-# 	@echo Compiling \($(architecture)\) $< to $@
+# 	@echo "Compiling ($(architecture)) $< to $@"
 # 	$(CXX) -c -o $@ $< $(CXXFLAGS) -DLIBBSC_DYNAMIC_CPU_DISPATCH -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_$*
 
 # $(OBJDIR)/bsc/adler32_%.o : bsc/adler32.cpp 
-# 	@echo Compiling \($(architecture)\) $< to $@
+# 	@echo "Compiling ($(architecture)) $< to $@"
 # 	$(CXX) -c -o $@ $< $(CXXFLAGS) -DLIBBSC_DYNAMIC_CPU_DISPATCH -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_$*
 
 $(OBJDIR)/%.o: %.c $(OBJDIR)/%.d
-	@echo Compiling \($(architecture)\) $<
+	@echo "Compiling ($(architecture)) $<"
 	@$(CC) -c -o $@ $< $(CFLAGS) 
 
 $(OBJDIR)/%.debug-o: %.c $(OBJDIR)/%.d
-	@echo "Compiling \($(architecture)\) $< (debug)"
+	@echo "Compiling ($(architecture)) $< (debug)"
 	@$(CC) -c -o $@ $< $(CFLAGS)
 
 $(OBJDIR)/%.opt-o: %.c $(OBJDIR)/%.d
-	@echo "Compiling \($(architecture)\) $< (opt)"
+	@echo "Compiling ($(architecture)) $< (opt)"
 	@$(CC) -c -o $@ $< $(CFLAGS)
 
 $(OBJDIR)/%.o: %.cpp $(OBJDIR)/%.d
-	@echo Compiling \($(architecture)\) $<
+	@echo "Compiling ($(architecture)) $<"
 	@$(CXX) -c -o $@ $< $(CXXFLAGS) 
 
 $(OBJDIR)/%.debug-o: %.cpp $(OBJDIR)/%.d
-	@echo "Compiling \($(architecture)\) $< (debug)"
+	@echo "Compiling ($(architecture)) $< (debug)"
 	@$(CXX) -c -o $@ $< $(CXXFLAGS)
 
 $(OBJDIR)/%.opt-o: %.cpp $(OBJDIR)/%.d
-	@echo "Compiling \($(architecture)\) $< (opt)"
+	@echo "Compiling ($(architecture)) $< (opt)"
 	@$(CXX) -c -o $@ $< $(CXXFLAGS)
 
 $(OBJDIR)/%.d: %.asm
@@ -408,11 +409,11 @@ $(OBJDIR)/%.d: %.S
 	@$(AS) $(ASFLAGS) -M $< > $@
 
 $(OBJDIR)/%.o: %.asm # nasm or yasm
-	@echo Compiling \($(architecture)\) $<
+	@echo "Compiling ($(architecture)) $<"
 	@$(AS) $(ASFLAGS) -o $@ $< 
 
 $(OBJDIR)/%.o: %.S   # GNU Assembler 
-	@echo Compiling \($(architecture)\) $<
+	@echo "Compiling ($(architecture)) $<"
 	@$(AS) $(ASFLAGS) -o $@ $< 
 
 %.S: %.c $(OBJDIR)/%.d

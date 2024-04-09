@@ -90,7 +90,11 @@ static void arch_add_to_windows_path (void)
 
 void arch_set_locale (void)
 {
-#ifndef _WIN32 // TO DO: make this work for Windows
+#ifdef _WIN32 // see bug 679
+    // ASSERTWD (SetThreadLocale (LOCALE_USER_DEFAULT),
+    ASSERTWD (SetThreadLocale (LOCALE_INVARIANT), // same as En_US
+              "Warning: failed SetThreadLocale: %s", str_win_error());
+#else 
     ASSERTWD0 (setlocale (LC_CTYPE,   flag.is_windows ? ".UTF-8" : "en_US.UTF-8"), "Warning: failed to setlocale of LC_CTYPE");   // accept and print UTF-8 text (to do: doesn't work for Windows)
 #endif
     ASSERTWD0 (setlocale (LC_NUMERIC, flag.is_windows ? "english" : "en_US.UTF-8"), "Warning: failed to setlocale of LC_NUMERIC"); // force printf's %f to use '.' as the decimal separator (not ',') (required by the Genozip file format)
@@ -255,7 +259,8 @@ double arch_get_physical_mem_size (void)
 StrText arch_get_filesystem_type (void)
 {
     StrText s = { "unknown" };
-    
+    int save_errno = errno; // save errno, as this function is often used in ASSERT.
+
     if (txt_file && txt_file->is_remote) {
         strcpy (s.s, "remote");
         goto done;
@@ -292,6 +297,7 @@ StrText arch_get_filesystem_type (void)
         NAME (0x2fc12fc1, "ZFS");      // Oracle ZFS (originally in Solaris) https://docs.oracle.com/cd/E19253-01/819-5461/zfsover-2/
         NAME (0x19830326, "FhGFS");    // https://www.beegfs.io/docs/SC13_FHGFS_Presentation.pdf
         NAME (0x53464846, "wslfs");    // WSL1: https://github.com/MicrosoftDocs/WSL/issues/465
+        NAME (0x1021994,  "tmpfs");    // Heap Backing Filesystem
         default: snprintf (s.s, sizeof (s.s), "0x%lx", fs.f_type); 
     }
 
@@ -307,10 +313,12 @@ StrText arch_get_filesystem_type (void)
     WCHAR ws[100];
     if (!GetVolumeInformationByHandleW ((HANDLE)_get_osfhandle(fileno (txt_file->file)), 0, 0, 0, 0, 0, ws, ARRAY_LEN(ws))) goto done;
 
-    wcstombs (s.s, ws, sizeof(s.s)-1);
+    if (wcstombs (s.s, ws, sizeof(s.s)-1) == (size_t)-1)
+        strcpy (s.s, "failed-wcstombs"); // can happen if locale is set to non-english
 #endif    
 
 done:
+    errno = save_errno;
     return s;
 } 
 

@@ -98,14 +98,14 @@ static void crypt_generate_aes_key (VBlockP vb,
     uint8_t is_header_byte = (uint8_t)is_header;
 
     // add some salt to the password, mixed with vb_i and sec_i for uniqueness
-    buf_add (&vb->spiced_pw, &vb_i, sizeof (uint32_t));
-    buf_add (&vb->spiced_pw, &sec_type_byte, sizeof (uint8_t));
-    buf_add (&vb->spiced_pw, &is_header_byte, sizeof (uint8_t));
-    buf_add (&vb->spiced_pw, salt, salt_len);
+    buf_add (&vb->spiced_pw, (rom)&vb_i, sizeof (uint32_t));
+    buf_add (&vb->spiced_pw, (rom)&sec_type_byte, sizeof (uint8_t));
+    buf_add (&vb->spiced_pw, (rom)&is_header_byte, sizeof (uint8_t));
+    buf_add (&vb->spiced_pw, STRa(salt));
     Digest salty_hash = md5_do (STRb(vb->spiced_pw));
 
     // add some pepper
-    buf_add (&vb->spiced_pw, pepper, pepper_len);
+    buf_add (&vb->spiced_pw, STRa(pepper));
     Digest peppered_hash = md5_do (STRb(vb->spiced_pw));
 
     // get hash

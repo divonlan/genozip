@@ -36,6 +36,20 @@
 #include "zip_dyn_int.h"
 #include "libdeflate_1.19/libdeflate.h"
 
+// part of ASSSEG
+StrTextLong seg_error (VBlockP vb)
+{
+    StrTextLong s;
+    snprintf (s.s, sizeof(s.s), 
+              "\nTechnical details: pos_in_vb=%u pos_in_file=%"PRIu64" txt_data.len=%u vb_size=%"PRIu64"\n"
+              "To get vblock: \"genozip --biopsy %d %s\". Offending line:\n",
+              vb->line_start, vb->vb_position_txt_file + vb->line_start, 
+              vb->txt_data.len32, segconf.vb_size, 
+              vb->vblock_i, txt_name);
+
+    return s;
+}
+
 WordIndex seg_by_ctx_ex (VBlockP vb, STRp(snip), ContextP ctx, uint32_t add_bytes,
                          bool *is_new) // optional out
 {
@@ -1228,7 +1242,7 @@ void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, const void *const data
 #endif
 
     buf_alloc (vb, &ctx->local, data_len + add_nul, 100000, char, CTX_GROWTH, CTX_TAG_LOCAL);
-    if (data_len) buf_add (&ctx->local, data, data_len); 
+    if (data_len) buf_add (&ctx->local, STRa(data)); 
     if (add_nul) BNXTc (ctx->local) = 0;
 
     if (add_bytes) ctx->txt_len += add_bytes;

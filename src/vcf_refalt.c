@@ -198,7 +198,7 @@ static void vcf_refalt_seg_BND (VBlockVCFP vb)
 {
     seg_by_dict_id (VB, vb->REF, 1, (DictId)_ALT_BND_REF, 1);
     seg_by_dict_id (VB, STRa(copy_ALT_BND_REF_snip), (DictId)_ALT_BND_REF2, 1);
-    seg_by_dict_id (VB, STRtxtw (vb->BND_INS), (DictId)_ALT_BND_INS, vb->BND_INS.len);
+    seg_by_dict_id (VB, STRtxt (vb->BND_INS), (DictId)_ALT_BND_INS, vb->BND_INS.len);
     
     vcf_seg_sv_copy_mate (vb, CTX(VCF_MATE_CHROM), STRa(vb->mate_chrom_name), TW_MATE_CHROM, TW_CHROM, false, vb->mate_chrom_name_len);
     

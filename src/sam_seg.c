@@ -1355,13 +1355,13 @@ static inline bool has_same_qname (VBlockSAMP vb, STRp (qname), LineIType buddy_
     TxtWord buddy_q = DATA_LINE(buddy_line_i)->QNAME;
 
     if (!last_char_flipped) 
-        return str_issame_(STRa(qname), STRtxtw (buddy_q));
+        return str_issame_(STRa(qname), STRtxt (buddy_q));
 
     else {   
         char r_a = qname[qname_len-1];
         char r_b = *Btxt(buddy_q.index + buddy_q.len - 1);
 
-        return str_issame_(STRa(qname) - 1, STRtxtw (buddy_q) - 1) &&
+        return str_issame_(STRa(qname) - 1, STRtxt (buddy_q) - 1) &&
                ((r_a=='1' && r_b=='2') || (r_a=='2' && r_b=='1'));
     }
 }
@@ -1375,12 +1375,12 @@ static inline BuddyType sam_seg_mate (VBlockSAMP vb, SamFlags f, STRp (qname), u
 
     uint32_t mate_hash = qname_calc_hash (QNAME1, STRa(qname), !f.is_last, true, NULL) & MAXB(CTX(SAM_QNAME)->qname_hash.prm8[0]);
     LineIType candidate = LINE_BY_HASH(mate_hash);
-    SamFlags mate_f = DATA_LINE(candidate)->FLAG;
+    SamFlags *mate_f = &DATA_LINE(candidate)->FLAG; // invalid pointer if no mate
 
     // case: mate is found
     if (has_same_qname (vb, STRa (qname), candidate, segconf.flav_prop[QNAME1].is_mated) && 
-        !sam_is_depn (mate_f) && 
-        mate_f.is_last != f.is_last) {
+        !sam_is_depn (*mate_f) && 
+        mate_f->is_last != f.is_last) {
         
         vb->mate_line_i = candidate;
         vb->mate_line_count++; // for stats
@@ -1404,12 +1404,12 @@ static inline BuddyType sam_seg_saggy (VBlockSAMP vb, SamFlags f, STRp (qname), 
     if (!IS_MAIN(vb)) return BUDDY_NONE;
 
     LineIType candidate = LINE_BY_HASH(my_hash);
-    SamFlags saggy_f = DATA_LINE(candidate)->FLAG;
+    SamFlags *saggy_f = &DATA_LINE(candidate)->FLAG; // invalid pointer if no saggy
 
     // case: we found another member of the same sag (i.e. same qname, same is_last)
-    if (has_same_qname (vb, STRa (qname), candidate, false) && saggy_f.is_last == f.is_last) { // the "prim" line against which we are segging cannot have hard clips
+    if (has_same_qname (vb, STRa (qname), candidate, false) && saggy_f->is_last == f.is_last) { // the "prim" line against which we are segging cannot have hard clips
         vb->saggy_line_i = candidate;
-        vb->saggy_is_prim = !sam_is_depn (saggy_f);
+        vb->saggy_is_prim = !sam_is_depn (*saggy_f);
         vb->saggy_near_count++;
 
         // replace value in hash table with current line, so future lines from the same seg have a smaller buddy delta,

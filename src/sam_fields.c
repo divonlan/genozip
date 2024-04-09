@@ -878,7 +878,7 @@ void sam_seg_buddied_Z_fields (VBlockSAMP vb, ZipDataLineSAMP dl, MatedZFields f
     ContextP channel_ctx = do_mux ? seg_mux_get_channel_ctx (VB, buddied_Z_dids[f], (MultiplexerP)&vb->mux_mated_z_fields[f], !!buddy_dl)
                                   : ctx;
 
-    if (do_mux && buddy_dl && str_issame_(STRa(value), STRtxtw (buddy_dl->mated_z_fields[f]))) 
+    if (do_mux && buddy_dl && str_issame_(STRa(value), STRtxt (buddy_dl->mated_z_fields[f]))) 
         seg_by_ctx (VB, STRi(copy_buddy_Z_snip,f), channel_ctx, add_bytes); 
 
     else if (seg_cb && !segconf.running) 
@@ -965,7 +965,7 @@ static void sam_seg_cross_mated_Z_fields (VBlockSAMP vb, Did did_i, ZipDataLineS
 
     ContextP channel_ctx = seg_mux_get_channel_ctx (VB, did_i, (MultiplexerP)mux, sam_has_mate);
 
-    if (sam_has_mate && str_issame_(STRtxtw(*(TxtWord *)((rom)mate_value - (rom)dl + (rom)mate_dl)), STRa(value)))
+    if (sam_has_mate && str_issame_(STRtxt(*(TxtWord *)((rom)mate_value - (rom)dl + (rom)mate_dl)), STRa(value)))
         seg_by_ctx (VB, STRa(copy_snip), channel_ctx, add_bytes);
 
     else
@@ -1143,6 +1143,7 @@ void sam_seg_array_one_ctx (VBlockSAMP vb, ZipDataLineSAMP dl, DictId dict_id, u
     // prepare array container - a single item, with number of repeats of array element. array type is stored as a prefix
     ContextP con_ctx = ctx_get_ctx (vb, dict_id), elem_ctx;
     SmallContainerP con = sam_seg_array_one_ctx_get_con (vb, con_ctx, type, is_bam, &elem_ctx);
+    ASSERTNOTNULL (elem_ctx);
 
     int width = aux_width[type];
 

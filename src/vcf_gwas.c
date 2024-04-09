@@ -36,7 +36,7 @@ void vcf_gwas_seg_FORMAT_ID (VBlockVCFP vb, ContextP ctx, STRp(id))
 {
     if (ctx_encountered_in_line (VB, VCF_ID) && 
         CTX(VCF_ID)->last_txt.index != INVALID_LAST_TXT_INDEX &&
-        str_issame_(STRa(id), STRtxtw(CTX(VCF_ID)->last_txt))) 
+        str_issame_(STRa(id), STRtxt(CTX(VCF_ID)->last_txt))) 
        
         seg_by_ctx (VB, STRa(copy_ID_snip), ctx, id_len);
 

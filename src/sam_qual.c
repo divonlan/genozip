@@ -148,7 +148,7 @@ static void sam_get_sa_grp_qual (VBlockSAMP vb)
         vb->scratch.len = uncomp_len;
     }
     else // not compressed
-        buf_add (&vb->scratch, B8(z_file->sag_qual, vb->sag->qual), vb->sag->seq_len);
+        buf_add (&vb->scratch, Bc(z_file->sag_qual, vb->sag->qual), vb->sag->seq_len);
 
     return;
     
@@ -323,7 +323,7 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qual)/*always textual
             qual_ctx->txt_len += add_bytes;
         }    
         else {
-            diff_type = sam_seg_QUAL_diff (vb, dl, STRa(qual), STRtxtw(saggy_dl->QUAL), saggy_dl->FLAG.rev_comp, saggy_dl->hard_clip, add_bytes);
+            diff_type = sam_seg_QUAL_diff (vb, dl, STRa(qual), STRtxt(saggy_dl->QUAL), saggy_dl->FLAG.rev_comp, saggy_dl->hard_clip, add_bytes);
             if (diff_type == QDT_ABORTED) goto standard;
         }
 
@@ -634,7 +634,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_QUAL)
     // 2. If not (i.e. we have SEQ data but not QUAL) - it is a string of 0xff, length l_seq
     if (VB_SAM->qual_missing) {
         BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)Btxt (vb->line_start);
-        uint32_t l_seq = LTEN32 (alignment->l_seq);
+        uint32_t l_seq = GET_UINT32_(alignment, l_seq);
         
         if (!l_seq) // option 1
             Ltxt--;

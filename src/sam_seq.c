@@ -598,7 +598,7 @@ static bool sam_seg_verify_saggy_line_SEQ (VBlockSAMP vb, ZipDataLineSAMP my_dl,
     if (IS_BAM_ZIP) {
         ASSERTNOTINUSE (vb->scratch);
         buf_alloc (vb, &vb->scratch, 0, prim_dl->SEQ.len + 2/* +1 for last half-byte and \0 */, char, 0, "scratch");
-        bam_seq_to_sam (vb, (bytes)STRtxtw (prim_dl->SEQ), false, false, &vb->scratch);
+        bam_seq_to_sam (vb, (bytes)STRtxt (prim_dl->SEQ), false, false, &vb->scratch);
         prim_seq = Bc(vb->scratch, vb->hard_clip[xstrand]);
     }
     else
@@ -915,7 +915,7 @@ COMPRESSOR_CALLBACK_DT (sam_zip_seq)
         if (__builtin_expect (dl->no_seq, false)) 
             bam_seq_to_sam (vb, 0, 0, false, false, &vb->textual_seq);
         else
-            bam_seq_to_sam (vb, (uint8_t *)STRtxtw(dl->SEQ), false, false, &vb->textual_seq);
+            bam_seq_to_sam (vb, (uint8_t *)STRtxt(dl->SEQ), false, false, &vb->textual_seq);
         
         *line_data = B1STc (VB_SAM->textual_seq);
     }
@@ -1449,7 +1449,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_SEQ)
         sam_piz_con_item_cb (vb, &(ContainerItem){ .dict_id = ctx->dict_id }, STRa(recon));
     
     BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)Btxt (vb->line_start);
-    uint32_t l_seq = LTEN32 (alignment->l_seq);
+    uint32_t l_seq = GET_UINT32_(alignment, l_seq);
 
     // backward compatability note: prior to v14 the condition was:
     // if (CTX(SAM_QUAL)->lcodec == CODEC_LONGR) ...

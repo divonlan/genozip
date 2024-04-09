@@ -119,7 +119,7 @@ bool lookback_is_same_txt (VBlockP vb, Did lb_did_i, ContextP ctx, uint32_t look
 
     ValueType value = lookback_get_value (vb, CTX(lb_did_i), ctx, lookback);
 
-    return str_issame_(STRa(str), STRtxtw(value));
+    return str_issame_(STRa(str), STRtxt(value));
 }
 
 

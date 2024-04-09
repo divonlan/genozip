@@ -27,7 +27,7 @@ typedef struct {
     uint8_t *qual;
     uint32_t qual_len; 
     uint8_t dom;     // dom of this line
-    bool is_diverse; // not enough % of of this line is dom
+    bool is_diverse; // too few qual score in this line are dom
     bool is_rev;
 } QualLine;
 
@@ -262,7 +262,7 @@ static uint8_t codec_domq_prepare_normalize (VBlockP vb, ContextP ctx, LocalGetL
 
     // get quality scores 
     buf_free (ql_buf); // we can free local_hash as this function is called from seg_finalize 
-    buf_alloc_exact (vb, ql_buf, get_line_cb ? vb->lines.len : 1, QualLine, "contexts->qual_line");
+    buf_alloc_exact_zero (vb, ql_buf, get_line_cb ? vb->lines.len : 1, QualLine, "contexts->qual_line");
 
     if (get_line_cb)
         for_buf2 (QualLine, ql, line_i, ql_buf) 

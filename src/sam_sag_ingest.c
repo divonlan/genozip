@@ -161,7 +161,7 @@ static void sam_zip_prim_ingest_vb_copy_qname_vb_to_z (VBlockSAMP vb, Sag *vb_gr
         Sag *g = &vb_grps[grp_i];
 
         // qname. case: collated files - mates are consecutive - in case both of primary, we can just use the existing qname
-        if (segconf.is_collated && grp_i && str_issameR_(STRtxt(g->qname), Bc(z_file->sag_qnames, (g-1)->qname), (g-1)->qname_len))
+        if (segconf.is_collated && grp_i && str_issameR_(Btxt(g->qname), g->qname_len, Bc(z_file->sag_qnames, (g-1)->qname), (g-1)->qname_len))
             g->qname = (g-1)->qname; // same index into z_file->sag_qnames like previous qname
         
         else {

@@ -64,7 +64,7 @@ void vcf_seg_ILLUMINA_CHR (VBlockVCFP vb, ContextP ctx, STRp(chr))
 // <ID=ILLUMINA_POS,Number=1,Type=Integer,Description="Position in Illumina manifest">
 void vcf_seg_ILLUMINA_POS (VBlockVCFP vb, ContextP ctx, STRp(pos))
 {
-    if (str_issame_(STRa(pos), STRtxtw(CTX(VCF_POS)->last_txt)))
+    if (str_issame_(STRa(pos), STRtxt(CTX(VCF_POS)->last_txt)))
         seg_by_ctx (VB, STRa(copy_VCF_POS_snip), ctx, pos_len);
 
     else
@@ -172,7 +172,7 @@ void vcf_seg_PROBE_B (VBlockVCFP vb, ContextP ctx, STRp(seq))
 {
     // predicted: . or same as PROBE_A except for the final base 
     if (seq_len > 1 && ctx_encountered_in_line (VB, INFO_PROBE_A) &&  
-        str_issame_(STRa(seq)-1, STRtxtw(CTX(INFO_PROBE_A)->last_txt)-1))
+        str_issame_(STRa(seq)-1, STRtxt(CTX(INFO_PROBE_A)->last_txt)-1))
         
         seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_PROBE_B, seq[seq_len-1] }, 3, ctx, seq_len);
 

@@ -99,7 +99,9 @@ bool fastq_zip_use_pair_identical (DictId dict_id)
 }
 
 // returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
-int32_t fastq_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i_out /* in/out */)
+int32_t fastq_unconsumed (VBlockP vb, 
+                          uint32_t first_i, // in/out the smallest index in txt_data for which txt_data is populated (the rest might still in uncompressed BGZF blocks) 
+                          int32_t *i_out) 
 {    
     ASSERT (*i_out >= 0 && *i_out < Ltxt, "*i=%d is out of range [0,%u]", *i_out, Ltxt);
 
@@ -127,7 +129,7 @@ int32_t fastq_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i_out /* in/out
 
     // case: the data provided has less than 8 newlines, and within it we didn't find a read. need more data.
     *i_out = (int32_t)first_i - 1; // next index to test - one before first_i
-    return -1;
+    return -1; // more data please
 }
 
 // called by txtfile_read_vblock when reading the 2nd file in a fastq pair - counts the number of fastq "lines" (each being 4 textual lines),
