@@ -549,8 +549,9 @@ clean-dev: clean-installers clean-test # use only in dev - deletes license.o
 
 .PHONY: clean clean-debug clean-optimized clean-installers initialize-build-distribution \
 		finalize-distribution dict_id_gen$(EXE) \
-		objdir.linux objdir.windows objdir.mac \
-		push-build increment-version $(INSTALLERS)/LICENSE.html  
+		objdir.linux objdir.windows objdir.mac  \
+		push-build increment-version $(INSTALLERS)/LICENSE.html \
+		genozip-latest  
 
 # builds latest for local OS
 
@@ -558,7 +559,7 @@ clean-dev: clean-installers clean-test # use only in dev - deletes license.o
 ifdef Windows
 
 genozip-latest.exe: 
-	@echo "building latest for Windows"
+	@echo "Building latest for Windows"
 	@(cd $(LATEST_SRC); (mkdir $(OBJDIR) >& /dev/null || exit 0) ; cd $(OBJDIR) ; (mkdir $(SRC_DIRS) >& /dev/null || exit 0) )
 	@(cd $(LATEST_SRC); if [[ `pwd` = *genozip-latest* ]]; then git reset --hard ; git pull ; $(MAKE) -j clean ; touch dict_id_gen.h ; $(MAKE) -j; cp $(LATEST_SRC)/genozip.exe ../../genozip/private/releases/genozip-$(version).exe ; ln -sf $(LATEST_SRC)/genozip.exe $@ ; fi )
 
@@ -704,9 +705,10 @@ endif # Windows
 ifdef linux_x86
 
 genozip-latest: 
-	@echo "building latest for Linux"
+	@echo "Building latest for Linux"
 	@(cd $(LATEST_SRC); (mkdir $(OBJDIR) 2> /dev/null || exit 0); cd $(OBJDIR) ; (mkdir $(SRC_DIRS) 2> /dev/null || exit 0))
-	@(cd $(LATEST_SRC); $(MAKE) -j clean ; $(MAKE) -j; cp $(LATEST_SRC)/genozip ../../genozip/private/releases/genozip-$(version) ; ln -sf $(LATEST_SRC)/genozip $@ )
+	@(cd $(LATEST_SRC); $(MAKE) -j clean ; $(MAKE) -j; cp $(LATEST_SRC)/genozip ../../genozip/private/releases/genozip-$(version) )
+	@ln -sf $(LATEST_SRC)/genozip $@
 
 # note: getpwuid and getgrgid will cause dymanically loading of the locally installed glibc in the --tar option, or segfault. that's normally fine.
 genozip-linux-x86_64/genozip: CFLAGS += $(OPTFLAGS)
@@ -745,11 +747,11 @@ genozip-osx-%/genozip: $(OBJS) $(OBJDIR)/distribution.osx-%.o
 # note: two separate rules for x86 and arm, as we can't have multiple targets with a % in the same rule(?)
 genozip-osx-x86/genounzip genozip-osx-x86/genocat genozip-osx-x86/genols: genozip-osx-x86/genozip 
 	@echo Generating $@
-	@cp -f $< $@ # ln doesn't work on SMB shares
+	@ln -f $< $@ 
 
 genozip-osx-arm/genounzip genozip-osx-arm/genocat genozip-osx-arm/genols: genozip-osx-arm/genozip 
 	@echo Generating $@
-	@cp -f $< $@ # ln doesn't work on SMB shares
+	@ln -f $< $@ 
 
 genozip-osx-%/LICENSE.txt: ../LICENSE.txt
 	@(mkdir genozip-osx-$(osx) >& /dev/null ; exit 0)
@@ -767,6 +769,12 @@ OSX_ARM_TARGZ_OBJS = genozip-osx-arm/genozip genozip-osx-arm/genounzip genozip-o
 $(INSTALLERS)/genozip-osx-arm.tar: $(OSX_ARM_TARGZ_OBJS) 
 	@echo "Creating $@"
 	@tar -cf $@ --lzma genozip-osx-arm
+
+genozip-latest: 
+	@echo "Building latest for osx-$(osx)"
+	@(cd $(LATEST_SRC); (mkdir $(OBJDIR) 2> /dev/null || exit 0); cd $(OBJDIR) ; (mkdir $(SRC_DIRS) 2> /dev/null || exit 0))
+	@(cd $(LATEST_SRC); if [[ `pwd` = *genozip-latest* ]]; then git reset --hard; git pull ; $(MAKE) -j clean ; $(MAKE) -j 20; fi)
+	@ln -sf $(LATEST_SRC)/genozip $@
 
 # MACDWNDIR = mac/darwinpkg
 # MACLIBDIR = $(MACDWNDIR)/Library/genozip
