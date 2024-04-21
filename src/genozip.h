@@ -123,7 +123,7 @@ typedef struct Huffman *HuffmanP;
 typedef struct { char s[80];    } StrText;
 typedef struct { char s[1024];  } StrTextLong;
 typedef struct { char s[4096];  } StrTextSuperLong;
-typedef struct { char s[65536]; } StrTextMegaLong;
+typedef struct { char s[16384]; } StrTextMegaLong; 
 
 #include "version.h" // must be after StrText definition
 
@@ -318,7 +318,8 @@ typedef int ThreadId;
 #define THREAD_ID_NONE ((ThreadId)-1)
 
 #define VER(n) (z_file->genozip_version >= (n))
-#define VER2(major,minor) (z_file->genozip_version > (major) || (z_file->genozip_version == (major) && z_file->genozip_minor_ver >= (minor)))
+#define VER2(major,minor) (z_file->genozip_version > (major) || \
+                           (z_file->genozip_version == (major) && (z_file->genozip_minor_ver >= (minor) || (flag.test_i && z_file->genozip_minor_ver == (minor)-1)))) // when developing, version is still the target version minus 1
 #define EXACT_VER(n) (z_file->genozip_version == (n))
 
 #define KB *((uint64_t)1<<10)
@@ -360,6 +361,13 @@ typedef int ThreadId;
 
 #define SWAP(a,b)    ({ typeof(a) tmp = a; a = b; b = tmp; })
 #define SWAPbit(a,b) ({ uint8_t   tmp = a; a = b; b = tmp; })  // meant for bit fields 
+
+// safe snprintf for multiple-step string building 
+#define SNPRINTF(out/*StrText* */, format, ...) \
+    ({ out##_len += snprintf (&out.s[out##_len], sizeof(out.s)-out##_len, (format), __VA_ARGS__); out##_len = MIN_(out##_len, sizeof(out.s)); })
+
+#define SNPRINTF0(out/*StrText* */, str) \
+    ({ out##_len += snprintf (&out.s[out##_len], sizeof(out.s)-out##_len, (str)); out##_len = MIN_(out##_len, sizeof(out.s)); })
 
 // getting and putting unaligned words
 #ifdef GENOZIP_ALLOW_UNALIGNED_ACCESS
@@ -482,6 +490,7 @@ typedef SORTER ((*Sorter));
 #define STRl(name,len) char name[len]; uint32_t name##_len
 #define mSTRl(name,multi,len) char name##s[multi][len]; uint32_t name##_len##s[multi]
 #define STRli(name,len) uint32_t name##_len = (len) ; char name[name##_len] // avoid evaluating len twice
+#define STRlic(name,len) uint32_t name##_len = len ; char name[len]         // integer constant len
 #define eSTRl(x) extern char x[]; extern uint32_t x##_len
 #define txtSTR(x,txtword) rom x = Btxt ((txtword).index); uint32_t x##_len = (txtword).len
 #define ASSERT_LAST_TXT_VALID(ctx) ASSERT (is_last_txt_valid(ctx), "%s.last_txt is INVALID", (ctx)->tag_name)
@@ -512,7 +521,8 @@ typedef SORTER ((*Sorter));
 #define STRlst_(ctx) last_txtx (VB, (ctx)), (ctx)->last_txt.len
 
 // for printf %.*s argument list
-#define STRf(x)    ((int)x##_len), x          
+#define STRf(x)    ((int)x##_len), x
+#define STRfNUL(x) ((int)x##_len), ((x) ? (x) : "(null)")
 #define STRfi(x,i) x##_lens[i], x##s[i]
 #define STRfb(buf) (int)(buf).len, (buf).data 
 #define STRfw(txtword) (txtword).len, Btxt ((txtword).index) // used with TxtWord
@@ -668,9 +678,7 @@ extern void progress_newline(void);
 #define ABORTINP(format, ...)                ( { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); exit_on_error(false);} )
 #define ABORTINP0(string)                    ABORTINP (string "%s", "")
 
-// check for a bug - prints stack
-typedef struct { char s[256]; } StrTime; // long, in case of eg Chinese language time zone strings
-extern StrTime str_time (void);
+extern StrTextLong str_time (void);
 
 extern StrText license_get_number (void);
 

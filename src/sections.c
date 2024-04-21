@@ -1205,7 +1205,11 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
 // called from main()
 void noreturn genocat_show_headers (rom z_filename)
 {
+    TEMP_FLAG(quiet, false);
     z_file = file_open_z_read (z_filename);    
+    RESTORE_FLAG (quiet);
+    ASSERTNOTNULL (z_file);
+    
     SectionHeaderGenozipHeader header;
 
     flag.dont_load_ref_file = true;
@@ -1278,7 +1282,7 @@ void noreturn genocat_show_headers (rom z_filename)
 
 void sections_show_section_list (DataType dt) // optional - take data from z_data
 {    
-    for_buf (SectionEnt, s, z_file->section_list_buf)
+    for_buf (SectionEnt, s, z_file->section_list_buf) 
         if (s->st == SEC_B250 || s->st == SEC_LOCAL || s->st == SEC_DICT)
             iprintf ("%5u %-20.20s %s%s%-8.8s\tvb=%s/%-4u offset=%-8"PRIu64"  size=%-6u  %s\n", 
                      BNUM(z_file->section_list_buf, s), st_name(s->st), 

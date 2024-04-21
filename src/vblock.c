@@ -372,11 +372,11 @@ void vb_destroy_pool_vbs (VBlockPoolType type, bool destroy_pool)
         FREE (pools[type]);
 }
 
-// NOT thread safe, use only in execution-terminating messages
-rom err_vb_pos (void *vb)
+StrText err_vb_pos (void *vb)
 {
-    static char s[80];
-    snprintf (s, sizeof (s), "vb i=%u position in %s file=%"PRIu64, 
+    StrText s;
+
+    snprintf (s.s, sizeof (s), "vb i=%u position in %s file=%"PRIu64, 
              (VB)->vblock_i, dt_name (txt_file->data_type), (VB)->vb_position_txt_file);
     return s;
 }

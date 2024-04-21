@@ -512,7 +512,22 @@ static void vcf_seg_FILTER (VBlockVCFP vb, STRp(filter))
         vcf_seg_sv_copy_mate (vb, ctx, STRa(filter), TW_FILTER, TW_FILTER, false, filter_len+1);
     
     else
+        // note: better than ;-separated array, bc when there are multiple filters, they are often correlated
         seg_by_ctx (VB, STRa(filter), ctx, filter_len+1);
+
+    set_last_txt (VCF_FILTER, filter);
+}
+
+// check if filter contains a specific string
+bool vcf_FILTER_has (VBlockVCFP vb, rom test_for/*nul-terminated*/)
+{
+    STRlast (filter, VCF_FILTER);
+    
+    SAFE_NULT (filter);
+    bool has = strstr (filter, test_for);
+    SAFE_RESTORE;
+
+    return has;
 }
 
 static inline void vcf_seg_ID (VBlockVCFP vb, STRp(id))

@@ -16,10 +16,11 @@
             //"program": "${workspaceFolder}/src/genounzip.exe",
             // "program": "${workspaceFolder}/src/genols-debug.exe",
             
-            "args" : ["-fX", "../genozip/private/test/minimal.vcf"],
+            "args" : ["--echo", "-fo", "./private/test/tmp/copy.vcf.gz", "-e", "./public/hs37d5.v15.ref.genozip", "./private/test/tmp/output.genozip"],
 
             "environment": [
-                // { "name": "GENOZIP_REFERENCE", "value": "/mnt/c/Users/divon/Projects/genozip/data/hs37d5.v15.ref.genozip:data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip", },
+                { "name": "GENOZIP_TEST", "value": "1", }, // needed for VER2 macro to work
+                // { "name": "GENOZIP_REFERENCE", "value": "c:\\Users\\divon\\genozip/public", },
             ],
             
             "stopAtEntry": false,

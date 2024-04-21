@@ -140,8 +140,8 @@ ValueType reconstruct_peek (VBlockP vb, ContextP ctx,
     // since we are reconstructing unaccounted for data, make sure we didn't go beyond the end of txt_data (this can happen if we are close to the end
     // of the VB, and reconstructed more than OVERFLOW_SIZE allocated in piz_reconstruct_one_vb)
     // note: leave txt_data.len 64bit to detect bugs
-    ASSPIZ (vb->txt_data.len <= vb->txt_data.size, "txt_data overflow while peeking %s: len=%"PRIu64" size=%"PRIu64" last_txt_len=%u. vb->txt_data dumped to %s.gz", 
-            ctx->tag_name, vb->txt_data.len, (uint64_t)vb->txt_data.size, ctx->last_txt.len, txtfile_dump_vb (vb, z_name));
+    ASSPIZ (Rtxt, "txt_data overflow while peeking %s: len=%"PRIu64" size=%"PRIu64" last_txt_len=%u. vb->txt_data dumped to %s.gz", 
+            ctx->tag_name, vb->txt_data.len, (uint64_t)vb->txt_data.size, ctx->last_txt.len, txtfile_dump_vb (vb, z_name).s);
 
     // sanity checks
     ASSPIZ (save_level == vb->peek_stack_level, "While peeking %s: expecting peek_stack_level=%u to be %u. Dev tip: try --debug-peek", 

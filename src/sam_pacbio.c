@@ -56,7 +56,7 @@ void sam_seg_pacbio_np (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t np, unsigned 
     if (segconf.pacbio_subreads && np == 1)
         seg_by_did (VB, "1", 1, OPTION_np_i, add_bytes); // in subreads, we expect np=1 all-the-same
 
-    else if (segconf.has[OPTION_ec_f] && ctx_has_value_in_line_(vb, CTX(OPTION_ec_f)))
+    else if (segconf.has[OPTION_ec_f] && ctx_has_value_in_line_(vb, CTX(OPTION_ec_f))) 
         seg_delta_vs_other_localN (VB, CTX(OPTION_np_i), CTX(OPTION_ec_f), np, -1, add_bytes);
 
     else 

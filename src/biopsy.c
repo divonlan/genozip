@@ -15,7 +15,8 @@
 #include "biopsy.h"
 
 static Buffer biopsy_vb_i = { .name = "biopsy_vb_i" };
-static char *biopsy_fn = NULL;
+static StrTextSuperLong biopsy_fn;
+static int biopsy_fn_len = 0;
 
 void biopsy_init (rom optarg)
 {
@@ -52,9 +53,7 @@ void biopsy_init (rom optarg)
         }
     }
 
-    int biopsy_fn_size = strlen(optarg)+50; 
-    biopsy_fn = MALLOC (biopsy_fn_size);
-    snprintf (biopsy_fn, biopsy_fn_size, "%s.biopsy", optarg);
+    SNPRINTF (biopsy_fn, "%s.biopsy", optarg);
 
     flag.biopsy   = true;
     flag.seg_only = true; // no need to write the genozip file (+ we don't even seg, see zip_compress_one_vb)
@@ -64,9 +63,9 @@ static void biopsy_compress (void)
 {
     iprint0 ("Biopsy: compressing biopsy file\n");   
     
-    file_gzip (biopsy_fn);
+    file_gzip (biopsy_fn.s);
     
-    iprintf ("Biopsy: Done. Biopsy file is %s\n", biopsy_fn);    
+    iprintf ("Biopsy: Done. Biopsy file is %s\n", biopsy_fn.s);    
 }
 
 static bool data_exhausted = false;
@@ -101,25 +100,28 @@ void biopsy_take (VBlockP vb)
 
 start_biopsy: {
     DO_ONCE {
-        sprintf (&biopsy_fn[strlen(biopsy_fn)], "%s", file_plain_ext_by_dt (txt_file->data_type));
-        file_remove (biopsy_fn, true); // remove old file
+        SNPRINTF (biopsy_fn, "%s", file_plain_ext_by_dt (txt_file->data_type));
+        file_remove (biopsy_fn.s, true); // remove old file
     }
 
+    if (biopsy_fn_len == sizeof (biopsy_fn.s)) goto too_long;
+    
     // append to file
-    FILE *fp = fopen (biopsy_fn, "ab");
+    FILE *fp = fopen (biopsy_fn.s, "ab");
 
-    if (!fp && errno == ENAMETOOLONG) { 
-        sprintf (biopsy_fn, "biopsy%s", file_plain_ext_by_dt (txt_file->data_type));
-        file_remove (biopsy_fn, true); // remove old file
-        fp = fopen (biopsy_fn, "ab");
+    if (!fp && errno == ENAMETOOLONG) too_long: { 
+        biopsy_fn_len = 0;
+        SNPRINTF (biopsy_fn, "biopsy%s", file_plain_ext_by_dt (txt_file->data_type));
+        file_remove (biopsy_fn.s, true); // remove old file
+        fp = fopen (biopsy_fn.s, "ab");
     }
 
-    ASSERT (fp, "failed to open biopsy file %s: %s", biopsy_fn, strerror (errno));
+    ASSERT (fp, "failed to open biopsy file %s: %s", biopsy_fn.s, strerror (errno));
 
     ASSERT (fwrite (B1STtxt, 1, Ltxt, fp) == Ltxt, "failed to write %u bytes to biopsy file %s: %s", 
-            Ltxt, biopsy_fn, strerror (errno));
+            Ltxt, biopsy_fn.s, strerror (errno));
 
-    ASSERT (!fclose (fp), "failed to close biopsy file %s: %s", biopsy_fn, strerror (errno)); 
+    ASSERT (!fclose (fp), "failed to close biopsy file %s: %s", biopsy_fn.s, strerror (errno)); 
     
     if (vb->vblock_i == 0) iprint0 ("Biopsy: wrote txt_header\n");
     else                   iprintf ("Biopsy: wrote vblock=%s\n", VB_NAME);

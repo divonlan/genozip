@@ -34,16 +34,16 @@
 #define MAX_TXT_HEADER_LEN ((uint64_t)0xffffffff) // maximum length of txt header - one issue with enlarging it is that we digest it in one go, and the digest module is 32 bit
 
 // PIZ: dump bad vb to disk
-rom txtfile_dump_vb (VBlockP vb, rom base_name)
+StrTextLong txtfile_dump_vb (VBlockP vb, rom base_name)
 {
-    int dump_filename_size = strlen (base_name) + 100;
-    char *dump_filename = MALLOC (dump_filename_size); // we're going to leak this allocation
-    snprintf (dump_filename, dump_filename_size, "%s.vblock-%u.start-%"PRIu64".len-%u.bad", 
-            base_name, vb->vblock_i, vb->vb_position_txt_file, Ltxt);
+    StrTextLong dump_filename;
 
-    if (flag.is_windows) str_replace_letter (dump_filename, strlen(dump_filename), '/', '\\');
+    snprintf (dump_filename.s, sizeof (dump_filename.s), "%*s.vblock-%u.start-%"PRIu64".len-%u.bad", 
+              (int)sizeof (dump_filename.s)-100, base_name, vb->vblock_i, vb->vb_position_txt_file, Ltxt);
 
-    buf_dump_to_file (dump_filename, &vb->txt_data, 1, false, false, false, true);
+    if (flag.is_windows) str_replace_letter (dump_filename.s, strlen(dump_filename.s), '/', '\\');
+
+    buf_dump_to_file (dump_filename.s, &vb->txt_data, 1, false, false, false, true);
 
     return dump_filename;
 }
@@ -521,7 +521,7 @@ static uint32_t txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb)
             VB_NAME, dt_name (txt_file->data_type), Ltxt, codec_name (txt_file->codec),
             DTPT(is_binary) ? "truncated but not on the boundary of the" : "missing a newline on the last", DTPT(line_name),
             TXT_DT(REF) ? "FASTA" : dt_name (txt_file->data_type),
-            txtfile_dump_vb (vb, txt_name));
+            txtfile_dump_vb (vb, txt_name).s);
 
 done:
     if (vb->gzip_compressor)

@@ -1132,7 +1132,7 @@ static QnameFlavorStruct qf[] = {
     {},  { QF_BAMSURGEON,  "BamSurgeon",    { "22:33597495-34324994_726956_727496_0:0:0_0:0:0_2963e" },   
                                                                                           TECH_UNKNOWN, TECH_NCBI,    QANY,   &con_bamsurgeon,     no_validate,    0,   7,  {1,2,3,4,7,-1},     {-1},           {1,3,7,-1},         {7,-1},         0,  1,3,   2,4,   -1, -1, -1, -1,                       },
     // NCBI QNAMEs - no mate, as mate is part of QNAME2 in this case
-         { QF_SRA_L,       "NCBI_SRA_L",    { "SRR11215720.1_1_length=120" },             TECH_NCBI,    TECH_NONE,    Q1or3,  &con_ncbi_sra_L,     val_sra,        0,   10, {2,3,-1},           {-1},           {3,-1},             {-1},           0,  3,-1,  -1,-1,  4, -1, -1, -1, 0,  PX_sra_len        },
+         { QF_SRA_L,       "NCBI_SRA_L",    { "SRR11215720.1_1_length=120" },             TECH_NCBI,    TECH_NONE,    Q1or3,  &con_ncbi_sra_L,     val_sra,        0,   10, {2,3,4,-1},         {-1},           {2,3,4,-1},         {-1},           0,  3,-1,  -1,-1,  4, -1, -1, -1, 0,  PX_sra_len        },
          { QF_SRA2,        "NCBI-SRA2",     { "ERR2708427.1.1" },                         TECH_NCBI,    TECH_NONE,    Q1or3,  &con_ncbi_sra2,      val_sra,        0,   2,  {2,3,-1},           {-1},           {2,3,-1},           {-1},           0,  2,-1,  -1,-1, -1, -1, -1, -1,     .is_mated=true    },
          { QF_SRA,         "NCBI-SRA",      { "SRR001666.1" },                            TECH_NCBI,    TECH_NONE,    Q1or3,  &con_ncbi_sra,       val_sra,        0,   1,  {2,-1},             {-1},           {2,-1},             {-1},           0,  2,-1,  -1,-1, -1, -1, -1, -1,                       },
 

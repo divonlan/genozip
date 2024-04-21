@@ -205,6 +205,7 @@
 #pragma GENDICT INFO_TI=DTYPE_1=TI                  // <ID=TI,Number=.,Type=String,Description="Transcript ID">
 #pragma GENDICT INFO_GI=DTYPE_1=GI                  // <ID=GI,Number=.,Type=String,Description="Gene ID">
 #pragma GENDICT INFO_FC=DTYPE_1=FC                  // <ID=FC,Number=.,Type=String,Description="Functional Consequence">
+#pragma GENDICT INFO_RefMinor=DTYPE_1=RefMinor      // <ID=RefMinor,Number=0,Type=Flag,Description="Denotes positions where the reference base is a minor allele and is annotated as though it were a variant">
 #pragma GENDICT FORMAT_GQX=DTYPE_2=GQX              // <ID=GQX,Number=1,Type=Integer,Description="Empirically calibrated variant quality score for variant sites, otherwise Minimum of {Genotype quality assuming variant position,Genotype quality assuming non-variant position}">
 #pragma GENDICT FORMAT_DPF=DTYPE_2=DPF              // <ID=DPF,Number=1,Type=Integer,Description="Basecalls filtered from input prior to site genotyping">
 #pragma GENDICT FORMAT_DPI=DTYPE_2=DPI              // <ID=DPI,Number=1,Type=Integer,Description="Read depth associated with indel, taken from the site preceding the indel.">
@@ -444,6 +445,8 @@
 #pragma GENDICT INFO_AMR_AF=DTYPE_1=AMR_AF          // <ID=AMR_AF,Number=1,Type=Float,Description="Allele Frequency for samples from AMR based on AC/AN">
 #pragma GENDICT INFO_EUR_AF=DTYPE_1=EUR_AF          // <ID=AMR_AF,Number=1,Type=Float,Description="Allele Frequency for samples from EUR based on AC/AN">
 #pragma GENDICT INFO_ASN_AF=DTYPE_1=ASN_AF          // <ID=AMR_AF,Number=1,Type=Float,Description="Allele Frequency for samples from ASN based on AC/AN">
+#pragma GENDICT INFO_SAS_AF=DTYPE_1=SAS_AF          
+#pragma GENDICT INFO_EAS_AF=DTYPE_1=EAS_AF          
 
 // bcftools csq
 #pragma GENDICT INFO_BCSQ=DTYPE_1=BCSQ              // <ID=BCSQ,Number=.,Type=String,Description="Local consequence annotation from BCFtools/csq, see http://samtools.github.io/bcftools/howtos/csq-calling.html for details. Format: Consequence|gene|transcript|biotype|strand|amino_acid_change|dna_change">
@@ -726,7 +729,7 @@ extern uint32_t vcf_header_get_num_samples (void);
 extern uint32_t vcf_header_get_num_contigs (void);
 extern uint64_t vcf_header_get_nbases (void);
 extern bool vcf_header_get_has_fileformat (void);
-extern void vcf_piz_finalize (void);
+extern void vcf_piz_finalize (bool is_last_z_file);
 
 // VBlock stuff
 extern void vcf_header_finalize(void);
@@ -838,6 +841,7 @@ SPECIAL (VCF, 83, VRS_Starts,          vcf_piz_special_VRS_Starts);             
 SPECIAL (VCF, 84, QUAL_BY_GP,          vcf_piz_special_QUAL_BY_GP);               // added v15.0.51
 SPECIAL (VCF, 85, N_ALTS,              vcf_piz_special_N_ALTS);                   // added v15.0.51
 SPECIAL (VCF, 86, N_ALLELES,           vcf_piz_special_N_ALLELES);                // added v15.0.51
+SPECIAL (VCF, 87, GMAF_allele,         vcf_piz_special_GMAF_allele);              // added v15.0.57
 
 #define VCF_DICT_ID_ALIASES                                                 \
     /*        type        alias                   maps to               */  \

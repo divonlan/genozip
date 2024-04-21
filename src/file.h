@@ -70,6 +70,10 @@ typedef struct File {
     Digest digest;                     // ZIP: Z_FILE: digest of txt data read from input file (make-ref since v15: digest of in-memory genome)  PIZ: z_file: as read from TxtHeader section (used for MD5 and, in v9-13, for Adler32)
     bool vb_digest_failed;             // PIZ: TXT_FILE: At least one VB has an unexpected digest when decompressing
     
+    // PIZ: reference file name and digest as appears in the z_file header 
+    char ref_filename_used_in_zip[REF_FILENAME_LEN]; // PIZ: Z_FILE: ref filename as appears in the z_file header - this is not necessarily the file used - it could be overridden with --reference or $GENOZIP_REFERENCE
+    Digest ref_genome_digest;          // PIZ: Z_FILE: digest of REF_EXTERNAL file with which this file was compressed
+    
     // Used for READING & WRITING txt files - but stored in the z_file structure for zip to support bindenation (and in the txt_file structure for piz)
     uint32_t max_lines_per_vb;         // ZIP & PIZ - in ZIP, discovered while segmenting, in PIZ - given by SectionHeaderTxtHeader
     bool piz_header_init_has_run;      // PIZ: true if we called piz_header_init to initialize (only once per outputted txt_file, even if concatenated)
@@ -234,7 +238,7 @@ typedef struct File {
 // methods
 extern FileP file_open_z_read (rom filename);
 extern FileP file_open_z_write (rom filename, FileMode mode, DataType data_type /* only needed for WRITE */);
-extern rom file_get_z_run_time (FileP file);
+extern StrText file_get_z_run_time (FileP file);
 extern FileP file_open_txt_read (rom filename);
 extern FileP file_open_txt_write (rom filename, DataType data_type, BgzfLevel bgzf_level);
 extern void file_close (FileP *file_p);
@@ -276,7 +280,7 @@ extern bool file_rename (rom old_name, rom new_name, bool fail_quietly);
 extern void file_gzip (char *filename);
 extern void file_mkfifo (rom filename);
 extern uint64_t file_get_size (rom filename);
-extern char *file_compressible_extensions (bool plain_only);
+extern StrTextLong file_compressible_extensions (bool plain_only);
 extern bool file_buf_locate (FileP file, ConstBufferP buf);
 
 #define FILENAME_STDIN  "(stdin)"

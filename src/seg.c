@@ -1328,7 +1328,7 @@ skip_diff:
         seg_by_ctx (vb, STRa(snip), ctx, add_bytes);
     }
     else {
-        STRli(snip, 48);
+        STRlic(snip, 48);
         seg_prepare_snip_other (SNIP_DIFF, base_ctx->dict_id, true, exact ? -(int32_t)value_len : (int32_t)value_len, snip);
         seg_by_ctx (vb, STRa(snip), ctx, add_bytes);
     }

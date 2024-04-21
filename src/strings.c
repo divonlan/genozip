@@ -64,20 +64,20 @@ StrText char_to_printable (char c)
 
 // replaces \t, \n, \r, \b, \ with "\t" etc, replaces unprintables with '?'. caller should allocate out. 
 // returns length (excluding \0). out should be allocated by caller to (in_len*2 + 1), out is null-terminated
-uint32_t str_to_printable (STRp(in), char *out)
+uint32_t str_to_printable (STRp(in), char *out, int out_len)
 {
     char *start = out;
 
-    for (uint32_t i=0; i < in_len; i++)
+    for (uint32_t i=0; i < in_len && out_len > 3; i++) // 3 = 2 characters + nul
         switch (in[i]) {
-            case '\t' : *out++ = '\\'; *out++ = 't' ; break;
-            case '\n' : *out++ = '\\'; *out++ = 'n' ; break;
-            case '\r' : *out++ = '\\'; *out++ = 'r' ; break;
-            case '\b' : *out++ = '\\'; *out++ = 'b' ; break;
-            case '\\' : *out++ = '\\'; *out++ = '\\'; break;
+            case '\t' : *out++ = '\\'; *out++ = 't' ; out_len -= 2; break;
+            case '\n' : *out++ = '\\'; *out++ = 'n' ; out_len -= 2; break;
+            case '\r' : *out++ = '\\'; *out++ = 'r' ; out_len -= 2; break;
+            case '\b' : *out++ = '\\'; *out++ = 'b' ; out_len -= 2; break;
+            case '\\' : *out++ = '\\'; *out++ = '\\'; out_len -= 2; break;
             case -128 ... 7: case 11 ... 12: case 14 ... 31: 
-                        *out++ = '?';                 break;
-            default:    *out++ = in[i];
+                        *out++ = '?';               ; out_len -= 1; break;
+            default:    *out++ = in[i];             ; out_len -= 1;
         }
     
     *out = 0;
@@ -536,7 +536,7 @@ bool str_scientific_to_decimal (STRp(float_str), char *modified, uint32_t *modif
     if (modified) {
         if (*modified_len < decimal_digits + 2 + negative) return false; // not enough room (+1 for \0)
         
-        sprintf (modified, "%.*f", decimal_digits, f);
+        snprintf (modified, *modified_len, "%.*f", decimal_digits, f);
         *modified_len = decimal_digits + 2 + negative;
     }
 
@@ -1173,38 +1173,43 @@ char *memchr2 (rom p, char ch1, char ch2, uint32_t count)
 }
 
 // print duration in human-readable form eg 1h2' or "1 hour 2 minutes"
-void str_human_time (unsigned secs, bool compact, char *str /* out */)
+StrText str_human_time (unsigned secs, bool compact)
 {
+    StrText s;
+    int s_len = 0;
+
     unsigned hours = secs / 3600;
     unsigned mins  = (secs % 3600) / 60;
              secs  = secs % 60;
 
     if (compact)
-        sprintf (str, "%uh%u'%u\"", hours, mins, secs);
+        SNPRINTF (s, "%uh%u'%u\"", hours, mins, secs);
     else if (hours) 
-        sprintf (str, "%u %s %u %s", hours, hours==1 ? "hour" : "hours", mins, mins==1 ? "minute" : "minutes");
+        SNPRINTF (s, "%u %s %u %s", hours, hours==1 ? "hour" : "hours", mins, mins==1 ? "minute" : "minutes");
     else if (mins)
-        sprintf (str, "%u %s %u %s", mins, mins==1 ? "minute" : "minutes", secs, secs==1 ? "second" : "seconds");
+        SNPRINTF (s, "%u %s %u %s", mins, mins==1 ? "minute" : "minutes", secs, secs==1 ? "second" : "seconds");
     else 
-        sprintf (str, "%u %s", secs, secs==1 ? "second" : "seconds");
+        SNPRINTF (s, "%u %s", secs, secs==1 ? "second" : "seconds");
+
+    return s;
 }
 
 // current date and time
-StrTime str_time (void)
+StrTextLong str_time (void)
 {
-    StrTime s = {};
+    StrTextLong s = {}; // long, in case of eg Chinese language time zone strings
 
 #ifdef _WIN32
-    int len = GetDateFormatA (LOCALE_USER_DEFAULT, DATE_SHORTDATE, NULL, NULL, s.s, sizeof(s.s)-1) - 1;
-    s.s[len++] = ' ';
-    len += GetTimeFormatA (LOCALE_USER_DEFAULT, TIME_FORCE24HOURFORMAT, NULL, NULL, &s.s[len], sizeof(s.s)-len-1) - 1;
+    int s_len = GetDateFormatA (LOCALE_USER_DEFAULT, DATE_SHORTDATE, NULL, NULL, s.s, sizeof(s.s)-1) - 1;
+    s.s[s_len++] = ' ';
+    s_len += GetTimeFormatA (LOCALE_USER_DEFAULT, TIME_FORCE24HOURFORMAT, NULL, NULL, &s.s[s_len], sizeof(s.s)-s_len-1) - 1;
 
-    s.s[len++] = ' ';
+    s.s[s_len++] = ' ';
 
     TIME_ZONE_INFORMATION tz_info = {};
     bool is_daylight = (GetTimeZoneInformation (&tz_info) == TIME_ZONE_ID_DAYLIGHT);
 
-    sprintf (&s.s[len], "%ls", is_daylight ? tz_info.DaylightName : tz_info.StandardName);
+    SNPRINTF (s, "%ls", is_daylight ? tz_info.DaylightName : tz_info.StandardName);
 
 #else
     time_t now = time (NULL);

@@ -1047,7 +1047,7 @@ static inline void vcf_seg_FORMAT_AB (VBlockVCFP vb, ContextP ctx, STRp(ab))
 static inline void calculate_AB (double ad0, double ad1, qSTRp(snip))
 {
     double ab = 0.0000001 + ad0 / (ad0 + ad1); // +epsilon to bring number over the 0.01 mark if it is almost almost there 
-    *snip_len = sprintf (snip, "%.*g", ab < 0.1 ? 1 : 2, ab); 
+    *snip_len = snprintf (snip, *snip_len, "%.*g", ab < 0.1 ? 1 : 2, ab); 
 }
 
 // this is called if we segged AB channel 1 as a SPECIAL
@@ -1068,7 +1068,7 @@ static inline void vcf_seg_FORMAT_AB_verify_channel1 (VBlockVCFP vb)
     double ad1 = ad1_ctx->last_value.i;
     if (ad0==0 && ad1==0) goto rollback; // formula would be division by zero 
 
-    STRl(recon_ab_str,32);
+    STRlic(recon_ab_str,32);
     calculate_AB (ad0, ad1, qSTRa(recon_ab_str));
 
     if (!str_issame (ab_str, recon_ab_str)) goto rollback;
@@ -1098,7 +1098,7 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_FORMAT_AB)
         str_split_ints (ad, ad_len, MAX_ALLELES + 1, ',', ad, false); // note: up to 15.0.36 we could arrive here even with n_alts > 1 
         ASSPIZ (n_ads, "Failed to split AD=\"%.*s\" to %u integers", STRf(ad), VB_VCF->n_alts + 1);
 
-        STRl(recon_ab_str, 32);
+        STRlic(recon_ab_str, 32);
         calculate_AB (ads[0], ads[1], qSTRa(recon_ab_str));
         RECONSTRUCT_str (recon_ab_str);
     }
@@ -1535,6 +1535,7 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
 
         // Illumina ISAAC fields
         case _FORMAT_GQX   : COND (segconf.vcf_is_isaac, vcf_seg_FORMAT_GQX (vb, ctx, STRi(sf, i)));
+        case _FORMAT_DPF   : COND (segconf.vcf_is_isaac, seg_integer_or_not (VB, ctx, STRi(sf, i), sf_lens[i]));
 
         // DRAGEN fields
         case _FORMAT_PE    : COND (segconf.vcf_is_dragen, seg_array (VB, ctx, ctx->did_i, STRi(sf, i), ',', 0, false, STORE_INT, DICT_ID_NONE, sf_lens[i]));

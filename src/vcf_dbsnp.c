@@ -59,7 +59,7 @@ void vcf_seg_INFO_RSPOS (VBlockVCFP vb, ContextP ctx, STRp(rspos))
             seg_by_ctx (VB, STRa(delta_POS_snip), ctx, rspos_len);
 
         else {
-            STRli(snip, 32);
+            STRlic(snip, 32);
             seg_prepare_snip_other (SNIP_OTHER_DELTA, _VCF_POS, true, rspos_value - CTX(VCF_POS)->last_value.i, snip);
             seg_by_ctx (VB, STRa(snip), ctx, rspos_len);            
         }

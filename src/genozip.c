@@ -183,7 +183,7 @@ static void main_print_help (bool explicit)
         str_print_text (help_attributions, ARRAY_LEN(help_attributions), "                          ",  "\n", NULL, 0);
 
     else if (flag.help && !strcmp (flag.help, "input")) 
-        iprintf ("Supported file types for --input:\n%s\n", file_compressible_extensions (false));
+        iprintf ("Supported file types for --input:\n%s\n", file_compressible_extensions (false).s);
     
     else 
         str_print_text (texts[exe_type], sizes[exe_type] / sizeof(char*),  "                     ",  "\n", NULL, 0);
@@ -253,6 +253,10 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
             RESTORE_VALUE (z_file);
         }
     }
+
+    // test for matching digest between loaded external reference and reference specified in SectionHeaderGenozipHeader
+    if (REF_EXTERNAL) 
+        digest_verify_ref_is_equal (gref);
 
     flags_update_piz_one_z_file (z_file_i); // must be before piz_z_file_initialize
    

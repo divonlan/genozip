@@ -16,7 +16,7 @@
 #include "reconstruct.h"
 #include "piz.h"
 
-void vcf_piz_finalize (void)
+void vcf_piz_finalize (bool is_last_z_file)
 {
     vcf_header_finalize();
 }
@@ -126,8 +126,8 @@ void vcf_piz_insert_field (VBlockVCFP vb, ContextP ctx, STRp(value), int chars_r
         Ltxt += move_by;
 
         // note: keep txt_data.len 64b to detect bugs
-        ASSPIZ (vb->txt_data.len <= vb->txt_data.size, "txt_data overflow: len=%"PRIu64" > size=%"PRIu64". vb->txt_data dumped to %s.gz", 
-                vb->txt_data.len, (uint64_t)vb->txt_data.size, txtfile_dump_vb (VB, z_name));
+        ASSPIZ (Rtxt, "txt_data overflow: len=%"PRIu64" > size=%"PRIu64". vb->txt_data dumped to %s.gz", 
+                vb->txt_data.len, (uint64_t)vb->txt_data.size, txtfile_dump_vb (VB, z_name).s);
         
         // adjust last_txt of other INFO contexts that might need insertion (and hence last_txt)
         if (ctx->did_i != VCF_ID) { // no need to adjust after inserting ID, as it is inserted during REFALT reconstruction (not at end of TOPLEVEL like the rest)

@@ -43,10 +43,10 @@ extern bool is_printable[256];
 
 extern StrText char_to_printable (char c);
 
-extern uint32_t str_to_printable (STRp(in), char *out);
+extern uint32_t str_to_printable (STRp(in), char *out, int out_len);
 static inline StrTextSuperLong str_to_printable_(STRp(in)) { // for bound-length short texts
     StrTextSuperLong s;
-    str_to_printable (STRa(in), s.s);
+    str_to_printable (STRa(in), s.s, sizeof (s.s));
     return s;
 }
 
@@ -267,8 +267,8 @@ extern bool str_is_in_range (STRp(str), char first_c, char last_c);
 // textual length of a non-negative integer
 extern uint32_t str_get_uint_textual_len (uint64_t n);
 
-extern StrTime str_time (void);
-extern void str_human_time (unsigned secs, bool compact, char *str /* out */);
+extern StrTextLong str_time (void);
+extern StrText str_human_time (unsigned secs, bool compact);
 
 #define FLOAT_FORMAT_LEN 12
 extern bool str_get_float (STRp(float_str), double *value, char format[FLOAT_FORMAT_LEN], uint32_t *format_len);

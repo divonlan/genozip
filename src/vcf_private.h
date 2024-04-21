@@ -33,7 +33,7 @@ typedef struct {
     WordIndex format_node_i;// the node_index into contexts[VCF_FORMAT].nodes and also format_mapper_buf that applies to this line. Data on the fields is in format_mapper_buf[dl.format_node_i]
     PosType32 pos;          // 
     PosType32 end_delta;    // Delta of INFO/END vs POS (same in both coordinates) - used in case chrom and pos are the same
-    TxtWord BND_id;      // BND variants: a number as close as possible to unique of a BND event
+    TxtWord BND_id;         // BND variants: a number as close as possible to unique of a BND event
     TxtWord tw[NUM_TWs];    // used by vcf_seg_sv_copy_mate 
 } ZipDataLineVCF;
 
@@ -152,6 +152,7 @@ typedef struct VBlockVCF {
     int16_t idx_AN, idx_AC, idx_AF, idx_MLEAC, idx_MLEAF, idx_AC_Hom, idx_AC_Het, idx_AC_Hemi, idx_QD, idx_DP, idx_SF, 
             idx_AS_SB_TABLE, idx_END, idx_SVLEN, idx_CIPOS, idx_BaseCounts,
             idx_SVTYPE, idx_HOMSEQ, idx_DUPHOMSEQ, idx_SVINSSEQ, idx_DUPSVINSSEQ, idx_LEFT_SVINSSEQ;  
+
     #define has(f)   (vb->idx_##f != -1)
     #define after_idx mux_PLn
 
@@ -393,6 +394,7 @@ extern void vcf_seg_INFO_mutation (VBlockVCFP vb, ContextP ctx, STRp(mut));
 // ISAAC stuff
 extern void vcf_isaac_seg_initialize (VBlockVCFP vb);
 extern void vcf_seg_FORMAT_GQX (VBlockVCFP vb, ContextP ctx, STRp(gqx));
+extern void vcf_seg_FORMAT_GMAF (VBlockVCFP vb, ContextP ctx, STRp(gmaf));
 extern void vcf_seg_INFO_IDREP (VBlockVCFP vb, ContextP ctx, STRp(idrep));
 extern int vcf_isaac_info_channel_i (VBlockP vb);
 

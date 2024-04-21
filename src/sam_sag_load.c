@@ -83,28 +83,27 @@ void sam_show_sag_one_grp (SAGroup grp_i)
 {
     const Sag *g = B(Sag, z_file->sag_grps, grp_i);
 
-    char extra[16384] = "";
+    StrTextMegaLong extra = {};
     unsigned extra_len=0;
 
     if (IS_SAG_SA)
-        snprintf (extra, sizeof (extra), " first_aln=%"PRIu64, (uint64_t)g->first_aln_i);
+        SNPRINTF (extra, " first_aln=%"PRIu64, (uint64_t)g->first_aln_i);
 
     else if (IS_SAG_CC) {
         CCAln *aln = B(CCAln, z_file->sag_alns, grp_i);
-        snprintf (extra, sizeof (extra), " rname=%s pos=%u", 
-                (command==ZIP) ? ctx_get_z_snip_ex (ZCTX(SAM_RNAME), aln->rname, 0, 0) 
-                               : ctx_get_snip_by_word_index0 (ZCTX(SAM_RNAME), aln->rname), 
-                aln->pos);
+        SNPRINTF (extra, " rname=%s pos=%u", 
+                  (command==ZIP) ? ctx_get_z_snip_ex (ZCTX(SAM_RNAME), aln->rname, 0, 0) 
+                                 : ctx_get_snip_by_word_index0 (ZCTX(SAM_RNAME), aln->rname), 
+                  aln->pos);
     }
 
     else if (IS_SAG_SOLO) {
         SoloAln *solo = B(SoloAln, z_file->sag_alns, grp_i);
         for (SoloTags tag_i=0; tag_i < NUM_SOLO_TAGS; tag_i++)
             if (solo->word[tag_i].len)
-                extra_len += 
-                    sprintf (&extra[extra_len], " %s=\"%.*s\"", 
-                             ZCTX(solo_props[tag_i].did_i)->tag_name,
-                             solo->word[tag_i].len, B(char, z_file->solo_data, solo->word[tag_i].index));
+                SNPRINTF (extra, " %s=\"%.*s\"", 
+                          ZCTX(solo_props[tag_i].did_i)->tag_name,
+                          solo->word[tag_i].len, B(char, z_file->solo_data, solo->word[tag_i].index));
     }
 
     iprintf ("grp_i=%u: qname(i=%"PRIu64",l=%u,hash=%u)=%.*s seq=(i=%"PRIu64",l=%u) qual=(i=%"PRIu64",comp_l=%u)[%u]=\"%s\" AS=%u strand=%c mul/fst/lst=%u,%u,%u %s=%u%s%s\n",
@@ -114,7 +113,7 @@ void sam_show_sag_one_grp (SAGroup grp_i)
              (uint64_t)g->qual, g->qual_comp_len, SA_QUAL_DISPLAY_LEN, sam_display_qual_from_SA_Group (g),  
              (int)g->as, "+-"[g->revcomp], g->multi_segs, g->is_first, g->is_last,
              ((IS_SAG_NH || IS_SAG_CC || IS_SAG_SOLO) ? "NH" : "num_alns"), g->num_alns, 
-             extra, g->first_grp_in_vb ? " FIRST_GRP_IN_VB" : "");
+             extra.s, g->first_grp_in_vb ? " FIRST_GRP_IN_VB" : "");
 
     if (IS_SAG_SA)
         for (uint64_t aln_i=g->first_aln_i; aln_i < g->first_aln_i + g->num_alns; aln_i++) 

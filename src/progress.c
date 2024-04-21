@@ -22,17 +22,14 @@ static int last_seconds_so_far=-1;
 static rom component_name=NULL;
 static unsigned last_len=0; // so we know how many characters to erase on next update
 
-static rom progress_ellapsed_time (void)
+static StrText progress_ellapsed_time (void)
 {
     TimeSpecType tb; 
     clock_gettime (CLOCK_REALTIME, &tb); 
     
     int seconds_so_far = ((tb.tv_sec - component_start_time.tv_sec)*1000 + ((int64_t)tb.tv_nsec - (int64_t)component_start_time.tv_nsec) / 1000000) / 1000; 
 
-    static char time_str[70];
-    str_human_time (seconds_so_far, false, time_str);
-
-    return time_str;
+    return str_human_time (seconds_so_far, false);
 }
 
 static void progress_update_status (rom prefix, rom status)
@@ -124,7 +121,7 @@ void progress_new_component (rom new_component_name,
 
 void progress_update (rom task, uint64_t sofar, uint64_t total, bool done)
 {
-    char time_str[70], progress_str[200];
+    char progress_str[200];
     if (flag.quiet && !flag.debug_progress) return; 
 
     TimeSpecType tb; 
@@ -156,13 +153,12 @@ void progress_update (rom task, uint64_t sofar, uint64_t total, bool done)
         if (!done) { 
             // time remaining
             unsigned secs = (100.0 - percent) * ((double)seconds_so_far / (double)percent);
-            str_human_time (secs, false, time_str);
 
             if (!flag.debug_progress)
-                snprintf (progress_str, sizeof(progress_str), "%u%% (%s)", (unsigned)percent, time_str);
+                snprintf (progress_str, sizeof(progress_str), "%u%% (%s)", (unsigned)percent, str_human_time (secs, false).s);
             else
                 snprintf (progress_str, sizeof(progress_str), "%u%% (%s) task=%s sofar=%"PRIu64" total=%"PRIu64" seconds_so_far=%d", 
-                         (unsigned)percent, time_str, task, sofar, total, seconds_so_far);            
+                         (unsigned)percent, str_human_time (secs, false).s, task, sofar, total, seconds_so_far);            
 
             progress_update_status (NULL, progress_str);
         }
@@ -192,34 +188,34 @@ bool progress_has_component (void)
     return component_name != NULL;
 }
 
-#define FINALIZE(format, ...) { \
-    char s[500]; \
-    int s_len = snprintf (s, sizeof(s), format, __VA_ARGS__);  \
-    if (IS_ZIP && flag.md5) snprintf (&s[s_len], sizeof(s)-s_len, "\t%s = %s", digest_name(), digest_display (md5).s); \
-    progress_finalize_component (s);  \
+#define FINALIZE(format, ...) {                                                               \
+    StrTextLong s; int s_len=0;                                                               \
+    SNPRINTF (s, format, __VA_ARGS__);                                                        \
+    if (IS_ZIP && flag.md5) SNPRINTF (s, "\t%s = %s", digest_name(), digest_display (md5).s); \
+    progress_finalize_component (s.s);                                                        \
 }
 
 void progress_finalize_component_time (rom status, Digest md5/*ZIP only*/)
 {
-    FINALIZE ("%s (%s)", status, progress_ellapsed_time());
+    FINALIZE ("%s (%s)", status, progress_ellapsed_time().s);
 }
 
 void progress_finalize_component_time_ratio (rom me, float ratio, Digest md5)
 {
     if (component_name)
-        FINALIZE ("Done (%s, %s compression ratio: %1.1f)", progress_ellapsed_time(), me, ratio)
+        FINALIZE ("Done (%s, %s compression ratio: %1.1f)", progress_ellapsed_time().s, me, ratio)
     else
-        FINALIZE ("Time: %s, %s compression ratio: %1.1f", progress_ellapsed_time(), me, ratio);
+        FINALIZE ("Time: %s, %s compression ratio: %1.1f", progress_ellapsed_time().s, me, ratio);
 }
 
 void progress_finalize_component_time_ratio_better (rom me, float ratio, rom better_than, float ratio_than, Digest md5)
 {
     if (component_name) 
         FINALIZE ("Done (%s, %s compression ratio: %1.1f - better than %s by a factor of %1.1f)", 
-                  progress_ellapsed_time(), me, ratio, better_than, ratio_than)
+                  progress_ellapsed_time().s, me, ratio, better_than, ratio_than)
     else
         FINALIZE ("Time: %s, %s compression ratio: %1.1f - better than %s by a factor of %1.1f", 
-                  progress_ellapsed_time(), me, ratio, better_than, ratio_than)
+                  progress_ellapsed_time().s, me, ratio, better_than, ratio_than)
 }
 
 void progress_concatenated_md5 (rom me, Digest md5)

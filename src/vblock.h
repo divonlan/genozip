@@ -32,9 +32,10 @@ typedef struct {
 } DeferredField;
 
 typedef struct { 
-    ConstContainerP con;  
-    Did did_i;      // of container 
+    ConstContainerP con; 
+    STR(prefixes); 
     int32_t repeat; // PIZ: current repeat being reconstructed in each container in the container stack
+    Did did_i;      // of container 
 } ConStack;
 
 #define VBLOCK_COMMON_FIELDS \
@@ -258,7 +259,7 @@ extern void vb_set_is_processed (VBlockP vb);
 //-----------------------------------------
 
 // NOT thread safe, use only in execution-terminating messages
-extern rom err_vb_pos (void *vb);
+extern StrText err_vb_pos (void *vb);
 extern bool vb_buf_locate (VBlockP vb, ConstBufferP buf);
 extern rom textual_assseg_line (VBlockP vb);
 

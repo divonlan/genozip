@@ -252,16 +252,15 @@ void aes_initialize (VBlockP vb, bytes key)
     vb->bi = AES_BLOCKLEN;
 }
 
-char *aes_display_data (bytes data, unsigned data_len)
+rom aes_display_data (bytes data, unsigned data_len)
 {
     char *str = MALLOC (data_len * 2 + 1);
-
-    for (unsigned i=0; i < data_len; i++) 
-        sprintf (&str[i*2], "%2.2x", data[i]);
-
-    str[data_len*2] = 0;
-
-    return str;
+    return str_to_hex (STRa(data), str, false);
 }
 
-char *aes_display_key (bytes key) { return aes_display_data (key, AES_KEYLEN); }
+StrText aes_display_key (bytes key) 
+{ 
+    StrText s;
+    str_to_hex (key, AES_KEYLEN, s.s, false);
+    return s;
+}

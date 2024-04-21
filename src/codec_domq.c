@@ -264,7 +264,7 @@ static uint8_t codec_domq_prepare_normalize (VBlockP vb, ContextP ctx, LocalGetL
     buf_free (ql_buf); // we can free local_hash as this function is called from seg_finalize 
     buf_alloc_exact_zero (vb, ql_buf, get_line_cb ? vb->lines.len : 1, QualLine, "contexts->qual_line");
 
-    if (get_line_cb)
+    if (get_line_cb) 
         for_buf2 (QualLine, ql, line_i, ql_buf) 
             get_line_cb (vb, ctx, line_i, (char**)pSTRa(ql->qual), CALLBACK_NO_SIZE_LIMIT, &ql->is_rev);
     else

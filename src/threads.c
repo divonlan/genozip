@@ -8,6 +8,7 @@
 
 #include <errno.h>
 #include <pthread.h>
+#include <limits.h>
 #include <string.h>
 #include <sys/types.h>
 #ifdef _WIN32
@@ -474,12 +475,18 @@ ThreadId threads_create (void (*func)(VBlockP), VBlockP vb)
     // release all data (inc. VB initialization data) to be visible to the new thread
     __atomic_thread_fence (__ATOMIC_RELEASE); 
 
+    // set thread stack size: Mac fails without this (in reconstruct and also in longr zip)
+    pthread_attr_t tattr;
+    int err;
+    ASSERT (!(err = pthread_attr_init(&tattr)), "pthread_attr_init: %s", strerror (err)); // initialized with default attributes
+    ASSERT (!(err = pthread_attr_setstacksize (&tattr, 4 MB)), "pthread_attr_setstacksize: %s", strerror (err)); 
+
     mutex_initialize (vb->ready_for_compute);
     mutex_lock (vb->ready_for_compute); // thread_entry_caller will wait on this until VB is initialized
 
     pthread_t pthread;
-    unsigned err = pthread_create (&pthread, NULL, thread_entry_caller, vb);
-    ASSERT (!err, "failed to create thread task=\"%s\" vb_i=%d: %s", vb->compute_task, vb->vblock_i, strerror(err));
+    err = pthread_create (&pthread, &tattr, thread_entry_caller, vb);
+    ASSERT (!err, "pthread_create: task=\"%s\" vb_i=%d: %s", vb->compute_task, vb->vblock_i, strerror(err));
 
     *B(ThreadEnt, threads, thread_id) = (ThreadEnt){ 
         .in_use    = true, 

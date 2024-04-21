@@ -37,7 +37,7 @@ genozip-debug*
 genozip-opt*
 genozip-latest*
 1000genomes/*
-data/*
+public/*
 support/*
 benchmark.txt
 notes.txt

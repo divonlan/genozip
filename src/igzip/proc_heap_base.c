@@ -27,9 +27,9 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 **********************************************************************/
 
-#include "../igzip_lib.h"
-#include "../huff_codes.h"
-#include "../unaligned.h"
+#include "igzip_lib.h"
+#include "huff_codes.h"
+#include "unaligned.h"
 
 static inline void heapify(uint64_t * heap, uint64_t heap_size, uint64_t index)
 {

@@ -470,7 +470,7 @@ static void fasta_seg_seq_line_do (VBlockFASTAP vb, uint32_t line_len, bool is_f
         seg_duplicate_last (VB, lm_ctx, 0);
 
     else { 
-        STRli (special_snip, 100);
+        STRlic (special_snip, 100);
         seg_prepare_snip_other_do (SNIP_OTHER_LOOKUP, _FASTA_NONREF, 
                                    true, (int32_t)line_len, 0, &special_snip[3], &special_snip_len);
 

@@ -106,7 +106,7 @@ typedef struct DataTypeProperties {
     bool (*piz_preprocess) (Dispatcher dispatcher); // called for preprocessing
     void (*piz_header_init)(void);              // called at the beginning of reconstruction of every txt header that is reconstructed
     bool (*piz_initialize)(CompIType comp_i);   // called at the beginning of each output txt_file (after the global sections have been read already)
-    void (*piz_finalize)(void);                 // called by main thread after each txt file reconstruction is done
+    void (*piz_finalize)(bool is_last_z_file);  // called by main thread after each txt file reconstruction is done
     void (*piz_before_read)(VBlockP);           // called by main thread after reading VB_HEADER and before reading local/b250 sections from z_file
     bool (*piz_init_vb)(VBlockP, ConstSectionHeaderVbHeaderP);  // called by main thread after all sections of a VB have been read, before dispatching the compute thread
     void (*piz_recon_init)(VBlockP);            // called by the compute thread after uncompressing and before reconstructing

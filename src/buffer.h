@@ -21,8 +21,10 @@
     element_type *name = ((element_type *)((buf).data)); \
     const uint32_t name##_len __attribute__((unused)) = (buf).len32 // read-only copy of len 
 
+#pragma GCC diagnostic ignored "-Wnonnull"  // avoid warning when using B macros in memcpy, memmove and atoi - warning bc they are sometimes NULL
+
 // entry #index in Buffer
-#define B(type, buf, index) ((type *)(&(buf).data[(index) * sizeof(type)]))
+#define B(type, buf, index) ((buf).data ? ((type *)(&(buf).data[(index) * sizeof(type)])) : NULL)
 #define Bc(buf, index)      B(char,     (buf), (index))
 #define B8(buf, index)      B(uint8_t,  (buf), (index))
 #define B16(buf, index)     B(uint16_t, (buf), (index))
@@ -30,6 +32,8 @@
 #define B64(buf, index)     B(uint64_t, (buf), (index))
 #define Btxt(index)         Bc (vb->txt_data, index)
 #define Ltxt                (vb->txt_data.len32)
+#define Stxt                (vb->txt_data.size)
+#define Rtxt                (vb->txt_data.len < Stxt ? (Stxt - vb->txt_data.len) : 0) // remaining (non-negative)
 
 // first entry in Buffer
 #define B1ST(type, buf)     ((type     *)(buf).data)
@@ -41,16 +45,16 @@
 #define B1STtxt             (vb->txt_data.data)
 
 // last entry in Buffer
-#define BLST(type, buf)     ((type *)(&(buf).data[((buf).len-1) * sizeof(type)]))
+#define BLST(type, buf)     ((buf).data ? ((type *)(&(buf).data[((buf).len-1) * sizeof(type)])) : NULL)
 #define BLSTc(buf)          BLST(char,    (buf))
 #define BLST8(buf)          BLST(uint8_t, (buf))
 #define BLST16(buf)         BLST(uint16_t,(buf))
 #define BLST32(buf)         BLST(uint32_t,(buf))
 #define BLST64(buf)         BLST(uint64_t,(buf))
-#define BLSTtxt             (&vb->txt_data.data[(Ltxt-1)])
+#define BLSTtxt             (vb->txt_data.data ? (&vb->txt_data.data[(Ltxt-1)]) : NULL)
 
 // entry after the end of the Buffer 
-#define BAFT(type, buf)     ((type *)(&(buf).data[((buf).len) * sizeof(type)]))
+#define BAFT(type, buf)     ((buf).data ? ((type *)(&(buf).data[((buf).len) * sizeof(type)])) : NULL)
 #define BAFTc(buf)          BAFT(char,    (buf))
 #define BAFT8(buf)          BAFT(uint8_t, (buf))
 #define BAFT16(buf)         BAFT(uint16_t,(buf))
@@ -59,31 +63,31 @@
 #define BAFTtxt             (&vb->txt_data.data[Ltxt])
 
 #define for_buf(element_type, iterator, buf)  \
-    for (element_type *iterator=B1ST(element_type, (buf)), *fb_after=BAFT(element_type, (buf)); iterator < fb_after; iterator++)
+    for (element_type *iterator=B1ST(element_type, (buf)), *fb_after=BAFT(element_type, (buf)); iterator && iterator < fb_after; iterator++)
 
 #define for_buf_back(element_type, iterator, buf)  \
-    for (element_type *iterator=BLST(element_type, (buf)), *fb_first=B1ST(element_type, (buf)); iterator >= fb_first; iterator--)
+    for (element_type *iterator=BLST(element_type, (buf)), *fb_first=B1ST(element_type, (buf)); iterator && iterator >= fb_first; iterator--)
 
 // loop with two concurrent iterators "iter_p" (pointer to element_type) and "iter_i" (32bit) 
 #define for_buf2(element_type, iter_p, iter_i, buf) \
     for (uint32_t iter_i=0, iter_i_after=(buf).len32; iter_i < iter_i_after;)  \
-        for (element_type *iter_p=B1ST(element_type, (buf)), *fb_after=BAFT(element_type, (buf)); iter_p < fb_after; iter_p++, iter_i++)
+        for (element_type *iter_p=B1ST(element_type, (buf)), *fb_after=BAFT(element_type, (buf)); iter_p && iter_p < fb_after; iter_p++, iter_i++)
 
 #define for_buf2_back(element_type, iter_p, iter_i, buf) \
     for (int32_t iter_i=(buf).len32-1; iter_i >= 0;)  \
-        for (element_type *iter_p=BLST(element_type, (buf)), *fb_first=B1ST(element_type, (buf)); iter_p >= fb_first; iter_p--, iter_i--)
+        for (element_type *iter_p=BLST(element_type, (buf)), *fb_first=B1ST(element_type, (buf)); iter_p && iter_p >= fb_first; iter_p--, iter_i--)
 
 #define for_buf_tandem(element_type1, iterator1, buf1, element_type2, iterator2, buf2)  \
     ASSERT ((buf1).len32 == (buf2).len32, "expecting %s.len=%u == %s.len=%u", (buf1).name, (buf1).len32, (buf2).name, (buf2).len32);\
     element_type1 *iterator1=B1ST(element_type1, (buf1)), *fb_after=BAFT(element_type1, (buf1)); \
     element_type2 *iterator2=B1ST(element_type2, (buf2)); \
-    for (; iterator1 < fb_after; iterator1++, iterator2++)
+    for (; iterator1 && iterator1 < fb_after; iterator1++, iterator2++)
 
 #define for_buf_tandem_back(element_type1, iterator1, buf1, element_type2, iterator2, buf2)  \
     ASSERT ((buf1).len32 == (buf2).len32, "expecting %s.len=%u == %s.len=%u", (buf1).name, (buf1).len32, (buf2).name, (buf2).len32);\
     element_type1 *iterator1=BLST(element_type1, (buf1)), *fb_first=B1ST(element_type1, (buf1)); \
     element_type2 *iterator2=BLST(element_type2, (buf2)); \
-    for (; iterator1 >= fb_first; iterator1--, iterator2--)
+    for (; iterator1 && iterator1 >= fb_first; iterator1--, iterator2--)
 
 // remove entries from buffer that fail to meet the condition
 #define buf_remove_items_except_(type, buf, keep_predicate) \

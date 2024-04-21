@@ -188,7 +188,9 @@ void vcf_piz_insert_QUAL_by_GP (VBlockVCFP vb)
             vcf_piz_insert_field (vb, ctx, STRa(qual), segconf.wid_QUAL.width);
 
         if (ctx->flags.store == STORE_FLOAT)
-            ctx_set_last_value (VB, ctx, atof (qual)); // note: atof again, bc value might be slightly different than gp1 due to rounding in sprintf
+            // note: atof again, bc value might be slightly different than gp1 due to rounding in sprintf        
+            // note: we explicitly build a ValueType union bc just passing a double doesn't work in clang
+            ctx_set_last_value (VB, ctx, (ValueType){ .f = atof (qual) }); 
     }
 
     else {

@@ -461,8 +461,7 @@ typedef struct Sag {
 #define MAX_SA_CIGAR_INDEX    MAXB64(ALN_CIGAR_BITS)
 #define CAP_SA_AS(as)         MAX_(0, MIN_((as), (SamASType)MAXB(GRP_AS_BITS)))  // our limit - [0,65535] - capped at 0 and 65535
 
-#define DATA_LINE(i) B(ZipDataLineSAM, vb->lines, i)
-#define MATE(f) DATA_LINE(vb->mate_line_i)->f
+#define DATA_LINE(i) ((i) >= 0 ? B(ZipDataLineSAM, vb->lines, (i)) : NULL)
 
 #define IS_MAIN(x) ((x)->comp_i == SAM_COMP_MAIN)
 #define IS_PRIM(x) ((x)->comp_i == SAM_COMP_PRIM)
@@ -509,8 +508,7 @@ extern void sam_reconstruct_from_buddy_get_textual_snip (VBlockSAMP vb, ContextP
 extern rom buddy_type_name (BuddyType bt);
 
 // FLAG stuff
-typedef struct { char s[256]; } SamFlagStr;
-extern SamFlagStr sam_dis_FLAG (SamFlags f);
+extern StrTextLong sam_dis_FLAG (SamFlags f);
 extern void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAMP dl, unsigned add_bytes);
 #define last_flags ((SamFlags){ .value = CTX(SAM_FLAG)->last_value.i })
 

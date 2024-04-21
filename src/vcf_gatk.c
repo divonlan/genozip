@@ -409,7 +409,7 @@ static int64_t vcf_piz_calculate_BaseCounts (VBlockVCFP vb, STRp(snip), qSTRp(ou
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_BaseCounts)
 {
-    STRli(recon,256);
+    STRlic(recon,256);
 
     // case: reconstruct now
     if (snip[0] != 'X') { // no deferring because not dependent on AD
@@ -446,7 +446,7 @@ void vcf_piz_insert_INFO_BaseCounts_by_AD (VBlockVCFP vb)
     STR(snip);
     ctx_get_snip_by_word_index (ctx, ctx->last_wi, snip);
 
-    STRli(recon,256);
+    STRlic(recon,256);
     int64_t value = 
         vcf_piz_calculate_BaseCounts (vb, snip+3, snip_len-3, reconstruct ? recon : NULL, &recon_len);
     

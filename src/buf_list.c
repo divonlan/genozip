@@ -559,7 +559,7 @@ static void buflist_find_underflow_culprit (ConstVBlockP calling_vb, rom memory,
             if (!vb) continue;
             
             char func[50];
-            sprintf (func, "%s(vb_i=%u)\n", __FUNCTION__, vb->vblock_i);
+            snprintf (func, sizeof(func), "%s(vb_i=%u)\n", __FUNCTION__, vb->vblock_i);
 
             buf_lock_if (&vb->buffer_list, vb != calling_vb); // calling_vb->buf_list is already locked by caller
 

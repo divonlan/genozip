@@ -17,3 +17,4 @@ typedef struct __attribute__ ((packed)) {
 
 extern void aliases_compress (void);
 extern ConstBufferP aliases_get (void);
+extern void show_aliases (void);

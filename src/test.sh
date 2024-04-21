@@ -21,6 +21,7 @@ cleanup()
     rm -fR $OUTDIR/* $TESTDIR/*.bad $TESTDIR/*.rejects.* 
     cleanup_cache
     install_license Premium || exit 1
+    unset GENOZIP_REFERENCE    
 }
 
 cmp_2_files() 
@@ -394,7 +395,6 @@ batch_bgzf()
     local sam_gz=${OUTDIR}/bgzf_test.sam.gz
     $genozip ${TESTDIR}/basic.sam -Xfo $output || exit 1
     $genocat --no-pg $output -fo $sam_gz || exit 1
-#    if [ "$(head -c4 $sam_gz | od -x | head -1 | awk '{$2=$2};1')" != "0000000 8b1f 0408" ] ; then  # the awk converts the Mac output to be the same as Linux (removing redundant spaces)
     verify_bgzf $sam_gz 1
 
     test_header "sam-> sam.genozip -> genocat to bam - see that it is BGZF"
@@ -472,7 +472,7 @@ batch_special_algs()
 
     # bug was: compression failed, bc igzip would not decompress a 128K GZ chunk into the small vb_sizes[0] of first segconf attempt, and segconf gave up instead of attempting vb_sizes[1]
     test_header "segconf vb_sizes[0] too small, try with vb_size[1]" 
-    $genozip -B32 ${TESTDIR}/regression.no_small_segconf_vb_size.fq.gz -ft --truncate || exit 1 
+    $genozip ${TESTDIR}/regression.no_small_segconf_vb_size.fq.gz -ft --truncate || exit 1 
 }
 
 batch_qual_codecs()
@@ -781,7 +781,7 @@ batch_user_message_permissions()
     rm -f $LICFILE
 
     $genounzip $output -fo $recon > $recon_msg || exit 1
-    if [[ `grep $line $recon_msg | wc -l` != 1 ]]; then
+    if (( `grep "$line" $recon_msg | wc -l` != 1 )); then
         echo "Error: cannot find message from $msg in $recon_msg"
         exit 1
     fi
@@ -1010,20 +1010,15 @@ batch_backward_compatability()
     batch_print_header
     local files=( `ls -r $TESTDIR/back-compat/[0-9]*/*.genozip | grep -v "/0" | grep -v .ref.genozip` ) # since v15, backcomp goes back only to v11 
     local file ref
+
+    # standard reference are taken from REFDIR, regression-test references which are
+    # not found in REFDIR, are taken specified in the genozip file
+    export GENOZIP_REFERENCE=$REFDIR
+
     for file in ${files[@]}; do
         test_header "$file - backward compatability test"
-        
-        # update the reference path (possibly ../genozip/data)
-        ref=`$genocat $file --show-reference --force` || exit 1 
 
-        local ref_opt=""
-        if [ "${ref:0:5}" = data/ ]; then
-            ref_opt="--reference $REFDIR/${ref:5:1000}"         
-        elif [ "${ref:0:13}" = private/test/ ]; then
-            ref_opt="--reference $TESTDIR/${ref:13:1000}" 
-        fi
-
-        $genounzip --no-cache -t $file $ref_opt || exit 1
+        $genounzip --no-cache -t $file || exit 1
     done
 
     cleanup # to do: change loop ^ to double loop, clean up after each version (to remove shm)
@@ -1137,10 +1132,10 @@ batch_real_world_genounzip_compare_file() # $1 extra genozip argument
         $genounzip $genozip_file -o $recon || exit 1
 
         # same is in $TESTDIR/Makefile
-        if [[ `head -c2 $recon | od -x | head -1 | cut -d" " -f2 || exit 1` == 8b1f ]]; then
-            local actual_md5=`zcat $recon | md5sum | cut -d" " -f1`
+        if [[ `head -c2 $recon | od -x | head -1 | sed "s/     //" | cut -d" " -f2 || exit 1` == 8b1f ]]; then # sed handles Mac format
+            local actual_md5=`gzip -dc $recon | $md5 | cut -d" " -f1` # note: no zcat on mac
         else
-            local actual_md5=`md5sum $recon | cut -d" " -f1`
+            local actual_md5=`$md5 $recon | cut -d" " -f1`
         fi
 
         local expected_md5=`cat ${TESTDIR}/${f}.md5` # calculated in test/Makefile
@@ -1909,7 +1904,7 @@ TESTDIR=$BASEDIR/private/test
 SCRIPTSDIR=$BASEDIR/private/scripts
 LICENSESDIR=$BASEDIR/private/licenses
 OUTDIR=$TESTDIR/tmp
-REFDIR=$BASEDIR/data
+REFDIR=$BASEDIR/public
 if [ -n "$is_windows" ]; then
     LICFILE=$APPDATA/genozip/.genozip_license.v15
 
@@ -2008,12 +2003,13 @@ genounzip_exe=$dir/genounzip${debug}$exe
 genocat_exe=$dir/genocat${debug}$exe
 genols_exe=$dir/genols${debug}$exe
 
-# $@ - extra args
-genozip="$genozip_exe --echo $@ $zip_threads"
-genozip_latest="$genozip_latest_exe --echo $@ $zip_threads"
-genounzip="$genounzip_exe --echo $@ $piz_threads"
-genocat_no_echo="$genocat_exe $@ $piz_threads"
-genocat="$genocat_exe --echo $@ $piz_threads"
+# extra args: $1 - zip args $2 - piz args: 
+# example: test.sh debug 0 "--no-longer -w" "-z3" 
+genozip="$genozip_exe --echo $1 $zip_threads"
+genozip_latest="$genozip_latest_exe --echo $1 $zip_threads"
+genounzip="$genounzip_exe --echo $2 $piz_threads"
+genocat_no_echo="$genocat_exe $2 $piz_threads"
+genocat="$genocat_exe --echo $2 $piz_threads"
 genols=$genols_exe 
 
 basics=(basic.vcf basic.sam basic.vcf basic.bam basic.fq basic.fa basic.gvf basic.gtf basic.me23 \
@@ -2036,7 +2032,7 @@ fi
 mkdir $OUTDIR >& /dev/null
 cleanup
 
-make -C $TESTDIR --quiet -j sync_wsl_clock generated md5s || exit 1
+make -C $TESTDIR --quiet -j20 sync_wsl_clock generated md5s || exit 1 # limit threads to 20, otherwise too many concurrent forks (Mac runs out of resources)
 
 inc() { 
     GENOZIP_TEST=$((GENOZIP_TEST + 1)) 

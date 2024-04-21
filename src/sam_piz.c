@@ -22,6 +22,8 @@
 #include "qname_filter.h"
 #include "libdeflate_1.19/libdeflate.h"
 
+static void seq_filter_destroy (void); // forward
+
 void sam_piz_xtra_line_data (VBlockP vb_)
 {
     VBlockSAMP vb = (VBlockSAMP)vb_;
@@ -123,7 +125,7 @@ void sam_piz_process_recon (VBlockP vb)
 
 // PIZ: called by main thread after each SAM/BAM txt file reconstruction is done. Note: not called if
 // txt_file is filtered out with --fastq, --R1 etc
-void sam_piz_finalize (void)
+void sam_piz_finalize (bool is_last_z_file)
 {
     sam_header_finalize();
 
@@ -140,6 +142,9 @@ void sam_piz_finalize (void)
 
         vb_dehoard_memory (true);
     }
+
+    if (is_last_z_file && flag.debug_valgrind)
+        seq_filter_destroy();
 }
 
 // returns true if section is to be skipped reading / uncompressing
@@ -285,7 +290,9 @@ IS_SKIP (sam_piz_is_skip_section)
 
 typedef struct {
     uint32_t hash; // hash of seq
-    STR (seq);
+    uint32_t seq_len    : 31;
+    uint32_t is_alloced : 1;
+    rom seq;
 } SeqFilterItem;
 static Buffer seqs_filter = {};
 
@@ -312,10 +319,11 @@ void seq_filter_initialize (rom filename)
 
     // revcomp entries
     for (int i=0; i < n_lines; i++) {
-        seq[n_lines + i].seq     = MALLOC (line_lens[i]);
-        seq[n_lines + i].seq_len = line_lens[i];
+        seq[n_lines + i].seq        = MALLOC (line_lens[i]);
+        seq[n_lines + i].seq_len    = line_lens[i];
         str_revcomp ((char *)seq[n_lines + i].seq, STRi(line, i));
-        seq[n_lines + i].hash    = crc32 (0, STRa(seq[n_lines + i].seq));
+        seq[n_lines + i].hash       = crc32 (0, STRa(seq[n_lines + i].seq));
+        seq[n_lines + i].is_alloced = true;
     }
 
     qsort (STRb(seqs_filter), sizeof(SeqFilterItem), seq_filter_sort_by_hash);
@@ -333,6 +341,12 @@ void seq_filter_initialize (rom filename)
 
     // display sorted list of (hash,seq) pairs (uncomment for debugging)
     // for_buf (SeqFilterItem, e, seqs_filter) iprintf ("%u %s\n", e->hash, e->seq);
+}
+
+static void seq_filter_destroy (void)
+{
+    for_buf (SeqFilterItem, seq, seqs_filter)
+        if (seq->is_alloced) FREE (seq->seq);
 }
 
 static bool sam_piz_line_survives_seq_filter (STRp(seq))
@@ -465,7 +479,7 @@ SPECIAL_RECONSTRUCTOR (bam_piz_special_FLOAT)
         unsigned dec_digits = MAX_(0, NUM_SIGNIFICANT_DIGITS - int_digits);
         
         // reconstruct number with exactly NUM_SIGNIFICANT_DIGITS digits
-        sprintf (BAFTtxt, "%.*f", dec_digits, machine_en.f); 
+        snprintf (BAFTtxt, Rtxt, "%.*f", dec_digits, machine_en.f); 
         unsigned len = strlen (BAFTtxt); 
         Ltxt += len;
 
@@ -626,7 +640,7 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
 
         if (flag.add_line_numbers && TXT_DT(SAM)) {
             Ltxt -= 1 + (*(BLSTtxt-1) == '\r'); // remove \n or \r\n
-            Ltxt += sprintf (BAFTtxt, "\tVB:Z:%s\n", LN_NAME);
+            Ltxt += snprintf (BAFTtxt, Rtxt, "\tVB:Z:%s\n", LN_NAME);
         }
 
         // case SAM to BAM translation: set alignment.block_size (was in sam_piz_sam2bam_AUX until v11)

@@ -94,12 +94,12 @@ WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con,
 StrTextMegaLong container_stack (VBlockP vb)
 {
     StrTextMegaLong s;
-    int len = 0;
+    int s_len = 0;
 
     for (int i=0; i < vb->con_stack_len; i++)
-        len += snprintf (&s.s[len], sizeof (s.s) - len, "%s[%u]->", CTX(vb->con_stack[i].did_i)->tag_name, vb->con_stack[i].repeat);
+        SNPRINTF (s, "%s[%u]->", CTX(vb->con_stack[i].did_i)->tag_name, vb->con_stack[i].repeat);
 
-    s.s[len-2] = 0; // remove final "->"
+    if (s_len >= 2) s.s[s_len-2] = 0; // remove final "->"
 
     return s;
 }
@@ -436,7 +436,8 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
     if (flag.show_stack)
         iprintf ("%s: PUSH[%u] %s\n", LN_NAME, vb->con_stack_len, ctx->tag_name);
 
-    vb->con_stack[vb->con_stack_len++] = (ConStack){ .con=con, .did_i=ctx->did_i, .repeat=-1 };
+    vb->con_stack[vb->con_stack_len++] = (ConStack){ .con=con, .prefixes=prefixes, .prefixes_len=prefixes_len, 
+                                                     .did_i=ctx->did_i, .repeat=-1 };
     ctx->curr_container = con;
 
     if (is_toplevel) {
@@ -655,8 +656,8 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
 
             // we allocate txt_data to be OVERFLOW_SIZE (=1MB) beyond needed, if we get 64KB near the edge
             // of that we error here. These is to prevent actual overflowing which will manifest as difficult to trace memory issues
-            ASSPIZ (vb->txt_data.size - Ltxt > 64 KB, "%s: txt_data overflow: Ltxt=%u lines.len=%u con->repeats=%u recon_size=%u. vb->txt_data dumped to %s.gz", 
-                    LN_NAME, Ltxt, vb->lines.len32, con->repeats, vb->recon_size, txtfile_dump_vb (vb, z_name));
+            ASSPIZ (Rtxt > 64 KB, "%s: txt_data overflow: Ltxt=%u lines.len=%u con->repeats=%u recon_size=%u. vb->txt_data dumped to %s.gz", 
+                    LN_NAME, Ltxt, vb->lines.len32, con->repeats, vb->recon_size, txtfile_dump_vb (vb, z_name).s);
 
             if (flag.maybe_lines_dropped_by_reconstructor || flag.maybe_lines_dropped_by_writer)
                 container_toplevel_filter (vb, rep_i, rep_reconstruction_start, show_non_item);
@@ -806,11 +807,11 @@ static StrText item_sep_name0 (uint8_t sep)
 
     if (sep & 0x80) {
         int s_len = 0;
-        if ((sep & 0x7f) & CI0_TRANS_NUL)    s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "TRANS_NUL|");
-        if ((sep & 0x7f) & CI0_TRANS_NOR)    s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "TRANS_NOR|");
-        if ((sep & 0x7f) & CI0_TRANS_MOVE)   s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "TRANS_MOVE|");
-        if ((sep & 0x7f) & CI0_NATIVE_NEXT)  s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "NATIVE_NEXT|");
-        if ((sep & 0x7f) & CI0_TRANS_ALWAYS) s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "TRANS_ALWAYS|");
+        if ((sep & 0x7f) & CI0_TRANS_NUL)    SNPRINTF0 (s, "TRANS_NUL|");
+        if ((sep & 0x7f) & CI0_TRANS_NOR)    SNPRINTF0 (s, "TRANS_NOR|");
+        if ((sep & 0x7f) & CI0_TRANS_MOVE)   SNPRINTF0 (s, "TRANS_MOVE|");
+        if ((sep & 0x7f) & CI0_NATIVE_NEXT)  SNPRINTF0 (s, "NATIVE_NEXT|");
+        if ((sep & 0x7f) & CI0_TRANS_ALWAYS) SNPRINTF0 (s, "TRANS_ALWAYS|");
 
         if (s_len) s.s[s_len-1] = 0; // remove final |
     }
@@ -847,15 +848,15 @@ static StrTextLong container_flags (ConstContainerP con)
     StrTextLong s = {};
     int s_len = 0;
 
-    if (con->drop_final_repsep)                   s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "drop_final_repsep|");
-    if (con->drop_final_item_sep)                 s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "drop_final_item_sep|");
-    if (con->drop_final_item_sep_of_final_repeat) s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "drop_final_item_sep_of_final_repeat|");
-    if (con->keep_empty_item_sep)                 s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "keep_empty_item_sep|");
-    if (con->filter_repeats)                      s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "filter_repeats|");
-    if (con->filter_items)                        s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "filter_items|");
-    if (con->is_toplevel)                         s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "is_toplevel|");
-    if (con->callback)                            s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "callback|");
-    if (con->no_translation)                      s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "no_translation|");
+    if (con->drop_final_repsep)                   SNPRINTF0 (s, "drop_final_repsep|");
+    if (con->drop_final_item_sep)                 SNPRINTF0 (s, "drop_final_item_sep|");
+    if (con->drop_final_item_sep_of_final_repeat) SNPRINTF0 (s, "drop_final_item_sep_of_final_repeat|");
+    if (con->keep_empty_item_sep)                 SNPRINTF0 (s, "keep_empty_item_sep|");
+    if (con->filter_repeats)                      SNPRINTF0 (s, "filter_repeats|");
+    if (con->filter_items)                        SNPRINTF0 (s, "filter_items|");
+    if (con->is_toplevel)                         SNPRINTF0 (s, "is_toplevel|");
+    if (con->callback)                            SNPRINTF0 (s, "callback|");
+    if (con->no_translation)                      SNPRINTF0 (s, "no_translation|");
 
     if (s_len) s.s[s_len-1] = 0; // remove final |
 
@@ -869,27 +870,34 @@ StrTextMegaLong container_to_json (ConstContainerP con, STRp (prefixes))
     
     uint32_t num_items = con_nitems (*con);
 
-    s_len = snprintf (s.s, sizeof (s.s), "{ \"repeats\": %s, \"num_items\": %u, \"flags\": %s, \"repsep\": [ '%.5s', '%.5s' ], \"items\": [ ",
-                     (con->repeats == CON_REPEATS_IS_SEQ_LEN?"SEQ_LEN" : con->repeats == CON_REPEATS_IS_SPECIAL?"SPECIAL" : str_int_s (con->repeats).s),
-                     num_items,container_flags(con).s,
-                     char_to_printable (con->repsep[0]).s, char_to_printable(con->repsep[1]).s);
+    SNPRINTF (s, "{ \"repeats\": %s, \"num_items\": %u, \"flags\": %s, \"repsep\": [ '%.5s', '%.5s' ], \"items\": [ ",
+              (con->repeats == CON_REPEATS_IS_SEQ_LEN?"SEQ_LEN" : con->repeats == CON_REPEATS_IS_SPECIAL?"SPECIAL" : str_int_s (con->repeats).s),
+              num_items,container_flags(con).s,
+              char_to_printable (con->repsep[0]).s, char_to_printable(con->repsep[1]).s);
     
     for (unsigned i=0; i < num_items; i++)
-        s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "{ \"dict_id\": \"%s\", \"separator\": [ %s, %s ], \"translator\": %u }, ",
-                          dis_dict_id (con->items[i].dict_id).s,  
-                          item_sep_name0 (con->items[i].separator[0]).s, item_sep_name1 (con->items[i].separator[1]).s, 
-                          con->items[i].translator);
+        SNPRINTF (s, "{ \"dict_id\": \"%s\", \"separator\": [ %s, %s ], \"translator\": %u }, ",
+                  dis_dict_id (con->items[i].dict_id).s,  
+                  item_sep_name0 (con->items[i].separator[0]).s, item_sep_name1 (con->items[i].separator[1]).s, 
+                  con->items[i].translator);
     
     if (num_items) s_len -= 2; // remove last com
-    s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, " }, prefixes=[ ");
 
-    str_split (prefixes, prefixes_len, 0, CON_PX_SEP, pr, false);
+    if (prefixes_len) {
+        SNPRINTF0 (s, " ], prefixes=[ ");
+    
+        str_split (prefixes, prefixes_len, 0, CON_PX_SEP, pr, false);
 
-    for (unsigned i=0; i < n_prs-1; i++) 
-        s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, "\"%s\", ", str_to_printable_(prs[i], MIN_(pr_lens[i], sizeof(StrTextSuperLong)/2-1)).s);
+        for (unsigned i=0; i < n_prs-1; i++) 
+            SNPRINTF (s, "\"%s\", ", str_to_printable_(prs[i], MIN_(pr_lens[i], sizeof(StrTextSuperLong)/2-1)).s);
 
-    if (num_items) s_len -= 2; // remove last comma
-    s_len += snprintf (&s.s[s_len], sizeof (s.s) - s_len, " ] }");
+        if (num_items) s_len -= 2; // remove last comma
+    
+        SNPRINTF0 (s, " ] }");
+    }
+
+    else
+        SNPRINTF0 (s, " ], prefixes=N/A }");
 
     return s;
 }

@@ -124,7 +124,7 @@ static int url_do_curl_head (rom url,
                              char *stderr_data, unsigned *stderr_len)
 {
     ASSERT (stream_is_exec_in_path ("curl"),
-            "Failed to open URL %s because curl was not found in the execution path", url);
+            "Failed to open URL %s because curl was not found in the execution path: %s", url, getenv ("PATH"));
 
     StreamP curl = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
                                   "To compress files from a URL",
@@ -347,16 +347,16 @@ char *url_esc_non_valid_chars_(rom in, char *out/*malloced if NULL*/, bool esc_a
     for (; *in; in++) {
         if (IS_VALID_URL_CHAR(*in)) {
             if (esc_all_or_none) {
-                sprintf (next, "%%%02X", (unsigned char)*in);
-                next +=3;
+                snprintf (next, 4, "%%%02X", (unsigned char)*in); // 4 bc inc. room for \0 required by snprintf
+                next += 3;
             }
             else
                 *(next++) = *in;
         }
 
         else {
-            sprintf (next, "%%%02X", (unsigned char)*in);
-            next +=3;
+            snprintf (next, 4, "%%%02X", (unsigned char)*in);
+            next += 3;
             any_invalid = true;
         }
     }

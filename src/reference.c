@@ -1109,7 +1109,7 @@ void ref_set_reference (Reference ref, rom filename, ReferenceType ref_type, boo
     unsigned filename_len;
     if (!filename) {
         rom env = getenv ("GENOZIP_REFERENCE");
-        if (!env || !env[0]) return; // nothing to set
+        if (!env || !env[0] || file_is_dir (env)) return; // nothing to set
 
         filename     = env;
         filename_len = strlen (env);

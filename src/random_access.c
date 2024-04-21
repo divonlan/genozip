@@ -69,7 +69,7 @@ static void random_access_show_index (ConstBufferP ra_buf, bool from_zip, Did ch
             chrom_snip_len = chrom_word->snip_len;
         }
         iprintf ("vb_i=%u chrom='%.*s' (chrom_word_index=%d) min_pos=%"PRId64" max_pos=%"PRId64"\n",
-                 ra->vblock_i, chrom_snip_len, chrom_snip, ra->chrom_index, ra->min_pos, ra->max_pos);
+                 ra->vblock_i, STRfNUL(chrom_snip), ra->chrom_index, ra->min_pos, ra->max_pos);
     }
 }
 

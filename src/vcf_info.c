@@ -462,6 +462,9 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_AFR_AF:
         case _INFO_EUR_AF:
         case _INFO_ASN_AF:
+        case _INFO_SAS_AF:
+        case _INFO_EAS_AF:
+        case _INFO_AF1000G:
         case _INFO_GNOMAD_AF:       CALL (seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, value_len));
         
         // ---------------------------------------
@@ -634,6 +637,9 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_IDREP:           CALL_IF (segconf.vcf_is_isaac, vcf_seg_INFO_IDREP (vb, ctx, STRa(value)));
         case _INFO_CSQT:            CALL_IF (segconf.vcf_is_isaac, seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
         case _INFO_cosmic:          CALL_IF (segconf.vcf_is_isaac, seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
+        case _INFO_phyloP:          CALL_IF (segconf.vcf_is_isaac, seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, value_len));
+        case _INFO_SNVHPOL:         CALL_IF (segconf.vcf_is_isaac, seg_integer_or_not (VB, ctx, STRa(value), value_len));
+        case _INFO_GMAF:            CALL_IF (segconf.vcf_is_isaac, vcf_seg_FORMAT_GMAF (vb, ctx, STRa(value)));
 
         // ---------------------------------------
         // Illumina DRAGEN fields
@@ -778,6 +784,8 @@ void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
     for (unsigned i=0; i < ii_len; i++)
         if (ii[i].value) 
             vcf_seg_info_one_subfield (vb, ii[i].ctx, STRa(ii[i].value));
+        else
+            ctx_set_encountered (VB, ii[i].ctx);
 }
 
 // Seg INFO fields that were deferred to after all samples are segged

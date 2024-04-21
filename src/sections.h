@@ -50,7 +50,7 @@
 // the reason for selecting big endian is that I am developing on little endian CPU (Intel) so
 // endianity bugs will be discovered more readily this way
 
-typedef packed_enum { STORE_NONE, STORE_INT, STORE_FLOAT, STORE_INDEX        } StoreType; // values for SectionFlags.ctx.store
+typedef packed_enum { STORE_NONE, STORE_INT, STORE_FLOAT, STORE_INDEX } StoreType; // values for SectionFlags.ctx.store
 typedef packed_enum { B250_BYTES_4, B250_BYTES_3, B250_BYTES_2, B250_BYTES_1, // used in files 14 - 15.0.37
                       B250_VARL // used in files starting 15.0.39                                               
                     } B250Size; // part of the file format - goes into SectionHeaderCtx.b250_size

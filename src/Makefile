@@ -12,7 +12,8 @@
 
 OBJDIR_LINUX   := objdir.linux
 OBJDIR_WINDOWS := objdir.windows
-OBJDIR_MAC     := objdir.mac
+OBJDIR_OSX_X86 := objdir.osx-x86
+OBJDIR_OSX_ARM := objdir.osx-arm
 
 architecture := $(shell uname -sm | sed -e 's/amd/x86_/')
 
@@ -29,10 +30,17 @@ ifeq ($(architecture),Linux x86_64)
 endif
 
 ifeq ($(architecture),Darwin x86_64)
+	osx = x86
 	osx_x86 := 1		
-	OBJDIR=$(OBJDIR_MAC)
+	OBJDIR=$(OBJDIR_OSX_X86)
 	CFLAGS   += -mmacosx-version-min=10.9 -DNO_UTIMENSAT # Conda requires support from 10.9 but utimensat() was only introduced in MacOS 10.13
 	CXXFLAGS += -mmacosx-version-min=10.9 
+endif
+
+ifeq ($(architecture),Darwin arm64)
+	osx = arm
+	osx_arm64 := 1		
+	OBJDIR=$(OBJDIR_OSX_ARM)
 endif
 
 ifndef OBJDIR
@@ -69,52 +77,53 @@ else # not conda
 	endif
 endif 
 
-# note: modern nasm/yasm have AS_FEATURE_LEVEL=10. HAVE_AS_KNOWS_AVX512 is true if level 10.
-ASFLAGS = -DAS_FEATURE_LEVEL=10 -DHAVE_AS_KNOWS_AVX512
-
-CPU = $(shell uname -m | sed -e 's/amd/x86_/')
-
-ifeq ($(CPU),x86_64) # or amd64
+ifdef Windows
 	AS := nasm
 	x86_64 := 1
+	ASFLAGS := -f win64 -DAS_FEATURE_LEVEL=10 -DHAVE_AS_KNOWS_AVX512 # note: modern nasm/yasm have AS_FEATURE_LEVEL=10. HAVE_AS_KNOWS_AVX512 is true if level 10.
+	# -lasan needed for -fsanitize=address is not supported by MinGW: https://stackoverflow.com/questions/55018627/cannot-find-lasan-using-address-sanitizer-in-mingw-in-windows-mingw
+endif
 
-	ifdef Windows
-		ASFLAGS += -f win64
-		# -lasan needed for -fsanitize=address is not supported by MinGW: https://stackoverflow.com/questions/55018627/cannot-find-lasan-using-address-sanitizer-in-mingw-in-windows-mingw
-	endif
+ifdef linux_x86
+	AS := nasm
+	x86_64 := 1
+	ASFLAGS := -f elf64 -DINTEL_CET_ENABLED -DAS_FEATURE_LEVEL=10 -DHAVE_AS_KNOWS_AVX512
+	# DEBUGFLAGS += -fsanitize=undefined 
+	DEBUGFLAGS += -fsanitize=address -Dsanitize_address
+endif
 
-	ifdef linux_x86
-		ASFLAGS += -f elf64 -DINTEL_CET_ENABLED
-		# DEBUGFLAGS += -fsanitize=undefined 
-		DEBUGFLAGS += -fsanitize=address -Dsanitize_address
-	endif
+ifdef osx_x86
+	AS := nasm
+	x86_64 := 1
+	ASFLAGS := -f macho64 --prefix=_ -DAS_FEATURE_LEVEL=10 -DHAVE_AS_KNOWS_AVX512
+	DEBUGFLAGS += -fsanitize=address -Dsanitize_address
+endif	
 
-	ifdef osx_x86
-		ASFLAGS += -f macho64 --prefix=_
-		DEBUGFLAGS += -fsanitize=address -Dsanitize_address
-	endif	
-else 
-	ifeq ($(CPU),aarch64) # ARM 64
-		aarch64 := 1
-		AS = $(CC) -D__ASSEMBLY__ -c
-		DEBUGFLAGS_AS = -g 
-		DEBUGFLAGS += -fsanitize=address -Dsanitize_address
-	else 
-		noarch := 1
-	endif
+ifdef osx_arm64
+	noarch := 1
+	# arm64 := 1
+	AS = $(CC) -D__ASSEMBLY__ -c
+	DEBUGFLAGS_AS = -g 
+	DEBUGFLAGS += -fsanitize=address -Dsanitize_address -fsanitize=undefined
+	# clang flags
+	CFLAGS += -DDEFAULT_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX13.sdk 
+	ARCHS = arm64
+	VALID_ARCHS = arm64 
+endif
+
+ifndef AS
+	noarch := 1
 endif
 
 LDFLAGS    += -lpthread -lm 
-CFLAGS     += -Wall -D_LARGEFILE64_SOURCE=1 -D_GNU_SOURCE -std=gnu11 -D_7ZIP_ST -fms-extensions \
-		      -march=nehalem -msse4.1 -msse4.2 # relatively low CPU for installer and conda, change to -mnative if building locally 
-CXXFLAGS   += -Wall -D_LARGEFILE64_SOURCE=1 -D_GNU_SOURCE -std=gnu++11 -Ibsc -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_SSE41 \
-              -march=nehalem -msse4.1
+CFLAGS     += -Wall -D_LARGEFILE64_SOURCE=1 -D_GNU_SOURCE -std=gnu11 -D_7ZIP_ST -fms-extensions 
+CXXFLAGS   += -Wall -D_LARGEFILE64_SOURCE=1 -D_GNU_SOURCE -std=gnu++11 -Ibsc 
 OPTFLAGS   += -O3 
 DEBUGFLAGS += -DDEBUG -ggdb3 -O0 -fstack-check -fstack-protector-strong
 
 ifdef x86_64
-	CFLAGS += -DGENOZIP_ALLOW_UNALIGNED_ACCESS 
-	CXXFLAGS += -DLIBBSC_ALLOW_UNALIGNED_ACCESS
+	CFLAGS   += -DGENOZIP_ALLOW_UNALIGNED_ACCESS -march=nehalem -msse4.1 -msse4.2 # relatively low CPU for installer and conda, change to -mnative if building locally 
+	CXXFLAGS += -DLIBBSC_ALLOW_UNALIGNED_ACCESS  -march=nehalem -msse4.1 -msse4.2 -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_SSE41 
 endif
 
 WSL_GCC_8_5 = /home_local_fs/divon/miniconda3/envs/distribution/bin/x86_64-conda-linux-gnu-gcc # path to gcc 8.5 on WSL (generate with: conda create -n distribution gcc_linux-64=8.5.0)
@@ -128,7 +137,7 @@ RELEASES = $(DEV_DIR)/private/releases
 DATA     = $(DEV_DIR)/data
 LATEST_SRC = ../../genozip-latest/src
 
-SRC_DIRS = secure zlib bzlib nehalem bsc libdeflate_1.7 libdeflate_1.19 libdeflate_1.19/x86 libdeflate_1.19/arm 	\
+SRC_DIRS = secure zlib bzlib lzma bsc libdeflate_1.7 libdeflate_1.19 libdeflate_1.19/x86 libdeflate_1.19/arm 	\
 		  htscodecs igzip igzip/aarch64 igzip/x86_64 igzip/noarch
 
 MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.c seg_id.c zip_dyn_int.c     	\
@@ -230,10 +239,7 @@ INCLUDES += dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h ali
 			igzip/aarch64/crc32_aarch64_common.h igzip/aarch64/crc32_gzip_refl_pmull.h igzip/aarch64/crc32_norm_common_pmull.h 				\
 			igzip/aarch64/crc32_refl_common_pmull.h igzip/aarch64/crc_common_pmull.h igzip/aarch64/data_struct_aarch64.h 					\
 			igzip/aarch64/huffman_aarch64.h igzip/aarch64/lz0a_const_aarch64.h igzip/aarch64/options_aarch64.h 								\
-			igzip/aarch64/stdmac_aarch64.h igzip/aarch64/crc32_common_crc_ext_cortex_a72.S igzip/aarch64/crc32_common_mix_neoverse_n1.S 	\
-			igzip/aarch64/crc32_gzip_refl_3crc_fold.S igzip/aarch64/crc32_gzip_refl_crc_ext.S igzip/aarch64/crc32_gzip_refl_pmull.S			\
-			igzip/aarch64/crc32_mix_default.S igzip/aarch64/crc32_mix_default_common.S igzip/aarch64/crc32_mix_neoverse_n1.S 				\
-			igzip/aarch64/crc32c_mix_default.S igzip/aarch64/crc32c_mix_neoverse_n1.S igzip/aarch64/crc_multibinary_arm.S 
+			igzip/aarch64/stdmac_aarch64.h igzip/aarch64/crc32_common_crc_ext_cortex_a72.S igzip/aarch64/crc32_common_mix_neoverse_n1.S
 
 INSTALLERS := ../installers
 
@@ -254,18 +260,21 @@ IGZIP_ARM_ASM_SRCS := igzip/aarch64/igzip_inflate_multibinary_arm64.S igzip/aarc
 		  igzip/aarch64/igzip_isal_adler32_neon.S igzip/aarch64/igzip_deflate_body_aarch64.S igzip/aarch64/igzip_deflate_finish_aarch64.S	\
 		  igzip/aarch64/isal_deflate_icf_body_hash_hist.S igzip/aarch64/isal_deflate_icf_finish_hash_hist.S									\
 		  igzip/aarch64/igzip_set_long_icf_fg.S igzip/aarch64/encode_df.S igzip/aarch64/isal_update_histogram.S igzip/aarch64/gen_icf_map.S \
-		  igzip/aarch64/igzip_deflate_hash_aarch64.S igzip/aarch64/igzip_decode_huffman_code_block_aarch64.S 
+		  igzip/aarch64/igzip_deflate_hash_aarch64.S igzip/aarch64/igzip_decode_huffman_code_block_aarch64.S 								\
+	  	  igzip/aarch64/crc32_gzip_refl_3crc_fold.S igzip/aarch64/crc32_gzip_refl_crc_ext.S igzip/aarch64/crc32_gzip_refl_pmull.S			\
+		  igzip/aarch64/crc32_mix_default.S igzip/aarch64/crc32_mix_default_common.S igzip/aarch64/crc32_mix_neoverse_n1.S 					\
+		  igzip/aarch64/crc32c_mix_default.S igzip/aarch64/crc32c_mix_neoverse_n1.S igzip/aarch64/crc_multibinary_arm.S 
 
 ifdef x86_64
 IGZIP_ARCH_DIR := igzip/x86_64
 endif
-ifdef aarch64
+ifdef arm64
 IGZIP_ARCH_DIR := igzip/aarch64
 IGZIP_SRCS     += igzip/aarch64/crc_aarch64_dispatcher.c igzip/aarch64/igzip_multibinary_aarch64_dispatcher.c igzip/proc_heap_base.c
 endif
 ifdef noarch
 IGZIP_ARCH_DIR := igzip/noarch
-IGZIP_SRCS     += igzip/noarch/igzip_base_aliases.c igzip/noarch/proc_heap_base.c igzip/noarch/crc_base_aliases.c
+IGZIP_SRCS     += igzip/noarch/igzip_base_aliases.c igzip/proc_heap_base.c igzip/noarch/crc_base_aliases.c
 endif
 
 ifeq ($(CC),cl) # Microsoft Visual C
@@ -274,7 +283,8 @@ endif
 
 ifneq ($(wildcard secure/.*),) # "secure" directory exists
 	MY_SRCS += secure/license.c
-	CONDA_LIC_OBJS := $(OBJDIR_LINUX)/secure/license.o $(OBJDIR_MAC)/secure/license.o $(OBJDIR_WINDOWS)/secure/license.o
+	CONDA_LIC_OBJS := $(OBJDIR_LINUX)/secure/license.o $(OBJDIR_WINDOWS)/secure/license.o \
+	                  $(OBJDIR_OSX_X86)/secure/license.o $(OBJDIR_OSX_ARM)/secure/license.o
 else
 	LDFLAGS += $(OBJDIR)/secure/license.o
 endif
@@ -288,7 +298,7 @@ ifdef linux_x86
 	LDFLAGS += -lrt -fuse-ld=gold -rdynamic # rt is required by pthreads ; rdynamic for backtrace_symbols_fd to show function names
 endif
 
-ifdef osx_x86 # Mac
+ifdef osx 
 	MY_SRCS += mac_compat.c
 	LDFLAGS += -rdynamic
 endif
@@ -314,7 +324,7 @@ IGZIP_OBJS   = $(addprefix $(OBJDIR)/,$(X86_SRCS:.asm=.o))
 # BSC_OPT_OBJS = $(addprefix $(OBJDIR)/,bsc/qlfc_AVX2.o bsc/qlfc_AVX.o bsc/qlfc_SSE41.o bsc/adler32_AVX.o bsc/adler32_SSSE3.o)
 endif
 
-ifdef aarch64
+ifdef arm64
 IGZIP_DEPS   = $(addprefix $(OBJDIR)/,$(ARM_SRCS:.S=.d)) 
 IGZIP_OBJS   = $(addprefix $(OBJDIR)/,$(ARM_SRCS:.S=.o))
 # BSC_OPT_OBJS = $(addprefix $(OBJDIR)/,bsc/qlfc_A64.o bsc/adler32_A64.o)
@@ -511,7 +521,7 @@ clean-debug:
 
 clean:  # careful not to delete license.o
 	@echo Cleaning up optimized
-	@rm -f $(EXECUTABLES) $(OBJS) $(DEPS) $(OBJDIR)/*.o $(OBJDIR)/*.d
+	@rm -f $(EXECUTABLES) $(OBJS) $(DISTOBJ) $(DEPS) $(OBJDIR)/*.o $(OBJDIR)/*.d
 
 initialize-build-distribution: # clean Linux, Windows
 	@$(SH_VERIFY_ALL_STAGED)
@@ -645,7 +655,11 @@ $(INSTALLERS)/genozip-linux-x86_64.tar.build: genozip-linux-x86_64/LICENSE.txt
 # get Mac files: ../installers/genozip-osx-x86.tar and objdir.mac/secure/license.o
 $(INSTALLERS)/genozip-osx-x86.tar : $(C_SRCS) $(X86_SRCS) $(INCLUDES) $(wildcard secure/*.c) $(wildcard secure/*.h) ../LICENSE.txt Makefile
 	@echo "getting $>"
-	@wsl mac-build-and-fetch.sh 
+	@wsl mac-build-and-fetch.sh x86 
+
+$(INSTALLERS)/genozip-osx-arm.tar : $(C_SRCS) $(ARM_SRCS) $(INCLUDES) $(wildcard secure/*.c) $(wildcard secure/*.h) ../LICENSE.txt Makefile
+	@echo "getting $>"
+	@wsl mac-build-and-fetch.sh arm
 
 $(INSTALLERS)/LICENSE.html: genozip$(EXE)
 	@./genozip$(EXE) --license=html,5000 > $@
@@ -672,7 +686,10 @@ finalize-distribution:
 	@echo "  (5) Copy the notes for the version from RELEASE NOTES -> Publish release"
 
 distribution: initialize-build-distribution increment-version ../LICENSE.txt $(INSTALLERS)/LICENSE.html \
-              $(INSTALLERS)/genozip-linux-x86_64.tar.build $(INSTALLERS)/genozip-osx-x86.tar $(INSTALLERS)/genozip-installer.exe \
+              $(INSTALLERS)/genozip-osx-arm.tar 			\
+			  $(INSTALLERS)/genozip-osx-x86.tar 			\
+			  $(INSTALLERS)/genozip-linux-x86_64.tar.build	\
+			  $(INSTALLERS)/genozip-installer.exe 			\
               push-build conda/.conda-timestamp genozip-latest.exe genozip-latest finalize-distribution
 
 # license copied on Windows, not Linux due to file mode issues on NTFS causing git to think LICENSE.txt has changed
@@ -713,23 +730,23 @@ $(INSTALLERS)/genozip-linux-x86_64.tar: $(LINUX_TARGZ_OBJS)
 
 endif # linux_x86
 
-ifdef osx_x86
+ifdef osx
 
-initialize-build-mac: # clean Mac
-	@echo Cleaning up Mac for distribution
-	@rm -f $(OBJDIR_MAC)/*.o $(OBJDIR_MAC)/*.d $(OBJDIR_MAC)/*/*.o $(OBJDIR_MAC)/*/*.d $(INSTALLERS)/*
+initialize-build-mac: # clean Mac - called from mac-build-and-fetch.sh
+	@echo Cleaning up $(OBJDIR) for distribution
+	@rm -f $(OBJDIR)/*.o $(OBJDIR)/*.d $(OBJDIR)/*/*.o $(OBJDIR)/*/*.d $(INSTALLERS)/*
 
-genozip-osx-x86/genozip: CFLAGS += $(OPTFLAGS)
-genozip-osx-x86/genozip: $(OBJS) $(OBJDIR)/distribution.osx-x86.o
+genozip-osx-%/genozip: CFLAGS += $(OPTFLAGS)
+genozip-osx-%/genozip: $(OBJS) $(OBJDIR)/distribution.osx-%.o
 	@echo Linking $@
-	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
+	$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
-genozip-osx-x86/genounzip genozip-osx-x86/genocat genozip-osx-x86/genols: genozip-osx-x86/genozip 
+genozip-osx-%/genounzip genozip-osx-%/genocat genozip-osx-%/genols: genozip-osx-%/genozip 
 	@echo Generating $@
 	@cp -f $< $@ # ln doesn't work on SMB shares
 
-genozip-osx-x86/LICENSE.txt: ../LICENSE.txt
-	@(mkdir genozip-osx-x86 >& /dev/null ; exit 0)
+genozip-osx-%/LICENSE.txt: ../LICENSE.txt
+	@(mkdir genozip-osx-$(osx) >& /dev/null ; exit 0)
 	@echo Generating $@
 	@cp -f $< $@
 
@@ -739,69 +756,75 @@ $(INSTALLERS)/genozip-osx-x86.tar: $(OSX_X86_TARGZ_OBJS)
 	@echo "Creating $@"
 	@tar -cf $@ --lzma genozip-osx-x86
 
-MACDWNDIR = mac/darwinpkg
-MACLIBDIR = $(MACDWNDIR)/Library/genozip
-MACSCTDIR = mac/scripts
-MACRSSDIR = mac/Resources
+OSX_ARM_TARGZ_OBJS = genozip-osx-arm/genozip genozip-osx-arm/genounzip genozip-osx-arm/genocat genozip-osx-arm/genols genozip-osx-arm/LICENSE.txt
 
-$(MACRSSDIR)/welcome.html: mac/welcome.template.html
-	@sed -e "s/__VERSION__/$(version)/g" $< > $@ 
+$(INSTALLERS)/genozip-osx-arm.tar: $(OSX_ARM_TARGZ_OBJS) 
+	@echo "Creating $@"
+	@tar -cf $@ --lzma genozip-osx-arm
 
-$(MACSCTDIR)/postinstall: mac/postinstall.template.sh
-	@sed -e "s/__FILES__/$(EXECUTABLES)/g" $< > $@
+# MACDWNDIR = mac/darwinpkg
+# MACLIBDIR = $(MACDWNDIR)/Library/genozip
+# MACSCTDIR = mac/scripts
+# MACRSSDIR = mac/Resources
 
-$(MACLIBDIR)/uninstall.sh: mac/uninstall.template.sh
-	@sed -e "s/__VERSION__/$(version)/g" $< | sed -e "s/__FILES__/$(EXECUTABLES)/g" > $@ 
+# $(MACRSSDIR)/welcome.html: mac/welcome.template.html
+# 	@sed -e "s/__VERSION__/$(version)/g" $< > $@ 
 
-$(MACRSSDIR)/README.html: ../README.md
-	@cp -f $< $@
+# $(MACSCTDIR)/postinstall: mac/postinstall.template.sh
+# 	@sed -e "s/__FILES__/$(EXECUTABLES)/g" $< > $@
 
-$(MACRSSDIR)/LICENSE.txt: ../LICENSE.txt
-	@cp -f $< $@
+# $(MACLIBDIR)/uninstall.sh: mac/uninstall.template.sh
+# 	@sed -e "s/__VERSION__/$(version)/g" $< | sed -e "s/__FILES__/$(EXECUTABLES)/g" > $@ 
 
-$(MACLIBDIR)/%: %
-	@cp -f $< $@
+# $(MACRSSDIR)/README.html: ../README.md
+# 	@cp -f $< $@
 
-pkg_identifier  := genozip-$(version)
+# $(MACRSSDIR)/LICENSE.txt: ../LICENSE.txt
+# 	@cp -f $< $@
 
-#app_specific_pw := $(shell cat .altool_app_specifc_password)
+# $(MACLIBDIR)/%: %
+# 	@cp -f $< $@
 
-apple_id        := $(shell /usr/libexec/PlistBuddy -c "print :Accounts:0:AccountID" ~/Library/Preferences/MobileMeAccounts.plist)
+# pkg_identifier  := genozip-$(version)
 
-signer_name     := ${shell security find-identity -v|grep "3rd Party Mac Developer Installer" | cut -d ":" -f2 | cut -d"(" -f1 }
+# #app_specific_pw := $(shell cat .altool_app_specifc_password)
 
-mac/genozip.pkg: $(MACLIBDIR)/genozip $(MACLIBDIR)/genounzip $(MACLIBDIR)/genocat $(MACLIBDIR)/genols $(MACLIBDIR)/uninstall.sh \
-                 $(MACSCTDIR)/postinstall
-	@echo "Building Mac package $@"
-	@$(SH_VERIFY_ALL_COMMITTED)
-	@chmod -R 755 $(MACLIBDIR) $(MACSCTDIR)				 
-	@pkgbuild --identifier $(pkg_identifier) --version $(version) --scripts $(MACSCTDIR) --root $(MACDWNDIR) mac/genozip.pkg > /dev/null
+# apple_id        := $(shell /usr/libexec/PlistBuddy -c "print :Accounts:0:AccountID" ~/Library/Preferences/MobileMeAccounts.plist)
 
-mac/genozip_installer.unsigned.pkg: mac/genozip.pkg mac/Distribution \
-                                    $(MACRSSDIR)/welcome.html $(MACRSSDIR)/README.html $(MACRSSDIR)/LICENSE.txt
-	@echo "Building Mac product $@"
-	@productbuild --distribution mac/Distribution --resources $(MACRSSDIR) --package-path mac $@ > /dev/null
+# signer_name     := ${shell security find-identity -v|grep "3rd Party Mac Developer Installer" | cut -d ":" -f2 | cut -d"(" -f1 }
 
-mac/genozip_installer.pkg: mac/genozip_installer.unsigned.pkg
-	@bash -c "echo -n Unlocking the keychain. Password:"
-	@# note: keychain requires unlocking if logged in remotely (through SSH)
-	@read pw ; security -v unlock-keychain -p $$pw `security list-keychains|grep login|cut -d\" -f2`
-	@echo "Signing Mac product $@"
-	@# note: productsign needs a "3rd party mac developer" certificate, and the Apple developer CA certificate, installed in the keychain. see: https://developer.apple.com/developer-id/. I keep them on Drive for backup.
-	@productsign --sign "$(signer_name)" $< $@ > /dev/null
-	@echo "Verifying the signature"
-	@(( `pkgutil --check-signature $@ | grep "signed by a developer certificate issued by Apple (Development)" | wc -l ` > 0 )) || (echo Error: signature verification failed ; exit 1)
-	@#@echo 'Committing Mac installer and pushing to repo'
-	@#@(git stage $@ ; exit 0)
-	@#(git commit -m mac_installer_for_version_$(version) $@ ; exit 0)
-	@#git push
+# mac/genozip.pkg: $(MACLIBDIR)/genozip $(MACLIBDIR)/genounzip $(MACLIBDIR)/genocat $(MACLIBDIR)/genols $(MACLIBDIR)/uninstall.sh \
+#                  $(MACSCTDIR)/postinstall
+# 	@echo "Building Mac package $@"
+# 	@$(SH_VERIFY_ALL_COMMITTED)
+# 	@chmod -R 755 $(MACLIBDIR) $(MACSCTDIR)				 
+# 	@pkgbuild --identifier $(pkg_identifier) --version $(version) --scripts $(MACSCTDIR) --root $(MACDWNDIR) mac/genozip.pkg > /dev/null
 
-mac/.from_remote_timestamp: mac/genozip_installer.pkg
-	@echo "Notarizing Mac app"
-	@xcrun altool --notarize-app --primary-bundle-id $(pkg_identifier) --username $(apple_id) --password $(app_specific_pw) --file $< >& .notarize.out ; exit 0
-	@grep ERROR\: .notarize.out ; exit 0
-	@(( `grep ERROR\: .notarize.out | wc -l` == 0 )) || (echo "See .notarize.out" ; exit 1)
-	@(( `grep "No errors uploading" .notarize.out | wc -l` == 0 )) || (grep "RequestUUID" .notarize.out ; exit 0)
-	@touch $@
+# mac/genozip_installer.unsigned.pkg: mac/genozip.pkg mac/Distribution \
+#                                     $(MACRSSDIR)/welcome.html $(MACRSSDIR)/README.html $(MACRSSDIR)/LICENSE.txt
+# 	@echo "Building Mac product $@"
+# 	@productbuild --distribution mac/Distribution --resources $(MACRSSDIR) --package-path mac $@ > /dev/null
+
+# mac/genozip_installer.pkg: mac/genozip_installer.unsigned.pkg
+# 	@bash -c "echo -n Unlocking the keychain. Password:"
+# 	@# note: keychain requires unlocking if logged in remotely (through SSH)
+# 	@read pw ; security -v unlock-keychain -p $$pw `security list-keychains|grep login|cut -d\" -f2`
+# 	@echo "Signing Mac product $@"
+# 	@# note: productsign needs a "3rd party mac developer" certificate, and the Apple developer CA certificate, installed in the keychain. see: https://developer.apple.com/developer-id/. I keep them on Drive for backup.
+# 	@productsign --sign "$(signer_name)" $< $@ > /dev/null
+# 	@echo "Verifying the signature"
+# 	@(( `pkgutil --check-signature $@ | grep "signed by a developer certificate issued by Apple (Development)" | wc -l ` > 0 )) || (echo Error: signature verification failed ; exit 1)
+# 	@#@echo 'Committing Mac installer and pushing to repo'
+# 	@#@(git stage $@ ; exit 0)
+# 	@#(git commit -m mac_installer_for_version_$(version) $@ ; exit 0)
+# 	@#git push
+
+# mac/.from_remote_timestamp: mac/genozip_installer.pkg
+# 	@echo "Notarizing Mac app"
+# 	@xcrun altool --notarize-app --primary-bundle-id $(pkg_identifier) --username $(apple_id) --password $(app_specific_pw) --file $< >& .notarize.out ; exit 0
+# 	@grep ERROR\: .notarize.out ; exit 0
+# 	@(( `grep ERROR\: .notarize.out | wc -l` == 0 )) || (echo "See .notarize.out" ; exit 1)
+# 	@(( `grep "No errors uploading" .notarize.out | wc -l` == 0 )) || (grep "RequestUUID" .notarize.out ; exit 0)
+# 	@touch $@
 
 endif # Darwin

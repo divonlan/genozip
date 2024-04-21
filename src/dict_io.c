@@ -396,7 +396,7 @@ void dict_io_read_all_dictionaries (void)
 StrTextMegaLong str_snip_ex (STRp(snip), bool add_quote)
 {
     StrTextMegaLong s;
-    char *next = s.s;
+    int s_len=0;
     
     char op = (snip_len && snip[0] > 0 && snip[0] < 32) ? snip[0] : 0;
     int i=1;
@@ -407,33 +407,36 @@ StrTextMegaLong str_snip_ex (STRp(snip), bool add_quote)
           [DT_GENERIC]=GENERIC_SPECIAL_NAMES, [DT_LOCS]=LOCS_SPECIAL_NAMES,   [DT_BED]=BED_SPECIAL_NAMES };
 
     switch (op) {
-        case 0                         : i--;                                                              break;
-        case SNIP_LOOKUP               : next  = mempcpy (next, "[LOOKUP]",      STRLEN("[LOOKUP]"));      break;
-        case SNIP_OTHER_LOOKUP         : next  = mempcpy (next, "[OLOOKUP]",     STRLEN("[OLOOKUP]"));     break;
-        case v13_SNIP_MATE_LOOKUP      : next  = mempcpy (next, "[MLOOKUP]",     STRLEN("[MLOOKUP]"));     break;
-        case SNIP_CONTAINER            : next  = mempcpy (next, "[CONTAINER]",   STRLEN("[CONTAINER]"));   break;
-        case SNIP_SELF_DELTA           : next  = mempcpy (next, "[DELTA]",       STRLEN("[DELTA]"));       break;
-        case SNIP_OTHER_DELTA          : next  = mempcpy (next, "[ODELTA]",      STRLEN("[ODELTA]"));      break;
-        case v13_SNIP_FASTQ_PAIR2_GPOS : next  = mempcpy (next, "[PAIR2GPOS]",   STRLEN("[PAIR2GPOS]"));   break;
-        case SNIP_REDIRECTION          : next  = mempcpy (next, "[REDIRECTION]", STRLEN("[REDIRECTION]")); break;
-        case SNIP_DONT_STORE           : next  = mempcpy (next, "[DONT_STORE]",  STRLEN("[DONT_STORE]"));  break;
-        case SNIP_COPY                 : next  = mempcpy (next, "[COPY]",        STRLEN("[COPY]"));        break;
-        case dvcf_SNIP_DUAL            : next  = mempcpy (next, "[DUAL]",        STRLEN("[DUAL]"));        break;
-        case SNIP_LOOKBACK             : next  = mempcpy (next, "[LOOKBACK]",    STRLEN("[LOOKBACK]"));    break;
-        case v13_SNIP_COPY_BUDDY       : next  = mempcpy (next, "[BCOPY]",       STRLEN("[BCOPY]"));       break;
-        case SNIP_DIFF                 : next  = mempcpy (next, "[DIFF]",        STRLEN("[DIFF]"));        break;
-        case SNIP_NUMERIC              : next  = mempcpy (next, "[NUMERIC]",     STRLEN("[NUMERIC]"));     break;
-        case SNIP_SPECIAL              : next += (z_file && special_names[z_file->data_type][snip[1]-32]) 
-                                               ? sprintf (next, "[%s_SPECIAL_%s]", dt_name(z_file->data_type), special_names[z_file->data_type][snip[1]-32]) 
-                                               : sprintf (next, "[SPECIAL-%u]", snip[1]-32); i++;          break;
-        default                        : next += sprintf (next, "\\x%x", (uint8_t)op);
+        case 0                         : i--;                           break;
+        case SNIP_LOOKUP               : SNPRINTF0(s, "[LOOKUP]");      break; 
+        case SNIP_OTHER_LOOKUP         : SNPRINTF0(s, "[OLOOKUP]");     break;
+        case v13_SNIP_MATE_LOOKUP      : SNPRINTF0(s, "[MLOOKUP]");     break;
+        case SNIP_CONTAINER            : SNPRINTF0(s, "[CONTAINER]");   break;
+        case SNIP_SELF_DELTA           : SNPRINTF0(s, "[DELTA]");       break;
+        case SNIP_OTHER_DELTA          : SNPRINTF0(s, "[ODELTA]");      break; 
+        case v13_SNIP_FASTQ_PAIR2_GPOS : SNPRINTF0(s, "[PAIR2GPOS]");   break; 
+        case SNIP_REDIRECTION          : SNPRINTF0(s, "[REDIRECTION]"); break;
+        case SNIP_DONT_STORE           : SNPRINTF0(s, "[DONT_STORE]");  break; 
+        case SNIP_COPY                 : SNPRINTF0(s, "[COPY]");        break; 
+        case dvcf_SNIP_DUAL            : SNPRINTF0(s, "[DUAL]");        break; 
+        case SNIP_LOOKBACK             : SNPRINTF0(s, "[LOOKBACK]");    break;
+        case v13_SNIP_COPY_BUDDY       : SNPRINTF0(s, "[BCOPY]");       break; 
+        case SNIP_DIFF                 : SNPRINTF0(s, "[DIFF]");        break; 
+        case SNIP_NUMERIC              : SNPRINTF0(s, "[NUMERIC]");     break; 
+        case SNIP_SPECIAL              : if (z_file && special_names[z_file->data_type][snip[1]-32]) 
+                                            SNPRINTF (s, "[%s_SPECIAL_%s]", dt_name(z_file->data_type), special_names[z_file->data_type][snip[1]-32]);
+                                         else 
+                                            SNPRINTF (s, "[SPECIAL-%u]", snip[1]-32); 
+                                         i++; 
+                                         break;
+        default                        : SNPRINTF (s, "\\x%x", (uint8_t)op);
     }
 
     if (op == SNIP_OTHER_LOOKUP || op == SNIP_OTHER_DELTA || op == SNIP_COPY || op == SNIP_REDIRECTION) {
         unsigned b64_len = base64_sizeof (DictId);
         DictId dict_id;
         base64_decode (&snip[1], &b64_len, dict_id.id);
-        next += sprintf (next, "(%s)", dis_dict_id (dict_id).s);
+        SNPRINTF (s, "(%s)", dis_dict_id (dict_id).s);
         i += b64_len;
     }
 
@@ -446,7 +449,7 @@ StrTextMegaLong str_snip_ex (STRp(snip), bool add_quote)
 
         con.repeats = BGEN24 (con.repeats);
         unsigned prefixes_len = snip_len - i;
-        next += sprintf (next, "%.*s", (int)sizeof(s)-20, container_to_json (&con, &snip[i+1], prefixes_len).s);
+        SNPRINTF (s, "%.*s", (int)sizeof(s)-20, container_to_json (&con, &snip[i+1], prefixes_len).s);
         i += prefixes_len;
     }
 
@@ -466,19 +469,18 @@ StrTextMegaLong str_snip_ex (STRp(snip), bool add_quote)
             base64_decode (items[n_items-2], &b64_len, dict_id_lst.id);
         }
 
-        next += sprintf (next, " %.*s∈{%s%s}", STRfi (item, n_items-1),
-                         dis_dict_id (dict_id_1st).s, 
-                         cond_str (n_items > 2, " → ", dis_dict_id (dict_id_lst).s));
+        SNPRINTF (s, " %.*s∈{%s%s}", STRfi (item, n_items-1), dis_dict_id (dict_id_1st).s, 
+                  cond_str (n_items > 2, " → ", dis_dict_id (dict_id_lst).s));
 
         snip_len = start_at; // print the bytes before the dictionaries, if any
     }
 
-    if (add_quote && !op) *next++ = '\"';    
+    if (add_quote && !op) SNPRINTF0 (s, "\"");    
 
-    uint32_t len = MIN_(snip_len - i, sizeof(s) - add_quote*2 - 1);
-    next += str_to_printable (snip+i, len, next); // also nul-terminates
+    int len = MAX_(0, MIN_(snip_len - i, sizeof(s) - add_quote*2 - 1));
+    s_len += str_to_printable (snip+i, len, &s.s[s_len], sizeof (s.s) - s_len - add_quote - 1); // also nul-terminates
 
-    if (add_quote && !op) { *next++ = '\"'; *next = 0; }  
+    if (add_quote && !op) SNPRINTF0 (s, "\"");
 
     return s;
 }

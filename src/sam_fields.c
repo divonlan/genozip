@@ -81,25 +81,25 @@ bool sam_seg_peek_int_field (VBlockSAMP vb, Did did_i, int16_t idx, int32_t min_
 // FLAG
 //--------------
 
-SamFlagStr sam_dis_FLAG (SamFlags f)
+StrTextLong sam_dis_FLAG (SamFlags f)
 {
-    SamFlagStr result;
-    char *next = result.s, *after = result.s + sizeof (result.s);
+    StrTextLong result;
+    int result_len = 0;
 
-    if (f.multi_segs)     next += snprintf (next, after - next, "MultiSeg,");
-    if (f.is_aligned)     next += snprintf (next, after - next, "Aligned,");
-    if (f.unmapped)       next += snprintf (next, after - next, "Unmapped,");
-    if (f.next_unmapped)  next += snprintf (next, after - next, "NextUnmapped,");
-    if (f.rev_comp)       next += snprintf (next, after - next, "Revcomp,");
-    if (f.next_rev_comp)  next += snprintf (next, after - next, "NextRevcomp,");
-    if (f.is_first)       next += snprintf (next, after - next, "First,");
-    if (f.is_last)        next += snprintf (next, after - next, "Last,");
-    if (f.secondary)      next += snprintf (next, after - next, "Secondary,");
-    if (f.filtered)       next += snprintf (next, after - next, "Filtered,");
-    if (f.duplicate)      next += snprintf (next, after - next, "Duplicate,");
-    if (f.supplementary)  next += snprintf (next, after - next, "Supplementary,");
+    if (f.multi_segs)     SNPRINTF0 (result, "MultiSeg,");
+    if (f.is_aligned)     SNPRINTF0 (result, "Aligned,");
+    if (f.unmapped)       SNPRINTF0 (result, "Unmapped,");
+    if (f.next_unmapped)  SNPRINTF0 (result, "NextUnmapped,");
+    if (f.rev_comp)       SNPRINTF0 (result, "Revcomp,");
+    if (f.next_rev_comp)  SNPRINTF0 (result, "NextRevcomp,");
+    if (f.is_first)       SNPRINTF0 (result, "First,");
+    if (f.is_last)        SNPRINTF0 (result, "Last,");
+    if (f.secondary)      SNPRINTF0 (result, "Secondary,");
+    if (f.filtered)       SNPRINTF0 (result, "Filtered,");
+    if (f.duplicate)      SNPRINTF0 (result, "Duplicate,");
+    if (f.supplementary)  SNPRINTF0 (result, "Supplementary,");
     
-    if (next != result.s) *(next-1) = 0; // removal comma separator from final item
+    if (result_len) result.s[result_len-1] = 0; // removal comma separator from final item
 
     return result;
 }
@@ -927,8 +927,8 @@ void sam_seg_buddied_i_fields (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i,
         ContextP channel_ctx = seg_mux_get_channel_ctx (VB, did_i, mux, channel_i);
 
         // calculating mate value's pointer. Note: this only works if ZipDataLineSAM is NOT packed
-        int32_t *mate_value  = &dl_value[(vb->mate_line_i  - vb->line_i) * sizeof (ZipDataLineSAM) / sizeof (int32_t)];
-        int32_t *saggy_value = &dl_value[(vb->saggy_line_i - vb->line_i) * sizeof (ZipDataLineSAM) / sizeof (int32_t)];
+        int32_t *mate_value  = (vb->mate_line_i  >= 0) ? &dl_value[(vb->mate_line_i  - vb->line_i) * sizeof (ZipDataLineSAM) / sizeof (int32_t)] : NULL;
+        int32_t *saggy_value = (vb->saggy_line_i >= 0) ? &dl_value[(vb->saggy_line_i - vb->line_i) * sizeof (ZipDataLineSAM) / sizeof (int32_t)] : NULL;
 
         // note: we don't check if our mate has this field. the math still works, because if it doesn't have 
         // this field, the dl value in Seg will be 0, as will be the History value in recon.
@@ -1373,7 +1373,7 @@ static void sam_seg_set_last_value_f_from_aux (VBlockSAMP vb, Did did_i, bool is
     ContextP ctx = CTX(did_i);
 
     if (is_bam) 
-        ctx_set_last_value (VB, ctx, (double)numeric.f32.f);
+        ctx_set_last_value (VB, ctx, (ValueType){ .f = numeric.f32.f }); // note: just casting f32.f to double works in gcc but not clang
 
     else {
         SAFE_NULT(value);

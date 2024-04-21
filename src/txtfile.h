@@ -11,7 +11,7 @@
 #include "genozip.h"
 #include "digest.h"
 
-extern rom txtfile_dump_vb (VBlockP vb, rom base_name);
+extern StrTextLong txtfile_dump_vb (VBlockP vb, rom base_name);
 extern void txtfile_read_header (bool is_first_txt);
 
 #define TXTFILE_READ_VB_PADDING 16 // txtfile_read_vblock ensure this quantity of bytes at the end of vb.txt_data are unused

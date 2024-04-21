@@ -3,6 +3,13 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+15.0.57 
+- genounzip/genocat: GENOZIP_REFERENCE environment variable can now accept either a file name 
+  (of the reference file) OR the directory where it is located (the latter is new).
+- Support for Mac with Apple Silicon (requires MacOS version 13 or higher)
+- Fix bug introduced in 15.0.55: compressing with --test tested only partially. You may use genounzip --test to test previously compressed files.
+- Fixed bug causing errors on old Macs
+
 15.0.56 9/4/2024
 - Bug fixes.
 

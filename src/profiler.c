@@ -43,9 +43,9 @@ StrTextSuperLong profiler_get_avg_compute_vbs (char sep)
     StrTextSuperLong s = {};
     int s_len = 0;
     for (int i=0; i < profile.num_txt_files; i++)
-        s_len += snprintf (&s.s[s_len], sizeof (s.s)-s_len, "%.1f%c", profile.avg_compute_vbs[i], sep);
+        SNPRINTF (s, "%.1f%c", profile.avg_compute_vbs[i], sep);
 
-    if (s.s[0]) s.s[s_len-1] = 0; // remove final separator
+    if (s_len) s.s[s_len-1] = 0; // remove final separator
 
     return s;
 }

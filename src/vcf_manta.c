@@ -84,19 +84,21 @@ static void vcf_manta_predcited_CIGAR (VBlockVCFP vb, qSTRp (cigar))
 {
     if (vb->n_alts == 1) {
         if      (ALT0(DEL)) 
-            *cigar_len = sprintf (cigar, "1M%uD", vb->REF_len-1);
+            *cigar_len = snprintf (cigar, *cigar_len, "1M%uD", vb->REF_len-1);
         
         else if (ALT0(INS)) 
-            *cigar_len = sprintf (cigar, "1M%uI", vb->alt_lens[0]-1);
+            *cigar_len = snprintf (cigar, *cigar_len, "1M%uI", vb->alt_lens[0]-1);
         
         else if (ALT0(SUBST) || ALT0(SUBST_INS) || ALT0(SUBST_DEL)) 
-            *cigar_len = sprintf (cigar, "1M%uI%uD", vb->alt_lens[0]-1, vb->REF_len-1);
+            *cigar_len = snprintf (cigar, *cigar_len, "1M%uI%uD", vb->alt_lens[0]-1, vb->REF_len-1);
     }
+    else
+        *cigar_len = 0;
 } 
 
 void vcf_seg_manta_CIGAR (VBlockVCFP vb, ContextP ctx, STRp(cigar))
 {
-    STRl(predicted_cigar,32) = 0;
+    STRlic(predicted_cigar,32);
     vcf_manta_predcited_CIGAR (vb, qSTRa(predicted_cigar));
 
     if (str_issame (cigar, predicted_cigar)) 
@@ -108,7 +110,7 @@ void vcf_seg_manta_CIGAR (VBlockVCFP vb, ContextP ctx, STRp(cigar))
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_manta_CIGAR)
 {    
     if (reconstruct) {
-        STRl(cigar,32) = 0;
+        STRlic(cigar,32);
         vcf_manta_predcited_CIGAR (VB_VCF, qSTRa(cigar));
         RECONSTRUCT_str (cigar);
     }

@@ -1270,8 +1270,13 @@ void ctx_initialize_predefined_ctxs (ContextArray contexts,
     // initialize alias contexts (note: all aliases and their destinations are predefined)
     // note: all alias destinations that ever existed in previous versions of Genozip must be defined in #pragma GENDICT for this to work
     for_buf2 (DictIdAlias, alias, alias_i, *aliases) {
-        ASSERT0 (alias_dids[alias_i] != DID_NONE, "Problem with aliases: either a dict_id defined in aliases is no longer a predefined context, or a duplicate alias exists. See genocat --show-aliases"); // a missing alias_did, might mean another entry got set twice
-        
+        if (alias_dids[alias_i] == DID_NONE) {
+            show_aliases();
+            
+            ABORT ("%s: Problem with aliases for %s: either a dict_id defined in aliases is no longer a predefined context, or a duplicate alias exists.",
+                   z_name, z_dt_name()); // a missing alias_did, might mean another entry got set twice
+        }
+
         ContextP alias_ctx = &z_file->contexts[alias_dids[alias_i]];
         ContextP dst_ctx   = ctx_get_existing_zctx (alias->dst); 
         

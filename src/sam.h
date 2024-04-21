@@ -708,7 +708,7 @@ extern int32_t sam_zip_get_np (VBlockP vb, LineIType line_i);
 // PIZ Stuff
 extern void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header);
 extern bool sam_piz_initialize (CompIType comp_i);
-extern void sam_piz_finalize (void);
+extern void sam_piz_finalize (bool is_last_z_file);
 extern IS_SKIP (sam_piz_is_skip_section);
 extern bool sam_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header);
 extern void sam_piz_recon_init (VBlockP vb);

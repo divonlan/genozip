@@ -10,6 +10,7 @@
 #include <time.h>
 #include <math.h>
 #include <limits.h>
+#include <libgen.h>
 #include "vblock.h"
 #include "zfile.h"
 #include "crypt.h"
@@ -628,12 +629,21 @@ static rom zfile_read_genozip_header_get_ref_filename (rom header_fn)
     }
 }
 
+static void zfile_read_genozip_header_set_reference (ConstSectionHeaderGenozipHeaderP header, rom ref_filename)
+{
+    WARN ("Note: using the reference file %s. You can override this with --reference or $GENOZIP_REFERENCE", ref_filename);
+    ref_set_reference (gref, ref_filename, REF_EXTERNAL, false);
+}
+
 // reference data when NOT reading a reference file
 static void zfile_read_genozip_header_handle_ref_info (ConstSectionHeaderGenozipHeaderP header)
 {
     ASSERT0 (!flag.reading_reference, "we should not be here");
 
     if (digest_is_zero (header->ref_genome_digest)) return; // no reference info in header - we're done
+
+    z_file->ref_genome_digest = header->ref_genome_digest;
+    memcpy (z_file->ref_filename_used_in_zip, header->ref_filename, REF_FILENAME_LEN);
 
     if (flag.show_reference) {
         if (flag.force)
@@ -648,19 +658,23 @@ static void zfile_read_genozip_header_handle_ref_info (ConstSectionHeaderGenozip
 
         rom gref_fn = ref_get_filename (gref);
 
+        rom env = getenv ("GENOZIP_REFERENCE");
+        int env_len = env ? strlen (env) : 0;
+        
+        if (env_len > 1 && (env[env_len-1] == '/' || env[env_len-1] == '\\')) 
+            env_len--; // remove trailing /
+        
         // case: this file requires an external reference, but command line doesn't include --reference - attempt to use the
         // reference specified in the header. 
         // Note: this code will be executed when zfile_read_genozip_header is called from main_genounzip.
-        if (!flag.explicit_ref && !getenv ("GENOZIP_REFERENCE") && // reference NOT was specified on command line
-                 !Z_DT(REF) && // for reference files, this field is actual fasta_filename
-                 !(gref_fn && !strcmp (gref_fn, header->ref_filename))) { // ref_filename already set from a previous file with the same reference
+        if (!flag.explicit_ref && !env && // reference NOT was specified on command line
+            !Z_DT(REF) && // for reference files, this field is actual fasta_filename
+            !(gref_fn && !strcmp (gref_fn, header->ref_filename))) { // ref_filename already set from a previous file with the same reference
 
             rom ref_filename = zfile_read_genozip_header_get_ref_filename (header->ref_filename);
 
-            if (!flag.dont_load_ref_file && ref_filename) {
-                WARN ("Note: using the reference file %s. You can override this with --reference or $GENOZIP_REFERENCE", ref_filename);
-                ref_set_reference (gref, ref_filename, REF_EXTERNAL, false);
-            }
+            if (!flag.dont_load_ref_file && ref_filename && file_exists (ref_filename)) 
+                zfile_read_genozip_header_set_reference (header, ref_filename);
             else 
                 ASSINP (flag.dont_load_ref_file, "Please use --reference to specify the path to the reference file. Original path was: %.*s",
                         REF_FILENAME_LEN, header->ref_filename);
@@ -668,10 +682,44 @@ static void zfile_read_genozip_header_handle_ref_info (ConstSectionHeaderGenozip
             FREE (ref_filename);
         }
 
-        // test for matching digest between specified external reference and reference in the header
-        // note: for --chain, we haven't read the reference yet, so we will check this separately in chain_load
-        if (flag.explicit_ref) 
-            digest_verify_ref_is_equal (gref, header->ref_filename, header->ref_genome_digest);
+        // case: reference directory provided in GENOZIP_REFERENCE
+        else if (!flag.explicit_ref && !Z_DT(REF) && !flag.dont_load_ref_file && 
+                 env && file_is_dir (env)) {
+
+            bool exists = false;
+
+            if (header->ref_filename[0]) {
+                // get basename of filename in header
+                rom ref_basename = strrchr (header->ref_filename, '/');
+                if (!ref_basename) ref_basename = strrchr (header->ref_filename, '\\');
+                ref_basename = ref_basename ? (ref_basename + 1) : header->ref_filename; 
+
+                int new_filename_size = strlen (ref_basename) + env_len + 2; 
+                char new_filename[new_filename_size];
+                
+                snprintf (new_filename, new_filename_size, "%.*s/%s", STRf(env), ref_basename);
+                exists = file_exists (new_filename);
+
+                // case: use reference file in directory GENOZIP_REFERENCE and basename from header
+                if (exists && 
+                    !(gref_fn && !strcmp (gref_fn, new_filename))) // reference not already loaded
+                    zfile_read_genozip_header_set_reference (header, new_filename);
+            }
+
+            // if reference not found in directory GENOZIP_REFERENCE, use full filename from header
+            if (!exists) {
+                rom ref_filename = zfile_read_genozip_header_get_ref_filename (header->ref_filename);
+
+                if (!(ref_filename && gref_fn && !strcmp (gref_fn, ref_filename))) {
+                    if (ref_filename) 
+                        zfile_read_genozip_header_set_reference (header, ref_filename);
+                    else 
+                        ABORTINP ("Please use --reference to specify the path to the reference file. Original path was: %.*s",
+                                REF_FILENAME_LEN, header->ref_filename);
+                }
+                FREE (ref_filename);
+            }
+        }
     }
 }
 
@@ -768,6 +816,8 @@ uint64_t zfile_read_genozip_header_get_offset (bool as_is)
 // returns false if file should be skipped
 bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header, FailType fail_type) // optional outs
 {
+    ASSERTNOTNULL (z_file);
+
     if (z_file->section_list_buf.len) return true; // header already read
 
     SectionEnt sec = { .st     = SEC_GENOZIP_HEADER, 

@@ -1404,7 +1404,7 @@ static inline BuddyType sam_seg_saggy (VBlockSAMP vb, SamFlags f, STRp (qname), 
     if (!IS_MAIN(vb)) return BUDDY_NONE;
 
     LineIType candidate = LINE_BY_HASH(my_hash);
-    SamFlags *saggy_f = &DATA_LINE(candidate)->FLAG; // invalid pointer if no saggy
+    SamFlags *saggy_f = (candidate >= 0) ? &DATA_LINE(candidate)->FLAG : NULL; // invalid pointer if no saggy
 
     // case: we found another member of the same sag (i.e. same qname, same is_last)
     if (has_same_qname (vb, STRa (qname), candidate, false) && saggy_f->is_last == f.is_last) { // the "prim" line against which we are segging cannot have hard clips

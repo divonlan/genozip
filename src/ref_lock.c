@@ -19,13 +19,14 @@ void ref_lock_initialize (Reference ref)
     buf_alloc_exact_zero (evb, ref->genome_muteces, (ref->genome_nbases + GENOME_BASES_PER_MUTEX-1) / GENOME_BASES_PER_MUTEX/*round up*/, Mutex, "genome_nbases");
     
     bool show = mutex_is_show ("genome_muteces"); // use --show-mutex=genome_muteces to see these
-    if (show) buf_alloc (evb, &ref->genome_mutex_names, 24 * ref->genome_muteces.len, 0, char, 0, "genome_mutex_names");
+    if (show) buf_alloc (evb, &ref->genome_mutex_names, 32 * ref->genome_muteces.len, 0, char, 0, "genome_mutex_names");
 
     for_buf2 (Mutex, mutex_p, i, ref->genome_muteces) {
         char *name = BAFTc (ref->genome_mutex_names);
-        if (show) 
-            ref->genome_mutex_names.len += sprintf (name, "genome_muteces[%u]", i) + 1;
         
+        if (show && name) 
+            ref->genome_mutex_names.len += snprintf (name, ref->genome_mutex_names.size - ref->genome_mutex_names.len, "genome_muteces[%u]", i) + 1;
+
         mutex_initialize_do (mutex_p, show ? name : "genome_muteces[]", __FUNCTION__);
     }
 }

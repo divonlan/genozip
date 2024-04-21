@@ -54,6 +54,8 @@ uint32_t hash_next_size_up (uint64_t size, bool allow_huge)
 static void hash_populate_from_nodes (ContextP zctx)
 {
     uint32_t len = zctx->nodes.len32;
+    if (!len) return; // avoid -fsanitize=undefined error
+    
     zctx->nodes.len32 = 0; // hash_global_get_entry will increment it back to its original value
 
     for (CtxNodeP node = B1ST(CtxNode, zctx->nodes); node < B(CtxNode, zctx->nodes, len); node++) {

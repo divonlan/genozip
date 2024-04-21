@@ -13,7 +13,7 @@
 #include "buffer.h"
 #include "qname.h"
 
-static void show_aliases (void)
+void show_aliases (void)
 {
     if (!z_file->aliases.len)
         iprint0 ("No aliases in this file\n");

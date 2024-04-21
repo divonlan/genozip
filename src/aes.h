@@ -15,6 +15,6 @@
 
 extern void aes_initialize (VBlockP vb, bytes key);
 extern void aes_xcrypt_buffer (VBlockP vb, uint8_t *data, uint32_t length);
-extern char *aes_display_key (bytes key);
-extern char *aes_display_data (bytes data, unsigned data_len);
+extern StrText aes_display_key (bytes key);
+extern rom aes_display_data (bytes data, unsigned data_len);
 

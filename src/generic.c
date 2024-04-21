@@ -78,7 +78,7 @@ int32_t generic_is_header_done (bool is_eof)
         WARN_ONCE ("FYI: genozip doesn't recognize %s file's type, so it will be compressed as GENERIC. In the future, you may specify the type with \"--input <type>\". To suppress this warning, use \"--input generic\".", txt_name);
 
     else 
-        ABORTINP ("to pipe data in, please use --input (or -i) to specify its type, which can be one of the following:\n%s", file_compressible_extensions (true));
+        ABORTINP ("to pipe data in, please use --input (or -i) to specify its type, which can be one of the following:\n%s", file_compressible_extensions (true).s);
 
     return 0;
 }
@@ -148,7 +148,7 @@ StrTextLong generic_get_magic (void)
 {
     StrTextLong s = {};
     s.s[0] = '"';
-    int len = 1 + str_to_printable (magic, strlen(magic), &s.s[1]);
+    int len = 1 + str_to_printable (magic, strlen(magic), &s.s[1], sizeof(s.s) - MAGIC_SIZE*3 - 10);
     s.s[len++] = '"';
     s.s[len++] = ' ';
 

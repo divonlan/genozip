@@ -122,36 +122,35 @@ FileType file_get_z_ft_by_dt (DataType dt)
 }
 
 // possible arguments for --input
-char *file_compressible_extensions (bool plain_only)
+StrTextLong file_compressible_extensions (bool plain_only)
 {
-    static char s[1000];
-        
-    int len = 0;
+    StrTextLong s;
+    int s_len = 0;
+
     for (DataType dt=1; dt < NUM_DATATYPES; dt++) { // start from 1, excluding DT_REFERENCE
         
-        if (dt == DT_GENERIC || dt == DT_ME23) continue;
+        if (dt == DT_GENERIC || dt == DT_ME23 || !txt_in_ft_by_dt[dt][0].in) continue;
 
         if (plain_only) 
             for (unsigned i=0; txt_in_ft_by_dt[dt][i].in; i++) {
                 Codec codec = txt_in_ft_by_dt[dt][i].codec;
                 if (codec != CODEC_BGZF && codec != CODEC_GZ && codec != CODEC_BZ2 && codec != CODEC_XZ && codec != CODEC_ZIP && codec != CODEC_ORA)
-                    len += sprintf (&s[len], "%s ", &file_exts[txt_in_ft_by_dt[dt][i].in][1]);
+                    SNPRINTF (s, "%s ", &file_exts[txt_in_ft_by_dt[dt][i].in][1]);
             }
-            // sprintf (&s[strlen(s)], "%s ", &file_exts[txt_in_ft_by_dt[dt][0].in][1]);
     
         else {
-            sprintf (&s[strlen (s)], "\n%-8s: ", dt_name (dt));
+            SNPRINTF (s, "\n%-8s: ", dt_name (dt));
 
             for (unsigned i=0; txt_in_ft_by_dt[dt][i].in; i++)
-                len += sprintf (&s[len], "%s ", &file_exts[txt_in_ft_by_dt[dt][i].in][1]);
+                SNPRINTF (s, "%s ", &file_exts[txt_in_ft_by_dt[dt][i].in][1]);
         }
     }
 
     if (plain_only)
-        sprintf (&s[strlen(s)], "23andme generic ");
+        SNPRINTF0 (s, "23andme generic ");
     else
-        sprintf (&s[strlen(s)], "\n23andMe : 23andme 23andme.zip"
-                                "\nOther   : generic");
+        SNPRINTF0 (s, "\n23andMe : 23andme 23andme.zip"
+                      "\nOther   : generic");
     return s;
 }
 
@@ -255,14 +254,13 @@ void file_set_input_type (rom type_str)
 
     else {
         flag.stdin_type = file_get_type (ext); // we don't enforce 23andMe name format - any .txt or .zip will be considered ME23
-        if (flag.stdin_type == GNRIC && !flag.explicitly_generic) 
-            flag.stdin_type = UNKNOWN_FILE_TYPE; // This is an unknown input name - not generic
+
+        // the user's argument is not an accepted input file type - print error message
+        if (flag.stdin_type == GNRIC) 
+            ABORT ("%s: --input (or -i) must be ones of these: %s", global_cmd, file_compressible_extensions(false).s);
     }
 
     if (file_get_data_type (flag.stdin_type, true) != DT_NONE) return; // all good 
-
-    // the user's argument is not an accepted input file type - print error message
-    ABORT ("%s: --input (or -i) must be ones of these: %s", global_cmd, file_compressible_extensions(false));
 }
 
 static void file_ask_user_to_confirm_overwrite (rom filename)
@@ -323,10 +321,10 @@ static rom file_samtools_no_PG (void)
 
     for (unsigned i=1; i < 15 && len < MIN_ACCEPTABLE_LEN; i++) {
         // Tested on samtools 1.11: The normal way to see help is "samtools help view" however it fails if stdin is not the terminal. 
-        // Instead, we use samtools view with an invalid option "--junk". This *sometimes* shows the help, and sometimes
+        // Instead, we use samtools view --threads, invalidly without an argument. This *sometimes* shows the help, and sometimes
         // just shows one line "samtools view:". We overcome this by repeating if the response is not long enough.
         StreamP samtools = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, 0, "To read/write CRAM files",
-                                          "samtools", "view", "--junk", NULL);
+                                          "samtools", "view", "--threads", NULL);
         usleep (50000 * i); // wait for samtools
 
         // read both stderr and stdout from samtools
@@ -337,7 +335,7 @@ static rom file_samtools_no_PG (void)
     } 
     samtools_help_text[len] = '\0'; // terminate string (more portable, strnstr and memmem are non-standard)
 
-    ASSERT0 (len >= MIN_ACCEPTABLE_LEN, "no response from \"samtools view --junk\"");
+    ASSERT0 (len >= MIN_ACCEPTABLE_LEN, "no response from \"samtools view --threads\"");
 
     return ret_str[(has_no_PG = !!strstr (samtools_help_text, "--no-PG"))];
 }
@@ -778,7 +776,7 @@ static void file_initialize_z_file_data (FileP file)
 }
 
 // get time since creation of z_file object in memory
-rom file_get_z_run_time (FileP file)
+StrText file_get_z_run_time (FileP file)
 {
     TimeSpecType tb; 
     clock_gettime(CLOCK_REALTIME, &tb); 
@@ -786,10 +784,7 @@ rom file_get_z_run_time (FileP file)
     int seconds_so_far = ((tb.tv_sec - file->start_time.tv_sec)*1000 + 
                          ((int64_t)tb.tv_nsec - (int64_t)file->start_time.tv_nsec) / 1000000) / 1000; 
 
-    static char time_str[16];
-    str_human_time (seconds_so_far, true, time_str);
-
-    return time_str;
+    return str_human_time (seconds_so_far, true);
 }
 
 // opens z_file for read or write
@@ -1313,9 +1308,20 @@ uint64_t file_get_size (rom filename)
 
 bool file_is_dir (rom filename)
 {
-    struct stat64 st;
-    int ret = stat64(filename, &st); // 0 if successful
+    ASSERTNOTNULL (filename);
+    int filename_len = strlen (filename);
     
+    // temporarily remove trailing / 
+    if (filename[filename_len-1] == '/' || filename[filename_len-1] == '\\')
+        filename_len--;
+
+    SAFE_NULT (filename);
+
+    struct stat64 st;
+    int ret = stat64 (filename, &st); // 0 if successful
+
+    SAFE_RESTORE;
+
     return !ret && S_ISDIR (st.st_mode);
 }
 

@@ -216,7 +216,7 @@ void vcf_refalt_seg_REF_ALT (VBlockVCFP vb, STRp(ref), STRp(alt))
     bool do_account = true;
 
     // optimize ref/alt in the common case of single-character
-    if (vb->n_alts == 1 && ALT0(SNP)) 
+    if (vb->n_alts == 1 && (ALT0(SNP) || (vb->REF_len == 1 && ALT0(NO_ALT)))) 
         vcf_refalt_seg_ref_alt_snp (vb, *ref, *alt);
 
     else if (vb->n_alts == 1 && ALT0(DEL) && vcf_refalt_seg_DEL_against_reference (vb, STRa(ref), alt[0]))

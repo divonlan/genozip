@@ -444,6 +444,6 @@ bool stream_is_exec_in_path (rom exec)
 #else
     char run[32 + strlen(exec)];
     snprintf (run, sizeof (run), "which %s > /dev/null 2>&1", exec);
-    return !system ("which wget > /dev/null 2>&1") && file_exists ("/dev/stdout");
+    return !system (run) && file_exists ("/dev/stdout");
 #endif
 }

@@ -272,7 +272,7 @@ MappingType aligner_seg_seq (VBlockP vb, STRp(seq), bool is_pair_2, PosType64 pa
     buf_alloc (vb, &gpos_ctx->local, 1, 0, uint32_t, CTX_GROWTH, NULL); 
 
     buf_add_bit (&strand_ctx->local, pair_gpos == NO_GPOS ? is_forward // pair 1 is unaligned - just store the strand
-                                                          : (is_forward == pair_is_forward)); // pair 1 is aligned aligned - store equality, expected to he 1 in most cases
+                                                          : (is_forward == pair_is_forward)); // pair 1 is aligned - store equality, expected to he 1 in most cases
             
     if (is_pair_2) 
         fastq_seg_pair2_gpos (vb, pair_gpos, gpos);

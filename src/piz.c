@@ -71,20 +71,20 @@ PizDisQname piz_dis_qname (VBlockP vb)
 
 void asspiz_text (VBlockP vb, FUNCLINE)
 {
-    StrTextSuperLong stack;
+    StrTextSuperLong s;
+    int s_len = 0;
 
-    char *next = stack.s;
     for (int i=0; i < vb->con_stack_len; i++)
-        next += sprintf (next, "%s[%u]->", CTX(vb->con_stack[i].did_i)->tag_name, vb->con_stack[i].repeat);
+        SNPRINTF (s, "%s[%u]->", CTX(vb->con_stack[i].did_i)->tag_name, vb->con_stack[i].repeat);
 
-    sprintf (next, "%s", (vb->curr_item != DID_NONE ? CTX(vb->curr_item)->tag_name : "N/A"));
+    SNPRINTF (s, "%s", (vb->curr_item != DID_NONE ? CTX(vb->curr_item)->tag_name : "N/A"));
 
     progress_newline(); 
     fprintf (stderr, "%s %s: Error in %s:%u line_in_file(1-based)=%"PRId64"%s %s%s stack=%s %s: ", 
              str_time().s, LN_NAME, func, code_line, 
              writer_get_txt_line_i ((VBlockP)(vb), vb->line_i), 
              cond_int (Z_DT(VCF) || Z_DT(BCF), " sample_i=", vb->sample_i), 
-             piz_dis_coords((VBlockP)(vb)).s, piz_dis_qname((VBlockP)(vb)).s, stack.s, version_str().s); 
+             piz_dis_coords((VBlockP)(vb)).s, piz_dis_qname((VBlockP)(vb)).s, s.s, version_str().s); 
 }
 
 bool piz_grep_match (rom start, rom after)
@@ -885,7 +885,7 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
         dispatcher_pause (dispatcher); // we're unbinding and still have more txt_files
     
     if (txt_file)
-        DT_FUNC (txt_file, piz_finalize)();
+        DT_FUNC (txt_file, piz_finalize) (is_last_z_file);
 
     if (flag_is_show_vblocks (PIZ_TASK_NAME)) 
         iprintf ("Finished PIZ of %s\n", txt_file ? txt_file->name : "(no filename)");                
