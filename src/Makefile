@@ -742,7 +742,12 @@ genozip-osx-%/genozip: $(OBJS) $(OBJDIR)/distribution.osx-%.o
 	@echo Linking $@
 	$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
-genozip-osx-%/genounzip genozip-osx-%/genocat genozip-osx-%/genols: genozip-osx-%/genozip 
+# note: two separate rules for x86 and arm, as we can't have multiple targets with a % in the same rule(?)
+genozip-osx-x86/genounzip genozip-osx-x86/genocat genozip-osx-x86/genols: genozip-osx-x86/genozip 
+	@echo Generating $@
+	@cp -f $< $@ # ln doesn't work on SMB shares
+
+genozip-osx-arm/genounzip genozip-osx-arm/genocat genozip-osx-arm/genols: genozip-osx-arm/genozip 
 	@echo Generating $@
 	@cp -f $< $@ # ln doesn't work on SMB shares
 
