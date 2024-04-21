@@ -665,9 +665,10 @@ $(INSTALLERS)/LICENSE.html: genozip$(EXE)
 	@./genozip$(EXE) --license=html,5000 > $@
 
 BUILD_FILES = version.h Makefile \
-	objdir.linux/secure/license.o objdir.windows/secure/license.o objdir.mac/secure/license.o \
-	../RELEASE_NOTES.txt ../LICENSE.txt \
-	$(INSTALLERS)/genozip-installer.exe $(INSTALLERS)/genozip-linux-x86_64.tar $(INSTALLERS)/genozip-osx-x86.tar $(INSTALLERS)/LICENSE.html
+	objdir.linux/secure/license.o objdir.windows/secure/license.o objdir.osx-x86/secure/license.o \
+	objdir.osx-arm/secure/license.o ../RELEASE_NOTES.txt ../LICENSE.txt \
+	$(INSTALLERS)/genozip-installer.exe $(INSTALLERS)/genozip-linux-x86_64.tar \
+	$(INSTALLERS)/genozip-osx-x86.tar $(INSTALLERS)/genozip-osx-arm.tar $(INSTALLERS)/LICENSE.html
 
 push-build: # push files modified during the build process
 	@git stage $(BUILD_FILES) -f
