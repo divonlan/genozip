@@ -26,6 +26,8 @@ launch.json
 *.new
 *.crdownload
 genozip-linux-x86_64
+genozip-osx-x86
+genozip-osx-arm
 genozip-installer.ifp.save
 geno*-prod
 genozip

@@ -563,7 +563,7 @@ genozip-latest.exe:
 	@(cd $(LATEST_SRC); if [[ `pwd` = *genozip-latest* ]]; then git reset --hard ; git pull ; $(MAKE) -j clean ; touch dict_id_gen.h ; $(MAKE) -j; cp $(LATEST_SRC)/genozip.exe ../../genozip/private/releases/genozip-$(version).exe ; ln -sf $(LATEST_SRC)/genozip.exe $@ ; fi )
 
 genozip-latest:
-	@run-on-wsl.sh GCC=$(WSL_GCC_DEFAULT) make genozip-latest  # make -j doesn't work well on WSL - filesystem clock issues (try: hwclock -s)
+	@$(SCRIPTS)/run-on-wsl.sh GCC=$(WSL_GCC_DEFAULT) make genozip-latest  # make -j doesn't work well on WSL - filesystem clock issues (try: hwclock -s)
 
 # increments minor version, eg. 1.0.1 -> 1.0.2. 
 # To increment a major version, manually edit version.h and set minor version to -1 e.g. 1.1.-1 (careful! no newlines or spaces)
@@ -650,7 +650,7 @@ $(INSTALLERS)/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS)
 
 $(INSTALLERS)/genozip-linux-x86_64.tar.build: genozip-linux-x86_64/LICENSE.txt 
 	@(mkdir genozip-linux-x86_64 >& /dev/null ; exit 0)
-	@run-on-wsl.sh GCC=$(WSL_GCC_8_5) make $(INSTALLERS)/genozip-linux-x86_64.tar # make -j doesn't work well on WSL - filesystem clock issues
+	@$(SCRIPTS)/run-on-wsl.sh GCC=$(WSL_GCC_8_5) make $(INSTALLERS)/genozip-linux-x86_64.tar # make -j doesn't work well on WSL - filesystem clock issues
 
 # get Mac files: ../installers/genozip-osx-x86.tar and objdir.mac/secure/license.o
 $(INSTALLERS)/genozip-osx-x86.tar : $(C_SRCS) $(X86_SRCS) $(INCLUDES) $(wildcard secure/*.c) $(wildcard secure/*.h) ../LICENSE.txt Makefile
