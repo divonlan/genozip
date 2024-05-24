@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ^ finds bash according to $PATH
-
+ 
 # ------------------------------------------------------------------
 #   autocomplete_gen.sh.sh
 #   Copyright (C) 2024-2024 Genozip Limited. Patent Pending.
