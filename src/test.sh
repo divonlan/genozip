@@ -1157,7 +1157,7 @@ batch_real_world_with_ref_md5() # $1 extra genozip argument
     cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
 
     local files37=( test.IonXpress.sam.gz \
-                    test.human.fq.gz test.human2.bam test.pacbio.clr.bam \
+                    test.human.fq.gz test.human2.bam test.human2.interleaved.fq.gz test.pacbio.clr.bam \
                     test.human2-R1.fq.bz2 test.pacbio.ccs.10k.bam test.unmapped.sam.gz \
                     test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq \
                     test.human2.filtered.snp.vcf test.solexa-headerless.sam test.cigar-no-seq-qual.bam \
@@ -1398,6 +1398,62 @@ batch_reference_fastq()
     # solexa read style
     test_standard "-e$GRCh38 --pair" "" special.solexa-R1.fq special.solexa-R2.fq
 
+    cleanup
+}
+
+batch_reference_fasta_as_fastq()
+{
+    batch_print_header
+
+    echo "FASTA with --reference, --password, --md5, -B1"
+    test_standard "-e$GRCh38 -p 123 -mB1" "-p123" test.human2-R1.fa.gz
+
+    # test --grep (regression test for bug 788)
+    local n
+    n=`$genocat --grep "@A00910:85:HYGWJDSXX:1:1101:9028:1000" -p 123 $output --count` || exit $?
+    if (( n != 1 )); then
+        echo "Expecting 1 reads to be grepped in FASTA-as-FASTQ"
+        exit 1
+    fi
+
+    # test single-line --head (only pair-1 is expressed) - note: cannot use --count with --head
+    n=`$genocat --head=1 -p 123 $output | wc -l` || exit $? 
+    if (( n != 2 )); then
+        echo "Expecting 1 read to be counted with --head=1 in FASTA-as-FASTQ but lines=$n"
+        exit 1
+    fi
+
+    # test single-line --tail (only pair-2 expressed) - note: cannot use --count with --tail
+    n=`$genocat --tail=1 -p 123 $output | wc -l` || exit $? 
+    if (( n != 2 )); then
+        echo "Expecting 1 reads to be counted with --tail=1 in FASTA-as-FASTQ"
+        exit 1
+    fi
+
+    # test --bases
+    n=`$genocat --bases=N -p 123 $output --count || exit 1` || exit $? 
+    if (( n != 49 )); then
+        echo "Expecting 49 reads to be counted with --bases=N in this FASTA-as-FASTQ"
+        exit 1
+    fi
+
+    # test --header-only
+    n=`$genocat --header-only -p 123 $output | wc -l` || exit $? 
+    if (( n != 100000 )); then
+        echo "Expecting 100000 lines to be counted with -header-only in FASTA-as-FASTQ"
+        exit 1
+    fi
+
+    # test --seq-only
+    n=`$genocat --seq-only -p 123 $output | wc -l` || exit $? 
+    if (( n != 100000 )); then
+        echo "Expecting 100000 lines to be counted with --seq-only in FASTA-as-FASTQ"
+        exit 1
+    fi
+
+    echo "2 FASTA with --REFERENCE (BGZF, decompress concatenated, password)"
+    test_standard "COPY -E$GRCh38 -p 123" " " test.human2-R1.fa.gz
+    
     cleanup
 }
 
@@ -2032,7 +2088,13 @@ fi
 mkdir $OUTDIR >& /dev/null
 cleanup
 
-make -C $TESTDIR --quiet -j20 sync_wsl_clock generated md5s || exit 1 # limit threads to 20, otherwise too many concurrent forks (Mac runs out of resources)
+make -C $TESTDIR --quiet sync_wsl_clock generated md5s || exit 1 # limit threads to 20, otherwise too many concurrent forks (Mac runs out of resources)
+
+# recalculate defective .md5 files
+if (( `ls -l $TESTDIR/*.md5 | grep -v 33 | wc -l` != 0 )); then # .md5 files are expected to be size 33
+    rm `ls -l private/test/*.md5 | grep -v 33 | rev | cut -d" " -f1 | rev`
+    make -C $TESTDIR --quiet md5s # redo
+fi
 
 inc() { 
     GENOZIP_TEST=$((GENOZIP_TEST + 1)) 
@@ -2085,34 +2147,35 @@ case $GENOZIP_TEST in
 42)  batch_external_unzip              ;;
 43)  batch_external_ora                ;;
 44)  batch_reference_fastq             ;;
-45)  batch_reference_sam               ;;
-46)  batch_reference_vcf               ;;
-47)  batch_many_small_files            ;;
-48)  batch_make_reference              ;;
-49)  batch_headerless_wrong_ref        ;;
-50)  batch_replace                     ;;
-51)  batch_coverage_idxstats           ;;
-52)  batch_qname_flavors               ;;
-53)  batch_piz_no_license              ;;
-54)  batch_sendto                      ;;
-55)  batch_user_message_permissions    ;;
-56)  batch_password_permissions        ;;
-57)  batch_reference_backcomp          ;;
-58)  batch_real_world_backcomp 11.0.11 ;; # note: versions must match VERSIONS in test/Makefile
-59)  batch_real_world_backcomp 12.0.42 ;; 
-60)  batch_real_world_backcomp 13.0.21 ;; 
-61)  batch_real_world_backcomp 14.0.33 ;; 
-62)  batch_real_world_backcomp latest  ;;
-63)  batch_basic basic.vcf     latest  ;;
-64)  batch_basic basic.bam     latest  ;;
-65)  batch_basic basic.sam     latest  ;;
-66)  batch_basic basic.fq      latest  ;;
-67)  batch_basic basic.fa      latest  ;;
-68)  batch_basic basic.bed     latest  ;;
-69)  batch_basic basic.gvf     latest  ;;
-70)  batch_basic basic.gtf     latest  ;;
-71)  batch_basic basic.me23    latest  ;;
-72)  batch_basic basic.generic latest  ;;
+45)  batch_reference_fasta_as_fastq    ;;
+46)  batch_reference_sam               ;;
+47)  batch_reference_vcf               ;;
+48)  batch_many_small_files            ;;
+49)  batch_make_reference              ;;
+50)  batch_headerless_wrong_ref        ;;
+51)  batch_replace                     ;;
+52)  batch_coverage_idxstats           ;;
+53)  batch_qname_flavors               ;;
+54)  batch_piz_no_license              ;;
+55)  batch_sendto                      ;;
+56)  batch_user_message_permissions    ;;
+57)  batch_password_permissions        ;;
+58)  batch_reference_backcomp          ;;
+59)  batch_real_world_backcomp 11.0.11 ;; # note: versions must match VERSIONS in test/Makefile
+60)  batch_real_world_backcomp 12.0.42 ;; 
+61)  batch_real_world_backcomp 13.0.21 ;; 
+62)  batch_real_world_backcomp 14.0.33 ;; 
+63)  batch_real_world_backcomp latest  ;;
+64)  batch_basic basic.vcf     latest  ;;
+65)  batch_basic basic.bam     latest  ;;
+66)  batch_basic basic.sam     latest  ;;
+67)  batch_basic basic.fq      latest  ;;
+68)  batch_basic basic.fa      latest  ;;
+69)  batch_basic basic.bed     latest  ;;
+70)  batch_basic basic.gvf     latest  ;;
+71)  batch_basic basic.gtf     latest  ;;
+72)  batch_basic basic.me23    latest  ;;
+73)  batch_basic basic.generic latest  ;;
 
 * ) break; # break out of loop
 

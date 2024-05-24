@@ -19,8 +19,11 @@ void sam_pacbio_seg_initialize (VBlockSAMP vb)
     
     ctx_set_store (VB, STORE_FLOAT, OPTION_ec_f, DID_EOL);
 
-    if (segconf.has[OPTION_ec_f]) 
-        CTX(OPTION_np_i)->flags.same_line = true;  // np segged as delta vs ec, and np needs to be peeked for QUAL, before reconstructing ec
+    ctx_set_store (VB, STORE_INT, OPTION_ws_i,
+                   T(flag.best && segconf.has[OPTION_we_i], OPTION_pw_B_C), // store sum of array elements
+                   T(flag.best && segconf.has[OPTION_we_i], OPTION_ip_B_C), DID_EOL);
+
+    ctx_set_same_line (VB, T(segconf.has[OPTION_ec_f], OPTION_np_i), DID_EOL);  // np segged as delta vs ec, and np needs to be peeked for QUAL, before reconstructing ec
 
     if (segconf.use_pacbio_iqsqdq) {
         ctx_set_ltype (VB, LT_BLOB, OPTION_dq_Z, OPTION_iq_Z, OPTION_sq_Z, DID_EOL);        
@@ -28,7 +31,7 @@ void sam_pacbio_seg_initialize (VBlockSAMP vb)
     }
 
     if (segconf.sam_use_sn_mux)
-        seg_mux_init (VB, CTX(OPTION_sn_B_f), 2, SAM_SPECIAL_DEMUX_sn, false, (MultiplexerP)&vb->mux_sn);
+        seg_mux_init (vb, OPTION_sn_B_f, SAM_SPECIAL_DEMUX_sn, false, sn);
 }
 
 // -------------
@@ -131,6 +134,50 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_PACBIO_qe)
 {
     int64_t qs = reconstruct_peek_(vb, _OPTION_qs_i, 0, 0).i;
     new_value->i = qs + vb->seq_len;
+
+    if (reconstruct) RECONSTRUCT_INT (new_value->i);
+
+    return HAS_NEW_VALUE;
+}
+
+// ----------------------------------------------
+// ws:i - Start of first base of the query (‘qs’) in approximate raw frame count since start of movie. For a CCS read, the start of the first base of the first incorporated subread.
+// we:i - Start of last base of the query (‘qe - 1’) in approximate raw frame count since start of movie. For a CCS read, the start of the last base of the last incorporated subread.
+// ----------------------------------------------
+
+void sam_seg_pacbio_we (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t we, unsigned add_bytes)    
+{
+    decl_ctx (OPTION_we_i);
+
+    int32_t ws;
+
+    // prediction (subreads data): we ~= ws + (sum(ip) + sum (pw) + seq_len)
+    if (flag.best && // summing ip/pw add time - not worth the tiny benefit of this method unless --best
+        segconf.has[OPTION_we_i] && // condition for ip and pw sum to be calculated
+        sam_seg_peek_int_field (vb, OPTION_ws_i, vb->idx_ws_i, 0, 0x7ffffff, true, &ws)  &&
+        ctx_has_value_in_line_(vb, CTX(OPTION_ip_B_C)) && 
+        ctx_has_value_in_line_(vb, CTX(OPTION_pw_B_C))) {
+     
+        int64_t sum_ip = CTX(OPTION_ip_B_C)->last_value.i;
+        int64_t sum_pw = CTX(OPTION_pw_B_C)->last_value.i;
+        int64_t delta = we - (ws + sum_ip + sum_pw + dl->SEQ.len);
+
+        seg_integer (VB, ctx, delta, false, 0);
+        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_PACBIO_we }, 2, ctx, add_bytes);
+    }
+    
+    else 
+        seg_integer (VB, ctx, we, true, add_bytes); // delta vs ws is worse 
+}
+
+SPECIAL_RECONSTRUCTOR (sam_piz_special_PACBIO_we)
+{
+    int64_t sum_ip = CTX(OPTION_ip_B_C)->last_value.i;
+    int64_t sum_pw = CTX(OPTION_pw_B_C)->last_value.i;
+    int64_t ws = reconstruct_peek (vb, CTX(OPTION_ws_i), 0, 0).i;
+    int64_t delta = reconstruct_from_local_int (vb, ctx, 0, RECON_OFF);
+
+    new_value->i = delta + (ws + sum_ip + sum_pw + vb->seq_len);
 
     if (reconstruct) RECONSTRUCT_INT (new_value->i);
 

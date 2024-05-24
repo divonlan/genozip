@@ -129,6 +129,20 @@ typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, Did did_i, DictI
     ({ ASSPIZ ((ctx)->next_local + (offset) < (ctx)->local.len32, "PEEKNEXTLOCAL: %s.local exhausted: next_local=%u len=%u", (ctx)->tag_name, (ctx)->next_local, (ctx)->local.len32); \
        *B(type, (ctx)->local, (ctx)->next_local + (offset)); })
 
+#define NEXTLOCALBIT(ctx) ({ \
+    ASSPIZ ((ctx)->next_local < (ctx)->local.nbits, "%s.local exhausted: next_local=%u nbits=%u", (ctx)->tag_name, (ctx)->next_local, (uint32_t)(ctx)->local.nbits); \
+    bool ret = bits_get ((BitsP)&(ctx)->local, (ctx)->next_local); \
+    (ctx)->next_local++; \
+    ret; \
+})
+    
+#define NEXTLOCAL2BITS(ctx) ({ \
+    ASSPIZ ((ctx)->next_local < (ctx)->local.nbits-1, "%s.local exhausted: next_local=%u nbits=%u", (ctx)->tag_name, (ctx)->next_local, (uint32_t)(ctx)->local.nbits); \
+    uint8_t ret = bits_get ((BitsP)&(ctx)->local, (ctx)->next_local) | (bits_get ((BitsP)&(ctx)->local, (ctx)->next_local+1) << 1); \
+    (ctx)->next_local += 2; \
+    ret; \
+})
+
 #ifdef DEBUG
 #define RECONSTRUCT(_s,_s_len)                                                  \
     ({ uint32_t new_len = (uint32_t)(_s_len); /* copy in case caller uses ++ */ \

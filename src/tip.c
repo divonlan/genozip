@@ -67,20 +67,20 @@ void tip_print (void)
         valid_tips[n++] = "Tip: genozip compresses VCF files 5-10X faster than it compresses BCF files";
     
     if (E(SAM) || E(BAM) || E(VCF) || E(BCF) || E(GFF) || E(ME23)) 
-        valid_tips[n++] = "Tip: do the chromosomes have different names (eg 22 vs chr22)? Genozip can fix that: " WEBSITE_MATCH_CHROM;
+        valid_tips[n++] = "Tip: are the chromosome names different than in the reference file (eg 22 vs chr22)? Genozip can fix that: " WEBSITE_MATCH_CHROM;
 
     if (E(SAM) || E(BAM))
-        valid_tips[n++] = "Please take a moment now to make a note to not forget to cite Genozip:\n " PAPER3_CITATION "\n";
+        valid_tips[n++] = "Please take a moment now to make a note to not forget to cite Genozip:\n" PAPER3_CITATION "\n";
 
     if (flag.deep)
-        valid_tips[n++] = "Please take a moment now to make a note to not forget to cite Genozip:\n " PAPER4_CITATION "\n";
+        valid_tips[n++] = "Please take a moment now to make a note to not forget to cite Genozip:\n" PAPER4_CITATION "\n";
 
     if (!flag.deep && (E(SAM) || E(BAM) || E(FASTQ)) && sam_get_deep_tip()) // 5X more likely
         for (int i=0; i < 5; i++)
             valid_tips[n++] = sam_get_deep_tip();
 
     if (E(VCF) || E(BCF))
-        valid_tips[n++] = "Please take a moment now to make a note to not forget to cite Genozip:\n " PAPER1_CITATION "\n";
+        valid_tips[n++] = "Please take a moment now to make a note to not forget to cite Genozip:\n" PAPER1_CITATION "\n";
 
     if (!flag.optimize && (E(SAM) || E(BAM) || E(VCF) || E(BCF) || E(GFF) || E(FASTQ))) 
         valid_tips[n++] = "Tip: using --optimize permits Genozip to make minor modifications to the data that usually have no impact on downstream analysis, yet result in significantly better compression, see: " WEBSITE_GENOZIP;

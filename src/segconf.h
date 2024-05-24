@@ -63,7 +63,7 @@ extern QualHistType did_i_to_qht (Did did_i);
 
 typedef struct { uint8_t q; int count; } QualHisto;
 
-typedef packed_enum { GQ_old=0/*up to 15.0.36*/, BY_PL=1, BY_GP=2, MUX_DOSAGExDP, MUX_DOSAGE } GQMethodType; // values go into SectionHeaderGenozipHeader.segconf_GQ_method (only 0,1,2 are used in PIZ)
+typedef packed_enum { GQ_old=0/*up to 15.0.36*/, BY_PL=1, BY_GP=2, MUX_DOSAGExDP, MUX_DOSAGE, GQ_INTEGER } GQMethodType; // values go into SectionHeaderGenozipHeader.segconf_GQ_method (only 0,1,2 are used in PIZ)
 
 typedef packed_enum         { MATE_NONE, MATE_01, MATE_12, MATE_PBSV } MateIDMethodType;
 #define MATEID_METHOD_NAMES { "NONE",    "01",    "12",    "PBSV"    }
@@ -96,9 +96,6 @@ typedef struct {
     SeqTech tech;
     char master_qname[SAM_MAX_QNAME_LEN+1];     // ZIP/PIZ: one of the (ZIP: the first) QNAMEs in the SAM file, to which we compare all others 
     
-    // FASTQ and FASTA
-    bool multiseq;              // sequences in file are variants of each others 
-
     // SAM/BAM and FASTQ
     uint32_t longest_seq_len;   // length of the longest seq_len in the segconf data 
     DictId seq_len_dict_id;     // dict_id of one of the QNAME/QNAME2/LINE3/FASTQ_AUX contexts, which is expected to hold the seq_len for this read. 0 if there is no such item.
@@ -214,6 +211,7 @@ typedef struct {
     bool vcf_is_gatk_gvcf;
     bool vcf_is_beagle;
     bool vcf_is_dragen;
+    bool vcf_is_hail;
     bool vcf_is_manta;
     bool vcf_is_cosmic;
     bool vcf_is_clinvar;    
@@ -225,6 +223,7 @@ typedef struct {
     bool vcf_illum_gtyping;     // tags from Illumina GenCall genotyping software
     bool vcf_is_infinium;
     bool vcf_is_dbSNP;
+    bool vcf_is_giab;
     bool vcf_is_giab_trio;
     bool vcf_is_vep;
     char *vcf_vep_spec;
@@ -239,8 +238,13 @@ typedef struct {
     bool vcf_is_pbsv;
     bool vcf_is_sv;
     bool vcf_is_callmom;
+    bool vcf_is_melt;
+    bool vcf_is_GLIMPSE_phase;
+    bool vcf_is_gencove;
+    bool vcf_is_giggle;
     bool use_null_DP_method;    // A method for predicting GT=./. by DP=.
     bool vcf_del_svlen_is_neg;
+    char vcf_ID_is_variant;     // ID format is eg 1_2704352_AT_A or 1:2704352:AT:A which is CHROM_POS_REF_ALT. value is '_' or ':' or 0. 
     uint8_t vcf_max_MAPQ;       // maximum MAPQ of BAM alignments that contributed to this variant, as derived from RAW_MQandDP, but not more than 223
     FormatDPMethod FMT_DP_method;
     InfoDPMethod INFO_DP_method;
@@ -277,6 +281,9 @@ typedef struct {
     char aux_sep;               // separator between name and value in aux fields (either '=' or ':')
     FastqLine3Type line3;       // format of line3
     int r1_or_r2;               // in case compression is WITHOUT --pair: our guess of whether this file is R1 or R2
+    thool is_interleaved;       // whether FASTQ file is identified as interleaved
+    char interleaved_r1;        // valid if is_interleaved: character representing R1: usually '0' or '1'
+    char interleaved_r2;        // valid if is_interleaved: character representing R2: usually '1' or '2'
     QType deep_qtype;           // Deep: QNAME1 or QNAME2 if for most segconf lines for which have Deep, SAM qname matches FASTQ's QNAME1 or QNAME2, or QNONE if not
     bool deep_no_qual;          // Deep: true if for most segconf lines which have Deep, qual doesn't match (eg, bc of undocumented BQSR) 
     bool deep_has_trimmed;      // Deep: some FASTQ reads in segconf appear in SAM trimmed (beyond cropping)
@@ -290,11 +297,17 @@ typedef struct {
     unsigned n_seq_mch;         // Deep: count segconf lines where hash matches with at least one SAM line - SEQ
     unsigned n_no_mch;          // Deep: count segconf lines that don't match any SAM line (perhaps because SAM is filtered)
 
+    // shared FASTA/FASTQ
+    bool multiseq;              // sequences in file are variants of each others 
+    #define FAF segconf.fasta_as_fastq
+    bool fasta_as_fastq;        // Segging a FASTA file as a QUAL-less FASTQ
+    char desc_char;             // FASTA: '>' by default, but can also be '@' ; FASTQ: normally '@', but can be '>' if fasta_as_fastq
+    #define DC segconf.desc_char
+
     // FASTA stuff (including FASTA embedded in GFF)
     bool fasta_has_contigs;     // the sequences in this FASTA represent contigs (as opposed to reads) - in which case we have a FASTA_CONTIG dictionary and RANDOM_ACCESS
     SeqType seq_type;           // nucleotide or protein
     unsigned seq_type_counter;  // used for calculating seq_type 
-    char fasta_desc_char;       // '>' by default, but can also be '@'
     
     // GFF stuff
     int gff_version;

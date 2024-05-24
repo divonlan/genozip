@@ -26,7 +26,7 @@ struct {                                                \
     char snip[BASE64_DICT_ID_LEN * (n_channels) + 6];   \
 }                               
 #define MUX ((MultiplexerP)mux)
-#define MUX_CAPACITY(mux) (sizeof((mux).dict_ids)/sizeof(DictId)) // max number of channels this mux can contain
+#define MUX_CAPACITY(mux)    (sizeof((mux).dict_ids)/sizeof(DictId)) // max number of channels this mux can contain
 #define MUX_CHANNEL_CTX(mux) ((ContextP *)((mux)->dict_ids + (mux)->num_channels))
 #define MUX_SNIP(mux)        ((char *)(MUX_CHANNEL_CTX(mux) + (mux)->num_channels))
 #define MUX_SIZEOF_SNIP(mux) (BASE64_DICT_ID_LEN * ((mux)->num_channels) + 6)

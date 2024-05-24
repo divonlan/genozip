@@ -144,6 +144,16 @@ void vcf_piz_insert_field (VBlockVCFP vb, ContextP ctx, STRp(value), int chars_r
 
             ASSPIZ (found_me, "Missing ctx=%s in dids[]", ctx->tag_name);   
         }
+
+        // ID: adjust REF ALT
+        else {
+            vb->REF += move_by;
+            vb->ALT += move_by;
+            CTX(VCF_REFALT)->last_txt.index += move_by;
+
+            for (int alt_i=0; alt_i < vb->n_alts; alt_i++)
+                vb->alts[alt_i] += move_by;
+        }
         
         // adjust lookback addresses that might be affected by this insertion
         vcf_piz_ps_pid_lookback_shift (VB, addr, move_by);
@@ -221,6 +231,33 @@ CONTAINER_FILTER_FUNC (vcf_piz_filter)
 
     return true;    
 
+}
+
+// called from vcf_piz_refalt_parse
+void vcf_piz_insert_ID_is_variant (VBlockVCFP vb)
+{
+    decl_ctx (VCF_ID);
+    
+    if (IS_RECON_INSERTION(ctx)) {
+        rom id_recon = BAFTtxt;
+        char sep = CTX(VCF_ID)->deferred;
+
+        RECONSTRUCT_str (vb->chrom_name);
+        RECONSTRUCT1 (sep);
+        RECONSTRUCT_INT (CTX(VCF_POS)->last_value.i);
+        RECONSTRUCT1 (sep);
+        RECONSTRUCT_str (vb->REF);
+        RECONSTRUCT1 (sep);
+        RECONSTRUCT_str (vb->ALT);
+        
+        uint32_t id_len = BAFTtxt - id_recon;
+        Ltxt -= id_len; 
+
+        char id[id_len];
+        memcpy (id, id_recon, id_len);
+        
+        vcf_piz_insert_field (vb, ctx, STRa(id), segconf.wid_ID.width);
+    }
 }
 
 // ------------------------------------
@@ -303,7 +340,7 @@ CONTAINER_CALLBACK (vcf_piz_container_cb)
         if (ctx_encountered_in_line (vb, INFO_AN))
             vcf_piz_insert_INFO_AN (VB_VCF);
 
-        if (CTX(INFO_BaseCounts)->BaseCounts.is_deferred)
+        if (CTX(INFO_BaseCounts)->deferred)
             vcf_piz_insert_INFO_BaseCounts_by_AD (VB_VCF); 
 
         if (CTX(INFO_DP)->dp.is_deferred)

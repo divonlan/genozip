@@ -432,10 +432,16 @@ StrTextMegaLong str_snip_ex (STRp(snip), bool add_quote)
         default                        : SNPRINTF (s, "\\x%x", (uint8_t)op);
     }
 
-    if (op == SNIP_OTHER_LOOKUP || op == SNIP_OTHER_DELTA || op == SNIP_COPY || op == SNIP_REDIRECTION) {
+    #define X(dt,sp)  (op == SNIP_SPECIAL && z_file->data_type==DT_##dt && (snip[1] == dt##_SPECIAL_##sp))
+    #define X_SAM(sp) (op == SNIP_SPECIAL && (Z_DT(SAM) || Z_DT(BAM))   && (snip[1] == SAM_SPECIAL_##sp))
+    if (op == SNIP_OTHER_LOOKUP || op == SNIP_OTHER_DELTA || op == SNIP_COPY || op == SNIP_REDIRECTION ||
+        X(VCF,LEN_OF) || X(VCF,ARRAY_LEN_OF) || X(VCF,COPY_MATE) || 
+        X_SAM(COPY_BUDDY))
+    #undef X
+    {
         unsigned b64_len = base64_sizeof (DictId);
         DictId dict_id;
-        base64_decode (&snip[1], &b64_len, dict_id.id);
+        base64_decode (&snip[1 + (op==SNIP_SPECIAL)], &b64_len, dict_id.id, sizeof(DictId));
         SNPRINTF (s, "(%s)", dis_dict_id (dict_id).s);
         i += b64_len;
     }
@@ -444,13 +450,46 @@ StrTextMegaLong str_snip_ex (STRp(snip), bool add_quote)
         // decode
         Container con;
         unsigned b64_len = snip_len - 1; // maximum length of b64 
-        base64_decode (&snip[1], &b64_len, (uint8_t*)&con);
+        base64_decode (&snip[1], &b64_len, (uint8_t*)&con, -1);
         i += b64_len;
 
         con.repeats = BGEN24 (con.repeats);
         unsigned prefixes_len = snip_len - i;
-        SNPRINTF (s, "%.*s", (int)sizeof(s)-20, container_to_json (&con, &snip[i+1], prefixes_len).s);
+        SNPRINTF (s, "%.*s", (int)sizeof(s)-20, container_to_json (&con, &snip[i], prefixes_len).s);
         i += prefixes_len;
+    }
+
+    // case: MINUS
+    else if (op == SNIP_SPECIAL && 
+                ((Z_DT(VCF) && snip[1] == VCF_SPECIAL_MINUS) || 
+                 (Z_DT(GFF) && snip[1] == GFF_SPECIAL_MINUS))) {
+
+        DictId dicts[2]; 
+        unsigned b64_len = snip_len - 2; 
+        base64_decode (&snip[2], &b64_len, (uint8_t *)dicts, 2 * sizeof(DictId));
+
+        i += b64_len;
+
+        SNPRINTF (s, " (%s - %s)", dis_dict_id (dicts[0]).s, dis_dict_id (dicts[1]).s); 
+    }
+        
+    // case: PLUS
+    else if (op == SNIP_SPECIAL && 
+                ((Z_DT(VCF) && snip[1] == VCF_SPECIAL_PLUS) || 
+                 (Z_DT(SAM) && snip[1] == SAM_SPECIAL_PLUS))) {
+
+        DictId dicts[MAX_SNIP_DICTS]; 
+        unsigned b64_len = snip_len - 2; 
+        int num_dicts = base64_decode (&snip[2], &b64_len, (uint8_t *)dicts, -1) / sizeof (DictId);
+
+        SNPRINTF0 (s, " (");
+
+        for (int i=0; i < num_dicts; i++) {
+            SNPRINTF (s, "%s", dis_dict_id (dicts[i]).s);
+            SNPRINTF0 (s, (i < num_dicts-1) ? " + " : ")");
+        }
+
+        i += b64_len;
     }
 
     // case: SPECIAL with base64-encodeded dictionaries: 
@@ -462,11 +501,11 @@ StrTextMegaLong str_snip_ex (STRp(snip), bool add_quote)
 
         DictId dict_id_1st, dict_id_lst;
         unsigned b64_len = item_lens[0]; 
-        base64_decode (items[0], &b64_len, dict_id_1st.id);
+        base64_decode (items[0], &b64_len, dict_id_1st.id, sizeof(DictId));
 
         if (n_items > 2) {
             b64_len = item_lens[1]; 
-            base64_decode (items[n_items-2], &b64_len, dict_id_lst.id);
+            base64_decode (items[n_items-2], &b64_len, dict_id_lst.id, sizeof(DictId));
         }
 
         SNPRINTF (s, " %.*s∈{%s%s}", STRfi (item, n_items-1), dis_dict_id (dict_id_1st).s, 

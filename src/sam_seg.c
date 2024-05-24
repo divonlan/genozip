@@ -44,6 +44,7 @@ STRl(copy_Q3NAME_int, 30);
 STRl(copy_mate_CIGAR_snip, 30);
 STRl(copy_mate_MAPQ_snip, 30);
 STRl(copy_mate_MQ_snip, 30);
+STRl(copy_mate_PQ_snip, 30);
 STRl(XA_lookback_snip, 30);
 STRl(TX_lookback_snip, 30);
 STRl(AN_lookback_snip, 30);
@@ -153,6 +154,7 @@ void sam_zip_initialize (void)
         seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _SAM_RNEXT, copy_mate_RNEXT_snip, '0' + BUDDY_MATE);
         seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _SAM_MAPQ, copy_mate_MAPQ_snip, '0' + BUDDY_MATE);
         seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_MQ_i, copy_mate_MQ_snip, '0' + BUDDY_MATE);
+        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_PQ_i, copy_mate_PQ_snip, '0' + BUDDY_MATE);
         seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_ms_i, copy_mate_ms_snip, '0' + BUDDY_MATE);
         seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_nM_i, copy_mate_nM_snip, '0' + BUDDY_MATE);
         seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_YS_i, copy_mate_YS_snip, '0' + BUDDY_MATE);
@@ -243,7 +245,7 @@ void sam_zip_after_compute (VBlockP vb)
     z_file->num_perfect_matches += vb->num_perfect_matches; // for stats
     z_file->num_aligned         += vb->num_aligned;
 
-    if (segconf.sam_is_unmapped) { 
+    if (segconf.sam_is_unmapped && IS_REF_LOADED_ZIP) { 
         DO_ONCE ref_verify_organism (vb);
     }
 }
@@ -316,16 +318,14 @@ void sam_seg_initialize (VBlockP vb_)
     // case: this is a DEPN VB where data needs to be re-read from txt file - reread data now into txt_data
     if (vb->reread_prescription.len)
         gencomp_reread_lines_as_prescribed (VB);
-
-    #define T(cond, did_i) ((cond) ? (did_i) : DID_NONE)
     
     // note: all numeric fields need STORE_INT / STORE_FLOAT to be reconstructable to BAM (possibly already set)
     // via the translators set in the SAM_TOP2BAM Container
     ctx_set_store (VB, STORE_INT, SAM_TLEN, SAM_MAPQ, SAM_FLAG, SAM_POS, SAM_PNEXT, SAM_GPOS,
                    OPTION_NM_i, OPTION_AS_i, OPTION_MQ_i, OPTION_XS_i, OPTION_XM_i, OPTION_mc_i, OPTION_ms_i, OPTION_Z5_i,
                    OPTION_tx_i, OPTION_YS_i, OPTION_XC_i, OPTION_AM_i, OPTION_SM_i, OPTION_X0_i, OPTION_X1_i, OPTION_CP_i,
-                   OPTION_OP_i, OPTION_NH_i, OPTION_HI_i, OPTION_UQ_i, OPTION_cm_i, 
-                   OPTION_XX_i, OPTION_YY_i, OPTION_XO_i, OPTION_a3_i,
+                   OPTION_OP_i, OPTION_NH_i, OPTION_HI_i, OPTION_UQ_i, OPTION_cm_i, OPTION_PQ_i,
+                   OPTION_XX_i, OPTION_YY_i, OPTION_XO_i, OPTION_a3_i, OPTION_CP_i,
                    OPTION_SA_POS, OPTION_OA_POS,
                    T(MP(BLASR), OPTION_XS_i), T(MP(BLASR), OPTION_XE_i), T(MP(BLASR), OPTION_XQ_i), T(MP(BLASR), OPTION_XL_i), T(MP(BLASR), OPTION_FI_i),
                    T(MP(NGMLR), OPTION_QS_i), T(MP(NGMLR), OPTION_QE_i), T(MP(NGMLR), OPTION_XR_i),
@@ -336,7 +336,7 @@ void sam_seg_initialize (VBlockP vb_)
                    DID_EOL);
 
     // when reconstructing these contexts against another context (DELTA_OTHER or XOR_DIFF) the other may be before or after
-    ctx_set_same_line (VB, OPTION_AS_i, OPTION_s1_i, // AS may be DELTA_OTHER vs ms:i ; s1 vs AS ; XS vs AS
+    ctx_set_same_line (VB, OPTION_AS_i, OPTION_s1_i, OPTION_PQ_i, // AS may be DELTA_OTHER vs ms:i ; s1 vs AS ; XS vs AS ; PQ vs AS
                        T(segconf.sam_has_BWA_XS_i, OPTION_XS_i),
                        OPTION_RX_Z, OPTION_CR_Z, // whe UR and CR are reconstruted as XOR_DIFF against UB and CB respectively, we search for the values on the same line (befor or after)
                        DID_EOL);
@@ -368,7 +368,7 @@ void sam_seg_initialize (VBlockP vb_)
                    OPTION_CR_Z_X, OPTION_RX_Z_X, OPTION_2R_Z, OPTION_TR_Z, DID_EOL);
 
     // set ltype=LT_DYN_INT to allow use of seg_integer
-    ctx_set_dyn_int (VB, SAM_BUDDY, OPTION_HI_i, OPTION_NM_i, OPTION_NH_i, OPTION_XM_i, OPTION_X1_i,
+    ctx_set_dyn_int (VB, SAM_BUDDY, OPTION_HI_i, OPTION_NM_i, OPTION_NH_i, OPTION_XM_i, OPTION_X1_i, OPTION_CP_i,
                      OPTION_AS_i, OPTION_XS_i, OPTION_ZS_i, OPTION_cm_i, OPTION_ms_i, OPTION_nM_i, OPTION_UQ_i,
                      T(segconf.has_TLEN_non_zero, SAM_TLEN), // note: we don't set if !has_TLEN_non_zero, bc values are stored in b250 and may require singletons
                      T(segconf.sam_has_xcons, OPTION_YY_i),
@@ -383,7 +383,7 @@ void sam_seg_initialize (VBlockP vb_)
     // we may use mates (other than for QNAME) if not is_long_reads (meaning: no mates in this file) and not DEPN components (bc we seg against PRIM)
     if (segconf.is_paired && !IS_DEPN(vb))
         ctx_set_store_per_line (VB, SAM_RNAME, SAM_RNEXT, SAM_FLAG, SAM_POS, SAM_PNEXT, SAM_MAPQ,
-                                OPTION_MQ_i, OPTION_MC_Z, OPTION_SM_i, DID_EOL);
+                                OPTION_MQ_i, OPTION_PQ_i, OPTION_MC_Z, OPTION_SM_i, DID_EOL);
 
     // case: some lines may be segged against a in-VB saggy line
     if (IS_MAIN(vb)) // 14.0.0
@@ -427,7 +427,7 @@ void sam_seg_initialize (VBlockP vb_)
     ctx_consolidate_stats (VB, OPTION_BD_BI, OPTION_BI_Z, OPTION_BD_Z, DID_EOL);
     ctx_consolidate_stats_(VB, CTX(OPTION_MM_Z), (ContainerP)&segconf.MM_con);
 
-    if (segconf.has[OPTION_HI_i] && !segconf.has[OPTION_SA_Z])
+    if (segconf.has[OPTION_HI_i] && !segconf.has[OPTION_SA_Z] && !MP(NOVOALIGN))
         ctx_consolidate_stats (VB, OPTION_HI_i, OPTION_SA_Z, DID_EOL);
     else
         ctx_consolidate_stats (VB, OPTION_SA_Z, OPTION_SA_RNAME, OPTION_SA_POS, OPTION_SA_STRAND, OPTION_SA_CIGAR, OPTION_SA_MAPQ, OPTION_SA_NM, OPTION_SA_MAIN, DID_EOL);
@@ -466,55 +466,56 @@ void sam_seg_initialize (VBlockP vb_)
     ctx_set_store (VB, STORE_INDEX, OPTION_XA_Z, DID_EOL); // for containers this stores repeats - used by sam_piz_special_X1->container_peek_repeats
 
     if (segconf.sam_has_BWA_XS_i) // XS:i is as defined some aligners
-        seg_mux_init (VB, CTX(OPTION_XS_i), 4, SAM_SPECIAL_BWA_XS, false, (MultiplexerP)&vb->mux_XS);
+        seg_mux_init (vb, OPTION_XS_i, SAM_SPECIAL_BWA_XS, false, XS);
 
     else if (MP(HISAT2)) // ZS:i is like BWA's XS:i
-        seg_mux_init (VB, CTX(OPTION_ZS_i), 4, SAM_SPECIAL_BWA_XS, false, (MultiplexerP)&vb->mux_XS);
+        seg_mux_init (vb, OPTION_ZS_i, SAM_SPECIAL_BWA_XS, false, XS);
 
     if (segconf.sam_has_XM_i_is_mismatches)
         CTX(OPTION_XM_i)->flags.same_line = true;   // copy NM from same line
 
     if (segconf.sam_has_bowtie2_YS_i) {
         ctx_set_store_per_line (VB, OPTION_AS_i, OPTION_YS_i, DID_EOL);
-        seg_mux_init (VB, CTX(OPTION_YS_i), 2, SAM_SPECIAL_DEMUX_BY_MATE, false, (MultiplexerP)&vb->mux_YS);
+        seg_mux_init (vb, OPTION_YS_i, SAM_SPECIAL_DEMUX_BY_MATE, false, YS);
     }
 
     if (MP(STAR) && segconf.is_paired && !IS_DEPN(vb)) {
-        seg_mux_init (VB, CTX(OPTION_nM_i), 2, SAM_SPECIAL_DEMUX_BY_MATE, false, (MultiplexerP)&vb->mux_nM);
+        seg_mux_init (vb, OPTION_nM_i, SAM_SPECIAL_DEMUX_BY_MATE, false, nM);
         ctx_set_store_per_line (VB, OPTION_AS_i, OPTION_nM_i, DID_EOL);
     }
 
     if (segconf.sam_is_nanoseq) {
         ctx_set_store_per_line (VB, OPTION_rb_Z, OPTION_mb_Z, DID_EOL);
-        seg_mux_init (VB, CTX(OPTION_rb_Z), 2, SAM_SPECIAL_DEMUX_BY_MATE, false, (MultiplexerP)&vb->mux_rb);
-        seg_mux_init (VB, CTX(OPTION_mb_Z), 2, SAM_SPECIAL_DEMUX_BY_MATE, false, (MultiplexerP)&vb->mux_mb);
+        seg_mux_init (vb, OPTION_rb_Z, SAM_SPECIAL_DEMUX_BY_MATE, false, rb);
+        seg_mux_init (vb, OPTION_mb_Z, SAM_SPECIAL_DEMUX_BY_MATE, false, mb);
     }
 
     if (segconf.sam_ms_type == ms_BIOBAMBAM) {
-        seg_mux_init (VB, CTX(OPTION_ms_i), 2, SAM_SPECIAL_DEMUX_BY_MATE, false, (MultiplexerP)&vb->mux_ms);
+        seg_mux_init (vb, OPTION_ms_i, SAM_SPECIAL_DEMUX_BY_MATE, false, ms);
 
         CTX(OPTION_ms_i)->flags.spl_custom = true;  // custom store-per-line - SPECIAL will handle the storing
         CTX(OPTION_ms_i)->flags.store = STORE_INT;  // since v14 - store QUAL_score for mate ms:i (in v13 it was stored in QUAL)
 
     }
     if (segconf.sam_has_xcons) {
-        seg_mux_init (VB, CTX(OPTION_YY_i), 2, SAM_SPECIAL_DEMUX_BY_XX_0, false, (MultiplexerP)&vb->mux_YY);
-        seg_mux_init (VB, CTX(OPTION_XO_i), 2, SAM_SPECIAL_DEMUX_BY_AS,   false, (MultiplexerP)&vb->mux_XO);
+        seg_mux_init (vb, OPTION_YY_i, SAM_SPECIAL_DEMUX_BY_XX_0, false, YY);
+        seg_mux_init (vb, OPTION_XO_i, SAM_SPECIAL_DEMUX_BY_AS,   false, XO);
     }
 
-    seg_mux_init (VB, CTX(SAM_FLAG), 2, SAM_SPECIAL_DEMUX_BY_BUDDY, false, (MultiplexerP)&vb->mux_FLAG);
-    seg_mux_init (VB, CTX(SAM_POS), 3, SAM_SPECIAL_DEMUX_BY_MATE_PRIM, true, (MultiplexerP)&vb->mux_POS);
-    seg_mux_init (VB, CTX(SAM_PNEXT), 4, SAM_SPECIAL_PNEXT, true, (MultiplexerP)&vb->mux_PNEXT);
-    seg_mux_init (VB, CTX(SAM_MAPQ), 3, SAM_SPECIAL_DEMUX_BY_MATE_PRIM, false, (MultiplexerP)&vb->mux_MAPQ);
-    seg_mux_init (VB, CTX(OPTION_MQ_i), 2, SAM_SPECIAL_DEMUX_BY_MATE, false, (MultiplexerP)&vb->mux_MQ);
-    seg_mux_init (VB, CTX(OPTION_MC_Z), 2, SAM_SPECIAL_DEMUX_BY_MATE, false, (MultiplexerP)&vb->mux_MC);
-    seg_mux_init (VB, CTX(OPTION_AS_i), 2, SAM_SPECIAL_DEMUX_BY_MATE, false, (MultiplexerP)&vb->mux_AS);
-    seg_mux_init (VB, CTX(OPTION_NH_i), 3, SAM_SPECIAL_DEMUX_BY_BUDDY_MAP, false, (MultiplexerP)&vb->mux_NH);
+    seg_mux_init (vb, SAM_FLAG,    SAM_SPECIAL_DEMUX_BY_BUDDY,     false, FLAG);
+    seg_mux_init (vb, SAM_POS,     SAM_SPECIAL_DEMUX_BY_MATE_PRIM, true,  POS);
+    seg_mux_init (vb, SAM_PNEXT,   SAM_SPECIAL_PNEXT,              true,  PNEXT);
+    seg_mux_init (vb, SAM_MAPQ,    SAM_SPECIAL_DEMUX_BY_MATE_PRIM, false, MAPQ);
+    seg_mux_init (vb, OPTION_MQ_i, SAM_SPECIAL_DEMUX_BY_MATE,      false, MQ);
+    seg_mux_init (vb, OPTION_MC_Z, SAM_SPECIAL_DEMUX_BY_MATE,      false, MC);
+    seg_mux_init (vb, OPTION_AS_i, SAM_SPECIAL_DEMUX_BY_MATE,      false, AS);
+    seg_mux_init (vb, OPTION_PQ_i, SAM_SPECIAL_DEMUX_BY_MATE,      false, PQ);
+    seg_mux_init (vb, OPTION_NH_i, SAM_SPECIAL_DEMUX_BY_BUDDY_MAP, false, NH);
 
     for (MatedZFields f = 0; f < NUM_MATED_Z_TAGS; f++)
-        seg_mux_init (VB, CTX(buddied_Z_dids[f]), 2, SAM_SPECIAL_DEMUX_BY_BUDDY, false, (MultiplexerP)&vb->mux_mated_z_fields[f]);
+        seg_mux_init (vb, buddied_Z_dids[f], SAM_SPECIAL_DEMUX_BY_BUDDY, false, mated_z_fields[f]);
         
-    // get counts of qnames in the VB, that will allow us to leave lines in th  e VB for saggy instead of gencomp
+    // get counts of qnames in the VB, that will allow us to leave lines in the VB for saggy instead of gencomp
     // note: for SAG_BY_SA in --best, we send all prim/depn to gencomp (see bug 629)
     if (vb->check_for_gc && !flag.force_gencomp && (/*IS_SAG_SA ||*/ IS_SAG_NH || IS_SAG_SOLO)) // SA still doesn't work well with saggy - not even QUAL
         scan_index_qnames_seg (vb);
@@ -525,7 +526,6 @@ void sam_seg_initialize (VBlockP vb_)
                           !segconf.SA_CIGAR_can_have_H;    // set when segging PRIM component
 
     COPY_TIMER(seg_initialize);
-#undef T
 }
 
 static void sam_seg_toplevel (VBlockP vb)
@@ -900,9 +900,9 @@ void sam_seg_finalize (VBlockP vb_)
         if (vb->has_qual && CTX(SAM_CQUAL)->local.len32) 
             codec_assign_best_qual_codec (VB, SAM_CQUAL, sam_zip_cqual, false, true, &vb->codec_requires_seq);
 
-        if (CTX(OPTION_OQ_Z)->local.len32)
+        if (CTX(OPTION_OQ_Z)->local.len32 && !codec_oq_comp_init (VB)) 
             codec_assign_best_qual_codec (VB, OPTION_OQ_Z, sam_zip_OQ, false, true, &vb->codec_requires_seq);
-
+        
         if (CTX(OPTION_TQ_Z)->local.len32)
             codec_assign_best_qual_codec (VB, OPTION_TQ_Z, sam_zip_TQ, true, false, &vb->codec_requires_seq);
 
@@ -1128,6 +1128,7 @@ void sam_seg_idx_aux (VBlockSAMP vb)
             TEST_AUX(ZB_Z, 'Z', 'B', 'Z');
             TEST_AUX(pr_i, 'p', 'r', 'i');
             TEST_AUX(qs_i, 'q', 's', 'i');
+            TEST_AUX(ws_i, 'w', 's', 'i');
             TEST_AUX(ac_B, 'a', 'c', 'B');
 
             default: {}
@@ -1738,11 +1739,11 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
     if (has(NM_i))
         dl->NM_len = sam_seg_get_aux_int (vb, vb->idx_NM_i, &dl->NM, false, MIN_NM_i, MAX_NM_i, HARD_FAIL) + 1; // +1 for \t or \n
 
-    if (!IS_MAIN(vb)) {
-        // set dl->AS needed by sam_seg_prim_add_sag
-        if (IS_PRIM(vb) && has(AS_i))
-            sam_seg_get_aux_int (vb, vb->idx_AS_i, &dl->AS, false, MIN_AS_i, MAX_AS_i, HARD_FAIL);
+    // set dl->AS needed by sam_seg_prim_add_sag (in PRIM) and several fields that delta against it
+    if (has(AS_i))
+        sam_seg_get_aux_int (vb, vb->idx_AS_i, &dl->AS, false, MIN_AS_i, MAX_AS_i, HARD_FAIL);
 
+    if (!IS_MAIN(vb)) {
         sam_seg_sag_stuff (vb, dl, STRfld (CIGAR), flds[SEQ], false);
 
         // re-seg rname, against SA group

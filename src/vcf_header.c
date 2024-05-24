@@ -294,6 +294,9 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
     IF_IN_SOURCE ("svaba", vcf_is_svaba);
     IF_IN_SOURCE ("pbsv", vcf_is_pbsv);
     IF_IN_SOURCE ("callMom", vcf_is_callmom);
+    IF_IN_SOURCE ("MELT", vcf_is_melt);
+    IF_IN_SOURCE ("GLIMPSE_phase", vcf_is_GLIMPSE_phase);
+    IF_IN_SOURCE ("Gencove", vcf_is_gencove);
     IF_IN_HEADER ("GenotypeGVCFs", vcf_is_gatk_gvcf, "GenotypeGVCFs");
     IF_IN_HEADER ("CombineGVCFs", vcf_is_gatk_gvcf, "CombineGVCFs");
     if (segconf.vcf_is_gatk_gvcf) segconf.vcf_is_gvcf = true;
@@ -312,6 +315,8 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
     IF_IN_HEADER ("##trait", vcf_is_gwas, "GWAS_1.2"); /*v1.2*/
     IF_IN_HEADER ("DRAGEN", vcf_is_dragen, "DRAGEN");
     IF_IN_HEADER ("DeepVariant", vcf_is_deep_variant, "DeepVariant");
+    IF_IN_HEADER ("##hailversion", vcf_is_hail, "Hail");
+    IF_IN_HEADER ("Giggle", vcf_is_giggle, "Giggle"); // appears in description of fields such as GT and GQ
     
     if (segconf.vcf_is_svaba) 
         stats_remove_data_after_program_name ("svaba"); // remove the command line that appears after "svaba"

@@ -87,9 +87,20 @@ rom dt_name (DataType dt)
     return type_name (dt, &dt_props[dt].name, NUM_DATATYPES);
 }
 
+rom dt_name_faf (DataType dt) 
+{ 
+    return FAF ? "FASTA" : dt_name (dt); 
+}
+
 rom z_dt_name (void)
 {
     return IS_SRC_BAM_PIZ ? "BAM" 
          : z_file         ? dt_name (z_file->data_type)
          :                  "ERR_NULL_Z_FILE";
 }
+
+rom z_dt_name_faf (void) 
+{ 
+    return FAF ? "FASTA" : z_dt_name(); 
+}
+

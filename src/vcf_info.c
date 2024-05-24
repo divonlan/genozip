@@ -16,9 +16,11 @@
 #include "stats.h"
 #include "zip_dyn_int.h"
 
-#define info_items CTX(VCF_INFO)->info_items
+#define ii_buf (vb->contexts[VCF_INFO].info_items)
 
 STRl(copy_VCF_POS_snip, 16);
+STRl(copy_VCF_ID_snip, 16);
+STRl(copy_INFO_AF_snip, 16);
 sSTRl(copy_BaseCounts_sum, 32);
 
 // called after reading VCF header, before segconf
@@ -26,6 +28,8 @@ void vcf_info_zip_initialize (void)
 {
     DO_ONCE {
         seg_prepare_snip_other (SNIP_COPY, _VCF_POS, false, 0, copy_VCF_POS_snip);
+        seg_prepare_snip_other (SNIP_COPY, _VCF_ID, false, 0, copy_VCF_ID_snip);
+        seg_prepare_snip_other (SNIP_COPY, _INFO_AF, false, 0, copy_INFO_AF_snip);
         
         // copy_BaseCounts_sum is a DELTA-0 of BaseCounts (=copy) prefixes with SPECIAL
         copy_BaseCounts_sum[0] = SNIP_SPECIAL;
@@ -38,15 +42,12 @@ void vcf_info_zip_initialize (void)
 
 void vcf_info_seg_initialize (VBlockVCFP vb) 
 {
-    #define T(cond, did_i) ((cond) ? (did_i) : DID_NONE)
-
     ctx_set_store (VB, STORE_INT, INFO_AN, INFO_AC, INFO_ADP, INFO_DP, INFO_MLEAC, 
                    INFO_DP4_RF, INFO_DP4_RR, INFO_DP4_AF, INFO_DP4_AR, 
                    INFO_AC_Hom, INFO_AC_Het, INFO_AC_Hemi,
                    DID_EOL);
 
-    CTX(INFO_AF)->flags.store = STORE_FLOAT;
-    // xxx (is this really needed for --indels-only?) CTX(INFO_SVTYPE)-> flags.store = STORE_INDEX; // since v13 - consumed by vcf_refalt_piz_is_variant_indel
+    ctx_set_store (VB, STORE_FLOAT, INFO_AF, DID_EOL);
 
     CTX(INFO_SF)->sf.SF_by_GT = unknown;
     
@@ -62,8 +63,6 @@ void vcf_info_seg_initialize (VBlockVCFP vb)
     if (segconf.has[INFO_CLNHGVS]) vcf_seg_hgvs_consolidate_stats (vb, INFO_CLNHGVS);
     if (segconf.has[INFO_HGVSG])   vcf_seg_hgvs_consolidate_stats (vb, INFO_HGVSG);
     if (segconf.has[INFO_ANN])     vcf_seg_hgvs_consolidate_stats (vb, INFO_ANN); // subfield HGVS_c
-
-    #undef T
 }
 
 //--------
@@ -306,7 +305,7 @@ bool vcf_seg_INFO_allele (VBlockP vb_, ContextP ctx, STRp(value), uint32_t repea
         seg_by_ctx (VB, snip, 4 + lowercase, ctx, value_len);
     }
 
-    // case: a unique allele and no xstrand - we just leave it as-is
+    // case: an allele that is not one of REF or ALT - we just leave it as-is
     else
         seg_by_ctx (VB, STRa(value), ctx, value_len); 
 
@@ -364,7 +363,13 @@ void vcf_seg_INFO_VT (VBlockVCFP vb, ContextP ctx, STRp(vt_str))
         (segconf.INFO_VT_type == INFO_VT_1KG &&
           ((has(SVTYPE)  && V("SV", 2))  ||
            (vt == VT_SNP && V("SNP", 3)) || 
-           ((vt == VT_INS || vt == VT_DEL) && V("INDEL", 5)))))
+           ((vt == VT_INS || vt == VT_DEL) && V("INDEL", 5))))
+    ||
+        (segconf.INFO_VT_type == INFO_VT_CALLMOM &&
+           ((vt == VT_SNP && V("S", 1))  ||
+            ((vt == VT_INS || vt == VT_DEL) && V("I", 1)) ||
+            ((vt != VT_SNP && vt != VT_INS && vt != VT_DEL) && V("M", 1)))))
+
         seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_VT, '0' + segconf.INFO_VT_type }, 3, ctx, vt_str_len);
 
     else // fallback
@@ -398,6 +403,15 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_VT)
             };
             break;
 
+        case INFO_VT_CALLMOM:
+            switch (vb->var_types[0]) {
+                case VT_SNP: RECONSTRUCT1 ('S'); break;
+                case VT_DEL:
+                case VT_INS: RECONSTRUCT1 ('I'); break;
+                default:     RECONSTRUCT1 ('M'); break;
+            }
+            break;
+
         default: 
             ABORT ("Invalid INFO_VT_type=%d", snip[0] - '0');
     }
@@ -422,21 +436,21 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         STRset (value, modified); })                                       
 
     // many fields, for example: ##INFO=<ID=AN_amr_male,Number=1,Type=Integer,Description="Total number of alleles in male samples of Latino ancestry">
-    #define T(i,c) (ctx->tag_name[i] == (c))
-    if ((T(0,'A') && T(1,'N') && (T(2,'_') || T(2,'-'))) ||
+    #define N(i,c) (ctx->tag_name[i] == (c))
+    if ((N(0,'A') && N(1,'N') && (N(2,'_') || N(2,'-'))) ||
         ctx->dict_id.num == _INFO_AC_Hom || ctx->dict_id.num == _INFO_AC_Het || ctx->dict_id.num == _INFO_AC_Hemi || // single integer, even if n_alt > 1
         !memcmp (ctx->tag_name, "nhomalt", 7)) 
         seg_integer_or_not (VB, ctx, STRa(value), value_len);
 
-    else if ((T(0,'A') && T(1,'C') && (T(2,'_') || T(2,'-'))) ||
-             (T(0,'H') && T(1,'o') && T(2,'m') && T(3,'_')))
+    else if ((N(0,'A') && N(1,'C') && (N(2,'_') || N(2,'-'))) ||
+             (N(0,'H') && N(1,'o') && N(2,'m') && N(3,'_')))
 
         vcf_seg_array_of_N_ALTS_numbers (vb, ctx, STRa(value), STORE_INT);
 
-    else if ((T(0,'A') && T(1,'F') && (T(2,'_') || T(2,'-'))))
+    else if ((N(0,'A') && N(1,'F') && (N(2,'_') || N(2,'-'))))
         vcf_seg_array_of_N_ALTS_numbers (vb, ctx, STRa(value), STORE_FLOAT);
 
-    #undef T
+    #undef N
 
     else switch (ctx->dict_id.num) {
         #define CALL(f) ({ (f); break; })
@@ -481,6 +495,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_MFRL:            
         case _INFO_MBQ:
         case _INFO_MMQ:             CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, STORE_INT, DICT_ID_NONE, value_len));
+        case _INFO_VDB:
         case _INFO_HaplotypeScore:
         case _INFO_R2_5P_bias:
         case _INFO_BaseQRankSum:
@@ -639,7 +654,8 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_cosmic:          CALL_IF (segconf.vcf_is_isaac, seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
         case _INFO_phyloP:          CALL_IF (segconf.vcf_is_isaac, seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, value_len));
         case _INFO_SNVHPOL:         CALL_IF (segconf.vcf_is_isaac, seg_integer_or_not (VB, ctx, STRa(value), value_len));
-        case _INFO_GMAF:            CALL_IF (segconf.vcf_is_isaac, vcf_seg_FORMAT_GMAF (vb, ctx, STRa(value)));
+        case _INFO_GMAF:            CALL_IF (segconf.vcf_is_isaac, vcf_seg_INFO_GMAF (vb, ctx, STRa(value)));
+        case _INFO_EVS:             CALL_IF (segconf.vcf_is_isaac, vcf_seg_INFO_EVS (vb, ctx, STRa(value)));
 
         // ---------------------------------------
         // Illumina DRAGEN fields
@@ -678,6 +694,21 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_TCR:             CALL_IF (segconf.vcf_is_platypus, vcf_seg_playpus_INFO_TCR (vb, ctx, STRa(value)));
 
         // ---------------------------------------
+        // GIAB
+        // ---------------------------------------
+        case _INFO_callsetnames:    goto standard_seg; // better than seg_array
+        case _INFO_callsets:        CALL_IF (has(callsetnames),  seg_by_ARRAY_LEN_OF (VB, ctx, STRa(value), STRa(BII(callsetnames)->value),  STRa(callsets_snip)));
+        case _INFO_datasets:        CALL_IF (has(datasetnames),  seg_by_ARRAY_LEN_OF (VB, ctx, STRa(value), STRa(BII(datasetnames)->value),  STRa(datasets_snip)));
+        case _INFO_platforms:       CALL_IF (has(platformnames), seg_by_ARRAY_LEN_OF (VB, ctx, STRa(value), STRa(BII(platformnames)->value), STRa(platforms_snip)));
+
+        // ---------------------------------------
+        // 1000 Genomes
+        // ---------------------------------------
+        case _INFO_ID:              CALL_IF (str_issame_(STRa(value), STRlst(VCF_ID)), seg_by_ctx (VB, STRa(copy_VCF_ID_snip), ctx, value_len));
+        case _INFO_MAF:             CALL (vcf_seg_INFO_MAF (vb, ctx, STRa(value)));
+        case _INFO_NS:              CALL (vcf_seg_INFO_NS (vb, ctx, STRa(value)));
+
+        // ---------------------------------------
         // Structural variants
         // ---------------------------------------
         case _INFO_CIPOS:           CALL (vcf_seg_INFO_CIPOS (vb, ctx, STRa(value)));
@@ -685,7 +716,6 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_SVLEN:           CALL (vcf_seg_INFO_SVLEN (vb, ctx, STRa(value)));
         case _INFO_SVTYPE:          CALL (vcf_seg_SVTYPE (vb, ctx, STRa(value)));
         case _INFO_HOMSEQ:          CALL (vcf_seg_HOMSEQ (vb, ctx, STRa(value)));
-        case _INFO_MEINFO:          CALL (seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, value_len));
         case _INFO_MATEID:          CALL_IF0(segconf.vcf_is_svaba, vcf_seg_svaba_MATEID (vb, ctx, STRa(value)))
                                     CALL_IF (segconf.vcf_is_pbsv,  vcf_seg_pbsv_MATEID (vb, ctx, STRa(value)));
         case _INFO_MAPQ:            CALL_IF (segconf.vcf_is_svaba, vcf_seg_svaba_MAPQ (vb, ctx, STRa(value)));
@@ -698,13 +728,26 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_MATENM:          CALL_IF (segconf.vcf_is_svaba, vcf_seg_sv_copy_mate (vb, ctx, STRa(value), TW_MATENM,         TW_NM,        false, value_len));
         case _INFO_MATEMAPQ:        CALL_IF (segconf.vcf_is_svaba, vcf_seg_sv_copy_mate (vb, ctx, STRa(value), TW_HOMSEQ,         TW_HOMSEQ,    false, value_len));
 
-        case _INFO_HOMLEN:          CALL_IF (segconf.vcf_is_sv    && has(HOMSEQ),      vcf_seg_LEN_OF (vb, ctx, STRa(value), vb->idx_HOMSEQ,      STRa(homlen_snip)));
-        case _INFO_DUPHOMLEN:       CALL_IF (segconf.vcf_is_manta && has(DUPHOMSEQ),   vcf_seg_LEN_OF (vb, ctx, STRa(value), vb->idx_DUPHOMSEQ,   STRa(duphomlen_snip)));
-        case _INFO_SVINSLEN:        CALL_IF (segconf.vcf_is_manta && has(SVINSSEQ),    vcf_seg_LEN_OF (vb, ctx, STRa(value), vb->idx_SVINSSEQ,    STRa(svinslen_snip)));
-        case _INFO_DUPSVINSLEN:     CALL_IF (segconf.vcf_is_manta && has(DUPSVINSSEQ), vcf_seg_LEN_OF (vb, ctx, STRa(value), vb->idx_DUPSVINSSEQ, STRa(dupsvinslen_snip)));
+        case _INFO_HOMLEN:          CALL_IF (segconf.vcf_is_sv    && has(HOMSEQ),      seg_LEN_OF (VB, ctx, STRa(value), BII(HOMSEQ)->value_len,      STRa(homlen_snip)));
+        case _INFO_DUPHOMLEN:       CALL_IF (segconf.vcf_is_manta && has(DUPHOMSEQ),   seg_LEN_OF (VB, ctx, STRa(value), BII(DUPHOMSEQ)->value_len,   STRa(duphomlen_snip)));
+        case _INFO_SVINSLEN:        CALL_IF (segconf.vcf_is_manta && has(SVINSSEQ),    seg_LEN_OF (VB, ctx, STRa(value), BII(SVINSSEQ)->value_len,    STRa(svinslen_snip)));
+        case _INFO_DUPSVINSLEN:     CALL_IF (segconf.vcf_is_manta && has(DUPSVINSSEQ), seg_LEN_OF (VB, ctx, STRa(value), BII(DUPSVINSSEQ)->value_len, STRa(dupsvinslen_snip)));
         case _INFO_CIGAR:           CALL_IF (segconf.vcf_is_manta, vcf_seg_manta_CIGAR (vb, ctx, STRa(value)));
         case _INFO_BND_DEPTH:       CALL_IF (segconf.vcf_is_manta, vcf_seg_sv_copy_mate (vb, ctx, STRa(value), TW_BND_DEPTH, TW_MATE_BND_DEPTH, false, value_len));
         case _INFO_MATE_BND_DEPTH:  CALL_IF (segconf.vcf_is_manta, vcf_seg_sv_copy_mate (vb, ctx, STRa(value), TW_MATE_BND_DEPTH, TW_BND_DEPTH, false, value_len));
+
+        // ---------------------------------------
+        // Mobile elements
+        // ---------------------------------------
+        case _INFO_MEINFO:          CALL (vcf_seg_MEINFO (vb, ctx, STRa(value)));
+        case _INFO_ADJLEFT:         CALL_IF (segconf.vcf_is_melt, vcf_seg_melt_ADJLEFT (vb, ctx, STRa(value)));
+        case _INFO_ADJRIGHT:        CALL_IF (segconf.vcf_is_melt, vcf_seg_melt_ADJRIGHT (vb, ctx, STRa(value)));
+        case _INFO_INTERNAL:        CALL_IF (segconf.vcf_is_melt, vcf_seg_melt_INTERNAL (vb, ctx, STRa(value)));
+        case _INFO_DIFF:            CALL_IF (segconf.vcf_is_melt, vcf_seg_melt_DIFF (vb, ctx, STRa(value)));
+        case _INFO_LP:
+        case _INFO_RP:
+        case _INFO_SR:
+        case _INFO_ASSESS:          CALL_IF (segconf.vcf_is_melt, seg_integer_or_not (VB, ctx, STRa(value), value_len));
 
         case _INFO_VT:              CALL (vcf_seg_INFO_VT (vb, ctx, STRa(value)));
 
@@ -723,10 +766,10 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
 
 static SORTER (sort_by_subfield_name)
 { 
-    InfoItem *ina = (InfoItem *)a;
-    InfoItem *inb = (InfoItem *)b;
+    InfoItemP ina = (InfoItemP)a;
+    InfoItemP inb = (InfoItemP)b;
     
-    // END comes first (as eg vcf_INFO_SVLEN_prediction depends on POS.last_delta)
+    // END comes first (as eg vcf_INFO_SVLEN_prediction depends on POS.last_delta and vcf_seg_melt_ADJLEFT relies on it too)
     if (str_issame_(STRa(ina->name), "END=", 4)) return -1;
     if (str_issame_(STRa(inb->name), "END=", 4)) return 1;
     
@@ -735,7 +778,7 @@ static SORTER (sort_by_subfield_name)
 
 void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
 {
-    info_items.len = 0; // reset from previous line
+    ii_buf.len = 0; // reset from previous line
 
     // case: INFO field is '.' (empty) 
     if (IS_PERIOD (info) && !segconf.vcf_is_isaac) { // note: in Isaac, it slightly better to mux the "."
@@ -744,10 +787,10 @@ void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
     }
 
     // parse the info string
-    str_split (info, info_len, MAX_FIELDS-2, ';', pair, false); // -2 - leave room for LUFT + PRIM
-    ASSVCF (n_pairs, "Too many INFO subfields, Genozip supports up to %u", MAX_FIELDS-2);
+    str_split (info, info_len, MAX_FIELDS, ';', pair, false); 
+    ASSVCF (n_pairs, "Too many INFO subfields, Genozip supports up to %u", MAX_FIELDS);
 
-    buf_alloc (vb, &info_items, 0, n_pairs + 2, InfoItem, CTX_GROWTH, "info_items");
+    buf_alloc (vb, &ii_buf, 0, n_pairs + 2, InfoItem, CTX_GROWTH, "info_items");
 
     // pass 1: initialize info items + get indices of AC
     for (unsigned i=0; i < n_pairs; i++) {
@@ -766,44 +809,40 @@ void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
         
         if (segconf.running) segconf.has[ii.ctx->did_i]++;
 
-        #define X(x) case INFO_##x : vb->idx_##x = info_items.len32; break
+        #define X(x) case INFO_##x : vb->idx_##x = ii_buf.len32; break
         switch (ii.ctx->did_i) {
             X(AN); X(AF); X(AC); X(MLEAC); X(MLEAF); X(AC_Hom); X(AC_Het); X(AC_Hemi); X(DP); X(QD); X(SF);
-            X(AS_SB_TABLE); X(SVINSSEQ) ; X(SVTYPE); X(HOMSEQ); X(END) ; X(SVLEN); X(CIPOS); X(LEFT_SVINSSEQ);
-            X(BaseCounts);
+            X(AS_SB_TABLE); X(SVINSSEQ) ; X(SVTYPE); X(SVLEN); X(HOMSEQ); X(END) ; X(CIPOS); X(LEFT_SVINSSEQ);
+            X(BaseCounts); X(platformnames); X(datasetnames); X(callsetnames); X(AF1000G);
             default: {}
         }
         #undef X
 
-        BNXT (InfoItem, info_items) = ii;
+        BNXT (InfoItem, ii_buf) = ii;
     }
 
-    ARRAY (InfoItem, ii, info_items);
-
     // pass 2: seg all subfields except AC
-    for (unsigned i=0; i < ii_len; i++)
-        if (ii[i].value) 
-            vcf_seg_info_one_subfield (vb, ii[i].ctx, STRa(ii[i].value));
+    for_buf (InfoItem, ii, ii_buf)
+        if (ii->value) 
+            vcf_seg_info_one_subfield (vb, ii->ctx, STRa(ii->value));
         else
-            ctx_set_encountered (VB, ii[i].ctx);
+            ctx_set_encountered (VB, ii->ctx);
 }
 
 // Seg INFO fields that were deferred to after all samples are segged
 void vcf_seg_finalize_INFO_fields (VBlockVCFP vb)
 {
-    if (!info_items.len) return; // no INFO items on this line (except if dual-coords - we will add them in a sec)
+    if (!ii_buf.len) return; // no INFO items on this line (except if dual-coords - we will add them in a sec)
 
     Container con = { .repeats             = 1, 
                       .drop_final_item_sep = true }; 
  
-    ARRAY (InfoItem, ii, info_items);
-
-    con_set_nitems (con, ii_len);
+    con_set_nitems (con, ii_buf.len32);
 
     // if requested, we will re-sort the info fields in alphabetical order. This will result less words in the dictionary
     // thereby both improving compression and improving --regions speed. 
-    if (flag.optimize_sort && ii_len > 1) 
-        qsort (ii, ii_len, sizeof(InfoItem), sort_by_subfield_name);
+    if (flag.optimize_sort && ii_buf.len32 > 1) 
+        qsort (B1ST(InfoItem, ii_buf), ii_buf.len32, sizeof(InfoItem), sort_by_subfield_name);
 
     char prefixes[CONTAINER_MAX_PREFIXES_LEN];  // these are the Container prefixes
     prefixes[0] = prefixes[1] = CON_PX_SEP; // initial CON_PX_SEP follow by separator of empty Container-wide prefix
@@ -811,22 +850,22 @@ void vcf_seg_finalize_INFO_fields (VBlockVCFP vb)
 
     // Populate the Container 
     uint32_t total_names_len=0;
-    for (unsigned i=0; i < ii_len; i++) {
+    for_buf2 (InfoItem, ii, i, ii_buf) {
         // Set the Container item and find (or create) a context for this name
-        con.items[i] = (ContainerItem){ .dict_id   = !ii[i].value                        ? DICT_ID_NONE 
-                                                   : ii[i].ctx->dict_id.num == _INFO_END ? (DictId)_VCF_POS
-                                                   :                                       ii[i].ctx->dict_id,
+        con.items[i] = (ContainerItem){ .dict_id   = !ii->value                        ? DICT_ID_NONE 
+                                                   : ii->ctx->dict_id.num == _INFO_END ? (DictId)_VCF_POS
+                                                   :                                     ii->ctx->dict_id,
                                         .separator = { ';' } }; 
             
         // add to the prefixes
-        ASSVCF (prefixes_len + ii[i].name_len + 1 <= CONTAINER_MAX_PREFIXES_LEN, 
+        ASSVCF (prefixes_len + ii->name_len + 1 <= CONTAINER_MAX_PREFIXES_LEN, 
                 "INFO contains tag names that, combined (including the '='), exceed the maximum of %u characters", CONTAINER_MAX_PREFIXES_LEN);
 
-        memcpy (&prefixes[prefixes_len], ii[i].name, ii[i].name_len);
-        prefixes_len += ii[i].name_len;
+        memcpy (&prefixes[prefixes_len], ii->name, ii->name_len);
+        prefixes_len += ii->name_len;
         prefixes[prefixes_len++] = CON_PX_SEP;
 
-        total_names_len += ii[i].name_len + 1; // +1 for ; \t or \n separator
+        total_names_len += ii->name_len + 1; // +1 for ; \t or \n separator
     }
 
     // seg deferred fields 

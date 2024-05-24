@@ -34,8 +34,8 @@ LocalType dyn_int_get_ltype (ContextP ctx)
         default           : actual_ltype = ctx->ltype;
     }
 
-    ASSERT (actual_ltype != (LocalType)-1, "Invalid actual_ltype for %s.ltype=%s and dyn_lt_order=%u", 
-            ctx->tag_name, lt_name(ctx->ltype), ctx->dyn_lt_order);
+    ASSERT (actual_ltype != (LocalType)-1, "Invalid actual_ltype for %.*s.ltype=%s and dyn_lt_order=%u", 
+            MAX_TAG_LEN-1, ctx->tag_name, lt_name(ctx->ltype), ctx->dyn_lt_order);
 
     return actual_ltype;
 }

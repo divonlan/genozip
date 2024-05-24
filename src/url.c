@@ -25,6 +25,9 @@
 #include "stream.h"
 #include "file.h"
 #include "strings.h"
+#include "arch.h"
+
+#define CURL_RESPONSE_LEN 4096
 
 static StreamP remote_file_stream = NULL;
 
@@ -38,22 +41,45 @@ bool url_is_url (rom filename)
     return false; // all letters, no ://
 }
 
-#define CURL_RESPONSE_LEN 4096
+static inline bool is_wget (StreamP stream) { return stream_exec_is (stream, "wget"); }
 
-// returns error string if curl itself (not server) failed, or NULL if successful
-static void url_do_curl (rom url, char *stdout_data, unsigned *stdout_len/*in/out*/,
-                         char *error, unsigned *error_len,
-                         bool blocking, bool follow_redirects) 
+static StreamP url_open (StreamP parent_stream, rom url, bool head_only)
 {
-    StreamP curl = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
-                                  "To read from a URL", // reason in case of failure to execute curl
-                                  "curl", 
-                                  flag.is_windows  ? "--ssl-no-revoke" : SKIP_ARG, 
-                                  follow_redirects ? "--location"      : SKIP_ARG,
-                                  url, NULL); 
+    char str5[6] = "";
+    strncpy (str5, url, 5);
+    bool is_file = str_case_compare (str5, "file:", NULL); 
 
-    FILE *data_stream  = stream_from_stream_stdout (curl);
-    FILE *error_stream = stream_from_stream_stdout (curl);
+    // wget is better than curl in flakey connections
+    if (!is_file && wget_available())  // note: wget doesn't support file://
+        return stream_create (parent_stream, 
+                              head_only ? 0 : DEFAULT_PIPE_SIZE, // in wget, header arrives in error channel and data channel is empty
+                              DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
+                              "To compress files from a URL", "wget", "--tries=16", 
+                              "--quiet", 
+                              "--waitretry=3", 
+                              head_only ? "--server-response"           : SKIP_ARG,                         
+                              head_only ? "--spider"                    : SKIP_ARG,                         
+                              head_only ? "--output-document=/dev/null" : "--output-document=/dev/stdout", 
+                              url, NULL);
+    
+    else if (curl_available()) 
+        return stream_create (parent_stream, DEFAULT_PIPE_SIZE, 0, 0, 0, 0, 0,
+                              "To compress files from a URL", "curl", "--silent", 
+                              flag.is_windows ? "--ssl-no-revoke" : SKIP_ARG,
+                              head_only       ? "--head"          : SKIP_ARG,                         
+                              url, NULL);
+
+    else 
+        ABORT ("Failed to open URL %s because %s not found in the execution path", 
+                url, (flag.is_windows || is_file) ? "curl was" : "wget or curl were");
+}
+
+// returns error string if curl/wget itself (not server) failed, or NULL if successful
+static void url_do_curl (rom url, qSTRp(data), qSTRp(error), bool blocking, bool follow_redirects) 
+{
+    StreamP url_stream = url_open (NULL, url, false);
+    FILE *data_stream  = stream_from_stream_stdout (url_stream);
+    FILE *error_stream = stream_from_stream_stdout (url_stream);
 
 #ifndef _WIN32
     // set non-blocking (unfortunately _pipes in Windows are always blocking)
@@ -63,7 +89,7 @@ static void url_do_curl (rom url, char *stdout_data, unsigned *stdout_len/*in/ou
 
     #define RETRIES 70
     for (int i=0; i < RETRIES; i++) {
-        int ret = fread (stdout_data, 1, *stdout_len - 1, data_stream); // -1 to leave room for \0
+        int ret = fread (data, 1, *data_len - 1, data_stream); // -1 to leave room for \0
         if (ret == 0) {
             if (errno == EAGAIN && i < RETRIES-1) { // doesn't happen on Windows
                 usleep (100000); // 100ms
@@ -72,27 +98,27 @@ static void url_do_curl (rom url, char *stdout_data, unsigned *stdout_len/*in/ou
 
             strcpy (error, "Failed to read (possibly no connection)");
             *error_len = strlen (error);
-            *stdout_len = 0;
+            *data_len = 0;
 
-            stream_close (&curl, STREAM_DONT_WAIT_FOR_PROCESS);
+            stream_close (&url_stream, STREAM_DONT_WAIT_FOR_PROCESS);
             return;
         }
     
-        *stdout_len = (unsigned)ret;
+        *data_len = (unsigned)ret;
         break;
     }
 
-    stdout_data[*stdout_len] = '\0'; // terminate string
+    data[*data_len] = '\0'; // terminate string
 
     *error_len = fread (error, 1, CURL_RESPONSE_LEN-1, error_stream); 
     error[*error_len] = '\0'; // terminate string
 
-    int curl_exit_code = stream_close (&curl, STREAM_DONT_WAIT_FOR_PROCESS); // Don't wait for process - Google Forms call hangs if waiting
-    if (!curl_exit_code) 
-        return; // curl itself is good - we may have or not an error in "error" from the server or in case of no connection
+    int exit_code = stream_close (&url_stream, STREAM_DONT_WAIT_FOR_PROCESS); // Don't wait for process - Google Forms call hangs if waiting
+    if (!exit_code) 
+        return; // curl/wget itself is good - we may have or not an error in "error" from the server or in case of no connection
 
 #ifdef _WIN32
-    if (curl_exit_code == ENFILE) return; // we didn't read all the data on the pipe - that's ok
+    if (exit_code == ENFILE) return; // we didn't read all the data on the pipe - that's ok
 #endif
 
     // case: for non-HTTP urls (eg ftp:// file://) or for HTTP urls where the error occurred before connecting
@@ -114,33 +140,85 @@ static void url_do_curl (rom url, char *stdout_data, unsigned *stdout_len/*in/ou
         }
     }
     else 
-        strcpy (error, strerror (curl_exit_code));
+        strcpy (error, strerror (exit_code));
 
     *error_len = strlen (error);
 }
 
-static int url_do_curl_head (rom url,
-                             char *stdout_data, unsigned *stdout_len,
-                             char *stderr_data, unsigned *stderr_len)
+static bool url_get_head (rom url, qSTRp(data), qSTRp(error),
+                          StreamP *url_stream) // set while stream is open, so other threads can kill it if needed
 {
-    ASSERT (stream_is_exec_in_path ("curl"),
-            "Failed to open URL %s because curl was not found in the execution path: %s", url, getenv ("PATH"));
+    __atomic_store_n (url_stream, (StreamP)NULL, __ATOMIC_RELEASE);
 
-    StreamP curl = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
-                                  "To compress files from a URL",
-                                  "curl", 
-                                  flag.is_windows ? "--ssl-no-revoke" : SKIP_ARG,                          
-                                  "--head", url, NULL); // not silent - we want to collect errors
+    __atomic_store_n (url_stream, url_open (NULL, url, true), __ATOMIC_RELEASE);
+    
+    bool wget = is_wget (*url_stream);
 
-    *stdout_len = fread (stdout_data, 1, CURL_RESPONSE_LEN-1, stream_from_stream_stdout (curl));
-    stdout_data[*stdout_len] = '\0'; // terminate string
+    FILE *f;
+    if (wget) 
+        *error_len = (f=stream_from_stream_stderr (*url_stream)) ? fread (error, 1, *error_len - 1, f)   : 0;
 
-    *stderr_len = fread (stderr_data, 1, CURL_RESPONSE_LEN-1, stream_from_stream_stderr (curl));
-    stderr_data[*stderr_len] = '\0'; // terminate string
+    else {
+        *data_len  = (f=stream_from_stream_stdout (*url_stream)) ? fread (data,  1, *data_len  - 1, f) : 0;
+        *error_len = (f=stream_from_stream_stderr (*url_stream)) ? fread (error, 1, *error_len - 1, f) : 0;
+    }
 
-    int curl_exit_code = stream_close (&curl, STREAM_WAIT_FOR_PROCESS);
+    int exit_code = stream_close (url_stream, STREAM_WAIT_FOR_PROCESS);
 
-    return curl_exit_code;
+    if ((flag.is_windows && exit_code == ENFILE) || // we didn't read all the data on the pipe - that's ok
+        (wget && exit_code == 1)) // not really an error
+        exit_code = 0; 
+
+    if (wget && exit_code && ! *error_len) {
+        // see: https://www.gnu.org/software/wget/manual/html_node/Exit-Status.html
+        static rom wget_exit_errors[] = { 
+            [1]="Generic error code",
+            [2]="Parse error",
+            [3]="File I/O error",
+            [4]="Network failure",
+            [5]="SSL verification failure",
+            [6]="Authentication failure",
+            [7]="Protocol error",
+            [8]="Server error" 
+        };
+
+        // mimic curls' format: "curl: (3) URL using bad/illegal format or missing URL\n"
+        if (exit_code < ARRAY_LEN(wget_exit_errors))
+            *error_len = snprintf (error, CURL_RESPONSE_LEN, "wget: (%u) %s\n", exit_code, wget_exit_errors[exit_code]);
+        else
+            *error_len = snprintf (error, CURL_RESPONSE_LEN, "wget: (%u) Unknown error\n", exit_code);
+    }
+
+    if (!wget && exit_code && ! *error_len) { 
+        // see: https://curl.se/libcurl/c/libcurl-errors.html
+        static rom some_curl_exit_errors[] = { // curl has 101 error codes... we display common ones, and refer to the manual for the rest
+            [1]="Unsupported protocol",
+            [3]="URL malformat",
+            [5]="Couldn't resolve proxy",
+            [6]="Couldn't resolve host",
+            [7]="Couldn't connect",
+            [9]="Remote access denied",
+            [10]="FTP access denied",
+            [12]="FTP ACCEPT timeout", 
+            [22]="HTTP error",
+        };
+
+        if (exit_code < ARRAY_LEN(some_curl_exit_errors) && some_curl_exit_errors[exit_code])
+            *error_len = snprintf (error, CURL_RESPONSE_LEN, "curl: (%u) %s\n", exit_code, some_curl_exit_errors[exit_code]);
+        else
+            *error_len = snprintf (error, CURL_RESPONSE_LEN, "curl: (%u) see: https://curl.se/libcurl/c/libcurl-errors.html\n", exit_code);
+    }
+
+    // in wget, header arrives in the error channel - move it to data if successful
+    if (wget && !exit_code) {        
+        memcpy (data, error, *error_len); 
+        *data_len = *error_len;
+        *error_len = 0;
+    }
+
+    data[*data_len] = error[*error_len] = '\0'; // terminate strings
+
+    return !exit_code; // true if successful 
 }
 
 // for a url, returns whether that URL exists, and if possible, its file_size, or -1 if its not available
@@ -150,38 +228,40 @@ rom url_get_status (rom url, thool *is_file_exists, int64_t *file_size)
 {
     *is_file_exists = unknown;
     *file_size = 0;
-    char response[CURL_RESPONSE_LEN];
+    STRlic (response, CURL_RESPONSE_LEN);
     char *error = MALLOC (CURL_RESPONSE_LEN);
-    unsigned response_len, error_len;
-
-    // run 'curl --head url'
-    int curl_exit_code = url_do_curl_head (url, response, &response_len, error, &error_len);
+    uint32_t error_len = CURL_RESPONSE_LEN;
     
     // case: for non-HTTP urls (eg ftp:// file://) or for HTTP urls where the error occurred before connecting
     // to the webserver (eg bad url) the error comes in stderr, and curl exit code is non-0.
     // curl message format looks like this: "curl: (3) URL using bad/illegal format or missing URL"
-    if (curl_exit_code) {
+    StreamP url_stream = 0;
+    if (!url_get_head (url, qSTRa(response), qSTRa(error), &url_stream)) {
         // get message itself
-        char *msg_start = strstr (error, ") ");
-        if (msg_start) msg_start += 2;
-
-        char *msg_after = strchr (msg_start, '\r'); // in case of Windows-style end-of-line
-        if (!msg_after) msg_after = strchr (msg_start, '\n'); // try again, with \n
-
-        if (msg_start && msg_after) {
-            memcpy (error, msg_start, msg_after - msg_start);
-            error[msg_after - msg_start] = '\0';
+        char *msg_after=0, *msg_start = strstr (error, ") ");
+        if (msg_start) {
+            msg_start += 2;
+            
+            msg_after = strchr (msg_start, '\r'); // in case of Windows-style end-of-line
+            if (!msg_after) msg_after = strchr (msg_start, '\n'); // try again, with \n
+        
+            if (msg_after) {
+                memcpy (error, msg_start, msg_after - msg_start);
+                error[msg_after - msg_start] = '\0';
+            }
         }
+        
+        *is_file_exists = false;
         return error;
     }
 
-    // Get the first line of text - since curl completed successfully, we expect this to always exist
+    // Get the first line of text - since curl/wget completed successfully, we expect this to always exist
     char *first_eol = strchr (response, '\r'); // in case of Windows-style end-of-line
     if (!first_eol) first_eol = strchr (response, '\n'); // try again, with \n
 
     // case: we got exit_code=0 (OK) but no response. this happens, for example, in some FTP servers when the URL is a directory
     if (!first_eol) {
-        strcpy (error, "Server did not respond to curl -I. Please check the URL");
+        strcpy (error, "Server did not respond to request for the URL head. Please check the URL");
         return error;
     }
 
@@ -215,8 +295,17 @@ rom url_get_status (rom url, thool *is_file_exists, int64_t *file_size)
 }
 
 // reads a string response from a URL, returns a nul-terminated string and the number of characters (excluding \0), or -1 if failed
-int32_t url_read_string (rom url, STRc(data), bool blocking, bool follow_redirects)
+int32_t url_read_string (rom url, STRc(data), bool blocking, bool follow_redirects, rom show_errors)
 {
+    rom action = show_errors ? show_errors : "url_read_string";
+
+    if (!wget_available() && !curl_available()) {
+        if (flag.debug_submit || flag.debug || show_errors) 
+            fprintf (stderr, "\nError in %s: neither curl nor wget are available\n", action);
+        
+        return -3; // failure
+    }
+
     char *response, local_response[CURL_RESPONSE_LEN], error[CURL_RESPONSE_LEN];
     unsigned response_len=0, error_len=0;
 
@@ -229,18 +318,18 @@ int32_t url_read_string (rom url, STRc(data), bool blocking, bool follow_redirec
 
     response     = data ? data     : local_response;
     response_len = data ? data_len : CURL_RESPONSE_LEN;
-    url_do_curl (url, response, &response_len, error, &error_len, blocking, follow_redirects);
+    url_do_curl (url, qSTRa(response), qSTRa(error), blocking, follow_redirects);
 
     if (error_len && !response_len) {
-        if (flag.debug_submit) 
-            fprintf (stderr, "Error in url_read_string: %.*s\n", STRf(error));
+        if (flag.debug_submit || flag.debug || show_errors) 
+            fprintf (stderr, "\nError in %s: %.*s\n", action, STRf(error));
 
         return -1; // failure
     }
 
     if (response_len && strstr (response, "Bad Request")) {
-        if (flag.debug_submit) 
-            fprintf (stderr, "Error in url_read_string: Bad Request\n");
+        if (flag.debug_submit || flag.debug || show_errors) 
+            fprintf (stderr, "\nError in %s: Bad Request\n", action);
 
         return -2;
     }
@@ -249,65 +338,40 @@ int32_t url_read_string (rom url, STRc(data), bool blocking, bool follow_redirec
 }
 
 bool url_get_redirect (rom url, STRc(redirect_url),
-                       StreamP *redirect_stream) // optional: used to free the stream if the running thread is canceled. 
+                       StreamP *redirect_stream) // optional out: used to free the stream if the running thread is canceled. 
 {
-    if (!stream_is_exec_in_path ("curl")) return false;
+    if (!curl_available() && !wget_available()) return false;
 
-    StreamP no_stream = NULL;
-    if (redirect_stream) __atomic_store_n (redirect_stream, no_stream, __ATOMIC_RELEASE);                      \
+    STRlic (response, CURL_RESPONSE_LEN);
+    STRlic (error, CURL_RESPONSE_LEN);
 
-    StreamP curl = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
-                                  "To get a URL's redirect", // reason in case of failure to execute curl
-                                  "curl", url, "--location", "--silent", "--output", "/dev/null",
-                                  flag.is_windows ? "--ssl-no-revoke" : SKIP_ARG,                          
-                                  "--write-out", "%{url_effective}", NULL); 
+    url_get_head (url, qSTRa(response), qSTRa(error), redirect_stream);
 
-    if (redirect_stream) __atomic_store_n (redirect_stream, curl, __ATOMIC_RELEASE);                      \
+    // we're looking for a line that looks like this (URL is terminated by some white space)
+    // Location: https://github.com/divonlan/genozip/releases/tag/genozip-15.0.57
+    #define LOCATION "Location: "
+    char *location = strstr (response, LOCATION);
+    if (!location) return false;
+    location += STRLEN (LOCATION);
 
-    redirect_url_len = fread (redirect_url, 1, redirect_url_len - 1, stream_from_stream_stdout (curl));
-    redirect_url[redirect_url_len] = '\0'; // terminate string
+    uint32_t location_len = strcspn (location, " \n\r\t");
+    if (location_len >= redirect_url_len) return false;
 
-    // resetting redirect_stream before stream_close risks leaking the Stream object in case
-    // of a race condition, which is better than resetting after, which would risk the caller
-    // attempting to free an already-freed pointer
-    if (redirect_stream) __atomic_store_n (redirect_stream, no_stream, __ATOMIC_RELEASE);                      \
-
-    stream_close (&curl, STREAM_WAIT_FOR_PROCESS);
+    memcpy (redirect_url, location, location_len); 
+    redirect_url[location_len] = 0;
 
     return true;
 }
 
 // returns a FILE* which streams the content of a URL 
-// Note: FILE* returned is a *copy* of the FILE* in the curl stream - it should not be FCLOSEd
+// Note: FILE* returned is a *copy* of the FILE* in the url_stream - it should not be FCLOSEd
 // directly, rather call url_close_remote_file_stream or url_disconnect_from_remote_file_stream
 // Note: only one open URL file is possible at any time, as it goes into the global "curl".
 //       This is reserved for reading a remote file and should not be used for other purposes.
 FILE *url_open_remote_file (StreamP parent_stream, rom url)
 {
     ASSERTISNULL (remote_file_stream);
-
-    char str5[6] = "";
-    strncpy (str5, url, 5);
-    bool is_file = str_case_compare (str5, "file:", NULL); // wget doesn't support file://
-
-    // check if wget exists, it is better than curl in flakey connections
-    bool has_wget = !flag.is_windows && stream_is_exec_in_path ("wget");
-
-    ASSERT (has_wget || stream_is_exec_in_path ("curl"),
-            "Failed to open URL %s because %s not found in the execution path", 
-            url, (flag.is_windows || is_file) ? "curl was" : "wget or curl were");
-
-    if (has_wget && !is_file) // note: stream_create doesn't support soft_fail (yet)
-        remote_file_stream = 
-            stream_create (parent_stream, DEFAULT_PIPE_SIZE, 0, 0, 0, 0, 0,
-                           "To compress files from a URL", "wget", "--tries=16", "--quiet", "--waitretry=3", "--output-document=/dev/stdout", 
-                           url, NULL);
-    else // curl
-        remote_file_stream = 
-            stream_create (parent_stream, DEFAULT_PIPE_SIZE, 0, 0, 0, 0, 0,
-                           "To compress files from a URL", "curl", "--silent", 
-                           flag.is_windows ? "--ssl-no-revoke" : SKIP_ARG,                          
-                           url, NULL);
+    remote_file_stream = url_open (parent_stream, url, false);
 
     return stream_from_stream_stdout (remote_file_stream);
 }
@@ -317,7 +381,7 @@ void url_reset_if_remote_file_stream (StreamP maybe_remote_file_stream)
     if (remote_file_stream == maybe_remote_file_stream) remote_file_stream = NULL;
 }
 
-// kill curl - used in case of an
+// kill curl/wget 
 void url_close_remote_file_stream (FILE **copy_of_input_pipe)
 {
     if (!remote_file_stream) return; // nothing to do
@@ -327,7 +391,7 @@ void url_close_remote_file_stream (FILE **copy_of_input_pipe)
     stream_close (&remote_file_stream, STREAM_KILL_PROCESS);
 }
 
-// close stream without killing curl process - used if stream is used by forked sub-process
+// close stream without killing curl/wget process - used if stream is used by forked sub-process
 void url_disconnect_from_remote_file_stream (FILE **copy_of_input_pipe)
 {
     if (!remote_file_stream) return; // nothing to do

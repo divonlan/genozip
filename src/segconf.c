@@ -266,7 +266,6 @@ void segconf_initialize (void)
 
             // FASTA stuff
             .fasta_has_contigs     = true, // initialize optimistically
-            .fasta_desc_char       = '>',
         };
 
     // Deep - 1st FASTQ file
@@ -327,7 +326,7 @@ void segconf_calculate (void)
 
     if (!Ltxt) {
         // error unless this is a header-only file
-        ASSERT0 (txt_file->header_size, "Failed to segconf. Possible reasons: cannot find a single valid line");
+        ASSERT (txt_file->header_size, "Failed to segconf. Possible reasons: cannot find a single valid line. eof=%s", TF(vb->is_eof));
     
         segconf_set_vb_size (vb, save_vb_size);
         goto done; // cannot find a single line - vb_size set to default and other segconf fields remain default, or previous file's setting
@@ -345,7 +344,11 @@ void segconf_calculate (void)
     flag.quiet = true;
     flag.show_vblocks = NULL;
 
-    seg_all_data_lines (vb);      
+    seg_all_data_lines (vb);
+
+    // in segconf, seg_initialize might change the data_type and realloc the segconf vb (eg FASTA->FASTQ)
+    vb = vb_get_nonpool_vb (VB_ID_SEGCONF);
+
     SAVE_FLAG (aligner_available); // might have been set in sam_seg_finalize_segconf
     SAVE_FLAG (no_tip);
     SAVE_FLAG (multiseq);
@@ -354,6 +357,7 @@ void segconf_calculate (void)
     RESTORE_FLAG (no_tip);
     RESTORE_FLAG (multiseq);
     
+
     if (flag.show_segconf_has) 
         segconf_show_has();
 
@@ -461,6 +465,7 @@ rom GQ_method_name (GQMethodType method)
         case BY_PL         : return "BY_PL";
         case MUX_DOSAGE    : return "DOSAGE";
         case MUX_DOSAGExDP : return "DOSAGExDP";
+        case GQ_INTEGER    : return "Integer";
         default            : return "INVALID";
     }
 }

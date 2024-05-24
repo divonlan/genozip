@@ -18,6 +18,25 @@
 // -----------------------------------------------------------------------------------------------------------
 
 #pragma GENDICT FASTA_CONTIG=DTYPE_FIELD=CONTIG
+
+#pragma GENDICT FASTA_QNAME=DTYPE_FIELD=QNAME // MAX_QNAME_ITEMS - same did as SAM/FASTQ/GFF - used for testing if file is actually a QUAL-less FASTQ
+#pragma GENDICT FASTA_Q0NAME=DTYPE_1=Q0NAME // must have a did_i directly after QNAME
+#pragma GENDICT FASTA_Q1NAME=DTYPE_1=Q1NAME 
+#pragma GENDICT FASTA_Q2NAME=DTYPE_1=Q2NAME
+#pragma GENDICT FASTA_Q3NAME=DTYPE_1=Q3NAME
+#pragma GENDICT FASTA_Q4NAME=DTYPE_1=Q4NAME
+#pragma GENDICT FASTA_Q5NAME=DTYPE_1=Q5NAME
+#pragma GENDICT FASTA_Q6NAME=DTYPE_1=Q6NAME 
+#pragma GENDICT FASTA_Q7NAME=DTYPE_1=Q7NAME 
+#pragma GENDICT FASTA_Q8NAME=DTYPE_1=Q8NAME 
+#pragma GENDICT FASTA_Q9NAME=DTYPE_1=Q9NAME 
+#pragma GENDICT FASTA_QANAME=DTYPE_1=QANAME 
+#pragma GENDICT FASTA_QBNAME=DTYPE_1=QBNAME 
+#pragma GENDICT FASTA_QCNAME=DTYPE_1=QCNAME 
+#pragma GENDICT FASTA_QDNAME=DTYPE_1=QDNAME 
+#pragma GENDICT FASTA_QENAME=DTYPE_1=QENAME // if adding more Q*NAMEs - add to fastq.h too, and update MAX_QNAME_ITEMS
+#pragma GENDICT FASTA_QmNAME=DTYPE_1=QmNAME // QmNAME reserved for mate number (always the last dict_id in the container)
+
 #pragma GENDICT FASTA_LINEMETA=DTYPE_FIELD=LINEMETA
 #pragma GENDICT FASTA_EOL=DTYPE_FIELD=EOL
 #pragma GENDICT FASTA_DESC=DTYPE_FIELD=DESC
@@ -56,7 +75,8 @@ extern bool fasta_piz_is_vb_needed (VBIType vb_i);
 extern bool fasta_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header);
 extern void fasta_reconstruct_vb(); // no parameter - implicit casting of VBlockP
 extern IS_SKIP (fasta_piz_is_skip_section);
-extern bool fastq_piz_get_pair2_is_forward (VBlockP vb);
+extern bool fastq_piz_get_r2_is_forward (VBlockP vb);
+extern bool fastq_piz_get_interleaved_r2_is_forward (VBlockP vb);
 
 // VBlock stuff
 extern unsigned fasta_vb_size (DataType dt);

@@ -34,7 +34,7 @@ void sam_ultima_seg_initialize (VBlockSAMP vb)
     arr_ctx->ltype = LT_INT8; // propagated to channels
     arr_ctx->st_did_i = OPTION_tp_B_c; 
     arr_ctx->flags.store = STORE_INT; // needed for BAM translation (propagated to channels)
-    seg_mux_init (VB, arr_ctx, TP_NUM_BINS, SAM_SPECIAL_ULTIMA_tp, false, (MultiplexerP)&vb->mux_tp); 
+    seg_mux_init (vb, OPTION_tp_B_ARR, SAM_SPECIAL_ULTIMA_tp, false, tp); 
 
     seg_by_ctx (VB,STRa(vb->mux_tp.snip), arr_ctx, 0);  // all-the-same (not ctx_create node bc we need the b250 to carry the flags)
 
@@ -428,7 +428,7 @@ void ultima_c_Q5NAME_cb (VBlockP vb, ContextP ctx, STRp(value))
     Multiplexer2P mux = is_fq ? fastq_get_ultima_c_mux (vb) : &VB_SAM->mux_ultima_c;
     
     if (!ctx->is_initialized) {
-        seg_mux_init (VB, ctx, 2, (is_fq ? FASTQ_SPECIAL_ULTIMA_C : SAM_SPECIAL_ULTIMA_C), false, (MultiplexerP)mux);
+        seg_mux_init_(VB, ctx->did_i, 2, (is_fq ? FASTQ_SPECIAL_ULTIMA_C : SAM_SPECIAL_ULTIMA_C), false, (MultiplexerP)mux);
 
         seg_by_ctx (VB, STRa(mux->snip), ctx, 0);  // all-the-same (not ctx_create node bc we need the b250 to carry the flags)
         

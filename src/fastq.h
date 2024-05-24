@@ -23,7 +23,9 @@
 #define FASTQ_NONREF_X      SAM_NONREF_X
 #define FASTQ_GPOS          SAM_GPOS
 #define FASTQ_GPOS_DELTA    SAM_GPOS_DELTA
+#define FASTQ_GPOS_R2       SAM_GPOS_R2    // 15.0.58: used for interleaved files
 #define FASTQ_STRAND        SAM_STRAND
+#define FASTQ_STRAND_R2     SAM_STRAND_R2  // 15.0.58: used for interleaved files
 #define FASTQ_SEQMIS_A      SAM_SEQMIS_A
 #define FASTQ_SEQMIS_C      SAM_SEQMIS_C
 #define FASTQ_SEQMIS_G      SAM_SEQMIS_G
@@ -50,7 +52,9 @@
 #define _FASTQ_NONREF_X     _SAM_NONREF_X
 #define _FASTQ_GPOS         _SAM_GPOS
 #define _FASTQ_GPOS_DELTA   _SAM_GPOS_DELTA
+#define _FASTQ_GPOS_R2      _SAM_GPOS_R2    
 #define _FASTQ_STRAND       _SAM_STRAND
+#define _FASTQ_STRAND_R2    _SAM_STRAND_R2  
 #define _FASTQ_SEQMIS_A     _SAM_SEQMIS_A
 #define _FASTQ_SEQMIS_C     _SAM_SEQMIS_C
 #define _FASTQ_SEQMIS_G     _SAM_SEQMIS_G
@@ -94,7 +98,8 @@ extern void fastq_seg_finalize(VBlockP vb);
 extern bool fastq_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern rom fastq_seg_txt_line(VBlockP vb, rom line_start, uint32_t remaining, bool *has_13);
 extern rom fastq_assseg_line (VBlockP vb);
-extern void fastq_seg_pair2_gpos (VBlockP vb, PosType64 pair1_pos, PosType64 pair2_gpos);
+extern void fastq_seg_r2_gpos (VBlockP vb, PosType64 r1_pos, PosType64 r2_gpos);
+extern void fastq_seg_interleaved_gpos (VBlockP vb, PosType64 pair_gpos/*only if we are R2*/, PosType64 gpos);
 extern void fastq_update_qual_len (VBlockP vb, uint32_t line_i, uint32_t new_len);
 extern Multiplexer2P fastq_get_ultima_c_mux (VBlockP vb);
 
@@ -147,3 +152,4 @@ SPECIAL (FASTQ, 10, ULTIMA_C,          ultima_c_piz_special_DEMUX_BY_Q4NAME); //
 SPECIAL (FASTQ, 11, AGENT_RX,          agilent_special_AGENT_RX);             // introduced 15.0.23
 SPECIAL (FASTQ, 12, AGENT_QX,          agilent_special_AGENT_QX);             // introduced 15.0.23
 SPECIAL (FASTQ, 13, qname_rng2seq_len, special_qname_rng2seq_len);            // introduced 15.0.26
+SPECIAL (FASTQ, 14, DEMUX_BY_R,        fastq_special_DEMUX_BY_R);             // introduced 15.0.58

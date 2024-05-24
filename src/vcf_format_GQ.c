@@ -14,6 +14,7 @@
 #include "reconstruct.h"
 #include "piz.h"
 #include "base64.h"
+#include "zip_dyn_int.h"
 
 void vcf_segconf_finalize_GQ (VBlockVCFP vb)
 {
@@ -25,6 +26,9 @@ void vcf_segconf_finalize_GQ (VBlockVCFP vb)
 
     else if (segconf.has[FORMAT_DP])
         segconf.GQ_method = MUX_DOSAGExDP;
+
+    else if (segconf.vcf_is_giggle)
+        segconf.GQ_method = GQ_INTEGER;
 
     else
         segconf.GQ_method = MUX_DOSAGE;
@@ -130,6 +134,13 @@ void vcf_seg_FORMAT_GQ (VBlockVCFP vb)
             vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRa(gq), (DosageMultiplexer *)&vb->mux_GQ);
             break;
 
+        case GQ_INTEGER:
+            if (IS_PERIOD(gq)) 
+                dyn_int_append_nothing_char (VB, ctx, gq_len);
+            else
+                dyn_int_append (VB, ctx, gq_value, gq_len);
+            break;
+            
         default:
             ABORT ("Invalid value segconf.GQ_method=%u", segconf.GQ_method);
     }

@@ -38,7 +38,7 @@ StrTextLong txtfile_dump_vb (VBlockP vb, rom base_name)
 {
     StrTextLong dump_filename;
 
-    snprintf (dump_filename.s, sizeof (dump_filename.s), "%*s.vblock-%u.start-%"PRIu64".len-%u.bad", 
+    snprintf (dump_filename.s, sizeof (dump_filename.s), "%.*s.vblock-%u.start-%"PRIu64".len-%u.bad", 
               (int)sizeof (dump_filename.s)-100, base_name, vb->vblock_i, vb->vb_position_txt_file, Ltxt);
 
     if (flag.is_windows) str_replace_letter (dump_filename.s, strlen(dump_filename.s), '/', '\\');
@@ -512,13 +512,13 @@ static uint32_t txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb)
 
     ASSERT (pass_to_next_vb_len >= 0 ||
             segconf.running, // case: we're testing memory and this VB is too small for a single line - return and caller will try again with a larger VB 
-            "Reason: failed to find a full line %sin vb=%s data_type=%s txt_data.len=%u txt_file->codec=%s.\n"
+            "Reason: failed to find a full line %sin vb=%s data_type=%s txt_data.len=%u txt_file->codec=%s vb->is_eof=%s interleaved=%s.\n"
             "Known possible causes:\n"
             "- The file is %s %s.\n"
             "- The file is not a %s file.\n"
             "VB dumped: %s\n",  
             DTPT(is_binary) ? "" : "(i.e. newline-terminated) ",
-            VB_NAME, dt_name (txt_file->data_type), Ltxt, codec_name (txt_file->codec),
+            VB_NAME, dt_name (txt_file->data_type), Ltxt, codec_name (txt_file->codec), TF(vb->is_eof), TF(segconf.is_interleaved),
             DTPT(is_binary) ? "truncated but not on the boundary of the" : "missing a newline on the last", DTPT(line_name),
             TXT_DT(REF) ? "FASTA" : dt_name (txt_file->data_type),
             txtfile_dump_vb (vb, txt_name).s);

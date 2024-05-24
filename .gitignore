@@ -6,6 +6,7 @@ launch.json
 *.back
 .conda-timestamp
 .archive.tar.gz
+autocomplete.sh
 *.o
 !src/objdir.*/secure/license.o
 !src/objdir.mac/secure/license.old_mac.o

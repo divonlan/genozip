@@ -64,7 +64,9 @@
 #pragma GENDICT SAM_NONREF_X=DTYPE_FIELD=NONREF_X
 #pragma GENDICT SAM_GPOS=DTYPE_FIELD=GPOS
 #pragma GENDICT SAM_GPOS_DELTA=DTYPE_FIELD=G0POS  // v15
+#pragma GENDICT SAM_GPOS_R2=DTYPE_FIELD=Gr2POS    // 15.0.58
 #pragma GENDICT SAM_STRAND=DTYPE_FIELD=STRAND
+#pragma GENDICT SAM_STRAND_R2=DTYPE_FIELD=Sr2TRAND// 15.0.58
 #pragma GENDICT SAM_SEQMIS_A=DTYPE_FIELD=SEQMIS_A // v14: mismatch bases vs the reference, when ref=A
 #pragma GENDICT SAM_SEQMIS_C=DTYPE_FIELD=SEQMIS_C 
 #pragma GENDICT SAM_SEQMIS_G=DTYPE_FIELD=SEQMIS_G 
@@ -346,7 +348,6 @@
 #pragma GENDICT OPTION_sS_Z=DTYPE_2=sS:Z     // Sequence of the entire barcode (CB,UMI,adapter...)
 #pragma GENDICT OPTION_sQ_Z=DTYPE_2=sQ:Z     // Quality of the entire barcode
 #pragma GENDICT OPTION_sM_Z=DTYPE_2=sM:Z     // Assessment of CB and UMI
-#pragma GENDICT OPTION_fx_Z=DTYPE_2=fx:Z     // CellRanger: Feature identifier matched to this Feature Barcode read. Specified in the id column of the feature reference.
 #pragma GENDICT OPTION_TX_Z=DTYPE_2=TX:Z     // Transcript list
 #pragma GENDICT OPTION_TX_LOOKBACK=DTYPE_2=T^X_LOOKBACK
 #pragma GENDICT OPTION_TX_NEGATIVE=DTYPE_2=T1X_NEG 
@@ -377,7 +378,12 @@
 #pragma GENDICT OPTION_2Y_QUALMPLX=DTYPE_FIELD=21Y_MPLX 
 #pragma GENDICT OPTION_2Y_DIVRQUAL=DTYPE_FIELD=22Y_DEVQ // these 3 are supposed to be DTYPE_2, they are DTYPE_FIELD by error. we keep it this way for back comp
 
-// cellranger has many more
+#pragma GENDICT OPTION_fb_Z=DTYPE_2=fb:Z     // Chromium Feature Barcode sequence that is error-corrected and confirmed against known Feature Barcode sequences from the feature reference.
+#pragma GENDICT OPTION_fr_Z=DTYPE_2=fr:Z     // Chromium Feature Barcode sequence as reported by the sequencer.
+#pragma GENDICT OPTION_fq_Z=DTYPE_2=fq:Z     // Chromium Feature Barcode read quality. Phred scores as reported by sequencer.
+#pragma GENDICT OPTION_fx_Z=DTYPE_2=fx:Z     // Feature identifier matched to this Feature Barcode read. Specified in the id column of the feature reference.
+
+// note: cellranger has many more
 
 // 10x Genomics longranger lariat aligner: https://support.10xgenomics.com/genome-exome/software/pipelines/latest/output/bam
 
@@ -547,7 +553,7 @@
 #pragma GENDICT OPTION_cm_i=DTYPE_2=cm:i     // Number of minimizers on the chain
 #pragma GENDICT OPTION_s1_i=DTYPE_2=s1:i     // Chaining score
 #pragma GENDICT OPTION_s2_i=DTYPE_2=s2:i     // Chaining score of the best secondary chain
-//#pragma GENDICT OPTION_ms_i=DTYPE_2=ms:i   // Conflict with biobambam and samtools: DP score of the max scoring segment in the alignment
+// (dup) #pragma GENDICT OPTION_ms_i=DTYPE_2=ms:i   // DP score of the max scoring segment in the alignment
 #pragma GENDICT OPTION_nn_i=DTYPE_2=nn:i     // Number of ambiguous bases in the alignment
 #pragma GENDICT OPTION_ts_A=DTYPE_2=ts:A     // Transcript strand (splice mode only)
 #pragma GENDICT OPTION_cs_Z=DTYPE_2=cs:Z     // Difference string, see: https://github.com/lh3/minimap2#cs and https://lh3.github.io/2018/03/27/the-history-the-cigar-x-operator-and-the-md-tag
@@ -816,6 +822,7 @@ SPECIAL (SAM, 66, DEMUX_sn,              sam_piz_special_DEMUX_sn);            /
 SPECIAL (SAM, 67, jI,                    sam_piz_special_jI);                  // introduced 15.0.42
 SPECIAL (SAM, 68, jM_length,             sam_piz_special_jM_length);           // introduced 15.0.42
 SPECIAL (SAM, 69, RG_by_QNAME,           sam_piz_special_RG_by_QNAME);         // introduced 15.0.51
+SPECIAL (SAM, 70, PACBIO_we,             sam_piz_special_PACBIO_we);           // introduced 15.0.58
  
 #define SAM_LOCAL_GET_LINE_CALLBACKS(dt)        \
     { dt, _OPTION_BD_BI,    sam_zip_BD_BI    }, \
@@ -873,6 +880,7 @@ TXTHEADER_TRANSLATOR (txtheader_sam2fq);
     { dt,  ALIAS_DICT, _OPTION_OA_RNAME,    _SAM_RNAME          },  \
     { dt,  ALIAS_DICT, _OPTION_XA_RNAME,    _SAM_RNAME          },  \
     { dt,  ALIAS_DICT, _OPTION_SA_RNAME,    _SAM_RNAME          },  \
+    { dt,  ALIAS_DICT, _OPTION_CC_Z,        _SAM_RNAME          },  \
     { dt,  ALIAS_DICT, _OPTION_MC0_Z,       _OPTION_OC_Z        },  /* note: no need to alias MC1_Z, bc it is normally all-the-same copy-mate */ \
     { dt,  ALIAS_DICT, _OPTION_OA_CIGAR,    _OPTION_OC_Z        },  /* note: SA_CIGAR cannot be an alias of OC:Z because it causes issues with gencomp */ \
     { dt,  ALIAS_DICT, _OPTION_XA_CIGAR,    _OPTION_OC_Z        },  \

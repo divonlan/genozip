@@ -791,6 +791,7 @@ void sam_zip_gc_after_compute_main (VBlockSAMP vb)
     // case: we removed some gencomp lines from this VB, we now create a recon plan to insert them back.
     // the actual line location in the gencomp vb will be updated later
     else {         
+        recon_plan->param = vb->vblock_i; // VB being processed - so its visible in buf_alloc error messages
         buf_alloc (evb, recon_plan, gc_lines_len * 2 + 2, 100000, ReconPlanItem, 2, "txt_file->recon_plan");
         buf_alloc (evb, &txt_file->line_info[0], gc_lines_len, 100000, uint32_t, 2, "txt_file->line_info");
         buf_alloc (evb, &txt_file->line_info[1], gc_lines_len, 100000, uint32_t, 2, "txt_file->line_info");

@@ -494,7 +494,7 @@ DataType piz_read_global_area (Reference ref)
         ctx_read_all_subdicts(); // read all SEC_SUBDICTS sections
 
         // update chrom node indices using the CHROM dictionary, for the user-specified regions (in case -r/-R were specified)
-        if (flag.regions && ZCTX(DTFZ(chrom))->word_list.len) // FASTQ compressed without reference, has no CHROMs 
+        if (flag.regions) 
             regions_make_chregs (ZCTX(DTFZ(chrom)));
 
         // if the regions are negative, transform them to the positive complement instead

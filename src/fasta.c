@@ -24,11 +24,10 @@
 #include "tokenizer.h"
 #include "writer.h" 
 #include "zfile.h"
+#include "qname.h"
 
 #define dict_id_is_fasta_desc_sf dict_id_is_type_1
 #define dict_id_fasta_desc_sf dict_id_type_1
-
-#define DC segconf.fasta_desc_char
 
 sSTRl(desc_redirect_snip, 24);
 sSTRl(comment_redirect_snip, 24);
@@ -58,9 +57,9 @@ void fasta_get_data_line (VBlockP vb, uint32_t line_i, uint32_t *seq_data_start,
 //-------------------------
 
 // detect if a generic file is actually a FASTA - 
-// we call based on first character being '>', and subsequent lines being equal-length nuke or amino characters
+// we call based on first character being '>' or '@', and subsequent lines being equal-length nuke or amino characters
 // note: we accept comment lines starting with ; but every sequence must start with >
-bool is_fasta (STRp(data), bool *need_more/*optional*/)
+bool is_fasta (STRp(txt_data), bool *need_more/*optional*/)
 {
     // characters that may appear in a FASTA seqience
     static bool seq_char[256] = { ['E']=true, ['F']=true, ['I']=true, ['L']=true, ['P']=true, ['Q']=true, ['X']=true, ['Z']=true,
@@ -71,10 +70,16 @@ bool is_fasta (STRp(data), bool *need_more/*optional*/)
                                   ['n']=true, ['r']=true, ['s']=true, ['t']=true, ['v']=true, ['w']=true, ['y']=true, ['u']=true, ['b']=true,
                                   ['-']=true, ['*']=true };
 
-    if (!data_len || data[0] != DC || !str_is_printable (STRa(data))) return false; // fail fast
+    char dc = DC ? DC : '>'; // if called from GENERIC, DC is not set yet - we test only for '>'
+    
+    if (dc != '>' && dc != '@' && dc != ';') return false;
+
+    // first line must be the sequence description
+    if (!txt_data_len || txt_data[0] != dc || !str_is_printable (STRa(txt_data))) 
+        return false; // fail fast
 
     #define NUM_TEST_LINES 10
-    str_split_by_lines (data, data_len, NUM_TEST_LINES);
+    str_split_by_lines (txt_data, txt_data_len, NUM_TEST_LINES);
 
     #define CANT_TELL ({ if (need_more) { \
                             *need_more = true; /* we can't tell yet - need more data */ \
@@ -85,8 +90,8 @@ bool is_fasta (STRp(data), bool *need_more/*optional*/)
 
     if (!n_lines) CANT_TELL;
 
-    // first line must be the sequence description
-    if (lines[0][0] != DC) return false;
+    if (lines[0][0] != dc) 
+        return false;
 
     // skip comment and empty lines
     int line_i=1; 
@@ -96,23 +101,25 @@ bool is_fasta (STRp(data), bool *need_more/*optional*/)
     if (n_lines - line_i < 1) CANT_TELL;
     
     // next lines must contain sequence (specifically, not DC)
-    if (!line_lens[line_i] || !seq_char[(int)lines[line_i][0]]) return false;
+    if (!line_lens[line_i] || !seq_char[(int)lines[line_i][0]]) 
+        return false;
     
     int seq_line_len = line_lens[line_i];
 
     for (; line_i < n_lines; line_i++) {
         // we arrived at a line beyond the contig - we're done
-        if (!line_lens[line_i] || lines[line_i][0] == DC) break;
+        if (!line_lens[line_i] || lines[line_i][0] == dc) break;
 
         // all sequence lines, except for the last of the contig, must be equal length
         if (line_lens[line_i] != seq_line_len && // line is different length than first line of contig
-            line_i != n_lines-1 && line_lens[line_i+1] && lines[line_i+1][0] != DC) // and we are sure that it is not the last line of the contig
+            line_i != n_lines-1 && line_lens[line_i+1] && lines[line_i+1][0] != dc) // and we are sure that it is not the last line of the contig
             return false;
 
         // entire line must be nukes or aminos or '-' (gap) or '*' (end of sequence)
         rom after_c = lines[line_i] + line_lens[line_i]; 
         for (rom c=lines[line_i]; c < after_c; c++)
-            if (!seq_char[(int)*c]) return false; 
+            if (!seq_char[(int)*c]) 
+                return false; 
     }
 
     return true;
@@ -168,7 +175,7 @@ int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *last_i)
         }
     }
 
-    // we move the final partial line to the next vb (unless we are already moving more, due to a reference file)
+    // we move the final partial line to the next vb (unless we are already moving more, due to a --make-reference)
     for (int32_t i=*last_i; i >= (int32_t)first_i; i--) {
 
         if (txt[i] == '\n') {
@@ -189,7 +196,7 @@ int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *last_i)
 
             // otherwise - tolerate a VB that ends part way through a SEQ
             else if (is_entire_vb && i+1 < Ltxt &&
-                     txt[i+1] != ';' && txt[i+1] != DC) { // partial line isn't a Description or a Comment, hence its a Sequence
+                     txt[i+1] != ';' && txt[i+1] != '>' && txt[i+1] != '@') { // partial line isn't a Description or a Comment, hence its a Sequence
                 ((VBlockFASTAP)vb)->vb_has_no_newline = true;
                 return 0;                
             }
@@ -259,16 +266,70 @@ void fasta_zip_after_compute (VBlockP vb)
     z_file->num_sequences += vb->num_sequences; // for stats
 }
 
+// we consider it a "QUAL-less FASTQ" if both these conditions are met:
+// 1. DESC line starts with a recognized QNAME
+// 2. Testing the first bunch of lines - the consist of pairs of (DESC, SEQ) lines (i.e. all contigs are single lines)
+static bool fasta_segconf_is_qualless_fastq (VBlockP vb)
+{
+    #define NUM_FASTQ_TEST_LINES 2000
+    str_split_by_lines (vb->txt_data.data, vb->txt_data.len32, NUM_FASTQ_TEST_LINES);
+
+    if (n_lines < 16 && !txt_file->is_eof) 
+        return false; // not enough lines to determine (except of segconf is the entire file) 
+
+    n_lines = ROUNDDOWN2 (n_lines) - 2; // keep whole pairs or lines, and drop last pair that might be truncated. now there are at least 4 pairs (8 lines)
+
+    for (uint32_t i=0; i < n_lines; i += 2) 
+        if (lines[i][0] != DC) return false; // not all contigs are single-line of SEQ
+
+    // test first 4 seqs to make sure they are uppercase and do not contain unique amino characters
+    for (uint32_t i=1; i <= 7; i += 2) 
+        if (!str_is_fastq_seq (lines[i], MIN_(256, line_lens[i]))) return false; // line contains an invalid SEQ character for FASTQ  
+
+    qname_zip_initialize();
+    qname_segconf_discover_flavor (vb, QNAME1, lines[0]+1, strcspn (lines[0]+1, " \t\r\n")); 
+
+    if (!segconf.qname_flavor[QNAME1]) return false;
+
+    // DECIDED! convert VB to a FASTQ VB.
+
+    // re-initialize z_file / txt_file stuff
+    txt_file->data_type = z_file->data_type = DT_FASTQ;
+    ctx_initialize_predefined_ctxs (z_file->contexts, DT_FASTQ, z_file->d2d_map, &z_file->num_contexts);
+    
+    // re-initialize segconf VB
+    vb_change_datatype_nonpool_vb (&vb, DT_FASTQ);
+
+    buflist_destroy_private_and_context_vb_bufs (vb);
+    ctx_clone (vb); // clone FASTQ contexts
+
+    // move redundant txt to unconsumed (since FASTA allows last line to be a description line or a partial SEQ line)
+    rom final_read = memrchr (B1STtxt, DC, Ltxt);
+    uint32_t final_read_len = BAFTtxt - final_read;
+    if (str_count_char (STRa(final_read), '\n') != 2)
+        Ltxt -= final_read_len; // note: this txt_data is discards after segconf so no problem modifying it
+
+    // call FASTQ's seg initialize instead
+    FAF = true;
+    fastq_seg_initialize (vb);
+
+    return true;
+}
+
 void fasta_seg_initialize (VBlockP vb)
 {
     START_TIMER;
 
     // NSBI FASTA download files might have "@" instead of ">"
-    if (segconf.running && *B1STtxt == '@')
-        DC = '@';
+    if (segconf.running) {
+        DC = *B1STtxt; // note: common: '>', very old FASTA: ';', downloaded from NCBI: '@'
         
-    if (vb->vblock_i == 1)
         ASSINP (is_fasta (STRb(vb->txt_data), NULL), "Error: %s is not a valid FASTA file. Solution: use --input generic", txt_name);
+    
+        // case: this FASTA looks more like a FASTQ without QUAL data - better off segged as FASTQ with reference support and QNAME handling 
+        if (!flag.make_reference && !flag.no_faf && !flag.index_txt &&
+            fasta_segconf_is_qualless_fastq (vb)) return;
+    }
 
     CTX(FASTA_TOPLEVEL)->no_stons  = true; // keep in b250 so it can be eliminated as all_the_same
     CTX(FASTA_CONTIG)->flags.store = STORE_INDEX; // since v12
@@ -313,11 +374,12 @@ static void fasta_seg_finalize_segconf (VBlockP vb)
     if (num_contigs_this_vb >= 5 && !flag.make_reference && !flag.fast) 
         segconf_test_multiseq (VB, FASTA_NONREF);
 
-    // limit the number of contigs, to avoid the FASTA_CONTIG dictionary becoming too big
-    #define MAX_CONTIGS_IN_FILE 100000 
-    segconf.fasta_has_contigs &= !segconf.multiseq &&
-                                 (num_contigs_this_vb == 1 || // the entire VB is a single contig
-                                 est_num_contigs_in_file <  MAX_CONTIGS_IN_FILE); 
+    // output FASTA_CONTIG dictionary (allowing genocat --grep and --regions) if requested
+    // with --index, or if small enough
+    #define MAX_CONTIGS_IN_FILE 10000
+    segconf.fasta_has_contigs &= (num_contigs_this_vb == 1 || // the entire VB is a single contig
+                                  flag.index_txt ||
+                                  est_num_contigs_in_file <= MAX_CONTIGS_IN_FILE); 
 }
 
 void fasta_seg_finalize (VBlockP vb)
@@ -399,6 +461,9 @@ static void fasta_seg_desc_line (VBlockFASTAP vb, rom line, uint32_t line_len, b
         chrom_seg_no_b250 (VB, STRa(chrom_name), &is_new);
 
         if (!is_new && segconf.running) {
+            // error if user explicitly requested to index but we can't
+            ASSSEG (!flag.index_txt, "Cannot index this file, because it contains duplicate contig names, for example: %.*s", STRf(chrom_name));
+
             segconf.fasta_has_contigs = false; // this FASTA is not of contigs. It might be just a multiseq (collection of variants of a sequence).
             seg_rollback (VB);
         }
@@ -557,7 +622,7 @@ rom fasta_seg_txt_line (VBlockP vb_, rom line, uint32_t remaining_txt_len, bool 
     rom next_field = seg_get_next_line (VB, line, &remaining_vb_txt_len, &line_len, !vb->vb_has_no_newline, has_13, "FASTA line");
 
     // case: description line - we segment it to its components
-    if (*line == DC || (*line == ';' && vb->last_line == FASTA_LINE_SEQ))
+    if (*line == DC && (vb->last_line == FASTA_LINE_SEQ || vb->last_line == FASTA_LINE_COMMENT))
         fasta_seg_desc_line (vb, line, line_len, has_13);
 
     // case: comment line - stored in the comment buffer
@@ -683,6 +748,8 @@ bool fasta_piz_is_vb_needed (VBIType vb_i)
 {
     if (!flag.grep) return true;
 
+    ASSINP0 (z_file->ra_buf.len, "--grep is not supported for this file because it was not indexed during compression (to index, compress with --index)"); // FASTA compressed without contigs
+
     TEMP_FLAG (show_containers, false); // don't show during preprocessing
 
     rom task_name = "fasta_filter_grep";
@@ -690,7 +757,7 @@ bool fasta_piz_is_vb_needed (VBIType vb_i)
     VBlockP vb = vb_get_vb (POOL_MAIN, task_name, vb_i, COMP_MAIN);
     vb->preprocessing = true;
 
-    piz_read_one_vb (vb, false); 
+    piz_read_one_vb (vb, false); // preprocessing - reads only DESC data
 
     // we only need room for one line for now 
     uint32_t longest_line_len = BGEN32 (B1ST (SectionHeaderVbHeader, vb->z_data)->longest_line_len);

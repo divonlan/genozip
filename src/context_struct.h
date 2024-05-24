@@ -187,6 +187,8 @@ typedef struct Context {
         };
         PosType32 pos_last_value;   // PIZ: VCF_POS: value for rolling back last_value after INFO/END
         bool has_len;               // ZIP: INFO_ANN subfields of cDNA, CDS, AA
+        char deferred;              // PIZ: !=0 if reconstruction deferred. possibly a seg-passed parameter
+
         struct {                    // ZIP: INFO_SF
             uint32_t next;
             uint32_t SF_by_GT; 
@@ -203,9 +205,6 @@ typedef struct Context {
             uint32_t sum_dp_with_dosage; // sum of FORMAT/DP of samples in this line and dosage >= 1
             uint32_t pred_type;     // predictor type
         } qd;
-        struct {
-            bool is_deferred;       // PIZ: reconstruction deferred to after samples
-        } BaseCounts;
         struct {                    // PIZ: VCF_QUAL
             bool by_GP;             // QUAL_BY_GP used for this line 
             uint8_t decimals;
@@ -219,7 +218,8 @@ typedef struct Context {
         struct { packed_enum { PS_NONE, PS_POS, PS_POS_REF_ALT, PS_UNKNOWN } ps_type; }; // FORMAT_PS, FORMAT_PID, FORMAT_IPSphased
 
         // FASTQ
-        packed_enum { PAIR1_ALIGNED_UNKNOWN=-1, PAIR1_NOT_ALIGNED=0, PAIR1_ALIGNED=1 } pair1_is_aligned;  // FASTQ_SQBITMAP:  PIZ: used when reconstructing pair-2
+        packed_enum { PAIR1_ALIGNED_UNKNOWN=-1, PAIR1_NOT_ALIGNED=0, PAIR1_ALIGNED=1 } r1_is_aligned;  // FASTQ_SQBITMAP:  PIZ: used when reconstructing pair-2
+        TxtWord last_line1;         // ZIP segconf QNAME: entire line1
     };
 
     SnipIterator iterator;     // PIZ: used to iterate on the ctx->b250, reading one b250 word_index at a time

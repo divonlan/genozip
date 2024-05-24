@@ -97,6 +97,7 @@ typedef struct {
     { 0, "PACB", "+",      codec_pacb_compress,      USE_SUBCODEC,             codec_pacb_reconstruct,    codec_trivial_size,      }, \
     { 0, "SMUX", "+",      codec_smux_compress,      USE_SUBCODEC,             codec_smux_reconstruct,    codec_trivial_size,      }, \
     { 0, "ORA",  "+.ora",  NA1,                      NA2,                      NA3,                       NA4                      }, \
+    { 0, "OQ",   "+",      codec_oq_compress,        USE_SUBCODEC,             codec_oq_reconstruct,      codec_RANB_est_size,     }, \
 }
 
 extern CodecArgs codec_args[NUM_CODECS];
@@ -106,7 +107,7 @@ extern CodecCompress codec_bz2_compress, codec_lzma_compress, codec_domq_compres
                      codec_RANB_compress, codec_RANW_compress, codec_RANb_compress, codec_RANw_compress, 
                      codec_ARTB_compress, codec_ARTW_compress, codec_ARTb_compress, codec_ARTw_compress,
                      codec_longr_compress, codec_normq_compress, codec_homp_compress, codec_t0_compress,
-                     codec_pacb_compress, codec_smux_compress;
+                     codec_pacb_compress, codec_smux_compress, codec_oq_compress;
 
 extern CodecUncompress codec_bz2_uncompress, codec_lzma_uncompress, codec_acgt_uncompress, codec_xcgt_uncompress,
                        codec_bsc_uncompress, codec_none_uncompress, codec_gtshark_uncompress, codec_pbwt_uncompress,
@@ -114,7 +115,7 @@ extern CodecUncompress codec_bz2_uncompress, codec_lzma_uncompress, codec_acgt_u
 
 extern CodecReconstruct codec_domq_reconstruct, codec_pbwt_reconstruct, 
                         codec_longr_reconstruct, codec_normq_reconstruct, codec_homp_reconstruct,
-                        codec_t0_reconstruct, codec_pacb_reconstruct, codec_smux_reconstruct;
+                        codec_t0_reconstruct, codec_pacb_reconstruct, codec_smux_reconstruct, codec_oq_reconstruct;
 
 extern CodecEstSizeFunc codec_none_est_size, codec_bsc_est_size, codec_domq_est_size,
                         codec_RANB_est_size, codec_RANW_est_size, codec_RANb_est_size, codec_RANw_est_size, 
@@ -186,4 +187,6 @@ extern bool codec_longr_maybe_used (VBlockP vb, Did did_i);
 extern bool codec_longr_comp_init (VBlockP vb, Did qual_did_i, bool force);
 extern void codec_longr_segconf_calculate_bins (VBlockP vb, ContextP ctx, LocalGetLineCB callback);
 
+// OQ stuff
+extern bool codec_oq_comp_init (VBlockP vb);
 

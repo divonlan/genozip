@@ -16,6 +16,7 @@
 #elif defined __APPLE__
 #include <malloc/malloc.h>
 #endif
+#include <math.h>
 #include <fcntl.h> 
 #include "genozip.h"
 #include "profiler.h"
@@ -25,6 +26,7 @@
 #include "file.h"
 #include "threads.h"
 #include "version.h"
+#include "arch.h"
 
 #define DISPLAY_ALLOCS_AFTER 0 // display allocations, except the first X allocations. reallocs are always displayed
 
@@ -102,7 +104,7 @@ const BufDescType buf_desc (ConstBufferP buf)
         tag_name = TAG_NAME (z_file->contexts);
 
     BufDescType desc; // use static memory instead of malloc since we could be in the midst of a memory issue when this is called
-    snprintf (desc.s, sizeof (desc.s), "\"%s\"%.20s memory=%p data=%p param=%"PRId64"(0x%016"PRIx64") len=%"PRIu64" size=%"PRId64" type=%s shared=%s%.16s promiscuous=%s spinlock=%p%.20s%.20s allocated in %s:%u%.20s", 
+    snprintf (desc.s, sizeof (desc.s), "{ \"%s\"%.20s memory=%p data=%p param=%"PRId64"(0x%016"PRIx64") len=%"PRIu64" size=%"PRId64" type=%s shared=%s%.16s promiscuous=%s spinlock=%p%.20s%.20s allocated in %s:%u%.20s }", 
              buf->name ? buf->name : "(no name)", cond_str (tag_name, " ctx=", tag_name), 
              buf->memory, buf->data, buf->param, buf->param, buf->len, (uint64_t)buf->size, buf_type_name (buf), 
              TF(buf->shared), cond_int (buf->memory && buf->vb, " users=", BOLCOUNTER(buf)), TF(buf->promiscuous),
@@ -212,8 +214,8 @@ void buf_alloc_do (VBlockP vb, BufferP buf, uint64_t requested_size,
 
 #define REQUEST_TOO_BIG_THREADSHOLD (3 GB)
     if (requested_size > REQUEST_TOO_BIG_THREADSHOLD && !buf->can_be_big) // use WARN instead of ASSERTW to have a place for breakpoint
-        WARN ("Warning: buf_alloc called from %s:%u %s for \"%s\" requested %s. This is suspiciously high and might indicate a bug - please report to " EMAIL_SUPPORT ". vb->vblock_i=%u buf=%s line_i=%d",
-              func, code_line, version_str().s, name, str_size (requested_size).s, vb->vblock_i, buf_desc (buf).s, vb->line_i);
+        WARN ("Warning: buf_alloc called from %s:%u %s for \"%s\" requested %s. This is suspiciously high and might indicate a bug - please report to " EMAIL_SUPPORT ". z_dt=%s vb->vblock_i=%u buf=%s line_i=%d vb_size=%s RAM=%3.1lf GB txt_file->disk_size=%s",
+              func, code_line, version_str().s, name, str_size (requested_size).s, z_dt_name(), vb->vblock_i, buf_desc (buf).s, vb->line_i, str_size (segconf.vb_size).s, arch_get_physical_mem_size(), str_size (txt_file->disk_size).s);
 
     ASSERT (buf->type == BUF_REGULAR || buf->type == BUF_UNALLOCATED, "called from %s:%u: cannot buf_alloc a buffer of type %s. details: %s", 
             func, code_line, buf_type_name (buf), buf_desc (buf).s);

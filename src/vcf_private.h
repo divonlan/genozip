@@ -32,7 +32,6 @@ typedef struct {
     WordIndex chrom;        // Seg: enter as node_index ; Merge: convert to word_index
     WordIndex format_node_i;// the node_index into contexts[VCF_FORMAT].nodes and also format_mapper_buf that applies to this line. Data on the fields is in format_mapper_buf[dl.format_node_i]
     PosType32 pos;          // 
-    PosType32 end_delta;    // Delta of INFO/END vs POS (same in both coordinates) - used in case chrom and pos are the same
     TxtWord BND_id;         // BND variants: a number as close as possible to unique of a BND event
     TxtWord tw[NUM_TWs];    // used by vcf_seg_sv_copy_mate 
 } ZipDataLineVCF;
@@ -140,9 +139,9 @@ typedef struct VBlockVCF {
     PosType32 mate_pos;      // ZIP/PIZ: mate's pos in case of VT_BND
     LineIType mate_line_i;   // Seg/PIZ: the mate of this line.
     uint32_t mate_line_count;// for stats
-    Multiplexer2 mate_mux[NUM_TWs]; // BND variants: mux by mate 
-    Multiplexer6 pbsv_I0D_mux;
-    Multiplexer3 pbsv_I1D_mux;
+    Multiplexer2 mux_mate[NUM_TWs]; // BND variants: mux by mate 
+    Multiplexer6 mux_pbsv_I0D;
+    Multiplexer3 mux_pbsv_I1D;
 
     // FORMAT/AD
     int64_t ad_values[VCF_MAX_ARRAY_ITEMS];
@@ -151,7 +150,8 @@ typedef struct VBlockVCF {
     // IMPORTANT: when adding, add to X() in vcf_seg_info_subfields
     int16_t idx_AN, idx_AC, idx_AF, idx_MLEAC, idx_MLEAF, idx_AC_Hom, idx_AC_Het, idx_AC_Hemi, idx_QD, idx_DP, idx_SF, 
             idx_AS_SB_TABLE, idx_END, idx_SVLEN, idx_CIPOS, idx_BaseCounts,
-            idx_SVTYPE, idx_HOMSEQ, idx_DUPHOMSEQ, idx_SVINSSEQ, idx_DUPSVINSSEQ, idx_LEFT_SVINSSEQ;  
+            idx_SVTYPE, idx_HOMSEQ, idx_DUPHOMSEQ, idx_SVINSSEQ, idx_DUPSVINSSEQ, idx_LEFT_SVINSSEQ,
+            idx_platformnames, idx_datasetnames, idx_callsetnames, idx_AF1000G; 
 
     #define has(f)   (vb->idx_##f != -1)
     #define after_idx mux_PLn
@@ -195,7 +195,7 @@ extern char *vcf_samples_is_included;
 #define samples_am_i_included(sample_i) (!flag.samples || ((bool)(vcf_samples_is_included[sample_i]))) // macro for speed - this is called in the critical loop of reconstructing samples
 extern VcfVersion vcf_header_get_version (void);
 
-#define BII(x) B(InfoItem, CTX(VCF_INFO)->info_items, vb->idx_##x)
+#define BII(x) B(InfoItem, vb->contexts[VCF_INFO].info_items, vb->idx_##x)
 
 extern void vcf_seg_array_of_N_ALTS_numbers (VBlockVCFP vb, ContextP ctx, STRp(value), StoreType type);
 
@@ -208,12 +208,21 @@ extern void vcf_seg_QUAL (VBlockVCFP vb, STRp(qual));
 extern void vcf_segconf_finalize_QUAL (VBlockVCFP vb);
 extern void vcf_piz_insert_QUAL_by_GP (VBlockVCFP vb);
 
+// ID stuff
+extern void vcf_piz_insert_ID_is_variant (VBlockVCFP vb);
+
 // AC / AF / AN
 extern void vcf_seg_INFO_AC (VBlockVCFP vb, ContextP ac_ctx, STRp(ac_str));
 extern void vcf_seg_INFO_AN (VBlockVCFP vb);
 extern void vcf_seg_INFO_MLEAC (VBlockVCFP vb, ContextP ac_ctx, STRp(ac_str));
 extern void vcf_seg_INFO_MLEAF (VBlockVCFP vb, ContextP ctx, STRp(mleaf));
 extern void vcf_piz_insert_INFO_AN (VBlockVCFP vb);
+
+// 1000G stuff
+extern void vcf_1000G_zip_initialize (void);
+extern void vcf_1000G_seg_initialize (VBlockVCFP vb);
+extern void vcf_seg_INFO_MAF (VBlockVCFP vb, ContextP ctx, STRp(maf));
+extern void vcf_seg_INFO_NS (VBlockVCFP vb, ContextP ctx, STRp(ns_str));
 
 // Samples stuff
 extern void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt));
@@ -240,10 +249,12 @@ static inline Allele *this_sample_GT (VBlockVCFP vb) {
 }
 
 // GIAB trio stuff
+extern void vcf_giab_zip_initialize (void);
 extern void vcf_giab_seg_initialize (VBlockVCFP vb);
 extern void vcf_seg_FORMAT_IGT (VBlockVCFP vb, ContextP ctx, STRp(igt));
 extern void vcf_seg_FORMAT_IPS (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STRp(ips));
 extern void vcf_seg_ADALL_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP *item_ctxs, const int64_t *values);
+eSTRl(datasets_snip); eSTRl(callsets_snip); eSTRl(platforms_snip);
 
 #define IS_TRIVAL_FORMAT_SUBFIELD ((!recon_len || (recon_len==1 && *recon=='.')) && dict_id_is_vcf_format_sf (ctx->dict_id))
 extern void vcf_FORMAT_PL_decide (VBlockVCFP vb);
@@ -294,7 +305,7 @@ extern void vcf_piz_insert_INFO_BaseCounts_by_AD (VBlockVCFP vb);
 typedef struct { char name[MAX_TAG_LEN]; // not nul-terminated, including '=' if there is one
                  rom value; 
                  unsigned name_len, value_len; 
-                 ContextP ctx; } InfoItem;
+                 ContextP ctx; } InfoItem, *InfoItemP;
 
 extern void vcf_info_zip_initialize (void);
 extern void vcf_info_seg_initialize (VBlockVCFP vb);
@@ -394,7 +405,8 @@ extern void vcf_seg_INFO_mutation (VBlockVCFP vb, ContextP ctx, STRp(mut));
 // ISAAC stuff
 extern void vcf_isaac_seg_initialize (VBlockVCFP vb);
 extern void vcf_seg_FORMAT_GQX (VBlockVCFP vb, ContextP ctx, STRp(gqx));
-extern void vcf_seg_FORMAT_GMAF (VBlockVCFP vb, ContextP ctx, STRp(gmaf));
+extern void vcf_seg_INFO_GMAF (VBlockVCFP vb, ContextP ctx, STRp(gmaf));
+extern void vcf_seg_INFO_EVS (VBlockVCFP vb, ContextP ctx, STRp(evs));
 extern void vcf_seg_INFO_IDREP (VBlockVCFP vb, ContextP ctx, STRp(idrep));
 extern int vcf_isaac_info_channel_i (VBlockP vb);
 
@@ -437,6 +449,15 @@ extern void vcf_seg_pbsv_ID (VBlockVCFP vb, STRp(id));
 extern void vcf_piz_insert_pbsv_ID (VBlockVCFP vb);
 extern void vcf_seg_pbsv_MATEID (VBlockVCFP vb, ContextP ctx, STRp(mate_id));
 
+// Mobile Elements stuff
+extern void vcf_me_zip_initialize (void);
+extern void vcf_me_seg_initialize (VBlockVCFP vb);
+extern void vcf_seg_MEINFO (VBlockVCFP vb, ContextP ctx, STRp(meinfo));
+extern void vcf_seg_melt_ADJLEFT (VBlockVCFP vb, ContextP ctx, STRp(adjleft_str));
+extern void vcf_seg_melt_ADJRIGHT (VBlockVCFP vb, ContextP ctx, STRp(adjright_str));
+extern void vcf_seg_melt_INTERNAL (VBlockVCFP vb, ContextP ctx, STRp(internal));
+extern void vcf_seg_melt_DIFF (VBlockVCFP vb, ContextP ctx, STRp(diff));
+
 // Ultima Genomics stuff
 extern void vcf_ultima_seg_initialize (VBlockVCFP vb);
 extern void vcf_seg_INFO_X_LM_RM (VBlockVCFP vb, ContextP ctx, STRp(seq));
@@ -457,11 +478,10 @@ extern void vcf_seg_playpus_INFO_WS_WE (VBlockVCFP vb, ContextP ctx, STRp(value)
 extern void vcf_seg_playpus_INFO_HP (VBlockVCFP vb, ContextP ctx, STRp(hp_str));    
 extern void vcf_seg_platypus_FORMAT_GOF (VBlockVCFP vb, ContextP ctx, STRp(gof_str));
 
-// Liftover Piz
-extern void vcf_lo_piz_TOPLEVEL_cb_filter_line (VBlockVCFP vb);
-
 eSTRl(snip_copy_af);
 eSTRl(copy_VCF_POS_snip);
+eSTRl(copy_VCF_ID_snip);
+eSTRl(copy_INFO_AF_snip);
 
 #define VCF_ERR_PREFIX { progress_newline(); fprintf (stderr, "Error %s:%u in variant %.*s:%"PRId64": ", __FUNCLINE, STRf(vb->chrom_name), vb->last_int (VCF_POS)); }
 #define ASSVCF(condition, format, ...) ({ if (!(condition)) { VCF_ERR_PREFIX; fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); }})

@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-//   vcf_manta.c
+//   vcf_pbsv.c
 //   Copyright (C) 2022-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
@@ -65,8 +65,8 @@ void vcf_pbsv_seg_initialize (VBlockVCFP vb)
 
     ctx_set_dyn_int (VB, id1_ctx->did_i, bnd1_ctx->did_i, DID_EOL);
 
-    seg_mux_init (VB, id0_ctx, 6, VCF_SPECIAL_DEMUX_BY_VARTYPE, true,  (MultiplexerP)&vb->pbsv_I0D_mux);
-    seg_mux_init (VB, id1_ctx, 3, VCF_SPECIAL_DEMUX_BY_VARTYPE, false, (MultiplexerP)&vb->pbsv_I1D_mux);
+    seg_mux_init (vb, id0_ctx->did_i, VCF_SPECIAL_DEMUX_BY_VARTYPE, true,  pbsv_I0D);
+    seg_mux_init (vb, id1_ctx->did_i, VCF_SPECIAL_DEMUX_BY_VARTYPE, false, pbsv_I1D);
 }
 
 StrTextLong vcf_pbsv_get_mate_id (STRp(id), uint32_t *len/*out*/)
@@ -186,8 +186,6 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_PBSV_ID_BND)
 
 void vcf_seg_pbsv_ID (VBlockVCFP vb, STRp(id))
 {
-    SEGCONF_RECORD_WIDTH (ID, id_len);
-
     STR(mate_id);
     mate_id = vcf_pbsv_get_mate_id (STRa(id), &mate_id_len).s;
 
@@ -209,10 +207,10 @@ void vcf_seg_pbsv_ID (VBlockVCFP vb, STRp(id))
             (!ALT0(SYM_DUP) && svtype_by_vt[vt] && (vt_item = match_vt (vt, pSTRa(id), svtype_by_vt[vt], strlen (svtype_by_vt[vt]), 0, 0, &vt_item_len)))) {
 
             ContextP channel_ctx = 
-                seg_mux_get_channel_ctx (VB, id0_ctx->did_i, (MultiplexerP)&vb->pbsv_I0D_mux, i0d_mux_channel[vt]);
+                seg_mux_get_channel_ctx (VB, id0_ctx->did_i, (MultiplexerP)&vb->mux_pbsv_I0D, i0d_mux_channel[vt]);
 
             seg_by_ctx (VB, STRa(vt_item), channel_ctx, vt_item_len);
-            seg_by_ctx (VB, STRa(vb->pbsv_I0D_mux.snip), id0_ctx, 0); // I0D de-multiplexer
+            seg_by_ctx (VB, STRa(vb->mux_pbsv_I0D.snip), id0_ctx, 0); // I0D de-multiplexer
         }
 
         else 
@@ -223,7 +221,7 @@ void vcf_seg_pbsv_ID (VBlockVCFP vb, STRp(id))
         // channel 1 - CNV - its own number range
         // channel 2 - BND - chrom/pos of this and mate
         ContextP channel_ctx = 
-            seg_mux_get_channel_ctx (VB, id1_ctx->did_i, (MultiplexerP)&vb->pbsv_I1D_mux, i1d_mux_channel[vt]);
+            seg_mux_get_channel_ctx (VB, id1_ctx->did_i, (MultiplexerP)&vb->mux_pbsv_I1D, i1d_mux_channel[vt]);
 
         if (ALT0(BND)) {
             if (!vcf_seg_pbsv_ID_BND (vb, channel_ctx, STRa(id)))
@@ -239,7 +237,7 @@ void vcf_seg_pbsv_ID (VBlockVCFP vb, STRp(id))
                 seg_by_ctx (VB, STRa(id), channel_ctx, id_len); // fallback
         }
 
-        seg_by_ctx (VB, STRa(vb->pbsv_I1D_mux.snip), id1_ctx, 0); // I1D de-multiplexer
+        seg_by_ctx (VB, STRa(vb->mux_pbsv_I1D.snip), id1_ctx, 0); // I1D de-multiplexer
 
         seg_by_did (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_DEFER }, 2, VCF_ID, 7); // "pbsv" + 2 '.' separators + \t
     }
@@ -255,7 +253,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_DEMUX_BY_VARTYPE)
     return reconstruct_demultiplex (vb, ctx, STRa(snip), (ctx->dict_id.num == _ID0 ? i0d_mux_channel : i1d_mux_channel)[VB_VCF->var_types[0]], new_value, reconstruct);
 }
 
-// called from toplevel callback
+// called from vcf_piz_refalt_parse
 void vcf_piz_insert_pbsv_ID (VBlockVCFP vb)
 {
     decl_ctx (VCF_ID);

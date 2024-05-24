@@ -612,6 +612,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
     if (!VER(14)) // up to v13 this special was only when calculating score was needed
         new_value->i = sam_get_QUAL_score (vb, STRa(qual));
     
+    // calculate QUAL_score to be copied into our future mate's ms:i
     else if (CTX(OPTION_ms_i)->flags.spl_custom) // since v14 for ms_BIOBAMBAM
         *B(int64_t, CTX(OPTION_ms_i)->history, vb->line_i) = sam_get_QUAL_score (vb, STRa(qual));
 

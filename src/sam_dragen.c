@@ -14,7 +14,7 @@
 
 void sam_dragen_seg_initialize (VBlockSAMP vb)
 {
-    seg_mux_init (VB, CTX(OPTION_sd_f), 2, SAM_SPECIAL_sd, false, (MultiplexerP)&vb->mux_dragen_sd);
+    seg_mux_init (vb, OPTION_sd_f, SAM_SPECIAL_sd, false, dragen_sd);
 }
 
 static int sd_channel_i (int seq_len, int as)

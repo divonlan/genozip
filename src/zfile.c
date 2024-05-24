@@ -759,8 +759,6 @@ uint64_t zfile_read_genozip_header_get_offset (bool as_is)
     if (!ret) return 0; // failed
     
     // case: there is no genozip header. this can happen if the file was truncated (eg because compression did not complete)
-    // note: this can also happen if the file is genozip v1, but I don't think there are any real v1 files in the wild
-    // so I will keep the error message simple and not mention it
     RETURNW (BGEN32 (footer.magic) == GENOZIP_MAGIC, 0, "Error in %s: the file appears to be incomplete (it is missing the Footer).", z_name);
     
     uint64_t offset = flag.recover ? zfile_read_genozip_header_get_actual_offset() // get correct offset in case of corruption

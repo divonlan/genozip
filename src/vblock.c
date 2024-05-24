@@ -195,6 +195,20 @@ VBlockP vb_get_nonpool_vb (VBID vb_id)
     return nonpool_vbs[NUM_NONPOOL_VBs + vb_id]; // may be NULL
 }
 
+// used to change segconf VB data_type is seg_initiatlize (FASTA->FASTQ)
+void vb_change_datatype_nonpool_vb (VBlockP *vb_p, DataType new_dt)
+{
+    REALLOC (vb_p, get_vb_size (new_dt), "VBlock");
+    VBlockP vb = *vb_p;
+
+    vb->data_type = vb->data_type_alloced = new_dt;
+    init_dict_id_to_did_map (vb->d2d_map); 
+    
+    buflist_update_vb_addr_change (vb, vb->buffer_list.vb);
+
+    nonpool_vbs[NUM_NONPOOL_VBs + vb->id] = vb;
+}
+
 static VBlockP vb_update_data_type (VBlockP vb, DataType dt, DataType alloc_dt, uint64_t sizeof_vb)
 {
     if (z_file && vb->data_type == dt) return vb;

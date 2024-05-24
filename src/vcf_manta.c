@@ -57,7 +57,7 @@ void vcf_manta_seg_initialize (VBlockVCFP vb)
     }
 
     for (int tw=0; tw < NUM_MANTA_TWs; tw++) 
-        seg_mux_init (VB, CTX(tw_dids[tw]), 2, VCF_SPECIAL_DEMUX_BY_MATE, false, (MultiplexerP)&vb->mate_mux[tw]);
+        seg_mux_init (vb, tw_dids[tw], VCF_SPECIAL_DEMUX_BY_MATE, false, mate[tw]);
 }
 
 static bool vcf_seg_manta_ID_cb_3 (VBlockP vb, ContextP ctx, STRp(value), uint32_t unused_rep)

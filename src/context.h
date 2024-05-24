@@ -55,6 +55,8 @@
                      "SNIP_DONT_STORE", "<LF>", "SNIP_COPY", "SNIP_DUAL", "SNIP_LOOKBACK",\
                      "SNIP_COPY_BUDDY", "SNIP_DIFF", "SNIP_RESERVED", "SNIP_NUMERIC" }
 
+#define MAX_SNIP_DICTS 3 // maximum dicts for PLUS snip. Can be increased if needed, but never decreased.
+
 #define decl_ctx(did_i) ContextP ctx = CTX(did_i)
 #define decl_const_ctx(did_i) ConstContextP ctx = CTX(did_i)
 #define decl_zctx(did_i) ContextP zctx = ZCTX(did_i)
@@ -96,9 +98,6 @@ typedef struct {              // 8 bytes
 #define SAFE_NEGATE(signedtype,n) ((u##signedtype)(-((int64_t)n))) // careful negation to avoid overflow eg -(-128)==0 in int8_t
 #define INTERLACE(signedtype,num) ({ signedtype n=(signedtype)(num); (n < 0) ? ((SAFE_NEGATE(signedtype,n) << 1) - 1) : (((u##signedtype)n) << 1); })
 #define DEINTERLACE(signedtype,unum) (((unum) & 1) ? -(signedtype)(((unum)>>1)+1) : (signedtype)((unum)>>1))
-
-static inline bool NEXTLOCALBIT(ContextP ctx)      { bool ret = bits_get ((BitsP)&ctx->local, ctx->next_local); ctx->next_local++; return ret; }
-static inline uint8_t NEXTLOCAL2BITS(ContextP ctx) { uint8_t ret = bits_get ((BitsP)&ctx->local, ctx->next_local) | (bits_get ((BitsP)&ctx->local, ctx->next_local+1) << 1); ctx->next_local += 2; return ret; }
 
 // factor in which we grow buffers in CTX upon realloc
 #define CTX_GROWTH 1.75
@@ -223,15 +222,15 @@ extern void ctx_update_stats (VBlockP vb);
 extern rom ctx_get_snip_by_word_index_do (ConstContextP ctx, WordIndex word_index, pSTRp(snip), FUNCLINE);
 #define ctx_get_snip_by_word_index(ctx,word_index,snip) ctx_get_snip_by_word_index_do ((ctx), (word_index), &snip, &snip##_len, __FUNCLINE)
 #define ctx_get_snip_by_word_index0(ctx,word_index) ctx_get_snip_by_word_index_do ((ctx), (word_index), 0,0, __FUNCLINE)
-                                                
+
+static inline rom ctx_get_words_snip(ConstContextP ctx, WordIndex word_index)  // PIZ
+    { return ctx_get_snip_by_word_index0 (ctx, word_index); }
+
 // ZIP - get snip
 extern rom ctx_get_vb_snip_ex (ConstContextP vctx, WordIndex vb_node_index, pSTRp(snip)); 
 extern StrTextMegaLong ctx_get_vb_snip (ConstContextP vctx, WordIndex vb_node_index);
 extern rom ctx_get_z_snip_ex (ConstContextP zctx, WordIndex z_node_index, pSTRp(snip));
 extern StrTextMegaLong ctx_get_z_snip (ConstContextP zctx, WordIndex z_node_index); 
-
-static inline rom ctx_get_words_snip(ConstContextP ctx, WordIndex word_index)  // PIZ
-    { return ctx_get_snip_by_word_index0 (ctx, word_index); }
 
 extern WordIndex ctx_get_word_index_by_snip (VBlockP vb, ContextP ctx, STRp(snip)); // PIZ
 
@@ -362,6 +361,7 @@ extern uint64_t ctx_get_ctx_group_z_len (VBlockP vb, Did group_did_i);
 typedef enum { KR_KEEP, KR_REMOVE } CtxKeepRemove;
 extern void ctx_declare_winning_group (Did winning_group_did_i, Did losing_group_did_i, Did new_st_did_i);
 
+#define T(cond, did_i) ((cond) ? (did_i) : DID_NONE)
 extern void ctx_set_store (VBlockP vb, int store_type, ...);
 extern void ctx_set_no_stons (VBlockP vb, ...);
 extern void ctx_set_same_line (VBlockP vb, ...);

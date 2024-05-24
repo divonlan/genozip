@@ -246,7 +246,7 @@ static inline void container_verify_line_integrity (VBlockP vb, ContextP debug_l
 static inline uint32_t container_reconstruct_prefix (VBlockP vb, ConstContainerP con, pSTRp(prefixes),
                                                      bool skip, DictId con_dict_id, DictId item_dict_id, bool show)
 {
-    ASSERT (*prefixes_len <= CONTAINER_MAX_PREFIXES_LEN, "prefixes_len=%u is too big", *prefixes_len);
+    ASSPIZ (*prefixes_len <= CONTAINER_MAX_PREFIXES_LEN, "prefixes_len=%u is too big", *prefixes_len);
 
     if (! (*prefixes_len)) return 0; // nothing to do
     
@@ -471,6 +471,13 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
 
     bool show_non_item = vb->show_containers && (!flag.dict_id_show_containers.num || dict_id_typeless (ctx->dict_id).num == flag.dict_id_show_containers.num);
 
+    if (show_non_item) // show container reconstruction (note: before container_reconstruct_prefix which modifies prefixes)
+        iprintf ("%s%sVB=%u Line=%d Container(%s)=%s\n", 
+                 vb->preprocessing    ? "preproc " : "", 
+                 vb->peek_stack_level ? "peeking " : "",
+                 vb->vblock_i, vb->line_i, dis_dict_id (ctx->dict_id).s, 
+                 container_to_json (con, prefixes_len ? prefixes-1 : NULL, prefixes_len ? prefixes_len+1 : 0).s); // +1 to add back initial CON_PX_SEP removed by container_retrieve
+
     // container wide prefix - it will be missing if Container has no prefixes, or empty if it has only items prefixes
     container_reconstruct_prefix (vb, con, pSTRa(prefixes), false, ctx->dict_id, DICT_ID_NONE, show_non_item); 
 
@@ -485,9 +492,6 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
 
     // for containers, new_value is the sum of all its items, all repeats last_value (either int or float)
     ValueType new_value = {};
-
-    if (show_non_item) // show container reconstruction 
-        iprintf ("Container(%s)=%s\n", dis_dict_id (ctx->dict_id).s, container_to_json (con, STRa(prefixes)).s);
 
     ContextP debug_lines_ctx = NULL;
     if (is_toplevel) {
@@ -666,7 +670,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
 
     if (is_toplevel) {
         // sanity checks
-        ASSERT (vb->lines.len == con->repeats, "%s: Expected vb->lines.len=%"PRIu64" == con->repeats=%u", VB_NAME, vb->lines.len, con->repeats);
+        ASSPIZ (vb->lines.len == con->repeats, "%s: Expected vb->lines.len=%"PRIu64" == con->repeats=%u", VB_NAME, vb->lines.len, con->repeats);
 
         // final line_start entry (it has a total of num_lines+1 entires) - done last, after possibly dropping line
         container_set_lines (vb, con->repeats);
@@ -719,10 +723,10 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
     if (!con_p) {
         // decode
         unsigned b64_len = snip_len; // maximum length of b64 - it will be shorter if snip includes prefixes too
-        base64_decode (snip, &b64_len, (uint8_t*)&con);
+        base64_decode (snip, &b64_len, (uint8_t*)&con, -1);
         con.repeats = BGEN24 (con.repeats);
 
-        ASSERT (con_nitems (con) <= MAX_FIELDS, "A container of %s has %u items which is beyond MAX_FIELDS=%u. %s",
+        ASSPIZ (con_nitems (con) <= MAX_FIELDS, "A container of %s has %u items which is beyond MAX_FIELDS=%u. %s",
                 ctx->tag_name, con_nitems (con), MAX_FIELDS, genozip_update_msg());
 
         // get the did_i for each dict_id - unfortunately we can only store did_i up to 254 (changing this would be a change in the file format)
@@ -731,7 +735,7 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
                 Did did_i = ctx_get_existing_did_i (vb, item->dict_id);
                 
                 // note: we possibly won't have did_i if all instances of this container had repeats=0 (and hence items were not segged)
-                ASSERT (did_i != DID_NONE || !con.repeats, "analyzing a %s container in vb=%s: unable to find did_i for item %s/%s",
+                ASSPIZ (did_i != DID_NONE || !con.repeats, "analyzing a %s container in vb=%s: unable to find did_i for item %s/%s",
                         ctx->tag_name, VB_NAME, dtype_name_z(item->dict_id), dis_dict_id (item->dict_id).s);
 
                 item->did_i_small = (did_i <= 254 ? (uint8_t)did_i : 255);
@@ -741,16 +745,16 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
  
         // get prefixes
         unsigned con_size = con_sizeof (con);
-        prefixes     = (b64_len < snip_len) ? &snip[b64_len+1]       : NULL;
+        prefixes     = (b64_len < snip_len) ? &snip[b64_len+1]       : NULL; // remove initial CON_PX_SEP
         prefixes_len = (b64_len < snip_len) ? snip_len - (b64_len+1) : 0;
 
-        ASSERT (prefixes_len <= CONTAINER_MAX_PREFIXES_LEN, "ctx=%s: prefixes_len=%u longer than CONTAINER_MAX_PREFIXES_LEN=%u", 
+        ASSPIZ (prefixes_len <= CONTAINER_MAX_PREFIXES_LEN, "ctx=%s: prefixes_len=%u longer than CONTAINER_MAX_PREFIXES_LEN=%u", 
                 ctx->tag_name, prefixes_len, CONTAINER_MAX_PREFIXES_LEN);
 
-        ASSERT (!prefixes_len || prefixes[prefixes_len-1] == CON_PX_SEP, 
-                "ctx=%s: prefixes array does end with a CON_PX_SEP: %.*s", ctx->tag_name, prefixes_len, prefixes);
+        ASSPIZ (!prefixes_len || (prefixes[-1] == CON_PX_SEP && prefixes[prefixes_len-1] == CON_PX_SEP), 
+                "ctx=%s: prefixes array does not start and end with a CON_PX_SEP: \"%s\"", ctx->tag_name, str_to_printable_(prefixes-1, prefixes_len+1).s);
 
-        ASSERT (con_size + prefixes_len <= 65535, "ctx=%s: con_size=%u + prefixes_len=%u too large", 
+        ASSPIZ (con_size + prefixes_len <= 65535, "ctx=%s: con_size=%u + prefixes_len=%u too large", 
                 ctx->tag_name, con_size, prefixes_len);
 
         // first encounter with Container for this context - allocate the cache index
@@ -781,7 +785,7 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
         
         if (vb->translation.trans_containers && !item0->dict_id.num && item0->translator) {
             int32_t prefixes_len_change = (DT_FUNC(vb, translator)[item0->translator](vb, ctx, cached_con, con_size + prefixes_len, 0, false));  
-            ASSERT (prefixes_len_change <= CONTAINER_MAX_SELF_TRANS_CHANGE, 
+            ASSPIZ (prefixes_len_change <= CONTAINER_MAX_SELF_TRANS_CHANGE, 
                     "ctx=%s: prefixes_len_change=%d exceeds range maximum %u", 
                     ctx->tag_name, prefixes_len_change, CONTAINER_MAX_SELF_TRANS_CHANGE);
             
@@ -876,8 +880,8 @@ StrTextMegaLong container_to_json (ConstContainerP con, STRp (prefixes))
               char_to_printable (con->repsep[0]).s, char_to_printable(con->repsep[1]).s);
     
     for (unsigned i=0; i < num_items; i++)
-        SNPRINTF (s, "{ \"dict_id\": \"%s\", \"separator\": [ %s, %s ], \"translator\": %u }, ",
-                  dis_dict_id (con->items[i].dict_id).s,  
+        SNPRINTF (s, "[%d]={ \"dict_id\": \"%s\", \"separator\": [ %s, %s ], \"translator\": %u }, ",
+                  i, dis_dict_id (con->items[i].dict_id).s,  
                   item_sep_name0 (con->items[i].separator[0]).s, item_sep_name1 (con->items[i].separator[1]).s, 
                   con->items[i].translator);
     
@@ -886,12 +890,14 @@ StrTextMegaLong container_to_json (ConstContainerP con, STRp (prefixes))
     if (prefixes_len) {
         SNPRINTF0 (s, " ], prefixes=[ ");
     
-        str_split (prefixes, prefixes_len, 0, CON_PX_SEP, pr, false);
+        str_split (prefixes+1, prefixes_len-3, 0, CON_PX_SEP, pr, false); // skip container initial (ZIP only, in PIZ is was already removed in container_retrieve), final CON_PX_SEP and terminator of final item (as it would cause a redundant item in str_split)
 
-        for (unsigned i=0; i < n_prs-1; i++) 
-            SNPRINTF (s, "\"%s\", ", str_to_printable_(prs[i], MIN_(pr_lens[i], sizeof(StrTextSuperLong)/2-1)).s);
+        SNPRINTF (s, "[con_wide]=\"%s\", ", str_to_printable_(prs[0], MIN_(pr_lens[0], sizeof(StrTextSuperLong)/2-1)).s);
 
-        if (num_items) s_len -= 2; // remove last comma
+        for (unsigned i=1; i < n_prs; i++) 
+            SNPRINTF (s, "[%d]=\"%s\", ", i-1, str_to_printable_(prs[i], MIN_(pr_lens[i], sizeof(StrTextSuperLong)/2-1)).s);
+
+        s_len -= 2; // remove last comma (exists even if num_items=0 - for container-wide prefix)
     
         SNPRINTF0 (s, " ] }");
     }

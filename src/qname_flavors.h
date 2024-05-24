@@ -707,6 +707,19 @@ static SmallContainer con_illumina_5 = {
                    { .dict_id = { _SAM_QmNAME }, I_AM_MATE                 } }
 };
 
+// Example: HWI-ST156_288:4:1:10000:112636:0
+static SmallContainer con_illumina_6 = {
+    .repeats   = 1,
+    .nitems_lo = 7,
+    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = ":"          },  
+                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q4NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q5NAME },                           },
+                   { .dict_id = { _SAM_QmNAME }, I_AM_MATE                 } }
+};
+
 // HWI-ST550_0201:3:1101:1626:2216#ACAGTG
 static SmallContainer con_illumina_5i = {
     .repeats   = 1,
@@ -1116,6 +1129,7 @@ static QnameFlavorStruct qf[] = {
     {},  { QF_ILLUM_5,     "Illum-old",     { "SOLEXA-1GA-1_4_FC20ENL:7:258:737:870" },   TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_5,     no_validate,    0,   4,  {1,2,3,4,-1},       {-1},           {1,2,3,4,-1},       {-1},           0,  -1,-1, -1,-1, -1, -1, -1, -1,                       },
     {},  { QF_ILLUM_5rng,  "Illum-oldR",    { "NOVID_3053_FC625AGAAXX:6:1:1069:11483:0,84" },   
                                                                                           TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_5rng,  no_validate,    ':', 6,  {1,2,3,4,5,6,-1},   {-1},           {1,2,3,4,5,6,-1},   {-1},           0,  -1,-1, -1,-1, 6,  -1, -1, -1,                       },
+    {},  { QF_ILLUM_6,     "Illum-old6",    { "HWI-ST156_288:4:1:10000:110537:0" },       TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_6,     no_validate,    0,   5,  {1,2,3,4,5,-1},     {-1},           {1,2,3,4,-1},       {-1},           0,  -1,-1, -1,-1, -1, -1, -1, -1,                       },
     {},  { QF_ROCHE_454,   "Roche-454",     { "000050_1712_0767" },                       TECH_454,     TECH_NCBI,    QANY,   &con_roche_454,      no_validate,    0,   2,  {-1},               {0,1,2,-1},     {-1},               {-1},           0,  -1,-1, -1,-1, -1, -1, -1, -1, 16, PX_roche_454      },
     {},  { QF_HELICOS,     "Helicos",       { "VHE-242383071011-15-1-0-2" },              TECH_HELICOS, TECH_NCBI,    QANY,   &con_helicos,        no_validate,    0,   5,  {2,3,4,5,-1},       {-1},           {-1},               {-1},           0,  -1,-1, -1,-1, -1, -1, -1, -1,                       },
     {},  { QF_PACBIO_3,    "PacBio-3",      { "0ae26d65_70722_4787" },                    TECH_PACBIO,  TECH_NCBI,    QANY,   &con_pacbio_3,       no_validate,    0,   2,  {1,2,-1},           {0,-1},         {1,2,-1},           {0,-1},         0,  -1,-1, -1,-1, -1, -1, -1, -1, 0,  PX_pacbio_3       },

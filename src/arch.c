@@ -298,6 +298,7 @@ StrText arch_get_filesystem_type (void)
         NAME (0x19830326, "FhGFS");    // https://www.beegfs.io/docs/SC13_FHGFS_Presentation.pdf
         NAME (0x53464846, "wslfs");    // WSL1: https://github.com/MicrosoftDocs/WSL/issues/465
         NAME (0x1021994,  "tmpfs");    // Heap Backing Filesystem
+        NAME (0x2011bab0, "exFAT");    // Filesystem for flash memory: https://en.wikipedia.org/wiki/ExFAT
         default: snprintf (s.s, sizeof (s.s), "0x%lx", fs.f_type); 
     }
 
@@ -465,5 +466,40 @@ bool arch_is_process_alive (uint32_t pid)
     CloseHandle (process);
 #endif
     return is_alive;
+}
+
+// check if executable is in the path. Note: in Windows it actually runs the executable, so 
+// only suitable for executables that would terminate immediately.
+static bool arch_is_exec_in_path (rom exec)
+{
+#ifdef _WIN32
+    StreamP where = stream_create (0, 0, 0, 0, 0, 0, 0, "where.exe", "where.exe", "/Q", exec, NULL); 
+
+    return stream_close (&where, STREAM_WAIT_FOR_PROCESS) == 0;
+
+#else
+    char run[32 + strlen(exec)];
+    snprintf (run, sizeof (run), "which %s > /dev/null 2>&1", exec);
+    return !system (run) && file_exists ("/dev/stdout");
+#endif
+}
+
+bool wget_available (void)
+{
+    static thool installed = unknown;
+    if (installed == unknown)
+        // note: wget not used on Windows, bc I can't get it to output to stdout, and also earlier wget versions may be adding \r ... : https://stackoverflow.com/questions/8522983/wget-of-binary-file-piped-into-other-commands-on-windows-breaks-the-binary
+        installed = !flag.is_windows && arch_is_exec_in_path ("wget");
+
+    return installed;
+}
+
+bool curl_available (void)
+{
+    static thool installed = unknown;
+    if (installed == unknown)
+        installed = arch_is_exec_in_path ("curl");
+
+    return installed;
 }
 

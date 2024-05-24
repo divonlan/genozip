@@ -190,6 +190,7 @@ typedef struct {
     uint32_t ref_consumed;
     uint32_t hard_clip[2];        
     int32_t NH;                    // used by sam_seg_HI_i
+    uint16_t PQ;
     SamNMType NM;                  // value of NM:i and its length
     SamFlags FLAG; 
     uint8_t NM_len;                
@@ -245,7 +246,7 @@ typedef struct VBlockSAM {
             idx_UB_Z, idx_BX_Z, idx_CB_Z, idx_GX_Z, idx_CR_Z, idx_CY_Z,
             idx_XO_Z, idx_YS_Z, idx_XB_A, idx_XM_Z, idx_XB_Z,
             idx_dq_Z, idx_iq_Z, idx_sq_Z, idx_ZA_Z, idx_ZB_Z,
-            idx_pr_i, idx_qs_i, idx_ac_B;
+            idx_pr_i, idx_qs_i, idx_ws_i, idx_ac_B;
     #define has(f)   (vb->idx_##f  != -1)
     #define has_MD   (has(MD_Z) && segconf.has[OPTION_MD_Z])
 
@@ -261,7 +262,7 @@ typedef struct VBlockSAM {
     Multiplexer4 mux_PNEXT;
     Multiplexer3 mux_POS, mux_MAPQ;// ZIP: DEMUX_BY_MATE_PRIM multiplexers
     Multiplexer2 mux_FLAG, mux_MQ, mux_MC, mux_ms, mux_AS, mux_YS, mux_nM, // ZIP: DEMUX_BY_MATE or DEMUX_BY_BUDDY multiplexers
-                 mux_mated_z_fields[NUM_MATED_Z_TAGS], mux_ultima_c, mux_dragen_sd, mux_YY, mux_XO,
+                 mux_mated_z_fields[NUM_MATED_Z_TAGS], mux_ultima_c, mux_dragen_sd, mux_YY, mux_XO, mux_PQ,
                  mux_sn, mux_rb, mux_mb;
     Multiplexer3 mux_NH;           // ZIP: DEMUX_BY_BUDDY_MAP
     Multiplexer7 mux_tp;           // ZIP: ULTIMA_tp (number of channels matches TP_NUM_BINS)
@@ -673,6 +674,7 @@ extern void sam_seg_pacbio_xq (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, Txt
 extern void sam_seg_pacbio_np (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t np, unsigned add_bytes);
 extern void sam_seg_pacbio_qs (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t qs, unsigned add_bytes);
 extern void sam_seg_pacbio_qe (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t qe, unsigned add_bytes);
+extern void sam_seg_pacbio_we (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t we, unsigned add_bytes);
 extern void sam_seg_pacbio_zm (VBlockSAMP vb, int64_t zm, unsigned add_bytes);
 extern bool sam_seg_pacbio_qual (VBlockSAMP vb, STRp(qual), unsigned add_bytes);
 extern void sam_seg_pacbio_sn (VBlockSAMP vb, ZipDataLineSAMP dl, rom sn, int sn_len);
@@ -884,6 +886,7 @@ eSTRl(copy_Q3NAME_int);
 eSTRl(copy_mate_CIGAR_snip);
 eSTRl(copy_mate_MAPQ_snip);
 eSTRl(copy_mate_MQ_snip);
+eSTRl(copy_mate_PQ_snip);
 eSTRl(XA_lookback_snip);
 eSTRl(TX_lookback_snip);
 eSTRl(AN_lookback_snip);

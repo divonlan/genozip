@@ -21,56 +21,6 @@
 #include "lookback.h"
 #include "aligner.h"
 
-// decode and store the the contexts in the first call for ctx (only one MINUS snip allowed per ctx)
-static uint32_t decode_dicts (VBlockP vb, ContextP ctx, STRp(snip))
-{
-    #define MAX_SNIP_DICTS 3 // increase if needed
-    buf_alloc_zero (vb, &ctx->ctx_cache, 0, MAX_SNIP_DICTS, ContextP, 1, "ctx_cache");
-
-    DictId dicts[MAX_SNIP_DICTS]; 
-    ctx->ctx_cache.len32 = base64_decode (snip, &snip_len, (uint8_t *)dicts) / sizeof (DictId);
-
-    for (int i=0; i < ctx->ctx_cache.len32; i++)
-        *B(ContextP, ctx->ctx_cache, i) = ECTX (dicts[i]);
-
-    return snip_len;
-}
-
-// parameter is two or more dict_id's (in base64). reconstructs sum(dict[i].last_value)
-SPECIAL_RECONSTRUCTOR (piz_special_PLUS)
-{
-    if (!ctx->ctx_cache.len32) 
-        decode_dicts (vb, ctx, STRa(snip));
-
-    new_value->i = 0;
-    for (int i=0; i < ctx->ctx_cache.len32; i++)
-        if (ctx_has_value_in_line_(vb, *B(ContextP, ctx->ctx_cache, i)))
-            new_value->i += (*B(ContextP, ctx->ctx_cache, i))->last_value.i;
-
-    if (reconstruct)
-        RECONSTRUCT_INT (new_value->i); 
-
-    return HAS_NEW_VALUE; 
-}
-
-// parameter is two dict_id's (in base64). reconstructs dict1.last_value - dict2.last_value
-SPECIAL_RECONSTRUCTOR (piz_special_MINUS)
-{
-    if (!ctx->ctx_cache.len32) 
-        snip += decode_dicts (vb, ctx, STRa(snip));
-
-    new_value->i = (*B(ContextP, ctx->ctx_cache, 0))->last_value.i - 
-                   (*B(ContextP, ctx->ctx_cache, 1))->last_value.i;
-
-    if (str_is_1char (snip, 'A')) 
-        new_value->i = ABS (new_value->i); // ABS option since 15.0.48
-
-    if (reconstruct)
-        RECONSTRUCT_INT (new_value->i); 
-
-    return HAS_NEW_VALUE; 
-}
-
 // Compute threads: decode the delta-encoded value of the POS field, and returns the new lacon_pos
 // Special values:
 // "-" - negated previous value
@@ -354,7 +304,7 @@ ContextP reconstruct_get_other_ctx_from_snip (VBlockP vb, ContextP ctx, pSTRp(sn
             ctx->tag_name, str_snip_ex (STRa(*snip), true).s, *snip_len, b64_len + 1);
 
     DictId dict_id;
-    base64_decode ((*snip)+1, &b64_len, dict_id.id);
+    base64_decode ((*snip)+1, &b64_len, dict_id.id, sizeof (DictId));
 
     ContextP other_ctx = ECTX (dict_id);
     ASSPIZ (other_ctx, "Failed to get other context: ctx=%s snip=%.*s other_dict_id=%s", 
@@ -388,7 +338,7 @@ ContextP recon_multi_dict_id_get_ctx_first_time (VBlockP vb, ContextP ctx, STRp(
     str_item_i (STRa(snip), '\t', ctx_i, pSTRa(dict_b64));
 
     DictId item_dict_id;
-    base64_decode (qSTRa(dict_b64), item_dict_id.id);
+    base64_decode (qSTRa(dict_b64), item_dict_id.id, sizeof (DictId));
 
     return (*B(ContextP, ctx->ctx_cache, ctx_i) = ECTX (item_dict_id)); // NULL if no data was segged to this channel    
 }
@@ -575,6 +525,7 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
 
     case SNIP_CONTAINER: {
         STR(prefixes);
+
         ContainerP con_p = container_retrieve (vb, snip_ctx, word_index, snip+1, snip_len-1, pSTRa(prefixes));
 
         ctx_set_encountered (vb, snip_ctx); // indicate this container was encountered, in case it is queried in container_peek_get_idxs

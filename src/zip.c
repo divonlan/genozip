@@ -98,15 +98,15 @@ static void zip_display_compression_ratio (Digest md5)
 
     // when compressing BAM report only ratio_vs_comp (compare to BGZF-compress BAM - we don't care about the underlying plain BAM)
     // Likewise, doesn't have a compression extension (eg .gz), even though it may actually be compressed eg .tbi (which is actually BGZF)
-    else if (Z_DT(BAM) || (txt_file && file_get_codec_by_txt_ft (txt_file->data_type, txt_file->type, false) == CODEC_NONE)) 
-        progress_finalize_component_time_ratio (SOURCE_CODEC(CRAM) ? "CRAM" : z_dt_name(), ratio_vs_comp, md5);
+    else if (Z_DT(BAM) || (txt_file && file_get_codec_by_txt_ft (FAF ? DT_FASTA : txt_file->data_type, txt_file->type, false) == CODEC_NONE)) 
+        progress_finalize_component_time_ratio (SOURCE_CODEC(CRAM)?"CRAM" : z_dt_name_faf(), ratio_vs_comp, md5);
 
     else if (ratio_vs_comp >= 0) {
         if (SOURCE_CODEC(NONE) || ratio_vs_comp < 1.05) // disk_so_far doesn't give us the true txt file size 
-            progress_finalize_component_time_ratio (z_dt_name(), ratio_vs_plain, md5);
+            progress_finalize_component_time_ratio (z_dt_name_faf(), ratio_vs_plain, md5);
         
         else // source was compressed
-            progress_finalize_component_time_ratio_better (z_dt_name(), ratio_vs_plain, file_exts[txt_file->type], ratio_vs_comp, md5);
+            progress_finalize_component_time_ratio_better (z_dt_name_faf(), ratio_vs_plain, file_exts[txt_file->type], ratio_vs_comp, md5);
     }
 }
 
@@ -139,7 +139,7 @@ static void zip_handle_unique_words_ctxs (VBlockP vb)
     START_TIMER;
 
     for_ctx {
-        if (ctx->local.len ||  // local is not free to accept our singletons
+        if (ctx->local.len || ctx->local_always ||  // local is not free to accept our singletons
             ctx->no_stons  ||  // don't change to LT_SINGLETON if we were explicitly forbidden having singletons
             ctx->ltype == LT_SUPP || // local data might be created by codec (later)
             ((VB_DT(VCF) || VB_DT(BCF)) && dict_id_is_vcf_format_sf (ctx->dict_id))) // this doesn't work for FORMAT fields

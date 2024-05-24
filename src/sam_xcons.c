@@ -14,10 +14,8 @@
 // in consensus reads XO:i is sometimes close to AS:i
 void sam_seg_xcons_XO_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t xo, unsigned add_bytes)
 {
-    int32_t as;
-
-    if (sam_seg_get_aux_int (vb, vb->idx_AS_i, &as, IS_BAM_ZIP, 1, 0x7fffffff, SOFT_FAIL)) {
-        int channel_i = (as == dl->SEQ.len);
+    if (has(AS_i)) {
+        int channel_i = (dl->AS == dl->SEQ.len);
         ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_XO_i, (MultiplexerP)&vb->mux_XO, channel_i);
 
         seg_delta_vs_other_localN (VB, channel_ctx, CTX(OPTION_AS_i), xo, -1, add_bytes);

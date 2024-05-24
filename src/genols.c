@@ -103,7 +103,8 @@ void genols (rom z_filename, bool finalize, rom subdir, bool recursive)
 
     bool is_subdir = subdir && (subdir[0] != '.' || subdir[1] != '\0');
 
-    z_file = file_open_z_read (z_filename); // open global z_file
+    if (!(z_file = file_open_z_read (z_filename))) // open global z_file
+        goto finish;
 
     SectionHeaderGenozipHeader header;
     if (!zfile_read_genozip_header (&header, SOFT_FAIL))

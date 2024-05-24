@@ -375,7 +375,7 @@ bool random_access_does_last_chrom_continue_in_next_vb (VBIType vb_i)
     return ra->chrom_index == (ra-1)->chrom_index;
 }
 
-// FASTA+FASTQ PIZ - number of chroms in this VB, excluding one that started before
+// FASTA PIZ - number of chroms in this VB, excluding one that started before
 uint32_t random_access_num_chroms_start_in_this_vb (VBIType vb_i)
 {
     const RAEntry *ra = random_access_get_first_ra_of_vb (vb_i);

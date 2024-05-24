@@ -78,10 +78,9 @@ void vcf_seg_INFO_VRS_Allele_IDs (VBlockVCFP vb, ContextP ctx, STRp(ids))
 
     #define VRS_ALL_ID_PREFIX "\4\4ga4gh:VA.\4" // \4 == CON_PX_SEP
 
-    seg_array_of_struct_with_prefixes (VB, ctx, VRS_Allele_IDs_con, VRS_ALL_ID_PREFIX, STRLEN(VRS_ALL_ID_PREFIX), 
-                                       STRa(ids), 
-                                       (SegCallback[]){ seg_add_to_local_fixed_len_cb }, // expected to be all of length 32, so better seg as a fixed-len blob than a string
-                                       NULL, ids_len);
+    seg_array_of_struct_ (VB, ctx, VRS_Allele_IDs_con, VRS_ALL_ID_PREFIX, STRLEN(VRS_ALL_ID_PREFIX), 
+                          STRa(ids), (SegCallback[]){ seg_add_to_local_fixed_len_cb }, // expected to be all of length 32, so better seg as a fixed-len blob than a string
+                          0, 0, NULL, ids_len);
 }
 
 #define VT(x) (vb->var_types[0] == VT_##x)

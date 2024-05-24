@@ -148,12 +148,12 @@ void seg_id_field (VBlockP vb, ContextP ctx, STRp(id),
                    bool hint_zero_padded_fixed_len, // numeric part is expected to be zero padded (or not). if hint is correct, this will result in better compression
                    unsigned add_bytes)     
 {
-    #define T(x) (ctx->id_type == IDT_##x)
+    #define IDT(x) (ctx->id_type == IDT_##x)
 
     if (!ctx->is_initialized) 
         seg_id_field_init (vb, ctx, STRa(id), hint_zero_padded_fixed_len);
         
-    if (T(OTHER)) {
+    if (IDT(OTHER)) {
         seg_add_to_local_string (vb, ctx, STRa(id), LOOKUP_SIMPLE, add_bytes); // LOOKUP_SIMPLE bc eg in gff_seg_dbxref we mix seg_id_field with other methods
 
         if (segconf.running && id_len > 1)
@@ -167,13 +167,13 @@ void seg_id_field (VBlockP vb, ContextP ctx, STRp(id),
         ContextP ctx_num1 = ctx;
 
         if (!seg_id_split (STRa(id),  
-                           T(ALPHA_INT_DOT_INT) || T(ALPHA_NUM_DOT_INT), // has_num2
-                           T(ALPHA_NUM) || T(ALPHA_NUM_DOT_INT),        // allow_num1_leading_zeros
+                           IDT(ALPHA_INT_DOT_INT) || IDT(ALPHA_NUM_DOT_INT), // has_num2
+                           IDT(ALPHA_NUM) || IDT(ALPHA_NUM_DOT_INT),        // allow_num1_leading_zeros
                            pSTRa(alpha), &num1, &num1_len, &num2, &num2_len))
             goto fallback;
             
         // case: eg "ENSMUSE00000866652.1": container goes into ctx, and id's components into other contexts
-        if (T(ALPHA_INT_DOT_INT) || T(ALPHA_NUM_DOT_INT)) {
+        if (IDT(ALPHA_INT_DOT_INT) || IDT(ALPHA_NUM_DOT_INT)) {
             ctx_num1 = id_num1_ctx (vb, ctx);
             ContextP ctx_num2 = id_num2_ctx (vb, ctx);
             
@@ -193,7 +193,7 @@ void seg_id_field (VBlockP vb, ContextP ctx, STRp(id),
         if (ctx->flags.store == STORE_INT) ctx_set_last_value (vb, ctx, num1);
 
         // case: not expecting leading zeros - if there are any, they will be part of alpha
-        if (T(ALPHA_INT) || T(ALPHA_INT_DOT_INT)) {
+        if (IDT(ALPHA_INT) || IDT(ALPHA_INT_DOT_INT)) {
             SAFE_ASSIGN (&id[-1], SNIP_LOOKUP); // we assign it anyway bc of the macro convenience, but we included it only if num_digits>0
             seg_by_ctx (VB, id-1, 1 + alpha_len, ctx_num1, alpha_len + num1_len); // account for the entire length, and sometimes with \t
             SAFE_RESTORE;
@@ -224,7 +224,6 @@ fallback: {
     seg_prepare_snip_other (SNIP_REDIRECTION, ctx_fallback->dict_id, false, 0, snip);
     seg_by_ctx (vb, STRa(snip), ctx, add_bytes - id_len);
 }
-    #undef T
 }
 
 // optimized for variable-length integers without leading zeros (but its ok if they have leading zeros)

@@ -224,8 +224,8 @@ static void scan_remove_single_vb_depns (void)
     z_file->sag_depn_index.len = new_depn_len;
 }
 
-// ZIP: runs during segconf: scan the entire file and build z_file->sag_depn_index - a uniq-sorted list of hash(QNAME) of all depn
-// alignments in the file
+// ZIP: runs during segconf if SAG_BY_FLAG is suspected: scan the entire file and build 
+// z_file->sag_depn_index - a uniq-sorted list of hash(QNAME) of all depn alignments in the file
 void sam_sag_by_flag_scan_for_depn (void)
 {
     const rom task_name = "scan_for_depn";
@@ -289,7 +289,7 @@ static bool sam_sag_is_multi_vb_SAG_BY_FLAG (int64_t first, int64_t last, uint32
 //---------------------------------------------------------------------------
 // Scanning during sam_seg_initialize - for non-SAG_by_FLAG files - so we can 
 // know whether all alignments of a sag are contained in a VB (in which case
-// no need to move to the prim/depn components) - BAM only
+// no need to move to the prim/depn components) 
 //---------------------------------------------------------------------------
 
 static ASCENDING_SORTER (qname_count_sorter, QnameCount, hash)

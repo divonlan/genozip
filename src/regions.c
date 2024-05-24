@@ -237,6 +237,10 @@ void regions_make_chregs (ContextP chrom_ctx)
     ARRAY (Region, regions, regions_buf);
 
     num_chroms = chrom_ctx->word_list.len;
+    // case: FASTA compressed without contigs, or FASTQ...
+    ASSINP (num_chroms, "--regions is not supported for this file because it was not indexed during compression%s",
+            (Z_DT(FASTA) || FAF) ? " (to index, compress with --index)" : ""); 
+
     chregs = CALLOC (num_chroms * sizeof (Buffer)); // a module global variable - array of buffers, one for each chrom
     
     for (int i=0; i < regions_len; i++) {

@@ -59,8 +59,7 @@ void vcf_seg_INFO_END (VBlockVCFP vb, ContextP end_ctx, STRp(end_str)) // end_ct
     else  
         seg_pos_field (VB, VCF_POS, VCF_POS, SPF_BAD_SNIPS_TOO | SPF_ZERO_IS_BAD, 0, STRa(end_str), 0, end_str_len);
 
-    // add end_delta to dl for sorting. it is used only in case chrom and pos are identical
-    DATA_LINE (vb->line_i)->end_delta = vb->last_delta (VCF_POS);
+    ctx_set_encountered (VB, end_ctx); // encountered END (but segged into POS and set last_value of POS as its an alias)
 }
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_END)

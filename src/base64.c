@@ -65,25 +65,26 @@ unsigned base64_encode (bytes data, unsigned data_len, char *b64_str)
 }
 
 // returns length of decoded data. b64_str_len is updated to the length of b64 string that was consumed.
-uint32_t base64_decode (rom b64_str, unsigned *b64_str_len /* in / out */, uint8_t *data)
+uint32_t base64_decode (rom b64_str, unsigned *b64_str_len /* in / out */, uint8_t *data,
+                        uint32_t data_len) // -1 if asking to read to end of snip (a non-b64 char like \0 or \t will terminate the b64 string) 
 {
 	uint8_t block[4];
-	bytes start_data = data;
+	uint32_t len=0;
 
-	unsigned pad=0, i=0; for (; i < *b64_str_len; i++) {
+	unsigned pad=0, i=0; for (; i < *b64_str_len && len < data_len; i++) {
 		if (b64_str[i] == '=') pad++;
 		block[i&3] = decode_lookup[(unsigned)b64_str[i]];
 		
 		if (block[i&3] == 0x80) break; // end of b64 string
 
 		if ((i&3) == 3) {
-  			                 *data++ = (block[0] << 2) | (block[1] >> 4);
-			if (pad <= 1)    *data++ = (block[1] << 4) | (block[2] >> 2);
-			if (!pad)        *data++ = (block[2] << 6) |  block[3];
+  			                 { *data++ = (block[0] << 2) | (block[1] >> 4); len++; }
+			if (pad <= 1)    { *data++ = (block[1] << 4) | (block[2] >> 2); len++; }
+			if (!pad)        { *data++ = (block[2] << 6) |  block[3];       len++; }
 		}
 	}	
 
 	*b64_str_len = i;
 
-	return (uint32_t)(data - start_data);
+	return len;
 }

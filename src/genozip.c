@@ -87,11 +87,9 @@ void noreturn main_exit (bool show_stack, bool is_error)
         if (!arch_is_valgrind())
             flag.let_OS_cleanup_on_exit = true;  
 
-        if (!is_error) {
+        if (!is_error && (IS_ZIP || (IS_PIZ && flag.check_latest)/*non-returning test after compress*/)) {
             version_print_notice_if_has_newer();
-
-            if (IS_ZIP || (IS_PIZ && flag.check_latest)/*non-returning test after compress*/)
-                tip_print();
+            tip_print();
         }
 
         if (is_error && flag.debug_threads)
@@ -376,6 +374,7 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
                                       flag.show_threads  ? "--show-threads"   : SKIP_ARG,
                                       flag.debug_threads ? "--debug-threads"  : SKIP_ARG,
                                       flag.debug_valgrind? "--debug-valgrind" : SKIP_ARG,
+                                      flag.debug_upgrade ? "--debug-upgrade"  : SKIP_ARG,
                                       flag.echo          ? "--echo"           : SKIP_ARG,
                                       flag.verify_codec  ? "--verify-codec"   : SKIP_ARG,
                                       flag.debug_lines   ? "--debug-lines"    : SKIP_ARG,
@@ -387,10 +386,10 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
                                       flag.no_cache      ? "--no-cache"       : SKIP_ARG,
                                       flag.sendto        ? "--sendto"         : SKIP_ARG,
                                       flag.sendto        ? sendto_str         : SKIP_ARG,
-                                      flag.license_filename        ? "--licfile"            : SKIP_ARG,
-                                      flag.license_filename        ? flag.license_filename  : SKIP_ARG,
-                                      IS_REF_EXTERNAL    ? "--reference"          : SKIP_ARG, 
-                                      IS_REF_EXTERNAL    ? ref_get_filename(gref) : SKIP_ARG, 
+                                      flag.license_filename ? "--licfile"     : SKIP_ARG,
+                                      flag.license_filename ? flag.license_filename : SKIP_ARG,
+                                      IS_REF_EXTERNAL    ? "--reference"      : SKIP_ARG, 
+                                      IS_REF_EXTERNAL    ? ref_get_filename(gref)   : SKIP_ARG, 
                                       // note: no need for --check-latest as this call returns, and we check-latest and print the tip it in ZIP
                                       NULL);
                                       // ↓↓↓ Don't forget to add below too ↓↓↓
@@ -399,7 +398,7 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
         int exit_code = stream_close (&test, STREAM_WAIT_FOR_PROCESS);
     
         TEMP_VALUE (primary_command, TEST_AFTER_ZIP); // make exit_on_error NOT delete the genozip file in this case, so its available for debugging
-        ASSERT (!exit_code, "%s: test exited with status: \"%s\"\n", global_cmd, exit_code_name (exit_code)); // exit with error status 
+        ASSERT (!exit_code, "%s: test exited with status: \"%s\"\n", global_cmd, genozip_exit_code_name (exit_code)); // exit with error status 
         RESTORE_VALUE (primary_command); // recover in case of more non-concatenated files
     }
 
@@ -426,6 +425,7 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
         if (flag.show_threads)  argv[argc++] = "--show-threads";
         if (flag.debug_threads) argv[argc++] = "--debug-threads";
         if (flag.debug_valgrind)argv[argc++] = "--debug-valgrind";
+        if (flag.debug_upgrade) argv[argc++] = "--debug-upgrade";
         if (flag.echo)          argv[argc++] = "--echo";
         if (flag.verify_codec)  argv[argc++] = "--verify-codec";
         if (flag.debug_lines)   argv[argc++] = "--debug-lines";
@@ -703,7 +703,9 @@ static void main_load_reference (rom filename, bool is_first_file, bool is_last_
     int old_aligner_available = flag.aligner_available;
     DataType dt = main_get_file_dt (filename);
     flag.aligner_available = primary_command == ZIP && 
-                            (old_aligner_available || dt == DT_FASTQ || dt == DT_GENERIC || // GENERIC might end up being FASTQ/SAM/BAM (in generic_is_header_done), initialize refhash just in case
+                            (old_aligner_available || dt == DT_FASTQ || 
+                            dt == DT_FASTA   || // FASTA can be segged as FASTQ
+                            dt == DT_GENERIC || // GENERIC might end up being FASTQ/SAM/BAM (in generic_is_header_done), initialize refhash just in case
                              ((dt==DT_SAM || dt==DT_BAM) && (flag.best || flag.deep)));     // SAM/BAM: load refhash only in --best or --deep
 
     // no need to load the reference if not needed (unless its genocat of the reference file itself)

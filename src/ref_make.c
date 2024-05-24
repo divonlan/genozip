@@ -45,7 +45,8 @@ void ref_make_seg_initialize (VBlockP vb)
             "Error: expecting FASTA file %s to start with a '>' or a ';'", txt_name);
 
     CTX(FASTA_CONTIG)->no_stons = true; // needs b250 node_index for reference
-
+    DC = '>';
+    
     if (segconf.running) segconf.fasta_has_contigs = true; // initialize optimistically
 
     COPY_TIMER (seg_initialize);

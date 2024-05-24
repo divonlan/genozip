@@ -29,6 +29,8 @@ extern bool arch_is_first_compression (void);
 extern Timestamp arch_timestamp (void);
 extern bool arch_is_process_alive (uint32_t pid);
 extern uint64_t arch_get_max_resident_set (void);
+extern bool wget_available (void);
+extern bool curl_available (void);
 
 static inline uint32_t arch_time_lap (uint128_t ts_start) // in msec
 { return (uint32_t)((arch_timestamp() - ts_start) / 1000000); }

@@ -111,15 +111,15 @@ void vcf_samples_zip_initialize (void)
 
 void vcf_samples_seg_initialize (VBlockVCFP vb)
 {
-    #define T(cond, did_i) ((cond) ? (did_i) : DID_NONE)
-
     ctx_set_store (VB, STORE_INT, FORMAT_ADALL, FORMAT_DP, FORMAT_AD, FORMAT_RD, FORMAT_RDR, FORMAT_RDF,
                    FORMAT_ADR, FORMAT_ADF, FORMAT_SDP, DID_EOL);
 
-    ctx_set_dyn_int (VB, FORMAT_RD, FORMAT_GQ, FORMAT_RGQ, FORMAT_MIN_DP, FORMAT_SDP, DID_EOL);
+    ctx_set_dyn_int (VB, FORMAT_RD, FORMAT_GQ, FORMAT_RGQ, FORMAT_MIN_DP, FORMAT_SDP, 
+                     T(segconf.vcf_is_GLIMPSE_phase, FORMAT_HS), 
+                     DID_EOL);
             
     if (segconf.FMT_DP_method != FMT_DP_DEFAULT) {
-        seg_mux_init (VB, CTX(FORMAT_DP), 2, VCF_SPECIAL_MUX_FORMAT_DP, false, (MultiplexerP)&vb->mux_FORMAT_DP);
+        seg_mux_init (vb, FORMAT_DP, VCF_SPECIAL_MUX_FORMAT_DP, false, FORMAT_DP);
     
         seg_mux_get_channel_ctx (VB, FORMAT_DP, (MultiplexerP)&vb->mux_FORMAT_DP, 0)->dyn_transposed = true; // seg transposed for variants that don't have AD / SDP to seg against
     }
@@ -143,7 +143,7 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
         : no;
 
     // initialize dosage multiplexers
-    #define init_mux_by_dosage(name) seg_mux_init ((VBlockP)vb, CTX(FORMAT_##name), ZIP_NUM_DOSAGES_FOR_MUX, VCF_SPECIAL_MUX_BY_DOSAGE, CTX(FORMAT_##name)->no_stons, (MultiplexerP)&vb->mux_##name)
+    #define init_mux_by_dosage(name) seg_mux_init_(VB, FORMAT_##name, ZIP_NUM_DOSAGES_FOR_MUX, VCF_SPECIAL_MUX_BY_DOSAGE, CTX(FORMAT_##name)->no_stons, (MultiplexerP)&vb->mux_##name)
     init_mux_by_dosage(PRI);
     init_mux_by_dosage(GL);
     init_mux_by_dosage(DS);
@@ -155,20 +155,19 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
     init_mux_by_dosage(RD);
     init_mux_by_dosage(PLn);
 
-    seg_mux_init (VB, CTX(FORMAT_PLy), MUX_CAPACITY(vb->mux_PLy), VCF_SPECIAL_MUX_BY_DOSAGExDP, false, (MultiplexerP)&vb->mux_PLy);
+    seg_mux_init (vb, FORMAT_PLy, VCF_SPECIAL_MUX_BY_DOSAGExDP, false, PLy);
     
     if (segconf.has[FORMAT_DP]) 
-        seg_mux_init (VB, CTX(FORMAT_RGQ), MUX_CAPACITY(vb->mux_RGQ), VCF_SPECIAL_RGQ, false, (MultiplexerP)&vb->mux_RGQ);
+        seg_mux_init (vb, FORMAT_RGQ, VCF_SPECIAL_RGQ, false, RGQ);
     
-    if (segconf.GQ_method == MUX_DOSAGExDP)
-        seg_mux_init (VB, CTX(FORMAT_GQ),  MUX_CAPACITY(vb->mux_GQ),  VCF_SPECIAL_MUX_BY_DOSAGExDP, false, (MultiplexerP)&vb->mux_GQ);
-    else if (segconf.GQ_method == MUX_DOSAGE)
-        init_mux_by_dosage(GQ);
+    switch (segconf.GQ_method) {
+        case MUX_DOSAGExDP : seg_mux_init (vb, FORMAT_GQ,  VCF_SPECIAL_MUX_BY_DOSAGExDP, false, GQ); break;
+        case MUX_DOSAGE    : init_mux_by_dosage(GQ); break;
+        default            : break;
+    }
 
     // flags to send to PIZ
     vb->flags.vcf.use_null_DP_method = segconf.use_null_DP_method;
-
-    #undef T
 }
 
 void vcf_samples_seg_finalize (VBlockVCFP vb)
@@ -485,8 +484,8 @@ static void vcf_seg_AD_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP
     ctx_set_last_value (VB, ctx, sum_ad); // AD value is sum of its items
 
     // if we have ADALL in this file, we delta vs ADALL if we have it in this sample, or seg normally if not
-    if (segconf.has[FORMAT_ADALL]) {
-        bool has_adall_this_sample = segconf.has[FORMAT_ADALL] && ctx_encountered (VB, FORMAT_ADALL); // note: we can't delta vs ADALL unless segconf says so, bc it can ruin other fields that rely on peeking AD, eg AB
+    if (segconf.has[FORMAT_ADALL]) { // note: we can't delta vs ADALL unless segconf says so, bc it can ruin other fields that rely on peeking AD, eg AB
+        bool has_adall_this_sample = ctx_encountered (VB, FORMAT_ADALL); 
     
         for (unsigned i=0; i < n_items; i++) 
             // case: we had ADALL preceeding in this sample, seg as delta vs. ADALL 
@@ -504,7 +503,7 @@ static void vcf_seg_AD_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP
             
             else if (i==0 || i==1) {
                 if (!vb->mux_AD[i].num_channels) 
-                    seg_mux_init (VB, item_ctxs[i], ZIP_NUM_DOSAGES_FOR_MUX, VCF_SPECIAL_MUX_BY_DOSAGE, false, (MultiplexerP)&vb->mux_AD[i]);
+                    seg_mux_init (vb, item_ctxs[i]->did_i, VCF_SPECIAL_MUX_BY_DOSAGE, false, AD[i]);
 
                 vcf_seg_FORMAT_mux_by_dosage_int (vb, item_ctxs[i], values[i], &vb->mux_AD[i], item_lens[i]);
             }
@@ -1547,7 +1546,10 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
         
         // Platypus fields
         case _FORMAT_GOF   : COND (segconf.vcf_is_platypus, vcf_seg_platypus_FORMAT_GOF (vb, ctx, STRi(sf, i)));
-        
+
+        // GLIMPSE_phase fields
+        case _FORMAT_HS    : COND (segconf.vcf_is_GLIMPSE_phase, seg_integer_or_not (VB, ctx, STRi(sf, i), sf_lens[i]));
+
         default            :
         fallback           : seg_by_ctx (VB, STRi(sf, i), ctx, sf_lens[i]);
         }

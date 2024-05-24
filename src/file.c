@@ -433,7 +433,7 @@ FileP file_open_txt_read (rom filename)
         goto fail;    
 
     if (!file->redirected) {
-        ASSINP (is_file_exists != no, "cannot open \"%s\" for reading: %s", filename, error);
+        ASSINP (is_file_exists != no, "Failed to open \"%s\" for reading: %s", filename, error);
     
         file_set_filename (file, filename);
     
@@ -1162,19 +1162,17 @@ void file_gzip (char *filename)
     char command[fn_len + 50];
 
     int ret = 1;
-
-    if (!flag.is_windows) {
-        snprintf (command, sizeof (command), "bgzip -@%u -f \"%s\"", global_max_threads, filename);
-        ret = system (command);
-    }
     
-    if ((ret && errno == ENOENT) || flag.is_windows) { // no bgzip - try pigz
-        snprintf (command, sizeof (command), "pigz -f \"%s\"", filename);
+    snprintf (command, sizeof (command), "bgzip -@%u -f \"%s\" %s", global_max_threads, filename, flag.is_windows ? "" : " > /dev/null 2>&1");
+    ret = system (command); // note: runs sh on Unix, and cmd.exe on Windows
+    
+    if (ret && errno == ENOENT) { // no bgzip - try pigz
+        snprintf (command, sizeof (command), "pigz -f \"%s\" %s", filename, flag.is_windows ? "" : " > /dev/null 2>&1");
         ret = system (command);
     }
 
     if (ret && errno == ENOENT) { // no pigz - try gzip
-        memcpy (command, "gzip", 4);
+        snprintf (command, sizeof (command), "gzip -f \"%s\" %s", filename, flag.is_windows ? "" : " > /dev/null 2>&1");
         ret = system (command);
     }
 
@@ -1517,7 +1515,7 @@ rom ft_name (FileType ft)
 
 rom file_plain_ext_by_dt (DataType dt)
 {
-    FileType plain_ft = txt_in_ft_by_dt[dt][0].in;
+    FileType plain_ft = txt_in_ft_by_dt[FAF ? DT_FASTA : dt][0].in;
 
     return file_exts[plain_ft];
 }

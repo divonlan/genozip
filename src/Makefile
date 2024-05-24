@@ -142,13 +142,13 @@ SRC_DIRS = secure zlib bzlib lzma bsc libdeflate_1.7 libdeflate_1.19 libdeflate_
 
 MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.c seg_id.c zip_dyn_int.c     	\
 		  data_types.c bits.c progress.c writer.c zriter.c tar.c chrom.c qname.c tokenizer.c mutex.c threads.c	\
-          zip.c piz.c reconstruct.c recon_history.c recon_peek.c seg.c zfile.c aligner.c flags.c digest.c    	\
-		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c ref_cache.c     	 	\
+          zip.c piz.c reconstruct.c recon_history.c recon_peek.c seg.c zfile.c aligner.c flags.c specials.c    	\
+		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c ref_cache.c digest.c \
 		  vcf_piz.c vcf_seg.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_hgvs.c      				\
-		  vcf_format_GT.c vcf_format_PS_PID.c vcf_dbsnp.c vcf_giab.c vcf_vep.c vcf_qual.c						\
+		  vcf_format_GT.c vcf_format_PS_PID.c vcf_dbsnp.c vcf_giab.c vcf_vep.c vcf_qual.c vcf_1000G.c			\
 		  vcf_refalt.c vcf_format.c vcf_illum_gtyping.c vcf_gwas.c vcf_vagrent.c vcf_svaba.c vcf_pbsv.c			\
 		  vcf_icgc.c vcf_snpeff.c vcf_cosmic.c vcf_mastermind.c vcf_isaac.c	vcf_manta.c vcf_pos.c vcf_ultima.c	\
-		  vcf_platypus.c vcf_info_AC_AF_AN.c vcf_format_GQ.c vcf_gatk.c vcf_sv.c vcf_gnomad.c					\
+		  vcf_platypus.c vcf_info_AC_AF_AN.c vcf_format_GQ.c vcf_gatk.c vcf_sv.c vcf_gnomad.c vcf_me.c			\
 		  sam_seg.c sam_piz.c sam_shared.c sam_header.c sam_md.c sam_nm.c sam_tlen.c sam_cigar.c sam_fields.c  	\
 		  sam_sa.c bam_seg.c bam_seq.c bam_show.c sam_pacbio.c sam_ultima.c sam_xcons.c cram.c agilent.c   		\
 		  sam_seq.c sam_qual.c sam_sag_zip.c sam_sag_piz.c sam_sag_load.c sam_sag_ingest.c sam_sag_scan.c    	\
@@ -160,7 +160,7 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.
 		  buffer.c buf_struct.c buf_list.c random_access.c sections.c base64.c bgzf.c coverage.c txtheader.c  	\
 		  codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_bsc.c codec_pacb.c					\
 		  codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c codec_normq.c codec_homp.c codec_t0.c		\
-		  codec_smux.c																							\
+		  codec_smux.c codec_oq.c																			\
 	      txtfile.c profiler.c file.c filename.c dispatcher.c crypt.c aes.c md5.c segconf.c biopsy.c gencomp.c	\
 		  vblock.c regions.c optimize.c dict_id.c aliases.c hash.c stream.c url.c bases_filter.c dict_io.c		\
 		  recon_plan_io.c version.c huffman.c user_message.c b250.c qname_filter.c
@@ -335,9 +335,9 @@ DEBUG_OBJS := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.debug-o)) $(addprefix $(OBJDIR
 OPT_OBJS   := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.opt-o))   $(addprefix $(OBJDIR)/,$(CXX_SRCS:.cpp=.opt-o))   $(IGZIP_OBJS) $(BSC_OPT_OBJS)  # optimized but with debug info, for debugging issues that only manifest with compiler optimization
 DEPS       := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.d))       $(addprefix $(OBJDIR)/,$(CXX_SRCS:.cpp=.d))       $(IGZIP_DEPS)
 
-EXECUTABLES       = genozip$(EXE)       genounzip$(EXE)       genocat$(EXE)       genols$(EXE)
-DEBUG_EXECUTABLES = genozip-debug$(EXE) genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE)
-OPT_EXECUTABLES   = genozip-opt$(EXE)   genounzip-opt$(EXE)   genocat-opt$(EXE)   genols-opt$(EXE)
+EXECUTABLES       = genozip$(EXE)       genounzip$(EXE)       genocat$(EXE)       genols$(EXE)        autocomplete.sh
+DEBUG_EXECUTABLES = genozip-debug$(EXE) genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE)  autocomplete-debug.sh
+OPT_EXECUTABLES   = genozip-opt$(EXE)   genounzip-opt$(EXE)   genocat-opt$(EXE)   genols-opt$(EXE)    autocomplete-debug.sh
 
 all   : CFLAGS += $(OPTFLAGS) 
 all   : CXXFLAGS += $(OPTFLAGS) 
@@ -355,6 +355,16 @@ debug : $(OBJDIR) $(DEBUG_EXECUTABLES)
 opt   : CFLAGS += -ggdb3 $(OPTFLAGS) -DDEBUG 
 opt   : CXXFLAGS += $(OPTFLAGS) 
 opt   : $(OBJDIR) $(OPT_EXECUTABLES)
+
+autocomplete.sh : autocomplete_gen.sh flags.c
+	@echo "Generating $@"
+	@./autocomplete_gen.sh
+	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
+
+autocomplete-debug.sh : autocomplete_gen.sh flags.c
+	@echo "Generating $@"
+	@./autocomplete_gen.sh debug
+	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
 
 ifdef osx_x86
 objdir.mac/secure/license.o : CFLAGS := $(patsubst -march=% ,-march=x86-64 ,$(CFLAGS)) # plain vanilla x86-64, so it runs on Rosetta x86-64 simulator on M1/M2/M3
@@ -441,7 +451,7 @@ GENDICT_OBJS := $(addprefix $(OBJDIR)/,$(GENDICT_SRCS:.c=.o))
 # Step 2: dict_id_gen.sh compiles dict_id_gen.c and generate dict_id_gen[.exe]
 # Step 3. dict_id_gen.sh generates dict_id_gen.h: it uses dict_id_gen[.exe]to generate the field constant, and then adds the fields enum and mapping
 ifdef Windows
-dict_id_gen.h : $(shell grep -w "pragma GENDICT" *.h | cut -d: -f1 | uniq) dict_id_gen.sh
+dict_id_gen.h : $(shell egrep -w "GENDICT|SPECIAL" *.h | cut -d: -f1 | uniq) dict_id_gen.sh
 	@echo Generating $@
 	@./dict_id_gen.sh $(CC)
 

@@ -323,12 +323,13 @@ void seg_mux_display (MultiplexerP mux)
         iprintf ("[%u] dict_id=%s channel_ctx=%p\n", i, dis_dict_id (mux->dict_ids[i]).s, MUX_CHANNEL_CTX(mux)[i]);
 }
 
-void seg_mux_init (VBlockP vb, ContextP ctx, unsigned num_channels, uint8_t special_code, 
+void seg_mux_init_(VBlockP vb, Did did_i, unsigned num_channels, uint8_t special_code, 
                    bool no_stons, MultiplexerP mux) // optional - a string with num_channels unique characters
 {
     // note: if we ever need more than 256, we need to update the dict_id generation formula below
     ASSERT (num_channels <= 256, "num_channels=%u exceeds maximum of 256", num_channels);
 
+    decl_ctx(did_i);
     bytes id = ctx->dict_id.id;
     DictId dict_id_template = (DictId){ .id = { id[0], 0, id[1], id[2], id[3], id[4], id[5], id[6] } };
     unsigned id_len = 1 + strnlen ((rom)ctx->dict_id.id, 7);
@@ -1077,12 +1078,13 @@ badly_formatted:
 // The last item is treated as an ENST_ID (format: ENST00000399012) while the other items are regular dictionaries
 // the names of the dictionaries are the same as the ctx, with the 2nd character replaced by 1,2,3...
 // the field itself will contain the number of entries
-int32_t seg_array_of_struct_with_prefixes (VBlockP vb, ContextP ctx, 
-                                           MediumContainer con, STRp(prefixes), 
-                                           STRp(snip), 
-                                           const SegCallback *callbacks, // optional - either NULL, or contains a seg callback for each item (any callback may be NULL)
-                                           SplitCorrectionCallback split_correction_callback, 
-                                           unsigned add_bytes)
+int32_t seg_array_of_struct_ (VBlockP vb, ContextP ctx, 
+                              MediumContainer con, STRp(prefixes), 
+                              STRp(snip), 
+                              const SegCallback *callbacks, // optional - either NULL, or contains a seg callback for each item (any callback may be NULL)
+                              uint8_t con_rep_special, uint32_t expected_num_repeats, // optional: if expected_num_repeats is correct, then use con_rep_special
+                              SplitCorrectionCallback split_correction_callback, 
+                              unsigned add_bytes)
 {
     if (!ctx->is_stats_parent) 
         ctx_consolidate_stats_(vb, ctx, (ContainerP)&con);
@@ -1101,7 +1103,7 @@ int32_t seg_array_of_struct_with_prefixes (VBlockP vb, ContextP ctx,
     if (split_correction_callback)
         split_correction_callback (&n_repeats, repeats, repeat_lens);
 
-    con.repeats = n_repeats;
+    con.repeats = (con_rep_special && expected_num_repeats == n_repeats) ? CON_REPEATS_IS_SPECIAL : n_repeats;
 
     ASSSEG (n_repeats <= CONTAINER_MAX_REPEATS, "exceeded maximum repeats allowed (%u) while parsing %s",
             CONTAINER_MAX_REPEATS, ctx->tag_name);
@@ -1259,8 +1261,10 @@ void seg_integer_fixed (VBlockP vb, ContextP ctx, void *number, bool with_lookup
 {
     buf_alloc (vb, &ctx->local, 0, MAX_(ctx->local.len+1, 32768) * lt_width(ctx), char, CTX_GROWTH, CTX_TAG_LOCAL);
 
+#ifdef DEBUG
     ASSERT (ctx->ltype >= LT_INT8 && ctx->ltype <= LT_FLOAT64, "%s: %s.ltype=%s can be segged as fixed", 
             VB_NAME, ctx->tag_name, lt_name(ctx->ltype));
+#endif
 
     switch (lt_width(ctx)) {
         case 1  : BNXT8  (ctx->local) = *(uint8_t  *)number; break;
@@ -1430,6 +1434,9 @@ void seg_all_data_lines (VBlockP vb)
     }
     
     DT_FUNC (vb, seg_initialize)(vb);  // data-type specific initialization
+
+    // in segconf, seg_initialize might change the data_type and realloc the segconf vb (eg FASTA->FASTQ)
+    if (segconf.running) vb = vb_get_nonpool_vb (VB_ID_SEGCONF);
 
     // if local is going to be compressed using a callback, we can't have singletons go to local
     // note: called after seg_initialize, to allow for setting of ctx->no_callback where needed 

@@ -47,7 +47,10 @@
 			"license.h": "c",
 			"windows.h": "c",
 			"cstdlib": "c",
-			"reconstruct.h": "c"
+			"reconstruct.h": "c",
+			"seg.h": "c",
+			"compare": "c",
+			"context.h": "c"
 		}
 	}
 }

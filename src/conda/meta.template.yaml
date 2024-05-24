@@ -27,7 +27,7 @@ build:
 requirements:
   build:    
     - {{posix}}make
-    - nasm
+    - nasm                       # [not arm64]
     - {{ compiler('c') }}        # [not win]
     - {{ compiler('cxx') }}      # [not win]
     - {{ compiler('m2w64_c') }}  # [win]

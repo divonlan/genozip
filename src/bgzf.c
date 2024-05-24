@@ -60,7 +60,6 @@ static FlagsBgzf bgzf_recompression_levels[1+MAX_FLAG_BGZF] = {
     { .library = BGZF_LIBDEFLATE19, .level = 7  },  // --bgzf=4 
     { .library = BGZF_LIBDEFLATE19, .level = 9  },  // --bgzf=5
 };
-#define BGZF_DEFAULT_LEVEL 2 // used if --bgzf is not specified (it is actually faster than 1 if also writing to disk)
 
 // possible return values, see libdeflate_result in libdeflate.h
 static rom libdeflate_error (int err)
@@ -462,7 +461,7 @@ void bgzf_uncompress_vb (VBlockP vb)
 }
 
 // ZIP: decompresses a prescribed BGZF block when re-reading DEPN lines
-static inline void bgzf_uncompress_one_prescribed_block (VBlockP vb, STRp(bgzf_block), STRc (uncomp_block), uint64_t bb_i)
+static inline void bgzf_uncompress_one_prescribed_block (VBlockP vb, STRp(bgzf_block), STRc(uncomp_block), uint64_t bb_i)
 {
     START_TIMER;
 

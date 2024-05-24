@@ -43,8 +43,6 @@ void vcf_gatk_zip_initialize (void)
 
 void vcf_gatk_seg_initialize (VBlockVCFP vb)
 {
-    #define T(cond, did_i) ((cond) ? (did_i) : DID_NONE)
-
     ctx_set_ltype (VB, LT_STRING, INFO_TLOD, INFO_NALOD, INFO_NLOD, DID_EOL);
 
     ctx_set_dyn_int (VB, INFO_RPA, DID_EOL);
@@ -431,7 +429,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_BaseCounts)
 
     // case: defer reconstruction to after samples, as we need FORMAT_AD
     else {
-        ctx->BaseCounts.is_deferred = true;
+        ctx->deferred = true;
         vcf_piz_defer_to_after_samples (BaseCounts);
 
         return NO_NEW_VALUE;
@@ -922,6 +920,8 @@ void vcf_piz_insert_INFO_AS_SB_TABLE (VBlockVCFP vb)
 // defer reconstruction after reconstruction of FORMAT/SB - happens in vcf_piz_insert_INFO_AS_SB_TABLE
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_DEFER)
 {
+    ctx->deferred = (snip_len ? snip[0] : true); // true, or optional parameter passed to deferred reconstructor
+
     switch (ctx->did_i) {
         case INFO_AS_SB_TABLE : vcf_piz_defer_to_after_samples (AS_SB_TABLE); break;
         case VCF_ID           : vcf_piz_defer_to_later (ID); break;

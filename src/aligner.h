@@ -11,13 +11,15 @@
 #include "genozip.h"
 
 #define declare_seq_contexts ContextP __attribute__((unused)) \
-    bitmap_ctx = CTX(SAM_SQBITMAP),                           \
-    nonref_ctx = CTX(SAM_NONREF),                             \
-    gpos_ctx   = CTX(SAM_GPOS),                               \
-    gpos_d_ctx = CTX(SAM_GPOS_DELTA),                         \
-    strand_ctx = CTX(SAM_STRAND),                             \
-    seqmis_ctx = CTX(SAM_SEQMIS_A),                           \
-    seqins_ctx = CTX(SAM_SEQINS_A)
+    bitmap_ctx    = CTX(SAM_SQBITMAP),                        \
+    nonref_ctx    = CTX(SAM_NONREF),                          \
+    gpos_ctx      = CTX(SAM_GPOS),                            \
+    gpos_d_ctx    = CTX(SAM_GPOS_DELTA),                      \
+    gpos_r2_ctx   = CTX(SAM_GPOS_R2),                         \
+    strand_ctx    = CTX(SAM_STRAND),                          \
+    strand_r2_ctx = CTX(SAM_STRAND_R2),                       \
+    seqmis_ctx    = CTX(SAM_SEQMIS_A),                        \
+    seqins_ctx    = CTX(SAM_SEQINS_A)
 
 
 typedef enum { MAPPING_NO_MAPPING, MAPPING_ALIGNED, MAPPING_PERFECT } MappingType;

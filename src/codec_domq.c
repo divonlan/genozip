@@ -617,7 +617,7 @@ bytes codec_domq_piz_get_denorm (VBlockP vb, ContextP domqruns_ctx, uint8_t dom_
         PEEK_SNIP (domqruns_ctx->did_i); // only one snip per VB - used for all lines
 
         buf_alloc_exact (vb, domqruns_ctx->domq_denorm, snip_len, uint8_t, "domq_denorm");
-        domqruns_ctx->domq_denorm.len32 = base64_decode (snip, &snip_len, B1ST8(domqruns_ctx->domq_denorm));
+        domqruns_ctx->domq_denorm.len32 = base64_decode (snip, &snip_len, B1ST8(domqruns_ctx->domq_denorm), -1);
 
         if (flag.show_qual)
             show_denormalize (vb, B1ST8(domqruns_ctx->domq_denorm), NULL, NULL, num_norm_qs, domqruns_ctx->domq_denorm.len32 / (uint32_t)num_norm_qs);

@@ -253,33 +253,40 @@ MappingType aligner_seg_seq (VBlockP vb, STRp(seq), bool is_pair_2, PosType64 pa
     ref_get_genome (gref, &genome, &emoneg, &genome_nbases);
 
     bool is_forward=false, is_all_ref=false;
+    bool is_interleaved_r2 = (segconf.is_interleaved && vb->line_i % 2);
 
     // our aligner algorithm only works for short reads - long reads tend to have many Indel differences (mostly errors) vs the reference
     PosType64 gpos = (seq_len <= MAX_SHORT_READ_LEN) 
         ? aligner_best_match (VB, STRa(seq), pair_gpos, genome, emoneg, genome_nbases, &is_forward, &is_all_ref) : NO_GPOS; 
 
     if (gpos == NO_GPOS || gpos > genome_nbases - seq_len || gpos > MAX_ALIGNER_GPOS - seq_len || gpos < 0/*never happens*/) {
+        gpos_ctx->last_value.i = NO_GPOS;
+
         COPY_TIMER (aligner_seg_seq);
         return MAPPING_NO_MAPPING;
     }
 
     if (flag.show_aligner)
-        iprintf ("%s: gpos=%"PRId64" forward=%s\n", LN_NAME, gpos, TF(is_forward));
+        iprintf ("%s: gpos=%"PRId64" forward=%s perfect=%s\n", LN_NAME, gpos, TF(is_forward), TF(is_all_ref));
 
-    if ((strand_ctx->local.size & ~3ULL) * 8 == strand_ctx->local.nbits)
-        buf_alloc_do (vb, &strand_ctx->local, strand_ctx->local.size + sizeof(uint64_t), CTX_GROWTH, NULL, __FUNCLINE);
-        
-    buf_alloc (vb, &gpos_ctx->local, 1, 0, uint32_t, CTX_GROWTH, NULL); 
+    ContextP this_strand_ctx = is_interleaved_r2 ? strand_r2_ctx : strand_ctx;
 
-    buf_add_bit (&strand_ctx->local, pair_gpos == NO_GPOS ? is_forward // pair 1 is unaligned - just store the strand
-                                                          : (is_forward == pair_is_forward)); // pair 1 is aligned - store equality, expected to he 1 in most cases
-            
-    if (is_pair_2) 
-        fastq_seg_pair2_gpos (vb, pair_gpos, gpos);
+    if ((this_strand_ctx->local.size & ~3ULL) * 8 == this_strand_ctx->local.nbits)
+        buf_alloc_do (vb, &this_strand_ctx->local, this_strand_ctx->local.size + sizeof(uint64_t), CTX_GROWTH, NULL, __FUNCLINE);
+
+    buf_add_bit (&this_strand_ctx->local, pair_gpos == NO_GPOS ? is_forward // pair 1 is unaligned - just store the strand
+                                                               : (is_forward == pair_is_forward)); // pair 1 is aligned - store equality, expected to he 1 in most cases
+
+    if (is_pair_2 || is_interleaved_r2) 
+        fastq_seg_r2_gpos (vb, pair_gpos, gpos);
     
     // store the GPOS in local if its not a 2nd pair, or if it is, but the delta is not small enough
-    else
-        BNXT32 (gpos_ctx->local) = (uint32_t)gpos;
+    else 
+        seg_integer_fixed (VB, gpos_ctx, &gpos, false, 0);
+    
+    // note regarding interleaved: we always store last_value in gpos/strand (never in gpos_r2/strand_r2)
+    gpos_ctx->last_value.i = gpos;
+    strand_ctx->last_value.i = is_forward;
 
     // lock region of reference to protect is_set
     if (IS_REF_EXT_STORE) {
@@ -350,6 +357,7 @@ void aligner_reconstruct_seq (VBlockP vb, uint32_t seq_len, bool is_pair_2, bool
 {
     START_TIMER;
     declare_seq_contexts;
+    bool is_interleaved_r2 = (segconf.is_interleaved && vb->line_i % 2);
 
     if (!bitmap_ctx->is_loaded) return; // if case we need to skip the SEQ field (for the entire file)
     
@@ -357,26 +365,36 @@ void aligner_reconstruct_seq (VBlockP vb, uint32_t seq_len, bool is_pair_2, bool
 
         bool is_forward;
         PosType64 gpos;
-
+        
         // first file of a pair (R1) or a non-pair fastq or sam
-        if (!is_pair_2) {
+        if (!is_pair_2 && !is_interleaved_r2) {
             gpos = gpos_ctx->last_value.i = NEXTLOCAL (uint32_t, gpos_ctx);
-            is_forward = NEXTLOCALBIT (strand_ctx);        
+            is_forward = NEXTLOCALBIT (strand_ctx);  
+
+            if (segconf.is_interleaved) bitmap_ctx->r1_is_aligned = PAIR1_ALIGNED;      
         }
 
         // 2nd file of a pair (R2)
-        else {
-            is_forward = fastq_piz_get_pair2_is_forward (vb); // MUST be called before gpos reconstruction as it inquires GPOS.localR1.next
+        else if (is_pair_2) {
+            is_forward = fastq_piz_get_r2_is_forward (vb); // MUST be called before gpos reconstruction as it inquires GPOS.localR1.next
 
             // gpos: don't reconstruct just get last_value
             reconstruct_from_ctx (vb, gpos_ctx->did_i, 0, false); // calls fastq_special_PAIR2_GPOS
             gpos = gpos_ctx->last_value.i;
         }
 
-        if (flag.deep) ctx_set_last_value (vb, strand_ctx, (int64_t)is_forward); // consumed by sam_piz_deep_add_seq
+        // R2 in a single-file interleaved FASTQ
+        else { // is_interleaved_r2 
+            is_forward = fastq_piz_get_interleaved_r2_is_forward (vb);
+
+            reconstruct_from_ctx (vb, gpos_r2_ctx->did_i, 0, false); // calls fastq_special_PAIR2_GPOS
+            gpos = gpos_r2_ctx->last_value.i;
+        }
+
+        ctx_set_last_value (vb, strand_ctx, (int64_t)is_forward); // consumed by sam_piz_deep_add_seq and next line's fastq_piz_get_interleaved_r2_is_forward
 
         if (flag.show_aligner)
-            iprintf ("%s: gpos=%"PRId64" forward=%s\n", LN_NAME, gpos, TF(is_forward));
+            iprintf ("%s: gpos=%"PRId64" forward=%s perfect=%s\n", LN_NAME, gpos, TF(is_forward), TF(is_perfect_alignment));
 
         const Bits *genome=NULL;
         PosType64 genome_nbases;

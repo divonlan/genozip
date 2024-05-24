@@ -750,7 +750,7 @@ void sam_piz_after_preproc (VBlockP vb)
     // print SA after all groups are loaded
     if (flag.show_sag && sections_get_num_vbs (SAM_COMP_PRIM) == z_file->num_preproc_vbs_joined) {
         sam_show_sag();
-        if (is_genocat) exit(0);
+        if (is_genocat) exit_ok;
     }
 
     if (flag_is_show_vblocks (PREPROCESSING_TASK_NAME) || flag_is_show_vblocks (PIZ_TASK_NAME))

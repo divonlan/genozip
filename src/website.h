@@ -43,8 +43,16 @@
 #define GITHUB_LATEST_RELEASE    GITHUB_REPO "/releases/latest"
 #define GITHUB_INSTALLERS        GITHUB_RAW  "/installers"  
 #define GITHUB_WINDOWS_INSTALLER GITHUB_INSTALLERS "/genozip-installer.exe"
-#define TARBALL_NAME             "genozip-linux-x86_64.tar"
-#define GITHUB_LINUX_TARBALL     GITHUB_INSTALLERS "/" TARBALL_NAME
+#ifdef __linux__
+#define TARBALL_DIRNAME          "genozip-linux-x86_64" /* directory contained in tarball - defined in Makefile */
+#elif defined(__APPLE__) && defined(__x86_64__)
+#define TARBALL_DIRNAME          "genozip-osx-x86"
+#elif defined(__APPLE__) && defined(__aarch64__)
+#define TARBALL_DIRNAME          "genozip-osx-arm"
+#endif
+
+#define TARBALL_NAME             TARBALL_DIRNAME ".tar"
+#define GITHUB_GENOZIP_TARBALL   GITHUB_INSTALLERS "/" TARBALL_NAME
 // #define WINDOWS_UPDATE_NAME      "genozip.windows"
 // #define GITHUB_WINDOWS_UPDATE    GITHUB_INSTALLERS "/" WINDOWS_UPDATE_NAME // .windows and not .exe to avoid antivirus blocking updates
 #define GITHUB_LICENSE_TXT       GITHUB_RAW "/LICENSE.txt"

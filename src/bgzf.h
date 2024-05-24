@@ -9,6 +9,8 @@
 #include "genozip.h"
 #include "sections.h"
 
+#define BGZF_DEFAULT_LEVEL 2 // PIZ: used if --bgzf is not specified (it is actually faster than 1 if also writing to disk)
+
 #define BGZF_MAX_BLOCK_SIZE 65536 // maximum block size of both compressed and uncompressed data of one block
 
 // First 16 bytes of every BGZF block

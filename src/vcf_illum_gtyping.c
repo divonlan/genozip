@@ -27,9 +27,9 @@ void vcf_illum_gtyping_seg_initialize (VBlockVCFP vb)
 {
     ctx_set_store (VB, STORE_INT, INFO_ALLELE_A, INFO_ILLUMINA_POS, DID_EOL);
 
-    seg_mux_init (VB, CTX(FORMAT_BAF), 3, VCF_SPECIAL_MUX_BY_ADJ_DOSAGE, true, (MultiplexerP)&vb->mux_BAF);
-    seg_mux_init (VB, CTX(FORMAT_X),   3, VCF_SPECIAL_MUX_BY_ADJ_DOSAGE, true, (MultiplexerP)&vb->mux_X);
-    seg_mux_init (VB, CTX(FORMAT_Y),   3, VCF_SPECIAL_MUX_BY_ADJ_DOSAGE, true, (MultiplexerP)&vb->mux_Y);
+    seg_mux_init (vb, FORMAT_BAF, VCF_SPECIAL_MUX_BY_ADJ_DOSAGE, true, BAF);
+    seg_mux_init (vb, FORMAT_X, VCF_SPECIAL_MUX_BY_ADJ_DOSAGE, true, X);
+    seg_mux_init (vb, FORMAT_Y, VCF_SPECIAL_MUX_BY_ADJ_DOSAGE, true, Y);
 
     ctx_set_ltype (VB, LT_BLOB, INFO_PROBE_A, INFO_PROBE_B, DID_EOL);
 

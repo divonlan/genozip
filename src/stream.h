@@ -38,6 +38,7 @@ extern FILE *stream_to_stream_stdin    (StreamP stream);
 
 extern rom stream_get_exec_name (StreamP stream);
 
-extern rom exit_code_name (int exit_code);
+extern bool stream_exec_is (StreamP stream, rom exec_name);
 
-extern bool stream_is_exec_in_path (rom exec);
+extern rom genozip_exit_code_name (ExitCode exit_code);
+

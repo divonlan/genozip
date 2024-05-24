@@ -125,7 +125,7 @@ typedef union SectionFlags {
         uint8_t spl_custom       : 1;  // introduced v14: similar to store_per_line, but storing is done by the context's SPECIAL function, instead of in reconstruct_store_history
         uint8_t all_the_same     : 1;  // SEC_B250: the b250 data contains only one element, and should be used to reconstruct any number of snips from this context
 
-        #define same_line        ctx_specific_flag // v13.0.5: Valid for contexts that use SNIP_OTHER_DELTA, SNIP_DIFF, SNIP_COPY(from other)(15.0.48): if true, reconstructs gets the value in the line (whether before or after). if false, it gets the last value.
+        #define same_line        ctx_specific_flag // v13.0.5: Valid for contexts that use SNIP_OTHER_DELTA, SNIP_DIFF, SNIP_COPY(from other)(15.0.48), SPECIAL_MINUS(15.0.58), SPECIAL_PLUS(15.0.58), SPECIAL_DIVIDE_BY(15.0.58): if true, reconstructs gets the value in the line (whether before or after). if false, it gets the last value.
         #define no_textual_seq   ctx_specific_flag // v14.0.0: SAM_SQBITMAP: indicates that SEQ is NOT consumed by other fields, and therefore sam_piz_sam2bam_SEQ doesn't need to store textual_seq. 
         #define depn_clip_hard   ctx_specific_flag // v14.0.0: OPTION_SA_Z in SAM_COMP_MAIN: if true: depn lines, if their CIGAR has a clipping, it is hard clipping (H)
         #define lookback0_ok     ctx_specific_flag // v14.0.0: contexts that are items of a container with lookback. indicates that a SNIP_LOOKBACK when lookback=0 is not an error.
@@ -258,7 +258,10 @@ typedef struct {
 
         struct { 
             DictId segconf_seq_len_dict_id;   // FASTQ: dict_id of one of the Q?NAME contexts, which is expected to hold the seq_len for this read. 0 if there is no such item. copied from segconf.seq_len_dict_id. added v14.
-            char unused[264];
+            uint8_t segconf_fa_as_fq     : 1; // FASTQ: 15.0.58
+            uint8_t segconf_is_ileaved   : 1; // FASTQ: 15.0.58
+            uint8_t unused_bits          : 6;
+            char unused[263];
         } fastq;
 
         struct {

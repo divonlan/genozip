@@ -19,6 +19,10 @@
 
 bool is_printable[256] = { [9]=1, [10]=1, [13]=1, [32 ... 126]=1 };
 
+// valid characters in a FASTQ sequence
+bool is_fastq_seq[256] = { ['A']=true, ['C']=true, ['D']=true, ['G']=true, ['H']=true, ['K']=true, ['M']=true, ['N']=true, 
+                           ['R']=true, ['S']=true, ['T']=true, ['V']=true, ['W']=true, ['Y']=true, ['U']=true, ['B']=true };
+
 uint64_t p10[] = { 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000, 10000000000ULL, 100000000000ULL, 1000000000000ULL, 10000000000000ULL, 100000000000000ULL, 1000000000000000ULL, 100000000000000000ULL, 100000000000000000ULL };
 
 char *str_tolower (rom in, char *out /* out allocated by caller - can be the same as in */)
@@ -70,14 +74,15 @@ uint32_t str_to_printable (STRp(in), char *out, int out_len)
 
     for (uint32_t i=0; i < in_len && out_len > 3; i++) // 3 = 2 characters + nul
         switch (in[i]) {
-            case '\t' : *out++ = '\\'; *out++ = 't' ; out_len -= 2; break;
-            case '\n' : *out++ = '\\'; *out++ = 'n' ; out_len -= 2; break;
-            case '\r' : *out++ = '\\'; *out++ = 'r' ; out_len -= 2; break;
-            case '\b' : *out++ = '\\'; *out++ = 'b' ; out_len -= 2; break;
-            case '\\' : *out++ = '\\'; *out++ = '\\'; out_len -= 2; break;
-            case -128 ... 7: case 11 ... 12: case 14 ... 31: 
-                        *out++ = '?';               ; out_len -= 1; break;
-            default:    *out++ = in[i];             ; out_len -= 1;
+            case 32 ... '\\'-1: case '\\'+1 ... 126:
+                           *out++ = in[i];             ; out_len -= 1; break;
+            case '\t'    : *out++ = '\\'; *out++ = 't' ; out_len -= 2; break;
+            case '\n'    : *out++ = '\\'; *out++ = 'n' ; out_len -= 2; break;
+            case '\r'    : *out++ = '\\'; *out++ = 'r' ; out_len -= 2; break;
+            case '\b'    : *out++ = '\\'; *out++ = 'b' ; out_len -= 2; break;
+            case '\\'    : *out++ = '\\'; *out++ = '\\'; out_len -= 2; break;
+            case 0 ... 7 : *out++ = '\\'; *out++ = '0' + in[i]; out_len -= 2; break;
+            default      : *out++ = '\\'; *out++ = '?' ; out_len -= 2; 
         }
     
     *out = 0;

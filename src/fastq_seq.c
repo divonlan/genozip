@@ -50,9 +50,17 @@ void fastq_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(seq), bool deep)
     // get pair-1 gpos and is_forward, but only if we are pair-2 and the corresponding pair-1 line is aligned
     PosType64 pair_gpos = NO_GPOS; 
     bool pair_is_forward = false;
-    if (vb->pair_vb_i) // R2
+
+    // case: R2 in paired file
+    if (vb->pair_vb_i) 
         fastq_get_pair_1_gpos_strand (vb, &pair_gpos, &pair_is_forward); // advance iterators even if we don't need the pair data
 
+    // case: R2 in interleaved file
+    else if (segconf.is_interleaved && vb->line_i % 2) {
+        pair_gpos = gpos_ctx->last_value.i;
+        pair_is_forward = strand_ctx->last_value.i;
+    }
+        
     // note: monochar reads don't work well with deep - too much contention. In illumina, we observe many monochar N reads,
     // and in for R2, also many monochar G reads. These seem to be an artifact of the technology rather than true sequence values.
     if (dl->monochar) {
@@ -118,65 +126,77 @@ COMPRESSOR_CALLBACK (fastq_zip_seq)
     if (is_rev) *is_rev = 0;
 }
 
-//------------------------
-// Pair-2 GPOS (ZIP & PIZ)
-//------------------------
+//-----------------------------------------------------
+// Pair-2 GPOS, and Single-file interleaved (ZIP & PIZ)
+//-----------------------------------------------------
 
-void fastq_seg_pair2_gpos (VBlockP vb, PosType64 pair1_pos, PosType64 pair2_gpos)
+void fastq_seg_r2_gpos (VBlockP vb, PosType64 r1_gpos, PosType64 r2_gpos)
 {
-    #define MAX_GPOS_DELTA 1000 // paired reads are usually with a delta less than 300 - so this is more than enough
     declare_seq_contexts;
+    ContextP my_gpos_ctx = segconf.is_interleaved ? gpos_r2_ctx : gpos_ctx;
+    
+    #define MAX_GPOS_DELTA 1000 // paired reads are usually with a delta less than 300 - so this is more than enough
 
     // case: we are pair-2 ; pair-1 is aligned ; delta is small enough : store a delta
-    PosType64 gpos_delta = pair2_gpos - pair1_pos; 
+    PosType64 gpos_delta = r2_gpos - r1_gpos; 
 
-    if (pair1_pos != NO_GPOS && pair2_gpos != NO_GPOS && ABS(gpos_delta) <= MAX_GPOS_DELTA) {
+    if (r1_gpos != NO_GPOS && r2_gpos != NO_GPOS && ABS(gpos_delta) <= MAX_GPOS_DELTA) {
         int16_t gpos_delta16 = gpos_delta;
         seg_integer_fixed (VB, gpos_d_ctx, &gpos_delta16, false, 0);
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_PAIR2_GPOS, 'D' }, 3, gpos_ctx, 0); // lookup from local and advance localR1.next to consume gpos
+        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_PAIR2_GPOS, segconf.is_interleaved ? 'I' : 'D' }, 3, my_gpos_ctx, 0); // lookup from local and advance localR1.next to consume gpos
     }
 
     // case: otherwise, store verbatim
     else {
-        BNXT32 (gpos_ctx->local) = (uint32_t)pair2_gpos;
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_PAIR2_GPOS }, 2, gpos_ctx, 0); // lookup from local and advance localR1.next to consume gpos
+        seg_integer_fixed (VB, my_gpos_ctx, &r2_gpos, false, 0);
+        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_PAIR2_GPOS }, 2, my_gpos_ctx, 0); // lookup from local and advance localR1.next to consume gpos
     }
 }
 
 // note: in files up to v13, this is triggereed by v13_SNIP_FASTQ_PAIR2_GPOS
+// since 15.0.58, also used for R2 in single-file interleaved
 SPECIAL_RECONSTRUCTOR (fastq_special_PAIR2_GPOS)
 {
     declare_seq_contexts;
 
     // case: no delta
     if (!snip_len) {
-        if (bitmap_ctx->pair1_is_aligned == PAIR1_ALIGNED)
-            gpos_ctx->localR1.next++; // we didn't use this pair value 
+        if (bitmap_ctx->r1_is_aligned == PAIR1_ALIGNED)
+            ctx->localR1.next++; // we didn't use this pair value 
 
-        new_value->i = NEXTLOCAL(uint32_t, gpos_ctx);
+        new_value->i = NEXTLOCAL(uint32_t, ctx);
     }
 
     // case: pair-1 is aligned, and GPOS is a delta vs pair-1. 
     else {   
-        ASSPIZ (gpos_ctx->localR1.next < gpos_ctx->localR1.len, "gpos_ctx->localR1.next=%"PRId64" overflow: gpos_ctx->localR1.len=%u",
-                gpos_ctx->localR1.next, gpos_ctx->localR1.len32);
+        int64_t gpos_r1;
 
-        int64_t pair_value = (int64_t)(VER(14) ? *B32 (gpos_ctx->localR1, gpos_ctx->localR1.next++) // starting v14, only aligned lines have GPOS
-                                               : *B32 (gpos_ctx->localR1, vb->line_i));                // up to v13, all lines segged GPOS (possibly NO_GPOS value, but not in this case, since we have a delta)
-        
+        // case: delta vs pair-1 data (snip is "D" since v15 or a textual integer up to v14)
+        if (*snip != 'I') { 
+            ASSPIZ (ctx->localR1.next < ctx->localR1.len, "gpos_ctx->localR1.next=%"PRId64" overflow: gpos_ctx->localR1.len=%u",
+                    ctx->localR1.next, ctx->localR1.len32);
+
+            gpos_r1 = (int64_t)(VER(14) ? *B32 (ctx->localR1, ctx->localR1.next++) // starting v14, only aligned lines have GPOS
+                                        : *B32 (ctx->localR1, vb->line_i));             // up to v13, all lines segged GPOS (possibly NO_GPOS value, but not in this case, since we have a delta)
+        }
+
+        // case: delta vs previous line in interleaved file (snip is "I") since 15.0.58
+        else 
+            gpos_r1 = gpos_ctx->last_value.i;
+
         int16_t delta = VER(15) ? reconstruct_from_local_int (VB, gpos_d_ctx, 0, RECON_OFF) // starting v15, delta is stored in FASTQ_GPOS_DELTA.local
                                 : (int64_t)strtoull (snip, NULL, 10 /* base 10 */);         // up to v14, delta was encoded in the snip
 
-        new_value->i = pair_value + delta; // just sets value, doesn't reconstruct
+        new_value->i = gpos_r1 + delta; // just sets value, doesn't reconstruct
 
-        ASSPIZ (pair_value != NO_GPOS, "pair_value=NO_GPOS - not expected as we have delta=%d", (int)delta);
+        ASSPIZ (gpos_r1 != NO_GPOS, "gpos_r1=NO_GPOS - not expected as we have delta=%d", (int)delta);
     }
  
     return HAS_NEW_VALUE;
 }
 
 // can only be called before fastq_special_PAIR2_GPOS, because it inquires GPOS.localR1.next
-bool fastq_piz_get_pair2_is_forward (VBlockP vb)
+bool fastq_piz_get_r2_is_forward (VBlockP vb)
 {
     declare_seq_contexts;
 
@@ -185,7 +205,7 @@ bool fastq_piz_get_pair2_is_forward (VBlockP vb)
     bool defect_2023_02_11 = !bitmap_ctx->b250R1.len32 && EXACT_VER(14); // can only happen up to 14.0.30
 
     // case: paired read (including all reads in up to v13) - diff vs pair1
-    if (!defect_2023_02_11 && bitmap_ctx->pair1_is_aligned == PAIR1_ALIGNED) { // always true for files up to v13 and all lines had a is_forward value
+    if (!defect_2023_02_11 && bitmap_ctx->r1_is_aligned == PAIR1_ALIGNED) { // always true for files up to v13 and all lines had a is_forward value
         ASSPIZ (!VER(14) || gpos_ctx->localR1.next < strand_ctx->localR1.nbits, "gpos_ctx->localR1.next=%"PRId64" overflow: strand_ctx->localR1.nbits=%"PRIu64,
                 gpos_ctx->localR1.next, strand_ctx->localR1.nbits);
 
@@ -200,19 +220,36 @@ bool fastq_piz_get_pair2_is_forward (VBlockP vb)
         return NEXTLOCALBIT (strand_ctx);
 }
 
+bool fastq_piz_get_interleaved_r2_is_forward (VBlockP vb)
+{
+    declare_seq_contexts;
+
+    // case: paired read - diff vs r1
+    if (bitmap_ctx->r1_is_aligned == PAIR1_ALIGNED) {
+        bool is_forward_pair_1 = strand_ctx->last_value.i;
+        return NEXTLOCALBIT (strand_r2_ctx) ? is_forward_pair_1 : !is_forward_pair_1;
+    }
+
+    // case: unpaired read - just take bit
+    else
+        return NEXTLOCALBIT (strand_r2_ctx);
+}
+
 // called when reconstructing R2, to check if R1 is aligned
 bool fastq_piz_R1_test_aligned (VBlockFASTQP vb)
 {
     declare_seq_contexts;
 
     // case we are pair-2: advance pair-1 SQBITMAP iterator, and if pair-1 is aligned - also its GPOS iterator
-    if (bitmap_ctx->pair1_is_aligned == PAIR1_ALIGNED_UNKNOWN) { // case: not already set by fastq_special_mate_lookup
+    if (bitmap_ctx->r1_is_aligned == PAIR1_ALIGNED_UNKNOWN) { // case: not already set by fastq_special_mate_lookup
         STR(snip);
-        ctx_get_next_snip (VB, bitmap_ctx, true, pSTRa(snip));
-        bitmap_ctx->pair1_is_aligned = (snip_len && *snip == SNIP_LOOKUP) ? PAIR1_ALIGNED : PAIR1_NOT_ALIGNED;
+        ctx_get_next_snip (VB, bitmap_ctx, true, pSTRa(snip)); // paired file - get snip from R1
+
+        // note: bitmap_ctx is segged with LOOKUP if aligned and SNIP_SPECIAL if not aligned 
+        bitmap_ctx->r1_is_aligned = (snip_len && *snip == SNIP_LOOKUP) ? PAIR1_ALIGNED : PAIR1_NOT_ALIGNED;
     }
     
-    return (bitmap_ctx->pair1_is_aligned == PAIR1_ALIGNED);
+    return (bitmap_ctx->r1_is_aligned == PAIR1_ALIGNED);
 }
 
 static void fastq_update_coverage_aligned (VBlockFASTQP vb)
@@ -247,7 +284,7 @@ void fastq_recon_aligned_SEQ (VBlockP vb_, STRp(seq_len_str), ReconType reconstr
     declare_seq_contexts;
 
     if (vb->pair_vb_i) // R2 
-        fastq_piz_R1_test_aligned (vb); // set pair1_is_aligned
+        fastq_piz_R1_test_aligned (vb); // set r1_is_aligned
     
     // v14: perfect alignment is expressed by a negative seq_len
     bool perfect_alignment = (seq_len_str[0] == '-');

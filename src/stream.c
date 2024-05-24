@@ -49,28 +49,17 @@ typedef struct stream_ {
 #endif
 } Stream;
 
-#define EXIT_OK                   0
-#define EXIT_GENERAL_ERROR        1
-#define EXIT_INVALID_GENOZIP_FILE 2
-#define EXIT_DOWNSTREAM_LOST      3
-#define EXIT_STREAM               4
-#define EXIT_SIGHUP               5
-#define EXIT_SIGSEGV              6
-
-#define EXIT_ABNORMAL             7
-
-rom exit_code_name (int exit_code)
+// exit codes names of the genozip process
+rom genozip_exit_code_name (ExitCode exit_code)
 {
-    static rom names[NUM_EXIT_CODES] = 
-        { "EXIT_OK", "EXIT_GENERAL_ERROR", "EXIT_INVALID_GENOZIP_FILE", "EXIT_DOWNSTREAM_LOST", "EXIT_STREAM",
-          "EXIT_SIGHUP", "EXIT_SIGSEGV", "EXIT_ABNORMAL" };
+    static rom names[NUM_EXIT_CODES] = EXIT_CODE_NAMES;
 
 #ifndef _WIN32 
     if (WIFSIGNALED(exit_code))
         return strsignal (WTERMSIG(exit_code)); // name of signal
 #endif
 
-    return (exit_code >= 0 && exit_code < NUM_EXIT_CODES) ? names[exit_code] : "Invalid exit code";
+    return (exit_code >= 0 && exit_code < NUM_EXIT_CODES) ? names[exit_code] : "Invalid Genpzip exit code";
 }
 
 #ifdef _WIN32
@@ -84,6 +73,11 @@ static rom stream_windows_error (void)
     return msg;
 }
 #endif
+
+bool stream_exec_is (StreamP stream, rom exec_name)
+{
+    return !strcmp (exec_name, stream->exec_name);
+}
 
 static void stream_pipe (int *fds, uint32_t pipe_size, bool is_stream_to_genozip)
 {
@@ -358,14 +352,16 @@ int stream_close (StreamP *stream, StreamCloseMode close_mode)
         kill ((*stream)->pid, 9); // ignore errors
 #endif
     
-    int exit_code = 0; 
+    int exit_code = EXIT_OK; 
     if ((*stream)->pid && close_mode != STREAM_DONT_WAIT_FOR_PROCESS)
         // TerminateProcess is asynchronous - we need to wait to make sure the process is terminated (not sure about kill)
         exit_code = stream_wait_for_exit (*stream, close_mode == STREAM_KILL_PROCESS);
 
-    StreamP stream_copy = *stream;
-    FREE (*stream);
+    StreamP stream_copy = *stream, stream_copy2 = *stream;
+    __atomic_store_n (stream, (StreamP)NULL, __ATOMIC_RELEASE); // prevent other threads from trying to close the stream
 
+    FREE (stream_copy2);
+    
     url_reset_if_remote_file_stream (stream_copy); // must be after FREE
 
     return exit_code;
@@ -399,7 +395,6 @@ int stream_wait_for_exit (StreamP stream,
     // fails to execv, and exits and code EXIT_STREAM. The main process catches it here, and exits silently.
     if (stream->exit_status == EXIT_STREAM) 
         exit(EXIT_GENERAL_ERROR); // child process failed to exec and displayed error message, we can exit silently
-
 #endif
     stream->pid = 0;
 
@@ -427,23 +422,4 @@ void stream_abort_if_cannot_run (rom exec_name, rom reason)
 
     // if we reach here, everything's good - the exec can run.
     stream_close (&stream, STREAM_KILL_PROCESS);
-}
-
-// check if executable is in the path. Note: in Windows it actually runs the executable, so 
-// only suitable for executables that would terminate immediately.
-bool stream_is_exec_in_path (rom exec)
-{
-#ifdef _WIN32
-    // our own instance of curl - to not conflict with url_open_remote_file 
-    StreamP curl = stream_create (0, 0, 0, 0, 0, 0, 0,
-                                  "where.exe", // reason in case of failure to execute curl
-                                  "where.exe", "/Q", exec, NULL); 
-
-    return stream_close (&curl, STREAM_WAIT_FOR_PROCESS) == 0;
-
-#else
-    char run[32 + strlen(exec)];
-    snprintf (run, sizeof (run), "which %s > /dev/null 2>&1", exec);
-    return !system (run) && file_exists ("/dev/stdout");
-#endif
 }

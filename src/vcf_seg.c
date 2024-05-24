@@ -27,6 +27,9 @@ void vcf_zip_initialize (void)
     vcf_gnomad_zip_initialize();
     vcf_samples_zip_initialize_PS_PID();
     vcf_gwas_zip_initialize(); 
+    vcf_me_zip_initialize();
+    vcf_giab_zip_initialize();
+    vcf_1000G_zip_initialize();
 
     if (segconf.vcf_is_vagrent)    vcf_vagrent_zip_initialize();
     if (segconf.vcf_is_mastermind) vcf_mastermind_zip_initialize();
@@ -131,8 +134,6 @@ void vcf_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeaderP vb_heade
 // called by Compute threadfrom seg_all_data_lines
 void vcf_seg_initialize (VBlockP vb_)
 {
-    #define T(cond, did_i) ((cond) ? (did_i) : DID_NONE)
-
     VBlockVCFP vb = (VBlockVCFP)vb_;
 
     ctx_consolidate_stats (VB, VCF_ID, VCF_MATE, DID_EOL);
@@ -187,34 +188,35 @@ void vcf_seg_initialize (VBlockP vb_)
     }
         
     if (segconf.vcf_QUAL_method == VCF_QUAL_by_RGQ) {
-        seg_mux_init (VB, CTX(VCF_QUAL), 2, VCF_SPECIAL_MUX_BY_HAS_RGQ, false, (MultiplexerP)&vb->mux_QUAL);
+        seg_mux_init (vb, VCF_QUAL, VCF_SPECIAL_MUX_BY_HAS_RGQ, false, QUAL);
 
         if (vcf_num_samples > 1) // too many unique QUAL values when there are many samples
             ctx_get_ctx (vb, vb->mux_QUAL.dict_ids[0])->ltype = LT_STRING;
     }
 
     if (segconf.vcf_INFO_method == VCF_INFO_by_RGQ) 
-        seg_mux_init (VB, CTX(VCF_INFO), 2, VCF_SPECIAL_MUX_BY_HAS_RGQ, false, (MultiplexerP)&vb->mux_INFO);        
+        seg_mux_init (vb, VCF_INFO, VCF_SPECIAL_MUX_BY_HAS_RGQ, false, INFO);        
     
     else if (segconf.vcf_INFO_method == VCF_INFO_by_FILTER)
-        seg_mux_init (VB, CTX(VCF_INFO), 2, VCF_SPECIAL_MUX_BY_ISAAC_FILTER, false, (MultiplexerP)&vb->mux_INFO);        
+        seg_mux_init (vb, VCF_INFO, VCF_SPECIAL_MUX_BY_ISAAC_FILTER, false, INFO);        
 
     if (segconf.vcf_is_gvcf)
-        seg_mux_init (VB, CTX(VCF_POS), 2, VCF_SPECIAL_MUX_BY_END, false, (MultiplexerP)&vb->mux_POS);
+        seg_mux_init (vb, VCF_POS, VCF_SPECIAL_MUX_BY_END, false, POS);
 
     vcf_refalt_seg_initialize (vb);
     vcf_info_seg_initialize(vb);
     vcf_samples_seg_initialize(vb);
-
     vcf_gatk_seg_initialize (vb);
     vcf_gnomad_seg_initialize (vb);
+    vcf_me_seg_initialize (vb);
+    vcf_1000G_seg_initialize (vb);
     if (segconf.vcf_illum_gtyping)  vcf_illum_gtyping_seg_initialize (vb);
     if (segconf.vcf_is_gwas)        vcf_gwas_seg_initialize (vb);
     if (segconf.vcf_is_cosmic)      vcf_cosmic_seg_initialize (vb);
     if (segconf.vcf_is_vep)         vcf_vep_seg_initialize (vb);
     if (segconf.vcf_is_mastermind)  vcf_mastermind_seg_initialize (vb);
     if (segconf.vcf_is_dbSNP)       vcf_dbsnp_seg_initialize (vb);
-    if (segconf.vcf_is_giab_trio)   vcf_giab_seg_initialize (vb);
+    if (segconf.vcf_is_giab_trio || segconf.vcf_is_giab) vcf_giab_seg_initialize (vb);
     if (segconf.vcf_is_isaac)       vcf_isaac_seg_initialize (vb);
     if (segconf.vcf_is_ultima)      vcf_ultima_seg_initialize (vb);
     if (segconf.vcf_is_platypus)    vcf_platypus_seg_initialize (vb);
@@ -222,7 +224,6 @@ void vcf_seg_initialize (VBlockP vb_)
     if (segconf.vcf_is_manta)       vcf_manta_seg_initialize (vb);
     if (segconf.vcf_is_pbsv)        vcf_pbsv_seg_initialize (vb);
     if (!segconf.vcf_is_sv)         vcf_sv_seg_initialize (vb, 0, 0); // not known SV caller - initialize generic stuff
-    #undef T
 }             
 
 static void vcf_seg_finalize_segconf (VBlockVCFP vb)
@@ -268,7 +269,10 @@ static void vcf_seg_finalize_segconf (VBlockVCFP vb)
 
     if (segconf.has[FORMAT_IGT] && segconf.has[FORMAT_IPS] && segconf.has[FORMAT_ADALL])
         segconf.vcf_is_giab_trio = true;
-        
+    
+    if (segconf.has[INFO_callsetnames] && segconf.has[FORMAT_ADALL])
+        segconf.vcf_is_giab = true;
+
     // an alternative way to discover dbSNP if ##source is missing
     if (!!segconf.has[INFO_RS] + !!segconf.has[INFO_RSPOS] + !!segconf.has[INFO_SAO] + !!segconf.has[INFO_SSR] +
         !!segconf.has[INFO_dbSNPBuildID] + !!segconf.has[INFO_VC] + !!segconf.has[INFO_NSM] + !!segconf.has[INFO_U3] >= 3)
@@ -462,12 +466,12 @@ void vcf_seg_array_of_N_ALTS_numbers (VBlockVCFP vb, ContextP ctx, STRp(value), 
         ctx_consolidate_stats_(VB, ctx, (ContainerP)&con);
         ctx->con_rep_special = VCF_SPECIAL_N_ALTS;
         ctx->is_initialized  = true;
-        ctx->nothing_char = '.';
+        ctx->nothing_char    = '.';
     }
 
     ContextP item_ctx = ctx_get_ctx (vb, con.items[0].dict_id);
 
-    for (int i=0; i < n_numbers; i++) 
+    for (uint32_t i=0; i < n_numbers; i++) 
         if (type == STORE_INT)
             seg_integer_or_not (VB, item_ctx, STRi(number,i), 0); // an integer or '.'
         else // float
@@ -530,7 +534,19 @@ bool vcf_FILTER_has (VBlockVCFP vb, rom test_for/*nul-terminated*/)
     return has;
 }
 
-static inline void vcf_seg_ID (VBlockVCFP vb, STRp(id))
+// true is ID is of the format 1_2704352_AT_A which is CHROM_POS_REF_ALT
+static inline bool vcf_seg_ID_is_variant (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(id))
+{
+    str_split (id, id_len, 4, segconf.vcf_ID_is_variant, item, true);
+    
+    return n_items == 4 &&
+           str_issame_(STRi(item,0), STRa(vb->chrom_name))   &&
+           str_issame_(STRi(item,1), STRtxt(dl->tw[TW_POS])) &&
+           str_issame_(STRi(item,2), STRa(vb->REF))          &&
+           str_issame_(STRi(item,3), STRa(vb->ALT));
+}
+
+static inline void vcf_seg_ID (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(id))
 {
     decl_ctx(VCF_ID);
     
@@ -538,6 +554,19 @@ static inline void vcf_seg_ID (VBlockVCFP vb, STRp(id))
         vcf_seg_add_line_number (vb, id_len);
 
     else {
+        if (segconf.running) {
+            // segconf: set vcf_ID_is_variant in first line
+            if (vb->line_i == 0 && !segconf.vcf_is_pbsv) {
+                if (!({ segconf.vcf_ID_is_variant = '_' ; vcf_seg_ID_is_variant (vb, dl, STRa(id)); }) &&
+                    !({ segconf.vcf_ID_is_variant = ':' ; vcf_seg_ID_is_variant (vb, dl, STRa(id)); })) 
+                    segconf.vcf_ID_is_variant = 0;
+            }
+
+            // cases where we want PIZ to insert ID after REF,ALT
+            if (segconf.vcf_is_pbsv || segconf.vcf_ID_is_variant)
+                SEGCONF_RECORD_WIDTH (ID, id_len);
+        }
+
         if (segconf.vcf_is_manta)
             vcf_seg_manta_ID (vb, STRa(id));
         
@@ -546,6 +575,10 @@ static inline void vcf_seg_ID (VBlockVCFP vb, STRp(id))
 
         else if (segconf.vcf_is_pbsv)
             vcf_seg_pbsv_ID (vb, STRa(id));
+
+        else if (segconf.vcf_ID_is_variant && vcf_seg_ID_is_variant (vb, dl, STRa(id)))
+            // defer reconstruction of ID to after reconstruction of REF/ALT - called from vcf_piz_refalt_parse
+            seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_DEFER, segconf.vcf_ID_is_variant/*'_' or ':'*/ }, 3, ctx, id_len+1);  // often - all the same
 
         else if (IS_PERIOD(id))
             seg_by_ctx (VB, STRa(id), ctx, id_len+1); // often - all the same
@@ -597,7 +630,7 @@ rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
     vb_parse_ALT (vb);
 
     // ID: seg after REFALT is parsed as in PBSV is predicted based on ALT
-    vcf_seg_ID (vb, STRd(VCF_ID));
+    vcf_seg_ID (vb, dl, STRd(VCF_ID));
 
     CTX(FORMAT_RGQ)->line_has_RGQ = !segconf.running && segconf.has[FORMAT_RGQ] && vcf_refalt_seg_ref_alt_line_has_RGQ (VCF_ALT_str);
 

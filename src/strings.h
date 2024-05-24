@@ -27,6 +27,9 @@
 #define IS_QUAL_SCORE(c)   IS_NON_WS_PRINTABLE(c)
 extern bool is_printable[256];
 #define IS_PRINTABLE(c)    is_printable[(uint8_t)(c)]
+extern bool is_fastq_seq[256];
+#define IS_FASTQ_SEQ(c)    is_fastq_seq[(uint8_t)(c)]
+
 #define IS_VALID_URL_CHAR(c) (IS_ALPHANUMERIC(c) || c=='-' || c=='_' || c=='.' || c=='~') // characters valid in a URL
 #define FLIP_CASE(c)  (IS_CLETTER(c) ? ((c)+32) : (IS_SLETTER(c) ? ((c)-32) : (c))) // flips lower <--> upper case
 #define UPPER_CASE(c) (IS_SLETTER(c) ? ((c)-32) : (c))
@@ -252,17 +255,20 @@ extern bool str_get_int_range_allow_hex32 (STRp(str), uint32_t min_val, uint32_t
 extern bool str_get_int_range_allow_hex64 (STRp(str), uint64_t min_val, uint64_t max_val, uint64_t *value);
 
 static bool inline str_is_int(STRp(str))       { return str_get_int (STRa(str), NULL); } // integer - leading zeros not allowed
-static bool inline str_is_numeric(STRp(str))   { for (int i=0; i<str_len; i++) if (!IS_DIGIT(str[i]))            return false; return true; } // numeric - leading zeros ok
 extern bool str_is_simple_float (STRp(str), uint32_t *decimals);
 static bool inline str_is_hexlo(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_HEXDIGITlo(str[i]))       return false; return true; } 
 static bool inline str_is_hexup(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_HEXDIGITUP(str[i]))       return false; return true; } 
 static bool inline str_is_printable(STRp(str)) { for (int i=0; i<str_len; i++) if (!IS_PRINTABLE(str[i]))        return false; return true; } 
+static bool inline str_is_fastq_seq(STRp(str)) { for (int i=0; i<str_len; i++) if (!IS_FASTQ_SEQ(str[i]))        return false; return true; } 
 extern bool str_is_utf8 (STRp(str));
 static bool inline str_is_no_ws(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_NON_WS_PRINTABLE(str[i])) return false; return true; } 
 static bool inline str_is_ACGT(STRp(str), uint32_t *bad_i) { for (int i=0; i<str_len; i++) if (!IS_ACGT(str[i])) { if(bad_i) *bad_i = i; return false; } return true; } 
 static bool inline str_is_ACGTN(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_ACGTN(str[i]))            return false; return true; } 
 
 extern bool str_is_in_range (STRp(str), char first_c, char last_c);
+static bool inline str_is_upper (STRp(str))    { return str_is_in_range (STRa(str), 'A', 'Z'); }
+static bool inline str_is_lower (STRp(str))    { return str_is_in_range (STRa(str), 'a', 'z'); }
+static bool inline str_is_numeric(STRp(str))   { return str_is_in_range (STRa(str), '0', '9'); } // numeric - leading zeros ok
 
 // textual length of a non-negative integer
 extern uint32_t str_get_uint_textual_len (uint64_t n);

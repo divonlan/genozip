@@ -580,8 +580,8 @@ static inline void sam_seg_CP_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t cp, 
         sam_seg_against_sa_group (vb, CTX(OPTION_CP_i), add_bytes);
 
     // if there's no gencomp - CP tends to compress well by delta, as subsequent lines also tend to have subsequent secondaries
-    else if (IS_MAIN(vb) && segconf.is_sorted)
-        seg_pos_field (VB, OPTION_CP_i, OPTION_CP_i, 0, 0, 0, 0, cp, add_bytes); 
+    else if (IS_MAIN(vb) && segconf.is_sorted) 
+        seg_self_delta (VB, CTX(OPTION_CP_i), cp, 0, 0, add_bytes); 
 
     else {
         uint32_t cp32 = cp;
@@ -663,6 +663,7 @@ static inline void sam_seg_AS_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t as, 
         if (ABS((int32_t)vb->ref_consumed * 2 - as) < 10) segconf.AS_is_2ref_consumed++;
     }
 
+    // note: dl->AS was already set in sam_seg_txt_line/bam_seg_txt_line
     ctx_set_last_value (VB, CTX (OPTION_AS_i), as);
 
     // depn VB - seg against prim line AS (sag_has_AS determines if its beneficial to do so)
@@ -710,8 +711,6 @@ static inline void sam_seg_AS_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t as, 
 
     else
         seg_integer (VB, CTX (OPTION_AS_i), as, true, add_bytes);
-
-    dl->AS = as;
 
     COPY_TIMER(sam_seg_AS_i);
 }
@@ -860,6 +859,29 @@ static inline void sam_seg_MQ_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t mq, 
         seg_delta_vs_other_localN (VB, channel_ctx, CTX(SAM_MAPQ), mq, -1, add_bytes);
 
     seg_by_did (VB, STRa(vb->mux_MQ.snip), OPTION_MQ_i, 0); // de-multiplexer
+}
+
+// PQ:i Phred likelihood of the template, conditional on the mapping locations of both/all segments being correct.
+static inline void sam_seg_PQ_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t pq, unsigned add_bytes)
+{
+    if (pq >= 0 && pq <= 65534) // dl->PQ is uint16_t
+        dl->PQ = pq + 1; // +1, so that if pq is out of this range, leave dl as 0, which will mean "no valid PQ"
+    
+    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_PQ_i, (MultiplexerP)&vb->mux_PQ, sam_has_mate);
+
+    uint16_t mate_pq; 
+    if (sam_has_mate && (mate_pq = DATA_LINE (vb->mate_line_i)->PQ) && pq+1 == mate_pq) // this implies 0<=pq<=65534
+        seg_by_ctx (VB, STRa(copy_mate_PQ_snip), channel_ctx, add_bytes); // copy MAPQ from earlier-line mate 
+
+    else if (has(AS_i)) {
+        CTX(OPTION_AS_i)->last_value.i = dl->AS;
+        seg_delta_vs_other_localN (VB, channel_ctx, CTX(OPTION_AS_i), pq, -1, add_bytes);
+    }
+
+    else
+        seg_integer (VB, channel_ctx, pq, true, add_bytes);
+
+    seg_by_did (VB, STRa(vb->mux_PQ.snip), OPTION_PQ_i, 0); // de-multiplexer
 }
 
 // RG:Z, PG:Z, PU:Z, LB:Z, RX:Z and others: we predict that the value will be the same as the buddy
@@ -1133,7 +1155,7 @@ static inline SmallContainerP sam_seg_array_one_ctx_get_con (VBlockSAMP vb, Cont
 // an array - all elements go into a single item context, multiple repeats. items are segged as dynamic integers or floats, or a callback is called to seg them.
 void sam_seg_array_one_ctx (VBlockSAMP vb, ZipDataLineSAMP dl, DictId dict_id, uint8_t type, 
                             rom array, int/*signed*/ array_len, // SAM: comma separated array ; BAM : arrays original width and machine endianity
-                            ArrayItemCallback callback, void *cb_param, // optional - call back for each item to seg the item
+                            ArrayItemCallback callback, void *cb_param, // optional - call back with array
                             PizSpecialReconstructor length_predictor)   // optional - SPECIAL function for predicting repeats
 {   
     bool is_bam = IS_BAM_ZIP;
@@ -1168,9 +1190,25 @@ void sam_seg_array_one_ctx (VBlockSAMP vb, ZipDataLineSAMP dl, DictId dict_id, u
 
     char *local_start = BAFTc (elem_ctx->local);
 
-    if (is_bam)    
-        buf_add (&elem_ctx->local, array, array_bytes); // LTEN, not machine endianity (local_is_lten is set)
+    int64_t sum = 0;
 
+    if (is_bam) {
+        buf_add (&elem_ctx->local, array, array_bytes); // LTEN, not machine endianity (local_is_lten is set)
+        
+        if (con_ctx->flags.store == STORE_INT) {
+            switch (type) {
+                #define SUM_TYPE(type) for (type *n = (type *)local_start; n < (type *)(local_start + array_bytes); n++) sum += *n 
+                case 'c':  SUM_TYPE(int8_t);   break; 
+                case 'C':  SUM_TYPE(uint8_t);  break; 
+                case 's':  SUM_TYPE(int16_t);  break; 
+                case 'S':  SUM_TYPE(uint16_t); break; 
+                case 'i':  SUM_TYPE(int32_t);  break; 
+                case 'I':  SUM_TYPE(uint32_t); break;                 
+                default : ABOSEG ("not implemented for type '%c'", type);
+            }
+            ctx_set_last_value (VB, con_ctx, sum);
+        }
+    }
     else { // SAM
         // note: we're not using str_split on array, because the number of elements can be very large (eg one per base in PacBio ip:B) - possibly stack overflow
         for (uint32_t i=0; i < repeats; i++) { // str_len will be -1 after last number
@@ -1186,6 +1224,9 @@ void sam_seg_array_one_ctx (VBlockSAMP vb, ZipDataLineSAMP dl, DictId dict_id, u
                         LN_NAME, STRf(snip), con_ctx->tag_name);
                 value = LTEN64 (value); // consistent with BAM and avoid a condition before the memcpy below 
                 memcpy (&local_start[i*width], &value, width);
+
+                if (con_ctx->flags.store == STORE_INT) 
+                    sum += value;
             }
             else // float
                 seg_add_to_local_string (VB, elem_ctx, STRa(snip), LOOKUP_NONE, 0);
@@ -1195,6 +1236,9 @@ void sam_seg_array_one_ctx (VBlockSAMP vb, ZipDataLineSAMP dl, DictId dict_id, u
         }
 
         if (is_int) elem_ctx->local.len += repeats * width;
+
+        if (con_ctx->flags.store == STORE_INT)
+            ctx_set_last_value (VB, con_ctx, sum);
     }
 
     if (callback)
@@ -1318,6 +1362,28 @@ void sam_seg_array_multi_ctx (VBlockSAMP vb, ZipDataLineSAMP dl, ContextP con_ct
     container_seg (vb, con_ctx, (ContainerP)con, ((char[]){ CON_PX_SEP, type, ',', CON_PX_SEP }), 4, container_add_bytes);
 }
 
+static void sam_seg_set_last_value_f_from_aux (VBlockSAMP vb, Did did_i, bool is_bam,
+                                               STRp(value),       // used if SAM 
+                                               ValueType numeric) // .f32 needs to be set if BAM
+{
+    ContextP ctx = CTX(did_i);
+
+    if (is_bam) 
+        ctx_set_last_value (VB, ctx, (ValueType){ .f = numeric.f32.f }); // note: just casting f32.f to double works in gcc but not clang
+
+    else {
+        SAFE_NULT(value);
+        char *after;
+        numeric.f = strtod (value, &after); // same as in reconstruct_one_snip
+        SAFE_RESTORE;
+
+        ASSSEG (after == value + value_len, "%s: Expecting float value for auxiliary field %s but found \"%.*s\"",
+                LN_NAME, ctx->tag_name, STRf (value));
+
+        ctx_set_last_value (VB, ctx, numeric);
+    }
+}
+
 void sam_seg_float_as_snip (VBlockSAMP vb, ContextP ctx, STRp(sam_value), ValueType bam_value, unsigned add_bytes)
 {
     if (IS_BAM_ZIP) {
@@ -1329,6 +1395,9 @@ void sam_seg_float_as_snip (VBlockSAMP vb, ContextP ctx, STRp(sam_value), ValueT
     else 
         // in case of SAM, we seg the string so we maintain the precise textual representation. 
         seg_by_ctx (VB, STRa(sam_value), ctx, add_bytes);
+
+    if (ctx->flags.store == STORE_FLOAT)
+        sam_seg_set_last_value_f_from_aux (vb, ctx->did_i, IS_BAM_ZIP, STRa(sam_value), bam_value);
 }
 
 // note: also called from fastq_seg_one_saux()
@@ -1364,28 +1433,6 @@ void sam_seg_aux_field_fallback (VBlockP vb, void *dl, DictId dict_id, char sam_
     // Z,H,A - normal snips in their own dictionary
     else 
         seg_by_dict_id (VB, STRa(value), dict_id, add_bytes);     
-}
-
-static void sam_seg_set_last_value_f_from_aux (VBlockSAMP vb, Did did_i, bool is_bam,
-                                               STRp(value),       // used if SAM 
-                                               ValueType numeric) // .f32 needs to be set if BAM
-{
-    ContextP ctx = CTX(did_i);
-
-    if (is_bam) 
-        ctx_set_last_value (VB, ctx, (ValueType){ .f = numeric.f32.f }); // note: just casting f32.f to double works in gcc but not clang
-
-    else {
-        SAFE_NULT(value);
-        char *after;
-        numeric.f = strtod (value, &after); // same as in reconstruct_one_snip
-        SAFE_RESTORE;
-
-        ASSSEG (after == value + value_len, "%s: Expecting float value for auxiliary field %s but found \"%.*s\"",
-                LN_NAME, ctx->tag_name, STRf (value));
-
-        ctx_set_last_value (VB, ctx, numeric);
-    }
 }
 
 // process an optional subfield, that looks something like MX:Z:abcdefg. We use "MX" for the field name, and
@@ -1485,6 +1532,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam,
 
         case _OPTION_AS_i: sam_seg_AS_i (vb, dl, numeric.i, add_bytes); break;
         case _OPTION_MQ_i: sam_seg_MQ_i (vb, dl, numeric.i, add_bytes); break;
+        case _OPTION_PQ_i: sam_seg_PQ_i (vb, dl, numeric.i, add_bytes); break;
         case _OPTION_SM_i: sam_seg_SM_i (vb, dl, numeric.i, add_bytes); break;
         case _OPTION_AM_i: sam_seg_AM_i (vb, dl, numeric.i, add_bytes); break;
         case _OPTION_HI_i: sam_seg_HI_i (vb, dl, numeric.i, add_bytes); break;
@@ -1568,6 +1616,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam,
 
         case _OPTION_fx_Z: COND (segconf.has_cellranger, sam_seg_fx_Z (vb, dl, STRa(value), add_bytes));
 
+        // PacBio fields
         case _OPTION_dq_Z: COND0 (segconf.use_pacbio_iqsqdq, sam_seg_pacbio_xq (vb, dl, OPTION_dq_Z, &dl->dq, STRa(value), add_bytes))
                            COND (TECH(PACBIO), seg_add_to_local_string (VB, CTX(OPTION_dq_Z), STRa(value), LOOKUP_SIMPLE, add_bytes)); 
         
@@ -1579,6 +1628,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam,
 
         case _OPTION_qs_i: COND (TECH(PACBIO), sam_seg_pacbio_qs (vb, dl, numeric.i, add_bytes));
         case _OPTION_qe_i: COND (TECH(PACBIO), sam_seg_pacbio_qe (vb, dl, numeric.i, add_bytes));
+        case _OPTION_we_i: COND (TECH(PACBIO), sam_seg_pacbio_we (vb, dl, numeric.i, add_bytes));
         case _OPTION_np_i: COND (TECH(PACBIO), sam_seg_pacbio_np (vb, dl, numeric.i, add_bytes));
 
         case _OPTION_sn_B_f : COND (TECH(PACBIO), sam_seg_pacbio_sn (vb, dl, STRa(value)));

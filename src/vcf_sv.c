@@ -53,46 +53,11 @@ void vcf_sv_seg_initialize (VBlockVCFP vb, Did *tw_dids, int num_tw_dids)
         for (int tw=0; tw < num_tw_dids; tw++) 
             if (tw_dids[tw] != DID_NONE) {
                 ctx_set_store_per_line (VB, tw_dids[tw], DID_EOL);
-                seg_mux_init (VB, CTX(tw_dids[tw]), 2, VCF_SPECIAL_DEMUX_BY_MATE, false, (MultiplexerP)&vb->mate_mux[tw]);
+                seg_mux_init (vb, tw_dids[tw], VCF_SPECIAL_DEMUX_BY_MATE, false, mate[tw]);
             }
     }
 
     CTX(INFO_CIEND)->flags.same_line = true; // copy CIPOS from same line, regardless if before or after
-}
-
-//-------------------------------------------------------------------
-// LEN_OF - field value is expected to be the length of another field
-//-------------------------------------------------------------------
-
-void vcf_seg_LEN_OF (VBlockVCFP vb, ContextP ctx, STRp(len_str), int16_t idx, STRp(special_snip))
-{
-    InfoItem *seq_item = B(InfoItem, CTX(VCF_INFO)->info_items, idx);
-
-    int64_t len;
-    if (!str_get_int (STRa(len_str), &len)) goto fallback;
-    if (seq_item->value_len != len) goto fallback;
-
-    seg_by_ctx (VB, STRa(special_snip), ctx, len_str_len);
-    return;
-
-fallback:
-    seg_by_ctx (VB, STRa(len_str), ctx, len_str_len);
-}
-
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_LEN_OF)
-{    
-    if (reconstruct) {
-        ContextP base_ctx = reconstruct_special_get_base_ctx (VB, ctx, pSTRa(snip));
-
-        uint32_t len;
-        reconstruct_peek (vb, base_ctx, NULL, &len);
-
-        if (snip_len) RECONSTRUCT_snip; // optional prefix
-
-        RECONSTRUCT_INT (len);
-    }
-
-    return NO_NEW_VALUE;
 }
 
 //-------------------
@@ -102,7 +67,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_LEN_OF)
 // in case a field is predicted to be the same as mate's
 ContextP vcf_seg_sv_copy_mate (VBlockVCFP vb, ContextP ctx, STRp(value), int my_tw, int her_tw, bool seg_only_if_mated, unsigned add_bytes)
 {
-    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, ctx->did_i, (MultiplexerP)&vb->mate_mux[my_tw], vcf_has_mate);
+    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, ctx->did_i, (MultiplexerP)&vb->mux_mate[my_tw], vcf_has_mate);
     ContextP ret = NULL; // default: caller shouldn't seg 
 
     if (vcf_has_mate) {
@@ -127,7 +92,7 @@ ContextP vcf_seg_sv_copy_mate (VBlockVCFP vb, ContextP ctx, STRp(value), int my_
             seg_by_ctx (VB, STRa(value), channel_ctx, add_bytes); 
     }
 
-    seg_by_ctx (VB, STRa(vb->mate_mux[my_tw].snip), ctx, 0); // de-multiplexer
+    seg_by_ctx (VB, STRa(vb->mux_mate[my_tw].snip), ctx, 0); // de-multiplexer
 
     return ret; 
 }
@@ -256,9 +221,11 @@ void vcf_seg_INFO_SVLEN (VBlockVCFP vb, ContextP ctx, STRp(svlen_str))
         segconf.vcf_del_svlen_is_neg = true;
 
     // prediction based on variant type (since 15.0.48)
-    if (svlen == predicted_sv_len)
+    if (svlen == predicted_sv_len) {
         seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_SVLEN, 'P' }), 3, ctx, svlen_str_len);
-    
+        ctx_set_last_value (VB, ctx, svlen);
+    }
+
     else
         seg_integer_or_not (VB, ctx, STRa(svlen_str), svlen_str_len);
 }

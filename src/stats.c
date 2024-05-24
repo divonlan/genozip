@@ -77,6 +77,25 @@ void stats_remove_data_after_program_name (rom program)
     buf_remove (stats_programs, char, BNUM (stats_programs, sep), end - sep);
 }
 
+// option 1: substitute ; and , with their UTF-8 equivalents
+static StrText stats_subs_seps_in_name (rom name)
+{
+    ASSERT0 (sizeof (StrText) > MAX_TAG_LEN - 10, "bad string size");
+
+    StrText s = {};
+    char *next = s.s;
+
+    while (*name) {
+        if (*name == ',')      { strcpy (next, "⸲"); next += strlen ("⸲"); } // Unicode "Turned Comma"
+        else if (*name == ';') { strcpy (next, "；"); next += strlen ("；"); } // Unicode "Full-width" semicolon
+        else *next++ = *name;
+
+        name++;
+    }
+
+    return s;
+}
+
 // calculate exceptions before consolidating stats
 static void stats_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
 {
@@ -114,7 +133,7 @@ static void stats_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
 
             for (int i=0; i < segconf.n_unk_flav_qnames[q]; i++)
                 if (segconf.unk_flav_qnames[q][i][0])
-                    bufprintf (evb, &exceptions, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.unk_flav_qnames[q][i], strlen(segconf.unk_flav_qnames[q][i]), ',', -127)).s); 
+                    bufprintf (evb, &exceptions, "%%2C%s", url_esc_non_valid_charsS (stats_subs_seps_in_name (segconf.unk_flav_qnames[q][i]).s).s); 
         }
     }
 
@@ -134,25 +153,6 @@ static void stats_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
 
     if (segconf.sam_malformed_XA[0]) 
         bufprintf (evb, &exceptions, "%sBAD_XA%%2C%s", (need_sep++ ? "%3B" : ""), url_esc_non_valid_charsS (str_replace_letter (segconf.sam_malformed_XA, strlen(segconf.sam_malformed_XA),  ',', -127)).s); 
-}
-
-// substitute ; and , with their UTF-8 equivalents
-static StrText stats_subs_seps_in_name (rom name)
-{
-    ASSERT0 (sizeof (StrText) > MAX_TAG_LEN - 10, "bad string size");
-
-    StrText s = {};
-    char *next = s.s;
-
-    while (*name) {
-        if (*name == ',')      { strcpy (next, "⸲"); next += strlen ("⸲"); } // Unicode "Turned Comma"
-        else if (*name == ';') { strcpy (next, "；"); next += strlen ("；"); } // Unicode "Full-width" semicolon
-        else *next++ = *name;
-
-        name++;
-    }
-
-    return s;
 }
 
 // stats of contexts and sections contribution to Z
@@ -257,7 +257,8 @@ static void stats_output_file_metadata (void)
         
     bufprint0 (evb, &stats, "\n\n");
     if (txt_file->name) 
-        bufprintf (evb, &stats, "%s file%s%s: %.*s\n", flag.deep ? "BAM/FASTQ" : z_dt_name(),
+        bufprintf (evb, &stats, "%s file%s%s: %.*s\n", 
+                   flag.deep?"BAM/FASTQ" : z_dt_name_faf(),
                    z_file->bound_txt_names.count > 1 ? "s" : "", // param holds the number of txt files
                    (flag.deep && flag.pair)?" (deep & paired)" : flag.deep?" (deep)" : flag.pair?" (paired)" : "", 
                    (int)z_file->bound_txt_names.len, z_file->bound_txt_names.data);
@@ -340,7 +341,7 @@ static void stats_output_file_metadata (void)
                 FEATURE0 (segconf.is_sorted && segconf.sam_is_unmapped, "Sorting: Unmapped", "Sorted_by=Unmapped");        
                 FEATURE0 (segconf.is_collated, "Sorting: Collated by QNAME", "Sorted_by=QNAME");
                 FEATURE0 (!segconf.is_sorted && !segconf.is_collated, "Sorting: Not sorted or collated", "Sorted_by=NONE");
-                FEATURE0 (segconf.multiseq, "Multiseq", "multiseq");
+                FEATURE0 (segconf.multiseq, "Multiseq", "multiseq=True");
             }
                         
             FEATURE (true, "Aligner: %s", "Mapper=%s", segconf_sam_mapper_name()); 
@@ -446,27 +447,32 @@ static void stats_output_file_metadata (void)
             REPORT_VBs;
             REPORT_QNAME;
             FEATURE (flag.optimize_DESC && z_file->num_lines, "Sequencer: %s", "Sequencer=%s", segconf_tech_name());\
-            FEATURE0 (segconf.multiseq, "Multiseq", "multiseq");
+            FEATURE0 (FAF, "FASTA-as-FASTQ", "FASTA-as-FASTQ=True");
+            FEATURE0 (segconf.multiseq, "Multiseq", "multiseq=True");
+            FEATURE0 (segconf.is_interleaved, "Interleaved", "interleaved=True");
             if (IS_REF_LOADED_ZIP) {
                 bufprintf (evb, &features, "ref_ncontigs=%u;", ref_get_ctgs (gref)->contigs.len32);
                 bufprintf (evb, &features, "ref_nbases=%"PRIu64";", contigs_get_nbases (ref_get_ctgs (gref)));
                 bufprintf (evb, &features, "aligner_ok=%.1f%%;", 100.0 * (double)z_file->num_aligned / (double)z_file->num_lines); // report even if num_aligned=0 (i.e. wrong reference)           
                 bufprintf (evb, &features, "aligner_perfect=%.1f%%;", 100.0 * (double)z_file->num_perfect_matches / (double)z_file->num_lines);
             }
-            bufprintf (evb, &features, "Qual=%s;", !segconf.nontrivial_qual ? "Trivial" : ZCTX(SAM_QUAL)->qual_codec != CODEC_UNKNOWN ? codec_name (ZCTX(SAM_QUAL)->qual_codec) : codec_name (ZCTX(SAM_QUAL)->lcodec));
-            bufprintf (evb, &features, "Qual_histo=%s;", segconf_get_qual_histo(QHT_QUAL).s);
 
-            bufprintf (evb, &features, "smux_max_stdv=%2.1f%% '%s';",
-                       segconf.smux_max_stdv * 100.0, 
-                       segconf.smux_max_stdv_q=='='?"≐" : segconf.smux_max_stdv_q==';'?"；" : char_to_printable (segconf.smux_max_stdv_q).s); // Unicode ；and ≐ (in UTF-8) to avoid breaking spreadsheet
+            if (!FAF) {
+                bufprintf (evb, &features, "Qual=%s;", !segconf.nontrivial_qual ? "Trivial" : ZCTX(SAM_QUAL)->qual_codec != CODEC_UNKNOWN ? codec_name (ZCTX(SAM_QUAL)->qual_codec) : codec_name (ZCTX(SAM_QUAL)->lcodec));
+                bufprintf (evb, &features, "Qual_histo=%s;", segconf_get_qual_histo(QHT_QUAL).s);
 
-            if (segconf.r1_or_r2) bufprintf (evb, &features, "R1_or_R2=R%d;", (segconf.r1_or_r2 == PAIR_R1) ? 1 : 2);
+                bufprintf (evb, &features, "smux_max_stdv=%2.1f%% '%s';",
+                        segconf.smux_max_stdv * 100.0, 
+                        segconf.smux_max_stdv_q=='='?"≐" : segconf.smux_max_stdv_q==';'?"；" : char_to_printable (segconf.smux_max_stdv_q).s); // Unicode ；and ≐ (in UTF-8) to avoid breaking spreadsheet
 
+                if (segconf.r1_or_r2) bufprintf (evb, &features, "R1_or_R2=R%d;", (segconf.r1_or_r2 == PAIR_R1) ? 1 : 2);
+            }
             break;
 
         case DT_FASTA:
             FEATURE0 (segconf.seq_type==SQT_AMINO, "Sequence type: Amino acids",      "Amino_acids");
             FEATURE0 (segconf.seq_type==SQT_NUKE, "Sequence type: Nucleotide bases", "Nucleotide_bases");
+            bufprint0 (evb, &features, "FASTA-as-FASTQ=False;");
             FEATURE0 (segconf.multiseq, "Multiseq", "multiseq");
             FEATURE (true, "Sequences: %"PRIu64, "num_sequences=%"PRIu64, z_file->num_sequences);
             REPORT_VBs;

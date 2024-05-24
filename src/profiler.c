@@ -152,9 +152,10 @@ void profiler_add_evb_and_print_report (void)
         PRINT (compressor_pbwt,  2);
         PRINT (compressor_longr, 2);
         PRINT (compressor_homp,  2);
-        PRINT (compressor_t0,    2);
         PRINT (compressor_pacb,  2);
         PRINT (compressor_smux,  2);
+        PRINT (compressor_t0,    2);
+        PRINT (compressor_oq,    2);
         
         PRINT (reconstruct_vb, 1);
         for (Did did_i=0; did_i < z_file->num_contexts; did_i++) 
@@ -174,6 +175,7 @@ void profiler_add_evb_and_print_report (void)
             PRINT (codec_pacb_reconstruct, 3);
             PRINT (codec_domq_reconstruct, 3);
             PRINT (codec_domq_reconstruct_dom_run, 4);
+            PRINT (codec_oq_reconstruct, 3);
         }
         PRINT (fastq_special_monochar_QUAL, 2);        
         PRINT (sam_piz_sam2fastq_QUAL, 2); 

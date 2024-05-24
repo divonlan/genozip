@@ -13,14 +13,14 @@
             // "program": "${workspaceFolder}/src/genozip-opt.exe",
             // "program": "${workspaceFolder}/src/genocat-opt.exe",
             // "program": "${workspaceFolder}/src/genozip.exe",
-            //"program": "${workspaceFolder}/src/genounzip.exe",
+            // "program": "${workspaceFolder}/src/genounzip.exe",
             // "program": "${workspaceFolder}/src/genols-debug.exe",
-            
-            "args" : ["--echo", "-fo", "./private/test/tmp/copy.vcf.gz", "-e", "./public/hs37d5.v15.ref.genozip", "./private/test/tmp/output.genozip"],
 
+            "args" : ["-ft", "private/test/test.starling.vcf"],
+            
             "environment": [
                 { "name": "GENOZIP_TEST", "value": "1", }, // needed for VER2 macro to work
-                // { "name": "GENOZIP_REFERENCE", "value": "c:\\Users\\divon\\genozip/public", },
+                { "name": "GENOZIP_REFERENCE", "value": "c:\\Users\\divon\\genozip/public", },
             ],
             
             "stopAtEntry": false,

@@ -19,7 +19,24 @@
 // Common contexts of FASTA and GFF - these MUST be first; in same order; same dict_id
 // -----------------------------------------------------------------------------------------------------------
 
-#pragma GENDICT GFF_SEQID=DTYPE_FIELD=SEQID             // must be 1st as this is GFF's CHROM. We don't use FASTA_CONTIG for gff-embedded FASTAs
+#pragma GENDICT GFF_SEQID=DTYPE_FIELD=SEQID       // must be 1st as this is GFF's CHROM. We don't use FASTA_CONTIG for gff-embedded FASTAs
+#pragma GENDICT GFF_FASTA_QNAME=DTYPE_FIELD=QNAME 
+#pragma GENDICT GFF_FASTA_Q0NAME=DTYPE_1=Q0NAME 
+#pragma GENDICT GFF_FASTA_Q1NAME=DTYPE_1=Q1NAME 
+#pragma GENDICT GFF_FASTA_Q2NAME=DTYPE_1=Q2NAME
+#pragma GENDICT GFF_FASTA_Q3NAME=DTYPE_1=Q3NAME
+#pragma GENDICT GFF_FASTA_Q4NAME=DTYPE_1=Q4NAME
+#pragma GENDICT GFF_FASTA_Q5NAME=DTYPE_1=Q5NAME
+#pragma GENDICT GFF_FASTA_Q6NAME=DTYPE_1=Q6NAME 
+#pragma GENDICT GFF_FASTA_Q7NAME=DTYPE_1=Q7NAME 
+#pragma GENDICT GFF_FASTA_Q8NAME=DTYPE_1=Q8NAME 
+#pragma GENDICT GFF_FASTA_Q9NAME=DTYPE_1=Q9NAME 
+#pragma GENDICT GFF_FASTA_QANAME=DTYPE_1=QANAME 
+#pragma GENDICT GFF_FASTA_QBNAME=DTYPE_1=QBNAME 
+#pragma GENDICT GFF_FASTA_QCNAME=DTYPE_1=QCNAME 
+#pragma GENDICT GFF_FASTA_QDNAME=DTYPE_1=QDNAME 
+#pragma GENDICT GFF_FASTA_QENAME=DTYPE_1=QENAME // if adding more Q*NAMEs - add to fastq.h too, and update MAX_QNAME_ITEMS
+#pragma GENDICT GFF_FASTA_QmNAME=DTYPE_1=QmNAME // QmNAME reserved for mate number (always the last dict_id in the container)
 #pragma GENDICT GFF_FASTA_LINEMETA=DTYPE_FIELD=LINEMETA
 #pragma GENDICT GFF_EOL=DTYPE_FIELD=EOL
 #pragma GENDICT GFF_FASTA_DESC=DTYPE_FIELD=DESC

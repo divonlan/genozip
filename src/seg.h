@@ -113,16 +113,20 @@ typedef void (*SplitCorrectionCallback) (uint32_t *n_repeats, rom *repeats, uint
 
 extern bool seg_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), const SegCallback *callbacks, unsigned add_bytes, bool account_in_subfields);
 
-extern int32_t seg_array_of_struct_with_prefixes (VBlockP vb, ContextP ctx, MediumContainer con, STRp(prefixes), STRp(snip), const SegCallback *callbacks, SplitCorrectionCallback split_correction_callback, unsigned add_bytes);
+extern int32_t seg_array_of_struct_ (VBlockP vb, ContextP ctx, MediumContainer con, STRp(prefixes), STRp(snip), const SegCallback *callbacks, uint8_t con_rep_special, uint32_t expected_num_repeats, SplitCorrectionCallback split_correction_callback, unsigned add_bytes);
 
 static inline int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), const SegCallback *callbacks, SplitCorrectionCallback split_correction_callback, unsigned add_bytes)
 {
-    return seg_array_of_struct_with_prefixes (vb, ctx, con, 0, 0, STRa(snip), callbacks, split_correction_callback, add_bytes);
+    return seg_array_of_struct_ (vb, ctx, con, 0, 0, STRa(snip), callbacks, 0, 0, split_correction_callback, add_bytes);
 }
 
 extern void seg_array_of_array_of_struct (VBlockP vb, ContextP ctx, char outer_sep, MediumContainer inner_con, STRp(snip), const SegCallback *callbacks);
 
 extern bool seg_by_container (VBlockP vb, ContextP ctx, ContainerP con, STRp(value), STRp(container_snip), SegCallback item_seg, bool normal_seg_if_fail, unsigned add_bytes);
+
+// common SPECIAL methods
+extern void seg_LEN_OF (VBlockP vb, ContextP ctx, STRp(len_str), uint32_t other_str_len, STRp(special_snip));
+extern void seg_by_ARRAY_LEN_OF (VBlockP vb, ContextP ctx, STRp(value), STRp(other_array), STRp(snip));
 
 extern void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, bool has_parameter, int64_t int_param, char char_param, qSTRp(snip));
 #define seg_prepare_snip_other(snip_code, other_dict_id, has_parameter, parameter, snip) \
@@ -147,6 +151,11 @@ extern void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, 
        seg_prepare_snip_other_do ((special_code), (DictId)(other_dict_id), char_param, 0, char_param, &snip##s[i][1], &snip##_lens[i]); \
        snip##_lens[i]++; })
 
+#define seg_prepare_snip_special_other_char(special_code, other_dict_id, snip, char_param) \
+    ({ snip[0]=SNIP_SPECIAL; snip##_len=sizeof(snip)-1; \
+       seg_prepare_snip_other_do ((special_code), (DictId)(other_dict_id), true, 0, (char_param), &snip[1], &snip##_len); \
+       snip##_len++; })
+
 #define seg_prepare_snip_special_other_int(special_code, other_dict_id, snip, int_param) \
     ({ snip[0]=SNIP_SPECIAL; snip##_len=sizeof(snip)-1; \
        seg_prepare_snip_other_do ((special_code), (DictId)(other_dict_id), true, int_param, 0, &snip[1], &snip##_len); \
@@ -157,7 +166,8 @@ extern void seg_prepare_multi_dict_id_special_snip (uint8_t special_code, unsign
 extern void seg_prepare_array_dict_id_special_snip (int num_dict_ids, DictId *dict_ids, uint8_t special_code, qSTRp(snip));
 
 #define seg_prepare_plus_snip(dt, num_dict_ids, dict_ids, snip) \
-    ({ snip##_len = sizeof (snip);\
+    ({ ASSERT ((num_dict_ids) <= MAX_SNIP_DICTS, "num_dict_ids=%d too large. increase MAX_SNIP_DICTS=%d", (num_dict_ids), MAX_SNIP_DICTS); \
+       snip##_len = sizeof (snip);\
        seg_prepare_array_dict_id_special_snip ((num_dict_ids), (dict_ids), dt##_SPECIAL_PLUS, (snip), &snip##_len); })
 
 #define seg_prepare_minus_snip(dt, dict_id_a, dict_id_b, snip) \
@@ -190,7 +200,10 @@ extern void seg_create_rollback_point (VBlockP vb, ContainerP con, unsigned num_
 extern void seg_add_ctx_to_rollback_point (VBlockP vb, ContextP ctx);
 extern void seg_rollback (VBlockP vb);
 
-extern void seg_mux_init (VBlockP vb, ContextP ctx, unsigned num_channels, uint8_t special_code, bool no_stons, MultiplexerP mux);
+extern void seg_mux_init_(VBlockP vb, Did did_i, unsigned num_channels, uint8_t special_code, bool no_stons, MultiplexerP mux);
+#define seg_mux_init(vb,did_i,special_code,no_stons,mux_name) \
+    seg_mux_init_((VBlockP)(vb), (did_i), MUX_CAPACITY((vb)->mux_##mux_name), (special_code), (no_stons), (MultiplexerP)&(vb)->mux_##mux_name)
+
 extern ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux, uint32_t channel_i);
 
 // --------------------

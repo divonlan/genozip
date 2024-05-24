@@ -67,8 +67,12 @@ static void *version_background_test_for_newer_do (void *unused)
 
     if (url_get_redirect (GITHUB_LATEST_RELEASE, redirect_url, sizeof redirect_url, &github_stream)) {
         latest_version = strrchr (redirect_url, '-'); // url looks something like: "https://github.com/divonlan/genozip/releases/tag/genozip-13.0.18"
+
         if (latest_version) {
             latest_version++;
+
+            if (flag.debug_upgrade)
+                iprintf ("\ndebug-upgrade: latest_version=%s\n", latest_version);
 
             char copy[100];
             strcpy (copy, GENOZIP_CODE_VERSION); // bc str_split_ints doesn't work on string literals
@@ -79,9 +83,18 @@ static void *version_background_test_for_newer_do (void *unused)
             if (!flag.debug_latest && n_latests == 3 && n_thiss == 3 && latests[0] == thiss[0] && latests[2] <= thiss[2])
                 latest_version = NULL; // same or newer than current version
         } 
+        else {
+            if (flag.debug_upgrade)
+                iprint0 ("debug-upgrade: no latest_version\n");
+        }
     }
 
-    __atomic_store_n (&thread_running, (bool)false, __ATOMIC_RELEASE); // stamp our merge_num as the ones that set the word_index
+    else {
+        if (flag.debug_upgrade)
+            iprintf ("debug-upgrade: failed to get redirect url=\"%s\"\n", redirect_url);
+    }
+
+    __atomic_store_n (&thread_running, (bool)false, __ATOMIC_RELEASE); 
     return NULL;
 }
 
@@ -109,7 +122,7 @@ static void my_system (rom command)
 }
 #endif
 
-#ifdef __linux__
+#if defined __linux__ || defined __APPLE__ 
 static bool is_updatable (void)
 {
     // check that executable is "genozip" (not genozip-debug or renamed to anything else). note: even in piz with --test, executable is "genozip"
@@ -132,13 +145,19 @@ static void udpate_do (void)
 
     ASSERT (!chdir ("/tmp"), "chdir(\"/tmp\") failed: %s", strerror (errno));
 
-    // download
     my_system ("rm -f " TARBALL_NAME);
-    my_system ("wget --quiet " GITHUB_LINUX_TARBALL);
+
+    // download: use wget if it exists, it is better than curl in flakey connections
+    if (wget_available())
+        my_system ("wget -q "  GITHUB_GENOZIP_TARBALL);
+    else if (curl_available())
+        my_system ("curl -sL " GITHUB_GENOZIP_TARBALL);
+    else
+        ABORT0 ("Neither wget nor curl are available"); // unexpected, since we used one of them when checking for an update
 
     // untar
     char cmd1[100 + STRLEN(TARBALL_NAME)];
-    snprintf (cmd1, sizeof (cmd1), "tar xf %s", TARBALL_NAME);
+    snprintf (cmd1, sizeof (cmd1), "env LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 tar xf %s", TARBALL_NAME);
     my_system (cmd1);
 
     // mv to destination 
@@ -149,12 +168,12 @@ static void udpate_do (void)
     rom exe_names[] = { "genozip", "genounzip", "genocat", "genols" };
     for (int exe_i=0; exe_i < ARRAY_LEN(exe_names); exe_i++) {    
         // note: mv better than cp because it preserves the hard links ; mv better than rename because it works across filesystems
-        snprintf (cmd2, cmd2_size, "mv genozip-linux-x86_64/%s %s", exe_names[exe_i], dir_name);
+        snprintf (cmd2, cmd2_size, "mv " TARBALL_DIRNAME "/%s %s", exe_names[exe_i], dir_name);
         my_system (cmd2);
     }
 
     // cleanup
-    snprintf (cmd1, sizeof (cmd1), "rm -Rf genozip-linux-x86_64 %s", TARBALL_NAME); // note: "genozip-linux-x86_64" is defined in the Makefile
+    snprintf (cmd1, sizeof (cmd1), "rm -Rf " TARBALL_DIRNAME " %s", TARBALL_NAME); 
     my_system (cmd1);
 
     // revert current directory
@@ -223,6 +242,9 @@ void version_print_notice_if_has_newer (void)
         pthread_cancel (thread_id);
         pthread_join (thread_id, NULL); // wait for cancelation to complete
 
+        if (flag.debug_upgrade)
+            iprint0 ("debug-upgrade: upgrade thread canceled\n");
+
         __atomic_thread_fence (__ATOMIC_ACQUIRE); // make sure github_stream is updated      
         
         if (github_stream) 
@@ -231,31 +253,27 @@ void version_print_notice_if_has_newer (void)
     
     // case: thread completed, and there is a new version
     else if (latest_version) {
+        if (flag.debug_upgrade)
+            iprint0 ("debug-upgrade: upgrade thread completed\n");
+
         iprintf ("\nA newer & better version of Genozip is available - version %s. You are currently running version %s\n", 
                  latest_version, GENOZIP_CODE_VERSION);
 
         if (is_info_stream_terminal) {
-            if (0) {}
 #ifdef _WIN32
-            // else if (is_updatable() &&                      
-            //     str_query_user_yn ("Do you want to update Genozip now?", QDEF_YES)) 
-            //     udpate_do();
+            if (!strcmp (get_distribution(), "InstallForge")) 
+                iprintf ("You can install the latest version from here: %s\n", GITHUB_WINDOWS_INSTALLER);
             
-#elif defined __linux__            
+#else
+            if (!strcmp (get_distribution(), "conda") &&
+                str_query_user_yn ("Do you want to update Genozip now?", QDEF_YES))
+                my_system ("conda update genozip");
+
             else if (strcmp (get_distribution(), "conda") && // anything but conda. note: distribution names are defined in the Makefile
                 is_updatable() &&                      
                 str_query_user_yn ("Do you want to update Genozip now?", QDEF_YES)) 
                 udpate_do();
-#endif            
-
-#ifndef _WIN32
-            else if (!strcmp (get_distribution(), "conda") &&
-                     str_query_user_yn ("Do you want to update Genozip now?", QDEF_YES)) {
-                my_system ("conda update genozip");
-            }
 #endif
-            else if (!strcmp (get_distribution(), "InstallForge")) 
-                iprintf ("You can install the latest version from here: %s\n", GITHUB_WINDOWS_INSTALLER);
 
             else 
                 iprintf ("Installation instructions: %s\n", WEBSITE_INSTALLING);

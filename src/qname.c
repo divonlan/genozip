@@ -154,7 +154,7 @@ void qname_zip_initialize (void)
                 if (dnum == _SAM_QmNAME) 
                     ASSERT (item_i == qfs->con.nitems_lo - 1, "Item=%d QmNAME of %s is not the last item in the container", item_i, qfs->name);
 
-                // veriry Q*NAME requirements
+                // verify Q*NAME requirements
                 else { 
                     ASSERT (dnum, "dnum=0 for item_i=%u in qfs=\"%s\"", item_i, qfs->name);
 
@@ -428,7 +428,7 @@ QnameTestResult qname_test_flavor (STRp(qname), QType q, QnameFlavor qfs, bool q
         return QTR_WRONG_Q; 
 
     // in FASTQ, QNAME1 match fq_qname1_tech
-    if (q==QNAME2 && Z_DT(FASTQ) && 
+    if (q==QNAME2 && (Z_DT(FASTQ) || Z_DT(FASTA)) && 
         qfs->fq_qname1_tech != TECH_ANY && segconf.tech != qfs->fq_qname1_tech && segconf.tech != TECH_UNKNOWN)
             return QTR_TECH_MISMATCH;
 
@@ -695,6 +695,7 @@ bool qname_seg (VBlockP vb, QType q, STRp (qname), unsigned add_additional_bytes
     }
 
     bool success = false;
+
     if (flavor)
         success = qname_seg_qf (vb, q, STRa(qname), add_additional_bytes);
 

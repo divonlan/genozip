@@ -37,7 +37,7 @@ static SectionHeaderTxtHeader section_header = {};
 static BufferP txt_header_buf = NULL;
 static CompIType txt_header_comp_i = 0;
 
-#define TXT_HEADER_VB_SIZE (1<<24) // 16MB
+#define TXT_HEADER_VB_SIZE 1 MB
 
 // compress the Txt Header fragment - to allow multi-threaded compression and decompression
 static void txtheader_prepare_for_compress (VBlockP vb)

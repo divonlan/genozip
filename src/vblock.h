@@ -228,6 +228,7 @@ extern void vb_destroy_vb_do (VBlockP *vb_p, rom func);
 extern void vb_dehoard_memory (bool release_to_kernel);
 
 extern VBlockP vb_initialize_nonpool_vb (VBID vb_id, DataType dt, rom task);
+extern void vb_change_datatype_nonpool_vb (VBlockP *vb_p, DataType new_dt);
 extern VBlockP vb_get_nonpool_vb (VBID vb_id);
 
 // -------------

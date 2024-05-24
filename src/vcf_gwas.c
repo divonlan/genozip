@@ -13,13 +13,8 @@
 // ZIP
 // ---------------
 
-sSTRl(copy_ID_snip, 30);
-
 void vcf_gwas_zip_initialize (void)
 {
-    DO_ONCE {
-        seg_prepare_snip_other (SNIP_COPY, _VCF_ID, false, 0, copy_ID_snip);
-    }
 }
 
 void vcf_gwas_seg_initialize (VBlockVCFP vb)
@@ -38,7 +33,7 @@ void vcf_gwas_seg_FORMAT_ID (VBlockVCFP vb, ContextP ctx, STRp(id))
         CTX(VCF_ID)->last_txt.index != INVALID_LAST_TXT_INDEX &&
         str_issame_(STRa(id), STRtxt(CTX(VCF_ID)->last_txt))) 
        
-        seg_by_ctx (VB, STRa(copy_ID_snip), ctx, id_len);
+        seg_by_ctx (VB, STRa(copy_VCF_ID_snip), ctx, id_len);
 
     else 
         seg_id_field (VB, ctx, STRa(id), false, id_len);

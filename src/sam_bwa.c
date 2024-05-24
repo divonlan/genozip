@@ -401,9 +401,7 @@ void sam_seg_BWA_XS_i (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, int64_t xs,
             seg_integer (VB, channel_ctx, xs, true, add_bytes);
         }
 
-        else if (xs && // XS can be before or after AS
-                 (dl->AS || sam_seg_get_aux_int (vb, vb->idx_AS_i, &dl->AS, IS_BAM_ZIP, MIN_AS_i, MAX_AS_i, SOFT_FAIL))) { 
-            
+        else if (xs && dl->AS) { // XS can be before or after AS
             CTX(OPTION_AS_i)->last_value.i = dl->AS;
             seg_delta_vs_other_localN (VB, channel_ctx, CTX(OPTION_AS_i), xs, -1, add_bytes);
         }

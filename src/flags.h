@@ -50,9 +50,9 @@ typedef struct {
     int64_t sendto;
     
     // ZIP: data modifying options
-    int optimize, optimize_sort, optimize_phred, GL_to_PL, GP_to_PP, optimize_VQSLOD,  // optimize flags
+    int optimize, optimize_sort, optimize_phred, GL_to_PL, GP_to_PP, optimize_VQSLOD,  // optimize flags: if adding, update has_optimize
         optimize_QUAL, optimize_Vf, optimize_ZM, optimize_DESC,
-        allow_ambiguous, add_line_numbers, match_chrom_to_reference;
+        add_line_numbers, match_chrom_to_reference;
         
     int truncate; // allow truncated file - compress only available full lines. note: we don't consider this option data modifying as its used for debugging - digest is calculated only after truncation
         
@@ -134,10 +134,11 @@ typedef struct {
         show_threads, show_uncompress, biopsy, skip_segconf, show_data_type,
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
         debug_LONG, show_qual, debug_qname, debug_read_ctxs, debug_sag, debug_gencomp, debug_lines, debug_latest,
-        debug_peek, stats_submit, debug_submit, show_deep, show_segconf_has, debug_huffman, debug_split,
+        debug_peek, stats_submit, debug_submit, show_deep, show_segconf_has, debug_huffman, debug_split, debug_upgrade,
         debug_debug,  // a flag with no functionality - used for ad-hoc debugging  
         debug_valgrind, debug_tar, // ad-hoc debug printing in prod
-        no_gencomp, force_gencomp, force_deep, force_PLy, no_domqual, no_pacb, no_longr, no_homp, force_qual_codec, no_smux, verify_codec, 
+        no_gencomp, force_gencomp, force_deep, force_PLy, no_domqual, no_pacb, no_longr, no_homp, no_smux, no_faf, no_interleaved,
+        force_qual_codec, verify_codec, 
         seg_only, show_bam, xthreads,
         #define SHOW_CONTAINERS_ALL_VBs (-1)
         show_containers, show_stack, show_aligner, show_buddy,
