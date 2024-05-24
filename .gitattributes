@@ -1,6 +1,13 @@
 # Set the default behavior, in case people don't have core.autocrlf set.
 * text=auto
 
+*.sh eol=lf
+*.txt eol=lf
+*.md eol=lf
+*.eb eol=lf
+*.json eol=lf
+*.sed eol=lf
+
 # Declare our textual formats as binary so we can check in test files with Unix or Windows style end-of-lines
 *.vcf binary
 *.bcf binary
