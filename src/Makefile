@@ -594,7 +594,7 @@ increment-version: # note: target name is not "version.h" so this is not invoked
 	@(cd secure; git tag genozip-$(version) > /dev/null ; exit 0)
 	@git push origin genozip-$(version) > /dev/null
 	@(cd secure; git push origin genozip-$(version) > /dev/null)
-	@curl https://github.com/divonlan/genozip/archive/genozip-$(version).tar.gz --ssl-no-revoke --silent --location -o $@ > /dev/null
+	@curl https://github.com/divonlan/genozip/archive/refs/tags/genozip-$(version).tar.gz --ssl-no-revoke --silent --location -o $@ > /dev/null
 
 conda/meta.yaml: conda/meta.template.yaml .archive.tar.gz ../README.md
 	@echo "Generating conda/meta.yaml"
