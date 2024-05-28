@@ -9,14 +9,10 @@
 #include "vcf_private.h"
 #include "zfile.h"
 #include "txtfile.h"
-#include "vblock.h"
 #include "crypt.h"
-#include "version.h"
-#include "file.h"
 #include "dispatcher.h"
 #include "txtfile.h"
 #include "txtheader.h"
-#include "dict_id.h"
 #include "contigs.h"
 #include "stats.h"
 #include "tip.h"
@@ -50,6 +46,14 @@ static char *vcf_sample_names_data;    // vcf_sample_names point into here
                                 buf_add_more (NULL, new_txt_header, line + (sizeof old - 1), line_len - (sizeof old - 1), NULL); })
 
 typedef struct { STR (key); STR (value); } Attr;
+
+int32_t vcf_is_header_done (bool is_eof)
+{
+    // verify that this isn't by any chance a BCF...
+    ASSINP0 (!is_bcf (STRb(evb->txt_data), NULL), "This is BCF file, but Genozip got confused because the file's name implies it is a VCF. Solution: re-run and add the command line option \"--input bcf\"");
+
+    return def_is_header_done (is_eof);
+}
 
 void vcf_piz_header_init (void)
 {
@@ -463,7 +467,7 @@ static void vcf_header_trim_field_name_line (BufferP vcf_header)
 
 uint32_t vcf_header_get_num_samples (void)
 {
-    if (Z_DT(VCF) || Z_DT(BCF))
+    if Z_DT(VCF)
         return vcf_num_samples;
     else
         return 0;
@@ -471,7 +475,7 @@ uint32_t vcf_header_get_num_samples (void)
 
 uint32_t vcf_header_get_num_contigs (void)
 {
-    if (Z_DT(VCF) || Z_DT(BCF))
+    if Z_DT(VCF)
         return vcf_num_hdr_contigs;
     else
         return 0;
@@ -479,7 +483,7 @@ uint32_t vcf_header_get_num_contigs (void)
 
 uint64_t vcf_header_get_nbases (void)
 {
-    if (Z_DT(VCF) || Z_DT(BCF))
+    if Z_DT(VCF)
         return vcf_num_hdr_nbases;
     else
         return 0;

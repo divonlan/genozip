@@ -6,20 +6,12 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
-#include "genozip.h"
 #include "sam_private.h"
-#include "sections.h"
-#include "codec.h"
 #include "compressor.h"
 #include "dispatcher.h"
-#include "profiler.h"
-#include "piz.h"
-#include "reconstruct.h"
 #include "zfile.h"
 #include "qname.h"
-#include "bits.h"
 #include "writer.h"
-#include "progress.h"
 #include "htscodecs/rANS_static4x16.h"
 
 typedef struct {
@@ -377,7 +369,7 @@ static void sam_load_groups_add_aln_cigar (VBlockSAMP vb, PlsgVbInfo *plsg, Sag 
 
     // case: the cigar is in dict - we therefore don't store - reconstruction will copy it from the dictionary
     else {
-        ASSERT (word_index >= 0 && word_index < ctx->word_list.len32, "word_index=%d of %s out of range [0,%d] snip_len=%u snip[0]=%u snip=\"%.*s\"", 
+        ASSERT (word_index >= 0 && word_index < ctx->word_list.len32, "word_index=%d of %s ∉ [0,%d] snip_len=%u snip[0]=%u snip=\"%.*s\"", 
                 word_index, ctx->tag_name, ctx->word_list.len32-1, snip_len, snip_len ? (uint8_t)snip[0] : 0, STRf(snip));
 
         a->cigar.piz.is_word = true; // cigar is in ZCTX(OPTION_SA_CIGAR).dict (short cigar)
@@ -505,7 +497,7 @@ static inline void sam_load_groups_add_grps (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
         if (IS_SAG_SA) {
 
             ASSERT (g->first_aln_i >= plsg->first_aln_i && g->first_aln_i < z_file->sag_alns.len,
-                    "grp_i=%u z_grp_i=%u has first_aln_i=%"PRIu64" which is out of range [0,%"PRId64"]", 
+                    "grp_i=%u z_grp_i=%u has first_aln_i=%"PRIu64" ∉ [0,%"PRId64"]", 
                     grp_i, ZGRP_I(g), (uint64_t)g->first_aln_i, z_file->sag_alns.len-1);
 
             SAAln *prim_aln = B(SAAln, z_file->sag_alns, g->first_aln_i); // first Aln of group

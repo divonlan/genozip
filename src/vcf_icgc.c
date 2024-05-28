@@ -7,8 +7,6 @@
 //   and subject to penalties specified in the license.
 
 #include "vcf_private.h"
-#include "piz.h"
-#include "reconstruct.h"
 
 // ##INFO=<ID=mutation,Number=1,Type=String,Description="Somatic mutation definition">
 // SNP: REF/ALT=C T         mutation=C>T

@@ -72,8 +72,25 @@ void vcf_zip_finalize (bool is_last_user_txt_file)
 // detect if a generic file is actually a vcf
 bool is_vcf (STRp(header), bool *need_more)
 {
-    return header_len >= 16 && !memcmp (header, "##fileformat=VCF", 16);
+    if (header_len < STRLEN(VCF_MAGIC)) {
+        *need_more = true;
+        return false;
+    }
+
+    return str_isprefix_(STRa(header), _S(VCF_MAGIC));
 }
+
+// detect if a generic file is actually a bcf
+bool is_bcf (STRp(header), bool *need_more)
+{
+    if (header_len < STRLEN(BCF_MAGIC)) {
+        if (need_more) *need_more = true;
+        return false;
+    }
+
+    return str_isprefix_(STRa(header), _S(BCF_MAGIC));
+}
+
 
 // main thread: writing data-type specific fields to genozip header
 void vcf_zip_genozip_header (SectionHeaderGenozipHeaderP header)
@@ -282,9 +299,9 @@ static void vcf_seg_finalize_segconf (VBlockVCFP vb)
         segconf.vcf_is_ultima = true;
 
         if (!flag.reference && !flag.seg_only)
-            TIP ("Compressing a Ultima Genomics VCF file using a reference file can reduce the size by 12%%.\n"
+            TIP ("Compressing a Ultima Genomics %s file using a reference file can reduce the size by 12%%.\n"
                  "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
-                 arch_get_argv0(), txt_file->name);
+                 z_dt_name(), arch_get_argv0(), txt_file->name);
     }
 
     if (segconf.has[INFO_X_HIL] && segconf.has[INFO_X_HIN]) 
@@ -300,14 +317,14 @@ static void vcf_seg_finalize_segconf (VBlockVCFP vb)
              arch_get_argv0(), txt_file->name);
 
     if (!flag.reference && segconf.vcf_is_platypus && (segconf.has[INFO_SC] || segconf.has[INFO_HP]) && !flag.seg_only)
-        TIP ("Compressing a Platypus VCF file using a reference file can reduce the compressed file's size by 30%%.\n"
+        TIP ("Compressing a Platypus %s file using a reference file can reduce the compressed file's size by 30%%.\n"
              "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
-             arch_get_argv0(), txt_file->name);
+             z_dt_name(), arch_get_argv0(), txt_file->name);
 
     if (!flag.reference && segconf.vcf_is_sv && !flag.seg_only)
-        TIP ("Compressing a structrual variants VCF file using a reference file can reduce the compressed file's size by 20%%-60%%.\n"
+        TIP ("Compressing a structrual variants %s file using a reference file can reduce the compressed file's size by 20%%-60%%.\n"
             "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n", 
-            arch_get_argv0(), txt_file->name);
+            z_dt_name(), arch_get_argv0(), txt_file->name);
 
     // In case of dependency DAG: DP->(sum)AD->(mux)GT we can't have GT->(null)DP
     if (segconf.FMT_DP_method == BY_AD) segconf.use_null_DP_method = false;
@@ -317,7 +334,7 @@ static void vcf_seg_finalize_segconf (VBlockVCFP vb)
         vcf_segconf_finalize_GQ (vb);
 
     if (segconf.has_DP_before_PL && !flag.best)
-        TIP0 ("Compressing this particular VCF with --best could result in significantly better compression");
+        TIP ("Compressing this particular %s with --best could result in significantly better compression", z_dt_name());
 
     // set width: number of bits come from SectionHeaderGenozipHeader
     segconf_set_width (&segconf.wid_AC, 3);

@@ -7,12 +7,6 @@
 //   and subject to penalties specified in the license.
 
 #include "vcf_private.h"
-#include "seg.h"
-#include "context.h"
-#include "file.h"
-#include "strings.h"
-#include "reconstruct.h"
-#include "piz.h"
 #include "base64.h"
 #include "zip_dyn_int.h"
 

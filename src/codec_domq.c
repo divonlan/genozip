@@ -156,7 +156,7 @@ static void codec_domq_calc_histogram (VBlockP vb, ContextP qual_ctx, ContextP d
         uint32_t max_score_count=0;
         for (int ascii_i=0; ascii_i < 256; ascii_i++) {
             ASSERT ((ascii_i >= FIRST_Q && ascii_i <= LAST_Q) || !line_ascii_histogram[ascii_i],
-                    "%s/%u: QUAL value=%u is out of range [%u, %u] for %s", 
+                    "%s/%u: QUAL value=%u ∉ [%u, %u] for %s", 
                     VB_NAME, line_i, ascii_i, FIRST_Q, LAST_Q, qual_ctx->tag_name);
 
             if (line_ascii_histogram[ascii_i] >= max_score_count) { // if equal, the higher ascii_i is the dom

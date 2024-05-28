@@ -7,8 +7,6 @@
 //   and subject to penalties specified in the license.
 
 #include "sam_private.h"
-#include "reconstruct.h"
-#include "context.h"
 #include "chrom.h"
 #include "optimize.h"
 
@@ -672,7 +670,7 @@ static inline void sam_seg_AS_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t as, 
 
     // in bowtie2-like data, we might be able to copy from mate
     else if (segconf.is_bowtie2) {
-        ASSERT (as >= MIN_AS_i && as <= MAX_AS_i, "%s: AS=%"PRId64" is out of range [%d,%d]", LN_NAME, as, MIN_AS_i, MAX_AS_i);    
+        ASSERT (as >= MIN_AS_i && as <= MAX_AS_i, "%s: AS=%"PRId64" is ∉ [%d,%d]", LN_NAME, as, MIN_AS_i, MAX_AS_i);    
         
         ZipDataLineSAMP mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is -1
 

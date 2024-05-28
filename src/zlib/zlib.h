@@ -398,7 +398,6 @@ ZEXTERN int ZEXPORT inflateInit OF((z_streamp strm));
    that is deferred until inflate() is called.
 */
 
-
 ZEXTERN int ZEXPORT inflate OF((z_streamp strm, int flush));
 /*
     inflate decompresses as much data as possible, and stops when the input

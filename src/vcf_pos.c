@@ -7,9 +7,6 @@
 //   and subject to penalties specified in the license.
 
 #include "vcf_private.h"
-#include "seg.h"
-#include "context.h"
-#include "reconstruct.h"
 #include "random_access.h"
 
 void vcf_seg_pos (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(pos_str))

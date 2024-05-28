@@ -9,7 +9,6 @@
 // a module for handling CIGAR and MC:Z
 
 #include "sam_private.h"
-#include "reconstruct.h"
 #include "md5.h"
 #include "random_access.h"
 #include "chrom.h"
@@ -948,7 +947,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_cigar_special_CIGAR)
     }
 
     // BAM - output vb->binary_cigar generated in sam_cigar_analyze
-    else if (OUT_DT(BAM) && !vb->preprocessing) {
+    else if ((OUT_DT(BAM) || OUT_DT(CRAM)) && !vb->preprocessing) {
         // now we have the info needed to reconstruct bin, l_read_name, n_cigar_op and l_seq
         BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)Btxt (vb->line_start);
         alignment->l_read_name = BAFTtxt - &alignment->read_name[0];
@@ -996,8 +995,8 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_COPY_BUDDY_CIGAR)
     BuddyType bt = snip_len > 1 ? BUDDY_MATE : BUDDY_SAGGY; // for mate, it is segged with the other_ctx
 
     // fall back to normal COPY_BUDDY in case of SAM
-    if (!OUT_DT(BAM)) 
-        return sam_piz_special_COPY_BUDDY (VB, ctx, STRa(snip), new_value, reconstruct); // SAM or FASTQ output
+    if (OUT_DT(SAM)) 
+        return sam_piz_special_COPY_BUDDY (VB, ctx, STRa(snip), new_value, reconstruct); 
 
     // get CIGAR field value previously reconstructed in BAM **BINARY** format
     STR(bam_cigar);

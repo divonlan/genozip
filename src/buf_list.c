@@ -6,14 +6,9 @@
 #ifdef _WIN32
 #include <windows.h>
 #endif
-#include "genozip.h"
-#include "vblock.h"
-#include "buf_struct.h"
 #include "buf_list.h"
-#include "context.h"
 #include "file.h"
 #include "threads.h"
-#include "reference.h"
 #include "gencomp.h"
 #include "arch.h"
 

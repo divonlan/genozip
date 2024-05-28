@@ -8,11 +8,8 @@
 
 #include <math.h>
 #include "sam_private.h"
-#include "piz.h"
-#include "reconstruct.h"
 #include "regions.h"
 #include "aligner.h"
-#include "file.h"
 #include "coverage.h"
 #include "bases_filter.h"
 #include "lookback.h"
@@ -212,10 +209,10 @@ IS_SKIP (sam_piz_is_skip_section)
             // fallthrough
 
         case _SAM_QUALSA  :
-            SKIPIFF (preproc || cov || (cnt && !(flag.bases && OUT_DT(BAM))));
+            SKIPIFF (preproc || cov || (cnt && !(flag.bases && (OUT_DT(BAM) || OUT_DT(CRAM)))));
 
         case _SAM_Q1NAME : case _SAM_QNAMESA :
-            KEEPIF (preproc || dict_needed_for_preproc || (cnt && flag.bases && OUT_DT(BAM))); // if output is BAM we need the entire BAM record to correctly analyze the SEQ for IUPAC, as it is a structure.
+            KEEPIF (preproc || dict_needed_for_preproc || (cnt && flag.bases && (OUT_DT(BAM) || OUT_DT(CRAM)))); // if output is BAM we need the entire BAM record to correctly analyze the SEQ for IUPAC, as it is a structure.
             SKIPIFF (is_prim);                                         
 
         case _OPTION_SA_Z :
@@ -268,7 +265,7 @@ IS_SKIP (sam_piz_is_skip_section)
         case _SAM_PNEXT    : case _SAM_P0NEXT : case _SAM_P1NEXT : case _SAM_P2NEXT : case _SAM_P3NEXT : // PNEXT is required by POS
         case _SAM_POS      : SKIPIFF (preproc && IS_SAG_SA);
         case _SAM_TOPLEVEL : KEEPIF (flag.deep && is_dict); // needed to reconstruct the FASTQ components
-                             SKIPIFF (preproc || OUT_DT(BAM) || OUT_DT(FASTQ));
+                             SKIPIFF (preproc || OUT_DT(BAM) || OUT_DT(CRAM) || OUT_DT(FASTQ));
         case _SAM_TOP2BAM  : SKIPIFF (preproc || OUT_DT(SAM) || OUT_DT(FASTQ));
         case 0             : KEEPIFF (ST(VB_HEADER) || !preproc);
         
@@ -464,7 +461,7 @@ SPECIAL_RECONSTRUCTOR (bam_piz_special_FLOAT)
     if (!reconstruct) goto finish;
 
     // binary reconstruction in little endian - BAM format
-    if (OUT_DT(BAM)) {
+    if (OUT_DT(BAM) || OUT_DT(CRAM)) {
         uint32_t n32_lten = LTEN32 (machine_en.i); // little endian (per BAM format spec)
         RECONSTRUCT (&n32_lten, sizeof (uint32_t)); // in binary - float and uint32 are the same
     }

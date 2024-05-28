@@ -8,15 +8,16 @@
 
 #pragma once
 
-#include "sam.h"
 #include "vblock.h"
-#include "reference.h"
 #include "contigs.h"
 #include "file.h"
 #include "seg.h"
 #include "gencomp.h"
 #include "digest.h"
 #include "deep.h"
+#include "piz.h"
+#include "context.h"
+#include "reconstruct.h"
 
 #define DTYPE_QNAME   DTYPE_1
 #define DTYPE_SAM_AUX DTYPE_2
@@ -502,6 +503,9 @@ static bool inline sam_line_is_prim (ZipDataLineSAMP dl) { return !sam_is_depn (
                                              (!segconf.is_paired && !sam_is_depn ((SamFlags){ .value = history64(SAM_FLAG, VB_SAM->buddy_line_i)}))))
 
 extern void sam_segconf_set_by_MP (void);
+
+// Header stuff
+extern void sam_header_zip_inspect_SQ_lines_in_cram (rom cram_filename);
 
 // BUDDY stuff
 extern void sam_piz_set_buddy_v13 (VBlockP vb);

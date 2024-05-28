@@ -16,21 +16,17 @@
 #endif
 #include "genozip.h"
 #include "text_help.h"
-#include "version.h" // automatically incremented by the make when we create a new distribution
 #include "zfile.h"
 #include "zip.h"
 #include "piz.h"
 #include "crypt.h"
 #include "file.h"
 #include "filename.h"
-#include "vblock.h"
 #include "url.h"
-#include "strings.h"
 #include "stats.h"
 #include "arch.h"
 #include "license.h"
 #include "tip.h"
-#include "reference.h"
 #include "refhash.h"
 #include "random_access.h"
 #include "codec.h"
@@ -41,7 +37,6 @@
 #include "tar.h"
 #include "gencomp.h"
 #include "chrom.h"
-#include "buf_list.h"
 #include "dispatcher.h"
 #include "biopsy.h"
 
@@ -496,7 +491,7 @@ static void main_genozip (rom txt_filename,
                        : (flag.pair && !flag.out_filename) ? filename_z_pair (txt_filename, next_txt_filename, false) // first file in a FASTQ pair
                        :                                     filename_z_normal (txt_file->name, txt_file->data_type, txt_file->type);
 
-        z_file = file_open_z_write (z_filename, flag.pair ? WRITEREAD : WRITE, txt_file->data_type);
+        z_file = file_open_z_write (z_filename, flag.pair ? WRITEREAD : WRITE, txt_file->data_type, txt_file->source_codec);
         FREE(z_filename); // file_open_z copies the name
 
         license_eval_notice();
@@ -591,8 +586,8 @@ done:
 static inline DataType main_get_file_dt (rom filename)
 {   
     switch (command) {
-        case ZIP: return txtfile_get_file_dt (filename);
-        case PIZ: return zfile_get_file_dt (filename);
+        case ZIP: return txtfile_zip_get_file_dt (filename);
+        case PIZ: return zfile_piz_get_file_dt (filename);
         default : return DT_NONE;
     }
 }
@@ -703,9 +698,9 @@ static void main_load_reference (rom filename, bool is_first_file, bool is_last_
     int old_aligner_available = flag.aligner_available;
     DataType dt = main_get_file_dt (filename);
     flag.aligner_available = primary_command == ZIP && 
-                            (old_aligner_available || dt == DT_FASTQ || 
-                            dt == DT_FASTA   || // FASTA can be segged as FASTQ
-                            dt == DT_GENERIC || // GENERIC might end up being FASTQ/SAM/BAM (in generic_is_header_done), initialize refhash just in case
+                             (old_aligner_available || dt == DT_FASTQ || 
+                             dt == DT_FASTA   || // FASTA can be segged as FASTQ
+                             dt == DT_GNRIC || // GENERIC might end up being FASTQ/SAM/BAM (in generic_is_header_done), initialize refhash just in case
                              ((dt==DT_SAM || dt==DT_BAM) && (flag.best || flag.deep)));     // SAM/BAM: load refhash only in --best or --deep
 
     // no need to load the reference if not needed (unless its genocat of the reference file itself)

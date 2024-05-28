@@ -7,7 +7,6 @@
 //   under penalties specified in the license.
 
 #include "vcf_private.h"
-#include "reconstruct.h"
 
 sSTRl (tcr_snip, 32);
 

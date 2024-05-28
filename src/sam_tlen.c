@@ -7,7 +7,6 @@
 //   under penalties specified in the license.
 
 #include "sam_private.h"
-#include "reconstruct.h"
 
 //---------
 // SEG
@@ -115,7 +114,7 @@ static inline PosType32 sam_piz_predict_TLEN (VBlockSAMP vb, bool has_mc)
     STRlast (last_rname, SAM_RNAME);
     STRlast (last_rnext, SAM_RNEXT);
          
-    if (OUT_DT(BAM) && *(int32_t*)last_rname != *(int32_t*)last_rnext) return 0;
+    if (!OUT_DT(SAM) && *(int32_t*)last_rname != *(int32_t*)last_rnext) return 0;
 
     if (OUT_DT(SAM) && !IS_EQUAL_SIGN (last_rnext) && !str_issame (last_rname, last_rnext)) return 0;
 

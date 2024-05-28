@@ -8,17 +8,7 @@
 
 #include <math.h>
 #include "vcf_private.h"
-#include "seg.h"
-#include "piz.h"
-#include "context.h"
-#include "strings.h"
-#include "codec.h"
-#include "reconstruct.h"
-#include "dict_id.h"
-#include "file.h"
-#include "reference.h"
 #include "ref_iupacs.h"
-#include "dict_id_gen.h"
 
 #define _ALT_BND_REF      DICT_ID_MAKEF_7("BND_REF")
 #define _ALT_BND_REF2     DICT_ID_MAKEF_8("BND_REF2")

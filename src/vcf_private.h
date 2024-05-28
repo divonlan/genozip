@@ -9,9 +9,13 @@
 #pragma once
 
 #include "vblock.h"
-#include "vcf.h"
-#include "website.h"
 #include "seg.h"
+#include "piz.h"
+#include "context.h"
+#include "reconstruct.h"
+
+#define VCF_MAGIC "##fileformat=VCF"
+#define BCF_MAGIC "BCF"
 
 #define VCF_FIELD_NAMES "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO"
 #define VCF_FIELD_NAMES_LONG VCF_FIELD_NAMES "\tFORMAT"

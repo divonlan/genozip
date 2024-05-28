@@ -7,11 +7,8 @@
 //   and subject to penalties specified in the license.
 
 #include "bzlib/bzlib.h"
-#include "genozip.h"
-#include "codec.h"
+#include "compressor.h"
 #include "vblock.h"
-#include "buffer.h"
-#include "strings.h"
 
 static void *codec_bz2_alloc (void *vb_, int items, int size, FUNCLINE)
 {

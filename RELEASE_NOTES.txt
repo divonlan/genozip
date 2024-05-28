@@ -3,6 +3,11 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+15.0.59 29/5/2024
+- CRAM is now a "first-class citizen" in Genozip - all functionality availabe for BAM is also availble for CRAM.
+- SAM/BAM/CRAM: new option: genocat --cram: output a file in CRAM format
+- Deep: better detection of more use cases
+
 15.0.58 24/5/2024
 - FASTA: New method (FAF) for better compressing FASTA files that contain sequencer reads (as opposed to assembled contigs), including support for --reference
 - FASTA: genozip option --index now required in order to enable genocat --grep and --regions on files with more than 10,000 contigs (flles with less contigs are indexed by default)

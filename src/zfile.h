@@ -70,7 +70,7 @@ extern void zfile_uncompress_section_into_buf (VBlockP vb, SectionHeaderUnionP s
 
 extern bool zfile_advance_to_next_header (uint64_t *offset, uint64_t *gap);
 
-extern DataType zfile_get_file_dt (rom filename);
+extern DataType zfile_piz_get_file_dt (rom filename);
 
 #ifdef __APPLE__
 #define off64_t __int64_t // needed for conda mac - otherwise zlib.h throws compilation errors

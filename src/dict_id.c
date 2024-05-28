@@ -7,7 +7,6 @@
 //   and subject to penalties specified in the license.
 
 #include <stdarg.h>
-#include "genozip.h"
 #include "dict_id.h"
 #include "file.h"
 #include "zfile.h"

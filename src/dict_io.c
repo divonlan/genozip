@@ -7,17 +7,7 @@
 //   under penalties specified in the license.
 
 #include <errno.h>
-#include "genozip.h"
-#include "endianness.h"
-#include "sections.h"
-#include "vblock.h"
-#include "context.h"
 #include "zfile.h"
-#include "file.h"
-#include "dict_id.h"
-#include "strings.h"
-#include "flags.h"
-#include "buffer.h"
 #include "dispatcher.h"
 #include "piz.h"
 #include "compressor.h"
@@ -404,7 +394,7 @@ StrTextMegaLong str_snip_ex (STRp(snip), bool add_quote)
     static rom special_names[NUM_DATATYPES][MAX_NUM_SPECIAL] = 
         { [DT_VCF]=VCF_SPECIAL_NAMES,         [DT_SAM]=SAM_SPECIAL_NAMES,     [DT_BAM]=SAM_SPECIAL_NAMES,
           [DT_FASTQ]=FASTQ_SPECIAL_NAMES,     [DT_FASTA]=FASTA_SPECIAL_NAMES, [DT_GFF]=GFF_SPECIAL_NAMES, 
-          [DT_GENERIC]=GENERIC_SPECIAL_NAMES, [DT_LOCS]=LOCS_SPECIAL_NAMES,   [DT_BED]=BED_SPECIAL_NAMES };
+          [DT_GNRIC]=GENERIC_SPECIAL_NAMES, [DT_LOCS]=LOCS_SPECIAL_NAMES,   [DT_BED]=BED_SPECIAL_NAMES };
 
     switch (op) {
         case 0                         : i--;                           break;

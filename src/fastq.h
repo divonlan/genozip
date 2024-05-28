@@ -8,10 +8,8 @@
 
 #pragma once
 
-#include "genozip.h"
 #include "sections.h"
 #include "multiplexer.h"
-#include "dict_id_gen.h"
 
 // SAM and FASTQ share the same Dids and DictIds
 #define FASTQ_CONTIG        SAM_RNAME

@@ -7,34 +7,21 @@
 //   and subject to penalties specified in the license.
 
 #include <errno.h>
-#include "reference.h"
-#include "buffer.h"
-#include "strings.h"
-#include "dict_id.h"
+#include "ref_private.h"
 #include "dispatcher.h"
 #include "zfile.h"
-#include "endianness.h"
 #include "random_access.h"
 #include "seg.h"
 #include "piz.h"
-#include "vblock.h"
-#include "context.h"
-#include "mutex.h"
 #include "sections.h"
 #include "filename.h"
-#include "file.h"
 #include "regions.h"
 #include "refhash.h"
-#include "ref_private.h"
 #include "compressor.h"
-#include "threads.h"
-#include "website.h"
 #include "ref_iupacs.h"
 #include "chrom.h"
 #include "crypt.h"
 #include "arch.h"
-#include "buf_list.h"
-#include "refhash.h"
 #include "zriter.h"
 #include "tip.h"
 
@@ -51,6 +38,7 @@ Reference gref = &refs[0]; // global reference
 
 // get / set functions 
 rom ref_get_filename (const Reference ref)            { return ref->filename;               }
+rom ref_get_fasta_name (const Reference ref)          { return ref->ref_fasta_name;         }
 uint8_t ref_get_genozip_version (const Reference ref) { return ref->genozip_version;        }
 BufferP ref_get_stored_ra (Reference ref)             { return &ref->stored_ra;             }
 Digest ref_get_genome_digest (const Reference ref)    { return ref->genome_digest;          }
@@ -869,7 +857,7 @@ static bool ref_compact_ref (Reference ref, RangeP r)
 
     ASSERT0 (r->is_set.nbits, "r->is_set.nbits=0");
 
-    ASSERT (r->num_set >= 0 && r->num_set <= r->is_set.nbits, "range %u (%s) r->num_set=%"PRId64" is out of range [0,%"PRIu64"]",
+    ASSERT (r->num_set >= 0 && r->num_set <= r->is_set.nbits, "range %u (%s) r->num_set=%"PRId64" ∉ [0,%"PRIu64"]",
             BNUM (ref->ranges, r), r->chrom_name, r->num_set, r->is_set.nbits); 
 
     // remove flanking regions
@@ -1500,59 +1488,6 @@ void ref_print_is_set (ConstRangeP r,
         i = next;
     }
     fprintf (file, "\n");
-}
-
-// returns the reference file name for CRAM, derived from the genozip reference name
-rom ref_get_cram_ref (Reference ref)
-{
-    static char *samtools_T_option = NULL;
-    if (samtools_T_option) goto done; // already calculated
-
-    ASSINP0 (ref->filename, "when compressing a CRAM file, --reference or --REFERENCE must be specified");
-
-    // if we're attempting to open a cram file, just to check whether it is aligned (in main_load_reference),
-    // then we haven't loaded the reference file yet, and hence we don't know ref_fasta_name.
-    // in that case, we will just load the reference file's header
-    TEMP_FLAG(seg_only,false); // disable seg_only as it would prevent opening a z_file
-    z_file = file_open_z_read (ref->filename);    
-    ASSERTNOTNULL (z_file->file);
-    RESTORE_FLAG(seg_only);
-
-    flag.reading_reference = gref;
-    zfile_read_genozip_header (0, HARD_FAIL);
-    file_close (&z_file);
-    flag.reading_reference = NULL;
-
-    // cases where the FASTA name is not in SEC_GENOZIP_HEADER
-    ASSINP (ref->ref_fasta_name, "Genozip limitation: Reference file %s cannot be used to compress CRAM files because it was created by piping a fasta file from from a url or stdin, or because the name of the fasta file exceeds %u characters",
-            ref->filename, REF_FILENAME_LEN-1);
-
-    int samtools_T_option_size = MAX_(strlen (ref->ref_fasta_name), strlen (ref->filename)) + 10;
-    samtools_T_option = MALLOC (samtools_T_option_size);
-
-    // case: fasta file is in its original location
-    if (file_exists (ref->ref_fasta_name)) 
-        snprintf (samtools_T_option, samtools_T_option_size, "-T%s", ref->ref_fasta_name);
-
-    // try: fasta file is in directory of reference file
-    else {
-        rom slash = strrchr (ref->ref_fasta_name, '/');
-        if (!slash) slash = strrchr (ref->ref_fasta_name, '\\'); 
-        rom basename = slash ? slash+1 : ref->ref_fasta_name;
-
-        slash = strrchr (ref->filename, '/');
-        if (!slash) slash = strrchr (ref->filename, '\\'); 
-        unsigned dirname_len = slash ? ((slash+1) - ref->filename) : 0;
-
-        snprintf (samtools_T_option, samtools_T_option_size, "-T%.*s%s", dirname_len, ref->filename, basename);
-
-        ASSINP (file_exists (&samtools_T_option[2]), 
-                "Searching of the fasta file used to create %s. It was not found in %s or %s. Note: it is needed for passing to samtools as a reference file (-T option) for reading the CRAM file", 
-                ref->filename, ref->ref_fasta_name, &samtools_T_option[2]);        
-    }
-
-done:
-    return samtools_T_option;
 }
 
 rom ref_type_name (void)

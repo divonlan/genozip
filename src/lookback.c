@@ -6,10 +6,8 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
-#include "genozip.h"
 #include "lookback.h"
 #include "context.h"
-#include "buffer.h"
 
 // A round-robin buffer that can handle 1^num_bits-1 items. An item is inserted *before* the previous item, so
 // that the newest item as the lowest index (modulo the size) and when we search for the most recent item, we search
@@ -71,7 +69,7 @@ const void *lookback_get_do (VBlockP vb, ContextP lb_ctx, ContextP ctx,
     uint32_t lb_size = lookback_size (lb_ctx);
 
     ASSERT (lookback <= lookback_len (ctx, lb_size), "%s: expecting lookback=%u <= lookback_len=%u for ctx=%s%s lb_size=%u", 
-            LN_NAME, lookback, lookback_len(ctx, lb_size), ctx->tag_name, cond_int (VB_DT(VCF) || VB_DT(BCF), " sample_i=", vb->sample_i), lb_size);
+            LN_NAME, lookback, lookback_len(ctx, lb_size), ctx->tag_name, cond_int (VB_DT(VCF), " sample_i=", vb->sample_i), lb_size);
             
     BufferP buf = lookback_buf(ctx);
     unsigned index = RR(buf->newest_index + lookback - 1, lb_size);
@@ -83,7 +81,7 @@ const void *lookback_get_do (VBlockP vb, ContextP lb_ctx, ContextP ctx,
     }
 
     ASSERT (lookback > 0 && lookback < lb_size, "%s: Expecting lookback=%d in ctx=%s%s to be in the range [1,%u]", 
-            LN_NAME, lookback, ctx->tag_name, cond_int (VB_DT(VCF) || VB_DT(BCF), " sample_i=", vb->sample_i), lb_size-1);
+            LN_NAME, lookback, ctx->tag_name, cond_int (VB_DT(VCF), " sample_i=", vb->sample_i), lb_size-1);
 
     return (ctx->flags.store == STORE_INDEX) ? (void *)B(WordIndex, *buf, index) 
                                              : (void *)B(ValueType, *buf, index);

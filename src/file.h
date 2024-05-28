@@ -8,14 +8,11 @@
 
 #pragma once
 
-#include "genozip.h"
-#include "file_types.h"
 #include "context.h"
+#include "file_types.h"
 #include "aes.h"
-#include "data_types.h"
 #include "mutex.h"
 #include "buffer.h"
-#include "sam.h"
 
 #define MAX_GEN_COMP 2
 
@@ -40,6 +37,7 @@ typedef struct File {
     bool is_scanned;                   // TXT_FILE: sam_sag_by_flag_scan_for_depn has been performed for this file
     DataType data_type;
     Codec source_codec;                // TXT_FILE ZIP: codec of txt file before redirection (eg CRAM, XZ, ZIP...). Note: CODEC_BAM if BAM (with or without internal bgzf compression)
+                                       // Z_FILE PIZ: set to CODEC_BCF or CODEC_CRAM iff GenozipHeader.data_type is DT_BCF/DT_CRAM
     Codec codec;                       // TXT_FILE ZIP: generic codec used with this file. If redirected - as read by txtfile (eg for cram files this is BGZF)
 
     // these relate to actual bytes on the disk
@@ -237,7 +235,7 @@ typedef struct File {
 
 // methods
 extern FileP file_open_z_read (rom filename);
-extern FileP file_open_z_write (rom filename, FileMode mode, DataType data_type /* only needed for WRITE */);
+extern FileP file_open_z_write (rom filename, FileMode mode, DataType data_type, Codec source_codec);
 extern StrText file_get_z_run_time (FileP file);
 extern FileP file_open_txt_read (rom filename);
 extern FileP file_open_txt_write (rom filename, DataType data_type, BgzfLevel bgzf_level);
@@ -246,18 +244,16 @@ extern void file_write_txt (const void *data, unsigned len);
 extern bool file_seek (FileP file, int64_t offset, int whence, rom mode, FailType soft_fail); // SEEK_SET, SEEK_CUR or SEEK_END
 extern int64_t file_tell_do (FileP file, FailType soft_fail, FUNCLINE);
 #define file_tell(file,soft_fail) file_tell_do ((file), (soft_fail), __FUNCLINE) 
-extern void file_set_input_type (rom type_str);
-extern void file_set_input_size (rom size_str);
 extern FileType file_get_type (rom filename);
-extern DataType file_get_data_type (FileType ft, bool is_input);
+extern DataType file_get_data_type_of_input_file (FileType ft);
+extern DataType file_piz_get_dt_of_out_filename (void);
 extern Codec file_get_codec_by_txt_ft (DataType dt, FileType txt_ft, bool source);
-extern rom file_plain_text_ext_of_dt (DataType dt);
 extern void file_get_raw_name_and_type (rom filename, rom *raw_name, FileType *ft);
 extern void file_assert_ext_decompressor (void);
 extern void file_kill_external_compressors (void);
 extern FileType file_get_z_ft_by_txt_in_ft (DataType dt, FileType txt_ft);
-extern DataType file_get_dt_by_z_ft (FileType z_ft);
-extern FileType file_get_z_ft_by_dt (DataType dt);
+extern DataType file_get_dt_by_z_filename (rom z_filename);
+extern FileType file_get_default_z_ft_of_data_type (DataType dt);
 extern rom file_plain_ext_by_dt (DataType dt);
 extern rom ft_name (FileType ft);
 
@@ -300,19 +296,16 @@ extern bool file_buf_locate (FileP file, ConstBufferP buf);
 // tests for compression types
 // ---------------------------
 
-#define SOURCE_CODEC(x) (txt_file->source_codec == CODEC_##x)
+#define SRC_CODEC(x) (txt_file->source_codec == CODEC_##x)
 
-static inline bool file_is_read_via_ext_decompressor(ConstFileP file) { 
-    return file->supertype == TXT_FILE && (file->source_codec == CODEC_XZ || file->source_codec == CODEC_ZIP || file->source_codec == CODEC_BCF || file->source_codec == CODEC_CRAM || file->source_codec == CODEC_ORA);
-}
+#define SC(x) (file->source_codec == CODEC_##x)
+static inline bool is_read_via_ext_decompressor(ConstFileP file) { return SC(XZ)|| SC(ZIP) || SC(BCF)|| SC(CRAM) || SC(ORA); }
+#undef SC
 
-static inline bool file_is_read_via_int_decompressor(ConstFileP file) {
-    return file->supertype == TXT_FILE && (file->codec == CODEC_GZ || file->codec == CODEC_BGZF || file->codec == CODEC_BZ2);
-}
-
-static inline bool file_is_written_via_ext_compressor(ConstFileP file) {
-    return file->supertype == TXT_FILE && (file->codec == CODEC_BCF || file->codec == CODEC_GZ);
-}
+#define FC(x) (codec == CODEC_##x)
+static inline bool is_read_via_int_decompressor(Codec codec)  { return FC(GZ)|| FC(BGZF)|| FC(BZ2); }
+static inline bool is_written_via_ext_compressor(Codec codec) { return FC(BCF) || FC(CRAM); }
+#undef FC
 
 // read the contents and a newline-separated text file and split into lines - creating char **lines, unsigned *line_lens and unsigned n_lines
 #define file_split_lines(fn, name, ver_type)                                                \

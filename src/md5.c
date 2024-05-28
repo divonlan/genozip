@@ -37,9 +37,7 @@
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 #include <memory.h>
-#include "genozip.h"
 #include "md5.h"
-#include "endianness.h"
 #include "vblock.h"
 
 #define F( x, y, z )            ( (z) ^ ((x) & ((y) ^ (z))) )

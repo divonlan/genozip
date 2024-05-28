@@ -8,9 +8,10 @@
 
 #pragma once
 
-#include "fastq.h"
-#include "vblock.h"
 #include "file.h"
+#include "seg.h"
+#include "piz.h"
+#include "reconstruct.h"
 
 #define DTYPE_QNAME     DTYPE_1
 #define DTYPE_FASTQ_AUX DTYPE_2

@@ -7,8 +7,6 @@
 //   under penalties specified in the license.
 
 #include "sam_private.h"
-#include "bits.h"
-#include "piz.h"
 #include "threads.h"
 #include "huffman.h"
 #include "htscodecs/arith_dynamic.h"

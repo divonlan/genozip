@@ -8,9 +8,7 @@
 
 #pragma once
 
-#include "genozip.h"
 #include "reconstruct.h"
-#include "sam.h"
 #include "file.h"
 
 extern bool piz_default_skip_section (SectionType st, DictId dict_id);

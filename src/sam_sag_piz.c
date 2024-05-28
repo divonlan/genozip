@@ -7,10 +7,6 @@
 //   under penalties specified in the license.
 
 #include "sam_private.h"
-#include "sections.h"
-#include "codec.h"
-#include "piz.h"
-#include "reconstruct.h"
 
 // reconstruct PRIM or DEPN line from SA Group data: (rname, pos, strand, CIGAR, mapQ, NM ;)+
 static void sam_sa_reconstruct_SA_from_SA_Group (VBlockSAMP vb)
@@ -56,7 +52,7 @@ void sam_piz_set_sag (VBlockSAMP vb)
         // get the PRIM VB and the sag within it which are the SA Group of this DEPN line
         int64_t sa_grp_i = reconstruct_from_local_int (VB, CTX(SAM_SAG), 0, RECON_OFF);
 
-        ASSPIZ (sa_grp_i < z_file->sag_grps.len, "sa_grp_i=%"PRId64" is out of range [0,%"PRId64"]", sa_grp_i, z_file->sag_grps.len-1);
+        ASSPIZ (sa_grp_i < z_file->sag_grps.len, "sa_grp_i=%"PRId64" ∉ [0,%"PRId64"]", sa_grp_i, z_file->sag_grps.len-1);
         vb->sag = B(const Sag, z_file->sag_grps, sa_grp_i);
     }
 
@@ -72,7 +68,7 @@ void sam_piz_set_sag (VBlockSAMP vb)
         // The primary alignment is the first alignment, then the alignments from the SA Groups
         int64_t sa_aln_i = vb->sag->first_aln_i + (IS_DEPN(vb) ? reconstruct_from_local_int (VB, CTX(SAM_SAALN), 0, RECON_OFF) : 0);
 
-        ASSPIZ (sa_aln_i < z_file->sag_alns.len, "sa_aln_i=%"PRId64" is out of range [0,%"PRIu64"]", sa_aln_i, z_file->sag_alns.len-1);
+        ASSPIZ (sa_aln_i < z_file->sag_alns.len, "sa_aln_i=%"PRId64" ∉ [0,%"PRIu64"]", sa_aln_i, z_file->sag_alns.len-1);
         vb->sa_aln = B(const SAAln, z_file->sag_alns, sa_aln_i);
     }
 

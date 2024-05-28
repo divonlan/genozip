@@ -784,7 +784,9 @@ uint64_t zfile_read_genozip_header_get_offset (bool as_is)
     z_file->genozip_minor_ver = top.genozip_minor_ver; // 0 before 15.0.28
 
     z_file->data_type = BGEN16 (top.data_type);
-
+    if (Z_DT(BCF))       { z_file->data_type = DT_VCF; z_file->source_codec = CODEC_BCF;  } // Z_DT is always VCF, not BCF
+    else if (Z_DT(CRAM)) { z_file->data_type = DT_SAM; z_file->source_codec = CODEC_CRAM; } // Z_DT is always SAM, not CRAM or BAM
+     
     // check that file version is at most this executable version, except for reference file for which only major version is tested
     ASSINP (z_file->genozip_version < code_version_major() || 
             (z_file->genozip_version == code_version_major() && (z_file->genozip_minor_ver <= code_version_minor() || Z_DT(REF) || (is_genocat && flag.show_stats))),
@@ -832,12 +834,21 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header, FailType
     if (out_header) *out_header = *header;
 
     DataType data_type = (DataType)(BGEN16 (header->data_type)); 
+    
+    // Note: BCF/CRAM files have DT_BCF/DT_CRAM in the GenozipHeader, but in the PIZ code we
+    // expect data_type=VCF/SAM with z_file->source_codec set to CODEC_BCF/CODEC_CRAM.
+    if (data_type == DT_BCF) data_type = DT_VCF;
+    else if (data_type == DT_CRAM) data_type = DT_SAM;
+
     ASSERT ((unsigned)data_type < NUM_DATATYPES, "unrecognized data_type=%d. %s", data_type, genozip_update_msg());
 
-    if (Z_DT(NONE) || Z_DT(GENERIC)) {
+    // case: we couldn't figure out z_file->data_type from the .genozip filename - set based on the data_type in the GenozipHeader
+    if (Z_DT(NONE) || Z_DT(GNRIC)) {
         z_file->data_type = data_type;
-        z_file->type      = file_get_z_ft_by_dt (z_file->data_type);  
+        z_file->type      = file_get_default_z_ft_of_data_type (data_type);  
     }
+
+    // case: we set z_file->data_type based on the .genozip filename - verify that it is correct
     else
         ASSINP (z_file->data_type == data_type, "%s - file extension indicates this is a %s file, but according to its contents it is a %s", 
                 z_name, z_dt_name(), dt_name (data_type));
@@ -865,6 +876,8 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header, FailType
 
     int dts = z_file->z_flags.dt_specific; // save in case its set already (eg dts_paired is set in sections_is_paired)
     z_file->z_flags = header->flags.genozip_header;
+
+    if (IS_SRC_BCF) z_file->z_flags.txt_is_bin = true; // in files 15.0.58 or older this was not set
 
     z_file->z_flags.dt_specific |= dts; 
     z_file->num_lines = BGEN64 (header->num_lines_bound);
@@ -1046,15 +1059,15 @@ void zfile_output_processed_vb (VBlockP vb)
     zfile_output_processed_vb_ext (vb, false);
 }
 
-DataType zfile_get_file_dt (rom filename)
+// get file data type - by its name if possible, or if not, inspect the GenozipHeader
+DataType zfile_piz_get_file_dt (rom z_filename)
 {
-    FileType ft = file_get_type (filename);
-    DataType dt = file_get_dt_by_z_ft (ft);
+    DataType dt = file_get_dt_by_z_filename (z_filename);
     FileP file = NULL;
 
     // case: we don't know yet what file type this is - we need to read the genozip header to determine
-    if (dt == DT_NONE && filename) {
-        if (!(file = file_open_z_read (filename)) || !file->file)
+    if (dt == DT_NONE && z_filename) {
+        if (!(file = file_open_z_read (z_filename)) || !file->file)
             goto done; // not a genozip file
 
         // read the footer from the end of the file

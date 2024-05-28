@@ -9,11 +9,8 @@
 // WARNING: THIS FILE CONTAINS A METHOD THAT IS PATENT PENDING.
 
 #include <math.h>
-#include "codec.h"
 #include "reconstruct.h"
-#include "profiler.h"
 #include "compressor.h"
-#include "reference.h"
 
 // note: dict_id compatible with codec_pacb_smux_is_qual()
 #define decl_smux_ctxs_zip(id)                                                                                                       \

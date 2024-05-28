@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include "genozip.h"
 #include "file.h"
 
 #define MAX_BB_I (uint64_t)((1ULL << 48) - 1ULL) // 256 Tera blocks

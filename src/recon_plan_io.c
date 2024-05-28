@@ -7,15 +7,7 @@
 //   under penalties specified in the license.
 
 #include <errno.h>
-#include "genozip.h"
-#include "sections.h"
-#include "vblock.h"
-#include "context.h"
 #include "zfile.h"
-#include "endianness.h"
-#include "file.h"
-#include "strings.h"
-#include "flags.h"
 #include "buffer.h"
 #include "dispatcher.h"
 #include "piz.h"

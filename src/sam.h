@@ -675,7 +675,10 @@ extern void sam_zip_after_vbs (void);
 extern void sam_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeaderP vb_header);
 extern uint32_t sam_zip_get_seq_len (VBlockP vb, uint32_t line_i);
 extern void sam_sa_prim_finalize_ingest (void);
-extern uint64_t cram_estimated_num_alignments (rom filename);
+
+// CRAM stuff
+extern void cram_inspect_file (FileP file);
+extern StrTextSuperLong cram_get_samtools_option_T (const Reference ref);
 
 // HEADER stuff
 extern bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags);
@@ -900,6 +903,11 @@ typedef enum { SAM_COMP_NONE=255, SAM_COMP_MAIN=0, SAM_COMP_PRIM=1, SAM_COMP_DEP
 #define dict_id_aux_sf dict_id_type_2
 
 #define IS_BAM_ZIP TXT_DT(BAM)
-#define IS_SRC_BAM_PIZ (Z_DT(SAM) && z_file->z_flags.txt_is_bin)       // source file was BAM, NOT that the reconstruction is BAM! 
+#define IS_SRC_BAM_PIZ  (Z_DT(SAM) && z_file->z_flags.txt_is_bin) // source file was BAM, NOT that the reconstruction is BAM! 
+
 #define IS_SRC_and_RECON_BAM_PIZ (IS_SRC_BAM_PIZ && vb->translation.trans_containers) 
+
+// source file. works for ZIP/PIZ. In PIZ: Source, NOT the data type reconstructed.
 #define IS_SRC_BAM (command==ZIP ? IS_BAM_ZIP : IS_SRC_BAM_PIZ)
+#define IS_SRC_CRAM (z_file->source_codec == CODEC_CRAM)          
+#define IS_SRC_BCF  (z_file->source_codec == CODEC_BCF)

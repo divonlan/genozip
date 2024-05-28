@@ -7,10 +7,6 @@
 //   and subject to penalties specified in the license.
 
 #include "vcf_private.h"
-#include "seg.h"
-#include "piz.h"
-#include "context.h"
-#include "reconstruct.h"
 #include "url.h"
 
 sSTRl (hgvsg_con_snip, 64);

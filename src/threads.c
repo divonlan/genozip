@@ -516,7 +516,7 @@ void threads_join_do (ThreadId *thread_id, rom expected_task, rom expected_task2
     const ThreadEnt ent = *B(ThreadEnt, threads, *thread_id); // make a copy as array be realloced
     mutex_unlock (threads_mutex);
 
-    ASSERT (*thread_id < threads.len32, "called from %s: thread_id=%u out of range [0,%u]", func, *thread_id, threads.len32);
+    ASSERT (*thread_id < threads.len32, "called from %s: thread_id=%u ∉ [0,%u]", func, *thread_id, threads.len32);
     ASSERT (ent.task_name, "called from %s: entry for thread_id=%u has task_name=NULL", func, *thread_id);
     ASSERT (!strcmp (ent.task_name, expected_task) || !strcmp (ent.task_name, expected_task2), 
             "called from %s: Expected thread_id=%u to have task=\"%s\" or task=\"%s\", but it has \"%s\"", func, *thread_id, expected_task, expected_task2, ent.task_name);

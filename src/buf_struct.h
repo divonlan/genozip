@@ -10,7 +10,6 @@
 
 #include <stdint.h>
 #include <pthread.h>
-#include "genozip.h"
 #include "strings.h"
 #include "buf_list.h"
 #include "endianness.h"

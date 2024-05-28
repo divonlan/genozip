@@ -7,10 +7,6 @@
 //   and subject to penalties specified in the license.
 
 #include "vcf_private.h"
-#include "seg.h"
-#include "piz.h"
-#include "context.h"
-#include "reconstruct.h"
 #include "libdeflate_1.19/libdeflate.h"
 
 #define _ID0  DICT_ID_MAKEF_8("I0D_VTYP")

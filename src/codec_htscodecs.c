@@ -10,7 +10,6 @@
 
 #include "htscodecs/rANS_static4x16.h"
 #include "htscodecs/arith_dynamic.h"
-#include "genozip.h"
 #include "codec.h"
 #include "vblock.h"
 #include "buffer.h"

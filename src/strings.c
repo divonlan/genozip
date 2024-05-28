@@ -9,7 +9,6 @@
 #include <time.h>
 #include "genozip.h"
 #include "strings.h"
-#include "flags.h"
 #include "context.h"
 #ifndef WIN32
 #include <sys/ioctl.h>

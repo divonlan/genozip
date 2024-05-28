@@ -8,11 +8,8 @@
 
 #include "lzma/LzmaEnc.h"
 #include "lzma/LzmaDec.h"
-#include "genozip.h"
-#include "codec.h"
+#include "compressor.h"
 #include "vblock.h"
-#include "buffer.h"
-#include "strings.h"
 #include "segconf.h"
 
 static rom lzma_errstr (SRes res) 

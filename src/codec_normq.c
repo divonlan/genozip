@@ -8,9 +8,6 @@
 
 // fallback compression algorithm for SAM/FASTQ QUAL values if LONGR and DOMQ are not applicable
 
-#include "vblock.h"
-#include "data_types.h"
-#include "profiler.h"
 #include "codec.h"
 #include "sam_private.h" // this is a SAM-only codec
 

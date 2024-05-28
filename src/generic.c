@@ -6,12 +6,7 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
-#include "genozip.h"
-#include "vblock.h"
-#include "buffer.h"
 #include "seg.h"
-#include "generic.h"
-#include "dict_id.h"
 #include "file.h"
 #include "tar.h"
 #include "threads.h"
@@ -41,22 +36,19 @@ int32_t generic_is_header_done (bool is_eof)
     bool need_more = false;
 
     // search for a data type who's signature is in this header
-    if (!flag.explicitly_generic) {
-
-        // test explicitly for CRAM - as it is not a data type. We will need to re-start - reading through an external decompressor
-        if (is_cram (STRa(header), &need_more)) 
-            ABORTINP0 ("This is CRAM file, but Genozip got confused because the file's name doesn't end with .cram. Solution: re-run and add the command line option \"--input cram\"");
-    
-        else
-            for (DataType dt=0; dt < NUM_DATATYPES; dt++) 
-                if (dt_props[dt].is_data_type && dt_props[dt].is_data_type (STRa(header), &need_more)) {
-                    new_dt = dt;
-                    break;
-                }
-    }
+    if (!flag.explicitly_generic) 
+        for (DataType dt=0; dt < NUM_DATATYPES; dt++) 
+            if (dt_props[dt].is_data_type && dt_props[dt].is_data_type (STRa(header), &need_more)) {
+                new_dt = dt;
+                break;
+            }
 
     SAFE_RESTORE;
 
+    // if new data type requires an external compressor, ask user to re-start (unelegant solution to a rare scenario)
+    ASSINP0 (new_dt != DT_CRAM, "This is CRAM file, but Genozip got confused because the file's name doesn't end with .cram. Solution: re-run and add the command line option \"--input cram\"");
+    ASSINP0 (new_dt != DT_BCF,  "This is BCF file, but Genozip got confused because the file's name doesn't end with .bcf. Solution: re-run and add the command line option \"--input bcf\"");
+    
     if (new_dt != DT_NONE) {
         txt_file->data_type = z_file->data_type = new_dt;
 
@@ -172,10 +164,10 @@ rom fallback_to_generic (VBlockP vb) // vb is optional
     if (!flag.explicit_quiet) flag.quiet = false; // cancel segconf's quietness
     WARN ("%s is not a valid %s file, compressing as GENERIC", txt_name, dt_name(txt_file->data_type));
     
-    z_file->data_type = txt_file->data_type = DT_GENERIC;
+    z_file->data_type = txt_file->data_type = DT_GNRIC;
 
     // recreate predefined contexts
-    ctx_initialize_predefined_ctxs (z_file->contexts, DT_GENERIC, z_file->d2d_map, &z_file->num_contexts);
+    ctx_initialize_predefined_ctxs (z_file->contexts, DT_GNRIC, z_file->d2d_map, &z_file->num_contexts);
 
     RESTORE_FLAG(quiet);
     return vb ? BAFTtxt : NULL;

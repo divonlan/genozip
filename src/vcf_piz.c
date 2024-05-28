@@ -10,11 +10,6 @@
 #include "vcf_private.h"
 #include "zfile.h"
 #include "txtfile.h"
-#include "context.h"
-#include "file.h"
-#include "dict_id.h"
-#include "reconstruct.h"
-#include "piz.h"
 
 void vcf_piz_finalize (bool is_last_z_file)
 {

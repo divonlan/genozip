@@ -144,7 +144,6 @@ void arch_initialize (rom my_argv0)
     ASSERT0 (sizeof (ReconPlanItem) == 12, "expecting sizeof (ReconPlanItem)==12");
     ASSERT0 (sizeof (void *)        <= 8,  "expecting sizeof (void *)<=8"); // important bc void* is a member of ValueType, and also counting on it in huffman_decompress
     ASSERT0 (sizeof (ValueType)     == 8,  "expecting sizeof (ValueType)==8");
-    ASSERT0 (sizeof (PairType)      == sizeof(int),  "expecting sizeof (PairType)==sizeof(int)");
 
     // Note: __builtin_clzl is inconsistent between Windows and Linux, even on the same host, so we don't use it
     ASSERT0 (__builtin_clz(5)   == 29, "expecting __builtin_clz to be 32 bit");

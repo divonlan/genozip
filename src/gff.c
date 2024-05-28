@@ -13,23 +13,15 @@
 // GTF / GFF2: https://www.ensembl.org/info/website/upload/gff.html
 //             http://gmod.org/wiki/GFF2
 
-#include "genozip.h"
 #include "seg.h"
-#include "vblock.h"
-#include "context.h"
 #include "random_access.h"
 #include "file.h"
-#include "strings.h"
 #include "optimize.h"
 #include "piz.h"
-#include "gff.h"
-#include "dict_id.h"
 #include "codec.h"
-#include "vcf.h"
 #include "dict_id_gen.h"
 #include "chrom.h"
 #include "stats.h"
-#include "contigs.h"
 
 #define MAX_ENST_ITEMS 10 // maximum number of items in an enst structure. this can be changed without impacting backward compatability.
 
@@ -120,7 +112,7 @@ bool gff_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
 // search for last newline, and also search for embedded FASTA
 int32_t gff_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 {
-    ASSERT (*i >= 0 && *i < Ltxt, "*i=%d is out of range [0,%u]", *i, Ltxt);
+    ASSERT (*i >= 0 && *i < Ltxt, "*i=%d is ∉ [0,%u]", *i, Ltxt);
 
     int32_t final_i = *i;
     int32_t last_newline = -1;

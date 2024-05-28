@@ -149,7 +149,7 @@ bool writer_am_i_pair_2 (VBIType vb_i, uint32_t *pair_1_vb_i)
 
 bool writer_does_txtheader_need_write (CompIType comp_i)
 {
-    ASSERT (comp_i < txt_header_info.len, "comp_i=%u out of range [0,%d]", comp_i, (int)txt_header_info.len-1);
+    ASSERT (comp_i < txt_header_info.len, "comp_i=%u ∉ [0,%d]", comp_i, (int)txt_header_info.len-1);
     
     bool needs_write = !flag.no_writer_thread && TXTINFO(comp_i)->needs_write;
     return needs_write;                             
@@ -157,7 +157,7 @@ bool writer_does_txtheader_need_write (CompIType comp_i)
 
 bool writer_does_txtheader_need_recon (CompIType comp_i)
 {
-    ASSERT (comp_i < txt_header_info.len, "comp_i=%u out of range [0,%d]", comp_i, (int)txt_header_info.len-1);
+    ASSERT (comp_i < txt_header_info.len, "comp_i=%u ∉ [0,%d]", comp_i, (int)txt_header_info.len-1);
 
     bool needs_recon = TXTINFO(comp_i)->needs_recon;
     return needs_recon;                             
@@ -165,21 +165,21 @@ bool writer_does_txtheader_need_recon (CompIType comp_i)
 
 bool writer_get_fasta_contig_grepped_out (VBIType vb_i)
 {
-    ASSERT (vb_i >= 1 && vb_i < vb_info.len, "vb_i=%u out of range [1,%d]", vb_i, (int)vb_info.len-1);
+    ASSERT (vb_i >= 1 && vb_i < vb_info.len, "vb_i=%u ∉ [1,%d]", vb_i, (int)vb_info.len-1);
 
     return VBINFO(vb_i)->fasta_contig_grepped_out;
 }
 
 void writer_set_fasta_contig_grepped_out (VBIType vb_i)
 {
-    ASSERT (vb_i >= 1 && vb_i < vb_info.len, "vb_i=%u out of range [1,%d]", vb_i, (int)vb_info.len-1);
+    ASSERT (vb_i >= 1 && vb_i < vb_info.len, "vb_i=%u ∉ [1,%d]", vb_i, (int)vb_info.len-1);
 
     VBINFO(vb_i)->fasta_contig_grepped_out = true;
 }
 
 bool writer_does_vb_need_recon (VBIType vb_i)
 {
-    ASSERT (vb_i >= 1 && vb_i < vb_info.len, "vb_i=%u out of range [1,%d]", vb_i, (int)vb_info.len-1);
+    ASSERT (vb_i >= 1 && vb_i < vb_info.len, "vb_i=%u ∉ [1,%d]", vb_i, (int)vb_info.len-1);
 
     bool needs_recon = !vb_info.len || VBINFO(vb_i)->needs_recon;
     return needs_recon;
@@ -187,7 +187,7 @@ bool writer_does_vb_need_recon (VBIType vb_i)
 
 bool writer_does_vb_need_write (VBIType vb_i)
 {
-    ASSERT (vb_i >= 1 && vb_i < vb_info.len, "vb_i=%u out of range [1,%d]", vb_i, (int)vb_info.len-1);
+    ASSERT (vb_i >= 1 && vb_i < vb_info.len, "vb_i=%u ∉ [1,%d]", vb_i, (int)vb_info.len-1);
 
     bool needs_write = !vb_info.len || VBINFO(vb_i)->needs_write;
     return needs_write;
@@ -197,7 +197,7 @@ bool writer_does_vb_need_write (VBIType vb_i)
 // 2. PIZ compute thread
 Bits *writer_get_is_dropped (VBIType vb_i)
 {
-    ASSERT (vb_i >= 1 && vb_i < vb_info.len, "vb_i=%u out of range [1,%d]", vb_i, (int)vb_info.len-1);
+    ASSERT (vb_i >= 1 && vb_i < vb_info.len, "vb_i=%u ∉ [1,%d]", vb_i, (int)vb_info.len-1);
     VbInfo *v = VBINFO(vb_i);
 
     // allocate if needed. buffer was put in wvb buffer_list by writer_init_vb_info
@@ -305,7 +305,7 @@ static void writer_init_vb_info (void)
         
         else if (t->pair == PAIR_R2) {
             v->pair_vb_i = vb_i - num_vbs_R;
-            ASSERT (v->pair_vb_i >= 1 && v->pair_vb_i < vb_info.len, "v->pair_vb_i=%d out of range [1,%d]", v->pair_vb_i, vb_info.len32-1);
+            ASSERT (v->pair_vb_i >= 1 && v->pair_vb_i < vb_info.len, "v->pair_vb_i=%d ∉ [1,%d]", v->pair_vb_i, vb_info.len32-1);
 
             // verify that this VB and its pair have the same number of lines (test when initiazing the second one)
             uint32_t pair_num_lines = VBINFO(v->pair_vb_i)->num_lines;
@@ -319,7 +319,7 @@ static void writer_init_vb_info (void)
 
         // Drop if VB has no lines (can happen e.g. if all lines were sent to gencomp)
         if (!v->num_lines       && 
-            !Z_DT(GENERIC)      && // keep if generic: its normal that generic has no lines
+            !Z_DT(GNRIC)      && // keep if generic: its normal that generic has no lines
             vb_i != flag.one_vb && // sam_piz_dispatch_one_load_sag_vb needs the section header of one_vb 
             !(piz_need_digest && z_has_gencomp)) // keep if we need to digest (digest after prim/depn lines are added back in)
             DROP; 
@@ -1236,7 +1236,7 @@ static void writer_main_loop (VBlockP wvb) // same as wvb global variable
     threads_set_writer_thread();
 
     // if we need to BGZF-compress, we will dispatch the compression workload to compute threads
-    Dispatcher dispatcher = (!flag.no_writer && txt_file->codec == CODEC_BGZF) ? 
+    Dispatcher dispatcher = (!flag.no_writer && txt_file->codec == CODEC_BGZF && txt_file->bgzf_flags.library != BGZF_EXTERNAL_LIB) ? 
         dispatcher_init ("bgzf", NULL, POOL_BGZF, writer_get_max_bgzf_threads(), 0, false, false, NULL, 0, NULL) : NULL;
 
     // normally, we digest in the compute thread but in case gencomp lines can be inserted into the vb we digest here.

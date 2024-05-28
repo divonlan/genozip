@@ -3,14 +3,7 @@
 //   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
-#include "genozip.h"
 #include "buffer.h"
-#include "buf_struct.h"
-#include "buf_list.h"
-#include "sections.h"
-#include "bits.h"
-#include "flags.h"
-#include "context.h"
 #include "file.h"
 
 // writes a buffer to a file, return true if successful

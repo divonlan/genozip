@@ -10,7 +10,6 @@
 // it means a block of lines from the text file. 
 
 #include "vcf_private.h"
-#include "strings.h"
 
 unsigned vcf_vb_size (DataType dt) { return sizeof (VBlockVCF); }
 unsigned vcf_vb_zip_dl_size (void) { return sizeof (ZipDataLineVCF); }

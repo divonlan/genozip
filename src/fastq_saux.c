@@ -7,9 +7,7 @@
 //   and subject to penalties specified in the license.
 
 #include "fastq_private.h"
-#include "seg.h"
 #include "stats.h"
-#include "profiler.h"
 
 //-----------------------------------------------------------------------------------
 // SAUX: SAM style AUX. eg BC:Z:CTTA, separated by an arbitrary number of ' ' or '\t'

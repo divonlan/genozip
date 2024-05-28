@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include "genozip.h"
 #include "sections.h"
 
 #define STORE_LAST_TXT STORE_NONE

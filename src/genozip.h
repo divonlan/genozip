@@ -133,11 +133,13 @@ typedef struct { char s[16384]; } StrTextMegaLong;
 typedef packed_enum { 
     DT_NONE=-1,   // used in the code logic, never written to the file
     DT_REF=0, DT_VCF=1, DT_SAM=2, DT_FASTQ=3, DT_FASTA=4, DT_GFF=5, DT_ME23=6, // these values go into SectionHeaderGenozipHeader.data_type
-    DT_BAM=7, DT_BCF=8, DT_GENERIC=9, 
+    DT_BAM=7, DT_GNRIC=9, 
     DT_PHYLIP=10, // OBSOLETE: 9.0.11 - 15.0.41 
     DT_CHAIN=11,  // OBSOLETE: 11.0.8 - 15.0.41
     DT_KRAKEN=12, // OBSOLETE: 12.0.2 - 15.0.41
-    DT_LOCS=13, DT_BED=14, NUM_DATATYPES 
+    DT_LOCS=13, DT_BED=14, 
+    DT_BCF=8, DT_CRAM=15, // used only for OUT_DT in piz and set in GenozipHeader.data_type. It is NOT used in Z_DT/TXT_DT/VB_DT.
+    NUM_DATATYPES 
 } DataType; 
 
 #define Z_DT(dt)   (z_file->data_type   == (DT_##dt))
@@ -594,7 +596,7 @@ typedef enum { QNONE   = -6,
                QLINE3  = 2,  // FASTQ: The NCBI QNAME on line3, but only if different than line1 
                NUM_QTYPES/*NUM_QTYPES is part of the file format*/ } QType; 
 #define QTYPE_NAME { "QNAME", "QNAME2", "LINE3" }
-#define QTYPE_NEG_NAMES { "", "QANY", "Q1or3", "Q2orSAM", "QSAM", "QNONE" }
+#define QTYPE_NEG_NAMES { "", "QANY", "Q1or3", "Q2orSAM", "QSAM", "QSAM2", "QNONE" }
 
 // filter is called before reconstruction of a repeat or an item, and returns false if item should 
 // not be processed. if not processed, contexts are not consumed. if we need the contexts consumed,
@@ -617,14 +619,22 @@ typedef packed_enum {  ENC_NONE = 0, ENC_AES256 = 1, NUM_ENCRYPTION_TYPES } Encr
 #define ENC_NAMES { "NO_ENC", "AES256" }
 
 // note: #pragma pack doesn't affect enums
-typedef packed_enum { BGZF_LIBDEFLATE7, BGZF_ZLIB, BGZF_LIBDEFLATE19, BGZF_IGZIP, NUM_BGZF_LIBRARIES } BgzfLibraryType; // constants for BGZF FlagsBgzf.library
-#define BGZF_LIB_NAMES_LONG { "libdeflate_1.7", "zlib", "libdeflate_1.19", "igzip" }
-#define BGZF_LIB_NAMES_SHRT { "libdef7",        "zlib", "libdef19",        "igzip" }
+typedef packed_enum { BGZF_LIBDEFLATE7=0, BGZF_ZLIB=1, BGZF_LIBDEFLATE19=2, BGZF_IGZIP=3, NUM_BGZF_LIBRARIES,
+                      // the following are not part of the file format: used only in PIZ
+                      BGZF_EXTERNAL_LIB, // level is sent to external compressor (used for BCF)
+                      BGZF_NO_LIBRARY,
+                      NUM_ALL_BGZF_LIBRARIES
+                    } BgzfLibraryType; // constants for BGZF FlagsBgzf.library
+#define BGZF_LIB_NAMES_LONG { "libdeflate_1.7", "zlib", "libdeflate_1.19", "igzip", "invalid", "external", "no_bgzf" }
+#define BGZF_LIB_NAMES_SHRT { "libdef7",        "zlib", "libdef19",        "igzip", "invalid", "external", "no_bgzf" }
 
-typedef packed_enum { BGZF_NOT_INITIALIZED=-100, 
-                      BGZF_BY_ZFILE=-1,          // PIZ: use BGZF compression recorded in .genozip file 
+typedef packed_enum { BGZF_NOT_INITIALIZED    = -100,  
+                      BGZF_BY_ZFILE           = -1,   // PIZ: use BGZF compression recorded in .genozip file 
                       // 0->14 are valid compression levels in a library-dependent level-space
-                      BGZF_COMP_LEVEL_UNKNOWN=15 } BgzfLevel;
+                      BGZF_MAX_LEVEL          = 14,
+                      BGZF_COMP_LEVEL_UNKNOWN = 15 
+                      #define BGZF_NO_BGZF      15    // meaning if bgzf_library=BGZF_NO_LIBRARY
+} BgzfLevel;
 
 #define COMPRESSOR_CALLBACK(func)                                   \
 void func (VBlockP vb,                                              \

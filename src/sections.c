@@ -20,6 +20,7 @@
 #include "codec.h"
 #include "bgzf.h"
 #include "threads.h"
+#include "license.h"
 
 typedef struct SectionEnt SectionEntModifiable;
 
@@ -47,12 +48,12 @@ static Section Bsec (int32_t sec_i)
         return B(SectionEnt, z_file->section_list_buf, sec_i);
 
     else
-        ABORT ("sec_i=%d out of range [0,%u]", sec_i, z_file->vb_sections_index.len32-1);
+        ABORT ("sec_i=%d ∉ [0,%u]", sec_i, z_file->vb_sections_index.len32-1);
 }
 
 static const SectionsVbIndexEnt *Bvbindex (VBIType vb_i)
 {
-    ASSERT (vb_i >= 1 && vb_i < z_file->vb_sections_index.len32, "vb_i=%u out of range [1,%d] (this happens if flag.pair is wrong or other reasons)", vb_i, (int)z_file->vb_sections_index.len32-1);
+    ASSERT (vb_i >= 1 && vb_i < z_file->vb_sections_index.len32, "vb_i=%u ∉ [1,%d] (this happens if flag.pair is wrong or other reasons)", vb_i, (int)z_file->vb_sections_index.len32-1);
 
     const SectionsVbIndexEnt *vb_index_ent = B(SectionsVbIndexEnt, z_file->vb_sections_index, vb_i);
     return vb_index_ent;
@@ -60,7 +61,7 @@ static const SectionsVbIndexEnt *Bvbindex (VBIType vb_i)
 
 static const SectionsCompIndexEnt *Bcompindex (CompIType comp_i)
 {
-    ASSERT (comp_i < z_file->comp_sections_index.len32, "comp_i=%u out of range [0,%u]", comp_i, z_file->comp_sections_index.len32-1);
+    ASSERT (comp_i < z_file->comp_sections_index.len32, "comp_i=%u ∉ [0,%u]", comp_i, z_file->comp_sections_index.len32-1);
 
     const SectionsCompIndexEnt *comp_index_ent = B(SectionsCompIndexEnt, z_file->comp_sections_index, comp_i);
     return comp_index_ent;
@@ -88,7 +89,7 @@ void sections_add_to_list (VBlockP vb, ConstSectionHeaderP header)
         return;
 
     SectionType st = header->section_type;
-    ASSERT (st >= SEC_NONE && st < NUM_SEC_TYPES, "sec_type=%u out of range [-1,%u]", st, NUM_SEC_TYPES-1);
+    ASSERT (st >= SEC_NONE && st < NUM_SEC_TYPES, "sec_type=%u ∉ [-1,%u]", st, NUM_SEC_TYPES-1);
 
     DictId dict_id = sections_get_dict_id (header);
     ASSERT0 (!IS_DICTED_SEC(st) || dict_id.num, "dict_id=0");
@@ -739,7 +740,7 @@ void sections_set_show_headers (char *name)
 
 uint32_t st_header_size (SectionType sec_type)
 {
-    ASSERT (sec_type >= SEC_NONE && sec_type < NUM_SEC_TYPES, "sec_type=%u out of range [-1,%u]", sec_type, NUM_SEC_TYPES-1);
+    ASSERT (sec_type >= SEC_NONE && sec_type < NUM_SEC_TYPES, "sec_type=%u ∉ [-1,%u]", sec_type, NUM_SEC_TYPES-1);
 
     return sec_type == SEC_NONE ? 0 
          : sec_type == SEC_VB_HEADER      && command != ZIP && !VER(12) ? sizeof (SectionHeaderVbHeader) - 5*sizeof(uint32_t) // in v8-11, SectionHeaderVbHeader was shorter by 5 32b words
@@ -1050,11 +1051,12 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
                       SEC_TAB, digest_is_zero(h->FASTQ_v13_digest_bound) ? "N/A" : digest_display (h->FASTQ_v13_digest_bound).s, 
                       dis_dict_id(h->fastq.segconf_seq_len_dict_id).s, TF(h->fastq.segconf_fa_as_fq), TF(h->fastq.segconf_is_ileaved));
 
-        snprintf (str, sizeof (str), "\n%sver=%u.0.%u private=%u enc=%s dt=%s usize=%"PRIu64" lines=%"PRIu64" secs=%u txts=%u vb_size=%u\n" 
+        snprintf (str, sizeof (str), "\n%sver=%u.0.%u lic=%s private=%u enc=%s dt=%s usize=%"PRIu64" lines=%"PRIu64" secs=%u txts=%u vb_size=%u\n" 
                                      "%s%s %s=\"%.*s\" %s=%s\n"
                                      "%s" // dt_specific, if there is any
                                      "%screated=\"%.*s\"\n",
-                  SEC_TAB, h->genozip_version, h->genozip_minor_ver/*15.0.28*/, h->private_file, encryption_name (h->encryption_type), dt_name (dt), 
+                  SEC_TAB, h->genozip_version, h->genozip_minor_ver/*15.0.28*/, lic_type_name (h->lic_type)/*15.0.59*/, 
+                  h->private_file, encryption_name (h->encryption_type), dt_name (dt), 
                   BGEN64 (h->recon_size), BGEN64 (h->num_lines_bound), BGEN32 (h->num_sections), h->num_txt_files,
                   BGEN16(h->vb_size), 
                   SEC_TAB, sections_dis_flags (f, st, dt).s,
@@ -1091,7 +1093,7 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
 
     case SEC_VB_HEADER: {
         SectionHeaderVbHeaderP h = (SectionHeaderVbHeaderP)header;
-        if (Z_DT(VCF) || Z_DT(BCF)) 
+        if Z_DT(VCF) 
             snprintf (str, sizeof (str), 
                       "\n%srecon_size=%u longest_line=%u HT_n_lines=%u z_data_bytes=%u digest=%s %s\n",
                       SEC_TAB, BGEN32 (h->recon_size), BGEN32 (h->longest_line_len), BGEN32 (h->vcf_HT_n_lines),

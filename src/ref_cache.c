@@ -20,16 +20,10 @@
 #include <mach/mach.h>
 #include <mach/shared_region.h>
 #endif
-#include "genozip.h"
-#include "mutex.h"
 #include "ref_private.h"
-#include "flags.h"
 #include "file.h"
 #include "refhash.h"
 #include "arch.h"
-#include "buffer.h"
-#include "sections.h"
-#include "version.h"
 #include "filename.h"
 
 bool ref_cache_is_cached     (Reference ref) { return ref->cache_state == CACHE_READY;      }

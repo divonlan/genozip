@@ -7,14 +7,8 @@
 //   and subject to penalties specified in the license.
 
 #include "reconstruct.h"
-#include "vblock.h"
-#include "context.h"
-#include "file.h"
-#include "strings.h"
-#include "dict_id.h"
 #include "codec.h"
 #include "container.h"
-#include "flags.h"
 #include "piz.h"
 #include "base64.h"
 #include "regions.h"
@@ -191,7 +185,7 @@ int64_t reconstruct_from_local_int (VBlockP vb, ContextP ctx, char separator /* 
 
     if (reconstruct) { 
         // logic applying to files up to 15.0.37 (nothing_char == 1 always in these files)
-        if (ctx->nothing_char == 1 && (VB_DT(VCF) || VB_DT(BCF)) && num==lt_desc[ctx->ltype].max_int && 
+        if (ctx->nothing_char == 1 && VB_DT(VCF) && num==lt_desc[ctx->ltype].max_int && 
             dict_id_is_vcf_format_sf (ctx->dict_id) && !lt_desc[ctx->ltype].is_signed) {
             RECONSTRUCT1 ('.');
             num = 0; // we consider FORMAT fields that are . to be 0.
@@ -233,7 +227,7 @@ int64_t reconstruct_peek_local_int (VBlockP vb, ContextP ctx, int offset /*0=nex
             ABORT_PIZ ("Unexpected ltype=%s(%u)", lt_name(ctx->ltype), ctx->ltype); 
     }
 
-    if ((VB_DT(VCF) || VB_DT(BCF)) && num==lt_desc[ctx->ltype].max_int && dict_id_is_vcf_format_sf (ctx->dict_id)
+    if (VB_DT(VCF) && num==lt_desc[ctx->ltype].max_int && dict_id_is_vcf_format_sf (ctx->dict_id)
         && !lt_desc[ctx->ltype].is_signed)
         return 0; // returns 0 if '.'
 

@@ -7,31 +7,18 @@
 //   and subject to penalties specified in the license.
 
 #include <stdarg.h>
-#include "genozip.h"
-#include "profiler.h"
 #include "seg.h"
-#include "vblock.h"
-#include "context.h"
-#include "endianness.h"
-#include "file.h"
-#include "strings.h"
 #include "optimize.h"
 #include "random_access.h"
-#include "dict_id.h"
 #include "base64.h"
 #include "piz.h"
 #include "zfile.h"
-#include "data_types.h"
 #include "container.h"
 #include "codec.h"
-#include "reference.h"
 #include "zip.h"
-#include "segconf.h"
-#include "website.h"
 #include "stats.h"
 #include "bgzf.h"
 #include "dispatcher.h"
-#include "buf_list.h"
 #include "b250.h"
 #include "zip_dyn_int.h"
 #include "libdeflate_1.19/libdeflate.h"
@@ -1423,7 +1410,7 @@ void seg_all_data_lines (VBlockP vb)
     vb->lines.len32 = vb->lines.len32  ? vb->lines.len32 // already set? don't change (eg 2nd pair FASTQ, bcl_unconsumed)
                     : segconf.running  ? 10              // low number of avoid memory overallocation for PacBio arrays etc 
                     : segconf.line_len ? MAX_(1, Ltxt / segconf.line_len)
-                    :                    1;              // eg DT_GENERIC
+                    :                    1;              // eg DT_GNRIC
 
     vb->scratch.name = "scratch"; // initialize so we don't need to worry about it later
     

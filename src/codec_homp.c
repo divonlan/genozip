@@ -8,7 +8,6 @@
 
 // WARNING: THIS FILE CONTAINS A METHOD THAT IS PATENT PENDING.
 
-#include "codec.h"
 #include "reconstruct.h"
 #include "profiler.h"
 #include "compressor.h"

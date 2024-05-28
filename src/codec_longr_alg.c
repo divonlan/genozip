@@ -36,7 +36,7 @@
 // SOFTWARE.
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-#include "genozip.h"
+#include "compressor.h"
 
 // algorithm parameters
 #define N_BASES      6

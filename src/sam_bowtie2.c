@@ -6,14 +6,8 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
 //   under penalties specified in the license.
 
-#include "genozip.h"
 #include "sam_private.h"
-#include "strings.h"
-#include "seg.h"
-#include "piz.h"
-#include "reconstruct.h"
 #include "chrom.h"
-#include "codec.h"
 
 // ----------------------------------------------------------------------------------------------
 // YS:i mate alignment score (bowtie2 and hisat2)
@@ -21,7 +15,7 @@
 
 void sam_seg_bowtie2_YS_i (VBlockSAMP vb, ZipDataLineSAMP dl, ValueType YS, unsigned add_bytes)
 {
-    ASSERT (YS.i >= MIN_AS_i && YS.i <= MAX_AS_i, "%s: YS=%"PRId64" is out of range [%d,%d]", LN_NAME, YS.i, MIN_AS_i, MAX_AS_i);    
+    ASSERT (YS.i >= MIN_AS_i && YS.i <= MAX_AS_i, "%s: YS=%"PRId64" is ∉ [%d,%d]", LN_NAME, YS.i, MIN_AS_i, MAX_AS_i);    
 
     ctx_set_last_value (VB, CTX (OPTION_YS_i), YS);
     dl->YS = YS.i;

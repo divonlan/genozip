@@ -8,9 +8,6 @@
 
 // WARNING: THIS FILE CONTAINS A METHOD THAT IS PATENT PENDING.
 
-#include "codec.h"
-#include "reconstruct.h"
-#include "profiler.h"
 #include "compressor.h"
 #include "sam_private.h"
 
@@ -122,7 +119,7 @@ CODEC_RECONSTRUCT (codec_oq_reconstruct)
 {
     START_TIMER;
     decl_oq_ctxs_piz;
-    char sam_diff = OUT_DT(BAM) ? 0 : 33;
+    char sam_diff = (OUT_DT(BAM) || OUT_DT(CRAM)) ? 0 : 33;
 
     STRlast (qual, IS_PRIM(vb) ? SAM_QUALSA : SAM_QUAL);
     ASSPIZ (len == qual_len, "expecting len=%u == qual_len=%u", len, qual_len);

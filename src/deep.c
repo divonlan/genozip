@@ -7,8 +7,6 @@
 //   under penalties specified in the license.
 
 #include "genozip.h"
-#include "bits.h"
-#include "strings.h"
 #include "deep.h"
 #include "vblock.h"
 #include "libdeflate_1.19/libdeflate.h"

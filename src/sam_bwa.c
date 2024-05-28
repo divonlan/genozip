@@ -7,7 +7,6 @@
 //   under penalties specified in the license.
 
 #include "sam_private.h"
-#include "reconstruct.h"
 #include "chrom.h"
 #include "lookback.h"
 #include "b250.h"

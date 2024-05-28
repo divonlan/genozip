@@ -30,4 +30,4 @@ extern rom isal_error (int ret);
 extern int32_t def_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
 extern int32_t def_is_header_done (bool is_eof);
 
-extern DataType txtfile_get_file_dt (rom filename);
+extern DataType txtfile_zip_get_file_dt (rom filename);

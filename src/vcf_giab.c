@@ -7,7 +7,6 @@
 //   and subject to penalties specified in the license.
 
 #include "vcf_private.h"
-#include "reconstruct.h"
 
 STRl(datasets_snip, 32);
 STRl(callsets_snip, 32);

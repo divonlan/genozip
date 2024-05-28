@@ -8,10 +8,8 @@
 
 #pragma once
 
-#include "genozip.h"
 #include "reference.h"
 #include "sections.h"
-#include "mutex.h"
 #include "contigs.h"
 
 typedef struct {

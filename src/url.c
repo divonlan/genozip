@@ -50,7 +50,7 @@ static StreamP url_open (StreamP parent_stream, rom url, bool head_only)
     bool is_file = str_case_compare (str5, "file:", NULL); 
 
     // wget is better than curl in flakey connections
-    if (!is_file && wget_available())  // note: wget doesn't support file://
+    if (!is_file && wget_available())  // note: wget doesn't support file:// and also not supported for Windows (see wget_available)
         return stream_create (parent_stream, 
                               head_only ? 0 : DEFAULT_PIPE_SIZE, // in wget, header arrives in error channel and data channel is empty
                               DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
@@ -72,77 +72,6 @@ static StreamP url_open (StreamP parent_stream, rom url, bool head_only)
     else 
         ABORT ("Failed to open URL %s because %s not found in the execution path", 
                 url, (flag.is_windows || is_file) ? "curl was" : "wget or curl were");
-}
-
-// returns error string if curl/wget itself (not server) failed, or NULL if successful
-static void url_do_curl (rom url, qSTRp(data), qSTRp(error), bool blocking, bool follow_redirects) 
-{
-    StreamP url_stream = url_open (NULL, url, false);
-    FILE *data_stream  = stream_from_stream_stdout (url_stream);
-    FILE *error_stream = stream_from_stream_stdout (url_stream);
-
-#ifndef _WIN32
-    // set non-blocking (unfortunately _pipes in Windows are always blocking)
-    if (!blocking)
-        ASSERT (!fcntl(fileno(data_stream), F_SETFL, fcntl (fileno(data_stream), F_GETFL) | O_NONBLOCK), "fcntl failed: %s", strerror (errno));
-#endif
-
-    #define RETRIES 70
-    for (int i=0; i < RETRIES; i++) {
-        int ret = fread (data, 1, *data_len - 1, data_stream); // -1 to leave room for \0
-        if (ret == 0) {
-            if (errno == EAGAIN && i < RETRIES-1) { // doesn't happen on Windows
-                usleep (100000); // 100ms
-                continue;
-            }
-
-            strcpy (error, "Failed to read (possibly no connection)");
-            *error_len = strlen (error);
-            *data_len = 0;
-
-            stream_close (&url_stream, STREAM_DONT_WAIT_FOR_PROCESS);
-            return;
-        }
-    
-        *data_len = (unsigned)ret;
-        break;
-    }
-
-    data[*data_len] = '\0'; // terminate string
-
-    *error_len = fread (error, 1, CURL_RESPONSE_LEN-1, error_stream); 
-    error[*error_len] = '\0'; // terminate string
-
-    int exit_code = stream_close (&url_stream, STREAM_DONT_WAIT_FOR_PROCESS); // Don't wait for process - Google Forms call hangs if waiting
-    if (!exit_code) 
-        return; // curl/wget itself is good - we may have or not an error in "error" from the server or in case of no connection
-
-#ifdef _WIN32
-    if (exit_code == ENFILE) return; // we didn't read all the data on the pipe - that's ok
-#endif
-
-    // case: for non-HTTP urls (eg ftp:// file://) or for HTTP urls where the error occurred before connecting
-    // to the webserver (eg bad url) the error comes in stderr, and curl exit code is non-0.
-    // curl message format looks like this: "curl: (3) URL using bad/illegal format or missing URL"
-
-    // get message itself
-    char *msg_start = strstr (error, ") ");
-    if (msg_start) { 
-    
-        msg_start += 2;
-
-        char *msg_after = strchr (msg_start, '\r'); // in case of Windows-style end-of-line
-        if (!msg_after) msg_after = strchr (msg_start, '\n'); // try again, with \n
-
-        if (msg_start && msg_after) {
-            memcpy (error, msg_start, msg_after - msg_start);
-            error[msg_after - msg_start] = '\0';
-        }
-    }
-    else 
-        strcpy (error, strerror (exit_code));
-
-    *error_len = strlen (error);
 }
 
 static bool url_get_head (rom url, qSTRp(data), qSTRp(error),
@@ -221,6 +150,32 @@ static bool url_get_head (rom url, qSTRp(data), qSTRp(error),
     return !exit_code; // true if successful 
 }
 
+bool url_get_redirect (rom url, STRc(redirect_url),
+                       StreamP *redirect_stream) // optional out: used to free the stream if the running thread is canceled. 
+{
+    if (!curl_available() && !wget_available()) return false;
+
+    STRlic (response, CURL_RESPONSE_LEN);
+    STRlic (error, CURL_RESPONSE_LEN);
+
+    url_get_head (url, qSTRa(response), qSTRa(error), redirect_stream);
+
+    // we're looking for a line that looks like this (URL is terminated by some white space)
+    // Location: https://github.com/divonlan/genozip/releases/tag/genozip-15.0.57
+    #define LOCATION "Location: "
+    char *location = strstr (response, LOCATION);
+    if (!location) return false;
+    location += STRLEN (LOCATION);
+
+    uint32_t location_len = strcspn (location, " \n\r\t");
+    if (location_len >= redirect_url_len) return false;
+
+    memcpy (redirect_url, location, location_len); 
+    redirect_url[location_len] = 0;
+
+    return true;
+}
+
 // for a url, returns whether that URL exists, and if possible, its file_size, or -1 if its not available
 // note that the file_size availability is at the discretion of the web/ftp site. 
 // in case of an error, returns the error string : caller should FREE() the error string
@@ -294,13 +249,84 @@ rom url_get_status (rom url, thool *is_file_exists, int64_t *file_size)
     return NULL; // no error
 }
 
+// returns error string if curl/wget itself (not server) failed, or NULL if successful
+static void url_read_string_do (rom url, qSTRp(data), qSTRp(error), bool blocking, bool follow_redirects) 
+{
+    StreamP url_stream = url_open (NULL, url, false);
+    FILE *data_stream  = stream_from_stream_stdout (url_stream);
+    FILE *error_stream = stream_from_stream_stdout (url_stream);
+
+#ifndef _WIN32
+    // set non-blocking (unfortunately _pipes in Windows are always blocking)
+    if (!blocking)
+        ASSERT (!fcntl(fileno(data_stream), F_SETFL, fcntl (fileno(data_stream), F_GETFL) | O_NONBLOCK), "fcntl failed: %s", strerror (errno));
+#endif
+
+    #define RETRIES 70
+    for (int i=0; i < RETRIES; i++) {
+        int ret = fread (data, 1, *data_len - 1, data_stream); // -1 to leave room for \0
+        if (ret == 0) {
+            if (errno == EAGAIN && i < RETRIES-1) { // doesn't happen on Windows
+                usleep (100000); // 100ms
+                continue;
+            }
+
+            strcpy (error, "Failed to read (possibly no connection)");
+            *error_len = strlen (error);
+            *data_len = 0;
+
+            stream_close (&url_stream, STREAM_DONT_WAIT_FOR_PROCESS);
+            return;
+        }
+    
+        *data_len = (unsigned)ret;
+        break;
+    }
+
+    data[*data_len] = '\0'; // terminate string
+
+    *error_len = fread (error, 1, CURL_RESPONSE_LEN-1, error_stream); 
+    error[*error_len] = '\0'; // terminate string
+
+    int exit_code = stream_close (&url_stream, STREAM_DONT_WAIT_FOR_PROCESS); // Don't wait for process - Google Forms call hangs if waiting
+    if (!exit_code) 
+        return; // curl/wget itself is good - we may have or not an error in "error" from the server or in case of no connection
+
+#ifdef _WIN32
+    if (exit_code == ENFILE) return; // we didn't read all the data on the pipe - that's ok
+#endif
+
+    // case: for non-HTTP urls (eg ftp:// file://) or for HTTP urls where the error occurred before connecting
+    // to the webserver (eg bad url) the error comes in stderr, and curl exit code is non-0.
+    // curl message format looks like this: "curl: (3) URL using bad/illegal format or missing URL"
+
+    // get message itself
+    char *msg_start = strstr (error, ") ");
+    if (msg_start) { 
+    
+        msg_start += 2;
+
+        char *msg_after = strchr (msg_start, '\r'); // in case of Windows-style end-of-line
+        if (!msg_after) msg_after = strchr (msg_start, '\n'); // try again, with \n
+
+        if (msg_start && msg_after) {
+            memcpy (error, msg_start, msg_after - msg_start);
+            error[msg_after - msg_start] = '\0';
+        }
+    }
+    else 
+        strcpy (error, strerror (exit_code));
+
+    *error_len = strlen (error);
+}
+
 // reads a string response from a URL, returns a nul-terminated string and the number of characters (excluding \0), or -1 if failed
 int32_t url_read_string (rom url, STRc(data), bool blocking, bool follow_redirects, rom show_errors)
 {
     rom action = show_errors ? show_errors : "url_read_string";
 
     if (!wget_available() && !curl_available()) {
-        if (flag.debug_submit || flag.debug || show_errors) 
+        if (flag.debug_submit || show_errors) 
             fprintf (stderr, "\nError in %s: neither curl nor wget are available\n", action);
         
         return -3; // failure
@@ -318,49 +344,23 @@ int32_t url_read_string (rom url, STRc(data), bool blocking, bool follow_redirec
 
     response     = data ? data     : local_response;
     response_len = data ? data_len : CURL_RESPONSE_LEN;
-    url_do_curl (url, qSTRa(response), qSTRa(error), blocking, follow_redirects);
+    url_read_string_do (url, qSTRa(response), qSTRa(error), blocking, follow_redirects);
 
     if (error_len && !response_len) {
-        if (flag.debug_submit || flag.debug || show_errors) 
+        if (flag.debug_submit || show_errors) 
             fprintf (stderr, "\nError in %s: %.*s\n", action, STRf(error));
 
         return -1; // failure
     }
 
     if (response_len && strstr (response, "Bad Request")) {
-        if (flag.debug_submit || flag.debug || show_errors) 
+        if (flag.debug_submit || show_errors) 
             fprintf (stderr, "\nError in %s: Bad Request\n", action);
 
         return -2;
     }
 
     return data ? response_len : 0;
-}
-
-bool url_get_redirect (rom url, STRc(redirect_url),
-                       StreamP *redirect_stream) // optional out: used to free the stream if the running thread is canceled. 
-{
-    if (!curl_available() && !wget_available()) return false;
-
-    STRlic (response, CURL_RESPONSE_LEN);
-    STRlic (error, CURL_RESPONSE_LEN);
-
-    url_get_head (url, qSTRa(response), qSTRa(error), redirect_stream);
-
-    // we're looking for a line that looks like this (URL is terminated by some white space)
-    // Location: https://github.com/divonlan/genozip/releases/tag/genozip-15.0.57
-    #define LOCATION "Location: "
-    char *location = strstr (response, LOCATION);
-    if (!location) return false;
-    location += STRLEN (LOCATION);
-
-    uint32_t location_len = strcspn (location, " \n\r\t");
-    if (location_len >= redirect_url_len) return false;
-
-    memcpy (redirect_url, location, location_len); 
-    redirect_url[location_len] = 0;
-
-    return true;
 }
 
 // returns a FILE* which streams the content of a URL 

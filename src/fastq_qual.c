@@ -7,11 +7,8 @@
 //   and subject to penalties specified in the license.
 
 #include "fastq_private.h"
-#include "seg.h"
-#include "piz.h"
 #include "deep.h"
 #include "codec.h"
-#include "segconf.h"
 
 //---------------
 // ZIP

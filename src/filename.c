@@ -12,7 +12,6 @@
 #elif defined __APPLE__
 #include <sys/syslimits.h>
 #endif
-#include "genozip.h"
 #include "filename.h"
 #include "file.h"
 #include "codec.h"
@@ -212,12 +211,6 @@ rom filename_base (rom filename, bool remove_exe, rom default_basename,
 void filename_remove_codec_ext (char *filename, FileType ft)
 {
     unsigned fn_len = strlen (filename);
-
-    // .cram -> .bam
-    if (ft == CRAM && fn_len > 5 && !strcmp (&filename[fn_len-5], ".cram")) {
-        strcpy (&filename[fn_len-4], "bam");
-        return;
-    }
     
     // codec extension removed eg .fq.gz -> .fq
     rom codec_ext;

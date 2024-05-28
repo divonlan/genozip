@@ -7,14 +7,9 @@
 //   and subject to penalties specified in the license.
 
 #include "sam_private.h"
-#include "reconstruct.h"
 #include "chrom.h"
-#include "bits.h"
 #include "writer.h"
-#include "sections.h"
 #include "compressor.h"
-#include "bits.h"
-#include "flags.h"
 #include "qname.h"
 #include "recon_plan_io.h"
 
@@ -242,9 +237,9 @@ int32_t sam_seg_prim_add_sag_SA (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(sa), in
 
         // pos, mapq, nm - get integers and verify limits
         int64_t pos, mapq, nm;
-        FAILIF (!str_get_int_range64 (STRi(item,SA_POS ), 0, MAX_SA_POS,  &pos ), "in SA alignment %u - pos=%"PRId64" out of range [0, %u]", i, pos, MAX_SA_POS);
-        FAILIF (!str_get_int_range64 (STRi(item,SA_MAPQ), 0, MAX_SA_MAPQ, &mapq), "in SA alignment %u - mapq=%"PRId64" out of range [0, %u]", i, mapq, MAX_SA_MAPQ);
-        FAILIF (!str_get_int_range64 (STRi(item,SA_NM  ), 0, MAX_SA_NM,   &nm  ), "in SA alignment %u - nm=%"PRId64" out of range [0, %u]", i, nm, MAX_SA_NM);
+        FAILIF (!str_get_int_range64 (STRi(item,SA_POS ), 0, MAX_SA_POS,  &pos ), "in SA alignment %u - pos=%"PRId64" ∉ [0, %u]", i, pos, MAX_SA_POS);
+        FAILIF (!str_get_int_range64 (STRi(item,SA_MAPQ), 0, MAX_SA_MAPQ, &mapq), "in SA alignment %u - mapq=%"PRId64" ∉ [0, %u]", i, mapq, MAX_SA_MAPQ);
+        FAILIF (!str_get_int_range64 (STRi(item,SA_NM  ), 0, MAX_SA_NM,   &nm  ), "in SA alignment %u - nm=%"PRId64" ∉ [0, %u]", i, nm, MAX_SA_NM);
  
         // revcomp
         bool revcomp = *items[SA_STRAND] == '-';

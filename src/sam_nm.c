@@ -7,8 +7,6 @@
 //   and subject to penalties specified in the license.
 
 #include "sam_private.h"
-#include "piz.h"
-#include "reconstruct.h"
 
 // ----------------------------
 // NM:i "Number of differences"

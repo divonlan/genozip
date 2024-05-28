@@ -7,12 +7,7 @@
 //   and subject to penalties specified in the license.
 
 #include "vcf_private.h"
-#include "seg.h"
-#include "piz.h"
-#include "context.h"
-#include "reconstruct.h"
 #include "zip_dyn_int.h"
-#include "reference.h"
 
 static char copy_mate_snips[NUM_TWs][30];
 uint32_t copy_mate_snip_lens[NUM_TWs];

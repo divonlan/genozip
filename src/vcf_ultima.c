@@ -7,10 +7,6 @@
 //   and subject to penalties specified in the license.
 
 #include "vcf_private.h"
-#include "reconstruct.h"
-#include "reference.h"
-#include "seg.h"
-#include "context.h"
 #include "zip_dyn_int.h"
 
 #define VT(x) (vb->var_types[alt_i] == VT_##x)

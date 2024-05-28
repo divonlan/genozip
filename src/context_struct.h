@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include "genozip.h"
 #include "buffer.h"
 #include "mutex.h"
 #include "sections.h"

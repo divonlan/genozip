@@ -6,11 +6,7 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
 //   under penalties specified in the license.
 
-#include "genozip.h"
 #include "sam_private.h"
-#include "strings.h"
-#include "seg.h"
-#include "reconstruct.h"
 
 void sam_dragen_seg_initialize (VBlockSAMP vb)
 {

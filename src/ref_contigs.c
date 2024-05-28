@@ -6,23 +6,11 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
-#include "genozip.h"
 #include "ref_private.h"
-#include "sections.h"
-#include "data_types.h"
-#include "file.h"
 #include "zfile.h"
-#include "endianness.h"
-#include "strings.h"
-#include "vblock.h"
-#include "mutex.h"
 #include "seg.h"
 #include "refhash.h"
-#include "profiler.h"
-#include "fasta.h"
-#include "contigs.h"
 #include "chrom.h"
-#include "buffer.h"
 
 #ifdef __linux__ 
 extern int strncasecmp (rom s1, rom s2, size_t n); // defined in <strings.h>, but file name conflicts with "strings.h" (to do: sort this out in the Makefile)
@@ -400,12 +388,12 @@ WordIndex ref_contigs_ref_chrom_from_header_chrom (Reference ref, STRp(chrom_nam
     // if its not found, we ignore it. sequences that have this chromosome will just be non-ref
     if (ref_contig_index == WORD_INDEX_NONE) {
         if (IS_ZIP)
-            WARN_ONCE ("FYI: header of %s has contig '%.*s' (and maybe others, too), missing in %s. If the file contains many %ss with this contig, it might compress a bit less than when using a reference file that contains all contigs.",
+            WARN_ONCE ("FYI: header of %s has contig \"%.*s\" (and maybe others, too), missing in %s. If the file contains many %ss with this contig, it might compress a bit less than when using a reference file that contains all contigs.",
                         txt_file->basename, STRf(chrom_name), ref->filename, DTPT(line_name));
         return WORD_INDEX_NONE;
     }
 
-    if (buf_is_alloc (&ref->ranges)) { // it is not allocated in --sex/coverage
+    if (buf_is_alloc (&ref->ranges)) { // it is not allocated in --coverage
         PosType64 ref_LN = B(Range, ref->ranges, ref_contig_index)->last_pos; // get from ranges because Contig.LN=0 - we don't populate it at reference creation
         
         // case: file header is missing length, update from reference
@@ -421,6 +409,27 @@ WordIndex ref_contigs_ref_chrom_from_header_chrom (Reference ref, STRp(chrom_nam
     }
 
     return ref_contig_index;
+}
+
+// ZIP CRAM: verify that a contig name from the SAM header (in CRAM) has identical name and length to a contig in the reference
+void ref_contigs_verify_same_contig_as_ref (Reference ref, rom cram_filename, STRp(chrom_name), PosType64 hdr_LN)
+{            
+    ASSINP0 (ref->filename, "when compressing a CRAM file that has @SQ fields, --reference or --REFERENCE must be specified");
+
+    // get contig with exact name in reference (no alts allowed)
+    WordIndex ref_contig_index = ref_contigs_get_by_name (ref, STRa(chrom_name), false, true); 
+        
+    // if its not found, error, as samtools might hang
+    ASSINP (ref_contig_index != WORD_INDEX_NONE, "header of %s has contig \"%.*s\" (and maybe others, too), missing in %s. ",
+            cram_filename, STRf(chrom_name), ref->filename);
+
+    if (hdr_LN) { // 0 if header doesn't specify LN
+        PosType64 ref_LN = B(Range, ref->ranges, ref_contig_index)->last_pos; // get from ranges because Contig.LN=0 - we don't populate it at reference creation
+    
+        // case: file header specifies length - it must be the same as the reference
+        ASSINP (hdr_LN == ref_LN, "Error: wrong reference file - different contig length: in %s \"%.*s\" has LN=%"PRIu64", but in %s it has LN=%"PRId64, 
+                cram_filename, STRf(chrom_name), hdr_LN, ref->filename, ref_LN);
+    }
 }
 
 // get length of contig according to ref_contigs (loaded or stored reference) - used in piz when generating

@@ -8,4 +8,6 @@
 
 #pragma once
 
+#include "genozip.h"
+
 extern void genols (rom z_filename, bool finalize, rom subdir, bool recursive);

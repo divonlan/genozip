@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include "genozip.h"
 #include "digest.h"
 #include "local_type.h"
 
@@ -227,7 +226,7 @@ typedef struct {
         Digest ref_genome_digest;      // Used if REF_EXTERNAL: SectionHeaderGenozipHeader.genome_digest of the reference file
         Digest refhash_digest;         // DT_REF: digest of refhash (v15)
     };
-    union { // 272 bytes - data-type specific
+    union { // 271 bytes - data-type specific
         struct {
             // copied from their respective values in segconf, and copied back to segconf in PIZ
             DictId segconf_seq_len_dict_id;   // SAM: dict_id of one of the Q?NAME contexts (the "length=" item), which is expected to hold the seq_len for this read. 0 if there is no such item. v14.
@@ -253,7 +252,7 @@ typedef struct {
             uint8_t unused_bits          : 6;
             uint8_t segconf_sam_factor;       // 15.0.28: BAM only: 64X estimated blow-up factor of SAM txt_data vs BAM 
             uint8_t segconf_deep_N_fq_score;  // 15.0.39: Deep: when copying QUAL from SAM, update scores of 'N' bases to this value
-            char unused[253];
+            char unused[252];
         } sam;
 
         struct { 
@@ -261,7 +260,7 @@ typedef struct {
             uint8_t segconf_fa_as_fq     : 1; // FASTQ: 15.0.58
             uint8_t segconf_is_ileaved   : 1; // FASTQ: 15.0.58
             uint8_t unused_bits          : 6;
-            char unused[263];
+            char unused[262];
         } fastq;
 
         struct {
@@ -285,9 +284,12 @@ typedef struct {
                 uint64_t unused      : 24;
             } width; 
             
-            uint8_t unused[260];
+            uint8_t unused[259];
         } vcf;
-    };    
+    };
+
+    // ⇧ New non-data-type-specific fields grow upwards at the expense of unused[] ⇧ 
+    uint8_t lic_type;                  // license type used to create this file. 15.0.59.
 } SectionHeaderGenozipHeader, *SectionHeaderGenozipHeaderP;
 typedef const SectionHeaderGenozipHeader *ConstSectionHeaderGenozipHeaderP;
 

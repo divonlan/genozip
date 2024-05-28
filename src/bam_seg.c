@@ -132,7 +132,7 @@ static int32_t bam_unconsumed_scan_backwards (VBlockP vb, uint32_t first_i, int3
 // if first_i > 0, we attempt to heuristically detect the start of a BAM alignment.
 int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 {
-    ASSERT (*i >= 0 && *i < Ltxt, "*i=%d is out of range [0,%u]", *i, Ltxt);
+    ASSERT (*i >= 0 && *i < Ltxt, "*i=%d is ∉ [0,%u]", *i, Ltxt);
 
     int32_t result;
 
@@ -425,7 +425,7 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     
     // expecting all contigs to be defined in SAM header, and hence in ol_nodes/ol_dict 
     ASSERT (vb->chrom_node_index >= -1 && vb->chrom_node_index < (int32_t)CTX(SAM_RNAME)->ol_nodes.len32, 
-            "%s: RNAME=%d out of range [-1,%d]", LN_NAME, vb->chrom_node_index, (int)CTX(SAM_RNAME)->ol_nodes.len32-1);
+            "%s: RNAME=%d ∉ [-1,%d]", LN_NAME, vb->chrom_node_index, (int)CTX(SAM_RNAME)->ol_nodes.len32-1);
 
     dl->POS              = 1 + (int32_t)NEXT_UINT32; // pos in BAM is 0 based, -1 for unknown 
     uint8_t l_read_name  = NEXT_UINT8;               // QNAME length

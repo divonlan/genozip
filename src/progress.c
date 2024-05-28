@@ -36,8 +36,8 @@ static void progress_update_status (rom prefix, rom status)
 {
     if (flag.quiet) return;
 
-    static rom eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
-    static rom spaces = "                                                                                                                                                                ";
+    #define eraser "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b"
+    #define spaces "                                                                                                                                                                "
 
     ASSERT (STRLEN(eraser) == STRLEN(spaces), "eraser.len=%u != spaces.len=%u", STRLEN(eraser), STRLEN(spaces)); // will be optimized out
     
@@ -97,10 +97,7 @@ void progress_new_component (rom new_component_name,
                     else 
                         strcpy (genounzip_str, global_cmd);
 
-                    if (component_name_len > 4 && !memcmp (&component_name[component_name_len-5], ".cram", 5))
-                        snprintf (prefix.s, sizeof (prefix.s), "testing: %s %.*s.bam : ", genounzip_str, component_name_len-5, component_name);                
-                    else
-                        snprintf (prefix.s, sizeof (prefix.s), "testing: %s %s : ", genounzip_str, component_name);
+                    snprintf (prefix.s, sizeof (prefix.s), "testing: %s %s : ", genounzip_str, component_name);
                 }
 
                 else

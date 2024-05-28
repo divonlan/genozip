@@ -6,13 +6,8 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
 //   under penalties specified in the license.
 
-#include "genozip.h"
-#include "vblock.h"
 #include "profiler.h"
-#include "flags.h"
 #include "file.h"
-#include "segconf.h"
-#include "mutex.h"
 
 static ProfilerRec profile = {};    // data for this z_file 
 static Mutex profile_mutex = {};
@@ -224,6 +219,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (refhash_read_one_vb, 2);
         PRINT (refhash_compress_digest, 2); // make-ref
         PRINT (refhash_uncompress_one_vb, 2);
+        PRINT (cram_inspect_file, 1);
         PRINT (txtheader_zip_read_and_compress, 1);
         PRINT (txtfile_read_header, 2);
         PRINT (sam_header_inspect, 2);

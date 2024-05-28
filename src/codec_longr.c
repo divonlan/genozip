@@ -9,19 +9,11 @@
 // This codec is for quality scores of Nanopore and PacBio data, based on https://pubmed.ncbi.nlm.nih.gov/32470109/. This file contains 
 // only original Genozip code, and the algorithm itself, derived from ENano source code, is located in codec_longr_alg.c
 
-#include "genozip.h"
 #include "codec.h"
-#include "buffer.h"
-#include "vblock.h"
-#include "dict_id.h"
 #include "reconstruct.h"
-#include "strings.h"
 #include "compressor.h"
-#include "profiler.h"
 #include "context.h"
-#include "endianness.h"
 #include "piz.h"
-#include "strings.h"
 #include "stats.h"
 
 #include "codec_longr_alg.c" // seperate source file for this, as it derived from external code with a different license

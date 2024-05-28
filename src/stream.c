@@ -82,13 +82,14 @@ bool stream_exec_is (StreamP stream, rom exec_name)
 static void stream_pipe (int *fds, uint32_t pipe_size, bool is_stream_to_genozip)
 {
 #ifdef _WIN32
-    ASSERT (!_pipe (fds,  pipe_size, _O_BINARY), "failed to create pipe: %s", strerror (errno));
+    ASSERT (!_pipe (fds, pipe_size, _O_BINARY), "failed to create pipe: %s", strerror (errno));
 
 #else // Not Windows
     ASSERT (!pipe (fds), "failed to create pipe: %s (errno=%u)", strerror (errno), errno);
 
 #ifdef F_SETPIPE_SZ // this is Linux-specific, and available since kernel 2.6.35
     
+#ifdef __linux__
     // lower pipe size requested to the maximum allowed system size (fcntl will return EPERM if size is larger than limit)
     FILE *pipe_max_size_file = fopen ("/proc/sys/fs/pipe-max-size", "rb");
     if (pipe_max_size_file) {
@@ -97,6 +98,7 @@ static void stream_pipe (int *fds, uint32_t pipe_size, bool is_stream_to_genozip
         if (bytes) pipe_size = MIN_(pipe_size, atoi (max_pipe_size_str));
         FCLOSE (pipe_max_size_file, "pipe_max_size_file");
     }
+#endif
 
     // set the pipe size
     fcntl(fds[0], F_SETPIPE_SZ, pipe_size); // ignore errors

@@ -7,12 +7,7 @@
 //   and subject to penalties specified in the license.
 
 #include "vcf_private.h"
-#include "piz.h"
 #include "optimize.h"
-#include "file.h"
-#include "dict_id.h"
-#include "codec.h"
-#include "reconstruct.h"
 #include "stats.h"
 #include "zip_dyn_int.h"
 

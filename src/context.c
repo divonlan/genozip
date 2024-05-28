@@ -8,34 +8,14 @@
 
 #include <errno.h>
 #include <stdarg.h>
-#include "genozip.h"
-#include "profiler.h"
-#include "sections.h"
-#include "vcf.h"
-#include "vblock.h"
 #include "context.h"
 #include "zfile.h"
-#include "endianness.h"
-#include "file.h"
 #include "hash.h"
 #include "seg.h"
-#include "dict_id.h"
-#include "reference.h"
-#include "mutex.h"
-#include "progress.h"
-#include "dispatcher.h"
 #include "compressor.h"
-#include "strings.h"
-#include "codec.h"
-#include "flags.h"
-#include "zip.h"
-#include "piz.h"
 #include "reconstruct.h"
 #include "contigs.h"
-#include "segconf.h"
 #include "chrom.h"
-#include "buffer.h"
-#include "version.h"
 #include "qname.h"
 #include "threads.h"
 #include "aliases.h"
@@ -1753,7 +1733,7 @@ StrText ctx_tag_name_ex (ConstContextP ctx)
     if (!ctx) return (StrText){ .s = "<none>" };
 
     unsigned start=0;
-    if (z_file && (Z_DT(VCF) || Z_DT(BCF))) {
+    if (z_file && Z_DT(VCF)) {
         if      (dict_id_is_vcf_format_sf (ctx->dict_id)) { memcpy (s.s, "FORMAT/", 7); start = 7; }
         else if (dict_id_is_vcf_info_sf   (ctx->dict_id)) { memcpy (s.s, "INFO/",   5); start = 5; }
     }
@@ -2047,7 +2027,7 @@ void ctx_show_zctx_big_consumers (FILE *out)
 
     for (int i=0; i < NUM_TO_PRINT; i++)
         fprintf (out, "%-*s: %-17s: %s%s%s%s\n", 
-                 (Z_DT(VCF) || Z_DT(BCF)) ? 15 : 9, bc[i].tag_name.s, bc[i].buf_name, str_size (bc[i].size).s,
+                 Z_DT(VCF) ? 15 : 9, bc[i].tag_name.s, bc[i].buf_name, str_size (bc[i].size).s,
                  cond_int (bc[i].n_words, " n_words=", bc[i].n_words),
                  cond_str (true, " ltype=", lt_name (bc[i].ltype)),
                  cond_str (bc[i].dyn_lt_order, " dyn_ltype=", dyn_int_lt_order_name (bc[i].dyn_lt_order)));

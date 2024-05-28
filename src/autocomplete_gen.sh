@@ -83,16 +83,6 @@ for cmd in genozip genounzip genocat genols; do
     if [ $cmd != genols ] ; then 
     echo '    elif [[ "$3" =~ "-".*[eE] ]] || [ "$3" == "--reference" ] || [ "$3" == "--REFERENCE" ]; then' >> $out 
     echo '        COMPREPLY=( `ls -d1p ${2}* 2>/dev/null | egrep ".ref.genozip$|/$"` )' >> $out
-
-    echo '    elif [[ "$3" =~ "-".*o || "$3" == "--output" ]]; then' >> $out 
-    echo '        printf "\n[Argument: output filename] $3 "' >> $out
-
-    echo '    elif [[ "$3" =~ "-".*p || "$3" == "--password" ]]; then' >> $out 
-    echo '        printf "\n[Argument: password] $3 "' >> $out
-    # (bug 1066) echo '        COMPREPLY=( `basename --multiple $( ls -d1p ${2}* $GENOZIP_REFERENCE/${2}* 2>/dev/null ; ls -d1p ${2}* $GENOZIP_REFERENCE/${2}* 2>/dev/null | egrep -v "/$" ) | egrep ".ref.genozip$|/$" | sort | uniq` )' >> $out
-
-    echo '    elif [[ "$3" =~ "-".*@ || "$3" == "--threads" ]]; then' >> $out 
-    echo '        printf "\n[Argument: maximum concurrent threads allowed] $3 "' >> $out
     fi
 
     if [ $cmd == genozip ] ; then 
@@ -100,18 +90,6 @@ for cmd in genozip genounzip genocat genols; do
     echo '    elif [[ "$3" =~ "-".*i || "$3" == "--input" ]]; then' >> $out 
     echo '        COMPREPLY=( `compgen -W "'$inputs'" -- "$2"` )' >> $out 
     
-    # show input options after --input or -i
-    echo '    elif [[ "$3" =~ "-".*I || "$3" == "--input-size" ]]; then' >> $out 
-    echo '        printf "\n[Argument: file size in bytes] $3 "' >> $out
-    
-    # show argument tip after --vblock or -B
-    echo '    elif [[ "$3" =~ "-".*B || "$3" == "--vblock" ]]; then' >> $out 
-    echo '        printf "\n[Argument: vblock size in MB] $3 "' >> $out
-
-    # show argument tip after --sendto
-    echo '    elif [[ "$3" == "--sendto" ]]; then' >> $out 
-    echo '        printf "\n[Argument: license-number] $3 "' >> $out
-
     # show tar files after --tar
     echo '    elif [[ "$3" == "--tar" ]]; then' >> $out 
     echo '        COMPREPLY=( `ls -dp ${2}* 2>/dev/null | xargs | tr " " "\n" | egrep "\.tar$|/$"` )' >> $out
@@ -126,8 +104,6 @@ for cmd in genozip genounzip genocat genols; do
 
     # show argument tip after --bgzf or -z
     elif [ $cmd == genounzip ] || [ $cmd == genocat ] ; then 
-    echo '    elif [[ "$3" =~ "-".*z || "$3" == "--bgzf" ]]; then' >> $out 
-    echo '        printf "\n[Argument: 0 (no re-compression) to 5 (maximum) or exact (attempt to recover original file'"'"'s compression)] $3 "' >> $out
 
     # genounzip: show directories and .genozip files, excluding .ref.genozip
     echo '    elif [ "$1" == "genounzip" ]; then' >> $out

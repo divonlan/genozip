@@ -6,20 +6,14 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
-#include "data_types.h"
 #include "codec.h" // must be included before reference.h
-#include "reference.h"
-#include "vblock.h"
 #include "fasta_private.h"
 #include "ref_private.h"
-#include "mutex.h"
 #include "refhash.h"
 #include "random_access.h"
-#include "context.h"
 #include "filename.h"
 #include "file.h"
 #include "ref_iupacs.h"
-#include "contigs.h"
 #include "stream.h"
 #include "arch.h"
 #include "digest.h"

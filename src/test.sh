@@ -29,9 +29,10 @@ cmp_2_files()
     if [ ! -f $1 ] ; then echo "File $1 not found while in cmp_2_files()"; exit 1; fi
     if [ ! -f $2 ] ; then echo "File $2 not found while in cmp_2_files()"; exit 1; fi
 
-    if (( `$md5 $1 $2 | cut -d" " -f1 | uniq | wc -l` != 1 )) ; then
+    if [[ `$zmd5 $1` != `$zmd5 $2` ]] ; then
         echo "MD5 comparison FAILED: $1 $2"
-        $md5 $1 $2
+        echo `$zmd5 "$1"` "$1" 
+        echo `$zmd5 "$2"` "$2"
         exit 1
     fi
 }
@@ -213,7 +214,7 @@ test_md5()
     
     local genozip_md5 real_md5
     genozip_md5=`$genols $output | grep $output | cut -c 51-82` || exit $? 
-    real_md5=`$md5 $file | cut -d" " -f1` || exit $?
+    real_md5=`$zmd5 $file` || exit $?
 
     if [[ "$genozip_md5" != "$real_md5" ]]; then echo "FAILED - expected $file to have MD5=\"$real_md5\" but genozip calculated MD5=\"$genozip_md5\""; exit 1; fi
 
@@ -359,16 +360,32 @@ batch_precompressed()
     done
 }
 
-verify_bgzf() # $1 file that we wish to inspect $2 expected result (1 bgzf 0 not-bgzf)
+verify_bgzf() # $1 file that we wish to inspect $2 expected result (0 not-bgzf 1 bgzf 2 BAM-bgzf-without-compression)
 {
+    # case: file is BGZF-foramt
     if [ "$(head -c4 $1 | od -x | head -1 | awk '{$2=$2};1')" == "0000000 8b1f 0408" ]; then 
         if [ $2 -eq 0 ]; then
-            echo $1 is unexpectedly BGZF-compressed
+            echo "$1 is unexpectedly BGZF-compressed"
             exit 1
+        
+        # case: BGZF format consists of non-compressed blocks
+        elif [ "$(head -c26 $1 | tail -c3)" == "BAM" ]; then
+            if [ $2 -eq 1 ]; then
+                echo "$1 is unexpectedly a BAM file with non-compressed BGZF blocks"
+                exit 1
+            fi
+
+        # case: BGZF format consists of compressed blocks
+        else
+            if [ $2 -eq 2 ]; then
+                echo "$1 is unexpectedly a BGZF-compressed file (with compressed BGZF blocks)"
+                exit 1
+            fi
         fi
+
     else
-        if [ $2 -eq 1 ]; then
-            echo $1 is not BGZF-compressed
+        if [ $2 -ne 0 ]; then
+            echo "$1 is not BGZF-compressed"
             exit 1
         fi
     fi
@@ -420,9 +437,9 @@ batch_bgzf()
     $genounzip $output -fo $bam2 || exit 1
     verify_bgzf $bam2 1
 
-    test_header "bam -> bam.genozip -> genounzip -z0 to bam - see that it is not BGZF"
+    test_header "bam -> bam.genozip -> genounzip -z0 to bam - see that it is BGZF_0"
     $genounzip $output -z0 -fo $bam2 || exit 1
-    verify_bgzf $bam2 0
+    verify_bgzf $bam2 2
 
     # test with gencomp
     file=special.sag-by-sa.bam.gz
@@ -629,22 +646,6 @@ batch_sam_bam_translations()
     for file in ${files[@]}; do
         test_translate_sam_to_bam_to_sam $file
     done
-}
-
-# note: only runs it to see that it doesn't crash, doesn't validate results
-test_translate_sambam_to_fastq() # $1 sam or bam file ; $2 outfile fastq name ; $3 genozip command line options if any
-{
-    local sambam=$TESTDIR/$1
-    local fastq=$OUTDIR/$2.fastq
-    if [ ! -f $sambam ] ; then echo "$sambam: File not found"; exit 1; fi
-
-    $genozip -fX $sambam -fo $output $3 || exit 1
-    
-    $genocat $output -fo $fastq    || exit 1
-    verify_is_fastq $fastq
-
-    $genocat $output -fo $fastq --fq=all || exit 1
-    verify_is_fastq $fastq
 }
 
 # Test --coverage, --idxstats- not testing correctness, only that it doesn't crash
@@ -901,12 +902,12 @@ batch_genocat_tests()
     # BAM genocat tests
     local file=$TESTDIR/basic.bam
     local filter=$TESTDIR/basic.sam.qname-filter
-    test_count_genocat_lines $file "-H --qnames-file $filter" 4
-    test_count_genocat_lines $file "-H --qnames-file ^$filter" 11
+    test_count_genocat_lines $file "--sam -z0 -H --qnames-file $filter" 4
+    test_count_genocat_lines $file "--sam -z0 -H --qnames-file ^$filter" 11
 
     local filter=$TESTDIR/basic.sam.seq-filter
-    test_count_genocat_lines $file "-H --seqs-file $filter" 4
-    test_count_genocat_lines $file "-H --seqs-file ^$filter" 11
+    test_count_genocat_lines $file "--sam -z0 -H --seqs-file $filter" 4
+    test_count_genocat_lines $file "--sam -z0 -H --seqs-file ^$filter" 11
 }
 
 # test --grep, --count, --lines
@@ -916,7 +917,8 @@ batch_grep_count_lines()
 
     local file
     for file in ${basics[@]}; do
-        if [ $file == basic.fa ] || [ $file == basic.bam ] || [ $file == basic.locs ] || [ $file == basic.generic ]; then continue; fi
+        if [ $file == basic.fa ] || [ $file == basic.bam ] || [ $file == basic.locs ] ||\
+           [ $file == basic.generic ] || [ $file == basic.cram ] || [ $file == basic.bcf ]; then continue; fi
 
         # number of expected lines
         local lines=1
@@ -1131,12 +1133,7 @@ batch_real_world_genounzip_compare_file() # $1 extra genozip argument
         local recon=${OUTDIR}/$f
         $genounzip $genozip_file -o $recon || exit 1
 
-        # same is in $TESTDIR/Makefile
-        if [[ `head -c2 $recon | od -x | head -1 | sed "s/     //" | cut -d" " -f2 || exit 1` == 8b1f ]]; then # sed handles Mac format
-            local actual_md5=`gzip -dc $recon | $md5 | cut -d" " -f1` # note: no zcat on mac
-        else
-            local actual_md5=`$md5 $recon | cut -d" " -f1`
-        fi
+        local actual_md5=`$zmd5 $recon`
 
         local expected_md5=`cat ${TESTDIR}/${f}.md5` # calculated in test/Makefile
         if [[ "$actual_md5" != "$expected_md5" ]] ; then
@@ -1311,24 +1308,227 @@ batch_multiseq()
     # test_standard "--multiseq" " " test.nanopore-virus.fq
 }
 
-# CRAM hs37d5
-batch_external_cram()
+get_sam_type() # $1 = filename
+{
+    local first_chars="@RG" # first 3 characters of test.ubam.sam
+
+    local head="`head -c4 $1`"
+    if [[ "$head" == "CRAM" ]];               then echo "CRAM";   return; fi
+    if [[ "${head:0:3}" == "$first_chars" ]]; then echo "SAM";    return; fi 
+
+    local bhead="`head -c26 private/test/tmp/txt | tail -c3`"
+    if [[ "$bhead" == "BAM" ]];               then echo "BAM_Z0"; return; fi # BGZF with non-compressed blocks
+
+    local zhead="`zcat $1 2>/dev/null | head -c3`"
+    if [[ "$zhead" == "BAM" ]];               then echo "BAM";    return; fi
+    if [[ "$zhead" == "$first_chars" ]];      then echo "SAM_GZ"; return; fi
+}
+
+batch_sam_bam_cram_output()
 {
     batch_print_header
-    if `command -v samtools >& /dev/null`; then
-        test_standard "-E$hs37d5" " " test.human2.cram   
-    fi
+    if ! `command -v samtools >& /dev/null`; then return; fi
+
+    # verify data types when pizzing a cram file
+    local txt=$OUTDIR/txt # no file extension, so that it doesn't modify the data type
+
+    local src=$TESTDIR/test.ubam.bam # small file, but not too small so that there is a difference between -z0 and -z1
+    local name=$OUTDIR/test.ubam 
+
+    # prepare files
+    samtools view -h $src -OSAM -o $name.sam || exit 1
+    gzip -c $name.sam > $name.sam.gz
+    cp $src $name.bam
+    samtools view $src -OCRAM -o $name.cram >& /dev/null || exit 1
+
+    # tests flags_piz_set_out_dt and bgzf_piz_calculate_bgzf_flags 
+    for file in $name.sam $name.sam.gz $name.bam $name.cram; do
+        local z=$file.genozip
+
+        $genozip -ft $file -o $z || exit 1
+        z_type=$(get_sam_type $file) 
+
+        test_header "#1: test genounzip of `basename $z`: should be the same type"
+        $genounzip $z -fo $txt || exit 1
+        txt_type=$(get_sam_type $txt)
+        if [[ $txt_type != $z_type ]]; then echo "genounzip of $z_type unexpectedly generated $txt_type"; exit 1; fi
+
+        test_header "#2: genocat of `basename $z`: implicit - should be the same type"
+        $genocat $z -fo $txt || exit 1
+        txt_type=$(get_sam_type $txt)
+        if [[ $txt_type != $z_type ]]; then echo "genocat (implicit) of $z_type unexpectedly generated $txt_type"; exit 1; fi
+
+        test_header "#3: genocat of `basename $z`: stdout - should be SAM"
+        $genocat $z > $txt || exit 1
+        txt_type=$(get_sam_type $txt)
+        if [[ $txt_type != "SAM" ]]; then echo "genocat (stdout) of $z_type unexpectedly generated $txt_type, expecting SAM"; exit 1; fi
+
+        test_header "#4: genocat of `basename $z`: explicitly SAM by filename"
+        $genocat $z -fo $txt.sam || exit 1
+        txt_type=$(get_sam_type $txt.sam)
+        if [[ $txt_type != "SAM" ]]; then echo "genocat (-o .sam) of $z_type unexpectedly generated $txt_type, expecting SAM"; exit 1; fi
+
+        test_header "#5: genocat of `basename $z`: explicitly SAM by flag"
+        $genocat $z -fo $txt --sam || exit 1
+        txt_type=$(get_sam_type $txt)
+        if [[ $z_type == "SAM" && $txt_type != "SAM" ]]; then echo "genocat (--sam) of $z_type unexpectedly generated $txt_type, expecting SAM"; exit 1; fi
+        if [[ $z_type != "SAM" && $txt_type != "SAM_GZ" ]]; then echo "genocat (--sam) of $z_type unexpectedly generated $txt_type, expecting SAM_GZ"; exit 1; fi
+
+        test_header "#6: genocat of `basename $z`: stdout as SAM.gz"
+        $genocat $z --sam -z1 > $txt || exit 1
+        txt_type=$(get_sam_type $txt)
+        if [[ $txt_type != "SAM_GZ" ]]; then echo "genocat (stdout as SAM.gz) of $z_type unexpectedly generated $txt_type, expecting BAM"; exit 1; fi
+
+        test_header "#7: genocat of `basename $z`: explicitly SAM.gz by .sam.gz filename"
+        $genocat $z -fo $txt.sam.gz || exit 1
+        txt_type=$(get_sam_type $txt.sam.gz)
+        if [[ $txt_type != "SAM_GZ" ]]; then echo "genocat (-o .sam.gz) of $z_type unexpectedly generated $txt_type, expecting SAM.gz"; exit 1; fi
+
+        test_header "#8: genocat of `basename $z`: explicitly SAM.gz by --sam + .gz filename"
+        $genocat $z -fo $txt.gz --sam || exit 1
+        txt_type=$(get_sam_type $txt.gz)
+        if [[ $txt_type != "SAM_GZ" ]]; then echo "genocat (--sam -o .gz) of $z_type unexpectedly generated $txt_type, expecting SAM.gz"; exit 1; fi
+
+        test_header "#9: genocat of `basename $z`: stdout as BAM"
+        $genocat $z --bam -z1 > $txt || exit 1
+        txt_type=$(get_sam_type $txt)
+        if [[ $txt_type != "BAM" ]]; then echo "genocat (stdout as BAM) of $z_type unexpectedly generated $txt_type, expecting BAM"; exit 1; fi
+
+        test_header "#10: genocat of `basename $z`: explicitly BAM by filename"
+        $genocat $z -fo $txt.bam || exit 1
+        txt_type=$(get_sam_type $txt.bam)
+        if [[ $txt_type != "BAM" ]]; then echo "genocat (-o .bam) of $z_type unexpectedly generated $txt_type, expecting BAM"; exit 1; fi
+
+        test_header "#11: genocat of `basename $z`: explicitly BAM by flag"
+        $genocat $z -fo $txt --bam || exit 1
+        txt_type=$(get_sam_type $txt)
+        if [[ $txt_type != "BAM" ]]; then echo "genocat (--bam) of $z_type unexpectedly generated $txt_type, expecting BAM"; exit 1; fi
+
+        test_header "#12: genocat of `basename $z`: stdout as BAM_Z0"
+        $genocat $z --bam > $txt || exit 1
+        txt_type=$(get_sam_type $txt)
+        if [[ $txt_type != "BAM_Z0" ]]; then echo "genocat (stdout as BAM_Z0) of $z_type unexpectedly generated $txt_type, expecting BAM_Z0"; exit 1; fi
+
+        test_header "#13: genocat of `basename $z`: explicitly BAM_Z0 by filename"
+        $genocat $z -fo $txt.bam -z0 || exit 1
+        txt_type=$(get_sam_type $txt.bam)
+        if [[ $txt_type != "BAM_Z0" ]]; then echo "genocat (-o .bam -z0) of $z_type unexpectedly generated $txt_type, expecting BAM_Z0"; exit 1; fi
+
+        test_header "#14: genocat of `basename $z`: explicitly BAM_Z0 by flag"
+        $genocat $z -fo $txt --bam -z0 || exit 1
+        txt_type=$(get_sam_type $txt)
+        if [[ $txt_type != "BAM_Z0" ]]; then echo "genocat (--bam -z0) of $z_type unexpectedly generated $txt_type, expecting BAM_Z0"; exit 1; fi
+
+        test_header "#15: genocat of `basename $z`: stdout as CRAM"
+        $genocat $z --cram > $txt || exit 1
+        txt_type=$(get_sam_type $txt)
+        if [[ $txt_type != "CRAM" ]]; then echo "genocat (stdout as CRAM) of $z_type unexpectedly generated $txt_type, expecting BAM"; exit 1; fi
+
+        test_header "#16: genocat of `basename $z`: explicitly CRAM by filename"
+        $genocat $z -fo $txt.cram || exit 1
+        txt_type=$(get_sam_type $txt.cram)
+        if [[ $txt_type != "CRAM" ]]; then echo "genocat (-o .cram) of $z_type unexpectedly generated $txt_type, expecting CRAM"; exit 1; fi
+
+        test_header "#17: genocat of `basename $z`: explicitly CRAM by flag"
+        $genocat $z -fo $txt --cram || exit 1
+        txt_type=$(get_sam_type $txt)
+        if [[ $txt_type != "CRAM" ]]; then echo "genocat (--cram) of $z_type unexpectedly generated $txt_type, expecting CRAM"; exit 1; fi
+    done
 
     cleanup
 }
 
-# BCF
-batch_external_bcf()
+get_vcf_type() # $1 = filename
+{
+    local first_chars="##f" # first 3 characters of test.svaba.somatic.sv.vcf
+
+    local head="`head -c3 $1`"
+    if [[ "$head" == "$first_chars" ]];  then echo "VCF";    return; fi
+
+    local zhead="`zcat $1 2>/dev/null | head -c3`"
+    if [[ "$zhead" == "BCF" ]];          then echo "BCF";    return; fi
+    if [[ "$zhead" == "$first_chars" ]]; then echo "VCF_GZ"; return; fi
+}
+
+batch_vcf_bcf_output()
 {
     batch_print_header
-    if `command -v bcftools >& /dev/null`; then
-        test_standard " " " " test.human2.filtered.snp.bcf    
-    fi
+    if ! `command -v bcftools >& /dev/null`; then return; fi
+
+    # verify data types when pizzing a cram file
+    local txt=$OUTDIR/txt # no file extension, so that it doesn't modify the data type
+
+    local src=$TESTDIR/test.svaba.somatic.sv.vcf  # small file, but not too small so that there is a difference between -z0 and -z1
+    local name=$OUTDIR/test.svaba.somatic.sv
+
+    # prepare files
+    cp $src $name.vcf
+    bcftools view -h $src -Oz1 -o $name.vcf.gz >& /dev/null || exit 1
+    bcftools view -h $src -Ob  -o $name.bcf    >& /dev/null || exit 1
+
+    # tests flags_piz_set_out_dt and bgzf_piz_calculate_bgzf_flags 
+    for file in $name.vcf $name.vcf.gz $name.bcf ; do
+        local z=$file.genozip
+
+        $genozip -ft $file -o $z || exit 1
+        z_type=$(get_vcf_type $file) 
+
+        test_header "#1: test genounzip of `basename $z`: should be the same type"
+        $genounzip $z -fo $txt || exit 1
+        txt_type=$(get_vcf_type $txt)
+        if [[ $txt_type != $z_type ]]; then echo "genounzip of $z_type unexpectedly generated $txt_type"; exit 1; fi
+
+        test_header "#2: genocat of `basename $z`: implicit - should be the same type"
+        $genocat $z -fo $txt || exit 1
+        txt_type=$(get_vcf_type $txt)
+        if [[ $txt_type != $z_type ]]; then echo "genocat (implicit) of $z_type unexpectedly generated $txt_type"; exit 1; fi
+
+        test_header "#3: genocat of `basename $z`: stdout - should be VCF"
+        $genocat $z > $txt || exit 1
+        txt_type=$(get_vcf_type $txt)
+        if [[ $txt_type != "VCF" ]]; then echo "genocat (stdout) of $z_type unexpectedly generated $txt_type, expecting VCF"; exit 1; fi
+
+        test_header "#4: genocat of `basename $z`: explicitly VCF by filename"
+        $genocat $z -fo $txt.vcf || exit 1
+        txt_type=$(get_vcf_type $txt.vcf)
+        if [[ $txt_type != "VCF" ]]; then echo "genocat (-o .vcf) of $z_type unexpectedly generated $txt_type, expecting VCF"; exit 1; fi
+
+        test_header "#5: genocat of `basename $z`: explicitly VCF by flag"
+        $genocat $z -fo $txt --vcf || exit 1
+        txt_type=$(get_vcf_type $txt)
+        if [[ $z_type == "VCF" && $txt_type != "VCF"    ]]; then echo "genocat (--vcf) of $z_type unexpectedly generated $txt_type, expecting VCF"; exit 1; fi
+        if [[ $z_type != "VCF" && $txt_type != "VCF_GZ" ]]; then echo "genocat (--vcf) of $z_type unexpectedly generated $txt_type, expecting VCF_GZ"; exit 1; fi
+
+        test_header "#6: genocat of `basename $z`: stdout as VCF.gz"
+        $genocat $z --vcf -z1 > $txt || exit 1
+        txt_type=$(get_vcf_type $txt)
+        if [[ $txt_type != "VCF_GZ" ]]; then echo "genocat (stdout as VCF.gz) of $z_type unexpectedly generated $txt_type, expecting BAM"; exit 1; fi
+
+        test_header "#7: genocat of `basename $z`: explicitly VCF.gz by .vcf.gz filename"
+        $genocat $z -fo $txt.vcf.gz || exit 1
+        txt_type=$(get_vcf_type $txt.vcf.gz)
+        if [[ $txt_type != "VCF_GZ" ]]; then echo "genocat (-o .vcf.gz) of $z_type unexpectedly generated $txt_type, expecting VCF.gz"; exit 1; fi
+
+        test_header "#8: genocat of `basename $z`: explicitly VCF.gz by --vcf + .gz filename"
+        $genocat $z -fo $txt.gz --vcf || exit 1
+        txt_type=$(get_vcf_type $txt.gz)
+        if [[ $txt_type != "VCF_GZ" ]]; then echo "genocat (--vcf -o .gz) of $z_type unexpectedly generated $txt_type, expecting SAM.gz"; exit 1; fi
+
+        test_header "#9: genocat of `basename $z`: stdout as BCF"
+        $genocat $z --bcf > $txt || exit 1
+        txt_type=$(get_vcf_type $txt)
+        if [[ $txt_type != "BCF" ]]; then echo "genocat (stdout as BCF) of $z_type unexpectedly generated $txt_type, expecting BAM"; exit 1; fi
+
+        test_header "#10: genocat of `basename $z`: explicitly BCF by filename"
+        $genocat $z -fo $txt.bcf || exit 1
+        txt_type=$(get_vcf_type $txt.bcf)
+        if [[ $txt_type != "BCF" ]]; then echo "genocat (-o .bcf) of $z_type unexpectedly generated $txt_type, expecting BCF"; exit 1; fi
+
+        test_header "#11: genocat of `basename $z`: explicitly BCF by flag"
+        $genocat $z -fo $txt --bcf || exit 1
+        txt_type=$(get_vcf_type $txt)
+        if [[ $txt_type != "BCF" ]]; then echo "genocat (--bcf) of $z_type unexpectedly generated $txt_type, expecting BCF"; exit 1; fi
+    done
 
     cleanup
 }
@@ -1344,13 +1544,16 @@ batch_external_unzip()
     cleanup
 }
 
-# # ORA
+# ORA
 batch_external_ora()
 {
-    # Commented out because its very slow - uncomment if needed
-    # batch_print_header
+    batch_print_header
+
+    # Commented out (uncomment if needed) because its very slow - 80 seconds.
+    # Reason for slowness: test.fastq.ora is a abrupt subset of a larger file - orad doesn't like that.
+    # 
     # if `command -v orad >& /dev/null`; then
-    #     ORA_REF_PATH=$REFDIR $genozip --truncate -ft -e data/hs37d5.v15.ref.genozip test.fastq.ora || exit $?
+    #     ORA_REF_PATH=$REFDIR $genozip --truncate -ft -e $hs37d5 $TESTDIR/test.fastq.ora || exit $?
     # fi
 
     cleanup
@@ -1984,6 +2187,8 @@ T2T1_1=$REFDIR/chm13_1.1.v15.ref.genozip
 mm10=$REFDIR/mm10.v15.ref.genozip
 chinese_spring=$REFDIR/Chinese_Spring.v15.ref.genozip
 
+zmd5=$SCRIPTSDIR/zmd5
+
 if (( $# < 1 )); then
     echo "Usage: test.sh [debug|opt|prod] <GENOZIP_TEST-test> [optional-genozip-arg]"
     exit 0
@@ -2068,7 +2273,7 @@ genocat_no_echo="$genocat_exe $2 $piz_threads"
 genocat="$genocat_exe --echo $2 $piz_threads"
 genols=$genols_exe 
 
-basics=(basic.vcf basic.sam basic.vcf basic.bam basic.fq basic.fa basic.gvf basic.gtf basic.me23 \
+basics=(basic.vcf basic.bcf basic.sam basic.bam basic.fq basic.fa basic.gvf basic.gtf basic.me23 \
         basic.locs basic.bed basic.generic)
 
 exes=($genozip_exe $genounzip_exe $genocat_exe $genols_exe)
@@ -2102,39 +2307,39 @@ inc() {
 
 for GENOZIP_TEST in `seq $GENOZIP_TEST 200`; do 
 case $GENOZIP_TEST in
-0 )  sparkling_clean              ;;
-1 )  batch_minimal                ;;
-2 )  batch_basic basic.vcf        ;;
-3 )  batch_basic basic.bam        ;;
-4 )  batch_basic basic.sam        ;;
-5 )  batch_basic basic.fq         ;;
-6 )  batch_basic basic.fa         ;;
-7 )  batch_basic basic.bed        ;;
-8 )  batch_basic basic.gvf        ;;
-9 )  batch_basic basic.gtf        ;;
-10)  batch_basic basic.me23       ;;
-11)  batch_basic basic.generic    ;;
-12)  batch_precompressed          ;;
-13)  batch_bgzf                   ;;
-14)  batch_subdirs                ;;
-15)  batch_special_algs           ;;
-16)  batch_qual_codecs            ;;
-17)  batch_sam_bam_translations   ;;
-18)  batch_23andMe_translations   ;;
-19)  batch_genocat_tests          ;;
-20)  batch_grep_count_lines       ;;
-21)  batch_bam_subsetting         ;;
-22)  batch_backward_compatability ;;
-23)  batch_match_chrom            ;;
-24)  batch_single_thread          ;; 
-25)  batch_copy_ref_section       ;; 
-26)  batch_iupac                  ;; 
-27)  batch_genols                 ;;
-28)  batch_tar_files_from         ;;
-29)  batch_gencomp_depn_methods   ;; 
-30)  batch_deep                   ;; 
-31)  batch_real_world_small_vbs   ;; 
-32)  batch_real_world_1_adler32   ;; 
+0 )  sparkling_clean                   ;;
+1 )  batch_minimal                     ;;
+2 )  batch_basic basic.vcf             ;;
+3 )  batch_basic basic.bam             ;;
+4 )  batch_basic basic.sam             ;;
+5 )  batch_basic basic.fq              ;;
+6 )  batch_basic basic.fa              ;;
+7 )  batch_basic basic.bed             ;;
+8 )  batch_basic basic.gvf             ;;
+9 )  batch_basic basic.gtf             ;;
+10)  batch_basic basic.me23            ;;
+11)  batch_basic basic.generic         ;;
+12)  batch_precompressed               ;;
+13)  batch_bgzf                        ;;
+14)  batch_subdirs                     ;;
+15)  batch_special_algs                ;;
+16)  batch_qual_codecs                 ;;
+17)  batch_sam_bam_translations        ;;
+18)  batch_23andMe_translations        ;;
+19)  batch_genocat_tests               ;;
+20)  batch_grep_count_lines            ;;
+21)  batch_bam_subsetting              ;;
+22)  batch_backward_compatability      ;;
+23)  batch_match_chrom                 ;;
+24)  batch_single_thread               ;; 
+25)  batch_copy_ref_section            ;; 
+26)  batch_iupac                       ;; 
+27)  batch_genols                      ;;
+28)  batch_tar_files_from              ;;
+29)  batch_gencomp_depn_methods        ;; 
+30)  batch_deep                        ;; 
+31)  batch_real_world_small_vbs        ;; 
+32)  batch_real_world_1_adler32        ;; 
 33)  batch_real_world_genounzip_single_process ;; 
 34)  batch_real_world_genounzip_compare_file   ;; 
 35)  batch_real_world_1_adler32 "--best -f"    ;; 
@@ -2142,8 +2347,8 @@ case $GENOZIP_TEST in
 37)  batch_real_world_with_ref_md5;; 
 38)  batch_real_world_with_ref_md5 "--best --no-cache --force-gencomp" ;; 
 39)  batch_multiseq                    ;;
-40)  batch_external_cram               ;;
-41)  batch_external_bcf                ;;
+40)  batch_sam_bam_cram_output         ;;
+41)  batch_vcf_bcf_output              ;;
 42)  batch_external_unzip              ;;
 43)  batch_external_ora                ;;
 44)  batch_reference_fastq             ;;

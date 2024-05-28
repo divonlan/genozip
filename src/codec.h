@@ -10,7 +10,6 @@
 
 #include "lzma/7zTypes.h"
 #include "lzma/LzmaDec.h"
-#include "genozip.h"
 #include "data_types.h"
 
 #define MIN_LEN_FOR_COMPRESSION 50 // less that this size, and compressed size is typically larger than uncompressed size

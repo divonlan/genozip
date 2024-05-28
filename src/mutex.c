@@ -7,7 +7,6 @@
 //   and subject to penalties specified in the license.
 
 #include <errno.h>
-#include "genozip.h"
 #include "mutex.h"
 #include "flags.h"
 #include "buffer.h"

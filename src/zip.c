@@ -9,18 +9,14 @@
 #include <math.h>
 #include <errno.h>
 #include <sys/types.h>
-#include "genozip.h"
-#include "profiler.h"
 #include "zfile.h"
 #include "dispatcher.h"
 #include "zip.h"
 #include "seg.h"
 #include "random_access.h"
-#include "reference.h"
 #include "refhash.h"
 #include "ref_iupacs.h"
 #include "progress.h"
-#include "fastq.h"
 #include "stats.h"
 #include "compressor.h"
 #include "bgzf.h"
@@ -42,7 +38,7 @@ static void zip_display_compression_ratio (Digest md5)
 {
     float z_bytes        = MAX_((float)z_file->disk_so_far, 1.0); // at least one, to avoid division by zero in case of a z_bytes=0 issue
     float plain_bytes    = (float)z_file->txt_data_so_far_bind;
-    float comp_bytes     = file_is_read_via_ext_decompressor (txt_file) 
+    float comp_bytes     = is_read_via_ext_decompressor (txt_file) 
                               ? (float)txt_file->disk_size    // 0 if via pipe or url, as we have no knowledge of file size
                               : (float)txt_file->disk_so_far; // unlike disk_size, works also for piped-in files (but not CRAM, BCF, XZ, ZIP)
     float ratio_vs_plain = plain_bytes / z_bytes;
@@ -99,10 +95,10 @@ static void zip_display_compression_ratio (Digest md5)
     // when compressing BAM report only ratio_vs_comp (compare to BGZF-compress BAM - we don't care about the underlying plain BAM)
     // Likewise, doesn't have a compression extension (eg .gz), even though it may actually be compressed eg .tbi (which is actually BGZF)
     else if (Z_DT(BAM) || (txt_file && file_get_codec_by_txt_ft (FAF ? DT_FASTA : txt_file->data_type, txt_file->type, false) == CODEC_NONE)) 
-        progress_finalize_component_time_ratio (SOURCE_CODEC(CRAM)?"CRAM" : z_dt_name_faf(), ratio_vs_comp, md5);
+        progress_finalize_component_time_ratio (SRC_CODEC(CRAM)?"CRAM" : z_dt_name_faf(), ratio_vs_comp, md5);
 
     else if (ratio_vs_comp >= 0) {
-        if (SOURCE_CODEC(NONE) || ratio_vs_comp < 1.05) // disk_so_far doesn't give us the true txt file size 
+        if (SRC_CODEC(NONE) || ratio_vs_comp < 1.05) // disk_so_far doesn't give us the true txt file size 
             progress_finalize_component_time_ratio (z_dt_name_faf(), ratio_vs_plain, md5);
         
         else // source was compressed
@@ -142,7 +138,7 @@ static void zip_handle_unique_words_ctxs (VBlockP vb)
         if (ctx->local.len || ctx->local_always ||  // local is not free to accept our singletons
             ctx->no_stons  ||  // don't change to LT_SINGLETON if we were explicitly forbidden having singletons
             ctx->ltype == LT_SUPP || // local data might be created by codec (later)
-            ((VB_DT(VCF) || VB_DT(BCF)) && dict_id_is_vcf_format_sf (ctx->dict_id))) // this doesn't work for FORMAT fields
+            (VB_DT(VCF) && dict_id_is_vcf_format_sf (ctx->dict_id))) // this doesn't work for FORMAT fields
             continue;
             
         // reset ltype to LT_SINGLETON so that we can use local for singletons (either here or in ctx_commit_node - subject to conditions).
@@ -350,7 +346,7 @@ static void zip_update_txt_counters (VBlockP vb)
 {
     // note: in case of an FASTQ with flag.optimize_DESC or VCF with add_line_numbers, we already updated this in *_zip_init_vb
     if (!(flag.optimize_DESC && VB_DT(FASTQ)) &&
-        !(flag.add_line_numbers && (VB_DT(VCF) || VB_DT(BCF))))
+        !(flag.add_line_numbers && VB_DT(VCF)))
         txt_file->num_lines += vb->lines.len; // lines in this txt file
 
     // counters of data AS IT APPEARS IN THE TXT FILE
@@ -733,12 +729,13 @@ void zip_one_file (rom txt_basename,
                                  zip_complete_processing_one_vb);
 
     // verify that entire file was read (if file size is known)
-    ASSERT (txt_file->disk_so_far == txt_file->disk_size || !txt_file->disk_size || file_is_read_via_ext_decompressor (txt_file) ||
+    ASSERT (txt_file->disk_so_far == txt_file->disk_size || !txt_file->disk_size || is_read_via_ext_decompressor (txt_file) ||
             (txt_file->disk_so_far > txt_file->disk_size && flag.truncate), // case of compressing a file while it is still downloading - we will likely compress more than the disk_size bytes recorded upon file open
             "Failed to compress entire file: file size is %s, but only %s bytes were compressed",
             str_int_commas (txt_file->disk_size).s, str_int_commas (txt_file->disk_so_far).s);
 
-    bgzf_finalize_discovery(); 
+    if (txt_file->codec == CODEC_BGZF)
+        bgzf_finalize_discovery(); 
 
     zriter_wait_for_bg_writing(); // complete writing VBs before moving on
 

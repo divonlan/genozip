@@ -8,12 +8,6 @@
 
 #include <math.h>
 #include "vcf_private.h"
-#include "seg.h"
-#include "piz.h"
-#include "context.h"
-#include "strings.h"
-#include "dict_id.h"
-#include "reconstruct.h"
 
 #define adjustment ctx->last_delta
 

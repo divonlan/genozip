@@ -9,17 +9,12 @@
 // vb stands for VBlock - it started its life as VBlockVCF when genozip could only compress VCFs, but now
 // it means a block of lines from the text file. 
 
-#include "genozip.h"
-#include "context.h"
 #include "vblock.h"
 #include "file.h"
-#include "reference.h"
 #include "digest.h"
 #include "bgzf.h"
-#include "strings.h"
 #include "threads.h"
 #include "writer.h"
-#include "buf_list.h"
 
 // pool of VBs allocated based on number of threads
 static VBlockPoolP pools[NUM_POOL_TYPES] = {};

@@ -6,23 +6,13 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
-#include "genozip.h"
-#include "context.h"
-#include "buffer.h"
-#include "vblock.h"
 #include "seg.h"
 #include "refhash.h"
-#include "endianness.h"
 #include "file.h"
-#include "strings.h"
 #include "codec.h"
 #include "reconstruct.h"
 #include "piz.h"
-#include "segconf.h"
-#include "fastq.h"
 #include "aligner.h"
-#include "profiler.h"
-#include "contigs.h"
 
 // Foward example: If seq is: G-AGGGCT  (G is the hook)  -- matches reference AGGGCT       - function returns 110110101000 (A=00 is the LSb)
 // Reverse       : If seq is: CGCCCT-C  (C is the hook)  -- also matches reference AGGGCT  - function returns 110110101000 - the same

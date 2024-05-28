@@ -92,7 +92,7 @@ static inline uint32_t b250_set_wi (uint8_t *dst, // begining of writing if piz_
         case WORD_INDEX_EMPTY            : enc = VARL_EMPTY;                           enc_len = 2; break; 
         case WORD_INDEX_MISSING          : enc = VARL_MISSING;                         enc_len = 2; break; 
 
-        default                          : ABORT ("wi=%d out of range [-4..-2,0..%u]", wi, VARL_MAX_4B);
+        default                          : ABORT ("wi=%d ∉ [-4..-2,0..%u]", wi, VARL_MAX_4B);
     }
 
     // convert to piz format: big endian, so that MSB, carrying the type, is the first byte.

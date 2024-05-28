@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include "genozip.h"
 #include "qname.h"
 
 #define num_hash_bits z_file->deep_index_by[BY_SEQ].prm8[0] // ZIP: number of bits of seq_hash used for deep_hash_by_* (i.e. hash table is of size 2^num_hash_bits)

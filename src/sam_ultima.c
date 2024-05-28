@@ -8,7 +8,6 @@
 
 #include <math.h>
 #include "sam_private.h"
-#include "reconstruct.h"
 #include "codec.h"
 
 sSTRl(copy_RNAME_snip, 32);
@@ -136,7 +135,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_ULTIMA_tp_old)
 {
     int32_t qual_i = ctx->tp.repeat++;
     
-    int8_t qual = last_txtx (vb, CTX(IS_PRIM(vb) ? SAM_QUALSA : SAM_QUAL))[qual_i] + (OUT_DT(BAM) ? 33 : 0);
+    int8_t qual = last_txtx (vb, CTX(IS_PRIM(vb) ? SAM_QUALSA : SAM_QUAL))[qual_i] + (OUT_DT(SAM) ? 0 : 33);
 
     return reconstruct_demultiplex (vb, ctx, STRa(snip), tp_bins[qual], new_value, reconstruct);
 }
@@ -176,7 +175,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_ULTIMA_tp)
     }
 
     else {
-        int8_t qual = last_txtx (vb, CTX(IS_PRIM(vb) ? SAM_QUALSA : SAM_QUAL))[qual_i] + (OUT_DT(BAM) ? 33 : 0);
+        int8_t qual = last_txtx (vb, CTX(IS_PRIM(vb) ? SAM_QUALSA : SAM_QUAL))[qual_i] + (OUT_DT(SAM) ? 0 : 33);
         int channel_i = tp_bins[qual];
 
         uint32_t save_ltxt = Ltxt;

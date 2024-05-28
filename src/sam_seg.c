@@ -8,21 +8,10 @@
 
 #include <math.h>
 #include "sam_private.h"
-#include "reference.h"
 #include "refhash.h"
-#include "seg.h"
-#include "context.h"
-#include "file.h"
 #include "random_access.h"
-#include "endianness.h"
-#include "strings.h"
-#include "zip.h"
-#include "dict_id.h"
 #include "codec.h"
-#include "container.h"
 #include "stats.h"
-#include "segconf.h"
-#include "contigs.h"
 #include "chrom.h"
 #include "qname.h"
 #include "lookback.h"
@@ -1194,7 +1183,7 @@ uint32_t sam_seg_get_aux_int (VBlockSAMP vb, int16_t idx,
 
 out_of_range:
     if (soft_fail) return 0;
-    ABORT("%s: value of %.2s=%" PRId64 " is out of range [%d,%d]", LN_NAME, vb->auxs[idx], numeric.i, min_value, max_value);
+    ABORT("%s: value of %.2s=%" PRId64 " ∉ [%d,%d]", LN_NAME, vb->auxs[idx], numeric.i, min_value, max_value);
 }
 
 // returns the length of the field, or 0 if it is not found

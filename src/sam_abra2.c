@@ -7,8 +7,6 @@
 //   under penalties specified in the license.
 
 #include "sam_private.h"
-#include "container.h"
-
 
 #define _YA_RNAME  DICT_ID_MAKE2_8("Y0A_RNAM")  
 #define _YA_POS    DICT_ID_MAKE2_7("Y1A_POS")    

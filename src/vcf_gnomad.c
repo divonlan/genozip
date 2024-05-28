@@ -7,8 +7,6 @@
 //   and subject to penalties specified in the license.
 
 #include "vcf_private.h"
-#include "piz.h"
-#include "reconstruct.h"
 
 sSTRl(copy_QD_snip, 16);
 sSTRl(copy_SOR_snip, 16);

@@ -7,8 +7,6 @@
 //   under penalties specified in the license.
 
 #include "sam_private.h"
-#include "reconstruct.h"
-#include "piz.h"
 
 void sam_star_zip_initialize (void)
 {
@@ -88,10 +86,11 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_jI)
     uint32_t count_N = 0;
     char *bam_array_len_p = 0; // pointer to char and not int32 bc not word-aligned
     char *next = 0;
+    bool is_bam = OUT_DT(BAM) || OUT_DT(CRAM);
 
     RECONSTRUCT1 ('i'); // array type
 
-    if (OUT_DT(BAM)) {
+    if (is_bam) {
         // leave room for count_N
         bam_array_len_p = BAFTtxt;
         next = BAFTtxt + 4;
@@ -99,7 +98,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_jI)
 
     for_buf (BamCigarOp, op, vb->binary_cigar) {
         if (op->op == BC_N) {
-            if (OUT_DT(BAM)) {
+            if (is_bam) {
                 PUT_UINT32 (next, LTEN32 (pos));
                 next += sizeof (uint32_t);
                 PUT_UINT32 (next, LTEN32 (pos + op->n - 1));
@@ -121,7 +120,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_jI)
     }
 
     if (!count_N) { // no intron
-        if (OUT_DT(BAM)) {
+        if (is_bam) {
             PUT_UINT32 (next, LTEN32 ((uint32_t)-1));
             next += sizeof (uint32_t);
         }
@@ -130,7 +129,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_jI)
             RECONSTRUCT (",-1", 3);
     }
 
-    if (OUT_DT(BAM)) {
+    if (is_bam) {
         PUT_UINT32 (bam_array_len_p, LTEN32 (count_N ? count_N * 2 : 1));
 
         vb->txt_data.len32 = BNUM (vb->txt_data, next);

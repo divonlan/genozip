@@ -8,18 +8,12 @@
 
 #include "fasta_private.h"
 #include "seg.h"
-#include "context.h"
-#include "file.h"
 #include "piz.h"
 #include "dict_id.h"
 #include "random_access.h"
-#include "strings.h"
 #include "regions.h"
 #include "codec.h"
 #include "stats.h"
-#include "reconstruct.h"
-#include "reference.h"
-#include "segconf.h"
 #include "chrom.h"
 #include "tokenizer.h"
 #include "writer.h" 
@@ -154,7 +148,7 @@ int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *last_i)
 {
     bool is_entire_vb = (first_i == 0 && *last_i == Ltxt-1);
 
-    ASSERT (*last_i >= 0 && *last_i < Ltxt, "*last_i=%d is out of range [0,%u]", *last_i, Ltxt);
+    ASSERT (*last_i >= 0 && *last_i < Ltxt, "*last_i=%d is ∉ [0,%u]", *last_i, Ltxt);
 
     ARRAY (char, txt, vb->txt_data);
 

@@ -7,8 +7,6 @@
 //   under penalties specified in the license.
 
 #include "vcf_private.h"
-#include "reconstruct.h"
-#include "context.h"
 
 void vcf_isaac_seg_initialize (VBlockVCFP vb)
 {

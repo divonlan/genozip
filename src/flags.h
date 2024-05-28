@@ -10,6 +10,7 @@
 
 #include "genozip.h"
 #include "file_types.h"
+#include "endianness.h"
 
 typedef enum { 
     REF_NONE          = 0,  // ZIP (except SAM) and PIZ when user didn't specify an external reference
@@ -35,11 +36,18 @@ extern rom ref_type_name(void);
 
 typedef enum { STATS_NONE=0, STATS_SHORT=1, STATS_LONG=2, STATS_SHORT_GREP=-1, STATS_LONG_GREP=-2 } StatsType;
 
-typedef enum { NOT_PAIRED,       // ZIP and PIZ
-               PAIR_R1, PAIR_R2, // ZIP: currently compressing R1 or R2 
-               PAIRED,           // PIZ: z_file is paired ; ZIP: --pair or --deep with paired FASTQ
-               PAIR_force_sizeof_int=0x7fffffff } PairType; 
+typedef packed_enum { NOT_PAIRED,       // ZIP and PIZ
+                      PAIR_R1, PAIR_R2, // ZIP: currently compressing R1 or R2 
+                      PAIRED,           // PIZ: z_file is paired ; ZIP: --pair or --deep with paired FASTQ
+                    } PairType; 
 #define PAIR_TYPE_NAMES { "NOT_PAIRED", "PAIR_R1", "PAIR_R2", "PAIRED" }
+
+// make a single-byte flag padded to 4 bytes, so we can easily assign to it in flags_init_from_command_line
+#ifdef __LITTLE_ENDIAN__
+#define PADDED_FLAG(type,f) struct { type f; char pad_##f[3]; } __attribute__ ((aligned (4)))
+#else
+#define PADDED_FLAG(type,f) struct { char pad_##f[3]; type f; } __attribute__ ((aligned (4)))
+#endif
 
 typedef struct {
     
@@ -56,15 +64,14 @@ typedef struct {
         
     int truncate; // allow truncated file - compress only available full lines. note: we don't consider this option data modifying as its used for debugging - digest is calculated only after truncation
         
-    PairType pair; 
+    PADDED_FLAG(PairType, pair); 
 
     // piz options
     #define MAX_FLAG_BGZF 5
     int32_t bgzf;   // PIZ: can be set by --bgzf, or by various other conditions. values 0-MAX_FLAG_BGZF indicate the level of libdeflate, BGZF_BY_ZFILE means use SEC_BGZF or default level if it is absent
     
-    int out_dt; // used to indicate the desired dt of the output txt - consumed by file_open_z, and thereafter equal to txt_file->data_type
-    #define out_dt_is_binary dt_props[flag.out_dt].is_binary
-
+    PADDED_FLAG(DataType, out_dt); // used to indicate the desired dt of the output txt - consumed by file_open_z, and thereafter equal to txt_file->data_type
+    
     // PIZ: data-modifying genocat options for showing only a subset of the file, or otherwise modify the file 
     int header_one, header_only_fast, no_header, header_only, // how to handle the txt header
         seq_only, qual_only,  

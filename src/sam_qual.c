@@ -7,8 +7,6 @@
 //   under penalties specified in the license.
 
 #include "sam_private.h"
-#include "piz.h"
-#include "reconstruct.h"
 #include "optimize.h"
 #include "codec.h"
 #include "htscodecs/rANS_static4x16.h"
@@ -518,6 +516,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
     bool pacbio_diff              = (snip_len >= 3 && snip[2] == '1'); // v15
     char monochar                 = (snip_len >= 4 ? snip[3] : 0);     // v15
     char is_missing               = (snip[0] == '*');
+    bool is_bam                   = OUT_DT(BAM) || OUT_DT(CRAM);
 
     const CigarAnalItem *saggy_anal;
 
@@ -563,7 +562,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
         SamFlags saggy_flags = { .value = history64 (SAM_FLAG, vb->saggy_line_i) };
         rom saggy_qual = (word.lookup == LookupTxtData) ? Btxt (word.index) : Bc(ctx->per_line, word.index);
 
-        if (word.len == 1 && (uint8_t)*saggy_qual == (OUT_DT(BAM) ? 0xff : '*'))
+        if (word.len == 1 && (uint8_t)*saggy_qual == (is_bam ? 0xff : '*'))
             goto no_diff; // in case prim has no qual - seg did not diff (the current line may or may not have qual)
 
         else if (prim_has_qual_but_i_dont)
@@ -573,7 +572,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
             goto no_diff;
 
         else
-            sam_piz_QUAL_undiff_vs_other (vb, saggy_qual, word.len, diff_type, saggy_flags.rev_comp, saggy_anal, OUT_DT(BAM), reconstruct);                
+            sam_piz_QUAL_undiff_vs_other (vb, saggy_qual, word.len, diff_type, saggy_flags.rev_comp, saggy_anal, is_bam, reconstruct);                
     } 
         
     // case: reconstruct from data in local

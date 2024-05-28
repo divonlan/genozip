@@ -8,14 +8,8 @@
 
 // a module for handling POS and PNEXT
 
-#include "genozip.h"
 #include "sam_private.h"
-#include "seg.h"
-#include "piz.h"
-#include "reconstruct.h"
 #include "random_access.h"
-#include "segconf.h"
-#include "codec.h"
 
 PosType32 sam_seg_POS (VBlockSAMP vb, ZipDataLineSAMP dl, WordIndex prev_line_chrom, unsigned add_bytes)
 {
@@ -83,7 +77,7 @@ void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(pnext_str)/* option 
 {
     if (pnext_str) 
         ASSSEG (str_get_int_range32 (STRa(pnext_str), 0, MAX_POS_SAM, &pnext),
-                "PNEXT=\"%.*s\" out of range [0,%d] (pnext_str=%p)", pnext_str_len, pnext_str, (int)MAX_POS_SAM, pnext_str);
+                "PNEXT=\"%.*s\" ∉ [0,%d] (pnext_str=%p)", pnext_str_len, pnext_str, (int)MAX_POS_SAM, pnext_str);
 
     if (pnext && segconf.running) 
         segconf.has[SAM_PNEXT]++; // "has" means we found evidence of non-zero PNEXT

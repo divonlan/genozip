@@ -7,15 +7,9 @@
 //   and subject to penalties specified in the license.
 
 #include <math.h>
-#include "genozip.h"
-#include "buffer.h"
 #include "context.h"
 #include "file.h"
-#include "vblock.h"
 #include "hash.h"
-#include "strings.h"
-#include "dict_id.h"
-#include "segconf.h"
 #include "libdeflate_1.19/libdeflate.h"
 
 #define ENT_NONE 0xffffffffUL // no global_hash/stons_hash entry

@@ -8,28 +8,18 @@
 
 #include <stdarg.h>
 #include <errno.h>
-#include "genozip.h"
-#include "buffer.h"
-#include "strings.h"
 #include "stats.h"
-#include "sections.h"
 #include "file.h"
-#include "vblock.h"
 #include "txtheader.h"
-#include "reference.h"
 #include "zfile.h"
-#include "version.h"
 #include "arch.h"
 #include "codec.h"
 #include "license.h"
-#include "segconf.h"
 #include "qname.h"
 #include "gencomp.h"
 #include "url.h"
 #include "crypt.h"
 #include "tar.h"
-#include "generic.h"
-#include "reference.h"
 #include "contigs.h"
 
 #define SHORT_HEADER "NAME                   GENOZIP      %       TXT      %   RATIO\n"
@@ -241,7 +231,7 @@ static void stats_output_file_metadata (void)
     }
 
     bufprintf (evb, &features, "VBs=%u X %s;", z_file->num_vbs, str_size (segconf.vb_size).s);
-    if (!Z_DT(GENERIC) && !flag.make_reference) {
+    if (!Z_DT(GNRIC) && !flag.make_reference) {
         bufprintf (evb, &features, "num_lines=%"PRIu64";", z_file->num_lines);
 
         // note regarding DVCF: reports lines of reject components, which are duplicates of MAIN component lines
@@ -496,7 +486,7 @@ static void stats_output_file_metadata (void)
             FEATURE (true, "Contigs: %u (%"PRIu64")", "ref_contigs=%u (%"PRIu64")", ref_contigs_get_num_contigs(gref), ref_contigs_get_genome_nbases(gref));
             break;
 
-        case DT_GENERIC:
+        case DT_GNRIC:
             REPORT_VBs;
             bufprintf (evb, &stats, "Vblocks: %u x %u MB  Sections: %u\n", 
                        z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), z_file->section_list_buf.len32);
@@ -762,7 +752,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
         all_z_size      += s->z_size;
         all_txt_len     += s->txt_len;
 
-        if ((Z_DT(VCF) || Z_DT(BCF) || Z_DT(GFF)) && dict_id_type(zctx->dict_id) != DTYPE_FIELD)
+        if ((Z_DT(VCF) || Z_DT(GFF)) && dict_id_type(zctx->dict_id) != DTYPE_FIELD)
             snprintf (s->name, sizeof (s->name), "%s/%s", dtype_name_z(zctx->dict_id), zctx->tag_name);
         else  
             strcpy (s->name, zctx->tag_name);

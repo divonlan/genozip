@@ -6,27 +6,12 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
-#include "genozip.h"
-#include "mutex.h"
-#include "codec.h" // must be included before reference.h
-#include "reference.h"
-#include "sections.h"
-#include "buffer.h"
-#include "vblock.h"
-#include "filename.h"
+#include "compressor.h" // codec.h included in compressor.h must be included before reference.h
 #include "file.h"
-#include "endianness.h"
 #include "dispatcher.h"
 #include "zfile.h"
 #include "refhash.h"
-#include "compressor.h"
-#include "bits.h"
-#include "profiler.h"
 #include "threads.h"
-#include "segconf.h"
-#include "strings.h"
-#include "buffer.h"
-#include "buf_list.h"
 
 // ref_hash logic:
 // we use the 28 bits (14 nucleotides) following a "G" hook, as the hash value, to index into a hash table with multiple

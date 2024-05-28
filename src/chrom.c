@@ -7,21 +7,11 @@
 //   and subject to penalties specified in the license.
 
 #include <stdarg.h>
-#include "genozip.h"
 #include "seg.h"
-#include "vblock.h"
-#include "context.h"
-#include "segconf.h"
-#include "buffer.h"
-#include "context.h"
-#include "file.h"
 #include "random_access.h"
 #include "chrom.h"
 #include "zfile.h"
-#include "endianness.h"
 #include "contigs.h"
-#include "reference.h"
-#include "version.h"
 #include "b250.h"
 
 static ContextP sorter_ctx = NULL; 
@@ -109,9 +99,9 @@ void chrom_2ref_load (Reference ref)
         WordIndex chrom_index = BGEN32 (ent->chrom_index);
         WordIndex ref_index   = BGEN32 (ent->ref_index);
 
-        ASSERT (chrom_index >= 0 && chrom_index < zctx->word_list.len, "chrom_index=%d out of range [0,%d]", chrom_index, (int32_t)zctx->word_list.len-1);
+        ASSERT (chrom_index >= 0 && chrom_index < zctx->word_list.len, "chrom_index=%d ∉ [0,%d]", chrom_index, (int32_t)zctx->word_list.len-1);
         ASSERT (!num_ref_contigs /* ref not loaded */ || (ref_index >= -1 && ref_index < num_ref_contigs), 
-                "ref_index=%d out of range [-1,%u] (chrom_index=%u i=%u len=%u)", 
+                "ref_index=%d ∉ [-1,%u] (chrom_index=%u i=%u len=%u)", 
                 ref_index, num_ref_contigs-1, chrom_index, i, evb->scratch.len32);
 
         map[chrom_index] = ref_index;

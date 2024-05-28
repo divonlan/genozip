@@ -8,8 +8,6 @@
 
 #pragma once
 
-#include "genozip.h"
-#include "reference.h"
 #include "file.h"
 
 extern void chrom_2ref_load (Reference ref);

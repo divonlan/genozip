@@ -9,13 +9,8 @@
 #include <errno.h>
 #include <pthread.h>
 #include "libdeflate_1.19/libdeflate.h"
-#include "genozip.h"
-#include "file.h"
 #include "gencomp.h"
 #include "zip.h"
-#include "sections.h"
-#include "sam.h"
-#include "fastq.h"
 #include "codec.h"
 #include "bgzf.h"
 #include "biopsy.h"

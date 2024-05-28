@@ -7,8 +7,6 @@
 //   under penalties specified in the license.
 
 #include "sam_private.h"
-#include "reconstruct.h"
-#include "bits.h"
 #include "writer.h"
 #include "qname.h"
 #include "compressor.h"

@@ -18,14 +18,12 @@
 #endif
 #include <math.h>
 #include <fcntl.h> 
-#include "genozip.h"
 #include "profiler.h"
 #include "buf_struct.h"
 #include "buf_list.h"
 #include "bits.h"
 #include "file.h"
 #include "threads.h"
-#include "version.h"
 #include "arch.h"
 
 #define DISPLAY_ALLOCS_AFTER 0 // display allocations, except the first X allocations. reallocs are always displayed

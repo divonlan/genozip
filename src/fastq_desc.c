@@ -7,8 +7,6 @@
 //   and subject to penalties specified in the license.
 
 #include "fastq_private.h"
-#include "seg.h"
-#include "piz.h"
 #include "qname.h"
 #include "tokenizer.h"
 

@@ -8,9 +8,7 @@
 
 // codec for Ultima's T0:Z
 
-#include "codec.h"
 #include "reconstruct.h"
-#include "profiler.h"
 #include "compressor.h"
 
 //--------------

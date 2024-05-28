@@ -14,11 +14,7 @@
 #include "sam_private.h"
 #include "random_access.h"
 #include "zfile.h"
-#include "version.h"
-#include "endianness.h"
 #include "contigs.h"
-#include "flags.h"
-#include "buffer.h"
 #include "stats.h"
 #include "arch.h"
 
@@ -517,7 +513,7 @@ static void sam_header_alloc_contigs (BufferP txt_header)
     foreach_textual_SQ_line (txt_header->data, IS_SRC_BAM ? txt_header->len : 0, sam_header_count_contigs_cb, &txt_ctg_count, NULL);
 
     // count contigs in binary header
-    if (IS_SRC_BAM)
+    if (IS_SRC_BAM && txt_file->type != CRAM) // in case of CRAM we don't have binary contigs (unless header was read through samtools - but even then, the CRAM itself has only a textual header)
         foreach_binary_SQ_line  (STRb(*txt_header), sam_header_count_contigs_cb, &bin_ctg_count,  NULL);
     
     // we expect textual and binary files to be identical, however we observed in the wild files where the binary contigs
@@ -581,6 +577,18 @@ static void sam_header_zip_inspect_SQ_lines (VBlockP txt_header_vb, BufferP txt_
 
     COPY_TIMER_EVB (sam_header_zip_inspect_SQ_lines);
     #undef new_txt_header
+}
+
+// called from cram_read_sam_header to verify that all CRAM header contigs appear in reference, 
+// because otherwise samtools will hang 
+static void sam_header_verify_same_contig_as_ref (STRp (contig_name), PosType64 LN, void *cram_filename)
+{
+    ref_contigs_verify_same_contig_as_ref (gref, cram_filename, STRa(contig_name), LN); 
+}
+
+void sam_header_zip_inspect_SQ_lines_in_cram (rom cram_filename)
+{
+    foreach_textual_SQ_line (B1STc(evb->txt_data), 0, sam_header_verify_same_contig_as_ref, (void *)cram_filename, NULL);
 }
 
 void sam_header_finalize (void)

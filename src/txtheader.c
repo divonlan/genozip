@@ -6,21 +6,12 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
 //   under penalties specified in the license.
 
-#include "genozip.h"
-#include "buffer.h"
 #include "digest.h"
-#include "flags.h"
-#include "data_types.h"
 #include "filename.h"
-#include "file.h"
-#include "sections.h"
 #include "txtfile.h"
-#include "vblock.h"
 #include "zfile.h"
 #include "bgzf.h"
 #include "writer.h"
-#include "strings.h"
-#include "endianness.h"
 #include "contigs.h"
 #include "piz.h"
 #include "gencomp.h"
@@ -93,7 +84,7 @@ void txtheader_compress (BufferP txt_header,
 
     // true if filename is compressed with gz/bgzf but does not have a .gz/.bgz extension (e.g. usually true for BAM files)
     section_header.flags.txt_header.no_gz_ext = 
-        (SOURCE_CODEC(GZ) || SOURCE_CODEC(BGZF) || SOURCE_CODEC(BAM) || SOURCE_CODEC(CRAM)/*reconstructed as BAM*/) &&
+        (SRC_CODEC(GZ) || SRC_CODEC(BGZF) || SRC_CODEC(BAM) || SRC_CODEC(CRAM)/*reconstructed as BAM*/) &&
         txt_file->basename && !filename_has_ext (txt_file->basename, ".gz") && !filename_has_ext (txt_file->basename, ".bgz");
 
     // In BGZF, we store the 3 least significant bytes of the file size, so check if the reconstructed BGZF file is likely the same
@@ -132,7 +123,7 @@ int64_t txtheader_zip_read_and_compress (int64_t *txt_header_offset, CompIType c
     evb->comp_i = comp_i; // used by def_is_header_done
     
     TxtHeaderRequirement req = DTPT (txt_header_required); 
-    if (req == HDR_MUST || req == HDR_OK || (comp_i==0 && (req == HDR_MUST_0 || req == HDR_OK_0))) 
+    if (req == HDR_MUST || req == HDR_OK || (comp_i==0 && (req == HDR_MUST_0 || req == HDR_OK_0)))
         txtfile_read_header (is_first_txt); // reads into evb->txt_data and evb->lines.len
 
     // get header digest and initialize component digest
@@ -223,7 +214,7 @@ static void txtheader_uncompress_one_vb (VBlockP vb)
 // case 1: outputing a single file - generate txt_filename based on the z_file's name
 // case 2: unbinding a genozip into multiple txt files - generate txt_filename of a component file from the
 //         component name in SEC_TXT_HEADER 
-static rom txtheader_piz_get_filename (rom orig_name, rom prefix, bool is_orig_name_genozip, bool with_bgzf, bool no_gz_ext)
+static rom txtheader_piz_get_filename (rom orig_name, rom prefix, bool is_orig_name_genozip, bool has_bgzf, bool no_gz_ext)
 {
     unsigned fn_len = strlen (orig_name);
     unsigned dn_len = flag.out_dirname ? strlen (flag.out_dirname) : 0;
@@ -232,31 +223,38 @@ static rom txtheader_piz_get_filename (rom orig_name, rom prefix, bool is_orig_n
     int txt_filename_size = fn_len + dn_len + px_len + 10;
     char *txt_filename = (char *)CALLOC(txt_filename_size);
 
-    #define EXT2_MATCHES_TRANSLATE(from,to,ext)  \
-        ((z_file->data_type==(from) && flag.out_dt==(to) && \
+    #define EXT2_MATCHES_TRANSLATE(z,out,ext)  \
+        ((z_file->data_type==DT_##z && flag.out_dt==DT_##out && \
          fn_len >= genozip_ext_len+strlen(ext) && \
          !strcmp (&txt_filename[fn_len-genozip_ext_len- (sizeof ext - 1)], (ext))) ? (int)(sizeof ext - 1) : 0) 
 
     // length of extension to remove if translating, eg remove ".sam" if .sam.genozip->.bam */
-    int old_ext_removed_len = EXT2_MATCHES_TRANSLATE (DT_SAM,   DT_BAM,    ".sam")
-                            + EXT2_MATCHES_TRANSLATE (DT_SAM,   DT_SAM,    ".bam")
-                            + EXT2_MATCHES_TRANSLATE (DT_SAM,   DT_FASTQ,  ".sam")
-                            + EXT2_MATCHES_TRANSLATE (DT_SAM,   DT_FASTQ,  ".bam")
-                            + EXT2_MATCHES_TRANSLATE (DT_VCF,   DT_BCF,    ".vcf")
-                            + EXT2_MATCHES_TRANSLATE (DT_ME23,  DT_VCF,    ".txt");
+    int old_ext_removed_len = EXT2_MATCHES_TRANSLATE (SAM,  BAM,   ".sam")
+                            + EXT2_MATCHES_TRANSLATE (SAM,  BAM,   ".cram")
+                            + EXT2_MATCHES_TRANSLATE (SAM,  SAM,   ".bam")
+                            + EXT2_MATCHES_TRANSLATE (SAM,  SAM,   ".cram")
+                            + EXT2_MATCHES_TRANSLATE (SAM,  CRAM,  ".sam")
+                            + EXT2_MATCHES_TRANSLATE (SAM,  CRAM,  ".bam")
+                            + EXT2_MATCHES_TRANSLATE (SAM,  FASTQ, ".sam") // deep? or obsolete?
+                            + EXT2_MATCHES_TRANSLATE (SAM,  FASTQ, ".bam")
+                            + EXT2_MATCHES_TRANSLATE (VCF,  BCF,   ".vcf")
+                            + EXT2_MATCHES_TRANSLATE (VCF,  VCF,   ".bcf")
+                            + EXT2_MATCHES_TRANSLATE (ME23, VCF,   ".txt");
 
     // case: new directory - take only the basename
     if (dn_len) orig_name = filename_base (orig_name, 0,0,0,0); 
     
     // cases in which BGZF compression does not result in a ".gz" file name extension:
     // if original gz/bgzf-compressed file did not have a .gz/.bgz extension (since 15.0.23) or when outputing BAM or BCF
-    no_gz_ext |= OUT_DT(BCF) || OUT_DT(BAM); 
+    no_gz_ext = no_gz_ext  // original file had no .gz extension despite being GZ/BGZF compressed  
+             || OUT_DT(BCF) || OUT_DT(BAM) || OUT_DT(CRAM)  // data types for which we never add .gz
+             || !has_bgzf; // bgzf logic decided not to compress this file   
 
     snprintf ((char *)txt_filename, txt_filename_size, "%s%s%s%.*s%s%s", prefix ? prefix : "",
              (dn_len ? flag.out_dirname : ""), (dn_len ? "/" : ""), 
              fn_len - genozip_ext_len - old_ext_removed_len, orig_name,
              old_ext_removed_len ? file_plain_ext_by_dt (flag.out_dt) : "", // add translated extension if needed
-             (with_bgzf && !no_gz_ext) ? ".gz" : ""); // add .gz if needed
+             no_gz_ext ? "" : ".gz"); // add .gz if needed
 
     if (dn_len) FREE (orig_name); // allocated by filename_base
 
@@ -277,12 +275,12 @@ StrTextLong txtheader_get_txt_filename_from_section (void)
 
     // note: for bz2, xz, and zip - we reconstruct as gz too. better choice than plain.
     #define C(cdc) (header.src_codec == CODEC_##cdc)
-    bool dot_gz = flag.bgzf == BGZF_NOT_INITIALIZED ? ((C(BGZF) || C(GZ) || C(BZ2) || C(XZ) || C(ZIP))) // note: similar logic to in bgzf_piz_calculate_bgzf_flags
-                :                                     (flag.bgzf != 0);
+    bool has_bgzf = (flag.bgzf == BGZF_NOT_INITIALIZED) ? ((C(BGZF) || C(GZ) || C(BZ2) || C(XZ) || C(ZIP))) // note: similar logic to in bgzf_piz_calculate_bgzf_flags
+                :                                         (flag.bgzf != 0);
     #undef C
 
     TEMP_FLAG(out_dirname, NULL); // only basename in progress string
-    rom filename = txtheader_piz_get_filename (header.txt_filename, flag.unbind, false, dot_gz, header.flags.txt_header.no_gz_ext);
+    rom filename = txtheader_piz_get_filename (header.txt_filename, flag.unbind, false, has_bgzf, header.flags.txt_header.no_gz_ext);
     RESTORE_FLAG(out_dirname);
 
     StrTextLong name = {};
@@ -336,19 +334,19 @@ void txtheader_piz_read_and_reconstruct (Section sec)
 
         filename = flag.to_stdout    ? NULL 
                  : flag.out_filename ? flag.out_filename
-                 : flag.unbind       ? txtheader_piz_get_filename (header.txt_filename, flag.unbind, false, bgzf_flags.level >= 1, header.flags.txt_header.no_gz_ext)
-                 :                     txtheader_piz_get_filename (z_name,              "",          true,  bgzf_flags.level >= 1, header.flags.txt_header.no_gz_ext); // use genozip filename as a base regardless of original name
+                 : flag.unbind       ? txtheader_piz_get_filename (header.txt_filename, flag.unbind, false, (bgzf_flags.library != BGZF_NO_LIBRARY), header.flags.txt_header.no_gz_ext)
+                 :                     txtheader_piz_get_filename (z_name,              "",          true,  (bgzf_flags.library != BGZF_NO_LIBRARY), header.flags.txt_header.no_gz_ext); // use genozip filename as a base regardless of original name
     }
 
     // note: when reading an auxiliary file or no_writer - we still create txt_file (but don't actually open the physical file)
-    // note: if there are several components contributing to a single txt_file (DVCF, SAM w/gencomp) - we only open it once
+    // note: if there are several components contributing to a single txt_file (e.g. SAM w/gencomp) - we only open it once
     if (!txt_file)
         txt_file = file_open_txt_write (filename, flag_loading_auxiliary ? z_file->data_type : flag.out_dt, bgzf_flags.level);
     
     if (!flag.to_stdout && !flag.out_filename) FREE (filename); // file_open_z copies the names
 
     // set BGZF info in txt_file - either that originates from SEC_BGZF, or constructed based on bgzf_flags
-    if (needs_recon && txt_file->codec == CODEC_BGZF)
+    if (needs_recon && txt_file->codec == CODEC_BGZF) 
         bgzf_piz_set_txt_file_bgzf_info (bgzf_flags, header.codec_info);
 
     // note: this is reset for each component:

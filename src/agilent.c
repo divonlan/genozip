@@ -6,8 +6,6 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
 //   under penalties specified in the license.
 
-#include "reconstruct.h"
-#include "seg.h"
 #include "sam_private.h"
 
 void agilent_seg_initialize (VBlockP vb)

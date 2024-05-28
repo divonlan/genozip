@@ -9,19 +9,7 @@
 // The codec implements a modified version of the PBWT algorithm. The permutation logic is loosely based on the logic in
 // Durbin R. Efficient haplotype matching and storage using the positional Burrows-Wheeler transform (PBWT). Bioinformatics. 2014 
 
-#include "genozip.h"
-#include "codec.h"
-#include "buffer.h"
-#include "file.h"
-#include "vblock.h"
-#include "dict_id.h"
-#include "reconstruct.h"
-#include "strings.h"
 #include "compressor.h"
-#include "profiler.h"
-#include "context.h"
-#include "endianness.h"
-#include "piz.h"
 #include "vcf_private.h"
 
 #define decl_pbwt_contexts                                              \

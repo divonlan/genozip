@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include "genozip.h"
 #include "file_types.h"
 #include "flags.h"
 

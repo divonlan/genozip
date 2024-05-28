@@ -7,10 +7,6 @@
 //   under penalties specified in the license.
 
 #include "vcf_private.h"
-#include "seg.h"
-#include "reconstruct.h"
-#include "file.h"
-#include "codec.h"
 
 // -----------
 // Seg

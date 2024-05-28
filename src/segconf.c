@@ -130,7 +130,7 @@ static void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
     else if (flag.make_reference) 
         segconf.vb_size = VBLOCK_MEMORY_MAKE_REF;
 
-    else if (TXT_DT(GENERIC)) 
+    else if (TXT_DT(GNRIC)) 
         segconf.vb_size = VBLOCK_MEMORY_GENERIC;
 
     // if we failed to calculate an estimated size or file is very small - use default
@@ -142,7 +142,7 @@ static void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
         for_ctx_that (ctx->b250.len32 || ctx->local.len32)
             num_used_contexts++;
             
-        uint32_t vcf_samples = (TXT_DT(VCF) || TXT_DT(BCF)) ? vcf_header_get_num_samples() : 0;
+        uint32_t vcf_samples = TXT_DT(VCF) ? vcf_header_get_num_samples() : 0;
         
         // formula - 1MB for each contexts, 128K for each VCF sample
         uint64_t bytes = ((uint64_t)num_used_contexts MB) + (vcf_samples << 17);
@@ -175,12 +175,12 @@ static void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
             
             // assuming infinite cores, estimate the max number of concurrent threads based on I/O and source-decompression constraints
             // TO DO: make this more accurate taking into account the type of filesystem (eg nfs) etc
-            uint32_t est_max_threads = SOURCE_CODEC(BGZF) ? 60  // bottleneck is disk I/O - but less that CODEC_NONE as less data is read
-                                     : SOURCE_CODEC(BAM)  ? 60  // bottleneck is disk I/O - but less that CODEC_NONE as less data is read
-                                     : SOURCE_CODEC(CRAM) ? 40  // bottleneck is samtools
-                                     : SOURCE_CODEC(ORA)  ? 40  // bottleneck is orad
-                                     : SOURCE_CODEC(GZ)   ? 20  // bottleneck is GZ-decompression in main thread
-                                     : SOURCE_CODEC(NONE) ? 30  // bottleneck is disk I/O
+            uint32_t est_max_threads = SRC_CODEC(BGZF) ? 60  // bottleneck is disk I/O - but less that CODEC_NONE as less data is read
+                                     : SRC_CODEC(BAM)  ? 60  // bottleneck is disk I/O - but less that CODEC_NONE as less data is read
+                                     : SRC_CODEC(CRAM) ? 40  // bottleneck is samtools
+                                     : SRC_CODEC(ORA)  ? 40  // bottleneck is orad
+                                     : SRC_CODEC(GZ)   ? 20  // bottleneck is GZ-decompression in main thread
+                                     : SRC_CODEC(NONE) ? 30  // bottleneck is disk I/O
                                      :                                        30; // arbitrary
 
             uint64_t new_vb_size = MAX_(VBLOCK_MEMORY_MIN_SMALL, est_seggable_size * 1.2 / MIN_(est_max_threads, global_max_threads));
@@ -219,7 +219,7 @@ static void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
         iprintf ("\nvblock size set to %u MB %s%s\n", 
                  (unsigned)(segconf.vb_size >> 20), 
                  cond_int (num_used_contexts, "num_used_contexts", num_used_contexts),
-                 cond_int (Z_DT(VCF) || Z_DT(BCF), " num_vcf_samples=", vcf_header_get_num_samples()));
+                 cond_int (Z_DT(VCF), " num_vcf_samples=", vcf_header_get_num_samples()));
 }
 
 // this function is called to set is_long_reads, and may be also called while running segconf before is_long_reads is set
@@ -304,7 +304,7 @@ void segconf_calculate (void)
     // check for components that don't need segconf
     if (segconf_no_calculate()) return; 
     
-    if (TXT_DT(GENERIC) ||    // no need for a segconf test VB in generic files
+    if (TXT_DT(GNRIC) ||    // no need for a segconf test VB in generic files
         flag.skip_segconf) {  // for use in combination with --biopsy, to biopsy of a defective file
         segconf_set_vb_size (NULL, segconf.vb_size);
         return;

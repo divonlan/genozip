@@ -15,7 +15,6 @@
 // ---------------------------------------------------------
 
 #include "sam_private.h"
-#include "reconstruct.h"
 #include "chrom.h"
 #include "b250.h"
 
@@ -373,7 +372,7 @@ void sam_piz_SA_get_prim_item (VBlockSAMP vb, int sa_item, pSTRp(out))
     str_split (SA, SA_len, MAX_SA_NUM_ALNS, ';', prim_aln, false); // split SA:Z into alignments
 
     int predicted_aln_i = segconf.is_sorted ? 0 : (vb->line_i - vb->saggy_line_i) - 1;
-    ASSPIZ (predicted_aln_i < n_prim_alns-1, "predicted_aln_i=%d out of range [0,%d]", predicted_aln_i, n_prim_alns-2);
+    ASSPIZ (predicted_aln_i < n_prim_alns-1, "predicted_aln_i=%d ∉ [0,%d]", predicted_aln_i, n_prim_alns-2);
     
     str_split (prim_alns[predicted_aln_i], prim_aln_lens[predicted_aln_i], NUM_SA_ITEMS, ',', item, true); // split predicted alignment into its items
     ASSPIZ (n_items == NUM_SA_ITEMS, "Failed to split prim SA alignment \"%.*s\"", STRfi(prim_aln,predicted_aln_i));

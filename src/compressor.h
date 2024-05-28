@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include "genozip.h"
 #include "codec.h"
 
 extern uint32_t comp_compress (VBlockP vb, ContextP ctx, BufferP z_data, SectionHeaderUnionP header, 

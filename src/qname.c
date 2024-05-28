@@ -9,17 +9,10 @@
 #include "libdeflate_1.19/libdeflate.h"
 #include "qname.h"
 #include "tokenizer.h"
-#include "buffer.h"
-#include "vblock.h"
-#include "segconf.h"
-#include "strings.h"
 #include "seg.h"
-#include "sam.h"
-#include "fastq.h"
 #include "stats.h"
 #include "qname_flavors.h"
 #include "file.h"
-#include "sam.h"
 #include "codec.h"
 #include "zip_dyn_int.h"
 
@@ -749,7 +742,8 @@ void qname_canonize (QType q, rom qname, uint32_t *qname_len)
         *qname_len -= 2;
 
     // eg: "NOVID_3053_FC625AGAAXX:6:1:1069:11483:0,84" ⟶ "NOVID_3053_FC625AGAAXX:6:1:1069:11483"
-    else if (f->cnn) {
+    // note: it is possible that QNAME has both the mate and the cnn removed
+    if (f->cnn) {
         static char cnn_to_char[NUM_CNN] = CNN_TO_CHAR;
         rom cut = memrchr (qname + 1, cnn_to_char[f->cnn], *qname_len); // +1 so at least one character survives
         if (cut) *qname_len = cut - qname;

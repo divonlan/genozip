@@ -6,15 +6,10 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
 //   under penalties specified in the license.
 
-#include "data_types.h"
-#include "reference.h"
-#include "vblock.h"
 #include "ref_private.h"
+#include "zfile.h"
 #include "context.h"
 #include "file.h"
-#include "endianness.h"
-#include "zfile.h"
-#include "buffer.h"
 
 //----------------------
 // make-reference side

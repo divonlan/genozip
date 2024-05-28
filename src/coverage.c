@@ -7,9 +7,6 @@
 //   under penalties specified in the license.
 
 #include "coverage.h"
-#include "vblock.h"
-#include "file.h"
-#include "strings.h"
 #include "txtfile.h"
 #include "contigs.h"
 #include "sam_private.h"

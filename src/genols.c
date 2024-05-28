@@ -11,16 +11,10 @@
 #include <errno.h>
 #include <sys/types.h>
 
-#include "genozip.h"
+#include "file.h"
 #include "genols.h"
 #include "filename.h"
-#include "file.h"
-#include "buffer.h"
-#include "flags.h"
-#include "strings.h"
 #include "zfile.h"
-#include "vblock.h"
-#include "endianness.h"
 
 static void genols_list_dir (rom dirname); // forward declaration
 

@@ -12,13 +12,10 @@
 #ifdef _WIN32
 #include <windows.h>
 #endif
-#include "genozip.h"
 #include "url.h"
 #include "version.h"
 #include "flags.h"
-#include "strings.h"
 #include "arch.h"
-#include "website.h"
 #include "file.h"
 
 static rom latest_version = NULL;

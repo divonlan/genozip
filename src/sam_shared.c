@@ -7,9 +7,6 @@
 //   and subject to penalties specified in the license.
 
 #include "sam_private.h"
-#include "strings.h"
-#include "file.h"
-#include "endianness.h"
 
 const uint8_t aux_width[256] = { ['i']=4, ['I']=4, ['s']=2, ['S']=2, ['c']=1, ['C']=1, ['A']=1, ['f']=4 };
 

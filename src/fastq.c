@@ -9,8 +9,6 @@
 #include <dirent.h>
 #include <libgen.h>
 #include "fastq_private.h"
-#include "seg.h"
-#include "piz.h"
 #include "optimize.h"
 #include "codec.h"
 #include "writer.h"
@@ -135,7 +133,7 @@ int32_t fastq_unconsumed (VBlockP vb,
                           uint32_t first_i, // in/out the smallest index in txt_data for which txt_data is populated (the rest might still in uncompressed BGZF blocks) 
                           int32_t *i_out) 
 {    
-    ASSERT (*i_out >= 0 && *i_out < Ltxt, "*i=%d is out of range [0,%u]", *i_out, Ltxt);
+    ASSERT (*i_out >= 0 && *i_out < Ltxt, "*i=%d is ∉ [0,%u]", *i_out, Ltxt);
 
     rom nl[12]={};     // newline pointers: nl[0] is the first from the end
     uint32_t l[12]={}; // lengths of segments excluding \n and \r: l[1] is the segment that starts at nl[1]+1 until nl[0]-1 (or nl[0]-2 if there is a \r). l[0] is not used.

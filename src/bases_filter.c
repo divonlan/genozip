@@ -9,7 +9,6 @@
 #include "genozip.h"
 #include "flags.h"
 #include "bases_filter.h"
-#include "flags.h"
 
 uint8_t iupac_ascii_mask[256] = {}; // for --bases filter - '1' for every ASCII included in a positive or negative bases
 uint8_t iupac_bam_mask[16]    = {}; // each entry corresponds to: =ACMGRSVTWYHKDBN (defined page 16: https://samtools.github.io/hts-specs/SAMv1.pdf)

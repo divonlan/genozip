@@ -12,12 +12,8 @@
 // This module scans the txt_file for depn lines, creating a sort-uniqed array of hash(QNAME) in z_file->sag_depn_index
 // for each dependent line - during segconf, and a function for determining if a depn exists by looking up in this array during seg
 
-#include "genozip.h"
-#include "vblock.h"
 #include "sam_private.h"
-#include "sections.h"
 #include "dispatcher.h"
-#include "profiler.h"
 #include "txtfile.h"
 #include "qname.h"
 #include "progress.h"

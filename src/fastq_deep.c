@@ -8,12 +8,7 @@
 
 #include "fastq_private.h"
 #include "deep.h"
-#include "seg.h"
-#include "piz.h"
-#include "reconstruct.h"
-#include "bits.h"
 #include "huffman.h"
-#include "container.h"
 #include "codec.h"
 #include "zip_dyn_int.h"
 #include "htscodecs/arith_dynamic.h"

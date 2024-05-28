@@ -8,9 +8,6 @@
 
 #include <math.h>
 #include "vcf_private.h"
-#include "piz.h"
-#include "dict_id.h"
-#include "reconstruct.h"
 
 // -------
 // INFO/AN

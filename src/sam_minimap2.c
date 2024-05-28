@@ -7,8 +7,6 @@
 //   under penalties specified in the license.
 
 #include "sam_private.h"
-#include "piz.h"
-#include "reconstruct.h"
 #include "chrom.h"
 
 // -------------------------------------------------------

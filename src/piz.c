@@ -6,7 +6,6 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
 //   under penalties specified in the license.
 
-#include "genozip.h"
 #include "profiler.h"
 #include "zfile.h"
 #include "dispatcher.h"
@@ -83,7 +82,7 @@ void asspiz_text (VBlockP vb, FUNCLINE)
     fprintf (stderr, "%s %s: Error in %s:%u line_in_file(1-based)=%"PRId64"%s %s%s stack=%s %s: ", 
              str_time().s, LN_NAME, func, code_line, 
              writer_get_txt_line_i ((VBlockP)(vb), vb->line_i), 
-             cond_int (Z_DT(VCF) || Z_DT(BCF), " sample_i=", vb->sample_i), 
+             cond_int (Z_DT(VCF), " sample_i=", vb->sample_i), 
              piz_dis_coords((VBlockP)(vb)).s, piz_dis_qname((VBlockP)(vb)).s, s.s, version_str().s); 
 }
 
@@ -536,7 +535,8 @@ DataType piz_read_global_area (Reference ref)
             // exit now if all we wanted was just to see the reference (we've already shown it)
             if ((flag.show_reference || flag.show_is_set || flag.show_ref_hash) && is_genocat) exit_ok;
 
-            if (ref_loaded_from_disk) progress_finalize_component ("Done");
+            if (ref_loaded_from_disk) 
+                progress_finalize_component ("Done");
         }
 
         // case: non-reference file has stored reference sections

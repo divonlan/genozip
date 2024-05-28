@@ -6,12 +6,7 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
 //   under penalties specified in the license.
 
-#include "genozip.h"
-#include "vblock.h"
-#include "buffer.h"
 #include "seg.h"
-#include "locs.h"
-#include "dict_id.h"
 #include "reconstruct.h"
 #include "piz.h"
 #include "file.h"

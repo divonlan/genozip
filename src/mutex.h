@@ -17,7 +17,6 @@
 #include <libkern/OSAtomic.h>
 #endif
 #endif
-#include "genozip.h"
 #include "buffer.h"
 
 // -----------

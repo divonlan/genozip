@@ -9,11 +9,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
-#include "genozip.h"
 #include "flags.h"
 #include "arch.h"
 #include "license.h"
-#include "website.h"
 #include "sam.h"
 
 static bool dt_encountered[NUM_DATATYPES] = {};

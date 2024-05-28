@@ -7,9 +7,6 @@
 //   and subject to penalties specified in the license.
 
 #include "vcf_private.h"
-#include "reconstruct.h"
-#include "container.h"
-#include "seg.h"
 
 // Handle VEP fields: https://www.ensembl.org/info/docs/tools/vep/index.html
 

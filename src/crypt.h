@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include "genozip.h"
 #include "sections.h"
 
 extern void crypt_set_password (rom new_password);

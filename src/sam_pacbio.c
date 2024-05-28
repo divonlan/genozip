@@ -7,8 +7,6 @@
 //   under penalties specified in the license.
 
 #include "sam_private.h"
-#include "reconstruct.h"
-#include "piz.h"
 #include "qname.h"
 
 void sam_pacbio_seg_initialize (VBlockSAMP vb)

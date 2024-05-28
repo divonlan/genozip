@@ -229,7 +229,7 @@ static inline void container_verify_line_integrity (VBlockP vb, ContextP debug_l
         
         PutLineFn fn = file_put_line (vb, recon_start, recon_len, "\nFailed line integrity check");
 
-        if (OUT_DT(BAM))
+        if (OUT_DT(BAM) || OUT_DT(CRAM))
             iprintf ("Tip: To view the dumped BAM line with:\n   genozip --show-bam %s\n\n", fn.s);
 
         iprintf ("Tip: To extract the original line for comparison use:\n   genozip --biopsy-line=%u/%u -B%u%s %s\n",
@@ -405,7 +405,7 @@ static inline bool container_is_of_fields (VBlockP vb, ContextP ctx, bool is_top
 {
     return is_toplevel || 
            (VB_DT(SAM) && ctx->did_i == SAM_AUX) || 
-           ((VB_DT(VCF) || VB_DT(BCF)) && (ctx->did_i == VCF_INFO || ctx->did_i == VCF_FORMAT)) ||
+           (VB_DT(VCF) && (ctx->did_i == VCF_INFO || ctx->did_i == VCF_FORMAT)) ||
            (VB_DT(GFF) && ctx->did_i == GFF_ATTRS);
 }
 

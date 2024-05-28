@@ -7,6 +7,11 @@
 *.eb eol=lf
 *.json eol=lf
 *.sed eol=lf
+*.c eol=lf
+*.cpp eol=lf
+*.h eol=lf
+*.asm eol=lf
+*.S eol=lf
 
 # Declare our textual formats as binary so we can check in test files with Unix or Windows style end-of-lines
 *.vcf binary

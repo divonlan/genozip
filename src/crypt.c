@@ -11,7 +11,6 @@
 #include "crypt.h"
 #include "vblock.h"
 #include "md5.h"
-#include "strings.h"
 
 static rom password = NULL;
 

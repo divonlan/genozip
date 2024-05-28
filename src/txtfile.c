@@ -11,17 +11,10 @@
 #endif
 #define Z_LARGE64
 #include <errno.h>
-#include "genozip.h"
 #include "txtfile.h"
-#include "vblock.h"
-#include "filename.h"
 #include "file.h"
-#include "strings.h"
-#include "progress.h"
 #include "codec.h"
 #include "bgzf.h"
-#include "profiler.h"
-#include "segconf.h"
 #include "biopsy.h"
 #include "zip.h"
 #include "arch.h"
@@ -69,7 +62,7 @@ static inline uint32_t txtfile_read_block_plain (VBlockP vb, uint32_t max_bytes)
 
         if (!bytes_read) { 
             // case external decompressor: inspect its stderr to make sure this is just an EOF and not an error 
-            if (file_is_read_via_ext_decompressor (txt_file)) 
+            if (is_read_via_ext_decompressor (txt_file)) 
                 file_assert_ext_decompressor();
             
             txt_file->is_eof = true;
@@ -458,15 +451,13 @@ void txtfile_read_header (bool is_first_txt)
 
     txt_file->txt_data_so_far_single = txt_file->header_size = header_len; 
 
-    biopsy_take (evb);
-
     COPY_TIMER_EVB (txtfile_read_header); // same profiler entry as txtfile_read_header
 }
 
 // default "unconsumed" function file formats where we need to read whole \n-ending lines. returns the unconsumed data length
 int32_t def_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 {
-    ASSERT (*i >= 0 && *i < Ltxt, "*i=%d is out of range [0,%u]", *i, Ltxt);
+    ASSERT (*i >= 0 && *i < Ltxt, "*i=%d ∉ [0,%u]", *i, Ltxt);
 
     int32_t j; for (j=*i; j >= (int32_t)first_i; j--) // use j - automatic var - for speed 
         if (*Btxt (j) == '\n') {
@@ -715,13 +706,13 @@ void txtfile_read_vblock (VBlockP vb)
     COPY_TIMER (txtfile_read_vblock);
 }
 
-DataType txtfile_get_file_dt (rom filename)
+DataType txtfile_zip_get_file_dt (rom filename)
 {
     FileType ft = flag.stdin_type; // check for --input option
 
     if (ft == UNKNOWN_FILE_TYPE) // no --input - get file type from filename
         ft = file_get_type (filename);
 
-    return file_get_data_type (ft, true);
+    return file_get_data_type_of_input_file (ft);
 }
 

@@ -738,9 +738,11 @@ extern void vcf_zip_genozip_header (SectionHeaderGenozipHeaderP header);
 extern void vcf_zip_init_vb (VBlockP vb);
 extern void vcf_zip_after_compress (VBlockP vb);
 extern void vcf_zip_after_vbs (void);
+extern int32_t vcf_is_header_done (bool is_eof);
 extern void vcf_zip_set_txt_header_flags (struct FlagsTxtHeader *f);
 extern void vcf_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeaderP vb_header);
 extern bool is_vcf (STRp(header), bool *need_more);
+extern bool is_bcf (STRp(header), bool *need_more);
 
 // SEG stuff
 extern rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);

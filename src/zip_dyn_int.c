@@ -50,12 +50,12 @@ void dyn_int_transpose (VBlockP vb, ContextP ctx)
         cols = ctx->local.n_cols;
 
         // we're restricted to 255 columns, because this number goes into uint8_t SectionHeaderCtx.param
-        ASSERT (cols >= 0 && cols <= 255, "columns=%u out of range [1,255] in transposed matrix %s", cols, ctx->tag_name);
+        ASSERT (cols >= 0 && cols <= 255, "columns=%u ∉ [1,255] in transposed matrix %s", cols, ctx->tag_name);
 
         ctx->local_param = true; // SectionHeaderCtx.param carries cols
     }
     else {
-        ASSERT (VB_DT(VCF) || VB_DT(BCF), "%s: cols=0 for ctx=%s", VB_NAME, ctx->tag_name);
+        ASSERT (VB_DT(VCF), "%s: cols=0 for ctx=%s", VB_NAME, ctx->tag_name);
         cols = vcf_header_get_num_samples(); // not restricted to 255
     } 
 
@@ -163,7 +163,7 @@ void dyn_int_init_ctx (VBlockP vb, ContextP ctx, int64_t value)
     ctx->dyn_int_min = ctx->dyn_int_max = value;
 
     // if set, segger *may* call dyn_int_append_nothing_char 
-    if (VB_DT(VCF) || VB_DT(BCF))
+    if (VB_DT(VCF))
         ctx->nothing_char = '.';
 
     ASSERT (!ctx->local.len, "%s: expecting %s.local to be empty", LN_NAME, ctx->tag_name);

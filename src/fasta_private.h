@@ -8,9 +8,7 @@
 
 #pragma once
 
-#include "genozip.h"
 #include "vblock.h"
-#include "fasta.h"
 #include "contigs.h"
 
 typedef struct VBlockFASTA {    

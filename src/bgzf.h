@@ -6,7 +6,6 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
  
-#include "genozip.h"
 #include "sections.h"
 
 #define BGZF_DEFAULT_LEVEL 2 // PIZ: used if --bgzf is not specified (it is actually faster than 1 if also writing to disk)
