@@ -450,8 +450,7 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     vb->cigar_missing  = n_cigar_op==0; // needed for sam_seg_is_gc_line
  
     // split auxillary fields
-    rom auxs[MAX_FIELDS]; 
-    uint32_t aux_lens[MAX_FIELDS];
+    STR_ARRAY (aux,MAX_FIELDS); 
     vb->n_auxs   = bam_split_aux (vb, alignment, aux, after, auxs, aux_lens);
     vb->auxs     = auxs;    // note: pointers to data on the stack
     vb->aux_lens = aux_lens;

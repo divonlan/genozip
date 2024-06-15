@@ -198,10 +198,9 @@ test_stdout()
 
 test_optimize()
 {
-    test_header "$1 --optimize - NOT checking correctness, just that it doesn't crash"
+    test_header "$1 --optimize"
     local file=$TESTDIR/$1
-    $genozip $file -Xf --optimize -o $output || exit 1
-    $genounzip $output -fo $OUTDIR/recon || exit 1 # just testing that it doesn't error
+    $genozip $file -tf --optimize -o $output || exit 1
     cleanup
 }
 
@@ -287,7 +286,7 @@ batch_print_header()
 batch_minimal()
 {
     batch_print_header
-    local files=( minimal.vcf minimal.sam minimal.fq minimal.fa minimal.gvf minimal.me23 )
+    local files=( minimal.vcf minimal.sam minimal.bam minimal.cram minimal.fq minimal.fa minimal.gvf minimal.me23 )
     local file
     for file in ${files[@]}; do
         test_standard " " " " $file
@@ -330,10 +329,7 @@ batch_basic()
     test_standard "NOPREFIX CONCAT $ref" " " file://${path}${TESTDIR}/$file
     test_standard "-p123 $ref" "--password 123" $file
     if [ -z "$is_windows" ] || [ "$file" != basic.bam ]; then # can't redirect binary files in Windows
-    # if [ -z "$is_windows" ]; then # in windows, we don't support redirecting stdin (bug 339)
         test_redirected $file
-    # fi
-#    if [ -z "$is_windows" ] || [ $file != basic.bam ]; then # can't redirect binary files in Windows
         test_stdout $file
     fi
     test_standard "COPY $ref" " " $file
@@ -471,7 +467,7 @@ batch_special_algs()
         test_unix_style $file                # standard
         test_standard "-p123" "-p 123" $file # encrypted
         test_standard "COPY" " " $file       # multiple files unbound
-        test_optimize $file                  # optimize - only compress to see that it doesn't error
+        test_optimize $file                  # optimize 
     done
 
     test_header "FASTQ QUAL with + regression test"
@@ -510,39 +506,6 @@ batch_qual_codecs()
     done
 }
 
-batch_match_chrom()
-{
-    batch_print_header
-    
-    # hg19 tests
-    local files=(basic-dvcf-source.vcf basic.me23 special.match.sam special.match.bam test.homo_sapiens_incl_consequences-chrY.gvf test.cigar-no-seq-qual.bam)
-    local file f
-    for f in ${files[@]}; do
-
-        test_header "$f --match-chrom"
-
-        file=$TESTDIR/$f # has contigs from both styles
-        one=$OUTDIR/one.$f
-        two=$OUTDIR/two.$f
-        three=$OUTDIR/three.$f
-
-        # convert to CHROM_STYLE_22
-        $genozip --match-chrom $file -Xfo ${one}.genozip -e $hg19_plusMT || exit 1
-        $genounzip -z0 ${one}.genozip || exit 1
-
-        #convert CHROM_STYLE_chr22 and then to CHROM_STYLE_22
-        $genozip --match-chrom $file -Xfo ${two}.genozip -e $hs37d5 || exit 1
-        $genounzip -z0 -f ${two}.genozip || exit 1
-
-        $genozip --match-chrom $two -Xfo ${three}.genozip -e $hg19_plusMT || exit 1
-        $genounzip -z0 -f ${three}.genozip || exit 1
-
-        cmp_2_files $three $one 
-    done
-
-    cleanup
-}
-
 # unit test for ref_copy_compressed_sections_from_reference_file. 
 batch_copy_ref_section()
 {
@@ -564,10 +527,6 @@ batch_single_thread()
     # note -@1 will override previous -@
     test_standard "-@1" "-@1" basic.vcf 
     
-    # with reference
-    # $genozip -e $hs37d5 -e $GRCh38 $chain37_38 -Xfqo $chain --match-chrom || exit 1
-    # cleanup_cache
-
     cleanup
 }
 
@@ -1066,6 +1025,23 @@ batch_real_world_1_adler32() # $1 extra genozip argument
     #for f in ${files[@]}; do rm -f ${f}.genozip; done
 }
 
+batch_real_world_optimize() 
+{
+    batch_print_header
+
+    cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
+
+    cd $TESTDIR
+    local files=( `ls -1 test.*vcf test.*vcf.gz test.*bcf test.*sam test.*sam.gz test.*bam test.*fq test.*fq.gz |
+                   grep -v headerless` )
+
+    # test genozip and genounzip --test - first 10K lines of the file should be sufficient to detect optimization issues
+    echo "compressing first 10k lines with --optimize"
+    $genozip --head=10000 --optimize --show-filename --test --force ${files[*]} || exit 1
+
+    cd -
+}
+
 # test genounzip with many files of different types in a single process
 batch_real_world_genounzip_single_process() # $1 extra genozip argument
 {
@@ -1316,10 +1292,10 @@ get_sam_type() # $1 = filename
     if [[ "$head" == "CRAM" ]];               then echo "CRAM";   return; fi
     if [[ "${head:0:3}" == "$first_chars" ]]; then echo "SAM";    return; fi 
 
-    local bhead="`head -c26 private/test/tmp/txt | tail -c3`"
+    local bhead="`head -c26 $OUTDIR/txt | tail -c3`"
     if [[ "$bhead" == "BAM" ]];               then echo "BAM_Z0"; return; fi # BGZF with non-compressed blocks
 
-    local zhead="`zcat $1 2>/dev/null | head -c3`"
+    local zhead="`zcat < $1 2>/dev/null | head -c3`" # zcat of a file called txt doesn't work on mac, hence input redirection
     if [[ "$zhead" == "BAM" ]];               then echo "BAM";    return; fi
     if [[ "$zhead" == "$first_chars" ]];      then echo "SAM_GZ"; return; fi
 }
@@ -1445,7 +1421,7 @@ get_vcf_type() # $1 = filename
     local head="`head -c3 $1`"
     if [[ "$head" == "$first_chars" ]];  then echo "VCF";    return; fi
 
-    local zhead="`zcat $1 2>/dev/null | head -c3`"
+    local zhead="`zcat < $1 2>/dev/null | head -c3`" # zcat of a file called txt doesn't work on mac, hence input redirection
     if [[ "$zhead" == "BCF" ]];          then echo "BCF";    return; fi
     if [[ "$zhead" == "$first_chars" ]]; then echo "VCF_GZ"; return; fi
 }
@@ -2330,21 +2306,21 @@ case $GENOZIP_TEST in
 20)  batch_grep_count_lines            ;;
 21)  batch_bam_subsetting              ;;
 22)  batch_backward_compatability      ;;
-23)  batch_match_chrom                 ;;
-24)  batch_single_thread               ;; 
-25)  batch_copy_ref_section            ;; 
-26)  batch_iupac                       ;; 
-27)  batch_genols                      ;;
-28)  batch_tar_files_from              ;;
-29)  batch_gencomp_depn_methods        ;; 
-30)  batch_deep                        ;; 
-31)  batch_real_world_small_vbs        ;; 
-32)  batch_real_world_1_adler32        ;; 
-33)  batch_real_world_genounzip_single_process ;; 
-34)  batch_real_world_genounzip_compare_file   ;; 
-35)  batch_real_world_1_adler32 "--best -f"    ;; 
-36)  batch_real_world_1_adler32 "--fast --force-gencomp" ;; 
-37)  batch_real_world_with_ref_md5;; 
+23)  batch_single_thread               ;; 
+24)  batch_copy_ref_section            ;; 
+25)  batch_iupac                       ;; 
+26)  batch_genols                      ;;
+27)  batch_tar_files_from              ;;
+28)  batch_gencomp_depn_methods        ;; 
+29)  batch_deep                        ;; 
+30)  batch_real_world_small_vbs        ;; 
+31)  batch_real_world_1_adler32        ;; 
+32)  batch_real_world_genounzip_single_process ;; 
+33)  batch_real_world_genounzip_compare_file   ;; 
+34)  batch_real_world_1_adler32 "--best -f"    ;; 
+35)  batch_real_world_1_adler32 "--fast --force-gencomp" ;; 
+36)  batch_real_world_optimize         ;;
+37)  batch_real_world_with_ref_md5     ;; 
 38)  batch_real_world_with_ref_md5 "--best --no-cache --force-gencomp" ;; 
 39)  batch_multiseq                    ;;
 40)  batch_sam_bam_cram_output         ;;

@@ -31,6 +31,8 @@
         txtfile_read_block_bgzf, txtfile_read_block_zlib, txtfile_read_block_gz, txtfile_read_block_bz2, \
         bgzf_io_thread, bgzf_compute_thread, bgzf_writer_thread, bgzf_uncompress_vb, bgzf_copy_unconsumed_blocks, bgzf_read_block, \
         bgzf_compress_one_block, bgzf_uncompress_one_prescribed_block, \
+        zip_modify, vcf_zip_modify, vcf_optimize_samples, vcf_optimize_QUAL, vcf_optimize_INFO, vcf_convert_probabilites_to_phred, \
+        vcf_convert_likelihoods_to_phred, vcf_phred_optimize, optimize_float_3_sig_dig, \
         seg_all_data_lines, seg_get_next_line, seg_get_next_item, seg_initialize,\
         ctx_clone, qname_seg, sam_cigar_seg, sam_seg_BWA_XA_Z, sam_seg_BWA_XA_pos, sam_sa_prim_finalize_ingest, sam_zip_prim_ingest_vb,\
         sam_seg_SEQ, sam_seg_verify_saggy_line_SEQ, sam_seg_SEQ_vs_ref, sam_seg_bisulfite_M, reconstruct_SEQ_copy_sag_prim, \

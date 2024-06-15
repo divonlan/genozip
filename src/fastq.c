@@ -9,7 +9,6 @@
 #include <dirent.h>
 #include <libgen.h>
 #include "fastq_private.h"
-#include "optimize.h"
 #include "codec.h"
 #include "writer.h"
 #include "bases_filter.h"
@@ -135,8 +134,8 @@ int32_t fastq_unconsumed (VBlockP vb,
 {    
     ASSERT (*i_out >= 0 && *i_out < Ltxt, "*i=%d is ∉ [0,%u]", *i_out, Ltxt);
 
-    rom nl[12]={};     // newline pointers: nl[0] is the first from the end
-    uint32_t l[12]={}; // lengths of segments excluding \n and \r: l[1] is the segment that starts at nl[1]+1 until nl[0]-1 (or nl[0]-2 if there is a \r). l[0] is not used.
+    rom nl[16]={};     // newline pointers: nl[0] is the first from the end
+    uint32_t l[16]={}; // lengths of segments excluding \n and \r: l[1] is the segment that starts at nl[1]+1 until nl[0]-1 (or nl[0]-2 if there is a \r). l[0] is not used.
 
     // search backwards a suffient number of newlines (eg. for normal FASTQ: best case: \nD\nS\nT\nQ\n ; worst case: \nD1\nS1\nT1\nQ1\nD2\nS2\nT2\nq2 (q2 is partial Q2))
     int n=0;
@@ -215,10 +214,11 @@ void fastq_zip_set_txt_header_flags (struct FlagsTxtHeader *f)
 // ZIP / SEG stuff
 //---------------
 
+// ZIP main thread: called after reading VB
 void fastq_zip_init_vb (VBlockP vb)
 {
     // in case we're optimizing DESC in FASTQ, we need to know the number of lines
-    if (flag.optimize_DESC) {
+    if (flag.zip_lines_counted_at_init_vb) {
         uint32_t num_lines = str_count_char (STRb(vb->txt_data), '\n');
         ASSERT (num_lines % 4 == 0, "expecting number of txt lines in VB to be a multiple of 4, but found %u", num_lines);
 
@@ -243,18 +243,18 @@ void fastq_zip_after_compute (VBlockP vb)
 
 // case of --optimize-DESC: generate the prefix of the read name from the txt file name
 // eg. "../../fqs/sample.1.fq.gz" -> "@sample-1."
-static void fastq_get_optimized_desc_read_name (VBlockFASTQP vb)
+static void fastq_get_optimized_qname_read_name (VBlockFASTQP vb)
 {
-    vb->optimized_desc = MALLOC (strlen (txt_file->basename) + 30); // leave room for the line number to follow
-    strcpy (vb->optimized_desc, txt_file->basename);
-    file_get_raw_name_and_type (vb->optimized_desc, NULL, NULL); // remove file type extension
-    vb->optimized_desc_len = strlen (vb->optimized_desc) + 1; // +1 for ':'
+    vb->optimized_qname = MALLOC (strlen (txt_file->basename) + 30); // leave room for the line number and possibly mate to follow
+    strcpy (vb->optimized_qname, txt_file->basename);
+    file_get_raw_name_and_type (vb->optimized_qname, NULL, NULL); // remove file type extension
+    vb->optimized_qname_len = strlen (vb->optimized_qname) + 1; // +1 for '.'
 
-    // replace '.' in the filename with '-' as '.' is a separator in compound_seg and would needless inflate the number of contexts
-    for (unsigned i=0; i < vb->optimized_desc_len-1; i++)
-        if (vb->optimized_desc[i] == '.') vb->optimized_desc[i] = '-';
+    // replace '.' in the filename with '-' as '.' is a separator in con_genozip_opt
+    for (unsigned i=0; i < vb->optimized_qname_len-1; i++)
+        if (vb->optimized_qname[i] == '.') vb->optimized_qname[i] = '-';
 
-    vb->optimized_desc[vb->optimized_desc_len-1] = '.';
+    vb->optimized_qname[vb->optimized_qname_len-1] = '.';
 }
 
 // test if an R2 file has been compressed after R1 without --pair - and produce tip if so
@@ -349,6 +349,9 @@ void fastq_seg_initialize (VBlockP vb_)
         
         // if no --pair, segconf to determine if file is interleaved
         segconf.is_interleaved = (flag.pair || flag.no_interleaved) ? no : unknown; 
+
+        // this optimization is not dependent on segconf results, and is needed by segconf - so we initialize here 
+        if (flag.optimize) segconf.optimize[FASTQ_QNAME] = !flag.deep; 
     }
 
     vb->has_extra = segconf.has_extra; // VB-private copy
@@ -357,11 +360,11 @@ void fastq_seg_initialize (VBlockP vb_)
         CTX(FASTQ_CONTIG)->flags.store = STORE_INDEX; // since v12
 
     if (flag.aligner_available) {
-        strand_ctx->ltype       = LT_BITMAP;
-        gpos_ctx->ltype         = LT_UINT32;
-        gpos_ctx->flags.store   = STORE_INT;
-        gpos_d_ctx->ltype       = LT_INT16;
-        nonref_ctx->no_callback = true; // when using aligner, nonref data is in local. without aligner, the entire SEQ is segged into nonref using a callback
+        strand_ctx->ltype        = LT_BITMAP;
+        gpos_ctx->ltype          = LT_UINT32;
+        gpos_ctx->flags.store    = STORE_INT;
+        gpos_d_ctx->ltype        = LT_INT16;
+        nonref_ctx->no_callback  = true; // when using aligner, nonref data is in local. without aligner, the entire SEQ is segged into nonref using a callback
         
         bitmap_ctx->ltype        = LT_BITMAP; // implies no_stons
         bitmap_ctx->local_always = true;
@@ -378,7 +381,7 @@ void fastq_seg_initialize (VBlockP vb_)
             
             buf_alloc (vb, &gpos_ctx->local,    1, vb->lines.len / 2, uint32_t, CTX_GROWTH, CTX_TAG_LOCAL); 
             buf_alloc (vb, &gpos_r2_ctx->local, 1, vb->lines.len / 2, uint32_t, CTX_GROWTH, CTX_TAG_LOCAL); 
-            buf_alloc (vb, &gpos_d_ctx->local,  1, vb->lines.len / 2, int16_t, CTX_GROWTH, CTX_TAG_LOCAL); 
+            buf_alloc (vb, &gpos_d_ctx->local,  1, vb->lines.len / 2, int16_t,  CTX_GROWTH, CTX_TAG_LOCAL); 
 
             buf_alloc (vb, &strand_ctx->local,    0, roundup_bits2bytes64 (vb->lines.len / 2), uint8_t, 0, CTX_TAG_LOCAL); 
             buf_alloc (vb, &strand_r2_ctx->local, 0, roundup_bits2bytes64 (vb->lines.len / 2), uint8_t, 0, CTX_TAG_LOCAL); 
@@ -433,9 +436,6 @@ void fastq_seg_initialize (VBlockP vb_)
     if (flag.pair == PAIR_R2)
         ctx_create_node (VB, FASTQ_SQBITMAP, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_mate_lookup }, 2);
 
-    if (flag.optimize_DESC) 
-        fastq_get_optimized_desc_read_name (vb);
-
     // when pairing, we cannot have singletons, bc a singleton in R1, when appearing in R2 will not
     // be a singleton (since not the first appearance), causing both b250 and local to differ between the R's. 
     if (flag.pair)
@@ -463,7 +463,7 @@ void fastq_seg_initialize (VBlockP vb_)
     COPY_TIMER (seg_initialize);
 }
 
-static void fastq_seg_finalize_segconf (VBlockP vb)
+void fastq_segconf_finalize (VBlockP vb)
 {
     segconf.longest_seq_len = vb->longest_seq_len;
     segconf.is_long_reads = segconf_is_long_reads();
@@ -505,22 +505,32 @@ static void fastq_seg_finalize_segconf (VBlockP vb)
     codec_smux_calc_stats (vb);
     
     qname_segconf_finalize (VB);
+
+    // set optimizations
+    if (flag.optimize) {
+        // optimize QUAL unless already binned (8 is the number of bins in Illimina: https://sapac.illumina.com/content/dam/illumina-marketing/documents/products/technotes/technote_understanding_quality_scores.pdf)
+        segconf.optimize[FASTQ_QUAL]  = (segconf_get_num_qual_scores(QHT_QUAL) > 8); 
+
+        segconf.optimize[FASTQ_LINE3] = (segconf.line3 == L3_OPTIMIZED_AWAY);
+
+        if (!flag.deep) {
+            segconf.optimize[FASTQ_QNAME]  = true;
+            segconf.optimize[FASTQ_QNAME2] = segconf.has_qname2; // note: we don't reset has_qname2 as fastq_zip_modify needs it to parse the read
+            segconf.qname_flavor[QNAME2]   = NULL;
+            ZCTX(FASTQ_QNAME2)->st_did_i   = FASTQ_QNAME; // consolidate_stats doesn't work for QNAME2 because it is not merged if optimized 
+        }
+    }
 }
 
 void fastq_seg_finalize (VBlockP vb)
 {
-    if (segconf.running) 
-        fastq_seg_finalize_segconf (vb);
-
     // assign the QUAL codec
-    else {
-        codec_assign_best_qual_codec (vb, FASTQ_QUAL, fastq_zip_qual, segconf.deep_has_trimmed, false, NULL);
-        
-        if (segconf.has_agent_trimmer) 
-            codec_assign_best_qual_codec (vb, OPTION_QX_Z, NULL, true, false, NULL);
-    }
+    codec_assign_best_qual_codec (vb, FASTQ_QUAL, fastq_zip_qual, segconf.deep_has_trimmed, false, NULL);
     
-    FREE (VB_FASTQ->optimized_desc);
+    if (segconf.has_agent_trimmer) 
+        codec_assign_best_qual_codec (vb, OPTION_QX_Z, NULL, true, false, NULL);
+    
+    FREE (VB_FASTQ->optimized_qname);
 
     // top level snip
     SmallContainer top_level = { 
@@ -579,11 +589,16 @@ void fastq_seg_finalize (VBlockP vb)
         memmove (&prefixes[px_i], &prefixes[px_i+px_len], sizeof (prefixes)-(px_i+px_len)); \
         prefixes_len -= px_len; })
 
-    bool has_line3  = segconf.line3 != L3_EMPTY;
-    bool has_qname2 = !flag.optimize_DESC && segconf.has_qname2;
-    bool has_extra  = !flag.optimize_DESC && VB_FASTQ->has_extra;
-    bool has_aux    = !flag.optimize_DESC && (segconf.has_aux || segconf.has_saux);
-    bool desc_is_l3 = segconf.desc_is_l3; // whether the Description (QNAME2 + EXTRA + AUX) appears on line 1 or line 3 (note: if on both, the line 3 is just a copy snip from line 1)
+    bool has_line3  = segconf.line3 != L3_EMPTY && segconf.line3 != L3_OPTIMIZED_AWAY;
+    
+    // whether the Description (QNAME2 + EXTRA + AUX) appears on line 1 or line 3 
+    // note: if on both, the line 3 is just a copy snip from line 1
+    // note: if --optimize-DESC, has_line3==desc_is_l3==false
+    bool desc_is_l3 = segconf.desc_is_l3; 
+    
+    bool has_qname2 = segconf.has_qname2;
+    bool has_extra  = VB_FASTQ->has_extra;
+    bool has_aux    = (segconf.has_aux || segconf.has_saux);
 
     // remove unneeded container and prefix items - in reverse order
     if (!segconf.seq_len_dict_id.num)      REMOVE (15, 25, 1);
@@ -595,9 +610,9 @@ void fastq_seg_finalize (VBlockP vb)
     if (FAF || !desc_is_l3 || !has_qname2) REMOVE (9,  16, 2);
     if (FAF)                               REMOVE (8,  14, 2);    
     if (!has_line3)                        REMOVE (8,  15, 1); // removing CON_PX_SEP the '+' now becomes the prefix of E2L (as QNAME2, EXTRA, AUX have already been removed)
-    if (desc_is_l3 || !has_aux)           REMOVE (4,  9,  2);
-    if (desc_is_l3 || !has_extra)         REMOVE (3,  7,  2);
-    if (desc_is_l3 || !has_qname2)        REMOVE (2,  5,  2);
+    if (desc_is_l3 || !has_aux)            REMOVE (4,  9,  2);
+    if (desc_is_l3 || !has_extra)          REMOVE (3,  7,  2);
+    if (desc_is_l3 || !has_qname2)         REMOVE (2,  5,  2);
     if (!flag.deep)                        REMOVE (0,  2,  1);
 
     container_seg (vb, CTX(FASTQ_TOPLEVEL), (ContainerP)&top_level, prefixes, prefixes_len, 0); // note: the '@', '+' and ' ' are accounted for in the QNAME, QNAME2/EXTRA/AUX and LINE3 fields respectively
@@ -665,7 +680,8 @@ bool fastq_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header)
 }
 
 static rom fastq_seg_get_lines (VBlockFASTQP vb, rom line, int32_t remaining, 
-                                pSTRp(qname), pSTRp(qname2), pSTRp(desc), pSTRp(seq), pSTRp(line3), pSTRp(qual), uint32_t *line1_len, bool *has_13) // out
+                                pSTRp(qname), pSTRp(qname2), pSTRp(desc), 
+                                pSTRp(seq), pSTRp(line3), pSTRp(qual), uint32_t *line1_len, bool *has_13) // out
 {
     START_TIMER;
 
@@ -737,7 +753,7 @@ static rom fastq_seg_get_lines (VBlockFASTQP vb, rom line, int32_t remaining,
     if (FAF) goto done;
 
     *line3 = after;
-    ASSSEG (remaining && (*line3)[0] == '+', "Invalid FASTQ file format: expecting middle line to be a \"+\", but it starts with a '%c'", (*line3)[0]);
+    ASSSEG (remaining && (*line3)[0] == '+', "Invalid FASTQ file format (#3): expecting middle line to be a \"+\", but it starts with a '%c'", (*line3)[0]);
     (*line3)++; // skip '+';
 
     // get LINE3
@@ -745,8 +761,11 @@ static rom fastq_seg_get_lines (VBlockFASTQP vb, rom line, int32_t remaining,
 
     // analyze Line3 (segconf)
     if (analyze) {
-        if (*line3_len==0 || flag.optimize_DESC) 
+        if (*line3_len == 0) 
             segconf.line3 = L3_EMPTY;
+
+        else if (flag.optimize)
+            segconf.line3 = L3_OPTIMIZED_AWAY;
 
         else if (fastq_is_line3_copy_of_line1 (STRa(*qname), STRa(*line3), *desc_len))
             segconf.line3 = L3_COPY_LINE1;
@@ -764,8 +783,8 @@ static rom fastq_seg_get_lines (VBlockFASTQP vb, rom line, int32_t remaining,
         }
 
         else 
-            ABORT ("Unsupported FASTQ file format: expecting middle line to be a \"+\" with or without a copy of the description, or NCBI, but it is \"%.*s\"",
-                    (*line3_len)+1, (*line3)-1);
+            ABORT ("Unsupported FASTQ file format (#4): expecting middle line to be a \"+\" with or without a copy of the description, or NCBI, but it is \"%.*s\"",
+                   (*line3_len)+1, (*line3)-1);
     }
 
     if (segconf.has_desc && segconf.desc_is_l3) {
@@ -796,6 +815,89 @@ done:
     return after;
 }
 
+// --optimize: re-write VB before digest and seg
+rom fastq_zip_modify (VBlockP vb_, rom line_start, uint32_t remaining)
+{
+    VBlockFASTQP vb = (VBlockFASTQP)vb_;
+
+    // Split read to to desc, seq, line3 and qual (excluding the '@' and '+')
+    STR0(qname); STR0(qname2); STR0(desc); STR0(seq); STR0(line3); STR0(qual);
+    bool line_has_13[4] = {}; // initialize as expected by downstream functions
+    uint32_t line1_len;
+    rom after = fastq_seg_get_lines (vb, line_start, remaining, pSTRa(qname), pSTRa(qname2), pSTRa(desc), 
+                                     pSTRa(seq), pSTRa(line3), pSTRa(qual), &line1_len, line_has_13);
+
+
+    buf_alloc (vb, &vb->optimized_line, 0, after - line_start + 20, char, 0, "optimized_line"); // +20 for worst case scenario that original DESC was of negligible length, and then we add a long number
+    char *next = B1STc (vb->optimized_line);
+
+    *next++ = DC;
+
+    // case: --optimize_DESC: we replace the description with "filename.line_i" (optimized string stored in vb->optimized_qname)
+    if (segconf.optimize[FASTQ_QNAME]) {
+
+        if (vb->line_i == 0) 
+            fastq_get_optimized_qname_read_name (vb);
+
+        char *save_next = next;
+        next = mempcpy (next, vb->optimized_qname, vb->optimized_qname_len);
+        next += str_int (vb->first_line + vb->line_i, next);
+
+        // preserve mate (/1 or /2) if mate is on QNAME (possibly is on QNAME2 in which case it is copied anyway)
+        if (qf_is_mated(QNAME1) && qname_len > 2 && qname[qname_len-2] == '/' && (qname[qname_len-1] == '1' || qname[qname_len-1] == '2')) {
+            *next++ = '/';
+            *next++ = qname[qname_len-1];
+        }
+
+        CTX(FASTQ_QNAME)->txt_shrinkage += qname_len - (next - save_next);
+
+        // case: we have QNAME2 - copy line except QNAME and QNAME2
+        if (segconf.optimize[FASTQ_QNAME2] && qname2_len) {
+            next = mempcpy (next, qname2 + qname2_len, line1_len - qname_len - 1/*sep*/ - qname2_len);
+            
+            CTX(FASTQ_QNAME2)->txt_shrinkage += qname2_len + 1/*sep*/;
+        }
+
+        // case: no QNAME2 - copy line except QNAME
+        else
+            next = mempcpy (next, qname + qname_len, line1_len - qname_len); // remainder of line1 is unchanged
+    }
+
+    else 
+        next = mempcpy (next, qname, line1_len);
+
+    *next++ = '\n'; // note: modify always excludes any \r
+
+    // unmodified SEQ
+    next = mempcpy (next, seq, seq_len);
+    *next++ = '\n'; 
+
+    if (!FAF) {
+        *next++ = '+'; 
+
+        // case: optimize -> empty line3
+        if (segconf.optimize[FASTQ_LINE3]) 
+            CTX(FASTQ_LINE3)->txt_shrinkage += line3_len;
+        else
+            next = mempcpy (next, line3, line3_len);
+
+        *next++ = '\n'; 
+
+        // QUAL: optimize or not
+        next = segconf.optimize[FASTQ_QUAL] ? optimize_phred_quality_string (STRa(qual), next, false, false) 
+                                            : mempcpy (next, qual, qual_len);
+        *next++ = '\n'; 
+    }
+
+    vb->optimized_line.len = BNUM (vb->optimized_line, next);
+    
+    // account for the shrinkage due to the \r's we got rid of
+    CTX(FASTQ_E1L)->txt_shrinkage += line_has_13[0];
+    CTX(FASTQ_E2L)->txt_shrinkage += line_has_13[1] + line_has_13[2] + line_has_13[3];
+
+    return after;
+}
+
 // concept: we treat every 4 lines as a "line". the Description/ID is stored in DESC dictionary and segmented to subfields D?ESC.
 // The sequence is stored in SEQ data. In addition, we utilize the TEMPLATE dictionary for metadata on the line, namely
 // the length of the sequence and whether each line has a \r.
@@ -814,12 +916,8 @@ rom fastq_seg_txt_line (VBlockP vb_, rom line_start, uint32_t remaining, bool *h
     ZipDataLineFASTQ *dl = DATA_LINE (vb->line_i);
     dl->seq  = TXTWORD(seq); 
     
-    if (!FAF) {
+    if (!FAF) 
         dl->qual = TXTWORD(qual);
-
-        // case --optimize_QUAL: optimize in place, must be done before fastq_seg_deep calculates a hash
-        if (flag.optimize_QUAL) optimize_phred_quality_string ((char *)STRa(qual));
-    }
 
     dl->monochar = str_is_monochar (STRa(seq)); // set dl->monochar
 
@@ -837,7 +935,7 @@ rom fastq_seg_txt_line (VBlockP vb_, rom line_start, uint32_t remaining, bool *h
         fastq_seg_saux (vb, STRa(desc));
 
     // seg DESC (i.e. QNAME2 + EXTRA + AUX), it might have come either from line1 or from line3
-    else if (segconf.has_desc && !flag.optimize_DESC) 
+    else if (segconf.has_desc) 
         fastq_seg_DESC (vb, STRa(desc), segconf.deep_qtype == QNAME2 && deep_qname, uncanonical_suffix_len);
 
     if (!FAF)

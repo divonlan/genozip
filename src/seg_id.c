@@ -167,7 +167,7 @@ void seg_id_field (VBlockP vb, ContextP ctx, STRp(id),
 
         if (!seg_id_split (STRa(id),  
                            IDT(ALPHA_INT_DOT_INT) || IDT(ALPHA_NUM_DOT_INT), // has_num2
-                           IDT(ALPHA_NUM) || IDT(ALPHA_NUM_DOT_INT),        // allow_num1_leading_zeros
+                           IDT(ALPHA_NUM) || IDT(ALPHA_NUM_DOT_INT),         // allow_num1_leading_zeros
                            pSTRa(alpha), &num1, &num1_len, &num2, &num2_len))
             goto fallback;
             

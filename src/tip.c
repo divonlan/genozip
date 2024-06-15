@@ -53,7 +53,7 @@ void tip_print (void)
     valid_tips[n++] = "Is Genozip useful? Help your colleagues by posting on your institution's bioinformatics forum\n";
 
     if (!(E(SAM) || E(BAM) || E(VCF) || E(BCF)))
-        valid_tips[n++] = "Please take a moment now to make a note to not forget to cite Genozip:\n%s" PAPER2_CITATION "\n";
+        valid_tips[n++] = "Please take a moment now to make a note to not forget to cite Genozip:\n" PAPER2_CITATION "\n";
 
     if (!strcmp (get_distribution(), "github"))  
         valid_tips[n++] = "Do you like Genozip? Please support it by starring it on github: " GITHUB_REPO;
@@ -64,9 +64,6 @@ void tip_print (void)
     if (E(BCF))
         valid_tips[n++] = "Tip: genozip compresses VCF files 5-10X faster than it compresses BCF files";
     
-    if (E(SAM) || E(BAM) || E(VCF) || E(BCF) || E(GFF) || E(ME23)) 
-        valid_tips[n++] = "Tip: are the chromosome names different than in the reference file (eg 22 vs chr22)? Genozip can fix that: " WEBSITE_MATCH_CHROM;
-
     if (E(SAM) || E(BAM))
         valid_tips[n++] = "Please take a moment now to make a note to not forget to cite Genozip:\n" PAPER3_CITATION "\n";
 
@@ -80,7 +77,7 @@ void tip_print (void)
     if (E(VCF) || E(BCF))
         valid_tips[n++] = "Please take a moment now to make a note to not forget to cite Genozip:\n" PAPER1_CITATION "\n";
 
-    if (!flag.optimize && (E(SAM) || E(BAM) || E(VCF) || E(BCF) || E(GFF) || E(FASTQ))) 
+    if (!flag.optimize && (E(SAM) || E(BAM) || E(CRAM) || E(VCF) || E(BCF) || E(FASTQ))) 
         valid_tips[n++] = "Tip: using --optimize permits Genozip to make minor modifications to the data that usually have no impact on downstream analysis, yet result in significantly better compression, see: " WEBSITE_GENOZIP;
 
     if (!flag.best && !flag.fast && !flag.low_memory && !flag.make_reference) 

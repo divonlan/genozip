@@ -12,16 +12,6 @@
 
 void fastq_seg_QNAME (VBlockFASTQP vb, STRp(qname), uint32_t line1_len, bool deep, uint32_t uncanonical_suffix_len)
 {
-    // case: --optimize_DESC: we replace the description with "filename.line_i" (optimized string stored in vb->optimized_desc)
-    unsigned optimized_len = 0; 
-    if (flag.optimize_DESC) {
-        optimized_len  = vb->optimized_desc_len + str_int (vb->first_line + vb->line_i, &vb->optimized_desc[vb->optimized_desc_len]);   
-        vb->recon_size -= line1_len - optimized_len;
-
-        qname = vb->optimized_desc;
-        qname_len = optimized_len;
-    }
-
     if (deep)
         fastq_deep_seg_QNAME (vb, FASTQ_QNAME, STRa(qname), uncanonical_suffix_len, qname_len + 1); // +1 for '@'
 
@@ -38,20 +28,16 @@ bool fastq_is_line3_copy_of_line1 (STRp(qname), STRp(line3), uint32_t desc_len)
 
 void fastq_seg_LINE3 (VBlockFASTQP vb, STRp(qline3), STRp(qline1), STRp(desc))
 {
-    if (flag.optimize_DESC) {
-        vb->recon_size -= qline3_len;    // no segging - we will drop the line from top_level
-        CTX(FASTQ_LINE3)->txt_len++;     // account for the '+' (it is segged in the toplevel container)
-    }
-    
-    else switch (segconf.line3) {
+    switch (segconf.line3) {
         case L3_EMPTY:  // no segging - we will drop the line from top_level
-            ASSSEG (!qline3_len, "Invalid FASTQ file format: expecting middle line to be a \"+\", but it is \"%.*s\"", STRf(qline3));
+        case L3_OPTIMIZED_AWAY:
+            ASSSEG (!qline3_len || segconf.optimize[FASTQ_QNAME], "Invalid FASTQ file format (#1): expecting middle line to be a \"+\", but it is \"+%.*s\"", STRf(qline3));
             CTX(FASTQ_LINE3)->txt_len++;      // account for the '+' (it is segged in the toplevel container)
             break;
 
         case L3_COPY_LINE1:
             ASSSEG (fastq_is_line3_copy_of_line1 (STRa(qline1), STRa(qline3), desc_len),
-                    "Invalid FASTQ file format: expecting middle line to be a \"+\" followed by a copy of the description line, but it is \"%.*s\"", STRf(qline3)); 
+                    "Invalid FASTQ file format (#2): expecting middle line to be a \"+\" followed by a copy of the description line, but it is \"%.*s\"", STRf(qline3)); 
             seg_by_did (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_copy_line1 }, 2, FASTQ_LINE3, 1 + qline3_len); // +1 - account for the '+' (segged as a toplevel container prefix)
             break;
 
@@ -136,7 +122,7 @@ void fastq_segconf_analyze_DESC (VBlockFASTQP vb, STRp(desc))
 
     segconf.has_qname2 |= (segconf.qname_flavor[QNAME2] != 0);      // first item, apart from the auxes is the QNAME2 - but only if it has a flavor
     segconf.has_extra  |= (n_items - n_auxes > segconf.has_qname2); // extra info that is not the QNAME2 and not AUX
-    segconf.has_aux    |= (n_auxes > 0);        
+    segconf.has_aux    |= (n_auxes > 0);    
 }
 
 void fastq_seg_DESC (VBlockFASTQP vb, STRp(desc), bool deep_qname2, uint32_t uncanonical_suffix_len)

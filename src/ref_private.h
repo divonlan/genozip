@@ -19,7 +19,9 @@ typedef struct {
 
 typedef enum { CHROM_STYLE_UNKNOWN, CHROM_STYLE_chr22, CHROM_STYLE_22 } RefChromeStyle;
 
-typedef enum { CACHE_INITITAL, CACHE_READY/*shm read-only*/, CACHE_POPULATING/*shm read-write*/, CACHE_NONE } RefCacheState;
+typedef enum { CACHE_INITITAL, CACHE_READY/*shm read-only*/, CACHE_POPULATING/*shm read-write*/, CACHE_NONE, NUM_CACHE_STATES } RefCacheState;
+#define CACHE_STATE_NAMES { "INITIAL", "READY", "POPULATING", "NONE" }
+extern rom cache_state_name (RefCacheState cs);
 
 // a reference cache is a shared memory segment consisting of a RefCache struct, followed by the genome, follewed by the refhash
 typedef struct ref_cache { 
@@ -40,8 +42,7 @@ typedef struct RefStruct {
     rom filename;                 // filename of external reference file
     Digest genome_digest;         // v15: digest of genome as it is loaded to memory. Up to v14: MD5 of original FASTA file (buggy)
     bool is_adler;                // true if genome_digest is Adler32, false if it MD5
-    uint8_t genozip_version;
-    bool is_primary;
+    uint8_t genozip_version;      // Genozip version of the external reference file
     bool is_filename_allocated;
     
     // features

@@ -22,6 +22,7 @@ extern rom arch_get_scheduler (void);
 extern rom arch_get_glibc (void);
 extern rom get_distribution (void);
 extern StrTextSuperLong arch_get_executable (void);
+extern StrTextSuperLong arch_get_genozip_executable (void);
 extern rom arch_get_argv0 (void);
 extern bool arch_is_valgrind (void);
 extern bool arch_is_docker (void);

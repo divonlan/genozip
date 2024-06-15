@@ -64,7 +64,7 @@ static void txtheader_compress_one_fragment (VBlockP vb)
 
 void txtheader_compress (BufferP txt_header, 
                          uint64_t unmodified_txt_header_len, // length of header before modifications, eg due to --optimize
-                         Digest header_md5, bool is_first_txt, CompIType comp_i)
+                         Digest header_digest, bool is_first_txt, CompIType comp_i)
 {
     START_TIMER;
 
@@ -75,7 +75,7 @@ void txtheader_compress (BufferP txt_header,
         .section_type      = SEC_TXT_HEADER,
         .codec             = (codec == CODEC_UNKNOWN) ? CODEC_NONE : codec,
         .src_codec         = txt_file->source_codec, 
-        .digest_header     = flag.zip_txt_modified ? DIGEST_NONE : header_md5,
+        .digest_header     = header_digest,
         .txt_header_size   = BGEN64 (unmodified_txt_header_len), // length before zip-side modifications
     };
 
@@ -127,11 +127,11 @@ int64_t txtheader_zip_read_and_compress (int64_t *txt_header_offset, CompIType c
         txtfile_read_header (is_first_txt); // reads into evb->txt_data and evb->lines.len
 
     // get header digest and initialize component digest
-    if (zip_need_digest) 
-        header_digest = digest_txt_header (&evb->txt_data, DIGEST_NONE, comp_i);
+    // note: for safety, if we are sure it is not modified, we take the digest before inspect_txt_header 
+    header_digest = digest_txt_header (&evb->txt_data, DIGEST_NONE, comp_i);
 
     // for VCF, we need to check if the samples are the same before approving binding (other data types can bind without restriction)
-    //          also: header is modified if --chain or compressing a Luft file
+    //          also: (in the future, header might be modified if --optimize, see bug 1079)
     // for SAM, we check that the contigs specified in the header are consistent with the reference given in --reference/--REFERENCE
     uint64_t txt_header_size = evb->txt_data.len; // note: 0 if BAM with --show-bam
     if (txt_header_size && !(DT_FUNC_OPTIONAL (txt_file, inspect_txt_header, true)(evb, &evb->txt_data, (struct FlagsTxtHeader){}))) { 
@@ -154,7 +154,7 @@ int64_t txtheader_zip_read_and_compress (int64_t *txt_header_offset, CompIType c
     // DVCF note: we don't account for rejects files as txt_len - the variant lines are already accounted for in the main file, and the added header lines are duplicates of the main header
     // SAM/BAM note: we don't account for PRIM/DEPN txt headers generated in gencomp_initialize
     if (!comp_i) 
-        z_file->header_size += txt_file->header_size; // note: header_size already contains the length difference if --match-chrom
+        z_file->header_size += txt_file->header_size; 
 
     z_file->num_txts_so_far++; // when compressing
 
@@ -214,12 +214,12 @@ static void txtheader_uncompress_one_vb (VBlockP vb)
 // case 1: outputing a single file - generate txt_filename based on the z_file's name
 // case 2: unbinding a genozip into multiple txt files - generate txt_filename of a component file from the
 //         component name in SEC_TXT_HEADER 
-static rom txtheader_piz_get_filename (rom orig_name, rom prefix, bool is_orig_name_genozip, bool has_bgzf, bool no_gz_ext)
+static rom txtheader_piz_get_filename_do (rom orig_name, rom prefix, bool is_orig_name_genozip, bool has_bgzf, bool no_gz_ext)
 {
     unsigned fn_len = strlen (orig_name);
     unsigned dn_len = flag.out_dirname ? strlen (flag.out_dirname) : 0;
     unsigned px_len = prefix ? strlen (prefix) : 0;
-    unsigned genozip_ext_len = is_orig_name_genozip ? (sizeof GENOZIP_EXT - 1) : 0;
+    unsigned genozip_ext_len = is_orig_name_genozip ? STRLEN(GENOZIP_EXT) : 0;
     int txt_filename_size = fn_len + dn_len + px_len + 10;
     char *txt_filename = (char *)CALLOC(txt_filename_size);
 
@@ -242,7 +242,10 @@ static rom txtheader_piz_get_filename (rom orig_name, rom prefix, bool is_orig_n
                             + EXT2_MATCHES_TRANSLATE (ME23, VCF,   ".txt");
 
     // case: new directory - take only the basename
-    if (dn_len) orig_name = filename_base (orig_name, 0,0,0,0); 
+    if (dn_len) {
+        orig_name = filename_base (orig_name, 0,0,0,0); 
+        fn_len = strlen (orig_name);
+    }
     
     // cases in which BGZF compression does not result in a ".gz" file name extension:
     // if original gz/bgzf-compressed file did not have a .gz/.bgz extension (since 15.0.23) or when outputing BAM or BCF
@@ -259,6 +262,14 @@ static rom txtheader_piz_get_filename (rom orig_name, rom prefix, bool is_orig_n
     if (dn_len) FREE (orig_name); // allocated by filename_base
 
     return txt_filename;
+}
+
+rom txtheader_piz_get_filename (SectionHeaderTxtHeader *header, bool has_gz_ext)
+{
+    return flag.to_stdout    ? NULL 
+         : flag.out_filename ? flag.out_filename
+         : flag.unbind       ? txtheader_piz_get_filename_do (header->txt_filename, flag.unbind, false, has_gz_ext, header->flags.txt_header.no_gz_ext)
+         :                     txtheader_piz_get_filename_do (z_name,               "",          true,  has_gz_ext, header->flags.txt_header.no_gz_ext); // use genozip filename as a base regardless of original name
 }
 
 // get filename, even if txt_file has might not been open. 
@@ -280,12 +291,17 @@ StrTextLong txtheader_get_txt_filename_from_section (void)
     #undef C
 
     TEMP_FLAG(out_dirname, NULL); // only basename in progress string
-    rom filename = txtheader_piz_get_filename (header.txt_filename, flag.unbind, false, has_bgzf, header.flags.txt_header.no_gz_ext);
+    rom filename = txtheader_piz_get_filename (&header, has_bgzf);
+
     RESTORE_FLAG(out_dirname);
 
     StrTextLong name = {};
-    strncpy (name.s, filename, sizeof (StrTextLong)-1);
-    FREE (filename);
+    if (filename) {
+        strncpy (name.s, filename, sizeof (StrTextLong)-1);
+        FREE (filename);
+    }
+    else
+        strcpy (name.s, "(stdout)");
 
     return name;
 }          
@@ -332,10 +348,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
 
         bgzf_flags = bgzf_piz_calculate_bgzf_flags (sec->comp_i, header.src_codec);
 
-        filename = flag.to_stdout    ? NULL 
-                 : flag.out_filename ? flag.out_filename
-                 : flag.unbind       ? txtheader_piz_get_filename (header.txt_filename, flag.unbind, false, (bgzf_flags.library != BGZF_NO_LIBRARY), header.flags.txt_header.no_gz_ext)
-                 :                     txtheader_piz_get_filename (z_name,              "",          true,  (bgzf_flags.library != BGZF_NO_LIBRARY), header.flags.txt_header.no_gz_ext); // use genozip filename as a base regardless of original name
+        filename = txtheader_piz_get_filename (&header, (bgzf_flags.library != BGZF_NO_LIBRARY));
     }
 
     // note: when reading an auxiliary file or no_writer - we still create txt_file (but don't actually open the physical file)

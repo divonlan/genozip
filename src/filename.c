@@ -28,7 +28,7 @@ rom filename_z_by_flag (void)
 
 rom filename_z_normal (rom txt_filename, DataType dt, FileType txt_ft)
 {
-    if (!txt_filename && (flag.biopsy || flag.has_biopsy_line))
+    if (!txt_filename && zip_is_biopsy)
         txt_filename = "dummy"; // we don't have a txt_filename, but that's ok, because we don't need it
 
     ASSINP0 (txt_filename || !tar_zip_is_tar(), "Piping from stdin is not supported when using --tar");

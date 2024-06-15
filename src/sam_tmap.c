@@ -20,18 +20,3 @@ void sam_seg_TMAP_XM_i (VBlockSAMP vb, ValueType XM, unsigned add_bytes)
         seg_integer (VB, CTX(OPTION_XM_i), XM.i, true, add_bytes);
 }
 
-// optimization for Ion Torrent flow signal (ZM) - negative values become zero, positives are rounded to the nearest 10
-void sam_optimize_TMAP_ZM (VBlockSAMP vb, ContextP ctx, void *cb_param, void *array_, uint32_t array_len)
-{
-    int16_t *array = (int16_t *)array_;
-
-    for (uint32_t i=0; i < array_len; i++)
-        if (array[i] >= 0) 
-#ifdef __BIG_ENDIAN__
-            array[i] = LTEN16 (((LTEN16(array[i]) + 5) / 10) * 10);
-#else            
-            array[i] = ((array[i] + 5) / 10) * 10;
-#endif
-        else array[i] = 0;
-}
-

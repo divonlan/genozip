@@ -58,9 +58,7 @@ typedef struct {
     int64_t sendto;
     
     // ZIP: data modifying options
-    int optimize, optimize_sort, optimize_phred, GL_to_PL, GP_to_PP, optimize_VQSLOD,  // optimize flags: if adding, update has_optimize
-        optimize_QUAL, optimize_Vf, optimize_ZM, optimize_DESC,
-        add_line_numbers, match_chrom_to_reference;
+    int optimize, add_line_numbers;
         
     int truncate; // allow truncated file - compress only available full lines. note: we don't consider this option data modifying as its used for debugging - digest is calculated only after truncation
         
@@ -123,7 +121,7 @@ typedef struct {
 
     // stats / metadata flags for end users
     int show_wrong_md, show_wrong_xg, show_wrong_xm, show_wrong_xb; 
-    enum { VLD_NONE, VLD_REPORT_INVALID, VLD_REPORT_VALID, VLD_INVALID_FOUND } validate; // genocat: tests if this is a valid genozip file (z_file opens correctly)
+    enum { VLD_NONE, VLD_REPORT_INVALID, VLD_REPORT_VALID, VLD_INVALID_FOUND, VLD_NO_REPORT } validate; // genocat: tests if this is a valid genozip file (z_file opens correctly)
     StatsType show_stats;
     CompIType show_stats_comp_i;
 
@@ -158,8 +156,11 @@ typedef struct {
     
     CompIType show_time_comp_i;   // comp_i for which to show time (possibly COMP_NONE or COMP_ALL)
     
-    #define has_biopsy_line biopsy_line.line_i != NO_LINE
-    #define no_biopsy_line  biopsy_line.line_i == NO_LINE
+    #define has_biopsy_line biopsy_line.line_i != NO_LINE // ZIP: --biopsy-line is used
+    #define no_biopsy_line  biopsy_line.line_i == NO_LINE // ZIP: --biopsy-line is not used
+    #define has_head        lines_last != NO_LINE         // ZIP: --head is used
+    #define zip_is_biopsy   (flag.biopsy || flag.has_biopsy_line) // ZIP: either --biopsy or --biopsy-line is used
+    
     struct biopsy_line { VBIType vb_i; int32_t line_i/*within vb*/; } biopsy_line; // argument of --biopsy-line (line_i=-1 means: not used)
     DeepHash debug_deep_hash; // qname, seq, qual hashes
     
@@ -180,7 +181,7 @@ typedef struct {
          is_lten,            // set according to endianness   
          explicit_out_dt,    // genocat - out txt file data type set explicitly from command line
          aligner_available,  // ZIP: compression requires using the aligner
-         dont_load_ref_file,// PIZ (genocat): we don't need to load the reference data
+         dont_load_ref_file, // PIZ (genocat): we don't need to load the reference data
          genocat_no_dicts,   // PIZ (genocat): we don't need to read the dicts
          genocat_global_area_only, // PIZ (genocat): we quit after processing the global area
          genocat_no_reconstruct,   // PIZ: User requested to genocat with only metadata to be shown, not file contents
@@ -197,7 +198,7 @@ typedef struct {
          maybe_lines_out_of_order,
          missing_contexts_allowed, // PIZ: its not an error if contexts are missing - just reconstruct as an empty string
          piz_txt_modified,   // PIZ: output is NOT precisely identical to the compressed source, and hence we cannot use its BZGF blocks or verify digest
-         zip_txt_modified,   // ZIP: txt data is modified during Seg
+         zip_lines_counted_at_init_vb, // ZIP: VB lines need to be counted at zip_init_vb instead of zip_update_txt_counters, requiring BGZF-uncompression of a VB by the main thread
          explicit_ref,       // ref->filename was set by --reference or --REFERENCE (as opposed to being read from the genozip header)
          collect_coverage,   // PIZ: collect coverage data for show_coverage/idxstats
          deep_fq_only,       // PIZ: SAM data is reconstructed by not written, only FASTQ data is written

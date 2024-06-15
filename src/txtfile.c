@@ -617,8 +617,7 @@ void txtfile_read_vblock (VBlockP vb)
     bool always_uncompress = flag.pair == PAIR_R2  || // if we're reading the 2nd paired file, fastq_txtfile_have_enough_lines needs the whole data
                              flag.make_reference   || // unconsumed callback for make-reference needs to inspect the whole data
                              segconf.running       ||
-                             flag.optimize_DESC    || // fastq_zip_init_vb needs to count lines
-                             flag.add_line_numbers || // vcf_zip_init_vb   needs to count lines
+                             flag.zip_lines_counted_at_init_vb || // *_zip_init_vb needs to count lines
                              flag.biopsy;
 
     for (bool first=true; ; first=false) {

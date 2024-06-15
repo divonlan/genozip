@@ -1026,8 +1026,8 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
         if (dt >= NUM_DATATYPES) dt = DT_NONE;
 
         if ((DT(VCF) || DT(BCF)) && v14)
-            snprintf (dt_specific, sizeof (dt_specific), "%ssegconf=(has_RGQ=%s,del_svlen_is_neg=%s,GQ_method=%s,FMT_DP_method=%s,INFO_DP_method=%s,mate_id_chars=%s) width=(AC=%u,AN=%u,MLEAC=%u,DP=%u,QD=%u,SF=%u,AS_SB_TABLE=%u,QUAL=%u,BaseCounts=%u) max_ploidy_for_mux=%u\n", 
-                      SEC_TAB, TF(h->vcf.segconf_has_RGQ), TF(h->vcf.segconf_del_svlen_is_neg), GQ_method_name (h->vcf.segconf_GQ_method), FMT_DP_method_name (h->vcf.segconf_FMT_DP_method), INFO_DP_method_name (h->vcf.segconf_INF_DP_method), 
+            snprintf (dt_specific, sizeof (dt_specific), "%ssegconf=(has_RGQ=%s,del_svlen_is_neg=%s,FMT_GQ_method=%s,FMT_DP_method=%s,INFO_DP_method=%s,mate_id_chars=%s) width=(AC=%u,AN=%u,MLEAC=%u,DP=%u,QD=%u,SF=%u,AS_SB_TABLE=%u,QUAL=%u,BaseCounts=%u) max_ploidy_for_mux=%u\n", 
+                      SEC_TAB, TF(h->vcf.segconf_has_RGQ), TF(h->vcf.segconf_del_svlen_is_neg), FMT_GQ_method_name (h->vcf.segconf_GQ_method), FMT_DP_method_name (h->vcf.segconf_FMT_DP_method), INFO_DP_method_name (h->vcf.segconf_INF_DP_method), 
                       (rom[])MATEID_METHOD_NAMES[h->vcf.segconf_MATEID_method], 
                       h->vcf.width.AC, h->vcf.width.AN, h->vcf.width.MLEAC, h->vcf.width.DP, h->vcf.width.QD, h->vcf.width.SF, h->vcf.width.AS_SB_TABLE, h->vcf.width.QUAL, h->vcf.width.BaseCounts, 
                       h->vcf.max_ploidy_for_mux);
@@ -1037,7 +1037,7 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
                       SEC_TAB, h->sam.segconf_is_sorted, h->sam.segconf_is_collated, BGEN32 (h->sam.segconf_seq_len), h->sam.segconf_seq_len_cm, h->sam.segconf_ms_type, h->sam.segconf_has_MD_or_NM, 
                       h->sam.segconf_bisulfite, h->sam.segconf_MD_NM_by_un, h->sam.segconf_predict_meth, 
                       h->sam.segconf_is_paired, sag_type_name(h->sam.segconf_sag_type), h->sam.segconf_sag_has_AS, 
-                      h->sam.segconf_pysam_qual, h->sam.segconf_cellranger, h->sam.segconf_SA_HtoS, dis_dict_id(h->sam.segconf_seq_len_dict_id).s,
+                      h->sam.segconf_pysam_qual, h->sam.segconf_10xGen, h->sam.segconf_SA_HtoS, dis_dict_id(h->sam.segconf_seq_len_dict_id).s,
                       h->sam.segconf_deep_qname1, h->sam.segconf_deep_qname2, h->sam.segconf_deep_no_qual, 
                       h->sam.segconf_use_ins_ctxs, SAM_FACTOR_MULT, h->sam.segconf_sam_factor);
 
@@ -1051,11 +1051,11 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
                       SEC_TAB, digest_is_zero(h->FASTQ_v13_digest_bound) ? "N/A" : digest_display (h->FASTQ_v13_digest_bound).s, 
                       dis_dict_id(h->fastq.segconf_seq_len_dict_id).s, TF(h->fastq.segconf_fa_as_fq), TF(h->fastq.segconf_is_ileaved));
 
-        snprintf (str, sizeof (str), "\n%sver=%u.0.%u lic=%s private=%u enc=%s dt=%s usize=%"PRIu64" lines=%"PRIu64" secs=%u txts=%u vb_size=%u\n" 
+        snprintf (str, sizeof (str), "\n%sver=%u.0.%u modified=%u lic=%s private=%u enc=%s dt=%s usize=%"PRIu64" lines=%"PRIu64" secs=%u txts=%u vb_size=%u\n" 
                                      "%s%s %s=\"%.*s\" %s=%s\n"
                                      "%s" // dt_specific, if there is any
                                      "%screated=\"%.*s\"\n",
-                  SEC_TAB, h->genozip_version, h->genozip_minor_ver/*15.0.28*/, lic_type_name (h->lic_type)/*15.0.59*/, 
+                  SEC_TAB, h->genozip_version, h->genozip_minor_ver/*15.0.28*/, h->is_modified/*15.0.60*/, lic_type_name (h->lic_type)/*15.0.59*/, 
                   h->private_file, encryption_name (h->encryption_type), dt_name (dt), 
                   BGEN64 (h->recon_size), BGEN64 (h->num_lines_bound), BGEN32 (h->num_sections), h->num_txt_files,
                   BGEN16(h->vb_size), 
@@ -1225,11 +1225,14 @@ void noreturn genocat_show_headers (rom z_filename)
 
     // normal --show-headers - go by the section list
     if (!flag.force) {
-        ARRAY (SectionEnt, sec, z_file->section_list_buf);
-        for (uint32_t i=0; i < sec_len; i++) {
-            header = zfile_read_section_header (evb, &sec[i], SEC_NONE).genozip_header; // we assign the largest of the SectionHeader* types
-            sections_show_header ((SectionHeaderP)&header, NULL, sec[i].offset, 'R');
-        }        
+        for_buf (SectionEnt, sec, z_file->section_list_buf)
+            if (flag.show_headers == SHOW_ALL_HEADERS || 
+                flag.show_headers-1 == sec->st ||
+                flag.debug_read_ctxs) {
+                
+                header = zfile_read_section_header (evb, sec, SEC_NONE).genozip_header; // we assign the largest of the SectionHeader* types
+                sections_show_header ((SectionHeaderP)&header, NULL, sec->offset, 'R');
+            }        
     }
 
     // --show-headers --force - search for actual headers in case of file corruption
@@ -1336,6 +1339,7 @@ void sections_show_gheader (ConstSectionHeaderGenozipHeaderP header)
         iprintf ("  num_lines_bound: %"PRIu64"\n",  BGEN64 (header->num_lines_bound));
         iprintf ("  num_sections: %u\n",            z_file->section_list_buf.len32);
         iprintf ("  num_txt_files: %u\n",           header->num_txt_files);
+        iprintf ("  modified_by_zip: %s\n", TF(header->is_modified));
         if (dt == DT_REF)
             iprintf ("  %s: %s\n", (v15 ? "genome_digest" : "REF_fasta_md5"), digest_display (header->genome_digest).s);
         iprintf ("  created: %*s\n",                -FILE_METADATA_LEN, header->created);

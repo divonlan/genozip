@@ -17,6 +17,7 @@
 
 typedef enum { ERR_SEG_NO_ERROR=0, ERR_SEG_OUT_OF_RANGE, ERR_SEG_NOT_INTEGER } SegError;
 
+extern void zip_modify (VBlockP vb);
 extern void seg_all_data_lines (VBlockP vb); 
 
 typedef enum { GN_FORBIDEN, GN_SEP, GN_IGNORE } GetNextAllow;

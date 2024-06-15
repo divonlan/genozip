@@ -54,7 +54,7 @@ void sam_set_sag_type (void)
         segconf.sag_type = SAG_NONE;
 
     // --fast, --low-memory or a non-sorted file prohibit gencomp, but may be overrided with --force-gencomp
-    else if ((!segconf.is_sorted || flag.fast || flag.low_memory) && !flag.force_gencomp)
+    else if ((!segconf.is_sorted || flag.fast || flag.low_memory || flag.has_head) && !flag.force_gencomp)
         segconf.sag_type = SAG_NONE;
 
     else if (MP(LONGRANGER))
@@ -956,12 +956,12 @@ static void sam_zip_recon_plan_add_gc_lines (void)
             else {
                 bool is_depn = (pi->vb_i == SAM_GC_UPDATE_DEPN);
 
-                VBIType vb_i = vb_info[is_depn]->vb_i; // now we know what the true gencomp vb_i is
-
 #ifdef DEBUG    // sanity check - in tight loop, so only in DEBUG
                 ASSERTNOTNULL (vb_info[is_depn]);
                 ASSERT (vb_info[is_depn] < after_vb_info[is_depn], "vb_info[%u] out if bounds", is_depn);
 #endif
+                VBIType vb_i = vb_info[is_depn]->vb_i; // now we know what the true gencomp vb_i is
+
                 // case: previous entry is also a PLAN_RANGE with the same vb - just increment num_lines
                 if (next != start && (next-1)->vb_i == vb_i && (next-1)->flavor == PLAN_RANGE) {
                     (next-1)->num_lines++;

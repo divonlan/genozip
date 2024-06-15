@@ -117,15 +117,17 @@ static bool cram_read_sam_header (FileP file, bool read_sam_header)
 
     if (b.codec == CRAM_CODEC_NONE) {
         if (!get_int32 (&sam_header_len32) ||
-             sam_header_len32 > remaining) // we haven't read the entire SAM header from disk
+             sam_header_len32 > remaining)  // we haven't read the entire SAM header from disk
             return false;
+
+        if (!sam_header_len32) return true; // no SAM header in this file - that's ok
 
         buf_alloc_exact (evb, evb->txt_data, sam_header_len32 + 1, char, "txt_data");
         memcpy (B1STc(evb->txt_data), Bc(evb->scratch, evb->scratch.next), sam_header_len32);
     }
 
     else { // CRAM_CODEC_GZIP
-        if (b.compressed_size > remaining) // we haven't read the entire SAM header from disk
+        if (b.compressed_size > remaining)      // we haven't read the entire SAM header from disk
             return false;
 
         struct inflate_state state = {};
@@ -260,7 +262,7 @@ void cram_inspect_file (FileP file)
     int64_t n_records=0, disk_consumed=0;
     while (cram_get_container_header (file, &h, false)) {
         n_records     += h.n_records; // records are alignments
-        disk_consumed += h.length;
+        disk_consumed += h.length;    // note: length here (unlike in the CRAM spec) includes the container header
     }
 
     if (!n_records) goto done; // not even one full data container - we can't set est_num_lines
@@ -269,6 +271,8 @@ void cram_inspect_file (FileP file)
 
     double one_record_size = (double)disk_consumed / (double)n_records; // this also allocates part of the container header to each record
     
+    // note: for CRAM, we use est_num_lines instead of est_seggable_size as its
+    // hard to get the seggable size (in BAM format)
     file->est_num_lines = (double)(file_size - header_container_size) / one_record_size;
 
 done:
@@ -279,7 +283,8 @@ done:
 // returns the -T (reference) option for CRAM, derived from the genozip reference name
 StrTextSuperLong cram_get_samtools_option_T (Reference ref)
 {
-    if (!ref_is_loaded (ref)) return (StrTextSuperLong){};
+    if (!ref_is_external_loaded (ref)) 
+        return (StrTextSuperLong){}; 
 
     StrTextSuperLong samtools_T_option;
     uint32_t samtools_T_option_len = 0;

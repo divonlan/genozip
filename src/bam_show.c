@@ -92,9 +92,7 @@ rom bam_show_line (VBlockSAMP vb, rom alignment, uint32_t remaining_txt_len)
     iprintf ("qual=\"%s\" ", textual_qual); next_field += l_seq; FREE (textual_qual);
 
     // split auxillary fields
-    rom auxs[MAX_FIELDS]; 
-    uint32_t aux_lens[MAX_FIELDS];
-    uint32_t n_auxs = bam_split_aux (vb, alignment, next_field, after, auxs, aux_lens);
+    STR_ARRAY (aux, MAX_FIELDS) = bam_split_aux (vb, alignment, next_field, after, auxs, aux_lens);
     for (int i=0; i < n_auxs; i++)
         bam_show_one_aux (auxs[i], aux_lens[i]);
 
@@ -162,9 +160,7 @@ rom bam_assseg_line (VBlockP vb)
         FREE (textual_qual);
 
         // split auxillary fields
-        rom auxs[MAX_FIELDS]; 
-        uint32_t aux_lens[MAX_FIELDS];
-        uint32_t n_auxs = bam_split_aux (VB_SAM, alignment, next_field, after, auxs, aux_lens);
+        STR_ARRAY (aux, MAX_FIELDS) = bam_split_aux (VB_SAM, alignment, next_field, after, auxs, aux_lens);
         for (int i=0; i < n_auxs; i++)
             bam_show_one_aux (auxs[i], aux_lens[i]);
 

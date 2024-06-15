@@ -34,6 +34,7 @@ extern bool is_bed (STRp(header), bool *need_more);
 extern int32_t bed_is_header_done (bool is_eof);
 extern rom bed_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
 extern void bed_seg_initialize (VBlockP vb_);
+extern void bed_segconf_finalize (VBlockP vb);
 extern void bed_seg_finalize (VBlockP vb);
 extern bool bed_seg_is_small (ConstVBlockP vb, DictId dict_id);
 

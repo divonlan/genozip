@@ -348,7 +348,7 @@ void fasta_seg_initialize (VBlockP vb)
     COPY_TIMER (seg_initialize);
 }
 
-static void fasta_seg_finalize_segconf (VBlockP vb)
+void fasta_segconf_finalize (VBlockP vb)
 {
     // case: we've seen only characters that are both nucleotide and protein (as are A,C,G,T,N) - call it as nucleotide
     if (segconf.seq_type == SQT_NUKE_OR_AMINO) segconf.seq_type = SQT_NUKE;
@@ -378,9 +378,6 @@ static void fasta_seg_finalize_segconf (VBlockP vb)
 
 void fasta_seg_finalize (VBlockP vb)
 {
-    if (segconf.running) 
-        fasta_seg_finalize_segconf (vb);
-
     if (!flag.make_reference) {
         // top level snip
         SmallContainer top_level = { 

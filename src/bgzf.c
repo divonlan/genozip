@@ -368,7 +368,7 @@ void bgzf_compress_bgzf_section (void)
     // cases where we don't write the BGZF blocks section
     if (!txt_file->bgzf_isizes.len ||  // this txt file is not compressed with BGZF - we don't need a BGZF section
         txt_file->bgzf_flags.level == BGZF_COMP_LEVEL_UNKNOWN ||  // we don't know the level - so PIZ will reconstruct at default level
-        flag.zip_txt_modified)         // the file has changed and we can't reconstruct to the same blocks
+        segconf.zip_txt_modified)      // the file has changed and we can't reconstruct to the same blocks
         return;
 
     // sanity check
@@ -744,7 +744,7 @@ FlagsBgzf bgzf_piz_calculate_bgzf_flags (CompIType comp_i, Codec src_codec)
     // case: genounzip without explicit filename, and no --bgzf: default compression or no compression
     else
         // note: for bz2, xz, and zip - we reconstruct as gz too. better choice than plain.
-        bgzf_flags = bgzf_recompression_levels[(C(BGZF) || C(BAM) || C(GZ) || C(BZ2) || C(XZ) || C(ZIP)) ? BGZF_DEFAULT_LEVEL : 0]; // note: similar logic to txtheader_get_txt_filename_from_section
+        bgzf_flags = (C(BGZF) || C(BAM) || C(GZ) || C(BZ2) || C(XZ) || C(ZIP)) ? bgzf_recompression_levels[BGZF_DEFAULT_LEVEL] : bgzf_no_recompression; // note: similar logic to txtheader_get_txt_filename_from_section
     
     // case: user wants to see this section header, despite not needing BGZF data
     if (!isizes_loaded && (flag.only_headers == SEC_BGZF+1 || flag.only_headers == SHOW_ALL_HEADERS))

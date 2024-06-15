@@ -106,7 +106,7 @@ void sam_deep_zip_finalize (void)
 {
     threads_log_by_vb (evb, "main_thread", "sam_deep_zip_finalize", 0);
     
-    if (flag.biopsy || flag.has_biopsy_line) return;
+    if (zip_is_biopsy) return;
 
     // return unused memory to libc
     buf_trim (z_file->deep_ents, ZipZDeep);
@@ -194,7 +194,7 @@ void sam_deep_set_QUAL_hash (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qual))
 // ZIP compute thread: mutex-protected callback from ctx_merge_in_vb_ctx during merge: add VB's deep_hash to z_file->deep_index_by_*/deep_ents
 void sam_deep_merge (VBlockP vb_)
 {
-    if (!flag.deep || flag.biopsy || flag.has_biopsy_line) return;
+    if (!flag.deep || zip_is_biopsy) return;
 
     VBlockSAMP vb = (VBlockSAMP)vb_;
     START_TIMER;

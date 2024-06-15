@@ -16,7 +16,6 @@
 #include "seg.h"
 #include "random_access.h"
 #include "file.h"
-#include "optimize.h"
 #include "piz.h"
 #include "codec.h"
 #include "dict_id_gen.h"
@@ -170,7 +169,7 @@ void gff_seg_initialize (VBlockP vb)
         ctx_consolidate_stats (vb, ATTR_db_xref, ATTR_DBXid, ATTR_DBXdb, DID_EOL);
 }
 
-static void gff_seg_finalize_segconf (VBlockP vb)
+void gff_segconf_finalize (VBlockP vb)
 {
     if (segconf.has[ATTR_score] && segconf.has[ATTR_cscore] && segconf.has[ATTR_sscore])
         stats_add_one_program (_S("Prodigal"));
@@ -178,9 +177,6 @@ static void gff_seg_finalize_segconf (VBlockP vb)
 
 void gff_seg_finalize (VBlockP vb)
 {
-    if (segconf.running) 
-        gff_seg_finalize_segconf (vb);
-
     CTX(ENSTid)->st_did_i = DID_NONE; // cancel consolidatation as it goes into multiple attributes
 
     // top level snip
@@ -492,18 +488,6 @@ static inline DictId gff_seg_attr_subfield (VBlockGFFP vb, STRp(tag), STRp(value
 
     case _ATTR_chr:
         CALL (chrom_seg_by_did_i (VB, ATTR_chr, STRa(value), value_len));
-
-    // Optimize Variant_freq
-    case _ATTR_Variant_freq:
-        if (flag.optimize_Vf) {
-            STRli (optimized_snip, value_len + 20); // used for 1. fields that are optimized 2. fields translated luft->primary
-
-            if (optimize_float_2_sig_dig (STRa(value), 0, qSTRa(optimized_snip))) {        
-                vb->recon_size -= (int)(value_len) - (int)optimized_snip_len;
-                STRset (value, optimized_snip);
-            }            
-        }
-        goto plain_seg; // proceed with adding to dictionary/b250
 
     // GTF fields
     case _ATTR_gene_name:

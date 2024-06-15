@@ -21,6 +21,7 @@
 			}
 		},
 		"files.associations": {
+			"*.vcf": "plaintext",
 			"*.eb": "python",
 			"genozip.h": "c",
 			"strings.h": "c",
@@ -50,7 +51,9 @@
 			"reconstruct.h": "c",
 			"seg.h": "c",
 			"compare": "c",
-			"context.h": "c"
+			"context.h": "c",
+			"cmath": "c",
+			"zip.h": "c"
 		}
 	}
 }

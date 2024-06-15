@@ -49,6 +49,7 @@
 #pragma GENDICT VCF_DEBUG_LINES=DTYPE_FIELD=DBGLINES// used by --debug-lines
 
 // FORMAT fields
+#define VCF_FIRST_OPTIONAL_DID FORMAT_AD
 #pragma GENDICT FORMAT_AD=DTYPE_2=AD                // <ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed">
                                                     // BUT in VarScan conflicting: <ID=AD,Number=1,Type=Integer,Description="Depth of variant-supporting bases (reads2)">
 #pragma GENDICT FORMAT_ADF=DTYPE_2=ADF              // <ID=ADF,Number=R,Type=Float,Description="Allele dosage on fwd strand">
@@ -59,7 +60,8 @@
 #pragma GENDICT FORMAT_DP=DTYPE_2=DP                // <ID=DP,Number=1,Type=Integer,Description="Approximate read depth (reads with MQ=255 or with bad mates are filtered)">. See also: https://gatk.broadinstitute.org/hc/en-us/articles/360036891012-DepthPerSampleHC
 #pragma GENDICT FORMAT_DS=DTYPE_2=DS                // <ID=DS,Number=1,Type=Float,Description="Genotype dosage from MaCH/Thunder">. See: https://genome.sph.umich.edu/wiki/Thunder Beagle: "estimated ALT dose [P(RA) + P(AA)]"
 #pragma GENDICT FORMAT_GL=DTYPE_2=GL                // <ID=GL,Number=.,Type=Float,Description="Genotype Likelihoods">
-#pragma GENDICT FORMAT_GP=DTYPE_2=GP                // <ID=GP,Number=G,Type=Float,Description="Phred-scaled posterior probabilities for genotypes as defined in the VCF specification">
+#pragma GENDICT FORMAT_GP=DTYPE_2=GP                // (Phred)         <ID=GP,Number=G,Type=Float,Description="Phred-scaled posterior probabilities for genotypes as defined in the VCF specification">
+                                                    // (probabilities) <ID=GP,Number=3,Type=Float,Description="Estimated Posterior Probabilities for Genotypes 0/0, 0/1 and 1/1 ">
 #pragma GENDICT FORMAT_GQ=DTYPE_2=GQ                // <ID=GQ,Number=1,Type=Integer,Description="Genotype Quality"> VCF spec: "conditional genotype quality, encoded as a phred quality −10log10 p(genotype call is wrong, conditioned on the site’s being variant) (Integer)"
 #pragma GENDICT FORMAT_GT=DTYPE_2=GT                // <ID=GT,Number=1,Type=String,Description="Genotype">
 #pragma GENDICT FORMAT_PL=DTYPE_2=PL                // <ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes as defined in the VCF specification">
@@ -743,11 +745,14 @@ extern void vcf_zip_set_txt_header_flags (struct FlagsTxtHeader *f);
 extern void vcf_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeaderP vb_header);
 extern bool is_vcf (STRp(header), bool *need_more);
 extern bool is_bcf (STRp(header), bool *need_more);
+extern char *optimize_float_3_sig_dig (VBlockP vb, ContextP ctx, STRp(snip), char *out);
 
 // SEG stuff
+extern rom vcf_zip_modify (VBlockP vb_, rom line_start, uint32_t remaining);
 extern rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
 extern void vcf_seg_initialize (VBlockP vb_);
 extern void vcf_zip_after_compute (VBlockP vb);
+extern void vcf_segconf_finalize (VBlockP vb);
 extern void vcf_seg_finalize (VBlockP vb_);
 extern bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern bool vcf_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id);
@@ -797,7 +802,7 @@ SPECIAL (VCF, 0,  main_REFALT,         vcf_piz_special_main_REFALT);
 SPECIAL (VCF, 1,  FORMAT,              vcf_piz_special_FORMAT)
 SPECIAL (VCF, 2,  INFO_AC,             vcf_piz_special_INFO_AC);
 SPECIAL (VCF, 3,  SVLEN,               vcf_piz_special_SVLEN);
-SPECIAL (VCF, 4,  DS_old,              vcf_piz_special_FORMAT_DS_old);            // used in files up to 12.0.42
+SPECIAL (VCF, 4,  DS_old,              vcf_piz_special_DS_old);                   // used in files up to 12.0.42
 SPECIAL (VCF, 5,  BaseCounts,          vcf_piz_special_INFO_BaseCounts);
 SPECIAL (VCF, 6,  SF,                  vcf_piz_special_INFO_SF);
 SPECIAL (VCF, 7,  MINUS,               piz_special_MINUS);                        // added v12.0.0 
@@ -815,8 +820,8 @@ SPECIAL (VCF, 18, HGVS_INS_PAYLOAD,    vcf_piz_special_INFO_HGVS_INS_PAYLOAD);  
 SPECIAL (VCF, 19, HGVS_DELINS_END_POS, vcf_piz_special_INFO_HGVS_DELINS_END_POS); // added v12.0.34
 SPECIAL (VCF, 20, HGVS_DELINS_PAYLOAD, vcf_piz_special_INFO_HGVS_DELINS_PAYLOAD); // added v12.0.34
 SPECIAL (VCF, 21, MUX_BY_DOSAGE,       vcf_piz_special_MUX_BY_DOSAGE);            // added v13.0.0
-SPECIAL (VCF, 22, AB,                  vcf_piz_special_FORMAT_AB);                // added v13.0.0
-SPECIAL (VCF, 23, GQ,                  vcf_piz_special_FORMAT_GQ);                // added v13.0.0
+SPECIAL (VCF, 22, AB,                  vcf_piz_special_AB);                       // added v13.0.0
+SPECIAL (VCF, 23, GQ,                  vcf_piz_special_GQ);                       // added v13.0.0
 SPECIAL (VCF, 24, MUX_BY_DOSAGExDP,    vcf_piz_special_MUX_BY_DOSAGExDP);         // added v13.0.3
 SPECIAL (VCF, 25, COPY_REForALT,       vcf_piz_special_COPY_REForALT);            // added v13.0.5
 SPECIAL (VCF, 26, DP_by_DP_v13,        vcf_piz_special_DP_by_DP_v13);             // added v13.0.5, removed in v14

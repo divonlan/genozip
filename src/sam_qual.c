@@ -7,7 +7,6 @@
 //   under penalties specified in the license.
 
 #include "sam_private.h"
-#include "optimize.h"
 #include "codec.h"
 #include "htscodecs/rANS_static4x16.h"
 
@@ -271,10 +270,6 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qual)/*always textual
     
     if (!vb->qual_missing) vb->has_qual = true;
     
-    // case --optimize_QUAL: optimize in place, must be done before sam_deep_set_QUAL_hash calculates a hash
-    if (flag.optimize_QUAL && !vb->qual_missing) 
-        optimize_phred_quality_string ((char*)STRa(qual));
-
     if ((flag.deep || flag.show_deep == 2) && !segconf.running)
         sam_deep_set_QUAL_hash (vb, dl, STRa(qual));
 
@@ -359,7 +354,7 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qual)/*always textual
                 IS_PRIM(vb) ? SAM_QUALSA : SAM_QUAL, 0); 
    
     // get QUAL score, consumed by mate ms:i
-    if (!segconf.running && segconf.sam_ms_type == ms_BIOBAMBAM && !flag.optimize_QUAL)
+    if (!segconf.running && segconf.sam_ms_type == ms_BIOBAMBAM && !segconf.optimize[SAM_QUAL])
         dl->QUAL_score = sam_get_QUAL_score (vb, STRa(qual));
  
     if (segconf.running) 

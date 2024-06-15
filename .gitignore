@@ -97,7 +97,7 @@ src/conda/README.md
 *.local
 *.b250
 *.bad 
-*.good
+*.bad.gz
 *.gcache
 *.hcache
 *.biopsy

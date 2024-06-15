@@ -120,8 +120,10 @@ void ref_destroy_reference (Reference ref)
     buf_destroy (ref->ref_file_section_list);
     buf_destroy (ref->iupacs_buf);
     FREE (ref->ref_fasta_name);
-    
-    ref_cache_detach (ref);
+
+    refhash_destroy(); // must be before ref_cache_detach
+
+    ref_cache_detach (ref); // after destroying genome_buf and refhash_buf
 
     // note: we keep ref->filename, in case it needs to be loaded again
     rom save_filename  = ref->filename;
@@ -1094,16 +1096,35 @@ void ref_set_reference (Reference ref, rom filename, ReferenceType ref_type, boo
 {
     if (!is_explicit && ref->filename) return; // already set explicitly
 
+    rom env = getenv ("GENOZIP_REFERENCE");
     unsigned filename_len;
+    StrTextLong alt_name;
+
     if (!filename) {
-        rom env = getenv ("GENOZIP_REFERENCE");
         if (!env || !env[0] || file_is_dir (env)) return; // nothing to set
 
         filename     = env;
         filename_len = strlen (env);
         WARN ("Note: Using the reference file \"%.*s\" set in $GENOZIP_REFERENCE. You can override this with --reference", STRf(filename));
     }
-    else
+
+    // explicit filename, relative to GENOZIP_REFERENCE directory
+    else if (is_explicit && 
+             env && env[0] && // have GENOZIP_REFERENCE
+             filename[0] != '/' && filename[0] != '\\' && // filename is a relative path
+             !file_exists (filename) &&
+             file_is_dir (env) &&
+             strlen (filename) + strlen(env) + 2 <= sizeof (alt_name)) {
+        
+        char *next = strpcpy (alt_name.s, env);
+        if (next[-1] != '/') *next++ = '/';
+        next = strpcpy (next, filename);
+
+        filename = alt_name.s;
+        filename_len = next - alt_name.s;
+    }
+
+    else 
         filename_len = strlen (filename);
 
     static int num_explicit = 0; // user can have up to 1 --reference arguments

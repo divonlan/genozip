@@ -39,16 +39,16 @@ typedef packed_enum { VCF_QUAL_DEFAULT, VCF_QUAL_local, VCF_QUAL_by_RGQ, VCF_QUA
 
 typedef packed_enum { VCF_INFO_DEFAULT, VCF_INFO_by_RGQ, VCF_INFO_by_FILTER } VcfInfoMethod;
 
-typedef packed_enum { L3_UNKNOWN, L3_EMPTY, L3_COPY_LINE1, L3_NCBI, NUM_L3s } FastqLine3Type;
+typedef packed_enum { L3_UNKNOWN, L3_EMPTY, L3_COPY_LINE1, L3_NCBI, L3_OPTIMIZED_AWAY, NUM_L3s } FastqLine3Type;
 
 typedef packed_enum { INFO_VT_UNKNOWN, INFO_VT_VAGrENT, INFO_VT_1KG, INFO_VT_CALLMOM } InfoVTType; // part of the file format: values go into the snip of VCF_SPECIAL_VT
 
 typedef packed_enum { RG_DEFAULT, RG_CELLRANGER } RGMethod; // part of the file format: values go into the snip of SAM_SPECIAL_RG_by_QNAME
 
 // SamMapperType is part of the file format and values should not be changed (new ones can be added)
-typedef enum  {                       MP_UNKNOWN,       MP_BSBOLT,             MP_bwa,   MP_BWA,   MP_MINIMAP2,   MP_STAR,   MP_BOWTIE2,   MP_DRAGEN,    MP_GEM3,         MP_GEM2SAM,     MP_BISMARK,   MP_BSSEEKER2,     MP_WINNOWMAP,   MP_BAZ2BAM,    MP_BBMAP,   MP_TMAP,   MP_HISAT2,   MP_BOWTIE,   MP_NOVOALIGN,   MP_RAZER3,    MP_BLASR,   MP_NGMLR,           MP_DELVE,   MP_TOPHAT,   MP_CPU,   MP_LONGRANGER,          MP_CLC,              MP_PBMM2,   MP_CCS,  MP_SNAP,   MP_BWA_MEM2,   MP_PARABRICKS,     MP_ISAAC,   MP_ULTIMA, MP_TORRENT_BC,   MP_BIONANO,      NUM_MAPPERS } SamMapperType;
-#define SAM_MAPPER_NAME             { "Unknown_mapper", "bsbolt",              "bwa",    "BWA",    "minimap2",    "STAR",    "bowtie2",    "dragen",     "gem3",          "gem2sam",      "bismark",    "bsseeker2",      "Winnowmap",    "baz2bam",     "BBMap",    "tmap",    "hisat2",    "Bowtie1",   "NovoAlign",    "razers3",    "blasr",    "ngmlr",            "Delve",    "TopHat",    "cpu",    "longranger",           "CLCGenomicsWB",    "pbmm2",    "ccs",    "snap",    "bwa-mem2",    "parabricks",      "iSAAC",    "Ultima",  "Torrent_BC",    "Bionano",                   }
-#define SAM_MAPPER_SIGNATURE        { "Unknown_mapper", "PN:bwa	VN:BSB"/*\t*/, "PN:bwa", "PN:BWA", "PN:minimap2", "PN:STAR", "PN:bowtie2", "ID: DRAGEN", "PN:gem-mapper", "PN:gem-2-sam", "ID:Bismark", "PN:BS Seeker 2", "PN:Winnowmap", "PN:baz2bam",  "PN:BBMap", "ID:tmap", "PN:hisat2", "ID:Bowtie", "PN:novoalign", "PN:razers3", "ID:BLASR", "PN:nextgenmap-lr", "ID:Delve", "ID:TopHat", "PN:cpu", "PN:longranger.lariat", "PN:clcgenomicswb", "PN:pbmm2", "PN:ccs", "PN:SNAP", "PN:bwa-mem2", "PN:pbrun fq2bam", "PN:iSAAC", "ID:UA-",  "PN:BaseCaller", "ID:xmap_to_bam",            }   
+typedef enum  {                       MP_UNKNOWN,       MP_BSBOLT,             MP_bwa,   MP_BWA,   MP_MINIMAP2,   MP_STAR,   MP_BOWTIE2,   MP_DRAGEN,    MP_GEM3,         MP_GEM2SAM,     MP_BISMARK,   MP_BSSEEKER2,     MP_WINNOWMAP,   MP_BAZ2BAM,    MP_BBMAP,   MP_TMAP,   MP_HISAT2,   MP_BOWTIE,   MP_NOVOALIGN,   MP_RAZER3,    MP_BLASR,   MP_NGMLR,           MP_DELVE,   MP_TOPHAT,   MP_CPU,   MP_LONGRANGER,          MP_CLC,              MP_PBMM2,   MP_CCS,  MP_SNAP,   MP_BWA_MEM2,   MP_PARABRICKS,     MP_ISAAC,   MP_ULTIMA, MP_TORRENT_BC,   MP_BIONANO,       MP_CRDNA,        NUM_MAPPERS } SamMapperType;
+#define SAM_MAPPER_NAME             { "Unknown_mapper", "bsbolt",              "bwa",    "BWA",    "minimap2",    "STAR",    "bowtie2",    "dragen",     "gem3",          "gem2sam",      "bismark",    "bsseeker2",      "Winnowmap",    "baz2bam",     "BBMap",    "tmap",    "hisat2",    "Bowtie1",   "NovoAlign",    "razers3",    "blasr",    "ngmlr",            "Delve",    "TopHat",    "cpu",    "longranger",           "CLCGenomicsWB",    "pbmm2",    "ccs",    "snap",    "bwa-mem2",    "parabricks",      "iSAAC",    "Ultima",  "Torrent_BC",    "Bionano",        "CellRangerDNA",             }
+#define SAM_MAPPER_SIGNATURE        { "Unknown_mapper", "PN:bwa	VN:BSB"/*\t*/, "PN:bwa", "PN:BWA", "PN:minimap2", "PN:STAR", "PN:bowtie2", "ID: DRAGEN", "PN:gem-mapper", "PN:gem-2-sam", "ID:Bismark", "PN:BS Seeker 2", "PN:Winnowmap", "PN:baz2bam",  "PN:BBMap", "ID:tmap", "PN:hisat2", "ID:Bowtie", "PN:novoalign", "PN:razers3", "ID:BLASR", "PN:nextgenmap-lr", "ID:Delve", "ID:TopHat", "PN:cpu", "PN:longranger.lariat", "PN:clcgenomicswb", "PN:pbmm2", "PN:ccs", "PN:SNAP", "PN:bwa-mem2", "PN:pbrun fq2bam", "PN:iSAAC", "ID:UA-",  "PN:BaseCaller", "ID:xmap_to_bam", "ID:crdna",                  }   
 #define MP(x) (segconf.sam_mapper == MP_##x)
 
 #define MAX_SHORT_READ_LEN 2500
@@ -64,6 +64,8 @@ extern QualHistType did_i_to_qht (Did did_i);
 typedef struct { uint8_t q; int count; } QualHisto;
 
 typedef packed_enum { GQ_old=0/*up to 15.0.36*/, BY_PL=1, BY_GP=2, MUX_DOSAGExDP, MUX_DOSAGE, GQ_INTEGER } GQMethodType; // values go into SectionHeaderGenozipHeader.segconf_GQ_method (only 0,1,2 are used in PIZ)
+
+typedef packed_enum { GP_unknown, GP_probabilities, GP_phred, GP_other } GPContentType;
 
 typedef packed_enum         { MATE_NONE, MATE_01, MATE_12, MATE_PBSV } MateIDMethodType;
 #define MATEID_METHOD_NAMES { "NONE",    "01",    "12",    "PBSV"    }
@@ -81,6 +83,8 @@ typedef struct {
     uint64_t vb_size;            // ZIP/PIZ: compression VBlock size in bytes (PIZ: passed in SectionHeaderGenozipHeader.vb_size)
     bool running;                // currently in segconf_calculate()
     int has[MAX_DICTS];          // for select did_i's, counts the numner of times this field was encountered during segconf.running
+    bool optimize[MAX_DICTS];    // true if --optimize indicates that this field should be optimized
+    bool zip_txt_modified;       // ZIP/PIZ: txt data is/was modified during Seg (e.g. by --optimize, --add-line-numbers). Before segconf: true if data *might* be modifed. After segconf: true iff data is modified.
     uint32_t line_len;           // approx line len
     float b250_per_line[MAX_NUM_PREDEFINED];    // b250.len / num_lines
     float local_per_line[MAX_NUM_PREDEFINED];   // local.len / num_lines
@@ -187,7 +191,7 @@ typedef struct {
     bool use_pacbio_iqsqdq;     // ZIP: if iq:Z sq:Z and dq:Z are present in all lines, we can compress them, as well as QUAL, better. 
     char CR_CB_seperator;       // ZIP: seperator within CR:Z and CB:Z fields
     bool abort_gencomp;         // ZIP: vb=1 found out that the file actually has no depn or no prim, so we stop sending lines to prim/depn
-    bool has_cellranger;        // ZIP/PIZ: if TX:Z and/or AN:Z fields are present, they were generated by cellranger
+    bool has_10xGen;            // ZIP/PIZ: has 10xGenomics tags
     bool has_RSEM;              // ZIP: RSEM is used (https://github.com/bli25/RSEM_tutorial)
     RGMethod RG_method;
 
@@ -244,6 +248,7 @@ typedef struct {
     bool vcf_is_giggle;
     bool use_null_DP_method;    // A method for predicting GT=./. by DP=.
     bool vcf_del_svlen_is_neg;
+    GPContentType FMT_GP_content; 
     char vcf_ID_is_variant;     // ID format is eg 1_2704352_AT_A or 1:2704352:AT:A which is CHROM_POS_REF_ALT. value is '_' or ':' or 0. 
     uint8_t vcf_max_MAPQ;       // maximum MAPQ of BAM alignments that contributed to this variant, as derived from RAW_MQandDP, but not more than 223
     FormatDPMethod FMT_DP_method;
@@ -253,7 +258,7 @@ typedef struct {
     bool AS_SB_TABLE_by_SB;
     InfoVTType INFO_VT_type;
     uint64_t count_GQ_by_PL, count_GQ_by_GP; // used tp calculate GQ_by_PL, GQ_by_GP
-    GQMethodType GQ_method;     // values go into SectionHeaderGenozipHeader.segconf_GQ_method (only 0,1,2 are used in PIZ)
+    GQMethodType FMT_GQ_method;     // values go into SectionHeaderGenozipHeader.segconf_GQ_method (only 0,1,2 are used in PIZ)
     MateIDMethodType MATEID_method; // method to convert between VCF_ID and the BND mate's VCF_ID
     VcfInfoMethod vcf_INFO_method;
     VcfQualMethod vcf_QUAL_method;
@@ -330,10 +335,13 @@ extern rom segconf_tech_name (void);
 extern rom segconf_deep_trimming_name (void);
 extern rom VCF_QUAL_method_name (VcfQualMethod method);
 extern rom VCF_INFO_method_name (VcfInfoMethod method);
-extern rom GQ_method_name (GQMethodType method);
+extern rom FMT_GQ_method_name (GQMethodType method);
 extern rom FMT_DP_method_name (FormatDPMethod method);
 extern rom INFO_DP_method_name (InfoDPMethod method);
+extern rom FMT_GP_content_name (GPContentType method);
 extern rom RG_method_name (RGMethod method);
 extern void segconf_test_sorted (VBlockP vb, WordIndex prev_line_chrom, PosType32 pos, PosType32 prev_line_pos);
 extern void segconf_test_multiseq (VBlockP vb, Did nonref);
 extern StrText segconf_get_qual_histo (QualHistType qht);
+extern unsigned segconf_get_num_qual_scores (QualHistType qht);
+extern StrTextLong segconf_get_optimizations (void);

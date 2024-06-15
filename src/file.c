@@ -685,7 +685,13 @@ FileP file_open_txt_write (rom filename, DataType data_type, BgzfLevel bgzf_leve
         case CODEC_BGZF : 
         case CODEC_NONE : file->file = file->redirected ? fdopen (STDOUT_FILENO, "wb") : fopen (file->name, WRITE); break;
 
-        case CODEC_CRAM : file_redirect_output_to_stream (file, "samtools", "view", "-OCRAM", file_samtools_no_PG(), NULL); break;
+        case CODEC_CRAM : {
+            StrTextSuperLong samtools_T_option = cram_get_samtools_option_T (gref);
+            file_redirect_output_to_stream (file, "samtools", "view", "-OCRAM", 
+                                            file_samtools_no_PG(), 
+                                            samtools_T_option.s[0] ? samtools_T_option.s : NULL); 
+            break;
+        }
         
         case CODEC_BCF  : {
             char comp_level[4] = { '-', 'l', '0' + MIN_(bgzf_level, 9), 0 };
@@ -832,7 +838,11 @@ FileP file_open_z_read (rom filename)
             int fail_errno = errno;
             FCLOSE (file->file, disk_filename);
 
-            if (flag.validate == VLD_REPORT_INVALID) flag.validate = VLD_INVALID_FOUND; 
+            if (flag.validate == VLD_REPORT_INVALID) 
+                flag.validate = VLD_INVALID_FOUND;
+
+            else if (flag.validate == VLD_NO_REPORT)
+                exit (EXIT_INVALID_GENOZIP_FILE); // silent exit with error code, if even a single file is not valid
 
             rom cause_str =   cause==1 ? strerror (fail_errno)
                             : cause==2 ? "file is empty"

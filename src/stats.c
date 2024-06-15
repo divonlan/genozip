@@ -68,11 +68,11 @@ void stats_remove_data_after_program_name (rom program)
 }
 
 // option 1: substitute ; and , with their UTF-8 equivalents
-static StrText stats_subs_seps_in_name (rom name)
+static StrTextLong stats_subs_seps_in_name (rom name)
 {
     ASSERT0 (sizeof (StrText) > MAX_TAG_LEN - 10, "bad string size");
 
-    StrText s = {};
+    StrTextLong s = {};
     char *next = s.s;
 
     while (*name) {
@@ -354,7 +354,7 @@ static void stats_output_file_metadata (void)
                        segconf.smux_max_stdv_q=='='?"≐" : segconf.smux_max_stdv_q==';'?"；" : char_to_printable (segconf.smux_max_stdv_q).s); // Unicode ；and ≐ (in UTF-8) to avoid breaking spreadsheet
 
             FEATURE0 (segconf.sam_bisulfite, "Feature: Bisulfite", "Bisulfite");
-            FEATURE0 (segconf.has_cellranger, "Feature: cellranger-style fields", "has_cellranger");
+            FEATURE0 (segconf.has_10xGen, "Feature: 10xGenomics_tags", "has_10xGen");
 
             if (segconf.sam_ms_type && segconf.has[OPTION_ms_i]) {
                 rom names[] = ms_type_NAME;
@@ -424,11 +424,14 @@ static void stats_output_file_metadata (void)
                 bufprintf (evb, &features, "FMT_DP_method=%s;", FMT_DP_method_name (segconf.FMT_DP_method));
 
             if (segconf.has[FORMAT_GQ])
-                bufprintf (evb, &features, "GQ_method=%s;", GQ_method_name (segconf.GQ_method));
+                bufprintf (evb, &features, "GQ_method=%s;", FMT_GQ_method_name (segconf.FMT_GQ_method));
 
             if (segconf.has[FORMAT_PL])
                 bufprintf (evb, &features, "PL_method=%s;",  segconf.PL_mux_by_DP==yes ? "DosageXDP" : "Dosage");
-                       
+
+            if (segconf.FMT_GP_content)
+                bufprintf (evb, &features, "GP_content=%s;",  FMT_GP_content_name (segconf.FMT_GP_content));
+
             REPORT_VBs;
 
             break;
@@ -436,7 +439,7 @@ static void stats_output_file_metadata (void)
         case DT_FASTQ:
             REPORT_VBs;
             REPORT_QNAME;
-            FEATURE (flag.optimize_DESC && z_file->num_lines, "Sequencer: %s", "Sequencer=%s", segconf_tech_name());\
+            FEATURE (segconf.optimize[FASTQ_QNAME] && z_file->num_lines, "Sequencer: %s", "Sequencer=%s", segconf_tech_name());\
             FEATURE0 (FAF, "FASTA-as-FASTQ", "FASTA-as-FASTQ=True");
             FEATURE0 (segconf.multiseq, "Multiseq", "multiseq=True");
             FEATURE0 (segconf.is_interleaved, "Interleaved", "interleaved=True");
@@ -508,6 +511,9 @@ static void stats_output_file_metadata (void)
      
         bufprintf (evb, &stats, "Programs: %.*s\n", STRfb(stats_programs));
     }
+
+    if (flag.optimize)
+        bufprintf (evb, &stats, "Fields optimized: %s\n", segconf_get_optimizations().s);
 
     bufprintf (evb, &stats, "Genozip version: %s %s\nDate compressed: %s\n", 
                GENOZIP_CODE_VERSION, get_distribution(), str_time().s);
@@ -611,7 +617,7 @@ static void stats_output_stats (StatsByLine *s, unsigned num_stats, float src_co
     }
 
     for (uint32_t i=0; i < num_stats; i++, s++)
-        if (s->z_size)
+        if (s->z_size || (s->my_did_i != DID_NONE && segconf.optimize[s->my_did_i] && s->txt_len))
             bufprintf (evb, &stats, "%-20.20s %9s %5.1f%% %9s %5.1f%% %6.*fX\n", 
                        s->name, 
                        str_size (s->z_size).s, s->pc_of_z, // z size and % of total z that is in this line
@@ -665,7 +671,7 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
         fprintf (stderr, "%s", LONG_HEADER);
 
     for (uint32_t i=0; i < num_stats; i++, s++)
-        if (s->z_size)
+        if (s->z_size || (s->my_did_i != DID_NONE && segconf.optimize[s->my_did_i] && s->txt_len))
             bufprintf (evb, &STATS, "%-2.2s    %-17.17s %-17.17s %6s %6s %6s %6s %8s %3.0f%% %3.0f%% %9s %9s %9s %9s %9s %9s %9s %6.*fX %5.1f%% %5.1f%%\n", 
                        s->did_i.s, s->name, s->type, s->words.s, 
                        s->dict_words.s, s->local_words.s, s->failed_ston_words.s, 
@@ -689,11 +695,11 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
 void stats_generate (void) // specific section, or COMP_NONE if for the entire file
 {
     // initial allocation
-    buf_alloc (evb, &stats,     0, 10000,  char, 1, "stats");
-    buf_alloc (evb, &STATS,     0, 10000,  char, 1, "stats");
-    buf_alloc (evb, &features,  0, 1000,   char, 1, "stats");
-    buf_alloc (evb, &exceptions,  0, 1000,   char, 1, "stats");
-    buf_alloc (evb, &internals, 0, 1000,   char, 1, "stats");
+    buf_alloc (evb, &stats,      0, 10000,  char, 1, "stats");
+    buf_alloc (evb, &STATS,      0, 10000,  char, 1, "stats");
+    buf_alloc (evb, &features,   0, 1000,   char, 1, "stats");
+    buf_alloc (evb, &exceptions, 0, 1000,   char, 1, "stats");
+    buf_alloc (evb, &internals,  0, 1000,   char, 1, "stats");
 
     if (flag.show_stats_comp_i == COMP_NONE) {
         stats_output_file_metadata();
@@ -719,7 +725,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
 
         if (ST(DICT) || ST(B250) || ST(LOCAL) || ST(COUNTS)) continue; // these are covered by individual contexts
 
-        s->txt_len    = ST(TXT_HEADER)  ? z_file->header_size : 0; // note: excluding generated headers for DVCF
+        s->txt_len    = ST(TXT_HEADER) ? z_file->header_size : 0; // note: excluding generated headers for DVCF
         s->type       = (ST(REFERENCE) || ST(REF_IS_SET) || ST(REF_CONTIGS) || ST(CHROM2REF_MAP) || ST(REF_IUPACS)) ? "SEQUENCE" 
                       : (ST(RANDOM_ACCESS) || ST(REF_RAND_ACC))                                                                   ? "RandomAccessIndex"
                       :                                                                                                                     "Other"; // note: some contexts appear as "Other" in --stats, but in --STATS their parent is themself, not "Other"
@@ -740,17 +746,18 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
     for_zctx {    
         s->z_size = zctx->dict.count + zctx->b250.count + zctx->local.count;
 
-        if (!zctx->b250.count && !zctx->txt_len && !zctx->b250.len && !zctx->is_stats_parent && !zctx->txt_len && !s->z_size) 
+        if (!zctx->b250.count && !zctx->txt_len && !zctx->b250.len && !zctx->is_stats_parent && !zctx->txt_shrinkage && 
+            !s->z_size) 
             continue;
 
-        s->txt_len = zctx->txt_len;
+        s->txt_len = zctx->txt_len + zctx->txt_shrinkage; // original txt_len before modifications
         
         all_comp_dict   += zctx->dict.count;
         all_uncomp_dict += zctx->dict.len;
         all_comp_b250   += zctx->b250.count;
         all_comp_local  += zctx->local.count;
+        all_txt_len     += zctx->txt_len; // sum of txt after modifications
         all_z_size      += s->z_size;
-        all_txt_len     += s->txt_len;
 
         if ((Z_DT(VCF) || Z_DT(GFF)) && dict_id_type(zctx->dict_id) != DTYPE_FIELD)
             snprintf (s->name, sizeof (s->name), "%s/%s", dtype_name_z(zctx->dict_id), zctx->tag_name);
@@ -830,7 +837,8 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
     stats_consolidate_non_ctx (sbl, sbl_buf.len32, "RandomAccessIndex", 2, ST_NAME (SEC_RANDOM_ACCESS), ST_NAME (SEC_REF_RAND_ACC));
     
     ASSERTW (all_txt_len == txt_size || flag.make_reference, // all_txt_len=0 in make-ref as there are no contexts
-             "Expecting all_txt_len(sum of txt_len of all contexts)=%"PRId64" == txt_size(modified txt_file size)=%"PRId64" (diff=%"PRId64")", all_txt_len, txt_size, (int64_t)txt_size - all_txt_len);
+             "Expecting all_txt_len=Σ(ctx.txt_len)=%"PRId64" == txt_size%s=%"PRId64" (diff=%"PRId64")", 
+             all_txt_len, (segconf.zip_txt_modified ? "(as modified)" : ""), txt_size, (int64_t)txt_size - all_txt_len);
 
     // short form stats from --stats    
     qsort (sbl, sbl_buf.len32, sizeof (sbl[0]), stats_sort_by_z_size);  // re-sort after consolidation
@@ -851,7 +859,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
     // note: we use txt_data_so_far_bind is the sum of recon_sizes - see zip_update_txt_counters - which is
     // expected to be the sum of txt_len. However, this NOT the size of the original file which is stored in
     // z_file->txt_data_so_far_bind_0.
-    ASSERT (!flag.debug_or_test || flag.show_stats_comp_i != COMP_NONE || all_txt_len == txt_size || flag.zip_txt_modified || flag.make_reference, 
+    ASSERT (!flag.debug_or_test || flag.show_stats_comp_i != COMP_NONE || all_txt_len == txt_size || segconf.zip_txt_modified || flag.make_reference, 
             "Hmm... incorrect calculation for %s sizes: total section sizes=%s but file size is %s (diff=%d)", 
             z_dt_name(), str_int_commas (all_txt_len).s, str_int_commas (txt_size).s, 
             (int32_t)(txt_size - all_txt_len)); 

@@ -392,8 +392,8 @@ StrTextMegaLong str_snip_ex (STRp(snip), bool add_quote)
     int i=1;
 
     static rom special_names[NUM_DATATYPES][MAX_NUM_SPECIAL] = 
-        { [DT_VCF]=VCF_SPECIAL_NAMES,         [DT_SAM]=SAM_SPECIAL_NAMES,     [DT_BAM]=SAM_SPECIAL_NAMES,
-          [DT_FASTQ]=FASTQ_SPECIAL_NAMES,     [DT_FASTA]=FASTA_SPECIAL_NAMES, [DT_GFF]=GFF_SPECIAL_NAMES, 
+        { [DT_VCF]=VCF_SPECIAL_NAMES,       [DT_SAM]=SAM_SPECIAL_NAMES,     [DT_BAM]=SAM_SPECIAL_NAMES,
+          [DT_FASTQ]=FASTQ_SPECIAL_NAMES,   [DT_FASTA]=FASTA_SPECIAL_NAMES, [DT_GFF]=GFF_SPECIAL_NAMES, 
           [DT_GNRIC]=GENERIC_SPECIAL_NAMES, [DT_LOCS]=LOCS_SPECIAL_NAMES,   [DT_BED]=BED_SPECIAL_NAMES };
 
     switch (op) {
@@ -425,7 +425,7 @@ StrTextMegaLong str_snip_ex (STRp(snip), bool add_quote)
     #define X(dt,sp)  (op == SNIP_SPECIAL && z_file->data_type==DT_##dt && (snip[1] == dt##_SPECIAL_##sp))
     #define X_SAM(sp) (op == SNIP_SPECIAL && (Z_DT(SAM) || Z_DT(BAM))   && (snip[1] == SAM_SPECIAL_##sp))
     if (op == SNIP_OTHER_LOOKUP || op == SNIP_OTHER_DELTA || op == SNIP_COPY || op == SNIP_REDIRECTION ||
-        X(VCF,LEN_OF) || X(VCF,ARRAY_LEN_OF) || X(VCF,COPY_MATE) || 
+        X(VCF,LEN_OF) || X(VCF,ARRAY_LEN_OF) || X(VCF,COPY_MATE) || (X(VCF,GQ) && snip_len > 8) ||
         X_SAM(COPY_BUDDY))
     #undef X
     {
@@ -538,8 +538,9 @@ void dict_io_print (FILE *fp, STRp(data), bool with_word_index, bool add_quotati
 void dict_io_show_singletons (VBlockP vb, ContextP ctx)
 {
     if (ctx->ltype == LT_SINGLETON) {
-        iprintf ("%s: %s.local contains singletons: ", VB_NAME, ctx->tag_name);
-        dict_io_print (info_stream, STRb(ctx->local), true, true, false, false);
+        iprintf ("%s: %s.local contains singletons:\n", VB_NAME, ctx->tag_name);
+        dict_io_print (info_stream, STRb(ctx->local), true, true, true, false);
+        iprint0 ("\n");
     }
 
     else

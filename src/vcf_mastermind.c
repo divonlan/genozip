@@ -21,8 +21,8 @@ void vcf_mastermind_zip_initialize (void)
     DictId hgvsg_dict_id_accession = (DictId)DICT_ID_MAKE1_6("H0GVSG");
     DictId hgvsg_dict_id_hgvs = (DictId)DICT_ID_MAKE1_6("H1GVSG");
     
-    hgvsg_did_accession = ctx_add_new_zf_ctx_from_txtheader ("HGVSG_ACCESSION", 15, hgvsg_dict_id_accession, 0)->did_i;
-    hgvsg_did_hgvs = ctx_add_new_zf_ctx_from_txtheader ("HGVSG_HGVS", 10, hgvsg_dict_id_hgvs,  0)->did_i;
+    hgvsg_did_accession = ctx_add_new_zf_ctx_at_init ("HGVSG_ACCESSION", 15, hgvsg_dict_id_accession)->did_i;
+    hgvsg_did_hgvs = ctx_add_new_zf_ctx_at_init ("HGVSG_HGVS", 10, hgvsg_dict_id_hgvs)->did_i;
     
     DO_ONCE {
         SmallContainer con = { .repeats   = 1,

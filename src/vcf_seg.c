@@ -14,8 +14,6 @@
 #include "tip.h"
 #include "arch.h"
 
-static MiniContainer line_number_container = {};
-
 // called by main thread after reading the header
 void vcf_zip_initialize (void)
 {
@@ -41,20 +39,15 @@ void vcf_zip_initialize (void)
     if (segconf.vcf_is_pbsv)       vcf_pbsv_zip_initialize();
     if (!segconf.vcf_is_sv)        vcf_sv_zip_initialize (0, 0); // if not any known SV caller (manta, pbsv, svaba), we still initialize for the non-specific stuff
 
-    // container just for adding a prefix to the delta-encoded line number (the container is all_the_same)
-    if (flag.add_line_numbers && !line_number_container.repeats) { // possibly already initialized by previous files
-        line_number_container = (MiniContainer) {
-            .repeats   = 1,
-            .nitems_lo = 1,
-            .items     = { { .dict_id = { _VCF_LINE_NUM } } }
-        };
-    }
+    // set header_info for QUAL, consumed by get_max_items
+    ZCTX(VCF_QUAL)->header_info.vcf.Type   = VCF_Float;
+    ZCTX(VCF_QUAL)->header_info.vcf.Number = 1;
 }
 
 // called after each file
 void vcf_zip_finalize (bool is_last_user_txt_file)
 {
-    // if REFALT takes more than 10% of z_file, advise on using --reference (note: if some cases, we already advised in vcf_seg_finalize_segconf)
+    // if REFALT takes more than 10% of z_file, advise on using --reference (note: if some cases, we already advised in vcf_segconf_finalize)
     decl_zctx(VCF_REFALT);
     int refalt_z_pc = flag.zip_no_z_file ? 0 : (100 * (zctx->dict.count + zctx->b250.count + zctx->local.count) / z_file->disk_size);
 
@@ -96,7 +89,7 @@ bool is_bcf (STRp(header), bool *need_more)
 void vcf_zip_genozip_header (SectionHeaderGenozipHeaderP header)
 {
     header->vcf.segconf_has_RGQ          = (segconf.has[FORMAT_RGQ] > 0); // introduced in v14
-    header->vcf.segconf_GQ_method        = segconf.GQ_method;             // since 15.0.37
+    header->vcf.segconf_GQ_method        = segconf.FMT_GQ_method;             // since 15.0.37
     header->vcf.segconf_INF_DP_method    = segconf.INFO_DP_method;        // since 15.0.52
     header->vcf.segconf_FMT_DP_method    = segconf.FMT_DP_method;         // since 15.0.37
     header->vcf.max_ploidy_for_mux       = ZIP_MAX_PLOIDY_FOR_MUX;        // since 15.0.36
@@ -115,6 +108,7 @@ void vcf_zip_genozip_header (SectionHeaderGenozipHeaderP header)
     header->vcf.width.BaseCounts         = segconf.wid_BaseCounts.width;  // since 15.0.52
 }
 
+// ZIP main thread
 void vcf_zip_init_vb (VBlockP vb_)
 {
     VBlockVCFP vb = (VBlockVCFP)vb_;
@@ -123,10 +117,8 @@ void vcf_zip_init_vb (VBlockP vb_)
     vb->vcf_version = vcf_header_get_version();
 
     // in case we're replacing ID with the line number
-    if (flag.add_line_numbers) {
-        vb->first_line = txt_file->num_lines + 1; 
-        txt_file->num_lines += str_count_char (STRb(vb->txt_data), '\n');  // update here instead of in zip_update_txt_counters;
-    }
+    if (flag.zip_lines_counted_at_init_vb) 
+        vcf_zip_add_line_numbers_init_vb (vb);
 }
 
 // called by main thread, as VBs complete (might be out-of-order)
@@ -191,19 +183,7 @@ void vcf_seg_initialize (VBlockP vb_)
     samples_ctx->format_mapper_buf.len = samples_ctx->format_contexts.len = CTX(VCF_FORMAT)->ol_nodes.len;
     buf_alloc_zero (vb, &samples_ctx->format_mapper_buf, 0, samples_ctx->format_mapper_buf.len, Container, CTX_GROWTH, "contexts->format_mapper_buf");
     buf_alloc_zero (vb, &samples_ctx->format_contexts, 0, samples_ctx->format_contexts.len, ContextPBlock, CTX_GROWTH, "contexts->format_contexts");
-    
-    if (flag.add_line_numbers) {
-        // create a b250 and dict entry for VCF_LINE_NUM, VCF_ID - these become "all_the_same" so no need to seg them explicitly hereinafter        
-        #define LN_PREFIX_LEN 3 // "LN="
-        static const char prefix[] = { CON_PX_SEP, // has prefix 
-                                       CON_PX_SEP, // end of (empty) container-wide prefix
-                                       'L', 'N', '=', CON_PX_SEP };  // NOTE: if changing prefix, update LN_PREFIX_LEN
-
-        container_seg (vb, CTX(VCF_ID), (Container *)&line_number_container, prefix, sizeof prefix, 0); 
-        ctx_decrement_count (vb_, CTX(VCF_ID), 0);
-        CTX(VCF_ID)->no_stons = true;
-    }
-        
+            
     if (segconf.vcf_QUAL_method == VCF_QUAL_by_RGQ) {
         seg_mux_init (vb, VCF_QUAL, VCF_SPECIAL_MUX_BY_HAS_RGQ, false, QUAL);
 
@@ -227,6 +207,7 @@ void vcf_seg_initialize (VBlockP vb_)
     vcf_gnomad_seg_initialize (vb);
     vcf_me_seg_initialize (vb);
     vcf_1000G_seg_initialize (vb);
+    if (flag.add_line_numbers)      vcf_add_line_numbers_seg_initialize (vb);
     if (segconf.vcf_illum_gtyping)  vcf_illum_gtyping_seg_initialize (vb);
     if (segconf.vcf_is_gwas)        vcf_gwas_seg_initialize (vb);
     if (segconf.vcf_is_cosmic)      vcf_cosmic_seg_initialize (vb);
@@ -243,8 +224,10 @@ void vcf_seg_initialize (VBlockP vb_)
     if (!segconf.vcf_is_sv)         vcf_sv_seg_initialize (vb, 0, 0); // not known SV caller - initialize generic stuff
 }             
 
-static void vcf_seg_finalize_segconf (VBlockVCFP vb)
+void vcf_segconf_finalize (VBlockP vb_)
 {
+    VBlockVCFP vb = (VBlockVCFP)vb_;
+
     vcf_segconf_finalize_QUAL (vb);
 
     if (segconf.has[FORMAT_RGQ] || segconf.vcf_is_gatk_gvcf)
@@ -264,7 +247,7 @@ static void vcf_seg_finalize_segconf (VBlockVCFP vb)
         for (int i=0; i < ARRAY_LEN(gvcf_dids); i++)
             segconf.has[gvcf_dids[i]] = true;
 
-        segconf.GQ_method = BY_PL;
+        segconf.FMT_GQ_method = BY_PL;
         segconf.FMT_DP_method = BY_AD; // override potential setting to BY_AD in segconf, bc most lines don't have AD
         segconf.has_DP_before_PL = true;
         if (flag.best) segconf.PL_mux_by_DP = yes;
@@ -330,7 +313,7 @@ static void vcf_seg_finalize_segconf (VBlockVCFP vb)
     if (segconf.FMT_DP_method == BY_AD) segconf.use_null_DP_method = false;
 
     // whether we should seg GQ as a function of GP or PL (the better of the two) - only if this works for at least 20% of the samples
-    if (segconf.has[FORMAT_GQ] && !segconf.GQ_method) 
+    if (segconf.has[FORMAT_GQ] && !segconf.FMT_GQ_method) 
         vcf_segconf_finalize_GQ (vb);
 
     if (segconf.has_DP_before_PL && !flag.best)
@@ -351,6 +334,9 @@ static void vcf_seg_finalize_segconf (VBlockVCFP vb)
 
     if (segconf.vcf_QUAL_method == VCF_QUAL_by_GP) 
         segconf_set_width (&segconf.wid_QUAL, 4); // should be non-zero only if VCF_QUAL_by_GP
+
+    if (flag.optimize) 
+        vcf_segconf_finalize_optimizations (vb);
 }
 
 void vcf_seg_finalize (VBlockP vb_)
@@ -382,11 +368,7 @@ void vcf_seg_finalize (VBlockP vb_)
     
     vcf_samples_seg_finalize (vb);
 
-    if (segconf.running)
-        vcf_seg_finalize_segconf (vb);
-
-    else
-        __atomic_add_fetch (&z_file->mate_line_count, (uint64_t)vb->mate_line_count,  __ATOMIC_RELAXED);
+    __atomic_add_fetch (&z_file->mate_line_count, (uint64_t)vb->mate_line_count,  __ATOMIC_RELAXED);
 }
 
 // after each VB is compressed and merge (VB order is arbitrary)
@@ -447,17 +429,6 @@ bool vcf_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id/*dict_id
         st_dict_id.num == _FORMAT_PLn  || // P1Ln1 etc are often big
         st_dict_id.num == _FORMAT_PLy  ||
         st_dict_id.num == _FORMAT_GP    ; // G1P1 etc are often big
-}
-
-static void vcf_seg_add_line_number (VBlockVCFP vb, unsigned VCF_ID_len)
-{
-    char line_num[20];
-    unsigned line_num_len = str_int (vb->first_line + vb->line_i, line_num);
-
-    seg_pos_field (VB, VCF_LINE_NUM, VCF_LINE_NUM, SPF_ZERO_IS_BAD, 0, line_num, line_num_len, 0, line_num_len + 1 + LN_PREFIX_LEN); // +1 for tab +3 for "LN="
-    
-    int shrinkage = (int)VCF_ID_len - line_num_len - LN_PREFIX_LEN;
-    vb->recon_size -= shrinkage;
 }
 
 // --------------------------------------------------------
@@ -567,56 +538,51 @@ static inline void vcf_seg_ID (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(id))
 {
     decl_ctx(VCF_ID);
     
-    if (flag.add_line_numbers) 
-        vcf_seg_add_line_number (vb, id_len);
-
-    else {
-        if (segconf.running) {
-            // segconf: set vcf_ID_is_variant in first line
-            if (vb->line_i == 0 && !segconf.vcf_is_pbsv) {
-                if (!({ segconf.vcf_ID_is_variant = '_' ; vcf_seg_ID_is_variant (vb, dl, STRa(id)); }) &&
-                    !({ segconf.vcf_ID_is_variant = ':' ; vcf_seg_ID_is_variant (vb, dl, STRa(id)); })) 
-                    segconf.vcf_ID_is_variant = 0;
-            }
-
-            // cases where we want PIZ to insert ID after REF,ALT
-            if (segconf.vcf_is_pbsv || segconf.vcf_ID_is_variant)
-                SEGCONF_RECORD_WIDTH (ID, id_len);
+    if (segconf.running && !flag.add_line_numbers) {
+        // segconf: set vcf_ID_is_variant in first line
+        if (vb->line_i == 0 && !segconf.vcf_is_pbsv) {
+            if (!({ segconf.vcf_ID_is_variant = '_' ; vcf_seg_ID_is_variant (vb, dl, STRa(id)); }) &&
+                !({ segconf.vcf_ID_is_variant = ':' ; vcf_seg_ID_is_variant (vb, dl, STRa(id)); })) 
+                segconf.vcf_ID_is_variant = 0;
         }
 
-        if (segconf.vcf_is_manta)
-            vcf_seg_manta_ID (vb, STRa(id));
-        
-        else if (segconf.vcf_is_svaba)
-            vcf_seg_svaba_ID (vb, STRa(id));
-
-        else if (segconf.vcf_is_pbsv)
-            vcf_seg_pbsv_ID (vb, STRa(id));
-
-        else if (segconf.vcf_ID_is_variant && vcf_seg_ID_is_variant (vb, dl, STRa(id)))
-            // defer reconstruction of ID to after reconstruction of REF/ALT - called from vcf_piz_refalt_parse
-            seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_DEFER, segconf.vcf_ID_is_variant/*'_' or ':'*/ }, 3, ctx, id_len+1);  // often - all the same
-
-        else if (IS_PERIOD(id))
-            seg_by_ctx (VB, STRa(id), ctx, id_len+1); // often - all the same
-
-        else
-            seg_id_field (VB, ctx, STRa(id), false, id_len+1);
-        
-        seg_set_last_txt (VB, ctx, STRa(id));
+        // cases where we want PIZ to insert ID after REF,ALT
+        if (segconf.vcf_is_pbsv || segconf.vcf_ID_is_variant)
+            SEGCONF_RECORD_WIDTH (ID, id_len);
     }
+
+    if (flag.add_line_numbers) 
+        vcf_seg_line_number_ID (vb, STRa(id));
+
+    else if (segconf.vcf_is_manta)
+        vcf_seg_manta_ID (vb, STRa(id));
+    
+    else if (segconf.vcf_is_svaba)
+        vcf_seg_svaba_ID (vb, STRa(id));
+
+    else if (segconf.vcf_is_pbsv)
+        vcf_seg_pbsv_ID (vb, STRa(id));
+
+    else if (segconf.vcf_ID_is_variant && vcf_seg_ID_is_variant (vb, dl, STRa(id)))
+        // defer reconstruction of ID to after reconstruction of REF/ALT - called from vcf_piz_refalt_parse
+        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_DEFER, segconf.vcf_ID_is_variant/*'_' or ':'*/ }, 3, ctx, id_len+1);  // often - all the same
+
+    else if (IS_PERIOD(id))
+        seg_by_ctx (VB, STRa(id), ctx, id_len+1); // often - all the same
+
+    else 
+        seg_id_field (VB, ctx, STRa(id), false, id_len+1);
+    
+    seg_set_last_txt (VB, ctx, STRa(id));
 }
 
-/* segment a VCF line into its fields:
-   fields CHROM->FORMAT are "field" contexts
-   all samples go into the SAMPLES context, which is a Container
-   Haplotype and phase data are stored in a separate buffers + a SNIP_SPECIAL in the GT context  */
-rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
+// segment a VCF line into its fields
+rom vcf_seg_txt_line (VBlockP vb_, rom line_start, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
 {
     VBlockVCFP vb = (VBlockVCFP)vb_;
     ZipDataLineVCF *dl = DATA_LINE (vb->line_i);
 
-    rom next_field=field_start_line, field_start;
+    rom next_field=line_start, field_start;
     int32_t len = remaining_txt_len;
     unsigned field_len=0;
     char separator;

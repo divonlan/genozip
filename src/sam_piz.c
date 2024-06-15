@@ -46,7 +46,7 @@ void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
         segconf.sag_type              = header->sam.segconf_sag_type;
         segconf.sag_has_AS            = header->sam.segconf_sag_has_AS;
         segconf.pysam_qual            = header->sam.segconf_pysam_qual;
-        segconf.has_cellranger        = header->sam.segconf_cellranger;
+        segconf.has_10xGen            = header->sam.segconf_10xGen;
         segconf.SA_HtoS               = header->sam.segconf_SA_HtoS;
         segconf.is_sorted             = header->sam.segconf_is_sorted;
         segconf.is_collated           = header->sam.segconf_is_collated;

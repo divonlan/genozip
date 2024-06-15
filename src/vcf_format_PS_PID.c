@@ -18,8 +18,8 @@
 #define MAX_PS_PID_LOOKBACK_LINES 16
 #define PS_PID_LOOKBACK_LINES (flag.fast ? 4 : flag.best ? 16 : 10) // may be modified without affecting backward compatability
 
-static char ps_lookback_snips[MAX_PS_PID_LOOKBACK_LINES][32], ps_pra_snip[200];
-static unsigned ps_lookback_snip_lens[MAX_PS_PID_LOOKBACK_LINES], ps_pra_snip_len;
+sSTRl_ARRAY(ps_lookback_snip, MAX_PS_PID_LOOKBACK_LINES, 32);
+sSTRl(ps_pra_snip, 200);
 
 void vcf_samples_zip_initialize_PS_PID (void)
 {

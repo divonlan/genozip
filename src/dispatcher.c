@@ -67,7 +67,8 @@ void dispatcher_increment_progress (rom where, int64_t increment)
 
     // update target
     if (IS_ZIP && !txt_file->est_num_lines)
-        d->target_progress = 3 * txtfile_get_seggable_size();
+        d->target_progress = (3 + segconf.zip_txt_modified) // read, (modify), seg, compress
+                           * txtfile_get_seggable_size();
 
     // in unbind mode - dispatcher is not done if there's another component after this one
     bool done = dispatcher_is_done (main_dispatcher);

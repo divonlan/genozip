@@ -871,7 +871,7 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header, FailType
                 "password is wrong for file %s", z_name);
     }
 
-    z_file->num_txt_files = header->num_txt_files;
+    z_file->num_txt_files = VER(14) ? header->num_txt_files : BGEN32 (header->v13_num_components);
     if (z_file->num_txt_files < 2) flag.unbind = 0; // override user's prefix if file has only 1 component (bug 326)
 
     int dts = z_file->z_flags.dt_specific; // save in case its set already (eg dts_paired is set in sections_is_paired)
@@ -882,7 +882,10 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header, FailType
     z_file->z_flags.dt_specific |= dts; 
     z_file->num_lines = BGEN64 (header->num_lines_bound);
     z_file->txt_data_so_far_bind = BGEN64 (header->recon_size);
-    segconf.vb_size = (uint64_t)BGEN16 (header->vb_size) MB;
+    segconf.vb_size = VER(14) ? (uint64_t)BGEN16 (header->vb_size) MB : 0;
+
+    if (VER(15))
+        segconf.zip_txt_modified = header->is_modified; // since 15.0.60
 
     if (flag.show_data_type) {
         iprintf ("%s\n", z_dt_name());
@@ -975,7 +978,7 @@ void zfile_update_txt_header_section_header (uint64_t offset_in_z_file)
     for (QType q=0; q < NUM_QTYPES; q++)
         header->flav_prop[q] = segconf.flav_prop[q];
 
-    if (flag.md5 && !flag.zip_txt_modified && gencomp_comp_eligible_for_digest(NULL))
+    if (flag.md5 && !segconf.zip_txt_modified && gencomp_comp_eligible_for_digest(NULL))
         header->digest = digest_snapshot (&z_file->digest_ctx, "file");
 
     if (flag.show_headers)
@@ -1004,10 +1007,10 @@ void zfile_compress_vb_header (VBlockP vb)
         .vblock_i          = BGEN32 (vb->vblock_i),
         .codec             = CODEC_NONE,
         .flags.vb_header   = vb->flags,
-        .recon_size   = BGEN32 (vb->recon_size),
+        .recon_size        = BGEN32 (vb->recon_size),
         .longest_line_len  = BGEN32 (vb->longest_line_len),
         .longest_seq_len   = BGEN32 (vb->longest_seq_len), // since v15 (non-0 for SAM, BAM, FASTQ)
-        .digest            = flag.zip_txt_modified ? DIGEST_NONE : vb->digest,
+        .digest            = vb->digest,
     };
 
     DT_FUNC (vb, zip_set_vb_header_specific)(vb, &vb_header);

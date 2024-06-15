@@ -528,8 +528,6 @@ void refhash_destroy (void)
     buf_destroy (refhash_buf);
     buf_destroy (emoneg_buf);
 
-    ref_cache_detach (gref);
-
     FREE (refhashs);
 
     flag.aligner_available = false;

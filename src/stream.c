@@ -348,7 +348,7 @@ int stream_close (StreamP *stream, StreamCloseMode close_mode)
     stream_close_pipes (*stream);
 
     if ((*stream)->pid && close_mode == STREAM_KILL_PROCESS) 
-#ifdef WIN32
+#ifdef _WIN32
         TerminateProcess ((*stream)->pid, 9); // ignore errors
 #else
         kill ((*stream)->pid, 9); // ignore errors

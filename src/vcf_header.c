@@ -18,6 +18,13 @@
 #include "tip.h"
 #include "arch.h"
 
+// VCF standard keys
+#define HK_GENOZIP_CMD   "##genozip_command="
+#define TAG_SOURCE       Source=\""GENOZIP_URL"\""
+#define HK_INFO          "##INFO="
+#define HK_FORMAT        "##FORMAT="
+#define HK_CONTIG        "##contig="
+
 // Globals
 static VcfVersion vcf_version;
 uint32_t vcf_num_samples = 0; // number of samples in the file
@@ -124,7 +131,7 @@ static void vcf_header_add_genozip_command (VBlockP txt_header_vb, BufferP txt_h
 }
 
 static void vcf_header_get_attribute (STRp(line), unsigned key_len, STRp(attr), bool remove_quotes, bool enforce,// in
-                                      rom *snip, unsigned *snip_len) // out
+                                      pSTRp(snip)) // out
 {
     SAFE_NUL (&line[line_len]);
     rom start = strstr (line + key_len, attr);
@@ -172,101 +179,114 @@ static void vcf_header_consume_contig (STRp (contig_name), PosType64 *LN)
         iprintf ("\"%.*s\" LN=%"PRId64" ref_index=%d\n", STRf(contig_name), *LN, ref_index);
 }
 
-// PIZ with --luft: remove fileformat, update *contig, *reference, dual_coordinates keys to Luft format
-static void vcf_header_rewrite_header (VBlockP txt_header_vb, BufferP txt_header, TxtIteratorCallback callback, void *ret)
+// in case of --optimize: add PL and PP (if converting from GL or GP) - these might be dup lines, that's ok
+// bug 1079
+// static void vcf_header_add_FORMAT_lines (BufferP txt_header)
+// {
+//     txt_header->len -= vcf_field_name_line.len; // remove field name line
+
+//     #define FORMAT_PP "##FORMAT=<ID=PP,Number=G,Type=Integer,Description=\"Phred-scaled genotype posterior probabilities rounded to the closest integer\">\n"
+//     buf_add_moreC (evb, txt_header, FORMAT_PP, "txt_data");
+//     z_file->header_size += STRLEN(FORMAT_PP); // header_size has grown
+
+//     #define FORMAT_PL "##FORMAT=<ID=PL,Number=G,Type=Integer,Description=\"Phred-scaled genotype likelihoods rounded to the closest integer\">\n"
+//     buf_add_moreC (evb, txt_header, FORMAT_PL, "txt_data");
+//     z_file->header_size += STRLEN(FORMAT_PL); // header_size has grown
+
+//     // add back the field name (#CHROM) line
+//     buf_add_buf (evb, txt_header, &vcf_field_name_line, char, "txt_data");
+// }
+
+static void vcf_header_zip_create_contig (STRp(line))
 {
-    #define new_txt_header txt_header_vb->codec_bufs[0]
-
-    buf_alloc (txt_header_vb, &new_txt_header, 0, txt_header->len, char, 0, "codec_bufs[0]"); // initial allocation (might be a bit bigger due to label changes)
-
-    txtfile_foreach_line (txt_header, false, callback, &new_txt_header, ret, 0, 0);
-
-    // replace txt_header with lifted back one
-    buf_free (*txt_header);
-    buf_copy (txt_header_vb, txt_header, &new_txt_header, char, 0, 0, "txt_data");
-    buf_free (new_txt_header);
-    #undef new_txt_header
-}
-
-// scan header for contigs - used to pre-populate z_file contexts in ctx_populate_zf_ctx_from_contigs
-static bool vcf_header_handle_contigs (STRp(line), void *new_txt_header_, void *num_contig_lines, unsigned unused2)
-{
-    bool printed = false;
-    BufferP new_txt_header = (BufferP )new_txt_header_;
-
-    if (!LINEIS (HK_CONTIG)) goto copy_line;
-
-    (*(uint32_t *)num_contig_lines)++;
-
-    PosType64 LN = 0;
-    unsigned key_len = STRLEN (HK_CONTIG);
-
     // parse eg "##contig=<ID=NKLS02001838.1,length=29167>" 
     SAFE_NUL (&line[line_len]);
-    STR (contig_name);
-    vcf_header_get_attribute (STRa(line), key_len, cSTR("ID="),     false, true,  pSTRa(contig_name));
+
+    STR(contig_name);
+    vcf_header_get_attribute (STRa(line), STRLEN (HK_CONTIG), cSTR("ID="),     false, true,  pSTRa(contig_name));
+
     STR(length_str);
-    vcf_header_get_attribute (STRa(line), key_len, cSTR("length="), false, false, pSTRa(length_str));
+    vcf_header_get_attribute (STRa(line), STRLEN (HK_CONTIG), cSTR("length="), false, false, pSTRa(length_str));
+    PosType64 LN = 0;
     str_get_int_range64 (STRa(length_str), 1, 1000000000000ULL, &LN); // length stays 0 if length_str_len=0
-    SAFE_RESTORE;
-
-    // case match_chrom_to_reference: update contig_name to the matching name in the reference
-    // Note: we match reference contigs by name only, not searching LN, we just verify the LN after the fact.
-    // This is so the process is the same when matching CHROM fields while segging, which will result in the header and lines
-    // behaving the same
-    if (flag.match_chrom_to_reference) {
-        WordIndex ref_index = ref_contigs_get_by_name (gref , STRa(contig_name), true, true);
-        if (ref_index != WORD_INDEX_NONE) {
-            contig_name = ref_contigs_get_name (gref, ref_index, &contig_name_len); // this contig as its called in the reference
-            LN = ref_contigs_get_contig_length (gref, ref_index, 0, 0, true);   // update - we check later that it is consistent
-        }
-
-        int32_t len_before = new_txt_header->len32; 
-        bufprintf (evb, new_txt_header, "%.*s<ID=%.*s,length=%"PRIu64">\n", key_len, line, STRf(contig_name), LN);
-        
-        z_file->header_size += (int32_t)new_txt_header->len32 - (int32_t)len_before - (int32_t)line_len; // header_size now has the growth in the size due to --match. the base will be added in txtheader_zip_read_and_compress
-        printed = true;
-
-        int32_t new_line_len = (int32_t)new_txt_header->len32 - len_before;
-        z_file->header_size += new_line_len - (int32_t)line_len; // header_size has growth in the size due to --match. the base will be added in txtheader_zip_read_and_compress
-    }
 
     vcf_header_consume_contig (STRa (contig_name), &LN); // also verifies / updates length
-
     vcf_num_hdr_contigs++;
     vcf_num_hdr_nbases += LN;
 
-copy_line:
-    if (!printed) 
-        buf_add_more (NULL, new_txt_header, line, line_len, NULL); // unchanged
+    SAFE_RESTORE;
+}
+
+static void vcf_header_zip_create_ctx (STRp(line), bool is_info)
+{
+    SAFE_NUL (&line[line_len]);
+    int key_len = is_info ? STRLEN (HK_INFO) : STRLEN (HK_FORMAT);
+
+    STR(tag_name);
+    vcf_header_get_attribute (STRa(line), key_len, cSTR("ID="), false, false, pSTRa(tag_name));
     
-    return false; // continue iterating
-}
+    STR(number); // expecting: an integer string, "A", "R", "G" or "." 
+    vcf_header_get_attribute (STRa(line), key_len, cSTR("Number="), false, false, pSTRa(number));
+    
+    STR(type); // expecting:  "Integer", "Float", "Flag", "Character", or "String"
+    vcf_header_get_attribute (STRa(line), key_len, cSTR("Type="), false, false, pSTRa(type));
 
-static void vcf_header_add_FORMAT_lines (BufferP txt_header)
-{
-    txt_header->len -= vcf_field_name_line.len; // remove field name line
+    if (!tag_name || !number || !type)
+        goto done; // ignore this header line if one of the needed attributes is missing;
 
-    if (flag.GP_to_PP) {
-        #define FORMAT_PP "##FORMAT=<ID=PP,Number=G,Type=Integer,Description=\"Phred-scaled genotype posterior probabilities rounded to the closest integer\">\n"
-        buf_add_moreC (evb, txt_header, FORMAT_PP, "txt_data");
-        z_file->header_size += STRLEN(FORMAT_PP); // header_size has grown
+    DictId dict_id = dict_id_make (STRa(tag_name), is_info ? DTYPE_1 : DTYPE_2);
+
+    ContextP zctx = ctx_add_new_zf_ctx_at_init (STRa(tag_name), dict_id);
+    if (!zctx) zctx = ctx_get_existing_zctx (dict_id); // pre-defined context
+
+    int64_t number_int;    
+    if      (str_issame_(STRa(number), "A", 1)) zctx->header_info.vcf.Number = NUMBER_A;
+    else if (str_issame_(STRa(number), "G", 1)) zctx->header_info.vcf.Number = NUMBER_G;
+    else if (str_issame_(STRa(number), "R", 1)) zctx->header_info.vcf.Number = NUMBER_R;
+    else if (str_issame_(STRa(number), ".", 1)) zctx->header_info.vcf.Number = NUMBER_VAR;
+    else if (str_get_int (STRa(number), &number_int)) 
+        zctx->header_info.vcf.Number = (number_int >= 1 && number_int <= 127) ? number_int : NUMBER_LARGE; 
+    else goto done; // unrecgonized Number - remains NOT_IN_HEADER
+
+    if      (str_issame_(STRa(type), _S("Integer")))   zctx->header_info.vcf.Type = VCF_Integer;
+    else if (str_issame_(STRa(type), _S("Float")))     zctx->header_info.vcf.Type = VCF_Float;
+    else if (str_issame_(STRa(type), _S("Flag")))      zctx->header_info.vcf.Type = VCF_Flag;
+    else if (str_issame_(STRa(type), _S("Character"))) zctx->header_info.vcf.Type = VCF_Character;
+    else if (str_issame_(STRa(type), _S("String")))    zctx->header_info.vcf.Type = VCF_String;
+    else zctx->header_info.vcf.Number = NOT_IN_HEADER; // unrecognized Type
+
+    if (zctx->did_i == FORMAT_GP) {
+        if (strstr (line, "Phred") || strstr (line, "phred")) 
+            segconf.FMT_GP_content = GP_phred;
+        else if (strstr (line, "Estimated Posterior Probabilities"))
+            segconf.FMT_GP_content = GP_probabilities;
     }
 
-    if (flag.GL_to_PL) {
-        #define FORMAT_PL "##FORMAT=<ID=PL,Number=G,Type=Integer,Description=\"Phred-scaled genotype likelihoods rounded to the closest integer\">\n"
-        buf_add_moreC (evb, txt_header, FORMAT_PL, "txt_data");
-        z_file->header_size += STRLEN(FORMAT_PL); // header_size has grown
-    }
-
-    // add back the field name (#CHROM) line
-    buf_add_buf (evb, txt_header, &vcf_field_name_line, char, "txt_data");
+done:
+    SAFE_RESTORE;
 }
 
-static bool vcf_header_build_stats_programs (STRp(line), void *unused1, void *unused2, unsigned unused3)
+static bool vcf_header_zip_parse_one_line (STRp(line), void *unused1, void *unused2, unsigned unused3)
 {
-    if (LINEIS ("##source=")) 
-        stats_add_one_program (&line[9], line_len-10); // without the \n
+    bool is_info=false;
+
+    // populate contigs
+    if (LINEIS (HK_CONTIG)) 
+        vcf_header_zip_create_contig (STRa(line));
+
+    // create contexts that appear in header 
+    else if ((is_info = LINEIS(HK_INFO)) || LINEIS(HK_FORMAT)) 
+        vcf_header_zip_create_ctx (STRa(line), is_info);
+
+    // keywords that designate programs
+    #define ISPROG(s) \
+    else if (LINEIS (s)) stats_add_one_program (&line[STRLEN(s)], line_len-STRLEN(s)-1) // without the \n
+
+    // identify programs
+    ISPROG("##source=");
+    ISPROG("##imputation=");
+    ISPROG("##phasing=");
+    ISPROG("##annotator=");
 
     return false; // continue iterating
 }
@@ -275,14 +295,14 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
 {
     if (!vcf_header_set_globals (txt_file->name, txt_header, true)) return false; // samples are different than a previous concatented file
 
-    txtfile_foreach_line (txt_header, false, vcf_header_build_stats_programs, 0, 0, 0, 0);
-
+    // populate contigs, identify programs, identify float fields for optimization    
+    txtfile_foreach_line (txt_header, false, vcf_header_zip_parse_one_line, 0, 0, 0, 0);
+    
     SAFE_NULB (*txt_header);
     #define IF_IN_SOURCE(signature, segcf) if (stats_is_in_programs (signature)) segconf.segcf = true
     #define IF_IN_HEADER(signature, segcf, program) ({ if ((sig = strstr (txt_header->data, (signature)))) {                    \
                                                            segconf.segcf = true;                                                \
                                                            if (program[0]) stats_add_one_program (program, strlen (program)); } })
-
     
     // when adding here, also add to stats_output_file_metadata()
     rom sig;
@@ -309,7 +329,7 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
     IF_IN_HEADER ("Pindel", vcf_is_pindel, "Pindel");
     IF_IN_HEADER ("caveman", vcf_is_caveman, "CaVEMan");
     IF_IN_HEADER ("gnomAD", vcf_is_gnomad, "gnomAD");
-    IF_IN_HEADER ("ExAC", vcf_is_exac, "ExAC");
+    IF_IN_HEADER ("ExAC", vcf_is_exac, ""); // "" = not a program
     IF_IN_HEADER ("Mastermind", vcf_is_mastermind, "Mastermind");
     IF_IN_HEADER ("VcfAnnotate.pl", vcf_is_vagrent, "VAGrENT");
     IF_IN_HEADER ("ICGC", vcf_is_icgc, "ICGC");
@@ -347,13 +367,9 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
              "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
              arch_get_argv0(), txt_file->name);
     
-    // handle contig lines    
-    uint32_t num_contig_lines=0;
-    vcf_header_rewrite_header (evb, txt_header, vcf_header_handle_contigs, &num_contig_lines);
-
-    // add PP and/or PL INFO lines if needed
-    if ((flag.GP_to_PP || flag.GL_to_PL) && !evb->comp_i)
-        vcf_header_add_FORMAT_lines (txt_header);
+    // (bug 1079) add PP and/or PL INFO lines if needed
+    // if (flag.optimize)
+    //     vcf_header_add_FORMAT_lines (txt_header);
 
     // set vcf_version
     vcf_header_set_vcf_version (txt_header);
@@ -379,13 +395,8 @@ static bool vcf_inspect_txt_header_piz (VBlockP txt_header_vb, BufferP txt_heade
     if (flag.samples) vcf_header_subset_samples (&vcf_field_name_line);
     else              vcf_num_displayed_samples = vcf_num_samples;
 
-    // for the rejects part of the header - we're done
-    if (evb->comp_i) 
-        return true;
-
     // add genozip command line
-    if (!flag.header_one && is_genocat && !flag.genocat_no_reconstruct && !evb->comp_i
-        && !flag.no_pg && flag.piz_txt_modified) 
+    if (!flag.header_one && is_genocat && !flag.genocat_no_reconstruct && !flag.no_pg && flag.piz_txt_modified) 
         vcf_header_add_genozip_command (txt_header_vb, txt_header);
 
     if (flag.drop_genotypes) 

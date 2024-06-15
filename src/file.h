@@ -44,7 +44,7 @@ typedef struct File {
     int64_t disk_size;                 // ZIP: size of actual file on disk. 0 if not known (eg stdin or http stream). 
     int64_t disk_so_far;               // ZIP: Z/TXT_FILE: data actually read/write to/from "disk" (using fread/fwrite), (TXT_FILE: possibley bgzf/gz/bz2 compressed ; 0 if external compressor is used for reading).
     int64_t est_seggable_size;         // TXT_FILE ZIP, access via txtfile_get_seggable_size(). Estimated size of txt_data in file, i.e. excluding the header. It is exact for plain files, or based on test_vb if the file has source compression
-    int64_t est_num_lines;             // TXT_FILE ZIP, an alternative for progress bar - by lines instead of bytes
+    int64_t est_num_lines;             // TXT_FILE ZIP, an alternative for progress bar - by lines instead of bytes (used for CRAM)
     
     // this relate to the textual data represented. In case of READ - only data that was picked up from the read buffer.
     int64_t txt_data_size;             // TXT_FILE: PIZ: value copied from SectionHeaderTxtHeader.txt_data_size. At the end of piz, expected to be equal to txt_data_so_far_single if no PIZ modifications (eg filters) 

@@ -9,6 +9,7 @@
 #include "sam_private.h"
 #include "lookback.h"
 #include "zip_dyn_int.h"
+#include "context.h"
 
 // fields used by STARsolo and 10xGenomics cellranger. Some are SAM-standard and some not.
 
@@ -21,6 +22,22 @@ void sam_segconf_retag_UBURUY (void)
     strcpy (ZCTX(OPTION_QX_DOMQRUNS)->tag_name, "U0Y_DOMQ");
     strcpy (ZCTX(OPTION_QX_QUALMPLX)->tag_name, "U1Y_MPLX");
     strcpy (ZCTX(OPTION_QX_DIVRQUAL)->tag_name, "U2Y_DEVQ");
+}
+
+static void sam_seg_TX_AN_initialize (VBlockSAMP vb, Did did_i); // forward
+
+void sam_10xGen_seg_initialize (VBlockSAMP vb)
+{
+    sam_seg_TX_AN_initialize (vb, OPTION_TX_Z);
+    sam_seg_TX_AN_initialize (vb, OPTION_AN_Z);    
+
+    if (MP(CRDNA)) {
+        ctx_set_store (VB, STORE_INT, OPTION_GP_i, OPTION_MP_i, DID_EOL);
+        ctx_set_store_per_line (VB, OPTION_GP_i, OPTION_MP_i, DID_EOL);
+        seg_mux_init (vb, OPTION_GP_i, SAM_SPECIAL_DEMUX_BY_REVCOMP_MATE, true, GP);
+        seg_mux_init (vb, OPTION_MP_i, SAM_SPECIAL_DEMUX_BY_REVCOMP_MATE, true, MP);
+    }
+
 }
 
 //------------------------------------------------------------------------------------------------------------------------
@@ -473,7 +490,7 @@ void sam_seg_GY_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(gy), unsigned add_byt
 
 #define lookback_value last_value.i
 
-void sam_seg_TX_AN_initialize (VBlockSAMP vb, Did did_i)
+static void sam_seg_TX_AN_initialize (VBlockSAMP vb, Did did_i)
 {
     ContextP lookback_ctx = CTX(did_i + 1);
     ContextP negative_ctx = CTX(did_i + 2);
@@ -716,3 +733,58 @@ void sam_seg_TX_AN_Z (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, STRp(value),
 
     COPY_TIMER(sam_seg_TX_AN_Z);
 }
+
+// First: somewhat close to POS; Last: very close to POS; Mated: =mate(MP)
+void sam_seg_GP_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t value, unsigned add_bytes)
+{
+    int channel_i = sam_has_mate?2 : dl->FLAG.rev_comp?1 : 0;
+    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_GP_i, (MultiplexerP)&vb->mux_GP, channel_i);
+    dl->GP = value;
+
+    if (channel_i==2 && (value == DATA_LINE (vb->mate_line_i)->MP)) 
+        seg_by_ctx (VB, STRa(copy_mate_MP_snip), channel_ctx, add_bytes);
+
+    else if (channel_i==1 && value == (dl->POS + vb->ref_consumed + vb->soft_clip[1] - 1)) 
+        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_crdna_GP, '0'/*ffu*/ }, 3, channel_ctx, add_bytes);
+
+    else if (channel_i==0)
+        seg_delta_vs_other_localN (VB, channel_ctx, CTX(SAM_POS), value, -1, add_bytes);
+
+    else 
+        seg_integer (VB, channel_ctx, value, true, add_bytes);
+
+    seg_by_did (VB, STRa(vb->mux_GP.snip), OPTION_GP_i, 0);
+}
+
+SPECIAL_RECONSTRUCTOR (sam_piz_special_crdna_GP)
+{
+    new_value->i = CTX(SAM_POS)->last_value.i + VB_SAM->ref_consumed + VB_SAM->soft_clip[1] - 1;
+    return HAS_NEW_VALUE;
+}
+
+// rev_comp: very close to PNEXT; !rev_comp: somewhat close to PNEXT; Mated: =mate(GP)
+void sam_seg_MP_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t value, unsigned add_bytes)
+{
+    int channel_i = sam_has_mate?2 : dl->FLAG.rev_comp?1 : 0;
+    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_MP_i, (MultiplexerP)&vb->mux_MP, channel_i);
+    dl->MP = value;
+
+    if (sam_has_mate) {
+        if (value == DATA_LINE (vb->mate_line_i)->GP) 
+            seg_by_ctx (VB, STRa(copy_mate_GP_snip), channel_ctx, add_bytes);
+        else
+            seg_integer (VB, channel_ctx, value, true, add_bytes);
+    }
+
+    else 
+        seg_delta_vs_other_dictN (VB, channel_ctx, CTX(SAM_PNEXT), value, -1, add_bytes);
+
+    seg_by_did (VB, STRa(vb->mux_MP.snip), OPTION_MP_i, 0);
+}
+
+SPECIAL_RECONSTRUCTOR (sam_piz_special_DEMUX_BY_REVCOMP_MATE)
+{
+    int channel_i = sam_has_mate?2 : last_flags.rev_comp?1 : 0;
+    return reconstruct_demultiplex (vb, ctx, STRa(snip), channel_i, new_value, reconstruct);
+}
+

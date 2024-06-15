@@ -6,8 +6,8 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
+#include <math.h>
 #include "vcf_private.h"
-#include "optimize.h"
 #include "codec.h"
 #include "base64.h"
 #include "stats.h"
@@ -20,14 +20,22 @@
 static SmallContainer con_AD={}, con_ADALL={}, con_ADF={}, con_ADR={}, con_SAC={}, con_F1R2={}, con_F2R1={}, 
     con_MB={}, con_SB={}, con_AF={};
 
-static char sb_snips[2][32], mb_snips[2][32], f2r1_snips[VCF_MAX_ARRAY_ITEMS][32], adr_snips[VCF_MAX_ARRAY_ITEMS][32], adf_snips[VCF_MAX_ARRAY_ITEMS][32], 
-    rdf_snip[32], rdr_snip[32], adf_snip[32], adr_snip[32], ad_varscan_snip[32], gq_by_pl[50], gq_by_gp[50],
-    sac_snips[VCF_MAX_ARRAY_ITEMS/2][32], PL_to_PLn_redirect_snip[30], PL_to_PLy_redirect_snip[30];
+sSTRl_ARRAY(sb_snip, 2, 32);
+sSTRl_ARRAY(mb_snip, 2, 32);
+sSTRl_ARRAY(f2r1_snip, VCF_MAX_ARRAY_ITEMS, 32);
+sSTRl_ARRAY(adr_snip,  VCF_MAX_ARRAY_ITEMS, 32);
+sSTRl_ARRAY(adf_snip,  VCF_MAX_ARRAY_ITEMS, 32);
+sSTRl_ARRAY(sac_snip,  VCF_MAX_ARRAY_ITEMS/2, 32);
+sSTRl(PL_to_PLn_redirect_snip, 30);
+sSTRl(PL_to_PLy_redirect_snip, 30);
+sSTRl(rdf_snip,32);
+sSTRl(rdr_snip,32);
+sSTRl(adf_snip,32);
+sSTRl(adr_snip,32);
+sSTRl(ad_varscan_snip,32);
+sSTRl(gq_by_pl,32);
+sSTRl(gq_by_gp,32);
 STRl(snip_copy_af,32);
-
-static unsigned sb_snip_lens[2], mb_snip_lens[2], f2r1_snip_lens[VCF_MAX_ARRAY_ITEMS], adr_snip_lens[VCF_MAX_ARRAY_ITEMS], adf_snip_lens[VCF_MAX_ARRAY_ITEMS], 
-    sac_snip_lens[VCF_MAX_ARRAY_ITEMS/2], rdf_snip_len, rdr_snip_len, adf_snip_len, adr_snip_len, ad_varscan_snip_len,
-    gq_by_pl_len, gq_by_gp_len, PL_to_PLn_redirect_snip_len, PL_to_PLy_redirect_snip_len;
 
 static DictId make_array_item_dict_id (uint64_t dict_id_num, unsigned item_i)
 {
@@ -153,7 +161,7 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
     if (segconf.has[FORMAT_DP]) 
         seg_mux_init (vb, FORMAT_RGQ, VCF_SPECIAL_RGQ, false, RGQ);
     
-    switch (segconf.GQ_method) {
+    switch (segconf.FMT_GQ_method) {
         case MUX_DOSAGExDP : seg_mux_init (vb, FORMAT_GQ,  VCF_SPECIAL_MUX_BY_DOSAGExDP, false, GQ); break;
         case MUX_DOSAGE    : init_mux_by_dosage(GQ); break;
         default            : break;
@@ -428,7 +436,7 @@ static WordIndex vcf_seg_FORMAT_A_R (VBlockVCFP vb, ContextP ctx, SmallContainer
             }
 
             else if (item_store_type == STORE_FLOAT) 
-                seg_add_to_local_string (VB, item_ctxs[i], STRi(item, i), LOOKUP_NONE, item_lens[i]);
+                vcf_seg_string (vb, item_ctxs[i], STRi(item, i));
 
             else
                 seg_by_ctx (VB, STRi(item, i), item_ctxs[i], item_lens[i]);
@@ -542,7 +550,7 @@ static void vcf_seg_AD_complement_items (VBlockVCFP vb, ContextP ctx, STRps(item
 
         // case: as expected, F1R2 + F2R1 = AD - seg as a F2R1 as a MINUS snip
         if (use_formula && vb->ad_values[i] == values[i] + ECTX (other_con->items[i].dict_id)->last_value.i) 
-            seg_by_ctx (VB, my_snips[i], my_snip_lens[i], item_ctxs[i], item_lens[i]); 
+            seg_by_ctx (VB, STRi(my_snip,i), item_ctxs[i], item_lens[i]); 
 
         // case: the formula doesn't work for this item - seg a normal snip
         else
@@ -890,9 +898,12 @@ static inline void vcf_seg_FORMAT_DP (VBlockVCFP vb)
     }
 
     // multi-sample default: store in transposed matrix (or just LOOKUP from local if not transposable)
-    else 
+    else if (vcf_num_samples > 1) 
         vcf_seg_FORMAT_transposed (vb, ctx, STRa(dp), 0, (char []){ SNIP_LOOKUP }, 1, dp_len); // this handles DP that is an integer or '.'
 
+    else
+        seg_integer_or_not (VB, ctx, STRa(dp), dp_len);
+        
     if (!IS_PERIOD(dp) && segconf.INFO_DP_method == BY_FORMAT_DP) 
         CTX(INFO_DP)->dp.sum_format_dp += ctx->last_value.i; // we may delta INFO/DP against this sum
 
@@ -959,47 +970,6 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_PGT)
     }
 
     return NO_NEW_VALUE;
-}
-
-//----------
-// FORMAT/GL
-// ---------
-
-// convert an array of probabilities to an array of integer phred scores capped at 60
-static void vcf_convert_prob_to_phred (VBlockVCFP vb, rom flag_name, STRp(snip), char *optimized_snip, unsigned *optimized_snip_len)
-{
-    str_split_floats (snip, snip_len, 0, ',', prob, false);
-    ASSVCF (n_probs, "cannot to apply %s to value \"%.*s\"", flag_name, STRf(snip)); // not an array of floats - abort, because we already changed the FORMAT field
-
-    unsigned phred_len = 0;
-    for (unsigned i=0; i < n_probs; i++) {
-        
-        int64_t phred = MIN_(60, (int64_t)(((-probs[i]) * 10)+0.5)); // round to the nearest int, capped at 60
-
-        phred_len += str_int (phred, &optimized_snip[phred_len]);
-        if (i < n_probs - 1)
-            optimized_snip[phred_len++] = ',';
-    }
-
-    *optimized_snip_len = phred_len;
-}
-
-// converts an array of phred scores (possibly floats) to integers capped at 60
-static bool vcf_phred_optimize (rom snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len /* in / out */)
-{
-    str_split_floats (snip, len, 0, ',', item, false);
-    if (!n_items) return false; // not an array of floats
-
-    unsigned out_len = 0;
-
-    for (unsigned i=0; i < n_items; i++) {
-        int64_t new_phred = MIN_(60, (int64_t)(items[i] + 0.5));
-        out_len += str_int (new_phred, &optimized_snip[out_len]);
-        if (i < n_items-1) optimized_snip[out_len++] = ',';
-    }
-
-    *optimized_snip_len = out_len;
-    return true;
 }
 
 //----------
@@ -1073,7 +1043,7 @@ rollback:
     seg_by_ctx (VB, STRa(ab_str), ab_ctx, ab_str_len); 
 }
 
-SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_FORMAT_AB)
+SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_AB)
 {
     VBlockVCFP vb = (VBlockVCFP)vb_;
 
@@ -1104,6 +1074,41 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_FORMAT_AB)
 }
 
 //----------
+// FORMAT/GP
+// ---------
+
+static inline void vcf_seg_FORMAT_GP (VBlockVCFP vb, ContextP ctx, STRp(gp))
+{
+    // according to the VCF spec, until VCF 4.2 GP contains phred values
+    // and since 4.3, it contains probabilities. But tools don't adhere to this, and it might be either.
+    // we test all GPs in the segconf data to identify their format and verify its consistency   
+    if (segconf.running && segconf.FMT_GP_content == GP_unknown) {
+        str_split_floats (gp, gp_len, 0, ',', gp, false, '.');
+        if (!n_gps)
+            segconf.FMT_GP_content = GP_other; // unrecognized format
+
+        // case: probabilities format if numbers add up approximately 1
+        else if (({ double sum=0 ; 
+                    for (int i=0; i < n_gps; i++) sum += (isnan(gps[i]) ? 0 : gps[i]); 
+                    (sum > 0.98 && sum < 1.02); }))
+            segconf.FMT_GP_content = GP_probabilities; 
+
+        // case: evidence of phred if all numbers are non-negative, but are not probabilities
+        else if (({ bool all_non_negative=true; 
+                    for (int i=0; i < n_gps; i++) if (!isnan(gps[i]) && gps[i] < 0) { all_non_negative=false; break; }; 
+                    all_non_negative; }))
+            segconf.FMT_GP_content = GP_phred; 
+
+        // case: negative numbers - unknown format
+        else
+            segconf.FMT_GP_content = GP_other;
+    }
+
+    vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRa(gp), &vb->mux_GP);
+    seg_set_last_txt (VB, ctx, STRa(gp)); // used by GQ
+}
+
+//----------
 // FORMAT/PL
 // ---------
 
@@ -1113,18 +1118,8 @@ static inline void vcf_seg_FORMAT_PL (VBlockVCFP vb, ContextP ctx, STRp(PL))
     if (segconf.running && !segconf.has_DP_before_PL) 
         segconf.has_DP_before_PL = ctx_encountered (VB, FORMAT_DP);
 
-    seg_set_last_txt (VB, ctx, STRa(PL)); // used by GQ and SPL (points into txt_data, before optimization)
-
-    // attempt to optimize PL string, if requested
-    unsigned optimized_len = PL_len*2 + 10;                 
-    char optimized[PL_len]; // note: modifying functions need to make sure not to overflow this space
-
-    if (flag.optimize_phred && vcf_phred_optimize (STRa(PL), qSTRa(optimized))) {
-        int growth = (int)optimized_len - (int)PL_len;
-        vb->recon_size      += growth;               
-        STRset(PL, optimized);
-    }
-        
+    seg_set_last_txt (VB, ctx, STRa(PL)); // consumed by GQ and SPL 
+       
     // seg into either PLy or PLn, or into both if we're testing (vcf_FORMAT_PL_decide will drop one of them) 
     if (vb->PL_mux_by_DP == yes || vb->PL_mux_by_DP == unknown) 
         vcf_seg_FORMAT_mux_by_dosagexDP (vb, CTX(FORMAT_PLy), STRa(PL), &vb->mux_PLy);
@@ -1224,7 +1219,7 @@ static inline WordIndex vcf_seg_FORMAT_DS (VBlockVCFP vb, ContextP ctx, rom ds, 
 */
 
 // used for decompressing files compressed with version up to 12.0.42
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_DS_old)
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_DS_old)
 {
     if (!reconstruct) goto done;
 
@@ -1319,13 +1314,6 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
         DictId dict_id = format->items[i].dict_id;
         ContextP ctx = ctxs[i];
 
-        STRli(optimized,  sf_lens[i]*2 + 10); // for optimizations - separate space - we can optimize a "translated" string
-
-        #define SEG_OPTIMIZED_MUX_BY_DOSAGE(tag) ({                     \
-            vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRa(optimized), &vb->mux_##tag);  \
-            int32_t growth = (int)optimized_len - (int)sf_lens[i];      \
-            vb->recon_size += growth; })
-
         if (!sf_lens[i])
             seg_by_ctx (VB, "", 0, ctx, 0); // generates WORD_INDEX_EMPTY
 
@@ -1342,34 +1330,8 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
             break;
         }
 
-        // <ID=GL,Number=.,Type=Float,Description="Genotype Likelihoods">
-        case _FORMAT_GL:
-            // --GL-to-PL:  GL: 0.00,-0.60,-8.40 -> PL: 0,6,60
-            // note: we changed the FORMAT field GL->PL in vcf_seg_format_field. data is still stored in the GL context.
-            // <ID=PL,Number=G,Type=Integer,Description="Phred-scaled genotype likelihoods rounded to the closest integer">
-            if (flag.GL_to_PL) {
-                vcf_convert_prob_to_phred (vb, "--GL-to-PL", STRi(sf, i), qSTRa(optimized));
-                SEG_OPTIMIZED_MUX_BY_DOSAGE(GL);
-            }
-            else // I tried muxing against DS instead of dosage (41 channels) - worse results than dosage in 1KGP-37 even with --best 
-                vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_GL);
-            break;
-
         // note: GP and PL - for non-optimized, I tested segging as A_R and seg_array - they are worse or not better than the default, because the values are correlated.
-        case _FORMAT_GP:
-            // convert GP (probabilities) to PP (phred values). PP was introduced in VCF v4.3.
-            if (flag.GP_to_PP && vb->vcf_version >= VCF_v4_3) {
-                vcf_convert_prob_to_phred (vb, "--GP-to-PP", STRi(sf, i), qSTRa(optimized));
-                SEG_OPTIMIZED_MUX_BY_DOSAGE(GP);
-            }
-            else if (flag.optimize_phred && vb->vcf_version <= VCF_v4_2 &&
-                     vcf_phred_optimize (STRi(sf, i), qSTRa(optimized))) 
-                SEG_OPTIMIZED_MUX_BY_DOSAGE(GP);
-            else
-                vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_GP);
-
-            seg_set_last_txt (VB, ctx, STRi(sf, i)); // used by GQ
-            break;
+        case _FORMAT_GP: vcf_seg_FORMAT_GP (vb, ctx, STRi (sf, i)); break;
 
         // <ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes as defined in the VCF specification">       
         case _FORMAT_PL: vcf_seg_FORMAT_PL (vb, ctx, STRi (sf, i)); break;
@@ -1378,19 +1340,16 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
         case _FORMAT_PP:
             if (segconf.vcf_is_pindel)
                 goto fallback; // PP means something entirely different in Pindel
-            else if (flag.optimize_phred && vcf_phred_optimize (STRi(sf, i), qSTRa(optimized))) 
-                SEG_OPTIMIZED_MUX_BY_DOSAGE(PP);
             else
                 vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_PP);
             break;
         
+        // <ID=GL,Number=.,Type=Float,Description="Genotype Likelihoods">
+        // note: I tried muxing against DS instead of dosage (41 channels) - worse results than dosage in 1KGP-37 even with --best 
+        case _FORMAT_GL   : vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_GL); break;
+
         // <ID=PRI,Number=G,Type=Float,Description="Phred-scaled prior probabilities for genotypes">
-        case _FORMAT_PRI:
-            if (flag.optimize_phred && vcf_phred_optimize (STRi(sf, i), qSTRa(optimized))) 
-                SEG_OPTIMIZED_MUX_BY_DOSAGE(PRI);
-            else
-                vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_PRI);
-            break;
+        case _FORMAT_PRI  : vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_PRI); break;
         
         case _FORMAT_CN   : seg_integer_or_not (VB, ctx, STRi(sf, i), sf_lens[i]); break;
 
@@ -1622,7 +1581,7 @@ rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t len, char *next_
     rom field_start;
     unsigned field_len=0, num_colons=0;
 
-    // 0 or more samples (note: we don't use str_split, because samples can be very numerous)
+    // 0 or more samples (note: we don't use str_split, because samples could be very numerous)
     for (char separator=0 ; separator != '\n'; format.repeats++) {
 
         field_start = next_field;

@@ -236,16 +236,40 @@ static bool segconf_no_calculate (void)
            ((Z_DT(SAM) || Z_DT(BAM)) && flag.deep && flag.zip_comp_i >= SAM_COMP_FQ01); // --deep: no recalculating for second (or more) FASTQ file
 }
 
+static bool segconf_get_zip_txt_modified (bool provisional)
+{
+    ASSERTNOTNULL (z_file);
+    bool has_optimize = false;
+
+    if (provisional)
+        has_optimize = flag.optimize; // if true, we still don't know if we are really going to optimize
+
+    else
+        for (Did did_i=0; did_i < z_file->num_contexts; did_i++)
+            if (segconf.optimize[did_i]) {
+                has_optimize = true;
+                break;
+            }
+        
+    // cases where txt data is modified during Seg - digest is not stored, it cannot be tested with --test and other limitations 
+    // note: this flag is also set when the file header indicates that it's a Luft file. See vcf_header_get_dual_coords().
+    return has_optimize
+        || flag.add_line_numbers
+        || flag.has_head  // --head diagnostic option to compress only a few lines of VB=1
+        || flag.has_biopsy_line;    
+}
+
 // ZIP only
 void segconf_initialize (void)
 {
     if (segconf_no_calculate()) return;
 
-    // note: in Deep, we re-segconf the first FASTQ component, but don't remove the SAM segconf data    
+    // case: everything but first FASTQ in Deep
     if (!((Z_DT(SAM) || Z_DT(BAM)) && flag.deep && flag.zip_comp_i == SAM_COMP_FQ00))
         segconf = (SegConf){
             .vb_size               = z_file->num_txts_so_far ? segconf.vb_size : 0, // components after first inherit vb_size from first
             .is_sorted             = true,      // initialize optimistically
+            .zip_txt_modified      = segconf_get_zip_txt_modified (true), // provisional - to be finalized after segconf
             
             // SAM stuff
             .is_collated           = true,      // initialize optimistically
@@ -268,7 +292,7 @@ void segconf_initialize (void)
             .fasta_has_contigs     = true, // initialize optimistically
         };
 
-    // Deep - 1st FASTQ file
+    // case: 1st FASTQ in Deep. Note: we re-segconf with this file, but don't remove the SAM segconf data    
     else {
         // reset flavor data so we can recalcualte for FASTQ (might be related but different flavor)
         memset (segconf.qname_flavor, 0, sizeof (segconf.qname_flavor));
@@ -311,7 +335,6 @@ void segconf_calculate (void)
     }
 
     segconf.running = true;
-
     uint64_t save_vb_size = segconf.vb_size;
     segconf_vb = vb_initialize_nonpool_vb (VB_ID_SEGCONF, txt_file->data_type, "segconf");
     #define vb segconf_vb
@@ -349,6 +372,28 @@ void segconf_calculate (void)
     // in segconf, seg_initialize might change the data_type and realloc the segconf vb (eg FASTA->FASTQ)
     vb = vb_get_nonpool_vb (VB_ID_SEGCONF);
 
+    // add to all contexts discovered in segconf to z_file->contexts
+    for (Did did_i = z_file->num_contexts; did_i < vb->num_contexts; did_i++) {
+        ContextP zctx = ctx_add_new_zf_ctx_at_init (CTX(did_i)->tag_name, MAX_TAG_LEN-1, CTX(did_i)->dict_id);
+        
+        ASSERT (zctx, "failed to create zctx for \"%.*s\", perhaps because it exists. did_i=%u", 
+                MAX_TAG_LEN, CTX(did_i)->tag_name, did_i);
+                
+        ASSERT (did_i == zctx->did_i, "expecting did_i=%u == zctx->did_i=%u for %s", did_i, zctx->did_i, zctx->tag_name); // so we can rely on segconf.has[] and segconf.optimize[]
+    }
+
+    // finalize setting data-type-specific segconf stuff
+    DT_FUNC (vb, segconf_finalize)(vb); 
+
+    // finalize flag.zip_txt_modified after finalizing optimizations
+    if (flag.optimize) 
+        segconf.zip_txt_modified = segconf_get_zip_txt_modified (false); 
+
+    // true if txt_file->num_lines need to be counted at zip_init_vb instead of zip_update_txt_counters, 
+    // requiring BGZF-uncompression of the VBs by the main thread instead of compute thread
+    flag.zip_lines_counted_at_init_vb = (TXT_DT(FASTQ) && segconf.optimize[FASTQ_QNAME])
+                                     || ((TXT_DT(VCF) || TXT_DT(BCF)) && flag.add_line_numbers);
+
     SAVE_FLAG (aligner_available); // might have been set in sam_seg_finalize_segconf
     SAVE_FLAG (no_tip);
     SAVE_FLAG (multiseq);
@@ -356,7 +401,6 @@ void segconf_calculate (void)
     RESTORE_FLAG (aligner_available);
     RESTORE_FLAG (no_tip);
     RESTORE_FLAG (multiseq);
-    
 
     if (flag.show_segconf_has) 
         segconf_show_has();
@@ -457,7 +501,17 @@ rom VCF_INFO_method_name (VcfInfoMethod method)
     }
 }
 
-rom GQ_method_name (GQMethodType method)
+rom FMT_GP_content_name (GPContentType content)
+{
+    switch (content) {
+        case GP_probabilities : return "probabilities";
+        case GP_phred         : return "phred";
+        case GP_other         : return "other";
+        default               : return "invalid";
+    }
+}
+
+rom FMT_GQ_method_name (GQMethodType method)
 {
     switch (method) {
         case GQ_old        : return "OLD";
@@ -534,3 +588,32 @@ StrText segconf_get_qual_histo (QualHistType qht)
 
     return s;
 }
+
+unsigned segconf_get_num_qual_scores (QualHistType qht)
+{
+    unsigned count=0;
+    for (int q=0; q < 94; q++)
+        if (segconf.qual_histo[qht][q].count) count++;
+
+    return count;
+}
+
+StrTextLong segconf_get_optimizations (void)
+{
+    ASSERTNOTNULL (z_file);
+
+    StrTextLong s;
+    uint32_t s_len=0;
+
+    for_zctx
+        if (segconf.optimize[zctx->did_i])
+            SNPRINTF (s, "%s,", zctx->tag_name);
+
+    if (s_len) 
+        s.s[s_len-1] = 0; // remove final ','
+    else
+        strcpy (s.s, "NONE");
+
+    return s;
+}
+

@@ -285,8 +285,7 @@ extern uint32_t str_split_do (STRp(str), uint32_t max_items, char sep, rom *item
 
 #define str_split_enforce(str,str_len,max_items,sep,name,exactly,enforce) \
     uint32_t n_##name##s = (max_items) ? (max_items) : (sep)==0 ? 1 : str_count_char ((str), (str_len), (sep)) + 1; /* 0 if str is NULL */ \
-    rom name##s[MAX_(n_##name##s, 1)]; \
-    uint32_t name##_lens[MAX_(n_##name##s, 1)]; \
+    STR_ARRAY_(name, MAX_(n_##name##s, 1)); \
     n_##name##s = str_split_do ((str), (str_len), n_##name##s, (sep), name##s, name##_lens, (exactly), (enforce))
 
 // name      : eg "item", macro defines variables "items" (array of pointers), item_lens (array or uint32_t), n_items (actual number of items)
@@ -296,23 +295,17 @@ extern uint32_t str_split_do (STRp(str), uint32_t max_items, char sep, rom *item
 extern uint32_t str_split_by_container_do (STRp(str), ConstContainerP con, STRp(con_prefixes), rom *items, uint32_t *item_lens, rom enforce_msg);
 
 #define str_split_by_container(str,str_len,container,prefix,prefix_len,name,enforce_msg) \
-    rom name##s[MAX_(con_nitems(*container), 1)];  \
-    uint32_t name##_lens[MAX_(con_nitems(*container), 1)]; \
-    uint32_t n_##name##s = str_split_by_container_do ((str), (str_len), (ConstContainerP)(container), (prefix), (prefix_len), name##s, name##_lens, (enforce_msg))
+    STR_ARRAY (name, MAX_(con_nitems(*container), 1)) = str_split_by_container_do ((str), (str_len), (ConstContainerP)(container), (prefix), (prefix_len), name##s, name##_lens, (enforce_msg))
 
 extern rom str_split_by_tab_do (STRp(str), uint32_t *n_flds, rom *flds, uint32_t *fld_lens, bool *has_13, bool exactly, bool enforce);
 #define str_split_by_tab(str,max_len,max_flds,has_13,exactly,enforce) \
-    rom flds[(max_flds)];   \
-    uint32_t fld_lens[(max_flds)];  \
-    uint32_t n_flds = (max_flds);   \
+    STR_ARRAY (fld, (max_flds)) = (max_flds);   \
     str = str_split_by_tab_do ((str), (max_len), &n_flds, flds, fld_lens, (has_13), (exactly), (enforce))
 #define STRfld(i) STRi(fld,(i))
 
 extern uint32_t str_split_by_lines_do (STRp(str), uint32_t max_lines, rom *lines, uint32_t *line_lens);
 #define str_split_by_lines(str,str_len,max_lines) \
-    rom lines[(max_lines)];   \
-    uint32_t line_lens[(max_lines)];  \
-    uint32_t n_lines = str_split_by_lines_do ((str), (str_len), max_lines, lines, line_lens)
+    STR_ARRAY (line, (max_lines)) = str_split_by_lines_do ((str), (str_len), max_lines, lines, line_lens)
 
 extern uint32_t str_split_ints_do (STRp(str), uint32_t max_items, char sep, bool exactly, int64_t *items);
 
@@ -321,11 +314,11 @@ extern uint32_t str_split_ints_do (STRp(str), uint32_t max_items, char sep, bool
     int64_t name##s[n_##name##s]; \
     n_##name##s = str_split_ints_do ((str), (str_len), n_##name##s, (sep), (exactly), name##s); 
 
-extern uint32_t str_split_floats_do (STRp(str), uint32_t max_items, char sep, bool exactly, double *items);
-#define str_split_floats(str,str_len,max_items,sep,name,exactly) \
+extern uint32_t str_split_floats_do (STRp(str), uint32_t max_items, char sep, bool exactly, char this_char_is_NAN, double *items);
+#define str_split_floats(str,str_len,max_items,sep,name,exactly,this_char_is_NAN) \
     uint32_t n_##name##s = (max_items) ? (max_items) : str_count_char ((str), (str_len), (sep)) + 1; \
     double name##s[n_##name##s]; \
-    n_##name##s = str_split_floats_do ((str), (str_len), n_##name##s, (sep), (exactly), name##s); 
+    n_##name##s = str_split_floats_do ((str), (str_len), n_##name##s, (sep), (exactly), (this_char_is_NAN), name##s); 
 
 extern bool str_item_i (STRp(str), char sep, uint32_t requested_item_i, pSTRp(item));
 extern bool str_item_i_int (STRp(str), char sep, uint32_t requested_item_i, int64_t *item);
@@ -361,12 +354,18 @@ extern void *memrchr (const void *s, int c, size_t n);
 #endif
 
 #ifdef __APPLE__ // is mempcpy available on gcc of darwin? if so, this is ifdef should be just for clang
-static inline void *mempcpy(void *restrict dest, const void *restrict src, size_t n)
+static inline void *mempcpy(void *restrict dst, const void *restrict src, size_t n)
 {
-    memcpy (dest, src, n);
-    return dest + n;
+    memcpy (dst, src, n);
+    return dst + n;
 }
 #endif
+
+static inline char *strpcpy(char *restrict dst, const void *restrict src)
+{
+    int len = strlen (src);
+    return mempcpy (dst, src, len);
+}
 
 extern rom str_win_error_(uint32_t error);
 extern rom str_win_error (void);

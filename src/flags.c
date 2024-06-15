@@ -152,6 +152,14 @@ static void flags_set_tail (rom optarg)
                 "The optional argument of --tail must be a positive integer value");
 }
 
+static void flags_set_validate (rom optarg)
+{
+    if      (!optarg)                   { flag.validate = VLD_NO_REPORT; flag.quiet = true; } // silent validation, provides only exit code
+    else if (!strcmp (optarg, "valid"))   flag.validate = VLD_REPORT_VALID;
+    else if (!strcmp (optarg, "invalid")) flag.validate = VLD_REPORT_INVALID;
+    else ABORTINP0 ("Bad argument for option --validate");
+}
+  
 static void flags_set_show_time (rom optarg)
 {
     int64_t value;
@@ -354,22 +362,6 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _lm {"low-memory",       no_argument,       &flag.low_memory,       1 }
         #define _9  {"optimize",         no_argument,       &flag.optimize,         1 } // US spelling
         #define _8  {"optimise",         no_argument,       &flag.optimize,         1 } // British spelling
-        #define _9s {"optimize-sort",    no_argument,       &flag.optimize_sort,    1 }
-        #define _8s {"optimise-sort",    no_argument,       &flag.optimize_sort,    1 }
-        #define _9P {"optimize-phred",   no_argument,       &flag.optimize_phred,   1 }
-        #define _8P {"optimise-phred",   no_argument,       &flag.optimize_phred,   1 }
-        #define _9V {"optimize-VQSLOD",  no_argument,       &flag.optimize_VQSLOD,  1 }
-        #define _8V {"optimise-VQSLOD",  no_argument,       &flag.optimize_VQSLOD,  1 }
-        #define _9Q {"optimize-QUAL",    no_argument,       &flag.optimize_QUAL,    1 } 
-        #define _8Q {"optimise-QUAL",    no_argument,       &flag.optimize_QUAL,    1 } 
-        #define _9f {"optimize-Vf",      no_argument,       &flag.optimize_Vf,      1 }
-        #define _8f {"optimise-Vf",      no_argument,       &flag.optimize_Vf,      1 }
-        #define _9Z {"optimize-ZM",      no_argument,       &flag.optimize_ZM,      1 }
-        #define _8Z {"optimise-ZM",      no_argument,       &flag.optimize_ZM,      1 }
-        #define _9D {"optimize-DESC",    no_argument,       &flag.optimize_DESC,    1 }
-        #define _8D {"optimise-DESC",    no_argument,       &flag.optimize_DESC,    1 }
-        #define _9G {"GL-to-PL",         no_argument,       &flag.GL_to_PL,         1 }
-        #define _9g {"GP-to-PP",         no_argument,       &flag.GP_to_PP,         1 }
         #define _al {"add-line-numbers", no_argument,       &flag.add_line_numbers, 1 }
         #define _Sd {"secure-DP",        no_argument,       &flag.secure_DP,        1 }
         #define _pe {"pair",             no_argument,       PADDED(pair),      PAIRED } 
@@ -535,7 +527,6 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _bi {"biopsy",           required_argument, 0, 134,                   }
         #define _bl {"biopsy-line",      required_argument, 0, 137,                   }
         #define _sk {"skip-segconf",     no_argument,       &flag.skip_segconf,     1 }
-        #define _MR {"match-chrom-to-reference",   no_argument, &flag.match_chrom_to_reference,   1 }
         #define _TL {"truncate",         no_argument,       &flag.truncate,         1 }
         #define _VV {"check-latest",     no_argument,       &flag.check_latest,     1 }
         #define _DV {"debug-latest",     no_argument,       &flag.debug_latest,     1 }
@@ -556,10 +547,10 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                       }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _lg, _i, _I, _d, _f, _h, _x, _D,    _L1, _L2, _q, _Q, _qq, _t, _Nt, _DL, _nb, _nz, _nc,_nu,  _V, _z,                                                                       _m, _th,     _o, _p, _e, _E,                                                                       _H1,                                         _sL, _ss, _SS,      _sd, _sT, _sb, _Sb, _lc, _lh, _lH, _s2, _s7, _S7, _S0, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv, _sn, _pn, _ai,                    _B, _xt, _dm, _dp, _dL, _dD, _dq, _dB, _dt, _dw, _dM, _dr, _dR, _dP, _dG, _dN, _dF, _DF, _dQ, _dH, _dO, _dC, _fQ, _fC, _fO, _fS, _fH, _fN, _dU, _dl, _dc, _dg,      _dh,_dS, _bS, _9, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _8, _8s, _8P, _8V, _8Q, _8f, _8Z, _8D, _pe, _fa, _bs, _lm,                        _nh, _rg,                          _hC, _rA,           _rS, _me, _s5, _S5, _sM, _sA, _sB, _sP, _sc, _Sc, _AL, _sI, _cn,                                    _s6,          _oe, _al, _Lf, _dd, _T, _TT, _MR, _TL, _wM, _wm, _WM, _WB, _bi, _bl, _sk, _VV, _DV,           _Ds, _DS, _sp, _Du, _DD, _DP, _SH, _Dd,      _to, _ts,      _hc, _dv, _TR, _NE, _lp, _Sd, _St, _um,      _fP, _nF, _nI, _00 };
-        static Option genounzip_lo[]  = { _lg,         _d, _f, _h, _x, _D,    _L1, _L2, _q, _Q,      _t,      _DL,           _nc,      _V, _z,                                                                       _m, _th, _u, _o, _p, _e,                                                                                                                        _sL, _ss, _SS, _sG, _sd, _sT, _sb,      _lc, _lh, _lH, _s2, _s7, _S7, _S0, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv, _sn, _pn,      _ov,                   _xt, _dm, _dp,      _dD,      _dB, _dt,                _dR,                                                                                      _dc,                                                                                                                                _lm,                                  _sR, _pR,                _hC, _rA,           _rS, _me, _s5, _S5, _sM, _sA, _sB,           _Sc, _AL, _sI, _cn, _cN,                               _s6,          _oe,           _dd, _T, _TT,                                                        _Dp, _Dh,           _sp,      _DD,           _Dd,      _to, _ts, _RC, _hc, _dv, _TR, _NE,                     _np,                _00 };
-        static Option genocat_lo[]    = { _lg,         _d, _f, _h,     _D,    _L1, _L2, _q, _Q,                              _nc,      _V, _z, _zr, _zR, _zb, _zB, _zs, _zS, _zq, _zQ, _zf, _zF, _zc, _zC, _zv, _zV,     _th,     _o, _p, _e,     _il, _r, _R, _Rg, _qf, _qF, _Qf, _QF, _SF, _s, _sf, _sq, _G, _1, _H0, _H1, _H2, _H3, _Gt, _So, _Io, _IU, _iu, _GT, _sL, _ss, _SS, _sG, _sd, _sT, _sb,      _lc, _lh, _lH, _s2, _s7, _S7, _S0, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv, _sn, _pn,      _ov, _R1, _R2, _RX,    _xt, _dm, _dp,      _dD,      _dB, _dt,                _dR,                                                                                      _dc,      _ds,                                                                                                                      _lm, _fs, _g, _gw, _n, _nt, _nh,      _sR, _pR,      _sC, _pC, _hC, _rA, _rI, _pI, _rS, _me, _s5, _S5, _sM, _sA, _sB,           _Sc, _AL, _sI, _cn, _cN, _pg, _PG, _SX, _ix, _ct, _vl, _s6,          _oe,      _al, _dd, _T,                                                             _Dp, _Dh,           _sp,      _DD,           _Dd, _DT,           _RC, _hc, _dv, _TR, _NE,                     _np,                _00 };
-        static Option genols_lo[]     = { _lg,             _f, _h,        _l, _L1, _L2, _q,                                            _V,                                                                                            _p,                                                                                                                                                                                                                      _st, _sm,                                                                               _dm,                          _dt,                                                                                                                                                                                                                                                                                                                                                     _sM,                                                                                 _b, _LC, _oe,           _dd, _T,                                                                                 _sp,      _DD,                                         _dv,      _NE,                                         _00 };
+        static Option genozip_lo[]    = { _lg, _i, _I, _d, _f, _h, _x, _D,    _L1, _L2, _q, _Q, _qq, _t, _Nt, _DL, _nb, _nz, _nc,_nu,  _V, _z,                                                                       _m, _th,     _o, _p, _e, _E,                                                                       _H1,                                         _sL, _ss, _SS,      _sd, _sT, _sb, _Sb, _lc, _lh, _lH, _s2, _s7, _S7, _S0, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv, _sn, _pn, _ai,                    _B, _xt, _dm, _dp, _dL, _dD, _dq, _dB, _dt, _dw, _dM, _dr, _dR, _dP, _dG, _dN, _dF, _DF, _dQ, _dH, _dO, _dC, _fQ, _fC, _fO, _fS, _fH, _fN, _dU, _dl, _dc, _dg,      _dh,_dS, _bS, _9, _8, _pe, _fa, _bs, _lm,                        _nh, _rg,                          _hC, _rA,           _rS, _me, _s5, _S5, _sM, _sA, _sB, _sP, _sc, _Sc, _AL, _sI, _cn,                                    _s6,          _oe, _al, _Lf, _dd, _T, _TT, _TL, _wM, _wm, _WM, _WB, _bi, _bl, _sk, _VV, _DV,           _Ds, _DS, _sp, _Du, _DD, _DP, _SH, _Dd,      _to, _ts,      _hc, _dv, _TR, _NE, _lp, _Sd, _St, _um,      _fP, _nF, _nI, _00 };
+        static Option genounzip_lo[]  = { _lg,         _d, _f, _h, _x, _D,    _L1, _L2, _q, _Q,      _t,      _DL,           _nc,      _V, _z,                                                                       _m, _th, _u, _o, _p, _e,                                                                                                                        _sL, _ss, _SS, _sG, _sd, _sT, _sb,      _lc, _lh, _lH, _s2, _s7, _S7, _S0, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv, _sn, _pn,      _ov,                   _xt, _dm, _dp,      _dD,      _dB, _dt,                _dR,                                                                                      _dc,                                                _lm,                                  _sR, _pR,                _hC, _rA,           _rS, _me, _s5, _S5, _sM, _sA, _sB,           _Sc, _AL, _sI, _cn, _cN,                               _s6,          _oe,           _dd, _T, _TT,                                                   _Dp, _Dh,           _sp,      _DD,           _Dd,      _to, _ts, _RC,      _dv, _TR, _NE,                     _np,                _00 };
+        static Option genocat_lo[]    = { _lg,         _d, _f, _h,     _D,    _L1, _L2, _q, _Q,                              _nc,      _V, _z, _zr, _zR, _zb, _zB, _zs, _zS, _zq, _zQ, _zf, _zF, _zc, _zC, _zv, _zV,     _th,     _o, _p, _e,     _il, _r, _R, _Rg, _qf, _qF, _Qf, _QF, _SF, _s, _sf, _sq, _G, _1, _H0, _H1, _H2, _H3, _Gt, _So, _Io, _IU, _iu, _GT, _sL, _ss, _SS, _sG, _sd, _sT, _sb,      _lc, _lh, _lH, _s2, _s7, _S7, _S0, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv, _sn, _pn,      _ov, _R1, _R2, _RX,    _xt, _dm, _dp,      _dD,      _dB, _dt,                _dR,                                                                                      _dc,      _ds,                                      _lm, _fs, _g, _gw, _n, _nt, _nh,      _sR, _pR,      _sC, _pC, _hC, _rA, _rI, _pI, _rS, _me, _s5, _S5, _sM, _sA, _sB,           _Sc, _AL, _sI, _cn, _cN, _pg, _PG, _SX, _ix, _ct, _vl, _s6,          _oe, _al,      _dd, _T,                                                        _Dp, _Dh,           _sp,      _DD,           _Dd, _DT,           _RC,      _dv, _TR, _NE,                     _np,                _00 };
+        static Option genols_lo[]     = { _lg,             _f, _h,        _l, _L1, _L2, _q,                                            _V,                                                                                            _p,                                                                                                                                                                                                                      _st, _sm,                                                                               _dm,                          _dt,                                                                                                                                                                                                                                                                     _sM,                                                                                 _b, _LC, _oe,           _dd, _T,                                                                            _sp,      _DD,                                         _dv,      _NE,                                         _00 };
         static Option *long_options[NUM_EXE_TYPES] = { genozip_lo, genounzip_lo, genocat_lo, genols_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -658,7 +649,7 @@ verify_command:
             case 131 : flag.show_one_counts = dict_id_make (cSTR("o$TATUS"), DTYPE_PLAIN); break;
             case 17  : sam_set_FLAG_filter (optarg) ; break; // filter by SAM FLAG
             case 18  : sam_set_MAPQ_filter (optarg) ; break; // filter by SAM MAPQ
-            case 19  : flag.validate = optarg ? VLD_REPORT_VALID : VLD_REPORT_INVALID ; break;
+            case 19  : flags_set_validate (optarg)  ; break;
             case 20  : flag.count = optarg ? CNT_VBs : CNT_TOTAL; break;
             case 22  : flags_set_head (optarg)      ; break;
             case 23  : flags_set_tail (optarg)      ; break;
@@ -737,95 +728,82 @@ static void flags_test_conflicts (unsigned num_files /* optional */)
     #define NEED_DECOMPRESS(flag1, text) \
         ASSINP (!(flag1), "option %s can only be used if --decompress is used too", text);
 
-    CONFLICT (flag.subdirs,     flag.out_filename,   OT("subdirs", "D"),   OT("output", "o")); 
-    CONFLICT (flag.quiet,       flag.noisy,          OT("quiet", "q"),     OT("noisy", "Q"));
-    CONFLICT (flag.replace,     flag.no_test,        OT("replace", "^"),   OT("no-test", "X"));
-    CONFLICT (flag.test,        flag.no_test,        OT("test", "t"),      OT("no-test", "X"));
-    CONFLICT (flag.test,        flag.bgzf != BGZF_NOT_INITIALIZED, OT("test", "t"),      OT("bgzf", "z"));
+    CONFLICT (flag.subdirs,         flag.out_filename,      OT("subdirs", "D"), OT("output", "o")); 
+    CONFLICT (flag.quiet,           flag.noisy,             OT("quiet", "q"),   OT("noisy", "Q"));
+    CONFLICT (flag.replace,         flag.no_test,           OT("replace", "^"), OT("no-test", "X"));
+    CONFLICT (flag.test,            flag.no_test,           OT("test", "t"),    OT("no-test", "X"));
+    CONFLICT (flag.test,            flag.bgzf != BGZF_NOT_INITIALIZED, OT("test", "t"), OT("bgzf", "z"));
     CONFLICT (flag.dump_one_b250_dict_id.num, flag.dump_one_local_dict_id.num, "--dump-one-b250", "--dump-one-local");
 
     if (IS_ZIP) {
-        #define CONFLICT_NO_DIGEST(f,opt) \
-            CONFLICT (flag.test, flag.f, OT("test", "t"), opt); \
-            CONFLICT (flag.md5,  flag.f, OT("md5", "m"),  opt);
+        // can't use --md5 with data-modifying options
+        CONFLICT (flag.md5,         flag.add_line_numbers,  OT("md5", "m"),     "--add-line-numbers");
+        CONFLICT (flag.md5,         flag.optimize,          OT("md5", "m"),     OT("optimize", "9"));
 
-        CONFLICT_NO_DIGEST (add_line_numbers, "--add-line-numbers");
-        CONFLICT_NO_DIGEST (optimize, "optimize");
-        CONFLICT_NO_DIGEST (optimize_sort, "optimize-sort");
-        CONFLICT_NO_DIGEST (optimize_phred, "optimize-phred");
-        CONFLICT_NO_DIGEST (GL_to_PL, "GL-to-PL");
-        CONFLICT_NO_DIGEST (GP_to_PP, "GP-to-PP");
-        CONFLICT_NO_DIGEST (optimize_VQSLOD, "optimize-VQSLOD");
-        CONFLICT_NO_DIGEST (optimize_QUAL, "optimize-QUAL");
-        CONFLICT_NO_DIGEST (optimize_Vf, "optimize-Vf");
-        CONFLICT_NO_DIGEST (optimize_ZM, "optimize-ZM");
-        CONFLICT_NO_DIGEST (optimize_DESC, "--optimize-DESC");
-        CONFLICT_NO_DIGEST (match_chrom_to_reference, "--match-chrom-to-reference");
-
-        CONFLICT (flag.test,        flag.biopsy,         OT("test", "t"),      "--biopsy");
-        CONFLICT (flag.best,        flag.fast,           OT("best", "b"),      OT("fast", "F"));
-        CONFLICT (flag.best,        flag.low_memory,     OT("best", "b"),      "--low-memory");
-        CONFLICT (flag.test,        flag.seg_only,       "--seg-only",         OT("test", "t"));
-        CONFLICT (flag.test,        flag.make_reference, "--make-reference",   OT("test", "t"));
-        CONFLICT (flag.reference,   flag.make_reference, "--make-reference",   OT("reference", "e"));
-        CONFLICT (flag.index_txt,   flag.make_reference, "--make-reference",   OT("index", "x"));
-        CONFLICT (flag.no_gencomp,  flag.force_gencomp,  "--no-gencomp",       "--force-gencomp");
-        CONFLICT (flag.biopsy,      flag.out_filename,   "--biopsy",           OT("output", "o"));
-        CONFLICT (flag.has_biopsy_line, flag.out_filename, "--biopsy-line", OT("output", "o"));
-        CONFLICT (flag.deep,        flag.pair,           OT("deep", "3"),      OT("pair", "2"));
-        CONFLICT (flag.deep,        flag.subdirs,        OT("deep", "3"),      OT("subdirs", "D"));
-        CONFLICT (flag.deep,        tar_zip_is_tar(),    OT("deep", "3"),      "--tar");
-        CONFLICT (flag.pair,        tar_zip_is_tar(),    OT("pair", "2"),      "--tar");
-        CONFLICT (flag.deep,        flag.optimize_DESC,  OT("deep", "3"),      "--optimize-DESC");
+        CONFLICT (flag.test,        flag.biopsy,            OT("test", "t"),    "--biopsy");
+        CONFLICT (flag.best,        flag.fast,              OT("best", "b"),    OT("fast", "F"));
+        CONFLICT (flag.best,        flag.low_memory,        OT("best", "b"),    "--low-memory");
+        CONFLICT (flag.test,        flag.seg_only,          "--seg-only",       OT("test", "t"));
+        CONFLICT (flag.test,        flag.make_reference,    "--make-reference", OT("test", "t"));
+        CONFLICT (flag.reference,   flag.make_reference,    "--make-reference", OT("reference", "e"));
+        CONFLICT (flag.index_txt,   flag.make_reference,    "--make-reference", OT("index", "x"));
+        CONFLICT (flag.no_gencomp,  flag.force_gencomp,     "--no-gencomp",     "--force-gencomp");
+        CONFLICT (flag.biopsy,      flag.out_filename,      "--biopsy",         OT("output", "o"));
+        CONFLICT (flag.has_biopsy_line, flag.out_filename,  "--biopsy-line",    OT("output", "o"));
+        CONFLICT (flag.has_head,    flag.force_gencomp,     "--head",           "--force-gencomp");
+        CONFLICT (flag.deep,        flag.pair,              OT("deep", "3"),    OT("pair", "2"));
+        CONFLICT (flag.deep,        flag.subdirs,           OT("deep", "3"),    OT("subdirs", "D"));
+        CONFLICT (flag.deep,        tar_zip_is_tar(),       OT("deep", "3"),    "--tar");
+        CONFLICT (flag.pair,        tar_zip_is_tar(),       OT("pair", "2"),    "--tar");
 
         // see comment in fastq_deep_zip_finalize
         WARN_IF (flag.no_test && flag.deep, "It is not recommended to use %s in combination with %s, as Deep relies on testing to catch rare edge cases", OT("no-test", "X"), OT("deep", "3"));
     }
 
     if (IS_PIZ) {
-        CONFLICT (flag.unbind,      flag.out_filename,   OT("unbind", "u"),    OT("output", "o"));
-        CONFLICT (flag.samples,     flag.drop_genotypes, OT("samples", "s"),   OT("drop-genotypes", "G"));
-        CONFLICT (flag.one_vb,      flag.interleaved,    "--interleaved",      "--one-vb");
-        CONFLICT (flag.one_component, flag.interleaved,  "--interleaved",      "--R1/--R2");
-        CONFLICT (flag.snps_only,   flag.indels_only,    "--snps_only",        "--indels-only");
-        CONFLICT (flag.header_only, flag.seq_only,       "--seq-only",         "--header-only");
-        CONFLICT (flag.header_only, flag.qual_only,      "--qual-only",        "--header-only");
-        CONFLICT (flag.seq_only,    flag.qual_only,      "--seq-only",         "--qual-only");
-        CONFLICT (flag.header_only, flag.interleaved,    "--interleaved",      "--header-only");
-        CONFLICT (flag.regions,     flag.interleaved,    "--interleaved",      "--regions");
-        CONFLICT (flag.header_only, flag.no_header==1,   OT("no-header", "H"), "--header-only");
-        CONFLICT (flag.no_header,   flag.header_one,     OT("no-header", "H"), OT("header-one", "1"));
-        CONFLICT (flag.test,        flag.out_filename,   OT("output", "o"),    OT("test", "t"));
-        CONFLICT (flag.test,        flag.replace,        OT("replace", "^"),   OT("test", "t"));
-        CONFLICT (flag.show_coverage, flag.idxstats,     "--coverage",         "--idxstats");
-        CONFLICT (flag.show_coverage, flag.regions==1,   "--coverage",         OT("regions", "r"));
-        CONFLICT (flag.show_coverage, flag.out_filename, "--coverage",         OT("output", "o"));
-        CONFLICT (flag.show_coverage, flag.grep,         "--coverage",         OT("grep", "g"));
-        CONFLICT (flag.show_coverage, flag.count,        "--coverage",         "--count");
-        CONFLICT (flag.show_coverage, flag.test,         "--coverage",         OT("test", "t"));
-        CONFLICT (flag.idxstats,    flag.test,           "--idxstats",         OT("test", "t"));
-        CONFLICT (flag.idxstats,    flag.count,          "--idxstats",         "--count");
-        CONFLICT (flag.idxstats,    flag.show_coverage,  "--idxstats",         "--coverage");
-        CONFLICT (flag.count,       flag.out_filename,   "--count",            OT("output", "o"));
-        CONFLICT (flag.count,       flag.header_only,    "--count",            OT("header-only", "H"));
-        CONFLICT (flag.count,       flag.header_one,     "--count",            OT("header-one", "1"));
-        CONFLICT (flag.count,       flag.explicit_head,  "--count",            "--head"); 
-        CONFLICT (flag.count,       flag.tail,           "--count",            "--tail"); 
-        CONFLICT (flag.count,       flag.lines_first != NO_LINE, "--count",    OT("lines", "n")); 
-        CONFLICT (flag.show_stats,  flag.grep,           OT("stats", "w"),     OT("grep", "g"));
+        CONFLICT (flag.unbind,      flag.out_filename,   OT("unbind", "u"),     OT("output", "o"));
+        CONFLICT (flag.samples,     flag.drop_genotypes, OT("samples", "s"),    OT("drop-genotypes", "G"));
+        CONFLICT (flag.one_vb,      flag.interleaved,    "--interleaved",       "--one-vb");
+        CONFLICT (flag.one_component, flag.interleaved,  "--interleaved",       "--R1/--R2");
+        CONFLICT (flag.snps_only,   flag.indels_only,    "--snps_only",         "--indels-only");
+        CONFLICT (flag.header_only, flag.seq_only,       "--seq-only",          "--header-only");
+        CONFLICT (flag.header_only, flag.qual_only,      "--qual-only",         "--header-only");
+        CONFLICT (flag.seq_only,    flag.qual_only,      "--seq-only",          "--qual-only");
+        CONFLICT (flag.header_only, flag.interleaved,    "--interleaved",       "--header-only");
+        CONFLICT (flag.regions,     flag.interleaved,    "--interleaved",       "--regions");
+        CONFLICT (flag.header_only, flag.no_header==1,   OT("no-header", "H"),  "--header-only");
+        CONFLICT (flag.no_header,   flag.header_one,     OT("no-header", "H"),  OT("header-one", "1"));
+        CONFLICT (flag.test,        flag.out_filename,   OT("output", "o"),     OT("test", "t"));
+        CONFLICT (flag.test,        flag.replace,        OT("replace", "^"),    OT("test", "t"));
+        CONFLICT (flag.show_coverage, flag.idxstats,     "--coverage",          "--idxstats");
+        CONFLICT (flag.show_coverage, flag.regions==1,   "--coverage",          OT("regions", "r"));
+        CONFLICT (flag.show_coverage, flag.out_filename, "--coverage",          OT("output", "o"));
+        CONFLICT (flag.show_coverage, flag.grep,         "--coverage",          OT("grep", "g"));
+        CONFLICT (flag.show_coverage, flag.count,        "--coverage",          "--count");
+        CONFLICT (flag.show_coverage, flag.test,         "--coverage",          OT("test", "t"));
+        CONFLICT (flag.idxstats,    flag.test,           "--idxstats",          OT("test", "t"));
+        CONFLICT (flag.idxstats,    flag.count,          "--idxstats",          "--count");
+        CONFLICT (flag.idxstats,    flag.show_coverage,  "--idxstats",          "--coverage");
+        CONFLICT (flag.count,       flag.out_filename,   "--count",             OT("output", "o"));
+        CONFLICT (flag.count,       flag.header_only,    "--count",             OT("header-only", "H"));
+        CONFLICT (flag.count,       flag.header_one,     "--count",             OT("header-one", "1"));
+        CONFLICT (flag.count,       flag.explicit_head,  "--count",             "--head"); 
+        CONFLICT (flag.count,       flag.tail,           "--count",             "--tail"); 
+        CONFLICT (flag.count,       flag.lines_first != NO_LINE, "--count",     OT("lines", "n")); 
+        CONFLICT (flag.show_stats,  flag.grep,           OT("stats", "w"),      OT("grep", "g"));
         CONFLICT (flag.show_stats,  flag.lines_first != NO_LINE, OT("stats", "w"), OT("lines", "n"));
-        CONFLICT (flag.show_stats,  flag.downsample,     OT("stats", "w"),     "--downsample");
-        CONFLICT (flag.show_stats,  flag.header_only,    OT("stats", "w"),     "--header-only");
-        CONFLICT (flag.show_stats,  flag.MAPQ,           OT("stats", "w"),     "--MAPQ");
-        CONFLICT (flag.show_stats,  flag.FLAG,           OT("stats", "w"),     "--FLAG");
-        CONFLICT (flag.show_stats,  flag.one_component,  OT("stats", "w"),     "--R1/--R2");
-        CONFLICT (flag.show_stats,  flag.one_vb,         OT("stats", "w"),     "--one-vb");
-        CONFLICT (flag.show_stats,  flag.sequential,     OT("stats", "w"),     "--sequential");
-        CONFLICT (flag.show_stats,  flag.tail,           OT("stats", "w"),     "--tail");
-        CONFLICT (flag.show_stats,  flag.drop_genotypes, OT("stats", "w"),     OT("drop-genotypes", "G"));
-        CONFLICT (flag.show_stats,  flag.regions,        OT("stats", "w"),     OT("regions", "r"));
-        CONFLICT (flag.show_stats,  flag.samples,        OT("stats", "w"),     OT("samples", "s"));
-        CONFLICT (flag.qnames_file, flag.qnames_opt,     "--qnames",           "--qnames-file");
+        CONFLICT (flag.show_stats,  flag.downsample,     OT("stats", "w"),      "--downsample");
+        CONFLICT (flag.show_stats,  flag.header_only,    OT("stats", "w"),      "--header-only");
+        CONFLICT (flag.show_stats,  flag.MAPQ,           OT("stats", "w"),      "--MAPQ");
+        CONFLICT (flag.show_stats,  flag.FLAG,           OT("stats", "w"),      "--FLAG");
+        CONFLICT (flag.show_stats,  flag.one_component,  OT("stats", "w"),      "--R1/--R2");
+        CONFLICT (flag.show_stats,  flag.one_vb,         OT("stats", "w"),      "--one-vb");
+        CONFLICT (flag.show_stats,  flag.sequential,     OT("stats", "w"),      "--sequential");
+        CONFLICT (flag.show_stats,  flag.tail,           OT("stats", "w"),      "--tail");
+        CONFLICT (flag.show_stats,  flag.drop_genotypes, OT("stats", "w"),      OT("drop-genotypes", "G"));
+        CONFLICT (flag.show_stats,  flag.regions,        OT("stats", "w"),      OT("regions", "r"));
+        CONFLICT (flag.show_stats,  flag.samples,        OT("stats", "w"),      OT("samples", "s"));
+        CONFLICT (flag.qnames_file, flag.qnames_opt,     "--qnames",            "--qnames-file");
         
         // options that require --reference
         if (!flag.reference) {
@@ -878,35 +856,24 @@ static void flags_test_conflicts (unsigned num_files /* optional */)
 void flags_zip_verify_dt_specific (DataType dt)
 {
     // SAM
-    FLAG_ONLY_FOR_DT(BAM,          show_bam,      "show_bam");
-    FLAG_ONLY_FOR_DT(SAM,          optimize_ZM,   "optimize-ZM");
-    FLAG_ONLY_FOR_2DTs(SAM, FASTQ, optimize_QUAL, "optimize-QUAL");
+    FLAG_ONLY_FOR_DT(BAM, show_bam, "show_bam");
 
     if (flag.show_bam || flag.analyze_ins) 
         flag.seg_only = flag.xthreads = flag.quiet = true; 
     
     // FASTQ
     FLAG_ONLY_FOR_2DTs(SAM, FASTQ, pair,    "pair");
-    FLAG_ONLY_FOR_DT(FASTQ, optimize_DESC,  "optimize-DESC");
     FLAG_ONLY_FOR_2DTs(FASTQ, FASTA, multiseq, "multiseq");
 
     // VCF
     FLAG_ONLY_FOR_DT(VCF, add_line_numbers, "add-line-numbers");
-    FLAG_ONLY_FOR_DT(VCF, optimize_phred,   "optimize-phred");
-    FLAG_ONLY_FOR_DT(VCF, GL_to_PL,         "GL-to-PL");
-    FLAG_ONLY_FOR_DT(VCF, GP_to_PP,         "GP-to-PP");
-    FLAG_ONLY_FOR_DT(VCF, optimize_VQSLOD,  "optimize-VQSLOD");
-    FLAG_ONLY_FOR_2DTs(VCF, GFF, optimize_sort, "optimize-sort");
 
     // FASTA
     ASSINP0 (!flag.make_reference || dt == DT_REF || dt == DT_GNRIC, 
              "--make-reference is only supported for FASTA files"); // data_type is DT_REF, but error says FASTA
-
-    // GFF
-    FLAG_ONLY_FOR_DT(GFF, optimize_Vf,      "optimize-Vf");
     
     // GENERIC
-    FLAG_NOT_FOR_DT (GNRIC, debug_lines,    "debug-lines"); // GENERIC doesn't have lines 
+    FLAG_NOT_FOR_DT (GNRIC, debug_lines, "debug-lines"); // GENERIC doesn't have lines 
 }
 
 static void flags_piz_verify_dt_specific (DataType dt)
@@ -1042,7 +1009,7 @@ void flags_update (unsigned num_files, rom *filenames)
         is_info_stream_terminal = isatty (fileno (info_stream)); 
     }
 
-    if (flag.biopsy || flag.has_biopsy_line) {
+    if (zip_is_biopsy) {
         ASSERTW (!flag.test,         "FYI: the %s option is ignored when taking a biopsy", OT("test",   "t"));
         ASSERTW (!flag.show_stats,   "FYI: the %s option is ignored when taking a biopsy", OT("stats",  "w"));
         ASSERTW (!flag.out_filename, "FYI: the %s option is ignored when taking a biopsy", OT("output", "o"));
@@ -1072,7 +1039,7 @@ void flags_update (unsigned num_files, rom *filenames)
 
     // note: must be here and not in flags_update_zip_one_file, so its before the z_file creation
     flag.zip_no_z_file = IS_ZIP && 
-                         (flag.seg_only || flag.biopsy || flag.has_biopsy_line || flag.show_segconf_has || flag.show_bam || flag.show_gz);
+                         (flag.seg_only || zip_is_biopsy || flag.show_segconf_has || flag.show_bam || flag.show_gz);
 
     if (IS_ZIP) {
         // flag.explicit_no_zriter = flag.no_zriter;
@@ -1102,7 +1069,7 @@ void flags_update (unsigned num_files, rom *filenames)
          flag.collect_coverage); // note: this is updated in flags_update_piz_one_z_file
 
     flag.dont_load_ref_file |= is_genozip &&
-        (flag.make_reference || flag.biopsy || flag.has_biopsy_line || flag.show_gz || flag.show_bam);
+        (flag.make_reference || zip_is_biopsy || flag.show_gz || flag.show_bam);
 
     // if reference is not specified, attempt to set it from env var $GENOZIP_REFERENCE
     if (!flag.reference && !flag.dont_load_ref_file) 
@@ -1123,13 +1090,13 @@ void flags_update (unsigned num_files, rom *filenames)
     if (is_genocat) flag.only_headers = flag.show_headers;
 
     flag.no_tip |= flag.quiet || (flag.test_i && !flag.noisy) || tar_zip_is_tar() || !isatty(0) || !isatty (1) ||
-                   flag.show_bam || flag.biopsy || flag.has_biopsy_line;
+                   flag.show_bam || zip_is_biopsy;
 }
 
-// ZIP: called ONCE, only for the MAIN component, after opening txt and z files, but before calling zip_one_file 
+// ZIP: called ONCE per z_file, only for the MAIN component, after opening txt and z files, but before calling zip_one_file 
 void flags_update_zip_one_file (void)
 {
-    DataType dt = z_file->data_type;
+    DataType dt = z_file->data_type;  // note: dt cannot be BCF or CRAM
 
     // --make-reference implies --B1 (unless --vblock says otherwise) and not encrypted. 
     // in addition, txtfile_read_vblock() limits each VB to have exactly one contig.
@@ -1141,41 +1108,15 @@ void flags_update_zip_one_file (void)
     
     DO_ONCE
         if (flag.sendto) WARN0 ("Note: compressing using --sendto means that this file can only be decomrpessed by its intended recipient.\n");
-
-    // if --optimize was selected, all optimizations are turned on
-    if (flag.optimize) switch (dt) {
-        case DT_BCF   :
-        case DT_VCF   : flag.GP_to_PP = flag.GL_to_PL = flag.optimize_phred = flag.optimize_VQSLOD = flag.optimize_sort = true; break;
-        case DT_GFF   : flag.optimize_sort = flag.optimize_Vf = true; break;
-        case DT_BAM   :
-        case DT_SAM   : flag.optimize_QUAL = flag.optimize_ZM = true; break;
-        case DT_FASTQ : flag.optimize_QUAL = flag.optimize_DESC = true; break; // note: optimize_DESC is not turned on by --optimize when --deep, bc DT=SAM
-        default: break;
-    }
     
-    // if any optimization flag is on, we turn on flag.optimize
-    else flag.optimize = flag.optimize_sort || flag.optimize_phred || flag.GL_to_PL || flag.GP_to_PP || flag.optimize_VQSLOD ||
-                         flag.optimize_QUAL || flag.optimize_Vf || flag.optimize_ZM || flag.optimize_DESC;
-
-    // cases where txt data is modified during Seg - digest is not stored, it cannot be tested with --test and other limitations 
-    // note: this flag is also set when the file header indicates that it's a Luft file. See vcf_header_get_dual_coords().
-    flag.zip_txt_modified = flag.zip_txt_modified  // this is needed, eg, so when compressing a Luft file, the rejects file inherits data_modified 
-                      || flag.optimize       // we're modifying data to make it more compressible
-                      || flag.match_chrom_to_reference
-                      || (flag.add_line_numbers && dt == DT_VCF)
-                      || flag.lines_last != NO_LINE  // --head advanced option to compress only a few lines
-                      || flag.has_biopsy_line;
-
     // add v14: --test if user selected --test, OR this condition is true
     flag.explicit_test = flag.test;
-    flag.test |= !flag.no_test && !flag.make_reference && !flag.zip_txt_modified && !flag.biopsy && flag.no_biopsy_line &&
+    flag.test |= !flag.no_test && !flag.make_reference && !zip_is_biopsy &&
                  !flag.show_bam && !flag.seg_only && 
                  !flag.debug && !flag.show_time && !flag.show_memory;
 
-    ASSINP0 (!flag.test_i || flag.test || flag.no_test || flag.debug || flag.make_reference || flag.zip_no_z_file || flag.zip_txt_modified, 
+    ASSINP0 (!flag.test_i || flag.test || flag.no_test || flag.debug || flag.make_reference || flag.zip_no_z_file || zip_is_biopsy, 
              "When running with GENOZIP_TEST one of: --test, --no-test, --debug, --make-reference must be set");
-
-    ASSINP0 (!flag.match_chrom_to_reference || flag.reference, "--match-chrom-to-reference requires using --reference as well"); 
 
     flag.bind = flag.deep                         ? BIND_DEEP    // one SAM/BAM (1-3 components) and one or two FASTQs
               : (dt == DT_FASTQ && flag.pair)     ? BIND_FQ_PAIR // FQ_COMP_R1 and FQ_COMP_R2 components
@@ -1420,9 +1361,10 @@ void flags_update_piz_one_z_file (int z_file_i /* -1 if unknown - called form fi
 
     if (flag.out_filename && is_genounzip) {
         DataType out_dt_by_filename = file_piz_get_dt_of_out_filename();
-        
+        StrTextLong bn;
+
         WARN_IF (flag.out_dt != out_dt_by_filename, "genounzip is reconstructing a %s file, is this what you intended? Asking because filename is \"%s\".%s",
-                 dt_name (flag.out_dt), filename_base (flag.out_filename, false, NULL, 0, 0), // note: leaks basename
+                 dt_name (flag.out_dt), filename_base (flag.out_filename, false, NULL, bn.s, sizeof(bn)), 
                  (((out_dt_by_filename == DT_SAM || out_dt_by_filename == DT_BAM || out_dt_by_filename == DT_CRAM) && (flag.out_dt == DT_SAM || flag.out_dt == DT_BAM || flag.out_dt == DT_CRAM)) || 
                   ((out_dt_by_filename == DT_VCF || out_dt_by_filename == DT_BCF) && (flag.out_dt == DT_VCF || flag.out_dt == DT_BCF)))
                  ? "\nTip: To convert between file types, use genocat." : ""); // show tip only if relevant
@@ -1597,7 +1539,7 @@ void flags_update_piz_one_z_file (int z_file_i /* -1 if unknown - called form fi
             "--idxstats is not supported for %s because it only works on SAM, BAM and FASTQ data, but this file has %s data",
             z_name, z_dt_name());
 
-    // --add-lines-numbers is only possible on SAM
+    // --add-line-numbers is only possible on SAM
     ASSINP0 (!flag.add_line_numbers || OUT_DT(SAM), "--add_line_numbers works on SAM/BAM data, when outputting it as SAM");
     
     // // --seq-only and --qual-only only work on FASTQ

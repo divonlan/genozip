@@ -79,6 +79,7 @@ extern void fastq_zip_set_txt_header_flags (struct FlagsTxtHeader *f);
 
 // ZIP Stuff
 extern void fastq_zip_initialize (void);
+extern rom fastq_zip_modify (VBlockP vb, rom line_start, uint32_t remaining);
 extern void fastq_segconf_set_r1_or_r2 (void);
 extern void fastq_zip_finalize (bool is_last_user_txt_file);
 extern void fastq_zip_init_vb (VBlockP vb);
@@ -92,9 +93,10 @@ COMPRESSOR_CALLBACK(fastq_zip_qual); // used by codec_longr_compress
 
 // SEG Stuff
 extern void fastq_seg_initialize (VBlockP vb);
-extern void fastq_seg_finalize(VBlockP vb);
+extern void fastq_segconf_finalize (VBlockP vb);
+extern void fastq_seg_finalize (VBlockP vb);
 extern bool fastq_seg_is_small (ConstVBlockP vb, DictId dict_id);
-extern rom fastq_seg_txt_line(VBlockP vb, rom line_start, uint32_t remaining, bool *has_13);
+extern rom fastq_seg_txt_line (VBlockP vb, rom line_start, uint32_t remaining, bool *has_13);
 extern rom fastq_assseg_line (VBlockP vb);
 extern void fastq_seg_r2_gpos (VBlockP vb, PosType64 r1_pos, PosType64 r2_gpos);
 extern void fastq_seg_interleaved_gpos (VBlockP vb, PosType64 pair_gpos/*only if we are R2*/, PosType64 gpos);

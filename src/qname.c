@@ -520,8 +520,10 @@ void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
         iprintf ("%.*s - flavor is NOT DISCOVERED - for %s\n", STRf(qname), qtype_name(q));
 
     // when optimizing qname with --optimize_DESC - capture the correct TECH ^ but set flavor to Genozip-opt
-    if (flag.optimize_DESC) 
-        segconf.qname_flavor[q] = (q==QNAME1) ? &qf[NUM_QFs-1] : NULL; // relying on Genozip-opt being last
+    if (q == QNAME1 && segconf.optimize[FASTQ_QNAME]) {
+        bool is_mated = segconf.qname_flavor[QNAME1] && segconf.qname_flavor[QNAME1]->is_mated;
+        segconf.qname_flavor[QNAME1] = &qf[NUM_QFs-1 - is_mated]; // relying on Genozip-opt being last
+    }
 
     // set up dict id alias. need to do explicitly, because not predefined
     if (segconf.qname_flavor[q] && segconf.qname_flavor[q]->barcode_item2 != -1) {
@@ -793,6 +795,11 @@ DictIdAlias qname_get_alias (QType q)
         return (DictIdAlias){ .alias_type = ALIAS_DICT,
                               .alias      = dt_fields[DT_FASTQ].predefined[first_did_i + bc2].dict_id,
                               .dst        = dt_fields[DT_FASTQ].predefined[first_did_i + bc2 - 1].dict_id }; 
+}
+
+bool qf_is_mated (QType q)
+{
+    return segconf.qname_flavor[q]->is_mated;
 }
 
 QnameFlavorId segconf_qf_id (QType q)

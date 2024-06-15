@@ -499,7 +499,7 @@ void ctx_clone (VBlockP vb)
             vctx->dict_id     = zctx->dict_id;
             vctx->st_did_i    = zctx->st_did_i;
             vctx->dict_did_i  = zctx->dict_did_i;
-            vctx->luft_trans  = zctx->luft_trans;
+            vctx->header_info = zctx->header_info;
             vctx->last_line_i = LAST_LINE_I_INIT;
             vctx->tag_i       = -1;
 
@@ -667,8 +667,7 @@ ContextP ctx_get_existing_zctx (DictId dict_id)
     return NULL;
 }
 
-static ContextP ctx_add_new_zf_ctx_do (STRp (tag_name), DictId dict_id, TranslatorId luft_trans, 
-                                       Did st_did_i, bool is_stats_parent)
+static ContextP ctx_add_new_zf_ctx_do (STRp (tag_name), DictId dict_id, Did st_did_i, bool is_stats_parent)
 {
     ASSERT (z_file->num_contexts+1 < MAX_DICTS, // load num_contexts - this time with mutex protection - it could have changed
             "z_file has more dict_id types than MAX_DICTS=%u", MAX_DICTS);
@@ -676,7 +675,6 @@ static ContextP ctx_add_new_zf_ctx_do (STRp (tag_name), DictId dict_id, Translat
     decl_zctx(z_file->num_contexts);
     zctx->did_i           = z_file->num_contexts; 
     zctx->dict_id         = dict_id;
-    zctx->luft_trans      = luft_trans;
     zctx->st_did_i        = st_did_i;
     zctx->dict_did_i      = zctx->did_i; // this is a new context -> it is not a predefined context -> it is not an alias
     zctx->is_stats_parent = is_stats_parent;
@@ -699,17 +697,16 @@ static ContextP ctx_add_new_zf_ctx_do (STRp (tag_name), DictId dict_id, Translat
     return zctx;
 }
 
-// ZIP only: called by main thread when inspecting a txtheader for assigning liftover translators
-ContextP ctx_add_new_zf_ctx_from_txtheader (STRp(tag_name), DictId dict_id, TranslatorId luft_translator)
+// ZIP only: add new zf context by main thread before seg: when inspecting txt_header, at zip_initialize or in segconf
+ContextP ctx_add_new_zf_ctx_at_init (STRp(tag_name), DictId dict_id)
 {
-    ASSINP (tag_name_len <= MAX_TAG_LEN-1, "Tag name \"%.*s\" is of length=%u beyond the maximum tag length supported by Genozip=%u",
-            tag_name_len, tag_name, tag_name_len, MAX_TAG_LEN-1);
+    tag_name_len = MIN_(tag_name_len, MAX_TAG_LEN-1);
 
     mutex_lock (z_file->dicts_mutex); // note: mutex needed bc VBs of a previous component might still be merging
 
     ContextP zctx = ctx_get_existing_zctx (dict_id) 
                   ? NULL // not new - possibly a tag is duplicate in the header, or two tag names map to the same dict_id
-                  : ctx_add_new_zf_ctx_do (STRa(tag_name), dict_id, luft_translator, DID_NONE, false);
+                  : ctx_add_new_zf_ctx_do (STRa(tag_name), dict_id, DID_NONE, false);
 
     mutex_unlock (z_file->dicts_mutex);
 
@@ -725,8 +722,7 @@ static ContextP ctx_add_new_zf_ctx (ConstContextP vctx)
     // check if another thread raced and created this dict before us
     ContextP zctx = ctx_get_zctx_from_vctx (vctx, false, false);
     if (!zctx) 
-        zctx = ctx_add_new_zf_ctx_do (vctx->tag_name, sizeof(zctx->tag_name), vctx->dict_id, 
-                                      vctx->luft_trans, vctx->st_did_i, vctx->is_stats_parent);
+        zctx = ctx_add_new_zf_ctx_do (vctx->tag_name, sizeof(zctx->tag_name), vctx->dict_id, vctx->st_did_i, vctx->is_stats_parent);
 
     mutex_unlock (z_file->dicts_mutex);
     return zctx;
@@ -906,6 +902,7 @@ static inline bool vctx_needs_merge (VBlockP vb, ContextP vctx)
                 || vctx->ol_nodes.len32                  // possibly need to update counts 
                 || vctx->b250.len                        // some b250 might not have nodes (eg WORD_INDEX_MISSING)
                 || vctx->txt_len                         // a context may have txt_len but the txt was segged to another context
+                || vctx->txt_shrinkage                   // possibly shrinked away to zero, but txt_shrinkage is > 0
                 || (vctx->local.len && vb->vblock_i==1)  // zctx->flags needs setting
                 || (vctx->st_did_i != vctx->did_i && vctx->st_did_i != DID_NONE) // st_did_i needs setting
                 || vctx->is_stats_parent                 // is_stats_parent needs setting
@@ -969,8 +966,10 @@ static inline bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx, ContextP *z
 
     uint32_t ol_len = vctx->ol_nodes.len32;
 
-    if (flag.show_stats_comp_i == COMP_NONE || flag.show_stats_comp_i == vb->comp_i)
-        zctx_alias->txt_len += vctx->txt_len; // for stats
+    if (flag.show_stats_comp_i == COMP_NONE || flag.show_stats_comp_i == vb->comp_i) {
+        zctx_alias->txt_len += vctx->txt_len; // for stats (txt after modifications)
+        zctx_alias->txt_shrinkage += vctx->txt_shrinkage; // number of bytes removed from txt due to modifications
+    }
 
     if (vctx->st_did_i != DID_NONE && zctx_alias->st_did_i == DID_NONE) {
         ContextP st_ctx = ctx_get_zctx_from_vctx (CTX(vctx->st_did_i), true, false);

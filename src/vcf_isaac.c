@@ -93,14 +93,13 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_ISAAC_FILTER)
 static bool vcf_seg_GMAF_allele_cb (VBlockP vb_, ContextP ctx, STRp(value), uint32_t unused_rep)
 {
     VBlockVCFP vb = (VBlockVCFP)vb_;
-    bool has_refminor = ctx_encountered_in_line (VB, INFO_RefMinor);
     bool is_ref = str_is_1char (vb->REF, value[0]);
     bool is_alt = vb->alts[0][0] == value[0] && vb->alt_lens[0] == 1;
 
-    if ((has_refminor && is_ref) || (!has_refminor && is_alt)) // usually case
+    if ((has(RefMinor) && is_ref) || (!has(RefMinor) && is_alt)) // usually case
         seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_GMAF_allele, '0' }, 3, ctx, value_len);
     
-    else if ((!has_refminor && is_ref) || (has_refminor && is_alt)) // reverse case
+    else if ((!has(RefMinor) && is_ref) || (has(RefMinor) && is_alt)) // reverse case
         seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_GMAF_allele, '1' }, 3, ctx, value_len);
 
     else // can happen, for example, if ALT='.'

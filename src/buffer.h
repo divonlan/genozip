@@ -202,6 +202,8 @@ static inline unsigned buf_add_hex_as_text (BufferP buf, int64_t n, bool upperca
                 *B(type, (dst), i) += *B(type, (src), i); \
     } })
 
+extern void buf_swap (BufferP buf1, BufferP buf2);
+
 #define BUFPRINTF_MAX_LEN 5000
 #define bufprintf(vb, buf, format, ...)  ({ char __s[BUFPRINTF_MAX_LEN+2]; \
                                             int __s_len = snprintf (__s, sizeof(__s), (format), __VA_ARGS__); \

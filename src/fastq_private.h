@@ -41,7 +41,7 @@ typedef struct VBlockFASTQ {
     uint32_t pair_num_lines;     // R2: number of reads (FASTQ lines) in the equivalent vb in the R1
     uint32_t pair_txt_data_len;  // ZIP R2: populated if flag.debug
 
-    STRw (optimized_desc);       // base of desc in flag.optimize_DESC 
+    STRw (optimized_qname);       // base of desc in segconf.optimize[FASTQ_QNAME] 
     uint64_t first_line;         // ZIP: used for optimize_DESC  
 
     bool has_extra;              // ZIP: a VB-private copy of segconf.has_extra

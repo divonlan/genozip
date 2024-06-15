@@ -142,7 +142,9 @@ void digest_piz_verify_one_txt_file (unsigned txt_file_i/* 0-based */)
             iprintf ("Txt file #%u: %u VBs verified\n", txt_file_i, z_file->num_vbs_verified);
 
         if (flag.test) { 
-            snprintf (s, sizeof (s), "verified as identical to the original %s", dt_name_faf (txt_file->data_type));
+            snprintf (s, sizeof (s), "verified as identical to the %s %s", 
+                      segconf.zip_txt_modified ? "modified" : "original", // in case ZIP modified, e.g. with --optimize
+                      dt_name_faf (txt_file->data_type));
             progress_finalize_component (s); 
         }
 
@@ -209,7 +211,7 @@ static void digest_piz_verify_one_vb (VBlockP vb)
             if (!__atomic_test_and_set (&txt_file->vb_digest_failed, __ATOMIC_RELAXED)) { // not WARN_ONCE because we might be genounzipping multiple files - we want to show this for every failed file (see also note in digest_piz_verify_one_txt_file)
                 NOISYWARN ("Bad reconstructed vblock has been dumped to: %s.gz\n"
                            "To see the same data in the original file:\n"
-                           "genozip --biopsy %u -B%u %s%s%s",
+                           "genozip --biopsy %u -B%u %s%s%s",  // note: segconf.vb_size is only available since v14. For older files, look it up with genocat --stats.
                            txtfile_dump_vb (vb, z_name).s, vb->vblock_i, (unsigned)(segconf.vb_size >> 20), 
                            (Z_DT(SAM) ? "--no-gencomp " : ""), // note: digest is calculated on VB after gencomp lines have already been re-integrated according to the recon_plan
                            (txt_file && txt_file->name) ? filename_guess_original (txt_file) : IS_PIZ ? txtheader_get_txt_filename_from_section().s : "(uncalculable)",
@@ -244,7 +246,7 @@ bool digest_one_vb (VBlockP vb, bool is_compute_thread,
     if (IS_ADLER && (IS_ZIP || VER(14))) {
         if (digestable) {
             vb->digest = digest_do (STRb(*data), IS_ADLER, VB_NAME);
-            
+
             if (IS_PIZ) digest_piz_verify_one_vb (vb);  
         }
     }
@@ -318,12 +320,13 @@ Digest digest_txt_header (BufferP data, Digest piz_expected_digest, CompIType co
 
         if (!digest_recon_is_equal (digest, piz_expected_digest)) {
             
-            WARN ("%s of reconstructed %s header (%s) differs from original file (%s)\n"
+            WARN ("%s of reconstructed %s header (%s) differs from %s file (%s)\n"
                   "Bad reconstructed header has been dumped to: %s\n"
                   "To see the same data in the original file:\n"
                   "genozip --biopsy 0 %s%s",
-                  digest_name(),
-                  dt_name (z_file->data_type), digest_display (digest).s, digest_display (piz_expected_digest).s,
+                  digest_name(), dt_name (z_file->data_type), digest_display (digest).s, 
+                  segconf.zip_txt_modified ? "modified" : "original", // in case ZIP modified, e.g. with --optimize
+                  digest_display (piz_expected_digest).s,
                   txtfile_dump_vb (data->vb, z_name).s, filename_guess_original (txt_file), SUPPORT);
 
             if (flag.test) exit_on_error(false);

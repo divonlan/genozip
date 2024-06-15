@@ -8,7 +8,6 @@
 
 #include "sam_private.h"
 #include "chrom.h"
-#include "optimize.h"
 
 static const StoreType aux_field_store_flag[256] = {
     ['c']=STORE_INT, ['C']=STORE_INT, 
@@ -175,9 +174,9 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_COPY_MATE_FLAG)
     SamFlags flag = { .value = history64(SAM_FLAG, VB_SAM->mate_line_i) }; 
 
     // flip fields to opposite mate
-    SWAPbit (flag.unmapped, flag.next_unmapped);
-    SWAPbit (flag.rev_comp, flag.next_rev_comp);
-    SWAPbit (flag.is_first, flag.is_last);
+    SWAPbits (flag.unmapped, flag.next_unmapped);
+    SWAPbits (flag.rev_comp, flag.next_rev_comp);
+    SWAPbits (flag.is_first, flag.is_last);
 
     new_value->i = flag.value;
     if (reconstruct) RECONSTRUCT_INT (new_value->i);
@@ -199,9 +198,6 @@ COMPRESSOR_CALLBACK (sam_zip_U2)
     if (!line_data) return; // only lengths were requested
 
     *line_data = Btxt (dl->U2.index);
-
-    if (flag.optimize_QUAL)
-        optimize_phred_quality_string (*line_data, *line_data_len);
 
     if (is_rev) *is_rev = dl->FLAG.rev_comp;
 }
@@ -597,7 +593,7 @@ bool sam_seg_0A_rname_cb (VBlockP vb, ContextP ctx, STRp(oa_rname), uint32_t rep
         seg_by_ctx (vb, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_0A_RNAME }, 2, ctx, oa_rname_len); 
 
     else
-        chrom_seg_ex (vb, ctx->did_i, STRa(oa_rname), 0, NULL, oa_rname_len, true, NULL);
+        chrom_seg_ex (vb, ctx->did_i, STRa(oa_rname), 0, oa_rname_len, NULL);
     
     return true; // segged successfully
 }
@@ -1468,7 +1464,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam,
         case _OPTION_OQ_Z: sam_seg_other_qual (vb, dl, &dl->OQ, OPTION_OQ_Z, STRa(value), true, add_bytes); break;
         case _OPTION_TQ_Z: sam_seg_other_qual (vb, dl, &dl->TQ, OPTION_TQ_Z, STRa(value), false, add_bytes); break;
 
-        //case _OPTION_CC_Z: see unused code, bug 609
+        // case _OPTION_CC_Z: // see bug 609
 
         case _OPTION_MC_Z: sam_cigar_seg_MC_Z (vb, dl, STRa(value), add_bytes); break;
 
@@ -1508,15 +1504,15 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam,
         case _OPTION_BC_Z: sam_seg_BC_Z (vb, dl, STRa(value), add_bytes); break;
         case _OPTION_MM_Z: sam_seg_MM_Z (vb, STRa(value), add_bytes); break;
 
-        case _OPTION_2Y_Z: COND (segconf.has_cellranger, sam_seg_other_qual (vb, dl, &dl->_2Y, OPTION_2Y_Z, STRa(value), false, add_bytes));
+        case _OPTION_2Y_Z: COND (segconf.has_10xGen, sam_seg_other_qual (vb, dl, &dl->_2Y, OPTION_2Y_Z, STRa(value), false, add_bytes));
         
-        case _OPTION_GR_Z: COND (segconf.has_cellranger, sam_seg_GR_Z (vb, dl, STRa(value), add_bytes));
-        case _OPTION_GY_Z: COND (segconf.has_cellranger, sam_seg_GY_Z (vb, dl, STRa(value), add_bytes));
-        case _OPTION_2R_Z: COND (segconf.has_cellranger, sam_seg_other_seq (vb, dl, OPTION_2R_Z, STRa(value), add_bytes));
-        case _OPTION_TR_Z: COND (segconf.has_cellranger || MP(LONGRANGER), sam_seg_other_seq (vb, dl, OPTION_TR_Z, STRa(value), add_bytes));
+        case _OPTION_GR_Z: COND (segconf.has_10xGen, sam_seg_GR_Z (vb, dl, STRa(value), add_bytes));
+        case _OPTION_GY_Z: COND (segconf.has_10xGen, sam_seg_GY_Z (vb, dl, STRa(value), add_bytes));
+        case _OPTION_2R_Z: COND (segconf.has_10xGen, sam_seg_other_seq (vb, dl, OPTION_2R_Z, STRa(value), add_bytes));
+        case _OPTION_TR_Z: COND (segconf.has_10xGen, sam_seg_other_seq (vb, dl, OPTION_TR_Z, STRa(value), add_bytes));
 
-        case _OPTION_TX_Z: COND (segconf.has_cellranger, sam_seg_TX_AN_Z (vb, dl, OPTION_TX_Z, STRa(value), add_bytes));
-        case _OPTION_AN_Z: COND (segconf.has_cellranger, sam_seg_TX_AN_Z (vb, dl, OPTION_AN_Z, STRa(value), add_bytes));
+        case _OPTION_TX_Z: COND (segconf.has_10xGen, sam_seg_TX_AN_Z (vb, dl, OPTION_TX_Z, STRa(value), add_bytes));
+        case _OPTION_AN_Z: COND (segconf.has_10xGen, sam_seg_TX_AN_Z (vb, dl, OPTION_AN_Z, STRa(value), add_bytes));
 
         case _OPTION_GN_Z: sam_seg_gene_name_id (vb, dl, OPTION_GN_Z, STRa(value), add_bytes); break;
         case _OPTION_GX_Z: sam_seg_gene_name_id (vb, dl, OPTION_GX_Z, STRa(value), add_bytes); break;
@@ -1588,7 +1584,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam,
 
         case _OPTION_mc_i: COND (segconf.is_biobambam2_sort, sam_seg_mc_i (vb, numeric.i, add_bytes));
 
-        case _OPTION_ms_i: COND (segconf.sam_ms_type == ms_BIOBAMBAM && !flag.optimize_QUAL, sam_seg_ms_i (vb, dl, numeric.i, add_bytes)); // ms:i produced by biobambam or samtools
+        case _OPTION_ms_i: COND (segconf.sam_ms_type == ms_BIOBAMBAM && !segconf.optimize[SAM_QUAL], sam_seg_ms_i (vb, dl, numeric.i, add_bytes)); // ms:i produced by biobambam or samtools
 
         case _OPTION_s1_i: COND (segconf.is_minimap2, sam_seg_s1_i (vb, dl, numeric.i, add_bytes));
 
@@ -1597,8 +1593,6 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam,
         case _OPTION_Z5_i: seg_pos_field (VB, OPTION_Z5_i, SAM_PNEXT, 0, 0, 0, 0, numeric.i, add_bytes); break;
 
         case _OPTION_Zs_Z: COND (MP(HISAT2), sam_seg_HISAT2_Zs_Z (vb, STRa(value), add_bytes));
-
-        case _OPTION_ZM_B_s: COND (flag.optimize_ZM, sam_seg_array_one_ctx (vb, dl, _OPTION_ZM_B_s, array_subtype, STRa(value), sam_optimize_TMAP_ZM, 0, NULL));
 
         case _OPTION_YH_Z: COND (MP(NOVOALIGN), seg_add_to_local_string (VB, CTX(OPTION_YH_Z), STRa(value), LOOKUP_NONE, add_bytes)); break;
         case _OPTION_YQ_Z: COND (MP(NOVOALIGN), seg_add_to_local_string (VB, CTX(OPTION_YQ_Z), STRa(value), LOOKUP_NONE, add_bytes)); break;
@@ -1612,7 +1606,9 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam,
 
         case _OPTION_FI_i: COND (MP(BLASR), sam_seg_blasr_FI_i (vb, dl, numeric.i, add_bytes));
 
-        case _OPTION_fx_Z: COND (segconf.has_cellranger, sam_seg_fx_Z (vb, dl, STRa(value), add_bytes));
+        case _OPTION_fx_Z: COND (segconf.has_10xGen, sam_seg_fx_Z (vb, dl, STRa(value), add_bytes));
+        case _OPTION_GP_i: COND (MP(CRDNA), sam_seg_GP_i (vb, dl, numeric.i, add_bytes));
+        case _OPTION_MP_i: COND (MP(CRDNA), sam_seg_MP_i (vb, dl, numeric.i, add_bytes));
 
         // PacBio fields
         case _OPTION_dq_Z: COND0 (segconf.use_pacbio_iqsqdq, sam_seg_pacbio_xq (vb, dl, OPTION_dq_Z, &dl->dq, STRa(value), add_bytes))
@@ -1662,7 +1658,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam,
         // Abra2
         case _OPTION_YA_Z: COND (segconf.sam_has_abra2, sam_seg_ABRA2_YA_Z (vb, STRa(value), add_bytes));
         case _OPTION_YO_Z: COND (segconf.sam_has_abra2, sam_seg_ABRA2_YO_Z (vb, STRa(value), add_bytes));
-        
+
         default: fallback:
             sam_seg_aux_field_fallback (VB, dl, dict_id, sam_type, array_subtype, STRa(value), numeric, add_bytes);
     }

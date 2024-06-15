@@ -194,8 +194,8 @@ typedef struct {
     EncryptionType encryption_type;    // one of EncryptionType
     uint16_t data_type;                // one of DataType
     uint64_t recon_size;               // data size of reconstructed file, if uncompressing as a single file in primary coordinates
-    uint64_t genozip_minor_ver : 10;   // populated since 15.0.28
-    uint64_t unused8           : 5;    // reserved for future extension of genozip_minor_ver (if needed)
+    uint64_t genozip_minor_ver : 14;   // populated since 15.0.28. 10 bits until 15.0.59
+    uint64_t is_modified       : 1;    // ZIP modified the txt_data (e.g. --optimize). Since 15.0.60      
     uint64_t private_file      : 1;    // this file can only be decompressed by user with the specified license_hash (15.0.30)
     uint64_t num_lines_bound   : 48;   // number of lines in a bound file. "line" is data_type-dependent. For FASTQ, it is a read.
     uint32_t num_sections;             // number sections in this file (including this one)
@@ -205,7 +205,7 @@ typedef struct {
             char unused;                       
             CompIType num_txt_files;   // number of txt bound components in this file (1 if no binding). We don't count generated components (gencomp).
         };
-        uint32_t v13_num_components;
+        uint32_t v13_num_components;   // up to v13: number of txt bound components in this file (1 if no binding)
     };
     union { // 16 bytes
         Digest genome_digest;          // DT_REF: Digest of genome as loaded to memory (algorithm determined by genozip_header.adler) (since v15)
@@ -239,7 +239,7 @@ typedef struct {
             uint8_t segconf_is_paired    : 1; // SAM: v14
             uint8_t segconf_sag_has_AS   : 1; // SAM: v14
             uint8_t segconf_pysam_qual   : 1; // SAM: v14
-            uint8_t segconf_cellranger   : 1; // SAM: v14
+            uint8_t segconf_10xGen       : 1; // SAM: v14
             uint8_t segconf_SA_HtoS      : 1; // SAM: v14
             uint8_t segconf_is_sorted    : 1; // SAM: v14
             uint8_t segconf_is_collated  : 1; // SAM: v14
@@ -322,8 +322,8 @@ typedef struct {
     uint32_t max_lines_per_vb;         // upper bound on how many data lines a VB can have in this file
     Codec    src_codec;                // codec of original txt file (none, bgzf, gz, bz2...)
     uint8_t  codec_info[3];            // codec specific info: for CODEC_BGZF, these are the LSB, 2nd-LSB, 3rd-LSB of the source BGZF-compressed file size
-    Digest   digest;                   // digest of original single txt file (except modified or DVCF). v14: only if md5, not alder32 (adler32 digest, starting v14, is stored per VB) (bug in v14: this field is garbage instead of 0 for FASTQ_COMP_FQR2 if adler32)
-    Digest   digest_header;            // MD5 or Adler32 of header
+    Digest   digest;                   // digest of original single txt file. Up to 15.0.59: 0 if modified or DVCF. v14: only if md5, not alder32 (adler32 digest, starting v14, is stored per VB) (bug in v14: this field is garbage instead of 0 for FASTQ_COMP_FQR2 if adler32)
+    Digest   digest_header;            // MD5 or Adler32 of header. Up to 15.0.59: 0 if txt was modified by zip.
 #define TXT_FILENAME_LEN 256
     char     txt_filename[TXT_FILENAME_LEN];// filename of this single component. without path, 0-terminated. always in base form like .vcf or .sam, even if the original is compressed .vcf.gz or .bam
     uint64_t txt_header_size;          // size of header in original txt file before any zip-side modifications. note: use Σdata_uncompress_len(fragᵢ) for the size after zip-size modifications (v12)
@@ -335,7 +335,7 @@ typedef struct {
     union {
         uint32_t v11_first_line;       // up to v11 - first_line; if 0, this is the terminating section of the components
         uint32_t sam_prim_seq_len;     // SAM PRIM: total number of bases of SEQ in this VB (v14) 
-        uint32_t vcf_HT_n_lines;        // VCF starting 15.0.48: number of lines that 1. have FORMAT/GT 2. Samples were segged (i.e. not copy-from-mate)
+        uint32_t vcf_HT_n_lines;       // VCF starting 15.0.48: number of lines that 1. have FORMAT/GT 2. Samples were segged (i.e. not copy-from-mate)
     };    
     union {
         uint32_t v13_top_level_repeats;// v12/13: repeats of TOPLEVEL container in this VB. Up to v12 - called num_lines.
@@ -344,7 +344,7 @@ typedef struct {
     uint32_t recon_size;               // size of vblock as it appears in the default reconstruction (i.e. after ZIP-side modifications)
     uint32_t z_data_bytes;             // total bytes of this vblock in the genozip file including all sections and their headers 
     uint32_t longest_line_len;         // length of the longest line in this vblock 
-    Digest   digest;                   // stand-alone Adler32 or commulative MD5 up to and including this VB. Up to v13: Adler32 was commulative too.
+    Digest   digest;                   // stand-alone Adler32 or commulative MD5 up to and including this VB. Up to 15.0.59: not if VB was modified. Up to v13: Adler32 was commulative too.
     union {
         uint32_t v13_num_lines_prim;   // v12/13: number of lines in default reconstruction (DVCF: in PRIMARY coords) (v12)
         uint32_t sam_prim_first_grp_i; // SAM PRIM: the index of first group of this PRIM VB, in z_file->sag_grps (v14)
@@ -466,7 +466,7 @@ typedef struct __attribute__ ((packed)) SectionEntFileFormat { // 19 bytes (sinc
             uint32_t dict_sec_i; // section from which to copy the dict_id
         };
         struct { 
-            uint32_t num_lines;      // VB_HEADER sections - number of lines in this VB. 
+            uint32_t num_lines;// VB_HEADER sections - number of lines in this VB. 
             uint32_t num_non_deep_lines; // VB_HEADER Deep SAM, component MAIN and PRIM: number of lines in this VB that are NOT deepable, i.e. SUPPLEMENTARY or SECONDARY or monochar or with SEQ.len=0  
         };
         uint64_t st_specific;  // generic access to the value

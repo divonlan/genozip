@@ -129,7 +129,7 @@ typedef struct { char s[16384]; } StrTextMegaLong;
 
 #define VB ((VBlockP)(vb))
 
-// IMPORTANT: DATATYPES GO INTO THE FILE FORMAT - THEY CANNOT BE CHANGED
+// IMPORTANT: DATATYPES GO INTO THE FILE FORMAT - THEY CANNOT BE CHANGED (note: if updating, also update single-user-stats-helper.c)
 typedef packed_enum { 
     DT_NONE=-1,   // used in the code logic, never written to the file
     DT_REF=0, DT_VCF=1, DT_SAM=2, DT_FASTQ=3, DT_FASTA=4, DT_GFF=5, DT_ME23=6, // these values go into SectionHeaderGenozipHeader.data_type
@@ -371,8 +371,8 @@ typedef int ThreadId;
 
 #define IS_FLAG(flag, mask) (((flag) & (mask)) == (mask))
 
-#define SWAP(a,b)    ({ typeof(a) tmp = a; a = b; b = tmp; })
-#define SWAPbit(a,b) ({ uint8_t   tmp = a; a = b; b = tmp; })  // meant for bit fields 
+#define SWAP(a,b)     ({ typeof(a) tmp = a; a = b; b = tmp; })
+#define SWAPbits(a,b) ({ uint64_t  tmp = a; a = b; b = tmp; })  // meant for bit fields (of any type uint8_t -> uint64_t)
 
 // safe snprintf for multiple-step string building 
 #define SNPRINTF(out/*StrText* */, format, ...) \
@@ -509,6 +509,12 @@ typedef SORTER ((*Sorter));
 #define ASSERT_LAST_TXT_VALID(ctx) ASSERT (is_last_txt_valid(ctx), "%s.last_txt is INVALID", (ctx)->tag_name)
 #define STRlast(name,did_i)    ASSERT_LAST_TXT_VALID(CTX(did_i)); rom name = last_txt((VBlockP)(vb), did_i); uint32_t name##_len = CTX(did_i)->last_txt.len
 #define SETlast(name,did_i) ({ ASSERT_LAST_TXT_VALID(CTX(did_i));     name = last_txt((VBlockP)(vb), did_i);          name##_len = CTX(did_i)->last_txt.len; })
+
+#define STR_ARRAY(x,n) rom x##s[n]; uint32_t x##_lens[n]; uint32_t n_##x##s __attribute__((unused))
+#define STR_ARRAY_(x,n) rom x##s[n]; uint32_t x##_lens[n]
+#define STRl_ARRAY(x,n,l) char x##s[n][l]; uint32_t x##_lens[n]
+#define eSTRl_ARRAY(x,n,l) extern char x##s[n][l]; extern uint32_t x##_lens[n]
+#define sSTRl_ARRAY(x,n,l) static char x##s[n][l]; static uint32_t x##_lens[n]
 
 // Strings - function parameters
 #define STRp(x)  rom x,   uint32_t x##_len    

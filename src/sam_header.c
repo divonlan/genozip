@@ -39,29 +39,13 @@ void sam_destroy_deep_tip (void)
     buf_destroy (sam_deep_tip);
 }
 
-static void sam_header_get_ref_index (STRp (contig_name), PosType64 LN, void *ref_index)
-{
-    *(WordIndex *)ref_index = ref_contigs_ref_chrom_from_header_chrom (gref, STRa(contig_name), &LN); // also verifies LN
-}
-
 static void sam_header_add_contig (STRp (contig_name), PosType64 LN, void *out_ref_index)
 {
     WordIndex ref_index;
 
     // case: we have a reference, we use the reference chrom_index    
-    if (flag.reference & REF_ZIP_LOADED) {
+    if (flag.reference & REF_ZIP_LOADED) 
         ref_index = ref_contigs_ref_chrom_from_header_chrom (gref, STRa(contig_name), &LN); // also verifies LN
-
-        // case --match-chrom-to-reference
-        if (flag.match_chrom_to_reference) {
-            if (ref_index != WORD_INDEX_NONE) { // udpate contig name, if this contig is in the reference
-                z_file->header_size -= (int32_t)contig_name_len * (IS_BAM_ZIP ? 2 : 1); // in BAM the contig appears twice - in the binary and textual header
-                contig_name = ref_contigs_get_name (gref, ref_index, &contig_name_len);
-                z_file->header_size += contig_name_len * (IS_BAM_ZIP ? 2 : 1); // header_size now has the growth in the size due to --match. the base will be added in txtheader_zip_read_and_compress
-            }
-            *(WordIndex*)out_ref_index = ref_index;
-        }
-    }
 
     else // internal
         ref_index = sam_hdr_contigs->contigs.len32;
@@ -95,8 +79,7 @@ static void sam_header_add_contig (STRp (contig_name), PosType64 LN, void *out_r
 // call a callback for each SQ line (contig) in the textual header (SAM and BAM). Note: callback function is the same as foreach_contig
 static void foreach_textual_SQ_line (rom txt_header, // nul-terminated string if SAM header
                                      uint32_t bam_header_len, // if BAM header: total header len. if SAM header: 0
-                                     ContigsIteratorCallback callback, void *callback_param,
-                                     BufferP new_txt_header) // optional - if provided, all lines need to be copied (modified or not) to this buffer
+                                     ContigsIteratorCallback callback, void *callback_param)
 {
     rom line = txt_header;
     uint32_t bam_txt_hdr_len = 0;
@@ -109,9 +92,6 @@ static void foreach_textual_SQ_line (rom txt_header, // nul-terminated string if
         __save_ = txt_header[bam_txt_hdr_len + 8]; // temporary \0 after textual header
         *(__addr_ = (char *)&txt_header[bam_txt_hdr_len + 8]) = 0;
 
-        if (new_txt_header)
-            buf_add_more (NULL, new_txt_header, txt_header, 8, NULL);
-
         line += 8;
     }
 
@@ -121,8 +101,6 @@ static void foreach_textual_SQ_line (rom txt_header, // nul-terminated string if
         char *newline = strchr (line, '\n');
         ASSERT (newline, "line %u of textual SAM header does not end with a newline: \"%s\"", i, line);
 
-        bool add_line = !!new_txt_header; // whether we need to add the line to new_txt_header
-
         if (line[1] == 'S' && line[2] == 'Q') { // this test will always be in the buffer - possible in the overflow area
 
             // line looks something like: @SQ\tSN:chr10\tLN:135534747 (no strict order between SN and LN and there could be more parameters)
@@ -130,46 +108,27 @@ static void foreach_textual_SQ_line (rom txt_header, // nul-terminated string if
             rom pos_str    = strstr (line, "LN:"); 
             if (chrom_name && pos_str) {
                 unsigned chrom_name_len = strcspn (&chrom_name[3], "\t\n\r");
-                rom after_chrom = chrom_name + chrom_name_len + STRLEN("SN:");
 
                 PosType64 last_pos = (PosType64)strtoull (&pos_str[3], NULL, 10);
 
                 ASSINP (last_pos <= MAX_POS_SAM, "Error: @SQ record in header contains LN:%"PRId64" which is beyond the maximum permitted by the SAM spec of %"PRId64,
                         last_pos, MAX_POS_SAM);
 
-                WordIndex ref_index = WORD_INDEX_NONE; // of reference contig with matched name
-                callback (&chrom_name[3], chrom_name_len, last_pos, add_line ? &ref_index : callback_param);
-
-                // case --match-chrom-to-reference: we need to update the contig name from the reference, if this contig is in the reference
-                if (add_line && ref_index != WORD_INDEX_NONE) {
-                    add_line = false; // done
-                    bufprintf (evb, new_txt_header, "%.*s%s%.*s\n",
-                               (int)(chrom_name - line + STRLEN("SN:")), line, // line beginning up to the contig name
-                               ref_contigs_get_name (gref, ref_index, NULL),   // matched contig name from the reference
-                               (int)(newline - after_chrom), after_chrom);     // line after contig name
-                }
+                callback (&chrom_name[3], chrom_name_len, last_pos, callback_param);
             }
         }
-
-        if (add_line)
-            buf_add_more (NULL, new_txt_header, line, newline-line+1, NULL);
 
         *newline = '\n';    // restore
         line = newline + 1; // beginning of next line or \0
     }
 
-    if (bam_header_len) {
-        SAFE_RESTORE;
-
-        if (new_txt_header)
-            buf_add_more (NULL, new_txt_header, &txt_header[bam_txt_hdr_len + 8], bam_header_len - bam_txt_hdr_len - 8, NULL);
-    }
+    if (bam_header_len) SAFE_RESTORE;
+    
 }
 
 // call a callback for each SQ line (contig). Note: callback function is the same as foreach_contig
 static void foreach_binary_SQ_line (rom txt_header, uint32_t txt_header_len, // binary BAM header
-                                    ContigsIteratorCallback callback, void *callback_param,
-                                    BufferP new_txt_header) // optional - if provided, all lines need to be copied (modified or not) to this buffer
+                                    ContigsIteratorCallback callback, void *callback_param)
 {
     #define HDRSKIP(n) if (txt_header_len < next + n) goto incomplete_header; next += n
     #define HDR32 (next + 4 <= txt_header_len ? GET_UINT32 (&txt_header[next]) : 0) ; if (txt_header_len < next + 4) goto incomplete_header; next += 4;
@@ -181,58 +140,17 @@ static void foreach_binary_SQ_line (rom txt_header, uint32_t txt_header_len, // 
     // skip magic, l_text, text
     HDRSKIP(4);
     uint32_t l_text = HDR32;
-    rom plain_sam_header = &txt_header[next];
     HDRSKIP(l_text);
 
     uint32_t n_ref = HDR32;
 
-    // case --match-chrom-to-reference: 
-    if (new_txt_header) {
-        // copy magic and l_text - we will update l_text later
-        buf_add (new_txt_header, txt_header, 8); 
-        
-        // update SAM plain header with new contigs, but DONT add to hdr_contigs - we will do that in the loop below
-        SAFE_NUL (&plain_sam_header[l_text]); // per SAM spec, plain SAM header within a BAM header is not nul terminated
-        foreach_textual_SQ_line (plain_sam_header, 0, sam_header_get_ref_index, NULL, new_txt_header);
-        SAFE_RESTORE;
-
-        // update l_text
-        *B32 (*new_txt_header, 1) = LTEN32 ((uint32_t)new_txt_header->len - 8); // this assignment is word-aligned
-
-        // add n_ref
-        uint32_t n_ref_lten = LTEN32 (n_ref);
-        buf_add_more (NULL, new_txt_header, (char*)&n_ref_lten, sizeof (uint32_t), NULL); // not necessarily word-aligned
-    }
-
     for (uint32_t ref_i=0; ref_i < n_ref; ref_i++) {
-        
-        uint32_t start_line = next;
-
         uint32_t l_name = HDR32; // name length including \0
         rom name = &txt_header[next];
         HDRSKIP (l_name);
         uint32_t l_ref = HDR32;
 
-        WordIndex ref_index = WORD_INDEX_NONE; // of reference contig with matched name
-        callback (name, l_name-1, l_ref, new_txt_header ? &ref_index : callback_param);
-
-        // case --match-chrom-to-reference: we need to update the contig name from the reference, if this contig is in the reference
-        if (new_txt_header) {
-            if (ref_index != WORD_INDEX_NONE) {            
-                uint32_t new_l_name;
-                name = ref_contigs_get_name (gref, ref_index, &new_l_name); 
-                new_l_name++; // now its the length including \0
-
-                uint32_t new_l_name_lten = LTEN32 (new_l_name);
-                buf_add_more (NULL, new_txt_header, (char*)&new_l_name_lten, sizeof (uint32_t), NULL); // use memcpy as data is not word-aligned
-                buf_add_more (NULL, new_txt_header, name, new_l_name_lten, NULL);
-
-                uint32_t l_ref_lten = LTEN32 (l_ref);
-                buf_add_more (NULL, new_txt_header, (char*)&l_ref_lten, sizeof (uint32_t), NULL); // use memcpy as data is not word-aligned
-            }
-            else 
-                buf_add_more (NULL, new_txt_header, &txt_header[start_line], l_name + 8, NULL); // use memcpy as data is not word-aligned
-        }
+        callback (name, l_name-1, l_ref, callback_param);
     }
 
     return;
@@ -327,10 +245,16 @@ static void sam_header_zip_build_stats_programs (rom hdr, rom after)
             }
 
         if (added) {
-            // if ID and PN are the same - keep just the value
-            if (PN_i>=0 && ID_i>=0 && str_issame_(flds[PN_i]+3, fld_lens[PN_i]-3, flds[ID_i]+3, ID_len-3)) {
+            // case: ID and PN are the same - keep just the value (possibly up to the hyphen in ID)
+            if (PN_i>=0 && ID_i>=0 && str_issame_(flds[PN_i]+3, fld_lens[PN_i]-3, flds[ID_i]+3, ID_len-3)){
                 stats_programs.len32 = this_PG_i; // undo           
                 buf_add_more (evb, &stats_programs, flds[ID_i]+3, ID_len-3, "stats_programs"); // just value
+            }
+
+            // case: ID and PN are the same - entire fld is equal
+            else if (PN_i>=0 && ID_i>=0 && str_issame_(flds[PN_i]+3, fld_lens[PN_i]-3, flds[ID_i]+3, fld_lens[ID_i]-3)) {
+                stats_programs.len32 = this_PG_i; // undo           
+                buf_add_more (evb, &stats_programs, flds[ID_i]+3, fld_lens[ID_i]-3, "stats_programs"); // just value
             }
 
             uint32_t this_PG_len = stats_programs.len32 - this_PG_i;
@@ -444,6 +368,8 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
         }
     }
 
+    if (MP(CRDNA) || MP(LONGRANGER)) segconf.has_10xGen = true;
+
     if (strstr (first_PG, "ABRA2")) segconf.sam_has_abra2 = true;
 
     // build buffer of unique PN+ID fields, for stats
@@ -510,11 +436,11 @@ static void sam_header_alloc_contigs (BufferP txt_header)
 {
     // count contigs in textual header
     ContigsCbParam txt_ctg_count={}, bin_ctg_count={}; 
-    foreach_textual_SQ_line (txt_header->data, IS_SRC_BAM ? txt_header->len : 0, sam_header_count_contigs_cb, &txt_ctg_count, NULL);
+    foreach_textual_SQ_line (txt_header->data, IS_SRC_BAM ? txt_header->len : 0, sam_header_count_contigs_cb, &txt_ctg_count);
 
     // count contigs in binary header
     if (IS_SRC_BAM && txt_file->type != CRAM) // in case of CRAM we don't have binary contigs (unless header was read through samtools - but even then, the CRAM itself has only a textual header)
-        foreach_binary_SQ_line  (STRb(*txt_header), sam_header_count_contigs_cb, &bin_ctg_count,  NULL);
+        foreach_binary_SQ_line  (STRb(*txt_header), sam_header_count_contigs_cb, &bin_ctg_count);
     
     // we expect textual and binary files to be identical, however we observed in the wild files where the binary contigs
     // are a subset of the textual contigs (apartently generated by STAR: https://www.encodeproject.org/files/ENCFF047UEJ/@@download/ENCFF047UEJ.bam)
@@ -547,36 +473,22 @@ static void sam_header_zip_inspect_SQ_lines (VBlockP txt_header_vb, BufferP txt_
 {
     START_TIMER;
     
-    #define new_txt_header txt_header_vb->codec_bufs[0]
-
     sam_header_alloc_contigs (txt_header); 
     if (sam_hdr_contigs) {
-
-        if (flag.match_chrom_to_reference) 
-            buf_alloc (txt_header_vb, &new_txt_header, 0, txt_header->len + 100, char, 0, "codec_bufs[0]"); // initial allocation (might be a bit bigger due to label changes)
-
         START_TIMER;
 
         if (sam_hdr_contigs->contigs.param) // contigs originate from textual header
-            foreach_textual_SQ_line (txt_header->data, IS_SRC_BAM ? txt_header->len32 : 0, sam_header_add_contig, NULL, flag.match_chrom_to_reference ? &new_txt_header : NULL);
+            foreach_textual_SQ_line (txt_header->data, IS_SRC_BAM ? txt_header->len32 : 0, sam_header_add_contig, NULL);
         else
-            foreach_binary_SQ_line  (STRb(*txt_header), sam_header_add_contig, NULL, flag.match_chrom_to_reference ? &new_txt_header : NULL);
+            foreach_binary_SQ_line  (STRb(*txt_header), sam_header_add_contig, NULL);
 
         COPY_TIMER_EVB (sam_header_add_contig);
-
-        // replace txt_header with the updated one
-        if (flag.match_chrom_to_reference) {
-            buf_free (*txt_header);
-            buf_copy (txt_header_vb, txt_header, &new_txt_header, char, 0, 0, "txt_data");
-            buf_free (new_txt_header);
-        }
 
         if (IS_ZIP)            
             contigs_create_index (sam_hdr_contigs, SORT_BY_NAME); // used by sam_sa_add_sa_group
     }
 
     COPY_TIMER_EVB (sam_header_zip_inspect_SQ_lines);
-    #undef new_txt_header
 }
 
 // called from cram_read_sam_header to verify that all CRAM header contigs appear in reference, 
@@ -588,7 +500,7 @@ static void sam_header_verify_same_contig_as_ref (STRp (contig_name), PosType64 
 
 void sam_header_zip_inspect_SQ_lines_in_cram (rom cram_filename)
 {
-    foreach_textual_SQ_line (B1STc(evb->txt_data), 0, sam_header_verify_same_contig_as_ref, (void *)cram_filename, NULL);
+    foreach_textual_SQ_line (B1STc(evb->txt_data), 0, sam_header_verify_same_contig_as_ref, (void *)cram_filename);
 }
 
 void sam_header_finalize (void)
@@ -798,7 +710,7 @@ TXTHEADER_TRANSLATOR (sam_header_sam2bam)
 
     // n_ref = count SQ lines in text
     uint32_t n_ref=0;
-    foreach_textual_SQ_line (txtheader_buf->data, 0, sam_header_sam2bam_count_sq, &n_ref, NULL);
+    foreach_textual_SQ_line (txtheader_buf->data, 0, sam_header_sam2bam_count_sq, &n_ref);
 
     // we can't convert to BAM if its a SAM file with aligned reads but without SQ records, compressed with REF_INTERNAL - as using the REF_INTERNAL
     // contigs would produce lengths that don't match actual reference files - rendering the BAM file useless for downstream
@@ -831,7 +743,7 @@ TXTHEADER_TRANSLATOR (sam_header_sam2bam)
 
     // option 1: copy reference information from SAM SQ lines, if available
     if (from_SQ) 
-        foreach_textual_SQ_line (STRb(*txtheader_buf), sam_header_sam2bam_ref_info, txtheader_buf, NULL);
+        foreach_textual_SQ_line (STRb(*txtheader_buf), sam_header_sam2bam_ref_info, txtheader_buf);
 
     // option 2: copy reference information from ref_contigs if available - i.e. if pizzed with external or stored reference
     else if (ref_num_contigs (gref)) 

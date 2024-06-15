@@ -13,19 +13,19 @@
 void vcf_segconf_finalize_GQ (VBlockVCFP vb)
 {
     if ((segconf.count_GQ_by_GP > vb->lines.len * vcf_num_samples / 5) && (segconf.count_GQ_by_GP > segconf.count_GQ_by_PL))
-        segconf.GQ_method = BY_GP;
+        segconf.FMT_GQ_method = BY_GP;
 
     else if ((segconf.count_GQ_by_PL > vb->lines.len * vcf_num_samples / 5) && (segconf.count_GQ_by_PL >= segconf.count_GQ_by_GP))
-        segconf.GQ_method = BY_PL;
+        segconf.FMT_GQ_method = BY_PL;
 
     else if (segconf.has[FORMAT_DP])
-        segconf.GQ_method = MUX_DOSAGExDP;
+        segconf.FMT_GQ_method = MUX_DOSAGExDP;
 
     else if (segconf.vcf_is_giggle)
-        segconf.GQ_method = GQ_INTEGER;
+        segconf.FMT_GQ_method = GQ_INTEGER;
 
     else
-        segconf.GQ_method = MUX_DOSAGE;
+        segconf.FMT_GQ_method = MUX_DOSAGE;
 }
 
 static SORTER (value_sorter)
@@ -58,7 +58,7 @@ static int64_t vcf_predict_GQ_by_PL (VBlockVCFP vb)
     int64_t prediction = n_vals == 1  ? vals[0]
                        : vals[0] == 0 ? -1             // all values are 0 - predicting a .
                        : n_vals >= 4 && vals[0] == 1 && vals[1] == 0 ? -1 // observed empircally
-                       :               vals[n_vals-2]; // 2nd lowest
+                       :                vals[n_vals-2]; // 2nd lowest
 
     return MIN_(prediction, 99); // cap at 99
 }
@@ -71,7 +71,7 @@ static int64_t vcf_predict_GQ_by_GP (VBlockVCFP vb)
     if (IS_PERIOD(gp)) return -1;
 
     // get array of GP values
-    str_split_floats (gp, gp_len, 64, ',', val, false);
+    str_split_floats (gp, gp_len, 64, ',', val, false, 0);
     if (!n_vals) return 0; // array too long or not all float
 
     // round to integers (in-place)
@@ -104,7 +104,7 @@ void vcf_seg_FORMAT_GQ (VBlockVCFP vb)
         if (ctx_encountered (VB, FORMAT_PL) && ABS (vcf_predict_GQ_by_PL (vb) - gq_value) <= 5) segconf.count_GQ_by_PL++;
     }
 
-    else switch (segconf.GQ_method) {
+    else switch (segconf.FMT_GQ_method) {
         case BY_GP: 
             if (!ctx_encountered (VB, FORMAT_GP)) goto fallback;
             prediction = vcf_predict_GQ_by_GP (vb);
@@ -136,21 +136,21 @@ void vcf_seg_FORMAT_GQ (VBlockVCFP vb)
             break;
             
         default:
-            ABORT ("Invalid value segconf.GQ_method=%u", segconf.GQ_method);
+            ABORT ("Invalid value segconf.FMT_GQ_method=%u", segconf.FMT_GQ_method);
     }
 }
 
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_GQ_old); // forward
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_GQ_old); // forward
 
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_GQ)
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_GQ)
 {
-    if (segconf.GQ_method == GQ_old) // up to 15.0.36
-        return vcf_piz_special_FORMAT_GQ_old (vb, ctx, STRa(snip), new_value, reconstruct);
+    if (segconf.FMT_GQ_method == GQ_old) // up to 15.0.36
+        return vcf_piz_special_GQ_old (vb, ctx, STRa(snip), new_value, reconstruct);
 
-    ASSPIZ (segconf.GQ_method == BY_GP || segconf.GQ_method == BY_PL, "Invalid GQ_method=%u", segconf.GQ_method);
+    ASSPIZ (segconf.FMT_GQ_method == BY_GP || segconf.FMT_GQ_method == BY_PL, "Invalid FMT_GQ_method=%u", segconf.FMT_GQ_method);
 
-    int64_t prediction = segconf.GQ_method == BY_GP ? vcf_predict_GQ_by_GP (VB_VCF)
-                                                    : vcf_predict_GQ_by_PL (VB_VCF);
+    int64_t prediction = segconf.FMT_GQ_method == BY_GP ? vcf_predict_GQ_by_GP (VB_VCF)
+                                                        : vcf_predict_GQ_by_PL (VB_VCF);
     int64_t delta = atoi (snip);
     new_value->i = prediction - delta;
 
@@ -187,7 +187,11 @@ static int64_t vcf_piz_predict_GQ_old (VBlockVCFP vb, Did src_did_i)
 
         else if (is_gp) {
             double f;
-            if (str_get_float (STRi(item,i), &f, 0, 0)) 
+            // until 15.0.59 str_get_float returned false for values with mantissa/exponent format, 
+            // but now it returns return true, so we explicitly fail the condition for this format
+            if (!memchr(items[i], 'e', item_lens[i]) &&
+                !memchr(items[i], 'E', item_lens[i]) &&
+                str_get_float (STRi(item,i), &f, 0, 0)) 
                 values[n_values++] = (int64_t)(f+0.5); // round to nearest integer
         }
         else
@@ -206,7 +210,7 @@ static int64_t vcf_piz_predict_GQ_old (VBlockVCFP vb, Did src_did_i)
     return mid_value;
 }
 
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_GQ_old)
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_GQ_old)
 {
     rom tab = memchr (snip, '\t', snip_len);
 

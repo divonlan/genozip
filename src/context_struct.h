@@ -237,7 +237,8 @@ typedef struct Context {
                                // ZIP->PIZ zctx.nodes.param is transferred via SectionHeaderCounts.nodes_param if counts_section=true
     Buffer global_hash;        // ZIP: zctx/vctx: global hash table that is populated during merge in zctx and is overlayed to vctx during clone. contains indices into global_ents.
 
-    uint64_t txt_len;          // ZIP zctx/vctx: number of characters in reconstructed text are accounted for by snips in this ctx (for stats), when file reconstructed in PRIMARY coordinates (i.e. PRIMARY reconstruction for regular VBs, LUFT reconstruction for ##luft_only VBs, and no reconstruction for ##primary_only VBs) (note: seg_seg_long_CIGAR assumes this is uint64_t)
+    uint64_t txt_len;          // ZIP zctx/vctx: number of characters in reconstructed (possibly modified) text are accounted for by snips in this ctx (for stats)  (note: seg_seg_long_CIGAR assumes this is uint64_t)
+    int64_t txt_shrinkage;     // ZIP zctx/vctx: number of characters removed from txt due to modifications (can be negative)
     uint64_t local_num_words;  // ZIP zctx/vctx: number of words (segs) that went into local. If a field is segged into multiple contexts - this field is incremented in each of them. If the context also uses b250, this field is ignored by stats which uses count instead.
 
     int32_t num_new_entries_prev_merged_vb; // zctx: updated in every merge - how many new words happened in this VB
@@ -255,9 +256,13 @@ typedef struct Context {
     bool subdicts_section;     // ZIP: zctx/vctx: output ctx->subdicts to SEC_SUBDICTS section for this context
     bool lcodec_hard_coded;    // ZIP: zctx/vctx: lcodec is hard-coded and should not be reassigned
     bool is_stats_parent;      // other contexts have this context in st_did_i
-    bool line_is_luft_trans;   // Seg: true if current line, when reconstructed with --luft, should be translated with luft_trans (false if no
-                               //      trans_luft exists for this context, or it doesn't trigger for this line, or line is already in LUFT coordinates)
-    TranslatorId luft_trans;   // ZIP zctx/vctx: VCF: Luft translator for the context, set at context init and immutable thereafter    
+
+    union {
+        struct {
+            packed_enum { NOT_IN_HEADER=0, NUMBER_R=-1, NUMBER_A=-2, NUMBER_G=-3, NUMBER_VAR=-4, NUMBER_LARGE=-5/*Number∉[1,127]*/ } Number; // contains a value 1->127 or one of enumerated values
+            packed_enum { VCF_Unknown_Type, VCF_Float, VCF_Integer, VCF_Character, VCF_Flag, VCF_String } Type;
+        } vcf;
+    } header_info;
 
     union {
 

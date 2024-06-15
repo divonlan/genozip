@@ -84,9 +84,10 @@ static bool url_get_head (rom url, qSTRp(data), qSTRp(error),
     bool wget = is_wget (*url_stream);
 
     FILE *f;
-    if (wget) 
+    if (wget) {
+        *data_len  = 0;
         *error_len = (f=stream_from_stream_stderr (*url_stream)) ? fread (error, 1, *error_len - 1, f)   : 0;
-
+    }
     else {
         *data_len  = (f=stream_from_stream_stdout (*url_stream)) ? fread (data,  1, *data_len  - 1, f) : 0;
         *error_len = (f=stream_from_stream_stderr (*url_stream)) ? fread (error, 1, *error_len - 1, f) : 0;

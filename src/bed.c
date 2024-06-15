@@ -71,12 +71,15 @@ void bed_seg_initialize (VBlockP vb)
     ctx_set_dyn_int (vb, BED_SCORE, DID_EOL);
 }
 
-void bed_seg_finalize (VBlockP vb)
+void bed_segconf_finalize (VBlockP vb)
 {
     // case: if we haven't found any pair of consecutive lines with the same CHROM and non-descreasing POS, this is not a sorted file, despite no evidence of "not sorted". eg could be unique CHROMs.
-    if (segconf.running && !segconf.evidence_of_sorted)
+    if (!segconf.evidence_of_sorted)
         segconf.is_sorted = false;
+}
 
+void bed_seg_finalize (VBlockP vb)
+{
     // top level snip
     SmallContainer top_level = { 
         .repeats      = vb->lines.len32,

@@ -62,11 +62,13 @@ static RefCacheState ref_cache_set_ready (Reference ref)
     void *old_attachment = ref->cache;
 
     // re-attach as read-only first attach new, then detach old, to prevent cache from being deleted if marked for removal
-#ifndef _WIN32
-    ref->cache = shmat (ref->cache_shm, NULL, SHM_RDONLY);
-    ASSERT (ref->cache != NO_SHM, "shmat (read-only) failed: %s", strerror (errno)); 
+#ifndef _WIN32  
+    ref->cache = shmat (ref->cache_shm, NULL, SHM_RDONLY); // sometimes fails in Mac, bug 1095
+    if (ref->cache != NO_SHM) 
+        ASSERT (!shmdt (old_attachment), "shmdt failed: %s", strerror (errno));
+    else
+        WARN ("shmat (read-only) failed: %s. shm remains RW. No harm.", strerror (errno)); 
 
-    ASSERT (!shmdt (old_attachment), "shmdt failed: %s", strerror (errno));
 #else
     ref->cache = MapViewOfFile (ref->cache_shm, FILE_MAP_READ, 0, 0, 0);
     ASSERT (ref->cache, "MapViewOfFile (read-only) failed: %s", str_win_error()); 
@@ -210,7 +212,7 @@ bool ref_cache_initialize_genome (Reference ref)
     if (cache_did_not_exist && !flag.removing_cache) {
         STARTUPINFO si = { .cb = sizeof (STARTUPINFO) };
         PROCESS_INFORMATION pi = {};
-        rom exec = arch_get_executable().s;
+        rom exec = arch_get_genozip_executable().s;
         char cmd[strlen(exec) + 64];
         snprintf (cmd, sizeof (cmd), "%s --hold-cache=%"PRIu64, exec, (uint64_t)ref->cache_shm);
         
@@ -427,4 +429,11 @@ void ref_cache_detach (Reference ref)
     ref->cache_state = CACHE_INITITAL;
 
     if (flag.show_cache) iprint0 ("show-cache: detached shm\n");
+}
+
+rom cache_state_name (RefCacheState cs)
+{
+    rom names[] = CACHE_STATE_NAMES;
+    if (cs >=0 && cs < NUM_CACHE_STATES) return names[cs];
+    else return "INVALID_CACHE_STATS";
 }

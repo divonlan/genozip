@@ -131,6 +131,21 @@ void buf_append_string (VBlockP vb, BufferP buf, rom str)
     *BAFTc (*buf) = '\0'; // string terminator without increasing buf->len
 }
 
+// swaps buffers' content without affecting buffer list
+void buf_swap (BufferP buf1, BufferP buf2)
+{
+    ASSERT (buf1->vb == buf2->vb && 
+            buf1->type == BUF_REGULAR && buf2->type == BUF_REGULAR &&
+            !buf1->shared && !buf2->shared,
+            "buf1->vb != buf2->vb or not REGULAR or shared. buf1=%s buf2=%s", buf_desc (buf1).s, buf_desc (buf2).s);
+
+    SWAP (buf1->memory,   buf2->memory);
+    SWAP (buf1->data,     buf2->data);
+    SWAP (buf1->len,      buf2->len);
+    SWAP (buf1->param,    buf2->param);
+    SWAPbits (buf1->size, buf2->size);
+}
+
 void buf_print (BufferP buf, bool add_newline)
 {
     for (uint64_t i=0; i < buf->len; i++) 

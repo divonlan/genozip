@@ -211,7 +211,7 @@ extern ContextP ctx_get_existing_zctx (DictId dict_id);
 
 extern ContextP ctx_get_zctx_from_vctx (ConstContextP vctx, bool create_if_missing, bool follow_alias);
 
-extern ContextP ctx_add_new_zf_ctx_from_txtheader (STRp(tag_name), DictId dict_id, TranslatorId luft_translator);
+extern ContextP ctx_add_new_zf_ctx_at_init (STRp(tag_name), DictId dict_id);
 
 extern void ctx_overlay_dictionaries_to_vb (VBlockP vb);
 
@@ -254,23 +254,6 @@ extern WordIndex ctx_populate_zf_ctx (Did dst_did_i, STRp (snip), WordIndex ref_
 extern void ctx_dump_binary (VBlockP vb, ContextP ctx, bool local);
 
 StrText ctx_tag_name_ex (ConstContextP ctx);
-
-// Seg: called before seg, to store the point to which we might roll back
-static inline bool ctx_set_rollback (VBlockP vb, ContextP ctx, bool override_id)
-{
-    if (ctx->rback_id == vb->rback_id && !override_id) return false; // ctx already in rollback point 
-    
-    ctx->rback_local_len       = ctx->local.len32;
-    ctx->rback_nodes_len       = ctx->nodes.len32;
-    ctx->rback_txt_len         = ctx->txt_len;
-    ctx->rback_local_num_words = ctx->local_num_words;
-    ctx->rback_b250_count      = ctx->b250.count;
-    ctx->rback_last_value      = ctx->last_value;
-    ctx->rback_last_delta      = ctx->last_delta;
-    ctx->rback_last_txt        = ctx->last_txt;
-    ctx->rback_id              = vb->rback_id;
-    return true;
-}
 
 // Needed only if we intend to call ctx_set_rollback again without advancing vb->rback_id
 static inline void ctx_unset_rollback (ContextP ctx) { ctx->rback_id = 1; }

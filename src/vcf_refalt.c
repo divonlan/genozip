@@ -29,40 +29,40 @@ void vcf_refalt_zip_initialize (void)
             .repeats   = 1,
             .nitems_lo = 5,
             .items     = { { .dict_id.num = _ALT_BND_REF,    .separator[0] = '\t' },
-                        { .dict_id.num = _ALT_BND_REF2,                        },
-                        { .dict_id.num = _ALT_BND_INS,    .separator[0] = '['  },
-                        { .dict_id.num = _VCF_MATE_CHROM, .separator[0] = ':'  },
-                        { .dict_id.num = _VCF_MATE_POS,   .separator[0] = '['  } } };
+                           { .dict_id.num = _ALT_BND_REF2,                        },
+                           { .dict_id.num = _ALT_BND_INS,    .separator[0] = '['  },
+                           { .dict_id.num = _VCF_MATE_CHROM, .separator[0] = ':'  },
+                           { .dict_id.num = _VCF_MATE_POS,   .separator[0] = '['  } } };
 
         // REF=A ALT="AAACTCCT]hs37d5:33588521]"
         con_BND[1] = (SmallContainer){
             .repeats   = 1,
             .nitems_lo = 5,
             .items     = { { .dict_id.num = _ALT_BND_REF,    .separator[0] = '\t' },
-                        { .dict_id.num = _ALT_BND_REF2,                        },
-                        { .dict_id.num = _ALT_BND_INS,    .separator[0] = ']'  },
-                        { .dict_id.num = _VCF_MATE_CHROM, .separator[0] = ':'  },
-                        { .dict_id.num = _VCF_MATE_POS,   .separator[0] = ']'  } } };
+                           { .dict_id.num = _ALT_BND_REF2,                        },
+                           { .dict_id.num = _ALT_BND_INS,    .separator[0] = ']'  },
+                           { .dict_id.num = _VCF_MATE_CHROM, .separator[0] = ':'  },
+                           { .dict_id.num = _VCF_MATE_POS,   .separator[0] = ']'  } } };
 
         // REF=G       ALT="[hs37d5:35428323[TAAGAGCCGCTGGCTGGCTGTCCGGGCAGGCCTCCTGGCTGCACCTGCCACAGTGCACAGGCTGACTGAGGTGCACG"
         con_BND[2] = (SmallContainer){
             .repeats   = 1,
             .nitems_lo = 5,
             .items     = { { .dict_id.num = _ALT_BND_REF,    .separator  = "\t["  },
-                        { .dict_id.num = _VCF_MATE_CHROM, .separator[0] = ':'  },
-                        { .dict_id.num = _VCF_MATE_POS,   .separator[0] = '['  },
-                        { .dict_id.num = _ALT_BND_INS,                         },
-                        { .dict_id.num = _ALT_BND_REF2                         } } };
+                           { .dict_id.num = _VCF_MATE_CHROM, .separator[0] = ':'  },
+                           { .dict_id.num = _VCF_MATE_POS,   .separator[0] = '['  },
+                           { .dict_id.num = _ALT_BND_INS,                         },
+                           { .dict_id.num = _ALT_BND_REF2                         } } };
 
         // REF=G       ALT="]hs37d5:35428323]TAAGAGCCGCTGGCTGGCTGTCCGGGCAGGCCTCCTGGCTGCACCTGCCACAGTGCACAGGCTGACTGAGGTGCACG"
         con_BND[3] = (SmallContainer){
             .repeats   = 1,
             .nitems_lo = 5,
             .items     = { { .dict_id.num = _ALT_BND_REF,    .separator  = "\t]"  },
-                        { .dict_id.num = _VCF_MATE_CHROM, .separator[0] = ':'  },
-                        { .dict_id.num = _VCF_MATE_POS,   .separator[0] = ']'  },
-                        { .dict_id.num = _ALT_BND_INS,                         },
-                        { .dict_id.num = _ALT_BND_REF2                         } } };
+                           { .dict_id.num = _VCF_MATE_CHROM, .separator[0] = ':'  },
+                           { .dict_id.num = _VCF_MATE_POS,   .separator[0] = ']'  },
+                           { .dict_id.num = _ALT_BND_INS,                         },
+                           { .dict_id.num = _ALT_BND_REF2                         } } };
 
         for (int i=0; i < 4; i++)
             container_prepare_snip ((ContainerP)&con_BND[i], 0, 0, con_BND_snips[i], &con_BND_snip_lens[i]);
@@ -93,8 +93,7 @@ static inline void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char ref, char alt
     decl_acgt_decode;
 
     // if we have a reference, we use it 
-    // except: if --match-chrom, we assume the user just wants to match, and we don't burden him with needing the reference to decompress
-    if (((IS_REF_EXTERNAL && !flag.match_chrom_to_reference) || IS_REF_EXT_STORE)) {
+    if (IS_REF_LOADED_ZIP) {
         PosType32 pos = vb->last_int(VCF_POS);
 
         RefLock lock = REFLOCK_NONE;
@@ -151,9 +150,7 @@ static inline bool vcf_refalt_seg_DEL_against_reference (VBlockVCFP vb, STRp(ref
 {
     decl_acgt_decode;
 
-    // if we have a reference, we use it except: if --match-chrom, we assume the user just wants to match, and we don't burden him with needing the reference to decompress
-    if ((!(IS_REF_EXTERNAL && !flag.match_chrom_to_reference) && !IS_REF_EXT_STORE) || 
-        ref[0] != alt) return false;
+    if (!IS_REF_LOADED_ZIP || ref[0] != alt) return false;
 
     PosType32 pos = vb->last_int(VCF_POS);
 

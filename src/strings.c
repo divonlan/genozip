@@ -7,10 +7,12 @@
 //   and subject to penalties specified in the license.
 
 #include <time.h>
+#include <math.h>
 #include "genozip.h"
 #include "strings.h"
 #include "context.h"
-#ifndef WIN32
+#include "file.h"
+#ifndef _WIN32
 #include <sys/ioctl.h>
 #else
 #include <windows.h>
@@ -454,14 +456,13 @@ uint32_t str_get_uint_textual_len (uint64_t n)
     ABORT ("n=%"PRIu64" too big", n);
 }
 
-// returns 32 bit float value and/or format: "3.123" -> "%5.3f" ; false if not a simple float
+// returns 32 bit float value and/or format: "3.123" -> "%5.3f" 
 bool str_get_float (STRp(float_str), 
                     double *value, char format[FLOAT_FORMAT_LEN], uint32_t *format_len) // optional outs (format allocated by caller)
 {
-    // TODO: add support for %e and %E (matinsa/exponent) formats
-
     bool in_decimals=false;
     uint32_t num_decimals=0;
+    int exponent=0;
     double val = 0;
     bool is_negative = (float_str[0] == '-');
 
@@ -473,34 +474,60 @@ bool str_get_float (STRp(float_str),
             val = (val * 10) + (float_str[i] - '0');
             if (in_decimals) num_decimals++;
         }
+
+        // format [eE][+-][0-9][0-9]
+        else if ((float_str[i] == 'e' || float_str[i] == 'E') &&
+                  i+4 == float_str_len && 
+                  (float_str[i+1] == '-' || float_str[i+1] == '+') &&
+                  IS_DIGIT (float_str[i+2]) && IS_DIGIT (float_str[i+3])) {
+            
+            exponent = ((float_str[i+2] == '0') ? 0 : (float_str[i+2]-'0') * 10) + // avoid multiplication in common case of '0'
+                       (float_str[i+3]-'0');
+            
+            if (float_str[i+1] == '-') exponent = -exponent;
+            break;
+        }
     
         else return false; // can't interpret this string as float
     }
 
     // calculate format if requested - the format string is in a format expected by reconstruct_from_local_float
     if (format) {
-
         if (float_str_len > 99) return false; // we support format of float strings up to 99 characters... more than enough
         uint32_t next=0;
         format[next++] = '%';
-        if (float_str_len >= 10) format[next++] = '0' + (float_str_len / 10);
-        format[next++] = '0' + (float_str_len % 10);
+        
+        if (float_str_len >= 10) {
+            format[next++] = '0' + (float_str_len / 10);
+            format[next++] = '0' + (float_str_len % 10);
+        }
+        else
+            format[next++] = '0' + float_str_len;
+
         format[next++] = '.';
-        if (num_decimals >= 10) format[next++] = '0' + (num_decimals / 10);
-        format[next++] = '0' + (num_decimals % 10);
-        format[next++] = 'f';
+
+        if (num_decimals >= 10) {
+            format[next++] = '0' + (num_decimals / 10);
+            format[next++] = '0' + (num_decimals % 10);
+        }
+        else
+            format[next++] = '0' + num_decimals;
+
+        format[next++] = exponent ? float_str[float_str_len-4]/*e or E*/ : 'f';
         format[next] = 0;
 
         if (format_len) *format_len = next;
     }
 
     if (value) {
-        static const double pow10[16] = { 1.0, 10.0, 100.0, 1000.0, 10000.0, 100000.0, 1000000.0, 10000000.0, 100000000.0, 1000000000.0, 
-                                          10000000000.0, 100000000000.0, 1000000000000.0, 10000000000000.0, 100000000000000.0, 1000000000000000.0 };
+        static const double pow10[100] = { 1.0e+00, 1.0e+01, 1.0e+02, 1.0e+03, 1.0e+04, 1.0e+05, 1.0e+06, 1.0e+07, 1.0e+08, 1.0e+09, 1.0e+10, 1.0e+11, 1.0e+12, 1.0e+13, 1.0e+14, 1.0e+15, 1.0e+16, 1.0e+17, 1.0e+18, 1.0e+19, 1.0e+20, 1.0e+21, 1.0e+22, 1.0e+23, 1.0e+24, 1.0e+25, 1.0e+26, 1.0e+27, 1.0e+28, 1.0e+29, 1.0e+30, 1.0e+31, 1.0e+32, 1.0e+33, 1.0e+34, 1.0e+35, 1.0e+36, 1.0e+37, 1.0e+38, 1.0e+39, 1.0e+40, 1.0e+41, 1.0e+42, 1.0e+43, 1.0e+44, 1.0e+45, 1.0e+46, 1.0e+47, 1.0e+48, 1.0e+49, 1.0e+50, 1.0e+51, 1.0e+52, 1.0e+53, 1.0e+54, 1.0e+55, 1.0e+56, 1.0e+57, 1.0e+58, 1.0e+59, 1.0e+60, 1.0e+61, 1.0e+62, 1.0e+63, 1.0e+64, 1.0e+65, 1.0e+66, 1.0e+67, 1.0e+68, 1.0e+69, 1.0e+70, 1.0e+71, 1.0e+72, 1.0e+73, 1.0e+74, 1.0e+75, 1.0e+76, 1.0e+77, 1.0e+78, 1.0e+79, 1.0e+80, 1.0e+81, 1.0e+82, 1.0e+83, 1.0e+84, 1.0e+85, 1.0e+86, 1.0e+87, 1.0e+88, 1.0e+89, 1.0e+90, 1.0e+91, 1.0e+92, 1.0e+93, 1.0e+94, 1.0e+95, 1.0e+96, 1.0e+97, 1.0e+98, 1.0e+99 };
                                         
         if (num_decimals >= ARRAY_LEN (pow10)) return false; // too many decimals
 
         *value = (is_negative ? -1 : 1) * (val / pow10[num_decimals]);
+
+        if      (exponent > 0) *value *= pow10[exponent];
+        else if (exponent < 0) *value /= pow10[-exponent];
     }
 
     return true;
@@ -970,26 +997,38 @@ uint32_t str_split_ints_do (STRp(str), uint32_t max_items, char sep, bool exactl
 
 // splits a string with up to (max_items-1) separators (doesn't need to be nul-terminated) to up to or exactly max_items floats
 // returns the actual number of items, or 0 is unsuccessful
-uint32_t str_split_floats_do (STRp(str), uint32_t max_items, char sep, bool exactly,
-                              double *items)  // out - array of floats                 
+// WARNING: this function is slow! because strtod is very slow (atof is just as slow).
+uint32_t str_split_floats_do (STRp(str), uint32_t max_items, char sep, bool exactly, 
+                              char this_char_is_NAN,   // optional (if not 0): if this character is encountered, then the floating point value is NAN
+                              double *items)           // out - array of floats                 
 {
     rom after = &str[str_len];
     SAFE_NUL (after); // this doesn't work on string literals
 
     uint32_t item_i;
     for (item_i=0; item_i < max_items && str < after; item_i++, str++) {
-        items[item_i] = strtod (str, (char**)&str);
-        if (item_i < max_items-1 && *str != sep && *str != 0) {
-            item_i=0;
-            break; // fail
+        if (this_char_is_NAN && *str == this_char_is_NAN && (str[1] == sep || str[1] == 0)) {
+            items[item_i] = NAN;
+            str++;    
+        }
+        
+        else {
+            rom after_item = memchr (str, sep, after - str);
+            if (!after_item) after_item = after;
+
+            if (!str_get_float (str, after_item - str, &items[item_i], 0, 0)) goto error;
+            str = after_item;
         }
     }
 
     if (str < after) item_i = 0;
 
     SAFE_RESTORE;
-
     return (!exactly || item_i == max_items) ? item_i : 0; // 0 if requested exactly, but too few separators 
+
+error:
+    SAFE_RESTORE;
+    return 0;
 }
 
 rom type_name (uint32_t item, 

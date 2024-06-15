@@ -154,6 +154,7 @@ typedef struct {
     union { \
     Buffer z_data_test;           /* ZIP: for use of codec_assign_best_codec */ \
     Buffer reread_prescription;   /* ZIP SAM/BAM DEPN: list of lines to be re-read at seg initialize */\
+    Buffer optimized_txt_data;    /* ZIP: --optimized: txt_data being re-written, if it cannot be re-written in place */ \
     }; \
     Buffer txt_data;              /* ZIP: txt_data as read from disk - either the txt header (in evb) or the VB data lines PIZ: reconstructed data */\
     Buffer z_section_headers;     /* PIZ and Pair-1 reading in ZIP-Fastq: an array of unsigned offsets of section headers within z_data */\
@@ -182,6 +183,7 @@ typedef struct {
     \
     union { \
     Buffer gencomp_lines;         /* ZIP: array of GencompLineIEntry: SAM-SA: primary/dependent lines */ \
+    Buffer optimized_line;        /* ZIP: re-written line in case of --optimize */ \
     Buffer flusher_blocks;        /* PIZ writer vb */ \
     }; \
     \

@@ -85,15 +85,6 @@ void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt))
         if (dict_id.num == _FORMAT_PS || dict_id.num == _FORMAT_PID || dict_id.num == _FORMAT_DP ||
             (dict_id.num == _FORMAT_SB && segconf.AS_SB_TABLE_by_SB))
             format_mapper.items[i].separator[1] = CI1_ITEM_CB;
-
-        // case: GL_to_PL:  FORMAT field snip is changed here to GL. Note: dict_id remains _FORMAT_GL.
-        // so that vcf_seg_one_sample treats it as GL, and converts it to PL.
-        if (dict_id.num == _FORMAT_GL && flag.GL_to_PL)
-            *((char *)sf_names[i]) = 'P'; // change GL to GP (note: FORMAT changes and field changes, but still stored in dict_id=GL)
-
-        // case: GP_to_PP - only relevant to VCF 4.3 where GP is probabilities and PP is Phred values (up to 4.2 GP was Phred values)
-        if (dict_id.num == _FORMAT_GP && flag.GP_to_PP && vb->vcf_version >= VCF_v4_3)
-            *((char *)sf_names[i]) = 'P'; // change GP to PP (note: FORMAT changes and field changes, but still stored in dict_id=GP)
     } 
     
     // note: fmt_len needs to be int64_t to avoid -Wstringop-overflow warning in gcc 10

@@ -7,11 +7,8 @@
 //   and subject to penalties specified in the license.
 
 #include "vcf_private.h"
-#include "optimize.h"
 #include "stats.h"
 #include "zip_dyn_int.h"
-
-#define ii_buf (vb->contexts[VCF_INFO].info_items)
 
 STRl(copy_VCF_POS_snip, 16);
 STRl(copy_VCF_ID_snip, 16);
@@ -415,21 +412,17 @@ done:
     return NO_NEW_VALUE;
 }    
 
-static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
+void vcf_seg_string (VBlockVCFP vb, ContextP ctx, STRp(value))
 {
-    unsigned modified_len = value_len + 20;
-    char modified[modified_len]; // used for 1. fields that are optimized 2. fields translated luft->primary. A_1 transformed 4.321e-03->0.004321
-        
-    // note: since we use modified for both optimization and luft_back - we currently don't support
-    // subfields having both translators and optimization. This can be fixed if needed.
-
-    ctx->line_is_luft_trans = false; // initialize
+    if (flag.optimize)
+        seg_by_ctx (VB, STRa(value), ctx, value_len);
     
-    #define ADJUST_FOR_MODIFIED ({                                  \
-        int32_t growth = (int32_t)modified_len - (int32_t)value_len;\
-        if (growth) vb->recon_size += growth;                       \
-        STRset (value, modified); })                                       
+    else
+        seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, value_len);
+}
 
+static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
+{            
     // many fields, for example: ##INFO=<ID=AN_amr_male,Number=1,Type=Integer,Description="Total number of alleles in male samples of Latino ancestry">
     #define N(i,c) (ctx->tag_name[i] == (c))
     if ((N(0,'A') && N(1,'N') && (N(2,'_') || N(2,'-'))) ||
@@ -474,7 +467,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_SAS_AF:
         case _INFO_EAS_AF:
         case _INFO_AF1000G:
-        case _INFO_GNOMAD_AF:       CALL (seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, value_len));
+        case _INFO_GNOMAD_AF:       CALL (vcf_seg_string (vb, ctx, STRa(value)));
         
         // ---------------------------------------
         // GATK fields
@@ -503,7 +496,8 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_InbreedingCoeff:
         case _INFO_NALOD:
         case _INFO_NLOD:
-        case _INFO_TLOD:            CALL (seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, value_len));
+        case _INFO_VQSLOD:          
+        case _INFO_TLOD:            CALL (vcf_seg_string (vb, ctx, STRa(value)));
         case _INFO_GERMQ:
         case _INFO_CONTQ:
         case _INFO_SEQQ:
@@ -512,10 +506,6 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_ECNT:            CALL (seg_integer_or_not (VB, ctx, STRa(value), value_len));
         case _INFO_AS_SB_TABLE:     CALL_IF (segconf.AS_SB_TABLE_by_SB, DEFER(AS_SB_TABLE, DID_NONE));
         
-        case _INFO_VQSLOD: // Optimize VQSLOD 
-            if (flag.optimize_VQSLOD && optimize_float_2_sig_dig (STRa(value), 0, qSTRa(modified))) 
-                ADJUST_FOR_MODIFIED;
-            CALL (seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, value_len));
 
         // ---------------------------------------
         // VEP fields
@@ -572,7 +562,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         // ---------------------------------------
         case _INFO_MMID3:           CALL_IF (segconf.vcf_is_mastermind, vcf_seg_INFO_MMID3   (vb, ctx, STRa(value)));
         case _INFO_MMURI3:          CALL_IF (segconf.vcf_is_mastermind, vcf_seg_INFO_MMURI3  (vb, ctx, STRa(value)));
-        case _INFO_MMURI:           CALL_IF (segconf.vcf_is_mastermind, seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, value_len));
+        case _INFO_MMURI:           CALL_IF (segconf.vcf_is_mastermind, seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, value_len)); // value is a URL
         case _INFO_GENE:            CALL_IF (segconf.vcf_is_mastermind, STORE_AND_SEG (STORE_NONE)); // consumed by vcf_seg_INFO_MMID3
 
         // ---------------------------------------
@@ -647,7 +637,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_IDREP:           CALL_IF (segconf.vcf_is_isaac, vcf_seg_INFO_IDREP (vb, ctx, STRa(value)));
         case _INFO_CSQT:            CALL_IF (segconf.vcf_is_isaac, seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
         case _INFO_cosmic:          CALL_IF (segconf.vcf_is_isaac, seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
-        case _INFO_phyloP:          CALL_IF (segconf.vcf_is_isaac, seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, value_len));
+        case _INFO_phyloP:          CALL_IF (segconf.vcf_is_isaac, vcf_seg_string (vb, ctx, STRa(value)));
         case _INFO_SNVHPOL:         CALL_IF (segconf.vcf_is_isaac, seg_integer_or_not (VB, ctx, STRa(value), value_len));
         case _INFO_GMAF:            CALL_IF (segconf.vcf_is_isaac, vcf_seg_INFO_GMAF (vb, ctx, STRa(value)));
         case _INFO_EVS:             CALL_IF (segconf.vcf_is_isaac, vcf_seg_INFO_EVS (vb, ctx, STRa(value)));
@@ -668,7 +658,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_X_HIL:           CALL_IF (segconf.vcf_is_ultima, vcf_seg_INFO_X_HIL (vb, ctx, STRa(value)));
         case _INFO_X_GCC:           
         case _INFO_HAPDOM:
-        case _INFO_TREE_SCORE:      CALL_IF (segconf.vcf_is_ultima, seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, value_len));
+        case _INFO_TREE_SCORE:      CALL_IF (segconf.vcf_is_ultima, vcf_seg_string (vb, ctx, STRa(value)));
         case _INFO_VARIANT_TYPE:    CALL_IF (segconf.vcf_is_ultima, vcf_seg_INFO_VARIANT_TYPE (vb, ctx, STRa(value)));
         case _INFO_HAPCOMP:
         case _INFO_ASSEMBLED_HAPS:  CALL_IF (segconf.vcf_is_ultima, seg_integer_or_not (VB, ctx, STRa(value), value_len));
@@ -759,28 +749,8 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
     seg_set_last_txt (VB, ctx, STRa(value));
 }
 
-static SORTER (sort_by_subfield_name)
-{ 
-    InfoItemP ina = (InfoItemP)a;
-    InfoItemP inb = (InfoItemP)b;
-    
-    // END comes first (as eg vcf_INFO_SVLEN_prediction depends on POS.last_delta and vcf_seg_melt_ADJLEFT relies on it too)
-    if (str_issame_(STRa(ina->name), "END=", 4)) return -1;
-    if (str_issame_(STRa(inb->name), "END=", 4)) return 1;
-    
-    return strncmp (ina->name, inb->name, MIN_(ina->name_len, inb->name_len));
-}
-
-void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
+void vcf_parse_info_subfields (VBlockVCFP vb, STRp(info))
 {
-    ii_buf.len = 0; // reset from previous line
-
-    // case: INFO field is '.' (empty) 
-    if (IS_PERIOD (info) && !segconf.vcf_is_isaac) { // note: in Isaac, it slightly better to mux the "."
-        seg_by_did (VB, ".", 1, VCF_INFO, 2); // + 1 for \t or \n
-        return;
-    }
-
     // parse the info string
     str_split (info, info_len, MAX_FIELDS, ';', pair, false); 
     ASSVCF (n_pairs, "Too many INFO subfields, Genozip supports up to %u", MAX_FIELDS);
@@ -808,15 +778,25 @@ void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
         switch (ii.ctx->did_i) {
             X(AN); X(AF); X(AC); X(MLEAC); X(MLEAF); X(AC_Hom); X(AC_Het); X(AC_Hemi); X(DP); X(QD); X(SF);
             X(AS_SB_TABLE); X(SVINSSEQ) ; X(SVTYPE); X(SVLEN); X(HOMSEQ); X(END) ; X(CIPOS); X(LEFT_SVINSSEQ);
-            X(BaseCounts); X(platformnames); X(datasetnames); X(callsetnames); X(AF1000G);
+            X(BaseCounts); X(platformnames); X(datasetnames); X(callsetnames); X(AF1000G); X(RefMinor);
             default: {}
         }
         #undef X
 
         BNXT (InfoItem, ii_buf) = ii;
     }
+}
 
-    // pass 2: seg all subfields except AC
+void vcf_seg_info_subfields (VBlockVCFP vb, STRp(info))
+{
+    // case: INFO field is '.' (empty) 
+    if (IS_PERIOD (info) && !segconf.vcf_is_isaac) { // note: in Isaac, it slightly better to mux the "."
+        seg_by_did (VB, ".", 1, VCF_INFO, 2); // + 1 for \t or \n
+        return;
+    }
+
+    vcf_parse_info_subfields (vb, STRa(info));
+
     for_buf (InfoItem, ii, ii_buf)
         if (ii->value) 
             vcf_seg_info_one_subfield (vb, ii->ctx, STRa(ii->value));
@@ -833,11 +813,6 @@ void vcf_seg_finalize_INFO_fields (VBlockVCFP vb)
                       .drop_final_item_sep = true }; 
  
     con_set_nitems (con, ii_buf.len32);
-
-    // if requested, we will re-sort the info fields in alphabetical order. This will result less words in the dictionary
-    // thereby both improving compression and improving --regions speed. 
-    if (flag.optimize_sort && ii_buf.len32 > 1) 
-        qsort (B1ST(InfoItem, ii_buf), ii_buf.len32, sizeof(InfoItem), sort_by_subfield_name);
 
     char prefixes[CONTAINER_MAX_PREFIXES_LEN];  // these are the Container prefixes
     prefixes[0] = prefixes[1] = CON_PX_SEP; // initial CON_PX_SEP follow by separator of empty Container-wide prefix

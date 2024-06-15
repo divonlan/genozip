@@ -62,6 +62,7 @@ extern void fasta_zip_after_compute (VBlockP vb);
 
 // SEG Stuff
 extern void fasta_seg_initialize(VBlockP vb);
+extern void fasta_segconf_finalize (VBlockP vb);
 extern void fasta_seg_finalize (VBlockP vb);
 extern bool fasta_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern rom fasta_seg_txt_line (VBlockP vb, rom line_start, uint32_t remaining, bool *has_13);
@@ -83,9 +84,9 @@ extern unsigned fasta_vb_zip_dl_size (void);
 extern void fasta_get_data_line (VBlockP vb_, uint32_t line_i, uint32_t *seq_data_start, uint32_t *seq_len);
 
 // SPECIALs
-SPECIAL (FASTA, 0, SEQ, fasta_piz_special_SEQ);
+SPECIAL (FASTA, 0, SEQ,     fasta_piz_special_SEQ);
 SPECIAL (FASTA, 1, COMMENT, fasta_piz_special_COMMENT);
-SPECIAL (FASTA, 2, DESC, fasta_piz_special_DESC);
+SPECIAL (FASTA, 2, DESC,    fasta_piz_special_DESC);
 
 #define FASTA_LOCAL_GET_LINE_CALLBACKS  \
     { DT_FASTA, _FASTA_NONREF, fasta_zip_seq }, 

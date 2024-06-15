@@ -121,7 +121,7 @@ void vcf_vep_zip_initialize (void) // nul-terminated string containing list of f
     for (unsigned i=0; i < n_names; i++) {
         csq_con.items[i] = (ContainerItem){ .dict_id = dict_id_make (names[i], name_lens[i], DTYPE_VCF_INFO), .separator[0] = ((i < n_names-1) ? '|'  : 0) };
 
-        ContextP zctx = ctx_add_new_zf_ctx_from_txtheader (names[i], name_lens[i], csq_con.items[i].dict_id, TRANS_ID_NONE); // zctx, but will be the same did for vb contexts because pre-created
+        ContextP zctx = ctx_add_new_zf_ctx_at_init (names[i], name_lens[i], csq_con.items[i].dict_id); // zctx, but will be the same did for vb contexts because pre-created
         if (!zctx) // already exist - predefined
             zctx = ctx_get_existing_zctx (csq_con.items[i].dict_id);
 

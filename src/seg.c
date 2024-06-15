@@ -8,7 +8,6 @@
 
 #include <stdarg.h>
 #include "seg.h"
-#include "optimize.h"
 #include "random_access.h"
 #include "base64.h"
 #include "piz.h"
@@ -72,6 +71,23 @@ WordIndex seg_duplicate_last (VBlockP vb, ContextP ctx, unsigned add_bytes)
 }
 
 #define MAX_ROLLBACK_CTXS ARRAY_LEN(vb->rollback_dids)
+
+// Seg: called before seg, to store the point to which we might roll back
+static bool ctx_set_rollback (VBlockP vb, ContextP ctx, bool override_id)
+{
+    if (ctx->rback_id == vb->rback_id && !override_id) return false; // ctx already in rollback point 
+    
+    ctx->rback_local_len       = ctx->local.len32;
+    ctx->rback_nodes_len       = ctx->nodes.len32;
+    ctx->rback_txt_len         = ctx->txt_len;
+    ctx->rback_local_num_words = ctx->local_num_words;
+    ctx->rback_b250_count      = ctx->b250.count;
+    ctx->rback_last_value      = ctx->last_value;
+    ctx->rback_last_delta      = ctx->last_delta;
+    ctx->rback_last_txt        = ctx->last_txt;
+    ctx->rback_id              = vb->rback_id;
+    return true;
+}
 
 // NOTE: this does not save recon_size - if the processing may change recon_size it must be saved and rolled back separately
 void seg_create_rollback_point (VBlockP vb, 
@@ -154,10 +170,10 @@ rom seg_get_next_item (VBlockP vb, rom str, int *str_len,
         }
 
 not_found: // no sep found in entire string, or forbidden separator encountered
-    ABOSEG ("while segmenting %s: expecting a %s%s%s in \"%.*s\"", 
+    ABOSEG ("while segmenting %s: expecting a %s%s%s in \"%.1000s\"", 
             item_name,
             newline==GN_SEP ? "NEWLINE " : "", tab==GN_SEP ? "TAB " : "", space==GN_SEP ? "\" \" " : "", 
-            (int)MIN_(after - str, 1000), str);
+            str);
     
 sep_found:
     *len = c - str;
@@ -178,7 +194,7 @@ sep_found:
 // returns first character after current line
 rom seg_get_next_line (VBlockP vb, rom str, 
                        int *remaining_len, // in/out
-                       unsigned *len,      // out - length of line exluding \r and \n
+                       unsigned *len,      // out - length of line excluding \r and \n
                        bool must_have_newline, bool *has_13 /* out */, rom item_name)
 {
     START_TIMER;
@@ -511,6 +527,10 @@ void seg_integer (VBlockP vb, ContextP ctx, int64_t n, bool with_lookup, unsigne
 // returns true if it was an integer
 bool seg_integer_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_bytes)
 {
+    // initialize if needed (also initializes nothing_char for VCF)
+    if (!ctx->dyn_lt_order) 
+        dyn_int_init_ctx (vb, ctx, 0);
+
     if (ctx->nothing_char && value_len == 1 && *value == ctx->nothing_char) { 
         dyn_int_append_nothing_char (vb, ctx, add_bytes);
         seg_by_ctx (vb, (char[]){ SNIP_LOOKUP }, 1, ctx, 0);
@@ -1369,7 +1389,7 @@ static void seg_verify_file_size (VBlockP vb)
         for_ctx_that (ctx->nodes.len || ctx->local.len || ctx->txt_len)
             fprintf (stderr, "%s: %u\n", ctx_tag_name_ex (ctx).s, (uint32_t)ctx->txt_len);
 
-        fprintf (stderr, "%s: reconstructed_vb_size=%s (calculated by adding up ctx.txt_len after segging) but vb->recon_size=%s (initialized when reading the file and adjusted for modifications) (diff=%d) (vblock_memory=%s)\n",
+        fprintf (stderr, "%s: reconstructed_vb_size=%s (=Σ(ctx.txt_len) after segging) but vb->recon_size=%s (initialized when reading the file and adjusted for modifications) (diff=%d) (vblock_memory=%s)\n",
                  VB_NAME, str_int_commas (recon_size).s, str_int_commas (vb->recon_size).s, 
                  (int32_t)recon_size - (int32_t)vb->recon_size, str_size (segconf.vb_size).s);
 
@@ -1379,7 +1399,7 @@ static void seg_verify_file_size (VBlockP vb)
 }
 
 // increment progress indicator
-static void seg_increment_progress (VBlockP vb, uint32_t bytes_so_far_this_vb, int64_t *prev_increment)
+static void seg_increment_progress (VBlockP vb, uint32_t bytes_so_far_this_vb, int64_t *prev_increment, rom name)
 {
     // by bytes or by lines
     int64_t this_increment = (txt_file->est_num_lines ? vb->line_i : bytes_so_far_this_vb);
@@ -1387,9 +1407,130 @@ static void seg_increment_progress (VBlockP vb, uint32_t bytes_so_far_this_vb, i
     int64_t increment = this_increment - *prev_increment;
     
     if (increment > (txt_file->est_num_lines ? 2500/*lines*/ : 1000000/*bytes*/)) {
-        dispatcher_increment_progress ("seg", increment);
+        dispatcher_increment_progress (name, increment);
         *prev_increment = this_increment;
     }
+}
+
+// verify that shrinkage is accounted correctly 
+// note: to find the cause of an error here, run genozip --stats with and without --optimize. TXT is expected to be the same in both - find where it is not.
+static void zip_modify_verify_shrinkage (VBlockP vb, int32_t shrinkage_by_vb)
+{
+    int32_t shrinkage_by_ctx = 0;
+    for_ctx shrinkage_by_ctx += ctx->txt_shrinkage;
+
+    if (shrinkage_by_vb != shrinkage_by_ctx) {
+        fprintf (stderr, "\n\nShrinkage by context:\n");
+        for_ctx
+            if (ctx->txt_shrinkage) fprintf (stderr, "%s: %d\n", ctx->tag_name, (int32_t)ctx->txt_shrinkage);
+
+        char fn[64];
+        snprintf (fn, sizeof(fn), "optimize.vb-%u.bad", vb->vblock_i);
+        buf_dump_to_file (fn, &vb->txt_data, 1, false, false, true, true);
+        
+        ABORT ("%s: shrinkage_by_vb=%d != Σ(shrinkage_by_ctx(⇑))=%d (num_lines=%u)", VB_NAME, shrinkage_by_vb, shrinkage_by_ctx, vb->lines.len32);
+    }
+}
+
+// --optimize: re-write VB before digest and seg
+void zip_modify (VBlockP vb)
+{
+    START_TIMER;
+
+    // sanity (leave 64b to detect bugs)
+    ASSERT (vb->lines.len <= vb->txt_data.len, "%s: Expecting lines.len=%"PRIu64" < txt_data.len=%"PRIu64, 
+            VB_NAME, vb->lines.len, vb->txt_data.len); // 64 bit test in case of memory corruption
+
+    // set estimated number of lines
+    vb->lines.len32 = vb->lines.len32  ? vb->lines.len32 // already set? don't change (set in certain cases, e.g. 2nd pair FASTQ, bcl_unconsumed, vcf_zip_add_line_numbers_init_vb...)
+                    : segconf.line_len ? MAX_(1, Ltxt / segconf.line_len)
+                    :                    1;              // eg DT_GNRIC
+
+    vb->scratch.name = "scratch"; // initialize so we don't need to worry about it later
+    
+    rom line = B1STtxt;
+    char *optimized = B1STtxt;
+    int64_t progress = 0;
+    int64_t n_lines_processed=0; // number of lines sent to segging. some of them might have been sent to gencomp. 
+    bool in_place = true; // re-write in-place until it becomes impossible
+    
+    for (vb->line_i=0; vb->line_i < vb->lines.len32; vb->line_i++, n_lines_processed++) {
+
+        seg_increment_progress (vb, BNUMtxt(line), &progress, "optimize");
+        
+        uint32_t remaining_txt_len = BREMAINS (vb->txt_data, line);
+        
+        if (!remaining_txt_len) { // we're done
+            vb->lines.len32 = vb->line_i; // update to actual number of lines
+            break;
+        }
+
+        vb->line_start = BNUMtxt (line);
+
+        // Call optimizer to shorten line (note: line can be shortened, but not extended!)
+        rom next_line = DTP(zip_modify) (vb, line, remaining_txt_len);
+
+        if (flag.biopsy_line.line_i == vb->line_i && flag.biopsy_line.vb_i == vb->vblock_i && !DTP(seg_modifies)) {
+            file_put_line (vb, line, next_line - line, "Line biopsy:");
+            exit_ok;
+        }
+
+        // case: first time for which we can't update in-place: move over to new buffer
+        if (in_place && optimized + vb->optimized_line.len > next_line) {
+            buf_alloc (vb, &vb->optimized_txt_data, 0, vb->txt_data.len * 1.05, char, 0, "optimized_line");
+            
+            memcpy (B1STc(vb->optimized_txt_data), B1STtxt, BNUMtxt(optimized));
+            vb->optimized_txt_data.len32 = BNUMtxt(optimized);
+
+            optimized = BAFTc (vb->optimized_txt_data);
+            in_place = false;
+        }
+
+        // extend optimized_txt_data if needed        
+        if (!in_place) {
+            buf_alloc (vb, &vb->optimized_txt_data, vb->optimized_line.len, 0, char, 1.05, "optimized_line");
+            optimized = BAFTc (vb->optimized_txt_data); // in case of realloc
+        }
+
+        // copy optimized_line to txt_data or optimized_txt_data
+        memcpy (optimized, B1STc(vb->optimized_line), vb->optimized_line.len32);
+        optimized += vb->optimized_line.len;
+        
+        vb->optimized_txt_data.len32 += vb->optimized_line.len;
+
+        vb->optimized_line.len = 0;
+
+        line = next_line;
+
+        // --head advanced option in ZIP cuts a certain number of first lines from vb=1
+        if (flag.lines_last == vb->line_i) {
+            vb->lines.len32 = vb->line_i + 1;
+            ECTX(DTF(toplevel))->txt_shrinkage = BAFTtxt - next_line; // account for all abandoned txt in TOPLEVEL 
+            break;
+        }
+
+        // if our estimate number of lines was too small, increase it
+        if (vb->line_i == vb->lines.len32-1 && BNUMtxt(line) != Ltxt)         
+            vb->lines.len32++;
+    }
+
+    // verify that shrinkage is accounted correctly (so that stats are correct)
+    int32_t shrinkage_by_vb = (int32_t)vb->txt_data.len32 - (int32_t)vb->optimized_txt_data.len32;
+
+    if (in_place)
+        Ltxt = vb->optimized_txt_data.len32; 
+    else
+        buf_swap (&vb->txt_data, &vb->optimized_txt_data);
+
+    zip_modify_verify_shrinkage (vb, shrinkage_by_vb);    
+        
+    dispatcher_increment_progress ("optimize_final", 
+                                   txt_file->est_num_lines ? (n_lines_processed - (int64_t)vb->lines.len) 
+                                                           : ((int64_t)vb->txt_size - progress));
+
+    buf_free (vb->optimized_txt_data);
+    buf_free (vb->optimized_line);
+    COPY_TIMER (zip_modify);
 }
 
 // split each lines in this VB to its components
@@ -1433,7 +1574,7 @@ void seg_all_data_lines (VBlockP vb)
     uint32_t sizeof_line = DT_FUNC_OPTIONAL (vb, sizeof_zip_dataline, 1)(); // 1 - we waste a little bit of memory to avoid making exceptions throughout the code logic
     buf_alloc_zero (vb, &vb->lines, 0, vb->lines.len * sizeof_line, char, 1, "lines");
 
-    rom field_start = B1STtxt;
+    rom line = B1STtxt;
     bool hash_hints_set_1_3 = false, hash_hints_set_2_3 = false;
     int64_t progress = 0;
     int64_t n_lines_processed=0; // number of lines sent to segging. some of them might have been sent to gencomp. 
@@ -1441,9 +1582,9 @@ void seg_all_data_lines (VBlockP vb)
     for (vb->line_i=0; vb->line_i < vb->lines.len32; vb->line_i++, n_lines_processed++) {
 
         if (!segconf.running) 
-            seg_increment_progress (vb, BNUMtxt(field_start), &progress);
+            seg_increment_progress (vb, BNUMtxt(line), &progress, "seg");
         
-        uint32_t remaining_txt_len = BREMAINS (vb->txt_data, field_start);
+        uint32_t remaining_txt_len = BREMAINS (vb->txt_data, line);
         
         if (!remaining_txt_len) { // we're done
             vb->lines.len32 = vb->line_i; // update to actual number of lines
@@ -1451,60 +1592,48 @@ void seg_all_data_lines (VBlockP vb)
         }
 
         bool has_13 = false;
-        vb->line_start = BNUMtxt (field_start);
+        vb->line_start = BNUMtxt (line);
 
         if (flag.show_lines)
             iprintf ("%s byte-in-vb=%u\n", LN_NAME, vb->line_start);
 
         // Call the segmenter of the data type to segment one line
-        rom next_field = DTP(seg_txt_line) (vb, field_start, remaining_txt_len, &has_13);
+        rom next_line = DTP(seg_txt_line) (vb, line, remaining_txt_len, &has_13);
 
-        uint32_t line_len = next_field - field_start;
+        uint32_t line_len = next_line - line;
 
         if (debug_lines_ctx) {
             if (!vb->debug_line_hash_skip) {
-                uint32_t hash = DTP(seg_modifies) ? vb->debug_line_hash // if seg_modifies, Seg calculates hash before modifications
-                                                  : adler32 (2, field_start, line_len); // same as in container_verify_line_integrity
+                uint32_t hash = DTP(seg_modifies) ? vb->debug_line_hash // if seg_modifies, Seg calculates hash before modifications (this happens for BAM, bc Seg re-writes QUAL)
+                                                  : adler32 (2, line, line_len); // same as in container_verify_line_integrity
                 seg_integer_fixed (vb, debug_lines_ctx, &hash, false, 0);
             }
             else 
                 vb->debug_line_hash_skip = false; // reset
         }
 
-        if (flag.biopsy_line.line_i == vb->line_i && flag.biopsy_line.vb_i == vb->vblock_i && !DTP(seg_modifies)) {
-            file_put_line (vb, field_start, line_len, "Line biopsy:");
-            exit_ok;
-        }
-
         if (line_len > vb->longest_line_len) vb->longest_line_len = line_len;
 
-        field_start = next_field;
+        line = next_line;
 
         // update line_bgzf_uoffset to next line
         if (txt_file->codec == CODEC_BGZF && vb->comp_i == COMP_MAIN) 
             bgzf_zip_advance_index (vb, line_len);
         
         // if our estimate number of lines was too small, increase it
-        if (vb->line_i == vb->lines.len32-1 && field_start - vb->txt_data.data != vb->txt_data.len)         
+        if (vb->line_i == vb->lines.len32-1 && line - vb->txt_data.data != vb->txt_data.len)         
             seg_more_lines (vb, sizeof_line);
         
         // collect stats at the approximate 1/3 or 2/3s marks of the file, to help hash_alloc_global create a hash
         // table. note: we do this for every vb, not just 1, because hash_alloc_global runs in the first
         // vb a new field/subfield is introduced
-        if (!hash_hints_set_1_3 && BNUMtxt (field_start) > Ltxt / 3) {
+        if (!hash_hints_set_1_3 && BNUMtxt (line) > Ltxt / 3) {
             seg_set_hash_hints (vb, 1);
             hash_hints_set_1_3 = true;
         }
-        else if (!hash_hints_set_2_3 && BNUMtxt (field_start) > 2 * Ltxt / 3) {
+        else if (!hash_hints_set_2_3 && BNUMtxt (line) > 2 * Ltxt / 3) {
             seg_set_hash_hints (vb, 2);
             hash_hints_set_2_3 = true;
-        }
-
-        // --head advanced option in ZIP cuts a certain number of first lines from vb=1
-        if (vb->vblock_i==1 && (flag.lines_last != NO_LINE) && flag.lines_last == vb->line_i) {
-            vb->recon_size -= BREMAINS (vb->txt_data, field_start);
-            vb->lines.len32 = vb->line_i + 1;
-            break;
         }
     }
 
@@ -1514,9 +1643,10 @@ void seg_all_data_lines (VBlockP vb)
             "Solution: use --vblock to set a lower value (value is in MB)",
             DTP(line_name), CON_MAX_REPEATS, str_size (segconf.vb_size).s);
 
-    DT_FUNC (vb, seg_finalize)(vb); // data-type specific finalization
+    if (!segconf.running) 
+        DT_FUNC (vb, seg_finalize)(vb); // data-type specific finalization
 
-     if (!flag.make_reference && !segconf.running && !flag.biopsy && flag.no_biopsy_line) 
+     if (!flag.make_reference && !segconf.running && !zip_is_biopsy) 
         seg_verify_file_size (vb);
 
     // txt_size and lines.len exclude lines moved to gencomp. increment might be negative

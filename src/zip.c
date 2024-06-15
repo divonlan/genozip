@@ -317,8 +317,9 @@ static void zip_compress_all_contexts_local (VBlockP vb)
 
             if (flag.show_time) codec_show_time (vb, "LOCAL", ctx->tag_name, ctx->lcodec);
 
-            if (HAS_DEBUG_SEG(ctx)) iprintf ("%s: zip_compress_all_contexts_local: %s: LOCAL.len=%"PRIu64" LOCAL.param=%"PRIu64"\n", 
-                                            VB_NAME, ctx->tag_name, ctx->local.len, ctx->local.param);
+            if (HAS_DEBUG_SEG(ctx)) 
+                iprintf ("%s: zip_compress_all_contexts_local: %s: LOCAL.len=%"PRIu64" LOCAL.param=%"PRIu64"\n", 
+                         VB_NAME, ctx->tag_name, ctx->local.len, ctx->local.param);
 
             START_TIMER; 
             zfile_compress_local_data (vb, ctx, 0);
@@ -335,18 +336,14 @@ static void zip_compress_all_contexts_local (VBlockP vb)
 
 void zip_init_vb (VBlockP vb)
 {
-    vb->recon_size = Ltxt; // initial value. it may change if --optimize / --chain are used, or if dual coordintes - for the other coordinate
-    vb->txt_size   = Ltxt; // this copy doesn't change with --optimize / --chain.
-
     if (DTPT(zip_init_vb)) DTPT(zip_init_vb)(vb); // data-type specific initialization of the VB    
 }
 
 // called by main thread after VB has completed processing
 static void zip_update_txt_counters (VBlockP vb)
 {
-    // note: in case of an FASTQ with flag.optimize_DESC or VCF with add_line_numbers, we already updated this in *_zip_init_vb
-    if (!(flag.optimize_DESC && VB_DT(FASTQ)) &&
-        !(flag.add_line_numbers && VB_DT(VCF)))
+    // note: in case of an FASTQ with qname optimization or VCF with add_line_numbers, we already updated this in *_zip_init_vb
+    if (!flag.zip_lines_counted_at_init_vb)
         txt_file->num_lines += vb->lines.len; // lines in this txt file
 
     // counters of data AS IT APPEARS IN THE TXT FILE
@@ -493,6 +490,19 @@ static void zip_compress_one_vb (VBlockP vb)
     if (txt_file->codec == CODEC_BGZF && flag.pair != PAIR_R2) 
         bgzf_uncompress_vb (vb);    // some of the blocks might already have been decompressed while reading - we decompress the remaining
 
+    vb->txt_size = Ltxt; // this doesn't change with --optimize.
+
+    // clone global dictionaries while granted exclusive access to the global dictionaries
+    ctx_clone (vb);
+
+    // case we need to modify the data (--optimize etc): re-write VB before digest
+    if (segconf.zip_txt_modified && DTP(zip_modify) &&
+        !flag.make_reference && Ltxt &&
+        !((VB_DT(SAM) || VB_DT(BAM)) && vb->comp_i != SAM_COMP_MAIN)) // not generated components
+        zip_modify (vb);
+
+    vb->recon_size = Ltxt; // length after potentially modifying
+
     // calculate the digest contribution of this VB, and the digest snapshot of this VB
     if (zip_need_digest) 
         digest_one_vb (vb, true, NULL); // serializes VBs in order if MD5
@@ -500,9 +510,6 @@ static void zip_compress_one_vb (VBlockP vb)
     // allocate memory for the final compressed data of this vb. allocate 1/8 of the
     // vb size on the (uncompressed) txt file - this is normally plenty. if not, we will realloc downstream
     buf_alloc (vb, &vb->z_data, 0, vb->txt_size / 8, char, CTX_GROWTH, "z_data");
-
-    // clone global dictionaries while granted exclusive access to the global dictionaries
-    ctx_clone (vb);
 
     // split each line in this VB to its components
     threads_log_by_vb (vb, "zip", "START SEG", 0);
@@ -590,7 +597,7 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
         txtfile_read_vblock (vb);
 
         // --head diagnostic option in ZIP cuts a certain number of first lines from vb=1, and discards other VBs
-        if (vb->vblock_i != 1 && flag.lines_last != NO_LINE) {
+        if (vb->vblock_i != 1 && flag.has_head) {
             vb->dispatch = DATA_EXHAUSTED;
             return;
         }
@@ -710,7 +717,7 @@ void zip_one_file (rom txt_basename,
 
         int64_t progress_unit = txt_file->est_num_lines ? txt_file->est_num_lines : txtfile_get_seggable_size(); 
 
-        target_progress = progress_unit * 3 // read, seg, compress
+        target_progress = progress_unit * (3 + segconf.zip_txt_modified) // read, (modify), seg, compress
                         + (!flag.make_reference && !flag.seg_only && !flag.biopsy) * progress_unit; // write
     }
 
@@ -729,7 +736,9 @@ void zip_one_file (rom txt_basename,
                                  zip_complete_processing_one_vb);
 
     // verify that entire file was read (if file size is known)
-    ASSERT (txt_file->disk_so_far == txt_file->disk_size || !txt_file->disk_size || is_read_via_ext_decompressor (txt_file) ||
+    ASSERT (txt_file->disk_so_far == txt_file->disk_size || !txt_file->disk_size || 
+            flag.lines_last != NO_LINE ||  // only of a subset of the file was compressed, at user request
+            is_read_via_ext_decompressor (txt_file) ||
             (txt_file->disk_so_far > txt_file->disk_size && flag.truncate), // case of compressing a file while it is still downloading - we will likely compress more than the disk_size bytes recorded upon file open
             "Failed to compress entire file: file size is %s, but only %s bytes were compressed",
             str_int_commas (txt_file->disk_size).s, str_int_commas (txt_file->disk_so_far).s);
@@ -797,7 +806,7 @@ finish:
     dispatcher_finish (&dispatcher, &prev_file_last_vb_i, 
                        z_file->z_closes_after_me && !is_last_user_txt_file,
                        flag.show_memory && z_file->z_closes_after_me && is_last_user_txt_file); // show memory
-
+    
     if (!z_file->z_closes_after_me) 
         ctx_reset_codec_commits(); 
 

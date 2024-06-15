@@ -22,8 +22,6 @@
 #include "threads.h"
 #include "zip_dyn_int.h"
 
-typedef enum { QNAME, FLAG, RNAME, POS, MAPQ, CIGAR, RNEXT, PNEXT, TLEN, SEQ, QUAL, AUX } SamFields __attribute__((unused)); // quick way to define constants
-
 STRl(copy_GX_snip, 30);
 STRl(copy_sn_snip, 30);
 STRl(copy_POS_snip, 30);
@@ -50,12 +48,14 @@ STRl(copy_mate_nM_snip, 30);
 STRl(copy_buddy_NH_snip, 30);
 STRl(copy_mate_rb_snip, 30);
 STRl(copy_mate_mb_snip, 30);
+STRl(copy_mate_GP_snip, 30);
+STRl(copy_mate_MP_snip, 30);
 STRl(redirect_to_CR_X_snip, 30);
 STRl(redirect_to_GR_X_snip, 30);
 STRl(redirect_to_GY_X_snip, 30);
 STRl(redirect_to_RX_X_snip, 30);
 STRl(XC_snip, 48);
-char copy_buddy_Z_snips[NUM_MATED_Z_TAGS][30]; unsigned copy_buddy_Z_snip_lens[NUM_MATED_Z_TAGS];
+STRl_ARRAY(copy_buddy_Z_snip, NUM_MATED_Z_TAGS, 30);
 
 WordIndex xa_lookback_strand_word_index = WORD_INDEX_NONE, xa_lookback_rname_word_index = WORD_INDEX_NONE;
 
@@ -151,6 +151,8 @@ void sam_zip_initialize (void)
         seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_NH_i, copy_buddy_NH_snip, '0' + BUDDY_EITHER);
         seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_rb_Z, copy_mate_rb_snip, '0' + BUDDY_MATE);
         seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_mb_Z, copy_mate_mb_snip, '0' + BUDDY_MATE);
+        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_GP_i, copy_mate_GP_snip, '0' + BUDDY_MATE);
+        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_MP_i, copy_mate_MP_snip, '0' + BUDDY_MATE);
         seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY_CIGAR, _SAM_CIGAR, copy_mate_CIGAR_snip, '0' + BUDDY_MATE);
         seg_prepare_plus_snip (SAM, 3, ((DictId[]){ {_OPTION_XX_i}, {_OPTION_YY_i}, {_OPTION_XY_i} }), XC_snip);
 
@@ -254,7 +256,7 @@ void sam_zip_genozip_header (SectionHeaderGenozipHeaderP header)
     header->sam.segconf_is_sorted       = segconf.is_sorted;             // v14
     header->sam.segconf_is_collated     = segconf.is_collated;           // v14
     header->sam.segconf_pysam_qual      = segconf.pysam_qual;            // v14
-    header->sam.segconf_cellranger      = segconf.has_cellranger;        // v14
+    header->sam.segconf_10xGen          = segconf.has_10xGen;            // v14
     header->sam.segconf_seq_len_dict_id = segconf.seq_len_dict_id;       // v14
     header->sam.segconf_MD_NM_by_un     = segconf.MD_NM_by_unconverted;  // v14
     header->sam.segconf_predict_meth    = segconf.sam_predict_meth_call; // v14
@@ -432,25 +434,17 @@ void sam_seg_initialize (VBlockP vb_)
     sam_seg_0X_initialize (VB, OPTION_SA_STRAND);
     sam_seg_0X_initialize (VB, OPTION_OA_STRAND);
 
-    if (segconf.has_cellranger) {
-        sam_seg_TX_AN_initialize (vb, OPTION_TX_Z);
-        sam_seg_TX_AN_initialize (vb, OPTION_AN_Z);
-    }
-
-    if (segconf.has_agent_trimmer) agilent_seg_initialize (VB);
-
-    if (segconf.sam_has_abra2) sam_abra2_seg_initialize (vb);
-
     if (MP(ULTIMA) || segconf.running) // note: need also in segconf, so we can identify Ultima parameters in case it is Ultima (no harm if it is not)
         sam_ultima_seg_initialize (vb);
     else
         CTX(OPTION_t0_Z)->no_callback = true; // override Ultima's sam_zip_t0
     
-    if (MP(DRAGEN)) sam_dragen_seg_initialize (vb);
-    
-    if (MP(STAR)) sam_star_seg_initialize (vb);
-
-    if (TECH(PACBIO)) sam_pacbio_seg_initialize (vb);
+    if (segconf.has_10xGen)        sam_10xGen_seg_initialize (vb);
+    if (segconf.has_agent_trimmer) agilent_seg_initialize    (VB);
+    if (segconf.sam_has_abra2)     sam_abra2_seg_initialize  (vb);
+    if (MP(DRAGEN))                sam_dragen_seg_initialize (vb);
+    if (MP(STAR))                  sam_star_seg_initialize   (vb);
+    if (TECH(PACBIO))              sam_pacbio_seg_initialize (vb);
 
     ctx_set_store (VB, STORE_INDEX, OPTION_XA_Z, DID_EOL); // for containers this stores repeats - used by sam_piz_special_X1->container_peek_repeats
 
@@ -631,7 +625,7 @@ void sam_segconf_set_by_MP (void)
 
     segconf.has_RSEM = stats_is_in_programs ("RSEM") || stats_is_in_programs ("rsem");
 
-    // note: this file *might* be of bisulfite-treated reads. This variable might be reset in sam_seg_finalize_segconf if it fails additonal conditions 
+    // note: this file *might* be of bisulfite-treated reads. This variable might be reset in sam_segconf_finalize if it fails additonal conditions 
     segconf.sam_bisulfite     = MP(BISMARK) || MP(BSSEEKER2) || MP(DRAGEN) || MP(BSBOLT) || MP(GEM3) || MP(ULTIMA) || segconf.has_bwa_meth;
     segconf.sam_has_bismark_XM_XG_XR = MP(BISMARK) || MP(DRAGEN) || MP(ULTIMA);
 
@@ -642,27 +636,26 @@ void sam_segconf_set_by_MP (void)
     segconf.is_minimap2       = MP(MINIMAP2) || MP(WINNOWMAP) || MP(PBMM2);   // aligners based on minimap2
     segconf.is_bowtie2        = MP(BOWTIE2) || MP(HISAT2) || MP(TOPHAT) || MP(BISMARK) || MP(BSSEEKER2); // aligners based on bowtie2
 
-    segconf.sam_has_SA_Z      = segconf.is_bwa || segconf.is_minimap2 || MP(NGMLR) || MP(DRAGEN) || MP(NOVOALIGN) || MP(ULTIMA) || MP(ISAAC); /*|| MP(LONGRANGER); non-standard SA:Z format (POS is off by 1, main-field NM is missing) */ 
+    segconf.sam_has_SA_Z      = segconf.is_bwa || segconf.is_minimap2 || MP(NGMLR) || MP(DRAGEN) || MP(NOVOALIGN) || MP(ULTIMA) || MP(ISAAC) || MP(CRDNA); /*|| MP(LONGRANGER); non-standard SA:Z format (POS is off by 1, main-field NM is missing) */ 
     
-    segconf.sam_has_BWA_XA_Z  = (segconf.is_bwa || MP(GEM3) || MP(GEM2SAM) || MP(DELVE) || MP(DRAGEN) || MP(ULTIMA)) ? yes 
-                              : MP(TMAP) || MP(TORRENT_BC)                                                           ? no 
-                              :                                                                                        segconf.sam_has_BWA_XA_Z; // remain "unknown" or as determined by segconf
+    segconf.sam_has_BWA_XA_Z  = (segconf.is_bwa || MP(GEM3) || MP(GEM2SAM) || MP(DELVE) || MP(DRAGEN) || MP(ULTIMA) || MP(CRDNA)) ? yes 
+                              : MP(TMAP) || MP(TORRENT_BC)                                                                        ? no 
+                              :                                                                                                     segconf.sam_has_BWA_XA_Z; // remain "unknown" or as determined by segconf
                               
-    segconf.sam_has_BWA_XS_i  = segconf.is_bwa || MP(TMAP) || MP(GEM3) || (segconf.is_bowtie2 && !MP(HISAT2)) || MP(CPU) || MP(LONGRANGER) || MP(DRAGEN);
+    segconf.sam_has_BWA_XS_i  = segconf.is_bwa || MP(TMAP) || MP(GEM3) || (segconf.is_bowtie2 && !MP(HISAT2)) || MP(CPU) || MP(LONGRANGER) || MP(DRAGEN) || MP(CRDNA);
     segconf.sam_has_XM_i_is_mismatches  = segconf.is_bwa || segconf.is_bowtie2 || MP(NOVOALIGN) || MP(DRAGEN);
     segconf.sam_has_BWA_XT_A  = segconf.is_bwa || MP(DRAGEN);
     segconf.sam_has_BWA_XC_i  = segconf.is_bwa || MP(DRAGEN); // might be canceled during segconf (see sam_seg_BWA_XC_i)
     segconf.sam_has_BWA_X01_i = segconf.is_bwa || MP(DRAGEN);
 
     segconf.sam_has_bowtie2_YS_i = MP(BOWTIE2) || MP(BSSEEKER2) || MP(HISAT2);
-
-    if ((!MP(TMAP/*mapped file*/) && !MP(TORRENT_BC/*unmapped file*/)) || !segconf.has[OPTION_ZM_B_s])
-        flag.optimize_ZM = false; // optimize_ZM is for IonTorrent ZM:B data, but is set automatically with --optimize
 }
 
 // finalize Seg configuration parameters
-static void sam_seg_finalize_segconf (VBlockSAMP vb)
+void sam_segconf_finalize (VBlockP vb_)
 {
+    VBlockSAMP vb = (VBlockSAMP)vb_;
+
     segconf.longest_seq_len = vb->longest_seq_len;
     segconf.is_long_reads   = segconf_is_long_reads();
     segconf.sam_cigar_len   = 1 + ((segconf.sam_cigar_len - 1) / vb->lines.len32);                   // set to the average CIGAR len (rounded up)
@@ -713,9 +706,13 @@ static void sam_seg_finalize_segconf (VBlockSAMP vb)
          segconf.has[OPTION_AN_Z])) {
 
         segconf.sam_mapper = MP_STAR;
-        segconf.star_solo  = true;     // must be before sam_set_sag_type
-        segconf.has_cellranger = true; // STAR Solo mimics cellranger's tags
+        segconf.star_solo  = true; // must be before sam_set_sag_type
+        segconf.has_10xGen = true; // STAR Solo mimics cellranger's tags
     }
+
+    // set optimizations
+    if (flag.optimize) 
+        sam_segconf_finalize_optimizations();
 
     segconf.sam_has_zm_by_Q1NAME = TECH(PACBIO) && segconf_qf_id (QNAME1) != QF_PACBIO_3;
 
@@ -877,39 +874,33 @@ void sam_seg_finalize (VBlockP vb_)
         bits_truncate ((BitsP)&CTX(SAM_SQBITMAP)->local, CTX(SAM_SQBITMAP)->next_local); // remove unused bits due to MAPPING_PERFECT
     }
 
-    // finalize Seg configuration parameters
-    if (segconf.running)
-        sam_seg_finalize_segconf (vb);
-
     // assign the QUAL codec
-    else {
-        if (vb->has_qual && CTX(SAM_QUAL)->local.len32) 
-            codec_assign_best_qual_codec (VB, SAM_QUAL, sam_zip_qual, false, true, &vb->codec_requires_seq);
+    if (vb->has_qual && CTX(SAM_QUAL)->local.len32) 
+        codec_assign_best_qual_codec (VB, SAM_QUAL, sam_zip_qual, false, true, &vb->codec_requires_seq);
 
-        if (vb->has_qual && CTX(SAM_CQUAL)->local.len32) 
-            codec_assign_best_qual_codec (VB, SAM_CQUAL, sam_zip_cqual, false, true, &vb->codec_requires_seq);
+    if (vb->has_qual && CTX(SAM_CQUAL)->local.len32) 
+        codec_assign_best_qual_codec (VB, SAM_CQUAL, sam_zip_cqual, false, true, &vb->codec_requires_seq);
 
-        if (CTX(OPTION_OQ_Z)->local.len32 && !codec_oq_comp_init (VB)) 
-            codec_assign_best_qual_codec (VB, OPTION_OQ_Z, sam_zip_OQ, false, true, &vb->codec_requires_seq);
-        
-        if (CTX(OPTION_TQ_Z)->local.len32)
-            codec_assign_best_qual_codec (VB, OPTION_TQ_Z, sam_zip_TQ, true, false, &vb->codec_requires_seq);
+    if (CTX(OPTION_OQ_Z)->local.len32 && !codec_oq_comp_init (VB)) 
+        codec_assign_best_qual_codec (VB, OPTION_OQ_Z, sam_zip_OQ, false, true, &vb->codec_requires_seq);
+    
+    if (CTX(OPTION_TQ_Z)->local.len32)
+        codec_assign_best_qual_codec (VB, OPTION_TQ_Z, sam_zip_TQ, true, false, &vb->codec_requires_seq);
 
-        if (CTX(OPTION_CY_ARR)->local.len32)
-            codec_assign_best_qual_codec (VB, OPTION_CY_ARR, NULL, true, false, &vb->codec_requires_seq);
+    if (CTX(OPTION_CY_ARR)->local.len32)
+        codec_assign_best_qual_codec (VB, OPTION_CY_ARR, NULL, true, false, &vb->codec_requires_seq);
 
-        if (CTX(OPTION_QX_Z)->local.len32)
-            codec_assign_best_qual_codec (VB, OPTION_QX_Z, segconf.has_agent_trimmer ? NULL : sam_zip_QX, true, false, &vb->codec_requires_seq);
+    if (CTX(OPTION_QX_Z)->local.len32)
+        codec_assign_best_qual_codec (VB, OPTION_QX_Z, segconf.has_agent_trimmer ? NULL : sam_zip_QX, true, false, &vb->codec_requires_seq);
 
-        if (CTX(OPTION_2Y_Z)->local.len32)
-            codec_assign_best_qual_codec (VB, OPTION_2Y_Z, sam_zip_2Y, true, true, &vb->codec_requires_seq);
+    if (CTX(OPTION_2Y_Z)->local.len32)
+        codec_assign_best_qual_codec (VB, OPTION_2Y_Z, sam_zip_2Y, true, true, &vb->codec_requires_seq);
 
-        if (CTX(OPTION_QT_ARR)->local.len32)
-            codec_assign_best_qual_codec (VB, OPTION_QT_Z, NULL, true, false, &vb->codec_requires_seq);
+    if (CTX(OPTION_QT_ARR)->local.len32)
+        codec_assign_best_qual_codec (VB, OPTION_QT_Z, NULL, true, false, &vb->codec_requires_seq);
 
-        if (CTX(OPTION_U2_Z)->local.len32)
-            codec_assign_best_qual_codec (VB, OPTION_U2_Z, sam_zip_U2, true, true, &vb->codec_requires_seq);
-    }
+    if (CTX(OPTION_U2_Z)->local.len32)
+        codec_assign_best_qual_codec (VB, OPTION_U2_Z, sam_zip_U2, true, true, &vb->codec_requires_seq);
 
     // determine if sam_piz_sam2bam_SEQ ought to store vb->textual_seq (saves piz time if not)
     CTX(SAM_SQBITMAP)->flags.no_textual_seq = !vb->codec_requires_seq            && // a QUAL-like field uses a codec that requires SEQ
@@ -934,11 +925,9 @@ void sam_seg_finalize (VBlockP vb_)
         sam_zip_prim_ingest_vb (vb);
 
     // collect stats
-    if (!segconf.running) {
-        __atomic_add_fetch (&z_file->mate_line_count,  (uint64_t)vb->mate_line_count,  __ATOMIC_RELAXED);
-        __atomic_add_fetch (&z_file->saggy_near_count, (uint64_t)vb->saggy_near_count, __ATOMIC_RELAXED);
-        __atomic_add_fetch (&z_file->prim_far_count,   (uint64_t)vb->prim_far_count,   __ATOMIC_RELAXED);
-    }
+    __atomic_add_fetch (&z_file->mate_line_count,  (uint64_t)vb->mate_line_count,  __ATOMIC_RELAXED);
+    __atomic_add_fetch (&z_file->saggy_near_count, (uint64_t)vb->saggy_near_count, __ATOMIC_RELAXED);
+    __atomic_add_fetch (&z_file->prim_far_count,   (uint64_t)vb->prim_far_count,   __ATOMIC_RELAXED);
 
     // VB1: if we've not found depn lines in the VB, abort gencomp (likely the depn lines were filtered out)
     if (vb->vblock_i == 1 && !vb->seg_found_depn_line && !flag.force_gencomp)
@@ -1081,8 +1070,11 @@ void sam_seg_idx_aux (VBlockSAMP vb)
 
         #define AUXval(c1,c2,c3) (((uint32_t)(c1)) << 16 | ((uint32_t)(c2)) << 8 | ((uint32_t)(c3)))
 
-        #define TEST_AUX(name, c1, c2, c3)        \
-            case AUXval(c1,c2,c3): vb->idx_##name = f; break;
+        #define TEST_AUX(name, c1, c2, c3) \
+                case AUXval(c1,c2,c3): vb->idx_##name = f; break;
+
+        #define TEST_AUX_B(name, c1, c2, c3, array_subtype) \
+                case AUXval(c1,c2,c3): if (vb->auxs[f][is_bam ? 3 : 5] == (array_subtype)) vb->idx_##name = f; break;
 
         switch (AUXval(c1, c2, c3)) {
             TEST_AUX(NM_i, 'N', 'M', 'i');
@@ -1118,7 +1110,6 @@ void sam_seg_idx_aux (VBlockSAMP vb)
             TEST_AUX(pr_i, 'p', 'r', 'i');
             TEST_AUX(qs_i, 'q', 's', 'i');
             TEST_AUX(ws_i, 'w', 's', 'i');
-            TEST_AUX(ac_B, 'a', 'c', 'B');
 
             default: {}
         }
@@ -1298,7 +1289,7 @@ void sam_seg_aux_all (VBlockSAMP vb, ZipDataLineSAMP dl)
         if (sam_type == 'Z')
             for (int i=0; i < value_len; i++)
                 ASSSEG (value[i] >= ' ' && value[i] <= '~', // SAM specification section 1.5
-                        "Invalid character in %c%c:Z field [index=%u]: ASCII %u", tag[0], tag[1], i, value[i]);
+                        "Invalid character in %c%c:Z field [index=%u]: ASCII %u", tag[0], tag[1], i, (uint8_t)value[i]);
 
         else if (sam_type == 'H')
             ASSSEG (str_is_hexup (STRa(value)), "Invalid character in %c%c:H field", tag[0], tag[1]);
@@ -1424,7 +1415,7 @@ static inline void sam_seg_QNAME_segconf (VBlockSAMP vb, ContextP ctx, STRp (qna
         bool is_new = !is_same_last_txt (VB, ctx, STRa(qname));
         if (is_new && ctx->last_is_new) segconf.is_collated = false; // two new QNAMEs in a row = not collated
 
-        // case: at least on pair of consecutive lines has the same QNAME. if the file is not sorted, we will set it as collated in sam_seg_finalize_segconf
+        // case: at least on pair of consecutive lines has the same QNAME. if the file is not sorted, we will set it as collated in sam_segconf_finalize
         if (!is_new) segconf.evidence_of_collated = true;
 
         ctx->last_is_new = is_new;
@@ -1542,7 +1533,7 @@ WordIndex sam_seg_RNAME (VBlockSAMP vb, ZipDataLineSAMP dl, STRp (chrom),
 
     else normal_seg: {
         bool is_new;
-        node_index = chrom_seg_ex (VB, SAM_RNAME, STRa (chrom), 0, NULL, add_bytes, !IS_BAM_ZIP, &is_new);
+        node_index = chrom_seg_ex (VB, SAM_RNAME, STRa (chrom), 0, add_bytes, &is_new);
         normal_seg = true;
 
         // don't allow adding chroms to a BAM file or a SAM that has SQ lines in the header, but we do allow to add to a headerless SAM.
@@ -1591,7 +1582,7 @@ WordIndex sam_seg_RNEXT (VBlockSAMP vb, ZipDataLineSAMP dl, STRp (chrom), unsign
 
     else normal_seg: {
         bool is_new;
-        node_index = chrom_seg_ex (VB, SAM_RNEXT, STRa (chrom), 0, NULL, add_bytes, !IS_BAM_ZIP, &is_new);
+        node_index = chrom_seg_ex (VB, SAM_RNEXT, STRa (chrom), 0, add_bytes, &is_new);
         normal_seg = true;
 
         // don't allow adding chroms to a BAM file or a SAM that has SQ lines in the header, but we do allow to add to a headerless SAM.
@@ -1683,13 +1674,11 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
     if (fld_lens[QUAL] == 1 && flds[QUAL][0] == '*')
         vb->qual_missing = dl->no_qual = true;
 
-    // lazy way to get vb->chrom* (inc. if --match-chrom), rollback later if seg RNAMEaa is not needed
+    // lazy way to get vb->chrom*, rollback later if seg RNAME is not needed
     if (vb->check_for_gc || !IS_MAIN(vb))
         seg_create_rollback_point (VB, NULL, 1, SAM_RNAME);
 
-    int32_t rname_shrinkage = vb->recon_size;
     dl->RNAME = sam_seg_RNAME (vb, dl, STRfld (RNAME), false, fld_lens[RNAME] + 1);
-    rname_shrinkage -= vb->recon_size; // number of characters RNAME was reduced by, due to --match-chrom-to-reference
 
     ASSSEG (str_get_int_range32 (STRfld (POS), 0, MAX_POS_SAM, &dl->POS),
             "Invalid POS \"%.*s\": expecting an integer [0,%d]", STRfi (fld, POS), (int)MAX_POS_SAM);
@@ -1737,7 +1726,6 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
 
         // re-seg rname, against SA group
         seg_rollback (VB);
-        vb->recon_size += rname_shrinkage; // grow back, as we will shrink it again when re-segging
         sam_seg_RNAME(vb, dl, STRfld (RNAME), true, fld_lens[RNAME] + 1);
     }
 
@@ -1814,7 +1802,6 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
 rollback_and_done:
     memset (dl, 0, sizeof (ZipDataLineSAM));
     seg_rollback (VB); // cancelling segging of RNAME
-    vb->recon_size += rname_shrinkage; // grow back, as the change in recon_size due to the change in RNAME, will be accounted for by the PRIM/DEPN VB to which this alignment belongs was sent
 
     return next_line;
 }

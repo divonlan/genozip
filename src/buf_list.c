@@ -80,7 +80,7 @@ static void buflist_foreach_buffer (VBlockP vb, bool (*callback)(ConstBufferP, V
         #ifdef __linux__
             // if (!BL_IS_REMOVED (*bl) && access ((rom)*bl, F_OK) == -1 && errno == EFAULT)
             //     ABORT ("buffer structure inaccessible (invalid pointer=%p) in buf_i=%u of vb_id=%d", *bl, buf_i, vb_id); 
-        #elif defined WIN32
+        #elif defined _WIN32
             if (!BL_IS_REMOVED (bl->buf) && IsBadReadPtr (bl->buf, sizeof (Buffer))) 
                 ABORT ("buffer structure inaccessible (invalid pointer=%p) in buf_i=%u of vb_id=%d", bl->buf, buf_i, vb->id); 
         #endif
@@ -635,7 +635,7 @@ static bool buflist_test_overflows_do (VBlockP vb, bool primary, rom msg)
             goto done;
         }
 
-#ifdef WIN32
+#ifdef _WIN32
         if (IsBadReadPtr (ent->buf, sizeof (Buffer))) {
             fprintf (stderr, "%s%s: Memory corruption in vb->id=%d (vb->vblock_i=%d) buffer=%p func=%s:%u \"%s\" (buf_i=%u): buffer structure inaccessible (invalid pointer)\n", 
                      nl[primary], msg, vb->id, vb->vblock_i, ent->buf, fcn, buf_i);

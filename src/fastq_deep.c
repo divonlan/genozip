@@ -117,7 +117,7 @@ void fastq_deep_zip_finalize (void)
 
 void fastq_deep_seg_finalize_segconf (uint32_t n_lines)
 {
-    if (flag.biopsy || flag.has_biopsy_line) return;
+    if (zip_is_biopsy) return;
 
     unsigned n_mch = n_lines - segconf.n_no_mch; // exclude lines that don't match any SAM line - perhaps they were filtered out and excluded from the SAM file 
     unsigned threashold = flag.force_deep ? 1 : MAX_(n_mch/2, 1); // at least half of the lines need this level of matching (or at least 1 if --force-deep)

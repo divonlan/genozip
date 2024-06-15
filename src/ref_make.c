@@ -214,7 +214,7 @@ rom ref_fasta_to_ref (FileP file)
         WARN ("FYI: cannot find reference file %s: generating it now from %s", ref_filename, file->name);
 
         StreamP make_ref = stream_create (NULL, 0, 0, 0, 0, 0, 0, "Make reference",
-                                          arch_get_executable().s, "--make-reference", file->name, 
+                                          arch_get_genozip_executable().s, "--make-reference", file->name, 
                                           flag.stats_submit ? "--submit" : SKIP_ARG,
                                           "--no-tip", NULL);
         

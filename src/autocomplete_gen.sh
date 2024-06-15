@@ -2,7 +2,7 @@
 # ^ finds bash according to $PATH
  
 # ------------------------------------------------------------------
-#   autocomplete_gen.sh.sh
+#   autocomplete_gen.sh
 #   Copyright (C) 2024-2024 Genozip Limited. Patent Pending.
 #   Please see terms and conditions in the file LICENSE.txt
 
@@ -79,10 +79,10 @@ for cmd in genozip genounzip genocat genols; do
     echo '    if [[ "$2" =~ ^--* ]]; then' >> $out 
     echo '        COMPREPLY=( `compgen -W "$options" -- "$2" `) ' >> $out 
 
-    # show reference files after e.g. --reference (except genols)
+    # show reference files after e.g. --reference (except genols): files from current dir and also $GENOZIP_REFERENCE dir
     if [ $cmd != genols ] ; then 
-    echo '    elif [[ "$3" =~ "-".*[eE] ]] || [ "$3" == "--reference" ] || [ "$3" == "--REFERENCE" ]; then' >> $out 
-    echo '        COMPREPLY=( `ls -d1p ${2}* 2>/dev/null | egrep ".ref.genozip$|/$"` )' >> $out
+    echo '    elif [[ "$3" =~ "-".*[eE]$ ]] || [ "$3" == "--reference" ] || [ "$3" == "--REFERENCE" ]; then' >> $out 
+    echo '        COMPREPLY=( `ls -d1p ${2}* 2>/dev/null | egrep ".ref.genozip$|/$" ; if [ -v GENOZIP_REFERENCE ] && [ -d $GENOZIP_REFERENCE ]; then cd $GENOZIP_REFERENCE; ls -d1p ${2}* 2>/dev/null | egrep ".ref.genozip$" ; cd - > /dev/null; fi` )' >> $out
     fi
 
     if [ $cmd == genozip ] ; then 
@@ -102,14 +102,13 @@ for cmd in genozip genounzip genocat genols; do
     echo '    else' >> $out 
     echo '        COMPREPLY=( `ls -d1p ${2}* 2>/dev/null | grep -v ".genozip$"` )' >> $out
 
-    # show argument tip after --bgzf or -z
-    elif [ $cmd == genounzip ] || [ $cmd == genocat ] ; then 
-
     # genounzip: show directories and .genozip files, excluding .ref.genozip
-    echo '    elif [ "$1" == "genounzip" ]; then' >> $out
+    elif [ $cmd == genounzip ] ; then 
+    echo '    else' >> $out 
     echo '        COMPREPLY=( `ls -d1p ${2}* 2>/dev/null | egrep "\.genozip$|/$" | grep -Fv  ".ref.genozip"` )' >> $out
 
     # genocat: show directories and .genozip files, including .ref.genozip
+    elif [ $cmd == genocat ] ; then 
     echo '    else' >> $out 
     echo '        COMPREPLY=( `ls -d1p ${2}* 2>/dev/null | egrep "\.genozip$|/$"` )' >> $out
     fi

@@ -186,7 +186,8 @@ typedef struct {
     SamASType AS;
     SamASType YS;                  // used for bowtie2 and some other mappers
     WordIndex RNAME, RNEXT;
-    PosType32 POS, PNEXT;         
+    PosType32 POS, PNEXT;
+    PosType32 GP, MP;              // used for CellRanger-DNA         
     uint32_t seq_consumed;
     uint32_t ref_consumed;
     uint32_t hard_clip[2];        
@@ -247,7 +248,7 @@ typedef struct VBlockSAM {
             idx_UB_Z, idx_BX_Z, idx_CB_Z, idx_GX_Z, idx_CR_Z, idx_CY_Z,
             idx_XO_Z, idx_YS_Z, idx_XB_A, idx_XM_Z, idx_XB_Z,
             idx_dq_Z, idx_iq_Z, idx_sq_Z, idx_ZA_Z, idx_ZB_Z,
-            idx_pr_i, idx_qs_i, idx_ws_i, idx_ac_B;
+            idx_pr_i, idx_qs_i, idx_ws_i, idx_ZM_B;
     #define has(f)   (vb->idx_##f  != -1)
     #define has_MD   (has(MD_Z) && segconf.has[OPTION_MD_Z])
 
@@ -262,6 +263,7 @@ typedef struct VBlockSAM {
     Multiplexer4 mux_XS;
     Multiplexer4 mux_PNEXT;
     Multiplexer3 mux_POS, mux_MAPQ;// ZIP: DEMUX_BY_MATE_PRIM multiplexers
+    Multiplexer3 mux_GP, mux_MP;   // ZIP: channels: is_first, is_last, is_mated
     Multiplexer2 mux_FLAG, mux_MQ, mux_MC, mux_ms, mux_AS, mux_YS, mux_nM, // ZIP: DEMUX_BY_MATE or DEMUX_BY_BUDDY multiplexers
                  mux_mated_z_fields[NUM_MATED_Z_TAGS], mux_ultima_c, mux_dragen_sd, mux_YY, mux_XO, mux_PQ,
                  mux_sn, mux_rb, mux_mb;
@@ -343,7 +345,8 @@ typedef struct VBlockSAM {
 #define line_cigar(dl) Bc (*(IS_BAM_ZIP ? &vb->line_textual_cigars : &vb->txt_data), (dl)->CIGAR.index)
 
 // fixed-field part of a BAM alignment, see https://samtools.github.io/hts-specs/SAMv1.pdf
-typedef struct {
+typedef struct __attribute__((packed,aligned(1))) {
+    // fixed-field
     uint32_t block_size;
     int32_t ref_id;
     PosType32 pos;
@@ -356,8 +359,20 @@ typedef struct {
     int32_t next_ref_id;
     PosType32 next_pos;  
     int32_t tlen;
-    char read_name[]; // char[l_read_name]
+
+    // variable-length fields (not included in sizeof(BAMAlignmentFixed))
+    char read_name[/*l_read_name*/]; 
+    // uint32_t cigar[n_cigar_op]
+    // uint8_t seq[(l_seq+1)/2]
+    // char qual[l_seq]
 } BAMAlignmentFixed;
+
+#define bam_seg_get_aux_B_template(array_subtype, element_type) \
+typedef struct __attribute__((packed,aligned(1))) { char tag[2]; char B; char subtype; uint32_t array_len; element_type elem[]; } BamArray_##array_subtype;
+bam_seg_get_aux_B_template (s, int16_t); // defines BamArray_s
+bam_seg_get_aux_B_template (f, float);   // defines BamArray_f
+
+typedef enum { QNAME, FLAG, RNAME, POS, MAPQ, CIGAR, RNEXT, PNEXT, TLEN, SEQ, QUAL, AUX } SamFields __attribute__((unused)); // quick way to define constants
 
 typedef VBlockSAM *VBlockSAMP;
 
@@ -502,7 +517,9 @@ static bool inline sam_line_is_prim (ZipDataLineSAMP dl) { return !sam_is_depn (
 #define piz_has_real_prim (piz_has_buddy && ((segconf.is_paired && sam_is_depn(last_flags)) || \
                                              (!segconf.is_paired && !sam_is_depn ((SamFlags){ .value = history64(SAM_FLAG, VB_SAM->buddy_line_i)}))))
 
+// segconf stuff
 extern void sam_segconf_set_by_MP (void);
+extern void sam_segconf_finalize_optimizations (void);
 
 // Header stuff
 extern void sam_header_zip_inspect_SQ_lines_in_cram (rom cram_filename);
@@ -531,6 +548,7 @@ extern uint32_t sam_seg_get_aux_float (VBlockSAMP vb, int16_t idx, double *numbe
 
 extern void sam_seg_get_aux_Z (VBlockSAMP vb, int16_t idx, pSTRp (snip), bool is_bam);
 extern char sam_seg_get_aux_A (VBlockSAMP vb, int16_t idx, bool is_bam);
+
 extern bool sam_seg_peek_int_field (VBlockSAMP vb, Did did_i, int16_t idx, int32_t min_value, int32_t max_value, bool set_last_value, int32_t *value);
 
 extern uint32_t bam_split_aux (VBlockSAMP vb, rom alignment, rom aux, rom after_aux, rom *auxs, uint32_t *aux_lens);
@@ -713,7 +731,6 @@ extern void sam_seg_HISAT2_Zs_Z (VBlockSAMP vb, STRp(zs), unsigned add_bytes);
 
 // tmap (IonXpress) stuff
 extern void sam_seg_TMAP_XM_i (VBlockSAMP vb, ValueType XM, unsigned add_bytes);
-extern void sam_optimize_TMAP_ZM (VBlockSAMP vb, ContextP ctx, void *cb_param, void *array_, uint32_t array_len);
 
 extern void sam_seg_init_bisulfite (VBlockSAMP vb, ZipDataLineSAMP dl);
 
@@ -745,7 +762,7 @@ extern void sam_seg_blasr_FI_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t fi, u
 
 // scRNA-seq stuff (STARsolo and cellranger)
 extern void sam_segconf_retag_UBURUY (void);
-extern void sam_seg_TX_AN_initialize (VBlockSAMP vb, Did did_i);
+extern void sam_10xGen_seg_initialize (VBlockSAMP vb);
 extern void sam_seg_TX_AN_Z (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, STRp(value), unsigned add_bytes);
 
 extern void sam_seg_CR_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(cr), unsigned add_bytes);
@@ -758,6 +775,8 @@ extern void sam_seg_BC_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(bc), unsigned 
 extern void sam_seg_other_seq (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, STRp(seq),unsigned add_bytes);
 extern void sam_seg_GR_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(gr), unsigned add_bytes);
 extern void sam_seg_GY_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(gy), unsigned add_bytes);
+extern void sam_seg_GP_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t value, unsigned add_bytes);
+extern void sam_seg_MP_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t value, unsigned add_bytes);
 
 extern bool sam_seg_barcode_qual (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, SoloTags solo, uint8_t n_seps, STRp(qual), qSTRp (con_snip), MiniContainerP con, unsigned add_bytes);
 extern void sam_seg_gene_name_id (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, STRp(value), unsigned add_bytes);
@@ -787,9 +806,7 @@ extern void sam_abra2_seg_initialize (VBlockSAMP vb);
 extern void sam_seg_ABRA2_YA_Z (VBlockSAMP vb, STRp(field), unsigned add_bytes);
 extern void sam_seg_ABRA2_YO_Z (VBlockSAMP vb, STRp(field), unsigned add_bytes);
 
-// -----------------------------------
 // SAG stuff
-// -----------------------------------
 static inline bool sam_seg_has_sag_by_SA (VBlockSAMP vb)    { return  IS_SAG_SA && ((IS_DEPN(vb) && vb->sa_aln) || IS_PRIM(vb)); }
 static inline bool sam_seg_has_sag_by_nonSA (VBlockSAMP vb) { return !IS_SAG_SA && ((IS_DEPN(vb) && vb->sag)    || IS_PRIM(vb)); }
 
@@ -904,10 +921,12 @@ eSTRl(copy_mate_nM_snip);
 eSTRl(copy_buddy_NH_snip);
 eSTRl(copy_mate_rb_snip);
 eSTRl(copy_mate_mb_snip);
+eSTRl(copy_mate_GP_snip);
+eSTRl(copy_mate_MP_snip);
 eSTRl(redirect_to_CR_X_snip);
 eSTRl(redirect_to_GR_X_snip);
 eSTRl(redirect_to_GY_X_snip);
 eSTRl(redirect_to_RX_X_snip);
 eSTRl(XC_snip);
 
-extern char copy_buddy_Z_snips[NUM_MATED_Z_TAGS][30]; extern unsigned copy_buddy_Z_snip_lens[NUM_MATED_Z_TAGS];
+eSTRl_ARRAY(copy_buddy_Z_snip, NUM_MATED_Z_TAGS, 30);

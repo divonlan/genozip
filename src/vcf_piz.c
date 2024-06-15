@@ -23,7 +23,7 @@ void vcf_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
 
     if (VER(15)) {
         z_file->max_ploidy_for_mux    = header->vcf.max_ploidy_for_mux; // since 15.0.36
-        segconf.GQ_method             = header->vcf.segconf_GQ_method;
+        segconf.FMT_GQ_method             = header->vcf.segconf_GQ_method;
         segconf.FMT_DP_method         = header->vcf.segconf_FMT_DP_method;
         segconf.INFO_DP_method        = header->vcf.segconf_INF_DP_method;
         segconf.MATEID_method         = header->vcf.segconf_MATEID_method;

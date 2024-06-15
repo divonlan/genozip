@@ -170,9 +170,7 @@ void chrom_calculate_ref2chrom (uint64_t num_ref_contigs)
 WordIndex chrom_seg_ex (VBlockP vb, Did did_i, 
                         STRp(chrom), 
                         PosType64 LN,     // Optional, if readily known
-                        bool *is_alt_out, // need iff flag.match_chrom_to_reference.
                         int add_bytes,    // must be signed
-                        bool recon_changes_if_match, // whether reconstruction changes in case of change in chrom name due to --match-chrom
                         bool *is_new_out) // optional out
 {
     ASSERTNOTZERO (chrom_len);
@@ -180,51 +178,10 @@ WordIndex chrom_seg_ex (VBlockP vb, Did did_i,
     bool is_primary = did_i == DTF(chrom); // note: possibly not primary, eg SA_RNAME
 
     WordIndex chrom_node_index = WORD_INDEX_NONE, ref_index = WORD_INDEX_NONE;
-    int32_t chrom_name_growth=0;
     bool is_new, is_alt=false;
-    rom save_chrom = chrom;
-    uint32_t save_chrom_len = chrom_len;
     
-    Reference ref = !(flag.reference & REF_ZIP_LOADED) ? NULL
-                  :                                      gref;
-    
-    // case match_chrom_to_reference: rather than segging the chrom as in the txt_data, we seg the matching name in the reference, if there is one.
-    if (flag.match_chrom_to_reference) {
+    Reference ref = (flag.reference & REF_ZIP_LOADED) ? gref : NULL;
 
-        // case: chrom is the same as previous line 
-        #define last_growth last_delta
-        if (vb->line_i && chrom_len == ctx->last_txt.len && ctx->last_txt.index != INVALID_LAST_TXT_INDEX && 
-            !memcmp (chrom, last_txtx(vb, ctx), chrom_len)) {
-            if (is_alt_out) *is_alt_out = ctx->last_is_alt;
-            if (is_new_out) *is_new_out = false;
-            vb->recon_size += ctx->last_growth;
-            
-            return seg_duplicate_last (vb, ctx, add_bytes + ctx->last_growth);
-        }
-
-        // test for ref match
-        ref_index = ref_contigs_get_matching (ref, LN, STRa(chrom), pSTRa(chrom), false, &is_alt, &chrom_name_growth); 
-        if (ref_index != WORD_INDEX_NONE) { // chrom/chrom_len are modified in-place
-            if (is_alt_out) *is_alt_out = is_alt;
-
-            if (!recon_changes_if_match) chrom_name_growth = 0; // in BAM, chroms are stored as a ref_id (=chrom_index), so no change in reconstruction size
-
-            vb->recon_size += chrom_name_growth;
-            
-            chrom_node_index = seg_by_ctx_ex (vb, STRa(chrom), ctx, add_bytes + chrom_name_growth, &is_new); // seg modified chrom
-        }
-
-        // update cache
-        seg_set_last_txt (vb, ctx, STRa(save_chrom));
-        ctx->last_is_alt = is_alt;
-        ctx->last_growth = chrom_name_growth;  
-        ctx->no_stons    = true; // needed for seg_duplicate_last
-
-        // if a match was found, we're done
-        if (ref_index != WORD_INDEX_NONE) goto finalize;
-    }
-
-    // case: either without --match-chrom-to-reference OR chrom not found in the reference
     chrom_node_index = seg_by_ctx_ex (vb, STRa(chrom), ctx, add_bytes, &is_new); // note: this is not the same as ref_index, bc ctx->nodes contains the header contigs first, followed by the reference contigs that are not already in the header
     
     STR0 (ref_contig);
@@ -236,17 +193,12 @@ WordIndex chrom_seg_ex (VBlockP vb, Did did_i,
     if (ref_index != WORD_INDEX_NONE && is_alt && // a new chrom that matched to the reference with an alternative name
         is_primary &&
         !segconf.running  &&              // segconf runs with flag.quiet so the user won't see the warning
-        !flag.match_chrom_to_reference && // we didn't already attempt to match to the reference
         !__atomic_test_and_set (&once[is_primary], __ATOMIC_RELAXED))   // skip if we've shown the warning already
             
-        WARN ("FYI: Contigs name mismatch between %s and reference file %s. For example: %s file: \"%.*s\" Reference file: \"%.*s\". "
-                "You may use --match-chrom-to-reference to create %s with contigs matching those of the reference. This makes no difference for the compression. More info: %s",
-                txt_name, ref_get_filename (ref), dt_name (vb->data_type), STRf(chrom), STRf(ref_contig), z_name, WEBSITE_MATCH_CHROM);
+        WARN ("FYI: Contigs name mismatch between %s and reference file %s. For example: file: \"%.*s\" Reference file: \"%.*s\". This makes no difference for the compression.",
+              txt_name, ref_get_filename (ref), STRf(chrom), STRf(ref_contig));
         // we don't use WARN_ONCE bc we want the "once" to also include ref_contigs_get_matching
 
-    if (is_alt_out) *is_alt_out = false;
-
-finalize:
     if (is_new_out) *is_new_out = is_new;        
 
     if (is_primary)
@@ -273,7 +225,7 @@ finalize:
 
 WordIndex chrom_seg_no_b250 (VBlockP vb, STRp(chrom_name), bool *is_new)
 {
-    WordIndex chrom_node_index = chrom_seg_ex (VB, CHROM, STRa(chrom_name), 0, NULL, 0, false, is_new); // also adds to random access etc
+    WordIndex chrom_node_index = chrom_seg_ex (VB, CHROM, STRa(chrom_name), 0, 0, is_new); // also adds to random access etc
     b250_seg_remove_last (vb, CTX(CHROM), chrom_node_index);
 
     return chrom_node_index;
@@ -281,7 +233,7 @@ WordIndex chrom_seg_no_b250 (VBlockP vb, STRp(chrom_name), bool *is_new)
 
 bool chrom_seg_cb (VBlockP vb, ContextP ctx, STRp (chrom), uint32_t repeat)
 {
-    chrom_seg_ex (vb, ctx->did_i, STRa(chrom), 0, NULL, chrom_len, true, NULL);
+    chrom_seg_ex (vb, ctx->did_i, STRa(chrom), 0, chrom_len, NULL);
 
     return true; // segged successfully
 }

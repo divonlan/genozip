@@ -9,14 +9,13 @@
 #include "vcf_private.h"
 #include "zip_dyn_int.h"
 
-static char copy_mate_snips[NUM_TWs][30];
-uint32_t copy_mate_snip_lens[NUM_TWs];
-sSTRl(snip_copy_cipos,16);
+sSTRl_ARRAY(copy_mate_snip, NUM_TWs, 30);
+sSTRl(snip_copy_cipos, 16);
 STRl(homlen_snip, 16);
 STRl(duphomlen_snip, 16);
 STRl(svinslen_snip, 16);
 STRl(dupsvinslen_snip, 16);
-sSTRl(cipos_snip,18);
+sSTRl(cipos_snip, 18);
 
 void vcf_sv_zip_initialize (Did *tw_dids, int num_tw_dids)
 {

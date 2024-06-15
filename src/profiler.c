@@ -282,6 +282,15 @@ void profiler_add_evb_and_print_report (void)
         PRINT (bgzf_uncompress_vb, 1);
         PRINT (ctx_clone, 1);
         PRINT (scan_index_qnames_preprocessing, 1);
+        PRINT (zip_modify, 1);
+        PRINT (vcf_zip_modify, 2);
+        PRINT (vcf_optimize_QUAL, 3);
+        PRINT (vcf_optimize_INFO, 3);
+        PRINT (vcf_optimize_samples, 3);
+        PRINT (vcf_convert_probabilites_to_phred, 4);
+        PRINT (vcf_convert_likelihoods_to_phred, 4); 
+        PRINT (vcf_phred_optimize, 4);
+        PRINT (optimize_float_3_sig_dig, 4);
         PRINT (seg_all_data_lines, 1);
         PRINT (seg_initialize, 2);
         PRINT (qname_seg, 2);

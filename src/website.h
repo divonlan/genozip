@@ -24,7 +24,6 @@
 #define WEBSITE_LICENSE      GENOZIP_URL "/license"
 #define WEBSITE_GET_GENOZIP  GENOZIP_URL "/get-genozip"
 #define WEBSITE_PUBLICATIONS GENOZIP_URL "/publications"
-#define WEBSITE_MATCH_CHROM  GENOZIP_URL "/match-chrom"
 #define WEBSITE_INSTALLING   GENOZIP_URL "/installing"
 #define WEBSITE_USING_ON_HPC GENOZIP_URL "/using-on-hpc"
 #define WEBSITE_ATTRIBUTIONS GENOZIP_URL "/attributions"

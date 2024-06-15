@@ -64,6 +64,7 @@ extern rom segconf_qf_name (QType q);
 extern QnameFlavorId segconf_qf_id (QType q);
 extern rom qtype_name (QType q);
 extern DictIdAlias qname_get_alias (QType q);
+extern bool qf_is_mated (QType q);
 
 typedef void (*QnameSegCallback) (VBlockP vb, ContextP ctx, STRp(value));
 

@@ -232,7 +232,7 @@ double arch_get_physical_mem_size (void)
     file_get_file (evb, "/proc/meminfo", &evb->scratch, "meminfo", 100, VERIFY_ASCII, true);
 
     int num_start = strcspn (B1STc(evb->scratch), "0123456789");
-    mem_size = (double)atoll(Bc(evb->scratch, num_start)) / (1024.0*1024.0);
+    mem_size = (double)atoll(Bc(evb->scratch, num_start)) / (1024.0*1024.0); // convert KB to GB
 
     buf_free (evb->scratch);
 
@@ -298,6 +298,8 @@ StrText arch_get_filesystem_type (void)
         NAME (0x53464846, "wslfs");    // WSL1: https://github.com/MicrosoftDocs/WSL/issues/465
         NAME (0x1021994,  "tmpfs");    // Heap Backing Filesystem
         NAME (0x2011bab0, "exFAT");    // Filesystem for flash memory: https://en.wikipedia.org/wiki/ExFAT
+        NAME (0x9123683e, "brtfs");    // Copy-on-write filesystem for Linux: https://docs.kernel.org/filesystems/btrfs.html
+        NAME (0x794C7630, "OverlayFS");// A union-mount filesystem: https://en.wikipedia.org/wiki/OverlayFS
         default: snprintf (s.s, sizeof (s.s), "0x%lx", fs.f_type); 
     }
 
@@ -419,6 +421,30 @@ error:
     strcpy (path.s, argv0);
     return path;
 }
+
+StrTextSuperLong arch_get_genozip_executable (void)
+{
+    StrTextSuperLong fn = arch_get_executable();
+
+    if (!is_genozip) {
+        rom bn       = is_genounzip?"genounzip" : is_genocat?"genocat" : "genols";
+        int bn_len   = is_genounzip?9           : is_genocat?7         : 6;
+
+        // replace filename if possible
+        char *loc = strstr (fn.s, bn);
+        if (loc) {  
+            memmove (loc + 7, loc + bn_len, strlen (loc+bn_len) + 1/*\0*/);
+            memcpy (loc, "genozip", 7);
+        }
+
+        else
+            ABORT ("Cannot find substring %s in %s", bn, fn.s);
+    }
+
+    return fn;
+}
+
+
 
 rom arch_get_argv0 (void)
 {
