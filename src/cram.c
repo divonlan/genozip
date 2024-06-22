@@ -262,7 +262,7 @@ void cram_inspect_file (FileP file)
     int64_t n_records=0, disk_consumed=0;
     while (cram_get_container_header (file, &h, false)) {
         n_records     += h.n_records; // records are alignments
-        disk_consumed += h.length;    // note: length here (unlike in the CRAM spec) includes the container header
+        disk_consumed += h.length;    // note: compressed length here (unlike in the CRAM spec) includes the container header
     }
 
     if (!n_records) goto done; // not even one full data container - we can't set est_num_lines

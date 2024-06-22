@@ -34,11 +34,12 @@ bool codec_longr_comp_init (VBlockP vb, Did qual_did_i, bool force)
     ContextP lens_ctx             = CTX(qual_did_i);
     lens_ctx->ltype               = LT_CODEC;    // causes reconstruction to go to codec_longr_reconstruct
     lens_ctx->lcodec              = CODEC_LONGR;
+    lens_ctx->local_dep           = DEP_L1; // yield to other codecs (eg CODEC_OQ) that need to query QUAL before we destroy it
 
     // values_ctx contains the base quality data, sorted by channel
     ContextP values_ctx           = lens_ctx+1;  // used
     values_ctx->ltype             = LT_SUPP;
-    values_ctx->local_dep         = DEP_L1; 
+    values_ctx->local_dep         = DEP_L2; 
     values_ctx->lcodec            = CODEC_ARITH8;
     values_ctx->lcodec_hard_coded = true;
     values_ctx->counts_section    = true; // we store the global value-to-bin mapper in a SEC_COUNTS

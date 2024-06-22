@@ -56,7 +56,7 @@ static inline uint32_t txtfile_read_block_plain (VBlockP vb, uint32_t max_bytes)
     else {
         bytes_read = fread (data, 1, max_bytes, (FILE *)txt_file->file); // -1 if error in libc
         ASSERT (!ferror((FILE *)txt_file->file) && bytes_read >= 0, "Error reading PLAIN file %s on filesystem=%s: %s", 
-                txt_name, arch_get_filesystem_type().s, strerror (errno));
+                txt_name, arch_get_txt_filesystem().s, strerror (errno));
 
         txt_file->disk_so_far += (int64_t)bytes_read;
 
@@ -136,7 +136,7 @@ static uint32_t txtfile_read_block_gz (VBlockP vb, uint32_t max_bytes)
     int32_t bytes_read = fread (BAFTc(txt_file->igzip_data), 1, IGZIP_CHUNK - txt_file->igzip_data.len32, (FILE *)txt_file->file); 
     
     ASSERT (!ferror((FILE *)txt_file->file) && bytes_read >= 0, "Error reading GZ file %s on filesystem=%s: %s", 
-            txt_name, arch_get_filesystem_type().s, strerror (errno));
+            txt_name, arch_get_txt_filesystem().s, strerror (errno));
 
     txt_file->igzip_data.len32 += bytes_read; // yet-uncompressed data read from disk
 
@@ -147,6 +147,17 @@ static uint32_t txtfile_read_block_gz (VBlockP vb, uint32_t max_bytes)
     state->next_out  = BAFT8 (vb->txt_data);
     state->avail_out = max_bytes;
 
+    // case: happens in blocked-GZ: in the previous call to this function we read the entire GZ-block, 
+    // but unluckily just short of reading the checksum data. Now that we read more data from disk, 
+    // we can verify the checksum, and if successful, the state will change to ISAL_BLOCK_FINISH
+    if (state->block_state == ISAL_CHECKSUM_CHECK) {
+        int ret = isal_inflate (state); // new gzip header in a file that has concatented gzip compressions
+        ASSERT (ret == ISAL_DECOMP_OK, "isal_inflate failed checksum: %s avail_in=%u avail_out=%u",
+                isal_error (ret), txt_file->igzip_data.len32, max_bytes);
+    }
+
+    // case: happens in blocked-GZ: we decompressed an entire GZ-block and verified the 
+    // checksum, now we need to move on to the next GZ block
     if (state->block_state == ISAL_BLOCK_FINISH) 
         isal_inflate_reset (state);
 
@@ -451,6 +462,8 @@ void txtfile_read_header (bool is_first_txt)
 
     txt_file->txt_data_so_far_single = txt_file->header_size = header_len; 
 
+    biopsy_take (evb);
+    
     COPY_TIMER_EVB (txtfile_read_header); // same profiler entry as txtfile_read_header
 }
 
@@ -592,6 +605,7 @@ void txtfile_read_vblock (VBlockP vb)
 {
     START_TIMER;
 
+    ASSERTNOTNULL (txt_file);
     ASSERT_DT_FUNC (txt_file, unconsumed);
     ASSERT ((segconf.vb_size >= ABSOLUTE_MIN_VBLOCK_MEMORY && segconf.vb_size <= ABSOLUTE_MAX_VBLOCK_MEMORY) || segconf.running,
             "Invalid vb_size=%"PRIu64" comp_i(0-based)=%u", segconf.vb_size, z_file->num_txts_so_far-1);
@@ -644,8 +658,8 @@ void txtfile_read_vblock (VBlockP vb)
             !fastq_txtfile_have_enough_lines (vb, &pass_to_next_vb_len, &my_lines, &pair_vb_i, &pair_num_lines, &pair_txt_data_len)) { // we don't yet have all the data we need
 
             // note: the opposite case where R2 has more reads than R1 is caught in fastq_txtfile_have_enough_lines or zip_prepare_one_vb_for_dispatching
-            ASSINP ((len || no_read_expected) && Ltxt, "Error: File %s has less FASTQ reads than its R1 mate (vb=%s has %u lines while its pair_vb_i=%d has pair_txt_data_len=%u pair_num_lines=%u; vb=%s Ltxt=%u bytes_requested=%u bytes_read=%u eof=%s max_memory_per_vb=%"PRIu64")", 
-                    txt_name, VB_NAME, my_lines, pair_vb_i, pair_txt_data_len/*only set if flag.debug*/, pair_num_lines, VB_NAME, Ltxt, bytes_requested, len, TF(txt_file->is_eof), max_memory_per_vb);
+            ASSINP ((len || no_read_expected) && Ltxt, "Error: File %s has less FASTQ reads than its R1 mate (vb=%s has %u lines while its pair_vb_i=%d num_R1_VBs=%u has pair_txt_data_len=%u pair_num_lines=%u; vb=%s Ltxt=%u bytes_requested=%u bytes_read=%u eof=%s max_memory_per_vb=%"PRIu64" vb_size=%s src_codec=%s)", 
+                    txt_name, VB_NAME, my_lines, pair_vb_i, sections_get_num_vbs (FQ_COMP_R1), pair_txt_data_len/*only set if flag.debug*/, pair_num_lines, VB_NAME, Ltxt, bytes_requested, len, TF(txt_file->is_eof), max_memory_per_vb, str_size (segconf.vb_size).s, src_codec_name (txt_file->source_codec, vb->comp_i).s);
 
             // if we need more lines - increase memory and keep on reading
             max_memory_per_vb += MAX_((is_bgzf ? 2 * BGZF_MAX_BLOCK_SIZE : 0), max_memory_per_vb / 16); 
@@ -715,3 +729,23 @@ DataType txtfile_zip_get_file_dt (rom filename)
     return file_get_data_type_of_input_file (ft);
 }
 
+// outputs details on src_codec of a component, as stored in z_file
+StrText src_codec_name (Codec src_codec, CompIType comp_i) // COMP_NONE means report for current txt_file
+{
+    StrText s;
+    
+    if (src_codec == CODEC_BGZF || 
+        (src_codec == CODEC_BAM && z_file->comp_codec[comp_i==CODEC_BGZF])) {
+            if (z_file->comp_bgzf[comp_i].level < BGZF_COMP_LEVEL_UNKNOWN)
+                snprintf (s.s, sizeof (s.s), "BGZF(%s[%d])", bgzf_library_name (z_file->comp_bgzf[comp_i].library, false), z_file->comp_bgzf[comp_i].level);
+            else
+                strcpy (s.s, "BGZF(unknown_lib)");
+        }
+    else if (src_codec==CODEC_GZ && z_file->gzip_section_size[comp_i] && !z_file->gzip_section_size_single_block[comp_i])
+        snprintf (s.s, sizeof (s), "GZ(%.50s)", str_size (z_file->gzip_section_size[comp_i]).s);
+
+    else 
+        strcpy (s.s, codec_name (src_codec));
+
+    return s;
+}

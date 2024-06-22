@@ -13,6 +13,31 @@
 #include "container.h"
 #include "context.h"
 
+
+static inline uint32_t vcf_get_n_repeats_genotypes (VBlockVCFP vb)
+{
+    // common cases of G. note: we can extend to more cases, but never reduce, to not break back comp
+    return vb->ploidy==2 && vb->n_alts==1 ? 3 
+         : vb->ploidy==2 && vb->n_alts==2 ? 6 
+         : vb->ploidy==2 && vb->n_alts==3 ? 10 
+         : vb->ploidy==2 && vb->n_alts==4 ? 15 
+         : vb->ploidy==2 && vb->n_alts==5 ? 21 
+         : vb->ploidy==2 && vb->n_alts==6 ? 28 // note on ploidy=2 values: 28-21=7, which is one more than 21-15=6 etc. 
+         : vb->ploidy==1                  ? (vb->n_alts + 1) 
+         :                                  0;
+}
+
+// get number of comma-separated repeats expected in an INFO/FORMAT field
+static inline uint32_t vcf_get_n_repeats (VBlockVCFP vb, ContextP ctx)
+{
+    return (ctx->header_info.vcf.Number >= 1)                      ? ctx->header_info.vcf.Number // note: VCF_QUAL.header_info is set vcf_zip_initialize
+         : (ctx->header_info.vcf.Number == NUMBER_A)               ? vb->n_alts // 0 if n_alts is not set yet
+         : (ctx->header_info.vcf.Number == NUMBER_R && vb->n_alts) ? (vb->n_alts + 1)
+         : (ctx->header_info.vcf.Number == NUMBER_G && 
+            dict_id_is_vcf_format_sf (ctx->dict_id))               ? vcf_get_n_repeats_genotypes (vb) // note: for INFO fields, we don't know the ploidy yet
+         : /* fallback */                                            0; 
+}
+
 void vcf_segconf_finalize_optimizations (VBlockVCFP vb)
 {
     segconf.optimize[VCF_INFO] = !CTX(VCF_INFO)->flags.all_the_same; 
@@ -21,6 +46,7 @@ void vcf_segconf_finalize_optimizations (VBlockVCFP vb)
     // conditional optimizations    
     segconf.optimize[FORMAT_GP]  = segconf.has[FORMAT_GP] && (segconf.FMT_GP_content == GP_phred || segconf.FMT_GP_content == GP_probabilities);
     segconf.optimize[FORMAT_PP]  = segconf.has[FORMAT_PP] && !segconf.vcf_is_pindel; // note: in Pindel, PP is used for something else
+    segconf.optimize[FORMAT_QR]  = segconf.has[FORMAT_QR] && segconf.vcf_is_freebayes; 
 
     // unconditional optimizations
     segconf.optimize[FORMAT_GL]  = segconf.has[FORMAT_GL];
@@ -189,17 +215,6 @@ fallback:
     return mempcpy (save_out, save_snip, snip_len); 
 }
 
-static inline uint32_t get_max_items (VBlockVCFP vb, ContextP ctx)
-{
-    return (ctx->header_info.vcf.Number >= 1)                                          ? ctx->header_info.vcf.Number // note: VCF_QUAL.header_info is set vcf_zip_initialize
-         : (ctx->header_info.vcf.Number == NUMBER_A)                                   ? vb->n_alts // 0 if n_alts is not set yet
-         : (ctx->header_info.vcf.Number == NUMBER_R && vb->n_alts)                     ? (vb->n_alts + 1)
-         : (ctx->header_info.vcf.Number == NUMBER_G && vb->ploidy==2 && vb->n_alts==1) ? 3 // common cases of G
-         : (ctx->header_info.vcf.Number == NUMBER_G && vb->ploidy==2 && vb->n_alts==2) ? 6 
-         : (ctx->header_info.vcf.Number == NUMBER_G && vb->ploidy==1)                  ? (vb->n_alts + 1) 
-         : /* fallback */                                                                0; // split will determine (slower)
-}
-
 static char *vcf_optimize_float_or_not (VBlockVCFP vb, ContextP ctx, STRp(value), char *next)
 {
     if (str_is_1char (value, '.')) goto fallback;
@@ -209,7 +224,7 @@ static char *vcf_optimize_float_or_not (VBlockVCFP vb, ContextP ctx, STRp(value)
             next = optimize_float_3_sig_dig (VB, ctx, STRa(value), next);
 
         else {
-            uint32_t max_items = get_max_items (vb, ctx);
+            uint32_t max_items = vcf_get_n_repeats (vb, ctx);
             str_split (value, value_len, max_items, ',', item, (max_items>0)); 
             if (!n_items) goto fallback;
 
@@ -330,7 +345,7 @@ static char *vcf_phred_optimize (VBlockVCFP vb, ContextP ctx, STRp(snip), char *
         return mempcpy (save_next, snip, snip_len); // format error - don't optimize
     }
 
-    uint32_t max_items = get_max_items (vb, ctx);
+    uint32_t max_items = vcf_get_n_repeats (vb, ctx);
 
     if (ctx->header_info.vcf.Type == VCF_Integer) {
         str_split (snip, snip_len, max_items, ',', item, (max_items>0)); 
@@ -454,6 +469,7 @@ static char *vcf_optimize_samples (VBlockVCFP vb, STRp(format), rom samples, rom
                         CASE2(PL,'P','L')  next = vcf_phred_optimize (vb, ctxs[i], STRi(sf, i), next); break; 
                         CASE2(PP,'P','P')  next = vcf_phred_optimize (vb, ctxs[i], STRi(sf, i), next); break; 
                         CASE2(GQ,'G','Q')  next = vcf_phred_optimize (vb, ctxs[i], STRi(sf, i), next); break; 
+                                                
                         default: goto fallback;
                     }
 

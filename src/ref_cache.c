@@ -392,7 +392,7 @@ void ref_cache_remove_all (void)
         }
     }
 
-    if (count) WARN ("Removed in-memory caching of %d reference file%s", STRfN(count));
+    if (count) WARN ("Unloading reference cache of %d reference file%s", STRfN(count));
 #endif 
 }
 

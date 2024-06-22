@@ -10,44 +10,6 @@
 #include "vcf_private.h"
 
 // -------
-// INFO/AN
-// -------
-
-void vcf_seg_INFO_AN (VBlockVCFP vb)
-{
-    decl_ctx (INFO_AN);
-    STRlast (an_str, INFO_AN);
-    
-    SEGCONF_RECORD_WIDTH (AN, an_str_len);
-
-    int64_t an;
-    if (str_get_int (STRa(an_str), &an) && an == ctx->an.count_ht)
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_AN }, 2, ctx, an_str_len);
-    else
-        seg_by_ctx (VB, STRa(an_str), ctx, an_str_len);
-}
-
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_AN)
-{
-    vcf_piz_defer_to_after_samples (AN);
-
-    return NO_NEW_VALUE;
-}
-
-// called from toplevel callback
-void vcf_piz_insert_INFO_AN (VBlockVCFP vb)
-{
-    decl_ctx (INFO_AN);
-    
-    if (IS_RECON_INSERTION(ctx)) {
-        STRl(an_str, 12) = str_int (ctx->an.count_ht, an_str);
-        vcf_piz_insert_field (vb, ctx, STRa(an_str), segconf.wid_AN.width);
-    }
-
-    ctx_set_last_value (VB, ctx, (int64_t)ctx->an.count_ht);
-}
-
-// -------
 // INFO/AC
 // -------
 
@@ -80,7 +42,7 @@ static bool vcf_seg_INFO_AC_item (VBlockP vb_, ContextP arr_ctx, STRp(ac_item), 
 
 void vcf_seg_INFO_AC (VBlockVCFP vb, ContextP ctx, STRp(ac_str))
 {
-    SEGCONF_RECORD_WIDTH (AC, ac_str_len);
+    SEGCONF_RECORD_WIDTH (INFO_AC, ac_str_len);
 
     int64_t ac, ac_hom, ac_het, ac_hemi;
 
@@ -106,7 +68,7 @@ void vcf_seg_INFO_AC (VBlockVCFP vb, ContextP ctx, STRp(ac_str))
 
 void vcf_seg_INFO_MLEAC (VBlockVCFP vb, ContextP ctx, STRp(mleac))
 {
-    SEGCONF_RECORD_WIDTH (MLEAC, mleac_len);
+    SEGCONF_RECORD_WIDTH (INFO_MLEAC, mleac_len);
 
     // case: expecting MLEAC ≅ AN * MLEAF for each alt allele (might not be exact due to rounding errors, esp if AF is a very small fraction)
     if (has(AN) && has(MLEAF) && str_get_int (STRa(BII(AN)->value), &CTX(INFO_AN)->last_value.i)) 

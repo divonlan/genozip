@@ -479,6 +479,10 @@ batch_special_algs()
     test_header "VCF empty sample fields regression test"
     $genozip ${TESTDIR}/regression.empty-sample-fields.vcf -ft || exit 1 
 
+    # bug was: AF subfield in CSQ was segged to INFO/AF, messing up COPY_OTHER(INFO_AF) in FORMAT_AF - in v15 until 15.0.60
+    test_header "CSQ has an AF field"
+    $genozip ${TESTDIR}/regression.CSQ_has_AF.vcf -ft || exit 1 
+
     # bug was: compression failed, bc failed to identify a read in the VB when there is only one, with part of it in unconsumed_txt from previous VB, and part in a BGZF block (fixed 15.0.56)
     test_header "vb=2 is single read" 
     $genozip -B32 ${TESTDIR}/regression.vb2-is-single-read.fq.gz -ft || exit 1 
@@ -486,6 +490,14 @@ batch_special_algs()
     # bug was: compression failed, bc igzip would not decompress a 128K GZ chunk into the small vb_sizes[0] of first segconf attempt, and segconf gave up instead of attempting vb_sizes[1]
     test_header "segconf vb_sizes[0] too small, try with vb_size[1]" 
     $genozip ${TESTDIR}/regression.no_small_segconf_vb_size.fq.gz -ft --truncate || exit 1 
+
+    # bug was: piz failed if two consecutive Is in CIGAR (ignoring non-seq-consuming ops like N) (defect 2024-06-16)
+    test_header "two consecutive Is in CIGAR" 
+    $genozip ${TESTDIR}/regression.two-consecutive-Is.sam -ft || exit 1 
+
+    # bug was: CHECKSUM at the end of 1MB-gz block in R2 was not handled correctly, failing R2 zip.
+    test_header "CHECKSUM in Illumina-style gzip: R2 alignment to R1" 
+    $genozip -tf --pair -e $hs37d5 --truncate -B19 ${TESTDIR}/regression.defect-2024-06-21.R1.fq.gz ${TESTDIR}/regression.defect-2024-06-21.R2.fq.gz 
 }
 
 batch_qual_codecs()
@@ -914,17 +926,17 @@ ass_eq_num() # $1 result $2 expected
 
     echo \"$res\" \"$2\"
     if ! [[ "$res" =~ ^[0-9]+$ ]] ; then
-        echo "Failed: result \"$res\" is not a number" # genocat failed and hence didn't return a number - error message is already displayed
+        echo "test.sh: Failed: result \"$res\" is not a number" # genocat failed and hence didn't return a number - error message is already displayed
         exit 1
     fi
 
     if ! [[ "$res" =~ ^[0-9]+$ ]] ; then
-        echo "Bad comparison argument, expecting \$2 to be an integer" # genocat failed and hence didn't return a number - error message is already displayed
+        echo "test.sh: Bad comparison argument, expecting \$2 to be an integer" # genocat failed and hence didn't return a number - error message is already displayed
         exit 1
     fi
 
     if (( $res != $2 )); then 
-        echo "Failed: result is $1 but expecting $2"
+        echo "test.sh: Failed: result is $1 but expecting $2"
         exit 1
     fi
 }
@@ -1215,6 +1227,11 @@ batch_real_world_backcomp()
     
     # remove reference file from list
     files=( ${files[@]/"$TESTDIR/$1/hs37d5.ref.genozip"} ) 
+
+    # bug 1099 (only applicable to 11.0.11 with debug)
+    if [[ "$1" == "11.0.11" && "$is_debug" != "" ]]; then
+        files=( ${files[@]/"$TESTDIR/11.0.11/test.1KG-37.vcf.genozip"} ) 
+    fi
 
     # remove 0-size files - test/Makefile sets file size to 0, if old Genozip version failed on this (in compression or test)
     for f in ${files[@]}; do     

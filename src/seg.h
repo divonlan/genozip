@@ -102,7 +102,10 @@ extern void seg_diff (VBlockP vb, ContextP ctx, ContextP base_ctx, STRp(value), 
 
 typedef bool (*SegCallback) (VBlockP vb, ContextP ctx, STRp(value), uint32_t repeat); // returns true if segged successfully
 
-extern WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_did_i, rom value, int32_t value_len, char sep, char subarray_sep, bool use_integer_delta, StoreType store_in_local, DictId arr_dict_id, int add_bytes);
+extern WordIndex seg_array_(VBlockP vb, ContextP container_ctx, Did stats_conslidation_did_i, rom value, int32_t value_len, char sep, char subarray_sep, bool use_integer_delta, StoreType store_in_local, DictId arr_dict_id, uint8_t con_rep_special, uint32_t expected_num_repeats, int add_bytes);
+
+static inline WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_did_i, rom value, int32_t value_len, char sep, char subarray_sep, bool use_integer_delta, StoreType store_in_local, DictId arr_dict_id, int add_bytes)
+{ return seg_array_(vb, container_ctx, stats_conslidation_did_i, STRa(value), sep, subarray_sep, use_integer_delta, store_in_local, arr_dict_id, 0, 0, add_bytes); }
 
 extern void seg_array_by_callback (VBlockP vb, ContextP container_ctx, STRp(arr), char sep, SegCallback item_seg, uint8_t con_rep_special, uint32_t expected_num_repeats, unsigned add_bytes);
 
@@ -171,6 +174,7 @@ extern void seg_prepare_array_dict_id_special_snip (int num_dict_ids, DictId *di
        snip##_len = sizeof (snip);\
        seg_prepare_array_dict_id_special_snip ((num_dict_ids), (dict_ids), dt##_SPECIAL_PLUS, (snip), &snip##_len); })
 
+// A minus B
 #define seg_prepare_minus_snip(dt, dict_id_a, dict_id_b, snip) \
     ({ snip##_len = sizeof (snip);\
        seg_prepare_array_dict_id_special_snip (2, (DictId[]){(DictId)(dict_id_a), (DictId)(dict_id_b)}, dt##_SPECIAL_MINUS, (snip), &snip##_len); })

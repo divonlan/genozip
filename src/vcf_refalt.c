@@ -373,12 +373,8 @@ void vcf_piz_refalt_parse (VBlockVCFP vb)
 
     vb_parse_ALT (vb);
 
-    // case where ID is inserted after REFALT
-    if (CTX(VCF_ID)->deferred == '_' || CTX(VCF_ID)->deferred == ':') // ID_is_variant 
-        vcf_piz_insert_ID_is_variant (vb);
-        
-    else if (CTX(VCF_ID)->deferred) // deferred with no parameter = PBSV
-        vcf_piz_insert_pbsv_ID (vb);
+    if (is_deferred (VCF_ID))
+        vcf_piz_insert_VCF_ID (vb); // needs to be here (rather than after samples) for PBSV to work
 }
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_obsolete_dvcf)

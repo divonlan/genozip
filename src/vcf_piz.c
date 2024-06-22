@@ -23,22 +23,24 @@ void vcf_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
 
     if (VER(15)) {
         z_file->max_ploidy_for_mux    = header->vcf.max_ploidy_for_mux; // since 15.0.36
-        segconf.FMT_GQ_method             = header->vcf.segconf_GQ_method;
+        segconf.FMT_GQ_method         = header->vcf.segconf_GQ_method;
         segconf.FMT_DP_method         = header->vcf.segconf_FMT_DP_method;
         segconf.INFO_DP_method        = header->vcf.segconf_INF_DP_method;
         segconf.MATEID_method         = header->vcf.segconf_MATEID_method;
         segconf.vcf_del_svlen_is_neg  = header->vcf.segconf_del_svlen_is_neg;
-        segconf.wid_AC.width          = header->vcf.width.AC;
-        segconf.wid_AF.width          = header->vcf.width.AF;
-        segconf.wid_AN.width          = header->vcf.width.AN;
-        segconf.wid_DP.width          = header->vcf.width.DP;
-        segconf.wid_QD.width          = header->vcf.width.QD;
-        segconf.wid_SF.width          = header->vcf.width.SF;
-        segconf.wid_MLEAC.width       = header->vcf.width.MLEAC;
-        segconf.wid_AS_SB_TABLE.width = header->vcf.width.AS_SB_TABLE;
-        segconf.wid_ID.width          = header->vcf.width.ID;
-        segconf.wid_QUAL.width        = header->vcf.width.QUAL;
-        segconf.wid_BaseCounts.width  = header->vcf.width.BaseCounts;
+        segconf.Q_to_O                = BGEN32F (header->vcf.segconf_Q_to_O);
+        segconf.wid[INFO_AC].width    = header->vcf.width.AC;
+        segconf.wid[INFO_AF].width    = header->vcf.width.AF;
+        segconf.wid[INFO_AN].width    = header->vcf.width.AN;
+        segconf.wid[INFO_DP].width    = header->vcf.width.DP;
+        segconf.wid[INFO_QD].width    = header->vcf.width.QD;
+        segconf.wid[INFO_SF].width    = header->vcf.width.SF;
+        segconf.wid[INFO_MLEAC].width = header->vcf.width.MLEAC;
+        segconf.wid[INFO_AS_SB_TABLE].width = header->vcf.width.AS_SB_TABLE;
+        segconf.wid[VCF_ID].width     = header->vcf.width.ID;
+        segconf.wid[VCF_QUAL].width   = header->vcf.width.QUAL;
+        segconf.wid[INFO_BaseCounts].width  = header->vcf.width.BaseCounts;
+        segconf.wid[INFO_DPB].width   = header->vcf.width.DPB;
     }
 }
 
@@ -106,17 +108,21 @@ IS_SKIP (vcf_piz_is_skip_section)
 
 // insert a field after following fields have already been reconstructed
 // IMPORTANT: if calling this function on a new ctx, add to dids array below 
-void vcf_piz_insert_field (VBlockVCFP vb, ContextP ctx, STRp(value), int chars_reserved)
+void vcf_piz_insert_field (VBlockVCFP vb, ContextP ctx, STRp(value))
 {
+#ifdef DEBUG
+    DO_ONCE WARN_IF (segconf.wid[ctx->did_i].width==0, "segconf.wid[%s].width=0. This can legimitately happen if this field is not encounted in segconf, but more likely the width is not recorded and transferred due a bug", ctx->tag_name);
+#endif
+
     if (!IS_RECON_INSERTION(ctx)) return;
     
     char *addr = last_txtx (VB, ctx);
-    int move_by = (int)value_len - chars_reserved;
+    int move_by = (int)value_len - segconf.wid[ctx->did_i].width;
 
     // actually insert or remove space in txt_data if different than what was reserved
     if (move_by) {
         if (move_by > 0) memmove (addr + move_by, addr, BAFTtxt - addr);             // make room if chars_reserved is not enough
-        else             memmove (addr, addr - move_by, BAFTtxt - (addr - move_by)); // shrink room added by vcf_piz_defer_to_after_samples if it was too much
+        else             memmove (addr, addr - move_by, BAFTtxt - (addr - move_by)); // shrink room added by vcf_piz_defer if it was too much
 
         Ltxt += move_by;
 
@@ -126,7 +132,7 @@ void vcf_piz_insert_field (VBlockVCFP vb, ContextP ctx, STRp(value), int chars_r
         
         // adjust last_txt of other INFO contexts that might need insertion (and hence last_txt)
         if (ctx->did_i != VCF_ID) { // no need to adjust after inserting ID, as it is inserted during REFALT reconstruction (not at end of TOPLEVEL like the rest)
-            Did dids[] = { VCF_QUAL, INFO_QD, INFO_SF, INFO_DP, INFO_AN, INFO_AS_SB_TABLE, INFO_BaseCounts };
+            Did dids[] = { VCF_QUAL, INFO_QD, INFO_SF, INFO_DP, INFO_AN, INFO_AS_SB_TABLE, INFO_BaseCounts, INFO_DPB };
             uint32_t last_txt_index = ctx->last_txt.index;
 
             bool found_me = false;
@@ -229,30 +235,37 @@ CONTAINER_FILTER_FUNC (vcf_piz_filter)
 }
 
 // called from vcf_piz_refalt_parse
-void vcf_piz_insert_ID_is_variant (VBlockVCFP vb)
+void vcf_piz_insert_VCF_ID (VBlockVCFP vb)
 {
-    decl_ctx (VCF_ID);
-    
-    if (IS_RECON_INSERTION(ctx)) {
-        rom id_recon = BAFTtxt;
-        char sep = CTX(VCF_ID)->deferred;
-
-        RECONSTRUCT_str (vb->chrom_name);
-        RECONSTRUCT1 (sep);
-        RECONSTRUCT_INT (CTX(VCF_POS)->last_value.i);
-        RECONSTRUCT1 (sep);
-        RECONSTRUCT_str (vb->REF);
-        RECONSTRUCT1 (sep);
-        RECONSTRUCT_str (vb->ALT);
+    // case: ID_is_variant
+    if (CTX(VCF_ID)->deferred_snip.len32) { 
+        decl_ctx (VCF_ID);
         
-        uint32_t id_len = BAFTtxt - id_recon;
-        Ltxt -= id_len; 
+        if (IS_RECON_INSERTION(ctx)) {
+            rom id_recon = BAFTtxt;
+            char sep = *B1STc(CTX(VCF_ID)->deferred_snip);
 
-        char id[id_len];
-        memcpy (id, id_recon, id_len);
-        
-        vcf_piz_insert_field (vb, ctx, STRa(id), segconf.wid_ID.width);
+            RECONSTRUCT_str (vb->chrom_name);
+            RECONSTRUCT1 (sep);
+            RECONSTRUCT_INT (CTX(VCF_POS)->last_value.i);
+            RECONSTRUCT1 (sep);
+            RECONSTRUCT_str (vb->REF);
+            RECONSTRUCT1 (sep);
+            RECONSTRUCT_str (vb->ALT);
+            
+            uint32_t id_len = BAFTtxt - id_recon;
+            Ltxt -= id_len; 
+
+            char id[id_len];
+            memcpy (id, id_recon, id_len);
+            
+            vcf_piz_insert_field (vb, ctx, STRa(id));
+        }
     }
+
+    // case: deferred with no snip = PBSV
+    else
+        vcf_piz_insert_pbsv_ID (vb);    
 }
 
 // ------------------------------------
@@ -306,6 +319,37 @@ CONTAINER_ITEM_CALLBACK (vcf_piz_con_item_cb)
     }
 }
 
+// called from toplevel callback
+static void vcf_piz_insert_by_snip (VBlockVCFP vb, ContextP ctx)
+{
+    rom recon = BAFTtxt;
+
+    reconstruct_one_snip (VB, ctx, WORD_INDEX_NONE, STRb(ctx->deferred_snip), true, __FUNCLINE);
+    uint32_t recon_len = BAFTtxt - recon;
+
+    // we can't send recon in txt_data since its going to memmove, so we copy it to a buffer
+    ctx->deferred_snip.len32 = 0;
+    buf_add_moreS (vb, &ctx->deferred_snip, recon, "ctx->deferred_snip");
+    
+    vcf_piz_insert_field (vb, ctx, STRb(ctx->deferred_snip));
+    Ltxt -= recon_len;
+}
+
+// defer reconstruction after reconstruction of FORMAT/SB - happens in vcf_piz_insert_INFO_AS_SB_TABLE
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_DEFER)
+{
+    // save snip for later (note: the SNIP_SPECIAL+code are already removed)
+    if (snip_len) {
+        ctx->deferred_snip.len32 = 0;
+        buf_add_moreS (vb, &ctx->deferred_snip, snip, "contexts->deferred_snip");
+        *BAFTc (ctx->deferred_snip) = 0; // buf_add_moreS allocates room for this nul-terminator
+    }
+    
+    vcf_piz_defer (ctx);
+
+    return NO_NEW_VALUE;
+}
+
 CONTAINER_CALLBACK (vcf_piz_container_cb)
 {
     #define have_INFO_SF (CTX(INFO_SF)->deferred_snip.len > 0)
@@ -327,28 +371,14 @@ CONTAINER_CALLBACK (vcf_piz_container_cb)
     }
 
     else if (is_top_level) {
-        // insert QUAL, INFO fields who's value is determined by the sample fields that we just finished reconstructing
-
-        if (CTX(VCF_QUAL)->QUAL.by_GP)
-            vcf_piz_insert_QUAL_by_GP (VB_VCF); // must be inserted before vcf_piz_insert_INFO_QD that might depend on QUAL
-
-        if (ctx_encountered_in_line (vb, INFO_AN))
-            vcf_piz_insert_INFO_AN (VB_VCF);
-
-        if (CTX(INFO_BaseCounts)->deferred)
-            vcf_piz_insert_INFO_BaseCounts_by_AD (VB_VCF); 
-
-        if (CTX(INFO_DP)->dp.is_deferred)
-            vcf_piz_insert_INFO_DP (VB_VCF); // must be after BaseCounts (might depends on BaseCounts.last_value)
-
-        if (have_INFO_SF)  
-            vcf_piz_insert_INFO_SF (VB_VCF); // cleans up allocations - call even if line will be dropped due oSTATUS
-
-        if (CTX(INFO_QD)->qd.pred_type)  // must be after DP (depends on DP.last_value)
-            vcf_piz_insert_INFO_QD (VB_VCF);
-
-        if (CTX(INFO_AS_SB_TABLE)) 
-            vcf_piz_insert_INFO_AS_SB_TABLE (VB_VCF);
+        // insert fields whose value is determined by the sample fields that we just finished reconstructing    
+        if (is_deferred(VCF_QUAL))         vcf_piz_insert_QUAL_by_GP (VB_VCF); 
+        if (is_deferred(INFO_BaseCounts))  vcf_piz_insert_INFO_BaseCounts_by_AD (VB_VCF); 
+        if (is_deferred(INFO_DP))          vcf_piz_insert_INFO_DP (VB_VCF);    // constraint: must be after BaseCounts (might depends on BaseCounts.last_value)
+        if (is_deferred(INFO_DPB))         vcf_piz_insert_by_snip (VB_VCF, CTX(INFO_DPB)); // constraint: must be after DP (depends on DP.last_value)
+        if (is_deferred(INFO_SF))          vcf_piz_insert_INFO_SF (VB_VCF);    
+        if (is_deferred(INFO_QD))          vcf_piz_insert_INFO_QD (VB_VCF);    // constraint: must be inserted after QUAL (it might depend on it)
+        if (is_deferred(INFO_AS_SB_TABLE)) vcf_piz_insert_INFO_AS_SB_TABLE (VB_VCF);
 
         if (flag.snps_only && !vcf_refalt_piz_is_variant_snp (VB_VCF))
             vb->drop_curr_line = "snps_only";

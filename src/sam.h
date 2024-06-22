@@ -137,10 +137,6 @@
 #pragma GENDICT SAM_CIGAR=DTYPE_FIELD=CIGAR
 #pragma GENDICT SAM_RNEXT=DTYPE_FIELD=RNEXT
 #pragma GENDICT SAM_PNEXT=DTYPE_FIELD=PNEXT
-#pragma GENDICT SAM_P0NEXT=DTYPE_FIELD=P0NEXT // multiplexed values
-#pragma GENDICT SAM_P1NEXT=DTYPE_FIELD=P1NEXT
-#pragma GENDICT SAM_P2NEXT=DTYPE_FIELD=P2NEXT
-#pragma GENDICT SAM_P3NEXT=DTYPE_FIELD=P3NEXT
 #pragma GENDICT SAM_TLEN=DTYPE_FIELD=TLEN
 #pragma GENDICT SAM_QNAMESA=DTYPE_FIELD=QNAMESA   // v14.0.0. PRIM: copy from SA Group
 #pragma GENDICT SAM_QUALSA=DTYPE_FIELD=QUALSA     // v14.0.0. DEPN: Qual diff vs SA Group PRIM: copy from SA Group 
@@ -170,7 +166,6 @@
 #pragma GENDICT OPTION_H2_i=DTYPE_2=H2:i     // Number of 2-difference hits
 #pragma GENDICT OPTION_MC_Z=DTYPE_2=MC:Z     // CIGAR string for mate/next segment
 #pragma GENDICT OPTION_MC0_Z=DTYPE_2=M0C:Z0     
-#pragma GENDICT OPTION_MC1_Z=DTYPE_2=M1C:Z1     
 #pragma GENDICT OPTION_MD_Z=DTYPE_2=MD:Z     // String encoding mismatched and deleted reference bases
 #pragma GENDICT OPTION_MQ_i=DTYPE_2=MQ:i     // Mapping quality of the mate/next segment
 #pragma GENDICT OPTION_NH_i=DTYPE_2=NH:i     // Number of reported alignments that contain the query in the current record
@@ -844,7 +839,8 @@ SPECIAL (SAM, 69, RG_by_QNAME,           sam_piz_special_RG_by_QNAME);          
 SPECIAL (SAM, 70, PACBIO_we,             sam_piz_special_PACBIO_we);             // introduced 15.0.58
 SPECIAL (SAM, 71, DEMUX_BY_REVCOMP_MATE, sam_piz_special_DEMUX_BY_REVCOMP_MATE); // introduced 15.0.60
 SPECIAL (SAM, 72, crdna_GP,              sam_piz_special_crdna_GP);              // introduced 15.0.60
- 
+SPECIAL (SAM, 73, DEMUX_MAPQ,            sam_piz_special_DEMUX_MAPQ);            // introduced 15.0.61
+
 #define SAM_LOCAL_GET_LINE_CALLBACKS(dt)        \
     { dt, _OPTION_BD_BI,    sam_zip_BD_BI    }, \
     { dt, _SAM_QUAL,        sam_zip_qual     }, \

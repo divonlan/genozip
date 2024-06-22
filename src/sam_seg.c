@@ -264,6 +264,8 @@ void sam_zip_genozip_header (SectionHeaderGenozipHeaderP header)
     header->sam.segconf_deep_qname1     = (segconf.deep_qtype == QNAME1);// v15
     header->sam.segconf_deep_qname2     = (segconf.deep_qtype == QNAME2);// v15
     header->sam.segconf_deep_no_qual    = segconf.deep_no_qual;          // v15
+    header->sam.segconf_MAPQ_use_xq     = segconf.MAPQ_use_xq;           // 15.0.61
+    header->sam.segconf_has_MQ          = !!segconf.has[OPTION_MQ_i];    // 15.0.61
     if (segconf.deep_N_fq_score && segconf.deep_N_sam_score)
         header->sam.segconf_deep_N_fq_score = segconf.deep_N_fq_score;   // 15.0.39
     
@@ -488,7 +490,7 @@ void sam_seg_initialize (VBlockP vb_)
     seg_mux_init (vb, SAM_FLAG,    SAM_SPECIAL_DEMUX_BY_BUDDY,     false, FLAG);
     seg_mux_init (vb, SAM_POS,     SAM_SPECIAL_DEMUX_BY_MATE_PRIM, true,  POS);
     seg_mux_init (vb, SAM_PNEXT,   SAM_SPECIAL_PNEXT,              true,  PNEXT);
-    seg_mux_init (vb, SAM_MAPQ,    SAM_SPECIAL_DEMUX_BY_MATE_PRIM, false, MAPQ);
+    seg_mux_init (vb, SAM_MAPQ,    SAM_SPECIAL_DEMUX_MAPQ,         false, MAPQ);
     seg_mux_init (vb, OPTION_MQ_i, SAM_SPECIAL_DEMUX_BY_MATE,      false, MQ);
     seg_mux_init (vb, OPTION_MC_Z, SAM_SPECIAL_DEMUX_BY_MATE,      false, MC);
     seg_mux_init (vb, OPTION_AS_i, SAM_SPECIAL_DEMUX_BY_MATE,      false, AS);
@@ -723,6 +725,8 @@ void sam_segconf_finalize (VBlockP vb_)
 
     segconf.sam_use_sn_mux = segconf.pacbio_subreads && segconf.sam_is_unmapped && segconf_qf_id (QNAME1) == QF_PACBIO_rng;
 
+    segconf.MAPQ_use_xq = MP(DRAGEN) && segconf.has[OPTION_xq_i];
+
     segconf.AS_is_ref_consumed  = (segconf.AS_is_ref_consumed  > vb->lines.len32 / 2);
     segconf.AS_is_2ref_consumed = (segconf.AS_is_2ref_consumed > vb->lines.len32 / 2); // AS tends to be near 2 X ref_consumed, if at least half of the lines say so
 
@@ -790,15 +794,17 @@ void sam_segconf_finalize (VBlockP vb_)
                            (MP(STAR) && segconf.has[OPTION_nM_i] && !segconf.is_paired); // we use the NM method to seg nM in this case
 
     // note: in case of both is_biobambam2_sort and minimap2, it is likely biobambam's tag
-    if (segconf.is_biobambam2_sort && segconf.is_paired) 
-        segconf.sam_ms_type = ms_BIOBAMBAM;
+    if (segconf.has[OPTION_ms_i]) {
+        if (segconf.is_biobambam2_sort && segconf.is_paired) 
+            segconf.sam_ms_type = ms_BIOBAMBAM;
 
-    else if (segconf.is_minimap2)
-        segconf.sam_ms_type = ms_MINIMAP2; 
+        else if (segconf.is_minimap2)
+            segconf.sam_ms_type = ms_MINIMAP2; 
 
-    // if we have no conclusive evidence of either minimap2 or biobambam, this is likely samtools, which has the same logic as biobambam
-    else if (segconf.is_sorted)
-        segconf.sam_ms_type = ms_BIOBAMBAM;
+        // if we have no conclusive evidence of either minimap2 or biobambam, this is likely samtools, which has the same logic as biobambam
+        else if (segconf.is_sorted)
+            segconf.sam_ms_type = ms_BIOBAMBAM;
+    }
 
     // update context tag names if this file has UB/UR/UY which are aliased to BX/RX/QX
     if (segconf.has[OPTION_UB_Z] || segconf.has[OPTION_UR_Z]) 
@@ -1110,6 +1116,7 @@ void sam_seg_idx_aux (VBlockSAMP vb)
             TEST_AUX(pr_i, 'p', 'r', 'i');
             TEST_AUX(qs_i, 'q', 's', 'i');
             TEST_AUX(ws_i, 'w', 's', 'i');
+            TEST_AUX(xq_i, 'x', 'q', 'i');
 
             default: {}
         }
@@ -1652,7 +1659,7 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
 
     str_split_by_tab (next_line, remaining_txt_len, MAX_FIELDS + AUX, has_13, false, true); // also advances next_line to next line
     
-    ASSSEG (n_flds >= 11, "%s: Bad SAM file: alignment expected to have at least 11 fields, but found only %u", LN_NAME, n_flds);
+    ASSSEG (n_flds >= 11, "%s: (sam_seg_txt_line) Bad SAM file: alignment expected to have at least 11 fields, but found only %u", LN_NAME, n_flds);
 
     vb->n_auxs = n_flds - AUX;
     vb->auxs = &flds[AUX]; // note: pointers to data on the stack

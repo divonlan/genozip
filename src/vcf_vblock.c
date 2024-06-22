@@ -26,13 +26,12 @@ void vcf_reset_line (VBlockP vb_)
 
     CTX(FORMAT_GT_HT)->use_HT_matrix = false; 
     CTX(FORMAT_RGQ)->line_has_RGQ = unknown;
-    CTX(FORMAT_SB)->ctx_specific = 0;
-    CTX(INFO_BaseCounts)->ctx_specific = 0;
-    CTX(INFO_AN)->ctx_specific = 0;
-    CTX(INFO_DP)->ctx_specific = 0;
-    CTX(INFO_QD)->ctx_specific = 0;
-    CTX(INFO_RU)->ctx_specific = 0;
-    CTX(VCF_QUAL)->ctx_specific = 0;
+
+    Did reset_ctx_specific[] = { 
+        FORMAT_SB, INFO_AN, INFO_DP, INFO_QD, INFO_RU, VCF_QUAL,
+    };
+    for (int i=0; i < ARRAY_LEN(reset_ctx_specific); i++)
+        CTX(reset_ctx_specific[i])->ctx_specific = 0;
     
     if (IS_ZIP) {
         for (Did did_i=0; did_i < NUM_VCF_FIELDS; did_i++)
@@ -41,5 +40,9 @@ void vcf_reset_line (VBlockP vb_)
         memset (&vb->first_idx, 0xff, (char*)&vb->after_idx - (char*)&vb->first_idx); // set all idx's to -1
 
         ii_buf.len32 = 0; 
+    }
+
+    else {
+        memset (vb->is_deferred_, 0, sizeof (vb->is_deferred_));
     }
 }

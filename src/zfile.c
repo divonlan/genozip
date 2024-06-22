@@ -882,9 +882,11 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header, FailType
     z_file->z_flags.dt_specific |= dts; 
     z_file->num_lines = BGEN64 (header->num_lines_bound);
     z_file->txt_data_so_far_bind = BGEN64 (header->recon_size);
-    segconf.vb_size = VER(14) ? (uint64_t)BGEN16 (header->vb_size) MB : 0;
+    
+    if (VER(14) && !flag.reading_reference)
+        segconf.vb_size = (uint64_t)BGEN16 (header->vb_size) MB;
 
-    if (VER(15))
+    if (VER(15) && !flag.reading_reference)
         segconf.zip_txt_modified = header->is_modified; // since 15.0.60
 
     if (flag.show_data_type) {
@@ -1030,10 +1032,11 @@ void zfile_update_compressed_vb_header (VBlockP vb)
     vb_header->z_data_bytes = BGEN32 (vb->z_data.len32);
 
     if (flag_is_show_vblocks (ZIP_TASK_NAME)) 
-        iprintf ("UPDATE_VB_HEADER(id=%d) vb_i=%u comp_i=%u recon_size=%u genozip_size=%u longest_line_len=%u\n",
+        iprintf ("UPDATE_VB_HEADER(id=%d) vb_i=%u comp_i=%u recon_size=%u genozip_size=%u n_lines=%u longest_line_len=%u\n",
                  vb->id, vb->vblock_i, vb->comp_i, 
-                 BGEN32 (vb_header->recon_size), 
-                 BGEN32 (vb_header->z_data_bytes), BGEN32 (vb_header->longest_line_len));
+                 BGEN32 (vb_header->recon_size), BGEN32 (vb_header->z_data_bytes), 
+                 vb->lines.len32, // just for debugging, not in VB header
+                 BGEN32 (vb_header->longest_line_len));
 
     // now we can finally encrypt the header - if needed
     if (has_password())  

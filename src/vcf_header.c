@@ -321,6 +321,7 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
     IF_IN_SOURCE ("MELT", vcf_is_melt);
     IF_IN_SOURCE ("GLIMPSE_phase", vcf_is_GLIMPSE_phase);
     IF_IN_SOURCE ("Gencove", vcf_is_gencove);
+    IF_IN_SOURCE ("freeBayes", vcf_is_freebayes);
     IF_IN_HEADER ("GenotypeGVCFs", vcf_is_gatk_gvcf, "GenotypeGVCFs");
     IF_IN_HEADER ("CombineGVCFs", vcf_is_gatk_gvcf, "CombineGVCFs");
     if (segconf.vcf_is_gatk_gvcf) segconf.vcf_is_gvcf = true;

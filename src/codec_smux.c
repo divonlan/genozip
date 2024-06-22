@@ -164,14 +164,15 @@ bool codec_smux_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB get_line_c
 
     decl_ctx (qual_did_i);
     
-    ctx->ltype  = LT_CODEC;
-    ctx->lcodec = CODEC_SMUX;
+    ctx->ltype     = LT_CODEC;
+    ctx->lcodec    = CODEC_SMUX;
+    ctx->local_dep = DEP_L1; // yield to other codecs (eg CODEC_OQ) that need to query QUAL before we destroy it
 
     decl_smux_ctxs_zip (ctx->dict_id.id);
     ctx_consolidate_statsA (vb, qual_did_i, ctxs, 5);
 
     for (int b=0; b < 5; b++) { 
-        ctxs[b]->local_dep = DEP_L1;  
+        ctxs[b]->local_dep = DEP_L2;  
         ctxs[b]->ltype = LT_SUPP; // data used by codec - not reconstructed directly
     }
 

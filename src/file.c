@@ -208,7 +208,7 @@ static FileType file_get_type_force_dt (rom filename, DataType dt)
 
 // returns the filename without the extension eg myfile.1.sam.gz -> myfile.1. 
 // if raw_name is given, memory is allocated sufficiently to concatenate a extension. Otherwise, filename is overwritten
-void file_get_raw_name_and_type (rom filename, rom *raw_name, FileType *out_ft)
+uint32_t file_get_raw_name_and_type (rom filename, rom *raw_name, FileType *out_ft)
 {
     unsigned len = strlen (filename);
 
@@ -221,10 +221,14 @@ void file_get_raw_name_and_type (rom filename, rom *raw_name, FileType *out_ft)
         raw_name = &filename; // overwrite filename
 
     FileType ft = file_get_type (filename);
-    if (ft != UNKNOWN_FILE_TYPE) 
-        (*(char **)raw_name)[len - strlen (file_exts[ft])] = 0;
+    if (ft != UNKNOWN_FILE_TYPE) {
+        len -= strlen (file_exts[ft]);
+        (*(char **)raw_name)[len] = 0;
+    }
 
     if (out_ft) *out_ft = ft;
+
+    return len;
 }
 
 static void file_ask_user_to_confirm_overwrite (rom filename)
@@ -450,7 +454,7 @@ FileP file_open_txt_read (rom filename)
                                                 NULL);
             file->file = stream_from_stream_stdout (input_decompressor);
             file->redirected = true;
-            file->codec = CODEC_BGZF;
+            file->codec = CODEC_BGZF; // because the samtools stream is BGZF-blocks
             break;
         }
 

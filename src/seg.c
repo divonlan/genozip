@@ -716,13 +716,14 @@ WordIndex seg_self_delta (VBlockP vb, ContextP ctx, int64_t value,
 // an array or array of arrays
 // note: if container_ctx->flags.store=STORE_INT, container_ctx->last_value.i will be set to sum of integer
 // elements including recursively from sub-arrays (non-integer elements will be ignored)
-WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_did_i, 
+WordIndex seg_array_(VBlockP vb, ContextP container_ctx, Did stats_conslidation_did_i, 
                      rom value, int32_t value_len, // must be signed
                      char sep, 
                      char subarray_sep,         // if non-zero, will attempt to find internal arrays
                      bool use_integer_delta,    // first item stored as is, subsequent items stored as deltas
                      StoreType store_in_local,  // STORE_INT/FLOAT - if its an integer/float, store in local (with LOOKUP) instead of a snip
                      DictId arr_dict_id,        // item dict_id, DICT_ID_NONE if we don't care what it is 
+                     uint8_t con_rep_special, uint32_t expected_num_repeats, // optional: if expected_num_repeats is correct, then use con_rep_special
                      int add_bytes)             // account for this much
 {
     MiniContainerP con;
@@ -749,7 +750,10 @@ WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_
 
         if (use_integer_delta || container_ctx->flags.store == STORE_INT) 
             arr_ctx->flags.store = STORE_INT;
+
+        container_ctx->con_rep_special = con_rep_special;
     }
+    
     else { 
         con         = B1ST (MiniContainer, container_ctx->con_cache);
         arr_dict_id = con->items[0].dict_id;
@@ -764,13 +768,14 @@ WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_
     else
         con->drop_final_repsep = true;
 
-    // count repeats (1 + number of seperators)
-    con->repeats = 1 + str_count_char (STRa(value), sep);
+    // count repeats (1 + number of seperators, or SPECIAL
+    uint32_t n_items = 1 + str_count_char (STRa(value), sep);
+    con->repeats = (con_rep_special && expected_num_repeats == n_items) ? CON_REPEATS_IS_SPECIAL : n_items;
 
     if (container_ctx->flags.store == STORE_INT) 
         ctx_set_last_value (vb, container_ctx, (int64_t)0);
 
-    for (uint32_t i=0; i < con->repeats; i++) { // value_len will be -1 after last number
+    for (uint32_t i=0; i < n_items; i++) { // value_len will be -1 after last number
 
         rom this_item = value;
         int64_t this_item_value=0;
@@ -784,19 +789,19 @@ WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_
 
         // case: it has a sub-array
         if (is_subarray) {
-            seg_array (vb, arr_ctx, stats_conslidation_did_i, STRa(this_item), subarray_sep, 0, use_integer_delta, store_in_local, DICT_ID_NONE, this_item_len);
+            seg_array (vb, arr_ctx, stats_conslidation_did_i, STRa(this_item), subarray_sep, 0, use_integer_delta, (store_in_local ? store_in_local : container_ctx->seg_to_local), DICT_ID_NONE, this_item_len);
             this_item_value = arr_ctx->last_value.i;
         }
 
         // case: its an scalar (we don't delta arrays that have sub-arrays and we don't delta the first item)
         else if (!use_integer_delta || subarray_sep || i==0) {
             
-            if (store_in_local == STORE_INT) {
+            if (store_in_local == STORE_INT || container_ctx->seg_to_local == STORE_INT) {
                 bool is_int = seg_integer_or_not (vb, arr_ctx, STRa(this_item), this_item_len);
                 if (is_int) this_item_value = arr_ctx->last_value.i;
             }
 
-            else if (store_in_local == STORE_FLOAT) 
+            else if (store_in_local == STORE_FLOAT || container_ctx->seg_to_local == STORE_FLOAT) 
                 seg_add_to_local_string (VB, arr_ctx, STRa(this_item), LOOKUP_NONE, this_item_len);
             
             else {
@@ -820,9 +825,8 @@ WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_
         value++;
     }
 
-    return container_seg (vb, container_ctx, (ContainerP)con, 0, 0, con->repeats - con->drop_final_repsep + additional_bytes); // acount for separators and additional bytes
+    return container_seg (vb, container_ctx, (ContainerP)con, 0, 0, n_items - con->drop_final_repsep + additional_bytes); // acount for separators and additional bytes
 }
-
 
 void seg_array_by_callback (VBlockP vb, ContextP container_ctx, STRp(arr), char sep, 
                             SegCallback item_seg, 

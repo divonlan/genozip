@@ -75,9 +75,9 @@ typedef struct Context {
 
     #define FIRST_BUFFER_IN_Context dict
     Buffer dict;               // tab-delimited list of all unique snips - in this VB that don't exist in ol_dict
-    Buffer b250;               // ZIP: During Seg, .data contains 32b indices into context->nodes. In b250_zip_generate_section, 
-                               //      the "node indices" are converted into "word indices" - indices into the future 
-                               //      context->word_list, in base-250. the number of words is moved from .len to .count. 
+    Buffer b250;               // ZIP: During Seg, .data contains variable-length indices into context->nodes. .count contains the number 
+                               //      of b250s (still >1 if multiple b250s collapse with all-the-same) and .len contains the length in bytes.
+                               //      In b250_zip_generate_section the "node indices" are converted into "word indices" - indices into the future context->word_list.
                                // PIZ: .data contains the word indices (i.e. indices into word_list) in base-250
     Buffer local;              // ZIP/PIZ vctx: Data private to this VB that is not in the dictionary
                                // ZIP zctx - only .len - number of fields of this type segged in the file (for stats)
@@ -118,7 +118,7 @@ typedef struct Context {
         Buffer last_format;        // ZIP: vctx: VCF_FORMAT: cache previous line's FORMAT string
         Buffer id_hash;            // ZIP: vctx: VCF_ID (BND mates): each entry i contains a line number for which the hash(ID₀)=i (or -1). prm8[0] is log2(len) (i.e., the number of bits)
         Buffer info_items;         // ZIP: vctx: VCF_INFO
-        Buffer deferred_snip;      // ZIP/PIZ: VCF: snip of a field whose seg/recon is postponed to after samples: INFO_SF
+        Buffer deferred_snip;      // ZIP/PIZ: VCF: snip of a field whose seg/recon is postponed to after samples: INFO_SF, INFO_DPB
     };
 
     // ZIP/PIZ: context specific #2
@@ -146,26 +146,26 @@ typedef struct Context {
     };
 
     #define INVALID_LAST_TXT_INDEX ((uint32_t)-1)
-    TxtWord last_txt;          // ZIP/PIZ: index/len into vb->txt_data of last seg/reconstruction (always in PIZ, sometimes in Seg) (introduced 10.0.5)
+    TxtWord last_txt;              // ZIP/PIZ: index/len into vb->txt_data of last seg/reconstruction (always in PIZ, sometimes in Seg) (introduced 10.0.5)
 
     #define LAST_LINE_I_INIT -0x7fffffff
-    LineIType last_line_i;     // ZIP/PIZ: =vb->line_i this line, so far, generated a valid last_value that can be used by downstream fields 
-                               //          =(-vb->line_i-1) means ctx encountered in this line (so far) but last_value was not set 
-    int32_t last_sample_i;     // ZIP/PIZ: Current sample in VCF/FORMAT ; must be set to 0 if not VCF/FORMAT
-   
+    LineIType last_line_i;         // ZIP/PIZ: =vb->line_i this line, so far, generated a valid last_value that can be used by downstream fields 
+                                   //          =(-vb->line_i-1) means ctx encountered in this line (so far) but last_value was not set 
+    int32_t last_sample_i;         // ZIP/PIZ: Current sample in VCF/FORMAT ; must be set to 0 if not VCF/FORMAT
+    
     union { // 64 bit
         int64_t ctx_specific;
-        uint32_t segconf_max;       // maximum value during segconf
-        bool last_is_alt;           // CHROM (all DTs): ZIP: last CHROM was has an alternative name
-        IdType id_type;             // ZIP: type of ID in fields segged with seg_id_field        
+        uint32_t segconf_max;      // maximum value during segconf
+        bool last_is_alt;          // CHROM (all DTs): ZIP: last CHROM was has an alternative name
+        IdType id_type;            // ZIP: type of ID in fields segged with seg_id_field        
 
         // SAM / BAM
-        bool last_is_new;           // SAM_QNAME:       ZIP: used in segconf.running
-        thool XG_inc_S;             // ZIP: bsseeker2 OPTION_XG_Z: whether to include soft_clip[0]
-        struct {                    // SAM_QUAL, SAM_CQUAL, OPTION_OQ_Z, FASTQ_QUAL: 
+        bool last_is_new;          // SAM_QNAME:       ZIP: used in segconf.running
+        thool XG_inc_S;            // ZIP: bsseeker2 OPTION_XG_Z: whether to include soft_clip[0]
+        struct {                   // SAM_QUAL, SAM_CQUAL, OPTION_OQ_Z, FASTQ_QUAL: 
             bool longr_bins_calculated; // ZIP zctx: codec_longr: were LONGR bins calculated in segconf
         };
-        struct ctx_tp {             // PIZ: OPTION_tp_B_ARR (15.0.10-15.0.27: OPTION_tp_B_c)
+        struct ctx_tp {            // PIZ: OPTION_tp_B_ARR (15.0.10-15.0.27: OPTION_tp_B_c)
             #define TP_LEN_BITS 23
             #define HP_LEN_BITS 17
             uint64_t repeat    : TP_LEN_BITS; // repeat within tp:B
@@ -186,7 +186,7 @@ typedef struct Context {
         };
         PosType32 pos_last_value;   // PIZ: VCF_POS: value for rolling back last_value after INFO/END
         bool has_len;               // ZIP: INFO_ANN subfields of cDNA, CDS, AA
-        char deferred;              // PIZ: !=0 if reconstruction deferred. possibly a seg-passed parameter
+        // char deferred;              // PIZ: !=0 if reconstruction deferred. possibly a seg-passed parameter
 
         struct {                    // ZIP: INFO_SF
             uint32_t next;
@@ -194,7 +194,6 @@ typedef struct Context {
         } sf;    
         thool line_has_RGQ;         // ZIP/PIZ: FORMAT_RGQ : GVCF
         struct {                    // 
-            bool is_deferred;       //   PIZ: reconstruction deferred to after samples
             int32_t sum_format_dp;  //   ZIP/PIZ: sum of FORMAT/DP of samples in this line ('.' counts as 0).
         } dp;
         struct {
@@ -215,6 +214,7 @@ typedef struct Context {
         TxtWord predicted_RU;       // PIZ/ZIP: INFO_RU: pointer into REFALT field in this line in txt_data
         bool saggy_seq_needs_fq_reversal; // PIZ: SAM_SQBITMAP: true if saggy copied is a reverse         
         struct { packed_enum { PS_NONE, PS_POS, PS_POS_REF_ALT, PS_UNKNOWN } ps_type; }; // FORMAT_PS, FORMAT_PID, FORMAT_IPSphased
+        ContextP other_ctx;         // ZIP: used by FORMAT/RO, FORMAT/AO
 
         // FASTQ
         packed_enum { PAIR1_ALIGNED_UNKNOWN=-1, PAIR1_NOT_ALIGNED=0, PAIR1_ALIGNED=1 } r1_is_aligned;  // FASTQ_SQBITMAP:  PIZ: used when reconstructing pair-2
@@ -256,7 +256,8 @@ typedef struct Context {
     bool subdicts_section;     // ZIP: zctx/vctx: output ctx->subdicts to SEC_SUBDICTS section for this context
     bool lcodec_hard_coded;    // ZIP: zctx/vctx: lcodec is hard-coded and should not be reassigned
     bool is_stats_parent;      // other contexts have this context in st_did_i
-
+    StoreType seg_to_local;    // ZIP: zctx/vctx: seg_array: this Int/Float field should be segged to local 
+    
     union {
         struct {
             packed_enum { NOT_IN_HEADER=0, NUMBER_R=-1, NUMBER_A=-2, NUMBER_G=-3, NUMBER_VAR=-4, NUMBER_LARGE=-5/*Number∉[1,127]*/ } Number; // contains a value 1->127 or one of enumerated values

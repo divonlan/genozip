@@ -47,7 +47,8 @@ License agreement:
 
    a. Academic License: Using Genozip Executables for academic research, educational or training
 purposes provided that You are a recognized academic research institution which is not a hospital,
-or a registered student at such an institution, but excluding use with Your Commercial Data.
+or a registered student at such an institution, but excluding use with Your Commercial Data, and
+limited to a total of 10,000 files per institution.
 
    b. Academic License: Using Genozip Executables for another non-commercial purpose, if it has
 been pre-approved by Licensor in writing. Email register@genozip.com to seek such an approval.
@@ -158,5 +159,5 @@ ABOVE STATED REMEDY FAILS OF ITS ESSENTIAL PURPOSE.
 
 END OF TERMS AND CONDITIONS
 
-Genozip license version: 15.0.60
+Genozip license version: 15.0.61
 

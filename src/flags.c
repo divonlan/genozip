@@ -66,6 +66,32 @@ static Buffer command_line    = {},
 static pid_t pipe_in_pid = 0;
 static char pipe_in_process_name[100] = "";
 
+static void flags_set_optimize (rom optarg)
+{
+    if (!optarg) fallback: {
+        flag.optimize = FULL_OPTIMIZE; 
+        return;
+    }
+
+    if (optarg && *optarg=='^') {
+        flag.optimize = OPTIMIZE_NEG_LIST;
+        optarg++;
+    }
+    else
+        flag.optimize = OPTIMIZE_POS_LIST;
+
+    str_split (optarg, strlen (optarg), 0, ',', dict, false);
+    if (!n_dicts) goto fallback;
+
+    ASSINP0 (!flag.optimize_dict_ids, "--optimize specified more than once");
+
+    flag.optimize_dict_ids = MALLOC (sizeof (DictId) * n_dicts);
+    flag.optimize_dict_ids_len = n_dicts;
+
+    for (int i=0; i < n_dicts; i++)
+        flag.optimize_dict_ids[i] = dict_id_make (STRi(dict,i), DTYPE_PLAIN);
+}
+
 #define MAX_LINE ((int64_t)1 << 62)
 static void flags_set_lines (rom optarg)
 {
@@ -350,18 +376,18 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _zC {"BCF",              no_argument,       PADDED(out_dt),    DT_BCF }
         #define _zv {"vcf",              no_argument,       PADDED(out_dt),    DT_VCF }
         #define _zV {"VCF",              no_argument,       PADDED(out_dt),    DT_VCF }
-        #define _zq {"fastq",            optional_argument, 0, 130                    }
-        #define _zQ {"FASTQ",            optional_argument, 0, 130                    }
-        #define _zf {"fq",               optional_argument, 0, 130                    }
-        #define _zF {"FQ",               optional_argument, 0, 130                    }
+        #define _zq {"fastq",            no_argument,       PADDED(out_dt),  DT_FASTQ }
+        #define _zQ {"FASTQ",            no_argument,       PADDED(out_dt),  DT_FASTQ }
+        #define _zf {"fq",               no_argument,       PADDED(out_dt),  DT_FASTQ }
+        #define _zF {"FQ",               no_argument,       PADDED(out_dt),  DT_FASTQ }
+        #define _9  {"optimize",         optional_argument, 0, '9',                   } // US spelling
+        #define _8  {"optimise",         optional_argument, 0, '9',                   } // British spelling
         #define _m  {"md5",              no_argument,       &flag.md5,              1 }
         #define _t  {"test",             no_argument,       &flag.test,             1 }
         #define _Nt {"no-test",          no_argument,       &flag.no_test,          1 }
         #define _fa {"fast",             no_argument,       &flag.fast,             1 }
         #define _bs {"best",             no_argument,       &flag.best,             1 }
         #define _lm {"low-memory",       no_argument,       &flag.low_memory,       1 }
-        #define _9  {"optimize",         no_argument,       &flag.optimize,         1 } // US spelling
-        #define _8  {"optimise",         no_argument,       &flag.optimize,         1 } // British spelling
         #define _al {"add-line-numbers", no_argument,       &flag.add_line_numbers, 1 }
         #define _Sd {"secure-DP",        no_argument,       &flag.secure_DP,        1 }
         #define _pe {"pair",             no_argument,       PADDED(pair),      PAIRED } 
@@ -397,7 +423,8 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _g  {"grep",             required_argument, 0, 25                     }
         #define _gw {"grep-w",           required_argument, 0, 'g'                    }
         #define _n  {"lines",            required_argument, 0, 'n'                    }
-        #define _nh {"head",             optional_argument, 0, 22                     }
+        #define _nh {"head",             optional_argument, 0, 22                     } // genozip
+        #define _nH {"head",             required_argument, 0, 22                     } // genocat
         #define _nt {"tail",             optional_argument, 0, 23                     }
         #define _G  {"drop-genotypes",   no_argument,       &flag.drop_genotypes,   1 }
         #define _H1 {"no-header",        no_argument,       &flag.no_header,        1 }
@@ -445,6 +472,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _WM {"show-wrong-XM",    no_argument,       &flag.show_wrong_xm,    1 }  
         #define _WB {"show-wrong-XB",    no_argument,       &flag.show_wrong_xb,    1 }  
         #define _su {"show-uncompress",  no_argument,       &flag.show_uncompress,  1 }  
+        #define _so {"show-compress",    no_argument,       &flag.show_compress,    1 }  
         #define _sv {"show-vblocks",     optional_argument, 0, 141                    }  
         #define _ai {"analyze-insertions", no_argument,     &flag.analyze_ins,      1 }  
         #define _ov {"one-vb",           required_argument, 0, 8                      }  
@@ -547,10 +575,10 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                       }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _lg, _i, _I, _d, _f, _h, _x, _D,    _L1, _L2, _q, _Q, _qq, _t, _Nt, _DL, _nb, _nz, _nc,_nu,  _V, _z,                                                                       _m, _th,     _o, _p, _e, _E,                                                                       _H1,                                         _sL, _ss, _SS,      _sd, _sT, _sb, _Sb, _lc, _lh, _lH, _s2, _s7, _S7, _S0, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv, _sn, _pn, _ai,                    _B, _xt, _dm, _dp, _dL, _dD, _dq, _dB, _dt, _dw, _dM, _dr, _dR, _dP, _dG, _dN, _dF, _DF, _dQ, _dH, _dO, _dC, _fQ, _fC, _fO, _fS, _fH, _fN, _dU, _dl, _dc, _dg,      _dh,_dS, _bS, _9, _8, _pe, _fa, _bs, _lm,                        _nh, _rg,                          _hC, _rA,           _rS, _me, _s5, _S5, _sM, _sA, _sB, _sP, _sc, _Sc, _AL, _sI, _cn,                                    _s6,          _oe, _al, _Lf, _dd, _T, _TT, _TL, _wM, _wm, _WM, _WB, _bi, _bl, _sk, _VV, _DV,           _Ds, _DS, _sp, _Du, _DD, _DP, _SH, _Dd,      _to, _ts,      _hc, _dv, _TR, _NE, _lp, _Sd, _St, _um,      _fP, _nF, _nI, _00 };
-        static Option genounzip_lo[]  = { _lg,         _d, _f, _h, _x, _D,    _L1, _L2, _q, _Q,      _t,      _DL,           _nc,      _V, _z,                                                                       _m, _th, _u, _o, _p, _e,                                                                                                                        _sL, _ss, _SS, _sG, _sd, _sT, _sb,      _lc, _lh, _lH, _s2, _s7, _S7, _S0, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv, _sn, _pn,      _ov,                   _xt, _dm, _dp,      _dD,      _dB, _dt,                _dR,                                                                                      _dc,                                                _lm,                                  _sR, _pR,                _hC, _rA,           _rS, _me, _s5, _S5, _sM, _sA, _sB,           _Sc, _AL, _sI, _cn, _cN,                               _s6,          _oe,           _dd, _T, _TT,                                                   _Dp, _Dh,           _sp,      _DD,           _Dd,      _to, _ts, _RC,      _dv, _TR, _NE,                     _np,                _00 };
-        static Option genocat_lo[]    = { _lg,         _d, _f, _h,     _D,    _L1, _L2, _q, _Q,                              _nc,      _V, _z, _zr, _zR, _zb, _zB, _zs, _zS, _zq, _zQ, _zf, _zF, _zc, _zC, _zv, _zV,     _th,     _o, _p, _e,     _il, _r, _R, _Rg, _qf, _qF, _Qf, _QF, _SF, _s, _sf, _sq, _G, _1, _H0, _H1, _H2, _H3, _Gt, _So, _Io, _IU, _iu, _GT, _sL, _ss, _SS, _sG, _sd, _sT, _sb,      _lc, _lh, _lH, _s2, _s7, _S7, _S0, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv, _sn, _pn,      _ov, _R1, _R2, _RX,    _xt, _dm, _dp,      _dD,      _dB, _dt,                _dR,                                                                                      _dc,      _ds,                                      _lm, _fs, _g, _gw, _n, _nt, _nh,      _sR, _pR,      _sC, _pC, _hC, _rA, _rI, _pI, _rS, _me, _s5, _S5, _sM, _sA, _sB,           _Sc, _AL, _sI, _cn, _cN, _pg, _PG, _SX, _ix, _ct, _vl, _s6,          _oe, _al,      _dd, _T,                                                        _Dp, _Dh,           _sp,      _DD,           _Dd, _DT,           _RC,      _dv, _TR, _NE,                     _np,                _00 };
-        static Option genols_lo[]     = { _lg,             _f, _h,        _l, _L1, _L2, _q,                                            _V,                                                                                            _p,                                                                                                                                                                                                                      _st, _sm,                                                                               _dm,                          _dt,                                                                                                                                                                                                                                                                     _sM,                                                                                 _b, _LC, _oe,           _dd, _T,                                                                            _sp,      _DD,                                         _dv,      _NE,                                         _00 };
+        static Option genozip_lo[]    = { _lg, _i, _I, _d, _f, _h, _x, _D,    _L1, _L2, _q, _Q, _qq, _t, _Nt, _DL, _nb, _nz, _nc,_nu,  _V, _z,                                                                       _m, _th,     _o, _p, _e, _E,                                                                       _H1,                                         _sL, _ss, _SS,      _sd, _sT, _sb, _Sb, _lc, _lh, _lH, _s2, _s7, _S7, _S0, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _so, _sv, _sn, _pn, _ai,                    _B, _xt, _dm, _dp, _dL, _dD, _dq, _dB, _dt, _dw, _dM, _dr, _dR, _dP, _dG, _dN, _dF, _DF, _dQ, _dH, _dO, _dC, _fQ, _fC, _fO, _fS, _fH, _fN, _dU, _dl, _dc, _dg,      _dh,_dS, _bS, _9, _8, _pe, _fa, _bs, _lm,                        _nh, _rg,                          _hC, _rA,           _rS, _me, _s5, _S5, _sM, _sA, _sB, _sP, _sc, _Sc, _AL, _sI, _cn,                                    _s6,          _oe, _al, _Lf, _dd, _T, _TT, _TL, _wM, _wm, _WM, _WB, _bi, _bl, _sk, _VV, _DV,           _Ds, _DS, _sp, _Du, _DD, _DP, _SH, _Dd,      _to, _ts,      _hc, _dv, _TR, _NE, _lp, _Sd, _St, _um,      _fP, _nF, _nI, _00 };
+        static Option genounzip_lo[]  = { _lg,         _d, _f, _h, _x, _D,    _L1, _L2, _q, _Q,      _t,      _DL,           _nc,      _V, _z,                                                                       _m, _th, _u, _o, _p, _e,                                                                                                                        _sL, _ss, _SS, _sG, _sd, _sT, _sb,      _lc, _lh, _lH, _s2, _s7, _S7, _S0, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su,      _sv, _sn, _pn,      _ov,                   _xt, _dm, _dp,      _dD,      _dB, _dt,                _dR,                                                                                      _dc,                                                _lm,                                  _sR, _pR,                _hC, _rA,           _rS, _me, _s5, _S5, _sM, _sA, _sB,           _Sc, _AL, _sI, _cn, _cN,                               _s6,          _oe,           _dd, _T, _TT,                                                   _Dp, _Dh,           _sp,      _DD,           _Dd,      _to, _ts, _RC,      _dv, _TR, _NE,                     _np,                _00 };
+        static Option genocat_lo[]    = { _lg,         _d, _f, _h,     _D,    _L1, _L2, _q, _Q,                              _nc,      _V, _z, _zr, _zR, _zb, _zB, _zs, _zS, _zq, _zQ, _zf, _zF, _zc, _zC, _zv, _zV,     _th,     _o, _p, _e,     _il, _r, _R, _Rg, _qf, _qF, _Qf, _QF, _SF, _s, _sf, _sq, _G, _1, _H0, _H1, _H2, _H3, _Gt, _So, _Io, _IU, _iu, _GT, _sL, _ss, _SS, _sG, _sd, _sT, _sb,      _lc, _lh, _lH, _s2, _s7, _S7, _S0, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su,      _sv, _sn, _pn,      _ov, _R1, _R2, _RX,    _xt, _dm, _dp,      _dD,      _dB, _dt,                _dR,                                                                                      _dc,      _ds,                                      _lm, _fs, _g, _gw, _n, _nt, _nH,      _sR, _pR,      _sC, _pC, _hC, _rA, _rI, _pI, _rS, _me, _s5, _S5, _sM, _sA, _sB,           _Sc, _AL, _sI, _cn, _cN, _pg, _PG, _SX, _ix, _ct, _vl, _s6,          _oe, _al,      _dd, _T,                                                        _Dp, _Dh,           _sp,      _DD,           _Dd, _DT,           _RC,      _dv, _TR, _NE,                     _np,                _00 };
+        static Option genols_lo[]     = { _lg,             _f, _h,        _l, _L1, _L2, _q,                                            _V,                                                                                            _p,                                                                                                                                                                                                                      _st, _sm,                                                                                    _dm,                          _dt,                                                                                                                                                                                                                                                                     _sM,                                                                                 _b, _LC, _oe,           _dd, _T,                                                                            _sp,      _DD,                                         _dv,      _NE,                                         _00 };
         static Option *long_options[NUM_EXE_TYPES] = { genozip_lo, genounzip_lo, genocat_lo, genols_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -589,7 +617,7 @@ verify_command:
             case '1' : flag.header_one    = 1       ; break;
             case '2' : flag.pair          = PAIRED  ; break;
             case '3' : flag.deep          = 1       ; break;
-            case '9' : flag.optimize      = 1       ; break;
+            case '9' : flags_set_optimize (optarg)  ; break;
             case 'X' : flag.no_test       = 1       ; break; 
             case 'b' : flag.best          = 1       ; break; 
             case 'B' : flag.vblock        = optarg  ; break;
@@ -658,7 +686,6 @@ verify_command:
             case 27  : tar_set_tar_name (optarg)    ; break;
             case 28  : flag.do_register = optarg ? optarg : ""; break;
             case 29  : flag_set_interleaved (optarg); break;
-            case 130 : flag.out_dt = DT_FASTQ       ; break; 
             case 132 : flag_set_show_containers (optarg); break; 
             case 133 : flag.debug_seg=1;
                        if (optarg) flag.dict_id_debug_seg = dict_id_make (optarg, strlen (optarg), DTYPE_PLAIN); 
@@ -680,6 +707,7 @@ verify_command:
             case 148 : license_prepare (optarg); break;
             case 151 : ASSINP (str_get_int_range64 (optarg, strlen (optarg), 1, 0xffffffff, &flag.sendto), "Expecting the value of --sendto=%s to a number", optarg); break;
             case 152 : user_message_init (optarg); break;
+            
             case 0   : break; // a long option that doesn't have short version will land here - already handled so nothing to do
                  
             default  : // unrecognized option 
@@ -917,6 +945,9 @@ static void flags_piz_verify_dt_specific (DataType dt)
 // ZIP: --pair: verify an even number of fastq files, --output, and --reference/--REFERENCE
 static void flags_zip_verify_pair_rules (unsigned num_files, rom *filenames)
 {
+    // --pair can't be used with --biopsy, because reading the second pair requires reading the VB headers of the first, which are not written in biopsy
+    ASSINP (!flag.biopsy && !(flag.has_biopsy_line), "%s cannot be used with --biopsy or --biopsy-line, please take a biopsy from each file seperately", OT("pair", "2"));
+
     // verify non-zero even number of files
     ASSINP (num_files && num_files % 2 == 0, "when using %s, expecting an even number of FASTQ input files, each consecutive two being a pair", OT("pair", "2"));
     ASSINP (flag.reference || getenv ("GENOZIP_REFERENCE"), "either --reference or --REFERENCE must be specified when using %s", OT("pair", "2"));
@@ -936,6 +967,9 @@ static void flags_zip_verify_pair_rules (unsigned num_files, rom *filenames)
 // ZIP: --deep: verify conditions
 static void flags_zip_verify_deep_rules (unsigned num_files, rom *filenames)
 {
+    // --deep can't be used with --biopsy because of implied --pair: reading the second pair requires reading the VB headers of the first, which are not written in biopsy
+    ASSINP (!flag.biopsy && !(flag.has_biopsy_line), "%s cannot be used with --biopsy or --biopsy-line: take a biopsy from each file seperately", OT("deep", "3"));
+
     // verify one or two fastq files and one sam/bam/cram file and no stdin (bc we can't confirm its data type yet)
     int n_dt[NUM_DATATYPES] = {};
     int sam_i=-1;
@@ -1029,7 +1063,7 @@ void flags_update (unsigned num_files, rom *filenames)
     flag.explicit_quiet = flag.quiet;
     if (flag.show_dict || flag.show_b250 || flag.show_headers || flag.show_threads || flag.show_bgzf || flag.show_mutex || flag.show_containers || flag.show_stack ||
         flag.dict_id_show_one_b250.num || flag.show_one_dict || flag.show_one_counts.num || flag.show_sag || flag.show_depn || flag.show_singletons_dict_id.num ||
-        flag.show_reference || flag.show_digest || flag.list_chroms || flag.show_coverage == COV_ONE || flag.show_ranges || flag.show_snips ||
+        flag.show_reference || flag.show_digest || flag.list_chroms || flag.show_coverage == COV_ONE || flag.show_ranges || flag.show_snips || flag.show_compress ||
         flag.show_alleles || flag.show_vblocks || flag.show_codec || flag.show_cache || flag.debug_gencomp || flag.show_qual || flag.show_aligner ||
         flag.show_buddy || flag.debug_peek || flag.show_aliases || (flag.show_index && command==PIZ) || flag.count || flag.biopsy || flag.show_gz)
         flag.quiet=true; // don't show progress or warnings
@@ -1091,6 +1125,9 @@ void flags_update (unsigned num_files, rom *filenames)
 
     flag.no_tip |= flag.quiet || (flag.test_i && !flag.noisy) || tar_zip_is_tar() || !isatty(0) || !isatty (1) ||
                    flag.show_bam || zip_is_biopsy;
+
+    if ((flag.biopsy || flag.has_biopsy_line) && !flag.force_gencomp)
+        flag.no_gencomp = true;
 }
 
 // ZIP: called ONCE per z_file, only for the MAIN component, after opening txt and z files, but before calling zip_one_file 
@@ -1693,6 +1730,7 @@ void flags_finalize (void)
     buf_destroy (debugger_params);
 
     FREE (flag.out_dirname);
+    FREE (flag.optimize_dict_ids);    
 }
 
 rom pair_type_name (PairType p)

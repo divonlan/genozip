@@ -158,7 +158,7 @@ void digest_piz_verify_one_txt_file (unsigned txt_file_i/* 0-based */)
         if (digest_recon_is_equal (decompressed_file_digest, z_file->digest)) {
             if (flag.test || !IS_ADLER) { 
                 snprintf (s, sizeof (s), "verified as identical to the original %s (%s=%s)", 
-                         dt_name_faf (txt_file->data_type), digest_name(), digest_display (decompressed_file_digest).s);
+                          dt_name_faf (txt_file->data_type), digest_name(), digest_display (decompressed_file_digest).s);
                 progress_finalize_component (s); 
             }
         }
@@ -201,8 +201,9 @@ static void digest_piz_verify_one_vb (VBlockP vb)
             if (vb->recon_size != vb->txt_data.len) // note: leave vb->txt_data.len 64bit to detect bugs
                 snprintf (recon_size_warn, sizeof (recon_size_warn), "Expecting: VB_HEADER.recon_size=%u == txt_data.len=%"PRIu64"\n", vb->recon_size, vb->txt_data.len);
 
-            NOISYWARN ("reconstructed vblock=%s/%u (vb_line_i=0 -> txt_line_i(1-based)=%"PRId64" num_lines=%u), (%s=%s) differs from the original file (%s=%s).\n%s",
+            NOISYWARN ("reconstructed vblock=%s/%u (vb_line_i=0 -> txt_line_i(1-based)=%"PRId64" num_lines=%u), (%s=%s) differs from the %s file (%s=%s).\n%s",
                        comp_name (vb->comp_i), vb->vblock_i, writer_get_txt_line_i (vb, 0), vb->lines.len32,
+                       segconf.zip_txt_modified ? "modified" : "original",
                        DIGEST_NAME, digest_display (piz_digest).s, 
                        DIGEST_NAME, digest_display (vb->expected_digest).s, 
                        recon_size_warn);
@@ -211,9 +212,8 @@ static void digest_piz_verify_one_vb (VBlockP vb)
             if (!__atomic_test_and_set (&txt_file->vb_digest_failed, __ATOMIC_RELAXED)) { // not WARN_ONCE because we might be genounzipping multiple files - we want to show this for every failed file (see also note in digest_piz_verify_one_txt_file)
                 NOISYWARN ("Bad reconstructed vblock has been dumped to: %s.gz\n"
                            "To see the same data in the original file:\n"
-                           "genozip --biopsy %u -B%u %s%s%s",  // note: segconf.vb_size is only available since v14. For older files, look it up with genocat --stats.
+                           "genozip --biopsy %u -B%u %s%s",  // note: segconf.vb_size is only available since v14. For older files, look it up with genocat --stats.
                            txtfile_dump_vb (vb, z_name).s, vb->vblock_i, (unsigned)(segconf.vb_size >> 20), 
-                           (Z_DT(SAM) ? "--no-gencomp " : ""), // note: digest is calculated on VB after gencomp lines have already been re-integrated according to the recon_plan
                            (txt_file && txt_file->name) ? filename_guess_original (txt_file) : IS_PIZ ? txtheader_get_txt_filename_from_section().s : "(uncalculable)",
                            SUPPORT);
 

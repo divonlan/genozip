@@ -214,60 +214,50 @@ static void sam_header_zip_build_stats_programs (rom hdr, rom after)
 {
     #define EQ3(s1,s2) (s1[0]==s2[0] && s1[1]==s2[1] && s1[2]==s2[2])
 
-    uint32_t last_PG_i=0, last_PG_len=0; // last PG added
     while (hdr < after) {
         str_split_by_tab (hdr, after - hdr, 10, NULL, false, false); // also advances hdr to after the newline
         if (!hdr || n_flds < 2 || fld_lens[0] != 3 || !EQ3(flds[0], "@PG")) break;
 
-        bool added = false;
-        uint32_t this_PG_i = stats_programs.len32;
-        uint32_t ID_len=0;
         int ID_i=-1, PN_i=-1;
+        STRl(pg, 128) = 0;
         
+        // find ID and/or PN
         for (int i=1; i < n_flds; i++) 
             if (EQ3(flds[i], "ID:")) { // add part before first . and/or -
                 ID_i = i;
                 rom dot = memchr (flds[i], '.', fld_lens[i]);
-                ID_len = dot ? (dot - flds[i]) : fld_lens[i];
+                if (dot) fld_lens[i] = dot - flds[i];
                 
-                rom hyphen = memchr (flds[i], '-', ID_len);
-                if (hyphen) ID_len = hyphen - flds[i];
-
-                if (added) BNXTc (stats_programs) = '\t'; // note: previous buf_add_more->buf_insert_do allocated an extra character
-                buf_add_more (evb, &stats_programs, flds[i], ID_len, "stats_programs");
-                added = true;
+                rom hyphen = memchr (flds[i], '-', fld_lens[i]);
+                if (hyphen) fld_lens[i] = hyphen - flds[i];
             }
-            else if (EQ3(flds[i], "PN:")) {
+            else if (EQ3(flds[i], "PN:")) 
                 PN_i = i;
-                if (added) BNXTc (stats_programs) = '\t';
-                buf_add_more (evb, &stats_programs, flds[i], fld_lens[i], "stats_programs");
-                added = true;
-            }
+        
+        // case: the (possibly truncated) ID is a prefix of PN - keep just ID
+        if (PN_i>=0 && ID_i>=0) {
+            if (str_issame_(flds[PN_i]+3, MIN_(fld_lens[PN_i],fld_lens[ID_i]) - 3, flds[ID_i]+3, fld_lens[ID_i]-3)) 
+                pg_len = snprintf (pg, sizeof(pg), "%.*s", fld_lens[ID_i]-3, flds[ID_i]+3);
+            else
+                pg_len = snprintf (pg, sizeof(pg), "%.*s %.*s", STRfi(fld,ID_i), STRfi(fld,PN_i));
+        }
 
-        if (added) {
-            // case: ID and PN are the same - keep just the value (possibly up to the hyphen in ID)
-            if (PN_i>=0 && ID_i>=0 && str_issame_(flds[PN_i]+3, fld_lens[PN_i]-3, flds[ID_i]+3, ID_len-3)){
-                stats_programs.len32 = this_PG_i; // undo           
-                buf_add_more (evb, &stats_programs, flds[ID_i]+3, ID_len-3, "stats_programs"); // just value
-            }
+        else if (PN_i>=0) // only PN exists
+            pg_len = snprintf (pg, sizeof(pg), "%.*s", fld_lens[PN_i]-3, flds[PN_i]+3);
 
-            // case: ID and PN are the same - entire fld is equal
-            else if (PN_i>=0 && ID_i>=0 && str_issame_(flds[PN_i]+3, fld_lens[PN_i]-3, flds[ID_i]+3, fld_lens[ID_i]-3)) {
-                stats_programs.len32 = this_PG_i; // undo           
-                buf_add_more (evb, &stats_programs, flds[ID_i]+3, fld_lens[ID_i]-3, "stats_programs"); // just value
-            }
+        else if (ID_i>=0) // only ID exists
+            pg_len = snprintf (pg, sizeof(pg), "%.*s", fld_lens[ID_i]-3, flds[ID_i]+3);
 
-            uint32_t this_PG_len = stats_programs.len32 - this_PG_i;
+        bool is_dup = false;
+        if (stats_programs.len) {
+            SAFE_NULB (stats_programs);
+            is_dup = strstr (B1STc(stats_programs), pg);
+            SAFE_RESTORE;
+        }
 
-            // case: duplicate PG (perhaps the untaken part of ID - after the dot - is different)
-            if (str_issame_(Bc(stats_programs, this_PG_i), this_PG_len, Bc(stats_programs, last_PG_i), last_PG_len))    
-                stats_programs.len32 -= this_PG_len; // remove the dup
-
-            else { // new, not dup
-                BNXTc (stats_programs) = ';';
-                last_PG_i = this_PG_i;
-                last_PG_len = this_PG_len;
-            }
+        if (!is_dup) {
+            buf_add_moreS (evb, &stats_programs, pg, "stats_programs");
+            BNXTc (stats_programs) = ';'; // buf_add_moreS allocates space for a separator
         }
     }
 }

@@ -233,6 +233,11 @@ extern VBlockP vb_initialize_nonpool_vb (VBID vb_id, DataType dt, rom task);
 extern void vb_change_datatype_nonpool_vb (VBlockP *vb_p, DataType new_dt);
 extern VBlockP vb_get_nonpool_vb (VBID vb_id);
 
+static inline bool vb_is_gencomp (VBlockP vb) 
+{   
+    return (vb->comp_i == SAM_COMP_PRIM || vb->comp_i == SAM_COMP_DEPN) && (VB_DT(BAM) || VB_DT(SAM)); 
+}
+
 // -------------
 // vb_pool stuff
 // -------------

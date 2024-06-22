@@ -35,7 +35,7 @@ static void codec_pacb_init_ctxs (VBlockP vb, ContextP ctx, uint8_t n_channels, 
         ContextP subctx = IS_ZIP ? ctx_get_ctx (vb, pb_dicts[channel_i]) : ECTX(pb_dicts[channel_i]);
 
         if (IS_ZIP) {
-            subctx->local_dep = DEP_L1;
+            subctx->local_dep = DEP_L2;
             subctx->st_did_i  = ctx->did_i;
             subctx->ltype     = LT_SUPP;
         }
@@ -98,8 +98,9 @@ bool codec_pacb_comp_init (VBlockP vb, Did did_i, LocalGetLineCB get_line_cb, bo
             return false;
     }
 
-    ctx->ltype  = LT_CODEC;
-    ctx->lcodec = CODEC_PACB;
+    ctx->ltype     = LT_CODEC;
+    ctx->lcodec    = CODEC_PACB;
+    ctx->local_dep = DEP_L1; // yield to other codecs (eg CODEC_OQ) that need to query QUAL before we destroy it
 
     return true;
 }

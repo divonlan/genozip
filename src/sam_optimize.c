@@ -148,7 +148,7 @@ rom sam_zip_modify (VBlockP vb_, rom line_start, uint32_t remaining)
     rom next_line = line_start;
     str_split_by_tab (next_line, remaining, MAX_FIELDS + AUX, &has_13, false, true); // also advances next_line to next line
     
-    ASSSEG (n_flds >= 11, "%s: Bad SAM file: alignment expected to have at least 11 fields, but found only %u", LN_NAME, n_flds);
+    ASSSEG (n_flds >= 11, "%s: (sam_zip_modify) Bad SAM file: alignment expected to have at least 11 fields, but found only %u", LN_NAME, n_flds);
 
     uint32_t n_auxs = n_flds - AUX;
     rom *auxs = &flds[AUX]; // note: pointers to data on the stack

@@ -223,7 +223,9 @@ void gencomp_initialize (CompIType comp_i, GencompType gct)
         buf_set_promiscuous (&depn.thread_data_comp, "depn.thread_data_comp");
 
         // if we cannot re-read the depn lines from the file, we will offload them to disk
-        if ((txt_file->codec != CODEC_BGZF && txt_file->codec != CODEC_NONE) || txt_file->redirected || txt_file->is_remote) {
+        if ((txt_file->codec != CODEC_BGZF && txt_file->codec != CODEC_NONE) || 
+             txt_file->redirected || txt_file->is_remote ||
+             segconf.zip_txt_modified) { 
             depn_method = DEPN_OFFLOAD;
 
             int depn_name_size = strlen (z_file->name) + 20;

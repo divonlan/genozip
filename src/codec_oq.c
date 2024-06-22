@@ -63,8 +63,12 @@ COMPRESS (codec_oq_compress)
         ZipDataLineSAMP dl = DATA_LINE (line_i);
         txtSTR (qual, dl->QUAL);
 
-        for (uint32_t i=0; i < qual_len; i++) 
+        for (uint32_t i=0; i < qual_len; i++) {
+            #ifdef DEBUG // note: codecs that are destructive to QUAL data (DOMQ, NORMQ...) must set QUAL context to local_dep >= DEP_L1
+            ASSERT (qual[i] >= 33 && qual[i] <= 126, "%s/%u: Invalid QUAL[%u]=%d", VB_NAME, line_i, i, qual[i]);
+            #endif
             count_q[(int)qual[i] - 33]++; // BAM note: qual in txt_data has been already converted to SAM values in bam_rewrite_qual
+        }
     }
 
     char *next[NUM_OQ_CTXS] = {};
@@ -89,7 +93,7 @@ COMPRESS (codec_oq_compress)
         if (!oq_len) continue; // note: oq_len=0 can either mean no OQ field in this line, or empty OP field exists, and SEQ=*. sam_seg_other_qual enforces OP_len==seq_len
 
         for (uint32_t i=0; i < qual_len; i++) 
-            *next[(int)qual[i] - 33]++ = oq[i]; // qual[i] is always in SAM terms (even in BAM), but the channels start from 0 (i.e. in BAM terms)
+            *next[(uint8_t)qual[i] - 33]++ = oq[i]; // qual[i] is always in SAM terms (even in BAM), but the channels start from 0 (i.e. in BAM terms)
     }
 
     // for monochar channels, we just store the mono character in OQ, and cancel the separate context

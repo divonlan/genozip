@@ -7,10 +7,7 @@
 //   under penalties specified in the license.
 
 #include <errno.h>
-#include "genozip.h"
-#include "buffer.h"
-#include "strings.h"
-#include "vblock.h"
+#include "seg.h"
 #include "file.h"
 #include "biopsy.h"
 
@@ -78,27 +75,30 @@ void biopsy_take (VBlockP vb)
 {
     if (!flag.biopsy || !Ltxt) return;
 
-    ARRAY (int32_t, vb_i, biopsy_vb_i);
-
-    for (int i=0; i < vb_i_len; i++)
-        if (vb_i[i] == vb->vblock_i) {
-            memmove (&vb_i[i], &vb_i[i+1], sizeof(uint32_t) * (vb_i_len-(i+1))); // remove from list
-            biopsy_vb_i.count--;
-
+    for_buf2 (int32_t, vb_i, i, biopsy_vb_i)
+        if (*vb_i == vb->vblock_i) {
+            buf_remove (biopsy_vb_i, int32_t, i, 1);
             goto start_biopsy;
         }
 
-        else if (-vb_i[i]-1 == vb->comp_i) 
+        else if (-vb_i[i]-1 == vb->comp_i) // vb_i is actually a comp_i
             goto start_biopsy;
 
 
-    // always output the txt header except if --no-header
+    // case: this is txt_header but it is not explicitly on the list: biopsy it anyway, except if --no-header
     if (vb->vblock_i == 0 && !flag.no_header) 
         goto start_biopsy; 
 
     return; // we were not requested to take a biopsy from this vb
 
 start_biopsy: {
+    // modify, if needed, before taking biopsy
+    if (segconf.zip_txt_modified && DTP(zip_modify) && vb->vblock_i != 0 &&
+        !flag.make_reference && Ltxt) { 
+        ctx_clone (vb);
+        zip_modify (vb);
+    }
+
     DO_ONCE {
         SNPRINTF (biopsy_fn, "%s", file_plain_ext_by_dt (txt_file->data_type));
         file_remove (biopsy_fn.s, true); // remove old file

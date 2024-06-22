@@ -102,6 +102,9 @@ static void dict_io_prepare_for_compress (VBlockP vb)
             for (const CtxNode *node=B1ST (CtxNode, frag_ctx->nodes); node <= BLST (CtxNode, frag_ctx->nodes); node++)
                 if (node->snip_len * 2 > frag_size)
                     frag_size = 2 * roundup2pow ((uint64_t)node->snip_len); // must be power of 2 for dict_io_read_one_vb
+
+            if (flag.show_compress)
+                iprintf ("DICT:  %s: len=%"PRIu64" words=%"PRIu64"\n", frag_ctx->tag_name, frag_ctx->dict.len, frag_ctx->nodes.len);
         }
 
         vb->fragment_ctx   = frag_ctx;
@@ -481,6 +484,12 @@ StrTextMegaLong str_snip_ex (STRp(snip), bool add_quote)
 
         i += b64_len;
     }
+
+    else if (op == SNIP_SPECIAL && Z_DT(VCF) && snip[1] == VCF_SPECIAL_DEFER && snip_len > 2)
+    {
+        SNPRINTF (s, "%.*s", (int)sizeof (s)-50, str_snip_ex (snip+2, snip_len-2, false).s); // recursive call
+        return s;
+    }  
 
     // case: SPECIAL with base64-encodeded dictionaries: 
     // last item in a \t-separated array should be eg "MUX0"SNIP_SPECIAL

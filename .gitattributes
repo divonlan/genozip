@@ -12,6 +12,7 @@
 *.h eol=lf
 *.asm eol=lf
 *.S eol=lf
+Makefile eol=lf
 
 # Declare our textual formats as binary so we can check in test files with Unix or Windows style end-of-lines
 *.vcf binary

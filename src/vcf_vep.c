@@ -119,6 +119,12 @@ void vcf_vep_zip_initialize (void) // nul-terminated string containing list of f
         }
 
     for (unsigned i=0; i < n_names; i++) {
+        // special case: we store AF in VEP_AF, to not conflict with INFO_AF (we don't reconstruct VEP field names, this will only affect STATS output)
+        // MAX_AF is another overlap item between vcf.h and the VEP field list https://ensembl.org/info/docs/tools/vep/vep_formats.html but currently there is no special method for it, so no conflict worries
+        if (str_issame_(STRi(name,i), "AF", 2)) {
+            names[i] = "VEP_AF"; name_lens[i]=6;
+        }
+
         csq_con.items[i] = (ContainerItem){ .dict_id = dict_id_make (names[i], name_lens[i], DTYPE_VCF_INFO), .separator[0] = ((i < n_names-1) ? '|'  : 0) };
 
         ContextP zctx = ctx_add_new_zf_ctx_at_init (names[i], name_lens[i], csq_con.items[i].dict_id); // zctx, but will be the same did for vb contexts because pre-created
@@ -132,6 +138,7 @@ void vcf_vep_zip_initialize (void) // nul-terminated string containing list of f
 
         #define CB(dnum,cb) if (zctx->dict_id.num == (dnum)) csq_cbs[i] = (cb); else
 
+        // if and not switch, because DICT_ID_MAKE1_* do not produce an integer constant
         CB (_INFO_Allele,             vcf_seg_INFO_allele    )
         CB (_INFO_Existing_variation, vcf_vep_Existing_var_cb)
         CB (_INFO_cDNA_position,      seg_integer_or_not_cb  )

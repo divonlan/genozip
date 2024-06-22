@@ -181,7 +181,10 @@ bool fastq_txtfile_have_enough_lines (VBlockP vb_, uint32_t *unconsumed_len,
     VBlockFASTQ *vb = (VBlockFASTQ *)vb_;
 
     // note: the opposite case where R2 has less reads than R1 is caught in txtfile_read_vblock. this case is also caught in zip_prepare_one_vb_for_dispatching
-    ASSINP (vb->pair_num_lines, "Error: File %s has more FASTQ reads than its R1 mate (vb=%s)", txt_name, VB_NAME);
+    ASSINP (vb->pair_num_lines || 
+            (flag.truncate && str_count_char (STRb(vb->txt_data), '\n') < 4), //  we don't have any line either - the data we have is just yet-to-be-truncated partial final line 
+            "Error: File %s has more FASTQ reads than its R1 mate (vb=%s txt_data.len=%u pair_vb_i=%u pair_num_lines=0)", 
+            txt_name, VB_NAME, Ltxt, vb->pair_vb_i);
 
     rom next  = B1STtxt;
     rom after = BAFTtxt;
@@ -243,18 +246,16 @@ void fastq_zip_after_compute (VBlockP vb)
 
 // case of --optimize-DESC: generate the prefix of the read name from the txt file name
 // eg. "../../fqs/sample.1.fq.gz" -> "@sample-1."
-static void fastq_get_optimized_qname_read_name (VBlockFASTQP vb)
+static void fastq_get_optimized_qname_read_name (void)
 {
-    vb->optimized_qname = MALLOC (strlen (txt_file->basename) + 30); // leave room for the line number and possibly mate to follow
-    strcpy (vb->optimized_qname, txt_file->basename);
-    file_get_raw_name_and_type (vb->optimized_qname, NULL, NULL); // remove file type extension
-    vb->optimized_qname_len = strlen (vb->optimized_qname) + 1; // +1 for '.'
+    strncpy (segconf.optimized_qname.s, txt_file->basename, sizeof(StrText)-2); // qname prefix is truncated at 78 characters
+    segconf.optimized_qname_len = 1 + file_get_raw_name_and_type (segconf.optimized_qname.s, NULL, NULL); // remove file type extension
 
     // replace '.' in the filename with '-' as '.' is a separator in con_genozip_opt
-    for (unsigned i=0; i < vb->optimized_qname_len-1; i++)
-        if (vb->optimized_qname[i] == '.') vb->optimized_qname[i] = '-';
+    str_replace_letter (segconf.optimized_qname.s, segconf.optimized_qname_len, '.', '-');
 
-    vb->optimized_qname[vb->optimized_qname_len-1] = '.';
+    segconf.optimized_qname.s[segconf.optimized_qname_len-1] = '.';
+    memset (&segconf.optimized_qname.s[segconf.optimized_qname_len], 0, sizeof(StrText) - segconf.optimized_qname_len); // hygine
 }
 
 // test if an R2 file has been compressed after R1 without --pair - and produce tip if so
@@ -496,15 +497,15 @@ void fastq_segconf_finalize (VBlockP vb)
         flag.aligner_available = false;
 
     if (codec_pacb_maybe_used (FASTQ_QUAL)) 
-        codec_pacb_segconf_finalize (VB);
+        codec_pacb_segconf_finalize (vb);
 
-    if (codec_longr_maybe_used (VB, FASTQ_QUAL)) 
-        codec_longr_segconf_calculate_bins (VB, CTX(FASTQ_QUAL + 1), fastq_zip_qual);
+    if (codec_longr_maybe_used (vb, FASTQ_QUAL)) 
+        codec_longr_segconf_calculate_bins (vb, CTX(FASTQ_QUAL + 1), fastq_zip_qual);
 
     // note: we calculate the smux stdv to be reported in stats, even if SMUX is not used
     codec_smux_calc_stats (vb);
     
-    qname_segconf_finalize (VB);
+    qname_segconf_finalize (vb);
 
     // set optimizations
     if (flag.optimize) {
@@ -519,6 +520,9 @@ void fastq_segconf_finalize (VBlockP vb)
             segconf.qname_flavor[QNAME2]   = NULL;
             ZCTX(FASTQ_QNAME2)->st_did_i   = FASTQ_QNAME; // consolidate_stats doesn't work for QNAME2 because it is not merged if optimized 
         }
+
+        if (segconf.optimize[FASTQ_QNAME])
+            fastq_get_optimized_qname_read_name();
     }
 }
 
@@ -530,8 +534,6 @@ void fastq_seg_finalize (VBlockP vb)
     if (segconf.has_agent_trimmer) 
         codec_assign_best_qual_codec (vb, OPTION_QX_Z, NULL, true, false, NULL);
     
-    FREE (VB_FASTQ->optimized_qname);
-
     // top level snip
     SmallContainer top_level = { 
         .repeats        = vb->lines.len32,
@@ -827,20 +829,15 @@ rom fastq_zip_modify (VBlockP vb_, rom line_start, uint32_t remaining)
     rom after = fastq_seg_get_lines (vb, line_start, remaining, pSTRa(qname), pSTRa(qname2), pSTRa(desc), 
                                      pSTRa(seq), pSTRa(line3), pSTRa(qual), &line1_len, line_has_13);
 
-
-    buf_alloc (vb, &vb->optimized_line, 0, after - line_start + 20, char, 0, "optimized_line"); // +20 for worst case scenario that original DESC was of negligible length, and then we add a long number
+    buf_alloc (vb, &vb->optimized_line, 0, after - line_start + segconf.optimized_qname_len + 20, char, 0, "optimized_line"); // +20 for worst case scenario that original DESC was of negligible length, and then we add a long number
     char *next = B1STc (vb->optimized_line);
 
     *next++ = DC;
 
-    // case: --optimize_DESC: we replace the description with "filename.line_i" (optimized string stored in vb->optimized_qname)
+    // case: --optimize_DESC: we replace the description with "filename.line_i" (optimized string stored in segconf.optimized_qname)
     if (segconf.optimize[FASTQ_QNAME]) {
-
-        if (vb->line_i == 0) 
-            fastq_get_optimized_qname_read_name (vb);
-
         char *save_next = next;
-        next = mempcpy (next, vb->optimized_qname, vb->optimized_qname_len);
+        next = mempcpy (next, segconf.optimized_qname.s, segconf.optimized_qname_len);
         next += str_int (vb->first_line + vb->line_i, next);
 
         // preserve mate (/1 or /2) if mate is on QNAME (possibly is on QNAME2 in which case it is copied anyway)

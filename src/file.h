@@ -226,7 +226,7 @@ typedef struct File {
     Codec comp_codec[MAX_NUM_COMPS];                    // Z_FILE ZIP: codec used for every txt file component (i.e. excluding generated components)
     Codec comp_source_codec[MAX_NUM_COMPS];             // Z_FILE ZIP: source codec used for every txt file component (i.e. excluding generated components)
     FlagsBgzf comp_bgzf[MAX_NUM_COMPS];                 // Z_FILE ZIP BGZF: library and level of BGZF of each comp
-    bool gzip_section_size_single_block[MAX_NUM_COMPS];  // Z_FILE ZIP GZ: if true, disregard gzip_section_size as it represents just one block
+    bool gzip_section_size_single_block[MAX_NUM_COMPS]; // Z_FILE ZIP GZ: if true, disregard gzip_section_size as the entire file is just one GZ block
     uint64_t gzip_section_size[MAX_NUM_COMPS];          // Z_FILE ZIP GZ: size of one gzip section (in uncompressed terms) in case of concatenated gzip. -1 if they are not equal size.
 } File;
 
@@ -248,7 +248,7 @@ extern FileType file_get_type (rom filename);
 extern DataType file_get_data_type_of_input_file (FileType ft);
 extern DataType file_piz_get_dt_of_out_filename (void);
 extern Codec file_get_codec_by_txt_ft (DataType dt, FileType txt_ft, bool source);
-extern void file_get_raw_name_and_type (rom filename, rom *raw_name, FileType *ft);
+extern uint32_t file_get_raw_name_and_type (rom filename, rom *raw_name, FileType *ft);
 extern void file_assert_ext_decompressor (void);
 extern void file_kill_external_compressors (void);
 extern FileType file_get_z_ft_by_txt_in_ft (DataType dt, FileType txt_ft);

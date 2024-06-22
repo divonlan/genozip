@@ -304,11 +304,12 @@ bool codec_domq_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB get_line_c
     if (force || flag.force_qual_codec == CODEC_DOMQ || 
         (!flag.no_domqual && codec_domq_qual_data_is_a_fit_for_domq (vb, qual_ctx, get_line_cb))) {
         
-        qual_ctx->ltype  = LT_CODEC;
-        qual_ctx->lcodec = CODEC_DOMQ;
+        qual_ctx->ltype     = LT_CODEC;
+        qual_ctx->lcodec    = CODEC_DOMQ;
+        qual_ctx->local_dep = DEP_L1; // yield to other codecs (eg CODEC_OQ) that need to query QUAL before we destroy it
 
         ctx_set_ltype (vb, LT_SUPP, SAM_DOMQRUNS, SAM_QUALMPLX, SAM_DIVRQUAL, DID_EOL);
-        domqruns_ctx->local_dep = qualmplx_ctx->local_dep = divrqual_ctx->local_dep = DEP_L1;  
+        domqruns_ctx->local_dep = qualmplx_ctx->local_dep = divrqual_ctx->local_dep = DEP_L2;  
 
         // normalize quality scores in preparation for compression. note: we do it here in seg, as we need to seg the denormalization table
         codec_domq_prepare_normalize (vb, qual_ctx, get_line_cb, qual_ctx, domqruns_ctx);

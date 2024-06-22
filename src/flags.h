@@ -58,7 +58,11 @@ typedef struct {
     int64_t sendto;
     
     // ZIP: data modifying options
-    int optimize, add_line_numbers;
+    enum { NO_OPTIMIZE, FULL_OPTIMIZE, OPTIMIZE_POS_LIST, OPTIMIZE_NEG_LIST } optimize;
+    int optimize_dict_ids_len;
+    DictId *optimize_dict_ids;
+
+    int add_line_numbers;
         
     int truncate; // allow truncated file - compress only available full lines. note: we don't consider this option data modifying as its used for debugging - digest is calculated only after truncation
         
@@ -142,6 +146,7 @@ typedef struct {
         debug_peek, stats_submit, debug_submit, show_deep, show_segconf_has, debug_huffman, debug_split, debug_upgrade,
         debug_debug,  // a flag with no functionality - used for ad-hoc debugging  
         debug_valgrind, debug_tar, // ad-hoc debug printing in prod
+        show_compress,
         no_gencomp, force_gencomp, force_deep, force_PLy, no_domqual, no_pacb, no_longr, no_homp, no_smux, no_faf, no_interleaved,
         force_qual_codec, verify_codec, 
         seg_only, show_bam, xthreads,

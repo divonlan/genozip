@@ -66,6 +66,32 @@ void segconf_set_width (FieldWidth *w,
         }
 }
 
+// finalize optimize - filter the optimizable fields detected in segconf by optimize_dict_ids
+static void segconf_finalize_optimize (void)
+{
+    if (flag.optimize == OPTIMIZE_POS_LIST) {
+        for_zctx 
+            if (segconf.optimize[zctx->did_i]) {
+                bool found = false;
+                for (int d=0; d < flag.optimize_dict_ids_len; d++)
+                    if (dict_id_typeless (zctx->dict_id).num == flag.optimize_dict_ids[d].num) {
+                        found = true;
+                        break;
+                    }
+                if (!found)
+                    segconf.optimize[zctx->did_i] = false; // cancel optimization, because not on positive list
+            }
+    }
+    else if (flag.optimize == OPTIMIZE_NEG_LIST)
+        for_zctx
+            if (segconf.optimize[zctx->did_i]) 
+                for (int d=0; d < flag.optimize_dict_ids_len; d++)
+                    if (dict_id_typeless (zctx->dict_id).num == flag.optimize_dict_ids[d].num) {
+                        segconf.optimize[zctx->did_i] = false; // cancel optimization bc on negative list
+                        break;
+                    }
+} 
+
 // mark contexts as used, for calculation of vb_size
 void segconf_mark_as_used (VBlockP vb, unsigned num_ctxs, ...)
 {
@@ -253,14 +279,14 @@ static bool segconf_get_zip_txt_modified (bool provisional)
         
     // cases where txt data is modified during Seg - digest is not stored, it cannot be tested with --test and other limitations 
     // note: this flag is also set when the file header indicates that it's a Luft file. See vcf_header_get_dual_coords().
-    return has_optimize
-        || flag.add_line_numbers
+    return (has_optimize && DTPZ(zip_modify))
+        || (flag.add_line_numbers && Z_DT(VCF))
         || flag.has_head  // --head diagnostic option to compress only a few lines of VB=1
         || flag.has_biopsy_line;    
 }
 
-// ZIP only
-void segconf_initialize (void)
+// ZIP only: after opening z_file, before reading txt_header and opening txt_file
+void segconf_zip_initialize (void)
 {
     if (segconf_no_calculate()) return;
 
@@ -301,6 +327,18 @@ void segconf_initialize (void)
     }
     
     mutex_initialize (segconf.PL_mux_by_DP_mutex);
+}
+
+// PIZ only
+void segconf_piz_initialize (void)
+{
+    ASSERTISZERO (flag_loading_auxiliary);
+
+    segconf = (SegConf){};
+}
+
+void segconf_free (void)
+{
 }
 
 static void segconf_show_has (void)
@@ -386,8 +424,10 @@ void segconf_calculate (void)
     DT_FUNC (vb, segconf_finalize)(vb); 
 
     // finalize flag.zip_txt_modified after finalizing optimizations
-    if (flag.optimize) 
+    if (flag.optimize) {
+        segconf_finalize_optimize(); // filter fields to be optimized based on positive or negative flags
         segconf.zip_txt_modified = segconf_get_zip_txt_modified (false); 
+    }
 
     // true if txt_file->num_lines need to be counted at zip_init_vb instead of zip_update_txt_counters, 
     // requiring BGZF-uncompression of the VBs by the main thread instead of compute thread
@@ -531,6 +571,16 @@ rom FMT_DP_method_name (FormatDPMethod method)
         case BY_SDP         : return "BY_SDP";
         case BY_INFO_DP     : return "BY_INFO_DP";
         case FMT_DP_DEFAULT : return "DEFAULT";
+        default             : return "INVALID";
+    }
+}
+
+rom FMT_ROAO_method_name (ROAOMethodType method)
+{
+    switch (method) {
+        case RO_AO_none     : return "NONE";
+        case RO_AO_by_AD    : return "BY_AD";
+        case RO_AO_by_DP    : return "BY_DP";
         default             : return "INVALID";
     }
 }

@@ -64,3 +64,12 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_cm)
     
     return HAS_NEW_VALUE;
 }
+
+// ----------------------------------------------------------
+// ms:i DP score of the max scoring segment in the alignment
+// ----------------------------------------------------------
+
+// void sam_seg_ms_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t ms, unsigned add_bytes)
+// {
+//     // if (ms == vb->ref_and_seq_consumed)
+// }

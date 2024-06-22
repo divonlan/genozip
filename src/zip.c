@@ -269,8 +269,9 @@ void zip_compress_all_contexts_b250 (VBlockP vb)
 
         if (flag.show_time) codec_show_time (vb, "B250", ctx->tag_name, ctx->bcodec);
         
-        if (HAS_DEBUG_SEG(ctx)) iprintf ("zip_compress_all_contexts_b250: vb=%s %s: B250.len=%"PRIu64" NODES.len=%"PRIu64"\n", 
-                                         VB_NAME, ctx->tag_name, ctx->b250.len, ctx->nodes.len);
+        if (HAS_DEBUG_SEG(ctx) || flag.show_compress) 
+            iprintf ("B250:  %s: %s: b250.len=%"PRIu64" b250.count=%"PRIu64" nodes.len=%"PRIu64"\n", 
+                     VB_NAME, ctx->tag_name, ctx->b250.len, ctx->b250.count, ctx->nodes.len);
 
         START_TIMER; 
         zfile_compress_b250_data (vb, ctx);
@@ -317,9 +318,9 @@ static void zip_compress_all_contexts_local (VBlockP vb)
 
             if (flag.show_time) codec_show_time (vb, "LOCAL", ctx->tag_name, ctx->lcodec);
 
-            if (HAS_DEBUG_SEG(ctx)) 
-                iprintf ("%s: zip_compress_all_contexts_local: %s: LOCAL.len=%"PRIu64" LOCAL.param=%"PRIu64"\n", 
-                         VB_NAME, ctx->tag_name, ctx->local.len, ctx->local.param);
+            if (HAS_DEBUG_SEG(ctx) || flag.show_compress) 
+                iprintf ("LOCAL: %s: L%u: %s: ltype=%s len=%"PRIu64" size=%"PRIu64" param=%"PRIu64"\n", 
+                         VB_NAME, dep_level, ctx->tag_name, lt_name (ctx->ltype), ctx->local.len, ctx->local.len * lt_width(ctx), ctx->local.param);
 
             START_TIMER; 
             zfile_compress_local_data (vb, ctx, 0);
@@ -497,8 +498,7 @@ static void zip_compress_one_vb (VBlockP vb)
 
     // case we need to modify the data (--optimize etc): re-write VB before digest
     if (segconf.zip_txt_modified && DTP(zip_modify) &&
-        !flag.make_reference && Ltxt &&
-        !((VB_DT(SAM) || VB_DT(BAM)) && vb->comp_i != SAM_COMP_MAIN)) // not generated components
+        !flag.make_reference && Ltxt && !vb_is_gencomp(vb)) 
         zip_modify (vb);
 
     vb->recon_size = Ltxt; // length after potentially modifying
@@ -693,7 +693,7 @@ void zip_one_file (rom txt_basename,
     if (z_file->num_txts_so_far == 0)  // first component of this z_file 
         ctx_initialize_predefined_ctxs (z_file->contexts, txt_file->data_type, z_file->d2d_map, &z_file->num_contexts);
 
-    segconf_initialize(); // before txtheader 
+    segconf_zip_initialize(); // before txtheader 
 
     uint32_t first_vb_i = prev_file_last_vb_i + 1;
 
@@ -815,6 +815,8 @@ finish:
 
     DT_FUNC (txt_file, zip_finalize)(is_last_user_txt_file);
 
+    segconf_free();
+    
     if (flag.show_time_comp_i == flag.zip_comp_i) 
         profiler_add_evb_and_print_report();
 }

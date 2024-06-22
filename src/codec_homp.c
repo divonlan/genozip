@@ -103,8 +103,9 @@ bool codec_homp_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB get_line_c
         !codec_homp_qual_data_is_a_fit_for_homp (vb, qual_ctx, get_line_cb))
         return false;
 
-    qual_ctx->ltype  = LT_CODEC;
-    qual_ctx->lcodec = CODEC_HOMP;
+    qual_ctx->ltype     = LT_CODEC;
+    qual_ctx->lcodec    = CODEC_HOMP;
+    qual_ctx->local_dep = DEP_L1; // yield to other codecs (eg CODEC_OQ) that need to query QUAL before we destroy it
 
     if (segconf.running && TECH(UNKNOWN)) 
         segconf.tech = TECH_ULTIMA; // if tech is unknown, given HOMP compatability, it is likely Ultima

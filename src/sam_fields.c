@@ -8,6 +8,7 @@
 
 #include "sam_private.h"
 #include "chrom.h"
+#include "zip_dyn_int.h"
 
 static const StoreType aux_field_store_flag[256] = {
     ['c']=STORE_INT, ['C']=STORE_INT, 
@@ -709,11 +710,39 @@ static inline void sam_seg_AS_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t as, 
     COPY_TIMER(sam_seg_AS_i);
 }
 
+// ----------------------------------------------------------------------------------------------
+// delta vs seq_len. Used for Ultima a3:i, minimap2 ms:i and until 12.0.37 also AS:i 
+// ----------------------------------------------------------------------------------------------
+
+static void sam_seg_delta_seq_len (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, int64_t value, bool in_local, unsigned add_bytes)    
+{
+    decl_ctx (did_i);
+
+    if (in_local) { // since 15.0.61
+        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_delta_seq_len, '$'/*=in_local*/}, 3, ctx, add_bytes);
+        dyn_int_append (VB, ctx, (int64_t)dl->SEQ.len - value, 0); 
+    }
+
+    else if (!value)
+        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_delta_seq_len }, 2, ctx, add_bytes);
+
+    else {
+        SNIPi2 (SNIP_SPECIAL, SAM_SPECIAL_delta_seq_len, (int64_t)dl->SEQ.len - value);
+        seg_by_did (VB, STRa(snip), did_i, add_bytes);
+    }
+}
+
 // reconstruct seq_len or (seq_len-snip)
-// Note: This is used by AS:i fields in files compressed up to 12.0.37
 SPECIAL_RECONSTRUCTOR (sam_piz_special_delta_seq_len)
 {
-    new_value->i = (int32_t)vb->seq_len - atoi (snip); // seq_len if snip=""
+    int64_t delta;
+    if (str_is_1char (snip, '$')) // since 15.0.61
+        delta = reconstruct_from_local_int (vb, ctx, 0, false);    
+    else
+        delta = atoi (snip); // 0 if snip==""
+
+    new_value->i = (int32_t)vb->seq_len - delta; 
+    
     if (reconstruct) RECONSTRUCT_INT (new_value->i);
     
     return HAS_NEW_VALUE;
@@ -793,15 +822,19 @@ void sam_seg_MAPQ (VBlockSAMP vb, ZipDataLineSAMP dl, unsigned add_bytes)
 
     ctx_set_last_value (VB, CTX(SAM_MAPQ), (int64_t)dl->MAPQ);
 
-    bool do_mux = IS_MAIN(vb) && segconf.is_paired && !segconf.sam_is_unmapped; // for simplicity. To do: also for prim/depn components
-    int channel_i = sam_has_mate?1 : sam_has_prim?2 : 0;
+    bool do_mux = IS_MAIN(vb) && !segconf.sam_is_unmapped; // MAIN-only for simplicity. To do: also for prim/depn components
+    int channel_i = (segconf.MAPQ_use_xq && has(xq_i))         ? 3  // DRAGEN: if xq:i exists in the alignment, MAPQ is expected to be all-the-same
+                  : (segconf.has[OPTION_MQ_i] && sam_has_mate) ? 1  // MAPQ is expected to be == mate's MQ 
+                  : sam_has_prim                               ? 2  // seg saggy depn to separate channel as expected to be lower MAPQ
+                  :                                              0;
+
     ContextP channel_ctx = do_mux ? seg_mux_get_channel_ctx (VB, SAM_MAPQ, (MultiplexerP)&vb->mux_MAPQ, channel_i) 
                                   : CTX(SAM_MAPQ);
 
     ZipDataLineSAMP mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is -1
 
     if (segconf.sam_is_unmapped) 
-        seg_integer_as_snip_do (VB, CTX(SAM_MAPQ), dl->MAPQ, add_bytes); // expecting all-the-same
+        seg_integer_as_snip_do (VB, channel_ctx, dl->MAPQ, add_bytes); // expecting all-the-same
     
     else if (sam_seg_has_sag_by_SA (vb)) {
         sam_seg_against_sa_group (vb, channel_ctx, add_bytes);
@@ -815,6 +848,9 @@ void sam_seg_MAPQ (VBlockSAMP vb, ZipDataLineSAMP dl, unsigned add_bytes)
             sa_mapq_ctx->counts.count += add_bytes; 
         }
     }
+
+    else if (channel_i == 3) 
+        seg_integer_as_snip_do (VB, channel_ctx, dl->MAPQ, add_bytes); // expecting all-the-same
 
     // case: seg against mate
     else if (!segconf.MAPQ_has_single_value && segconf.has[OPTION_MQ_i] &&
@@ -834,6 +870,24 @@ void sam_seg_MAPQ (VBlockSAMP vb, ZipDataLineSAMP dl, unsigned add_bytes)
 
     if (do_mux)
         seg_by_did (VB, STRa(vb->mux_MAPQ.snip), SAM_MAPQ, 0); // de-multiplexer
+}
+
+// since 15.0.61. until then MAPQ used DEMUX_BY_MATE_PRIM
+SPECIAL_RECONSTRUCTOR (sam_piz_special_DEMUX_MAPQ)
+{
+    int channel_i;
+    if (segconf.MAPQ_use_xq && container_peek_has_item (vb, CTX(SAM_AUX), _OPTION_xq_i, false))
+        channel_i = 3; // since 15.0.61
+    
+    else {
+        // note: when reconstructing MAPQ in BAM, FLAG is not known yet, so we peek it here
+        if (!ctx_has_value_in_line_(vb, CTX(SAM_FLAG)))
+            ctx_set_last_value (vb, CTX(SAM_FLAG), reconstruct_peek (vb, CTX(SAM_FLAG), 0, 0));
+
+        channel_i = (segconf.has[OPTION_MQ_i] && sam_has_mate)?1 : sam_has_prim?2 : 0;
+    }
+
+    return reconstruct_demultiplex (vb, ctx, STRa(snip), channel_i, new_value, reconstruct);
 }
 
 // MQ:i Mapping quality of the mate/next segment
@@ -1584,7 +1638,8 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam,
 
         case _OPTION_mc_i: COND (segconf.is_biobambam2_sort, sam_seg_mc_i (vb, numeric.i, add_bytes));
 
-        case _OPTION_ms_i: COND (segconf.sam_ms_type == ms_BIOBAMBAM && !segconf.optimize[SAM_QUAL], sam_seg_ms_i (vb, dl, numeric.i, add_bytes)); // ms:i produced by biobambam or samtools
+        case _OPTION_ms_i: COND0 (segconf.sam_ms_type == ms_BIOBAMBAM && !segconf.optimize[SAM_QUAL], sam_seg_ms_i (vb, dl, numeric.i, add_bytes)) // ms:i produced by biobambam or samtools
+                           COND  (segconf.sam_ms_type == ms_MINIMAP2, sam_seg_delta_seq_len (vb, dl, OPTION_ms_i, numeric.i, true, add_bytes));    // ms:i produced by minimap2
 
         case _OPTION_s1_i: COND (segconf.is_minimap2, sam_seg_s1_i (vb, dl, numeric.i, add_bytes));
 
@@ -1635,12 +1690,13 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam,
         
         case _OPTION_zm_i: COND(segconf.sam_has_zm_by_Q1NAME, sam_seg_pacbio_zm (vb, numeric.i, add_bytes));
 
+        // Illumina DRAGEN fields
         case _OPTION_sd_f: COND (MP(DRAGEN), sam_dragen_seg_sd_f (vb, dl, STRa(value), numeric, add_bytes));
 
         // Ultima Genomics fields
         case _OPTION_tp_B_c: COND (segconf.has[OPTION_tp_B_c] && !dl->no_qual && segconf.has[OPTION_tp_B_c], sam_seg_array_one_ctx (vb, dl, _OPTION_tp_B_c, array_subtype, STRa(value), sam_seg_ULTIMA_tp, dl, NULL));
         case _OPTION_bi_Z: COND (MP(ULTIMA), sam_seg_ultima_bi (vb, STRa(value), add_bytes));
-        case _OPTION_a3_i: COND (MP(ULTIMA), sam_seg_ultima_a3 (vb, dl, numeric.i, add_bytes));
+        case _OPTION_a3_i: COND (MP(ULTIMA), sam_seg_delta_seq_len (vb, dl, OPTION_a3_i, numeric.i, false, add_bytes));
         case _OPTION_XV_Z: COND (MP(ULTIMA), sam_seg_ultima_XV (vb, STRa(value), add_bytes));
         case _OPTION_XW_Z: COND (MP(ULTIMA), sam_seg_ultima_XW (vb, STRa(value), add_bytes));
         case _OPTION_rq_f: COND (MP(ULTIMA) || segconf.pacbio_subreads, sam_seg_float_as_snip (vb, CTX(OPTION_rq_f), STRa(value), numeric, add_bytes)); // expecting all-the-same for subreads

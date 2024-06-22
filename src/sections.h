@@ -249,7 +249,9 @@ typedef struct {
             uint8_t segconf_deep_qname2  : 1; // SAM: v15
             uint8_t segconf_deep_no_qual : 1; // SAM: v15
             uint8_t segconf_use_ins_ctxs : 1; // 15.0.30
-            uint8_t unused_bits          : 6;
+            uint8_t segconf_MAPQ_use_xq  : 1; // 15.0.61
+            uint8_t segconf_has_MQ       : 1; // 15.0.61
+            uint8_t unused_bits          : 4;
             uint8_t segconf_sam_factor;       // 15.0.28: BAM only: 64X estimated blow-up factor of SAM txt_data vs BAM 
             uint8_t segconf_deep_N_fq_score;  // 15.0.39: Deep: when copying QUAL from SAM, update scores of 'N' bases to this value
             char unused[252];
@@ -281,10 +283,13 @@ typedef struct {
                 uint64_t ID          : 6;      // VCF: 15.0.48
                 uint64_t QUAL        : 4;      // VCF: 15.0.51
                 uint64_t BaseCounts  : 5;      // VCF: 15.0.52
-                uint64_t unused      : 24;
+                uint64_t DPB         : 3;      // VCF: 15.0.61
+                uint64_t unused      : 21;
             } width; 
-            
-            uint8_t unused[259];
+
+            float segconf_Q_to_O;              // VCF: 15.0.61
+
+            uint8_t unused[255];
         } vcf;
     };
 

@@ -265,7 +265,7 @@ static void stats_output_file_metadata (void)
     #define REPORT_VBs ({ \
         bufprintf (evb, &stats, "%ss: %s   Contexts: %u   Vblocks: %u x %s   Sections: %u\n",  \
                    DTPZ (line_name), str_int_commas (z_file->num_lines).s, num_used_ctxs, \
-                   z_file->num_vbs, str_size (segconf.vb_size).s, z_file->section_list_buf.len32); })
+                   z_file->num_vbs, (segconf.vb_size % (1 MB) != 0) ? str_int_commas (segconf.vb_size).s : str_size (segconf.vb_size).s, z_file->section_list_buf.len32); })
 
     #define REPORT_QNAME \
         FEATURE (z_file->num_lines, "Read name style: %s%s", "Qname=%s%s", \
@@ -292,8 +292,8 @@ static void stats_output_file_metadata (void)
                 bufprintf (evb, &stats, "FASTQ %ss: %s in %u FASTQ files\n", 
                            dt_props[DT_FASTQ].line_name, str_int_commas (z_file->deep_stats[NDP_FQ_READS]).s, num_fq_files);
 
-            bufprintf (evb, &stats, "Contexts: %u  Vblocks: %u x %u MB  Sections: %s\n", 
-                       num_used_ctxs, z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), str_int_commas (z_file->section_list_buf.len).s);
+            bufprintf (evb, &stats, "Contexts: %u  Vblocks: %u x %s  Sections: %s\n", 
+                       num_used_ctxs, z_file->num_vbs, (segconf.vb_size % (1 MB) != 0) ? str_int_commas (segconf.vb_size).s : str_size (segconf.vb_size).s, str_int_commas (z_file->section_list_buf.len).s);
 
             uint32_t num_deep_fq_vbs = 0;
             if (flag.deep) 
@@ -356,7 +356,7 @@ static void stats_output_file_metadata (void)
             FEATURE0 (segconf.sam_bisulfite, "Feature: Bisulfite", "Bisulfite");
             FEATURE0 (segconf.has_10xGen, "Feature: 10xGenomics_tags", "has_10xGen");
 
-            if (segconf.sam_ms_type && segconf.has[OPTION_ms_i]) {
+            if (segconf.sam_ms_type) {
                 rom names[] = ms_type_NAME;
                 bufprintf (evb, &features, "ms:i_type=%s;", names[segconf.sam_ms_type]);
             }
@@ -432,6 +432,9 @@ static void stats_output_file_metadata (void)
             if (segconf.FMT_GP_content)
                 bufprintf (evb, &features, "GP_content=%s;",  FMT_GP_content_name (segconf.FMT_GP_content));
 
+            if (segconf.vcf_is_freebayes)
+                bufprintf (evb, &features, "RO_AO_method=%s;",  FMT_ROAO_method_name (segconf.FMT_RO_AO_method));
+            
             REPORT_VBs;
 
             break;

@@ -37,7 +37,7 @@ sSTRl(gq_by_pl,32);
 sSTRl(gq_by_gp,32);
 STRl(snip_copy_af,32);
 
-static DictId make_array_item_dict_id (uint64_t dict_id_num, unsigned item_i)
+DictId make_array_item_dict_id (uint64_t dict_id_num, unsigned item_i)
 {
     bytes id = ((DictId)dict_id_num).id;
     char dict_id_str[8] = { id[0], base32(item_i), id[1], id[2], id[3], id[4], id[5], id[6] };
@@ -510,6 +510,8 @@ static void vcf_seg_AD_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP
             }
             else
                 seg_integer_or_not (VB, item_ctxs[i], STRi(item, i), item_lens[i]);
+        
+            ctx_set_last_value (VB, item_ctxs[i], values[i]); // consumed by FORMAT_RO/AO
         }
 
     memcpy (vb->ad_values, values, n_items * sizeof (values[0]));
@@ -1502,9 +1504,16 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
         // GLIMPSE_phase fields
         case _FORMAT_HS    : COND (segconf.vcf_is_GLIMPSE_phase, seg_integer_or_not (VB, ctx, STRi(sf, i), sf_lens[i]));
 
+        // freebayes fields
+        case _FORMAT_RO    : 
+        case _FORMAT_AO    : COND (segconf.vcf_is_freebayes, vcf_seg_FORMAT_RO_AO (vb, ctx, STRi(sf, i)));
+        case _FORMAT_QR    : 
+        case _FORMAT_QA    : COND (segconf.vcf_is_freebayes, vcf_seg_FORMAT_QR_QA (vb, ctx, STRi(sf, i)));
+        
         default            :
-        fallback           : seg_by_ctx (VB, STRi(sf, i), ctx, sf_lens[i]);
-        }
+        fallback           : 
+            vcf_seg_field_fallback (vb, ctx, STRi(sf, i));
+        } // switch
 
         int64_t value;
         if (ctx->flags.store == STORE_INT && !ctx_has_value(VB, ctx->did_i) &&  // not already set

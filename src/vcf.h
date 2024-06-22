@@ -719,11 +719,13 @@
 // Gencove
 #pragma GENDICT INFO_RAF=DTYPE_1=RAF                // <ID=RAF,Number=A,Type=Float,Description="ALT allele frequency in the reference panel">
 
-// Genozip INFO fields
-#pragma GENDICT INFO_LUFT=DTYPE_1=LUFT
-#pragma GENDICT INFO_PRIM=DTYPE_1=PRIM
-#pragma GENDICT INFO_LREJ=DTYPE_1=Lrej
-#pragma GENDICT INFO_PREJ=DTYPE_1=Prej
+// freebayes: https://github.com/freebayes/freebayes
+// also: GT, GQ, GL, AD, DP 
+#pragma GENDICT FORMAT_RO=DTYPE_2=RO                // <ID=RO,Number=1,Type=Integer,Description="Reference allele observation count">
+#pragma GENDICT FORMAT_QR=DTYPE_2=QR                // <ID=QR,Number=1,Type=Integer,Description="Sum of quality of the reference observations">
+#pragma GENDICT FORMAT_AO=DTYPE_2=AO                // <ID=AO,Number=A,Type=Integer,Description="Alternate allele observation count">
+#pragma GENDICT FORMAT_QA=DTYPE_2=QA                // <ID=QA,Number=A,Type=Integer,Description="Sum of quality of the alternate observations">
+#pragma GENDICT INFO_DPB=DTYPE_1=DPB                // <ID=DPB,Number=1,Type=Float,Description="Total read depth per bp at the locus; bases in reads overlapping / bases in haplotype">
 
 #define VCF_MAX_PLOIDY 100  // set to a reasonable 100 to avoid memory allocation explosion in case of an error in the VCF file
 #if VCF_MAX_PLOIDY > 255
@@ -865,7 +867,8 @@ SPECIAL (VCF, 63, PLATYPUS_HP,         vcf_piz_special_PLATYPUS_HP);            
 SPECIAL (VCF, 64, INFO_MLEAF,          vcf_piz_special_INFO_MLEAF);               // added v15.0.36
 SPECIAL (VCF, 65, FORMAT_AD0,          vcf_piz_special_FORMAT_AD0);               // added v15.0.37
 SPECIAL (VCF, 66, MUX_FORMAT_DP,       vcf_piz_special_MUX_FORMAT_DP);            // added v15.0.37
-SPECIAL (VCF, 67, AN,                  vcf_piz_special_INFO_AN);                  // added v15.0.37
+//SPECIAL (VCF, 67, AN,                vcf_piz_special_INFO_AN);                  // In the code from v15.0.37-60, but VCF_SPECIAL_AN was never segged, so we can reuse its number for QR_QA
+SPECIAL (VCF, 67, QR_QA,               vcf_piz_special_QR_QA);                    // added v15.0.61
 SPECIAL (VCF, 68, DEFER,               vcf_piz_special_DEFER);                    // added v15.0.41
 SPECIAL (VCF, 69, RPA,                 vcf_piz_special_RPA);                      // added v15.0.41
 SPECIAL (VCF, 70, SVABA_MATEID,        vcf_piz_special_SVABA_MATEID);             // added v15.0.48

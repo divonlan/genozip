@@ -21,8 +21,9 @@ bool codec_normq_comp_init (VBlockP vb, Did did_i, bool maybe_revcomped, bool fo
 
     decl_ctx (did_i);
 
-    ctx->ltype  = LT_CODEC;
-    ctx->lcodec = CODEC_NORMQ;
+    ctx->ltype     = LT_CODEC;
+    ctx->lcodec    = CODEC_NORMQ;
+    ctx->local_dep = DEP_L1; // yield to other codecs (eg CODEC_OQ) that need to query QUAL before we destroy it
 
     return true;
 }

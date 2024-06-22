@@ -225,6 +225,8 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
         return; // we're only validating that z_file is valid
     }
 
+    segconf_piz_initialize(); // once per z_file, and only when reconstructing files (i.e. not when reading reference) 
+
     // read the genozip header:
     // 1) verify the data type deduced from the file name, or set the data type if it wasn't deduced
     // 2) if an external reference is not specified, check if the file needs one, and if it does - set it from the header

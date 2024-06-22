@@ -67,7 +67,7 @@ static void vcf_seg_INFO_DP_by_BaseCounts (VBlockP vb);
 // return true if caller still needs to seg 
 static void vcf_seg_INFO_DP (VBlockVCFP vb, ContextP ctx, STRp(dp_str))
 {
-    SEGCONF_RECORD_WIDTH (DP, dp_str_len);
+    SEGCONF_RECORD_WIDTH (INFO_DP, dp_str_len);
 
     // used in: vcf_seg_one_sample (for 1-sample files), vcf_seg_INFO_DP_by_FORMAT_DP (multi sample files)
     int64_t dp;
@@ -139,15 +139,13 @@ static void vcf_seg_INFO_DP_by_BaseCounts (VBlockP vb)
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_deferred_DP)
 {
     if (!flag.drop_genotypes && !flag.gt_only && !flag.samples) {
-        ctx->dp.is_deferred = true;             // DP needs to be inserted by vcf_piz_insert_INFO_DP
-
         if (segconf.INFO_DP_method == BY_FORMAT_DP) {
             int64_t sum_format_dp;
             str_item_i_int (STRa(snip), '\t', 1, &sum_format_dp); // note: up to 15.0.35, items[0] was the length of the integer to be inserted. we ignore it now.
             ctx->dp.sum_format_dp = sum_format_dp; // initialize with delta
         }
 
-        vcf_piz_defer_to_after_samples (DP);
+        vcf_piz_defer (ctx);
 
         return NO_NEW_VALUE; // we don't have the value yet - it will be set in vcf_piz_insert_INFO_DP
     }
@@ -189,7 +187,7 @@ void vcf_piz_insert_INFO_DP (VBlockVCFP vb)
             ctx_set_last_value (VB, ctx, info_dp_value);
         } 
 
-        vcf_piz_insert_field (vb, ctx, STRa(info_dp), segconf.wid_DP.width);
+        vcf_piz_insert_field (vb, ctx, STRa(info_dp));
     }
 }
 
@@ -665,6 +663,11 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_FILTERED_HAPS:   CALL_IF (segconf.vcf_is_ultima, vcf_seg_INFO_FILTERED_HAPS (vb, ctx, STRa(value)));
         
         // ---------------------------------------
+        // freebayes
+        // ---------------------------------------
+        case _INFO_DPB:            CALL_IF (segconf.vcf_is_freebayes, DEFER(DPB, DID_NONE));
+
+        // ---------------------------------------
         // Platypus
         // ---------------------------------------
         case _INFO_TR:
@@ -737,7 +740,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_VT:              CALL (vcf_seg_INFO_VT (vb, ctx, STRa(value)));
 
         default: standard_seg:
-            seg_by_ctx (VB, STRa(value), ctx, value_len);
+            vcf_seg_field_fallback (vb, ctx, STRa(value));
             
             if (ctx->flags.store == STORE_INT) {
                 int64_t val;
@@ -747,6 +750,27 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
     }
 
     seg_set_last_txt (VB, ctx, STRa(value));
+}
+
+void vcf_seg_field_fallback (VBlockVCFP vb, ContextP ctx, STRp(value))
+{
+    #define ISNUM(x)  (ctx->header_info.vcf.Number == (x))
+    #define ISTYPE(x) (ctx->header_info.vcf.Type == VCF_##x)
+    
+    if (ISTYPE(Integer) && ISNUM(1)) 
+        seg_integer_or_not (VB, ctx, STRa(value), value_len);
+
+    else if (ISNUM(NUMBER_A)) 
+        seg_array_(VB, ctx, ctx->did_i, STRa(value), ',', 0, false, 
+                   ISTYPE(Integer) ? STORE_INT : STORE_NONE/*goes by ctx->seg_to_local*/, 
+                   DICT_ID_NONE, VCF_SPECIAL_N_ALTS, vb->n_alts, value_len);
+
+    else if (ISTYPE(Float) && ISNUM(1) && ctx->seg_to_local) 
+        seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_SIMPLE, value_len);
+
+    else
+        // note: in case R/G, >1: values are usally correlated, so we're better off with segging to dict
+        seg_by_ctx (VB, STRa(value), ctx, value_len);
 }
 
 void vcf_parse_info_subfields (VBlockVCFP vb, STRp(info))
@@ -779,6 +803,7 @@ void vcf_parse_info_subfields (VBlockVCFP vb, STRp(info))
             X(AN); X(AF); X(AC); X(MLEAC); X(MLEAF); X(AC_Hom); X(AC_Het); X(AC_Hemi); X(DP); X(QD); X(SF);
             X(AS_SB_TABLE); X(SVINSSEQ) ; X(SVTYPE); X(SVLEN); X(HOMSEQ); X(END) ; X(CIPOS); X(LEFT_SVINSSEQ);
             X(BaseCounts); X(platformnames); X(datasetnames); X(callsetnames); X(AF1000G); X(RefMinor);
+            X(DPB);
             default: {}
         }
         #undef X

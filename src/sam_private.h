@@ -248,7 +248,7 @@ typedef struct VBlockSAM {
             idx_UB_Z, idx_BX_Z, idx_CB_Z, idx_GX_Z, idx_CR_Z, idx_CY_Z,
             idx_XO_Z, idx_YS_Z, idx_XB_A, idx_XM_Z, idx_XB_Z,
             idx_dq_Z, idx_iq_Z, idx_sq_Z, idx_ZA_Z, idx_ZB_Z,
-            idx_pr_i, idx_qs_i, idx_ws_i, idx_ZM_B;
+            idx_pr_i, idx_qs_i, idx_ws_i, idx_ZM_B, idx_xq_i;
     #define has(f)   (vb->idx_##f  != -1)
     #define has_MD   (has(MD_Z) && segconf.has[OPTION_MD_Z])
 
@@ -261,8 +261,8 @@ typedef struct VBlockSAM {
  
     #define first_mux mux_XS
     Multiplexer4 mux_XS;
-    Multiplexer4 mux_PNEXT;
-    Multiplexer3 mux_POS, mux_MAPQ;// ZIP: DEMUX_BY_MATE_PRIM multiplexers
+    Multiplexer4 mux_PNEXT, mux_MAPQ;
+    Multiplexer3 mux_POS;// ZIP: DEMUX_BY_MATE_PRIM multiplexers
     Multiplexer3 mux_GP, mux_MP;   // ZIP: channels: is_first, is_last, is_mated
     Multiplexer2 mux_FLAG, mux_MQ, mux_MC, mux_ms, mux_AS, mux_YS, mux_nM, // ZIP: DEMUX_BY_MATE or DEMUX_BY_BUDDY multiplexers
                  mux_mated_z_fields[NUM_MATED_Z_TAGS], mux_ultima_c, mux_dragen_sd, mux_YY, mux_XO, mux_PQ,
@@ -586,6 +586,7 @@ extern void sam_cigar_seg_MC_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(mc), uin
 extern bool sam_cigar_reverse (char *dst, STRp(cigar));
 extern bool sam_cigar_is_valid (STRp(cigar));
 extern void sam_seg_other_CIGAR (VBlockSAMP vb, ContextP ctx, STRp (cigar), bool squanking_allowed, unsigned add_bytes);
+extern rom display_binary_cigar (VBlockSAMP vb);
 
 extern bool sam_seg_0A_rname_cb (VBlockP vb, ContextP ctx, STRp(oa_rname), uint32_t repeat);
 extern bool sam_seg_0A_pos_cb (VBlockP vb, ContextP ctx, STRp(oa_pos), uint32_t repeat);

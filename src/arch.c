@@ -255,27 +255,27 @@ double arch_get_physical_mem_size (void)
     return mem_size;
 }
 
-StrText arch_get_filesystem_type (void)
+StrText arch_get_filesystem_type (FileP file)
 {
     StrText s = { "unknown" };
     int save_errno = errno; // save errno, as this function is often used in ASSERT.
 
-    if (txt_file && txt_file->is_remote) {
+    if (file && file->is_remote) {
         strcpy (s.s, "remote");
         goto done;
     }
 
-    if (txt_file && txt_file->redirected && !txt_file->name) {
+    if (file && file->redirected && !file->name) {
         strcpy (s.s, "pipe");
         goto done;
     }
 
-    if (!txt_file || !txt_file->file || !txt_file->name) 
+    if (!file || !file->file || !file->name) 
         goto done;
 
 #ifdef __linux__    
     struct statfs fs;
-    if (statfs (txt_name, &fs)) goto done; 
+    if (statfs (file->name, &fs)) goto done; 
 
     rom name = NULL;
     #define NAME(magic, name_s) case magic: name = name_s; break
@@ -307,13 +307,13 @@ StrText arch_get_filesystem_type (void)
 
 #elif defined __APPLE__
     struct statfs fs;
-    if (statfs (txt_name, &fs)) goto done; 
+    if (statfs (file->name, &fs)) goto done; 
 
     memcpy (s.s, fs.f_fstypename, MIN_(sizeof(fs.f_fstypename), sizeof(s)-1));
 
 #elif defined _WIN32
     WCHAR ws[100];
-    if (!GetVolumeInformationByHandleW ((HANDLE)_get_osfhandle(fileno (txt_file->file)), 0, 0, 0, 0, 0, ws, ARRAY_LEN(ws))) goto done;
+    if (!GetVolumeInformationByHandleW ((HANDLE)_get_osfhandle(fileno (file->file)), 0, 0, 0, 0, 0, ws, ARRAY_LEN(ws))) goto done;
 
     if (wcstombs (s.s, ws, sizeof(s.s)-1) == (size_t)-1)
         strcpy (s.s, "failed-wcstombs"); // can happen if locale is set to non-english
@@ -323,6 +323,16 @@ done:
     errno = save_errno;
     return s;
 } 
+
+StrText arch_get_txt_filesystem (void)
+{
+    return arch_get_filesystem_type (txt_file);
+}
+
+StrText arch_get_z_filesystem (void)
+{
+    return arch_get_filesystem_type (z_file);
+}
 
 // returns value in bytes
 uint64_t arch_get_max_resident_set (void)
@@ -436,8 +446,9 @@ StrTextSuperLong arch_get_genozip_executable (void)
             memmove (loc + 7, loc + bn_len, strlen (loc+bn_len) + 1/*\0*/);
             memcpy (loc, "genozip", 7);
         }
-
-        else
+        
+        // note: do nothing is is_genounzip - this is likely genozip --decompress
+        else if (!is_genounzip)
             ABORT ("Cannot find substring %s in %s", bn, fn.s);
     }
 

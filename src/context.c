@@ -495,14 +495,14 @@ void ctx_clone (VBlockP vb)
                 vctx->num_new_entries_prev_merged_vb = dict_ctx->num_new_entries_prev_merged_vb;
             }
 
-            vctx->did_i       = did_i;
-            vctx->dict_id     = zctx->dict_id;
-            vctx->st_did_i    = zctx->st_did_i;
-            vctx->dict_did_i  = zctx->dict_did_i;
-            vctx->header_info = zctx->header_info;
-            vctx->last_line_i = LAST_LINE_I_INIT;
-            vctx->tag_i       = -1;
-
+            vctx->did_i        = did_i;
+            vctx->dict_id      = zctx->dict_id;
+            vctx->st_did_i     = zctx->st_did_i;
+            vctx->dict_did_i   = zctx->dict_did_i;
+            vctx->header_info  = zctx->header_info;
+            vctx->seg_to_local = zctx->seg_to_local;
+            vctx->last_line_i  = LAST_LINE_I_INIT;
+            vctx->tag_i        = -1;
             // note: lcodec and bcodec are inherited in merge (see comment in codec_assign_best_codec)
 
             memcpy ((char*)vctx->tag_name, zctx->tag_name, sizeof (vctx->tag_name));
@@ -1857,7 +1857,7 @@ void ctx_set_same_line (VBlockP vb,                  ...) { SET_MULTI_CTX (vb, c
 void ctx_set_store (VBlockP vb, int store_type,      ...) { SET_MULTI_CTX (store_type, ctx->flags.store=(store_type)); } 
 void ctx_set_dyn_int (VBlockP vb,                    ...) { SET_MULTI_CTX (vb, dyn_int_init_ctx (vb, ctx, 0)); }
 void ctx_set_ltype (VBlockP vb, int ltype,           ...) { SET_MULTI_CTX (ltype, ctx->ltype=(ltype)); ASSERT0 (!IS_LT_DYN(ltype), "Use ctx_set_dyn_int"); }
-void ctx_consolidate_stats (VBlockP vb, int parent,  ...) { SET_MULTI_CTX (parent, ctx->st_did_i=parent); CTX(parent)->is_stats_parent = true;}
+void ctx_consolidate_stats (VBlockP vb, int parent,  ...) { SET_MULTI_CTX (parent, ({ ctx->st_did_i=parent; ctx->header_info=CTX(parent)->header_info; })); CTX(parent)->is_stats_parent = true;}
 
 void ctx_consolidate_stats_(VBlockP vb, ContextP parent_ctx, ContainerP con)
 {
@@ -1871,8 +1871,10 @@ void ctx_consolidate_stats_(VBlockP vb, ContextP parent_ctx, ContainerP con)
         if (!con->items[d].dict_id.num) continue;
 
         ContextP item_ctx = ctx_get_ctx (vb, con->items[d].dict_id);
-        if (item_ctx->did_i != parent_ctx->did_i) 
+        if (item_ctx->did_i != parent_ctx->did_i) {
             item_ctx->st_did_i = parent_ctx->did_i;
+            item_ctx->header_info = parent_ctx->header_info;
+        }
     }
 
     parent_ctx->is_stats_parent = true;

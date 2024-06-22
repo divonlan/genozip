@@ -34,7 +34,7 @@ static uint64_t __inline windows_popcount (uint64_t w)
     w = (uint64_t)(w * ((uint64_t)~(uint64_t)0/255)) >> (sizeof(uint64_t) - 1) * 8;
 }
 
-#define POPCOUNT(x) windows_popcountl(x)
+#define POPCOUNT(x) windows_popcount(x)
 #else
 #define POPCOUNT(x) (unsigned)__builtin_popcountll(x)
 #endif

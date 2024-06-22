@@ -300,7 +300,7 @@ void vcf_seg_INFO_BaseCounts (VBlockP vb_) // returns true if caller still needs
     decl_ctx(INFO_BaseCounts);
     STRlast (bc, INFO_BaseCounts);
 
-    SEGCONF_RECORD_WIDTH (BaseCounts, bc_len);
+    SEGCONF_RECORD_WIDTH (INFO_BaseCounts, bc_len);
 
     // up to 3 ALTS, and all ALTs must be unique SNPs
     if (vb->n_alts < 1 || vb->n_alts > 3) fallback: {
@@ -423,8 +423,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_BaseCounts)
 
     // case: defer reconstruction to after samples, as we need FORMAT_AD
     else {
-        ctx->deferred = true;
-        vcf_piz_defer_to_after_samples (BaseCounts);
+        vcf_piz_defer (ctx);
 
         return NO_NEW_VALUE;
     }
@@ -443,7 +442,7 @@ void vcf_piz_insert_INFO_BaseCounts_by_AD (VBlockVCFP vb)
         vcf_piz_calculate_BaseCounts (vb, snip+3, snip_len-3, reconstruct ? recon : NULL, &recon_len);
     
     if (reconstruct)
-        vcf_piz_insert_field (vb, ctx, STRa(recon), segconf.wid_BaseCounts.width);
+        vcf_piz_insert_field (vb, ctx, STRa(recon));
 
     ctx_set_last_value (VB, ctx, value);
 }
@@ -461,7 +460,7 @@ static void vcf_seg_INFO_SF_seg (VBlockP vb); // forward
 // if it is wrong we set sf.SF_by_GT=NO. The assumption is that normally, it is either true for all lines or false.
 bool vcf_seg_INFO_SF_init (VBlockVCFP vb, ContextP ctx, STRp(sf))
 {
-    SEGCONF_RECORD_WIDTH (SF, sf_len);
+    SEGCONF_RECORD_WIDTH (INFO_SF, sf_len);
 
     switch (ctx->sf.SF_by_GT) {
         case no: 
@@ -578,7 +577,7 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_INFO_SF)
             // save snip for later (note: the SNIP_SPECIAL+code are already removed)
             buf_add_moreS (vb, &ctx->deferred_snip, snip, "contexts->deferred_snip");
 
-            vcf_piz_defer_to_after_samples (SF);
+            vcf_piz_defer (ctx);
         }
         else
             RECONSTRUCT ("N/A", 3);
@@ -657,7 +656,7 @@ void vcf_piz_insert_INFO_SF (VBlockVCFP vb)
     }
 
     // make room for the SF txt and copy it to its final location
-    vcf_piz_insert_field (vb, ctx, STRb(ctx->insertion), segconf.wid_SF.width);
+    vcf_piz_insert_field (vb, ctx, STRb(ctx->insertion));
 
     buf_free (ctx->deferred_snip);
     buf_free (ctx->insertion);
@@ -762,7 +761,7 @@ void vcf_seg_INFO_QD (VBlockP vb)
     decl_ctx (INFO_QD);
     STRlast (qd, INFO_QD);
     
-    SEGCONF_RECORD_WIDTH (QD, qd_len);
+    SEGCONF_RECORD_WIDTH (INFO_QD, qd_len);
 
     // case: we can't generate a prediction or prediction is wrong - seg normally
     QdPredType pd;
@@ -798,7 +797,7 @@ void vcf_piz_insert_INFO_QD (VBlockVCFP vb)
     if (qd[qd_len-1] == '0' && !ctx->flags.trailing_zero_ok)
         qd_len -= (qd[qd_len-2] != '0') ? 1 : 3; // if both are 0, remove decimal point too
 
-    vcf_piz_insert_field (vb, ctx, STRa(qd), segconf.wid_QD.width);
+    vcf_piz_insert_field (vb, ctx, STRa(qd));
 }
 
 void vcf_piz_sum_DP_for_QD (VBlockP vb, STRp(recon))
@@ -826,7 +825,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_QD)
     }
 
     else
-        vcf_piz_defer_to_after_samples (QD);
+        vcf_piz_defer (ctx);
 
     return NO_NEW_VALUE;
 }
@@ -861,7 +860,7 @@ void vcf_seg_INFO_AS_SB_TABLE (VBlockP vb)
 
     if (VB_VCF->n_alts != 1) goto fallback;
 
-    SEGCONF_RECORD_WIDTH (AS_SB_TABLE, as_sb_table_len);
+    SEGCONF_RECORD_WIDTH (INFO_AS_SB_TABLE, as_sb_table_len);
 
     char seps[4] = {',', '|', ',', '\0'}; // structure expected if bi-allelic
 
@@ -908,19 +907,6 @@ void vcf_piz_insert_INFO_AS_SB_TABLE (VBlockVCFP vb)
     char as_sb_table[64];
     int as_sb_table_len = snprintf (as_sb_table, sizeof(as_sb_table), "%u,%u|%u,%u", sb[0], sb[1], sb[2], sb[3]);
 
-    vcf_piz_insert_field (vb, ctx, STRa(as_sb_table), segconf.wid_AS_SB_TABLE.width);
+    vcf_piz_insert_field (vb, ctx, STRa(as_sb_table));
 }
 
-// defer reconstruction after reconstruction of FORMAT/SB - happens in vcf_piz_insert_INFO_AS_SB_TABLE
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_DEFER)
-{
-    ctx->deferred = (snip_len ? snip[0] : true); // true, or optional parameter passed to deferred reconstructor
-
-    switch (ctx->did_i) {
-        case INFO_AS_SB_TABLE : vcf_piz_defer_to_after_samples (AS_SB_TABLE); break;
-        case VCF_ID           : vcf_piz_defer_to_later (ID); break;
-        default               : ABORT_PIZ ("unsupported ctx=%s", ctx->tag_name);
-    }
-
-    return NO_NEW_VALUE;
-}

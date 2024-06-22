@@ -51,15 +51,15 @@ typedef struct BgzfFooter {
 } BgzfFooter;
 
 static FlagsBgzf bgzf_recompression_levels[1+MAX_FLAG_BGZF] = {
-    { .library = BGZF_LIBDEFLATE19, .level = 0  },  // --bgzf=0 : BGZF blocks with no compression     
-    { .library = BGZF_IGZIP,        .level = 1  },  // --bgzf=1 : note: this is IGZIP LVL0 
-    { .library = BGZF_IGZIP,        .level = 2  },  // --bgzf=2 : note: this is IGZIP LVL1
-    { .library = BGZF_LIBDEFLATE19, .level = 1  },  // --bgzf=3 
-    { .library = BGZF_LIBDEFLATE19, .level = 7  },  // --bgzf=4 
-    { .library = BGZF_LIBDEFLATE19, .level = 9  },  // --bgzf=5
+    { .library = BGZF_LIBDEFLATE19, .level = 0, .has_eof_block = true },  // --bgzf=0 : BGZF blocks with no compression     
+    { .library = BGZF_IGZIP,        .level = 1, .has_eof_block = true },  // --bgzf=1 : note: this is IGZIP LVL0 
+    { .library = BGZF_IGZIP,        .level = 2, .has_eof_block = true },  // --bgzf=2 : note: this is IGZIP LVL1
+    { .library = BGZF_LIBDEFLATE19, .level = 1, .has_eof_block = true },  // --bgzf=3 
+    { .library = BGZF_LIBDEFLATE19, .level = 7, .has_eof_block = true },  // --bgzf=4 
+    { .library = BGZF_LIBDEFLATE19, .level = 9, .has_eof_block = true },  // --bgzf=5
 };
 
-#define bgzf_no_recompression (FlagsBgzf){ .library = BGZF_NO_LIBRARY, .level = BGZF_NO_BGZF }
+#define bgzf_no_recompression (FlagsBgzf){ .library = BGZF_NO_LIBRARY, .level = BGZF_NO_BGZF, .has_eof_block = false }
 
 // possible return values, see libdeflate_result in libdeflate.h
 static rom libdeflate_error (int err)
@@ -98,10 +98,22 @@ void bgzf_initialize_discovery (FileP file)
     ASSERTNOTINUSE (file->bgzf_plausible_levels);
     
     if (file->codec == CODEC_GZ) {
-        if (flag.show_gz || flag.show_bgzf) {
-            iprintf ("%s: is GZIP but not BGZF\n", file->name); fflush (info_stream);
-            if (flag.show_gz) exit_ok;
+        if (flag.show_gz) {
+            // attempt to detect GZ blocks (up to 64MB)
+            segconf.vb_size = 65 MB; 
+            txt_file = file;
+            z_file = CALLOC (sizeof (File));
+            txtfile_read_vblock (evb);
+            iprintf ("%s: is %s but not BGZF\n", txt_file->name, src_codec_name (txt_file->source_codec, flag.zip_comp_i).s); fflush (info_stream);
+            FREE (z_file);
+            exit_ok;
         }
+
+        else if (flag.show_bgzf) {
+            iprintf ("%s: is GZIP but not BGZF\n", file->name); 
+            fflush (info_stream);
+        }
+
         else return;
     }
  
@@ -294,7 +306,7 @@ static int32_t bgzf_read_block_raw (FILE *file, // txt_file is not yet assigned 
             feof (file) ? "Unexpected end of file while reading" : "Failed to read body", 
             basename, ftello64 (file), 
             (is_remote && save_errno == ESPIPE) ? "Disconnected from remote host" : strerror (save_errno),
-            bytes, body_size, arch_get_filesystem_type().s,
+            bytes, body_size, arch_get_txt_filesystem().s,
             feof (file) ? "If file is expected to be truncated, you may use --truncate-partial-last-line to disregard the final partial BGZF block." : "");
     
     return (bytes == body_size) ? BGZF_BLOCK_SUCCESS : BGZF_BLOCK_TRUNCATED;
@@ -316,7 +328,7 @@ int32_t bgzf_read_block (FileP file, // txt_file is not yet assigned when called
                 flag.truncate ||    // possibly compressing while downloading
                 file->disk_so_far == file->disk_size, // entire file was read
                 "Abrupt EOF in BGZF file %s: disk_so_far=%s disk_size=%s filesystem=%s", 
-                file->name, str_int_commas (file->disk_so_far).s, str_int_commas (file->disk_size).s, arch_get_filesystem_type().s);
+                file->name, str_int_commas (file->disk_so_far).s, str_int_commas (file->disk_size).s, arch_get_filesystem_type (file).s);
 
         return 0; // no EOF block, that's fine
     }
@@ -517,7 +529,7 @@ void bgzf_reread_uncompress_vb_as_prescribed (VBlockP vb, FILE *file)
                 STRl (bgzf_block, BGZF_MAX_BLOCK_SIZE);
                 int32_t ret = bgzf_read_block_raw (file, (uint8_t*)qSTRa(bgzf_block), txt_file->basename, false, HARD_FAIL, NULL); 
                 ASSERT (ret != BGZF_ABRUBT_EOF, "Unexpected BGZF_ABRUBT_EOF while re-reading BGZF block in %s: filesystem=%s offset=%"PRIu64" uncomp_block_size=%u", 
-                        txt_name, arch_get_filesystem_type().s, offset, isize);
+                        txt_name, arch_get_txt_filesystem().s, offset, isize);
 
                 bgzf_uncompress_one_prescribed_block (vb, STRa(bgzf_block), uncomp_block, isize, line->offset.bb_i);
             

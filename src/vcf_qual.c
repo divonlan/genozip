@@ -161,7 +161,7 @@ static inline void vcf_seg_QUAL_by_GP (VBlockVCFP vb, ContextP ctx, STRp(qual))
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_QUAL_BY_GP)
 {
-    vcf_piz_defer_to_after_samples (QUAL);
+    vcf_piz_defer (ctx);
     ctx->QUAL.by_GP        = true;
     ctx->QUAL.is_rounddown = (snip[0] == 'D');
     ctx->QUAL.decimals     = snip[1] - '0';
@@ -183,7 +183,7 @@ void vcf_piz_insert_QUAL_by_GP (VBlockVCFP vb)
         rom qual = str_round (STRa(gp1_str), ctx->QUAL.is_rounddown, ctx->QUAL.decimals, ctx->QUAL.truncate_trailing_zeros, &qual_len).s;
 
         if (IS_RECON_INSERTION(ctx)) 
-            vcf_piz_insert_field (vb, ctx, STRa(qual), segconf.wid_QUAL.width);
+            vcf_piz_insert_field (vb, ctx, STRa(qual));
 
         if (ctx->flags.store == STORE_FLOAT)
             // note: atof again, bc value might be slightly different than gp1 due to rounding in sprintf        
@@ -193,7 +193,7 @@ void vcf_piz_insert_QUAL_by_GP (VBlockVCFP vb)
 
     else {
         if (IS_RECON_INSERTION(ctx)) 
-            vcf_piz_insert_field (vb, ctx, ".", 1, segconf.wid_QUAL.width);
+            vcf_piz_insert_field (vb, ctx, ".", 1);
     }
 }
 
@@ -217,7 +217,7 @@ void vcf_seg_QUAL (VBlockVCFP vb, STRp(qual))
     decl_ctx (VCF_QUAL);
 
     if (segconf.running) {
-        SEGCONF_RECORD_WIDTH (QUAL, qual_len);
+        SEGCONF_RECORD_WIDTH (VCF_QUAL, qual_len);
 
         if (!str_is_1char (qual, '.')) {
             rom period = memchr (qual, '.', qual_len); 
@@ -245,7 +245,10 @@ void vcf_seg_QUAL (VBlockVCFP vb, STRp(qual))
             break;
 
         case VCF_QUAL_DEFAULT: 
-            seg_by_ctx (VB, STRa(qual), ctx, qual_len+1);
+            if (ctx->seg_to_local)
+                seg_add_to_local_string (VB, ctx, STRa(qual), LOOKUP_NONE, qual_len+1);
+            else
+                seg_by_ctx (VB, STRa(qual), ctx, qual_len+1);
             break;
 
         default:

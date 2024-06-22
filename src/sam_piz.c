@@ -63,6 +63,8 @@ void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
         segconf.deep_N_fq_score       = header->sam.segconf_deep_N_fq_score;
         segconf.use_insertion_ctxs    = header->sam.segconf_use_ins_ctxs;
         segconf.est_sam_factor        = (double)header->sam.segconf_sam_factor / (double)SAM_FACTOR_MULT;
+        segconf.MAPQ_use_xq           = header->sam.segconf_MAPQ_use_xq;
+        segconf.has[OPTION_MQ_i]      = header->sam.segconf_has_MQ;
     }
 }
 
@@ -158,20 +160,38 @@ IS_SKIP (sam_piz_is_skip_section)
     if (comp_i >= SAM_COMP_FQ00 && comp_i != COMP_NONE)
         return fastq_piz_is_skip_section (st, comp_i, dict_id, f8, purpose);
 
-    // if this is a mux channel of an OPTION - consider its parent instead. Eg. "M0C:Z0", "M1C:Z1" -> "MC:Z"
-    if (dict_id.id[3]==':' && dict_id.id[1] == dict_id.id[5]&& !dict_id.id[6])
-        dict_id = (DictId){ .id = { dict_id.id[0], dict_id.id[2], ':', dict_id.id[4] } };
-
     SectionFlags f = { .flags = f8 };
     bool is_dict = (ST(DICT));
     
-    uint64_t dnum = dict_id.num;
     bool preproc = (purpose == SKIP_PURPOSE_PREPROC) && (ST(B250) || ST(LOCAL)); // when loading SA, don't skip the needed B250/LOCAL
     bool dict_needed_for_preproc = (is_dict && z_file->z_flags.has_gencomp);  // when loading a SEC_DICT in a file that has gencomp, don't skip dicts needed for loading SA
 
-    if (dict_id_is_qname_sf(dict_id)) dnum = _SAM_Q1NAME; // treat all QNAME subfields as _SAM_Q1NAME
+    // select representative dict_id
 
-    if (codec_pacb_smux_is_qual (dict_id)) dnum = _SAM_QUAL;
+    // case: QNAME subfields: treat as _SAM_Q1NAME
+    if (dict_id.num == 0) {}
+
+    else if (dict_id_is_qname_sf(dict_id)) dict_id.num = _SAM_Q1NAME; 
+
+    // case: a mux channel of an OPTION - consider its parent instead. Eg. "M0C:Z0", "M1C:Z1" -> "MC:Z"
+    else if (dict_id.id[3]==':' && dict_id.id[1] == dict_id.id[5] && !dict_id.id[6])
+        dict_id = (DictId){ .id = { dict_id.id[0], dict_id.id[2], ':', dict_id.id[4] } };
+
+    // case: a mux channel or sub-context of a SAM field - consider its parent instead
+    else if (dict_id_is_field (dict_id)) {
+        if (dict_id.id[3] == '-') // eg Q03-QUAL (PACB) or CCC-QUAL (SMUX)
+            dict_id.num = _SAM_QUAL;
+
+        else if (IS_DIGIT (dict_id.id[1]) && 
+                 dict_id.id[3] != '_') // exclude eg C0Y_DOMQ : subfields of QT/CY/BZ/OQ/2Y/QX/TQ are incorrectly of type FIELD, but kept that way for backcomp
+            switch (dict_id.id[2]) {
+                case 'A': dict_id.num = _SAM_MAPQ  ; break; // eg M0APQ0
+                case 'N': dict_id.num = _SAM_PNEXT ; break; // eg P0NEXT
+                case 'L': dict_id.num = _SAM_FLAG  ; break; // eg F0LAG0
+                case 'O': dict_id.num = _SAM_POS   ; break; // eg P0OS0
+                default: ABORT ("unrecognized FIELD dict_id %s", dis_dict_id(dict_id).s);
+            }
+    }
 
     bool is_prim = (comp_i == SAM_COMP_PRIM) && !preproc;
     bool is_main = (comp_i == SAM_COMP_MAIN);
@@ -181,7 +201,7 @@ IS_SKIP (sam_piz_is_skip_section)
     #define has_sa (ZCTX(OPTION_SA_Z)->z_data_exists > 0)
     #define is_aux dict_id_is_aux_sf(dict_id) /* #define so calculated only when (rarely) needed*/
 
-    switch (dnum) {
+    switch (dict_id.num) {
         case _SAM_SQBITMAP : 
             SKIPIFF ((cov || cnt) && !flag.bases && 
                      !has_sa); // if this file has SA:Z: needed by MD:Z which is needed by NM:i which is needed by SA:Z
@@ -252,17 +272,18 @@ IS_SKIP (sam_piz_is_skip_section)
         case _SAM_SAALN    : KEEP;
         case _SAM_AUX      : KEEP; // needed in preproc for container_peek_get_idxs and codec_pacb_piz_get_np
 
-        case _OPTION_MQ_i  :       // needed for MAPQ reconstruction (mate copy)
+        case _OPTION_MQ_i  : // needed for MAPQ reconstruction (mate copy)
+        case _OPTION_xq_i  : // needed for MAPQ reconstruction
         case _SAM_MAPQ     : // required for SA:Z reconstruction, which is required for RNAME, POS etc if segged against saggy
         case _OPTION_NM_i  : // required for SA:Z reconstruction
         case _OPTION_MD_Z  : // required NM:i reconstruction
             if (!has_sa) goto other; // not needed if this file has no SA:Z
             SKIPIFF (preproc); 
             
-        case _OPTION_MC_Z  : case _OPTION_MC0_Z : case _OPTION_MC1_Z :         
+        case _OPTION_MC_Z  :          
         case _SAM_CIGAR    : SKIPIFF (preproc && IS_SAG_SA);
         case _SAM_RNEXT    : // Required by RNAME and PNEXT
-        case _SAM_PNEXT    : case _SAM_P0NEXT : case _SAM_P1NEXT : case _SAM_P2NEXT : case _SAM_P3NEXT : // PNEXT is required by POS
+        case _SAM_PNEXT    : // PNEXT is required by POS
         case _SAM_POS      : SKIPIFF (preproc && IS_SAG_SA);
         case _SAM_TOPLEVEL : KEEPIF (flag.deep && is_dict); // needed to reconstruct the FASTQ components
                              SKIPIFF (preproc || OUT_DT(BAM) || OUT_DT(CRAM) || OUT_DT(FASTQ));
@@ -270,7 +291,7 @@ IS_SKIP (sam_piz_is_skip_section)
         case 0             : KEEPIFF (ST(VB_HEADER) || !preproc);
         
         default            : other :
-            SKIPIF ((cov || cnt) && is_aux && !(is_dict && dnum == _OPTION_OC_Z/*dict-alias of MC0_Z needed to reconstruct CIGAR*/));
+            SKIPIF ((cov || cnt) && is_aux && !(is_dict && dict_id.num == _OPTION_OC_Z/*dict-alias of MC0_Z needed to reconstruct CIGAR*/));
             SKIPIF (deep_fq && is_aux && !is_dict); // Dictionaries might be needed for FASTQ AUX fields
             SKIPIF (deep_fq && is_dict && is_aux && !f.dictionary.deep_fastq); // Deep --R1/2: we don't need SAM-only AUX dicts
             SKIPIF (is_dict && !flag.deep && is_aux && f.dictionary.deep_fastq && !f.dictionary.deep_sam);   // Deep file, but we are not reconstructed FQ (hence !flag.deep) - we don't need FASTQ-only AUX dicts
@@ -795,7 +816,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_DEMUX_BY_BUDDY)
 // v14: De-multiplex by has_mate and has_prim
 SPECIAL_RECONSTRUCTOR (sam_piz_special_DEMUX_BY_MATE_PRIM)
 {
-    // note: when reconstructing POS in BAM, FLAG is not known yet, so we peek it here
+    // note: when reconstructing POS or MAPQ in BAM, FLAG is not known yet, so we peek it here
     if (!ctx_has_value_in_line_(vb, CTX(SAM_FLAG)))
         ctx_set_last_value (vb, CTX(SAM_FLAG), reconstruct_peek (vb, CTX(SAM_FLAG), 0, 0));
 

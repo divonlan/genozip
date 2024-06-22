@@ -729,7 +729,7 @@ void buflist_test_overflows_all_other_vb (VBlockP caller_vb, rom msg, bool force
     fprintf (stderr, "\nTesting all other VBs (WARNING: NOT thread safe - might segfault; activated by certain flags (see code)):\n");
     bool corruption_detected = false;
     for (VBlockPoolType type=POOL_MAIN; type <= POOL_BGZF; type++) {
-        VBlockPool *vb_pool = vb_get_pool (type, SOFT_FAIL);
+        VBlockPoolP vb_pool = vb_get_pool (type, SOFT_FAIL);
         if (!vb_pool) continue;
 
         for (VBID vb_id=-1; vb_id < (int)vb_pool->num_vbs; vb_id++) {

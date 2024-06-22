@@ -345,6 +345,20 @@ void sam_zip_report_monochar_inserts (void)
     count_non_monochar_ins = count_S = 0; 
 }
 
+// true if next seq-consuming op is I
+static inline bool next_op_is_I (VBlockSAMP vb, uint32_t this_op_i)
+{
+    for (uint32_t op_i=this_op_i+1; op_i < vb->binary_cigar.len32; op_i++) {
+        BamCigarOpType op = B(BamCigarOp, vb->binary_cigar, op_i)->op;
+        if (op == BC_I) 
+            return true; // next seq-consuming op is indeed an I
+        else if (op == BC_M || op == BC_S || op == BC_E || op == BC_X)
+            return false; // next seq-consuming op is not an I
+    }
+    
+    return false; // there is no further seq-consuming op
+}
+
 // Creates a bitmap from seq data - exactly one bit per base that consumes reference (i.e. not bases with CIGAR I/S)
 // - Normal SEQ: tracking CIGAR, we compare the sequence to the reference, indicating in a SAM_SQBITMAP whether this
 //   base in the same as the reference or not. In case of REF_INTERNAL, if the base is not already in the reference, we add it.
@@ -505,8 +519,12 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(s
                         "CIGAR %s implies seq_len longer than actual seq_len=%u", vb->last_cigar ? vb->last_cigar : "", seq_len);
 
                 if (op == BC_I && segconf.use_insertion_ctxs) {
-                    ContextP ins_ctx = seqins_ctx + acgt_encode[(int8_t)seq[i + n]]; // mux by base after insertion in SEQ. note: if i+n is the end of SEQ, then the byte after is 0 in BAM (see bam_seq_to_sam) and \t in SAM - both mapped to 0.
-                    buf_add (&ins_ctx->local, &seq[i], n);
+                    // mux by base after insertion in SEQ. 
+                    // note: if i+n is the end of SEQ, then the byte after is 0 in BAM (see bam_seq_to_sam) and \t in SAM - both mapped to 0.
+                    // note: if we have two consecutive Is in seq (e.g. in RNA: 621I2611N310I), map to 0 (since 15.0.61 - see defect 2024-06-16)
+                    int ins_ctx_i = next_op_is_I (vb, vb->binary_cigar.next - 1) ? 0 : acgt_encode[(int8_t)seq[i + n]];
+
+                    buf_add (&(seqins_ctx + ins_ctx_i)->local, &seq[i], n);
                 }
                 else 
                     buf_add (&nonref_ctx->local, &seq[i], n);
@@ -1204,14 +1222,17 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
 
     // case: insertions were muxed by the base after - we can fill them in now (since 15.0.30)
     if (segconf.use_insertion_ctxs) {
-        SAFE_ASSIGN (recon, 0);           // in case last insertion goes to the end of SEQ - it will use this "base" for muxing
-        recon -= vb->seq_len; // go back to the start of the SEQ reconstruction
+        SAFE_ASSIGN (recon, 0); // in case last insertion goes to the end of SEQ - it will use this "base" for muxing
+        recon -= vb->seq_len;   // go back to the start of the SEQ reconstruction
 
-        for_buf (BamCigarOp, op, vb->binary_cigar) {        
+        for_buf2 (BamCigarOp, op, op_i, vb->binary_cigar) {        
             if (op->op == BC_I) {
-                ContextP ins_ctx = seqins_ctx + acgt_encode[(int8_t)recon[op->n]]; // mux by base after insertion in SEQ. 
+                int ins_ctx_i = next_op_is_I (vb, op_i) ? 0 : acgt_encode[(int8_t)recon[op->n]];
+                ContextP ins_ctx = seqins_ctx + ins_ctx_i; // mux by base after insertion in SEQ. 
                 
-                ASSPIZ (ins_ctx->next_local + op->n <= ins_ctx->local.len32, NEXT_ERRFMT, __FUNCTION__, ins_ctx->tag_name, ins_ctx->next_local, op->n, ins_ctx->local.len32); 
+                ASSPIZ (ins_ctx->next_local + op->n <= ins_ctx->local.len32, NEXT_ERRFMT " op_i=%u cigar=\"%s\"%s", 
+                        __FUNCTION__, ins_ctx->tag_name, ins_ctx->next_local, op->n, ins_ctx->local.len32, op_i, display_binary_cigar (vb),
+                        VER2(15,61) ? "" : ". See defect 2024-06-16."); 
        
                 memcpy (recon, Bc(ins_ctx->local, ins_ctx->next_local), op->n);
                 recon += op->n;

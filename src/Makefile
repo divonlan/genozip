@@ -145,10 +145,10 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.
           zip.c piz.c reconstruct.c recon_history.c recon_peek.c seg.c zfile.c aligner.c flags.c specials.c    	\
 		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c ref_cache.c digest.c \
 		  vcf_piz.c vcf_seg.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_hgvs.c vcf_modify.c     	\
-		  vcf_format_GT.c vcf_format_PS_PID.c vcf_dbsnp.c vcf_giab.c vcf_vep.c vcf_qual.c vcf_1000G.c			\
+		  vcf_format_GT.c vcf_format_PS_PID.c vcf_dbsnp.c vcf_giab.c vcf_vep.c vcf_qual.c vcf_1000G.c vcf_me.c	\
 		  vcf_refalt.c vcf_format.c vcf_illum_gtyping.c vcf_gwas.c vcf_vagrent.c vcf_svaba.c vcf_pbsv.c			\
 		  vcf_icgc.c vcf_snpeff.c vcf_cosmic.c vcf_mastermind.c vcf_isaac.c	vcf_manta.c vcf_pos.c vcf_ultima.c	\
-		  vcf_platypus.c vcf_info_AC_AF_AN.c vcf_format_GQ.c vcf_gatk.c vcf_sv.c vcf_gnomad.c vcf_me.c			\
+		  vcf_platypus.c vcf_info_AC_AF_AN.c vcf_format_GQ.c vcf_gatk.c vcf_sv.c vcf_gnomad.c vcf_freebayes.c	\
 		  sam_seg.c sam_piz.c sam_shared.c sam_header.c sam_md.c sam_nm.c sam_tlen.c sam_cigar.c sam_fields.c  	\
 		  sam_sa.c bam_seg.c bam_seq.c bam_show.c sam_pacbio.c sam_ultima.c sam_xcons.c cram.c agilent.c   		\
 		  sam_seq.c sam_qual.c sam_sag_zip.c sam_sag_piz.c sam_sag_load.c sam_sag_ingest.c sam_sag_scan.c    	\
@@ -515,8 +515,8 @@ SH_VERIFY_ALL_COMMITTED = 																																				\
 	if (( `cd secure; git status -s | wc -l` != 0 )); then echo "ERROR: there are some UNCOMMITTED changes:" ; echo ; git status -s ; exit 1; fi
 
 SH_VERIFY_ALL_STAGED = 																																					\
-	if (( `           git status -s | cut -c2 | grep -v " " | wc -l` != 0 )); then echo "ERROR: there are some UNSTAGED changes:" ; echo ; git status -s ; exit 1; fi;  \
-	if (( `cd secure; git status -s | cut -c2 | grep -v " " | wc -l` != 0 )); then echo "ERROR: there are some UNSTAGED changes:" ; echo ; git status -s ; exit 1; fi
+	if (( `           git diff | wc -l` != 0 )); then echo "ERROR: there are some UNSTAGED changes:" ; echo ; git status -s ; exit 1; fi;  \
+	if (( `cd secure; git diff | wc -l` != 0 )); then echo "ERROR: there are some UNSTAGED changes in 'secure':" ; echo ; ( cd secure ; git status -s ) ; exit 1; fi
 
 test:
 	@cat test.sh | tr -d "\r" | bash -

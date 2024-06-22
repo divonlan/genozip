@@ -16,6 +16,7 @@
     "files.eol": "\n",
     
     "files.associations": {
+        "*.vcf": "plaintext",
         "*.eb": "python",
         "genozip.h": "c",
         "strings.h": "c",
@@ -38,7 +39,8 @@
         "utility": "c",
         "endianness.h": "c",
         "version.h": "c",
-        "libgen.h": "c"
+        "libgen.h": "c",
+        "compare": "c"
     },
     "cmake.sourceDirectory": "C:/Users/divon/genozip/src/onion",
     "cmake.configureOnOpen": false

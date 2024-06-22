@@ -270,6 +270,6 @@ void vcf_piz_insert_pbsv_ID (VBlockVCFP vb)
         char id[id_len];
         memcpy (id, id_recon, id_len);
         
-        vcf_piz_insert_field (vb, ctx, STRa(id), segconf.wid_ID.width);
+        vcf_piz_insert_field (vb, ctx, STRa(id));
     }
 }

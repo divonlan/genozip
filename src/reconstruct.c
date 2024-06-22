@@ -57,10 +57,10 @@ static int64_t reconstruct_from_delta (VBlockP vb,
     else if (!delta_snip_len)
         my_ctx->last_delta = -my_ctx->last_delta; // negated previous delta
 
-    else if (str_is_1char (delta_snip, '$')) // since 15.0.27
+    else if (str_is_1char (delta_snip, '$')) // case: delta is in local (since 15.0.27)
         my_ctx->last_delta = reconstruct_from_local_int (vb, my_ctx, 0, false);
 
-    else // up to 15.0.26
+    else // case: delta is in the snip
         my_ctx->last_delta = (int64_t)strtoull (delta_snip, NULL, 10 /* base 10 */); // strtoull can handle negative numbers, despite its name
 
     char *num_str = BAFTtxt;

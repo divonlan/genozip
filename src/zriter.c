@@ -15,6 +15,7 @@
 #include "profiler.h"
 #include "threads.h"
 #include "zriter.h"
+#include "arch.h"
 
 static uint32_t zriter_thread_num = 0; // for --show-threads
 
@@ -27,8 +28,10 @@ typedef struct {
 
 void zriter_flush (void)
 {
-    if (!flag.zip_no_z_file) 
-        fflush ((FILE*)z_file->file);
+    if (flag.zip_no_z_file) return;
+
+    ASSERT (!fflush ((FILE*)z_file->file), 
+            "fflush to %s on a %s filesystem failed: %s", z_name, arch_get_z_filesystem().s, strerror (errno));
 }
 
 void zriter_wait_for_bg_writing (void)
@@ -47,7 +50,7 @@ void zriter_wait_for_bg_writing (void)
 
     z_file->zriter_threads.len = 0;
 
-    fflush ((FILE*)z_file->file); // important - eg flush pair-1 to disk before pair-2 re-reads via a different FILE 
+    zriter_flush(); // important - eg flush pair-1 to disk before pair-2 re-reads via a different FILE 
 }
 
 static void *zriter_thread_entry (void *zt_)
@@ -63,8 +66,8 @@ static void *zriter_thread_entry (void *zt_)
     int64_t bytes_written = fwrite (zt->data.data, 1, zt->data.len, (FILE *)z_file->file); 
     
     // error if failed to write to file
-    ASSERT (bytes_written == zt->data.len, "wrote only %"PRId64" of the expected %"PRId64" bytes to %s: %s", 
-            bytes_written, zt->data.len, z_file->name, strerror(errno));
+    ASSERT (bytes_written == zt->data.len, "wrote only %"PRId64" of the expected %"PRId64" bytes to %s on a %s filesystem: %s", 
+            bytes_written, zt->data.len, z_file->name, arch_get_z_filesystem().s, strerror(errno));
 
     sections_list_concat (&zt->section_list); // note: must be before incrementing disk_so_far
 
@@ -138,19 +141,19 @@ static void zriter_write_foreground (BufferP data, BufferP section_list, int64_t
     START_TIMER; // not including mutex wait time
 
     if (offset_in_z_file != -1) {
-        fflush ((FILE*)z_file->file); // just in case...
+        zriter_flush(); // just in case...
         file_seek (z_file, offset_in_z_file, SEEK_SET, WRITE, HARD_FAIL); 
     }
     
     int64_t bytes_written = fwrite (data->data, 1, data->len, (FILE *)z_file->file); // use fwrite - let libc manage write buffers for us
 
     // error if failed to write to file
-    ASSERT (bytes_written == data->len, "wrote only %"PRId64" of the expected %"PRId64" bytes to %s: %s", 
-            bytes_written, data->len, z_file->name, strerror(errno));
+    ASSERT (bytes_written == data->len, "wrote only %"PRId64" of the expected %"PRId64" bytes to %s on a %s filesystem: %s", 
+            bytes_written, data->len, z_file->name, arch_get_z_filesystem().s, strerror(errno));
 
     // writing to an offset - return to the end of the file
     if (offset_in_z_file != -1) {
-        fflush ((FILE*)z_file->file); // its not clear why, but without this fflush the bytes immediately after the first header get corrupted (at least on Windows with gcc)
+        zriter_flush(); // its not clear why, but without this fflush the bytes immediately after the first header get corrupted (at least on Windows with gcc)
         file_seek (z_file, 0, SEEK_END, WRITE, HARD_FAIL); 
     }
 
