@@ -21,7 +21,7 @@ sSTRl(snip_redirect_to_QNAME2, 16);
 
 static inline Did did_by_q (QType q) 
 {
-    ASSERT (q >= 0 && q < NUM_QTYPES, "Invalid q=%d", q);
+    ASSERT (IN_RANGE (q, 0, NUM_QTYPES-1), "Invalid q=%d", q);
 
     return (Did[]){ FASTQ_QNAME, FASTQ_QNAME2, FASTQ_LINE3 }[q]; // note: SAM and FASTQ have the same dids for QNAMEs
 }

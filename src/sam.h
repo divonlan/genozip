@@ -152,6 +152,7 @@
 #pragma GENDICT SAM_SAG=DTYPE_FIELD=SAG      // PRIM and DEPN: the sag from which to copy data
 #pragma GENDICT SAM_SAALN=DTYPE_FIELD=SAALN  // DEPN: sags: the alignment within sag which is this line (not needed for PRIM, as the aln_i is always 0)
 #pragma GENDICT SAM_FQ_AUX=DTYPE_FIELD=FQAUX // used for consuming some AUX fields in case of translation to FASTQ (name is "MC_Z" for as up to 14.0.25 it was called SAM_MC_Z)
+#pragma GENDICT SAM_FQ_AUX_OLD=DTYPE_FIELD=MC_Z // 15.0.62: returned MC_Z need for back comp that was incorrectly modified in SAM_FQ_AUX in some 15.0.x version. now we need to support both for back comp...
 
 // Standard AUX fields - section 1.1 here: https://samtools.github.io/hts-specs/SAMtags.pdf
 #define SAM_FIRST_OPTIONAL_DID OPTION_AM_i 
@@ -170,7 +171,7 @@
 #pragma GENDICT OPTION_MQ_i=DTYPE_2=MQ:i     // Mapping quality of the mate/next segment
 #pragma GENDICT OPTION_NH_i=DTYPE_2=NH:i     // Number of reported alignments that contain the query in the current record
 #pragma GENDICT OPTION_IH_i=DTYPE_2=IH:i     // Query hit total count. Novoalign: Number of stored alignments in SAM that contains the query in the current record. Only present if there is more than one alignment reported for the read (i.e. IH <= NH)
-#pragma GENDICT OPTION_HI_i=DTYPE_2=HI:i     // Query hit index (a number [1,NH])
+#pragma GENDICT OPTION_HI_i=DTYPE_2=HI:i     // Query hit index ∈[1,NH]
 #pragma GENDICT OPTION_NM_i=DTYPE_2=NM:i     // Edit distance to the reference
 #pragma GENDICT OPTION_PQ_i=DTYPE_2=PQ:i     // Phred likelihood of the template, conditional on the mapping locations of both/all segments being correct.
 #pragma GENDICT OPTION_SM_i=DTYPE_2=SM:i     // Template-independent mapping quality

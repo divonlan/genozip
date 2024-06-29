@@ -239,14 +239,16 @@ void profiler_add_evb_and_print_report (void)
         PRINT (txtfile_read_vblock, 1);
         PRINT (read, 2);
         PRINT (txtfile_read_block_zlib, 3);
-        PRINT (txtfile_read_block_gz, 3);
+        PRINT (txtfile_read_block_igzip, 3);
+        PRINT (igzip_uncompress_during_read, 4);
         PRINT (txtfile_read_block_bz2, 3);
-        PRINT (txtfile_read_block_bgzf, 3);
+        PRINT (txtfile_read_block_bgz, 3);
         PRINT (bgzf_read_block, 4);
-        PRINT (txtfile_read_block_bgzf_uncompress, 4);
+        PRINT (gzil_read_block, 4)
+        PRINT (bgz_uncompress_during_read, 4);
         PRINT (fastq_txtfile_have_enough_lines, 2);
-        PRINT (txtfile_get_unconsumed_to_pass_to_next_vb, 2);
-        PRINT (bgzf_copy_unconsumed_blocks, 2);
+        PRINT (txtfile_get_unconsumed_callback, 2);
+        PRINT (bgz_copy_unconsumed_blocks, 2);
         PRINT (zriter_write, 1);
         PRINT (write_fg, 2);
         PRINT (write_bg, 2);
@@ -279,7 +281,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (zfile_compress_genozip_header, 2);
 
         iprintf ("GENOZIP compute threads %s\n", str_int_commas (ms(profile.nanosecs.compute)).s);
-        PRINT (bgzf_uncompress_vb, 1);
+        PRINT (bgz_uncompress_vb, 1);
         PRINT (ctx_clone, 1);
         PRINT (scan_index_qnames_preprocessing, 1);
         PRINT (zip_modify, 1);

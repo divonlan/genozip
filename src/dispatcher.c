@@ -13,6 +13,7 @@
 #include "threads.h"
 #include "segconf.h"
 #include "arch.h"
+#include "zip.h"
 
 #define RR(x) ((x) % d->max_threads)
 
@@ -67,8 +68,7 @@ void dispatcher_increment_progress (rom where, int64_t increment)
 
     // update target
     if (IS_ZIP && !txt_file->est_num_lines)
-        d->target_progress = (3 + segconf.zip_txt_modified) // read, (modify), seg, compress
-                           * txtfile_get_seggable_size();
+        d->target_progress = zip_get_target_progress();
 
     // in unbind mode - dispatcher is not done if there's another component after this one
     bool done = dispatcher_is_done (main_dispatcher);
@@ -388,7 +388,7 @@ bool dispatcher_is_input_exhausted (Dispatcher d)
 
 Dispatcher dispatcher_fan_out_task (rom task_name,
                                     rom filename,   // NULL to continue with previous filename
-                                    uint32_t target_progress, // used if progress_type=PROGRESS_PERCENT 
+                                    uint64_t target_progress, // used if progress_type=PROGRESS_PERCENT 
                                     rom prog_msg,   // implies progress_type=PROGRESS_MESSAGE 
                                     bool out_of_order,
                                     bool test_mode,

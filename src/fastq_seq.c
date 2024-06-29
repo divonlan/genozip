@@ -265,7 +265,7 @@ static void fastq_update_coverage_aligned (VBlockFASTQP vb)
     
     ASSPIZ0 (gpos != NO_GPOS, "expecting a GPOS, because sequence is aligned");
 
-    WordIndex ref_index = ref_contig_get_by_gpos (gref, gpos, 0, NULL);
+    WordIndex ref_index = ref_contig_get_by_gpos (gref, gpos, 0, NULL, true); // if gpos is in a gap between to contigs, it means that bulk of seq is on the next contig while its beginning is in the gap
     ASSPIZ0 (ref_index != WORD_INDEX_NONE, "expecting ref_index, because sequence is aligned");
 
     if (flag.show_coverage)

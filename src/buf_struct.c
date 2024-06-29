@@ -77,9 +77,9 @@ void buf_initialize()
 
 rom buf_type_name (ConstBufferP buf)
 {
-    static rom names[] = BUFTYPE_NAMES;
-    if (buf->type >= 0 && buf->type < BUF_NUM_TYPES) 
-        return names[buf->type];
+    if (IN_RANGE (buf->type, 0, BUF_NUM_TYPES-1)) 
+        return (rom[])BUFTYPE_NAMES[buf->type];
+
     else {
         char *s = malloc (32); // used for error printing
         snprintf (s, 32, "invalid_buf_type=%u", buf->type);
@@ -113,15 +113,15 @@ const BufDescType buf_desc (ConstBufferP buf)
 }
 
 // quick inline for internal buf_struct.c use check overflow and underflow in an allocated buffer
-static void no_integrity (ConstBufferP buf, FUNCLINE, rom buf_func)
+static inline void no_integrity (ConstBufferP buf, FUNCLINE, rom buf_func)
 {
     flag.quiet = false;
 
-    ASSERTW (BUNDERFLOW(buf) == UNDERFLOW_TRAP, "called from %s:%u to %s: Error in %s: buffer has corrupt underflow trap",
-             func, code_line, buf_func, buf_desc(buf).s);
+    ASSERTW (BUNDERFLOW(buf) == UNDERFLOW_TRAP, "called from %s:%u to %s: Error in %s: buffer has corrupt underflow trap: %s",
+             func, code_line, buf_func, buf_desc(buf).s, str_to_printable_(buf->memory, 8).s);
 
-    ASSERTW (BOVERFLOW(buf) == OVERFLOW_TRAP, "called from %s:%u to %s: Error in %s: buffer has corrupt overflow trap",
-            func, code_line, buf_func, buf_desc(buf).s);
+    ASSERTW (BOVERFLOW(buf) == OVERFLOW_TRAP, "called from %s:%u to %s: Error in %s: buffer has corrupt overflow trap: %s",
+            func, code_line, buf_func, buf_desc(buf).s, str_to_printable_(buf->memory + buf->size + sizeof(uint64_t), 8).s);
     
     bool corruption_detected = buflist_test_overflows (buf->vb, buf_func);
     if (corruption_detected) buflist_test_overflows_all_other_vb (buf->vb, buf_func, true); // corruption not from this VB - test the others

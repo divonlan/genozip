@@ -156,7 +156,7 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.
 		  sam_blasr.c sam_dragen.c sam_minimap2.c sam_10xGenomics.c sam_biobambam.c sam_pos.c sam_deep.c 		\
 		  sam_star.c sam_abra2.c sam_optimize.c																	\
 		  fastq.c fastq_desc.c fastq_seq.c fastq_qual.c fastq_deep.c fastq_saux.c deep.c						\
-		  fasta.c gff.c bed.c me23.c locs.c generic.c lookback.c compressor.c									\
+		  fasta.c gff.c bed.c me23.c locs.c generic.c lookback.c compressor.c 							\
 		  buffer.c buf_struct.c buf_list.c random_access.c sections.c base64.c bgzf.c coverage.c txtheader.c  	\
 		  codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_bsc.c codec_pacb.c					\
 		  codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c codec_normq.c codec_homp.c codec_t0.c		\
@@ -193,7 +193,7 @@ INCLUDES += dict_id_gen.h aes.h dispatcher.h profiler.h dict_id.h aliases.h txtf
             buffer.h buf_struct.h buf_list.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h 		\
             crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h qname.h qname_flavors.h codec.h  		\
 		 	lookback.h tokenizer.h codec_longr_alg.c gencomp.h dict_io.h recon_plan_io.h tip.h deep.h filename.h stats.h multiplexer.h 		\
-		 	reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h bgzf.h coverage.h threads.h local_type.h 					\
+		 	reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h bgzf.h coverage.h threads.h local_type.h				\
 			arch.h license.h file_types.h data_types.h base64.h txtheader.h writer.h zriter.h bases_filter.h genols.h contigs.h chrom.h 	\
 			vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h gff.h bed.h locs.h generic.h 							\
 			fastq.h fastq_private.h user_message.h mac_compat.h b250.h zip_dyn_int.h qname_filter.h 										\
@@ -335,9 +335,9 @@ DEBUG_OBJS := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.debug-o)) $(addprefix $(OBJDIR
 OPT_OBJS   := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.opt-o))   $(addprefix $(OBJDIR)/,$(CXX_SRCS:.cpp=.opt-o))   $(IGZIP_OBJS) $(BSC_OPT_OBJS)  # optimized but with debug info, for debugging issues that only manifest with compiler optimization
 DEPS       := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.d))       $(addprefix $(OBJDIR)/,$(CXX_SRCS:.cpp=.d))       $(IGZIP_DEPS)
 
-EXECUTABLES       = genozip$(EXE)       genounzip$(EXE)       genocat$(EXE)       genols$(EXE)        autocomplete.sh
-DEBUG_EXECUTABLES = genozip-debug$(EXE) genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE)  autocomplete-debug.sh
-OPT_EXECUTABLES   = genozip-opt$(EXE)   genounzip-opt$(EXE)   genocat-opt$(EXE)   genols-opt$(EXE)    autocomplete-debug.sh
+EXECUTABLES       = genozip$(EXE)       genounzip$(EXE)       genocat$(EXE)       genols$(EXE)        # autocomplete.sh
+DEBUG_EXECUTABLES = genozip-debug$(EXE) genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE)  # autocomplete-debug.sh
+OPT_EXECUTABLES   = genozip-opt$(EXE)   genounzip-opt$(EXE)   genocat-opt$(EXE)   genols-opt$(EXE)    # autocomplete-debug.sh
 
 all   : CFLAGS += $(OPTFLAGS) 
 all   : CXXFLAGS += $(OPTFLAGS) 
@@ -611,7 +611,7 @@ CONDA_RECIPE_DIR = $(CONDA_FEEDSTOCK)/recipe
 # publish to conda-forge 
 conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld.bat 
 	@echo "Publishing to conda-forge"
-	@$(SH_VERIFY_ALL_COMMITTED)
+	@$(SH_VERIFY_ALL_STAGED)
 	@echo " "
 	@echo "Copying $^ to conda feedstock"
 	@(cd $(CONDA_FEEDSTOCK); git reset --hard; git pull)

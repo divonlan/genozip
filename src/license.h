@@ -10,7 +10,7 @@
 
 #include "sections.h"
 
-extern void license_register (bool);
+extern void license_register (void);
 extern bool license_is_registered (void);
 extern void license_set_filename (rom filename);
 extern void license_load (void);

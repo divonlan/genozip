@@ -139,6 +139,10 @@ static void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
                     flag.vblock, MAX_VBLOCK_MEMORY);
 
             segconf.vb_size = (uint64_t)mem_size_mb MB;
+
+            // we can't use GZIL for tiny VBs
+            if (TXT_IS_GZIL && segconf.vb_size < GZIL_MAX_BLOCK_SIZE)
+                txt_file->codec = CODEC_GZ;  // leave source_code=GZIL for stats
         }
 
         // case: developer option - a number of bytes eg "100000B"
@@ -364,12 +368,12 @@ static void segconf_show_has (void)
 void segconf_calculate (void)
 {
     // check for components that don't need segconf
-    if (segconf_no_calculate()) return; 
+    if (segconf_no_calculate()) goto finalize; 
     
     if (TXT_DT(GNRIC) ||    // no need for a segconf test VB in generic files
         flag.skip_segconf) {  // for use in combination with --biopsy, to biopsy of a defective file
         segconf_set_vb_size (NULL, segconf.vb_size);
-        return;
+        goto finalize;
     }
 
     segconf.running = true;
@@ -382,12 +386,13 @@ void segconf_calculate (void)
     
     for (int s = (txt_file->codec == CODEC_BZ2); s < ARRAY_LEN(vb_sizes) && !Ltxt; s++) {
         segconf.vb_size = vb_sizes[s];
+        if (TXT_IS_GZIL) segconf.vb_size = ROUNDUP1M (segconf.vb_size);
         txtfile_read_vblock (vb);
     }
 
     if (!Ltxt) {
         // error unless this is a header-only file
-        ASSERT (txt_file->header_size, "Failed to segconf. Possible reasons: cannot find a single valid line. eof=%s", TF(vb->is_eof));
+        ASSERT (txt_file->header_size, "Failed to segconf. Possible reasons: cannot find a single valid line. is_last_vb_in_txt_file=%s", TF(vb->is_last_vb_in_txt_file));
     
         segconf_set_vb_size (vb, save_vb_size);
         goto done; // cannot find a single line - vb_size set to default and other segconf fields remain default, or previous file's setting
@@ -426,7 +431,7 @@ void segconf_calculate (void)
     // finalize flag.zip_txt_modified after finalizing optimizations
     if (flag.optimize) {
         segconf_finalize_optimize(); // filter fields to be optimized based on positive or negative flags
-        segconf.zip_txt_modified = segconf_get_zip_txt_modified (false); 
+        segconf.zip_txt_modified |= segconf_get_zip_txt_modified (false); // note: might be already marked as modified if truncated
     }
 
     // true if txt_file->num_lines need to be counted at zip_init_vb instead of zip_update_txt_counters, 
@@ -464,8 +469,8 @@ void segconf_calculate (void)
     buf_insert (evb, txt_file->unconsumed_txt, char, 0, txt_data_copy.data, txt_data_copy.len, "txt_file->unconsumed_txt");
     buf_destroy (txt_data_copy);
 
-    if (txt_file->codec == CODEC_BGZF)
-        bgzf_return_segconf_blocks (vb); // return BGZF used by the segconf VB to the unconsumed BGZF blocks
+    if (TXT_IS_BGZF || TXT_IS_GZIL)
+        bgz_return_segconf_blocks (vb); // return BGZF used by the segconf VB to the unconsumed BGZF blocks
 
     // in case of generated component data - undo
     vb->gencomp_lines.len = 0;
@@ -487,6 +492,14 @@ done:
     // restore (used for --optimize-DESC / --add-line-numbers)
     txt_file->num_lines = 0;
     segconf.running = false;
+
+finalize: // code to execute even if segconf was skipped
+    flag.zip_uncompress_source_during_read = 
+        flag.pair == PAIR_R2  || // if we're reading the 2nd paired file, fastq_txtfile_have_enough_lines needs the whole data
+        flag.make_reference   || // unconsumed callback for make-reference needs to inspect the whole data
+        flag.biopsy           ||
+        flag.zip_lines_counted_at_init_vb; // *_zip_init_vb needs to count lines
+
     #undef vb
 }
 

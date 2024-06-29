@@ -139,7 +139,7 @@ typedef struct {
         show_index, show_gheader, show_ref_contigs, show_ref_seq,
         show_reference, show_ref_hash, show_ref_index, show_chrom2ref, show_ref_iupacs, show_ranges,
         show_codec, show_cache, show_memory, show_snips,
-        show_alleles, show_bgzf, show_gz, show_txt_contigs, show_lines,
+        show_alleles, show_bgzf, show_gz, show_txt_contigs, show_lines, show_gz_uncomp,
         show_threads, show_uncompress, biopsy, skip_segconf, show_data_type,
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
         debug_LONG, show_qual, debug_qname, debug_read_ctxs, debug_sag, debug_gencomp, debug_lines, debug_latest,
@@ -154,7 +154,6 @@ typedef struct {
         show_containers, show_stack, show_aligner, show_buddy,
         echo,         // show the command line in case of an error
         recover,      // PIZ: attempted recovery from data corruption
-
         #define SHOW_ALL_HEADERS (-1)
         show_headers; // (1 + SectionType to display) or 0=flag off or -1=all sections
     rom help, dump_section, show_is_set, show_time, show_mutex, show_vblocks, show_header_dict_name;
@@ -204,6 +203,7 @@ typedef struct {
          missing_contexts_allowed, // PIZ: its not an error if contexts are missing - just reconstruct as an empty string
          piz_txt_modified,   // PIZ: output is NOT precisely identical to the compressed source, and hence we cannot use its BZGF blocks or verify digest
          zip_lines_counted_at_init_vb, // ZIP: VB lines need to be counted at zip_init_vb instead of zip_update_txt_counters, requiring BGZF-uncompression of a VB by the main thread
+         zip_uncompress_source_during_read, // ZIP: uncompress source compression in main thread during read, rather than compute thread
          explicit_ref,       // ref->filename was set by --reference or --REFERENCE (as opposed to being read from the genozip header)
          collect_coverage,   // PIZ: collect coverage data for show_coverage/idxstats
          deep_fq_only,       // PIZ: SAM data is reconstructed by not written, only FASTQ data is written

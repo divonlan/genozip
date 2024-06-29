@@ -255,12 +255,10 @@ void aes_initialize (VBlockP vb, bytes key)
 rom aes_display_data (bytes data, unsigned data_len)
 {
     char *str = MALLOC (data_len * 2 + 1);
-    return str_to_hex (STRa(data), str, false);
+    return str_to_hex_ (STRa(data), str, false);
 }
 
 StrText aes_display_key (bytes key) 
 { 
-    StrText s;
-    str_to_hex (key, AES_KEYLEN, s.s, false);
-    return s;
+    return str_to_hex (key, AES_KEYLEN);
 }

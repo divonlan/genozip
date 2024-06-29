@@ -94,7 +94,7 @@ static uint32_t codec_est_size_default (Codec codec, uint64_t uncompressed_len)
 // returns 4-character codec name
 rom codec_name (Codec codec)
 {
-    return (codec >=0 && codec < NUM_CODECS) ? codec_args[codec].name : "BAD!";    
+    return IN_RANGE (codec, 0, NUM_CODECS-1) ? codec_args[codec].name : "BAD!";    
 }
 
 void codec_initialize (void)
@@ -311,7 +311,7 @@ Codec codec_assign_best_codec (VBlockP vb,
     // save the assignment for future VBs, but not in --best, where each VB tests on its own.
     // note: for local (except in --fast), we don't commit for vb=1 bc less representative of data 
     // (ok for --best as we count (BEST_LOCK_IN_THREASHOLD) anyway))
-    if ((is_b250 || (is_local && (flag.best || flag.fast || vb->vblock_i > 1 || vb->is_eof))) && *selected_codec != CODEC_UNKNOWN && zctx) 
+    if ((is_b250 || (is_local && (flag.best || flag.fast || vb->vblock_i > 1 || vb->is_last_vb_in_txt_file))) && *selected_codec != CODEC_UNKNOWN && zctx) 
         ctx_commit_codec_to_zf_ctx (vb, ctx, is_local, true);
 
 done:

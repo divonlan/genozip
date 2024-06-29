@@ -175,7 +175,7 @@ bool sections_prev_sec2 (Section *sl_ent,   // optional in/out. if NULL - search
 {
     Section sec = sl_ent ? *sl_ent : NULL; 
 
-    ASSERT (!sec || (sec >= B1ST(SectionEnt, z_file->section_list_buf) && sec <= BLST(SectionEnt, z_file->section_list_buf)),
+    ASSERT (!sec || IN_RANGE (sec, B1ST(SectionEnt, z_file->section_list_buf), BLST(SectionEnt, z_file->section_list_buf)),
            "Invalid sec: st1=%s st2=%s", st_name (st1), st_name (st2));
 
     while (!sec || sec >= B1ST (SectionEnt, z_file->section_list_buf)) {
@@ -458,7 +458,7 @@ void sections_list_memory_to_file_format (bool in_place) // in place, or to evb-
         SectionEnt sec = *B(SectionEnt, z_file->section_list_buf, i); // copy before it gets overwritten
         
         int64_t offset_delta = (int64_t)sec.offset - (int64_t)prev_sec.offset;
-        ASSERT (offset_delta >=0LL && offset_delta <= 0xffffffffLL,  // note: offset_delta is size of previous section
+        ASSERT (IN_RANGE (offset_delta, 0LL, 0xffffffffLL),  // note: offset_delta is size of previous section
                 "section_i=%u size=%"PRId64" st=%s is too big", i-1, offset_delta, st_name ((fsec-1)->st));
 
         int32_t vb_delta = INTERLACE(int32_t, (int32_t)sec.vblock_i - (int32_t)prev_sec.vblock_i);

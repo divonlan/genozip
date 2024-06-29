@@ -218,7 +218,7 @@ void bam_seg_BIN (VBlockSAMP vb, ZipDataLineSAMP dl, uint16_t bin /* used only i
 
 static inline void bam_seg_ref_id (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, int32_t ref_id, int32_t compare_to_ref_i)
 {
-    ASSERT (ref_id == -1 || (sam_hdr_contigs && ref_id >= 0 && ref_id < (int32_t)sam_hdr_contigs->contigs.len), 
+    ASSERT (ref_id == -1 || (sam_hdr_contigs && IN_RANGE (ref_id, 0, sam_hdr_contigs->contigs.len32-1)), 
             "%s: encountered %s.ref_id=%d but header has only %u contigs%s", 
             LN_NAME, CTX(did_i)->tag_name, ref_id, sam_hdr_contigs ? sam_hdr_contigs->contigs.len32 : 0,
             MP(LONGRANGER) ? ". This is a known longranger bug (samtools won't accept this file either)." : "");
@@ -412,8 +412,8 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
 
     // a non-sensical block_size might indicate an false-positive identification of a BAM alignment in bam_unconsumed
     ASSERT (block_size + 4 >= sizeof (BAMAlignmentFixed) && block_size + 4 <= remaining_txt_len, 
-            "%s: (block_size+4)=%u is out of range - too small, or goes beyond end of txt data: remaining_txt_len=%u",
-            LN_NAME, block_size+4, remaining_txt_len);
+            "%s: (block_size+4)=%u is out of range - too small, or goes beyond end of txt data: txt_data.len=%u remaining_txt_len=%u",
+            LN_NAME, block_size+4, vb->txt_data.len32, remaining_txt_len);
 
     rom after = alignment + block_size + sizeof (uint32_t);
 

@@ -139,7 +139,8 @@ void progress_update (rom task, uint64_t sofar, uint64_t total, bool done)
         if (!flag.debug_progress)
             progress_update_status (NULL, "Finalizing...");
         else {
-            snprintf (progress_str, sizeof(progress_str), "Finalizing... %u%% task=%s sofar=%"PRIu64" total=%"PRIu64, (unsigned)percent, task, sofar, total);            
+            snprintf (progress_str, sizeof(progress_str), "Finalizing... %u%% task=%s sofar=%.20s total=%.20s", 
+                      (unsigned)percent, task, str_int_commas(sofar).s, str_int_commas(total).s);            
             progress_update_status (NULL, progress_str);
         }
     }
@@ -154,8 +155,8 @@ void progress_update (rom task, uint64_t sofar, uint64_t total, bool done)
             if (!flag.debug_progress)
                 snprintf (progress_str, sizeof(progress_str), "%u%% (%s)", (unsigned)percent, str_human_time (secs, false).s);
             else
-                snprintf (progress_str, sizeof(progress_str), "%u%% (%s) task=%s sofar=%"PRIu64" total=%"PRIu64" seconds_so_far=%d", 
-                         (unsigned)percent, str_human_time (secs, false).s, task, sofar, total, seconds_so_far);            
+                snprintf (progress_str, sizeof(progress_str), "%u%% (%s) task=%s sofar=%.20s total=%.20s seconds_so_far=%d", 
+                         (unsigned)percent, str_human_time (secs, false).s, task, str_int_commas(sofar).s, str_int_commas(total).s, seconds_so_far);            
 
             progress_update_status (NULL, progress_str);
         }

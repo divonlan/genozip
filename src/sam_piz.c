@@ -778,9 +778,11 @@ CONTAINER_FILTER_FUNC (sam_piz_filter)
 
     // collect_coverage: rather than reconstructing optional, reconstruct SAM_FQ_AUX that just consumes MC:Z if it exists
     else if (dict_id.num == _SAM_AUX) {
-        if (flag.collect_coverage) { // filter_repeats is set in the AUX container since v14
-            ASSISLOADED(CTX(SAM_FQ_AUX));
-            reconstruct_from_ctx (vb, SAM_FQ_AUX, 0, false);
+        if (flag.collect_coverage) {
+            if      (CTX(SAM_FQ_AUX    )->is_loaded) reconstruct_from_ctx (vb, SAM_FQ_AUX,     0, false); // filter_repeats is set in the AUX container since v14
+            else if (CTX(SAM_FQ_AUX_OLD)->is_loaded) reconstruct_from_ctx (vb, SAM_FQ_AUX_OLD, 0, false);
+            else ABORT0 ("Neither SAM_FQ_AUX or SAM_FQ_AUX_OLD are loaded");
+
             return false; // don't reconstruct AUX
         }
 

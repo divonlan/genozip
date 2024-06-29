@@ -99,8 +99,8 @@ void chrom_2ref_load (Reference ref)
         WordIndex chrom_index = BGEN32 (ent->chrom_index);
         WordIndex ref_index   = BGEN32 (ent->ref_index);
 
-        ASSERT (chrom_index >= 0 && chrom_index < zctx->word_list.len, "chrom_index=%d ∉ [0,%d]", chrom_index, (int32_t)zctx->word_list.len-1);
-        ASSERT (!num_ref_contigs /* ref not loaded */ || (ref_index >= -1 && ref_index < num_ref_contigs), 
+        ASSERT (IN_RANGE(chrom_index, 0, zctx->word_list.len32-1), "chrom_index=%d ∉ [0,%d]", chrom_index, (int32_t)zctx->word_list.len-1);
+        ASSERT (!num_ref_contigs /* ref not loaded */ || IN_RANGE (ref_index, -1, num_ref_contigs-1), 
                 "ref_index=%d ∉ [-1,%u] (chrom_index=%u i=%u len=%u)", 
                 ref_index, num_ref_contigs-1, chrom_index, i, evb->scratch.len32);
 
@@ -135,7 +135,7 @@ WordIndex chrom_2ref_seg_get (Reference ref, ConstVBlockP vb, WordIndex chrom_in
                         : (chrom_index < ctx->chrom2ref_map.len32) ? *B(WordIndex, ctx->chrom2ref_map, chrom_index - ol_len) // possibly WORD_INDEX_NONE, see chrom_seg_ex
                         :                                            WORD_INDEX_NONE;
 
-    ASSSEG (ref_index >= WORD_INDEX_NONE && ref_index < (WordIndex)ref_num_contigs (ref), 
+    ASSSEG (IN_RANGE (ref_index, WORD_INDEX_NONE, (WordIndex)ref_num_contigs (ref)-1), 
             "ref_index=%d out of range: ref->ranges.len=%u, chrom_index=%d", ref_index, ref_num_contigs (ref), chrom_index);
 
     return ref_index;

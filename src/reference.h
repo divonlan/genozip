@@ -111,7 +111,7 @@ extern void ref_contigs_load_contigs (Reference ref);
 extern uint32_t ref_contigs_get_num_contigs (Reference ref);
 extern PosType64 ref_contigs_get_genome_nbases (Reference ref);
 
-extern WordIndex ref_contig_get_by_gpos (const Reference ref, PosType64 gpos, int32_t seq_len, PosType32 *pos);
+extern WordIndex ref_contig_get_by_gpos (const Reference ref, PosType64 gpos, int32_t seq_len, PosType32 *pos, bool next_contig_if_in_gap);
 
 // cache stuff
 extern bool ref_cache_is_cached  (Reference ref);
@@ -147,7 +147,7 @@ static inline void ref_assert_nucleotide_available (ConstRangeP range, PosType64
     bool available;
     switch (flag.reference) {
         case REF_STORED   : available = ref_is_nucleotide_set (range, pos); break;
-        default           : available = (pos >= range->first_pos && pos <= range->last_pos); break;
+        default           : available = IN_RANGE (pos, range->first_pos, range->last_pos); break;
     }
     ASSERT (available, "reference is not set: chrom=%.*s pos=%"PRId64, (range)->chrom_name_len, (range)->chrom_name, (pos));
 }

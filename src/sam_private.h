@@ -610,8 +610,7 @@ extern void sam_reconstruct_SA_cigar_from_SA_Group (VBlockSAMP vb, SAAln *a);
 
 extern CigarSignature cigar_sign (STRp(cigar));
 extern bool cigar_is_same_signature (CigarSignature sig1, CigarSignature sig2) ;
-typedef struct { char s[CIGAR_SIG_LEN*2 + 1]; } DisCigarSig;
-extern DisCigarSig cigar_display_signature (CigarSignature sig);
+extern StrText cigar_display_signature (CigarSignature sig);
 
 #define SA_CIGAR_DISPLAY_LEN 12
 extern rom sam_piz_display_aln_cigar (const SAAln *a);
@@ -880,7 +879,7 @@ static inline char sam_seg_sam_type_to_bam_type (char type, int64_t n)
 
     // i converts to one of 6: C,c,S,s,I,i
     for (int i=0 ; i < 6; i++)
-        if (n >= lt_min (test[i]) && n <= lt_max (test[i]))
+        if (IN_RANGE (n, lt_min (test[i]), lt_max (test[i])))
             return lt_desc[test[i]].sam_type;
     
     return 0; // number out of range

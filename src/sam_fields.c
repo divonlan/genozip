@@ -370,7 +370,7 @@ static void sam_seg_SM_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t SM, unsigne
 {
     decl_ctx (OPTION_SM_i);
 
-    if (SM >= 0 && SM <= 255 && 
+    if (IN_RANGE (SM, 0, 255) && 
         SM != 254 &&           // note: 254 is a valid, but highly improbable value - we use 254 for "copy from MAPQ" so a actual 254 is segged as an exception
         !(SM && !dl->MAPQ)) {  // we're expecting SM=0 if MAPQ=0
         
@@ -416,7 +416,7 @@ static void sam_seg_AM_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t AM, unsigne
     // note: currently we only support for this algorithm AM appearing after SM. Easily fixable if ever needed.
     // AM is often one of 3 options: 0, =SM =MAPQ-SM. If SM=0 then AM is expected to be 0.
     if (has(SM_i) && 
-        AM >= 0 && AM <= 255 &&   // valid value
+        IN_RANGE (AM, 0, 255) &&  // valid value
         AM != 253 && AM != 254) { // note: 253,254 are valid, but highly improbable values
 
         int32_t SM;
@@ -667,7 +667,7 @@ static inline void sam_seg_AS_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t as, 
 
     // in bowtie2-like data, we might be able to copy from mate
     else if (segconf.is_bowtie2) {
-        ASSERT (as >= MIN_AS_i && as <= MAX_AS_i, "%s: AS=%"PRId64" is ∉ [%d,%d]", LN_NAME, as, MIN_AS_i, MAX_AS_i);    
+        ASSERT (IN_RANGE (as, MIN_AS_i, MAX_AS_i), "%s: AS=%"PRId64" is ∉ [%d,%d]", LN_NAME, as, MIN_AS_i, MAX_AS_i);    
         
         ZipDataLineSAMP mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is -1
 
@@ -894,7 +894,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_DEMUX_MAPQ)
 // Seg against mate if we have one, or else against MAPQ as it is often very similar
 static inline void sam_seg_MQ_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t mq, unsigned add_bytes)
 {
-    ASSERT (mq >=0 && mq <= 255, "%s: Invalid MQ:i=%"PRId64": expecting an integer [0,255]", LN_NAME, mq);
+    ASSERT (IN_RANGE (mq, 0, 255), "%s: Invalid MQ:i=%"PRId64": expecting an integer [0,255]", LN_NAME, mq);
     dl->MQ = mq; 
     
     ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_MQ_i, (MultiplexerP)&vb->mux_MQ, sam_has_mate);
@@ -912,7 +912,7 @@ static inline void sam_seg_MQ_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t mq, 
 // PQ:i Phred likelihood of the template, conditional on the mapping locations of both/all segments being correct.
 static inline void sam_seg_PQ_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t pq, unsigned add_bytes)
 {
-    if (pq >= 0 && pq <= 65534) // dl->PQ is uint16_t
+    if (IN_RANGE (pq, 0, 65534)) // dl->PQ is uint16_t
         dl->PQ = pq + 1; // +1, so that if pq is out of this range, leave dl as 0, which will mean "no valid PQ"
     
     ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_PQ_i, (MultiplexerP)&vb->mux_PQ, sam_has_mate);
@@ -977,7 +977,7 @@ void sam_seg_buddied_i_fields (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i,
 
     // BAM spec permits values up to 0xffffffff, and SAM is unlimited, however for code covenience we limit
     // values segged with this method to int32_t. If this is ever an issue, it can be solved.
-    ASSERT (my_value >= -0x80000000LL && my_value <= 0x7fffffffLL, "%s: Value of %s is %"PRId64", outside the supported range by Genozip of [%d,%d]",
+    ASSERT (IN_RANGE (my_value, -0x80000000LL, 0x7fffffffLL), "%s: Value of %s is %"PRId64", outside the supported range by Genozip of [%d,%d]",
             LN_NAME, ctx->tag_name, my_value, -0x80000000, 0x7fffffff);
 
     #define by_mate      (mux->special_code == SAM_SPECIAL_DEMUX_BY_MATE)

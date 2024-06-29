@@ -665,7 +665,7 @@ static void sam_cigar_update_random_access (VBlockSAMP vb, ZipDataLineSAMP dl)
 
         if (LN == -1) {}
             
-        else if (last_pos >= 1 && last_pos <= LN)
+        else if (IN_RANGE (last_pos, 1, LN))
             random_access_update_last_pos (VB, last_pos);
         
         else  // we circled back to the beginning for the chromosome - i.e. this VB RA is the entire chromosome
@@ -1000,6 +1000,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_COPY_BUDDY_CIGAR)
 
     // get CIGAR field value previously reconstructed in BAM **BINARY** format
     STR(bam_cigar);
+    CTX(SAM_CIGAR)->empty_lookup_ok = true; // in case CIGAR is "*" (i.e. empty in BAM) (was incorrectly missing, added in 15.0.62)
     sam_reconstruct_from_buddy_get_textual_snip (vb, CTX(SAM_CIGAR), bt, pSTRa(bam_cigar));
     
 #ifndef GENOZIP_ALLOW_UNALIGNED_ACCESS
@@ -1041,8 +1042,8 @@ void sam_reconstruct_main_cigar_from_sag (VBlockSAMP vb, bool do_htos, ReconType
             uint32_t uncomp_len = cigar_len;
             void *success = rans_uncompress_to_4x16 (VB, comp, a->cigar.piz.comp_len,
                                                      B1ST8(vb->scratch), &uncomp_len); 
-            ASSPIZ (success && uncomp_len == cigar_len, "rans_uncompress_to_4x16 failed to decompress an SA Aln CIGAR data: grp_i=%u aln_i=%"PRIu64" success=%u comp_len=%u uncomp_len=%u expected_uncomp_len=%u cigar_index=%"PRIu64" comp[10]=%s",
-                    ZGRP_I(vb->sag), ZALN_I(a), !!success, (uint32_t)a->cigar.piz.comp_len, uncomp_len, cigar_len, (uint64_t)a->cigar.piz.index, str_hex10 (comp, a->cigar.piz.comp_len).s);
+            ASSPIZ (success && uncomp_len == cigar_len, "rans_uncompress_to_4x16 failed to decompress an SA Aln CIGAR data: grp_i=%u aln_i=%"PRIu64" success=%u comp_len=%u uncomp_len=%u expected_uncomp_len=%u cigar_index=%"PRIu64" comp[10]=%.10s",
+                    ZGRP_I(vb->sag), ZALN_I(a), !!success, (uint32_t)a->cigar.piz.comp_len, uncomp_len, cigar_len, (uint64_t)a->cigar.piz.index, str_to_hex (comp, a->cigar.piz.comp_len).s);
         }
 
         // case: not compressed
@@ -1160,12 +1161,8 @@ bool cigar_is_same_signature (CigarSignature sig1, CigarSignature sig2)
     return !memcmp (sig1.bytes, sig2.bytes, CIGAR_SIG_LEN);
 }
 
-DisCigarSig cigar_display_signature (CigarSignature sig)
-{
-    DisCigarSig dis;
-    
-    str_to_hex (sig.bytes, CIGAR_SIG_LEN, dis.s, false);
-
-    return dis;
+StrText cigar_display_signature (CigarSignature sig)
+{    
+    return str_to_hex (sig.bytes, CIGAR_SIG_LEN);
 }
 

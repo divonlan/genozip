@@ -29,8 +29,6 @@ extern bool url_is_url (rom filename);
 
 extern char *url_esc_non_valid_chars_(rom in, char *out, bool esc_all_or_none);
 static inline char *url_esc_non_valid_chars (rom in) { return url_esc_non_valid_chars_ (in, NULL, false); } // on heap
+static inline char *url_esc_all_or_none (rom in)     { return url_esc_non_valid_chars_ (in, NULL, true ); } // on heap
 
-static inline char *url_esc_all_or_none (rom in) { return url_esc_non_valid_chars_ (in, NULL, true); } // on heap
-
-typedef struct { char s[1024]; } UrlStr;
-extern UrlStr url_esc_non_valid_charsS (rom in); // for short strings - on stack
+extern StrTextLong url_esc_non_valid_charsS (rom in); // for short strings - on stack

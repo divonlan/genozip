@@ -144,7 +144,7 @@ StrTextLong generic_get_magic (void)
     s.s[len++] = '"';
     s.s[len++] = ' ';
 
-    str_to_hex ((bytes)magic, strlen(magic), &s.s[len], true);
+    str_to_hex_((bytes)magic, strlen(magic), &s.s[len], true);
 
     return s;
 }

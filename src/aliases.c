@@ -19,12 +19,10 @@ void show_aliases (void)
         iprint0 ("No aliases in this file\n");
 
     else {
-        static rom names[] = ALIAS_TYPE_NAMES;
-
         iprintf ("Contents of SEC_DICT_ID_ALIASES section (num_aliases=%u):\n", z_file->aliases.len32);
         
         for_buf (DictIdAlias, alias, z_file->aliases)
-            iprintf ("type=%-4s\talias=%s/%-8s\tdst=%s/%-8s\n", names[alias->alias_type],
+            iprintf ("type=%-4s\talias=%s/%-8s\tdst=%s/%-8s\n", (rom[])ALIAS_TYPE_NAMES[alias->alias_type],
                     dtype_name_z (alias->alias), dis_dict_id (alias->alias).s, 
                     dtype_name_z (alias->dst),   dis_dict_id (alias->dst).s);
     }

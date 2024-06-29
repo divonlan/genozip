@@ -56,14 +56,12 @@ void fastq_deep_seg_initialize (VBlockFASTQP vb)
 void fastq_deep_zip_finalize (void) 
 {
     if (flag.show_deep) {
-        static rom names[] = NO_DEEP_NAMES;
-
         uint64_t total = z_file->deep_stats[NDP_FQ_READS];
         iprint0 ("\nFASTQ reads breakdown by deepability:\n");
         
         for (int i=0; i < NUM_DEEP_STATS; i++) 
             if (z_file->deep_stats[i])
-                iprintf ("%-11.11s: %"PRIu64" (%.1f%%)\n", names[i], z_file->deep_stats[i], 100.0 * (double)z_file->deep_stats[i] / (double)total);
+                iprintf ("%-11.11s: %"PRIu64" (%.1f%%)\n", (rom[])NO_DEEP_NAMES[i], z_file->deep_stats[i], 100.0 * (double)z_file->deep_stats[i] / (double)total);
     }
 
     ARRAY (ZipZDeep, deep_ents, z_file->deep_ents);

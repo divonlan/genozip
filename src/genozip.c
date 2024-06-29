@@ -740,7 +740,7 @@ static void main_no_files (int argc)
 {
     // case: --register
     if (flag.do_register) {
-        license_register (false);
+        license_register();
         threads_finalize();
     }
 
@@ -765,7 +765,7 @@ static void main_no_files (int argc)
 
     // genozip with no parameters and not registered yet - register now
     else if (is_genozip && argc == 1 && isatty(0) && !license_is_registered())
-        license_register (false);
+        license_register();
         
     // otherwise: show help
     else

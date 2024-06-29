@@ -433,11 +433,11 @@ char *url_esc_non_valid_chars_(rom in, char *out/*malloced if NULL*/, bool esc_a
     return out;
 }
 
-UrlStr url_esc_non_valid_charsS (rom in) // for short strings - on stack
+StrTextLong url_esc_non_valid_charsS (rom in) // for short strings - on stack
 {
-    rom esc = url_esc_non_valid_chars_(in, NULL, false); // note: might be longer than UrlStr
+    rom esc = url_esc_non_valid_chars_(in, NULL, false); // note: might be longer than StrTextLong
     
-    UrlStr out;
+    StrTextLong out;
     int out_len = MIN_(sizeof (out.s)-1, strlen(esc)); // trim if needed - possibly resulting in an invalid URL!
     memcpy (out.s, esc, out_len);
     out.s[out_len] = 0;

@@ -161,6 +161,19 @@ static void tar_copy_metadata_from_file (rom fn)
     #endif
 }
 
+static void tar_fwrite (const void *data, uint32_t size, rom object)
+{
+    if (!size) return; // nothing to do
+
+    ASSERTNOTNULL (tar_file);
+    ASSERTNOTNULL (data);
+    
+    uint32_t bytes = fwrite (data, 1, size, tar_file); 
+
+    ASSERT (bytes == size, "Error writing %s to %s on filesystem=%s - requested %u bytes but wrote only %u: (%u)%s", 
+            object, tar_name, arch_get_filesystem_type (txt_file).s, size, bytes, errno, strerror (errno));
+}
+
 // filenames that have a last component longer than 99 characters don't fit in POSIX tar. Instead, we use a GNU-specific extension
 // of storing the filename as a pseudo-file in the tarball. See: https://itecnote.com/tecnote/r-what-exactly-is-the-gnu-tar-longlink-trick/
 static void tar_write_gnu_long_filename (STRp(fn_in_tar)/* length includes \0 */)
@@ -185,15 +198,12 @@ static void tar_write_gnu_long_filename (STRp(fn_in_tar)/* length includes \0 */
     for (unsigned i=0; i < 512; i++) checksum += ((bytes)&ll_hdr)[i];
     snprintf (ll_hdr.checksum, sizeof (ll_hdr.checksum), "%06o", checksum);
 
-    ASSERT (fwrite (&ll_hdr, 512,    1, tar_file) == 1, "failed to write LongLink header of %s to %s", fn_in_tar, tar_name); 
-    ASSERT (fwrite (STRa(fn_in_tar), 1, tar_file) == 1, "failed to write long filename of %s to %s",   fn_in_tar, tar_name); 
+    tar_fwrite (&ll_hdr, 512, "LongLink header");
+    tar_fwrite (STRa(fn_in_tar), "long filename");
 
     // pad to full block
-    if (fn_in_tar_len % 512) {
-        char padding[512] = "";
-        ASSERT (fwrite (padding, ROUNDUP512(fn_in_tar_len) - fn_in_tar_len, 1, tar_file) == 1, 
-                "failed to write long filename padding of %s to %s", fn_in_tar, tar_name); 
-    }
+    if (fn_in_tar_len % 512)
+        tar_fwrite ((char[512]){}, ROUNDUP512(fn_in_tar_len) - fn_in_tar_len, "long filename padding");
 
     t_offset += 512 + ROUNDUP512(fn_in_tar_len);
 }
@@ -243,7 +253,7 @@ FILE *tar_open_file (rom fn_on_disk, rom fn_in_tar)
         iprintf ("tar_open_file: t_offset=%"PRIu64" ftell=%"PRIu64" data_start=%"PRIu64" %s\n", 
                  t_offset, ftello64 (tar_file), t_offset + 512, fn);
 
-    ASSERT (fwrite (&hdr, 512, 1, tar_file) == 1, "failed to write header of %s to %s", fn_in_tar, tar_name); 
+    tar_fwrite (&hdr, 512, fn_in_tar);
     t_offset += 512; // past tar header
 
     return tar_file;
@@ -275,7 +285,7 @@ static void tar_add_hard_link (rom fn_on_disk, rom fn_in_tar_src, rom fn_in_tar_
     if (flag.debug_tar) 
         iprintf ("tar_add_hard_link: t_offset=%"PRIu64" ftell=%"PRIu64" %s\n", t_offset, ftello64 (tar_file), hdr.name);
 
-    ASSERT (fwrite (&hdr, 512, 1, tar_file) == 1, "failed to write header of %s to %s", fn_in_tar_dst, tar_name); 
+    tar_fwrite (&hdr, 512, fn_in_tar_dst);
     t_offset += 512; // past tar header
 }
 
@@ -302,9 +312,7 @@ void tar_close_file (void **file)
     int64_t padding_len = ROUNDUP512(tar_size) - tar_size;
 
     if (padding_len) {
-        char padding[512] = "";
-        ASSERT (fwrite (padding, padding_len, 1, tar_file) == 1, "failed to write file padding to %s", tar_name);
-        
+        tar_fwrite ((char[512]){}, padding_len, "file padding");        
         tar_size += padding_len; 
     }
 
@@ -326,7 +334,7 @@ void tar_close_file (void **file)
     
     // update header
     ASSERT (!fseeko64 (tar_file, t_offset-512, SEEK_SET), "fseek(%"PRId64") of %s failed (1): %s", t_offset-512, tar_name, strerror (errno));
-    ASSERT (fwrite (&hdr, 512, 1, tar_file) == 1, "failed to write file header to %s", tar_name);
+    tar_fwrite (&hdr, 512, "file header");
     ASSERT (!fseeko64 (tar_file, 0, SEEK_END), "fseek(END) of %s failed (2): %s", tar_name, strerror (errno));
 
     // flush to finalize z_file within tar file, before deleting txt file, and also before spawning a process to test it
@@ -358,7 +366,7 @@ void tar_copy_file (rom fn_on_disk, rom fn_in_tar)
     int64_t size;
     int64_t bytes_copied = 0;
     while ((size = fread (data, 1, BLOCK_SIZE, src_file))) {
-        ASSERT (fwrite (data, 1, size, tar_file) == size, "failed to copy %s to %s - failed to write %"PRId64" bytes", fn_on_disk, tar_name, size);
+        tar_fwrite (data, size, fn_on_disk);
         bytes_copied += size;
     }
 
@@ -379,8 +387,7 @@ void tar_finalize (void)
         iprintf ("tar_finalize EOF block: t_offset=%"PRIu64" ftell=%"PRIu64"\n", t_offset, ftello64 (tar_file));
 
     // tar file format: two empty tar blocks as EOF
-    char s[1024] = "";
-    ASSERT (fwrite (s, 1024, 1, tar_file) == 1, "failed to EOF tar blocks to %s", tar_name);
+    tar_fwrite ((char[1024]){}, 1024, "EOF tar blocks");
 
     FCLOSE (tar_file, "tar_file");
     t_offset = 0;

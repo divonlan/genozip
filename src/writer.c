@@ -1004,7 +1004,7 @@ bool writer_create_plan (void)
 
 #define BGZF_FLUSH_THRESHOLD  (32 MB) 
 #define PLAIN_FLUSH_THRESHOLD (4 MB) 
-#define FLUSH_THRESHOLD ((txt_file->codec == CODEC_BGZF) ? BGZF_FLUSH_THRESHOLD : PLAIN_FLUSH_THRESHOLD)
+#define FLUSH_THRESHOLD (TXT_IS_BGZF ? BGZF_FLUSH_THRESHOLD : PLAIN_FLUSH_THRESHOLD)
 
 static void writer_write (BufferP buf, uint64_t txt_data_len)
 {
@@ -1012,7 +1012,7 @@ static void writer_write (BufferP buf, uint64_t txt_data_len)
 
     if (!buf->len) return;
     
-    file_write_txt (STRb(*buf));
+    txtfile_fwrite (STRb(*buf));
     
     txt_file->disk_so_far += buf->len;
 
@@ -1236,7 +1236,7 @@ static void writer_main_loop (VBlockP wvb) // same as wvb global variable
     threads_set_writer_thread();
 
     // if we need to BGZF-compress, we will dispatch the compression workload to compute threads
-    Dispatcher dispatcher = (!flag.no_writer && txt_file->codec == CODEC_BGZF && txt_file->bgzf_flags.library != BGZF_EXTERNAL_LIB) ? 
+    Dispatcher dispatcher = (!flag.no_writer && TXT_IS_BGZF && txt_file->bgzf_flags.library != BGZF_EXTERNAL_LIB) ? 
         dispatcher_init ("bgzf", NULL, POOL_BGZF, writer_get_max_bgzf_threads(), 0, false, false, NULL, 0, NULL) : NULL;
 
     // normally, we digest in the compute thread but in case gencomp lines can be inserted into the vb we digest here.

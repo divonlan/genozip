@@ -50,7 +50,8 @@ typedef struct {
     \
     VBIType vblock_i;             /* VB 1-based sequential number in the dispatcher (or 0 if not in dispatcher) */\
     CompIType comp_i;             /* ZIP/PIZ: txt component within z_file that this VB belongs to  */ \
-    bool is_eof;                  /* encountered EOF when reading this VB data from file */ \
+    bool is_last_vb_in_txt_file;  /* ZIP: this VB is the last VB in its txt_file (excluding gencomp VBs)  */ \
+    Codec txt_codec;              /* ZIP: if compute thread is expected to decompress scratch into txt_data, this is the codec. If not, CODEC_UNKNOWN. */ \
     \
     /* compute thread stuff */ \
     ThreadId compute_thread_id;   /* id of compute thread currently processing this VB */ \
@@ -75,7 +76,7 @@ typedef struct {
     \
     /* tracking execution */\
     uint64_t vb_position_txt_file;/* ZIP/PIZ: position of this VB's data in the plain text file (without source compression): ZIP: as read before any ZIP-side modifications ; PIZ: as reconstructed with all modifications */\
-    uint64_t vb_bgzf_i;           /* ZIP: index into txt_file->bgzf_isizes of the first BGZF block of this VB */ \
+    uint64_t vb_bgz_i;            /* ZIP: index into txt_file->bgzf_isizes of the first BGZF/GZIL block of this VB */ \
     int32_t recon_size;           /* ZIP: actual size of txt if this VB is reconstructed in PRIMARY coordinates (inc. as ##primary_only in --luft) */\
                                   /* PIZ: expected reconstruction size in the coordinates of reconstruction */\
     int32_t txt_size;             /* ZIP: original size of of text data read from the file */ \
@@ -126,7 +127,7 @@ typedef struct {
     \
     /* bgzf - for handling bgzf-compressed files */ \
     void *gzip_compressor;        /* Handle into libdeflate compressor or decompressor, or zlib's z_stream. Pointer to codec_bufs[].data */ \
-    Buffer bgzf_blocks;           /* ZIP: an array of BgzfBlockZip tracking the decompression of bgzf blocks in scratch into txt_data.  */\
+    Buffer gz_blocks;             /* ZIP: an array of GzBlockZip tracking the decompression of bgzf/gzil blocks in scratch into txt_data.  */\
                                   /* PIZ: an array of BgzfBlockPiz */ \
     \
     /* random access, chrom, pos */ \

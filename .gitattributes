@@ -1,5 +1,5 @@
 # Set the default behavior, in case people don't have core.autocrlf set.
-* text=auto
+* text=lf
 
 *.sh eol=lf
 *.txt eol=lf
@@ -12,6 +12,7 @@
 *.h eol=lf
 *.asm eol=lf
 *.S eol=lf
+*.yaml eol=lf
 Makefile eol=lf
 
 # Declare our textual formats as binary so we can check in test files with Unix or Windows style end-of-lines

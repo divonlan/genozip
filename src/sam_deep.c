@@ -89,8 +89,6 @@ static void sam_deep_zip_show_index_stats (void)
 
 static void sam_deep_zip_display_reasons (void)
 {
-    static rom rsn_names[] = RSN_NAMES;
-
     uint64_t total = z_file->num_lines;
 
     iprintf ("%s Alignments breakdown by deepability:\n", dt_name (txt_file->data_type));
@@ -98,7 +96,7 @@ static void sam_deep_zip_display_reasons (void)
 
     for (int i=0; i < NUM_DEEP_STATS_ZIP; i++) 
         if (z_file->deep_stats[i])
-            iprintf ("%-13.13s: %"PRIu64" (%.1f%%)\n", rsn_names[i], z_file->deep_stats[i], 100.0 * (double)z_file->deep_stats[i] / (double)total);
+            iprintf ("%-13.13s: %"PRIu64" (%.1f%%)\n", (rom[])RSN_NAMES[i], z_file->deep_stats[i], 100.0 * (double)z_file->deep_stats[i] / (double)total);
 }
 
 // Called during zip_finalize of the SAM component for a Deep compression
@@ -619,14 +617,12 @@ static void sam_piz_deep_finalize_ents (void)
     }
 
     if (flag.show_deep) {
-        static rom names[] = DEEP_ENT_NAMES;
-
         uint64_t total = z_file->deep_stats[QNAME_BYTES] + z_file->deep_stats[SEQ_BYTES] + z_file->deep_stats[QUAL_BYTES];
         iprint0 ("\ndeep_ents RAM consumption breakdown by field:\n");
         iprintf ("Total: %s\n", str_size (total).s);
         
         for (int i=0; i < NUM_DEEP_STATS_PIZ; i++)
-            iprintf ("%-5.5s: %s (%.1f%%)\n", names[i], str_size (z_file->deep_stats[i]).s, 100.0 * (double)z_file->deep_stats[i] / (double)total);
+            iprintf ("%-5.5s: %s (%.1f%%)\n", (rom[])DEEP_ENT_NAMES[i], str_size (z_file->deep_stats[i]).s, 100.0 * (double)z_file->deep_stats[i] / (double)total);
     }
 
     // We need to set param only after deep_ents/index is finalized.

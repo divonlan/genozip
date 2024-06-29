@@ -1069,8 +1069,5 @@ void sam_stats_reallocate (void)
 
 rom sag_type_name (SagType sagt)
 {
-    rom names[] = SAM_SAG_TYPE_NAMES;
-
-    if (sagt < 0 || sagt >= NUM_SAG_TYPES) return "InvalidSagType";
-    else                                   return names[sagt];
+    return IN_RANGE (sagt, 0, NUM_SAG_TYPES-1) ? (rom[])SAM_SAG_TYPE_NAMES[sagt] : "InvalidSagType";
 }

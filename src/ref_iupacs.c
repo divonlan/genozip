@@ -98,7 +98,7 @@ void ref_iupacs_load (Reference ref)
 
         if (flag.show_ref_iupacs)  {
             PosType32 pos;
-            WordIndex chrom_index = ref_contig_get_by_gpos (ref, iupacs[i].gpos, 0, &pos);
+            WordIndex chrom_index = ref_contig_get_by_gpos (ref, iupacs[i].gpos, 0, &pos, false);
             iprintf ("IUPAC=%c\tCHROM=%s\tPOS=%u\tGPOS=%"PRIu64"\n", 
                      iupacs[i].iupac, ctx_get_snip_by_word_index0 (ZCTX(FASTA_CONTIG), chrom_index), pos, iupacs[i].gpos);
         }

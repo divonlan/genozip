@@ -88,7 +88,7 @@ void txtheader_compress (BufferP txt_header,
         txt_file->basename && !filename_has_ext (txt_file->basename, ".gz") && !filename_has_ext (txt_file->basename, ".bgz");
 
     // In BGZF, we store the 3 least significant bytes of the file size, so check if the reconstructed BGZF file is likely the same
-    if (txt_file->codec == CODEC_BGZF) 
+    if (TXT_IS_BGZF) 
         bgzf_sign (txt_file->disk_size, section_header.codec_info);
         
     filename_base (txt_file->name, false, FILENAME_STDIN, section_header.txt_filename, TXT_FILENAME_LEN);
@@ -359,7 +359,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
     if (!flag.to_stdout && !flag.out_filename) FREE (filename); // file_open_z copies the names
 
     // set BGZF info in txt_file - either that originates from SEC_BGZF, or constructed based on bgzf_flags
-    if (needs_recon && txt_file->codec == CODEC_BGZF) 
+    if (needs_recon && TXT_IS_BGZF) 
         bgzf_piz_set_txt_file_bgzf_info (bgzf_flags, header.codec_info);
 
     // note: this is reset for each component:

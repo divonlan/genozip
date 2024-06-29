@@ -17,7 +17,7 @@
 // Notes: 1 byte. BUF_UNALLOCATED must be 0. all values must be identical to 
 #define BUF_TYPE_BITS 3
 typedef enum          { BUF_UNALLOCATED=0, BUF_REGULAR,   BITS_STANDALONE, BUF_SHM, BUF_DISOWNED, BUF_NUM_TYPES } BufferType; 
-#define BUFTYPE_NAMES { "UNALLOCATED",     "REGULAR", "BITS_STANDALONE",   "SHM",   "DISOWNED"                                                   }
+#define BUFTYPE_NAMES {    "UNALLOCATED",     "REGULAR", "BITS_STANDALONE",   "SHM",   "DISOWNED"                                                   }
 
 typedef struct { 
     bool lock;
@@ -42,6 +42,9 @@ typedef struct Buffer {        // 72 bytes
         uint16_t prm16[4];
         uint8_t  prm8 [8];
         void *pointer;
+        struct { int32_t uncomp_len, comp_len; }; // (signed) used for compressed buffer: uncomp_len is the length of the uncompressing comp_len data from the buffer
+        struct { uint32_t consumed_by_prev_vb;    // vb->gz_blocks: bytes of the first BGZF block consumed by the prev VB or txt_header
+                 uint32_t current_bb_i;        }; // index into vb->gz_blocks of first bgzf block of current line
     };
     union {
         uint64_t len;          // used by the buffer user according to its internal logic. not modified by malloc/realloc, zeroed by buf_free (in Bits - nwords)
@@ -94,7 +97,7 @@ extern void buf_initialize(void);
 #define ASSERTNOTINUSE(buf)  ASSERT (!buf_is_alloc (&(buf)) && !(buf).len && !(buf).param, "expecting %s to be free, but it's not: %s", #buf, buf_desc (&(buf)).s)
 #define ASSERTISALLOCED(buf) ASSERT (buf_is_alloc (&(buf)), "%s is not allocated", #buf)
 #define ASSERTISEMPTY(buf)   ASSERT (buf_is_alloc (&(buf)) && !(buf).len, "expecting %s to be be allocated and empty, but it isn't: %s", #buf, buf_desc (&(buf)).s)
-#define ASSERTNOTEMPTY(buf)  ASSERT ((buf).len, "expecting %s to be contain some data, but it doesn't: %s", #buf, buf_desc (&(buf)).s)
+#define ASSERTNOTEMPTY(buf)  ASSERT ((buf).len && (buf).data, "expecting %s to be contain some data, but it doesn't: %s", #buf, buf_desc (&(buf)).s)
 
 extern void buf_alloc_do (VBlockP vb, BufferP buf, uint64_t requested_size, float grow_at_least_factor, rom name, FUNCLINE);
 

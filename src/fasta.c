@@ -268,7 +268,7 @@ static bool fasta_segconf_is_qualless_fastq (VBlockP vb)
     #define NUM_FASTQ_TEST_LINES 2000
     str_split_by_lines (vb->txt_data.data, vb->txt_data.len32, NUM_FASTQ_TEST_LINES);
 
-    if (n_lines < 16 && !txt_file->is_eof) 
+    if (n_lines < 16 && !txt_file->no_more_blocks) 
         return false; // not enough lines to determine (except of segconf is the entire file) 
 
     n_lines = ROUNDDOWN2 (n_lines) - 2; // keep whole pairs or lines, and drop last pair that might be truncated. now there are at least 4 pairs (8 lines)

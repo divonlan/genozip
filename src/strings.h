@@ -11,7 +11,7 @@
 #include "genozip.h"
 
 #define IS_DIGIT(c)        ((c)>='0' && (c)<='9')
-#define NUM2HEXDIGIT(n)    ((n)<=9 ? '0' + (n) : 'A'+((n)-10))      // converts a number [0,15] to hex digit character
+#define NUM2HEXDIGIT(n)    ((n)<=9 ? '0' + (n) : 'a'+((n)-10))      
 #define HEXDIGIT2NUM(c)    (IS_DIGIT(c) ? ((c)-'0') : ((c)-'A'+10)) // converts an uppercase hex digit to a number [0,15]
 #define IS_HEXDIGIT(c)     (IS_DIGIT(c) || ((c)>='A' && (c)<='F') || ((c)>='a' && (c)<='f'))
 #define IS_HEXDIGITlo(c)   (IS_DIGIT(c) || ((c)>='a' && (c)<='f'))
@@ -214,8 +214,13 @@ extern StrTextLong str_int_s_(rom label, int64_t n);
 extern StrTextLong str_str_s_(rom label, rom str);
 #define cond_str(cond, label, str) ((cond) ? str_str_s_((label), (str)).s : "") /* note: str does not evaluate if cond is false! */\
 
-extern rom str_to_hex (bytes data, uint32_t data_len, char *hex_str, bool with_dot);
-extern StrText str_hex10 (bytes data, uint32_t data_len); // up to 10 bytes in hex (21 chars inc. \0)
+extern rom str_to_hex_(bytes data, uint32_t data_len, char *hex_str, bool with_dot);
+static inline StrText str_to_hex (bytes data, uint32_t data_len) // note: for data_len up to 39 (truncated if longer)
+{
+    StrText s;
+    str_to_hex_(data, MIN_(data_len, sizeof(s)/2 - 1), s.s, false);
+    return s;
+}
 
 // string length of an integer. #include <math.h> if using this.
 static inline unsigned str_int_len (int64_t n_)
@@ -366,6 +371,10 @@ static inline char *strpcpy(char *restrict dst, const void *restrict src)
     int len = strlen (src);
     return mempcpy (dst, src, len);
 }
+
+#ifdef __MINGW64__
+extern void *memmem (const void *haystack, size_t haystack_len, const void *needle, size_t needle_len);
+#endif
 
 extern rom str_win_error_(uint32_t error);
 extern rom str_win_error (void);

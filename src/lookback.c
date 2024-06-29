@@ -137,7 +137,7 @@ uint32_t lookback_get_next (VBlockP vb, ContextP lb_ctx, ContextP ctx, WordIndex
         if (*B(WordIndex, *buf, *iterator) == search_for) 
             lookback = (RR(*iterator - buf->newest_index + 1, lb_size));
 
-    ASSERT (lookback >= 0 && lookback < lb_size, "Invalid lookback=%d", lookback);
+    ASSERT (IN_RANGE (lookback, 0, lb_size-1), "Invalid lookback=%d", lookback);
     return lookback;
 }
 

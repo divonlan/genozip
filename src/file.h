@@ -32,17 +32,19 @@ typedef struct File {
     FileType type;
     bool is_remote;                    // true if file is downloaded from a url
     bool redirected;                   // TXT_FILE: true if this file is redirected from stdin/stdout or a pipe
-    bool is_eof;                       // we've read the entire file
+    bool no_more_blocks;               // ZIP TXT_FILE: txtfile_read_block has completed returning all the file's data (note: it is possible that we read all the data on the disk file so feof(fp)=true, but no_more_blocks=false, because some of it is waiting in buffers: gz_data or state->avail_in)
     bool is_in_tar;                    // z_file: file is embedded in tar file
     bool is_scanned;                   // TXT_FILE: sam_sag_by_flag_scan_for_depn has been performed for this file
     DataType data_type;
     Codec source_codec;                // TXT_FILE ZIP: codec of txt file before redirection (eg CRAM, XZ, ZIP...). Note: CODEC_BAM if BAM (with or without internal bgzf compression)
                                        // Z_FILE PIZ: set to CODEC_BCF or CODEC_CRAM iff GenozipHeader.data_type is DT_BCF/DT_CRAM
-    Codec codec;                       // TXT_FILE ZIP: generic codec used with this file. If redirected - as read by txtfile (eg for cram files this is BGZF)
+    Codec codec;                       // TXT_FILE ZIP: internal decompression codec used with this file. If redirected - as read by txtfile (eg for cram files this is BGZF)
+    Codec gunzip_method;               // TXT_FILE ZIP: if codec∈{GZ,BGZF,GZIL}, method used to decompress it (either the same as codec, or GZ)
 
     // these relate to actual bytes on the disk
     int64_t disk_size;                 // ZIP: size of actual file on disk. 0 if not known (eg stdin or http stream). 
     int64_t disk_so_far;               // ZIP: Z/TXT_FILE: data actually read/write to/from "disk" (using fread/fwrite), (TXT_FILE: possibley bgzf/gz/bz2 compressed ; 0 if external compressor is used for reading).
+    int64_t disk_gz_uncomp_or_trunc;   // ZIP: TXT_FILE: gz-compressed data actually either decompressed or discarded due to truncate
     int64_t est_seggable_size;         // TXT_FILE ZIP, access via txtfile_get_seggable_size(). Estimated size of txt_data in file, i.e. excluding the header. It is exact for plain files, or based on test_vb if the file has source compression
     int64_t est_num_lines;             // TXT_FILE ZIP, an alternative for progress bar - by lines instead of bytes (used for CRAM)
     
@@ -119,23 +121,20 @@ typedef struct File {
     Buffer section_list_save;          // a copy of the section_list in case it is modified due to recon plan.
 
     // TXT file: reading
-    Buffer unconsumed_txt;             // ZIP: excess uncompressed data read from the txt file - moved to the next VB
+    Buffer unconsumed_txt;             // ZIP: excess uncompressed data read from the txt file - moved to the next VB: the final part of vb->txt_data that was not consumed
+    Buffer unconsumed_bgz_blocks;      // ZIP TXT BGZF/GZIL: unconsumed or partially consumed bgzf/gzil blocks - moved to the next VB
+    Buffer gz_data;                    // ZIP TXT GZ: yet-unconsumed gz data read from disk. .comp_len/.uncomp_len refer to the first block in the buffer (in GZIL, but not BGZF, there might be additional data after the first block) 
+    Buffer igzip_state;                // ZIP TXT GZ (with igzip)
 
     // TXT file: BGZF stuff reading and writing compressed txt files 
-    Buffer unconsumed_bgzf_blocks;  // ZIP TXT BGZF: unconsumed or partially consumed bgzf blocks - moved to the next VB
-    Buffer bgzf_isizes;             // ZIP/PIZ: uncompressed size of the bgzf blocks in which this txt file is compressed (in BGEN16)
-    Buffer bgzf_starts;             // ZIP: offset in txt_file of each BGZF block
-    Buffer bgzf_plausible_levels;   // ZIP: discovering library/level. .count = number of BGZF blocks tested so far
-    struct FlagsBgzf bgzf_flags;    // corresponds to SectionHeader.flags in SEC_BGZF
-    uint8_t bgzf_signature[3];      // PIZ: 3 LSB of size of source BGZF-compressed file, as passed in SectionHeaderTxtHeader.codec_info
-
-    // TXT file: IGZIP stuff reading and writing compressed txt files 
-    Buffer igzip_data;              // ZIP TXT GZ (with igzip): yet-uncompressed data read from disk
-    Buffer igzip_state;             // ZIP TXT GZ (with igzip)
-    uint64_t gzip_start_Ltxt;       // ZIP TXT GZ: Ltxt at the beginning for this gzip_section
+    Buffer bgzf_isizes;                // ZIP/PIZ: BGZF: uncompressed size of the BGZF blocks in which this txt file is compressed (in BGEN16).
+                                       // ZIP    : GZIL: only .len is used to count GZIL blocks (as their isize is always 1MB except for the last block)
+    Buffer bgzf_starts;                // ZIP: offset in txt_file of each BGZF block
+    Buffer bgzf_plausible_levels;      // ZIP: discovering library/level. .count = number of BGZF blocks tested so far
+    struct FlagsBgzf bgzf_flags;       // corresponds to SectionHeader.flags in SEC_BGZF
+    uint8_t bgzf_signature[3];         // PIZ: 3 LSB of size of source BGZF-compressed file, as passed in SectionHeaderTxtHeader.codec_info
 
     // TXT FILE: accounting for truncation when --truncate-partial-last-line is used
-    bool bgzf_truncated_last_block;    // ZIP: detected a truncated last block
     uint32_t last_truncated_line_len;  // ZIP: bytes truncated due to incomplete final line. note that if file is BGZF, then this truncated data is contained in the final intact BGZF blocks, after already discarding the final incomplete BGZF block
 
     // TXT file: data used in --sex, --coverage and --idxstats
@@ -225,9 +224,10 @@ typedef struct File {
     int64_t txt_data_so_far_bind_0_comp[MAX_NUM_COMPS]; // Z_FILE ZIP: per-component txt_size before modifications 
     Codec comp_codec[MAX_NUM_COMPS];                    // Z_FILE ZIP: codec used for every txt file component (i.e. excluding generated components)
     Codec comp_source_codec[MAX_NUM_COMPS];             // Z_FILE ZIP: source codec used for every txt file component (i.e. excluding generated components)
+    Codec comp_gunzip_method[MAX_NUM_COMPS];            // Z_FILE ZIP: gunzip_method used for every txt file component with codec∈{GZ,BGZF,GZIL}
     FlagsBgzf comp_bgzf[MAX_NUM_COMPS];                 // Z_FILE ZIP BGZF: library and level of BGZF of each comp
-    bool gzip_section_size_single_block[MAX_NUM_COMPS]; // Z_FILE ZIP GZ: if true, disregard gzip_section_size as the entire file is just one GZ block
-    uint64_t gzip_section_size[MAX_NUM_COMPS];          // Z_FILE ZIP GZ: size of one gzip section (in uncompressed terms) in case of concatenated gzip. -1 if they are not equal size.
+    uint64_t gz_isize[MAX_NUM_COMPS][2];                // Z_FILE ZIP GZ: isize(=uncomp_size) of the first two gzip block multi-gz-blocks (excluding BGZF and GZIL). 
+    uint8_t gz_header[MAX_NUM_COMPS][12];               // Z_FILE ZIP GZ: first 12 bytes of the gz header (10 if FEXTRA=false) (excluding BGZF and GZIL). 
 } File;
 
 #define z_has_gencomp (z_file && z_file->z_flags.has_gencomp) // ZIP/PIZ
@@ -240,7 +240,6 @@ extern StrText file_get_z_run_time (FileP file);
 extern FileP file_open_txt_read (rom filename);
 extern FileP file_open_txt_write (rom filename, DataType data_type, BgzfLevel bgzf_level);
 extern void file_close (FileP *file_p);
-extern void file_write_txt (const void *data, unsigned len);
 extern bool file_seek (FileP file, int64_t offset, int whence, rom mode, FailType soft_fail); // SEEK_SET, SEEK_CUR or SEEK_END
 extern int64_t file_tell_do (FileP file, FailType soft_fail, FUNCLINE);
 #define file_tell(file,soft_fail) file_tell_do ((file), (soft_fail), __FUNCLINE) 
@@ -298,12 +297,17 @@ extern bool file_buf_locate (FileP file, ConstBufferP buf);
 
 #define SRC_CODEC(x) (txt_file->source_codec == CODEC_##x)
 
+#define TXT_IS_PLAIN (txt_file->codec == CODEC_NONE)
+#define TXT_IS_BGZF  (txt_file->codec == CODEC_BGZF)
+#define TXT_IS_GZIL  (txt_file->codec == CODEC_GZIL)
+#define TXT_IS_GZ    (txt_file->codec == CODEC_GZ)
+#define TXT_IS_BZ2   (txt_file->codec == CODEC_BZ2)
+
 #define SC(x) (file->source_codec == CODEC_##x)
 static inline bool is_read_via_ext_decompressor(ConstFileP file) { return SC(XZ)|| SC(ZIP) || SC(BCF)|| SC(CRAM) || SC(ORA); }
 #undef SC
 
 #define FC(x) (codec == CODEC_##x)
-static inline bool is_read_via_int_decompressor(Codec codec)  { return FC(GZ)|| FC(BGZF)|| FC(BZ2); }
 static inline bool is_written_via_ext_compressor(Codec codec) { return FC(BCF) || FC(CRAM); }
 #undef FC
 

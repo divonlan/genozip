@@ -663,8 +663,8 @@ void sam_segconf_finalize (VBlockP vb_)
     segconf.sam_cigar_len   = 1 + ((segconf.sam_cigar_len - 1) / vb->lines.len32);                   // set to the average CIGAR len (rounded up)
     segconf.est_sam_factor  = (double)segconf.est_segconf_sam_size / (double)Ltxt;
 
-    if (num_lines_at_max_len(vb) > vb->lines.len32 / 2 &&  // more than half the lines are at exactly maximal length
-        (vb->lines.len32 > 100 || txt_file->is_eof)    &&  // enough lines to be reasonably convinced that this is not by chance
+    if (num_lines_at_max_len(vb) > vb->lines.len32 / 2      &&  // more than half the lines are at exactly maximal length
+        (vb->lines.len32 > 100 || txt_file->no_more_blocks) &&  // enough lines to be reasonably convinced that this is not by chance
         !segconf.is_long_reads)        // TO DO: trimming long-read qual in FASTQ with --deep would mess up LONGR codec, we need to sort this out
         
         segconf.sam_cropped_at = vb->longest_seq_len; // possibily the FASTQ reads were cropped to be all equal length

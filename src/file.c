@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <fcntl.h>
 #ifdef _WIN32
 #include <windows.h>
 #include <direct.h>
@@ -350,7 +351,7 @@ static void file_set_filename (FileP file, rom fn)
     memcpy (file->name, fn, fn_size);
 }
 
-static void file_initialize_txt_file_data (FileP file)
+static void file_initialize_txt_file_fields (FileP file)
 {
     #define TXT_INIT(buf) ({ buf_set_promiscuous (&file->buf, "txt_file->" #buf); })
 
@@ -367,6 +368,62 @@ static void file_initialize_txt_file_data (FileP file)
     else {
 
     }
+}
+
+static void file_open_ext_decompessor (FileP file, rom exec_name, rom subcommand, Codec streamed_codec, bool name_if_not_remote, rom args[7])
+{
+    char reason[64]; // used for error message if stream_create fails
+    snprintf (reason, sizeof(reason), "To compress a %s file", codec_name (file->codec));
+
+    input_decompressor = 
+        stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0,
+                       file->is_remote ? file->name : NULL,      // url                                        
+                       file->redirected, reason, exec_name,
+                       subcommand ? subcommand : SKIP_ARG,
+                       #define A(i) (args[i] ? args[i] : SKIP_ARG)
+                       A(0), A(1), A(2), A(3), A(4), A(5), A(6), 
+                       (name_if_not_remote && !file->is_remote) ? file->name : SKIP_ARG,
+                       NULL); 
+    
+    file->file       = stream_from_stream_stdout (input_decompressor);
+    file->redirected = true;
+    file->codec      = streamed_codec; // data received from input_decompressor is in this codec
+}
+
+static void file_open_txt_read_bz2 (FileP file)
+{
+    file->file = file->is_remote  ? BZ2_bzdopen (fileno (url_open_remote_file (NULL, file->name)), READ) // we're abandoning the FILE structure (and leaking it, if libc implementation dynamically allocates it) and working only with the fd
+               : file->redirected ? BZ2_bzdopen (STDIN_FILENO, READ)
+               :                    BZ2_bzopen (file->name, READ);  // for local files we decompress ourselves   
+
+    ASSERT (file->file, "failed to open BZ2 file %s", file->name);
+        
+    if (!file->is_remote && !file->redirected) {
+        int fd = BZ2_get_fd (file->file);
+        
+        stream_set_inheritability (fd, false); // Windows: allow file_remove in case of --replace
+        #ifdef __linux__
+        posix_fadvise (fd, 0, 0, POSIX_FADV_SEQUENTIAL); // ignore errors
+        #endif
+    }
+}
+
+static void file_open_txt_read_gz (FileP file)
+{
+    file->file = file->is_remote  ? url_open_remote_file (NULL, file->name)  
+               : file->redirected ? fdopen (STDIN_FILENO,  "rb") 
+               :                    fopen (file->name, READ);
+
+    ASSERT (file->file, "failed to open %s: %s", file->name, strerror (errno));
+
+    if (!file->is_remote && !file->redirected) {
+        stream_set_inheritability (fileno (file->file), false); // Windows: allow file_remove in case of --replace
+        #ifdef __linux__
+        posix_fadvise (fileno ((FILE *)file->file), 0, 0, POSIX_FADV_SEQUENTIAL); // ignore errors
+        #endif
+    }
+
+    txtfile_discover_gz_codec (file); // decide between CODEC_GZ, CODEC_BGZF or CODEC_GZIL
 }
 
 FileP file_open_txt_read (rom filename)
@@ -430,6 +487,14 @@ FileP file_open_txt_read (rom filename)
     file->source_codec = file_get_codec_by_txt_ft (file->data_type, file->type, true);
 
     switch (file->codec) { 
+        case CODEC_GZ: case CODEC_BGZF: case CODEC_NONE: gz: 
+            file_open_txt_read_gz (file);
+            break;
+        
+        case CODEC_BZ2:
+            file_open_txt_read_bz2 (file);
+            break;
+
         case CODEC_CRAM: {
             // note: in CRAM, we read the header in advance in possible, directly (without samtools), so we can handle the case 
             // that the reference file is wrong. In samtools, if we read beyond the header with a wrong ref, samtools will hang.
@@ -440,187 +505,40 @@ FileP file_open_txt_read (rom filename)
             
             StrTextSuperLong samtools_T_option = cram_get_samtools_option_T (gref);
 
-            input_decompressor = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 
-                                                file->is_remote ? file->name : NULL,      // url                                        
-                                                file->redirected,
-                                                "To decompress a CRAM file", 
-                                                "samtools", "view", 
-                                                file->header_size ? SKIP_ARG : "-h",      // don't output the SAM header if already read in cram_inspect_file
-                                                "--bam", "--uncompressed",                // BAM with BGZF blocks in which the payload is not compressed
-                                                "--threads", "10",                        // in practice, samtools is able to consume ~4 cores
-                                                file_samtools_no_PG() ? "--no-PG" : SKIP_ARG, // don't add a PG line to the header 
-                                                file->is_remote ? SKIP_ARG : file->name,  // local file name 
-                                                samtools_T_option.s[0] ? samtools_T_option.s : NULL, 
-                                                NULL);
-            file->file = stream_from_stream_stdout (input_decompressor);
-            file->redirected = true;
-            file->codec = CODEC_BGZF; // because the samtools stream is BGZF-blocks
+            file_open_ext_decompessor (file, "samtools", "view", CODEC_BGZF, true, (rom[7]){  
+                                       "--bam", "--uncompressed",           // BAM with BGZF blocks in which the payload is not compressed
+                                       "--threads=10",                      // in practice, samtools is able to consume ~4 cores
+                                       file_samtools_no_PG() ? "--no-PG" : SKIP_ARG, // don't add a PG line to the header 
+                                       samtools_T_option.s[0] ? samtools_T_option.s : SKIP_ARG });
+
+            txtfile_discover_gz_codec (file); // also allocates gz_data
             break;
         }
 
-        case CODEC_GZ:   // we test the first few bytes of the file to differentiate between NONE, GZ and BGZIP
-        case CODEC_BGZF: 
-        case CODEC_NONE: gz: {
-            file->file = file->is_remote  ? url_open_remote_file (NULL, file->name)  
-                       : file->redirected ? fdopen (STDIN_FILENO,  "rb") 
-                       :                    fopen (file->name, READ);
-            ASSERT (file->file, "failed to open %s: %s", file->name, strerror (errno));
-
-            if (!file->is_remote && !file->redirected)
-                stream_set_inheritability (fileno (file->file), false); // Windows: allow file_remove in case of --replace
-
-            // read the first potential BGZF block to test if this is GZ or BGZF
-            uint8_t block[BGZF_MAX_BLOCK_SIZE]; 
-            uint32_t block_size;
-
-            ASSERTNOTINUSE (evb->scratch);
-
-            int32_t bgzf_uncompressed_size = bgzf_read_block (file, block, &block_size, SOFT_FAIL);
-
-            // case: this is indeed a bgzf - we put the still-compressed data in vb->scratch for later consumption
-            // in txtfile_read_block_bgzf
-            if (bgzf_uncompressed_size > 0) {
-                if (file->source_codec != CODEC_CRAM && file->source_codec != CODEC_BAM && file->source_codec != CODEC_BCF) 
-                    file->source_codec = CODEC_BGZF;
-
-                file->codec = CODEC_BGZF;
-                
-                evb->scratch.count = bgzf_uncompressed_size; 
-                buf_add_more (evb, &evb->scratch, (char*)block, block_size, "scratch");                
-            }
-
-            // for regulars files, we already skipped 0 size files. This can happen in STDIN
-            else if (bgzf_uncompressed_size == 0) {
-
-                ASSINP (!flags_pipe_in_process_died(), // only works for Linux
-                        "Pipe-in process %s (pid=%u) died without sending any data",
-                        flags_pipe_in_process_name(), flags_pipe_in_pid());
-
-                ABORTINP ("No data exists in input file %s", file->name ? file->name : FILENAME_STDIN);
-            }
-            
-            // case: this is non-BGZF GZIP format 
-            else if (bgzf_uncompressed_size == BGZF_BLOCK_GZIP_NOT_BGZIP) {      
-                file->codec = file->source_codec = CODEC_GZ;
-
-                txtfile_init_read_igzip (file);
-                buf_add_more (evb, &file->igzip_data, block, block_size, "igzip_data");
-            } 
-
-            // case: this is not GZIP format at all. treat as a plain file, and put the data read in vb->scratch 
-            // for later consumption is txtfile_read_block_plain
-            else if (bgzf_uncompressed_size == BGZF_BLOCK_IS_NOT_GZIP) {
-
-                #define BZ2_MAGIC "BZh"
-                #define XZ_MAGIC  (char[]){ 0xFD, '7', 'z', 'X', 'Z', 0 }
-                #define ZIP_MAGIC (char[]){ 0x50, 0x4b, 0x03, 0x04 }
-                #define ORA_MAGIC (char[]){ 0x49, 0x7c } // https://support-docs.illumina.com/SW/ORA_Format_Specification/Content/SW/ORA/ORAFormatSpecification.htm
-
-                // we already open the file, so not easy to re-open with BZ2_bzopen as it would require injecting the read data into the BZ2 buffers
-                if (str_isprefix_((rom)block, block_size, BZ2_MAGIC, 3)) 
-                    ABORTINP0 ("The data seems to be in bz2 format. Please use --input to specify the type (eg: \"genozip --input sam.bz2\")");
-
-                else if (str_isprefix_((rom)block, block_size, XZ_MAGIC, 6)) {
-                    if (file->redirected) ABORTINP0 ("Compressing piped-in data in xz format is not currently supported");
-                    if (file->is_remote) ABORTINP0 ("The data seems to be in xz format. Please use --input to specify the type (eg: \"genozip --input sam.xz\")");
-                    ABORTINP0 ("The data seems to be in xz format. Please use --input to specify the type (eg: \"genozip --input sam.xz\")");
-                }
-
-                else if (str_isprefix_((rom)block, block_size, ZIP_MAGIC, 4)) {
-                    if (file->redirected) ABORTINP0 ("Compressing piped-in data in zip format is not currently supported");
-                    if (file->is_remote) ABORTINP0 ("The data seems to be in zip format. Please use --input to specify the type (eg: \"genozip --input generic.zip\")");
-                    ABORTINP0 ("The data seems to be in zip format. Please use --input to specify the type (eg: \"genozip --input generic.zip\")");
-                }
-
-                else if (str_isprefix_((rom)block, block_size, ORA_MAGIC, 2)) {
-                    if (file->redirected) ABORTINP0 ("Compressing piped-in data in ora format is not currently supported");
-                    if (file->is_remote) ABORTINP0 ("The data seems to be in ora format. Please use --input to specify the type (eg: \"genozip --input fastq.ora\")");
-                    ABORTINP0 ("The data seems to be in ora format. Please use --input to specify the type (eg: \"genozip --input fastq.ora\")");
-                }
-
-                file->codec = CODEC_NONE;
-                buf_add_more (evb, &evb->scratch, (char*)block, block_size, "scratch");
-            }
-
-            ASSINP (!file->redirected || file->codec == CODEC_NONE || file->codec == CODEC_BGZF || file->codec == CODEC_GZ, 
-                    "genozip only supports piping in data that is either plain (uncompressed) or compressed in GZIP format (typically with .gz extension) (codec=%s)", 
-                    codec_name (file->codec));
+        case CODEC_BCF: {
+            file_open_ext_decompessor (file, "bcftools", "view", CODEC_NONE, true, (rom[7]){ 
+                                       "--threads=8", "-Ov", "--no-version" }); // BCF: do not append version and command line to the header
             break;
         }
-        case CODEC_BZ2:
-            if (file->is_remote) {            
-                FILE *url_fp = url_open_remote_file (NULL, file->name);
-                file->file = BZ2_bzdopen (fileno(url_fp), READ); // we're abandoning the FILE structure (and leaking it, if libc implementation dynamically allocates it) and working only with the fd
-            }
-            else if (file->redirected) 
-                file->file = BZ2_bzdopen (STDIN_FILENO, READ);
-            
-            else {
-                file->file = BZ2_bzopen (file->name, READ);  // for local files we decompress ourselves   
-                
-                if (file->file)
-                    stream_set_inheritability (BZ2_get_fd (file->file), false); // Windows: allow file_remove in case of --replace
-            }
-            break;
 
         case CODEC_XZ:
             if (file->redirected) ABORTINP0 ("Compressing piped-in data in xz format is not currently supported");
 
-            input_decompressor = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 
-                                                file->is_remote ? file->name : NULL,     // url
-                                                file->redirected,
-                                                "To uncompress an .xz file", "xz",       // reason, exec_name
-                                                file->is_remote ? SKIP_ARG : file->name, // local file name 
-                                                "--threads=8", "--decompress", "--keep", "--stdout", 
-                                                flag.quiet ? "--quiet" : SKIP_ARG, 
-                                                NULL);            
-            file->file = stream_from_stream_stdout (input_decompressor);
-            file->redirected = true;
-            file->codec = CODEC_NONE;
+            file_open_ext_decompessor (file, "xz", NULL, CODEC_NONE, true, (rom[7]){
+                                       "--threads=8", "--decompress", "--keep", "--stdout", 
+                                       flag.quiet ? "--quiet" : SKIP_ARG }); 
             break;
 
         case CODEC_ZIP:
-            input_decompressor = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 
-                                                file->is_remote ? file->name : NULL,     // url
-                                                file->redirected,
-                                                "To uncompress a .zip file", "unzip",    // reason, exec_name
-                                                "-p", // must be before file name
-                                                file->is_remote ? SKIP_ARG : file->name, // local file name 
-                                                flag.quiet ? "--quiet" : SKIP_ARG, 
-                                                NULL);            
-            file->file = stream_from_stream_stdout (input_decompressor);
-            file->redirected = true;
-            file->codec = CODEC_NONE;
+            file_open_ext_decompessor (file, "unzip", NULL, CODEC_NONE, true, (rom[7]){
+                                       "-p", flag.quiet ? "--quiet" : SKIP_ARG }); 
             break;
-
-        case CODEC_BCF: {
-            input_decompressor = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 
-                                                file->is_remote ? file->name : NULL,        // url                                        
-                                                file->redirected,
-                                                "To compress a BCF file", 
-                                                "bcftools", "view", "--threads", "8", "-Ov",
-                                                file->is_remote ? SKIP_ARG : file->name,    // local file name 
-                                                "--no-version", // BCF: do not append version and command line to the header
-                                                NULL);
-            file->file = stream_from_stream_stdout (input_decompressor);
-            file->redirected = true;
-            file->codec = CODEC_NONE;
-            break;
-        }
 
         case CODEC_ORA: {
-            input_decompressor = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 
-                                                file->is_remote ? file->name : NULL,        // url                                        
-                                                file->redirected,
-                                                "To compress an Ora file", 
-                                                "orad", 
-                                                "--raw", "--quiet", "--stdout",
-                                                "--threads", str_int_s (global_max_threads).s, 
-                                                (file->is_remote || file->redirected) ? "-" : file->name,    // local file name 
-                                                NULL);
-            file->file = stream_from_stream_stdout (input_decompressor);
-            file->redirected = true;
-            file->codec = CODEC_NONE;
+            file_open_ext_decompessor (file, "orad", NULL, CODEC_NONE, false, (rom[7]){  
+                                       "--raw", "--quiet", "--stdout",
+                                       "--threads", str_int_s (global_max_threads).s, 
+                                       (file->is_remote || file->redirected) ? "-" : file->name });    // local file name 
             break;
         }
 
@@ -628,16 +546,12 @@ FileP file_open_txt_read (rom filename)
             ABORT ("%s: invalid filename extension for %s files: %s", global_cmd, dt_name (file->data_type), file->name);
     }
     
-    bgzf_initialize_discovery (file);
-
-    if (flag.show_codec) 
-        iprintf ("%s: source_code=%s\n", file->basename, codec_name (file->source_codec));
-
     if (!file->file) goto fail;
 
-    file_initialize_txt_file_data (file);
+    file_initialize_txt_file_fields (file);
 
     if (file->is_remote) FREE (error); // allocated by url_get_status
+
     return file;
 
 fail:
@@ -712,7 +626,7 @@ FileP file_open_txt_write (rom filename, DataType data_type, BgzfLevel bgzf_leve
 
     ASSINP (file->file, "cannot open file \"%s\": %s", file->name, strerror(errno)); // errno will be retrieve even the open() was called through zlib and bzlib 
 
-    file_initialize_txt_file_data (file);
+    file_initialize_txt_file_fields (file);
 
     return file;
 }
@@ -1100,28 +1014,6 @@ void file_close (FileP *file_p)
     }
 
     COPY_TIMER_EVB (file_close);
-}
-
-void file_write_txt (const void *data, unsigned len)
-{
-    if (!len) return; // nothing to do
-
-    ASSERTNOTNULL (txt_file);
-    ASSERTNOTNULL (txt_file->file);
-    ASSERTNOTNULL (data);
-    
-    size_t bytes_written = fwrite (data, 1, len, (FILE *)txt_file->file); // use fwrite - let libc manage write buffers for us
-
-    // if we're streaming our genounzip/genocat/genols output to another process and that process has 
-    // ended prematurely then exit quietly. In genozip we display an error because this means the resulting
-    // .genozip file will be corrupted
-    if (!txt_file->name && errno == EINVAL) exit (EXIT_DOWNSTREAM_LOST);
-
-    // exit quietly if failed to write to stdout - likely downstream consumer (piped executable or terminal) was closed
-    if (bytes_written < len && !txt_file->name) exit (EXIT_DOWNSTREAM_LOST);
-
-    // error if failed to write to file
-    ASSERT (bytes_written == len, "wrote only %u of the expected %u bytes to %s: %s", (int)bytes_written, len, txt_file->name, strerror(errno));
 }
 
 void file_remove (rom filename, bool fail_quietly)

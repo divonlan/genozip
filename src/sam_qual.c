@@ -31,7 +31,7 @@ rom bam_qual_display (bytes qual, uint32_t l_seq) // caller should free memory
 
     else {
         char *str = MALLOC (l_seq*3 + 2);
-        return str_to_hex (qual, l_seq, str, true);
+        return str_to_hex_ (qual, l_seq, str, true);
     }
 }
 

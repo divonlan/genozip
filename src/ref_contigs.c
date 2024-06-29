@@ -268,7 +268,7 @@ static void ref_contigs_load_set_contig_names (Reference ref)
         if (!contig[i].max_pos) continue;
 
         WordIndex chrom_index = contig[i].ref_index;
-        ASSERT (chrom_index >= 0 && chrom_index < chrom_len, "Expecting contig[%u].ref_index=%d to be in the range [0,%d]", i, chrom_index, (int)chrom_len-1);
+        ASSERT (IN_RANGE (chrom_index, 0, chrom_len-1), "Expecting contig[%u].ref_index=%d to be in the range [0,%d]", i, chrom_index, (int)chrom_len-1);
         contig[i].char_index = chrom[chrom_index].char_index;
         contig[i].snip_len   = chrom[chrom_index].snip_len;
     }
@@ -517,9 +517,13 @@ static ContigP ref_contig_search_by_gpos_v13 (const Reference ref, PosType64 gpo
     return NULL; // not found
 }
 
-static ContigP ref_contig_search_by_gpos (const Reference ref, PosType64 gpos, WordIndex first_ctg_i, WordIndex last_ctg_i)
+static ContigP ref_contig_search_by_gpos (const Reference ref, PosType64 gpos, 
+                                          WordIndex first_ctg_i, WordIndex last_ctg_i,
+                                          bool next_contig_if_in_gap)
 {
-    if (first_ctg_i > last_ctg_i) return NULL; // gpos is after all contigs, or in the gaps between contigs
+    if (first_ctg_i > last_ctg_i) 
+        return next_contig_if_in_gap ? B(Contig, ref->ctgs.contigs, first_ctg_i)
+                                     : NULL; // gpos is after all contigs, or in the gaps between contigs
 
     WordIndex mid_ctg_i = (first_ctg_i + last_ctg_i) / 2;
     ContigP rc = B(Contig, ref->ctgs.contigs, mid_ctg_i);
@@ -528,17 +532,18 @@ static ContigP ref_contig_search_by_gpos (const Reference ref, PosType64 gpos, W
         return rc;
 
     else if (gpos < rc->gpos)
-        return ref_contig_search_by_gpos (ref, gpos, first_ctg_i, mid_ctg_i - 1);
+        return ref_contig_search_by_gpos (ref, gpos, first_ctg_i, mid_ctg_i - 1, next_contig_if_in_gap);
 
     else
-        return ref_contig_search_by_gpos (ref, gpos, mid_ctg_i + 1, last_ctg_i);
+        return ref_contig_search_by_gpos (ref, gpos, mid_ctg_i + 1, last_ctg_i, next_contig_if_in_gap);
 }
 
 WordIndex ref_contig_get_by_gpos (const Reference ref, PosType64 gpos,
                                   int32_t seq_len, // if non-0 succeed only if range is entirely with the contig (may be positive or negative number)
-                                  PosType32 *pos)  // optional out, POS within the CHROM matching gpos
+                                  PosType32 *pos,  // optional out, POS within the CHROM matching gpos
+                                  bool next_contig_if_in_gap)
 {
-    ContigP rc = VER(14) ? ref_contig_search_by_gpos (ref, gpos, 0, ref->ctgs.contigs.len32 - 1)
+    ContigP rc = VER(14) ? ref_contig_search_by_gpos (ref, gpos, 0, ref->ctgs.contigs.len32 - 1, next_contig_if_in_gap)
                          : ref_contig_search_by_gpos_v13 (ref, gpos);
     
     if (!rc) 

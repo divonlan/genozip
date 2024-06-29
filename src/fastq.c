@@ -134,8 +134,8 @@ int32_t fastq_unconsumed (VBlockP vb,
 {    
     ASSERT (*i_out >= 0 && *i_out < Ltxt, "*i=%d is ∉ [0,%u]", *i_out, Ltxt);
 
-    rom nl[16]={};     // newline pointers: nl[0] is the first from the end
-    uint32_t l[16]={}; // lengths of segments excluding \n and \r: l[1] is the segment that starts at nl[1]+1 until nl[0]-1 (or nl[0]-2 if there is a \r). l[0] is not used.
+    rom nl[17]={};     // newline pointers: nl[0] is the first from the end
+    uint32_t l[17]={}; // lengths of segments excluding \n and \r: l[1] is the segment that starts at nl[1]+1 until nl[0]-1 (or nl[0]-2 if there is a \r). l[0] is not used.
 
     // search backwards a suffient number of newlines (eg. for normal FASTQ: best case: \nD\nS\nT\nQ\n ; worst case: \nD1\nS1\nT1\nQ1\nD2\nS2\nT2\nq2 (q2 is partial Q2))
     int n=0;
@@ -143,7 +143,7 @@ int32_t fastq_unconsumed (VBlockP vb,
     int min_lines = height * (segconf.is_interleaved ? 2 : 1); // minimum lines needed for testing
     int max_lines = min_lines * 2; // maximum lines needed for testing
 
-    for (rom c=Btxt (*i_out), first_c=Btxt (first_i) ; c >= first_c-1/*one beyond*/ && n < max_lines; c--) 
+    for (rom c=Btxt (*i_out), first_c=Btxt (first_i) ; c >= first_c-1/*one beyond*/ && n <= max_lines; c--) 
         if (c == (first_c-1) || *c == '\n') { // we consider character before the start to also be a "virtual newline"
             nl[n] = c;
             if (n) l[n] = ((nl[n-1]) - (nl[n-1][-1] == '\r')) - (nl[n] + 1);

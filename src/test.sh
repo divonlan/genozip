@@ -495,9 +495,22 @@ batch_special_algs()
     test_header "two consecutive Is in CIGAR" 
     $genozip ${TESTDIR}/regression.two-consecutive-Is.sam -ft || exit 1 
 
+    # bug was: no handling of GZIL blocks after move to igzip (defect 2024-03-01)
+    test_header "Illumina GZIL blocks"
+    $genozip -tf --no-bgzf ${TESTDIR}/regression.defect-2024-03-01.multi-gzip-break-between-reads.fq.gz || exit 1 
+    $genozip -tf --no-bgzf ${TESTDIR}/regression.defect-2024-03-01.multi-gzip-break-within-read.fq.gz || exit 1 
+
     # bug was: CHECKSUM at the end of 1MB-gz block in R2 was not handled correctly, failing R2 zip.
     test_header "CHECKSUM in Illumina-style gzip: R2 alignment to R1" 
-    $genozip -tf --pair -e $hs37d5 --truncate -B19 ${TESTDIR}/regression.defect-2024-06-21.R1.fq.gz ${TESTDIR}/regression.defect-2024-06-21.R2.fq.gz 
+    $genozip -tf --pair -e $hs37d5 --truncate -B19 --no-bgzf ${TESTDIR}/regression.defect-2024-06-21.R1.gzil-broke-w-B19.fq.gz \
+                                                             ${TESTDIR}/regression.defect-2024-06-21.R2.gzil-broke-w-B19.fq.gz || exit 1 
+
+    # two special code paths for handling truncated GZIL files, depending if the garbage last word of the file >1MB (detected during read) or <=1MB (detected during uncompress) 
+    $genozip -tf --truncate ${TESTDIR}/special.gzil.truncated-last-word.gt.1MB.fastq.gz || exit 1 
+    $genozip -tf --truncate ${TESTDIR}/special.gzil.truncated-last-word.eq.1MB.fastq.gz || exit 1 
+
+    # bug was: MC copying CIGAR from mate, when both are "*" (=empty in BAM). Fixed in 15.0.62 in PIZ.
+    $genozip -tf ${TESTDIR}/regression.2024-06-26.MC-copy-from-mate-CIGAR.null-CIGAR.bam || exit 1
 }
 
 batch_qual_codecs()
@@ -1054,6 +1067,22 @@ batch_real_world_optimize()
     cd -
 }
 
+batch_gzil_fastq() 
+{
+    batch_print_header
+
+    cd $TESTDIR
+    local files=( `ls -1 gzil.*.fq.gz` )
+
+    $genozip --show-filename --test --force ${files[*]} || exit 1
+
+    # expecting R2 to be decompressed by igzip as it is faster than isil for gz decompressing while reading 
+    $genozip gzil.R1.fq.gz gzil.R1.fq.gz -o $output -e $hs37d5 -tf -2 
+
+    cd -
+}
+
+
 # test genounzip with many files of different types in a single process
 batch_real_world_genounzip_single_process() # $1 extra genozip argument
 {
@@ -1542,12 +1571,12 @@ batch_external_ora()
 {
     batch_print_header
 
-    # Commented out (uncomment if needed) because its very slow - 80 seconds.
+    return; # skipped because its very slow - 80 seconds.
     # Reason for slowness: test.fastq.ora is a abrupt subset of a larger file - orad doesn't like that.
-    # 
-    # if `command -v orad >& /dev/null`; then
-    #     ORA_REF_PATH=$REFDIR $genozip --truncate -ft -e $hs37d5 $TESTDIR/test.fastq.ora || exit $?
-    # fi
+    
+    if `command -v orad >& /dev/null`; then
+        ORA_REF_PATH=$REFDIR $genozip --truncate -ft -e $hs37d5 $TESTDIR/test.fastq.ora || exit $?
+    fi
 
     cleanup
 }
@@ -1784,6 +1813,12 @@ update_latest()
     pushd ../genozip-latest
     git reset --hard
     git pull
+
+    if [ -n "$is_mac" ]; then 
+        chmod +x src/*.sh # reverted by git pull
+    fi  
+    
+    make -j clean
     make -j 
     popd
 }
@@ -2157,15 +2192,20 @@ SCRIPTSDIR=$BASEDIR/private/scripts
 LICENSESDIR=$BASEDIR/private/licenses
 OUTDIR=$TESTDIR/tmp
 REFDIR=$BASEDIR/public
-if [ -n "$is_windows" ]; then
-    LICFILE=$APPDATA/genozip/.genozip_license.v15
 
+if [ -n "$is_windows" ]; then
     if [[ ! -v APPDATA ]]; then
         export APPDATA="$BASEDIR/../AppData/Roaming"
     fi
+
+    LICFILE=$APPDATA/genozip/.genozip_license.v15
 else
     LICFILE=$HOME/.genozip_license.v15
 fi
+
+if [ -n "$is_mac" ]; then 
+    chmod +x $BASEDIR/private/scripts/* $BASEDIR/private/utils/mac/* $BASEDIR/src/*.sh # reverted by git pull
+fi  
 
 output=${OUTDIR}/output.genozip
 output2=${OUTDIR}/output2.genozip
@@ -2359,21 +2399,22 @@ case $GENOZIP_TEST in
 56)  batch_user_message_permissions    ;;
 57)  batch_password_permissions        ;;
 58)  batch_reference_backcomp          ;;
-59)  batch_real_world_backcomp 11.0.11 ;; # note: versions must match VERSIONS in test/Makefile
-60)  batch_real_world_backcomp 12.0.42 ;; 
-61)  batch_real_world_backcomp 13.0.21 ;; 
-62)  batch_real_world_backcomp 14.0.33 ;; 
-63)  batch_real_world_backcomp latest  ;;
-64)  batch_basic basic.vcf     latest  ;;
-65)  batch_basic basic.bam     latest  ;;
-66)  batch_basic basic.sam     latest  ;;
-67)  batch_basic basic.fq      latest  ;;
-68)  batch_basic basic.fa      latest  ;;
-69)  batch_basic basic.bed     latest  ;;
-70)  batch_basic basic.gvf     latest  ;;
-71)  batch_basic basic.gtf     latest  ;;
-72)  batch_basic basic.me23    latest  ;;
-73)  batch_basic basic.generic latest  ;;
+59)  batch_gzil_fastq                  ;;
+60)  batch_real_world_backcomp 11.0.11 ;; # note: versions must match VERSIONS in test/Makefile
+61)  batch_real_world_backcomp 12.0.42 ;; 
+62)  batch_real_world_backcomp 13.0.21 ;; 
+63)  batch_real_world_backcomp 14.0.33 ;; 
+64)  batch_real_world_backcomp latest  ;;
+65)  batch_basic basic.vcf     latest  ;;
+66)  batch_basic basic.bam     latest  ;;
+67)  batch_basic basic.sam     latest  ;;
+68)  batch_basic basic.fq      latest  ;;
+69)  batch_basic basic.fa      latest  ;;
+70)  batch_basic basic.bed     latest  ;;
+71)  batch_basic basic.gvf     latest  ;;
+72)  batch_basic basic.gtf     latest  ;;
+73)  batch_basic basic.me23    latest  ;;
+74)  batch_basic basic.generic latest  ;;
 
 * ) break; # break out of loop
 

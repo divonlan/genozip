@@ -116,9 +116,7 @@ void reconstruct_to_history (VBlockP vb, ContextP ctx)
 
 rom lookup_type_name (LookupType lookup)
 {
-    static rom names[] = LOOKUP_TYPE_NAMES;
-
-    return (lookup < 0 || lookup >= ARRAY_LEN(names)) ? "Invalid" : names[lookup];
+    return IN_RANGE (lookup, 0, ARRAY_LEN((rom[])LOOKUP_TYPE_NAMES)-1) ? (rom[])LOOKUP_TYPE_NAMES[lookup] : "Invalid LookupType";
 }
 
 void recon_history_get_historical_snip (VBlockP vb, ContextP ctx, LineIType buddy_line_i, pSTRp(snip))

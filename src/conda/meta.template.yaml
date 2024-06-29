@@ -26,17 +26,17 @@ build:
 
 requirements:
   build:    
-    - {{posix}}make
+    - {{ posix }}make
     - nasm                       # [not arm64]
     - {{ compiler('c') }}        # [not win]
     - {{ compiler('cxx') }}      # [not win]
     - {{ compiler('m2w64_c') }}  # [win]
-    - {{posix}}sed               # [win]
-    - {{posix}}coreutils         # [win]
+    - {{ posix }}sed             # [win]
+    - {{ posix }}coreutils       # [win]
   host:
-    - {{native}}gcc-libs         # [win]
+    - {{ native }}gcc-libs       # [win]
   run:
-    - {{native}}gcc-libs         # [win]
+    - {{ native }}gcc-libs       # [win]
     - curl
 
 test:

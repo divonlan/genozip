@@ -220,7 +220,7 @@ static void ref_uncompact_ref (RangeP r, int64_t first_bit, int64_t last_bit, co
 RangeP ref_get_range_by_chrom (Reference ref, WordIndex chrom, rom *chrom_name)
 {
     decl_zctx (CHROM);
-    ASSERT (chrom >= 0 && chrom < zctx->word_list.len, "chrom=%d out of range - ctx->word_list.len=%u",
+    ASSERT (IN_RANGE (chrom, 0, zctx->word_list.len32-1), "chrom=%d out of range - ctx->word_list.len=%u",
             chrom, zctx->word_list.len32);
 
     if (chrom_name)
@@ -418,7 +418,7 @@ static void ref_uncompress_one_range (VBlockP vb)
 
             uint64_t start = MAX_(sec_start_within_contig, 0);
             uint64_t len   = ref_sec_len - initial_flanking_len - final_flanking_len;
-            ASSERT (len >= 0 && len <= ref_sec_len, "expecting ref_sec_len=%"PRIu64" >= initial_flanking_len=%"PRIu64" + final_flanking_len=%"PRIu64,
+            ASSERT (IN_RANGE (len, 0, ref_sec_len), "expecting ref_sec_len=%"PRIu64" >= initial_flanking_len=%"PRIu64" + final_flanking_len=%"PRIu64,
                     ref_sec_len, initial_flanking_len, final_flanking_len);
 
             RefLock lock = ref_lock (vb->ref, start + r->gpos, len + 63); 

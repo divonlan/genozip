@@ -1541,7 +1541,7 @@ void zip_modify (VBlockP vb)
 void seg_all_data_lines (VBlockP vb)
 {
     START_TIMER;
-
+    
     // sanity (leave 64b to detect bugs)
     ASSERT (vb->lines.len <= vb->txt_data.len, "%s: Expecting lines.len=%"PRIu64" < txt_data.len=%"PRIu64, 
             VB_NAME, vb->lines.len, vb->txt_data.len); // 64 bit test in case of memory corruption
@@ -1565,7 +1565,13 @@ void seg_all_data_lines (VBlockP vb)
         if (debug_lines_ctx) debug_lines_ctx->ltype = LT_UINT32;
     }
     
-    DT_FUNC (vb, seg_initialize)(vb);  // data-type specific initialization
+    DT_FUNC (vb, seg_initialize)(vb);  // data-type specific initialization (SAM DEPN: re-read lines here)
+
+    if (flag_is_show_vblocks (ZIP_TASK_NAME)) 
+        iprintf ("SEG(id=%d) vb=%s Ltxt=%u %.*s\n", vb->id, VB_NAME, vb->txt_data.len32,
+                 MIN_(64, Ltxt), cond_str (!DTP(is_binary), "txt_data[64]=", B1STtxt ? B1STtxt : "(null)"));
+
+    ASSERTNOTEMPTY (vb->txt_data); // after this print ^
 
     // in segconf, seg_initialize might change the data_type and realloc the segconf vb (eg FASTA->FASTQ)
     if (segconf.running) vb = vb_get_nonpool_vb (VB_ID_SEGCONF);
@@ -1621,8 +1627,8 @@ void seg_all_data_lines (VBlockP vb)
         line = next_line;
 
         // update line_bgzf_uoffset to next line
-        if (txt_file->codec == CODEC_BGZF && vb->comp_i == COMP_MAIN) 
-            bgzf_zip_advance_index (vb, line_len);
+        if (TXT_IS_BGZF && vb->comp_i == COMP_MAIN) 
+            bgz_zip_advance_index (vb, line_len);
         
         // if our estimate number of lines was too small, increase it
         if (vb->line_i == vb->lines.len32-1 && line - vb->txt_data.data != vb->txt_data.len)         

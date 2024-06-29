@@ -1032,8 +1032,8 @@ void zfile_update_compressed_vb_header (VBlockP vb)
     vb_header->z_data_bytes = BGEN32 (vb->z_data.len32);
 
     if (flag_is_show_vblocks (ZIP_TASK_NAME)) 
-        iprintf ("UPDATE_VB_HEADER(id=%d) vb_i=%u comp_i=%u recon_size=%u genozip_size=%u n_lines=%u longest_line_len=%u\n",
-                 vb->id, vb->vblock_i, vb->comp_i, 
+        iprintf ("UPDATE_VB_HEADER(id=%d) vb=%s recon_size=%u genozip_size=%u n_lines=%u longest_line_len=%u\n",
+                 vb->id, VB_NAME, 
                  BGEN32 (vb_header->recon_size), BGEN32 (vb_header->z_data_bytes), 
                  vb->lines.len32, // just for debugging, not in VB header
                  BGEN32 (vb_header->longest_line_len));

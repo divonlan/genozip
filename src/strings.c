@@ -67,13 +67,12 @@ StrText char_to_printable (char c)
     }
 }
 
-// replaces \t, \n, \r, \b, \ with "\t" etc, replaces unprintables with '?'. caller should allocate out. 
-// returns length (excluding \0). out should be allocated by caller to (in_len*2 + 1), out is null-terminated
+// returns length (excluding \0). out should be allocated by caller to (in_len*4 + 1), out is null-terminated
 uint32_t str_to_printable (STRp(in), char *out, int out_len)
 {
     char *start = out;
 
-    for (uint32_t i=0; i < in_len && out_len > 3; i++) // 3 = 2 characters + nul
+    for (uint32_t i=0; i < in_len && out_len > 5; i++) // 5 = 4 characters + nul
         switch (in[i]) {
             case 32 ... '\\'-1: case '\\'+1 ... 126:
                            *out++ = in[i];             ; out_len -= 1; break;
@@ -83,7 +82,7 @@ uint32_t str_to_printable (STRp(in), char *out, int out_len)
             case '\b'    : *out++ = '\\'; *out++ = 'b' ; out_len -= 2; break;
             case '\\'    : *out++ = '\\'; *out++ = '\\'; out_len -= 2; break;
             case 0 ... 7 : *out++ = '\\'; *out++ = '0' + in[i]; out_len -= 2; break;
-            default      : *out++ = '\\'; *out++ = '?' ; out_len -= 2; 
+            default      : *out++ = '\\'; *out++ = 'x' ; *out++ = NUM2HEXDIGIT(in[i] >> 4), *out++ = NUM2HEXDIGIT(in[i] & 0xf); out_len -= 4; 
         }
     
     *out = 0;
@@ -290,7 +289,7 @@ bool str_get_int_range##func_num (rom str, uint32_t str_len, int64_t min_val, in
     if (!str_get_int (str, str_len ? str_len : strlen (str), &value64)) return false; \
     if (value) *value = (type)value64;                                                \
                                                                                       \
-    return value64 >= min_val && value64 <= max_val;                                  \
+    return IN_RANGE (value64, min_val, max_val);                                      \
 }
 str_get_int_range_type(8,uint8_t)   // unsigned
 str_get_int_range_type(16,uint16_t) // unsigned
@@ -374,7 +373,7 @@ str_get_int_range_allow_hex_bits(32) // unsigned
 str_get_int_range_allow_hex_bits(64) // unsigned
 
 // caller should allocate hex_str[data_len*2+1] (or *3 if with_dot). returns nul-terminated string.
-rom str_to_hex (bytes data, uint32_t data_len, char *hex_str, bool with_dot)
+rom str_to_hex_ (bytes data, uint32_t data_len, char *hex_str, bool with_dot)
 {
     char *s = hex_str;
 
@@ -389,14 +388,6 @@ rom str_to_hex (bytes data, uint32_t data_len, char *hex_str, bool with_dot)
     *s = 0;
     return hex_str;
 }
-
-StrText str_hex10 (bytes data, uint32_t data_len)
-{
-    StrText s = {};
-    str_to_hex (data, MIN_(10, data_len), s.s, false);
-    return s;
-}
-
 
 StrText str_int_commas (int64_t n)
 {
@@ -1289,3 +1280,16 @@ bool str_is_utf8 (STRp(s))
 
     return true;
 }
+
+#ifdef __MINGW64__
+void *memmem (const void *haystack, size_t haystack_len, // same as in gcc
+              const void *needle,   size_t needle_len)
+{
+    const void *after_haystack = (rom)haystack + haystack_len - needle_len + 1;
+    for (; haystack < after_haystack; haystack=(rom)haystack + 1)
+        if (!memcmp (haystack, needle, needle_len)) 
+            return (void *)haystack;
+
+    return NULL;
+}
+#endif

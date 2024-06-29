@@ -15,6 +15,7 @@
 #include "bgzf.h"
 #include "biopsy.h"
 #include "stream.h"
+#include "dispatcher.h"
 
 //-----------------------
 // Types & macros
@@ -149,9 +150,9 @@ void gencomp_seg_add_line (VBlockP vb, CompIType comp_i, STRp(line)/*pointer int
 
     // If we're might re-read depn lines from the txt file, we store their coordinates in the txt file
     if (componentsP[comp_i].type == GCT_DEPN && depn_method == DEPN_REREAD) {
-        if (txt_file->codec == CODEC_BGZF) {
-            uint64_t bb_i = vb->vb_bgzf_i + vb->bgzf_blocks.current_bb_i;
-            ASSERT (bb_i <= MAX_BB_I, "BGZF bb_i=%"PRIu64" exceeds maximum of %"PRIu64, bb_i, MAX_BB_I);
+        if (TXT_IS_BGZF) {
+            uint64_t bb_i = vb->vb_bgz_i + vb->gz_blocks.current_bb_i;
+            ASSERT (bb_i <= MAX_BB_I, "%s: BGZF bb_i=%"PRIu64" exceeds maximum of %"PRIu64, VB_NAME, bb_i, MAX_BB_I);
 
             BLST (GencompLineIEntry, vb->gencomp_lines)->offset = (LineOffset){ .bb_i = bb_i, .uoffset = vb->line_bgzf_uoffset };
         }
@@ -223,7 +224,7 @@ void gencomp_initialize (CompIType comp_i, GencompType gct)
         buf_set_promiscuous (&depn.thread_data_comp, "depn.thread_data_comp");
 
         // if we cannot re-read the depn lines from the file, we will offload them to disk
-        if ((txt_file->codec != CODEC_BGZF && txt_file->codec != CODEC_NONE) || 
+        if ((!TXT_IS_BGZF && !TXT_IS_PLAIN) || 
              txt_file->redirected || txt_file->is_remote ||
              segconf.zip_txt_modified) { 
             depn_method = DEPN_OFFLOAD;
@@ -709,6 +710,10 @@ static void gencomp_get_txt_data_from_queue (VBlockP vb, GencompType gct)
     if (flag.debug_gencomp) 
         debug_gencomp (vb->comp_i==1 ? "disp_comp1" : "disp_comp2", false);
 
+    if (flag_is_show_vblocks (ZIP_TASK_NAME)) 
+        iprintf ("TXT_DATA_FROM_GENCOMP_QUEUE(id=%d) vb=%s buf_i=%u Ltxt=%u n_lines=%u\n", 
+                 vb->id, VB_NAME, buf_i, Ltxt, vb->lines.len32);
+
     mutex_unlock (gc_protected);
 } 
 
@@ -811,7 +816,7 @@ bool gencomp_get_txt_data (VBlockP vb)
     // case: finished ingesting PRIM and no more out-of-band data, and all MAIN data has been flushed (which also means txt_file reached EOF,
     // see zip_prepare_one_vb_for_dispatching) - so no more MAIN or GetQBit data will be available. time for DEPN data.
     if (sam_finished_ingesting_prim && reread_depn_lines.next < reread_depn_lines.len) 
-        RETURN (txt_file->codec == CODEC_BGZF ? "REREAD_BGZF" : "REREAD_PLAIN", gencomp_prescribe_reread (vb));
+        RETURN (TXT_IS_BGZF ? "REREAD_BGZF" : "REREAD_PLAIN", gencomp_prescribe_reread (vb));
 
     // no more data exists at this point OR we have GCT_DEPN, but not finished ingesting PRIM yet
     // DEBUG_GENCOMP ("NO_DATA_AVAILABLE"); // commenting out because there are too many of
@@ -890,27 +895,31 @@ void gencomp_reread_lines_as_prescribed (VBlockP vb)
     Ltxt = 0;
 
     // open a file handle private to this VB
-    FILE *file = fopen (txt_file->name, "rb");
-    ASSERT (file, "%s: Failed to open %s for rereading depn lines: %s", VB_NAME, txt_file->name, strerror(errno));
+    FILE *fp = fopen (txt_file->name, "rb");
+    ASSERT (fp, "%s: Failed to open %s for rereading depn lines: %s", VB_NAME, txt_file->name, strerror(errno));
 
-    stream_set_inheritability (fileno (file), false); // Windows: allow file_remove in case of --replace
+    stream_set_inheritability (fileno (fp), false); // Windows: allow file_remove in case of --replace
 
-    if (txt_file->codec == CODEC_BGZF) 
-        bgzf_reread_uncompress_vb_as_prescribed (vb, file);
+    if (flag_is_show_vblocks (ZIP_TASK_NAME)) 
+        iprintf ("REREAD_DEPN(id=%d) vb=%s n_lines=%u codec=%s\n", 
+                 vb->id, VB_NAME, vb->reread_prescription.len32, codec_name (txt_file->codec));
+
+    if (TXT_IS_BGZF) 
+        bgzf_reread_uncompress_vb_as_prescribed (vb, fp);
 
     else { // CODEC_NONE
         for_buf (RereadLine, line, vb->reread_prescription) {
-            ASSERT (!fseeko64 (file, line->offset.offset, SEEK_SET),
+            ASSERT (!fseeko64 (fp, line->offset.offset, SEEK_SET),
                     "%s: fseeko64 on %s failed while rereading depn lines: %s", VB_NAME, txt_file->name, strerror(errno));
             
-            ASSERT (fread (BAFTtxt, line->line_len, 1, file) == 1,
+            ASSERT (fread (BAFTtxt, line->line_len, 1, fp) == 1,
                     "%s: fread of %u bytes on %s failed while rereading depn lines: %s", VB_NAME, line->line_len, txt_file->name, strerror(errno));
 
             Ltxt += line->line_len;
         }
     }
 
-    fclose (file);
+    fclose (fp);
 
     if (flag.debug_gencomp)
         iprintf ("%s: Reread %u gencomp lines from txt_file adler32=%u\n", 
