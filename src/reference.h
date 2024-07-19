@@ -147,7 +147,7 @@ static inline void ref_assert_nucleotide_available (ConstRangeP range, PosType64
     bool available;
     switch (flag.reference) {
         case REF_STORED   : available = ref_is_nucleotide_set (range, pos); break;
-        default           : available = IN_RANGE (pos, range->first_pos, range->last_pos); break;
+        default           : available = IN_RANGX (pos, range->first_pos, range->last_pos); break;
     }
     ASSERT (available, "reference is not set: chrom=%.*s pos=%"PRId64, (range)->chrom_name_len, (range)->chrom_name, (pos));
 }

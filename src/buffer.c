@@ -154,6 +154,52 @@ void buf_print (BufferP buf, bool add_newline)
     iprint0 (add_newline ? "\n" : "");
 }
 
+// iterator on a buffer containing newline-terminated lines
+// false means continue iterating, true means stop
+char *buf_foreach_line (BufferP buf,
+                        bool reverse, // iterate backwards
+                        TxtIteratorCallback callback, 
+                        void *cb_param1, void *cb_param2, unsigned cb_param3, // passed as-is to callback
+                        int64_t *line_len) // out
+{
+    if (line_len) *line_len = 0;
+
+    if (!buf->len) return NULL;
+
+    char *firstbuf = buf->data;
+    char *afterbuf = BAFTc (*buf);
+
+    char *first = !reverse ? firstbuf : 0;
+    char *after = !reverse ? 0 : afterbuf;
+
+    while (1) {
+            
+        // get one line - searching forward or backwards
+        if (!reverse) {
+            for (after=first ; after < afterbuf && *after != '\n' ; after++);
+            after++; // skip newline
+        }
+        else {
+            for (first=after-2 /* skip final \n */; first >= firstbuf && *first != '\n'; first--);
+            first++; // after detected \n or at start of line
+        }
+
+        if (!reverse && after > afterbuf) return NULL; // we don't call callback if after>afterbuf - beyond end of line
+            
+        if (callback (first, after - first, cb_param1, cb_param2, cb_param3)) {
+            if (line_len) *line_len = after - first;
+            return first;
+        }
+
+        if (reverse && first == firstbuf) return NULL; // beginning of line - we called the cb
+
+        if (!reverse) first=after;
+        else          after=first;
+    }
+
+    return 0; // never reaches here
+}   
+
 //---------------------
 // Bits stuff
 //---------------------

@@ -36,15 +36,17 @@ typedef struct File {
     bool is_in_tar;                    // z_file: file is embedded in tar file
     bool is_scanned;                   // TXT_FILE: sam_sag_by_flag_scan_for_depn has been performed for this file
     DataType data_type;
-    Codec source_codec;                // TXT_FILE ZIP: codec of txt file before redirection (eg CRAM, XZ, ZIP...). Note: CODEC_BAM if BAM (with or without internal bgzf compression)
+    Codec src_codec;                   // TXT_FILE ZIP/PIZ: internal or external codec of txt file (eg CRAM, BAM, XZ, ZIP, BGZF, MGZF, NONE...). Passed in SectionHeaderTxtHeader.src_codec.
                                        // Z_FILE PIZ: set to CODEC_BCF or CODEC_CRAM iff GenozipHeader.data_type is DT_BCF/DT_CRAM
-    Codec codec;                       // TXT_FILE ZIP: internal decompression codec used with this file. If redirected - as read by txtfile (eg for cram files this is BGZF)
-    Codec gunzip_method;               // TXT_FILE ZIP: if codec∈{GZ,BGZF,GZIL}, method used to decompress it (either the same as codec, or GZ)
+    Codec effective_codec;             // TXT_FILE ZIP: method with which we actually uncompress txt_file: can be different than .codec, e.g. using GZ instead of a specialized gzip codec, or using BGZF/NONE when streaming
+                                       // TXT_FILE PIZ: reconstruction codec (possibile values: NONE, BGZF, BCF, CRAM)
+    uint32_t num_EOF_blocks;           // TXT_FILE ZIP MGZIP: number of EOF blocks encountered
 
     // these relate to actual bytes on the disk
     int64_t disk_size;                 // ZIP: size of actual file on disk. 0 if not known (eg stdin or http stream). 
     int64_t disk_so_far;               // ZIP: Z/TXT_FILE: data actually read/write to/from "disk" (using fread/fwrite), (TXT_FILE: possibley bgzf/gz/bz2 compressed ; 0 if external compressor is used for reading).
     int64_t disk_gz_uncomp_or_trunc;   // ZIP: TXT_FILE: gz-compressed data actually either decompressed or discarded due to truncate
+    int64_t gz_blocks_so_far;          // ZIP: TXT_FILE: number of gz blocks read from disk
     int64_t est_seggable_size;         // TXT_FILE ZIP, access via txtfile_get_seggable_size(). Estimated size of txt_data in file, i.e. excluding the header. It is exact for plain files, or based on test_vb if the file has source compression
     int64_t est_num_lines;             // TXT_FILE ZIP, an alternative for progress bar - by lines instead of bytes (used for CRAM)
     
@@ -122,18 +124,24 @@ typedef struct File {
 
     // TXT file: reading
     Buffer unconsumed_txt;             // ZIP: excess uncompressed data read from the txt file - moved to the next VB: the final part of vb->txt_data that was not consumed
-    Buffer unconsumed_bgz_blocks;      // ZIP TXT BGZF/GZIL: unconsumed or partially consumed bgzf/gzil blocks - moved to the next VB
-    Buffer gz_data;                    // ZIP TXT GZ: yet-unconsumed gz data read from disk. .comp_len/.uncomp_len refer to the first block in the buffer (in GZIL, but not BGZF, there might be additional data after the first block) 
-    Buffer igzip_state;                // ZIP TXT GZ (with igzip)
+    Buffer unconsumed_mgzip_blocks;    // ZIP TXT MGZIP codecs: unconsumed or partially consumed MGZIP blocks - moved to the next VB
+    Buffer gz_data;                    // ZIP TXT GZ: yet-unconsumed gz data read from disk. .comp_len/.uncomp_len refer to the first block in the buffer (in IL1M, but not BGZF, there might be additional data after the first block) 
+    Buffer igzip_state;                // ZIP TXT GZ (with igzip).
+    uint64_t start_gz_block;           // ZIP TXT GZ (with igzip): offset in file of start of a gz block
+    uint32_t mgsp_vb_isize;            // ZIP TXT GZ (with MGSP): isize of each gz block in the VB (except for the last block that might be slightly more)
+    uint32_t num_mgsp_blocks_in_vb;    // ZIP TXT GZ (with MGSP): number of gz blocks in this VB
+    uint32_t max_mgsp_blocks_in_vb;    // ZIP TXT GZ (with MGSP): max gz blocks in a VB so far
+    uint32_t max_mgzip_isize;          // ZIP TXT GZ: largest MGZIP gz block 
+    bool discover_during_segconf;      // ZIP TXT GZ: gz discovery during segconf instead of file_open: for FASTQ files
 
-    // TXT file: BGZF stuff reading and writing compressed txt files 
-    Buffer bgzf_isizes;                // ZIP/PIZ: BGZF: uncompressed size of the BGZF blocks in which this txt file is compressed (in BGEN16).
-                                       // ZIP    : GZIL: only .len is used to count GZIL blocks (as their isize is always 1MB except for the last block)
-    Buffer bgzf_starts;                // ZIP: offset in txt_file of each BGZF block
+    // TXT file: MGZIP stuff reading and writing compressed txt files 
+    Buffer mgzip_isizes;               // ZIP/PIZ: MGZIP: uncompressed size of the MGZIP blocks in which this txt file is compressed
+    Buffer mgzip_starts;               // ZIP: offset in txt_file of each BGZF block
     Buffer bgzf_plausible_levels;      // ZIP: discovering library/level. .count = number of BGZF blocks tested so far
-    struct FlagsBgzf bgzf_flags;       // corresponds to SectionHeader.flags in SEC_BGZF
+    struct FlagsMgzip mgzip_flags;     // corresponds to SectionHeader.flags in SEC_MGZIP
     uint8_t bgzf_signature[3];         // PIZ: 3 LSB of size of source BGZF-compressed file, as passed in SectionHeaderTxtHeader.codec_info
-
+    bool non_EOF_zero_block_found;     // ZIP: file contains an isize=0 block that is not identical to the EOF block, therefore we won't be able to reconstruct exactly
+     
     // TXT FILE: accounting for truncation when --truncate-partial-last-line is used
     uint32_t last_truncated_line_len;  // ZIP: bytes truncated due to incomplete final line. note that if file is BGZF, then this truncated data is contained in the final intact BGZF blocks, after already discarding the final incomplete BGZF block
 
@@ -173,12 +181,9 @@ typedef struct File {
     int qnames_sampled;                // Z_FILE: PIZ: Deep: Number of QNAMEs sampled for producing the huffman compressor
 
     // Reconstruction plan, for reconstructing in sorted order if --sort: [0] is primary coords, [1] is luft coords
-    Mutex recon_plan_mutex;            // TXT_FILE ZIP: VCF: protect vb_info and line_info during merging of VB data
     Buffer vb_info[2];                 // TXT_FILE ZIP: VCF: array of ZipVbInfo per VB, indexed by (vb_i-1), 0:PRIMARY, 1:LUFT
                                        // Z_FILE   ZIP: SAM: array of SamGcVbInfo for: 0:PRIM 1:DEPN
                                        // Z_FILE   PIZ: [0]: used by writer [1]: used to load SAM SA Groups - array of PlsgVbInfo - entry per PRIM vb 
-    Buffer line_info[2];               // TXT_FILE ZIP: VCF: array of LineInfo per line or gapless range in txt_file
-                                       //               SAM: array of uint32 - lengths of lines in PRIM/DEPN
     Buffer recon_plan;                 // TXT_FILE ZIP/PIZ: array of ReconPlanItem - order of reconstruction of ranges of lines, to achieve a sorted file. VCF: [0]=PRIM rendition [1]=LUFT rendition
                                        // Z_FILE   PIZ: plan for entire z_file, txt_file.recon_plan is assigned a portion of this plan
     Buffer recon_plan_index;           // TXT_FILE ZIP / Z_FILE PIZ: An array of BufWord, one for each VB: start and length of VB in recon_plan
@@ -192,7 +197,11 @@ typedef struct File {
     struct timespec start_time;        // Z_FILE: For stats: time z_file object was created in memory 
     Mutex ctx_mutex[MAX_DICTS];        // Z_FILE ZIP: Context z_file (only) is protected by a mutex 
     Mutex custom_merge_mutex;          // Z_FILE: ZIP: used to merge deep, but in the future could be used for other custom merges
-
+    Buffer R1_txt_data_lens;           // Z_FILE: ZIP: FASTQ GZ: info regarding R1 VBs: txt_data.len32 of each VB 
+    Buffer R1_last_qname_index;        // Z_FILE: ZIP: FASTQ GZ: info regarding R1 VBs: last qname of each VB, canonical form, nul-separated: index into R1_last_qname. Note: only accessible in main thread (bc may realloc)
+    Buffer R1_last_qname;              // Z_FILE: ZIP: FASTQ GZ: data of R1_last_qname
+    VBIType R1_first_vb_i;             // Z_FILE: ZIP: first vb_i of R1. Always 1 for --pair, more for --deep.
+    
     // Information content stats 
     CompIType num_components;          // ZIP/PIZ z_file: number of components in this file (inc. generated components)
     uint32_t num_vbs;                  // ZIP: z_file/txt_file PIZ: txt_file: number of VBs processed z_file: total VBs in file
@@ -222,12 +231,18 @@ typedef struct File {
     int64_t disk_so_far_comp[MAX_NUM_COMPS];            // Z_FILE ZIP: per-component size if z_file VB sections (note: global area sections, including SEC_DICT, are not accounted for)
     int64_t txt_data_so_far_bind_comp[MAX_NUM_COMPS];   // Z_FILE ZIP: per-component txt_size after modifications (due to --optimzie etc)
     int64_t txt_data_so_far_bind_0_comp[MAX_NUM_COMPS]; // Z_FILE ZIP: per-component txt_size before modifications 
-    Codec comp_codec[MAX_NUM_COMPS];                    // Z_FILE ZIP: codec used for every txt file component (i.e. excluding generated components)
-    Codec comp_source_codec[MAX_NUM_COMPS];             // Z_FILE ZIP: source codec used for every txt file component (i.e. excluding generated components)
-    Codec comp_gunzip_method[MAX_NUM_COMPS];            // Z_FILE ZIP: gunzip_method used for every txt file component with codec∈{GZ,BGZF,GZIL}
-    FlagsBgzf comp_bgzf[MAX_NUM_COMPS];                 // Z_FILE ZIP BGZF: library and level of BGZF of each comp
-    uint64_t gz_isize[MAX_NUM_COMPS][2];                // Z_FILE ZIP GZ: isize(=uncomp_size) of the first two gzip block multi-gz-blocks (excluding BGZF and GZIL). 
-    uint8_t gz_header[MAX_NUM_COMPS][12];               // Z_FILE ZIP GZ: first 12 bytes of the gz header (10 if FEXTRA=false) (excluding BGZF and GZIL). 
+    Codec comp_src_codec[MAX_NUM_COMPS];                // Z_FILE ZIP: source codec used for every txt file component (i.e. excluding generated components)
+    Codec comp_eff_codec[MAX_NUM_COMPS];                // Z_FILE ZIP: effective_codec used for every txt file component with a GZIP codec
+    FlagsMgzip comp_bgzf[MAX_NUM_COMPS];                // Z_FILE ZIP BGZF: library and level of BGZF of each comp
+    uint64_t gz_isize[MAX_NUM_COMPS][2];                // Z_FILE ZIP GZ: isize(=uncomp_size) of the first two MGZIP blocks (excluding known MGZIP codecs). 
+    uint32_t comp_num_EOF_blocks[MAX_NUM_COMPS];        // Z_FILE ZIP MGZIP: number of EOF blocks encountered in the component
+    
+    #define GZ_HEADER_LEN 100
+    union {
+    uint8_t comp_gz_header[MAX_NUM_COMPS][GZ_HEADER_LEN]; // Z_FILE ZIP gzip codecs: first (usually all) bytes of the gz header 
+    uint8_t gz_header[GZ_HEADER_LEN];                   // TXT_FILE ZIP: first gz_header of file (copied later to comp_gz_header)
+    };
+    uint32_t gz_header_len;                             // TXT_FILE ZIP: gz_header length of first gz block
 } File;
 
 #define z_has_gencomp (z_file && z_file->z_flags.has_gencomp) // ZIP/PIZ
@@ -235,14 +250,12 @@ typedef struct File {
 
 // methods
 extern FileP file_open_z_read (rom filename);
-extern FileP file_open_z_write (rom filename, FileMode mode, DataType data_type, Codec source_codec);
+extern FileP file_open_z_write (rom filename, FileMode mode, DataType data_type, Codec src_codec);
 extern StrText file_get_z_run_time (FileP file);
 extern FileP file_open_txt_read (rom filename);
-extern FileP file_open_txt_write (rom filename, DataType data_type, BgzfLevel bgzf_level);
+extern FileP file_open_txt_write (rom filename, DataType data_type, MgzipLevel bgzf_level);
 extern void file_close (FileP *file_p);
 extern bool file_seek (FileP file, int64_t offset, int whence, rom mode, FailType soft_fail); // SEEK_SET, SEEK_CUR or SEEK_END
-extern int64_t file_tell_do (FileP file, FailType soft_fail, FUNCLINE);
-#define file_tell(file,soft_fail) file_tell_do ((file), (soft_fail), __FUNCLINE) 
 extern FileType file_get_type (rom filename);
 extern DataType file_get_data_type_of_input_file (FileType ft);
 extern DataType file_piz_get_dt_of_out_filename (void);
@@ -295,15 +308,9 @@ extern bool file_buf_locate (FileP file, ConstBufferP buf);
 // tests for compression types
 // ---------------------------
 
-#define SRC_CODEC(x) (txt_file->source_codec == CODEC_##x)
+#define SRC_CODEC(x) (txt_file->src_codec == CODEC_##x)
 
-#define TXT_IS_PLAIN (txt_file->codec == CODEC_NONE)
-#define TXT_IS_BGZF  (txt_file->codec == CODEC_BGZF)
-#define TXT_IS_GZIL  (txt_file->codec == CODEC_GZIL)
-#define TXT_IS_GZ    (txt_file->codec == CODEC_GZ)
-#define TXT_IS_BZ2   (txt_file->codec == CODEC_BZ2)
-
-#define SC(x) (file->source_codec == CODEC_##x)
+#define SC(x) (file->src_codec == CODEC_##x)
 static inline bool is_read_via_ext_decompressor(ConstFileP file) { return SC(XZ)|| SC(ZIP) || SC(BCF)|| SC(CRAM) || SC(ORA); }
 #undef SC
 

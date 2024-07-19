@@ -50,7 +50,7 @@ void fastq_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(seq), bool deep)
     bool pair_is_forward = false;
 
     // case: R2 in paired file
-    if (vb->pair_vb_i) 
+    if (vb->R1_vb_i) 
         fastq_get_pair_1_gpos_strand (vb, &pair_gpos, &pair_is_forward); // advance iterators even if we don't need the pair data
 
     // case: R2 in interleaved file
@@ -78,7 +78,7 @@ void fastq_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(seq), bool deep)
 
     // case: aligner - lookup from SQBITMAP
     MappingType aln_res;
-    if (aligner_ok && ((aln_res = aligner_seg_seq (VB, STRa(seq), (vb->pair_vb_i > 0), pair_gpos, pair_is_forward)))) {
+    if (aligner_ok && ((aln_res = aligner_seg_seq (VB, STRa(seq), (vb->R1_vb_i > 0), pair_gpos, pair_is_forward)))) {
     
         int32_t pseudo_seq_len = seq_len_by_qname (vb, seq_len) ? SEQ_LEN_BY_QNAME : seq_len;    
 
@@ -281,7 +281,7 @@ void fastq_recon_aligned_SEQ (VBlockP vb_, STRp(seq_len_str), ReconType reconstr
     VBlockFASTQP vb = (VBlockFASTQP )vb_;
     declare_seq_contexts;
 
-    if (vb->pair_vb_i) // R2 
+    if (vb->R1_vb_i) // R2 
         fastq_piz_R1_test_aligned (vb); // set r1_is_aligned
     
     // v14: perfect alignment is expressed by a negative seq_len
@@ -302,7 +302,7 @@ void fastq_recon_aligned_SEQ (VBlockP vb_, STRp(seq_len_str), ReconType reconstr
 
     // normal reconstruction
     else 
-        aligner_reconstruct_seq (vb_, vb->seq_len, vb->pair_vb_i > 0, perfect_alignment, reconstruct, NULL, NULL, NULL);
+        aligner_reconstruct_seq (vb_, vb->seq_len, vb->R1_vb_i > 0, perfect_alignment, reconstruct, NULL, NULL, NULL);
 }
 
 // PIZ: SEQ reconstruction - in case of unaligned sequence 
@@ -311,7 +311,7 @@ SPECIAL_RECONSTRUCTOR (fastq_special_unaligned_SEQ)
     declare_seq_contexts;
 
     // case we are pair-2: advance pair-1 SQBITMAP iterator, and if pair-1 is aligned - also its GPOS iterator
-    if (VB_FASTQ->pair_vb_i) // R2
+    if (VB_FASTQ->R1_vb_i) // R2
         if (fastq_piz_R1_test_aligned (VB_FASTQ) || !VER(14)) // up to v13, even non-aligned reads had a GPOS entry
             gpos_ctx->localR1.next++; // gpos_ctx->localR1.next is an iterator for both gpos and strand
 

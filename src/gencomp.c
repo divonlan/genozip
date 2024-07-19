@@ -12,7 +12,7 @@
 #include "gencomp.h"
 #include "zip.h"
 #include "codec.h"
-#include "bgzf.h"
+#include "mgzip.h"
 #include "biopsy.h"
 #include "stream.h"
 #include "dispatcher.h"
@@ -151,7 +151,7 @@ void gencomp_seg_add_line (VBlockP vb, CompIType comp_i, STRp(line)/*pointer int
     // If we're might re-read depn lines from the txt file, we store their coordinates in the txt file
     if (componentsP[comp_i].type == GCT_DEPN && depn_method == DEPN_REREAD) {
         if (TXT_IS_BGZF) {
-            uint64_t bb_i = vb->vb_bgz_i + vb->gz_blocks.current_bb_i;
+            uint64_t bb_i = vb->vb_mgzip_i + vb->gz_blocks.current_bb_i;
             ASSERT (bb_i <= MAX_BB_I, "%s: BGZF bb_i=%"PRIu64" exceeds maximum of %"PRIu64, VB_NAME, bb_i, MAX_BB_I);
 
             BLST (GencompLineIEntry, vb->gencomp_lines)->offset = (LineOffset){ .bb_i = bb_i, .uoffset = vb->line_bgzf_uoffset };
@@ -316,6 +316,8 @@ void gencomp_destroy (void)
 
 static uint32_t compress_depn_buf (BufferP comp_buf)
 {
+    START_TIMER;
+
     compress_depn_vb = vb_initialize_nonpool_vb (VB_ID_COMPRESS_DEPN, DT_NONE, "compress_depn_buf");
     
     uint32_t uncomp_len = depn.thread_data.len32;
@@ -330,6 +332,7 @@ static uint32_t compress_depn_buf (BufferP comp_buf)
     
     vb_release_vb (&compress_depn_vb, "compress_depn_buf");
     
+    COPY_TIMER_EVB (compress_depn_buf);
     return (comp_buf->len = comp_len + sizeof (uint32_t));
 }
 
@@ -339,8 +342,10 @@ static void *gencomp_do_offload (void *info_)
     uint32_t uncomp_len = depn.thread_data.len32;
     info->comp_len = compress_depn_buf (&depn.thread_data_comp);
 
+    START_TIMER;
     ASSERT (1 == fwrite (STRb(depn.thread_data_comp), 1, depn.fp), 
             "Failed to write %"PRIu64" bytes to temporary file %s: %s", depn.thread_data_comp.len, depn.name, strerror (errno));
+    COPY_TIMER_EVB (gencomp_do_offload_write);
 
     if (flag.debug_gencomp) 
         iprintf ("Wrote to disk: buf=%u num_lines=%u uncomp_len=%u comp_len=%u uncomp_alder32=%u comp_adler32=%u\n",
@@ -425,7 +430,7 @@ static bool gencomp_flush (CompIType comp_i, bool is_final_flush) // final flush
     // wait for previous DEPN compression / offload to finish
     if (gct == GCT_DEPN && depn.has_thread) {
         int err;
-        ASSERT (!(err = pthread_join (depn.thread, NULL)), "pthread_join failed: %s", strerror (err));
+        ASSERT (!(err = PTHREAD_JOIN (depn.thread, "gencomp_compress_depn")), "pthread_join failed: %s", strerror (err));
         depn.has_thread = false;
     }
 
@@ -583,7 +588,8 @@ static ASCENDING_SORTER (preabsorb_queue_sorter, PreabsorbEntry, vblock_i)
 // called from compute_vb, with VBs in arbitrary order. Notes:
 // (1) We need to do it in the compute thread (rather than the main thread) so that zip_prepare_one_vb_for_dispatching, 
 //     running in the main thread, can busy-wait for all MAIN compute threads to complete before flushing the final txt_data.
-// (2) We do it in VB order, as recon_plan creation expects the lines to be in the same order as in the MAIN component. 
+// (2) Despite this function being called in arbitrary VB order, we take care to absorb the VBs in order, as 
+//     recon_plan creation expects the lines to be in the same order as in the MAIN component. 
 void gencomp_absorb_vb_gencomp_lines (VBlockP vb) 
 {
     mutex_lock (preabsorb_queue_mutex); // protects preabsorb_queue
@@ -901,8 +907,8 @@ void gencomp_reread_lines_as_prescribed (VBlockP vb)
     stream_set_inheritability (fileno (fp), false); // Windows: allow file_remove in case of --replace
 
     if (flag_is_show_vblocks (ZIP_TASK_NAME)) 
-        iprintf ("REREAD_DEPN(id=%d) vb=%s n_lines=%u codec=%s\n", 
-                 vb->id, VB_NAME, vb->reread_prescription.len32, codec_name (txt_file->codec));
+        iprintf ("REREAD_DEPN(id=%d) vb=%s n_lines=%u effective_codec=%s\n", 
+                 vb->id, VB_NAME, vb->reread_prescription.len32, codec_name (txt_file->effective_codec));
 
     if (TXT_IS_BGZF) 
         bgzf_reread_uncompress_vb_as_prescribed (vb, fp);

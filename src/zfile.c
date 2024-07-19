@@ -203,8 +203,8 @@ uint32_t zfile_compress_b250_data (VBlockP vb, ContextP ctx)
     struct FlagsCtx flags = ctx->flags; // make a copy
     
     if (VB_DT(FASTQ))
-        flags.paired = (flag.pair == PAIR_R1 && fastq_zip_use_pair_identical (ctx->dict_id)) ||        // "paired" flag in R1 means: "In R2, reconstruct R1 data IFF R2 data is absent" (v15)
-                       (flag.pair == PAIR_R2 && fastq_zip_use_pair_assisted (ctx->dict_id, SEC_B250)); // "paired" flag in R2 means: "Reconstruction of R2 requires R2 data as well as R1 data"
+        flags.paired = (IS_R1 && fastq_zip_use_pair_identical (ctx->dict_id)) ||        // "paired" flag in R1 means: "In R2, reconstruct R1 data IFF R2 data is absent" (v15)
+                       (IS_R2 && fastq_zip_use_pair_assisted (ctx->dict_id, SEC_B250)); // "paired" flag in R2 means: "Reconstruction of R2 requires R2 data as well as R1 data"
 
     SectionHeaderCtx header = (SectionHeaderCtx) { 
         .magic                 = BGEN32 (GENOZIP_MAGIC),
@@ -234,8 +234,8 @@ uint32_t zfile_compress_local_data (VBlockP vb, ContextP ctx, uint32_t sample_si
     struct FlagsCtx flags = ctx->flags; // make a copy
 
     if (VB_DT(FASTQ))
-        flags.paired = (flag.pair == PAIR_R1 && fastq_zip_use_pair_identical (ctx->dict_id)) ||         // "paired" flag in R1 means: "Load R1 data in R2, if R2 data is absent" (v15)
-                       (flag.pair == PAIR_R2 && fastq_zip_use_pair_assisted (ctx->dict_id, SEC_LOCAL)); // "paired" flag in R2 means: "Reconstruction of R2 requires R2 data as well as R1 data"
+        flags.paired = (IS_R1 && fastq_zip_use_pair_identical (ctx->dict_id)) ||         // "paired" flag in R1 means: "Load R1 data in R2, if R2 data is absent" (v15)
+                       (IS_R2 && fastq_zip_use_pair_assisted (ctx->dict_id, SEC_LOCAL)); // "paired" flag in R2 means: "Reconstruction of R2 requires R2 data as well as R1 data"
 
     uint32_t uncompressed_len = ctx->local.len32 * lt_width(ctx);
     
@@ -784,14 +784,14 @@ uint64_t zfile_read_genozip_header_get_offset (bool as_is)
     z_file->genozip_minor_ver = top.genozip_minor_ver; // 0 before 15.0.28
 
     z_file->data_type = BGEN16 (top.data_type);
-    if (Z_DT(BCF))       { z_file->data_type = DT_VCF; z_file->source_codec = CODEC_BCF;  } // Z_DT is always VCF, not BCF
-    else if (Z_DT(CRAM)) { z_file->data_type = DT_SAM; z_file->source_codec = CODEC_CRAM; } // Z_DT is always SAM, not CRAM or BAM
+    if (Z_DT(BCF))       { z_file->data_type = DT_VCF; z_file->src_codec = CODEC_BCF;  } // Z_DT is always VCF, not BCF
+    else if (Z_DT(CRAM)) { z_file->data_type = DT_SAM; z_file->src_codec = CODEC_CRAM; } // Z_DT is always SAM, not CRAM or BAM
      
     // check that file version is at most this executable version, except for reference file for which only major version is tested
     ASSINP (z_file->genozip_version < code_version_major() || 
             (z_file->genozip_version == code_version_major() && (z_file->genozip_minor_ver <= code_version_minor() || Z_DT(REF) || (is_genocat && flag.show_stats))),
             "Error: %s cannot be opened because it was compressed with genozip version %u.0.%u which is newer than the version running - %s.\n%s",
-            z_name, z_file->genozip_version, z_file->genozip_minor_ver, GENOZIP_CODE_VERSION, genozip_update_msg());
+            z_name, z_file->genozip_version, z_file->genozip_minor_ver, code_version().s, genozip_update_msg());
 
     bool metadata_only = is_genocat && (flag.show_stats || flag.show_gheader || flag.show_headers || flag.show_aliases || flag.show_dict);
 
@@ -836,7 +836,7 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header, FailType
     DataType data_type = (DataType)(BGEN16 (header->data_type)); 
     
     // Note: BCF/CRAM files have DT_BCF/DT_CRAM in the GenozipHeader, but in the PIZ code we
-    // expect data_type=VCF/SAM with z_file->source_codec set to CODEC_BCF/CODEC_CRAM.
+    // expect data_type=VCF/SAM with z_file->src_codec set to CODEC_BCF/CODEC_CRAM.
     if (data_type == DT_BCF) data_type = DT_VCF;
     else if (data_type == DT_CRAM) data_type = DT_SAM;
 

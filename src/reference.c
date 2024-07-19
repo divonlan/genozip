@@ -220,7 +220,7 @@ static void ref_uncompact_ref (RangeP r, int64_t first_bit, int64_t last_bit, co
 RangeP ref_get_range_by_chrom (Reference ref, WordIndex chrom, rom *chrom_name)
 {
     decl_zctx (CHROM);
-    ASSERT (IN_RANGE (chrom, 0, zctx->word_list.len32-1), "chrom=%d out of range - ctx->word_list.len=%u",
+    ASSERT (IN_RANGE (chrom, 0, zctx->word_list.len32), "chrom=%d out of range - ctx->word_list.len=%u",
             chrom, zctx->word_list.len32);
 
     if (chrom_name)
@@ -418,7 +418,7 @@ static void ref_uncompress_one_range (VBlockP vb)
 
             uint64_t start = MAX_(sec_start_within_contig, 0);
             uint64_t len   = ref_sec_len - initial_flanking_len - final_flanking_len;
-            ASSERT (IN_RANGE (len, 0, ref_sec_len), "expecting ref_sec_len=%"PRIu64" >= initial_flanking_len=%"PRIu64" + final_flanking_len=%"PRIu64,
+            ASSERT (IN_RANGX (len, 0, ref_sec_len), "expecting ref_sec_len=%"PRIu64" >= initial_flanking_len=%"PRIu64" + final_flanking_len=%"PRIu64,
                     ref_sec_len, initial_flanking_len, final_flanking_len);
 
             RefLock lock = ref_lock (vb->ref, start + r->gpos, len + 63); 
@@ -1096,6 +1096,8 @@ void ref_set_reference (Reference ref, rom filename, ReferenceType ref_type, boo
 {
     if (!is_explicit && ref->filename) return; // already set explicitly
 
+    ASSINP (!filename || filename[0] != '-', "expecting a the name a reference file after --reference, but found \"%s\"", filename); // catch common error of a command line option instead of a ref filename
+    
     rom env = getenv ("GENOZIP_REFERENCE");
     unsigned filename_len;
     StrTextLong alt_name;

@@ -17,7 +17,7 @@
 #pragma GENDICT LOCS_DEBUG_LINES=DTYPE_FIELD=DBGLINES      // used by --debug-lines
 
 extern int32_t locs_is_header_done (bool is_eof);
-extern int32_t locs_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
+extern int32_t locs_unconsumed (VBlockP vb, uint32_t first_i);
 extern bool locs_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern void locs_seg_initialize (VBlockP vb);
 extern void locs_seg_finalize (VBlockP vb);

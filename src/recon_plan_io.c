@@ -61,7 +61,7 @@ void recon_plan_show (FileP file, uint32_t conc_writing_vbs, uint32_t vblock_mb)
 }
 
 // -------------------------------------------------------------------------------
-// convert ReconPlanItem.start_line between absolute line numbers and deltas
+// convert ReconPlanItem.start_line: absolute-line-numbers ⇔ deltas
 // -------------------------------------------------------------------------------
 
 // ZIP main thread
@@ -71,6 +71,7 @@ static void recon_plan_deltify (void)
 
     ARRAY (ReconPlanItem, plan, txt_file->recon_plan);
 
+    // get max_vb_i in recon_plan
     VBIType max_vb_i = 0; // Note: this might be more than z_file->num_vbs, as in SAM recon_plan is compressed before PRIM/DEPN components are segged
     for (uint32_t i=0; i < plan_len; i++)
         if (plan[i].vb_i > max_vb_i) max_vb_i = plan[i].vb_i;

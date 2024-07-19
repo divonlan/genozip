@@ -300,6 +300,7 @@ StrText arch_get_filesystem_type (FileP file)
         NAME (0x2011bab0, "exFAT");    // Filesystem for flash memory: https://en.wikipedia.org/wiki/ExFAT
         NAME (0x9123683e, "brtfs");    // Copy-on-write filesystem for Linux: https://docs.kernel.org/filesystems/btrfs.html
         NAME (0x794C7630, "OverlayFS");// A union-mount filesystem: https://en.wikipedia.org/wiki/OverlayFS
+        NAME (0xf15f,     "eCryptfs"); // A cryptographic filesystem for Linux: https://www.ecryptfs.org/
         default: snprintf (s.s, sizeof (s.s), "0x%lx", fs.f_type); 
     }
 
@@ -521,7 +522,7 @@ static bool arch_is_exec_in_path (rom exec)
 }
 
 bool wget_available (void)
-{
+{   
     static thool installed = unknown;
     if (installed == unknown)
         // note: wget not used on Windows, bc I can't get it to output to stdout, and also earlier wget versions may be adding \r ... : https://stackoverflow.com/questions/8522983/wget-of-binary-file-piped-into-other-commands-on-windows-breaks-the-binary

@@ -133,13 +133,13 @@ rom filename_guess_original (ConstFileP file)
 {
     if (!file) return "(is-NULL)";
 
-    if (file->codec == CODEC_NONE) return file->name;
+    if (file->src_codec == CODEC_NONE) return file->name;
 
     unsigned len = strlen (file->name) + 10;
     char *org_name = MALLOC (len);
     strcpy (org_name, file->name);
 
-    rom ext = codec_args[file->codec].ext;
+    rom ext = codec_args[file->src_codec].ext;
 
     // remove existing extension if needed (eg when replacing .sam with .bam)
     if (ext[0] == '-') {
@@ -268,7 +268,7 @@ PairType filename_is_fastq_pair (STRp(fn1), STRp(fn2))
         }
     
     // its predicted to a pair if filenames are the same, except for '1'⇄'2' switch
-    if  (mismatches == 1 && ((fn1[mm_i] == '1' && fn2[mm_i] == '2'))) return PAIR_R1; // fn1 is PAIR_1
+    if  (mismatches == 1 && ((fn1[mm_i] == '1' && fn2[mm_i] == '2'))) return PAIR_R1; // fn1 is PAIR_R1
     if  (mismatches == 1 && ((fn1[mm_i] == '2' && fn2[mm_i] == '1'))) return PAIR_R2; 
     return NOT_PAIRED;
 }

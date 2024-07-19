@@ -8,6 +8,34 @@
 
 #include "sam_private.h"
 
+static rom sam_add_seq (VBlockSAMP vb, rom line_start, uint32_t remaining)
+{
+    ASSERT0 (!flag.optimize, "combining --optimize and --add-seq is not yet supported");
+
+    bool has_13;
+    rom next_line = line_start;
+    str_split_by_tab (next_line, remaining, MAX_FIELDS + AUX, &has_13, false, true); // also advances next_line to next line
+    
+    ASSSEG (n_flds >= 10, "%s: Bad SAM file: alignment expected to have at least 10 fields (lacking SEQ), but found only %u", LN_NAME, n_flds);
+
+    buf_alloc (vb, &vb->optimized_line, 0, (next_line - line_start) + (fld_lens[SEQ] + 1), char, 0, "optimized_line"); // x2+1000 is plenty for types of modifications we have so far.
+    
+    // the start of the line: until TLEN inc. the following \t
+    char *next = mempcpy (B1STc(vb->optimized_line), line_start, flds[SEQ] - line_start); // initialize to exact copy of fields 1-10
+
+    // generate SEQ
+    for (int i=0; i < fld_lens[SEQ]; i++) // note: since there is no SEQ field, [SEQ] contains the QUAL data
+        *next++ = 'A';
+
+    CTX(SAM_SQBITMAP)->txt_shrinkage -= fld_lens[SEQ] + 1;
+
+    // the end of the line: from QUAL inc. the preceding \t
+    next = mempcpy (next, flds[SEQ] - 1/*\t*/, next_line - (flds[SEQ] - 1) + has_13);
+    
+    vb->optimized_line.len32 = BNUM(vb->optimized_line, next);
+    return next_line;
+}
+
 void sam_segconf_finalize_optimizations (void)
 {
     // optimize QUAL and other tags containing base qualities unless already binned (8 is the number of bins in Illimina: https://sapac.illumina.com/content/dam/illumina-marketing/documents/products/technotes/technote_understanding_quality_scores.pdf)
@@ -137,13 +165,16 @@ static inline void optimize_float (const void *in, void *out) // non-aligned add
     // TO DO: it would be better to round-up if the first dropped bit is 1, but it is not easy to do
     // as the exponent might change too. If we do so, we can make-out on more bit and achieve equivalent accuracy
     f32 &= 0b11111111111111111110000000000000;
-    PUT_UINT32 (out, LTEN32 (f32)); // back to BAM's Little Endian
+    PUT_UINT32 (out, f32); // back to BAM's Little Endian
 }
 
 rom sam_zip_modify (VBlockP vb_, rom line_start, uint32_t remaining)
 {
     VBlockSAMP vb = (VBlockSAMP)vb_;
     
+    if (flag.add_seq)   
+        return sam_add_seq (vb, line_start, remaining);
+
     bool has_13;
     rom next_line = line_start;
     str_split_by_tab (next_line, remaining, MAX_FIELDS + AUX, &has_13, false, true); // also advances next_line to next line

@@ -665,7 +665,7 @@ static void sam_cigar_update_random_access (VBlockSAMP vb, ZipDataLineSAMP dl)
 
         if (LN == -1) {}
             
-        else if (IN_RANGE (last_pos, 1, LN))
+        else if (IN_RANGX (last_pos, 1, LN))
             random_access_update_last_pos (VB, last_pos);
         
         else  // we circled back to the beginning for the chromosome - i.e. this VB RA is the entire chromosome
@@ -951,8 +951,8 @@ SPECIAL_RECONSTRUCTOR_DT (sam_cigar_special_CIGAR)
         // now we have the info needed to reconstruct bin, l_read_name, n_cigar_op and l_seq
         BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)Btxt (vb->line_start);
         alignment->l_read_name = BAFTtxt - &alignment->read_name[0];
-        PUT_UINT16_(alignment, n_cigar_op, LTEN16 (vb->binary_cigar.len));
-        PUT_UINT32_(alignment, l_seq, (snip[0] == '-') ? 0 : LTEN32 (vb->seq_len));
+        PUT_UINT16_(alignment, n_cigar_op, vb->binary_cigar.len);
+        PUT_UINT32_(alignment, l_seq, (snip[0] == '-') ? 0 : vb->seq_len);
 
         LTEN_u32_buf (&vb->binary_cigar, NULL);
         RECONSTRUCT (vb->binary_cigar.data, vb->binary_cigar.len * sizeof (BamCigarOp));
@@ -967,7 +967,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_cigar_special_CIGAR)
             PosType32 last_pos = last_flags.unmapped ? pos : (pos + vb->ref_consumed - 1);
             
             uint16_t bin = bam_reg2bin (pos, last_pos); // zero-based, half-closed half-open [start,end)
-            PUT_UINT16_(alignment, bin, LTEN16 (bin)); // override the -1 previously set by the translator
+            PUT_UINT16_(alignment, bin, bin); // override the -1 previously set by the translator
         }
     }
     

@@ -12,7 +12,7 @@
 #include "vblock.h"
 #include "file.h"
 #include "digest.h"
-#include "bgzf.h"
+#include "mgzip.h"
 #include "threads.h"
 #include "writer.h"
 

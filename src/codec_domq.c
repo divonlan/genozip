@@ -155,7 +155,7 @@ static void codec_domq_calc_histogram (VBlockP vb, ContextP qual_ctx, ContextP d
         // validate bases and get line dom
         uint32_t max_score_count=0;
         for (int ascii_i=0; ascii_i < 256; ascii_i++) {
-            ASSERT (IN_RANGE (ascii_i, FIRST_Q, LAST_Q) || !line_ascii_histogram[ascii_i],
+            ASSERT (IN_RANGE (ascii_i, FIRST_Q, LAST_Q+1) || !line_ascii_histogram[ascii_i],
                     "%s/%u: QUAL value=%u ∉ [%u, %u] for %s", 
                     VB_NAME, line_i, ascii_i, FIRST_Q, LAST_Q, qual_ctx->tag_name);
 

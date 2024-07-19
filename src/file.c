@@ -23,7 +23,7 @@
 #include "file.h"
 #include "url.h"
 #include "codec.h"
-#include "bgzf.h"
+#include "mgzip.h"
 #include "progress.h"
 #include "tar.h"
 #include "writer.h"
@@ -356,12 +356,8 @@ static void file_initialize_txt_file_fields (FileP file)
     #define TXT_INIT(buf) ({ buf_set_promiscuous (&file->buf, "txt_file->" #buf); })
 
     if (IS_ZIP) {
-        mutex_initialize (file->recon_plan_mutex);
-
         // initialize evb "promiscuous" buffers - i.e. buffers that can be allocated by any thread
         // promiscuous buffers must be initialized by the main thread, and buffer.c does not verify their integrity.
-        TXT_INIT(line_info[0]);
-        TXT_INIT(line_info[1]);
         TXT_INIT(vb_info[0]);
         TXT_INIT(vb_info[1]);
     }
@@ -373,7 +369,7 @@ static void file_initialize_txt_file_fields (FileP file)
 static void file_open_ext_decompessor (FileP file, rom exec_name, rom subcommand, Codec streamed_codec, bool name_if_not_remote, rom args[7])
 {
     char reason[64]; // used for error message if stream_create fails
-    snprintf (reason, sizeof(reason), "To compress a %s file", codec_name (file->codec));
+    snprintf (reason, sizeof(reason), "To compress a %s file", codec_name (file->src_codec));
 
     input_decompressor = 
         stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0,
@@ -387,7 +383,7 @@ static void file_open_ext_decompessor (FileP file, rom exec_name, rom subcommand
     
     file->file       = stream_from_stream_stdout (input_decompressor);
     file->redirected = true;
-    file->codec      = streamed_codec; // data received from input_decompressor is in this codec
+    file->effective_codec = streamed_codec; // data received from input_decompressor is in this codec
 }
 
 static void file_open_txt_read_bz2 (FileP file)
@@ -423,7 +419,17 @@ static void file_open_txt_read_gz (FileP file)
         #endif
     }
 
-    txtfile_discover_gz_codec (file); // decide between CODEC_GZ, CODEC_BGZF or CODEC_GZIL
+    // case: discovery deferred to the end of segconf when we know segconf.tech
+    if (file->data_type == DT_FASTQ) {  // note: even if --no-bgzf: so we can report correct src_codec in stats
+        file->effective_codec = file->src_codec = txtfile_is_gzip (file) ? CODEC_GZ : CODEC_NONE; // based on the first 3 bytes
+        file->discover_during_segconf = (file->effective_codec == CODEC_GZ);
+        txtfile_initialize_igzip (file);
+    }
+
+    // run discovery now if not FASTQ. That's because other data types might have header
+    // which is read before segconf. luckily FASTQ doesn't.
+    else
+        txtfile_discover_specific_gz (file); // decide between GZ, BGZF and NONE
 }
 
 FileP file_open_txt_read (rom filename)
@@ -483,11 +489,12 @@ FileP file_open_txt_read (rom filename)
     if (file_open_txt_read_test_valid_dt (file)) goto fail; // skip this file
     
     // open the file, based on the codec (as guessed by file extension)
-    file->codec        = file_get_codec_by_txt_ft (file->data_type, file->type, false);
-    file->source_codec = file_get_codec_by_txt_ft (file->data_type, file->type, true);
+    // file->codec           = file_get_codec_by_txt_ft (file->data_type, file->type, false);
+    file->src_codec       = file_get_codec_by_txt_ft (file->data_type, file->type, true);
+    file->effective_codec = file->src_codec; // initialize: can be changed if streaming or if gz variant
 
-    switch (file->codec) { 
-        case CODEC_GZ: case CODEC_BGZF: case CODEC_NONE: gz: 
+    switch (file->src_codec) { 
+        case CODEC_GZ: case CODEC_BGZF: case CODEC_BAM: case CODEC_NONE: gz: 
             file_open_txt_read_gz (file);
             break;
         
@@ -499,8 +506,8 @@ FileP file_open_txt_read (rom filename)
             // note: in CRAM, we read the header in advance in possible, directly (without samtools), so we can handle the case 
             // that the reference file is wrong. In samtools, if we read beyond the header with a wrong ref, samtools will hang.
             if (!file->is_remote && !file->redirected) {
-                cram_inspect_file (file); // if file is indeed CRAM, updates file->est_num_lines, file->header_size, and if not, updates file->data_type and file->codec/source_codec
-                if (file->codec == CODEC_GZ || file->codec == CODEC_NONE) goto gz; // actually, this is a GZ file (possibly BAM)
+                cram_inspect_file (file); // if file is indeed CRAM, updates file->est_num_lines, file->header_size, and if not, updates file->data_type and file->codec/src_codec
+                if (file->src_codec == CODEC_GZ || file->src_codec == CODEC_NONE) goto gz; // actually, this is a GZ file (possibly BAM)
             }
             
             StrTextSuperLong samtools_T_option = cram_get_samtools_option_T (gref);
@@ -510,8 +517,12 @@ FileP file_open_txt_read (rom filename)
                                        "--threads=10",                      // in practice, samtools is able to consume ~4 cores
                                        file_samtools_no_PG() ? "--no-PG" : SKIP_ARG, // don't add a PG line to the header 
                                        samtools_T_option.s[0] ? samtools_T_option.s : SKIP_ARG });
+            
+            if (flag.no_bgzf) {
+                file->effective_codec = CODEC_GZ; 
+                txtfile_initialize_igzip (file);
+            }
 
-            txtfile_discover_gz_codec (file); // also allocates gz_data
             break;
         }
 
@@ -562,7 +573,7 @@ fail:
     return NULL;
 }
 
-FileP file_open_txt_write (rom filename, DataType data_type, BgzfLevel bgzf_level)
+FileP file_open_txt_write (rom filename, DataType data_type, MgzipLevel bgzf_level)
 {
     ASSERT (data_type > DT_NONE && data_type < NUM_DATATYPES ,"invalid data_type=%d", data_type);
 
@@ -573,10 +584,10 @@ FileP file_open_txt_write (rom filename, DataType data_type, BgzfLevel bgzf_leve
     file->data_type  = data_type;
     file->redirected = !filename;
 
-    file->codec = data_type == DT_CRAM       ? CODEC_CRAM 
-                : data_type == DT_BCF        ? CODEC_BCF
-                : bgzf_level != BGZF_NO_BGZF ? CODEC_BGZF // see bgzf_piz_calculate_bgzf_flags
-                : /* BGZF_NO_BGZF */           CODEC_NONE;
+    file->effective_codec = data_type == DT_CRAM       ? CODEC_CRAM 
+                          : data_type == DT_BCF        ? CODEC_BCF
+                          : bgzf_level != BGZF_NO_BGZF ? CODEC_BGZF // see mgzip_piz_calculate_mgzip_flags
+                          : /* BGZF_NO_BGZF */           CODEC_NONE;
     
     if (!file->redirected) { // not stdout
         if (file_exists (filename)   && 
@@ -599,7 +610,7 @@ FileP file_open_txt_write (rom filename, DataType data_type, BgzfLevel bgzf_leve
     if (flag.no_writer) return file;
 
     // open the file, based on the codec 
-    switch (file->codec) { 
+    switch (file->effective_codec) { 
         case CODEC_BGZF : 
         case CODEC_NONE : file->file = file->redirected ? fdopen (STDOUT_FILENO, "wb") : fopen (file->name, WRITE); break;
 
@@ -812,7 +823,7 @@ done:
 }
 
 // opens z_file for read or write
-FileP file_open_z_write (rom filename, FileMode mode, DataType data_type, Codec source_codec)
+FileP file_open_z_write (rom filename, FileMode mode, DataType data_type, Codec src_codec)
 {
     START_TIMER;
 
@@ -835,7 +846,7 @@ FileP file_open_z_write (rom filename, FileMode mode, DataType data_type, Codec 
 
     file->type = file_get_type_force_dt (file->name, data_type);
     file->data_type = data_type; 
-    file->source_codec = source_codec;
+    file->src_codec = src_codec;
 
     file->basename = filename_base (file->name, false, NULL, NULL, 0);
 
@@ -892,7 +903,7 @@ FileP file_open_z_write (rom filename, FileMode mode, DataType data_type, Codec 
     return file;
 }
 
-// index file is it is a disk file of a type that can be indexed
+// PIZ: index file is it is a disk file of a type that can be indexed
 static void file_index_txt (ConstFileP file)
 {
     ASSERTNOTNULL (file);
@@ -904,20 +915,20 @@ static void file_index_txt (ConstFileP file)
     switch (file->data_type) {
         case DT_SAM:
         case DT_BAM: 
-            RETURNW (file->codec == CODEC_BGZF,, "%s: output file needs to be a .sam.gz or .bam to be indexed", global_cmd); 
+            RETURNW (file->effective_codec == CODEC_BGZF,, "%s: output file needs to be a .sam.gz or .bam to be indexed", global_cmd); 
             indexing = stream_create (0, 0, 0, 0, 0, 0, 0, "to create an index", "samtools", "index", file->name, NULL); 
             break;
             
         case DT_VCF: 
-            RETURNW (file->codec == CODEC_BGZF,, "%s: output file needs to be a .vcf.gz or .bcf to be indexed", global_cmd); 
+            RETURNW (file->effective_codec == CODEC_BGZF,, "%s: output file needs to be a .vcf.gz or .bcf to be indexed", global_cmd); 
             RETURNW (vcf_header_get_has_fileformat(),, "%s: file needs to start with ##fileformat=VCF be indexed", global_cmd); 
             indexing = stream_create (0, 0, 0, 0, 0, 0, 0, "to create an index", "bcftools", "index", file->name, NULL); 
             break;
 
         case DT_FASTQ:
         case DT_FASTA:
-            RETURNW (file->codec == CODEC_BGZF || file->codec == CODEC_NONE,, 
-                     "%s: To be indexed, the output file cannot be compressed with %s", global_cmd, codec_name (file->codec)); 
+            RETURNW (file->effective_codec == CODEC_BGZF || file->effective_codec == CODEC_NONE,, 
+                     "%s: To be indexed, the output file cannot be compressed with %s", global_cmd, codec_name (file->effective_codec)); 
             indexing = stream_create (0, 0, 0, 0, 0, 0, 0, "to create an index", "samtools", "faidx", file->name, NULL); 
             break;
 
@@ -949,13 +960,13 @@ void file_close (FileP *file_p)
 
     if (file->file && file->supertype == TXT_FILE) {
 
-        if (file->mode == READ && file->codec == CODEC_BZ2)
+        if (file->mode == READ && file->effective_codec == CODEC_BZ2)
             BZ2_bzclose((BZFILE *)file->file);
         
         else if (file->mode == READ && is_read_via_ext_decompressor (file)) 
             stream_close (&input_decompressor, STREAM_WAIT_FOR_PROCESS);
 
-        else if (file->mode == WRITE && is_written_via_ext_compressor (file->codec)) 
+        else if (file->mode == WRITE && is_written_via_ext_compressor (file->effective_codec)) 
             stream_close (&output_compressor, STREAM_WAIT_FOR_PROCESS);
 
         // if its stdout - just flush, don't close - we might need it for the next file
@@ -986,7 +997,7 @@ void file_close (FileP *file_p)
             FCLOSE (file->file, file_printname (file));
             FCLOSE (file->z_reread_file, file_printname (file));
         }
-        serializer_destroy (file->digest_serializer);     
+        serializer_destroy (file->digest_serializer);  
     }
 
     // free resources if we are NOT near the end of the execution. If we are at the end of the execution
@@ -1006,7 +1017,6 @@ void file_close (FileP *file_p)
         mutex_destroy (file->dicts_mutex);
         mutex_destroy (file->custom_merge_mutex);
         mutex_destroy (file->qname_huf_mutex);
-        mutex_destroy (file->recon_plan_mutex);
         
         FREE (file->name);
         FREE (file->basename);
@@ -1152,30 +1162,6 @@ bool file_seek (FileP file, int64_t offset,
                 offset, whence, file_printname (file), file->file, TF(file->is_remote), TF(file->redirected), strerror (errno));
 
     return !ret;
-}
-
-int64_t file_tell_do (FileP file, FailType soft_fail, rom func, unsigned line)
-{
-    ASSERTNOTNULL (file);
-    ASSERTNOTNULL (file->file);
-
-    if (IS_ZIP && file->supertype == TXT_FILE && file->codec == CODEC_GZ)
-        return txt_file->disk_so_far;
-        
-    if (IS_ZIP && file->supertype == TXT_FILE && file->codec == CODEC_BZ2)
-        return BZ2_consumed ((BZFILE *)file->file); 
-    
-    int64_t offset = ftello64 ((FILE *)file->file);
-    ASSERT (offset >= 0 || soft_fail, "called from %s:%u: ftello64 failed for %s (FILE*=%p remote=%s redirected=%s): %s", 
-            func, line, file->name, file->file, TF(file->is_remote), TF(file->redirected), strerror (errno));
-
-    if (offset < 0) return -1; // soft fail
-
-    // in in z_file that is being tarred, update the offset to the beginning of the file data in the tar file
-    if (file->supertype == Z_FILE)
-        offset -= tar_file_offset(); // 0 if not using tar
-
-    return offset;    
 }
 
 uint64_t file_get_size (rom filename)

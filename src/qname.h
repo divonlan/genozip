@@ -48,6 +48,7 @@ extern const char sep_with_space[], sep_without_space[];
 extern bool qname_seg (VBlockP vb, QType q, STRp(qname), unsigned add_additional_bytes);
 extern void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname));
 extern QType qname_sam_get_qtype (STRp(qname));
+extern QnameFlavor qname_get_optimize_qf (void);
 
 extern void qname_zip_initialize (void);
 extern void qname_seg_initialize (VBlockP vb, QType q, Did st_did_i);

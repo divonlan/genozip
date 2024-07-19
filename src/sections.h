@@ -28,7 +28,7 @@
     {"SEC_LOCAL",           sizeof (SectionHeaderCtx)           }, \
     {"SEC_CHROM2REF_MAP",   sizeof (SectionHeader)              }, \
     {"SEC_STATS",           sizeof (SectionHeader)              }, \
-    {"SEC_BGZF",            sizeof (SectionHeader)              }, \
+    {"SEC_MGZIP",           sizeof (SectionHeader)              }, \
     {"SEC_RECON_PLAN",      sizeof (SectionHeaderReconPlan)     }, \
     {"SEC_COUNTS",          sizeof (SectionHeaderCounts)        }, \
     {"SEC_REF_IUPACS",      sizeof (SectionHeader)              }, \
@@ -109,11 +109,11 @@ typedef union SectionFlags {
         } gff;
     } vb_header;
 
-    struct FlagsBgzf {
-        uint8_t has_eof_block    : 1;
+    struct FlagsMgzip {
+        uint8_t OLD_has_eof_block: 1;  // used up to 15.0.62
         uint8_t level            : 4;  // 0-12 for libdeflate or 0-9 for zlib level: 15 means unknown
-        BgzfLibraryType library  : 3;  // ignored if level=15 (introduced 9.0.16)
-    } bgzf;
+        MgzipLibraryType library : 3;  // ignored if level=15 (introduced 9.0.16)
+    } mgzip;
 
     struct FlagsCtx {
         StoreType store          : 2;  // after reconstruction of a snip, store it in ctx.last_value
@@ -162,7 +162,7 @@ typedef union SectionFlags {
 
 } SectionFlags __attribute__((__transparent_union__));
 
-typedef struct FlagsBgzf FlagsBgzf;
+typedef struct FlagsMgzip FlagsMgzip;
 
 #define SECTION_FLAGS_NONE ((SectionFlags){ .flags = 0 })
 
@@ -316,7 +316,8 @@ typedef struct { // 2 bytes
     uint8_t is_consensus : 1;          // qname flavor is a "consensus read" flavor (15.0.26) (15.0.0 to 15.0.14 : is_mated: qname ends with /1 or /2 (never used in PIZ))
     uint8_t is_mated     : 1;          // qname's final two characters are separator + mate (1 or 2), eg "/1" or "|2" or ".1" (previously called "has_R")
     uint8_t cnn          : 3;          // QnameCNN: terminate before the last character that is this, to canonoize 
-    uint8_t unused_bits  : 2;
+    uint8_t is_tokenized : 1;          // unrecognized flavor: qname is tokenized (15.0.63)
+    uint8_t unused_bits  : 1;
 } QnameFlavorProp;
 
 // The text file header section appears once in the file (or multiple times in case of bound file), and includes the txt file header 
@@ -325,7 +326,7 @@ typedef struct {
     uint64_t txt_data_size;            // number of bytes in the original txt file (without source compression, potentially after ZIP modifications eg --optimize)
     uint64_t txt_num_lines;            // number of data (non-header) lines in the original txt file. Concat mode: entire file for first SectionHeaderTxtHeader, and only for that txt if not first
     uint32_t max_lines_per_vb;         // upper bound on how many data lines a VB can have in this file
-    Codec    src_codec;                // codec of original txt file (none, bgzf, gz, bz2...)
+    Codec    src_codec;                // codec of original txt file (none, bgzf, gz, bz2, cram...)
     uint8_t  codec_info[3];            // codec specific info: for CODEC_BGZF, these are the LSB, 2nd-LSB, 3rd-LSB of the source BGZF-compressed file size
     Digest   digest;                   // digest of original single txt file. Up to 15.0.59: 0 if modified or DVCF. v14: only if md5, not alder32 (adler32 digest, starting v14, is stored per VB) (bug in v14: this field is garbage instead of 0 for FASTQ_COMP_FQR2 if adler32)
     Digest   digest_header;            // MD5 or Adler32 of header. Up to 15.0.59: 0 if txt was modified by zip.
@@ -644,5 +645,5 @@ extern StrText comp_name_(CompIType comp_i);
 
 #define IS_DICTED_SEC(st) ((st)==SEC_B250 || (st)==SEC_LOCAL || (st)==SEC_DICT || (st)==SEC_COUNTS || (st) == SEC_SUBDICTS)
 #define IS_VB_SEC(st)     ((st)==SEC_VB_HEADER || (st)==SEC_B250 || (st)==SEC_LOCAL)
-#define IS_COMP_SEC(st)   (IS_VB_SEC(st) || (st)==SEC_TXT_HEADER || (st)==SEC_BGZF || (st)==SEC_RECON_PLAN)
+#define IS_COMP_SEC(st)   (IS_VB_SEC(st) || (st)==SEC_TXT_HEADER || (st)==SEC_MGZIP || (st)==SEC_RECON_PLAN)
 #define IS_FRAG_SEC(st)   ((st)==SEC_DICT || (st)==SEC_TXT_HEADER || (st)==SEC_RECON_PLAN || (st)==SEC_REFERENCE || (st)==SEC_REF_IS_SET || (st)==SEC_REF_HASH) // global sections fragmented with a dispatcher, and hence use vb_i 

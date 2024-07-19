@@ -203,8 +203,8 @@ static void digest_piz_verify_one_vb (VBlockP vb)
 
             NOISYWARN ("reconstructed vblock=%s/%u (vb_line_i=0 -> txt_line_i(1-based)=%"PRId64" num_lines=%u), (%s=%s) differs from the %s file (%s=%s).\n%s",
                        comp_name (vb->comp_i), vb->vblock_i, writer_get_txt_line_i (vb, 0), vb->lines.len32,
-                       segconf.zip_txt_modified ? "modified" : "original",
                        DIGEST_NAME, digest_display (piz_digest).s, 
+                       segconf.zip_txt_modified ? "modified" : "original",
                        DIGEST_NAME, digest_display (vb->expected_digest).s, 
                        recon_size_warn);
 
@@ -212,9 +212,11 @@ static void digest_piz_verify_one_vb (VBlockP vb)
             if (!__atomic_test_and_set (&txt_file->vb_digest_failed, __ATOMIC_RELAXED)) { // not WARN_ONCE because we might be genounzipping multiple files - we want to show this for every failed file (see also note in digest_piz_verify_one_txt_file)
                 NOISYWARN ("Bad reconstructed vblock has been dumped to: %s.gz\n"
                            "To see the same data in the original file:\n"
-                           "genozip --biopsy %u -B%u %s%s",  // note: segconf.vb_size is only available since v14. For older files, look it up with genocat --stats.
-                           txtfile_dump_vb (vb, z_name).s, vb->vblock_i, (unsigned)(segconf.vb_size >> 20), 
-                           (txt_file && txt_file->name) ? filename_guess_original (txt_file) : IS_PIZ ? txtheader_get_txt_filename_from_section().s : "(uncalculable)",
+                           "genozip --biopsy %u%s %s%s",  // note: segconf.vb_size is only available since v14. For older files, look it up with genocat --stats.
+                           txtfile_dump_vb (vb, z_name).s, vb->vblock_i, 
+                           cond_int (segconf.vb_size/*0 if IS_VB_SIZE_BY_MGZIP*/, " -B", (unsigned)(segconf.vb_size >> 20)), 
+
+                           (txt_file && txt_file->name) ? filename_guess_original (txt_file) : IS_PIZ ? txtheader_get_txt_filename_from_section(vb->comp_i).s : "(uncalculable)",
                            SUPPORT);
 
                 if (flag.test) exit_on_error (false); // must be inside the atomic test, otherwise another thread will exit before we completed dumping

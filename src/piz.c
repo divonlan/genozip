@@ -742,7 +742,7 @@ Dispatcher piz_z_file_initialize (void)
                                              flag.xthreads ? 1 : global_max_threads, 0, 
                                              flag.test && flag.no_writer_thread, // out-of-order if --test with no writer thread (note: SAM gencomp always have writer thread to do digest). 
                                              flag.test,
-                                             flag.out_filename ? flag.out_filename : txtheader_get_txt_filename_from_section().s, 
+                                             flag.out_filename ? flag.out_filename : txtheader_get_txt_filename_from_section(COMP_MAIN).s, 
                                              piz_target_progress (COMP_MAIN), 
                                              0);
 
@@ -795,7 +795,7 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
 
                 // case --unbind: unpausing after previous txt_file pause (requires txt file to be open)
                 uint64_t target_progress = piz_target_progress (first_comp_i ? first_comp_i : COMP_MAIN);
-                dispatcher_resume (dispatcher, target_progress);
+                dispatcher_resume (dispatcher, target_progress, sec->comp_i);
             }
 
             // case SEC_VB_HEADER

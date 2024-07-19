@@ -23,10 +23,10 @@ sSTRl(con_decanonize2_snip,96);
 void fastq_deep_zip_initialize (void)
 {
     DO_ONCE {
-        SmallContainer con1 = { .repeats = 1, .nitems_lo = 2, .items = { { .dict_id.num = _FASTQ_Q0NAME }, { .dict_id.num = _FASTQ_Q1NAME } }};
+        SmallContainer con1 = { .repeats = 1, .nitems_lo = 2, .items = { { .dict_id.num = _FASTQ_Q0NAME  }, { .dict_id.num = _FASTQ_QmNAME  } }};
         container_prepare_snip ((ContainerP)&con1, NULL, 0, qSTRa(con_decanonize1_snip));
 
-        SmallContainer con2 = { .repeats = 1, .nitems_lo = 2, .items = { { .dict_id.num = _FASTQ_Q0NAME2 }, { .dict_id.num = _FASTQ_Q1NAME2 } }};
+        SmallContainer con2 = { .repeats = 1, .nitems_lo = 2, .items = { { .dict_id.num = _FASTQ_Q0NAME2 }, { .dict_id.num = _FASTQ_QmNAME2 } }};
         container_prepare_snip ((ContainerP)&con2, NULL, 0, qSTRa(con_decanonize2_snip));
     }
 }
@@ -41,7 +41,7 @@ void fastq_deep_seg_initialize (VBlockFASTQP vb)
 {
     ctx_set_dyn_int (VB, FASTQ_DEEP, DID_EOL); // this also sets STORE_INT. actually, we store a pointer into one of the Buffers in z_file->deep_ents, but we treat it as an int
 
-    if (flag.pair == PAIR_R1 || flag.pair == NOT_PAIRED) 
+    if (IS_R1 || flag.pair == NOT_PAIRED) 
         seg_by_did (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_set_deep, '0' }, 3, FASTQ_DEEP, 0);  // all-the-same for FASTQ_DEEP
 
     else { // pair-2
@@ -238,7 +238,7 @@ static void fastq_deep_seg_segconf (VBlockFASTQP vb, STRp(qname), STRp(qname2), 
 
     int num_qnames = 1 + (qname2_len > 0);
 
-    uint32_t qname_hash[2] = { deep_qname_hash (QNAME1, STRa(qname),  NULL),
+    uint32_t qname_hash[2] = { deep_qname_hash (QNAME1, STRa(qname), NULL),
                                ((num_qnames==2) ? deep_qname_hash (QNAME2, STRa(qname2), NULL) : 0) };
     uint32_t seq_hash  = deep_seq_hash (VB, STRa(seq), false);
     
@@ -587,7 +587,7 @@ void fastq_seg_deep (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qname), STRp(qn
         *deep_seq = *deep_qual = *deep_qname = false; // reset
     }
 
-    if (flag.pair == NOT_PAIRED || flag.pair == PAIR_R1)
+    if (flag.pair == NOT_PAIRED || IS_R1)
         dyn_int_append (VB, ctx, deep_value, 0);
 
     else { // PAIR_R2
@@ -657,7 +657,7 @@ void fastq_deep_seg_QNAME (VBlockFASTQP vb, Did did_i, STRp(qname), uint32_t unc
         else /*QNAME2*/           seg_by_did (VB, STRa(con_decanonize2_snip), did_i, 0);
         
         seg_by_did (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_deep_copy_QNAME }, 2, did_i + 1, add_bytes - uncanonical_suffix_len);
-        seg_by_did (VB, qname + qname_len - uncanonical_suffix_len, uncanonical_suffix_len, did_i + 2, uncanonical_suffix_len);
+        seg_by_did (VB, qname + qname_len - uncanonical_suffix_len, uncanonical_suffix_len, (did_i == FASTQ_QNAME) ? FASTQ_QmNAME : FASTQ_QmNAME2, uncanonical_suffix_len);
     }
 
     // case: entire qname is canonical - seg as "copy from deep"
@@ -715,7 +715,7 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_set_deep)
     ASSERTNOTEMPTY (z_file->vb_start_deep_line);
     uint64_t txt_deepable_line_i;
 
-    uint64_t pair_1_deep_value = vb->pair_vb_i ? fastq_get_pair_deep_value (vb, ctx) : 0; // consume whether or not used
+    uint64_t pair_1_deep_value = vb->R1_vb_i ? fastq_get_pair_deep_value (vb, ctx) : 0; // consume whether or not used
 
     if (snip[0] == '0') // no delta
         txt_deepable_line_i = reconstruct_from_local_int (VB, ctx, 0, RECON_OFF);
@@ -889,7 +889,7 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_deep_copy_SEQ)
         reconstruct_from_local_sequence (VB, CTX(FASTQ_NONREF), trim_len - vb->sam_seq_offset, reconstruct);
 
     // case we are pair-2: advance pair-1 SQBITMAP iterator, and if pair-1 is aligned - also its GPOS iterator
-    if (vb->pair_vb_i/*we are R2*/ && fastq_piz_R1_test_aligned (vb))
+    if (vb->R1_vb_i/*we are R2*/ && fastq_piz_R1_test_aligned (vb))
         CTX(FASTQ_GPOS)->localR1.next++; // gpos_ctx->localR1.next is an iterator for both gpos and strand
 
     COPY_TIMER (fastq_special_deep_copy_SEQ);

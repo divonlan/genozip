@@ -22,6 +22,8 @@
 #define ABSOLUTE_MIN_VBLOCK_MEMORY ((uint64_t)1000) // in Bytes
 #define ABSOLUTE_MAX_VBLOCK_MEMORY ((uint64_t)MAX_VBLOCK_MEMORY MB)
 
+#define MAX_SEGCONF_LINES 1000 // max lines tested in segconf (even if VB is large e.g. due to reading full MGZIP block)
+
 typedef packed_enum { TECH_NONE=-1, TECH_ANY=-2, TECH_CONS=-3, TECH_UNKNOWN=0,   TECH_ILLUM, TECH_PACBIO, TECH_NANOPORE,     TECH_454, TECH_MGI,   TECH_IONTORR, TECH_HELICOS, TECH_NCBI, TECH_ULTIMA, TECH_SINGLR, TECH_ELEMENT, TECH_ONSO, NUM_TECHS } SeqTech;
 #define TECH_NAME                     {                        "Unknown_tech",   "Illumina", "PacBio",    "Oxford_Nanopore", "454",    "MGI_Tech", "IonTorrent", "Helicos",    "NCBI",    "Ultima",    "Singular",  "Element",    "Onso"               }
 #define TECH(x) (segconf.tech == TECH_##x)
@@ -39,7 +41,7 @@ typedef packed_enum { VCF_QUAL_DEFAULT, VCF_QUAL_local, VCF_QUAL_by_RGQ, VCF_QUA
 
 typedef packed_enum { VCF_INFO_DEFAULT, VCF_INFO_by_RGQ, VCF_INFO_by_FILTER } VcfInfoMethod;
 
-typedef packed_enum { L3_UNKNOWN, L3_EMPTY, L3_COPY_LINE1, L3_NCBI, L3_OPTIMIZED_AWAY, NUM_L3s } FastqLine3Type;
+typedef packed_enum { L3_UNKNOWN, L3_EMPTY, L3_COPY_LINE1, L3_NCBI, NUM_L3s } FastqLine3Type;
 
 typedef packed_enum { INFO_VT_UNKNOWN, INFO_VT_VAGrENT, INFO_VT_1KG, INFO_VT_CALLMOM } InfoVTType; // part of the file format: values go into the snip of VCF_SPECIAL_VT
 
@@ -84,6 +86,7 @@ typedef struct {
     // Seg parameters - general
     uint64_t vb_size;            // ZIP/PIZ: compression VBlock size in bytes (PIZ: passed in SectionHeaderGenozipHeader.vb_size)
     bool running;                // currently in segconf_calculate()
+    uint32_t gz_comp_size;       // size of segconf data in source gz compression, used if discover_during_segconf 
     int has[MAX_DICTS];          // for select did_i's, counts the numner of times this field was encountered during segconf.running
     bool optimize[MAX_DICTS];    // true if --optimize indicates that this field should be optimized
     bool zip_txt_modified;       // ZIP/PIZ: txt data is/was modified during Seg (e.g. by --optimize, --add-line-numbers). Before segconf: true if data *might* be modifed. After segconf: true iff data is modified.

@@ -41,7 +41,7 @@ static bool codec_hts_compress (VBlockP vb, ContextP ctx,
                                 rom uncompressed,           // option 1 - compress contiguous data
                                 uint32_t *uncompressed_len, 
                                 LocalGetLineCB get_line_cb, // option 2 - compress data one line at a time
-                                STRe(compressed),           // in/out 
+                                qSTRp(compressed),           // in/out 
                                 uint8_t *(*func)(VBlockP vb, uint8_t *in, unsigned in_size, uint8_t *out, unsigned *out_size, int order),                                
                                 int order, FailType soft_fail, rom name)
 {

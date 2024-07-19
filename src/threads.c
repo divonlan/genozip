@@ -528,7 +528,7 @@ void threads_join_do (ThreadId *thread_id, rom expected_task, rom expected_task2
     }
 
     // wait for thread to complete (no wait if it completed already)
-    pthread_join (ent.pthread, NULL);
+    PTHREAD_JOIN (ent.pthread, ent.task_name);
     
     // wait for data from this thread to arrive
     __atomic_thread_fence (__ATOMIC_ACQUIRE); 

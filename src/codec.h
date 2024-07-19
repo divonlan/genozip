@@ -97,7 +97,11 @@ typedef struct {
     { 0, "SMUX", "+",      codec_smux_compress,      USE_SUBCODEC,             codec_smux_reconstruct,    codec_trivial_size,      }, \
     { 0, "ORA",  "+.ora",  NA1,                      NA2,                      NA3,                       NA4                      }, \
     { 0, "OQ",   "+",      codec_oq_compress,        USE_SUBCODEC,             codec_oq_reconstruct,      codec_RANB_est_size,     }, \
-    { 0, "GZIL", "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
+    { 0, "IL1M", "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
+    { 0, "MGZF", "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
+    { 0, "MGSP", "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
+    { 0, "EMFL", "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
+    { 0, "EMVL", "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
 }
 
 extern CodecArgs codec_args[NUM_CODECS];

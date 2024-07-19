@@ -41,6 +41,8 @@ typedef packed_enum { NOT_PAIRED,       // ZIP and PIZ
                       PAIRED,           // PIZ: z_file is paired ; ZIP: --pair or --deep with paired FASTQ
                     } PairType; 
 #define PAIR_TYPE_NAMES { "NOT_PAIRED", "PAIR_R1", "PAIR_R2", "PAIRED" }
+#define IS_R1 (flag.pair == PAIR_R1)
+#define IS_R2 (flag.pair == PAIR_R2)
 
 // make a single-byte flag padded to 4 bytes, so we can easily assign to it in flags_init_from_command_line
 #ifdef __LITTLE_ENDIAN__
@@ -52,7 +54,7 @@ typedef packed_enum { NOT_PAIRED,       // ZIP and PIZ
 typedef struct {
     
     // genozip options that affect the compressed file
-    int fast, best, low_memory, make_reference, multiseq, md5, secure_DP, 
+    int fast, best, low_memory, make_reference, multiseq, md5, secure_DP, not_paired,
         deep; // deep is set with --deep in ZIP and from SectionHeaderGenozipHeader.flags.genozip_header.dts2_deep in PIZ
     rom vblock;
     int64_t sendto;
@@ -62,7 +64,7 @@ typedef struct {
     int optimize_dict_ids_len;
     DictId *optimize_dict_ids;
 
-    int add_line_numbers;
+    int add_line_numbers, add_seq;
         
     int truncate; // allow truncated file - compress only available full lines. note: we don't consider this option data modifying as its used for debugging - digest is calculated only after truncation
         
@@ -70,7 +72,7 @@ typedef struct {
 
     // piz options
     #define MAX_FLAG_BGZF 5
-    int32_t bgzf;   // PIZ: can be set by --bgzf, or by various other conditions. values 0-MAX_FLAG_BGZF indicate the level of libdeflate, BGZF_BY_ZFILE means use SEC_BGZF or default level if it is absent
+    int32_t bgzf;   // PIZ: can be set by --bgzf, or by various other conditions. values 0-MAX_FLAG_BGZF indicate the level of libdeflate, BGZF_BY_ZFILE means use SEC_MGZIP or default level if it is absent
     
     PADDED_FLAG(DataType, out_dt); // used to indicate the desired dt of the output txt - consumed by file_open_z, and thereafter equal to txt_file->data_type
     

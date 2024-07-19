@@ -433,5 +433,5 @@ void ref_cache_detach (Reference ref)
 
 rom cache_state_name (RefCacheState cs)
 {
-    return IN_RANGE (cs, 0, NUM_CACHE_STATES-1) ? (rom[])CACHE_STATE_NAMES[cs] : "InvalidRefCacheState";
+    return IN_RANGE (cs, 0, NUM_CACHE_STATES) ? (rom[])CACHE_STATE_NAMES[cs] : "InvalidRefCacheState";
 }

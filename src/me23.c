@@ -162,7 +162,7 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
                char, 1, "txt_data");
     
     // add genozip stuff
-    bufprintf (comp_vb, txtheader_buf, VCF_HEAD_3p1, GENOZIP_CODE_VERSION, GENOZIP_URL);
+    bufprintf (comp_vb, txtheader_buf, VCF_HEAD_3p1, code_version().s, GENOZIP_URL);
     buf_append_string (comp_vb, txtheader_buf, flags_command_line());
     bufprint0 (comp_vb, txtheader_buf, "\"\n");
 

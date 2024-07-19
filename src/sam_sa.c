@@ -216,7 +216,7 @@ void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(sa), unsigned add_byt
 
 
         // We already tested the SA to be good when we added this line to PRIM in sam_seg_prim_add_sag_SA
-        ASSSEG (IN_RANGE (num_alns, 2, MAX_SA_NUM_ALNS), "%s: Not expecting a malformed SA field in PRIM. num_alns=%u SA:Z=\"%.*s\"", 
+        ASSSEG (IN_RANGX (num_alns, 2, MAX_SA_NUM_ALNS), "%s: Not expecting a malformed SA field in PRIM. num_alns=%u SA:Z=\"%.*s\"", 
                 LN_NAME, num_alns, STRf(sa));
 
         // use SA.local to store number of alignments in this SA Group (inc. primary)

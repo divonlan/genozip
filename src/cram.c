@@ -207,7 +207,7 @@ static bool cram_inspect_file_definition_data (FileP file)
 
     // case: this is actually a GZ file (possibly BAM)
     if (c_len >= 2 && c[0] == 0x1f && c[1] == 0x8b) {
-        file->codec = file->source_codec = CODEC_GZ;
+        file->effective_codec = file->src_codec = CODEC_GZ;
         file->data_type = DT_GNRIC; // generic_is_header_done will figure out the true data type
         file->type = GNRIC_GZ;
         return false;
@@ -215,7 +215,7 @@ static bool cram_inspect_file_definition_data (FileP file)
 
     // case: this is not CRAM, but not a GZ file (perhaps SAM) 
     else if (c_len < 26 || memcmp (c, CRAM_MAGIC, STRLEN(CRAM_MAGIC))) {
-        file->codec = file->source_codec = CODEC_NONE;
+        file->effective_codec = file->src_codec = CODEC_NONE;
         file->data_type = DT_GNRIC; 
         file->type = GNRIC;
         return false;

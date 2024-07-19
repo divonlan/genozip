@@ -144,11 +144,12 @@ static inline int fasta_is_end_of_contig (VBlockP vb, uint32_t first_i,
 }
 
 // returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
-int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *last_i)
+int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i)
 {
-    bool is_entire_vb = (first_i == 0 && *last_i == Ltxt-1);
+    ASSERTNOTZERO (Ltxt);
 
-    ASSERT (*last_i >= 0 && *last_i < Ltxt, "*last_i=%d is ∉ [0,%u]", *last_i, Ltxt);
+    int32_t last_i = Ltxt-1;
+    bool is_entire_vb = (first_i == 0);
 
     ARRAY (char, txt, vb->txt_data);
 
@@ -170,7 +171,7 @@ int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *last_i)
     }
 
     // we move the final partial line to the next vb (unless we are already moving more, due to a --make-reference)
-    for (int32_t i=*last_i; i >= (int32_t)first_i; i--) {
+    for (int32_t i=last_i; i >= (int32_t)first_i; i--) {
 
         if (txt[i] == '\n') {
 
@@ -195,7 +196,7 @@ int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *last_i)
                 return 0;                
             }
                 
-            *last_i = i;
+            last_i = i;
             return Ltxt-1 - i;
         }
     }

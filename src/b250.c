@@ -9,6 +9,7 @@
 #include "b250.h"
 #include "context.h"
 #include "codec.h"
+#include "file.h"
 
 // single-length encoding (up to 15.0.37)
 // Format on data in Context.b250: Each entry is either a single-byte special-code value 0xFA-0xFF, OR a 1, 2 or 4 big-endian integer.
@@ -259,12 +260,22 @@ bool b250_zip_generate (VBlockP vb, ContextP ctx)
     ctx->b250.size  -= shortened_by;
 
     // in case we are using "pair identical", drop this section if it is an R2 section identical to its R1 counterpart
-    if (is_fastq_pair_2 (vb) && fastq_zip_use_pair_identical (ctx->dict_id) && buf_issame (&ctx->b250, &ctx->b250R1, 1)) {
-        ctx->b250.len = 0; 
-        
-        if (flag.debug_generate) iprintf ("%s: %s[%u].b250 dropped because it is an R2 section which is identical to its R1 counterpart\n", VB_NAME, ctx->tag_name, ctx->did_i);
+    if (is_fastq_pair_2 (vb) && fastq_zip_use_pair_identical (ctx->dict_id)) { 
 
-        ret = false;
+        if (buf_issame (&ctx->b250, &ctx->b250R1, 1)) {
+            ctx->b250.len = 0; 
+            ret = false;
+            
+            if (flag.debug_generate) iprintf ("%s: %s[%u].b250 dropped because it is an R2 section which is identical to its R1 counterpart\n", VB_NAME, ctx->tag_name, ctx->did_i);
+        }
+
+        // if we know the flavor - verify that VBs are indeed paired by requiring that all QNAME components (except for QmNAME) are identical
+        else if (segconf.qname_flavor[QNAME1] && IN_RANGE(ctx->did_i, FASTQ_Q0NAME, FASTQ_QmNAME) && 
+            // note: in deep the sections don't always match as a deeped read will have copy-from-deep, but if its mate is missing from SAM, it will be segged differently.
+            // since we don't error if deep, it is possible that fastq files that are not aligned paired-end will be segged as such if they are close enough
+            // so that their VBs get divvied up by txtfile_read_vblock in the same way, and paired VBs have the same number of lines. no harm. 
+            !flag.deep)
+            ABORTINP (NO_PAIR_FMT_PREFIX "%s %s.b250 is not identical to R1)", txt_name, VB_NAME, ctx->tag_name);
     }
     
     // xxx - print b250 if show_b250

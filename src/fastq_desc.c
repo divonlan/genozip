@@ -17,6 +17,9 @@ void fastq_seg_QNAME (VBlockFASTQP vb, STRp(qname), uint32_t line1_len, bool dee
 
     else
         qname_seg (VB, QNAME1, STRa(qname), 1); // account for the '@' (segged as a toplevel container prefix)
+
+    if (IS_R1) 
+        set_last_txt (FASTQ_QNAME, qname); // used to populate z_file->R1_last_qname in fastq_zip_after_compute
 }
 
 bool fastq_is_line3_copy_of_line1 (STRp(qname), STRp(line3), uint32_t desc_len)
@@ -30,7 +33,6 @@ void fastq_seg_LINE3 (VBlockFASTQP vb, STRp(qline3), STRp(qline1), STRp(desc))
 {
     switch (segconf.line3) {
         case L3_EMPTY:  // no segging - we will drop the line from top_level
-        case L3_OPTIMIZED_AWAY:
             ASSSEG (!qline3_len || segconf.optimize[FASTQ_QNAME], "Invalid FASTQ file format (#1): expecting middle line to be a \"+\", but it is \"+%.*s\"", STRf(qline3));
             CTX(FASTQ_LINE3)->txt_len++;      // account for the '+' (it is segged in the toplevel container)
             break;

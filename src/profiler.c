@@ -220,6 +220,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (refhash_compress_digest, 2); // make-ref
         PRINT (refhash_uncompress_one_vb, 2);
         PRINT (cram_inspect_file, 1);
+        PRINT (txtfile_discover_specific_gz, 1);
         PRINT (txtheader_zip_read_and_compress, 1);
         PRINT (txtfile_read_header, 2);
         PRINT (sam_header_inspect, 2);
@@ -234,7 +235,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (txtheader_compress_one_fragment, 3); 
         PRINT (digest_txt_header, 2);
         PRINT (vb_get_vb, 1);
-        PRINT (fastq_read_pair_1_data, 1);
+        PRINT (fastq_read_R1_data, 1);
         PRINT (piz_read_all_ctxs, 2);
         PRINT (txtfile_read_vblock, 1);
         PRINT (read, 2);
@@ -242,17 +243,18 @@ void profiler_add_evb_and_print_report (void)
         PRINT (txtfile_read_block_igzip, 3);
         PRINT (igzip_uncompress_during_read, 4);
         PRINT (txtfile_read_block_bz2, 3);
-        PRINT (txtfile_read_block_bgz, 3);
-        PRINT (bgzf_read_block, 4);
-        PRINT (gzil_read_block, 4)
-        PRINT (bgz_uncompress_during_read, 4);
-        PRINT (fastq_txtfile_have_enough_lines, 2);
+        PRINT (txtfile_read_block_mgzip, 3);
+        PRINT (mgzip_read_block_with_bsize, 4);
+        PRINT (mgzip_read_block_no_bsize, 4);
+        PRINT (mgzip_uncompress_during_read, 4);
+        PRINT (fastq_txtfile_sync_to_R1_by_num_lines, 2);
         PRINT (txtfile_get_unconsumed_callback, 2);
-        PRINT (bgz_copy_unconsumed_blocks, 2);
+        PRINT (mgzip_copy_unconsumed_blocks, 2);
         PRINT (zriter_write, 1);
         PRINT (write_fg, 2);
         PRINT (write_bg, 2);
         PRINT (bgzf_io_thread, 1);
+        PRINT (sam_zip_gc_after_compute_main, 1);
         PRINT (sam_sa_prim_finalize_ingest, 1);
         PRINT (zip_main_loop_idle, 1);
         PRINT (zip_free_undeeded_zctx_bufs_after_seg, 1);
@@ -281,7 +283,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (zfile_compress_genozip_header, 2);
 
         iprintf ("GENOZIP compute threads %s\n", str_int_commas (ms(profile.nanosecs.compute)).s);
-        PRINT (bgz_uncompress_vb, 1);
+        PRINT (mgzip_uncompress_vb, 1);
         PRINT (ctx_clone, 1);
         PRINT (scan_index_qnames_preprocessing, 1);
         PRINT (zip_modify, 1);
@@ -356,6 +358,8 @@ void profiler_add_evb_and_print_report (void)
         PRINT (gencomp_absorb_add_to_queue, 1);
         PRINT (gencomp_flush, 2);
         PRINT (gencomp_offload_DEPN_to_disk, 3);
+        PRINT (compress_depn_buf, 4);
+        PRINT (gencomp_do_offload_write, 4);
         PRINT (gencomp_reread_lines_as_prescribed, 1);
         PRINT (bgzf_uncompress_one_prescribed_block, 2);
         PRINT (ctx_merge_in_vb_ctx, 1);

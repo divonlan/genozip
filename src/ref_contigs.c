@@ -268,7 +268,7 @@ static void ref_contigs_load_set_contig_names (Reference ref)
         if (!contig[i].max_pos) continue;
 
         WordIndex chrom_index = contig[i].ref_index;
-        ASSERT (IN_RANGE (chrom_index, 0, chrom_len-1), "Expecting contig[%u].ref_index=%d to be in the range [0,%d]", i, chrom_index, (int)chrom_len-1);
+        ASSERT (IN_RANGE (chrom_index, 0, chrom_len), "Expecting contig[%u].ref_index=%d to be in the range [0,%d]", i, chrom_index, (int)chrom_len-1);
         contig[i].char_index = chrom[chrom_index].char_index;
         contig[i].snip_len   = chrom[chrom_index].snip_len;
     }

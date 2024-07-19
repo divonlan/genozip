@@ -763,6 +763,8 @@ void sam_seg_against_sa_group_int (VBlockSAMP vb, ContextP ctx, int64_t paramete
 // called in the main thread after_compute - VBs might be out of order
 void sam_zip_gc_after_compute_main (VBlockSAMP vb)
 {
+    START_TIMER;
+
     BufferP recon_plan = &txt_file->recon_plan;
     BufferP recon_plan_index = &txt_file->recon_plan_index;
     ARRAY (GencompLineIEntry, gc_lines, vb->gencomp_lines);
@@ -788,8 +790,6 @@ void sam_zip_gc_after_compute_main (VBlockSAMP vb)
     else {         
         recon_plan->param = vb->vblock_i; // VB being processed - so its visible in buf_alloc error messages
         buf_alloc (evb, recon_plan, gc_lines_len * 2 + 2, 100000, ReconPlanItem, 2, "txt_file->recon_plan");
-        buf_alloc (evb, &txt_file->line_info[0], gc_lines_len, 100000, uint32_t, 2, "txt_file->line_info");
-        buf_alloc (evb, &txt_file->line_info[1], gc_lines_len, 100000, uint32_t, 2, "txt_file->line_info");
 
         uint32_t normal_line_i=0;
     
@@ -812,9 +812,6 @@ void sam_zip_gc_after_compute_main (VBlockSAMP vb)
             // vb_i within the gencomp components and start_line will be updated later as we don't know them yet
             BNXT (ReconPlanItem, *recon_plan) = 
                 (ReconPlanItem){ .vb_i = IS_PRIM(&gc_line) ? SAM_GC_UPDATE_PRIM : SAM_GC_UPDATE_DEPN };
-          
-            // store line lengths, to be used later to calculate vb_info
-            BNXT32 (txt_file->line_info[gc_line.comp_i-1]) = gc_line.line_len;
         }
 
         // insert final normal lines
@@ -835,6 +832,8 @@ void sam_zip_gc_after_compute_main (VBlockSAMP vb)
 
     *B(BufWord, *recon_plan_index, vb->vblock_i) = (BufWord){ .index = recon_plan_vb_start, 
                                                               .len   = recon_plan->len - recon_plan_vb_start };
+
+    COPY_TIMER (sam_zip_gc_after_compute_main);
 }
 
 //-------------------
@@ -1069,5 +1068,5 @@ void sam_stats_reallocate (void)
 
 rom sag_type_name (SagType sagt)
 {
-    return IN_RANGE (sagt, 0, NUM_SAG_TYPES-1) ? (rom[])SAM_SAG_TYPE_NAMES[sagt] : "InvalidSagType";
+    return IN_RANGE (sagt, 0, NUM_SAG_TYPES) ? (rom[])SAM_SAG_TYPE_NAMES[sagt] : "InvalidSagType";
 }

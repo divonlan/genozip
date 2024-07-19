@@ -154,9 +154,9 @@ static inline void sam_load_groups_add_qname (VBlockSAMP vb, PlsgVbInfo *plsg, S
 
         reconstruct_from_ctx (vb, SAM_BUDDY, 0, RECON_OFF); // set buddy (false = don't consume QNAME)
 
-        vb_grps[vb->line_i].qname = plsg->qname_start + Ltxt;
+        vb_grps[vb->line_i].qname = plsg->qname_start + vb->txt_data.len; // 64 bit arithmetic
         reconstruct_from_ctx (vb, SAM_QNAME, 0, RECON_ON); // reconstructs into vb->txt_data, sets vb->buddy_line_i if SNIP_COPY_BUDDY
-        vb_grps[vb->line_i].qname_len = Ltxt - (vb_grps[vb->line_i].qname - plsg->qname_start); // 64 bit arithmetic
+        vb_grps[vb->line_i].qname_len = vb->txt_data.len - (vb_grps[vb->line_i].qname - plsg->qname_start); // 64 bit arithmetic
 
         // if seq_len is carried by a QNAME item, set the last value here (needed for sam_cigar_special_CIGAR)
         if (seq_len_ctx) vb_grps[vb->line_i].seq_len = seq_len_ctx->last_value.i;

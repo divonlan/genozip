@@ -14,6 +14,7 @@
 #include "segconf.h"
 #include "arch.h"
 #include "zip.h"
+#include "txtheader.h"
 
 #define RR(x) ((x) % d->max_threads)
 
@@ -39,7 +40,7 @@ typedef struct DispatcherData {
     uint32_t next_vb_i;
     uint32_t max_threads;
     enum { PROGRESS_PERCENT, PROGRESS_MESSAGE, PROGRESS_NONE } progress_type;
-    rom filename;
+    StrTextLong filename;
     
     uint64_t progress;        // progress towards target_progress
     uint64_t target_progress; // progress reaches this, it is at 100%
@@ -109,7 +110,7 @@ Dispatcher dispatcher_init (rom task_name,
         main_dispatcher = d;
 
     if (filename)
-        d->filename = filename;
+        strncpy (d->filename.s, filename, sizeof (StrTextLong)-1);
 
     ASSERT (max_threads <= global_max_threads, "expecting max_threads=%u <= global_max_threads=%u", max_threads, global_max_threads);
 
@@ -142,15 +143,15 @@ void dispatcher_pause (Dispatcher d)
 }
 
 // PIZ: reinit dispatcher, used when splitting a genozip file to its components, using a single dispatcher object
-void dispatcher_resume (Dispatcher d, uint32_t target_progress)
+void dispatcher_resume (Dispatcher d, uint32_t target_progress, CompIType comp_i)
 {
     d->input_exhausted = false;
-    d->filename        = txt_file->basename;
+    d->filename        = txtheader_get_txt_filename_from_section (comp_i);
     d->progress        = 0;
     d->target_progress = target_progress;
 
     if (d->paused) 
-        progress_new_component (d->filename, "0\%", flag.test, start_time_initialized ? &start_time : NULL);    
+        progress_new_component (d->filename.s, "0\%", flag.test, start_time_initialized ? &start_time : NULL);    
 
     d->paused          = false;
 }

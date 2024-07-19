@@ -3,10 +3,15 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
-15.0.62
-- I/O optimizations for faster compression
+15.0.63 18/7/2024
+- FASTQ: much faster compression of most MGI, most Element, and some Illumina FASTQs due to better scaling of CPU cores on machines with > 40 cores
+- New option: --not-paired: used in combination of --deep to inform Genozip that the two FASTQs files provided are not paired-end.
+- Bug fix: correct handling of BGZF-compressed files with a BGZF End-of-File block in their midst (instead of at their end): Until version 15.0.46 the file was compressed up the BGZF EOF block, and the rest of the file was lost. Between 15.0.48 to 15.0.62 Genozip errored on this situation. This edge case was discovered during development and has not been encountered so far in any real-world files.
+
+15.0.62 29/6/2024
+- Scaling to more cores thanks to improved method of handing disk I/O
 - Bug fixes
-- New diagnostic options: --show-gz-uncomp, --generate-gzil
+- New diagnostic options: --show-gz-uncomp, --generate-il1m
 - Removed bash autocomplete for genozip as it didn't work very well. If this was installed, it can be removed by manually editing ~/.bash_completion
 
 15.0.61 22/6/2024

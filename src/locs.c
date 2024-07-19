@@ -23,7 +23,7 @@ int32_t locs_is_header_done (bool is_eof)
 }
 
 // returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
-int32_t locs_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i /* in/out */)
+int32_t locs_unconsumed (VBlockP vb, uint32_t first_i)
 {
     return Ltxt % 8; // a line is an 8-byte cluster of {float x, y;}
 }

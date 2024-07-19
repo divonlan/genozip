@@ -284,7 +284,7 @@ extern StrText str_human_time (unsigned secs, bool compact);
 #define FLOAT_FORMAT_LEN 12
 extern bool str_get_float (STRp(float_str), double *value, char format[FLOAT_FORMAT_LEN], uint32_t *format_len);
 
-extern bool str_scientific_to_decimal (STRp(float_str), STRe(modified), double *value);
+extern bool str_scientific_to_decimal (STRp(float_str), qSTRp(modified), double *value);
 
 extern uint32_t str_split_do (STRp(str), uint32_t max_items, char sep, rom *items, uint32_t *item_lens, bool exactly, rom enforce_msg);
 
@@ -336,7 +336,7 @@ extern void str_nul_separate_do (STRps(item));
 #define str_nul_separate(name) str_nul_separate_do (n_##name##s, name##s, name##_lens)
 
 extern uint32_t str_remove_whitespace (STRp(in), bool also_uppercase, char *out);
-extern void str_trim (STRe(str));
+extern void str_trim (qSTRp(str));
 
 extern rom type_name (uint32_t item, 
                       rom  const *name, // the address in which a pointer to name is found, if item is in range
@@ -351,7 +351,7 @@ extern void str_query_user (rom query, STRc(response), bool allow_empty, Respons
 typedef enum { QDEF_NONE, QDEF_NO, QDEF_YES } DefAnswerType;
 extern bool str_query_user_yn (rom query, DefAnswerType def_answer);
 
-extern char *memchr2 (rom p, char ch1, char ch2, uint32_t count);
+extern char *memchr2 (const void *p, char ch1, char ch2, uint32_t count);
 
 // implementing memrchr, as it doesn't exist in Windows libc (msvcrt.dll) or Darwin (at least clang)
 #if defined _WIN32 || defined __APPLE__

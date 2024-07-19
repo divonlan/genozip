@@ -17,7 +17,7 @@
 #include "txtfile.h"
 #include "qname.h"
 #include "progress.h"
-#include "bgzf.h"
+#include "mgzip.h"
 
 static VBlockP real_evb;
 static VBlockP scan_vb;
@@ -36,7 +36,7 @@ static rom scan_index_one_line (VBlockSAMP vb, rom alignment, uint32_t remaining
         alignment_len = GET_UINT32 (alignment) + 4;
 
         // a non-sensical block_size might indicate an false-positive identification of a BAM alignment in bam_unconsumed
-        ASSERT (IN_RANGE (alignment_len, sizeof (BAMAlignmentFixed), remaining_txt_len), 
+        ASSERT (IN_RANGX (alignment_len, sizeof (BAMAlignmentFixed), remaining_txt_len), 
                 "%s: alignment_len=%u is out of range - too small, or goes beyond end of txt data: remaining_txt_len=%u",
                 LN_NAME, alignment_len, remaining_txt_len);
 
@@ -161,7 +161,7 @@ static void scan_index_qnames_preprocessing (VBlockP vb)
 
     // if the txt file is compressed with BGZF, we uncompress now, in the compute thread
     if (TXT_IS_BGZF) 
-        bgz_uncompress_vb (vb, CODEC_BGZF);    // some of the blocks might already have been decompressed while reading - we decompress the remaining
+        mgzip_uncompress_vb (vb, CODEC_BGZF);    // some of the blocks might already have been decompressed while reading - we decompress the remaining
 
     rom next  = B1STtxt;
     rom after = BAFTtxt;

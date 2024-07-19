@@ -76,7 +76,7 @@ typedef struct {
     \
     /* tracking execution */\
     uint64_t vb_position_txt_file;/* ZIP/PIZ: position of this VB's data in the plain text file (without source compression): ZIP: as read before any ZIP-side modifications ; PIZ: as reconstructed with all modifications */\
-    uint64_t vb_bgz_i;            /* ZIP: index into txt_file->bgzf_isizes of the first BGZF/GZIL block of this VB */ \
+    uint64_t vb_mgzip_i;          /* ZIP: index into txt_file->mgzip_isizes of the first MGZIP block of this VB */ \
     int32_t recon_size;           /* ZIP: actual size of txt if this VB is reconstructed in PRIMARY coordinates (inc. as ##primary_only in --luft) */\
                                   /* PIZ: expected reconstruction size in the coordinates of reconstruction */\
     int32_t txt_size;             /* ZIP: original size of of text data read from the file */ \
@@ -127,7 +127,7 @@ typedef struct {
     \
     /* bgzf - for handling bgzf-compressed files */ \
     void *gzip_compressor;        /* Handle into libdeflate compressor or decompressor, or zlib's z_stream. Pointer to codec_bufs[].data */ \
-    Buffer gz_blocks;             /* ZIP: an array of GzBlockZip tracking the decompression of bgzf/gzil blocks in scratch into txt_data.  */\
+    Buffer gz_blocks;             /* ZIP: an array of GzBlockZip tracking the decompression of bgzf/il1m blocks in scratch into txt_data.  */\
                                   /* PIZ: an array of BgzfBlockPiz */ \
     \
     /* random access, chrom, pos */ \
@@ -157,7 +157,8 @@ typedef struct {
     Buffer reread_prescription;   /* ZIP SAM/BAM DEPN: list of lines to be re-read at seg initialize */\
     Buffer optimized_txt_data;    /* ZIP: --optimized: txt_data being re-written, if it cannot be re-written in place */ \
     }; \
-    Buffer txt_data;              /* ZIP: txt_data as read from disk - either the txt header (in evb) or the VB data lines PIZ: reconstructed data */\
+    Buffer txt_data;              /* ZIP: txt_data as read from disk and uncompressed - either the txt header (in evb) or the VB data lines PIZ: reconstructed data */\
+    Buffer comp_txt_data;         /* ZIP/PIZ: source-comprssed data as read/written from/to disk */ \
     Buffer z_section_headers;     /* PIZ and Pair-1 reading in ZIP-Fastq: an array of unsigned offsets of section headers within z_data */\
     Buffer scratch;               /* helper buffer: used by many functions. before usage, assert that its free, and buf_free after. */\
     int16_t z_next_header_i;      /* next header of this VB to be encrypted or decrypted */\

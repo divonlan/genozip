@@ -16,6 +16,7 @@
 #include "threads.h"
 #include "zriter.h"
 #include "arch.h"
+#include "tar.h"
 
 static uint32_t zriter_thread_num = 0; // for --show-threads
 
@@ -25,6 +26,18 @@ typedef struct {
     pthread_t thread_id;
     bool completed;
 } ZriterThread, *ZriterThreadP;
+
+static int64_t zriter_tell (void)
+{
+    int64_t offset = ftello64 ((FILE *)z_file->file);
+    ASSERT (offset >= 0 , "ftello64 failed for %s (FILE*=%p remote=%s redirected=%s): %s", 
+            z_file->name, z_file->file, TF(z_file->is_remote), TF(z_file->redirected), strerror (errno));
+
+    // in a z_file that is being tarred, update the offset to the beginning of the file data in the tar file
+    offset -= tar_file_offset(); // 0 if not using tar
+
+    return offset;    
+}
 
 void zriter_flush (void)
 {
@@ -40,7 +53,7 @@ void zriter_wait_for_bg_writing (void)
     
     for_buf (ZriterThreadP, zt_p, z_file->zriter_threads) {
         if (flag.show_threads) iprintf ("zriter: JOINING: thread_id=%"PRIu64"\n", (uint64_t)(*zt_p)->thread_id);
-        pthread_join ((*zt_p)->thread_id, NULL); // blocking
+        PTHREAD_JOIN ((*zt_p)->thread_id, "zriter_thread_entry"); // blocking
         if (flag.show_threads) iprintf ("zriter: JOINED: thread_id=%"PRIu64"\n", (uint64_t)(*zt_p)->thread_id);
 
         buf_destroy ((*zt_p)->data);
@@ -74,7 +87,7 @@ static void *zriter_thread_entry (void *zt_)
     z_file->disk_so_far += zt->data.len; // length of GENOZIP data writen to disk (protected by zriter_mutex)
 
     // sanity
-    uint64_t actual_disk_so_far = file_tell (z_file, false);
+    uint64_t actual_disk_so_far = zriter_tell();
     ASSERT (actual_disk_so_far == z_file->disk_so_far, "Expecting actual_disk_so_far=%"PRIu64" == z_file->disk_so_far=%"PRIu64,
             actual_disk_so_far, z_file->disk_so_far);
 
@@ -99,7 +112,7 @@ static void zriter_write_background (BufferP data, BufferP section_list)
             // free resources
 
             if (flag.show_threads) iprintf ("zriter: JOINING: thread_id=%"PRIu64"\n", (uint64_t)(*zt_p)->thread_id);
-            pthread_join ((*zt_p)->thread_id, NULL);
+            PTHREAD_JOIN ((*zt_p)->thread_id, "zriter_thread_entry");
             if (flag.show_threads) iprintf ("zriter: JOINED: thread_id=%"PRIu64"\n", (uint64_t)(*zt_p)->thread_id);
 
             buf_destroy ((*zt_p)->data);
@@ -165,7 +178,7 @@ static void zriter_write_foreground (BufferP data, BufferP section_list, int64_t
         z_file->disk_so_far += data->len;   // length of GENOZIP data writen to disk (pr)
 
         // sanity
-        uint64_t actual_disk_so_far = file_tell (z_file, false);
+        uint64_t actual_disk_so_far = zriter_tell();
         ASSERT (actual_disk_so_far == z_file->disk_so_far, "Expecting actual_disk_so_far=%"PRIu64" == z_file->disk_so_far=%"PRIu64,
                 actual_disk_so_far, z_file->disk_so_far);
     }

@@ -21,6 +21,7 @@ static float last_percent=0;
 static int last_seconds_so_far=-1;
 static rom component_name=NULL;
 static unsigned last_len=0; // so we know how many characters to erase on next update
+static uint32_t last_secs_remaining=0xffff0000;
 
 static StrText progress_ellapsed_time (void)
 {
@@ -81,7 +82,7 @@ void progress_new_component (rom new_component_name,
 
         test_mode = new_test_mode;
         component_name = new_component_name; 
-
+        
         if (!flag.quiet) {
             
             if (test_mode) { 
@@ -113,6 +114,7 @@ void progress_new_component (rom new_component_name,
         }
     }
 
+    last_secs_remaining = 0xffff0000;
     progress_update_status (prefix.s, message ? message : "");
 }
 
@@ -147,18 +149,20 @@ void progress_update (rom task, uint64_t sofar, uint64_t total, bool done)
     
     // case: we're making progress... show % and time remaining
     else if (!done && percent && (last_seconds_so_far < seconds_so_far)) { 
+        // time remaining
+        uint32_t secs_remaining = (100.0 - percent) * ((double)seconds_so_far / (double)percent);
 
-        if (!done) { 
-            // time remaining
-            unsigned secs = (100.0 - percent) * ((double)seconds_so_far / (double)percent);
+        if (!done && (percent != last_percent || secs_remaining <= last_secs_remaining || secs_remaining >= last_secs_remaining+15)) { // timer doesn't go up unless estimate changed by a good fews seconds
 
             if (!flag.debug_progress)
-                snprintf (progress_str, sizeof(progress_str), "%u%% (%s)", (unsigned)percent, str_human_time (secs, false).s);
+                snprintf (progress_str, sizeof(progress_str), "%u%% (%s)", (unsigned)percent, str_human_time (secs_remaining, false).s);
             else
                 snprintf (progress_str, sizeof(progress_str), "%u%% (%s) task=%s sofar=%.20s total=%.20s seconds_so_far=%d", 
-                         (unsigned)percent, str_human_time (secs, false).s, task, str_int_commas(sofar).s, str_int_commas(total).s, seconds_so_far);            
+                         (unsigned)percent, str_human_time (secs_remaining, false).s, task, str_int_commas(sofar).s, str_int_commas(total).s, seconds_so_far);            
 
             progress_update_status (NULL, progress_str);
+
+            last_secs_remaining = secs_remaining;
         }
     }
 

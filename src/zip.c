@@ -19,7 +19,7 @@
 #include "progress.h"
 #include "stats.h"
 #include "compressor.h"
-#include "bgzf.h"
+#include "mgzip.h"
 #include "txtheader.h"
 #include "threads.h"
 #include "contigs.h"
@@ -487,9 +487,9 @@ static void zip_compress_one_vb (VBlockP vb)
         !(segconf.sag_type && vb->comp_i == SAM_COMP_MAIN)) // except in MAIN of SAM/BAM gencomp - need to generate PRIM and DEPN VBs 
         goto after_compress; 
 
-    // if the txt file is compressed with BGZF/GZIL, we uncompress now, in the compute thread
+    // if the txt file is compressed with a MGZIP codec, we (usually) uncompress now, in the compute thread
     if (vb->txt_codec) 
-        bgz_uncompress_vb (vb, vb->txt_codec);    // some of the blocks might already have been decompressed while reading - we decompress the remaining
+        mgzip_uncompress_vb (vb, vb->txt_codec);    // some of the blocks might already have been uncompressed while reading - we uncompress the remaining
 
     vb->txt_size = Ltxt; // this doesn't change with --optimize.
 
@@ -579,11 +579,11 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
     // and copy the data we need for this vb. note: we need to do this before txtfile_read_vblock as
     // we need the num_lines of the pair VB
     bool R1_data_exhausted = false;
-    if (flag.pair == PAIR_R2) {
-        uint32_t pair_vb_i = prev_file_first_vb_i + (vb->vblock_i-1 - prev_file_last_vb_i);
+    if (IS_R2) {
+        uint32_t R1_vb_i = prev_file_first_vb_i + (vb->vblock_i-1 - prev_file_last_vb_i);
         
-        if (pair_vb_i <= prev_file_last_vb_i)
-            fastq_read_pair_1_data (vb, pair_vb_i); // add the R1 sections z_data after the R2 sections 
+        if (R1_vb_i <= prev_file_last_vb_i)
+            fastq_read_R1_data (vb, R1_vb_i); // add the R1 sections z_data after the R2 sections 
         else
             R1_data_exhausted = true; // R1 data is already exhausted. This is ok if R2 data is exhausted too.
     }
@@ -668,7 +668,7 @@ static void zip_complete_processing_one_vb (VBlockP vb)
 uint64_t zip_get_target_progress (void)
 {
     static uint64_t target_progress=0;
-    if ((Z_DT(FASTQ) && flag.pair != PAIR_R2) ||   // note: if 2nd of a FASTQ file pair - we leave the target as it was in the first file as seggable_size is not calculated for the 2nd file
+    if ((Z_DT(FASTQ) && !IS_R2) ||   // note: if 2nd of a FASTQ file pair - we leave the target as it was in the first file as seggable_size is not calculated for the 2nd file
         (flag.deep && flag.zip_comp_i <= SAM_COMP_FQ00) ||
         (!flag.deep && !Z_DT(FASTQ))) {
 
@@ -699,9 +699,7 @@ void zip_one_file (rom txt_basename,
     z_file->num_components         = MAX_(z_file->num_components, flag.zip_comp_i+1); // may increase further with generated components (in zip_update_txt_counters())
     evb->z_data.len                = 0;
     evb->z_next_header_i           = 0;
-    
-    txtfile_zip_finalize_codecs();
-    
+        
     // we calculate digest for each component seperately, stored in SectionHeaderTxtHeader (always 0 for generated components, or if modified)
     if (gencomp_comp_eligible_for_digest(NULL)) // if generated component - keep digest to display in progress after the last component
         z_file->digest_ctx = DIGEST_CONTEXT_NONE;
@@ -731,12 +729,17 @@ void zip_one_file (rom txt_basename,
 
     DT_FUNC (txt_file, zip_after_segconf)();
 
-    uint64_t target_progress = zip_get_target_progress();
+    txtfile_zip_finalize_codecs();
+
+    uint64_t target_progress = zip_get_target_progress(); // estimate based on segconf data
 
     dispatcher = dispatcher_fan_out_task (
         ZIP_TASK_NAME, txt_basename, 
         target_progress,      // target progress: 1 for each read, compute, write
-        target_progress ? NULL : txt_file->is_remote ? "Downloading & compressing..." : "Compressing...",
+        target_progress     ? NULL 
+      : txt_file->is_remote ? "Downloading & compressing..." 
+      : flag.skip_segconf   ? "Compressing (skipped segconf)..." // no progress data if segconf was skipped 
+      :                       "Compressing...",
         !flag.make_reference, // allow callbacks to zip_complete_processing_one_vb not in order of VBs (not allowed for make-reference as contigs need to be in consistent order)
         false,                // not test mode
         flag.xthreads, prev_file_last_vb_i, 5000, false,
@@ -756,15 +759,14 @@ void zip_one_file (rom txt_basename,
 
     WARN_IF (appending, "%s was being appended by an external process while compression was in progress", txt_name);
 
-    // verify that the entire data is either decompressed or truncated away (doesn't work for external decompressors)
-    ASSERT (txt_file->disk_gz_uncomp_or_trunc == txt_file->disk_so_far || (!TXT_IS_BGZF && !TXT_IS_GZIL && !TXT_IS_GZ) || flag.has_head,
-            "Failed to process all source data: read %s bytes from disk, but decompressed %sonly %s bytes. txt_codec=%s",
-            str_int_commas (txt_file->disk_so_far).s, flag.truncate ? "or truncated " : "", str_int_commas (txt_file->disk_gz_uncomp_or_trunc).s,
-            txtfile_codec_name (z_file, flag.zip_comp_i).s);
-    
-    if (TXT_IS_BGZF || TXT_IS_GZIL)
-        bgzf_finalize_discovery(); 
+    bgzf_finalize_discovery(); 
 
+    // verify that the entire data is either decompressed or truncated away (doesn't work for external decompressors)
+    ASSERT (txt_file->disk_gz_uncomp_or_trunc == txt_file->disk_so_far || !TXT_IS_GZIP || flag.has_head,
+            "Failed to process all source data: read %s bytes from disk, but decompressed %sonly %s bytes. src_codec=%s",
+            str_int_commas (txt_file->disk_so_far).s, flag.truncate ? "or truncated " : "", str_int_commas (txt_file->disk_gz_uncomp_or_trunc).s,
+            txtfile_codec_name (z_file, flag.zip_comp_i, false).s);
+    
     zriter_wait_for_bg_writing(); // complete writing VBs before moving on
 
     dispatcher_calc_avg_compute_vbs (dispatcher);
@@ -777,14 +779,14 @@ void zip_one_file (rom txt_basename,
 
     ASSERT0 (!flag.biopsy || biopsy_is_done(), "Biopsy request not complete - some VBs missing");
 
-    // write the BGZF section containing BGZF block sizes, if this txt file is compressed with BGZF
-    if (TXT_IS_BGZF)
-        bgzf_compress_bgzf_section();
+    // write the MGZIP section containing MGZIP block sizes, if this txt file is compressed with a MGZIP codec
+    if (TXT_IS_MGZIP)
+        mgzip_compress_mgzip_section();
 
     // if this a non-bound file, or the last component of a bound file - write the genozip header, random access and dictionaries
 finish:   
     z_file->txt_file_disk_sizes[flag.zip_comp_i] = txt_file->disk_size ? txt_file->disk_size // actual file size on disk, if we know it (we don't if its a remote or stdin file)
-                                                                       : (int64_t)txt_file->disk_so_far + (txt_file->codec==CODEC_BGZF ? BGZF_EOF_LEN : 0); // data (plain, BGZF, GZ or BZ2) read from the file descriptor (we won't have correct src data here if reading through an external decompressor - but luckily txt_file->disk_size will capture that case)
+                                                                       : (int64_t)txt_file->disk_so_far;
     z_file->txt_file_disk_sizes_sum += z_file->txt_file_disk_sizes[flag.zip_comp_i];
 
     // (re-)index sections after adding this txt_file 

@@ -192,7 +192,7 @@ static void main_print_help (bool explicit)
 
 static void main_print_version()
 {
-    iprintf ("version=%s distribution=%s\n", GENOZIP_CODE_VERSION, get_distribution());  
+    iprintf ("version=%s distribution=%s\n", code_version().s, get_distribution());  
 }
 
 static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool is_last_z_file)
@@ -491,7 +491,7 @@ static void main_genozip (rom txt_filename,
                        : (flag.pair && !flag.out_filename) ? filename_z_pair (txt_filename, next_txt_filename, false) // first file in a FASTQ pair
                        :                                     filename_z_normal (txt_file->name, txt_file->data_type, txt_file->type);
 
-        z_file = file_open_z_write (z_filename, flag.pair ? WRITEREAD : WRITE, txt_file->data_type, txt_file->source_codec);
+        z_file = file_open_z_write (z_filename, flag.pair ? WRITEREAD : WRITE, txt_file->data_type, txt_file->src_codec);
         FREE(z_filename); // file_open_z copies the name
 
         license_eval_notice();
@@ -511,7 +511,7 @@ static void main_genozip (rom txt_filename,
     int64_t t_offset = z_file->is_in_tar ? tar_file_offset() : 0; // if tar: offset of beginning of z_file in tar (after tar header block)
 
     if (flag.bind == BIND_FQ_PAIR || (flag.bind == BIND_DEEP && flag.pair && flag.zip_comp_i >= SAM_COMP_FQ00))
-        flag.pair = (flag.pair==PAIR_R1) ? PAIR_R2 : PAIR_R1;
+        flag.pair = IS_R1 ? PAIR_R2 : PAIR_R1;
 
     zip_one_file (txt_file->basename, is_last_user_txt_file);
 

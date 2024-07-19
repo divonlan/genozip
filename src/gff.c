@@ -109,18 +109,18 @@ bool gff_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
 }
 
 // search for last newline, and also search for embedded FASTA
-int32_t gff_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
+int32_t gff_unconsumed (VBlockP vb, uint32_t first_i)
 {
-    ASSERT (*i >= 0 && *i < Ltxt, "*i=%d is ∉ [0,%u]", *i, Ltxt);
+    ASSERTNOTZERO (Ltxt);
 
-    int32_t final_i = *i;
+    int32_t last_i = Ltxt - 1;
     int32_t last_newline = -1;
 
-    for (int32_t j=first_i; j <= final_i; j++)
+    for (int32_t j=first_i; j <= last_i; j++)
         if (*Btxt (j) == '\n') {
             last_newline = j;
 
-            if (j < final_i && *Btxt (j+1) == '>') {
+            if (j < last_i && *Btxt (j+1) == '>') {
                 if (!segconf.running) {
                     // note: we don't run segconf on an embedded FASTA - we set the values here instead
                     segconf.has_embedded_fasta = true;
@@ -132,15 +132,11 @@ int32_t gff_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
             }
         }
 
-    if (last_newline != -1) {
-        *i = last_newline;
+    if (last_newline != -1) 
         return Ltxt-1 - last_newline;
-    }
 
-    else { // no newline found
-        *i = (int32_t)first_i - 1;
+    else  // no newline found
         return -1; // cannot find \n in the data starting first_i
-    }
 }
 
 // called from seg_all_data_lines

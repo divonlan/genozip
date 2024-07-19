@@ -594,7 +594,7 @@ int32_t bam_is_header_done (bool is_eof)
 
         if (is_sam (STRb(evb->txt_data), NULL)) {
             txt_file->data_type = z_file->data_type = DT_SAM;
-            txt_file->source_codec = txt_file->codec; // not CODEC_BAM anymore
+            txt_file->src_codec = txt_file->effective_codec; // not CODEC_BAM anymore
             z_file->z_flags.txt_is_bin = false;
             return HEADER_DATA_TYPE_CHANGED;
         }
@@ -636,7 +636,7 @@ static inline void sam_header_add_PG (BufferP txtheader_buf)
 
     // the command line length is unbound, careful not to put it in a bufprintf
     bufprintf (txtheader_buf->vb, txtheader_buf, "@PG\tID:genozip-%u\tPN:genozip\tDS:%s\tVN:%s\tCL:", 
-               getpid(), GENOZIP_URL, GENOZIP_CODE_VERSION);
+               getpid(), GENOZIP_URL, code_version().s);
     buf_append_string (txtheader_buf->vb, txtheader_buf, flags_command_line());
     buf_append_string (txtheader_buf->vb, txtheader_buf, "\n");
 }

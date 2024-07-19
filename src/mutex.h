@@ -18,6 +18,7 @@
 #endif
 #endif
 #include "buffer.h"
+#include "profiler.h" // for TimeSpecType
 
 // -----------
 // mutex stuff
@@ -116,3 +117,16 @@ extern void serializer_lock_do (SerializerP ser, VBIType vb_i, FUNCLINE);
                           ASSERT (!ret, "pthread_spin_lock failed: %s", strerror (ret)); })
 #endif
 
+// --------------------------------------------
+// support for pthread_join bottleneck analysis
+// --------------------------------------------
+
+extern void thread_join_lock_point (rom thread_name, TimeSpecType profiler_timer, FUNCLINE);
+
+#define PTHREAD_JOIN(thread, thread_entry_point) ({                                 \
+    START_TIMER;                                                                    \
+    int err = pthread_join ((thread), NULL);                                        \
+    if (flag.show_time_comp_i != COMP_NONE)                                         \
+        thread_join_lock_point ((thread_entry_point), profiler_timer, __FUNCLINE);  \
+    err;                                                                            \
+})

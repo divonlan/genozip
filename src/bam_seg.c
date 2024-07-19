@@ -65,14 +65,14 @@ static int32_t bam_unconsumed_scan_forwards (VBlockP vb)
         return aln_size - (i - txt_len); // we pass the data of the final, partial, alignment to the next VB
 }
 
-static int32_t bam_unconsumed_scan_backwards (VBlockP vb, uint32_t first_i, int32_t *i)
+static int32_t bam_unconsumed_scan_backwards (VBlockP vb, uint32_t first_i)
 {
-    *i = MIN_(*i, Ltxt - sizeof(BAMAlignmentFixed));
+    int32_t last_i = Ltxt - sizeof(BAMAlignmentFixed);
 
     // find the first alignment in the data (going backwards) that is entirely in the data - 
     // we identify and alignment by l_read_name and read_name
-    for (; *i >= (int32_t)first_i; (*i)--) {
-        const BAMAlignmentFixed *aln = (const BAMAlignmentFixed *)Btxt (*i);
+    for (; last_i >= (int32_t)first_i; (last_i)--) {
+        const BAMAlignmentFixed *aln = (const BAMAlignmentFixed *)Btxt (last_i);
 
         uint32_t block_size = LTEN32 (aln->block_size);
         if (block_size > 100000000) continue; // quick short-circuit - more than 100M for one alignment - clearly wrong
@@ -81,7 +81,7 @@ static int32_t bam_unconsumed_scan_backwards (VBlockP vb, uint32_t first_i, int3
         uint16_t n_cigar_op = LTEN16 (aln->n_cigar_op);
 
         // test to see block_size makes sense
-        if ((uint64_t)*i + (uint64_t)block_size + 4 > (uint64_t)vb->txt_data.len || // 64 bit arith to catch block_size=-1 that will overflow in 32b
+        if ((uint64_t)last_i + (uint64_t)block_size + 4 > (uint64_t)vb->txt_data.len || // 64 bit arith to catch block_size=-1 that will overflow in 32b
             block_size + 4 < sizeof (BAMAlignmentFixed) + 4*n_cigar_op  + aln->l_read_name + l_seq + (l_seq+1)/2)
             continue;
 
@@ -122,7 +122,7 @@ static int32_t bam_unconsumed_scan_backwards (VBlockP vb, uint32_t first_i, int3
         // agree with our formula. see comment in bam_reg2bin
 
         // all tests passed - this is indeed an alignment
-        return Ltxt - (*i + LTEN32 (aln->block_size) + 4); // everything after this alignment is "unconsumed"
+        return Ltxt - (last_i + LTEN32 (aln->block_size) + 4); // everything after this alignment is "unconsumed"
     }
 
     return -1; // we can't find any alignment - need more data (lower first_i)    
@@ -130,9 +130,9 @@ static int32_t bam_unconsumed_scan_backwards (VBlockP vb, uint32_t first_i, int3
 
 // returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
 // if first_i > 0, we attempt to heuristically detect the start of a BAM alignment.
-int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
+int32_t bam_unconsumed (VBlockP vb, uint32_t first_i)
 {
-    ASSERT (*i >= 0 && *i < Ltxt, "*i=%d is ∉ [0,%u]", *i, Ltxt);
+    ASSERTNOTZERO (Ltxt);
 
     int32_t result;
 
@@ -142,7 +142,7 @@ int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 
     // stringent -either CIGAR needs to match seq_len, or qname needs to match flavor
     else
-        result = bam_unconsumed_scan_backwards (vb, first_i, i); 
+        result = bam_unconsumed_scan_backwards (vb, first_i); 
 
     return result; // if -1 - we will be called again with more data
 }
@@ -218,7 +218,7 @@ void bam_seg_BIN (VBlockSAMP vb, ZipDataLineSAMP dl, uint16_t bin /* used only i
 
 static inline void bam_seg_ref_id (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, int32_t ref_id, int32_t compare_to_ref_i)
 {
-    ASSERT (ref_id == -1 || (sam_hdr_contigs && IN_RANGE (ref_id, 0, sam_hdr_contigs->contigs.len32-1)), 
+    ASSERT (ref_id == -1 || (sam_hdr_contigs && IN_RANGE (ref_id, 0, sam_hdr_contigs->contigs.len32)), 
             "%s: encountered %s.ref_id=%d but header has only %u contigs%s", 
             LN_NAME, CTX(did_i)->tag_name, ref_id, sam_hdr_contigs ? sam_hdr_contigs->contigs.len32 : 0,
             MP(LONGRANGER) ? ". This is a known longranger bug (samtools won't accept this file either)." : "");
@@ -288,16 +288,16 @@ void bam_get_one_aux (VBlockSAMP vb, int16_t idx,
 
     switch (*type) {
         // in case of an numeric type, we pass the value as a ValueType
-        case 'i': *value_len = 4; numeric->i     = (int32_t)LTEN32 (GET_UINT32 (aux)); break;
-        case 'I': *value_len = 4; numeric->i     = LTEN32 (GET_UINT32 (aux));          break; 
-        case 'f': *value_len = 4; numeric->f32.f = LTEN32F (GET_FLOAT32 (aux));        break; // note: this DOES NOT result in the correct value in last_value.f
-        case 's': *value_len = 2; numeric->i     = (int16_t)LTEN16 (GET_UINT16 (aux)); break;
-        case 'S': *value_len = 2; numeric->i     = LTEN16 (GET_UINT16 (aux));          break;
-        case 'c': *value_len = 1; numeric->i     = (int8_t)*aux;                       break;
-        case 'C': *value_len = 1; numeric->i     = (uint8_t)*aux;                      break;
+        case 'i': *value_len = 4; numeric->i     = (int32_t)GET_UINT32 (aux); break;
+        case 'I': *value_len = 4; numeric->i     = GET_UINT32 (aux);          break; 
+        case 'f': *value_len = 4; numeric->f32.f = GET_FLOAT32 (aux);         break; // note: this DOES NOT result in the correct value in last_value.f
+        case 's': *value_len = 2; numeric->i     = (int16_t)GET_UINT16 (aux); break;
+        case 'S': *value_len = 2; numeric->i     = GET_UINT16 (aux);          break;
+        case 'c': *value_len = 1; numeric->i     = (int8_t)*aux;              break;
+        case 'C': *value_len = 1; numeric->i     = (uint8_t)*aux;             break;
         case 'Z': 
-        case 'H': *value_len = vb->aux_lens[idx] - 4; *value = aux;                    break; // value_len excludes the terminating \0
-        case 'A': *value_len = 1; *value = aux;                                        break;
+        case 'H': *value_len = vb->aux_lens[idx] - 4; *value = aux;           break; // value_len excludes the terminating \0
+        case 'A': *value_len = 1; *value = aux;                               break;
 
         // in case of a numerical value we pass the data as is, in machine endianity
         case 'B':

@@ -21,6 +21,7 @@
 #include "crypt.h"
 #include "tar.h"
 #include "contigs.h"
+#include "mgzip.h"
 
 #define SHORT_HEADER "NAME                   GENOZIP      %       TXT      %   RATIO\n"
 
@@ -262,13 +263,15 @@ static void stats_output_file_metadata (void)
     uint32_t num_used_ctxs=0;
     for_zctx_that (zctx->nodes.len || zctx->txt_len) num_used_ctxs++;
 
-    #define REPORT_VBs ({ \
-        bufprintf (evb, &stats, "%ss: %s   Contexts: %u   Vblocks: %u x %s   Sections: %u\n",  \
-                   DTPZ (line_name), str_int_commas (z_file->num_lines).s, num_used_ctxs, \
-                   z_file->num_vbs, (segconf.vb_size % (1 MB) != 0) ? str_int_commas (segconf.vb_size).s : str_size (segconf.vb_size).s, z_file->section_list_buf.len32); })
+    #define REPORT_VBs ({                                                                                   \
+        bufprintf (evb, &stats, "%ss: %s   Contexts: %u   Vblocks: %u x %s   Sections: %u\n",               \
+                   DTPZ (line_name), str_int_commas (z_file->num_lines).s, num_used_ctxs,                   \
+                   z_file->num_vbs, TXT_IS_VB_SIZE_BY_MGZIP         ? "(var-length)"                        \
+                                  : (segconf.vb_size % (1 MB) != 0) ? str_int_commas (segconf.vb_size).s    \
+                                  :                                   str_size (segconf.vb_size).s, z_file->section_list_buf.len32); })
 
-    #define REPORT_QNAME \
-        FEATURE (z_file->num_lines, "Read name style: %s%s", "Qname=%s%s", \
+    #define REPORT_QNAME                                                                                    \
+        FEATURE (z_file->num_lines, "Read name style: %s%s", "Qname=%s%s",                                  \
                  segconf_qf_name (0), cond_str(segconf.qname_flavor[1], "+", segconf_qf_name(1))) // no space surrounding the '+' as expected by batch_qname_flavors
 
     switch (z_file->data_type) {
@@ -519,7 +522,7 @@ static void stats_output_file_metadata (void)
         bufprintf (evb, &stats, "Fields optimized: %s\n", segconf_get_optimizations().s);
 
     bufprintf (evb, &stats, "Genozip version: %s %s\nDate compressed: %s\n", 
-               GENOZIP_CODE_VERSION, get_distribution(), str_time().s);
+               code_version().s, get_distribution(), str_time().s);
 
     bufprint0 (evb, &stats, "Command line: ");
     buf_append_string (evb, &stats, flags_command_line()); // careful not to use bufprintf with command_line as it can exceed the maximum length in bufprintf
@@ -631,10 +634,10 @@ static void stats_output_stats (StatsByLine *s, unsigned num_stats, float src_co
     if (src_comp_ratio != 1 && flag.show_stats_comp_i == COMP_NONE) {
 
         // display codec name if same source codec for all components, or "DISK_SIZE" if not
-        rom source_code_name = codec_name (z_file->comp_source_codec[0]);
+        rom source_code_name = codec_name (z_file->comp_src_codec[0]);
 
         for (CompIType comp_i=1; comp_i < z_file->num_components; comp_i++)
-            if (z_file->comp_source_codec[comp_i] != z_file->comp_source_codec[0])
+            if (z_file->comp_src_codec[comp_i] != z_file->comp_src_codec[0])
                 source_code_name = "DISK_SIZE";
 
         bufprintf (evb, &stats, 
@@ -730,8 +733,8 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
 
         s->txt_len    = ST(TXT_HEADER) ? z_file->header_size : 0; // note: excluding generated headers for DVCF
         s->type       = (ST(REFERENCE) || ST(REF_IS_SET) || ST(REF_CONTIGS) || ST(CHROM2REF_MAP) || ST(REF_IUPACS)) ? "SEQUENCE" 
-                      : (ST(RANDOM_ACCESS) || ST(REF_RAND_ACC))                                                                   ? "RandomAccessIndex"
-                      :                                                                                                                     "Other"; // note: some contexts appear as "Other" in --stats, but in --STATS their parent is themself, not "Other"
+                      : (ST(RANDOM_ACCESS) || ST(REF_RAND_ACC))                                                     ? "RandomAccessIndex"
+                      :                                                                                               "Other"; // note: some contexts appear as "Other" in --stats, but in --STATS their parent is themself, not "Other"
         s->my_did_i   = s->st_did_i = DID_NONE;
         s->did_i.s[0] = s->words.s[0] = s->hash.s[0] = s->uncomp_dict.s[0] = s->comp_dict.s[0] = '-';
         s->pc_of_txt  = txt_size ? 100.0 * (float)s->txt_len / (float)txt_size : 0;
@@ -831,11 +834,10 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
                                ST_NAME (SEC_REF_CONTIGS), ST_NAME (SEC_CHROM2REF_MAP),
                                ST_NAME (SEC_REF_IUPACS));
 
-    stats_consolidate_non_ctx (sbl, sbl_buf.len32, "Other", 22 + (DTPZ(txt_header_required) == HDR_NONE), "E1L", "E2L", "EOL", 
-                               "SAMPLES", "AUX", TOPLEVEL, "ToPLUFT", "TOP2BAM", "TOP2FQ", "TOP2NONE", "TOP2FQEX", "TOP2VCF", "TOP2HASH", 
-                               "LINEMETA", "CONTIG", "COORDS", "SAG", "SAALN",
+    stats_consolidate_non_ctx (sbl, sbl_buf.len32, "Other", 17 + (DTPZ(txt_header_required) == HDR_NONE), "E1L", "E2L", "EOL", 
+                               "SAMPLES", "AUX", TOPLEVEL, "TOP2BAM", "TOP2NONE", "TOP2VCF", "LINEMETA", "CONTIG", "SAG", "SAALN",
                                ST_NAME (SEC_DICT_ID_ALIASES), ST_NAME (SEC_RECON_PLAN),
-                               ST_NAME (SEC_VB_HEADER), ST_NAME (SEC_BGZF), ST_NAME(SEC_TXT_HEADER)/*must be last*/);
+                               ST_NAME (SEC_VB_HEADER), ST_NAME (SEC_MGZIP), ST_NAME(SEC_TXT_HEADER)/*must be last*/);
         
     stats_consolidate_non_ctx (sbl, sbl_buf.len32, "RandomAccessIndex", 2, ST_NAME (SEC_RANDOM_ACCESS), ST_NAME (SEC_REF_RAND_ACC));
     

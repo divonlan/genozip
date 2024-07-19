@@ -7,8 +7,9 @@
 //   and subject to penalties specified in the license.
 
 #include "genozip.h"
+#include "version.h"
 
 rom get_distribution (void)
 {
-    return DISTRIBUTION;
+    return version_is_devel() ? "devel" : DISTRIBUTION;
 }

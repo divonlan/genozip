@@ -20,5 +20,5 @@ extern int64_t txtheader_zip_read_and_compress (int64_t *txt_header_offset, Comp
 //----------
 
 extern void txtheader_piz_read_and_reconstruct (Section txt_header_sec);
-extern StrTextLong txtheader_get_txt_filename_from_section (void);
+extern StrTextLong txtheader_get_txt_filename_from_section (CompIType comp_i);
 

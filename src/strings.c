@@ -59,6 +59,9 @@ StrText char_to_printable (char c)
         case '\t'           : return (StrText) { .s = "\\t"  };
         case '\n'           : return (StrText) { .s = "\\n"  };
         case '\r'           : return (StrText) { .s = "\\r"  };
+        case '\b'           : return (StrText) { .s = "\\b"  };
+        case 0 ... 7        : return (StrText) { .s[0] = '\\', .s[1] = '0'+c };
+        
         default             : { // unprintable - output eg \xf 
             StrText p = {};
             snprintf (p.s, sizeof(p.s), "\\x%x", (uint8_t)c);
@@ -82,7 +85,10 @@ uint32_t str_to_printable (STRp(in), char *out, int out_len)
             case '\b'    : *out++ = '\\'; *out++ = 'b' ; out_len -= 2; break;
             case '\\'    : *out++ = '\\'; *out++ = '\\'; out_len -= 2; break;
             case 0 ... 7 : *out++ = '\\'; *out++ = '0' + in[i]; out_len -= 2; break;
-            default      : *out++ = '\\'; *out++ = 'x' ; *out++ = NUM2HEXDIGIT(in[i] >> 4), *out++ = NUM2HEXDIGIT(in[i] & 0xf); out_len -= 4; 
+            default      : *out++ = '\\'; *out++ = 'x' ; 
+                           *out++ = NUM2HEXDIGIT((uint8_t)in[i] >> 4); 
+                           *out++ = NUM2HEXDIGIT((uint8_t)in[i] & 0xf); 
+                           out_len -= 4; 
         }
     
     *out = 0;
@@ -289,7 +295,7 @@ bool str_get_int_range##func_num (rom str, uint32_t str_len, int64_t min_val, in
     if (!str_get_int (str, str_len ? str_len : strlen (str), &value64)) return false; \
     if (value) *value = (type)value64;                                                \
                                                                                       \
-    return IN_RANGE (value64, min_val, max_val);                                      \
+    return IN_RANGX (value64, min_val, max_val);                                      \
 }
 str_get_int_range_type(8,uint8_t)   // unsigned
 str_get_int_range_type(16,uint16_t) // unsigned
@@ -937,7 +943,7 @@ uint32_t str_remove_whitespace (STRp(in), bool also_uppercase, char *out)
 }
 
 // in-place removal of flanking whitespace from a null-terminated string
-void str_trim (STRe(str))
+void str_trim (qSTRp(str))
 {
     // remove leading whitespace
     int i=0; for (; i < *str_len; i++)
@@ -1198,8 +1204,10 @@ void *memrchr (const void *s, int c/*interpreted as unsigned char*/, size_t n)
 }
 #endif
 
-char *memchr2 (rom p, char ch1, char ch2, uint32_t count)
+char *memchr2 (const void *p_, char ch1, char ch2, uint32_t count)
 {
+    rom p = (rom)p_;
+
     for (rom after = p + count; p < after; p++)
         if (*p == ch1 || *p == ch2) return (char *)p;
 

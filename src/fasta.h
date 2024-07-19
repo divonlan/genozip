@@ -51,7 +51,7 @@
 // -----------------------------------------------------------------------------------------------------------
 
 // Txtfile stuff
-extern int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
+extern int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i);
 extern bool is_fasta (STRp(header), bool *need_more);
 
 // ZIP Stuff

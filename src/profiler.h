@@ -18,7 +18,7 @@
         file_open_z, file_close, buf_low_level_free, buflist_find_buf, buflist_sort, buflist_test_overflows_do,\
         read, compute, compressor_bz2, compressor_lzma, compressor_bsc, \
         write, write_fg, write_bg, zriter_write, piz_read_one_vb, vb_get_vb,\
-        compressor_domq, compressor_actg, bgz_uncompress_during_read, igzip_uncompress_during_read, \
+        compressor_domq, compressor_actg, mgzip_uncompress_during_read, igzip_uncompress_during_read, \
         piz_get_line_subfields, b250_zip_generate, zip_generate_local, zip_compress_ctxs, ctx_merge_in_vb_ctx, wait_for_merge,\
         zfile_uncompress_section, codec_assign_best_codec, compressor_pbwt, compressor_longr, compressor_homp, compressor_t0, \
         compressor_rans, compressor_arith, compressor_normq, compressor_pacb, compressor_smux, compressor_oq, \
@@ -27,11 +27,11 @@
         reconstruct_vb, buf_alloc_main, buf_alloc_compute, buf_destroy_do_do_main, buf_destroy_do_do_compute, buf_overlay_do, \
         buf_free_main, buf_free_compute, buflist_add_buf, buflist_remove_buf, \
         dispatcher_recycle_vbs, sections_create_index, \
-        txtfile_read_header, txtfile_read_vblock, txtfile_get_unconsumed_callback, fastq_txtfile_have_enough_lines, \
-        txtfile_read_block_bgz, txtfile_read_block_zlib, txtfile_read_block_igzip, txtfile_read_block_bz2, \
-        bgzf_io_thread, bgzf_compute_thread, bgzf_writer_thread, bgz_uncompress_vb, bgz_copy_unconsumed_blocks, bgzf_read_block, \
+        txtfile_discover_specific_gz, txtfile_read_header, txtfile_read_vblock, txtfile_get_unconsumed_callback, fastq_txtfile_sync_to_R1_by_num_lines, \
+        txtfile_read_block_mgzip, txtfile_read_block_zlib, txtfile_read_block_igzip, txtfile_read_block_bz2, \
+        bgzf_io_thread, bgzf_compute_thread, bgzf_writer_thread, mgzip_uncompress_vb, mgzip_copy_unconsumed_blocks, mgzip_read_block_with_bsize, \
         bgzf_compress_one_block, bgzf_uncompress_one_prescribed_block, \
-        gzil_read_block, \
+        mgzip_read_block_no_bsize, \
         zip_modify, vcf_zip_modify, vcf_optimize_samples, vcf_optimize_QUAL, vcf_optimize_INFO, vcf_convert_probabilites_to_phred, \
         vcf_convert_likelihoods_to_phred, vcf_phred_optimize, optimize_float_3_sig_dig, \
         seg_all_data_lines, seg_get_next_line, seg_get_next_item, seg_initialize,\
@@ -48,7 +48,7 @@
         sam_deep_merge, sam_piz_con_item_cb, sam_piz_deep_compress, sam_piz_deep_add_qname, sam_piz_deep_add_seq, sam_piz_deep_add_qual,\
         sam_piz_deep_finalize_ents, sam_piz_deep_grab_deep_ents, \
         scan_index_qnames_preprocessing, sam_piz_sam2fastq_QUAL, sam_piz_sam2bam_QUAL,\
-        fastq_read_pair_1_data, piz_read_all_ctxs, fastq_seg_get_lines, fastq_seg_SEQ, fastq_seg_QUAL, \
+        fastq_read_R1_data, piz_read_all_ctxs, fastq_seg_get_lines, fastq_seg_SEQ, fastq_seg_QUAL, \
         fastq_seg_deep, fastq_deep_seg_find_subseq, fastq_seg_DESC, fastq_seg_saux, fastq_seg_deep_consume_unique_matching_ent,\
         ref_initialize_ranges,\
         fastq_special_set_deep, fastq_special_deep_copy_QNAME, fastq_special_deep_copy_SEQ, fastq_special_deep_copy_QUAL, fastq_special_monochar_QUAL, \
@@ -70,7 +70,8 @@
         random_access_finalize_entries, random_access_compress, ctx_compress_counts, zfile_compress_genozip_header,\
         ref_compress_ref, ref_compress_one_range, ref_copy_compressed_sections_from_reference_file,\
         piz_main_loop_idle, zip_main_loop_idle, zip_free_undeeded_zctx_bufs_after_seg, \
-        gencomp_absorb_add_to_queue, gencomp_flush, gencomp_offload_DEPN_to_disk, gencomp_reread_lines_as_prescribed, \
+        gencomp_absorb_add_to_queue, gencomp_flush, gencomp_offload_DEPN_to_disk, gencomp_reread_lines_as_prescribed, gencomp_do_offload_write, \
+        compress_depn_buf, sam_zip_gc_after_compute_main, \
         tmp1, tmp2, tmp3, tmp4, tmp5, \
         fields[MAX_DICTS]/* ZIP: compression time (all ctxs); PIZ: recon time (fields only). must be last for profiler_add. */ \
 

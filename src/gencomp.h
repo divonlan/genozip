@@ -14,7 +14,7 @@
 
 typedef union { // 64 bit
     struct {             // used if file codec is BGZF
-        uint64_t bb_i    : 48; // index into txt_file->bgzf_isizes if beginning of line
+        uint64_t bb_i    : 48; // index into txt_file->mgzip_isizes if beginning of line
         uint64_t uoffset : 16; // index into uncompressed BGZF block of beginning of line
     };
     uint64_t offset;     // offset into txt_file of beginning of line - used if file codec is NONE

@@ -24,6 +24,28 @@ static pthread_t thread_id;
 static char redirect_url[128];
 static StreamP github_stream = NULL;
 
+// we are running in development - consider version to be next minor version
+bool version_is_devel (void)
+{
+    rom exe = arch_get_executable().s;
+    int exe_len = strlen (exe);
+
+    static rom devel_paths[] = { 
+    #ifdef _WIN32
+        "C:\\Users\\divon\\genozip\\", 
+    #elif defined __linux__        
+        "/mnt/c/Users/divon/", 
+    #elif defined __APPLE__
+        "/Users/divon/genozip/"
+    #endif
+    };
+
+    for (int i=0; i < ARRAY_LEN(devel_paths); i++)
+        if (str_isprefix_(STRa(exe), devel_paths[i], strlen(devel_paths[i]))) return true;
+
+    return false;
+}
+
 // version of the genozip executable running
 int code_version_major (void)
 {
@@ -31,9 +53,17 @@ int code_version_major (void)
 }
 
 int code_version_minor (void)
+{   
+    return atoi (strrchr (GENOZIP_CODE_VERSION, '.') + 1) + 
+           version_is_devel(); //  In development - we are running one minor version higher than GENOZIP_CODE_VERSION: needed so VER2() works in PIZ
+}
+
+StrText code_version (void)
 {
-    rom ver = GENOZIP_CODE_VERSION;
-    return atoi (strrchr (ver, '.') + 1);
+    StrText s;
+    snprintf (s.s, sizeof(s), "%u.0.%u", code_version_major(), code_version_minor());
+    
+    return s;
 }
 
 StrText version_str (void)
@@ -41,11 +71,11 @@ StrText version_str (void)
     StrText s={};
 
     if (IS_ZIP || !z_file)  
-        snprintf (s.s, sizeof (s.s), "version=%s", GENOZIP_CODE_VERSION);
+        snprintf (s.s, sizeof (s.s), "version=%.16s", code_version().s);
     else if (!VER2(15,28))
-        snprintf (s.s, sizeof (s.s), "code_version=%s file_version=%u", GENOZIP_CODE_VERSION, z_file->genozip_version);
+        snprintf (s.s, sizeof (s.s), "code_version=%.16s file_version=%u", code_version().s, z_file->genozip_version);
     else        
-        snprintf (s.s, sizeof (s.s), "code_version=%s file_version=%u.0.%u", GENOZIP_CODE_VERSION, z_file->genozip_version, z_file->genozip_minor_ver);
+        snprintf (s.s, sizeof (s.s), "code_version=%.16s file_version=%u.0.%u", code_version().s, z_file->genozip_version, z_file->genozip_minor_ver);
 
     return s;
 }
@@ -71,11 +101,10 @@ static void *version_background_test_for_newer_do (void *unused)
             if (flag.debug_upgrade)
                 iprintf ("\ndebug-upgrade: latest_version=%s\n", latest_version);
 
-            char copy[100];
-            strcpy (copy, GENOZIP_CODE_VERSION); // bc str_split_ints doesn't work on string literals
+            StrText code_ver = code_version();
 
             str_split_ints (latest_version, strlen (latest_version), 3, '.', latest, true);
-            str_split_ints (copy, strlen (copy), 3, '.', this, true);
+            str_split_ints (code_ver.s, strlen (code_ver.s), 3, '.', this, true);
 
             if (!flag.debug_latest && n_latests == 3 && n_thiss == 3 && latests[0] == thiss[0] && latests[2] <= thiss[2])
                 latest_version = NULL; // same or newer than current version
@@ -237,7 +266,7 @@ void version_print_notice_if_has_newer (void)
     // case: Genozip finished its work while thread is still running - kill it
     if (__atomic_load_n (&thread_running, __ATOMIC_ACQUIRE)) {
         pthread_cancel (thread_id);
-        pthread_join (thread_id, NULL); // wait for cancelation to complete
+        PTHREAD_JOIN (thread_id, "version_background_test_for_newer_do"); // wait for cancelation to complete
 
         if (flag.debug_upgrade)
             iprint0 ("debug-upgrade: upgrade thread canceled\n");
@@ -254,7 +283,7 @@ void version_print_notice_if_has_newer (void)
             iprint0 ("debug-upgrade: upgrade thread completed\n");
 
         iprintf ("\nA newer & better version of Genozip is available - version %s. You are currently running version %s\n", 
-                 latest_version, GENOZIP_CODE_VERSION);
+                 latest_version, code_version().s);
 
         if (is_info_stream_terminal) {
 #ifdef _WIN32

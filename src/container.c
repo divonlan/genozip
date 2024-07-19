@@ -73,10 +73,10 @@ WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con,
     container_prepare_snip (con, STRa(prefixes), qSTRa(snip));
 
     if (flag.show_containers) { 
-        iprintf ("%s%sVB=%u Line=%d Ctx=%u:%s Repeats=%u RepSep=%u,%u Items=", 
+        iprintf ("%s%s%s Ctx=%u:%s Repeats=%u RepSep=%u,%u Items=", 
                  vb->preprocessing    ? "preproc " : "",
                  vb->peek_stack_level ? "peeking " : "",
-                 vb->vblock_i, vb->line_i, ctx->did_i, ctx->tag_name, con->repeats, con->repsep[0], con->repsep[1]);
+                 LN_NAME, ctx->did_i, ctx->tag_name, con->repeats, con->repsep[0], con->repsep[1]);
         for_con (con) 
             if (item->dict_id.num) 
                 iprintf ("%s(%u) ", dis_dict_id (item->dict_id).s, ctx->did_i); 
@@ -315,10 +315,10 @@ static inline void container_toplevel_filter (VBlockP vb, uint32_t rep_i, rom re
         vb->num_nondrop_lines++;
         
     if (show_non_item && vb->drop_curr_line) // show container reconstruction 
-        iprintf ("%s%sVB=%u Line=%d dropped due to \"%s\"\n", 
+        iprintf ("%s%s%s dropped due to \"%s\"\n", 
                     vb->preprocessing    ? "preproc " : "", 
                     vb->peek_stack_level ? "peeking " : "",
-                    vb->vblock_i, vb->line_i, vb->drop_curr_line);
+                    LN_NAME, vb->drop_curr_line);
 }
 
 CONTAINER_FILTER_FUNC (default_piz_filter)
@@ -472,10 +472,10 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
     bool show_non_item = vb->show_containers && (!flag.dict_id_show_containers.num || dict_id_typeless (ctx->dict_id).num == flag.dict_id_show_containers.num);
 
     if (show_non_item) // show container reconstruction (note: before container_reconstruct_prefix which modifies prefixes)
-        iprintf ("%s%sVB=%u Line=%d Container(%s)=%s\n", 
+        iprintf ("%s%s%s Container(%s)=%s\n", 
                  vb->preprocessing    ? "preproc " : "", 
                  vb->peek_stack_level ? "peeking " : "",
-                 vb->vblock_i, vb->line_i, dis_dict_id (ctx->dict_id).s, 
+                 LN_NAME, dis_dict_id (ctx->dict_id).s, 
                  container_to_json (con, prefixes_len ? prefixes-1 : NULL, prefixes_len ? prefixes_len+1 : 0).s); // +1 to add back initial CON_PX_SEP removed by container_retrieve
 
     // container wide prefix - it will be missing if Container has no prefixes, or empty if it has only items prefixes
@@ -536,10 +536,10 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
         unsigned num_preceding_seps = 0;
 
         if (show_non_item) // show container reconstruction 
-            iprintf ("%s%sVB=%u Line=%d Repeat=%u LastRepeat=%u %s\n", 
+            iprintf ("%s%s%s Repeat=%u LastRepeat=%u %s\n", 
                      vb->preprocessing    ? "preproc " : "", 
                      vb->peek_stack_level ? "peeking " : "",
-                     vb->vblock_i, vb->line_i, rep_i, con->repeats-1, ctx->tag_name);
+                     VB_NAME, rep_i, con->repeats-1, ctx->tag_name);
 
         for (unsigned item_i=0; item_i < num_items; item_i++) {
             const ContainerItem *item = &con->items[item_i];
@@ -569,10 +569,10 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
             }
 
             if (show_item) 
-                iprintf ("%s%sVB=%u Line=%d Repeat=%u %s(%u)->%s(%u) trans_id=%u txt_data.len=%"PRIu64" (0x%04"PRIx64") reconstruct_prefix=%d reconstruct_value=%d : ", 
+                iprintf ("%s%s%s Repeat=%u %s(%u)->%s(%u) trans_id=%u txt_data.len=%"PRIu64" (0x%04"PRIx64") reconstruct_prefix=%d reconstruct_value=%d : ", 
                          vb->preprocessing    ? "preproc " : "",
                          vb->peek_stack_level ? "peeking " : "",
-                         vb->vblock_i, vb->line_i, rep_i, ctx->tag_name, ctx->did_i, item_ctx->tag_name, item_ctx->did_i,
+                         LN_NAME, rep_i, ctx->tag_name, ctx->did_i, item_ctx->tag_name, item_ctx->did_i,
                          trans_item ? item->translator : 0, 
                          vb->vb_position_txt_file + Ltxt, vb->vb_position_txt_file + Ltxt,
                          reconstruct, reconstruct && !trans_nor);

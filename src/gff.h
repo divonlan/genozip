@@ -165,7 +165,7 @@
 extern void gff_zip_initialize (void);
 extern bool is_gff (STRp(header), bool *need_more);
 extern bool gff_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags);
-extern int32_t gff_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
+extern int32_t gff_unconsumed (VBlockP vb, uint32_t first_i);
 extern rom gff_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
 extern void gff_seg_initialize (VBlockP vb_);
 extern void gff_segconf_finalize (VBlockP vb);

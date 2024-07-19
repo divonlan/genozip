@@ -40,7 +40,9 @@
         "endianness.h": "c",
         "version.h": "c",
         "libgen.h": "c",
-        "compare": "c"
+        "compare": "c",
+        "progress.h": "c",
+        "pthread.h": "c"
     },
     "cmake.sourceDirectory": "C:/Users/divon/genozip/src/onion",
     "cmake.configureOnOpen": false

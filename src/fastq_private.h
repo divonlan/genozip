@@ -36,12 +36,14 @@ typedef struct VBlockFASTQ {
     // current line
     uint32_t sam_seq_offset;     // PIZ Deep: offset of start of SEQ / QUAL copied from SAM with the FASTQ SEQ / QUAL
 
-    // pairing stuff - used if we are the 2nd file in the pair 
-    uint32_t pair_vb_i;          // ZIP/PIZ: in R2: the equivalent vb_i in the R1 (vb_i >= 1), or 0 if this is R1
-    uint32_t pair_num_lines;     // R2: number of reads (FASTQ lines) in the equivalent vb in the R1
-    uint32_t pair_txt_data_len;  // ZIP R2: populated if flag.debug
+    // data used for segging R2
+    uint32_t R1_vb_i;            // ZIP/PIZ R2: the equivalent vb_i in the R1 (vb_i >= 1)
+    STR (R1_last_qname);         // ZIP R2: pointer into z_file->R1_last_qname: last reversed, nul-terminated canonical qname of the correspondining R1 VB
+    uint32_t R1_num_lines;       // ZIP R2: number of reads (FASTQ lines) in the corresponding R1 vb
+    int32_t R2_lowest_read;      // ZIP: in fastq_unconsumed: lowest/highest index in txt_data of reads that we tested against R1_last_qname
+    int32_t R2_highest_read; 
 
-    uint64_t first_line;         // ZIP: used for optimizing QNAME  
+    uint64_t first_line;         // ZIP R2: used for optimizing QNAME  
 
     bool has_extra;              // ZIP: a VB-private copy of segconf.has_extra
 

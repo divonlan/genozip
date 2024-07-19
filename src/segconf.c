@@ -16,7 +16,7 @@
 #include "strings.h"
 #include "codec.h"
 #include "arch.h"
-#include "bgzf.h"
+#include "mgzip.h"
 #include "tip.h"
 #include "zfile.h"
 #include "zip_dyn_int.h"
@@ -123,7 +123,7 @@ static void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
     segconf.vb_size = curr_vb_size;
 
     if (segconf.vb_size) {
-        // already set from previous components of this z_file - do nothing (in particular, FASTQ PAIR_2 must have the same vb_size as PAIR_1)
+        // already set from previous components of this z_file - do nothing (in particular, FASTQ PAIR_R2 must have the same vb_size as PAIR_R1)
         // note: for 2nd+ components, we may set other aspects of segconf, but not vb_size
     }
 
@@ -139,10 +139,6 @@ static void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
                     flag.vblock, MAX_VBLOCK_MEMORY);
 
             segconf.vb_size = (uint64_t)mem_size_mb MB;
-
-            // we can't use GZIL for tiny VBs
-            if (TXT_IS_GZIL && segconf.vb_size < GZIL_MAX_BLOCK_SIZE)
-                txt_file->codec = CODEC_GZ;  // leave source_code=GZIL for stats
         }
 
         // case: developer option - a number of bytes eg "100000B"
@@ -163,15 +159,12 @@ static void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
     else if (TXT_DT(GNRIC)) 
         segconf.vb_size = VBLOCK_MEMORY_GENERIC;
 
-    // if we failed to calculate an estimated size or file is very small - use default
-    // else if (txtfile_get_seggable_size() < VBLOCK_MEMORY_GENERIC)
-    //     segconf.vb_size = VBLOCK_MEMORY_GENERIC;
-
     else { 
         // count number of contexts used
-        for_ctx_that (ctx->b250.len32 || ctx->local.len32)
-            num_used_contexts++;
-            
+        if (vb) // NULL if --skip-segconf
+            for_ctx_that (ctx->b250.len32 || ctx->local.len32)
+                num_used_contexts++;
+
         uint32_t vcf_samples = TXT_DT(VCF) ? vcf_header_get_num_samples() : 0;
         
         // formula - 1MB for each contexts, 128K for each VCF sample
@@ -260,12 +253,6 @@ bool segconf_is_long_reads(void)
            flag.debug_LONG;
 }
 
-static bool segconf_no_calculate (void)
-{
-    return (Z_DT(FASTQ) && flag.pair == PAIR_R2) || // FASTQ: no recalculating for 2nd pair 
-           ((Z_DT(SAM) || Z_DT(BAM)) && flag.deep && flag.zip_comp_i >= SAM_COMP_FQ01); // --deep: no recalculating for second (or more) FASTQ file
-}
-
 static bool segconf_get_zip_txt_modified (bool provisional)
 {
     ASSERTNOTNULL (z_file);
@@ -285,14 +272,21 @@ static bool segconf_get_zip_txt_modified (bool provisional)
     // note: this flag is also set when the file header indicates that it's a Luft file. See vcf_header_get_dual_coords().
     return (has_optimize && DTPZ(zip_modify))
         || (flag.add_line_numbers && Z_DT(VCF))
+        || (flag.add_seq && Z_DT(SAM))
         || flag.has_head  // --head diagnostic option to compress only a few lines of VB=1
         || flag.has_biopsy_line;    
+}
+
+static bool segconf_skip_segconf (void)
+{
+    return (Z_DT(FASTQ) && flag.pair == PAIR_R2) || // FASTQ: no recalculating for 2nd pair 
+           ((Z_DT(SAM) || Z_DT(BAM)) && flag.deep && flag.zip_comp_i >= SAM_COMP_FQ01); // --deep: no recalculating for second (or more) FASTQ file
 }
 
 // ZIP only: after opening z_file, before reading txt_header and opening txt_file
 void segconf_zip_initialize (void)
 {
-    if (segconf_no_calculate()) return;
+    if (segconf_skip_segconf()) return;
 
     // case: everything but first FASTQ in Deep
     if (!((Z_DT(SAM) || Z_DT(BAM)) && flag.deep && flag.zip_comp_i == SAM_COMP_FQ00))
@@ -364,14 +358,29 @@ static void segconf_show_has (void)
     exit_ok;
 }
 
+// decide between GZIP codecs. if this is GNRIC that changed to FASTQ, we are running discovery again.
+static void segconf_discover_fastq_gz (void)
+{
+    buf_free (txt_file->igzip_state);
+
+    txtfile_discover_specific_gz (txt_file); // sets txt_file->codec and txt_file->effective_codec
+
+    // discard segconf uncompressed data - the discovered codec will uncompress txt_file->gz_data again  
+    txt_file->discover_during_segconf = false;
+    buf_free (txt_file->unconsumed_txt);
+}
+
 // ZIP: Seg a small sample of data of the beginning of the data, to pre-calculate several Seg configuration parameters
 void segconf_calculate (void)
 {
-    // check for components that don't need segconf
-    if (segconf_no_calculate()) goto finalize; 
-    
-    if (TXT_DT(GNRIC) ||    // no need for a segconf test VB in generic files
-        flag.skip_segconf) {  // for use in combination with --biopsy, to biopsy of a defective file
+    // no need to re-calculate segconf if this is R2. We just re-calculate the codecs.
+    if (segconf_skip_segconf()) {
+        if (txt_file->discover_during_segconf)
+            segconf_discover_fastq_gz();
+        goto finalize;
+    }
+
+    if (flag.skip_segconf) {  // for use in combination with --biopsy, to biopsy of a defective file. also implied by --add-seq.
         segconf_set_vb_size (NULL, segconf.vb_size);
         goto finalize;
     }
@@ -381,14 +390,13 @@ void segconf_calculate (void)
     segconf_vb = vb_initialize_nonpool_vb (VB_ID_SEGCONF, txt_file->data_type, "segconf");
     #define vb segconf_vb
 
-    // note: in case of BZ2, needs to be big enough to overcome the block nature of BZ2 (64K block -> 200-800K text) to get a reasonable size estimate
-    uint32_t vb_sizes[] = { 300000, 1500000, 5000000 };
-    
-    for (int s = (txt_file->codec == CODEC_BZ2); s < ARRAY_LEN(vb_sizes) && !Ltxt; s++) {
-        segconf.vb_size = vb_sizes[s];
-        if (TXT_IS_GZIL) segconf.vb_size = ROUNDUP1M (segconf.vb_size);
-        txtfile_read_vblock (vb);
-    }
+    SAVE_FLAGS;
+    flag.show_alleles = flag.show_digest = flag.show_hash = flag.show_reference = false;
+    flag.show_vblocks = NULL;
+    flag.pair = NOT_PAIRED;
+
+    segconf.vb_size = 256 KB; // actual VB size might end up bigger, if this is not enough for a single line
+    txtfile_read_vblock (vb);
 
     if (!Ltxt) {
         // error unless this is a header-only file
@@ -404,13 +412,8 @@ void segconf_calculate (void)
 
     // segment this VB
     ctx_clone (vb);
-
-    SAVE_FLAGS;
-    flag.show_alleles = flag.show_digest = flag.show_hash = flag.show_reference = false;
-    flag.quiet = true;
-    flag.show_vblocks = NULL;
-
-    seg_all_data_lines (vb);
+    
+    uint32_t remaining_txt_len = seg_all_data_lines (vb);
 
     // in segconf, seg_initialize might change the data_type and realloc the segconf vb (eg FASTA->FASTQ)
     vb = vb_get_nonpool_vb (VB_ID_SEGCONF);
@@ -452,7 +455,7 @@ void segconf_calculate (void)
 
     segconf_set_vb_size (vb, save_vb_size);
 
-    segconf.line_len = (vb->lines.len32 ? ((double)Ltxt / (double)vb->lines.len32) : 500) + 0.999; // get average line length (rounded up ; arbitrary 500 if the segconf data ended up not having any lines)
+    segconf.line_len = (vb->lines.len32 ? ((double)(Ltxt - remaining_txt_len) / (double)vb->lines.len32) : 500) + 0.999; // get average line length (rounded up ; arbitrary 500 if the segconf data ended up not having any lines)
 
     // limitations: only pre-defined field
     for (Did did_i=0; did_i < DTF(num_fields); did_i++) {
@@ -465,12 +468,23 @@ void segconf_calculate (void)
             segconf.local_per_line[did_i] = ((float)ctx->local.len32 / (float)vb->lines.len32) * (float)lt_desc[dyn_int_get_ltype(ctx)].width;
     }
 
-    // return the data to txt_file->unconsumed_txt - squeeze it in before the passed-up data
-    buf_insert (evb, txt_file->unconsumed_txt, char, 0, txt_data_copy.data, txt_data_copy.len, "txt_file->unconsumed_txt");
-    buf_destroy (txt_data_copy);
+    if (txt_file->discover_during_segconf) {
+        segconf_discover_fastq_gz();
 
-    if (TXT_IS_BGZF || TXT_IS_GZIL)
-        bgz_return_segconf_blocks (vb); // return BGZF used by the segconf VB to the unconsumed BGZF blocks
+        // note: this warning won't trigger for EMVL bc first gz block is isize=0, and segconf doesn't reach the end of the gz block
+        WARN_IF (flag.vblock && TXT_IS_VB_SIZE_BY_MGZIP && segconf.vb_size < txt_file->max_mgzip_isize, 
+                 "For performance, vblocks might be larger than requested with %s. To override this, use --no-bgzf", OT("vblock", "B"));
+    }
+
+    // return the data to txt_file->unconsumed_txt - squeeze it in before the passed-up data
+    else {
+        buf_insert (evb, txt_file->unconsumed_txt, char, 0, txt_data_copy.data, txt_data_copy.len, "txt_file->unconsumed_txt");
+
+        if (TXT_IS_BGZF) // non-FASTQ or GENERIC-cum-FASTQ
+            mgzip_return_segconf_blocks (vb); // return BGZF used by the segconf VB to the unconsumed BGZF blocks
+    }
+
+    buf_destroy (txt_data_copy);
 
     // in case of generated component data - undo
     vb->gencomp_lines.len = 0;
@@ -495,7 +509,6 @@ done:
 
 finalize: // code to execute even if segconf was skipped
     flag.zip_uncompress_source_during_read = 
-        flag.pair == PAIR_R2  || // if we're reading the 2nd paired file, fastq_txtfile_have_enough_lines needs the whole data
         flag.make_reference   || // unconsumed callback for make-reference needs to inspect the whole data
         flag.biopsy           ||
         flag.zip_lines_counted_at_init_vb; // *_zip_init_vb needs to count lines

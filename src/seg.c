@@ -16,7 +16,7 @@
 #include "codec.h"
 #include "zip.h"
 #include "stats.h"
-#include "bgzf.h"
+#include "mgzip.h"
 #include "dispatcher.h"
 #include "b250.h"
 #include "zip_dyn_int.h"
@@ -1446,7 +1446,7 @@ void zip_modify (VBlockP vb)
             VB_NAME, vb->lines.len, vb->txt_data.len); // 64 bit test in case of memory corruption
 
     // set estimated number of lines
-    vb->lines.len32 = vb->lines.len32  ? vb->lines.len32 // already set? don't change (set in certain cases, e.g. 2nd pair FASTQ, bcl_unconsumed, vcf_zip_add_line_numbers_init_vb...)
+    vb->lines.len32 = IS_R2            ? fastq_get_R1_num_lines (vb)
                     : segconf.line_len ? MAX_(1, Ltxt / segconf.line_len)
                     :                    1;              // eg DT_GNRIC
 
@@ -1471,7 +1471,7 @@ void zip_modify (VBlockP vb)
 
         vb->line_start = BNUMtxt (line);
 
-        // Call optimizer to shorten line (note: line can be shortened, but not extended!)
+        // Call data-specific modifier 
         rom next_line = DTP(zip_modify) (vb, line, remaining_txt_len);
 
         if (flag.biopsy_line.line_i == vb->line_i && flag.biopsy_line.vb_i == vb->vblock_i && !DTP(seg_modifies)) {
@@ -1480,7 +1480,7 @@ void zip_modify (VBlockP vb)
         }
 
         // case: first time for which we can't update in-place: move over to new buffer
-        if (in_place && optimized + vb->optimized_line.len > next_line) {
+        if (in_place && (optimized + vb->optimized_line.len > next_line)) {
             buf_alloc (vb, &vb->optimized_txt_data, 0, vb->txt_data.len * 1.05, char, 0, "optimized_line");
             
             memcpy (B1STc(vb->optimized_txt_data), B1STtxt, BNUMtxt(optimized));
@@ -1538,22 +1538,24 @@ void zip_modify (VBlockP vb)
 }
 
 // split each lines in this VB to its components
-void seg_all_data_lines (VBlockP vb)
+uint32_t seg_all_data_lines (VBlockP vb)
 {
     START_TIMER;
-    
+    ASSERTNOTNULL (vb);
+
     // sanity (leave 64b to detect bugs)
     ASSERT (vb->lines.len <= vb->txt_data.len, "%s: Expecting lines.len=%"PRIu64" < txt_data.len=%"PRIu64, 
             VB_NAME, vb->lines.len, vb->txt_data.len); // 64 bit test in case of memory corruption
 
     // note: empty VB is possible, for example empty SAM generated component
     // note: if re-reading, data is not loaded yet (it will be in *_seg_initialize)
-    ASSERT (!Ltxt || vb->reread_prescription.len || *BLSTtxt == '\n' || !DTP(vb_end_nl), "%s: %s txt_data unexpectedly doesn't end with a newline. Last 10 chars: \"%10s\"", 
-            VB_NAME, dt_name(vb->data_type), Btxt (Ltxt - MIN_(10,Ltxt)));
+    ASSERT (!Ltxt || vb->reread_prescription.len || *BLSTtxt == '\n' || !DTP(vb_end_nl), "%s: %s txt_data unexpectedly doesn't end with a newline. Ltxt=%u Last 10 chars: \"%.10s\". If you expect this file to be truncated, use --truncate.", 
+            VB_NAME, dt_name(vb->data_type), Ltxt, Btxt (Ltxt - MIN_(10,Ltxt)));
     
     // set estimated number of lines
-    vb->lines.len32 = vb->lines.len32  ? vb->lines.len32 // already set? don't change (eg 2nd pair FASTQ, bcl_unconsumed)
+    vb->lines.len32 = vb->lines.len32  ? vb->lines.len32 // already set in zip_modify
                     : segconf.running  ? 10              // low number of avoid memory overallocation for PacBio arrays etc 
+                    : IS_R2            ? str_count_char (STRb(vb->txt_data), '\n') / 4 // fastq_seg_initialize verifes that it is the same as R1
                     : segconf.line_len ? MAX_(1, Ltxt / segconf.line_len)
                     :                    1;              // eg DT_GNRIC
 
@@ -1567,14 +1569,14 @@ void seg_all_data_lines (VBlockP vb)
     
     DT_FUNC (vb, seg_initialize)(vb);  // data-type specific initialization (SAM DEPN: re-read lines here)
 
-    if (flag_is_show_vblocks (ZIP_TASK_NAME)) 
-        iprintf ("SEG(id=%d) vb=%s Ltxt=%u %.*s\n", vb->id, VB_NAME, vb->txt_data.len32,
-                 MIN_(64, Ltxt), cond_str (!DTP(is_binary), "txt_data[64]=", B1STtxt ? B1STtxt : "(null)"));
-
-    ASSERTNOTEMPTY (vb->txt_data); // after this print ^
-
     // in segconf, seg_initialize might change the data_type and realloc the segconf vb (eg FASTA->FASTQ)
     if (segconf.running) vb = vb_get_nonpool_vb (VB_ID_SEGCONF);
+
+    if (flag_is_show_vblocks (ZIP_TASK_NAME)) 
+        iprintf ("SEG(id=%d) vb=%s Ltxt=%u %.*s%s\n", vb->id, VB_NAME, vb->txt_data.len32,
+                 MIN_(64, Ltxt), cond_str (!DTP(is_binary), "txt_data[64]=\"", B1STtxt ? B1STtxt : "(null)"), DTP(is_binary) ? "" : "\"");
+
+    ASSERTNOTEMPTY (vb->txt_data); // after this print ^
 
     // if local is going to be compressed using a callback, we can't have singletons go to local
     // note: called after seg_initialize, to allow for setting of ctx->no_callback where needed 
@@ -1588,15 +1590,17 @@ void seg_all_data_lines (VBlockP vb)
     bool hash_hints_set_1_3 = false, hash_hints_set_2_3 = false;
     int64_t progress = 0;
     int64_t n_lines_processed=0; // number of lines sent to segging. some of them might have been sent to gencomp. 
+    uint32_t remaining_txt_len=0;
 
     for (vb->line_i=0; vb->line_i < vb->lines.len32; vb->line_i++, n_lines_processed++) {
 
         if (!segconf.running) 
             seg_increment_progress (vb, BNUMtxt(line), &progress, "seg");
+
+        remaining_txt_len = BREMAINS (vb->txt_data, line);
         
-        uint32_t remaining_txt_len = BREMAINS (vb->txt_data, line);
-        
-        if (!remaining_txt_len) { // we're done
+        if (!remaining_txt_len ||                    // we're done
+            (segconf.running && vb->line_i == MAX_SEGCONF_LINES)) { // segconf: limit lines (even if VB is large e.g. due to reading full MGZIP block)
             vb->lines.len32 = vb->line_i; // update to actual number of lines
             break;
         }
@@ -1628,7 +1632,7 @@ void seg_all_data_lines (VBlockP vb)
 
         // update line_bgzf_uoffset to next line
         if (TXT_IS_BGZF && vb->comp_i == COMP_MAIN) 
-            bgz_zip_advance_index (vb, line_len);
+            mgzip_zip_advance_index (vb, line_len);
         
         // if our estimate number of lines was too small, increase it
         if (vb->line_i == vb->lines.len32-1 && line - vb->txt_data.data != vb->txt_data.len)         
@@ -1667,4 +1671,5 @@ void seg_all_data_lines (VBlockP vb)
     if (flag.debug_or_test) buflist_test_overflows(vb, __FUNCTION__); 
 
     COPY_TIMER (seg_all_data_lines);
+    return remaining_txt_len;
 }

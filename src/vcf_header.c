@@ -116,7 +116,7 @@ static bool vcf_header_get_last_line_cb (STRp(line), void *unused1, void *unused
 static unsigned vcf_header_get_last_line (BufferP txt_header, char **line_p)
 {
     int64_t line_len;
-    char *line = txtfile_foreach_line (txt_header, true, vcf_header_get_last_line_cb, 0, 0, 0, &line_len);
+    char *line = buf_foreach_line (txt_header, true, vcf_header_get_last_line_cb, 0, 0, 0, &line_len);
     if (line_p) *line_p = line;
 
     return is_field_name_line (STRa(line)) ? (unsigned)line_len : 0;
@@ -279,14 +279,23 @@ static bool vcf_header_zip_parse_one_line (STRp(line), void *unused1, void *unus
         vcf_header_zip_create_ctx (STRa(line), is_info);
 
     // keywords that designate programs
-    #define ISPROG(s) \
+    #define ISPROG(s)       \
     else if (LINEIS (s)) stats_add_one_program (&line[STRLEN(s)], line_len-STRLEN(s)-1) // without the \n
+
+    #define ISGATK(s,sep) /* start after ## and terminate string at sep */\
+    else if (LINEIS (s)) ({  \
+        char str[100];      \
+        snprintf (str, 100, "GATK.%.*s", MIN_(30, (int)strcspn (&line[STRLEN(s)], sep " \t\n\r")), &line[STRLEN(s)]); \
+        stats_add_one_program (str, strlen (str)); \
+    })
 
     // identify programs
     ISPROG("##source=");
     ISPROG("##imputation=");
     ISPROG("##phasing=");
     ISPROG("##annotator=");
+    ISGATK("##GATKCommandLine.", "=");     // e.g. ##GATKCommandLine.UnifiedGenotyper=<ID=UnifiedGenotyper....
+    ISGATK("##GATKCommandLine=<ID=", ","); // e.g. ##GATKCommandLine=<ID=HaplotypeCaller,CommandLine=...
 
     return false; // continue iterating
 }
@@ -296,7 +305,7 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
     if (!vcf_header_set_globals (txt_file->name, txt_header, true)) return false; // samples are different than a previous concatented file
 
     // populate contigs, identify programs, identify float fields for optimization    
-    txtfile_foreach_line (txt_header, false, vcf_header_zip_parse_one_line, 0, 0, 0, 0);
+    buf_foreach_line (txt_header, false, vcf_header_zip_parse_one_line, 0, 0, 0, 0);
     
     SAFE_NULB (*txt_header);
     #define IF_IN_SOURCE(signature, segcf) if (stats_is_in_programs (signature)) segconf.segcf = true
@@ -324,6 +333,7 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
     IF_IN_SOURCE ("freeBayes", vcf_is_freebayes);
     IF_IN_HEADER ("GenotypeGVCFs", vcf_is_gatk_gvcf, "GenotypeGVCFs");
     IF_IN_HEADER ("CombineGVCFs", vcf_is_gatk_gvcf, "CombineGVCFs");
+    IF_IN_HEADER ("EMIT_ALL_SITES", vcf_is_gvcf, ""); // GATK UnifiedGenotyper GVCF (obsolete tool, no RGQ, so set as vcf_is_gvcf, not vcf_is_gatk_gvcf)
     if (segconf.vcf_is_gatk_gvcf) segconf.vcf_is_gvcf = true;
     if (segconf.vcf_is_isaac) IF_IN_HEADER ("gvcf", vcf_is_gvcf, "");
     IF_IN_HEADER ("beagle", vcf_is_beagle, "beagle");

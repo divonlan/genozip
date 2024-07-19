@@ -184,7 +184,7 @@ done:
 // compress primary context of a complex codec, after codec code as prepared the data in ctx->local. The other contexts 
 // of the complex codec are marked with DEP_L* and will be compressed in the normal ctx->local compression loop
 bool comp_compress_complex_codec (VBlockP vb, ContextP ctx, SectionHeaderP header, bool is_2nd_try,
-                                  uint32_t *uncompressed_len, STRe(compressed), rom name)
+                                  uint32_t *uncompressed_len, qSTRp(compressed), rom name)
 {
     if (!is_2nd_try) {
         Codec save_lcodec = ctx->lcodec;

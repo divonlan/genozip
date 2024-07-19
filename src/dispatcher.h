@@ -21,7 +21,7 @@ extern Dispatcher dispatcher_init (rom task_name, rom preproc_task_name, VBlockP
 extern void dispatcher_start_wallclock (void);
 extern void dispatcher_allow_out_of_order (Dispatcher dispatcher);
 extern void dispatcher_pause (Dispatcher dispatcher);
-extern void dispatcher_resume (Dispatcher dispatcher, uint32_t target_progress);
+extern void dispatcher_resume (Dispatcher dispatcher, uint32_t target_progress, CompIType comp_i);
 extern void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i, bool cleanup_after_me, bool show_memory);
 
 typedef void (*DispatcherFunc)(VBlockP);

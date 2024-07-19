@@ -167,7 +167,7 @@ void mutex_show_bottleneck_analsyis (void)
     qsort (lp, MAX_CODE_LINE+1, sizeof(LockPoint), mutex_sort_by_accumulator);
 
     iprint0 ("Bottleneck analysis - Time waiting on locks:\n"
-             "Millisec Mutex                   LockPoint\n");
+             "Millisec Mutex / Join            LockPoint\n");
 
     for (int i=0; i <= MAX_CODE_LINE; i++) {
         if (!lp[i].accumulator) break; // done, since its sorted
@@ -186,4 +186,20 @@ void mutex_who_is_locked (void)
                     my_lp.mutex_name, (my_lp.func ? my_lp.func : ""), my_lp.code_line, 
                     cond_int (my_lp.lock_count > 1, "num_locks_from_different_objects=", my_lp.lock_count));
     }
+}
+
+// call so join time will reported in by profiler (in --show-time)
+void thread_join_lock_point (rom thread_name, TimeSpecType profiler_timer, FUNCLINE)
+{
+    if (!lp[code_line].mutex_name) { // first lock at this lockpoint
+        ASSERT (code_line <= MAX_CODE_LINE, "pthreads_join at %s:%u: cannot lock a mutex in a code_line > %u", func, code_line, MAX_CODE_LINE);
+        lp[code_line] = (LockPoint){ .mutex_name = thread_name, .func = func, .code_line = code_line };
+    }
+
+    else 
+        if (lp[code_line].func != func) 
+            WARN_ONCE ("FYI: Two calls to mutex_lock/pthreads_join exist on the same code_line: %s @ %s:%u and %s @ %s:%u - --show-time will show their combined time. To solve, add an empty line to shift the code line number of one of them",
+                        lp[code_line].mutex_name, lp[code_line].func, lp[code_line].code_line, thread_name, func, code_line);
+        
+    __atomic_add_fetch (&lp[code_line].accumulator, CHECK_TIMER, __ATOMIC_RELAXED); 
 }

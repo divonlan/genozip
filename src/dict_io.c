@@ -390,7 +390,8 @@ StrTextMegaLong str_snip_ex (STRp(snip), bool add_quote)
 {
     StrTextMegaLong s;
     int s_len=0;
-    
+    DataType dt = txt_file ? txt_file->data_type : z_file->data_type;
+
     char op = (snip_len && snip[0] > 0 && snip[0] < 32) ? snip[0] : 0;
     int i=1;
 
@@ -416,8 +417,8 @@ StrTextMegaLong str_snip_ex (STRp(snip), bool add_quote)
         case v13_SNIP_COPY_BUDDY       : SNPRINTF0(s, "[BCOPY]");       break; 
         case SNIP_DIFF                 : SNPRINTF0(s, "[DIFF]");        break; 
         case SNIP_NUMERIC              : SNPRINTF0(s, "[NUMERIC]");     break; 
-        case SNIP_SPECIAL              : if (z_file && special_names[z_file->data_type][snip[1]-32]) 
-                                            SNPRINTF (s, "[%s_SPECIAL_%s]", dt_name(z_file->data_type), special_names[z_file->data_type][snip[1]-32]);
+        case SNIP_SPECIAL              : if (z_file && special_names[dt][snip[1]-32]) 
+                                            SNPRINTF (s, "[%s_SPECIAL_%s]", dt_name(dt), special_names[dt][snip[1]-32]);
                                          else 
                                             SNPRINTF (s, "[SPECIAL-%u]", snip[1]-32); 
                                          i++; 
@@ -425,7 +426,7 @@ StrTextMegaLong str_snip_ex (STRp(snip), bool add_quote)
         default                        : SNPRINTF (s, "\\x%x", (uint8_t)op);
     }
 
-    #define X(dt,sp)  (op == SNIP_SPECIAL && z_file->data_type==DT_##dt && (snip[1] == dt##_SPECIAL_##sp))
+    #define X(dtype,sp)  (op == SNIP_SPECIAL && dt==DT_##dtype && (snip[1] == dtype##_SPECIAL_##sp))
     #define X_SAM(sp) (op == SNIP_SPECIAL && (Z_DT(SAM) || Z_DT(BAM))   && (snip[1] == SAM_SPECIAL_##sp))
     if (op == SNIP_OTHER_LOOKUP || op == SNIP_OTHER_DELTA || op == SNIP_COPY || op == SNIP_REDIRECTION ||
         X(VCF,LEN_OF) || X(VCF,ARRAY_LEN_OF) || X(VCF,COPY_MATE) || (X(VCF,GQ) && snip_len > 8) ||

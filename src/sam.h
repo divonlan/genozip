@@ -36,7 +36,6 @@
 #pragma GENDICT SAM_QENAME=DTYPE_1=QENAME // if adding more Q*NAMEs - add to fastq.h too, and update MAX_QNAME_ITEMS
 #pragma GENDICT SAM_QmNAME=DTYPE_1=QmNAME // QmNAME reserved for mate number (always the last dict_id in the container)
 
-// Fields prefixed with "FASTQ_" are not used in SAM, but are here so that the did's are the same for SAM and FASTQ
 #pragma GENDICT SAM_QNAME2=DTYPE_FIELD=QNAME2
 #pragma GENDICT SAM_Q0NAME2=DTYPE_1=q0NAME    
 #pragma GENDICT SAM_Q1NAME2=DTYPE_1=q1NAME 
@@ -55,6 +54,7 @@
 #pragma GENDICT SAM_QeNAME2=DTYPE_1=qENAME 
 #pragma GENDICT SAM_QmNAME2=DTYPE_1=qmNAME 
 
+// Fields prefixed with "FASTQ_" are not used in SAM, but are here so that the did's are the same for SAM and FASTQ
 #pragma GENDICT FASTQ_EXTRA=DTYPE_1=DESC 
 
 #pragma GENDICT SAM_AUX=DTYPE_FIELD=AUX
@@ -750,7 +750,7 @@ extern bool sam_is_last_flags_rev_comp (VBlockP vb);
 // BAM Stuff
 extern void bam_seg_initialize (VBlockP vb);
 extern int32_t bam_is_header_done (bool is_eof);
-extern int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
+extern int32_t bam_unconsumed (VBlockP vb, uint32_t first_i);
 extern void bam_read_vblock (VBlockP vb);
 extern void bam_seg_initialize (VBlockP vb);
 extern rom bam_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
@@ -924,5 +924,5 @@ typedef enum { SAM_COMP_NONE=255, SAM_COMP_MAIN=0, SAM_COMP_PRIM=1, SAM_COMP_DEP
 
 // source file. works for ZIP/PIZ. In PIZ: Source, NOT the data type reconstructed.
 #define IS_SRC_BAM (command==ZIP ? IS_BAM_ZIP : IS_SRC_BAM_PIZ)
-#define IS_SRC_CRAM (z_file->source_codec == CODEC_CRAM)          
-#define IS_SRC_BCF  (z_file->source_codec == CODEC_BCF)
+#define IS_SRC_CRAM (z_file->src_codec == CODEC_CRAM)          
+#define IS_SRC_BCF  (z_file->src_codec == CODEC_BCF)

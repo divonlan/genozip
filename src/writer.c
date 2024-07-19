@@ -18,7 +18,7 @@
 #include "random_access.h"
 #include "writer.h"
 #include "zfile.h"
-#include "bgzf.h"
+#include "mgzip.h"
 #include "mutex.h"
 #include "codec.h" 
 #include "endianness.h"
@@ -308,9 +308,9 @@ static void writer_init_vb_info (void)
             ASSERT (v->pair_vb_i >= 1 && v->pair_vb_i < vb_info.len, "v->pair_vb_i=%d ∉ [1,%d]", v->pair_vb_i, vb_info.len32-1);
 
             // verify that this VB and its pair have the same number of lines (test when initiazing the second one)
-            uint32_t pair_num_lines = VBINFO(v->pair_vb_i)->num_lines;
-            ASSERT (v->num_lines == pair_num_lines, "vb=%u has %u lines, but vb=%u, its pair, has %u lines", 
-                    vb_i, v->num_lines, v->pair_vb_i, pair_num_lines);
+            uint32_t R1_num_lines = VBINFO(v->pair_vb_i)->num_lines;
+            ASSERT (v->num_lines == R1_num_lines, "vb=%u has %u lines, but vb=%u, its pair, has %u lines", 
+                    vb_i, v->num_lines, v->pair_vb_i, R1_num_lines);
         }
 
         // conditions this VB should not be read or reconstructed 
@@ -701,7 +701,7 @@ static void writer_update_section_list (void)
     else if (Z_DT(FASTQ) && flag.one_component == FQ_COMP_R2+1)  // flag.one_component is comp_i+1
         writer_add_entire_component_section_list (new_list, FQ_COMP_R1);
 
-    // add SEC_BGZF of all components that have it
+    // add SEC_MGZIP of all components that have it
     sections_new_list_add_bgzf (new_list);
 
     // copy all global sections from current section list to new one
@@ -1032,7 +1032,7 @@ static bool writer_output_one_processed_bgzf (Dispatcher dispatcher, bool blocki
     VBlockP bgzf_vb = dispatcher_get_processed_vb (dispatcher, NULL, blocking);
 
     if (bgzf_vb) {
-        writer_write (&bgzf_vb->z_data, bgzf_vb->txt_data.len);
+        writer_write (&bgzf_vb->comp_txt_data, bgzf_vb->txt_data.len);
         dispatcher_recycle_vbs (dispatcher, true);  // also release VB
     }
 
@@ -1094,8 +1094,8 @@ static void writer_write_line_range (VbInfo *v, uint32_t start_line, uint32_t nu
     ASSERTNOTNULL (v);
     ASSERTNOTNULL (v->vb);
     
-    ASSERT (!v->vb->scratch.len, "expecting vb=%s/%u data to be BGZF-compressed by writer at flush, but it is already compressed by reconstructor: txt_file->codec=%s compressed.len=%"PRIu64" txt_data.len=%"PRIu64,
-            comp_name (v->vb->comp_i), v->vb->vblock_i, codec_name (txt_file->codec), v->vb->scratch.len, v->vb->txt_data.len);
+    ASSERT (!v->vb->scratch.len, "expecting vb=%s/%u data to be BGZF-compressed by writer at flush, but it is already compressed by reconstructor: txt_file->effective_codec=%s compressed.len=%"PRIu64" txt_data.len=%"PRIu64,
+            comp_name (v->vb->comp_i), v->vb->vblock_i, codec_name (txt_file->effective_codec), v->vb->scratch.len, v->vb->txt_data.len);
 
     if (!v->vb->txt_data.len) return; // no data in the VB 
 
@@ -1236,7 +1236,7 @@ static void writer_main_loop (VBlockP wvb) // same as wvb global variable
     threads_set_writer_thread();
 
     // if we need to BGZF-compress, we will dispatch the compression workload to compute threads
-    Dispatcher dispatcher = (!flag.no_writer && TXT_IS_BGZF && txt_file->bgzf_flags.library != BGZF_EXTERNAL_LIB) ? 
+    Dispatcher dispatcher = (!flag.no_writer && TXT_IS_BGZF && txt_file->mgzip_flags.library != BGZF_EXTERNAL_LIB) ? 
         dispatcher_init ("bgzf", NULL, POOL_BGZF, writer_get_max_bgzf_threads(), 0, false, false, NULL, 0, NULL) : NULL;
 
     // normally, we digest in the compute thread but in case gencomp lines can be inserted into the vb we digest here.
@@ -1336,8 +1336,8 @@ static void writer_main_loop (VBlockP wvb) // same as wvb global variable
         while (!vb_pool_is_empty (POOL_BGZF)) 
             writer_output_one_processed_bgzf (dispatcher, true);
 
-        bgzf_write_finalize(); // write final data to wvb->z_data
-        writer_write (&wvb->z_data, 0);
+        bgzf_write_finalize(); // write final data to wvb->comp_txt_data
+        writer_write (&wvb->comp_txt_data, 0);
 
         dispatcher_finish (&dispatcher, NULL, false, false);
     }

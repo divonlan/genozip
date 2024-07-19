@@ -50,7 +50,10 @@ static StreamP url_open (StreamP parent_stream, rom url, bool head_only)
     bool is_file = str_case_compare (str5, "file:", NULL); 
 
     // wget is better than curl in flakey connections
-    if (!is_file && wget_available())  // note: wget doesn't support file:// and also not supported for Windows (see wget_available)
+    if (!is_file &&                       // wget doesn't support file://
+        !(head_only && curl_available())  // wget --spider doesn't follow redirects, so for header_only, we prefer curl if its available
+        && wget_available())              // note: wget is not supported for Windows (see wget_available)
+        
         return stream_create (parent_stream, 
                               head_only ? 0 : DEFAULT_PIPE_SIZE, // in wget, header arrives in error channel and data channel is empty
                               DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
@@ -64,7 +67,7 @@ static StreamP url_open (StreamP parent_stream, rom url, bool head_only)
     
     else if (curl_available()) 
         return stream_create (parent_stream, DEFAULT_PIPE_SIZE, 0, 0, 0, 0, 0,
-                              "To compress files from a URL", "curl", "--silent", 
+                              "To compress files from a URL", "curl", "--silent", "--location",
                               flag.is_windows ? "--ssl-no-revoke" : SKIP_ARG,
                               head_only       ? "--head"          : SKIP_ARG,                         
                               url, NULL);

@@ -10,7 +10,7 @@
 #include "filename.h"
 #include "txtfile.h"
 #include "zfile.h"
-#include "bgzf.h"
+#include "mgzip.h"
 #include "writer.h"
 #include "contigs.h"
 #include "piz.h"
@@ -74,7 +74,7 @@ void txtheader_compress (BufferP txt_header,
         .magic             = BGEN32 (GENOZIP_MAGIC),
         .section_type      = SEC_TXT_HEADER,
         .codec             = (codec == CODEC_UNKNOWN) ? CODEC_NONE : codec,
-        .src_codec         = txt_file->source_codec, 
+        .src_codec         = txt_file->src_codec, 
         .digest_header     = header_digest,
         .txt_header_size   = BGEN64 (unmodified_txt_header_len), // length before zip-side modifications
     };
@@ -84,7 +84,7 @@ void txtheader_compress (BufferP txt_header,
 
     // true if filename is compressed with gz/bgzf but does not have a .gz/.bgz extension (e.g. usually true for BAM files)
     section_header.flags.txt_header.no_gz_ext = 
-        (SRC_CODEC(GZ) || SRC_CODEC(BGZF) || SRC_CODEC(BAM) || SRC_CODEC(CRAM)/*reconstructed as BAM*/) &&
+        (TXT_IS_GZIP || SRC_CODEC(BAM) || SRC_CODEC(CRAM)/*reconstructed as BAM*/) &&
         txt_file->basename && !filename_has_ext (txt_file->basename, ".gz") && !filename_has_ext (txt_file->basename, ".bgz");
 
     // In BGZF, we store the 3 least significant bytes of the file size, so check if the reconstructed BGZF file is likely the same
@@ -214,10 +214,10 @@ static void txtheader_uncompress_one_vb (VBlockP vb)
 // case 1: outputing a single file - generate txt_filename based on the z_file's name
 // case 2: unbinding a genozip into multiple txt files - generate txt_filename of a component file from the
 //         component name in SEC_TXT_HEADER 
-static rom txtheader_piz_get_filename_do (rom orig_name, rom prefix, bool is_orig_name_genozip, bool has_bgzf, bool no_gz_ext)
+static rom txtheader_piz_get_filename_do (rom orig_name, rom prefix, rom out_dirname, bool is_orig_name_genozip, bool has_gz_ext)
 {
     unsigned fn_len = strlen (orig_name);
-    unsigned dn_len = flag.out_dirname ? strlen (flag.out_dirname) : 0;
+    unsigned dn_len = out_dirname ? strlen (out_dirname) : 0;
     unsigned px_len = prefix ? strlen (prefix) : 0;
     unsigned genozip_ext_len = is_orig_name_genozip ? STRLEN(GENOZIP_EXT) : 0;
     int txt_filename_size = fn_len + dn_len + px_len + 10;
@@ -247,53 +247,51 @@ static rom txtheader_piz_get_filename_do (rom orig_name, rom prefix, bool is_ori
         fn_len = strlen (orig_name);
     }
     
-    // cases in which BGZF compression does not result in a ".gz" file name extension:
-    // if original gz/bgzf-compressed file did not have a .gz/.bgz extension (since 15.0.23) or when outputing BAM or BCF
-    no_gz_ext = no_gz_ext  // original file had no .gz extension despite being GZ/BGZF compressed  
-             || OUT_DT(BCF) || OUT_DT(BAM) || OUT_DT(CRAM)  // data types for which we never add .gz
-             || !has_bgzf; // bgzf logic decided not to compress this file   
-
     snprintf ((char *)txt_filename, txt_filename_size, "%s%s%s%.*s%s%s", prefix ? prefix : "",
-             (dn_len ? flag.out_dirname : ""), (dn_len ? "/" : ""), 
+             (dn_len ? out_dirname : ""), (dn_len ? "/" : ""), 
              fn_len - genozip_ext_len - old_ext_removed_len, orig_name,
              old_ext_removed_len ? file_plain_ext_by_dt (flag.out_dt) : "", // add translated extension if needed
-             no_gz_ext ? "" : ".gz"); // add .gz if needed
+             has_gz_ext ? ".gz" : ""); // add .gz if needed
 
     if (dn_len) FREE (orig_name); // allocated by filename_base
 
     return txt_filename;
 }
 
-rom txtheader_piz_get_filename (SectionHeaderTxtHeader *header, bool has_gz_ext)
+// returns filename which caller is responsible to free (but returns NULL if to stdout)
+static rom txtheader_piz_get_filename (const SectionHeaderTxtHeader *header, rom out_dirname/*optional*/)
 {
-    return flag.to_stdout    ? NULL 
-         : flag.out_filename ? flag.out_filename
-         : flag.unbind       ? txtheader_piz_get_filename_do (header->txt_filename, flag.unbind, false, has_gz_ext, header->flags.txt_header.no_gz_ext)
-         :                     txtheader_piz_get_filename_do (z_name,               "",          true,  has_gz_ext, header->flags.txt_header.no_gz_ext); // use genozip filename as a base regardless of original name
+    // note: for bz2, xz, and zip - we reconstruct as gz too. better choice than plain.
+    #define C(cdc) (header->src_codec == CODEC_##cdc)
+    bool has_gzip = (flag.bgzf == BGZF_NOT_INITIALIZED) ? (IS_GZIP(header->src_codec) || C(BZ2) || C(XZ) || C(ZIP)) // note: similar logic to in mgzip_piz_calculate_mgzip_flags
+                :                                         (flag.bgzf != 0);
+    #undef C
+
+    bool has_gz_ext = has_gzip && 
+                      !header->flags.txt_header.no_gz_ext &&         // source was gzip-compressed but lacked a .gz extension - we keep it that way
+                      !OUT_DT(BCF) && !OUT_DT(BAM) && !OUT_DT(CRAM); // data types for which we never add .gz
+
+    rom filename = flag.to_stdout    ? NULL 
+                 : flag.out_filename ? ({ char *fn=MALLOC(strlen(flag.out_filename)+1); strcpy (fn, flag.out_filename); fn; })
+                 : flag.unbind       ? txtheader_piz_get_filename_do (header->txt_filename, flag.unbind, out_dirname, false, has_gz_ext)
+                 :                     txtheader_piz_get_filename_do (z_name,               "",          out_dirname, true,  has_gz_ext); // use genozip filename as a base regardless of original name
+
+    return filename;
 }
 
-// get filename, even if txt_file has might not been open. 
-StrTextLong txtheader_get_txt_filename_from_section (void)
+// PIZ: get filename (without the directory name), even if txt_file has not been opened. 
+StrTextLong txtheader_get_txt_filename_from_section (CompIType comp_i)
 {
     Section sec;
 
     if (flag.one_component && !flag.deep)
         sec = sections_get_comp_txt_header_sec (flag.one_component - 1);
     else 
-        sec = sections_get_comp_txt_header_sec (COMP_MAIN);
+        sec = sections_get_comp_txt_header_sec (comp_i);
 
     SectionHeaderTxtHeader header = zfile_read_section_header (evb, sec, SEC_TXT_HEADER).txt_header;
 
-    // note: for bz2, xz, and zip - we reconstruct as gz too. better choice than plain.
-    #define C(cdc) (header.src_codec == CODEC_##cdc)
-    bool has_bgzf = (flag.bgzf == BGZF_NOT_INITIALIZED) ? ((C(BGZF) || C(GZ) || C(BZ2) || C(XZ) || C(ZIP))) // note: similar logic to in bgzf_piz_calculate_bgzf_flags
-                :                                         (flag.bgzf != 0);
-    #undef C
-
-    TEMP_FLAG(out_dirname, NULL); // only basename in progress string
-    rom filename = txtheader_piz_get_filename (&header, has_bgzf);
-
-    RESTORE_FLAG(out_dirname);
+    rom filename = txtheader_piz_get_filename (&header, NULL);
 
     StrTextLong name = {};
     if (filename) {
@@ -336,7 +334,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
 
     // read actual txt header data only if we need to reconstruct the header
     bool needs_recon = writer_does_txtheader_need_recon (sec->comp_i);
-    FlagsBgzf bgzf_flags = {};
+    FlagsMgzip mgzip_flags = {};
     rom filename = NULL;
     sum_fragment_len = 0;
 
@@ -346,21 +344,21 @@ void txtheader_piz_read_and_reconstruct (Section sec)
                                  txtheader_uncompress_one_vb,
                                  NO_CALLBACK);
 
-        bgzf_flags = bgzf_piz_calculate_bgzf_flags (sec->comp_i, header.src_codec);
+        mgzip_flags = mgzip_piz_calculate_mgzip_flags (sec->comp_i, header.src_codec);
 
-        filename = txtheader_piz_get_filename (&header, (bgzf_flags.library != BGZF_NO_LIBRARY));
+        filename = txtheader_piz_get_filename (&header, flag.out_dirname);
     }
 
     // note: when reading an auxiliary file or no_writer - we still create txt_file (but don't actually open the physical file)
     // note: if there are several components contributing to a single txt_file (e.g. SAM w/gencomp) - we only open it once
     if (!txt_file)
-        txt_file = file_open_txt_write (filename, flag_loading_auxiliary ? z_file->data_type : flag.out_dt, bgzf_flags.level);
+        txt_file = file_open_txt_write (filename, flag_loading_auxiliary ? z_file->data_type : flag.out_dt, mgzip_flags.level);
     
-    if (!flag.to_stdout && !flag.out_filename) FREE (filename); // file_open_z copies the names
+    FREE (filename); // file_open_z copies the names
 
-    // set BGZF info in txt_file - either that originates from SEC_BGZF, or constructed based on bgzf_flags
-    if (needs_recon && TXT_IS_BGZF) 
-        bgzf_piz_set_txt_file_bgzf_info (bgzf_flags, header.codec_info);
+    // If we are reconstructing to a MGZIP codec: set recompression info
+    if (needs_recon && TXT_IS_MGZIP) 
+        bgzf_piz_set_txt_file_bgzf_info (mgzip_flags, header.codec_info);
 
     // note: this is reset for each component:
     // since v14 it is used for the commulative component-scope MD5 used for both VBs and txt file verification
@@ -377,7 +375,8 @@ void txtheader_piz_read_and_reconstruct (Section sec)
     txt_file->num_vbs          = sections_count_sections_until (SEC_VB_HEADER, sec, SEC_TXT_HEADER);    
     txt_file->txt_data_size    = BGEN64 (header.txt_data_size);
     txt_file->txt_data_so_far_single_0 = sum_fragment_len;
-
+    txt_file->src_codec     = header.src_codec;
+    
     if (VER(15)) 
         for (QType q=0; q < NUM_QTYPES; q++)
             segconf.flav_prop[q] = header.flav_prop[q];

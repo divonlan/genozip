@@ -19,9 +19,16 @@
 sSTRl(copy_qname, 16);
 sSTRl(snip_redirect_to_QNAME2, 16);
 
+QnameFlavor qname_get_optimize_qf (void)
+{
+    bool is_mated = segconf.qname_flavor[QNAME1] && qf_is_mated(QNAME1);
+
+    return &qf[NUM_QFs-1 - is_mated]; // relying on Genozip-opt being last
+}
+
 static inline Did did_by_q (QType q) 
 {
-    ASSERT (IN_RANGE (q, 0, NUM_QTYPES-1), "Invalid q=%d", q);
+    ASSERT (IN_RANGE (q, 0, NUM_QTYPES), "Invalid q=%d", q);
 
     return (Did[]){ FASTQ_QNAME, FASTQ_QNAME2, FASTQ_LINE3 }[q]; // note: SAM and FASTQ have the same dids for QNAMEs
 }
@@ -402,7 +409,7 @@ void qname_segconf_finalize (VBlockP vb)
             segconf.sorted_by_qname[q] = VB_DT(FASTQ) ||
                                          segconf.is_collated || segconf.sam_is_unmapped || segconf.qname_flavor[q]->sam_qname_sorted || 
                                          (!segconf.is_sorted && !segconf.is_paired);
-
+            
     // if only consensus reads exist, change tech to unknown
     if (segconf.tech == TECH_CONS)
         segconf.tech = TECH_UNKNOWN;
@@ -465,11 +472,9 @@ QnameTestResult qname_test_flavor (STRp(qname), QType q, QnameFlavor qfs, bool q
     return QTR_SUCCESS; // yes, qname is of this flavor
 }
 
-// called for the first line in segconf.running
+// called for the first line in segconf.running or from txtfile_discover_analyze_txt
 void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
 {
-    ASSERTNOTZERO (segconf.running);
-
     static rom reasons[] = QTR_NAME;
 
     segconf.qname_flavor[q] = NULL; // unknown
@@ -516,13 +521,11 @@ void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
             iprintf ("%.*s is not %s flavor \"%s\". Reason: %s\n", STRf(qname), qtype_name(q), qfs->name, reasons[reason]);
     }
 
-    if (flag.debug_qname && !segconf.qname_flavor[q])
-        iprintf ("%.*s - flavor is NOT DISCOVERED - for %s\n", STRf(qname), qtype_name(q));
+    if (!segconf.qname_flavor[q]) {
+        segconf.flav_prop[q].is_tokenized = true; // since 15.0.63
 
-    // when optimizing qname with --optimize_DESC - capture the correct TECH ^ but set flavor to Genozip-opt
-    if (q == QNAME1 && segconf.optimize[FASTQ_QNAME]) {
-        bool is_mated = segconf.qname_flavor[QNAME1] && segconf.qname_flavor[QNAME1]->is_mated;
-        segconf.qname_flavor[QNAME1] = &qf[NUM_QFs-1 - is_mated]; // relying on Genozip-opt being last
+        if (flag.debug_qname)         
+            iprintf ("%.*s - flavor is NOT DISCOVERED - for %s\n", STRf(qname), qtype_name(q));
     }
 
     // set up dict id alias. need to do explicitly, because not predefined
@@ -736,19 +739,30 @@ done:
 // reduces qname to its canonical form: possibly reduces qname_len to make a qname more likely compareble between SAM/BAM and FASTQ 
 void qname_canonize (QType q, rom qname, uint32_t *qname_len)
 {
-    QnameFlavorProp *f = &segconf.flav_prop[q]; // all 0 if no flavor
+    QnameFlavorProp *f = &segconf.flav_prop[q];
 
-    // mated: "HSQ1004:134:C0D8DACXX:3:1101:1318:114841/2" ⟶ "HSQ1004:134:C0D8DACXX:3:1101:1318:114841"
-    // SRA2:  "ERR2708427.177.1" ⟶ "ERR2708427.177"
-    if (f->is_mated && *qname_len > 2) 
-        *qname_len -= 2;
+    if (!f->is_tokenized) {
+        // mated: "HSQ1004:134:C0D8DACXX:3:1101:1318:114841/2" ⟶ "HSQ1004:134:C0D8DACXX:3:1101:1318:114841"
+        // SRA2:  "ERR2708427.177.1" ⟶ "ERR2708427.177"
+        if (f->is_mated && *qname_len > 2) 
+            *qname_len -= 2;
 
-    // eg: "NOVID_3053_FC625AGAAXX:6:1:1069:11483:0,84" ⟶ "NOVID_3053_FC625AGAAXX:6:1:1069:11483"
-    // note: it is possible that QNAME has both the mate and the cnn removed
-    if (f->cnn) {
-        static char cnn_to_char[NUM_CNN] = CNN_TO_CHAR;
-        rom cut = memrchr (qname + 1, cnn_to_char[f->cnn], *qname_len); // +1 so at least one character survives
-        if (cut) *qname_len = cut - qname;
+        // eg: "NOVID_3053_FC625AGAAXX:6:1:1069:11483:0,84" ⟶ "NOVID_3053_FC625AGAAXX:6:1:1069:11483"
+        // note: it is possible that QNAME has both the mate and the cnn removed
+        if (f->cnn) {
+            static char cnn_to_char[NUM_CNN] = CNN_TO_CHAR;
+            rom cut = memrchr (qname + 1, cnn_to_char[f->cnn], *qname_len); // +1 so at least one character survives
+            if (cut) *qname_len = cut - qname;
+        }
+    }
+    else { // not a recognized flavor - try our best (added 15.0.63)
+        SAFE_NUL(&qname[*qname_len]);
+        *qname_len = strcspn (qname, " \t\n\r");
+        SAFE_RESTORE;
+
+        if (*qname_len > 2 && qname[*qname_len-2] == '/' && 
+            (qname[*qname_len-1] == '1' || qname[*qname_len-1] == '2'))
+            *qname_len -= 2;
     }
 }
 
@@ -756,7 +770,7 @@ uint32_t qname_calc_hash (QType q, STRp(qname), thool is_last, bool canonical,
                           uint32_t *uncanonical_suffix_len) // optional out
 {
     uint32_t save_qame_len = qname_len;
-    if (canonical) qname_canonize (q, qSTRa(qname));
+    if (canonical) qname_canonize (q, qSTRa(qname)); // might shorten qname_len, does not modify the qname string
 
     if (uncanonical_suffix_len) 
         *uncanonical_suffix_len = save_qame_len - qname_len;
@@ -780,7 +794,9 @@ rom segconf_qf_name (QType q)
     else if (q == QSAM2)
         return segconf.deep_sam_qname_flavor[1] ? segconf.deep_sam_qname_flavor[1]->name : "N/A";
     else
-        return segconf.qname_flavor[q] ? segconf.qname_flavor[q]->name : "N/A";
+        return segconf.qname_flavor[q] ? segconf.qname_flavor[q]->name 
+             : flag.skip_segconf       ? "<skipped segconf>"
+             :                           "N/A";
 }
 
 DictIdAlias qname_get_alias (QType q)

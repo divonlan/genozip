@@ -57,9 +57,9 @@ typedef struct Context {
     };
 
     LocalType ltype;           // LT_* - type of local data - included in the section header
-    LocalType pair_ltype;      // LT_* - Used if this file is a PAIR_2 - type of local data of PAIR_1
+    LocalType pair_ltype;      // LT_* - Used if this file is a PAIR_R2 - type of local data of PAIR_R1
     struct FlagsCtx flags;     // flags to be included in section header
-    struct FlagsCtx pair_flags;// Used if this file is a PAIR_2 - contains ctx->flags of the PAIR_1
+    struct FlagsCtx pair_flags;// Used if this file is a PAIR_R2 - contains ctx->flags of the PAIR_R1
     struct FlagsDict dict_flags;  // ZIP zctx ; PIZ: zctx+vctx . Tramsmiited via SectionFlags.dictinonary (v15)
     B250Size b250_size;        // Size type of element in b250 data (PIZ and ZIP after generation) v14
     B250Size pair_b250_size;
@@ -81,7 +81,7 @@ typedef struct Context {
                                // PIZ: .data contains the word indices (i.e. indices into word_list) in base-250
     Buffer local;              // ZIP/PIZ vctx: Data private to this VB that is not in the dictionary
                                // ZIP zctx - only .len - number of fields of this type segged in the file (for stats)
-    Buffer b250R1;             // ZIP/PIZ: used by PAIR_2 FASTQ VBs (inc. in Deep SAM), for paired contexts: PAIR_1 b250 data from corresponding VB (in PIZ: only if CTX_PAIR_LOAD)    
+    Buffer b250R1;             // ZIP/PIZ: used by PAIR_R2 FASTQ VBs (inc. in Deep SAM), for paired contexts: PAIR_R1 b250 data from corresponding VB (in PIZ: only if CTX_PAIR_LOAD)    
 
     Buffer counts;             // ZIP/PIZ: counts of snips (VB:uint32_t, z_file:uint64_t)
                                // ZIP: counts.param is a context-specific global counter that gets accumulated in zctx during merge (e.g. OPTION_SA_CIGAR)
@@ -128,7 +128,7 @@ typedef struct Context {
         Buffer ref2chrom_map;      // ZIP: zctx: SAM/BAM/VCF: CHROM: reverse mapping from ref_index to chrom, created by ref_compress_ref
         Buffer con_len;            // PIZ: vctx: use by contexts that might have containers: Array of uint16_t - length of item in cache
         // FASTQ
-        Buffer localR1;            // ZIP/PIZ vctx: PAIR_2 FASTQ VBs (inc. in Deep SAM): for paired contexts: PAIR_1 local data from corresponding VB (in PIZ: only if fastq_use_pair_assisted). Note: contexts with containers are always no_stons, so they have no local - therefore no issue with union conflict.
+        Buffer localR1;            // ZIP/PIZ vctx: PAIR_R2 FASTQ VBs (inc. in Deep SAM): for paired contexts: PAIR_R1 local data from corresponding VB (in PIZ: only if fastq_use_pair_assisted). Note: contexts with containers are always no_stons, so they have no local - therefore no issue with union conflict.
         // VCF
         Buffer format_contexts;    // ZIP: vctx: VCF_SAMPLES: an array of format_mapper_buf.len of ContextPBlock
         Buffer insertion;          // PIZ: vctx: INFO_SF: inserted INFO fields reconstructed after samples

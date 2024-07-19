@@ -14,7 +14,7 @@
 #include "zfile.h"
 #include "zip.h"
 #include "profiler.h"
-#include "bgzf.h"
+#include "mgzip.h"
 
 // --------------------------------------
 // memory functions that serve the codecs
@@ -94,7 +94,7 @@ static uint32_t codec_est_size_default (Codec codec, uint64_t uncompressed_len)
 // returns 4-character codec name
 rom codec_name (Codec codec)
 {
-    return IN_RANGE (codec, 0, NUM_CODECS-1) ? codec_args[codec].name : "BAD!";    
+    return IN_RANGE (codec, 0, NUM_CODECS) ? codec_args[codec].name : "BAD!";    
 }
 
 void codec_initialize (void)

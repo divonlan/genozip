@@ -144,3 +144,41 @@
 #define BGEN32F(x) ({ union { float f;  uint32_t i; } u = {.f = (x)}; u.i = BGEN32(u.i); u.f; })
 #define LTEN64F(x) ({ union { double f; uint64_t i; } u = {.f = (x)}; u.i = LTEN64(u.i); u.f; })
 #define BGEN64F(x) ({ union { double f; uint64_t i; } u = {.f = (x)}; u.i = BGEN64(u.i); u.f; })
+
+// getting and putting unaligned Little Endian words
+#ifdef GENOZIP_ALLOW_UNALIGNED_ACCESS
+    #define GET_UINT16(p)  LTEN16 (*((uint16_t *)(p)))
+    #define GET_UINT32(p)  LTEN32 (*((uint32_t *)(p)))
+    #define GET_UINT64(p)  LTEN64 (*((uint64_t *)(p)))
+    #define GET_FLOAT32(p) LTEN32F(*((float    *)(p)))
+
+    #define GET_UINT32_(st_p, member) ((st_p)->member)
+
+    #define PUT_UINT16(p,n) *((uint16_t *)(p)) = LTEN16(n)
+    #define PUT_UINT32(p,n) *((uint32_t *)(p)) = LTEN32(n)
+
+    #define PUT_UINT16_(st_p, member, n) (st_p)->member = LTEN16(n)
+    #define PUT_UINT32_(st_p, member, n) (st_p)->member = LTEN32(n)
+#else
+    // loading a Little Endian uint32_t from an unaligned memory location
+    #define GET_UINT16(p)  ((uint16_t)((uint8_t*)(p))[0] | ((uint16_t)((uint8_t*)(p))[1] << 8))
+    #define GET_UINT32(p)  ((uint32_t)((uint8_t*)(p))[0] | ((uint32_t)((uint8_t*)(p))[1] << 8) | ((uint32_t)((uint8_t*)(p))[2] << 16) | ((uint32_t)((uint8_t*)(p))[3] << 24))
+    #define GET_UINT64(p)  ((uint64_t)((uint8_t*)(p))[0] | ((uint64_t)((uint8_t*)(p))[1] << 8) | ((uint64_t)((uint8_t*)(p))[2] << 16) | ((uint64_t)((uint8_t*)(p))[3] << 24) | ((uint64_t)((uint8_t*)(p))[4] << 32) | ((uint64_t)((uint8_t*)(p))[5] << 40) | ((uint64_t)((uint8_t*)(p))[6] << 48) | ((uint64_t)((uint8_t*)(p))[7] << 56)))
+    #define GET_FLOAT32(p) ({ union { uint32_t i; float f; } n= {.i = GET_UINT32(p)}; n.f; })
+
+    #define GET_UINT32_(st_p, member) ({ typeof(*st_p) dummy; bytes _P=(bytes)(st_p) + ((bytes)&dummy.member - (bytes)&dummy); ((uint32_t)_P[0] | ((uint32_t)_P[1] << 8) | ((uint32_t)_P[2] << 16) | ((uint32_t)_P[3] << 24)); })
+
+    // storing a Little Endian integer in an unaligned memory location
+    #define PUT_UINT16(p,n) ({ uint16_t _N=(n); uint8_t *_P=(uint8_t *)(p); _P[0]=_N; _P[1]=_N>>8; }) 
+    #define PUT_UINT32(p,n) ({ uint32_t _N=(n); uint8_t *_P=(uint8_t *)(p); _P[0]=_N; _P[1]=_N>>8; _P[2]=_N>>16; _P[3]=_N>>24; })
+
+    // storing as a struct member
+    #define PUT_UINT16_(st_p, member, n) ({ typeof(*st_p) dummy; PUT_UINT16 ((rom)(st_p) + ((rom)&dummy.member - (rom)&dummy), LTEN16(n)); })
+    #define PUT_UINT32_(st_p, member, n) ({ typeof(*st_p) dummy; PUT_UINT32 ((rom)(st_p) + ((rom)&dummy.member - (rom)&dummy), LTEN32(n)); })
+#endif
+
+#define GET_UINT8(p)   ((uint8_t)(((uint8_t*)(p))[0]))
+#define GET_UINT24(p)  ((uint32_t)(((uint8_t*)(p))[0] | (((uint8_t*)(p))[1] << 8))| (((uint8_t*)(p))[2] << 16))
+
+#define PUT_UINT8(p,n)  ({ ((uint8_t*)(p))[0] = (n); })
+#define PUT_UINT24(p,n) ({ uint32_t _N=(n); uint8_t *_P=(uint8_t *)(p); _P[0]=_N; _P[1]=_N>>8; _P[2]=_N>>16; })

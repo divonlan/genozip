@@ -879,7 +879,7 @@ static inline char sam_seg_sam_type_to_bam_type (char type, int64_t n)
 
     // i converts to one of 6: C,c,S,s,I,i
     for (int i=0 ; i < 6; i++)
-        if (IN_RANGE (n, lt_min (test[i]), lt_max (test[i])))
+        if (IN_RANGX (n, lt_min (test[i]), lt_max (test[i])))
             return lt_desc[test[i]].sam_type;
     
     return 0; // number out of range

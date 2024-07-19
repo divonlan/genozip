@@ -16,10 +16,9 @@
             // "program": "${workspaceFolder}/src/genounzip.exe",
             // "program": "${workspaceFolder}/src/genols-debug.exe",
 
-            "args" : ["-ft", "private/test/test.starling.vcf"],
-            
+            "args" : ["--echo", "-fX", "--truncate", "./private/test/gz.bgzf.truncated.fq.gz"],
+
             "environment": [
-                { "name": "GENOZIP_TEST", "value": "1", }, // needed for VER2 macro to work
                 { "name": "GENOZIP_REFERENCE", "value": "c:\\Users\\divon\\genozip/public", },
             ],
             

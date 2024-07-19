@@ -14,7 +14,10 @@
 // SAM and FASTQ share the same Dids and DictIds
 #define FASTQ_CONTIG        SAM_RNAME
 #define FASTQ_QNAME         SAM_QNAME
+#define FASTQ_Q0NAME        SAM_Q0NAME
+#define FASTQ_QmNAME        SAM_QmNAME
 #define FASTQ_QNAME2        SAM_QNAME2
+#define FASTQ_QmNAME2       SAM_QmNAME2
 #define FASTQ_AUX           SAM_AUX
 #define FASTQ_SQBITMAP      SAM_SQBITMAP
 #define FASTQ_NONREF        SAM_NONREF
@@ -41,9 +44,11 @@
 #define _FASTQ_QNAME        _SAM_QNAME
 #define _FASTQ_Q0NAME       _SAM_Q0NAME
 #define _FASTQ_Q1NAME       _SAM_Q1NAME
+#define _FASTQ_QmNAME       _SAM_QmNAME
 #define _FASTQ_QNAME2       _SAM_QNAME2
 #define _FASTQ_Q0NAME2      _SAM_Q0NAME2
 #define _FASTQ_Q1NAME2      _SAM_Q1NAME2
+#define _FASTQ_QmNAME2      _SAM_QmNAME2
 #define _FASTQ_AUX          _SAM_AUX
 #define _FASTQ_SQBITMAP     _SAM_SQBITMAP
 #define _FASTQ_NONREF       _SAM_NONREF
@@ -70,17 +75,25 @@
 
 #define NUM_FASTQ_FIELDS    NUM_SAM_FIELDS
 
+#define NO_PAIR_FMT_PREFIX "--pair cannot be used because %s is not perfectly paired with its counterpart (read names differ or are not aligned) (technical: "
+#define NO_PAIR_FMT_SUFFIX (flag.deep ? " Solution: add --not-paired" : "")
+
 // Txtfile stuff
-extern int32_t fastq_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
-extern bool fastq_txtfile_have_enough_lines (VBlockP vb, uint32_t *unconsumed_len, uint32_t *my_lines, VBIType *pair_vb_i, uint32_t *pair_lines, uint32_t *pair_txt_data_len);
+extern int32_t fastq_unconsumed (VBlockP vb, uint32_t first_i);
+extern bool fastq_txtfile_sync_to_R1_by_num_lines (VBlockP vb, uint32_t bytes_requested, uint32_t len, bool no_read_expected, uint32_t *my_vb_size);
 extern bool is_fastq (STRp(header), bool *need_more);
 extern bool is_fastq_pair_2 (VBlockP vb);
+extern VBIType fastq_get_R1_vb_i (VBlockP vb);
+extern uint32_t fastq_get_R1_num_lines (VBlockP vb);
+extern uint32_t fastq_get_R1_txt_data_len (VBlockP vb);
+extern rom fastq_get_R1_last_qname (VBlockP vb);
 extern void fastq_zip_set_txt_header_flags (struct FlagsTxtHeader *f);
 
 // ZIP Stuff
 extern void fastq_zip_initialize (void);
 extern rom fastq_zip_modify (VBlockP vb, rom line_start, uint32_t remaining);
 extern void fastq_segconf_set_r1_or_r2 (void);
+extern void fastq_zip_after_segconf (void);
 extern void fastq_zip_finalize (bool is_last_user_txt_file);
 extern void fastq_zip_init_vb (VBlockP vb);
 extern void fastq_zip_after_compute (VBlockP vb);
@@ -120,7 +133,7 @@ extern unsigned fastq_vb_zip_dl_size (void);
 extern void fastq_reset_line (VBlockP vb);
 
 // file pairing (--pair) stuff
-extern void fastq_read_pair_1_data (VBlockP vb, VBIType pair_vb_i);
+extern void fastq_read_R1_data (VBlockP vb, VBIType R1_vb_i);
 
 // FASTQ-specific fields in genozip header
 extern void fastq_zip_genozip_header (SectionHeaderGenozipHeaderP header);

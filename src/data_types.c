@@ -65,10 +65,10 @@ const DtTranslation dt_get_translation (VBlockP vb) // vb=NULL relates to the tx
 }
 
 // if file is_txt_binary - return the equivalent textual type, or just the type if not
-DataType dt_get_dt_for_genozip_header (DataType dt, Codec source_codec)
+DataType dt_get_dt_for_genozip_header (DataType dt, Codec src_codec)
 {
-    return (dt == DT_VCF && source_codec == CODEC_BCF)  ? DT_BCF  // note: this goes into the GenozipHeader, but converted in piz to z_file->data_type=VCF & z_file->source_code=CODEC_BCF 
-         : (dt == DT_BAM && source_codec == CODEC_CRAM) ? DT_CRAM // note: likewise
+    return (dt == DT_VCF && src_codec == CODEC_BCF)  ? DT_BCF  // note: this goes into the GenozipHeader, but converted in piz to z_file->data_type=VCF & z_file->source_code=CODEC_BCF 
+         : (dt == DT_BAM && src_codec == CODEC_CRAM) ? DT_CRAM // note: likewise
          : (dt == DT_BAM)                               ? DT_SAM
          :                                                dt;
 }
@@ -86,11 +86,11 @@ rom dt_name_faf (DataType dt)
 
 rom z_dt_name (void)
 {
-    return IS_SRC_BAM  ? "BAM" 
-         : IS_SRC_CRAM ? "CRAM"
-         : IS_SRC_BCF  ? "BCF"
-         : z_file      ? dt_name (z_file->data_type)
-         :               "ERR_NULL_Z_FILE";
+    return (txt_file && IS_SRC_BAM)  ? "BAM" 
+         : (txt_file && IS_SRC_CRAM) ? "CRAM"
+         : (txt_file && IS_SRC_BCF)  ? "BCF"
+         : z_file                    ? dt_name (z_file->data_type)
+         :                             "<no_z_file>";
 }
 
 rom z_dt_name_faf (void) 

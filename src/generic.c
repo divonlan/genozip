@@ -17,7 +17,7 @@ static char magic[MAGIC_SIZE+1] = {}; // first bytes of the generic file
 static char ext[32] = {}; // nul-terminated txt filename extension
 
 // all data is always consumed
-int32_t generic_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
+int32_t generic_unconsumed (VBlockP vb, uint32_t first_i)
 {
     return 0;
 }
@@ -56,7 +56,8 @@ int32_t generic_is_header_done (bool is_eof)
 
         // recreate predefined contexts
         ctx_initialize_predefined_ctxs (z_file->contexts, new_dt, z_file->d2d_map, &z_file->num_contexts);
-        
+
+        // note on FASTQ: effective_codec is currently GZ or BGZF. We will not try to re-discover in segconf as that is too complicated.        
         return HEADER_DATA_TYPE_CHANGED;
     }
 

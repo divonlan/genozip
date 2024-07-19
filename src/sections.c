@@ -18,7 +18,7 @@
 #include "piz.h"
 #include "endianness.h"
 #include "codec.h"
-#include "bgzf.h"
+#include "mgzip.h"
 #include "threads.h"
 #include "license.h"
 
@@ -175,7 +175,7 @@ bool sections_prev_sec2 (Section *sl_ent,   // optional in/out. if NULL - search
 {
     Section sec = sl_ent ? *sl_ent : NULL; 
 
-    ASSERT (!sec || IN_RANGE (sec, B1ST(SectionEnt, z_file->section_list_buf), BLST(SectionEnt, z_file->section_list_buf)),
+    ASSERT (!sec || IN_RANGX (sec, B1ST(SectionEnt, z_file->section_list_buf), BLST(SectionEnt, z_file->section_list_buf)),
            "Invalid sec: st1=%s st2=%s", st_name (st1), st_name (st2));
 
     while (!sec || sec >= B1ST (SectionEnt, z_file->section_list_buf)) {
@@ -261,7 +261,7 @@ void sections_create_index (void)
                     comp->txt_header_sec_i = sec_i; 
                 break;
             
-            case SEC_BGZF : 
+            case SEC_MGZIP : 
                 comp->bgzf_sec_i = sec_i; 
                 break;
 
@@ -341,7 +341,7 @@ void sections_new_list_add_txt_header (BufferP new_list, CompIType comp_i)
         BNXT (SectionEntModifiable, *new_list) = *sec;
 }
 
-// PIZ: If any of the components has a SEC_BGZF add it
+// PIZ: If any of the components has a SEC_MGZIP add it
 void sections_new_list_add_bgzf (BufferP new_list)
 {
     for_buf2 (SectionsCompIndexEnt, comp, comp_i, z_file->comp_sections_index)
@@ -354,7 +354,7 @@ void sections_new_list_add_global_sections (BufferP new_list)
     // get first section that's not TXT_HEADER/BGZF/VB_HEADER/LOCAL/B250/COUNT/DICT
     Section sec = NULL;
     for_buf_back (SectionEnt, s, z_file->section_list_buf) 
-        if (IS_DICTED_SEC(s->st) || s->st == SEC_VB_HEADER || s->st == SEC_TXT_HEADER || s->st == SEC_BGZF) {
+        if (IS_DICTED_SEC(s->st) || s->st == SEC_VB_HEADER || s->st == SEC_TXT_HEADER || s->st == SEC_MGZIP) {
             sec = s; 
             break;
         }
@@ -458,7 +458,7 @@ void sections_list_memory_to_file_format (bool in_place) // in place, or to evb-
         SectionEnt sec = *B(SectionEnt, z_file->section_list_buf, i); // copy before it gets overwritten
         
         int64_t offset_delta = (int64_t)sec.offset - (int64_t)prev_sec.offset;
-        ASSERT (IN_RANGE (offset_delta, 0LL, 0xffffffffLL),  // note: offset_delta is size of previous section
+        ASSERT (IN_RANGX (offset_delta, 0LL, 0xffffffffLL),  // note: offset_delta is size of previous section
                 "section_i=%u size=%"PRId64" st=%s is too big", i-1, offset_delta, st_name ((fsec-1)->st));
 
         int32_t vb_delta = INTERLACE(int32_t, (int32_t)sec.vblock_i - (int32_t)prev_sec.vblock_i);
@@ -938,8 +938,8 @@ static FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt)
             }
             break;
 
-        case SEC_BGZF:
-            snprintf (str.s, sizeof (str.s), "library=%s level=%u has_eof=%u", bgzf_library_name(f.bgzf.library, false), f.bgzf.level, f.bgzf.has_eof_block); 
+        case SEC_MGZIP:
+            snprintf (str.s, sizeof (str.s), "library=%s level=%u OLD_has_eof=%u", bgzf_library_name(f.mgzip.library, false), f.mgzip.level, f.mgzip.OLD_has_eof_block); 
             break;
 
         case SEC_LOCAL:
@@ -1070,7 +1070,7 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
 
     case SEC_TXT_HEADER: {
         SectionHeaderTxtHeaderP h = (SectionHeaderTxtHeaderP)header;
-        if (VER(15))
+        if (!VER(15))
             snprintf (str, sizeof (str), "\n%stxt_data_size=%"PRIu64" txt_header_size=%"PRIu64" lines=%"PRIu64" max_lines_per_vb=%u digest=%s digest_header=%s\n" 
                       "%ssrc_codec=%s (args=0x%02X.%02X.%02X) %s txt_filename=\"%.*s\"\n",
                       SEC_TAB, BGEN64 (h->txt_data_size), v12 ? BGEN64 (h->txt_header_size) : 0, BGEN64 (h->txt_num_lines), BGEN32 (h->max_lines_per_vb), 
@@ -1079,14 +1079,14 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
                       sections_dis_flags (f, st, dt).s, TXT_FILENAME_LEN, h->txt_filename);
         else
             snprintf (str, sizeof (str), "\n%stxt_data_size=%"PRIu64" txt_header_size=%"PRIu64" lines=%"PRIu64" max_lines_per_vb=%u digest=%s digest_header=%s\n" 
-                      "%ssrc_codec=%s (args=0x%02X.%02X.%02X) %s txt_filename=\"%.*s\" flav_prop=(id,has_seq_len,is_mated,cnn)=[[%u,%u,%u],[%u,%u,%u],[%u,%u,%u]]\n",
+                      "%ssrc_codec=%s (args=0x%02X.%02X.%02X) %s txt_filename=\"%.*s\" flav_prop=(id,has_seq_len,is_mated,cnn,tokenized)=[[%u,%u,'%s',%u],[%u,%u,'%s',%u],[%u,%u,'%s',%u]]\n",
                       SEC_TAB, BGEN64 (h->txt_data_size), v12 ? BGEN64 (h->txt_header_size) : 0, BGEN64 (h->txt_num_lines), BGEN32 (h->max_lines_per_vb), 
                       digest_display (h->digest).s, digest_display (h->digest_header).s, 
                       SEC_TAB, codec_name (h->src_codec), h->codec_info[0], h->codec_info[1], h->codec_info[2], 
                       sections_dis_flags (f, st, dt).s, TXT_FILENAME_LEN, h->txt_filename,
-                      h->flav_prop[0].has_seq_len, h->flav_prop[0].is_mated, h->flav_prop[0].cnn,
-                      h->flav_prop[1].has_seq_len, h->flav_prop[1].is_mated, h->flav_prop[1].cnn,
-                      h->flav_prop[2].has_seq_len, h->flav_prop[2].is_mated, h->flav_prop[2].cnn);
+                      h->flav_prop[0].has_seq_len, h->flav_prop[0].is_mated, char_to_printable((char[])CHAR_TO_CNN[h->flav_prop[0].cnn]).s, h->flav_prop[0].is_tokenized,
+                      h->flav_prop[1].has_seq_len, h->flav_prop[1].is_mated, char_to_printable((char[])CHAR_TO_CNN[h->flav_prop[1].cnn]).s, h->flav_prop[1].is_tokenized,
+                      h->flav_prop[2].has_seq_len, h->flav_prop[2].is_mated, char_to_printable((char[])CHAR_TO_CNN[h->flav_prop[2].cnn]).s, h->flav_prop[2].is_tokenized);
 
         break;
     }
@@ -1152,7 +1152,7 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
         break;
     }
         
-    case SEC_BGZF:
+    case SEC_MGZIP:
     case SEC_RANDOM_ACCESS: {
         snprintf (str, sizeof (str), "%s%s\n", SEC_TAB, sections_dis_flags (f, st, dt).s); 
         break;
@@ -1303,7 +1303,7 @@ void sections_show_section_list (DataType dt) // optional - take data from z_dat
                      BNUM(z_file->section_list_buf, s), st_name(s->st), comp_name (s->comp_i), 
                      s->vblock_i, s->offset, s->size, s->num_lines, sections_dis_flags (s->flags, s->st, dt).s);
 
-        else if (IS_FRAG_SEC(s->st) || s->st == SEC_BGZF)
+        else if (IS_FRAG_SEC(s->st) || s->st == SEC_MGZIP)
             iprintf ("%5u %-20.20s\t\t\tvb=%s/%-4u offset=%-8"PRIu64"  size=%-6u  %s\n", 
                      BNUM(z_file->section_list_buf, s), st_name(s->st), 
                      comp_name_ex (s->comp_i, s->st).s, s->vblock_i, s->offset, s->size, sections_dis_flags (s->flags, s->st, dt).s);

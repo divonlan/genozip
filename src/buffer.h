@@ -168,8 +168,8 @@ extern void buf_add (BufferP buf, STRp(data));
 
 #define buf_add_moreC(vb_, buf, literal_str, name) buf_add_more ((VBlockP)(vb_), (buf), literal_str, sizeof literal_str-1, (name))
 #define buf_add_moreS(vb_, buf, str, name) buf_add_more ((VBlockP)(vb_), (buf), str, str##_len, (name))
-#define buf_add_buf(vb_,dst_buf,src_buf,type,name) ({ \
-    buf_alloc ((vb_) ? (VBlockP)(vb_) : (dst_buf)->vb, (dst_buf), (src_buf)->len, 0, type, CTX_GROWTH, (name)); \
+#define buf_add_buf(dst_vb,dst_buf,src_buf,type,name) ({ \
+    buf_alloc ((dst_vb) ? (VBlockP)(dst_vb) : (dst_buf)->vb, (dst_buf), (src_buf)->len, 0, type, CTX_GROWTH, (name)); \
     memcpy (BAFT(type, *(dst_buf)), (src_buf)->data, (src_buf)->len * sizeof (type));   \
     (dst_buf)->len += (src_buf)->len; })
 
@@ -225,6 +225,9 @@ extern void buf_copy_do (VBlockP dst_vb, BufferP dst, ConstBufferP src, uint64_t
                          rom name);
 #define buf_copy(dst_vb,dst,src,type,src_start_entry,max_entries,dst_name) \
   buf_copy_do ((VBlockP)(dst_vb),(dst),(src),sizeof(type),(src_start_entry),(max_entries),__FUNCLINE,(dst_name))
+
+typedef bool (*TxtIteratorCallback)(rom line, unsigned line_len, void *cb_param1, void *cb_param2, unsigned cb_param3);
+extern char *buf_foreach_line (BufferP buf, bool reverse, TxtIteratorCallback callback, void *cb_param1, void *cb_param2, unsigned cb_param3, int64_t *line_len);
 
 extern void buf_print (BufferP buf, bool add_newline);
 

@@ -369,7 +369,7 @@ static inline WordIndex hash_global_add_node (ContextP zctx, uint32_t hash, uint
 
     if (zctx->nodes.len > HASH_OCC_WARNING * zctx->global_hash.len) {
         if (txt_file->redirected)
-            WARN_ONCE ("Unusually slow compression due to Genozip under-allocating resources because the input file is streaming through a pipe preventing it from knowing the file size. To overcome this, please use --input-size (value in bytes, can be approximate) to inform Genozip of the file size. ctx=%s hash_prime=%u snip=\"%s\"", 
+            WARN_ONCE ("Unusually slow compression due to Genozip under-allocating resources because the input file is streaming through a pipe preventing it from knowing the file size. To overcome this, use --input-size (value in bytes, can be approximate) to inform Genozip of the file size. ctx=%s hash_prime=%u snip=\"%s\"", 
                        zctx->tag_name, zctx->global_hash.len32, str_snip);
         else
             WARN_ONCE ("Unexpected structure of file is causing unusually slow compression. ctx=%s hash_prime=%u snip=\"%s\"%s", 
