@@ -59,7 +59,10 @@ void buf_copy_do (VBlockP dst_vb, BufferP dst, ConstBufferP src,
     ASSERT (!max_entries || src_start_entry < src->len, 
             "buf_copy of %s called from %s:%u: src_start_entry=%"PRIu64" is larger than src->len=%"PRIu64, buf_desc(src).s, func, code_line, src_start_entry, src->len);
 
-    uint64_t num_entries = max_entries ? MIN_(max_entries, src->len - src_start_entry) : src->len - src_start_entry;
+    uint64_t num_entries = src->len - MIN_(src_start_entry, src->len);
+    if (max_entries && max_entries < num_entries) num_entries = max_entries;
+    // up to 15.0.63 this was buggy: uint64_t num_entries = max_entries ? MIN_(max_entries, src->len - src_start_entry) : src->len - src_start_entry;
+
     if (!bytes_per_entry) bytes_per_entry=1;
     
     if (num_entries) {

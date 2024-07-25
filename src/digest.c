@@ -179,7 +179,8 @@ void digest_piz_verify_one_txt_file (unsigned txt_file_i/* 0-based */)
     }
 }
 
-static void digest_piz_verify_one_vb (VBlockP vb)
+static void digest_piz_verify_one_vb (VBlockP vb, 
+                                      BufferP txt_data) // may differ from vb->txt_data if integrated PRIM/DEPN lines
 {
     // Compare digest up to this VB transmitted through SectionHeaderVbHeader. If Adler32, it is a stand-alone
     // digest of the VB, and if MD5, it is a commulative digest up to this VB.
@@ -197,9 +198,11 @@ static void digest_piz_verify_one_vb (VBlockP vb)
         // warn if VB is bad, but don't exit, so file reconstruction is complete and we can debug it
         if (!digest_recon_is_equal (piz_digest, vb->expected_digest)) { 
 
+            // compare recon_size (note: this excludes integrated PRIM/DEPN lines)
             char recon_size_warn[100] = "";
             if (vb->recon_size != vb->txt_data.len) // note: leave vb->txt_data.len 64bit to detect bugs
-                snprintf (recon_size_warn, sizeof (recon_size_warn), "Expecting: VB_HEADER.recon_size=%u == txt_data.len=%"PRIu64"\n", vb->recon_size, vb->txt_data.len);
+                snprintf (recon_size_warn, sizeof (recon_size_warn), "Expecting: VB_HEADER.recon_size=%u == txt_data.len=%"PRIu64"%s\n", 
+                          vb->recon_size, vb->txt_data.len, (z_sam_gencomp ? " (note these sizes exclude gencomp data)" : ""));  
 
             NOISYWARN ("reconstructed vblock=%s/%u (vb_line_i=0 -> txt_line_i(1-based)=%"PRId64" num_lines=%u), (%s=%s) differs from the %s file (%s=%s).\n%s",
                        comp_name (vb->comp_i), vb->vblock_i, writer_get_txt_line_i (vb, 0), vb->lines.len32,
@@ -213,7 +216,7 @@ static void digest_piz_verify_one_vb (VBlockP vb)
                 NOISYWARN ("Bad reconstructed vblock has been dumped to: %s.gz\n"
                            "To see the same data in the original file:\n"
                            "genozip --biopsy %u%s %s%s",  // note: segconf.vb_size is only available since v14. For older files, look it up with genocat --stats.
-                           txtfile_dump_vb (vb, z_name).s, vb->vblock_i, 
+                           txtfile_dump_vb (vb, z_name, txt_data).s, vb->vblock_i, // note: txt_data dumped INCLUDES integrated gencomp lines (if there are any)
                            cond_int (segconf.vb_size/*0 if IS_VB_SIZE_BY_MGZIP*/, " -B", (unsigned)(segconf.vb_size >> 20)), 
 
                            (txt_file && txt_file->name) ? filename_guess_original (txt_file) : IS_PIZ ? txtheader_get_txt_filename_from_section(vb->comp_i).s : "(uncalculable)",
@@ -235,21 +238,21 @@ static void digest_piz_verify_one_vb (VBlockP vb)
 
 // ZIP and PIZ: called by compute thread to calculate MD5 or Adler32 of one VB - possibly serializing VBs using a mutex
 bool digest_one_vb (VBlockP vb, bool is_compute_thread, 
-                    BufferP data) // if NULL, data digested is vb->txt_data
+                    BufferP txt_data) // if NULL, txt_data digested is vb->txt_data (if not NULL: this might be PIZ of a SAM MAIN vb with integrated PRIM and DEPN lines)
 {
     #define WAIT_TIME_USEC 1000
     #define DIGEST_TIMEOUT (30*60) // 30 min
 
-    if (!data) data = &vb->txt_data;
-
+    if (!txt_data) txt_data = &vb->txt_data;
+//if (vb->vblock_i==18) buf_dump_to_file ("bug1.sam", txt_data, 1, false, false, true, false);//xxx
     bool digestable = gencomp_comp_eligible_for_digest(vb);
 
     // starting V14, if adler32, we digest each VB stand-alone.
     if (IS_ADLER && (IS_ZIP || VER(14))) {
         if (digestable) {
-            vb->digest = digest_do (STRb(*data), IS_ADLER, VB_NAME);
+            vb->digest = digest_do (STRb(*txt_data), IS_ADLER, VB_NAME);
 
-            if (IS_PIZ) digest_piz_verify_one_vb (vb);  
+            if (IS_PIZ) digest_piz_verify_one_vb (vb, txt_data);  
         }
     }
 
@@ -262,19 +265,19 @@ bool digest_one_vb (VBlockP vb, bool is_compute_thread,
 
         // note: we don't digest generated components, but we need to enter the mutex anyway as otherwise the serialization will go out of sync
         if (digestable && IS_ZIP) {
-            digest_update (&z_file->digest_ctx, data, "vb");
+            digest_update (&z_file->digest_ctx, txt_data, "vb");
 
             // take a snapshot of the commulative digest as per the end of this VB 
             vb->digest = digest_snapshot (&z_file->digest_ctx, NULL);
         }
             
         else if (digestable && IS_PIZ) {
-            digest_update (&z_file->digest_ctx, data, "vb"); // labels consistent with ZIP so we can easily diff PIZ vs ZIP
+            digest_update (&z_file->digest_ctx, txt_data, "vb"); // labels consistent with ZIP so we can easily diff PIZ vs ZIP
 
             if (!VER(14) && flag.unbind)
-                digest_update (&z_file->v13_commulative_digest_ctx, data, "vb"); // up to v13, multi-component, VB digest is commulative across all components (in MD5 and Adler)
+                digest_update (&z_file->v13_commulative_digest_ctx, txt_data, "vb"); // up to v13, multi-component, VB digest is commulative across all components (in MD5 and Adler)
 
-            digest_piz_verify_one_vb (vb);        
+            digest_piz_verify_one_vb (vb, txt_data);        
         }
 
         if (is_compute_thread)
@@ -285,7 +288,7 @@ bool digest_one_vb (VBlockP vb, bool is_compute_thread,
 }
 
 // ZIP and PIZ: called by main thread to calculate MD5 or Adler32 of the txt header
-Digest digest_txt_header (BufferP data, Digest piz_expected_digest, CompIType comp_i)
+Digest digest_txt_header (BufferP txt_data, Digest piz_expected_digest, CompIType comp_i)
 {
     START_TIMER;
 
@@ -299,17 +302,17 @@ Digest digest_txt_header (BufferP data, Digest piz_expected_digest, CompIType co
     if (IS_PIZ && (!IS_ADLER || !VER(14)) && sections_get_num_vbs (comp_i)) 
         z_file->digest_serializer.vb_i_last = sections_get_first_vb_i (comp_i) - 1; 
 
-    if (!data->len) return DIGEST_NONE;
+    if (!txt_data->len) return DIGEST_NONE;
 
     Digest digest;
     
     // starting V14, if adler32, we digest each TXT_HEADER stand-alone.
     if (IS_ADLER && VER(14))
-        digest = digest_do (STRb(*data), IS_ADLER, "TXT_HEADER");
+        digest = digest_do (STRb(*txt_data), IS_ADLER, "TXT_HEADER");
 
     // if MD5 or v13 (or earlier) - digest is for commulative for the whole file, and we take a snapshot
     else {
-        digest_update (&z_file->digest_ctx, data, "txt_header");
+        digest_update (&z_file->digest_ctx, txt_data, "txt_header");
         digest = digest_snapshot (&z_file->digest_ctx, NULL);
 
         // up to v13, in unbind, VB digest relied on commulative digest of all componets
@@ -329,7 +332,7 @@ Digest digest_txt_header (BufferP data, Digest piz_expected_digest, CompIType co
                   digest_name(), dt_name (z_file->data_type), digest_display (digest).s, 
                   segconf.zip_txt_modified ? "modified" : "original", // in case ZIP modified, e.g. with --optimize
                   digest_display (piz_expected_digest).s,
-                  txtfile_dump_vb (data->vb, z_name).s, filename_guess_original (txt_file), SUPPORT);
+                  txtfile_dump_vb (txt_data->vb, z_name, txt_data).s, filename_guess_original (txt_file), SUPPORT);
 
             if (flag.test) exit_on_error(false);
         }
@@ -397,7 +400,7 @@ DigestDisplay digest_display_ex_(const Digest digest, DigestDisplayMode mode, th
         snprintf (dis.s, sizeof (dis.s), "N/A                                    ");
 
     else if ((mode == DD_NORMAL || mode == DD_SHORT) && is_adler)
-        snprintf (dis.s, sizeof (dis.s), "%s%s%-10u", alg, alg_eq, BGEN32 (digest.adler_bgen));
+        snprintf (dis.s, sizeof (dis.s), "%s%s%08x", alg, alg_eq, BGEN32 (digest.adler_bgen));
 
     else if ((mode == DD_NORMAL && !is_adler     && !digest_is_zero (digest)) ||
              (mode == DD_MD5                     && !digest_is_zero (digest)) || 

@@ -135,7 +135,7 @@ void zfile_uncompress_section (VBlockP vb,
     uint32_t actual_z_digest = adler32 (1, (uint8_t*)header + compressed_offset, MAX_(data_compressed_len, data_encrypted_len));
 
     if (VER(15) && expected_z_digest != actual_z_digest) {
-        sections_show_header (header_p.common, vb, 0, 'E');
+        sections_show_header (header_p.common, vb, vb->comp_i, 0, 'E');
         ABORT ("%s:%s: Section %s data failed digest verification: expected_z_digest=%u != actual_z_digest=%u", 
                z_name, VB_NAME, st_name(header->section_type), expected_z_digest, actual_z_digest);
     }
@@ -166,7 +166,7 @@ void zfile_uncompress_section (VBlockP vb,
             header->uncomp_adler32 != adler32 (1, uncompressed_data->data, data_uncompressed_len)) {
         
             iprintf ("--verify-codec: BAD ADLER32 section decompressed incorrectly: codec=%s\n", codec_name(header->codec));
-            sections_show_header (header, NULL, 0, 'R');
+            sections_show_header (header, NULL, vb->comp_i, 0, 'R');
             bad_compression = true;
         }
     }
@@ -445,7 +445,7 @@ int32_t zfile_read_section_do (FileP file,
     }
 
     if (flag.show_headers) {
-        sections_show_header (header, NULL, sec ? sec->offset : 0, 'R');
+        sections_show_header (header, NULL, sec ? sec->offset : 0, sec ? sec->comp_i : COMP_NONE, 'R');
         if (is_genocat && (IS_DICTED_SEC (expected_sec_type) || expected_sec_type == SEC_REFERENCE || expected_sec_type == SEC_REF_IS_SET))
              return header_offset; // in genocat --show-header - we only show headers, nothing else
     }
@@ -818,7 +818,7 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header, FailType
 {
     ASSERTNOTNULL (z_file);
 
-    if (z_file->section_list_buf.len) return true; // header already read
+    if (z_file->section_list.len) return true; // header already read
 
     SectionEnt sec = { .st     = SEC_GENOZIP_HEADER, 
                        .offset = zfile_read_genozip_header_get_offset (false) };
@@ -897,12 +897,12 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header, FailType
     DT_FUNC (z_file, piz_genozip_header)(header); // data-type specific processing of the Genozip Header
 
     bool has_section_list = true; 
-    if (!z_file->section_list_buf.param) { // not already initialized in a previous call to this function
+    if (!z_file->section_list.param) { // not already initialized in a previous call to this function
         
         has_section_list = license_piz_prepare_genozip_header (header, IS_LIST || (IS_SHOW_HEADERS && flag.force));
 
         if (has_section_list) {
-            zfile_uncompress_section (evb, header, &z_file->section_list_buf, "z_file->section_list_buf", 0, SEC_GENOZIP_HEADER);
+            zfile_uncompress_section (evb, header, &z_file->section_list, "z_file->section_list", 0, SEC_GENOZIP_HEADER);
 
             sections_list_file_to_memory_format (header);
         }
@@ -912,7 +912,7 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header, FailType
             if (is_genocat) exit_ok; // in genocat, exit after showing the requested data
         }
 
-        z_file->section_list_buf.param = 1;
+        z_file->section_list.param = 1;
     }
 
     if (!VER(15)) 
@@ -984,7 +984,7 @@ void zfile_update_txt_header_section_header (uint64_t offset_in_z_file)
         header->digest = digest_snapshot (&z_file->digest_ctx, "file");
 
     if (flag.show_headers)
-        sections_show_header ((SectionHeaderP)header, NULL, offset_in_z_file, 'W'); 
+        sections_show_header ((SectionHeaderP)header, NULL, COMP_NONE, offset_in_z_file, 'W'); 
 
     evb->scratch.len = crypt_padded_len (sizeof (SectionHeaderTxtHeader));
 
@@ -1002,7 +1002,6 @@ void zfile_update_txt_header_section_header (uint64_t offset_in_z_file)
 // ZIP compute thread - called from zip_compress_one_vb()
 void zfile_compress_vb_header (VBlockP vb)
 {
-
     SectionHeaderVbHeader vb_header = {
         .magic             = BGEN32 (GENOZIP_MAGIC),
         .section_type      = SEC_VB_HEADER,
@@ -1017,8 +1016,16 @@ void zfile_compress_vb_header (VBlockP vb)
 
     DT_FUNC (vb, zip_set_vb_header_specific)(vb, &vb_header);
 
+    if (vb->dt_specific_vb_header_payload.len) {
+        if (!txt_file->vb_header_codec)
+            txt_file->vb_header_codec = codec_assign_best_codec (vb, NULL, &vb->dt_specific_vb_header_payload, SEC_VB_HEADER);
+    
+        vb_header.codec = txt_file->vb_header_codec;
+    }
+
     // copy section header into z_data - to be eventually written to disk by the main thread. this section doesn't have data.
-    comp_compress (vb, NULL, &vb->z_data, &vb_header, NULL, NO_CALLBACK, "SEC_VB_HEADER");
+    // note: data_uncompressed_len needs to be set (if needed) by zip_set_vb_header_specific
+    comp_compress (vb, NULL, &vb->z_data, &vb_header, vb->dt_specific_vb_header_payload.data, NO_CALLBACK, "SEC_VB_HEADER");
 }
 
 // ZIP only: called by the main thread in the sequential order of VBs: updating of the already compressed
@@ -1049,7 +1056,7 @@ void zfile_output_processed_vb_ext (VBlockP vb, bool background)
 {
     ASSERTMAINTHREAD;
     
-    zriter_write (&vb->z_data, &vb->section_list_buf, -1, background);
+    zriter_write (&vb->z_data, &vb->section_list, -1, background);
 
     if (vb->comp_i != COMP_NONE) z_file->disk_so_far_comp[vb->comp_i] += vb->z_data.len;
     vb->z_data.len = 0;

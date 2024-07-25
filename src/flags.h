@@ -148,7 +148,7 @@ typedef struct {
         debug_peek, stats_submit, debug_submit, show_deep, show_segconf_has, debug_huffman, debug_split, debug_upgrade,
         debug_debug,  // a flag with no functionality - used for ad-hoc debugging  
         debug_valgrind, debug_tar, // ad-hoc debug printing in prod
-        show_compress,
+        show_compress, show_sec_gencomp,
         no_gencomp, force_gencomp, force_deep, force_PLy, no_domqual, no_pacb, no_longr, no_homp, no_smux, no_faf, no_interleaved,
         force_qual_codec, verify_codec, 
         seg_only, show_bam, xthreads,
@@ -211,7 +211,6 @@ typedef struct {
          deep_fq_only,       // PIZ: SAM data is reconstructed by not written, only FASTQ data is written
          removing_cache,     // genocat: running --no-cache with only -e <ref-file> to remove cache
          let_OS_cleanup_on_exit; // don't release resources as we are about to exit - the OS does it faster
-         
     int only_headers,        // genocat --show_headers (not genounzip) show only headers (value is section_type+1 or SHOW_ALL_HEADERS)
         check_latest;        // PIZ: run with "genozip --decompress --test": ZIP passes this to PIZ upon testing of the last file
 

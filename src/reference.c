@@ -745,7 +745,7 @@ static void ref_copy_one_compressed_section (Reference ref, FileP ref_file, cons
     // Write header and body of the reference to z_file
     // Note on encryption: reference sections originating from an external reference are never encrypted - not
     // by us here, and not in the source reference fasta (because with disallow --make-reference in combination with --password)
-    zriter_write (&evb->scratch, &evb->section_list_buf, -1, true);
+    zriter_write (&evb->scratch, &evb->section_list, -1, true);
 
     if (flag.show_reference) {
         decl_zctx (CHROM);
@@ -1337,7 +1337,7 @@ void ref_initialize_ranges (Reference ref, RangesType type)
         buf_copy (evb, &ref->ref_external_ra, &z_file->ra_buf, RAEntry, 0, 0, "ref_external_ra");
         
         // copy section list, keeping only SEC_REFERENCE sections
-        buf_copy (evb, &ref->ref_file_section_list, &z_file->section_list_buf, SectionEnt, 0, 0, "ref_file_section_list");
+        buf_copy (evb, &ref->ref_file_section_list, &z_file->section_list, SectionEnt, 0, 0, "ref_file_section_list");
         buf_remove_items_except (struct SectionEnt, ref->ref_file_section_list, st, SEC_REFERENCE);
         
         // sort sections - ascending by vblock_i

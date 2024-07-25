@@ -472,7 +472,7 @@ static void zip_write_global_area (void)
 
     stats_finalize();
     
-    if (DTPZ(zip_free_end_of_z)) DTPZ(zip_free_end_of_z)();
+    if (DTPZ(zip_end_of_z)) DTPZ(zip_end_of_z)();
 
     COPY_TIMER_EVB (zip_write_global_area);
 }
@@ -792,11 +792,11 @@ finish:
     // (re-)index sections after adding this txt_file 
     sections_create_index(); 
 
-    // reconstruction plan (for VCF - for DVCF or --sort, for SAM - re-integrate supp/secondary alignments)
-    if (!flag.seg_only && DTPZ(generate_recon_plan)) 
-        DTPZ(generate_recon_plan)(); // should set z_file->z_closes_after_me if we need to close after this component after all
+    // reconstruction plan SAM with gencomp
+    if (!flag.seg_only && z_sam_gencomp) 
+        sam_zip_compress_sec_gencomp();
 
-    if (z_file->z_closes_after_me && !flag.seg_only) { // note: for SAM, z_closes_after_me might be updated in sam_zip_generate_recon_plan
+    if (z_file->z_closes_after_me && !flag.seg_only) { 
         // if we used the aligner with REF_EXT_STORE, we make sure all the CHROMs referenced are in the CHROM context, so
         // as SEC_REF_CONTIGS refers to them. We do this by seeing which contigs have any bit set in is_set.
         // note: in REF_EXTERNAL we don't use is_set, so we populate all contigs in zip_initialize

@@ -21,10 +21,13 @@ extern void threads_print_call_stack (void);
 extern pthread_t main_thread;
 static inline bool threads_am_i_main_thread (void) { return pthread_self() == main_thread; }
 
-// writer thread stuff
+// writer / zriter thread stuff
 extern void threads_set_writer_thread (void);
+extern void threads_set_zriter_thread (void);
 extern void threads_unset_writer_thread (void);
+extern void threads_unset_zriter_thread (void);
 extern bool threads_am_i_writer_thread (void);
+extern bool threads_am_i_zriter_thread (void);
 
 // for debugging thread issues, activated with --debug-threads or --show-threads
 void threads_log_by_vb (ConstVBlockP vb, rom task_name, rom event, int time_usec);

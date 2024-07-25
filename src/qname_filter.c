@@ -19,7 +19,7 @@ typedef struct {
 static Buffer qnames_filter = {};
 
 static ASCENDING_SORTER (qname_filter_sort_by_hash, QnameFilterItem, hash)
-static BINARY_SEARCHER (find_qname_in_filter, QnameFilterItem, uint32_t, hash, false)
+static BINARY_SEARCHER (find_qname_in_filter, QnameFilterItem, uint32_t, hash, false, ReturnNULL)
 
 // initialize qnames_filter and flag.qname_filter from file
 void qname_filter_initialize_from_file (rom filename)

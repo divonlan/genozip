@@ -12,7 +12,7 @@
 #include "local_type.h"
 
 // this data must be perfectly aligned with SectionType.
-#define SECTIONTYPE_ABOUT {    \
+#define SECTIONTYPE_ABOUT {                                        \
     {"SEC_RANDOM_ACCESS",   sizeof (SectionHeader)              }, \
     {"SEC_REFERENCE",       sizeof (SectionHeaderReference)     }, \
     {"SEC_REF_IS_SET",      sizeof (SectionHeaderReference)     }, \
@@ -34,6 +34,7 @@
     {"SEC_REF_IUPACS",      sizeof (SectionHeader)              }, \
     {"SEC_SUBDICTS",        sizeof (SectionHeaderSubDicts)      }, \
     {"SEC_USER_MESSAGE",    sizeof (SectionHeader)              }, \
+    {"SEC_GENCOMP",         sizeof (SectionHeader)              }, \
 }
 
 #define HEADER_IS(_st) (header->section_type == SEC_##_st)
@@ -86,7 +87,7 @@ typedef union SectionFlags {
     struct FlagsTxtHeader {
         uint8_t pair             : 2;  // FASTQ component (inc. in a Deep SAM): PAIR_R1 or PAIR_R2 if this component is a paired FASTQ component (v15)
         #define v13_dvcf_comp_i pair   // v12-13: DVCF: 0=Main 1=Primary-only rejects 2=Luft-only rejects (in v14, this moved to SectionEnt.comp_i)
-        uint8_t is_txt_luft      : 1;  // v12-15.0.41: DVCF: true if original source file was a dual-coordinates file in Luft rendition (v12)
+        uint8_t is_txt_luft      : 1;  // v12-15.0.41: is_txt_luft: DVCF: true if original source file was a dual-coordinates file in Luft rendition (v12)
         uint8_t no_gz_ext        : 1;  // source file was compressed with GZ/BGZF AND it did not have a .gz/.bgz extension (15.0.23) 
         uint8_t unused           : 4;
     } txt_header;
@@ -142,16 +143,11 @@ typedef union SectionFlags {
         uint8_t all_the_same_wi  : 4;  // snip of this word_index to be reconstructed in no b250 and no local sections. can be non-zero (0-15) since 15.0.51.
         uint8_t unused           : 2;
     } dictionary;
-
-    struct FlagsRandomAccess {
-        uint8_t luft             : 1;  // this section is for reconstructing the file in the Luft coordinates (introduced v12)
-        uint8_t unused           : 7;
-    } random_access;
     
-    struct FlagsReconPlan {
-        uint8_t luft             : 1;  // this section is for reconstructing the file in the Luft coordinates (introduced v12)
+    struct FlagsReconPlan { // used v12-15.0.63
+        uint8_t unused1          : 1;  // v12-15.0.42: "luft: this section is for reconstructing the file in the Luft coordinates (introduced v12-15.0.42)"
         uint8_t frag_len_bits    : 4;  // 2^(frag_len_bits+17) is the maximum fragment length (v14) 
-        uint8_t unused           : 3;
+        uint8_t unused2          : 3;
     } recon_plan;
 
     struct FlagsRefContigs {
@@ -193,7 +189,7 @@ typedef struct {
     uint8_t  genozip_version;
     EncryptionType encryption_type;    // one of EncryptionType
     uint16_t data_type;                // one of DataType
-    uint64_t recon_size;               // data size of reconstructed file, if uncompressing as a single file in primary coordinates
+    uint64_t recon_size;               // data size of reconstructed file (note: for MAIN VBs in SAM gencomp, this excludes any PRIM/DEPN lines)
     uint64_t genozip_minor_ver : 14;   // populated since 15.0.28. 10 bits until 15.0.59
     uint64_t is_modified       : 1;    // ZIP modified the txt_data (e.g. --optimize). Since 15.0.60      
     uint64_t private_file      : 1;    // this file can only be decompressed by user with the specified license_hash (15.0.30)
@@ -254,7 +250,9 @@ typedef struct {
             uint8_t unused_bits          : 4;
             uint8_t segconf_sam_factor;       // 15.0.28: BAM only: 64X estimated blow-up factor of SAM txt_data vs BAM 
             uint8_t segconf_deep_N_fq_score;  // 15.0.39: Deep: when copying QUAL from SAM, update scores of 'N' bases to this value
-            char unused[252];
+            uint8_t unused0;
+            uint16_t conc_writing_vbs;        // 15.0.64: max number of handed-over the VBs the writer will need to have open concurrent. Up to 15.0.63 this was in SectionHeaderReconPlan
+            char unused[249];
         } sam;
 
         struct { 
@@ -339,40 +337,39 @@ typedef struct {
 typedef struct {
     SectionHeader;     
     union {
-        uint32_t v11_first_line;       // up to v11 - first_line; if 0, this is the terminating section of the components
         uint32_t sam_prim_seq_len;     // SAM PRIM: total number of bases of SEQ in this VB (v14) 
         uint32_t vcf_HT_n_lines;       // VCF starting 15.0.48: number of lines that 1. have FORMAT/GT 2. Samples were segged (i.e. not copy-from-mate)
+        uint32_t v11_first_line;       // up to v11 - first_line; if 0, this is the terminating section of the components
     };    
     union {
-        uint32_t v13_top_level_repeats;// v12/13: repeats of TOPLEVEL container in this VB. Up to v12 - called num_lines.
         uint32_t sam_prim_num_sag_alns;// SAM PRIM: number of alns (prim + depn) in SAGs this VB (v14)
+        uint32_t v13_top_level_repeats;// v12/13: repeats of TOPLEVEL container in this VB. Up to v12 - called num_lines.
     };
     uint32_t recon_size;               // size of vblock as it appears in the default reconstruction (i.e. after ZIP-side modifications)
     uint32_t z_data_bytes;             // total bytes of this vblock in the genozip file including all sections and their headers 
     uint32_t longest_line_len;         // length of the longest line in this vblock 
     Digest   digest;                   // stand-alone Adler32 or commulative MD5 up to and including this VB. Up to 15.0.59: not if VB was modified. Up to v13: Adler32 was commulative too.
+   
+    struct { // SAM PRIM - 16 bytes
+    uint32_t sam_prim_first_grp_i;     // SAM PRIM: the index of first group of this PRIM VB, in z_file->sag_grps (v14)
+    uint32_t sam_prim_comp_qual_len;   // SAM PRIM: total size of SA Group's QUAL, as compressed in-memory in ZIP (v14)
+    uint32_t sam_prim_qname_len;       // SAM PRIM: total length of QUAL in this VB (v14)
     union {
-        uint32_t v13_num_lines_prim;   // v12/13: number of lines in default reconstruction (DVCF: in PRIMARY coords) (v12)
-        uint32_t sam_prim_first_grp_i; // SAM PRIM: the index of first group of this PRIM VB, in z_file->sag_grps (v14)
+    uint32_t sam_prim_comp_cigars_len; // SAM PRIM SAG_BY_SA: total size of sag's CIGARs, as compressed in-memory in ZIP (i.e. excluding CIGARs stored in OPTION_SA_CIGAR.dict) (v14)
+    uint32_t sam_prim_solo_data_len;   // SAM PRIM SAG_BY_SOLO: size of solo_data
     };
-    
-    union {
-        uint32_t v13_dvcf_num_lines_luft; // v12/13: DVCF: number of lines in default reconstruction in LUFT coords (v12)
-        uint32_t sam_prim_comp_qual_len;  // SAM PRIM: total size of SA Group's QUAL, as compressed in-memory in ZIP (v14)
-    };
-
-    union {
-        uint32_t dvcf_recon_size_luft; // DVCF (12 to 15.0.41): size of vblock as it appears in the default LUFT reconstruction (v12)
-        uint32_t sam_prim_qname_len;   // SAM PRIM: total length of QUAL in this VB (v14)
     };
 
-    union {
-        uint32_t sam_prim_comp_cigars_len; // SAM PRIM SAG_BY_SA: total size of sag's CIGARs, as compressed in-memory in ZIP (i.e. excluding CIGARs stored in OPTION_SA_CIGAR.dict) (v14)
-        uint32_t sam_prim_solo_data_len;   // SAM PRIM SAG_BY_SOLO: size of solo_data
-    };
     uint32_t longest_seq_len;          // SAM / FASTQ: largest seq_len in this VB (v15)
 } SectionHeaderVbHeader, *SectionHeaderVbHeaderP; 
 typedef const SectionHeaderVbHeader *ConstSectionHeaderVbHeaderP;
+
+// Format of the the payload of SEC_VB_HEADER for SAM/BAM with gencomp
+#define MAX_PLAN_ITEM_LINES 16383
+typedef struct {
+    uint16_t comp_i  : 2;  // 0=MAIN 1=PRIM 2=DEPN
+    uint16_t n_lines : 14; // 1 - MAX_PLAN_ITEM_LINES
+} VbPlanItem;
 
 typedef struct {
     SectionHeader;           
@@ -435,7 +432,7 @@ typedef struct {
     uint32_t start_in_layer;   // start index within layer
 } SectionHeaderRefHash, *SectionHeaderRefHashP;
 
-// SEC_RECON_PLAN, contains ar array of ReconPlanItem
+// SEC_RECON_PLAN, contains ar array of ReconPlanItem (used v14-15.0.63 for SAM ; v12-15.0.52 for DVCF)
 typedef struct SectionHeaderReconPlan {
     SectionHeader;
     VBIType conc_writing_vbs;  // max number of concurrent VBs in possesion of the writer thread needed to execute this plan    
@@ -443,10 +440,10 @@ typedef struct SectionHeaderReconPlan {
 } SectionHeaderReconPlan, *SectionHeaderReconPlanP;
 
 // plan flavors (3 bit)
-typedef enum { PLAN_RANGE=0, PLAN_FULL_VB=2, PLAN_INTERLEAVE=3/*PIZ-only*/, PLAN_TXTHEADER=4/*PIZ-only*/,
-               PLAN_REMOVE_ME=5/*PIZ-only*/, PLAN_DOWNSAMPLE=6/*PIZ-only*/, PLAN_END_OF_VB=7 } PlanFlavor;
-#define PLAN_FLAVOR_NAMES { "RANGE", "invalid", "FULL_VB", "INTERLEAVE", "TXTHEADER", "REMOVE_ME", "DOWNSAMPLE", "END_OF_VB" }
-typedef struct {
+typedef enum { PLAN_RANGE=0, PLAN_FULL_VB=2, PLAN_END_OF_VB=7, // these appear in SEC_RECON_PLAN (up to 15.0.63)
+               PLAN_VB_PLAN=1, PLAN_INTERLEAVE=3, PLAN_TXTHEADER=4, PLAN_REMOVE_ME=5, PLAN_DOWNSAMPLE=6 } PlanFlavor;
+#define PLAN_FLAVOR_NAMES { "RANGE", "VB_PLAN", "FULL_VB", "INTERLEAVE", "TXTHEADER", "REMOVE_ME", "DOWNSAMPLE", "END_OF_VB" }
+typedef struct { // 12 bytes
     VBIType vb_i;               
     union {
         uint32_t start_line;   // used for RANGE
@@ -456,9 +453,12 @@ typedef struct {
     }; 
     uint32_t num_lines : 29;   // used by RANGE, FULL_VB (writer only, not file), INTERLEAVE, DOWNSAMPLE. note: in v12/13 END_OF_VB, this field was all 1s.
     PlanFlavor flavor  : 3;  
-} ReconPlanItem, *ReconPlanItemP;
+} ReconPlanItem, *ReconPlanItemP; 
 
-// the data of SEC_SECTION_LIST is an array of the following type, as is the z_file->section_list_buf
+// SEC_GENCOMP contains ar array of GencompSecItem, in the order of MAIN VB absorption, since 15.0.64
+typedef struct { uint32_t vb_i, num_gc_lines[2]/*PRIM, DEPN*/; } GencompSecItem;
+
+// the data of SEC_SECTION_LIST is an array of the following type, as is the z_file->section_list
 typedef struct __attribute__ ((packed)) SectionEntFileFormat { // 19 bytes (since v15)
     uint32_t offset_delta;     // delta vs previous offset (always positive)
     int32_t vblock_i_delta;    // delta vs previous section's vblock_i (may be negative) 
@@ -473,7 +473,7 @@ typedef struct __attribute__ ((packed)) SectionEntFileFormat { // 19 bytes (sinc
         };
         struct { 
             uint32_t num_lines;// VB_HEADER sections - number of lines in this VB. 
-            uint32_t num_non_deep_lines; // VB_HEADER Deep SAM, component MAIN and PRIM: number of lines in this VB that are NOT deepable, i.e. SUPPLEMENTARY or SECONDARY or monochar or with SEQ.len=0  
+            uint32_t unused;   // this was "deep_num_lines" v15-15.0.63, but never accessed in piz
         };
         uint64_t st_specific;  // generic access to the value
     };
@@ -550,7 +550,7 @@ typedef const struct SectionEnt {
         DictId dict_id;         // DICT, LOCAL, B250 or COUNT sections
         struct {
             uint32_t num_lines; // VB_HEADER sections - number of lines in this VB. 
-            uint32_t num_deep_lines; // VB_HEADER SAM: number of lines in this VB that are not SUPPLEMENTARY or SECONDARY (v15) 
+            uint32_t unused;    // this was "deep_num_lines" v15-15.0.63, but never accessed in piz
         };
         struct { 
             char is_dict_id;    // if zero, dict_id is copied from dict_sec_i (dict_id.id[0] cannot be zero = a DTYPE_FIELD dict_id cannot start with '@')
@@ -576,7 +576,7 @@ typedef packed_enum { ALIAS_NONE, ALIAS_CTX, ALIAS_DICT } AliasType;
 
 extern void sections_add_to_list (VBlockP vb, ConstSectionHeaderP header);
 extern void sections_remove_from_list (VBlockP vb, uint64_t offset, uint64_t len);
-extern void sections_list_concat (BufferP section_list_buf);
+extern void sections_list_concat (BufferP section_list);
 
 // ---------
 // PIZ stuff
@@ -593,28 +593,26 @@ extern bool sections_next_sec3 (Section *sl_ent, SectionType st1, SectionType st
 extern bool sections_prev_sec2 (Section *sl_ent, SectionType st1, SectionType st2);
 #define sections_prev_sec(sl_ent,st) sections_prev_sec2((sl_ent),(st),SEC_NONE)
 
-extern uint32_t sections_count_sections_until (SectionType st, Section first_sec, SectionType until_encountering);
-static inline uint32_t sections_count_sections (SectionType st) { return sections_count_sections_until (st, 0, SEC_NONE); }
+extern uint32_t sections_count_sections_until (BufferP sec_list, SectionType st, Section first_sec, SectionType until_encountering);
+#define sections_count_sections(st) sections_count_sections_until (&z_file->section_list, (st), 0, SEC_NONE)
 
 extern void sections_create_index (void);
 extern Section sections_vb_header (VBIType vb_i);
+extern Section sections_vb_last_section (VBIType vb_i);
 extern VBIType sections_get_num_vbs (CompIType comp_i);
 extern VBIType sections_get_num_vbs_(CompIType first_comp_i, CompIType last_comp_i);
 extern VBIType sections_get_first_vb_i (CompIType comp_i);
 extern Section sections_get_comp_txt_header_sec (CompIType comp_i);
-extern Section sections_get_comp_recon_plan_sec (CompIType comp_i);
+extern uint32_t sections_get_recon_plan (Section *recon_sec);
+extern Section sections_get_gencomp_sec (void);
 extern Section sections_get_comp_bgzf_sec (CompIType comp_i);
 extern Section sections_get_next_vb_header_sec (CompIType comp_i, Section *vb_sec);
-extern Section sections_one_before (Section sec);
 extern bool is_there_any_section_with_dict_id (DictId dict_id);
 extern SectionEnt *section_get_section (VBIType vb_i, SectionType st, DictId dict_id);
+extern uint32_t sections_txt_header_get_num_fragments (CompIType comp_i);
 
-// API for writer to create modified section list
-extern void sections_new_list_add_vb (BufferP new_list, VBIType vb_i);
-extern void sections_new_list_add_txt_header (BufferP new_list, CompIType comp_i);
-extern void sections_new_list_add_bgzf (BufferP new_list);
-extern void sections_new_list_add_global_sections (BufferP new_list);
-extern void sections_commit_new_list (BufferP new_list);
+extern void sections_txt_list_add_vb_header (VBIType vb_i);
+extern void sections_txt_list_add_txt_header (CompIType comp_i);
 
 extern void sections_list_memory_to_file_format (bool in_place);
 extern void sections_list_file_to_memory_format (SectionHeaderGenozipHeaderP genozip_header);
@@ -625,10 +623,10 @@ extern uint32_t st_header_size (SectionType sec_type);
 
 // display functions
 #define sections_read_prefix(P_prefix) ((P_prefix) ? 'P' : flag_loading_auxiliary ? 'L' : 'R')
-extern void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if output to buffer */, uint64_t offset, char rw);
+extern void sections_show_header (ConstSectionHeaderP header, VBlockP vb, CompIType comp_i, uint64_t offset, char rw);
 extern void noreturn genocat_show_headers (rom z_filename);
 extern void sections_show_gheader (ConstSectionHeaderGenozipHeaderP header);
-extern void sections_show_section_list (DataType dt);
+extern void sections_show_section_list (DataType dt, BufferP section_list);
 extern rom st_name (SectionType sec_type);
 extern rom lt_name (LocalType lt);
 extern rom store_type_name (StoreType store);
@@ -645,5 +643,5 @@ extern StrText comp_name_(CompIType comp_i);
 
 #define IS_DICTED_SEC(st) ((st)==SEC_B250 || (st)==SEC_LOCAL || (st)==SEC_DICT || (st)==SEC_COUNTS || (st) == SEC_SUBDICTS)
 #define IS_VB_SEC(st)     ((st)==SEC_VB_HEADER || (st)==SEC_B250 || (st)==SEC_LOCAL)
-#define IS_COMP_SEC(st)   (IS_VB_SEC(st) || (st)==SEC_TXT_HEADER || (st)==SEC_MGZIP || (st)==SEC_RECON_PLAN)
+#define IS_COMP_SEC(st)   (IS_VB_SEC(st) || (st)==SEC_TXT_HEADER || (st)==SEC_MGZIP || (st)==SEC_GENCOMP || (st)==SEC_RECON_PLAN)
 #define IS_FRAG_SEC(st)   ((st)==SEC_DICT || (st)==SEC_TXT_HEADER || (st)==SEC_RECON_PLAN || (st)==SEC_REFERENCE || (st)==SEC_REF_IS_SET || (st)==SEC_REF_HASH) // global sections fragmented with a dispatcher, and hence use vb_i 

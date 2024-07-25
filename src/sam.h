@@ -691,7 +691,7 @@ extern StrTextSuperLong cram_get_samtools_option_T (const Reference ref);
 // HEADER stuff
 extern bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags);
 extern void sam_header_finalize (void);
-extern void sam_zip_free_end_of_z (void);
+extern void sam_zip_end_of_z (void);
 extern bool is_sam (STRp(header), bool *need_more);
 extern bool is_bam (STRp(header), bool *need_more);
 extern bool is_cram (STRp(header), bool *need_more);
@@ -710,7 +710,6 @@ extern rom sam_zip_modify (VBlockP vb_, rom line_start, uint32_t remaining);
 extern rom sam_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
 extern uint32_t sam_seg_seq_len_from_cigar (STRp(cigar));
 extern uint32_t sam_seg_get_seq_len_by_MD_field (STRp(md_str));
-extern void sam_zip_generate_recon_plan (void);
 extern void sam_zip_init_vb (VBlockP vb);
 extern void sam_zip_after_compress (VBlockP vb);
 extern void sam_stats_reallocate (void);
@@ -723,6 +722,7 @@ extern void sam_ultima_update_t0_len (VBlockP vb, uint32_t line_i, uint32_t new_
 extern void sam_seg_aux_field_fallback (VBlockP vb, void *dl, DictId dict_id, char sam_type, char array_subtype,
                                         STRp(value), ValueType numeric, unsigned add_bytes);
 extern int32_t sam_zip_get_np (VBlockP vb, LineIType line_i);
+extern void sam_zip_compress_sec_gencomp (void);
 
 // PIZ Stuff
 extern void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header);
@@ -746,6 +746,14 @@ extern CONTAINER_ITEM_CALLBACK (sam_piz_con_item_cb);
 extern void seq_filter_initialize (rom filename);
 extern rom sam_piz_get_textual_seq (VBlockP vb);
 extern bool sam_is_last_flags_rev_comp (VBlockP vb);
+extern void sam_piz_after_vb_header (VBlockP vb);
+
+// PIZ writer stuff
+extern void gencomp_piz_initialize_vb_info (void); // used for writing files starting 15.0.64 
+extern void gencomp_piz_vb_to_plan (VBlockP vb, int64_t *i);
+extern void gencomp_piz_update_piz_reading_list (VBlockP vb);
+extern void recon_plan_add_prescribed_by_recon_plan_section (void); // used for writing files up to up to 15.0.63
+extern void recon_plan_show (int vb_i);
 
 // BAM Stuff
 extern void bam_seg_initialize (VBlockP vb);

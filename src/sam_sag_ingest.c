@@ -129,7 +129,7 @@ static void sam_zip_prim_ingest_vb_copy_qual_vb_to_z (VBlockSAMP vb, Sag *vb_grp
         for (uint32_t vb_grp_i=0; vb_grp_i < vb_grps_len; vb_grp_i++) 
             vb_grps[vb_grp_i].qual += z_file->sag_qual.len;
 
-        buf_add_buf (evb, &z_file->sag_qual, comp_qual_buf, char, NULL);
+        buf_append_buf (evb, &z_file->sag_qual, comp_qual_buf, char, NULL);
     }
     
     else 
@@ -281,7 +281,7 @@ void sam_zip_prim_ingest_vb (VBlockSAMP vb)
             
             if (IS_SAG_SA) {
                 uint64_t z_first_aln = z_file->sag_alns.len;
-                buf_add_buf (evb, &z_file->sag_alns, &vb->sag_alns, SAAln, NULL); // copy alignments (also allocs memory)
+                buf_append_buf (evb, &z_file->sag_alns, &vb->sag_alns, SAAln, NULL); // copy alignments (also allocs memory)
 
                 for (uint32_t grp_i=0; grp_i < vb_grps_len; grp_i++)
                     vb_grps[grp_i].first_aln_i += z_first_aln; // update index from index into vb->sag_alns to z_file->sag_alns
@@ -290,7 +290,7 @@ void sam_zip_prim_ingest_vb (VBlockSAMP vb)
             }
 
             else if (IS_SAG_CC) 
-                buf_add_buf (evb, &z_file->sag_alns, &vb->sag_alns, CCAln, NULL); 
+                buf_append_buf (evb, &z_file->sag_alns, &vb->sag_alns, CCAln, NULL); 
 
             else if (IS_SAG_SOLO) 
                 sam_zip_prim_ingest_solo_data (vb);
@@ -311,7 +311,7 @@ void sam_zip_prim_ingest_vb (VBlockSAMP vb)
     // Groups - must be last, after vb_grps is updated ^. Order of VBs is arbitrary
     mutex_lock (grp_mutex);
     vb->first_grp_i = z_file->sag_grps.len; // the index of first group of this PRIM VB, in z_file->sag_grps. note: might be out-of-order of VBs.
-    buf_add_buf (evb, &z_file->sag_grps, &vb->sag_grps, Sag, NULL); 
+    buf_append_buf (evb, &z_file->sag_grps, &vb->sag_grps, Sag, NULL); 
     mutex_unlock (grp_mutex);    
 
     buf_destroy (packed_seq_buf); 

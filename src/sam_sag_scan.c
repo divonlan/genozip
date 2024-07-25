@@ -196,8 +196,8 @@ static void scan_index_qnames_preprocessing (VBlockP vb)
 
 static void scan_append_index (VBlockP vb)
 {
-    buf_add_buf (real_evb, &z_file->sag_depn_index, &vb_depn_index, uint32_t, NULL);
-    buf_add_buf (evb, &z_qname_index, &VB_SAM->qname_count, QnameIndexEnt, "z_qname_index");
+    buf_append_buf (real_evb, &z_file->sag_depn_index, &vb_depn_index, uint32_t, NULL);
+    buf_append_buf (evb, &z_qname_index, &VB_SAM->qname_count, QnameIndexEnt, "z_qname_index");
 }
 
 // remove depn for which qnames_hash instances (prim and depn) are contained in a single VB

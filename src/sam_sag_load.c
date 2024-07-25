@@ -211,7 +211,7 @@ static inline void sam_load_groups_move_comp_to_zfile (VBlockSAMP vb, PlsgVbInfo
         // QUAL. note: we lock as we might realloc (therefore other threads can't access this Buffer concurrently)
         if (!qual_done && mutex_trylock (copy_qual_mutex)) {
             start_qual = z_file->sag_qual.len;
-            buf_add_buf (evb, &z_file->sag_qual, &vb_qual_buf, uint8_t, NULL); // might grow the buffer
+            buf_append_buf (evb, &z_file->sag_qual, &vb_qual_buf, uint8_t, NULL); // might grow the buffer
             qual_done = achieved_something = true;
             mutex_unlock (copy_qual_mutex);
         }
@@ -219,7 +219,7 @@ static inline void sam_load_groups_move_comp_to_zfile (VBlockSAMP vb, PlsgVbInfo
         // CIGARs
         if (!cigars_done && mutex_trylock (copy_cigars_mutex)) {
             start_cigars = z_file->sag_cigars.len;
-            buf_add_buf (evb, &z_file->sag_cigars, &vb_cigars_buf, uint8_t, NULL); 
+            buf_append_buf (evb, &z_file->sag_cigars, &vb_cigars_buf, uint8_t, NULL); 
             cigars_done = achieved_something = true;
             mutex_unlock (copy_cigars_mutex);
         }
@@ -297,7 +297,7 @@ static inline void sam_load_groups_add_qual (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
         vb_qual_buf.len += g->qual_comp_len;
     }
     else {
-        buf_add_buf (vb, &vb_qual_buf, &vb->codec_bufs[0], char, NULL); // add uncompressed data instead of compressed
+        buf_append_buf (vb, &vb_qual_buf, &vb->codec_bufs[0], char, NULL); // add uncompressed data instead of compressed
         g->qual_comp_len = 0; // we will use qual_comp_len==0 to mean "not compressed"
     }
 

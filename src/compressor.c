@@ -169,7 +169,7 @@ uint32_t comp_compress (VBlockP vb,
         sections_add_to_list (vb, header);
 
     if (flag.show_headers && !in_assign_codec)
-        sections_show_header (header, vb->vblock_i ? vb : NULL, z_data->len, 'W'); // store and print upon about for vb sections, and print immediately for non-vb sections
+        sections_show_header (header, vb->vblock_i ? vb : NULL, vb->comp_i, z_data->len, 'W'); // store and print upon about for vb sections, and print immediately for non-vb sections
 
     z_data->len += total_z_len;
 

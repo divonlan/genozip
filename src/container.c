@@ -661,7 +661,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
             // we allocate txt_data to be OVERFLOW_SIZE (=1MB) beyond needed, if we get 64KB near the edge
             // of that we error here. These is to prevent actual overflowing which will manifest as difficult to trace memory issues
             ASSPIZ (Rtxt > 64 KB, "%s: txt_data overflow: Ltxt=%u lines.len=%u con->repeats=%u recon_size=%u. vb->txt_data dumped to %s.gz", 
-                    LN_NAME, Ltxt, vb->lines.len32, con->repeats, vb->recon_size, txtfile_dump_vb (vb, z_name).s);
+                    LN_NAME, Ltxt, vb->lines.len32, con->repeats, vb->recon_size, txtfile_dump_vb (vb, z_name, NULL).s);
 
             if (flag.maybe_lines_dropped_by_reconstructor || flag.maybe_lines_dropped_by_writer)
                 container_toplevel_filter (vb, rep_i, rep_reconstruction_start, show_non_item);

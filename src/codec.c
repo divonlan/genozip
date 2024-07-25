@@ -255,7 +255,7 @@ Codec codec_assign_best_codec (VBlockP vb,
         }
 
     uint64_t save_data_len = data->len;
-    uint64_t save_section_list = vb->section_list_buf.len; // save section list as comp_compress adds to it
+    uint64_t save_section_list = vb->section_list.len; // save section list as comp_compress adds to it
 
     data->len = MIN_(data->len * (is_local ? lt_width(ctx) : 1), CODEC_ASSIGN_SAMPLE_SIZE);
 
@@ -317,7 +317,7 @@ Codec codec_assign_best_codec (VBlockP vb,
 done:
     // roll back
     data->len                = save_data_len;
-    vb->section_list_buf.len = save_section_list; 
+    vb->section_list.len = save_section_list; 
     vb->z_data_test.param    = false; // no longer testing
 
     COPY_TIMER (codec_assign_best_codec);

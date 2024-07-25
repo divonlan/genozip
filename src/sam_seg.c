@@ -103,11 +103,6 @@ bool is_sam (STRp(header), bool *need_more)
     return is_headerful_sam (STRa(header)) || is_headerless_sam (STRa(header));
 }
 
-void sam_zip_free_end_of_z (void)
-{
-    sam_header_finalize();
-}
-
 // main thread, called for each component. called after reading txt header, before segconf.
 void sam_zip_initialize (void)
 {
@@ -200,6 +195,12 @@ void sam_zip_finalize (bool is_last_user_txt_file)
     }
 }
 
+// main thread: after finishing writing z_file
+void sam_zip_end_of_z (void)
+{
+    sam_header_finalize();
+}
+
 // called by main thread after reading txt of one vb into vb->txt_data
 void sam_zip_init_vb (VBlockP vb_)
 {
@@ -218,19 +219,12 @@ void sam_zip_init_vb (VBlockP vb_)
 // called compute thread after compress, order of VBs is arbitrary
 void sam_zip_after_compress (VBlockP vb)
 {
-    // Only the MAIN component produces gencomp lines, however we are absorbing VBs in order, so out-of-band VBs
-    // need to be sent too, just to keep the order
-    if (segconf.sag_type && (IS_MAIN(vb) || IS_PRIM(vb)))
-        gencomp_absorb_vb_gencomp_lines (vb);
 }
 
 // called by main thread, as VBs complete (might be out-of-order)
 void sam_zip_after_compute (VBlockP vb)
 {
-    if (IS_MAIN(vb))
-        sam_zip_gc_after_compute_main (VB_SAM);
-
-    else if (IS_PRIM(vb))
+    if (IS_PRIM(vb))
         gencomp_sam_prim_vb_has_been_ingested (vb);
 
     z_file->num_perfect_matches += vb->num_perfect_matches; // for stats
@@ -275,6 +269,8 @@ void sam_zip_genozip_header (SectionHeaderGenozipHeaderP header)
         est_sam_factor_mult = 0; // fallback to PIZ default
     }
     header->sam.segconf_sam_factor      = est_sam_factor_mult;
+
+    header->sam.conc_writing_vbs        = BGEN16 (z_has_gencomp ? sam_zip_calculate_max_conc_writing_vbs() : 1); // 15.0.64
 }
 
 // initialize SA and OA
@@ -379,9 +375,13 @@ void sam_seg_initialize (VBlockP vb_)
                                 OPTION_MQ_i, OPTION_PQ_i, OPTION_MC_Z, OPTION_SM_i, DID_EOL);
 
     // case: some lines may be segged against a in-VB saggy line
-    if (IS_MAIN(vb)) // 14.0.0
+    if (IS_MAIN(vb)) { // 14.0.0
         ctx_set_store_per_line (VB, SAM_RNAME, SAM_RNEXT, SAM_PNEXT, SAM_POS, SAM_MAPQ, SAM_FLAG,
                                 OPTION_SA_Z, OPTION_NM_i, DID_EOL);
+
+        if (vb->check_for_gc)
+            buf_alloc (vb, &vb->vb_plan, 0, MAX_(1, vb->lines.len32 / 8), VbPlanItem, 0, "vb_plan"); // inital allocation
+    }
 
     ctx_set_store_per_line (VB, SAM_CIGAR, OPTION_NH_i, T(segconf.is_paired && segconf.sam_multi_RG, OPTION_RG_Z), DID_EOL);
     
@@ -938,6 +938,9 @@ void sam_seg_finalize (VBlockP vb_)
     // VB1: if we've not found depn lines in the VB, abort gencomp (likely the depn lines were filtered out)
     if (vb->vblock_i == 1 && !vb->seg_found_depn_line && !flag.force_gencomp)
         segconf.abort_gencomp = true;
+
+    if (segconf.sag_type && IS_MAIN(vb) && vb->check_for_gc && !segconf.abort_gencomp)
+        gencomp_absorb_vb_gencomp_lines (VB);
 }
 
 // main thread: called after all VBs, before compressing global sections
@@ -952,6 +955,10 @@ void sam_zip_after_vbs (void)
         ctx_shorten_unused_dict_words (SAM_RNAME);
 
     ctx_shorten_unused_dict_words (OPTION_XA_STRAND); // remove gem3 bi-sulfite words if not used
+
+    // case: no PRIM or DEPN lines - this file will have just one (main) component (but don't change if BIND_DEEP)
+    if (flag.bind == BIND_SAM && !gencomp_have_any_lines_absorbed())
+        flag.bind = BIND_NONE; 
 }
 
 bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id)

@@ -42,9 +42,10 @@ typedef struct Buffer {        // 72 bytes
         uint16_t prm16[4];
         uint8_t  prm8 [8];
         void *pointer;
-        struct { int32_t uncomp_len, comp_len; }; // (signed) used for compressed buffer: uncomp_len is the length of the uncompressing comp_len data from the buffer
-        struct { uint32_t consumed_by_prev_vb;    // vb->gz_blocks: bytes of the first BGZF block consumed by the prev VB or txt_header
-                 uint32_t current_bb_i;        }; // index into vb->gz_blocks of first bgzf block of current line
+        struct { int32_t uncomp_len, comp_len;   }; // (signed) used for compressed buffer: uncomp_len is the length of the uncompressing comp_len data from the buffer
+        struct { uint32_t consumed_by_prev_vb;      // vb->gz_blocks: bytes of the first BGZF block consumed by the prev VB or txt_header
+                 uint32_t current_bb_i;          }; // index into vb->gz_blocks of first bgzf block of current line
+        struct { uint32_t next_index, next_line; }; // used by z_file->gencomp_vb_lines for building recon plan
     };
     union {
         uint64_t len;          // used by the buffer user according to its internal logic. not modified by malloc/realloc, zeroed by buf_free (in Bits - nwords)

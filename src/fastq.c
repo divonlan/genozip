@@ -746,7 +746,7 @@ void fastq_read_R1_data (VBlockP vb_, VBIType R1_vb_i)
 }
 
 // main thread: after reading VB_HEADER and before reading local/b250 sections from z_file
-void fastq_piz_before_read (VBlockP vb)
+void fastq_piz_after_vb_header (VBlockP vb)
 {
     if (writer_am_i_pair_2 (vb->vblock_i, &VB_FASTQ->R1_vb_i)) { // sets R1_vb_i if R2, leaves it 0 if R1
         

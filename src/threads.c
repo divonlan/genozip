@@ -41,13 +41,14 @@
 #include "piz.h"
 #include "sections.h"
 #include "arch.h"
+#include "license.h"
 
 static Buffer threads = {};
 static Mutex threads_mutex = { .name = "threads_mutex-not-initialized" };
 static Mutex print_call_stack_mutex = { };
 pthread_t main_thread = 0; 
-static pthread_t writer_thread;
-static bool writer_thread_is_set = false;
+static pthread_t writer_thread, zriter_thread;
+static bool writer_thread_is_set = false, zriter_thread_is_set = false;
 
 static Buffer log = {}; // for debugging thread issues, activated with --debug-threads
 static Mutex log_mutex = {};
@@ -113,9 +114,10 @@ static void threads_print_call_stack_do (CONTEXT thread_ctx)
     // loosly following: https://theorangeduck.com/page/printing-stack-trace-mingw
     // issue: shows only Windows DLL symbols, not ours
 
-    fprintf (stderr, "\nCall stack (%s thread):\n", 
+    fprintf (stderr, "\nCall stack (%s thread):\n",  // note: SUBMIT is not a separate thread in Windows
                threads_am_i_main_thread()   ? "MAIN" 
              : threads_am_i_writer_thread() ? "WRITER"
+             : threads_am_i_zriter_thread() ? "ZRITER"
              :                                threads_get_task_name());
 
 //     HANDLE process = GetCurrentProcess();
@@ -212,9 +214,10 @@ void threads_print_call_stack (void)
         fflush (stderr);
 
         fprintf (stderr, "(%s thread):\n", 
-                threads_am_i_main_thread()    ? "MAIN" 
-              : threads_am_i_writer_thread()  ? "WRITER"
-           // : zriter_am_i_a_zriter_thread() ? "ZRITER" // to be implemented
+                am_i_submit()                ? "SUBMIT"
+              : threads_am_i_main_thread()   ? "MAIN" 
+              : threads_am_i_writer_thread() ? "WRITER"
+              : threads_am_i_zriter_thread() ? "ZRITER" 
               :                                 threads_get_task_name());
         fflush (stderr);
 
@@ -292,8 +295,10 @@ static void threads_init_signal_handlers (void)
     signal (SIGUSR1, threads_sigusr1_handler);
     signal (SIGUSR2, threads_sigusr2_handler);
 
+#ifndef santize_thread // looks like this signal handler gets called all the time when compiled with --sanitize-thread
     if (flag.debug_or_test) 
         signal (SIGINT, threads_sigint_handler);
+#endif
 }
 
 #endif
@@ -340,6 +345,22 @@ void threads_unset_writer_thread (void)
 bool threads_am_i_writer_thread (void)
 {
     return writer_thread_is_set && pthread_self() == writer_thread;    
+}
+
+void threads_set_zriter_thread (void)
+{
+    zriter_thread_is_set = true;
+    zriter_thread = pthread_self();
+}
+
+void threads_unset_zriter_thread (void)
+{
+    zriter_thread_is_set = false;
+}
+
+bool threads_am_i_zriter_thread (void)
+{
+    return zriter_thread_is_set && pthread_self() == zriter_thread;    
 }
 
 void threads_write_log (bool to_info_stream)

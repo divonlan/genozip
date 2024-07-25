@@ -122,7 +122,7 @@ void genols (rom z_filename, bool finalize, rom subdir, bool recursive)
 
     DataType dt = z_file->z_flags.txt_is_bin ? DTPZ (bin_type) : z_file->data_type;
 
-    bool is_private = !z_file->section_list_buf.len; // non-accessible private file (compressed with --sendto of someone else)
+    bool is_private = !z_file->section_list.len; // non-accessible private file (compressed with --sendto of someone else)
     
     if (flag.bytes) 
         bufprintf (evb, &str_buf, item_format_bytes, dt_name (dt), str_int_commas (z_file->num_lines).s, 

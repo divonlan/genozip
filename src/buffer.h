@@ -129,6 +129,8 @@ static inline uint64_t BNXT_get_index (BufferP buf, size_t size, FUNCLINE)
 #define BISVALID(buf, ent)  (!BISBEFORE((buf),(ent)) && !BISAFT((buf),(ent)))
 #define ASSBISVALID(buf,ent) ASSERT (BISVALID((buf), (ent)), #ent "=%p is not in its Buffer " #buf, (ent))
 
+#define IN_BUF(ent,buf) (BNUM64((buf),(ent)) >= 0 && BNUM64((buf),(ent)) < (buf).len) // is item contained in buffer
+
 #define INSERTAFTER(type, buf, index) ({                \
     buf_alloc ((buf).vb, &(buf), 1, 0, type, 1, NULL);  \
     memmove (B(type, (buf), (index)+2), B(type, (buf), (index)+1), ((buf).len - ((index)+1)) * sizeof(type)); \
@@ -163,15 +165,16 @@ extern void buf_add (BufferP buf, STRp(data));
     BLST(typeof(item), (buf));                                                          \
 })
 
+#define buf_append_buf(dst_vb,dst_buf,src_buf,type,name) ({ \
+    buf_alloc ((dst_vb) ? (VBlockP)(dst_vb) : (dst_buf)->vb, (dst_buf), (src_buf)->len, 0, type, CTX_GROWTH, (name)); \
+    memcpy ((char *)BAFT(type, *(dst_buf)), (src_buf)->data, (src_buf)->len * sizeof (type));   \
+    (dst_buf)->len += (src_buf)->len; })
+
 #define buf_insert(vb, buf, type, insert_at, new_data, new_data_len, name) \
     buf_insert_do ((VBlockP)(vb), &(buf), sizeof(type), (insert_at), (new_data), (new_data_len), (name), __FUNCLINE)
 
 #define buf_add_moreC(vb_, buf, literal_str, name) buf_add_more ((VBlockP)(vb_), (buf), literal_str, sizeof literal_str-1, (name))
 #define buf_add_moreS(vb_, buf, str, name) buf_add_more ((VBlockP)(vb_), (buf), str, str##_len, (name))
-#define buf_add_buf(dst_vb,dst_buf,src_buf,type,name) ({ \
-    buf_alloc ((dst_vb) ? (VBlockP)(dst_vb) : (dst_buf)->vb, (dst_buf), (src_buf)->len, 0, type, CTX_GROWTH, (name)); \
-    memcpy (BAFT(type, *(dst_buf)), (src_buf)->data, (src_buf)->len * sizeof (type));   \
-    (dst_buf)->len += (src_buf)->len; })
 
 extern void buf_append_string (VBlockP vb, BufferP buf, rom str);
 

@@ -32,7 +32,7 @@ void ref_iupacs_add_do (VBlockP vb, uint64_t idx, char iupac)
 void ref_iupacs_after_compute (VBlockP vb)
 {
     if (CTX(FASTA_NONREF_X)->local.len) {
-        buf_add_buf (evb, &gref->iupacs_buf, &CTX(FASTA_NONREF_X)->local, MakeIupac, "iupacs_buf");
+        buf_append_buf (evb, &gref->iupacs_buf, &CTX(FASTA_NONREF_X)->local, MakeIupac, "iupacs_buf");
         buf_free (CTX(FASTA_NONREF_X)->local);
     }
 }

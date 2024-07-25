@@ -677,7 +677,7 @@ void fastq_deep_piz_wait_for_deep_data (void)
         usleep (100000); // 100ms
 
     // flag.no_writer (eg --test) with gencomp files is forced in-order for SAM bc digest is calculated by writer for gencomp files,
-    // but can be out of order in the FQ part as if no_writer=true FASTQ VBs have needs_write=false (see writer_init_vb_info)
+    // but can be out of order in the FQ part as if no_writer=true FASTQ VBs have needs_write=false (see writer_z_initialize)
     if (flag.no_writer)
         piz_allow_out_of_order(); 
 }

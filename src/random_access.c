@@ -340,7 +340,7 @@ bool random_access_has_filter (void)
            z_file->ra_buf.len;  // this file has RA data (eg not unaligned SAM/BAM)
 }
 
-// PIZ main thread (called from writer_init_vb_info): check if for the given VB,
+// PIZ main thread (called from writer_z_initialize): check if for the given VB,
 // the ranges in random access (from the file) overlap with the ranges in regions (from the command line --regions)
 bool random_access_is_vb_included (VBIType vb_i)
 {

@@ -31,7 +31,6 @@
 #include "random_access.h"
 #include "codec.h"
 #include "threads.h"
-#include "recon_plan_io.h"
 #include "bases_filter.h"
 #include "genols.h"
 #include "tar.h"
@@ -260,31 +259,29 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
     Dispatcher dispatcher = piz_z_file_initialize();  
 
     // generate txt_file(s)
-    if (dispatcher) {
-        piz_set_main_dispatcher (dispatcher);
-        
-        if (flag.interleaved && Z_DT(FASTQ))
-            piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, FQ_COMP_R1, FQ_COMP_R2, true);
-        
-        else if (!flag.unbind)  // single txt_file
-            piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, COMP_NONE, COMP_NONE, true);
+    piz_set_main_dispatcher (dispatcher);
+    
+    if (flag.interleaved && Z_DT(FASTQ))
+        piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, FQ_COMP_R1, FQ_COMP_R2, true);
+    
+    else if (!flag.unbind)  // single txt_file
+        piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, COMP_NONE, COMP_NONE, true);
 
-        else if (Z_DT(FASTQ)) { // paired FASTQ
-            piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, FQ_COMP_R1, FQ_COMP_R1, false);
-            piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, FQ_COMP_R2, FQ_COMP_R2, true);
-        }
-
-        else if (Z_DT(SAM) && flag.deep) {   // Deep: one SAM/BAM and one or more FASTQ
-            piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, SAM_COMP_MAIN, SAM_COMP_DEPN, false);
-
-            flag.out_dt = DT_FASTQ;
-            for (CompIType comp_i=SAM_COMP_FQ00; comp_i < z_file->num_txt_files + 2; comp_i++) 
-                piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, comp_i, comp_i, comp_i == z_file->num_txt_files + 1);
-        }
-
-        else
-            ABORT0 ("Invalid unbinding mode");
+    else if (Z_DT(FASTQ)) { // paired FASTQ
+        piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, FQ_COMP_R1, FQ_COMP_R1, false);
+        piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, FQ_COMP_R2, FQ_COMP_R2, true);
     }
+
+    else if (Z_DT(SAM) && flag.deep) {   // Deep: one SAM/BAM and one or more FASTQ
+        piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, SAM_COMP_MAIN, SAM_COMP_DEPN, false);
+
+        flag.out_dt = DT_FASTQ;
+        for (CompIType comp_i=SAM_COMP_FQ00; comp_i < z_file->num_txt_files + 2; comp_i++) 
+            piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, comp_i, comp_i, comp_i == z_file->num_txt_files + 1);
+    }
+
+    else
+        ABORT0 ("Invalid unbinding mode");
 
     tip_dt_encountered (z_file->data_type);
 
@@ -930,6 +927,6 @@ int main (int argc, char **argv)
 
     if (arch_is_valgrind())  // when testing with valgrind, release memory we normally intentionally leak, to expose true leaks
         main_destroy_filename_list();
- 
+
     exit_ok;
 }

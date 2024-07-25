@@ -299,12 +299,13 @@ typedef packed_enum { // 1 byte
     SEC_LOCAL           = 12, // Multiple sections per-VB
     SEC_CHROM2REF_MAP   = 13, // Global section
     SEC_STATS           = 14, // Global section
-    SEC_MGZIP           = 15, // Per-component section (optional): contains the uncompressed sizes of the source file mgzip block
-    SEC_RECON_PLAN      = 16, // Per-component section (optional): introduced v12
+    SEC_MGZIP           = 15, // Per-component section (optional): contains the uncompressed sizes of the source file mgzip block (called SEC_BGZF until 15.0.62)
+    SEC_RECON_PLAN      = 16, // Per-component section (optional): used for DVCF v12-15.0.42, and for SAM gencomp v14-15.0.63
     SEC_COUNTS          = 17, // Global section: introduced v12
     SEC_REF_IUPACS      = 18, // Global section: introduced v12
     SEC_SUBDICTS        = 19, // Global section: introduced 15.0.25
     SEC_USER_MESSAGE    = 20, // Global section: introduced 15.0.30
+    SEC_GENCOMP         = 21, // Section belonging to the SAM component (optional): used for SAM gencomp since v15.0.64
     NUM_SEC_TYPES 
 } SectionType;
 
@@ -353,6 +354,8 @@ typedef int ThreadId;
 #ifndef SQR 
 #define SQR(x) ((x)*(x)) 
 #endif
+
+#define MAXIMIZE(var,new_val) ({ if ((new_val) > (var)) var = (new_val); })
 
 #define IN_RANGE(x,min,after) ((x) >= (min) && (x) < (after)) // half_open [min,after)
 #define IN_RANGX(x,min,max)   ((x) >= (min) && (x) <= (max))  // close [min,max]
@@ -405,33 +408,41 @@ typedef SORTER ((*Sorter));
     SORTER (func_name) { return DESCENDING (struct_type, struct_field); }
 
 // declaration of binary search recursive function - array of struct, must be sorted ascending by field
-#define BINARY_SEARCHER(func, type, type_field, field, is_unique/*if false, we return the first entry of requested value*/) \
-    type *func (type *first, type *last, type_field value, int level)   \
-    {                                                                   \
-        if (first > last) return NULL; /* not found */                  \
-        type *mid = first + (last - first) / 2, *ret;                   \
-        if (mid->field == value) return mid;                            \
-        ret = (mid->field > value) ? func (first, last-1, value, level+1) : func (mid+1, last, value, level+1); \
+typedef enum { ReturnLower, ReturnHigher, ReturnNULL } BinarySearchIfNotExact; 
+#define BINARY_SEARCHER(func, struct_type, field_type, struct_field,                                                    \
+                        is_unique,    /* if false, we return the first entry of requested value */                      \
+                        if_not_exact) /* what to do if exact match is not found. Note: if ReturnLower, and value is less than the first, will return pointer to an item before the first. Likewise with ReturnHigher */ \
+    struct_type *func (struct_type *first, struct_type *last, field_type value, int level)                              \
+    {                                                                                                                   \
+        ASSERT (level < 50, "recursion too deep (level=50) first=%p last=%p", first, last);                             \
+        if (first > last) /* not found */                                                                               \
+            return if_not_exact==ReturnNULL?NULL : if_not_exact==ReturnLower?last : first;                              \
+        struct_type *mid = first + (last - first) / 2, *ret;                                                            \
+        if (mid->struct_field == value) return mid;                                                                     \
+        ret = (mid->struct_field > value) ? func (first, mid-1, value, level+1) : func (mid+1, last, value, level+1);   \
         if (!(is_unique) && level==0 && ret)  /* possibly multiple entries with value - move back to the first (note: we can only do this when back in level=0 where "first" is the true first entry) */\
-            while (ret > first && (ret-1)->field == value) ret--;       \
-        return ret;                                                     \
+            while (ret > first && (ret-1)->struct_field == value) ret--;                                                \
+        return ret;                                                                                                     \
     }
 
-// declaration of binary search recursive function - array of values, must be sorted ascending
-#define BINARY_SEARCHER_BY_VALUE(func, type, is_unique/*if false, we return the first entry of requested value*/) \
-    type *func (type *first, type *last, type value, int level)         \
-    {                                                                   \
-        if (first > last) return NULL; /* not found */                  \
-        type *mid = first + (last - first) / 2, *ret;                   \
-        if (*mid == value) return mid;                                  \
-        ret = (*mid > value) ? func (first, last-1, value, level+1) : func (mid+1, last, value, level+1); \
+// declaration of binary search recursive function - array of integral (i.e. comparable) values, must be sorted ascending
+#define BINARY_SEARCHER_INTEGRAL(func, element_type,                                                                    \
+                                 is_unique,    /* if false, we return the first entry of requested value*/              \
+                                 if_not_exact) /* what to do if exact match is not found. Note: if ReturnLower, and value is less than the first, will return pointer to an item before the first. Likewise with ReturnHigher */ \
+    element_type *func (element_type *first, element_type *last, element_type value, int level)                         \
+    {                                                                                                                   \
+        if (first > last) /* not found */                                                                               \
+            return if_not_exact==ReturnNULL?NULL : if_not_exact==ReturnLower?last : first;                              \
+        element_type *mid = first + (last - first) / 2, *ret;                                                           \
+        if (*mid == value) return mid;                                                                                  \
+        ret = (*mid > value) ? func (first, mid-1, value, level+1) : func (mid+1, last, value, level+1);               \
         if (!(is_unique) && level==0 && ret)  /* possibly multiple entries with value - move back to the first (note: we can only do this when back in level=0 where "first" is the true first entry) */\
-            while (ret > first && *(ret-1) == value) ret--;             \
-        return ret;                                                     \
+            while (ret > first && *(ret-1) == value) ret--;                                                             \
+        return ret;                                                                                                     \
     }
 
 // actually do a binary search. buf is required to be sorted in an ascending order of field
-#define binary_search(func, type, buf, value) func (B1ST(type,(buf)), BLST(type,(buf)), value, 0);
+#define binary_search(func, type, buf, value) ((buf).len ? func (B1ST(type,(buf)), BLST(type,(buf)), value, 0) : NULL)
 
 // note: second caller will skip block, even if first caller is still executing it
 #define DO_ONCE static bool do_once=0; if (!__atomic_test_and_set (&do_once, __ATOMIC_RELAXED))  

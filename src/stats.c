@@ -235,7 +235,6 @@ static void stats_output_file_metadata (void)
     if (!Z_DT(GNRIC) && !flag.make_reference) {
         bufprintf (evb, &features, "num_lines=%"PRIu64";", z_file->num_lines);
 
-        // note regarding DVCF: reports lines of reject components, which are duplicates of MAIN component lines
         if (z_file->num_components > 1) {
             bufprint0 (evb, &features, "comp_num_lines=");
             for (CompIType comp_i=0; comp_i < z_file->num_components; comp_i++)
@@ -268,7 +267,7 @@ static void stats_output_file_metadata (void)
                    DTPZ (line_name), str_int_commas (z_file->num_lines).s, num_used_ctxs,                   \
                    z_file->num_vbs, TXT_IS_VB_SIZE_BY_MGZIP         ? "(var-length)"                        \
                                   : (segconf.vb_size % (1 MB) != 0) ? str_int_commas (segconf.vb_size).s    \
-                                  :                                   str_size (segconf.vb_size).s, z_file->section_list_buf.len32); })
+                                  :                                   str_size (segconf.vb_size).s, z_file->section_list.len32); })
 
     #define REPORT_QNAME                                                                                    \
         FEATURE (z_file->num_lines, "Read name style: %s%s", "Qname=%s%s",                                  \
@@ -296,7 +295,7 @@ static void stats_output_file_metadata (void)
                            dt_props[DT_FASTQ].line_name, str_int_commas (z_file->deep_stats[NDP_FQ_READS]).s, num_fq_files);
 
             bufprintf (evb, &stats, "Contexts: %u  Vblocks: %u x %s  Sections: %s\n", 
-                       num_used_ctxs, z_file->num_vbs, (segconf.vb_size % (1 MB) != 0) ? str_int_commas (segconf.vb_size).s : str_size (segconf.vb_size).s, str_int_commas (z_file->section_list_buf.len).s);
+                       num_used_ctxs, z_file->num_vbs, (segconf.vb_size % (1 MB) != 0) ? str_int_commas (segconf.vb_size).s : str_size (segconf.vb_size).s, str_int_commas (z_file->section_list.len).s);
 
             uint32_t num_deep_fq_vbs = 0;
             if (flag.deep) 
@@ -498,7 +497,7 @@ static void stats_output_file_metadata (void)
         case DT_GNRIC:
             REPORT_VBs;
             bufprintf (evb, &stats, "Vblocks: %u x %u MB  Sections: %u\n", 
-                       z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), z_file->section_list_buf.len32);
+                       z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), z_file->section_list.len32);
     
             bufprintf (evb, &features, "magic=%s;extension=\"%s\";", generic_get_magic().s, generic_get_ext());
             break;

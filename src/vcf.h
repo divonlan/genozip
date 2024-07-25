@@ -792,10 +792,6 @@ extern void vcf_reset_line (VBlockP vb);
 
 #define VCF_CONTIG_FMT "##contig=<ID=%.*s,length=%"PRId64">"
 
-// DVCF tag renaming stuff
-extern void vcf_tags_cmdline_drop_option(void);
-extern void vcf_tags_cmdline_rename_option(void);
-
 // Samples stuff
 extern void vcf_samples_add  (rom samples_str);
 

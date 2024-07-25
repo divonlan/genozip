@@ -151,7 +151,6 @@ int64_t txtheader_zip_read_and_compress (int64_t *txt_header_offset, CompIType c
     if (flag.show_lines)
         iprintf ("txtheader bytes=%"PRIu64"\n", txt_header_size);
     
-    // DVCF note: we don't account for rejects files as txt_len - the variant lines are already accounted for in the main file, and the added header lines are duplicates of the main header
     // SAM/BAM note: we don't account for PRIM/DEPN txt headers generated in gencomp_initialize
     if (!comp_i) 
         z_file->header_size += txt_file->header_size; 
@@ -372,7 +371,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
     evb->comp_i                = VER(14) ? sec->comp_i/*since v14*/ : 0;
     txt_file->max_lines_per_vb = BGEN32 (header.max_lines_per_vb);
     txt_file->txt_flags        = header.flags.txt_header;
-    txt_file->num_vbs          = sections_count_sections_until (SEC_VB_HEADER, sec, SEC_TXT_HEADER);    
+    txt_file->num_vbs          = sections_count_sections_until (&z_file->piz_reading_list, SEC_VB_HEADER, sec, SEC_TXT_HEADER);    
     txt_file->txt_data_size    = BGEN64 (header.txt_data_size);
     txt_file->txt_data_so_far_single_0 = sum_fragment_len;
     txt_file->src_codec     = header.src_codec;

@@ -10,8 +10,8 @@
 
 #include "genozip.h"
 
-// Reconstruction plan 
-extern bool writer_create_plan (void);
+extern void writer_z_initialize (void);
+extern void writer_create_plan (CompIType comp_i);
 
 // Writer thread
 extern bool writer_handover_data (VBlockP *vb_p);
@@ -34,3 +34,4 @@ extern int64_t writer_get_txt_line_i (VBlockP vb, LineIType line_in_vb);
 extern void writer_set_num_txtheader_lines (CompIType comp_i, uint32_t num_txtheader_lines);
 
 extern VBlockP wvb;
+extern rom recon_plan_flavors[8];

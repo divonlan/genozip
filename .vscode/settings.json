@@ -42,7 +42,9 @@
         "libgen.h": "c",
         "compare": "c",
         "progress.h": "c",
-        "pthread.h": "c"
+        "pthread.h": "c",
+        "numbers": "c",
+        "license.h": "c"
     },
     "cmake.sourceDirectory": "C:/Users/divon/genozip/src/onion",
     "cmake.configureOnOpen": false

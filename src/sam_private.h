@@ -40,6 +40,8 @@
 #define SAM_FLAG_SUPPLEMENTARY ((uint16_t)0x0800) // 2048  1000 0000 0000
 #define SAM_MAX_FLAG           ((uint16_t)0x0FFF)
 
+#define MAX_CONC_WRITING_VBS 1023 // we set some limit to catch values that are non-sensical
+
 typedef union SamFlags {
     struct {
         uint8_t multi_segs    : 1;
@@ -294,10 +296,13 @@ typedef struct VBlockSAM {
     };
     Buffer meth_call;              // ZIP/PIZ: prediction of methylation call in Bismark format: z/Z: unmethylated/methylated C in CpG ; x/X in CHG h/H in CHH ; u/U unknown context ; . not C. prm8[0] is bisulfite_strand ('C' or 'G') 
     
+    // gencomp stuff
+    uint32_t main_vb_info_i;       // ZIP SAM MAIN: index of entry in z_file->vb_info[0] for this VB
+
     // sag stuff
     uint32_t plsg_i;               // PIZ: prim_vb: index of this VB in the plsg array  
     LineIType sag_line_i;          // PIZ: the vb->line_i for which sag was set
-    Buffer sag_grps;               // ZIP/PIZ: an SA group is a group of alignments, including the primary aligngment
+    Buffer sag_grps;               // ZIP/PIZ: an SA group is a group of alignments, including the primary alignment
     Buffer sag_alns;               // ZIP/PIZ: array of {RNAME, STRAND, POS, CIGAR, NM, MAPQ} of the alignment
     Buffer sa_prim_cigars;         // ZIP/PIZ: textual primary CIGARs of SAG_BY_SA (SAM & BAM)
     Buffer qname_count;            // ZIP: count the number of each qname_hash in this VB (if needed)
@@ -819,7 +824,6 @@ extern void sam_seg_prim_add_sag_NH (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t 
 extern void sam_seg_prim_add_sag_CC (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t nh);
 extern void sam_seg_prim_add_sag_SOLO (VBlockSAMP vb, ZipDataLineSAMP dl);
 extern void sam_seg_sag_stuff (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(textual_cigar), rom textual_seq, bool is_bam);
-extern void sam_zip_gc_after_compute_main (VBlockSAMP vb);
 extern void sam_sa_prim_initialize_ingest(void);
 extern void sam_zip_prim_ingest_vb (VBlockSAMP vb);
 extern void sam_seg_against_sa_group (VBlockSAMP vb, ContextP ctx, uint32_t add_bytes);
@@ -831,6 +835,8 @@ extern void sam_sag_by_flag_scan_for_depn (void);
 extern bool sam_might_have_saggies_in_other_VBs (VBlockSAMP vb, ZipDataLineSAMP dl, int32_t n_alns/*0 if unknown*/);
 extern void scan_index_qnames_seg (VBlockSAMP vb);
 extern uint32_t sam_piz_get_plsg_i (VBIType vb_i);
+extern void sam_add_main_vb_info (VBlockP vb, uint64_t prim_first_line, uint32_t prim_num_lines, uint64_t depn_first_line, uint32_t depn_num_lines);
+extern uint32_t sam_zip_calculate_max_conc_writing_vbs (void);
 
 typedef struct { char s[1024]; } ShowAln;
 extern void sam_show_sag_one_grp (SAGroup grp_i);

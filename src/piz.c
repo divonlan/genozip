@@ -174,7 +174,7 @@ static inline void piz_adjust_one_local (ContextP ctx, BufferP local_buf, LocalT
     }
 }
 
-// PIZ compute thread: decompress all contexts (in pair-2 of paired FASTQ: z_data contains contexts of both pairs)
+// PIZ compute thread: uncompress all contexts (in pair-2 of paired FASTQ: z_data contains contexts of both pairs)
 // ZIP compute thread in FASTQ: decompress pair_1 contexts when compressing pair_2
 void piz_uncompress_all_ctxs (VBlockP vb)
 {
@@ -353,9 +353,8 @@ static void piz_reconstruct_one_vb (VBlockP vb)
 static void piz_initialize_ctx_flags_from_vb_1 (VBlockP vb)
 {
     // ctx.flags defaults to vb_i=1 flags, overridden if a b250 or local section is read. this will not be overridden if all_the_same, i.e. no b250/local sections.
-    // note: we use section_list_save and not section_list_buf, because the latter might not contain vb=1, if removed by writer_create_plan
-    Section vb_1_first_sec = B(SectionEnt, z_file->section_list_save, z_file->section_list_save.prm32[0]);
-    Section vb_1_last_sec  = B(SectionEnt, z_file->section_list_save, z_file->section_list_save.prm32[1]);
+    Section vb_1_first_sec = sections_vb_header (1);
+    Section vb_1_last_sec  = sections_vb_last_section (1);
 
     for (Section sec = vb_1_first_sec+1; sec <= vb_1_last_sec; sec++) {
         ContextP ctx = ECTX (sec->dict_id); // will exist if it has a dict (all_the_same sections always have a dict)
@@ -433,7 +432,7 @@ void piz_read_all_ctxs (VBlockP vb, Section *sec/* VB_HEADER section */, bool is
 
         if (flag.debug_read_ctxs) {
             if (section_read)
-                sections_show_header ((SectionHeaderP)Bc (vb->z_data, section_start), NULL, (*sec)->offset, sections_read_prefix (is_pair_data || vb->preprocessing));
+                sections_show_header ((SectionHeaderP)Bc (vb->z_data, section_start), NULL, (*sec)->comp_i, (*sec)->offset, sections_read_prefix (is_pair_data || vb->preprocessing));
             else
                 iprintf ("%c Skipped loading %s/%u %s.%s\n", sections_read_prefix (is_pair_data || vb->preprocessing), 
                          comp_name((*sec)->comp_i), vb->vblock_i, zctx->tag_name, st_name ((*sec)->st));
@@ -562,6 +561,7 @@ bool piz_read_one_vb (VBlockP vb, bool for_reconstruction)
     START_TIMER; 
    
     Section sec = sections_vb_header (vb->vblock_i); 
+    vb->comp_i  = sec->comp_i; // must be before zfile_read_section for sections_show_header to work 
     
     int32_t vb_header_offset = zfile_read_section (z_file, vb, vb->vblock_i, &vb->z_data, "z_data", SEC_VB_HEADER, sec); 
     ASSERT0 (vb_header_offset >= 0, "Unexpectedly VB_HEADER section was skipped");
@@ -576,13 +576,17 @@ bool piz_read_one_vb (VBlockP vb, bool for_reconstruction)
     vb->expected_digest  = header.digest;
     vb->chrom_node_index = WORD_INDEX_NONE;
     vb->lines.len        = VER(14) ? sec->num_lines : BGEN32 (header.v13_top_level_repeats);
-    vb->comp_i           = sec->comp_i; 
     vb->show_containers  = (flag.show_containers == SHOW_CONTAINERS_ALL_VBs || flag.show_containers == vb->vblock_i); // a per-VB value bc in SAM Load-Prim VBs =false vs normal VBs have the flag value (set in sam_piz_dispatch_one_load_sag_vb)
 
     if (txt_file) { // sometimes we don't have a txtfile, eg when genocat is used with some flags that emit other data, no the file
         vb->vb_position_txt_file = txt_file->txt_data_so_far_single_0; // position in original txt file (before any ZIP or PIZ modifications)
         txt_file->num_lines += vb->lines.len; // source file lines
     }
+
+    // uncompress data_type-specific VB header payload. note: adjust length, BGEN etc in piz_after_vb_header
+    if (header.data_compressed_len)
+        zfile_uncompress_section (vb, B1ST(SectionHeaderVbHeader, vb->z_data), &vb->dt_specific_vb_header_payload, "dt_specific_vb_header_payload", 
+                                  vb->vblock_i, SEC_VB_HEADER); 
 
     // in case of unbind, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher
     // because the dispatcher is re-initialized for every txt component
@@ -600,7 +604,7 @@ bool piz_read_one_vb (VBlockP vb, bool for_reconstruction)
 
     piz_initialize_ctx_flags_from_vb_1 (vb);
 
-    DT_FUNC (vb, piz_before_read)(vb);
+    DT_FUNC (vb, piz_after_vb_header)(vb);
 
     // read all b250 and local of all fields and subfields
     piz_read_all_ctxs (vb, &sec, false);
@@ -640,16 +644,16 @@ static void piz_handover_or_discard_vb (Dispatcher dispatcher, VBlockP *vb)
 // returns false if VB was dispatched, and true if vb was skipped
 static void piz_dispatch_one_vb (Dispatcher dispatcher, Section sec)
 {
-    VBlockP next_vb = dispatcher_generate_next_vb (dispatcher, sec->vblock_i, sec->comp_i);
+    VBlockP vb = dispatcher_generate_next_vb (dispatcher, sec->vblock_i, sec->comp_i);
 
     // read one VB's data from z_file
-    ReconType reconstruct = piz_read_one_vb (next_vb, true) && // read even if no_reconstruct
+    ReconType reconstruct = piz_read_one_vb (vb, true) && // read even if no_reconstruct
                             !flag.genocat_no_reconstruct; 
 
     if (reconstruct) {
         if (flag_is_show_vblocks (PIZ_TASK_NAME)) 
             iprintf ("BEFORE_COMPUTE(id=%d) vb=%s/%u num_running_compute_threads(before)=%u\n", 
-                     next_vb->id, comp_name(next_vb->comp_i), next_vb->vblock_i, dispatcher_get_num_running_compute_threads(dispatcher));
+                     vb->id, comp_name(vb->comp_i), vb->vblock_i, dispatcher_get_num_running_compute_threads(dispatcher));
 
         dispatcher_compute (dispatcher, piz_reconstruct_one_vb);
         dispatcher_increment_progress ("read", 1); // done reading
@@ -660,7 +664,7 @@ static void piz_dispatch_one_vb (Dispatcher dispatcher, Section sec)
     else {
         dispatcher_increment_progress ("all_no_reconstruct", 3); // done reading, skipped reconstructing and writing
         dispatcher_abandon_next_vb (dispatcher); // just moves the to processed_vb so dispatcher_recycle_vbs can recycle it
-        piz_handover_or_discard_vb (dispatcher, &next_vb);
+        piz_handover_or_discard_vb (dispatcher, &vb);
     }
 }
 
@@ -729,8 +733,7 @@ Dispatcher piz_z_file_initialize (void)
     if (!flag_loading_auxiliary && DTPZ(piz_after_global_area)) // must be before writer_create_plan messes up the section list
         DTPZ(piz_after_global_area)();
 
-    if (!writer_create_plan())
-        return NULL; // --count, and it was reported already
+    writer_z_initialize();
 
     if (flag.test || flag.md5) 
         ASSINP0 (dt_get_translation(NULL).is_src_dt, "Error: --test or --md5 cannot be used when converting a file to another format"); 
@@ -757,6 +760,9 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
 {
     dispatcher_start_wallclock();
     
+    // generate z_file->piz_reading_list and z_file->recon_plan 
+    writer_create_plan (first_comp_i == COMP_NONE ? COMP_MAIN : first_comp_i);
+
     recon_stack_initialize();
     
     if (DTPZ(piz_initialize) && !DTPZ(piz_initialize)(first_comp_i))
@@ -764,11 +770,6 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
       
     bool header_only_file = true; // initialize - true until we encounter a VB header
     uint64_t num_nondrop_lines = 0;
-
-    // note: may be NULL if txt_header was removed by writer, eg when loading auxillary files
-    Section txt_header_sec = (first_comp_i != COMP_NONE) ? sections_get_comp_txt_header_sec (first_comp_i) : NULL;
-
-    Section sec = sections_one_before (txt_header_sec);
 
     // traverse section list as re-arranged by writer_create_plan
     while (!dispatcher_is_done (dispatcher)) {
@@ -783,11 +784,22 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
         else if (!dispatcher_is_input_exhausted (dispatcher) && dispatcher_has_free_thread (dispatcher) && !vb_pool_is_full (POOL_MAIN)) {
             achieved_something = true;
 
-            bool found_header = sections_next_sec2 (&sec, SEC_TXT_HEADER, SEC_VB_HEADER);
-            bool is_sec_in_comp = (first_comp_i==COMP_NONE || (sec->comp_i >= first_comp_i && sec->comp_i <= last_comp_i));
+            // note: z_file->piz_reading_list contains only TXT_HEADER and VB_HEADER sections needed to reconstruct this txt file
+            Section sec = B(SectionEnt, z_file->piz_reading_list, z_file->piz_reading_list.next++); // bad pointer if beyond list
+
+            // case: we're done with this txt_file (either no header bc EOF, or TXT_HEADER belongs to the next txt_file when unbinding)
+            if (z_file->piz_reading_list.next > z_file->piz_reading_list.len) {
+                if (flag_is_show_vblocks (PIZ_TASK_NAME)) 
+                    iprintf ("INPUT EXHAUSTED - no more SEC_VB_HEADER or SEC_TXT_HEADER for txt_file_i=%u\n", z_file->num_txts_so_far);                
+
+                dispatcher_set_no_data_available (dispatcher, false, DATA_EXHAUSTED);
+
+                if (header_only_file)
+                    dispatcher_recycle_vbs (dispatcher, true); // note: this is normally done in piz_handover_or_discard_vb
+            }
 
             // case SEC_TXT_HEADER
-            if (found_header && sec->st == SEC_TXT_HEADER && is_sec_in_comp) { 
+            else if (sec->st == SEC_TXT_HEADER) { 
                 if (sec->vblock_i >= 2) continue; // fragments >= 2 were already handled together with the first fragment
                 
                 // note: also starts writer, and if unbinding, also opens the txt file and hands data over to the writer
@@ -799,8 +811,7 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
             }
 
             // case SEC_VB_HEADER
-            else if (found_header && sec->st == SEC_VB_HEADER && is_sec_in_comp) {
-                
+            else {
                 if (!writer_does_vb_need_recon (sec->vblock_i)) {
                     dispatcher_increment_progress ("vb_no_recon", 3); // skipped reading, reconstructing, writing
 
@@ -811,17 +822,6 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
 
                 piz_dispatch_one_vb (dispatcher, sec);
                 header_only_file = false;
-            }
-
-            // case: we're done with this txt_file (either no header bc EOF, or TXT_HEADER belongs to the next txt_file when unbinding)
-            else {
-                if (flag_is_show_vblocks (PIZ_TASK_NAME)) 
-                    iprintf ("INPUT EXHAUSTED - no more SEC_VB_HEADER or SEC_TXT_HEADER for txt_file_i=%u\n", z_file->num_txts_so_far);                
-
-                dispatcher_set_no_data_available (dispatcher, false, DATA_EXHAUSTED);
-
-                if (header_only_file)
-                    dispatcher_recycle_vbs (dispatcher, true); // note: this is normally done in piz_handover_or_discard_vb
             }
         }
 

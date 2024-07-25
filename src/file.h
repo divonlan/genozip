@@ -14,8 +14,6 @@
 #include "mutex.h"
 #include "buffer.h"
 
-#define MAX_GEN_COMP 2
-
 typedef rom FileMode;
 extern FileMode READ, WRITE, WRITEREAD;// this are pointers to static strings - so they can be compared eg "if (mode==READ)"
 
@@ -119,9 +117,9 @@ typedef struct File {
     Buffer ra_buf;                     // ZIP/PIZ:  RAEntry records
     
     // section list - used for READING and WRITING genozip files
-    Buffer section_list_buf;           // section list to be written as the payload of the genotype header section
-    Buffer section_list_save;          // a copy of the section_list in case it is modified due to recon plan.
-
+    Buffer section_list;               // Z_FILE ZIP/PIZ section list (payload of the GenozipHeader section)
+    Buffer piz_reading_list;           // Z_FILE PIZ: a subset of z_file->section_list - only the TXT_HEADER and VB_HEADER sections of txt file which need to be read by PIZ. Accessed only by the main thread.
+    
     // TXT file: reading
     Buffer unconsumed_txt;             // ZIP: excess uncompressed data read from the txt file - moved to the next VB: the final part of vb->txt_data that was not consumed
     Buffer unconsumed_mgzip_blocks;    // ZIP TXT MGZIP codecs: unconsumed or partially consumed MGZIP blocks - moved to the next VB
@@ -133,6 +131,7 @@ typedef struct File {
     uint32_t max_mgsp_blocks_in_vb;    // ZIP TXT GZ (with MGSP): max gz blocks in a VB so far
     uint32_t max_mgzip_isize;          // ZIP TXT GZ: largest MGZIP gz block 
     bool discover_during_segconf;      // ZIP TXT GZ: gz discovery during segconf instead of file_open: for FASTQ files
+    Codec vb_header_codec;             // ZIP TXT: codec used for compressing VB_HEADER payload
 
     // TXT file: MGZIP stuff reading and writing compressed txt files 
     Buffer mgzip_isizes;               // ZIP/PIZ: MGZIP: uncompressed size of the MGZIP blocks in which this txt file is compressed
@@ -166,11 +165,12 @@ typedef struct File {
     
     // Z_FILE: Deep
     Buffer vb_start_deep_line;         // Z_FILE: ZIP/PIZ: for each SAM VB, the first deepable_line_i of that VB (0-based, uint64_t)
+    Buffer vb_num_deep_lines;          // Z_FILE: ZIP: for each SAM VB, the number of deepable lines
     Buffer deep_ents;                  // Z_FILE: ZIP: entries of type ZipZDeep
                                        // Z_FILE: PIZ: an array of Buffers, one for each SAM VB, containing QNAME,SEQ,QUAL of all reconstructed lines
     
     Buffer deep_index;                 // Z_FILE: PIZ: an array of Buffers, one for each SAM VB, each containing an array of uint32_t - one for each primary line - index into deep_ents[vb_i] of PizZDeep of that line
-
+    
     #define BY_SEQ   0
     #define BY_QNAME 1
     Buffer deep_index_by[2];           // Z_FILE: ZIP: hash table (BY_SEQ,BY_QNAME) - indices into deep ents, indexed by a subset of the hash(SEQ) bits 
@@ -181,12 +181,9 @@ typedef struct File {
     int qnames_sampled;                // Z_FILE: PIZ: Deep: Number of QNAMEs sampled for producing the huffman compressor
 
     // Reconstruction plan, for reconstructing in sorted order if --sort: [0] is primary coords, [1] is luft coords
-    Buffer vb_info[2];                 // TXT_FILE ZIP: VCF: array of ZipVbInfo per VB, indexed by (vb_i-1), 0:PRIMARY, 1:LUFT
-                                       // Z_FILE   ZIP: SAM: array of SamGcVbInfo for: 0:PRIM 1:DEPN
+    Buffer vb_info[3];                 // Z_FILE   ZIP: SAM: array of SamMainVbInfo for MAIN and SamGcVbInfo for PRIM, DEPN
                                        // Z_FILE   PIZ: [0]: used by writer [1]: used to load SAM SA Groups - array of PlsgVbInfo - entry per PRIM vb 
-    Buffer recon_plan;                 // TXT_FILE ZIP/PIZ: array of ReconPlanItem - order of reconstruction of ranges of lines, to achieve a sorted file. VCF: [0]=PRIM rendition [1]=LUFT rendition
-                                       // Z_FILE   PIZ: plan for entire z_file, txt_file.recon_plan is assigned a portion of this plan
-    Buffer recon_plan_index;           // TXT_FILE ZIP / Z_FILE PIZ: An array of BufWord, one for each VB: start and length of VB in recon_plan
+    Buffer recon_plan;                 // Z_FILE   PIZ: array of ReconPlanItem - reconstruction plan for the current txt file 
     Buffer txt_header_info;            // Z_FILE   PIZ: used by writer
     uint64_t lines_written_so_far;     // TXT_FILE PIZ: number of textual lines (excluding the header) that passed all filters except downsampling, and is to be written to txt_file, or downsampled-out
     uint32_t num_vbs_verified;         // Z_FILE   PIZ: number of VBs verified so far
@@ -207,7 +204,7 @@ typedef struct File {
     uint32_t num_vbs;                  // ZIP: z_file/txt_file PIZ: txt_file: number of VBs processed z_file: total VBs in file
     uint32_t num_vbs_dispatched;       // ZIP: txt_file
     uint32_t num_preproc_vbs_joined;   // Z_FILE: PIZ
-    uint32_t max_conc_writing_vbs;     // Z_FILE: PIZ: the maximal value conc_writing_vbs across all SEC_RECON_PLAN sections in this z_file
+    uint32_t max_conc_writing_vbs;     // Z_FILE: PIZ: SAM: the maximal number of hand-over VBs writer might have in memory. Passed through SectionHeaderGenozipHeader since 15.0.64, and through SectionHeaderReconPlan before that.
     uint64_t deep_stats[NUM_DEEP_STATS]; // Z_FILE: ZIP/PIZ: SAM: stats collection on Deep performance
     uint64_t saggy_near_count, mate_line_count, prim_far_count; // Z_FILE ZIP: SAM: for stats
     union {

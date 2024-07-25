@@ -254,16 +254,10 @@ void profiler_add_evb_and_print_report (void)
         PRINT (write_fg, 2);
         PRINT (write_bg, 2);
         PRINT (bgzf_io_thread, 1);
-        PRINT (sam_zip_gc_after_compute_main, 1);
         PRINT (sam_sa_prim_finalize_ingest, 1);
         PRINT (zip_main_loop_idle, 1);
         PRINT (zip_free_undeeded_zctx_bufs_after_seg, 1);
-        PRINT (generate_recon_plan, 1);
-        PRINT (sam_zip_recon_plan_add_gc_lines, 2);
-        PRINT (sam_zip_recon_plan_count_writers, 3);
-        PRINT (recon_plan_compress, 2);
-        PRINT (recon_plan_deltify, 3);
-        PRINT (recon_plan_compress_one_fragment, 3);
+        PRINT (sam_zip_calculate_max_conc_writing_vbs, 3);
         PRINT (zip_write_global_area, 1);
         PRINT (dict_io_compress_dictionaries, 2); 
         PRINT (dict_io_assign_codecs, 3); 
@@ -355,7 +349,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (sam_seg_ULTIMA_tp, 3);
         PRINT (vcf_seg_PROBE_A, 3);
         PRINT (random_access_merge_in_vb, 1); 
-        PRINT (gencomp_absorb_add_to_queue, 1);
+        PRINT (gencomp_absorb_vb_gencomp_lines, 1);
         PRINT (gencomp_flush, 2);
         PRINT (gencomp_offload_DEPN_to_disk, 3);
         PRINT (compress_depn_buf, 4);

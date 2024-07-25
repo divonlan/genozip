@@ -194,7 +194,7 @@ static void vcf_header_consume_contig (STRp (contig_name), PosType64 *LN)
 //     z_file->header_size += STRLEN(FORMAT_PL); // header_size has grown
 
 //     // add back the field name (#CHROM) line
-//     buf_add_buf (evb, txt_header, &vcf_field_name_line, char, "txt_data");
+//     buf_append_buf (evb, txt_header, &vcf_field_name_line, char, "txt_data");
 // }
 
 static void vcf_header_zip_create_contig (STRp(line))

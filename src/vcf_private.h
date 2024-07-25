@@ -365,7 +365,6 @@ extern void vcf_seg_INFO_VD (VBlockVCFP vb, ContextP ctx, STRp(vd));
 extern void vcf_seg_INFO_VW (VBlockVCFP vb, ContextP ctx, STRp(vw));
 
 // VEP stuff
-extern uint64_t _INFO_Allele;
 extern void vcf_vep_zip_initialize (void);
 extern void vcf_vep_seg_initialize (VBlockVCFP vb);
 extern void vcf_seg_INFO_CSQ (VBlockVCFP vb, ContextP ctx, STRp(value));

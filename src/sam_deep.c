@@ -115,11 +115,10 @@ void sam_deep_zip_finalize (void)
     uint64_t count=0;
     
     for (VBIType vb_i=1; vb_i <= z_file->num_vbs; vb_i++) {
-        Section sec = sections_vb_header (vb_i);
-        if (IS_DEPN(sec)) continue;
-
         *B64(z_file->vb_start_deep_line, vb_i) = count; // note: in ZIP, vb_start_deep_line index is vb_i (unlike PIZ, which is vb_idx)
-        count += sec->num_deep_lines;
+        
+        if (vb_i < z_file->vb_num_deep_lines.len32) // this condition might be false for DEPN VBs, bc we don't extend the buffer for DEPN VBs
+            count += *B32(z_file->vb_num_deep_lines, vb_i);
     }
 
     if (flag.show_deep) {
@@ -224,6 +223,11 @@ void sam_deep_merge (VBlockP vb_)
         z_file->deep_ents.len = 0;
     }
 
+    if (vb->comp_i != SAM_COMP_DEPN) {
+        buf_alloc_zero (evb, &z_file->vb_num_deep_lines, 0, vb->vblock_i+1, uint32_t, 0, "z_file->vb_num_deep_lines"); // initial allocation is in sam_set_sag_type
+        *B32(z_file->vb_num_deep_lines, vb->vblock_i) = vb->lines.count;
+    }
+
     buf_alloc (evb, &z_file->deep_ents, vb->lines.count/*num deepable lines in VB*/, 0, ZipZDeep, CTX_GROWTH, "z_file->deep_ents"); 
 
     uint32_t ent_i = z_file->deep_ents.len32;
@@ -309,7 +313,7 @@ static void inline sam_piz_alloc_deep_ents (VBlockSAMP vb, uint32_t size)
     }
 }
 
-#define NUM_QNAMES_TO_SAMPLE 100 // number of QNAMEs to sample for producing the huffman comressor
+#define NUM_QNAMES_TO_SAMPLE 100 // number of QNAMEs to sample for producing the huffman compressor
 
 static void sam_piz_deep_sample_qname (STRp(suffix), // if prfx_len>0 then this is just the suffix 
                                        int prfx_len)

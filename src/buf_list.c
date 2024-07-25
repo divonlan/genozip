@@ -45,7 +45,7 @@ void buflist_sort (VBlockP vb, bool already_locked)
 // remove from buffer_list of this vb
 // thread safety: only the thread owning the VB of the buffer (main thread of evb) can remove a buffer
 // from the buf list, OR the main thread may remove for all VBs, IF no compute thread is running
-static BINARY_SEARCHER (buflist_finder, BufListEnt, ConstBufferP, buf, true)
+static BINARY_SEARCHER (buflist_finder, BufListEnt, ConstBufferP, buf, true, ReturnNULL)
 BufListEnt *buflist_find_buf (VBlockP vb, ConstBufferP buf, FailType soft_fail)
 {
     START_TIMER;
@@ -330,11 +330,10 @@ bool buflist_locate (ConstBufferP buf, rom prefix /*NULL if silent*/)
     OBJECT_TEST(file_buf_locate, txt_file);
     OBJECT_TEST(ref_buf_locate, gref);
 
-    void *depn=0, *componentsP=0, *queueP=0, *preabsorb_queue=0; // dummies
+    void *depn=0, *componentsP=0, *queueP=0; // dummies
     OBJECT_TEST(gencomp_buf_locate_depn, depn);
     OBJECT_TEST(gencomp_buf_locate_componentsP, componentsP);
     OBJECT_TEST(gencomp_buf_locate_queueP, queueP);
-    OBJECT_TEST(gencomp_buf_locate_preabsorb_queue, preabsorb_queue);
 
     if (prefix) 
         fprintf (stderr, "%s %p is not located in any of the objects tested.", prefix, buf);

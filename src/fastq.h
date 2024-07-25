@@ -120,7 +120,7 @@ extern Multiplexer2P fastq_get_ultima_c_mux (VBlockP vb);
 extern bool fastq_piz_initialize (CompIType comp_i);
 extern void fastq_piz_header_init (void);
 extern void fastq_piz_process_recon (VBlockP vb);
-extern void fastq_piz_before_read (VBlockP vb);
+extern void fastq_piz_after_vb_header (VBlockP vb);
 extern bool fastq_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header);
 CONTAINER_FILTER_FUNC (fastq_piz_filter);
 extern IS_SKIP (fastq_piz_is_skip_section);

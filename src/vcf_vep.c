@@ -13,8 +13,7 @@
 static MediumContainer csq_con;
 static SegCallback csq_cbs[MEDIUM_CON_NITEMS];
 
-uint64_t _INFO_Allele; // needs to be translated in DVCF
-static uint64_t _INFO_Existing_variation, _INFO_cDNA_position, _INFO_CDS_position, _INFO_Protein_position, _INFO_DISTANCE, 
+static uint64_t _INFO_Allele, _INFO_Existing_variation, _INFO_cDNA_position, _INFO_CDS_position, _INFO_Protein_position, _INFO_DISTANCE, 
                 _INFO_AFR_MAF, _INFO_AMR_MAF, _INFO_EAS_MAF, _INFO_EUR_MAF, _INFO_SAS_MAF, _INFO_AA_MAF, _INFO_EA_MAF, _INFO_ExAC_MAF;
 
 static DictId maf_dict_id[2];

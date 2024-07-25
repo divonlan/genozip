@@ -68,6 +68,8 @@ void zriter_wait_for_bg_writing (void)
 
 static void *zriter_thread_entry (void *zt_)
 {
+    threads_set_zriter_thread();
+
     mutex_lock (z_file->zriter_mutex); // only one thread can write a time
 
     START_TIMER;
@@ -97,6 +99,7 @@ static void *zriter_thread_entry (void *zt_)
 
     mutex_unlock (z_file->zriter_mutex);
 
+    threads_unset_zriter_thread();
     return NULL;
 }
 
@@ -146,7 +149,6 @@ static void zriter_write_background (BufferP data, BufferP section_list)
                                     (uint64_t)(*zt_p)->thread_id, zriter_thread_num++, (*zt_p)->data.len32, (*zt_p)->section_list.len32);
 }
 
-
 static void zriter_write_foreground (BufferP data, BufferP section_list, int64_t offset_in_z_file)
 {
     mutex_lock (z_file->zriter_mutex);
@@ -189,7 +191,7 @@ static void zriter_write_foreground (BufferP data, BufferP section_list, int64_t
 }
 
 void zriter_write (BufferP data,
-                   BufferP section_list,     // section list to append to z_file->section_list_buf (non-NULL iff offset_in_z_file==-1)
+                   BufferP section_list,     // section list to append to z_file->section_list (non-NULL iff offset_in_z_file==-1)
                    int64_t offset_in_z_file, // -1 means append to end of file
                    bool background)          // write in a separate thread to enable concurrent reading (only one thread at a time writes)
 {
@@ -207,7 +209,7 @@ void zriter_write (BufferP data,
     if (data->shared || (section_list && section_list->shared) || // shared buffers cannot be grabbed (eg txt_data is shared in SAM PRIM)
         flag.no_zriter) // user requested or as set in flags_update(); 
         background = false; 
-        
+
     // case: foreground write
     if (!background) 
         zriter_write_foreground (data, section_list, offset_in_z_file);

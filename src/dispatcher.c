@@ -74,7 +74,7 @@ void dispatcher_increment_progress (rom where, int64_t increment)
     // in unbind mode - dispatcher is not done if there's another component after this one
     bool done = dispatcher_is_done (main_dispatcher);
 
-    progress_update (d->task_name, d->progress, d->target_progress, done);
+    progress_update (d->task_name, __atomic_load_n (&d->progress, __ATOMIC_RELAXED), d->target_progress, done);
 }
 
 void dispatcher_start_wallclock (void)

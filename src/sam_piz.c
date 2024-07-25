@@ -65,6 +65,10 @@ void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
         segconf.est_sam_factor        = (double)header->sam.segconf_sam_factor / (double)SAM_FACTOR_MULT;
         segconf.MAPQ_use_xq           = header->sam.segconf_MAPQ_use_xq;
         segconf.has[OPTION_MQ_i]      = header->sam.segconf_has_MQ;
+
+        flag.deep = header->flags.genozip_header.dts2_deep; 
+
+        z_file->max_conc_writing_vbs  = MAX_(1, BGEN16 (header->sam.conc_writing_vbs)); // since 15.0.64. For earlier v14,15 versions, this will be 0 in the file and set to 1 here, and might be further updated when uncompressing SectionHeaderReconPlan.
     }
 }
 
@@ -105,6 +109,19 @@ void sam_piz_recon_init (VBlockP vb)
         usleep (250000); // 250 ms
 
     buf_alloc_zero (vb, &CTX(SAM_CIGAR)->cigar_anal_history, 0, vb->lines.len, CigarAnalItem, 0, "cigar_anal_history"); // initialize to exactly one per line.
+}
+
+// PIZ main thread: after reading and uncompressing VB_HEADER
+void sam_piz_after_vb_header (VBlockP vb)
+{
+    if (vb->vb_plan.len) {
+        // note: vb_plan was uncompressed in piz_read_one_vb 
+        VB_SAM->vb_plan.len /= sizeof (VbPlanItem); // non-zero only in MAIN VBs with gencomp lines
+        BGEN_u16_buf (&VB_SAM->vb_plan, NULL);
+
+        // add all the VB_HEADERs of the PRIM/DEPN VBs needed by this main VB.
+        gencomp_piz_update_piz_reading_list (vb); // this also removes items already processed
+    }
 }
 
 // PIZ: piz_after_recon callback: called by the compute thread from piz_reconstruct_one_vb. order of VBs is arbitrary
@@ -315,7 +332,7 @@ typedef struct {
 static Buffer seqs_filter = {};
 
 static ASCENDING_SORTER (seq_filter_sort_by_hash, SeqFilterItem, hash)
-static BINARY_SEARCHER (find_seq_in_filter, SeqFilterItem, uint32_t, hash, false)
+static BINARY_SEARCHER (find_seq_in_filter, SeqFilterItem, uint32_t, hash, false, ReturnNULL)
 
 // initialize seqs_filter and flag.seq_filter from command line
 void seq_filter_initialize (rom filename)

@@ -673,7 +673,7 @@ static void file_initialize_z_file_data (FileP file)
         Z_INIT (deep_index_by[BY_SEQ]);
         Z_INIT (deep_index_by[BY_QNAME]);
         Z_INIT (deep_ents);
-        Z_INIT (section_list_buf);
+        Z_INIT (section_list);
         Z_INIT (contexts[CHROM].chrom2ref_map);
     }
     else {

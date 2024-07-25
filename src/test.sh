@@ -507,7 +507,7 @@ batch_special_algs()
     test_header "MC copying CIGAR from mate, when both are null-CIGARs"
     $genozip -tf ${TESTDIR}/regression.2024-06-26.MC-copy-from-mate-CIGAR.null-CIGAR.bam || exit 1
 
-    # txt data is 393k - over segconf's first VB size of 300K (test in plain, bgzf, gz; test SAM and FASTQ as they have different code paths related to discovery of gz codec)
+    # txt data is 393k - over segconf's VB size of 256K (test in plain, bgzf, gz; test SAM and FASTQ as they have different code paths related to discovery of gz codec)
     test_header "Single read/alignment longer than segconf's first VB"
     $genozip -tf ${TESTDIR}/special.force-2nd-segconf-vb_size.plain.sam   || exit 1
     $genozip -tf ${TESTDIR}/special.force-2nd-segconf-vb_size.bgzf.sam.gz || exit 1
@@ -515,6 +515,10 @@ batch_special_algs()
     $genozip -tf ${TESTDIR}/special.force-2nd-segconf-vb_size.plain.fq    || exit 1
     $genozip -tf ${TESTDIR}/special.force-2nd-segconf-vb_size.bgzf.fq.gz  || exit 1
     $genozip -tf ${TESTDIR}/special.force-2nd-segconf-vb_size.gz.fq.gz    || exit 1
+
+    # two alignments only, both DEPN
+    test_header "two DEPN lines"
+    $genozip -tf ${TESTDIR}/special.2-depn-lines.sam                      || exit 1
 }
 
 batch_qual_codecs()

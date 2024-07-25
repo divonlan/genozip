@@ -736,7 +736,7 @@ void sam_seg_CIGAR (VBlockSAMP vb, ZipDataLineSAMP dl, uint32_t last_cigar_len, 
 
     else if (line_textual_cigars_used && !segconf.running) { // BAM
         dl->CIGAR =(TxtWord){ .index = vb->line_textual_cigars.len32, .len = vb->textual_cigar.len32 }; // in BAM dl->CIGAR points into line_textual_cigars
-        buf_add_buf (VB, &vb->line_textual_cigars, &vb->textual_cigar, char, "line_textual_cigars");
+        buf_append_buf (VB, &vb->line_textual_cigars, &vb->textual_cigar, char, "line_textual_cigars");
     }
 
     // case: DEPN or PRIM line.

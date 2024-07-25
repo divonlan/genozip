@@ -114,7 +114,7 @@ typedef struct {
     \
     Buffer frozen_state;          /* PIZ: reconstruction state - frozen during reconstruct_peek */ \
     \
-    /* data for dictionary and recon_plan compressing */ \
+    /* data for dictionary, txt_header and recon_plan compressing */ \
     char *fragment_start;        \
     uint32_t fragment_len;       \
     uint32_t fragment_num_words; \
@@ -158,7 +158,7 @@ typedef struct {
     Buffer optimized_txt_data;    /* ZIP: --optimized: txt_data being re-written, if it cannot be re-written in place */ \
     }; \
     Buffer txt_data;              /* ZIP: txt_data as read from disk and uncompressed - either the txt header (in evb) or the VB data lines PIZ: reconstructed data */\
-    Buffer comp_txt_data;         /* ZIP/PIZ: source-comprssed data as read/written from/to disk */ \
+    Buffer comp_txt_data;         /* ZIP/PIZ: source-compressed data as read/written from/to disk */ \
     Buffer z_section_headers;     /* PIZ and Pair-1 reading in ZIP-Fastq: an array of unsigned offsets of section headers within z_data */\
     Buffer scratch;               /* helper buffer: used by many functions. before usage, assert that its free, and buf_free after. */\
     int16_t z_next_header_i;      /* next header of this VB to be encrypted or decrypted */\
@@ -184,15 +184,20 @@ typedef struct {
     PosType64 iupacs_last_pos, iupacs_next_pos; \
     \
     union { \
-    Buffer gencomp_lines;         /* ZIP: array of GencompLineIEntry: SAM-SA: primary/dependent lines */ \
+    Buffer gencomp_lines;         /* ZIP SAM: array of GencompLineIEntry: SAM-SA: primary/dependent lines */ \
     Buffer optimized_line;        /* ZIP: re-written line in case of --optimize */ \
     Buffer flusher_blocks;        /* PIZ writer vb */ \
+    }; \
+    \
+    union { \
+    Buffer dt_specific_vb_header_payload; \
+    Buffer vb_plan;               /* SAM MAIN: reconstruction plan for this VB */ \
     }; \
     \
     /* Information content stats - how many bytes does this section have more than the corresponding part of the vcf file */\
     Buffer show_headers_buf;      /* ZIP only: we collect header info, if --show-headers is requested, during compress, but show it only when the vb is written so that it appears in the same order as written to disk */\
     Buffer show_b250_buf;         /* ZIP only: for collecting b250 during generate - so we can print at onces without threads interspersing */\
-    Buffer section_list_buf;      /* ZIP only: all the sections non-dictionary created in this vb. we collect them as the vb is processed, and add them to the zfile list in correct order of VBs. */\
+    Buffer section_list;          /* ZIP only: all the sections non-dictionary created in this vb. we collect them as the vb is processed, and add them to the zfile list in correct order of VBs. */\
     union { \
     uint32_t num_sequences;       /* ZIP only: FASTA: num DESC lines encountered in this VB */ \
     uint32_t num_perfect_matches; /* ZIP only: SAM/BAM/FASTQ: number of perfect matches found by aligner */ \

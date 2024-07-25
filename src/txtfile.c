@@ -27,7 +27,7 @@
 #define MAX_TXT_HEADER_LEN ((uint64_t)0xffffffff) // maximum length of txt header - one issue with enlarging it is that we digest it in one go, and the digest module is 32 bit
 
 // PIZ: dump bad vb to disk
-StrTextLong txtfile_dump_vb (VBlockP vb, rom base_name)
+StrTextLong txtfile_dump_vb (VBlockP vb, rom base_name, BufferP txt_data)
 {
     StrTextLong dump_filename;
 
@@ -36,7 +36,7 @@ StrTextLong txtfile_dump_vb (VBlockP vb, rom base_name)
 
     if (flag.is_windows) str_replace_letter (dump_filename.s, strlen(dump_filename.s), '/', '\\');
 
-    buf_dump_to_file (dump_filename.s, &vb->txt_data, 1, false, false, false, true);
+    buf_dump_to_file (dump_filename.s, txt_data ? txt_data : &vb->txt_data, 1, false, false, false, true);
 
     return dump_filename;
 }
@@ -945,7 +945,7 @@ static bool txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb, bool *R2_vb_t
                    VB_NAME, dt_name (txt_file->data_type), Ltxt, codec_name (txt_file->effective_codec), TF(vb->is_last_vb_in_txt_file), TF(segconf.is_interleaved),
                    DTPT(is_binary) ? "truncated but not on the boundary of the" : "missing a newline on the last", DTPT(line_name),
                    TXT_DT(REF) ? "FASTA" : dt_name (txt_file->data_type),
-                   txtfile_dump_vb (vb, txt_name).s);
+                   txtfile_dump_vb (vb, txt_name, NULL).s);
     }
 
 done:

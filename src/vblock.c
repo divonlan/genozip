@@ -55,7 +55,7 @@ void vb_release_vb_do (VBlockP *vb_p, rom task_name, rom func)
 
     VBlockP vb = *vb_p;
     if (!vb) return; // nothing to release
-
+    
     ASSERT (is_in_use (vb) || vb==evb, "Cannot release VB because it is not in_use (called from %s): vb->id=%d vb->vblock_id=%u", 
             func, vb->id, vb->vblock_i);
 
@@ -137,7 +137,7 @@ void vb_create_pool (VBlockPoolType type, rom name)
     // only main-thread dispatcher can create a pool. other dispatcher (eg writer's bgzf compression) can must existing pool
     uint32_t num_vbs = (type == POOL_MAIN) ? MAX_(1, global_max_threads) +               // compute thread VBs
                                              (IS_PIZ ? 2 : 0)    +                       // txt header VB and wvb (for PIZ)
-                                             (IS_PIZ ? z_file->max_conc_writing_vbs : 0) // thread-less VBs handed over to the writer thread
+                                             (IS_PIZ ? z_file->max_conc_writing_vbs : 0) // SAM: max number of thread-less VBs handed over to the writer thread which the writer must load concurrently 
                                            : writer_get_max_bgzf_threads();
     if (flag_is_show_vblocks (NULL)) 
         iprintf ("CREATING_VB_POOL: type=%s global_max_threads=%u max_conc_writing_vbs=%u num_vbs=%u\n", 

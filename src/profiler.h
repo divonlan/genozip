@@ -58,11 +58,10 @@
         dict_io_compress_dictionaries, dict_io_assign_codecs, dict_io_compress_one_fragment, \
         aligner_best_match, aligner_get_word_from_seq, aligner_update_best, aligner_seq_to_bitmap, aligner_first_layer, aligner_additional_layers, \
         refhash_generate_emoneg, ref_contigs_compress,\
-        generate_recon_plan, zip_write_global_area, \
+        zip_write_global_area, \
         piz_read_global_area, ref_load_stored_reference, dict_io_read_all_dictionaries, dict_io_build_word_lists, \
         ref_read_one_range, ref_uncompress_one_range, vb_release_vb_do, vb_destroy_vb,\
-        sam_load_groups_add_one_prim_vb, recon_plan_compress, recon_plan_compress_one_fragment,\
-        sam_zip_recon_plan_add_gc_lines, sam_zip_recon_plan_count_writers, recon_plan_deltify,\
+        sam_load_groups_add_one_prim_vb, sam_zip_calculate_max_conc_writing_vbs, \
         sam_reconstruct_SEQ_vs_ref, aligner_reconstruct_seq,\
         sam_bismark_piz_update_meth_call,\
         zip_handle_unique_words_ctxs, random_access_merge_in_vb, \
@@ -70,8 +69,8 @@
         random_access_finalize_entries, random_access_compress, ctx_compress_counts, zfile_compress_genozip_header,\
         ref_compress_ref, ref_compress_one_range, ref_copy_compressed_sections_from_reference_file,\
         piz_main_loop_idle, zip_main_loop_idle, zip_free_undeeded_zctx_bufs_after_seg, \
-        gencomp_absorb_add_to_queue, gencomp_flush, gencomp_offload_DEPN_to_disk, gencomp_reread_lines_as_prescribed, gencomp_do_offload_write, \
-        compress_depn_buf, sam_zip_gc_after_compute_main, \
+        gencomp_absorb_vb_gencomp_lines, gencomp_flush, gencomp_offload_DEPN_to_disk, gencomp_reread_lines_as_prescribed, gencomp_do_offload_write, \
+        compress_depn_buf,  \
         tmp1, tmp2, tmp3, tmp4, tmp5, \
         fields[MAX_DICTS]/* ZIP: compression time (all ctxs); PIZ: recon time (fields only). must be last for profiler_add. */ \
 

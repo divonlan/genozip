@@ -228,13 +228,16 @@ double arch_get_physical_mem_size (void)
     if (mem_size) return mem_size;
 
 #ifdef __linux__    
-    ASSERTNOTINUSE (evb->scratch);
-    file_get_file (evb, "/proc/meminfo", &evb->scratch, "meminfo", 100, VERIFY_ASCII, true);
+    FILE *fp = fopen ("/proc/meminfo", "rb");
+    if (!fp) return 0;
 
-    int num_start = strcspn (B1STc(evb->scratch), "0123456789");
-    mem_size = (double)atoll(Bc(evb->scratch, num_start)) / (1024.0*1024.0); // convert KB to GB
+    char meminfo[100] = {}; // note: can't use a Buffer because called from a signal handler - we don't know which is the running thread
+    fread (meminfo, 1, sizeof(meminfo)-1, fp); // -1 to guarantee that (at least) last character is \0 
 
-    buf_free (evb->scratch);
+    int num_start = strcspn (meminfo, "0123456789");
+    mem_size = (double)atoll(&meminfo[num_start]) / (1024.0*1024.0); // convert KB to GB
+    
+    fclose (fp);
 
 #elif defined _WIN32
     ULONGLONG kb = 0;
@@ -254,6 +257,7 @@ double arch_get_physical_mem_size (void)
 
     return mem_size;
 }
+
 
 StrText arch_get_filesystem_type (FileP file)
 {
@@ -540,3 +544,6 @@ bool curl_available (void)
     return installed;
 }
 
+#ifdef santize_thread
+void *__gxx_personality_v0; // overcome "undefined reference to '__gxx_personality_v0'" when linking with --sanitize=thread
+#endif
