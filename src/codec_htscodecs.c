@@ -23,14 +23,14 @@
 // Get maximum compressed size
 //----------------------------
 
-uint32_t codec_ARTB_est_size (Codec codec, uint64_t uncompressed_len) { return arith_compress_bound    (uncompressed_len, ORDER_B); }
-uint32_t codec_ARTW_est_size (Codec codec, uint64_t uncompressed_len) { return arith_compress_bound    (uncompressed_len, ORDER_W); }
-uint32_t codec_ARTb_est_size (Codec codec, uint64_t uncompressed_len) { return arith_compress_bound    (uncompressed_len, ORDER_b); }
-uint32_t codec_ARTw_est_size (Codec codec, uint64_t uncompressed_len) { return arith_compress_bound    (uncompressed_len, ORDER_w); }
-uint32_t codec_RANB_est_size (Codec codec, uint64_t uncompressed_len) { return rans_compress_bound_4x16(uncompressed_len, ORDER_B); }
-uint32_t codec_RANW_est_size (Codec codec, uint64_t uncompressed_len) { return rans_compress_bound_4x16(uncompressed_len, ORDER_W); }
-uint32_t codec_RANb_est_size (Codec codec, uint64_t uncompressed_len) { return rans_compress_bound_4x16(uncompressed_len, ORDER_b); }
-uint32_t codec_RANw_est_size (Codec codec, uint64_t uncompressed_len) { return rans_compress_bound_4x16(uncompressed_len, ORDER_w); }
+uint32_t codec_ARTB_est_size (Codec codec, uint64_t uncompressed_len) { return 1 KB + arith_compress_bound    (uncompressed_len, ORDER_B); } // +1 KB - see bug 1131
+uint32_t codec_ARTW_est_size (Codec codec, uint64_t uncompressed_len) { return 1 KB + arith_compress_bound    (uncompressed_len, ORDER_W); }
+uint32_t codec_ARTb_est_size (Codec codec, uint64_t uncompressed_len) { return 1 KB + arith_compress_bound    (uncompressed_len, ORDER_b); }
+uint32_t codec_ARTw_est_size (Codec codec, uint64_t uncompressed_len) { return 1 KB + arith_compress_bound    (uncompressed_len, ORDER_w); }
+uint32_t codec_RANB_est_size (Codec codec, uint64_t uncompressed_len) { return 1 KB + rans_compress_bound_4x16(uncompressed_len, ORDER_B); }
+uint32_t codec_RANW_est_size (Codec codec, uint64_t uncompressed_len) { return 1 KB + rans_compress_bound_4x16(uncompressed_len, ORDER_W); }
+uint32_t codec_RANb_est_size (Codec codec, uint64_t uncompressed_len) { return 1 KB + rans_compress_bound_4x16(uncompressed_len, ORDER_b); }
+uint32_t codec_RANw_est_size (Codec codec, uint64_t uncompressed_len) { return 1 KB + rans_compress_bound_4x16(uncompressed_len, ORDER_w); }
 
 //------------------------
 // Compress
@@ -39,7 +39,7 @@ uint32_t codec_RANw_est_size (Codec codec, uint64_t uncompressed_len) { return r
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
 static bool codec_hts_compress (VBlockP vb, ContextP ctx,
                                 rom uncompressed,           // option 1 - compress contiguous data
-                                uint32_t *uncompressed_len, 
+                                uint32_t *uncompressed_len, // function does NOT modify this value
                                 LocalGetLineCB get_line_cb, // option 2 - compress data one line at a time
                                 qSTRp(compressed),           // in/out 
                                 uint8_t *(*func)(VBlockP vb, uint8_t *in, unsigned in_size, uint8_t *out, unsigned *out_size, int order),                                
@@ -66,6 +66,8 @@ static bool codec_hts_compress (VBlockP vb, ContextP ctx,
 
     if (func == rans_compress_to_4x16) COPY_TIMER_COMPRESS (compressor_rans);
     else                               COPY_TIMER_COMPRESS (compressor_arith); // higher level codecs are accounted for in their codec code
+
+    buf_free (vb->codec_bufs[0]); // don't rely on caller to free, because this function is called in many places outside of normal section compression
 
     return ret;
 }

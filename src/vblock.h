@@ -168,8 +168,7 @@ typedef struct {
     ContextArray contexts;    \
     DictIdtoDidMap d2d_map;       /* map for quick look up of did_i from dict_id : 64K for key_map, 64K for alt_map */\
     \
-    bool has_ctx_index; \
-    ContextIndex ctx_index[MAX_DICTS]; /* PIZ VB: sorted index into contexts for binary-search lookup if d2d_map fails */\
+    Buffer ctx_index;             /* PIZ VB: sorted index into contexts for binary-search lookup if d2d_map fails */\
     \
     /* reference stuff */ \
     Reference ref;                /* used by VBs created by dispatchers for uncompressing / compressing internal or external references. NOT used by VBs of the data type itself. */ \

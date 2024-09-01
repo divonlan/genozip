@@ -211,14 +211,19 @@ static void digest_piz_verify_one_vb (VBlockP vb,
                        DIGEST_NAME, digest_display (vb->expected_digest).s, 
                        recon_size_warn);
 
+            // gencomp: don't count PRIM VBs in the midst of MAIN VBs, as --biopsy sets --no-gencomp
+            VBIType no_gencomp_vb_i = (z_sam_gencomp && vb->comp_i == SAM_COMP_MAIN) ? sections_get_num_vbs_up_to (SAM_COMP_MAIN, vb->vblock_i) : vb->vblock_i; 
+
             // case: first bad VB: dump bad VB to disk and maybe exit
             if (!__atomic_test_and_set (&txt_file->vb_digest_failed, __ATOMIC_RELAXED)) { // not WARN_ONCE because we might be genounzipping multiple files - we want to show this for every failed file (see also note in digest_piz_verify_one_txt_file)
-                NOISYWARN ("Bad reconstructed vblock has been dumped to: %s.gz\n"
+                NOISYWARN ("Bad reconstructed %s has been dumped to: %s. vb_position_txt_file=%"PRIu64", txt_data.len=%u recon_size(expected)=%u\n"
                            "To see the same data in the original file:\n"
-                           "genozip --biopsy %u%s %s%s",  // note: segconf.vb_size is only available since v14. For older files, look it up with genocat --stats.
-                           txtfile_dump_vb (vb, z_name, txt_data).s, vb->vblock_i, // note: txt_data dumped INCLUDES integrated gencomp lines (if there are any)
-                           cond_int (segconf.vb_size/*0 if IS_VB_SIZE_BY_MGZIP*/, " -B", (unsigned)(segconf.vb_size >> 20)), 
-
+                           "genozip --biopsy %u%s%s%s --no-header %s%s",  // note: segconf.vb_size is only available since v14. For older files, look it up with genocat --stats.
+                           VB_NAME, txtfile_dump_vb (vb, z_name, txt_data).s, // note: txt_data dumped INCLUDES integrated gencomp lines (if there are any)
+                           vb->vb_position_txt_file, vb->txt_data.len32, vb->recon_size, no_gencomp_vb_i,
+                           cond_int (segconf.vb_size/*0 if IS_VB_SIZE_BY_MGZIP*/ && !(segconf.vb_size % (1 MB)), " -B", (unsigned)(segconf.vb_size >> 20)), 
+                           cond_int (segconf.vb_size && (segconf.vb_size % (1 MB)), " -B", (int)segconf.vb_size),
+                           segconf.vb_size && (segconf.vb_size % (1 MB)) ? "B" : "",
                            (txt_file && txt_file->name) ? filename_guess_original (txt_file) : IS_PIZ ? txtheader_get_txt_filename_from_section(vb->comp_i).s : "(uncalculable)",
                            SUPPORT);
 
@@ -244,7 +249,7 @@ bool digest_one_vb (VBlockP vb, bool is_compute_thread,
     #define DIGEST_TIMEOUT (30*60) // 30 min
 
     if (!txt_data) txt_data = &vb->txt_data;
-//if (vb->vblock_i==18) buf_dump_to_file ("bug1.sam", txt_data, 1, false, false, true, false);//xxx
+
     bool digestable = gencomp_comp_eligible_for_digest(vb);
 
     // starting V14, if adler32, we digest each VB stand-alone.

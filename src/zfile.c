@@ -91,19 +91,19 @@ void zfile_uncompress_section (VBlockP vb,
     DictId dict_id = DICT_ID_NONE;
     uint8_t codec_param = 0;
 
-    if (expected_section_type == SEC_DICT)
-        dict_id = header_p.dict->dict_id;
-    else if (expected_section_type == SEC_B250 || expected_section_type == SEC_LOCAL) {
-        dict_id = header_p.ctx->dict_id;
-        codec_param = header_p.ctx->param; 
-    }
-    else if (expected_section_type == SEC_COUNTS) 
-        dict_id = header_p.counts->dict_id;
-    else if (expected_section_type == SEC_SUBDICTS) 
-        dict_id = header_p.subdicts->dict_id;
-
     ContextP ctx = NULL;
     if (IS_DICTED_SEC (expected_section_type)) { 
+        switch (expected_section_type) {
+            case SEC_B250     : 
+            case SEC_LOCAL    : codec_param = header_p.ctx->param; 
+                                dict_id = header_p.ctx->dict_id;      break;
+            case SEC_DICT     : dict_id = header_p.dict->dict_id;     break;
+            case SEC_COUNTS   : dict_id = header_p.counts->dict_id;   break;
+            case SEC_SUBDICTS : dict_id = header_p.subdicts->dict_id; break;
+            case SEC_HUFFMAN  : dict_id = header_p.huffman->dict_id;  break;
+            default           : ABORT ("missing case for %s", st_name (expected_section_type)); 
+        }
+        
         ctx = ECTX(dict_id); 
         if (ctx && !ctx->is_loaded && IS_PIZ)  // note: never skip in ZIP (when an R2 VB uncompressed R1 sections)
             return;  // section was skipped 
@@ -111,7 +111,7 @@ void zfile_uncompress_section (VBlockP vb,
     else 
         if (piz_is_skip_undicted_section (expected_section_type)) return; // undicted section was skipped 
 
-    SectionHeaderP header  = header_p.common;
+    SectionHeaderP header          = header_p.common;
     uint32_t data_encrypted_len    = BGEN32 (header->data_encrypted_len);
     uint32_t data_compressed_len   = BGEN32 (header->data_compressed_len);
     uint32_t data_uncompressed_len = BGEN32 (header->data_uncompressed_len);
@@ -210,7 +210,7 @@ uint32_t zfile_compress_b250_data (VBlockP vb, ContextP ctx)
         .magic                 = BGEN32 (GENOZIP_MAGIC),
         .section_type          = SEC_B250,
         .data_uncompressed_len = BGEN32 (ctx->b250.len32),
-        .codec                 = ctx->bcodec == CODEC_UNKNOWN ? CODEC_RANS8 : ctx->bcodec,
+        .codec                 = ctx->bcodec == CODEC_UNKNOWN ? CODEC_RANB : ctx->bcodec,
         .vblock_i              = BGEN32 (vb->vblock_i),
         .flags.ctx             = flags,
         .dict_id               = ctx->dict_id,
@@ -247,7 +247,7 @@ uint32_t zfile_compress_local_data (VBlockP vb, ContextP ctx, uint32_t sample_si
         .magic                 = BGEN32 (GENOZIP_MAGIC),
         .section_type          = SEC_LOCAL,
         .data_uncompressed_len = BGEN32 (uncompressed_len),
-        .codec                 = ctx->lcodec == CODEC_UNKNOWN ? CODEC_RANS8 : ctx->lcodec, // if codec has not been decided yet, fall back on RANS8
+        .codec                 = ctx->lcodec == CODEC_UNKNOWN ? CODEC_RANB : ctx->lcodec, // if codec has not been decided yet, fall back on RANS8
         .sub_codec             = ctx->lsubcodec_piz ? ctx->lsubcodec_piz : CODEC_UNKNOWN,
         .vblock_i              = BGEN32 (vb->vblock_i),
         .flags.ctx             = flags,
@@ -561,12 +561,11 @@ static bool zfile_get_has_digest_up_to_v14 (SectionHeaderGenozipHeaderP header)
         
         // proof: a TXT_HEADER has a digest of the txt_header (0 if file has no header) or 
         // digest of the entire file. 
-        if (sec->st == SEC_TXT_HEADER &&              
-               (!digest_is_zero (header.txt_header.digest) || !digest_is_zero (header.txt_header.digest_header)))
+        if (IS_TXT_HEADER(sec) && (!digest_is_zero (header.txt_header.digest) || !digest_is_zero (header.txt_header.digest_header)))
             return true; 
     
         // proof: a VB has a digest
-        if (sec->st == SEC_VB_HEADER && !digest_is_zero (header.vb_header.digest)) return true;
+        if (IS_VB_HEADER(sec) && !digest_is_zero (header.vb_header.digest)) return true;
     }
 
     return false; // no proof of digest
@@ -883,8 +882,10 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header, FailType
     z_file->num_lines = BGEN64 (header->num_lines_bound);
     z_file->txt_data_so_far_bind = BGEN64 (header->recon_size);
     
-    if (VER(14) && !flag.reading_reference)
-        segconf.vb_size = (uint64_t)BGEN16 (header->vb_size) MB;
+    if (VER(14) && !VER2(15,65) && !flag.reading_reference)
+        segconf.vb_size = (uint64_t)BGEN16 (header->old_vb_size) MB;
+    else if (VER2(15,65))
+        segconf.vb_size = BGEN32 (header->segconf_vb_size);
 
     if (VER(15) && !flag.reading_reference)
         segconf.zip_txt_modified = header->is_modified; // since 15.0.60

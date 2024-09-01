@@ -11,12 +11,18 @@
 #include "genozip.h"
 
 // compression
-extern HuffmanP huffman_initialize (void);
-extern void huffman_destroy (HuffmanP *h);
-extern int  huffman_chew_one_sample (HuffmanP h, bytes sample, uint32_t sample_len);
-extern void huffman_produce_compressor (HuffmanP h);
-extern bool huffman_is_produced (HuffmanP h);
-extern void huffman_compress (HuffmanP h, bytes uncomp, uint32_t uncomp_len, uint8_t *comp, uint32_t *comp_len);
-extern int huffman_decompress (HuffmanP h, bytes comp, uint8_t *uncomp, uint32_t uncomp_len);
+extern void huffman_start_chewing (Did did_i, STRp(master), uint8_t max_prefix_len);
+extern void huffman_chew_one_sample (Did did_i, STRp(sample), bool skip_if_same_as_prev);
+extern void huffman_produce_compressor (Did did_i);
+extern void huffman_get_master (Did did_i, pSTRp(master));
+extern void huffman_compress (Did did_i, STRp (uncomp), qSTR8p(comp));
+extern int huffman_uncompress (Did did_i, bytes comp, STRc(uncomp));
+extern int RECONSTRUCT_huffman (VBlockP vb, Did did_i, uint32_t uncomp_len, bytes comp);
+extern bool huffman_issame (Did did_i, bytes comp, uint32_t uncomp_len, STRp(uncomp_compare_to));
+extern void huffman_compress_section (Did did_i);
+extern void huffman_piz_read_all (void);
 
-static inline int huffman_comp_len_required_allocation (int uncomp_len) { return uncomp_len * 8; }
+static inline int huffman_comp_len_required_allocation (int uncomp_len) { return 1 + uncomp_len * 8; } // (hypothetical worse case scenario is 64bit per character)
+
+#define huffman_exists(did_i) (ZCTX(did_i)->huffman.len == 1)
+

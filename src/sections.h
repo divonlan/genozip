@@ -11,32 +11,6 @@
 #include "digest.h"
 #include "local_type.h"
 
-// this data must be perfectly aligned with SectionType.
-#define SECTIONTYPE_ABOUT {                                        \
-    {"SEC_RANDOM_ACCESS",   sizeof (SectionHeader)              }, \
-    {"SEC_REFERENCE",       sizeof (SectionHeaderReference)     }, \
-    {"SEC_REF_IS_SET",      sizeof (SectionHeaderReference)     }, \
-    {"SEC_REF_HASH",        sizeof (SectionHeaderRefHash)       }, \
-    {"SEC_REF_RAND_ACC",    sizeof (SectionHeader)              }, \
-    {"SEC_REF_CONTIGS",     sizeof (SectionHeader)              }, \
-    {"SEC_GENOZIP_HEADER",  sizeof (SectionHeaderGenozipHeader) }, \
-    {"SEC_DICT_ID_ALIASES", sizeof (SectionHeader)              }, \
-    {"SEC_TXT_HEADER",      sizeof (SectionHeaderTxtHeader)     }, \
-    {"SEC_VB_HEADER",       sizeof (SectionHeaderVbHeader)      }, \
-    {"SEC_DICT",            sizeof (SectionHeaderDictionary)    }, \
-    {"SEC_B250",            sizeof (SectionHeaderCtx)           }, \
-    {"SEC_LOCAL",           sizeof (SectionHeaderCtx)           }, \
-    {"SEC_CHROM2REF_MAP",   sizeof (SectionHeader)              }, \
-    {"SEC_STATS",           sizeof (SectionHeader)              }, \
-    {"SEC_MGZIP",           sizeof (SectionHeader)              }, \
-    {"SEC_RECON_PLAN",      sizeof (SectionHeaderReconPlan)     }, \
-    {"SEC_COUNTS",          sizeof (SectionHeaderCounts)        }, \
-    {"SEC_REF_IUPACS",      sizeof (SectionHeader)              }, \
-    {"SEC_SUBDICTS",        sizeof (SectionHeaderSubDicts)      }, \
-    {"SEC_USER_MESSAGE",    sizeof (SectionHeader)              }, \
-    {"SEC_GENCOMP",         sizeof (SectionHeader)              }, \
-}
-
 #define HEADER_IS(_st) (header->section_type == SEC_##_st)
 #define ST(_st) (st == SEC_##_st)
 
@@ -99,7 +73,7 @@ typedef union SectionFlags {
             uint8_t unused             : 5;
         } vcf;
         struct FlagsVbHeaderSam {
-            uint8_t unused             : 2; // for now, reserved for coords, should we have a dual-coord SAM in the future
+            uint8_t unused             : 2; 
             uint8_t v13_is_sorted      : 1; // Likely sorted (copied from segconf.is_sorted)     - introduced 13.0.3 and canceled v14
             uint8_t v13_is_collated    : 1; // Likely collated (copied from segconf.is_collated) - introduced 13.0.3 and canceled v14
             uint8_t unused2            : 4;
@@ -197,7 +171,7 @@ typedef struct {
     uint32_t num_sections;             // number sections in this file (including this one)
     union {
         struct {                       // since v14
-            uint16_t vb_size;          // segconf.vb_size in MB (if not exact MB in zip - rounded up to nearest MB)
+            uint16_t old_vb_size;      // v14 to 15.0.64: segconf.vb_size in MB (if not exact MB in zip - rounded up to nearest MB) (replaced by segconf_vb_size)
             char unused;                       
             CompIType num_txt_files;   // number of txt bound components in this file (1 if no binding). We don't count generated components (gencomp).
         };
@@ -252,7 +226,7 @@ typedef struct {
             uint8_t segconf_deep_N_fq_score;  // 15.0.39: Deep: when copying QUAL from SAM, update scores of 'N' bases to this value
             uint8_t unused0;
             uint16_t conc_writing_vbs;        // 15.0.64: max number of handed-over the VBs the writer will need to have open concurrent. Up to 15.0.63 this was in SectionHeaderReconPlan
-            char unused[249];
+            char unused[245];
         } sam;
 
         struct { 
@@ -260,7 +234,7 @@ typedef struct {
             uint8_t segconf_fa_as_fq     : 1; // FASTQ: 15.0.58
             uint8_t segconf_is_ileaved   : 1; // FASTQ: 15.0.58
             uint8_t unused_bits          : 6;
-            char unused[262];
+            char unused[258];
         } fastq;
 
         struct {
@@ -287,11 +261,12 @@ typedef struct {
 
             float segconf_Q_to_O;              // VCF: 15.0.61
 
-            uint8_t unused[255];
+            uint8_t unused[251];
         } vcf;
     };
 
     // ⇧ New non-data-type-specific fields grow upwards at the expense of unused[] ⇧ 
+    uint32_t segconf_vb_size;          // in bytes (replaced old_vb_size). 15.0.65
     uint8_t lic_type;                  // license type used to create this file. 15.0.59.
 } SectionHeaderGenozipHeader, *SectionHeaderGenozipHeaderP;
 typedef const SectionHeaderGenozipHeader *ConstSectionHeaderGenozipHeaderP;
@@ -331,7 +306,7 @@ typedef struct {
 #define TXT_FILENAME_LEN 256
     char     txt_filename[TXT_FILENAME_LEN];// filename of this single component. without path, 0-terminated. always in base form like .vcf or .sam, even if the original is compressed .vcf.gz or .bam
     uint64_t txt_header_size;          // size of header in original txt file before any zip-side modifications. note: use Σdata_uncompress_len(fragᵢ) for the size after zip-size modifications (v12)
-    QnameFlavorProp flav_prop[NUM_QTYPES]; // SAM/BAM/FASTQ. properties of QNAME flavor (v15)
+    QnameFlavorProp flav_prop[NUM_QTYPES]; // SAM/BAM/FASTQ. properties of QNAME flavor (v15) 
 } SectionHeaderTxtHeader, *SectionHeaderTxtHeaderP; 
 
 typedef struct {
@@ -353,7 +328,7 @@ typedef struct {
     struct { // SAM PRIM - 16 bytes
     uint32_t sam_prim_first_grp_i;     // SAM PRIM: the index of first group of this PRIM VB, in z_file->sag_grps (v14)
     uint32_t sam_prim_comp_qual_len;   // SAM PRIM: total size of SA Group's QUAL, as compressed in-memory in ZIP (v14)
-    uint32_t sam_prim_qname_len;       // SAM PRIM: total length of QUAL in this VB (v14)
+    uint32_t sam_prim_comp_qname_len;  // SAM PRIM: total length of QUAL in this VB (v14). since 15.0.65: huffman-compressed length ; Up to 15.0.64: uncompress length
     union {
     uint32_t sam_prim_comp_cigars_len; // SAM PRIM SAG_BY_SA: total size of sag's CIGARs, as compressed in-memory in ZIP (i.e. excluding CIGARs stored in OPTION_SA_CIGAR.dict) (v14)
     uint32_t sam_prim_solo_data_len;   // SAM PRIM SAG_BY_SOLO: size of solo_data
@@ -365,10 +340,20 @@ typedef struct {
 typedef const SectionHeaderVbHeader *ConstSectionHeaderVbHeaderP;
 
 // Format of the the payload of SEC_VB_HEADER for SAM/BAM with gencomp
-#define MAX_PLAN_ITEM_LINES 16383
+#define MAX_PLAN_ITEM_LINES 32767 // if there are more than this number of consecutive lines from a specific comp_i, we will need more than one VbPlanItem
+#define VB_PLAN_COMP_ZIP(comp_i) \
+  ( vb->vb_plan.prev_comp_i==SAM_COMP_MAIN ? ((comp_i) == SAM_COMP_PRIM)  /* comp_i must be DEPN or PRIM */ \
+  : vb->vb_plan.prev_comp_i==SAM_COMP_DEPN ? ((comp_i) == SAM_COMP_PRIM)  /* comp_i must be MAIN or PRIM */ \
+  : /*          prev_comp_i==SAM_COMP_PRIM*/ ((comp_i) == SAM_COMP_DEPN)) /* comp_i must be MAIN or DEPN */ \
+
+#define VB_PLAN_COMP_PIZ(comp, prev_comp_i) \
+  (  prev_comp_i==SAM_COMP_MAIN ? ((comp)==0?SAM_COMP_DEPN : SAM_COMP_PRIM) \
+  :  prev_comp_i==SAM_COMP_DEPN ? ((comp)==0?SAM_COMP_MAIN : SAM_COMP_PRIM) \
+  :/*prev_comp_i==SAM_COMP_PRIM*/ ((comp)==0?SAM_COMP_MAIN : SAM_COMP_DEPN) )
+
 typedef struct {
-    uint16_t comp_i  : 2;  // 0=MAIN 1=PRIM 2=DEPN
-    uint16_t n_lines : 14; // 1 - MAX_PLAN_ITEM_LINES
+    uint16_t comp    : 1;  // see VB_PLAN_COMP
+    uint16_t n_lines : 15; // ∈[0, MAX_PLAN_ITEM_LINES]; 
 } VbPlanItem;
 
 typedef struct {
@@ -388,6 +373,11 @@ typedef struct {
     int64_t  param;            // an extra piece of data transferred to/from zctx->subdicts.param
     DictId   dict_id;           
 } SectionHeaderSubDicts, *SectionHeaderSubDictsP;     
+
+typedef struct {
+    SectionHeader;
+    DictId dict_id;   
+} SectionHeaderHuffman, *SectionHeaderHuffmanP;
 
 // used for SEC_LOCAL and SEC_B250
 typedef struct {
@@ -465,15 +455,15 @@ typedef struct __attribute__ ((packed)) SectionEntFileFormat { // 19 bytes (sinc
     CompIType comp_i_plus_1;   // stores 0 if same as prev section, COMP_NONE if COMP_NONE, and otherwise comp_i+1.
     SectionType st;            // 1 byte
     union {                    // Section-Type-specific field
-        DictId dict_id;        // DICT, LOCAL, B250 or COUNT sections (first occurance of this dict_id)
-        struct {               // DICT, LOCAL, B250 or COUNT sections (2nd+ occurance of this dict_id)
+        DictId dict_id;        // used for dicted sections (see IS_DICTED_SEC) (first occurance of this dict_id)
+        struct {               // used for dicted sections (2nd+ occurance of this dict_id)
             char is_dict_id;   // if zero, dict_id is copied from earlier section
             char unused3[3];
             uint32_t dict_sec_i; // section from which to copy the dict_id
         };
         struct { 
-            uint32_t num_lines;// VB_HEADER sections - number of lines in this VB. 
-            uint32_t unused;   // this was "deep_num_lines" v15-15.0.63, but never accessed in piz
+            uint32_t num_lines;// VB_HEADER sections - number of lines in this VB (SAM MAIN: excluding gencomp lines)
+            uint32_t unused;   // this was "deep_num_lines" v15-15.0.64, but never accessed in piz
         };
         uint64_t st_specific;  // generic access to the value
     };
@@ -524,6 +514,7 @@ typedef union {
     SectionHeaderReference reference;
     SectionHeaderRefHash ref_hash;
     SectionHeaderReconPlan recon_plan;
+    SectionHeaderHuffman huffman;
     char padding[sizeof(SectionHeaderGenozipHeader) + 15]; // SectionHeaderGenozipHeader is the largest, 15=crypt_max_padding_len()
 } SectionHeaderUnion;
 
@@ -539,6 +530,7 @@ typedef union {
     SectionHeaderReferenceP reference;
     SectionHeaderRefHashP ref_hash;
     SectionHeaderReconPlanP recon_plan;
+    SectionHeaderHuffmanP huffman;
 } SectionHeaderUnionP __attribute__((__transparent_union__));
 
 #pragma pack()
@@ -549,7 +541,7 @@ typedef const struct SectionEnt {
     union {                     // Section-Type-specific field
         DictId dict_id;         // DICT, LOCAL, B250 or COUNT sections
         struct {
-            uint32_t num_lines; // VB_HEADER sections - number of lines in this VB. 
+            uint32_t num_lines; // VB_HEADER sections - number of lines in this VB (SAM MAIN: excluding gencomp lines).
             uint32_t unused;    // this was "deep_num_lines" v15-15.0.63, but never accessed in piz
         };
         struct { 
@@ -601,18 +593,18 @@ extern Section sections_vb_header (VBIType vb_i);
 extern Section sections_vb_last_section (VBIType vb_i);
 extern VBIType sections_get_num_vbs (CompIType comp_i);
 extern VBIType sections_get_num_vbs_(CompIType first_comp_i, CompIType last_comp_i);
+extern VBIType sections_get_num_vbs_up_to (CompIType comp_i, VBIType max_vb_i);
 extern VBIType sections_get_first_vb_i (CompIType comp_i);
 extern Section sections_get_comp_txt_header_sec (CompIType comp_i);
 extern uint32_t sections_get_recon_plan (Section *recon_sec);
-extern Section sections_get_gencomp_sec (void);
 extern Section sections_get_comp_bgzf_sec (CompIType comp_i);
 extern Section sections_get_next_vb_header_sec (CompIType comp_i, Section *vb_sec);
 extern bool is_there_any_section_with_dict_id (DictId dict_id);
 extern SectionEnt *section_get_section (VBIType vb_i, SectionType st, DictId dict_id);
-extern uint32_t sections_txt_header_get_num_fragments (CompIType comp_i);
+extern uint32_t sections_txt_header_get_num_fragments (void);
 
-extern void sections_txt_list_add_vb_header (VBIType vb_i);
-extern void sections_txt_list_add_txt_header (CompIType comp_i);
+extern void sections_reading_list_add_vb_header (VBIType vb_i);
+extern void sections_reading_list_add_txt_header (CompIType comp_i);
 
 extern void sections_list_memory_to_file_format (bool in_place);
 extern void sections_list_file_to_memory_format (SectionHeaderGenozipHeaderP genozip_header);
@@ -641,7 +633,12 @@ extern StrText line_name (VBlockP vb);
 extern StrText comp_name_(CompIType comp_i);
 #define comp_name(comp_i) comp_name_(comp_i).s
 
-#define IS_DICTED_SEC(st) ((st)==SEC_B250 || (st)==SEC_LOCAL || (st)==SEC_DICT || (st)==SEC_COUNTS || (st) == SEC_SUBDICTS)
+#define IS_TXT_HEADER(sec) ((sec)->st == SEC_TXT_HEADER)
+#define IS_VB_HEADER(sec)  ((sec)->st == SEC_VB_HEADER)
+#define IS_LOCAL(sec)      ((sec)->st == SEC_LOCAL)
+#define IS_B250(sec)       ((sec)->st == SEC_B250)
+
+#define IS_DICTED_SEC(st) ((st)==SEC_B250 || (st)==SEC_LOCAL || (st)==SEC_DICT || (st)==SEC_COUNTS || (st) == SEC_SUBDICTS || (st) == SEC_HUFFMAN)
 #define IS_VB_SEC(st)     ((st)==SEC_VB_HEADER || (st)==SEC_B250 || (st)==SEC_LOCAL)
-#define IS_COMP_SEC(st)   (IS_VB_SEC(st) || (st)==SEC_TXT_HEADER || (st)==SEC_MGZIP || (st)==SEC_GENCOMP || (st)==SEC_RECON_PLAN)
+#define IS_COMP_SEC(st)   (IS_VB_SEC(st) || (st)==SEC_TXT_HEADER || (st)==SEC_MGZIP || (st)==SEC_RECON_PLAN)
 #define IS_FRAG_SEC(st)   ((st)==SEC_DICT || (st)==SEC_TXT_HEADER || (st)==SEC_RECON_PLAN || (st)==SEC_REFERENCE || (st)==SEC_REF_IS_SET || (st)==SEC_REF_HASH) // global sections fragmented with a dispatcher, and hence use vb_i 

@@ -81,13 +81,13 @@ bool sam_piz_initialize (CompIType comp_i)
     return true;
 }
 
-void sam_piz_header_init (void)
+void sam_piz_header_init (CompIType comp_i)
 {
     if (flag.qnames_file)
-        qname_filter_initialize_from_file (flag.qnames_file); // note: uses SectionHeaderTxtHeader.flav_props to canonize qnames
+        qname_filter_initialize_from_file (flag.qnames_file, comp_i); // note: uses SectionHeaderTxtHeader.flav_props to canonize qnames
 
     if (flag.qnames_opt)
-        qname_filter_initialize_from_opt (flag.qnames_opt); 
+        qname_filter_initialize_from_opt (flag.qnames_opt, comp_i); 
 }
 
 bool sam_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header)
@@ -120,7 +120,8 @@ void sam_piz_after_vb_header (VBlockP vb)
         BGEN_u16_buf (&VB_SAM->vb_plan, NULL);
 
         // add all the VB_HEADERs of the PRIM/DEPN VBs needed by this main VB.
-        gencomp_piz_update_piz_reading_list (vb); // this also removes items already processed
+        if (vb != evb) // =evb if called from gencomp_piz_genocat_show_plan
+            gencomp_piz_update_reading_list (vb); // this also removes items already processed
     }
 }
 
@@ -332,7 +333,7 @@ typedef struct {
 static Buffer seqs_filter = {};
 
 static ASCENDING_SORTER (seq_filter_sort_by_hash, SeqFilterItem, hash)
-static BINARY_SEARCHER (find_seq_in_filter, SeqFilterItem, uint32_t, hash, false, ReturnNULL)
+static BINARY_SEARCHER (find_seq_in_filter, SeqFilterItem, uint32_t, hash, false, IfNotExact_ReturnNULL)
 
 // initialize seqs_filter and flag.seq_filter from command line
 void seq_filter_initialize (rom filename)
@@ -713,7 +714,7 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
             DROP_LINE ("bases");
         
         // --qnames and --qnames-file
-        if (flag.qname_filter && !qname_filter_does_line_survive (STRlst (IS_PRIM(vb) ? SAM_QNAMESA : SAM_QNAME))) // works also for FASTQ as SAM_QNAME==FASTQ_QNAME
+        if (flag.qname_filter && !qname_filter_does_line_survive (vb, STRlst (IS_PRIM(vb) ? SAM_QNAMESA : SAM_QNAME))) // works also for FASTQ as SAM_QNAME==FASTQ_QNAME
             DROP_LINE ("qname_filter");
 
         // --seqs-file
@@ -985,8 +986,12 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_COPY_BUDDY)
             sam_reconstruct_from_buddy_get_textual_snip (vb, base_ctx, buddy_type, pSTRa(snip));
             RECONSTRUCT_snip;
 
-            if (ctx->did_i == SAM_QNAME && buddy_type == BUDDY_MATE && segconf.flav_prop[QNAME1].is_mated)
-                *BLSTtxt = (*BLSTtxt=='1') ? '2' : '1';
+            if (ctx->did_i == SAM_QNAME && buddy_type == BUDDY_MATE) {
+                if (z_file->flav_prop[vb->comp_i][QNAME1].is_mated)
+                    *BLSTtxt = (*BLSTtxt=='1') ? '2' : '1';
+                else
+                    ctx->mate_copied_exactly = true; // consumed by sam_load_groups_add_qname
+            }
 
             ctx_set_last_value (VB, ctx, (int64_t)buddy_line_i); // this context has STORE_NONE so this can't conflict with anything
         }

@@ -39,9 +39,6 @@ static uint64_t __inline windows_popcount (uint64_t w)
 #define POPCOUNT(x) (unsigned)__builtin_popcountll(x)
 #endif
 
-// word of all 1s
-#define WORD_MAX  (~(uint64_t)0)
-
 #define SET_REGION(bits,start,len)    _set_region((bits),(start),(len),FILL_REGION)
 #define CLEAR_REGION(bits,start,len)  _set_region((bits),(start),(len),ZERO_REGION)
 #define TOGGLE_REGION(bits,start,len) _set_region((bits),(start),(len),SWAP_REGION)
@@ -123,32 +120,6 @@ static inline uint64_t _reverse_word (uint64_t word)
                        (reverse_table[(word >> 56) & 0xff]);
 
     return reverse;
-}
-
-// Set 64 bits from a particular start position
-// Doesn't extend bit array
-static inline void _set_word (BitsP bits, uint64_t start, uint64_t word)
-{
-    uint64_t word_index = bitset64_wrd(start);
-    word_offset_t word_offset = bitset64_idx(start);
-
-    if (word_offset == 0)
-        bits->words[word_index] = word;
-    
-    else {
-        bits->words[word_index] = (word << word_offset) |
-                                  (bits->words[word_index] & bitmask64(word_offset));
-
-        if (word_index+1 < bits->nwords) { // if last part of the word goes beyond nwords, we drop it
-
-            bits->words[word_index+1] = (word >> (WORD_SIZE - word_offset)) |
-                                        (bits->words[word_index+1] & (WORD_MAX << word_offset));
-
-            // added by divon: Mask top word only if its the last word --divon
-            if (word_index+2 == bits->nwords)
-                bits_clear_excess_bits_in_top_word (bits);
-        }
-    }
 }
 
 static inline void _set_byte (BitsP bits, uint64_t start, uint8_t byte)
@@ -276,7 +247,7 @@ Bits bits_init_do (uint64_t nbits, uint8_t *data, uint64_t data_len/*in bytes*/,
     if (clear) 
         memset (data, roundup_bits2bytes64 (nbits), data_len);
     else
-        bits_clear_excess_bits_in_top_word (&bits);
+        bits_clear_excess_bits_in_top_word (&bits, false);
 
     return bits;
 }
@@ -290,7 +261,7 @@ Bits bits_alloc_do (uint64_t nbits, bool clear, FUNCLINE)
                   .words  = buf_low_level_malloc (roundup_bits2bytes64(nbits), clear, func, code_line) };
 
     // zero the bits in the top word that are beyond nbits (if not already cleared)
-    if (!clear) bits_clear_excess_bits_in_top_word (&bits);
+    if (!clear) bits_clear_excess_bits_in_top_word (&bits,  false);
     
     return bits;
 }
@@ -445,7 +416,7 @@ void bits_set_all (BitsP bits)
     if (!bits->nwords) return; // nothing to do
     
     memset (bits->words, 0xFF, bits->nwords * sizeof(uint64_t));
-    bits_clear_excess_bits_in_top_word (bits);
+    bits_clear_excess_bits_in_top_word (bits, true);
     DEBUG_VALIDATE(bits);
 }
 
@@ -500,14 +471,6 @@ void bits_set_word8 (BitsP bits, uint64_t start, uint8_t byte)
 {
     ASSERT (start < bits->nbits, "expecting start(%"PRIu64") < bits->nbits(%"PRIu64")", start, bits->nbits);
     _set_byte(bits, start, byte);
-}
-
-void bits_set_wordn(BitsP bits, uint64_t start, uint64_t word, int n)
-{
-    ASSERT (start < bits->nbits, "expecting start(%"PRIu64") < bits->nbits(%"PRIu64")", start, bits->nbits);
-    assert(n <= 64);
-    uint64_t w = _get_word(bits, start), m = bitmask64(n);
-    _set_word(bits, start, bitmask_merge(word,w,m));
 }
 
 //
@@ -881,7 +844,7 @@ void bits_copy_do (BitsP dst, uint64_t dstindx, ConstBitsP src, uint64_t srcindx
 
     // note: only zero top word if copy reaches it
     if (dstindx + length == dst->nbits)
-        bits_clear_excess_bits_in_top_word(dst);
+        bits_clear_excess_bits_in_top_word(dst, true);
 
     DEBUG_VALIDATE(dst);
 }
@@ -1057,7 +1020,7 @@ void bits_not (BitsP dst, ConstBitsP src)
     for (uint64_t i = src->nwords; i < dst->nwords; i++)
         dst->words[i] = WORD_MAX;
 
-    bits_clear_excess_bits_in_top_word(dst);
+    bits_clear_excess_bits_in_top_word(dst, true);
 
     DEBUG_VALIDATE(dst);
 }
@@ -1352,7 +1315,7 @@ void bits_reverse_complement_in_place (BitsP bits)
         bytes[i] = CONVERT(b0) | (CONVERT(b1) << 2) | (CONVERT(b2) << 4) | (CONVERT(b3) << 6);
     }
 
-    bits_clear_excess_bits_in_top_word (bits);
+    bits_clear_excess_bits_in_top_word (bits, true);
 }
 
 // removes flanking bits on boths sides, shrinking bits
@@ -1376,7 +1339,7 @@ void bits_truncate (BitsP bits, uint64_t new_num_of_bits)
     bits->nbits  = new_num_of_bits;
     bits->nwords = roundup_bits2words64 (new_num_of_bits);   
 
-    bits_clear_excess_bits_in_top_word (bits);
+    bits_clear_excess_bits_in_top_word (bits, true);
 }
 
 // get number of bits in an array, excluding trailing zeros (divon)

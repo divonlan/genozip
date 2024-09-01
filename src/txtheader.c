@@ -176,10 +176,13 @@ static uint64_t sum_fragment_len = 0;
 
 static void txtheader_read_one_vb (VBlockP vb)
 {
-    bool is_new_header = (txtheader_sec->st == SEC_TXT_HEADER) && (txtheader_sec->vblock_i == vb->vblock_i); // 14.0.9 or later
-    bool is_old_header = (txtheader_sec->st == SEC_TXT_HEADER) && (txtheader_sec->vblock_i == 0) && (vb->vblock_i == 1); // up tp 14.0.8 - TXT_HEADER is always a single section with vblock_i=0
+    if (txtheader_sec == BAFT(SectionEnt, z_file->piz_reading_list) || !IS_TXT_HEADER(txtheader_sec)) 
+        return; // this is not a TXT_HEADER section at all
+
+    bool is_new_header = (txtheader_sec->vblock_i == vb->vblock_i); // 14.0.9 or later
+    bool is_old_header = (txtheader_sec->vblock_i == 0) && (vb->vblock_i == 1); // up tp 14.0.8 - TXT_HEADER is always a single section with vblock_i=0
     
-    if (!is_new_header && !is_old_header) return; // this is not a TXT_HEADER section at all, or not one that belongs to this component
+    if (!is_new_header && !is_old_header) return; // this TXT_HEADER section doesn't belong to this component
     
     zfile_read_section (z_file, vb, txtheader_sec->vblock_i, &vb->z_data, "z_data", SEC_TXT_HEADER, txtheader_sec);    
     SectionHeaderTxtHeaderP header = B1ST (SectionHeaderTxtHeader, vb->z_data);
@@ -312,10 +315,12 @@ void txtheader_piz_read_and_reconstruct (Section sec)
 
     txt_header_vb = vb_get_vb (POOL_MAIN, PIZ_TASK_NAME, 0, sec->comp_i);
 
-    // allocate memory for uncompressed text header - the size is the sum of the fragment sizes
+    // allocate memory for uncompressed txt header - the size is the sum of the fragment sizes
     Section my_sec = sec;
     SectionHeaderTxtHeader header = {};
-    for (VBIType vb_i=1; my_sec->st == SEC_TXT_HEADER && (my_sec->vblock_i==vb_i || (!my_sec->vblock_i && vb_i==1 /* up to 14.0.8 */)); vb_i++, my_sec++) {
+    for (VBIType vb_i=1; 
+         my_sec < BAFT(SectionEnt, z_file->piz_reading_list) && IS_TXT_HEADER(my_sec) && (my_sec->vblock_i==vb_i || (!my_sec->vblock_i && vb_i==1 /* up to 14.0.8 */)); 
+         vb_i++, my_sec++) {
         SectionHeaderTxtHeader frag_header = zfile_read_section_header (txt_header_vb, my_sec, SEC_TXT_HEADER).txt_header;
         txt_header_vb->txt_data.len += BGEN32 (frag_header.data_uncompressed_len);
 
@@ -376,14 +381,13 @@ void txtheader_piz_read_and_reconstruct (Section sec)
     txt_file->txt_data_so_far_single_0 = sum_fragment_len;
     txt_file->src_codec     = header.src_codec;
     
-    if (VER(15)) 
+    if (VER(15))
         for (QType q=0; q < NUM_QTYPES; q++)
-            segconf.flav_prop[q] = header.flav_prop[q];
+            z_file->flav_prop[evb->comp_i][q] = header.flav_prop[q]; // storing in z_file rather than segconf, as VBs of several components may be reconstructing in parallel
 
     // initialize if needed - but only once per outputted txt file 
-    // i.e. if we have rejects+normal, or concatenated, we will only init in the first)
     if (!txt_file->piz_header_init_has_run && DTPZ(piz_header_init)) {
-        DTPZ(piz_header_init)();
+        DTPZ(piz_header_init)(evb->comp_i);
         txt_file->piz_header_init_has_run = true;
     }
     

@@ -114,11 +114,9 @@ void sam_deep_zip_finalize (void)
 
     uint64_t count=0;
     
-    for (VBIType vb_i=1; vb_i <= z_file->num_vbs; vb_i++) {
-        *B64(z_file->vb_start_deep_line, vb_i) = count; // note: in ZIP, vb_start_deep_line index is vb_i (unlike PIZ, which is vb_idx)
-        
-        if (vb_i < z_file->vb_num_deep_lines.len32) // this condition might be false for DEPN VBs, bc we don't extend the buffer for DEPN VBs
-            count += *B32(z_file->vb_num_deep_lines, vb_i);
+    for (VBIType vb_i=1; vb_i < z_file->vb_num_deep_lines.len32; vb_i++) { // note: z_file->vb_num_deep_lines.len might be less than z_file->num_vbs, as we don't extend the buffer for DEPN VBs
+        *B64(z_file->vb_start_deep_line, vb_i) = count; // note: in ZIP, vb_start_deep_line index is vb_i (unlike PIZ, which is vb_idx)        
+        count += *B32(z_file->vb_num_deep_lines, vb_i);
     }
 
     if (flag.show_deep) {
@@ -142,7 +140,7 @@ void sam_deep_set_QNAME_hash (VBlockSAMP vb, ZipDataLineSAMP dl, QType q, STRp(q
     // note: we must drop consensus reads, because Deep has an assumption, used to prove uniqueness by hash,
     // that there are no BAM alignments except those in the FASTQ files provided
     if (!dl->FLAG.secondary && !dl->FLAG.supplementary && !segconf.flav_prop[q].is_consensus) {
-        dl->deep_hash.qname = deep_qname_hash (q, STRa(qname), NULL);
+        dl->deep_hash.qname = deep_qname_hash (q, STRa(qname), segconf.deep_paired_qname ? dl->FLAG.is_last : unknown, NULL);
         dl->is_deepable = true; // note: we haven't tested SEQ yet, so this might still change
 
         vb->lines.count++;      // counts deepable lines
@@ -224,8 +222,9 @@ void sam_deep_merge (VBlockP vb_)
     }
 
     if (vb->comp_i != SAM_COMP_DEPN) {
-        buf_alloc_zero (evb, &z_file->vb_num_deep_lines, 0, vb->vblock_i+1, uint32_t, 0, "z_file->vb_num_deep_lines"); // initial allocation is in sam_set_sag_type
+        buf_alloc_zero (NULL, &z_file->vb_num_deep_lines, 0, vb->vblock_i+1, uint32_t, 0, NULL); // initial allocation is in sam_set_sag_type
         *B32(z_file->vb_num_deep_lines, vb->vblock_i) = vb->lines.count;
+        MAXIMIZE (z_file->vb_num_deep_lines.len32, vb->vblock_i+1);
     }
 
     buf_alloc (evb, &z_file->deep_ents, vb->lines.count/*num deepable lines in VB*/, 0, ZipZDeep, CTX_GROWTH, "z_file->deep_ents"); 
@@ -278,14 +277,6 @@ void sam_deep_merge (VBlockP vb_)
 // main thread: called for after reading global area
 void sam_piz_deep_initialize (void)
 {
-    mutex_initialize (z_file->qname_huf_mutex);
-
-    // // In Deep, if we have gencomp, we digest the SAM VBs in writer (during which the serializer is not used), and the 
-    // // FASTQ VBs in their compute threads (with the serializer). Therefore, the serializer needs to be
-    // // initialized to skip the SAM VBs 
-    // if (!z_file->z_flags.adler && // serializer is only used for md5 (considering Deep files only exist since v15)
-    //      z_has_gencomp)           // if no gencomp, we digest all VBs in the compute thread
-    //     z_file->digest_serializer.vb_i_last = sections_get_first_vb_i (SAM_COMP_FQ00) - 1;
 }
 
 void sam_piz_deep_init_vb (VBlockSAMP vb, ConstSectionHeaderVbHeaderP header)
@@ -313,35 +304,6 @@ static void inline sam_piz_alloc_deep_ents (VBlockSAMP vb, uint32_t size)
     }
 }
 
-#define NUM_QNAMES_TO_SAMPLE 100 // number of QNAMEs to sample for producing the huffman compressor
-
-static void sam_piz_deep_sample_qname (STRp(suffix), // if prfx_len>0 then this is just the suffix 
-                                       int prfx_len)
-{
-    // note: the mutex is not necessary locked in the order of z_file->qnames_sampled
-    mutex_lock (z_file->qname_huf_mutex);
-
-    // first thread that locked the mutex - initialize
-    if (!z_file->qname_huf) {
-        // this lucky qname is now our master_qname (note: at this point suffix is the whole qname)
-        memcpy (segconf.master_qname, suffix, suffix_len); // note: we verified already that qname_len <= SAM_MAX_QNAME_LEN
-
-        // We need to set qname_huf only after master_qname is is set. 
-        __atomic_store_n (&z_file->qname_huf, huffman_initialize(), __ATOMIC_RELEASE); 
-    }
-
-    uint8_t sample[suffix_len];
-    for (int i=0; i < suffix_len; i++)
-        sample[i] = suffix[i] ^ segconf.master_qname[prfx_len + i];
-
-    int sampled_so_far = huffman_chew_one_sample (z_file->qname_huf, sample, suffix_len);
-
-    if (sampled_so_far == NUM_QNAMES_TO_SAMPLE) 
-        huffman_produce_compressor (z_file->qname_huf);
-        
-    mutex_unlock (z_file->qname_huf_mutex);
-}
-
 // copy QNAME as is to deep_ents
 static void sam_piz_deep_add_qname (VBlockSAMP vb)
 {
@@ -349,67 +311,40 @@ static void sam_piz_deep_add_qname (VBlockSAMP vb)
 
     STRlast (qname, IS_PRIM(vb) ? SAM_QNAMESA : SAM_QNAME);
 
-    sam_piz_alloc_deep_ents (vb, 3 + qname_len); // +3: PizZDeepFlags, qname_len, prfx_len
+    sam_piz_alloc_deep_ents (vb, 2 + qname_len); // +2: PizZDeepFlags, qname_len
 
-    BNXT32 (vb->deep_index) = vb->deep_ents.len32; // index in deep_ents of data of current deepable line
-    
-    PizZDeepFlags *deep_flags = &BNXT(PizZDeepFlags, vb->deep_ents); // also, skip past flags
-    bool suffix_is_compressed = false;
-    
+    BNXT32(vb->deep_index) = vb->deep_ents.len32; // index in deep_ents of data of current deepable line
+    BNXT(PizZDeepFlags, vb->deep_ents) = (PizZDeepFlags){}; // initialize flags
+         
     if (segconf.deep_qtype == QNONE || flag.seq_only || flag.qual_only)
         goto done;         
 
     ASSPIZ (qname_len <= SAM_MAX_QNAME_LEN, "QNAME.len=%u, but per BAM specfication it is limited to %u characters. QNAME=\"%.*s\"", SAM_MAX_QNAME_LEN, qname_len, STRf(qname));
 
-    qname_canonize (QNAME1, qSTRa(qname)); // might reduce qname_len
+    qname_canonize (QNAME1, qSTRa(qname), vb->comp_i); // might reduce qname_len
 
-    // get common prefix length of qname and segconf.qame1
-    int prfx_len=0; 
-    if (z_file->qname_huf) // case: master_qname is initialized
-        for (; prfx_len < qname_len; prfx_len++)
-            if (qname[prfx_len] != segconf.master_qname[prfx_len]) break;
-    
-    rom suffix = qname + prfx_len;
-    int suffix_len = qname_len - prfx_len;
+    BNXT8(vb->deep_ents) = qname_len; // uncompressed length
 
-    if (z_file->qnames_sampled < NUM_QNAMES_TO_SAMPLE && // first test without atomic - quick fail without the atomicity overhead
-        __atomic_fetch_add (&z_file->qnames_sampled, (int)1, __ATOMIC_RELAXED) < NUM_QNAMES_TO_SAMPLE)
-        sam_piz_deep_sample_qname (STRa(suffix), prfx_len);
-
-    BNXT8(vb->deep_ents) = qname_len;
-    BNXT8(vb->deep_ents) = prfx_len;
-
-    // if the huffman compressor is ready, we compress the suffix
-    if (huffman_is_produced (z_file->qname_huf)) { 
-        // compress suffix XOR master_qname
-        uint8_t uncomp[suffix_len];
-        for (int i=0; i < suffix_len; i++)
-            uncomp[i] = suffix[i] ^ segconf.master_qname[prfx_len + i];
-
-        uint32_t comp_len = huffman_comp_len_required_allocation(suffix_len);
+    // since 15.0.65, a SEC_HUFFMAN section is available and we can compress. 
+    if (huffman_exists (SAM_QNAME)) {
+        uint32_t comp_len = huffman_comp_len_required_allocation (qname_len);
         uint8_t comp[comp_len];
-        memset (comp, 0, comp_len);
-        
-        huffman_compress (z_file->qname_huf, uncomp, suffix_len, qSTRa(comp));
+        huffman_compress (SAM_QNAME, STRa(qname), qSTRa(comp)); // using huffman sent via SEC_HUFFMAN
 
-        if (comp_len >= suffix_len) goto uncompressed_suffix;
-
-        suffix_is_compressed = true;
         buf_add (&vb->deep_ents, (rom)comp, comp_len);
 
         vb->deep_stats[QNAME_BYTES] += 2 + comp_len;
     }
+    
+    // For files up to 15.0.64. Note that the code used to build the huffman table on-the-fly here.- 
+    // For simplicity, we no longer do that, and qname for older files shall remain uncompressed in memory.
+    else { 
+        buf_add (&vb->deep_ents, (rom)qname, qname_len);
 
-    else uncompressed_suffix: {
-        buf_add (&vb->deep_ents, STRa(suffix));
-
-        vb->deep_stats[QNAME_BYTES] += 2 + suffix_len;
+        vb->deep_stats[QNAME_BYTES] += 2 + qname_len;
     }
 
 done:
-    // update flags
-    *deep_flags = (PizZDeepFlags){ .is_qname_comp = suffix_is_compressed }; 
-
     COPY_TIMER (sam_piz_deep_add_qname);
 }
 
@@ -566,7 +501,7 @@ CONTAINER_ITEM_CALLBACK (sam_piz_con_item_cb)
     if (con_item->dict_id.num == _SAM_SQBITMAP) {
         if (!flag.deep                                       || // Deep file (otherwise this callback will not be set), but SAM/BAM-only reconstruction
             last_flags.secondary || last_flags.supplementary || // SECONDARY or SUPPLEMENTARY alignment
-            (segconf.flav_prop[QNAME2].is_consensus && ctx_encountered_in_line (vb, SAM_QNAME2)) || // consensus alignment 
+            (z_file->flav_prop[vb->comp_i][QNAME2].is_consensus && ctx_encountered_in_line (vb, SAM_QNAME2)) || // consensus alignment 
             IS_ASTERISK(recon)                               || // Missing SEQ
             str_is_monochar (STRa(recon))) {                    // mono-char SEQ
 

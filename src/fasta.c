@@ -374,7 +374,8 @@ void fasta_segconf_finalize (VBlockP vb)
     #define MAX_CONTIGS_IN_FILE 10000
     segconf.fasta_has_contigs &= (num_contigs_this_vb == 1 || // the entire VB is a single contig
                                   flag.index_txt ||
-                                  est_num_contigs_in_file <= MAX_CONTIGS_IN_FILE); 
+                                  est_num_contigs_in_file <= MAX_CONTIGS_IN_FILE||
+                                  flag.make_reference); 
 }
 
 void fasta_seg_finalize (VBlockP vb)
@@ -756,7 +757,7 @@ bool fasta_piz_is_vb_needed (VBIType vb_i)
     buf_alloc (vb, &vb->txt_data, 0, longest_line_len, char, 1.1, "txt_data");
 
     // uncompress & map desc field (filtered by piz_is_skip_section)
-    piz_uncompress_all_ctxs (VB);
+    piz_uncompress_all_ctxs (VB, PUR_FASTA_WRITER_INIT);
 
     ContextP desc_ctx = CTX(FASTA_DESC);
     desc_ctx->iterator.next_b250 = B1ST8 (desc_ctx->b250); 

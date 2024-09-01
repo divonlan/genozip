@@ -36,9 +36,132 @@ unsigned fastq_vb_zip_dl_size (void) { return sizeof (ZipDataLineFASTQ); }
 
 #define DT_NAME (FAF ? "FASTA" : "FASTQ")
 
+// if the two string differ by exactly one character - '1' vs '2' - return PAIR_R1 or PAIR_R2 (indicating the identify of fn1)  
+static PairType fastq_is_pair_strings (STRp(fn1), STRp(fn2))
+{
+    if (fn1_len != fn2_len) return false; 
+
+    int mismatches = 0, mm_i=0;
+    for (int i=0; i < fn1_len && mismatches < 2; i++)
+        if (fn1[i] != fn2[i]) {
+            mismatches++;
+            mm_i = i;
+        }
+    
+    // its predicted to a pair if filenames are the same, except for '1'⇄'2' switch
+    if  (mismatches == 1 && ((fn1[mm_i] == '1' && fn2[mm_i] == '2'))) return PAIR_R1; // fn1 is PAIR_R1
+    if  (mismatches == 1 && ((fn1[mm_i] == '2' && fn2[mm_i] == '1'))) return PAIR_R2; 
+    return NOT_PAIRED;
+}
 //-----------------------
 // TXTFILE stuff
 //-----------------------
+
+// for an array of filenames: verify that these are pairs of FASTQs, and sort them
+typedef struct { rom fn; STRw(qname); STRw(qname2); } FastqAnalyze;
+
+static SORTER (filename_sorter) { return strcmp (*(char**)a, *(char**)b); }
+static SORTER (sort_by_qname)   { return strcmp (((FastqAnalyze *)a)->qname, ((FastqAnalyze *)b)->qname); }
+
+// accepts an even number, but unsorted, array of fastq filenames
+// True: files are pairs of FASTQs files. Also sorts them in order of pairs, and if identifiable 
+// from qname or filename - also in order of first/last. Returns false if not pairs.
+// False: files are not pairs.
+// Unknown: one or more of the files is URL or redirected and hence cannot be tested
+thool fastq_verify_and_sort_pairs (int n_fns, rom *fns, FailType soft_fail)
+{
+    if (n_fns % 2) return false; // odd number of files -> not paired
+
+    // verify FASTQ; unable to analyze url or redirected    
+    for (int i=0; i < n_fns; i++) {
+        ASSINP (txtfile_zip_get_file_dt (fns[i]) == DT_FASTQ, "Expecting %s to be a FASTQ file, but judging by its name, it is not", fns[i]);
+
+        if (strstr (fns[i], "://") || !strcmp (fns[i], "-")) return unknown; 
+    }
+    
+    // verify no duplicates
+    qsort (fns, n_fns, sizeof (char *), filename_sorter);
+    for (int i=0; i < n_fns-1; i++) 
+        ASSINP (strcmp (fns[i], fns[i+1]), "filename %s appears more than once", fns[i]);
+
+    // read first qname of each file
+    FastqAnalyze fqs[n_fns];
+    memset (fqs, 0, n_fns * sizeof (FastqAnalyze));
+
+    for (int i=0; i < n_fns; i++) {
+        fqs[i].fn = fns[i];
+
+        int block_len = SAM_MAX_QNAME_LEN + 64; // also read QNAME2 if exists
+        txtfile_query_first_bytes_in_file (fns[i], block_len);
+
+        ASSINP (evb->txt_data.len >= 2, "failed to read file %s", fns[i]);
+
+        ASSINP (*B1STc(evb->txt_data) == '@', "%s is not a FASTQ file as it does not start with a '@'", fns[i]);
+
+        SAFE_NUL(BAFTc(evb->txt_data));
+        fqs[i].qname_len = strcspn (Bc(evb->txt_data, 1), " \t\n\r");
+
+        ASSINP (fqs[i].qname_len <= SAM_MAX_QNAME_LEN, "First read name in file %s has more SAM_MAX_QNAME_LEN=%u characters: \"%.*s\"",
+                fqs[i].fn, SAM_MAX_QNAME_LEN, block_len/*entire data read*/, B1STc(evb->txt_data));
+
+        fqs[i].qname = MALLOC (fqs[i].qname_len + 1);
+        memcpy (fqs[i].qname, Bc(evb->txt_data, 1), fqs[i].qname_len);
+        fqs[i].qname[fqs[i].qname_len] = 0;
+
+        rom after_qname = Bc(evb->txt_data, 1 + fqs[i].qname_len);
+        if (*after_qname != '\n' && *after_qname != '\r') {
+            fqs[i].qname2_len = strcspn (after_qname+1, " \t\n\r");
+            fqs[i].qname2 = MALLOC (fqs[i].qname2_len + 1);
+            memcpy (fqs[i].qname2, after_qname + 1, fqs[i].qname2_len);
+            fqs[i].qname2[fqs[i].qname2_len] = 0;
+        }
+
+        SAFE_RESTORE;
+        buf_free (evb->txt_data);
+    }
+
+    qsort (fqs, n_fns, sizeof (FastqAnalyze), sort_by_qname);
+
+    bool is_pair = true; // optimistic
+
+    for (int i=0; i < n_fns; i += 2) {
+        
+        // case: QNAME is the same in both: files are paired, try to guess first/last by filename or QNAME2
+        if (str_issame (fqs[i].qname, fqs[i+1].qname)) { 
+            // try to distguish R1 vs R2 based on filename
+            if (fastq_is_pair_strings (fqs[i].fn, strlen(fqs[i].fn), fqs[i+1].fn, strlen(fqs[i+1].fn)) == PAIR_R2)
+                SWAP (fqs[i], fqs[i+1]); // if filename indicates reverse order - swap
+            
+            // try to distguish R1 vs R2 based on QNAME2 (e.g. "1:N:0:41" vs "2:N:0:41" in QF_ILLUM_0bc)
+            else if (fastq_is_pair_strings (STRa(fqs[i].qname2), STRa(fqs[i+1].qname2)) == PAIR_R2)
+                SWAP (fqs[i], fqs[i+1]); // if QNAME2 indicates reverse order - swap
+        }
+
+        // case: QNAME differs - paired if the only difference is '1' vs '2'
+        else switch (fastq_is_pair_strings (STRa(fqs[i].qname), STRa(fqs[i+1].qname))) {
+            case NOT_PAIRED : 
+                ASSINP (soft_fail, "Judging by the first read name in each file, files %s (first_read=\"%.*s\") and %s (first_read=\"%.*s\") are not a pair", 
+                        fqs[i].fn, STRf(fqs[i].qname), fqs[i+1].fn, STRf(fqs[i+1].qname)); 
+                is_pair = false; 
+                goto done; 
+
+            case PAIR_R2    : SWAP (fqs[i], fqs[i+1]); // fallthrough
+            default         : break; // PAIR_R1
+        }
+    }
+
+    // we established that these FASTQs are paired - now update the input array order to pair order
+    for (int i=0; i < n_fns; i++) 
+        fns[i] = fqs[i].fn;
+
+done:
+    for (int i=0; i < n_fns; i++) {
+        FREE (fqs[i].qname);
+        FREE (fqs[i].qname2);
+    }
+    
+    return is_pair;
+}
 
 static inline bool is_valid_read (const rom *t,      // 4 (FASTQ) or 2 (FASTA-as-FASTQ) textual lines
                                   const uint32_t *l) // their lengths
@@ -119,10 +242,10 @@ static bool fastq_zip_is_interleaved (STRp(r1), STRp(r2))
 {
     if (segconf.qname_flavor[QNAME1]) {
         r1_len = strcspn (r1, " \t\n\r"); // note: no need to nul-terminate - we always call this function when we know there are full lines, so at least a \n is there
-        qname_canonize (QNAME1, r1, &r1_len);
+        qname_canonize (QNAME1, r1, &r1_len, COMP_NONE);
 
         r2_len = strcspn (r2, " \t\n\r");
-        qname_canonize (QNAME1, r2, &r2_len);
+        qname_canonize (QNAME1, r2, &r2_len, COMP_NONE);
     
         return str_issame (r1, r2);
     }
@@ -152,7 +275,7 @@ static bool fastq_zip_is_interleaved (STRp(r1), STRp(r2))
 
 static inline bool is_last_qname (VBlockFASTQP vb, STRp(qname), STRp(pair_qname))
 {
-    qname_canonize (QNAME1, qSTRa(qname)); // changes qname_len, but not qname
+    qname_canonize (QNAME1, qSTRa(qname), COMP_NONE); // changes qname_len, but not qname
 
     if (qname_len != pair_qname_len) return false;
 
@@ -204,7 +327,7 @@ int32_t fastq_unconsumed (VBlockP vb_,
     int line_1_modulo = -1;   // value 0-3 means we know which n%4 an R2 read starts, otherwise -1.
     uint32_t highest_read_in_this_call=0;
 
-    for (rom c = ((IS_R2 && vb->R2_lowest_read >= 0) ? Btxt(vb->R2_lowest_read-1) : BLSTtxt), one_before = Btxt (first_i)-1; 
+    for (rom c = ((IS_R2 && vb->R2_lowest_read > 0) ? Btxt(vb->R2_lowest_read-1) : BLSTtxt), one_before = Btxt (first_i)-1; 
          c >= one_before && (n <= max_lines || IS_R2); 
          c--) 
         
@@ -213,7 +336,7 @@ int32_t fastq_unconsumed (VBlockP vb_,
             memmove (line_lens+1, line_lens, min_lines * sizeof(uint32_t));
             lines[0] = c+1; // first character after \n
             line_lens[0] = n ? (lines[1] - lines[0] -1/*\n*/ - (lines[1][-2] == '\r')) : 0; // when n=0, it is the final, partial, line, so we considers its length to be 0.
-            
+
             // case: test for valid read after reading a sufficient number of lines
             if (n >= min_lines && 
                 (line_1_modulo == -1 || line_1_modulo == n % 4) && // R2: no need to call is_valid_read if we are not on a start of a read
@@ -234,7 +357,7 @@ int32_t fastq_unconsumed (VBlockP vb_,
                         vb->R2_lowest_read = read_bnum; // this is the read with the lowest index in txt_data so far to be considered
 
                     // case: in previous calls to this function, we already tested this read and all lower reads - we need to read more data
-                    if (vb->R2_highest_read == read_bnum && vb->R2_lowest_read == 0) {
+                    if (vb->R2_lowest_read == 0 && (vb->R2_highest_read == -1 || vb->R2_highest_read == read_bnum)) {
                         vb->R2_highest_read = highest_read_in_this_call; // the highest read we've considered
                         return -1; // all current txt_data has been considered and matching QNAME not found, read more data from disk please
                     }
@@ -255,7 +378,7 @@ int32_t fastq_unconsumed (VBlockP vb_,
     ASSINP (n < max_lines || IS_R2, "%s: Examined %d textual lines at the end of the VB and could not find a valid read, it appears that this is not a valid %s file. Last %u lines examined:\n[0]=\"%.*s\"\n[1]=\"%.*s\"\n[2]=\"%.*s\"\n[3]=\"%.*s\"\n[4]=\"%.*s\"\n",
             VB_NAME, n, DT_NAME, MIN_(n, 5), STRfi(line,0), STRfi(line,1), STRfi(line,2), STRfi(line,3), STRfi(line,4));
 
-    return -1; // uncompress one more mgzip block please 
+    return -1; // need more data
 }
 
 void fastq_zip_set_txt_header_flags (struct FlagsTxtHeader *f)
@@ -301,7 +424,7 @@ void fastq_zip_after_compute (VBlockP vb)
         z_file->R1_last_qname_index.len32 = MAX_(z_file->R1_last_qname_index.len32, vb->vblock_i - z_file->R1_first_vb_i + 1);
 
         STRlast (qname, FASTQ_QNAME);
-        qname_canonize (QNAME1, qname, &qname_len); // get canonical qname_len
+        qname_canonize (QNAME1, qname, &qname_len, COMP_NONE); // get canonical qname_len
 
         buf_add_more (evb, &z_file->R1_last_qname, qname, qname_len, NULL); // pre-allocated in fastq_zip_after_segconf
         BNXTc (z_file->R1_last_qname) = 0; // nul
@@ -346,7 +469,7 @@ static void fastq_tip_if_should_be_pair (void)
     // find R2 file assuming we are R1, if there is one
     struct dirent *ent=0;
     while (!segconf.r1_or_r2 && (ent = readdir(dir))) 
-        segconf.r1_or_r2 = filename_is_fastq_pair (STRa(bn), ent->d_name, strlen (ent->d_name));
+        segconf.r1_or_r2 = fastq_is_pair_strings (STRa(bn), ent->d_name, strlen (ent->d_name));
 
     if (segconf.r1_or_r2 == PAIR_R1) 
         TIP ("Using --pair to compress paired-end FASTQs can reduce the compressed file's size by 10%%. E.g.:\n"
@@ -482,7 +605,7 @@ void fastq_seg_initialize (VBlockP vb_)
                 txt_name, VB_NAME, vb->lines.len32, vb->R1_num_lines, vb->R1_vb_i, NO_PAIR_FMT_SUFFIX);
 
         // we're pair-2, decompress all of pair-1's contexts needed for pairing
-        piz_uncompress_all_ctxs (VB);
+        piz_uncompress_all_ctxs (VB, PUR_FASTQ_READ_R1);
 
         // we've finished uncompressing the pair sections in z_data into their contexts. now, reset z_data for our compressed output coming next.
         vb->z_data.len32 = 0; 
@@ -595,7 +718,7 @@ void fastq_zip_after_segconf (void)
         
         // allocate memory to store the last qname (canonized) of each R1 VB
         uint32_t canonical_len = strlen (segconf.qname_line0[QNAME1].s);
-        qname_canonize (QNAME1, segconf.qname_line0[QNAME1].s, &canonical_len);
+        qname_canonize (QNAME1, segconf.qname_line0[QNAME1].s, &canonical_len, COMP_NONE);
         buf_alloc (evb, &z_file->R1_last_qname, 0, est_num_vbs * (1 + canonical_len), char, 0, "z_file->R1_last_qname");
         buf_alloc (evb, &z_file->R1_last_qname_index, 0, est_num_vbs, uint64_t, 0, "z_file->R1_last_qname_index");        
     }
@@ -1076,13 +1199,13 @@ bool fastq_piz_initialize (CompIType comp_i)
     return true;
 }
 
-void fastq_piz_header_init (void)
+void fastq_piz_header_init (CompIType comp_i)
 {
     if (flag.qnames_file)
-        qname_filter_initialize_from_file (flag.qnames_file); // note: uses SectionHeaderTxtHeader.flav_props to canonize qnames
+        qname_filter_initialize_from_file (flag.qnames_file, comp_i); // note: uses SectionHeaderTxtHeader.flav_props to canonize qnames
 
     if (flag.qnames_opt)
-        qname_filter_initialize_from_opt (flag.qnames_opt); 
+        qname_filter_initialize_from_opt (flag.qnames_opt, comp_i); 
 }
 
 // PIZ: main thread: piz_process_recon callback: usually called in order of VBs, but out-of-order if --test with no writer
@@ -1219,7 +1342,7 @@ CONTAINER_CALLBACK (fastq_piz_container_cb)
             DROP_LINE ("bases");
 
         // --qnames and --qnames-file
-        if (flag.qname_filter && !qname_filter_does_line_survive (STRlst (FASTQ_QNAME)))
+        if (flag.qname_filter && !qname_filter_does_line_survive (vb, STRlst (FASTQ_QNAME)))
             DROP_LINE ("qname_filter");
         
         dropped: {}

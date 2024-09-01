@@ -769,7 +769,7 @@ extern CONTAINER_CALLBACK (vcf_piz_container_cb);
 extern CONTAINER_ITEM_CALLBACK (vcf_piz_con_item_cb);
 
 // VCF Header stuff
-extern void vcf_piz_header_init (void);
+extern void vcf_piz_header_init (CompIType comp_i);
 extern bool vcf_inspect_txt_header (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags);
 extern uint32_t vcf_header_get_num_samples (void);
 extern uint32_t vcf_header_get_num_contigs (void);

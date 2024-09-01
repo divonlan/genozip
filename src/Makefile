@@ -90,7 +90,7 @@ ifdef linux_x86
 	ASFLAGS := -f elf64 -DINTEL_CET_ENABLED -DAS_FEATURE_LEVEL=10 -DHAVE_AS_KNOWS_AVX512
 	# DEBUGFLAGS += -fsanitize=undefined
 	# DEBUGFLAGS += -fsanitize=thread -Dsantize_thread
-	#xxx DEBUGFLAGS += -fsanitize=address -Dsanitize_address # not compatable with valgrind - comment out if using valgrind
+	DEBUGFLAGS += -fsanitize=address -Dsanitize_address # not compatable with valgrind - comment out if using valgrind
 endif
 
 ifdef osx_x86
@@ -155,7 +155,7 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.
 		  sam_seq.c sam_qual.c sam_sag_zip.c sam_sag_piz.c sam_sag_load.c sam_sag_ingest.c sam_sag_scan.c    	\
 		  sam_bwa.c sam_bowtie2.c sam_bsseeker2.c sam_bsbolt.c sam_bismark.c sam_gem3.c sam_tmap.c sam_hisat2.c \
 		  sam_blasr.c sam_dragen.c sam_minimap2.c sam_10xGenomics.c sam_biobambam.c sam_pos.c sam_deep.c 		\
-		  sam_star.c sam_abra2.c sam_modify.c sam_recon_plan_piz.c gencomp_zip.c gencomp_piz.c					\
+		  sam_star.c sam_abra2.c sam_cpu.c sam_modify.c sam_recon_plan_piz.c gencomp_zip.c gencomp_piz.c		\
 		  fastq.c fastq_desc.c fastq_seq.c fastq_qual.c fastq_deep.c fastq_saux.c deep.c						\
 		  fasta.c gff.c bed.c me23.c locs.c generic.c lookback.c compressor.c 									\
 		  buffer.c buf_struct.c buf_list.c random_access.c sections.c base64.c mgzip.c coverage.c txtheader.c  	\

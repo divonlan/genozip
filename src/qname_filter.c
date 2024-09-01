@@ -19,10 +19,10 @@ typedef struct {
 static Buffer qnames_filter = {};
 
 static ASCENDING_SORTER (qname_filter_sort_by_hash, QnameFilterItem, hash)
-static BINARY_SEARCHER (find_qname_in_filter, QnameFilterItem, uint32_t, hash, false, ReturnNULL)
+static BINARY_SEARCHER (find_qname_in_filter, QnameFilterItem, uint32_t, hash, false, IfNotExact_ReturnNULL)
 
-// initialize qnames_filter and flag.qname_filter from file
-void qname_filter_initialize_from_file (rom filename)
+// PIZ: initialize qnames_filter and flag.qname_filter from file
+void qname_filter_initialize_from_file (rom filename, CompIType comp_i)
 {
     flag.qname_filter = (filename[0] == '^') ? -1 : 1;
 
@@ -47,9 +47,9 @@ void qname_filter_initialize_from_file (rom filename)
         memcpy (qname[i].qname, lines[i] + has_prefix, qname[i].qname_len);
 
         if (VER(15))
-            qname_canonize (QNAME1, qSTRa(qname[i].qname)); // possibly reduces qname_len
+            qname_canonize (QNAME1, qSTRa(qname[i].qname), comp_i); // possibly reduces qname_len
 
-        qname[i].hash = qname_calc_hash (QNAME1, STRa(qname[i].qname), unknown, false, NULL);
+        qname[i].hash = qname_calc_hash (QNAME1, comp_i, STRa(qname[i].qname), unknown, false, NULL);
     }
 
     buf_destroy (data); // defined in file_split_lines
@@ -72,7 +72,7 @@ void qname_filter_initialize_from_file (rom filename)
 }
 
 // initialize qnames_filter and flag.qname_filter from command line
-void qname_filter_initialize_from_opt (rom opt)
+void qname_filter_initialize_from_opt (rom opt, CompIType comp_i)
 {
     flag.qname_filter = (opt[0] == '^') ? -1 : 1;
 
@@ -87,7 +87,7 @@ void qname_filter_initialize_from_opt (rom opt)
         qname[i].qname_len = str_lens[i];
         memcpy (qname[i].qname, strs[i], qname[i].qname_len);
 
-        qname[i].hash = qname_calc_hash (QNAME1, STRa(qname[i].qname), unknown, false, NULL);
+        qname[i].hash = qname_calc_hash (QNAME1, comp_i, STRa(qname[i].qname), unknown, false, NULL);
     }
 
     qsort (STRb(qnames_filter), sizeof(QnameFilterItem), qname_filter_sort_by_hash);
@@ -96,14 +96,15 @@ void qname_filter_initialize_from_opt (rom opt)
     // for_buf (QnameFilterItem, e, qnames_filter) iprintf ("hash=%u %s\n", e->hash, e->qname);
 }
 
-bool qname_filter_does_line_survive (STRp(qname))
+// PIZ compute thread
+bool qname_filter_does_line_survive (VBlockP vb, STRp(qname))
 {
     ASSERT (qname_len <= SAM_MAX_QNAME_LEN, "qname=\"%.*s\" has length=%u longer than allowed by SAM spec=%u", STRf(qname), qname_len, SAM_MAX_QNAME_LEN);
 
     if (VER(15))
-        qname_canonize (QNAME1, qSTRa(qname)); // possibly reduce qname_len
+        qname_canonize (QNAME1, qSTRa(qname), vb->comp_i); // possibly reduce qname_len
 
-    uint32_t hash = qname_calc_hash (QNAME1, STRa(qname), unknown, false, NULL);
+    uint32_t hash = qname_calc_hash (QNAME1, vb->comp_i, STRa(qname), unknown, false, NULL);
     QnameFilterItem *ent = binary_search (find_qname_in_filter, QnameFilterItem, qnames_filter, hash);
 
     bool found = false;

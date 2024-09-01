@@ -73,13 +73,13 @@ void progress_new_component (rom new_component_name,
 {
     StrTextSuperLong prefix = {};
 
+    if (start_time)
+        component_start_time = *start_time;
+    else
+        clock_gettime (CLOCK_REALTIME, &component_start_time); 
+
     // (re) initialize if new component
     if (!component_name || strcmp (new_component_name, component_name)) {
-        if (start_time)
-            component_start_time = *start_time;
-        else
-            clock_gettime (CLOCK_REALTIME, &component_start_time); 
-
         test_mode = new_test_mode;
         component_name = new_component_name; 
         

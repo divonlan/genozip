@@ -620,10 +620,10 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
                 Ltxt += (uint8_t)item->separator[1];
 
             // display 10 first reconstructed characters, but all characters if just this ctx was requested 
-            if (show_item)
-                iprintf ("\"%.*s\"\n", 
-                  /*len*/(flag.dict_id_show_containers.num ? (int)(BAFTtxt-reconstruction_start) : MIN_(10,(int)(BAFTtxt-reconstruction_start))), 
-                         reconstruction_start);  
+            if (show_item) {
+                int len = flag.dict_id_show_containers.num ? (int)(BAFTtxt-reconstruction_start) : MIN_(64,(int)(BAFTtxt-reconstruction_start));
+                iprintf ("%s\"%.*s\"\n", len==32 ? "[64]" : "", len, reconstruction_start);  
+            }
         } // items loop
 
         vb->curr_item = DID_NONE; // finished with the items

@@ -12,6 +12,7 @@
 #include "compressor.h"
 #include "qname.h"
 #include "zfile.h"
+#include "huffman.h"
 
 typedef struct {
     VBIType vb_i;              // MAIN VB vblock_i
@@ -28,7 +29,7 @@ typedef struct {
 
 const SoloProp solo_props[NUM_SOLO_TAGS] = SOLO_PROPS;
 
-// called by main thread after reading a VB - callback of zip_init_vb
+// called by main thread after reading a VB - called from sam_zip_init_vb
 void sam_sag_zip_init_vb (VBlockSAMP vb)
 {
     if (IS_MAIN(vb) || !Ltxt) return;
@@ -55,7 +56,7 @@ void sam_add_main_vb_info (VBlockP vb,
 {    
     VB_SAM->main_vb_info_i = z_file->vb_info[SAM_COMP_MAIN].len32;
 
-    SamMainVbInfo new_info ={
+    SamMainVbInfo new_info = {
         .vb_i             = vb->vblock_i,
         .first_gc_line[0] = prim_first_line, .num_gc_lines[0] = prim_num_lines,
         .first_gc_line[1] = depn_first_line, .num_gc_lines[1] = depn_num_lines,
@@ -70,7 +71,7 @@ void sam_add_main_vb_info (VBlockP vb,
                  VB_NAME, new_info.first_gc_line[0], new_info.num_gc_lines[0], new_info.first_gc_line[1], new_info.num_gc_lines[1]);
 }                           
 
-// this is SAM/BAM's zip_after_segconf callback
+// main thread: called from sam_zip_after_segconf
 void sam_set_sag_type (void)
 {
     // --no-gencomp prohibits gencomp
@@ -78,7 +79,7 @@ void sam_set_sag_type (void)
         segconf.sag_type = SAG_NONE;
 
     // --fast, --low-memory or a non-sorted file prohibit gencomp, but may be overrided with --force-gencomp
-    else if ((!segconf.is_sorted || flag.fast || flag.low_memory || flag.has_head) && !flag.force_gencomp)
+    else if ((!segconf.is_sorted || flag.fast || flag.low_memory || flag_has_head) && !flag.force_gencomp)
         segconf.sag_type = SAG_NONE;
 
     else if (MP(LONGRANGER))
@@ -125,8 +126,6 @@ void sam_set_sag_type (void)
         buf_alloc (evb, &z_file->vb_info[SAM_COMP_MAIN], 0, 10000, SamMainVbInfo, 0, "z_file->vb_info");
         buf_alloc (evb, &z_file->vb_info[SAM_COMP_PRIM], 0, 3000,  SamGcVbInfo,   0, "z_file->vb_info");
         buf_alloc (evb, &z_file->vb_info[SAM_COMP_DEPN], 0, 3000,  SamGcVbInfo,   0, "z_file->vb_info");
-
-        buf_alloc_zero (evb, &z_file->vb_num_deep_lines, 0, 10000, uint32_t, 0, "z_file->vb_num_deep_lines");
     }
 }
 
@@ -243,10 +242,6 @@ int32_t sam_seg_prim_add_sag_SA (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(sa), in
             .mapq            = dl->MAPQ,
             .nm              = this_nm
         };
-
-        // in BAM, add textual CIGAR to vb->sag_cigars, as txt_data CIGAR is binary
-        if (is_bam)
-            buf_append_buf (vb, &vb->sa_prim_cigars, &vb->textual_cigar, char, "sa_prim_cigars");
 
         vb->sag_alns.count += n_alns;
     }
@@ -428,10 +423,24 @@ bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(alignment), boo
 
 done:        
     #define last_plan BLST(VbPlanItem, vb->vb_plan)
-    if (vb->vb_plan.len32 && last_plan->comp_i == comp_i && last_plan->n_lines < MAX_PLAN_ITEM_LINES)
+
+    if (vb->vb_plan.len32 && vb->vb_plan.prev_comp_i == comp_i && last_plan->n_lines < MAX_PLAN_ITEM_LINES)
         last_plan->n_lines++;
-    else
-        buf_append_one (vb->vb_plan, ((VbPlanItem){ .comp_i=comp_i, .n_lines = 1})); // initial allocation in sam_seg_initialize
+    
+    else {
+         // case: we need a 0-lines transition entry to modify prev_comp_i to be different from comp_i
+        if (comp_i == vb->vb_plan.prev_comp_i) {
+            CompIType transition_comp_i = (comp_i==SAM_COMP_MAIN ? SAM_COMP_PRIM : SAM_COMP_MAIN);
+            int16_t transition_comp = VB_PLAN_COMP_ZIP (transition_comp_i);
+            buf_append_one (vb->vb_plan, ((VbPlanItem){ .comp=transition_comp, .n_lines = 0 })); 
+            
+            vb->vb_plan.prev_comp_i = transition_comp_i;
+        }
+
+        int16_t comp = VB_PLAN_COMP_ZIP(comp_i);
+        buf_append_one (vb->vb_plan, ((VbPlanItem){ .comp=comp, .n_lines = 1})); // initial allocation in sam_seg_initialize
+        vb->vb_plan.prev_comp_i = comp_i;
+    }
 
     COPY_TIMER (sam_seg_is_gc_line);
     return comp_i != COMP_MAIN; // true if line moves to generated component
@@ -443,36 +452,18 @@ done:
 
 typedef struct { uint32_t qname_hash, grp_i; } SAGroupIndexEntry; 
 
-//xxx // ZIP DEPN: search for index entry by qname_hash 
-// static int64_t sam_sa_binary_search_for_qname_hash (const SAGroupIndexEntry *index, uint64_t this_qname_hash, int64_t first, int64_t last)
-// {
-//     if (first > last) return -1; // not found
-
-//     int64_t mid = (first + last) / 2;
-
-//     int64_t cmp = (int64_t)index[mid].qname_hash - (int64_t)this_qname_hash;
-//     if      (cmp < 0) return sam_sa_binary_search_for_qname_hash (index, this_qname_hash, mid+1, last);
-//     else if (cmp > 0) return sam_sa_binary_search_for_qname_hash (index, this_qname_hash, first, mid-1);
-
-//     // mid contains the this_qname_hash - scan the index backwards for the first matching entry as there might be several different qnames with the same hash
-//     while (mid >= 1 && index[mid-1].qname_hash == this_qname_hash) mid--;
-
-//     return mid;
-// }
-
-static BINARY_SEARCHER (sam_sa_binary_search_for_qname_hash, SAGroupIndexEntry, int64_t, qname_hash, false, ReturnNULL);
+static BINARY_SEARCHER (sam_sa_binary_search_for_qname_hash, SAGroupIndexEntry, int64_t, qname_hash, false, IfNotExact_ReturnNULL);
 
 // ZIP DEPN: find group index with this_qname in z_file->sag_grps, and if there are several - return the first
 static Sag *sam_sa_get_first_group_by_qname_hash (VBlockSAMP vb, STRp(this_qname), bool is_last, int64_t *grp_index_i, 
                                                   uint32_t *this_qname_hash) // out
 {
     // search for a group with qname in z_file->sa_qname
-    *this_qname_hash = qname_calc_hash (QNAME1, this_qname, this_qname_len, is_last, false, NULL);
-   
+    *this_qname_hash = qname_calc_hash (QNAME1, COMP_NONE, this_qname, this_qname_len, is_last, false, NULL);
+
     // search for index entry by qname_hash 
     SAGroupIndexEntry *index_entry = binary_search (sam_sa_binary_search_for_qname_hash, SAGroupIndexEntry, z_file->sag_grps_index, *this_qname_hash);
     *grp_index_i = index_entry ? BNUM (z_file->sag_grps_index, index_entry) : -1;
-    //xxx *grp_index_i = sam_sa_binary_search_for_qname_hash (B1ST (SAGroupIndexEntry, z_file->sag_grps_index), *this_qname_hash, 0, z_file->sag_grps_index.len-1);
 
     const SAGroupIndexEntry *index_ent = B(SAGroupIndexEntry, z_file->sag_grps_index, *grp_index_i); // invalid pointer if grp_index_i==-1, that's ok    
     return (*grp_index_i >= 0) ? B(Sag, z_file->sag_grps, index_ent->grp_i) : NULL; 
@@ -659,13 +650,13 @@ static void sam_sa_seg_depn_find_sagroup_SAtag (VBlockSAMP vb, ZipDataLineSAMP d
         uint16_t my_aln_i=0; // relative to group
 
         // case: get alignment where SA and my alignment perfectly match the group 
-        if (dl->FLAG.is_first   == g->is_first                                   && // note: order tests in the condition is optimized to fail fast with minimal effort
-            g->seq_len          == vb->hard_clip[0] + seq_len + vb->hard_clip[1] &&
-            dl->FLAG.is_last    == g->is_last                                    &&
-            dl->FLAG.multi_segs == g->multi_segs                                 &&
-            n_my_alns           == g->num_alns                                   && 
-            str_issame_(STRtxt(dl->QNAME), GRP_QNAME(g), g->qname_len)           && 
-            sam_seg_depn_find_SA_aln (vb, g, n_my_alns, my_alns, &my_aln_i)      &&
+        if (dl->FLAG.is_first   == g->is_first                                        && // note: order tests in the condition is optimized to fail fast with minimal effort
+            g->seq_len          == vb->hard_clip[0] + seq_len + vb->hard_clip[1]      &&
+            dl->FLAG.is_last    == g->is_last                                         &&
+            dl->FLAG.multi_segs == g->multi_segs                                      &&
+            n_my_alns           == g->num_alns                                        && 
+            huffman_issame (SAM_QNAME, GRP_QNAME(g), g->qname_len, STRtxt(dl->QNAME)) &&
+            sam_seg_depn_find_SA_aln (vb, g, n_my_alns, my_alns, &my_aln_i)           &&
             sam_seg_depn_is_subseq_of_prim (vb, (uint8_t*)textual_seq, dl->SEQ.len, (revcomp != g->revcomp), g, is_bam)) { // this will fail if SEQ has non-ACGT or if DEPN sequence invalidly does not match the PRIM sequence (observed in the wild)
 
             // found - seg into local
@@ -674,7 +665,7 @@ static void sam_sa_seg_depn_find_sagroup_SAtag (VBlockSAMP vb, ZipDataLineSAMP d
             
             vb->sag = g;
             vb->sa_aln = has(SA_Z) ? B(SAAln, z_file->sag_alns, g->first_aln_i + my_aln_i) : NULL;
-            vb->prim_far_count++; // for stats
+            vb->depn_far_count++; // for stats
 
             if (flag.show_depn || flag.show_buddy)
                  iprintf ("%s: %.*s grp=%u aln=%s qname_hash=%08x\n", LN_NAME, STRfw(dl->QNAME), ZGRP_I(g), sam_show_sag_one_aln (vb->sag, vb->sa_aln).s, qname_hash);                
@@ -732,18 +723,18 @@ static void sam_sa_seg_depn_find_sagroup_noSA (VBlockSAMP vb, ZipDataLineSAMP dl
 
     // iterate on all groups with matching QNAME hash
     do {
-        if ((IS_SAG_FLAG ||  nh == g->num_alns)  && // note: order tests in the condition is optimized to fail fast with minimal effort
-            dl->FLAG.is_first   == g->is_first   && 
-            g->seq_len          == vb->hard_clip[0] + seq_len + vb->hard_clip[1] &&
-            dl->FLAG.is_last    == g->is_last    &&
-            dl->FLAG.multi_segs == g->multi_segs &&
-            str_issame_(STRtxt(dl->QNAME), GRP_QNAME(g), g->qname_len) && 
+        if ((IS_SAG_FLAG ||  nh == g->num_alns)                                       && // note: order tests in the condition is optimized to fail fast with minimal effort
+            dl->FLAG.is_first   == g->is_first                                        && 
+            g->seq_len          == vb->hard_clip[0] + seq_len + vb->hard_clip[1]      &&
+            dl->FLAG.is_last    == g->is_last                                         &&
+            dl->FLAG.multi_segs == g->multi_segs                                      &&
+            huffman_issame (SAM_QNAME, GRP_QNAME(g), g->qname_len, STRtxt(dl->QNAME)) &&
             sam_seg_depn_is_subseq_of_prim (vb, (uint8_t*)textual_seq, dl->SEQ.len, (revcomp != g->revcomp), g, is_bam)) {
 
             // found - seg into local
             BNXT (SAGroup, CTX(SAM_SAG)->local) = ZGRP_I(g);
             vb->sag = g;
-            vb->prim_far_count++; // for stats
+            vb->depn_far_count++; // for stats
             
             if (IS_SAG_CC)
                 vb->cc_aln = B(CCAln, z_file->sag_alns, ZGRP_I(g));
@@ -816,7 +807,7 @@ void sam_zip_set_vb_header_specific (VBlockP vb_, SectionHeaderVbHeaderP vb_head
 
         vb_header->sam_prim_seq_len         = BGEN32 (total_seq_len);
         vb_header->sam_prim_comp_qual_len   = BGEN32 (vb->comp_qual_len);
-        vb_header->sam_prim_qname_len       = BGEN32 (total_qname_len);
+        vb_header->sam_prim_comp_qname_len  = BGEN32 (CTX(SAM_QNAME)->huffman.comp_len);
         vb_header->sam_prim_num_sag_alns    = BGEN32 ((uint32_t)VB_SAM->sag_alns.count); 
         vb_header->sam_prim_first_grp_i     = BGEN32 (vb->first_grp_i);
         vb_header->sam_prim_comp_cigars_len = BGEN32 (vb->comp_cigars_len); // note: both the header and VB field are a union with solo_data_len 
@@ -832,7 +823,7 @@ void sam_zip_set_vb_header_specific (VBlockP vb_, SectionHeaderVbHeaderP vb_head
 }
 
 static ASCENDING_SORTER (sort_main_vb_info, SamMainVbInfo, vb_i)
-static BINARY_SEARCHER (find_gc_vb_by_line, SamGcVbInfo, uint64_t, first_line, true, ReturnLower)
+static BINARY_SEARCHER (find_gc_vb_by_line, SamGcVbInfo, uint64_t, first_line, true, IfNotExact_ReturnLower)
 
 // simulate a reconstruction and count max concurrent loaded VBs
 uint32_t sam_zip_calculate_max_conc_writing_vbs (void)
@@ -877,7 +868,7 @@ uint32_t sam_zip_calculate_max_conc_writing_vbs (void)
     }
 
     // sanity
-    for (VBIType vb_i=1; vb_i <= z_file->num_vbs; vb_i++)
+    for (VBIType vb_i=1; vb_i <= z_file->vb_info[COMP_MAIN].len + z_file->vb_info[SAM_COMP_PRIM].len + z_file->vb_info[SAM_COMP_DEPN].len/*exc. deep FASTQ*/; vb_i++)
         ASSERT (simulate_vb_is_loaded[vb_i], "gencomp vb_i=%u was not consumed in conc_writing_vbs simulation", vb_i);
 
     for (CompIType comp_i=SAM_COMP_PRIM; comp_i <= SAM_COMP_DEPN; comp_i++) 
@@ -914,7 +905,6 @@ void sam_zip_compress_sec_gencomp (void)
         };
 
     evb->scratch.len *= sizeof (GencompSecItem);
-    evb->comp_i = SAM_COMP_MAIN; // this goes into SectionEnt
     zfile_compress_section_data (evb, SEC_GENCOMP, &evb->scratch);
 
     buf_free (evb->scratch);

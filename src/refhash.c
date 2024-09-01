@@ -254,7 +254,7 @@ static void refhash_compress_one_vb (VBlockP vb)
     //         hash_data[i] = 0; 
 
     SectionHeaderRefHash header = { .section_type          = SEC_REF_HASH, 
-                                    .codec                 = CODEC_RANS32, // Much!! faster than LZMA (compress and uncompress), 8% worse compression of human refs, MUCH better on small refs
+                                    .codec                 = CODEC_RANW, // Much!! faster than LZMA (compress and uncompress), 8% worse compression of human refs, MUCH better on small refs
                                     .data_uncompressed_len = BGEN32 (uncompressed_size),
                                     .vblock_i              = BGEN32 (vb->vblock_i),
                                     .magic                 = BGEN32 (GENOZIP_MAGIC),

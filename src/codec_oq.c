@@ -105,7 +105,7 @@ COMPRESS (codec_oq_compress)
         }
 
     // compress the tiny monochar array
-    header->sub_codec = CODEC_RANS8; // note: if changing this codec, also update the est_size function in CODEC_ARGS.OQ
+    header->sub_codec = CODEC_RANB; // note: if changing this codec, also update the est_size function in CODEC_ARGS.OQ
     CodecCompress *compress = codec_args[header->sub_codec].compress;
     *uncompressed_len = NUM_OQ_CTXS;
 

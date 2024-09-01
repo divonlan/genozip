@@ -19,6 +19,7 @@
 #include "zip.h"
 #include "arch.h"
 #include "dispatcher.h"
+#include "threads.h"
 #include "zlib/zlib.h"
 #include "libdeflate_1.19/libdeflate.h"
 #include "bzlib/bzlib.h"
@@ -27,16 +28,15 @@
 #define MAX_TXT_HEADER_LEN ((uint64_t)0xffffffff) // maximum length of txt header - one issue with enlarging it is that we digest it in one go, and the digest module is 32 bit
 
 // PIZ: dump bad vb to disk
-StrTextLong txtfile_dump_vb (VBlockP vb, rom base_name, BufferP txt_data)
+StrText txtfile_dump_vb (VBlockP vb, rom base_name, BufferP txt_data)
 {
-    StrTextLong dump_filename;
-
-    snprintf (dump_filename.s, sizeof (dump_filename.s), "%.*s.vblock-%u.start-%"PRIu64".len-%u.bad", 
-              (int)sizeof (dump_filename.s)-100, base_name, vb->vblock_i, vb->vb_position_txt_file, Ltxt);
+    StrText dump_filename;
+    
+    snprintf (dump_filename.s, sizeof (dump_filename.s), "%u.bad-recon%s", vb->vblock_i, file_plain_ext_by_dt (txt_file->data_type));
 
     if (flag.is_windows) str_replace_letter (dump_filename.s, strlen(dump_filename.s), '/', '\\');
 
-    buf_dump_to_file (dump_filename.s, txt_data ? txt_data : &vb->txt_data, 1, false, false, false, true);
+    buf_dump_to_file (dump_filename.s, txt_data ? txt_data : &vb->txt_data, 1, false, false, false, txt_data->len > 8 MB);
 
     return dump_filename;
 }
@@ -177,6 +177,17 @@ static StrText display_gz_flags (uint32_t flg)
     return s;
 }
 
+static StrText display_gz_xfl (uint8_t xfl)
+{
+    StrText s={};
+
+    if      (xfl==2) strcpy (s.s, "BEST");
+    else if (xfl==4) strcpy (s.s, "FAST");
+    else snprintf (s.s, sizeof(s.s), "%u", xfl);
+
+    return s;
+}
+
 StrTextLong display_gz_header (STR8p(h), bool obscure_fname)
 {
     StrTextLong s = {};
@@ -207,7 +218,7 @@ StrTextLong display_gz_header (STR8p(h), bool obscure_fname)
 
     #define OS(x,s) os==x?s :
     // note: for brevity, we don't display ID and CM: we verify above that they are BGZF_PREFIX.
-    SNPRINTF (s, "{ FLG=%s %s XFL=%u OS=%s", display_gz_flags(flg).s, time_str, xfl, 
+    SNPRINTF (s, "{ FLG=%s %s XFL=%s OS=%s", display_gz_flags(flg).s, time_str, display_gz_xfl(xfl).s, 
               OS(3,"Unix") OS(7,"Mac") OS(11,"Windows") OS(255,"Unknown") str_int_s(h[9]).s);
     ADVANCE_h(10);
 
@@ -268,7 +279,7 @@ StrTextLong display_gz_header (STR8p(h), bool obscure_fname)
 
     SNPRINTF0 (s, " }");
 
-    if (flg == 8/*name*/ && mtime && xfl == 0 && os == 3)  SNPRINTF0 (s, " (looks like gzip or pigz)");
+    if (flg == 8/*name*/ && mtime && xfl == 0 && os == 3)  SNPRINTF0 (s, " (gzip/pigz)");
 
     return s;
 
@@ -554,14 +565,19 @@ static uint32_t txtfile_read_block_igzip (VBlockP vb, uint32_t max_bytes, bool *
     uint32_t gz_data_consumed = BNUM (txt_file->gz_data, state->next_in);
     
     if (state->block_state == ISAL_BLOCK_FINISH && z_file && gz_data_consumed >= 4) {
-        uint32_t isize = GET_UINT32 (B8(txt_file->gz_data, gz_data_consumed - 4)); // note: this is actually (isize % 2^32) bc gzip isize field is 32bit
+        
+        // note: this is actually (isize % 2^32) bc gzip isize field is 32bit
+        uint32_t isize = GET_UINT32 (B8(txt_file->gz_data, gz_data_consumed - 4)); 
+
+        bool is_single_block_gz = (!txt_file->max_mgzip_isize && feof((FILE *)txt_file->file));
 
         // for stats: save the isize from the gzip footer (of the first 2 gzip blocks) 
-        for (int i=0; i <= 1; i++)
-            if (!z_file->gz_isize[flag.zip_comp_i][i]) {
-                z_file->gz_isize[flag.zip_comp_i][i] = isize;
-                break;
-            }
+        if (!is_single_block_gz)
+            for (int i=0; i <= 1; i++)
+                if (!z_file->gz_isize[flag.zip_comp_i][i]) {
+                    z_file->gz_isize[flag.zip_comp_i][i] = isize;
+                    break;
+                }
 
         uint64_t decompressed_so_far = txt_file->disk_so_far - txt_file->gz_data.len + BNUM (txt_file->gz_data, state->next_in);
 
@@ -575,7 +591,9 @@ static uint32_t txtfile_read_block_igzip (VBlockP vb, uint32_t max_bytes, bool *
 
         txt_file->gz_blocks_so_far++;
         txt_file->start_gz_block = decompressed_so_far;
-        txt_file->max_mgzip_isize = MAX_(txt_file->max_mgzip_isize, isize);
+
+        if (!is_single_block_gz)
+            MAXIMIZE (txt_file->max_mgzip_isize, isize);
     }
 
     *is_data_read = BNUM(txt_file->gz_data, state->next_in) > next_in_before;
@@ -696,7 +714,7 @@ static inline uint32_t txtfile_read_block_mgzip (VBlockP vb,
             if (!txt_file->gz_data.uncomp_len) 
                 inc_disk_gz_uncomp_or_trunc (txt_file, txt_file->gz_data.comp_len);
 
-            txt_file->max_mgzip_isize = MAX_(txt_file->max_mgzip_isize, txt_file->gz_data.uncomp_len);
+            MAXIMIZE (txt_file->max_mgzip_isize, txt_file->gz_data.uncomp_len);
 
             this_uncomp_len              += txt_file->gz_data.uncomp_len; // total uncompressed length of data read by this function call
             vb->comp_txt_data.uncomp_len += txt_file->gz_data.uncomp_len; // total uncompressed length of data in vb->compress
@@ -915,19 +933,20 @@ static bool txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb, bool *R2_vb_t
 
         // case: R2 doesn't have enough data to sync with R1 (confirmed by counting lines) get more data
         else if (IS_R2) {
+            uint32_t r1_num_lines = fastq_get_R1_num_lines (vb);
             uint32_t r2_num_lines = str_count_char (B1STtxt, Ltxt, '\n') / 4;
 
             // error if we did in fact read the same amount of lines as R1, uncompress everything, and still didn't find the QNAME
-            ASSINP (r2_num_lines < fastq_get_R1_num_lines (vb),
-                    NO_PAIR_FMT_PREFIX "read name \"%s\" is missing in %s. codec=%s vb_i=%u R2_num_lines=%u R1_vb_i=%u R1_num_lines=%u)%s",
+            ASSINP (r2_num_lines < r1_num_lines,
+                    NO_PAIR_FMT_PREFIX "read name \"%s\" is missing in %s. codec=%s R2_vb_i=%u R2_num_lines=%u R1_vb_i=%u R1_num_lines=%u)%s",
                     txt_name, fastq_get_R1_last_qname(vb), txt_name, codec_name (txt_file->effective_codec),
-                    vb->vblock_i, (uint32_t)r2_num_lines, fastq_get_R1_vb_i (vb), fastq_get_R1_num_lines (vb), NO_PAIR_FMT_SUFFIX);
+                    vb->vblock_i, (uint32_t)r2_num_lines, fastq_get_R1_vb_i (vb), r1_num_lines, NO_PAIR_FMT_SUFFIX);
             
             // error if there isn't enough data in the file
             ASSINP (!txt_file->no_more_blocks,
                     NO_PAIR_FMT_PREFIX "read name \"%s\" is missing in %s, because the file appears shorter than its R1. codec=%s vb_i=%u R2_num_lines=%u R1_vb_i=%u R1_num_lines=%u)%s",
                     txt_name, fastq_get_R1_last_qname(vb), txt_name, codec_name (txt_file->effective_codec),
-                    vb->vblock_i, (uint32_t)r2_num_lines, fastq_get_R1_vb_i (vb), fastq_get_R1_num_lines (vb), NO_PAIR_FMT_SUFFIX);
+                    vb->vblock_i, (uint32_t)r2_num_lines, fastq_get_R1_vb_i (vb), r1_num_lines, NO_PAIR_FMT_SUFFIX);
         } 
         
         // case: file is truncated
@@ -963,6 +982,27 @@ done:
     }
 
     return final_unconsumed_len >= 0; // false means more data is needed
+}
+
+// reads some bytes from beginning of a file into evb->txt_data
+void txtfile_query_first_bytes_in_file (rom filename, uint32_t len)
+{
+    ASSERTNOTINUSE (evb->txt_data);
+    ASSERTISNULL (txt_file);
+    ASSERTMAINTHREAD;
+
+    // note: at the moment, this function is only used for FASTQ files, in which case gz discovery is not done. If ever used for other file types, we will need to explicitly ask file_open_txt_read to not discover and just use igzip.
+    txt_file = file_open_txt_read (filename);
+    ASSINP (txt_file, "failed to open file %s", filename);
+    
+    uint32_t save_vb_size = segconf.vb_size;
+    segconf.vb_size = SAM_MAX_QNAME_LEN+1;
+    
+    txtfile_read_vblock (evb);
+        
+    file_close (&txt_file);
+
+    segconf.vb_size = save_vb_size;
 }
 
 static bool seggable_size_is_modifiable (void)
@@ -1024,7 +1064,7 @@ int64_t txtfile_get_seggable_size (void)
 uint32_t txt_data_alloc_size (uint32_t vb_size) 
 {
     return TXT_IS_MGSP ? MAX_(24, txt_file->max_mgsp_blocks_in_vb) * (txt_file->max_mgzip_isize + 1/*1 + for last gz block extra length*/) + TXTFILE_READ_VB_PADDING  
-         : vb_size     ? vb_size + txt_file->max_mgzip_isize + TXTFILE_READ_VB_PADDING 
+         : vb_size     ? vb_size + (TXT_IS_MGZIP ? txt_file->max_mgzip_isize : 0) + TXTFILE_READ_VB_PADDING 
          :               0;
 }
 
@@ -1070,7 +1110,7 @@ void txtfile_read_vblock (VBlockP vb)
 
     ASSERTNOTNULL (txt_file);
     ASSERT_DT_FUNC (txt_file, unconsumed);
-    ASSERT (IN_RANGX (segconf.vb_size, ABSOLUTE_MIN_VBLOCK_MEMORY, ABSOLUTE_MAX_VBLOCK_MEMORY) || segconf.running,
+    ASSERT (vb == evb || IN_RANGX (segconf.vb_size, ABSOLUTE_MIN_VBLOCK_MEMORY, ABSOLUTE_MAX_VBLOCK_MEMORY) || segconf.running,
             "Invalid vb_size=%"PRIu64" comp_i(0-based)=%u", segconf.vb_size, z_file->num_txts_so_far-1);
 
     if (txt_file->no_more_blocks && !txt_file->unconsumed_txt.len) return; // we're done
@@ -1232,24 +1272,26 @@ StrTextLong txtfile_codec_name (FileP z_file/*obscures global*/, CompIType comp_
 {
     StrTextLong s;
 
+    Codec src_codec = (z_file->comp_src_codec[comp_i] == CODEC_BAM) ? z_file->comp_eff_codec[comp_i] : z_file->comp_src_codec[comp_i]; // avoid BAM➤BGZF
+
     if (!IN_RANGE (comp_i, 0, MAX_NUM_COMPS))
         snprintf (s.s, sizeof (s.s), "comp_i=%u out_of_range", comp_i);
 
-    else if (z_file->comp_src_codec[comp_i] == CODEC_BGZF) {
+    else if (src_codec == CODEC_BGZF) {
             if (z_file->comp_bgzf[comp_i].level < BGZF_COMP_LEVEL_UNKNOWN)
                 snprintf (s.s, sizeof (s.s), "BGZF(%s[%d])", bgzf_library_name (z_file->comp_bgzf[comp_i].library, false), z_file->comp_bgzf[comp_i].level);
             else
                 strcpy (s.s, "BGZF(unknown_lib)");
         }
         
-    else if (z_file->comp_src_codec[comp_i]==CODEC_GZ) 
+    else if (src_codec == CODEC_GZ) 
         snprintf (s.s, sizeof (s), "GZ(%.800s%.12s%.12s)", 
                   display_gz_header (z_file->comp_gz_header[comp_i], GZ_HEADER_LEN, obscure_fname).s,
                   cond_str (z_file->gz_isize[comp_i][0], "-", str_size (z_file->gz_isize[comp_i][0]).s),
                   cond_str (z_file->gz_isize[comp_i][1], "-", str_size (z_file->gz_isize[comp_i][1]).s));
 
     else 
-        strcpy (s.s, codec_name (z_file->comp_src_codec[comp_i]));
+        strcpy (s.s, codec_name (src_codec));
 
     return s;
 }

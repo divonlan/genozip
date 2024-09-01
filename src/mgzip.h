@@ -52,7 +52,8 @@
 #define BGZF_EOF BGZF_PREFIX "\x1b\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00" // // BGZF EOF marker is simply an empty block (note: there are multiple encoding for empty blocks, this is a specific one of them), see https://samtools.github.io/hts-specs/SAMv1.pdf section 4.1.2
 #define BGZF_EOF_LEN 28
 
-#define IL1M_HEADER "\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03"
+#define IL1M_HEADER "\x1f\x8b\x08\x00\x00\x00\x00\x00" // followed by XFL (can be 0,2,4) and OS (3)
+#define IL1M_HEADER_LEN 10
 #define IL1M_ISIZE  "\x00\x00\x10\x00" // isize == 1MB in all blocks except the last
 
 // MGI: a 32-bit version of BGZF 
@@ -63,7 +64,7 @@
 #define MGZF_HEADER_LEN 29
 
 // MGI: constant isize for all gz blocks that go into a particular VB (last block in group might slightly bigger)
-#define MGSP_HEADER     IL1M_HEADER
+#define MGSP_HEADER     "\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03"
 #define MGSP_EOF_LEN 20
 #define MGSP_EOF MGSP_HEADER "\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00"
 
@@ -79,7 +80,7 @@
     [CODEC_BGZF] = BGZF_HEADER_LEN,     \
     [CODEC_MGZF] = MGZF_HEADER_LEN,     \
     [CODEC_EMFL] = EMFL_HEADER_LEN,     \
-    [CODEC_IL1M] = STRLEN(IL1M_HEADER), \
+    [CODEC_IL1M] = IL1M_HEADER_LEN,     \
     [CODEC_MGSP] = STRLEN(MGSP_HEADER), \
     [CODEC_EMVL] = STRLEN(EMVL_HEADER), \
 }

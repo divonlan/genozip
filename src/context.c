@@ -1141,37 +1141,22 @@ void ctx_merge_in_vb_ctx (VBlockP vb)
     COPY_TIMER (ctx_merge_in_vb_ctx);
 }
 
-static Did ctx_did_i_search (const ContextIndex *ctx_index, Did num_contexts, DictId dict_id, Did first, Did last)
-{
-    if (last < first) return DID_NONE;
-
-    Did mid = (first + last) / 2;
-    DictId dict_id_mid = ctx_index[mid].dict_id;
-
-    if (dict_id_mid.num == dict_id.num)    
-        return ctx_index[mid].did_i;
-
-    else if (dict_id_mid.num < dict_id.num) 
-        return ctx_did_i_search (ctx_index, num_contexts, dict_id, mid+1, last);
-
-    else
-        return ctx_did_i_search (ctx_index, num_contexts, dict_id, first, mid-1);
-}
+static BINARY_SEARCHER (ctx_did_i_search, ContextIndex, uint64_t, dict_id.num, true, IfNotExact_ReturnNULL);
 
 // returns an existing did_i in this vb, or DID_NONE if there isn't one
-Did ctx_get_unmapped_existing_did_i (const ContextArray contexts, const ContextIndex *ctx_index, Did num_contexts, DictId dict_id)
+Did ctx_get_unmapped_existing_did_i (const ContextArray contexts, ConstBufferP ctx_index, Did num_contexts, DictId dict_id)
 {
-    int did_i; // signed
+    ContextIndex *ent;
 
     // binary search if we have ctx_index (we will have it in PIZ compute threads)
-    if (ctx_index) {
-        if ((did_i = ctx_did_i_search (ctx_index, num_contexts, dict_id, 0, num_contexts-1)) != DID_NONE)
-            return did_i;
-    }
+    if (ctx_index && 
+        (ent = binary_search (ctx_did_i_search, ContextIndex, *ctx_index, dict_id.num)))
+        return ent->did_i;
 
     else // linear search if not
-        for (did_i=num_contexts-1; did_i >= 0 ; did_i--)  // Search backwards as unmapped ctxs are more likely to be towards the end.
-            if (dict_id.num == contexts[did_i].dict_id.num) return contexts[did_i].did_i; // note: in case of an alias, contexts[did_i].did_i is the dst_did_i
+        for (int did_i=num_contexts-1; did_i >= 0 ; did_i--)  // Search backwards as unmapped ctxs are more likely to be towards the end.
+            if (dict_id.num == contexts[did_i].dict_id.num) 
+                return contexts[did_i].did_i; // note: in case of an alias, contexts[did_i].did_i is the dst_did_i
 
     return DID_NONE; // not found
 }
@@ -1630,7 +1615,7 @@ void ctx_compress_counts (void)
     COPY_TIMER_EVB (ctx_compress_counts);
 }
 
-// PIZ: called by the main threads from piz_read_global_area
+// PIZ: called by the main thread from piz_read_global_area
 void ctx_read_all_counts (void)
 {
     Section sec = NULL;

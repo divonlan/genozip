@@ -7,6 +7,7 @@
 //   under penalties specified in the license.
 
 #include "sam_private.h"
+#include "huffman.h"
 
 // reconstruct PRIM or DEPN line from SA Group data: (rname, pos, strand, CIGAR, mapQ, NM ;)+
 static void sam_sa_reconstruct_SA_from_SA_Group (VBlockSAMP vb)
@@ -101,14 +102,10 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_pull_from_sag)
     else if (IS_SAG_SA) ASSERTNOTNULL ((sa_aln = vb->sa_aln));  
     else if (IS_SAG_CC) ASSERTNOTNULL ((cc_aln = vb->cc_aln)); 
 
-// printf ("g=%u g->first_aln=%u sa_aln=%u\n", ZGRP_I(g), g->first_aln_i, ZALN_I(sa_aln));
     switch (ctx->did_i) {
-    
-        case SAM_QNAME: {
-            rom qname = GRP_QNAME(g);
-            if (reconstruct) RECONSTRUCT (qname, g->qname_len);
+        case SAM_QNAME: 
+            if (reconstruct) RECONSTRUCT_huffman (VB, SAM_QNAME, g->qname_len, GRP_QNAME(g));
             return NO_NEW_VALUE;
-        }
 
         case SAM_RNAME: {
             STR(rname);
@@ -200,7 +197,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_PRIM_QNAME)
 
     uint32_t last_txt_index = Ltxt;
 
-    RECONSTRUCT (GRP_QNAME(vb->sag), vb->sag->qname_len);
+    RECONSTRUCT_huffman (VB, SAM_QNAME, vb->sag->qname_len, GRP_QNAME(vb->sag));
 
     CTX(SAM_QNAME)->last_txt = (TxtWord){ .index = last_txt_index,
                                           .len   = Ltxt - last_txt_index }; // 15.0.16 - needed by sam_ultima_bi_prediction

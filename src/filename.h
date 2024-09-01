@@ -23,4 +23,3 @@ extern void filename_remove_codec_ext (char *filename, FileType ft);
 extern rom filename_base (rom filename, bool remove_exe, rom default_basename, char *basename, unsigned basename_size);
 
 extern char *filename_make_unix (char *filename);
-extern PairType filename_is_fastq_pair (STRp(fn1), STRp(fn2));

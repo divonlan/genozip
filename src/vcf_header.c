@@ -62,7 +62,7 @@ int32_t vcf_is_header_done (bool is_eof)
     return def_is_header_done (is_eof);
 }
 
-void vcf_piz_header_init (void)
+void vcf_piz_header_init (CompIType comp_i)
 {
     vcf_num_samples = vcf_num_hdr_contigs = 0;
     vcf_num_hdr_nbases = 0;

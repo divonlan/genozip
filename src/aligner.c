@@ -70,7 +70,7 @@ static inline Bits aligner_seq_to_bitmap (VBlockP vb, rom seq, uint64_t seq_len,
         bits_assign2 (&seq_bits, (base_i << 1), encoding);
     }
 
-    bits_clear_excess_bits_in_top_word (&seq_bits); // bc bitmap_words is uninitialized
+    bits_clear_excess_bits_in_top_word (&seq_bits, false); // bc bitmap_words is uninitialized
 
     COPY_TIMER (aligner_seq_to_bitmap);
 

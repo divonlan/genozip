@@ -665,6 +665,7 @@ static void file_initialize_z_file_data (FileP file)
         // promiscuous buffers must be initialized by the main thread, and buffer.c does not verify their integrity.
         Z_INIT (ra_buf);
         Z_INIT (sag_grps);
+        Z_INIT (sag_grps_index);
         Z_INIT (sag_alns);
         Z_INIT (sag_qnames);
         Z_INIT (sag_cigars); // union with solo_data
@@ -675,8 +676,10 @@ static void file_initialize_z_file_data (FileP file)
         Z_INIT (deep_ents);
         Z_INIT (section_list);
         Z_INIT (contexts[CHROM].chrom2ref_map);
+        Z_INIT (vb_info[SAM_COMP_MAIN]);
     }
-    else {
+    else { // PIZ
+        Z_INIT (sag_qnames);
         Z_INIT (sag_qual);
         Z_INIT (sag_cigars); // union with solo_data
     }
@@ -851,7 +854,7 @@ FileP file_open_z_write (rom filename, FileMode mode, DataType data_type, Codec 
     file->basename = filename_base (file->name, false, NULL, NULL, 0);
 
     ASSINP (filename_has_ext (file->name, GENOZIP_EXT), 
-            "file %s must have a " GENOZIP_EXT " extension", file_printname (file));
+            "file \"%s\" must have a " GENOZIP_EXT " extension", file_printname (file));
     
     // set file->type according to the data type, overriding the previous setting - i.e. if the user
     // uses the --output option, he is unrestricted in the choice of a file name
@@ -1008,7 +1011,6 @@ void file_close (FileP *file_p)
         if (IS_PIZ && flag.deep && file->supertype == Z_FILE) { // in this case, deep_index and deep_ents are Buffers containing arrays of Buffers
             for_buf (Buffer, buf, file->deep_index) buf_destroy (*buf);
             for_buf (Buffer, buf, file->deep_ents)  buf_destroy (*buf);  
-            huffman_destroy (&file->qname_huf);          
         }
 
         buflist_destroy_file_bufs (file);
@@ -1016,7 +1018,6 @@ void file_close (FileP *file_p)
         mutex_destroy (file->zriter_mutex);
         mutex_destroy (file->dicts_mutex);
         mutex_destroy (file->custom_merge_mutex);
-        mutex_destroy (file->qname_huf_mutex);
         
         FREE (file->name);
         FREE (file->basename);
@@ -1245,7 +1246,7 @@ static rom put_data_tmp_filenames[MAX_PUT_DATA_FILES_PER_EXECUTION] = {};
 static unsigned num_put_files=0;
 
 bool file_put_data (rom filename, const void *data, uint64_t len, 
-                    mode_t mode) // optional - ignored if 0
+                    mode_t chmod_to) // optional - ignored if 0
 {
     int fn_len = strlen (filename);
 
@@ -1308,8 +1309,8 @@ bool file_put_data (rom filename, const void *data, uint64_t len,
     ASSERT (!renamed_failed, "Failed to rename %s to %s: %s", tmp_filename, filename, strerror (errno));
     FREE (tmp_filename);
 
-    if (mode) 
-        ASSERT (!chmod (filename, mode), "Failed to chmod %s: %s", filename, strerror (errno));
+    if (chmod_to) 
+        ASSERT (!chmod (filename, chmod_to), "Failed to chmod %s: %s", filename, strerror (errno));
     
     return true;
 }

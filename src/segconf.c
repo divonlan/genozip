@@ -241,7 +241,7 @@ static void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
     if (flag.show_memory) 
         iprintf ("\nvblock size set to %u MB %s%s\n", 
                  (unsigned)(segconf.vb_size >> 20), 
-                 cond_int (num_used_contexts, "num_used_contexts", num_used_contexts),
+                 cond_int (num_used_contexts, "num_used_contexts=", num_used_contexts),
                  cond_int (Z_DT(VCF), " num_vcf_samples=", vcf_header_get_num_samples()));
 }
 
@@ -273,7 +273,7 @@ static bool segconf_get_zip_txt_modified (bool provisional)
     return (has_optimize && DTPZ(zip_modify))
         || (flag.add_line_numbers && Z_DT(VCF))
         || (flag.add_seq && Z_DT(SAM))
-        || flag.has_head  // --head diagnostic option to compress only a few lines of VB=1
+        || flag_has_head  // --head diagnostic option to compress only a few lines of VB=1
         || flag.has_biopsy_line;    
 }
 
@@ -311,6 +311,7 @@ void segconf_zip_initialize (void)
 
             // FASTQ stuff
             .deep_qtype            = QNONE,
+            .deep_is_last          = unknown,
 
             // FASTA stuff
             .fasta_has_contigs     = true, // initialize optimistically
@@ -324,7 +325,8 @@ void segconf_zip_initialize (void)
         memset (segconf.qname_line0, 0, sizeof (segconf.qname_line0));
     }
     
-    mutex_initialize (segconf.PL_mux_by_DP_mutex);
+    if (Z_DT(VCF))
+        mutex_initialize (segconf.PL_mux_by_DP_mutex);
 }
 
 // PIZ only
@@ -377,6 +379,10 @@ void segconf_calculate (void)
     if (segconf_skip_segconf()) {
         if (txt_file->discover_during_segconf)
             segconf_discover_fastq_gz();
+
+        if (segconf.deep_paired_qname) // Deep with exactly 2 FASTQs, and since skipped, this is the 2nd FASTQ
+            segconf.deep_is_last = !segconf.deep_is_last;
+
         goto finalize;
     }
 

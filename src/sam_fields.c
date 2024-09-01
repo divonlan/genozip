@@ -166,6 +166,9 @@ void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAMP dl, unsigned add_bytes)
         if (sam_is_depn (dl->FLAG))
             segconf.sam_has_depn = true;
     }
+
+    if (dl->FLAG.secondary)     vb->secondary_count++;
+    if (dl->FLAG.supplementary) vb->supplementary_count++; 
 }
 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_COPY_MATE_FLAG)
@@ -1702,6 +1705,11 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam,
         case _OPTION_rq_f: COND (MP(ULTIMA) || segconf.pacbio_subreads, sam_seg_float_as_snip (vb, CTX(OPTION_rq_f), STRa(value), numeric, add_bytes)); // expecting all-the-same for subreads
 
         case _OPTION_t0_Z: COND (segconf.sam_has_ultima_t0, sam_seg_ultima_t0 (vb, dl, STRa(value), add_bytes));
+        
+        // cpu
+        case _OPTION_Y0_i: COND (MP(CPU) && sam_seg_peek_int_field (vb, OPTION_AS_i, vb->idx_AS_i, 0, 10000, true, NULL), seg_delta_vs_other_dictN (VB, CTX(OPTION_Y0_i), CTX(OPTION_AS_i), numeric.i, 10, add_bytes));
+        case _OPTION_Y1_i: COND (MP(CPU) && sam_seg_peek_int_field (vb, OPTION_XS_i, vb->idx_XS_i, 0, 10000, true, NULL), seg_delta_vs_other_localN (VB, CTX(OPTION_Y1_i), CTX(OPTION_XS_i), numeric.i, 1000, add_bytes));
+        case _OPTION_XL_Z: COND (MP(CPU), sam_seg_CPU_XL_Z (vb, STRa(value), add_bytes));
         
         // Agilent
         case _OPTION_ZA_Z: COND (segconf.has_agent_trimmer, sam_seg_buddied_Z_fields (vb, dl, MATED_ZA, STRa(value), 0, add_bytes));

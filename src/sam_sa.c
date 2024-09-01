@@ -22,6 +22,35 @@
 // SEG
 //---------
 
+bool sam_zip_is_valid_SA (rom sa, uint32_t char_limit, bool is_bam)
+{
+    MINIMIZE (char_limit, 1000); // recognizes SA strings that are up to 1000 characters long
+
+    uint32_t sa_len;
+    if (is_bam) {
+        rom nul = memchr (sa, 0, char_limit); // search for end of string
+        if (!nul) return false;
+
+        sa_len = nul - sa;
+    }
+    else {
+        SAFE_NUL (sa + char_limit);
+        sa_len = strcspn (sa, "\t\n\r");
+        SAFE_RESTORE;
+
+        if (sa_len == char_limit) return false;
+    }
+
+    str_split (sa, sa_len, 0, ';', aln, false);
+
+    for (int i=0; i < n_alns; i++) {
+        str_split (alns[i], aln_lens[i], NUM_SA_ITEMS, ',', item, true);
+        if (n_items != NUM_SA_ITEMS) return false;
+    }
+
+    return true;
+}
+
 // Seg: get item from prim line's SA:Z - of the alignment predicted to correspond to the current line
 bool sam_seg_SA_get_prim_item (VBlockSAMP vb, int sa_item_i, pSTRp(out))
 {

@@ -35,9 +35,12 @@
         zip_modify, vcf_zip_modify, vcf_optimize_samples, vcf_optimize_QUAL, vcf_optimize_INFO, vcf_convert_probabilites_to_phred, \
         vcf_convert_likelihoods_to_phred, vcf_phred_optimize, optimize_float_3_sig_dig, \
         seg_all_data_lines, seg_get_next_line, seg_get_next_item, seg_initialize,\
-        ctx_clone, qname_seg, sam_cigar_seg, sam_seg_BWA_XA_Z, sam_seg_BWA_XA_pos, sam_sa_prim_finalize_ingest, sam_zip_prim_ingest_vb,\
+        ctx_clone, qname_seg, sam_cigar_seg, sam_seg_BWA_XA_Z, sam_seg_BWA_XA_pos, sam_sa_prim_finalize_ingest, \
+        sam_zip_prim_ingest_vb, sam_zip_prim_ingest_idle, sam_zip_prim_ingest_wait_for_seq_mutex, sam_zip_prim_ingest_wait_for_qual_mutex, sam_zip_prim_ingest_wait_for_qname_mutex, sam_zip_prim_ingest_wait_for_aln_mutex, \
+        sam_zip_prim_ingest_vb_pack_seq, sam_zip_prim_ingest_vb_compress_qual, sam_zip_prim_ingest_vb_compress_qnames, sam_zip_prim_ingest_solo_data, sam_zip_prim_ingest_vb_create_index, \
         sam_seg_SEQ, sam_seg_verify_saggy_line_SEQ, sam_seg_SEQ_vs_ref, sam_seg_bisulfite_M, reconstruct_SEQ_copy_sag_prim, \
-        sam_analyze_copied_SEQ, sam_cigar_special_CIGAR, sam_piz_special_QUAL,\
+        sam_analyze_copied_SEQ, sam_cigar_special_CIGAR, sam_piz_special_QUAL, \
+        sam_sag_by_flag_scan_for_depn, sam_sag_by_flag_scan_sag_depn_index, sam_sag_by_flag_scan_sort_qname_index, scan_remove_single_vb_depns, \
         sam_seg_QUAL, sam_seg_is_gc_line, sam_seg_aux_all, sam_seg_MD_Z_analyze, sam_seg_bsseeker2_XG_Z_analyze,\
         sam_seg_bismark_XM_Z, sam_seg_bsbolt_XB, sam_seg_AS_i, sam_seg_NM_i, sam_seg_SA_Z, sam_seg_BWA_XS_i,\
         sam_seg_TX_AN_Z, sam_seg_barcode_qual, sam_seg_CB_Z, sam_seg_CR_Z, sam_seg_RX_Z, sam_seg_BX_Z, sam_seg_ULTIMA_tp,\
@@ -61,14 +64,18 @@
         zip_write_global_area, \
         piz_read_global_area, ref_load_stored_reference, dict_io_read_all_dictionaries, dict_io_build_word_lists, \
         ref_read_one_range, ref_uncompress_one_range, vb_release_vb_do, vb_destroy_vb,\
-        sam_load_groups_add_one_prim_vb, sam_zip_calculate_max_conc_writing_vbs, \
-        sam_reconstruct_SEQ_vs_ref, aligner_reconstruct_seq,\
+        sam_load_groups_add_one_prim_vb, sam_load_groups_move_comp_to_zfile, sam_load_groups_move_comp_to_zfile_idle, \
+        sam_load_groups_add_qname, sam_load_groups_add_flags, sam_load_groups_add_seq, sam_load_groups_add_qual, sam_load_groups_add_grp_cigars, \
+        sam_load_groups_add_SA_alns, sam_load_groups_add_solo_data, sam_load_groups_add_grps, \
+        sam_zip_calculate_max_conc_writing_vbs, sam_reconstruct_SEQ_vs_ref, aligner_reconstruct_seq,\
+        writer_main_loop, writer_create_plan, gencomp_piz_initialize_vb_info, gencomp_piz_update_reading_list, gencomp_piz_vb_to_plan, \
         sam_bismark_piz_update_meth_call,\
         zip_handle_unique_words_ctxs, random_access_merge_in_vb, \
         vcf_seg_PROBE_A, vcf_seg_QUAL, \
         random_access_finalize_entries, random_access_compress, ctx_compress_counts, zfile_compress_genozip_header,\
         ref_compress_ref, ref_compress_one_range, ref_copy_compressed_sections_from_reference_file,\
         piz_main_loop_idle, zip_main_loop_idle, zip_free_undeeded_zctx_bufs_after_seg, \
+        piz_uncompress_all_ctxs__recon, piz_uncompress_all_ctxs__fasta_writer_init, piz_uncompress_all_ctxs__fastq_read_r1, piz_uncompress_all_ctxs__sam_load_sag,\
         gencomp_absorb_vb_gencomp_lines, gencomp_flush, gencomp_offload_DEPN_to_disk, gencomp_reread_lines_as_prescribed, gencomp_do_offload_write, \
         compress_depn_buf,  \
         tmp1, tmp2, tmp3, tmp4, tmp5, \

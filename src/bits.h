@@ -112,8 +112,9 @@
 // Bit functions on arrays
 //
 #define bitset2_get(arr,wrd,idx)     (((arr)[wrd] >> (idx)) & 0x1)
-#define bitset2_get2(arr,wrd,idx)    (((arr)[wrd] >> (idx)) & 0x3) // divon
-#define bitset2_get4(arr,wrd,idx)    (((arr)[wrd] >> (idx)) & 0xf) // divon
+#define bitset2_get2(arr,wrd,idx)    (((arr)[wrd] >> (idx)) & 0x3)  // divon
+#define bitset2_get4(arr,wrd,idx)    (((arr)[wrd] >> (idx)) & 0xf)  // divon
+#define bitset2_get5(arr,wrd,idx)    (((arr)[wrd] >> (idx)) & 0x1f) // divon
 #define bitset2_set(arr,wrd,idx)     ((arr)[wrd] |=  _TYPESHIFT((arr),1,(idx)))
 #define bitset2_del(arr,wrd,idx)     ((arr)[wrd] &=~ _TYPESHIFT((arr),1,(idx)))
 #define bitset2_tgl(arr,wrd,idx)     ((arr)[wrd] ^=  _TYPESHIFT((arr),1,(idx)))
@@ -137,6 +138,7 @@
 #define bitset_get(arr,pos)       bitset_op (bitset2_get,  (arr), (pos))
 #define bitset_get2(arr,pos)      bitset_op (bitset2_get2, (arr), (pos)) // divon - gets a value [0,3] of 2 bits 
 #define bitset_get4(arr,pos)      bitset_op (bitset2_get4, (arr), (pos)) // divon - gets a value [0,15] of 4 bits 
+#define bitset_get5(arr,pos)      bitset_op (bitset2_get5, (arr), (pos)) // divon - gets a value [0,15] of 4 bits 
 #define bitset_set(arr,pos)       bitset_op (bitset2_set,  (arr), (pos))
 #define bitset_del(arr,pos)       bitset_op (bitset2_del,  (arr), (pos))
 #define bitset_tgl(arr,pos)       bitset_op (bitset2_tgl,  (arr), (pos))
@@ -173,12 +175,15 @@ typedef struct Bits
 #define bits_in_top_word(nbits) ((nbits) ? bitset64_idx((nbits) - 1) + 1 : 0)
 
 // clear excess bits in top used word of bitmap 
-static inline void bits_clear_excess_bits_in_top_word (BitsP bits)
+static inline void bits_clear_excess_bits_in_top_word (BitsP bits, bool atomic)
 {
     if (bits->nwords) {
         word_offset_t bits_active = bits_in_top_word(bits->nbits);
         //atomic version of &= in case multiple threads do this in concurrently while working on different regions of the bitmap
-        __atomic_and_fetch (&bits->words[bits->nwords-1], bitmask64(bits_active), __ATOMIC_RELAXED);
+        if (atomic)
+            __atomic_and_fetch (&bits->words[bits->nwords-1], bitmask64(bits_active), __ATOMIC_RELAXED);
+        else
+            bits->words[bits->nwords-1] &= bitmask64(bits_active);
     }
 }
 
@@ -210,6 +215,7 @@ extern void LTEN_bits (BitsP bits); // divon
 static inline bool    bits_get (ConstBitsP arr, uint64_t i) { return bitset_get (arr->words, i); }
 static inline uint8_t bits_get2(ConstBitsP arr, uint64_t i) { return bitset_get2(arr->words, i); }
 static inline uint8_t bits_get4(ConstBitsP arr, uint64_t i) { return bitset_get4(arr->words, i); }
+static inline uint8_t bits_get5(ConstBitsP arr, uint64_t i) { return bitset_get5(arr->words, i); }
 static inline void bits_set    (BitsP arr, uint64_t i) { bitset_set(arr->words, i); }
 static inline void bits_clear  (BitsP arr, uint64_t i) { bitset_del(arr->words, i); }
 static inline void bits_toggle (BitsP arr, uint64_t i) { bitset_tgl(arr->words, i); }
@@ -301,6 +307,35 @@ static inline uint64_t _get_word(ConstBitsP bits, uint64_t start)
     return result;
 }
 
+
+// Set 64 bits from a particular start position
+// Doesn't extend bit array
+#define WORD_MAX  (~(uint64_t)0) // word of all 1s
+
+static inline void _set_word (BitsP bits, uint64_t start, uint64_t word)
+{
+    uint64_t word_index = bitset64_wrd(start);
+    word_offset_t word_offset = bitset64_idx(start);
+
+    if (word_offset == 0)
+        bits->words[word_index] = word;
+    
+    else {
+        bits->words[word_index] = (word << word_offset) |
+                                  (bits->words[word_index] & bitmask64(word_offset));
+
+        if (word_index+1 < bits->nwords) { // if last part of the word goes beyond nwords, we drop it
+
+            bits->words[word_index+1] = (word >> (WORD_SIZE - word_offset)) |
+                                        (bits->words[word_index+1] & (WORD_MAX << word_offset));
+
+            // added by divon: Mask top word only if its the last word --divon
+            if (word_index+2 == bits->nwords)
+                bits_clear_excess_bits_in_top_word (bits, true);
+        }
+    }
+}
+
 //
 // Get / set a word of a given size
 //
@@ -325,7 +360,12 @@ extern void bits_set_word64 (BitsP bits, uint64_t start, uint64_t word);
 extern void bits_set_word32 (BitsP bits, uint64_t start, uint32_t word);
 extern void bits_set_word16 (BitsP bits, uint64_t start, uint16_t word);
 extern void bits_set_word8 (BitsP bits, uint64_t start, uint8_t byte);
-extern void bits_set_wordn (BitsP bits, uint64_t start, uint64_t word, int n);
+
+static inline void bits_set_wordn (BitsP bits, uint64_t start, uint64_t word, int n) 
+{
+    uint64_t w = _get_word(bits, start), m = bitmask64(n);
+    _set_word(bits, start, bitmask_merge(word,w,m));
+}
 
 //
 // Number of bits set

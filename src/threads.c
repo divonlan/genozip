@@ -270,7 +270,7 @@ static void threads_sigusr1_handler (int signum)
     
     iprint0 ("\n\n");
     buflist_show_memory (false, 0, 0);
-
+    
     ctx_show_zctx_big_consumers (info_stream);
 }
 

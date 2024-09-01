@@ -580,7 +580,6 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
         segconf.est_segconf_sam_size += bam_segconf_get_transated_sam_line_len (vb, dl, tlen);
 
 done: {}
-
     buf_free (vb->textual_cigar);
     buf_free (vb->textual_seq);
 

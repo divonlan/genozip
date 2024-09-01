@@ -30,7 +30,7 @@ void vcf_dbsnp_seg_initialize (VBlockVCFP vb)
 // *might* be the same as the numeric value of the ID
 void vcf_seg_INFO_RS (VBlockVCFP vb, ContextP ctx, STRp(rs))
 {
-    // case: eg ID=rs3844233 RS=3844233. We use a SNIP_DELTA_OTHER with delta=0 to copy last_value from ID.
+    // case: eg ID=rs3844233 RS=3844233. We use a SNIP_OTHER_DELTA with delta=0 to copy last_value from ID.
     // (can't use SNIP_COPY bc it would copy the entire txt "rs3844233")
     int64_t rs_value;
     if (ctx_has_value_in_line_(VB, CTX(VCF_ID)) &&
@@ -48,7 +48,7 @@ void vcf_seg_INFO_RS (VBlockVCFP vb, ContextP ctx, STRp(rs))
 // *might* be the same as POS
 void vcf_seg_INFO_RSPOS (VBlockVCFP vb, ContextP ctx, STRp(rspos))
 {
-    // case: eg ID=rs3844233 RS=3844233. We use a SNIP_DELTA_OTHER with delta=0 to copy last_value from ID.
+    // case: eg ID=rs3844233 RS=3844233. We use a SNIP_OTHER_DELTA with delta=0 to copy last_value from ID.
     // (can't use SNIP_COPY bc it would copy the entire txt "rs3844233")
     int64_t rspos_value;
     if (ctx_has_value_in_line_(VB, CTX(VCF_POS)) &&

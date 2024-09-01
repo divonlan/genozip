@@ -117,40 +117,65 @@ void fastq_deep_seg_finalize_segconf (uint32_t n_lines)
 {
     if (zip_is_biopsy) return;
 
-    unsigned n_mch = n_lines - segconf.n_no_mch; // exclude lines that don't match any SAM line - perhaps they were filtered out and excluded from the SAM file 
-    unsigned threashold = flag.force_deep ? 1 : MAX_(n_mch/2, 1); // at least half of the lines need this level of matching (or at least 1 if --force-deep)
+    uint32_t proof_of_first=0, proof_of_last=0;
+
+    if (segconf.deep_paired_qname) {
+        proof_of_first = segconf.n_seq_qname_mch[2] + segconf.n_seq_qname_mch[3] + segconf.n_full_mch[2] + segconf.n_full_mch[3];  
+        proof_of_last  = segconf.n_seq_qname_mch[4] + segconf.n_seq_qname_mch[5] + segconf.n_full_mch[4] + segconf.n_full_mch[5];  
+        
+        if      (proof_of_first && proof_of_first >= 9 * proof_of_last)  segconf.deep_is_last = no;
+        
+        else if (proof_of_last  && proof_of_last  >= 9 * proof_of_first) segconf.deep_is_last = yes;
+
+        // usually fastq_verify_and_sort_pairs would cause the first (i.e. segconfed) FASTQ file to be
+        // the true R1, and usually the user creates the SAM/BAM file with an aligner command line with R1 listed first.
+        // If we are wrong, then no FASTQ read will be segged against Deep, which is not great, but not an error.  
+        else segconf.deep_is_last = no; 
+    }
+
+    unsigned qname_i = segconf.deep_is_last==no?2 : segconf.deep_is_last==yes? 4 : 0/*not paired*/;
+    unsigned qname2_i = qname_i + 1;
 
     // test: at least half of the reads (excluding reads that had no matching SEQ in the SAM) have a matching QNAME
-    segconf.deep_qtype = (segconf.n_seq_qname_mch[0] + segconf.n_full_mch[0] >= threashold) ? QNAME1
-                       : (segconf.n_seq_qname_mch[1] + segconf.n_full_mch[1] >= threashold) ? QNAME2
-                       : QNONE;
+    uint32_t proof_of_qname1 = segconf.n_seq_qname_mch[qname_i]  + segconf.n_full_mch[qname_i];
+    uint32_t proof_of_qname2 = segconf.n_seq_qname_mch[qname2_i] + segconf.n_full_mch[qname2_i];
+                          
+    segconf.deep_qtype = (!proof_of_qname1 && !proof_of_qname2) ? QNONE 
+                       : (proof_of_qname1 >= proof_of_qname2)   ? QNAME1
+                       :                                          QNAME2;
 
     if (segconf.deep_qtype == QNONE) segconf.deep_has_trimmed = false;
 
     if (!segconf.deep_has_trimmed) buf_destroy (z_file->deep_index_by[BY_QNAME]);
 
-    if (flag.show_deep) 
-        iprintf ("segconf: n_lines=%u threashold=%u n_full_mch=(%u,%u) n_seq_qname_mch=(%u,%u) n_seq_qual_mch=%u n_seq_only=%u n_no_match=%u trimming=%s\n",
-                 n_lines, threashold, segconf.n_full_mch[0], segconf.n_full_mch[1], segconf.n_seq_qname_mch[0], segconf.n_seq_qname_mch[1], 
-                 segconf.n_seq_qual_mch, segconf.n_seq_mch, segconf.n_no_mch, segconf_deep_trimming_name());
-
     // test: likewise, matching QUAL
-    if ((segconf.n_seq_qual_mch + segconf.n_full_mch[0] < threashold) &&
-        (segconf.n_seq_qual_mch + segconf.n_full_mch[1] < threashold)) {
+    uint32_t proof_of_qual = (segconf.deep_qtype == QNAME1) ? segconf.n_full_mch[qname_i]
+                           : (segconf.deep_qtype == QNAME2) ? segconf.n_full_mch[qname2_i]
+                           : /* QNONE */                      segconf.n_seq_qual_mch;
+
+    if (!proof_of_qual) {
         segconf.deep_no_qual = true;
         segconf.deep_N_fq_score = segconf.deep_N_sam_score = 0;
     }
 
     // we need at least 2 of the 3 (QNANE,SEQ,QUAL) to be comparable between FASTQ and SAM to have a total of 64 bit hash (32 from each)    
-    ASSINP (segconf.deep_qtype != QNONE || !segconf.deep_no_qual, 
-            "Error: cannot use --deep with this file: based on testing the first %u reads of %s, only:\n"
-            "%u reads had a matching alignment in the SAM/BAM file matching QNAME, SEQ, QUAL\n"
-            "%u reads had a matching alignment in the SAM/BAM file matching QNAME2, SEQ, QUAL\n"
-            "%u matching QNAME and SEQ\n"
-            "%u matching QNAME2 and SEQ\n"
-            "%u matching SEQ and QUAL\n"
-            "This is below the threashold needed for meaningful Deep compression. You may compress these files without --deep, or override with --force-deep",
-            n_lines, txt_name, segconf.n_full_mch[0], segconf.n_full_mch[1], segconf.n_seq_qname_mch[0], segconf.n_seq_qname_mch[1], segconf.n_seq_qual_mch);
+    bool can_deep = segconf.deep_qtype != QNONE || !segconf.deep_no_qual;
+
+    if (flag.show_deep || !can_deep) {
+        iprintf ("\nFASTQ Deep segconf stats: n_lines=%u proof_of_first=%u proof_of_last=%u proof_of_qname1=%u proof_of_qname2=%u proof_of_qual=%u\n"
+                 "FIRST:{n_full_mch=(%u,%u) n_seq_qname_mch=(%u,%u)} LAST:{n_full_mch=(%u,%u) n_seq_qname_mch=(%u,%u)} NOT_PAIR={n_full_mch=(%u,%u) n_seq_qname_mch=(%u,%u)} n_seq_qual_mch=%u n_seq_only=%u n_no_match=%u trimming=%s\n",
+                 n_lines, proof_of_first, proof_of_last, proof_of_qname1, proof_of_qname2, proof_of_qual,
+                 segconf.n_full_mch[2], segconf.n_full_mch[3], segconf.n_seq_qname_mch[2], segconf.n_seq_qname_mch[3], 
+                 segconf.n_full_mch[4], segconf.n_full_mch[5], segconf.n_seq_qname_mch[4], segconf.n_seq_qname_mch[5], 
+                 segconf.n_full_mch[0], segconf.n_full_mch[1], segconf.n_seq_qname_mch[0], segconf.n_seq_qname_mch[1],                  
+                 segconf.n_seq_qual_mch, segconf.n_seq_mch, segconf.n_no_mch, segconf_deep_trimming_name());
+        
+        iprintf ("\nFASTQ Deep segconf settings: paired_qname=%s is_last=%s qtype=%s has_trimmed=%s has_trimmed_left=%s no_qual=%s\n",
+                 TF(segconf.deep_paired_qname), YN(segconf.deep_is_last), qtype_name (segconf.deep_qtype), TF(segconf.deep_has_trimmed), TF(segconf.deep_has_trimmed_left), TF(segconf.deep_no_qual));
+    }
+    
+    ASSINP (can_deep, "Error: cannot use --deep with this file: based on testing the first %u reads of %s.\nYou may compress these files without --deep, or override with --force-deep",
+            n_lines, txt_name);
 }
 
 // find a subset of FASTQ's seq that matches the hash of the SAM's seq. 
@@ -236,11 +261,18 @@ static void fastq_deep_seg_segconf (VBlockFASTQP vb, STRp(qname), STRp(qname2), 
 {
     ARRAY (ZipZDeep, deep_ents, z_file->deep_ents);
 
-    int num_qnames = 1 + (qname2_len > 0);
+    struct { bool cond; QType q; STR(qname); thool is_last; } inst[NUM_INSTS] = 
+          // QNAME1                                                       QNAME2
+        { { !segconf.deep_paired_qname, QNAME1, STRa(qname), unknown }, { !segconf.deep_paired_qname && qname2_len > 0, QNAME2, STRa(qname2), unknown },   // not apired
+          {  segconf.deep_paired_qname, QNAME1, STRa(qname), false   }, { segconf.deep_paired_qname  && qname2_len > 0, QNAME2, STRa(qname2), false   },   // is_first
+          {  segconf.deep_paired_qname, QNAME1, STRa(qname), true    }, { segconf.deep_paired_qname  && qname2_len > 0, QNAME2, STRa(qname2), true    } }; // is_last
 
-    uint32_t qname_hash[2] = { deep_qname_hash (QNAME1, STRa(qname), NULL),
-                               ((num_qnames==2) ? deep_qname_hash (QNAME2, STRa(qname2), NULL) : 0) };
-    uint32_t seq_hash  = deep_seq_hash (VB, STRa(seq), false);
+    uint32_t qname_hash[NUM_INSTS];
+    for (int i=0; i < NUM_INSTS; i++)
+        if (inst[i].cond) 
+            qname_hash[i] = deep_qname_hash (inst[i].q, STRa(inst[i].qname), inst[i].is_last, NULL);
+    
+    uint32_t seq_hash = deep_seq_hash (VB, STRa(seq), false);
     
     if (segconf.deep_N_sam_score) {
         qual = fastq_deep_set_N_qual (vb, STRa(seq), STRa(qual));
@@ -252,7 +284,7 @@ static void fastq_deep_seg_segconf (VBlockFASTQP vb, STRp(qname), STRp(qname2), 
 
     uint32_t qual_hash = deep_qual_hash (VB, STRa(qual), false);
 
-    bool seq_qual_matches=false, seq_qname_matches[2]={}, seq_matches=false;
+    bool seq_qual_matches=false, seq_qname_matches[6]={}, seq_matches=false;
     uint32_t hash = seq_hash & bitmask32 (num_hash_bits);
     
     for (uint32_t ent_i = *B32(z_file->deep_index_by[BY_SEQ], hash); ent_i != NO_NEXT; ent_i = deep_ents[ent_i].next[BY_SEQ]) {
@@ -260,14 +292,14 @@ static void fastq_deep_seg_segconf (VBlockFASTQP vb, STRp(qname), STRp(qname2), 
         
         if (e->hash.seq != seq_hash) continue; // possible, because hash uses less bits that e->hash.seq
 
-        for (int qn=0; qn < num_qnames; qn++) 
-            if (e->hash.qname == qname_hash[qn]) {
+        for (int i=0; i < NUM_INSTS; i++) 
+            if (inst[i].cond && e->hash.qname == qname_hash[i]) {
                 if (e->hash.qual == qual_hash) {
-                    segconf.n_full_mch[qn]++;
+                    segconf.n_full_mch[i]++;
                     return;
                 }
                 else {
-                    seq_qname_matches[qn] = true;
+                    seq_qname_matches[i] = true;
                     goto next_ent;
                 }
             }
@@ -281,20 +313,26 @@ static void fastq_deep_seg_segconf (VBlockFASTQP vb, STRp(qname), STRp(qname2), 
     }
         
     // each segconf read increments exactly one category
-    if      (seq_qname_matches[0]) segconf.n_seq_qname_mch[0]++; // if one match is seq+qname and another is seq+qual, then count the seq+qname 
-    else if (seq_qname_matches[1]) segconf.n_seq_qname_mch[1]++; 
-    else if (seq_qual_matches)     segconf.n_seq_qual_mch++;
-    else if (seq_matches)          segconf.n_seq_mch++;        // no match for qname and qual, only seq alone
+    for (int i=0; i < NUM_INSTS; i++)
+        if (seq_qname_matches[i]) {
+            segconf.n_seq_qname_mch[i]++; // if one match is seq+qname and another is seq+qual, then count the seq+qname 
+            goto done;
+        } 
+
+    if (seq_qual_matches) segconf.n_seq_qual_mch++;
+    else if (seq_matches) segconf.n_seq_mch++;        // no match for qname and qual, only seq alone
     
     // no match based on SEQ index, perhaps the read appears trimmed (beyond cropped) in the SAM data - search based on QNAME index
     else {
-        for (int qn=0; qn < num_qnames; qn++) {
-            hash = qname_hash[qn] & bitmask32 (num_hash_bits);
+        for (int i=0; i < NUM_INSTS; i++) {
+            if (!inst[i].cond) continue;
+
+            hash = qname_hash[i] & bitmask32 (num_hash_bits);
             
             for (uint32_t ent_i = *B32(z_file->deep_index_by[BY_QNAME], hash); ent_i != NO_NEXT; ent_i = deep_ents[ent_i].next[BY_QNAME]) {
                 ZipZDeep *e = &deep_ents[ent_i];
                 
-                if (e->hash.qname != qname_hash[qn] || // possible, because hash uses less bits that e->hash.qname
+                if (e->hash.qname != qname_hash[i] || // possible, because hash uses less bits that e->hash.qname
                     e->seq_len >= seq_len) continue;   // definitely not a match if FASTQ seq_len is shorter than SAM's and also not equal seq_len, as that would have been a no-trimming situation already inspected above
             
                 uint32_t sam_seq_offset = 0;
@@ -308,19 +346,24 @@ static void fastq_deep_seg_segconf (VBlockFASTQP vb, STRp(qname), STRp(qname2), 
                 
                 qual_hash = deep_qual_hash (VB, qual + sam_seq_offset, e->seq_len, false); // trimmed QUAL
                 if (qual_hash == e->hash.qual) {
-                    segconf.n_full_mch[qn]++;
+                    segconf.n_full_mch[i]++;
                     return;
                 }
                 else
-                    seq_qname_matches[qn] = true;
+                    seq_qname_matches[i] = true;
             }
         }
         
-        if      (seq_qname_matches[0]) segconf.n_seq_qname_mch[0]++;
-        else if (seq_qname_matches[1]) segconf.n_seq_qname_mch[1]++; 
-        else                           segconf.n_no_mch++; // no match - likely bc this read was filtered out in the SAM file
+        for (int i=0; i < NUM_INSTS; i++)
+            if (seq_qname_matches[i]) {
+                segconf.n_seq_qname_mch[i]++; 
+                goto done;
+            } 
+
+        segconf.n_no_mch++; // no match - likely bc this read was filtered out in the SAM file
     }
 
+done:
     if (segconf.deep_N_sam_score) 
         buf_free (vb->scratch);
 }
@@ -377,9 +420,8 @@ ent_consumed_by_another_thread:
     // 1) two different (QNAME,SEQ,QUAL) triplets have the same 96-bit deep_hash AND only one of the two 
     //    corresponding SAM lines actually exists in the SAM file. Therefore, both reads map to the single SAM
     //    line, and we don't know which is the true match. We have no choice but to abort.
-    // 2) two identical (QNAME,SEQ,QUAL), and only one SAM line exists. conceivably, this could happen for example
-    //    if SEQ of the two mates sharing the QNAME is trivial but non-monochar (eg an STR), and QUAL is mono-value.
-    //    We can't distinguish between this case and case 1, so we need to abort as well.
+    // 2) two identical (-,SEQ,QUAL) (with QNONE), and only one SAM line exists. conceivably, this could happen for example
+    //    due to duplicates that were filtered out of the SAM. 
     // TO DO: recompress normally by executing another instance of genozip
     ABORTINP ("Deep: We hit a rare edge case: two FASTQ reads: current line %s and line FQ\?\?/%u/%u (vb_size=%s)\n"
               "map to the same SAM line (deep_hash=%u,%u,%u qtype=%s no_qual=%s).\n"
@@ -475,8 +517,8 @@ void fastq_seg_deep (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qname), STRp(qn
             goto no_match; // some qual scores of 'N' bases are of an inconsistent value - we don't be able to reconstruct them from segconf.deep_N_fq_score
     }
 
-    DeepHash deep_hash = { .qname = (segconf.deep_qtype == QNAME1) ? deep_qname_hash (QNAME1, STRa(qname),  uncanonical_suffix_len)
-                                  : (segconf.deep_qtype == QNAME2) ? deep_qname_hash (QNAME2, STRa(qname2), uncanonical_suffix_len)
+    DeepHash deep_hash = { .qname = (segconf.deep_qtype == QNAME1) ? deep_qname_hash (QNAME1, STRa(qname),  segconf.deep_is_last, uncanonical_suffix_len)
+                                  : (segconf.deep_qtype == QNAME2) ? deep_qname_hash (QNAME2, STRa(qname2), segconf.deep_is_last, uncanonical_suffix_len)
                                   :                                  0,
                            .seq   =                             deep_seq_hash (VB, STRa(seq), false),
                            .qual  = segconf.deep_no_qual  ? 0 : deep_qual_hash (VB, STRa(qual), false) };
@@ -505,9 +547,9 @@ void fastq_seg_deep (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qname), STRp(qn
         bool qual_matches=false, qname_matches=false;
         
         if (e->hash.seq == deep_hash.seq &&  // SEQ matches
-            (segconf.deep_no_qual || !e->hash.qual || (qual_matches = (deep_hash.qual == e->hash.qual))) &&  // QUAL matches (or not relevant)
+            (segconf.deep_no_qual || !e->hash.qual || (qual_matches = (deep_hash.qual == e->hash.qual)) || segconf.deep_qtype != QNONE) &&  // QUAL matches. It's ok QUAL doesn't match if QNAME matches (which is required if not QNONE)
             (segconf.deep_qtype == QNONE || (qname_matches = (deep_hash.qname == e->hash.qname)))) {  // QNAME matches (or not relevant)
-            
+
             if (e->dup) {
                 vb->deep_stats[NDP_MULTI_MATCH]++; // already detected before as a dup entry
                 goto no_match;
@@ -536,7 +578,7 @@ void fastq_seg_deep (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qname), STRp(qn
             if (e->hash.qname != deep_hash.qname || // possible, because hash uses less bits that e->hash.qname
                 e->seq_len >= seq_len) continue;    // definitely not a match if FASTQ seq_len is shorter than SAM's and also not equal seq_len, as that would have been a no-trimming situation already inspected above
 
-            // case: SEQ matches, and QUAL and QNAME match if they are required to match
+            // case: QNAME matches: see if we can find a subsequence of SEQ that matches
             if (!fastq_deep_seg_find_subseq (vb, STRa(seq), e->seq_len, e->hash.seq, segconf.deep_has_trimmed_left, &dl->sam_seq_offset))
                 continue; 
 
@@ -577,8 +619,8 @@ void fastq_seg_deep (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qname), STRp(qn
             if (__atomic_fetch_add (&count, (int)1, __ATOMIC_RELAXED) < 20) {
                 rom once = "";
                 DO_ONCE once = "\n\n(Showing first ~20 no-matches)\n";
-                iprintf ("%s%s: no matching SAM line (has_match=%s, deep_hash=%u,%u,%u \nQNAME=\"%.*s\"\nSEQ=  \"%.*s\"\nQUAL= \"%.*s\"\n", 
-                         once, LN_NAME, TF(!!matching_ent), DEEPHASHf(deep_hash), STRf(qname), STRf(seq), STRf(qual));        
+                iprintf ("%s%s: no matching SAM line (has_match=%s deep_hash=%u,%u,%u is_last=%s)\nQNAME=\"%.*s\"\nSEQ=  \"%.*s\"\nQUAL= \"%.*s\"\n", 
+                         once, LN_NAME, TF(!!matching_ent), DEEPHASHf(deep_hash), YN(segconf.deep_is_last), STRf(qname), STRf(seq), STRf(qual));        
             }
         }
 
@@ -756,29 +798,11 @@ SPECIAL_RECONSTRUCTOR (fastq_special_deep_copy_QNAME)
     uint8_t *deep_ent = CTX(FASTQ_DEEP)->last_value.p;
     ASSERTNOTNULL (deep_ent);
 
-    PizZDeepFlags f = *(PizZDeepFlags *)deep_ent;
     int qname_len = deep_ent[1];
-    int prfx_len  = deep_ent[2];
-    ASSPIZ (qname_len >= prfx_len, "Expecting qname_len=%d >= prfx_len=%d", qname_len, prfx_len);
 
-    STRli (suffix, qname_len - prfx_len);
-
-    RECONSTRUCT (segconf.master_qname, prfx_len);
-
-    int comp_len = 0;
-    if (f.is_qname_comp) {
-        comp_len = huffman_decompress (z_file->qname_huf, &deep_ent[3], (uint8_t *)suffix, suffix_len);
-
-        for (int i=0; i < suffix_len; i++)
-            suffix[i] ^= segconf.master_qname[prfx_len + i];
-    }
-
-    if (reconstruct)
-        RECONSTRUCT (f.is_qname_comp ? suffix : (rom)&deep_ent[3], suffix_len);
-
-    // update qual_len to be entire amount of data consumed - inc "prfx_len" and compressed (or not) suffix
-    deep_ent[1] = 1/*prfx_len*/ + (f.is_qname_comp ? comp_len : suffix_len);
-
+    // note: we update deep_ent[1] to the consumed amount
+    deep_ent[1] = RECONSTRUCT_huffman (vb, SAM_QNAME, qname_len, &deep_ent[2]);
+    
     COPY_TIMER (fastq_special_deep_copy_QNAME);
     return NO_NEW_VALUE;    
 }
@@ -817,8 +841,8 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_deep_copy_SEQ)
     
     vb->seq_len = deep_seq_len + trim_len; 
     
-    ASSPIZ (vb->seq_len <= vb->longest_seq_len, "%s: unexpectedly seq_len(as read from deep_ent)=%u > vb->longest_seq_len=%u (deep_seq_len=%u trim_len=%u)",
-            LN_NAME, vb->seq_len, vb->longest_seq_len, deep_seq_len, trim_len); // sanity check
+    ASSPIZ (vb->seq_len <= vb->longest_seq_len, "%s: unexpectedly seq_len(as read from deep_ent)=%u > vb->longest_seq_len=%u (deep_seq_len=%u trim_len=%u sam_seq_offset=%u is_long_seq=%s)",
+            LN_NAME, vb->seq_len, vb->longest_seq_len, deep_seq_len, trim_len, vb->sam_seq_offset, TF(f.is_long_seq)); // sanity check
 
     // reconstruct SEQ copied from SAM
     if (reconstruct) {
@@ -896,22 +920,6 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_deep_copy_SEQ)
     return NO_NEW_VALUE;    
 }
 
-static void fastq_recon_qual_trim (VBlockFASTQP vb, ContextP ctx, uint32_t len, bool reconstruct)
-{
-    switch (ctx->ltype) { // the relevant subset of ltypes from reconstruct_from_ctx_do
-        case LT_CODEC:         
-            codec_args[ctx->lcodec].reconstruct (VB, ctx->lcodec, ctx, len, reconstruct); 
-            break;
-        
-        case LT_BLOB: 
-            reconstruct_from_local_sequence (VB, ctx, len, reconstruct); 
-            break;
-
-        default: 
-            ABORT_PIZ ("Invalid ltype=%s for %s", lt_name (ctx->ltype), ctx->tag_name);
-    }
-} 
-
 SPECIAL_RECONSTRUCTOR_DT (fastq_special_deep_copy_QUAL)
 {
     VBlockFASTQP vb = (VBlockFASTQP)vb_;
@@ -929,10 +937,30 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_deep_copy_QUAL)
 
     uint32_t deep_seq_len = f.is_long_seq ? GET_UINT32 (deep_ent) : *deep_ent;
 
-    // reconstruct left trim
-    if (vb->sam_seq_offset) 
-        fastq_recon_qual_trim (vb, ctx, vb->sam_seq_offset, reconstruct);
+    // reconstruct left and right trim together (see in zip: fastq_zip_qual)
+    ASSERT (vb->seq_len >= deep_seq_len, "Expecting vb->seq_len=%u >= deep_seq_len=%u", vb->seq_len, deep_seq_len);
+    uint32_t total_trim = vb->seq_len - deep_seq_len;
 
+    ASSERT (total_trim >= vb->sam_seq_offset, "Expecting total_trim=%u >= vb->sam_seq_offset=%u", total_trim, vb->sam_seq_offset);
+    uint32_t right_trim = total_trim - vb->sam_seq_offset; 
+
+    if (total_trim) {
+        if (ctx->ltype == LT_CODEC)         
+            codec_args[ctx->lcodec].reconstruct (VB, ctx->lcodec, ctx, total_trim, reconstruct); 
+
+        else if (ctx->ltype == LT_BLOB) 
+            reconstruct_from_local_sequence (VB, ctx, total_trim, reconstruct); 
+
+        else
+            ABORT_PIZ ("Invalid ltype=%s for %s", lt_name (ctx->ltype), ctx->tag_name);
+
+        // move right trim to its place after the portion to be copied from Deep
+        if (right_trim) {
+            Ltxt -= right_trim;
+            memmove (BAFTtxt + deep_seq_len, BAFTtxt, right_trim); // careful: if there is any QUAL codec that temporarily writes beyond, this won't work
+        }
+    }
+    
     // reconstruct QUAL copied from SAM
     if (reconstruct) {
         deep_ent += f.is_long_seq ? 4 : 1;
@@ -963,9 +991,7 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_deep_copy_QUAL)
         Ltxt += out_len;
     }
 
-    // reconstruct right trim
-    if (deep_seq_len + vb->sam_seq_offset < vb->seq_len) 
-        fastq_recon_qual_trim (vb, ctx, vb->seq_len - vb->sam_seq_offset - deep_seq_len, reconstruct);
+    Ltxt += right_trim; // already reconstructed & copied here above
 
     // case: correct qualities of 'N' bases
     if (segconf.deep_N_fq_score && reconstruct) {

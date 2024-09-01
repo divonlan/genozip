@@ -110,105 +110,7 @@ void profiler_add_evb_and_print_report (void)
 
     iprintf ("Wallclock: %s milliseconds\n", str_int_commas (ms (CHECK_TIMER)).s);
 
-    if (command == PIZ) { // this is a uncompress operation
-
-        iprint0 ("GENOUNZIP main thread (piz_one_txt_file):\n");
-        PRINT (ref_load_stored_reference, 1);
-        PRINT (ref_initialize_ranges, 2);
-        PRINT (ref_read_one_range, 2);
-        PRINT (ref_uncompress_one_range, 2);
-        PRINT (piz_read_global_area, 1); // sometimes also includes ref_load_stored_reference, but usually not
-        PRINT (dict_io_read_all_dictionaries, 2);
-        PRINT (dict_io_build_word_lists, 3);
-        PRINT (txtheader_piz_read_and_reconstruct, 1);
-        PRINT (sam_header_inspect, 2);
-        PRINT (digest_txt_header, 2);
-        PRINT (vb_get_vb, 1);
-        PRINT (piz_read_one_vb, 1);
-        PRINT (read, 2);
-        PRINT (bgzf_io_thread, 1);
-        PRINT (bgzf_writer_thread, 1);
-        PRINT (write, 1);
-        PRINT (sam_sa_prim_finalize_ingest, 1);
-        PRINT (sam_piz_deep_grab_deep_ents, 1);
-        PRINT (sam_piz_deep_finalize_ents, 2);
-        PRINT (piz_main_loop_idle, 1);
-
-        iprintf ("GENOUNZIP compute threads: %s\n", str_int_commas (ms(profile.nanosecs.compute)).s);
-        PRINT (zfile_uncompress_section, 1);
-        PRINT (compressor_bz2,   2);
-        PRINT (compressor_lzma,  2);
-        PRINT (compressor_bsc,   2);
-        PRINT (compressor_rans,  2);
-        PRINT (compressor_arith, 2);
-        PRINT (compressor_domq,  2);
-        PRINT (compressor_normq, 2);
-        PRINT (compressor_actg,  2);
-        PRINT (compressor_pbwt,  2);
-        PRINT (compressor_longr, 2);
-        PRINT (compressor_homp,  2);
-        PRINT (compressor_pacb,  2);
-        PRINT (compressor_smux,  2);
-        PRINT (compressor_t0,    2);
-        PRINT (compressor_oq,    2);
-        
-        PRINT (reconstruct_vb, 1);
-        for (Did did_i=0; did_i < z_file->num_contexts; did_i++) 
-            PRINT_(fields[did_i], ZCTX(did_i)->tag_name, 2);
-
-        PRINT (sam_reconstruct_SEQ_vs_ref, 2);
-        PRINT (reconstruct_SEQ_copy_sag_prim, 3);
-        PRINT (sam_analyze_copied_SEQ, 3);
-        PRINT (sam_bismark_piz_update_meth_call, 3);
-        PRINT (aligner_reconstruct_seq, 2);
-        PRINT (sam_piz_special_QUAL, 2);
-        if (Z_DT(SAM) || Z_DT(BAM)) {
-            PRINT (codec_longr_reconstruct,3);
-            PRINT (codec_homp_reconstruct, 3);
-            PRINT (codec_t0_reconstruct,   3);
-            PRINT (codec_smux_reconstruct, 3);
-            PRINT (codec_pacb_reconstruct, 3);
-            PRINT (codec_domq_reconstruct, 3);
-            PRINT (codec_domq_reconstruct_dom_run, 4);
-            PRINT (codec_oq_reconstruct, 3);
-        }
-        PRINT (fastq_special_monochar_QUAL, 2);        
-        PRINT (sam_piz_sam2fastq_QUAL, 2); 
-        PRINT (sam_piz_sam2bam_QUAL, 2);        
-        PRINT (sam_cigar_special_CIGAR, 2);
-
-        PRINT (sam_piz_con_item_cb, 2); 
-        PRINT (sam_piz_deep_add_qname, 3); 
-        PRINT (sam_piz_deep_add_seq, 3); 
-        PRINT (sam_piz_deep_add_qual, 3);
-        PRINT (sam_piz_deep_compress, 4); // mostly under qual, a tiny bit of seq
-
-        PRINT (fastq_special_set_deep, 2); 
-        PRINT (fastq_special_deep_copy_QNAME, 2);
-        PRINT (fastq_special_deep_copy_SEQ, 2);
-        PRINT (fastq_special_deep_copy_QUAL, 2);
-         
-        PRINT (sam_zip_prim_ingest_vb, 1);
-        PRINT (digest, 1); // note: in SAM/BAM digest is done in the writer thread, otherwise its done in the compute thread. TODO: change level to 0 in case of SAM/BAM
-        PRINT (piz_get_line_subfields, 2);
-        PRINT (sam_load_groups_add_one_prim_vb, 1);
-        if (Z_DT(FASTQ)) {
-            PRINT (codec_longr_reconstruct, 3);
-            PRINT (codec_domq_reconstruct, 2);
-            PRINT (codec_domq_reconstruct_dom_run, 3);
-            PRINT (codec_homp_reconstruct, 2);
-            PRINT (codec_smux_reconstruct, 2);
-            PRINT (codec_pacb_reconstruct, 2);
-        }
-        
-        if (profile.nanosecs.bgzf_compute_thread) {
-            iprintf ("GENOUNZIP BGZF threads: %s\n", str_int_commas (ms(profile.nanosecs.bgzf_compute_thread)).s);
-            PRINT (bgzf_compute_thread, 1);
-            PRINT (bgzf_compress_one_block, 2);
-        }
-    }
-
-    else { // compress
+    if (IS_ZIP) {
         iprint0 ("GENOZIP main thread (zip_one_file):\n");
         PRINT (ref_load_stored_reference, 1);
         PRINT (ref_read_one_range, 2);
@@ -234,7 +136,12 @@ void profiler_add_evb_and_print_report (void)
         PRINT (txtheader_compress, 2);
         PRINT (txtheader_compress_one_fragment, 3); 
         PRINT (digest_txt_header, 2);
-        PRINT (vb_get_vb, 1);
+        PRINT (sam_sag_by_flag_scan_for_depn, 1);
+        PRINT (sam_sag_by_flag_scan_sag_depn_index, 2);
+        PRINT (sam_sag_by_flag_scan_sort_qname_index, 2);
+        PRINT (scan_remove_single_vb_depns, 2);
+        PRINT (vb_get_vb, 1);        
+        PRINT (digest, 1);
         PRINT (fastq_read_R1_data, 1);
         PRINT (piz_read_all_ctxs, 2);
         PRINT (txtfile_read_vblock, 1);
@@ -291,6 +198,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (optimize_float_3_sig_dig, 4);
         PRINT (seg_all_data_lines, 1);
         PRINT (seg_initialize, 2);
+        PRINT (piz_uncompress_all_ctxs__fastq_read_r1, 3);
         PRINT (qname_seg, 2);
         PRINT (sam_cigar_seg, 2);
         PRINT (squank_seg, 3);
@@ -354,6 +262,17 @@ void profiler_add_evb_and_print_report (void)
         PRINT (gencomp_offload_DEPN_to_disk, 3);
         PRINT (compress_depn_buf, 4);
         PRINT (gencomp_do_offload_write, 4);
+        PRINT (sam_zip_prim_ingest_vb, 1);
+        PRINT (sam_zip_prim_ingest_vb_pack_seq, 2);
+        PRINT (sam_zip_prim_ingest_vb_compress_qual, 2);
+        PRINT (sam_zip_prim_ingest_vb_compress_qnames, 2);
+        PRINT (sam_zip_prim_ingest_solo_data, 2);
+        PRINT (sam_zip_prim_ingest_vb_create_index, 2);
+        PRINT (sam_zip_prim_ingest_idle, 2);
+        PRINT (sam_zip_prim_ingest_wait_for_seq_mutex, 3);
+        PRINT (sam_zip_prim_ingest_wait_for_qual_mutex, 3);
+        PRINT (sam_zip_prim_ingest_wait_for_qname_mutex, 3);
+        PRINT (sam_zip_prim_ingest_wait_for_aln_mutex, 3);        
         PRINT (gencomp_reread_lines_as_prescribed, 1);
         PRINT (bgzf_uncompress_one_prescribed_block, 2);
         PRINT (ctx_merge_in_vb_ctx, 1);
@@ -381,11 +300,136 @@ void profiler_add_evb_and_print_report (void)
 
         for_zctx 
             PRINT_(fields[zctx->did_i], zctx->tag_name, 2);
-
-        PRINT (sam_zip_prim_ingest_vb, 1);
-        PRINT (digest, 1);
     }    
-    
+
+    else { // PIZ
+
+        iprint0 ("GENOUNZIP main thread (piz_one_txt_file):\n");
+        PRINT (ref_load_stored_reference, 1);
+        PRINT (ref_initialize_ranges, 2);
+        PRINT (ref_read_one_range, 2);
+        PRINT (ref_uncompress_one_range, 2);
+        PRINT (piz_read_global_area, 1); // sometimes also includes ref_load_stored_reference, but usually not
+        PRINT (dict_io_read_all_dictionaries, 2);
+        PRINT (dict_io_build_word_lists, 3);
+        PRINT (writer_create_plan, 1);
+        PRINT (piz_uncompress_all_ctxs__fasta_writer_init, 1);        
+        PRINT (gencomp_piz_initialize_vb_info, 2);
+        PRINT (txtheader_piz_read_and_reconstruct, 1);
+        PRINT (sam_header_inspect, 2);
+        PRINT (digest_txt_header, 2);
+        PRINT (vb_get_vb, 1);
+        PRINT (piz_read_one_vb, 1);
+        PRINT (read, 2);
+        PRINT (gencomp_piz_update_reading_list, 2);
+        PRINT (bgzf_io_thread, 1);
+        PRINT (bgzf_writer_thread, 1);
+        PRINT (write, 1);
+        PRINT (sam_piz_deep_grab_deep_ents, 1);
+        PRINT (sam_piz_deep_finalize_ents, 2);
+        PRINT (piz_main_loop_idle, 1);
+        
+        iprint0 ("GENOUNZIP writer thread\n");
+        PRINT (writer_main_loop, 1);
+        PRINT (gencomp_piz_vb_to_plan, 2);
+
+        if (profile.nanosecs.sam_load_groups_add_one_prim_vb) {
+            iprintf ("GENOUNZIP load SAGs compute threads: %s\n", str_int_commas (ms(profile.nanosecs.sam_load_groups_add_one_prim_vb)).s);
+            PRINT (sam_load_groups_add_one_prim_vb, 1);
+            PRINT (piz_uncompress_all_ctxs__sam_load_sag, 2);
+            PRINT (sam_load_groups_add_SA_alns, 2);
+            PRINT (sam_load_groups_add_solo_data, 2);
+            PRINT (sam_load_groups_add_qname, 2);
+            PRINT (sam_load_groups_add_flags, 2);
+            PRINT (sam_load_groups_add_grps, 2);
+            PRINT (sam_load_groups_add_seq, 3);
+            PRINT (sam_load_groups_add_qual, 3);
+            PRINT (sam_load_groups_add_grp_cigars, 3);
+            PRINT (sam_load_groups_move_comp_to_zfile, 2);
+            PRINT (sam_load_groups_move_comp_to_zfile_idle, 3);
+        }
+
+        iprintf ("GENOUNZIP compute threads: %s\n", str_int_commas (ms(profile.nanosecs.compute)).s);
+
+        PRINT (piz_uncompress_all_ctxs__recon, 1);
+
+        PRINT (reconstruct_vb, 1);
+        for (Did did_i=0; did_i < z_file->num_contexts; did_i++) 
+            PRINT_(fields[did_i], ZCTX(did_i)->tag_name, 2);
+
+        PRINT (sam_reconstruct_SEQ_vs_ref, 2);
+        PRINT (reconstruct_SEQ_copy_sag_prim, 3);
+        PRINT (sam_analyze_copied_SEQ, 3);
+        PRINT (sam_bismark_piz_update_meth_call, 3);
+        PRINT (aligner_reconstruct_seq, 2);
+        PRINT (sam_piz_special_QUAL, 2);
+        if (Z_DT(SAM) || Z_DT(BAM)) {
+            PRINT (codec_longr_reconstruct,3);
+            PRINT (codec_homp_reconstruct, 3);
+            PRINT (codec_t0_reconstruct,   3);
+            PRINT (codec_smux_reconstruct, 3);
+            PRINT (codec_pacb_reconstruct, 3);
+            PRINT (codec_domq_reconstruct, 3);
+            PRINT (codec_domq_reconstruct_dom_run, 4);
+            PRINT (codec_oq_reconstruct, 3);
+        }
+        PRINT (fastq_special_monochar_QUAL, 2);        
+        PRINT (sam_piz_sam2fastq_QUAL, 2); 
+        PRINT (sam_piz_sam2bam_QUAL, 2);        
+        PRINT (sam_cigar_special_CIGAR, 2);
+
+        PRINT (sam_piz_con_item_cb, 2); 
+        PRINT (sam_piz_deep_add_qname, 3); 
+        PRINT (sam_piz_deep_add_seq, 3); 
+        PRINT (sam_piz_deep_add_qual, 3);
+        PRINT (sam_piz_deep_compress, 4); // mostly under qual, a tiny bit of seq
+
+        PRINT (fastq_special_set_deep, 2); 
+        PRINT (fastq_special_deep_copy_QNAME, 2);
+        PRINT (fastq_special_deep_copy_SEQ, 2);
+        PRINT (fastq_special_deep_copy_QUAL, 2);
+         
+        PRINT (sam_zip_prim_ingest_vb, 1);
+        PRINT (digest, 1); // note: in SAM/BAM digest is done in the writer thread, otherwise its done in the compute thread. TODO: change level to 0 in case of SAM/BAM
+        PRINT (piz_get_line_subfields, 2);
+        
+        if (Z_DT(FASTQ)) {
+            PRINT (codec_longr_reconstruct, 3);
+            PRINT (codec_domq_reconstruct, 2);
+            PRINT (codec_domq_reconstruct_dom_run, 3);
+            PRINT (codec_homp_reconstruct, 2);
+            PRINT (codec_smux_reconstruct, 2);
+            PRINT (codec_pacb_reconstruct, 2);
+        }
+        
+        if (profile.nanosecs.bgzf_compute_thread) {
+            iprintf ("GENOUNZIP BGZF threads: %s\n", str_int_commas (ms(profile.nanosecs.bgzf_compute_thread)).s);
+            PRINT (bgzf_compute_thread, 1);
+            PRINT (bgzf_compress_one_block, 2);
+        }
+    }
+
+    // PIZ and also ZIP if paired FASTQ
+    if (profile.nanosecs.zfile_uncompress_section) {
+        iprint0 ("BREAKDOWN OF zfile_uncompress_section by codec (all threads)\n");
+        PRINT (zfile_uncompress_section, 1);
+        PRINT (compressor_bz2,   2);
+        PRINT (compressor_lzma,  2);
+        PRINT (compressor_bsc,   2);
+        PRINT (compressor_rans,  2);
+        PRINT (compressor_arith, 2);
+        PRINT (compressor_domq,  2);
+        PRINT (compressor_normq, 2);
+        PRINT (compressor_actg,  2);
+        PRINT (compressor_pbwt,  2);
+        PRINT (compressor_longr, 2);
+        PRINT (compressor_homp,  2);
+        PRINT (compressor_pacb,  2);
+        PRINT (compressor_smux,  2);
+        PRINT (compressor_t0,    2);
+        PRINT (compressor_oq,    2);
+    }
+
     // ZIP and PIZ compute thread
     iprint0 ("COMPUTE THREADS ADMIN\n");
     PRINT (buf_alloc_compute, 1);

@@ -171,6 +171,7 @@ typedef struct {
     };
 
     DeepHash deep_hash;            // Set for primary (i.e. not supplementary or secondary) alignments
+    LineIType mate_line_i;
     TxtWord QUAL, OQ, TQ, _2Y, GY, U2, BD_BI[2], SA, QNAME, MC, YB;// coordinates in txt_data 
     union {
     struct {                       // PacBio
@@ -211,6 +212,7 @@ typedef struct {
     bool dont_compress_QT   : 1;   // 
     bool dont_compress_GY   : 1;   // 
     bool dont_compress_2Y   : 1;   // 
+    bool qname_mate_copied_exactly : 1; // qname segged as COPY_BUDDY, without need to flip the mate 1<>2 
 } ZipDataLineSAM, *ZipDataLineSAMP;
 
 // note: making VBlockSAM packed will ruin the math in sam_seg_buddied_i_fields
@@ -245,7 +247,7 @@ typedef struct VBlockSAM {
     // When adding, also update sam_seg_idx_aux
     #define first_idx idx_NM_i
     int16_t idx_NM_i, idx_MD_Z, idx_SA_Z, idx_XG_Z, idx_NH_i, idx_HI_i, idx_IH_i,
-            idx_X0_i, idx_X1_i, idx_XA_Z, idx_AS_i, 
+            idx_X0_i, idx_X1_i, idx_XA_Z, idx_AS_i, idx_XS_i, idx_XM_i,
             idx_CC_Z, idx_CP_i, idx_ms_i, idx_SM_i,
             idx_UB_Z, idx_BX_Z, idx_CB_Z, idx_GX_Z, idx_CR_Z, idx_CY_Z,
             idx_XO_Z, idx_YS_Z, idx_XB_A, idx_XM_Z, idx_XB_Z,
@@ -304,7 +306,6 @@ typedef struct VBlockSAM {
     LineIType sag_line_i;          // PIZ: the vb->line_i for which sag was set
     Buffer sag_grps;               // ZIP/PIZ: an SA group is a group of alignments, including the primary alignment
     Buffer sag_alns;               // ZIP/PIZ: array of {RNAME, STRAND, POS, CIGAR, NM, MAPQ} of the alignment
-    Buffer sa_prim_cigars;         // ZIP/PIZ: textual primary CIGARs of SAG_BY_SA (SAM & BAM)
     Buffer qname_count;            // ZIP: count the number of each qname_hash in this VB (if needed)
 
     const struct Sag *sag;         // ZIP/PIZ of SAM_COMP_DEPN: SA Group of this line (pointer into ZIP: z_file->sag_grps PIZ:prim_vb->sag_grps), NULL if none
@@ -330,7 +331,7 @@ typedef struct VBlockSAM {
 
     // buddied Seg
     Buffer line_textual_cigars;    // Seg of BAM (not SAM): an array of textual CIGARs referred to from DataLine->CIGAR
-    uint32_t saggy_near_count, mate_line_count, prim_far_count; // for stats
+    uint32_t supplementary_count, secondary_count, saggy_near_count, mate_line_count, depn_far_count; // for stats
     LineIType mate_line_i;         // Seg/PIZ: the mate of this line. Goes into vb->buddy_line_i in Piz.
     LineIType saggy_line_i;        // Seg/PIZ: without gencomp: a previous line with the same sag as the current line.
     bool saggy_is_prim;            // Seg/PIZ: The line in saggy_line_i is 1. not secondary 2. not supplementary 3. has no hard clips
@@ -461,7 +462,7 @@ typedef struct Sag {
     uint64_t qual            : GRP_QUAL_BITS;     // index into: vb: txt_data ; z_file: zfile->sag_qual (256 TB)
     uint64_t as              : GRP_AS_BITS;       // AS:i ([0,65535] - capped at 0 and 65535)
     uint64_t first_aln_i     : 41;                // index into z_file->sag_alns (up to 2 trillion)
-    uint64_t qname_len       : 8;                 // limited to 8 by BAM format
+    uint64_t qname_len       : 8;                 // limited to 8 by BAM format (SAM_MAX_QNAME_LEN). length of uncompressed qname in vb->sag_grps and z_file->sag_qnames (even though qnames are compressed in the latter) 
     uint64_t no_qual         : 2;                 // (QualMissingType) this SA has no quality, all dependends are expected to not have quality either
     uint64_t revcomp         : 1;                 // FLAG.revcomp of primary is set (in SA:Z-defined groups, this is same as revcomp for the first alignment)
     uint64_t num_alns        : ALN_NUM_ALNS_BITS; // number of alignments in this SA group (including primary alignment)
@@ -471,7 +472,7 @@ typedef struct Sag {
 
 #define ZGRP_I(g) ((SAGroup)BNUM (z_file->sag_grps, (g)))   // group pointer to grp_i
 #define ZALN_I(a) (BNUM64 (z_file->sag_alns, (a)))  // aln pointer to aln_i
-#define GRP_QNAME(g) Bc (z_file->sag_qnames, (g)->qname)
+#define GRP_QNAME(g) B8(z_file->sag_qnames, (g)->qname)
 
 #define MAX_SA_NUM_ALNS       MAXB(ALN_NUM_ALNS_BITS)  // our limit
 #define MAX_SA_POS            MAXB(31)                 // BAM limit
@@ -623,7 +624,6 @@ extern rom sam_piz_display_aln_cigar (const SAAln *a);
 // SEQ stuff
 extern void sam_seg_SEQ_initialize (VBlockSAMP vb);
 extern void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(seq), unsigned add_bytes);
-extern void sam_zip_prim_ingest_vb_pack_seq (VBlockSAMP vb, Sag *vb_grps, uint32_t vb_grps_len, BufferP underlying_buf, BufferP packed_seq_buf, bool is_bam_format);
 extern bool sam_seq_pack (VBlockSAMP vb, Bits *packed, uint64_t next_bit, STRp(seq), bool bam_format, bool revcomp, FailType soft_fail);
 extern rom sam_seg_analyze_set_one_ref_base (VBlockSAMP vb, bool is_depn, PosType32 pos, char base, uint32_t ref_consumed, RangeP *range_p, RefLock *lock);
 extern void sam_zip_report_monochar_inserts (void);
@@ -675,6 +675,7 @@ extern bool sam_seg_0A_mapq_cb (VBlockP vb, ContextP ctx, STRp (mapq_str), uint3
 extern bool sam_seg_SA_get_prim_item (VBlockSAMP vb, int sa_item, pSTRp(out));
 extern void sam_piz_SA_get_prim_item (VBlockSAMP vb, int sa_item, pSTRp(out));
 extern bool sam_seg_is_item_predicted_by_prim_SA (VBlockSAMP vb, int sa_item_i, int64_t value);
+extern bool sam_zip_is_valid_SA (rom sa, uint32_t char_limit, bool is_bam);
 
 // MM:Z stuff
 extern void sam_MM_zip_initialize (void);
@@ -733,6 +734,9 @@ extern void sam_dragen_seg_sd_f (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(sd), Va
 
 // hisat2 stuff
 extern void sam_seg_HISAT2_Zs_Z (VBlockSAMP vb, STRp(zs), unsigned add_bytes);
+
+// cpu (the aligner) stuff
+extern void sam_seg_CPU_XL_Z (VBlockSAMP vb, STRp(xl), unsigned add_bytes);
 
 // tmap (IonXpress) stuff
 extern void sam_seg_TMAP_XM_i (VBlockSAMP vb, ValueType XM, unsigned add_bytes);
@@ -816,6 +820,7 @@ static inline bool sam_seg_has_sag_by_SA (VBlockSAMP vb)    { return  IS_SAG_SA 
 static inline bool sam_seg_has_sag_by_nonSA (VBlockSAMP vb) { return !IS_SAG_SA && ((IS_DEPN(vb) && vb->sag)    || IS_PRIM(vb)); }
 
 extern void sam_sag_zip_init_vb (VBlockSAMP vb);
+extern void sam_set_sag_type (void);
 extern void sam_seg_gc_initialize (VBlockSAMP vb);
 extern bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(alignment), bool is_bam);
 extern bool sam_seg_prim_add_sag (VBlockSAMP vb, ZipDataLineSAMP dl, uint16_t num_alns/* inc primary aln*/, bool is_bam);

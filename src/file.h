@@ -92,8 +92,9 @@ typedef struct File {
     struct FlagsTxtHeader txt_flags;   // TXT_FILE PIZ: genozip file flags as read from SectionHeaderTxtHeader.flags
     };                                 
 
-    Buffer vb_sections_index;          // PIZ Z_FILE: an index into VB sections
-    Buffer comp_sections_index;        // PIZ Z_FILE: an index into Txt sections
+    Buffer vb_sections_index;          // ZIP/PIZ Z_FILE: an index into VB sections
+    Buffer comp_sections_index;        // ZIP/PIZ Z_FILE: an index into Txt sections
+    Buffer first_last_sec_index;       // ZIP/PIZ Z_FILE: sec_i of first section in the file of each section type
 
     // Used for WRITING GENOZIP files
     Mutex zriter_mutex;                // Z_FILE ZIP: forces one writer at a time
@@ -175,11 +176,6 @@ typedef struct File {
     #define BY_QNAME 1
     Buffer deep_index_by[2];           // Z_FILE: ZIP: hash table (BY_SEQ,BY_QNAME) - indices into deep ents, indexed by a subset of the hash(SEQ) bits 
 
-    Mutex qname_huf_mutex;             // Z_FILE: PIZ: Deep: mutex to protect qname_huf
-    HuffmanP qname_huf;                // Z_FILE: PIZ: Deep: Used for compressing QNAME in deep_ents
-    char master_qname[SAM_MAX_QNAME_LEN+1]; // Z_FILE: PIZ: Deep: 
-    int qnames_sampled;                // Z_FILE: PIZ: Deep: Number of QNAMEs sampled for producing the huffman compressor
-
     // Reconstruction plan, for reconstructing in sorted order if --sort: [0] is primary coords, [1] is luft coords
     Buffer vb_info[3];                 // Z_FILE   ZIP: SAM: array of SamMainVbInfo for MAIN and SamGcVbInfo for PRIM, DEPN
                                        // Z_FILE   PIZ: [0]: used by writer [1]: used to load SAM SA Groups - array of PlsgVbInfo - entry per PRIM vb 
@@ -198,7 +194,7 @@ typedef struct File {
     Buffer R1_last_qname_index;        // Z_FILE: ZIP: FASTQ GZ: info regarding R1 VBs: last qname of each VB, canonical form, nul-separated: index into R1_last_qname. Note: only accessible in main thread (bc may realloc)
     Buffer R1_last_qname;              // Z_FILE: ZIP: FASTQ GZ: data of R1_last_qname
     VBIType R1_first_vb_i;             // Z_FILE: ZIP: first vb_i of R1. Always 1 for --pair, more for --deep.
-    
+
     // Information content stats 
     CompIType num_components;          // ZIP/PIZ z_file: number of components in this file (inc. generated components)
     uint32_t num_vbs;                  // ZIP: z_file/txt_file PIZ: txt_file: number of VBs processed z_file: total VBs in file
@@ -206,7 +202,7 @@ typedef struct File {
     uint32_t num_preproc_vbs_joined;   // Z_FILE: PIZ
     uint32_t max_conc_writing_vbs;     // Z_FILE: PIZ: SAM: the maximal number of hand-over VBs writer might have in memory. Passed through SectionHeaderGenozipHeader since 15.0.64, and through SectionHeaderReconPlan before that.
     uint64_t deep_stats[NUM_DEEP_STATS]; // Z_FILE: ZIP/PIZ: SAM: stats collection on Deep performance
-    uint64_t saggy_near_count, mate_line_count, prim_far_count; // Z_FILE ZIP: SAM: for stats
+    uint64_t secondary_count, supplementary_count, saggy_near_count, mate_line_count, depn_far_count; // Z_FILE ZIP: SAM: for stats
     union {
     uint64_t num_sequences;            // Z_FILE: ZIP: FASTA: num "DESC" lines in this file. for stats
     uint64_t num_perfect_matches;      // Z_FILE: ZIP: SAM/BAM/FASTQ: number of perfect matches found by aligner. for stats 
@@ -221,8 +217,9 @@ typedef struct File {
     uint64_t longr_lines[MAX_NUM_COMPS];
     uint64_t normq_lines[MAX_NUM_COMPS];
 
-    // per-component data (ZIP)
+    // per-component data 
     uint64_t comp_num_lines[MAX_NUM_COMPS];             // Z_FILE: PIZ/ZIP: number of lines in each component 
+    QnameFlavorProp flav_prop[MAX_NUM_COMPS][NUM_QTYPES]; // Z_FILE: PIZ: qname properties as read from SectionHeaderTxtHeader.flav_prop. Used in SAM for Deep and Gencomp, and used in genocat SAM/FASTQ for qname filterning.
     int64_t txt_file_disk_sizes_sum;                    // Z_FILE ZIP: sum of txt_file_disk_sizes[*]
     int64_t txt_file_disk_sizes[MAX_NUM_COMPS];         // Z_FILE ZIP: size of original txt file (whether or not compressed) of each component. 
     int64_t disk_so_far_comp[MAX_NUM_COMPS];            // Z_FILE ZIP: per-component size if z_file VB sections (note: global area sections, including SEC_DICT, are not accounted for)
@@ -270,7 +267,7 @@ extern rom ft_name (FileType ft);
 typedef enum { VERIFY_NONE, VERIFY_ASCII, VERIFY_UTF8 } FileContentVerificationType; 
 extern void file_get_file (VBlockP vb, rom filename, BufferP buf, rom buf_name, uint64_t max_size, FileContentVerificationType ver_type, bool add_string_terminator);
 
-extern bool file_put_data (rom filename, const void *data, uint64_t len, mode_t mode);
+extern bool file_put_data (rom filename, const void *data, uint64_t len, mode_t chmod_to);
 extern void file_put_data_abort (void);
 extern void file_put_data_reset_after_fork (void);
 

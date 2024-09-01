@@ -136,9 +136,9 @@ static void sam_get_sa_grp_qual (VBlockSAMP vb)
 
     if (vb->sag->qual_comp_len) { // qual of this group is compressed
         uint32_t uncomp_len = vb->sag->seq_len;
-        void *success = rans_uncompress_to_4x16 (VB, B8(z_file->sag_qual, vb->sag->qual), vb->sag->qual_comp_len,
-                                                 B1ST8(vb->scratch), &uncomp_len); 
 
+        void *success = rans_uncompress_to_4x16 (VB, B8(z_file->sag_qual, vb->sag->qual), vb->sag->qual_comp_len,
+                                                B1ST8(vb->scratch), &uncomp_len); 
         ASSGOTO (success && uncomp_len == vb->sag->seq_len, "%s: rans_uncompress_to_4x16 failed to decompress an SA Group QUAL data: grp_i=%u success=%u comp_len=%u uncomp_len=%u expected_uncomp_len=%u qual=%"PRIu64,
                     LN_NAME, ZGRP_I(vb->sag), !!success, vb->sag->qual_comp_len, uncomp_len, vb->sag->seq_len, (uint64_t)vb->sag->qual);
 
@@ -254,6 +254,7 @@ static void sam_seg_QUAL_segconf (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qual)/
     for (uint32_t i=0; i < qual_len; i++)
         if (IS_QUAL_SCORE(qual[i]))
             segconf.qual_histo[dl->is_consensus ? QHT_CONSENSUS : QHT_QUAL][qual[i]-33].count++;
+
 }
 
 void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qual)/*always textual*/, unsigned add_bytes)
@@ -576,7 +577,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
             sam_reconstruct_missing_quality (VB, reconstruct);
 
         else {
-            bool is_consensus = (!IS_PRIM(vb)/*bug 949*/ && ctx_encountered_in_line (VB, SAM_QNAME2) && segconf.flav_prop[QNAME2].is_consensus);
+            bool is_consensus = (!IS_PRIM(vb)/*bug 949*/ && ctx_encountered_in_line (VB, SAM_QNAME2) && z_file->flav_prop[vb->comp_i][QNAME2].is_consensus);
             if (is_consensus) ctx = CTX(SAM_CQUAL);
             
             switch (ctx->ltype) { // the relevant subset of ltypes from reconstruct_from_ctx_do

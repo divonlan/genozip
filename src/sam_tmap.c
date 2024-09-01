@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-//   sam_gem3.c
+//   sam_tmap.c
 //   Copyright (C) 2022-2024 Genozip Limited. Patent pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //

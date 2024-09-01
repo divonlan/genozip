@@ -58,8 +58,10 @@ typedef enum  { QTR_SUCCESS, QTR_QNAME_LEN_0, QTR_FIXED_LEN_MISMATCH, QTR_WRONG_
 #define QTR_NAME { "SUCCESS",   "QNAME_LEN=0",   "FIXED_LEN_MISMATCH",   "WRONG_Q",   "CONTAINER_MISMATCH",   "BAD_INTEGER",   "BAD_CHARS",   "BAD_NUMERIC",   "BAD_HEX",   "TECH_MISMATCH",   "NOT_BARCODE",   "NOT_BARCODE2",   "NO_MATE", "FAILED_VALIDATE_FUNC"}
 extern QnameTestResult qname_test_flavor (STRp(qname), QType q, QnameFlavor qf, bool quiet);
 
-extern uint32_t qname_calc_hash (QType q, STRp(qname), thool is_last, bool canonical, uint32_t *uncanonical_suffix_len);
-extern void qname_canonize (QType q, rom qname, uint32_t *qname_len);
+extern uint32_t qname_calc_hash (QType q, CompIType comp_i, STRp(qname), thool is_last, bool canonical, uint32_t *uncanonical_suffix_len);
+extern uint32_t qname_hash_change_last (uint32_t hash, bool is_last);
+
+extern void qname_canonize (QType q, rom qname, uint32_t *qname_len, CompIType comp_i);
 
 extern rom segconf_qf_name (QType q);
 extern QnameFlavorId segconf_qf_id (QType q);

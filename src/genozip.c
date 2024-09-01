@@ -257,7 +257,7 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
             "%s is a reference file. Did you intend to use \"--reference %s\" ?", z_name, z_name);
 
     Dispatcher dispatcher = piz_z_file_initialize();  
-
+    if (dispatcher)
     // generate txt_file(s)
     piz_set_main_dispatcher (dispatcher);
     
@@ -672,7 +672,7 @@ static void main_get_filename_list (unsigned num_files, char **filenames,  // in
                  : input_files_buf.len; 
 
     // sort files by data type to improve VB re-using, and refhash-using files in the end to improve reference re-using
-    if (!flag.deep) {
+    if (!flag.deep && !flag.pair) { // if deep/pair, we have already sorted them as desired in fastq_verify_and_sort_pairs
         SET_FLAG (quiet); // suppress warnings
         qsort (B1ST (char *, input_files_buf), input_files_buf.len, sizeof (char *), main_sort_input_filenames);
         RESTORE_FLAG (quiet);

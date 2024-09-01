@@ -12,6 +12,7 @@
 #include "zfile.h"
 #include "qname.h"
 #include "writer.h"
+#include "huffman.h"
 #include "htscodecs/rANS_static4x16.h"
 
 typedef struct {
@@ -24,18 +25,22 @@ typedef struct {
     uint32_t comp_cigars_len; // used by SAG_BY_SA
     uint32_t solo_data_len;   // used by SAG_BY_SOLO 
     };
-    uint32_t qname_len;
-    uint64_t seq_start, qual_start, qname_start, first_aln_i;
+    union {
+    uint32_t comp_qname_len;  // used for files since 15.0.65
+    uint32_t qname_len;       // used for files up to 15.0.64
+    };
+    uint64_t seq_start, first_aln_i;
 } PlsgVbInfo;
 
 #define plsg_info z_file->vb_info[1]
 static uint32_t next_plsg_i = 0; // iterator for dispatching compute threads
 static VBIType num_prim_vbs_loaded = 0; // number of PRIM VBs whose loading is complete
 
-static Mutex copy_qual_mutex = {}, copy_cigars_mutex = {};
+static Mutex copy_qual_mutex = {}, copy_cigars_mutex = {}, copy_qnames_mutex = {};
 
 #define vb_qual_buf   vb->z_data  // used for QUAL data being in-memory compressed in the loader compute thread
 #define vb_cigars_buf vb->codec_bufs[1] // similar for cigar data
+#define vb_qnames_buf vb->codec_bufs[2] // ... and qname data
 
 static Flags save_flag; 
 
@@ -48,7 +53,7 @@ ShowAln sam_show_sag_one_aln (const Sag *g, const SAAln *a)
 {
     ShowAln s;
     
-    if (command==PIZ) {
+    if (IS_PIZ) {
         char cigar_info[64];
         if (a->cigar.piz.is_word) 
             snprintf (cigar_info, sizeof (cigar_info), "word=%u", (WordIndex)a->cigar.piz.index);
@@ -100,7 +105,7 @@ void sam_show_sag_one_grp (SAGroup grp_i)
 
     iprintf ("grp_i=%u: qname(i=%"PRIu64",l=%u,hash=%u)=%.*s seq=(i=%"PRIu64",l=%u) qual=(i=%"PRIu64",comp_l=%u)[%u]=\"%s\" AS=%u strand=%c mul/fst/lst=%u,%u,%u %s=%u%s%s\n",
              grp_i, (uint64_t)g->qname, g->qname_len, 
-             qname_calc_hash (QNAME1, GRP_QNAME(g), g->qname_len, g->is_last, false, NULL), // the hash is part of the index in ZIP, and not part of the SAGroup struct. Its provided here for its usefulness in debugging
+             qname_calc_hash (QNAME1, COMP_NONE, (rom)GRP_QNAME(g), g->qname_len, g->is_last, false, NULL), // the hash is part of the index in ZIP, and not part of the SAGroup struct. Its provided here for its usefulness in debugging
              g->qname_len, GRP_QNAME(g) , g->seq, g->seq_len, 
              (uint64_t)g->qual, g->qual_comp_len, SA_QUAL_DISPLAY_LEN, sam_display_qual_from_SA_Group (g),  
              (int)g->as, "+-"[g->revcomp], g->multi_segs, g->is_first, g->is_last,
@@ -142,21 +147,49 @@ static void reset_iterators (VBlockSAMP vb)
 // QNAME: reconstruct directly into z_file->sa_qname by overlaying txt_data
 static inline void sam_load_groups_add_qname (VBlockSAMP vb, PlsgVbInfo *plsg, Sag *vb_grps) 
 {
-    // note: multiple threads concurrently reconstruct directly into z_file->sag_qnames
-    buf_set_shared (&z_file->sag_qnames);
-    buf_overlay_partial (vb, &vb->txt_data, &z_file->sag_qnames, plsg->qname_start, "txt_data");
+    START_TIMER;
     
-    ContextP seq_len_ctx = segconf.seq_len_dict_id.num ? ECTX(segconf.seq_len_dict_id) : NULL;
+    if (!CTX(SAM_QNAME)->is_loaded) return;
 
-    Ltxt = 0;
+    ASSERTNOTINUSE (vb->txt_data);
+    ASSERTNOTINUSE (vb_qnames_buf);
+
+    buf_alloc (vb, &vb->txt_data,  0, SAM_MAX_QNAME_LEN * plsg->num_grps, char, 0, "txt_data");
+    buf_alloc (vb, &vb_qnames_buf, 0, plsg->qname_len + SAM_MAX_QNAME_LEN*2/*overhead*/, char, 0, "txt_data"); // in ZIP we used this much - this is our estimate of how much compressed qnames will take
+
+    decl_ctx (SAM_QNAME);
+    ContextP seq_len_ctx = segconf.seq_len_dict_id.num ? ECTX(segconf.seq_len_dict_id) : NULL;
+    
     for (vb->line_i=0; vb->line_i < plsg->num_grps ; vb->line_i++) {
         sam_reset_line (VB);
-
         reconstruct_from_ctx (vb, SAM_BUDDY, 0, RECON_OFF); // set buddy (false = don't consume QNAME)
+        
+        rom uncomp_qname = BAFTtxt;
+        ctx->mate_copied_exactly = false; 
+        reconstruct_from_ctx (vb, SAM_QNAME, 0, RECON_ON);  // reconstructs into vb->txt_data, sets vb->buddy_line_i if SNIP_COPY_BUDDY
+        uint32_t uncomp_qname_len = BAFTtxt - uncomp_qname;
 
-        vb_grps[vb->line_i].qname = plsg->qname_start + vb->txt_data.len; // 64 bit arithmetic
-        reconstruct_from_ctx (vb, SAM_QNAME, 0, RECON_ON); // reconstructs into vb->txt_data, sets vb->buddy_line_i if SNIP_COPY_BUDDY
-        vb_grps[vb->line_i].qname_len = vb->txt_data.len - (vb_grps[vb->line_i].qname - plsg->qname_start); // 64 bit arithmetic
+        vb_grps[vb->line_i].qname     = vb_qnames_buf.len32;
+        vb_grps[vb->line_i].qname_len = uncomp_qname_len; // always uncompressed length
+        
+        // since 15.0.65, a SEC_HUFFMAN section is available and we can compress. 
+        if (huffman_exists (SAM_QNAME)) {
+            // if this QNAME was copied exactly from a buddy line, just point back to the compressed qname of the buddy line
+            if (ctx->mate_copied_exactly)  // set by sam_piz_special_COPY_BUDDY
+                vb_grps[vb->line_i].qname = vb_grps[ctx->last_value.i].qname; // last_value is buddy_line_i     
+
+            else {
+                uint32_t comp_len = huffman_comp_len_required_allocation (uncomp_qname_len);
+                buf_alloc (vb, &vb_qnames_buf, comp_len, 0, uint8_t, 0, NULL);
+
+                huffman_compress (SAM_QNAME, STRa(uncomp_qname), BAFT8(vb_qnames_buf), &comp_len); // using huffman sent via SEC_HUFFMAN
+                vb_qnames_buf.len32 += comp_len;
+            }
+        }
+
+        // up to 15.0.64, we had no SEC_HUFFMAN
+        else 
+            buf_add_do (&vb_qnames_buf, STRa(uncomp_qname));
 
         // if seq_len is carried by a QNAME item, set the last value here (needed for sam_cigar_special_CIGAR)
         if (seq_len_ctx) vb_grps[vb->line_i].seq_len = seq_len_ctx->last_value.i;
@@ -165,11 +198,15 @@ static inline void sam_load_groups_add_qname (VBlockSAMP vb, PlsgVbInfo *plsg, S
     buf_destroy (vb->txt_data);
 
     reset_iterators (vb);
+
+    COPY_TIMER (sam_load_groups_add_qname);
 }
 
 // FLAGS: get multi_segs, is_first, is_last from SAM_FLAGS. 
 static inline void sam_load_groups_add_flags (VBlockSAMP vb, PlsgVbInfo *plsg, Sag *vb_grps) 
 {
+    START_TIMER;
+
     for (SAGroup grp_i=0; grp_i < plsg->num_grps ; grp_i++) {
         STR0(snip);
         LOAD_SNIP(SAM_FLAG); 
@@ -189,22 +226,25 @@ static inline void sam_load_groups_add_flags (VBlockSAMP vb, PlsgVbInfo *plsg, S
         if (!IS_SAG_SA)
             vb_grps[grp_i].revcomp = sam_flags.rev_comp; 
     }
+
+    COPY_TIMER (sam_load_groups_add_flags);
 }
 
 // Grp loader compute thread: copy to z_file->sag_qual
 static inline void sam_load_groups_move_comp_to_zfile (VBlockSAMP vb, PlsgVbInfo *plsg, Sag *vb_grps, SAAln *vb_alns) 
 {
-    plsg->comp_qual_len = vb_qual_buf.len; // update to actual (might not be the same as received from ZIP, if codec has changed)
-    
-    if (IS_SAG_SA)
-        plsg->comp_cigars_len = vb_cigars_buf.len;
+    START_TIMER;
+
+    // update to compressed lengths actual (might not be the same as received from ZIP, if codec has changed)
+    plsg->comp_qname_len = vb_qnames_buf.len; 
+    plsg->comp_qual_len  = vb_qual_buf.len;  
+    if (IS_SAG_SA) plsg->comp_cigars_len = vb_cigars_buf.len;
 
     // copy buffers in arbitrary order, based on mutex availability
-    bool qual_done = false; 
-    bool cigars_done = !IS_SAG_SA; // CIGARs only in SAG_BY_SA
-    uint64_t start_qual=0, start_cigars=0;
+    bool qual_done = false, qnames_done=false, cigars_done = !IS_SAG_SA; // CIGARs only in SAG_BY_SA
+    uint64_t start_qual=0, start_cigars=0, start_qnames=0;
 
-    while (!qual_done || !cigars_done) {
+    while (!qual_done || !cigars_done || !qnames_done) {
 
         bool achieved_something = false;
         
@@ -216,6 +256,14 @@ static inline void sam_load_groups_move_comp_to_zfile (VBlockSAMP vb, PlsgVbInfo
             mutex_unlock (copy_qual_mutex);
         }
 
+        // QNAMEs
+        if (!qnames_done && mutex_trylock (copy_qnames_mutex)) {
+            start_qnames = z_file->sag_qnames.len;
+            buf_append_buf (evb, &z_file->sag_qnames, &vb_qnames_buf, uint8_t, NULL); 
+            qnames_done = achieved_something = true;
+            mutex_unlock (copy_qnames_mutex);
+        }
+
         // CIGARs
         if (!cigars_done && mutex_trylock (copy_cigars_mutex)) {
             start_cigars = z_file->sag_cigars.len;
@@ -224,23 +272,34 @@ static inline void sam_load_groups_move_comp_to_zfile (VBlockSAMP vb, PlsgVbInfo
             mutex_unlock (copy_cigars_mutex);
         }
 
-        if (!achieved_something) usleep (1000); // 1 ms
+        if (!achieved_something) {
+            START_TIMER;
+            usleep (1000); // 1 ms
+            COPY_TIMER (sam_load_groups_move_comp_to_zfile_idle);
+        }
     }
 
     buf_free (vb_qual_buf);
     buf_free (vb_cigars_buf);
+    buf_free (vb_qnames_buf);
 
-    for (SAGroup grp_i=0; grp_i < plsg->num_grps ; grp_i++) 
-        vb_grps[grp_i].qual += start_qual;
+    for (SAGroup grp_i=0; grp_i < plsg->num_grps ; grp_i++) {
+        vb_grps[grp_i].qname += start_qnames;
+        vb_grps[grp_i].qual  += start_qual;
+    }
 
     if (IS_SAG_SA)
         for (SAGroup aln_i=0; aln_i < plsg->num_alns ; aln_i++) 
             if (!vb_alns[aln_i].cigar.piz.is_word)
                 vb_alns[aln_i].cigar.piz.index += start_cigars; // update from index into vb_cigars_buf to z_file->sag_cigars 
+
+    COPY_TIMER (sam_load_groups_move_comp_to_zfile);
 }
 
 static inline void sam_load_groups_add_seq (VBlockSAMP vb, PlsgVbInfo *plsg, Sag *g, uint64_t z_seq_start)
 {
+    START_TIMER;
+
     if (!CTX(SAM_SQBITMAP)->is_loaded) return; // sequence is skipped
 
     // reconstruct SEQ to vb->textual_seq, needed by sam_piz_prim_add_QUAL
@@ -258,13 +317,16 @@ static inline void sam_load_groups_add_seq (VBlockSAMP vb, PlsgVbInfo *plsg, Sag
     // pack SEQ data into z_file->sag_seq
     Bits *z_sa_seq = (BitsP)&z_file->sag_seq;
     sam_seq_pack (vb, z_sa_seq, z_seq_start * 2, B1STc(vb->textual_seq), vb->seq_len, false, false, HARD_FAIL); 
+
+    COPY_TIMER (sam_load_groups_add_seq);
 }
 
 // PIZ: loads QUAL data of PRIM, and compresses it for in-memory storage, using fast rans codec.
 static inline void sam_load_groups_add_qual (VBlockSAMP vb, PlsgVbInfo *plsg, Sag *g)
 {
     if (!CTX(SAM_QUAL)->is_loaded) return; // qual is skipped
-
+    START_TIMER;
+   
     buf_alloc (vb, &vb->codec_bufs[0], vb->seq_len, 0, char, 1, "codec_bufs[0]");
 
     // to reconstruct into codec_bufs[0], we exchange it with txt_data, as the reconstruct machinery reconstructs to txt_data 
@@ -303,6 +365,7 @@ static inline void sam_load_groups_add_qual (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
 
 done:
     buf_free (vb->codec_bufs[0]); 
+    COPY_TIMER (sam_load_groups_add_qual);
 }
 
 // populates the cigar data of one alignment
@@ -310,6 +373,8 @@ static void sam_load_groups_add_aln_cigar (VBlockSAMP vb, PlsgVbInfo *plsg, Sag 
                                            bool is_all_the_same_LOOKUP, bool is_all_the_same_SQUANK,
                                            pSTRp(out_cigar)) // optional out
 {
+    START_TIMER;
+
     ContextP ctx = CTX (OPTION_SA_CIGAR);
 
     STR0(snip);
@@ -384,6 +449,8 @@ static void sam_load_groups_add_grp_cigars (VBlockSAMP vb, PlsgVbInfo *plsg, Sag
                                             bool is_all_the_same_LOOKUP, bool is_all_the_same_SQUANK,
                                             pSTRp(prim_cigar)) // out
 {
+    START_TIMER;
+
     // primary alignment CIGAR 
     sam_load_groups_add_aln_cigar (vb, plsg, g, a, ZGRP_I(g)==0, is_all_the_same_LOOKUP, is_all_the_same_SQUANK, STRa(prim_cigar));
 
@@ -393,6 +460,8 @@ static void sam_load_groups_add_grp_cigars (VBlockSAMP vb, PlsgVbInfo *plsg, Sag
     // populate SAAln.cigar with the CIGAR word index, for the non-primary alignments of this group
     for (uint8_t aln_i=1; aln_i < g->num_alns; aln_i++) 
         sam_load_groups_add_aln_cigar (vb, plsg, g, a + aln_i, false, is_all_the_same_LOOKUP, is_all_the_same_SQUANK, 0, 0);
+
+    COPY_TIMER (sam_load_groups_add_grp_cigars);
 }
 
 static inline ZWord reconstruct_to_solo_aln (VBlockSAMP vb, Did did_i, uint64_t solo_data_start, bool check_copy)
@@ -421,6 +490,8 @@ static inline ZWord reconstruct_to_solo_aln (VBlockSAMP vb, Did did_i, uint64_t 
 
 static inline void sam_load_groups_add_solo_data (VBlockSAMP vb, PlsgVbInfo *plsg, Sag *vb_grps)
 {
+    START_TIMER;
+
     SoloAln *solo_alns = IS_SAG_SOLO ? B(SoloAln, z_file->sag_alns, plsg->first_grp_i) : NULL;
 
     // get beggining of solo data for this prim vb (adding up lengths of lens of solo data in prev VBs)
@@ -431,7 +502,6 @@ static inline void sam_load_groups_add_solo_data (VBlockSAMP vb, PlsgVbInfo *pls
 
     // note: multiple threads concurrently reconstruct directly into z_file->solo_data
     buf_overlay_partial (vb, &vb->txt_data, &z_file->solo_data, solo_data_start, "txt_data");
-    Ltxt = 0;
 
     for (vb->line_i=0; vb->line_i < plsg->num_grps ; vb->line_i++) {
         sam_reset_line (VB);
@@ -450,6 +520,8 @@ static inline void sam_load_groups_add_solo_data (VBlockSAMP vb, PlsgVbInfo *pls
     buf_destroy (vb->txt_data); // un-overlay
 
     reset_iterators (vb);
+
+    COPY_TIMER (sam_load_groups_add_solo_data);
 }
 
 // SEQ - ACGT-pack uncompressed sequence directly to z_file->sag_seq
@@ -457,6 +529,8 @@ static inline void sam_load_groups_add_solo_data (VBlockSAMP vb, PlsgVbInfo *pls
 // Grp  - populate seq, seq_len, num_alns
 static inline void sam_load_groups_add_grps (VBlockSAMP vb, PlsgVbInfo *plsg, Sag *vb_grps, CCAln *cc_alns) 
 {
+    START_TIMER;
+
     ASSERTNOTINUSE (vb_qual_buf);
     ASSERTNOTINUSE (vb_cigars_buf);
 
@@ -600,11 +674,15 @@ static inline void sam_load_groups_add_grps (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
     buf_free (vb->codec_bufs[0]);
     buf_free (vb->txt_data);
     reset_iterators (vb);
+
+    COPY_TIMER (sam_load_groups_add_grps);
 }
 
 // Alns - populate RNAME, POS, MAPQ, STRAND and NM (CIGAR is added sam_load_groups_add_grps)
 static inline void sam_load_groups_add_SA_alns (VBlockSAMP vb, PlsgVbInfo *plsg, Sag *vb_grps, SAAln *vb_alns) 
 {
+    START_TIMER;
+
     ContextP sa_ctx    = LOADED_CTX(OPTION_SA_Z);
     ContextP rname_ctx = CTX(OPTION_SA_RNAME); // possibly not loaded
 
@@ -665,6 +743,8 @@ static inline void sam_load_groups_add_SA_alns (VBlockSAMP vb, PlsgVbInfo *plsg,
     // group revcomp is the revcomp of its primary alignment
     for (uint32_t grp_i=0; grp_i < num_alns_len; grp_i++) 
         vb_grps[grp_i].revcomp = vb_alns[vb_grps[grp_i].first_aln_i - plsg->first_aln_i].revcomp;
+
+    COPY_TIMER (sam_load_groups_add_SA_alns);
 }
 
 // entry point of compute thread of sag loading
@@ -673,7 +753,7 @@ static void sam_load_groups_add_one_prim_vb (VBlockP vb_)
     START_TIMER;
     VBlockSAMP vb = (VBlockSAMP)vb_;
 
-    piz_uncompress_all_ctxs (VB);
+    piz_uncompress_all_ctxs (VB, PUR_SAM_LOAD_SAG);
 
     buf_free (vb->z_data); // we will use z_data for vb_qual_buf to avoid allocating a separate buffer
 
@@ -690,10 +770,12 @@ static void sam_load_groups_add_one_prim_vb (VBlockP vb_)
     else if (IS_SAG_SOLO)
         sam_load_groups_add_solo_data (vb, plsg, vb_grps);
 
-    if (CTX(SAM_QNAME)->is_loaded) sam_load_groups_add_qname (vb, plsg, vb_grps);
+    sam_load_groups_add_qname (vb, plsg, vb_grps);
     sam_load_groups_add_flags (vb, plsg, vb_grps);
-    sam_load_groups_add_grps (vb, plsg, vb_grps, cc_alns);
-    sam_load_groups_move_comp_to_zfile (vb, plsg, vb_grps, vb_alns); // last, as it might block
+    sam_load_groups_add_grps  (vb, plsg, vb_grps, cc_alns);
+
+    // move compressed QNAME, QUAL, CIGAR to from vb to z_file 
+    sam_load_groups_move_comp_to_zfile (vb, plsg, vb_grps, vb_alns); 
 
     __atomic_fetch_add (&num_prim_vbs_loaded, (int)1, __ATOMIC_ACQ_REL);
 
@@ -764,7 +846,7 @@ void sam_piz_load_sags (void)
     uint64_t total_seq_len=0, total_qual_len=0, total_cigars_len=0, total_qname_len=0, total_alns=0; // total across all PRIM VBs of the file
     SAGroup total_grps=0;
 
-    // surveys all PRIM VBs in the order the appear in the file (note: they needn't be consecutive in the file)
+    // surveys all PRIM VBs in the order of vb_i (i.e. order of creation) (note: this is not the order they appear in the file)
     Section vb_header_sec = NULL;
     for (uint32_t i=0; i < num_prim_vbs; i++) {
         
@@ -778,16 +860,14 @@ void sam_piz_load_sags (void)
                                 .first_grp_i     = BGEN32 (header.sam_prim_first_grp_i),
                                 .first_aln_i     = total_alns,
                                 .seq_start       = total_seq_len, // in bases
-                                .qual_start      = total_qual_len,
-                                .qname_start     = total_qname_len,
                                 .num_grps        = vb_header_sec->num_lines,
                                 .num_alns        = BGEN32 (header.sam_prim_num_sag_alns),
                                 .seq_len         = BGEN32 (header.sam_prim_seq_len),
-                                .comp_qual_len   = BGEN32 (header.sam_prim_comp_qual_len), // this is just an estimate for PIZ, actual value will be updated after PIZ compresses
-                                .qname_len       = BGEN32 (header.sam_prim_qname_len),
+                                .comp_qual_len   = BGEN32 (header.sam_prim_comp_qual_len),     // this is just an estimate for PIZ, actual value will be updated after PIZ compresses
+                                .comp_qname_len  = BGEN32 (header.sam_prim_comp_qname_len),    // huffman-compressed length since 15.0.65, uncompressed length up to 15.0.64
                                 // note: both the plsg and the header fields are unions with solo_data_len
                                 .comp_cigars_len = BGEN32 (header.sam_prim_comp_cigars_len) }; // this is just an estimate for PIZ, actual value will be updated after PIZ compresses 
-        
+
         total_grps       += plsg[i].num_grps;
         total_alns       += plsg[i].num_alns;
         total_qual_len   += plsg[i].comp_qual_len; 
@@ -801,6 +881,9 @@ void sam_piz_load_sags (void)
     z_file->sag_cigars.can_be_big = true; // suppress warning
     
     buf_alloc_exact_zero (evb, z_file->sag_grps, total_grps, Sag, "z_file->sag_grps"); // also sets .len ; zero in case some fields not loaded
+    
+    // note: since 15.0.65 for total_qname_len is total huffman-compressed length and we count
+    // on the huffman alg in ZIP to be identical to PIZ. prior to that, it was total uncompress length
     buf_alloc_exact (evb, z_file->sag_qnames, total_qname_len, char, "z_file->sag_qnames");
 
     z_file->sag_alns.count = total_alns;
@@ -831,6 +914,7 @@ void sam_piz_load_sags (void)
     buf_alloc (evb, &z_file->sag_qual, 0, (float)total_qual_len * 1.05 + 1000000, uint8_t, 1, "z_file->sag_qual"); 
 
     mutex_initialize (copy_qual_mutex);
+    mutex_initialize (copy_qnames_mutex);
 
     save_flag = flag; // save in global variable
 
@@ -853,7 +937,6 @@ uint32_t sam_piz_get_plsg_i (VBIType vb_i)
 Sag *sam_piz_get_prim_vb_first_sa_grp (VBlockSAMP vb)
 {
     ASSERTNOTEMPTY (plsg_info);
-
     PlsgVbInfo *plsg = B(PlsgVbInfo, plsg_info, vb->plsg_i);
     return B(Sag, z_file->sag_grps, plsg->first_grp_i);
 }

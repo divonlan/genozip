@@ -116,7 +116,23 @@ static CompStruct componentsP[MAX_GEN_COMP+1] = {};
 // unprotected data is accessed by absorbing threads until absorbing is done, 
 // and after by dispatcher functions
 // --------------------------------------------------------------------------------------
-static Buffer reread_depn_lines = {}; // array of type RereadLine
+
+typedef struct { 
+    RereadLine *uncomp;  // uncompress array of ReReadline as extracted from reread_current_prescription
+    char *uncomp_memory; // memory containing uncomp should be freed after uncomp is compressed 
+    char *comp;          // a compressed array of RereadLine, representing lines that in total are <= segconf.vb_size
+    uint32_t comp_len;   // length of comp (in bytes)
+    uint32_t num_lines;  // length of uncomp array (in units of ReReadline)
+    uint32_t txt_len;    // txt_data length of the lines listed 
+} DepnVBPrescription, *DepnVBPrescriptionP;
+
+// array of DepnVBPrescription - one for DEPN vb. The buffer is immutable after all MAIN VBs are absorbed.
+static Buffer reread_depn_vb_prescriptions = {}; 
+static Mutex prescriptions_mutex = {}; // protects access to reread_depn_vb_prescriptions
+
+// used during absorbing MAIN VBs: an array of (uncompressed) RereadLine of the current prescription being created
+static Buffer reread_current_prescription = {}; // access is protected by gc_protected.  .count is the txt_data length represented by the lines listed in reread_current_prescription
+
 static VBlockP compress_depn_vb = NULL;
 
 //--------------------------------------------------
@@ -218,12 +234,20 @@ void gencomp_initialize (CompIType comp_i, GencompType gct)
             depn.name = MALLOC (depn_name_size);
             snprintf (depn.name, depn_name_size, "%s.DEPN", z_file->name);
             buf_set_promiscuous (&depn.offload_info, "depn.offload_info");
+
+            ASSINP (!flag.force_reread, "--force-reread not supported: redirected=%s remote=%s modified=%s effective_codec=%s",
+                    TF(txt_file->redirected), TF(txt_file->is_remote), TF(segconf.zip_txt_modified), codec_name (txt_file->effective_codec));
         }
 
         else {
             depn_method = DEPN_REREAD;
-            buf_set_promiscuous (&reread_depn_lines, "reread_depn_lines");
-            reread_depn_lines.can_be_big = true; // suppress warning if this grows very big
+            buf_set_promiscuous (&reread_depn_vb_prescriptions, "reread_depn_vb_prescriptions");
+            buf_set_promiscuous (&reread_current_prescription,  "reread_current_prescription");
+        
+            buf_alloc (evb, &reread_depn_vb_prescriptions, 0, 1000, DepnVBPrescription, 0, NULL);
+            buf_alloc (evb, &reread_current_prescription, 0, 1.15 * (double)segconf.vb_size / segconf.line_len, RereadLine, 0, NULL);
+        
+            mutex_initialize (prescriptions_mutex);
         }
     }
 
@@ -276,11 +300,13 @@ void gencomp_destroy (void)
     buf_destroy (depn.offload_info);
     buf_destroy (depn.thread_data);
     buf_destroy (depn.thread_data_comp);
-    buf_destroy (reread_depn_lines);
+    buf_destroy (reread_depn_vb_prescriptions);
+    buf_destroy (reread_current_prescription);
 
     vb_destroy_vb (&compress_depn_vb);
 
     mutex_destroy (gc_protected);
+    mutex_destroy (prescriptions_mutex);
     memset (queueP,   0, sizeof (queueP));
     memset (componentsP, 0, sizeof (componentsP));
     memset (&depn, 0, sizeof (depn));
@@ -304,7 +330,7 @@ static uint32_t compress_depn_buf (BufferP comp_buf)
     compress_depn_vb = vb_initialize_nonpool_vb (VB_ID_COMPRESS_DEPN, DT_NONE, "compress_depn_buf");
     
     uint32_t uncomp_len = depn.thread_data.len32;
-    uint32_t comp_len = codec_RANB_est_size (CODEC_RANS8, uncomp_len);
+    uint32_t comp_len = codec_RANB_est_size (CODEC_RANB, uncomp_len);
 
     buf_alloc (evb, comp_buf, 0, comp_len + sizeof (uint32_t), char, 1, NULL); // added to evb's buf_list before
     *B1ST32 (*comp_buf) = uncomp_len;
@@ -482,6 +508,90 @@ static bool gencomp_flush (CompIType comp_i, bool is_final_flush) // final flush
     return true;
 }
 
+// called from gencomp_depn_vb_prescriptions_memory - on memory exception or SIGUSR1
+uint64_t gencomp_depn_vb_prescriptions_memory (void)
+{
+    mutex_lock (prescriptions_mutex); // mostly to avoid a realloc under our feet
+
+    uint64_t memory=0;
+
+    for_buf (DepnVBPrescription, pres, reread_depn_vb_prescriptions)
+        memory += pres->comp_len ? pres->comp_len : (pres->num_lines * sizeof (RereadLine));
+
+    mutex_unlock (prescriptions_mutex);
+
+    return memory;
+}
+
+// called by compute thread, while gc_protected is locked
+static int32_t gencomp_rotate_prescription (void)
+{
+    mutex_lock (prescriptions_mutex); 
+
+    if (flag.debug_gencomp) 
+        iprintf ("Rotating DEPN reread_current_prescription: txt_size=%u, num_lines=%u\n",
+                 (uint32_t)reread_current_prescription.count, reread_current_prescription.len32);
+
+    buf_alloc (NULL, &reread_depn_vb_prescriptions, 1, 0, DepnVBPrescription, 2, NULL);
+
+    int32_t pres_i = reread_depn_vb_prescriptions.len32;
+    DepnVBPrescriptionP pres = &BNXT (DepnVBPrescription, reread_depn_vb_prescriptions);
+
+    // removes the memory from the buffer and replenishes it with new memory
+    buf_extract_data (reread_current_prescription, (char **)&pres->uncomp, 0, &pres->num_lines, &pres->uncomp_memory);
+
+    pres->txt_len = reread_current_prescription.count; // counts txt_data length represented by the lines in reread_current_prescription
+    reread_current_prescription.count = 0; 
+
+    mutex_unlock (prescriptions_mutex);
+
+    return pres_i;
+}
+
+static void gencomp_compress_prescription (VBlockP vb, int32_t pres_i)
+{
+    // copy prescription
+    mutex_lock (prescriptions_mutex); 
+    DepnVBPrescription pres = *B(DepnVBPrescription, reread_depn_vb_prescriptions, pres_i);
+    mutex_unlock (prescriptions_mutex);
+
+    // deltify
+    if (TXT_IS_BGZF)
+        for (int32_t i=pres.num_lines - 1; i >= 1; i--) {
+            pres.uncomp[i].offset.bb_i -= pres.uncomp[i-1].offset.bb_i;
+            if (!pres.uncomp[i].offset.bb_i) // same bb_i
+                pres.uncomp[i].offset.uoffset -= pres.uncomp[i-1].offset.uoffset;
+        }
+    
+    else
+        for (int32_t i=pres.num_lines - 1; i >= 1; i--)
+            pres.uncomp[i].offset.offset -= pres.uncomp[i-1].offset.offset;
+
+    // compress outside of mutex
+    ASSERTNOTINUSE (vb->scratch);
+    uint32_t uncomp_len = pres.num_lines * sizeof(RereadLine);
+
+    pres.comp_len = codec_RANW_est_size (CODEC_RANW, uncomp_len);
+    buf_alloc_exact (vb, vb->scratch, pres.comp_len, char, "scratch");
+
+    // compress into vb->scratch: note: RANW is about 4-5x. LZMA is usually better, but takes 7x time.
+    codec_RANW_compress (vb, NULL, NULL, (rom)pres.uncomp, &uncomp_len, NULL, B1STc(vb->scratch), &pres.comp_len, HARD_FAIL, "scratch");
+
+    buf_free (vb->codec_bufs[0]);
+
+    pres.comp = MALLOC (pres.comp_len); // usually a lot less than alloced to scratch
+    memcpy (pres.comp, B1STc(vb->scratch), pres.comp_len);
+
+    FREE (pres.uncomp_memory);
+    pres.uncomp = NULL;
+    buf_free (vb->scratch);
+
+    // update consumed prescription
+    mutex_lock (prescriptions_mutex); 
+    *B(DepnVBPrescription, reread_depn_vb_prescriptions, pres_i) = pres;
+    mutex_unlock (prescriptions_mutex);
+}
+
 // Called from compute_vb, for MAIN VBs, in arbitrary order of VBs. 
 // Note: We need to do it in the compute thread (rather than the main thread) so that zip_prepare_one_vb_for_dispatching, 
 // running in the main thread, can busy-wait for all MAIN compute threads to complete before flushing the final txt_data.
@@ -493,6 +603,7 @@ void gencomp_absorb_vb_gencomp_lines (VBlockP vb)
 
     uint64_t first_prim = num_lines_absorbed[SAM_COMP_PRIM];
     uint64_t first_depn = num_lines_absorbed[SAM_COMP_DEPN];
+    int32_t prescription_rotated = -1;
 
     if (vb->gencomp_lines.len) {
         ASSERT0 (!finished_absorbingP, "Absorbing is done - not expecting to be called");
@@ -505,14 +616,11 @@ void gencomp_absorb_vb_gencomp_lines (VBlockP vb)
         for (int i=1; i<=2; i++)
             buf_alloc (evb, &componentsP[i].txt_data, 0, comp_size[i], char, 1, "componentsP.txt_data");    
 
-        if (depn_method == DEPN_REREAD)
-            buf_alloc (NULL, &reread_depn_lines, vb->gencomp_lines.len, 0, RereadLine, 2, "reread_depn_lines");
-
         // iterate on all lines the segmenter decided to send to gencomp and place each in the correct queue
         for_buf (GencompLineIEntry, gcl, vb->gencomp_lines) {
 
             // flush previous lines if there is no room for new line
-            if (componentsP[gcl->comp_i].txt_data.len + gcl->line_len > comp_size[gcl->comp_i]) {
+            if (componentsP[gcl->comp_i].txt_data.len + gcl->line_len > comp_size[gcl->comp_i] && !flag.force_reread) {
                 bool flushed = gencomp_flush (gcl->comp_i, false);
 
                 // case: not flushed bc too much data is already waiting for the dispatcher - just continue to grow this txt_data - 
@@ -525,9 +633,17 @@ void gencomp_absorb_vb_gencomp_lines (VBlockP vb)
             // lines will be slated for re-reading 
             if (depn_method == DEPN_REREAD && 
                 componentsP[gcl->comp_i].type == GCT_DEPN && 
-                queueP[GCT_DEPN].next_unused == END_OF_LIST) 
-                
-                BNXT(RereadLine, reread_depn_lines) = (RereadLine){ .offset = gcl->offset, .line_len = gcl->line_len };
+                (queueP[GCT_DEPN].next_unused == END_OF_LIST || flag.force_reread)) {
+
+                if (reread_current_prescription.count + gcl->line_len > segconf.vb_size) {
+                    ASSERT (prescription_rotated == -1, "%s: only one DEPN prescription can be rotated per MAIN VB. reread_current_prescription.count=%"PRIu64", segconf.vb_size=%u gcl->line_len=%u", 
+                            VB_NAME, reread_current_prescription.count, (int)segconf.vb_size, gcl->line_len); // since MAIN VB is also at most segconf.vb_size, even if ALL lines in MAIN_VB are DEPNs, they are still under vb_size, so at most one rotation can occur
+                    prescription_rotated = gencomp_rotate_prescription ();
+                }
+
+                buf_append_one (reread_current_prescription, ((RereadLine){ .offset = gcl->offset, .line_len = gcl->line_len }));
+                reread_current_prescription.count += gcl->line_len;
+            }
 
             // to componentsP.txt_data to be flushed to the queue later
             else {
@@ -553,6 +669,9 @@ void gencomp_absorb_vb_gencomp_lines (VBlockP vb)
     num_MAIN_vbs_absorbedP++;
 
     mutex_unlock (gc_protected);
+
+    if (prescription_rotated != -1)
+        gencomp_compress_prescription (vb, prescription_rotated); // outside of mutex
 
     COPY_TIMER (gencomp_absorb_vb_gencomp_lines);
 }
@@ -602,7 +721,7 @@ static void gencomp_get_txt_data_from_queue (VBlockP vb, GencompType gct)
         Ltxt = *B1ST32 (*buf);
         buf_alloc (vb, &vb->txt_data, 0, segconf.vb_size, char, 0, "txt_data"); 
     
-        codec_rans_uncompress (evb, NULL, CODEC_RANS8, 0, buf->data + 4, buf->len - 4, 
+        codec_rans_uncompress (evb, NULL, CODEC_RANB, 0, buf->data + 4, buf->len - 4, 
                                &vb->txt_data, Ltxt, 0, "txt_data");
     }
 
@@ -646,7 +765,7 @@ static void gencomp_get_txt_data_from_disk (VBlockP vb)
     Ltxt = *B1ST32 (depn.thread_data_comp); // first 4 bytes = uncomp_len
     ASSERT (Ltxt <= segconf.vb_size, "Invalid Ltxt=%u", Ltxt); // sanity
 
-    codec_rans_uncompress (evb, NULL, CODEC_RANS8, 0, depn.thread_data_comp.data+4, depn.thread_data_comp.len-4, 
+    codec_rans_uncompress (evb, NULL, CODEC_RANB, 0, depn.thread_data_comp.data+4, depn.thread_data_comp.len-4, 
                            &vb->txt_data, Ltxt, 0, "txt_data");
 
     if (flag.debug_gencomp) 
@@ -663,20 +782,33 @@ static void gencomp_get_txt_data_from_disk (VBlockP vb)
 // re-reading is done by the Seg compute thread for this vb
 static void gencomp_prescribe_reread (VBlockP vb)
 {
-    ARRAY (RereadLine, lines, reread_depn_lines);
+    DepnVBPrescriptionP pres = B(DepnVBPrescription, reread_depn_vb_prescriptions, reread_depn_vb_prescriptions.next++);
+    
+    buf_alloc_exact (vb, vb->reread_prescription, pres->num_lines, RereadLine, "reread_prescription"); 
 
-    buf_alloc (vb, &vb->reread_prescription, segconf.vb_size / lines[0].line_len, 0, RereadLine, 2, "reread_prescription"); // initial allocation, might grow
+    codec_rans_uncompress (vb, NULL, CODEC_RANW, 0, pres->comp, pres->comp_len, 
+                           &vb->reread_prescription, pres->num_lines * sizeof (RereadLine), 0, "reread_prescription");
 
     vb->comp_i = SAM_COMP_DEPN;
+    vb->lines.len32 = pres->num_lines;
+    Ltxt = pres->txt_len;
 
-    while (reread_depn_lines.next < lines_len) {
-        if (Ltxt + lines[reread_depn_lines.next].line_len > segconf.vb_size) break; // VB is full
+    FREE (pres->comp);
+    pres->comp_len = pres->num_lines = 0; // so gencomp_depn_vb_prescriptions_memory shows no memory consumed for this prescription
 
-        buf_append_one (vb->reread_prescription, lines[reread_depn_lines.next]);
-        Ltxt += lines[reread_depn_lines.next].line_len;
-        vb->lines.len++;
-        reread_depn_lines.next++;
-    }
+    // undeltify
+    ARRAY (RereadLine, rr, vb->reread_prescription);
+    if (TXT_IS_BGZF)
+        for (uint32_t i=1; i < rr_len; i++) {
+            if (!rr[i].offset.bb_i) // same bb_i
+                rr[i].offset.uoffset += rr[i-1].offset.uoffset;
+
+            rr[i].offset.bb_i += rr[i-1].offset.bb_i;
+        }
+    
+    else
+        for (uint32_t i=1; i < rr_len; i++)
+            rr[i].offset.offset += rr[i-1].offset.offset;
 
     if (flag.debug_gencomp) debug_gencomp ("Reread DEPN", true, NULL);
 }
@@ -722,7 +854,7 @@ bool gencomp_get_txt_data (VBlockP vb)
 
     // case: finished ingesting PRIM and no more out-of-band data, and all MAIN data has been flushed (which also means txt_file reached EOF,
     // see zip_prepare_one_vb_for_dispatching) - so no more MAIN or GetQBit data will be available. time for DEPN data.
-    if (sam_finished_ingesting_prim && reread_depn_lines.next < reread_depn_lines.len) 
+    if (sam_finished_ingesting_prim && reread_depn_vb_prescriptions.next < reread_depn_vb_prescriptions.len) 
         RETURN (TXT_IS_BGZF ? "REREAD_BGZF" : "REREAD_PLAIN", gencomp_prescribe_reread (vb));
 
     // no more data exists at this point OR we have GCT_DEPN, but not finished ingesting PRIM yet
@@ -747,10 +879,16 @@ bool gencomp_am_i_expecting_more_txt_data (void)
         
         if (flag.debug_gencomp) iprintf ("Finished absorbing: num_MAIN_vbs_absorbedP=%u\n", num_MAIN_vbs_absorbedP);
         finished_absorbingP = true;
+
+        // rotate and compress final prescription - after this, prescriptions Buffer is immutable
+        if (reread_current_prescription.len) {
+            gencomp_rotate_prescription();
+            gencomp_compress_prescription (evb, reread_depn_vb_prescriptions.len32-1);
+        }
     }
 
     bool expecting = !finished_absorbingP || queueP[GCT_OOB].queue_len || queueP[GCT_DEPN].queue_len ||
-                     reread_depn_lines.next < reread_depn_lines.len;
+                     reread_depn_vb_prescriptions.next < reread_depn_vb_prescriptions.len;
 
     if ((TXT_DT(SAM) || TXT_DT(BAM)) && finished_absorbingP && !queueP[GCT_OOB].queue_len && !num_vbs_dispatched[GCT_OOB]) {
         sam_finished_ingesting_prim = true;
@@ -817,10 +955,13 @@ void gencomp_reread_lines_as_prescribed (VBlockP vb)
     else { // CODEC_NONE
         for_buf (RereadLine, line, vb->reread_prescription) {
             ASSERT (!fseeko64 (fp, line->offset.offset, SEEK_SET),
-                    "%s: fseeko64 on %s failed while rereading depn lines: %s", VB_NAME, txt_file->name, strerror(errno));
+                    "%s: fseeko64 on %s failed while rereading depn lines at offset=%"PRIu64": %s", 
+                    VB_NAME, txt_file->name, line->offset.offset, strerror(errno));
             
             ASSERT (fread (BAFTtxt, line->line_len, 1, fp) == 1,
-                    "%s: fread of %u bytes on %s failed while rereading depn lines: %s", VB_NAME, line->line_len, txt_file->name, strerror(errno));
+                    "%s: fread of %u bytes at offset=%"PRIu64" from %s file_size=%"PRIu64" failed while rereading depn lines: %s", 
+                    VB_NAME, line->line_len, line->offset.offset, txt_file->name, ({ fseek (fp, 0, SEEK_END); ftello64 (fp); }), 
+                    strerror(ferror(fp)));
 
             Ltxt += line->line_len;
         }

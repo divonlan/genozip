@@ -255,20 +255,3 @@ char *filename_make_unix (char *filename)
 
     return full_fn;
 }
-
-PairType filename_is_fastq_pair (STRp(fn1), STRp(fn2))
-{
-    if (fn1_len != fn2_len) return false; 
-
-    int mismatches = 0, mm_i=0;
-    for (int i=0; i < fn1_len && mismatches < 2; i++)
-        if (fn1[i] != fn2[i]) {
-            mismatches++;
-            mm_i = i;
-        }
-    
-    // its predicted to a pair if filenames are the same, except for '1'⇄'2' switch
-    if  (mismatches == 1 && ((fn1[mm_i] == '1' && fn2[mm_i] == '2'))) return PAIR_R1; // fn1 is PAIR_R1
-    if  (mismatches == 1 && ((fn1[mm_i] == '2' && fn2[mm_i] == '1'))) return PAIR_R2; 
-    return NOT_PAIRED;
-}

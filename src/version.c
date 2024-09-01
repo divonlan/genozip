@@ -28,22 +28,8 @@ static StreamP github_stream = NULL;
 bool version_is_devel (void)
 {
     rom exe = arch_get_executable().s;
-    int exe_len = strlen (exe);
-
-    static rom devel_paths[] = { 
-    #ifdef _WIN32
-        "C:\\Users\\divon\\genozip\\", 
-    #elif defined __linux__        
-        "/mnt/c/Users/divon/", 
-    #elif defined __APPLE__
-        "/Users/divon/genozip/"
-    #endif
-    };
-
-    for (int i=0; i < ARRAY_LEN(devel_paths); i++)
-        if (str_isprefix_(STRa(exe), devel_paths[i], strlen(devel_paths[i]))) return true;
-
-    return false;
+    return (strstr (exe, "divon/genozip") || strstr (exe, "divon\\genozip")) && 
+            !strstr (exe, "releases") && !strstr (exe, "latest");
 }
 
 // version of the genozip executable running

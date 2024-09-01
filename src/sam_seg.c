@@ -21,6 +21,7 @@
 #include "arch.h"
 #include "threads.h"
 #include "zip_dyn_int.h"
+#include "huffman.h"
 
 STRl(copy_GX_snip, 30);
 STRl(copy_sn_snip, 30);
@@ -211,7 +212,9 @@ void sam_zip_init_vb (VBlockP vb_)
 
     // note: we test for sorted and not collated, because we want non-sorted long read files (which are collated)
     // to seg depn against same-VB prim (i.e. not gencomp) - as the depn lines will follow the prim line
-    vb->check_for_gc = !segconf.running && segconf.sag_type && !segconf.abort_gencomp && IS_MAIN(vb);
+    vb->check_for_gc = !segconf.running && segconf.sag_type && !segconf.no_gc_checking && IS_MAIN(vb);
+
+    vb->vb_plan.prev_comp_i = SAM_COMP_PRIM; // initialize (same as in sam_piz_init_vb)
 
     sam_sag_zip_init_vb (vb);
 }
@@ -222,16 +225,24 @@ void sam_zip_after_compress (VBlockP vb)
 }
 
 // called by main thread, as VBs complete (might be out-of-order)
-void sam_zip_after_compute (VBlockP vb)
+void sam_zip_after_compute (VBlockP vb_)
 {
-    if (IS_PRIM(vb))
-        gencomp_sam_prim_vb_has_been_ingested (vb);
+    VBlockSAMP vb = (VBlockSAMP)vb_;
 
-    z_file->num_perfect_matches += vb->num_perfect_matches; // for stats
+    if (IS_PRIM(vb))
+        gencomp_sam_prim_vb_has_been_ingested (VB);
+
+    // increment stats accumulators
+    z_file->num_perfect_matches += vb->num_perfect_matches; 
     z_file->num_aligned         += vb->num_aligned;
+    z_file->secondary_count     += vb->secondary_count;
+    z_file->supplementary_count += vb->supplementary_count;
+    z_file->mate_line_count     += vb->mate_line_count;
+    z_file->saggy_near_count    += vb->saggy_near_count;
+    z_file->depn_far_count      += vb->depn_far_count;
 
     if (segconf.sam_is_unmapped && IS_REF_LOADED_ZIP) { 
-        DO_ONCE ref_verify_organism (vb);
+        DO_ONCE ref_verify_organism (VB);
     }
 }
 
@@ -318,6 +329,7 @@ void sam_seg_initialize (VBlockP vb_)
                    OPTION_SA_POS, OPTION_OA_POS,
                    T(MP(BLASR), OPTION_XS_i), T(MP(BLASR), OPTION_XE_i), T(MP(BLASR), OPTION_XQ_i), T(MP(BLASR), OPTION_XL_i), T(MP(BLASR), OPTION_FI_i),
                    T(MP(NGMLR), OPTION_QS_i), T(MP(NGMLR), OPTION_QE_i), T(MP(NGMLR), OPTION_XR_i),
+                   T(MP(CPU), OPTION_Y0_i), T(MP(CPU), OPTION_Y1_i),
                    T(segconf.is_minimap2, OPTION_s1_i), OPTION_ZS_i, OPTION_nM_i,
                    DID_EOL);
 
@@ -327,6 +339,7 @@ void sam_seg_initialize (VBlockP vb_)
     // when reconstructing these contexts against another context (DELTA_OTHER or XOR_DIFF) the other may be before or after
     ctx_set_same_line (VB, OPTION_AS_i, OPTION_s1_i, OPTION_PQ_i, // AS may be DELTA_OTHER vs ms:i ; s1 vs AS ; XS vs AS ; PQ vs AS
                        T(segconf.sam_has_BWA_XS_i, OPTION_XS_i),
+                       T(MP(CPU), OPTION_Y0_i), T(MP(CPU), OPTION_Y1_i),
                        OPTION_RX_Z, OPTION_CR_Z, // whe UR and CR are reconstruted as XOR_DIFF against UB and CB respectively, we search for the values on the same line (befor or after)
                        DID_EOL);
 
@@ -634,7 +647,7 @@ void sam_segconf_set_by_MP (void)
     // in bisulfate data, we still calculate MD:Z and NM:i vs unconverted reference
     segconf.MD_NM_by_unconverted = MP(BISMARK) || MP(DRAGEN) || MP(BSBOLT) || MP(GEM3) || MP(BSSEEKER2);
 
-    segconf.is_bwa            = MP(BWA) || MP(bwa) || MP(BSBOLT) || MP (CPU) || MP(BWA_MEM2) || MP(PARABRICKS); // aligners based on bwa
+    segconf.is_bwa            = MP(BWA) || MP(bwa) || MP(BSBOLT) || MP(CPU) || MP(BWA_MEM2) || MP(PARABRICKS); // aligners based on bwa
     segconf.is_minimap2       = MP(MINIMAP2) || MP(WINNOWMAP) || MP(PBMM2);   // aligners based on minimap2
     segconf.is_bowtie2        = MP(BOWTIE2) || MP(HISAT2) || MP(TOPHAT) || MP(BISMARK) || MP(BSSEEKER2); // aligners based on bowtie2
 
@@ -657,7 +670,7 @@ void sam_segconf_set_by_MP (void)
 void sam_segconf_finalize (VBlockP vb_)
 {
     VBlockSAMP vb = (VBlockSAMP)vb_;
-
+    
     segconf.longest_seq_len = vb->longest_seq_len;
     segconf.is_long_reads   = segconf_is_long_reads();
     segconf.sam_cigar_len   = 1 + ((segconf.sam_cigar_len - 1) / vb->lines.len32);                   // set to the average CIGAR len (rounded up)
@@ -716,12 +729,14 @@ void sam_segconf_finalize (VBlockP vb_)
     if (flag.optimize) 
         sam_segconf_finalize_optimizations();
 
+    segconf.deep_paired_qname = flag.deep && segconf.is_paired && flag.deep_num_fastqs == 2;
+    
     segconf.sam_has_zm_by_Q1NAME = TECH(PACBIO) && segconf_qf_id (QNAME1) != QF_PACBIO_3;
 
     segconf.pacbio_subreads = TECH(PACBIO) && segconf.sam_is_unmapped && segconf.has[OPTION_pw_B_C] && segconf.has[OPTION_ip_B_C];
 
     if (segconf.pacbio_subreads)
-        ctx_segconf_set_hard_coded_lcodec (OPTION_ip_ARR, CODEC_ARITH8); // as good as LZMA on ip:B:C and hugely faster - hard-code to prevent assigning LZMA  
+        ctx_segconf_set_hard_coded_lcodec (OPTION_ip_ARR, CODEC_ARTB); // as good as LZMA on ip:B:C and hugely faster - hard-code to prevent assigning LZMA  
 
     segconf.sam_use_sn_mux = segconf.pacbio_subreads && segconf.sam_is_unmapped && segconf_qf_id (QNAME1) == QF_PACBIO_rng;
 
@@ -871,6 +886,18 @@ void sam_segconf_finalize (VBlockP vb_)
     qname_segconf_finalize (VB);
 }
 
+// this is SAM/BAM's zip_after_segconf callback
+void sam_zip_after_segconf (void)
+{
+    sam_set_sag_type();   
+
+    if (flag.deep)
+        buf_alloc_zero (evb, &z_file->vb_num_deep_lines, 0, 10000, uint32_t, 0, "z_file->vb_num_deep_lines");
+
+    if (segconf.sag_type || flag.deep) 
+        huffman_produce_compressor (SAM_QNAME); // converts qname_huff from HuffmanChewer to HuffmanCodes
+}
+
 void sam_seg_finalize (VBlockP vb_)
 {
     VBlockSAMP vb = (VBlockSAMP)vb_;
@@ -930,16 +957,13 @@ void sam_seg_finalize (VBlockP vb_)
     if (IS_PRIM(vb))
         sam_zip_prim_ingest_vb (vb);
 
-    // collect stats
-    __atomic_add_fetch (&z_file->mate_line_count,  (uint64_t)vb->mate_line_count,  __ATOMIC_RELAXED);
-    __atomic_add_fetch (&z_file->saggy_near_count, (uint64_t)vb->saggy_near_count, __ATOMIC_RELAXED);
-    __atomic_add_fetch (&z_file->prim_far_count,   (uint64_t)vb->prim_far_count,   __ATOMIC_RELAXED);
-
-    // VB1: if we've not found depn lines in the VB, abort gencomp (likely the depn lines were filtered out)
+    // VB1: if we've not found depn lines in the VB, no need to check for gencomp lines in future VBs 
+    // note that it is possible that some VBs had gencomp lines and already absorbed
     if (vb->vblock_i == 1 && !vb->seg_found_depn_line && !flag.force_gencomp)
-        segconf.abort_gencomp = true;
+        segconf.no_gc_checking = true;
 
-    if (segconf.sag_type && IS_MAIN(vb) && vb->check_for_gc && !segconf.abort_gencomp)
+    // note: absorb even if no gc checking, since we need to increment counter
+    if (segconf.sag_type && IS_MAIN(vb))
         gencomp_absorb_vb_gencomp_lines (VB);
 }
 
@@ -1098,10 +1122,12 @@ void sam_seg_idx_aux (VBlockSAMP vb)
             TEST_AUX(IH_i, 'I', 'H', 'i');
             TEST_AUX(XG_Z, 'X', 'G', 'Z');
             TEST_AUX(XM_Z, 'X', 'M', 'Z');
+            TEST_AUX(XM_i, 'X', 'M', 'i');
             TEST_AUX(X0_i, 'X', '0', 'i');
             TEST_AUX(X1_i, 'X', '1', 'i');
             TEST_AUX(XA_Z, 'X', 'A', 'Z');
             TEST_AUX(AS_i, 'A', 'S', 'i');
+            TEST_AUX(XS_i, 'X', 'S', 'i');
             TEST_AUX(CC_Z, 'C', 'C', 'Z');
             TEST_AUX(CP_i, 'C', 'P', 'i');
             TEST_AUX(ms_i, 'm', 's', 'i');
@@ -1368,7 +1394,7 @@ static inline BuddyType sam_seg_mate (VBlockSAMP vb, SamFlags f, STRp (qname), u
 {
     if (sam_is_depn (f) || !segconf.is_paired) return BUDDY_NONE;
 
-    uint32_t mate_hash = qname_calc_hash (QNAME1, STRa(qname), !f.is_last, true, NULL) & MAXB(CTX(SAM_QNAME)->qname_hash.prm8[0]);
+    uint32_t mate_hash = qname_calc_hash (QNAME1, COMP_NONE, STRa(qname), !f.is_last, true, NULL) & MAXB(CTX(SAM_QNAME)->qname_hash.prm8[0]);
     LineIType candidate = LINE_BY_HASH(mate_hash);
     SamFlags *mate_f = &DATA_LINE(candidate)->FLAG; // invalid pointer if no mate
 
@@ -1438,8 +1464,14 @@ static inline void sam_seg_QNAME_segconf (VBlockSAMP vb, ContextP ctx, STRp (qna
     if (vb->line_i == 0) {
         qname_segconf_discover_flavor (VB, QNAME1, STRa (qname));
 
-        memcpy (segconf.master_qname, qname, MIN_(qname_len, sizeof (segconf.master_qname)-1));
+        huffman_start_chewing (SAM_QNAME, STRa(qname), 31);
     }
+
+    // build huffman compressor based on segconf qname character probabilities, which is then used 
+    // to compress qnames in SAGs (gencomp) in ZIP/PIZ and qnames in Deep in PIZ
+    huffman_chew_one_sample (SAM_QNAME, 
+                             STRa(qname), // lucky first qname will be the string to which we compare all other qnames hoping for an as long as possible identical prefix, as well as XOR the rest of the string
+                             true);       // skip if qname is same as previous line, bc: 1. in Sag we won't store the qname again and 2. in Deep we don't store secondary/supplementary (not perfect stats for mates in sorted files through, as we skip some and some not - that's ok)
 }
 
 void sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAMP dl, STRp (qname), unsigned add_additional_bytes)
@@ -1454,7 +1486,7 @@ void sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAMP dl, STRp (qname), unsigned ad
 
     QType q = qname_sam_get_qtype (STRa(qname)); // QNAME2 if we have QNAME2 and qname matches, else QNAME1
 
-    uint32_t qname_hash = qname_calc_hash (q, STRa(qname), dl->FLAG.is_last, true, NULL); // note: canonical=true as we use the same hash for find a mate and a saggy
+    uint32_t qname_hash = qname_calc_hash (q, COMP_NONE, STRa(qname), dl->FLAG.is_last, true, NULL); // note: canonical=true as we use the same hash for find a mate and a saggy
     uint32_t my_hash    = qname_hash & MAXB(CTX(SAM_QNAME)->qname_hash.prm8[0]);
     bool insert_to_hash = false;
 
@@ -1463,6 +1495,8 @@ void sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAMP dl, STRp (qname), unsigned ad
 
     BuddyType bt = sam_seg_mate  (vb, dl->FLAG, STRa (qname), my_hash, &insert_to_hash) | // bitwise or
                    sam_seg_saggy (vb, dl->FLAG, STRa (qname), my_hash, &insert_to_hash);
+
+    dl->mate_line_i = vb->mate_line_i;
 
     if (bt && flag.show_buddy) {
         if (bt == BUDDY_EITHER)
@@ -1482,7 +1516,11 @@ void sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAMP dl, STRp (qname), unsigned ad
     // note: in PRIM segging against buddy here is used for loading sag, SAM_QNAMESA is used for reconstruction
     if (bt) {
         seg_by_ctx (VB, (char[]){SNIP_SPECIAL, SAM_SPECIAL_COPY_BUDDY, '0' + bt}, 3, ctx, qname_len + add_additional_bytes); // seg QNAME as copy-from-buddy
-        seg_set_last_txt (VB, ctx, STRa(qname)); 
+        seg_set_last_txt (VB, ctx, STRa(qname));
+
+        // mirror logic of cases that sam_piz_special_COPY_BUDDY sets buddy_copied_exactly
+        if ((bt & BUDDY_MATE) && !segconf.flav_prop[QNAME1].is_mated)
+            dl->qname_mate_copied_exactly = true;  
     }
 
     // case: DEPN with SA Group: seg against SA Group (unless already segged against buddy)

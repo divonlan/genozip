@@ -826,7 +826,7 @@ bool sam_seq_pack (VBlockSAMP vb, Bits *packed, uint64_t next_bit, STRp(seq), bo
                 }
     }
 
-    bits_clear_excess_bits_in_top_word (packed);
+    bits_clear_excess_bits_in_top_word (packed, true);
 
     return true;
 }
@@ -875,37 +875,6 @@ rom sam_seg_analyze_set_one_ref_base (VBlockSAMP vb, bool is_depn, PosType32 pos
         bits_set (&(*range_p)->is_set, pos_index); // we will need this ref to reconstruct
 
     return NULL; // success
-}
-
-// pack seq (into 2bit ACGT format) of each PRIM line separately 
-void sam_zip_prim_ingest_vb_pack_seq (VBlockSAMP vb, Sag *vb_grps, uint32_t vb_grps_len,
-                                      BufferP underlying_buf, BufferP packed_seq_buf, bool is_bam_format)
-{
-    uint32_t total_seq_len=0;
-    for (uint32_t grp_i=0; grp_i < vb_grps_len; grp_i++) 
-        total_seq_len += vb_grps[grp_i].seq_len;
-
-    // allocate memory but don't extend the bitmap yet
-    ASSERTISEMPTY (*underlying_buf);
-    underlying_buf->len = roundup_bits2bytes64 (total_seq_len * 2);
-    buf_alloc (vb, underlying_buf, underlying_buf->len, 0, char, 0, "z_data");
-    buf_set_shared (underlying_buf);
-    
-    buf_overlay (vb, packed_seq_buf, underlying_buf, "packed_seq_buf");
-
-    for (uint32_t vb_grp_i=0; vb_grp_i < vb_grps_len; vb_grp_i++) {
-        
-        Sag *vb_grp = &vb_grps[vb_grp_i];
-
-        uint64_t next_bit = packed_seq_buf->nbits;
-        buf_extend_bits (packed_seq_buf, vb_grp->seq_len * 2); // extend now 
-        Bits *sag_seq = (BitsP)packed_seq_buf;
-
-        sam_seq_pack (vb, sag_seq, next_bit, Btxt (vb_grp->seq), vb_grp->seq_len, is_bam_format, false, HARD_FAIL);
-        vb_grp->seq = next_bit / 2; // update from an index into txt_data to an index (bases not bits) into sag_seq
-    }
-
-    bits_clear_excess_bits_in_top_word ((BitsP)packed_seq_buf);
 }
 
 uint32_t sam_zip_get_seq_len (VBlockP vb, uint32_t line_i) 

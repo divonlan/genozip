@@ -108,16 +108,7 @@ done:
     if (is_genocat && flag.show_ref_iupacs) exit_ok;
 }
 
-static const Iupac *ref_iupacs_find (Iupac *iupacs, int64_t first, int64_t last, PosType64 gpos)
-{
-    if (first > last) return &iupacs[first]; // gpos not found in iupacs - return one after (possibly beyond end of array)
-
-    int64_t mid = (first + last) / 2;
-    int64_t delta = gpos - iupacs[mid].gpos;
-
-    if (!delta) return &iupacs[mid];
-    else return ref_iupacs_find (iupacs, delta < 0 ? first : mid+1, delta < 0 ? mid-1 : last, gpos);
-}
+static BINARY_SEARCHER (ref_iupacs_find, Iupac, PosType64, gpos, true, IfNotExact_ReturnHigher)
 
 // note: we don't really need the lower case as both reference IUPACs and the bases tested are upper-cased, but no harm specifying for future-proofing.
 static const char IUPAC_IS_INCLUDED[128][128] = { ['R']={ ['A']=1, ['G']=1, ['a']=1, ['g']=1 },
@@ -145,8 +136,7 @@ bool ref_iupacs_is_included_do (Reference ref, VBlockP vb, const Range *r, PosTy
 {
     PosType64 gpos = r->gpos + (pos - r->first_pos);
 
-    ARRAY (Iupac, iupacs, ref->iupacs_buf);
-    const Iupac *iupac_ent = ref_iupacs_find (iupacs, 0, (int64_t)iupacs_len-1, gpos);
+    const Iupac *iupac_ent = binary_search (ref_iupacs_find, Iupac, ref->iupacs_buf, gpos);
     bool is_after = !ref->iupacs_buf.data || BISAFT (ref->iupacs_buf, iupac_ent);
 
     vb->iupacs_last_range = r;
@@ -189,7 +179,7 @@ char ref_iupacs_get (Reference ref, const Range *r, PosType64 pos, bool reverse,
     const Iupac *last = BLST(const Iupac, ref->iupacs_buf);
     PosType64 gpos = r->gpos + (pos - r->first_pos);
     
-    const Iupac *iupac = ref_iupacs_find (B1ST(Iupac, ref->iupacs_buf), 0, ref->iupacs_buf.len-1, gpos);
+    const Iupac *iupac = binary_search (ref_iupacs_find, Iupac, ref->iupacs_buf, gpos);
 
     if (!reverse) {
         *next_pos = (iupac > last)       ? MAX_POS            // our position is beyond the last iupac

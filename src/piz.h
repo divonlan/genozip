@@ -21,9 +21,11 @@ extern bool piz_default_skip_section (SectionType st, DictId dict_id);
 
 extern Dispatcher piz_z_file_initialize (void);
 extern DataType piz_read_global_area (Reference ref);
-extern bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last_z_file, CompIType first_comp_i, CompIType last_comp_i, bool allow_skip_cleaning);
+extern void piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last_z_file, CompIType first_comp_i, CompIType last_comp_i, bool allow_skip_cleaning);
 extern void piz_read_all_ctxs (VBlockP vb, Section *sec, bool is_pair_data);
-extern void piz_uncompress_all_ctxs (VBlockP vb);
+typedef enum { PUR_RECON, PUR_FASTA_WRITER_INIT, PUR_FASTQ_READ_R1, PUR_SAM_LOAD_SAG } PizUncompressReason;
+extern void piz_uncompress_all_ctxs (VBlockP vb, PizUncompressReason reason);
+extern SectionHeaderVbHeader piz_read_vb_header (VBlockP vb);
 extern bool piz_read_one_vb (VBlockP vb, bool for_reconstruction);
 extern void piz_set_main_dispatcher (Dispatcher dispatcher);
 extern void piz_allow_out_of_order (void);

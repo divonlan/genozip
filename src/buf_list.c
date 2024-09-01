@@ -45,7 +45,7 @@ void buflist_sort (VBlockP vb, bool already_locked)
 // remove from buffer_list of this vb
 // thread safety: only the thread owning the VB of the buffer (main thread of evb) can remove a buffer
 // from the buf list, OR the main thread may remove for all VBs, IF no compute thread is running
-static BINARY_SEARCHER (buflist_finder, BufListEnt, ConstBufferP, buf, true, ReturnNULL)
+static BINARY_SEARCHER (buflist_finder, BufListEnt, ConstBufferP, buf, true, IfNotExact_ReturnNULL)
 BufListEnt *buflist_find_buf (VBlockP vb, ConstBufferP buf, FailType soft_fail)
 {
     START_TIMER;
@@ -796,6 +796,9 @@ static bool buflist_show_memory_add_buf (ConstBufferP buf, VBlockPoolType pool_t
                                          .name    = buf->name, 
                                          .bytes   = buf->size + CTL_SIZE };
         ASSERT (num_stats < MAX_MEMORY_STATS, "# memory stats exceeded %u, consider increasing MAX_MEMORY_STATS", MAX_MEMORY_STATS);
+    
+        if (buf->name && !strcmp (buf->name, "reread_depn_vb_prescriptions"))
+            stats[num_stats-1].bytes += gencomp_depn_vb_prescriptions_memory();
     }
 
     num_buffers++;

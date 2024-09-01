@@ -22,6 +22,7 @@
 #include "tar.h"
 #include "contigs.h"
 #include "mgzip.h"
+#include "huffman.h"
 
 #define SHORT_HEADER "NAME                   GENOZIP      %       TXT      %   RATIO\n"
 
@@ -137,8 +138,10 @@ static void stats_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
 
     // if Deep with QNONE, we send the first QNAME of the SAM file and the first read name of the FASTQ
     if (flag.deep && segconf.deep_qtype == QNONE) {
+        STR(master_qname);
+        huffman_get_master (SAM_QNAME, pSTRa(master_qname));
         bufprintf (evb, &exceptions, "%sQNONE_REASON%%2C%%2C%%2C", need_sep++ ? "%3B" : "");
-        bufprintf (evb, &exceptions, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.master_qname, strlen(segconf.master_qname), ',', -127)).s); 
+        bufprintf (evb, &exceptions, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter ((char *)STRa(master_qname), ',', -127)).s); 
         bufprintf (evb, &exceptions, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.deep_1st_desc,  strlen(segconf.deep_1st_desc),  ',', -127)).s); 
     }
 
@@ -176,7 +179,7 @@ static void stats_prepare_internals (StatsByLine *sbl, unsigned num_stats, uint6
 // store the sizes of dict / b250 / local in zctx->*.param, and of other sections in sbl[st].z_size
 static void stats_get_compressed_sizes (StatsByLine *sbl) 
 {
-    ContextIndex ctx_index[MAX_DICTS];
+    ARRAY_alloc (ContextIndex, ctx_index, z_file->num_contexts, false, evb->ctx_index, evb, "ctx_index");
 
     // initialize & prepare context index
     for (Did did_i=0; did_i < z_file->num_contexts; did_i++) {
@@ -197,7 +200,7 @@ static void stats_get_compressed_sizes (StatsByLine *sbl)
             sbl[sec->st].z_size += sec->size;
             
         else if ((flag.show_stats_comp_i == COMP_NONE || flag.show_stats_comp_i == sec->comp_i) && IS_DICTED_SEC (sec->st)) {
-            Did did_i = ctx_get_existing_did_i_do (sec->dict_id, z_file->contexts, z_file->d2d_map, ctx_index, z_file->num_contexts);
+            Did did_i = ctx_get_existing_did_i_do (sec->dict_id, z_file->contexts, z_file->d2d_map, &evb->ctx_index, z_file->num_contexts);
 
             ASSERT (did_i != DID_NONE, "Cannot find zctx for %s with dict_id=%s\n", st_name(sec->st), dis_dict_id (sec->dict_id).s);
 
@@ -205,8 +208,9 @@ static void stats_get_compressed_sizes (StatsByLine *sbl)
             switch (sec->st) {
                 case SEC_LOCAL    : ZCTX(did_i)->local.count += sec->size; break;
                 case SEC_B250     : ZCTX(did_i)->b250.count  += sec->size; break;
-                case SEC_COUNTS   :
+                case SEC_COUNTS   : // include z_size of COUNTS, SUBDICTS, HUFFMAN in dict column of stats
                 case SEC_SUBDICTS :
+                case SEC_HUFFMAN  :
                 case SEC_DICT     : ZCTX(did_i)->dict.count  += sec->size; break;
                 default           : break;
             }
@@ -370,13 +374,17 @@ static void stats_output_file_metadata (void)
                 bufprintf (evb, &features, "RG_method=%s;", RG_method_name (segconf.RG_method));
 
             if (num_alignments) {
-                double mate_line_pc  = 100.0 * (double)z_file->mate_line_count  / (double)num_alignments;
-                double saggy_near_pc = 100.0 * (double)z_file->saggy_near_count / (double)num_alignments;
-                double prim_far_pc   = 100.0 * (double)z_file->prim_far_count   / (double)num_alignments;
+                double mate_line_pc   = 100.0 * (double)z_file->mate_line_count     / (double)num_alignments;
+                double saggy_near_pc  = 100.0 * (double)z_file->saggy_near_count    / (double)num_alignments;
+                double depn_far_pc    = 100.0 * (double)z_file->depn_far_count      / (double)num_alignments;
+                double secondary_pc   = 100.0 * (double)z_file->secondary_count     / (double)num_alignments;
+                double supp_pc        = 100.0 * (double)z_file->supplementary_count / (double)num_alignments;
+                double far_of_depn_pc = z_file->comp_num_lines[SAM_COMP_DEPN] ? (100.0 * (double)z_file->depn_far_count / (double)z_file->comp_num_lines[SAM_COMP_DEPN]) : 0;
                 #define PREC(f) ((f && f<10) ? (1 + ((f)<1)) : 0)
-                FEATURE(true, "Buddying: sag_type=%s mate=%.*f%% saggy_near=%.*f%% prim_far=%.*f%%",
-                        "sag_type=%s;mate=%.*f%%;saggy_near=%.*f%%;prim_far=%.*f%%",
-                        sag_type_name (segconf.sag_type), PREC(mate_line_pc), mate_line_pc, PREC(saggy_near_pc), saggy_near_pc, PREC(prim_far_pc), prim_far_pc);
+                FEATURE(true, "Buddying: sag_type=%s mate=%.*f%% saggy_near=%.*f%% depn_far=%.*f%% depn_far/num_DEPN=%.*f%% sec=%.*f%% supp=%.*f%%",
+                        "sag_type=%s;mate=%.*f%%;saggy_near=%.*f%%;depn_far=%.*f%%;depn_far/num_DEPN=%.*f%%;secondary=%.*f%%;suppl=%.*f%%",
+                        sag_type_name (segconf.sag_type), PREC(mate_line_pc), mate_line_pc, PREC(saggy_near_pc), saggy_near_pc, PREC(depn_far_pc), depn_far_pc, 
+                        PREC(far_of_depn_pc), far_of_depn_pc, PREC(secondary_pc), secondary_pc, PREC(supp_pc), supp_pc);
 
                 if (flag.deep)
                     bufprintf (evb, &stats, "Deep: fq_reads_deeped=%.1f%%%s qtype=%s no_qual=%s trimming=%s%s%s\n", 
@@ -869,12 +877,11 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
             (int32_t)(txt_size - all_txt_len)); 
 
     if (flag.show_stats_comp_i == COMP_NONE) { 
-        
         zfile_compress_section_data (evb, SEC_STATS, &stats);
         zfile_compress_section_data (evb, SEC_STATS, &STATS);
 
         // store stats overhead, for stats_display (because when stats_display runs, section list won't be accessible since it is already converted to SectionEntFileFormat)
-        Section sec = sections_last_sec (SEC_STATS, HARD_FAIL) - 1; // first stats section     
+        Section sec = sections_last_sec (SEC_NONE, HARD_FAIL) - 1; // first stats section     
         stats.count = z_file->disk_so_far - sec->offset;
     }
 

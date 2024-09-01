@@ -98,12 +98,11 @@ typedef struct {
     // qname characteristics (SAM/BAM and FASTQ)
     QnameFlavor qname_flavor[NUM_QTYPES+1];     // 0-QNAME 1-QNAME2(FASTQ) 1=secondary flavor(SAM) 2=NCBI LINE3 (FASTQ)
     QnameFlavor deep_sam_qname_flavor[2];       // save for stats, in --deep (SAM's QNAME and QNAME2)
-    QnameFlavorProp flav_prop[NUM_QTYPES];      // flavor properties
+    QnameFlavorProp flav_prop[NUM_QTYPES];      // ZIP: flavor properties (in PIZ: this is in z_file->flav_prop)
     bool sorted_by_qname[NUM_QTYPES];           // qnames appear in the file in a sorted order
     bool qname_flavor_rediscovered[NUM_QTYPES]; // true if flavor has been modified (used only during segconf.running)
     QnameStr qname_line0[NUM_QTYPES];           // qname of line_i=0 (by which flavor is determined) (nul-terminated)
     SeqTech tech;
-    char master_qname[SAM_MAX_QNAME_LEN+1];     // ZIP/PIZ: one of the (ZIP: the first) QNAMEs in the SAM file, to which we compare all others 
     
     // SAM/BAM and FASTQ
     uint32_t longest_seq_len;   // length of the longest seq_len in the segconf data 
@@ -196,7 +195,7 @@ typedef struct {
     uint32_t sam_cropped_at;    // ZIP: it appears that the FASTQ reads were sam_is_cropped to an identical length before aligning. If --deep, this field (as calculated in SAM) is also used when segging FASTQ.
     bool use_pacbio_iqsqdq;     // ZIP: if iq:Z sq:Z and dq:Z are present in all lines, we can compress them, as well as QUAL, better. 
     char CR_CB_seperator;       // ZIP: seperator within CR:Z and CB:Z fields
-    bool abort_gencomp;         // ZIP: vb=1 found out that the file actually has no depn or no prim, so we stop sending lines to prim/depn
+    bool no_gc_checking;        // ZIP: if true: vb=1 had no depn lines, so we heuristically decided not to check for gc in future VBs (note that some VBs running in parallel to vb=1 might have had depn lines)
     bool has_10xGen;            // ZIP/PIZ: has 10xGenomics tags
     bool has_RSEM;              // ZIP: RSEM is used (https://github.com/bli25/RSEM_tutorial)
     RGMethod RG_method;
@@ -300,15 +299,18 @@ typedef struct {
     char interleaved_r1;        // valid if is_interleaved: character representing R1: usually '0' or '1'
     char interleaved_r2;        // valid if is_interleaved: character representing R2: usually '1' or '2'
     QType deep_qtype;           // Deep: QNAME1 or QNAME2 if for most segconf lines for which have Deep, SAM qname matches FASTQ's QNAME1 or QNAME2, or QNONE if not
+    bool deep_paired_qname;     // Deep: QNAME hash includes deep_is_last
+    thool deep_is_last;         // Deep: whether this FASTQ file corresponds to is_first or is_last alignments in BAM, or unknown if !segconf.deep_paired_qname 
     bool deep_no_qual;          // Deep: true if for most segconf lines which have Deep, qual doesn't match (eg, bc of undocumented BQSR) 
     bool deep_has_trimmed;      // Deep: some FASTQ reads in segconf appear in SAM trimmed (beyond cropping)
     bool deep_has_trimmed_left; // Deep: some FASTQ reads in segconf are trimmed on the left too (not just the right)
     char deep_N_sam_score;      // Deep: ZIP only: Base qualities of 'N' bases in the SAM are this value, regardless of their value in FASTQ
     char deep_N_fq_score;       // Deep: ZIP/PIZ:  Base qualities of 'N' bases in the FASTQ are this value
     char deep_1st_desc[256];    // Deep: DESC line of first FASTQ read of first FASTQ file
-    unsigned n_full_mch[2];     // Deep: count segconf lines where hash matches with at least one SAM line - (QNAME1 or QNAME2), SEQ, QUAL
+    #define NUM_INSTS 6
+    unsigned n_full_mch[NUM_INSTS];      // Deep: count segconf lines where hash matches with at least one SAM line - (QNAME1 or QNAME2), SEQ, QUAL
+    unsigned n_seq_qname_mch[NUM_INSTS]; // Deep: count segconf lines where FASTQ (QNAME1 or QNAME2) hash matches with at least one SAM line - SEQ and QNAME 
     unsigned n_seq_qual_mch;    // Deep: count segconf lines where hash matches with at least one SAM line - SEQ and QUAL
-    unsigned n_seq_qname_mch[2];// Deep: count segconf lines where FASTQ (QNAME1 or QNAME2) hash matches with at least one SAM line - SEQ and QNAME 
     unsigned n_seq_mch;         // Deep: count segconf lines where hash matches with at least one SAM line - SEQ
     unsigned n_no_mch;          // Deep: count segconf lines that don't match any SAM line (perhaps because SAM is filtered)
     StrText optimized_qname;    // --optimize: prefix of optimized qname

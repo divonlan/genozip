@@ -56,7 +56,7 @@ void dict_io_assign_codecs (void)
 
         // assign CODEC_ARTB to dictionaries under 1KB (unless --best)
         else if (!flag.best && zctx->dict.len < 1 KB) 
-            zctx->dcodec = CODEC_ARITH8;
+            zctx->dcodec = CODEC_ARTB;
     }
 
     dispatcher_fan_out_task ("assign_dict_codecs", NULL, 0, "Writing dictionaries...", true, false, false, 0, 20000, true,

@@ -27,6 +27,7 @@
 #include "base64.h"
 #include "dict_io.h"
 #include "user_message.h"
+#include "huffman.h"
 
 TRANSLATOR_FUNC (piz_obsolete_translator)
 {
@@ -79,8 +80,9 @@ void asspiz_text (VBlockP vb, FUNCLINE)
     SNPRINTF (s, "%s", (vb->curr_item != DID_NONE ? CTX(vb->curr_item)->tag_name : "N/A"));
 
     progress_newline(); 
-    fprintf (stderr, "%s %s: Error in %s:%u line_in_file(1-based)=%"PRId64"%s %s%s stack=%s %s: ", 
-             str_time().s, LN_NAME, func, code_line, 
+    fprintf (stderr, "%s %s: Error in %s:%u vb_position_in_file: %"PRIu64" vb_recon_size(expected)=%u line_in_file(1-based)=%"PRId64"%s %s%s stack=%s %s: ", 
+             str_time().s, LN_NAME, func, code_line,
+             vb->vb_position_txt_file, vb->recon_size, 
              writer_get_txt_line_i ((VBlockP)(vb), vb->line_i), 
              cond_int (Z_DT(VCF), " sample_i=", vb->sample_i), 
              piz_dis_coords((VBlockP)(vb)).s, piz_dis_qname((VBlockP)(vb)).s, s.s, version_str().s); 
@@ -176,8 +178,10 @@ static inline void piz_adjust_one_local (ContextP ctx, BufferP local_buf, LocalT
 
 // PIZ compute thread: uncompress all contexts (in pair-2 of paired FASTQ: z_data contains contexts of both pairs)
 // ZIP compute thread in FASTQ: decompress pair_1 contexts when compressing pair_2
-void piz_uncompress_all_ctxs (VBlockP vb)
+void piz_uncompress_all_ctxs (VBlockP vb, PizUncompressReason reason)
 {
+    START_TIMER;
+
     bool vb_is_pair_2 = is_fastq_pair_2(vb); // is this VB a pair-2 FASTQ VB (either in a FASTQ or SAM z_file)
 
     for_buf (uint32_t, header_offset, vb->z_section_headers) {
@@ -293,15 +297,23 @@ void piz_uncompress_all_ctxs (VBlockP vb)
             }
 
         // prepare context index
+        ARRAY_alloc (ContextIndex, ctx_index, vb->num_contexts, false, vb->ctx_index, vb, "ctx_index");
         for_ctx
-            vb->ctx_index[ctx->did_i] = (ContextIndex){ .did_i = ctx->did_i, .dict_id = ctx->dict_id };
+            ctx_index[ctx->did_i] = (ContextIndex){ .did_i = ctx->did_i, .dict_id = ctx->dict_id };
     
-        qsort (vb->ctx_index, vb->num_contexts, sizeof (ContextIndex), sort_by_dict_id);
+        qsort (ctx_index, vb->num_contexts, sizeof (ContextIndex), sort_by_dict_id);
 
-        vb->has_ctx_index = true;
+        // vb->has_ctx_index = true;
     }
 
     if (flag.debug_or_test) buflist_test_overflows(vb, __FUNCTION__); 
+
+    switch (reason) {
+        case PUR_RECON             : COPY_TIMER (piz_uncompress_all_ctxs__recon);             break;
+        case PUR_FASTA_WRITER_INIT : COPY_TIMER (piz_uncompress_all_ctxs__fasta_writer_init); break;
+        case PUR_FASTQ_READ_R1     : COPY_TIMER (piz_uncompress_all_ctxs__fastq_read_r1);     break;
+        case PUR_SAM_LOAD_SAG      : COPY_TIMER (piz_uncompress_all_ctxs__sam_load_sag);      break;
+    }
 }
 
 // PIZ compute thread entry point
@@ -325,7 +337,7 @@ static void piz_reconstruct_one_vb (VBlockP vb)
                vb->recon_size * vb->translation.factor/*see TRANSLATIONS*/ + OVERFLOW_SIZE, 
                char, 1.1, "txt_data"); 
 
-    piz_uncompress_all_ctxs (vb);
+    piz_uncompress_all_ctxs (vb, PUR_RECON);
 
     DT_FUNC (vb, piz_recon_init)(vb);
 
@@ -369,14 +381,14 @@ void piz_read_all_ctxs (VBlockP vb, Section *sec/* VB_HEADER section */, bool is
 {
     START_TIMER;
 
-    for ((*sec)++; (*sec)->st == SEC_B250 || (*sec)->st == SEC_LOCAL; (*sec)++) {
+    for ((*sec)++; IS_B250(*sec) || IS_LOCAL(*sec); (*sec)++) {
         ASSERT (is_pair_data || vb->vblock_i == (*sec)->vblock_i, "expecting vb->vblock_i=%u == sec->vblock_i=%u", 
                 vb->vblock_i, (*sec)->vblock_i); // sanity
 
         // create a context even if section is skipped, for containers to work (skipping a section should be mirrored in a container filter)
         ContextP zctx = ctx_get_existing_zctx ((*sec)->dict_id); 
         ContextP vctx = CTX(zctx->did_i); // in PIZ z and vb contexts always have same did_i. This is also true for ZIP of R2, bc context was created by R1 and overlayed on this R2 VB.
-        bool is_local = ((*sec)->st == SEC_LOCAL);
+        bool is_local = IS_LOCAL(*sec);
         
         // don't assert for <=v11 due to bug (see comment in piz_uncompress_all_ctxs)
         ASSERT (!zctx->is_ctx_alias || !VER(12), "Found a %s section of %s, this is unexpected because %s is an alias (of %s)",
@@ -453,7 +465,7 @@ DataType piz_read_global_area (Reference ref)
 
     if (flag.show_stats) {
         stats_read_and_display();
-        if (is_genocat) return DT_NONE;
+        if (is_genocat) exit_ok;
     }
 
     user_message_display();
@@ -490,6 +502,8 @@ DataType piz_read_global_area (Reference ref)
         ctx_read_all_counts();   // read all SEC_COUNTS sections
 
         ctx_read_all_subdicts(); // read all SEC_SUBDICTS sections
+
+        huffman_piz_read_all();  // read all SEC_HUFFMAN sections
 
         // update chrom node indices using the CHROM dictionary, for the user-specified regions (in case -r/-R were specified)
         if (flag.regions) 
@@ -555,18 +569,17 @@ done:
     return z_file->data_type;
 }
 
-// main thread
-bool piz_read_one_vb (VBlockP vb, bool for_reconstruction)
+SectionHeaderVbHeader piz_read_vb_header (VBlockP vb)
 {
-    START_TIMER; 
-   
+    ASSERTISZERO (vb->z_data.len);
+
     Section sec = sections_vb_header (vb->vblock_i); 
     vb->comp_i  = sec->comp_i; // must be before zfile_read_section for sections_show_header to work 
     
-    int32_t vb_header_offset = zfile_read_section (z_file, vb, vb->vblock_i, &vb->z_data, "z_data", SEC_VB_HEADER, sec); 
-    ASSERT0 (vb_header_offset >= 0, "Unexpectedly VB_HEADER section was skipped");
+    ASSERT0 (0 == zfile_read_section (z_file, vb, vb->vblock_i, &vb->z_data, "z_data", SEC_VB_HEADER, sec),
+             "Unexpectedly VB_HEADER section was skipped");
 
-    SectionHeaderVbHeader header = *(SectionHeaderVbHeaderP)Bc (vb->z_data, vb_header_offset); // copy of header as it will be overwritten in piz_read_all_ctxs
+    SectionHeaderVbHeader header = *B1ST (SectionHeaderVbHeader, vb->z_data);
 
     // any of these might be overridden by callback
     vb->flags            = header.flags.vb_header;
@@ -592,21 +605,33 @@ bool piz_read_one_vb (VBlockP vb, bool for_reconstruction)
     // because the dispatcher is re-initialized for every txt component
     if (flag.unbind) vb->vblock_i = BGEN32 (header.vblock_i);
 
+    return header;
+}
+
+// main thread
+bool piz_read_one_vb (VBlockP vb, bool for_reconstruction)
+{
+    START_TIMER; 
+    
+    SectionHeaderVbHeader header = piz_read_vb_header (vb);
+
     if (flag_is_show_vblocks (PIZ_TASK_NAME)) 
-        iprintf ("READING(id=%d) vb=%s num_lines=%u recon_size=%u genozip_size=%u longest_line_len=%u\n",
-                 vb->id, VB_NAME, vb->lines.len32, vb->recon_size, BGEN32 (header.z_data_bytes), vb->longest_line_len);
+        iprintf ("READING(id=%d) vb=%s num_lines=%u recon_size=%u genozip_size=%u longest_line_len=%u %s\n",
+                 vb->id, VB_NAME, vb->lines.len32, vb->recon_size, BGEN32 (header.z_data_bytes), vb->longest_line_len, 
+                 flag.preprocessing ? "preprocessing=true" : "");
 
     ctx_overlay_dictionaries_to_vb (VB); // overlay all dictionaries to the vb 
 
     buf_alloc (vb, &vb->z_section_headers, MAX_DICTS * 2, 0, uint32_t, 0, "z_section_headers"); // room for section headers  
 
-    BNXT32 (vb->z_section_headers) = vb_header_offset; // vb_header_offset is always 0 for VB header
+    BNXT32 (vb->z_section_headers) = 0; // vb_header_offset is always 0 for VB header
 
     piz_initialize_ctx_flags_from_vb_1 (vb);
 
     DT_FUNC (vb, piz_after_vb_header)(vb);
 
     // read all b250 and local of all fields and subfields
+    Section sec = sections_vb_header (vb->vblock_i); 
     piz_read_all_ctxs (vb, &sec, false);
 
     bool ok_to_compute = DT_FUNC_OPTIONAL (vb, piz_init_vb, true)(vb, &header);
@@ -753,8 +778,7 @@ Dispatcher piz_z_file_initialize (void)
 }
 
 // main thread: called once per txt_file created: i.e. once, except if unbinding a paired FASTQ, or a Deep file.
-// returns true if piz completed, false if piz aborted by piz_initialize
-bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last_z_file,
+void piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last_z_file,
                        CompIType first_comp_i, CompIType last_comp_i, // COMP_NONE unless flag.unbind
                        bool allow_skip_cleaning)
 {
@@ -762,11 +786,12 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
     
     // generate z_file->piz_reading_list and z_file->recon_plan 
     writer_create_plan (first_comp_i == COMP_NONE ? COMP_MAIN : first_comp_i);
+    if (is_genocat && (flag.show_reading_list || flag.show_recon_plan)) return;
 
     recon_stack_initialize();
     
     if (DTPZ(piz_initialize) && !DTPZ(piz_initialize)(first_comp_i))
-        return false; // abort PIZ if piz_initialize says so
+        return; // abort PIZ if piz_initialize says so
       
     bool header_only_file = true; // initialize - true until we encounter a VB header
     uint64_t num_nondrop_lines = 0;
@@ -799,7 +824,7 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
             }
 
             // case SEC_TXT_HEADER
-            else if (sec->st == SEC_TXT_HEADER) { 
+            else if (IS_TXT_HEADER(sec)) { 
                 if (sec->vblock_i >= 2) continue; // fragments >= 2 were already handled together with the first fragment
                 
                 // note: also starts writer, and if unbinding, also opens the txt file and hands data over to the writer
@@ -899,6 +924,4 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
     if (flag.show_time && ((flag.show_time_comp_i >= first_comp_i && flag.show_time_comp_i <= last_comp_i) || 
                            (first_comp_i == COMP_NONE && flag.show_time_comp_i != COMP_ALL)))
         profiler_add_evb_and_print_report();
-
-    return true;
 }

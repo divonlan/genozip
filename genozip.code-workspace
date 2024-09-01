@@ -53,7 +53,15 @@
 			"compare": "c",
 			"context.h": "c",
 			"cmath": "c",
-			"zip.h": "c"
+			"zip.h": "c",
+			"limits": "c",
+			"algorithm": "c",
+			"atomic": "c",
+			"cstdint": "c",
+			"ratio": "c",
+			"random": "c",
+			"string": "c",
+			"string_view": "c"
 		}
 	}
 }

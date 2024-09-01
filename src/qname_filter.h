@@ -10,6 +10,6 @@
 
 #include "genozip.h"
 
-extern void qname_filter_initialize_from_file (rom filename);
-extern void qname_filter_initialize_from_opt (rom opt);
-extern bool qname_filter_does_line_survive (STRp(qname));
+extern void qname_filter_initialize_from_file (rom filename, CompIType comp_i);
+extern void qname_filter_initialize_from_opt (rom opt, CompIType comp_i);
+extern bool qname_filter_does_line_survive (VBlockP vb, STRp(qname));

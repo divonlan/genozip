@@ -297,6 +297,15 @@ void inc_disk_gz_uncomp_or_trunc_(FileP file, uint64_t inc, FUNCLINE)
         iprintf ("%s:%u: disk_gz_uncomp_or_trunc + %"PRIu64"\t= %"PRIu64"\n", func, code_line, inc, file->disk_gz_uncomp_or_trunc); 
 }
 
+static bool is_header_prefix (bytes header, STR8p(prefix))
+{
+    for (uint32_t i=0; i < prefix_len; i++)
+        if (prefix[i] != header[i] && prefix[i] != '\b')
+            return false;
+
+    return true;
+}
+
 static GzStatus mgzip_block_verify_header (FileP file, bool discovering, int header_len, STR8p(prefix))
 {
     FILE *fp = (FILE *)file->file;
@@ -331,7 +340,7 @@ static GzStatus mgzip_block_verify_header (FileP file, bool discovering, int hea
     }
 
     // case: this is GZIP block (by the magic) but it is NOT a valid BGZF block (see: https://samtools.github.io/hts-specs/SAMv1.pdf)
-    else if (memcmp (h, prefix, prefix_len)) {
+    else if (!is_header_prefix (h, prefix, prefix_len)) {
         if (discovering)
             return GZ_IS_OTHER_FORMAT;
         else 
@@ -1515,7 +1524,7 @@ rom bgzf_library_name (MgzipLibraryType library, bool long_name)
 // used by test/Makefile
 void il1m_compress (void)
 {
-    void *compressor = libdeflate_alloc_compressor (evb, 5, __FUNCLINE); 
+    void *compressor = libdeflate_alloc_compressor (evb, flag.fast?1 : flag.best?9 : 5, __FUNCLINE); 
 
     uint8_t *in = MALLOC (1 MB), *out = MALLOC (2 MB);
     uint32_t in_len;
@@ -1527,8 +1536,9 @@ void il1m_compress (void)
         ASSERT (out_len, "deflate failed: in_len=%u block_i=%u", in_len, i);
 
         ASSERT0 (1 == fwrite (_S(IL1M_HEADER), 1, stdout), "fwrite failed #1");
-        ASSERT  (1 == fwrite (STRa(out), 1, stdout), "fwrite failed: #2 out_len=%u", out_len);
-        ASSERT0 (1 == fwrite (&footer, sizeof (footer), 1, stdout), "fwrite failed #3");
+        ASSERT0 (1 == fwrite (flag.best?"\x02\x03" : flag.fast?"\x04\x03" : "\x00\x03", 2, 1, stdout), "fwrite failed #2");        
+        ASSERT  (1 == fwrite (STRa(out), 1, stdout), "fwrite failed: #3 out_len=%u", out_len);
+        ASSERT0 (1 == fwrite (&footer, sizeof (footer), 1, stdout), "fwrite failed #4");
     }
 
     fflush (stdout);

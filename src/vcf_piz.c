@@ -127,7 +127,7 @@ void vcf_piz_insert_field (VBlockVCFP vb, ContextP ctx, STRp(value))
         Ltxt += move_by;
 
         // note: keep txt_data.len 64b to detect bugs
-        ASSPIZ (Rtxt, "txt_data overflow: len=%"PRIu64" > size=%"PRIu64". vb->txt_data dumped to %s.gz", 
+        ASSPIZ (Rtxt, "txt_data overflow: len=%"PRIu64" > size=%"PRIu64". vb->txt_data dumped to %s", 
                 vb->txt_data.len, (uint64_t)vb->txt_data.size, txtfile_dump_vb (VB, z_name, NULL).s);
         
         // adjust last_txt of other INFO contexts that might need insertion (and hence last_txt)

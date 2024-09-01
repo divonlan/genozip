@@ -33,6 +33,7 @@
 #include "zriter.h"
 #include "b250.h"
 #include "zip_dyn_int.h"
+#include "huffman.h"
 
 static void zip_display_compression_ratio (Digest md5)
 {
@@ -420,11 +421,19 @@ static void zip_write_global_area (void)
     THREAD_DEBUG (compress_dictionaries);
     dict_io_compress_dictionaries(); 
 
+    // QNAME huffman codes (needed if gencomp or deep)
+    if (z_sam_gencomp || flag.deep) 
+        huffman_compress_section (SAM_QNAME);
+
     THREAD_DEBUG (compress_counts);
     ctx_compress_counts();
 
     THREAD_DEBUG (compress_subdicts);
     ctx_compress_subdicts();
+
+    // reconstruction plan SAM with gencomp
+    if (z_sam_gencomp) 
+        sam_zip_compress_sec_gencomp();
 
     // store a mapping of the file's chroms to the reference's contigs, if they are any different
     // note: not needed in REF_EXT_STORE, as we convert the stored ref_contigs to use chrom_index of the file's CHROM
@@ -595,7 +604,7 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
 
     else {        
         // --head diagnostic option in ZIP cuts a certain number of first lines from vb=1, and discards other VBs
-        if (vb->vblock_i != 1 && flag.has_head) {
+        if (vb->vblock_i != 1 && flag_has_head) {
             vb->dispatch = DATA_EXHAUSTED;
             return;
         }
@@ -692,7 +701,6 @@ void zip_one_file (rom txt_basename,
                    bool is_last_user_txt_file)  // the last user-specified txt file in this execution
 {
     Dispatcher dispatcher = 0;
-    dispatcher_start_wallclock();
     if (flag.show_time_comp_i == flag.zip_comp_i) profiler_initialize(); // re-start wallclock
 
     z_file->txt_data_so_far_single = 0;
@@ -733,6 +741,8 @@ void zip_one_file (rom txt_basename,
 
     uint64_t target_progress = zip_get_target_progress(); // estimate based on segconf data
 
+    dispatcher_start_wallclock(); // after any preprocessing (used for calculating remaining time)
+
     dispatcher = dispatcher_fan_out_task (
         ZIP_TASK_NAME, txt_basename, 
         target_progress,      // target progress: 1 for each read, compute, write
@@ -751,7 +761,7 @@ void zip_one_file (rom txt_basename,
     bool appending = false;
     ASSERT (txt_file->disk_so_far == txt_file->disk_size || // all good: entire file was read from disk
             !txt_file->disk_size                         || // we don't know the disk size (e.g. redirected) 
-            flag.has_head                                || // only of a subset of the file was compressed, at user request
+            flag_has_head                                || // only of a subset of the file was compressed, at user request
             is_read_via_ext_decompressor (txt_file)      || // we don't know how much was read from disk, because an external process did the reading
             (!txt_file->is_remote && !txt_file->redirected && flag.truncate && (appending = (txt_file->disk_size != file_get_size (txt_file->name)))), // edge case: compressed a local file while it was being appended (e.g. while downloading)
             "Failed to compress entire file: file size is %s, but only %s bytes were compressed",
@@ -762,7 +772,7 @@ void zip_one_file (rom txt_basename,
     bgzf_finalize_discovery(); 
 
     // verify that the entire data is either decompressed or truncated away (doesn't work for external decompressors)
-    ASSERT (txt_file->disk_gz_uncomp_or_trunc == txt_file->disk_so_far || !TXT_IS_GZIP || flag.has_head,
+    ASSERT (txt_file->disk_gz_uncomp_or_trunc == txt_file->disk_so_far || !TXT_IS_GZIP || flag_has_head,
             "Failed to process all source data: read %s bytes from disk, but decompressed %sonly %s bytes. src_codec=%s",
             str_int_commas (txt_file->disk_so_far).s, flag.truncate ? "or truncated " : "", str_int_commas (txt_file->disk_gz_uncomp_or_trunc).s,
             txtfile_codec_name (z_file, flag.zip_comp_i, false).s);
@@ -790,11 +800,8 @@ finish:
     z_file->txt_file_disk_sizes_sum += z_file->txt_file_disk_sizes[flag.zip_comp_i];
 
     // (re-)index sections after adding this txt_file 
-    sections_create_index(); 
-
-    // reconstruction plan SAM with gencomp
-    if (!flag.seg_only && z_sam_gencomp) 
-        sam_zip_compress_sec_gencomp();
+    if (!flag.make_reference)
+        sections_create_index(); 
 
     if (z_file->z_closes_after_me && !flag.seg_only) { 
         // if we used the aligner with REF_EXT_STORE, we make sure all the CHROMs referenced are in the CHROM context, so

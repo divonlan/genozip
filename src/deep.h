@@ -43,10 +43,10 @@ extern uint32_t deep_seq_hash (VBlockP vb, STRp(seq), bool is_revcomp);
 // hash of forward, qual. note: qual_hash=0 means "QUAL not hashed", so both crc32=0 and crc32=1 get mapped to hash=1
 extern uint32_t deep_qual_hash (VBlockP vb, STRp(qual), bool is_revcomp);
 
-// hash of qname (note: in FASTQ qname is the part of DESC up to the first whitespace)
-static inline uint32_t deep_qname_hash (QType q, STRp(qname), uint32_t *uncanonical_suffix_len) 
+// ZIP: hash of canonical qname (note: in FASTQ qname is the part of DESC up to the first whitespace)
+static inline uint32_t deep_qname_hash (QType q, STRp(qname), thool is_last, uint32_t *uncanonical_suffix_len) 
 { 
-    return qname_calc_hash (q, STRa(qname), unknown, true, uncanonical_suffix_len); 
+    return qname_calc_hash (q, COMP_NONE, STRa(qname), is_last, true, uncanonical_suffix_len); 
 }
 
 //-----------------------------------------------------------------------
@@ -96,8 +96,7 @@ typedef struct { // 1 byte
     uint8_t seq_encoding      : 3; // SEQ encoding according to PizZDeepSeqEncoding
     uint8_t is_long_seq       : 1; // is seq_len greater than 255
     uint8_t is_long_qual_comp : 1; // is qual_comp_len greater than 255
-    uint8_t is_qname_comp     : 1; // QNAME suffix is compressed
-    uint8_t unused            : 2;
+    uint8_t unused            : 3;
 } PizZDeepFlags;
 
 extern rom by_names[2];

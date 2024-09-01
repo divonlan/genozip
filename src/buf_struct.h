@@ -46,6 +46,7 @@ typedef struct Buffer {        // 72 bytes
         struct { uint32_t consumed_by_prev_vb;      // vb->gz_blocks: bytes of the first BGZF block consumed by the prev VB or txt_header
                  uint32_t current_bb_i;          }; // index into vb->gz_blocks of first bgzf block of current line
         struct { uint32_t next_index, next_line; }; // used by z_file->gencomp_vb_lines for building recon plan
+        CompIType prev_comp_i;                      // used by vb->vb_plan
     };
     union {
         uint64_t len;          // used by the buffer user according to its internal logic. not modified by malloc/realloc, zeroed by buf_free (in Bits - nwords)
@@ -183,8 +184,11 @@ extern void buf_move_do (VBlockP vb, BufferP dst_buf, rom dst_name, BufferP src_
 extern void buf_grab_do (VBlockP dst_vb, BufferP dst_buf, rom dst_name, BufferP src_buf, FUNCLINE);
 #define buf_grab(dst_vb, dst_buf, dst_name, src_buf) buf_grab_do ((VBlockP)(dst_vb), &(dst_buf), (dst_name), &(src_buf), __FUNCLINE)
 
-void buf_disown_do (VBlockP vb, BufferP src_buf, BufferP dst_buf, bool make_a_copy, FUNCLINE);
+extern void buf_disown_do (VBlockP vb, BufferP src_buf, BufferP dst_buf, bool make_a_copy, FUNCLINE);
 #define buf_disown(vb, src_buf, dst_buf, make_a_copy) buf_disown_do ((vb), &(src_buf), &(dst_buf), (make_a_copy), __FUNCLINE)
+
+extern void buf_extract_data_do (BufferP buf, char **data_p, uint64_t *len_p, uint32_t *len32_p, char **memory_p, FUNCLINE);
+#define buf_extract_data(buf, data_p, len_p, len32_p, memory_p) buf_extract_data_do (&(buf), (data_p), (len_p), (len32_p), (memory_p), __FUNCLINE)
 
 extern void buf_verify_do (ConstBufferP buf, rom msg, FUNCLINE);
 #define buf_verify(buf, msg) buf_verify_do (&(buf), (msg), __FUNCLINE)
@@ -216,13 +220,13 @@ extern void buf_low_level_release_memory_back_to_kernel (void);
 extern void buf_set_shared (BufferP buf);
 extern void buf_remove_spinlock (BufferP buf);
 
-extern void buf_overlay_do (VBlockP vb, BufferP top_buf, BufferP bottom_buf, uint64_t start_in_bottom, FUNCLINE, rom name);
+extern void buf_overlay_do (VBlockP vb, BufferP top_buf, BufferP bottom_buf, uint64_t start_in_bottom, bool copy_len, FUNCLINE, rom name);
 #define buf_overlay(vb, top_buf, bottom_buf, name) \
-    buf_overlay_do((VBlockP)(vb), (top_buf), (bottom_buf), 0, __FUNCLINE, (name)) 
+    buf_overlay_do((VBlockP)(vb), (top_buf), (bottom_buf), 0, true, __FUNCLINE, (name)) 
 
-// note: partially OVERLAY buffers MUST be freed before their regular_buf 
-#define buf_overlay_partial(vb, top_buf, bottom_buf, start_in_regular, name) \
-    buf_overlay_do((VBlockP)(vb), (top_buf), (bottom_buf), (start_in_regular), __FUNCLINE, (name)) 
+// note: partially OVERLAY buffers MUST be freed before their bottom_buf 
+#define buf_overlay_partial(vb, top_buf, bottom_buf, start_in_bottom, name) \
+    buf_overlay_do((VBlockP)(vb), (top_buf), (bottom_buf), (start_in_bottom), false, __FUNCLINE, (name)) 
 
 extern uint64_t buf_mem_size (ConstBufferP buf);
 

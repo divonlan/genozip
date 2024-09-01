@@ -28,7 +28,7 @@ QnameFlavor qname_get_optimize_qf (void)
 
 static inline Did did_by_q (QType q) 
 {
-    ASSERT (IN_RANGE (q, 0, NUM_QTYPES), "Invalid q=%d", q);
+    ASSERTINRANGE (q, 0, NUM_QTYPES);
 
     return (Did[]){ FASTQ_QNAME, FASTQ_QNAME2, FASTQ_LINE3 }[q]; // note: SAM and FASTQ have the same dids for QNAMEs
 }
@@ -737,21 +737,23 @@ done:
 }
 
 // reduces qname to its canonical form: possibly reduces qname_len to make a qname more likely compareble between SAM/BAM and FASTQ 
-void qname_canonize (QType q, rom qname, uint32_t *qname_len)
+void qname_canonize (QType q, rom qname, uint32_t *qname_len, CompIType comp_i/*only use in PIZ*/)
 {
-    QnameFlavorProp *f = &segconf.flav_prop[q];
+    QnameFlavorProp f = IS_ZIP                                 ? segconf.flav_prop[q] 
+                      : (Z_DT(SAM) && comp_i <= SAM_COMP_DEPN) ? z_file->flav_prop[SAM_COMP_MAIN][q] // DEPN and PRIM don't have a TxtHeader section
+                      :                                          z_file->flav_prop[comp_i][q];
 
-    if (!f->is_tokenized) {
+    if (!f.is_tokenized) {
         // mated: "HSQ1004:134:C0D8DACXX:3:1101:1318:114841/2" ⟶ "HSQ1004:134:C0D8DACXX:3:1101:1318:114841"
         // SRA2:  "ERR2708427.177.1" ⟶ "ERR2708427.177"
-        if (f->is_mated && *qname_len > 2) 
+        if (f.is_mated && *qname_len > 2) 
             *qname_len -= 2;
 
         // eg: "NOVID_3053_FC625AGAAXX:6:1:1069:11483:0,84" ⟶ "NOVID_3053_FC625AGAAXX:6:1:1069:11483"
         // note: it is possible that QNAME has both the mate and the cnn removed
-        if (f->cnn) {
+        if (f.cnn) {
             static char cnn_to_char[NUM_CNN] = CNN_TO_CHAR;
-            rom cut = memrchr (qname + 1, cnn_to_char[f->cnn], *qname_len); // +1 so at least one character survives
+            rom cut = memrchr (qname + 1, cnn_to_char[f.cnn], *qname_len); // +1 so at least one character survives
             if (cut) *qname_len = cut - qname;
         }
     }
@@ -766,11 +768,18 @@ void qname_canonize (QType q, rom qname, uint32_t *qname_len)
     }
 }
 
-uint32_t qname_calc_hash (QType q, STRp(qname), thool is_last, bool canonical, 
+uint32_t qname_hash_change_last (uint32_t hash, bool is_last)
+{
+    return (hash & 0xfffffffe) | is_last;
+}
+
+// ZIP: used for syncing DEPN/PRIM in gencomp and SAM/FASTQ in deep, and for scanning a SAM/BAM  
+// PIZ: used for qname filters.
+uint32_t qname_calc_hash (QType q, CompIType comp_i/*only used in PIZ*/, STRp(qname), thool is_last, bool canonical, 
                           uint32_t *uncanonical_suffix_len) // optional out
 {
     uint32_t save_qame_len = qname_len;
-    if (canonical) qname_canonize (q, qSTRa(qname)); // might shorten qname_len, does not modify the qname string
+    if (canonical) qname_canonize (q, qSTRa(qname), comp_i); // might shorten qname_len, does not modify the qname string
 
     if (uncanonical_suffix_len) 
         *uncanonical_suffix_len = save_qame_len - qname_len;

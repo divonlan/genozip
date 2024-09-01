@@ -118,7 +118,8 @@ typedef struct ContigPkg *ContigPkgP;
 typedef const struct ContigPkg *ConstContigPkgP;
 typedef const struct QnameFlavorStruct *QnameFlavor; 
 typedef struct DispatcherData *Dispatcher;
-typedef struct Huffman *HuffmanP;
+typedef struct HuffmanChewer *HuffmanChewerP;
+typedef struct HuffmanCodes *HuffmanCodesP;
 
 typedef struct { char s[80];    } StrText;
 typedef struct { char s[1024];  } StrTextLong;
@@ -260,8 +261,8 @@ typedef packed_enum { // 1 byte
 
     // simple codecs used in genozip files
     CODEC_LZMA=4, CODEC_BSC=5, /*CODEC_BZ2=3,*/
-    CODEC_RANS8=6, CODEC_RANS32=7, CODEC_RANS8_pack=8, CODEC_RANS32_pack=9, 
-    CODEC_ARITH8=16, CODEC_ARITH32=17, CODEC_ARITH8_pack=18, CODEC_ARITH32_pack=19, 
+    CODEC_RANB=6 /*8 bit*/, CODEC_RANW=7 /*32 bit*/, CODEC_RANb=8 /*8 bit packed*/, CODEC_RANw=9 /*32 bit packed*/, 
+    CODEC_ARTB=16/*8 bit*/, CODEC_ARTW=17/*32 bit*/, CODEC_ARTb=18/*8 bit packed*/, CODEC_ARTw=19/*32 bit packed*/, 
 
     // complex codecs used in genozip files
     CODEC_ACGT    = 10, CODEC_XCGT = 11, // compress sequence data - slightly better compression LZMA, 20X faster (these compress NONREF and NONREF_X respectively)
@@ -306,6 +307,7 @@ typedef packed_enum { // 1 byte
     SEC_SUBDICTS        = 19, // Global section: introduced 15.0.25
     SEC_USER_MESSAGE    = 20, // Global section: introduced 15.0.30
     SEC_GENCOMP         = 21, // Section belonging to the SAM component (optional): used for SAM gencomp since v15.0.64
+    SEC_HUFFMAN         = 22, // Section belonging to the SAM component (optional): huffman compression codes of QNAME (could be used for other data in the future)
     NUM_SEC_TYPES 
 } SectionType;
 
@@ -355,6 +357,7 @@ typedef int ThreadId;
 #define SQR(x) ((x)*(x)) 
 #endif
 
+#define MINIMIZE(var,new_val) ({ if ((new_val) < (var)) var = (new_val); })
 #define MAXIMIZE(var,new_val) ({ if ((new_val) > (var)) var = (new_val); })
 
 #define IN_RANGE(x,min,after) ((x) >= (min) && (x) < (after)) // half_open [min,after)
@@ -408,37 +411,39 @@ typedef SORTER ((*Sorter));
     SORTER (func_name) { return DESCENDING (struct_type, struct_field); }
 
 // declaration of binary search recursive function - array of struct, must be sorted ascending by field
-typedef enum { ReturnLower, ReturnHigher, ReturnNULL } BinarySearchIfNotExact; 
+typedef enum { IfNotExact_ReturnLower, IfNotExact_ReturnHigher, IfNotExact_ReturnNULL, IfNotExact_Error } BinarySearchIfNotExact; 
 #define BINARY_SEARCHER(func, struct_type, field_type, struct_field,                                                    \
                         is_unique,    /* if false, we return the first entry of requested value */                      \
-                        if_not_exact) /* what to do if exact match is not found. Note: if ReturnLower, and value is less than the first, will return pointer to an item before the first. Likewise with ReturnHigher */ \
+                        if_not_exact) /* what to do if exact match is not found. Note: if IfNotExact_ReturnLower, and value is less than the first, will return pointer to an item before the first. Likewise with IfNotExact_ReturnHigher */ \
     struct_type *func (struct_type *first, struct_type *last, field_type value, int level)                              \
     {                                                                                                                   \
         ASSERT (level < 50, "recursion too deep (level=50) first=%p last=%p", first, last);                             \
-        if (first > last) /* not found */                                                                               \
-            return if_not_exact==ReturnNULL?NULL : if_not_exact==ReturnLower?last : first;                              \
-        struct_type *mid = first + (last - first) / 2, *ret;                                                            \
-        if (mid->struct_field == value) return mid;                                                                     \
-        ret = (mid->struct_field > value) ? func (first, mid-1, value, level+1) : func (mid+1, last, value, level+1);   \
-        if (!(is_unique) && level==0 && ret)  /* possibly multiple entries with value - move back to the first (note: we can only do this when back in level=0 where "first" is the true first entry) */\
-            while (ret > first && (ret-1)->struct_field == value) ret--;                                                \
-        return ret;                                                                                                     \
+        if (first > last) { /* not found */                                                                             \
+            ASSERT (if_not_exact!=IfNotExact_Error, "requested %s=%"PRIu64" not found", #struct_field, (uint64_t)value);\
+            return if_not_exact==IfNotExact_ReturnNULL?NULL : if_not_exact==IfNotExact_ReturnLower?last : first;        \
+        }                                                                                                               \
+        struct_type *mid = first + (last - first) / 2;                                                                  \
+        if (mid->struct_field == value)                                                                                 \
+            return (is_unique || mid == first || (mid->struct_field != (mid-1)->struct_field))                          \
+                ? mid /* found and element is known to be unique, or is verified to be the first */                     \
+                : func (first, mid-1, value, level+1); /* found, but it isn't first: continue searching for the first */\
+        return (mid->struct_field > value) ? func (first, mid-1, value, level+1) : func (mid+1, last, value, level+1);  \
     }
 
 // declaration of binary search recursive function - array of integral (i.e. comparable) values, must be sorted ascending
 #define BINARY_SEARCHER_INTEGRAL(func, element_type,                                                                    \
                                  is_unique,    /* if false, we return the first entry of requested value*/              \
-                                 if_not_exact) /* what to do if exact match is not found. Note: if ReturnLower, and value is less than the first, will return pointer to an item before the first. Likewise with ReturnHigher */ \
+                                 if_not_exact) /* what to do if exact match is not found. Note: if IfNotExact_ReturnLower, and value is less than the first, will return pointer to an item before the first. Likewise with IfNotExact_ReturnHigher */ \
     element_type *func (element_type *first, element_type *last, element_type value, int level)                         \
     {                                                                                                                   \
         if (first > last) /* not found */                                                                               \
-            return if_not_exact==ReturnNULL?NULL : if_not_exact==ReturnLower?last : first;                              \
-        element_type *mid = first + (last - first) / 2, *ret;                                                           \
-        if (*mid == value) return mid;                                                                                  \
-        ret = (*mid > value) ? func (first, mid-1, value, level+1) : func (mid+1, last, value, level+1);               \
-        if (!(is_unique) && level==0 && ret)  /* possibly multiple entries with value - move back to the first (note: we can only do this when back in level=0 where "first" is the true first entry) */\
-            while (ret > first && *(ret-1) == value) ret--;                                                             \
-        return ret;                                                                                                     \
+            return if_not_exact==IfNotExact_ReturnNULL?NULL : if_not_exact==IfNotExact_ReturnLower?last : first;        \
+        element_type *mid = first + (last - first) / 2;                                                                 \
+        if (*mid == value)                                                                                              \
+            return (is_unique || mid == first || (*mid != *(mid-1)))                                                    \
+                ? mid /* found and element is known to be unique, or is verified to be the first */                     \
+                : func (first, mid-1, value, level+1); /* found, but it isn't first: continue searching for the first */\
+        return (*mid > value) ? func (first, mid-1, value, level+1) : func (mid+1, last, value, level+1);               \
     }
 
 // actually do a binary search. buf is required to be sorted in an ascending order of field
@@ -502,8 +507,10 @@ typedef enum { ReturnLower, ReturnHigher, ReturnNULL } BinarySearchIfNotExact;
 #define STRp(x)  rom x,   uint32_t x##_len    
 #define STR8p(x) bytes x, uint32_t x##_len    
 #define STRc(x)  char *x, uint32_t x##_len  // string is fixed-length, but editable 
+#define STR8c(x) uint8_t *x, uint32_t x##_len  // string is fixed-length, but editable 
 #define pSTRp(x) rom *x,  uint32_t *x##_len  
 #define qSTRp(x) char *x, uint32_t *x##_len // function populates a string and updates its length
+#define qSTR8p(x) uint8_t *x, uint32_t *x##_len 
 #define STRps(x) uint32_t n_##x##s, rom *x##s, const uint32_t *x##_lens  
 
 // Strings - function arguments
@@ -704,6 +711,9 @@ extern StrText license_get_number (void);
 #define ASSERTNOTZEROn(n,name)               ASSERT ((n), "%s: %s=0", (name), #n)
 #define ASSERTNOTZERO(n)                     ASSERT ((n), "%s=0", #n)
 #define ASSERTISZERO(n)                      ASSERT (!(n), "%s!=0", #n)
+#define ASSERTINRANGE(n, min, after)         ASSERT (IN_RANGE((n), (min), (after)), "%s=%"PRId64" ∉ [%"PRId64",%"PRId64"]", #n, (int64_t)(n), (int64_t)(min), ((int64_t)(after))-1)
+#define ASSERTINRANGX(n, min, max)           ASSERTINRANGE((n), (min), (max)+1)
+
 #define ASSERTW(condition, format, ...)      ( { if (__builtin_expect (!(condition), 0) && !flag.quiet) { progress_newline(); fprintf (stderr, "\n%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n\n"); fflush (stderr); }} )
 #define WARN_IF(condition, format, ...)      ( { if (__builtin_expect ((condition), 0) && !flag.explicit_quiet) { progress_newline(); fprintf (stderr, "%s: WARNING: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n\n"); fflush (stderr); }} )
 #define ASSERTW0(condition, string)          ASSERTW ((condition), string "%s", "")

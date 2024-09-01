@@ -15,8 +15,9 @@
 
 extern uint32_t txtfile_fread (FileP file, FILE *fp, void *addr, int32_t size, int64_t *disk_so_far);
 extern void txtfile_fwrite (const void *data, uint32_t size);
+extern void txtfile_query_first_bytes_in_file (rom filename, uint32_t len);
 extern void txtfile_initialize_igzip (FileP file);
-extern StrTextLong txtfile_dump_vb (VBlockP vb, rom base_name, BufferP txt_data);
+extern StrText txtfile_dump_vb (VBlockP vb, rom base_name, BufferP txt_data);
 extern StrTextLong txtfile_codec_name (FileP z_file, CompIType comp_i, bool obscure_fname);
 extern void txtfile_zip_finalize_codecs (void);
 extern void txtfile_read_header (bool is_first_txt);

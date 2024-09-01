@@ -311,8 +311,9 @@ VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompITy
     }
     
     if (flag_is_show_vblocks (task_name)) 
-        iprintf ("VB_GET_VB(task=%s id=%u) vb_i=%s/%d num_in_use=%u/%u\n", 
-                  task_name, vb->id, comp_name (vb->comp_i), vb->vblock_i, num_in_use, pool->num_vbs);
+        iprintf ("VB_GET_VB(task=%s id=%u) vb_i=%s/%d num_in_use=%u/%u%s\n", 
+                  task_name, vb->id, comp_name (vb->comp_i), vb->vblock_i, num_in_use, pool->num_vbs,
+                  flag.preprocessing ? " preprocessing" : "");
 
     threads_log_by_vb (vb, task_name, "GET VB", 0);
 

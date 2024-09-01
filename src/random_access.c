@@ -253,11 +253,10 @@ void random_access_finalize_entries (BufferP ra_buf)
 
     // use sorter to consturct a sorted RA
     static Buffer sorted_ra_buf = {}; // must be static because its added to buf_list
-    buf_alloc (evb, &sorted_ra_buf, 0, ra_buf->len, RAEntry, 1, ra_buf->name);
-    sorted_ra_buf.len = ra_buf->len;
+    buf_alloc_exact (evb, sorted_ra_buf, ra_buf->len, RAEntry, ra_buf->name);
 
-    for (uint32_t i=0; i < ra_buf->len32; i++) 
-        *B(RAEntry, sorted_ra_buf, i) = *B(RAEntry, *ra_buf, sorter[i]);
+    for_buf2 (RAEntry, sorted_ra, i, sorted_ra_buf)
+        *sorted_ra = *B(RAEntry, *ra_buf, sorter[i]);
 
     // replace ra_buf with sorted one
     buf_destroy (*ra_buf);
@@ -316,23 +315,10 @@ done:
 // PIZ stuff
 // --------------------
 
-// PIZ: binary search for first entry of vb_i, using the fact that in random_access_finalize_entries (in ZIP) we sorted the entries by vb_i
-static const RAEntry *random_access_get_first_ra_of_vb_do (VBIType vb_i, const RAEntry *first_ra, const RAEntry *last_ra)
-{
-    if (first_ra > last_ra) return NULL; // vb_i not found
+static BINARY_SEARCHER (random_access_get_first_ra_of_vb_do, RAEntry, VBIType, vblock_i, false, IfNotExact_ReturnNULL)
 
-    const RAEntry *mid_ra = first_ra + ((last_ra - first_ra) / 2);
-    bool first_ra_in_vb = (mid_ra == B1ST (RAEntry, z_file->ra_buf)) || (mid_ra->vblock_i != (mid_ra-1)->vblock_i);
-
-    if (mid_ra->vblock_i < vb_i) 
-        return random_access_get_first_ra_of_vb_do (vb_i, mid_ra+1, last_ra);
-
-    if (mid_ra->vblock_i > vb_i || !first_ra_in_vb)
-        return random_access_get_first_ra_of_vb_do (vb_i, first_ra, mid_ra-1);
-
-    return mid_ra;
-}
-#define random_access_get_first_ra_of_vb(vb_i) random_access_get_first_ra_of_vb_do (vb_i, B1ST (RAEntry, z_file->ra_buf), BLST (RAEntry, z_file->ra_buf))
+// ZIP/PIZ: binary search for first entry of vb_i (in ZIP random_access_finalize_entries sorted the array by vb_i)
+#define random_access_get_first_ra_of_vb(vb_i) binary_search (random_access_get_first_ra_of_vb_do, RAEntry, z_file->ra_buf, (vb_i))
 
 bool random_access_has_filter (void)
 {
@@ -404,6 +390,7 @@ void random_access_load_ra_section (SectionType sec_type, Did chrom_did_i, Buffe
     }
 }
 
+// ZIP
 void random_access_get_ra_info (VBIType vblock_i, WordIndex *chrom_index, PosType64 *min_pos, PosType64 *max_pos)
 {
     const RAEntry *ra = random_access_get_first_ra_of_vb (vblock_i);

@@ -22,8 +22,8 @@
 static VBlockP real_evb;
 static VBlockP scan_vb;
 
-#define vb_depn_index  vb->scratch
-#define z_qname_index  evb->z_data
+#define vb_depn_index  vb->scratch // QNAME hash of all sec and supp alignments in this VB
+#define z_qname_index  evb->z_data // QNAME hash of all mapped alignments in this file
 
 typedef struct { uint32_t hash; VBIType vb_i; } QnameIndexEnt;
 static rom scan_index_one_line (VBlockSAMP vb, rom alignment, uint32_t remaining_txt_len)   
@@ -64,7 +64,7 @@ static rom scan_index_one_line (VBlockSAMP vb, rom alignment, uint32_t remaining
         ASSERT (str_get_int_range16 (flag_str, tab - flag_str, 0, SAM_MAX_FLAG, &flag.value), "%s: invalid FLAG=%.*s", VB_NAME, (int)(tab - flag_str), flag_str);
     }
 
-    uint32_t hash = qname_calc_hash (QNAME1, qname, qname_len, flag.is_last, false, NULL);
+    uint32_t hash = qname_calc_hash (QNAME1, COMP_NONE, qname, qname_len, flag.is_last, false, NULL);
 
     if (vb->preprocessing) {
         // depn index
@@ -112,6 +112,7 @@ static SORTER (depn_index_sorter)
     return ASCENDING_RAW (*(uint32_t *)a, *(uint32_t *)b);
 }
 
+// sort and uniq list of qname hashes that appear in this VB
 static void scan_sort_unique_depn_index (Buffer *buf)
 {
     if (!buf->len) return;
@@ -133,6 +134,7 @@ static void scan_sort_unique_depn_index (Buffer *buf)
 
 static ASCENDING_SORTER (qname_index_sorter, QnameIndexEnt, hash)
 
+// sort and uniq QNAME hashes, and also mark if they appear in more than one VB
 static void scan_sort_unique_qname_index (Buffer *buf)
 {
     if (!buf->len) return;
@@ -166,19 +168,28 @@ static void scan_index_qnames_preprocessing (VBlockP vb)
     rom next  = B1STtxt;
     rom after = BAFTtxt;
 
+    #define SET_HAS_SA \
+        ({ segconf.has[OPTION_SA_Z] = true; /* likely, bot not 100% sure, that an SAZ string indicates an SA:Z optional field */ \
+           DO_ONCE if (flag.show_scan) \
+               iprintf ("Scan: SA:Z found in vb=%u", vb->vblock_i); })
+
     // in case of force-gencomp, we also try to detect SA_Z in the first 16 VBs
     if (flag.force_gencomp && !segconf.has[OPTION_SA_Z]) {
         if (IS_BAM_ZIP) {
-            for (rom c=next; c < after-3 ; c++) 
-                if (c[0] == 'S' && c[1]== 'A' && c[2] == 'Z') {
-                    segconf.has[OPTION_SA_Z] = true; // likely, bot not 100% sure, that an SAZ string indicates an SA:Z optional field
+            for (rom c=next; c < after-4 ; c++) 
+                if (c[0] == 'S' && c[1]== 'A' && c[2] == 'Z' && IS_ALPHANUMERIC(c[3])
+                    && sam_zip_is_valid_SA (&c[3], after - &c[3], true)) {
+                    SET_HAS_SA;
                     break;
                 }
         }
         else {
             SAFE_NUL (after);
-            segconf.has[OPTION_SA_Z] = !!strstr (next, "SA:Z:");
+            rom sa = strstr (next, "SA:Z:");
             SAFE_RESTORE;
+
+            if (sa && sam_zip_is_valid_SA (sa + 5, after - (sa+5), false)) 
+                SET_HAS_SA;
         }
     }
 
@@ -203,27 +214,36 @@ static void scan_append_index (VBlockP vb)
 // remove depn for which qnames_hash instances (prim and depn) are contained in a single VB
 static void scan_remove_single_vb_depns (void)
 {
+    START_TIMER;
+
     if (!z_file->sag_depn_index.len) return;
 
     ARRAY (uint32_t, depn, z_file->sag_depn_index);
-    ARRAY (QnameIndexEnt, qname, z_qname_index);
 
     uint64_t d=0, new_depn_len=0;
-    for (uint64_t q=0; q < qname_len; q++) {
-        if (qname[q].hash == depn[d]) {
-            if (qname[q].vb_i == 0) // appears in more than 1 VB - we'll keep it
+    for_buf (QnameIndexEnt, q, z_qname_index)
+        if (q->hash == depn[d]) {
+            if (q->vb_i == 0) // appears in more than 1 VB - we'll keep it
                 depn[new_depn_len++] = depn[d];
             d++;
         } 
-    }
 
     z_file->sag_depn_index.len = new_depn_len;
+
+    if (flag.show_scan) {
+        iprintf ("Scan: Unique mapped QNAMExfirst in file: %"PRIu64"\n", z_qname_index.len);
+        iprintf ("Scan: Unique mapped QNAMExfirst that appear in multiple VBs: %"PRIu64"\n", new_depn_len);
+    }
+
+    COPY_TIMER_EVB (scan_remove_single_vb_depns);
 }
 
 // ZIP: runs during segconf if SAG_BY_FLAG is suspected: scan the entire file and build 
 // z_file->sag_depn_index - a uniq-sorted list of hash(QNAME) of all depn alignments in the file
 void sam_sag_by_flag_scan_for_depn (void)
 {
+    START_TIMER;
+
     const rom task_name = "scan_for_depn";
 
     buf_alloc (evb, &z_file->sag_depn_index, 0, 100, uint32_t, 0, "z_file->sag_depn_index");
@@ -253,11 +273,16 @@ void sam_sag_by_flag_scan_for_depn (void)
     
     // most of the sort/uniq work was already done by the compute threads, so this final pass should be fast
     // TO DO: replace sort with combine sorted arrays 
+    { START_TIMER;  
     scan_sort_unique_depn_index (&z_file->sag_depn_index); 
-    scan_sort_unique_qname_index (&z_qname_index);
+    COPY_TIMER_EVB (sam_sag_by_flag_scan_sag_depn_index); }
+    
+    { START_TIMER;  
+    scan_sort_unique_qname_index (&z_qname_index);   
+    COPY_TIMER_EVB (sam_sag_by_flag_scan_sort_qname_index); }
 
     // keep only depns that have a qname that appears in 2 or VBs. If all qnames are in a single VB, we will use saggy.
-    scan_remove_single_vb_depns ();
+    scan_remove_single_vb_depns();
 
     file_close (&txt_file);
 
@@ -266,20 +291,8 @@ void sam_sag_by_flag_scan_for_depn (void)
     
     txt_file = save_txt_file;
     txt_file->is_scanned = true;
-}
 
-// for SAG_BY_FLAG: returns true if qname_hash represets a sag that has alignments in more than one VB
-static bool sam_sag_is_multi_vb_SAG_BY_FLAG (int64_t first, int64_t last, uint32_t qname_hash)
-{
-    if (last < first) return false; // qname_hash doesn't exist in the array
-
-    int64_t mid = (first + last) / 2;
-    uint32_t mid_hash = *B32 (z_file->sag_depn_index, mid);
-
-    if (mid_hash == qname_hash) return true; // found qname_hash in the array
-
-    if (mid_hash < qname_hash) return sam_sag_is_multi_vb_SAG_BY_FLAG (mid+1, last, qname_hash);
-    else                       return sam_sag_is_multi_vb_SAG_BY_FLAG (first, mid-1, qname_hash);
+    COPY_TIMER_EVB (sam_sag_by_flag_scan_for_depn);
 }
 
 //---------------------------------------------------------------------------
@@ -324,40 +337,32 @@ void scan_index_qnames_seg (VBlockSAMP vb)
     vb->qname_count.len32 = new_len2;
 }
 
-// returns the number of alignments in this VB with qname_hash
-static uint32_t sam_sag_get_qname_counts_this_vb (QnameCount *counts, uint32_t counts_len, int32_t first, int32_t last, uint32_t qname_hash)
-{
-    if (last < first) return 0; // qname_hash doesn't exist in the array
-
-    int32_t mid = (first + last) / 2;
-    uint32_t mid_hash = counts[mid].hash;
-
-    if (mid_hash == qname_hash) return counts[mid].count; // found qname_hash in the array
-
-    if (mid_hash < qname_hash) return sam_sag_get_qname_counts_this_vb (counts, counts_len, mid+1, last, qname_hash);
-    else                       return sam_sag_get_qname_counts_this_vb (counts, counts_len, first, mid-1, qname_hash);
-}
-
 //---------------------------------------------------
 // Shared - called from sam_seg_is_gc_line during seg
 //---------------------------------------------------
+
+// for SAG_BY_FLAG: returns non-NULL if qname_hash represets a sag that has alignments in more than one VB
+static BINARY_SEARCHER_INTEGRAL (sam_sag_is_multi_vb_SAG_BY_FLAG, uint32_t, true, IfNotExact_ReturnNULL)
+
+static BINARY_SEARCHER (sam_sag_get_qname_counts_this_vb, QnameCount, uint32_t, hash, true, IfNotExact_ReturnNULL)
 
 // ZIP: true if this prim or depn sag line *might* have saggies in other VBs
 bool sam_might_have_saggies_in_other_VBs (VBlockSAMP vb, ZipDataLineSAMP dl, int32_t n_alns)
 {
     if (!vb->qname_count.len32) return true; // we didn't count qnames, so we don't have proof that there aren't any saggies in other VBs
 
-    uint32_t qname_hash = qname_calc_hash (QNAME1, Btxt (dl->QNAME.index), dl->QNAME.len, dl->FLAG.is_last, false, NULL);
+    uint32_t qname_hash = qname_calc_hash (QNAME1, COMP_NONE, Btxt (dl->QNAME.index), dl->QNAME.len, dl->FLAG.is_last, false, NULL);
 
     if (IS_SAG_CC) 
         return true;   // we don't do qname accounting for SAG_BY_CC
 
-    else if (IS_SAG_FLAG)
-        return sam_sag_is_multi_vb_SAG_BY_FLAG (0, z_file->sag_depn_index.len - 1, qname_hash);
+    else if (IS_SAG_FLAG) 
+        return binary_search (sam_sag_is_multi_vb_SAG_BY_FLAG, uint32_t, z_file->sag_depn_index, qname_hash) != NULL;
 
     else {
-        if (!n_alns) n_alns = str_count_char (STRauxZ (SA_Z, true), ';'); // happens iff depn of SAG_BY_SA
+        if (!n_alns) n_alns = str_count_char (STRauxZ (SA_Z, true), ';'); // n_alns=0 only possible in SAG_BY_SA
+        QnameCount *count = binary_search (sam_sag_get_qname_counts_this_vb, QnameCount, vb->qname_count, qname_hash);
 
-        return n_alns != sam_sag_get_qname_counts_this_vb (B1ST (QnameCount, vb->qname_count), vb->qname_count.len32, 0, vb->qname_count.len - 1, qname_hash);
+        return !count || n_alns != count->count;
     }
 }

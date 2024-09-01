@@ -238,8 +238,8 @@ Codec codec_assign_best_codec (VBlockP vb,
         return *selected_codec; // if already assigned - no need to test
 
     CodecTest tests[] = { { CODEC_NONE }, 
-                          { CODEC_RANS8 }, { CODEC_RANS32 }, { CODEC_RANS8_pack }, { CODEC_RANS32_pack }, 
-                          { CODEC_ARITH8 }, { CODEC_ARITH32 }, { CODEC_ARITH8_pack }, { CODEC_ARITH32_pack },
+                          { CODEC_RANB }, { CODEC_RANW }, { CODEC_RANb }, { CODEC_RANw }, 
+                          { CODEC_ARTB }, { CODEC_ARTW }, { CODEC_ARTb }, { CODEC_ARTw },
                           { CODEC_BZ2 }, { CODEC_BSC }, { CODEC_LZMA } }; 
     
     // don't allow LZMA or BSC in buffers being compressed in the main thread - too slow (unless --best)
@@ -408,8 +408,8 @@ void codec_show_time (VBlockP vb, rom name, rom subname, Codec codec)
         (strcmp (flag.show_time, "compressor_smux"  ) && codec==CODEC_SMUX)  || 
         (strcmp (flag.show_time, "compressor_pacb"  ) && codec==CODEC_PACB)  || 
         (strcmp (flag.show_time, "compressor_t0"    ) && codec==CODEC_T0)    || 
-        (strcmp (flag.show_time, "compressor_rans"  ) && (codec==CODEC_RANS32 || codec==CODEC_RANS32_pack || codec==CODEC_RANS8 || codec==CODEC_RANS32_pack)) || 
-        (strcmp (flag.show_time, "compressor_arith" ) && (codec==CODEC_ARITH32 || codec==CODEC_ARITH32_pack || codec==CODEC_ARITH8 || codec==CODEC_ARITH32_pack)) || 
+        (strcmp (flag.show_time, "compressor_rans"  ) && (codec==CODEC_RANW || codec==CODEC_RANw || codec==CODEC_RANB || codec==CODEC_RANw)) || 
+        (strcmp (flag.show_time, "compressor_arith" ) && (codec==CODEC_ARTW || codec==CODEC_ARTw || codec==CODEC_ARTB || codec==CODEC_ARTw)) || 
         (strcmp (flag.show_time, "compressor_bz2"   ) && codec==CODEC_BZ2 )) {
 
         vb->profile.next_name    = name;

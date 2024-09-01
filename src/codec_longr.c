@@ -40,7 +40,7 @@ bool codec_longr_comp_init (VBlockP vb, Did qual_did_i, bool force)
     ContextP values_ctx           = lens_ctx+1;  // used
     values_ctx->ltype             = LT_SUPP;
     values_ctx->local_dep         = DEP_L2; 
-    values_ctx->lcodec            = CODEC_ARITH8;
+    values_ctx->lcodec            = CODEC_ARTB;
     values_ctx->lcodec_hard_coded = true;
     values_ctx->counts_section    = true; // we store the global value-to-bin mapper in a SEC_COUNTS
     

@@ -261,8 +261,8 @@
 #pragma GENDICT OPTION_X1_i=DTYPE_2=X1:i     // Number of suboptimal hits found by BWA
 #pragma GENDICT OPTION_XC_i=DTYPE_2=XC:i     // Undocumented: usually seq_len minus the final soft-clip (right if forward and left if rev-comp) 
 #pragma GENDICT OPTION_XN_i=DTYPE_2=XN:i     // Number of ambiguous bases in the reference (also bowtie2, bsbolt, hisat2)
-#pragma GENDICT OPTION_XM_i=DTYPE_2=XM:i     // Number of mismatches in the alignment (also bowtie2, bsbolt, hisat2, tophat)
-#pragma GENDICT OPTION_XO_i=DTYPE_2=XO:i     // Number of gap opens (also bowtie2, bsbolt, hisat2, tophat)
+#pragma GENDICT OPTION_XM_i=DTYPE_2=XM:i     // Number of mismatches in the alignment (also bowtie2, bsbolt, hisat2, tophat, cpu)
+#pragma GENDICT OPTION_XO_i=DTYPE_2=XO:i     // Number of gap opens (also bowtie2, bsbolt, hisat2, tophat, cpu)
 #pragma GENDICT OPTION_XG_i=DTYPE_2=XG:i     // Number of gap extentions (also bowtie2, bsbolt, hisat2, tophat)
 #pragma GENDICT OPTION_XT_A=DTYPE_2=XT:A     // U=Unique alignment R=Repeat N=Not mapped M=Mate-sw (Read is fixed due to paired end rescue)
 #pragma GENDICT OPTION_XS_i=DTYPE_2=XS:i     // Suboptimal alignment score. Also: Bowtie, BSSeeker2, BSBolt, tmap, gem
@@ -423,6 +423,9 @@
 
 // cpu (ChIA-PET Utilities): https://github.com/cheehongsg/CPU/wiki
 // background: https://bmcgenomics.biomedcentral.com/articles/10.1186/1471-2164-15-S12-S11
+#pragma GENDICT OPTION_Y0_i=DTYPE_2=Y0:i
+#pragma GENDICT OPTION_Y1_i=DTYPE_2=Y1:i
+#pragma GENDICT OPTION_XL_Z=DTYPE_2=XL:Z
 
 // BLASR aligner tags: Source: https://github.com/jcombs1/blasr/blob/master/common/datastructures/alignmentset/SAMAlignment.h
 //#pragma GENDICT OPTION_NM_i=DTYPE_2=NM:i   // (overlap) # of subreads
@@ -675,7 +678,7 @@ COMPRESSOR_CALLBACK(sam_zip_BQ);
 COMPRESSOR_CALLBACK(sam_zip_iq_sq_dq);
 COMPRESSOR_CALLBACK(sam_zip_BD_BI);
 extern void sam_zip_initialize (void);
-extern void sam_set_sag_type (void);
+extern void sam_zip_after_segconf (void);
 extern void sam_zip_finalize (bool is_last_user_txt_file);
 extern bool sam_zip_dts_flag (int dts);
 extern void sam_zip_after_compute (VBlockP vb);
@@ -695,7 +698,7 @@ extern void sam_zip_end_of_z (void);
 extern bool is_sam (STRp(header), bool *need_more);
 extern bool is_bam (STRp(header), bool *need_more);
 extern bool is_cram (STRp(header), bool *need_more);
-extern void sam_piz_header_init (void);
+extern void sam_piz_header_init (CompIType comp_i);
 
 extern ContigPkgP sam_hdr_contigs;
 extern uint32_t sam_num_header_contigs (void);
@@ -750,10 +753,14 @@ extern void sam_piz_after_vb_header (VBlockP vb);
 
 // PIZ writer stuff
 extern void gencomp_piz_initialize_vb_info (void); // used for writing files starting 15.0.64 
-extern void gencomp_piz_vb_to_plan (VBlockP vb, int64_t *i);
-extern void gencomp_piz_update_piz_reading_list (VBlockP vb);
+extern void gencomp_piz_vb_to_plan (VBlockP vb, int64_t *i, bool remove_previous);
+extern void gencomp_piz_update_reading_list (VBlockP vb);
+typedef enum { BEFORE_FIRST_EXPANDED_ITEM, AFTER_LAST_EXPANDED_ITEM } UpdatedIType;
+extern void gencomp_piz_expand_PLAN_VB_PLAN (ReconPlanItemP *p, int64_t *i, UpdatedIType updated_i_type);
 extern void recon_plan_add_prescribed_by_recon_plan_section (void); // used for writing files up to up to 15.0.63
-extern void recon_plan_show (int vb_i);
+extern StrText display_plan_item (ReconPlanItemP p);
+extern void recon_plan_show (int vb_i, int64_t start, int64_t len);
+static inline void recon_plan_show_all (void) { recon_plan_show (-1, 0, -1); }
 
 // BAM Stuff
 extern void bam_seg_initialize (VBlockP vb);
@@ -849,6 +856,7 @@ SPECIAL (SAM, 70, PACBIO_we,             sam_piz_special_PACBIO_we);            
 SPECIAL (SAM, 71, DEMUX_BY_REVCOMP_MATE, sam_piz_special_DEMUX_BY_REVCOMP_MATE); // introduced 15.0.60
 SPECIAL (SAM, 72, crdna_GP,              sam_piz_special_crdna_GP);              // introduced 15.0.60
 SPECIAL (SAM, 73, DEMUX_MAPQ,            sam_piz_special_DEMUX_MAPQ);            // introduced 15.0.61
+SPECIAL (SAM, 74, CPU_XL,                sam_piz_special_CPU_XL);                // introduced 15.0.65
 
 #define SAM_LOCAL_GET_LINE_CALLBACKS(dt)        \
     { dt, _OPTION_BD_BI,    sam_zip_BD_BI    }, \

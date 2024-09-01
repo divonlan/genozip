@@ -219,7 +219,7 @@ BitsP buf_alloc_bits_do (VBlockP vb, BufferP buf, uint64_t nbits, BitsInitType i
     buf->nbits  = nbits;   
     buf->nwords = nwords; 
 
-    bits_clear_excess_bits_in_top_word ((BitsP)buf);
+    bits_clear_excess_bits_in_top_word ((BitsP)buf, false);
 
     if (init_to == CLEAR) {
         if (!old_nbits) bits_clear_all ((BitsP)buf);
@@ -241,7 +241,7 @@ BitsP buf_overlay_bits_do (VBlockP vb,
 {
     uint64_t nwords = roundup_bits2words64 (nbits);
 
-    buf_overlay_do (evb, top_buf, bottom_buf, start_byte_in_bottom_buf, func, code_line, name);
+    buf_overlay_do (evb, top_buf, bottom_buf, start_byte_in_bottom_buf, false, func, code_line, name);
 
     top_buf->nbits  = nbits;
     top_buf->nwords = nwords;
@@ -263,7 +263,7 @@ Bits *buf_zfile_buf_to_bits (BufferP buf, uint64_t nbits)
 
     LTEN_bits (bits);
 
-    bits_clear_excess_bits_in_top_word (bits);
+    bits_clear_excess_bits_in_top_word (bits, false);
 
     return bits;
 }
@@ -293,7 +293,7 @@ uint64_t buf_extend_bits (BufferP buf, int64_t num_new_bits)
 
     bar->nbits += num_new_bits;     
     bar->nwords = roundup_bits2words64 (bar->nbits);
-    bits_clear_excess_bits_in_top_word (bar);
+    bits_clear_excess_bits_in_top_word (bar, true);
 
     return next_bit;
 }

@@ -79,6 +79,7 @@
 #define NO_PAIR_FMT_SUFFIX (flag.deep ? " Solution: add --not-paired" : "")
 
 // Txtfile stuff
+extern thool fastq_verify_and_sort_pairs (int n_fns, rom *fns, FailType soft_fail);
 extern int32_t fastq_unconsumed (VBlockP vb, uint32_t first_i);
 extern bool fastq_txtfile_sync_to_R1_by_num_lines (VBlockP vb, uint32_t bytes_requested, uint32_t len, bool no_read_expected, uint32_t *my_vb_size);
 extern bool is_fastq (STRp(header), bool *need_more);
@@ -118,7 +119,7 @@ extern Multiplexer2P fastq_get_ultima_c_mux (VBlockP vb);
 
 // PIZ Stuff
 extern bool fastq_piz_initialize (CompIType comp_i);
-extern void fastq_piz_header_init (void);
+extern void fastq_piz_header_init (CompIType comp_i);
 extern void fastq_piz_process_recon (VBlockP vb);
 extern void fastq_piz_after_vb_header (VBlockP vb);
 extern bool fastq_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header);

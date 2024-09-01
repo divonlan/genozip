@@ -20,43 +20,58 @@
 #define FRAG_SIZE_BITS 20    // ZIP. fragment size in log2(bytes). valid values: 17-32. transfered to piz via FlagsReconPlan.frag_len_bits. Not part of the file format - can be changed.
 #define frag_len(bits) ((1<<(bits)) / sizeof(ReconPlanItem)) // fragment length in units of ReconPlanItem
 
-void recon_plan_show (int vb_i) // -1 means for entire file, 0 means for txt header
+StrText display_plan_item (ReconPlanItemP p)
+{
+    StrText s;
+    
+    rom comp = p->vb_i ? comp_name(sections_vb_header(p->vb_i)->comp_i) : NULL;
+    rom flav = recon_plan_flavors[p->flavor];
+
+    rom no_recon = IS_ZIP                                                                         ? ""
+                 : (p->vb_i && !writer_does_vb_need_recon (p->vb_i))                              ? " no_recon"
+                 : (p->flavor == PLAN_TXTHEADER && !writer_does_txtheader_need_recon (p->comp_i)) ? " no_recon" 
+                 :                                                                                  "";
+
+    rom no_write = IS_ZIP                                                                         ? ""
+                 : (p->vb_i && !writer_does_vb_need_write (p->vb_i))                              ? " no_write"
+                 : (p->flavor == PLAN_TXTHEADER && !writer_does_txtheader_need_write (p->comp_i)) ? " no_write" 
+                 :                                                                                  "";
+
+    VbInfo *v = (IS_PIZ && p->vb_i) ? VBINFO(p->vb_i) : NULL;
+    uint32_t num_dropped_lines = (v && v->is_dropped) ? bits_num_set_bits (v->is_dropped) : 0;
+    rom dropped_lines = cond_int (num_dropped_lines, " dropped_lines=", num_dropped_lines);
+
+    switch (p->flavor) {
+        case PLAN_VB_PLAN    : snprintf (s.s, sizeof(s), "%-10s vb=%.12s/%u%.10s", flav, comp, p->vb_i, cond_int (IS_PIZ, "\tnum_lines=", p->num_lines)); break; // note: num_lines including integrated PRIM and DEPN lines
+        case PLAN_RANGE      : snprintf (s.s, sizeof(s), "%-10s vb=%.12s/%u\tstart_line=%u\tnum_lines=%u%s%s", flav, comp, p->vb_i, p->start_line, p->num_lines, no_recon, no_write); break;
+        case PLAN_FULL_VB    : snprintf (s.s, sizeof(s), "%-10s vb=%.12s/%u%.10s%.10s%s%s", flav, comp, p->vb_i, cond_int (IS_PIZ, "\tnum_lines=", p->num_lines), dropped_lines, no_recon, no_write); break;
+        case PLAN_TXTHEADER  : snprintf (s.s, sizeof(s), "%-10s %.12s%s%s", flav, comp_name(p->comp_i), no_recon, no_write); break;
+        case PLAN_REMOVE_ME  : snprintf (s.s, sizeof(s), "%-10s vb=%.12s/%u\tnum_lines=%u", flav, comp, p->vb_i, p->num_lines); break;
+        case PLAN_DOWNSAMPLE : snprintf (s.s, sizeof(s), "%-10s vb=%.12s/%u\tnum_lines=%u%s%s", flav, comp, p->vb_i, p->num_lines, no_recon, no_write); break;
+        case PLAN_END_OF_VB  : snprintf (s.s, sizeof(s), "%-10s vb=%.12s/%u%.10s%s%s", flav, comp, p->vb_i, dropped_lines, no_recon, no_write); break;
+        case PLAN_INTERLEAVE : snprintf (s.s, sizeof(s), "%-10s vb1=%.8s/%u\tvb2=%.8s/%u%.10s%.10s%.9s%.9s", flav, comp, p->vb_i,
+                                         comp_name(sections_vb_header(p->vb2_i)->comp_i), p->vb2_i,
+                                         cond_int (IS_PIZ, "\tnum_lines=", p->num_lines), dropped_lines, no_recon, no_write); break;
+        default              : ABORT ("Unknown flavor %u", p->flavor);
+    }  
+
+    return s;
+}
+
+void recon_plan_show (int vb_i, // -1 means for entire file, 0 means for txt header
+                      int64_t start, 
+                      int64_t len) // -1 = until plan's end
 {
     iprintf ("\nReconstruction plan: %s%s entries=%"PRIu64" conc_writing_vbs=%u vb_1_size=%s\n", 
              cond_int (vb_i >= 1, "for MAIN vblock_i=", vb_i),
              vb_i==0 ? "for TXT_HEADER" : "",
              z_file->recon_plan.len, z_file->max_conc_writing_vbs, str_size (segconf.vb_size).s);
 
-    for (uint32_t i=0; i < z_file->recon_plan.len32; i++) {
-        ReconPlanItemP p = B(ReconPlanItem, z_file->recon_plan, i);
-        rom comp = p->vb_i ? comp_name(sections_vb_header(p->vb_i)->comp_i) : NULL;
-        rom flav = recon_plan_flavors[p->flavor];
-
-        rom no_recon = IS_ZIP                                                                         ? ""
-                     : (p->vb_i && !writer_does_vb_need_recon (p->vb_i))                              ? " no_recon"
-                     : (p->flavor == PLAN_TXTHEADER && !writer_does_txtheader_need_recon (p->comp_i)) ? " no_recon" 
-                     :                                                                                  "";
-
-        rom no_write = IS_ZIP                                                                         ? ""
-                     : (p->vb_i && !writer_does_vb_need_write (p->vb_i))                              ? " no_write"
-                     : (p->flavor == PLAN_TXTHEADER && !writer_does_txtheader_need_write (p->comp_i)) ? " no_write" 
-                     :                                                                                  "";
-
-        switch (p->flavor) {
-            case PLAN_VB_PLAN    : iprintf ("%-10s vb=%s/%u\n", flav, comp, p->vb_i); break;
-            case PLAN_RANGE      : iprintf ("%-10s vb=%s/%u\tstart_line=%u\tnum_lines=%u%s%s\n", flav, comp, p->vb_i, p->start_line, p->num_lines, no_recon, no_write); break;
-            case PLAN_FULL_VB    : iprintf ("%-10s vb=%s/%u%s%s%s\n", flav, comp, p->vb_i, cond_int (IS_PIZ, "\t\t\tnum_lines=", p->num_lines), no_recon, no_write); break;
-            case PLAN_TXTHEADER  : iprintf ("%-10s %s%s%s\n", flav, comp_name(p->comp_i), no_recon, no_write); break;
-            case PLAN_REMOVE_ME  : iprintf ("%-10s\n", flav); break;
-            case PLAN_DOWNSAMPLE : iprintf ("%-10s vb=%s/%u\tnum_lines=%u%s%s\n", flav, comp, p->vb_i, p->num_lines, no_recon, no_write); break;
-            case PLAN_END_OF_VB  : iprintf ("%-10s vb=%s/%u%s%s\n", flav, comp, p->vb_i, no_recon, no_write); break;
-            case PLAN_INTERLEAVE : iprintf ("%-10s vb1=%s/%u\tvb2=%s/%u", flav, comp, p->vb_i,
-                                            comp_name(sections_vb_header(p->vb2_i)->comp_i), p->vb2_i); 
-                                   iprintf (command==PIZ ? "\tnum_lines=%u%s%s\n" : "\n", p->num_lines, no_recon, no_write); // num_lines populated by writer in PIZ
-                                   break;
-            default              : ABORT ("Unknown flavor %u", p->flavor);
-        }
-    }               
+    if (len == -1) 
+        len = z_file->recon_plan.len - start;
+    
+    for (int64_t i=start; i < start + len; i++) 
+        iprintf ("%s\n", display_plan_item (B(ReconPlanItem, z_file->recon_plan, i)).s);
 
     if (IS_PIZ && flag.to_stdout)
         TIP0 ("This is the reconstruction plan with flag.no_writer=true because decompressing to stdout is suppressed\n"
@@ -108,7 +123,7 @@ static void recon_plan_read_one_vb (VBlockP vb)
         segconf.vb_size = BGEN32 (header->vblock_mb) MB; // VB size of vb=1 as proxy for a typical VB size. Note that other VBs might be larger or smaller.
 
         // add memory to recon_plan
-        buf_alloc (evb, &z_file->recon_plan, max_frag_size * sections_get_recon_plan(NULL), 0, char, 0, "z_file->recon_plan");
+        buf_alloc (wvb, &z_file->recon_plan, max_frag_size * sections_get_recon_plan(NULL), 0, char, 0, "z_file->recon_plan");
         buf_set_shared (&z_file->recon_plan);
     }
 

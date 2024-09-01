@@ -496,7 +496,7 @@ static void ref_read_one_range (VBlockP vb)
     // if the user specified --regions, check if this ref range is needed
     bool range_is_included = true;
     RAEntry *ra = NULL;
-    if (command==PIZ && flag.regions &&
+    if (IS_PIZ && flag.regions &&
         !(Z_DT(REF) || Z_DT(SAM) || Z_DT(BAM) || Z_DT(FASTQ))) { // SAM/BAM/FASTQ: we need the reference even for excluded contigs, so recon can consume FASTQ_SEQMIS/SAM_SEQMIS (also always when reading external referene, as we don't yet know which files it will be use for)
         if (sec->vblock_i > vb->ref->stored_ra.len32) return; // we're done - no more ranges to read, per random access (this is the empty section)
 
@@ -939,7 +939,7 @@ static void ref_compress_one_range (VBlockP vb)
     if (r) LTEN_bits (&r->ref);
 
     header.section_type          = SEC_REFERENCE;
-    header.codec                 = (flag.make_reference || flag.fast) ? CODEC_RANS8 : CODEC_LZMA; // LZMA compresses a bit better, but RANS decompresses *much* faster, so better for reference files
+    header.codec                 = (flag.make_reference || flag.fast) ? CODEC_RANB : CODEC_LZMA; // LZMA compresses a bit better, but RANS decompresses *much* faster, so better for reference files
     header.data_uncompressed_len = r ? BGEN32 (r->ref.nwords * sizeof (uint64_t)) : 0;
     header.num_bases             = r ? BGEN32 (r->ref.nbits / 2) : 0; // less than ref_size(r) if compacted
     comp_compress (vb, NULL, &vb->z_data, &header, r ? (char *)r->ref.words : NULL, NO_CALLBACK, "SEC_REFERENCE");

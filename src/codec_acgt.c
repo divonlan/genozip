@@ -159,7 +159,7 @@ COMPRESS (codec_acgt_compress)
     else 
         ABORT ("%s: \"%s\": neither src_data nor callback is provided", VB_NAME, name);
 
-    bits_clear_excess_bits_in_top_word (packed); // for good measure (V15)
+    bits_clear_excess_bits_in_top_word (packed, false); // for good measure (V15)
 
     // get codec for NONREF_X header->lcodec remains CODEC_XCGT, and we set subcodec to the codec discovered in assign, and set to nonref_ctx->lcode
     Codec z_lcodec;
@@ -248,7 +248,7 @@ UNCOMPRESS (codec_acgt_uncompress)
 
     LTEN_bits (packed);
 
-    bits_clear_excess_bits_in_top_word (packed);
+    bits_clear_excess_bits_in_top_word (packed, false);
 
     // decode here if no X. If there's X we decode in codec_xcgt_uncompress (acgt_no_x added in 15.0.13)
     if (ctx->flags.acgt_no_x) {

@@ -117,15 +117,15 @@ static inline void no_integrity (ConstBufferP buf, FUNCLINE, rom buf_func)
 {
     flag.quiet = false;
 
-    ASSERTW (BUNDERFLOW(buf) == UNDERFLOW_TRAP, "called from %s:%u to %s: Error in %s: buffer has corrupt underflow trap: %s",
-             func, code_line, buf_func, buf_desc(buf).s, str_to_printable_(buf->memory, 8).s);
+    ASSERTW (BUNDERFLOW(buf) == UNDERFLOW_TRAP, "called from %s:%u to %s %s%s: Error in %s: buffer has corrupt underflow trap: %s",
+             func, code_line, buf_func, version_str().s, license_get_number().s, buf_desc(buf).s, str_to_printable_(buf->memory, 8).s);
 
-    ASSERTW (BOVERFLOW(buf) == OVERFLOW_TRAP, "called from %s:%u to %s: Error in %s: buffer has corrupt overflow trap: %s",
-            func, code_line, buf_func, buf_desc(buf).s, str_to_printable_(buf->memory + buf->size + sizeof(uint64_t), 8).s);
+    ASSERTW (BOVERFLOW(buf) == OVERFLOW_TRAP, "called from %s:%u to %s %s%s: Error in %s: buffer has corrupt overflow trap: %s",
+            func, code_line, buf_func, version_str().s, license_get_number().s, buf_desc(buf).s, str_to_printable_(buf->memory + buf->size + sizeof(uint64_t), 8).s);
     
     bool corruption_detected = buflist_test_overflows (buf->vb, buf_func);
     if (corruption_detected) buflist_test_overflows_all_other_vb (buf->vb, buf_func, true); // corruption not from this VB - test the others
-    exit_on_error (false);
+    exit_on_error (true);
 }
 
 // quick inline wrapper
@@ -364,7 +364,8 @@ void buf_remove_spinlock (BufferP buf)
 void buf_overlay_do (VBlockP vb, 
                      BufferP top_buf, // dst 
                      BufferP bottom_buf, 
-                     uint64_t start_in_bottom, // 0 means full overlay, and copy len 
+                     uint64_t start_in_bottom, // 0 means full overlay
+                     bool copy_len,
                      FUNCLINE, rom name)
 {   
     START_TIMER;
@@ -397,7 +398,7 @@ void buf_overlay_do (VBlockP vb,
 
     top_buf->type      = BUF_REGULAR;
     top_buf->name      = name;
-    top_buf->len       = start_in_bottom ? 0ULL : bottom_buf->len;
+    top_buf->len       = copy_len ? bottom_buf->len : 0ULL;
     top_buf->func      = func;
     top_buf->code_line = code_line;
     top_buf->shared    = true;
@@ -520,7 +521,7 @@ void buf_destroy_do_do (BufListEnt *ent, FUNCLINE)
     START_TIMER;
 
     BufferP buf = ent->buf;
-    VBlockP vb = buf->vb;
+    VBlockP vb  = buf->vb;
 
     if (flag.debug_memory==1) 
         iprintf ("Destroy %s: buf_addr=%p vb->id=%d buf_i=%u\n", buf_desc (buf).s, buf, buf->vb->id, BNUM (buf->vb->buffer_list, ent));
@@ -693,6 +694,23 @@ void buf_disown_do (VBlockP vb, BufferP src_buf, BufferP dst_buf, bool make_a_co
         reset_memory_pointer (src_buf);
         buf_destroy (*src_buf);
     }
+}
+
+// removes data and len from buffer, returning them to caller, and replenishes the buffer memory
+void buf_extract_data_do (BufferP buf, char **data_p, uint64_t *len_p, uint32_t *len32_p, char **memory_p, FUNCLINE)
+{
+    ASSERT (buf->type == BUF_REGULAR, "called from %s:%u: expecting buf to be BUF_REGULAR, buf_type=%s", func, code_line, buf_type_name(buf));
+
+    if (data_p)  *data_p  = buf->data;
+    if (len_p)   *len_p   = buf->len;
+    if (len32_p) *len32_p = buf->len32;
+
+    *memory_p = buf->memory; // caller must free this
+    
+    char *new_memory = (char *)buf_low_level_malloc (buf->size + CTL_SIZE, false, func, code_line);
+    buf_init (buf, new_memory, buf->size, func, code_line, NULL);
+
+    buf->len = 0;
 }
 
 //-------------------------

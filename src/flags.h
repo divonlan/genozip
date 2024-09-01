@@ -138,7 +138,7 @@ typedef struct {
     
     // stats / debug useful mostly for developers
     int debug, debug_or_test, show_sag, show_depn, show_dict, show_b250, show_aliases, show_digest, log_digest, show_recon_plan,
-        show_index, show_gheader, show_ref_contigs, show_ref_seq,
+        show_index, show_gheader, show_reading_list, show_ref_contigs, show_ref_seq,
         show_reference, show_ref_hash, show_ref_index, show_chrom2ref, show_ref_iupacs, show_ranges,
         show_codec, show_cache, show_memory, show_snips,
         show_alleles, show_bgzf, show_gz, show_txt_contigs, show_lines, show_gz_uncomp,
@@ -148,8 +148,8 @@ typedef struct {
         debug_peek, stats_submit, debug_submit, show_deep, show_segconf_has, debug_huffman, debug_split, debug_upgrade,
         debug_debug,  // a flag with no functionality - used for ad-hoc debugging  
         debug_valgrind, debug_tar, // ad-hoc debug printing in prod
-        show_compress, show_sec_gencomp,
-        no_gencomp, force_gencomp, force_deep, force_PLy, no_domqual, no_pacb, no_longr, no_homp, no_smux, no_faf, no_interleaved,
+        show_compress, show_sec_gencomp, show_scan,
+        no_gencomp, force_gencomp, force_reread, force_deep, force_PLy, no_domqual, no_pacb, no_longr, no_homp, no_smux, no_faf, no_interleaved,
         force_qual_codec, verify_codec, 
         seg_only, show_bam, xthreads,
         #define SHOW_CONTAINERS_ALL_VBs (-1)
@@ -164,11 +164,13 @@ typedef struct {
     
     #define has_biopsy_line biopsy_line.line_i != NO_LINE // ZIP: --biopsy-line is used
     #define no_biopsy_line  biopsy_line.line_i == NO_LINE // ZIP: --biopsy-line is not used
-    #define has_head        lines_last != NO_LINE         // ZIP: --head is used
+    #define flag_has_head   (flag.lines_last != NO_LINE)  // ZIP: --head PIZ: --head or --lines is used
+    #define flag_has_tail   (flag.lines_last != NO_LINE || flag.tail)  // PIZ: --tail or --lines is used    
     #define zip_is_biopsy   (flag.biopsy || flag.has_biopsy_line) // ZIP: either --biopsy or --biopsy-line is used
     
     struct biopsy_line { VBIType vb_i; int32_t line_i/*within vb*/; } biopsy_line; // argument of --biopsy-line (line_i=-1 means: not used)
     DeepHash debug_deep_hash; // qname, seq, qual hashes
+    int deep_num_fastqs;
     
     DictId dict_id_show_one_b250,   // argument of --show-b250-one
            show_one_counts,

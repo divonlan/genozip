@@ -41,7 +41,7 @@ extern bool is_fastq_seq[256];
 #define IS_EQUAL_SIGN(str) str_is_1char(str, '=')
 
 #define TF(x) ((x) ? "true" : "false")
-#define YN(x) ((x) ? "Yes" : "No")
+#define YN(x) ((x)==yes?"Yes" : (x)==no?"No" : "Unknown")
 #define S(s)  ((s) ? (s) : "(none)")
 
 extern StrText char_to_printable (char c);
