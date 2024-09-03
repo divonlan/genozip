@@ -3,7 +3,7 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
-15.0.65 1/9/2024
+15.0.65 3/9/2024
 - BAM: significantly reduced memory consumption when compressing and uncompressing SAM/BAM/CRAM files in which the majority of alignments are secondary alignments. 
 - BAM: better compression for files genereated by CPU (https://github.com/cheehongsg/CPU)
 - New diagnostic options: --show-sec-gencomp, --show-reading-list, --force-reread, --show-scan
