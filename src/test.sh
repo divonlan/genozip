@@ -13,7 +13,8 @@ cleanup_cache()
     $genozip --no-cache
 }
 
-install_license()
+# On Mac, function name number different that script name
+install_license_wrapper()
 {
     source $SCRIPTSDIR/install_license.sh $1 # need to run with source for MingW
 }
@@ -22,7 +23,7 @@ cleanup()
 { 
     rm -fR $OUTDIR/* $TESTDIR/*.bad $TESTDIR/*.rejects.* 
     cleanup_cache
-    install_license Premium || exit 1
+    install_license_wrapper Premium || exit 1
     unset GENOZIP_REFERENCE    
 }
 
@@ -705,49 +706,49 @@ batch_sendto()
     local lic_num=`tail -1 $LICENSESDIR/genozip_license.v15.Premium | sed "s/[^0-9]//g"`
 
     test_header "sender compresses+tests, receiver uncompresses\n"
-    install_license SendTo || exit 1
+    install_license_wrapper SendTo || exit 1
     $genozip $TESTDIR/minimal.vcf -ft --sendto $lic_num || exit 1
 
-    install_license Premium || exit 1
+    install_license_wrapper Premium || exit 1
     $genounzip $TESTDIR/minimal.vcf.genozip -fo $output || exit 1
 
     test_header "sender compresses+tests with encryption, receiver uncompresses\n"
-    install_license SendTo || exit 1
+    install_license_wrapper SendTo || exit 1
     $genozip $TESTDIR/minimal.vcf -ft -p xyz --sendto $lic_num || exit 1
 
-    install_license Premium || exit 1
+    install_license_wrapper Premium || exit 1
     $genounzip $TESTDIR/minimal.vcf.genozip -fo $output -p xyz || exit 1
 
     test_header "wrong license number - expecting ACCESS DENIED\n"
-    install_license SendTo || exit 1
+    install_license_wrapper SendTo || exit 1
     $genozip $TESTDIR/minimal.vcf -ft --sendto 1234 || exit 1
 
-    install_license Premium || exit 1
+    install_license_wrapper Premium || exit 1
     $genounzip $TESTDIR/minimal.vcf.genozip -fo $output 
     verify_failure genounzip $?
 
     test_header "no license - expecting ACCESS DENIED\n"
-    install_license SendTo || exit 1
+    install_license_wrapper SendTo || exit 1
     $genozip $TESTDIR/minimal.vcf -ft --sendto 1234 || exit 1
     $genounzip $TESTDIR/minimal.vcf.genozip -fo $output
     verify_failure genounzip $?
 
     test_header "Academic license - expecting ACCESS DENIED\n"
-    install_license SendTo || exit 1
+    install_license_wrapper SendTo || exit 1
     local lic_num=`tail -1 $LICENSESDIR/genozip_license.v15.Academic | sed "s/[^0-9]//g"`
 
     $genozip $TESTDIR/minimal.vcf -ft --sendto $lic_num || exit 1
-    install_license Academic || exit 1
+    install_license_wrapper Academic || exit 1
 
     $genounzip $TESTDIR/minimal.vcf.genozip -fo $output
     verify_failure genounzip $?
 
     test_header "Enteprise license w/ no-eval - expecting ACCESS DENIED\n"
-    install_license SendTo || exit 1
+    install_license_wrapper SendTo || exit 1
     local lic_num=`tail -1 $LICENSESDIR/genozip_license.v15.Enterprise | sed "s/[^0-9]//g"`
 
     $genozip $TESTDIR/minimal.vcf -ft --sendto $lic_num || exit 1
-    install_license Enterprise || exit 1
+    install_license_wrapper Enterprise || exit 1
 
     $genounzip $TESTDIR/minimal.vcf.genozip -fo $output --no-eval
     verify_failure genounzip $?
@@ -766,7 +767,7 @@ batch_user_message_permissions()
     local recon_msg=$OUTDIR/msg
 
     test_header "test: successful message: generated with Premium, read without a license"
-    install_license Premium
+    install_license_wrapper Premium
     $genozip $file --user-message $msg -fXo $output || exit 1
 
     rm -f $LICFILE
@@ -778,7 +779,7 @@ batch_user_message_permissions()
     fi
 
     test_header "test: failed message: generated with Enterprise"
-    install_license Enterprise
+    install_license_wrapper Enterprise
     $genozip $file --user-message $msg -fXo $output --no-eval
     verify_failure genozip $?
 
@@ -794,10 +795,10 @@ batch_password_permissions()
     local recon_msg=$OUTDIR/msg
 
     test_header "test: successful encryption: generated with Premium, read with Academic"
-    install_license Premium
+    install_license_wrapper Premium
     $genozip $file --password 1234567890qwertyuiop -fXo $output || exit 1
 
-    install_license Academic
+    install_license_wrapper Academic
     $genounzip $output --password 1234567890qwertyuiop -fo $recon > $recon_msg || exit 1
 
     test_header "test: failed decryption: wrong password"
@@ -907,7 +908,7 @@ batch_genocat_tests()
 # test that we can handle gencomp files with RECON_PLAN (up to 15.0.64) 
 batch_genocat_backcomp_recon_plan()
 {
-    cp $TESTDIR/special.gencomp.with-RECON_PLAN.sam.genozip $output
+    cp $TESTDIR/special.gencomp.with-RECON_PLAN.sam.genozip $output || exit 1 
 
     test_count_genocat_lines "" "--no-header" 750
     test_count_genocat_lines "" "--lines=2-4 --no-header" 3
@@ -1389,7 +1390,7 @@ batch_real_world_backcomp()
 
     # compress all real world test files with old genozip version. Some files might fail compression -
     # they will remain with size 0 and we will ignore them in this test.
-    install_license $1 || exit 1
+    install_license_wrapper $1 || exit 1
     make -C $TESTDIR $1.version  # generate files listed in "files"
     
     local files=( $TESTDIR/$1/*.genozip )
@@ -2179,6 +2180,17 @@ batch_tar_files_from()
     cleanup
 }
 
+# regression test to make sure depn_far/num_DEPN is as expected
+verify_depn_far_to_num_depn() # #1: expected percentage
+{
+    local depn_far_to_num_depn=`$genocat --stats $output | grep Buddying | cut -d= -f6 | cut -d% -f1`
+
+    if (( $depn_far_to_num_depn != $1 )); then
+        echo "`$genocat --stats $output | grep file:`: Expecting depn_far/num_DEPN to be $1 but it is $depn_far_to_num_depn"
+        exit 1
+    fi
+}
+
 batch_gencomp_depn_methods() # note: use --debug-gencomp for detailed tracking
 {
     batch_print_header
@@ -2186,29 +2198,49 @@ batch_gencomp_depn_methods() # note: use --debug-gencomp for detailed tracking
     # invoke REREAD with plain file (test.pacbio.clr.bam is NOT compressed with BGZF)
     # -B1 forces multiple depn VBs
     # -@3 sets DEPN queue length to 3 forcing other VBs to be REREAD
-    $genozip -fB1 -@3 -t $TESTDIR/test.pacbio.clr.bam --force-gencomp || exit 1 
+    $genozip -fB1 -@3 -t $TESTDIR/test.pacbio.clr.bam --force-gencomp -o$output || exit 1 
+    verify_depn_far_to_num_depn 24
 
     # invoke REREAD with BGZF file (test.pacbio.clr.bam.gz is generated by test/Makefile)
-    $genozip -fB1 -@3 -t $TESTDIR/test.pacbio.clr.bam.gz --force-gencomp || exit 1
+    $genozip -fB1 -@3 -t $TESTDIR/test.pacbio.clr.bam.gz --force-gencomp -o$output || exit 1
+    verify_depn_far_to_num_depn 24
 
     # invoke OFFLOAD method
     $genozip -fB1 -@3 -t --force-gencomp file://${path}${TESTDIR}/test.pacbio.clr.bam -fo $output || exit 1
     cat $TESTDIR/test.pacbio.clr.bam.gz | $genozip -i bam -fB1 -@3 -t - -fo $output || exit 1
+    verify_depn_far_to_num_depn 24
 
     # SAG by SA
-    $genozip -fB1 -@3 -t $TESTDIR/special.sag-by-sa.sam --force-gencomp || exit 1
+    $genozip -fB1 -@3 -t $TESTDIR/special.sag-by-sa.sam --force-gencomp -o$output || exit 1
+    verify_depn_far_to_num_depn 100
+
+    # SAG by SA with SA_CIGAR_abbreviated and SA_NM_by_CIGAR_X (PacBio with pbmm2)
+    $genozip -fB1 -@3 -t $TESTDIR/test.pbmm2-CIGAR-XE.bam --force-gencomp -o$output || exit 1
+    verify_depn_far_to_num_depn 98
+
+    # SAG by SA without SA_CIGAR_abbreviated or SA_NM_by_CIGAR_X, but with CIGAR_has_eqx and NM:i (PacBio with pbmm2)
+    $genozip -fB1 -@3 -t $TESTDIR/test.pacbio.hiphase.bam --force-gencomp -o$output || exit 1
+    verify_depn_far_to_num_depn 25
+
+    # SAG by SA with SA_CIGAR_abbreviated but without SA_NM_by_CIGAR_X (Nanopore with winnowmap)
+    $genozip -fB3 -@3 -t $TESTDIR/test.nanopore.t2t_v1_1.bam --force-gencomp -o$output || exit 1 # -B1 is too short 
+    verify_depn_far_to_num_depn 100
 
     # SAG by CC
-    $genozip -fB1 -@3 -t $TESTDIR/test.sag-by-cc.bam --force-gencomp || exit 1
+    $genozip -fB1 -@3 -t $TESTDIR/test.sag-by-cc.bam --force-gencomp -o$output || exit 1
+    verify_depn_far_to_num_depn 12
 
     # SAG by FLAG
-    $genozip -fB1 -@3 -t $TESTDIR/test.pacbio-blasr2.bam --force-gencomp || exit 1
+    $genozip -fB1 -@3 -t $TESTDIR/test.pacbio-blasr2.bam --force-gencomp -o$output || exit 1
+    verify_depn_far_to_num_depn 100
     
     # Alignments with and without CIGAR
-    $genozip -fB1 -@3 -t $TESTDIR/test.saggy-alns-with-and-without-CIGAR.sam.gz --force-gencomp || exit 1
+    $genozip -fB1 -@3 -t $TESTDIR/test.saggy-alns-with-and-without-CIGAR.sam.gz --force-gencomp -o$output || exit 1
+    verify_depn_far_to_num_depn 0 # all saggy
 
     # Missing QUAL for depn
-    $genozip -fB1 -@3 -t $TESTDIR/test.nanopore-minimap2-longr-depn_no_qual.bam --force-gencomp || exit 1
+    $genozip -fB1 -@3 -t $TESTDIR/test.nanopore-minimap2-longr-depn_no_qual.bam --force-gencomp -o$output || exit 1
+    verify_depn_far_to_num_depn 38
 
     cleanup
 }

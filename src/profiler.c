@@ -277,7 +277,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (bgzf_uncompress_one_prescribed_block, 2);
         PRINT (ctx_merge_in_vb_ctx, 1);
         PRINT (wait_for_merge, 2);
-        PRINT (sam_deep_merge, 2);
+        PRINT (sam_deep_zip_merge, 2);
         PRINT (zip_compress_ctxs, 1);
         PRINT (b250_zip_generate, 2);
         PRINT (zip_generate_local, 2);

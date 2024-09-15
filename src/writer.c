@@ -69,7 +69,7 @@ void writer_set_num_txtheader_lines (CompIType comp_i, uint32_t num_txtheader_li
 // or record in binary file (eg alignment in BAM). In case of a text file, it also includes the header lines.
 // For now: returns 0 if reconstruction modifies the file, and therefore recon_plan doesn't reconstruct the original file
 // To do: return line according to recon plan even if modified. challenge: lines dropped by reconstructor and not known yet to writer
-int64_t writer_get_txt_line_i (VBlockP vb, LineIType line_in_vb/*0-based*/)
+int64_t writer_get_txt_line_i (VBlockP vb, LineIType line_in_vb/*0-based (if MAIN VB, excludes gencomp lines) */)
 {
     if (flag.maybe_lines_dropped_by_reconstructor) return -1;
     if (!vb->lines.len32) return 0;
@@ -79,7 +79,20 @@ int64_t writer_get_txt_line_i (VBlockP vb, LineIType line_in_vb/*0-based*/)
     LineIType vb_num_lines = 0;
     int64_t factor = VB_DT(FASTQ) ? 4 : 1; // in FASTQ, each plan line is 4 txt lines
 
-    for_buf (ReconPlanItem, p, z_file->recon_plan) {
+    // if vb is PRIM/DEPN - find the MAIN VB embedding the desired line and expand it
+    if (z_has_gencomp && vb->comp_i != COMP_MAIN) {
+        // TODO (bug 1137): traverse MAIN VBs in VbInfo in order of absorption(!), looking for the VB embedding the requested prim/depn line:
+        // 1. set vb_num_lines to the sum of num_gc_lines[vb->comp_i] of all MAIN VBs prior (in absorption order!) 
+        //    to the VB embedding the the requested PRIM/DEPN line  
+        // 2. find the VB in which the requested prim/depn line: call a version of gencomp_piz_expand_PLAN_VB_PLAN 
+        //    that can run from an arbitrary thread to expand the PLAN_VB_PLAN in recon_plan
+        // -. We probably will need update gencomp_piz_initialize_vb_info to add more fields to VbInfo to do this
+        return -999; // not implemented
+    }
+    
+    for (int64_t i=0; i < z_file->recon_plan.len; i++) {
+        ReconPlanItemP p = B(ReconPlanItem, z_file->recon_plan, i);
+    
         // case: interleaved plan  
         if (p->flavor == PLAN_INTERLEAVE) {
             if (p->vb_i == vb->vblock_i && p->num_lines/2 > line_in_vb) // R1
@@ -88,6 +101,18 @@ int64_t writer_get_txt_line_i (VBlockP vb, LineIType line_in_vb/*0-based*/)
             else if (p->vb2_i == vb->vblock_i && p->num_lines/2 > line_in_vb) // R2
                 return txt_num_lines + (2 * line_in_vb + 1) * factor + 1; // +1 because 1-based
         }
+
+        // case: MAIN VB containing the requested line in a gencomp file - expand PLAN_VB_PLAN first
+        else if (p->flavor == PLAN_VB_PLAN && p->vb_i == vb->vblock_i) {
+            return -999; // not implemented 
+
+            // TODO (bug 1137): we need a version of gencomp_piz_expand_PLAN_VB_PLAN that can run from an arbitrary 
+            // thread (not just main or writer) - this will require using a copy of z_file->recon_plan, 
+            // because we can't change z_file->recon_plan itself under the feet of the writer thread
+            
+            // gencomp_piz_expand_PLAN_VB_PLAN (&p, &i, BEFORE_FIRST_EXPANDED_ITEM);
+            // continue;
+        } 
 
         else if (p->vb_i == vb->vblock_i) {
             // case: non-interleaved plan item containing this line
@@ -105,10 +130,10 @@ int64_t writer_get_txt_line_i (VBlockP vb, LineIType line_in_vb/*0-based*/)
 
         if (!no_write)
             txt_num_lines += (p->flavor == PLAN_TXTHEADER) ? TXTINFO(p->comp_i)->num_lines
-                                                           : (factor * p->num_lines); 
+                                                        : (factor * p->num_lines); 
     }
 
-    WARN_ONCE ("Unexpectedly, unable to find current line %s/%u in recon_plan", VB_NAME, line_in_vb);
+    WARN_ONCE ("While Unexpectedly, unable to find current line %s/%u in recon_plan", VB_NAME, line_in_vb);
     return 0;
 }
 
@@ -663,7 +688,8 @@ static void writer_add_txtheader_plan (CompIType comp_i)
         recon_plan_show (0, z_file->recon_plan.len-1, 1); // recon plan for this TXT_HEADER only
 }
 
-void writer_add_single_vb_plan (VBIType vblock_i)
+// plan for --one-vb of a PRIM or DEPN VB
+void writer_add_one_vb_plan_prim_or_depn (VBIType vblock_i)
 {
     BNXT (ReconPlanItem, z_file->recon_plan) = (ReconPlanItem){ 
         .flavor    = PLAN_VB_PLAN, // all lines

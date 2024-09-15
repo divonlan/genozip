@@ -46,20 +46,21 @@ static bool codec_hts_compress (VBlockP vb, ContextP ctx,
                                 int order, FailType soft_fail, rom name)
 {
     START_TIMER;
-
+    unsigned buf_i = 0;
+    
     if (get_line_cb) {
-        uncompressed = codec_alloc (vb, *uncompressed_len, 1);
+        uncompressed = codec_alloc_do (vb, *uncompressed_len, 1, &buf_i, __FUNCLINE);
         
         for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) {
             STRw (line);
-            get_line_cb (vb, ctx, line_i, pSTRa(line), *uncompressed_len - vb->codec_bufs[0].len, NULL);
+            get_line_cb (vb, ctx, line_i, pSTRa(line), *uncompressed_len - vb->codec_bufs[buf_i].len, NULL);
             
             if (line_len)
-                buf_add (&vb->codec_bufs[0], line, line_len);
+                buf_add (&vb->codec_bufs[buf_i], STRa(line));
         }
 
-        ASSERT (vb->codec_bufs[0].len == *uncompressed_len, "%s: \"%s\": Expecting total_qual_len_from_callbacks=%u == uncompressed_len=%u ctx=%s", 
-                VB_NAME, name, vb->codec_bufs[0].len32, *uncompressed_len, TAG_NAME);
+        ASSERT (vb->codec_bufs[buf_i].len == *uncompressed_len, "%s: \"%s\": Expecting total_qual_len_from_callbacks=%u == uncompressed_len=%u ctx=%s", 
+                VB_NAME, name, vb->codec_bufs[buf_i].len32, *uncompressed_len, TAG_NAME);
     }
 
     bool ret = !!func (vb, (uint8_t*)uncompressed, *uncompressed_len, (uint8_t*)compressed, compressed_len, order);
@@ -67,7 +68,8 @@ static bool codec_hts_compress (VBlockP vb, ContextP ctx,
     if (func == rans_compress_to_4x16) COPY_TIMER_COMPRESS (compressor_rans);
     else                               COPY_TIMER_COMPRESS (compressor_arith); // higher level codecs are accounted for in their codec code
 
-    buf_free (vb->codec_bufs[0]); // don't rely on caller to free, because this function is called in many places outside of normal section compression
+    if (get_line_cb) 
+        buf_free (vb->codec_bufs[buf_i]); // don't rely on caller to free, because this function is called in many places outside of normal section compression
 
     return ret;
 }

@@ -863,6 +863,7 @@ FileP file_open_z_write (rom filename, FileMode mode, DataType data_type, Codec 
 
     mutex_initialize (file->dicts_mutex);
     mutex_initialize (file->custom_merge_mutex);
+    mutex_initialize (file->test_abbrev_mutex);
     mutex_initialize (file->zriter_mutex);
 
     if (!flag.zip_no_z_file) {
@@ -1019,6 +1020,7 @@ void file_close (FileP *file_p)
         mutex_destroy (file->zriter_mutex);
         mutex_destroy (file->dicts_mutex);
         mutex_destroy (file->custom_merge_mutex);
+        mutex_destroy (file->test_abbrev_mutex);
         
         FREE (file->name);
         FREE (file->basename);

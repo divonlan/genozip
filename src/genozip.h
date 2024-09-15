@@ -363,7 +363,7 @@ typedef int ThreadId;
 #define IN_RANGE(x,min,after) ((x) >= (min) && (x) < (after)) // half_open [min,after)
 #define IN_RANGX(x,min,max)   ((x) >= (min) && (x) <= (max))  // close [min,max]
 
-#define MAXB64(x) ((1ULL<<(x))-1)
+#define MAXB64(x) ((uint64_t)((1ULL<<(x))-1))
 #define MAXB(x) ((uint32_t)MAXB64(x))  // eg: MAXB(3) == 0b111 == 7
 
 // round up or down to the nearest
@@ -543,8 +543,8 @@ typedef enum { IfNotExact_ReturnLower, IfNotExact_ReturnHigher, IfNotExact_Retur
 #define STRcpy(dst,src)    ({ if (src##_len) { memcpy(dst,src,src##_len) ; dst##_len = src##_len; } })
 #define STRcpyi(dst,i,src) ({ if (src##_len) { memcpy(dst##s[i],src,src##_len) ; dst##_lens[i] = src##_len; } })
 #define STRset(dst,src)    ({ dst=src; dst##_len=src##_len; })
-#define STRinc(x,n)          ({ x += (n); x##_len -= (n); })
-#define STRdec(x,n)          ({ x -= (n); x##_len += (n); })
+#define STRinc(x,n)        ({ typeof(n) my_n = (n)/*eval once*/; x += my_n; x##_len -= my_n; })
+#define STRdec(x,n)        ({ typeof(n) my_n = (n)/*eval once*/; x -= my_n; x##_len += my_n; })
 #define STRLEN(string_literal) ((unsigned)(sizeof string_literal - 1))
 #define _S(x) x, STRLEN(x)
 #define _8(x) (bytes)x, STRLEN(x)
@@ -703,8 +703,10 @@ extern StrTextLong str_time (void);
 
 extern StrText license_get_number (void);
 
-#define SUPPORT "\nIf this is unexpected, please contact "EMAIL_SUPPORT".\n"
-#define ASSERT(condition, format, ...)       ( { if (__builtin_expect (!(condition), 0)) { progress_newline(); fprintf (stderr, "%s Error in %s:%u %s%s: ", str_time().s, __FUNCLINE, version_str().s, license_get_number().s); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); fflush (stderr); exit_on_error(true); }} )
+extern rom report_support (void);
+extern rom report_support_if_unexpected (void);
+
+#define ASSERT(condition, format, ...)       ( { if (__builtin_expect (!(condition), 0)) { progress_newline(); fprintf (stderr, "%s Error in %s:%u %s%s: ", str_time().s, __FUNCLINE, version_str().s, license_get_number().s); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "%s", report_support_if_unexpected()); fflush (stderr); exit_on_error(true); }} )
 #define ASSERT0(condition, string)           ASSERT (condition, string "%s", "")
 #define ASSERTISNULL(p)                      ASSERT0 (!p, "expecting "#p" to be NULL")
 #define ASSERTNOTNULL(p)                     ASSERT0 (p, #p" is NULL")
@@ -726,7 +728,7 @@ extern StrText license_get_number (void);
                                                  ASSINP0 (!__atomic_test_and_set (&once, __ATOMIC_RELAXED), string); } )
 #define RETURNW(condition, ret, format, ...) ( { if (__builtin_expect (!(condition), 0)) { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); } return ret; }} )
 #define RETURNW0(condition, ret, string)     ( { if (__builtin_expect (!(condition), 0)) { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: %s\n", global_cmd, string); fflush (stderr); } return ret; } } )
-#define ABORT(format, ...)                   ( { progress_newline(); fprintf (stderr, "%s Error in %s:%u: ", str_time().s, __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); fflush (stderr); exit_on_error(true);} )
+#define ABORT(format, ...)                   ( { progress_newline(); fprintf (stderr, "%s Error in %s:%u: ", str_time().s, __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "%s", report_support_if_unexpected()); fflush (stderr); exit_on_error(true);} )
 #define ABORT0(string)                       ABORT (string "%s", "")
 #define WARN(format, ...)                    ( { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); } } )
 #define WARN0(string)                        WARN (string "%s", "")

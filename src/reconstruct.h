@@ -77,8 +77,7 @@ extern ContextP recon_multi_dict_id_get_ctx_first_time (VBlockP vb, ContextP ctx
 // snip is expected to be : 1-char-code + base64-dict_id + other stuff. snip is modified to be after the dict_id
 #define SCTX(snip) ({ ContextP sctx;                                \
                       if (ctx->other_did_i != DID_NONE)  {          \
-                          snip       += base64_sizeof (DictId) + 1; \
-                          snip##_len -= base64_sizeof (DictId) + 1; \
+                          STRinc(snip, base64_sizeof (DictId) + 1); \
                           sctx = CTX(ctx->other_did_i);             \
                       }                                             \
                       else                                          \

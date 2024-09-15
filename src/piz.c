@@ -182,7 +182,7 @@ void piz_uncompress_all_ctxs (VBlockP vb, PizUncompressReason reason)
 {
     START_TIMER;
 
-    bool vb_is_pair_2 = is_fastq_pair_2(vb); // is this VB a pair-2 FASTQ VB (either in a FASTQ or SAM z_file)
+    bool i_am_r2 = is_fastq_pair_2(vb); // is this VB a pair-2 FASTQ VB (either in a FASTQ or SAM z_file)
 
     for_buf (uint32_t, header_offset, vb->z_section_headers) {
         SectionHeaderCtxP header = (SectionHeaderCtxP)Bc(vb->z_data, *header_offset);
@@ -199,8 +199,8 @@ void piz_uncompress_all_ctxs (VBlockP vb, PizUncompressReason reason)
             header->dict_id = ctx->dict_id; 
         }
 
-        bool is_pair_section = vb_is_pair_2 && (BGEN32 (header->vblock_i) != vb->vblock_i); // is this a section of R1 read into an R2 vb 
-        bool uncompress_to_pair = is_pair_section && (!header->flags.ctx.paired/*not pair-identical*/ || IS_ZIP); // ZIP: always; PIZ: if pair-assisted
+        bool is_pair_section = i_am_r2 && (BGEN32 (header->vblock_i) != vb->vblock_i); // is this a section of R1 read into an R2 vb 
+        bool uncompress_to_pair = is_pair_section && (!header->flags.ctx.r1_pair_identical || IS_ZIP); // ZIP: always; PIZ: if pair-assisted
 
         ASSERT (is_b250 || header->ltype < NUM_LTYPES, "in vb=%u ctx=%s.%s: ltype=%u >= NUM_LTYPES=%u. This can possibly be solved by upgrading Genozip to the latest version", 
                 vb->vblock_i, ctx->tag_name, is_local ? "local" : "b250", header->ltype, NUM_LTYPES);
@@ -216,7 +216,7 @@ void piz_uncompress_all_ctxs (VBlockP vb, PizUncompressReason reason)
             if (is_local) {
                 ctx->lcodec = header->codec;
                 ctx->ltype  = header->ltype; 
-                ctx->nothing_char = !lt_max(ctx->ltype)          ? 0  // nothing char is only relevant for integer ltypes   
+                ctx->nothing_char = !lt_max(ctx->ltype)          ? 0 // nothing char is only relevant for integer ltypes   
                                   : header->nothing_char == 0xff ? 0 // no nothing char
                                   : header->nothing_char == 0    ? 1 // use hard-coded logic up to (0 always, and only, appears in files up to 15.0.37)
                                   :                                header->nothing_char;
@@ -380,6 +380,7 @@ static void piz_initialize_ctx_flags_from_vb_1 (VBlockP vb)
 void piz_read_all_ctxs (VBlockP vb, Section *sec/* VB_HEADER section */, bool is_pair_data) 
 {
     START_TIMER;
+    bool i_am_r2 = is_fastq_pair_2(vb);
 
     for ((*sec)++; IS_B250(*sec) || IS_LOCAL(*sec); (*sec)++) {
         ASSERT (is_pair_data || vb->vblock_i == (*sec)->vblock_i, "expecting vb->vblock_i=%u == sec->vblock_i=%u", 
@@ -389,6 +390,7 @@ void piz_read_all_ctxs (VBlockP vb, Section *sec/* VB_HEADER section */, bool is
         ContextP zctx = ctx_get_existing_zctx ((*sec)->dict_id); 
         ContextP vctx = CTX(zctx->did_i); // in PIZ z and vb contexts always have same did_i. This is also true for ZIP of R2, bc context was created by R1 and overlayed on this R2 VB.
         bool is_local = IS_LOCAL(*sec);
+        bool is_b250  = !is_local;
         
         // don't assert for <=v11 due to bug (see comment in piz_uncompress_all_ctxs)
         ASSERT (!zctx->is_ctx_alias || !VER(12), "Found a %s section of %s, this is unexpected because %s is an alias (of %s)",
@@ -399,14 +401,18 @@ void piz_read_all_ctxs (VBlockP vb, Section *sec/* VB_HEADER section */, bool is
         if (is_pair_data) {
             // note: pair_assisted available since early versions. when loading old versions, flags are fixed in sections_list_file_to_memory_format to be consistent with current version. 
             pair_assisted  = (IS_ZIP && fastq_zip_use_pair_assisted ((*sec)->dict_id, (*sec)->st)) ||
-                             (IS_PIZ && is_local  && vctx->pair_assist_type == SEC_LOCAL) ||  // R2 section indicated that recon requires assistence of R1 data
-                             (IS_PIZ && !is_local && vctx->pair_assist_type == SEC_B250);
+                             (IS_PIZ && is_local && vctx->pair_assist_type == SEC_LOCAL) ||  // R2 section indicated that recon requires assistence of R1 data
+                             (IS_PIZ && is_b250  && vctx->pair_assist_type == SEC_B250);
 
             // note: pair_identical was introduced in v15
             pair_identical = (IS_ZIP && fastq_zip_use_pair_identical ((*sec)->dict_id)) ||
-                             (IS_PIZ && is_local && !vctx->local_in_z && ((*sec)->flags.ctx.paired)) || // R2 section is missing and R1 is willing to take its stead
-                             (IS_PIZ && !is_local && !vctx->b250_in_z && ((*sec)->flags.ctx.paired));
+                             (IS_PIZ && is_local && !vctx->local_in_z && ((*sec)->flags.ctx.r1_pair_identical)) || // R2 section is missing and R1 is willing to take its stead
+                             (IS_PIZ && is_b250  && !vctx->b250_in_z  && ((*sec)->flags.ctx.r1_pair_identical));
 
+            // note: if R1 has b250 and local, and R2 has b250 without local, we have no way of knowing that 
+            // we should not load the R1's local to R2. That's ok - we load it but don't use it, because the snips in b250 don't refer to local.
+            // note: the reverse is not possible - R2 cannot have local but no b250 (dropped due to all-the-same with word_index=0)
+            // causing the incorrect load of R1's b250 instead, because ctx_drop_all_the_same prevents it. 
             if (!pair_assisted && !pair_identical) skip_R1 = true; // this R1 section is not needed by R2
 
             ASSERT (!pair_assisted || !pair_identical, "%s: %s.%s is invalidly both pair_assisted and pair_identical",
@@ -426,14 +432,19 @@ void piz_read_all_ctxs (VBlockP vb, Section *sec/* VB_HEADER section */, bool is
                 if (is_local) vctx->local_in_z = true;
                 else          vctx->b250_in_z  = true;
 
-                // note: |= (instead of =) to overcome bug in ZIP --pair in some versions <= 13 (lost track of which): 
-                // local sections with junk data created in addition to the expected b250: if both b250 and local indicate pair_assist, we take the b250.
-                if ((*sec)->flags.ctx.paired && is_fastq_pair_2(vb))
+                // note: Due a bug in ZIP --pair in some versions <= 13 (lost track of which), local sections with junk data 
+                // were created in addition to the expected b250: if both b250 and local indicate pair_assist, we take the b250.
+                if (i_am_r2 && (*sec)->flags.ctx.r2_pair_assisted && (is_b250 || vctx->pair_assist_type == SEC_NONE))
                     vctx->pair_assist_type = (*sec)->st; // set when reading R2 sections, consumed when reading pair R1 sections 
             }
 
             if (pair_assisted || (pair_identical && IS_ZIP)) 
                 vctx->pair_flags = (*sec)->flags.ctx;
+            
+            // case: R2 has one of b250/local which were already loaded, and now we are loading the R1 pair-identical for the other: don't change the flags 
+            else if (pair_identical && (vctx->local_in_z || vctx->b250_in_z))
+                {}
+
             else 
                 vctx->flags = (*sec)->flags.ctx; // override flags inherited from vb=1 and possibly the other B250/LOCAL section
         } 

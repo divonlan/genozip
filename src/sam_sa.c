@@ -17,6 +17,7 @@
 #include "sam_private.h"
 #include "chrom.h"
 #include "b250.h"
+#include "zip_dyn_int.h"
 
 //---------
 // SEG
@@ -183,6 +184,49 @@ static bool sam_seg_SA_field_is_depn_from_prim (VBlockSAMP vb, ZipDataLineSAMP d
     return true; // indeed, this depn line is in the same SA group as the prim line
 }
 
+static bool sam_SA_cigar_maybe_abbreviated (STRp(cigar))
+{
+    uint32_t n_Ms = str_count_char (STRa(cigar), 'M');
+    uint32_t n_Is = str_count_char (STRa(cigar), 'D');
+    uint32_t n_Ds = str_count_char (STRa(cigar), 'I');
+    uint32_t n_Es = str_count_char (STRa(cigar), '=');
+    uint32_t n_Xs = str_count_char (STRa(cigar), 'X');
+    uint32_t n_Hs = str_count_char (STRa(cigar), 'H');
+    uint32_t n_Ns = str_count_char (STRa(cigar), 'N');
+    uint32_t n_Ps = str_count_char (STRa(cigar), 'P');
+
+    rom p_M  = n_Ms ? memchr (cigar, 'M', cigar_len) : NULL;
+    rom p_DI = n_Is ? memchr (cigar, 'I', cigar_len) : n_Ds ? memchr (cigar, 'D', cigar_len) : NULL;
+
+    return n_Ms <= 1 && (n_Is + n_Ds) <= 1 && !n_Es && !n_Xs && !n_Hs && !n_Ns && !n_Ps &&
+           (!p_M || !p_DI || p_M < p_DI); // M appears before D/I
+}
+
+// called for exactly one SA:Z when segging a MAIN VB if SA_CIGAR abbreviation is plausible, but no SA:Zs were encountered during segconf 
+bool sam_test_SA_CIGAR_abbreviated (STRp(sa))
+{
+    str_split (sa, sa_len, 0, ';', sa, false);
+    if (n_sas) n_sas--;       // remove final empty item
+    if (!n_sas) return false; // empty (invalid) SA:Z
+
+    for (uint32_t sa_i=0; sa_i < n_sas; sa_i++) {
+        STR(cigar);
+        if (!str_item_i (sas[sa_i], sa_lens[sa_i], ',', 3, pSTRa(cigar)) || // no SA_CIGAR item: mal-formated SA:Z
+            !sam_SA_cigar_maybe_abbreviated (STRa(cigar))) // not abbreviated
+            return false;
+    } 
+
+    return true; // no evidence that SA:Z is not abbreviated, so we (speculatively) declare that it is
+}
+
+static bool sam_segconf_SA_cigar_cb (VBlockP vb, ContextP ctx, STRp (cigar), uint32_t repeat)
+{
+    if (segconf.SA_CIGAR_abbreviated == unknown && !sam_SA_cigar_maybe_abbreviated (STRa(cigar)))
+        segconf.SA_CIGAR_abbreviated = no; // found evidence that SA:Z is not abbreviated
+
+    return sam_seg_0A_cigar_cb (vb, ctx, STRa(cigar), repeat);
+}
+
 void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(sa), unsigned add_bytes)
 {
     START_TIMER;
@@ -197,7 +241,7 @@ void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(sa), unsigned add_byt
                                                                  { .dict_id = { _OPTION_SA_NM     },                  } } };
 
     decl_ctx (OPTION_SA_Z);
-    bool has_prim = sam_has_prim;
+    bool has_prim = sam_has_prim; // has a saggy, and that saggy is a prim line
 
     if (!IS_SAG_SA) goto fallback;
 
@@ -215,7 +259,13 @@ void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(sa), unsigned add_byt
 
         // we seg a container into OPTION_SA_MAIN if there is no prim line, or if the prim line doesn't match (=abnormal)
         if (abnormal || !has_prim) {
-            SegCallback callbacks[NUM_SA_ITEMS] = { [SA_RNAME]=chrom_seg_cb, [SA_POS]=seg_pos_field_cb, [SA_CIGAR]=sam_seg_0A_cigar_cb, [SA_MAPQ]=sam_seg_0A_mapq_cb };            
+            SegCallback callbacks[NUM_SA_ITEMS] = { 
+                [SA_RNAME] = chrom_seg_cb, 
+                [SA_POS]   = seg_pos_field_cb, 
+                [SA_CIGAR] = (segconf.running && segconf.SA_CIGAR_abbreviated == unknown) ? sam_segconf_SA_cigar_cb : sam_seg_0A_cigar_cb, 
+                [SA_MAPQ]  = sam_seg_0A_mapq_cb 
+            };
+
             seg_array_of_struct (VB, CTX(OPTION_SA_MAIN), container_SA, STRa(sa), callbacks, 
                                  segconf.sam_semcol_in_contig ? sam_seg_correct_for_semcol_in_contig : NULL,
                                  add_bytes); 
@@ -235,8 +285,10 @@ void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(sa), unsigned add_byt
         sam_seg_against_sa_group (vb, ctx, 0); // This will be reconstructed
 
         // we need to seg the primary NM before the SA NMs, if not segged yet
-        ASSERT (dl->NM_len, "%s: PRIM line with SA is missing NM. Not expecting MAIN to send this line to PRIM", LN_NAME);
-        sam_seg_NM_i (vb, dl, dl->NM, dl->NM_len);
+        if (!segconf.SA_NM_by_CIGAR_X) {
+            ASSERT (dl->NM_len, "%s: PRIM line with SA is missing NM:i. Not expecting MAIN to send this line to PRIM", LN_NAME);
+            sam_seg_NM_i (vb, dl, dl->NM, dl->NM_len);
+        }
 
         SegCallback callbacks[NUM_SA_ITEMS] = { [SA_RNAME]=chrom_seg_cb, [SA_POS]=seg_pos_field_cb, [SA_CIGAR]=sam_seg_0A_cigar_cb, [SA_MAPQ]=sam_seg_0A_mapq_cb };            
         int32_t num_alns = 1/*primary aln*/ + seg_array_of_struct (VB, ctx, container_SA, STRa(sa), callbacks,  // 0 if SA is malformed 
@@ -249,22 +301,21 @@ void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(sa), unsigned add_byt
                 LN_NAME, num_alns, STRf(sa));
 
         // use SA.local to store number of alignments in this SA Group (inc. primary)
-        uint8_t num_alns_8b = num_alns;
-        seg_integer_fixed (VB, ctx, &num_alns_8b, false, 0); // for non-SA PRIM lines, this is segged in sam_seg_sag_stuff
-    
+        dyn_int_append (VB, ctx, num_alns, 0); // this is always LT_UINT8 or LT_UINT16, because sam_seg_is_gc_line->sam_seg_prim_add_sag only makes a line into PRIM if num_alns <= MAX_SA_NUM_ALNS
+
         // PRIM: Remove the container b250 - Reconstruct will consume the SPECIAL_SAG, and sam_piz_load_sags will
         // consume OPTION_SA_* (to which we have already added the main fields of this line - RNAME, POS...)
         b250_seg_remove_last (VB, ctx, WORD_INDEX_NONE);
 
         // build SA Group structure in VB, to be later ingested into z_file->sa_*
-        sam_seg_prim_add_sag_SA (vb, dl, STRa (sa), dl->NM, IS_BAM_ZIP);
+        sam_seg_prim_add_sag_SA (vb, dl, STRa(sa), segconf.SA_NM_by_CIGAR_X ? vb->mismatch_bases_by_CIGAR : dl->NM, IS_BAM_ZIP);
         break;
     }
 
     // DEPN with SA Group - Seg against SA Group if we have one, or just a container if we don't
     case SAM_COMP_DEPN:
         if (vb->sag)  // sam_sa_seg_depn_find_sagroup verified that the group matches the SA field 
-            sam_seg_against_sa_group (vb, ctx, sa_len+1); // +1 for \t in SAM and \0 in BAM
+            sam_seg_against_sa_group_int (vb, ctx, vb->prim_aln_index_in_SA_Z, sa_len+1); // +1 for \t in SAM and \0 in BAM
 
         else {
             SegCallback callbacks[NUM_SA_ITEMS] = { [SA_RNAME]=chrom_seg_cb, [SA_POS]=seg_pos_field_cb, [SA_CIGAR]=sam_seg_0A_cigar_cb, [SA_MAPQ]=sam_seg_0A_mapq_cb };            

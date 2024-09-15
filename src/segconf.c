@@ -302,6 +302,7 @@ void segconf_zip_initialize (void)
             .nM_after_MD           = true,      // initialize optimistically
             .sam_is_unmapped       = true,      // we will reset this if finding a line with POS>0
             .SA_HtoS               = unknown,
+            .SA_CIGAR_abbreviated  = unknown,
             .sam_XG_inc_S          = unknown,
             .sam_has_BWA_XA_Z      = unknown,
             .PL_mux_by_DP          = flag.force_PLy ? yes : unknown,

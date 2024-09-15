@@ -1167,7 +1167,7 @@ libdeflate_alloc_decompressor_ex(VBlockP vb, const struct libdeflate_options *op
 	if (options->sizeof_options != sizeof(*options))
 		return NULL;
 
-	d = codec_alloc_do (vb, sizeof(*d), 1, func, code_line);
+	d = codec_alloc_do (vb, sizeof(*d), 1, NULL, func, code_line);
 	if (d == NULL)
 		return NULL;
 	/*

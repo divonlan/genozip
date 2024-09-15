@@ -373,7 +373,7 @@ static inline WordIndex hash_global_add_node (ContextP zctx, uint32_t hash, uint
                        zctx->tag_name, zctx->global_hash.len32, str_snip);
         else
             WARN_ONCE ("Unexpected structure of file is causing unusually slow compression. ctx=%s hash_prime=%u snip=\"%s\"%s", 
-                       zctx->tag_name, zctx->global_hash.len32, str_snip, SUPPORT);
+                       zctx->tag_name, zctx->global_hash.len32, str_snip, report_support_if_unexpected());
     }
     
     // realloc

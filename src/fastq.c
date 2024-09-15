@@ -540,8 +540,8 @@ void fastq_seg_initialize (VBlockP vb_)
     if (IS_R2 && TXT_IS_IN_SYNC) {
         uint32_t actual_num_lines = str_count_char (STRb(vb->txt_data), '\n') / 4;
         ASSERT (actual_num_lines == vb->lines.len32/*set in seg_all_data_lines*/, 
-                "expecting n_reads=%u in %s to match n_reads=%u in corresponding R1 vb=%u. effective_codec=%s. Please report this to "EMAIL_SUPPORT". Solution: use --no-bgzf.", 
-                actual_num_lines, VB_NAME, vb->lines.len32, vb->R1_vb_i, codec_name (txt_file->effective_codec)); 
+                "expecting n_reads=%u in %s to match n_reads=%u in corresponding R1 vb=%u. effective_codec=%s. %sSolution: use --no-bgzf.", 
+                actual_num_lines, VB_NAME, vb->lines.len32, vb->R1_vb_i, codec_name (txt_file->effective_codec), report_support()); 
     }
 
     vb->has_extra = segconf.has_extra; // VB-private copy

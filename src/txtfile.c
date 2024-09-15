@@ -36,7 +36,8 @@ StrText txtfile_dump_vb (VBlockP vb, rom base_name, BufferP txt_data)
 
     if (flag.is_windows) str_replace_letter (dump_filename.s, strlen(dump_filename.s), '/', '\\');
 
-    buf_dump_to_file (dump_filename.s, txt_data ? txt_data : &vb->txt_data, 1, false, false, false, txt_data->len > 8 MB);
+    if (!txt_data) txt_data = &vb->txt_data;
+    buf_dump_to_file (dump_filename.s, txt_data, 1, false, false, false, txt_data->len > 8 MB);
 
     return dump_filename;
 }
@@ -192,7 +193,7 @@ StrTextLong display_gz_header (STR8p(h), bool obscure_fname)
 {
     StrTextLong s = {};
     uint32_t s_len = 0;
-    #define ADVANCE_h(n) ({ h += (n); h_len -= (n); })
+    #define ADVANCE_h(n) STRinc(h, n)
 
     if (h_len < 3) goto fail;
     if (memcmp (h, BGZF_PREFIX, 3))
@@ -672,7 +673,7 @@ static inline uint32_t txtfile_read_block_mgzip (VBlockP vb,
              || (!requested_bytes && !vb->comp_txt_data.uncomp_len)
              || TXT_IS_MGSP) // MGSP: loop until broken 
          && ( !txt_file->no_more_blocks) ) {
-        
+
         GzStatus status = (TXT_GZ_HEADER_HAS_BSIZE ? mgzip_read_block_with_bsize : mgzip_read_block_no_bsize) (txt_file, false, txt_file->effective_codec);
 
         if (TXT_IS_MGSP && !txt_file->num_mgsp_blocks_in_vb)
@@ -701,12 +702,13 @@ static inline uint32_t txtfile_read_block_mgzip (VBlockP vb,
 
             if (flag.show_bgzf) {
                 GzBlockZip *bb = BLST (GzBlockZip, vb->gz_blocks);
-                iprintf ("READ       %s thread=MAIN%s block_i=%"PRIu64" bb_i=%u comp_index=%u comp_len=%u txt_index=%u txt_len=%u eof=%s%s\n",
+                iprintf ("READ       %s thread=MAIN%s block_i=%"PRIu64" bb_i=%u comp_index=%u comp_len=%u txt_index=%u txt_len=%u eof=%s%s disk_so_far=%"PRIu64"\n",
                          codec_name (txt_file->effective_codec), 
                          cond_str (vb->vblock_i, " vb=", VB_NAME),
                          txt_file->gz_blocks_so_far, 
                          BNUM (vb->gz_blocks, bb), bb->compressed_index, bb->comp_size, bb->txt_index, bb->txt_size, TF(bb->is_eof),
-                         str_issame_(Bc(vb->comp_txt_data, this_block_start), txt_file->gz_data.comp_len, _S(BGZF_EOF)) ? " BGZF_EOF  " : "");
+                         str_issame_(Bc(vb->comp_txt_data, this_block_start), txt_file->gz_data.comp_len, _S(BGZF_EOF)) ? " BGZF_EOF  " : "",
+                         txt_file->disk_so_far);
             }
             txt_file->gz_blocks_so_far++; // counts blocks in entire file (note: bb_i counts within VB)
 

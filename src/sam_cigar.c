@@ -356,9 +356,9 @@ void bam_seg_cigar_analyze (VBlockSAMP vb, ZipDataLineSAMP dl/*NULL if PIZ*/, ui
                                    LN_NAME, display_binary_cigar(vb)); })
 
         switch (cigar[op_i].op) { 
-            case BC_M    : 
-            case BC_E    : 
-            case BC_X    : SEQ_CONSUMED ; REF_CONSUMED ; SEQ_REF_CONSUMED       ; break ;
+            case BC_X    : SEQ_CONSUMED ; REF_CONSUMED ; SEQ_REF_CONSUMED ; COUNT(mismatch_bases_by_CIGAR); break ;
+            case BC_E    : SEQ_CONSUMED ; REF_CONSUMED ; SEQ_REF_CONSUMED ; COUNT(match_bases_by_CIGAR);    break ;
+            case BC_M    : SEQ_CONSUMED ; REF_CONSUMED ; SEQ_REF_CONSUMED       ; break ;
             case BC_I    : SEQ_CONSUMED ; COUNT(insertions)                     ; break ;
             case BC_D    : REF_CONSUMED ; COUNT(deletions)                      ; break ;
             case BC_N    : REF_CONSUMED ; vb->introns++                         ; break ;
@@ -387,9 +387,14 @@ void bam_seg_cigar_analyze (VBlockSAMP vb, ZipDataLineSAMP dl/*NULL if PIZ*/, ui
         };
 
     // evidence of not being entirely unmapped: we have !FLAG.unmapped, RNAME, POS and CIGAR in at least one line
-    if (segconf.running && !dl->FLAG.unmapped && dl->POS && !str_issame_(STRa(vb->chrom_name), "*", 1)) {
-        segconf.num_mapped++;
-        segconf.sam_is_unmapped = false; 
+    if (segconf.running) {
+        if (!dl->FLAG.unmapped && dl->POS && !str_issame_(STRa(vb->chrom_name), "*", 1)) {
+            segconf.num_mapped++;
+            segconf.sam_is_unmapped = false; 
+        }
+
+        if (vb->mismatch_bases_by_CIGAR || vb->match_bases_by_CIGAR)
+            segconf.CIGAR_has_eqx = true;
     }
 
     ASSINP (!seq_consumed || *seq_consumed, "%s: Invalid CIGAR: CIGAR implies 0-length SEQ. CIGAR=\"%s\"", 
@@ -596,6 +601,34 @@ bool sam_seg_0A_cigar_cb (VBlockP vb, ContextP ctx, STRp (cigar), uint32_t repea
     return true;
 }
 
+// abbreviate a CIGAR string to [S][M][ID][S] following the minimap2 logic in: https://github.com/lh3/minimap2/blob/master/format.c : mm_write_sam3
+// pbmm2 example (abbrev with I):    "9927S40=1I33=1D24=1D6=1D6=1D60=5I17=1I19=5I13=5I39=1I55=1I12=1I18=1D47=5S" ➤ "9927S394M15I5S"
+// pbmm2 example (abbrev with D):    "7675S5=1D5=1X5=1D5=1X11=1D32=1X5=1I3=1X12=1I27=1D9=1I12=1X5=5D1=1X5=5D1=1X5=5D1=1X51=1D6=1D5=1D12=1D18=1X6=1X6=1X6=1D10=2I5=2I4=1I5=1I5=2I12=1I6=1I6=1I6=1I6=1I6=1X5=1X5=1D3=1X49=1D30=1I6=1I47=1I12=1I59=1X5=1X5=1X11=1X35=1X5=1X5=1X5=1X5=1X5=1X5=1X5=1X5=1X5=1X5=1X4=1961S" ➤ "7675S705M6D1961S"
+// winnowmap example (CIGAR with H): "34615H15M2D24M2D1M1D6M3I10M2D9M1D22M1D18M1D16M3I6M1I8M1D9M1I4M1D27M1I23M1D7M1D3M1I2M4D12M2I38M1D3M2I4M6D6M2D2M1D5M6D3M5I23M2D2M1D6M1I9M2I16M1D10M2D24M4I2M1I3M2I1M1I16M3I5M3I10M1I1M2D5M3I6M1I3M1D2M4I3M3D5M2I1M1I6M1D13M6D5M2D9M2I2M2I21M2D11M4I3M1I2M5I2M2I9M3D3M1I4M1I18M1D7M1D16M1I14M1I19M1I11M1D15M2I1M3D2M2D4M1D13M2D20M1D2M1D6M2D21M5I7M1I3M1I13M4I1M1D8M1D21M1D11M1I39M2D10M1I4M3D9M2I13M1I8M3I10M1D20M1I10M1D14M1D5M2I5M1I12M1D16M1D5M1D14M4D17M1I14M1D17M1I4M1D49M2D2M2D1M1D13M2D13M1I26M1D2M3I1M1I6M5D16M1I9M1I3M1I7M1D6M3D26M1I7M1I14M1I1M2D9M1D5M2D6M1D9M1I27M1D7M1I7M2I3M1D20M1D9M1D4M5I12M1D5M4D6M1D4M1D10M1I2M1D2M2D23M2I1M1D35M1D10M1D9M2I23M1D4M4D3M1D8M1I5M3D11M1I22M3I20M1I8M2D19M1I8M1D4M2D19M2D6M2I4M2I21M2D12M1I13M2I17M2I4M1D3M1D8M1D26M1I2M1D12M1D1M2I5M1D7M1D10M1D7M2D1M1D3M3I1M1D13M1D9M4D5M2D9M2I14M1I15M2D6M1D14M2I4M1D10M2I2M3D5M1I9M3D3M1D8M1I10M1I3M1I1M1I5M2D7M1D4M1I3M2D4M1D17M4D1M3D6M2I3M2D6M1D3M2D7M1D4M1D6M2D11M1I26M1D1M1D8M1D2M1D7M1D6M3D1M1D12M1I2M2D3M2D15M2D6M3I2M2D12M1I13M1D7M1I1M1I9M1D1M2D5M2I5M1D1M4I11M1D13M1I15M2D4M1I3M2I4M1I3M1D9M1D8M1I18M1I6M1I2M1D7M5D13M1I5M2I4M4I1M2I7M4I8M5I3M3D1M1D8M1D14M6I32M1I3M2I7M2I6M2I3M2D3M1D9M2I1M1I4M1I4M2I15M2D2M1I3M2I21M3I3M1D5M1I7M2I5M1I6M1I8M3I4M2D8M1I8M2D7M3I21M1I5M1I16M3D12M1I6M5I6M1D12M1I13M1D8M2I7M4D4M1I9M1D3M1I18M1I27M1D12M2I9M1D4M1D40M2I22M1I1M1I14M4D8M1D10M1D6M1I6M1I7M1D3M1D4M1D1M6I2M1I8M2I3M2I4M1D7M2D4M1D5M1I5M1I15M4I2M2D8M2D11M1I5M2D1M1D6M1D5M1D20M1I9M2D5M1I9M2I22M4D13M1I29M2D17M2D5M1I16M4I1M2D5M2I6M2D3M9D8M1D1M3D11M2I5M1I4M1I16M2I20M1I19M4I3M1I6M1I9M2D11M2I3M1I6M1I2M1I9M1D4M1D2M2I2M2D5M1I6M1D7M1I8M3I1M1D4M2I3M1D13M1D22M5I12M2I5M1D11M1D14M1D2M2I7M4I5M1I4M3I4M2I14M1I33M6I5M2D2M3D5M1I10M1I8M2D2M1I12M3I5M2I3M1I3M2I4M3I7M1D12M2D6M1I28M2D9M1D4M2I1M4I2M2I3M3I5M2I4M1I2M2I3M1I6M3I2M1I11M1I15M6I3M1I9M1I5M2I1M1I4M1I4M1I29M1I4M4I2M1D5M2I15M1D3M1I2M1I5M1D9M2I13M1D5M1D1M3D3M1D12M2D8M1I19M1D11M1D12M1I4M2I5M1I6M5D1M1D11M5D5M2D26M1D3M1D16M3I2M1D6M1D7M2D14M1D14M4D11M2D9M1I7M1I8M2I32M5I4M1I7M3D7M4D16M2D13M7I2M1I4M1I43M2I3M3D1M2D13M2D3M1D10M1I7M1I2M1D18M1I20M2I3M1D3M1I2M1I11M1D12M2D2M1D4M1I18M2D9M1D6M1D20M1D14M1D9M1I5M1D24M1D3M1I4M1D20M1D7M1I40M1D4M4I3M1D7M3D19M2D4M3I5M2D5M1D1M1D4M1I9M1D9M1I6M1D4M1I4M1I3M1I5M5I10M1I9M1D14M5I6M3I18M1D10M2D6M5I5M2I7M1D6M7I4M2D3M2D7M1I8M3I2M4I5M1I6M6D10M2I4M1D6M4I8M1D4M1D9M1I4M1I5M2D5M2I11M1I10M4D5M2I2M1D11M3I4M7D13M6D1M1D3M1D5M1D3M1D3M4D5M1I1M1I6M3I3M3D8M3I9M5I5M2I1M1I2M2I2M2I6M3I2M1D10M3I2M3I13M7I5M2I16M2D4M1I19M2D7M2D3M2I4M1D10M3I2M1I4M4D7M3D6M3D3M1D4M2D8M1I2M3D1M1D13M1D11M3I1M1D12M1D4M1I27M1I5M3I5M1I1M1I15M3I6M4I7M4D5M1D4M1I20M4D10M2I4M1D3M2I2M1I17M1D2M3I10M2I4M4D2M1I12M4I9M1D15M1I5M2D6M1I2M2D6M1I6M1D9M6D8M1I9M1I8M2D3M2D1M1D5M1I9M1I17M5D15M2D8M1D6M1D5M1I4M4D6M3I1M1I16M2I6M1D4M2D3M1I3M1D1M1D9M1I3M1I6M2I4M1D6M1D3M1D1M2I6M1D2M1I12M1D3M2D1M1D1M4D2M2D4M2D3M2D11M2D8M1D13M3D4M1D2M1I1M2I11M2I15M3D4M8D9M1I2M3I3M3I3M1I3M2D7M1I10M2D2M1I7M1I5M1I12M3I5M1D7M1I2M2I8M1I5M1D6M2D16M1I3M1D24M1I2M2I4M2D22M1D22M1I7M3I8M2I5M2D9M1I7M2D10M2D1M2D2M2D11M2D2M1I4M1D2M1I12M2I6M2I3M1D28M1D35M2I3M2D10M1I35M5I1M1I6M4I6M2I11M1I6M2I20M1I12M1I5M1I2M1I7M1I6M1D2M1D2M3D3M1D1M1D8M1D10M1I6M1D2M1D10M1I6M2D1M1D14M1I8M2D14M1I3M1D9M3D9M2D5M1D5M1D11M1D4M1D3M1D3M1D5M1D11M5D8M5D1M1D12M3D9M1I1M1I4M1D2M2D7M1D9M3D11M2I6M1D3M1I3M41D2M1D3M6D10M1I6M1D4M1D4M1D2M1I13M2I1M1I14M1D4M3I3M1I2M3D2M1D11M1I4M2D8M2D4M1I16M1D11M5I2M2I7M1I6M1D9M1D7M2D10M1D9M1D23M2I4M2I7M1I5M2D8M1D4M2D15M1I2M3D4M3I6M1I7M2D8M3D38M1I17M1D3M1D2M1D5M2D3M1D18M1D4M1I7M5I6M2I3M1D15M2I7M3D5M2D9M1I9M1D3M1I34M3D12M3D5M1D13M1D10M2D5M2I3M3D10M2I16M1I5M1I6M1D3M6I1M1D7M1I9M1I17M6I20M2D11M4I5M2D8M3D2M2I5M3I3M1D6M1I3M1D8M1I5M4D10M1D3M1D8M1D11M2I22M1I1M3D12M3D18M1D7M2I2M4D5M1D13M7D2M3D18M8I4M3I2M1I7M1D4M1D13M1I3M2I38M1D25M2D6M1I25M4I23M1I2M2D21M2D1M3D18M2I38M1D11M1D14M2I5M1D8M1D3M1I5M1D5M1I11M2I4M1I3M1D24M3D5M3D13M3D10M2D11M1D3M1D3M1I7M1D5M1D8M2I3M3D2M3D6M2I12M1I10M2I17M3D7M1I5M1I10M1I2M3D14M1D3M2I6M1I13M1D6M1I7M1I7M1I11M1I5M1D4M1I3M1D11M2I6M1D2M3D4M1I8M4D3M1D8M1D14M1D18M1I4M4D13M1D4M3D1M1D7M3D15M1D8M1D15M1D2M2D22M1D8M1I2M1I5M1D6M1I3M1D1M1D6M2I14M1D6M6D1M1D11M4I6M2D4M1D11M1I16M2D9M2I1M1D7M1D5M1D5M1I7M2D4M1I10M1D44M1D10M3D9M1I2M4D11M2D17M1D4M2I9M2I10M2D3M2D6M1I6M1D6M1I7M2I3M1D3M2D4M1I12M1I4M1D15M2I6M2D19M1I15M1I4M3I17M1D6M1I2M1I10M1D6M2D7M1I2M1I13M1D10M4I7M4I1M2D12M1I12M3I3M4I5M9I1M5I8M1D1M1D17M1I29M1D7M1D4M1I8M1D5M5D2M1I5M2D10M1D7M1I2M1I25M1D7M1I2M1I3M1I16M7I2M2I7M1D4M4I9M2I5M1I4M3D6M1D13M2I23M1D6M1D4M2I7M1D6M4D5M1I1M3I8M1I2M1D9M6D3M1D3M2D29M2I4M3I10M1D21M4D5M2D9M2D16M1D10M1D1M1D10M2D4M1I4M2I13M1I5M1D10M3I7M1D1M2D5M1D1M1D21M2D15M1D6M1D6M2I4M3D14M2D5M1D6M3I4M4I1M1I3M1D32M1D19M5D2M1I3M1D16M6I7M1D14M1I6M1I6M1D3M1D3M2D7M2D15M4I2M1I3M6D5M6I3M1I5M1D7M1I8M1D33M2D7M2D12M2I35M3I24M3D8M1D3M1D4M2D15M2I12M1D11M3I15M4I10M2D8M1D10M2D20M4D3M1D1M1D11M5D15M1I8M1D26M1I1M1I9M2D24M2D10M2I4M3D3M2I10M1D1M1D16M4I12M2I37M1I4M1D9M2D9M3I3M3I3M2I5M1D2M1D12M3D12M4D7M1I11M1I14M1D1M1D5M1D11M2D28M3D4M1I7M1D1M2I2M1D7M1I12M1D2M3I7M6I1M1D15M3I10M1D2M1D18M2D4M2D4M2D6M1I20M1D3M1D2M2I8M1D7M2D24M2D2M1D4M2D11M1D1M1D10M1I11M2D2M3D15M2I4M1I2M1I6M2I11M3I5M3D3M1D10M2I8M1I14M2I2M1I6M1I6M2D4M1D3M2I6M2D10M3I16M1I5M2D5M1I3M1D3M1D9M2I10M1D4M2I8M1I1M4I15M1I5M1D6M2D3M1I10M2D5M1D4M1D21M1I9M2I2M1D6M1I1M3D4M1D12M1D4M1I5M1I20M1D3M1D9M3I4M2D4M2D1M1D5M1D7M2I5M1D3M1D19M2D15M2I4M1I7M3D6M1D12M1I5M1I3M2I9M1D3M1D14M1D4M3D13M1I2M5I3M1D20M2I1M1I4M1I6M3I6M5I6M2I4M3D12M3D8M1I5M1I7M4D25M2D1M2D11M1D5M2D20M1D69M1I4M1D14M1D3M1D5M1D10M1D5M2D9M1D22M2I3M3D6M1I9M3I2M2I14M2D3M1D2M2I2M1D11M1D11M1I9M1D15M1I6M1D6M1D22M1D17M2I2M2I7M1I14M3I11M4D2M1I13M1I8M1I9M1I2M3D3M1D6M1I3M1D9M2I12M2D1M1I9M1I5M4D8M2I19M1D4M1I19M3D15M1I10M1D12M1I10M1D13M1I3M2D20M1I28M2D17M1I9M5I3M7I4M5D2M1D26M1I7M1I11M1D3M1D26M1D16M1D15M1I3M1I12M1D5M1I7M4D3M1I7M1D12M1D7M1D8M3D3M1I10M1I10M2I7M1D25M1I1M1I4M2D27M1D2M1D14M1I29M1D7M1D11M1I30M1D1M1D10M2D3M4I2M1I5M1D19M1I8M1D4M3I12M1D10M1I3M1I1M3I21M1I4M2D12M1D14M4I21M1I3M2D5M2D7M4D2M4D14M4D6M1I9M1I13M1I1M2I10M1I4M2I10M1I1M1I5M1D6M7D8M3I1M1D2M2I5M1D10M2D26M2I9M6D11M3I13M2D16M1D50M1I3M2D7M2I3M4D27M1I9M1I12M2I1M3D11M1I3M2I16M2D3M1D14M1D7M1D4M1I3M1I4M1I1M1I10M1D15M2D12M1D22M3D7M1D6M1D6M1I7M1I2M4I3M2D7M1D13M2D15M2D9M1D4M3I6M1I4M1D14M1D5M2D5M1I5M3I2M1D24M2D25M1D6M3D4M1D5M1D5M2I1M1I9M1D9M4D2M3D1M1D5M3I8M3I6M3I3M4I2M1I12M1D4M2D11M1I4M1I4M2D6M3D2M1I6M2D7M2D3M1I17M1D4M1D11M1I3M2D4M1D25M1I4M1D3M1D9M2I2M1D6M1D12M1I10M40010H" ➤ "34615S13273M138D40010S"
+static void cigar_abbreviate (pSTRp(cigar), uint32_t seq_len, uint32_t ref_consumed, uint32_t soft_clip[2], uint32_t hard_clip[2], StrText *abbrev_cigar)
+{
+    for (int i=0; i < 2; i++)
+        ASSERT (!soft_clip[i] || !hard_clip[i], "only one of soft_clip[%u]=%u or hard_clip[%u]=%u can be set", i, soft_clip[i], i, hard_clip[i]);
+    
+    // following the logic in https://github.com/lh3/minimap2/blob/master/format.c : mm_write_sam3
+    uint32_t l_q = seq_len - soft_clip[0] - soft_clip[1];
+    uint32_t l_D=0, l_I=0, l_M=0;
+    if (l_q < ref_consumed) l_M = l_q, l_D = ref_consumed - l_M;
+    else                    l_M = ref_consumed, l_I = l_q - l_M;
+    uint32_t cl5 = soft_clip[0] ? soft_clip[0] : hard_clip[0]; 
+    uint32_t cl3 = soft_clip[1] ? soft_clip[1] : hard_clip[1];
+    
+    *cigar_len = snprintf (abbrev_cigar->s, sizeof (*abbrev_cigar), "%s%s%s%s%s%s%s%s%s%s",
+        cond_int (cl5, "", cl5), cl5 ? "S" : "",
+        cond_int (l_M, "", l_M), l_M ? "M" : "",
+        cond_int (l_I, "", l_I), l_I ? "I" : "",
+        cond_int (l_D, "", l_D), l_D ? "D" : "",
+        cond_int (cl3, "", cl3), cl3 ? "S" : "");
+
+    *cigar = abbrev_cigar->s;
+}
+
+// seg the prim CIGAR that in piz, will be loaded into the SAG and used to reconstructed the SA:Z field in the depn lines
 static void sam_cigar_seg_prim_cigar (VBlockSAMP vb, STRp(textual_cigar))
 {
     ContextP sa_cigar_ctx = CTX(OPTION_SA_CIGAR);
@@ -742,7 +775,12 @@ void sam_seg_CIGAR (VBlockSAMP vb, ZipDataLineSAMP dl, uint32_t last_cigar_len, 
     // case: DEPN or PRIM line.
     // Note: in DEPN, cigar already verified in sam_sa_seg_depn_find_sagroup to be the same as in SA alignment
     // Note: in DEPN, if cigar has soft/hard clips, we can only seg this cigar against against sag if soft/hard clips is consistent wtih SA_HtoS
-    if (sam_seg_has_sag_by_SA (vb) && 
+    // Note: in minimap2 and its derivatives SA_CIGAR abbreviated. Therefore:
+    // - In PRIM, we store the full unabbreviated CIGAR in SA_CIGAR and abbreviate it in PIZ when reconstructing
+    //   SA:Z of the depn lines. The full CIGAR is needed to reconstruct SEQ from the reference during loading.
+    // - In DEPN, we seg the unabbreviated CIGAR directly into SAM_CIGAR (i.e. not copying it from SAG) 
+     if (sam_seg_has_sag_by_SA (vb) && 
+        !(IS_DEPN(vb) && segconf.SA_CIGAR_abbreviated == yes) &&
         !(IS_DEPN(vb) && segconf.SA_HtoS==yes && (vb->soft_clip[0] || vb->soft_clip[1])) && 
         !(IS_DEPN(vb) && segconf.SA_HtoS==no  && (vb->hard_clip[0] || vb->hard_clip[1]))) {
 
@@ -1063,16 +1101,20 @@ void sam_reconstruct_main_cigar_from_sag (VBlockSAMP vb, bool do_htos, ReconType
 }
 
 // called from sam_sa_reconstruct_SA_from_SA_Group for reconstructing a CIGAR in an SA:Z field of a PRIM/DEPN line
-void sam_reconstruct_SA_cigar_from_SA_Group (VBlockSAMP vb, SAAln *a)
+uint32_t sam_reconstruct_SA_cigar_from_SA_Group (VBlockSAMP vb, SAAln *a, bool abbreviate, bool get_X_bases)
 {
+    STR(cigar);
+    cigar = BAFTtxt;
+    uint32_t X_bases=0;
+
     if (a->cigar.piz.is_word) {
-        STR(cigarS);
-        ctx_get_snip_by_word_index (CTX(OPTION_SA_CIGAR), a->cigar.piz.index, cigarS);
-        RECONSTRUCT_SEP (cigarS, cigarS_len, ',');
+        rom cigarS;
+        ctx_get_snip_by_word_index_do (CTX(OPTION_SA_CIGAR), a->cigar.piz.index, &cigarS, &cigar_len, __FUNCLINE);
+        RECONSTRUCT (cigarS, cigar_len);
     }
 
     else {
-        uint32_t cigar_len = a->cigar.piz.len_lo | (a->cigar.piz.len_hi << ALN_CIGAR_LEN_BITS_LO);
+        cigar_len = a->cigar.piz.len_lo | (a->cigar.piz.len_hi << ALN_CIGAR_LEN_BITS_LO);
 
         if (a->cigar.piz.comp_len) { // compressed
             uint32_t uncomp_len = cigar_len;
@@ -1087,9 +1129,35 @@ void sam_reconstruct_SA_cigar_from_SA_Group (VBlockSAMP vb, SAAln *a)
 
         else  // not compressed
             RECONSTRUCT (B8(z_file->sag_cigars, a->cigar.piz.index), cigar_len);
-
-        RECONSTRUCT1 (',');
     }
+
+    if (abbreviate || get_X_bases) {
+        // analyze this textual SA_CIGAR
+        uint32_t n=0, op_i=0, seq_len=0, ref_consumed=0, soft_clip[2]={}, hard_clip[2]={}; 
+        for (rom c=cigar; c < cigar + cigar_len; c++) 
+            switch (*c) {
+                case '0' ... '9'    : n = n*10 + (*c - '0');                                        break;
+                case '=' : case 'M' : seq_len += n; ref_consumed += n;               n = 0; op_i++; break;
+                case 'X'            : seq_len += n; ref_consumed += n; X_bases += n; n = 0; op_i++; break;
+                case 'I'            : seq_len += n;                                  n = 0; op_i++; break;
+                case 'N' : case 'D' : ref_consumed += n;                             n = 0; op_i++; break;
+                case 'S'            : seq_len += n; soft_clip[op_i > 0] += n;        n = 0; op_i++; break;
+                case 'H'            : hard_clip[op_i > 0] += n;                      n = 0; op_i++; break;
+                default             :                                                n = 0; op_i++; break;
+            }      
+
+        Ltxt -= cigar_len; // undo
+
+        StrText abbrev_cigar; // memory for abbreviated cigar
+        if (abbreviate)
+            cigar_abbreviate (pSTRa(cigar), seq_len, ref_consumed, soft_clip, hard_clip, &abbrev_cigar);
+
+        RECONSTRUCT_str (cigar); // reconstruct abbreviated cigar
+    }
+
+    RECONSTRUCT1 (',');
+
+    return X_bases;
 }
 
 // PIZ: main thread (not thread-safe): called from sam_show_sag_one_grp for getting first few characters of alignment cigar
@@ -1137,9 +1205,15 @@ rom sam_piz_display_aln_cigar (const SAAln *a)
 // Note: the signature is in-memory and is not written to the genozip file, so can be changed at will
 //---------------------------------------------------------------------------------------------------
 
-CigarSignature cigar_sign (STRp(cigar))
+CigarSignature cigar_sign (VBlockSAMP vb, 
+                           ZipDataLineSAMP dl, // set if field originates from SAM_CIGAR, NULL if it originates from SA:Z 
+                           STRp(cigar))
 {
     CigarSignature sig;
+
+    StrText abbrev_cigar; // memory allocation for abbreviated cigar, if needed
+    if (dl && segconf.SA_CIGAR_abbreviated == yes) 
+        cigar_abbreviate (pSTRa(cigar), dl->SEQ.len, vb->ref_consumed, vb->soft_clip, vb->hard_clip, &abbrev_cigar);
 
     // case: cigar is not longer than the signature - the cigar IS the signature
     if (cigar_len <= CIGAR_SIG_LEN) {

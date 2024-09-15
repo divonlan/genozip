@@ -123,7 +123,7 @@ void gencomp_piz_initialize_vb_info (void)
 
     // case: we're asked to output a single PRIM or DEPN VB 
     if (flag.one_vb && flag.one_vb <= z_file->num_vbs && IN_RANGX (VBINFO(flag.one_vb)->comp_i, SAM_COMP_PRIM, SAM_COMP_DEPN)) 
-        writer_add_single_vb_plan (flag.one_vb);
+        writer_add_one_vb_plan_prim_or_depn (flag.one_vb);
     
     // case: plan of all MAIN VBs with embedded PRIM / DEPN lines as presribed
     else 

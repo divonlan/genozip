@@ -257,7 +257,8 @@ void sam_zip_genozip_header (SectionHeaderGenozipHeaderP header)
     header->sam.segconf_is_paired       = segconf.is_paired;             // v14
     header->sam.segconf_sag_type        = segconf.sag_type;              // v14
     header->sam.segconf_sag_has_AS      = segconf.sag_has_AS;            // v14
-    header->sam.segconf_SA_HtoS         = (segconf.SA_HtoS == yes);      // v14
+    header->sam.segconf_SA_HtoS         = segconf.SA_HtoS == yes;        // v14
+    header->sam.segconf_SA_CIGAR_abb    = segconf.SA_CIGAR_abbreviated == yes; // 15.0.66
     header->sam.segconf_is_sorted       = segconf.is_sorted;             // v14
     header->sam.segconf_is_collated     = segconf.is_collated;           // v14
     header->sam.segconf_pysam_qual      = segconf.pysam_qual;            // v14
@@ -271,12 +272,13 @@ void sam_zip_genozip_header (SectionHeaderGenozipHeaderP header)
     header->sam.segconf_deep_no_qual    = segconf.deep_no_qual;          // v15
     header->sam.segconf_MAPQ_use_xq     = segconf.MAPQ_use_xq;           // 15.0.61
     header->sam.segconf_has_MQ          = !!segconf.has[OPTION_MQ_i];    // 15.0.61
+    header->sam.segconf_SA_NM_by_X      = segconf.SA_NM_by_CIGAR_X;      // 15.0.66
     if (segconf.deep_N_fq_score && segconf.deep_N_sam_score)
         header->sam.segconf_deep_N_fq_score = segconf.deep_N_fq_score;   // 15.0.39
     
     unsigned est_sam_factor_mult = round (MAX_(segconf.est_sam_factor, 1) * (double)SAM_FACTOR_MULT);
     if (est_sam_factor_mult > 255) {
-        WARN ("est_sam_factor_mult=%u, this might affect genocat translation to SAM. %s", est_sam_factor_mult, SUPPORT);
+        WARN ("est_sam_factor_mult=%u, this might affect genocat translation to SAM. %s", est_sam_factor_mult, report_support_if_unexpected());
         est_sam_factor_mult = 0; // fallback to PIZ default
     }
     header->sam.segconf_sam_factor      = est_sam_factor_mult;
@@ -627,6 +629,7 @@ static uint32_t num_lines_at_max_len (VBlockSAMP vb)
     return count;
 }
 
+// called after reading SAM header, and sometimes also after segconf
 void sam_segconf_set_by_MP (void)
 {
     if (MP(bwa)) segconf.sam_mapper = MP_BWA; // we consider "bwa" to be "BWA"
@@ -664,6 +667,9 @@ void sam_segconf_set_by_MP (void)
     segconf.sam_has_BWA_X01_i = segconf.is_bwa || MP(DRAGEN);
 
     segconf.sam_has_bowtie2_YS_i = MP(BOWTIE2) || MP(BSSEEKER2) || MP(HISAT2);
+
+    if (!segconf.is_minimap2) // we assume SA:Z CIGAR is abbreviated IFF is_minimap2 (this might be refined in the future) 
+        segconf.SA_CIGAR_abbreviated = no; 
 }
 
 // finalize Seg configuration parameters
@@ -703,6 +709,11 @@ void sam_segconf_finalize (VBlockP vb_)
         segconf.sam_mapper = MP_STAR;
         sam_segconf_set_by_MP();
     }
+
+    // SA:Zs analyzed sam_segconf_SA_cigar_cb found no evidence of no-abbrivation: since 
+    if (segconf.has[OPTION_SA_Z] &&              // we analyzed some SA_CIGARs in sam_segconf_SA_cigar_cb
+        segconf.SA_CIGAR_abbreviated == unknown) // unknown means that sam_segconf_set_by_MP determined that SA_CIGARs might be abbreivated and sam_segconf_SA_cigar_cb found no evidence that they are not
+        segconf.SA_CIGAR_abbreviated = yes;
 
     // sequencing technologies that results in lots of insertion errors - will benefit from the use_insertion_ctxs method
     if (TECH(PACBIO) || TECH(NANOPORE) || TECH(ULTIMA))
@@ -808,6 +819,10 @@ void sam_segconf_finalize (VBlockP vb_)
     segconf.has_MD_or_NM = segconf.has[OPTION_MD_Z] || segconf.has[OPTION_NM_i] ||
                            (MP(STAR) && segconf.has[OPTION_nM_i] && !segconf.is_paired); // we use the NM method to seg nM in this case
 
+    // use the number of CIGAR's X bases to determine SA_NM. Note that this excludes I and D included in NM:i, so 
+    // if NM:i is present as well, we expect it to be different that SA_NM.
+    segconf.SA_NM_by_CIGAR_X = segconf.CIGAR_has_eqx; // TO DO: test explicitly if SA_NM is determined by CIGAR's X bases or by NM:i (bug 1139)  
+
     // note: in case of both is_biobambam2_sort and minimap2, it is likely biobambam's tag
     if (segconf.has[OPTION_ms_i]) {
         if (segconf.is_biobambam2_sort && segconf.is_paired) 
@@ -889,7 +904,8 @@ void sam_segconf_finalize (VBlockP vb_)
 // this is SAM/BAM's zip_after_segconf callback
 void sam_zip_after_segconf (void)
 {
-    sam_set_sag_type();   
+    if (segconf.line_len) // not header-only file
+        sam_set_sag_type();   
 
     if (flag.deep)
         buf_alloc_zero (evb, &z_file->vb_num_deep_lines, 0, 10000, uint32_t, 0, "z_file->vb_num_deep_lines");

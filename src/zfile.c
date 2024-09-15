@@ -66,12 +66,15 @@ static void zfile_dump_section (BufferP uncompressed_data, SectionHeaderP header
     VBIType vb_i = BGEN32 (header->vblock_i);
 
     // header
-    snprintf (filename, sizeof(filename), "%s.%u.%s.header", st_name (header->section_type), vb_i, dis_dict_id (dict_id).s);
+    snprintf (filename, sizeof(filename), "%s.%u%.20s.header", st_name (header->section_type), vb_i, 
+              cond_str (IS_DICTED_SEC(header->section_type), ".", dis_dict_id (dict_id).s));
     file_put_data (filename, header, section_len, 0);
+    iprintf ("\nDumped file %s\n", filename);
 
     // body
     if (uncompressed_data->len) {
-        snprintf (filename, sizeof(filename),"%s.%u.%s.body", st_name (header->section_type), vb_i, dis_dict_id (dict_id).s);
+        snprintf (filename, sizeof(filename),"%s.%u%.20s.body", st_name (header->section_type), vb_i, 
+                  cond_str (IS_DICTED_SEC(header->section_type), ".", dis_dict_id (dict_id).s));
         buf_dump_to_file (filename, uncompressed_data, 1, false, false, true, false);
     }
 }
@@ -160,7 +163,7 @@ void zfile_uncompress_section (VBlockP vb,
                          uncompressed_data, data_uncompressed_len,
                          dict_id.num ? dis_dict_id(dict_id).s : st_name(expected_section_type));
 
-        //--verify-codec: verify that adler32 of the decompressed data is equal that of the original uncompressed data
+        //--verify-codec: verify that adler32 of the uncompressed data is equal that of the original uncompressed data
         if (flag.verify_codec && uncompressed_data && data_uncompressed_len && 
             BGEN32 (header->magic) != GENOZIP_MAGIC &&
             header->uncomp_adler32 != adler32 (1, uncompressed_data->data, data_uncompressed_len)) {
@@ -174,11 +177,16 @@ void zfile_uncompress_section (VBlockP vb,
     if (flag.show_b250 && expected_section_type == SEC_B250) 
         zfile_show_b250_section (header_p, uncompressed_data);
     
-    if ((flag.dump_section && !strcmp (st_name (expected_section_type), flag.dump_section)) || bad_compression) {
+    if ((flag.dump_section && !strcmp (st_name (expected_section_type), flag.dump_section)) || 
+        flag.dump_section_i == header->section_i || // zfile_read_section_do replaced magic with section_i
+        bad_compression) {
         uint64_t save_len = uncompressed_data->len;
         uncompressed_data->len = data_uncompressed_len; // might be different, eg in the case of ref_hash
         zfile_dump_section (uncompressed_data, header, compressed_offset, dict_id);
         uncompressed_data->len = save_len; // restore
+
+        if (is_genocat && flag.dump_section_i == header->section_i)
+            exit_ok;
     }
 
     if (vb) COPY_TIMER (zfile_uncompress_section);
@@ -449,6 +457,8 @@ int32_t zfile_read_section_do (FileP file,
         if (is_genocat && (IS_DICTED_SEC (expected_sec_type) || expected_sec_type == SEC_REFERENCE || expected_sec_type == SEC_REF_IS_SET))
              return header_offset; // in genocat --show-header - we only show headers, nothing else
     }
+
+    header->section_i = BNUM (z_file->section_list, sec); // note: replaces magic, 32 bit only. nonsense if sec is not in z_file->section_list.
 
     ASSERT (is_magical || flag.verify_codec, "called from %s:%u: corrupt data (magic is wrong) when attempting to read section=%s dict_id=%s of vblock_i=%u comp=%s in file %s", 
             func, code_line, st_name (expected_sec_type), sec ? dis_dict_id (sec->dict_id).s : "(no sec)", vb->vblock_i, comp_name(vb->comp_i), z_name);

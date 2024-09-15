@@ -182,8 +182,9 @@ WordIndex ctx_get_next_snip (VBlockP vb, ContextP ctx, bool is_pair, pSTRp (snip
     // we check after (no risk of segfault because of buffer overflow protector) - since b250 word is variable length
     if (IS_PIZ)
         ASSPIZ (iterator->next_b250 <= BAFT8 (*b250), 
-                "while reconstructing (vb->lines.len=%u): iterator for %s(%u) %sreached end of b250. %s.len=%u, preprocessing=%s.%s", 
-                vb->lines.len32, ctx->tag_name, ctx->did_i, is_pair ? "(PAIR) ": "", is_pair ? "pair" : "b250", b250->len32, TF(vb->preprocessing),
+                "while reconstructing (vb->lines.len=%u): iterator for %s(%u) %sreached end of b250. %s.len=%u is_pair=%s ctx->%sflags={ %s } preprocessing=%s.%s", 
+                vb->lines.len32, ctx->tag_name, ctx->did_i, is_pair ? "(PAIR) ": "", is_pair ? "pair" : "b250", b250->len32,
+                TF(is_pair), is_pair ? "pair_" : "", sections_dis_flags (is_pair ? ctx->pair_flags : ctx->flags, SEC_B250, vb->data_type, IS_R2 && !is_pair).s, TF(vb->preprocessing),
                 b250->len32 ? "" : " Check Skip function (since b250.len=0).");
     else
         ASSERT (iterator->next_b250 <= BAFT8 (*b250), 
@@ -1041,8 +1042,9 @@ static inline bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx, ContextP *z
     // warn if dict size is excessive
     if (zctx->dict.len > EXCESSIVE_DICT_SIZE && !zctx->dict_len_excessive) {
         zctx->dict_len_excessive = true; // warn only once (per context)
-        WARN ("WARNING: excessive zctx dictionary size - causing slow compression and decompression and reduced compression ratio. Please report this to " EMAIL_SUPPORT ".\n"
+        WARN ("WARNING: excessive zctx dictionary size - causing slow compression and decompression and reduced compression ratio. %s\n"
               "%s %s data_type=%s ctx=%s vb=%s vb_size=%"PRIu64" zctx->dict.len=%"PRIu64" %s. First 1000 bytes: ", 
+              report_support(),
               cond_str (VB_DT(BAM) || VB_DT(SAM), "sam_mapper=", segconf_sam_mapper_name()), 
               cond_str (VB_DT(BAM) || VB_DT(SAM) || VB_DT(FASTQ), "segconf_qf_name=", segconf_qf_name(QNAME1)), 
               z_dt_name(), zctx->tag_name, VB_NAME, segconf.vb_size, zctx->dict.len, version_str().s);

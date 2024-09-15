@@ -172,7 +172,7 @@ typedef struct {
 
     DeepHash deep_hash;            // Set for primary (i.e. not supplementary or secondary) alignments
     LineIType mate_line_i;
-    TxtWord QUAL, OQ, TQ, _2Y, GY, U2, BD_BI[2], SA, QNAME, MC, YB;// coordinates in txt_data 
+    TxtWord QUAL, OQ, TQ, _2Y, GY, U2, BD_BI[2], SA, QNAME, MC;// coordinates in txt_data 
     union {
     struct {                       // PacBio
     TxtWord dq, iq, sq;            // coordinates in txt_data
@@ -183,7 +183,7 @@ typedef struct {
     };
     TxtWord rb, mb;                // NanoSeq - coordinates in txt_data
     TxtWord CIGAR;                 // SAM: coordinates in txt_data (always); BAM: coordinates in vb->line_textual_cigars
-    TxtWord SEQ;                   // coordinates in txt_data. Note: len is actual sequence length in bases (not bytes) determined from any or or of: CIGAR, SEQ, QUAL. If more than one contains the length, they must all agree
+    TxtWord SEQ;                   // coordinates in txt_data. Note: len is actual sequence length in bases (not bytes) determined from any or or of: CIGAR, SEQ and/or QUAL. If more than one contains the length, they must all agree
     TxtWord BQ;
     int32_t QUAL_score;            // used by ms:i
     SamASType AS;
@@ -219,33 +219,17 @@ typedef struct {
 typedef struct VBlockSAM {
     VBLOCK_COMMON_FIELDS
     
-    uint32_t arith_compress_bound_longest_seq_len; // PIZ
-
-    // current line
+    // --------- current line before every line by sam_reset_line) ----------
     Buffer textual_seq;            // ZIP/PIZ: BAM: contains the textual SEQ (PIZ: used unless flags.no_textual_seq)
-    rom textual_seq_str;           // ZIP/PIZ: BAM: points into textual_seq SAM: points into txt_data
-    bool seq_missing;              // ZIP/PIZ: current line: SAM "*" BAM: l_seq=0
-    bool seq_is_monochar;          // PIZ only
-    bool cigar_missing;            // ZIP/PIZ: current line: SAM "*" BAM: n cigar op=0
-    bool qual_missing;             // ZIP/PIZ: current line: SAM "*" BAM: l_seq=0 or QUAL all 0xff (of if segconf.pysam_qual: 0xff followed by 0s
-    bool RNEXT_is_equal;           // RNEXT represents the same contig as RNAME (though the word index may differ in SAM, or RNEXT might be "=")
-    bool line_not_deepable;        // PIZ only
-    PizDeepSeq deep_seq;           // PIZ Deep: reconstruction instructions of SEQ, used only if cigar is perfect (eg 151M) and there is at most one mismatch vs reference
-
-    uint32_t n_auxs;               // ZIP: AUX data of this line
-    rom *auxs;                     
-    uint32_t *aux_lens;
-
-    ConstContainerP aux_con;       // AUX container being reconstructed
-
-    // REF_INTERNAL and REF_EXT_STORE: the current length of a consecutive range of is_set
-    WordIndex consec_is_set_chrom;
-    PosType32 consec_is_set_pos;
-    uint32_t consec_is_set_len;
+    Buffer textual_cigar;          // ZIP: Seg of BAM, PIZ: store CIGAR in sam_cigar_analyze
+    Buffer binary_cigar;           // ZIP/PIZ: BAM-style CIGAR representation, generated in sam_cigar_analyze. binary_cigar.next is used by sam_seg_SEQ
+    Buffer meth_call;              // ZIP/PIZ: prediction of methylation call in Bismark format: z/Z: unmethylated/methylated C in CpG ; x/X in CHG h/H in CHH ; u/U unknown context ; . not C. prm8[0] is bisulfite_strand ('C' or 'G') 
+    Buffer md_M_is_ref;            // Seg: bitmap of length ref_and_seq_consumed (corresponding to M, X and = CIGAR ops): 1 for a base matching the reference, 0 for non-matching, according to MD:Z
+    Buffer unconverted_bitmap;     // ZIP: Bisulfite conversion: mismatches vs unconverted reference - used for MD:Z prediction
 
     // Seg: 0-based index into AUX fields, -1 means field is not present in this line
     // When adding, also update sam_seg_idx_aux
-    #define first_idx idx_NM_i
+    #define first_sam_zip_vb_ff_per_line idx_NM_i
     int16_t idx_NM_i, idx_MD_Z, idx_SA_Z, idx_XG_Z, idx_NH_i, idx_HI_i, idx_IH_i,
             idx_X0_i, idx_X1_i, idx_XA_Z, idx_AS_i, idx_XS_i, idx_XM_i,
             idx_CC_Z, idx_CP_i, idx_ms_i, idx_SM_i,
@@ -256,17 +240,56 @@ typedef struct VBlockSAM {
     #define has(f)   (vb->idx_##f  != -1)
     #define has_MD   (has(MD_Z) && segconf.has[OPTION_MD_Z])
 
-    // data set by sam_seg_analyze_MD
-    #define after_idx md_verified
-    bool md_verified;              // Seg: MD:Z is verified to be calculatable from CIGAR, SEQ and Reference
-    Buffer md_M_is_ref;            // Seg: bitmap of length ref_and_seq_consumed (corresponding to M, X and = CIGAR ops): 1 for a base matching the reference, 0 for non-matching, according to MD:Z
+    #define first_sam_piz_vb_ff_per_line mate_line_i
+    LineIType mate_line_i;         // Seg/PIZ: the mate of this line. 
+    LineIType saggy_line_i;        // Seg/PIZ: without gencomp: a previous line with the same sag as the current line.
 
-    Buffer deep_index;             // PIZ: entry per prim_line - uint32_t index into deep_ents
+    #define after_sam_vb_ff_per_line   seq_is_monochar
+    #define first_sam_vb_zero_per_line seq_is_monochar
+
+    bool seq_is_monochar;          // PIZ only
+    bool line_not_deepable;        // PIZ only
+    bool cigar_missing;            // ZIP/PIZ: current line: SAM "*" BAM: n cigar op=0
+    bool qual_missing;             // ZIP/PIZ: current line: SAM "*" BAM: l_seq=0 or QUAL all 0xff (of if segconf.pysam_qual: 0xff followed by 0s
+    bool seq_missing;              // ZIP/PIZ: current line: SAM "*" BAM: l_seq=0
+    bool md_verified;              // Seg: MD:Z is verified to be calculatable from CIGAR, SEQ and Reference
+    bool RNEXT_is_equal;           // Seg: RNEXT represents the same contig as RNAME (though the word index may differ in SAM, or RNEXT might be "=")
+    bool saggy_is_prim;            // Seg/PIZ: The line in saggy_line_i is 1. not secondary 2. not supplementary 3. has no hard clips
+
+    uint32_t n_auxs;               // ZIP: AUX data of this line
+    rom *auxs;                     
+    uint32_t *aux_lens;
+
+    ConstContainerP aux_con;       // AUX container being reconstructed
+
+    // current line CIGAR stuff
+    rom last_cigar;                // ZIP: last textual CIGAR (PIZ: use vb->textual_cigar instead)
+    uint32_t ref_consumed;         // how many bp of reference are consumed according to the last_cigar
+    uint32_t ref_and_seq_consumed; // how many bp in the last seq consumes both ref and seq, according to CIGAR
+    int32_t mismatch_bases_by_SEQ; // ZIP/PIZ: mismatch bases according to SEQ - M/X/= bases that differ between SEQ and Reference
+    int32_t mismatch_bases_by_MD;  // ZIP: mismatch bases according to MD - M/X/= bases that MD reports to be different between SEQ and Reference (in PIZ, this is stored in MD.last_value)
+    int32_t mismatch_bases_by_CIGAR; // ZIP: mismatch bases according to CIGAR: sum of CIGAR 'X' ops
+    int32_t match_bases_by_CIGAR;  // ZIP: match bases according to CIGAR: sum of CIGAR '=' ops
+    uint32_t soft_clip[2];         // [0]=soft clip at start [1]=soft clip at end of this line
+    uint32_t hard_clip[2];         // [0]=hard clip at start [1]=hard clip at end of this line
+    uint32_t deletions;            // number of deleted bases according to CIGAR
+    uint32_t insertions;           // number of inserted bases according to CIGAR
+    uint32_t introns;              // number of introns ('N' CIGAR ops) - note: number of N ops, not number of bases
+
+    rom textual_seq_str;           // ZIP/PIZ: BAM: points into textual_seq SAM: points into txt_data
+    PizDeepSeq deep_seq;           // PIZ Deep: reconstruction instructions of SEQ, used only if cigar is perfect (eg 151M) and there is at most one mismatch vs reference
+    #define after_sam_vb_zero_per_line consec_is_set_chrom
+
+    // --------- END OF current line ----------
+
+    // REF_INTERNAL and REF_EXT_STORE: the current length of a consecutive range of is_set
+    WordIndex consec_is_set_chrom;
+    PosType32 consec_is_set_pos;
+    uint32_t consec_is_set_len;
  
-    #define first_mux mux_XS
     Multiplexer4 mux_XS;
     Multiplexer4 mux_PNEXT, mux_MAPQ;
-    Multiplexer3 mux_POS;// ZIP: DEMUX_BY_MATE_PRIM multiplexers
+    Multiplexer3 mux_POS;          // ZIP: DEMUX_BY_MATE_PRIM multiplexers
     Multiplexer3 mux_GP, mux_MP;   // ZIP: channels: is_first, is_last, is_mated
     Multiplexer2 mux_FLAG, mux_MQ, mux_MC, mux_ms, mux_AS, mux_YS, mux_nM, // ZIP: DEMUX_BY_MATE or DEMUX_BY_BUDDY multiplexers
                  mux_mated_z_fields[NUM_MATED_Z_TAGS], mux_ultima_c, mux_dragen_sd, mux_YY, mux_XO, mux_PQ,
@@ -274,29 +297,9 @@ typedef struct VBlockSAM {
     Multiplexer3 mux_NH;           // ZIP: DEMUX_BY_BUDDY_MAP
     Multiplexer7 mux_tp;           // ZIP: ULTIMA_tp (number of channels matches TP_NUM_BINS)
 
-    // CIGAR stuff
-    #define after_mux last_cigar
-    rom last_cigar;                // ZIP: last CIGAR (PIZ: use vb->textual_cigar instead)
-    Buffer textual_cigar;          // ZIP: Seg of BAM, PIZ: store CIGAR in sam_cigar_analyze
-    Buffer binary_cigar;           // ZIP/PIZ: BAM-style CIGAR representation, generated in sam_cigar_analyze. binary_cigar.next is used by sam_seg_SEQ
-    uint32_t ref_consumed;         // how many bp of reference are consumed according to the last_cigar
-    uint32_t ref_and_seq_consumed; // how many bp in the last seq consumes both ref and seq, according to CIGAR
-    int32_t mismatch_bases_by_SEQ; // ZIP/PIZ: mismatch bases according to SEQ - M/X/= bases that differ between SEQ and Reference
-    int32_t mismatch_bases_by_MD;  // ZIP: mismatch bases according to MD - M/X/= bases that MD reports to be different between SEQ and Reference (in PIZ, this is stored in MD.last_value)
-    uint32_t soft_clip[2];         // [0]=soft clip at start [1]=soft clip at end of this line
-    uint32_t hard_clip[2];         // [0]=hard clip at start [1]=hard clip at end of this line
-    uint32_t deletions;            // number of deleted bases according to CIGAR
-    uint32_t insertions;           // number of inserted bases according to CIGAR
-    uint128_t introns;             // number of introns ('N' CIGAR ops) - number of ops, not number of bases
-
-    union {      
-    // Deep (continued)
-    Buffer deep_ents;              // PIZ: QNAME(plain), SEQ(packed) and QUAL(compressed) for each reconstructed list
-
-    // Bisulfite conversion stuff
-    Buffer unconverted_bitmap;     // ZIP: mismatches vs unconverted reference - used for MD:Z prediction
-    };
-    Buffer meth_call;              // ZIP/PIZ: prediction of methylation call in Bismark format: z/Z: unmethylated/methylated C in CpG ; x/X in CHG h/H in CHH ; u/U unknown context ; . not C. prm8[0] is bisulfite_strand ('C' or 'G') 
+    // Deep stuff    
+    Buffer deep_index;             // PIZ: entry per prim_line - uint32_t index into deep_ents
+    Buffer deep_ents;              // PIZ: Deep: QNAME(compressed for files >15.0.65), SEQ(packed) and QUAL(compressed) for each reconstructed list
     
     // gencomp stuff
     uint32_t main_vb_info_i;       // ZIP SAM MAIN: index of entry in z_file->vb_info[0] for this VB
@@ -312,12 +315,13 @@ typedef struct VBlockSAM {
     union {
     const struct SAAln *sa_aln;    // ZIP/PIZ of SAM_COMP_DEPN: SAG_BY_SA: Alignment withing SA Group of this line 
     const struct CCAln *cc_aln;    // ZIP/PIZ of SAM_COMP_DEPN: SAG_BY_CC: Prim alignment
-    const struct SoloAln *solo_aln;// ZIP/PIZ of SAM_COMP_DEPN: SAG_BY_CC: Prim alignment
+    const struct SoloAln *solo_aln;// ZIP/PIZ of SAM_COMP_DEPN: SAG_BY_SOLO: Prim alignment
     };
     uint32_t comp_qual_len;        // ZIP PRIM: compressed length of QUAL as it appears in in-memory SA Group
     union {
     uint32_t comp_cigars_len;      // ZIP PRIM SAG_BY_SA: compressed length of CIGARS as it appears in in-memory SA Group
     uint32_t solo_data_len;        // ZIP PRIM SAG_BY_SOLO: size of solo_data
+    uint16_t prim_aln_index_in_SA_Z; // ZIP DEPN SAG_BY_SA: index of PRIM alignment in my SA:Z (1-based)
     };
     bool check_for_gc;             // ZIP: true if Seg should check for gencomp lines
     DepnClipping depn_clipping_type; // ZIP: For depn lines that have a clipping, what type of clipping do they have
@@ -332,15 +336,13 @@ typedef struct VBlockSAM {
     // buddied Seg
     Buffer line_textual_cigars;    // Seg of BAM (not SAM): an array of textual CIGARs referred to from DataLine->CIGAR
     uint32_t supplementary_count, secondary_count, saggy_near_count, mate_line_count, depn_far_count; // for stats
-    LineIType mate_line_i;         // Seg/PIZ: the mate of this line. Goes into vb->buddy_line_i in Piz.
-    LineIType saggy_line_i;        // Seg/PIZ: without gencomp: a previous line with the same sag as the current line.
-    bool saggy_is_prim;            // Seg/PIZ: The line in saggy_line_i is 1. not secondary 2. not supplementary 3. has no hard clips
 
     // QUAL stuff
     bool has_qual;                 // Seg: This VB has at least one line with non-missing qual
     bool codec_requires_seq;       // Seg: one or more fields uses a codec that requires SEQ for reconstruction
 
     // stats
+    uint32_t arith_compress_bound_longest_seq_len; // PIZ
     uint32_t deep_stats[NUM_DEEP_STATS]; // ZIP/PIZ: stats collection regarding Deep - one entry for each in DeepStatsZip/DeepStatsPiz
 } VBlockSAM;
 
@@ -445,42 +447,68 @@ typedef struct CigarAnalItem {
     uint32_t hard_clip[2];
 } CigarAnalItem;
 
-#define ALN_NUM_ALNS_BITS 12
-#define GRP_SEQ_LEN_BITS  32
-#define GRP_QUAL_BITS     48
-#define GRP_AS_BITS       16
+#define ALN_NUM_ALNS_BITS      12 // determines max number of alignments (including primary) in a SAG (note: sam_load_groups_add_SA_alns assumes it's at most 16 bits)
+#define PRIM_ALN_I_BITS        7  // determines the max index of a primary alignment in a full SA:Z alignment list
+#define GRP_SEQ_LEN_BITS       26 // determines the maximum seq_len of any primary alignment
+#define GRP_QUAL_COMP_LEN_BITS 22 // determines max length of compressed QUAL of any primary alignment in the file
+#define GRP_AS_BITS            16
+#define GRP_QNAME_BITS         38 // determines total length (in bytes) of compressed QNAMEs of all primary alignments
+#define GRP_SEQ_BITS           42 // determines total length (in bytes) of packed SEQs of all primary alignments
+#define GRP_QUAL_BITS          42 // determines total length (in bytes) of compressed QUALs of all primary alignments
+#define GRP_ALNS_BITS          36 // determines the maximum number of of prim+depn alignments in a file
 
-// note: fields ordered so to be packed and word-aligned. These structures are NOT written to the genozip file.
-typedef struct Sag {
-    // 40 bytes
-    uint64_t qname           : 60;                // index into: vb: txt_data ; z_file: zfile->sag_qnames
-    uint64_t first_grp_in_vb : 1;                 // This group is the first group in its PRIM vb
-    uint64_t multi_segs      : 1;                 // FLAG.multi_segnments is set for all alignments of this group
+// note: fields ordered so to be packed and word-aligned. 
+// backcomp note: while this structure is NOT written to the genozip file, both ZIP and PIZ use it, and if shrinking field widths, PIZ may not be able to load old files that use the large width. PIZ should test for this.
+// note: in 15.0.66, we reduced some fields widths causing a theoretical back comp issue (old widths were very large and unlikely to have been fully utilized in practice)
+// first_aln_i:  41 -> 36 (GRP_ALNS_BITS)
+// qname         60 -> 38 (GRP_QNAME_BITS)
+// seq_len       32 -> 26 (GRP_SEQ_LEN_BITS)
+// qual          48 -> 42 (GRP_QUAL_BITS)
+// qual_comp_len 32 -> 22 (GRP_QUAL_COMP_LEN_BITS)
+// seq           64 -> 42 (GRP_SEQ_BITS)
+typedef struct Sag { // 32 bytes (= 4 x uint64_t)
+    // word 0
+    uint64_t first_aln_i     : GRP_ALNS_BITS;     // index into z_file->sag_alns (up to 64 billion)
+    uint64_t as              : GRP_AS_BITS;       // AS:i ([0,65535] - capped at 0 and 65535)
+    uint64_t qname_len       : SAM_QNAME_LEN_BITS;// limited to SAM_MAX_QNAME_LEN=255. length of uncompressed qname in vb->sag_grps and z_file->sag_qnames (even though qnames are compressed in the latter) 
+    uint64_t revcomp         : 1;                 // FLAG.revcomp of primary is set (in SA:Z-defined groups, this is same as revcomp for the first alignment)
     uint64_t is_first        : 1;                 // FLAG.is_last is set for all alignments of this group
     uint64_t is_last         : 1;                 // FLAG.is_last is set for all alignments of this group
-    uint64_t seq;                                 // index into: vb: txt_data ; z_file: zfile->sag_seq
-    uint64_t qual            : GRP_QUAL_BITS;     // index into: vb: txt_data ; z_file: zfile->sag_qual (256 TB)
-    uint64_t as              : GRP_AS_BITS;       // AS:i ([0,65535] - capped at 0 and 65535)
-    uint64_t first_aln_i     : 41;                // index into z_file->sag_alns (up to 2 trillion)
-    uint64_t qname_len       : 8;                 // limited to 8 by BAM format (SAM_MAX_QNAME_LEN). length of uncompressed qname in vb->sag_grps and z_file->sag_qnames (even though qnames are compressed in the latter) 
-    uint64_t no_qual         : 2;                 // (QualMissingType) this SA has no quality, all dependends are expected to not have quality either
-    uint64_t revcomp         : 1;                 // FLAG.revcomp of primary is set (in SA:Z-defined groups, this is same as revcomp for the first alignment)
-    uint64_t num_alns        : ALN_NUM_ALNS_BITS; // number of alignments in this SA group (including primary alignment)
+    uint64_t multi_segs      : 1;                 // FLAG.multi_segnments is set for all alignments of this group
+
+    // word 1
+    uint64_t qname           : GRP_QNAME_BITS;    // index into: vb: txt_data ; z_file: zfile->sag_qnames (compressed qnames)
     uint64_t seq_len         : GRP_SEQ_LEN_BITS;  // number of bases in the sequences (not bytes). if !no_qual, this is also the length of qual.
-    uint64_t qual_comp_len   : GRP_SEQ_LEN_BITS;  // compressed length of QUAL
+
+    // word 2
+    uint64_t qual            : GRP_QUAL_BITS;     // index into: vb: txt_data ; z_file: zfile->sag_qual (256 TB)
+    uint64_t qual_comp_len   : GRP_QUAL_COMP_LEN_BITS; // compressed length of QUAL
+    
+    // word 3
+    uint64_t seq             : GRP_SEQ_BITS;      // index (in bases, not bytes) into: vb: txt_data ; z_file: zfile->sag_seq
+    uint64_t first_grp_in_vb : 1;                 // This group is the first group in its PRIM vb
+    uint64_t no_qual         : 2;                 // (QualMissingType) this SA has no quality, all dependends are expected to not have quality either
+    uint64_t num_alns        : ALN_NUM_ALNS_BITS; // number of alignments in this SA group (including primary alignment)
+    uint64_t prim_aln_i      : PRIM_ALN_I_BITS;   // (15.0.66) the index of the primary alignment in the full SA:Z (including all group alignments)
 } Sag; // Originally named "SA Group" representing the group of alignments in an SA:Z field, but now extended to other types of SAGs
 
 #define ZGRP_I(g) ((SAGroup)BNUM (z_file->sag_grps, (g)))   // group pointer to grp_i
-#define ZALN_I(a) (BNUM64 (z_file->sag_alns, (a)))  // aln pointer to aln_i
+#define ZALN_I(a) (BNUM64 (z_file->sag_alns, (a)))     // aln pointer to aln_i
 #define GRP_QNAME(g) B8(z_file->sag_qnames, (g)->qname)
 
-#define MAX_SA_NUM_ALNS       MAXB(ALN_NUM_ALNS_BITS)  // our limit
+#define MAX_SA_NUM_ALNS       MAXB(ALN_NUM_ALNS_BITS)  // our limit (number of alignments per group)
+#define MAX_PRIM_ALN_I        (MAXB(PRIM_ALN_I_BITS)-1)// our limit of prim_aln_i (127 means "not set")
 #define MAX_SA_POS            MAXB(31)                 // BAM limit
 #define MAX_SA_NM             MAXB(ALN_NM_BITS)        // our limit
 #define MAX_SA_MAPQ           MAXB(8)                  // BAM limit
 #define MAX_SA_SEQ_LEN        MAXB(GRP_SEQ_LEN_BITS)   // our limit
+#define MAX_SA_QUAL_COMP_LEN  MAXB(GRP_QUAL_COMP_LEN_BITS) // our limit for compressed QUAL length
 #define MAX_SA_CIGAR_LEN      MAXB(ALN_CIGAR_LEN_BITS) // our limit - 20 bit, BAM limit - 16 bit for the CIGAR field (may be extended with CG)
 #define MAX_SA_CIGAR_COMP_LEN MAXB(ALN_CIGAR_COMP_LEN_BITS)
+#define MAX_SA_QNAME_INDEX    MAXB64(GRP_QNAME_BITS)
+#define MAX_SA_SEQ_INDEX      MAXB64(GRP_SEQ_BITS)     // out limit (index in bases, not bytes)
+#define MAX_SA_QUAL_INDEX     MAXB64(GRP_QUAL_BITS)
+#define MAX_SA_GRP_ALNS       MAXB64(GRP_ALNS_BITS)    // our limit (number of prim+depn alignments in the file)
 #define MAX_SA_CIGAR_INDEX    MAXB64(ALN_CIGAR_BITS)
 #define CAP_SA_AS(as)         MAX_(0, MIN_((as), (SamASType)MAXB(GRP_AS_BITS)))  // our limit - [0,65535] - capped at 0 and 65535
 
@@ -517,11 +545,6 @@ static bool inline sam_line_is_prim (ZipDataLineSAMP dl) { return !sam_is_depn (
 #define sam_has_mate  (VB_SAM->mate_line_i  != NO_LINE)
 #define sam_has_saggy (VB_SAM->saggy_line_i != NO_LINE)
 #define sam_has_prim  (VB_SAM->saggy_line_i != NO_LINE && VB_SAM->saggy_is_prim) 
-
-#define zip_has_real_prim (has_saggy && VB_SAM->saggy_is_prim)
-
-#define piz_has_real_prim (piz_has_buddy && ((segconf.is_paired && sam_is_depn(last_flags)) || \
-                                             (!segconf.is_paired && !sam_is_depn ((SamFlags){ .value = history64(SAM_FLAG, VB_SAM->buddy_line_i)}))))
 
 // segconf stuff
 extern void sam_segconf_set_by_MP (void);
@@ -612,9 +635,9 @@ extern bool sam_cigar_has_H (STRp(cigar)); // textual
 
 extern uint32_t sam_cigar_get_MC_ref_consumed (STRp(mc));
 extern void sam_reconstruct_main_cigar_from_sag (VBlockSAMP vb, bool do_htos, ReconType reconstruct);
-extern void sam_reconstruct_SA_cigar_from_SA_Group (VBlockSAMP vb, SAAln *a);
+extern uint32_t sam_reconstruct_SA_cigar_from_SA_Group (VBlockSAMP vb, SAAln *a, bool abbreviate, bool get_X_bases);
 
-extern CigarSignature cigar_sign (STRp(cigar));
+extern CigarSignature cigar_sign (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(cigar));
 extern bool cigar_is_same_signature (CigarSignature sig1, CigarSignature sig2) ;
 extern StrText cigar_display_signature (CigarSignature sig);
 
@@ -676,6 +699,7 @@ extern bool sam_seg_SA_get_prim_item (VBlockSAMP vb, int sa_item, pSTRp(out));
 extern void sam_piz_SA_get_prim_item (VBlockSAMP vb, int sa_item, pSTRp(out));
 extern bool sam_seg_is_item_predicted_by_prim_SA (VBlockSAMP vb, int sa_item_i, int64_t value);
 extern bool sam_zip_is_valid_SA (rom sa, uint32_t char_limit, bool is_bam);
+extern bool sam_test_SA_CIGAR_abbreviated (STRp(sa));
 
 // MM:Z stuff
 extern void sam_MM_zip_initialize (void);

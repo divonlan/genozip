@@ -46,10 +46,8 @@ static int64_t reconstruct_from_delta (VBlockP vb,
     char format = (delta_snip_len && !IS_DIGIT (delta_snip[0]) && delta_snip[0] != '-' && delta_snip[0] != '$') ? delta_snip[0] : 0;
     unsigned fixed_len = (format && delta_snip_len > 2 && ((uint8_t)delta_snip[1]) >= 'A') ? (((uint8_t)delta_snip[1]) - 'A') : 0; // since 15.0.8  
     
-    if (format) {
-        delta_snip_len -= 1 + !!fixed_len;
-        delta_snip     += 1 + !!fixed_len;
-    }
+    if (format) 
+        STRinc (delta_snip, 1 + !!fixed_len);
 
     if (str_is_1char (delta_snip, '-'))
         my_ctx->last_delta = -2 * base_value; // negated previous value
@@ -304,8 +302,7 @@ ContextP reconstruct_get_other_ctx_from_snip (VBlockP vb, ContextP ctx, pSTRp(sn
     ASSPIZ (other_ctx, "Failed to get other context: ctx=%s snip=%.*s other_dict_id=%s", 
             ctx->tag_name, STRf(*snip), dis_dict_id(dict_id).s);
   
-    *snip     += b64_len + 1;
-    *snip_len -= b64_len + 1;
+    STRinc(*snip, b64_len + 1);
 
     ctx->other_did_i = other_ctx->did_i;
 

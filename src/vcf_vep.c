@@ -98,7 +98,8 @@ void vcf_vep_zip_initialize (void) // nul-terminated string containing list of f
     str_split (spec, spec_len, 0, '|', name, false);
 
     if (n_names > MEDIUM_CON_NITEMS) { // if this every happens, we should switch to a larger container
-        WARN ("FYI: VEP CSQ field has %u annotations, but compression will be sub-optimal as it has more than %u fields. - please report to " EMAIL_SUPPORT ":\n%.*s", n_names, CONTAINER_MAX_DICTS, STRf(spec));    
+        WARN ("FYI: VEP CSQ field has %u annotations, but compression will be sub-optimal as it has more than %u fields. %s:\n%.*s", n_names, 
+              CONTAINER_MAX_DICTS, report_support(), STRf(spec));    
         segconf.vcf_is_vep = false;
         return;
     }

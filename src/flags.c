@@ -55,6 +55,7 @@ Flags flag = {
     .show_stats_comp_i = COMP_NONE,
     .one_vb_comp_i     = COMP_NONE,
     .show_time_comp_i  = COMP_NONE,
+    .dump_section_i    = -1,
 };
 
 bool option_is_short[256] = { }; // indexed by character of short option.
@@ -177,6 +178,16 @@ static void flags_set_tail (rom optarg)
     else 
         ASSINP0 (str_get_int_range64 (optarg, 0, 1, MAX_LINE, &flag.tail),
                 "The optional argument of --tail must be a positive integer value");
+}
+
+static void flags_set_dump_section (rom optarg)
+{
+    int len = strlen (optarg);
+
+    if (str_is_int (optarg, len))
+        flag.dump_section_i = atoll (optarg);
+    else
+        flag.dump_section = optarg;
 }
 
 static void flags_set_validate (rom optarg)
@@ -671,7 +682,7 @@ verify_command:
             case 5   : flag.dump_one_b250_dict_id   = dict_id_make (optarg, strlen (optarg), DTYPE_PLAIN); break;
             case 6   : flag.dump_one_local_dict_id  = dict_id_make (optarg, strlen (optarg), DTYPE_PLAIN); break;
             case 150 : flag.show_singletons_dict_id = dict_id_make (optarg, strlen (optarg), DTYPE_PLAIN); break;
-            case 7   : flag.dump_section  = optarg  ; break;
+            case 7   : flags_set_dump_section (optarg); break;
             case 8   : ASSINP0 (str_get_int_range32 (optarg, 0, 1, 10000000, (int32_t*)&flag.one_vb), 
                                 "--one-vb expects a 1-based VBlock number"); break;
             case 9   : flags_set_downsample (optarg); break;
@@ -1233,8 +1244,7 @@ static void flags_piz_set_flags_for_deep (void)
         CONFLICT (flag.interleaved, sam,  "--interleaved", "--sam"); // not 100% accurate, sam might be set by reasons other than a --sam option. good enough
         CONFLICT (flag.interleaved, bam,  "--interleaved", "--bam");
         CONFLICT (flag.interleaved, cram, "--interleaved", "--cram");
-        CONFLICT (flag.one_component-1 >= SAM_COMP_FQ00, flag.one_vb, "--R", "--one-vb");
-        CONFLICT (flag.interleaved,                      flag.one_vb, "--interleaved", "--one-vb");
+        CONFLICT (flag.interleaved, flag.one_vb, "--interleaved", "--one-vb");
                                 
         if (fastq) {
             flag.deep = flag.deep_fq_only = true; // note: in case of SAM/BAM-only reconstruction, we don't need deep.
@@ -1353,6 +1363,13 @@ void flags_update_piz_one_z_file (int z_file_i /* -1 if unknown - called form fi
     ASSINP (!flag.test || z_file->z_flags.has_digest, 
             "--test cannot be used with %s, as it was compressed without a digest. See " WEBSITE_DIGEST, z_name);
 
+    // check validity of --one-vb
+    if (flag.one_vb) {
+        ASSINP (flag.one_vb <= z_file->num_vbs, "%s: --one-vb=%u but file has only %u VBlocks", z_name, flag.one_vb, z_file->num_vbs);
+
+        flag.one_vb_comp_i = sections_vb_header (flag.one_vb)->comp_i;
+    }
+
     flag.collect_coverage = flag.show_coverage || flag.idxstats;
     
     // non-translated mode needed for coverage collection
@@ -1430,12 +1447,6 @@ void flags_update_piz_one_z_file (int z_file_i /* -1 if unknown - called form fi
                   ((out_dt_by_filename == DT_VCF || out_dt_by_filename == DT_BCF) && (flag.out_dt == DT_VCF || flag.out_dt == DT_BCF)))
                  ? "\nTip: To convert between file types, use genocat." : ""); // show tip only if relevant
     }
-
-    // check validity of --one-vb
-    ASSINP (flag.one_vb <= z_file->num_vbs, "%s: --one-vb=%u but file has only %u VBlocks", z_name, flag.one_vb, z_file->num_vbs);
-
-    if (flag.one_vb) 
-        flag.one_vb_comp_i = sections_vb_header (flag.one_vb)->comp_i;
 
     // Check if the reconstructed data type is the same as the source data type
     bool is_binary = z_file->z_flags.txt_is_bin;

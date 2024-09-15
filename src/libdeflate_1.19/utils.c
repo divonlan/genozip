@@ -41,7 +41,7 @@
 void *
 libdeflate_aligned_malloc(VBlockP vb, size_t alignment, size_t size, FUNCLINE)
 {
-	void *ptr = codec_alloc_do (vb, sizeof(void *) + alignment - 1 + size, 1, func, code_line);
+	void *ptr = codec_alloc_do (vb, sizeof(void *) + alignment - 1 + size, 1, NULL, func, code_line);
 
 	if (ptr) {
 		void *orig_ptr = ptr;

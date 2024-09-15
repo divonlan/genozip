@@ -18,8 +18,8 @@ typedef rom FileMode;
 extern FileMode READ, WRITE, WRITEREAD;// this are pointers to static strings - so they can be compared eg "if (mode==READ)"
 
 // number of alignments that are deepable or non-deepable for each of these reasons
-typedef enum {          NDP_FQ_READS, NDP_DEEPABLE, NDP_DEEPABLE_TRIM, NDP_NO_ENTS, NDP_MONOSEQ, NDP_MONOQUAL, NDP_MULTI_MATCH, NDP_MULTI_TRIMMED, NDP_NO_MATCH , NUM_DEEP_STATS } DeepStatsFastq; 
-#define NO_DEEP_NAMES { "FQ_reads",   "Deepable",   "Dpable_trim",     "No_ents",   "Monoseq",   "Monoqual",   "Multi_match",   "MultM_trim",      "No_match" }
+typedef enum {          NDP_FQ_READS, NDP_DEEPABLE, NDP_DEEPABLE_TRIM, NDP_NO_ENTS, NDP_MONOSEQ, NDP_MONOQUAL, NDP_BAD_N_QUAL, NDP_MULTI_MATCH, NDP_MULTI_TRIMMED, NDP_NO_MATCH , NUM_DEEP_STATS } DeepStatsFastq; 
+#define NO_DEEP_NAMES { "FQ_reads",   "Deepable",   "Dpable_trim",     "No_ents",   "Monoseq",   "Monoqual",   "Bad_N_qual",   "Multi_match",   "MultM_trim",      "No_match" }
 
 typedef struct File {
     void *file;
@@ -190,6 +190,7 @@ typedef struct File {
     struct timespec start_time;        // Z_FILE: For stats: time z_file object was created in memory 
     Mutex ctx_mutex[MAX_DICTS];        // Z_FILE ZIP: Context z_file (only) is protected by a mutex 
     Mutex custom_merge_mutex;          // Z_FILE: ZIP: used to merge deep, but in the future could be used for other custom merges
+    Mutex test_abbrev_mutex;           // Z_FILE: ZIP: used to test if CIGAR_SA is abbreviated
     Buffer R1_txt_data_lens;           // Z_FILE: ZIP: FASTQ GZ: info regarding R1 VBs: txt_data.len32 of each VB 
     Buffer R1_last_qname_index;        // Z_FILE: ZIP: FASTQ GZ: info regarding R1 VBs: last qname of each VB, canonical form, nul-separated: index into R1_last_qname. Note: only accessible in main thread (bc may realloc)
     Buffer R1_last_qname;              // Z_FILE: ZIP: FASTQ GZ: data of R1_last_qname

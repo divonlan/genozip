@@ -38,29 +38,21 @@ void sam_reset_line (VBlockP vb_)
     
     vb->textual_cigar.len = vb->binary_cigar.len = vb->binary_cigar.next = 0;
     vb->textual_seq.len = 0;
-    vb->qual_missing = vb->seq_missing = vb->seq_is_monochar = vb->cigar_missing = vb->line_not_deepable = false;
-    vb->seq_len = 0;
-    vb->ref_consumed = vb->ref_and_seq_consumed = 0;
-    vb->soft_clip[0] = vb->soft_clip[1] = 0;
-    vb->hard_clip[0] = vb->hard_clip[1] = 0;
-    vb->deletions = vb->insertions = 0;
-    vb->mismatch_bases_by_SEQ = vb->mismatch_bases_by_MD = 0;
-    vb->saggy_line_i = vb->mate_line_i = NO_LINE;
-    vb->saggy_is_prim = false;
     vb->meth_call.len32 = 0;
+    vb->saggy_line_i = vb->mate_line_i = NO_LINE;
+    vb->seq_len = 0;
     vb->bisulfite_strand = 0;
-
     CTX(OPTION_XG_Z)->XG.len = 0;
 
+    memset (&vb->first_sam_vb_zero_per_line, 0, (rom)&vb->after_sam_vb_zero_per_line - (rom)&vb->first_sam_vb_zero_per_line);
+
     if (IS_PIZ) {
-        vb->textual_seq_str = NULL;
-        vb->aux_con = NULL;
+        memset (&vb->first_sam_piz_vb_ff_per_line, 0xff, (rom)&vb->after_sam_vb_ff_per_line - (rom)&vb->first_sam_piz_vb_ff_per_line);
+
         vb->chrom_node_index = WORD_INDEX_NONE;
         vb->chrom_name = "";
         vb->chrom_name_len = 0;
         vb->range = NULL;
-        vb->deep_seq = (PizDeepSeq){}; 
-        vb->seq_is_monochar = false;
         CTX(SAM_SQBITMAP)->line_sqbitmap.nbits = CTX(SAM_SQBITMAP)->line_sqbitmap.nwords = 0;
         CTX(OPTION_tp_B_ARR)->tp = (struct ctx_tp){};
 
@@ -71,11 +63,8 @@ void sam_reset_line (VBlockP vb_)
     }
 
     else { // ZIP
-        memset (&vb->first_idx, 0xff, (char*)&vb->after_idx - (char*)&vb->first_idx); // set all idx's to -1
-        vb->md_verified = false;
-        vb->auxs = NULL;
-        vb->aux_lens = NULL;
-        vb->n_auxs = 0;
+        memset (&vb->first_sam_zip_vb_ff_per_line, 0xff, (rom)&vb->after_sam_vb_ff_per_line - (rom)&vb->first_sam_zip_vb_ff_per_line);
+        
         vb->md_M_is_ref.nbits = vb->md_M_is_ref.nwords = 0;
         vb->unconverted_bitmap.nbits = vb->unconverted_bitmap.nwords = 0;
     }

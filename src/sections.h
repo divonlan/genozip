@@ -29,8 +29,8 @@ typedef packed_enum { B250_BYTES_4, B250_BYTES_3, B250_BYTES_2, B250_BYTES_1, //
                       B250_VARL // used in files starting 15.0.39                                               
                     } B250Size; // part of the file format - goes into SectionHeaderCtx.b250_size
 
-typedef packed_enum { SAG_NONE, SAG_BY_SA, SAG_BY_NH, SAG_BY_SOLO, SAG_BY_CC, SAG_BY_FLAG, NUM_SAG_TYPES } SagType;
-#define SAM_SAG_TYPE_NAMES            { "NONE",   "BY_SA",   "BY_NH",   "BY_SOLO",   "BY_CC",   "BY_FLAG" }
+typedef packed_enum { SAG_NONE,     SAG_BY_SA, SAG_BY_NH, SAG_BY_SOLO, SAG_BY_CC, SAG_BY_FLAG, NUM_SAG_TYPES } SagType;
+#define SAM_SAG_TYPE_NAMES { "NONE",   "BY_SA",   "BY_NH",   "BY_SOLO",   "BY_CC",   "BY_FLAG" }
 #define IS_SAG_SA   (segconf.sag_type == SAG_BY_SA)
 #define IS_SAG_NH   (segconf.sag_type == SAG_BY_NH)
 #define IS_SAG_SOLO (segconf.sag_type == SAG_BY_SOLO)
@@ -92,8 +92,9 @@ typedef union SectionFlags {
 
     struct FlagsCtx {
         StoreType store          : 2;  // after reconstruction of a snip, store it in ctx.last_value
-        uint8_t paired           : 1;  // FASTQ VB (inc. Deep): R1 context: pair-identical: this section should be used for both R1 and R2 if the corresponding R2 section missing (v15)
-                                       //                       R2 context: pair-assisted: reconstruction of this context requires loading the corresponding R1 context to ctx->b250R1/localR1
+        uint8_t paired           : 1;  // FASTQ VB (inc. Deep)
+        #define r1_pair_identical paired // Meaning in an R1 section: pair-identical: this section should be used for both R1 and R2 if the corresponding R2 section missing (v15)
+        #define r2_pair_assisted  paired // Meaning in an R2 section: pair-assisted: reconstruction of this context requires loading the corresponding R1 context to ctx->b250R1/localR1
         uint8_t store_delta      : 1;  // introduced v12.0.41: after reconstruction of a snip, store last_delta. notes: 1. last_delta also stored in case of a delta snip. 2. if using this, store=STORE_INT must be set.
         #define v13_copy_local_param spl_custom   // up to v13: copy ctx.b250/local.param from SectionHeaderCtx.param. since v14, piz always copies, except for LT_BITMAP
         uint8_t spl_custom       : 1;  // introduced v14: similar to store_per_line, but storing is done by the context's SPECIAL function, instead of in reconstruct_store_history
@@ -139,7 +140,8 @@ typedef struct FlagsMgzip FlagsMgzip;
 typedef struct SectionHeader {         // 28 bytes
     union {
     uint32_t     magic; 
-    uint32_t     uncomp_adler32;       // used in --verify-codec (not in file format)
+    uint32_t     uncomp_adler32;       // used if --verify-codec is specified (a diagnostic)
+    uint32_t     section_i;            // PIZ: section number in z_file->section_list. replaces magic (in memory only) after it is verified (15.0.66)
     };
     union {
     uint32_t     v14_compressed_offset;// up to v14: number of bytes from the start of the header that is the start of compressed data (sizeof header + header encryption padding) (32b up to v14, but upper 16b always 0)
@@ -221,7 +223,9 @@ typedef struct {
             uint8_t segconf_use_ins_ctxs : 1; // 15.0.30
             uint8_t segconf_MAPQ_use_xq  : 1; // 15.0.61
             uint8_t segconf_has_MQ       : 1; // 15.0.61
-            uint8_t unused_bits          : 4;
+            uint8_t segconf_SA_CIGAR_abb : 1; // 15.0.66
+            uint8_t segconf_SA_NM_by_X   : 1; // 15.0.66
+            uint8_t unused_bits          : 2;
             uint8_t segconf_sam_factor;       // 15.0.28: BAM only: 64X estimated blow-up factor of SAM txt_data vs BAM 
             uint8_t segconf_deep_N_fq_score;  // 15.0.39: Deep: when copying QUAL from SAM, update scores of 'N' bases to this value
             uint8_t unused0;
@@ -441,11 +445,13 @@ typedef struct { // 12 bytes
         uint32_t comp_i;       // used for TXTHEADER
         uint32_t word2;        // generic access to the value
     }; 
-    uint32_t num_lines : 29;   // used by RANGE, FULL_VB (writer only, not file), INTERLEAVE, DOWNSAMPLE. note: in v12/13 END_OF_VB, this field was all 1s.
+    uint32_t num_lines : 29;   // used by RANGE, FULL_VB (writer only, not file), INTERLEAVE, DOWNSAMPLE, PLAN_VB. note: for PLAN_VB, includes gencomp lines. note: in v12/13 END_OF_VB, this field was all 1s.
     PlanFlavor flavor  : 3;  
 } ReconPlanItem, *ReconPlanItemP; 
 
-// SEC_GENCOMP contains ar array of GencompSecItem, in the order of MAIN VB absorption, since 15.0.64
+// SEC_GENCOMP (since 15.0.64) contains ar array of GencompSecItem, an entry per SAM/BAM MAIN VBs, in the order of MAIN VB absorption.
+// For each MAIN VB, we record the number of lines from PRIM and DEPN VBs embedded in it. The location within the MAIN VB in which
+// each PRIM/DEPN line needs to be embedded, is recorded in the payload the VbHeader section of each MAIN VB.
 typedef struct { uint32_t vb_i, num_gc_lines[2]/*PRIM, DEPN*/; } GencompSecItem;
 
 // the data of SEC_SECTION_LIST is an array of the following type, as is the z_file->section_list
@@ -617,6 +623,8 @@ extern uint32_t st_header_size (SectionType sec_type);
 #define sections_read_prefix(P_prefix) ((P_prefix) ? 'P' : flag_loading_auxiliary ? 'L' : 'R')
 extern void sections_show_header (ConstSectionHeaderP header, VBlockP vb, CompIType comp_i, uint64_t offset, char rw);
 extern void noreturn genocat_show_headers (rom z_filename);
+typedef struct { char s[128]; } FlagStr;
+extern FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt, bool is_r2);
 extern void sections_show_gheader (ConstSectionHeaderGenozipHeaderP header);
 extern void sections_show_section_list (DataType dt, BufferP section_list);
 extern rom st_name (SectionType sec_type);

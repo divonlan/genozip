@@ -338,6 +338,10 @@ static void stats_output_file_metadata (void)
                 FEATURE0 (segconf.is_collated, "Sorting: Collated by QNAME", "Sorted_by=QNAME");
                 FEATURE0 (!segconf.is_sorted && !segconf.is_collated, "Sorting: Not sorted or collated", "Sorted_by=NONE");
                 FEATURE0 (segconf.multiseq, "Multiseq", "multiseq=True");
+
+                if (segconf.is_minimap2 || segconf.CIGAR_has_eqx)        bufprintf (evb, &features, "CIGAR_has_eqx=%s;",    TF(segconf.CIGAR_has_eqx));
+                if (segconf.is_minimap2 || segconf.SA_NM_by_CIGAR_X)     bufprintf (evb, &features, "SA_NM_by_CIGAR_X=%s;", TF(segconf.SA_NM_by_CIGAR_X));
+                if (segconf.is_minimap2 || segconf.SA_CIGAR_abbreviated) bufprintf (evb, &features, "SA_CIGAR_abbrev=%s;",  TF(segconf.SA_CIGAR_abbreviated));
             }
                         
             FEATURE (true, "Aligner: %s", "Mapper=%s", segconf_sam_mapper_name()); 

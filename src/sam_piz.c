@@ -64,6 +64,8 @@ void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
         segconf.use_insertion_ctxs    = header->sam.segconf_use_ins_ctxs;
         segconf.est_sam_factor        = (double)header->sam.segconf_sam_factor / (double)SAM_FACTOR_MULT;
         segconf.MAPQ_use_xq           = header->sam.segconf_MAPQ_use_xq;
+        segconf.SA_CIGAR_abbreviated  = header->sam.segconf_SA_CIGAR_abb;
+        segconf.SA_NM_by_CIGAR_X      = header->sam.segconf_SA_NM_by_X;
         segconf.has[OPTION_MQ_i]      = header->sam.segconf_has_MQ;
 
         flag.deep = header->flags.genozip_header.dts2_deep; 

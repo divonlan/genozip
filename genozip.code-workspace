@@ -8,6 +8,9 @@
 		},
 		{
 			"path": "../genozip/private"
+		},
+		{
+			"path": "../genozip-feedstock"
 		}
 	],
 	"settings": {
@@ -61,7 +64,9 @@
 			"ratio": "c",
 			"random": "c",
 			"string": "c",
-			"string_view": "c"
+			"string_view": "c",
+			"bzlib.h": "c",
+			"memory": "c"
 		}
 	}
 }

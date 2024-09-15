@@ -862,8 +862,8 @@ VBIType sections_get_num_vbs_up_to (CompIType comp_i, VBIType max_vb_i)
     VBIType num_vbs = 0;
 
     for (VBIType vb_i = Bcompindex(comp_i)->first_vb_i; 
-         vb_i != -1 && vb_i <= max_vb_i;
-         vb_i = Bvbindex(vb_i)->next_vb_i)
+         vb_i != 0 && vb_i <= max_vb_i;
+         vb_i = Bvbindex(vb_i)->next_vb_i) // 0 means end-of-list
         num_vbs++;
 
     return num_vbs;
@@ -972,13 +972,14 @@ rom store_type_name (StoreType store)
     }
 }
 
-typedef struct { char s[128]; } FlagStr;
-static FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt)
+FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt/*data type of component*/,
+                            bool is_r2) // relevant only if dt=FASTQ
 {
     rom dts[NUM_DATATYPES]  = { [DT_FASTQ]=(!VER(15) ? "v14_dts_paired" : 0), [DT_SAM]="dts_ref_internal" };
     rom dts2[NUM_DATATYPES] = { [DT_SAM]="dts2_deep" };
 
     FlagStr str = {};
+    rom paired_label = is_r2 ? " pair_assisted=" : " pair_identical=";
 
     switch (st) {
         case SEC_GENOZIP_HEADER:
@@ -1021,13 +1022,17 @@ static FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt)
             break;
 
         case SEC_LOCAL:
-            snprintf (str.s, sizeof (str.s), "store=%-5s per_ln=%u delta=%u paired=%u spl_custom=%u specific=%u",
-                     store_type_name(f.ctx.store), f.ctx.store_per_line, f.ctx.store_delta, f.ctx.paired, f.ctx.spl_custom, f.ctx.ctx_specific_flag); // note: we don't print ctx_specific as its not currently used
+            snprintf (str.s, sizeof (str.s), "store=%-5s per_ln=%u delta=%u%.22s spl_custom=%u specific=%u",
+                     store_type_name(f.ctx.store), f.ctx.store_per_line, f.ctx.store_delta, 
+                     cond_int (dt == DT_FASTQ, paired_label, f.ctx.paired),
+                     f.ctx.spl_custom, f.ctx.ctx_specific_flag); // note: we don't print ctx_specific as its not currently used
             break;
 
         case SEC_B250:
-            snprintf (str.s, sizeof (str.s), "store=%-5s per_ln=%u delta=%u paired=%u spl_custom=%u specific=%u same=%u",
-                     store_type_name(f.ctx.store), f.ctx.store_per_line, f.ctx.store_delta, f.ctx.paired, f.ctx.spl_custom, f.ctx.ctx_specific_flag, f.ctx.all_the_same); 
+            snprintf (str.s, sizeof (str.s), "store=%-5s per_ln=%u delta=%u%.22s spl_custom=%u specific=%u same=%u",
+                     store_type_name(f.ctx.store), f.ctx.store_per_line, f.ctx.store_delta,
+                     cond_int (dt == DT_FASTQ, paired_label, f.ctx.paired),
+                     f.ctx.spl_custom, f.ctx.ctx_specific_flag, f.ctx.all_the_same); 
             break;
  
         case SEC_RANDOM_ACCESS:
@@ -1049,7 +1054,7 @@ static FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt)
 
 void sections_show_header (ConstSectionHeaderP header, 
                            VBlockP vb,       // optional if output to buffer
-                           CompIType comp_i, // only used for VB_HEADER sections
+                           CompIType comp_i, 
                            uint64_t offset, char rw)
 {
     #define DT(x) ((dt) == DT_##x)
@@ -1062,7 +1067,7 @@ void sections_show_header (ConstSectionHeaderP header,
         return;
 
     SectionType st = header->section_type;
-
+    
     if (flag.show_header_dict_name && 
         (!IS_DICTED_SEC(st) || strcmp (flag.show_header_dict_name, dis_dict_id (sections_get_dict_id (header)).s)))
         return; // we requested a specific dict_id, and this is the wrong section
@@ -1095,7 +1100,9 @@ void sections_show_header (ConstSectionHeaderP header,
     PRINT;
 
     SectionFlags f = header->flags;
-    DataType dt = z_file->data_type;
+    DataType dt    = (flag.deep && comp_i >= SAM_COMP_FQ00) ? DT_FASTQ : z_file->data_type;
+    bool is_r2     = (dt == DT_FASTQ && comp_i == FQ_COMP_R2) ||
+                     (flag.deep && flag.pair && comp_i % 2 == 0); // SAM_COMP_FQ01=4, SAM_COMO_FQ03=6...
 
     switch (st) {
 
@@ -1114,13 +1121,13 @@ void sections_show_header (ConstSectionHeaderP header,
                       h->vcf.max_ploidy_for_mux);
 
         else if ((DT(SAM) || DT(BAM)) && v14)
-            snprintf (dt_specific, sizeof (dt_specific), "%ssegconf=(sorted=%u,collated=%u,seq_len=%u,seq_len_to_cm=%u,ms_type=%u,has_MD_or_NM=%u,bisulfite=%u,MD_NM_by_unconverted=%u,predict_meth=%u,is_paired=%u,sag_type=%s,sag_has_AS=%u,pysam_qual=%u,cellranger=%u,SA_HtoS=%u,seq_len_dict_id=%s,deep_qname1=%u,deep_qname2=%u,deep_no_qual=%u,use_ins_ctx=%u,MAPQ_use_xq=%u,has_MQ=%u,%uXsam_factor=%u)\n", 
+            snprintf (dt_specific, sizeof (dt_specific), "%ssegconf=(sorted=%u,collated=%u,seq_len=%u,seq_len_to_cm=%u,ms_type=%u,has_MD_or_NM=%u,bisulfite=%u,MD_NM_by_unconverted=%u,predict_meth=%u,is_paired=%u,sag_type=%s,sag_has_AS=%u,pysam_qual=%u,cellranger=%u,SA_HtoS=%u,seq_len_dict_id=%s,deep_qname1=%u,deep_qname2=%u,deep_no_qual=%u,use_ins_ctx=%u,MAPQ_use_xq=%u,has_MQ=%u,SA_CIGAR_abb=%u,SA_NM_by_X=%u,%uXsam_factor=%u)\n", 
                       SEC_TAB, h->sam.segconf_is_sorted, h->sam.segconf_is_collated, BGEN32 (h->sam.segconf_seq_len), h->sam.segconf_seq_len_cm, h->sam.segconf_ms_type, h->sam.segconf_has_MD_or_NM, 
                       h->sam.segconf_bisulfite, h->sam.segconf_MD_NM_by_un, h->sam.segconf_predict_meth, 
                       h->sam.segconf_is_paired, sag_type_name(h->sam.segconf_sag_type), h->sam.segconf_sag_has_AS, 
                       h->sam.segconf_pysam_qual, h->sam.segconf_10xGen, h->sam.segconf_SA_HtoS, dis_dict_id(h->sam.segconf_seq_len_dict_id).s,
                       h->sam.segconf_deep_qname1, h->sam.segconf_deep_qname2, h->sam.segconf_deep_no_qual, 
-                      h->sam.segconf_use_ins_ctxs, h->sam.segconf_MAPQ_use_xq, h->sam.segconf_has_MQ, SAM_FACTOR_MULT, h->sam.segconf_sam_factor);
+                      h->sam.segconf_use_ins_ctxs, h->sam.segconf_MAPQ_use_xq, h->sam.segconf_has_MQ, h->sam.segconf_SA_CIGAR_abb, h->sam.segconf_SA_NM_by_X, SAM_FACTOR_MULT, h->sam.segconf_sam_factor);
 
         else if (DT(REF)) {
             if (v15) snprintf (dt_specific, sizeof (dt_specific), "%sgenome_digest=%s\n", SEC_TAB, digest_display (h->genome_digest).s);
@@ -1142,7 +1149,7 @@ void sections_show_header (ConstSectionHeaderP header,
                   cond_int(!VER2(15,65), "vb_size=", BGEN16(h->old_vb_size)),
                   cond_int(VER2(15,65), "segconf_vb_size=", BGEN32(h->segconf_vb_size)),
                   cond_int ((DT(SAM) || DT(BAM)) && v15, " conc_writing_vbs=", BGEN16(h->sam.conc_writing_vbs)), 
-                  SEC_TAB, sections_dis_flags (f, st, dt).s,
+                  SEC_TAB, sections_dis_flags (f, st, dt, is_r2).s,
                   DT(REF) ? "fasta" : "ref", REF_FILENAME_LEN, h->ref_filename, 
                   DT(REF) ? "refhash_digest" : "ref_genome_digest", 
                   DT(REF) ? digest_display(h->refhash_digest).s : digest_display_ex (h->ref_genome_digest, DD_MD5).s,
@@ -1159,14 +1166,14 @@ void sections_show_header (ConstSectionHeaderP header,
                       SEC_TAB, BGEN64 (h->txt_data_size), v12 ? BGEN64 (h->txt_header_size) : 0, BGEN64 (h->txt_num_lines), BGEN32 (h->max_lines_per_vb), 
                       digest_display (h->digest).s, digest_display (h->digest_header).s, 
                       SEC_TAB, codec_name (h->src_codec), h->codec_info[0], h->codec_info[1], h->codec_info[2], 
-                      sections_dis_flags (f, st, dt).s, TXT_FILENAME_LEN, h->txt_filename);
+                      sections_dis_flags (f, st, dt, is_r2).s, TXT_FILENAME_LEN, h->txt_filename);
         else
             snprintf (str, sizeof (str), "\n%stxt_data_size=%"PRIu64" txt_header_size=%"PRIu64" lines=%"PRIu64" max_lines_per_vb=%u digest=%s digest_header=%s\n" 
                       "%ssrc_codec=%s (args=0x%02X.%02X.%02X) %s txt_filename=\"%.*s\" flav_prop=(has_seq_len,is_mated,cnn,tokenized)=[[%u,%u,'%s',%u],[%u,%u,'%s',%u],[%u,%u,'%s',%u]]\n",
                       SEC_TAB, BGEN64 (h->txt_data_size), v12 ? BGEN64 (h->txt_header_size) : 0, BGEN64 (h->txt_num_lines), BGEN32 (h->max_lines_per_vb), 
                       digest_display (h->digest).s, digest_display (h->digest_header).s, 
                       SEC_TAB, codec_name (h->src_codec), h->codec_info[0], h->codec_info[1], h->codec_info[2], 
-                      sections_dis_flags (f, st, dt).s, TXT_FILENAME_LEN, h->txt_filename,
+                      sections_dis_flags (f, st, dt, is_r2).s, TXT_FILENAME_LEN, h->txt_filename,
                       h->flav_prop[0].has_seq_len, h->flav_prop[0].is_mated, char_to_printable((char[])CNN_TO_CHAR[h->flav_prop[0].cnn]).s, h->flav_prop[0].is_tokenized,
                       h->flav_prop[1].has_seq_len, h->flav_prop[1].is_mated, char_to_printable((char[])CNN_TO_CHAR[h->flav_prop[1].cnn]).s, h->flav_prop[1].is_tokenized,
                       h->flav_prop[2].has_seq_len, h->flav_prop[2].is_mated, char_to_printable((char[])CNN_TO_CHAR[h->flav_prop[2].cnn]).s, h->flav_prop[2].is_tokenized);
@@ -1180,14 +1187,14 @@ void sections_show_header (ConstSectionHeaderP header,
             snprintf (str, sizeof (str), 
                       "\n%srecon_size=%u longest_line=%u HT_n_lines=%u z_data_bytes=%u digest=%s %s\n",
                       SEC_TAB, BGEN32 (h->recon_size), BGEN32 (h->longest_line_len), BGEN32 (h->vcf_HT_n_lines),
-                      BGEN32 (h->z_data_bytes), digest_display (h->digest).s, sections_dis_flags (f, st, dt).s);
+                      BGEN32 (h->z_data_bytes), digest_display (h->digest).s, sections_dis_flags (f, st, dt, is_r2).s);
         else if (Z_DT(SAM) && comp_i == SAM_COMP_MAIN)
             snprintf (str, sizeof (str), 
                       "\n%srecon_size=%-8u longest_line=%u longest_seq=%u z_data_bytes=%u digest=%s %s\n", 
                       SEC_TAB, BGEN32 (h->recon_size),  
                       BGEN32 (h->longest_line_len), BGEN32(h->longest_seq_len),
                       BGEN32 (h->z_data_bytes), digest_display (h->digest).s, 
-                      sections_dis_flags (f, st, dt).s);
+                      sections_dis_flags (f, st, dt, 0).s);
         else if (Z_DT(SAM) && comp_i == SAM_COMP_PRIM)
             snprintf (str, sizeof (str), 
                       "\n%srecon_size=%-8u longest_line=%u longest_seq=%u z_data_bytes=%u digest=%s PRIM=(seq=%u comp_qual=%u qname=%u num_alns=%u first_grp_i=%u %s=%u) %s\n", 
@@ -1201,24 +1208,24 @@ void sections_show_header (ConstSectionHeaderP header,
                       v14 ? BGEN32 (h->sam_prim_first_grp_i)      : 0,
                       IS_SAG_SA?"comp_cigars" : IS_SAG_SOLO?"solo_data" : "unused",
                       v14 ? BGEN32 (h->sam_prim_comp_cigars_len)  : 0,
-                      sections_dis_flags (f, st, dt).s);
+                      sections_dis_flags (f, st, dt, 0).s);
         else if (Z_DT(SAM) && comp_i == SAM_COMP_DEPN)
             snprintf (str, sizeof (str), 
                       "\n%srecon_size=%-8u longest_line=%u longest_seq=%u z_data_bytes=%u digest=%s %sDEPN\n", 
                       SEC_TAB, BGEN32 (h->recon_size),  
                       BGEN32 (h->longest_line_len), BGEN32(h->longest_seq_len),
                       BGEN32 (h->z_data_bytes), digest_display (h->digest).s, 
-                      sections_dis_flags (f, st, dt).s);
+                      sections_dis_flags (f, st, dt, 0).s);
         else if (Z_DT(FASTQ))
             snprintf (str, sizeof (str), 
                       "\n%srecon_size=%u longest_line=%u longest_seq=%u z_data_bytes=%u digest=%s %s\n",
                       SEC_TAB, BGEN32 (h->recon_size),BGEN32 (h->longest_line_len), BGEN32(h->longest_seq_len),
-                      BGEN32 (h->z_data_bytes), digest_display (h->digest).s, sections_dis_flags (f, st, dt).s);
+                      BGEN32 (h->z_data_bytes), digest_display (h->digest).s, sections_dis_flags (f, st, dt, is_r2).s);
         else
             snprintf (str, sizeof (str), 
                       "\n%srecon_size=%u longest_line=%u z_data_bytes=%u digest=%s %s\n",
                       SEC_TAB, BGEN32 (h->recon_size),BGEN32 (h->longest_line_len), 
-                      BGEN32 (h->z_data_bytes), digest_display (h->digest).s, sections_dis_flags (f, st, dt).s);
+                      BGEN32 (h->z_data_bytes), digest_display (h->digest).s, sections_dis_flags (f, st, dt, is_r2).s);
 
         break;
     }
@@ -1245,13 +1252,13 @@ void sections_show_header (ConstSectionHeaderP header,
     
     case SEC_RECON_PLAN: {
         SectionHeaderReconPlanP h = (SectionHeaderReconPlanP)header;
-        snprintf (str, sizeof (str), "conc_writing_vbs=%u %s\n", BGEN32 (h->conc_writing_vbs), sections_dis_flags (f, st, dt).s); 
+        snprintf (str, sizeof (str), "conc_writing_vbs=%u %s\n", BGEN32 (h->conc_writing_vbs), sections_dis_flags (f, st, dt, 0).s); 
         break;
     }
         
     case SEC_MGZIP:
     case SEC_RANDOM_ACCESS: {
-        snprintf (str, sizeof (str), "%s%s\n", SEC_TAB, sections_dis_flags (f, st, dt).s); 
+        snprintf (str, sizeof (str), "%s%s\n", SEC_TAB, sections_dis_flags (f, st, dt, 0).s); 
         break;
     }
     
@@ -1260,7 +1267,7 @@ void sections_show_header (ConstSectionHeaderP header,
         snprintf (str, sizeof (str), "%s/%-8s\tb250_size=%s param=%u %s\n",
                   dtype_name_z (h->dict_id), dis_dict_id (h->dict_id).s,  
                   h->b250_size==B250_BYTES_1?"1" : h->b250_size==B250_BYTES_2?"2" : h->b250_size==B250_BYTES_3?"3" : h->b250_size==B250_BYTES_4?"4" : h->b250_size==B250_VARL?"VARL" : "INVALID",
-                  h->param, sections_dis_flags (f, st, dt).s);
+                  h->param, sections_dis_flags (f, st, dt, is_r2).s);
         break;
     }
 
@@ -1269,14 +1276,14 @@ void sections_show_header (ConstSectionHeaderP header,
         snprintf (str, sizeof (str), "%s/%-8s\tltype=%s param=%u%s %s\n",
                   dtype_name_z (h->dict_id), dis_dict_id (h->dict_id).s, lt_name (h->ltype), h->param, 
                   cond_str (lt_max(h->ltype), " nothing_char=", char_to_printable (h->nothing_char).s), // nothing_char only defined for integer ltypes
-                  sections_dis_flags (f, st, dt).s);
+                  sections_dis_flags (f, st, dt, is_r2).s);
         break;
     }
 
     case SEC_DICT: {
         SectionHeaderDictionaryP h = (SectionHeaderDictionaryP)header;
         snprintf (str, sizeof (str), "%s/%-8s\tnum_snips=%u %s\n", dtype_name_z (h->dict_id), dis_dict_id (h->dict_id).s, BGEN32 (h->num_snips), 
-                  sections_dis_flags (f, st, dt).s); 
+                  sections_dis_flags (f, st, dt, 0).s); 
         break;
     }
 
@@ -1393,25 +1400,31 @@ void noreturn genocat_show_headers (rom z_filename)
 void sections_show_section_list (DataType dt, BufferP section_list) // optional - take data from z_data
 {    
     for_buf (SectionEnt, s, *section_list) 
-        if (IS_B250(s) || IS_LOCAL(s) || s->st == SEC_DICT)
+        if (IS_B250(s) || IS_LOCAL(s) || s->st == SEC_DICT) {
+            DataType my_dt = (s->st != SEC_DICT && flag.deep && s->comp_i >= SAM_COMP_FQ00) ? DT_FASTQ : dt;
+
+            bool is_r2 = (dt == DT_FASTQ && s->comp_i == FQ_COMP_R2) ||
+                        (flag.deep && flag.pair && s->comp_i % 2 == 0); // SAM_COMP_FQ01=4, SAM_COMO_FQ03=6...
+
             iprintf ("%5u %-20.20s %s%s%-8.8s\tvb=%s/%-4u offset=%-8"PRIu64"  size=%-6u  %s\n", 
                      BNUM(*section_list, s), st_name(s->st), 
                      s->dict_id.num ? dtype_name_z(s->dict_id) :"     ", 
                      s->dict_id.num ? "/" : "", 
                      s->dict_id.num ? dis_dict_id (s->dict_id).s : "", 
                      comp_name_ex (s->comp_i, s->st).s, s->vblock_i, s->offset, s->size, 
-                     sections_dis_flags (s->flags, s->st, dt).s);
+                     sections_dis_flags (s->flags, s->st, my_dt, is_r2).s);
+        }
         
         else if (IS_VB_HEADER(s))
             iprintf ("%5u %-20.20s\t\t\tvb=%s/%-4u offset=%-8"PRIu64"  size=%-6u  num_lines=%-8u%s\n", 
                      BNUM(*section_list, s), st_name(s->st), comp_name (s->comp_i), 
                      s->vblock_i, s->offset, s->size, s->num_lines, 
-                     sections_dis_flags (s->flags, s->st, dt).s);
+                     sections_dis_flags (s->flags, s->st, dt, 0).s);
 
         else if (IS_FRAG_SEC(s->st) || s->st == SEC_MGZIP)
             iprintf ("%5u %-20.20s\t\t\tvb=%s/%-4u offset=%-8"PRIu64"  size=%-6u  %s\n", 
                      BNUM(*section_list, s), st_name(s->st), 
-                     comp_name_ex (s->comp_i, s->st).s, s->vblock_i, s->offset, s->size, sections_dis_flags (s->flags, s->st, dt).s);
+                     comp_name_ex (s->comp_i, s->st).s, s->vblock_i, s->offset, s->size, sections_dis_flags (s->flags, s->st, dt, 0).s);
 
         else if (IS_DICTED_SEC(s->st))
             iprintf ("%5u %-20.20s %s%s%-8.8s\t             offset=%-8"PRIu64"  size=%-6u  %s\n", 
@@ -1419,11 +1432,11 @@ void sections_show_section_list (DataType dt, BufferP section_list) // optional 
                      s->dict_id.num ? dtype_name_z(s->dict_id) :"     ", 
                      s->dict_id.num ? "/" : "", 
                      s->dict_id.num ? dis_dict_id (s->dict_id).s : "", 
-                     s->offset, s->size, sections_dis_flags (s->flags, s->st, dt).s);
+                     s->offset, s->size, sections_dis_flags (s->flags, s->st, dt, 0).s);
         else
             iprintf ("%5u %-20.20s\t\t\t             offset=%-8"PRIu64"  size=%-6u  %s\n", 
                      BNUM(*section_list, s), st_name(s->st),
-                     s->offset, s->size, sections_dis_flags (s->flags, s->st, dt).s);
+                     s->offset, s->size, sections_dis_flags (s->flags, s->st, dt, 0).s);
 }
 
 void sections_show_gheader (ConstSectionHeaderGenozipHeaderP header)
@@ -1454,7 +1467,7 @@ void sections_show_gheader (ConstSectionHeaderGenozipHeaderP header)
             iprintf ("  reference filename: %s\n",  header->ref_filename);
             iprintf ("  reference file hash: %s\n", digest_display (header->ref_genome_digest).s);
         }
-        iprintf ("  flags: %s\n",                   sections_dis_flags (header->flags, SEC_GENOZIP_HEADER, dt).s);
+        iprintf ("  flags: %s\n",                   sections_dis_flags (header->flags, SEC_GENOZIP_HEADER, dt, 0).s);
     }
 
     iprint0 ("  sections:\n");

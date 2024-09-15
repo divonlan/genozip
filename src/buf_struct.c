@@ -212,8 +212,8 @@ void buf_alloc_do (VBlockP vb, BufferP buf, uint64_t requested_size,
 
 #define REQUEST_TOO_BIG_THREADSHOLD (3 GB)
     if (requested_size > REQUEST_TOO_BIG_THREADSHOLD && !buf->can_be_big) // use WARN instead of ASSERTW to have a place for breakpoint
-        WARN ("Warning: buf_alloc called from %s:%u %s for \"%s\" requested %s. This is suspiciously high and might indicate a bug - please report to " EMAIL_SUPPORT ". z_dt=%s vb->vblock_i=%u buf=%s line_i=%d vb_size=%s RAM=%3.1lf GB txt_file->disk_size=%s",
-              func, code_line, version_str().s, name, str_size (requested_size).s, z_dt_name(), vb->vblock_i, buf_desc (buf).s, vb->line_i, str_size (segconf.vb_size).s, arch_get_physical_mem_size(), txt_file ? str_size (txt_file->disk_size).s : "N/A");
+        WARN ("Warning: buf_alloc called from %s:%u %s for \"%s\" requested %s. This is suspiciously high and might indicate a bug %s. z_dt=%s vb->vblock_i=%u buf=%s line_i=%d vb_size=%s RAM=%3.1lf GB txt_file->disk_size=%s",
+              func, code_line, version_str().s, name, str_size (requested_size).s, report_support(), z_dt_name(), vb->vblock_i, buf_desc (buf).s, vb->line_i, str_size (segconf.vb_size).s, arch_get_physical_mem_size(), txt_file ? str_size (txt_file->disk_size).s : "N/A");
 
     ASSERT (buf->type == BUF_REGULAR || buf->type == BUF_UNALLOCATED, "called from %s:%u: cannot buf_alloc a buffer of type %s. details: %s", 
             func, code_line, buf_type_name (buf), buf_desc (buf).s);

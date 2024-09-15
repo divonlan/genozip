@@ -117,6 +117,11 @@ static void sam_zip_prim_ingest_vb_compress_qual (VBlockSAMP vb, Sag *vb_grps, u
         ASSERT (rans_compress_to_4x16 (VB, qual, vb_grp->seq_len, BAFT8(*comp_qual_buf), &comp_len, X_NOSZ) && comp_len,
                 "%s: Failed to compress PRIM qual: qual_len=%u", LN_NAME, vb_grp->seq_len);
 
+        // TO DO: this is not expected to occur as the limit is quite high. If this does occur, we can avoid failing by
+        // marking this vb_grp_i for removal and removing it prior to appending to z_file.
+        ASSERT (comp_len <= MAX_SA_QUAL_COMP_LEN, "%s: while ingesting vb_grp_i=%u: qual_comp_len=%u > MAX_SA_QUAL_COMP_LEN=%u. seq_len=%u. %s",
+                VB_NAME, vb_grp_i, comp_len, MAX_SA_QUAL_COMP_LEN, vb_grp->seq_len, report_support());
+
         vb_grp->qual          = comp_qual_buf->len; // if compressed - index in comp_qual_buf, if not - remains index in txt_data
         vb_grp->qual_comp_len = comp_len; 
         comp_qual_buf->len   += comp_len;    
@@ -263,11 +268,6 @@ void sam_zip_prim_ingest_vb (VBlockSAMP vb)
     
     sam_zip_prim_ingest_vb_compress_qual (vb, STRa(vb_grps), &comp_qual_buf);
 
-    // calculate total uncompressed qname length
-    uint32_t total_uncomp_qname_len=0;
-    for (uint32_t grp_i=0; grp_i < vb_grps_len; grp_i++)
-        total_uncomp_qname_len += vb_grps[grp_i].qname_len;
-
     // Note: Buffers are pre-INITed in file_initialize_bufs, so we can buf_alloc them from serialized compute threads
     // Note: We must serialize the data populating too, bc otherwise other VBs can re-alloc the buffers under our feet
     // VBs can enter in arbitrary order, and also handle SEQ, QUAL, QUAL, ALN in arbitrary order by availability of the mutex
@@ -281,6 +281,10 @@ void sam_zip_prim_ingest_vb (VBlockSAMP vb)
         // concatenate this VB's sequence to z_file->sag_seq (in ACGT format)
         if (!seq_done && mutex_trylock (seq_mutex)) {
             uint64_t start_seq = z_file->sag_seq.nbits / 2; // next_seq in bases, not bits
+            
+            ASSERT ((z_file->sag_seq.nbits + packed_seq_buf.nbits) / 2 <= MAX_SA_SEQ_INDEX, "%s: while ingesting: Total seq length of all prim sequences exceeds maximum of %"PRIu64" bases. Workaround: re-run with --no-gencomp. %s",
+                    VB_NAME, MAX_SA_SEQ_INDEX, report_support());
+
             buf_alloc_bits (evb, &z_file->sag_seq, z_file->sag_seq.nbits + packed_seq_buf.nbits, NOINIT, CTX_GROWTH, "z_file->sag_seq");
             bits_copy ((BitsP)&z_file->sag_seq, start_seq * 2, (BitsP)&packed_seq_buf, 0, packed_seq_buf.nbits);
 
@@ -295,6 +299,9 @@ void sam_zip_prim_ingest_vb (VBlockSAMP vb)
         if (!qual_done && mutex_trylock (qual_mutex)) {
             uint64_t start_qual = z_file->sag_qual.len;
 
+            ASSERT (z_file->sag_qual.len + comp_qual_buf.len <= MAX_SA_QUAL_INDEX, "%s: while ingesting: Total qual length of all prim sequences exceeds maximum of %"PRIu64". Workaround: re-run with --no-gencomp. %s",
+                    VB_NAME, MAX_SA_QUAL_INDEX, report_support());
+
             buf_append (evb, z_file->sag_qual, uint8_t, comp_qual_buf.data, comp_qual_buf.len, NULL);
             qual_done = achieved_something = true;
             mutex_unlock (qual_mutex);
@@ -306,6 +313,9 @@ void sam_zip_prim_ingest_vb (VBlockSAMP vb)
         // concatenate this VB's compressed qnames to z_file->sag_qnames and extend the (to-be-sorted) index in z_file->sag_grps_index
         if (!qname_done && mutex_trylock (qname_mutex)) {
             uint64_t start_qname = z_file->sag_qnames.len;
+
+            ASSERT (z_file->sag_qnames.len + comp_qname_buf.len <= MAX_SA_QNAME_INDEX, "%s: while ingesting: Total qname length of all prim sequences exceeds maximum of %"PRIu64". Workaround: re-run with --no-gencomp. %s",
+                    VB_NAME, MAX_SA_QNAME_INDEX, report_support());
 
             buf_append (evb, z_file->sag_qnames, uint8_t, comp_qname_buf.data, comp_qname_buf.len, NULL);
             qname_done = achieved_something = true;
@@ -333,15 +343,20 @@ void sam_zip_prim_ingest_vb (VBlockSAMP vb)
 
             if (!IS_SAG_SA)
                 for (uint32_t grp_i=0; grp_i < vb_grps_len; grp_i++)
-                    z_file->sag_alns.count += vb_grps[grp_i].num_alns; // in Sag types other than SA, we don't store alignments - just count them (for show_sag)
+                    z_file->sag_alns.count += vb_grps[grp_i].num_alns; // in Sag types other than SA, we don't store alignments (just the prim) - just count them (for show_sag)
              
             aln_done = achieved_something = true;
             mutex_unlock (aln_mutex);
 
             // update index from index into vb->sag_alns to z_file->sag_alns
-            if (IS_SAG_SA) 
+            if (IS_SAG_SA) {
+                ASSERT (vb_grps[vb_grps_len-1].first_aln_i + start_alns <= MAX_SA_GRP_ALNS, 
+                        "%s: while ingesting: Total number of prim+depn alignments in this file exceeds maximum of %"PRIu64". (vb_grps_len=%"PRIu64" first_aln_i=%"PRIu64" start_alns=%"PRIu64") Workaround: re-run with --no-gencomp. %s",
+                        VB_NAME, MAX_SA_GRP_ALNS, vb_grps_len, (uint64_t)vb_grps[vb_grps_len-1].first_aln_i, start_alns, report_support());
+
                 for (uint32_t grp_i=0; grp_i < vb_grps_len; grp_i++)
                     vb_grps[grp_i].first_aln_i += start_alns; 
+            }
         }
 
         if (!achieved_something) {

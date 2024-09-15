@@ -580,7 +580,7 @@ bool ref_load_stored_reference (Reference ref)
             // marked as "is_populated". This is just for extra safety.
             else {
                 ref_cache_remove_do (ref, true, false);
-                ABORTINP0 ("Error: Found bad reference cached in memory. It has now been removed. Please try again. Please report this incident to " EMAIL_SUPPORT);
+                ABORTINP ("Error: Found bad reference cached in memory. It has now been removed. Please try again. %s", report_support());
             }
         }
         else
@@ -723,6 +723,7 @@ static void ref_copy_one_compressed_section (Reference ref, FileP ref_file, cons
     RESTORE_FLAG (show_headers);
 
     SectionHeaderReferenceP header = (SectionHeaderReferenceP)B1ST8(evb->scratch);
+    header->magic = BGEN32 (GENOZIP_MAGIC); // restore magic (it was changed to section_i after reading)
 
     WordIndex ref_index = BGEN32 (header->chrom_word_index);
     ASSERT0 (ref_index == ra->chrom_index && BGEN64 (header->pos) == ra->min_pos, "RA and Section don't agree on chrom or pos");

@@ -21,10 +21,9 @@
 // 32 bytes
 typedef struct {
     DeepHash hash;                  // hashes of qname, seq, qual
+    #define NO_NEXT 0xffffffff
     uint32_t next[2];               // two linked lists (BY_SEQ, BY_QNAME) of entries with the with the same hash(SEQ)&mask
     uint32_t seq_len;
-    
-    #define NO_NEXT 0xffffffff
 
     union ZipZDeepPlace {
         struct { 

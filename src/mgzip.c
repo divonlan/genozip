@@ -122,7 +122,7 @@ static BgzfBlockStr display_bb (GzBlockZip *bb)
 
 static void *bgzf_alloc (void *vb_, unsigned items, unsigned size, FUNCLINE)
 {
-    return codec_alloc_do ((VBlockP )vb_, (uint64_t)items * (uint64_t)size, 1, func, code_line); // all bzlib buffers are constant in size between subsequent compressions
+    return codec_alloc_do ((VBlockP )vb_, (uint64_t)items * (uint64_t)size, 1, NULL, func, code_line); // all bzlib buffers are constant in size between subsequent compressions
 }
 
 //--------------------------------------------------------------------

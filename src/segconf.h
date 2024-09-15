@@ -185,8 +185,11 @@ typedef struct {
     thool sam_XG_inc_S;         // Does XG include soft_clip[0]
     bool is_long_reads;
     SagType sag_type;           // Type of sag
+    bool CIGAR_has_eqx;         // segconf detected lines with '=' and/or 'X' in their CIGAR (always in pbmm2, with --eqx in minimap2)
+    bool SA_NM_by_CIGAR_X;      // NM:i is not used, instead we get SA_NM it from the number of X bases in CIGAR
     bool depn_CIGAR_can_have_H; // some DEPN CIGARs (of alignments with SA:Z) have H (set while segging MAIN)
     bool SA_CIGAR_can_have_H;   // some SA_CIGARs have H (set while segging MAIN)
+    thool SA_CIGAR_abbreviated; // CIGAR strings in SA:Z are abbreviated as in minimap2, see https://github.com/lh3/minimap2/blob/master/format.c : mm_write_sam3
     thool SA_HtoS;              // when a DEPN CIGAR has H, the corresponding SA_CIGAR has S
     bool sag_has_AS;            // sag store the AS:i values of prim lines that have them. Set if its beneficial to seg AS:i in depn lines against prim
     uint32_t sam_cigar_len;     // approx average CIGAR len rounded up (during segconf.running==true - total len)

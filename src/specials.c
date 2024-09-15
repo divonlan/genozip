@@ -31,8 +31,7 @@ static void decode_dicts (VBlockP vb, ContextP ctx, pSTRp(snip), int num_dicts/*
         *B(ContextP, ctx->ctx_cache, i) = ECTX (dicts[i]);
 
     // advance snip to after b64
-    *snip     += b64_len;
-    *snip_len -= b64_len;
+    STRinc (*snip, b64_len);
 }
 
 //-------------------------------------------------------------------

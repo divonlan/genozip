@@ -45,10 +45,10 @@ typedef struct Context {
     Did dict_did_i;            // ZIP/PIZ: zctx only: normally ==did_i, but if context is a ALIAS_DICT, did_i of its destination (shared dictionary between otherwise independent contexts)
 
     uint32_t local_in_z;       // ZIP: index and len into z_data where local compressed data is
-                               // PIZ: local section of this VB found in file (used to determined if pair-identical R1 section should be loaded)
+                               // PIZ: used as bool: local section of this VB found in file (used to determined if pair-identical R1 section should be loaded)
     uint32_t local_in_z_len;   
     uint32_t b250_in_z;        // ZIP: index and len into z_data where b250 compressed data is
-                               // PIZ: b250 section of this VB found in file (used to determined if pair-identical R1 section should be loaded)
+                               // PIZ: used as bool: b250 section of this VB found in file (used to determined if pair-identical R1 section should be loaded)
     uint32_t b250_in_z_len;    
 
     union {
@@ -60,7 +60,7 @@ typedef struct Context {
     LocalType pair_ltype;      // LT_* - Used if this file is a PAIR_R2 - type of local data of PAIR_R1
     struct FlagsCtx flags;     // flags to be included in section header
     struct FlagsCtx pair_flags;// Used if this file is a PAIR_R2 - contains ctx->flags of the PAIR_R1
-    struct FlagsDict dict_flags;  // ZIP zctx ; PIZ: zctx+vctx . Tramsmiited via SectionFlags.dictinonary (v15)
+    struct FlagsDict dict_flags;  // ZIP zctx ; PIZ: zctx+vctx . Tramsmiited via SectionFlags.dictionary (v15)
     B250Size b250_size;        // Size type of element in b250 data (PIZ and ZIP after generation) v14
     B250Size pair_b250_size;
     Codec lcodec;              // ZIP/PIZ: vctx/zctx: codec used to compress local

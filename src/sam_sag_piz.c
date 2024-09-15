@@ -10,13 +10,36 @@
 #include "huffman.h"
 
 // reconstruct PRIM or DEPN line from SA Group data: (rname, pos, strand, CIGAR, mapQ, NM ;)+
-static void sam_sa_reconstruct_SA_from_SA_Group (VBlockSAMP vb)
+static void sam_sa_reconstruct_SA_from_SA_Group (VBlockSAMP vb, 
+                                                 int16_t prim_aln_index_in_SA_Z) // DEPN: 1-based location of primary alignment withing DEPN. 0 up to 15.0.65, which is treated as "1"
 {
     SAAln *vb_alns = B(SAAln, z_file->sag_alns, vb->sag->first_aln_i);
+    if (!IS_DEPN(vb)) prim_aln_index_in_SA_Z = -1;
+    else if (prim_aln_index_in_SA_Z >= 1) prim_aln_index_in_SA_Z--; // convert to 0-based
 
-    for (uint32_t aln_i=0; aln_i < vb->sag->num_alns; aln_i++) {
-        SAAln *a = &vb_alns[aln_i];
-        if (a == vb->sa_aln) continue; // skip my own alignment - already reconstructed in main SAM fields
+    for (uint32_t grp_aln_i=1, SA_aln_i=0; SA_aln_i < vb->sag->num_alns-1; SA_aln_i++) {   
+        SAAln *a;
+        bool cigar_abbreviated, nm_implied_by_cigar;
+
+        // case: reconstruct the primary alignment as alignment number "prim_aln_index_in_SA_Z" in SA:Z 
+        if (prim_aln_index_in_SA_Z == SA_aln_i) { 
+            a = &vb_alns[0]; 
+
+            // note: if SA_CIGARs are abbreviated (minimap2 etc), the SAG contains abbreviated cigars for all
+            // alignments except for PRIM, for which we need to abbreviate the cigar during reconstruction         
+            cigar_abbreviated   = segconf.SA_CIGAR_abbreviated;
+            nm_implied_by_cigar = segconf.SA_NM_by_CIGAR_X;
+        }
+        
+        // case: reconstruct a non-primary alignment in SA:Z according to order of group
+        else {
+            if (grp_aln_i == 0) grp_aln_i++; // don't reconstruct the primary alignment as its not its place (including: if PRIM, we don't reconstruct it at all with SA:Z)
+
+            a = &vb_alns[grp_aln_i++];
+            if (a == vb->sa_aln) a = &vb_alns[grp_aln_i++]; // skip my own alignment - already reconstructed in main SAM fields
+
+            cigar_abbreviated = nm_implied_by_cigar = false;
+        }
 
         // rname
         STR(rname);
@@ -31,14 +54,14 @@ static void sam_sa_reconstruct_SA_from_SA_Group (VBlockSAMP vb)
         RECONSTRUCT ((a->revcomp ? "-," : "+,"), 2);
 
         // cigar
-        sam_reconstruct_SA_cigar_from_SA_Group (vb, a);
+        uint32_t X_bases = sam_reconstruct_SA_cigar_from_SA_Group (vb, a, cigar_abbreviated, nm_implied_by_cigar);
 
         // mapq
         RECONSTRUCT_INT (a->mapq);
         RECONSTRUCT1 (',');
 
         // nm
-        RECONSTRUCT_INT (a->nm);
+        RECONSTRUCT_INT (nm_implied_by_cigar ? X_bases : a->nm);
         RECONSTRUCT1 (';');
     }
 }
@@ -147,7 +170,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_pull_from_sag)
             return HAS_NEW_VALUE;
 
         case OPTION_SA_Z:
-            if (reconstruct) sam_sa_reconstruct_SA_from_SA_Group (vb);
+            if (reconstruct) sam_sa_reconstruct_SA_from_SA_Group (vb, atoi (snip));
             return NO_NEW_VALUE;
 
         case OPTION_NH_i:

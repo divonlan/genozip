@@ -253,7 +253,7 @@ static void noreturn threads_sigint_handler (int signum)
 static void noreturn threads_bug_signal_handler (int signum) 
 {
     iprintf ("\n\nSignal \"%s\" received, exiting. Time: %s%s%s", 
-             strsignal (signum), str_time().s, cond_str(flags_command_line(), "\nCommand line: ", flags_command_line()), SUPPORT);
+             strsignal (signum), str_time().s, cond_str(flags_command_line(), "\nCommand line: ", flags_command_line()), report_support_if_unexpected());
     
     threads_print_call_stack(); // this works ok on mac (in debug only), but seems to not print function names on Linux
 

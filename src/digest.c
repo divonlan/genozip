@@ -225,7 +225,7 @@ static void digest_piz_verify_one_vb (VBlockP vb,
                            cond_int (segconf.vb_size && (segconf.vb_size % (1 MB)), " -B", (int)segconf.vb_size),
                            segconf.vb_size && (segconf.vb_size % (1 MB)) ? "B" : "",
                            (txt_file && txt_file->name) ? filename_guess_original (txt_file) : IS_PIZ ? txtheader_get_txt_filename_from_section(vb->comp_i).s : "(uncalculable)",
-                           SUPPORT);
+                           report_support_if_unexpected());
 
                 if (flag.test) exit_on_error (false); // must be inside the atomic test, otherwise another thread will exit before we completed dumping
             }
@@ -337,7 +337,7 @@ Digest digest_txt_header (BufferP txt_data, Digest piz_expected_digest, CompITyp
                   digest_name(), dt_name (z_file->data_type), digest_display (digest).s, 
                   segconf.zip_txt_modified ? "modified" : "original", // in case ZIP modified, e.g. with --optimize
                   digest_display (piz_expected_digest).s,
-                  txtfile_dump_vb (txt_data->vb, z_name, txt_data).s, filename_guess_original (txt_file), SUPPORT);
+                  txtfile_dump_vb (txt_data->vb, z_name, txt_data).s, filename_guess_original (txt_file), report_support_if_unexpected());
 
             if (flag.test) exit_on_error(false);
         }

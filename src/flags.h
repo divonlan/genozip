@@ -159,7 +159,8 @@ typedef struct {
         #define SHOW_ALL_HEADERS (-1)
         show_headers; // (1 + SectionType to display) or 0=flag off or -1=all sections
     rom help, dump_section, show_is_set, show_time, show_mutex, show_vblocks, show_header_dict_name;
-    
+    int64_t dump_section_i;
+
     CompIType show_time_comp_i;   // comp_i for which to show time (possibly COMP_NONE or COMP_ALL)
     
     #define has_biopsy_line biopsy_line.line_i != NO_LINE // ZIP: --biopsy-line is used

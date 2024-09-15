@@ -22,7 +22,7 @@
 
 // memory management for codecs - tesing shows that compress allocates 4 times, and decompress 2 times. Allocations are the same set of sizes
 // every call to compress/decompress with the same parameters, independent on the contents or size of the compressed/decompressed data.
-void *codec_alloc_do (VBlockP vb, uint64_t size, float grow_at_least_factor, FUNCLINE)
+void *codec_alloc_do (VBlockP vb, uint64_t size, float grow_at_least_factor, unsigned *buf_i, FUNCLINE)
 {
     rom names[NUM_CODEC_BUFS] = { "codec_bufs[0]", "codec_bufs[1]", "codec_bufs[2]", "codec_bufs[3]",
                                   "codec_bufs[4]", "codec_bufs[5]", "codec_bufs[6]" };
@@ -33,7 +33,8 @@ void *codec_alloc_do (VBlockP vb, uint64_t size, float grow_at_least_factor, FUN
         if (!buf_is_alloc (&vb->codec_bufs[i])) {
             vb->codec_bufs[i].can_be_big = true; // LZMA, for example, can allocate ~4GB buffers in --best
             buf_alloc_(vb, &vb->codec_bufs[i], 0, size, 1, grow_at_least_factor, names[i], func, code_line);
-            // printf ("%s:%u codec_alloc: buf=%u %"PRIu64" bytes\n", func, code_line, i, size);
+            // printf ("%s:%u codec_alloc: buf_i=%u %"PRIu64" bytes\n", func, code_line, i, size);
+            if (buf_i) *buf_i = i;
             return vb->codec_bufs[i].data;
         }
     ABORT ("%s: called from %s:%u codec_alloc could not find a free buffer", VB_NAME, func, code_line);

@@ -40,8 +40,8 @@ uint32_t comp_compress (VBlockP vb,
     ASSERT (!data_uncompressed_len || uncompressed_data || callback, "data_uncompressed_len!=0 but neither uncompressed_data nor callback are provided: st=%s ctx=%s", 
             st_name (header->section_type), ctx ? ctx->tag_name : "NONE");
 
-    ASSERTW (data_uncompressed_len < 1 GB, "%s: Excessive uncompressed_data_len=%u: %s. Please report to " EMAIL_SUPPORT, 
-             VB_NAME, data_uncompressed_len, name); // compressing a buffer over 1GB is likely an indication of not handling some edge case well
+    ASSERTW (data_uncompressed_len < 1 GB, "%s: Excessive uncompressed_data_len=%u: %s. %s", 
+             VB_NAME, data_uncompressed_len, name, report_support()); // compressing a buffer over 1GB is likely an indication of not handling some edge case well
 
     bool is_encrypted = false;
     uint32_t encryption_padding_reserve = 0;

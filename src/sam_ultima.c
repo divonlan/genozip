@@ -80,7 +80,7 @@ void sam_seg_ULTIMA_tp (VBlockSAMP vb, ContextP arr_ctx, void *dl_, void *tp_, u
 
     // note: flags.no_textual_seq is set to false, in sam_seg_finalize, as required by sam_piz_special_ULTIMA_tp
     ASSSEG (tp_len == dl->SEQ.len, "Expecting length of TP:B:c to be seq_len=%u but it is %u", dl->SEQ.len, tp_len);
-    ASSSEG (tp_len < (1 << TP_LEN_BITS), "Genozip limitation: tp:B:c is supported up to length %u, but here tp_len=%u. %s", (1 << TP_LEN_BITS)-1, tp_len, SUPPORT);
+    ASSSEG (tp_len < (1 << TP_LEN_BITS), "Genozip limitation: tp:B:c is supported up to length %u, but here tp_len=%u. %s", (1 << TP_LEN_BITS)-1, tp_len, report_support_if_unexpected());
 
     rom seq = vb->textual_seq_str;
     rom qual = Btxt (dl->QUAL.index);
@@ -99,7 +99,7 @@ void sam_seg_ULTIMA_tp (VBlockSAMP vb, ContextP arr_ctx, void *dl_, void *tp_, u
         unsigned hp_len = homopolymer_len (seq, dl->SEQ.len, i);  
         
         if (hp_len > 1) {
-            ASSSEG (hp_len < (1 << HP_LEN_BITS), "Genozip limitation: homopolymers are supported up to length %u, but here tp_len=%u. %s", (1 << HP_LEN_BITS)-1, hp_len, SUPPORT);
+            ASSSEG (hp_len < (1 << HP_LEN_BITS), "Genozip limitation: homopolymers are supported up to length %u, but here tp_len=%u. %s", (1 << HP_LEN_BITS)-1, hp_len, report_support_if_unexpected());
         
             unsigned num_to_be_segged = (hp_len + 1) / 2; // optimistic
 

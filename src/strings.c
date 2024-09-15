@@ -611,7 +611,7 @@ differ:
 #define ASSSPLIT(condition, format, ...) ({\
     if (!(condition)) { \
         if (enforce_msg || flag.debug_split) {   \
-            progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); \
+            progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "%s", report_support_if_unexpected()); \
             if (enforce_msg) exit_on_error(true); /* same as ASSERT */ \
         } \
         return 0; /* just return 0 if we're not asked to enforce */ \
@@ -1072,8 +1072,7 @@ int str_print_text (rom *text, uint32_t num_lines,
                         c>=0 && (IS_ALPHANUMERIC(line[c]) || line[c]==','); // wrap lines at - and | too, so we can break very long regex strings like in genocat
                         c--); // find 
             iprintf ("%s%.*s\n", wrapped ? wrapped_line_prefix : "", c, line);
-            line += c + (line[c]==' '); // skip space too
-            line_len -= c + (line[c]==' ');
+            STRinc (line, c + (line[c]==' ')/*skip space too*/);     
             wrapped = true;
         }
         iprintf ("%s%s%s", wrapped ? wrapped_line_prefix : "", line, newline_separator);

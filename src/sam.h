@@ -437,7 +437,7 @@
 #pragma GENDICT OPTION_XT_i=DTYPE_2=XT:i     // # of continues reads, always 1 for blasr
     
 // PacBio tags. Source: https://pacbiofileformats.readthedocs.io/en/12.0/SubreadsInternalBAM.html
-// and https://pacbiofileformats.readthedocs.io/en/11.0/BAM.html
+// and https://pacbiofileformats.readthedocs.io/en/13.0/BAM.html
 #pragma GENDICT OPTION_cx_i=DTYPE_2=cx:i     // per-read: Subread local context Flags: enum LocalContextFlags { ADAPTER_BEFORE = 1, ADAPTER_AFTER = 2, BARCODE_BEFORE = 4, BARCODE_AFTER = 8, FORWARD_PASS = 16, REVERSE_PASS = 32 ; 64 and 128 = observed by undocumented }
 #pragma GENDICT OPTION_qs_i=DTYPE_2=qs:i     // per-read: 0-based start of query in the ZMW read
 #pragma GENDICT OPTION_qe_i=DTYPE_2=qe:i     // per-read: 0-based end of query in the ZMW read 
@@ -654,7 +654,8 @@
 #pragma GENDICT SAM_E2_Z=DTYPE_FIELD=E2:Z    // This used to be the destination alias from OPTION_E2_Z (need to keep for back comp)
 #pragma GENDICT SAM_U2_Z=DTYPE_FIELD=U2:Z    // This used to be the destination alias from OPTION_U2_Z (need to keep for back comp)
 
-#define SAM_MAX_QNAME_LEN 255/*exc. \0*/     // In initial SAM specification verions, the max QNAME length was 255, and reduced to 254 in Aug 2015. We support 255 to support old SAM/BAM files too. BAM specifies 255 including \0 (so 254).
+#define SAM_QNAME_LEN_BITS 8
+#define SAM_MAX_QNAME_LEN  255 /*exc. \0*/     // In initial SAM specification verions, the max QNAME length was 255, and reduced to 254 in Aug 2015. We support 255 to support old SAM/BAM files too. BAM specifies 255 including \0 (so 254).
 
 // Note: 32 bit to save memory (we haven't seen a scenario in which there are more than 4B primary alignments), but can trivially extend to 64b if needed.
 // if we ever want to extend to 64 bits, consider than number of PRIM groups is also limited to 1B unique CIGARs - see sam_seg_prim_add_sag_SA
@@ -717,7 +718,7 @@ extern void sam_zip_init_vb (VBlockP vb);
 extern void sam_zip_after_compress (VBlockP vb);
 extern void sam_stats_reallocate (void);
 extern void sam_zip_genozip_header (SectionHeaderGenozipHeaderP header);
-extern void sam_deep_merge (VBlockP vb);
+extern void sam_deep_zip_merge (VBlockP vb);
 extern rom sam_get_deep_tip (void);
 extern void sam_destroy_deep_tip (void);
 extern void sam_update_qual_len (VBlockP vb, uint32_t line_i, uint32_t new_len);

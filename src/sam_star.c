@@ -39,13 +39,13 @@ void sam_seg_STAR_jI (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(raw), bool is_bam)
 
     ARRAY (BamCigarOp, cigar, vb->binary_cigar);
 
-    // case: no intron: expecting vals to ahve a single -1
+    // case: no intron: expecting vals to have a single -1
     if (!vb->introns) {
         if (n_vals != 1 || vals[0] != -1) 
             goto fallback;
     }
 
-    // case we have at least one intron: expecting vals to be pair of {first,last} POS of each intro
+    // case we have at least one intron: expecting vals to be pair of {first,last} POS of each intron
     else { 
         PosType32 pos = dl->POS;
         int op_i = 0;

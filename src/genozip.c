@@ -56,6 +56,9 @@ static Buffer input_files_buf = { .name = "input_files" };
 #define MAIN(format, ...) ({ if (!flag.explicit_quiet && (flag.echo || flag.test_i)) { progress_newline(); fprintf (stderr, "%s[%u]: ",     command_name(), getpid()); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } })
 #define MAIN0(string)     ({ if (!flag.explicit_quiet && (flag.echo || flag.test_i)) { progress_newline(); fprintf (stderr, "%s[%u]: %s\n", command_name(), getpid(), string); } })
 
+rom report_support (void) { return "Please report this to support@genozip.com. "; }
+rom report_support_if_unexpected (void) { return "\nIf this is unexpected, please contact "EMAIL_SUPPORT".\n"; }
+
 rom command_name (void) // see CommandType
 {
     switch (command) {
@@ -156,7 +159,7 @@ void noreturn main_exit (bool show_stack, bool is_error)
 static void main_print_help (bool explicit)
 {
     static rom *texts[NUM_EXE_TYPES] = { help_genozip, help_genounzip, help_genocat, help_genols }; // same order as ExeType
-    static unsigned sizes[NUM_EXE_TYPES] = {sizeof(help_genozip), sizeof(help_genounzip), sizeof(help_genocat), sizeof(help_genols) };
+    static unsigned sizes[NUM_EXE_TYPES] = { sizeof(help_genozip), sizeof(help_genounzip), sizeof(help_genocat), sizeof(help_genols) };
 
     if      (flag.help && !strcmp (flag.help, "genozip")) 
         str_print_text (help_genozip,      ARRAY_LEN(help_genozip),      "                          ",  "\n", NULL, 0);

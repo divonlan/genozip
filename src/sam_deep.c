@@ -60,7 +60,7 @@ static void sam_deep_zip_show_index_stats (void)
 
         if (longest_len > 16384)
             iprintf ("\nFYI: %s index entry %u has %"PRIu64 " deep entries on its linked list. This is excessively large and might cause slowness.%s",
-                     by_names[i], longest_len_hash, longest_len, SUPPORT); // note: error only shows with --show-deep... not very useful
+                     by_names[i], longest_len_hash, longest_len, report_support_if_unexpected()); // note: error only shows with --show-deep... not very useful
 
         iprintf ("\nDeep index[%s] entries used: %"PRIu64" / %"PRIu64" (%.1f%%)\n", 
                  by_names[i], used, index_len, 100.0 * (double)used / (double)index_len);
@@ -187,7 +187,7 @@ void sam_deep_set_QUAL_hash (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qual))
 }
 
 // ZIP compute thread: mutex-protected callback from ctx_merge_in_vb_ctx during merge: add VB's deep_hash to z_file->deep_index_by_*/deep_ents
-void sam_deep_merge (VBlockP vb_)
+void sam_deep_zip_merge (VBlockP vb_)
 {
     if (!flag.deep || zip_is_biopsy) return;
 
@@ -241,8 +241,8 @@ void sam_deep_merge (VBlockP vb_)
 
         // we can only handle 4G entries, because hash entry and "next" fields are 32 bit.
         if (ent_i == 0xffffffff) {
-            WARN_ONCE ("The number of non-secondary non-supplementary alignments in %s exceeds %u - the maximum supported for Deep compression. The excess alignments will be compressed normally without Deep. Please report this to " EMAIL_SUPPORT, 
-                       txt_name, 0xffffffff);
+            WARN_ONCE ("The number of non-secondary non-supplementary alignments in %s exceeds %u - the maximum supported for Deep compression. The excess alignments will be compressed normally without Deep. %s", 
+                       txt_name, 0xffffffff, report_support());
             break;
         }
 
@@ -267,7 +267,7 @@ void sam_deep_merge (VBlockP vb_)
     for (int i=0; i < NUM_DEEP_STATS_ZIP; i++)
         z_file->deep_stats[i] += vb->deep_stats[i];
 
-    COPY_TIMER(sam_deep_merge);
+    COPY_TIMER(sam_deep_zip_merge);
 } 
 
 //-----------------------------------------------------------------------------

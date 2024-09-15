@@ -62,6 +62,10 @@ void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAMP dl, SamNMType nm, unsigned add
 
     if (nm < 0) goto no_special; // invalid nm value
 
+    // method 0: if we use 'X' in CIGAR, NM:i can be derived from the sum of 'X' bases
+    else if (segconf.CIGAR_has_eqx && nm == vb->mismatch_bases_by_CIGAR + vb->deletions + vb->insertions) // observed in pbmm2
+        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'x'}, 3, OPTION_NM_i, add_bytes); // 15.0.66 
+
     // method 1: if we have MD:Z, we use prediction of number of mismatches derived by analyzing it. This is almost always correct, 
     // but the downside is that reconstruction takes longer due to the need to peek MD:Z. Therefore, we limit it to certain cases.
     else if (NM_is_integer && nm == predicted_by_MD && 
@@ -72,7 +76,8 @@ void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAMP dl, SamNMType nm, unsigned add
         seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'm'}, 3, OPTION_NM_i, add_bytes);  // 'm' type since v14
 
     // method 2: copy from SA Group. DEPN or PRIM line. Note: in DEPN, nm already verified in sam_sa_seg_depn_find_sagroup to be as in SA alignment
-    else if (sam_seg_has_sag_by_SA (vb)) 
+    // note: if SA_NM_by_CIGAR_X=true then NM(=mismatches+insertions+deletions) != SA_NM(=mismatches) 
+    else if (sam_seg_has_sag_by_SA (vb) && !segconf.SA_NM_by_CIGAR_X) 
         sam_seg_against_sa_group (vb, ctx, add_bytes); 
 
     // method 3: use prediction of the number of mismatches derived by comparing SEQ to a reference.
@@ -88,7 +93,7 @@ void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAMP dl, SamNMType nm, unsigned add
         seg_integer (VB, ctx, nm, true, add_bytes);
 
     // in PRIM with SA, we also seg it as the first SA alignment (used for PIZ to load alignments to memory, not used for reconstructing SA)
-    if (IS_PRIM(vb) && sam_seg_has_sag_by_SA (vb)) {
+    if (IS_PRIM(vb) && !segconf.SA_NM_by_CIGAR_X && sam_seg_has_sag_by_SA (vb)) {
         seg_integer_as_snip (VB, OPTION_SA_NM, nm, 0);  // note: for PRIM lines without SA:Z and nm:i, we seg "0" into OPTION_SA_NM in sam_seg_sag_stuff
 
         // count NM field contribution to OPTION_SA_NM, so sam_stats_reallocate can allocate the z_data between NM and SA:Z
@@ -199,6 +204,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_NM)
         case 'M' : case 'm' : new_value->i = sam_piz_NM_get_mismatches_by_MD(vb) + indels_count; break;
         case 'I' : case 'i' : new_value->i = vb->mismatch_bases_by_SEQ + indels_count;           break;
         case 'b' :            new_value->i = (vb->mismatch_bases_by_SEQ + indels_count) > 0;     break;
+        case 'x' :            new_value->i = vb->mismatch_bases_by_CIGAR + indels_count;         break; // 15.0.66
         default  :            ABORT_PIZ ("unrecognized opcode '%c'. %s", *snip, genozip_update_msg());
     }
 

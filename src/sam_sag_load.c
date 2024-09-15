@@ -106,7 +106,7 @@ void sam_show_sag_one_grp (SAGroup grp_i)
     iprintf ("grp_i=%u: qname(i=%"PRIu64",l=%u,hash=%u)=%.*s seq=(i=%"PRIu64",l=%u) qual=(i=%"PRIu64",comp_l=%u)[%u]=\"%s\" AS=%u strand=%c mul/fst/lst=%u,%u,%u %s=%u%s%s\n",
              grp_i, (uint64_t)g->qname, g->qname_len, 
              qname_calc_hash (QNAME1, COMP_NONE, (rom)GRP_QNAME(g), g->qname_len, g->is_last, false, NULL), // the hash is part of the index in ZIP, and not part of the SAGroup struct. Its provided here for its usefulness in debugging
-             g->qname_len, GRP_QNAME(g) , g->seq, g->seq_len, 
+             g->qname_len, GRP_QNAME(g), (uint64_t)g->seq, g->seq_len, 
              (uint64_t)g->qual, g->qual_comp_len, SA_QUAL_DISPLAY_LEN, sam_display_qual_from_SA_Group (g),  
              (int)g->as, "+-"[g->revcomp], g->multi_segs, g->is_first, g->is_last,
              ((IS_SAG_NH || IS_SAG_CC || IS_SAG_SOLO) ? "NH" : "num_alns"), g->num_alns, 
@@ -168,8 +168,10 @@ static inline void sam_load_groups_add_qname (VBlockSAMP vb, PlsgVbInfo *plsg, S
         ctx->mate_copied_exactly = false; 
         reconstruct_from_ctx (vb, SAM_QNAME, 0, RECON_ON);  // reconstructs into vb->txt_data, sets vb->buddy_line_i if SNIP_COPY_BUDDY
         uint32_t uncomp_qname_len = BAFTtxt - uncomp_qname;
+        
+        ASSPIZ (uncomp_qname_len <= SAM_MAX_QNAME_LEN, "unexpectedly, uncomp_qname_len=%u > SAM_MAX_QNAME_LEN=%u", uncomp_qname_len, SAM_MAX_QNAME_LEN);
 
-        vb_grps[vb->line_i].qname     = vb_qnames_buf.len32;
+        vb_grps[vb->line_i].qname     = vb_qnames_buf.len;
         vb_grps[vb->line_i].qname_len = uncomp_qname_len; // always uncompressed length
         
         // since 15.0.65, a SEC_HUFFMAN section is available and we can compress. 
@@ -183,7 +185,7 @@ static inline void sam_load_groups_add_qname (VBlockSAMP vb, PlsgVbInfo *plsg, S
                 buf_alloc (vb, &vb_qnames_buf, comp_len, 0, uint8_t, 0, NULL);
 
                 huffman_compress (SAM_QNAME, STRa(uncomp_qname), BAFT8(vb_qnames_buf), &comp_len); // using huffman sent via SEC_HUFFMAN
-                vb_qnames_buf.len32 += comp_len;
+                vb_qnames_buf.len += comp_len;
             }
         }
 
@@ -253,6 +255,10 @@ static inline void sam_load_groups_move_comp_to_zfile (VBlockSAMP vb, PlsgVbInfo
             start_qual = z_file->sag_qual.len;
             buf_append_buf (evb, &z_file->sag_qual, &vb_qual_buf, uint8_t, NULL); // might grow the buffer
             qual_done = achieved_something = true;
+
+            ASSERT (z_file->sag_qual.len <= MAX_SA_QUAL_INDEX, "PRIM/%u: while loading SAGs: z_file->sag_qual.len=%"PRIu64" > MAX_SA_QUAL_INDEX=%"PRIu64, 
+                    plsg->vblock_i, z_file->sag_qual.len, MAX_SA_QUAL_INDEX);
+
             mutex_unlock (copy_qual_mutex);
         }
 
@@ -261,6 +267,10 @@ static inline void sam_load_groups_move_comp_to_zfile (VBlockSAMP vb, PlsgVbInfo
             start_qnames = z_file->sag_qnames.len;
             buf_append_buf (evb, &z_file->sag_qnames, &vb_qnames_buf, uint8_t, NULL); 
             qnames_done = achieved_something = true;
+
+            ASSERT (z_file->sag_qnames.len <= MAX_SA_QNAME_INDEX, "PRIM/%u: while loading SAGs: z_file->sag_qnames.len=%"PRIu64" > MAX_SA_QNAME_INDEX=%"PRIu64, 
+                    plsg->vblock_i, z_file->sag_qnames.len, MAX_SA_QNAME_INDEX);
+
             mutex_unlock (copy_qnames_mutex);
         }
 
@@ -269,6 +279,10 @@ static inline void sam_load_groups_move_comp_to_zfile (VBlockSAMP vb, PlsgVbInfo
             start_cigars = z_file->sag_cigars.len;
             buf_append_buf (evb, &z_file->sag_cigars, &vb_cigars_buf, uint8_t, NULL); 
             cigars_done = achieved_something = true;
+
+            ASSERT (z_file->sag_cigars.len <= MAX_SA_CIGAR_INDEX, "PRIM/%u: while loading SAGs: z_file->sag_cigars.len=%"PRIu64" > MAX_SA_CIGAR_INDEX=%"PRIu64, 
+                    plsg->vblock_i, z_file->sag_cigars.len, MAX_SA_CIGAR_INDEX);
+
             mutex_unlock (copy_cigars_mutex);
         }
 
@@ -354,7 +368,7 @@ static inline void sam_load_groups_add_qual (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
     g->qual = vb_qual_buf.len; // relative to the VB. we will update later to be relative to z_file->sag_qual.
 
     // add to buffer only if compression actually compresses
-    if (comp_len < g->seq_len) { 
+    if (comp_len < g->seq_len && comp_len <= MAX_SA_QUAL_COMP_LEN) { 
         g->qual_comp_len = comp_len;  
         vb_qual_buf.len += g->qual_comp_len;
     }
@@ -458,7 +472,7 @@ static void sam_load_groups_add_grp_cigars (VBlockSAMP vb, PlsgVbInfo *plsg, Sag
     sam_cigar_analyze (vb, STRa(*prim_cigar), false, &vb->seq_len);
 
     // populate SAAln.cigar with the CIGAR word index, for the non-primary alignments of this group
-    for (uint8_t aln_i=1; aln_i < g->num_alns; aln_i++) 
+    for (uint32_t aln_i=1; aln_i < g->num_alns; aln_i++) 
         sam_load_groups_add_aln_cigar (vb, plsg, g, a + aln_i, false, is_all_the_same_LOOKUP, is_all_the_same_SQUANK, 0, 0);
 
     COPY_TIMER (sam_load_groups_add_grp_cigars);
@@ -634,6 +648,12 @@ static inline void sam_load_groups_add_grps (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
                                           .pos   = vb->last_int(SAM_POS) };
         }
 
+        ASSERT (plsg->seq_start + total_seq_len <= MAX_SA_SEQ_INDEX, "PRIM/%u: while loading SAGs: g->seq=%"PRIu64" > MAX_SA_SEQ_INDEX=%"PRIu64, 
+                plsg->vblock_i, plsg->seq_start + total_seq_len, MAX_SA_SEQ_INDEX);
+
+        ASSERT (vb->seq_len <= MAX_SA_SEQ_LEN, "PRIM/%u: while loading SAGs: g->seq_len=%u > MAX_SA_SEQ_LEN=%u", 
+                plsg->vblock_i, vb->seq_len, MAX_SA_SEQ_LEN);
+
         g->seq     = plsg->seq_start + total_seq_len; // in bases
         g->seq_len = vb->seq_len;   // in bases
 
@@ -657,7 +677,7 @@ static inline void sam_load_groups_add_grps (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
             idxs[0].idx != -1) {           // this line has AS:i
 
             reconstruct_from_ctx (VB, OPTION_AS_i, 0, RECON_OFF);
-            g->as = CAP_SA_AS (vb->last_int(OPTION_AS_i));  // [0,255] capped at 0 and 255
+            g->as = CAP_SA_AS (vb->last_int(OPTION_AS_i));  // capped at 0 and 65535
         }
 
         // if line contains MC:Z - reconstruct it into txt_data, as our mate's CIGAR might copy it
@@ -679,70 +699,84 @@ static inline void sam_load_groups_add_grps (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
 }
 
 // Alns - populate RNAME, POS, MAPQ, STRAND and NM (CIGAR is added sam_load_groups_add_grps)
-static inline void sam_load_groups_add_SA_alns (VBlockSAMP vb, PlsgVbInfo *plsg, Sag *vb_grps, SAAln *vb_alns) 
+static inline void sam_load_groups_add_SA_alns (VBlockSAMP vb, PlsgVbInfo *plsg, Sag *vb_grps) 
 {
     START_TIMER;
 
     ContextP sa_ctx    = LOADED_CTX(OPTION_SA_Z);
     ContextP rname_ctx = CTX(OPTION_SA_RNAME); // possibly not loaded
 
-    // sanity check
-    ARRAY (uint8_t, num_alns, sa_ctx->local); // this contains the number of alignments for each SA Group (inc. the primary alignment)
-    ASSERT (num_alns_len == plsg->num_grps, "Mismatch in number of PRIM lines for prim vb=%u: expecting OPTION_SA_Z.local.len=%u == num_lines=%u OPTION_SA_Z.is_loaded=%s",
-            plsg->vblock_i, (unsigned)num_alns_len, plsg->num_grps, TF(sa_ctx->is_loaded));
+    ASSERT (sa_ctx->local.len == plsg->num_grps, "PRIM/%u: Mismatch in number of PRIM lines: expecting OPTION_SA_Z.local.len=%"PRIu64" == num_lines=%u OPTION_SA_Z.is_loaded=%s",
+            plsg->vblock_i, sa_ctx->local.len, plsg->num_grps, TF(sa_ctx->is_loaded));
+    
+    ASSERT (sa_ctx->ltype == LT_UINT8 || sa_ctx->ltype == LT_UINT16, "Unexpected OPTION_SA_Z.ltype=%s", lt_name (sa_ctx->ltype));
 
-    for (uint32_t grp_i=0; grp_i < num_alns_len; grp_i++) {
-        vb_grps[grp_i].first_aln_i = grp_i ? vb_grps[grp_i-1].first_aln_i + num_alns[grp_i-1] : plsg->first_aln_i;
-        vb_grps[grp_i].num_alns    = num_alns[grp_i];
+    for (uint32_t grp_i=0; grp_i < plsg->num_grps; grp_i++) {
+        uint64_t first_aln_i       = grp_i ? vb_grps[grp_i-1].first_aln_i + vb_grps[grp_i-1].num_alns : plsg->first_aln_i;
+        ASSERT (first_aln_i <= MAX_SA_GRP_ALNS, "PRIM/%u: while loading SAGs vb_grp_i=%u: first_aln_i%"PRIu64" > MAX_SA_GRP_ALNS=%"PRIu64, 
+                plsg->vblock_i, grp_i, first_aln_i, MAX_SA_GRP_ALNS);
+
+        vb_grps[grp_i].first_aln_i = first_aln_i;
+
+        uint32_t grp_num_alns = (sa_ctx->ltype == LT_UINT8) ? *B8(sa_ctx->local, grp_i) : *B16(sa_ctx->local, grp_i);
+
+        ASSERT (grp_num_alns <= (uint32_t)MAX_SA_NUM_ALNS, "PRIM/%u: while loading SAGs vb_grp_i=%u: grp_num_alns=%d > MAX_SA_NUM_ALNS=%u",
+                plsg->vblock_i, grp_i, grp_num_alns, MAX_SA_NUM_ALNS);
+
+        vb_grps[grp_i].num_alns = grp_num_alns;
     }
 
-    int32_t vb_num_alns = (vb_grps[plsg->num_grps-1].first_aln_i - plsg->first_aln_i) + num_alns[plsg->num_grps-1];
-    ASSERT (vb_num_alns == plsg->num_alns, "Alignment count mismatch for vb=%u: expecting vb_num_alns=%d == plsg->num_alns=%u",
+    int32_t vb_num_alns = (vb_grps[plsg->num_grps-1].first_aln_i - plsg->first_aln_i) + vb_grps[plsg->num_grps-1].num_alns;
+
+    ASSERT (vb_num_alns == plsg->num_alns, "PRIM/%u: Alignment count mismatch: expecting vb_num_alns=%d == plsg->num_alns=%u",
             plsg->vblock_i, vb_num_alns, plsg->num_alns);
 
     uint32_t sa_rname_len = rname_ctx->word_list.len32;
 
-    for (uint32_t aln_i=0; aln_i < plsg->num_alns; aln_i++) {
-        
-        SAAln *a = &vb_alns[aln_i];
+    ARRAY (SAAln, alns, z_file->sag_alns);
 
-        // RNAME
-        if (rname_ctx->is_loaded) { // RNAME not skipped
-            reconstruct_from_ctx (vb, OPTION_SA_RNAME, 0, RECON_OFF);  // don't reconstruct, only set last_value to word_index
-            a->rname = rname_ctx->last_value.i;         // WordIndex into OPTION_SA_RNAME, NOT RNAME!
+    for (uint32_t grp_i=0; grp_i < plsg->num_grps; grp_i++) 
+        for (uint32_t aln_i=vb_grps[grp_i].first_aln_i; aln_i < vb_grps[grp_i].first_aln_i + vb_grps[grp_i].num_alns; aln_i++) {
+            SAAln *a = &alns[aln_i];
 
-            ASSERT (a->rname >= 0 && a->rname < sa_rname_len, 
-                    "While loading aln_i=%u: rname=%u out of range: OPTION_SA_RNAME.word_len.len=%u", aln_i, a->rname, sa_rname_len);
-        }
+            // RNAME
+            if (rname_ctx->is_loaded) { // RNAME not skipped
+                reconstruct_from_ctx (vb, OPTION_SA_RNAME, 0, RECON_OFF);  // don't reconstruct, only set last_value to word_index
+                a->rname = rname_ctx->last_value.i;         // WordIndex into OPTION_SA_RNAME, NOT RNAME!
 
-        // POS
-        if (CTX(OPTION_SA_POS)->is_loaded) {
-            reconstruct_from_ctx (vb, OPTION_SA_POS, 0, RECON_OFF);    // don't reconstruct, only set last_value to pos
-            a->pos = CTX(OPTION_SA_POS)->last_value.i;
-        }
+                ASSERT (a->rname >= 0 && a->rname < sa_rname_len, 
+                        "While loading aln_i=%u: rname=%u out of range: OPTION_SA_RNAME.word_len.len=%u", aln_i, a->rname, sa_rname_len);
+            }
 
-        // STRAND - nodes initialized in sam_seg_0X_initialize to 0="-" 1="+"
-        if (CTX(OPTION_SA_STRAND)->is_loaded) {
-            reconstruct_from_ctx (vb, OPTION_SA_STRAND, 0, RECON_OFF); // don't reconstruct, only set last_value to word_index
-            a->revcomp = !CTX(OPTION_SA_STRAND)->last_value.i;
-        }
-        
-        // MAPQ
-        if (CTX(OPTION_SA_MAPQ)->is_loaded) { // MAPQ is not skipped
-            reconstruct_from_ctx (vb, OPTION_SA_MAPQ, 0, RECON_OFF);   // don't reconstruct, only set last_value to pos
-            a->mapq = CTX(OPTION_SA_MAPQ)->last_value.i;
-        }
+            // POS
+            if (CTX(OPTION_SA_POS)->is_loaded) {
+                reconstruct_from_ctx (vb, OPTION_SA_POS, 0, RECON_OFF);    // don't reconstruct, only set last_value to pos
+                a->pos = CTX(OPTION_SA_POS)->last_value.i;
+            }
 
-        // NM
-        if (CTX(OPTION_SA_NM)->is_loaded) { // NM is not skipped
-            reconstruct_from_ctx (vb, OPTION_SA_NM, 0, RECON_OFF);     // don't reconstruct, only set last_value to pos
-            a->nm = CTX(OPTION_SA_NM)->last_value.i;
+            // STRAND - nodes initialized in sam_seg_0X_initialize to 0="-" 1="+"
+            if (CTX(OPTION_SA_STRAND)->is_loaded) {
+                reconstruct_from_ctx (vb, OPTION_SA_STRAND, 0, RECON_OFF); // don't reconstruct, only set last_value to word_index
+                a->revcomp = !CTX(OPTION_SA_STRAND)->last_value.i;
+            }
+            
+            // MAPQ
+            if (CTX(OPTION_SA_MAPQ)->is_loaded) { // MAPQ is not skipped
+                reconstruct_from_ctx (vb, OPTION_SA_MAPQ, 0, RECON_OFF);   // don't reconstruct, only set last_value to pos
+                a->mapq = CTX(OPTION_SA_MAPQ)->last_value.i;
+            }
+
+            // NM
+            if (CTX(OPTION_SA_NM)->is_loaded &&   // NM is not skipped
+                !(segconf.SA_NM_by_CIGAR_X && aln_i == vb_grps[grp_i].first_aln_i)) { // in case of SA_NM_by_CIGAR_X, we get the NM of the primary alignment from the its CIGAR 
+                reconstruct_from_ctx (vb, OPTION_SA_NM, 0, RECON_OFF);     // don't reconstruct, only set last_value to pos
+                a->nm = CTX(OPTION_SA_NM)->last_value.i;
+            }
         }
-    }
 
     // group revcomp is the revcomp of its primary alignment
-    for (uint32_t grp_i=0; grp_i < num_alns_len; grp_i++) 
-        vb_grps[grp_i].revcomp = vb_alns[vb_grps[grp_i].first_aln_i - plsg->first_aln_i].revcomp;
+    for (uint32_t grp_i=0; grp_i < plsg->num_grps; grp_i++) 
+        vb_grps[grp_i].revcomp = alns[vb_grps[grp_i].first_aln_i].revcomp;
 
     COPY_TIMER (sam_load_groups_add_SA_alns);
 }
@@ -765,7 +799,7 @@ static void sam_load_groups_add_one_prim_vb (VBlockP vb_)
     vb_grps[0].first_grp_in_vb = true;
 
     if (IS_SAG_SA)
-        sam_load_groups_add_SA_alns (vb, plsg, vb_grps, vb_alns);
+        sam_load_groups_add_SA_alns (vb, plsg, vb_grps);
 
     else if (IS_SAG_SOLO)
         sam_load_groups_add_solo_data (vb, plsg, vb_grps);
