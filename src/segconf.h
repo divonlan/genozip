@@ -24,8 +24,8 @@
 
 #define MAX_SEGCONF_LINES 1000 // max lines tested in segconf (even if VB is large e.g. due to reading full MGZIP block)
 
-typedef packed_enum { TECH_NONE=-1, TECH_ANY=-2, TECH_CONS=-3, TECH_UNKNOWN=0,   TECH_ILLUM, TECH_PACBIO, TECH_NANOPORE,     TECH_454, TECH_MGI,   TECH_IONTORR, TECH_HELICOS, TECH_NCBI, TECH_ULTIMA, TECH_SINGLR, TECH_ELEMENT, TECH_ONSO, NUM_TECHS } SeqTech;
-#define TECH_NAME                     {                        "Unknown_tech",   "Illumina", "PacBio",    "Oxford_Nanopore", "454",    "MGI_Tech", "IonTorrent", "Helicos",    "NCBI",    "Ultima",    "Singular",  "Element",    "Onso"               }
+typedef packed_enum { TECH_NONE=-1, TECH_ANY=-2, TECH_CONS=-3, TECH_UNKNOWN=0,   TECH_ILLUM, TECH_PACBIO, TECH_NANOPORE,     TECH_LS454, TECH_MGI,   TECH_IONTORR, TECH_HELICOS, TECH_NCBI, TECH_ULTIMA, TECH_SINGLR, TECH_ELEMENT, TECH_ONSO, TECH_CAPILLARY, TECH_SOLID, NUM_TECHS } SeqTech;
+#define TECH_NAME   {                                          "Unknown_tech",   "Illumina", "PacBio",    "Oxford_Nanopore", "LS454",    "MGI_Tech", "IonTorrent", "Helicos",    "NCBI",    "Ultima",    "Singular",  "Element",    "Onso",    "Capillary",    "SOLiD",              }
 #define TECH(x) (segconf.tech == TECH_##x)
 
 typedef packed_enum { SQT_UNKNOWN, SQT_NUKE, SQT_AMINO, SQT_NUKE_OR_AMINO } SeqType;
@@ -102,8 +102,10 @@ typedef struct {
     bool sorted_by_qname[NUM_QTYPES];           // qnames appear in the file in a sorted order
     bool qname_flavor_rediscovered[NUM_QTYPES]; // true if flavor has been modified (used only during segconf.running)
     QnameStr qname_line0[NUM_QTYPES];           // qname of line_i=0 (by which flavor is determined) (nul-terminated)
-    SeqTech tech;
-    
+    SeqTech tech;                               // tech by QNAME flavor (more reliable)
+    SeqTech tech_by_RG;                         // tech by first @RG PL field
+    char tech_by_RG_unidentified[32];           // tech by first @RG PL field - if failed to identify as a known tech
+
     // SAM/BAM and FASTQ
     uint32_t longest_seq_len;   // length of the longest seq_len in the segconf data 
     DictId seq_len_dict_id;     // dict_id of one of the QNAME/QNAME2/LINE3/FASTQ_AUX contexts, which is expected to hold the seq_len for this read. 0 if there is no such item.
@@ -301,7 +303,7 @@ typedef struct {
     thool is_interleaved;       // whether FASTQ file is identified as interleaved
     char interleaved_r1;        // valid if is_interleaved: character representing R1: usually '0' or '1'
     char interleaved_r2;        // valid if is_interleaved: character representing R2: usually '1' or '2'
-    QType deep_qtype;           // Deep: QNAME1 or QNAME2 if for most segconf lines for which have Deep, SAM qname matches FASTQ's QNAME1 or QNAME2, or QNONE if not
+    QType deep_qtype;           // Deep ZIP/PIZ: QNAME1 or QNAME2 if for most segconf lines for which have Deep, SAM qname matches FASTQ's QNAME1 or QNAME2. QNONE means no deep, or in PIZ of Deep files up to 15.0.66, it means matching was by SEQ and QUAL only (not QNAME) 
     bool deep_paired_qname;     // Deep: QNAME hash includes deep_is_last
     thool deep_is_last;         // Deep: whether this FASTQ file corresponds to is_first or is_last alignments in BAM, or unknown if !segconf.deep_paired_qname 
     bool deep_no_qual;          // Deep: true if for most segconf lines which have Deep, qual doesn't match (eg, bc of undocumented BQSR) 
@@ -312,9 +314,8 @@ typedef struct {
     char deep_1st_desc[256];    // Deep: DESC line of first FASTQ read of first FASTQ file
     #define NUM_INSTS 6
     unsigned n_full_mch[NUM_INSTS];      // Deep: count segconf lines where hash matches with at least one SAM line - (QNAME1 or QNAME2), SEQ, QUAL
+    unsigned n_full_mch_trimmed;// Deep: the size of the subset of n_full_mch which are trimmed     
     unsigned n_seq_qname_mch[NUM_INSTS]; // Deep: count segconf lines where FASTQ (QNAME1 or QNAME2) hash matches with at least one SAM line - SEQ and QNAME 
-    unsigned n_seq_qual_mch;    // Deep: count segconf lines where hash matches with at least one SAM line - SEQ and QUAL
-    unsigned n_seq_mch;         // Deep: count segconf lines where hash matches with at least one SAM line - SEQ
     unsigned n_no_mch;          // Deep: count segconf lines that don't match any SAM line (perhaps because SAM is filtered)
     StrText optimized_qname;    // --optimize: prefix of optimized qname
     uint32_t optimized_qname_len;
@@ -349,7 +350,7 @@ extern void segconf_set_width (FieldWidth *w, int bits);
 extern bool segconf_is_long_reads(void);
 extern void segconf_mark_as_used (VBlockP vb, unsigned num_ctxs, ...);
 extern rom segconf_sam_mapper_name (void);
-extern rom segconf_tech_name (void);
+extern rom tech_name (SeqTech tech);
 extern rom segconf_deep_trimming_name (void);
 extern rom VCF_QUAL_method_name (VcfQualMethod method);
 extern rom VCF_INFO_method_name (VcfInfoMethod method);

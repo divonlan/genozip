@@ -136,15 +136,6 @@ static void stats_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
                 bufprintf (evb, &exceptions, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.unk_ids[id_i][i], strlen(segconf.unk_ids[id_i][i]), ',', -127)).s); 
     }
 
-    // if Deep with QNONE, we send the first QNAME of the SAM file and the first read name of the FASTQ
-    if (flag.deep && segconf.deep_qtype == QNONE) {
-        STR(master_qname);
-        huffman_get_master (SAM_QNAME, pSTRa(master_qname));
-        bufprintf (evb, &exceptions, "%sQNONE_REASON%%2C%%2C%%2C", need_sep++ ? "%3B" : "");
-        bufprintf (evb, &exceptions, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter ((char *)STRa(master_qname), ',', -127)).s); 
-        bufprintf (evb, &exceptions, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.deep_1st_desc,  strlen(segconf.deep_1st_desc),  ',', -127)).s); 
-    }
-
     if (segconf.sam_malformed_XA[0]) 
         bufprintf (evb, &exceptions, "%sBAD_XA%%2C%s", (need_sep++ ? "%3B" : ""), url_esc_non_valid_charsS (str_replace_letter (segconf.sam_malformed_XA, strlen(segconf.sam_malformed_XA),  ',', -127)).s); 
 }
@@ -408,6 +399,15 @@ static void stats_output_file_metadata (void)
 
                 REPORT_QNAME;
             }            
+
+            bufprintf (evb, &features, "tech=%s;", tech_name (segconf.tech));
+            if (segconf.tech != segconf.tech_by_RG) {
+                if (segconf.tech_by_RG)
+                    bufprintf (evb, &features, "tech_by_RG=%s;", tech_name (segconf.tech_by_RG));
+                else if (segconf.tech_by_RG_unidentified[0])
+                    bufprintf (evb, &features, "@RG_PL=%s;", segconf.tech_by_RG_unidentified);
+            }
+
             break;
         }
 
@@ -456,7 +456,7 @@ static void stats_output_file_metadata (void)
         case DT_FASTQ:
             REPORT_VBs;
             REPORT_QNAME;
-            FEATURE (segconf.optimize[FASTQ_QNAME] && z_file->num_lines, "Sequencer: %s", "Sequencer=%s", segconf_tech_name());\
+            FEATURE (segconf.optimize[FASTQ_QNAME] && z_file->num_lines, "Sequencer: %s", "Sequencer=%s", tech_name(segconf.tech));\
             FEATURE0 (FAF, "FASTA-as-FASTQ", "FASTA-as-FASTQ=True");
             FEATURE0 (segconf.multiseq, "Multiseq", "multiseq=True");
             FEATURE0 (segconf.is_interleaved, "Interleaved", "interleaved=True");

@@ -23,8 +23,6 @@ extern void txtfile_zip_finalize_codecs (void);
 extern void txtfile_read_header (bool is_first_txt);
 extern uint32_t txt_data_alloc_size (uint32_t vb_size) ;
 extern void txtfile_read_vblock (VBlockP vb);
-extern void txtfile_set_seggable_size (void);
-extern int64_t txtfile_get_seggable_size (void);
 extern bool txtfile_is_gzip (FileP file);
 extern void txtfile_discover_specific_gz (FileP file);
 extern rom isal_error (int ret);

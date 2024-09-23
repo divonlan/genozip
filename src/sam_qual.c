@@ -100,7 +100,7 @@ COMPRESSOR_CALLBACK (sam_zip_##tag)                             \
 {                                                               \
     ZipDataLineSAMP dl = DATA_LINE (vb_line_i);                 \
     *line_data_len = dl->dont_compress_##tag ? 0 : MIN_(maximum_size, dl->f.len); /* note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec */ \
-    if (!line_data || ! *line_data_len) return; /* no dat, or only lengths were requested */   \
+    if (!line_data || ! *line_data_len) return; /* no data, or only lengths were requested */   \
     *line_data = Btxt (dl->f.index);                             \
     if (is_rev) *is_rev = may_be_revcomped ? dl->FLAG.rev_comp : false;\
 }                               
@@ -271,7 +271,7 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qual)/*always textual
     
     if (!vb->qual_missing) vb->has_qual = true;
     
-    if ((flag.deep || flag.show_deep == 2) && !segconf.running)
+    if ((flag.deep || flag.show_deep == SHOW_DEEP_ONE_HASH) && !segconf.running)
         sam_deep_set_QUAL_hash (vb, dl, STRa(qual));
 
     // case: monochar 

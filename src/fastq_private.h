@@ -87,7 +87,7 @@ extern void fastq_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qual));
 
 // Deep stuff
 extern void fastq_deep_zip_initialize (void);
-extern void fastq_seg_deep (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qname), STRp(qname2), STRp(seq), STRp(qual), bool *deep_qname, bool *deep_seq, bool *deep_qual, uint32_t *uncanonical_suffix_len);
+extern bool fastq_seg_deep (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qname), STRp(qname2), STRp(seq), STRp(qual), uint32_t *uncanonical_suffix_len);
 extern void fastq_deep_seg_finalize_segconf (uint32_t n_lines);
 extern void fastq_deep_seg_initialize (VBlockFASTQP vb);
 extern void fastq_deep_seg_QNAME (VBlockFASTQP vb, Did did_i, STRp(qname), uint32_t uncanonical_suffix_len, unsigned add_bytes);

@@ -518,6 +518,10 @@ batch_special_algs()
     $genozip -tf ${TESTDIR}/special.force-2nd-segconf-vb_size.plain.fq    || exit 1
     $genozip -tf ${TESTDIR}/special.force-2nd-segconf-vb_size.bgzf.fq.gz  || exit 1
     $genozip -tf ${TESTDIR}/special.force-2nd-segconf-vb_size.gz.fq.gz    || exit 1
+
+    # bug was: bad SAM/BAM file with two prim alignments with the same QNAME and is_first compressed successfully but failed uncompress
+    $genozip -tf ${TESTDIR}/regression.defect-2024-09-19.duplicate-QNAMEs.sam --no-gencomp || exit 1
+    $genozip -tf ${TESTDIR}/regression.defect-2024-09-19.duplicate-QNAMEs.sam --force-gencomp || exit 1
 }
 
 batch_qual_codecs()
@@ -1394,9 +1398,9 @@ batch_real_world_backcomp()
     make -C $TESTDIR $1.version  # generate files listed in "files"
     
     local files=( $TESTDIR/$1/*.genozip )
-    
-    # remove reference file from list
-    files=( ${files[@]/"$TESTDIR/$1/hs37d5.ref.genozip"} ) 
+
+    # remove reference files from list
+    files=( ${files[@]//*.ref.genozip/} )
 
     # bug 1099 (only applicable to 11.0.11 with debug)
     if [[ "$1" == "11.0.11" && "$is_debug" != "" ]]; then
@@ -1404,17 +1408,24 @@ batch_real_world_backcomp()
     fi
 
     # remove 0-size files - test/Makefile sets file size to 0, if old Genozip version failed on this (in compression or test)
-    for f in ${files[@]}; do     
+    for f in ${files[*]}; do     
         if [ ! -s $f ]; then 
-            files=( ${files[@]/"$f"} ) 
+            files=( ${files[@]//$f/} ) 
         fi
     done
+
+    if [[ "$1" == "latest" ]]; then
+        export GENOZIP_REFERENCE=$TESTDIR/$1 # deep files (available since v15) use various references
+        # local ref_option="--no-cache"
+    else 
+        local ref_option="-e $TESTDIR/$1/hs37d5.ref.genozip" 
+    fi
 
     local i=0
     for f in ${files[@]}; do     
         i=$(( i + 1 ))            
         test_header "$f - backcomp with $1 ($i/${#files[@]} batch_id=${GENOZIP_TEST})"
-        $genounzip -t $f -e $TESTDIR/$1/hs37d5.ref.genozip || exit 1
+        $genounzip -t $ref_option $f || exit 1
     done
 
     test_header "backcomp $1 genounzip --bgzf=exact"
@@ -2266,17 +2277,14 @@ batch_deep() # note: use --debug-deep for detailed tracking
     test_count_genocat_lines "" "--sam --head --no-header" 10
     test_count_genocat_lines "" "--sam --tail=11 --no-header" 11
     test_count_genocat_lines "" "--sam --header-only" 3376
-     
+    
+    #genozip="$genozip --show-deep"  
+    
     test_header deep.human2-38
     local T=$TESTDIR/deep.human2-38
     $genozip $T.sam $T.R1.fq.gz $T.R2.fq.gz -fe $GRCh38 -o $output -3t --best --not-paired || exit 1
     $genozip $T.sam $T.R1.fq.gz $T.R2.fq.gz -fe $GRCh38 -o $output -3t --no-gencomp --not-paired || exit 1
 
-    # bismark (bisulfite), SRA2, non-matching FASTQ filenames
-    test_header deep.bismark.sra2
-    local T=$TESTDIR/deep.bismark.sra2
-    $genozip $T.two.fq.gz $T.bam $T.one.fq.gz -fE $GRCh38 -o $output -3t || exit 1
-    
     # gem3 (bisulfite), multiple (>2) FASTQ
     test_header deep.gem3.multi-fastq
     local T=$TESTDIR/deep.gem3.multi-fastq
@@ -2285,6 +2293,11 @@ batch_deep() # note: use --debug-deep for detailed tracking
     test_count_genocat_lines "" "--R 2" 20
     test_count_genocat_lines "" "--R 3" 20
 
+    # bismark (bisulfite), SRA2, non-matching FASTQ filenames
+    test_header deep.bismark.sra2
+    local T=$TESTDIR/deep.bismark.sra2
+    $genozip $T.two.fq.gz $T.bam $T.one.fq.gz -fE $GRCh38 -o $output -3t || exit 1
+    
     # SAM has cropped one base at the end of every read (101 bases in FQ vs 100 in SAM)
     test_header deep.crop-100
     local T=$TESTDIR/deep.crop-100

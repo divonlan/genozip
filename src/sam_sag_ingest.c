@@ -171,7 +171,7 @@ static void sam_zip_prim_ingest_vb_compress_qnames (VBlockSAMP vb, Sag *vb_grps,
             huffman_compress (SAM_QNAME, STRa(qname), BAFT8(*comp_qname_buf), &comp_len);
             comp_qname_buf->len += comp_len;
 
-            qname_hashes[vb_grp_i] = qname_calc_hash (QNAME1, COMP_NONE, STRa(qname), g->is_last, false, NULL);
+            qname_hashes[vb_grp_i] = qname_calc_hash (QNAME1, COMP_NONE, STRa(qname), g->is_last, false, CRC32, NULL);
         }
     }
 

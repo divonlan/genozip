@@ -282,16 +282,19 @@ static void flag_set_biopsy_line (rom optarg)
 
 static void flag_set_show_deep (rom optarg)
 {
-    if (optarg) {
-        flag.show_deep = 2;
+    if (optarg && !strcmp (optarg, "all"))
+        flag.show_deep = SHOW_DEEP_ALL;
 
-        str_split_ints (optarg, strlen (optarg), 3, ',', hash, true);
-        ASSINP0 (n_hashs, "--show-deep takes an optional argument of deep_hash - format is 3 comma-seperator integers: qname_hash,seq_hash,qual_hash");
+    else if (optarg) {
+        flag.show_deep = SHOW_DEEP_ONE_HASH;
+
+        str_split_hexs (optarg, strlen (optarg), 3, ',', hash, true);
+        ASSINP0 (n_hashs, "--show-deep takes an optional argument of deep_hash - format is 3 comma-seperator integers: qname_hash,seq_hash,qual_hash OR \"all\"");
 
         flag.debug_deep_hash = (DeepHash){ hashs[0], hashs[1], hashs[2] };
     }
     else
-        flag.show_deep = 1;
+        flag.show_deep = SHOW_DEEP_SUMMARY;
 }
 
 static void flag_set_stats (StatsType stats_type, rom optarg)
@@ -692,7 +695,7 @@ verify_command:
                                           : !strcmp (optarg, "all") ? COV_ALL 
                                           : !strcmp (optarg, "one") ? COV_ONE 
                                           :                           COV_ALL; break;
-            case 15  : flag.log_filename  = optarg;  break;
+            case 15  : flag.log_filename  = optarg;   break;
             case 16  : flag.show_one_counts = dict_id_make (optarg, strlen (optarg), DTYPE_PLAIN); break;
             case 131 : flag.show_one_counts = dict_id_make (cSTR("o$TATUS"), DTYPE_PLAIN); break;
             case 17  : sam_set_FLAG_filter (optarg) ; break; // filter by SAM FLAG

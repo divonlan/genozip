@@ -105,7 +105,7 @@ void sam_show_sag_one_grp (SAGroup grp_i)
 
     iprintf ("grp_i=%u: qname(i=%"PRIu64",l=%u,hash=%u)=%.*s seq=(i=%"PRIu64",l=%u) qual=(i=%"PRIu64",comp_l=%u)[%u]=\"%s\" AS=%u strand=%c mul/fst/lst=%u,%u,%u %s=%u%s%s\n",
              grp_i, (uint64_t)g->qname, g->qname_len, 
-             qname_calc_hash (QNAME1, COMP_NONE, (rom)GRP_QNAME(g), g->qname_len, g->is_last, false, NULL), // the hash is part of the index in ZIP, and not part of the SAGroup struct. Its provided here for its usefulness in debugging
+             (uint32_t)qname_calc_hash (QNAME1, COMP_NONE, (rom)GRP_QNAME(g), g->qname_len, g->is_last, false, CRC32, NULL), // the hash is part of the index in ZIP, and not part of the SAGroup struct. Its provided here for its usefulness in debugging
              g->qname_len, GRP_QNAME(g), (uint64_t)g->seq, g->seq_len, 
              (uint64_t)g->qual, g->qual_comp_len, SA_QUAL_DISPLAY_LEN, sam_display_qual_from_SA_Group (g),  
              (int)g->as, "+-"[g->revcomp], g->multi_segs, g->is_first, g->is_last,

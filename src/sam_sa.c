@@ -444,7 +444,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SA_main)
     return NO_NEW_VALUE;
 }
 
-void sam_piz_SA_get_prim_item (VBlockSAMP vb, int sa_item, pSTRp(out))
+void sam_piz_SA_get_saggy_prim_item (VBlockSAMP vb, int sa_item, pSTRp(out))
 {
     STR(SA);
     sam_reconstruct_from_buddy_get_textual_snip (vb, CTX (OPTION_SA_Z), BUDDY_SAGGY, pSTRa(SA));
@@ -468,7 +468,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_COPY_PRIM)
     int item_i = snip[0]-'0';
 
     STR(item);
-    sam_piz_SA_get_prim_item (vb, item_i, pSTRa(item));
+    sam_piz_SA_get_saggy_prim_item (vb, item_i, pSTRa(item));
     if (reconstruct) RECONSTRUCT_str (item);   
 
     if (item_i == SA_POS || item_i == SA_MAPQ)

@@ -191,7 +191,7 @@ static void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
                 segconf.vb_size = MIN_(segconf.vb_size * 1.5, ABSOLUTE_MAX_VBLOCK_MEMORY);
         }
 
-        int64_t est_seggable_size = txtfile_get_seggable_size();
+        int64_t est_seggable_size = txt_file->est_seggable_size;
 
         // for small files - reduce VB size, to take advantage of all cores (subject to a minimum VB size)
         if (!flag.best && est_seggable_size && global_max_threads > 1) {
@@ -311,11 +311,11 @@ void segconf_zip_initialize (void)
             .CB_con_snip_len       = sizeof (segconf.CB_con_snip),
 
             // FASTQ stuff
-            .deep_qtype            = QNONE,
+            .deep_qtype            = QNONE,     // no deep
             .deep_is_last          = unknown,
 
             // FASTA stuff
-            .fasta_has_contigs     = true, // initialize optimistically
+            .fasta_has_contigs     = true,      // initialize optimistically
         };
 
     // case: 1st FASTQ in Deep. Note: we re-segconf with this file, but don't remove the SAM segconf data    
@@ -531,13 +531,13 @@ rom segconf_sam_mapper_name (void)
     return (segconf.sam_mapper >= 0 && segconf.sam_mapper < NUM_MAPPERS) ? mapper_name[segconf.sam_mapper] : "INVALID_MAPPER";
 }
 
-rom segconf_tech_name (void)
+rom tech_name (SeqTech tech)
 {
-    rom tech_name[] = TECH_NAME;
-    ASSERT0 (ARRAY_LEN(tech_name) == NUM_TECHS, "Invalid TECH_NAME array length - perhaps missing commas between strings?");
+    rom names[] = TECH_NAME;
+    ASSERT0 (ARRAY_LEN(names) == NUM_TECHS, "Invalid TECH_NAME array length - perhaps missing commas between strings?");
 
-    switch (segconf.tech) {
-        case 0 ... NUM_TECHS-1 : return tech_name[segconf.tech];
+    switch (tech) {
+        case 0 ... NUM_TECHS-1 : return names[tech];
         case TECH_NONE         : return "None";
         case TECH_ANY          : return "Any";
         case TECH_CONS         : return "Consensus";

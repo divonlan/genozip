@@ -380,6 +380,8 @@ void huffman_compress_section (Did did_i)
 {
     ContextP zctx = ZCTX(did_i);
 
+    ASSERT (huffman_exists (did_i), "huffman doesn't exist for %s", zctx->tag_name);
+
     zctx->huffman.len = sizeof (HuffmanCodes);
     Codec codec = codec_assign_best_codec (evb, NULL, &zctx->huffman, SEC_HUFFMAN);
 
@@ -395,6 +397,8 @@ void huffman_compress_section (Did did_i)
     };
 
     comp_compress (evb, zctx, &evb->z_data, &header, zctx->huffman.data, NO_CALLBACK, "SEC_HUFFMAN");
+
+    zctx->huffman.len = 1; // restore
 }
 
 // PIZ: called by the main thread from piz_read_global_area

@@ -28,6 +28,7 @@
 #include "dict_io.h"
 #include "user_message.h"
 #include "huffman.h"
+#include "filename.h"
 
 TRANSLATOR_FUNC (piz_obsolete_translator)
 {
@@ -67,6 +68,24 @@ PizDisQname piz_dis_qname (VBlockP vb)
     }
 
     return out;
+}
+
+StrTextLong piz_advise_biopsy (VBlockP vb)
+{
+    // gencomp: don't count PRIM VBs in the midst of MAIN VBs, as --biopsy sets --no-gencomp
+    VBIType no_gencomp_vb_i = (z_sam_gencomp && vb->comp_i == SAM_COMP_MAIN) ? sections_get_num_vbs_up_to (SAM_COMP_MAIN, vb->vblock_i) : vb->vblock_i; 
+
+    StrTextLong s;
+    snprintf (s.s, sizeof(s), "To see the same data in the original file:\n"
+                              "genozip --biopsy %u%.20s%.20s%s %.768s (optionally add: --no-header)",  // note: segconf.vb_size is only available since v14. For older files, look it up with genocat --stats.
+              no_gencomp_vb_i,
+              // note: segconf.vb_size is only available since v14. For older files, look it up with genocat --stats.
+              cond_int (segconf.vb_size/*0 if IS_VB_SIZE_BY_MGZIP*/ && !(segconf.vb_size % (1 MB)), " -B", (unsigned)(segconf.vb_size >> 20)), 
+              cond_int (segconf.vb_size && (segconf.vb_size % (1 MB)), " -B", (int)segconf.vb_size),
+              segconf.vb_size && (segconf.vb_size % (1 MB)) ? "B" : "",
+              (txt_file && txt_file->name) ? filename_guess_original (txt_file) : IS_PIZ ? txtheader_get_txt_filename_from_section(vb->comp_i).s : "(filename uncalculable)");
+
+    return s;
 }
 
 void asspiz_text (VBlockP vb, FUNCLINE)

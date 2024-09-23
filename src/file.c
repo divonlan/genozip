@@ -671,8 +671,7 @@ static void file_initialize_z_file_data (FileP file)
         Z_INIT (sag_cigars); // union with solo_data
         Z_INIT (sag_seq);
         Z_INIT (sag_qual);
-        Z_INIT (deep_index_by[BY_SEQ]);
-        Z_INIT (deep_index_by[BY_QNAME]);
+        Z_INIT (deep_index);
         Z_INIT (deep_ents);
         Z_INIT (vb_num_deep_lines);
         Z_INIT (section_list);

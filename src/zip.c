@@ -351,7 +351,7 @@ static void zip_update_txt_counters (VBlockP vb)
     // counters of data AS IT APPEARS IN THE TXT FILE
     z_file->num_lines += vb->lines.len; // lines in all bound files in this z_file
 
-    z_file->comp_num_lines[vb->comp_i] += vb->lines.len; // set also for DVCF rejects
+    z_file->comp_num_lines[vb->comp_i] += vb->lines.len; 
 
     z_file->txt_data_so_far_single_0 += (int64_t)vb->txt_size;  // length of data before any modifications
     z_file->txt_data_so_far_bind_0   += (int64_t)vb->txt_size;
@@ -395,7 +395,6 @@ static void zip_free_undeeded_zctx_bufs_after_seg (void)
     buf_destroy (z_file->sag_seq);
     buf_destroy (z_file->sag_qual);
     buf_destroy (z_file->vb_start_deep_line);
-    buf_destroy (z_file->deep_ents);
 
     buf_low_level_release_memory_back_to_kernel();
 
@@ -681,7 +680,7 @@ uint64_t zip_get_target_progress (void)
         (flag.deep && flag.zip_comp_i <= SAM_COMP_FQ00) ||
         (!flag.deep && !Z_DT(FASTQ))) {
 
-        int64_t progress_unit = txt_file->est_num_lines ? txt_file->est_num_lines : txtfile_get_seggable_size(); 
+        int64_t progress_unit = txt_file->est_num_lines ? txt_file->est_num_lines : txt_file->est_seggable_size; 
 
         target_progress = progress_unit * (3 + segconf.zip_txt_modified) // read, (modify), seg, compress
                         + (!flag.make_reference && !flag.seg_only && !flag.biopsy) * progress_unit; // write
@@ -800,7 +799,7 @@ finish:
     z_file->txt_file_disk_sizes_sum += z_file->txt_file_disk_sizes[flag.zip_comp_i];
 
     // (re-)index sections after adding this txt_file 
-    if (!flag.make_reference)
+    if (!flag.make_reference && !flag.zip_no_z_file)
         sections_create_index(); 
 
     if (z_file->z_closes_after_me && !flag.seg_only) { 

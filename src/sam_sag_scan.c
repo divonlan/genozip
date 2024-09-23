@@ -64,7 +64,7 @@ static rom scan_index_one_line (VBlockSAMP vb, rom alignment, uint32_t remaining
         ASSERT (str_get_int_range16 (flag_str, tab - flag_str, 0, SAM_MAX_FLAG, &flag.value), "%s: invalid FLAG=%.*s", VB_NAME, (int)(tab - flag_str), flag_str);
     }
 
-    uint32_t hash = qname_calc_hash (QNAME1, COMP_NONE, qname, qname_len, flag.is_last, false, NULL);
+    uint32_t hash = qname_calc_hash (QNAME1, COMP_NONE, qname, qname_len, flag.is_last, false, CRC32, NULL);
 
     if (vb->preprocessing) {
         // depn index
@@ -351,7 +351,7 @@ bool sam_might_have_saggies_in_other_VBs (VBlockSAMP vb, ZipDataLineSAMP dl, int
 {
     if (!vb->qname_count.len32) return true; // we didn't count qnames, so we don't have proof that there aren't any saggies in other VBs
 
-    uint32_t qname_hash = qname_calc_hash (QNAME1, COMP_NONE, Btxt (dl->QNAME.index), dl->QNAME.len, dl->FLAG.is_last, false, NULL);
+    uint32_t qname_hash = qname_calc_hash (QNAME1, COMP_NONE, Btxt (dl->QNAME.index), dl->QNAME.len, dl->FLAG.is_last, false, CRC32, NULL);
 
     if (IS_SAG_CC) 
         return true;   // we don't do qname accounting for SAG_BY_CC

@@ -18,73 +18,67 @@
 static void sam_deep_zip_show_index_stats (void) 
 {
     ARRAY (ZipZDeep, deep_ents, z_file->deep_ents);
+    ARRAY (uint32_t, index, z_file->deep_index);
 
-    for (int i=BY_SEQ; i <= BY_QNAME; i++) {
-        ARRAY (uint32_t, index, z_file->deep_index_by[i]);
+    iprintf ("\nz_file.deep_index.len=%"PRIu64" (%s) z_file.deep_ents.len=%"PRIu64" (%s)\n", 
+             z_file->deep_index.len, str_size (z_file->deep_index.len * sizeof (uint32_t)).s, 
+             z_file->deep_ents.len,  str_size (z_file->deep_ents.len  * sizeof (ZipZDeep)).s);
 
-        iprintf ("\nz_file.deep_index_by[%s].len=%"PRIu64" (%s) z_file.deep_ents.len=%"PRIu64" (%s)\n", 
-                 by_names[i], 
-                 z_file->deep_index_by[i].len, str_size (z_file->deep_index_by[i].len * sizeof (uint32_t)).s, 
-                 z_file->deep_ents.len, str_size (z_file->deep_ents.len * sizeof (ZipZDeep)).s);
+    #define NUM_LENS 64
+    uint64_t used=0;
+    uint64_t lens[NUM_LENS] = {}, longer=0; // each entry i contains number linked lists which are of length i; last entry i - linked lists of i or longer
+    uint64_t longest_len = 0;
+    uint32_t longest_len_hash;
 
-        #define NUM_LENS 64
-        uint64_t used=0;
-        uint64_t lens[NUM_LENS] = {}, longer=0; // each entry i contains number linked lists which are of length i; last entry i - linked lists of i or longer
-        uint64_t longest_len = 0;
-        uint32_t longest_len_hash;
+    uint64_t total_ents_traversed = 0; // total ents traversed on linked lists when segging FASTQ reads
 
-        uint64_t total_ents_traversed = 0; // total ents traversed on linked lists when segging FASTQ reads
+    for (uint64_t hash=0; hash < index_len; hash++) {
+        uint64_t this_len=0;
+        for (uint32_t ent_i = index[hash]; ent_i != NO_NEXT; ent_i = deep_ents[ent_i].next) 
+            this_len++;
+        
+        if (this_len) used++;
 
-        for (uint64_t hash=0; hash < index_len; hash++) {
+        if (this_len < NUM_LENS) 
+            lens[this_len]++;
 
-            uint64_t this_len=0;
-            for (uint32_t ent_i = index[hash]; ent_i != NO_NEXT; ent_i = deep_ents[ent_i].next[i]) 
-                this_len++;
-            
-            if (this_len) used++;
+        else {
+            longer++;
+            total_ents_traversed += this_len        // number of entries that will access this linked list
+                                  * this_len;       // length of linked list traversed for each entry accessing this list
 
-            if (this_len < NUM_LENS) 
-                lens[this_len]++;
-
-            else {
-                longer++;
-                total_ents_traversed += this_len        // number of entries that will access this linked list
-                                      * this_len;       // length of linked list traversed for each entry accessing this list
-
-                if (this_len > longest_len) {
-                    longest_len = this_len;
-                    longest_len_hash = hash;
-                }
+            if (this_len > longest_len) {
+                longest_len = this_len;
+                longest_len_hash = hash;
             }
         }
-
-        if (longest_len > 16384)
-            iprintf ("\nFYI: %s index entry %u has %"PRIu64 " deep entries on its linked list. This is excessively large and might cause slowness.%s",
-                     by_names[i], longest_len_hash, longest_len, report_support_if_unexpected()); // note: error only shows with --show-deep... not very useful
-
-        iprintf ("\nDeep index[%s] entries used: %"PRIu64" / %"PRIu64" (%.1f%%)\n", 
-                 by_names[i], used, index_len, 100.0 * (double)used / (double)index_len);
-
-        iprintf ("Deep index[%s] linked list length histogram:\n", by_names[i]);
-        for (int this_len=0; this_len < NUM_LENS; this_len++) {
-            if (!lens[this_len]) continue;
-
-            iprintf ("%3u: %"PRIu64"\n", this_len, lens[this_len]);
-
-            // our algorithm requires traversal of entire linked list for each entry. calculate the length of the list
-            // traversed for the average read (simplifying assumption: there are the same )
-            total_ents_traversed += (uint64_t)this_len        // number of entries that will access this linked list
-                                  * (uint64_t)this_len        // length of linked list traversed for each entry accessing this list
-                                  * (uint64_t)lens[this_len]; // number of linked lists of this length
-        }
-
-        if (longer) iprintf ("longer: %"PRIu64"\n", longer);
-
-        // this is approximate: assuming # of ents hashed is equal to the number of reads (only for BY_SEQ - we traverse BY_QNAME only for trimmed reads)
-        if (i==BY_SEQ)
-            iprintf ("\nFASTQ SEG: BY_SEQ index linked list length traversed on average: %.2f (total_ents_traversed=%"PRIu64")\n", 
-                     (double)total_ents_traversed / (double)deep_ents_len, total_ents_traversed);
     }
+
+    if (longest_len > 16384)
+        iprintf ("\nFYI: deep_index entry %u has %"PRIu64 " deep entries on its linked list. This is excessively large and might cause slowness.%s",
+                 longest_len_hash, longest_len, report_support_if_unexpected()); // note: error only shows with --show-deep... not very useful
+
+    iprintf ("\ndeep_index entries used: %"PRIu64" / %"PRIu64" (%.1f%%)\n", 
+             used, index_len, 100.0 * (double)used / (double)index_len);
+
+    iprint0 ("\ndeep_index linked list length histogram:\n");
+    for (int this_len=0; this_len < NUM_LENS; this_len++) {
+        if (!lens[this_len]) continue;
+
+        iprintf ("%3u: %"PRIu64"\n", this_len, lens[this_len]);
+
+        // our algorithm requires traversal of entire linked list for each entry. calculate the length of the list
+        // traversed for the average read (simplifying assumption: there are the same)
+        total_ents_traversed += (uint64_t)this_len        // number of entries that will access this linked list
+                              * (uint64_t)this_len        // length of linked list traversed for each entry accessing this list
+                              * (uint64_t)lens[this_len]; // number of linked lists of this length
+    }
+
+    if (longer) iprintf ("longer: %"PRIu64"\n", longer);
+
+    // this is approximate: assuming # of ents hashed is equal to the number of reads 
+    iprintf ("\nFASTQ SEG: deep_index linked list length traversed on average: %.2f (total_ents_traversed=%"PRIu64")\n", 
+             (double)total_ents_traversed / (double)deep_ents_len, total_ents_traversed);
 }
 
 static void sam_deep_zip_display_reasons (void)
@@ -181,12 +175,13 @@ void sam_deep_set_QUAL_hash (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qual))
 
     dl->deep_hash.qual = deep_qual_hash (VB, STRa(qual), dl->FLAG.rev_comp); 
 
-    if (flag.show_deep == 2 && deephash_issame (dl->deep_hash, flag.debug_deep_hash)) 
-        iprintf ("%s Found deep_hash=%u,%u,%u\nQNAME=\"%.*s\"\nSEQ=\"%.*s\"\nQUAL=\"%.*s\"\n",
+    if (flag.show_deep == SHOW_DEEP_ALL || 
+        (flag.show_deep == SHOW_DEEP_ONE_HASH && deephash_issame (dl->deep_hash, flag.debug_deep_hash)))
+        iprintf ("%s Recording deep_hash=%016"PRIx64",%08x,%08x\nQNAME=\"%.*s\"\nSEQ=\"%.*s\"\nQUAL=\"%.*s\"\n\n",
                  LN_NAME, DEEPHASHf(dl->deep_hash), STRfw(dl->QNAME), dl->SEQ.len, vb->textual_seq_str, STRfw(dl->QUAL));
 }
 
-// ZIP compute thread: mutex-protected callback from ctx_merge_in_vb_ctx during merge: add VB's deep_hash to z_file->deep_index_by_*/deep_ents
+// ZIP compute thread: mutex-protected callback from ctx_merge_in_vb_ctx during merge: add VB's deep_hash to z_file->deep_index/deep_ents
 void sam_deep_zip_merge (VBlockP vb_)
 {
     if (!flag.deep || zip_is_biopsy) return;
@@ -195,28 +190,26 @@ void sam_deep_zip_merge (VBlockP vb_)
     START_TIMER;
 
     // initialize - first VB merging
-    if (!z_file->deep_index_by[BY_SEQ].len) {
-        double est_num_vbs = MAX_(1, (double)txtfile_get_seggable_size() / (double)Ltxt * 1.05/* additonal PRIM VBs */);
-        uint64_t est_num_lines = MIN_(MAX_ENTRIES, (uint64_t)(est_num_vbs * (double)vb->lines.len * 1.15)); // inflate the estimate by 15% - to reduce hash contention, and to reduce realloc chances for z_file->deep_ents
+    if (!z_file->deep_index.len) {
+        double est_num_vbs = MAX_(1, (double)txt_file->est_seggable_size / (double)Ltxt * 1.05/* additonal PRIM VBs */);
+        uint64_t est_num_lines = MIN_(MAX_ENTRIES, (uint64_t)(est_num_vbs * (double)(vb->lines.len32 + vb->num_gc_lines) * 1.15)); // inflate the estimate by 15% - to reduce hash contention, and to reduce realloc chances for z_file->deep_ents
 
         // number of bits of hash table size (maximum 31)
         int clzll = (int)__builtin_clzll (est_num_lines * 2); 
         num_hash_bits = MIN_(31, 64 - clzll); // num hash bits
 
-        for (int by=BY_SEQ; by <= BY_QNAME; by++) {
-            z_file->deep_index_by[by].can_be_big = true;
+        z_file->deep_index.can_be_big = true;
 
-            // pointer into deep_ents - initialize to NO_NEXT
-            buf_alloc_exact_255 (evb, z_file->deep_index_by[by], ((uint64_t)1 << num_hash_bits), uint32_t, "z_file->deep_index_by"); 
-        }
+        // pointers into deep_ents - initialize to NO_NEXT
+        buf_alloc_exact_255 (evb, z_file->deep_index, ((uint64_t)1 << num_hash_bits), uint32_t, "z_file->deep_index"); 
 
         // note: no initialization of deep_ents - not needed and it takes too long (many seconds to get pages from kernel) while all threads are waiting for vb=1
         z_file->deep_ents.can_be_big = true;
         buf_alloc_exact (evb, z_file->deep_ents, MAX_(est_num_lines, vb->lines.count), ZipZDeep, "z_file->deep_ents");
 
         if (flag.show_deep) 
-            printf ("num_hash_bits=%u est_num_lines*1.15=%"PRIu64" clzll=%d deep_index_by[BY_SEQ].len=%"PRIu64" deep_index_by[BY_QNAME].len=%"PRIu64" deep_ents.len=%"PRIu64"\n", 
-                    num_hash_bits, est_num_lines, clzll, z_file->deep_index_by[BY_SEQ].len, z_file->deep_index_by[BY_QNAME].len, z_file->deep_ents.len);
+            printf ("num_hash_bits=%u est_num_lines*1.15=%"PRIu64" clzll=%d deep_index.len=%"PRIu64" deep_ents.len=%"PRIu64"\n", 
+                    num_hash_bits, est_num_lines, clzll, z_file->deep_index.len, z_file->deep_ents.len);
 
         z_file->deep_ents.len = 0;
     }
@@ -231,10 +224,10 @@ void sam_deep_zip_merge (VBlockP vb_)
 
     uint32_t ent_i = z_file->deep_ents.len32;
 
-    uint32_t *deep_index_by[2] = { B1ST32 (z_file->deep_index_by[BY_SEQ]), B1ST32 (z_file->deep_index_by[BY_QNAME]) };
+    uint32_t *deep_index = B1ST32 (z_file->deep_index);
     ARRAY (ZipZDeep, deep_ents, z_file->deep_ents);
 
-    uint32_t mask = bitmask32 (num_hash_bits); // num_hash_bits is calculated upon first merge
+    uint64_t mask = bitmask64 (num_hash_bits); // num_hash_bits is calculated upon first merge
     uint32_t deep_line_i = 0; // line_i within the VB, but counting only deepable lines that have SEQ.len > 0 and are not monochar
     for_buf2 (ZipDataLineSAM, dl, line_i, vb->lines) {
         if (!dl->is_deepable) continue; // case: non-deepable: secondary or supplementary line, no sequence or mono-base
@@ -247,15 +240,12 @@ void sam_deep_zip_merge (VBlockP vb_)
         }
 
         // add to indices (by SEQ and by QNAME)
-        uint32_t prev_head[2];
-        for (int by=BY_SEQ; by <= BY_QNAME; by++) {
-            uint32_t hash = (by==BY_SEQ ? dl->deep_hash.seq : dl->deep_hash.qname) & mask;                                 
-            prev_head[by] = deep_index_by[by][hash];
-            deep_index_by[by][hash] = ent_i; // new head of linked list 
-        }
+        uint32_t hash = dl->deep_hash.qname & mask;                                 
+        uint32_t prev_head = deep_index[hash];
+        deep_index[hash] = ent_i; // new head of linked list 
         
-        // create new entry - which is now the head of both linked links (BY_SEQ, BY_QNAME)
-        deep_ents[ent_i++] = (ZipZDeep){ .next    = { prev_head[0], prev_head[1] }, // previous head, if there is one, will now be the 2nd element
+        // create new entry - which is now the head of linked list
+        deep_ents[ent_i++] = (ZipZDeep){ .next    = prev_head, // this will now be the 2nd element
                                          .seq_len = dl->SEQ.len, 
                                          .hash    = dl->deep_hash,
                                          .vb_i    = vb->vblock_i, 
@@ -316,7 +306,8 @@ static void sam_piz_deep_add_qname (VBlockSAMP vb)
     BNXT32(vb->deep_index) = vb->deep_ents.len32; // index in deep_ents of data of current deepable line
     BNXT(PizZDeepFlags, vb->deep_ents) = (PizZDeepFlags){}; // initialize flags
          
-    if (segconf.deep_qtype == QNONE || flag.seq_only || flag.qual_only)
+    if (segconf.deep_qtype == QNONE || // back comp - QNONE was possible up to 15.0.66 (match by non-trimmed SEQ and QUAL)
+        flag.seq_only || flag.qual_only)
         goto done;         
 
     ASSPIZ (qname_len <= SAM_MAX_QNAME_LEN, "QNAME.len=%u, but per BAM specfication it is limited to %u characters. QNAME=\"%.*s\"", SAM_MAX_QNAME_LEN, qname_len, STRf(qname));
@@ -545,11 +536,11 @@ static void sam_piz_deep_finalize_ents (void)
     for (uint32_t vb_idx=0; vb_idx < z_file->deep_index.len32; vb_idx++) {
         BufferP deep_index = B(Buffer, z_file->deep_index, vb_idx);
 
-        // too much output, uncomment when needed
-        // BufferP deep_ents = B(Buffer, z_file->deep_ents, vb_idx); 
-        // if (flag.show_deep)
-        //     iprintf ("vb_idx=%u vb=%s/%u start_deepable_line=%"PRIu64" num_deepable_lines=%u ents=(%p, %u)\n", 
-        //              vb_idx, comp_name(deep_ents->prm32[1]), deep_ents->prm32[0], next_deepable_line, deep_index->len32, deep_ents->data, deep_ents->len32);
+        if (flag.show_deep == SHOW_DEEP_ALL) {
+            BufferP deep_ents = B(Buffer, z_file->deep_ents, vb_idx); 
+            iprintf ("vb_idx=%u vb=%s/%u start_deepable_line=%"PRIu64" num_deepable_lines=%u ents=(%p, %u)\n", 
+                     vb_idx, comp_name(deep_ents->prm32[1]), deep_ents->prm32[0], next_deepable_line, deep_index->len32, deep_ents->data, deep_ents->len32);
+        }
 
         BNXT64(z_file->vb_start_deep_line) = next_deepable_line;
         next_deepable_line += deep_index->len;
@@ -576,8 +567,6 @@ static void sam_piz_deep_finalize_ents (void)
 void sam_piz_deep_grab_deep_ents (VBlockSAMP vb)
 {
     START_TIMER;
-
-    #define num_deepable_sam_vbs z_file->deep_index.param
 
     // two cases: 1. in FASTQ-only reconstruction (eg --R1), DEPN items have need_recon=false, and hence will not recontructed and
     // this function will not be called for them. When unbinding (SAM+FASTQ), it will be called for DEPN VBs, and return here.

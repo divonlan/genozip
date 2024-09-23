@@ -312,12 +312,17 @@ extern uint32_t str_split_by_lines_do (STRp(str), uint32_t max_lines, rom *lines
 #define str_split_by_lines(str,str_len,max_lines) \
     STR_ARRAY (line, (max_lines)) = str_split_by_lines_do ((str), (str_len), max_lines, lines, line_lens)
 
-extern uint32_t str_split_ints_do (STRp(str), uint32_t max_items, char sep, bool exactly, int64_t *items);
+extern uint32_t str_split_ints_do (STRp(str), uint32_t max_items, char sep, bool exactly, int base, int64_t *items);
 
 #define str_split_ints(str,str_len,max_items,sep,name,exactly) \
     uint32_t n_##name##s = (max_items) ? (max_items) : str_count_char ((str), (str_len), (sep)) + 1; \
     int64_t name##s[n_##name##s]; \
-    n_##name##s = str_split_ints_do ((str), (str_len), n_##name##s, (sep), (exactly), name##s); 
+    n_##name##s = str_split_ints_do ((str), (str_len), n_##name##s, (sep), (exactly), 10, name##s); 
+
+#define str_split_hexs(str,str_len,max_items,sep,name,exactly) \
+    uint32_t n_##name##s = (max_items) ? (max_items) : str_count_char ((str), (str_len), (sep)) + 1; \
+    int64_t name##s[n_##name##s]; \
+    n_##name##s = str_split_ints_do ((str), (str_len), n_##name##s, (sep), (exactly), 16, name##s); 
 
 extern uint32_t str_split_floats_do (STRp(str), uint32_t max_items, char sep, bool exactly, char this_char_is_NAN, double *items);
 #define str_split_floats(str,str_len,max_items,sep,name,exactly,this_char_is_NAN) \
@@ -384,3 +389,5 @@ static inline char base32(uint32_t n) { return (n) < 26 ? ('a' + (n))     // 97-
                                              :            '@';          } // 64.      5bits: 0
 
 extern uint64_t p10[]; // powers of 10
+
+extern uint64_t crc64 (uint64_t crc, bytes data, uint64_t data_len); // implementation is in crc64.c

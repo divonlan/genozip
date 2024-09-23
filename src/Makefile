@@ -141,7 +141,7 @@ LATEST_SRC = ../../genozip-latest/src
 SRC_DIRS = secure zlib bzlib lzma bsc libdeflate_1.7 libdeflate_1.19 libdeflate_1.19/x86 libdeflate_1.19/arm 	\
 		  htscodecs igzip igzip/aarch64 igzip/x86_64 igzip/noarch
 
-MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c tip.c seg_id.c zip_dyn_int.c     	\
+MY_SRCS = genozip.c genols.c context.c container.c strings.c crc64.c stats.c arch.c tip.c seg_id.c zip_dyn_int.c\
 		  data_types.c bits.c progress.c writer.c zriter.c tar.c chrom.c qname.c tokenizer.c mutex.c threads.c	\
           zip.c piz.c reconstruct.c recon_history.c recon_peek.c seg.c zfile.c aligner.c flags.c specials.c    	\
 		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c ref_cache.c digest.c \

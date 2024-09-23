@@ -19,12 +19,13 @@ typedef struct { char s[100]; } PizDisQname;
 extern PizDisQname piz_dis_qname (VBlockP vb); // for ASSPIZ
 
 extern void asspiz_text (VBlockP vb, FUNCLINE);
+extern StrTextLong piz_advise_biopsy (VBlockP vb);
 
 #define ASSPIZ(condition, format, ...) ({ \
     if (__builtin_expect (!(condition), 0)) { \
         DO_ONCE { /* first thread to fail at this point prints error and starts exit flow, other threads stall */ \
-            asspiz_text ((VBlockP)vb, __FUNCLINE);\
-            fprintf (stderr, format "\n", __VA_ARGS__); \
+            asspiz_text (VB, __FUNCLINE);\
+            fprintf (stderr, format "\n%s\n", __VA_ARGS__, piz_advise_biopsy(VB).s);\
             exit_on_error(true); \
         } \
         else stall(); \

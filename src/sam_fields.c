@@ -347,7 +347,11 @@ static bool sam_seg_MM_Z_item (VBlockP vb, ContextP ctx,
         
         rom arr = comma + 1;
         uint32_t arr_len = mm_item_len + mm_item - arr;
-        seg_array (vb, ctx_get_ctx (vb, segconf.MM_con.items[1].dict_id), ctx->st_did_i, STRa(arr), ',', 0, false, true, sub_dict_id (_OPTION_MM_Z, 'A'), arr_len);
+
+        // note: we seg MNM:Z repeats as "special" and copy them from ML:Z if confirmed to be the same
+        seg_array_(vb, ctx_get_ctx (vb, segconf.MM_con.items[1].dict_id), ctx->st_did_i, STRa(arr), ',', 0, false, true, sub_dict_id (_OPTION_MM_Z, 'A'), 
+                   SAM_SPECIAL_ML_REPEATS, ctx_encountered_in_line (VB, OPTION_ML_B_C) ? CTX(OPTION_ML_B_C)->last_value.i/*ML's n_repeats*/ : -1, // note: will only use special if MM:Z has a single item (otherwise ML:B repeats are distributed between all MM:Z items)
+                   arr_len);
     }
 
     // trivial but legal MM:Z field: "MM:Z:C+m?;"
@@ -364,6 +368,13 @@ static bool sam_seg_MM_Z_item (VBlockP vb, ContextP ctx,
 static void sam_seg_MM_Z (VBlockSAMP vb, STRp(mm), unsigned add_bytes)
 {
     seg_array_by_callback (VB, CTX(OPTION_MM_Z), STRa(mm), ';', sam_seg_MM_Z_item, 0, 0, add_bytes);
+}
+
+// used by container_reconstruct to retrieve the number of repeats of ML:B, and use that for MM:Z subcontext MNM:Z
+SPECIAL_RECONSTRUCTOR (sam_piz_special_ML_REPEATS)
+{
+    new_value->i = CTX(OPTION_ML_B_C)->last_value.i; // number of repeats because ML.store=STORE_INDEX
+    return HAS_NEW_VALUE;
 }
 
 // ----------------------------------------------------------------------------------------------------------
@@ -1292,6 +1303,9 @@ void sam_seg_array_one_ctx (VBlockSAMP vb, ZipDataLineSAMP dl, DictId dict_id, u
             ctx_set_last_value (VB, con_ctx, sum);
     }
 
+    if (con_ctx->flags.store == STORE_INDEX)
+        ctx_set_last_value (VB, con_ctx, (int64_t)repeats);
+
     if (callback)
         callback (vb, elem_ctx, cb_param, local_start, repeats);
 
@@ -1692,6 +1706,8 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam,
         case _OPTION_st_Z: COND (TECH(PACBIO), seg_add_to_local_string (VB, CTX(OPTION_st_Z), STRa(value), LOOKUP_SIMPLE, add_bytes));
         
         case _OPTION_zm_i: COND(segconf.sam_has_zm_by_Q1NAME, sam_seg_pacbio_zm (vb, numeric.i, add_bytes));
+
+        // case _OPTION_ql_Z: _OPTION_qt_Z: // better off as snips that QUAL-like context
 
         // Illumina DRAGEN fields
         case _OPTION_sd_f: COND (MP(DRAGEN), sam_dragen_seg_sd_f (vb, dl, STRa(value), numeric, add_bytes));

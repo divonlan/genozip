@@ -392,17 +392,46 @@ static void sam_header_zip_inspect_RG_lines (BufferP txt_header)
     // advance to point to first @RG line
     #define IS_RG(s) (s[1] == 'R' && s[2] == 'G' && s[3] == '\t')
     #define IS_ID(s) (s[0] == 'I' && s[1] == 'D' && s[2] == ':')
+    #define IS_PL(s) (s[0] == 'P' && s[1] == 'L' && s[2] == ':')
 
     while ((hdr = strchr (hdr, '@'))) 
         if (IS_RG(hdr)) {
             str_split_by_tab (hdr, after - hdr, 32, NULL, false, false); // also advances hdr to after the newline
+        
+            for (int i=1; i < n_flds; i++)
+                if (IS_ID (flds[i])) 
+                    ctx_populate_zf_ctx (OPTION_RG_Z, flds[i]+3, fld_lens[i]-3, WORD_INDEX_NONE);
 
-            if (n_flds) 
-                for (int i=1; i < n_flds; i++)
-                    if (IS_ID (flds[i])) {
-                        ctx_populate_zf_ctx (OPTION_RG_Z, flds[i]+3, fld_lens[i]-3, WORD_INDEX_NONE);
-                        break;
-                    }
+                else if (!segconf.tech_by_RG && IS_PL (flds[i])) {
+                    SAFE_NUL(&flds[i][fld_lens[i]]);
+
+                    static struct { rom name/*case insensitive*/; SeqTech tech; } PL_to_tech[] = {
+                        // standard                       // observed non-standard
+                        { "Illumina",   TECH_ILLUM     }, 
+                        { "DNBSEQ",     TECH_MGI       }, { "mgi", TECH_MGI },
+                        { "PacBio",     TECH_PACBIO    }, 
+                        { "Ultima",     TECH_ULTIMA    }, 
+                        { "ONT",        TECH_NANOPORE  }, 
+                        { "IonTorrent", TECH_IONTORR   }, 
+                        { "Element",    TECH_ELEMENT   }, 
+                        { "Singular",   TECH_SINGLR    }, 
+                        { "Capillary",  TECH_CAPILLARY }, 
+                        { "Helicos",    TECH_HELICOS   },  
+                        { "LS454",      TECH_LS454       }, 
+                        { "SOLiD",      TECH_SOLID     }, 
+                    };
+                    
+                    for (int pl=0; pl < ARRAY_LEN(PL_to_tech); pl++) 
+                        if (str_case_compare (flds[i]+3, PL_to_tech[pl].name, NULL)) {
+                            segconf.tech_by_RG = PL_to_tech[pl].tech; // note: this is very unreliable, our segconf.tech is a much better predictor of the true sequencing technology. In many BAM files, this is missing, contains non-standard values, and is sometimes simply false (e.g. old Ultima files have LS454)
+                            break;
+                        }
+
+                    if (!segconf.tech_by_RG)
+                        strncpy (segconf.tech_by_RG_unidentified, flds[i]+3, sizeof(segconf.tech_by_RG_unidentified)-1);
+                    
+                    SAFE_RESTORE;
+                }           
         }
         else hdr++;
 

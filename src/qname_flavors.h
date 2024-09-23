@@ -373,6 +373,22 @@ CON_MGI_R(8);
 
 #define PX_mgi_R { "", "", "C", "R", "", PX_MATE_FIXED_0_PAD }
 
+// example: die1_A100004684C001R029011637
+#define CON_MGI_die(n)                   \
+static SmallContainer con_mgi_die##n = {  \
+    .repeats             = 1,            \
+    .nitems_lo           = 6,            \
+    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_FIXED_0_PAD, 1 } }, /* Die       */ \
+                             { .dict_id = { _SAM_Q1NAME }, .separator = "C"                    }, /* Flow cell */ \
+                             { .dict_id = { _SAM_Q2NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, /* Column    */ \
+                             { .dict_id = { _SAM_Q3NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, /* Row       */ \
+                             { .dict_id = { _SAM_Q4NAME }, .separator = { CI0_FIXED_0_PAD, n } }, /* Tile      */ \
+                             { .dict_id = { _SAM_QmNAME }, I_AM_MATE                           } }/* Mate      */ \
+}
+CON_MGI_die(6);
+
+#define PX_mgi_die { "die", "_", "", "R", "", PX_MATE_FIXED_0_PAD }
+
 #define CON_MGI_Rgs(n) /* SAM/BAM only*/    \
 static SmallContainer con_mgi_Rgs##n = {    \
     .repeats             = 1,               \
@@ -407,6 +423,23 @@ static SmallContainer con_mgi_RgsFQ##n = {  \
 CON_MGI_RgsFQ(8);
 
 #define PX_mgi_RgsFQ { "", "", "", "", "C", "R", "", PX_MATE_FIXED_0_PAD }
+
+// Example: "DV71-240104001:7:some-string:L02:R014C002:0000:2670"
+static SmallContainer con_mgi_coloned = {
+    .repeats             = 1,
+    .nitems_lo           = 9,
+    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = ":"                    }, // ?
+                             { .dict_id = { _SAM_Q1NAME }, .separator = ":"                    }, // ?
+                             { .dict_id = { _SAM_Q2NAME }, .separator = ":L"                   }, // ?
+                             { .dict_id = { _SAM_Q3NAME }, .separator = { CI0_FIXED_0_PAD, 2 } }, // Lane 
+                             { .dict_id = { _SAM_Q4NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, // Row
+                             { .dict_id = { _SAM_Q5NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, // Column
+                             { .dict_id = { _SAM_Q6NAME }, .separator = { CI0_FIXED_0_PAD, 4 } }, // Tile 1st half
+                             { .dict_id = { _SAM_Q7NAME }, .separator = { CI0_FIXED_0_PAD, 4 } }, // Tile 2nd half
+                             { .dict_id = { _SAM_QmNAME }, I_AM_MATE                           } } // Mate
+};
+
+#define PX_mgi_coloned { "", "", "", "", ":R", "C", ":", ":", PX_MATE_FIXED_0_PAD }
 
 // variant of MGI flavor where Q4NAME is a variable-length integer rather than a fixed-length zero-padded numeric
 static SmallContainer con_mgi_varlen = {  \
@@ -930,6 +963,9 @@ static SmallContainer con_ncbi_sra = {
                              { .dict_id = { _SAM_Q2NAME }                                      } } // usually sequential number in FASTQ
 };
 
+// used SRA-sra, example: "SRR001666.sra.1"
+#define PX_sra_sra { "", "", "sra." }
+
 // example: ERR2708427.1.1
 static SmallContainer con_ncbi_sra2 = {
     .repeats             = 1,
@@ -1097,12 +1133,15 @@ static QnameFlavorStruct qf[] = {
                                                                                           TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_varlen,     no_validate,    0,   3,  {4,-1},             {1,2,3,-1},     {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_varlen     },
     {},  { QF_MGI_r6,      "MGI-R6",        { "8A_V100004684L3C001R029011637", "V300014293BL2C001R027005967", "V300003413L4C001R016000000" },          
                                                                                           TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_R6,         no_validate,    0,   3,  {-1},               {1,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_R          },
+    {},  { QF_MGI_die6,    "MGI-die6",      { "die1_A100004684C001R029011637" },          TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_die6,       no_validate,    0,   6,  {-1},               {0,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_die        }, // 15.0.67
     {},  { QF_MGI_r7,      "MGI-R7",        { "V300017009_8AL2C001R0030001805", "V300022116L2C001R0010002968", "V300014296L2C001R0013000027", "E100001117L1C001R0030000000", "E1000536L1C002R0020000005" },         
                                                                                           TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_R7,         no_validate,    0,   3,  {-1},               {1,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_R          },
     {},  { QF_MGI_rgs8FQ,  "MGI-Rgs8FQ",    { "CGGTCT-AACCT|ab|E200003777L1C001R00100888074" },         // must be before QF_MGI_r8
                                                                                           TECH_MGI,     TECH_NCBI,    QNAME1, &con_mgi_RgsFQ8,     no_validate,    0,   5,  {-1},               {3,4,5,6,-1},   {4,5,6,-1},         {-1},           0,  6,5,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_RgsFQ      },
          { QF_MGI_rgs8,    "MGI-Rgs8",      { "CGGTCT-AACCT|ab|E200003777L1C001R00100888074|2" },       
                                                                                           TECH_MGI,     TECH_NCBI,    QSAM,   &con_mgi_Rgs8,       no_validate,    '|', 6,  {-1},               {3,4,5,6,-1},   {4,5,6,-1},         {-1},           0,  6,5,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_Rgs,       }, 
+    {},  { QF_MGI_coloned, "MGI-coloned",   { "DV71-240104001:7:some-string:L02:R014C002:0000:2670" },
+                                                                                          TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_coloned,    no_validate,    0,   9,  {1,-1},             {3,4,5,6,7,-1}, {1,3,4,5,6,7,-1},   {-1},           0,  6,-1,  -1,-1, -1, -1, -1, -1, 0,  PX_mgi_coloned    }, // 15.0.67
     {},  { QF_MGI_r8,      "MGI-R8",        { "V300046476L1C001R00100001719" },           TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_R8,         no_validate,    0,   3,  {-1},               {1,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_R          },
     {},  { QF_MGI_ll7,     "MGI-LL7",       { "DP8400010271TLL1C005R0511863479" },        TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_LL7,        no_validate,    0,   4,  {-1},               {1,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_LL         },
     {},  { QF_MGI_cl,      "MGI-CL",        { "CL100025298L1C002R050_244547" },           TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_CL,         no_validate,    0,   6,  {4,-1},             {1,2,3,-1},     {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_CL         }, 
@@ -1130,7 +1169,7 @@ static QnameFlavorStruct qf[] = {
     {},  { QF_ILLUM_5rng,  "Illum-oldR",    { "NOVID_3053_FC625AGAAXX:6:1:1069:11483:0,84" },   
                                                                                           TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_5rng,  no_validate,    ':', 6,  {1,2,3,4,5,6,-1},   {-1},           {1,2,3,4,5,6,-1},   {-1},           0,  -1,-1, -1,-1, 6,  -1, -1, -1,                       },
     {},  { QF_ILLUM_6,     "Illum-old6",    { "HWI-ST156_288:4:1:10000:110537:0" },       TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_6,     no_validate,    0,   5,  {1,2,3,4,5,-1},     {-1},           {1,2,3,4,-1},       {-1},           0,  -1,-1, -1,-1, -1, -1, -1, -1,                       },
-    {},  { QF_ROCHE_454,   "Roche-454",     { "000050_1712_0767" },                       TECH_454,     TECH_NCBI,    QANY,   &con_roche_454,      no_validate,    0,   2,  {-1},               {0,1,2,-1},     {-1},               {-1},           0,  -1,-1, -1,-1, -1, -1, -1, -1, 16, PX_roche_454      },
+    {},  { QF_ROCHE_454,   "Roche-454",     { "000050_1712_0767" },                       TECH_LS454,     TECH_NCBI,    QANY,   &con_roche_454,      no_validate,    0,   2,  {-1},               {0,1,2,-1},     {-1},               {-1},           0,  -1,-1, -1,-1, -1, -1, -1, -1, 16, PX_roche_454      },
     {},  { QF_HELICOS,     "Helicos",       { "VHE-242383071011-15-1-0-2" },              TECH_HELICOS, TECH_NCBI,    QANY,   &con_helicos,        no_validate,    0,   5,  {2,3,4,5,-1},       {-1},           {-1},               {-1},           0,  -1,-1, -1,-1, -1, -1, -1, -1,                       },
     {},  { QF_PACBIO_3,    "PacBio-3",      { "0ae26d65_70722_4787" },                    TECH_PACBIO,  TECH_NCBI,    QANY,   &con_pacbio_3,       no_validate,    0,   2,  {1,2,-1},           {0,-1},         {1,2,-1},           {0,-1},         0,  -1,-1, -1,-1, -1, -1, -1, -1, 0,  PX_pacbio_3       },
          { QF_PACBIO_rng,  "PacBio-Range",  { "m130802_221257_00127_c100560082550000001823094812221334_s1_p0/128361/872_4288" },
@@ -1149,6 +1188,7 @@ static QnameFlavorStruct qf[] = {
          { QF_SRA_L,       "NCBI_SRA_L",    { "SRR11215720.1_1_length=120" },             TECH_NCBI,    TECH_NONE,    Q1or3,  &con_ncbi_sra_L,     val_sra,        0,   10, {2,3,4,-1},         {-1},           {2,3,4,-1},         {-1},           0,  3,-1,  -1,-1,  4, -1, -1, -1, 0,  PX_sra_len        },
          { QF_SRA2,        "NCBI-SRA2",     { "ERR2708427.1.1" },                         TECH_NCBI,    TECH_NONE,    Q1or3,  &con_ncbi_sra2,      val_sra,        0,   2,  {2,3,-1},           {-1},           {2,3,-1},           {-1},           0,  2,-1,  -1,-1, -1, -1, -1, -1,     .is_mated=true    },
          { QF_SRA,         "NCBI-SRA",      { "SRR001666.1" },                            TECH_NCBI,    TECH_NONE,    Q1or3,  &con_ncbi_sra,       val_sra,        0,   1,  {2,-1},             {-1},           {2,-1},             {-1},           0,  2,-1,  -1,-1, -1, -1, -1, -1,                       },
+         { QF_SRA_sra,     "NCBI-SRA-sra",  { "SRR001666.sra.1" },                        TECH_NCBI,    TECH_NONE,    Q1or3,  &con_ncbi_sra,       val_sra,        0,   5,  {2,-1},             {-1},           {2,-1},             {-1},           0,  2,-1,  -1,-1, -1, -1, -1, -1, 0,  PX_sra_sra        }, // 15.0.67
 
     // QNAME2 - Illumina, Singular, Element... - no mate, as mate is part of QNAME in this case
          { QF_ILLUM_2bc,   "Illum-2bc",     { "2:N:0:CTGAAGCT+ATAGAGGC" },                TECH_NONE,    TECH_ANY,     QNAME2, &con_qname2_2bc,     no_validate,    0,   4,  {0,2,-1},           {-1},           {0,-1},             {-1},           0,  -1,-1, -1,-1, -1, 3,  -1, -1, 0,  PX_illumina_2bc   }, 

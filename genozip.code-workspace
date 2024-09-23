@@ -66,7 +66,8 @@
 			"string": "c",
 			"string_view": "c",
 			"bzlib.h": "c",
-			"memory": "c"
+			"memory": "c",
+			"vector": "c"
 		}
 	}
 }

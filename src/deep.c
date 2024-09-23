@@ -13,8 +13,6 @@
 
 #define MAX_AUTO_READ_LEN 20000 // not too long, so that the "longer reads" code path also gets some mileage
 
-rom by_names[2] = { "BY_SEQ", "BY_QNAME" };
-
 // hash of a SEQ field in the forward direction 
 // note: I tested crc32 after converting seq to 2-bit. No advantage - Almost identical linked-list-length histogram.
 uint32_t deep_seq_hash (VBlockP vb, STRp(seq), bool is_revcomp)
@@ -89,32 +87,6 @@ uint32_t deep_qual_hash (VBlockP vb, STRp(qual), bool is_revcomp)
 
     if (is_revcomp && qual_len > MAX_AUTO_READ_LEN)
         buf_free (vb->scratch);
-
-    // xxx possible better but slower hash for qual
-    // char *my_qual; 
-    
-    // // short enough reads - use automatic allocation
-    // if (qual_len <= MAX_AUTO_READ_LEN) 
-    //     my_qual = short_read_data;
-    // else {
-    //     ASSERTNOTINUSE (vb->scratch);
-    //     buf_alloc (vb, &vb->scratch, 0, qual_len, char, 0, "scratch");
-    //     my_qual = B1STc (vb->scratch);
-    // }
-
-    // if (is_revcomp) 
-    //     str_reverse (my_qual, STRa(qual));
-
-    // for (uint32_t i=0; i < qual_len; i++)
-    //     my_qual[i] ^= (i & 0xff);
-
-    // uint32_t hash = crc32 (0, my_qual, qual_len);
-    
-    // // note: qual_hash=0 means "QUAL not hashed", so both crc32=0 and crc32=1 get mapped to hash=1
-    // if (hash == 0) hash = 1;
-
-    // if (qual_len > MAX_AUTO_READ_LEN)
-    //     buf_free (vb->scratch);
 
     return hash;
 }

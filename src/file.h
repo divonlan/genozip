@@ -18,8 +18,8 @@ typedef rom FileMode;
 extern FileMode READ, WRITE, WRITEREAD;// this are pointers to static strings - so they can be compared eg "if (mode==READ)"
 
 // number of alignments that are deepable or non-deepable for each of these reasons
-typedef enum {          NDP_FQ_READS, NDP_DEEPABLE, NDP_DEEPABLE_TRIM, NDP_NO_ENTS, NDP_MONOSEQ, NDP_MONOQUAL, NDP_BAD_N_QUAL, NDP_MULTI_MATCH, NDP_MULTI_TRIMMED, NDP_NO_MATCH , NUM_DEEP_STATS } DeepStatsFastq; 
-#define NO_DEEP_NAMES { "FQ_reads",   "Deepable",   "Dpable_trim",     "No_ents",   "Monoseq",   "Monoqual",   "Bad_N_qual",   "Multi_match",   "MultM_trim",      "No_match" }
+typedef enum {          NDP_FQ_READS, NDP_DEEPABLE, NDP_DEEPABLE_TRIM, NDP_NO_ENTS, NDP_MONOSEQ, NDP_BAD_N_QUAL, NDP_SAM_DUP, NDP_SAM_DUP_TRIM, NDP_NO_MATCH , NUM_DEEP_STATS } DeepStatsFastq; 
+#define NO_DEEP_NAMES { "FQ_reads",   "Deepable",   "Dpable_trim",     "No_ents",   "Monoseq",   "Bad_N_qual",   "SAM_dup",   "SAM_dup_trm",    "No_match" }
 
 typedef struct File {
     void *file;
@@ -45,7 +45,7 @@ typedef struct File {
     int64_t disk_so_far;               // ZIP: Z/TXT_FILE: data actually read/write to/from "disk" (using fread/fwrite), (TXT_FILE: possibley bgzf/gz/bz2 compressed ; 0 if external compressor is used for reading).
     int64_t disk_gz_uncomp_or_trunc;   // ZIP: TXT_FILE: gz-compressed data actually either decompressed or discarded due to truncate
     int64_t gz_blocks_so_far;          // ZIP: TXT_FILE: number of gz blocks read from disk
-    int64_t est_seggable_size;         // TXT_FILE ZIP, access via txtfile_get_seggable_size(). Estimated size of txt_data in file, i.e. excluding the header. It is exact for plain files, or based on test_vb if the file has source compression
+    int64_t est_seggable_size;         // TXT_FILE ZIP, Estimated size of txt_data in file, i.e. excluding the header. It is exact for plain files, or based on test_vb if the file has source compression
     int64_t est_num_lines;             // TXT_FILE ZIP, an alternative for progress bar - by lines instead of bytes (used for CRAM)
     
     // this relate to the textual data represented. In case of READ - only data that was picked up from the read buffer.
@@ -170,12 +170,9 @@ typedef struct File {
     Buffer deep_ents;                  // Z_FILE: ZIP: entries of type ZipZDeep
                                        // Z_FILE: PIZ: an array of Buffers, one for each SAM VB, containing QNAME,SEQ,QUAL of all reconstructed lines
     
-    Buffer deep_index;                 // Z_FILE: PIZ: an array of Buffers, one for each SAM VB, each containing an array of uint32_t - one for each primary line - index into deep_ents[vb_i] of PizZDeep of that line
+    Buffer deep_index;                 // Z_FILE: ZIP: hash table  - indices into deep ents, indexed by a subset of the hash.qname bits 
+                                       // Z_FILE: PIZ: an array of Buffers, one for each SAM VB, each containing an array of uint32_t - one for each primary line - index into deep_ents[vb_i] of PizZDeep of that line
     
-    #define BY_SEQ   0
-    #define BY_QNAME 1
-    Buffer deep_index_by[2];           // Z_FILE: ZIP: hash table (BY_SEQ,BY_QNAME) - indices into deep ents, indexed by a subset of the hash(SEQ) bits 
-
     // Reconstruction plan, for reconstructing in sorted order if --sort: [0] is primary coords, [1] is luft coords
     Buffer vb_info[3];                 // Z_FILE   ZIP: SAM: array of SamMainVbInfo for MAIN and SamGcVbInfo for PRIM, DEPN
                                        // Z_FILE   PIZ: [0]: used by writer [1]: used to load SAM SA Groups - array of PlsgVbInfo - entry per PRIM vb 

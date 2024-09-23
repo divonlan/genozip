@@ -49,7 +49,7 @@ void qname_filter_initialize_from_file (rom filename, CompIType comp_i)
         if (VER(15))
             qname_canonize (QNAME1, qSTRa(qname[i].qname), comp_i); // possibly reduces qname_len
 
-        qname[i].hash = qname_calc_hash (QNAME1, comp_i, STRa(qname[i].qname), unknown, false, NULL);
+        qname[i].hash = qname_calc_hash (QNAME1, comp_i, STRa(qname[i].qname), unknown, false, CRC32, NULL);
     }
 
     buf_destroy (data); // defined in file_split_lines
@@ -87,7 +87,7 @@ void qname_filter_initialize_from_opt (rom opt, CompIType comp_i)
         qname[i].qname_len = str_lens[i];
         memcpy (qname[i].qname, strs[i], qname[i].qname_len);
 
-        qname[i].hash = qname_calc_hash (QNAME1, comp_i, STRa(qname[i].qname), unknown, false, NULL);
+        qname[i].hash = qname_calc_hash (QNAME1, comp_i, STRa(qname[i].qname), unknown, false, CRC32, NULL);
     }
 
     qsort (STRb(qnames_filter), sizeof(QnameFilterItem), qname_filter_sort_by_hash);
@@ -104,7 +104,7 @@ bool qname_filter_does_line_survive (VBlockP vb, STRp(qname))
     if (VER(15))
         qname_canonize (QNAME1, qSTRa(qname), vb->comp_i); // possibly reduce qname_len
 
-    uint32_t hash = qname_calc_hash (QNAME1, vb->comp_i, STRa(qname), unknown, false, NULL);
+    uint32_t hash = qname_calc_hash (QNAME1, vb->comp_i, STRa(qname), unknown, false, CRC32, NULL);
     QnameFilterItem *ent = binary_search (find_qname_in_filter, QnameFilterItem, qnames_filter, hash);
 
     bool found = false;

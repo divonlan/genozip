@@ -711,7 +711,7 @@ CODEC_RECONSTRUCT (codec_domq_reconstruct)
     START_TIMER;
 
     if (!ctx->is_loaded && !(ctx+1)->is_loaded && !(ctx+2)->is_loaded && !(ctx+3)->is_loaded) return;
-
+    
     ContextP declare_domq_contexts (ctx);
 
     // case: up to v13, all reads were compressed with the same dom (no multiplexing)

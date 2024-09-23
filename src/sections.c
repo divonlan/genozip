@@ -345,8 +345,7 @@ void sections_create_index (void)
             case SEC_VB_HEADER : {
                 VBIType vb_i = sec->vblock_i;
                 
-                ASSERT (vb_i>=1 && vb_i < z_file->vb_sections_index.len32, "Bad vb_i=%u, z_file->vb_sections_index.len=%u", vb_i, z_file->vb_sections_index.len32);
-                
+                ASSERTINRANGE (vb_i, 1, z_file->vb_sections_index.len32);
                 vbinx = &vb_index[vb_i];
                 *vbinx = (SectionsVbIndexEnt){ .vb_header_sec_i = sec_i };
                 break;
@@ -850,6 +849,10 @@ VBIType sections_get_num_vbs_(CompIType first_comp_i, CompIType last_comp_i)
 
 VBIType sections_get_first_vb_i (CompIType comp_i) 
 { 
+    // ZIP: works for current comp_i in certain cases, most importantly for a FQ component in deep
+    if (comp_i > 0 && comp_i == z_file->comp_sections_index.len32 && IS_ZIP && flag.zip_comp_i == comp_i)
+        return Bcompindex(comp_i-1)->first_vb_i + Bcompindex(comp_i-1)->num_vbs; 
+
     VBIType first_vb_i = Bcompindex(comp_i)->first_vb_i;
     ASSERT (first_vb_i, "comp_i=%s has no VBs", comp_name (comp_i));
     return first_vb_i;
@@ -858,7 +861,6 @@ VBIType sections_get_first_vb_i (CompIType comp_i)
 // get number of VBs in comp_i, for which vblock_i is at most max_vb_i
 VBIType sections_get_num_vbs_up_to (CompIType comp_i, VBIType max_vb_i)
 {
-    
     VBIType num_vbs = 0;
 
     for (VBIType vb_i = Bcompindex(comp_i)->first_vb_i; 

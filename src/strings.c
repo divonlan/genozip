@@ -968,7 +968,7 @@ void str_trim (qSTRp(str))
 
 // splits a string with up to (max_items-1) separators (doesn't need to be nul-terminated) to up to or exactly max_items integers
 // returns the actual number of items, or 0 is unsuccessful
-uint32_t str_split_ints_do (STRp(str), uint32_t max_items, char sep, bool exactly,
+uint32_t str_split_ints_do (STRp(str), uint32_t max_items, char sep, bool exactly, int base,
                             int64_t *items)  // out - array of integers
                        
 {
@@ -977,7 +977,8 @@ uint32_t str_split_ints_do (STRp(str), uint32_t max_items, char sep, bool exactl
 
     uint32_t item_i;
     for (item_i=0; item_i < max_items && str < after; item_i++, str++) {
-        items[item_i] = strtoll (str, (char **)&str, 10);
+        items[item_i] = (base==16) ? strtoull (str, (char **)&str, base) // allows parsing 64bit (unsigned) hexes
+                                   : strtoll (str, (char **)&str, base);
 
         if (item_i < max_items-1 && *str != sep && *str != 0) {
             item_i=0;

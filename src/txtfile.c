@@ -1011,9 +1011,10 @@ static bool seggable_size_is_modifiable (void)
 {
     return !is_read_via_ext_decompressor (txt_file) && !TXT_IS_PLAIN;
 }
+
 // estimate the size of the txt_data of the file - i.e. the uncompressed data excluding the header - 
 // based on the observed or assumed compression ratio of the source compression so far
-void txtfile_set_seggable_size (void)
+static void txtfile_set_seggable_size (void)
 {
     uint64_t disk_size = txt_file->disk_size ? txt_file->disk_size 
                        : flag.stdin_size     ? flag.stdin_size // user-provided size
@@ -1054,13 +1055,6 @@ void txtfile_set_seggable_size (void)
 
     if (segconf.running)
         txt_file->txt_data_so_far_single = txt_file->header_size; // roll back as we will re-account for this data in VB=1
-}
-
-int64_t txtfile_get_seggable_size (void)
-{
-    // note: this changes each time a VB is read by the main thread, but since its a single 64B word,
-    // a compute thread reading this value will always get a value that makes sense (not using atomic to avoid unnecessary overhead)
-    return txt_file->est_seggable_size; 
 }
 
 uint32_t txt_data_alloc_size (uint32_t vb_size) 

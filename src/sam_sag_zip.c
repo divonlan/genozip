@@ -440,6 +440,7 @@ bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(alignment), boo
         vb->line_i--;
         vb->recon_size -= alignment_len;
         vb->txt_size   -= alignment_len;
+        vb->num_gc_lines++;
 
         if      (comp_i == SAM_COMP_PRIM) vb->seg_found_prim_line = true;
         else if (comp_i == SAM_COMP_DEPN) vb->seg_found_depn_line = true;
@@ -483,7 +484,7 @@ static Sag *sam_sa_get_first_group_by_qname_hash (VBlockSAMP vb, STRp(this_qname
                                                   uint32_t *this_qname_hash) // out
 {
     // search for a group with qname in z_file->sa_qname
-    *this_qname_hash = qname_calc_hash (QNAME1, COMP_NONE, this_qname, this_qname_len, is_last, false, NULL);
+    *this_qname_hash = qname_calc_hash (QNAME1, COMP_NONE, this_qname, this_qname_len, is_last, false, CRC32, NULL);
 
     // search for index entry by qname_hash 
     SAGroupIndexEntry *index_entry = binary_search (sam_sa_binary_search_for_qname_hash, SAGroupIndexEntry, z_file->sag_grps_index, *this_qname_hash);

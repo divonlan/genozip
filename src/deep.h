@@ -9,20 +9,19 @@
 #pragma once
 
 #include "qname.h"
-
-#define num_hash_bits z_file->deep_index_by[BY_SEQ].prm8[0] // ZIP: number of bits of seq_hash used for deep_hash_by_* (i.e. hash table is of size 2^num_hash_bits)
+#define num_hash_bits z_file->deep_index.prm8[0] // ZIP: number of bits of seq_hash used for deep_hash_by_* (i.e. hash table is of size 2^num_hash_bits)
 
 #define deephash_issame(a,b) (!memcmp (&(a), &(b), sizeof (DeepHash)))
 #define DEEPHASHf(a) (a).qname, (a).seq, (a).qual // for printf-like arguments
 
 // note: in PIZ, z_file->vb_start_deep_line is indexed by vb_idx - 0-based counter of non-DEPN VBs (unlike in ZIP which is vb_i)
-#define num_deepable_sam_vbs z_file->deep_index.param
+#define num_deepable_sam_vbs z_file->deep_index.prm32[0] // PIZ
 
 // 32 bytes
 typedef struct {
-    DeepHash hash;                  // hashes of qname, seq, qual
+    DeepHash hash;                  // hashes of qname (64b), seq, qual (32b)
     #define NO_NEXT 0xffffffff
-    uint32_t next[2];               // two linked lists (BY_SEQ, BY_QNAME) of entries with the with the same hash(SEQ)&mask
+    uint32_t next;                  // linked list of entries with the with the same (hash.qname & mask)
     uint32_t seq_len;
 
     union ZipZDeepPlace {
@@ -43,9 +42,9 @@ extern uint32_t deep_seq_hash (VBlockP vb, STRp(seq), bool is_revcomp);
 extern uint32_t deep_qual_hash (VBlockP vb, STRp(qual), bool is_revcomp);
 
 // ZIP: hash of canonical qname (note: in FASTQ qname is the part of DESC up to the first whitespace)
-static inline uint32_t deep_qname_hash (QType q, STRp(qname), thool is_last, uint32_t *uncanonical_suffix_len) 
-{ 
-    return qname_calc_hash (q, COMP_NONE, STRa(qname), is_last, true, uncanonical_suffix_len); 
+static inline uint64_t deep_qname_hash (QType q, STRp(qname), thool is_last, uint32_t *uncanonical_suffix_len) 
+{
+    return qname_calc_hash (q, COMP_NONE, STRa(qname), is_last, true, CRC64, uncanonical_suffix_len); 
 }
 
 //-----------------------------------------------------------------------
@@ -56,7 +55,7 @@ static inline uint32_t deep_qname_hash (QType q, STRp(qname), thool is_last, uin
 //                 2: is_long_seq_comp  
 //                 3: is_long_qual_comp
 //
-// Part B: exists unless segconf.deep_qtype==QNONE or --seq-only or --qual-only
+// Part B: exists unless segconf.deep_qtype==QNONE (supported up to 15.0.66) or --seq-only or --qual-only
 // 1 Byte           : qname_len (up to 254 by BAM spec)
 // qname_len bytes  : QNAME (not compressed, not nul-terminated)
 //
@@ -97,5 +96,3 @@ typedef struct { // 1 byte
     uint8_t is_long_qual_comp : 1; // is qual_comp_len greater than 255
     uint8_t unused            : 3;
 } PizZDeepFlags;
-
-extern rom by_names[2];

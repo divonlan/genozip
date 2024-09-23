@@ -200,7 +200,7 @@ uint32_t bam_split_aux (VBlockSAMP vb, rom alignment, rom aux, rom after_aux, ro
 void bam_seg_BIN (VBlockSAMP vb, ZipDataLineSAMP dl, uint16_t bin /* used only in bam */, bool is_bam)
 {
     PosType32 this_pos = dl->POS;
-    PosType32 last_pos = dl->FLAG.unmapped ? this_pos : (this_pos + vb->ref_consumed - 1);
+    PosType32 last_pos = dl->FLAG.unmapped ? this_pos : (this_pos + vb->ref_consumed - 1); // note: it is possible to have RNAME/POS set and FLAG.unmapped. The SAM spec calls this "placed unmapped"; 
     uint16_t reg2bin = bam_reg2bin (this_pos, last_pos); // zero-based, half-closed half-open [start,end)
 
     if (!is_bam || (last_pos <= MAX_POS_SAM && reg2bin == bin))
@@ -549,7 +549,7 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
 
     // finally we can segment the textual CIGAR now (including if n_cigar_op=0)
     sam_seg_CIGAR (vb, dl, vb->textual_cigar.len32, STRb(vb->textual_seq), qual, l_seq, 
-                           ((uint32_t)n_cigar_op * sizeof (uint32_t) /* cigar */ + sizeof (uint16_t) /* n_cigar_op */));
+                   ((uint32_t)n_cigar_op * sizeof (uint32_t) /* cigar */ + sizeof (uint16_t) /* n_cigar_op */));
 
     // QUAL. note: can only be called after sam_seg_CIGAR updates SEQ.len
     if (!vb->qual_missing) // case we have both SEQ and QUAL

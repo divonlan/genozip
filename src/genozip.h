@@ -579,7 +579,7 @@ typedef uint8_t TranslatorId;
     extern TRANSLATOR_FUNC(func); \
     enum { src_dt##2##dst_dt##_##name = num }; // define constant
     
-typedef struct { uint32_t qname, seq, qual; } DeepHash;
+typedef struct { uint64_t qname; uint32_t seq, qual; } DeepHash;
 
 typedef enum { QNONE   = -6,
                QSAM2   = -5, // SAM QNAME2, while segging deep (for example, consensus reads flavor)

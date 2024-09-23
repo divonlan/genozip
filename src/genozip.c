@@ -192,6 +192,14 @@ static void main_print_help (bool explicit)
     }
 }
 
+rom main_input_filename (int file_i/* 0-based */)
+{
+    if (IN_RANGE (file_i, 0, input_files_buf.len) && *B(rom, input_files_buf, file_i)) 
+        return *B(rom, input_files_buf, file_i);
+    else
+        return "(unknown filename)";
+}
+
 static void main_print_version()
 {
     iprintf ("version=%s distribution=%s\n", code_version().s, get_distribution());  

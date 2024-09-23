@@ -219,7 +219,7 @@ typedef struct {
 typedef struct VBlockSAM {
     VBLOCK_COMMON_FIELDS
     
-    // --------- current line before every line by sam_reset_line) ----------
+    // --------- current line - reset before every line by sam_reset_line() ----------
     Buffer textual_seq;            // ZIP/PIZ: BAM: contains the textual SEQ (PIZ: used unless flags.no_textual_seq)
     Buffer textual_cigar;          // ZIP: Seg of BAM, PIZ: store CIGAR in sam_cigar_analyze
     Buffer binary_cigar;           // ZIP/PIZ: BAM-style CIGAR representation, generated in sam_cigar_analyze. binary_cigar.next is used by sam_seg_SEQ
@@ -243,10 +243,9 @@ typedef struct VBlockSAM {
     #define first_sam_piz_vb_ff_per_line mate_line_i
     LineIType mate_line_i;         // Seg/PIZ: the mate of this line. 
     LineIType saggy_line_i;        // Seg/PIZ: without gencomp: a previous line with the same sag as the current line.
-
     #define after_sam_vb_ff_per_line   seq_is_monochar
-    #define first_sam_vb_zero_per_line seq_is_monochar
 
+    #define first_sam_vb_zero_per_line seq_is_monochar
     bool seq_is_monochar;          // PIZ only
     bool line_not_deepable;        // PIZ only
     bool cigar_missing;            // ZIP/PIZ: current line: SAM "*" BAM: n cigar op=0
@@ -303,6 +302,7 @@ typedef struct VBlockSAM {
     
     // gencomp stuff
     uint32_t main_vb_info_i;       // ZIP SAM MAIN: index of entry in z_file->vb_info[0] for this VB
+    uint32_t num_gc_lines;         // ZIP: number of lines removed from this VB and sent to gencomp (0 if not MAIN VB)
 
     // sag stuff
     uint32_t plsg_i;               // PIZ: prim_vb: index of this VB in the plsg array  
@@ -448,7 +448,6 @@ typedef struct CigarAnalItem {
 } CigarAnalItem;
 
 #define ALN_NUM_ALNS_BITS      12 // determines max number of alignments (including primary) in a SAG (note: sam_load_groups_add_SA_alns assumes it's at most 16 bits)
-#define PRIM_ALN_I_BITS        7  // determines the max index of a primary alignment in a full SA:Z alignment list
 #define GRP_SEQ_LEN_BITS       26 // determines the maximum seq_len of any primary alignment
 #define GRP_QUAL_COMP_LEN_BITS 22 // determines max length of compressed QUAL of any primary alignment in the file
 #define GRP_AS_BITS            16
@@ -489,7 +488,7 @@ typedef struct Sag { // 32 bytes (= 4 x uint64_t)
     uint64_t first_grp_in_vb : 1;                 // This group is the first group in its PRIM vb
     uint64_t no_qual         : 2;                 // (QualMissingType) this SA has no quality, all dependends are expected to not have quality either
     uint64_t num_alns        : ALN_NUM_ALNS_BITS; // number of alignments in this SA group (including primary alignment)
-    uint64_t prim_aln_i      : PRIM_ALN_I_BITS;   // (15.0.66) the index of the primary alignment in the full SA:Z (including all group alignments)
+    uint64_t unused          : 7;   
 } Sag; // Originally named "SA Group" representing the group of alignments in an SA:Z field, but now extended to other types of SAGs
 
 #define ZGRP_I(g) ((SAGroup)BNUM (z_file->sag_grps, (g)))   // group pointer to grp_i
@@ -497,7 +496,6 @@ typedef struct Sag { // 32 bytes (= 4 x uint64_t)
 #define GRP_QNAME(g) B8(z_file->sag_qnames, (g)->qname)
 
 #define MAX_SA_NUM_ALNS       MAXB(ALN_NUM_ALNS_BITS)  // our limit (number of alignments per group)
-#define MAX_PRIM_ALN_I        (MAXB(PRIM_ALN_I_BITS)-1)// our limit of prim_aln_i (127 means "not set")
 #define MAX_SA_POS            MAXB(31)                 // BAM limit
 #define MAX_SA_NM             MAXB(ALN_NM_BITS)        // our limit
 #define MAX_SA_MAPQ           MAXB(8)                  // BAM limit
@@ -696,7 +694,7 @@ extern void sam_MD_Z_verify_due_to_seq (VBlockSAMP vb, STRp(seq), PosType32 pos,
 extern void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(sa), unsigned add_bytes);
 extern bool sam_seg_0A_mapq_cb (VBlockP vb, ContextP ctx, STRp (mapq_str), uint32_t repeat);
 extern bool sam_seg_SA_get_prim_item (VBlockSAMP vb, int sa_item, pSTRp(out));
-extern void sam_piz_SA_get_prim_item (VBlockSAMP vb, int sa_item, pSTRp(out));
+extern void sam_piz_SA_get_saggy_prim_item (VBlockSAMP vb, int sa_item, pSTRp(out));
 extern bool sam_seg_is_item_predicted_by_prim_SA (VBlockSAMP vb, int sa_item_i, int64_t value);
 extern bool sam_zip_is_valid_SA (rom sa, uint32_t char_limit, bool is_bam);
 extern bool sam_test_SA_CIGAR_abbreviated (STRp(sa));

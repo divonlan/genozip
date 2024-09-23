@@ -478,7 +478,7 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
                 reconstruct_from_local_text (vb, base_ctx, reconstruct); // this will call us back recursively with the snip retrieved
                 break;
                 
-            case LT_CODEC: // snip can optionally be the length of the sequence to be reconstructed
+            case LT_CODEC:  // snip can optionally be the length of the sequence to be reconstructed
                 codec_args[base_ctx->lcodec].reconstruct (vb, base_ctx->lcodec, base_ctx, (snip_len ? atoi(snip) : vb->seq_len), reconstruct); 
                 break;
 

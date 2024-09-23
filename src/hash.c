@@ -97,7 +97,7 @@ static void hash_alloc_local (VBlockP vb, ContextP vctx)
 uint32_t hash_get_estimated_entries (VBlockP vb, ContextP zctx, ConstContextP vctx)
 {
     double effective_num_vbs   = 0; 
-    double estimated_num_vbs   = MAX_(1, (double)txtfile_get_seggable_size() / (double)vb->txt_data.len);
+    double estimated_num_vbs   = MAX_(1, (double)txt_file->est_seggable_size / (double)vb->txt_data.len);
     double estimated_num_lines = estimated_num_vbs * (double)vb->lines.len;
 
     if (flag.show_hash && vctx->did_i==0) 

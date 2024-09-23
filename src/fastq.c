@@ -711,7 +711,7 @@ void fastq_segconf_finalize (VBlockP vb)
 void fastq_zip_after_segconf (void)
 {
     if (IS_R1) {
-        double est_num_vbs = MAX_(1, (double)txtfile_get_seggable_size() / (double)segconf.vb_size * 1.1);
+        double est_num_vbs = MAX_(1, (double)txt_file->est_seggable_size / (double)segconf.vb_size * 1.1);
 
         // allocate memory to store txt_data.len32 of each R1 VB
         buf_alloc (evb, &z_file->R1_txt_data_lens, 0, est_num_vbs, uint32_t, 0, "z_file->R1_txt_data_lens");
@@ -1132,13 +1132,15 @@ rom fastq_seg_txt_line (VBlockP vb_, rom line_start, uint32_t remaining, bool *h
     dl->monochar = str_is_monochar (STRa(seq)); // set dl->monochar
 
     // case --deep: compare DESC, SEQ and QUAL to the SAM/BAM data
-    bool deep_qname=false, deep_seq=false;
+    bool deeped=false;
     uint32_t uncanonical_suffix_len = 0;
     
-    if (flag.deep || flag.show_deep == 2)
-        fastq_seg_deep (vb, dl, STRa(qname), STRa(qname2), STRa(seq), STRa(qual), &deep_qname, &deep_seq, &dl->deep_qual, &uncanonical_suffix_len);
+    if (flag.deep || flag.show_deep == SHOW_DEEP_ONE_HASH)
+        deeped = fastq_seg_deep (vb, dl, STRa(qname), STRa(qname2), STRa(seq), STRa(qual), &uncanonical_suffix_len);
 
-    fastq_seg_QNAME (vb, STRa(qname), line1_len, segconf.deep_qtype == QNAME1 && deep_qname, uncanonical_suffix_len);
+    dl->deep_qual = deeped && flag.deep && !segconf.deep_no_qual;
+
+    fastq_seg_QNAME (vb, STRa(qname), line1_len, segconf.deep_qtype == QNAME1 && deeped, uncanonical_suffix_len);
 
     // seg SAUX
     if (segconf.has_saux)
@@ -1146,12 +1148,12 @@ rom fastq_seg_txt_line (VBlockP vb_, rom line_start, uint32_t remaining, bool *h
 
     // seg DESC (i.e. QNAME2 + EXTRA + AUX), it might have come either from line1 or from line3
     else if (segconf.has_desc) 
-        fastq_seg_DESC (vb, STRa(desc), segconf.deep_qtype == QNAME2 && deep_qname, uncanonical_suffix_len);
+        fastq_seg_DESC (vb, STRa(desc), segconf.deep_qtype == QNAME2 && deeped, uncanonical_suffix_len);
 
     if (!FAF)
         fastq_seg_LINE3 (vb, STRa(line3), STRa(qname), STRa(desc)); // before SEQ, in case it as a segconf_seq_len_dict_id field
 
-    fastq_seg_SEQ (vb, dl, STRa(seq), deep_seq);
+    fastq_seg_SEQ (vb, dl, STRa(seq), deeped);
 
     if (!FAF)
         fastq_seg_QUAL (vb, dl, STRa(qual));

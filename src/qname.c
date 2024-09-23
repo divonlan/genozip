@@ -410,9 +410,9 @@ void qname_segconf_finalize (VBlockP vb)
                                          segconf.is_collated || segconf.sam_is_unmapped || segconf.qname_flavor[q]->sam_qname_sorted || 
                                          (!segconf.is_sorted && !segconf.is_paired);
             
-    // if only consensus reads exist, change tech to unknown
-    if (segconf.tech == TECH_CONS)
-        segconf.tech = TECH_UNKNOWN;
+    // if only consensus reads exist, or is unknown
+    if (segconf.tech == TECH_CONS || segconf.tech == TECH_UNKNOWN)
+        segconf.tech = segconf.tech_by_RG; // usually tech by QNAME is more reliable, but if not available, go by the PL field of @RG in the SAM header (which might also be unavailable)
 }
 
 // note: we run this function only in discovery, not in segging, because it is quite expensive - checking all numerics.
@@ -775,7 +775,7 @@ uint32_t qname_hash_change_last (uint32_t hash, bool is_last)
 
 // ZIP: used for syncing DEPN/PRIM in gencomp and SAM/FASTQ in deep, and for scanning a SAM/BAM  
 // PIZ: used for qname filters.
-uint32_t qname_calc_hash (QType q, CompIType comp_i/*only used in PIZ*/, STRp(qname), thool is_last, bool canonical, 
+uint64_t qname_calc_hash (QType q, CompIType comp_i/*only used in PIZ*/, STRp(qname), thool is_last, bool canonical, CrcType type, 
                           uint32_t *uncanonical_suffix_len) // optional out
 {
     uint32_t save_qame_len = qname_len;
@@ -790,8 +790,8 @@ uint32_t qname_calc_hash (QType q, CompIType comp_i/*only used in PIZ*/, STRp(qn
     for (int i=0; i < qname_len; i++)
         data[i] = ((((uint8_t *)qname)[i]-33) & 0x3f) | ((((uint8_t *)qname)[qname_len-i-1] & 0x3) << 6);
 
-    uint32_t hash = crc32 (0, data, qname_len);
-    if (is_last != unknown) hash = (hash & 0xfffffffe) | is_last;
+    uint64_t hash = (type == CRC64) ? crc64 (0, data, qname_len) : crc32 (0, data, qname_len);
+    if (is_last != unknown) hash = (hash & 0xfffffffffffffffe) | is_last;
 
     return hash;
 }

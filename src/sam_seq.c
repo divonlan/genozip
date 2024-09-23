@@ -310,7 +310,7 @@ void sam_zip_report_monochar_inserts (void)
         return;
     }
 
-    iprintf ("\nSequencing technology: %s\nAligner: %s\n", segconf_tech_name(), segconf_sam_mapper_name());
+    iprintf ("\nSequencing technology: %s\nAligner: %s\n", tech_name(segconf.tech), segconf_sam_mapper_name());
 
     double total_nonref = count_monochar_ins + count_non_monochar_ins + count_S;
     iprint0 ("\nBreakdown of NONREF data:\n");
@@ -674,7 +674,7 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(textual_seq), unsigned
     if (textual_seq[0] == '*')
         vb->seq_missing = dl->no_seq = true;
 
-    if (flag.deep || flag.show_deep == 2)
+    if (flag.deep || flag.show_deep == SHOW_DEEP_ONE_HASH)
         sam_deep_set_SEQ_hash (vb, dl, STRa(textual_seq));
 
     bool aligner_ok = flag.aligner_available && !segconf.running;

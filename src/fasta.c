@@ -361,7 +361,7 @@ void fasta_segconf_finalize (VBlockP vb)
     ASSINP0 (num_contigs_this_vb, "Invalid FASTA file: no sequence description line");
 
     uint64_t avg_contig_size_this_vb = Ltxt / num_contigs_this_vb;
-    uint64_t est_num_contigs_in_file = txtfile_get_seggable_size() / avg_contig_size_this_vb;
+    uint64_t est_num_contigs_in_file = txt_file->est_seggable_size / avg_contig_size_this_vb;
 
     ASSINP0 (!flag.make_reference || segconf.fasta_has_contigs, "Can't use --make-reference on this file, because Genozip can't find the contig names in the FASTA description lines");
 

@@ -22,7 +22,7 @@ typedef packed_enum {
     // Illumina-style FASTQ QNAME2 flavors (also appears in Ultima, Singular...)
     QF_ILLUM_2bc, QF_ILLUM_1bc, QF_ILLUM_0bc, 
     // MGI flavors
-    QF_MGI_NEW6, QF_MGI_NEW7, QF_MGI_NEW8, QF_MGI_varlen, QF_MGI_r6, QF_MGI_r7, QF_MGI_r8, QF_MGI_ll7, QF_MGI_cl, QF_MGI_rgs8, QF_MGI_rgs8FQ, 
+    QF_MGI_NEW6, QF_MGI_NEW7, QF_MGI_NEW8, QF_MGI_varlen, QF_MGI_r6, QF_MGI_die6, QF_MGI_r7, QF_MGI_r8, QF_MGI_ll7, QF_MGI_cl, QF_MGI_rgs8, QF_MGI_rgs8FQ, QF_MGI_coloned,
     // PacBio flavors 
     QF_PACBIO_3, QF_PACBIO_rng, QF_PACBIO_lbl, QF_PACBIO_pln, QF_ONSO,
     // Nanopore flavors
@@ -33,7 +33,7 @@ typedef packed_enum {
     // Other sequencer flavors
     QF_ION_TORR_3, QF_ROCHE_454, QF_HELICOS, QF_SINGULAR, QF_ELEMENT, QF_ELEMENT_bc, 
     // NCBI flavors
-    QF_SRA_L, QF_SRA2, QF_SRA,
+    QF_SRA_L, QF_SRA2, QF_SRA, QF_SRA_sra,
     // Consensus alignments flavors
     QF_CONSENSUS, QF_CONS, 
     // Other syntheic (i.e. non-sequencer) flavors
@@ -58,7 +58,8 @@ typedef enum  { QTR_SUCCESS, QTR_QNAME_LEN_0, QTR_FIXED_LEN_MISMATCH, QTR_WRONG_
 #define QTR_NAME { "SUCCESS",   "QNAME_LEN=0",   "FIXED_LEN_MISMATCH",   "WRONG_Q",   "CONTAINER_MISMATCH",   "BAD_INTEGER",   "BAD_CHARS",   "BAD_NUMERIC",   "BAD_HEX",   "TECH_MISMATCH",   "NOT_BARCODE",   "NOT_BARCODE2",   "NO_MATE", "FAILED_VALIDATE_FUNC"}
 extern QnameTestResult qname_test_flavor (STRp(qname), QType q, QnameFlavor qf, bool quiet);
 
-extern uint32_t qname_calc_hash (QType q, CompIType comp_i, STRp(qname), thool is_last, bool canonical, uint32_t *uncanonical_suffix_len);
+typedef enum { CRC32, CRC64 } CrcType;
+extern uint64_t qname_calc_hash (QType q, CompIType comp_i, STRp(qname), thool is_last, bool canonical, CrcType type, uint32_t *uncanonical_suffix_len);
 extern uint32_t qname_hash_change_last (uint32_t hash, bool is_last);
 
 extern void qname_canonize (QType q, rom qname, uint32_t *qname_len, CompIType comp_i);

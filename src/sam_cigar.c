@@ -38,7 +38,7 @@ static const uint8_t cigar_char_to_op[256] = { [0 ... 255]=BC_INVALID,
 
 // CIGAR snip opcodes - part of the file format
 #define COPY_MATE_MC_Z             ((char)0x80)   // copy from mate's MC:Z
-#define COPY_PRIM_SA_CIGAR         ((char)0x81)   // v14: copy from prim's SA_CIGAR
+#define COPY_SAGGY_PRIM_SA_CIGAR         ((char)0x81)   // v14: copy from prim's SA_CIGAR
 #define COPY_QNAME_LENGTH          ((char)0x82)   // v14: derive CIGAR from qname's length= component
 #define SQUANK                     ((char)0x83)   // v14
 #define COPY_QNAME_LENGTH_NO_CIGAR ((char)0x84)   // v15.0.26 - get seq_len from QNAME, and CIGAR is *
@@ -805,8 +805,8 @@ void sam_seg_CIGAR (VBlockSAMP vb, ZipDataLineSAMP dl, uint32_t last_cigar_len, 
     }
 
     // case: copy from same-vb prim (note: saggy_line_i can only be set in the MAIN component)
-    else if (has(SA_Z) && segconf.sam_has_SA_Z && sam_has_prim && sam_cigar_seg_is_predicted_by_saggy_SA (vb, vb->last_cigar, last_cigar_len)) {
-        cigar_snip[cigar_snip_len++] = COPY_PRIM_SA_CIGAR; // always at cigar_snip[2]
+    else if (has(SA_Z) && segconf.sam_has_SA_Z && sam_has_prim && sam_line_is_depn (dl) && sam_cigar_seg_is_predicted_by_saggy_SA (vb, vb->last_cigar, last_cigar_len)) {
+        cigar_snip[cigar_snip_len++] = COPY_SAGGY_PRIM_SA_CIGAR; // always at cigar_snip[2]
         seg_by_did (VB, STRa(cigar_snip), SAM_CIGAR, add_bytes); 
     }
 
@@ -913,8 +913,8 @@ SPECIAL_RECONSTRUCTOR_DT (sam_cigar_special_CIGAR)
             ASSPIZ0 (snip_len, "Unable to find buddy MC:Z in history");
             break;
 
-        case COPY_PRIM_SA_CIGAR: // copy the predicted alignment in same-vb prim line's SA:Z
-            sam_piz_SA_get_prim_item (vb, SA_CIGAR, pSTRa(snip));
+        case COPY_SAGGY_PRIM_SA_CIGAR: // copy the predicted alignment in same-vb prim line's SA:Z
+            sam_piz_SA_get_saggy_prim_item (vb, SA_CIGAR, pSTRa(snip));
             stoh = segconf.SA_HtoS ? sam_cigar_S_to_H (vb, (char*)STRa(snip), false) : (StoH){};
             break;
     

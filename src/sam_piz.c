@@ -58,7 +58,7 @@ void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
     if (VER(15)) {
         segconf.deep_qtype            = header->sam.segconf_deep_qname1 ? QNAME1
                                       : header->sam.segconf_deep_qname2 ? QNAME2
-                                      :                                   QNONE;
+                                      :                                   QNONE; // no deep, or up to 15.0.66 possibly Deep by full SEQ+QUAL match (without QNAME matching)
         segconf.deep_no_qual          = header->sam.segconf_deep_no_qual;
         segconf.deep_N_fq_score       = header->sam.segconf_deep_N_fq_score;
         segconf.use_insertion_ctxs    = header->sam.segconf_use_ins_ctxs;

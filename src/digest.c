@@ -16,6 +16,7 @@
 #include "progress.h"
 #include "writer.h"
 #include "txtheader.h"
+#include "piz.h"
 
 #define IS_ADLER (IS_ZIP ? !flag.md5 : z_file->z_flags.adler)
 #define IS_MD5 (!IS_ADLER)
@@ -211,21 +212,12 @@ static void digest_piz_verify_one_vb (VBlockP vb,
                        DIGEST_NAME, digest_display (vb->expected_digest).s, 
                        recon_size_warn);
 
-            // gencomp: don't count PRIM VBs in the midst of MAIN VBs, as --biopsy sets --no-gencomp
-            VBIType no_gencomp_vb_i = (z_sam_gencomp && vb->comp_i == SAM_COMP_MAIN) ? sections_get_num_vbs_up_to (SAM_COMP_MAIN, vb->vblock_i) : vb->vblock_i; 
-
             // case: first bad VB: dump bad VB to disk and maybe exit
             if (!__atomic_test_and_set (&txt_file->vb_digest_failed, __ATOMIC_RELAXED)) { // not WARN_ONCE because we might be genounzipping multiple files - we want to show this for every failed file (see also note in digest_piz_verify_one_txt_file)
-                NOISYWARN ("Bad reconstructed %s has been dumped to: %s. vb_position_txt_file=%"PRIu64", txt_data.len=%u recon_size(expected)=%u\n"
-                           "To see the same data in the original file:\n"
-                           "genozip --biopsy %u%s%s%s --no-header %s%s",  // note: segconf.vb_size is only available since v14. For older files, look it up with genocat --stats.
+                NOISYWARN ("Bad reconstructed %s has been dumped to: %s. vb_position_txt_file=%"PRIu64", txt_data.len=%u recon_size(expected)=%u\n%s%s",
                            VB_NAME, txtfile_dump_vb (vb, z_name, txt_data).s, // note: txt_data dumped INCLUDES integrated gencomp lines (if there are any)
-                           vb->vb_position_txt_file, vb->txt_data.len32, vb->recon_size, no_gencomp_vb_i,
-                           cond_int (segconf.vb_size/*0 if IS_VB_SIZE_BY_MGZIP*/ && !(segconf.vb_size % (1 MB)), " -B", (unsigned)(segconf.vb_size >> 20)), 
-                           cond_int (segconf.vb_size && (segconf.vb_size % (1 MB)), " -B", (int)segconf.vb_size),
-                           segconf.vb_size && (segconf.vb_size % (1 MB)) ? "B" : "",
-                           (txt_file && txt_file->name) ? filename_guess_original (txt_file) : IS_PIZ ? txtheader_get_txt_filename_from_section(vb->comp_i).s : "(uncalculable)",
-                           report_support_if_unexpected());
+                           vb->vb_position_txt_file, vb->txt_data.len32, vb->recon_size, 
+                           piz_advise_biopsy (vb).s, report_support_if_unexpected());
 
                 if (flag.test) exit_on_error (false); // must be inside the atomic test, otherwise another thread will exit before we completed dumping
             }

@@ -336,6 +336,8 @@ void sam_seg_initialize (VBlockP vb_)
                    DID_EOL);
 
     ctx_set_store (VB, STORE_INDEX, SAM_RNAME, SAM_RNEXT, // when reconstructing BAM, we output the word_index instead of the string
+                   OPTION_XA_Z, // for containers this stores repeats - used by sam_piz_special_X1->container_peek_repeats
+                   OPTION_ML_B_C, // used to predict repeats in MM:Z subcontext MNM:Z
                    DID_EOL);
 
     // when reconstructing these contexts against another context (DELTA_OTHER or XOR_DIFF) the other may be before or after
@@ -462,8 +464,6 @@ void sam_seg_initialize (VBlockP vb_)
     if (MP(DRAGEN))                sam_dragen_seg_initialize (vb);
     if (MP(STAR))                  sam_star_seg_initialize   (vb);
     if (TECH(PACBIO))              sam_pacbio_seg_initialize (vb);
-
-    ctx_set_store (VB, STORE_INDEX, OPTION_XA_Z, DID_EOL); // for containers this stores repeats - used by sam_piz_special_X1->container_peek_repeats
 
     if (segconf.sam_has_BWA_XS_i) // XS:i is as defined some aligners
         seg_mux_init (vb, OPTION_XS_i, SAM_SPECIAL_BWA_XS, false, XS);
@@ -1410,7 +1410,7 @@ static inline BuddyType sam_seg_mate (VBlockSAMP vb, SamFlags f, STRp (qname), u
 {
     if (sam_is_depn (f) || !segconf.is_paired) return BUDDY_NONE;
 
-    uint32_t mate_hash = qname_calc_hash (QNAME1, COMP_NONE, STRa(qname), !f.is_last, true, NULL) & MAXB(CTX(SAM_QNAME)->qname_hash.prm8[0]);
+    uint32_t mate_hash = qname_calc_hash (QNAME1, COMP_NONE, STRa(qname), !f.is_last, true, CRC32, NULL) & MAXB(CTX(SAM_QNAME)->qname_hash.prm8[0]);
     LineIType candidate = LINE_BY_HASH(mate_hash);
     SamFlags *mate_f = &DATA_LINE(candidate)->FLAG; // invalid pointer if no mate
 
@@ -1445,8 +1445,17 @@ static inline BuddyType sam_seg_saggy (VBlockSAMP vb, SamFlags f, STRp (qname), 
 
     // case: we found another member of the same sag (i.e. same qname, same is_last)
     if (has_same_qname (vb, STRa (qname), candidate, false) && saggy_f->is_last == f.is_last) { // the "prim" line against which we are segging cannot have hard clips
-        vb->saggy_line_i = candidate;
+
         vb->saggy_is_prim = !sam_is_depn (*saggy_f);
+
+        // case: two alignments with the same QNAME, FLAG.is_first, and both are primary: usually a signof defective BAM 
+        if (vb->saggy_is_prim && !sam_is_depn (f)) {
+            WARN_ONCE ("WARNING: Non-compliant %s file: Found two alignments with the same QNAME, FLAG.IS_FIRST, and both are non-secondary, non-supplementary: QNAME=\"%.*s\"",
+                       dt_name (vb->data_type), STRf(qname));
+            goto no_saggy;
+        }
+
+        vb->saggy_line_i = candidate;
         vb->saggy_near_count++;
 
         // replace value in hash table with current line, so future lines from the same seg have a smaller buddy delta,
@@ -1459,7 +1468,7 @@ static inline BuddyType sam_seg_saggy (VBlockSAMP vb, SamFlags f, STRp (qname), 
     }
 
     // case: we didn't find another member of our sag in this VB
-    else {
+    else no_saggy: {
         *insert_to_hash = true;
         return BUDDY_NONE;
     }
@@ -1502,11 +1511,11 @@ void sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAMP dl, STRp (qname), unsigned ad
 
     QType q = qname_sam_get_qtype (STRa(qname)); // QNAME2 if we have QNAME2 and qname matches, else QNAME1
 
-    uint32_t qname_hash = qname_calc_hash (q, COMP_NONE, STRa(qname), dl->FLAG.is_last, true, NULL); // note: canonical=true as we use the same hash for find a mate and a saggy
+    uint32_t qname_hash = qname_calc_hash (q, COMP_NONE, STRa(qname), dl->FLAG.is_last, true, CRC32, NULL); // note: canonical=true as we use the same hash for find a mate and a saggy
     uint32_t my_hash    = qname_hash & MAXB(CTX(SAM_QNAME)->qname_hash.prm8[0]);
     bool insert_to_hash = false;
 
-    if (flag.deep || flag.show_deep == 2) 
+    if (flag.deep || flag.show_deep == SHOW_DEEP_ONE_HASH) 
         sam_deep_set_QNAME_hash (vb, dl, q, STRa(qname));
 
     BuddyType bt = sam_seg_mate  (vb, dl->FLAG, STRa (qname), my_hash, &insert_to_hash) | // bitwise or

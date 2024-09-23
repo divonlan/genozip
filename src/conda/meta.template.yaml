@@ -27,17 +27,21 @@ build:
 requirements:
   build:    
     - {{ posix }}make
-    - nasm                       # [not arm64]
-    - {{ compiler('c') }}        # [not win]
-    - {{ compiler('cxx') }}      # [not win]
-    - {{ compiler('m2w64_c') }}  # [win]
+    - {{ posix }}filesystem      # [win]
     - {{ posix }}sed             # [win]
-    - {{ posix }}coreutils       # [win]    
-
-  c_stdlib: # added per: https://github.com/conda-forge/conda-forge.github.io/issues/2102
-    - sysroot                    # [linux]
-    - macosx_deployment_target   # [osx]
-    # - vs                         # [win]
+    - {{ posix }}coreutils       # [win]   
+    - {{ posix }}zip             # [win]     
+    - nasm                       # [not arm64]
+    - {{ compiler('c') }}        # [unix]
+    - {{ compiler('cxx') }}      # [unix]
+    - {{ stdlib("c") }}          # [unix]
+    - {{ compiler('m2w64_c') }}  # [win]
+    - {{ compiler('m2w64_cxx') }} # [win]
+    - {{ stdlib("m2w64_c") }}    # [win]    
+    
+  # c_stdlib: # added per: https://github.com/conda-forge/conda-forge.github.io/issues/2102
+  #   - sysroot                    # [linux]
+  #   - macosx_deployment_target   # [osx]
 
   c_stdlib_version:              # [unix]
     - 2.12                       # [linux and x86_64]
@@ -46,9 +50,12 @@ requirements:
     - 11.0                       # [osx and arm64]
   
   host:
-    - {{ native }}gcc-libs       # [win]
+#    - {{ native }}gcc-libs       # [win]
+    - pthreads-win32             # [win]
+        
   run:
-    - {{ native }}gcc-libs       # [win]
+#    - {{ native }}gcc-libs       # [win]
+    - pthreads-win32             # [win]
     - curl
 
 test:
@@ -64,7 +71,7 @@ about:
   license_family: OTHER
   license_file: 
     - LICENSE.txt
-  summary: Compressor for genomic files (FASTQ, BAM, VCF, FASTA and more), up to 5x better than gzip and faster too
+  summary: Lossless compression of FASTQ, BAM, VCF, FASTA - 2x-10x better than .gz / .cram
   description: |
 __README_MD__
 
