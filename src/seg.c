@@ -1626,7 +1626,7 @@ uint32_t seg_all_data_lines (VBlockP vb)
                 vb->debug_line_hash_skip = false; // reset
         }
 
-        if (line_len > vb->longest_line_len) vb->longest_line_len = line_len;
+        MAXIMIZE (vb->longest_line_len, line_len);
 
         line = next_line;
 

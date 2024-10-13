@@ -302,7 +302,7 @@ void fastq_recon_aligned_SEQ (VBlockP vb_, STRp(seq_len_str), ReconType reconstr
 
     // normal reconstruction
     else 
-        aligner_reconstruct_seq (vb_, vb->seq_len, vb->R1_vb_i > 0, perfect_alignment, reconstruct, NULL, NULL, NULL);
+        aligner_reconstruct_seq (vb_, vb->seq_len, vb->R1_vb_i > 0, perfect_alignment, reconstruct, 0, NULL, NULL, NULL);
 }
 
 // PIZ: SEQ reconstruction - in case of unaligned sequence 

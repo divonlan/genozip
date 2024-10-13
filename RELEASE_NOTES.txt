@@ -3,6 +3,13 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+15.0.68 13/10/2024
+- Deep: reduction in memory in --test and genounzip of Deep files: typically 10-20% less RAM consumption
+- Deep: new option: --deep=no-qual to Deep seq, qname only (not qual): consumes drastically less RAM, and generates a file of size in between compressing the FASTQ and BAM alone, and full Deep. 
+- License: clarify the meaning of "Recognized Academic Research Institution"
+- BAM: further reduction in RAM consumption when compressing and uncompressing files with many secondary or supplementary alignments.
+- New diagnostic: --show-huffman
+
 15.0.67 23/9/2024
 - Improvements in Deep.
 

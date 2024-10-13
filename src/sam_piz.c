@@ -17,7 +17,9 @@
 #include "writer.h"
 #include "codec.h"
 #include "qname_filter.h"
+#include "huffman.h"
 #include "libdeflate_1.19/libdeflate.h"
+#include "htscodecs/arith_dynamic.h"
 
 static void seq_filter_destroy (void); // forward
 
@@ -66,6 +68,7 @@ void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
         segconf.MAPQ_use_xq           = header->sam.segconf_MAPQ_use_xq;
         segconf.SA_CIGAR_abbreviated  = header->sam.segconf_SA_CIGAR_abb;
         segconf.SA_NM_by_CIGAR_X      = header->sam.segconf_SA_NM_by_X;
+        segconf.CIGAR_has_eqx         = header->sam.segconf_CIGAR_has_eqx;
         segconf.has[OPTION_MQ_i]      = header->sam.segconf_has_MQ;
 
         flag.deep = header->flags.genozip_header.dts2_deep; 
@@ -97,8 +100,11 @@ bool sam_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header)
     if (IS_PRIM(vb))
         VB_SAM->plsg_i = sam_piz_get_plsg_i (vb->vblock_i);
 
-    if (flag.deep)
-        sam_piz_deep_init_vb (VB_SAM, header);
+    // calculate maximum theoretical compressed length of a QUAL string in this VB (for in-memory storage of QUAL in gencomp and deep)
+    if (flag.deep || z_has_gencomp) 
+        CTX(SAM_QUAL)->qual_longest_theoretical_comp_len = huffman_exists (SAM_QUAL)
+            ? huffman_get_theoretical_max_comp_len (SAM_QUAL, vb->longest_seq_len)
+            : arith_compress_bound (vb->longest_seq_len, X_NOSZ); 
 
     return true; // all good
 }
@@ -111,6 +117,12 @@ void sam_piz_recon_init (VBlockP vb)
         usleep (250000); // 250 ms
 
     buf_alloc_zero (vb, &CTX(SAM_CIGAR)->cigar_anal_history, 0, vb->lines.len, CigarAnalItem, 0, "cigar_anal_history"); // initialize to exactly one per line.
+
+    if (flag.deep) {
+        __atomic_store_n (&z_file->vb_start_deep_line.param, 1/*recon of deep_ents in progress*/, __ATOMIC_RELEASE);  
+        
+        CTX(SAM_CIGAR)->deep_textual_cigar.name = "contexts->deep_textual_cigar"; // so sam_cigar_binary_to_textual uses the right buffer name
+    }
 }
 
 // PIZ main thread: after reading and uncompressing VB_HEADER
@@ -215,11 +227,12 @@ IS_SKIP (sam_piz_is_skip_section)
 
     bool is_prim = (comp_i == SAM_COMP_PRIM) && !preproc;
     bool is_main = (comp_i == SAM_COMP_MAIN);
-    bool cov  = flag.collect_coverage;
-    bool cnt  = flag.count && !flag.grep; // we skip if we're only counting, but not also if based on --count, but not if --grep, because grepping requires full reconstruction
-    bool deep_fq = flag.deep && (comp_i <= SAM_COMP_DEPN) && (flag.one_component-1 >= SAM_COMP_FQ00); // deep: --R1 or --R2
+    bool cov     = flag.collect_coverage;
+    bool cnt     = flag.count && !flag.grep;  // we skip if we're only counting, but not also if based on --count, but not if --grep, because grepping requires full reconstruction
+    bool deep_fq = OUT_DT(FASTQ) && (comp_i <= SAM_COMP_DEPN); // genocat of fastq data from a Deep file
+
     #define has_sa (ZCTX(OPTION_SA_Z)->z_data_exists > 0)
-    #define is_aux dict_id_is_aux_sf(dict_id) /* #define so calculated only when (rarely) needed*/
+    #define is_aux dict_id_is_aux_sf(dict_id) // #define so calculated only when (rarely) needed
 
     switch (dict_id.num) {
         case _SAM_SQBITMAP : 
@@ -236,6 +249,7 @@ IS_SKIP (sam_piz_is_skip_section)
         case _SAM_QUAL  : case _SAM_DOMQRUNS  : case _SAM_QUALMPLX  : case _SAM_DIVRQUAL  :
         case _SAM_CQUAL : case _SAM_CDOMQRUNS : case _SAM_CQUALMPLX : case _SAM_CDIVRQUAL : 
             SKIPIF (is_prim);                                         
+            SKIPIF (deep_fq && (flag.seq_only || flag.header_only_fast));
             SKIPIFF (cov || cnt);
 
         case _OPTION_np_i : case _OPTION_ec_f : // np is needed for reconstruting QUAL (PACB codec), and ec is needed to rereconstruct np
@@ -313,7 +327,7 @@ IS_SKIP (sam_piz_is_skip_section)
         default            : other :
             SKIPIF ((cov || cnt) && is_aux && !(is_dict && dict_id.num == _OPTION_OC_Z/*dict-alias of MC0_Z needed to reconstruct CIGAR*/));
             SKIPIF (deep_fq && is_aux && !is_dict); // Dictionaries might be needed for FASTQ AUX fields
-            SKIPIF (deep_fq && is_dict && is_aux && !f.dictionary.deep_fastq); // Deep --R1/2: we don't need SAM-only AUX dicts
+            SKIPIF (deep_fq && is_dict && is_aux && !f.dictionary.deep_fastq); // outputting FASTQ: we don't need SAM-only AUX dicts
             SKIPIF (is_dict && !flag.deep && is_aux && f.dictionary.deep_fastq && !f.dictionary.deep_sam);   // Deep file, but we are not reconstructed FQ (hence !flag.deep) - we don't need FASTQ-only AUX dicts
             SKIPIFF (preproc);
     }
@@ -683,8 +697,8 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
 
         // case SAM to BAM translation: set alignment.block_size (was in sam_piz_sam2bam_AUX until v11)
         if (dict_id.num == _SAM_TOP2BAM) { 
-            BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)Btxt (vb->line_start);
-            PUT_UINT32_(alignment, block_size, Ltxt - vb->line_start - sizeof (uint32_t)); // block_size doesn't include the block_size field itself
+            BAMAlignmentFixedP alignment = (BAMAlignmentFixedP)Btxt (vb->line_start);
+            alignment->block_size = LTEN32 (Ltxt - vb->line_start - sizeof (uint32_t)); // block_size doesn't include the block_size field itself
         }
         
         // --FLAG
@@ -711,7 +725,7 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
 
         // --bases
         if (flag.bases && 
-            !(TXT_DT(BAM) ? iupac_is_included_bam (last_txt (vb, SAM_SQBITMAP), ((BAMAlignmentFixed *)recon)->l_seq)
+            !(TXT_DT(BAM) ? iupac_is_included_bam (last_txt (vb, SAM_SQBITMAP), ((BAMAlignmentFixedP)recon)->l_seq)
                           : iupac_is_included_ascii (STRlst (SAM_SQBITMAP))))
             DROP_LINE ("bases");
         
@@ -785,17 +799,11 @@ CONTAINER_FILTER_FUNC (sam_piz_filter)
     if (!VER(14) && sam_piz_filter_up_to_v13_stuff (vb, dict_id, item, &v13_ret_value))
         return v13_ret_value;
 
-    else if (dict_id.num == _SAM_TOP2NONE) { // bug 857
-        // if (con->items[item].dict_id.num == _SAM_SQBITMAP && (flag.header_only_fast || flag.qual_only)) 
-        //     return false; // don't reconstruct SEQ
-
-        // if (con->items[item].dict_id.num == _SAM_QUAL     && (flag.header_only_fast || flag.seq_only)) 
-        //     return false; // don't reconstruct QUAL
-
-        // if (con->items[item].dict_id.num == _SAM_QNAME    && (flag.qual_only || flag.seq_only))
-        //     return false; // don't reconstruct QNAME
+    else if (dict_id.num == _SAM_TOP2NONE) { 
+        if (con->items[item].dict_id.num == _SAM_QUAL && (flag.header_only_fast || flag.seq_only)) // only possible when genocat --fastq of a deep file
+            return false; // don't reconstruct QUAL
     }
-
+    
     // collect_coverage: rather than reconstructing optional, reconstruct SAM_FQ_AUX that just consumes MC:Z if it exists
     else if (dict_id.num == _SAM_AUX) {
         if (flag.collect_coverage) {

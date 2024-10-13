@@ -55,7 +55,7 @@ void vb_release_vb_do (VBlockP *vb_p, rom task_name, rom func)
 
     VBlockP vb = *vb_p;
     if (!vb) return; // nothing to release
-    
+
     ASSERT (is_in_use (vb) || vb==evb, "Cannot release VB because it is not in_use (called from %s): vb->id=%d vb->vblock_id=%u", 
             func, vb->id, vb->vblock_i);
 

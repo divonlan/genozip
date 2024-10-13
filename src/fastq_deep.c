@@ -11,10 +11,13 @@
 #include "huffman.h"
 #include "codec.h"
 #include "zip_dyn_int.h"
+#include "reconstruct.h"
 #include "htscodecs/arith_dynamic.h"
 
 sSTRl(con_decanonize1_snip,96);
 sSTRl(con_decanonize2_snip,96);
+
+#define DF vb->piz_deep_flags
 
 //----------------
 // ZIP
@@ -33,7 +36,7 @@ void fastq_deep_zip_initialize (void)
 
 void fastq_deep_zip_after_compute (VBlockFASTQP vb)
 {
-    for (int i=0; i < NUM_DEEP_STATS; i++)
+    for (int i=0; i < NUM_DEEP_STATS_ZIP; i++)
         z_file->deep_stats[i] += vb->deep_stats[i];
 }
 
@@ -59,9 +62,9 @@ void fastq_deep_zip_finalize (void)
         uint64_t total = z_file->deep_stats[NDP_FQ_READS];
         iprint0 ("\nFASTQ reads breakdown by deepability:\n");
         
-        for (int i=0; i < NUM_DEEP_STATS; i++) 
+        for (int i=0; i < NUM_DEEP_STATS_ZIP; i++) 
             if (z_file->deep_stats[i])
-                iprintf ("%-11.11s: %"PRIu64" (%.1f%%)\n", (rom[])NO_DEEP_NAMES[i], z_file->deep_stats[i], 100.0 * (double)z_file->deep_stats[i] / (double)total);
+                iprintf ("%-11.11s: %"PRIu64" (%.1f%%)\n", (rom[])DEEP_STATS_NAMES_ZIP[i], z_file->deep_stats[i], 100.0 * (double)z_file->deep_stats[i] / (double)total);
     }
 
     ASSERTISALLOCED (z_file->deep_ents);
@@ -70,20 +73,24 @@ void fastq_deep_zip_finalize (void)
     // Count deepable alignments in SAM that were did not appear in FASTQ. This would be an user
     // error as we require that FASTQ files covering all SAM alignments (except supplementary, 
     // secondary and consensus) must be provided when using --deep 
-    uint64_t count_not_consumed=0, count_dups=0;
+    uint64_t count_unconsumed=0, count_dups=0, first_unconsumed=0;
+    
     for (uint64_t ent_i=0; ent_i < deep_ents_len; ent_i++) 
         if (deep_ents[ent_i].dup) count_dups++;
-        else if (!deep_ents[ent_i].consumed) count_not_consumed++;
+        else if (!deep_ents[ent_i].consumed) {
+            if (!count_unconsumed) first_unconsumed = ent_i;
+            count_unconsumed++;
+        }
 
     if (flag.show_deep) {
         #define NUM_SHOW 20
         iprintf ("\nNumber of %s deepable alignments not consumed by FASTQ reads: %"PRIu64"\n"
                 "- Unusable due to multiple alignments with same hash: %"PRIu64"\n"
                 "- No matching FASTQ read: %"PRIu64" (showing first %d)\n",
-                z_dt_name(), count_not_consumed + count_dups, count_dups, count_not_consumed, (int)MIN_(count_not_consumed, NUM_SHOW));
+                z_dt_name(), count_unconsumed + count_dups, count_dups, count_unconsumed, (int)MIN_(count_unconsumed, NUM_SHOW));
 
         // show the first few unconsumed
-        if (count_not_consumed)
+        if (count_unconsumed)
             for (uint64_t ent_i=0, count=0; ent_i < deep_ents_len && count < NUM_SHOW; ent_i++)
                 if (!deep_ents[ent_i].consumed && !deep_ents[ent_i].dup) {
                     iprintf ("sam_vb=%u line_i=%u hash=%016"PRIx64",%08x,%08x\n", deep_ents[ent_i].vb_i, deep_ents[ent_i].line_i, DEEPHASHf(deep_ents[ent_i].hash));
@@ -97,18 +104,16 @@ void fastq_deep_zip_finalize (void)
     // covered by a FASTQ read, has, by chance, the same hashes as a FASTQ read that is not present in the 
     // BAM data (which is allowed). If this occurs, Deep will incorrectly map the FASTQ read to the redundant 
     // BAM alignment. This BAM alignment will be marked as "consumed" and hence not counted in 
-    // "count_not_consumed". However, --test would catch this and error on reconstruction. 
-    else if (count_not_consumed) {
+    // "count_unconsumed". However, --test would catch this and error on reconstruction. 
+    else if (count_unconsumed) {
         WARN ("WARNING: detected %"PRIu64" %s alignments (other than supplementary, secondary and consensus alignments) which "
               "are absent in the FASTQ file(s). Genozip requires that the FASTQ files included in --deep cover all alignments "
               "in the %s file, or otherwise, in rare cases, the resulting compressed file might be corrupted. If such corruption occurs, "
               "the testing that will follow now will detect it. If the testing completes successfully, then there is no problem. "
               "An example of an alignment present in the %s file but missing in the FASTQ file(s) can be obtained by running:\n"
-              "   genozip --biopsy-line=%u/%u -B%u%s %s\n",
-              count_not_consumed, z_dt_name(), z_dt_name(), z_dt_name(),
-              deep_ents[0].vb_i, deep_ents[0].line_i, (int)segconf.vb_size >> 20, 
-              (z_file->z_flags.has_gencomp ? "" : " --no-gencomp"),
-              segconf.sam_deep_filename);
+              "   %s\n",
+              count_unconsumed, z_dt_name(), z_dt_name(), z_dt_name(),
+              piz_advise_biopsy_line (COMP_NONE, deep_ents[first_unconsumed].vb_i, deep_ents[first_unconsumed].line_i, segconf.sam_deep_filename).s);
 
         flag.test = true; // force testing in this case
     }
@@ -161,7 +166,9 @@ void fastq_deep_seg_finalize_segconf (uint32_t n_lines)
         segconf.deep_has_trimmed = (segconf.n_full_mch_trimmed > 0); // true is some reads might be trimmed (shorter in SAM than FASTQ)
         
         // test: likewise, matching QUAL
-        proof_of_qual = (segconf.deep_qtype == QNAME1) ? segconf.n_full_mch[qname_i] : segconf.n_full_mch[qname2_i];
+        proof_of_qual = segconf.nontrivial_qual &&  // don't deep trivial qual: to avoid bloating deep_ents in piz with qual data without any compression gain 
+                        !flag.deep_no_qual      &&  // don't deep qual if user specified --deep=no-qual
+                        (segconf.deep_qtype == QNAME1 ? segconf.n_full_mch[qname_i] : segconf.n_full_mch[qname2_i]);
 
         if (!proof_of_qual) {
             segconf.deep_no_qual = true;
@@ -283,7 +290,7 @@ static void fastq_deep_seg_segconf (VBlockFASTQP vb, STRp(qname), STRp(qname2), 
           {  segconf.deep_paired_qname, QNAME1, STRa(qname), false   }, { segconf.deep_paired_qname  && qname2_len > 0, QNAME2, STRa(qname2), false   },   // is_first
           {  segconf.deep_paired_qname, QNAME1, STRa(qname), true    }, { segconf.deep_paired_qname  && qname2_len > 0, QNAME2, STRa(qname2), true    } }; // is_last
 
-    uint64_t qname_hash[NUM_INSTS];
+    uint64_t qname_hash[NUM_INSTS] = {};
     for (int i=0; i < NUM_INSTS; i++)
         if (inst[i].cond) 
             qname_hash[i] = deep_qname_hash (inst[i].q, STRa(inst[i].qname), inst[i].is_last, NULL);
@@ -340,40 +347,6 @@ done:
         buf_free (vb->scratch);
 }
 
-extern rom main_input_filename (int file_i);
-
-static CompIType fastq_seg_deep_get_comp_by_vb (VBIType vb_i) // caller guarantees vb_i with a Deep FASTQ vb
-{
-    for (CompIType comp_i=flag.zip_comp_i; comp_i >= SAM_COMP_FQ00; comp_i--) 
-        if (vb_i >= sections_get_first_vb_i (comp_i)) 
-            return comp_i;
-
-    return COMP_NONE;
-}
-
-static StrTextLong fastq_seg_deep_calculate_biopsy_line (VBIType vb_i, uint32_t line_i)
-{
-    StrTextLong s;
-    CompIType comp_i = fastq_seg_deep_get_comp_by_vb (vb_i);
-    
-    if (comp_i >= SAM_COMP_FQ00) {
-        // we know the vb_i when compressed with --deep, calculate it when compressed separately
-        VBIType standlone_vb_i = vb_i - sections_get_first_vb_i (comp_i) + 1;
-
-        snprintf (s.s, sizeof(s), "genozip --biopsy-line %u/%u%.20s%.20s%s %.768s", 
-                  standlone_vb_i, line_i,
-                  cond_int (segconf.vb_size/*0 if IS_VB_SIZE_BY_MGZIP*/ && !(segconf.vb_size % (1 MB)), " -B", (unsigned)(segconf.vb_size >> 20)), 
-                  cond_int (segconf.vb_size && (segconf.vb_size % (1 MB)), " -B", (int)segconf.vb_size),
-                  segconf.vb_size && (segconf.vb_size % (1 MB)) ? "B" : "",
-                  main_input_filename (1 + comp_i - SAM_COMP_FQ00));
-    }
-
-    else
-        snprintf (s.s, sizeof(s), "(unable to calculate --biopsy-line command for vb_i=%d line_i=%u)", vb_i, line_i);
-
-    return s;
-}
-
 static inline uint64_t fastq_seg_deep_consume_unique_matching_ent (VBlockFASTQP vb, ZipZDeep *ent, DeepHash deep_hash,
                                                                    STRp(qname), STRp(seq), STRp(qual)) 
 {
@@ -382,7 +355,7 @@ static inline uint64_t fastq_seg_deep_consume_unique_matching_ent (VBlockFASTQP 
     // copy current place (other threads might consume it in the mean time)
     union ZipZDeepPlace sam_place = { .place = ent->place };
     union ZipZDeepPlace contention_place; // vb and line_i of another thread that matches
-    
+
     if (sam_place.consumed) {
         contention_place = sam_place;
         goto ent_consumed_by_another_thread;
@@ -431,10 +404,10 @@ ent_consumed_by_another_thread:
               "%sWork around: compress without using --deep.\n"
               "This_line:\nQNAME=\"%.*s\"\nSEQ  =\"%.*s\"\nQUAL =\"%.*s\"\n"
               "To see other line, run: %s",
-              LN_NAME, comp_name (fastq_seg_deep_get_comp_by_vb (contention_place.vb_i)), contention_place.vb_i, contention_place.line_i, str_size (segconf.vb_size).s, 
+              LN_NAME, comp_name (sections_vb_header (contention_place.vb_i)->comp_i), contention_place.vb_i, contention_place.line_i, str_size (segconf.vb_size).s, 
               DEEPHASHf(deep_hash), qtype_name(segconf.deep_qtype), TF(segconf.deep_no_qual), 
               report_support(), STRf(qname), STRf(seq), STRf(qual),
-              fastq_seg_deep_calculate_biopsy_line (contention_place.vb_i, contention_place.line_i).s);
+              piz_advise_biopsy_line (COMP_NONE, contention_place.vb_i, contention_place.line_i, NULL).s);
     
     COPY_TIMER (fastq_seg_deep_consume_unique_matching_ent);
     return 0;
@@ -486,7 +459,7 @@ static bool fastq_seg_deep_is_dup (VBlockFASTQP vb,
     return e->dup;
 }
 
-static DeepStatsFastq fastq_seg_find_deep (VBlockFASTQP vb, ZipDataLineFASTQ *dl, DeepHash *deep_hash, STRp(seq), STRp(qual), 
+static DeepStatsZip fastq_seg_find_deep (VBlockFASTQP vb, ZipDataLineFASTQ *dl, DeepHash *deep_hash, STRp(seq), STRp(qual), 
                                            ZipZDeep **matching_ent) // out
 {
     ARRAY (ZipZDeep, deep_ents, z_file->deep_ents);
@@ -554,16 +527,15 @@ bool fastq_seg_deep (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qname), STRp(qn
     START_TIMER;
 
     uint64_t deep_value = 0;
-    DeepStatsFastq reason;
+    DeepStatsZip reason;
     #define NO_MATCH(r) ({ reason=(r); goto no_match; })
 
     if (flag.deep) { // skip tests if only --show-deep without --deep
         vb->deep_stats[NDP_FQ_READS]++;
         
-        if (!z_file->deep_ents.len) {
-            vb->deep_stats[NDP_NO_ENTS]++;
-            goto done;
-        }
+        // SAM file did not produce any Deep entries (e.g. because all alignments seconday/supplementary)
+        if (!z_file->deep_ents.len) 
+            NO_MATCH (NDP_NO_ENTS);
 
         if (segconf.running) {
             fastq_deep_seg_segconf (vb, STRa(qname), STRa(qname2), STRa(seq), STRa(qual));
@@ -699,8 +671,11 @@ void fastq_deep_seg_QNAME (VBlockFASTQP vb, Did did_i, STRp(qname), uint32_t unc
 // PIZ: called from compute threads of FASTQ component - after decompressing contexts but before reconstructing
 void fastq_deep_piz_wait_for_deep_data (void)
 {
+    // param=1 during SAM VB reconstruction and param=2 after z_file->deep_ents are ready
+    ASSERT0 (z_file->vb_start_deep_line.param, "deep_ent not initialized"); // SAM VBs were not reconstructed - perhaps writer_z_initialize issue  
+
     // busy-wait until sam_piz_deep_finalize_ents finalizes the deep data
-    while (!z_file->vb_start_deep_line.param) 
+    while (z_file->vb_start_deep_line.param != 2) 
         usleep (100000); // 100ms
 
     // flag.no_writer (eg --test) with gencomp files is forced in-order for SAM bc digest is calculated by writer for gencomp files,
@@ -770,7 +745,7 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_set_deep)
 
     uint32_t ents_index = *B32 (*deep_index, vb_deepable_line_i);
 
-    new_value->p = B8 (*deep_ents, ents_index);
+    new_value->p = B8(*deep_ents, ents_index);
 
     COPY_TIMER (fastq_special_set_deep);
     return HAS_NEW_VALUE; 
@@ -780,16 +755,130 @@ SPECIAL_RECONSTRUCTOR (fastq_special_deep_copy_QNAME)
 {
     START_TIMER;
 
+    if (flag.qual_only || flag.seq_only) goto done; // if seq/qual_only, SAM did not add qname to deep_ents
+
     uint8_t *deep_ent = CTX(FASTQ_DEEP)->last_value.p;
     ASSERTNOTNULL (deep_ent);
+        
+    int qname_uncomp_len = deep_ent[0];
+    bytes qname_comp = &deep_ent[1];
 
-    int qname_len = deep_ent[1];
+    uint32_t qname_comp_len = reconstruct ? RECONSTRUCT_huffman_or_copy (vb, SAM_QNAME, qname_uncomp_len, qname_comp)
+                                          : huffman_uncompress_len (SAM_QNAME, qname_comp, qname_uncomp_len);
 
-    // note: we update deep_ent[1] to the consumed amount
-    deep_ent[1] = RECONSTRUCT_huffman (vb, SAM_QNAME, qname_len, &deep_ent[2]);
+    CTX(FASTQ_DEEP)->last_value.p += 1 + qname_comp_len;
     
+done:
     COPY_TIMER (fastq_special_deep_copy_QNAME);
     return NO_NEW_VALUE;    
+}
+
+#define GET_NUMBER_1B_or_5B ({                                  \
+    uint32_t value = *next++;                                   \
+    if (value == 255) { value = GET_UINT32 (next); next += 4; } \
+    value; })
+
+static uint8_t *fastq_special_deep_copy_SEQ_by_arith (VBlockFASTQP vb, uint8_t *next)
+{
+    uint32_t comp_len = GET_NUMBER_1B_or_5B;
+
+    unsigned out_len = vb->deep_seq_len;        
+    ASSPIZ (arith_uncompress_to (VB, next, comp_len, (uint8_t*)BAFTtxt, &out_len) && out_len == vb->deep_seq_len,
+            "Failed arith_uncompress_to SEQ copied from SAM: compressed_len=%u uncompressed_len=%u (expected: %u)", 
+            comp_len, out_len, vb->deep_seq_len);
+    
+    return next + comp_len;
+}
+
+static uint8_t *fastq_special_deep_copy_SEQ_by_ref (VBlockFASTQP vb, uint8_t *next, uint32_t deep_ref_consumed)
+{
+    char *recon = BAFTtxt;
+
+    PosType64 gpos = DF.is_long_gpos ? GET_UINT64 (next) : GET_UINT32 (next);
+    next += DF.is_long_gpos ? 8 : 4;  
+    
+    const Bits *genome=NULL;
+    ref_get_genome (gref, &genome, NULL, NULL);
+    decl_acgt_decode;
+    
+    BASE_ITER_INIT (genome, gpos, deep_ref_consumed, DF.is_forward);
+
+    // case: no cigar - just copy the reference
+    if (!DF.has_cigar) 
+        for (uint32_t i=0; i < vb->deep_seq_len; i++) 
+            *recon++ = acgt_decode(BASE_NEXT);                    
+    
+    // case: follow instructions from cigar
+    else {
+        #define get_buf(buf, name)                                  \
+            ASSERTNOTINUSE (vb->buf);                               \
+            uint32_t name##_len = GET_NUMBER_1B_or_5B;              \
+            buf_alloc_exact (vb, vb->buf, name##_len, char, #buf);  \
+            char *name = B1STc(vb->buf);                            \
+
+        get_buf (scratch, cigar);
+
+        next += huffman_uncompress_or_copy (SAM_CIGAR, next, STRa(cigar)); // note: next is advanced to point to nonref data
+
+        get_buf (codec_bufs[0], nonref);
+
+        if (nonref_len) next += str_unpack_bases (nonref, next, nonref_len);
+
+        rom after = cigar + cigar_len;
+        rom c = cigar;
+        uint32_t D_and_N_bases = 0, S_and_I_bases = 0;
+
+        while (c < after) {
+            ASSERT (IS_DIGIT(*c), "%s: bad cigar: %.*s", LN_NAME, STRf(cigar)); // must have at least one digit (may be 0)
+
+            uint32_t n=0; 
+            while (IS_DIGIT(*c) && (c < after-1)) { 
+                n = 10*n + *c - '0'; 
+                c++; 
+            }
+            
+            switch (*c++) {
+                case 'M' : case '=' : case 'X' :
+                    for (uint32_t i=0; i < n; i++) *recon++ = acgt_decode(BASE_NEXT);                    
+                    break;
+
+                case 'S' : case 'I':
+                    for (uint32_t i=0; i < n; i++) *recon++ = *nonref++;
+                    S_and_I_bases += n;
+                    break;
+
+                case 'D' : case 'N':                    
+                    for (uint32_t i=0; i < n; i++) BASE_NEXT; // TODO: not very effecient to do this in a loop... we should advance with a direct calculation
+                    D_and_N_bases += n;
+                    break;
+
+                case 'P' : case 'H': break;
+
+                default: ABORT ("%s: bad cigar: %.*s", LN_NAME, STRf(cigar));
+            }
+        }
+
+        vb->deep_seq_len = deep_ref_consumed + S_and_I_bases - D_and_N_bases; // finally, we can calculate deep_seq_len
+        
+        buf_free (vb->scratch);
+        buf_free (vb->codec_bufs[0]);
+    }
+
+    // overwrite the mismatching bases
+    if (DF.has_mismatches) {
+        uint32_t num_mismatches = GET_NUMBER_1B_or_5B;
+        recon = BAFTtxt;
+
+        for (uint32_t i=0; i < num_mismatches; i++) {
+            uint32_t skip = GET_NUMBER_1B_or_5B;
+            ASSERT (recon + skip < Btxt(vb->txt_data.size), "%s: skip=%u goes beyond txt_data", LN_NAME, skip);
+
+            recon += skip; // offset - skip this many matching bases
+            *recon++ = *next++; // overwrite reference base with mismatching base
+        }
+    }
+
+    return next;
 }
 
 SPECIAL_RECONSTRUCTOR_DT (fastq_special_deep_copy_SEQ)
@@ -797,6 +886,10 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_deep_copy_SEQ)
     VBlockFASTQP vb = (VBlockFASTQP)vb_;
 
     START_TIMER;
+
+    uint8_t *next = CTX(FASTQ_DEEP)->last_value.p; // points to start of SEQ stuff within deep_ents
+
+    if (flag.header_only_fast) goto done; // if --header-only, SAM did not add seq to deep_ents
 
     uint32_t trim_len = 0;   // how much longer is the FASTQ SEQ than the SAM SEQ
 
@@ -810,88 +903,38 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_deep_copy_SEQ)
         if (n_items == 2) vb->sam_seq_offset = items[1];
     }
 
+    ASSERTNOTNULL (next);
+
+    vb->piz_deep_flags = *(PizDeepSeqFlags *)next++;
+    
+    if (flag.qual_only) {
+        vb->deep_seq_len = GET_NUMBER_1B_or_5B;  // if qual-only, SAM stores deep_seq_len in deep_ents rather than ref_consumed
+        vb->seq_len = vb->deep_seq_len + trim_len; 
+        goto done;
+    }
+
     // reconstruct left trim
     if (vb->sam_seq_offset)
         reconstruct_from_local_sequence (VB, CTX(FASTQ_NONREF), vb->sam_seq_offset, reconstruct);
 
-    uint8_t *deep_ent = CTX(FASTQ_DEEP)->last_value.p;
-    ASSERTNOTNULL (deep_ent);
+    uint32_t deep_ref_consumed = GET_NUMBER_1B_or_5B; 
 
-    PizZDeepFlags f = *(PizZDeepFlags *)deep_ent;
-
-    deep_ent += (segconf.deep_qtype == QNONE/*up to 15.0.66*/ || flag.seq_only || flag.qual_only) 
-        ? 1/*skip flags*/ : (2 + deep_ent[1])/*skip flags, qname_len and qname*/; 
-
-    uint32_t deep_seq_len = f.is_long_seq ? GET_UINT32 (deep_ent) : *deep_ent;
-    
-    vb->seq_len = deep_seq_len + trim_len; 
-    
-    ASSPIZ (vb->seq_len <= vb->longest_seq_len, "%s: unexpectedly seq_len(as read from deep_ent)=%u > vb->longest_seq_len=%u (deep_seq_len=%u trim_len=%u sam_seq_offset=%u is_long_seq=%s)",
-            LN_NAME, vb->seq_len, vb->longest_seq_len, deep_seq_len, trim_len, vb->sam_seq_offset, TF(f.is_long_seq)); // sanity check
+    if (!vb->piz_deep_flags.has_cigar)        
+        vb->deep_seq_len = deep_ref_consumed; // note: if has_cigar, deep_seq_len is set by fastq_special_deep_copy_SEQ_by_ref based on cigar
 
     // reconstruct SEQ copied from SAM
     if (reconstruct) {
-        deep_ent += f.is_long_seq ? 4 : 1;  
-
-        #define ENCODING(x) (f.seq_encoding == ZDEEP_SEQ_##x)
-
-        // case: SEQ is compressed (bc it contains non-ACGT)
-        if (ENCODING(COMPRESSED) || ENCODING(COMPRESSED_LONG_LEN)) {
-            uint32_t comp_len = (ENCODING(COMPRESSED) ? *deep_ent : GET_UINT32 (deep_ent));
-            deep_ent += (ENCODING(COMPRESSED) ? 1 : 4);
-
-            unsigned out_len = deep_seq_len;        
-            ASSPIZ (arith_uncompress_to (VB, deep_ent, comp_len, (uint8_t*)BAFTtxt, &out_len) && out_len == deep_seq_len,
-                    "Failed arith_uncompress_to SEQ copied from SAM: compressed_len=%u uncompressed_len=%u (expected: %u)", 
-                    comp_len, out_len, deep_seq_len);
-        }
-
-        // case: SEQ is packed
-        else if (ENCODING(PACKED)) {
-            // case: shortish reads - can fit on stack 
-            #define SHORTISH_READ_SIZE 1024
-            if ((ROUNDUP32(deep_seq_len) / 4 <= SHORTISH_READ_SIZE)) {
-                uint8_t data[SHORTISH_READ_SIZE]; // not too long, so code path gets mileage
-                memcpy (data, deep_ent, ROUNDUP4(deep_seq_len) / 4); // copy to word-align
-                
-                Bits pack = bits_init (deep_seq_len * 2, data, sizeof(data), false);
-                bits_2bit_to_ACGT (BAFTtxt, &pack, 0, deep_seq_len);
-            }
-
-            // case: too long for stack - allocate on heap
-            else {
-                ASSERTNOTINUSE (vb->scratch);
-                Bits pack = bits_alloc (deep_seq_len*2, true);
-                memcpy (pack.words, deep_ent, ROUNDUP4(deep_seq_len) / 4);
-
-                bits_2bit_to_ACGT (BAFTtxt, &pack, 0, deep_seq_len);
-                bits_free (&pack);
-            }
-        }
-
-        else { // ZDEEP_SEQ_PERFECT, ZDEEP_SEQ_PERFECT_REV, ZDEEP_SEQ_MIS_1, ZDEEP_SEQ_MIS_1_REV      
-            PizDeepSeq ds = *(PizDeepSeq *)deep_ent; // not nessesarily word-aligned, but I think its ok, since this is just a memcpy, not loading integers
-            deep_ent += (ENCODING(PERFECT) || ENCODING(PERFECT_REV)) ? 4 : 6;
-
-            const Bits *genome=NULL;
-            ref_get_genome (gref, &genome, NULL, NULL);
-            
-            BASE_ITER_INIT (genome, ds.gpos, deep_seq_len, (ENCODING(PERFECT) || ENCODING(MIS_1)));
-
-            char *next = BAFTtxt;
-            decl_acgt_decode;
-            for (uint32_t i=0; i < deep_seq_len; i++) 
-                *next++ = acgt_decode(BASE_NEXT);                    
-
-            if (ENCODING(MIS_1)) 
-                *(BAFTtxt + ds.mismatch_offset) = ds.mismatch_base; // reconstruct mismatch 
-
-            else if (ENCODING(MIS_1_REV))
-                *(BAFTtxt + deep_seq_len-1 - ds.mismatch_offset) = COMPLEM[(int)ds.mismatch_base]; // reconstruct mismatch 
-        }
-
-        Ltxt += deep_seq_len;
+        #define ENCODING(x) (DF.seq_encoding == ZDEEP_SEQ_##x)
+        next = ENCODING(BY_REF) ? fastq_special_deep_copy_SEQ_by_ref (vb, next, deep_ref_consumed)
+             : ENCODING(PACKED) ? next + str_unpack_bases (BAFTtxt, next, vb->deep_seq_len)
+             : /* ARITH */        fastq_special_deep_copy_SEQ_by_arith (vb, next);
+        Ltxt += vb->deep_seq_len;
     }
+    
+    vb->seq_len = vb->deep_seq_len + trim_len; 
+
+    ASSPIZ (vb->seq_len <= vb->longest_seq_len, "%s: unexpectedly seq_len(as read from deep_ent)=%u > vb->longest_seq_len=%u (deep_seq_len=%u trim_len=%u sam_seq_offset=%u)",
+            LN_NAME, vb->seq_len, vb->longest_seq_len, vb->deep_seq_len, trim_len, vb->sam_seq_offset); // sanity check
 
     // reconstruct right trim
     if (trim_len - vb->sam_seq_offset)
@@ -901,6 +944,9 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_deep_copy_SEQ)
     if (vb->R1_vb_i/*we are R2*/ && fastq_piz_R1_test_aligned (vb))
         CTX(FASTQ_GPOS)->localR1.next++; // gpos_ctx->localR1.next is an iterator for both gpos and strand
 
+done:
+    CTX(FASTQ_DEEP)->last_value.p = next;
+    
     COPY_TIMER (fastq_special_deep_copy_SEQ);
     return NO_NEW_VALUE;    
 }
@@ -908,28 +954,21 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_deep_copy_SEQ)
 SPECIAL_RECONSTRUCTOR_DT (fastq_special_deep_copy_QUAL)
 {
     VBlockFASTQP vb = (VBlockFASTQP)vb_;
-    char *qual = BAFTtxt;
+    char *qual = BAFTtxt; // save recon start address
 
     START_TIMER;
 
-    uint8_t *deep_ent = CTX(FASTQ_DEEP)->last_value.p;
-    ASSERTNOTNULL (deep_ent);
-
-    PizZDeepFlags f = *(PizZDeepFlags *)deep_ent;
-
-    deep_ent += (segconf.deep_qtype == QNONE/*up to 15.0.66*/ || flag.seq_only || flag.qual_only) 
-        ? 1/*skip flags*/ : (2 + deep_ent[1])/*skip flags, qname_len and qname*/; 
-
-    uint32_t deep_seq_len = f.is_long_seq ? GET_UINT32 (deep_ent) : *deep_ent;
+    if (flag.header_only_fast || flag.seq_only) goto done; // if --header-only or --seq-only, SAM did not add seq to deep_ents
 
     // reconstruct left and right trim together (see in zip: fastq_zip_qual)
-    ASSERT (vb->seq_len >= deep_seq_len, "Expecting vb->seq_len=%u >= deep_seq_len=%u", vb->seq_len, deep_seq_len);
-    uint32_t total_trim = vb->seq_len - deep_seq_len;
+    ASSERT (vb->seq_len >= vb->deep_seq_len, "Expecting vb->seq_len=%u >= deep_seq_len=%u", vb->seq_len, vb->deep_seq_len);
+    uint32_t total_trim = vb->seq_len - vb->deep_seq_len;
 
     ASSERT (total_trim >= vb->sam_seq_offset, "Expecting total_trim=%u >= vb->sam_seq_offset=%u", total_trim, vb->sam_seq_offset);
     uint32_t right_trim = total_trim - vb->sam_seq_offset; 
 
-    if (total_trim) {
+    // reconstruct left and right trim, or just consume local data even if !reconstruct
+    if (total_trim) { 
         if (ctx->ltype == LT_CODEC)         
             codec_args[ctx->lcodec].reconstruct (VB, ctx->lcodec, ctx, total_trim, reconstruct); 
 
@@ -938,54 +977,48 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_deep_copy_QUAL)
 
         else
             ABORT_PIZ ("Invalid ltype=%s for %s", lt_name (ctx->ltype), ctx->tag_name);
-
-        // move right trim to its place after the portion to be copied from Deep
-        if (right_trim) {
-            Ltxt -= right_trim;
-            memmove (BAFTtxt + deep_seq_len, BAFTtxt, right_trim); // careful: if there is any QUAL codec that temporarily writes beyond, this won't work
-        }
     }
     
-    // reconstruct QUAL copied from SAM
-    if (reconstruct) {
-        deep_ent += f.is_long_seq ? 4 : 1;
-        
-        // skip seq
-        if (!flag.qual_only) // in qual_only, sam_piz_deep_add_seq didn't store the SEQ
-            switch (f.seq_encoding) {
-                case ZDEEP_SEQ_COMPRESSED          : deep_ent += 1 + *deep_ent;              break;
-                case ZDEEP_SEQ_COMPRESSED_LONG_LEN : deep_ent += 4 + GET_UINT32 (deep_ent);  break;
-                case ZDEEP_SEQ_PACKED              : deep_ent += ROUNDUP4(deep_seq_len) / 4; break;
-                case ZDEEP_SEQ_PERFECT             : deep_ent += 4;                          break;
-                case ZDEEP_SEQ_PERFECT_REV         : deep_ent += 4;                          break;
-                case ZDEEP_SEQ_MIS_1               : deep_ent += 6;                          break;  
-                case ZDEEP_SEQ_MIS_1_REV           : deep_ent += 6;                          break;  
-                default: ABORT0 ("Unknown SEQ encoding");
-            }
+    if (!reconstruct) goto done;
 
-        uint32_t qual_comp_len = f.is_long_qual_comp ? GET_UINT32 (deep_ent) : *deep_ent;
-        deep_ent += (f.is_long_qual_comp ? 4 : 1);
-
-        ASSPIZ0 (qual_comp_len, "qual_comp_len=0 but expecting it to be >0 because QUAL of this line is not monochar");
-
-        unsigned out_len = deep_seq_len;        
-        ASSPIZ (arith_uncompress_to (VB, deep_ent, qual_comp_len, (uint8_t *)BAFTtxt, &out_len) && out_len == deep_seq_len,
-                "Failed arith_uncompress_to QUAL copied from SAM: compressed_len=%u uncompressed_len=%u (expected: %u)", 
-                qual_comp_len, out_len, deep_seq_len);
-
-        Ltxt += out_len;
+    // move right trim to its place after the portion to be copied from Deep
+    if (right_trim) {
+        Ltxt -= right_trim;
+        memmove (BAFTtxt + vb->deep_seq_len, BAFTtxt, right_trim); // careful: if there is any QUAL codec that temporarily writes beyond, this won't work
     }
 
-    Ltxt += right_trim; // already reconstructed & copied here above
+    uint8_t *next = CTX(FASTQ_DEEP)->last_value.p;
+    ASSERTNOTNULL (next);
+
+    // case: monochar qual
+    if (vb->piz_deep_flags.qual_is_monochar) 
+        memset (BAFTtxt, *next, vb->deep_seq_len);
+
+    // case: reconstruct QUAL copied from SAM
+    else {
+        uint32_t qual_comp_len = GET_NUMBER_1B_or_5B;
+        ASSPIZ0 (qual_comp_len, "qual_comp_len=0 but  it to be >0");
+
+        unsigned out_len = vb->deep_seq_len;        
+        if (huffman_exists (SAM_QUAL))
+            huffman_uncompress (SAM_QUAL, next, BAFTtxt, out_len);
+        else
+            ASSPIZ (arith_uncompress_to (VB, next, qual_comp_len, (uint8_t *)BAFTtxt, &out_len) && out_len == vb->deep_seq_len,
+                    "Failed arith_uncompress_to QUAL copied from SAM: compressed_len=%u uncompressed_len=%u (expected: %u)", 
+                    qual_comp_len, out_len, vb->deep_seq_len);
+    }
+
+    Ltxt += vb->deep_seq_len + right_trim;
 
     // case: correct qualities of 'N' bases
-    if (segconf.deep_N_fq_score && reconstruct) {
+    if (segconf.deep_N_fq_score) {
         STRlast (seq, FASTQ_SQBITMAP);
 
         for (unsigned i=0; i < seq_len; i++)
             if (seq[i] == 'N') qual[i] = segconf.deep_N_fq_score;
     }
 
+done:
     COPY_TIMER (fastq_special_deep_copy_QUAL);
     return NO_NEW_VALUE;
 }

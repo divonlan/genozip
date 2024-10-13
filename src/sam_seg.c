@@ -273,6 +273,7 @@ void sam_zip_genozip_header (SectionHeaderGenozipHeaderP header)
     header->sam.segconf_MAPQ_use_xq     = segconf.MAPQ_use_xq;           // 15.0.61
     header->sam.segconf_has_MQ          = !!segconf.has[OPTION_MQ_i];    // 15.0.61
     header->sam.segconf_SA_NM_by_X      = segconf.SA_NM_by_CIGAR_X;      // 15.0.66
+    header->sam.segconf_CIGAR_has_eqx   = segconf.CIGAR_has_eqx;         // 15.0.68
     if (segconf.deep_N_fq_score && segconf.deep_N_sam_score)
         header->sam.segconf_deep_N_fq_score = segconf.deep_N_fq_score;   // 15.0.39
     
@@ -332,6 +333,7 @@ void sam_seg_initialize (VBlockP vb_)
                    T(MP(BLASR), OPTION_XS_i), T(MP(BLASR), OPTION_XE_i), T(MP(BLASR), OPTION_XQ_i), T(MP(BLASR), OPTION_XL_i), T(MP(BLASR), OPTION_FI_i),
                    T(MP(NGMLR), OPTION_QS_i), T(MP(NGMLR), OPTION_QE_i), T(MP(NGMLR), OPTION_XR_i),
                    T(MP(CPU), OPTION_Y0_i), T(MP(CPU), OPTION_Y1_i),
+                   T(MP(TMAP), OPTION_XT_i), T(MP(TMAP), OPTION_XM_i),
                    T(segconf.is_minimap2, OPTION_s1_i), OPTION_ZS_i, OPTION_nM_i,
                    DID_EOL);
 
@@ -847,8 +849,12 @@ void sam_segconf_finalize (VBlockP vb_)
     }
 
     // cases where aligner is available (note: called even if reference is not loaded, so that it errors in segconf_calculate)
-    if (flag.best || flag.deep ||
-        (segconf.num_mapped < vb->lines.len32 && IS_REF_LOADED_ZIP && !segconf.is_long_reads)) { // evidence of unmapped reads. note: this won't catch unmapped reads in a sorted file, as they will be at the end of the file. in this case, the user should specificy --best to align unmapped reads
+    if (  flag.best 
+       || flag.deep 
+       || ( IS_REF_LOADED_ZIP 
+         && !segconf.is_long_reads 
+         && (  ( !flag.low_memory && (segconf.num_mapped < vb->lines.len32 || bam_txt_file_is_last_alignment_unmapped())) 
+            || ( flag.low_memory && segconf.num_mapped == 0)))) { 
 
         flag.aligner_available = true;
         if (IS_REF_LOADED_ZIP) refhash_load_standalone();
@@ -901,8 +907,8 @@ void sam_segconf_finalize (VBlockP vb_)
     qname_segconf_finalize (VB);
 }
 
-// this is SAM/BAM's zip_after_segconf callback
-void sam_zip_after_segconf (void)
+// main thread: this is SAM/BAM's zip_after_segconf callback
+void sam_zip_after_segconf (VBlockP vb)
 {
     if (segconf.line_len) // not header-only file
         sam_set_sag_type();   
@@ -910,8 +916,21 @@ void sam_zip_after_segconf (void)
     if (flag.deep)
         buf_alloc_zero (evb, &z_file->vb_num_deep_lines, 0, 10000, uint32_t, 0, "z_file->vb_num_deep_lines");
 
-    if (segconf.sag_type || flag.deep) 
-        huffman_produce_compressor (SAM_QNAME); // converts qname_huff from HuffmanChewer to HuffmanCodes
+    if (segconf.sag_type || flag.deep) {
+        huffman_produce_compressor (SAM_QNAME, (bool[256]){[32 ... 126] = true}); // converts qname_huff from HuffmanChewer to HuffmanCodes
+
+        // check if huffman compressed QUAL better than ARITH (for in-memory compressing of QUAL in gencomp ZIP/PIZ and deep PIZ)
+        if (VB_SAM->has_qual) 
+            sam_qual_produce_huffman_if_better (VB_SAM);
+
+        if (IS_SAG_SOLO)
+            sam_produce_solo_huffmans (VB_SAM);
+    }
+
+    if (IS_SAG_SA || flag.deep)
+        huffman_produce_compressor (SAM_CIGAR, (bool[256]){['0'...'9']=1, ['M']=1, ['I']=1, ['D']=1, ['N']=1, ['S']=1, ['H']=1, ['P']=1, ['=']=1, ['X']=1, ['*']=1 });
+    else
+        buf_destroy (CTX(SAM_CIGAR)->huffman); // not needed
 }
 
 void sam_seg_finalize (VBlockP vb_)
@@ -1854,14 +1873,10 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
     sam_seg_aux_all (vb, dl);
 
     if (IS_PRIM(vb)) {
-        if (IS_SAG_NH)
-            sam_seg_prim_add_sag_NH (vb, dl, dl->NH);
-        else if (IS_SAG_CC)
-            sam_seg_prim_add_sag_CC (vb, dl, dl->NH);
-        else if (IS_SAG_FLAG)
-            sam_seg_prim_add_sag (vb, dl, 0, false);
-        else if (IS_SAG_SOLO)
-            sam_seg_prim_add_sag_SOLO (vb, dl);
+        if      (IS_SAG_NH)   sam_seg_prim_add_sag_NH (vb, dl, dl->NH);
+        else if (IS_SAG_CC)   sam_seg_prim_add_sag_CC (vb, dl, dl->NH);
+        else if (IS_SAG_FLAG) sam_seg_prim_add_sag (vb, dl, 0, false);
+        else if (IS_SAG_SOLO) sam_seg_prim_add_sag_SOLO (vb, dl);
     }
 
     // TLEN - must be after AUX as we might need data from MC:Z
@@ -1872,7 +1887,7 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
 
     SAFE_RESTORE;            // restore \t after CIGAR
 
-    if (dl->SEQ.len > vb->longest_seq_len) vb->longest_seq_len = dl->SEQ.len;
+    MAXIMIZE (vb->longest_seq_len, dl->SEQ.len);
 
     return next_line;
 

@@ -1301,3 +1301,67 @@ void *memmem (const void *haystack, size_t haystack_len, // same as in gcc
     return NULL;
 }
 #endif
+
+// add packed A,C,G,T data to a byte array. 
+// NOTE: bases should have accessible memory for reading 3 bytes before and 3 bytes after (i.e. always ok if bases on in a Buffer)
+uint32_t str_pack_bases (uint8_t *packed, STRp(bases), bool revcomp)
+{
+    uint32_t num_bytes = roundup_bits2bytes (bases_len * 2);
+
+    if (!revcomp)
+        for (uint32_t byte_i=0; byte_i < num_bytes; byte_i++, bases += 4) 
+            packed[byte_i] = ((uint8_t)(bases[0] == 'C' || bases[0] == 'T') ) // A=00 C=01 G=10 T=11
+                           | ((uint8_t)(bases[0] == 'G' || bases[0] == 'T') << 1)
+                           | ((uint8_t)(bases[1] == 'C' || bases[1] == 'T') << 2)
+                           | ((uint8_t)(bases[1] == 'G' || bases[1] == 'T') << 3)
+                           | ((uint8_t)(bases[2] == 'C' || bases[2] == 'T') << 4)
+                           | ((uint8_t)(bases[2] == 'G' || bases[2] == 'T') << 5)
+                           | ((uint8_t)(bases[3] == 'C' || bases[3] == 'T') << 6)
+                           | ((uint8_t)(bases[3] == 'G' || bases[3] == 'T') << 7);
+
+    else {
+        bases = bases + bases_len - 4; 
+        for (uint32_t byte_i=0; byte_i < num_bytes; byte_i++, bases -= 4) 
+            packed[byte_i] = ((uint8_t)(bases[3] == 'G' || bases[3] == 'A') )
+                           | ((uint8_t)(bases[3] == 'C' || bases[3] == 'A') << 1)
+                           | ((uint8_t)(bases[2] == 'G' || bases[2] == 'A') << 2)
+                           | ((uint8_t)(bases[2] == 'C' || bases[2] == 'A') << 3)
+                           | ((uint8_t)(bases[1] == 'G' || bases[1] == 'A') << 4)
+                           | ((uint8_t)(bases[1] == 'C' || bases[1] == 'A') << 5)
+                           | ((uint8_t)(bases[0] == 'G' || bases[0] == 'A') << 6)
+                           | ((uint8_t)(bases[0] == 'C' || bases[0] == 'A') << 7);
+    }
+    
+    // clear unused bits
+    int used_bits_last_byte = 2 * (bases_len % 4);
+    if (used_bits_last_byte)    
+        packed[num_bytes-1] &= bitmask8 (used_bits_last_byte);
+     
+    return num_bytes;
+}
+
+// convert a bytes containing a series of 2-bits, a string of A,C,G,T
+uint32_t str_unpack_bases (char *dst, bytes packed, uint32_t num_bases)
+{
+    char acgt[4] = { 'A', 'C', 'G', 'T' };
+
+    // first, full bytes (4 bases each)
+    for (uint32_t base_i=0; base_i < ROUNDDOWN4(num_bases); base_i += 4) {
+        uint8_t b = *packed++;
+        *dst++ = acgt[(b & 0b00000011)];
+        *dst++ = acgt[(b & 0b00001100) >> 2];
+        *dst++ = acgt[(b & 0b00110000) >> 4];
+        *dst++ = acgt[(b & 0b11000000) >> 6];
+    }
+
+    // final partial byte
+    uint32_t remaining_bases = num_bases % 4;
+    if (remaining_bases) {
+        uint8_t b = *packed++;
+        if (remaining_bases--) *dst++ = acgt[(b & 0b00000011)];
+        if (remaining_bases--) *dst++ = acgt[(b & 0b00001100) >> 2];
+        if (remaining_bases--) *dst++ = acgt[(b & 0b00110000) >> 4];
+    }    
+
+    return roundup_bits2bytes (num_bases * 2); // data consumed in bytes
+}

@@ -286,6 +286,9 @@ StrTextLong txtheader_get_txt_filename_from_section (CompIType comp_i)
 {
     Section sec;
 
+    if (z_sam_gencomp && (comp_i == SAM_COMP_PRIM || comp_i==SAM_COMP_DEPN)) 
+        comp_i = SAM_COMP_MAIN;
+
     if (flag.one_component && !flag.deep)
         sec = sections_get_comp_txt_header_sec (flag.one_component - 1);
     else 

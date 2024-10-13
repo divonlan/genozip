@@ -78,12 +78,12 @@ void buf_copy_do (VBlockP dst_vb, BufferP dst, ConstBufferP src,
 }   
 
 // removes a section from the buffer
-void buf_remove_do (BufferP buf, unsigned sizeof_item, uint64_t remove_start, uint64_t remove_len)
+void buf_remove_do (BufferP buf, unsigned sizeof_item, uint64_t remove_start, uint64_t remove_len, FUNCLINE)
 {
     if (!remove_len) return;
 
-    ASSERT (remove_start + remove_len <= buf->len, "Out of range: remove_start=%"PRIu64" + remove_len=%"PRIu64" > buf->len=%"PRIu64,
-            remove_start, remove_len, buf->len);
+    ASSERT (remove_start + remove_len <= buf->len, "called from %s:%u: Out of range: remove_start=%"PRIu64" + remove_len=%"PRIu64" > buf->len=%"PRIu64" buf=%s",
+            func, code_line, remove_start, remove_len, buf->len, buf_desc(buf).s);
 
     if (remove_len != buf->len) { // skip in common case of deleting entire buffer 
         uint64_t remove_start_byte = remove_start * sizeof_item;
@@ -101,8 +101,9 @@ void buf_add (BufferP buf, STRp(data)) // assumes buf->len is in bytes
     if (!data_len) return; // don't test for space (and "data" pointer) if length is 0
 
     ASSERT (buf_has_space (buf, data_len), 
-            "buf_add: buffer %s is out of space: len=%u size=%u data_len=%u",
-            buf_desc (buf).s, (uint32_t)buf->len, (uint32_t)buf->size, data_len);
+            "buf_add: buffer %s is out of space: len=%"PRIu64" size=%"PRIu64" data_len=%u",
+            buf_desc (buf).s, buf->len, (uint64_t)buf->size, data_len);
+
     buf_add_do (buf, data, data_len);
 }
 

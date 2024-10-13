@@ -70,6 +70,12 @@ typedef int32_t TaxonomyId;
 
 #define NO_CALLBACK NULL
 
+#define KB *((uint64_t)1<<10)
+#define MB *((uint64_t)1<<20)
+#define GB *((uint64_t)1<<30)
+#define TB *((uint64_t)1<<40)
+#define PB *((uint64_t)1<<50)
+
 typedef packed_enum { 
     NO_POOL=-1, 
     POOL_MAIN,  // used for all VBs, except non-pool VBs and BGZF VBs
@@ -122,9 +128,10 @@ typedef struct HuffmanChewer *HuffmanChewerP;
 typedef struct HuffmanCodes *HuffmanCodesP;
 
 typedef struct { char s[80];    } StrText;
-typedef struct { char s[1024];  } StrTextLong;
-typedef struct { char s[4096];  } StrTextSuperLong;
-typedef struct { char s[16384]; } StrTextMegaLong; 
+typedef struct { char s[1 KB];  } StrTextLong;
+typedef struct { char s[4 KB];  } StrTextSuperLong;
+typedef struct { char s[16 KB]; } StrTextMegaLong; 
+typedef struct { char s[128 KB]; } StrTextUltraLong; 
 
 #include "version.h" // must be after StrText definition
 
@@ -189,6 +196,8 @@ typedef int32_t PosType32;    // per VCF v4.3 spec 1.6.1
 #define MAX_POS32 ((PosType64)0x7fffffff)
 
 typedef int32_t LineIType;
+#define NO_LINE (-1)
+
 typedef const char *rom;      // "read-only memory"
 typedef const uint8_t *bytes; // read-only array of bytes
 
@@ -340,12 +349,6 @@ typedef int ThreadId;
 #define VER2(major,minor) (z_file->genozip_version > (major) || \
                            (z_file->genozip_version == (major) && (z_file->genozip_minor_ver >= (minor))))
 #define EXACT_VER(n) (z_file->genozip_version == (n))
-
-#define KB *((uint64_t)1<<10)
-#define MB *((uint64_t)1<<20)
-#define GB *((uint64_t)1<<30)
-#define TB *((uint64_t)1<<40)
-#define PB *((uint64_t)1<<50)
 
 // macros with arguments that evaluate only once 
 #define MIN_(a, b) ({ __typeof__(a) _a_=(a); __typeof__(b) _b_=(b); (_a_ < _b_) ? _a_ : _b_; }) // GCC / clang "statement expressions" extesion: https://gcc.gnu.org/onlinedocs/gcc/Statement-Exprs.html#Statement-Exprs
@@ -519,7 +522,7 @@ typedef enum { IfNotExact_ReturnLower, IfNotExact_ReturnHigher, IfNotExact_Retur
 #define STRasi(x,i) (n_##x##s-(i)), &x##s[i], &x##_lens[i] // subset strating from item i
 #define STRd(x)     x##_str, x##_len                   
 #define STRb(buf)   (buf).data, (buf).len                  
-#define STRb(buf)   (buf).data, (buf).len                  
+#define STRbt(type,buf) (type *)(buf).data, (buf).len                  
 #define STRi(x,i)   x##s[i], x##_lens[i]             
 #define qSTRi(x,i)  x##s[i], &x##_lens[i]             
 #define pSTRa(x)    &x, &x##_len                      
@@ -607,7 +610,7 @@ typedef enum { QNONE   = -6,
                                            char *recon, int32_t recon_len, rom prefixes, uint32_t prefixes_len)
 
 // called after reconstruction of an item, if CI1_ITEM_CB is specified
-#define CONTAINER_ITEM_CALLBACK(func) void func(VBlockP vb, ConstContainerItemP con_item, rom recon, uint32_t recon_len)
+#define CONTAINER_ITEM_CALLBACK(func) void func(VBlockP vb_, ConstContainerItemP con_item, rom recon, uint32_t recon_len)
 
 #define TXTHEADER_TRANSLATOR(func) void func (VBlockP comp_vb, BufferP txtheader_buf)
 

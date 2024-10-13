@@ -30,9 +30,12 @@
 // PIZ: dump bad vb to disk
 StrText txtfile_dump_vb (VBlockP vb, rom base_name, BufferP txt_data)
 {
+    if (!txt_data) 
+        return (StrText){"(txt_data=NULL)"};
+
     StrText dump_filename;
     
-    snprintf (dump_filename.s, sizeof (dump_filename.s), "%u.bad-recon%s", vb->vblock_i, file_plain_ext_by_dt (txt_file->data_type));
+    snprintf (dump_filename.s, sizeof (dump_filename.s), "%u.bad-recon%s", vb->vblock_i, (txt_file ? file_plain_ext_by_dt (txt_file->data_type) : ""));
 
     if (flag.is_windows) str_replace_letter (dump_filename.s, strlen(dump_filename.s), '/', '\\');
 
@@ -931,7 +934,8 @@ static bool txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb, bool *R2_vb_t
     else if (final_unconsumed_len == -1) {
         
         // case: segconf - segconf will try again, increasing the vb_size
-        if (segconf.running) {}
+        if (segconf.running && !txt_file->no_more_blocks)
+            {}
 
         // case: R2 doesn't have enough data to sync with R1 (confirmed by counting lines) get more data
         else if (IS_R2) {

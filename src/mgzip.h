@@ -92,7 +92,7 @@
     [CODEC_EMFL] = txt_file->max_mgzip_isize /* determined during discovery */ \
 }    
 
-typedef bool (*IsValidSize)(FileP, uint32_t proposed_isize, bool is_eof, bool *is_end_of_vb);
+typedef bool (*IsValidSize)(FileP, uint32_t proposed_isize, bool is_eof, bool discovering, bool *is_end_of_vb);
 
 // "no_bsize" codecs
 typedef struct { 
@@ -143,15 +143,16 @@ extern uint32_t mgzip_get_max_block_size (void);
 extern void inc_disk_gz_uncomp_or_trunc_(FileP file, uint64_t inc, FUNCLINE);
 #define inc_disk_gz_uncomp_or_trunc(file, inc) inc_disk_gz_uncomp_or_trunc_((file), (inc), __FUNCLINE)
 
-// codec size validators
-extern bool il1m_is_valid_isize (FileP file, uint32_t proposed_isize, bool is_eof, bool *is_end_of_vb);
-extern bool mgsp_is_valid_isize (FileP file, uint32_t proposed_isize, bool is_eof, bool *is_end_of_vb);
-extern bool emfl_is_valid_isize (FileP file, uint32_t proposed_isize, bool is_eof, bool *is_end_of_vb);
-extern bool emvl_is_valid_isize (FileP file, uint32_t proposed_isize, bool is_eof, bool *is_end_of_vb);
+// codec size validators for no-bsize codecs
+extern bool il1m_is_valid_isize (FileP file, uint32_t proposed_isize, bool is_eof, bool discovering, bool *is_end_of_vb);
+extern bool mgsp_is_valid_isize (FileP file, uint32_t proposed_isize, bool is_eof, bool discovering, bool *is_end_of_vb);
+extern bool emfl_is_valid_isize (FileP file, uint32_t proposed_isize, bool is_eof, bool discovering, bool *is_end_of_vb);
+extern bool emvl_is_valid_isize (FileP file, uint32_t proposed_isize, bool is_eof, bool discovering, bool *is_end_of_vb);
 
 // library / level discovery
 extern void bgzf_initialize_discovery (FileP file);
 extern void bgzf_finalize_discovery (void);
+extern bool bgzf_read_and_uncomp_final_block (rom filename, qSTRp(uncomp));
 
 // PIZ side
 extern FlagsMgzip mgzip_piz_calculate_mgzip_flags (CompIType comp_i, Codec src_codec);

@@ -78,7 +78,7 @@ typedef struct {
     uint64_t vb_position_txt_file;/* ZIP/PIZ: position of this VB's data in the plain text file (without source compression): ZIP: as read before any ZIP-side modifications ; PIZ: as reconstructed with all modifications */\
     uint64_t vb_mgzip_i;          /* ZIP: index into txt_file->mgzip_isizes of the first MGZIP block of this VB */ \
     int32_t recon_size;           /* ZIP: actual size of txt if this VB is reconstructed in PRIMARY coordinates (inc. as ##primary_only in --luft) */\
-                                  /* PIZ: expected reconstruction size in the coordinates of reconstruction */\
+                                  /* PIZ: expected reconstruction size */\
     int32_t txt_size;             /* ZIP: original size of of text data read from the file */ \
     uint32_t longest_line_len;    /* length of longest line of text line in this vb. calculated by seg_all_data_lines */\
     uint32_t sample_i;            /* ZIP/PIZ: VCF: current sample in line (0-based) */ \

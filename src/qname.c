@@ -440,7 +440,7 @@ QnameTestResult qname_test_flavor (STRp(qname), QType q, QnameFlavor qfs, bool q
         return QTR_FIXED_LEN_MISMATCH;
 
     if (qfs->is_mated && qname[qname_len-1] != '1' && qname[qname_len-1] != '2') 
-        return QTR_NO_MATE;
+        return QTR_NO_MATE; // quick check
 
     str_split_by_container (qname, qname_len, &qfs->con, qfs->con_prefix, qfs->con_prefix_len, item, quiet ? NULL : qfs->name);
     if (!n_items) 
@@ -466,6 +466,9 @@ QnameTestResult qname_test_flavor (STRp(qname), QType q, QnameFlavor qfs, bool q
         if (!qfs->is_hex[*item_i] && !str_is_int (STRi(item, *item_i))) 
             return QTR_BAD_INTEGER;
 
+    if (qfs->is_mated && (item_lens[n_items-1] != 1 || (*items[n_items-1] != '1' && *items[n_items-1] != '2')))
+        return QTR_BAD_MATE; // mate is expected to be "1" or "2" - better check than NO_MATE - after splitting
+    
     if (!qfs->validate_flavor (STRas(item)))
         return QTR_FAILED_VALIDATE_FUNC;
 
@@ -710,7 +713,7 @@ bool qname_seg (VBlockP vb, QType q, STRp (qname), unsigned add_additional_bytes
         return true;
     } 
 
-    if (!success) {
+    if (!success) { 
         tokenizer_seg (VB, qname_ctx, STRa(qname), 
                        VB_DT(FASTQ) ? sep_with_space : sep_without_space, 
                        add_additional_bytes);
@@ -720,11 +723,11 @@ bool qname_seg (VBlockP vb, QType q, STRp (qname), unsigned add_additional_bytes
             if (VB_DT(SAM) || VB_DT(BAM)) q = QNAME1; 
 
             // collect the first 6 qnames / q2names, if flavor is unknown OR not successful in segging by flavor 
-            if (segconf.n_unk_flav_qnames[q] < NUM_COLLECTED_WORDS) { // unrecognized flavor
-                memcpy (segconf.unk_flav_qnames[q][segconf.n_unk_flav_qnames[q]], qname, MIN_(qname_len, UNK_QNANE_LEN));
+            if (segconf.n_1st_flav_qnames[q] < NUM_COLLECTED_WORDS) { // unrecognized flavor
+                memcpy (segconf.unk_flav_qnames[q][segconf.n_1st_flav_qnames[q]], qname, MIN_(qname_len, UNK_QNANE_LEN));
         
-                if (!segconf.n_unk_flav_qnames[q] || memcmp (segconf.unk_flav_qnames[q][segconf.n_unk_flav_qnames[q]], segconf.unk_flav_qnames[q][segconf.n_unk_flav_qnames[q]-1], UNK_QNANE_LEN))
-                    segconf.n_unk_flav_qnames[q]++; // advance iff qname is different than previous line (not always the case if collated)
+                if (!segconf.n_1st_flav_qnames[q] || memcmp (segconf.unk_flav_qnames[q][segconf.n_1st_flav_qnames[q]], segconf.unk_flav_qnames[q][segconf.n_1st_flav_qnames[q]-1], UNK_QNANE_LEN))
+                    segconf.n_1st_flav_qnames[q]++; // advance iff qname is different than previous line (not always the case if collated)
             }
         }
     }

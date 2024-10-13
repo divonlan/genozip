@@ -111,7 +111,7 @@ static inline bool sam_seg_SA_field_is_line_matches_aln (VBlockSAMP vb, ZipDataL
         !str_get_int (STRi(item, SA_NM),   &aln_nm)   || aln_nm   != dl->NM) return false; // note: if NM doesn't exist in dl, it is taken as 0. Eg novoalign omits the NM:i field if is is 0
 
     // cigar
-    return str_issame_(line_cigar(dl), dl->CIGAR.len, STRi(item, SA_CIGAR));
+    return str_issame_(STRacigar(dl), STRi(item, SA_CIGAR));
 }
 
 static inline void sam_seg_set_depn_clip_hard (VBlockSAMP vb)
@@ -164,7 +164,7 @@ static bool sam_seg_SA_field_is_depn_from_prim (VBlockSAMP vb, ZipDataLineSAMP d
     // Step 2: verify that one of the alignments of the prim SA matches the depn line
 
     // temporarily replace H with S in this (depn) line's CIGAR
-    HtoS htos = sam_cigar_H_to_S (vb, line_cigar(dl), dl->CIGAR.len, false); // points to txt_data in SAM, line_textual_cigars in BAM
+    HtoS htos = sam_cigar_H_to_S (vb, STRacigar(dl), false); // points to txt_data in SAM, line_textual_cigars in BAM
 
     // to do: improve effeciency by testing first the predicted alignment (vb->line-vb->saggy_line_i-1)
     int depn_i=0; // index of depn alignment within prim SA
@@ -303,7 +303,7 @@ void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(sa), unsigned add_byt
         // use SA.local to store number of alignments in this SA Group (inc. primary)
         dyn_int_append (VB, ctx, num_alns, 0); // this is always LT_UINT8 or LT_UINT16, because sam_seg_is_gc_line->sam_seg_prim_add_sag only makes a line into PRIM if num_alns <= MAX_SA_NUM_ALNS
 
-        // PRIM: Remove the container b250 - Reconstruct will consume the SPECIAL_SAG, and sam_piz_load_sags will
+        // PRIM: Remove the container b250 - Reconstruct will consume the SPECIAL_pull_from_sag, and sam_piz_load_sags will
         // consume OPTION_SA_* (to which we have already added the main fields of this line - RNAME, POS...)
         b250_seg_remove_last (VB, ctx, WORD_INDEX_NONE);
 

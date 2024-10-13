@@ -10,8 +10,36 @@
 #include "lookback.h"
 #include "zip_dyn_int.h"
 #include "context.h"
+#include "huffman.h"
 
 // fields used by STARsolo and 10xGenomics cellranger. Some are SAM-standard and some not.
+
+// ZIP w/ IS_SAG_SOLO: called after segconf to produce Huffman for Solo fields 
+void sam_produce_solo_huffmans (VBlockSAMP vb)
+{
+    for (int tag_i = 0; tag_i < NUM_SOLO_TAGS; tag_i++) 
+        huffman_start_chewing (solo_props[tag_i].did_i, 0, 0, 0);
+
+    // note: outer-loop on lines and inner of tags for better cpu caching of txt_data and vb->lines
+    for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) 
+        for (int tag_i = 0; tag_i < NUM_SOLO_TAGS; tag_i++) {
+            TxtWord w = DATA_LINE(line_i)->solo_z_fields[tag_i];
+            if (w.len)
+                huffman_chew_one_sample (solo_props[tag_i].did_i, STRtxt(w), false);
+        }        
+
+    for (int tag_i = 0; tag_i < NUM_SOLO_TAGS; tag_i++) 
+        huffman_produce_compressor (solo_props[tag_i].did_i, (bool[256]){[32 ... 126] = true});
+}
+
+// ZIP main thread: writing SEC_HUFFMAN global sections
+void sam_compress_solo_huffman_sections (void)
+{
+    if (!IS_SAG_SOLO) return;
+
+    for (int tag_i = 0; tag_i < NUM_SOLO_TAGS; tag_i++) 
+        huffman_compress_section (solo_props[tag_i].did_i);
+}
 
 // update context tag names if this file has UB/UR/UY which are aliased to BX/RX/QX
 void sam_segconf_retag_UBURUY (void)
@@ -79,6 +107,27 @@ static void sam_seg_CB_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(cb), un
         seg_add_to_local_string (VB, channel_ctx, STRa(cb), LOOKUP_SIMPLE, add_bytes); // requires no_stons
 }
 
+bytes sam_solo_sag_data (VBlockSAMP vb, SoloTags solo)
+{
+    // index of compressed data of field is aln index + comp_len of all previous fields of this alignment
+    uint64_t index = ((uint64_t)vb->solo_aln->index_lo) | (((uint64_t)vb->solo_aln->index_hi) << 32);
+    for (SoloTags i=0; i < solo; i++)
+        index += vb->solo_aln->field_comp_len[i];
+    
+    return B8(z_file->solo_data, index);
+}
+
+bool sam_can_seg_depn_solo_against_sag (VBlockSAMP vb, Did did_i, SoloTags solo, STRp(str))
+{
+    if (!vb->solo_aln || // non-NULL only if vb is DEPN and IS_SAG_SOLO and vb->sag is set
+        vb->solo_aln->field_uncomp_len[solo] != str_len) return false;
+
+    char uncomp[str_len];
+    huffman_uncompress (did_i, sam_solo_sag_data (vb, solo), uncomp, str_len);
+
+    return !memcmp (str, uncomp, str_len);
+}
+
 void sam_seg_CB_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(cb), unsigned add_bytes)
 {
     START_TIMER;
@@ -88,7 +137,7 @@ void sam_seg_CB_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(cb), unsigned add_byt
     if (segconf.running && !segconf.CB_con.repeats) 
         sam_seg_CB_Z_segconf (vb, STRa(cb));
 
-    if (IS_DEPN(vb) && vb->sag && IS_SAG_SOLO && str_issame_(STRa(cb), STRBw(z_file->solo_data, vb->solo_aln->word[SOLO_CB])))
+    if (sam_can_seg_depn_solo_against_sag (vb, OPTION_CB_Z, SOLO_CB, STRa(cb)))
         sam_seg_against_sa_group (vb, CTX(OPTION_CB_Z), add_bytes);
 
     else
@@ -127,7 +176,7 @@ void sam_seg_CR_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(cr), unsigned add_byt
 
     dl->solo_z_fields[SOLO_CR] = TXTWORD(cr);
 
-    if (IS_DEPN(vb) && vb->sag && IS_SAG_SOLO && str_issame_(STRa(cr), STRBw(z_file->solo_data, vb->solo_aln->word[SOLO_CR])))
+    if (sam_can_seg_depn_solo_against_sag (vb, OPTION_CR_Z, SOLO_CR, STRa(cr)))
         sam_seg_against_sa_group (vb, CTX(OPTION_CR_Z), add_bytes);
 
     // copy CB, and if different than CB - xor against it
@@ -177,7 +226,7 @@ bool sam_seg_barcode_qual (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, SoloTag
     }
 
     // seg against sag
-    if (IS_DEPN(vb) && vb->sag && IS_SAG_SOLO && str_issame_(STRa(qual), STRBw(z_file->solo_data, vb->solo_aln->word[solo]))) 
+    if (sam_can_seg_depn_solo_against_sag (vb, did_i, solo, STRa(qual)))
         sam_seg_against_sa_group (vb, CTX(did_i), add_bytes);
     
     // seg as an array - with items in local
@@ -247,7 +296,7 @@ void sam_seg_RX_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(rx), unsigned add_byt
 
     dl->solo_z_fields[SOLO_RX] = TXTWORD(rx);
 
-    if (IS_DEPN(vb) && vb->sag && IS_SAG_SOLO && str_issame_(STRa(rx), STRBw(z_file->solo_data, vb->solo_aln->word[SOLO_RX]))) 
+    if (sam_can_seg_depn_solo_against_sag (vb, OPTION_RX_Z, SOLO_RX, STRa(rx)))
         sam_seg_against_sa_group (vb, CTX(OPTION_RX_Z), add_bytes);
 
     else if (segconf.has_agent_trimmer)                               // Agilent case - expected to be predictable from ZA:Z and ZB:B, so no need to mate
@@ -273,7 +322,7 @@ void sam_seg_BX_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(bx), unsigned add_byt
 
     dl->solo_z_fields[SOLO_BX] = TXTWORD(bx);
 
-    if (IS_DEPN(vb) && vb->sag && IS_SAG_SOLO && str_issame_(STRa(bx), STRBw(z_file->solo_data, vb->solo_aln->word[SOLO_BX])))
+    if (sam_can_seg_depn_solo_against_sag (vb, OPTION_BX_Z, SOLO_BX, STRa(bx)))
         sam_seg_against_sa_group (vb, CTX(OPTION_BX_Z), add_bytes);
 
     else
@@ -292,7 +341,7 @@ void sam_seg_QX_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qx), unsigned add_byt
 
     dl->solo_z_fields[SOLO_QX] = TXTWORD(qx);
 
-    if (IS_DEPN(vb) && vb->sag && IS_SAG_SOLO && str_issame_(STRa(qx), STRBw(z_file->solo_data, vb->solo_aln->word[SOLO_QX]))) {
+    if (sam_can_seg_depn_solo_against_sag (vb, OPTION_QX_Z, SOLO_QX, STRa(qx))) {
         sam_seg_against_sa_group (vb, CTX(OPTION_QX_Z), add_bytes);
         dl->dont_compress_QX = true;
     }
@@ -332,7 +381,7 @@ void sam_seg_BC_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(bc), unsigned add_byt
 
     dl->solo_z_fields[SOLO_BC] = TXTWORD(bc);
 
-    if (IS_DEPN(vb) && vb->sag && IS_SAG_SOLO && str_issame_(STRa(bc), STRBw(z_file->solo_data, vb->solo_aln->word[SOLO_BC]))) 
+    if (sam_can_seg_depn_solo_against_sag (vb, OPTION_BC_Z, SOLO_BC, STRa(bc)))
         sam_seg_against_sa_group (vb, CTX(OPTION_BC_Z), add_bytes);
 
     else 

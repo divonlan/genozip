@@ -12,6 +12,7 @@
 #include "md5.h"
 #include "random_access.h"
 #include "chrom.h"
+#include "huffman.h"
 #include "htscodecs/rANS_static4x16.h"
 
 static const bool cigar_valid_op[256] = { ['M']=true, ['I']=true, ['D']=true, ['N']=true, ['S']=true, ['H']=true, ['P']=true, ['=']=true, ['X']=true }; 
@@ -153,7 +154,9 @@ static uint32_t sam_cigar_get_seq_len_plus_H (STRp(cigar))
     return seq_len;
 }
 
-void sam_cigar_binary_to_textual (VBlockSAMP vb, uint16_t n_cigar_op, const BamCigarOp *cigar, BufferP textual_cigar /* out */)
+void sam_cigar_binary_to_textual (VBlockSAMP vb, const BamCigarOp *cigar, uint16_t n_cigar_op, 
+                                  bool reverse, // reverse the cigar 15M3I20S -> 20S3I15M
+                                  BufferP textual_cigar /* out */)
 {
     START_TIMER;
 
@@ -182,10 +185,16 @@ void sam_cigar_binary_to_textual (VBlockSAMP vb, uint16_t n_cigar_op, const BamC
 
     char *next = BAFTc (*textual_cigar);
 
-    for (uint16_t i=0; i < n_cigar_op; i++) {
-        next += str_int_fast (cigar[i].n, next);
-        *next++ = cigar_op_to_char[cigar[i].op];
-    }
+    if (!reverse)
+        for (int i=0; i < n_cigar_op; i++) {
+            next += str_int_fast (cigar[i].n, next);
+            *next++ = cigar_op_to_char[cigar[i].op];
+        }
+    else
+        for (int i=n_cigar_op-1; i >= 0 ; i--) {
+            next += str_int_fast (cigar[i].n, next);
+            *next++ = cigar_op_to_char[cigar[i].op];
+        }
 
     *next = 0; // nul terminate
     textual_cigar->len32 = BNUM (*textual_cigar, next);
@@ -200,7 +209,7 @@ finish:
 rom display_binary_cigar (VBlockSAMP vb)
 {
     buf_free (vb->textual_cigar); // we might destroy needed data, but its ok as this is only called in an error condition
-    sam_cigar_binary_to_textual (vb, vb->binary_cigar.len32, B1ST(BamCigarOp, vb->binary_cigar), &vb->textual_cigar);
+    sam_cigar_binary_to_textual (vb, B1ST(BamCigarOp, vb->binary_cigar), vb->binary_cigar.len32, false, &vb->textual_cigar);
     return B1STc (vb->textual_cigar);
 }
 
@@ -260,7 +269,7 @@ bool sam_cigar_textual_to_binary (VBlockSAMP vb, STRp(cigar), BufferP binary_cig
 CigarStr dis_binary_cigar (VBlockSAMP vb, const BamCigarOp *cigar, uint32_t cigar_len/*in ops*/, BufferP working_buf)
 {
     CigarStr out = {};
-    sam_cigar_binary_to_textual (vb, cigar_len, cigar, working_buf);
+    sam_cigar_binary_to_textual (vb, STRa(cigar), false, working_buf);
     uint32_t len = MIN_(working_buf->len32, sizeof(out.s)-1);
     memcpy (out.s, working_buf->data, len);
     out.s[len] = 0;
@@ -436,10 +445,8 @@ bool sam_cigar_reverse (char *dst, STRp(cigar))
         
         if (!num_digits) return false;
 
-        memcpy (dst, c+1, num_digits);
-        dst[num_digits] = cigar_op;
-        
-        dst += num_digits + 1;
+        dst = mempcpy (dst, c+1, num_digits);
+        *dst++ = cigar_op;
     }
 
     return true;
@@ -597,6 +604,12 @@ bool sam_seg_0A_cigar_cb (VBlockP vb, ContextP ctx, STRp (cigar), uint32_t repea
 {
     // note: -1==prim cigar - cannot squank as it is used to determine seq_len
     sam_seg_other_CIGAR (VB_SAM, ctx, STRa(cigar), repeat != (uint32_t)-1, cigar_len);
+
+    // update if load (in PIZ) might compress (see sam_load_groups_add_aln_cigar)
+    // note: this might overstate compression length: some snips might end up being converted to LOOKUP later, if singletons
+    if (ctx->did_i == OPTION_SA_CIGAR && IS_PRIM(vb) && huffman_exists (SAM_CIGAR) && 
+        (ctx->last_snip[0] == SNIP_LOOKUP || (ctx->last_snip[0] == SNIP_SPECIAL && ctx->last_snip[1] == SAM_SPECIAL_SQUANK)))
+        VB_SAM->comp_cigars_len += huffman_compress_len (SAM_CIGAR, STRa(cigar)); 
 
     return true;
 }
@@ -767,7 +780,7 @@ void sam_seg_CIGAR (VBlockSAMP vb, ZipDataLineSAMP dl, uint32_t last_cigar_len, 
     if (!IS_BAM_ZIP) // SAM
         dl->CIGAR = (TxtWord){ .index = BNUMtxt (vb->last_cigar), .len = last_cigar_len }; // in SAM (but not BAM) vb->last_cigar points into txt_data
 
-    else if (line_textual_cigars_used && !segconf.running) { // BAM
+    else if (line_textual_cigars_used) { // BAM
         dl->CIGAR =(TxtWord){ .index = vb->line_textual_cigars.len32, .len = vb->textual_cigar.len32 }; // in BAM dl->CIGAR points into line_textual_cigars
         buf_append_buf (VB, &vb->line_textual_cigars, &vb->textual_cigar, char, "line_textual_cigars");
     }
@@ -831,7 +844,16 @@ void sam_seg_CIGAR (VBlockSAMP vb, ZipDataLineSAMP dl, uint32_t last_cigar_len, 
     if (segconf.running) {
         segconf.sam_cigar_len += last_cigar_len;
         segconf.sam_seq_len   += seq_data_len + vb->hard_clip[0] + vb->hard_clip[1]; // including hard clips in the calculation, so DEPN lines with hard clips don't ruin the average
+
+        // create huffman needed for PIZ load if SAG_BY_SA. But we don't yet know if this file is SAG_BY_SA so do always
+        if (vb->line_i == 0)
+            huffman_start_chewing (SAM_CIGAR, 0, 0, 0);
+
+        // note: chewing every segconf cigar is not a perfect statistical representation of the data to be compressed, 
+        // as in sam_load_groups_add_aln_cigar we only compress CIGARs that are LOOKUP or SQUANK. But good enough.
+        huffman_chew_one_sample (SAM_CIGAR, STRacigar(dl), false);
     }
+
     else if (dl->POS >= 1 && vb->ref_consumed)
         sam_cigar_update_random_access (vb, dl);
 
@@ -875,7 +897,7 @@ void sam_cigar_seg_MC_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(mc), uint32_t a
 
     if (sam_has_mate && 
         (!IS_BAM_ZIP || line_textual_cigars_used) && // there might be a rare edge case there are no MC:Z lines in the segconf vb, but are after - in which case, in depn/prim VBs, we won't have line_textual_cigars
-        str_issame_(line_cigar (mate_dl), mate_dl->CIGAR.len, STRa(mc)))
+        str_issame_(STRacigar(mate_dl), STRa(mc)))
         seg_by_ctx (VB, STRa(copy_mate_CIGAR_snip), channel_ctx, add_bytes); // copy MC from earlier-line mate CIGAR
     
     // case: long CIGAR and SEQ and CIGAR are not missing, with the "standard" sam_seq_len (normally only works for short reads)
@@ -987,10 +1009,10 @@ SPECIAL_RECONSTRUCTOR_DT (sam_cigar_special_CIGAR)
     // BAM - output vb->binary_cigar generated in sam_cigar_analyze
     else if ((OUT_DT(BAM) || OUT_DT(CRAM)) && !vb->preprocessing) {
         // now we have the info needed to reconstruct bin, l_read_name, n_cigar_op and l_seq
-        BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)Btxt (vb->line_start);
+        BAMAlignmentFixedP alignment = (BAMAlignmentFixedP)Btxt (vb->line_start);
         alignment->l_read_name = BAFTtxt - &alignment->read_name[0];
-        PUT_UINT16_(alignment, n_cigar_op, vb->binary_cigar.len);
-        PUT_UINT32_(alignment, l_seq, (snip[0] == '-') ? 0 : vb->seq_len);
+        alignment->n_cigar_op = LTEN16 (vb->binary_cigar.len);
+        alignment->l_seq = LTEN32 ((snip[0] == '-') ? 0 : vb->seq_len);
 
         LTEN_u32_buf (&vb->binary_cigar, NULL);
         RECONSTRUCT (vb->binary_cigar.data, vb->binary_cigar.len * sizeof (BamCigarOp));
@@ -1005,7 +1027,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_cigar_special_CIGAR)
             PosType32 last_pos = last_flags.unmapped ? pos : (pos + vb->ref_consumed - 1);
             
             uint16_t bin = bam_reg2bin (pos, last_pos); // zero-based, half-closed half-open [start,end)
-            PUT_UINT16_(alignment, bin, bin); // override the -1 previously set by the translator
+            alignment->bin = LTEN16 (bin); // override the -1 previously set by the translator
         }
     }
     
@@ -1048,8 +1070,8 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_COPY_BUDDY_CIGAR)
 #endif
 
     // convert binary CIGAR to textual MC:Z
-    uint32_t n_cigar_op = bam_cigar_len / sizeof (uint32_t);
-    sam_cigar_binary_to_textual (vb, n_cigar_op, (BamCigarOp *)bam_cigar, &vb->txt_data);
+    bam_cigar_len /= sizeof (uint32_t);
+    sam_cigar_binary_to_textual (vb, (BamCigarOp *)STRa(bam_cigar), false, &vb->txt_data);
 
     return NO_NEW_VALUE; 
 }
@@ -1060,32 +1082,26 @@ void sam_reconstruct_main_cigar_from_sag (VBlockSAMP vb, bool do_htos, ReconType
     // we generate the CIGAR in vb->scratch. sam_cigar_special_CIGAR will reconstruct it (possibly binary) in txt_data. 
     ASSERTNOTINUSE (vb->scratch);
     const SAAln *a = vb->sa_aln;
-    rom cigar_snip;
     uint32_t cigar_len;
 
     // case: cigar is stored in dict 
     if (a->cigar.piz.is_word) {
+        rom cigar_snip;
         ctx_get_snip_by_word_index_do (CTX(OPTION_SA_CIGAR), a->cigar.piz.index, &cigar_snip, &cigar_len, __FUNCLINE);
         buf_add_more (VB, &vb->scratch, cigar_snip, cigar_len, "scratch");
     }
 
     // case: cigar is stored in local  
     else {
-        cigar_len = a->cigar.piz.len_lo | (a->cigar.piz.len_hi << ALN_CIGAR_LEN_BITS_LO);
-        buf_alloc (vb, &vb->scratch, 0, cigar_len,  char, 0, "scratch");
+        cigar_len = a->cigar.piz.len;
+        buf_alloc (vb, &vb->scratch, 0, cigar_len, char, 0, "scratch");
 
-        // case: compressed
-        if (a->cigar.piz.comp_len) {      
-            uint8_t *comp = B8(z_file->sag_cigars, a->cigar.piz.index);
-            uint32_t uncomp_len = cigar_len;
-            void *success = rans_uncompress_to_4x16 (VB, comp, a->cigar.piz.comp_len,
-                                                     B1ST8(vb->scratch), &uncomp_len); 
-            ASSPIZ (success && uncomp_len == cigar_len, "rans_uncompress_to_4x16 failed to decompress an SA Aln CIGAR data: grp_i=%u aln_i=%"PRIu64" success=%u comp_len=%u uncomp_len=%u expected_uncomp_len=%u cigar_index=%"PRIu64" comp[10]=%.10s",
-                    ZGRP_I(vb->sag), ZALN_I(a), !!success, (uint32_t)a->cigar.piz.comp_len, uncomp_len, cigar_len, (uint64_t)a->cigar.piz.index, str_to_hex (comp, a->cigar.piz.comp_len).s);
-        }
+        // huffman_uncompress_or_copy (SAM_CIGAR, B8(z_file->sag_cigars, a->cigar.piz.index), B1STc(vb->scratch), cigar_len);
 
-        // case: not compressed
-        else 
+        if (huffman_exists (SAM_CIGAR)) 
+            huffman_uncompress (SAM_CIGAR, B8(z_file->sag_cigars, a->cigar.piz.index), B1STc(vb->scratch), cigar_len);
+
+        else // not compressed
             memcpy (B1ST8(vb->scratch), Bc(z_file->sag_cigars, a->cigar.piz.index), cigar_len);
     }
 
@@ -1114,16 +1130,12 @@ uint32_t sam_reconstruct_SA_cigar_from_SA_Group (VBlockSAMP vb, SAAln *a, bool a
     }
 
     else {
-        cigar_len = a->cigar.piz.len_lo | (a->cigar.piz.len_hi << ALN_CIGAR_LEN_BITS_LO);
+        cigar_len = a->cigar.piz.len;
 
-        if (a->cigar.piz.comp_len) { // compressed
-            uint32_t uncomp_len = cigar_len;
-    
-            void *success = rans_uncompress_to_4x16 (VB, B8(z_file->sag_cigars, a->cigar.piz.index), a->cigar.piz.comp_len,
-                                                     BAFT(uint8_t, vb->txt_data), &uncomp_len); 
-            ASSPIZ (success && uncomp_len == cigar_len, "rans_uncompress_to_4x16 failed to decompress an SA Aln CIGAR data: grp_i=%u aln_i=%"PRIu64" success=%u comp_len=%u uncomp_len=%u expected_uncomp_len=%u cigar_index=%"PRIu64,
-                    ZGRP_I(vb->sag), ZALN_I(a), !!success, (uint32_t)a->cigar.piz.comp_len, uncomp_len, cigar_len, (uint64_t)a->cigar.piz.index);
+        //xxx huffman_uncompress_or_copy (SAM_CIGAR, B8(z_file->sag_cigars, a->cigar.piz.index), BAFTtxt, cigar_len);
 
+        if (huffman_exists (SAM_CIGAR)) { 
+            huffman_uncompress (SAM_CIGAR, B8(z_file->sag_cigars, a->cigar.piz.index), BAFTtxt, cigar_len);
             Ltxt += cigar_len;
         }
 
@@ -1171,7 +1183,7 @@ rom sam_piz_display_aln_cigar (const SAAln *a)
     memset (cigar, 0, sizeof(cigar));
 
     if (a->cigar.piz.is_word) {
-        decl_zctx (VER(15) ? OPTION_OC_Z/*alias since v15*/ : OPTION_SA_CIGAR);
+        decl_zctx (OPTION_SA_CIGAR);
 
         if (a->cigar.piz.index < zctx->word_list.len) {
             STR(cigarS);
@@ -1179,19 +1191,16 @@ rom sam_piz_display_aln_cigar (const SAAln *a)
             memcpy (cigar, cigarS, MIN_(cigarS_len, SA_CIGAR_DISPLAY_LEN));
         }
         else {
-            snprintf (cigar, sizeof (cigar), "BAD_WORD(%s.len=%u)", zctx->tag_name, zctx->word_list.len32);
+            snprintf (cigar, sizeof (cigar), "BAD_WORD(%.*s.len=%u)", MAX_TAG_LEN, zctx->tag_name, zctx->word_list.len32);
         }
     }
 
     else {
-        uint32_t cigar_len = ALN_CIGAR_LEN(a);
-        uint32_t uncomp_len = MIN_(SA_CIGAR_DISPLAY_LEN, cigar_len); // possibly shorter than original cigar
+        uint32_t uncomp_len = MIN_(SA_CIGAR_DISPLAY_LEN, (uint32_t)a->cigar.piz.len); // possibly shorter than original cigar
 
-        if (a->cigar.piz.comp_len) { // compressed
-            void *success = rans_uncompress_to_4x16 (evb, B8(z_file->sag_cigars, a->cigar.piz.index), a->cigar.piz.comp_len,
-                                                    (uint8_t *)cigar, &uncomp_len); 
-            if (success && uncomp_len) cigar[uncomp_len] = '\0';
-        }
+        // huffman_uncompress_or_copy (SAM_CIGAR, B8(z_file->sag_cigars, a->cigar.piz.index), cigar, uncomp_len);
+        if (huffman_exists (SAM_CIGAR))  // compressed
+            huffman_uncompress (SAM_CIGAR, B8(z_file->sag_cigars, a->cigar.piz.index), cigar, uncomp_len);
 
         else // not compressed
             memcpy (cigar, B8(z_file->sag_cigars, a->cigar.piz.index), uncomp_len);
@@ -1200,43 +1209,61 @@ rom sam_piz_display_aln_cigar (const SAAln *a)
     return cigar;
 }
 
+// Deep PIZ: collapse X,= to M ahead of storing the textual cigar in deep_ents
+void sam_cigar_collapse_eqx_to_M (BufferP cigar)
+{
+    rom c = B1STc (*cigar);
+    rom after = BAFTc (*cigar);
+    char *dst = (char *)c;
+    uint32_t M_len = 0;
+
+    while (c < after) {
+        ASSERT (IS_DIGIT(*c), "bad cigar: %.*s", STRfb(*cigar)); // must have at least one digit (may be 0)
+
+        uint32_t n=0; 
+        while (IS_DIGIT(*c) && (c < after-1)) { 
+            n = 10*n + *c - '0'; 
+            c++; 
+        }
+        
+        if (*c == '=' || *c == 'X' || *c == 'M')
+            M_len++;                    
+
+        else {
+            if (M_len) {
+                dst += str_int_fast (M_len, dst);
+                *dst++ = 'M';
+                M_len = 0;
+            }
+            
+            *dst += str_int_fast (n, dst);
+            *dst++ = *c;
+        }
+
+        c++;
+    }
+
+    if (M_len) {
+        dst += str_int_fast (M_len, dst);
+        *dst++ = 'M';
+    }
+
+    cigar->len32 = BNUM (*cigar, dst); 
+}
+
+
 //---------------------------------------------------------------------------------------------------
 // CIGAR signature
 // Note: the signature is in-memory and is not written to the genozip file, so can be changed at will
 //---------------------------------------------------------------------------------------------------
 
-CigarSignature cigar_sign (VBlockSAMP vb, 
-                           ZipDataLineSAMP dl, // set if field originates from SAM_CIGAR, NULL if it originates from SA:Z 
-                           STRp(cigar))
+uint64_t cigar_sign (VBlockSAMP vb, 
+                     ZipDataLineSAMP dl, // set if field originates from SAM_CIGAR, NULL if it originates from SA:Z 
+                     STRp(cigar))
 {
-    CigarSignature sig;
-
     StrText abbrev_cigar; // memory allocation for abbreviated cigar, if needed
     if (dl && segconf.SA_CIGAR_abbreviated == yes) 
-        cigar_abbreviate (pSTRa(cigar), dl->SEQ.len, vb->ref_consumed, vb->soft_clip, vb->hard_clip, &abbrev_cigar);
+        cigar_abbreviate (pSTRa(cigar), dl->SEQ.len, vb->ref_consumed, vb->soft_clip, vb->hard_clip, &abbrev_cigar); // also modifies cigar pointer to point to abbrev_cigar
 
-    // case: cigar is not longer than the signature - the cigar IS the signature
-    if (cigar_len <= CIGAR_SIG_LEN) {
-        memcpy (sig.bytes, cigar, cigar_len);
-        memset (sig.bytes + cigar_len, 0, CIGAR_SIG_LEN - cigar_len);
-    }
-
-    // case: long cigar - use MD5 (note: I tried using Adler32 and got contention in real data)
-    else {
-        Digest digest = md5_do (STRa(cigar));
-        memcpy (sig.bytes, digest.bytes, CIGAR_SIG_LEN);
-    }
-
-    return sig;
+    return crc64 (0, (bytes)STRa(cigar));
 }
-
-bool cigar_is_same_signature (CigarSignature sig1, CigarSignature sig2) 
-{
-    return !memcmp (sig1.bytes, sig2.bytes, CIGAR_SIG_LEN);
-}
-
-StrText cigar_display_signature (CigarSignature sig)
-{    
-    return str_to_hex (sig.bytes, CIGAR_SIG_LEN);
-}
-

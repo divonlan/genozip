@@ -207,7 +207,7 @@ void vcf_seg_FORMAT_GT_finalize_line (VBlockVCFP vb, uint32_t line_n_samples)
 //------------------
 
 // return dosage derived from GT - equivalent to dosage calculation in vcf_seg_FORMAT_GT
-int vcf_piz_GT_get_last_dosage (VBlockP vb)
+int vcf_piz_GT_get_last_dosage (VBlockVCFP vb)
 {
     STRlast(gt, FORMAT_GT);
     int dosage = 0;

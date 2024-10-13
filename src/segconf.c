@@ -507,6 +507,9 @@ void segconf_calculate (void)
     if (!IS_REF_EXTERNAL && !IS_REF_EXT_STORE && flag.aligner_available)
         flag.aligner_available = false;
 
+    // more finalization, after flags are restored, and optimize flags are set
+    DT_FUNC (txt_file, zip_after_segconf)(vb); 
+
 done:
     vb_destroy_vb (&vb);
 

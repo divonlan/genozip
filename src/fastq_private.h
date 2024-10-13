@@ -12,6 +12,7 @@
 #include "seg.h"
 #include "piz.h"
 #include "reconstruct.h"
+#include "deep.h"
 
 #define DTYPE_QNAME     DTYPE_1
 #define DTYPE_FASTQ_AUX DTYPE_2
@@ -33,8 +34,14 @@ typedef struct {
 typedef struct VBlockFASTQ {
     VBLOCK_COMMON_FIELDS
 
-    // current line
+    // --------- current line - reset before every line by fastq_reset_line() ----------
+    #define first_fastq_vb_zero_per_line piz_deep_flags
+    PizDeepSeqFlags piz_deep_flags;// PIZ Deep
+    uint32_t deep_seq_len;       // PIZ Deep
     uint32_t sam_seq_offset;     // PIZ Deep: offset of start of SEQ / QUAL copied from SAM with the FASTQ SEQ / QUAL
+
+    #define after_fastq_vb_zero_per_line R1_vb_i
+    // --------- END OF current line ----------
 
     // data used for segging R2
     uint32_t R1_vb_i;            // ZIP/PIZ R2: the equivalent vb_i in the R1 (vb_i >= 1)
@@ -51,7 +58,7 @@ typedef struct VBlockFASTQ {
     bool item_filter[FASTQ_NUM_TOP_LEVEL_FIELDS];  // PIZ: item filter - true if to reconstrut, false if not. index is item in toplevel container. length must be >= nitems_lo of all genozip verions
 
     // stats
-    uint32_t deep_stats[NUM_DEEP_STATS];  // ZIP: stats collection regarding Deep
+    uint32_t deep_stats[NUM_DEEP_STATS_ZIP];  // ZIP: stats collection regarding Deep
 
     Multiplexer2 mux_ultima_c;
 } VBlockFASTQ;

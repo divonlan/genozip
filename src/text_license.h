@@ -15,6 +15,8 @@ static rom license[] = {
     "\"Legal Entity\" shall mean the union of the acting entity and all other entities that control, are controlled by, or are under common control with that entity. For the purposes of this definition, \"control\" means (i) the power, direct or indirect, to cause the direction or management of such entity, whether by contract or otherwise, or (ii) ownership of fifty percent (50%) or more of the outstanding shares, or (iii) beneficial ownership of such entity.",
 
     "\"You\" (or \"Your\") shall mean Legal Entity (possibly an individual) exercising permissions granted by this License.",
+    
+    "\"Recognized Academic Research Institution\" shall mean a Legal Entity that contributes to the scientific record by regularly publishing papers in scientific journals AND that grants academic degrees which are recongnized as such by the competent authority in the country in which said Legal Entity is organized.",
 
     "\"Derivative Works\" shall mean any work that is based on (or derived from) Genozip and for which the editorial revisions, annotations, elaborations, or other modifications represent, as a whole, an original work of authorship. For the purposes of this License, Derivative Works shall not include works that remain separable from Genozip and Derivative Works thereof.",
     
@@ -28,7 +30,7 @@ static rom license[] = {
 
     "2. Grant of copyright license. Licensor hereby grants to You a limited non-exclusive, non-transferrable, non-sublicensable, revokable copyright license to use Genozip on Your Computers, if you meet the conditions attached to any of the License Types a through f below, for the limited purpose attached to that particular License Type, and subject to the terms and conditions of this License agreement:",
     
-    "   a. Academic License: Using Genozip Executables for academic research, educational or training purposes provided that You are a recognized academic research institution which is not a hospital, or a registered student at such an institution, but excluding use with Your Commercial Data, and limited to a total of 10,000 files per institution.",
+    "   a. Academic License: Using Genozip Executables for academic research, educational or training purposes provided that You are a Recognized Academic Research Institution which is not a hospital, or a registered student at such an institution, but excluding use with Your Commercial Data, and limited to a total of 10,000 files per institution.",
     
     "   b. Academic License: Using Genozip Executables for another non-commercial purpose, if it has been pre-approved by Licensor in writing. Email "EMAIL_REGISTER" to seek such an approval.",
     

@@ -489,7 +489,6 @@ FileP file_open_txt_read (rom filename)
     if (file_open_txt_read_test_valid_dt (file)) goto fail; // skip this file
     
     // open the file, based on the codec (as guessed by file extension)
-    // file->codec           = file_get_codec_by_txt_ft (file->data_type, file->type, false);
     file->src_codec       = file_get_codec_by_txt_ft (file->data_type, file->type, true);
     file->effective_codec = file->src_codec; // initialize: can be changed if streaming or if gz variant
 
@@ -864,7 +863,7 @@ FileP file_open_z_write (rom filename, FileMode mode, DataType data_type, Codec 
     mutex_initialize (file->custom_merge_mutex);
     mutex_initialize (file->test_abbrev_mutex);
     mutex_initialize (file->zriter_mutex);
-
+    
     if (!flag.zip_no_z_file) {
 
         if (flag.force && !file->is_in_tar) 
@@ -1020,7 +1019,8 @@ void file_close (FileP *file_p)
         mutex_destroy (file->dicts_mutex);
         mutex_destroy (file->custom_merge_mutex);
         mutex_destroy (file->test_abbrev_mutex);
-        
+        mutex_destroy (file->bgzf_discovery_mutex);
+
         FREE (file->name);
         FREE (file->basename);
         FREE (file);
@@ -1281,22 +1281,22 @@ bool file_put_data (rom filename, const void *data, uint64_t len,
     mutex_unlock (put_data_mutex);
 
     // write in blocks (Windows hangs if the block is too big, a few GB)
-    size_t written = 0;
-    const uint64_t block_size = 1 << 24; // 16MB
-    for (int i=0; i < (len + block_size - 1) / block_size; i++) // round up
-        written += fwrite (&((rom)data)[i * block_size], 1, MIN_(block_size, len - i*block_size), file);
-    
+    for (size_t written = 0; written < len; written += 1 MB) {
+        uint64_t this_len = MIN_(1 MB, len - written); 
+        uint64_t this_written = fwrite ((rom)data + written, 1, this_len, file);
+
+        if (this_written != this_len) {
+            WARN ("Failed to write %s: wrote only %"PRIu64" bytes of the expected %"PRIu64" (file removed)", tmp_filename, (uint64_t)written, len);
+            put_data_tmp_filenames[my_file_i] = NULL; // no need to lock mutex
+            remove (tmp_filename);
+            return false;
+        }
+    }
+
     SAVE_VALUE (errno);
     fflush (file);    
     FCLOSE (file, tmp_filename); 
     RESTORE_VALUE (errno); // in cases caller wants to print fwrite error
-
-    if (written != len) {
-        WARN ("Failed to write %s: wrote only %"PRIu64" bytes of the expected %"PRIu64, tmp_filename, (uint64_t)written, len);
-        put_data_tmp_filenames[my_file_i] = NULL; // no need to lock mutex
-        remove (tmp_filename);
-        return false;
-    }
 
     // we can't enter if file_put_data_abort is active, or it needs to wait for us before deleting tmp files
     mutex_lock (put_data_mutex);

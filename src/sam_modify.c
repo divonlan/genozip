@@ -252,7 +252,7 @@ rom sam_zip_modify (VBlockP vb_, rom line_start, uint32_t remaining)
 rom bam_zip_modify (VBlockP vb_, rom line_start, uint32_t remaining)
 {
     VBlockSAMP vb = (VBlockSAMP)vb_;
-    BAMAlignmentFixed *aln = (BAMAlignmentFixed *)line_start;
+    BAMAlignmentFixedP aln = (BAMAlignmentFixedP)line_start;
 
     rom after = line_start + LTEN32 (aln->block_size) + 4; // +4 for block_size field itself
 

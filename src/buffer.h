@@ -122,6 +122,7 @@ static inline uint64_t BNXT_get_index (BufferP buf, size_t size, FUNCLINE)
 #define BNUM64(buf, ent)    ((int64_t)((((char*)(ent)) - ((buf).data)) / (int64_t)sizeof (*(ent)))) // signed integer
 #define BNUMtxt(ent)        BNUM(vb->txt_data, (ent))
 #define BREMAINS(buf, ent)  ((buf).len - BNUM ((buf),(ent)))
+#define BFREE8(buf)         ((buf).size - (buf.len)) // free space, for char or uint8_t buffers
 #define BIS1ST(buf,ent)     (BNUM((buf),(ent)) == 0)
 #define BISLST(buf,ent)     (BNUM((buf),(ent)) == (buf).len - 1)
 #define BISBEFORE(buf,ent)  (BNUM((buf),(ent)) <= -1)
@@ -138,8 +139,8 @@ static inline uint64_t BNXT_get_index (BufferP buf, size_t size, FUNCLINE)
     B(type, (buf), (index)+1);                          \
 })
 
-extern void buf_remove_do (BufferP buf, unsigned sizeof_item, uint64_t remove_start, uint64_t remove_len);
-#define buf_remove(buf, type, remove_start, remove_len) buf_remove_do (&(buf), sizeof(type), (remove_start), (remove_len))
+extern void buf_remove_do (BufferP buf, unsigned sizeof_item, uint64_t remove_start, uint64_t remove_len, FUNCLINE);
+#define buf_remove(buf, type, remove_start, remove_len) buf_remove_do (&(buf), sizeof(type), (remove_start), (remove_len), __FUNCLINE)
 
 extern void buf_insert_do (VBlockP vb, BufferP buf, unsigned width, uint64_t insert_at, const void *new_data, uint64_t new_data_len, rom name, FUNCLINE);
 

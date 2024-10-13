@@ -65,7 +65,7 @@
         piz_read_global_area, ref_load_stored_reference, dict_io_read_all_dictionaries, dict_io_build_word_lists, \
         ref_read_one_range, ref_uncompress_one_range, vb_release_vb_do, vb_destroy_vb,\
         sam_load_groups_add_one_prim_vb, sam_load_groups_move_comp_to_zfile, sam_load_groups_move_comp_to_zfile_idle, \
-        sam_load_groups_add_qname, sam_load_groups_add_flags, sam_load_groups_add_seq, sam_load_groups_add_qual, sam_load_groups_add_grp_cigars, \
+        sam_load_groups_add_qname, sam_load_groups_add_flags, sam_load_groups_add_seq, sam_load_groups_add_seq_pack, sam_load_groups_add_qual, sam_load_groups_add_grp_cigars, \
         sam_load_groups_add_SA_alns, sam_load_groups_add_solo_data, sam_load_groups_add_grps, \
         sam_zip_calculate_max_conc_writing_vbs, sam_reconstruct_SEQ_vs_ref, aligner_reconstruct_seq,\
         writer_main_loop, writer_create_plan, gencomp_piz_initialize_vb_info, gencomp_piz_update_reading_list, gencomp_piz_vb_to_plan, \

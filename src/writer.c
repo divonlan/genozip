@@ -306,7 +306,9 @@ void writer_z_initialize (void)
         #define DROP v->needs_recon = false
 
         // --one-vb: user only wants to see a single VB, and this is not it
-        if (flag.one_vb && flag.one_vb != vb_i) DROP; 
+        if (flag.one_vb && flag.one_vb != vb_i &&
+            !(flag.deep_fq_only && v->comp_i <= SAM_COMP_PRIM)) // but: if deep and requested VB is a FASTQ VB, don't drop MAIN/PRIM SAM VBs required for creating deep_ents 
+            DROP; 
 
         // --header-only: drop all VBs (except VCF - handled separately below, 
         // and except FASTQ and FASTA, for which --header-only sets flag.header_only_fast, not flag.header_only)
@@ -327,8 +329,8 @@ void writer_z_initialize (void)
                 break;
 
             case DT_SAM:
-                // Deep file, with --sam or --bam (and hence !flag.deep): - we don't need the FQ data
-                if (!flag.deep && (v->comp_i >= SAM_COMP_FQ00)) DROP; 
+                // Deep file, with --sam or --bam - we don't need the FQ data
+                if (flag.deep_sam_only && (v->comp_i >= SAM_COMP_FQ00)) DROP; 
 
                 // Deep, reconstructing only FASTQ data: We don't need DEPN as it doesn't particpate in Deep data
                 else if (flag.deep_fq_only && v->comp_i == SAM_COMP_DEPN) DROP;
@@ -882,7 +884,7 @@ void writer_create_plan (CompIType comp_i)
     writer_create_piz_reading_list (comp_i); 
 
     if (flag.show_reading_list) 
-        sections_show_section_list (z_file->data_type, &z_file->piz_reading_list);
+        sections_show_section_list (z_file->data_type, &z_file->piz_reading_list, SEC_NONE);
 
     // actual number of buffers - the maximum of reported by ZIP, but not less than 3 or more than num_vbs
     z_file->max_conc_writing_vbs = MIN_(z_file->num_vbs, MAX_(3, z_file->max_conc_writing_vbs));

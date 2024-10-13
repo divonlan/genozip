@@ -85,7 +85,8 @@ typedef union SectionFlags {
     } vb_header;
 
     struct FlagsMgzip {
-        uint8_t OLD_has_eof_block: 1;  // used up to 15.0.62
+        uint8_t OLD_has_eof_block: 1;  // PIZ: used for files up to 15.0.62
+        #define implausible OLD_has_eof_block // ZIP: used for level discovery (not part of file format)
         uint8_t level            : 4;  // 0-12 for libdeflate or 0-9 for zlib level: 15 means unknown
         MgzipLibraryType library : 3;  // ignored if level=15 (introduced 9.0.16)
     } mgzip;
@@ -225,7 +226,8 @@ typedef struct {
             uint8_t segconf_has_MQ       : 1; // 15.0.61
             uint8_t segconf_SA_CIGAR_abb : 1; // 15.0.66
             uint8_t segconf_SA_NM_by_X   : 1; // 15.0.66
-            uint8_t unused_bits          : 2;
+            uint8_t segconf_CIGAR_has_eqx: 1; // 15.0.68
+            uint8_t unused_bits          : 1;
             uint8_t segconf_sam_factor;       // 15.0.28: BAM only: 64X estimated blow-up factor of SAM txt_data vs BAM 
             uint8_t segconf_deep_N_fq_score;  // 15.0.39: Deep: when copying QUAL from SAM, update scores of 'N' bases to this value
             uint8_t unused0;
@@ -332,10 +334,10 @@ typedef struct {
     struct { // SAM PRIM - 16 bytes
     uint32_t sam_prim_first_grp_i;     // SAM PRIM: the index of first group of this PRIM VB, in z_file->sag_grps (v14)
     uint32_t sam_prim_comp_qual_len;   // SAM PRIM: total size of SA Group's QUAL, as compressed in-memory in ZIP (v14)
-    uint32_t sam_prim_comp_qname_len;  // SAM PRIM: total length of QUAL in this VB (v14). since 15.0.65: huffman-compressed length ; Up to 15.0.64: uncompress length
+    uint32_t sam_prim_comp_qname_len;  // SAM PRIM: total length of QNAME in this VB (v14). since 15.0.65: huffman-compressed length ; v14-15.0.64: uncompress length
     union {
     uint32_t sam_prim_comp_cigars_len; // SAM PRIM SAG_BY_SA: total size of sag's CIGARs, as compressed in-memory in ZIP (i.e. excluding CIGARs stored in OPTION_SA_CIGAR.dict) (v14)
-    uint32_t sam_prim_solo_data_len;   // SAM PRIM SAG_BY_SOLO: size of solo_data
+    uint32_t sam_prim_solo_data_len;   // SAM PRIM SAG_BY_SOLO: size of solo_data: the huffman-compressed length since 15.0.68, and the uncompressed length before
     };
     };
 
@@ -612,7 +614,7 @@ extern uint32_t sections_txt_header_get_num_fragments (void);
 extern void sections_reading_list_add_vb_header (VBIType vb_i);
 extern void sections_reading_list_add_txt_header (CompIType comp_i);
 
-extern void sections_list_memory_to_file_format (bool in_place);
+extern void sections_list_memory_to_file_format (void);
 extern void sections_list_file_to_memory_format (SectionHeaderGenozipHeaderP genozip_header);
 extern bool sections_is_paired (void);
 
@@ -626,7 +628,7 @@ extern void noreturn genocat_show_headers (rom z_filename);
 typedef struct { char s[128]; } FlagStr;
 extern FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt, bool is_r2);
 extern void sections_show_gheader (ConstSectionHeaderGenozipHeaderP header);
-extern void sections_show_section_list (DataType dt, BufferP section_list);
+extern void sections_show_section_list (DataType dt, BufferP section_list, SectionType only_this_st);
 extern rom st_name (SectionType sec_type);
 extern rom lt_name (LocalType lt);
 extern rom store_type_name (StoreType store);

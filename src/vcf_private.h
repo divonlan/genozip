@@ -238,7 +238,7 @@ extern void vcf_samples_seg_finalize (VBlockVCFP vb);
 
 extern rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t len, char *next_field, bool *has_13);
 extern int vcf_seg_get_mux_channel_i (VBlockVCFP vb);
-extern int vcf_piz_get_mux_channel_i (VBlockP vb);
+extern int vcf_piz_get_mux_channel_i (VBlockVCFP vb);
 extern ContextP vcf_seg_FORMAT_mux_by_dosage (VBlockVCFP vb, ContextP ctx, STRp(cell), const DosageMultiplexer *mux);
 extern void vcf_seg_FORMAT_mux_by_dosagexDP (VBlockVCFP vb, ContextP ctx, STRp(cell), void *mux_p);
 
@@ -247,7 +247,7 @@ extern WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF 
 extern void vcf_seg_FORMAT_GT_finalize_line (VBlockVCFP vb, uint32_t line_n_samples);
 extern void vcf_piz_FORMAT_GT_rewrite_predicted_phase (VBlockP vb, char *recon, uint32_t recon_len);
 extern void vcf_piz_GT_cb_null_GT_if_null_DP (VBlockP vb , char *recon);
-extern int vcf_piz_GT_get_last_dosage (VBlockP vb);
+extern int vcf_piz_GT_get_last_dosage (VBlockVCFP vb);
 
 static inline Allele *this_sample_GT (VBlockVCFP vb) {
     ContextP ht_ctx = CTX(FORMAT_GT_HT);
@@ -273,7 +273,7 @@ extern void vcf_samples_seg_finalize_PS_PID (VBlockVCFP vb);
 extern void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STRp(value));
 extern void vcf_seg_FORMAT_PS_PID_missing_value (VBlockVCFP vb, ContextP ctx, rom end_of_sample);
 extern void vcf_samples_seg_initialize_PS_PID (VBlockVCFP vb, ContextP ctx, STRp(value));
-extern void vcf_piz_ps_pid_lookback_insert (VBlockP vb, Did did_i, STRp(recon)); 
+extern void vcf_piz_ps_pid_lookback_insert (VBlockVCFP vb, Did did_i, STRp(recon)); 
 extern void vcf_piz_ps_pid_lookback_shift (VBlockP vb, STRp(insert));
 
 // FORMAT/GQ
@@ -286,7 +286,7 @@ extern void vcf_gatk_seg_initialize (VBlockVCFP vb);
 extern void vcf_seg_INFO_RAW_MQandDP (VBlockVCFP vb, ContextP ctx, STRp(value));
 extern void vcf_seg_INFO_BaseCounts (VBlockP vb);
 extern void vcf_seg_INFO_AS_SB_TABLE (VBlockP vb);
-extern void vcf_piz_sum_SB_for_AS_SB_TABLE (VBlockP vb, STRp(recon));
+extern void vcf_piz_sum_SB_for_AS_SB_TABLE (VBlockVCFP vb, STRp(recon));
 extern void vcf_piz_insert_INFO_AS_SB_TABLE (VBlockVCFP vb);
 extern void vcf_seg_INFO_RU (VBlockVCFP vb, ContextP ctx, STRp(ru));
 extern void vcf_seg_INFO_RPA (VBlockVCFP vb, ContextP ctx, STRp(rpa_str));
@@ -302,7 +302,7 @@ typedef packed_enum { QD_PRED_NONE, QD_PRED_INFO_DP, QD_PRED_INFO_DP_P001, QD_PR
                       QD_PRED_SUM_DP,  QD_PRED_SUM_DP_P001,  QD_PRED_SUM_DP_M001, NUM_QD_PRED_TYPES } QdPredType;
 extern void vcf_seg_sum_DP_for_QD (VBlockVCFP vb, int64_t value);
 extern void vcf_seg_INFO_QD (VBlockP vb);
-extern void vcf_piz_sum_DP_for_QD (VBlockP vb, STRp(recon));
+extern void vcf_piz_sum_DP_for_QD (VBlockVCFP vb, STRp(recon));
 extern void vcf_piz_insert_INFO_QD (VBlockVCFP vb);
 extern void vcf_piz_insert_INFO_BaseCounts_by_AD (VBlockVCFP vb);
 

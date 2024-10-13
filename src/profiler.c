@@ -343,6 +343,7 @@ void profiler_add_evb_and_print_report (void)
             PRINT (sam_load_groups_add_flags, 2);
             PRINT (sam_load_groups_add_grps, 2);
             PRINT (sam_load_groups_add_seq, 3);
+            PRINT (sam_load_groups_add_seq_pack, 4);
             PRINT (sam_load_groups_add_qual, 3);
             PRINT (sam_load_groups_add_grp_cigars, 3);
             PRINT (sam_load_groups_move_comp_to_zfile, 2);

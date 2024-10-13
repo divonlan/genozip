@@ -341,9 +341,10 @@ done:
 
 // PIZ: SEQ reconstruction - only for reads compressed with the aligner
 void aligner_reconstruct_seq (VBlockP vb, uint32_t seq_len, bool is_pair_2, bool is_perfect_alignment, ReconType reconstruct,
-                              char *first_mismatch_base,       // optional out: caller should initialize to 0
-                              uint32_t *first_mismatch_offset, // optional out
-                              uint32_t *num_mismatches)        // optional out: caller should initialize to 0
+                              int max_deep_mismatches,        // length of mismatch_base and mismatch_offset arrays  
+                              char *mismatch_base,       // optional out
+                              uint32_t *mismatch_offset, // optional out
+                              uint32_t *num_mismatches)  // optional out
 {
     START_TIMER;
     declare_seq_contexts;
@@ -428,10 +429,10 @@ void aligner_reconstruct_seq (VBlockP vb, uint32_t seq_len, bool is_pair_2, bool
                                            : nonref_ctx;
                     RECONSTRUCT_NEXT (ctx, 1); 
 
-                    if (first_mismatch_base) {
-                        if (! *first_mismatch_base) {
-                            *first_mismatch_base   = is_forward ? *BLSTtxt : COMPLEM[(int)*BLSTtxt];
-                            *first_mismatch_offset = is_forward ? i : seq_len - i -1;
+                    if (num_mismatches) {
+                        if (*num_mismatches <= max_deep_mismatches) {
+                            mismatch_base[*num_mismatches]   = *BLSTtxt;
+                            mismatch_offset[*num_mismatches] = i;
                         }
                         (*num_mismatches)++;
                     }

@@ -22,12 +22,12 @@
 static bool sam_analyze_copied_SEQ (VBlockSAMP vb, STRp(seq), const PosType32 pos, bool is_revcomp,
                                     uint32_t ref_consumed, uint32_t ref_and_seq_consumed,
                                     BufferP line_sqbitmap, 
-                                    char *first_mismatch_base,       // optional out: caller should initialize to 0
-                                    uint32_t *first_mismatch_offset, // optional out: caller should initialize to 0
+                                    bool has_deep, 
                                     PosType64 *range_last_pos,       // optional out
                                     PosType64 *range_gpos)           // optional out
 
 {
+    declare_seq_contexts;
     RefLock lock = REFLOCK_NONE;
 
     BitsP bitmap = (BitsP)line_sqbitmap;
@@ -38,6 +38,13 @@ static bool sam_analyze_copied_SEQ (VBlockSAMP vb, STRp(seq), const PosType32 po
     // we initialize all the bits to "set", and clear as needed.   
     ASSERT (!line_sqbitmap->len32, "%s: line_sqbitmap is in use", LN_NAME);
     buf_alloc_bits (VB, line_sqbitmap, ref_and_seq_consumed, SET, 0, line_sqbitmap->name ? line_sqbitmap->name : "line_sqbitmap"); 
+
+    // if we're going to store seq for Deep, we need to record the NONREF (i.e. S, I) bases
+    char *deep_nonref = NULL; 
+    if (has_deep) {
+        buf_alloc_exact (vb, nonref_ctx->deep_nonref, vb->seq_len - ref_and_seq_consumed, char, "contexts->deep_nonref");
+        deep_nonref = is_revcomp ? BLSTc(nonref_ctx->deep_nonref) : B1STc(nonref_ctx->deep_nonref);
+    }
 
     ConstRangeP range = IS_ZIP ? ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, ref_consumed, WORD_INDEX_NONE,  
                                                     IS_REF_EXTERNAL ? NULL : &lock)
@@ -89,9 +96,12 @@ static bool sam_analyze_copied_SEQ (VBlockSAMP vb, STRp(seq), const PosType32 po
  
                     // case: ref is set to a different value - update the bitmap
                     else {
-                        if (first_mismatch_base && ! *first_mismatch_base) {
-                            *first_mismatch_base = seq[i];
-                            *first_mismatch_offset = i;
+                        if (has_deep) {
+                            if (vb->num_deep_mismatches <= MAX_DEEP_SEQ_MISMATCHES) {
+                                vb->deep_mismatch_base[vb->num_deep_mismatches] = seq[i];
+                                vb->deep_mismatch_offset[vb->num_deep_mismatches] = i;
+                            }
+                            vb->num_deep_mismatches++;
                         }
 
                         bits_clear (bitmap, bit_i++);
@@ -105,8 +115,16 @@ static bool sam_analyze_copied_SEQ (VBlockSAMP vb, STRp(seq), const PosType32 po
             // for Insertion or Soft clipping - this SEQ segment doesn't align with the reference - we leave it as is 
             case BC_I: case BC_S: 
                 ASSERT (n > 0 && n <= (seq_len - i), "%s: CIGAR \"%s\" (n_ops=%u) implies seq_len longer than actual seq_len=%u", LN_NAME, vb->last_cigar ? vb->last_cigar : "", vb->binary_cigar.len32, seq_len);
+                
+                if (has_deep) 
+                    for (uint32_t j=i; j < i + n; j++) {
+                        if (is_revcomp) *deep_nonref-- = COMPLEM[(uint8_t)seq[j]];
+                        else            *deep_nonref++ = seq[j];
+                    }
+
                 i += n;
                 n = 0;
+
                 break;
 
             // for Deletion or Skipping - we move the next_ref ahead
@@ -597,7 +615,7 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(s
     
     else {
         bitmap_ctx->next_local -= vb->ref_and_seq_consumed; // note: we truncate bitmap, if needed, in sam_seg_finalize
-        return MAPPING_PERFECT;
+        return MAPPING_PERFECT; // no mismatches
     } 
 }
 
@@ -748,7 +766,7 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(textual_seq), unsigned
     // set vb->md_verified and vb->mismatch_bases_by_SEQ needed by MD:Z and NM:i
     bool force_no_analyze_depn_SEQ = false;
     if (vs_prim && segconf.has_MD_or_NM && !vb->cigar_missing && !vb->seq_missing &&
-        !sam_analyze_copied_SEQ (vb, STRa(textual_seq), dl->POS, dl->FLAG.rev_comp, vb->ref_consumed, vb->ref_and_seq_consumed, &vb->codec_bufs[0], NULL, NULL, NULL, NULL)) 
+        !sam_analyze_copied_SEQ (vb, STRa(textual_seq), dl->POS, dl->FLAG.rev_comp, vb->ref_consumed, vb->ref_and_seq_consumed, &vb->codec_bufs[0], false, NULL, NULL)) 
             force_no_analyze_depn_SEQ = true;
 
 
@@ -976,11 +994,11 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
 #endif
     if (!bitmap_ctx->is_loaded) return; // if case we need to skip the SEQ field (for the entire VB)
 
-    bool v14              = VER(14);
-    rom nonref            = Bc (nonref_ctx->local, nonref_ctx->next_local); // possibly, this VB has no nonref (i.e. everything is ref), in which case nonref would be an invalid pointer. That's ok, as it will not be accessed.
-    rom nonref_start      = nonref;
-    const PosType32 pos   = vb->last_int(SAM_POS);
-    unsigned seq_consumed=0, ref_consumed=0;
+    bool v14            = VER(14);
+    char *nonref        = Bc(nonref_ctx->local, nonref_ctx->next_local); // possibly, this VB has no nonref (i.e. everything is ref), in which case nonref would be an invalid pointer. That's ok, as it will not be accessed.
+    rom start_nonref    = nonref;
+    const PosType32 pos = vb->last_int(SAM_POS);
+    uint32_t seq_consumed=0, ref_consumed=0;
 
     // note: prim alignments (loaded in preprocessing) are always mapped - enforced by sam_seg_is_gc_line
     bool unmapped = v14 ? (!vb->preprocessing && (last_flags.unmapped || vb->cigar_missing || !pos || IS_ASTERISK (vb->chrom_name)))
@@ -998,6 +1016,8 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
 
     bool MD_NM_by_unconverted = v14 && bisulfite && segconf.MD_NM_by_unconverted; // we calculate MD:Z and NM:i vs unconverted reference
 
+    bool deep_seq_by_ref = flag.deep && !flag.deep_sam_only && !bisulfite && !last_flags.secondary && !last_flags.supplementary;
+
     if (predict_meth_call && vb->ref_and_seq_consumed) {
         buf_alloc_exact (vb, vb->meth_call, vb->seq_len, char, "meth_call");
         memset (vb->meth_call.data, '.', vb->meth_call.len32);
@@ -1005,22 +1025,17 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
     
     // case: unmapped, segged against reference using our aligner
     if (aligner_used) {
-        char mismatch_base = 0;
-        uint32_t mismatch_offset=0, num_mismatches=0;
-        aligner_reconstruct_seq (VB, vb->seq_len, false, is_perfect, reconstruct, &mismatch_base, &mismatch_offset, &num_mismatches);
+        aligner_reconstruct_seq (VB, vb->seq_len, false, is_perfect, reconstruct,
+                                 MAX_DEEP_SEQ_MISMATCHES, 
+                                 deep_seq_by_ref ? vb->deep_mismatch_base   : NULL, 
+                                 deep_seq_by_ref ? vb->deep_mismatch_offset : NULL, 
+                                 deep_seq_by_ref ? &vb->num_deep_mismatches : NULL);
         
         nonref_ctx->next_local = ROUNDUP4 (nonref_ctx->next_local);
         PosType64 gpos = gpos_ctx->last_value.i; // set in aligner_reconstruct_seq
 
-        // case: reconstructing using our aligner - calculate vb->deep_seq if it has at most one mismatch vs reference
-        if (flag.deep && !IS_DEPN(vb) && !bisulfite && 
-            num_mismatches  <= 1          &&  // at most one mismatch
-            gpos            <= 0xffffffff &&  // gpos fits in 32 bits
-            mismatch_offset <= 255)           // offset fits in 8 bits
-
-            vb->deep_seq = (PizDeepSeq){ .gpos            = gpos,
-                                         .mismatch_offset = (num_mismatches ? mismatch_offset : 0),
-                                         .mismatch_base   = (num_mismatches ? mismatch_base   : 0) };
+        if (deep_seq_by_ref) 
+            sam_piz_set_deep_seq (vb, true, gpos); 
 
         return; // aligner accounts for time separately, so we don't account for the time here
     }
@@ -1033,6 +1048,10 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
         uint32_t recon_len = (*nonref == '*') ? 1 : vb->seq_len;
         if (reconstruct) RECONSTRUCT (nonref, recon_len); 
         nonref_ctx->next_local += ROUNDUP4 (recon_len);
+
+        if (deep_seq_by_ref) 
+            sam_piz_set_deep_seq (vb, true, NO_GPOS64); 
+
         goto done;
     }
 
@@ -1041,6 +1060,12 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
     if (vb->seq_missing && !ctx_encountered_in_line (VB, bitmap_ctx->did_i)) {
         if (reconstruct) RECONSTRUCT1 ('*');
         goto done;
+    }
+
+    char *deep_nonref = NULL;
+    if (deep_seq_by_ref) {
+        buf_alloc_exact (vb, nonref_ctx->deep_nonref, vb->insertions + vb->soft_clip[0] + vb->soft_clip[1], char, "contexts->deep_nonref");
+        deep_nonref = B1STc (nonref_ctx->deep_nonref);
     }
 
     ASSERT0 (is_perfect || bitmap_ctx->local.len32 || nonref_ctx->local.len32, "No SEQ data, perhaps sections were skipped?");
@@ -1057,9 +1082,6 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
     bool consumes_query=false, consumes_reference=false;
     uint32_t save_n = 0;
     char *recon = BAFTtxt;
-
-    char first_mismatch_base=0;
-    uint32_t first_mismatch_offset=0; // 32 bit, value might be > 255
 
     decl_acgt_decode;
 
@@ -1100,7 +1122,7 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
         else {
             if (consumes_query) {
             
-                if (consumes_reference) {
+                if (consumes_reference) { // M / = / X
                     if (NEXTLOCALBIT (bitmap_ctx)) { // copy from reference (or from converted reference if bisulfite)                  
                         verify_is_set (ref_consumed);
                         if (reconstruct) {
@@ -1122,8 +1144,7 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
                             *recon++ = ref_base;
                         } 
                     }
-                    else {
-                        vb->mismatch_bases_by_SEQ++;
+                    else { // mismatch
                         char base;
 
                         if (v14) {
@@ -1138,6 +1159,13 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
 
                         if (reconstruct) *recon++ = base;
 
+                        if (deep_seq_by_ref && vb->mismatch_bases_by_SEQ <= MAX_DEEP_SEQ_MISMATCHES) {
+                            vb->deep_mismatch_offset[vb->mismatch_bases_by_SEQ] = seq_consumed;
+                            vb->deep_mismatch_base[vb->mismatch_bases_by_SEQ] = base;
+                        }
+
+                        vb->mismatch_bases_by_SEQ++;
+
                         if (bisulfite && base == acgt_decode(ref[ref_consumed])) { // uncoverted base = metyhlated
 
                             if (segconf.sam_predict_meth_call)
@@ -1148,11 +1176,6 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
                                 bits_set ((BitsP)&bitmap_ctx->local, bitmap_ctx->next_local-1); // adjust sqbitmap for use for reconstructing MD:Z                        
                             }
                         }
-
-                        if (vb->mismatch_bases_by_SEQ == 1) {
-                            first_mismatch_offset = seq_consumed;
-                            first_mismatch_base   = base;
-                        }
                     }
     
                     seq_consumed++;
@@ -1161,21 +1184,24 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
                 else if (op.op == BC_I && segconf.use_insertion_ctxs) { // most commonly op.n is 1 or 2
                     recon += op.n; // skip for now, we will fill in the gaps later
                     seq_consumed += op.n;
+                    if (deep_seq_by_ref) deep_nonref += op.n; // skip for now
                     op.n = 1; // so it is further decremented to 0 in a sec
                 }
 
-                else if (op.n == 1) { // I or S with a small op.n
+                else if (op.n == 1) { // I or S with op.n==1
                     if (reconstruct) *recon++ = *nonref;
+                    if (deep_seq_by_ref) *deep_nonref++ = *nonref;
                     nonref++;
                     seq_consumed++;
                 }
 
                 else { // larger op.n - we are better off with memcpy
-                    if (reconstruct) {
-                        memcpy (recon, nonref, op.n);
-                        recon += op.n;
-                    }
-                        
+                    if (reconstruct) 
+                        recon = mempcpy (recon, nonref, op.n);
+
+                    if (deep_seq_by_ref) 
+                        deep_nonref = mempcpy (deep_nonref, nonref, op.n);
+
                     nonref += op.n;
                     seq_consumed += op.n;
                     op.n = 1; // so it is further decremented to 0 in a sec
@@ -1193,6 +1219,7 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
     if (segconf.use_insertion_ctxs) {
         SAFE_ASSIGN (recon, 0); // in case last insertion goes to the end of SEQ - it will use this "base" for muxing
         recon -= vb->seq_len;   // go back to the start of the SEQ reconstruction
+        deep_nonref = B1STc(nonref_ctx->deep_nonref); // rewind
 
         for_buf2 (BamCigarOp, op, op_i, vb->binary_cigar) {        
             if (op->op == BC_I) {
@@ -1203,31 +1230,35 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
                         __FUNCTION__, ins_ctx->tag_name, ins_ctx->next_local, op->n, ins_ctx->local.len32, op_i, display_binary_cigar (vb),
                         VER2(15,61) ? "" : ". See defect 2024-06-16."); 
        
-                memcpy (recon, Bc(ins_ctx->local, ins_ctx->next_local), op->n);
-                recon += op->n;
+                recon = mempcpy (recon, Bc(ins_ctx->local, ins_ctx->next_local), op->n);
+                
+                if (deep_seq_by_ref) 
+                    deep_nonref = mempcpy (deep_nonref, Bc(ins_ctx->local, ins_ctx->next_local), op->n);
+
                 ins_ctx->next_local += op->n;
             }
 
-            else if (op->op == BC_M || op->op == BC_S || op->op == BC_E || op->op == BC_X)
+            else if (op->op == BC_M || op->op == BC_S || op->op == BC_E || op->op == BC_X) {
                 recon += op->n;
+
+                if (deep_seq_by_ref && op->op == BC_S)
+                    deep_nonref += op->n;
+            }
         }
 
         SAFE_RESTORE;
     }
     
-    // For deep ents passed from SAM reconstruction to FASTQ reconstruction, we use a shortcut
-    // if SEQ aligns with perfect CIGAR (eg "151M"), and up to 1 mismatch.
-    if (flag.deep && !bisulfite                      && 
-        vb->ref_and_seq_consumed == vb->seq_len      &&  // perfect CIGAR (eg "151M")
-        vb->ref_consumed         == vb->seq_len      &&
-        pos + vb->seq_len - 1 <= vb->range->last_pos &&  // doesn't round robin at edge of the chromosome
-        vb->mismatch_bases_by_SEQ <= 1               &&  // at most one mismatch
-        vb->range->gpos + (pos-1) <= 0xffffffff      &&  // gpos up to 32 bits
-        first_mismatch_offset <= 255)                    // offset up to 8 bits
+    // handle deep seqs passed from SAM reconstruction to FASTQ reconstruction
+    if (deep_seq_by_ref) {
+        vb->num_deep_mismatches = vb->mismatch_bases_by_SEQ;
 
-        vb->deep_seq = (PizDeepSeq){ .gpos            = vb->range->gpos + (pos-1),
-                                     .mismatch_offset = (is_perfect ? 0 : first_mismatch_offset),
-                                     .mismatch_base   = (is_perfect ? 0 : first_mismatch_base) };
+        if (nonref_ctx->deep_nonref.len32 && last_flags.rev_comp) 
+            str_revcomp_in_place (STRb(nonref_ctx->deep_nonref));
+
+        sam_piz_set_deep_seq (vb, pos + vb->seq_len - 1 <= vb->range->last_pos,  // doesn't round robin at edge of the chromosome
+                              vb->range->gpos + (pos-1)); // gpos
+    }
 
     if (save_reconstruct)
         Ltxt += vb->seq_len;
@@ -1235,7 +1266,7 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
     ASSPIZ (seq_consumed == vb->seq_len,      "expecting seq_consumed(%u) == vb->seq_len(%u)", seq_consumed, vb->seq_len);
     ASSPIZ (ref_consumed == vb->ref_consumed, "expecting ref_consumed(%u) == vb->ref_consumed(%u)", ref_consumed, vb->ref_consumed);
 
-    nonref_ctx->next_local += ROUNDUP4 (nonref - nonref_start);
+    nonref_ctx->next_local += ROUNDUP4 (nonref - start_nonref); // I and S data, except if use_insertion_ctxs in which case it is only S
 
     buf_free (vb->scratch); // allocated by sam_reconstruct_SEQ_get_ref_bytemap
 
@@ -1267,6 +1298,7 @@ static void reconstruct_SEQ_acgt (VBlockSAMP vb, BitsP seq_2bits, uint64_t start
     Ltxt += seq_len;
 }
 
+// PRIM or DEPN VB
 static void reconstruct_SEQ_copy_sag_prim (VBlockSAMP vb, ContextP ctx, 
                                            BitsP prim, uint64_t prim_start_base, uint32_t prim_seq_len, 
                                            bool xstrand, ReconType reconstruct, bool force_no_analyze_depn_SEQ)
@@ -1287,33 +1319,22 @@ static void reconstruct_SEQ_copy_sag_prim (VBlockSAMP vb, ContextP ctx,
 
     reconstruct_SEQ_acgt (vb, prim, recon_start_base, recon_seq_len, xstrand);
 
-    bool consider_vb_deep_seq = (flag.deep && IS_PRIM(vb) && !vb->bisulfite_strand);
+    bool has_deep = (flag.deep && !flag.deep_sam_only && !last_flags.secondary && !last_flags.supplementary && !vb->bisulfite_strand);
     
     // if needed, get vb->mismatch_bases_by_SEQ and line_sqbitmap for use in reconstructing MD:Z and NM:i, as well as Deep
     // NOTE: if SEQ is not loaded or !reconstruct - it is expected that NM and MD also don't reconstruct
-    if ((segconf.has_MD_or_NM || consider_vb_deep_seq) && !vb->cigar_missing && !vb->seq_missing && !force_no_analyze_depn_SEQ) {
-        
-        char mismatch_base = 0;
-        uint32_t mismatch_offset = 0;
+    if ((segconf.has_MD_or_NM || has_deep) && !vb->cigar_missing && !vb->seq_missing && !force_no_analyze_depn_SEQ) {
         PosType64 range_last_pos=0, range_gpos=0;
         PosType32 pos = vb->last_int(SAM_POS);
 
         sam_analyze_copied_SEQ (vb, seq, recon_seq_len, pos, last_flags.rev_comp,
                                 vb->ref_consumed, vb->ref_and_seq_consumed, &ctx->line_sqbitmap, 
-                                &mismatch_base, &mismatch_offset, &range_last_pos, &range_gpos);        
+                                has_deep, &range_last_pos, &range_gpos);        
 
         // case: reconstructing a PRIM line - calculate vb->deep_seq if it has at most one mismatch vs reference
-        if (consider_vb_deep_seq && 
-            vb->ref_and_seq_consumed  == recon_seq_len  &&  // perfect CIGAR (eg "151M")
-            vb->ref_consumed          == recon_seq_len  &&
-            pos + recon_seq_len - 1   <= range_last_pos &&  // doesn't round robin at edge of the chromosome
-            vb->mismatch_bases_by_SEQ <= 1              &&  // at most one mismatch
-            range_gpos + (pos-1)      <= 0xffffffff     &&  // gpos fits in 32 bits
-            mismatch_offset           <= 255)               // offset fits in 8 bits
-
-            vb->deep_seq = (PizDeepSeq){ .gpos            = range_gpos + (pos-1),
-                                         .mismatch_offset = (vb->mismatch_bases_by_SEQ ? mismatch_offset : 0),
-                                         .mismatch_base   = (vb->mismatch_bases_by_SEQ ? mismatch_base   : 0) };
+        if (has_deep) 
+            sam_piz_set_deep_seq (vb, pos + recon_seq_len - 1 <= range_last_pos,  // doesn't round robin at edge of the chromosome
+                                  range_gpos + (pos-1));
     }
 
     COPY_TIMER (reconstruct_SEQ_copy_sag_prim);
@@ -1347,36 +1368,26 @@ static void reconstruct_SEQ_copy_saggy (VBlockSAMP vb, ContextP ctx, ReconType r
         bam_seq_to_sam (vb, (uint8_t*)saggy_seq + clip/2, seq_len, clip%2, false, &vb->txt_data);
 
         if (xstrand)
-            str_revcomp (seq, seq, seq_len);
+            str_revcomp_in_place (STRa(seq));
     }
-
-    bool maybe_vb_deep_seq = flag.deep && !vb->bisulfite_strand &&
-                             vb->ref_and_seq_consumed == seq_len  &&  // perfect CIGAR (eg "151M", hard clips are ok)
-                             vb->ref_consumed         == seq_len;
+    
+    bool has_deep = flag.deep && !flag.deep_sam_only && !last_flags.secondary && !last_flags.supplementary && !vb->bisulfite_strand;
 
     // in needed, get vb->mismatch_bases_by_SEQ and line_sqbitmap for use in reconstructing MD:Z and NM:i
     // NOTE: if SEQ is not loaded or !reconstruct - it is expected that NM and MD also don't reconstruct
     if ((segconf.has_MD_or_NM && !vb->cigar_missing && !vb->seq_missing && !force_no_analyze_depn_SEQ) || 
-        maybe_vb_deep_seq) {
+        has_deep) {
         
-        char mismatch_base = 0;
-        uint32_t mismatch_offset = 0;
         PosType64 range_last_pos=0, range_gpos=0;
         PosType32 pos = vb->last_int(SAM_POS);
 
         sam_analyze_copied_SEQ (vb, STRa(seq), pos, last_flags.rev_comp,
                                 vb->ref_consumed, vb->ref_and_seq_consumed, &ctx->line_sqbitmap, 
-                                &mismatch_base, &mismatch_offset, &range_last_pos, &range_gpos);        
-            
-        if (maybe_vb_deep_seq                           &&
-            pos + seq_len - 1         <= range_last_pos &&  // doesn't round robin at edge of the chromosome
-            vb->mismatch_bases_by_SEQ <= 1              &&  // at most one mismatch
-            range_gpos + (pos-1)      <= 0xffffffff     &&  // gpos fits in 32 bits
-            mismatch_offset           <= 255)               // offset fits in 8 bits
+                                has_deep, &range_last_pos, &range_gpos);        
 
-            vb->deep_seq = (PizDeepSeq){ .gpos            = range_gpos + (pos-1),
-                                         .mismatch_offset = (vb->mismatch_bases_by_SEQ ? mismatch_offset : 0),
-                                         .mismatch_base   = (vb->mismatch_bases_by_SEQ ? mismatch_base   : 0) };
+        if (has_deep)
+            sam_piz_set_deep_seq (vb, pos + seq_len - 1 <= range_last_pos, // doesn't round robin at edge of the chromosome  
+                                  range_gpos + (pos-1)); // gpos 
     }
 }
 
@@ -1436,8 +1447,8 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_SEQ)
     if (flag.deep) 
         sam_piz_con_item_cb (vb, &(ContainerItem){ .dict_id = ctx->dict_id }, STRa(recon));
     
-    BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)Btxt (vb->line_start);
-    uint32_t l_seq = GET_UINT32_(alignment, l_seq);
+    BAMAlignmentFixedP alignment = (BAMAlignmentFixedP)Btxt (vb->line_start);
+    uint32_t l_seq = alignment->l_seq;
 
     // backward compatability note: prior to v14 the condition was:
     // if (CTX(SAM_QUAL)->lcodec == CODEC_LONGR) ...

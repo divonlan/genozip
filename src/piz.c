@@ -70,20 +70,73 @@ PizDisQname piz_dis_qname (VBlockP vb)
     return out;
 }
 
+static VBIType piz_get_standalone_vb_i (CompIType comp_i, // if COMP_NONE, we will look up
+                                        VBIType vb_i)   
+{
+    if (comp_i == COMP_NONE)
+        comp_i = sections_vb_header (vb_i)->comp_i;
+
+    return (Z_DT(FASTQ)   && comp_i >= FQ_COMP_R2)    ? (vb_i - sections_get_first_vb_i (comp_i) + 1)
+         : (flag.deep     && comp_i >= SAM_COMP_FQ00) ? (vb_i - sections_get_first_vb_i (comp_i) + 1)
+         : (z_sam_gencomp && comp_i == SAM_COMP_MAIN) ? sections_get_num_vbs_up_to (SAM_COMP_MAIN, vb_i) // gencomp: don't count PRIM VBs in the midst of MAIN VBs, as --biopsy sets --no-gencomp
+         :                                              vb_i;
+}
+
+extern rom main_input_filename (int file_i);
+
+static StrTextLong piz_get_filename_by_comp_i (CompIType comp_i, VBIType vb_i) // one of the two is needed
+{
+    if (comp_i == COMP_NONE)
+        comp_i = sections_vb_header (vb_i)->comp_i;
+
+    int file_i = ((Z_DT(SAM) || Z_DT(BAM)) && comp_i <= SAM_COMP_DEPN) ? 0
+                : (flag.deep && comp_i >= SAM_COMP_FQ00)                ? (1 + comp_i - SAM_COMP_FQ00)
+                :                                                         comp_i;
+
+    StrTextLong s = {};
+    if (IS_ZIP) 
+        strncpy (s.s, main_input_filename (file_i), sizeof(s)-1);
+    
+    else if (txt_file && txt_file->name) 
+        strncpy (s.s, filename_guess_original (txt_file), sizeof(s)-1);
+
+    else // PIZ
+        s = txtheader_get_txt_filename_from_section (comp_i);
+
+    return s;
+}
+
 StrTextLong piz_advise_biopsy (VBlockP vb)
 {
-    // gencomp: don't count PRIM VBs in the midst of MAIN VBs, as --biopsy sets --no-gencomp
-    VBIType no_gencomp_vb_i = (z_sam_gencomp && vb->comp_i == SAM_COMP_MAIN) ? sections_get_num_vbs_up_to (SAM_COMP_MAIN, vb->vblock_i) : vb->vblock_i; 
-
     StrTextLong s;
     snprintf (s.s, sizeof(s), "To see the same data in the original file:\n"
-                              "genozip --biopsy %u%.20s%.20s%s %.768s (optionally add: --no-header)",  // note: segconf.vb_size is only available since v14. For older files, look it up with genocat --stats.
-              no_gencomp_vb_i,
+                              "genozip --biopsy %u%.20s%.20s%s %.768s%s",  // note: segconf.vb_size is only available since v14. For older files, look it up with genocat --stats.
+              piz_get_standalone_vb_i (vb->comp_i, vb->vblock_i),
               // note: segconf.vb_size is only available since v14. For older files, look it up with genocat --stats.
               cond_int (segconf.vb_size/*0 if IS_VB_SIZE_BY_MGZIP*/ && !(segconf.vb_size % (1 MB)), " -B", (unsigned)(segconf.vb_size >> 20)), 
               cond_int (segconf.vb_size && (segconf.vb_size % (1 MB)), " -B", (int)segconf.vb_size),
               segconf.vb_size && (segconf.vb_size % (1 MB)) ? "B" : "",
-              (txt_file && txt_file->name) ? filename_guess_original (txt_file) : IS_PIZ ? txtheader_get_txt_filename_from_section(vb->comp_i).s : "(filename uncalculable)");
+              piz_get_filename_by_comp_i (vb->comp_i, vb->vblock_i).s,
+              (DTP(txt_header_required) != HDR_NONE ? " (optionally add: --no-header)" : ""));
+
+    return s;
+}
+
+StrTextLong piz_advise_biopsy_line (CompIType comp_i, // if COMP_NONE, we will look it up
+                                    VBIType vblock_i, LineIType line_i, 
+                                    rom filename) // optional
+{
+    if (!filename) 
+        filename = piz_get_filename_by_comp_i (comp_i, vblock_i).s;
+
+    StrTextLong s;
+    snprintf (s.s, sizeof(s), "genozip --biopsy-line %u/%u%.20s%.20s%s %.768s",  // note: segconf.vb_size is only available since v14. For older files, look it up with genocat --stats.
+              piz_get_standalone_vb_i (comp_i, vblock_i), line_i, // vb_i if genozip is run on this file alone
+              // note: segconf.vb_size is only available since v14. For older files, look it up with genocat --stats.
+              cond_int (segconf.vb_size/*0 if IS_VB_SIZE_BY_MGZIP*/ && !(segconf.vb_size % (1 MB)), " -B", (unsigned)(segconf.vb_size >> 20)), 
+              cond_int (segconf.vb_size && (segconf.vb_size % (1 MB)), " -B", (int)segconf.vb_size),
+              segconf.vb_size && (segconf.vb_size % (1 MB)) ? "B" : "",
+              filename);
 
     return s;
 }
@@ -491,7 +544,7 @@ DataType piz_read_global_area (Reference ref)
 {
     START_TIMER;
 
-    bool success = zfile_read_genozip_header (0, SOFT_FAIL); // already read if normal file, but not if auxilliary file
+    bool success = zfile_read_genozip_header (0, SOFT_FAIL); // already read if normal file (it won't read it again), but not if auxilliary file
 
     if (flag.show_stats) {
         stats_read_and_display();
@@ -615,7 +668,7 @@ SectionHeaderVbHeader piz_read_vb_header (VBlockP vb)
     vb->flags            = header.flags.vb_header;
     vb->recon_size       = BGEN32 (header.recon_size);   
     vb->longest_line_len = BGEN32 (header.longest_line_len);
-    vb->longest_seq_len  = VER(15) ? BGEN32 (header.longest_seq_len) : 0;
+    vb->longest_seq_len  = VER(15) ? BGEN32 (header.longest_seq_len) : (1 MB)/*long enough arbitrary*/;
     vb->expected_digest  = header.digest;
     vb->chrom_node_index = WORD_INDEX_NONE;
     vb->lines.len        = VER(14) ? sec->num_lines : BGEN32 (header.v13_top_level_repeats);

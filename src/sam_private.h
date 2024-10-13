@@ -99,7 +99,7 @@ typedef int32_t SamASType;
 
 // Z fields which are expected to be the same as their prim - overlap . 
 #define FIRST_SOLO_TAG MATED_BX
-typedef enum         {                                                                                                                      SOLO_BX,     SOLO_RX,     SOLO_CB,     SOLO_CR,     SOLO_BC,/* solo-only-after-this*/ SOLO_QX, SOLO_CY, SOLO_QT, NUM_SOLO_TAGS } SoloTags;
+typedef enum         { /* important: update sam_piz_special_pull_from_sag, sam_seg_is_gc_line if adding Solos */                                                 SOLO_BX,     SOLO_RX,     SOLO_CB,     SOLO_CR,     SOLO_BC,/* solo-only-after-this*/ SOLO_QX, SOLO_CY, SOLO_QT, NUM_SOLO_TAGS } SoloTags;
                        /* only mated (not solo) tags first */
 typedef enum         { MATED_RG,    MATED_PG,    MATED_PU,    MATED_LB,    MATED_OX,    MATED_MI,    MATED_ZA,    MATED_ZB,    MATED_YB,    MATED_BX,    MATED_RX,    MATED_CB,    MATED_CR,    MATED_BC,   NUM_MATED_Z_TAGS } MatedZFields;
 #define MATED_Z_DIDs { OPTION_RG_Z, OPTION_PG_Z, OPTION_PU_Z, OPTION_LB_Z, OPTION_OX_Z, OPTION_MI_Z, OPTION_ZA_Z, OPTION_ZB_Z, OPTION_YB_Z, OPTION_BX_Z, OPTION_RX_Z, OPTION_CB_Z, OPTION_CR_Z, OPTION_BC_Z,                 }                
@@ -127,9 +127,14 @@ extern Did buddied_Z_dids[NUM_MATED_Z_TAGS];
     { _OPTION_QT_Z, -1 }, \
 }
 
-// Alignment used from SAG_BY_SOLO
-typedef struct SoloAln {
-    ZWord word[NUM_SOLO_TAGS]; // references into vb->solo_data (we can add more at any time, but not remove)
+// Alignment used for SAG_BY_SOLO
+#define MAX_SOLO_UNCOMP_LEN 255
+#define MAX_SOLO_COMP_LEN   255
+typedef struct __attribute__ ((packed)) SoloAln {
+    uint32_t index_lo; // index into vb->solo_data of the start of the aln data
+    uint8_t index_hi;
+    uint8_t field_uncomp_len[NUM_SOLO_TAGS]; 
+    uint8_t field_comp_len[NUM_SOLO_TAGS];   // uncomp_len>0 && comp_len==0 means: next field is a copy of this field (so next+=comp_len remains at the same index)
 } SoloAln;
 
 typedef struct {
@@ -143,18 +148,6 @@ typedef struct {
     uint32_t hash;
     uint32_t count;
 } QnameCount;
-
-// number of alignments that are non-deepable for each of these reasons
-typedef enum {      RSN_DEEPABLE, RSN_SECONDARY, RSN_SUPPLEMENTARY, RSN_NO_SEQ, RSN_MONOCHAR, RSN_CONSENSUS, NUM_DEEP_STATS_ZIP } DeepStatsZip; 
-#define RSN_NAMES { "Deepable",   "Secondary",   "Supplementary",   "No_SEQ",   "Monochar",   "Consensus" }
-
-// number of bytes consumed by QNAME/SEQ/QUAL in z_file->deep_ents
-typedef enum {           QNAME_BYTES, SEQ_BYTES, QUAL_BYTES, NUM_DEEP_STATS_PIZ } DeepStatsPiz;
-#define DEEP_ENT_NAMES { "QNAME",     "SEQ",     "QUAL" }
-
-#if (NUM_DEEP_STATS_ZIP > NUM_DEEP_STATS) || (NUM_DEEP_STATS_PIZ > NUM_DEEP_STATS)
-#error NUM_DEEP_STATS is too small
-#endif
 
 typedef struct {
     // we use this construction so that the same fields (eg UR) are in same memory location and can be 
@@ -201,7 +194,7 @@ typedef struct {
     uint8_t NM_len;                
     uint8_t MAPQ, MQ;              // MAPQ is 8 bit by BAM specification, and MQ is mate MAPQ by SAMtags specification
     bool no_seq             : 1;   // SEQ is missing for this line
-    bool is_deepable        : 1;   // True if this line is deepable: Not SEC/DUPP and SEQ exists and is not mono-char.
+    bool is_deepable        : 1;   // True if this line is deepable: Not SEC/SUPP and SEQ exists and is not mono-char.
     bool is_consensus       : 1;   // This alignment is a consensus read
     bool no_qual            : 1;   // QUAL is missing this line
     bool dont_compress_QUAL : 1;   // don't compress QUAL in this line
@@ -243,10 +236,10 @@ typedef struct VBlockSAM {
     #define first_sam_piz_vb_ff_per_line mate_line_i
     LineIType mate_line_i;         // Seg/PIZ: the mate of this line. 
     LineIType saggy_line_i;        // Seg/PIZ: without gencomp: a previous line with the same sag as the current line.
-    #define after_sam_vb_ff_per_line   seq_is_monochar
+    LineIType sag_line_i;          // PIZ: the vb->line_i for which sag was set (NO_LINE if not set in PRIM/DEPN and always in MAIN VB)
+    #define after_sam_vb_ff_per_line   line_not_deepable
 
-    #define first_sam_vb_zero_per_line seq_is_monochar
-    bool seq_is_monochar;          // PIZ only
+    #define first_sam_vb_zero_per_line line_not_deepable
     bool line_not_deepable;        // PIZ only
     bool cigar_missing;            // ZIP/PIZ: current line: SAM "*" BAM: n cigar op=0
     bool qual_missing;             // ZIP/PIZ: current line: SAM "*" BAM: l_seq=0 or QUAL all 0xff (of if segconf.pysam_qual: 0xff followed by 0s
@@ -276,9 +269,25 @@ typedef struct VBlockSAM {
     uint32_t introns;              // number of introns ('N' CIGAR ops) - note: number of N ops, not number of bases
 
     rom textual_seq_str;           // ZIP/PIZ: BAM: points into textual_seq SAM: points into txt_data
-    PizDeepSeq deep_seq;           // PIZ Deep: reconstruction instructions of SEQ, used only if cigar is perfect (eg 151M) and there is at most one mismatch vs reference
-    #define after_sam_vb_zero_per_line consec_is_set_chrom
 
+    // current line Deep stuff
+    PosType64 deep_gpos;           // PIZ Deep: tell FASTQ to copy from reference at this gpos
+    PizDeepSeqFlags piz_deep_flags;   // PIZ Deep: flags before they are placed in deep_ents 
+    uint32_t piz_deep_flags_index; // PIZ Deep: index in deep_ents 
+    uint32_t num_deep_mismatches;  // PIZ Deep: same as mismatch_bases_by_SEQ if reconstructed from SAM alignment, but mismatch_bases_by_SEQ is not used when reconstructing from our aligner
+    #define MAX_DEEP_SEQ_MISMATCHES 1024
+    uint32_t deep_mismatch_offset[MAX_DEEP_SEQ_MISMATCHES]; // PIZ Deep: offsets within ref_consumed
+    char deep_mismatch_base[MAX_DEEP_SEQ_MISMATCHES];  // PIZ Deep
+
+    // current line sag stuff
+    union {
+    const struct SAAln *sa_aln;    // ZIP/PIZ DEPN: SAG_BY_SA: Alignment withing SA Group of this line 
+    const struct CCAln *cc_aln;    // ZIP/PIZ DEPN: SAG_BY_CC: Prim alignment
+    const struct SoloAln *solo_aln;  // ZIP/PIZ DEPN: SAG_BY_SOLO: Prim alignment
+    };
+    uint16_t prim_aln_index_in_SA_Z; // ZIP DEPN SAG_BY_SA: index of PRIM alignment in my SA:Z (1-based)
+
+    #define after_sam_vb_zero_per_line consec_is_set_chrom
     // --------- END OF current line ----------
 
     // REF_INTERNAL and REF_EXT_STORE: the current length of a consecutive range of is_set
@@ -305,26 +314,19 @@ typedef struct VBlockSAM {
     uint32_t num_gc_lines;         // ZIP: number of lines removed from this VB and sent to gencomp (0 if not MAIN VB)
 
     // sag stuff
+    const struct Sag *sag;         // ZIP/PIZ DEPN: sag of this line (pointer into ZIP: z_file->sag_grps PIZ:prim_vb->sag_grps), NULL if none. Note: this is NOT reset in every line, because in prim we just increment this with each line
     uint32_t plsg_i;               // PIZ: prim_vb: index of this VB in the plsg array  
-    LineIType sag_line_i;          // PIZ: the vb->line_i for which sag was set
     Buffer sag_grps;               // ZIP/PIZ: an SA group is a group of alignments, including the primary alignment
     Buffer sag_alns;               // ZIP/PIZ: array of {RNAME, STRAND, POS, CIGAR, NM, MAPQ} of the alignment
     Buffer qname_count;            // ZIP: count the number of each qname_hash in this VB (if needed)
 
-    const struct Sag *sag;         // ZIP/PIZ of SAM_COMP_DEPN: SA Group of this line (pointer into ZIP: z_file->sag_grps PIZ:prim_vb->sag_grps), NULL if none
+    uint32_t comp_qual_len;        // ZIP PRIM: compressed length of QUAL of this VB as it appears in in-memory sags
     union {
-    const struct SAAln *sa_aln;    // ZIP/PIZ of SAM_COMP_DEPN: SAG_BY_SA: Alignment withing SA Group of this line 
-    const struct CCAln *cc_aln;    // ZIP/PIZ of SAM_COMP_DEPN: SAG_BY_CC: Prim alignment
-    const struct SoloAln *solo_aln;// ZIP/PIZ of SAM_COMP_DEPN: SAG_BY_SOLO: Prim alignment
-    };
-    uint32_t comp_qual_len;        // ZIP PRIM: compressed length of QUAL as it appears in in-memory SA Group
-    union {
-    uint32_t comp_cigars_len;      // ZIP PRIM SAG_BY_SA: compressed length of CIGARS as it appears in in-memory SA Group
-    uint32_t solo_data_len;        // ZIP PRIM SAG_BY_SOLO: size of solo_data
-    uint16_t prim_aln_index_in_SA_Z; // ZIP DEPN SAG_BY_SA: index of PRIM alignment in my SA:Z (1-based)
+    uint32_t comp_cigars_len;      // ZIP PRIM SAG_BY_SA: compressed length of CIGARS of this VB as it appears in in-memory sags
+    uint32_t solo_data_len;        // ZIP PRIM SAG_BY_SOLO: compressed length of solo data of this VB as it appears in in-memory sags
     };
     bool check_for_gc;             // ZIP: true if Seg should check for gencomp lines
-    DepnClipping depn_clipping_type; // ZIP: For depn lines that have a clipping, what type of clipping do they have
+    DepnClipping depn_clipping_type; // ZIP: In this VB, for depn lines that have a clipping, what type of clipping do they have
     SAGroup first_grp_i;           // ZIP PRIM: the index of first group of this PRIM VB, in z_file->sag_grps 
     bool seg_found_prim_line;      // Seg MAIN: a prim line was found in the VB
     bool seg_found_depn_line;      // Seg MAIN: a prim line was found in the VB
@@ -342,15 +344,15 @@ typedef struct VBlockSAM {
     bool codec_requires_seq;       // Seg: one or more fields uses a codec that requires SEQ for reconstruction
 
     // stats
-    uint32_t arith_compress_bound_longest_seq_len; // PIZ
     uint32_t deep_stats[NUM_DEEP_STATS]; // ZIP/PIZ: stats collection regarding Deep - one entry for each in DeepStatsZip/DeepStatsPiz
 } VBlockSAM;
 
 #define VB_SAM ((VBlockSAMP)vb)
 
 #define line_textual_cigars_used (segconf.has[OPTION_MC_Z] || /* sam_cigar_seg_MC_Z might be called  */ \
-                                  IS_MAIN(vb))             /* sam_seg_SA_field_is_depn_from_prim might be called */
+                                  IS_MAIN(vb))                /* sam_seg_SA_field_is_depn_from_prim might be called */
 #define line_cigar(dl) Bc (*(IS_BAM_ZIP ? &vb->line_textual_cigars : &vb->txt_data), (dl)->CIGAR.index)
+#define STRacigar(dl) line_cigar(dl), (dl)->CIGAR.len
 
 // fixed-field part of a BAM alignment, see https://samtools.github.io/hts-specs/SAMv1.pdf
 typedef struct __attribute__((packed,aligned(1))) {
@@ -373,7 +375,7 @@ typedef struct __attribute__((packed,aligned(1))) {
     // uint32_t cigar[n_cigar_op]
     // uint8_t seq[(l_seq+1)/2]
     // char qual[l_seq]
-} BAMAlignmentFixed;
+} BAMAlignmentFixed, *BAMAlignmentFixedP;
 
 #define bam_seg_get_aux_B_template(array_subtype, element_type) \
 typedef struct __attribute__((packed,aligned(1))) { char tag[2]; char B; char subtype; uint32_t array_len; element_type elem[]; } BamArray_##array_subtype;
@@ -397,32 +399,20 @@ typedef enum { SA_RNAME, SA_POS, SA_STRAND, SA_CIGAR, SA_MAPQ, SA_NM, NUM_SA_ITE
 // z_file->{sag_grps,sag_alns,sag_qnames,sag_seq,sag_qual} during merge. 
 
 
-#define ALN_CIGAR_BITS          48 
-#define ALN_CIGAR_LEN_BITS_HI   7 
-#define ALN_CIGAR_LEN_BITS_LO   13
-#define ALN_CIGAR_LEN_BITS (ALN_CIGAR_LEN_BITS_HI + ALN_CIGAR_LEN_BITS_LO)
-#define ALN_CIGAR_COMP_LEN_BITS 19
-#define ALN_NM_BITS             23
+#define ALN_CIGAR_INDEX_BITS 43 
+#define ALN_CIGAR_LEN_BITS   20
+#define ALN_NM_BITS          23
 
-#define CIGAR_SIG_LEN 12
-typedef struct { 
-    uint8_t bytes[CIGAR_SIG_LEN]; 
-} CigarSignature;
-
-// Alignment used from SAG_BY_SA
-typedef struct SAAln {
-    // 24 bytes
-    union {
-        struct __attribute__ ((packed,aligned(4))) {
-            uint64_t is_word  : 1;                       // Piz: true is CIGAR is in OPTION_SA_CIGAR.dict, false if it is in OPTION_SA_CIGAR.local    
-            uint64_t index    : ALN_CIGAR_BITS;          // Piz: cigar_is_word ? WordIndex in OPTION_SA_CIGAR : index into OPTION_SA_CIGAR.local
-            uint64_t len_hi   : ALN_CIGAR_LEN_BITS_HI;   // Piz: only if cigar_is_word=false
-            uint32_t len_lo   : ALN_CIGAR_LEN_BITS_LO;   // Piz: only if cigar_is_word=false
-            uint32_t comp_len : ALN_CIGAR_COMP_LEN_BITS; // Piz: only if cigar_is_word=false
+// Alignment used from SAG_BY_SA (not part of the file format)
+typedef struct SAAln {     // 20 bytes
+    union __attribute__ ((packed,aligned(4))) {
+        struct {
+            uint64_t is_word : 1;                    // Piz: true is CIGAR is in OPTION_SA_CIGAR.dict, false if it is in OPTION_SA_CIGAR.local    
+            uint64_t index   : ALN_CIGAR_INDEX_BITS; // Piz: cigar_is_word ? WordIndex in OPTION_SA_CIGAR : index into OPTION_SA_CIGAR.local
+            uint64_t len     : ALN_CIGAR_LEN_BITS;   // Piz: only if cigar_is_word=false
         } piz;
-        #define ALN_CIGAR_LEN(a) ((a)->cigar.piz.len_lo | ((a)->cigar.piz.len_hi << ALN_CIGAR_LEN_BITS_LO))
 
-        CigarSignature signature; // Zip: first 96 bits of MD5 for CIGARs 13 characters or longer, or the CIGAR itself if shorter
+        uint64_t signature;// Zip: crc64 of the (possibly abbreviated) cigar 
     } cigar;
 
     WordIndex rname;       // Zip: word_index into RNAME == SAM header contig number.
@@ -433,16 +423,16 @@ typedef struct SAAln {
     uint32_t nm      : ALN_NM_BITS; 
 } SAAln;
 
-// Alignment used from SAG_BY_CC
+// Alignment used from SAG_BY_CC (not part of the file format)
 typedef struct CCAln {
-    WordIndex rname;  // RNAME of prim alignment (alignment with NH>2 but no CC,CP) ; sometimes WORD_INDEX_NONE if rname is not in sam header / ref file
-    PosType32 pos;   // POS of prim alignment
+    WordIndex rname;       // RNAME of prim alignment (alignment with NH>2 but no CC,CP) ; sometimes WORD_INDEX_NONE if rname is not in sam header / ref file
+    PosType32 pos;         // POS of prim alignment
 } CCAln;
 
 // PIZ: history of cigar analysis - one item per line
 typedef struct CigarAnalItem {
-    uint32_t seq_len      : 31;  // equivalent to dl->SEQ.len in ZIP - set if ANY of SEQ, QUAL, CIGAR-implied-seq-consumed have it
-    uint32_t qual_missing : 1;   // this alignment has no QUAL (or '*')
+    uint32_t seq_len      : 31;   // equivalent to dl->SEQ.len in ZIP - set if ANY of SEQ, QUAL, CIGAR-implied-seq-consumed have it
+    uint32_t qual_missing : 1;    // this alignment has no QUAL (or '*')
     uint32_t ref_consumed;
     uint32_t hard_clip[2];
 } CigarAnalItem;
@@ -507,7 +497,7 @@ typedef struct Sag { // 32 bytes (= 4 x uint64_t)
 #define MAX_SA_SEQ_INDEX      MAXB64(GRP_SEQ_BITS)     // out limit (index in bases, not bytes)
 #define MAX_SA_QUAL_INDEX     MAXB64(GRP_QUAL_BITS)
 #define MAX_SA_GRP_ALNS       MAXB64(GRP_ALNS_BITS)    // our limit (number of prim+depn alignments in the file)
-#define MAX_SA_CIGAR_INDEX    MAXB64(ALN_CIGAR_BITS)
+#define MAX_SA_CIGAR_INDEX    MAXB64(ALN_CIGAR_INDEX_BITS)
 #define CAP_SA_AS(as)         MAX_(0, MIN_((as), (SamASType)MAXB(GRP_AS_BITS)))  // our limit - [0,65535] - capped at 0 and 65535
 
 #define DATA_LINE(i) ((i) >= 0 ? B(ZipDataLineSAM, vb->lines, (i)) : NULL)
@@ -517,6 +507,8 @@ typedef struct Sag { // 32 bytes (= 4 x uint64_t)
 #define IS_DEPN(x) ((x)->comp_i == SAM_COMP_DEPN)
 
 #define DICT_ID_ARRAY(dict_id) (DictId){ .id = { (dict_id).id[0], (dict_id).id[1], type,  '_','A','R','R' } } // DTYPE_2
+
+extern bool bam_txt_file_is_last_alignment_unmapped (void);
 
 extern void      sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qname), unsigned add_additional_bytes);
 extern WordIndex sam_seg_RNAME (VBlockSAMP vb, ZipDataLineSAMP dl, STRp (chrom), bool against_sa_group_ok, unsigned add_bytes);
@@ -604,7 +596,7 @@ extern const uint8_t cigar_lookup_bam[16];
 extern void sam_seg_cigar_initialize (VBlockSAMP vb);
 extern void sam_cigar_analyze (VBlockSAMP vb, STRp(cigar), bool cigar_is_in_textual_cigar, uint32_t *seq_consumed);
 extern void bam_seg_cigar_analyze (VBlockSAMP vb, ZipDataLineSAMP dl, uint32_t *seq_consumed);
-extern void sam_cigar_binary_to_textual (VBlockSAMP vb, uint16_t n_cigar_op, const BamCigarOp *cigar, BufferP textual_cigar);
+extern void sam_cigar_binary_to_textual (VBlockSAMP vb, const BamCigarOp *cigar, uint16_t n_cigar_op, bool reverse, BufferP textual_cigar);
 extern bool sam_cigar_textual_to_binary (VBlockSAMP vb, STRp(cigar), BufferP binary_cigar);
 extern bool sam_is_cigar (STRp(cigar), bool allow_empty);
 extern void sam_seg_CIGAR (VBlockSAMP vb, ZipDataLineSAMP dl, uint32_t last_cigar_len, STRp(seq_data), STRp(qual_data), uint32_t add_bytes);
@@ -614,6 +606,8 @@ extern bool sam_cigar_reverse (char *dst, STRp(cigar));
 extern bool sam_cigar_is_valid (STRp(cigar));
 extern void sam_seg_other_CIGAR (VBlockSAMP vb, ContextP ctx, STRp (cigar), bool squanking_allowed, unsigned add_bytes);
 extern rom display_binary_cigar (VBlockSAMP vb);
+extern void sam_cigar_collapse_eqx_to_M (BufferP cigar);
+extern uint64_t cigar_sign (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(cigar));
 
 extern bool sam_seg_0A_rname_cb (VBlockP vb, ContextP ctx, STRp(oa_rname), uint32_t repeat);
 extern bool sam_seg_0A_pos_cb (VBlockP vb, ContextP ctx, STRp(oa_pos), uint32_t repeat);
@@ -634,10 +628,6 @@ extern bool sam_cigar_has_H (STRp(cigar)); // textual
 extern uint32_t sam_cigar_get_MC_ref_consumed (STRp(mc));
 extern void sam_reconstruct_main_cigar_from_sag (VBlockSAMP vb, bool do_htos, ReconType reconstruct);
 extern uint32_t sam_reconstruct_SA_cigar_from_SA_Group (VBlockSAMP vb, SAAln *a, bool abbreviate, bool get_X_bases);
-
-extern CigarSignature cigar_sign (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(cigar));
-extern bool cigar_is_same_signature (CigarSignature sig1, CigarSignature sig2) ;
-extern StrText cigar_display_signature (CigarSignature sig);
 
 #define SA_CIGAR_DISPLAY_LEN 12
 extern rom sam_piz_display_aln_cigar (const SAAln *a);
@@ -671,6 +661,7 @@ extern void sam_seg_QUAL_initialize (VBlockSAMP vb);
 extern void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAMP dl, rom qual, uint32_t qual_data_len, unsigned add_bytes);
 extern rom bam_qual_display (bytes qual, uint32_t l_seq); 
 extern void sam_seg_other_qual (VBlockSAMP vb, ZipDataLineSAMP dl, TxtWord *dl_word, Did did_i, STRp(qual), bool len_is_seq_len, unsigned add_bytes);
+extern void sam_qual_produce_huffman_if_better (VBlockSAMP vb);
 
 // --deep stuff
 // Stuff that happens during SAM seg
@@ -679,11 +670,11 @@ extern void sam_deep_set_QNAME_hash (VBlockSAMP vb, ZipDataLineSAMP dl, QType q,
 extern void sam_deep_set_SEQ_hash (VBlockSAMP vb,ZipDataLineSAMP dl, STRp(textual_seq));
 extern void sam_deep_set_QUAL_hash (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qual));
 extern void sam_piz_deep_initialize (void);
-extern void sam_piz_deep_init_vb (VBlockSAMP vb, ConstSectionHeaderVbHeaderP header);
+extern void sam_piz_set_deep_seq (VBlockSAMP vb, bool not_end_of_contig, PosType64 gpos);
 extern void sam_piz_deep_grab_deep_ents (VBlockSAMP vb);
 
 #define SA_QUAL_DISPLAY_LEN 20
-extern rom sam_display_qual_from_SA_Group (const Sag *g);
+extern StrTextUltraLong sam_display_qual_from_sag (const Sag *g);
 
 // MD:Z stuff
 extern void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(md), PosType32 pos);
@@ -761,7 +752,8 @@ extern void sam_seg_HISAT2_Zs_Z (VBlockSAMP vb, STRp(zs), unsigned add_bytes);
 extern void sam_seg_CPU_XL_Z (VBlockSAMP vb, STRp(xl), unsigned add_bytes);
 
 // tmap (IonXpress) stuff
-extern void sam_seg_TMAP_XM_i (VBlockSAMP vb, ValueType XM, unsigned add_bytes);
+extern void sam_seg_tmap_XM_i (VBlockSAMP vb, int64_t xm, unsigned add_bytes);
+extern void sam_seg_tmap_XT_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t xt, unsigned add_bytes);
 
 extern void sam_seg_init_bisulfite (VBlockSAMP vb, ZipDataLineSAMP dl);
 
@@ -792,6 +784,8 @@ extern bool sam_seg_gem3_XA_strand_cb (VBlockP vb, ContextP ctx, STRp(field), ui
 extern void sam_seg_blasr_FI_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t fi, unsigned add_bytes);
 
 // scRNA-seq stuff (STARsolo and cellranger)
+extern void sam_produce_solo_huffmans (VBlockSAMP vb);
+extern bytes sam_solo_sag_data (VBlockSAMP vb, SoloTags solo);
 extern void sam_segconf_retag_UBURUY (void);
 extern void sam_10xGen_seg_initialize (VBlockSAMP vb);
 extern void sam_seg_TX_AN_Z (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, STRp(value), unsigned add_bytes);
@@ -853,6 +847,7 @@ extern void sam_seg_prim_add_sag_SOLO (VBlockSAMP vb, ZipDataLineSAMP dl);
 extern void sam_seg_sag_stuff (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(textual_cigar), rom textual_seq, bool is_bam);
 extern void sam_sa_prim_initialize_ingest(void);
 extern void sam_zip_prim_ingest_vb (VBlockSAMP vb);
+extern void sam_gencomp_trim_memory (void);
 extern void sam_seg_against_sa_group (VBlockSAMP vb, ContextP ctx, uint32_t add_bytes);
 extern void sam_seg_against_sa_group_int (VBlockSAMP vb, ContextP ctx, int64_t parameter, uint32_t add_bytes);
 extern Sag *sam_piz_get_prim_vb_first_sa_grp (VBlockSAMP vb);
@@ -872,7 +867,7 @@ extern ShowAln sam_show_sag_one_aln (const Sag *g, const SAAln *a);
 typedef void (*ArrayItemCallback) (VBlockSAMP vb, ContextP ctx, void *cb_param, void *array, uint32_t array_len);
 extern void sam_seg_array_one_ctx (VBlockSAMP vb, ZipDataLineSAMP dl, DictId dict_id, uint8_t type, rom array, int array_len, ArrayItemCallback callback, void *cb_param, PizSpecialReconstructor length_predictor);
 
-#define SAM_PIZ_HAS_SAG (((VBlockSAMP)vb)->sag && ((VBlockSAMP)vb)->sag_line_i == vb->line_i + 1)
+#define SAM_PIZ_HAS_SAG (((VBlockSAMP)vb)->sag && ((VBlockSAMP)vb)->sag_line_i == vb->line_i)
 
 extern const char aux_sep_by_type[2][256];
 

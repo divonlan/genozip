@@ -202,16 +202,16 @@ void vcf_seg_FORMAT_PS_PID_missing_value (VBlockVCFP vb, ContextP ctx, rom end_o
 //---------
 
 // called by compute thread, after uncompress, before reconstruct
-void vcf_piz_ps_pid_lookback_insert (VBlockP vb, Did did_i, STRp(recon))
+void vcf_piz_ps_pid_lookback_insert (VBlockVCFP vb, Did did_i, STRp(recon))
 {
     decl_ctx (did_i);
 
     if (!ctx->is_initialized) {
-        lookback_init (vb, CTX(VCF_LOOKBACK), ctx, STORE_LAST_TXT);
+        lookback_init (VB, CTX(VCF_LOOKBACK), ctx, STORE_LAST_TXT);
         ctx->is_initialized = true;
     }
     
-    lookback_insert (vb, VCF_LOOKBACK, did_i, false, TXTWORD(recon));
+    lookback_insert (VB, VCF_LOOKBACK, did_i, false, TXTWORD(recon));
 }
 
 // update lookback in this line, if it has been shifted due to an insertion

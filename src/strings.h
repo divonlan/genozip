@@ -239,7 +239,7 @@ static inline uint32_t str_int (int64_t n, char *str /* out */) { return str_int
 static inline uint32_t str_int_fast (int64_t n, char *str /* out */) // faster if many of the numbers are expected to be single-digit
 { 
     if (n <= 9) { *str = '0' + n; return 1; }
-    else return str_int_ex (n, str, true); 
+    else return str_int_ex (n, str, false); 
 }
 
 extern uint32_t str_hex_ex (int64_t n, char *str /* out */, bool uppercase, bool add_nul_terminator);
@@ -274,6 +274,9 @@ extern bool str_is_in_range (STRp(str), char first_c, char last_c);
 static bool inline str_is_upper (STRp(str))    { return str_is_in_range (STRa(str), 'A', 'Z'); }
 static bool inline str_is_lower (STRp(str))    { return str_is_in_range (STRa(str), 'a', 'z'); }
 static bool inline str_is_numeric(STRp(str))   { return str_is_in_range (STRa(str), '0', '9'); } // numeric - leading zeros ok
+
+extern uint32_t str_pack_bases (uint8_t *packed, STRp(bases), bool revcomp);
+extern uint32_t str_unpack_bases (char *bases, bytes packed, uint32_t num_bases);
 
 // textual length of a non-negative integer
 extern uint32_t str_get_uint_textual_len (uint64_t n);

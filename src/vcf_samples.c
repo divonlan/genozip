@@ -248,7 +248,7 @@ static void vcf_seg_FORMAT_mux_by_dosage_int (VBlockVCFP vb, ContextP ctx, int64
 }
 
 // mirroring seg, we accept monoploid or diploid genotypes, with alleles 0 and 1.
-int vcf_piz_get_mux_channel_i (VBlockP vb)
+int vcf_piz_get_mux_channel_i (VBlockVCFP vb)
 {
     // since 15.0.36 - count ht that are not '0' or '.'
     if (z_file->max_ploidy_for_mux)  
@@ -273,7 +273,7 @@ int vcf_piz_get_mux_channel_i (VBlockP vb)
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_DOSAGE)
 {
-    int channel_i = vcf_piz_get_mux_channel_i (vb);
+    int channel_i = vcf_piz_get_mux_channel_i (VB_VCF);
     return reconstruct_demultiplex (vb, ctx, STRa(snip), channel_i, new_value, reconstruct);
 }
 
@@ -322,7 +322,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_DOSAGExDP)
     int64_t DP = reconstruct_peek (vb, CTX(FORMAT_DP), &DP_str, 0).i;
     DP = (*DP_str=='.') ? 0 : MAX_(0, MIN_(DP, num_dps-1));
 
-    int channel_i = vcf_piz_get_mux_channel_i (vb); 
+    int channel_i = vcf_piz_get_mux_channel_i (VB_VCF); 
 
     channel_i = (channel_i == 3 && !new_method) ? (num_dps * 3) : (DP*num_dosages + channel_i);
 
@@ -1049,7 +1049,7 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_AB)
 {
     VBlockVCFP vb = (VBlockVCFP)vb_;
 
-    int channel_i = vcf_piz_get_mux_channel_i (VB);
+    int channel_i = vcf_piz_get_mux_channel_i (vb);
 
     if ((channel_i == 0 || channel_i == 2) && reconstruct) 
         RECONSTRUCT1 ('.');
@@ -1229,7 +1229,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_DS_old)
     int32_t val;
     sscanf (snip, "%s %d", float_format, &val); // snip looks like eg: "%5.3f 50000"
 
-    unsigned dosage = vcf_piz_get_mux_channel_i (vb); // seg guaranteed 0, 1 or 2 (or else this SPECIAL is not used)
+    unsigned dosage = vcf_piz_get_mux_channel_i (VB_VCF); // seg guaranteed 0, 1 or 2 (or else this SPECIAL is not used)
     bufprintf (vb, &vb->txt_data, float_format, (double)val / 1000000 + dosage);
 
 done:

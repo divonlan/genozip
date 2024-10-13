@@ -145,7 +145,7 @@ typedef struct {
         show_threads, show_uncompress, biopsy, skip_segconf, show_data_type,
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
         debug_LONG, show_qual, debug_qname, debug_read_ctxs, debug_sag, debug_gencomp, debug_lines, debug_latest,
-        debug_peek, stats_submit, debug_submit, show_segconf_has, debug_huffman, debug_split, debug_upgrade,
+        debug_peek, stats_submit, debug_submit, show_segconf_has, debug_huffman, show_huffman, debug_split, debug_upgrade,
         debug_debug,  // a flag with no functionality - used for ad-hoc debugging  
         debug_valgrind, debug_tar, // ad-hoc debug printing in prod
         show_compress, show_sec_gencomp, show_scan,
@@ -159,7 +159,7 @@ typedef struct {
         #define SHOW_ALL_HEADERS (-1)
         show_headers; // (1 + SectionType to display) or 0=flag off or -1=all sections
     rom help, dump_section, show_is_set, show_time, show_mutex, show_vblocks, show_header_dict_name;
-    int64_t dump_section_i;
+    int32_t dump_section_i, show_header_section_i;
     enum { SHOW_DEEP_SUMMARY=1, SHOW_DEEP_ONE_HASH=2, SHOW_DEEP_ALL=3 } show_deep;
 
     CompIType show_time_comp_i;   // comp_i for which to show time (possibly COMP_NONE or COMP_ALL)
@@ -213,6 +213,8 @@ typedef struct {
          explicit_ref,       // ref->filename was set by --reference or --REFERENCE (as opposed to being read from the genozip header)
          collect_coverage,   // PIZ: collect coverage data for show_coverage/idxstats
          deep_fq_only,       // PIZ: SAM data is reconstructed by not written, only FASTQ data is written
+         deep_sam_only,      // PIZ: only SAM data is needed, no need to create deep_ents
+         deep_no_qual,       // ZIP: don't deep QUAL data
          removing_cache,     // genocat: running --no-cache with only -e <ref-file> to remove cache
          let_OS_cleanup_on_exit; // don't release resources as we are about to exit - the OS does it faster
     int only_headers,        // genocat --show_headers (not genounzip) show only headers (value is section_type+1 or SHOW_ALL_HEADERS)
@@ -232,8 +234,6 @@ typedef struct {
 } Flags;
 
 extern Flags flag;
-
-#define NO_LINE (-1) // used for lines_first, lines_last, biopsy_lines, VB_SAM->mate_line_i, VB_SAM->saggy_line_i
 
 #define SAVE_FLAGS Flags save_flag = flag
 #define RESTORE_FLAGS flag = save_flag

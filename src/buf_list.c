@@ -642,8 +642,8 @@ static bool buflist_test_overflows_do (VBlockP vb, bool primary, rom msg)
         }
 #endif
 
-        BufferSpinlockP spinlock = buf->promiscuous ? buf_lock_promiscuous (buf, __FUNCLINE) : NULL; // prevent frees or reallocs while we're testing
-        if (buf->promiscuous && !spinlock) return false; // by the time we acquired the lock, buf was already freed
+        BufferSpinlockP spinlock = buf->promiscuous && !buf->spinlock->lock/*crude checking of lock*/ ? buf_lock_promiscuous (buf, __FUNCLINE) : NULL; // prevent frees or reallocs while we're testing
+        if (buf->promiscuous && !spinlock) return false; // either buffer is locked (so this might hang if we attempted to lock) or by the time we acquired the lock, buf was already freed
 
         // memory=0 could be a buffer that has been buf_moved, or a promiscous evb buffer current being 
         // realloced by a compute thread (for example, Context.global_hash is realloced by all threads (under mutex protection)

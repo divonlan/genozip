@@ -94,7 +94,7 @@ extern void fastq_zip_set_txt_header_flags (struct FlagsTxtHeader *f);
 extern void fastq_zip_initialize (void);
 extern rom fastq_zip_modify (VBlockP vb, rom line_start, uint32_t remaining);
 extern void fastq_segconf_set_r1_or_r2 (void);
-extern void fastq_zip_after_segconf (void);
+extern void fastq_zip_after_segconf (VBlockP vb);
 extern void fastq_zip_finalize (bool is_last_user_txt_file);
 extern void fastq_zip_init_vb (VBlockP vb);
 extern void fastq_zip_after_compute (VBlockP vb);

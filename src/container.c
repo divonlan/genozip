@@ -232,10 +232,7 @@ static inline void container_verify_line_integrity (VBlockP vb, ContextP debug_l
         if (OUT_DT(BAM) || OUT_DT(CRAM))
             iprintf ("Tip: To view the dumped BAM line with:\n   genozip --show-bam %s\n\n", fn.s);
 
-        iprintf ("Tip: To extract the original line for comparison use:\n   genozip --biopsy-line=%u/%u -B%u%s %s\n",
-                vb->vblock_i, vb->line_i, (int)segconf.vb_size >> 20, 
-                ((VB_DT(SAM) || VB_DT(BAM)) && !z_file->z_flags.has_gencomp) ? " --no-gencomp" : "",
-                z_file->txt_filename);
+        iprintf ("Tip: To extract the original line for comparison use:\n   %s\n", piz_advise_biopsy_line (vb->comp_i, vb->vblock_i, vb->line_i, NULL).s);
 
         // show data-type-specific information about defective line
         DT_FUNC (vb, piz_xtra_line_data)(vb);

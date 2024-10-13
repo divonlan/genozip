@@ -330,7 +330,7 @@ static void codec_longr_reconstruct_init (VBlockP vb, ContextP lens_ctx, Context
         value_to_bin_dst[i] = value_to_bin_src[i]; // uint64 -> uint8
 
     // initialize longr state - stored in lens_ctx.longr_state
-    buf_alloc_zero (vb, &lens_ctx->longr_state, 1, 0, LongrState, 0, CTX_TAG_LOCAL); 
+    buf_alloc_zero (vb, &lens_ctx->longr_state, 1, 0, LongrState, 0, "contexts->longr_state"); 
     codec_longr_alg_init (B1ST (LongrState, lens_ctx->longr_state));
 
     lens_ctx->is_initialized = true;

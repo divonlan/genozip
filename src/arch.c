@@ -142,7 +142,7 @@ void arch_initialize (rom my_argv0)
     ASSERT0 (sizeof (LocalType)     == 1,  "expecting sizeof (LocalType)==1");
     ASSERT0 (sizeof (uint128_t)     == 16, "expecting sizeof (uint128_t)==16");
     ASSERT0 (sizeof (ReconPlanItem) == 12, "expecting sizeof (ReconPlanItem)==12");
-    ASSERT0 (sizeof (void *)        <= 8,  "expecting sizeof (void *)<=8"); // important bc void* is a member of ValueType, and also counting on it in huffman_uncompress
+    ASSERT0 (sizeof (void *)        <= 8,  "expecting sizeof (void *)<=8"); // important bc void* is a member of ValueType, and also counting on it in huffman_uncompress, str_pack_bases, bits_init_do
     ASSERT0 (sizeof (ValueType)     == 8,  "expecting sizeof (ValueType)==8");
 
     // Note: __builtin_clzl is inconsistent between Windows and Linux, even on the same host, so we don't use it

@@ -708,7 +708,7 @@ void fastq_segconf_finalize (VBlockP vb)
 }
 
 // called after segconf inc. segconf_finalize_optimize() which might remove optimizations
-void fastq_zip_after_segconf (void)
+void fastq_zip_after_segconf (VBlockP vb)
 {
     if (IS_R1) {
         double est_num_vbs = MAX_(1, (double)txt_file->est_seggable_size / (double)segconf.vb_size * 1.1);
@@ -1383,7 +1383,8 @@ void fastq_reset_line (VBlockP vb_)
         CTX(FASTQ_SQBITMAP)->r1_is_aligned = VER(14) ? PAIR1_ALIGNED_UNKNOWN 
                                                      : PAIR1_ALIGNED; // up to v13, all lines had alignment data, even if unmapped
 
-    vb->sam_seq_offset = 0;
+    memset (&vb->first_fastq_vb_zero_per_line, 0, (rom)&vb->after_fastq_vb_zero_per_line - (rom)&vb->first_fastq_vb_zero_per_line);
+    vb->seq_len = 0;
 }
 
 //---------------------------------------------------------

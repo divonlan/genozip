@@ -59,7 +59,7 @@ rom genozip_exit_code_name (ExitCode exit_code)
         return strsignal (WTERMSIG(exit_code)); // name of signal
 #endif
 
-    return (exit_code >= 0 && exit_code < NUM_EXIT_CODES) ? names[exit_code] : "Invalid Genpzip exit code";
+    return (exit_code >= 0 && exit_code < NUM_EXIT_CODES) ? names[exit_code] : "Invalid Genozip exit code";
 }
 
 #ifdef _WIN32

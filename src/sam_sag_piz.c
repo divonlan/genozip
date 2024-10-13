@@ -66,7 +66,7 @@ static void sam_sa_reconstruct_SA_from_SA_Group (VBlockSAMP vb,
     }
 }
 
-// PIZ: reconstruction of a PRIM or DEPN VB: Called in reconstruction of lines with SPECIAL_SAG (=all lines if PRIM)
+// PIZ: reconstruction of a PRIM or DEPN VB: Called in reconstruction of lines with SPECIAL_pull_from_sag (=all lines if PRIM)
 void sam_piz_set_sag (VBlockSAMP vb)
 {
     if (SAM_PIZ_HAS_SAG) return; // vb->sag and sa_aln are already set for this line 
@@ -80,12 +80,8 @@ void sam_piz_set_sag (VBlockSAMP vb)
         vb->sag = B(const Sag, z_file->sag_grps, sa_grp_i);
     }
 
-    else { // PRIM
-        if (!vb->sag_line_i) 
-            vb->sag = sam_piz_get_prim_vb_first_sa_grp (vb);
-        else
-            vb->sag++; // groups within a VB always have a consecutive grp_i
-    }
+    else  // PRIM
+        vb->sag = vb->sag ? (vb->sag + 1) : sam_piz_get_prim_vb_first_sa_grp (vb);
 
     // set vb->sa_aln (only for SA:Z-type SA Groups)
     if (IS_SAG_SA) {
@@ -103,7 +99,15 @@ void sam_piz_set_sag (VBlockSAMP vb)
         vb->solo_aln = B(SoloAln, z_file->sag_alns, ZGRP_I(vb->sag));
 
     // indicate that we have already updated sag and sa_aln for this line_i
-    vb->sag_line_i = vb->line_i + 1; // +1 as sag_line_i==0 means "not set"
+    vb->sag_line_i = vb->line_i;
+}
+
+static void sam_reconstruct_solo_from_sag (VBlockSAMP vb, Did did_i, SoloTags solo)
+{
+    bytes comp = sam_solo_sag_data (vb, solo);
+    uint32_t uncomp_len = vb->solo_aln->field_uncomp_len[solo];
+            
+    RECONSTRUCT_huffman_or_copy (VB, did_i, uncomp_len, comp);
 }
 
 // PIZ compute thread: called when reconstructing a PRIM or DEPN line - reconstruct pulling info from
@@ -127,7 +131,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_pull_from_sag)
 
     switch (ctx->did_i) {
         case SAM_QNAME: 
-            if (reconstruct) RECONSTRUCT_huffman (VB, SAM_QNAME, g->qname_len, GRP_QNAME(g));
+            if (reconstruct) RECONSTRUCT_huffman_or_copy (VB, SAM_QNAME, g->qname_len, GRP_QNAME(g));
             return NO_NEW_VALUE;
 
         case SAM_RNAME: {
@@ -196,15 +200,17 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_pull_from_sag)
         case SAM_QUAL:
             ABORT_PIZ0 ("Expecting SAM_QUAL to be handled by sam_piz_special_QUAL");
 
-        default:
-            // solo tags
-            for (SoloTags tag_i=0; tag_i < NUM_SOLO_TAGS; tag_i++)
-                if (ctx->did_i == solo_props[tag_i].did_i) {
-                    if (reconstruct) RECONSTRUCT (Bc(z_file->solo_data, vb->solo_aln->word[tag_i].index), vb->solo_aln->word[tag_i].len); 
-                    return NO_NEW_VALUE;
-                }
+        // solo tags
+        case OPTION_BX_Z: if (reconstruct) sam_reconstruct_solo_from_sag (vb, ctx->did_i, SOLO_BX); return NO_NEW_VALUE;
+        case OPTION_RX_Z: if (reconstruct) sam_reconstruct_solo_from_sag (vb, ctx->did_i, SOLO_RX); return NO_NEW_VALUE;
+        case OPTION_CB_Z: if (reconstruct) sam_reconstruct_solo_from_sag (vb, ctx->did_i, SOLO_CB); return NO_NEW_VALUE;
+        case OPTION_CR_Z: if (reconstruct) sam_reconstruct_solo_from_sag (vb, ctx->did_i, SOLO_CR); return NO_NEW_VALUE;
+        case OPTION_BC_Z: if (reconstruct) sam_reconstruct_solo_from_sag (vb, ctx->did_i, SOLO_BC); return NO_NEW_VALUE;
+        case OPTION_QX_Z: if (reconstruct) sam_reconstruct_solo_from_sag (vb, ctx->did_i, SOLO_QX); return NO_NEW_VALUE;
+        case OPTION_CY_Z: if (reconstruct) sam_reconstruct_solo_from_sag (vb, ctx->did_i, SOLO_CY); return NO_NEW_VALUE;
+        case OPTION_QT_Z: if (reconstruct) sam_reconstruct_solo_from_sag (vb, ctx->did_i, SOLO_QT); return NO_NEW_VALUE;
 
-            // not a solo tag
+        default:
             ABORT_PIZ ("Unexpected ctx=%s(%u)", ctx->tag_name, ctx->did_i);
     }
 
@@ -220,7 +226,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_PRIM_QNAME)
 
     uint32_t last_txt_index = Ltxt;
 
-    RECONSTRUCT_huffman (VB, SAM_QNAME, vb->sag->qname_len, GRP_QNAME(vb->sag));
+    RECONSTRUCT_huffman_or_copy (VB, SAM_QNAME, vb->sag->qname_len, GRP_QNAME(vb->sag));
 
     CTX(SAM_QNAME)->last_txt = (TxtWord){ .index = last_txt_index,
                                           .len   = Ltxt - last_txt_index }; // 15.0.16 - needed by sam_ultima_bi_prediction

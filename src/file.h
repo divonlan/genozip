@@ -17,9 +17,19 @@
 typedef rom FileMode;
 extern FileMode READ, WRITE, WRITEREAD;// this are pointers to static strings - so they can be compared eg "if (mode==READ)"
 
-// number of alignments that are deepable or non-deepable for each of these reasons
-typedef enum {          NDP_FQ_READS, NDP_DEEPABLE, NDP_DEEPABLE_TRIM, NDP_NO_ENTS, NDP_MONOSEQ, NDP_BAD_N_QUAL, NDP_SAM_DUP, NDP_SAM_DUP_TRIM, NDP_NO_MATCH , NUM_DEEP_STATS } DeepStatsFastq; 
-#define NO_DEEP_NAMES { "FQ_reads",   "Deepable",   "Dpable_trim",     "No_ents",   "Monoseq",   "Bad_N_qual",   "SAM_dup",   "SAM_dup_trm",    "No_match" }
+//                             number of sam alignments that are non-deepable for each of these reasons               | number of fastq reads that are deepable or non-deepable for each of these reasons
+typedef enum {                 RSN_DEEPABLE, RSN_SECONDARY, RSN_SUPPLEMENTARY, RSN_NO_SEQ, RSN_MONOCHAR, RSN_CONSENSUS, NDP_FQ_READS, NDP_DEEPABLE, NDP_DEEPABLE_TRIM, NDP_NO_ENTS, NDP_MONOSEQ, NDP_BAD_N_QUAL, NDP_SAM_DUP, NDP_SAM_DUP_TRIM, NDP_NO_MATCH, NUM_DEEP_STATS_ZIP } DeepStatsZip; 
+#define DEEP_STATS_NAMES_ZIP { "Deepable",   "Secondary",   "Supplementary",   "No_SEQ",   "Monochar",   "Consensus",   "FQ_reads",   "Deepable",   "Dpable_trim",     "No_ents",   "Monoseq",   "Bad_N_qual",   "SAM_dup",   "SAM_dup_trm",    "No_match"  }
+
+// bytes consumed by QNAME/SEQ/QUAL in z_file->deep_ents (SEQ_* in same order as PizZDeepSeqEncoding)                                                  | reasons why SEQ is stored explicitly in z_file->deep_ents and not vs the reference
+typedef enum {                 QNAME_BYTES, SEQ_PACKED_BYTES, SEQ_BY_REF_BYTES, SEQ_ARITH_BYTES, QUAL_MONOCHAR_BYTES, QUAL_HUFF_BYTES, QUAL_ARITH_BYTES, EXPL_DEEPABLE,    EXPL_SEQ_AS_REF, EXPL_TOO_MANY_MISMATCHES, EXPL_SEQ_NONREF_NON_ACGT, EXPL_SEQ_END_OF_CONTIG, EXPL_SEQ_COPY_VERBATIM, NUM_DEEP_STATS_PIZ } DeepStatsPiz;
+#define DEEP_STATS_NAMES_PIZ { "QNAME",     "SEQ_packed",     "SEQ_by_ref",     "SEQ_arith",     "QUAL_monochar",     "QUAL_huff",     "QUAL_arith",     "Total_deepable", "stored_as_ref", "too_many_mismatches",    "nonref_has_non-ACGT",    "end_of_contig",        "copy_verbatim", }
+
+#define NUM_DEEP_STATS ((int)NUM_DEEP_STATS_ZIP > (int)NUM_DEEP_STATS_PIZ ? (int)NUM_DEEP_STATS_ZIP : (int)NUM_DEEP_STATS_PIZ)
+
+#define LIBDEFLATE_MAX_LEVEL 12
+#define ZLIB_MAX_LEVEL 9
+#define NUM_PLAUSIBLE_LEVELS ((LIBDEFLATE_MAX_LEVEL+1)+LIBDEFLATE_MAX_LEVEL+ZLIB_MAX_LEVEL)
 
 typedef struct File {
     void *file;
@@ -134,35 +144,38 @@ typedef struct File {
     bool discover_during_segconf;      // ZIP TXT GZ: gz discovery during segconf instead of file_open: for FASTQ files
     Codec vb_header_codec;             // ZIP TXT: codec used for compressing VB_HEADER payload
 
-    // TXT file: MGZIP stuff reading and writing compressed txt files 
+    // TXT_FILE: MGZIP stuff reading and writing compressed txt files 
+    Mutex bgzf_discovery_mutex;        // TXT_FILE: ZIP: used to discover BGZF level
     Buffer mgzip_isizes;               // ZIP/PIZ: MGZIP: uncompressed size of the MGZIP blocks in which this txt file is compressed
     Buffer mgzip_starts;               // ZIP: offset in txt_file of each BGZF block
-    Buffer bgzf_plausible_levels;      // ZIP: discovering library/level. .count = number of BGZF blocks tested so far
+    struct FlagsMgzip bgzf_plausible_levels[NUM_PLAUSIBLE_LEVELS];      // ZIP: discovering library/level. .count = number of BGZF blocks tested so far
+    uint8_t num_plausible_levels;       // ZIP: number of bgzf_plausible_levels that have not been marked as implausible
+    uint8_t num_bgzf_blocks_tested_for_level; // ZIP: number of bgzf blocks tested for discovering level
     struct FlagsMgzip mgzip_flags;     // corresponds to SectionHeader.flags in SEC_MGZIP
     uint8_t bgzf_signature[3];         // PIZ: 3 LSB of size of source BGZF-compressed file, as passed in SectionHeaderTxtHeader.codec_info
     bool non_EOF_zero_block_found;     // ZIP: file contains an isize=0 block that is not identical to the EOF block, therefore we won't be able to reconstruct exactly
      
-    // TXT FILE: accounting for truncation when --truncate-partial-last-line is used
+    // TXT_FILE: accounting for truncation when --truncate-partial-last-line is used
     uint32_t last_truncated_line_len;  // ZIP: bytes truncated due to incomplete final line. note that if file is BGZF, then this truncated data is contained in the final intact BGZF blocks, after already discarding the final incomplete BGZF block
 
-    // TXT file: data used in --sex, --coverage and --idxstats
+    // TXT_FILE: data used in --sex, --coverage and --idxstats
     Buffer coverage;
     Buffer read_count;
     Buffer unmapped_read_count;
     
     // Z_FILE: SAM/BAM SA stuff
-    Buffer sag_grps;                   // Z_FILE: an SA group is a group of alignments, including the primary aligngment
-    Buffer sag_grps_index;             // Z_FILE: index z_file->sag_grps by adler32(qname)
-    Buffer sag_alns;                   // Z_FILE: array of {RNAME, STRAND, POS, CIGAR, NM, MAPQ} of the alignment
-    Buffer sag_qnames;                 // Z_FILE
-    Buffer sag_depn_index;             // Z_FILE: SAG_BY_FLAG: uniq-sorted hash(QNAME) of all depn alignments in the file
+    Buffer sag_grps;                   // Z_FILE ZIP/PIZ: an SA group is a group of alignments, including the primary aligngment
+    Buffer sag_grps_index;             // Z_FILE ZIP: index z_file->sag_grps by adler32(qname)
+    Buffer sag_alns;                   // Z_FILE ZIP/PIZ: array of {RNAME, STRAND, POS, CIGAR, NM, MAPQ} of the alignment
+    Buffer sag_qnames;                 // Z_FILE ZIP/PIZ: compressed qnames
+    Buffer sag_depn_index;             // Z_FILE ZIP: SAG_BY_FLAG: uniq-sorted hash(QNAME) of all depn alignments in the file
     
     union {
-    Buffer sag_cigars;                 // Z_FILE: SAG_BY_SA: compressed CIGARs
-    Buffer solo_data;                  // Z_FILE: SAG_BY_SOLO: solo data
+    Buffer sag_cigars;                 // Z_FILE ZIP: SAG_BY_SA: compressed CIGARs
+    Buffer solo_data;                  // Z_FILE ZIP/PIZ: SAG_BY_SOLO: solo data
     };
-    Buffer sag_seq;                    // Z_FILE: bitmap of seqs in ACGT 2bit format
-    Buffer sag_qual;                   // Z_FILE: compressed QUAL
+    Buffer sag_seq;                    // Z_FILE ZIP/PIZ: bitmap of seqs in ACGT 2bit format
+    Buffer sag_qual;                   // Z_FILE ZIP/PIZ: compressed QUAL
     
     // Z_FILE: Deep
     Buffer vb_start_deep_line;         // Z_FILE: ZIP/PIZ: for each SAM VB, the first deepable_line_i of that VB (0-based, uint64_t)

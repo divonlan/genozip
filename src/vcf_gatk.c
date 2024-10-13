@@ -800,7 +800,7 @@ void vcf_piz_insert_INFO_QD (VBlockVCFP vb)
     vcf_piz_insert_field (vb, ctx, STRa(qd));
 }
 
-void vcf_piz_sum_DP_for_QD (VBlockP vb, STRp(recon))
+void vcf_piz_sum_DP_for_QD (VBlockVCFP vb, STRp(recon))
 {
     int64_t dp;
     if (vcf_piz_GT_get_last_dosage (vb) >= 1 && str_get_int (STRa(recon), &dp))
@@ -887,7 +887,7 @@ done:
     SAFE_RESTORE;
 }
 
-void vcf_piz_sum_SB_for_AS_SB_TABLE (VBlockP vb, STRp(recon))
+void vcf_piz_sum_SB_for_AS_SB_TABLE (VBlockVCFP vb, STRp(recon))
 {
     str_split_ints (recon, recon_len, 4, ',', sb, true);
     

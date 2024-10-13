@@ -113,6 +113,8 @@ typedef struct Context {
         Buffer interlaced;         // ZIP: SAM: used to interlace BD/BI and iq/dq/sq line data
         Buffer mi_history;         // ZIP: SAM: used by OPTION_MI_Z in Ultima
         Buffer XG;                 // ZIP/PIZ: OPTION_XG_Z in bsseeker2: XG:Z field with the underscores removed. ZIP: revcomped if FLAG.revcomp. PIZ: as reconstructed when peeking during XM:Z special recon
+        Buffer deep_nonref;        // PIZ: SAM: SAM_NONREF in Deep: either an allocated buffer or partial overlay over .local. revcomp'ed of FLAG.revcomp
+        Buffer deep_textual_cigar; // PIZ: SAM: SAM_CIGAR in Deep: either an allocated buffer or overlay over vb->textual_cigar. reversed if FLAG.revcomp
         // VCF
         Buffer format_mapper_buf;  // ZIP: vctx: VCF_SAMPLES: an array of type Container - one entry per entry in CTX(VCF_FORMAT)->nodes   
         Buffer last_format;        // ZIP: vctx: VCF_FORMAT: cache previous line's FORMAT string
@@ -133,7 +135,7 @@ typedef struct Context {
         Buffer format_contexts;    // ZIP: vctx: VCF_SAMPLES: an array of format_mapper_buf.len of ContextPBlock
         Buffer insertion;          // PIZ: vctx: INFO_SF: inserted INFO fields reconstructed after samples
         // SAM/BAM
-        Buffer huffman;            // ZIP/PIZ zctx: QNAME: (except segconf): immutable HuffmanCodes for QNAME (used for Sag in ZIP/PIZ and for Deep in PIZ) ; ZIP SAM segconf: HuffmanChewer ; ZIP SAM vctx, we use .comp_len (param)
+        Buffer huffman;            // ZIP/PIZ zctx: QNAME, QUAL: (except segconf): immutable HuffmanCodes for QNAME (used for Sag in ZIP/PIZ and for Deep in PIZ) ; ZIP SAM segconf: HuffmanChewer ; ZIP SAM vctx, we use .comp_len (param)
     };
                 
     // ------------------------------------------------------------------------------------------------
@@ -162,8 +164,11 @@ typedef struct Context {
         IdType id_type;            // ZIP: type of ID in fields segged with seg_id_field        
 
         // SAM / BAM
+        uint32_t qual_longest_theoretical_comp_len; // SAM_QUAL PIZ: if using QUAL.huffman for in-memory compression of gencomp / Deep QUAL: longest theoretical compressed length of the longest QUAL string in this VB
         bool last_is_new;          // SAM_QNAME: ZIP: used in segconf.running
-        bool mate_copied_exactly;  // SAM_QNAME: PIZ (consumed for PRIM preprocessing by sam_load_groups_add_qname)
+        struct {
+            bool mate_copied_exactly;  // SAM_QNAME: PIZ (consumed for PRIM preprocessing by sam_load_groups_add_qname)
+        };
         thool XG_inc_S;            // ZIP: bsseeker2 OPTION_XG_Z: whether to include soft_clip[0]
         struct {                   // SAM_QUAL, SAM_CQUAL, OPTION_OQ_Z, FASTQ_QUAL: 
             bool longr_bins_calculated; // ZIP zctx: codec_longr: were LONGR bins calculated in segconf

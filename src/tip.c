@@ -13,6 +13,7 @@
 #include "arch.h"
 #include "license.h"
 #include "sam.h"
+#include "file.h"
 
 static bool dt_encountered[NUM_DATATYPES] = {};
 
@@ -67,11 +68,13 @@ void tip_print (void)
     if (E(SAM) || E(BAM))
         valid_tips[n++] = "Please take a moment now to make a note to not forget to cite Genozip:\n" PAPER3_CITATION "\n";
 
-    if (flag.deep)
+    bool is_deep = flag.deep || ((IS_PIZ && z_file && (Z_DT(SAM) || Z_DT(BAM))) && z_file->z_flags.dts2_deep);
+    
+    if (is_deep)
         valid_tips[n++] = "Please take a moment now to make a note to not forget to cite Genozip:\n" PAPER4_CITATION "\n";
 
-    if (!flag.deep && (E(SAM) || E(BAM) || E(FASTQ)) && sam_get_deep_tip()) // 5X more likely
-        for (int i=0; i < 5; i++)
+    if (!is_deep && (E(SAM) || E(BAM) || E(FASTQ)) && sam_get_deep_tip()) 
+        for (int i=0; i < 5; i++) // 5X more likely
             valid_tips[n++] = sam_get_deep_tip();
 
     if (E(VCF) || E(BCF))

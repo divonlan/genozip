@@ -362,7 +362,7 @@ void gencomp_piz_update_reading_list (VBlockP vb)
     if (initialized) {
         if (flag.show_reading_list) {
             iprintf ("Inserting to reading_list after reading SEC_VB_HEADER of vblock_i=%u :\n", vb->vblock_i);
-            sections_show_section_list (z_file->data_type, &z_file->piz_reading_list);
+            sections_show_section_list (z_file->data_type, &z_file->piz_reading_list, SEC_NONE);
         }
 
         buf_append_buf (evb, &z_file->piz_reading_list, &evb->scratch, SectionEnt, NULL);

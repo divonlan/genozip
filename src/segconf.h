@@ -112,7 +112,7 @@ typedef struct {
     #define UNK_QNANE_LEN 191
     #define NUM_COLLECTED_WORDS 6
     char unk_flav_qnames[NUM_QTYPES][NUM_COLLECTED_WORDS][UNK_QNANE_LEN+1]; // first 6 qnames if flavor is unknown
-    uint8_t n_unk_flav_qnames[NUM_QTYPES];  // number of entries populated in unk_flav_qnames
+    uint8_t n_1st_flav_qnames[NUM_QTYPES];      // some of the first qnames in the file
     #define NUM_UNK_ID_CTXS 10
     #define UNK_ID_LEN 32
     char unk_ids_tag_name[NUM_UNK_ID_CTXS][MAX_TAG_LEN];
@@ -187,6 +187,7 @@ typedef struct {
     thool sam_XG_inc_S;         // Does XG include soft_clip[0]
     bool is_long_reads;
     SagType sag_type;           // Type of sag
+    bool qual_in_mem_use_rans;  // Valid only if huffman for QUAL is missing: If true, use RANS for in-memory compression of QUAL (gencomp/deep) ; if false use ARITH
     bool CIGAR_has_eqx;         // segconf detected lines with '=' and/or 'X' in their CIGAR (always in pbmm2, with --eqx in minimap2)
     bool SA_NM_by_CIGAR_X;      // NM:i is not used, instead we get SA_NM it from the number of X bases in CIGAR
     bool depn_CIGAR_can_have_H; // some DEPN CIGARs (of alignments with SA:Z) have H (set while segging MAIN)

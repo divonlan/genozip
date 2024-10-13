@@ -233,7 +233,9 @@ int32_t sam_seg_prim_add_sag_SA (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(sa), in
         // in Seg, we add the Adler32 of CIGAR to save memory, as we just need to verify it, not reconstruct it
         uint32_t textual_cigar_len = (is_bam ? vb->textual_cigar.len32 : dl->CIGAR.len);
         rom textual_cigar = is_bam ? B1STc(vb->textual_cigar) : Btxt (dl->CIGAR.index);
-                
+        
+        FAILIF (textual_cigar_len > MAX_SA_CIGAR_LEN, "CIGAR.len=%u > MAX_SA_CIGAR_LEN=%u", textual_cigar_len, MAX_SA_CIGAR_LEN);
+
         // add primary alignment as first alignment in SA group
         BNXT (SAAln, vb->sag_alns) = (SAAln){
             .rname           = vb->chrom_node_index,
@@ -253,6 +255,8 @@ int32_t sam_seg_prim_add_sag_SA (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(sa), in
         // get items - rname, pos, revcomp, CIGAR, mapQ, NM
         str_split (alns[i], aln_lens[i], NUM_SA_ITEMS, ',', item, true);
         FAILIF (n_items != NUM_SA_ITEMS, "in SA alignment %u - n_items=%u != NUM_SA_ITEMS=%u", i, n_items, NUM_SA_ITEMS);
+
+        FAILIF (aln_lens[i] > MAX_SA_CIGAR_LEN, "SA_CIGAR.len=%u > MAX_SA_CIGAR_LEN=%u", aln_lens[i], MAX_SA_CIGAR_LEN);
 
         // rname (pre-populated from sam header)
         WordIndex rname = ctx_get_ol_node_index_by_snip (VB, CTX(SAM_RNAME), STRi(item,SA_RNAME));
@@ -276,7 +280,7 @@ int32_t sam_seg_prim_add_sag_SA (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(sa), in
             if (!segconf.SA_CIGAR_can_have_H && sam_cigar_has_H (STRi(item,SA_CIGAR)))
                 segconf.SA_CIGAR_can_have_H = true; // no worries about thread safety, this just gets set to true while segging MAIN and is inspected only when segging MAIN is over
 
-            CigarSignature cigar_sig = cigar_sign (vb, NULL, STRi(item,SA_CIGAR));
+            uint64_t cigar_sig = cigar_sign (vb, NULL, STRi(item,SA_CIGAR));
 
             BNXT (SAAln, vb->sag_alns) = (SAAln){ 
                 .rname           = rname, 
@@ -659,8 +663,8 @@ static void sam_sa_seg_depn_find_sagroup_SAtag (VBlockSAMP vb, ZipDataLineSAMP d
     bool revcomp = dl->FLAG.rev_comp;
     uint32_t seq_len = dl->SEQ.len;
 
-    buf_alloc (vb, &CTX(SAM_SAG)->local, 1, vb->lines.len, SAGroup, 1, CTX_TAG_LOCAL);
-    buf_alloc (vb, &CTX(SAM_SAALN)->local,   1, vb->lines.len, uint16_t,  1, CTX_TAG_LOCAL);
+    buf_alloc (vb, &CTX(SAM_SAG)->local,   1, vb->lines.len, SAGroup,  1, CTX_TAG_LOCAL);
+    buf_alloc (vb, &CTX(SAM_SAALN)->local, 1, vb->lines.len, uint16_t, 1, CTX_TAG_LOCAL);
 
     int64_t grp_index_i=-1;
     uint32_t qname_hash;
@@ -822,13 +826,13 @@ void sam_seg_sag_stuff (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(textual_cigar), 
 
 void sam_seg_against_sa_group (VBlockSAMP vb, ContextP ctx, uint32_t add_bytes)
 {
-    seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_SAG }, 2, ctx, add_bytes);
+    seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_pull_from_sag }, 2, ctx, add_bytes);
 }
 
 // seg a DEPN line against the SA data in z_file
 void sam_seg_against_sa_group_int (VBlockSAMP vb, ContextP ctx, int64_t parameter, uint32_t add_bytes)
 {
-    SNIPi2 (SNIP_SPECIAL, SAM_SPECIAL_SAG, parameter);
+    SNIPi2 (SNIP_SPECIAL, SAM_SPECIAL_pull_from_sag, parameter);
     seg_by_ctx (VB, STRa(snip), ctx, add_bytes);
 }
 
@@ -847,11 +851,11 @@ void sam_zip_set_vb_header_specific (VBlockP vb_, SectionHeaderVbHeaderP vb_head
             total_seq_len += DATA_LINE (line_i)->SEQ.len;   // length in bases, not bytes
 
         vb_header->sam_prim_seq_len         = BGEN32 (total_seq_len);
-        vb_header->sam_prim_comp_qual_len   = BGEN32 (vb->comp_qual_len);
+        vb_header->sam_prim_comp_qual_len   = BGEN32 (vb->comp_qual_len); 
         vb_header->sam_prim_comp_qname_len  = BGEN32 (CTX(SAM_QNAME)->huffman.comp_len);
         vb_header->sam_prim_num_sag_alns    = BGEN32 ((uint32_t)VB_SAM->sag_alns.count); 
         vb_header->sam_prim_first_grp_i     = BGEN32 (vb->first_grp_i);
-        vb_header->sam_prim_comp_cigars_len = BGEN32 (vb->comp_cigars_len); // note: both the header and VB field are a union with solo_data_len 
+        vb_header->sam_prim_comp_cigars_len = BGEN32 (vb->comp_cigars_len); 
     }
 
     // In MAIN VBs with gencomp lines, we compress their vb_plan (=dt_specific_vb_header_payload) as the payload of the VB_HEADER section

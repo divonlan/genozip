@@ -60,6 +60,11 @@ void sam_reset_line (VBlockP vb_)
         // note: having this allocation here allows us to keep vb->translation.factor relatively small to avoid over-allocation
         if (!vb->translation.is_src_dt && buf_user_count (&vb->txt_data) == 1) // not overlaid which happens loading sag (sam_load_groups_add_solo_data())
             buf_alloc (vb, &vb->txt_data, vb->longest_line_len * 5, 0, char, 1.15, "txt_data");
+    
+        if (flag.deep) {
+            buf_free (CTX(SAM_NONREF)->deep_nonref);
+            buf_free (CTX(SAM_CIGAR)->deep_textual_cigar);
+        }
     }
 
     else { // ZIP

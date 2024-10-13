@@ -193,7 +193,6 @@ static inline void ASSERT_excess_bits_are_0 (ConstBitsP bits) // divon
            "Expecting excess bits in top word of bit array to be 0");
 }
 
-
 extern Bits bits_init_do (uint64_t nbits, uint8_t *data, uint64_t data_len, bool clear, FUNCLINE);
 #define bits_init(nbits, data, data_len, clear) bits_init_do ((nbits), (data), (data_len), (clear), __FUNCLINE)
 
@@ -285,7 +284,6 @@ extern void bits_clear_all(BitsP bits);
 
 extern void bits_bit_to_byte  (uint8_t *dst, ConstBitsP src_bits, uint64_t src_bit,  uint32_t num_bits);
 extern void bits_2bit_to_byte (uint8_t *dst, ConstBitsP src_bits, uint64_t base_i, uint32_t num_2bits);
-extern void bits_2bit_to_ACGT (char *dst, ConstBitsP src_bits, uint64_t base_i, uint32_t num_bases);
 
 //
 // Get and set words (low level -- no bounds checking)
@@ -363,8 +361,8 @@ extern void bits_set_word8 (BitsP bits, uint64_t start, uint8_t byte);
 
 static inline void bits_set_wordn (BitsP bits, uint64_t start, uint64_t word, int n) 
 {
-    uint64_t w = _get_word(bits, start), m = bitmask64(n);
-    _set_word(bits, start, bitmask_merge(word,w,m));
+    uint64_t w = _get_word (bits, start), m = bitmask64(n);
+    _set_word (bits, start, bitmask_merge (word,w,m));
 }
 
 //
@@ -418,7 +416,7 @@ extern char *bits_to_substr (ConstBitsP bits, uint64_t start, uint64_t length, c
 
 // Print this array to a file stream.  Prints '0's and '1'.  Doesn't print newline.
 extern void bits_print_do (ConstBitsP bits, rom msg, FILE *file);
-#define bits_print(bits) bits_print_do (bits, #bits, info_stream)
+#define bits_print(bits) bits_print_do (bits, "", info_stream)
 
 extern void bits_print_binary_word_do (uint64_t word, rom msg, FILE *file);
 #define bits_print_binary_word(word) bits_print_binary_word_do (word, #word, info_stream)

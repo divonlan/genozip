@@ -9,6 +9,7 @@
 #include "sam_private.h"
 #include "threads.h"
 #include "huffman.h"
+#include "refhash.h"
 #include "htscodecs/arith_dynamic.h"
 
 // --------
@@ -90,7 +91,7 @@ static void sam_deep_zip_display_reasons (void)
 
     for (int i=0; i < NUM_DEEP_STATS_ZIP; i++) 
         if (z_file->deep_stats[i])
-            iprintf ("%-13.13s: %"PRIu64" (%.1f%%)\n", (rom[])RSN_NAMES[i], z_file->deep_stats[i], 100.0 * (double)z_file->deep_stats[i] / (double)total);
+            iprintf ("%-13.13s: %"PRIu64" (%.1f%%)\n", (rom[])DEEP_STATS_NAMES_ZIP[i], z_file->deep_stats[i], 100.0 * (double)z_file->deep_stats[i] / (double)total);
 }
 
 // Called during zip_finalize of the SAM component for a Deep compression
@@ -264,14 +265,95 @@ void sam_deep_zip_merge (VBlockP vb_)
 // SAM PIZ: step 1: output QNAME,SEQ,QUAL into vb->deep_ents / vb->deep_index
 //-----------------------------------------------------------------------------
 
+#define PUT_NUMBER_1B_or_5B(n) ({ \
+    if ((n) <= 254)               \
+        *next++ = (n);            \
+    else {                        \
+        *next++ = 255;            \
+        PUT_UINT32 (next, (n));   \
+        next += 4;                \
+    } })
+
 // main thread: called for after reading global area
 void sam_piz_deep_initialize (void)
 {
 }
 
-void sam_piz_deep_init_vb (VBlockSAMP vb, ConstSectionHeaderVbHeaderP header)
+// called during reconstruction of SEQ to determine if SEQ can be stored vs reference 
+void sam_piz_set_deep_seq (VBlockSAMP vb, 
+                           bool not_end_of_contig, // doesn't round robin at edge of the chromosome
+                           PosType64 gpos)         // true if forward relative to the reference
 {
-    vb->arith_compress_bound_longest_seq_len = arith_compress_bound (vb->longest_seq_len, X_NOSZ);
+    vb->deep_stats[EXPL_DEEPABLE]++;
+
+    #define NOT_BY_REF(reason) ({ vb->deep_stats[reason]++; \
+                                  vb->piz_deep_flags.has_cigar = false; \
+                                  return; }) // vb->piz_deep_flags.seq_encoding remains the default ZDEEP_SEQ_PACKED
+
+    if (gpos == NO_GPOS64) 
+        NOT_BY_REF(EXPL_SEQ_COPY_VERBATIM);
+
+    ARRAY32 (char, deep_nonref, CTX(SAM_NONREF)->deep_nonref);
+
+    bool used_aligner = ctx_has_value_in_line_(vb, CTX(SAM_STRAND));
+
+    ASSERT (used_aligner || vb->binary_cigar.len32, "%s: missing cigar", LN_NAME);
+
+    // note: we don't need to store the cigar if it is "perfect" (eg "151M" or aligner used) 
+    vb->piz_deep_flags.has_cigar = !used_aligner && !(vb->binary_cigar.len32 == 1 && B1ST(BamCigarOp, vb->binary_cigar)->op == BC_M); 
+
+    if (vb->piz_deep_flags.has_cigar && !str_is_ACGT (STRa(deep_nonref), NULL))
+        NOT_BY_REF(EXPL_SEQ_NONREF_NON_ACGT);
+    
+    if (!not_end_of_contig) 
+        NOT_BY_REF(EXPL_SEQ_END_OF_CONTIG);
+
+    if (vb->num_deep_mismatches > MAX_DEEP_SEQ_MISMATCHES) 
+        NOT_BY_REF(EXPL_TOO_MANY_MISMATCHES);
+
+    int32_t ref_and_seq_consumed = used_aligner ? vb->seq_len : vb->ref_and_seq_consumed;
+
+    // sanity
+    ASSERT (deep_nonref_len == vb->seq_len - ref_and_seq_consumed, "%s: expecting deep_nonref_len=%u == seq_len=%u - ref_and_seq_consumed=%u",
+            LN_NAME, deep_nonref_len, vb->seq_len, ref_and_seq_consumed);
+
+    // Yes! we will store SEQ as encoded vs the reference
+    
+    // calculate is_forward
+    bool aligner_rev = used_aligner && !CTX(SAM_STRAND)->last_value.i;
+
+    vb->piz_deep_flags.is_forward     = (last_flags.rev_comp == aligner_rev); // true if FASTQ's sequence is forward relative to the reference
+    vb->piz_deep_flags.has_mismatches = (vb->num_deep_mismatches > 0);
+
+    // revcomp the mismatches if FASTQ's and SAM's seq are reversed (regardless of orientation vs reference) 
+    if (last_flags.rev_comp) {
+        for (int i=0; i < vb->num_deep_mismatches / 2; i++) {
+            SWAP (vb->deep_mismatch_offset[i], vb->deep_mismatch_offset[vb->num_deep_mismatches-1-i]);
+            SWAP (vb->deep_mismatch_base[i], vb->deep_mismatch_base[vb->num_deep_mismatches-1-i]);
+        }
+
+        for (int i=0; i < vb->num_deep_mismatches; i++) {
+            vb->deep_mismatch_offset[i] = (vb->seq_len - 1 - vb->deep_mismatch_offset[i]);
+            vb->deep_mismatch_base[i] = COMPLEM[(uint8_t)vb->deep_mismatch_base[i]];
+        }
+    }
+
+    // make offsets relative to each other: offset will now become the number of matching bases (within ref_consumed)
+    // since the previous offset or beginning of ref_consumed
+    for (int i=vb->num_deep_mismatches-1; i >= 1; i--) 
+        vb->deep_mismatch_offset[i] -= vb->deep_mismatch_offset[i-1] + 1;
+
+    vb->piz_deep_flags.seq_encoding = ZDEEP_SEQ_BY_REF; // note: if we didn't reach here, encoding remains the default ZDEEP_SEQ_PACKED
+    vb->deep_gpos = gpos;
+
+    if (vb->piz_deep_flags.has_cigar) {
+        sam_cigar_binary_to_textual (vb, STRbt(BamCigarOp, vb->binary_cigar), last_flags.rev_comp, &CTX(SAM_CIGAR)->deep_textual_cigar);
+
+        if (segconf.CIGAR_has_eqx) // collapse X and = operators to M
+            sam_cigar_collapse_eqx_to_M (&CTX(SAM_CIGAR)->deep_textual_cigar); 
+    }
+
+    vb->deep_stats[EXPL_SEQ_AS_REF]++;
 }
 
 // strive to alloc exactly twice: 128K initialy, and then a good guess of the total
@@ -294,19 +376,16 @@ static void inline sam_piz_alloc_deep_ents (VBlockSAMP vb, uint32_t size)
     }
 }
 
-// copy QNAME as is to deep_ents
+// copy QNAME (huffman-compressed or uncompressed) to deep_ents
 static void sam_piz_deep_add_qname (VBlockSAMP vb)
 {
     START_TIMER;
 
     STRlast (qname, IS_PRIM(vb) ? SAM_QNAMESA : SAM_QNAME);
 
-    sam_piz_alloc_deep_ents (vb, 2 + qname_len); // +2: PizZDeepFlags, qname_len
-
     BNXT32(vb->deep_index) = vb->deep_ents.len32; // index in deep_ents of data of current deepable line
-    BNXT(PizZDeepFlags, vb->deep_ents) = (PizZDeepFlags){}; // initialize flags
          
-    if (segconf.deep_qtype == QNONE || // back comp - QNONE was possible up to 15.0.66 (match by non-trimmed SEQ and QUAL)
+    if (segconf.deep_qtype == QNONE || // back comp - QNONE was possible up to 15.0.66 (deep match was by non-trimmed SEQ and QUAL)
         flag.seq_only || flag.qual_only)
         goto done;         
 
@@ -318,7 +397,7 @@ static void sam_piz_deep_add_qname (VBlockSAMP vb)
 
     // since 15.0.65, a SEC_HUFFMAN section is available and we can compress. 
     if (huffman_exists (SAM_QNAME)) {
-        uint32_t comp_len = huffman_comp_len_required_allocation (qname_len);
+        uint32_t comp_len = huffman_get_theoretical_max_comp_len (SAM_QNAME, qname_len);
         uint8_t comp[comp_len];
         huffman_compress (SAM_QNAME, STRa(qname), qSTRa(comp)); // using huffman sent via SEC_HUFFMAN
 
@@ -339,10 +418,11 @@ done:
     COPY_TIMER (sam_piz_deep_add_qname);
 }
 
-// compress QUAL or SEQ - adding a 1B or 4B length
-static bool sam_piz_deep_compress (VBlockSAMP vb, STRp(data), bool is_seq)
+// compress QUAL or SEQ - adding a 1B or 5B length
+static uint32_t sam_piz_deep_compress (VBlockSAMP vb, uint8_t *next, STRp(data), bool is_seq)
 {
     START_TIMER;
+    uint8_t *start = next;
 
     // reverse if needed
     if (last_flags.rev_comp) {
@@ -355,39 +435,77 @@ static bool sam_piz_deep_compress (VBlockSAMP vb, STRp(data), bool is_seq)
         data = B1STc(vb->scratch);
     }
 
-    sam_piz_alloc_deep_ents (vb, 4 + vb->arith_compress_bound_longest_seq_len);
-
-    uint8_t *next = BAFT8 (vb->deep_ents);
-
-    uint32_t comp_len = vb->arith_compress_bound_longest_seq_len;
+    uint32_t comp_len = (is_seq || !huffman_exists (SAM_QUAL)) 
+        ? arith_compress_bound (data_len, X_NOSZ)
+        : CTX(SAM_QUAL)->qual_longest_theoretical_comp_len;
     
     bool len_is_1_byte = (data_len < (is_seq ? 1024 : 512)); // just a guess for now
-    uint8_t *guess_addr = next + (len_is_1_byte ?  1 : 4);   // we don't know comp_len yet, so just a guess
-    ASSPIZ (arith_compress_to (evb, (uint8_t *)STRa(data), guess_addr, &comp_len, X_NOSZ) && comp_len,
-            "%s: Failed to compress data: data_len=%u data=\"%.*s\"", LN_NAME, data_len, STRf(data));
+    uint8_t *guess_addr = next + (len_is_1_byte ? 1 : 5);   // we don't know comp_len yet, so just a guess
+    
+    if (!is_seq && huffman_exists (SAM_QUAL))
+        huffman_compress (SAM_QUAL, STRa(data), guess_addr, &comp_len);
+    else
+        ASSPIZ (arith_compress_to (evb, (uint8_t *)STRa(data), guess_addr, &comp_len, X_NOSZ) && comp_len,
+                "%s: Failed to arith-compress data: is_seq=%s comp_len=%u data_len=%u data=\"%.*s\"", 
+                LN_NAME, TF(is_seq), comp_len, data_len, STRf(data));
 
-    // we guessed wrong that we need 1 byte for the length - actually need 4 
-    if (len_is_1_byte && comp_len > 255) {
-        memmove (guess_addr+3, guess_addr, comp_len); // make room for another 3 bytes
+    // we guessed wrong how many bytes the comp_len integer will take - move the data
+    if (len_is_1_byte != (comp_len <= 254)) {
+        memmove (next + (comp_len <= 254 ? 1 : 5), guess_addr, comp_len);
         len_is_1_byte = false;
     }
 
-    if (len_is_1_byte)  // 1B length
-        *next = comp_len;
-
-    else  // 4B length
-        memcpy (next, &comp_len, 4); // memcpy bc non-aligned
-
-    uint32_t n_bytes = comp_len + (len_is_1_byte ? 1 : 4);
-    vb->deep_ents.len32 += n_bytes;
-    vb->deep_stats[is_seq ? SEQ_BYTES : QUAL_BYTES] += n_bytes;
+    PUT_NUMBER_1B_or_5B (comp_len);
+    next += comp_len;
 
     if (last_flags.rev_comp)   
         buf_free (vb->scratch);
 
     COPY_TIMER (sam_piz_deep_compress);
 
-    return !len_is_1_byte; // true long length
+    return next - start;
+}
+
+static uint8_t *sam_piz_deep_add_seq_by_ref (VBlockSAMP vb, uint8_t *next, PizDeepSeqFlags *deep_flags)
+{
+    // set GPOS and .is_long_gpos (4 or 8 bytes)
+    if (vb->deep_gpos <= 0xffffffffULL) {
+        PUT_UINT32 (next, (PosType32)vb->deep_gpos);
+        next += sizeof (PosType32);
+    }
+    else {
+        PUT_UINT32 (next, vb->deep_gpos);
+        next += sizeof (PosType64);
+        deep_flags->is_long_gpos = true;
+    }
+
+    // set cigar and nonref
+    if (deep_flags->has_cigar) {
+        BufferP textual_cigar = &CTX(SAM_CIGAR)->deep_textual_cigar; // possibly reversed
+            
+        PUT_NUMBER_1B_or_5B (textual_cigar->len32);
+        
+        next += huffman_compress_or_copy (SAM_CIGAR, STRb(*textual_cigar), next, vb->deep_ents.size - BNUM64 (vb->deep_ents, next));
+
+        BufferP deep_nonref = &CTX(SAM_NONREF)->deep_nonref;
+        PUT_NUMBER_1B_or_5B (deep_nonref->len32); // always output if has_cigar, even if 0
+
+        // note: sam_piz_set_deep_seq guarantees that NONREF is only A,C,G,T
+        if (deep_nonref->len32)
+            next += str_pack_bases (next, STRb(*deep_nonref), false);
+    }
+
+    // set mismatches
+    if (vb->num_deep_mismatches) {
+        PUT_NUMBER_1B_or_5B (vb->num_deep_mismatches);
+
+        for (int i=0; i < vb->num_deep_mismatches; i++) {
+            PUT_NUMBER_1B_or_5B (vb->deep_mismatch_offset[i]); // note: currently always 1B as number of mismatches is limited to 63.
+            *next++ = vb->deep_mismatch_base[i];
+        }
+    }
+
+    return next;
 }
 
 // container item callback for SQBITMAP: pack SEQ into 2-bit and into deep_ents or compress if it has non-ACGT (eg N)
@@ -395,70 +513,33 @@ static void sam_piz_deep_add_seq (VBlockSAMP vb, STRp(seq))
 {
     START_TIMER;
 
-    if (str_is_monochar (STRa(seq))) 
-        vb->seq_is_monochar = true; 
+    uint8_t *start = BAFT8(vb->deep_ents); 
+    uint8_t *next  = start;
 
-    // case: not deepable bc no SEQ or monochar - rollback
-    if (vb->seq_missing || vb->seq_is_monochar) {
-        vb->deep_ents.len32 = *BLST32 (vb->deep_index);
-        vb->deep_index.len32--;
-        return;
+    vb->piz_deep_flags_index = vb->deep_ents.len32;
+    PizDeepSeqFlags *deep_flags = (PizDeepSeqFlags *)next++;
+    *deep_flags = vb->piz_deep_flags; // .seq_encoding and .is_forward were set already by sam_piz_set_deep_seq 
+
+    // if has_cigar (and not qual-only): we store ref_consumed, otherwise seq_len
+    PUT_NUMBER_1B_or_5B ((deep_flags->has_cigar && !flag.qual_only) ? vb->ref_consumed : seq_len); // used for SEQ and QUAL
+
+    if (!flag.qual_only) {
+        if (deep_flags->seq_encoding == ZDEEP_SEQ_BY_REF) // as determined by sam_piz_set_deep_seq
+            next = sam_piz_deep_add_seq_by_ref (vb, next, deep_flags);
+
+        // if only A,C,G,T - pack in 2-bits: set .seq_encoding + add packed seq
+        else if (str_is_ACGT (STRa(seq), NULL)) 
+            next += str_pack_bases (next, STRa(seq), last_flags.rev_comp);
+
+        // if has an N or other IUPACs - arith-compress: set .seq_encoding, .is_long_seq_comp + add compressed seq
+        else {        
+            deep_flags->seq_encoding = ZDEEP_SEQ_ARITH;
+            next += sam_piz_deep_compress (vb, next, STRa(seq), true);
+        }
     }
 
-    PizZDeepFlags *deep_flags = B(PizZDeepFlags, vb->deep_ents, *BLST32(vb->deep_index));
-
-    if (flag.header_only_fast) return;
-
-    if (seq_len <= 255) 
-        BNXT8 (vb->deep_ents) = seq_len;
-    
-    else {
-        deep_flags->is_long_seq = true;
-        memcpy (BAFT8 (vb->deep_ents), &seq_len, sizeof (uint32_t)); // not word-aligned
-        vb->deep_ents.len32 += sizeof (uint32_t);
-    }
-
-    if (flag.qual_only) return;
-
-    // case: perfect match with perfect CIGAR (verbatim copy of the reference) - we need only GPOS
-    if (vb->deep_seq.gpos) { // note possible edge case: gpos exists and is actually zero. we will fail this condition and fallback to the normal treatment of this alignment.
-        bool perfect = !vb->deep_seq.mismatch_base;
-        memcpy (BAFT8 (vb->deep_ents), &vb->deep_seq, (perfect ? 4 : 6));
-        vb->deep_ents.len32 += (perfect ? 4 : 6);
-
-        bool used_aligner = ctx_has_value_in_line_(vb, CTX(SAM_STRAND));
-        bool aligner_rev = used_aligner && !CTX(SAM_STRAND)->last_value.i;
-        bool rev_comp = last_flags.rev_comp ^ aligner_rev;
-        
-        deep_flags->seq_encoding = perfect ? (rev_comp ? ZDEEP_SEQ_PERFECT_REV : ZDEEP_SEQ_PERFECT)
-                                           : (rev_comp ? ZDEEP_SEQ_MIS_1_REV   : ZDEEP_SEQ_MIS_1);
-    }
-
-    // if only A,C,G,T - pack in 2-bits
-    else if (str_is_ACGT (STRa(seq), NULL)) {
-        sam_piz_alloc_deep_ents (vb, 4 + seq_len + 2*sizeof(uint64_t)/*padding for Bits*/); 
-
-        uint32_t pack_index = ROUNDUP8 (vb->deep_ents.len32); // 64b word-align as required by Bits
-        Bits pack = bits_init (seq_len * 2, B8(vb->deep_ents, pack_index), vb->deep_ents.size - pack_index, false);
-        sam_seq_pack (vb, &pack, 0, STRa(seq), false, last_flags.rev_comp, HARD_FAIL);
-
-        uint32_t n_bytes = roundup_bits2bytes (pack.nbits);
-
-        if (BAFT8 (vb->deep_ents) != (uint8_t*)pack.words)
-            memmove (BAFT8 (vb->deep_ents), pack.words, n_bytes); // move back to (unaligned) place
-
-        vb->deep_ents.len32 += n_bytes;
-        vb->deep_stats[SEQ_BYTES] += n_bytes;
-        deep_flags->seq_encoding = ZDEEP_SEQ_PACKED;
-    }
-
-    // if has an N or other IUPACs - compress
-    else {
-        bool is_long = sam_piz_deep_compress (vb, STRa(seq), true);
-        
-        deep_flags = B(PizZDeepFlags, vb->deep_ents, *BLST32(vb->deep_index)); // cafeful! sam_piz_deep_compress reallocs vb->deep_ents
-        deep_flags->seq_encoding = (is_long ? ZDEEP_SEQ_COMPRESSED_LONG_LEN : ZDEEP_SEQ_COMPRESSED);
-    }
+    vb->deep_ents.len += (next - start);
+    vb->deep_stats[deep_flags->seq_encoding - ZDEEP_SEQ_PACKED + SEQ_PACKED_BYTES] += next - start;
 
     COPY_TIMER (sam_piz_deep_add_seq);
 }
@@ -468,16 +549,22 @@ static void sam_piz_deep_add_qual (VBlockSAMP vb, STRp(qual))
 {
     START_TIMER;
 
-    if (vb->seq_missing || vb->seq_is_monochar || VB_SAM->qual_missing || // not a deepable alignment or no QUAL
-        flag.seq_only || flag.header_only_fast) return; // FASTQ is not going to reconstruct QUAL
+    // case: monochar 
+    if (str_is_monochar (STRa(qual))) {
+        ((PizDeepSeqFlags *)B8(vb->deep_ents, vb->piz_deep_flags_index))->qual_is_monochar = true;
+        BNXT8(vb->deep_ents) = qual[0];
 
-    uint32_t index = *BLST32(vb->deep_index);
-    ASSERT (index < vb->deep_ents.len32, "index=%u out of range: vb->deep_ents.len=%u", index, vb->deep_ents.len32);
+        vb->deep_stats[QUAL_MONOCHAR_BYTES]++;
+    }
 
-    bool is_long = sam_piz_deep_compress (vb, STRa(qual), false);
+    // case: not monochar
+    else {
+        uint32_t comp_len = sam_piz_deep_compress (vb, BAFT8(vb->deep_ents), STRa(qual), false);
+        vb->deep_ents.len32 += comp_len;
 
-    PizZDeepFlags *deep_flags = B(PizZDeepFlags, vb->deep_ents, *BLST32(vb->deep_index)); // cafeful! sam_piz_deep_compress reallocs vb->deep_ents
-    deep_flags->is_long_qual_comp = is_long;
+        vb->deep_stats[huffman_exists(SAM_QUAL) ? QUAL_HUFF_BYTES : QUAL_ARITH_BYTES] += comp_len;
+    }
+
 
     COPY_TIMER (sam_piz_deep_add_qual);
 }
@@ -487,29 +574,41 @@ static void sam_piz_deep_add_qual (VBlockSAMP vb, STRp(qual))
 // for BAM: called from SEQ and QUAL translators (before translation) 
 CONTAINER_ITEM_CALLBACK (sam_piz_con_item_cb)
 {
+    VBlockSAMP vb = (VBlockSAMP)vb_;
+    
     START_TIMER;
 
-    if (con_item->dict_id.num == _SAM_SQBITMAP) {
-        if (!flag.deep                                       || // Deep file (otherwise this callback will not be set), but SAM/BAM-only reconstruction
-            last_flags.secondary || last_flags.supplementary || // SECONDARY or SUPPLEMENTARY alignment
-            (z_file->flav_prop[vb->comp_i][QNAME2].is_consensus && ctx_encountered_in_line (vb, SAM_QNAME2)) || // consensus alignment 
-            IS_ASTERISK(recon)                               || // Missing SEQ
-            str_is_monochar (STRa(recon))) {                    // mono-char SEQ
+    switch (con_item->dict_id.num) {
+        case _SAM_SQBITMAP:
+            // backcomp note: these are the same deepability conditions as in ZIP
+            if (flag.deep_sam_only                               || // Deep file (otherwise this callback will not be set), but SAM/BAM-only reconstruction
+                last_flags.secondary || last_flags.supplementary || // SECONDARY or SUPPLEMENTARY alignment
+                IS_ASTERISK(recon)                               || // Missing SEQ
+                (z_file->flav_prop[vb->comp_i][QNAME2].is_consensus && ctx_encountered_in_line (VB, SAM_QNAME2)) || // consensus alignment 
+                str_is_monochar (STRa(recon)))                      // mono-char SEQ
+                
+                vb->line_not_deepable = true;
+            
+            else {
+                // note: we do QNAME during the SQBITMAP callback, because we need last_flags to be set 
+                // (in SAM QNAME reconstructs before flags). On the other hand, SQBITMAP and QUAL must be 
+                // handled right after reconstruction, because in BAM, immediately after they get converted to binary format.
+                sam_piz_alloc_deep_ents (vb, 4 KB + 8 * recon_len + vb->textual_cigar.len); // more than enough for compresssed QNAME, SEQ and QUAL
 
-            VB_SAM->line_not_deepable = true;
-        }
-        else {
-            // note: we do QNAME during the SQBITMAP callback, because we need last_flags to be set 
-            // (in SAM QNAME reconstructs before flags). On the other hand, SQBITMAP and QUAL must be 
-            // handled right after reconstruction, because in BAM, immediately after they get converted to binary format.
-            sam_piz_deep_add_qname (VB_SAM);
-            sam_piz_deep_add_seq (VB_SAM, STRa(recon));
-        }
+                sam_piz_deep_add_qname (vb);
+                if (!flag.header_only_fast) sam_piz_deep_add_seq (vb, STRa(recon));
+            }
+            break;
+    
+        case _SAM_QUAL:
+        case _SAM_QUALSA:
+            if (!vb->line_not_deepable && !vb->qual_missing && !segconf.deep_no_qual &&
+                !flag.seq_only && !flag.header_only_fast) // conditions that may only appear in genocat --fastq of a Deep file
+                sam_piz_deep_add_qual (vb, STRa(recon)); 
+            break;
+
+        default: break;
     }
-
-    else if (!VB_SAM->line_not_deepable && 
-             (con_item->dict_id.num == _SAM_QUAL || con_item->dict_id.num == _SAM_QUALSA))
-        sam_piz_deep_add_qual (VB_SAM, STRa(recon)); 
 
     COPY_TIMER (sam_piz_con_item_cb);
 }
@@ -532,32 +631,45 @@ static void sam_piz_deep_finalize_ents (void)
 
     // create vb_start_deep_line to allow easy binary searching on the FASTQ PIZ side
     uint64_t next_deepable_line = 0;
-   
+    uint64_t actual_size = 0;
+
     for (uint32_t vb_idx=0; vb_idx < z_file->deep_index.len32; vb_idx++) {
         BufferP deep_index = B(Buffer, z_file->deep_index, vb_idx);
+        BufferP deep_ents = B(Buffer, z_file->deep_ents, vb_idx); 
 
         if (flag.show_deep == SHOW_DEEP_ALL) {
-            BufferP deep_ents = B(Buffer, z_file->deep_ents, vb_idx); 
             iprintf ("vb_idx=%u vb=%s/%u start_deepable_line=%"PRIu64" num_deepable_lines=%u ents=(%p, %u)\n", 
                      vb_idx, comp_name(deep_ents->prm32[1]), deep_ents->prm32[0], next_deepable_line, deep_index->len32, deep_ents->data, deep_ents->len32);
         }
+
+        actual_size += deep_ents->len;
 
         BNXT64(z_file->vb_start_deep_line) = next_deepable_line;
         next_deepable_line += deep_index->len;
     }
 
     if (flag.show_deep) {
-        uint64_t total = z_file->deep_stats[QNAME_BYTES] + z_file->deep_stats[SEQ_BYTES] + z_file->deep_stats[QUAL_BYTES];
-        iprint0 ("\ndeep_ents RAM consumption breakdown by field:\n");
-        iprintf ("Total: %s\n", str_size (total).s);
+        uint64_t total = 0;
+        for (DeepStatsPiz i=QNAME_BYTES; i <= QUAL_ARITH_BYTES; i++) total += z_file->deep_stats[i];
+
+        iprintf ("\ndeep_ents (actual_size=%s) RAM consumption breakdown by field:\n", str_size (actual_size).s);
+        iprintf ("Total: %s\n", str_size (total).s); // expected to be the same as actual_size
         
-        for (int i=0; i < NUM_DEEP_STATS_PIZ; i++)
-            iprintf ("%-5.5s: %s (%.1f%%)\n", (rom[])DEEP_ENT_NAMES[i], str_size (z_file->deep_stats[i]).s, 100.0 * (double)z_file->deep_stats[i] / (double)total);
+        for (DeepStatsPiz i=QNAME_BYTES; i <= QUAL_ARITH_BYTES; i++)
+            if (z_file->deep_stats[i])
+                iprintf ("%-14.14s: %s (%.1f%%)\n", (rom[])DEEP_STATS_NAMES_PIZ[i], str_size (z_file->deep_stats[i]).s, 100.0 * (double)z_file->deep_stats[i] / (double)total);
+
+        if (z_file->deep_stats[SEQ_PACKED_BYTES] || z_file->deep_stats[SEQ_ARITH_BYTES]) {
+            iprint0 ("\nReasons for storing explicit SEQ in deep_ents rather than a reference:\n");
+            for (DeepStatsPiz i=EXPL_DEEPABLE; i < NUM_DEEP_STATS_PIZ; i++)
+                if (z_file->deep_stats[i])
+                    iprintf ("%-24.24s: %s (%.1f%%)\n", (rom[])DEEP_STATS_NAMES_PIZ[i], str_int_commas (z_file->deep_stats[i]).s, 100.0 * (double)z_file->deep_stats[i] / (double)z_file->deep_stats[EXPL_DEEPABLE]);
+        }
     }
 
     // We need to set param only after deep_ents/index is finalized.
     // sam_deep_piz_wait_for_deep_data will unlock when vb_start_deep_line.param = true
-    __atomic_store_n (&z_file->vb_start_deep_line.param, (uint64_t)true, __ATOMIC_RELEASE); 
+    __atomic_store_n (&z_file->vb_start_deep_line.param, 2/*done!*/, __ATOMIC_RELEASE); 
 
     COPY_TIMER_EVB (sam_piz_deep_finalize_ents);
 }

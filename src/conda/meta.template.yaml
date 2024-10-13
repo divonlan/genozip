@@ -39,9 +39,9 @@ requirements:
     - {{ compiler('m2w64_cxx') }} # [win]
     - {{ stdlib("m2w64_c") }}    # [win]    
     
-  # c_stdlib: # added per: https://github.com/conda-forge/conda-forge.github.io/issues/2102
-  #   - sysroot                    # [linux]
-  #   - macosx_deployment_target   # [osx]
+  c_stdlib: # added per: https://github.com/conda-forge/conda-forge.github.io/issues/2102
+    - sysroot                    # [linux]
+    - macosx_deployment_target   # [osx]
 
   c_stdlib_version:              # [unix]
     - 2.12                       # [linux and x86_64]

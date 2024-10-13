@@ -189,7 +189,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_COPY_MATE_TLEN_old)
 // place value in correct location in alignment
 TRANSLATOR_FUNC (sam_piz_sam2bam_TLEN)
 {
-    BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)Btxt (vb->line_start);
-    PUT_UINT32_(alignment, tlen, (int32_t)ctx->last_value.i);
+    BAMAlignmentFixedP alignment = (BAMAlignmentFixedP)Btxt (vb->line_start);
+    alignment->tlen = LTEN32 ((int32_t)ctx->last_value.i);
     return 0;
 }

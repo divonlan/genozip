@@ -119,21 +119,21 @@ static void stats_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
 
     // we send the first 6 qnames of unrecognized QNAME flavor or in case of existing by unrecognized QNAME2 flavor
     for (QType q=QNAME1; q < NUM_QTYPES; q++) {
-        if (segconf.n_unk_flav_qnames[q]) {
+        if (segconf.n_1st_flav_qnames[q]) {
 
             bufprintf (evb, &exceptions, "%s%s%%2C%%2C%%2C", need_sep++ ? "%3B" : "", qtype_name(q));
 
-            for (int i=0; i < segconf.n_unk_flav_qnames[q]; i++)
+            for (int i=0; i < segconf.n_1st_flav_qnames[q]; i++)
                 if (segconf.unk_flav_qnames[q][i][0])
                     bufprintf (evb, &exceptions, "%%2C%s", url_esc_non_valid_charsS (stats_subs_seps_in_name (segconf.unk_flav_qnames[q][i]).s).s); 
         }
     }
 
     for (int id_i=0; id_i < NUM_UNK_ID_CTXS && segconf.unk_ids_tag_name[id_i][0]; id_i++) {
-            bufprintf (evb, &exceptions, "%s%s%%2C%%2C%%2C", need_sep++ ? "%3B" : "", segconf.unk_ids_tag_name[id_i]);
+        bufprintf (evb, &exceptions, "%s%s%%2C%%2C%%2C", need_sep++ ? "%3B" : "", segconf.unk_ids_tag_name[id_i]);
 
-            for (int i=0; i < NUM_COLLECTED_WORDS && segconf.unk_ids[id_i][i][0]; i++)
-                bufprintf (evb, &exceptions, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.unk_ids[id_i][i], strlen(segconf.unk_ids[id_i][i]), ',', -127)).s); 
+        for (int i=0; i < NUM_COLLECTED_WORDS && segconf.unk_ids[id_i][i][0]; i++)
+            bufprintf (evb, &exceptions, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.unk_ids[id_i][i], strlen(segconf.unk_ids[id_i][i]), ',', -127)).s); 
     }
 
     if (segconf.sam_malformed_XA[0]) 

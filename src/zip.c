@@ -420,9 +420,12 @@ static void zip_write_global_area (void)
     THREAD_DEBUG (compress_dictionaries);
     dict_io_compress_dictionaries(); 
 
-    // QNAME huffman codes (needed if gencomp or deep)
-    if (z_sam_gencomp || flag.deep) 
-        huffman_compress_section (SAM_QNAME);
+    if (z_sam_gencomp || flag.deep) {
+        huffman_compress_section (SAM_QNAME);  // always exists if gencomp or deep
+        huffman_compress_section (SAM_QUAL);   // sometimes exists if deep
+        huffman_compress_section (SAM_CIGAR);  // exists if SAG_BY_CIGAR
+        sam_compress_solo_huffman_sections();  // exist if SAG_BY_SOLO
+    }
 
     THREAD_DEBUG (compress_counts);
     ctx_compress_counts();
@@ -733,8 +736,6 @@ void zip_one_file (rom txt_basename,
     DT_FUNC (txt_file, zip_initialize)();
 
     segconf_calculate();
-
-    DT_FUNC (txt_file, zip_after_segconf)();
 
     txtfile_zip_finalize_codecs();
 

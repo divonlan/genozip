@@ -11,7 +11,7 @@
 #include "qname.h"
 #include "compressor.h"
 #include "huffman.h"
-#include "htscodecs/rANS_static4x16.h"
+#include "htscodecs/arith_dynamic.h"
 
 //------------------------------------
 // Ingesting SA Group from PRIM VBs
@@ -35,6 +35,49 @@ void sam_sa_prim_initialize_ingest (void)
 
 static ASCENDING_SORTER (group_index_sorter, SAGroupIndexEntry, qname_hash)
 
+// ZIP ingest/PIZ load: main thread: after ingest/load: trim over-allocated memory
+void sam_gencomp_trim_memory (void)
+{
+    buf_trim (z_file->sag_qual,       char);
+    buf_trim (z_file->sag_seq,        uint64_t); // len==nwords
+    buf_trim (z_file->sag_qnames,     char);
+    buf_trim (z_file->sag_grps,       Sag);
+    buf_trim (z_file->sag_cigars,     char); // union with solo_data
+
+    if (IS_ZIP) {
+        buf_trim (z_file->sag_grps_index, SAGroupIndexEntry);
+        buf_trim (z_file->sag_depn_index, uint32_t);
+    }
+    
+    if      (IS_SAG_SA)   buf_trim (z_file->sag_alns, SAAln);
+    else if (IS_SAG_CC)   buf_trim (z_file->sag_alns, CCAln);
+    else if (IS_SAG_SOLO) buf_trim (z_file->sag_alns, SoloAln);
+
+    buf_low_level_release_memory_back_to_kernel();
+
+    if (flag.show_memory) {
+        iprintf ("\nSAG memory %s:\n", IS_ZIP ? "ZIP" : "PIZ");
+        if (z_file->sag_qual.size)       iprintf ("sag_qual:       %s (compression=%s)\n", str_size (z_file->sag_qual.size).s, huffman_exists (SAM_QUAL) ? "huffman" : "arith");
+        if (z_file->sag_seq.size)        iprintf ("sag_seq:        %s\n", str_size (z_file->sag_seq.size).s);
+        if (IS_SAG_SA && z_file->sag_cigars.size) 
+                                         iprintf ("sag_cigars:     %s (compression=%s)\n", str_size (z_file->sag_cigars.size).s, (IS_ZIP || VER2(15,68)) ? "huffman" : "none");
+        if (IS_SAG_SOLO && z_file->solo_data.size) { 
+            StrTextLong solos;
+            uint32_t solos_len=0;
+            for (int solo = 0; solo < NUM_SOLO_TAGS; solo++)
+                if (!VER2(15,68) || huffman_exists (solo_props[solo].did_i)) // for files since 15.0.68, we store only fields with a huffman
+                    SNPRINTF (solos, "%s,", ZCTX(solo_props[solo].did_i)->tag_name);
+            solos.s[solos_len-1] = 0; // remove final ','
+                                         iprintf ("solo_data:      %s (compression=%s solos=%s)\n", str_size (z_file->solo_data.size).s, (IS_ZIP || VER2(15,68)) ? "huffman" : "none", solos.s);
+        }
+        if (z_file->sag_alns.size)       iprintf ("sag_alns:       %s (num_alns=%s)\n", str_size (z_file->sag_alns.size).s, str_int_commas (z_file->sag_alns.len).s);
+        if (z_file->sag_grps.size)       iprintf ("sag_grps:       %s (num_groups=%s)\n", str_size (z_file->sag_grps.size).s, str_int_commas (z_file->sag_grps.len).s);
+        if (z_file->sag_grps_index.size) iprintf ("sag_grps_index: %s\n", str_size (z_file->sag_grps_index.size).s);
+        if (z_file->sag_qnames.size)     iprintf ("sag_qnames:     %s (compression=%s)\n", str_size (z_file->sag_qnames.size).s, (IS_ZIP || VER2(15,65)) ? "huffman" : "none");
+        if (z_file->sag_depn_index.size) iprintf ("sag_depn_index: %s\n", str_size (z_file->sag_depn_index.size).s);
+    }
+}
+
 // ZIP: called from main thread by sam_zip_after_compute after final PRIM vb
 void sam_sa_prim_finalize_ingest (void)
 {
@@ -47,16 +90,9 @@ void sam_sa_prim_finalize_ingest (void)
     qsort (z_file->sag_grps_index.data, z_file->sag_grps_index.len, sizeof(SAGroupIndexEntry), group_index_sorter);
 
     if (flag.show_sag) sam_show_sag();
-
-    buf_trim (z_file->sag_qnames, char);
-    buf_trim (z_file->solo_data, char);
     
-    if      (IS_SAG_SA)   buf_trim (z_file->sag_alns, SAAln);
-    else if (IS_SAG_CC)   buf_trim (z_file->sag_alns, CCAln);
-    else if (IS_SAG_SOLO) buf_trim (z_file->sag_alns, SoloAln);
+    sam_gencomp_trim_memory();
 
-    // TODO: trim z_file->sag_seq (bits buffer)
-    
     COPY_TIMER_EVB (sam_sa_prim_finalize_ingest);
 }
 
@@ -103,26 +139,36 @@ static void sam_zip_prim_ingest_vb_compress_qual (VBlockSAMP vb, Sag *vb_grps, u
 
     // note: in an unlikely case, the compressed size might be beyond this - in which case we will abandon the compression.
     ASSERTNOTINUSE (*comp_qual_buf);
-    uint32_t est_total_comp_qual_len = MIN_(total_qual_len / 1.3 + rans_compress_bound_4x16 (segconf.longest_seq_len, X_NOSZ), MAX_SA_SEQ_LEN); // heuristic (we don't want this to be unnecessarily too big)
+    uint32_t est_total_comp_qual_len = total_qual_len / 1.5; // heuristic (we don't want this to be unnecessarily too big)
     buf_alloc (vb, comp_qual_buf, 0, est_total_comp_qual_len, char, 0, "comp_qual_buf"); // likely already allocated
+
+    bool is_huff = huffman_exists (SAM_QUAL);
+
+    uint32_t qual_longest_theoretical_comp_len = is_huff
+            ? huffman_get_theoretical_max_comp_len (SAM_QUAL, vb->longest_seq_len) // we will use huffman for in-memory compression of QUAL
+            : arith_compress_bound (vb->longest_seq_len, X_NOSZ);                  // we will use ARITH
 
     for (uint32_t vb_grp_i=0; vb_grp_i < vb_grps_len; vb_grp_i++) {
         Sag *vb_grp = &vb_grps[vb_grp_i];
         if (vb_grp->no_qual) continue;
-
-        uint32_t comp_len = rans_compress_bound_4x16 (vb_grp->seq_len, X_NOSZ);
-        buf_alloc (vb, comp_qual_buf, comp_len, 0, char, CTX_GROWTH, "comp_qual_buf"); // likely already allocated
         
         uint8_t *qual = B8 (vb->txt_data, vb_grp->qual);  // always in SAM format
-        ASSERT (rans_compress_to_4x16 (VB, qual, vb_grp->seq_len, BAFT8(*comp_qual_buf), &comp_len, X_NOSZ) && comp_len,
-                "%s: Failed to compress PRIM qual: qual_len=%u", LN_NAME, vb_grp->seq_len);
+        uint32_t comp_len = qual_longest_theoretical_comp_len;
+
+        buf_alloc (vb, comp_qual_buf, comp_len, 0, char, CTX_GROWTH, "comp_qual_buf"); // likely already allocated
+
+        if (is_huff)
+            huffman_compress (SAM_QUAL, (rom)qual, vb_grp->seq_len, BAFT8(*comp_qual_buf), &comp_len);
+        else
+            ASSERT (arith_compress_to (VB, qual, vb_grp->seq_len, BAFT8(*comp_qual_buf), &comp_len, X_NOSZ) && comp_len,
+                    "%s: Failed to arith_compress PRIM qual: qual_len=%u", LN_NAME, vb_grp->seq_len);
 
         // TO DO: this is not expected to occur as the limit is quite high. If this does occur, we can avoid failing by
         // marking this vb_grp_i for removal and removing it prior to appending to z_file.
         ASSERT (comp_len <= MAX_SA_QUAL_COMP_LEN, "%s: while ingesting vb_grp_i=%u: qual_comp_len=%u > MAX_SA_QUAL_COMP_LEN=%u. seq_len=%u. %s",
                 VB_NAME, vb_grp_i, comp_len, MAX_SA_QUAL_COMP_LEN, vb_grp->seq_len, report_support());
 
-        vb_grp->qual          = comp_qual_buf->len; // if compressed - index in comp_qual_buf, if not - remains index in txt_data
+        vb_grp->qual          = comp_qual_buf->len; 
         vb_grp->qual_comp_len = comp_len; 
         comp_qual_buf->len   += comp_len;    
     }
@@ -148,6 +194,8 @@ static void sam_zip_prim_ingest_vb_compress_qnames (VBlockSAMP vb, Sag *vb_grps,
     
     buf_alloc (vb, comp_qname_buf, 0, total_qnames_len / 2, uint8_t, 0, "comp_qname_buf");
 
+    uint32_t max_comp_len = huffman_get_theoretical_max_comp_len (SAM_QNAME, SAM_MAX_QNAME_LEN);
+
     for (uint32_t vb_grp_i=0; vb_grp_i < vb_grps_len; vb_grp_i++) {
         Sag *g = &vb_grps[vb_grp_i];
         ZipDataLineSAMP dl = DATA_LINE(vb_grp_i);
@@ -165,9 +213,9 @@ static void sam_zip_prim_ingest_vb_compress_qnames (VBlockSAMP vb, Sag *vb_grps,
         else {
             g->qname = comp_qname_buf->len; // update from index into vb->txt_data to index into z_file->sa_qname
 
-            uint32_t comp_len = huffman_comp_len_required_allocation (qname_len);
+            uint32_t comp_len = max_comp_len;
             buf_alloc (vb, comp_qname_buf, comp_len, 0, uint8_t, 0, NULL);
-            
+
             huffman_compress (SAM_QNAME, STRa(qname), BAFT8(*comp_qname_buf), &comp_len);
             comp_qname_buf->len += comp_len;
 
@@ -195,20 +243,6 @@ static void sam_zip_prim_ingest_vb_create_index (VBlockSAMP vb, BufferP index_bu
     COPY_TIMER (sam_zip_prim_ingest_vb_create_index);
 }
 
-static inline ZWord copy_solo (VBlockSAMP vb, char **next, TxtWord txtw, bool check_copy)
-{
-    uint64_t start = BNUM64(z_file->solo_data, *next);
-
-    // if identical, UR and UB, CR and CB, point to the same data in solo_data
-    if (check_copy && start >= txtw.len && !memcmp (*next - txtw.len, Btxt (txtw.index), txtw.len)) 
-        return (ZWord){ .index = start - txtw.len, .len = txtw.len };
-    
-    else {
-        *next = mempcpy (*next, Btxt (txtw.index), txtw.len); 
-        return (ZWord){ .index = start, .len = txtw.len };
-    }
-}
-
 // runs in compute thread, serialized by mutex
 void sam_zip_prim_ingest_solo_data (VBlockSAMP vb)
 {
@@ -218,26 +252,59 @@ void sam_zip_prim_ingest_solo_data (VBlockSAMP vb)
     ASSERT (vb->sag_grps.len32 == vb->lines.len32, "%s: Expecting sag_grps.len=%u == lines.len=%u", 
             VB_NAME, vb->sag_grps.len32, vb->lines.len32);
 
+    bool has_huff[NUM_SOLO_TAGS];
+    for (int solo = 0; solo < NUM_SOLO_TAGS; solo++)
+        has_huff[solo] = huffman_exists (solo_props[solo].did_i); // if false, this tag didn't exist in segconf and we won't include it in sag
+
     uint32_t total_solo_len=0;    
     for_buf (ZipDataLineSAM, dl, vb->lines) 
-        for (int tag_i = 0; tag_i < NUM_SOLO_TAGS; tag_i++)
-            total_solo_len += dl->solo_z_fields[tag_i].len;
-
+        for (int solo = 0; solo < NUM_SOLO_TAGS; solo++)
+            total_solo_len += huffman_compress_len (solo_props[solo].did_i, STRtxt(dl->solo_z_fields[solo]));
+ 
     z_file->solo_data.can_be_big = z_file->sag_alns.can_be_big = true; // suppress warnings
-    buf_alloc (evb, &z_file->solo_data, total_solo_len, 0, char, CTX_GROWTH, "solo_data");
-    buf_alloc (evb, &z_file->sag_alns, vb->sag_grps.len32, 0, SoloAln, CTX_GROWTH, "solo_aln");
+    buf_alloc (evb, &z_file->solo_data, total_solo_len, 0, char, CTX_GROWTH, "z_file->solo_data");
+    buf_alloc (evb, &z_file->sag_alns, vb->sag_grps.len32, 0, SoloAln, CTX_GROWTH, "z_file->solo_aln");
 
-    char *next = BAFTc (z_file->solo_data);
+    uint8_t *next = BAFT8 (z_file->solo_data);
+    bytes first = B1ST8 (z_file->solo_data);
+    bytes after = next + total_solo_len;
+
     for_buf (ZipDataLineSAM, dl, vb->lines) {
-        SoloAln solo_aln;
-        for (int tag_i = 0; tag_i < NUM_SOLO_TAGS; tag_i++)
-            solo_aln.word[tag_i] = copy_solo (vb, &next, dl->solo_z_fields[tag_i], solo_props[tag_i].maybe_same_as_prev);
+        SoloAln *solo_aln = &BNXT(SoloAln, z_file->sag_alns);
+
+        uint64_t index = next - first;
+        ASSERT0 (index < 1 TB, "Too much solo data. Workaround: run with --no-gencomp");
         
-        BNXT(SoloAln, z_file->sag_alns) = solo_aln;
+        solo_aln->index_lo = index & 0xffffffff;
+        solo_aln->index_hi = (index >> 32) & 0xff;
+
+        for (int solo = 0; solo < NUM_SOLO_TAGS; solo++) {
+            if (!has_huff[solo]) {} // this tag didn't exist in segconf so we are not including it
+
+            // if identical, UR and UB, CR and CB, point to the same data in solo_data
+            else if (solo_props[solo].maybe_same_as_prev &&  
+                str_issame_(STRtxt(dl->solo_z_fields[solo]), STRtxt(dl->solo_z_fields[solo-1]))) {
+                solo_aln->field_uncomp_len[solo] = solo_aln->field_uncomp_len[solo-1];
+                solo_aln->field_comp_len[solo]   = solo_aln->field_comp_len[solo-1];
+                solo_aln->field_comp_len[solo-1] = 0; // uncomp_len>0 && comp_len==0 means: next field uses the same comp data  
+            }
+            
+            else {
+                uint32_t comp_len = after - next;
+                huffman_compress (solo_props[solo].did_i, STRtxt(dl->solo_z_fields[solo]), next, &comp_len); 
+
+                // include this solo field in the ingest, if its uncomp_len and comp_len are short enough
+                if (dl->solo_z_fields[solo].len <= MAX_SOLO_UNCOMP_LEN && comp_len <= MAX_SOLO_COMP_LEN) {
+                    solo_aln->field_uncomp_len[solo] = dl->solo_z_fields[solo].len;
+                    solo_aln->field_comp_len[solo]   = comp_len;
+                    next += comp_len;
+                }
+            }
+        }
     }
 
     vb->solo_data_len = BNUM64 (z_file->solo_data, next) - z_file->solo_data.len;
-    z_file->solo_data.len = BNUM64 (z_file->solo_data, next);
+    z_file->solo_data.len = BNUM64 (z_file->solo_data, next); 
 
     COPY_TIMER (sam_zip_prim_ingest_solo_data);
 }

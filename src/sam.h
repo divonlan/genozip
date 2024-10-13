@@ -323,6 +323,7 @@
 // XS:i - same as BWA, bowtie2 etc
 // #pragma GENDICT OPTION_XA_Z=DTYPE_2=XA:Z  // (overlap) The algorithm that produced this mapping and from what stage. The format is the algorithm name and the zero-based stage (separated by a dash).
 // #pragma GENDICT OPTION_XM_i=DTYPE_2=XM:i  // (overlap) The target length, that is, the number of reference bases spanned by the alignment.
+// #pragma GENDICT OPTION_XT_i=DTYPE_2=XT:i  // (overlap) (documentation not found)
 
 // STAR aligner tags. Source: https://raw.githubusercontent.com/alexdobin/STAR/master/doc/STARmanual.pdf
 // full list according to the source code Parameters.h:  NH,HI,AS,NM,MD,nM,jM,jI,RG,XS,rB,vG,vA,vW,ha,ch,MC,CR,CY,UR,UY,CB,UB,GX,GN,gx,gn,sM,sS,sQ,cN
@@ -679,7 +680,7 @@ COMPRESSOR_CALLBACK(sam_zip_BQ);
 COMPRESSOR_CALLBACK(sam_zip_iq_sq_dq);
 COMPRESSOR_CALLBACK(sam_zip_BD_BI);
 extern void sam_zip_initialize (void);
-extern void sam_zip_after_segconf (void);
+extern void sam_zip_after_segconf (VBlockP vb);
 extern void sam_zip_finalize (bool is_last_user_txt_file);
 extern bool sam_zip_dts_flag (int dts);
 extern void sam_zip_after_compute (VBlockP vb);
@@ -727,6 +728,7 @@ extern void sam_seg_aux_field_fallback (VBlockP vb, void *dl, DictId dict_id, ch
                                         STRp(value), ValueType numeric, unsigned add_bytes);
 extern int32_t sam_zip_get_np (VBlockP vb, LineIType line_i);
 extern void sam_zip_compress_sec_gencomp (void);
+extern void sam_compress_solo_huffman_sections (void);
 
 // PIZ Stuff
 extern void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header);
@@ -800,7 +802,7 @@ SPECIAL (SAM, 13, COPY_BUDDY_CIGAR,      sam_piz_special_COPY_BUDDY_CIGAR);     
 SPECIAL (SAM, 14, FASTQ_CONSUME_AUX,     sam_piz_special_FASTQ_CONSUME_AUX);     // introduced 12.0.41 (up to 14.0.25 called CONSUME_MC_Z)
 SPECIAL (SAM, 15, TLEN,                  sam_piz_special_TLEN);                  // introduced 13.0.1
 SPECIAL (SAM, 16, QUAL,                  sam_piz_special_QUAL);                  // introduced 13.0.1
-SPECIAL (SAM, 17, SAG,                   sam_piz_special_pull_from_sag);         // introduced 14.0.0
+SPECIAL (SAM, 17, pull_from_sag,         sam_piz_special_pull_from_sag);         // introduced 14.0.0
 SPECIAL (SAM, 18, SEQ,                   sam_piz_special_SEQ);                   // introduced 14.0.0
 SPECIAL (SAM, 19, PRIM_QNAME,            sam_piz_special_PRIM_QNAME);            // introduced 14.0.0
 SPECIAL (SAM, 20, SQUANK,                sam_piz_special_SQUANK);                // introduced 14.0.0
@@ -859,6 +861,7 @@ SPECIAL (SAM, 72, crdna_GP,              sam_piz_special_crdna_GP);             
 SPECIAL (SAM, 73, DEMUX_MAPQ,            sam_piz_special_DEMUX_MAPQ);            // introduced 15.0.61
 SPECIAL (SAM, 74, CPU_XL,                sam_piz_special_CPU_XL);                // introduced 15.0.65
 SPECIAL (SAM, 75, ML_REPEATS,            sam_piz_special_ML_REPEATS);            // introduced 15.0.67
+SPECIAL (SAM, 76, TMAP_XT,               sam_piz_special_TMAP_XT);               // introduced 15.0.68
 
 #define SAM_LOCAL_GET_LINE_CALLBACKS(dt)        \
     { dt, _OPTION_BD_BI,    sam_zip_BD_BI    }, \

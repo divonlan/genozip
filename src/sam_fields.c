@@ -1622,16 +1622,18 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam,
 
         case _OPTION_XT_A: COND (segconf.sam_has_BWA_XT_A, sam_seg_BWA_XT_A (vb, value[0], add_bytes));
 
-        case _OPTION_nM_i: COND (MP(STAR), sam_seg_STAR_nM (vb, dl, (SamNMType)numeric.i, add_bytes)); break;
+        case _OPTION_nM_i: COND (MP(STAR), sam_seg_STAR_nM (vb, dl, (SamNMType)numeric.i, add_bytes)); 
         
-        case _OPTION_jI_B_i: COND (MP(STAR), sam_seg_STAR_jI (vb, dl, STRa(value), is_bam)); break;
+        case _OPTION_jI_B_i: COND (MP(STAR), sam_seg_STAR_jI (vb, dl, STRa(value), is_bam)); 
 
         case _OPTION_jM_B_c: COND (MP(STAR), sam_seg_array_one_ctx (VB_SAM, dl, dict_id, array_subtype, STRa(value), NULL, NULL, sam_piz_special_jM_length));
 
         case _OPTION_XM_i: COND0 (segconf.sam_has_XM_i_is_mismatches, sam_seg_XM_i (vb, dl, numeric.i, idx, add_bytes))
-                           COND (MP(TMAP), sam_seg_TMAP_XM_i (vb, numeric, add_bytes));
+                           COND (MP(TMAP), sam_seg_tmap_XM_i (vb, numeric.i, add_bytes));
 
-        case _OPTION_X1_i: COND (segconf.sam_has_BWA_X01_i, sam_seg_BWA_X1_i (vb, numeric.i, add_bytes)); break;
+        case _OPTION_XT_i: COND (MP(TMAP), sam_seg_tmap_XT_i (vb, dl, numeric.i, add_bytes)); 
+        
+        case _OPTION_X1_i: COND (segconf.sam_has_BWA_X01_i, sam_seg_BWA_X1_i (vb, numeric.i, add_bytes)); 
 
         case _OPTION_ZS_i: COND (MP(HISAT2), sam_seg_BWA_XS_i (vb, dl, OPTION_ZS_i, numeric.i, add_bytes)); 
 

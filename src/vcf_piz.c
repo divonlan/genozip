@@ -280,11 +280,13 @@ static void inline vcf_piz_SAMPLES_subset_samples (VBlockVCFP vb, unsigned rep, 
 
 CONTAINER_ITEM_CALLBACK (vcf_piz_con_item_cb)
 {
+    VBlockVCFP vb = (VBlockVCFP)vb_;
+
     switch (con_item->dict_id.num) {
         // IMPORTANT: when adding a "case", also update set CI1_ITEM_CB in vcf_seg_FORMAT
         
         case _FORMAT_DP:
-            if (ctx_has_value (vb, FORMAT_DP)) { // not '.' or missing
+            if (ctx_has_value (VB, FORMAT_DP)) { // not '.' or missing
                 if (segconf.INFO_DP_method == BY_FORMAT_DP) 
                     CTX(INFO_DP)->dp.sum_format_dp += CTX(FORMAT_DP)->last_value.i;
             
@@ -310,7 +312,7 @@ CONTAINER_ITEM_CALLBACK (vcf_piz_con_item_cb)
         // note: for _FORMAT_IPS we insert in vcf_piz_special_MUX_BY_IGT_PHASE
         
         case _VCF_REFALT: // files compress starting v14.0.12
-            vcf_piz_refalt_parse (VB_VCF);
+            vcf_piz_refalt_parse (vb);
             break;
 
         default:

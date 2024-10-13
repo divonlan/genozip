@@ -8,6 +8,7 @@
 
 #include "sam_private.h"
 #include "txtfile.h"
+#include "mgzip.h"
 #include "libdeflate_1.19/libdeflate.h"
 
 void bam_seg_initialize (VBlockP vb)
@@ -18,7 +19,7 @@ void bam_seg_initialize (VBlockP vb)
     buf_alloc (vb, &vb->txt_data, 1, 0, char, 0, 0); // add 1 character after the end of txt_data
     *BAFTtxt = '*'; // missing qual;
 
-    if (!segconf.running && line_textual_cigars_used)
+    if (line_textual_cigars_used)
         buf_alloc (vb, &VB_SAM->line_textual_cigars, 0, segconf.sam_cigar_len * vb->lines.len32 / (segconf.is_long_reads ? 4 : 1),/*divide in case sam_cigar_len is not representative*/
                    char, CTX_GROWTH, "line_textual_cigars");
 }
@@ -53,7 +54,7 @@ static int32_t bam_unconsumed_scan_forwards (VBlockP vb)
 
     uint32_t aln_size=0, i;
     for (i=0 ; i < txt_len-3; i += aln_size) 
-        aln_size = GET_UINT32_((BAMAlignmentFixed *)&txt[i], block_size) + 4;
+        aln_size = ((BAMAlignmentFixedP)&txt[i])->block_size + 4;
 
     if (aln_size > txt_len) 
         return -1; // this VB doesn't not even contain one single full alignment
@@ -65,14 +66,15 @@ static int32_t bam_unconsumed_scan_forwards (VBlockP vb)
         return aln_size - (i - txt_len); // we pass the data of the final, partial, alignment to the next VB
 }
 
-static int32_t bam_unconsumed_scan_backwards (VBlockP vb, uint32_t first_i)
+static int32_t bam_unconsumed_scan_backwards (rom bam_data, uint64_t bam_data_len,
+                                              const BAMAlignmentFixed **last_aln) // optional out
 {
-    int32_t last_i = Ltxt - sizeof(BAMAlignmentFixed);
+    int32_t last_i = bam_data_len - sizeof(BAMAlignmentFixed);
 
     // find the first alignment in the data (going backwards) that is entirely in the data - 
     // we identify and alignment by l_read_name and read_name
-    for (; last_i >= (int32_t)first_i; (last_i)--) {
-        const BAMAlignmentFixed *aln = (const BAMAlignmentFixed *)Btxt (last_i);
+    for (; last_i >= 0; last_i--) {
+        const BAMAlignmentFixed *aln = (const BAMAlignmentFixed *)&bam_data[last_i];
 
         uint32_t block_size = LTEN32 (aln->block_size);
         if (block_size > 100000000) continue; // quick short-circuit - more than 100M for one alignment - clearly wrong
@@ -81,13 +83,13 @@ static int32_t bam_unconsumed_scan_backwards (VBlockP vb, uint32_t first_i)
         uint16_t n_cigar_op = LTEN16 (aln->n_cigar_op);
 
         // test to see block_size makes sense
-        if ((uint64_t)last_i + (uint64_t)block_size + 4 > (uint64_t)vb->txt_data.len || // 64 bit arith to catch block_size=-1 that will overflow in 32b
+        if ((uint64_t)last_i + (uint64_t)block_size + 4 > bam_data_len || // 64 bit arith to catch block_size=-1 that will overflow in 32b
             block_size + 4 < sizeof (BAMAlignmentFixed) + 4*n_cigar_op  + aln->l_read_name + l_seq + (l_seq+1)/2)
             continue;
 
         // test to see l_read_name makes sense
         if (LTEN32 (aln->l_read_name) < 2 ||
-            &aln->read_name[aln->l_read_name] > BAFTtxt) continue;
+            &aln->read_name[aln->l_read_name] > bam_data + bam_data_len) continue;
 
         // test pos
         int32_t pos = LTEN32 (aln->pos);
@@ -122,9 +124,11 @@ static int32_t bam_unconsumed_scan_backwards (VBlockP vb, uint32_t first_i)
         // agree with our formula. see comment in bam_reg2bin
 
         // all tests passed - this is indeed an alignment
-        return Ltxt - (last_i + LTEN32 (aln->block_size) + 4); // everything after this alignment is "unconsumed"
+        if (last_aln) *last_aln = aln;
+        return bam_data_len - (last_i + LTEN32 (aln->block_size) + 4); // everything after this alignment is "unconsumed"
     }
 
+    if (last_aln) *last_aln = NULL;
     return -1; // we can't find any alignment - need more data (lower first_i)    
 }  
 
@@ -142,9 +146,27 @@ int32_t bam_unconsumed (VBlockP vb, uint32_t first_i)
 
     // stringent -either CIGAR needs to match seq_len, or qname needs to match flavor
     else
-        result = bam_unconsumed_scan_backwards (vb, first_i); 
+        result = bam_unconsumed_scan_backwards (Btxt(first_i), Ltxt - first_i, NULL); 
 
     return result; // if -1 - we will be called again with more data
+}
+
+bool bam_txt_file_is_last_alignment_unmapped (void)
+{
+    // notes: 1. in sorted files, unmapped are at the end. 2. No implemtnation for SAM, as BGZF .sam.gz or .sam are very rare.
+    if (!segconf.is_sorted || !IS_BAM_ZIP || !TXT_IS_BGZF || 
+        txt_file->redirected || txt_file->is_remote || is_read_via_ext_decompressor (txt_file)/*CRAM*/)
+        return false; // we cannot test
+
+    STRli(uncomp, BGZF_MAX_BLOCK_SIZE);
+    if (!bgzf_read_and_uncomp_final_block (txt_file->name, qSTRa(uncomp)))
+        return false; // failed to find or read or uncompress final bgzf block
+
+    const BAMAlignmentFixed *aln;
+    bam_unconsumed_scan_backwards (STRa(uncomp), &aln);
+    
+    return aln && // last alignment found (note: possibly NULL (=not found) if by bad luck the final BGZF block is tiny)
+           ((LTEN16(aln->flag) & SAM_FLAG_UNMAPPED) || !aln->n_cigar_op || aln->ref_id == -1 || aln->pos == -1);
 }
 
 static rom bam_dump_alignment (VBlockSAMP vb, rom alignment, rom after)
@@ -494,7 +516,7 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
         (flag.has_biopsy_line && sam_seg_test_biopsy_line (VB, alignment, block_size + 4)) )
         goto done;  
 
-    sam_cigar_binary_to_textual (vb, n_cigar_op, B1ST(BamCigarOp, vb->binary_cigar), // binary_cigar and not "cigar", as the latter is mis-aligned 
+    sam_cigar_binary_to_textual (vb, B1ST(BamCigarOp, vb->binary_cigar), n_cigar_op, false, // binary_cigar and not "cigar", as the latter is mis-aligned 
                                  &vb->textual_cigar); // re-write BAM format CIGAR as SAM textual format in vb->textual_cigar
 
     // SEQ - calculate diff vs. reference (denovo or loaded)
@@ -574,7 +596,7 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
         else if (IS_SAG_SOLO) sam_seg_prim_add_sag_SOLO (vb, dl);
     }
 
-    if (dl->SEQ.len > vb->longest_seq_len) vb->longest_seq_len = dl->SEQ.len;
+    MAXIMIZE (vb->longest_seq_len, dl->SEQ.len);
 
     if (segconf.running)
         segconf.est_segconf_sam_size += bam_segconf_get_transated_sam_line_len (vb, dl, tlen);

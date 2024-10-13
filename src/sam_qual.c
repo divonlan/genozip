@@ -8,7 +8,9 @@
 
 #include "sam_private.h"
 #include "codec.h"
+#include "huffman.h"
 #include "htscodecs/rANS_static4x16.h"
+#include "htscodecs/arith_dynamic.h"
 
 rom bam_qual_display (bytes qual, uint32_t l_seq) // caller should free memory
 {
@@ -33,29 +35,6 @@ rom bam_qual_display (bytes qual, uint32_t l_seq) // caller should free memory
         char *str = MALLOC (l_seq*3 + 2);
         return str_to_hex_ (qual, l_seq, str, true);
     }
-}
-
-// main thread (not thread-safe): called from sam_show_sag_one_grp for getting first few characters of alignment cigar
-rom sam_display_qual_from_SA_Group (const Sag *g)
-{
-    if (g->no_qual) return "*";
-
-    static char qual[SA_QUAL_DISPLAY_LEN+1];
-    memset (qual, 0, sizeof(qual));
-
-    uint32_t uncomp_len = MIN_(SA_CIGAR_DISPLAY_LEN, (uint32_t)g->seq_len); // possibly shorter than original cigar
-
-    if (g->qual_comp_len) { // qual of this group is compressed
-        uint32_t uncomp_len = MIN_((uint32_t)g->seq_len, SA_QUAL_DISPLAY_LEN);
-        void *success = rans_uncompress_to_4x16 (evb, B8(z_file->sag_qual, g->qual), g->qual_comp_len,
-                                                (uint8_t *)qual, &uncomp_len); 
-        if (success && uncomp_len) qual[uncomp_len] = '\0';
-    }
-
-    else // not compressed
-        memcpy (qual, B8(z_file->sag_qual, g->qual), uncomp_len);
-
-    return qual;
 }
 
 //---------
@@ -113,6 +92,58 @@ QUAL_ZIP_CALLBACK(QX, solo_z_fields[SOLO_QX], false)
 QUAL_ZIP_CALLBACK(CY, solo_z_fields[SOLO_CY], false)
 QUAL_ZIP_CALLBACK(QT, solo_z_fields[SOLO_QT], false)
 
+// Gencomp/Deep ZIP: called after segconf to check if gencomp_ingest, gencomp_load and deep_piz would be better 
+// off compressing QUAL (in memory) with Huffman (with a tree calculated by segconf) or with CODEC_ART   
+void sam_qual_produce_huffman_if_better (VBlockSAMP vb)
+{
+    uint32_t total_art=0, total_huff=0;
+
+    // create huffman compressor for QUAL based on segconf data
+    huffman_start_chewing (SAM_QUAL, 0, 0, 0);
+
+    for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) {
+        ZipDataLineSAMP dl = DATA_LINE(line_i);
+        if (dl->no_qual) continue;
+
+        // in case segconf decided to optimize QUAL: since segconf data was not optimized so we optimize it now
+        if (segconf.optimize[SAM_QUAL])
+            optimize_phred_quality_string (STRtxt(dl->QUAL), Btxt (dl->QUAL.index), false, false); 
+
+        huffman_chew_one_sample (SAM_QUAL, STRtxt(dl->QUAL), false);
+    }
+
+    huffman_produce_compressor (SAM_QUAL, (bool[256]){[33 ... 126] = true});
+
+    // compare huffman compression to ART which will be used if huffman is dropped
+    ARRAY_alloc (uint8_t, comp, 
+                 MAX_(arith_compress_bound (vb->longest_seq_len, X_NOSZ), huffman_get_theoretical_max_comp_len (SAM_QUAL, vb->longest_line_len)), 
+                 false, vb->scratch, vb, "scratch");
+
+    for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) {
+        ZipDataLineSAMP dl = DATA_LINE(line_i);
+        if (dl->no_qual) continue;
+        
+        // calculate using ART
+        uint32_t this_comp_len = comp_len;
+        ASSERT (arith_compress_to (VB, (uint8_t *)STRtxt(dl->QUAL), comp, &this_comp_len, X_NOSZ) && this_comp_len,
+                "Failed to compress segconf QUAL with ART: line_i=%u qual_len=%u qual=\"%.*s\"", line_i, dl->QUAL.len, STRfw(dl->QUAL));
+        
+        total_art += this_comp_len;
+
+        total_huff += huffman_compress_len (SAM_QUAL, STRtxt(dl->QUAL));
+    }
+
+    buf_free (vb->scratch);
+
+    if (flag.show_deep || flag.debug_gencomp)
+        iprintf ("\nSegconf: test QUAL compression (for gencomp / deep): total_huff=%u total_art=%u: %s is better.\n", 
+                 total_huff, total_art, (total_huff >= total_art ? "ARITH" : "HUFFMAN"));
+
+    // case: ART is better - cancel huffman
+    if (total_huff >= total_art)    
+        buf_destroy (ZCTX(SAM_QUAL)->huffman);
+}
+
 void sam_seg_QUAL_initialize (VBlockSAMP vb)
 {
     if (IS_MAIN(vb)) 
@@ -128,30 +159,48 @@ void sam_seg_QUAL_initialize (VBlockSAMP vb)
 }
 
 // ZIP/PIZ: decompresses grp qual of grp, into vb->scratch
-static void sam_get_sa_grp_qual (VBlockSAMP vb)
+static void sam_get_sa_grp_qual (VBlockSAMP vb, const Sag *g)
 {
     ASSERTNOTINUSE (vb->scratch);
 
-    buf_alloc (vb, &vb->scratch, vb->sag->seq_len, 0, char, 1, "scratch");
+    buf_alloc (vb, &vb->scratch, g->seq_len, 0, char, 1, "scratch");
 
-    if (vb->sag->qual_comp_len) { // qual of this group is compressed
-        uint32_t uncomp_len = vb->sag->seq_len;
+    if (g->qual_comp_len) { // qual of this group is compressed
+        uint32_t uncomp_len = g->seq_len;
 
-        void *success = rans_uncompress_to_4x16 (VB, B8(z_file->sag_qual, vb->sag->qual), vb->sag->qual_comp_len,
-                                                B1ST8(vb->scratch), &uncomp_len); 
-        ASSGOTO (success && uncomp_len == vb->sag->seq_len, "%s: rans_uncompress_to_4x16 failed to decompress an SA Group QUAL data: grp_i=%u success=%u comp_len=%u uncomp_len=%u expected_uncomp_len=%u qual=%"PRIu64,
-                    LN_NAME, ZGRP_I(vb->sag), !!success, vb->sag->qual_comp_len, uncomp_len, vb->sag->seq_len, (uint64_t)vb->sag->qual);
+        if (huffman_exists (SAM_QUAL))
+            huffman_uncompress (SAM_QUAL, B8(z_file->sag_qual, g->qual), B1STc(vb->scratch), uncomp_len);
+        else
+            ASSGOTO (arith_uncompress_to (VB, B8(z_file->sag_qual, g->qual), g->qual_comp_len, B1ST8(vb->scratch), &uncomp_len) && uncomp_len == g->seq_len,
+                     "%s: arith_uncompress_to failed to uncompress sag QUAL data: grp_i=%u comp_len=%u uncomp_len=%u expected_uncomp_len=%u qual_index=%"PRIu64,
+                     LN_NAME, ZGRP_I(g), g->qual_comp_len, uncomp_len, g->seq_len, (uint64_t)g->qual);
 
         vb->scratch.len = uncomp_len;
     }
     else // not compressed
-        buf_add (&vb->scratch, Bc(z_file->sag_qual, vb->sag->qual), vb->sag->seq_len);
+        buf_add (&vb->scratch, Bc(z_file->sag_qual, g->qual), g->seq_len);
 
     return;
     
 error:
-    sam_show_sag_one_grp (ZGRP_I(vb->sag));
+    sam_show_sag_one_grp (ZGRP_I(g));
     exit_on_error(true);
+}
+
+// main thread (not thread-safe): called from sam_show_sag_one_grp for getting first few characters of alignment cigar
+StrTextUltraLong sam_display_qual_from_sag (const Sag *g)
+{
+    if (g->no_qual) return (StrTextUltraLong){ "*" };
+
+    sam_get_sa_grp_qual ((VBlockSAMP)evb, g); // into vb->scratch
+
+    StrTextUltraLong s;
+    bool truncated = (evb->scratch.len > sizeof(s) - 4);
+    snprintf (s.s, sizeof(s.s), "%.*s%s", truncated ? (int)sizeof(s) - 4 : evb->scratch.len32, B1STc(evb->scratch), truncated ? "..." : "");
+
+    buf_free (evb->scratch);
+
+    return s;
 }
 
 static bool sam_seg_QUAL_diff_do (VBlockSAMP vb, rom my_qual, rom other_qual, uint32_t qual_len, bool reverse_other, 
@@ -293,7 +342,7 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qual)/*always textual
 
         // case: both this line and prim have QUAL - diff them
         else {
-            sam_get_sa_grp_qual (vb); // decompress prim qual into vb->scratch
+            sam_get_sa_grp_qual (vb, vb->sag); // decompress prim qual into vb->scratch
 
             diff_type = sam_seg_QUAL_diff (vb, dl, STRa(qual), STRb(vb->scratch), vb->sag->revcomp, (uint32_t[]){0, 0}, add_bytes);        
             buf_free (vb->scratch);
@@ -482,7 +531,7 @@ static void sam_piz_QUAL_undiff_vs_other (VBlockSAMP vb, STRp (other_qual), Qual
 
 static void sam_piz_QUAL_primary (VBlockSAMP vb)
 {
-    sam_get_sa_grp_qual (vb); // uncompress PRIM qual to vb->scratch
+    sam_get_sa_grp_qual (vb, vb->sag); // uncompress PRIM qual to vb->scratch
 
     RECONSTRUCT_BUF (vb->scratch);
     buf_free (vb->scratch);
@@ -538,7 +587,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
         else if (IS_DEPN(vb)) {
             if (diff_type == QDT_ABORTED) goto no_diff;
 
-            sam_get_sa_grp_qual (vb); // uncompress PRIM qual to vb->scratch
+            sam_get_sa_grp_qual (vb, vb->sag); // uncompress PRIM qual to vb->scratch
             
             sam_piz_QUAL_undiff_vs_other (vb, STRb(vb->scratch), diff_type, vb->sag->revcomp, NULL, false, reconstruct);                
             buf_free (vb->scratch);
@@ -629,8 +678,8 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_QUAL)
     // 1. If l_seq is 0, the QUAL is empty
     // 2. If not (i.e. we have SEQ data but not QUAL) - it is a string of 0xff, length l_seq
     if (VB_SAM->qual_missing) {
-        BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)Btxt (vb->line_start);
-        uint32_t l_seq = GET_UINT32_(alignment, l_seq);
+        BAMAlignmentFixedP alignment = (BAMAlignmentFixedP)Btxt (vb->line_start);
+        uint32_t l_seq = alignment->l_seq;
         
         if (!l_seq) // option 1
             Ltxt--;

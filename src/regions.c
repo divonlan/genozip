@@ -13,17 +13,17 @@
 
 // region as parsed from the --regions option
 typedef struct {
-    rom chrom;        // NULL means all chromosomes (i.e. not a specific chromosome)
-    PosType64 start_pos;       // if the user did specify pos then start_pos=0 and end_pos=MAX_POS
-    PosType64 end_pos;         // the region searched will include both the start and the end
-} Region;
+    rom chrom;           // NULL means all chromosomes (i.e. not a specific chromosome)
+    PosType64 start_pos; // if the user did specify pos then start_pos=0 and end_pos=MAX_POS
+    PosType64 end_pos;   // the region searched will include both the start and the end
+} Region, *RegionP;
 
 // region of a specific chromosome
 typedef struct {
-    PosType64 start_pos;       // if the user did specify pos then start_pos=0 and end_pos=MAX_POS
-    PosType64 end_pos;         // the region searched will include both the start and the end
-    bool revcomp;            // display the region in reverse complement
-} Chreg; // = Chromosome Region
+    PosType64 start_pos; // if the user did specify pos then start_pos=0 and end_pos=MAX_POS
+    PosType64 end_pos;   // the region searched will include both the start and the end
+    bool revcomp;        // display the region in reverse complement
+} Chreg, *ChregP; // = Chromosome Region
 
 static Buffer regions_buf = {}; // all regions together
 static BufferP chregs = NULL;     // one entry per chrom
@@ -256,14 +256,23 @@ void regions_make_chregs (ContextP chrom_ctx)
         for (unsigned chr_i = (chrom_word_index == WORD_INDEX_NONE ? 0 : chrom_word_index);
              chr_i         <= (chrom_word_index == WORD_INDEX_NONE ? num_chroms-1 : chrom_word_index);
              chr_i++) {
+
+            RangeP r = ref_get_range_by_ref_index (evb, gref, chr_i);
+
+            PosType64 reg_start_pos = reg->start_pos - ((r && flag.gpos) ? (r->gpos - 1) : 0);
+            PosType64 reg_end_pos   = reg->end_pos   - ((r && flag.gpos) ? (r->gpos - 1) : 0);
             
             chregs[chr_i].len++;
             buf_alloc (evb, &chregs[chr_i], 0, chregs[chr_i].len, Chreg, 2, "chregs");
             
-            Chreg *chreg = BLST (Chreg, chregs[chr_i]);
-            chreg->revcomp   = reg->end_pos < reg->start_pos; 
-            chreg->start_pos = chreg->revcomp ? reg->end_pos : reg->start_pos;
-            chreg->end_pos   = chreg->revcomp ? reg->start_pos : reg->end_pos;
+            ChregP chreg = BLST (Chreg, chregs[chr_i]);
+            chreg->revcomp   = reg_end_pos < reg_start_pos; 
+            chreg->start_pos = chreg->revcomp ? reg_end_pos : reg_start_pos;
+            chreg->end_pos   = chreg->revcomp ? reg_start_pos : reg_end_pos;
+
+            // remove chreg if it does not overlap chromosome at all
+            if (r && (chreg->start_pos > r->last_pos || chreg->end_pos < 1)) 
+                chregs[chr_i].len--;
         }
     }
 
@@ -282,7 +291,7 @@ void regions_transform_negative_to_positive_complement()
     // initialize regions for each chr - to be the whole chr
     for (unsigned chr_i=0; chr_i < num_chroms; chr_i++) {
         buf_alloc (evb, &chregs[chr_i], 0, 1, Chreg, 1, "chregs");
-        Chreg *chreg = B(Chreg, chregs[chr_i], 0);
+        ChregP chreg = B(Chreg, chregs[chr_i], 0);
         chreg->start_pos   = 0;
         chreg->end_pos     = MAX_POS;
         chregs[chr_i].len  = 1;
@@ -290,12 +299,12 @@ void regions_transform_negative_to_positive_complement()
         // process each negative regions - substract from positive chreg 
         for (unsigned negreg_i=0; negreg_i < neg_chregs[chr_i].len32; negreg_i++) {
 
-            Chreg *neg_chreg = B(Chreg, neg_chregs[chr_i], negreg_i);
+            ChregP neg_chreg = B(Chreg, neg_chregs[chr_i], negreg_i);
             
             // for each positive region that overlaps the negative region - fix it to remove the negative region
             for (unsigned posreg_i=0; posreg_i < chregs[chr_i].len32; posreg_i++) {
 
-                Chreg *pos_chreg = B(Chreg, chregs[chr_i], posreg_i);
+                ChregP pos_chreg = B(Chreg, chregs[chr_i], posreg_i);
 
                 // case: nagative completely eliminates the positive region
                 if (neg_chreg->start_pos <= pos_chreg->start_pos && neg_chreg->end_pos >= pos_chreg->end_pos) {
@@ -316,8 +325,8 @@ void regions_transform_negative_to_positive_complement()
                     chregs[chr_i].len++;
                     buf_alloc (evb, &chregs[chr_i], 0, chregs[chr_i].len, Chreg, 2, "chregs");
                     
-                    Chreg *new_pos_chreg = BLST (Chreg, chregs[chr_i]);
-                    Chreg *pos_chreg = B(Chreg, chregs[chr_i], posreg_i); // update after realloc
+                    ChregP new_pos_chreg = BLST (Chreg, chregs[chr_i]);
+                    ChregP pos_chreg = B(Chreg, chregs[chr_i], posreg_i); // update after realloc
 
                     new_pos_chreg->start_pos = neg_chreg->end_pos + 1;
                     new_pos_chreg->end_pos   = pos_chreg->end_pos;
@@ -374,7 +383,7 @@ bool regions_get_range_intersection (WordIndex chrom_word_index, PosType64 min_p
     BufferP chregs_buf = &chregs[chrom_word_index];
     if (intersect_i >= chregs_buf->len) return false; // intersect_i is out of range with this chromosome (possibly because len=0 - no intersections with this chromosome)
 
-    Chreg *chreg = B(Chreg, *chregs_buf, intersect_i);
+    ChregP chreg = B(Chreg, *chregs_buf, intersect_i);
 
     if (chreg->start_pos > max_pos || chreg->end_pos < min_pos) 
         return false; // no intersection with this chromosome
@@ -404,7 +413,7 @@ bool regions_is_site_included (VBlockP vb)
     // it sufficient that the site is included in one (positive) region
     BufferP chregs_buf = &chregs[chrom];
     for (unsigned chreg_i=0; chreg_i < chregs_buf->len; chreg_i++) {
-        Chreg *chreg = B(Chreg, *chregs_buf, chreg_i);
+        ChregP chreg = B(Chreg, *chregs_buf, chreg_i);
         if (pos >= chreg->start_pos && pos <= chreg->end_pos) return true;
     }
     return false;
@@ -419,7 +428,7 @@ bool regions_is_range_included (WordIndex chrom_word_index, PosType64 start_pos,
     // it sufficient that the site is included in one (positive) region
     BufferP chregs_buf = &chregs[chrom_word_index];
     for (unsigned chreg_i=0; chreg_i < chregs_buf->len; chreg_i++) {
-        Chreg *chreg = B(Chreg, *chregs_buf, chreg_i);
+        ChregP chreg = B(Chreg, *chregs_buf, chreg_i);
 
         // check for complete inclusion
         if (start_pos >= chreg->start_pos && end_pos <= chreg->end_pos) 
@@ -479,7 +488,7 @@ void regions_display(rom title)
 
         for (unsigned chr_i = 0; chr_i < num_chroms; chr_i++)
             for (unsigned chreg_i=0; chreg_i < chregs[chr_i].len32; chreg_i++) {
-                Chreg *chreg = B(Chreg, chregs[chr_i], chreg_i);
+                ChregP chreg = B(Chreg, chregs[chr_i], chreg_i);
                 iprintf ("chrom_word_index=%d start=%"PRId64" end=%"PRId64"\n", chr_i, chreg->start_pos, chreg->end_pos); 
             }
     }

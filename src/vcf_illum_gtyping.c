@@ -289,7 +289,7 @@ void vcf_seg_mux_by_adjusted_dosage (VBlockVCFP vb, ContextP ctx, STRp(baf), con
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_ADJ_DOSAGE)
 {    
-    int channel_i = vcf_seg_adjust_channel_i (vb, vcf_piz_get_mux_channel_i (VB));
+    int channel_i = vcf_seg_adjust_channel_i (vb, vcf_piz_get_mux_channel_i (VB_VCF));
 
     return reconstruct_demultiplex (vb, ctx, STRa(snip), channel_i, new_value, reconstruct);
 }    

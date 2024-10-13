@@ -505,6 +505,7 @@ SectionHeaderUnion zfile_read_section_header_do (VBlockP vb, Section sec,
                                                  SectionType expected_sec_type, // optional: if not SEC_NONE, also verifies section is of expected type
                                                  FUNCLINE)
 {
+    ASSERTNOTNULL (sec);
     ASSERT (expected_sec_type == SEC_NONE || sec->st == expected_sec_type, 
             "called from %s:%u: expecting sec.st=%s to be %s", func, code_line, st_name (sec->st), st_name (expected_sec_type));
 

@@ -385,7 +385,11 @@ Section sections_vb_header (VBIType vb_i)
     
     // sanity
     ASSERT (sec, "vb_i=%u fits in z_file->vb_sections_index, but it is not indexed", vb_i);
-    ASSERT (IS_VB_HEADER(sec), "Expecting indexed VB section of vb_i=%u to have st=VB_HEADER but it has st=%s", vb_i, st_name(sec->st));
+
+    if (!IS_VB_HEADER(sec)) {
+        sections_show_section_list (z_file->data_type, &z_file->section_list, SEC_VB_HEADER);
+        ABORT ("Expecting indexed VB section of vb_i=%u sec_i=%u to be a VB_HEADER but it is a %s.", vb_i, vb_header_sec_i, st_name(sec->st));
+    }
 
     return sec;
 }
@@ -479,25 +483,22 @@ static void v14_sections_list_file_to_memory_format (void)
     }
 }
 
-// ZIP (see also bug 819)
-void sections_list_memory_to_file_format (bool in_place) // in place, or to evb->scratch for testing codec
+// ZIP: creates file-format section list in evb->scratch (see also bug 819)
+void sections_list_memory_to_file_format (void) 
 {
-    if (!in_place) { // just generating for codec testing
-        ASSERTNOTINUSE(evb->scratch);
-        buf_alloc_exact (evb, evb->scratch, (MIN_(z_file->section_list.len * sizeof (SectionEntFileFormat), CODEC_ASSIGN_SAMPLE_SIZE) / sizeof(SectionEntFileFormat)),
-                         SectionEntFileFormat, "scratch");
-    }
-
-    BufferP out = in_place ? &z_file->section_list : &evb->scratch;
-
+    ASSERTNOTINUSE(evb->scratch);
+    buf_alloc_exact (evb, evb->scratch, (MAX_(z_file->section_list.len * sizeof (SectionEntFileFormat), CODEC_ASSIGN_SAMPLE_SIZE) / sizeof(SectionEntFileFormat)),
+                        SectionEntFileFormat, "scratch");
+    evb->scratch.len = z_file->section_list.len;
+    
     // replace dict_id with the the sec_i of its first appearahce. 
     int32_t first_appearance[z_file->num_contexts];
     memset (first_appearance, 255, z_file->num_contexts * sizeof (int32_t));
 
     SectionEntModifiable prev_sec = {};
     uint32_t prev_num_lines = 0;
-    for_buf2 (SectionEntFileFormat, fsec, i, *out) {
-        SectionEnt sec = *B(SectionEnt, z_file->section_list, i); // copy before it gets overwritten
+    for_buf2 (SectionEntFileFormat, fsec, i, evb->scratch) {
+        SectionEnt sec = *B(SectionEnt, z_file->section_list, i); 
         
         int64_t offset_delta = (int64_t)sec.offset - (int64_t)prev_sec.offset;
         ASSERT (IN_RANGX (offset_delta, 0LL, 0xffffffffLL),  // note: offset_delta is size of previous section
@@ -535,7 +536,7 @@ void sections_list_memory_to_file_format (bool in_place) // in place, or to evb-
         prev_sec = sec;
     }
 
-    out->len *= sizeof (SectionEntFileFormat); // change to counting bytes
+    evb->scratch.len *= sizeof (SectionEntFileFormat); // change to counting bytes
 }
 
 // PIZ: create in-memory format of the section list - copy from z_file section, BGEN, and add sizes
@@ -729,22 +730,30 @@ StrText line_name (VBlockP vb)
 }
 
 // called to parse the optional argument to --show-headers. we accept eg "REFERENCE" or "SEC_REFERENCE" or even "ref"
-void sections_set_show_headers (char *name)
+void sections_set_show_headers (char *arg)
 {
-    if (!name) {
+    if (!arg) {
         flag.show_headers = -1; // all sections
         return; 
     }
     
-    char upper_name[strlen(name)+1];
-    str_toupper_(name, upper_name, strlen(name)+1); // name is case insesitive (compare uppercase)
+    uint32_t arg_len = strlen(arg); 
+
+    if (str_is_int (STRa(arg))) {
+        flag.show_headers = -1; // all sections types
+        flag.show_header_section_i = atoi (arg);
+        return;
+    }
+
+    char upper_arg[arg_len+1];
+    str_toupper_(arg, upper_arg, arg_len+1); // arg is case insesitive (compare uppercase)
 
     SectionType candidate=-1;
     unsigned candidate_len=100000;
 
-    // choose the shortest section for which name is a case-insensitive substring (eg "dict" will result in SEC_DICT not SEC_DICT_ID_ALIASES)
+    // choose the shortest section for which arg is a case-insensitive substring (eg "dict" will result in SEC_DICT not SEC_DICT_ID_ALIASES)
     for (SectionType st=0; st < NUM_SEC_TYPES; st++)
-        if (strstr (abouts[st].name, upper_name)) { // found if name is a substring of the section name
+        if (strstr (abouts[st].name, upper_arg)) { // found if arg is a substring of the section name
             unsigned len = strlen (abouts[st].name);
             if (len < candidate_len) { // best candidate so far
                 candidate     = st;
@@ -758,8 +767,8 @@ void sections_set_show_headers (char *name)
     
     // case: if not a section name, we assume it is a dict name
     else {
-        flag.show_headers = -1; // all sections
-        flag.show_header_dict_name = name;
+        flag.show_headers = -1; // all sections types
+        flag.show_header_dict_name = arg;
     }
 }
 
@@ -1074,6 +1083,9 @@ void sections_show_header (ConstSectionHeaderP header,
         (!IS_DICTED_SEC(st) || strcmp (flag.show_header_dict_name, dis_dict_id (sections_get_dict_id (header)).s)))
         return; // we requested a specific dict_id, and this is the wrong section
         
+    if (flag.show_header_section_i != -1 && flag.show_header_section_i != header->section_i)
+        return;
+          
     bool is_dict_offset = (HEADER_IS(DICT) && rw == 'W'); // at the point calling this function in zip, SEC_DICT offsets are not finalized yet and are relative to the beginning of the dictionary area in the genozip file
     bool v12 = (IS_ZIP || VER(12));
     bool v14 = (IS_ZIP || VER(14));
@@ -1084,7 +1096,7 @@ void sections_show_header (ConstSectionHeaderP header,
     
     rom SEC_TAB = isatty(1) ? "            ++  " : " "; // single line if not terminal - eg for grepping
 
-    snprintf (str, sizeof (str), "%c %s%-*"PRIu64" %-19s %-4.4s %.8s%.15s vb=%-3u %s=%*u txt_len=%-7u z_len=%-7u enc_len=%-7u%s ",
+    snprintf (str, sizeof (str), "%c %s%-*"PRIu64" %-19s %-4.4s %.8s%.15s vb=%-3u %s=%*u txt_len=%-7u z_len=%-7u enc_len=%-7u ",
               rw, 
               is_dict_offset ? "~" : "", 9-is_dict_offset, offset, 
               st_name(header->section_type), 
@@ -1097,8 +1109,7 @@ void sections_show_header (ConstSectionHeaderP header,
               VER(15) ? BGEN32 (header->z_digest) : BGEN32 (header->v14_compressed_offset), 
               BGEN32 (header->data_uncompressed_len), 
               BGEN32 (header->data_compressed_len), 
-              BGEN32 (header->data_encrypted_len), 
-              BGEN32 (header->magic) != GENOZIP_MAGIC ? " BAD-MAGIC" : ""); // usually, we don't want the magic to take up line real estatee
+              BGEN32 (header->data_encrypted_len));
     PRINT;
 
     SectionFlags f = header->flags;
@@ -1123,13 +1134,13 @@ void sections_show_header (ConstSectionHeaderP header,
                       h->vcf.max_ploidy_for_mux);
 
         else if ((DT(SAM) || DT(BAM)) && v14)
-            snprintf (dt_specific, sizeof (dt_specific), "%ssegconf=(sorted=%u,collated=%u,seq_len=%u,seq_len_to_cm=%u,ms_type=%u,has_MD_or_NM=%u,bisulfite=%u,MD_NM_by_unconverted=%u,predict_meth=%u,is_paired=%u,sag_type=%s,sag_has_AS=%u,pysam_qual=%u,cellranger=%u,SA_HtoS=%u,seq_len_dict_id=%s,deep_qname1=%u,deep_qname2=%u,deep_no_qual=%u,use_ins_ctx=%u,MAPQ_use_xq=%u,has_MQ=%u,SA_CIGAR_abb=%u,SA_NM_by_X=%u,%uXsam_factor=%u)\n", 
+            snprintf (dt_specific, sizeof (dt_specific), "%ssegconf=(sorted=%u,collated=%u,seq_len=%u,seq_len_to_cm=%u,ms_type=%u,has_MD_or_NM=%u,bisulfite=%u,MD_NM_by_unconverted=%u,predict_meth=%u,is_paired=%u,sag_type=%s,sag_has_AS=%u,pysam_qual=%u,cellranger=%u,SA_HtoS=%u,seq_len_dict_id=%s,deep_qname1=%u,deep_qname2=%u,deep_no_qual=%u,use_ins_ctx=%u,MAPQ_use_xq=%u,has_MQ=%u,SA_CIGAR_abb=%u,SA_NM_by_X=%u,CIGAR_has_eqx=%u,%uXsam_factor=%u)\n", 
                       SEC_TAB, h->sam.segconf_is_sorted, h->sam.segconf_is_collated, BGEN32 (h->sam.segconf_seq_len), h->sam.segconf_seq_len_cm, h->sam.segconf_ms_type, h->sam.segconf_has_MD_or_NM, 
                       h->sam.segconf_bisulfite, h->sam.segconf_MD_NM_by_un, h->sam.segconf_predict_meth, 
                       h->sam.segconf_is_paired, sag_type_name(h->sam.segconf_sag_type), h->sam.segconf_sag_has_AS, 
                       h->sam.segconf_pysam_qual, h->sam.segconf_10xGen, h->sam.segconf_SA_HtoS, dis_dict_id(h->sam.segconf_seq_len_dict_id).s,
                       h->sam.segconf_deep_qname1, h->sam.segconf_deep_qname2, h->sam.segconf_deep_no_qual, 
-                      h->sam.segconf_use_ins_ctxs, h->sam.segconf_MAPQ_use_xq, h->sam.segconf_has_MQ, h->sam.segconf_SA_CIGAR_abb, h->sam.segconf_SA_NM_by_X, SAM_FACTOR_MULT, h->sam.segconf_sam_factor);
+                      h->sam.segconf_use_ins_ctxs, h->sam.segconf_MAPQ_use_xq, h->sam.segconf_has_MQ, h->sam.segconf_SA_CIGAR_abb, h->sam.segconf_SA_NM_by_X, h->sam.segconf_CIGAR_has_eqx, SAM_FACTOR_MULT, h->sam.segconf_sam_factor);
 
         else if (DT(REF)) {
             if (v15) snprintf (dt_specific, sizeof (dt_specific), "%sgenome_digest=%s\n", SEC_TAB, digest_display (h->genome_digest).s);
@@ -1338,12 +1349,14 @@ void noreturn genocat_show_headers (rom z_filename)
 
     // normal --show-headers - go by the section list
     if (!flag.force) {
-        for_buf (SectionEnt, sec, z_file->section_list)
+        for_buf2 (SectionEnt, sec, sec_i, z_file->section_list)
             if (flag.show_headers == SHOW_ALL_HEADERS || 
                 flag.show_headers-1 == sec->st ||
                 flag.debug_read_ctxs) {
                 
                 header = zfile_read_section_header (evb, sec, SEC_NONE).genozip_header; // we assign the largest of the SectionHeader* types
+                header.section_i = sec_i; // note: replaces magic, 32 bit only. nonsense if sec is not in z_file->section_list.
+
                 sections_show_header ((SectionHeaderP)&header, NULL, sec->comp_i, sec->offset, 'R');
             }        
     }
@@ -1379,6 +1392,7 @@ void noreturn genocat_show_headers (rom z_filename)
             if (flag.show_headers == SHOW_ALL_HEADERS || flag.show_headers-1 == header.section_type) 
                 iprintf ("%5u ", sec_i);
             
+            header.section_i = sec_i;
             sections_show_header ((SectionHeaderP)&header, NULL, sec.comp_i, sec.offset, 'R');
 
             sec.offset += header_size + BGEN32 (header.data_compressed_len);
@@ -1399,10 +1413,13 @@ void noreturn genocat_show_headers (rom z_filename)
     exit_ok;
 }
 
-void sections_show_section_list (DataType dt, BufferP section_list) // optional - take data from z_data
+void sections_show_section_list (DataType dt, BufferP section_list, SectionType only_this_st/*SEC_NONE if all*/)
 {    
-    for_buf (SectionEnt, s, *section_list) 
-        if (IS_B250(s) || IS_LOCAL(s) || s->st == SEC_DICT) {
+    for_buf (SectionEnt, s, *section_list)
+        if (only_this_st != SEC_NONE && s->st != only_this_st)
+            continue;
+
+        else if (IS_B250(s) || IS_LOCAL(s) || s->st == SEC_DICT) {
             DataType my_dt = (s->st != SEC_DICT && flag.deep && s->comp_i >= SAM_COMP_FQ00) ? DT_FASTQ : dt;
 
             bool is_r2 = (dt == DT_FASTQ && s->comp_i == FQ_COMP_R2) ||
@@ -1474,5 +1491,5 @@ void sections_show_gheader (ConstSectionHeaderGenozipHeaderP header)
 
     iprint0 ("  sections:\n");
 
-    sections_show_section_list (dt, &z_file->section_list);
+    sections_show_section_list (dt, &z_file->section_list, SEC_NONE);
 }
