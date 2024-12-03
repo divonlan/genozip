@@ -169,9 +169,9 @@ static inline PosType64 aligner_best_match (VBlockP vb, STRp(seq), PosType64 pai
     for (uint32_t i=0; i < seq_len; i += density) {          
         Direction found = NOT_FOUND;
 
-        if (__builtin_expect_with_probability (i < seq_len - nukes_per_hash, true, 0.93) && // room for the hash word
-            __builtin_expect_with_probability (seq[i] == HOOK,  false, 0.75) && 
-            __builtin_expect_with_probability (seq[i+1] != HOOK, true, 0.75) &&  // take the G - if there is a homopolymer GGGG... take the last one
+        if (__builtin_expect (i < seq_len - nukes_per_hash, true/*probability 93%*/) && // room for the hash word
+            __builtin_expect (seq[i] == HOOK,  false/*probability 75%*/) && 
+            __builtin_expect (seq[i+1] != HOOK, true/*probability 75%*/) &&  // take the G - if there is a homopolymer GGGG... take the last one
             (gpos = aligner_get_word_from_seq (vb, &seq[i+1], &refhash_word, 1)) != NO_GPOS) { 
 
             gpos -= i; // gpos is the first base on the reference, that aligns to the first base of seq
@@ -179,9 +179,9 @@ static inline PosType64 aligner_best_match (VBlockP vb, STRp(seq), PosType64 pai
         }
 
         // note: if the previous condition is true, then seq[i]==HOOK and no need to check this condition. hence the "else"
-        else if (__builtin_expect_with_probability (i >= nukes_per_hash, true, 0.93) && // room for the hash word
-            __builtin_expect_with_probability (seq[i] == HOOK_REV,  false, 0.75)  && 
-            __builtin_expect_with_probability (seq[i-1] != HOOK_REV, true, 0.75) &&  // take the G - if there is a polymer GGGG... take the last one
+        else if (__builtin_expect (i >= nukes_per_hash, true/*probability 93%*/) && // room for the hash word
+            __builtin_expect (seq[i] == HOOK_REV,  false/*probability 75%*/) && 
+            __builtin_expect (seq[i-1] != HOOK_REV, true/*probability 75%*/) &&  // take the G - if there is a polymer GGGG... take the last one
             (gpos = aligner_get_word_from_seq (vb, &seq[i-1], &refhash_word, -1)) != NO_GPOS) { 
 
             gpos -= seq_len_64-1 - i; // gpos is the first base of the reference, that aligns wit the LAST base of seq
