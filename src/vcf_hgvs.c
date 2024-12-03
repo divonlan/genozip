@@ -51,8 +51,8 @@ static bool vcf_seg_INFO_HGVS_snp (VBlockVCFP vb, ContextP ctx, STRp(value))
     SAFE_RESTOREx(2);
 
     // seg special snips
-    seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_HGVS_SNP_POS    }), 2, CTX(INFO_HGVS_snp_pos),    pos_str_len);
-    seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_HGVS_SNP_REFALT }), 2, CTX(INFO_HGVS_snp_refalt), 3);
+    seg_special0 (VB, VCF_SPECIAL_HGVS_SNP_POS, CTX(INFO_HGVS_snp_pos), pos_str_len);
+    seg_special0 (VB, VCF_SPECIAL_HGVS_SNP_REFALT, CTX(INFO_HGVS_snp_refalt), 3);
 
     return true;
 }
@@ -69,7 +69,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_SNP_REFALT)
 {
     RECONSTRUCT1 (*VB_VCF->REF); // this might overwrite the "peeked" data, but that's ok
     RECONSTRUCT1 ('>');
-    RECONSTRUCT1 (*VB_VCF->alts[0]);
+    RECONSTRUCT1 (*ALTi(0)->alt);
 
     return NO_NEW_VALUE;
 }
@@ -154,13 +154,13 @@ static bool vcf_seg_INFO_HGVS_indel (VBlockVCFP vb, ContextP ctx, STRp(value), r
     
     // We pos_lens[1] only if the payload is longer than 1
     if (n_poss == 2)
-        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, special_end_pos[t] }), 2, CTX(did_i_end_pos[t]), pos_lens[1]);
+        seg_special0 (VB, special_end_pos[t], CTX(did_i_end_pos[t]), pos_lens[1]);
     else
         seg_by_ctx (VB, NULL, 0, CTX(did_i_end_pos[t]), 0); // becomes WORD_INDEX_MISSING - container_reconstruct will remove the preceding _
 
     // the del payload is optional - we may or may not have it ; dup never has payload
     if (payload_len)
-        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, special_payload[t] }), 2, CTX(did_i_payload[t]), payload_len);
+        seg_special0 (VB, special_payload[t], CTX(did_i_payload[t]), payload_len);
     else
         seg_by_ctx (VB, NULL, 0, CTX(did_i_payload[t]), 0); 
 
@@ -203,8 +203,8 @@ static void vcf_piz_special_INFO_HGVS_INDEL_END_POS (VBlockVCFP vb, HgvsType t)
 
     PosType64 start_pos = ECTX (start_pos_dnum[t])->last_value.i;
     PosType64 end_pos = (t == DEL) ? (start_pos + vb->REF_len - 2)
-                      : (t == INS) ? (start_pos + vb->alt_lens[0] - 2)
-                      : /* DELINS */ (start_pos + vb->alt_lens[0] - 1);
+                      : (t == INS) ? (start_pos + ALTi(0)->alt_len - 2)
+                      : /* DELINS */ (start_pos + ALTi(0)->alt_len - 1);
 
     RECONSTRUCT_INT (end_pos);
 }
@@ -216,13 +216,13 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_DELINS_END_POS) { vcf_piz_speci
 
 static void vcf_piz_special_INFO_HGVS_INDEL_PAYLOAD (VBlockVCFP vb, HgvsType t)
 {
-    rom payload = (t == DEL) ? (vb->REF     + 1) // REF except for the anchor base
-                : (t == INS) ? (vb->alts[0] + 1) // ALT except for the anchor base
-                : /* DELINS */ vb->alts[0];      // the entire ALT
+    rom payload = (t == DEL) ? (vb->REF   + 1) // REF except for the anchor base
+                : (t == INS) ? (ALTi(0)->alt + 1) // ALT except for the anchor base
+                : /* DELINS */ ALTi(0)->alt;      // the entire ALT
 
     PosType64 payload_len = (t == DEL) ? (vb->REF_len - 1)
-                          : (t == INS) ? (vb->alt_lens[0] - 1)
-                          : /* DELINS */ (vb->alt_lens[0]);
+                          : (t == INS) ? (ALTi(0)->alt_len - 1)
+                          : /* DELINS */ (ALTi(0)->alt_len);
 
     memmove (BAFTtxt, payload, payload_len);
     Ltxt += payload_len;

@@ -255,14 +255,14 @@ void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(sa), unsigned add_byt
 
         bool abnormal = has_prim && !has_matching_prim; // abnormal if has unmatching prim line
 
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_SA_main, '0' + !abnormal }, 3, ctx, 0);
+        seg_special1 (VB, SAM_SPECIAL_SA_main, '0' + !abnormal, ctx, 0);
 
         // we seg a container into OPTION_SA_MAIN if there is no prim line, or if the prim line doesn't match (=abnormal)
         if (abnormal || !has_prim) {
             SegCallback callbacks[NUM_SA_ITEMS] = { 
                 [SA_RNAME] = chrom_seg_cb, 
                 [SA_POS]   = seg_pos_field_cb, 
-                [SA_CIGAR] = (segconf.running && segconf.SA_CIGAR_abbreviated == unknown) ? sam_segconf_SA_cigar_cb : sam_seg_0A_cigar_cb, 
+                [SA_CIGAR] = (segconf_running && segconf.SA_CIGAR_abbreviated == unknown) ? sam_segconf_SA_cigar_cb : sam_seg_0A_cigar_cb, 
                 [SA_MAPQ]  = sam_seg_0A_mapq_cb 
             };
 

@@ -194,3 +194,4 @@ extern void codec_longr_segconf_calculate_bins (VBlockP vb, ContextP ctx, LocalG
 // OQ stuff
 extern bool codec_oq_comp_init (VBlockP vb);
 
+

@@ -186,16 +186,16 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_COPY_MATE)
 
 static int64_t vcf_INFO_SVLEN_prediction (VBlockVCFP vb)
 {
-    if (ALT0(INS) || ALT0(SUBST_INS)) 
-        return vb->alt_lens[0] - 1;
+    if (VT0(INS) || VT0(SUBST_INS)) 
+        return ALTi(0)->alt_len - 1;
     
-    if ((ALT0(SYM_DUP) || ALT0(SYM_CNV)) && (IS_PIZ || vb->idx_SVLEN > vb->idx_END)) 
+    if ((VT0(SYM_DUP) || VT0(SYM_CNV)) && (IS_PIZ || vb->idx_SVLEN > vb->idx_END)) 
         return CTX(VCF_POS)->last_delta; // note: can predict only if END is before SVLEN
 
-    if (ALT0(SYM_DEL) && (IS_PIZ || vb->idx_SVLEN > vb->idx_END)) 
+    if (VT0(SYM_DEL) && (IS_PIZ || vb->idx_SVLEN > vb->idx_END)) 
         return CTX(VCF_POS)->last_delta * (segconf.vcf_del_svlen_is_neg ? -1 : 1); // same comment ^
 
-    if ((ALT0(DEL) || ALT0 (SUBST_DEL) || ALT0(SUBST))) 
+    if ((VT0(DEL) || VT0 (SUBST_DEL) || VT0(SUBST))) 
         return (int64_t)(vb->REF_len - 1) * (segconf.vcf_del_svlen_is_neg ? -1 : 1);
 
     return 0x7fffffffffffffff; // unknown
@@ -211,12 +211,12 @@ void vcf_seg_INFO_SVLEN (VBlockVCFP vb, ContextP ctx, STRp(svlen_str))
 
     int64_t predicted_sv_len = vcf_INFO_SVLEN_prediction (vb);
 
-    if (segconf.running && !segconf.vcf_del_svlen_is_neg && svlen == -predicted_sv_len)
+    if (segconf_running && !segconf.vcf_del_svlen_is_neg && svlen == -predicted_sv_len)
         segconf.vcf_del_svlen_is_neg = true;
 
     // prediction based on variant type (since 15.0.48)
     if (svlen == predicted_sv_len) {
-        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_SVLEN, 'P' }), 3, ctx, svlen_str_len);
+        seg_special1 (VB, VCF_SPECIAL_SVLEN, 'P', ctx, svlen_str_len);
         ctx_set_last_value (VB, ctx, svlen);
     }
 
@@ -229,7 +229,7 @@ void vcf_seg_INFO_REFLEN (VBlockVCFP vb, ContextP ctx, STRp(reflen_str)) // note
     int64_t reflen;
 
     if (CTX(VCF_POS)->last_delta && str_get_int (STRa(reflen_str), &reflen) && reflen == CTX(VCF_POS)->last_delta)
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_SVLEN, '2' }, 3, ctx, reflen_str_len);
+        seg_special1 (VB, VCF_SPECIAL_SVLEN, '2', ctx, reflen_str_len);
     else
         seg_by_ctx (VB, STRa(reflen_str), ctx, reflen_str_len);
 }
@@ -293,7 +293,7 @@ rom svtype_by_vt[] = SVTYPE_BY_VT; // NULL if vt's SVTYPE is not known (usually 
 
 void vcf_seg_SVTYPE (VBlockVCFP vb, ContextP ctx, STRp(svtype))
 {
-    VariantType vt = vb->var_types[0];
+    VariantType vt = ALTi(0)->var_type;
     bool lowercase_cnv = segconf.vcf_is_pbsv;
 
     // note in pbsv the SVTYPE for <CNV> is "cnv"
@@ -306,7 +306,7 @@ void vcf_seg_SVTYPE (VBlockVCFP vb, ContextP ctx, STRp(svtype))
 
     // case: prediction succeeded
     else if (str_issame (svtype, predicted)) 
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_SVTYPE, segconf.vcf_is_pbsv ? '1' : '0' }, 3, ctx, svtype_len);
+        seg_special1 (VB, VCF_SPECIAL_SVTYPE, segconf.vcf_is_pbsv ? '1' : '0', ctx, svtype_len);
     
     // case: SVTYPE field is different than expected
     else
@@ -317,7 +317,7 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_SVTYPE)
 {    
     VBlockVCFP vb = (VBlockVCFP)vb_;
 
-    VariantType vt = vb->var_types[0];
+    VariantType vt = ALTi(0)->var_type;
     bool lowercase_cnv = snip_len && snip[0] == '1';
 
     rom predicted = (vt == VT_SYM_CNV && lowercase_cnv) ? "cnv" : svtype_by_vt[vt];
@@ -344,7 +344,7 @@ static bool is_same_seq (STRp(homseq),
 
     // decl_acgt_decode;
 
-    //     RangeP range = IS_REF_EXTERNAL ? ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, homseq_len + 1, WORD_INDEX_NONE, NULL) : NULL;
+    //     RangeP range = IS_REF_EXTERNAL ? ref_seg_get_range (VB, vb->chrom_node_index, STRa(vb->chrom_name), pos, homseq_len + 1, WORD_INDEX_NONE, NULL) : NULL;
     //     if (!range) goto fallback;
 
     // if (!revcomp) {
@@ -378,7 +378,7 @@ void vcf_seg_HOMSEQ (VBlockVCFP vb, ContextP ctx, STRp(homseq))
     if (IS_REF_EXTERNAL && !segconf.vcf_is_svaba) {
         method = '1';
 
-        RangeP range = IS_REF_EXTERNAL ? ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos-homseq_len, homseq_len*2, WORD_INDEX_NONE, NULL) : NULL;
+        RangeP range = IS_REF_EXTERNAL ? ref_seg_get_range (VB, vb->chrom_node_index, STRa(vb->chrom_name), pos-homseq_len, homseq_len*2, WORD_INDEX_NONE, NULL) : NULL;
         if (!range) goto fallback;
 
         for (uint32_t i=0; i < homseq_len; i++) 
@@ -391,7 +391,7 @@ void vcf_seg_HOMSEQ (VBlockVCFP vb, ContextP ctx, STRp(homseq))
         ctx = vcf_seg_sv_copy_mate (vb, ctx, STRa(homseq), TW_HOMSEQ, TW_HOMSEQ, true, homseq_len); // set ctx to channel_ctx
         if (!ctx) return; // segged as copy from mate
 
-        if (!IS_REF_EXTERNAL || !ALT0(BND)) goto fallback; // cannot apply method 2
+        if (!IS_REF_EXTERNAL || !VT0(BND)) goto fallback; // cannot apply method 2
         
         method = '2';
 
@@ -403,16 +403,16 @@ void vcf_seg_HOMSEQ (VBlockVCFP vb, ContextP ctx, STRp(homseq))
     }
 
     // method 3: based on other fields
-    else if ((ALT0(DEL) && !str_isprefix_(vb->REF+1, vb->REF_len-1, STRa(homseq))) ||
-            (ALT0(INS) && !str_isprefix_(vb->alts[0]+1, vb->alt_lens[0]-1, STRa(homseq))) ||
-            (ALT0(SYM_INS) && (!has(LEFT_SVINSSEQ) || !str_isprefix (BII(LEFT_SVINSSEQ)->value, homseq))) ||
-            (!ALT0(DEL) && !ALT0(INS) && !ALT0(SYM_INS)))
+    else if ((VT0(DEL) && !str_isprefix_(vb->REF+1, vb->REF_len-1, STRa(homseq))) ||
+            (VT0(INS) && !str_isprefix_(ALTi(0)->alt + 1, ALTi(0)->alt_len - 1, STRa(homseq))) ||
+            (VT0(SYM_INS) && (!has(LEFT_SVINSSEQ) || !str_isprefix (BII(LEFT_SVINSSEQ)->value, homseq))) ||
+            (!VT0(DEL) && !VT0(INS) && !VT0(SYM_INS)))
         goto fallback;
     else
         method = '3';
     
     seg_integer (VB, ctx, homseq_len, false, 0); // store here rather than relying on HOMSEQ_LEN, as HOMSEQ_LEN is not always present
-    seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_HOMSEQ, method }, 3, ctx, homseq_len);
+    seg_special1 (VB, VCF_SPECIAL_HOMSEQ, method, ctx, homseq_len);
     return;
 
 fallback:
@@ -428,7 +428,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_HOMSEQ)
     // method 1: with reference
     if (method == '1') {
         PosType32 pos = CTX(VCF_POS)->last_value.i;
-        ConstRangeP range = ref_piz_get_range (VB, gref, false);
+        ConstRangeP range = ref_piz_get_range (VB, HARD_FAIL);
 
         char *next = BAFTtxt;
         for (uint32_t i=0; i < homseq_len; i++) 
@@ -444,19 +444,19 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_HOMSEQ)
 
     // method 3: based on other fields
     else if (method == '3') {
-        if (ALT0(DEL)) 
-            RECONSTRUCT (VB_VCF->REF+1, homseq_len);
+        if (VT0(DEL)) 
+            RECONSTRUCT (VB_VCF->REF + 1, homseq_len);
 
-        else if (ALT0(INS))
-            RECONSTRUCT (VB_VCF->alts[0]+1, homseq_len);
+        else if (VT0(INS))
+            RECONSTRUCT (ALTi(0)->alt + 1, homseq_len);
 
-        else if (ALT0(SYM_INS)) {
+        else if (VT0(SYM_INS)) {
             rom left_svinsseq;
             reconstruct_peek (vb, CTX(INFO_LEFT_SVINSSEQ), &left_svinsseq, NULL);
             RECONSTRUCT (left_svinsseq, homseq_len);
         }
         else
-            ABORT_PIZ ("unsupported vartype=%u", VB_VCF->var_types[0]);
+            ABORT_PIZ ("unsupported vartype=%u", ALTi(0)->var_type);
     }
 
     else

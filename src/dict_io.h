@@ -13,5 +13,5 @@ extern void dict_io_compress_dictionaries (void);
 
 extern StrTextMegaLong str_snip_ex (STRp(snip), bool add_quote);
 #define str_snip str_snip_ex (snip, snip_##len, true).s
-extern void dict_io_print (FILE *fp, STRp(data), bool with_word_index, bool add_quotation_marks, bool add_newline, bool remove_equal_asterisk);
+extern void dict_io_print (FILE *fp, STRp(data), bool with_word_index, bool add_quotation_marks, bool add_newline, bool remove_non_contigs);
 extern void dict_io_show_singletons (VBlockP vb, ContextP ctx);

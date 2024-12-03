@@ -60,9 +60,16 @@ static uint8_t get_max_np (void)
 
 void codec_pacb_segconf_finalize (VBlockP vb)
 {
-    ContextP ctx  = CTX(SAM_QUAL);
-    ContextP zctx = ZCTX(SAM_QUAL);
+    decl_ctx  (SAM_QUAL); // ==FASTQ_QUAL
+    decl_zctx (SAM_QUAL);
+
+    // in case of deep, zctx->subdicts might already be initialized in SAM (with more channels), so no need to initiate it again in FASTQ 
+    if (zctx->subdicts.len) return;
+
     uint8_t n_channels = get_max_np() * NUM_Ks;
+
+    if (flag.show_qual)
+        iprintf ("PACB: %s: max_np=%u n_channel=%u\n", txt_name, get_max_np(), n_channels);
 
     // store the dict_id array in the file as a global SEC_SUBDICTS section 
     ARRAY_alloc (DictId, subdicts, n_channels, false, zctx->subdicts, evb, "zctx->subdicts");
@@ -151,7 +158,7 @@ static uint8_t *set_values_one_line (VBlockP vb, STRp(qual),
 COMPRESS (codec_pacb_compress)
 {
     START_TIMER;
-    
+
     __atomic_add_fetch (&z_file->pacb_lines[vb->comp_i], vb->lines.len, __ATOMIC_RELAXED);
 
     uint8_t max_np = get_max_np();

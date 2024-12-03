@@ -72,34 +72,33 @@ COMPRESSOR_CALLBACK (sam_zip_cqual)
     *line_data = Btxt (dl->QUAL.index);
 
     if (is_rev) *is_rev = dl->FLAG.rev_comp;
-}
+}                 
 
-#define QUAL_ZIP_CALLBACK(tag, f, may_be_revcomped)             \
-COMPRESSOR_CALLBACK (sam_zip_##tag)                             \
-{                                                               \
-    ZipDataLineSAMP dl = DATA_LINE (vb_line_i);                 \
-    *line_data_len = dl->dont_compress_##tag ? 0 : MIN_(maximum_size, dl->f.len); /* note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec */ \
+#define QUAL_ZIP_CALLBACK(tag, txt_index, len, may_be_revcomped)        \
+COMPRESSOR_CALLBACK (sam_zip_##tag)                                     \
+{                                                                       \
+    ZipDataLineSAMP dl = DATA_LINE (vb_line_i);                         \
+    *line_data_len = ((txt_index) <= dl->line_start || dl->dont_compress_##tag) ? 0 : MIN_(maximum_size, (len)); /* note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec */ \
     if (!line_data || ! *line_data_len) return; /* no data, or only lengths were requested */   \
-    *line_data = Btxt (dl->f.index);                             \
-    if (is_rev) *is_rev = may_be_revcomped ? dl->FLAG.rev_comp : false;\
+    *line_data = Btxt (txt_index);                                      \
+    if (is_rev) *is_rev = may_be_revcomped ? dl->FLAG.rev_comp : false; \
 }                               
 
-QUAL_ZIP_CALLBACK(OQ, OQ, true)
-QUAL_ZIP_CALLBACK(TQ, TQ, true)
-QUAL_ZIP_CALLBACK(GY, GY, false)
-QUAL_ZIP_CALLBACK(2Y, _2Y, true)
-QUAL_ZIP_CALLBACK(QX, solo_z_fields[SOLO_QX], false)
-QUAL_ZIP_CALLBACK(CY, solo_z_fields[SOLO_CY], false)
-QUAL_ZIP_CALLBACK(QT, solo_z_fields[SOLO_QT], false)
+QUAL_ZIP_CALLBACK(OQ, dl->OQ, dl->SEQ.len, true)
+QUAL_ZIP_CALLBACK(U2, dl->U2, dl->SEQ.len, true)
+QUAL_ZIP_CALLBACK(TQ, dl->line_start + dl->TQ.index,  dl->TQ.len,  true)
+QUAL_ZIP_CALLBACK(2Y, dl->line_start + dl->_2Y.index, dl->_2Y.len, true)
+QUAL_ZIP_CALLBACK(CQ, dl->line_start + dl->CQ.index,  dl->CQ.len,  true)
+QUAL_ZIP_CALLBACK(QX, dl->line_start + dl->solo_z_fields[SOLO_QX].index, dl->solo_z_fields[SOLO_QX].len, false)
+QUAL_ZIP_CALLBACK(CY, dl->line_start + dl->solo_z_fields[SOLO_CY].index, dl->solo_z_fields[SOLO_CY].len, false)
+QUAL_ZIP_CALLBACK(QT, dl->line_start + dl->solo_z_fields[SOLO_QT].index, dl->solo_z_fields[SOLO_QT].len, false)
 
 // Gencomp/Deep ZIP: called after segconf to check if gencomp_ingest, gencomp_load and deep_piz would be better 
 // off compressing QUAL (in memory) with Huffman (with a tree calculated by segconf) or with CODEC_ART   
-void sam_qual_produce_huffman_if_better (VBlockSAMP vb)
+void sam_qual_produce_huffman (VBlockSAMP vb)
 {
-    uint32_t total_art=0, total_huff=0;
-
     // create huffman compressor for QUAL based on segconf data
-    huffman_start_chewing (SAM_QUAL, 0, 0, 0);
+    huffman_start_chewing (SAM_QUAL, 0, 0, 0, 1);
 
     for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) {
         ZipDataLineSAMP dl = DATA_LINE(line_i);
@@ -112,93 +111,47 @@ void sam_qual_produce_huffman_if_better (VBlockSAMP vb)
         huffman_chew_one_sample (SAM_QUAL, STRtxt(dl->QUAL), false);
     }
 
-    huffman_produce_compressor (SAM_QUAL, (bool[256]){[33 ... 126] = true});
-
-    // compare huffman compression to ART which will be used if huffman is dropped
-    ARRAY_alloc (uint8_t, comp, 
-                 MAX_(arith_compress_bound (vb->longest_seq_len, X_NOSZ), huffman_get_theoretical_max_comp_len (SAM_QUAL, vb->longest_line_len)), 
-                 false, vb->scratch, vb, "scratch");
-
-    for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) {
-        ZipDataLineSAMP dl = DATA_LINE(line_i);
-        if (dl->no_qual) continue;
-        
-        // calculate using ART
-        uint32_t this_comp_len = comp_len;
-        ASSERT (arith_compress_to (VB, (uint8_t *)STRtxt(dl->QUAL), comp, &this_comp_len, X_NOSZ) && this_comp_len,
-                "Failed to compress segconf QUAL with ART: line_i=%u qual_len=%u qual=\"%.*s\"", line_i, dl->QUAL.len, STRfw(dl->QUAL));
-        
-        total_art += this_comp_len;
-
-        total_huff += huffman_compress_len (SAM_QUAL, STRtxt(dl->QUAL));
-    }
-
-    buf_free (vb->scratch);
-
-    if (flag.show_deep || flag.debug_gencomp)
-        iprintf ("\nSegconf: test QUAL compression (for gencomp / deep): total_huff=%u total_art=%u: %s is better.\n", 
-                 total_huff, total_art, (total_huff >= total_art ? "ARITH" : "HUFFMAN"));
-
-    // case: ART is better - cancel huffman
-    if (total_huff >= total_art)    
-        buf_destroy (ZCTX(SAM_QUAL)->huffman);
+    huffman_produce_compressor (SAM_QUAL, (HuffmanMask[1]){ {[33 ... 126] = true} });
 }
 
 void sam_seg_QUAL_initialize (VBlockSAMP vb)
 {
+    decl_ctx (SAM_QUALSA);
+
     if (IS_MAIN(vb)) 
         ctx_set_store_per_line (VB, SAM_QUAL, SAM_FLAG, DID_EOL);
 
     // case: in DEPN and MAIN QUALSA is used to store the diff vs primary 
     if (IS_DEPN(vb) || IS_MAIN(vb))
-        CTX(SAM_QUALSA)->ltype = LT_INT8; // diff of prim vs depn qual
+        ctx->ltype = LT_INT8; // diff of prim vs depn qual
 
     // case: PRIM - TOPLEVEL reconstructs all-the-same SAM_QUALSA instead of SAM_QUAL. SAM_QUAL is consumed when loading SA Groups.
     if (IS_PRIM(vb)) 
-        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_QUAL, '0' }, 3, SAM_QUALSA, 0); // note: we can't just ctx_create_node because we need to transfer flags to piz, so need b250
+        seg_special1 (VB, SAM_SPECIAL_QUAL, '0', ctx, 0); // note: we can't just ctx_create_node because we need to transfer flags to piz, so need b250
 }
 
 // ZIP/PIZ: decompresses grp qual of grp, into vb->scratch
 static void sam_get_sa_grp_qual (VBlockSAMP vb, const Sag *g)
 {
     ASSERTNOTINUSE (vb->scratch);
-
     buf_alloc (vb, &vb->scratch, g->seq_len, 0, char, 1, "scratch");
 
-    if (g->qual_comp_len) { // qual of this group is compressed
-        uint32_t uncomp_len = g->seq_len;
-
-        if (huffman_exists (SAM_QUAL))
-            huffman_uncompress (SAM_QUAL, B8(z_file->sag_qual, g->qual), B1STc(vb->scratch), uncomp_len);
-        else
-            ASSGOTO (arith_uncompress_to (VB, B8(z_file->sag_qual, g->qual), g->qual_comp_len, B1ST8(vb->scratch), &uncomp_len) && uncomp_len == g->seq_len,
-                     "%s: arith_uncompress_to failed to uncompress sag QUAL data: grp_i=%u comp_len=%u uncomp_len=%u expected_uncomp_len=%u qual_index=%"PRIu64,
-                     LN_NAME, ZGRP_I(g), g->qual_comp_len, uncomp_len, g->seq_len, (uint64_t)g->qual);
-
-        vb->scratch.len = uncomp_len;
-    }
-    else // not compressed
-        buf_add (&vb->scratch, Bc(z_file->sag_qual, g->qual), g->seq_len);
-
-    return;
-    
-error:
-    sam_show_sag_one_grp (ZGRP_I(g));
-    exit_on_error(true);
+    huffman_uncompress (SAM_QUAL, B8(z_file->sag_qual, g->qual), B1STc(vb->scratch), g->seq_len);
+    vb->scratch.len = g->seq_len;
 }
 
 // main thread (not thread-safe): called from sam_show_sag_one_grp for getting first few characters of alignment cigar
-StrTextUltraLong sam_display_qual_from_sag (const Sag *g)
+StrTextUltraLong sam_display_qual_from_sag (VBlockP vb, const Sag *g)
 {
     if (g->no_qual) return (StrTextUltraLong){ "*" };
 
-    sam_get_sa_grp_qual ((VBlockSAMP)evb, g); // into vb->scratch
+    sam_get_sa_grp_qual (VB_SAM, g); // into vb->scratch
 
     StrTextUltraLong s;
     bool truncated = (evb->scratch.len > sizeof(s) - 4);
     snprintf (s.s, sizeof(s.s), "%.*s%s", truncated ? (int)sizeof(s) - 4 : evb->scratch.len32, B1STc(evb->scratch), truncated ? "..." : "");
 
-    buf_free (evb->scratch);
+    buf_free (vb->scratch);
 
     return s;
 }
@@ -320,7 +273,7 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qual)/*always textual
     
     if (!vb->qual_missing) vb->has_qual = true;
     
-    if ((flag.deep || flag.show_deep == SHOW_DEEP_ONE_HASH) && !segconf.running)
+    if ((flag.deep || flag.show_deep == SHOW_DEEP_ONE_HASH) && !segconf_running)
         sam_deep_set_QUAL_hash (vb, dl, STRa(qual));
 
     // case: monochar 
@@ -377,7 +330,7 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qual)/*always textual
     // all-the-same in that. If we might have mixed qual/no-qual in the file, we add to local to not add entropy to b250
     // 2. LONGR codec can't handle missing QUAL
     else if (!IS_PRIM(vb) && dl->no_qual && (!segconf.nontrivial_qual || codec_longr_maybe_used (VB, SAM_QUAL))) {
-        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_QUAL, '*' }, 3, SAM_QUAL, add_bytes); 
+        seg_special1 (VB, SAM_SPECIAL_QUAL, '*', qual_ctx, add_bytes); 
         dl->dont_compress_QUAL = true; // don't compress this line
         goto done;
     }
@@ -404,10 +357,10 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qual)/*always textual
                 IS_PRIM(vb) ? SAM_QUALSA : SAM_QUAL, 0); 
    
     // get QUAL score, consumed by mate ms:i
-    if (!segconf.running && segconf.sam_ms_type == ms_BIOBAMBAM && !segconf.optimize[SAM_QUAL])
+    if (!segconf_running && segconf.sam_ms_type == ms_BIOBAMBAM && !segconf.optimize[SAM_QUAL])
         dl->QUAL_score = sam_get_QUAL_score (vb, STRa(qual));
  
-    if (segconf.running) 
+    if (segconf_running) 
         sam_seg_QUAL_segconf (vb, dl, STRa(qual), monochar);
 
 done:
@@ -421,22 +374,35 @@ done:
 // 2Y:Z - CellRanger - R2 qual?
 // TQ:Z - CellRanger & longranger: Quality values of the 7 trimmed bases following the barcode sequence at the start of R1. Can be used to reconstruct the original R1 quality values.
 //-----------------------------------------------------------------------------------------------------
-void sam_seg_other_qual (VBlockSAMP vb, ZipDataLineSAMP dl, TxtWord *dl_word, Did did_i, STRp(qual), bool len_is_seq_len, unsigned add_bytes)
+void sam_seg_other_qual (VBlockSAMP vb, ZipDataLineSAMP dl, 
+                         uint32_t *txt_index,  // optional out: if used, qual_len is expected to be the same as SEQ.len
+                         LineWordS *line_word, // optional out
+                         Did did_i, STRp(qual), unsigned add_bytes)
 {
     decl_ctx (did_i);
+    uint32_t qual_txt_index = BNUMtxt(qual);
 
-    *dl_word = TXTWORD(qual);
+    if (txt_index) *txt_index = qual_txt_index;
+    
+    if (line_word) {
+        uint32_t line_index = qual_txt_index - dl->line_start;
+        ASSSEG (line_index < 64 KB && qual_len < 64 KB, 
+                "line_index=%u or len=%u too big for LineWordS in ctx=%s", line_index, qual_len, ctx->tag_name);
+
+        *line_word = (LineWordS){ .index=line_index, .len=qual_len };
+    }
+
     ctx->local.len32 += qual_len;
     ctx->txt_len     += add_bytes;
 
-    if (!len_is_seq_len) 
+    if (line_word) 
         seg_lookup_with_length (VB, ctx, qual_len, 0);
     else {
         ASSSEG (qual_len == dl->SEQ.len, "Expecting %s to have length == SEQ.len=%u but its length is %u. %s=\"%.*s\"",
                 ctx->tag_name, dl->SEQ.len, qual_len, ctx->tag_name, STRf(qual));
     }
 
-    if (segconf.running && did_i == OPTION_OQ_Z) 
+    if (segconf_running && did_i == OPTION_OQ_Z) 
         for (uint32_t i=0; i < qual_len; i++)
             if (IS_QUAL_SCORE(qual[i]))
                 segconf.qual_histo[QHT_OQ][qual[i]-33].count++;

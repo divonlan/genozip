@@ -356,7 +356,7 @@ static void *gencomp_do_offload (void *info_)
             "Failed to write %"PRIu64" bytes to temporary file %s: %s", depn.thread_data_comp.len, depn.name, strerror (errno));
     COPY_TIMER_EVB (gencomp_do_offload_write);
 
-    if (flag.debug_gencomp) 
+    if (flag_debug_gencomp) 
         iprintf ("Wrote to disk: buf=%u num_lines=%u uncomp_len=%u comp_len=%u uncomp_alder32=%u comp_adler32=%u\n",
                  BNUM (depn.offload_info, info), info->num_lines, uncomp_len, info->comp_len, 
                  adler32 (1, STRb(depn.thread_data)), adler32 (1, STRb(depn.thread_data_comp))); 
@@ -405,7 +405,7 @@ static void gencomp_offload_DEPN_to_disk (CompIType comp_i, bool is_final_flush)
     else 
         gencomp_do_offload(info);
 
-    if (flag.debug_gencomp) debug_gencomp ("offloaded DEPN", false, NULL);
+    if (flag_debug_gencomp) debug_gencomp ("offloaded DEPN", false, NULL);
 
     COPY_TIMER_EVB (gencomp_offload_DEPN_to_disk);
 }
@@ -502,7 +502,7 @@ static bool gencomp_flush (CompIType comp_i, bool is_final_flush) // final flush
 
     componentsP[comp_i].txt_data.len = componentsP[comp_i].txt_data.param = 0; // reset
 
-    if (flag.debug_gencomp) debug_gencomp(comp_i==1 ? "Flush PRIM" : "Flush DEPN", false, NULL);
+    if (flag_debug_gencomp) debug_gencomp(comp_i==1 ? "Flush PRIM" : "Flush DEPN", false, NULL);
 
     COPY_TIMER_EVB (gencomp_flush);
     return true;
@@ -528,7 +528,7 @@ static int32_t gencomp_rotate_prescription (void)
 {
     mutex_lock (prescriptions_mutex); 
 
-    if (flag.debug_gencomp) 
+    if (flag_debug_gencomp) 
         iprintf ("Rotating DEPN reread_current_prescription: txt_size=%u, num_lines=%u\n",
                  (uint32_t)reread_current_prescription.count, reread_current_prescription.len32);
 
@@ -658,7 +658,7 @@ void gencomp_absorb_vb_gencomp_lines (VBlockP vb)
     sam_add_main_vb_info (vb, first_prim, num_lines_absorbed[SAM_COMP_PRIM] - first_prim, 
                               first_depn, num_lines_absorbed[SAM_COMP_DEPN] - first_depn);
 
-    if (flag.debug_gencomp) 
+    if (flag_debug_gencomp) 
         iprintf ("%s absorbed %u gencomp lines: prim={start=%"PRIu64" len=%"PRIu64"} depn={start=%"PRIu64" len=%"PRIu64"}\n", 
                  VB_NAME, vb->gencomp_lines.len32, first_prim, num_lines_absorbed[SAM_COMP_PRIM]-first_prim, first_depn, num_lines_absorbed[SAM_COMP_DEPN]-first_depn);
 
@@ -733,7 +733,7 @@ static void gencomp_get_txt_data_from_queue (VBlockP vb, GencompType gct)
     num_vbs_dispatched[gct]++;
     queueP[gct].queue_len--;
 
-    if (flag.debug_gencomp) 
+    if (flag_debug_gencomp) 
         debug_gencomp (vb->comp_i==1 ? "GetTxt PRIM" : "GetTxt DEPN", false, vb);
 
     if (flag_is_show_vblocks (ZIP_TASK_NAME)) 
@@ -768,14 +768,14 @@ static void gencomp_get_txt_data_from_disk (VBlockP vb)
     codec_rans_uncompress (evb, NULL, CODEC_RANB, 0, depn.thread_data_comp.data+4, depn.thread_data_comp.len-4, 
                            &vb->txt_data, Ltxt, 0, "txt_data");
 
-    if (flag.debug_gencomp) 
+    if (flag_debug_gencomp) 
         iprintf ("Read from disk: buf=%"PRIu64" vb=%s num_lines=%u uncomp_len=%u comp_len=%u uncomp_alder32=%u comp_adler32=%u\n",
                   depn.offload_info.next-1, VB_NAME, info->num_lines, Ltxt, info->comp_len, 
                   adler32 (1, STRb(vb->txt_data)), adler32 (1, STRb(depn.thread_data_comp))); 
 
     depn.thread_data_comp.len = depn.thread_data.len = 0;
 
-    if (flag.debug_gencomp) debug_gencomp ("ReadDisk DEPN", true, NULL);
+    if (flag_debug_gencomp) debug_gencomp ("ReadDisk DEPN", true, NULL);
 }
 
 // main thread - creates vb->reread_prescription with offsets of lines to be reread. the actual
@@ -810,14 +810,14 @@ static void gencomp_prescribe_reread (VBlockP vb)
         for (uint32_t i=1; i < rr_len; i++)
             rr[i].offset.offset += rr[i-1].offset.offset;
 
-    if (flag.debug_gencomp) debug_gencomp ("Reread DEPN", true, NULL);
+    if (flag_debug_gencomp) debug_gencomp ("Reread DEPN", true, NULL);
 }
 
 // main thread: populate vb->txt_data with the next buffer on the out-of-band or DEPN queue
 bool gencomp_get_txt_data (VBlockP vb)
 {
     #define DEBUG_GENCOMP(msg) \
-        if (flag.debug_gencomp) \
+        if (flag_debug_gencomp) \
             iprintf ("Returning %s vb=%s/%u with txt_data: len=%u adler32=%u\n", \
                     (msg), comp_name (vb->comp_i), vb->vblock_i, Ltxt, adler32 (1, STRb(vb->txt_data))); 
 
@@ -836,8 +836,12 @@ bool gencomp_get_txt_data (VBlockP vb)
     // because there is no more file data to read), and some MAIN VBs have not sent data to absorb yet - 
     // 
     // case: we have out-of-band data: send it first
-    if (queueP[GCT_OOB].queue_len) 
+    if (queueP[GCT_OOB].queue_len) {
+        if (!z_file->SA_CIGAR_chewing_vb_i && IS_SAG_SA) 
+            z_file->SA_CIGAR_chewing_vb_i = vb->vblock_i; // this VB will chew cigars if needed
+
         RETURN ("OOB_Q", gencomp_get_txt_data_from_queue (vb, GCT_OOB)); // also unlocks mutex
+    }
 
     // case: finished ingesting PRIM, and finish all (if any) disk-offloaded data. Now we can do the in-memory GCT_DEPN queue   
     if (sam_finished_ingesting_prim && queueP[GCT_DEPN].queue_len)
@@ -877,7 +881,7 @@ bool gencomp_am_i_expecting_more_txt_data (void)
         for (CompIType comp_i=1; comp_i <= MAX_GEN_COMP; comp_i++) 
             gencomp_flush (comp_i, z_sam_gencomp || comp_i==MAX_GEN_COMP); // final flush of gct, not of comp_i
         
-        if (flag.debug_gencomp) iprintf ("Finished absorbing: num_MAIN_vbs_absorbedP=%u\n", num_MAIN_vbs_absorbedP);
+        if (flag_debug_gencomp) iprintf ("Finished absorbing: num_MAIN_vbs_absorbedP=%u\n", num_MAIN_vbs_absorbedP);
         finished_absorbingP = true;
 
         // rotate and compress final prescription - after this, prescriptions Buffer is immutable
@@ -892,7 +896,7 @@ bool gencomp_am_i_expecting_more_txt_data (void)
 
     if ((TXT_DT(SAM) || TXT_DT(BAM)) && finished_absorbingP && !queueP[GCT_OOB].queue_len && !num_vbs_dispatched[GCT_OOB]) {
         sam_finished_ingesting_prim = true;
-        if (flag.debug_gencomp) iprint0 ("No PRIM VBs in this file\n");
+        if (flag_debug_gencomp) iprint0 ("No PRIM VBs in this file\n");
     }
 
     mutex_unlock (gc_protected);
@@ -918,7 +922,7 @@ void gencomp_sam_prim_vb_has_been_ingested (VBlockP vb)
     uint16_t prim_queue_len = queueP[GCT_OOB].queue_len; // in SAM, GetQBit is PRIM
     mutex_unlock (gc_protected);
 
-    if (flag.debug_gencomp) iprintf ("Ingested SA Groups of vb=%s\n", VB_NAME);
+    if (flag_debug_gencomp) iprintf ("Ingested SA Groups of vb=%s\n", VB_NAME);
 
     // thread safety: 1. finished_absorbingP and  prim_queue_len these two are updated by the gencomp_absorb_vb_gencomp_lines 
     // which guarantees that if we have data, at least one of these two conditions will be true. 
@@ -927,7 +931,7 @@ void gencomp_sam_prim_vb_has_been_ingested (VBlockP vb)
     if ((VB_DT(SAM) || VB_DT(BAM)) && my_finished_absorbing && !prim_queue_len && num_vbs_dispatched[GCT_OOB] == num_SAM_PRIM_vbs_ingested) {
         sam_sa_prim_finalize_ingest ();
         sam_finished_ingesting_prim = true;
-        if (flag.debug_gencomp) iprintf ("Finished ingesting SAGs: num_SAM_PRIM_vbs_ingested=%u\n", num_SAM_PRIM_vbs_ingested);
+        if (flag_debug_gencomp) iprintf ("Finished ingesting SAGs: num_SAM_PRIM_vbs_ingested=%u\n", num_SAM_PRIM_vbs_ingested);
     }
 }
 
@@ -969,7 +973,7 @@ void gencomp_reread_lines_as_prescribed (VBlockP vb)
 
     fclose (fp);
 
-    if (flag.debug_gencomp)
+    if (flag_debug_gencomp)
         iprintf ("%s: Reread %u gencomp lines from txt_file adler32=%u\n", 
                  VB_NAME, vb->reread_prescription.len32, adler32 (1, STRb(vb->txt_data)));
 

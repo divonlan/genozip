@@ -16,7 +16,7 @@ void sam_seg_bismark_XG_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(xg), unsigned
     ASSSEG (xg_len==2 && ((xg[0]=='C' && xg[1]=='T') || (xg[0]=='G' && xg[1]=='A')), "Invalid XG:Z=%.*s, expecting CT or GA", STRf(xg));
 
     if (vb->bisulfite_strand)
-        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_BISMARK_XG }, 2, OPTION_XG_Z, add_bytes);
+        seg_special0 (VB, SAM_SPECIAL_BISMARK_XG, CTX(OPTION_XG_Z), add_bytes);
 
     else 
         seg_by_did (VB, STRa(xg), OPTION_XG_Z, add_bytes);
@@ -49,8 +49,8 @@ void sam_seg_bismark_XM_Z_analyze (VBlockSAMP vb, ZipDataLineSAMP dl)
     uint32_t ref_consumed = vb->ref_consumed; // M/=/X and D
     PosType32 pos = dl->POS;
 
-    for_buf (BamCigarOp, op, vb->binary_cigar) 
-        if (op->op==BC_M || op->op==BC_E || op->op==BC_X) 
+    for_cigar (vb->binary_cigar) {
+        case BC_M: case BC_E : case BC_X: 
             for (uint32_t i=0; i < op->n; i++) {
                 if (xm[xm_i++] != '.') {
                     rom error = sam_seg_analyze_set_one_ref_base (vb, false, pos, vb->bisulfite_strand, ref_consumed, &range, &lock); 
@@ -59,20 +59,24 @@ void sam_seg_bismark_XM_Z_analyze (VBlockSAMP vb, ZipDataLineSAMP dl)
                 pos++;
                 ref_consumed--;
             }
-        
+            break;        
 
-        else if (op->op == BC_D || op->op == BC_N) {
+        case BC_D: case BC_N:
             pos += op->n;
             ref_consumed -= op->n;
-        }
+            break;
         
-        else if (op->op == BC_I || op->op == BC_S)
+        case BC_I: case BC_S:
             xm_i += op->n;
+            break;
+
+        default: {}
+    }
 
     ASSSEG (xm_i == xm_len, "Mismatch between XM:Z=\"%.*s\" and CIGAR=\"%s\"", STRf(xm), 
-            dis_binary_cigar (vb, B1ST(BamCigarOp, vb->binary_cigar), vb->binary_cigar.len32, &vb->scratch).s);
+            dis_binary_cigar (VB, B1ST(BamCigarOp, vb->binary_cigar), vb->binary_cigar.len32, &vb->scratch).s);
 
-    if (range) ref_unlock (gref, &lock);
+    if (range) ref_unlock (&lock);
 }
 
 typedef enum { XM_AS_PREDICTED, XM_DIFF, XM_IN_LOCAL } XmSnip; // v14 - part of the file format
@@ -85,14 +89,14 @@ void sam_seg_bismark_XM_Z (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, int spe
     XmSnip xm_type = XM_AS_PREDICTED; // optimistic
     decl_ctx (did_i);
 
-    if (segconf.running) goto no_diff;
+    if (segconf_running) goto no_diff;
 
     if (!str_issame_(STRa(xm), STRb(vb->meth_call))) {
         ASSSEG (xm_len == dl->SEQ.len, "Expecting XM:Z.len=%u == SEQ.len=%u", xm_len, dl->SEQ.len);
 
         if (flag.show_wrong_xm) {
             iprintf ("%s: QNAME=\"%.*s\" bisulfite_strand=%c %s\n", 
-                     LN_NAME, STRfw(dl->QNAME), vb->bisulfite_strand, vb->meth_call.len ? "" : "(no meth_call)");
+                     LN_NAME, dl->QNAME_len, dl_qname(dl), vb->bisulfite_strand, vb->meth_call.len ? "" : "(no meth_call)");
             iprintf ("XM: %.*s\n", xm_len, xm);
             if (vb->meth_call.len) iprintf ("SQ: %.*s\n", STRfb(vb->meth_call));
         }
@@ -135,7 +139,7 @@ void sam_seg_bismark_XM_Z (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, int spe
         }
     }
 
-    seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, special_code, '0' + xm_type }, 3, ctx, add_bytes);
+    seg_special1 (VB, special_code, '0' + xm_type, ctx, add_bytes);
 
     COPY_TIMER(sam_seg_bismark_XM_Z);
 }
@@ -259,55 +263,59 @@ void sam_bismark_zip_update_meth_call (VBlockSAMP vb, RangeP range, uint32_t ran
     }
 }
 
-void sam_bismark_piz_update_meth_call (VBlockSAMP vb, bytes ref, int32_t idx, uint32_t seq_i, 
-                                              uint32_t M_i, uint32_t Mseg_len, // our position in the M segment and its length
-                                              const BamCigarOp *cigar, char bisulfite, bool methylated)
+void sam_bismark_piz_update_meth_call (VBlockSAMP vb, 
+                                       rom ref, // sequence from ref containing the ref_consumed bases used by this alignment 
+                                       int32_t idx,    // index within ref
+                                       uint32_t seq_i, // index within alignment sequence
+                                       uint32_t M_i, uint32_t Mseg_len, // our position in the M segment and its length
+                                       const BamCigarOp *op, // the *next* op in the cigar
+                                       char bisulfite, bool methylated)
 {
     START_TIMER;
     
     // prediction logic, precisely mirroring sam_seg_bisulfite_M 
     
     if (bisulfite == 'C') { // C->T
-        bool has_next = cigar < BAFT(BamCigarOp, vb->binary_cigar) && cigar->op != BC_S && cigar->op != BC_H; // "cigar" is the next cigar
-        bool nxt_is_I = has_next && cigar->op == BC_I;
-        bool nxt_is_D = has_next && cigar->op == BC_D;
+        bool has_next = op < BAFT(BamCigarOp, vb->binary_cigar) && op->op != BC_S && op->op != BC_H; // "op" is the next op
+        bool nxt_is_I = has_next && op->op == BC_I;
+        bool nxt_is_D = has_next && op->op == BC_D;
 
-        // ref 2 bases before and after (see sam_reconstruct_SEQ_get_ref_bytemap), so no need to round-robin
+        // ref 2 bases before and after (see sam_reconstruct_SEQ_get_textual_ref), so no need to round-robin
         int32_t idx1 = (M_i < Mseg_len-1 || !has_next) ? idx + 1
-                     : nxt_is_D                        ? idx + 1 + cigar->n 
+                     : nxt_is_D                        ? idx + 1 + op->n 
                      :                                   0;
 
         int32_t idx2 = (M_i < Mseg_len-2 || !has_next) ? idx + 2 
-                     : nxt_is_D                        ? idx + 2 + cigar->n 
+                     : nxt_is_D                        ? idx + 2 + op->n 
                      :                                   0;
 
         *Bc (vb->meth_call, seq_i) = 
             (M_i == Mseg_len-1 && nxt_is_I) ? (methylated ? 'U' : 'u') :
-            (ref[idx1] == 2/*G*/          ) ? (methylated ? 'Z' : 'z') :
+            (ref[idx1] == 'G'             ) ? (methylated ? 'Z' : 'z') :
             (M_i == Mseg_len-2 && nxt_is_I) ? (methylated ? 'U' : 'u') :
-            (ref[idx2] == 2/*G*/          ) ? (methylated ? 'X' : 'x') :
+            (ref[idx2] == 'G'             ) ? (methylated ? 'X' : 'x') :
                                               (methylated ? 'H' : 'h') ;
     }
 
     else { // G->A
-        cigar -= 2; // cigar is one before current cigar
-        bool has_prev = cigar >= B1ST (BamCigarOp, vb->binary_cigar) && cigar->op != BC_S && cigar->op != BC_H;
-        bool prv_is_I = has_prev && cigar->op == BC_I;
-        bool prv_is_D = has_prev && cigar->op == BC_D;
+        op -= 2; // op is one before current op
+        bool has_prev = op >= B1ST (BamCigarOp, vb->binary_cigar) && op->op != BC_S && op->op != BC_H;
+        bool prv_is_I = has_prev && op->op == BC_I;
+        bool prv_is_D = has_prev && op->op == BC_D;
 
         int32_t idx1 = (M_i >= 1 || !has_prev) ? idx - 1 
-                     : prv_is_D                ? idx - 1 - cigar->n 
+                     : prv_is_D                ? idx - 1 - op->n 
                      :                           0;
 
         int32_t idx2 = (M_i >= 2 || !has_prev) ? idx - 2 
-                     : prv_is_D                ? idx - 2 - cigar->n 
+                     : prv_is_D                ? idx - 2 - op->n 
                      :                           0;
 
         *Bc (vb->meth_call, seq_i) = 
             (M_i == 0 && prv_is_I) ? (methylated ? 'U' : 'u') :
-            (ref[idx1] == 1/*C*/ ) ? (methylated ? 'Z' : 'z') :
+            (ref[idx1] == 'C'    ) ? (methylated ? 'Z' : 'z') :
             (M_i == 1 && prv_is_I) ? (methylated ? 'U' : 'u') :
-            (ref[idx2] == 1/*C*/ ) ? (methylated ? 'X' : 'x') :
+            (ref[idx2] == 'C'    ) ? (methylated ? 'X' : 'x') :
                                      (methylated ? 'H' : 'h') ;
     }
 

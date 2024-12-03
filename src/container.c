@@ -72,7 +72,7 @@ WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con,
 
     container_prepare_snip (con, STRa(prefixes), qSTRa(snip));
 
-    if (flag.show_containers) { 
+    if (flag_show_containers) { 
         iprintf ("%s%s%s Ctx=%u:%s Repeats=%u RepSep=%u,%u Items=", 
                  vb->preprocessing    ? "preproc " : "",
                  vb->peek_stack_level ? "peeking " : "",
@@ -430,7 +430,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
 
     ASSPIZ (vb->con_stack_len < MAX_CON_STACK, "Container stack overflow: %s->%s", container_stack (vb).s, ctx->tag_name);
 
-    if (flag.show_stack)
+    if (flag_show_stack)
         iprintf ("%s: PUSH[%u] %s\n", LN_NAME, vb->con_stack_len, ctx->tag_name);
 
     vb->con_stack[vb->con_stack_len++] = (ConStack){ .con=con, .prefixes=prefixes, .prefixes_len=prefixes_len, 
@@ -642,7 +642,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
             if (con->repsep[1]) RECONSTRUCT1 (con->repsep[1]);
         }
 
-        // call callback if needed now that repeat reconstruction is done (always callback for top level)
+        // call callback if needed now that repeat reconstruction is done (always called for top level)
         if (con->callback || (is_toplevel && DTP (container_cb)))
             DT_FUNC(vb, container_cb)(vb, ctx->dict_id, is_toplevel, rep_i, con, rep_reconstruction_start, 
                     BAFTtxt - rep_reconstruction_start, STRa(prefixes));
@@ -689,7 +689,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
     vb->con_stack_len--;
     ctx->curr_container = NULL;
 
-    if (flag.show_stack)
+    if (flag_show_stack)
         iprintf ("%s: POP [%u] %s\n", LN_NAME, vb->con_stack_len, ctx->tag_name);
 
     if (is_toplevel)   

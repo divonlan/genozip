@@ -559,7 +559,7 @@ bool seg_integer_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_byt
 // segs a fixed width, 0-padded, non-negative integer - decimal, hex or HEX
 void seg_numeric_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_bytes)
 {
-    if (segconf.running) goto fallback;
+    if (segconf_running) goto fallback;
 
     bool has_zero_x = (ctx->ltype == LT_DYN_INT_h || ctx->ltype == LT_DYN_INT_H) && value_len > 2 && value[0] == '0' && value[1] == 'x';
     if (has_zero_x) STRinc (value, 2); // skip initial "0x"
@@ -636,7 +636,7 @@ void seg_delta_vs_other_do (VBlockP vb, ContextP ctx, ContextP other_ctx,
                             unsigned add_bytes)
 {
 #ifdef DEBUG
-    ASSERT (segconf.running || 
+    ASSERT (segconf_running || 
             (ctx->flags.store == STORE_INT && (other_ctx->flags.store == STORE_INT || other_ctx->flags.store == STORE_FLOAT)), 
             "expecting ctx=%s and other_ctx=%s to have STORE_INT", ctx->tag_name, other_ctx->tag_name);
 #endif
@@ -688,8 +688,8 @@ WordIndex seg_self_delta (VBlockP vb, ContextP ctx, int64_t value,
                           uint32_t add_bytes)
 {
 #ifdef DEBUG
-    ASSERT (segconf.running || ctx->flags.store == STORE_INT, "expecting %s to have store=STORE_INT", ctx->tag_name);
-    ASSERT (segconf.running || IS_LT_DYN (ctx->ltype), 
+    ASSERT (segconf_running || ctx->flags.store == STORE_INT, "expecting %s to have store=STORE_INT", ctx->tag_name);
+    ASSERT (segconf_running || IS_LT_DYN (ctx->ltype), 
             "%s: Expecting %s.ltype=LT_DYN_INT* but found %s", LN_NAME, ctx->tag_name, lt_name (ctx->ltype));
     ASSERT (fixed_len <= 190, "fixed_len=%u is larger than 190", fixed_len);
 #endif
@@ -1250,7 +1250,7 @@ bool seg_by_container (VBlockP vb, ContextP ctx, ContainerP con, STRp(value),
 void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, const void *const data, uint32_t data_len, bool add_nul, Lookup lookup_type, bool is_singleton, unsigned add_bytes) 
 {
 #ifdef DEBUG
-    ASSERT (is_singleton || ctx->ltype != LT_SINGLETON || segconf.running, 
+    ASSERT (is_singleton || ctx->ltype != LT_SINGLETON || segconf_running, 
             "%s: ctx %s requires ltype!=LT_SINGLETON", LN_NAME, ctx->tag_name);
 #endif
 
@@ -1554,7 +1554,7 @@ uint32_t seg_all_data_lines (VBlockP vb)
     
     // set estimated number of lines
     vb->lines.len32 = vb->lines.len32  ? vb->lines.len32 // already set in zip_modify
-                    : segconf.running  ? 10              // low number of avoid memory overallocation for PacBio arrays etc 
+                    : segconf_running  ? 10              // low number of avoid memory overallocation for PacBio arrays etc 
                     : IS_R2            ? str_count_char (STRb(vb->txt_data), '\n') / 4 // fastq_seg_initialize verifes that it is the same as R1
                     : segconf.line_len ? MAX_(1, Ltxt / segconf.line_len)
                     :                    1;              // eg DT_GNRIC
@@ -1562,7 +1562,7 @@ uint32_t seg_all_data_lines (VBlockP vb)
     vb->scratch.name = "scratch"; // initialize so we don't need to worry about it later
     
     ContextP debug_lines_ctx = NULL;
-    if (flag.debug_lines && !segconf.running) { 
+    if (flag.debug_lines && !segconf_running) { 
         debug_lines_ctx = ECTX (_SAM_DEBUG_LINES); // same dict_id for all data_types (ie _SAM_DEBUG_LINES==_VCF_DEBUG_LINES etc)
         if (debug_lines_ctx) debug_lines_ctx->ltype = LT_UINT32;
     }
@@ -1570,7 +1570,7 @@ uint32_t seg_all_data_lines (VBlockP vb)
     DT_FUNC (vb, seg_initialize)(vb);  // data-type specific initialization (SAM DEPN: re-read lines here)
 
     // in segconf, seg_initialize might change the data_type and realloc the segconf vb (eg FASTA->FASTQ)
-    if (segconf.running) vb = vb_get_nonpool_vb (VB_ID_SEGCONF);
+    if (segconf_running) vb = vb_get_nonpool_vb (VB_ID_SEGCONF);
 
     if (flag_is_show_vblocks (ZIP_TASK_NAME)) 
         iprintf ("SEG(id=%d) vb=%s Ltxt=%u %.*s%s\n", vb->id, VB_NAME, vb->txt_data.len32,
@@ -1594,13 +1594,13 @@ uint32_t seg_all_data_lines (VBlockP vb)
 
     for (vb->line_i=0; vb->line_i < vb->lines.len32; vb->line_i++, n_lines_processed++) {
 
-        if (!segconf.running) 
+        if (!segconf_running) 
             seg_increment_progress (vb, BNUMtxt(line), &progress, "seg");
 
         remaining_txt_len = BREMAINS (vb->txt_data, line);
         
         if (!remaining_txt_len ||                    // we're done
-            (segconf.running && vb->line_i == MAX_SEGCONF_LINES)) { // segconf: limit lines (even if VB is large e.g. due to reading full MGZIP block)
+            (segconf_running && vb->line_i == MAX_SEGCONF_LINES)) { // segconf: limit lines (even if VB is large e.g. due to reading full MGZIP block)
             vb->lines.len32 = vb->line_i; // update to actual number of lines
             break;
         }
@@ -1657,10 +1657,10 @@ uint32_t seg_all_data_lines (VBlockP vb)
             "Solution: use --vblock to set a lower value (value is in MB)",
             DTP(line_name), CON_MAX_REPEATS, str_size (segconf.vb_size).s);
 
-    if (!segconf.running) 
+    if (!segconf_running) 
         DT_FUNC (vb, seg_finalize)(vb); // data-type specific finalization
 
-     if (!flag.make_reference && !segconf.running && !zip_is_biopsy) 
+     if (!flag.make_reference && !segconf_running && !zip_is_biopsy) 
         seg_verify_file_size (vb);
 
     // txt_size and lines.len exclude lines moved to gencomp. increment might be negative

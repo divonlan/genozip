@@ -642,7 +642,7 @@ static rom zfile_read_genozip_header_get_ref_filename (rom header_fn)
 static void zfile_read_genozip_header_set_reference (ConstSectionHeaderGenozipHeaderP header, rom ref_filename)
 {
     WARN ("Note: using the reference file %s. You can override this with --reference or $GENOZIP_REFERENCE", ref_filename);
-    ref_set_reference (gref, ref_filename, REF_EXTERNAL, false);
+    ref_set_reference (ref_filename, REF_EXTERNAL, false);
 }
 
 // reference data when NOT reading a reference file
@@ -666,7 +666,7 @@ static void zfile_read_genozip_header_handle_ref_info (ConstSectionHeaderGenozip
 
     if (!is_genols) { // note: we don't need the reference for genols
 
-        rom gref_fn = ref_get_filename (gref);
+        rom gref_fn = ref_get_filename();
 
         rom env = getenv ("GENOZIP_REFERENCE");
         int env_len = env ? strlen (env) : 0;
@@ -708,6 +708,7 @@ static void zfile_read_genozip_header_handle_ref_info (ConstSectionHeaderGenozip
                 char new_filename[new_filename_size];
                 
                 snprintf (new_filename, new_filename_size, "%.*s/%s", STRf(env), ref_basename);
+
                 exists = file_exists (new_filename);
 
                 // case: use reference file in directory GENOZIP_REFERENCE and basename from header
@@ -800,8 +801,8 @@ uint64_t zfile_read_genozip_header_get_offset (bool as_is)
     // check that file version is at most this executable version, except for reference file for which only major version is tested
     ASSINP (z_file->genozip_version < code_version_major() || 
             (z_file->genozip_version == code_version_major() && (z_file->genozip_minor_ver <= code_version_minor() || Z_DT(REF) || (is_genocat && flag.show_stats))),
-            "Error: %s cannot be opened because it was compressed with genozip version %u.0.%u which is newer than the version running - %s.\n%s",
-            z_name, z_file->genozip_version, z_file->genozip_minor_ver, code_version().s, genozip_update_msg());
+            "Error: %s cannot be opened because it was compressed with genozip version %s which is newer than the version running - %s.\n%s",
+            z_name, file_version().s, code_version().s, genozip_update_msg());
 
     bool metadata_only = is_genocat && (flag.show_stats || flag.show_gheader || flag.show_headers || flag.show_aliases || flag.show_dict);
 
@@ -933,10 +934,10 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header, FailType
     // case: we are reading a file expected to be the reference file itself
     if (flag.reading_reference) {
         ASSINP (data_type == DT_REF, "Error: %s is not a reference file. To create a reference file, use 'genozip --make-reference <fasta-file.fa>'",
-                ref_get_filename(gref));
+                ref_get_filename());
 
         // note: in the reference file itself, header->ref_filename is the original fasta used to create this reference
-        ref_set_ref_file_info (flag.reading_reference, header->genome_digest, header->flags.genozip_header.adler, 
+        ref_set_ref_file_info (header->genome_digest, header->flags.genozip_header.adler, 
                                header->fasta_filename, header->genozip_version); 
 
         refhash_set_digest (header->refhash_digest);

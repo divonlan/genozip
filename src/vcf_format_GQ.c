@@ -99,7 +99,7 @@ void vcf_seg_FORMAT_GQ (VBlockVCFP vb)
         return;
     }
 
-    if (segconf.running) {
+    if (segconf_running) {
         if (ctx_encountered (VB, FORMAT_GP) && ABS (vcf_predict_GQ_by_GP (vb) - gq_value) <= 5) segconf.count_GQ_by_GP++;
         if (ctx_encountered (VB, FORMAT_PL) && ABS (vcf_predict_GQ_by_PL (vb) - gq_value) <= 5) segconf.count_GQ_by_PL++;
     }

@@ -32,7 +32,7 @@ typedef struct { WordIndex chrom_index, ref_index; } Chrom2Ref;
 // Here, we create a mapping between those chrom entries that are used (count>0) and the index of the contig in the reference file
 // against which this chrom data was compressed. We rely on contigs_get_matching() returning the same result here as it did in Seg.
 
-void chrom_2ref_compress (Reference ref)
+void chrom_2ref_compress (void)
 {
     if (flag.show_chrom2ref) 
         iprint0 ("\nAlternative chrom indices (output of --show-chrom2ref): chroms that are in the file and are mapped to a different index in the reference\n");
@@ -43,14 +43,21 @@ void chrom_2ref_compress (Reference ref)
 
     for_buf2 (WordIndex, ref_index, chrom_node_index, ZCTX(CHROM)->chrom2ref_map) {
         if (flag.show_chrom2ref) {
-            rom chrom_name = ctx_get_z_snip_ex (zctx, chrom_node_index, 0, 0);
-            rom ref_name = *ref_index >= 0 ? ref_contigs_get_name (ref, *ref_index, NULL) : "(none)";
+            STR(chrom_name);
+            ctx_get_z_snip_ex (zctx, chrom_node_index, pSTRa(chrom_name));
+            rom ref_name = *ref_index >= 0 ? ref_contigs_get_name (*ref_index, NULL) : "(none)";
+
+            char in_file[MAX_(chrom_name_len + 2, 16)];
+            if (! *chrom_name) 
+                strcpy (in_file, "(not used)"); // name was removed from dict because this header contig was not used in the file
+            else
+                snprintf (in_file, MAX_(chrom_name_len + 2, 16), "\"%.*s\"", STRf(chrom_name));
 
             if (*ref_index != WORD_INDEX_NONE) 
-                iprintf ("In file: '%s' (%d)\tIn reference: '%s' (%d)\t%s\n", 
-                         chrom_name, chrom_node_index, ref_name, *ref_index, chrom_node_index != *ref_index ? "INDEX_CHANGE" : "");
+                iprintf ("In file: %s (%d)\tIn reference: \"%s\" (%d)\t%s\n", 
+                         in_file, chrom_node_index, ref_name, *ref_index, chrom_node_index != *ref_index ? "INDEX_CHANGE" : "");
             else
-                iprintf ("In file: '%s' (%d)\tNot in reference\n", chrom_name, chrom_node_index);
+                iprintf ("In file: %s (%d)\tNot in reference\n", in_file, chrom_node_index);
         }
 
         // adds the mapping if not identify and adds -1 if this chrom doesn't map to a ref contig.
@@ -69,7 +76,7 @@ void chrom_2ref_compress (Reference ref)
     buf_free (evb->scratch);
 }
 
-void chrom_2ref_load (Reference ref)
+void chrom_2ref_load (void)
 {
     Section sec = sections_last_sec (SEC_CHROM2REF_MAP, SOFT_FAIL);
     if (!sec) return;
@@ -92,23 +99,23 @@ void chrom_2ref_load (Reference ref)
         map[i] = i;
 
     // the indices of chroms that are NOT in the reference (they are only in the user file), will be mapped to ref chroms
-    ConstContigPkgP ctgs = ref_get_ctgs (ref); 
+    ConstContigPkgP ctgs = ref_get_ctgs(); 
     WordIndex num_ref_contigs = ctgs->contigs.len; // must be signed int
 
     for_buf2 (Chrom2Ref, ent, i, evb->scratch) {
         WordIndex chrom_index = BGEN32 (ent->chrom_index);
         WordIndex ref_index   = BGEN32 (ent->ref_index);
 
-        ASSERT (IN_RANGE(chrom_index, 0, zctx->word_list.len32), "chrom_index=%d ∉ [0,%d]", chrom_index, (int32_t)zctx->word_list.len-1);
+        ASSERTINRANGE (chrom_index, 0, zctx->word_list.len32);
         ASSERT (!num_ref_contigs /* ref not loaded */ || IN_RANGE (ref_index, -1, num_ref_contigs), 
-                "ref_index=%d ∉ [-1,%u] (chrom_index=%u i=%u len=%u)", 
-                ref_index, num_ref_contigs-1, chrom_index, i, evb->scratch.len32);
+                "ref_index=%d ∉ [-1,%u) (chrom_index=%u i=%u len=%u)", 
+                ref_index, num_ref_contigs, chrom_index, i, evb->scratch.len32);
 
         map[chrom_index] = ref_index;
 
         if (flag.show_chrom2ref) {
             rom chrom_name = ctx_get_words_snip (zctx, chrom_index);
-            rom ref_name   = ref_index >= 0 ? ref_contigs_get_name (ref, ref_index, NULL) : NULL;
+            rom ref_name   = ref_index >= 0 ? ref_contigs_get_name (ref_index, NULL) : NULL;
             if (ref_name)
                 iprintf ("In file: '%s' (%d)\tIn reference: '%s' (%d)\n", chrom_name, chrom_index, ref_name, ref_index);
             else
@@ -122,7 +129,7 @@ void chrom_2ref_load (Reference ref)
 }
 
 // ZIP: returns the ref index by the chrom index, works only after Segging of CHROM
-WordIndex chrom_2ref_seg_get (Reference ref, ConstVBlockP vb, WordIndex chrom_index)
+WordIndex chrom_2ref_seg_get (ConstVBlockP vb, WordIndex chrom_index)
 { 
     ASSSEG (chrom_index >= WORD_INDEX_NONE, "invalid chrom_index=%d", chrom_index);
 
@@ -135,8 +142,8 @@ WordIndex chrom_2ref_seg_get (Reference ref, ConstVBlockP vb, WordIndex chrom_in
                         : (chrom_index < ctx->chrom2ref_map.len32) ? *B(WordIndex, ctx->chrom2ref_map, chrom_index - ol_len) // possibly WORD_INDEX_NONE, see chrom_seg_ex
                         :                                            WORD_INDEX_NONE;
 
-    ASSSEG (IN_RANGE (ref_index, WORD_INDEX_NONE, (WordIndex)ref_num_contigs (ref)), 
-            "ref_index=%d out of range: ref->ranges.len=%u, chrom_index=%d", ref_index, ref_num_contigs (ref), chrom_index);
+    ASSSEG (IN_RANGE (ref_index, WORD_INDEX_NONE, (WordIndex)ref_num_contigs()), 
+            "ref_index=%d ∉ [-1,%u) chrom_index=%d", ref_index, ref_num_contigs(), chrom_index);
 
     return ref_index;
 }   
@@ -157,7 +164,7 @@ void chrom_calculate_ref2chrom (uint64_t num_ref_contigs)
             
             // expecting only one chrom a be mapped to any particular ref_contig 
             ASSERT (r2c[c2r[wi]] == WORD_INDEX_NONE, "trying to map ref=\"%s\"(%d) to chrom=%s(%d): but r2c[%u] is already set to %s(%u)", 
-                    ref_contigs_get_name (gref, c2r[wi], NULL), c2r[wi], ctx_get_z_snip (zctx, wi).s, wi, c2r[wi], ctx_get_z_snip (zctx, r2c[c2r[wi]]).s, r2c[c2r[wi]]);
+                    ref_contigs_get_name (c2r[wi], NULL), c2r[wi], ctx_get_z_snip (zctx, wi).s, wi, c2r[wi], ctx_get_z_snip (zctx, r2c[c2r[wi]]).s, r2c[c2r[wi]]);
             
             r2c[c2r[wi]] = wi;
         }
@@ -175,28 +182,26 @@ WordIndex chrom_seg_ex (VBlockP vb, Did did_i,
 {
     ASSERTNOTZERO (chrom_len);
     decl_ctx (did_i);
-    bool is_primary = did_i == DTF(chrom); // note: possibly not primary, eg SA_RNAME
+    bool is_primary = (did_i == CHROM); // note: possibly not primary, eg SA_RNAME
 
     WordIndex chrom_node_index = WORD_INDEX_NONE, ref_index = WORD_INDEX_NONE;
     bool is_new, is_alt=false;
     
-    Reference ref = (flag.reference & REF_ZIP_LOADED) ? gref : NULL;
-
     chrom_node_index = seg_by_ctx_ex (vb, STRa(chrom), ctx, add_bytes, &is_new); // note: this is not the same as ref_index, bc ctx->nodes contains the header contigs first, followed by the reference contigs that are not already in the header
     
     STR0 (ref_contig);
-    if (is_new && ref)
-        ref_index = ref_contigs_get_matching (ref, LN, STRa(chrom), pSTRa(ref_contig), false, &is_alt, NULL);
+    if (is_new && (flag.reference & REF_ZIP_LOADED))
+        ref_index = ref_contigs_get_matching (STRa(chrom), pSTRa(ref_contig), false, &is_alt, NULL);
 
     // warn if the file's contigs are called by a different name in the reference (eg 22/chr22)
     static bool once[2]={};
     if (ref_index != WORD_INDEX_NONE && is_alt && // a new chrom that matched to the reference with an alternative name
         is_primary &&
-        !segconf.running  &&              // segconf runs with flag.quiet so the user won't see the warning
+        !segconf_running  &&              // segconf runs with flag.quiet so the user won't see the warning
         !__atomic_test_and_set (&once[is_primary], __ATOMIC_RELAXED))   // skip if we've shown the warning already
             
         WARN ("FYI: Contigs name mismatch between %s and reference file %s. For example: file: \"%.*s\" Reference file: \"%.*s\". This makes no difference for the compression.",
-              txt_name, ref_get_filename (ref), STRf(chrom), STRf(ref_contig));
+              txt_name, ref_get_filename(), STRf(chrom), STRf(ref_contig));
         // we don't use WARN_ONCE bc we want the "once" to also include ref_contigs_get_matching
 
     if (is_new_out) *is_new_out = is_new;        
@@ -300,39 +305,20 @@ static WordIndex chrom_zip_get_by_name_do (rom chrom_name, WordIndex first_sorte
     if (cmp > 0) return chrom_zip_get_by_name_do (chrom_name, first_sorted_index, mid_sorted_index-1);
 
     return node_index;
-}             
-
-// binary search for this chrom in ZCTX(CHROM). we count on gcc tail recursion optimization to keep this fast.
-static WordIndex chrom_piz_get_by_name_do (STRp (chrom_name), WordIndex first_sorted_index, WordIndex last_sorted_index)
-{
-    if (first_sorted_index > last_sorted_index) return WORD_INDEX_NONE; // not found
-
-    WordIndex mid_sorted_index = (first_sorted_index + last_sorted_index) / 2;
-    
-    STR (snip);
-    WordIndex word_index = *B(WordIndex, chrom_sorter, mid_sorted_index);
-    ctx_get_snip_by_word_index (ZCTX(CHROM), word_index, snip);
-
-    int cmp = strncmp (snip, chrom_name, chrom_name_len);
-    if (!cmp && snip_len != chrom_name_len) // identical prefix but different length
-        cmp = snip_len - chrom_name_len;
-
-    if (cmp < 0) return chrom_piz_get_by_name_do (STRa(chrom_name), mid_sorted_index+1, last_sorted_index);
-    if (cmp > 0) return chrom_piz_get_by_name_do (STRa(chrom_name), first_sorted_index, mid_sorted_index-1);
-
-    return word_index;
-}             
+}                   
 
 // note: search within the partial set of chroms that existed when chrom_index_by_name was called.
 WordIndex chrom_get_by_name (STRp (chrom_name))
 {
+    ASSERT0 (IS_ZIP, "only works in ZIP"); // if ever needed in PIZ, return chrom_index_by_name call from piz_read_global_area and return chrom_piz_get_by_name_do (see 15.0.68)
+
     if (!chrom_sorter.len) return WORD_INDEX_NONE;
 
-    WordIndex wi;
+    // WordIndex wi;
     SAFE_NULT(chrom_name); 
     
-    if (IS_ZIP) wi =  chrom_zip_get_by_name_do (chrom_name, 0, chrom_sorter.len-1); // not necessarily all of CHROM, just chrom_sorter.len
-    else        wi =  chrom_piz_get_by_name_do (STRa(chrom_name), 0, chrom_sorter.len-1);
+    // if (IS_ZIP) 
+    WordIndex wi = chrom_zip_get_by_name_do (chrom_name, 0, chrom_sorter.len-1); // not necessarily all of CHROM, just chrom_sorter.len
     
     SAFE_RESTORE;
     return wi;

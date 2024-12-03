@@ -152,9 +152,9 @@
     #define GET_UINT64(p)  LTEN64 (*((uint64_t *)(p)))
     #define GET_FLOAT32(p) LTEN32F(*((float    *)(p)))
 
-    #define PUT_UINT16(p,n) *((uint16_t *)(p)) = LTEN16(n)
-    #define PUT_UINT32(p,n) *((uint32_t *)(p)) = LTEN32(n)
-    #define PUT_UINT64(p,n) *((uint64_t *)(p)) = LTEN64(n)
+    #define PUT_UINT16(p,n) *((uint16_t *)(p)) = LTEN16((uint16_t)n)
+    #define PUT_UINT32(p,n) *((uint32_t *)(p)) = LTEN32((uint32_t)n)
+    #define PUT_UINT64(p,n) *((uint64_t *)(p)) = LTEN64((uint64_t)n)
 #else
     #define GET_UINT16(p)  LTEN16 (({ uint16_t n; memcpy (&n, p, 2); n; }))
     #define GET_UINT32(p)  LTEN32 (({ uint32_t n; memcpy (&n, p, 4); n; }))
@@ -162,9 +162,9 @@
     #define GET_FLOAT32(p) LTEN32F(({ float    n; memcpy (&n, p, 4); n; }))
 
     // storing a Little Endian integer in an unaligned memory location
-    #define PUT_UINT16(p,n) (({ uint16_t _N=LTEN16(n); memcpy (p, &_N, 2); }))
-    #define PUT_UINT32(p,n) (({ uint32_t _N=LTEN32(n); memcpy (p, &_N, 4); }))
-    #define PUT_UINT64(p,n) (({ uint64_t _N=LTEN64(n); memcpy (p, &_N, 8); }))      
+    #define PUT_UINT16(p,n) (({ uint16_t _N=LTEN16((uint16_t)n); memcpy (p, &_N, 2); }))
+    #define PUT_UINT32(p,n) (({ uint32_t _N=LTEN32((uint32_t)n); memcpy (p, &_N, 4); }))
+    #define PUT_UINT64(p,n) (({ uint64_t _N=LTEN64((uint64_t)n); memcpy (p, &_N, 8); }))      
 #endif
 
 #define GET_UINT8(p)   ((uint8_t)(((uint8_t*)(p))[0]))

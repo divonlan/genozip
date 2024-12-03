@@ -80,9 +80,9 @@ static StreamP url_open (StreamP parent_stream, rom url, bool head_only)
 static bool url_get_head (rom url, qSTRp(data), qSTRp(error),
                           StreamP *url_stream) // set while stream is open, so other threads can kill it if needed
 {
-    __atomic_store_n (url_stream, (StreamP)NULL, __ATOMIC_RELEASE);
+    store_release (*url_stream, (StreamP)NULL);
 
-    __atomic_store_n (url_stream, url_open (NULL, url, true), __ATOMIC_RELEASE);
+    store_release (*url_stream, url_open (NULL, url, true));
     
     bool wget = is_wget (*url_stream);
 

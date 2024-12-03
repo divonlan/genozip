@@ -130,7 +130,7 @@ int64_t writer_get_txt_line_i (VBlockP vb, LineIType line_in_vb/*0-based (if MAI
 
         if (!no_write)
             txt_num_lines += (p->flavor == PLAN_TXTHEADER) ? TXTINFO(p->comp_i)->num_lines
-                                                        : (factor * p->num_lines); 
+                                                           : (factor * p->num_lines); 
     }
 
     WARN_ONCE ("While Unexpectedly, unable to find current line %s/%u in recon_plan", VB_NAME, line_in_vb);
@@ -195,7 +195,7 @@ Bits *writer_get_is_dropped (VBIType vb_i)
 
     // allocate if needed. buffer was put in wvb buffer_list by writer_z_initialize
     if (!v->is_dropped && v->needs_write) {
-        buf_alloc_bits (NULL, &v->is_dropped_buf, v->num_lines, CLEAR, 0, IS_DROPPED_BUF_NAME);
+        buf_alloc_bits_exact (NULL, &v->is_dropped_buf, v->num_lines, CLEAR, 0, IS_DROPPED_BUF_NAME);
         v->is_dropped = (BitsP)&v->is_dropped_buf;
     }
 
@@ -230,13 +230,10 @@ static void writer_init_txt_header_info (void)
         // conditions we write the txt header (doesn't affect the VBs of this component)
         comp->needs_write =
            !flag_loading_auxiliary
-        &&
-           comp->needs_recon
-        &&
-           !flag.no_header
-        &&
-           (  !Z_DT(SAM) // This clause only limits SAM/BAM
-           || (comp_i != SAM_COMP_PRIM && comp_i != SAM_COMP_DEPN)); // Show only the txt header of the MAIN and any (deep) FASTQ components
+        && comp->needs_recon
+        && !flag.no_header
+        && DTPZ(txt_header_required) // not HDR_NONE
+        && (!Z_DT(SAM) || comp_i == SAM_COMP_MAIN); // For SAM/BAM, show the txt_header only of MAIN, not PRIM/DEPN and (deep) FASTQ components           
 
         if (comp->needs_write && !flag.no_writer_thread) {
             // mutex: locked:    here (at initialization)
@@ -306,7 +303,7 @@ void writer_z_initialize (void)
         #define DROP v->needs_recon = false
 
         // --one-vb: user only wants to see a single VB, and this is not it
-        if (flag.one_vb && flag.one_vb != vb_i &&
+        if (flag.one_vb && flag.one_vb != vb_i && 
             !(flag.deep_fq_only && v->comp_i <= SAM_COMP_PRIM)) // but: if deep and requested VB is a FASTQ VB, don't drop MAIN/PRIM SAM VBs required for creating deep_ents 
             DROP; 
 
@@ -869,6 +866,14 @@ void writer_create_plan (CompIType comp_i)
     else if (Z_DT(SAM) && comp_i == SAM_COMP_MAIN) 
         writer_add_SAM_plan();
 
+    // case: paried FASTQ with --one-vb : include both components - some are dropped in VBINFO
+    else if (Z_DT(FASTQ) && flag.pair && flag.one_vb) {
+        writer_add_txtheader_plan (FQ_COMP_R1);
+        writer_add_trivial_plan (FQ_COMP_R1, PLAN_FULL_VB);
+        writer_add_txtheader_plan (FQ_COMP_R2);
+        writer_add_trivial_plan (FQ_COMP_R2, PLAN_FULL_VB);
+    }
+
     // normal file, not one of the above
     else {
         writer_add_txtheader_plan (comp_i);
@@ -1094,13 +1099,13 @@ static void writer_write_lines_interleaves (Dispatcher dispatcher, VbInfo *v1, V
 // writer thread: waiting for data from a VB and loading it
 static void writer_load_vb (Dispatcher dispatcher, VbInfo *v, bool is_txtheader)
 {
-    if (flag.show_threads && !is_txtheader) 
+    if (flag_show_threads && !is_txtheader) 
         iprintf ("writer: vb=%s/%u WAITING FOR VB\n", comp_name(v->comp_i), VBINFO_NUM(v));
 
     if (flag_is_show_vblocks (PIZ_TASK_NAME) && !is_txtheader) 
         iprintf ("WRITER_WAITING_FOR vb=%s/%u\n", comp_name(v->comp_i), VBINFO_NUM(v));
 
-    else if (flag.show_threads && is_txtheader) 
+    else if (flag_show_threads && is_txtheader) 
         iprintf ("writer: comp=%s WAITING FOR TXT_HEADER\n", comp_name(v->comp_i));
 
     bool got_data;
@@ -1333,7 +1338,8 @@ static bool writer_handover (VbInfo *v, VBlockP vb)
 // PIZ main thread: hand over data from a txtheader whose reconstruction main thread has completed, to the writer thread
 bool writer_handover_txtheader (VBlockP *txt_header_vb_p)
 {
-    bool is_handed_over = writer_handover (TXTINFO((*txt_header_vb_p)->comp_i), *txt_header_vb_p);
+    bool is_handed_over = writer_does_txtheader_need_write ((*txt_header_vb_p)->comp_i)
+                       && writer_handover (TXTINFO((*txt_header_vb_p)->comp_i), *txt_header_vb_p);
     
     if (is_handed_over) *txt_header_vb_p = NULL;
 

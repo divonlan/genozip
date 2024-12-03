@@ -49,7 +49,7 @@ extern void mutex_bottleneck_analysis_init (void);
 extern void mutex_show_bottleneck_analsyis (void);
 extern void mutex_who_is_locked (void);
 
-#define mutex_is_show(name) (flag.show_mutex && (flag.show_mutex==(char*)1 || !strncmp ((name), flag.show_mutex, 8))) // only 8 chars so we can catch all genome_muteces[%u]
+#define mutex_is_show(name) (__builtin_expect (flag.show_mutex != NULL, false) && (flag.show_mutex==(char*)1 || !strncmp ((name), flag.show_mutex, 8))) // only 8 chars so we can catch all genome_muteces[%u]
 
 // -------------------
 // VB serializer stuff

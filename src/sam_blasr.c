@@ -17,7 +17,7 @@ void sam_seg_blasr_FI_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t fi, unsigned
 
     // check if prediction is correct (it is often correct, but not always)
     if (fi == 1 + vb->soft_clip[dl->FLAG.rev_comp])
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_FI }, 2, ctx, add_bytes);
+        seg_special0 (VB, SAM_SPECIAL_FI, ctx, add_bytes);
 
     else 
         seg_integer (VB, ctx, fi, true, add_bytes);

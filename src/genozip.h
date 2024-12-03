@@ -42,6 +42,17 @@ typedef packed_enum {
 
 typedef packed_enum { RECON_OFF, RECON_ON, RECON_PREFIX_ONLY } ReconType;
 
+typedef uint16_t __attribute__((aligned(1))) unaligned_uint16_t;
+typedef uint32_t __attribute__((aligned(1))) unaligned_uint32_t;
+typedef uint64_t __attribute__((aligned(1))) unaligned_uint64_t;
+
+// uint40_t stuff
+#define MAX_UINT40 0xffffffffffULL
+typedef struct __attribute__((packed)) { uint32_t lo; uint8_t hi; } uint40_t;
+// macros are good if lo is 32 bit and hi is 1 to 32 bits
+#define U40to64(x40) (((uint64_t)(x40).hi << 32) | (uint64_t)(x40).lo)         
+#define U64to40(x64) ((uint40_t){ .lo = (uint32_t)(x64), .hi = (x64) >> 32 })
+
 typedef unsigned __int128 uint128_t;
 typedef          __int128 int128_t;
 
@@ -117,7 +128,6 @@ typedef struct RAEntry *RAEntryP;
 typedef const struct RAEntry *ConstRAEntryP;
 typedef struct Mutex *MutexP;
 typedef struct Serializer *SerializerP;
-typedef struct RefStruct *Reference;
 typedef struct Contig *ContigP;
 typedef const struct Contig *ConstContigP;
 typedef struct ContigPkg *ContigPkgP;
@@ -126,6 +136,8 @@ typedef const struct QnameFlavorStruct *QnameFlavor;
 typedef struct DispatcherData *Dispatcher;
 typedef struct HuffmanChewer *HuffmanChewerP;
 typedef struct HuffmanCodes *HuffmanCodesP;
+typedef union BamCigarOp *BamCigarOpP;
+typedef const union BamCigarOp *ConstBamCigarOpP;
 
 typedef struct { char s[80];    } StrText;
 typedef struct { char s[1 KB];  } StrTextLong;
@@ -188,25 +200,38 @@ typedef uint8_t CompIType;    // comp_i
 #define MAX_NUM_COMPS 254 
 #define MAX_NUM_TXT_FILES_IN_ZFILE (MAX_NUM_COMPS-2) // A high number to support many FASTQs in Deep. This is the maximum bc CompIType is uint8_t. 2 components reserved for generated components (in SAM).
 
-typedef uint32_t VBIType;     // vblock_i
-typedef uint64_t CharIndex;   // index within dictionary
-typedef int32_t WordIndex;    // used for word and node indices
-typedef int64_t PosType64;    // used for position coordinate within a genome
-typedef int32_t PosType32;    // per VCF v4.3 spec 1.6.1
-#define MAX_POS32 ((PosType64)0x7fffffff)
+typedef uint32_t VBIType;       // vblock_i
+typedef uint64_t CharIndex;     // index within dictionary
+typedef int32_t WordIndex;      // used for word and node indices
+typedef int64_t PosType64;      // used for position coordinate within a genome
+typedef int32_t PosType32;    
+#define MAX_POS32 ((PosType64)0x7fffffff)  // max value of a POS field in VCF and SAM per their specifications
+#define MAX_POS40 ((PosType64)0xffffffffff)// max gpos for deep and bamass
 
 typedef int32_t LineIType;
 #define NO_LINE (-1)
 
-typedef const char *rom;      // "read-only memory"
-typedef const uint8_t *bytes; // read-only array of bytes
+typedef const char *rom;        // "read-only memory"
+typedef const uint8_t *bytes;   // read-only array of bytes
 
-typedef uint8_t Ploidy;       // ploidy of a genotype
+typedef uint8_t Ploidy;         // ploidy of a genotype
 
 // a reference into txt_data
 typedef struct { uint32_t index, len; } TxtWord; // 32b as VBs are limited to 2GB (usually used as reference into txt_data)
 #define TXTWORD(snip) ((TxtWord){ .index = BNUMtxt (snip),    .len = snip##_len }) // get coordinates in txt_data
 #define TXTWORDi(x,i) ((TxtWord){ .index = BNUMtxt (x##s[i]), .len = x##_lens[i] }) 
+
+// a reference into a specific line
+typedef struct { unaligned_uint16_t index/*in line*/; uint8_t len; } LineWord;  // short fields in short-read data
+#define LONG_READ_LINE_INDEX_BITS 24
+#define MAX_LONG_READ_LINE_INDEX ((1<<LONG_READ_LINE_INDEX_BITS) - 1)
+typedef struct { uint32_t index : LONG_READ_LINE_INDEX_BITS; uint32_t len : 8; } LineWordL; // short fields in long-read data (line length is possibly > 64K) 
+typedef struct { uint16_t index/*in line*/, len; } LineWordS;                   // long fields in short-read data
+#define set_LineWord(dl, fld, str/*in vb*/, str_len) ({ if (IN_RANGE((int32_t)BNUMtxt(str) - (int32_t)(dl)->line_start, 0, 64 KB) && (str_len) < 256) \
+                                                        (dl)->fld = (LineWord){ BNUMtxt(str) - (dl)->line_start, (str_len) }; })
+#define set_LineWord_str(dl, fld, str/*in vb*/) set_LineWord((dl), fld, str, str##_len) 
+#define LINEWORD(dl,snip)  ((LineWord) { .index = BNUMtxt (snip) - dl->line_start, .len = snip##_len }) // get coordinates in txt_data
+#define LINEWORDL(dl,snip) ((LineWordL){ .index = BNUMtxt (snip) - dl->line_start, .len = snip##_len }) // get coordinates in txt_data
 
 typedef struct __attribute__ ((packed,aligned(4))) { uint64_t index; uint32_t len; } BufWord; // see also ZWord
 
@@ -234,6 +259,7 @@ extern uint32_t global_max_threads;
 #define MAX_GLOBAL_MAX_THREADS 10000
 
 extern char global_cmd[];            // set once in main()
+extern unsigned file_i, n_files;
 
 typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOCAT, EXE_GENOLS, NUM_EXE_TYPES } ExeType;
 extern ExeType exe_type;
@@ -336,7 +362,7 @@ extern CommandType command, primary_command;
 #define IS_LIST (command == LIST)
 #define IS_SHOW_HEADERS (command == SHOW_HEADERS)
 
-typedef enum { VB_ID_EVB=-1, VB_ID_WRITER=-2, VB_ID_SEGCONF=-3, VB_ID_DEPN_SCAN=-4, VB_ID_COMPRESS_DEPN=-5, VB_ID_NONE=-999 } VBID;
+typedef enum { VB_ID_EVB=-1, VB_ID_WRITER=-2, VB_ID_SEGCONF=-3, VB_ID_SCAN_VB=-4, VB_ID_COMPRESS_DEPN=-5, VB_ID_NONE=-999 } VBID;
 #define NUM_NONPOOL_VBs 5
 
 extern VBlockP evb; // External VB
@@ -346,9 +372,17 @@ typedef int ThreadId;
 #define THREAD_ID_NONE ((ThreadId)-1)
 
 #define VER(n) (z_file->genozip_version >= (n))
-#define VER2(major,minor) (z_file->genozip_version > (major) || \
-                           (z_file->genozip_version == (major) && (z_file->genozip_minor_ver >= (minor))))
+#define VER2(major,minor) ((z_file->genozip_version == (major) && (z_file->genozip_minor_ver >= (minor))) || \
+                           (z_file->genozip_version > (major)))
+                           
 #define EXACT_VER(n) (z_file->genozip_version == (n))
+
+#define load_relaxed(var)        __atomic_load_n    (&var, __ATOMIC_RELAXED)
+#define load_acquire(var)        __atomic_load_n    (&var, __ATOMIC_ACQUIRE)
+#define store_relaxed(var,value) __atomic_store_n   (&var, (value), __ATOMIC_RELAXED); 
+#define store_release(var,value) __atomic_store_n   (&var, (value), __ATOMIC_RELEASE); 
+#define increment_relaxed(var)   __atomic_fetch_add (&var, 1, __ATOMIC_RELAXED) // returns value before incrementing
+#define decrement_relaxed(var)   __atomic_sub_fetch (&var, 1, __ATOMIC_RELAXED) // returns value after decrementing
 
 // macros with arguments that evaluate only once 
 #define MIN_(a, b) ({ __typeof__(a) _a_=(a); __typeof__(b) _b_=(b); (_a_ < _b_) ? _a_ : _b_; }) // GCC / clang "statement expressions" extesion: https://gcc.gnu.org/onlinedocs/gcc/Statement-Exprs.html#Statement-Exprs
@@ -399,59 +433,6 @@ typedef int ThreadId;
 #define SNPRINTF0(out/*StrText* */, str) \
     ({ out##_len += snprintf (&out.s[out##_len], sizeof(out.s)-out##_len, (str)); out##_len = MIN_(out##_len, sizeof(out.s)); })
 
-// used for qsort sort function - receives two integers of any type and returns -1/0/1 as required to sort in ascending order
-#define SORTER(func) int func (const void *a, const void *b)
-typedef SORTER ((*Sorter));
-#define ASCENDING_RAW(a,b) (((a) > (b)) ? 1 : (a) < (b) ? -1 : 0)
-#define DESCENDING_RAW(a,b) (-ASCENDING_RAW((a), (b)))
-#define ASCENDING(struct_type,struct_field) ASCENDING_RAW (((struct_type *)a)->struct_field, ((struct_type *)b)->struct_field)
-#define DESCENDING(struct_type,struct_field) (-ASCENDING(struct_type, struct_field))
-
-#define ASCENDING_SORTER(func_name,struct_type,struct_field) \
-    SORTER (func_name) { return ASCENDING (struct_type, struct_field); }
-
-#define DESCENDING_SORTER(func_name,struct_type,struct_field) \
-    SORTER (func_name) { return DESCENDING (struct_type, struct_field); }
-
-// declaration of binary search recursive function - array of struct, must be sorted ascending by field
-typedef enum { IfNotExact_ReturnLower, IfNotExact_ReturnHigher, IfNotExact_ReturnNULL, IfNotExact_Error } BinarySearchIfNotExact; 
-#define BINARY_SEARCHER(func, struct_type, field_type, struct_field,                                                    \
-                        is_unique,    /* if false, we return the first entry of requested value */                      \
-                        if_not_exact) /* what to do if exact match is not found. Note: if IfNotExact_ReturnLower, and value is less than the first, will return pointer to an item before the first. Likewise with IfNotExact_ReturnHigher */ \
-    struct_type *func (struct_type *first, struct_type *last, field_type value, int level)                              \
-    {                                                                                                                   \
-        ASSERT (level < 50, "recursion too deep (level=50) first=%p last=%p", first, last);                             \
-        if (first > last) { /* not found */                                                                             \
-            ASSERT (if_not_exact!=IfNotExact_Error, "requested %s=%"PRIu64" not found", #struct_field, (uint64_t)value);\
-            return if_not_exact==IfNotExact_ReturnNULL?NULL : if_not_exact==IfNotExact_ReturnLower?last : first;        \
-        }                                                                                                               \
-        struct_type *mid = first + (last - first) / 2;                                                                  \
-        if (mid->struct_field == value)                                                                                 \
-            return (is_unique || mid == first || (mid->struct_field != (mid-1)->struct_field))                          \
-                ? mid /* found and element is known to be unique, or is verified to be the first */                     \
-                : func (first, mid-1, value, level+1); /* found, but it isn't first: continue searching for the first */\
-        return (mid->struct_field > value) ? func (first, mid-1, value, level+1) : func (mid+1, last, value, level+1);  \
-    }
-
-// declaration of binary search recursive function - array of integral (i.e. comparable) values, must be sorted ascending
-#define BINARY_SEARCHER_INTEGRAL(func, element_type,                                                                    \
-                                 is_unique,    /* if false, we return the first entry of requested value*/              \
-                                 if_not_exact) /* what to do if exact match is not found. Note: if IfNotExact_ReturnLower, and value is less than the first, will return pointer to an item before the first. Likewise with IfNotExact_ReturnHigher */ \
-    element_type *func (element_type *first, element_type *last, element_type value, int level)                         \
-    {                                                                                                                   \
-        if (first > last) /* not found */                                                                               \
-            return if_not_exact==IfNotExact_ReturnNULL?NULL : if_not_exact==IfNotExact_ReturnLower?last : first;        \
-        element_type *mid = first + (last - first) / 2;                                                                 \
-        if (*mid == value)                                                                                              \
-            return (is_unique || mid == first || (*mid != *(mid-1)))                                                    \
-                ? mid /* found and element is known to be unique, or is verified to be the first */                     \
-                : func (first, mid-1, value, level+1); /* found, but it isn't first: continue searching for the first */\
-        return (*mid > value) ? func (first, mid-1, value, level+1) : func (mid+1, last, value, level+1);               \
-    }
-
-// actually do a binary search. buf is required to be sorted in an ascending order of field
-#define binary_search(func, type, buf, value) ((buf).len ? func (B1ST(type,(buf)), BLST(type,(buf)), value, 0) : NULL)
-
 // note: second caller will skip block, even if first caller is still executing it
 #define DO_ONCE static bool do_once=0; if (!__atomic_test_and_set (&do_once, __ATOMIC_RELAXED))  
 
@@ -500,8 +481,8 @@ typedef enum { IfNotExact_ReturnLower, IfNotExact_ReturnHigher, IfNotExact_Retur
 #define STRlast(name,did_i)    ASSERT_LAST_TXT_VALID(CTX(did_i)); rom name = last_txt((VBlockP)(vb), did_i); uint32_t name##_len = CTX(did_i)->last_txt.len
 #define SETlast(name,did_i) ({ ASSERT_LAST_TXT_VALID(CTX(did_i));     name = last_txt((VBlockP)(vb), did_i);          name##_len = CTX(did_i)->last_txt.len; })
 
-#define STR_ARRAY(x,n) rom x##s[n]; uint32_t x##_lens[n]; uint32_t n_##x##s __attribute__((unused))
 #define STR_ARRAY_(x,n) rom x##s[n]; uint32_t x##_lens[n]
+#define STR_ARRAY(x,n) STR_ARRAY_(x,n); uint32_t n_##x##s __attribute__((unused))
 #define STRl_ARRAY(x,n,l) char x##s[n][l]; uint32_t x##_lens[n]
 #define eSTRl_ARRAY(x,n,l) extern char x##s[n][l]; extern uint32_t x##_lens[n]
 #define sSTRl_ARRAY(x,n,l) static char x##s[n][l]; static uint32_t x##_lens[n]
@@ -522,7 +503,6 @@ typedef enum { IfNotExact_ReturnLower, IfNotExact_ReturnHigher, IfNotExact_Retur
 #define STRasi(x,i) (n_##x##s-(i)), &x##s[i], &x##_lens[i] // subset strating from item i
 #define STRd(x)     x##_str, x##_len                   
 #define STRb(buf)   (buf).data, (buf).len                  
-#define STRbt(type,buf) (type *)(buf).data, (buf).len                  
 #define STRi(x,i)   x##s[i], x##_lens[i]             
 #define qSTRi(x,i)  x##s[i], &x##_lens[i]             
 #define pSTRa(x)    &x, &x##_len                      
@@ -542,6 +522,7 @@ typedef enum { IfNotExact_ReturnLower, IfNotExact_ReturnHigher, IfNotExact_Retur
 #define STRfN(x) (x), ((x)!=1 ? "s" : "") // to match format eg "%u file%s" - singular or plural 
 
 #define STRtxt(txtword) Btxt ((txtword).index), (txtword).len // used with TxtWord
+#define STRline(dl,fld) Btxt ((dl)->line_start + (dl)->fld.index), (dl)->fld.len // used with LineWord
 
 #define STRcpy(dst,src)    ({ if (src##_len) { memcpy(dst,src,src##_len) ; dst##_len = src##_len; } })
 #define STRcpyi(dst,i,src) ({ if (src##_len) { memcpy(dst##s[i],src,src##_len) ; dst##_lens[i] = src##_len; } })
@@ -606,7 +587,7 @@ typedef enum { QNONE   = -6,
 #define CONTAINER_FILTER_FUNC(func) bool func(VBlockP vb, DictId dict_id, ConstContainerP con, unsigned rep, int item, ReconType *reconstruct)
 
 // called after reconstruction of each repeat, IF Container.callback or Container.is_top_level is set
-#define CONTAINER_CALLBACK(func) void func(VBlockP vb, DictId dict_id, bool is_top_level, unsigned rep, ConstContainerP con, \
+#define CONTAINER_CALLBACK(func) void func(VBlockP vb_, DictId dict_id, bool is_top_level, unsigned rep, ConstContainerP con, \
                                            char *recon, int32_t recon_len, rom prefixes, uint32_t prefixes_len)
 
 // called after reconstruction of an item, if CI1_ITEM_CB is specified
@@ -716,8 +697,8 @@ extern rom report_support_if_unexpected (void);
 #define ASSERTNOTZEROn(n,name)               ASSERT ((n), "%s: %s=0", (name), #n)
 #define ASSERTNOTZERO(n)                     ASSERT ((n), "%s=0", #n)
 #define ASSERTISZERO(n)                      ASSERT (!(n), "%s!=0", #n)
-#define ASSERTINRANGE(n, min, after)         ASSERT (IN_RANGE((n), (min), (after)), "%s=%"PRId64" ∉ [%"PRId64",%"PRId64"]", #n, (int64_t)(n), (int64_t)(min), ((int64_t)(after))-1)
-#define ASSERTINRANGX(n, min, max)           ASSERTINRANGE((n), (min), (max)+1)
+#define ASSERTINRANGE(n, min, after)         ASSERT (IN_RANGE((n), (min), (after)), "%s=%"PRId64" ∉ [%"PRId64",%"PRId64")", #n, (int64_t)(n), (int64_t)(min), ((int64_t)(after)))
+#define ASSERTINRANGX(n, min, max)           ASSERT (IN_RANGX((n), (min), (max)),   "%s=%"PRId64" ∉ [%"PRId64",%"PRId64"]", #n, (int64_t)(n), (int64_t)(min), ((int64_t)(max)))
 
 #define ASSERTW(condition, format, ...)      ( { if (__builtin_expect (!(condition), 0) && !flag.quiet) { progress_newline(); fprintf (stderr, "\n%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n\n"); fflush (stderr); }} )
 #define WARN_IF(condition, format, ...)      ( { if (__builtin_expect ((condition), 0) && !flag.explicit_quiet) { progress_newline(); fprintf (stderr, "%s: WARNING: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n\n"); fflush (stderr); }} )
@@ -748,3 +729,4 @@ extern rom report_support_if_unexpected (void);
 #define ASSGOTO(condition, format, ...)      ( { if (__builtin_expect (!(condition), 0)) { progress_newline(); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); goto error; }} )
 #define ASSGOTO0(condition, string)          ASSGOTO ((condition), string "%s", "")
 
+extern rom main_input_filename (int file_i);

@@ -11,21 +11,22 @@
 #include "vblock.h"
 #include "libdeflate_1.19/libdeflate.h"
 
+uint8_t num_hash_bits; // ZIP: number of bits of seq_hash used for deep_hash_by_* (i.e. hash table is of size 2^num_hash_bits) (note: cannot be in z_file because bamass may span several z_files)
+
 #define MAX_AUTO_READ_LEN 20000 // not too long, so that the "longer reads" code path also gets some mileage
+
+uint64_t deep_qname_hash (VBlockP vb, QType q, STRp(qname), thool is_last, uint32_t *uncanonical_suffix_len) 
+{
+    if (is_last != unknown && segconf.is_interleaved && vb->line_i % 2) is_last = !is_last;
+
+    return qname_calc_hash (q, COMP_NONE, STRa(qname), is_last, true, CRC64, uncanonical_suffix_len); 
+}
 
 // hash of a SEQ field in the forward direction 
 // note: I tested crc32 after converting seq to 2-bit. No advantage - Almost identical linked-list-length histogram.
 uint32_t deep_seq_hash (VBlockP vb, STRp(seq), bool is_revcomp)
 {
     char short_read_data[MAX_AUTO_READ_LEN]; 
-
-    // note: segconf.sam_cropped_at is set if the SAM SEQ field has a maximum length that is the length of most segconf alignemtnts, 
-    // indicating that the reads might have been cropped. If segconf.crop==true, we calculate that hash up until the sam_cropped_at,
-    // in both FASTQ and SAM - so this should work regardless of whether the reads were truly cropped.
-    if (segconf.sam_cropped_at && seq_len > segconf.sam_cropped_at) {
-        if (is_revcomp) seq += (seq_len - segconf.sam_cropped_at);
-        seq_len = segconf.sam_cropped_at; 
-    }
 
     if (is_revcomp) {
         char *rc; 
@@ -56,12 +57,6 @@ uint32_t deep_seq_hash (VBlockP vb, STRp(seq), bool is_revcomp)
 uint32_t deep_qual_hash (VBlockP vb, STRp(qual), bool is_revcomp)
 {
     char short_read_data[MAX_AUTO_READ_LEN] = {};
-
-    // same as in deep_seq_hash()
-    if (segconf.sam_cropped_at && qual_len > segconf.sam_cropped_at) {
-        if (is_revcomp) qual += (qual_len - segconf.sam_cropped_at);
-        qual_len = segconf.sam_cropped_at; 
-    }
 
     if (is_revcomp) {
         char *rev; 

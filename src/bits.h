@@ -77,7 +77,7 @@
 // Round a number up to the nearest number that is a power of two (fixed by Divon)
 #define roundup2pow(x) ((__builtin_popcountll(x)==1) ? (x) : ((__typeof(x))1 << (64 - leading_zeros(x))))
 
-#define rot32(x,r) (((x)<<(r)) | ((x)>>(32-(r))))
+#define rot32(x,r) (((x)<<(r)) | ((x)>>(32-(r)))) // note: use __builtin_stdc_rotate_right instead
 #define rot64(x,r) (((x)<<(r)) | ((x)>>(64-(r))))
 
 // A bitmask is a value with the (nbits) lower bits set to 1, and the remaining bits set to 0
@@ -282,8 +282,7 @@ extern void bits_set_all(BitsP bits);
 // Set all bits in this array to 0
 extern void bits_clear_all(BitsP bits);
 
-extern void bits_bit_to_byte  (uint8_t *dst, ConstBitsP src_bits, uint64_t src_bit,  uint32_t num_bits);
-extern void bits_2bit_to_byte (uint8_t *dst, ConstBitsP src_bits, uint64_t base_i, uint32_t num_2bits);
+extern void bits_bit_to_byte (uint8_t *dst, ConstBitsP src_bits, uint64_t src_bit,  uint32_t num_bits);
 
 //
 // Get and set words (low level -- no bounds checking)
@@ -536,30 +535,36 @@ static inline uint32_t bits_hamming_distance (ConstBitsP bits_1, uint64_t index_
     return nonmatches; // this is the "hamming distance" between the two Bits' - number of non-matches
 }
 
-// iterator on bases (2 bits)
-#define BASE_ITER_INIT(bits, base_i, n_bases, is_fwd)       \
-    uint64_t _base_i = (is_fwd) ? (base_i) : ((base_i) + (n_bases) - 1); \
-    uint64_t *_word_p = &(bits)->words[_base_i >> 5];       \
-    uint64_t _word = *_word_p;                              \
-    int8_t _next_2bit = _base_i & 31;                       \
-    bool _is_fwd __attribute__((unused)) = (is_fwd); 
+// get the number of consecutive 1s at the start of a region (divon)
+static inline uint64_t bits_get_run (ConstBitsP bits, uint64_t start, uint64_t len) 
+{
+    if (!len) return 0;
+    
+    uint64_t word_index        = bitset64_wrd (start);
+    uint64_t last_word_index   = bitset64_wrd (start + len - 1);
+    word_offset_t start_offset = bitset64_idx (start);
+    word_offset_t after_offset = bitset64_idx (start + len);
 
-#define BASE_NEXT_FWD ({                                    \
-    if (_next_2bit == 0) _word = *_word_p;                  \
-    uint8_t base = (_word >> (_next_2bit * 2)) & 3;         \
-    if (++_next_2bit == 32) {                               \
-        _next_2bit = 0;                                     \
-        _word_p++;                                          \
-    }                                                       \
-    base; })
+    int64_t run = -start_offset; // negative, because the first bits of the first word that are not part of the region, will be 0s, but they are not part of the run
+    
+    for (const uint64_t *start_w = &bits->words[word_index], *last_w = &bits->words[last_word_index], *w = start_w;
+         w <= last_w; w++) {
+        
+        uint64_t word = ~ *w; // negate - easier to find 0s that 1s
 
-#define BASE_NEXT_REVCOMP ({                                \
-    if (_next_2bit == 31) _word = *_word_p;                 \
-    uint8_t base = 3 - ((_word >> (_next_2bit * 2)) & 3);   \
-    if (--_next_2bit == -1) {                               \
-        _next_2bit = 31;                                    \
-        _word_p--;                                          \
-    }                                                       \
-    base; })
+        // case: partial last word: set the first bit after to 1 to break the run 
+        if (w == last_w && after_offset/*offset is not 0*/)
+            word |= (uint64_t)1 << after_offset;
 
-#define BASE_NEXT (_is_fwd ? BASE_NEXT_FWD : BASE_NEXT_REVCOMP)
+        // case: first word: zero the first bits that are not part of the region - we already accounted for them by setting "run" to a negative number 
+        if (w == start_w) 
+            word &= ~bitmask64 (start_offset); 
+        
+        uint64_t zeros = trailing_zeros (word);
+        run += zeros;
+
+        if (zeros != 64) break; // reached a 1 
+    }
+
+    return run;
+}

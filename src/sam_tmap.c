@@ -13,12 +13,14 @@
 
 void sam_seg_tmap_XM_i (VBlockSAMP vb, int64_t xm, unsigned add_bytes)
 {
+    decl_ctx (OPTION_XM_i);
+
     // xm is predicted to be ref_consumed
     if (xm == vb->ref_consumed)                              
-        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_REF_CONSUMED }, 2, OPTION_XM_i, add_bytes);
+        seg_special0 (VB, SAM_SPECIAL_REF_CONSUMED, ctx, add_bytes);
         
     else
-        seg_integer (VB, CTX(OPTION_XM_i), xm, true, add_bytes);
+        seg_integer (VB, ctx, xm, true, add_bytes);
 }
 
 static int64_t xt_prediction (int64_t as)
@@ -33,7 +35,7 @@ void sam_seg_tmap_XT_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t xt, unsigned 
     if (has(AS_i)) {
         int64_t delta = xt - xt_prediction (dl->AS);
 
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_TMAP_XT, '1'/*method version*/ }, 3, ctx, add_bytes);
+        seg_special1 (VB, SAM_SPECIAL_TMAP_XT, '1'/*method version*/, ctx, add_bytes);
         seg_integer (VB, ctx, delta, false, 0);
     }
 

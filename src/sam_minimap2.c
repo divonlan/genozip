@@ -37,7 +37,7 @@ void sam_seg_s2_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t s2, unsigned add_b
 
 void sam_seg_cm_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t cm, unsigned add_bytes)
 {
-    if (segconf.running) {
+    if (segconf_running) {
         // calculate average SEQ.len / cm:i
         segconf.seq_len_to_cm += (cm > 0) ? (int)((float)dl->SEQ.len / (float)cm + 0.5) : 0;
         goto fallback;

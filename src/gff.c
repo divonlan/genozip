@@ -30,9 +30,8 @@ typedef struct VBlockGFF {
 
     // current line
     bool has_parent;  
-} VBlockGFF;
+} VBlockGFF, *VBlockGFFP;
 
-typedef VBlockGFF *VBlockGFFP;
 #define VB_GFF ((VBlockGFFP)vb)
 
 unsigned gff_vb_size (DataType dt) { return sizeof (VBlockGFF);  }
@@ -121,7 +120,7 @@ int32_t gff_unconsumed (VBlockP vb, uint32_t first_i)
             last_newline = j;
 
             if (j < last_i && *Btxt (j+1) == '>') {
-                if (!segconf.running) {
+                if (!segconf_running) {
                     // note: we don't run segconf on an embedded FASTA - we set the values here instead
                     segconf.has_embedded_fasta = true;
                     segconf.fasta_has_contigs  = false; // GFF3-embedded FASTA doesn't have contigs, because did=0 is reserved for GFF's SEQID
@@ -234,7 +233,7 @@ bool gff_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id)
 static bool gff_seg_dbxref_one (VBlockP vb, ContextP ctx, STRp(value), uint32_t repeat)
 {
     // if this file has no "Parent", we're better off segging as a simple ID
-    if (!segconf.has[ATTR_Parent] || segconf.running)
+    if (!segconf.has[ATTR_Parent] || segconf_running)
         seg_id_field (vb, ctx, STRa(value), false, value_len);  
 
     else {
@@ -343,7 +342,7 @@ static void gff_seg_exon_number (VBlockGFFP vb, ContextP ctx, STRp(exon_number))
     ASSSEG (str_get_int (STRa(exon_number), &en), "expecting exon_number=\"%.*s\" to be an integer", STRf(exon_number));
 
     if (en == exon_number_prediction (vb, ctx))
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, GFF_SPECIAL_exon_number }, 2, ctx, exon_number_len);
+        seg_special0 (VB, GFF_SPECIAL_exon_number, ctx, exon_number_len);
 
     else 
         seg_by_ctx (VB, STRa(exon_number), ctx, exon_number_len);
@@ -394,7 +393,7 @@ static inline DictId gff_seg_attr_subfield (VBlockGFFP vb, STRp(tag), STRp(value
 
     ContextP ctx = ctx_get_ctx_tag (vb, dict_id, tag, tag_len);
     
-    if (segconf.running)
+    if (segconf_running)
         segconf.has[ctx_get_ctx (VB, dict_id)->did_i]++;
 
     switch (dict_id.num) {
@@ -752,7 +751,7 @@ rom gff_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
     if (separator != '\n') { // "attributes" is an optional field per http://gmod.org/wiki/GFF3
         GET_LAST_ITEM (GFF_ATTRS); 
 
-        if (segconf.running && !segconf.gff_version)
+        if (segconf_running && !segconf.gff_version)
             gff_segconf_set_gff_version (vb, STRd(GFF_ATTRS));
 
         if (segconf.gff_version >= 3) gff_seg_gff3_attrs_field (vb, STRd(GFF_ATTRS));
@@ -794,6 +793,8 @@ CONTAINER_FILTER_FUNC (gff_piz_filter)
 
 CONTAINER_CALLBACK (gff_piz_container_cb)
 {
+    VBlockGFFP vb = (VBlockGFFP)vb_;
+
     if (is_top_level) 
-        SETlast (VB_GFF->prev_type, GFF_TYPE);
+        SETlast (vb->prev_type, GFF_TYPE);
 }

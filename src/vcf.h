@@ -31,19 +31,12 @@
 #pragma GENDICT VCF_FORMAT=DTYPE_FIELD=FORMAT
 #pragma GENDICT VCF_SAMPLES=DTYPE_FIELD=SAMPLES
 #pragma GENDICT VCF_SAMPLES_0=DTYPE_FIELD=S0AMPLES  // channel_i=0 ("no mate" channel) of SAMPLES multiplexing by mate
+#pragma GENDICT VCF_COPY_SAMPLE=DTYPE_FIELD=COPY_SMP// used to copy same sample in previous line
 #pragma GENDICT VCF_LOOKBACK=DTYPE_FIELD=LOOKBACK   // samples lookback
 #pragma GENDICT VCF_EOL=DTYPE_FIELD=EOL
 #pragma GENDICT VCF_TOPLEVEL=DTYPE_FIELD=TOPLEVEL   // must be called TOPLEVEL
-#pragma GENDICT VCF_oCHROM=DTYPE_FIELD=oCHROM     
-#pragma GENDICT VCF_oPOS=DTYPE_FIELD=oPOS
-#pragma GENDICT VCF_oREFALT=DTYPE_FIELD=oREFALT
-#pragma GENDICT VCF_oXSTRAND=DTYPE_FIELD=oXSTRAND
-#pragma GENDICT VCF_COORDS=DTYPE_FIELD=COORDS
-#pragma GENDICT VCF_oSTATUS=DTYPE_FIELD=o$TATUS
-#pragma GENDICT VCF_COPYPOS=DTYPE_FIELD=C0PYPOS
-#pragma GENDICT VCF_LIFT_REF=DTYPE_FIELD=LIFT_REF
-#pragma GENDICT VCF_COPYSTAT=DTYPE_FIELD=CoPYSTAT
-#pragma GENDICT VCF_TOPLUFT=DTYPE_FIELD=ToPLUFT
+#pragma GENDICT VCF_COORDS=DTYPE_FIELD=COORDS       // exist in files 12.0.0-15.0.41 even if not DVCF, and needed by vcf_piz_filter to reconstruct them
+#pragma GENDICT VCF_oSTATUS=DTYPE_FIELD=o$TATUS     // - " -
 #pragma GENDICT VCF_LINE_NUM=DTYPE_FIELD=LINE_NUM
 #pragma GENDICT VCF_MATE=DTYPE_FIELD=MATE           // mate of this variant (used by svaba) 
 #pragma GENDICT VCF_DEBUG_LINES=DTYPE_FIELD=DBGLINES// used by --debug-lines
@@ -93,6 +86,7 @@
 #pragma GENDICT FORMAT_GT_HT=DTYPE_2=@HT    
 #pragma GENDICT FORMAT_PBWT_RUNS=DTYPE_2=@1BWTRUN   // PBWT runs - MUST have a did_i higher that FORMAT_GT_HT's
 #pragma GENDICT FORMAT_PBWT_FGRC=DTYPE_2=@2BWTFGR   // PBWT foreground run count - MUST be right after FORMAT_PBWT_RUNS
+#pragma GENDICT FORMAT_GT_HT_BIG=DTYPE_2=@3HT_BIG   // Values of Alleles greater than NUM_SMALL_ALLELES
 
 // INFO fields
 #pragma GENDICT INFO_AC=DTYPE_1=AC                  // <ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">
@@ -205,6 +199,11 @@
 #pragma GENDICT INFO_REFLEN=DTYPE_1=REFLEN          // <ID=REFLEN,Number=1,Type=Integer,Description="Number of REF positions included in this record"> (observed in DRAGEN)
 #pragma GENDICT FORMAT_PE=DTYPE_2=PE                // <ID=PE,Number=2,Type=Integer,Description="Number of improperly paired end reads at start and stop breakpoints">
 #pragma GENDICT FORMAT_BC=DTYPE_2=BC                // <ID=BC,Number=1,Type=Integer,Description="Number of bins in the region">
+
+// DRAGEN trio fields
+#pragma GENDICT FORMAT_DN=DTYPE_2=DN                // <ID=DN,Number=1,Type=String,Description="Possible values are 'Inherited', 'DeNovo' or 'LowDQ'. Threshold for passing de novo call: SNPs: 0.05, INDELs: 0.02">
+#pragma GENDICT FORMAT_DPL=DTYPE_2=DPL              // <ID=DPL,Number=.,Type=Integer,Description="Normalized, Phred-scaled likelihoods used for DQ calculation">
+#pragma GENDICT FORMAT_DQ=DTYPE_2=DQ                // <ID=DQ,Number=1,Type=Float,Description="De novo quality">
 
 // Illumina IsaacVariantCaller (discontinued) : https://support.illumina.com/content/dam/illumina-support/documents/documentation/software_documentation/basespace/isaac-wgs-user-guide-15050954b.pdf
 // Also: https://github.com/sequencing/isaac_variant_caller
@@ -727,13 +726,22 @@
 #pragma GENDICT FORMAT_QA=DTYPE_2=QA                // <ID=QA,Number=A,Type=Integer,Description="Sum of quality of the alternate observations">
 #pragma GENDICT INFO_DPB=DTYPE_1=DPB                // <ID=DPB,Number=1,Type=Float,Description="Total read depth per bp at the locus; bases in reads overlapping / bases in haplotype">
 
+// local allele annotations (e.g. DRAGEN msVCF files)
+// see: https://help.dragen.illumina.com/product-guides/dragen-v4.3/dragen-dna-pipeline/small-variant-calling/joint-analysis
+// see: https://samtools.github.io/bcftools/howtos/scaling.html
+#pragma GENDICT FORMAT_LAD=DTYPE_2=LAD              // <ID=LAD,Number=.,Type=Integer,Description="Localized field: Allelic Depths">
+#pragma GENDICT FORMAT_LPL=DTYPE_2=LPL              // <ID=LPL,Number=.,Type=Integer,Description="Local normalized, Phred-scaled likelihoods for genotypes as in original gVCF (without allele reordering)">
+#pragma GENDICT FORMAT_LAA=DTYPE_2=LAA              // <ID=LAA,Number=.,Type=String,Description="Mapping of alt allele index from original gVCF to msVCF, comma-separated, 1-based (each value is the allele index in the msVCF)">
+#pragma GENDICT FORMAT_LAF=DTYPE_2=LAF              // <ID=LAF,Number=A,Type=Float,Description="Local allele fractions for alt alleles in the order listed">
+#pragma GENDICT FORMAT_QL=DTYPE_2=QL                // <ID=QL,Number=1,Type=Float,Description="Phred-scaled probability that the site has no variant in this sample (original gVCF QUAL)">
+
 #define VCF_MAX_PLOIDY 100  // set to a reasonable 100 to avoid memory allocation explosion in case of an error in the VCF file
 #if VCF_MAX_PLOIDY > 255
 #error "VCF_MAX_PLOIDY cannot go beyond 255 because Ploidy is uint8_t"
 #endif
 
-#define MAX_ALLELES 100 // REF (allele #0) + 99 ALTs (alleles # 1-99)
-typedef uint8_t Allele; // elements of ht_matrix: values 48->147 for allele 0 to 99, '*' for unused, '%', '-'
+#define NUM_SMALL_ALLELES 245 // REF (allele #0) + 244 ALTs (alleles # 1-244) (note: these map to ASCII 48->255,0->36 where ASCII 37-47 are reserved for special values). Important: this value is part of the file format (see codec_pbwt.c)
+typedef uint8_t Allele; // elements of ht_matrix: values 48->255,0->36 for allele 0 to 244, '*' for unused, '%', '-'
 
 // ZIP stuff
 extern void vcf_zip_initialize (void);
@@ -762,7 +770,7 @@ extern bool vcf_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id);
 // PIZ stuff
 extern void vcf_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header);
 extern bool vcf_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header);
-extern void vcf_piz_recon_init (VBlockP vb);
+extern void vcf_piz_vb_recon_init (VBlockP vb);
 extern IS_SKIP (vcf_piz_is_skip_section);
 extern CONTAINER_FILTER_FUNC (vcf_piz_filter);
 extern CONTAINER_CALLBACK (vcf_piz_container_cb);
@@ -783,20 +791,13 @@ extern unsigned vcf_vb_size (DataType dt);
 extern unsigned vcf_vb_zip_dl_size (void);
 extern void vcf_reset_line (VBlockP vb);
 
-// Liftover - INFO fields
-#define INFO_LUFT_NAME  "LUFT"
-#define INFO_PRIM_NAME  "PRIM"
-#define INFO_LREJ_NAME  "Lrej"
-#define INFO_PREJ_NAME  "Prej" // lower case so Prej doesn't have the same first 2 chars as PRIM (to not conflict in d2d_map)
-#define INFO_DVCF_LEN (sizeof INFO_LUFT_NAME - 1) // these 4 must be the same length
-
 #define VCF_CONTIG_FMT "##contig=<ID=%.*s,length=%"PRId64">"
 
 // Samples stuff
 extern void vcf_samples_add  (rom samples_str);
 
 // SPECIALs
-SPECIAL (VCF, 0,  main_REFALT,         vcf_piz_special_main_REFALT);
+SPECIAL (VCF, 0,  REFALT,              vcf_piz_special_REFALT);
 SPECIAL (VCF, 1,  FORMAT,              vcf_piz_special_FORMAT)
 SPECIAL (VCF, 2,  INFO_AC,             vcf_piz_special_INFO_AC);
 SPECIAL (VCF, 3,  SVLEN,               vcf_piz_special_SVLEN);
@@ -839,10 +840,10 @@ SPECIAL (VCF, 39, QD,                  vcf_piz_special_QD);                     
 SPECIAL (VCF, 40, MUX_BY_VARTYPE,      vcf_piz_special_MUX_BY_VARTYPE);           // added v15.0.0
 SPECIAL (VCF, 41, ICNT,                vcf_piz_special_ICNT);                     // added v15.0.0
 SPECIAL (VCF, 42, SPL,                 vcf_piz_special_SPL);                      // added v15.0.0
-SPECIAL (VCF, 43, MUX_BY_SAMPLE_I,     vcf_piz_special_MUX_BY_SAMPLE_I);          // added v15.0.0
+SPECIAL (VCF, 43, MUX_BY_IS_SAMPLE_0,  vcf_piz_special_MUX_BY_IS_SAMPLE_0);       // added v15.0.0
 SPECIAL (VCF, 44, IGT,                 vcf_piz_special_IGT);                      // added v15.0.0
 SPECIAL (VCF, 45, MUX_BY_IGT_PHASE,    vcf_piz_special_MUX_BY_IGT_PHASE);         // added v15.0.0
-SPECIAL (VCF, 46, main_REFALT_DEL,     vcf_piz_special_main_REFALT_DEL);          // added v15.0.0
+SPECIAL (VCF, 46, REFALT_DEL,          vcf_piz_special_REFALT_DEL);               // added v15.0.0
 SPECIAL (VCF, 47, mutation,            vcf_piz_special_mutation);                 // added v15.0.8
 SPECIAL (VCF, 48, SO_TERM,             vcf_piz_special_SO_TERM);                  // added v15.0.8
 SPECIAL (VCF, 49, MMURI,               vcf_piz_special_MMURI);                    // added v15.0.8
@@ -863,7 +864,7 @@ SPECIAL (VCF, 63, PLATYPUS_HP,         vcf_piz_special_PLATYPUS_HP);            
 SPECIAL (VCF, 64, INFO_MLEAF,          vcf_piz_special_INFO_MLEAF);               // added v15.0.36
 SPECIAL (VCF, 65, FORMAT_AD0,          vcf_piz_special_FORMAT_AD0);               // added v15.0.37
 SPECIAL (VCF, 66, MUX_FORMAT_DP,       vcf_piz_special_MUX_FORMAT_DP);            // added v15.0.37
-//SPECIAL (VCF, 67, AN,                vcf_piz_special_INFO_AN);                  // In the code from v15.0.37-60, but VCF_SPECIAL_AN was never segged, so we can reuse its number for QR_QA
+//SPECIAL (VCF, 67, AN,                vcf_piz_special_INFO_AN);                  // In the code from v15.0.37-60, but VCF_SPECIAL_AN was never segged, so we reused its number for QR_QA
 SPECIAL (VCF, 67, QR_QA,               vcf_piz_special_QR_QA);                    // added v15.0.61
 SPECIAL (VCF, 68, DEFER,               vcf_piz_special_DEFER);                    // added v15.0.41
 SPECIAL (VCF, 69, RPA,                 vcf_piz_special_RPA);                      // added v15.0.41
@@ -889,6 +890,9 @@ SPECIAL (VCF, 88, PLUS,                piz_special_PLUS);                       
 SPECIAL (VCF, 89, ARRAY_LEN_OF,        piz_special_ARRAY_LEN_OF);                 // added v15.0.58
 SPECIAL (VCF, 90, DIVIDE_BY,           piz_special_DIVIDE_BY);                    // added v15.0.58
 SPECIAL (VCF, 91, GMAF_AF,             vcf_piz_special_GMAF_AF);                  // added v15.0.58
+SPECIAL (VCF, 92, COPY_SAMPLE,         vcf_piz_special_COPY_SAMPLE);              // added v15.0.69
+SPECIAL (VCF, 93, LAA,                 vcf_piz_special_LAA);                      // added v15.0.69
+SPECIAL (VCF, 94, MUX_BY_PREV_COPIED,  vcf_piz_special_MUX_BY_PREV_COPIED);       // added v15.0.69
 
 #define VCF_DICT_ID_ALIASES                                                 \
     /*        type        alias                   maps to               */  \

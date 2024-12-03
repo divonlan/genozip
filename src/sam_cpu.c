@@ -17,11 +17,13 @@ static rom xl_prediction (bool line_has_XM)
 
 void sam_seg_CPU_XL_Z (VBlockSAMP vb, STRp(xl), unsigned add_bytes)
 {
+    decl_ctx (OPTION_XL_Z);
+
     if (str_issame_(STRa(xl), xl_prediction (has(XM_i)), 3))
-        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_CPU_XL }, 2, OPTION_XL_Z, add_bytes);
+        seg_special0 (VB, SAM_SPECIAL_CPU_XL, ctx, add_bytes);
 
     else 
-        seg_by_did (VB, STRa(xl), OPTION_XL_Z, add_bytes);
+        seg_by_ctx (VB, STRa(xl), ctx, add_bytes);
 }
 
 // since 15.0.65

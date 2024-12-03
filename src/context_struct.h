@@ -11,6 +11,7 @@
 #include "buffer.h"
 #include "mutex.h"
 #include "sections.h"
+#include "segconf.h"
 
 typedef struct { // initialize with ctx_init_iterator()
     bytes next_b250;           // Pointer into b250 of the next b250 to be read (must be initialized to NULL)
@@ -69,19 +70,26 @@ typedef struct Context {
     Codec qual_codec;          // ZIP zctx: QUAL codec selected in codec_assign_best_qual_codec
     };
     bool z_data_exists;        // ZIP/PIZ: z_file has SEC_DICT, SEC_B250 and/or SEC_LOCAL sections of this context (not necessarily loaded)
-    bool is_initialized;       // ZIP / PIZ: context-specific initialization has been done
+    bool is_initialized;       // ZIP/PIZ: context-specific initialization has been done
     
     uint8_t nothing_char;      // ZIP/PIZ: if non-zero, if local integer == max_int (for its ltype), nothing_char will be reconstructed instead. In PIZ, 0xff means fallback to pre-15.0.39
 
     #define FIRST_BUFFER_IN_Context dict
-    Buffer dict;               // tab-delimited list of all unique snips - in this VB that don't exist in ol_dict
+    Buffer dict;               // ZIP/PIZ: tab-delimited list of all unique snips - in this VB that don't exist in ol_dict
     Buffer b250;               // ZIP: During Seg, .data contains variable-length indices into context->nodes. .count contains the number 
                                //      of b250s (still >1 if multiple b250s collapse with all-the-same) and .len contains the length in bytes.
                                //      In b250_zip_generate_section the "node indices" are converted into "word indices" - indices into the future context->word_list.
                                // PIZ: .data contains the word indices (i.e. indices into word_list) in base-250
     Buffer local;              // ZIP/PIZ vctx: Data private to this VB that is not in the dictionary
                                // ZIP zctx - only .len - number of fields of this type segged in the file (for stats)
-    Buffer b250R1;             // ZIP/PIZ: used by PAIR_R2 FASTQ VBs (inc. in Deep SAM), for paired contexts: PAIR_R1 b250 data from corresponding VB (in PIZ: only if CTX_PAIR_LOAD)    
+    
+    // ZIP/PIZ: context specific buffer #0
+    union {
+    Buffer b250R1;             // ZIP/PIZ: FASTQ/SAM used by PAIR_R2 FASTQ VBs (inc. in Deep SAM), for paired contexts: PAIR_R1 b250 data from corresponding VB (in PIZ: only if CTX_PAIR_LOAD)    
+    Buffer alts;               // ZIP/PIZ: VCF: VCF_REFALT
+    Buffer last_samples;       // ZIP/PIZ: VCF: VCF_SAMPLES: array of length samples_ctx->format_mapper_buf.len x vcf_num_samples, entry [format_node_i,sample_i] is TxtWord of last sample sample_i (could be this line or previous line with FORMAT type format_node_i)
+    Buffer sample_copied;      // ZIP/PIZ: VCF: VCF_COPY_SAMPLE: array of length samples_ctx->format_mapper_buf.len x vcf_num_samples of bool, true if last sample_i was copied
+    };
 
     Buffer counts;             // ZIP/PIZ: counts of snips (VB:uint32_t, z_file:uint64_t)
                                // ZIP: counts.param is a context-specific global counter that gets accumulated in zctx during merge (e.g. OPTION_SA_CIGAR)
@@ -108,13 +116,16 @@ typedef struct Context {
         Buffer longr_state;        // ZIP: Used by LONGR codec on QUAL contexts
         Buffer qual_line;          // ZIP: used by DOMQ codec on *_DOMQRUNS contexts
         Buffer normalize_buf;      // ZIP: used by DOMQ codec on QUAL contexts
+        
         // SAM/BAM
         Buffer qname_hash;         // ZIP: vctx: SAM_QNAME: each entry i contains a line number for which the hash(qname)=i (or -1). prm8[0] is log2(len) (i.e., the number of bits)
         Buffer interlaced;         // ZIP: SAM: used to interlace BD/BI and iq/dq/sq line data
         Buffer mi_history;         // ZIP: SAM: used by OPTION_MI_Z in Ultima
         Buffer XG;                 // ZIP/PIZ: OPTION_XG_Z in bsseeker2: XG:Z field with the underscores removed. ZIP: revcomped if FLAG.revcomp. PIZ: as reconstructed when peeking during XM:Z special recon
         Buffer deep_nonref;        // PIZ: SAM: SAM_NONREF in Deep: either an allocated buffer or partial overlay over .local. revcomp'ed of FLAG.revcomp
-        Buffer deep_textual_cigar; // PIZ: SAM: SAM_CIGAR in Deep: either an allocated buffer or overlay over vb->textual_cigar. reversed if FLAG.revcomp
+        Buffer deep_cigar;         // PIZ: SAM: Deep: SAM_CIGAR in Deep: reversed if FLAG.revcomp
+        Buffer bamass_cigar;       // ZIP: FASTQ: vctx CIGAR: used in bamass (binary format, no H,P,X,=, revcomped if needed)
+
         // VCF
         Buffer format_mapper_buf;  // ZIP: vctx: VCF_SAMPLES: an array of type Container - one entry per entry in CTX(VCF_FORMAT)->nodes   
         Buffer last_format;        // ZIP: vctx: VCF_FORMAT: cache previous line's FORMAT string
@@ -133,9 +144,11 @@ typedef struct Context {
         Buffer localR1;            // ZIP/PIZ vctx: PAIR_R2 FASTQ VBs (inc. in Deep SAM): for paired contexts: PAIR_R1 local data from corresponding VB (in PIZ: only if fastq_use_pair_assisted). Note: contexts with containers are always no_stons, so they have no local - therefore no issue with union conflict.
         // VCF
         Buffer format_contexts;    // ZIP: vctx: VCF_SAMPLES: an array of format_mapper_buf.len of ContextPBlock
+        Buffer sf_i;               // ZIP: vctx: VCF_FORMAT: array of MAX_DICTS x uint16_t : position of this context within this line's FORMAT ; NO_SF_I (0xffff) if context is not present in this line
         Buffer insertion;          // PIZ: vctx: INFO_SF: inserted INFO fields reconstructed after samples
         // SAM/BAM
-        Buffer huffman;            // ZIP/PIZ zctx: QNAME, QUAL: (except segconf): immutable HuffmanCodes for QNAME (used for Sag in ZIP/PIZ and for Deep in PIZ) ; ZIP SAM segconf: HuffmanChewer ; ZIP SAM vctx, we use .comp_len (param)
+        Buffer huffman;            // ZIP/PIZ zctx: QNAME, QUAL, CIGAR, SA_CIGAR, Solo contexts
+        Buffer piz_is_set;         // vctx: SQBITMAP: PIZ in SAM/BAM ; ZIP in FASTQ-bamass: 
     };
                 
     // ------------------------------------------------------------------------------------------------
@@ -153,8 +166,9 @@ typedef struct Context {
     TxtWord last_txt;              // ZIP/PIZ: index/len into vb->txt_data of last seg/reconstruction (always in PIZ, sometimes in Seg) (introduced 10.0.5)
 
     #define LAST_LINE_I_INIT -0x7fffffff
-    LineIType last_line_i;         // ZIP/PIZ: =vb->line_i this line, so far, generated a valid last_value that can be used by downstream fields 
-                                   //          =(-vb->line_i-1) means ctx encountered in this line (so far) but last_value was not set 
+    LineIType last_line_i;         // ZIP/PIZ: =-1 means ctx not encountered in this line
+                                   //          =vb->line_i this line, so far, generated a valid last_value that can be used by downstream fields 
+                                   //          =(-vb->line_i-2) means ctx encountered in this line (so far) but last_value was not set 
     int32_t last_sample_i;         // ZIP/PIZ: Current sample in VCF/FORMAT ; must be set to 0 if not VCF/FORMAT
     
     union { // 64 bit
@@ -164,7 +178,6 @@ typedef struct Context {
         IdType id_type;            // ZIP: type of ID in fields segged with seg_id_field        
 
         // SAM / BAM
-        uint32_t qual_longest_theoretical_comp_len; // SAM_QUAL PIZ: if using QUAL.huffman for in-memory compression of gencomp / Deep QUAL: longest theoretical compressed length of the longest QUAL string in this VB
         bool last_is_new;          // SAM_QNAME: ZIP: used in segconf.running
         struct {
             bool mate_copied_exactly;  // SAM_QNAME: PIZ (consumed for PRIM preprocessing by sam_load_groups_add_qname)
@@ -183,9 +196,11 @@ typedef struct Context {
         } tp;
 
         // VCF
+        uint32_t num_samples_copied;// ZIP: VCF_COPY_SAMPLE
         struct {                    // ZIP/PIZ: FORMAT_GT 
             Ploidy prev_ploidy, actual_last_ploidy; 
             char prev_phase; 
+            uint8_t ht[2];          // ZIP: first 2 haplotypes (up to NUM_SMALL_ALLELES)
         } gt; 
         struct {                    // ZIP/PIZ: FORMAT_GT_HT
             uint32_t use_HT_matrix : 1;  // ZIP: GT data from this line is placed in the HT matrix
@@ -202,10 +217,10 @@ typedef struct Context {
         } sf;    
         thool line_has_RGQ;         // ZIP/PIZ: FORMAT_RGQ : GVCF
         struct {                    // 
-            int32_t sum_format_dp;  //   ZIP/PIZ: sum of FORMAT/DP of samples in this line ('.' counts as 0).
+            int32_t sum_format_dp;  // ZIP/PIZ: INFO_DP: sum of FORMAT/DP of samples in this line ('.' counts as 0).
         } dp;
         struct {
-            uint32_t count_ht;      // ZIP/PIZ: INFO/AN: sum of non-. haplotypes in FORMAT/GT, used to calculate INFO/AN
+            uint32_t count_ht;      // ZIP/PIZ: INFO_AN: sum of non-. haplotypes in FORMAT/GT, used to calculate INFO/AN
         } an;
         struct {                    // ZIP/PIZ: INFO_QD:  
             uint32_t sum_dp_with_dosage; // sum of FORMAT/DP of samples in this line and dosage >= 1
@@ -225,7 +240,9 @@ typedef struct Context {
         ContextP other_ctx;         // ZIP: used by FORMAT/RO, FORMAT/AO
 
         // FASTQ
-        packed_enum { PAIR1_ALIGNED_UNKNOWN=-1, PAIR1_NOT_ALIGNED=0, PAIR1_ALIGNED=1 } r1_is_aligned;  // FASTQ_SQBITMAP:  PIZ: used when reconstructing pair-2
+        packed_enum { PAIR1_ALIGNED_UNKNOWN=-1, PAIR1_NOT_ALIGNED=0, PAIR1_ALIGNED=1 } r1_is_aligned;  // FASTQ_SQBITMAP: PIZ: used when reconstructing pair-2
+        BamAssTrimCigarTreatment bamass_trims; // ZIP FASTQ_CIGAR: bamass: set to segconf.bamass_trims at VB init. 
+        
         TxtWord last_line1;         // ZIP segconf QNAME: entire line1
     };
 
@@ -265,7 +282,7 @@ typedef struct Context {
     bool lcodec_hard_coded;    // ZIP: zctx/vctx: lcodec is hard-coded and should not be reassigned
     bool is_stats_parent;      // other contexts have this context in st_did_i
     StoreType seg_to_local;    // ZIP: zctx/vctx: seg_array: this Int/Float field should be segged to local 
-    
+
     union {
         struct {
             packed_enum { NOT_IN_HEADER=0, NUMBER_R=-1, NUMBER_A=-2, NUMBER_G=-3, NUMBER_VAR=-4, NUMBER_LARGE=-5/*Number∉[1,127]*/ } Number; // contains a value 1->127 or one of enumerated values
@@ -308,7 +325,6 @@ typedef struct Context {
     bool b250_compressed;      // ZIP: VB: b250 has been compressed
     bool nodes_converted;      // ZIP vctx: nodes have been converted in ctx_merge_in_one_vctx from index/len to word_index
     bool dict_merged;          // ZIP vctx: dict has been merged into zctx
-    int16_t sf_i;              // ZIP VCF sample fields: 0-based index of this context within the FORMAT of this line (only for fields defined in vcf.h); -1 if not context present in this line
     int tag_i;                 // ZIP VCF: dual-coordinates VB only: index into vb->tags for tag renaming 
     WordIndex last_snip_ni;    // ZIP
     }; // ------ End of ZIP-only fields - vctx only ------
@@ -355,10 +371,10 @@ typedef struct Context {
     Did other_did_i;           // PIZ: cache the other context needed for reconstructing this one
     SectionType pair_assist_type; // PIZ FASTQ R2: SEC_LOCAL, SEC_B250 is pair-assist, SEC_NONE if not.
     bool is_ctx_alias;         // PIZ: context is an alias            
-    bool local_uncompressed;   // PIZ: VB: local has been uncompressed
-    bool b250_uncompressed;    // PIZ: VB: b250 has been uncompressed
+    bool local_uncompressed;   // PIZ: vctx: local has been uncompressed
+    bool b250_uncompressed;    // PIZ: vctx: b250 has been uncompressed
     bool empty_lookup_ok;      // PIZ: 
-    bool is_loaded;            // PIZ: either dict or local or b250 are loaded (not skipped) so context can be reconstructed
+    bool is_loaded;            // PIZ: vctx/zctx: vctx: either dict or local or b250 are loaded (not skipped) so context can be reconstructed ; zctx: dict is loaded
     bool semaphore;            // valid within the context of reconstructing a single line. MUST be reset ahead of completing the line.
     SpecialResult special_res; // PIZ: set by a SPECIAL function in case of result for which the reconstructor needs to take further action
     }; // ------ End of PIZ-only fields ------- 

@@ -96,7 +96,7 @@ void vcf_seg_pbsv_MATEID (VBlockVCFP vb, ContextP ctx, STRp(mate_id))
             str_issame_(STRi(id_item, 0), STRi(mate_id_item,1)) &&
             str_issame_(STRi(id_item, 1), STRi(mate_id_item,0))) {
 
-            seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_PBSV_MATEID }, 2, ctx, mate_id_len);
+            seg_special0 (VB, VCF_SPECIAL_PBSV_MATEID, ctx, mate_id_len);
             return;
         }
     }
@@ -160,7 +160,7 @@ static bool vcf_seg_pbsv_ID_BND (VBlockVCFP vb, ContextP ctx, STRp(bnd))
         !str_get_int (STRi(hers,1), &her_pos) || her_pos != vb->mate_pos)                // her pos matches mate pos from ALT
         return false;
 
-    seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_PBSV_ID_BND }, 2, ctx, bnd_len);
+    seg_special0 (VB, VCF_SPECIAL_PBSV_ID_BND, ctx, bnd_len);
 
     return true;
 } 
@@ -189,18 +189,18 @@ void vcf_seg_pbsv_ID (VBlockVCFP vb, STRp(id))
         vcf_seg_BND_mate (vb, STRa(id), STRa(mate_id), crc32 (0, STRa(mate_id))); 
     
     if (vcf_has_mate)
-        seg_by_did (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPY_MATE }, 2, VCF_ID, id_len + 1); // +1 for \t
+        seg_special0 (VB, VCF_SPECIAL_COPY_MATE, CTX(VCF_ID), id_len + 1); // +1 for \t
 
     else {
         decl_pbsv_ID_ctxs;
     
         // seg I0D - the vartype component of e.g. pbsv.DEL.29378
         STR(vt_item);
-        VariantType vt = vb->var_types[0];
+        VariantType vt = ALTi(0)->var_type;
 
         // note: special case: DUP is different than SVTYPE string, and has two options
-        if ((ALT0(SYM_DUP) && (vt_item = match_vt (vt, pSTRa(id), "SPLIT.DUP", 9, "INS.DUP", 7, &vt_item_len))) ||
-            (!ALT0(SYM_DUP) && svtype_by_vt[vt] && (vt_item = match_vt (vt, pSTRa(id), svtype_by_vt[vt], strlen (svtype_by_vt[vt]), 0, 0, &vt_item_len)))) {
+        if ((VT0(SYM_DUP) && (vt_item = match_vt (vt, pSTRa(id), "SPLIT.DUP", 9, "INS.DUP", 7, &vt_item_len))) ||
+            (!VT0(SYM_DUP) && svtype_by_vt[vt] && (vt_item = match_vt (vt, pSTRa(id), svtype_by_vt[vt], strlen (svtype_by_vt[vt]), 0, 0, &vt_item_len)))) {
 
             ContextP channel_ctx = 
                 seg_mux_get_channel_ctx (VB, id0_ctx->did_i, (MultiplexerP)&vb->mux_pbsv_I0D, i0d_mux_channel[vt]);
@@ -219,7 +219,7 @@ void vcf_seg_pbsv_ID (VBlockVCFP vb, STRp(id))
         ContextP channel_ctx = 
             seg_mux_get_channel_ctx (VB, id1_ctx->did_i, (MultiplexerP)&vb->mux_pbsv_I1D, i1d_mux_channel[vt]);
 
-        if (ALT0(BND)) {
+        if (VT0(BND)) {
             if (!vcf_seg_pbsv_ID_BND (vb, channel_ctx, STRa(id)))
                 goto ID1_fallback;
         }
@@ -235,7 +235,7 @@ void vcf_seg_pbsv_ID (VBlockVCFP vb, STRp(id))
 
         seg_by_ctx (VB, STRa(vb->mux_pbsv_I1D.snip), id1_ctx, 0); // I1D de-multiplexer
 
-        seg_by_did (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_DEFER }, 2, VCF_ID, 7); // "pbsv" + 2 '.' separators + \t
+        seg_special0 (VB, VCF_SPECIAL_DEFER, CTX(VCF_ID), 7); // "pbsv" + 2 '.' separators + \t
     }
 
     return;
@@ -246,7 +246,8 @@ fallback:
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_DEMUX_BY_VARTYPE)
 {
-    return reconstruct_demultiplex (vb, ctx, STRa(snip), (ctx->dict_id.num == _ID0 ? i0d_mux_channel : i1d_mux_channel)[VB_VCF->var_types[0]], new_value, reconstruct);
+    int channel_i = ALTi(0)->var_type;
+    return reconstruct_demultiplex (vb, ctx, STRa(snip), (ctx->dict_id.num == _ID0 ? i0d_mux_channel : i1d_mux_channel)[channel_i], new_value, reconstruct);
 }
 
 // called from vcf_piz_refalt_parse

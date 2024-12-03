@@ -51,8 +51,8 @@ uint16_t buf_decrement_user_count (BufferP buf)
 
 #define buf_unlock_and_decrement_lock_links                                             \
     if (spinlock) {                                                                     \
-        ASSERT ((buf)->spinlock->link_count, "spinlock->link_count is 0 for %s", buf->name);            \
-        if (__atomic_sub_fetch (&spinlock->link_count, 1, __ATOMIC_RELAXED) == 0) {\
+        ASSERT ((buf)->spinlock->link_count, "spinlock->link_count is 0 for %s", buf->name); \
+        if (decrement_relaxed (spinlock->link_count) == 0) {                            \
             FREE ((buf)->spinlock);                                                     \
             (buf)->shared = false;                                                      \
         }                                                                               \
@@ -64,7 +64,7 @@ uint16_t buf_decrement_user_count (BufferP buf)
 #define reset_memory_pointer(buf)                                                       \
     /* careful to make sure that instructions are not re-ordered in either direction */ \
     char *old_memory __attribute__((unused)) = (buf)->memory;                           \
-    __atomic_store_n (&(buf)->memory, (void*)0, __ATOMIC_RELEASE);                      \
+    store_release ((buf)->memory, (void*)0);                                            \
     __atomic_thread_fence (__ATOMIC_ACQ_REL); 
 
 void buf_initialize()
@@ -124,7 +124,7 @@ static inline void no_integrity (ConstBufferP buf, FUNCLINE, rom buf_func)
             func, code_line, buf_func, version_str().s, license_get_number().s, buf_desc(buf).s, str_to_printable_(buf->memory + buf->size + sizeof(uint64_t), 8).s);
     
     bool corruption_detected = buflist_test_overflows (buf->vb, buf_func);
-    if (corruption_detected) buflist_test_overflows_all_other_vb (buf->vb, buf_func, true); // corruption not from this VB - test the others
+    if (corruption_detected) buflist_test_overflows_all_other_vb (buf->vb, buf_func, true, false); // corruption not from this VB - test the others
     exit_on_error (true);
 }
 
@@ -195,7 +195,7 @@ static void buf_init (BufferP buf, char *memory, uint64_t size, FUNCLINE, rom na
 
     // only when we're done initializing - we update memory - that buf_test_overflow running concurrently doesn't test
     // half-initialized buffers
-    __atomic_store_n (&buf->memory, memory, __ATOMIC_RELEASE); 
+    store_release (buf->memory, memory); 
 }
 
 // allocates or enlarges buffer
@@ -322,8 +322,13 @@ done:
 }
 
 // shrink buffer down to size, returning memory to libc (but not to kernel)
+// main thread only, but just because of the COPY_TIMER_EVB
 void buf_trim_do (BufferP buf, uint64_t size, FUNCLINE)
 {
+    START_TIMER;
+
+    size = ROUNDUP8 (size); // buffer size is required to be a multiple of 8 
+
     if (size >= buf->size || !buf->memory) return; // nothing to do - size if already smaller
 
     ASSERT (!buf->shared, "%s:%u trimming is not currently supported on shared buffers: buf=%s", func, code_line, buf_desc(buf).s);
@@ -338,6 +343,8 @@ void buf_trim_do (BufferP buf, uint64_t size, FUNCLINE)
     buf_init (buf, new_memory, size, func, code_line, buf->name);
 
     buf_unlock;
+
+    COPY_TIMER_EVB (buf_trim_do);
 }
 
 void buf_set_shared (BufferP buf)
@@ -354,7 +361,7 @@ void buf_remove_spinlock (BufferP buf)
 
     ASSERT (!buf->memory, "cannot remove spinlock: buf has memory: %s", buf_desc(buf).s);
 
-    if (!__atomic_sub_fetch (&buf->spinlock->link_count, 1, __ATOMIC_RELAXED))
+    if (!decrement_relaxed (buf->spinlock->link_count))
         FREE (buf->spinlock); // we were the only uses of the spinlock
 
     buf->shared = buf->promiscuous = false;
@@ -418,12 +425,12 @@ void buf_overlay_do (VBlockP vb,
     top_buf->data = bottom_buf->data + start_in_bottom;
 
     // increment spinlock users and memory users (note: spinlock link cou t >= memory_users bc a spinlock can be used by multiple memories in case of a realloc-induced split)
-    __atomic_fetch_add (&bottom_buf->spinlock->link_count, 1, __ATOMIC_RELAXED);    
+    increment_relaxed (bottom_buf->spinlock->link_count);    
 
     buf_increment_user_count (bottom_buf);
     
     // final step
-    __atomic_store_n (&top_buf->memory, bottom_buf->memory, __ATOMIC_RELEASE); 
+    store_release (top_buf->memory, bottom_buf->memory); 
 
     buf_unlock;
 

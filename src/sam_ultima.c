@@ -40,14 +40,12 @@ void sam_ultima_seg_initialize (VBlockSAMP vb)
     if (segconf.sam_has_ultima_t0) {
         if (IS_DEPN(vb))
             CTX(OPTION_t0_Z)->ltype = LT_BLOB; // see bug 922
-        else {
+        else 
             codec_t0_comp_init (VB);
-            vb->codec_requires_seq = true;
-        } 
     } else
         CTX(OPTION_t0_Z)->no_callback = true; // seg t0 normally
 
-    if (segconf.running) {
+    if (segconf_running) {
         segconf.sam_has_ultima_t0 = true; // optimistic
     }
 }
@@ -213,7 +211,7 @@ void sam_seg_ultima_bi (VBlockSAMP vb, STRp(bi_str), unsigned add_bytes)
     int64_t bi;
 
     if (str_get_int (STRa(bi_str), &bi) && (bi == sam_ultima_bi_prediction (VB))) 
-        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_bi }, 2, OPTION_bi_Z, add_bytes);
+        seg_special0 (VB, SAM_SPECIAL_bi, CTX(OPTION_bi_Z), add_bytes);
 
     else
         seg_integer_or_not (VB, CTX(OPTION_bi_Z), STRa(bi_str), add_bytes); 
@@ -348,8 +346,8 @@ void sam_seg_ultima_MI (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(mi), unsigned ad
     ARRAY (TxtWord, mi_history, ctx->mi_history);
 
     if (!dl->FLAG.duplicate) {
-        if (str_issame_(STRa(mi), STRtxt(dl->QNAME)))
-            seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_ULTIMA_mi, '0' }, 3, ctx, add_bytes);
+        if (str_issame_(STRa(mi), STRqname(dl)))
+            seg_special1 (VB, SAM_SPECIAL_ULTIMA_mi, '0', ctx, add_bytes);
         else
             goto fallback;
     }
@@ -358,7 +356,7 @@ void sam_seg_ultima_MI (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(mi), unsigned ad
         // search for a non-duplicaete or duplicate in the same MI-group that appears before
         int i=0; for (; i < MI_HISTORY_LEN; i++)
             if (str_issame_(STRa(mi), STRtxt(mi_history[i]))) {
-                seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_ULTIMA_mi, '0' + i }, 3, ctx, add_bytes);
+                seg_special1 (VB, SAM_SPECIAL_ULTIMA_mi, '0' + i, ctx, add_bytes);
                 break;
             }
 

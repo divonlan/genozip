@@ -29,10 +29,10 @@
 
 bool codec_oq_comp_init (VBlockP vb)
 {
-    // verify that OQ can be segged against QUAL
+    // verify that OQ can be segged against QUAL (i.e. QUAL exists iff OQ exists)
     for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {
         ZipDataLineSAMP dl = DATA_LINE (line_i);
-        if (dl->OQ.len && dl->OQ.len != dl->QUAL.len) return false;
+        if (dl->OQ && dl->SEQ.len != dl->QUAL.len) return false;
     }
 
     decl_ctx (OPTION_OQ_Z);
@@ -88,9 +88,10 @@ COMPRESS (codec_oq_compress)
     for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {   
         ZipDataLineSAMP dl = DATA_LINE (line_i);
         txtSTR (qual, dl->QUAL);
-        txtSTR (oq, dl->OQ);
+        rom oq = Btxt(dl->OQ);
+        uint32_t oq_len = dl->SEQ.len;
 
-        if (!oq_len) continue; // note: oq_len=0 can either mean no OQ field in this line, or empty OP field exists, and SEQ=*. sam_seg_other_qual enforces OP_len==seq_len
+        if (!oq_len) continue; // note: oq_len=0 can either mean no OQ field in this line, or empty OQ field exists (in which case SEQ=*, enforced by sam_seg_other_qual)
 
         for (uint32_t i=0; i < qual_len; i++) 
             *next[(uint8_t)qual[i] - 33]++ = oq[i]; // qual[i] is always in SAM terms (even in BAM), but the channels start from 0 (i.e. in BAM terms)

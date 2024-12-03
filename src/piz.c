@@ -39,9 +39,9 @@ TRANSLATOR_FUNC (piz_obsolete_translator)
 PizDisCoords piz_dis_coords (VBlockP vb)
 {
     PizDisCoords out = {};
-    if (DTF(chrom) == DID_NONE || !ctx_has_value (vb, DTF(chrom))) return out;
+    if (DTF(chrom) == DID_NONE || !ctx_has_value (vb, CHROM)) return out;
     
-    ContextP chrom_ctx = CTX(DTF(chrom));
+    ContextP chrom_ctx = CTX(CHROM);
     WordIndex chrom = chrom_ctx->last_value.i;
     if (chrom < 0 || chrom >= chrom_ctx->word_list.len) return out; // not a valid chrom value
 
@@ -82,16 +82,14 @@ static VBIType piz_get_standalone_vb_i (CompIType comp_i, // if COMP_NONE, we wi
          :                                              vb_i;
 }
 
-extern rom main_input_filename (int file_i);
-
 static StrTextLong piz_get_filename_by_comp_i (CompIType comp_i, VBIType vb_i) // one of the two is needed
 {
     if (comp_i == COMP_NONE)
         comp_i = sections_vb_header (vb_i)->comp_i;
 
     int file_i = ((Z_DT(SAM) || Z_DT(BAM)) && comp_i <= SAM_COMP_DEPN) ? 0
-                : (flag.deep && comp_i >= SAM_COMP_FQ00)                ? (1 + comp_i - SAM_COMP_FQ00)
-                :                                                         comp_i;
+                : (flag.deep && comp_i >= SAM_COMP_FQ00)               ? (1 + comp_i - SAM_COMP_FQ00)
+                :                                                        comp_i;
 
     StrTextLong s = {};
     if (IS_ZIP) 
@@ -198,17 +196,17 @@ bool piz_default_skip_section (SectionType st, DictId dict_id)
     // --show-dict=DICT - read only the one dictionary
     if (ST(DICT) && flag.show_one_dict && is_genocat && !dict_id_is_show (dict_id)) return true; // skip
 
+    uint64_t typeless_dnum = dict_id.num ? dict_id_typeless (dict_id).num : 1/*arbitrary number not likely to be a real dict_id*/;
+    
     // B250, LOCAL, COUNT sections
-    bool skip = is_genocat && dict_id.num 
-                && dict_id.num != DTFZ(predefined)[CHROM].dict_id.num 
-                && (
+    bool skip = is_genocat && dict_id.num != DTFZ(predefined)[CHROM].dict_id.num && (
     
     // sometimes we don't need dictionaries. but we always load CHROM.
-        (flag.genocat_no_dicts && dict_id_typeless (dict_id).num != flag.show_one_counts.num)
+        (flag.genocat_no_dicts && typeless_dnum != flag.show_one_counts.num)
 
     // if show_counts - we only need the requested section and CHROM (note: not true for dump_one_b250_dict_id,
     // as we need to reconstruct to dump it)
-    ||  (flag.show_one_counts.num && dict_id_typeless (dict_id).num != flag.show_one_counts.num)
+    ||  (flag.show_one_counts.num && typeless_dnum != flag.show_one_counts.num)
 
     // if --counts, we filter here - TOPLEVEL only - unless there's a skip_section function which will do the filtering
     ||  (flag.count && !DTPZ(is_skip_section) && dict_id.num != DTFZ(toplevel).num) 
@@ -216,7 +214,7 @@ bool piz_default_skip_section (SectionType st, DictId dict_id)
 
     skip |= flag.dont_load_ref_file && (ST(REFERENCE) || st == SEC_REF_HASH || ST(REF_IS_SET));
 
-    if (skip && is_genocat && dict_id.num && (dict_id.num == flag.show_singletons_dict_id.num || dict_id.num == flag.dump_one_local_dict_id.num))
+    if (skip && is_genocat && (typeless_dnum == flag.show_singletons_dict_id.num || typeless_dnum == flag.dump_one_local_dict_id.num))
         skip = false;
         
     return skip;
@@ -372,10 +370,8 @@ void piz_uncompress_all_ctxs (VBlockP vb, PizUncompressReason reason)
         ARRAY_alloc (ContextIndex, ctx_index, vb->num_contexts, false, vb->ctx_index, vb, "ctx_index");
         for_ctx
             ctx_index[ctx->did_i] = (ContextIndex){ .did_i = ctx->did_i, .dict_id = ctx->dict_id };
-    
-        qsort (ctx_index, vb->num_contexts, sizeof (ContextIndex), sort_by_dict_id);
 
-        // vb->has_ctx_index = true;
+        qsort (ctx_index, vb->num_contexts, sizeof (ContextIndex), sort_by_dict_id);
     }
 
     if (flag.debug_or_test) buflist_test_overflows(vb, __FUNCTION__); 
@@ -397,7 +393,7 @@ static void piz_reconstruct_one_vb (VBlockP vb)
     ASSERT (vb->vblock_i, "vb->vblock_i is 0: vb->compute_thread_id=%d pthread=%"PRIu64, 
             vb->compute_thread_id, (uint64_t)pthread_self());
 
-    ASSERT (!flag.reference || ref_is_loaded (gref) || flag.dont_load_ref_file,
+    ASSERT (!flag.reference || ref_is_loaded() || flag.dont_load_ref_file,
             "%s: reference is not loaded correctly", VB_NAME);
 
     ASSERT (vb->recon_size >= 0, "Invalid vb->recon_size=%d", vb->recon_size);
@@ -411,7 +407,7 @@ static void piz_reconstruct_one_vb (VBlockP vb)
 
     piz_uncompress_all_ctxs (vb, PUR_RECON);
 
-    DT_FUNC (vb, piz_recon_init)(vb);
+    DT_FUNC (vb, piz_vb_recon_init)(vb);
 
     // reconstruct from top level snip
     Did top_level_did_i = ctx_get_existing_did_i (vb, vb->translation.toplevel); 
@@ -460,6 +456,12 @@ void piz_read_all_ctxs (VBlockP vb, Section *sec/* VB_HEADER section */, bool is
 
         // create a context even if section is skipped, for containers to work (skipping a section should be mirrored in a container filter)
         ContextP zctx = ctx_get_existing_zctx ((*sec)->dict_id); 
+        ASSERT (zctx, "Unexpectedly, zctx for %s was not initialized", dis_dict_id ((*sec)->dict_id).s);
+        
+        ASSERT (zctx->did_i == zctx - z_file->contexts || zctx->is_ctx_alias, 
+                "Unexpectedly, zctx for %s has wrong did_i=%u, expecting did_i=%u (zctx->dict_i=%s)", 
+                dis_dict_id ((*sec)->dict_id).s, zctx->did_i, (int)(zctx - z_file->contexts), dis_dict_id (zctx->dict_id).s);
+        
         ContextP vctx = CTX(zctx->did_i); // in PIZ z and vb contexts always have same did_i. This is also true for ZIP of R2, bc context was created by R1 and overlayed on this R2 VB.
         bool is_local = IS_LOCAL(*sec);
         bool is_b250  = !is_local;
@@ -540,7 +542,7 @@ void piz_read_all_ctxs (VBlockP vb, Section *sec/* VB_HEADER section */, bool is
 }
 
 // Called by PIZ main thread: read all the sections at the end of the file, before starting to process VBs
-DataType piz_read_global_area (Reference ref)
+DataType piz_read_global_area (void)
 {
     START_TIMER;
 
@@ -561,11 +563,11 @@ DataType piz_read_global_area (Reference ref)
     bool has_ref_sections = !!sections_last_sec (SEC_REFERENCE, SOFT_FAIL);
 
     ASSERTW (!has_ref_sections || !IS_REF_EXTERNAL || flag.reading_reference, 
-             "FYI: ignoring reference file %s because %s was not compressed with --reference", ref_get_filename (ref), z_name);
+             "FYI: ignoring reference file %s because %s was not compressed with --reference", ref_get_filename(), z_name);
 
     if (!flag.reading_reference && has_ref_sections) {
-        ref_destroy_reference (ref);  // destroy an old reference, if one is loaded
-        flag.reference = REF_STORED;  // possibly override REF_EXTERNAL (it will be restored for the next file in )
+        ref_destroy_reference();     // destroy an old reference, if one is loaded
+        flag.reference = REF_STORED; // possibly override REF_EXTERNAL (it will be restored for the next file in )
     }
 
     // read all dictionaries - CHROM/RNAME is needed for regions_make_chregs(). 
@@ -574,9 +576,9 @@ DataType piz_read_global_area (Reference ref)
 
     if (!flag.header_only) {
         // mapping of the file's chroms to the reference chroms (for files originally compressed with REF_EXTERNAL/EXT_STORE and have alternative chroms)
-        chrom_2ref_load (ref); 
+        chrom_2ref_load(); 
 
-        ref_contigs_load_contigs (ref); // note: in case of REF_EXTERNAL, reference is already pre-loaded
+        ref_contigs_load_contigs(); // note: in case of REF_EXTERNAL, reference is already pre-loaded
     }
 
     // if the user wants to see only the header, we can skip regions and random access
@@ -603,12 +605,8 @@ DataType piz_read_global_area (Reference ref)
         random_access_load_ra_section (SEC_RANDOM_ACCESS, DTFZ(chrom), &z_file->ra_buf, "z_file->ra_buf", 
                                        !flag.show_index ? NULL : RA_MSG_PRIM);
 
-        random_access_load_ra_section (SEC_REF_RAND_ACC, CHROM, ref_get_stored_ra (ref), "ref_stored_ra", 
+        random_access_load_ra_section (SEC_REF_RAND_ACC, CHROM, ref_get_stored_ra(), "ref_stored_ra", 
                                        flag.show_ref_index && !flag.reading_reference ? RA_MSG_REF : NULL);
-
-        if (IS_REF_CHROM2REF && !flag.reading_reference && !flag.genocat_no_reconstruct)
-            // xxx is this actually used? 
-            chrom_index_by_name (CHROM); // create alphabetically sorted index for user file (not reference) chrom word list
 
         // case: reading reference file
         if (flag.reading_reference) {
@@ -617,16 +615,16 @@ DataType piz_read_global_area (Reference ref)
             if (is_genocat && (flag.show_coverage || flag.idxstats)) 
                 goto done;  
 
-            bool ref_loaded_from_disk = !flag.dont_load_ref_file && ref_load_stored_reference (ref);
+            bool ref_loaded_from_disk = !flag.dont_load_ref_file && ref_load_stored_reference();
 
             // load the IUPACs list of the reference (rare non-ACGT "bases")
-            ref_iupacs_load (ref);
+            ref_iupacs_load();
 
             // load the refhash, if we are compressing FASTA or FASTQ, or if user requested to see it
             if (  (primary_command == ZIP && flag.aligner_available) ||
                   (flag.show_ref_hash && is_genocat) ||
-                  ref_cache_is_populating (ref))
-                refhash_load (ref);
+                  ref_cache_is_populating())
+                refhash_load();
 
             // exit now if all we wanted was just to see the reference (we've already shown it)
             if ((flag.show_reference || flag.show_is_set || flag.show_ref_hash) && is_genocat) exit_ok;
@@ -638,7 +636,7 @@ DataType piz_read_global_area (Reference ref)
         // case: non-reference file has stored reference sections
         else if (has_ref_sections) {
             if (!flag.dont_load_ref_file) { 
-                ref_load_stored_reference (gref);
+                ref_load_stored_reference();
 
                 // exit now if all we wanted was just to see the reference (we've already shown it)
                 if ((flag.show_reference || flag.show_is_set || flag.show_ref_hash) && is_genocat) exit_ok;
@@ -672,7 +670,7 @@ SectionHeaderVbHeader piz_read_vb_header (VBlockP vb)
     vb->expected_digest  = header.digest;
     vb->chrom_node_index = WORD_INDEX_NONE;
     vb->lines.len        = VER(14) ? sec->num_lines : BGEN32 (header.v13_top_level_repeats);
-    vb->show_containers  = (flag.show_containers == SHOW_CONTAINERS_ALL_VBs || flag.show_containers == vb->vblock_i); // a per-VB value bc in SAM Load-Prim VBs =false vs normal VBs have the flag value (set in sam_piz_dispatch_one_load_sag_vb)
+    vb->show_containers  = (flag_show_containers == SHOW_CONTAINERS_ALL_VBs || flag_show_containers == vb->vblock_i); // a per-VB value bc in SAM Load-Prim VBs =false vs normal VBs have the flag value (set in sam_piz_dispatch_one_load_sag_vb)
 
     if (txt_file) { // sometimes we don't have a txtfile, eg when genocat is used with some flags that emit other data, no the file
         vb->vb_position_txt_file = txt_file->txt_data_so_far_single_0; // position in original txt file (before any ZIP or PIZ modifications)
@@ -736,9 +734,16 @@ static void piz_handover_or_discard_vb (Dispatcher dispatcher, VBlockP *vb)
 {
     bool is_handed_over = false;
 
-    if ((*vb)->preprocessing) 
-        DT_FUNC (z_file, piz_after_preproc)(*vb);
-    
+    if ((*vb)->preprocessing) {
+        DT_FUNC (z_file, piz_after_preproc_vb)(*vb);
+
+        if (flag.preprocessing == PREPROC_FINALIZING &&  
+            !dispatcher_get_num_running_compute_threads (dispatcher)) {
+            
+            DTPZ(piz_preproc_finalize) (dispatcher);
+        }
+    }
+
     else if (!flag.no_writer_thread)  // note: in SAM with gencomp - writer does the digest calculation
         is_handed_over = writer_handover_data (vb);
 
@@ -832,7 +837,7 @@ static uint64_t piz_target_progress (CompIType comp_i)
 Dispatcher piz_z_file_initialize (void)
 {
     // read all non-VB non-TxtHeader sections
-    DataType data_type = piz_read_global_area (gref);
+    DataType data_type = piz_read_global_area();
     if (data_type == DT_NONE || flag.reading_reference) 
         return NULL; // no components in this file (as is always the case with reference files) 
 
@@ -885,11 +890,15 @@ void piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
         bool achieved_something = false;
         
         // we're pre-processing data (SAM: loading sag)
-        if (flag.preprocessing && dispatcher_has_free_thread (dispatcher) && !vb_pool_is_full (POOL_MAIN))
+        if (flag.preprocessing && dispatcher_has_free_thread (dispatcher) && !vb_pool_is_full (POOL_MAIN)) {
             achieved_something = DTPZ(piz_preprocess)(dispatcher);
-    
+
+            if (!achieved_something) flag.preprocessing = PREPROC_FINALIZING; // some preprocessing VBs may still be running, but no new VBs are forthcoming
+        }
+
         // In input is not exhausted, and a compute thread is available - read a vblock and dispatch it
-        else if (!dispatcher_is_input_exhausted (dispatcher) && dispatcher_has_free_thread (dispatcher) && !vb_pool_is_full (POOL_MAIN)) {
+        else if (!flag.preprocessing && !dispatcher_is_input_exhausted (dispatcher) && 
+                 dispatcher_has_free_thread (dispatcher) && !vb_pool_is_full (POOL_MAIN)) {
             achieved_something = true;
 
             // note: z_file->piz_reading_list contains only TXT_HEADER and VB_HEADER sections needed to reconstruct this txt file
@@ -988,7 +997,7 @@ void piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
 
     if (is_genocat || (z_file->num_txts_so_far == z_file->num_txt_files)) // genocat always produces exactly one txt file 
         dispatcher_finish (&dispatcher, NULL, !is_last_z_file || flag.test,
-                           flag.show_memory && is_last_z_file);
+                           flag_show_memory && is_last_z_file);
     else 
         dispatcher_pause (dispatcher); // we're unbinding and still have more txt_files
     

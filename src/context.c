@@ -131,7 +131,7 @@ WordIndex ctx_search_for_word_index (ContextP ctx, STRp(snip))
 WordIndex ctx_get_next_snip (VBlockP vb, ContextP ctx, bool is_pair, pSTRp (snip)/*optional out*/)
 {
     ASSERT (ctx, "%s: ctx is NULL", VB_NAME);
-
+    
     bool zip_pair = (is_pair && command==ZIP);
 
     ConstBufferP b250      = is_pair  ? &ctx->b250R1                 : &ctx->b250;
@@ -456,7 +456,7 @@ void ctx_protect_from_removal (VBlockP vb, ContextP ctx, WordIndex node_index)
 // ZIP compute thread: overlay and/or copy the current state of the global contexts to the vb, ahead of segging this vb.
 void ctx_clone (VBlockP vb)
 {
-    Did z_num_contexts = __atomic_load_n (&z_file->num_contexts, __ATOMIC_ACQUIRE);
+    Did z_num_contexts = load_acquire (z_file->num_contexts);
 
     START_TIMER; // including mutex wait time
 
@@ -617,7 +617,7 @@ WordIndex ctx_populate_zf_ctx (Did dst_did_i, STRp (snip),
 // 1. when starting to zip a new file, with pre-loaded external reference, we integrate the reference's FASTA CONTIG
 //    dictionary as the chrom dictionary of the new file
 // 2. in SAM, DENOVO: after creating contigs from SQ records, we copy them to the RNAME dictionary
-void ctx_populate_zf_ctx_from_contigs (Reference ref, Did dst_did_i, ConstContigPkgP ctgs)
+void ctx_populate_zf_ctx_from_contigs (Did dst_did_i, ConstContigPkgP ctgs)
 {
     if (!ctgs->contigs.len) return; // nothing to do
 
@@ -641,7 +641,7 @@ void ctx_populate_zf_ctx_from_contigs (Reference ref, Did dst_did_i, ConstContig
         
         if (is_new && (flag.reference & REF_ZIP_LOADED)) {
             if (contig->ref_index >= 0) buf_add_int (evb, ZCTX(CHROM)->chrom2ref_map, contig->ref_index); // header contigs also know the ref_index
-            else                        buf_add_int (evb, ZCTX(CHROM)->chrom2ref_map, ref_contigs_get_matching (ref, 0, STRa(contig_name), NULL, NULL, false, NULL, NULL));
+            else                        buf_add_int (evb, ZCTX(CHROM)->chrom2ref_map, ref_contigs_get_matching (STRa(contig_name), NULL, NULL, false, NULL, NULL));
         }
     }
 }
@@ -657,8 +657,8 @@ ContextP ctx_get_existing_zctx (DictId dict_id)
         return &z_file->contexts[did_i];
     
     else {
-        Did z_num_contexts = IS_ZIP ? __atomic_load_n (&z_file->num_contexts, __ATOMIC_ACQUIRE)
-                                    : z_file->num_contexts; // in PIZ, num_contexts is immutable so no need for atomic
+        Did z_num_contexts = IS_ZIP ? load_acquire (z_file->num_contexts)
+                                    : z_file->num_contexts; // in PIZ, num_contexts is immutable after loading, and during loading only main thread accesses, so no need for atomic
 
         for (ContextP zctx=&z_file->contexts[0]; zctx < &z_file->contexts[z_num_contexts]; zctx++)
             if (dict_id.num == zctx->dict_id.num) 
@@ -744,6 +744,12 @@ ContextP ctx_get_zctx_from_vctx (ConstContextP vctx,
          :                       NULL;
 }
 
+#define atomic_lcodec            load_relaxed (zctx->lcodec)
+#define atomic_bcodec            load_relaxed (zctx->bcodec)
+#define atomic_lcodec_count      load_relaxed (zctx->lcodec_count)
+#define atomic_bcodec_count      load_relaxed (zctx->bcodec_count)
+#define atomic_lcodec_hard_coded load_relaxed (zctx->lcodec_hard_coded)
+
 // update zctx with codec as it is assigned - don't wait for merge, to increase the chance that subsequent
 // VBs can get this codec and don't need to test for themselves.
 void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vctx, bool is_lcodec, bool is_lcodec_inherited)
@@ -751,26 +757,29 @@ void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vctx, bool is_lcodec, bool
     // case: context might not exist yet in z_file, because no VB with it has merged yet - in which case we create it.
     ContextP zctx = ctx_get_zctx_from_vctx (vctx, true, false);
 
-    mutex_lock (ZMUTEX(zctx));
+    mutex_lock (ZMUTEX(zctx)); // mutex to concurrently set count and codec
 
+    // use atomic to avoid sanitize-threads complaining about concurrent access from ctx_get_z_codecs
     if (is_lcodec) {
-        if (zctx->lcodec == vctx->lcodec) {
-            if (zctx->lcodec_count < 255) zctx->lcodec_count++; // counts number of VBs in a row that set this codec
+        if (atomic_lcodec == vctx->lcodec) {
+            if (atomic_lcodec_count < 255) // protect from circling back to 0
+                increment_relaxed (zctx->lcodec_count); // counts number of VBs in a row that set this codec
         }
         else if (is_lcodec_inherited) {
-            zctx->lcodec_count = 0;
-            zctx->lcodec = vctx->lcodec; 
+            store_relaxed (zctx->lcodec_count, 0); 
+            store_relaxed (zctx->lcodec, vctx->lcodec); 
         }
         else 
             zctx->lcodec_non_inherited = vctx->lcodec; 
     }
     else {
-        if (zctx->bcodec == vctx->bcodec) {
-            if (zctx->bcodec_count < 255) zctx->bcodec_count++; 
+        if (atomic_bcodec == vctx->bcodec) {
+            if (atomic_bcodec_count < 255) 
+                increment_relaxed (zctx->bcodec_count);
         }
         else {
-            zctx->bcodec_count = 0;
-            zctx->bcodec = vctx->bcodec; 
+            store_relaxed (zctx->bcodec_count, 0); 
+            store_relaxed (zctx->bcodec, vctx->bcodec); 
         }
     }           
 
@@ -791,11 +800,22 @@ void ctx_reset_codec_commits (void)
 void ctx_segconf_set_hard_coded_lcodec (Did did_i, Codec codec)
 {
     ASSERT0 (did_i < DTFZ(num_fields), "function can only be called for pre-defined did's");
-    ASSERT0 (segconf.running, "function can only be called during segconf");
+    ASSERT0 (segconf_running, "function can only be called during segconf");
     
     ContextP zctx = ZCTX(did_i);
     zctx->lcodec = codec;
     zctx->lcodec_hard_coded = true; 
+}
+
+void ctx_get_z_codecs (ContextP zctx,
+                       Codec *lcodec, Codec *bcodec, uint8_t *lcodec_count, uint8_t *bcodec_count, bool *lcodec_hard_coded)
+{
+    // note: we don't want to lock the mutex here, as it would could b250/local compression to wait on merge
+    *lcodec            = atomic_lcodec;
+    *bcodec            = atomic_bcodec;
+    *lcodec_count      = atomic_lcodec_count;
+    *bcodec_count      = atomic_bcodec_count;
+    *lcodec_hard_coded = atomic_lcodec_hard_coded;
 }
 
 // called by compute threads during merge, with zctx locked
@@ -924,7 +944,7 @@ static void ctx_set_vb_1_pending_merges (VBlockP vb)
     // set vb_1_pending_merges - other VBs can merge only with this number of VB merges has occurred
     // note: for contexts where no vb=1 merge is needed, this updates vb_1_pending_merges from -1 to 0, allowing other threads to proceed
     for (Did did_i=0; did_i < MAX_DICTS; did_i++)
-        __atomic_store_n (&ZCTX(did_i)->vb_1_pending_merges, vb_1_merges_needed[did_i], __ATOMIC_RELEASE); 
+        store_release (ZCTX(did_i)->vb_1_pending_merges, vb_1_merges_needed[did_i]); 
 }
 
 // increment counts, where increment may or may not have the protection bit. if it does, it sets the
@@ -948,7 +968,7 @@ static inline bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx, ContextP *z
     ContextP zctx       = ctx_get_zctx_from_vctx (vctx, true, true);
     ContextP zctx_alias = ctx_get_zctx_from_vctx (vctx, true, false);
 
-    if ((vb->vblock_i != 1 && __atomic_load_n (&zctx->vb_1_pending_merges, __ATOMIC_ACQUIRE)) || // let vb_i=1 merge first and sorts dictionaries, other VBs can go in arbitrary order. 
+    if ((vb->vblock_i != 1 && load_acquire (zctx->vb_1_pending_merges)) || // let vb_i=1 merge first and sorts dictionaries, other VBs can go in arbitrary order. 
         !mutex_trylock (ZMUTEX(zctx))) // also implies locking all its aliases including zctx_alias
         return false; 
 
@@ -986,7 +1006,7 @@ static inline bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx, ContextP *z
     
     if (!buf_is_alloc (&vctx->dict)) goto finish; // no new snips introduced in this VB
  
-    // case: this is first vb that is merging this dict: allocate hash tabl based on the statistics gathered by this VB. 
+    // case: this is first vb that is merging this dict: allocate hash table based on the statistics gathered by this VB. 
     if (!buf_is_alloc (&zctx->global_hash)) {
         uint32_t estimated_entries = hash_get_estimated_entries (vb, zctx, vctx);
         hash_alloc_global (zctx, estimated_entries);
@@ -1069,7 +1089,7 @@ finish:
     for (WordIndex ni=0; ni < ol_len; ni++) 
         add_count (&zcounts[ni], vcounts[ni]);
     
-    int vb_1_pending_merges = (vb->vblock_i == 1) ? __atomic_load_n (&zctx->vb_1_pending_merges, __ATOMIC_ACQUIRE) : 0;
+    int vb_1_pending_merges = (vb->vblock_i == 1) ? load_acquire (zctx->vb_1_pending_merges) : 0;
 
     ctx_drop_all_the_same (vb, zctx, vctx); // drop b250 if warranted
 
@@ -1152,8 +1172,19 @@ Did ctx_get_unmapped_existing_did_i (const ContextArray contexts, ConstBufferP c
 
     // binary search if we have ctx_index (we will have it in PIZ compute threads)
     if (ctx_index && 
-        (ent = binary_search (ctx_did_i_search, ContextIndex, *ctx_index, dict_id.num)))
+        (ent = binary_search (ctx_did_i_search, ContextIndex, *ctx_index, dict_id.num))) {
+        
+        if (!IN_RANGE((int16_t)ent->did_i, 0, ctx_index->len32)) {
+            printf ("ctx_index (mapping dict_id->did_i sorted by dict_id.num). len=%"PRIu64" :", ctx_index->len);
+            
+            for_buf2 (ContextIndex, ci, i, *ctx_index)
+                printf ("[%u] dict_id=%s (%"PRIu64") did_i=%u\n", i, dis_dict_id(ci->dict_id).s, ci->dict_id.num, ci->did_i);
+            
+            ABORT ("did_i=%d ∉ [0,ctx_index.len=%u). dict_id=%s", ent->did_i, ctx_index->len32, dis_dict_id (dict_id).s); 
+        }
+
         return ent->did_i;
+    }
 
     else // linear search if not
         for (int did_i=num_contexts-1; did_i >= 0 ; did_i--)  // Search backwards as unmapped ctxs are more likely to be towards the end.
@@ -1485,7 +1516,7 @@ static void ctx_show_counts (ContextP zctx)
     if (!maybe_longr)
         qsort (counts, counts_len, sizeof (ShowCountsEnt), show_counts_cmp);
 
-    iprintf ("\nShowing counts of %s (did_i=%u). Occurances=%"PRIu64" Snips=%u\n", zctx->tag_name, zctx->did_i, sum_count, (unsigned)counts_len);    
+    iprintf ("\nShowing counts of %s (did_i=%u). Occurances=%"PRIu64" Snips=%u\n", ctx_tag_name_ex (zctx).s, zctx->did_i, sum_count, (unsigned)counts_len);    
 
     if (sum_count)
         for (uint32_t i=0; i < counts_len; i++) {            
@@ -1816,7 +1847,7 @@ void ctx_zip_init_promiscuous (ContextP zctx)
 void ctx_zip_z_data_exist (ContextP ctx)
 {
     if (ctx->did_i < DTFZ(num_fields)) // case: ctx is a predefined context
-        ZCTX(ctx->did_i)->z_data_exists = true;
+        store_relaxed (ZCTX(ctx->did_i)->z_data_exists, (bool)true);
 }
 
 // qsort comparison function

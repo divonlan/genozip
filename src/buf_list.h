@@ -40,8 +40,8 @@ extern void buflist_destroy_bufs_by_name (rom name, bool compact_after_destroyin
 
 // verifiers
 extern bool buflist_test_overflows (VBlockP vb, rom msg);
-extern void buflist_test_overflows_all_other_vb (VBlockP caller_vb, rom msg, bool force);
-extern void buflist_test_overflows_all_vbs (rom msg);
+extern void buflist_test_overflows_all_other_vb (VBlockP caller_vb, rom msg, bool force, bool on_exit);
+extern void buflist_test_overflows_all_vbs (rom msg, bool on_exit);
 extern bool buflist_locate (ConstBufferP buf, rom prefix);
 
 // memory usage reporting

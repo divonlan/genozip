@@ -26,10 +26,10 @@ static inline void ref_iupacs_add (VBlockP vb, uint64_t idx, char base)
 #define IUPAC_IS_INCLUDED(ref_base,vcf_base) hxcgcb
 
 // using with --chain side
-extern void ref_iupacs_load (Reference ref);
+extern void ref_iupacs_load (void);
 
-#define ref_iupacs_is_included(ref, vb, range, pos, vcf_base) \
-    (((range) == (vb)->iupacs_last_range[(ref)==gref] && (pos) > (vb)->iupacs_last_pos[(ref)==gref] && (pos) < (vb)->iupacs_next_pos[(ref)==gref]) ? false /* quick negative */ \
-     : ref_iupacs_is_included_do ((ref), (vb), (range), (pos), (vcf_base)))
-extern bool ref_iupacs_is_included_do (Reference ref, VBlockP vb, const Range *range, PosType64 pos, char vcf_base);
-extern char ref_iupacs_get (Reference ref, const Range *r, PosType64 pos, bool reverse, PosType64 *next_pos);
+#define ref_iupacs_is_included(vb, range, pos, vcf_base) \
+    (((range) == (vb)->iupacs_last_range && (pos) > (vb)->iupacs_last_pos && (pos) < (vb)->iupacs_next_pos) ? false /* quick negative */ \
+     : ref_iupacs_is_included_do ((vb), (range), (pos), (vcf_base)))
+extern bool ref_iupacs_is_included_do (VBlockP vb, const Range *range, PosType64 pos, char vcf_base);
+extern char ref_iupacs_get (const Range *r, PosType64 pos, bool reverse, PosType64 *next_pos);

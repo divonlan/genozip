@@ -117,7 +117,7 @@ static inline void buf_alloc_quick (BufferP buf, uint64_t req_size, rom name, FU
 #define buf_alloc_(alloc_vb, buf, more, at_least, width, grow_at_least_factor, name, func, code_line) ({\
     uint64_t new_more = (more); /* avoid evaluating twice */                                \
     uint64_t if_more = new_more ? ((buf)->len + new_more) : 0; /* in units of type */       \
-    uint64_t new_req_size = MAX_((at_least), if_more) * width; /* make copy to allow ++ */  \
+    uint64_t new_req_size = MAX_((uint64_t)(at_least), if_more) * width; /* make copy to allow ++ */  \
     if (__builtin_expect(new_req_size <= (buf)->size, true))                                \
         buf_alloc_quick ((buf), new_req_size, (name), func, code_line);                     \
     else                                                                                    \

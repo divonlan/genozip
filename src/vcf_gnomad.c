@@ -81,8 +81,6 @@ void vcf_seg_INFO_VRS_Allele_IDs (VBlockVCFP vb, ContextP ctx, STRp(ids))
                           0, 0, NULL, ids_len);
 }
 
-#define VT(x) (vb->var_types[0] == VT_##x)
-
 void vcf_seg_INFO_VRS_Starts (VBlockVCFP vb, ContextP ctx, STRp(arr))
 {
     PosType32 pos = DATA_LINE(vb->line_i)->pos;
@@ -90,15 +88,15 @@ void vcf_seg_INFO_VRS_Starts (VBlockVCFP vb, ContextP ctx, STRp(arr))
     str_split_ints (arr, arr_len, 2, ',', start, true);
     
     if (!n_starts || 
-        (!VT(SNP) && !VT(DEL) && !VT(INS)) ||
+        (!VT0(SNP) && !VT0(DEL) && !VT0(INS)) ||
         starts[0] != pos - 1 ||
-        (VT(SNP) && starts[1] != pos - 1) ||
-        (!VT(SNP) && starts[1] != pos))
+        (VT0(SNP) && starts[1] != pos - 1) ||
+        (!VT0(SNP) && starts[1] != pos))
 
         seg_by_ctx (VB, STRa(arr), ctx, arr_len); 
 
     else // value as predicted
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_VRS_Starts }, 2, ctx, arr_len); 
+        seg_special0 (VB, VCF_SPECIAL_VRS_Starts, ctx, arr_len); 
 }
 
 SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_VRS_Starts)
@@ -108,7 +106,7 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_VRS_Starts)
 
     RECONSTRUCT_INT (pos-1);
     RECONSTRUCT1 (',');
-    RECONSTRUCT_INT (pos - VT(SNP));
+    RECONSTRUCT_INT (pos - VT0(SNP));
 
     return NO_NEW_VALUE;
 }
@@ -143,7 +141,7 @@ void vcf_seg_INFO_VRS_States (VBlockVCFP vb, ContextP ctx, STRp(arr))
         else
             seg_by_dict_id (VB, STRi(state, 0), _INFO_VRS_States_REF, state_lens[0]);
 
-        if (str_issame_(STRi(state,1), STRi(vb->alt, 0)))
+        if (str_issame_(STRi(state,1), STRa(ALTi(0)->alt)))
             seg_by_dict_id (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_ALLELE, '*', '1' }, 4, _INFO_VRS_States_ALT, state_lens[1]);
         else
             seg_by_dict_id (VB, STRi(state, 1), _INFO_VRS_States_ALT, state_lens[1]);

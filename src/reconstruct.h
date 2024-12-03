@@ -34,6 +34,7 @@ extern StrTextLong piz_advise_biopsy_line (CompIType comp_i, VBIType vblock_i, L
 })
 
 #define ASSPIZ0(condition, string) ASSPIZ (condition, string "%s", "")
+#define ASSPIZNOTZERO(n)           ASSPIZ ((n), "%s=0", #n)
 
 #define ABORT_PIZ(format, ...) ({ \
     DO_ONCE { /* first thread to fail at this point prints error and starts exit flow, other threads stall */ \
@@ -71,8 +72,8 @@ extern ContextP reconstruct_special_get_base_ctx (VBlockP vb, ContextP ctx, pSTR
 
 extern uint32_t recon_multi_dict_id_get_num_dicts (ContextP ctx, STRp(snip));
 extern ContextP recon_multi_dict_id_get_ctx_first_time (VBlockP vb, ContextP ctx, STRp(snip), unsigned ctx_i);
-#define MCTX(ctx_i,snip,snip_len) ((ctx->ctx_cache.len32 && *B(ContextP, ctx->ctx_cache, ctx_i)) \
-                                        ? *B(ContextP, ctx->ctx_cache, ctx_i)                    \
+#define MCTX(ctx_i,snip,snip_len) (((ctx_i) < ctx->ctx_cache.len32 && *B(ContextP, ctx->ctx_cache, ctx_i))  \
+                                        ? *B(ContextP, ctx->ctx_cache, (ctx_i))                             \
                                         : recon_multi_dict_id_get_ctx_first_time ((VBlockP)vb, ctx, (snip), (snip_len), (ctx_i)))
 
 // use SCTX if we are certain that ctx can only be one other_dict_id in its snips 

@@ -22,10 +22,10 @@ void sam_seg_bsseeker2_XO_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(XO), unsign
     ASSSEG (XO_len == 3 && (XO[0]=='+' || XO[0]=='-') && XO[1]=='F' && (XO[2]=='R' || XO[2]=='W'),
             "XO:Z=%.*s but expecting one of four values: +FR -FR +FW -FW", STRf(XO));
 
-    seg_by_did (VB, ((char[]){ SNIP_SPECIAL, SAM_SPECIAL_BSSEEKER2_XO, 
-                               vb->bisulfite_strand?'*' : ((XO[0] == '-') == dl->FLAG.rev_comp)?'^' : XO[0], // if we have vb->bisulfite_strand - take for it
-                               (XO[2] == 'R') == dl->FLAG.multi_segs ? '*' : XO[2] }), // prediction: 'R' iff FLAG.multi_segs                  
-                4, OPTION_XO_Z, add_bytes);
+    seg_special2 (VB, SAM_SPECIAL_BSSEEKER2_XO, 
+                  vb->bisulfite_strand?'*' : ((XO[0] == '-') == dl->FLAG.rev_comp)?'^' : XO[0], // if we have vb->bisulfite_strand - take for it
+                  (XO[2] == 'R') == dl->FLAG.multi_segs ? '*' : XO[2], // prediction: 'R' iff FLAG.multi_segs                  
+                  CTX(OPTION_XO_Z), add_bytes);
 }
 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_BSSEEKER2_XO)
@@ -62,7 +62,7 @@ static rom sam_seg_XG_Z_analyze_test_lens (VBlockSAMP vb, STRp(XG))
         else
             return "XG_wrong_length_with_S"; // +6 for the 4 flanking bases and 2 underscore characters.
 
-        if (segconf.running) 
+        if (segconf_running) 
             segconf.sam_XG_inc_S = *XG_inc_S;
     }
     
@@ -100,7 +100,7 @@ void sam_seg_bsseeker2_XG_Z_analyze (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(XG)
     rom res = sam_seg_XG_Z_analyze_test_lens (vb, STRa(XG));
     if (res) FAIL (res);
 
-    if (segconf.running) return;
+    if (segconf_running) return;
 
     buf_alloc_exact (VB, ctx->XG, XG_len-2/*two underscores removed*/, char, "XG");
 
@@ -125,7 +125,7 @@ void sam_seg_bsseeker2_XG_Z_analyze (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(XG)
     PosType32 after_pos = start_pos + vb->ref_consumed + inc_soft_clip + 4/*flanking*/;
 
     // get range
-    RangeP range = ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), start_pos, after_pos - start_pos, 
+    RangeP range = ref_seg_get_range (VB, vb->chrom_node_index, STRa(vb->chrom_name), start_pos, after_pos - start_pos, 
                                       WORD_INDEX_NONE,
                                       IS_REF_EXTERNAL ? NULL : &lock); // lock if we might modify reference or is_set
 
@@ -168,7 +168,7 @@ done:
         iprintf ("%s: RNAME=%.*s POS=%d FLAG=%u CIGAR=\"%s\" ref_consumed%s=%u XG_len-6=%u Special XG not suitable (reason: \"%s\") (no harm)\n", 
                  LN_NAME, STRf(vb->chrom_name), line_pos, dl->FLAG.value, vb->last_cigar, (ctx->XG_inc_S == yes ? "+soft_clip[0]" : ""), vb->ref_consumed + inc_soft_clip, XG_len-6, result);
 
-    ref_unlock (gref, &lock);
+    ref_unlock (&lock);
     
     COPY_TIMER (sam_seg_bsseeker2_XG_Z_analyze);
     #undef FAIL
@@ -179,7 +179,7 @@ void sam_seg_bsseeker2_XG_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(XG), unsign
     decl_ctx (OPTION_XG_Z);
 
     if (ctx_encountered_in_line (VB, OPTION_XG_Z)) // encountered in this line & verified
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_BSSEEKER2_XG, '1'+ctx->XG_inc_S }, 3, ctx, add_bytes);
+        seg_special1 (VB, SAM_SPECIAL_BSSEEKER2_XG, '1'+ctx->XG_inc_S, ctx, add_bytes);
     else
         seg_add_to_local_string (VB, ctx, STRa(XG), LOOKUP_SIMPLE, add_bytes);
 }
@@ -203,7 +203,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_BSSEEKER2_XG)
     bool XG_inc_S = snip[0] - '1';
     int32_t inc_soft_clip = XG_inc_S ? vb->soft_clip[0] : 0; // soft clip length, if we need to include it
 
-    ConstRangeP range = ref_piz_get_range (VB, gref, HARD_FAIL);
+    ConstRangeP range = ref_piz_get_range (VB, HARD_FAIL);
 
     uint32_t idx = CTX(SAM_POS)->last_value.i - range->first_pos - inc_soft_clip;
 
@@ -266,7 +266,7 @@ static inline char XM_predict_rev (BamCigarOpType op, char xg0, char xg1, char x
 
 void sam_seg_bsseeker2_XM_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(XM), unsigned add_bytes)
 {
-    if (segconf.running || vb->cigar_missing || vb->seq_missing) goto fallback;
+    if (segconf_running || vb->cigar_missing || vb->seq_missing) goto fallback;
 
     ContextP ctx_xg = CTX(OPTION_XG_Z); 
 
@@ -322,7 +322,7 @@ void sam_seg_bsseeker2_XM_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(XM), unsign
     }
 
     // we include the argument XG_inc_S because we might have this special even if XG failed verification and has no special
-    seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_BSSEEKER2_XM, '1' + XG_inc_S }, 3, OPTION_XM_Z, add_bytes);
+    seg_special1 (VB, SAM_SPECIAL_BSSEEKER2_XM, '1' + XG_inc_S, CTX(OPTION_XM_Z), add_bytes);
     return;
 
 fallback:

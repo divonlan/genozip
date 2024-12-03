@@ -52,7 +52,7 @@ typedef struct CompactContig {
 
 #pragma pack()
 
-typedef enum { SORT_BY_NONE=0, SORT_BY_NAME=1, SORT_BY_AC=2, SORT_BY_REF_INDEX=4 } SortBy;
+typedef enum { SORT_BY_NONE=0, SORT_BY_NAME=1, SORT_BY_AC=2, SORT_BY_REF_INDEX=4, SORT_BY_LN=8 } SortBy;
 
 typedef struct ContigPkg {
     #define cp_next        contigs.param // iterator
@@ -69,7 +69,6 @@ typedef struct ContigPkg {
 //-------------------------------------------------------------------------
 
 // initialization & finalization
-extern void contigs_build_contig_pkg_from_zctx (ContigPkg *ctgs, ConstContextP ctx, SortBy sort_by);
 extern void contigs_create_index (ContigPkg *ctgs, SortBy sort_by);
 extern void contigs_free (ContigPkg *ctg);
 extern void contigs_destroy (ContigPkg *ctg);

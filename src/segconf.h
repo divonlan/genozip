@@ -48,9 +48,9 @@ typedef packed_enum { INFO_VT_UNKNOWN, INFO_VT_VAGrENT, INFO_VT_1KG, INFO_VT_CAL
 typedef packed_enum { RG_DEFAULT, RG_CELLRANGER } RGMethod; // part of the file format: values go into the snip of SAM_SPECIAL_RG_by_QNAME
 
 // SamMapperType is part of the file format and values should not be changed (new ones can be added)
-typedef enum  {                       MP_UNKNOWN,       MP_BSBOLT,             MP_bwa,   MP_BWA,   MP_MINIMAP2,   MP_STAR,   MP_BOWTIE2,   MP_DRAGEN,    MP_GEM3,         MP_GEM2SAM,     MP_BISMARK,   MP_BSSEEKER2,     MP_WINNOWMAP,   MP_BAZ2BAM,    MP_BBMAP,   MP_TMAP,   MP_HISAT2,   MP_BOWTIE,   MP_NOVOALIGN,   MP_RAZER3,    MP_BLASR,   MP_NGMLR,           MP_DELVE,   MP_TOPHAT,   MP_CPU,   MP_LONGRANGER,          MP_CLC,              MP_PBMM2,   MP_CCS,  MP_SNAP,   MP_BWA_MEM2,   MP_PARABRICKS,     MP_ISAAC,   MP_ULTIMA, MP_TORRENT_BC,   MP_BIONANO,       MP_CRDNA,        NUM_MAPPERS } SamMapperType;
-#define SAM_MAPPER_NAME             { "Unknown_mapper", "bsbolt",              "bwa",    "BWA",    "minimap2",    "STAR",    "bowtie2",    "dragen",     "gem3",          "gem2sam",      "bismark",    "bsseeker2",      "Winnowmap",    "baz2bam",     "BBMap",    "tmap",    "hisat2",    "Bowtie1",   "NovoAlign",    "razers3",    "blasr",    "ngmlr",            "Delve",    "TopHat",    "cpu",    "longranger",           "CLCGenomicsWB",    "pbmm2",    "ccs",    "snap",    "bwa-mem2",    "parabricks",      "iSAAC",    "Ultima",  "Torrent_BC",    "Bionano",        "CellRangerDNA",             }
-#define SAM_MAPPER_SIGNATURE        { "Unknown_mapper", "PN:bwa	VN:BSB"/*\t*/, "PN:bwa", "PN:BWA", "PN:minimap2", "PN:STAR", "PN:bowtie2", "ID: DRAGEN", "PN:gem-mapper", "PN:gem-2-sam", "ID:Bismark", "PN:BS Seeker 2", "PN:Winnowmap", "PN:baz2bam",  "PN:BBMap", "ID:tmap", "PN:hisat2", "ID:Bowtie", "PN:novoalign", "PN:razers3", "ID:BLASR", "PN:nextgenmap-lr", "ID:Delve", "ID:TopHat", "PN:cpu", "PN:longranger.lariat", "PN:clcgenomicswb", "PN:pbmm2", "PN:ccs", "PN:SNAP", "PN:bwa-mem2", "PN:pbrun fq2bam", "PN:iSAAC", "ID:UA-",  "PN:BaseCaller", "ID:xmap_to_bam", "ID:crdna",                  }   
+typedef enum  {                       MP_UNKNOWN,       MP_BSBOLT,             MP_bwa,   MP_BWA,   MP_MINIMAP2,   MP_STAR,   MP_BOWTIE2,   MP_DRAGEN,    MP_GEM3,         MP_GEM2SAM,     MP_BISMARK,   MP_BSSEEKER2,     MP_WINNOWMAP,   MP_BAZ2BAM,    MP_BBMAP,   MP_TMAP,   MP_HISAT2,   MP_BOWTIE,   MP_NOVOALIGN,   MP_RAZER3,    MP_BLASR,   MP_NGMLR,           MP_DELVE,   MP_TOPHAT,   MP_CPU,   MP_LONGRANGER,          MP_CLC,              MP_PBMM2,   MP_CCS,  MP_SNAP,   MP_BWA_MEM2,   MP_PARABRICKS,     MP_ISAAC,   MP_ULTIMA, MP_TORRENT_BC,   MP_BIONANO,       MP_CRDNA,        MP_VG,   MP_CRATAC,            MP_CELLRANGER, NUM_MAPPERS } SamMapperType;
+#define SAM_MAPPER_NAME             { "Unknown_mapper", "bsbolt",              "bwa",    "BWA",    "minimap2",    "STAR",    "bowtie2",    "dragen",     "gem3",          "gem2sam",      "bismark",    "bsseeker2",      "Winnowmap",    "baz2bam",     "BBMap",    "tmap",    "hisat2",    "Bowtie1",   "NovoAlign",    "razers3",    "blasr",    "ngmlr",            "Delve",    "TopHat",    "cpu",    "longranger",           "CLCGenomicsWB",    "pbmm2",    "ccs",    "snap",    "bwa-mem2",    "parabricks",      "iSAAC",    "Ultima",  "Torrent_BC",    "Bionano",        "CellRangerDNA", "vg",    "CellRangerATAC",     "CellRanger",              }
+#define SAM_MAPPER_SIGNATURE        { "Unknown_mapper", "PN:bwa	VN:BSB"/*\t*/, "PN:bwa", "PN:BWA", "PN:minimap2", "PN:STAR", "PN:bowtie2", "ID: DRAGEN", "PN:gem-mapper", "PN:gem-2-sam", "ID:Bismark", "PN:BS Seeker 2", "PN:Winnowmap", "PN:baz2bam",  "PN:BBMap", "ID:tmap", "PN:hisat2", "ID:Bowtie", "PN:novoalign", "PN:razers3", "ID:BLASR", "PN:nextgenmap-lr", "ID:Delve", "ID:TopHat", "PN:cpu", "PN:longranger.lariat", "PN:clcgenomicswb", "PN:pbmm2", "PN:ccs", "PN:SNAP", "PN:bwa-mem2", "PN:pbrun fq2bam", "PN:iSAAC", "ID:UA-",  "PN:BaseCaller", "ID:xmap_to_bam", "ID:crdna",      "PN:vg", "VN:cellranger-atac", "ID:cellranger",           }   
 #define MP(x) (segconf.sam_mapper == MP_##x)
 
 #define MAX_SHORT_READ_LEN 2500
@@ -71,10 +71,15 @@ typedef packed_enum { RO_AO_none, RO_AO_by_AD, RO_AO_by_DP } ROAOMethodType;
 
 typedef packed_enum { GP_unknown, GP_probabilities, GP_phred, GP_other } GPContentType;
 
+typedef packed_enum { TRIM_IS_M, TRIM_IS_S, TRIM_IS_MS/*extends existing M or S*/ } BamAssTrimCigarTreatment;
+#define TRIM_IS_NAMES { "M",     "S",       "MS" }
+
 typedef packed_enum         { MATE_NONE, MATE_01, MATE_12, MATE_PBSV } MateIDMethodType;
 #define MATEID_METHOD_NAMES { "NONE",    "01",    "12",    "PBSV"    }
 #define SEGCONF_MAX_WIDTH 63
-#define SEGCONF_RECORD_WIDTH(did_i, width) if (segconf.running && (width) <= SEGCONF_MAX_WIDTH) segconf.wid[did_i].count[width]++
+
+// record width during segconf, finalized by segconf_set_width
+#define SEGCONF_RECORD_WIDTH(did_i, width) if (segconf_running && (width) <= SEGCONF_MAX_WIDTH) segconf.wid[did_i].count[width]++
 typedef struct {
     uint8_t width; // 0 to SEGCONF_MAX_WIDTH
     uint32_t count[SEGCONF_MAX_WIDTH+1]; // number of appearance in segconf with width 0-SEGCONF_MAX_WIDTH
@@ -107,8 +112,8 @@ typedef struct {
     char tech_by_RG_unidentified[32];           // tech by first @RG PL field - if failed to identify as a known tech
 
     // SAM/BAM and FASTQ
-    uint32_t longest_seq_len;   // length of the longest seq_len in the segconf data 
-    DictId seq_len_dict_id;     // dict_id of one of the QNAME/QNAME2/LINE3/FASTQ_AUX contexts, which is expected to hold the seq_len for this read. 0 if there is no such item.
+    uint32_t std_seq_len;                       // length of the longest seq_len in the segconf data 
+    DictId seq_len_dict_id;                     // dict_id of one of the QNAME/QNAME2/LINE3/FASTQ_AUX contexts, which is expected to hold the seq_len for this read. 0 if there is no such item.
     #define UNK_QNANE_LEN 191
     #define NUM_COLLECTED_WORDS 6
     char unk_flav_qnames[NUM_QTYPES][NUM_COLLECTED_WORDS][UNK_QNANE_LEN+1]; // first 6 qnames if flavor is unknown
@@ -125,8 +130,9 @@ typedef struct {
     bool nontrivial_qual;       // true if we know that not all QUAL values are the same (as they are in newer PacBio files)
     bool has_agent_trimmer;     // has fields generated by Agilent AGeNT Trimmer
     bool is_pacbio_ccs;
-    
+
     // SAM/BAM stuff
+    QnameStr sam_qname_line0;   // copy of qname_line0[QNAME1], but survives to fastq in deep/bammass (nul-terminated)
     STRl (std_cigar, 16);       // first CIGAR in the file - used in case all CIGARs in the file are the same
     int num_mapped;             // number of segconf reads that are mapped - defined as having (!FLAG.unmapped, RNAME, POS, CIGAR)
     bool sam_is_unmapped;       // false if there is at least one read in segconf with (!FLAG.unmapped, RNAME, POS, CIGAR)
@@ -186,6 +192,7 @@ typedef struct {
     msType sam_ms_type;         // ZIP/PIZ: type of ms:i 
     thool sam_XG_inc_S;         // Does XG include soft_clip[0]
     bool is_long_reads;
+    bool HI_has_two_plus;       // a HI:i value of >= 2 was detected in segconf 
     SagType sag_type;           // Type of sag
     bool qual_in_mem_use_rans;  // Valid only if huffman for QUAL is missing: If true, use RANS for in-memory compression of QUAL (gencomp/deep) ; if false use ARITH
     bool CIGAR_has_eqx;         // segconf detected lines with '=' and/or 'X' in their CIGAR (always in pbmm2, with --eqx in minimap2)
@@ -196,13 +203,12 @@ typedef struct {
     thool SA_HtoS;              // when a DEPN CIGAR has H, the corresponding SA_CIGAR has S
     bool sag_has_AS;            // sag store the AS:i values of prim lines that have them. Set if its beneficial to seg AS:i in depn lines against prim
     uint32_t sam_cigar_len;     // approx average CIGAR len rounded up (during segconf.running==true - total len)
-    uint32_t sam_seq_len;       // ZIP/PIZ: approx average (SEQ.len+hard-clips) rounded to the nearest (during segconf.running - total len)
     uint32_t seq_len_to_cm;     // ZIP/PIZ: approx average of (seq_len/cm:i) (during segconf.running - cumulative)
-    uint32_t sam_cropped_at;    // ZIP: it appears that the FASTQ reads were sam_is_cropped to an identical length before aligning. If --deep, this field (as calculated in SAM) is also used when segging FASTQ.
     bool use_pacbio_iqsqdq;     // ZIP: if iq:Z sq:Z and dq:Z are present in all lines, we can compress them, as well as QUAL, better. 
     char CR_CB_seperator;       // ZIP: seperator within CR:Z and CB:Z fields
     bool no_gc_checking;        // ZIP: if true: vb=1 had no depn lines, so we heuristically decided not to check for gc in future VBs (note that some VBs running in parallel to vb=1 might have had depn lines)
     bool has_10xGen;            // ZIP/PIZ: has 10xGenomics tags
+    bool has_TR_TQ;             // ZIP: use cellrangerATAC-style TR:Z / TQ:Z methods             
     bool has_RSEM;              // ZIP: RSEM is used (https://github.com/bli25/RSEM_tutorial)
     RGMethod RG_method;
 
@@ -260,6 +266,8 @@ typedef struct {
     bool vcf_is_giggle;
     bool use_null_DP_method;    // A method for predicting GT=./. by DP=.
     bool vcf_del_svlen_is_neg;
+    bool vcf_local_alleles;
+    bool vcf_sample_copy;       // possibly copy this sample on previous line
     GPContentType FMT_GP_content; 
     char vcf_ID_is_variant;     // ID format is eg 1_2704352_AT_A or 1:2704352:AT:A which is CHROM_POS_REF_ALT. value is '_' or ':' or 0. 
     uint8_t vcf_max_MAPQ;       // maximum MAPQ of BAM alignments that contributed to this variant, as derived from RAW_MQandDP, but not more than 223
@@ -318,8 +326,10 @@ typedef struct {
     unsigned n_full_mch_trimmed;// Deep: the size of the subset of n_full_mch which are trimmed     
     unsigned n_seq_qname_mch[NUM_INSTS]; // Deep: count segconf lines where FASTQ (QNAME1 or QNAME2) hash matches with at least one SAM line - SEQ and QNAME 
     unsigned n_no_mch;          // Deep: count segconf lines that don't match any SAM line (perhaps because SAM is filtered)
+    BamAssTrimCigarTreatment bamass_trims; // bamass: how to treat a trim in the CIGAR
     StrText optimized_qname;    // --optimize: prefix of optimized qname
     uint32_t optimized_qname_len;
+    uint32_t total_usable_len;  // used by bamass_segconf to calculate line_len
     
     // shared FASTA/FASTQ
     bool multiseq;              // sequences in file are variants of each others 
@@ -347,8 +357,10 @@ extern SegConf segconf; // ZIP: set based on segging a sample of a few first lin
 extern void segconf_zip_initialize (void);
 extern void segconf_free (void);
 extern void segconf_calculate (void);
+extern void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size);
 extern void segconf_set_width (FieldWidth *w, int bits);
 extern bool segconf_is_long_reads(void);
+extern void segconf_set_use_insertion_ctxs (void);
 extern void segconf_mark_as_used (VBlockP vb, unsigned num_ctxs, ...);
 extern rom segconf_sam_mapper_name (void);
 extern rom tech_name (SeqTech tech);
@@ -367,3 +379,5 @@ extern StrText segconf_get_qual_histo (QualHistType qht);
 extern unsigned segconf_get_num_qual_scores (QualHistType qht);
 extern StrTextLong segconf_get_optimizations (void);
 extern void segconf_piz_initialize (void);
+
+#define segconf_running __builtin_expect (segconf.running, false)

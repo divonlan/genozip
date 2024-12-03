@@ -33,7 +33,7 @@ extern Digest refhash_get_digest (void);
 
 // stuff for loading and using refhash when ZIPping a fastq or sam/bam file
 extern uint64_t refhash_get_refhash_size (void);
-extern void refhash_load (Reference ref);
+extern void refhash_load (void);
 extern void refhash_load_standalone (void);
 extern void refhash_destroy (void);
 extern void refhash_set_digest (Digest digest);

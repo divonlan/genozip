@@ -208,28 +208,54 @@ char *buf_foreach_line (BufferP buf,
 // Bits stuff
 //---------------------
 
-BitsP buf_alloc_bits_do (VBlockP vb, BufferP buf, uint64_t nbits, BitsInitType init_to, float grow_at_least_factor, rom name, FUNCLINE)
+// adds "more_bits" to the bitmap, and optionally allocates memory beyond the end of the bitmap 
+// to avoid future allocations. optionally initializes (only) the new bits added.
+BitsP buf_alloc_bits_do (VBlockP vb, BufferP buf, uint64_t more_bits, uint64_t preallocate_at_least_bits, BitsInitType init_to, float grow_at_least_factor, rom name, FUNCLINE)
 {
     ASSERT0 (buf->type == BUF_UNALLOCATED || buf->type == BUF_REGULAR, "buf needs to be BUF_UNALLOCATED or BUF_REGULAR");
 
-    uint64_t nwords = roundup_bits2words64 (nbits);
-    uint64_t old_nbits = buf->nbits;
+    uint64_t old_nbits  = buf->nbits;
+    uint64_t old_nwords = buf->nwords;
+    buf->nbits += more_bits;   
+    buf->nwords = roundup_bits2words64 (buf->nbits);
     
-    buf_alloc_(vb, buf, 0, nwords, sizeof(uint64_t), grow_at_least_factor, name, func, code_line);
-
-    buf->nbits  = nbits;   
-    buf->nwords = nwords; 
+    buf_alloc_(vb, buf, buf->nwords - old_nwords, preallocate_at_least_bits / 64, 
+               sizeof(uint64_t), grow_at_least_factor, name, func, code_line);
 
     bits_clear_excess_bits_in_top_word ((BitsP)buf, false);
 
+    // clear / set only added bits
     if (init_to == CLEAR) {
         if (!old_nbits) bits_clear_all ((BitsP)buf);
-        else if (nbits > old_nbits) bits_clear_region ((BitsP)buf, old_nbits, nbits - old_nbits);           
+        else if (buf->nbits > old_nbits) bits_clear_region ((BitsP)buf, old_nbits, buf->nbits - old_nbits);           
     } 
-    if (init_to == SET) {
+    
+    else if (init_to == SET) {
         if (!old_nbits) bits_set_all ((BitsP)buf);
-        else if (nbits > old_nbits) bits_set_region ((BitsP)buf, old_nbits, nbits - old_nbits);           
+        else if (buf->nbits > old_nbits) bits_set_region ((BitsP)buf, old_nbits, buf->nbits - old_nbits);           
     } 
+
+    return (BitsP)buf;
+}
+
+// creates and optionally initializes a bitmap of requested "exact_bits" 
+BitsP buf_alloc_bits_exact_do (VBlockP vb, BufferP buf, uint64_t exact_bits, BitsInitType init_to, float grow_at_least_factor, rom name, FUNCLINE)
+{
+    ASSERT0 (buf->type == BUF_UNALLOCATED || buf->type == BUF_REGULAR, "buf needs to be BUF_UNALLOCATED or BUF_REGULAR");
+
+    buf->nwords = roundup_bits2words64 (exact_bits);
+    buf->nbits  = exact_bits;   
+    
+    buf_alloc_(vb, buf, 0, buf->nwords, sizeof(uint64_t), grow_at_least_factor, name, func, code_line);
+
+    bits_clear_excess_bits_in_top_word ((BitsP)buf, false);
+
+    // clear / set all bits
+    if (init_to == CLEAR) 
+        bits_clear_all ((BitsP)buf);
+
+    else if (init_to == SET) 
+        bits_set_all ((BitsP)buf);
 
     return (BitsP)buf;
 }
@@ -331,74 +357,72 @@ static inline uint32_t BGEN_transpose_num_cols (ConstBufferP buf)
     return cols;
 }
 
-void BGEN_transpose_u8_buf (BufferP buf, LocalType *lt)
-{
-    if (!buf->len) return;
-
-    uint32_t cols = BGEN_transpose_num_cols (buf);
-    uint32_t rows = buf->len / cols;
-
-    buf_alloc (buf->vb, &buf->vb->scratch, 0, buf->len, uint8_t, 1, "scratch");
-    ARRAY (uint8_t, target, buf->vb->scratch);
-    ARRAY (uint8_t, transposed, *buf);
-
-    for (uint32_t c=0; c < cols; c++) 
-        for (uint32_t r=0; r < rows; r++) 
-            target[r * cols + c] = transposed[c * rows + r];
-
-    buf->vb->scratch.len = buf->len;
-    buf_copy (buf->vb, buf, &buf->vb->scratch, uint8_t, 0, 0, CTX_TAG_LOCAL); // copy and not move, so we can keep local's memory for next vb
-
-    buf_free (buf->vb->scratch);
-
-    if (lt) *lt = LT_UINT8; // no longer transposed
+#define BGEN_transpose(n)                                                           \
+void BGEN_transpose_u##n##_buf (BufferP buf, LocalType *lt)                         \
+{                                                                                   \
+    if (!buf->len) return;                                                          \
+                                                                                    \
+    uint32_t cols = BGEN_transpose_num_cols (buf);                                  \
+    uint32_t rows = buf->len / cols;                                                \
+                                                                                    \
+    buf_alloc (buf->vb, &buf->vb->scratch, 0, buf->len, uint##n##_t, 1, "scratch"); \
+    ARRAY (uint##n##_t, target, buf->vb->scratch);                                  \
+    ARRAY (uint##n##_t, transposed, *buf);                                          \
+                                                                                    \
+    for (uint32_t c=0; c < cols; c++)                                               \
+        for (uint32_t r=0; r < rows; r++)                                           \
+            target[r * cols + c] = transposed[c * rows + r];                        \
+                                                                                    \
+    buf->vb->scratch.len = buf->len;                                                \
+    buf_copy (buf->vb, buf, &buf->vb->scratch, uint##n##_t, 0, 0, CTX_TAG_LOCAL); /* copy and not move, so we can keep local's memory for next vb */ \
+                                                                                    \
+    buf_free (buf->vb->scratch);                                                    \
+                                                                                    \
+    if (lt) *lt = LT_UINT##n; /* no longer transposed */                            \
+    if (n == 16) BGEN_u16_buf (buf, NULL);                                          \
+    if (n == 32) BGEN_u32_buf (buf, NULL);                                          \
 }
+BGEN_transpose(8)
+BGEN_transpose(16)
+BGEN_transpose(32)
 
-void BGEN_transpose_u16_buf (BufferP buf, LocalType *lt)
-{
-    if (!buf->len) return;
-
-    uint32_t cols = BGEN_transpose_num_cols (buf);
-    uint32_t rows = buf->len / cols;
-
-    buf_alloc (buf->vb, &buf->vb->scratch, 0, buf->len, uint16_t, 1, "scratch");
-    ARRAY (uint16_t, target, buf->vb->scratch);
-    ARRAY (uint16_t, transposed, *buf);
-
-    for (uint32_t c=0; c < cols; c++) 
-        for (uint32_t r=0; r < rows; r++) 
-            target[r * cols + c] = BGEN16 (transposed[c * rows + r]);
-
-    buf->vb->scratch.len = buf->len;
-    buf_copy (buf->vb, buf, &buf->vb->scratch, uint16_t, 0, 0, CTX_TAG_LOCAL); // copy and not move, so we can keep local's memory for next vb
-
-    buf_free (buf->vb->scratch);
-
-    *lt = LT_UINT16; // no longer transposed
+// transpose an a partial matrix (a matrix with some elements missing, as documented in VCF_COPY_SAMPLE): 
+// we first transpose in a full rectangle and then shrink back going down the other axis.
+#define BGEN_ptranspose(n)                                                                              \
+void BGEN_ptranspose_u##n##_buf (BufferP buf, LocalType *lt)                                            \
+{                                                                                                       \
+    if (!buf->len) return;                                                                              \
+                                                                                                        \
+    uint32_t rows = vcf_header_get_num_samples(); /* rows in transposed matrix*/                        \
+    uint32_t cols = buf->vb->lines.len;           /* cols in transposed matrix  */                      \
+                                                                                                        \
+    /* note: "missing" array is already untransposed as vcf_piz_init_vb hoists it untranspose first */  \
+    ARRAY (bool, missing, buf->vb->contexts[VCF_COPY_SAMPLE].local);                                    \
+    ARRAY_alloc (uint##n##_t, full, rows * cols, false, buf->vb->scratch, buf->vb, "scratch");          \
+                                                                                                        \
+    /* generate "full" a rows x cols matrix (still transposed) with values set from buf, and missing values left uninitialized */ \
+    uint##n##_t *data = B1ST(uint##n##_t, *buf);                                                        \
+    for (uint32_t r=0; r < rows; r++)                                                                   \
+        for (uint32_t c=0; c < cols; c++)                                                               \
+            if (!missing[c * rows + r])                                                                 \
+                full[r * cols + c] = *data++;                                                           \
+                                                                                                        \
+    /* now traverse the one column at a time of "full" (effectively transposing it), and collect the non-missing items */ \
+    data = B1ST(uint##n##_t, *buf); /* re-initialize */                                                 \
+    for (uint32_t c=0; c < cols; c++)                                                                   \
+        for (uint32_t r=0; r < rows; r++)                                                               \
+            if (!missing[c * rows + r])                                                                 \
+                *data++ = full[r * cols + c];                                                           \
+                                                                                                        \
+    buf_free (buf->vb->scratch);                                                                        \
+                                                                                                        \
+    if (lt) *lt = LT_UINT##n; /* no longer transposed */                                                \
+    if (n == 16) BGEN_u16_buf (buf, NULL);                                                              \
+    if (n == 32) BGEN_u32_buf (buf, NULL);                                                              \
 }
-
-void BGEN_transpose_u32_buf (BufferP buf, LocalType *lt)
-{
-    if (!buf->len) return;
-
-    uint32_t cols = BGEN_transpose_num_cols (buf);
-    uint32_t rows = buf->len / cols;
-
-    buf_alloc (buf->vb, &buf->vb->scratch, 0, buf->len, uint32_t, 1, "scratch");
-    ARRAY (uint32_t, target, buf->vb->scratch);
-    ARRAY (uint32_t, transposed, *buf);
-
-    for (uint32_t c=0; c < cols; c++) 
-        for (uint32_t r=0; r < rows; r++) 
-            target[r * cols + c] = BGEN32 (transposed[c * rows + r]);
-
-    buf->vb->scratch.len = buf->len;
-    buf_copy (buf->vb, buf, &buf->vb->scratch, uint32_t, 0, 0, CTX_TAG_LOCAL); // copy and not move, so we can keep local's memory for next vb
-
-    buf_free (buf->vb->scratch);
-
-    *lt = LT_UINT32; // no longer transposed
-}
+BGEN_ptranspose(8)
+BGEN_ptranspose(16)
+BGEN_ptranspose(32)
 
 void BGEN_deinterlace_d8_buf (BufferP buf, LocalType *lt)
 {

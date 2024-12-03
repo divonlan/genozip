@@ -44,6 +44,7 @@ LocalType dyn_int_get_ltype (ContextP ctx)
 void dyn_int_transpose (VBlockP vb, ContextP ctx)
 {
     uint32_t cols;
+    ContextP copy_ctx = CTX(VCF_COPY_SAMPLE);
 
     // note: caller needs to set local.n_cols to number of columns. or if it remains 0, it is interprets as vcf_num_samples
     if (ctx->local.n_cols) {
@@ -59,24 +60,44 @@ void dyn_int_transpose (VBlockP vb, ContextP ctx)
         cols = vcf_header_get_num_samples(); // not restricted to 255
     } 
 
-    // case: matrix is not transposable 
-    if (ctx->local.len32 % cols) {
+    bool *missing = NULL; // if non-NULL: lines x cols matrix - element is true if sample was copied so its value is missing in local
+
+    // case: VCF with vcf_sample_copys: all samples have data, but some is absent from local due vcf_sample_copy
+    if (segconf.vcf_sample_copy && 
+        ctx != copy_ctx         && // exclude copy_ctx itself: it is transposed, but not part of the sample
+        copy_ctx->local.len     && // some samples were copied (see vcf_copy_sample_seg_finalize)
+        vb->lines.len32 * cols == copy_ctx->num_samples_copied + ctx->local.len32) // all samples in all variants have this field
+        
+        missing = B1ST (bool, copy_ctx->local); // 0 and 1 are pre-defined node indicies (see vcf_copy_sample_seg_initialize)
+
+    // case: local is not a rectangle so not transposable 
+    else if (ctx->local.len32 % cols) {
         if (ctx->local.n_cols) ctx->local_param = false; // undo
         return; 
     }
 
-    uint32_t rows = ctx->local.len32 / cols;
+    uint32_t rows = missing ? vb->lines.len32 
+                  :           (ctx->local.len32 / cols); // if vcf_sample_copy not used, we allow some rows to not have data at all 
+
+if (ctx->did_i==550) {
+// printf ("data: \n");
+// uint8_t *data = (uint8_t *)ctx->local.data;                                     
+// for (int i=0; i < ctx->local.len32; i++) printf ("%u ", data[i]);
+// printf ("\n\n");
+}
 
     switch (ctx->ltype) { // note: the casting also correctly converts 0xffffffff to eg 0xff
-        #define case_width(n)                                                                       \
-        case LT_UINT##n: {                                                                          \
-            ARRAY (uint##n##_t, data, ctx->local);                                                  \
-            ARRAY_alloc (uint##n##_t, scratch, ctx->local.len, false, vb->scratch, vb, "scratch");  \
-            for (uint32_t r=0; r < rows; r++)                                                       \
-                for (uint32_t c=0; c < cols; c++)                                                   \
-                    scratch[c * rows + r] = data[r * cols + c];                                     \
-            ctx->ltype = LT_UINT##n##_TR;                                                           \
-            break;                                                                                  \
+        #define case_width(n)                                                                   \
+        case LT_UINT##n: {                                                                      \
+            uint##n##_t *data = (uint##n##_t *)ctx->local.data;                                 \
+            ARRAY_alloc (uint##n##_t, trans_full, rows * cols, false, vb->scratch, vb, "scratch");    \
+memset(trans_full,8,rows * cols);\
+            for (uint32_t r=0; r < rows; r++)                                                   \
+                for (uint32_t c=0; c < cols; c++)                                               \
+                    if (!missing || !(*missing++))                                              \
+                        trans_full[c * rows + r] = *data++; /* note: if missing, we set only the elements of scratch which were are available in local (i.e. not copied), leaving the remaining scratch elements uninitialized */ \
+            ctx->ltype = missing ? LT_UINT##n##_PTR : LT_UINT##n##_TR;                          \
+            break;                                                                              \
         }
 
         case_width(8);
@@ -86,7 +107,47 @@ void dyn_int_transpose (VBlockP vb, ContextP ctx)
         default: ABORT ("Bad ltype=%s in %s", lt_name (ctx->ltype), ctx->tag_name);
     }
 
-    buf_copy_do (vb, &ctx->local, &vb->scratch, lt_width(ctx), 0, 0, __FUNCLINE, CTX_TAG_LOCAL); // copy and not move, so we can keep local's memory for next vb
+    // case: copy back transposed array: rows X cols elements
+    if (!missing)
+        buf_copy_do (vb, &ctx->local, &vb->scratch, lt_width(ctx), 0, 0, __FUNCLINE, CTX_TAG_LOCAL); // copy and not move, so we can keep local's memory for next vb
+
+    // case: copy to local only the available data (i.e. not uninitialized scratch elements due to copied samples)
+    else {
+        missing = B1ST (bool, copy_ctx->local); // re-init
+         
+        switch (ctx->ltype) { 
+            #define case_width_copy(n)                                          \
+            case LT_UINT##n##_PTR: {                                             \
+                uint##n##_t *data = (uint##n##_t *)ctx->local.data;             \
+                uint##n##_t *trans_full = (uint##n##_t *)vb->scratch.data;            \
+                for (uint32_t c=0; c < cols; c++)       \
+                    for (uint32_t r=0; r < rows; r++)   \
+                        if (!missing[r * cols + c])           \
+                            *data++ = trans_full[c * rows + r];     \
+                ASSERT (BNUM(ctx->local, data) == ctx->local.len32, "bad copy: bnum=%u len=%u", BNUM(ctx->local, data), ctx->local.len32);/*sanity*/\
+                break;                                                          \
+            }
+
+            case_width_copy(8);
+            case_width_copy(16);
+            case_width_copy(32);
+            default: {} // already tested in previous switch
+        }
+// if (ctx->did_i==550) {
+// printf ("trans_full: \n");
+// uint8_t *full = (uint8_t *)vb->scratch.data;            
+// for (int r=0; r<cols; r++) {
+//     for (int c=0; c<rows; c++) printf ("%u ", full[r*rows+c]);
+//     printf ("\n");
+// }
+// printf ("\n\n");
+
+// printf ("transposed data: \n");
+// uint8_t *data = (uint8_t *)ctx->local.data;                                     
+// for (int i=0; i < ctx->local.len32; i++) printf ("%u ", data[i]);
+// printf ("\n\n");
+// }
+    }
 
     buf_free (vb->scratch);
 }

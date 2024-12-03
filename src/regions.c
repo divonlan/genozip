@@ -13,7 +13,7 @@
 
 // region as parsed from the --regions option
 typedef struct {
-    rom chrom;           // NULL means all chromosomes (i.e. not a specific chromosome)
+    rom chrom;           // Pointer into regions_data. NULL means all chromosomes (i.e. not a specific chromosome)
     PosType64 start_pos; // if the user did specify pos then start_pos=0 and end_pos=MAX_POS
     PosType64 end_pos;   // the region searched will include both the start and the end
 } Region, *RegionP;
@@ -25,10 +25,12 @@ typedef struct {
     bool revcomp;        // display the region in reverse complement
 } Chreg, *ChregP; // = Chromosome Region
 
+static Buffer regions_data = {};// if using --regions
+static BufferP regions_data_from_file = NULL; // if using --regions-file
 static Buffer regions_buf = {}; // all regions together
-static BufferP chregs = NULL;     // one entry per chrom
+static BufferP chregs = NULL;   // an array of Buffer - one entry per chrom
 
-static WordIndex num_chroms; // signed value as its compared to chrom
+static WordIndex num_chroms;    // signed value as its compared to chrom
 
 static bool is_negative_regions = false; // true if the user used ^ to negate the regions
 
@@ -91,22 +93,20 @@ static bool regions_is_valid_chrom (rom str)
 }
 
 // called from main when parsing the command line to add the argument of --regions
-void regions_add (char *region_str) // note: modifies region_str
+void regions_add (rom regions_arg) 
 {
-    ASSERTNOTNULL (region_str);
+    ASSERTNOTNULL (regions_arg);
 
-    // make a copy in case its needed for the error message
-    char *copy_regions_str = MALLOC (strlen (region_str)+1);
-    strcpy (copy_regions_str, region_str); 
+    buf_append (evb, regions_data, char, regions_arg, strlen (regions_arg)+1, "regions_data");
 
-    bool is_negated = region_str[0] == '^';
+    bool is_negated = (*B1STc(regions_data) == '^');
 
     bool is_conflicting_negation = (regions_buf.len && (is_negative_regions != is_negated));
     ASSINP0 (!is_conflicting_negation, "Error: inconsistent negation - all regions listed must either be negated or not");
 
     is_negative_regions = is_negated;
 
-    char *next_region_token = region_str + is_negated; // skip the ^ if there is one
+    char *next_region_token = Bc(regions_data, is_negated); // skip the ^ if there is one
 
     while (1) {
         char *one_rs = strtok_r (next_region_token, ",", &next_region_token);
@@ -117,17 +117,17 @@ void regions_add (char *region_str) // note: modifies region_str
         char *after_colon;
         char *before_colon = strtok_r (one_rs, ":", &after_colon);
 
-        ASSINP (before_colon, "Error: invalid region string: %s", copy_regions_str);
+        ASSINP (before_colon, "Error: invalid region string: %s", regions_arg);
 
         Region *reg = &BNXT (Region, regions_buf);
         *reg = (Region){ .chrom = NULL, .start_pos = 0, .end_pos = MAX_POS };
 
         // case: we have both chrom and pos - easy!
         if (after_colon && after_colon[0]) {
-            ASSINP (regions_is_valid_chrom (before_colon), "Error: Invalid CHROM in region string: %s", region_str);
+            ASSINP (regions_is_valid_chrom (before_colon), "Error: Invalid CHROM in region string: %s", regions_arg);
             reg->chrom = before_colon;
             
-            ASSINP (regions_parse_pos (after_colon, reg), "Error: Invalid position range in region string: \"%s\"", region_str);
+            ASSINP (regions_parse_pos (after_colon, reg), "Error: Invalid position range in region string: \"%s\"", regions_arg);
         }
 
         // case: only one substring. we need to determine if the single substring is a pos or a chrom. if it
@@ -140,11 +140,11 @@ void regions_add (char *region_str) // note: modifies region_str
             bool has_pos = regions_parse_pos (before_colon, reg);
 
             // make sure at least one of them is valid
-            ASSINP (reg->chrom || has_pos, "Error: Invalid region string: %s", copy_regions_str);
+            ASSINP (reg->chrom || has_pos, "Error: Invalid region string: %s", regions_arg);
 
             // if both are valid, but the number is <= MAX_NUM_THAT_WE_ASSUME_IS_A_CHROM_AND_NOT_POS, we assume it is a chromosome.
             // Otherwise, we create two regions. Note: the user can always force a region with 10-10 or 1:10
-#define MAX_NUM_THAT_WE_ASSUME_IS_A_CHROM_AND_NOT_POS 50
+            #define MAX_NUM_THAT_WE_ASSUME_IS_A_CHROM_AND_NOT_POS 50
             if (reg->chrom && has_pos) {
 
                 // if large number - have two regions: entire chrom of this number, and all chroms at this pos
@@ -163,8 +163,6 @@ void regions_add (char *region_str) // note: modifies region_str
 
         //regions_display ("After regions_add"); 
     }
-
-    FREE (copy_regions_str);
 }
 
 // called from main when parsing the command line to add the argument of --regions
@@ -211,7 +209,7 @@ void regions_add_by_file (rom regions_filename)
                 "Invalid len (column 3 in a tab-separated file) in %s line %u: \"%.*s\"", regions_filename, i+1, field_lens[2], fields[2]);
 
         BNXT (Region, regions_buf) = (Region){ 
-            .chrom     = fields[0], 
+            .chrom     = fields[0], // points into "data" allocated by file_split_lines
             .start_pos = start_pos, 
             .end_pos   = (num_fields==2) ? start_pos 
                        : has_len         ? (start_pos + len - 1) // user specified length, eg +10, rather than end
@@ -219,7 +217,7 @@ void regions_add_by_file (rom regions_filename)
         };
     }
 
-    // note: we don't free data, as chrom of each region points into it
+    regions_data_from_file = &data; // so we can destroy it if needed
 }
 
 // convert the list of regions as parsed from --regions, to an array of chregs - one for each chromosome.
@@ -246,7 +244,7 @@ void regions_make_chregs (ContextP chrom_ctx)
 
             // if we have a reference file loaded, try getting an alternative name
             if (chrom_word_index == WORD_INDEX_NONE)
-                chrom_word_index = contigs_get_matching (ref_get_ctgs(gref), regions[i].chrom, strlen (regions[i].chrom), 0, true, NULL);
+                chrom_word_index = contigs_get_matching (ref_get_ctgs(), regions[i].chrom, strlen (regions[i].chrom), 0, true, NULL);
 
             // if the requested chrom does not exist in the file, we remove this region
             if (chrom_word_index == WORD_INDEX_NONE) continue;
@@ -257,7 +255,7 @@ void regions_make_chregs (ContextP chrom_ctx)
              chr_i         <= (chrom_word_index == WORD_INDEX_NONE ? num_chroms-1 : chrom_word_index);
              chr_i++) {
 
-            RangeP r = ref_get_range_by_ref_index (evb, gref, chr_i);
+            RangeP r = ref_get_range_by_ref_index (evb, chr_i);
 
             PosType64 reg_start_pos = reg->start_pos - ((r && flag.gpos) ? (r->gpos - 1) : 0);
             PosType64 reg_end_pos   = reg->end_pos   - ((r && flag.gpos) ? (r->gpos - 1) : 0);
@@ -354,7 +352,7 @@ bool regions_get_ra_intersection (WordIndex chrom_word_index, PosType64 min_pos,
 {
     if (!flag.regions) return true; // nothing to do
 
-    ASSERT (chrom_word_index >= 0 && chrom_word_index < num_chroms, "chrom_word_index=%d out of range", chrom_word_index);
+    ASSERTINRANGE (chrom_word_index, 0, num_chroms);
 
     // if any -r region intersects with this VB random_access region - this this VB should be considered
     ARRAY (Chreg, ch, chregs[chrom_word_index]);
@@ -399,16 +397,14 @@ bool regions_get_range_intersection (WordIndex chrom_word_index, PosType64 min_p
 // a specific ra (i.e. chromosome)
 bool regions_is_site_included (VBlockP vb)
 {
-    Did chrom_did_i = DTF(chrom);
     Did pos_did_i   = DTF(pos);
 
-    WordIndex chrom = vb->last_index (chrom_did_i);
+    WordIndex chrom = vb->last_index (CHROM);
     PosType64 pos = (pos_did_i == DID_NONE)          ? 1 
                 : CTX(pos_did_i)->pos_last_value ? CTX(pos_did_i)->pos_last_value // use saved value if one exists (used in VCF, bc VCF_POS.last_value might be modified by a INFO/END)
                 :                                  CTX(pos_did_i)->last_value.i;
     
-    ASSPIZ (chrom >= 0 && chrom < num_chroms, "chrom=%d is out of range: num_chroms=%u chrom_did_i=%u", 
-            chrom, num_chroms, chrom_did_i);
+    ASSPIZ (IN_RANGE(chrom, 0, num_chroms), "chrom=%d ∉ [0,%u)", chrom, num_chroms);
 
     // it sufficient that the site is included in one (positive) region
     BufferP chregs_buf = &chregs[chrom];
@@ -422,8 +418,7 @@ bool regions_is_site_included (VBlockP vb)
 // PIZ: check if a range (chrom,start_pos,end_pos) overlaps with an included region. used when loading reference ranges.
 bool regions_is_range_included (WordIndex chrom_word_index, PosType64 start_pos, PosType64 end_pos, bool completely_included)
 {
-    ASSERT (chrom_word_index >= 0 && chrom_word_index < num_chroms, "chrom_word_index=%d is out of range. num_chroms=%u", 
-            chrom_word_index, num_chroms);
+    ASSERTINRANGE (chrom_word_index, 0, num_chroms);
 
     // it sufficient that the site is included in one (positive) region
     BufferP chregs_buf = &chregs[chrom_word_index];
@@ -492,4 +487,22 @@ void regions_display(rom title)
                 iprintf ("chrom_word_index=%d start=%"PRId64" end=%"PRId64"\n", chr_i, chreg->start_pos, chreg->end_pos); 
             }
     }
+}
+
+void regions_destroy (void)
+{
+    if (!is_genocat) return; // --regions and --regions-file are available only in genocat
+
+    buf_destroy (regions_data);
+    buf_destroy (regions_buf);
+
+    if (chregs) {
+        for (unsigned chr_i = 0; chr_i < num_chroms; chr_i++)
+            buf_destroy (chregs[chr_i]);
+
+        FREE (chregs);
+    }
+
+    if (regions_data_from_file)
+        buf_destroy (*regions_data_from_file);
 }

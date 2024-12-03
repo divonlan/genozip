@@ -52,9 +52,9 @@ void zriter_wait_for_bg_writing (void)
     if (flag.zip_no_z_file) return;
     
     for_buf (ZriterThreadP, zt_p, z_file->zriter_threads) {
-        if (flag.show_threads) iprintf ("zriter: JOINING: thread_id=%"PRIu64"\n", (uint64_t)(*zt_p)->thread_id);
+        if (flag_show_threads) iprintf ("zriter: JOINING: thread_id=%"PRIu64"\n", (uint64_t)(*zt_p)->thread_id);
         PTHREAD_JOIN ((*zt_p)->thread_id, "zriter_thread_entry"); // blocking
-        if (flag.show_threads) iprintf ("zriter: JOINED: thread_id=%"PRIu64"\n", (uint64_t)(*zt_p)->thread_id);
+        if (flag_show_threads) iprintf ("zriter: JOINED: thread_id=%"PRIu64"\n", (uint64_t)(*zt_p)->thread_id);
 
         buf_destroy ((*zt_p)->data);
         buf_destroy ((*zt_p)->section_list);
@@ -95,7 +95,7 @@ static void *zriter_thread_entry (void *zt_)
 
     COPY_TIMER_EVB (write_bg); // "write" profiler resource protected by zriter_mutex
 
-    __atomic_store_n (&zt->completed, true, __ATOMIC_RELEASE); // signal that thread is ready to be joined
+    store_release (zt->completed, true); // signal that thread is ready to be joined
 
     mutex_unlock (z_file->zriter_mutex);
 
@@ -111,12 +111,12 @@ static void zriter_write_background (BufferP data, BufferP section_list)
     for (int32_t i=0; i < z_file->zriter_threads.len32; i++) { // note: can't use for_buf, bc data.len decreases in the loop
         ZriterThreadP *zt_p = B(ZriterThreadP, z_file->zriter_threads, i);
 
-        if (__atomic_load_n (&(*zt_p)->completed, __ATOMIC_ACQUIRE)) { // completed
+        if (load_acquire ((*zt_p)->completed)) { // completed
             // free resources
 
-            if (flag.show_threads) iprintf ("zriter: JOINING: thread_id=%"PRIu64"\n", (uint64_t)(*zt_p)->thread_id);
+            if (flag_show_threads) iprintf ("zriter: JOINING: thread_id=%"PRIu64"\n", (uint64_t)(*zt_p)->thread_id);
             PTHREAD_JOIN ((*zt_p)->thread_id, "zriter_thread_entry");
-            if (flag.show_threads) iprintf ("zriter: JOINED: thread_id=%"PRIu64"\n", (uint64_t)(*zt_p)->thread_id);
+            if (flag_show_threads) iprintf ("zriter: JOINED: thread_id=%"PRIu64"\n", (uint64_t)(*zt_p)->thread_id);
 
             buf_destroy ((*zt_p)->data);
             buf_destroy ((*zt_p)->section_list);
@@ -145,7 +145,7 @@ static void zriter_write_background (BufferP data, BufferP section_list)
     unsigned err = pthread_create (&(*zt_p)->thread_id, NULL, zriter_thread_entry, *zt_p);
     ASSERT (!err, "failed to create thread zriter thread: %s", strerror(err));
 
-    if (flag.show_threads) iprintf ("zriter: CREATE: thread_id=%"PRIu64" zriter_num=%u data_len=%u sections=%u\n", 
+    if (flag_show_threads) iprintf ("zriter: CREATE: thread_id=%"PRIu64" zriter_num=%u data_len=%u sections=%u\n", 
                                     (uint64_t)(*zt_p)->thread_id, zriter_thread_num++, (*zt_p)->data.len32, (*zt_p)->section_list.len32);
 }
 

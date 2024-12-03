@@ -52,7 +52,7 @@ rom bam_show_line (VBlockSAMP vb, rom alignment, uint32_t remaining_txt_len)
     uint32_t block_size = NEXT_UINT32;
     rom after = alignment + block_size + sizeof (uint32_t);
 
-    if (segconf.running) return after;
+    if (segconf_running) return after;
 
     iprintf ("block_size=%d ", block_size);
 

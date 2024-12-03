@@ -77,10 +77,24 @@ test_count_genocat_lines()
     fi
     
     $genocat $output $2 -fo $recon || exit 1
-    local wc=`cat $recon |wc -l`
+    local wc=`cat $recon | wc -l`
 
     if (( $wc != $3 )); then
         echo "FAILED - expected $3 lines, but getting $wc"
+        exit 1
+    fi  
+    # note: we don't delete $output as subsequent tests might use it
+}
+
+test_count_genocat_info_lines() 
+{ # $1 - genocat arguments $2 - expected number of output lines
+    test_header "genocat $1"
+        
+    $genocat $1 > $recon || exit 1
+    local wc=`cat $recon | wc -l`
+
+    if (( $wc != $2 )); then
+        echo "FAILED - expected $2 lines, but getting $wc"
         exit 1
     fi  
 }
@@ -522,6 +536,12 @@ batch_special_algs()
     # bug was: bad SAM/BAM file with two prim alignments with the same QNAME and is_first compressed successfully but failed uncompress
     $genozip -tf ${TESTDIR}/regression.defect-2024-09-19.duplicate-QNAMEs.sam --no-gencomp || exit 1
     $genozip -tf ${TESTDIR}/regression.defect-2024-09-19.duplicate-QNAMEs.sam --force-gencomp || exit 1
+
+    # bug was: reading an R2 VB containing a single read failed (fixed 15.0.69)
+    $genozip -tf ${TESTDIR}/regression.single-read.R1.fq ${TESTDIR}/regression.single-read.R2.fq -2e $GRCh38 || exit 1
+
+    # VCF with with allele values in FORMAT/GT > NUM_SMALL_ALLELES
+    $genozip -tf ${TESTDIR}/special.large-alleles.vcf || exit 1
 }
 
 batch_qual_codecs()
@@ -840,6 +860,7 @@ batch_genocat_tests()
     batch_print_header
 
     # FASTA genocat tests
+    test_header "genocat tests - FASTA"
     local file=$TESTDIR/basic.fa
     test_count_genocat_lines $file "--sequential" 9
     test_count_genocat_lines $file "--header-only" 3
@@ -849,8 +870,10 @@ batch_genocat_tests()
     test_count_genocat_lines $file "--grep cytochrome" 6
     test_count_genocat_lines $file "--grep cytochrome --sequential " 2
     test_count_genocat_lines $file "--grep cytochrome --sequential --no-header " 1
+    test_count_genocat_info_lines "$output --contigs" 3 
 
     # FASTQ genocat tests
+    test_header "genocat tests - FASTQ"
     local file=$TESTDIR/basic.fq
     local num_lines=`grep + $file | wc -l`
     local file_copy=$OUTDIR/basic.fq
@@ -874,6 +897,7 @@ batch_genocat_tests()
     test_count_genocat_lines $file "--grep line5 --header-only" 1
 
     # BED genocat tests
+    test_header "genocat tests - BED"
     local file=$TESTDIR/basic.bed
     test_count_genocat_lines $file "--header-only" 3
     test_count_genocat_lines $file "--no-header" 7
@@ -883,10 +907,12 @@ batch_genocat_tests()
     test_count_genocat_lines $file "--tail=2 --no-header" 2
 
     # SAM genocat tests
+    test_header "genocat tests - SAM"
     local file=$TESTDIR/basic.sam
     local filter=$TESTDIR/basic.sam.qname-filter
     test_count_genocat_lines $file "-H --qnames-file $filter" 4
     test_count_genocat_lines $file "-H --qnames-file ^$filter" 11
+    test_count_genocat_info_lines "$output --contigs" 11
 
     local filter_opt=`cut -d" " -f1 $filter | sed "s/^@//g" | tr "\n" ","`
     test_count_genocat_lines $file "-H --qnames $filter_opt" 4
@@ -897,10 +923,12 @@ batch_genocat_tests()
     test_count_genocat_lines $file "-H --seqs-file ^$filter" 11
     
     # BAM genocat tests
+    test_header "genocat tests - BAM"
     local file=$TESTDIR/basic.bam
     local filter=$TESTDIR/basic.sam.qname-filter
     test_count_genocat_lines $file "--sam -z0 -H --qnames-file $filter" 4
     test_count_genocat_lines $file "--sam -z0 -H --qnames-file ^$filter" 11
+    test_count_genocat_info_lines "$output --contigs" 11
 
     local filter=$TESTDIR/basic.sam.seq-filter
     test_count_genocat_lines $file "--sam -z0 -H --seqs-file $filter" 4
@@ -1396,6 +1424,11 @@ batch_real_world_backcomp()
 
     cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
 
+    # check if files in "latest" are indeed latest
+    if [[ "$1" == "latest" ]]; then
+        update_latest # must be before make
+    fi
+
     # compress all real world test files with old genozip version. Some files might fail compression -
     # they will remain with size 0 and we will ignore them in this test.
     install_license_wrapper $1 || exit 1
@@ -1602,20 +1635,23 @@ batch_sam_bam_cram_output()
         txt_type=$(get_sam_type $txt)
         if [[ $txt_type != "BAM_Z0" ]]; then echo "genocat (--bam -z0) of $z_type unexpectedly generated $txt_type, expecting BAM_Z0"; exit 1; fi
 
-        test_header "#15: genocat of `basename $z`: stdout as CRAM"
-        $genocat $z --cram > $txt || exit 1
-        txt_type=$(get_sam_type $txt)
-        if [[ $txt_type != "CRAM" ]]; then echo "genocat (stdout as CRAM) of $z_type unexpectedly generated $txt_type, expecting BAM"; exit 1; fi
+        if [ ! -n "$is_windows" ]; then # these don't work with samtools on Windows
+            test_header "#15: genocat of `basename $z`: explicitly CRAM by flag"
+            $genocat $z -fo $txt --cram || exit 1
+            txt_type=$(get_sam_type $txt)
+            if [[ $txt_type != "CRAM" ]]; then echo "genocat (--cram) of $z_type unexpectedly generated $txt_type, expecting CRAM"; exit 1; fi
 
-        test_header "#16: genocat of `basename $z`: explicitly CRAM by filename"
-        $genocat $z -fo $txt.cram || exit 1
-        txt_type=$(get_sam_type $txt.cram)
-        if [[ $txt_type != "CRAM" ]]; then echo "genocat (-o .cram) of $z_type unexpectedly generated $txt_type, expecting CRAM"; exit 1; fi
+            test_header "#16: genocat of `basename $z`: stdout as CRAM"
+            $genocat $z --cram > $txt || exit 1
+            txt_type=$(get_sam_type $txt)
+            if [[ $txt_type != "CRAM" ]]; then echo "genocat (stdout as CRAM) of $z_type unexpectedly generated $txt_type, expecting BAM"; exit 1; fi
 
-        test_header "#17: genocat of `basename $z`: explicitly CRAM by flag"
-        $genocat $z -fo $txt --cram || exit 1
-        txt_type=$(get_sam_type $txt)
-        if [[ $txt_type != "CRAM" ]]; then echo "genocat (--cram) of $z_type unexpectedly generated $txt_type, expecting CRAM"; exit 1; fi
+            test_header "#17: genocat of `basename $z`: explicitly CRAM by filename"
+            $genocat $z -fo $txt.cram || exit 1
+            txt_type=$(get_sam_type $txt.cram)
+            if [[ $txt_type != "CRAM" ]]; then echo "genocat (-o .cram) of $z_type unexpectedly generated $txt_type, expecting CRAM"; exit 1; fi
+        fi
+
     done
 
     cleanup
@@ -1746,7 +1782,10 @@ batch_reference_fastq()
 {
     batch_print_header
 
-    echo "paired FASTQ with --reference, --password (BZ2), --md5, -B1"
+    test_header "paired MGI FASTQ with --reference"
+    test_standard "CONCAT -e$GRCh38 --pair" "" test.mgi-dragen.R1.fq.gz test.mgi-dragen.R2.fq.gz
+
+    test_header "paired Illumina FASTQ with --reference, --password (BZ2), --md5, -B1"
     test_standard "CONCAT -e$GRCh38 -p 123 --pair -mB1" "-p123" test.human2-R1.fq.bz2 test.human2-R2.fq.bz2
 
     # test --grep (regression test for bug 788)
@@ -1778,15 +1817,15 @@ batch_reference_fastq()
         exit 1
     fi
 
-    echo "4 paired FASTQ with --REFERENCE (BGZF, decompress concatenated, password)"
-    test_standard "COPY -E$GRCh38 -2 -p 123" " " test.human2-R1.fq.gz test.human2-R2.fq.gz
+    test_header "4 paired FASTQ with --REFERENCE (BGZF, decompress concatenated, password)"
+    test_standard "-E$GRCh38 -2 -p 123" " " test.human2-R1.fq.gz test.human2-R2.fq.gz test.mgi-dragen.R1.fq.gz test.mgi-dragen.R2.fq.gz
     
     # solexa read style
-    echo "solexa read style"
+    test_header "solexa read style"
     test_standard "-e$GRCh38 --pair" "" special.solexa-R1.fq special.solexa-R2.fq
 
     # first read of an R2 from disk doesn't have enough data, and another read from disk is needed
-    echo "paired where R2 is larger and needs an additional block read"
+    test_header "paired where R2 is larger and needs an additional block read"
     test_standard "-e$GRCh38 --pair -B2000B" "" special.R2-vblock-larger-than-R1.R1.fq special.R2-vblock-larger-than-R1.R2.fq
 
     cleanup
@@ -1894,6 +1933,16 @@ batch_reference_vcf()
     cleanup
 }
 
+batch_reference_genocat()
+{
+    batch_print_header
+    echo "--print-ref-contigs"
+
+    test_count_genocat_info_lines "--print-ref-contigs $GRCh38" 3366
+    test_count_genocat_info_lines "--contigs $GRCh38" 3366
+    test_count_genocat_info_lines "-e $GRCh38 --print-ref-iupacs" 96
+}
+
 batch_many_small_files()
 {
     batch_print_header
@@ -1978,15 +2027,30 @@ update_latest()
 
     pushd ../genozip-latest
     git reset --hard
-    git pull
+    git pull | tee pull.out
 
     if [ -n "$is_mac" ]; then 
         chmod +x src/*.sh # reverted by git pull
     fi  
-    
-    make -j clean
+
+    # clean - but careful not to clean if executable might be good - because rebuilding
+    # the executable will cause make to re-generate all private/test/latest files
+    if [[ `cat pull.out` != "Already up to date." ]] ; then    
+        make -j clean 
+    fi
+    rm pull.out
+
     make -j 
     popd
+
+    # remove old "latest" test files if needed
+    old_latest_ver="`cat $TESTDIR/latest/VERSION 2>/dev/null`"
+    this_latest_ver="`$genozip_latest --version | cut -d' ' -f1`"
+
+    if [[ "$old_latest_ver" != "$this_latest_ver" ]]; then
+        rm -f $TESTDIR/latest/*
+        echo $this_latest_ver > $TESTDIR/latest/VERSION
+    fi
 }
 
 # compress with prod and prod-created ref file, uncompress with new version and new version-created ref file
@@ -2264,8 +2328,10 @@ batch_deep() # note: use --debug-deep for detailed tracking
 {
     batch_print_header
 
-    # btest contains a variety of scenarios
-    test_header basic-deep
+    local save_genozip="$genozip"
+    genozip="$genozip --show-deep"  
+
+    test_header "deep: basic-deep"
     local T=$TESTDIR/basic-deep
     $genozip $T.sam $T.R1.fq $T.R2.fq -tfe $GRCh38 --deep -o $output --best || exit 1 # --best causes aligner use on unmapped alignments
     $genozip $T.sam $T.R1.fq $T.R2.fq -tfe $GRCh38 --deep -o $output --no-gencomp || exit 1 # --no-gencomp causes in-VB segging against saggy 
@@ -2281,37 +2347,40 @@ batch_deep() # note: use --debug-deep for detailed tracking
     test_count_genocat_lines "" "--sam --head --no-header" 10
     test_count_genocat_lines "" "--sam --tail=11 --no-header" 11
     test_count_genocat_lines "" "--sam --header-only" 3376
+
+    test_header "deep: deep.interleaved"
+    local T=$TESTDIR/deep.interleaved
+    $genozip $T.sam $T.fq -tfe $GRCh38 --deep -o $output || exit 1 
+
+    test_header "deep.interleaved (2 interleaved fq files)"
+    head -16 $T.fq > $OUTDIR/deep.interleaved.1.fq
+    tail -16 $T.fq > $OUTDIR/deep.interleaved.2.fq
+    $genozip $T.sam $OUTDIR/deep.interleaved.1.fq $OUTDIR/deep.interleaved.2.fq -tfe $GRCh38 --deep -o $output || exit 1 
     
-    genozip="$genozip --show-deep"  
-    
-    test_header deep.human2-38
+    test_header "deep: deep.human2-38"
     local T=$TESTDIR/deep.human2-38
     $genozip $T.sam $T.R1.fq.gz $T.R2.fq.gz -fe $GRCh38 -o $output -3t --best --not-paired || exit 1
     $genozip $T.sam $T.R1.fq.gz $T.R2.fq.gz -fe $GRCh38 -o $output -3t --no-gencomp --not-paired || exit 1
 
-    # gem3 (bisulfite), multiple (>2) FASTQ
-    test_header deep.gem3.multi-fastq
+    test_header "deep: deep.gem3.multi-fastq: gem3 (bisulfite), multiple (>2) FASTQ"
     local T=$TESTDIR/deep.gem3.multi-fastq
     $genozip $T.1.fq $T.sam $T.2.fq $T.3.fq -fe $GRCh38 -o $output -3t || exit 1
     test_count_genocat_lines "" "--R 1" 20
     test_count_genocat_lines "" "--R 2" 20
     test_count_genocat_lines "" "--R 3" 20
 
-    # bismark (bisulfite), SRA2, non-matching FASTQ filenames
-    test_header deep.bismark.sra2
+    test_header "deep: deep.bismark.sra2: bismark (bisulfite), SRA2, non-matching FASTQ filenames"
     local T=$TESTDIR/deep.bismark.sra2
     $genozip $T.two.fq.gz $T.bam $T.one.fq.gz -fE $GRCh38 -o $output -3t || exit 1
     
-    # SAM has cropped one base at the end of every read (101 bases in FQ vs 100 in SAM)
-    test_header deep.crop-100
+    test_header "deep: deep.crop-100: SAM has cropped one base at the end of every read (101 bases in FQ vs 100 in SAM)"
     local T=$TESTDIR/deep.crop-100
     $genozip $T.fq $T.sam -fe $GRCh38 -o $output -3t || exit 1
     test_count_genocat_lines "" "--fq --seq-only" 1000
     test_count_genocat_lines "" "--fq --qual-only" 1000
     test_count_genocat_lines "" "--fq --header-only" 1000 
 
-    # SAM and FQ qname flavor is different - but comparable after canonization
-    test_header deep.canonize-qname
+    test_header "deep: deep.canonize-qname: SAM and FQ qname flavor is different - but comparable after canonization"
     local T=$TESTDIR/deep.canonize-qname
     $genozip $T.2.fq $T.1.fq $T.sam -tfe $GRCh38 -o $output --deep || exit 1
     test_count_genocat_lines "" "--R1" 400
@@ -2321,34 +2390,33 @@ batch_deep() # note: use --debug-deep for detailed tracking
     test_count_genocat_lines "" "--one-vb=2 --no-header" 400
     test_count_genocat_lines "" "--one-vb=3 --no-header" 400
         
-    # SAM sequences may be shorter than in FASTQ due to trimming
-    test_header deep.trimmed
+    test_header "deep: deep.trimmed: SAM sequences may be shorter than in FASTQ due to trimming"
     local T=$TESTDIR/deep.trimmed
     $genozip $T.fq $T.sam -fe $GRCh38 -o $output -3t || exit 1
 
-    # some edge cases related storing seq / cigar
-    test_header deep.some-edge-cases
+    test_header "deep: deep.some-edge-cases: some edge cases related storing seq / cigar"
     local T=$TESTDIR/deep.some-edge-cases
     $genozip $T.fq $T.sam -fe $GRCh38 -o $output -3t || exit 1
 
-    # trimmed with LONG (codec consumes trimmed SEQ)
     cleanup_cache
-    test_header deep.trim+longr
+
+    test_header "deep: test.mgi-dragen - paired"
+    local T=$TESTDIR/test.mgi-dragen
+    $genozip $T.R1.fq.gz $T.R2.fq.gz -A $T.bam -2 -fe $hs37d5 -o $output -t || exit 1
+
+    test_header "deep: deep.trim+longr: trimmed with LONG (codec consumes trimmed SEQ)"
     local T=$TESTDIR/deep.trim+longr
     $genozip $T.fq $T.sam -fe $hs37d5 -o $output -3t || exit 1
 
-    # trimmed with HOMP (codec consumes trimmed SEQ and calls fastq_zip_qual for sub-codec too)
-    test_header deep.trim+homp
+    test_header "deep: deep.trim+homp: trimmed with HOMP (codec consumes trimmed SEQ and calls fastq_zip_qual for sub-codec too)"
     local T=$TESTDIR/deep.trim+homp
     $genozip $T.fq $T.sam -fe $hs37d5 -o $output -3t || exit 1
 
-    # FASTQ with SAUX
-    test_header deep.illum.saux
+    test_header "deep: deep.illum.saux: FASTQ with SAUX"
     local T=$TESTDIR/deep.illum.saux
     $genozip $T.R1.fq $T.R2.fq $T.sam -tfe $hs37d5 -o $output --deep || exit 1
 
-    # qual scores corresponding to 'N' bases are replaced by DRAGEN
-    test_header deep.rewrite-N-qual
+    test_header "deep: deep.rewrite-N-qual: qual scores corresponding to 'N' bases are replaced by DRAGEN"
     local T=$TESTDIR/deep.rewrite-N-qual
     $genozip $T.R1.fq $T.R2.fq $T.sam -fte $hs37d5 -o $output --deep || exit 1
 
@@ -2357,38 +2425,172 @@ batch_deep() # note: use --debug-deep for detailed tracking
         exit 1
     fi
 
-    # Amplicon data (lots of dup seqs) + 2 FASTQ pairs + gencomp + FASTQs out of order on command line
-    test_header deep.amplicon
+    test_header "deep: deep.amplicon: Amplicon data (lots of dup seqs) + 2 FASTQ pairs + gencomp + FASTQs out of order on command line"
     local T=$TESTDIR/deep.amplicon
     $genozip $T.A.R2.fq $T.B.R1.fq $T.B.R2.fq $T.A.R1.fq $T.bam -fte $hs37d5 -o $output --deep || exit 1
 
-    test_header deep.amplicon no-qual
+    test_header "deep: deep.amplicon no-qual"
     local T=$TESTDIR/deep.amplicon
     $genozip $T.A.R2.fq $T.B.R1.fq $T.B.R2.fq $T.A.R1.fq $T.bam -fte $hs37d5 -o $output --deep=no-qual || exit 1
 
-    # Illumina WGS - different FASTQ and SAM qname flavors
+    test_header "deep: deep.pbmm2-CIGAR-XE.fq - PACB qual codec + X/= cigar"
+    local T=$TESTDIR/deep.pbmm2-CIGAR-XE
+    local T1=$TESTDIR/test.pbmm2-CIGAR-XE
+    $genozip $T.fq.gz $T1.bam -fte $hs37d5 -o $output --deep || exit 1
+    
     cleanup_cache
-    test_header "deep.qtype=QNAME2 - different FASTQ and SAM qname flavors"
+    test_header "deep: deep.qtype=QNAME2 - different FASTQ and SAM qname flavors"
     local T="$TESTDIR/deep.qtype=QNAME2"
     $genozip $T.1.fq $T.2.fq $T.sam -tfE $hg19 --deep -o $output || exit 1
 
-    test_header "deep.trimmed-deep_no_qual - encrypted"
+    test_header "deep: deep.trimmed-deep_no_qual - encrypted"
     local T=$TESTDIR/deep.trimmed-deep_no_qual
     $genozip $T.bam $T.R1.fq.gz $T.R2.fq.gz -fe $hg19 -p 123 -o $output -3t || exit 1
 
-    test_header "deep.left-right-trimming"
+    test_header "deep: deep.left-right-trimming"
     local T=$TESTDIR/deep.left-right-trimming
     $genozip $T.bam $T.fq.gz -fe $hg19 -o $output -3t || exit 1
 
-    # pacbio ccs, minimap2, single FASTQ
     cleanup_cache
-    test_header deep.pacbio-ccs
+    test_header "deep: deep.pacbio-ccs: ccs, minimap2, single FASTQ"
     local T=$TESTDIR/deep.pacbio-ccs
     $genozip $T.fq.gz $T.bam -fe $mm10 -3t -o $output || exit 1
-    
+
+    cleanup_cache
+    test_header "deep: deep.gpos-64 - alignment has gpos=14B, i.e. fits in 64 bits"
+    local T=$TESTDIR/deep.gpos-64
+    $genozip $T.fq $T.sam -fe $chinese_spring -3t -o $output || exit 1
+
+    cleanup_cache
+    test_header "deep: deep.koala - Illumina WGS, 2 pairs, different contig names than reference"
+    local T=$TESTDIR/deep.koala
+    $genozip $T.1.R1.fq.gz $T.2.R2.fq.gz $T.1.R2.fq.gz $T.2.R1.fq.gz -3 $T.bam -fe $koala -t -o $output || exit 1
+
     # test back comp of a file with old QNAME huffman (used in 15.0.65-67)
+    # also tests handling monoseq reads that were omitted from deep until 15.0.68 (2nd sam alignment in monoseq)
     $genounzip -t $TESTDIR/special/special.deep.old-qname-huffman.deep.genozip -e $GRCh38 || exit 1
     
+    genozip="$save_genozip"
+    cleanup
+}
+
+batch_bamass()
+{
+    batch_print_header
+
+    local save_genozip="$genozip"
+    genozip="$genozip --show-bamass"  
+
+    local T=$TESTDIR/basic-deep
+
+    test_header "bamass: basic-deep: two separate fq.genozip files"
+    $genozip -A $T.sam $T.R1.fq $T.R2.fq -tfe $GRCh38 || exit 1 
+
+    test_header "bamass: basic-deep: one paired .genozip file"
+    $genozip -2A $T.sam $T.R1.fq $T.R2.fq -tfe $GRCh38 -o $output || exit 1 
+
+    test_count_genocat_lines "" "--R1" 24
+    test_count_genocat_lines "" "--R2" 24
+
+    local T=$TESTDIR/deep.interleaved
+    test_header "bamass: deep.interleaved: one interleaved FASTQ file"
+    $genozip -A $T.sam $T.fq -tfe $GRCh38 -o $output || exit 1 
+
+    test_header "bamass: deep.interleaved (2 interleaved fq files)"
+    head -16 $T.fq > $OUTDIR/deep.interleaved.1.fq # $T.fq is 32 lines (8 reads)
+    tail -16 $T.fq > $OUTDIR/deep.interleaved.2.fq
+    $genozip -A $T.sam $OUTDIR/deep.interleaved.1.fq $OUTDIR/deep.interleaved.2.fq -tfe $GRCh38 || exit 1 
+
+    test_header "bamass: deep.human2-38 (not paired)"
+    local T=$TESTDIR/deep.human2-38
+    $genozip -A $T.sam $T.R1.fq.gz $T.R2.fq.gz -fe $GRCh38 -t || exit 1
+
+    test_header "bamass: deep.gem3.multi-fastq - gem3 (bisulfite), multiple (>2) FASTQ"
+    local T=$TESTDIR/deep.gem3.multi-fastq
+    $genozip $T.1.fq -A $T.sam $T.2.fq $T.3.fq -fe $GRCh38 -t || exit 1 # note: all but one alignments are unmapped in the SAM file
+
+    test_header "bamass: deep.bismark.sra2 - bismark (bisulfite), SRA2, non-matching FASTQ filenames"
+    local T=$TESTDIR/deep.bismark.sra2
+    $genozip $T.two.fq.gz -2A $T.bam $T.one.fq.gz -fE $GRCh38 -o $output -t || exit 1
+    
+    test_header "bamass: deep.crop-100 - SAM has cropped one base at the end of every read (101 bases in FQ vs 100 in SAM)"
+    local T=$TESTDIR/deep.crop-100
+    $genozip $T.fq -A $T.sam -fe $GRCh38 -o $output -t || exit 1
+    test_count_genocat_lines "" "--fq --seq-only" 1000
+    test_count_genocat_lines "" "--fq --qual-only" 1000
+    test_count_genocat_lines "" "--fq --header-only" 1000 
+
+    test_header "bamass: deep.canonize-qname - SAM and FQ qname flavor is different - but comparable after canonization"
+    local T=$TESTDIR/deep.canonize-qname
+    $genozip $T.2.fq $T.1.fq --bamass $T.sam --pair -tfe $GRCh38 -o $output || exit 1
+    test_count_genocat_lines "" "--R1" 400
+    test_count_genocat_lines "" "--one-vb=1 --no-header" 400
+    test_count_genocat_lines "" "--one-vb=2 --no-header" 400
+        
+    test_header "bamass: deep.trimmed - SAM sequences may be shorter than in FASTQ due to trimming"
+    local T=$TESTDIR/deep.trimmed
+    $genozip $T.fq -A $T.sam -fe $GRCh38 -o $output -t || exit 1
+
+    test_header "bamass: deep.some-edge-cases - some edge cases related storing seq / cigar"
+    local T=$TESTDIR/deep.some-edge-cases
+    $genozip $T.fq -A $T.sam -fe $GRCh38 -o $output -t || exit 1
+
+    cleanup_cache
+
+    test_header "bamass: test.mgi-dragen - paired"
+    local T=$TESTDIR/test.mgi-dragen
+    $genozip $T.R1.fq.gz $T.R2.fq.gz -A $T.bam -2 -fe $hs37d5 -o $output -t || exit 1
+
+    test_header "bamass: deep.trim+longr - trimmed with LONG (codec consumes trimmed SEQ)"
+    local T=$TESTDIR/deep.trim+longr
+    $genozip $T.fq -A $T.sam -fe $hs37d5 -o $output -t || exit 1
+
+    test_header "bamass: deep.trim+homp - trimmed with HOMP (codec consumes trimmed SEQ and calls fastq_zip_qual for sub-codec too)"
+    local T=$TESTDIR/deep.trim+homp
+    $genozip $T.fq -A $T.sam -fe $hs37d5 -o $output -t || exit 1
+
+    test_header "bamass: deep.illum.saux - FASTQ with SAUX - REFERENCE"
+    local T=$TESTDIR/deep.illum.saux
+    $genozip $T.R1.fq $T.R2.fq -A $T.sam -tfE $hs37d5 -o $output --pair || exit 1
+
+    test_header "bamass: deep.amplicon - Amplicon data (lots of dup seqs) + 2 FASTQ pairs + gencomp + FASTQs out of order on command line"
+    local T=$TESTDIR/deep.amplicon
+    $genozip $T.A.R2.fq $T.B.R1.fq $T.B.R2.fq $T.A.R1.fq -A $T.bam --pair -fte $hs37d5 || exit 1
+
+    test_header "bamass: deep.pbmm2-CIGAR-XE.fq - X/= CIGAR"
+    local T=$TESTDIR/deep.pbmm2-CIGAR-XE
+    local T1=$TESTDIR/test.pbmm2-CIGAR-XE
+    $genozip $T.fq.gz -A $T1.bam -fte $hs37d5 -o $output || exit 1
+
+    cleanup_cache
+    test_header "bamass: deep.qtype=QNAME2 - Illumina WGS - different FASTQ and SAM qname flavors"
+    local T="$TESTDIR/deep.qtype=QNAME2"
+    $genozip $T.1.fq $T.2.fq -2A $T.sam -tfE $hg19 -o $output || exit 1
+
+    test_header "bamass: deep.trimmed-deep_no_qual - encrypted - REFERENCE"
+    local T=$TESTDIR/deep.trimmed-deep_no_qual
+    $genozip -A $T.bam $T.R1.fq.gz $T.R2.fq.gz -fE $hg19 -p 123 -o $output -t --pair || exit 1
+
+    test_header "bamass: deep.left-right-trimming"
+    local T=$TESTDIR/deep.left-right-trimming
+    $genozip -A $T.bam $T.fq.gz -fe $hg19 -o $output -t || exit 1
+
+    cleanup_cache
+    test_header "bamass: deep.pacbio-ccs - pacbio ccs, minimap2, single FASTQ"
+    local T=$TESTDIR/deep.pacbio-ccs
+    $genozip $T.fq.gz -A $T.bam -fe $mm10 -t -o $output || exit 1
+    
+    cleanup_cache
+    test_header "bamass: deep.gpos-64 - alignment has gpos=14B, i.e. fits in 64 bits"
+    local T=$TESTDIR/deep.gpos-64
+    $genozip $T.fq -A $T.sam -fe $chinese_spring -t -o $output || exit 1
+
+    cleanup_cache
+    test_header "bamass: deep.koala - Illumina WGS, 2 pairs, different contig names than reference"
+    local T=$TESTDIR/deep.koala
+    $genozip $T.1.R1.fq.gz $T.2.R2.fq.gz $T.1.R2.fq.gz $T.2.R1.fq.gz --pair -A $T.bam -fe $koala -t || exit 1
+
+    genozip="$save_genozip"
     cleanup
 }
 
@@ -2451,6 +2653,7 @@ GRCh38=$REFDIR/GRCh38.v15.ref.genozip
 T2T1_1=$REFDIR/chm13_1.1.v15.ref.genozip
 mm10=$REFDIR/mm10.v15.ref.genozip
 chinese_spring=$REFDIR/Chinese_Spring.v15.ref.genozip
+koala=$REFDIR/koala.v15.ref.genozip
 
 zmd5=$SCRIPTSDIR/zmd5
 
@@ -2573,6 +2776,7 @@ inc() {
 }
 
 for GENOZIP_TEST in `seq $GENOZIP_TEST 200`; do 
+export GENOZIP_TEST=$GENOZIP_TEST # needed in case GENOZIP_TEST in not already in the environment
 case $GENOZIP_TEST in
 0 )  sparkling_clean                   ;;
 1 )  batch_minimal                     ;;
@@ -2605,51 +2809,53 @@ case $GENOZIP_TEST in
 28)  batch_tar_files_from              ;;
 29)  batch_gencomp_depn_methods        ;; 
 30)  batch_deep                        ;; 
-31)  batch_real_world_small_vbs        ;; 
-32)  batch_real_world_1_adler32        ;; 
-33)  batch_real_world_genounzip_single_process ;; 
-34)  batch_real_world_genounzip_compare_file   ;; 
-35)  batch_real_world_1_adler32 "--best -f"    ;; 
-36)  batch_real_world_1_adler32 "--fast --force-gencomp" ;; 
-37)  batch_real_world_optimize         ;;
-38)  batch_real_world_with_ref_md5     ;; 
-39)  batch_real_world_with_ref_md5 "--best --no-cache --force-gencomp" ;; 
-40)  batch_multiseq                    ;;
-41)  batch_sam_bam_cram_output         ;;
-42)  batch_vcf_bcf_output              ;;
-43)  batch_external_unzip              ;;
-44)  batch_external_ora                ;;
-45)  batch_reference_fastq             ;;
-46)  batch_reference_fasta_as_fastq    ;;
-47)  batch_reference_sam               ;;
-48)  batch_reference_vcf               ;;
-49)  batch_many_small_files            ;;
-50)  batch_make_reference              ;;
-51)  batch_headerless_wrong_ref        ;;
-52)  batch_replace                     ;;
-53)  batch_coverage_idxstats           ;;
-54)  batch_qname_flavors               ;;
-55)  batch_piz_no_license              ;;
-56)  batch_sendto                      ;;
-57)  batch_user_message_permissions    ;;
-58)  batch_password_permissions        ;;
-59)  batch_genocat_backcomp_recon_plan ;;
-60)  batch_reference_backcomp          ;;
-61)  batch_real_world_backcomp 11.0.11 ;; # note: versions must match VERSIONS in test/Makefile
-62)  batch_real_world_backcomp 12.0.42 ;; 
-63)  batch_real_world_backcomp 13.0.21 ;; 
-64)  batch_real_world_backcomp 14.0.33 ;; 
-65)  batch_real_world_backcomp latest  ;;
-66)  batch_basic basic.vcf     latest  ;;
-67)  batch_basic basic.bam     latest  ;;
-68)  batch_basic basic.sam     latest  ;;
-69)  batch_basic basic.fq      latest  ;;
-70)  batch_basic basic.fa      latest  ;;
-71)  batch_basic basic.bed     latest  ;;
-72)  batch_basic basic.gvf     latest  ;;
-73)  batch_basic basic.gtf     latest  ;;
-74)  batch_basic basic.me23    latest  ;;
-75)  batch_basic basic.generic latest  ;;
+31)  batch_bamass                      ;; 
+32)  batch_real_world_small_vbs        ;; 
+33)  batch_real_world_1_adler32        ;; 
+34)  batch_real_world_genounzip_single_process ;; 
+35)  batch_real_world_genounzip_compare_file   ;; 
+36)  batch_real_world_1_adler32 "--best -f"    ;; 
+37)  batch_real_world_1_adler32 "--fast --force-gencomp" ;; 
+38)  batch_real_world_optimize         ;;
+39)  batch_real_world_with_ref_md5     ;; 
+40)  batch_real_world_with_ref_md5 "--best --no-cache --force-gencomp" ;; 
+41)  batch_multiseq                    ;;
+42)  batch_sam_bam_cram_output         ;;
+43)  batch_vcf_bcf_output              ;;
+44)  batch_external_unzip              ;;
+45)  batch_external_ora                ;;
+46)  batch_reference_fastq             ;;
+47)  batch_reference_fasta_as_fastq    ;;
+48)  batch_reference_sam               ;;
+49)  batch_reference_vcf               ;;
+50)  batch_reference_genocat           ;;
+51)  batch_many_small_files            ;;
+52)  batch_make_reference              ;;
+53)  batch_headerless_wrong_ref        ;;
+54)  batch_replace                     ;;
+55)  batch_coverage_idxstats           ;;
+56)  batch_qname_flavors               ;;
+57)  batch_piz_no_license              ;;
+58)  batch_sendto                      ;;
+59)  batch_user_message_permissions    ;;
+60)  batch_password_permissions        ;;
+61)  batch_genocat_backcomp_recon_plan ;;
+62)  batch_reference_backcomp          ;;
+63)  batch_real_world_backcomp 11.0.11 ;; # note: versions must match VERSIONS in test/Makefile
+64)  batch_real_world_backcomp 12.0.42 ;; 
+65)  batch_real_world_backcomp 13.0.21 ;; 
+66)  batch_real_world_backcomp 14.0.33 ;; 
+67)  batch_real_world_backcomp latest  ;;
+68)  batch_basic basic.vcf     latest  ;;
+69)  batch_basic basic.bam     latest  ;;
+70)  batch_basic basic.sam     latest  ;;
+71)  batch_basic basic.fq      latest  ;;
+72)  batch_basic basic.fa      latest  ;;
+73)  batch_basic basic.bed     latest  ;;
+74)  batch_basic basic.gvf     latest  ;;
+75)  batch_basic basic.gtf     latest  ;;
+76)  batch_basic basic.me23    latest  ;;
+77)  batch_basic basic.generic latest  ;;
 
 * ) break; # break out of loop
 

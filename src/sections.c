@@ -714,7 +714,7 @@ StrText vb_name (VBlockP vb)
     StrText s;
     if (vb && vb->vblock_i)
         snprintf (s.s, sizeof (s.s), "%.10s/%u", comp_name (vb->comp_i), vb->vblock_i);
-    else if (vb && segconf.running)
+    else if (vb && segconf_running)
         strcpy (s.s, "SEGCONF/0");
     else
         strcpy (s.s, "NONCOMPUTE");
@@ -1127,20 +1127,22 @@ void sections_show_header (ConstSectionHeaderP header,
         if (dt >= NUM_DATATYPES) dt = DT_NONE;
 
         if ((DT(VCF) || DT(BCF)) && v14)
-            snprintf (dt_specific, sizeof (dt_specific), "%ssegconf=(has_RGQ=%s,del_svlen_is_neg=%s,FMT_GQ_method=%s,FMT_DP_method=%s,INFO_DP_method=%s,mate_id_chars=%s) width=(AC=%u,AN=%u,MLEAC=%u,DP=%u,QD=%u,SF=%u,AS_SB_TABLE=%u,QUAL=%u,BaseCounts=%u,DPB=%u) max_ploidy_for_mux=%u\n", 
+            snprintf (dt_specific, sizeof (dt_specific), "%ssegconf=(has_RGQ=%s,del_svlen_is_neg=%s,FMT_GQ_method=%s,FMT_DP_method=%s,INFO_DP_method=%s,mate_id_chars=%s,allow_cp_smp=%s) width=(AC=%u,AN=%u,MLEAC=%u,DP=%u,QD=%u,SF=%u,AS_SB_TABLE=%u,QUAL=%u,BaseCounts=%u,DPB=%u) max_ploidy_for_mux=%u\n", 
                       SEC_TAB, TF(h->vcf.segconf_has_RGQ), TF(h->vcf.segconf_del_svlen_is_neg), FMT_GQ_method_name (h->vcf.segconf_GQ_method), FMT_DP_method_name (h->vcf.segconf_FMT_DP_method), INFO_DP_method_name (h->vcf.segconf_INF_DP_method), 
-                      (rom[])MATEID_METHOD_NAMES[h->vcf.segconf_MATEID_method], 
+                      (rom[])MATEID_METHOD_NAMES[h->vcf.segconf_MATEID_method], TF(h->vcf.segconf_sample_copy),
                       h->vcf.width.AC, h->vcf.width.AN, h->vcf.width.MLEAC, h->vcf.width.DP, h->vcf.width.QD, h->vcf.width.SF, h->vcf.width.AS_SB_TABLE, h->vcf.width.QUAL, h->vcf.width.BaseCounts, h->vcf.width.DPB,
                       h->vcf.max_ploidy_for_mux);
 
         else if ((DT(SAM) || DT(BAM)) && v14)
-            snprintf (dt_specific, sizeof (dt_specific), "%ssegconf=(sorted=%u,collated=%u,seq_len=%u,seq_len_to_cm=%u,ms_type=%u,has_MD_or_NM=%u,bisulfite=%u,MD_NM_by_unconverted=%u,predict_meth=%u,is_paired=%u,sag_type=%s,sag_has_AS=%u,pysam_qual=%u,cellranger=%u,SA_HtoS=%u,seq_len_dict_id=%s,deep_qname1=%u,deep_qname2=%u,deep_no_qual=%u,use_ins_ctx=%u,MAPQ_use_xq=%u,has_MQ=%u,SA_CIGAR_abb=%u,SA_NM_by_X=%u,CIGAR_has_eqx=%u,%uXsam_factor=%u)\n", 
-                      SEC_TAB, h->sam.segconf_is_sorted, h->sam.segconf_is_collated, BGEN32 (h->sam.segconf_seq_len), h->sam.segconf_seq_len_cm, h->sam.segconf_ms_type, h->sam.segconf_has_MD_or_NM, 
+            snprintf (dt_specific, sizeof (dt_specific), "%ssegconf=(sorted=%u,collated=%u,std_seq_len=%u,seq_len_to_cm=%u,ms_type=%u,has_MD_or_NM=%u,bisulfite=%u,MD_NM_by_unconverted=%u,predict_meth=%u,is_paired=%u,sag_type=%s,sag_has_AS=%u,pysam_qual=%u,cellranger=%u,SA_HtoS=%u,seq_len_dict_id=%s,deep_qname1=%u,deep_qname2=%u,deep_no_qual=%u,use_ins_ctx=%u,MAPQ_use_xq=%u,has_MQ=%u,SA_CIGAR_abb=%u,SA_NM_by_X=%u,CIGAR_has_eqx=%u,is_ileaved=%u,%uXsam_factor=%u)\n", 
+                      SEC_TAB, h->sam.segconf_is_sorted, h->sam.segconf_is_collated, BGEN32(h->sam.segconf_std_seq_len), h->sam.segconf_seq_len_cm, h->sam.segconf_ms_type, h->sam.segconf_has_MD_or_NM, 
                       h->sam.segconf_bisulfite, h->sam.segconf_MD_NM_by_un, h->sam.segconf_predict_meth, 
                       h->sam.segconf_is_paired, sag_type_name(h->sam.segconf_sag_type), h->sam.segconf_sag_has_AS, 
                       h->sam.segconf_pysam_qual, h->sam.segconf_10xGen, h->sam.segconf_SA_HtoS, dis_dict_id(h->sam.segconf_seq_len_dict_id).s,
                       h->sam.segconf_deep_qname1, h->sam.segconf_deep_qname2, h->sam.segconf_deep_no_qual, 
-                      h->sam.segconf_use_ins_ctxs, h->sam.segconf_MAPQ_use_xq, h->sam.segconf_has_MQ, h->sam.segconf_SA_CIGAR_abb, h->sam.segconf_SA_NM_by_X, h->sam.segconf_CIGAR_has_eqx, SAM_FACTOR_MULT, h->sam.segconf_sam_factor);
+                      h->sam.segconf_use_ins_ctxs, h->sam.segconf_MAPQ_use_xq, h->sam.segconf_has_MQ, h->sam.segconf_SA_CIGAR_abb, h->sam.segconf_SA_NM_by_X, 
+                      h->sam.segconf_CIGAR_has_eqx, h->sam.segconf_is_ileaved,
+                      SAM_FACTOR_MULT, h->sam.segconf_sam_factor);
 
         else if (DT(REF)) {
             if (v15) snprintf (dt_specific, sizeof (dt_specific), "%sgenome_digest=%s\n", SEC_TAB, digest_display (h->genome_digest).s);
@@ -1148,9 +1150,10 @@ void sections_show_header (ConstSectionHeaderP header,
         }
 
         else if (DT(FASTQ) && v14) 
-            snprintf (dt_specific, sizeof (dt_specific), "%sFASTQ_v13_digest_bound=%s segconf=(seq_len_dict_id=%s,fa_as_fq=%s,is_ileaved=%s)\n", 
+            snprintf (dt_specific, sizeof (dt_specific), "%sFASTQ_v13_digest_bound=%s segconf=(seq_len_dict_id=%s,fa_as_fq=%s,is_ileaved=%s,std_seq_len=%u,use_ins_ctxs=%u)\n", 
                       SEC_TAB, digest_is_zero(h->FASTQ_v13_digest_bound) ? "N/A" : digest_display (h->FASTQ_v13_digest_bound).s, 
-                      dis_dict_id(h->fastq.segconf_seq_len_dict_id).s, TF(h->fastq.segconf_fa_as_fq), TF(h->fastq.segconf_is_ileaved));
+                      dis_dict_id(h->fastq.segconf_seq_len_dict_id).s, TF(h->fastq.segconf_fa_as_fq), TF(h->fastq.segconf_is_ileaved), BGEN32(h->fastq.segconf_std_seq_len),
+                      h->fastq.segconf_use_ins_ctxs);
 
         snprintf (str, sizeof (str), "\n%sver=%u.0.%u modified=%u lic=%s private=%u enc=%s dt=%s usize=%"PRIu64" lines=%"PRIu64" secs=%u txts=%u %.10s%.20s%.6s\n" 
                                      "%s%s %s=\"%.*s\" %s=%34s\n"

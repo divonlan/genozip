@@ -10,7 +10,7 @@
 
 #include "file.h"
 
-extern void chrom_2ref_load (Reference ref);
+extern void chrom_2ref_load (void);
 
 // seg
 extern WordIndex chrom_seg_ex (VBlockP vb, Did did_i, STRp(chrom), PosType64 LN, int add_bytes, bool *is_new);
@@ -26,11 +26,11 @@ extern WordIndex chrom_get_by_name (STRp (chrom_name)); // ZIP and PIZ
 
 // chrom2ref
 extern void chrom_calculate_ref2chrom (uint64_t num_ref_contigs);
-extern void chrom_2ref_compress (Reference ref);
-extern WordIndex chrom_2ref_seg_get (Reference ref, ConstVBlockP vb, WordIndex chrom_index);
+extern void chrom_2ref_compress (void);
+extern WordIndex chrom_2ref_seg_get (ConstVBlockP vb, WordIndex chrom_index);
 #define chrom_2ref_seg_is_needed(did_i) ((did_i) == CHROM && IS_REF_CHROM2REF)
 
-extern void chrom_2ref_load (Reference ref);
+extern void chrom_2ref_load (void);
 static inline WordIndex chrom_2ref_piz_get (WordIndex chrom_index) 
     { return ZCTX(CHROM)->chrom2ref_map.len ? *B(WordIndex, ZCTX(CHROM)->chrom2ref_map, chrom_index) : chrom_index; }
 

@@ -15,6 +15,7 @@
 #include "zip.h"
 #include "profiler.h"
 #include "mgzip.h"
+#include "sorter.h"
 
 // --------------------------------------
 // memory functions that serve the codecs
@@ -200,20 +201,24 @@ Codec codec_assign_best_codec (VBlockP vb,
     bool data_override = ctx && data;    // caller provided data for us to use *instead* of ctx's own local/b250/dict buffer
     
     ContextP zctx = ctx ? ctx_get_zctx_from_vctx (ctx, false, false) : NULL; // note: if is_dict, ctx==zctx
+    
+    Codec z_lcodec=CODEC_UNKNOWN, z_bcodec=CODEC_UNKNOWN;
+    uint8_t z_lcodec_count=0, z_bcodec_count=0;
+    bool z_lcodec_hard_coded=0;
+    if (zctx) ctx_get_z_codecs (zctx, &z_lcodec, &z_bcodec, &z_lcodec_count, &z_bcodec_count, &z_lcodec_hard_coded);
 
     Codec *selected_codec = is_local ? &ctx->lcodec  : 
                             is_b250  ? &ctx->bcodec  :
                                        &non_ctx_codec;
 
-    Codec zselected_codec = !zctx    ? CODEC_UNKNOWN :
-                            is_local ? zctx->lcodec  : 
-                            is_b250  ? zctx->bcodec  :
+    Codec zselected_codec = is_local ? z_lcodec      : 
+                            is_b250  ? z_bcodec      :
                                        CODEC_UNKNOWN ;
 
-    uint8_t zselected_codec_count = !zctx ? 0 : is_local ? zctx->lcodec_count : is_b250 ? zctx->bcodec_count : 0;
+    uint8_t zselected_codec_count = !zctx ? 0 : is_local ? z_lcodec_count : is_b250 ? z_bcodec_count : 0;
 
     // case: codec is hard_coded and should not be reassigned
-    bool hard_coded = is_local && ((ctx ? ctx->lcodec_hard_coded : false) || (zctx ? zctx->lcodec_hard_coded : false));
+    bool hard_coded = is_local && ((ctx ? ctx->lcodec_hard_coded : false) || (zctx ? z_lcodec_hard_coded : false));
 
     // we don't change assigned non-simple codecs
     if (!codec_args[*selected_codec].is_simple) 
@@ -334,7 +339,7 @@ void codec_assign_best_qual_codec (VBlockP vb, Did did_i,
     decl_ctx (did_i);
     ASSERT (did_i < DTF(num_fields), "%s is not predefined", ctx->tag_name); // because of ZCTX()
 
-    Codec qual_codec = __atomic_load_n (&ZCTX(did_i)->qual_codec, __ATOMIC_ACQUIRE);
+    Codec qual_codec = load_acquire (ZCTX(did_i)->qual_codec);
 
     // case: a previous VB already determined that the did_i doesn't need one of the complex codec
     if (qual_codec == CODEC_NONE) {
@@ -373,7 +378,7 @@ void codec_assign_best_qual_codec (VBlockP vb, Did did_i,
         ctx->ltype = LT_BLOB;  // codec to be assigned by codec_assign_best_codec
     
     if (!qual_codec)
-        __atomic_store_n (&ZCTX(did_i)->qual_codec, ctx->ltype == LT_BLOB ? CODEC_NONE : ctx->lcodec, __ATOMIC_RELEASE);
+        store_release (ZCTX(did_i)->qual_codec, ctx->ltype == LT_BLOB ? CODEC_NONE : ctx->lcodec);
 
     if (codec_requires_seq && (ctx->lcodec == CODEC_PACB || ctx->lcodec == CODEC_LONGR || ctx->lcodec == CODEC_HOMP || ctx->lcodec == CODEC_SMUX)) 
         *codec_requires_seq = true;

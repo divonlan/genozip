@@ -104,10 +104,10 @@ void sam_piz_set_sag (VBlockSAMP vb)
 
 static void sam_reconstruct_solo_from_sag (VBlockSAMP vb, Did did_i, SoloTags solo)
 {
-    bytes comp = sam_solo_sag_data (vb, solo);
+    bytes comp = sam_solo_sag_data (vb, vb->solo_aln, solo);
     uint32_t uncomp_len = vb->solo_aln->field_uncomp_len[solo];
             
-    RECONSTRUCT_huffman_or_copy (VB, did_i, uncomp_len, comp);
+    RECONSTRUCT_huffman (VB, did_i, uncomp_len, comp);
 }
 
 // PIZ compute thread: called when reconstructing a PRIM or DEPN line - reconstruct pulling info from
@@ -131,7 +131,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_pull_from_sag)
 
     switch (ctx->did_i) {
         case SAM_QNAME: 
-            if (reconstruct) RECONSTRUCT_huffman_or_copy (VB, SAM_QNAME, g->qname_len, GRP_QNAME(g));
+            if (reconstruct) RECONSTRUCT_huffman (VB, SAM_QNAME, g->qname_len, GRP_QNAME(g));
             return NO_NEW_VALUE;
 
         case SAM_RNAME: {
@@ -226,7 +226,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_PRIM_QNAME)
 
     uint32_t last_txt_index = Ltxt;
 
-    RECONSTRUCT_huffman_or_copy (VB, SAM_QNAME, vb->sag->qname_len, GRP_QNAME(vb->sag));
+    RECONSTRUCT_huffman (VB, SAM_QNAME, vb->sag->qname_len, GRP_QNAME(vb->sag));
 
     CTX(SAM_QNAME)->last_txt = (TxtWord){ .index = last_txt_index,
                                           .len   = Ltxt - last_txt_index }; // 15.0.16 - needed by sam_ultima_bi_prediction

@@ -89,7 +89,7 @@ void sam_seg_pacbio_qs (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t qs, unsigned 
 
     // in ccs: qs has a small number of possible low values, often mono-value
     else {
-        if (segconf.running) {
+        if (segconf_running) {
             if (!vb->line_i) 
                 segconf.sam_first_qs = qs;
             else             
@@ -121,7 +121,7 @@ void sam_seg_pacbio_qe (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t qe, unsigned 
     else {
         int32_t qs;
         if (sam_seg_peek_int_field (vb, OPTION_qs_i, vb->idx_qs_i, 0, 0x7ffffff, true, &qs) && qs + dl->SEQ.len == qe) 
-            seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_PACBIO_qe }, 2, ctx, add_bytes);
+            seg_special0 (VB, SAM_SPECIAL_PACBIO_qe, ctx, add_bytes);
         
         else
             seg_integer (VB, ctx, qe, true, add_bytes); 
@@ -161,7 +161,7 @@ void sam_seg_pacbio_we (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t we, unsigned 
         int64_t delta = we - (ws + sum_ip + sum_pw + dl->SEQ.len);
 
         seg_integer (VB, ctx, delta, false, 0);
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_PACBIO_we }, 2, ctx, add_bytes);
+        seg_special0 (VB, SAM_SPECIAL_PACBIO_we, ctx, add_bytes);
     }
     
     else 
@@ -231,13 +231,13 @@ bool sam_seg_pacbio_qual (VBlockSAMP vb, STRp(qual)/*textual*/, unsigned add_byt
 #define PACBIO_QV(f)                                    \
 COMPRESSOR_CALLBACK (sam_zip_##f)                       \
 {                                                       \
-    TxtWord w = DATA_LINE (vb_line_i)->f;               \
+    ZipDataLineSAMP dl = DATA_LINE(vb_line_i);          \
                                                         \
-    *line_data_len = MIN_(maximum_size, w.len);         \
+    *line_data_len = MIN_(maximum_size, dl->SEQ.len);   \
                                                         \
     if (!line_data) return; /* only lengths requested */\
                                                         \
-    *line_data = Btxt (w.index);                        \
+    *line_data = Btxt (dl->f);                          \
 }                                                         
 PACBIO_QV(dq)
 PACBIO_QV(iq)
@@ -289,18 +289,26 @@ void sam_recon_skip_pacbio_qual (VBlockSAMP vb)
 // iq, sq and dq
 // -------------
 
-void sam_seg_pacbio_xq (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, TxtWord *dl_word, STRp(value), unsigned add_bytes)    
+void sam_seg_pacbio_xq (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, STRp(value), unsigned add_bytes)    
 {                                                          
     decl_ctx (did_i);
 
     ASSINP (value_len == dl->SEQ.len, "%s: Expecting %s.len=%u == SEQ.len=%u. %s=\"%.*s\"",       
             LN_NAME, ctx->tag_name, value_len, dl->SEQ.len, ctx->tag_name, STRf(value));     
 
-    *dl_word = TXTWORD(value);                                                           
+    uint32_t line_index = BNUMtxt(value) - dl->line_start;
+    ASSSEG (line_index <= MAX_LONG_READ_LINE_INDEX, "line_index=%u of ctx=%s too long", line_index, ctx->tag_name);
+    
+    switch (did_i) {
+        case OPTION_dq_Z : dl->dq = line_index; break;
+        case OPTION_iq_Z : dl->iq = line_index; break;
+        case OPTION_sq_Z : dl->sq = line_index; break;
+    }
+                                                           
     CTX(OPTION_iq_sq_dq)->txt_len += add_bytes;                      
     CTX(OPTION_iq_sq_dq)->local.len32 += value_len;                  
 
-    seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, SAM_SPECIAL_iqsqdq }), 2, ctx, 0);
+    seg_special0 (VB, SAM_SPECIAL_iqsqdq, ctx, 0);
 }                                                          
 
 // callback function for compress to get iq_sq_dq data of one line: this is an
@@ -309,9 +317,9 @@ COMPRESSOR_CALLBACK (sam_zip_iq_sq_dq)
 {
     ZipDataLineSAMP dl = DATA_LINE (vb_line_i);
     
-    rom iq = dl->iq.index ? Btxt (dl->iq.index) : NULL;
-    rom sq = dl->sq.index ? Btxt (dl->sq.index) : NULL;
-    rom dq = dl->dq.index ? Btxt (dl->dq.index) : NULL;
+    rom iq = dl->iq ? Btxt (dl->iq + dl->line_start) : NULL;
+    rom sq = dl->sq ? Btxt (dl->sq + dl->line_start) : NULL;
+    rom dq = dl->dq ? Btxt (dl->dq + dl->line_start) : NULL;
     
     if (!iq && !sq && !dq) return; // no iq/sq/dq on this line
 
@@ -418,7 +426,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_DEMUX_sn)
 // SAM + FASTQ: callback defined in qname_flavor for QF_PACBIO_rng 
 void seg_qname_rng2seq_len_cb (VBlockP vb, ContextP ctx, STRp(value))
 {
-    seg_by_ctx (vb, (char[]){ SNIP_SPECIAL, (VB_DT(FASTQ) ? FASTQ_SPECIAL_qname_rng2seq_len : SAM_SPECIAL_qname_rng2seq_len) }, 2, ctx, 0);
+    seg_special0 (vb, VB_DT(FASTQ) ? FASTQ_SPECIAL_qname_rng2seq_len : SAM_SPECIAL_qname_rng2seq_len, ctx, 0);
 
     ctx_set_last_value (vb, ctx, (ctx-1)->last_value.i - (ctx-2)->last_value.i);
 }

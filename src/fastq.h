@@ -18,6 +18,7 @@
 #define FASTQ_QmNAME        SAM_QmNAME
 #define FASTQ_QNAME2        SAM_QNAME2
 #define FASTQ_QmNAME2       SAM_QmNAME2
+#define FASTQ_CIGAR         SAM_CIGAR
 #define FASTQ_AUX           SAM_AUX
 #define FASTQ_SQBITMAP      SAM_SQBITMAP
 #define FASTQ_NONREF        SAM_NONREF
@@ -31,6 +32,10 @@
 #define FASTQ_SEQMIS_C      SAM_SEQMIS_C
 #define FASTQ_SEQMIS_G      SAM_SEQMIS_G
 #define FASTQ_SEQMIS_T      SAM_SEQMIS_T
+#define FASTQ_SEQINS_A      SAM_SEQINS_A
+#define FASTQ_SEQINS_C      SAM_SEQINS_C
+#define FASTQ_SEQINS_G      SAM_SEQINS_G
+#define FASTQ_SEQINS_T      SAM_SEQINS_T
 #define FASTQ_QUAL          SAM_QUAL
 #define FASTQ_DOMQRUNS      SAM_DOMQRUNS
 #define FASTQ_QUALMPLX      SAM_QUALMPLX
@@ -48,6 +53,7 @@
 #define _FASTQ_QNAME2       _SAM_QNAME2
 #define _FASTQ_Q0NAME2      _SAM_Q0NAME2
 #define _FASTQ_Q1NAME2      _SAM_Q1NAME2
+#define _FASTQ_CIGAR        _SAM_CIGAR
 #define _FASTQ_QmNAME2      _SAM_QmNAME2
 #define _FASTQ_AUX          _SAM_AUX
 #define _FASTQ_SQBITMAP     _SAM_SQBITMAP
@@ -62,6 +68,10 @@
 #define _FASTQ_SEQMIS_C     _SAM_SEQMIS_C
 #define _FASTQ_SEQMIS_G     _SAM_SEQMIS_G
 #define _FASTQ_SEQMIS_T     _SAM_SEQMIS_T
+#define _FASTQ_SEQINS_A     _SAM_SEQINS_A
+#define _FASTQ_SEQINS_C     _SAM_SEQINS_C
+#define _FASTQ_SEQINS_G     _SAM_SEQINS_G
+#define _FASTQ_SEQINS_T     _SAM_SEQINS_T
 #define _FASTQ_QUAL         _SAM_QUAL
 #define _FASTQ_DOMQRUNS     _SAM_DOMQRUNS
 #define _FASTQ_QUALMPLX     _SAM_QUALMPLX
@@ -95,12 +105,16 @@ extern void fastq_zip_initialize (void);
 extern rom fastq_zip_modify (VBlockP vb, rom line_start, uint32_t remaining);
 extern void fastq_segconf_set_r1_or_r2 (void);
 extern void fastq_zip_after_segconf (VBlockP vb);
+extern void fastq_zip_after_segconf_alloc_r1_z_bufs (void);
 extern void fastq_zip_finalize (bool is_last_user_txt_file);
 extern void fastq_zip_init_vb (VBlockP vb);
+extern void fastq_zip_comp_cb (VBlockP vb, ContextP ctx, SectionType st, uint32_t comp_len);
+extern void fastq_zip_after_compress (VBlockP vb);
 extern void fastq_zip_after_compute (VBlockP vb);
 extern bool fastq_zip_use_pair_assisted (DictId dict_id, SectionType st);
 extern bool fastq_zip_use_pair_identical (DictId dict_id);
 extern uint32_t fastq_zip_get_seq_len (VBlockP vb, uint32_t line_i) ;
+extern uint32_t fastq_get_num_deeped (VBlockP vb);
 
 COMPRESSOR_CALLBACK (fastq_zip_seq);
 COMPRESSOR_CALLBACK(fastq_zip_qual); // used by codec_longr_compress
@@ -166,4 +180,5 @@ SPECIAL (FASTQ, 10, ULTIMA_C,          ultima_c_piz_special_DEMUX_BY_Q4NAME); //
 SPECIAL (FASTQ, 11, AGENT_RX,          agilent_special_AGENT_RX);             // introduced 15.0.23
 SPECIAL (FASTQ, 12, AGENT_QX,          agilent_special_AGENT_QX);             // introduced 15.0.23
 SPECIAL (FASTQ, 13, qname_rng2seq_len, special_qname_rng2seq_len);            // introduced 15.0.26
-SPECIAL (FASTQ, 14, DEMUX_BY_R,        fastq_special_DEMUX_BY_R);             // introduced 15.0.58
+SPECIAL (FASTQ, 14, DEMUX_by_R,        fastq_special_DEMUX_by_R);             // introduced 15.0.58
+SPECIAL (FASTQ, 15, SEQ_by_bamass,     fastq_special_SEQ_by_bamass);          // introduced 15.0.69

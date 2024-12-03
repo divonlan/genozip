@@ -226,7 +226,7 @@ void bam_seg_BIN (VBlockSAMP vb, ZipDataLineSAMP dl, uint16_t bin /* used only i
     uint16_t reg2bin = bam_reg2bin (this_pos, last_pos); // zero-based, half-closed half-open [start,end)
 
     if (!is_bam || (last_pos <= MAX_POS_SAM && reg2bin == bin))
-        seg_by_did (VB, ((char []){ SNIP_SPECIAL, SAM_SPECIAL_BIN }), 2, SAM_BAM_BIN, is_bam ? sizeof (uint16_t) : 0);
+        seg_special0 (VB, SAM_SPECIAL_BIN, CTX(SAM_BAM_BIN), is_bam ? sizeof (uint16_t) : 0);
     
     else {
 #ifdef DEBUG // we show this warning only in DEBUG because I found actual files that have edge cases that don't work with our formula (no harm though)
@@ -290,7 +290,7 @@ static inline void bam_set_missing_qual_type (VBlockSAMP vb, bytes qual, uint32_
     // note: in older versions of pysam, missing QUAL was 0xff followed by 0s (SAM specficiation requires all bytes to be 0xff)
     if (!filler) {
         if (!segconf.pysam_qual)
-            __atomic_store_n (&segconf.pysam_qual, (bool)true, __ATOMIC_RELAXED); 
+            store_relaxed (segconf.pysam_qual, (bool)true); 
     }
     else
         // note: this test is not air-tight related to another thread setting pysam_qual after this test, but we really don't expect to see files that are mixed pysam/standard
@@ -367,7 +367,7 @@ static uint32_t bam_segconf_get_transated_sam_line_len (VBlockSAMP vb, ZipDataLi
         contigs_get_name (sam_hdr_contigs, dl->RNEXT, &rnext_len);
     
     uint32_t sam_line_len =  
-        dl->QNAME.len + rname_len + rnext_len +
+        dl->QNAME_len + rname_len + rnext_len +
         2 * 9 +             // POS and PNEXT: account for 9 characters - as segconf is biased to small values that are not representative of the file 
         str_int_len (dl->FLAG.value) + str_int_len (dl->MAPQ) + vb->textual_cigar.len32 + 
         str_int_len (tlen) + dl->SEQ.len + (dl->no_qual ? 1 : dl->SEQ.len) + 
@@ -425,6 +425,8 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     if (flag.show_bam) return bam_show_line (vb, alignment, remaining_txt_len);
 
     ZipDataLineSAMP dl = DATA_LINE (vb->line_i);
+    dl->line_start = vb->line_start;
+
     rom next_field = alignment;
    
     // BAM alignment fixed-length fields 
@@ -443,7 +445,7 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     if (flag.debug_lines) 
         vb->debug_line_hash = adler32 (2, alignment, after - alignment); 
 
-    dl->RNAME = vb->chrom_node_index = (int32_t)NEXT_UINT32; // corresponding to CHROMs in the BAM header. -1 in BAM means '*' (no RNAME) - which luckily is WORD_INDEX_NONE.    
+    dl->RNAME = vb->chrom_node_index = (int32_t)NEXT_UINT32; // corresponding to contigs in the BAM header. -1 in BAM means '*' (no RNAME) - which luckily is WORD_INDEX_NONE.    
     
     // expecting all contigs to be defined in SAM header, and hence in ol_nodes/ol_dict 
     ASSERT (vb->chrom_node_index >= -1 && vb->chrom_node_index < (int32_t)CTX(SAM_RNAME)->ol_nodes.len32, 
@@ -456,11 +458,11 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     uint16_t n_cigar_op  = NEXT_UINT16;
     dl->FLAG.value       = NEXT_UINT16;              // not to be confused with our global var "flag"
     uint32_t l_seq       = NEXT_UINT32;              // note: we stick with the same logic as SAM for consistency - dl->SEQ.len is determined by CIGAR 
-    dl->RNEXT            = (int32_t)NEXT_UINT32;     // corresponding to CHROMs in the BAM header
+    dl->RNEXT            = (int32_t)NEXT_UINT32;     // corresponding to contigs in the BAM header
     PosType32 next_pos  = 1 + (int32_t)NEXT_UINT32;  // pos in BAM is 0 based, -1 for unknown
     SamTlenType tlen     = (SamTlenType)NEXT_UINT32;
     rom read_name        = next_field;
-    dl->QNAME            = (TxtWord){ .index = BNUMtxt (read_name), .len = l_read_name-1 }; // -1 don't count \0
+    dl->QNAME_len        = l_read_name-1;            // -1 don't count \0
     BamCigarOp *cigar    = (BamCigarOp *)(read_name + l_read_name); // note: the "cigar" pointer might be mis-aligned, but we don't de-reference it
     bytes seq            = (uint8_t *)(cigar + n_cigar_op);
     dl->SEQ.index        = BNUMtxt (seq);
@@ -489,12 +491,8 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
 
     // convert BAM seq format to SAM
     buf_alloc (vb, &vb->textual_seq, 0, l_seq+2/* +1 for last half-byte and \0 */, char, 1.5, "textual_seq");    
-    {
-    START_TIMER; // time here and not in the function, because this is also called from the LongR codec
-    bam_seq_to_sam (vb, seq, l_seq, false, true, &vb->textual_seq);
+    bam_seq_to_sam (VB, seq, l_seq, false, true, &vb->textual_seq, false);
     vb->textual_seq_str = B1STc(vb->textual_seq); 
-    COPY_TIMER(bam_seq_to_sam);
-    }
 
     // analyze (but not seg yet) cigar
     buf_append (vb, vb->binary_cigar, BamCigarOp, cigar, n_cigar_op, "binary_cigar");
@@ -512,12 +510,13 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
 
     // case: biopsy (only arrives here in MAIN VBs if gencomp) biopsy_line: 
     // we just need to pass sam_seg_is_gc_line and we're done
-    if ((flag.biopsy && !segconf.running) ||
-        (flag.has_biopsy_line && sam_seg_test_biopsy_line (VB, alignment, block_size + 4)) )
+    if ((flag.biopsy && !segconf_running) ||
+        (flag_has_biopsy_line && sam_seg_test_biopsy_line (VB, alignment, block_size + 4)) )
         goto done;  
 
-    sam_cigar_binary_to_textual (vb, B1ST(BamCigarOp, vb->binary_cigar), n_cigar_op, false, // binary_cigar and not "cigar", as the latter is mis-aligned 
+    sam_cigar_binary_to_textual (VB, B1ST(BamCigarOp, vb->binary_cigar), n_cigar_op, false, // binary_cigar and not "cigar", as the latter is mis-aligned 
                                  &vb->textual_cigar); // re-write BAM format CIGAR as SAM textual format in vb->textual_cigar
+    vb->last_cigar = B1STc (vb->textual_cigar);
 
     // SEQ - calculate diff vs. reference (denovo or loaded)
     ASSERT (dl->SEQ.len == l_seq || (vb->textual_cigar.len == 1 && *B1STc(vb->textual_cigar) == '*') || !l_seq, 
@@ -598,7 +597,7 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
 
     MAXIMIZE (vb->longest_seq_len, dl->SEQ.len);
 
-    if (segconf.running)
+    if (segconf_running)
         segconf.est_segconf_sam_size += bam_segconf_get_transated_sam_line_len (vb, dl, tlen);
 
 done: {}

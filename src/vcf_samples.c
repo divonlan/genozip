@@ -134,12 +134,12 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
         ctx_get_ctx (vb, con_AD.items[0].dict_id)->dyn_transposed = true; // first item = Σ(ADᵢ) is transposed
     
     // create additional contexts as needed for compressing FORMAT/GT - must be done before merge
-    if (vcf_num_samples) 
+    if (GT_USES_PBWT) 
         codec_pbwt_seg_init (VB);
 
     // determine which way to seg PL - Mux by dosage or Mux by dosageXDP, or test both options
     CTX(FORMAT_PL)->no_stons = true;
-    vb->PL_mux_by_DP = (flag.best && !segconf.running && segconf.has_DP_before_PL) // only in --best, because it is very slow
+    vb->PL_mux_by_DP = (flag.best && !segconf_running && segconf.has_DP_before_PL) // only in --best, because it is very slow
         ? segconf.PL_mux_by_DP // set by a previous VB in vcf_FORMAT_PL_decide or still in its initial value of "unknown"
         : no;
 
@@ -155,6 +155,9 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
     init_mux_by_dosage(FREQ);
     init_mux_by_dosage(RD);
     init_mux_by_dosage(PLn);
+    init_mux_by_dosage(LAD);
+    init_mux_by_dosage(QL);
+    init_mux_by_dosage(FT);
 
     seg_mux_init (vb, FORMAT_PLy, VCF_SPECIAL_MUX_BY_DOSAGExDP, false, PLy);
     
@@ -173,18 +176,18 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
 
 void vcf_samples_seg_finalize (VBlockVCFP vb)
 {
-    if (!segconf.running) 
+    if (!segconf_running) 
         vcf_samples_seg_finalize_PS_PID(vb);
 }
 
 // returns true is the sample has a '.' value
-static inline bool vcf_seg_sample_has_null_value (uint64_t dnum, ContextP *ctxs, STRps(sf))
+bool vcf_seg_sample_has_null_value (Did did_i, ContextP *ctxs, STRps(sf))
 {
-    for (int i=1; i < n_sfs; i++) // start from 1 - we know 0 is GT
-        if (ctxs[i]->dict_id.num == dnum)
-            return sf_lens[i]==1 && sfs[i][0]=='.'; // null DP found on this line - return true if its not '.' or empty
+    for (int i=0; i < n_sfs; i++) 
+        if (ctxs[i]->did_i == did_i)
+            return str_is_1chari (sf, i, '.'); // null value found on this line - return true if its a '.'
 
-    return false; // no DP at all on this line
+    return false; // no context dnum at all in this sample
 }
 
 //--------------------
@@ -370,7 +373,7 @@ static void vcf_seg_FORMAT_transposed (VBlockVCFP vb, ContextP ctx,
                                        unsigned add_bytes)
 {
 #ifdef DEBUG
-    ASSERT (ctx->dyn_transposed, "expecting dyn_transposed=true in %s", ctx->tag_name);
+    ASSERT (ctx->dyn_transposed || segconf_running, "%s: expecting dyn_transposed=true in %s", VB_NAME, ctx->tag_name);
 #endif
 
     if (IS_PERIOD (cell)) 
@@ -389,11 +392,13 @@ static void vcf_seg_FORMAT_transposed (VBlockVCFP vb, ContextP ctx,
 }
 
 // a comma-separated array - each element goes into its own item context, single repeat
-static WordIndex vcf_seg_FORMAT_A_R (VBlockVCFP vb, ContextP ctx, SmallContainer con /* by value */, STRp(value), StoreType item_store_type,
+static WordIndex vcf_seg_FORMAT_A_R (VBlockVCFP vb, ContextP ctx, SmallContainer con /* by value */, STRp(value), StoreType item_store_type, 
                                      void (*seg_item_cb)(VBlockVCFP, ContextP ctx, unsigned n_items, const char**, const uint32_t*, ContextP *item_ctxs, const int64_t*))
 {   
-    if (IS_PERIOD(value)) 
-        return seg_by_ctx (VB, ".", 1, ctx, value_len); // note: segging a '.' to ctx adds the same entropy as segging a 1-item container, so we refrain from adding entropy to the item_ctxs[0] too by not segging a container.
+    // case: '.'. Adding to item_ctx adds the same entropy as segging a 1-item container, so we refrain from adding entropy to the item_ctxs[0] too by not segging a container.
+    // we added to the container anyway if we are transposing item0, and not adding it will cause the matrix to not be transposed
+    if (IS_PERIOD(value) && !ctx_get_ctx (vb, con.items[0].dict_id)->dyn_transposed)
+        return seg_by_ctx (VB, ".", 1, ctx, value_len); 
 
     str_split (value, value_len, VCF_MAX_ARRAY_ITEMS, ',', item, false);
     
@@ -485,7 +490,7 @@ static void vcf_seg_AD_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP
     ctx_set_last_value (VB, ctx, sum_ad); // AD value is sum of its items
 
     // if we have ADALL in this file, we delta vs ADALL if we have it in this sample, or seg normally if not
-    if (segconf.has[FORMAT_ADALL]) { // note: we can't delta vs ADALL unless segconf says so, bc it can ruin other fields that rely on peeking AD, eg AB
+    if (segconf.has[FORMAT_ADALL] && ctx->did_i == FORMAT_AD) { // note: we can't delta vs ADALL unless segconf says so, bc it can ruin other fields that rely on peeking AD, eg AB
         bool has_adall_this_sample = ctx_encountered (VB, FORMAT_ADALL); 
     
         for (unsigned i=0; i < n_items; i++) 
@@ -793,7 +798,7 @@ static inline void vcf_seg_FORMAT_RGQ (VBlockVCFP vb, ContextP ctx, STRp(rgq), C
     if (gt[0] != '.') {
         if (!segconf.has[FORMAT_DP]          ||    // segconf didn't detect FORMAT/DP so we didn't initialize the mux
             !ctx_encountered (VB, FORMAT_DP) ||    // no DP in the FORMAT of this line
-            segconf.running) goto fallback;        // multiplexer not initalized yet 
+            segconf_running) goto fallback;        // multiplexer not initalized yet 
 
         int64_t DP;
         if (!str_get_int (STRlst(FORMAT_DP), &DP)) // in some files, DP may be '.'
@@ -848,7 +853,7 @@ static inline void vcf_seg_FORMAT_DP (VBlockVCFP vb)
     bool is_null = IS_PERIOD(dp);
     bool has_value = !is_null && str_get_int (STRa(dp), &value);
 
-    if (segconf.running) {
+    if (segconf_running) {
         if (is_null) 
             segconf.use_null_DP_method = true;
         
@@ -866,7 +871,7 @@ static inline void vcf_seg_FORMAT_DP (VBlockVCFP vb)
         goto fallback;
     }
 
-    else if ((segconf.FMT_DP_method == BY_AD || segconf.FMT_DP_method == BY_SDP) && !segconf.running) {
+    else if ((segconf.FMT_DP_method == BY_AD || segconf.FMT_DP_method == BY_SDP) && !segconf_running) {
         Did other_did_i = (segconf.FMT_DP_method == BY_AD ? FORMAT_AD : FORMAT_SDP);
 
         bool other_is_in_FORMAT = ctx_encountered (VB, other_did_i); // note: DP is always segged after AD and SDP, regardless of their order in FORMAT
@@ -939,13 +944,13 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_DP_by_DP_single)
 static inline void vcf_seg_FORMAT_PGT (VBlockVCFP vb, ContextP ctx, STRp(pgt), ContextP *ctxs, STRps(sf))
 {
     // case: PGT=. and PID=.
-    if ((pgt_len==1 && *pgt=='.' && vcf_seg_sample_has_null_value (_FORMAT_PID, ctxs, STRas(sf)))
+    if ((pgt_len==1 && *pgt=='.' && vcf_seg_sample_has_null_value (FORMAT_PID, ctxs, STRas(sf)))
 
     // case: haplotypes of PGT are the same and in the same order as GT
     || (ctxs[0]->did_i == FORMAT_GT && sf_lens[0] == 3 && pgt_len==3 && 
         pgt[0]==sfs[0][0] && pgt[2]==sfs[0][2] && pgt[1] == '|'))
 
-        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_PGT }), 2, ctx, pgt_len); 
+        seg_special0 (VB, VCF_SPECIAL_PGT, ctx, pgt_len); 
 
     // other cases - normal seg: haplotypes appear in reverse order, . but not PID, ploidy!=2, non-standard PGT or GT format etc
     else
@@ -987,7 +992,7 @@ static inline void vcf_seg_FORMAT_AB (VBlockVCFP vb, ContextP ctx, STRp(ab))
 
     if (channel_i == -1                     || // GT didn't produce a mux channel
         CTX(FORMAT_GT)->gt.prev_ploidy != 2 || // This method was tested only for ploidy == 2
-        vb->n_alts != 1                     || // This method was tested only for n_alts == 1
+        N_ALTS != 1                         || // This method was tested only for n_alts == 1
         (channel_i != 1 && !IS_PERIOD(ab))) {  // prediction: '.' for channel 0,2. fail if prediction is wrong.
     
         seg_by_ctx (VB, STRa(ab), ctx, ab_len);
@@ -1003,7 +1008,7 @@ static inline void vcf_seg_FORMAT_AB (VBlockVCFP vb, ContextP ctx, STRp(ab))
         seg_create_rollback_point (VB, NULL, 1, FORMAT_AB); 
     }
 
-    seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_AB }, 2, ctx, ab_len);
+    seg_special0 (VB, VCF_SPECIAL_AB, ctx, ab_len);
 
     // note: up to 15.0.35, we segged channel_i=3 (exceptions channel) into FORMAT_AB3. Since 15.0.36 we no longer have an exception channel.
 }
@@ -1058,12 +1063,12 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_AB)
         STR(ad);
         reconstruct_peek (VB, CTX(FORMAT_AD), pSTRa(ad));
 
-        // note: using MAX_ALLELES and not vb->n_alts, bc n_alts is not defined for files older than 14.0.12
-        str_split_ints (ad, ad_len, MAX_ALLELES + 1, ',', ad, false); // note: up to 15.0.36 we could arrive here even with n_alts > 1 
-        ASSPIZ (n_ads, "Failed to split AD=\"%.*s\" to %u integers", STRf(ad), VB_VCF->n_alts + 1);
+        int64_t ad0, ad1;
+        ASSPIZ (str_item_i_int (STRa(ad), ',', 0, &ad0) && str_item_i_int (STRa(ad), ',', 1, &ad1), 
+                "Failed to get ad0 and ad1. AD=\"%.*s\"", STRf(ad));
 
         STRlic(recon_ab_str, 32);
-        calculate_AB (ads[0], ads[1], qSTRa(recon_ab_str));
+        calculate_AB (ad0, ad1, qSTRa(recon_ab_str));
         RECONSTRUCT_str (recon_ab_str);
     }
 
@@ -1084,7 +1089,7 @@ static inline void vcf_seg_FORMAT_GP (VBlockVCFP vb, ContextP ctx, STRp(gp))
     // according to the VCF spec, until VCF 4.2 GP contains phred values
     // and since 4.3, it contains probabilities. But tools don't adhere to this, and it might be either.
     // we test all GPs in the segconf data to identify their format and verify its consistency   
-    if (segconf.running && segconf.FMT_GP_content == GP_unknown) {
+    if (segconf_running && segconf.FMT_GP_content == GP_unknown) {
         str_split_floats (gp, gp_len, 0, ',', gp, false, '.');
         if (!n_gps)
             segconf.FMT_GP_content = GP_other; // unrecognized format
@@ -1115,9 +1120,10 @@ static inline void vcf_seg_FORMAT_GP (VBlockVCFP vb, ContextP ctx, STRp(gp))
 // ---------
 
 // <ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes as defined in the VCF specification">       
+// <ID=LPL,Number=.,Type=Integer,Description="Local normalized, Phred-scaled likelihoods for genotypes as in original gVCF (without allele reordering)">
 static inline void vcf_seg_FORMAT_PL (VBlockVCFP vb, ContextP ctx, STRp(PL))
 {
-    if (segconf.running && !segconf.has_DP_before_PL) 
+    if (segconf_running && !segconf.has_DP_before_PL) 
         segconf.has_DP_before_PL = ctx_encountered (VB, FORMAT_DP);
 
     seg_set_last_txt (VB, ctx, STRa(PL)); // consumed by GQ and SPL 
@@ -1132,10 +1138,10 @@ static inline void vcf_seg_FORMAT_PL (VBlockVCFP vb, ContextP ctx, STRp(PL))
     if (vb->PL_mux_by_DP == unknown) 
         vb->recon_size += PL_len; // since we're segging twice, we need to pretent the recon_size is growing even thow it isn't (reversed in zfile_remove_ctx_group_from_z_data)
 
-    // we seg "redirection to PLn" in all VBs regardless of PL_mux_by_DP, so that ZCTX(FORMAT_PL).dict has
+    // we seg "redirection to PLn" in all VBs regardless of PL_mux_by_DP, so that zctx->dict has
     // only a single word. This word might be updated to PLy in vcf_FORMAT_PL_after_vbs.
     // note: this isn't always "all-the-same" - we can have WORD_INDEX_MISSING in b250 in case of missing PLs in samples
-    seg_by_did (VB, STRa(PL_to_PLn_redirect_snip), FORMAT_PL, 0);
+    seg_by_ctx (VB, STRa(PL_to_PLn_redirect_snip), ctx, 0);
 }
 
 // in unknown (=test) mode, this function is called to pick one of the two compressed options, and drop the others
@@ -1175,23 +1181,25 @@ void vcf_FORMAT_PL_decide (VBlockVCFP vb)
 }
 
 // called after all VBs are compressed - before Global sections are compressed
-void vcf_FORMAT_PL_after_vbs (void)
+void vcf_FORMAT_PL_after_vbs (Did did_i) // PL or LPL
 {
-    if (!ZCTX(FORMAT_PL)->nodes.len) return; // no FORMAT/PL in this file
+    decl_zctx (did_i);
+    
+    if (!zctx->nodes.len) return; // no FORMAT/PL in this file
 
-    if (ZCTX(FORMAT_PL)->nodes.len > 1) {
-        dict_io_print (info_stream, STRb(ZCTX(FORMAT_PL)->dict), true, false, true, false);
-        ABORT ("Expecting FORMAT_PL to have exactly one word in its dict, but it has %"PRIu64, ZCTX(FORMAT_PL)->nodes.len);
+    if (zctx->nodes.len > 1) {
+        dict_io_print (info_stream, STRb(zctx->dict), true, false, true, false);
+        ABORT ("Expecting %s to have exactly one word in its dict, but it has %"PRIu64, zctx->tag_name, zctx->nodes.len);
     }
 
     if (segconf.PL_mux_by_DP == yes) { // Tested, and selected YES
-        ctx_declare_winning_group (FORMAT_PLy, FORMAT_PLn, FORMAT_PL); // update groups for stats
+        ctx_declare_winning_group (FORMAT_PLy, FORMAT_PLn, did_i); // update groups for stats
 
         // if we select "Yes", we change the (only) snip in the PL dictionary in place
-        memcpy (ZCTX(FORMAT_PL)->dict.data, PL_to_PLy_redirect_snip, PL_to_PLy_redirect_snip_len);
+        memcpy (zctx->dict.data, PL_to_PLy_redirect_snip, PL_to_PLy_redirect_snip_len);
     }
     else // Tested, and selected NO, or not tested
-        ctx_declare_winning_group (FORMAT_PLn, FORMAT_PLy, FORMAT_PL); 
+        ctx_declare_winning_group (FORMAT_PLn, FORMAT_PLy, did_i); 
 }
 
 //----------
@@ -1281,39 +1289,22 @@ static rom error_format_field (unsigned n_items, ContextP *ctxs)
 // One sample
 // ----------
 
-// returns true is the sample has a non-'.' PS value
-static inline bool vcf_seg_sample_has_PS (VBlockVCFP vb, ContextP *ctxs, STRps(sf))
-{
-    ContextP ps_ctx = CTX(FORMAT_PS);
-    int16_t sf_i = ps_ctx->sf_i;
-
-    if (sf_i == -1     ||                        // no SF in this line's FORMAT
-        sf_i >= n_sfs  ||                        // SF field is missing in this sample despite being in FORMAT
-        !sf_lens[sf_i] ||                        // SF is "" (i.e. empty)
-        (sf_lens[sf_i]==1 && sfs[sf_i][0]=='.')) // SF is "."
-        return false;
-
-    // first sample in the VB is a proper PS - get its type 
-    if (!ps_ctx->ps_type)
-        vcf_samples_seg_initialize_PS_PID (vb, ps_ctx, STRi(sf, sf_i));
-
-    return true;
-}
-
 // returns the number of colons in the sample
 static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP *ctxs, ContainerP format, STRp(sample))
 {
+    START_TIMER;
+
     #define COND0(condition, seg) if (condition) { seg; break; } else  
     #define COND(condition,  seg) if (condition) { seg; break; } else goto fallback; 
-
-    str_split (sample, sample_len, con_nitems (*format), ':', sf, false);
+    
+    str_split (sample, sample_len, con_nitems (*format) - segconf.vcf_sample_copy, ':', sf, false);
 
     ASSVCF (n_sfs, "Sample %u has too many subfields - FORMAT field \"%s\" specifies only %u: \"%.*s\"", 
             vb->sample_i+1, error_format_field (con_nitems (*format), ctxs), con_nitems (*format), STRf(sample));
 
     for (unsigned i=0; i < n_sfs; i++) { 
 
-        DictId dict_id = format->items[i].dict_id;
+        DictId dict_id = format->items[i + segconf.vcf_sample_copy].dict_id;
         ContextP ctx = ctxs[i];
 
         if (!sf_lens[i])
@@ -1322,21 +1313,13 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
         else switch (dict_id.num) {
 
         // <ID=GT,Number=1,Type=String,Description="Genotype">
-        case _FORMAT_GT: {
-            bool has_ps = vcf_seg_sample_has_PS (vb, ctxs, STRas(sf));
-            
-            bool has_null_dp = segconf.use_null_DP_method ? vcf_seg_sample_has_null_value (_FORMAT_DP, ctxs, STRas(sf)) 
-                                                          : false;
-
-            vcf_seg_FORMAT_GT (vb, ctx, dl, STRi(sf, i), has_ps, has_null_dp); 
-            break;
-        }
+        case _FORMAT_GT   : vcf_seg_FORMAT_GT (vb, ctx, dl, STRi(sf, i), ctxs, STRas(sf)); break;
 
         // note: GP and PL - for non-optimized, I tested segging as A_R and seg_array - they are worse or not better than the default, because the values are correlated.
-        case _FORMAT_GP: vcf_seg_FORMAT_GP (vb, ctx, STRi (sf, i)); break;
+        case _FORMAT_GP   : vcf_seg_FORMAT_GP (vb, ctx, STRi (sf, i)); break;
 
         // <ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes as defined in the VCF specification">       
-        case _FORMAT_PL: vcf_seg_FORMAT_PL (vb, ctx, STRi (sf, i)); break;
+        case _FORMAT_PL   : vcf_seg_FORMAT_PL (vb, ctx, STRi (sf, i)); break;
 
         // <ID=PP,Number=G,Type=Integer,Description="Phred-scaled genotype posterior probabilities rounded to the closest integer">
         case _FORMAT_PP:
@@ -1421,7 +1404,7 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
                                 if (segconf.has[INFO_BaseCounts]) seg_set_last_txt (VB, ctx, STRi(sf, i)); // consumed by vcf_seg_INFO_BaseCounts
                              }
                              break;
-
+        
         // <ID=PGT,Number=1,Type=String,Description="Physical phasing haplotype information, describing how the alternate alleles are phased in relation to one another">
         case _FORMAT_PGT   :  vcf_seg_FORMAT_PGT (vb, ctx, STRi(sf, i), ctxs, STRas(sf)); break;
 
@@ -1460,7 +1443,7 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
         case _FORMAT_ICNT  : COND (segconf.vcf_is_gvcf, vcf_seg_ICNT (vb, ctx, STRi(sf, i))); 
 
         // <ID=SPL,Number=.,Type=Integer,Description="Normalized, Phred-scaled likelihoods for SNPs based on the reference confidence model">
-        case _FORMAT_SPL  : COND (segconf.vcf_is_gvcf, vcf_seg_SPL (vb, ctx, STRi(sf, i))); 
+        case _FORMAT_SPL   : COND (segconf.vcf_is_gvcf, vcf_seg_SPL (vb, ctx, STRi(sf, i))); 
 
         // VarScan: <ID=RDF,Number=1,Type=Integer,Description="Depth of reference-supporting bases on forward strand (reads1plus)">
         case _FORMAT_RDF   : vcf_seg_FORMAT_minus (vb, ctx, STRi(sf, i), 0, CTX(FORMAT_RD), CTX(FORMAT_RDR), STRa(rdf_snip)); break;
@@ -1510,6 +1493,17 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
         case _FORMAT_QR    : 
         case _FORMAT_QA    : COND (segconf.vcf_is_freebayes, vcf_seg_FORMAT_QR_QA (vb, ctx, STRi(sf, i)));
         
+        // local-allele fields
+        case _FORMAT_LAA   : vcf_seg_FORMAT_LAA (vb, ctx, STRi(sf, i)); break;
+        
+        case _FORMAT_LPL   : COND(segconf.vcf_local_alleles, vcf_seg_FORMAT_PL (vb, ctx, STRi (sf, i))); // local-allele version of PL
+        
+        case _FORMAT_LAD   : COND(segconf.vcf_local_alleles, vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_LAD));
+
+        case _FORMAT_QL    : COND(segconf.vcf_local_alleles, vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_QL));
+
+        case _FORMAT_FT    : COND(segconf.vcf_local_alleles, vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_FT));
+
         default            :
         fallback           : 
             vcf_seg_field_fallback (vb, ctx, STRi(sf, i));
@@ -1524,8 +1518,8 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
     }
 
     // missing subfields - defined in FORMAT but missing (not merely empty) in sample
-    for (unsigned i=n_sfs; i < con_nitems (*format); i++) {
-        uint64_t dnum = format->items[i].dict_id.num;
+    for (unsigned i=n_sfs; i < con_nitems (*format) - segconf.vcf_sample_copy; i++) {
+        uint64_t dnum = format->items[i + segconf.vcf_sample_copy].dict_id.num;
 
         // special handling for PS and PID
         if (dnum == _FORMAT_PS || dnum == _FORMAT_PID) 
@@ -1547,6 +1541,7 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
     if (segconf.has[FORMAT_GQ] && ctx_encountered (VB, FORMAT_GQ))
         vcf_seg_FORMAT_GQ (vb);
 
+    COPY_TIMER (vcf_seg_one_sample);
     return n_sfs - 1; // number of colons
 }
 
@@ -1556,6 +1551,8 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
 
 rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t len, char *next_field, bool *has_13)
 {
+    START_TIMER;
+
     // Container for samples - we have:
     // - repeats as the number of samples in the line (<= vcf_num_samples)
     // - n_items as the number of FORMAT subfields (inc. GT)
@@ -1577,50 +1574,68 @@ rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t len, char *next_
     }
 
     // set ctx->sf_i - for the line's FORMAT fields
-    for (int sf_i=0; sf_i < con_nitems(format); sf_i++) {
-        ctxs[sf_i]->sf_i = sf_i;
+    for (int sf_i=0; sf_i < con_nitems(format) - segconf.vcf_sample_copy; sf_i++) {
+        SF_I(ctxs[sf_i]->did_i) = sf_i;
 
-        if (segconf.running) segconf.has[ctxs[sf_i]->did_i]++;
+        if (segconf_running) segconf.has[ctxs[sf_i]->did_i]++;
     }
 
     // initialize LOOKBACK if we have PS or PID
-    if (!CTX(VCF_LOOKBACK)->is_initialized && (CTX(FORMAT_PID)->sf_i >= 0 || CTX(FORMAT_PS)->sf_i >= 0))
+    if (!CTX(VCF_LOOKBACK)->is_initialized && (SF_I(FORMAT_PID) != NO_SF_I || SF_I(FORMAT_PS) != NO_SF_I))
         vcf_samples_seg_initialize_LOOKBACK (vb);
     
-    rom field_start;
-    unsigned field_len=0, num_colons=0;
+    STR0(sample);
+    unsigned num_colons=0;
+    char separator=0;
 
     // 0 or more samples (note: we don't use str_split, because samples could be very numerous)
-    for (char separator=0 ; separator != '\n'; format.repeats++) {
+    for (vb->sample_i=0 ; separator != '\n'; vb->sample_i++) {
+        sample = next_field;
+        next_field = (char *)seg_get_next_item (VB, sample, &len, GN_SEP, GN_SEP, GN_IGNORE, &sample_len, &separator, has_13, "sample-subfield");
 
-        field_start = next_field;
-        next_field = (char *)seg_get_next_item (VB, field_start, &len, GN_SEP, GN_SEP, GN_IGNORE, &field_len, &separator, has_13, "sample-subfield");
+        ASSVCF (sample_len, "Error: invalid VCF file - expecting sample data for sample_i=%u, but found a tab character", 
+                vb->sample_i);
 
-        ASSVCF (field_len, "Error: invalid VCF file - expecting sample data for sample # %u, but found a tab character", 
-                format.repeats+1);
+        if (segconf.vcf_sample_copy && 
+            !(segconf.FMT_DP_method == BY_INFO_DP && con_nitems(format)==3 && format.items[1].dict_id.num == _FORMAT_GT && format.items[2].dict_id.num == _FORMAT_DP) && // exclude special case seen in some gGVCF: most lines have FORMAT GT:DP, and DP is segged perfectly by INFO_DP
+            vcf_seg_copy_one_sample (vb, dl, ctxs, &format, (char *)sample, sample_len)) {
+START_TIMER;
+            num_colons += str_count_char (STRa(sample), ':');            
+COPY_TIMER(tmp1);            
+            SAMPLE_COPIED_SAME_FMT_ZIP = true; // indeed copied
+        }
 
-        vb->sample_i = format.repeats;
-        num_colons += vcf_seg_one_sample (vb, dl, ctxs, &format, (char *)field_start, field_len);
+        else { 
+            num_colons += vcf_seg_one_sample (vb, dl, ctxs, &format, (char *)sample, sample_len);
+            
+            if (segconf.vcf_sample_copy) 
+                SAMPLE_COPIED_SAME_FMT_ZIP = false; // note: assignment must be *after* segging the sample
+        }
 
-        ASSVCF (format.repeats < vcf_num_samples || separator == '\n',
-                "invalid VCF file - expecting a newline after the last sample (sample #%u)", vcf_num_samples);
+        ASSVCF (vb->sample_i < vcf_num_samples || separator == '\n',
+                "invalid VCF file - expecting a newline after the last sample (sample_i=%u)", vb->sample_i);
     }
-    vb->sample_i = 0;
     
-    ASSVCF (format.repeats <= vcf_num_samples, "according the VCF header, there should be %u sample%s per line, but this line has %u samples - that's too many",
-            STRfN(vcf_num_samples), format.repeats);
+    format.repeats = vb->sample_i;
 
     // in some real-world files I encountered have too-short lines due to human errors. we pad them
-    if (format.repeats < vcf_num_samples) 
+    if (format.repeats < vcf_num_samples) {
+        
+        // set length=0 in last_samples for missing samples
+        if (segconf.vcf_sample_copy)
+            memset (B(TxtWord, ctx->last_samples, vb->sample_i), 0, (vcf_num_samples - vb->sample_i) * sizeof (TxtWord));
+
         WARN_ONCE ("FYI: the number of samples in variant CHROM=%.*s POS=%"PRId64" is %u, different than the VCF column header line which has %u samples",
                    vb->chrom_name_len, vb->chrom_name, vb->last_int (VCF_POS), format.repeats, vcf_num_samples);
+    }
 
     vcf_seg_FORMAT_GT_finalize_line (vb, format.repeats);
 
     container_seg (vb, ctx, &format, 0, 0, format.repeats + num_colons); // account for : and \t \r \n separators
 
-    ctx_set_last_value (VB, CTX(VCF_SAMPLES), (ValueType){ .i = format.repeats });
+    ctx_set_last_value (VB, ctx, (ValueType){ .i = format.repeats });
  
+    COPY_TIMER (vcf_seg_samples);
     return next_field;
 }
 

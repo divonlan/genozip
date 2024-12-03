@@ -41,12 +41,12 @@ static VBlockP nonpool_vbs[NUM_NONPOOL_VBs] = {};
 
 static inline bool is_in_use (VBlockP vb)
 {
-    return __atomic_load_n (&vb->in_use, __ATOMIC_ACQUIRE);
+    return load_acquire (vb->in_use);
 }
 
 static void set_in_use (VBlockP vb, bool in_use)
 {
-    __atomic_store_n (&vb->in_use, in_use, __ATOMIC_RELEASE);   
+    store_release (vb->in_use, in_use);   
 }
 
 void vb_release_vb_do (VBlockP *vb_p, rom task_name, rom func)
@@ -73,27 +73,35 @@ void vb_release_vb_do (VBlockP *vb_p, rom task_name, rom func)
     // release all buffers in vb->buffer_list, and zero the space between these buffers
     buflist_free_vb (vb); 
 
-    // this release can be run by either the main or writer thread. we make sure to update in_use as the very
-    // last change, and do so atomically
+    buflist_compact (vb);
+
+    // IMPORTANT: this release can be run by either the main or writer thread. 
+    // we make sure to update in_use as the very last change, and do so atomically
+
+    VBID vb_id = vb->id; // copy before releasing
+    VBlockPoolType pool = vb->pool;
 
     // case: this VB is from the pool (i.e. not evb)
     int32_t num_in_use = -1;
     if (vb != evb) {
-        // Logic: num_in_use is always AT LEAST sum(vb)->in_use. i.e. pessimistic. (it can be mometarily less between these two updates)
         set_in_use (vb, false);   // released the VB back into the pool - it may now be reused 
-        if (vb->id >= 0) 
-            num_in_use = __atomic_sub_fetch (&pools[vb->pool]->num_in_use, 1, __ATOMIC_ACQ_REL); // atomic to prevent concurrent update by writer thread and main thread (must be after update of in_use)
+
+        __atomic_thread_fence (__ATOMIC_RELEASE); 
+
+        // **** NO ACCESS TO vb AFTER THIS POINT (in PIZ, it might be realloced by the next user) ****
+
+        // Logic: num_in_use is always AT LEAST sum(vb)->in_use. i.e. pessimistic. (it can be mometarily less between these two updates)
+        if (vb_id >= 0) 
+            num_in_use = decrement_relaxed (pools[pool]->num_in_use); // atomic to prevent concurrent update by writer thread and main thread (must be after update of in_use)
         *vb_p = NULL;
     }
 
     if (flag_is_show_vblocks (task_name)) 
-        iprintf (vb->id >= 0 ? "VB_RELEASE(task=%s id=%d) vb=%s caller=%s in_use=%d/%d\n"
-                             : "VB_RELEASE(task=%s id=%d) vb=%s caller=%s\n", 
-                 task_name, vb->id, VB_NAME, func, num_in_use, (vb->id >= 0 ? pools[vb->pool]->num_vbs : -1));
+        iprintf (vb_id >= 0 ? "VB_RELEASE(task=%s id=%d) vb=%s caller=%s in_use=%d/%d\n"
+                            : "VB_RELEASE(task=%s id=%d) vb=%s caller=%s\n", 
+                 task_name, vb_id, VB_NAME, func, num_in_use, (vb_id >= 0 ? pools[pool]->num_vbs : -1));
 
-    buflist_compact (vb);
-
-    if (vb->id >= 0) COPY_TIMER_EVB (vb_release_vb_do);
+    if (vb_id >= 0) COPY_TIMER_EVB (vb_release_vb_do);
 }
 
 
@@ -135,10 +143,10 @@ void vb_dehoard_memory (bool release_to_kernel)
 void vb_create_pool (VBlockPoolType type, rom name)
 {
     // only main-thread dispatcher can create a pool. other dispatcher (eg writer's bgzf compression) can must existing pool
-    uint32_t num_vbs = (type == POOL_MAIN) ? MAX_(1, global_max_threads) +               // compute thread VBs
-                                             (IS_PIZ ? 2 : 0)    +                       // txt header VB and wvb (for PIZ)
-                                             (IS_PIZ ? z_file->max_conc_writing_vbs : 0) // SAM: max number of thread-less VBs handed over to the writer thread which the writer must load concurrently 
-                                           : writer_get_max_bgzf_threads();
+    uint32_t num_vbs = (type == POOL_MAIN) ? MAX_(1, global_max_threads)                 + // compute thread VBs
+                                             (IS_PIZ ? (1 + !flag.no_writer_thread) : 0) + // txt header VB and wvb (for PIZ)
+                                             (IS_PIZ && !flag.no_writer_thread ? z_file->max_conc_writing_vbs : 0) // SAM: max number of thread-less VBs handed over to the writer thread which the writer must load concurrently 
+                       /*   POOL_BGZF   */ : writer_get_max_bgzf_threads();
     if (flag_is_show_vblocks (NULL)) 
         iprintf ("CREATING_VB_POOL: type=%s global_max_threads=%u max_conc_writing_vbs=%u num_vbs=%u\n", 
                  name, global_max_threads, z_file->max_conc_writing_vbs, num_vbs); 
@@ -209,7 +217,7 @@ static VBlockP vb_update_data_type (VBlockP vb, DataType dt, DataType alloc_dt, 
     if (z_file && vb->data_type == dt) return vb;
 
     // the new data type has a private section in its VB, that is different that the one of alloc_dt - realloc private section
-    if (vb->data_type_alloced != alloc_dt && alloc_dt != DT_NONE) {
+    if (vb->data_type_alloced != alloc_dt) {
 
         // destroy private part of previous data_type. we also destroy all contexts as new data type is going
         // to allocate different contexts with a different memory usage profile (eg b250 vs local) for each
@@ -267,16 +275,24 @@ VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompITy
         dt = DT_GFF; // return GFF dt to its true dt after getting the size, otherwise it won't work   
 
     // circle around until a VB becomes available (busy wait)
+    VBlockP vb;
     VBID vb_id; for (vb_id=0; ; vb_id = (vb_id+1) % pool->num_vbs) {
         if (!pool->vb[vb_id]) { // VB is not allocated - allocate it
-            pool->vb[vb_id] = CALLOC (sizeof_vb); 
+            vb = pool->vb[vb_id] = CALLOC (sizeof_vb); 
             pool->num_allocated_vbs++;
-            pool->vb[vb_id]->data_type_alloced = alloc_dt;
+            vb->id = vb_id;
+            vb->pool = type;
+            vb->data_type_alloced = alloc_dt;
+
+            vb->buffer_list.name = "buffer_list";
+            buf_init_lock (&vb->buffer_list);
+            buflist_add_buf (vb, &vb->buffer_list, __FUNCLINE);
+            vb->buffer_list.vb = vb; // indication buffer was added to buffer list
             break;
         }
 
         else if (!is_in_use (pool->vb[vb_id])) {
-            pool->vb[vb_id] = vb_update_data_type (pool->vb[vb_id], dt, alloc_dt, sizeof_vb); // possibly realloc
+            vb = pool->vb[vb_id] = vb_update_data_type (pool->vb[vb_id], dt, alloc_dt, sizeof_vb); // possibly realloc
             break;
         }
 
@@ -287,28 +303,17 @@ VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompITy
         if (vb_id == pool->num_vbs-1) usleep (50000); // 50 ms
     }
 
-    VBlockP vb = pool->vb[vb_id]; 
-
     // Logic: num_in_use is always AT LEAST sum(vb)->in_use. i.e. pessimistic. (it can be mometarily more between these two updates)
     uint32_t num_in_use = __atomic_add_fetch (&pool->num_in_use, 1, __ATOMIC_ACQ_REL); // atomic to prevent concurrent update by writer thread and main thread (must be before update of in_use)
     set_in_use (vb, true);
 
     // initialize VB fields that need to be a value other than 0
-    vb->id                = vb_id;
     vb->data_type         = dt;
     vb->vblock_i          = vblock_i;
     vb->comp_i            = comp_i;
     vb->compute_thread_id = THREAD_ID_NONE;
     vb->compute_task      = task_name;
-    vb->pool              = type;
     init_dict_id_to_did_map (vb->d2d_map);
-
-    if (!vb->buffer_list.vb) {
-        vb->buffer_list.name = "buffer_list";
-        buf_init_lock (&vb->buffer_list);
-        buflist_add_buf (vb, &vb->buffer_list, __FUNCLINE);
-        vb->buffer_list.vb = vb; // indication buffer was added to buffer list
-    }
     
     if (flag_is_show_vblocks (task_name)) 
         iprintf ("VB_GET_VB(task=%s id=%u) vb_i=%s/%d num_in_use=%u/%u%s\n", 
@@ -328,7 +333,7 @@ VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompITy
 uint32_t vb_pool_get_num_in_use (VBlockPoolType type, VBID *id/*optional out*/)
 {
     VBlockPool *pool = vb_get_pool (type, HARD_FAIL);
-    int num_in_use = __atomic_load_n (&pool->num_in_use, __ATOMIC_ACQUIRE); // atomic, bc for POOL_MAIN, writer thread might update concurrently.
+    int num_in_use = load_acquire (pool->num_in_use); // atomic, bc for POOL_MAIN, writer thread might update concurrently.
 
     if (id) {
         *id = VB_ID_NONE;
@@ -395,12 +400,12 @@ unsigned def_vb_size (DataType dt) { return sizeof (VBlock); }
 
 void vb_set_is_processed (VBlockP vb)
 {
-    __atomic_store_n (&vb->is_processed, (bool)true, __ATOMIC_RELEASE); 
+    store_release (vb->is_processed, (bool)true); 
 }
 
 bool vb_is_processed (VBlockP vb)
 {
-    return __atomic_load_n (&vb->is_processed, __ATOMIC_ACQUIRE);
+    return load_acquire (vb->is_processed);
 }
 
 bool vb_buf_locate (VBlockP vb, ConstBufferP buf)

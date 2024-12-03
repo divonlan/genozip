@@ -13,6 +13,7 @@
 #include "compressor.h"
 #include "dict_io.h"
 #include "base64.h"
+#include "sam_friend.h"
 
 // -------------------------------------
 // ZIP: Assign codecs to dictionaries
@@ -73,7 +74,7 @@ void dict_io_assign_codecs (void)
 
 static Context *frag_ctx;
 static const CtxNode *frag_next_node;
-static unsigned frag_size = 0;
+static unsigned frag_size;
 
 // compress the dictionary fragment - either an entire dict, or divide it to fragments if large to allow multi-threaded
 // compression and decompression
@@ -104,7 +105,7 @@ static void dict_io_prepare_for_compress (VBlockP vb)
                     frag_size = 2 * roundup2pow ((uint64_t)node->snip_len); // must be power of 2 for dict_io_read_one_vb
 
             if (flag.show_compress)
-                iprintf ("DICT:  %s: len=%"PRIu64" words=%"PRIu64"\n", frag_ctx->tag_name, frag_ctx->dict.len, frag_ctx->nodes.len);
+                iprintf ("DICT:  %s: len=%"PRIu64" words=%"PRIu64"\n", ctx_tag_name_ex (frag_ctx).s, frag_ctx->dict.len, frag_ctx->nodes.len);
         }
 
         vb->fragment_ctx   = frag_ctx;
@@ -149,15 +150,15 @@ static void dict_io_compress_one_fragment (VBlockP vb)
         .flags                 = { .dictionary = vb->fragment_ctx->dict_flags } // v15
     };
 
-    if (flag.show_dict) 
-        iprintf ("%s (vb=%u, did=%u, num_snips=%u)\n", 
-                 vb->fragment_ctx->tag_name, vb->vblock_i, vb->fragment_ctx->did_i, vb->fragment_num_words);
+    if (flag.show_dict || dict_id_is_show (vb->fragment_ctx->dict_id)) 
+        iprintf ("\nShowing dicts of %s (did=%u fragment_num_snips=%u fragment_vb=%u)\n", 
+                 ctx_tag_name_ex (vb->fragment_ctx).s, vb->fragment_ctx->did_i, vb->fragment_num_words, vb->vblock_i);
     
     if (dict_id_is_show (vb->fragment_ctx->dict_id))
         dict_io_print (info_stream, vb->fragment_start, vb->fragment_len, true, true, true, false);
 
-    if (flag.list_chroms && vb->fragment_ctx->did_i == CHROM)
-        dict_io_print (info_stream, vb->fragment_start, vb->fragment_len, true, true, false, VB_DT(SAM) || VB_DT(BAM));
+    if (flag.show_contigs && vb->fragment_ctx->did_i == CHROM)
+        dict_io_print (info_stream, vb->fragment_start, vb->fragment_len, true, true, true, VB_DT(SAM) || VB_DT(BAM));
 
     if (flag.show_time) codec_show_time (vb, st_name (SEC_DICT), vb->fragment_ctx->tag_name, vb->fragment_ctx->dcodec);
 
@@ -175,10 +176,14 @@ void dict_io_compress_dictionaries (void)
 
     frag_ctx = ZCTX(0);
     frag_next_node = NULL;
-        
+    frag_size = 0;
+
     dict_io_assign_codecs(); // assign codecs to all contexts' dicts
 
-    dispatcher_fan_out_task ("compress_dicts", NULL, 0, "Writing dictionaries...", false, false, false, 0, 20000, true,
+    dispatcher_fan_out_task ("compress_dicts", NULL, 0, "Writing dictionaries...", 
+                             false, false, 
+                             flag.show_dict || flag.show_one_dict, // force single thread if displaying 
+                             0, 20000, true,
                              dict_io_prepare_for_compress, 
                              dict_io_compress_one_fragment, 
                              zfile_output_processed_vb);
@@ -189,8 +194,8 @@ void dict_io_compress_dictionaries (void)
 // -------------------------------------
 // PIZ: Read and decompress dictionaries
 // -------------------------------------
-static Section dict_sec = NULL; 
-static ContextP dict_ctx = NULL;
+static Section dict_sec; 
+static ContextP dict_ctx;
 
 // V8 files: calculate dict size by adding up the size of all fragments. 
 // Note: We need this for supporting v8 reference files.
@@ -204,7 +209,7 @@ static uint64_t v8_get_dict_size (VBlockP vb, Section dict_sec)
     return size;
 }
 
-static void dict_io_read_one_vb (VBlockP vb)
+static void dict_io_read_one_vb (VBlockP vb) // one vb = one fragment
 {
     Section old_dict_sec = dict_sec;
     if (!sections_next_sec (&dict_sec, SEC_DICT)) 
@@ -256,7 +261,7 @@ static void dict_io_read_one_vb (VBlockP vb)
 
     if (header) {
         vb->fragment_ctx         = dict_ctx;
-        vb->fragment_start       = Bc (dict_ctx->dict, dict_ctx->dict.len);
+        vb->fragment_start       = Bc(dict_ctx->dict, dict_ctx->dict.len);
         dict_ctx->word_list.len += header ? BGEN32 (header->num_snips) : 0;
         dict_ctx->dict.len      += (uint64_t)vb->fragment_len;
         dict_ctx->dict_helper    = header->dict_helper; // 15.0.42 (union with con_rep_special)
@@ -274,7 +279,7 @@ done:
     vb->dispatch = READY_TO_COMPUTE;
 }
 
-// entry point of compute thread of dictionary decompression
+// entry point of compute thread of dictionary decompression of one fragment
 static void dict_io_uncompress_one_vb (VBlockP vb)
 {
     if (!vb->fragment_ctx || flag.only_headers) goto done; // nothing to do in this thread
@@ -330,9 +335,10 @@ static void dict_io_build_word_lists (void)
 {    
     START_TIMER;
 
-    Context *last = ZCTX((flag.show_headers && is_genocat) ? CHROM : z_file->num_contexts);
-
-    for (Context *zctx=z_file->contexts; zctx <= last; zctx++) 
+    if (flag.show_headers && is_genocat)
+        dict_io_dict_build_word_list_one (ZCTX(CHROM)); // only CHROM is needed
+    
+    else for_zctx
         dict_io_dict_build_word_list_one (zctx);
 
     COPY_TIMER_EVB (dict_io_build_word_lists);
@@ -362,12 +368,12 @@ void dict_io_read_all_dictionaries (void)
         dict_io_build_word_lists();
 
     // output the dictionaries if we're asked to
-    if (flag.show_dict || flag.show_one_dict || flag.list_chroms) {
+    if (flag.show_dict || flag.show_one_dict || flag.show_contigs) {
         for (uint32_t did_i=0; did_i < z_file->num_contexts; did_i++) {
             ContextP ctx = ZCTX(did_i);
             if (!ctx->dict.len) continue;
 
-            if (flag.list_chroms && ctx->did_i == CHROM)
+            if (flag.show_contigs && ctx->did_i == CHROM)
                 dict_io_print (info_stream, STRb(ctx->dict), true, false, true, Z_DT(SAM));
             
             if (flag.show_dict || (flag.show_one_dict && dict_id_is_show (ctx->dict_id))) 
@@ -378,7 +384,8 @@ void dict_io_read_all_dictionaries (void)
             if (dict_id_is_show (ctx->dict_id))
                 dict_io_print (info_stream, STRb(ctx->dict), true, true, true, false);
         }
-        iprint0 ("\n");
+        
+        if (flag.show_dict) iprint0 ("\n"); // but not for show_contigs or show_one_dict, as often wc is used to count them 
 
         if (is_genocat) exit_ok; // if this is genocat - we're done
     }
@@ -426,12 +433,14 @@ StrTextMegaLong str_snip_ex (STRp(snip), bool add_quote)
         default                        : SNPRINTF (s, "\\x%x", (uint8_t)op);
     }
 
-    #define X(dtype,sp)  (op == SNIP_SPECIAL && dt==DT_##dtype && (snip[1] == dtype##_SPECIAL_##sp))
-    #define X_SAM(sp) (op == SNIP_SPECIAL && (Z_DT(SAM) || Z_DT(BAM))   && (snip[1] == SAM_SPECIAL_##sp))
+    #define X_SAM(sp)   (op == SNIP_SPECIAL && (dt==DT_SAM || dt==DT_BAM) && (snip[1] == SAM_SPECIAL_##sp))
+    #define X_VCF(sp)   (op == SNIP_SPECIAL && dt==DT_VCF   && (snip[1] == VCF_SPECIAL_##sp))
+    #define X_GFF(sp)   (op == SNIP_SPECIAL && dt==DT_GFF   && (snip[1] == GFF_SPECIAL_##sp))
+    #define X_FASTQ(sp) (op == SNIP_SPECIAL && dt==DT_FASTQ && (snip[1] == FASTQ_SPECIAL_##sp))
+
     if (op == SNIP_OTHER_LOOKUP || op == SNIP_OTHER_DELTA || op == SNIP_COPY || op == SNIP_REDIRECTION ||
-        X(VCF,LEN_OF) || X(VCF,ARRAY_LEN_OF) || X(VCF,COPY_MATE) || (X(VCF,GQ) && snip_len > 8) ||
+        X_VCF(LEN_OF) || X_VCF(ARRAY_LEN_OF) || X_VCF(COPY_MATE) || (X_VCF(GQ) && snip_len > 8) ||
         X_SAM(COPY_BUDDY))
-    #undef X
     {
         unsigned b64_len = base64_sizeof (DictId);
         DictId dict_id;
@@ -454,10 +463,7 @@ StrTextMegaLong str_snip_ex (STRp(snip), bool add_quote)
     }
 
     // case: MINUS
-    else if (op == SNIP_SPECIAL && 
-                ((Z_DT(VCF) && snip[1] == VCF_SPECIAL_MINUS) || 
-                 (Z_DT(GFF) && snip[1] == GFF_SPECIAL_MINUS))) {
-
+    else if (X_VCF(MINUS) || X_GFF(MINUS)) {
         DictId dicts[2]; 
         unsigned b64_len = snip_len - 2; 
         base64_decode (&snip[2], &b64_len, (uint8_t *)dicts, 2 * sizeof(DictId));
@@ -468,10 +474,7 @@ StrTextMegaLong str_snip_ex (STRp(snip), bool add_quote)
     }
         
     // case: PLUS
-    else if (op == SNIP_SPECIAL && 
-                ((Z_DT(VCF) && snip[1] == VCF_SPECIAL_PLUS) || 
-                 (Z_DT(SAM) && snip[1] == SAM_SPECIAL_PLUS))) {
-
+    else if (X_VCF(PLUS) || X_SAM(PLUS)) {
         DictId dicts[MAX_SNIP_DICTS]; 
         unsigned b64_len = snip_len - 2; 
         int num_dicts = base64_decode (&snip[2], &b64_len, (uint8_t *)dicts, -1) / sizeof (DictId);
@@ -486,13 +489,38 @@ StrTextMegaLong str_snip_ex (STRp(snip), bool add_quote)
         i += b64_len;
     }
 
-    else if (op == SNIP_SPECIAL && Z_DT(VCF) && snip[1] == VCF_SPECIAL_DEFER && snip_len > 2)
-    {
+    else if (X_VCF(DEFER) && snip_len > 2) {
         SNPRINTF (s, "%.*s", (int)sizeof (s)-50, str_snip_ex (snip+2, snip_len-2, false).s); // recursive call
         return s;
     }  
 
-    // case: SPECIAL with base64-encodeded dictionaries: 
+    else if ((X_SAM(SQUANK)) && snip_len > 2) {
+        SNPRINTF (s, "[%s]", (rom[])SQUANK_NAMES[snip[2] - '0']);
+        return s;
+    }  
+
+    else if (X_SAM(CIGAR) && snip[2] < 0) {
+        SNPRINTF (s, "[%s]%s", (rom[])CIGAR_OP_NAMES[(uint8_t)snip[2] - 0x80], 
+                  snip[2] == SQUANK ? (rom[])SQUANK_NAMES[snip[3] - '0'] : &snip[3]);
+        return s;
+    }  
+
+    else if (X_SAM(SEQ)) {
+        SNPRINTF (s, "{%s%s%s%s%.12s%s }", 
+                  (snip_len >= 3 && snip[2]=='1') ? " FORCE_SEQ"    : "",
+                  (snip_len >= 4 && snip[3]=='1') ? " ALIGNER"      : "",
+                  (snip_len >= 5 && snip[4]=='1') ? " PERFECT"      : "",
+                  (snip_len >= 6 && snip[5]=='1') ? " NO_ANAL_DEPN" : "",
+                  cond_str (snip_len >= 7 && snip[6]!='0', " BISULFITE=", &snip[6]),
+                  (snip_len >= 8 && snip[7]=='1') ? " FRC_VERBATIM" : "");
+        return s;
+    }
+    else if (X_FASTQ(SEQ_by_bamass)) {
+        SNPRINTF (s, "[%s]", snip[2]=='0' ? "PERFECT" : "BITMAP");
+        return s;
+    }
+
+    // case: SPECIAL with base64-encoded dictionaries: 
     // last item in a \t-separated array should be eg "MUX0"SNIP_SPECIAL
     // SNIP_SPECIAL tell us to print the dictionaries. 0 is the offset from the beginning.
     else if (op == SNIP_SPECIAL && snip[snip_len-1] == SNIP_SPECIAL) {
@@ -525,21 +553,28 @@ StrTextMegaLong str_snip_ex (STRp(snip), bool add_quote)
 }
 
 // print one or more words in Context.dict
-void dict_io_print (FILE *fp, STRp(data), bool with_word_index, bool add_quotation_marks, bool add_newline, bool remove_equal_asterisk)
+void dict_io_print (FILE *fp, STRp(data), bool with_word_index, bool add_quotation_marks, bool add_newline, bool remove_non_contigs)
 {
     rom word = data, after = data + data_len;
     
     for (WordIndex wi=0; word < after; wi++) {
         int word_len = strlen (word);
 
+        StrTextMegaLong snip = str_snip_ex (STRa(word), add_quotation_marks);
+
         // in case we are showing chrom data in --list-chroms in SAM - don't show * and =
-        if (!remove_equal_asterisk || !(str_is_1char(word,'*') || str_is_1char(word,'='))) {
+        bool remove_one = remove_non_contigs && 
+                          (IS_ASTERISK(word) || IS_EQUAL_SIGN(word) || snip.s[0] == '[');
+
+        if (!remove_one) {
             if (add_newline) fprintf (fp, "[%u] ", wi);
-            fprintf (fp, "%s", str_snip_ex (STRa(word), add_quotation_marks).s);
+            fprintf (fp, "%s", snip.s);
         }
 
         word += word_len + 1;
-        fputc ((add_newline || word == after) ? '\n' : ' ', fp);
+
+        if (!remove_one)
+            fputc ((add_newline || word == after) ? '\n' : ' ', fp);
     }
 
     fflush (fp);

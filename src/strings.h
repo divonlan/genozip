@@ -35,10 +35,11 @@ extern bool is_fastq_seq[256];
 #define UPPER_CASE(c) (IS_SLETTER(c) ? ((c)-32) : (c))
 #define LOWER_CASE(c) (IS_CLETTER(c) ? ((c)+32) : (c))
 
-#define IS_ASTERISK(str)   str_is_1char(str, '*')
-#define IS_PERIOD(str)     str_is_1char(str, '.')
-#define IS_SPACE(str)      str_is_1char(str, ' ')
-#define IS_EQUAL_SIGN(str) str_is_1char(str, '=')
+#define IS_ASTERISK(str)    str_is_1char(str, '*')
+#define IS_ASTERISKi(arr,i) str_is_1chari(arr, (i), '*')
+#define IS_PERIOD(str)      str_is_1char(str, '.')
+#define IS_SPACE(str)       str_is_1char(str, ' ')
+#define IS_EQUAL_SIGN(str)  str_is_1char(str, '=')
 
 #define TF(x) ((x) ? "true" : "false")
 #define YN(x) ((x)==yes?"Yes" : (x)==no?"No" : "Unknown")
@@ -152,13 +153,14 @@ static inline char *str_revcomp_in_place (STRc(seq)) { return str_revcomp (seq, 
 extern char *str_revcomp_actg (char *dst_seq, rom src_seq, uint32_t seq_len);
 
 // count the number of occurances of a character in a string
-static inline uint64_t str_count_char (rom str, uint64_t len, char c)
+static inline uint32_t str_count_char (rom str, uint32_t len, char c)
 {
     if (!str) return 0;
     
-    uint64_t count=0;
-    for (uint64_t i=0; i < len; i++)
-        if (str[i] == c) count++;
+    uint32_t count=0;
+    rom after = str + len;
+    while (str < after)
+        if (*str++ == c) count++;
 
     return count;
 }
@@ -203,6 +205,11 @@ static inline uint64_t str_count_consecutive_char (rom str, uint64_t len, char c
     return i;
 }
 
+static inline rom str_a_an (rom s) {
+    return (s[0]=='a' || s[0]=='e' || s[0]=='i' || s[0]=='o' || s[0]=='u' ||  
+            s[0]=='A' || s[0]=='E' || s[0]=='I' || s[0]=='O' || s[0]=='U') ? "an" : "a";  
+}
+
 extern StrText str_size (uint64_t size);
 extern StrText str_bases (uint64_t num_bases);
 extern StrText str_int_commas (int64_t n);
@@ -211,10 +218,11 @@ extern StrText str_int_s (int64_t n);
 extern StrTextLong str_int_s_(rom label, int64_t n);
 #define cond_int(cond, label, n) ((cond) ? str_int_s_((label), (n)).s : "") /* note: n does not evaluate if cond is false! */\
 
-extern StrTextLong str_str_s_(rom label, rom str);
-#define cond_str(cond, label, str) ((cond) ? str_str_s_((label), (str)).s : "") /* note: str does not evaluate if cond is false! */\
+extern StrTextLong str_str_s_(rom label, STRp(str));
+#define cond_str(cond, label, str)  ((cond) ? ({ rom str_=(str); str_str_s_((label), str_, strlen (str_)).s; }) : "") /* note: str evaluates once, but only if cond is true */
+#define cond_stra(cond, label, str) ((cond) ? str_str_s_((label), str, str_len).s : "") 
 
-extern rom str_to_hex_(bytes data, uint32_t data_len, char *hex_str, bool with_dot);
+extern rom str_to_hex_(bytes data, uint32_t data_lepn, char *hex_str, bool with_dot);
 static inline StrText str_to_hex (bytes data, uint32_t data_len) // note: for data_len up to 39 (truncated if longer)
 {
     StrText s;
@@ -246,6 +254,7 @@ extern uint32_t str_hex_ex (int64_t n, char *str /* out */, bool uppercase, bool
 static inline uint32_t str_hex (int64_t n, char *str /* out */, bool uppercase) { return str_hex_ex (n, str, uppercase, true); }
 
 extern bool str_get_int (STRp(str), int64_t *value); 
+extern bool str_get_uint16 (STRp(str), uint16_t *value);
 extern bool str_get_uint32 (STRp(str), uint32_t *value); 
 extern bool str_get_int_range8  (STRp(str), int64_t min_val, int64_t max_val, uint8_t  *value); // unsigned
 extern bool str_get_int_range16 (STRp(str), int64_t min_val, int64_t max_val, uint16_t *value); // unsigned
@@ -305,10 +314,10 @@ extern uint32_t str_split_by_container_do (STRp(str), ConstContainerP con, STRp(
 #define str_split_by_container(str,str_len,container,prefix,prefix_len,name,enforce_msg) \
     STR_ARRAY (name, MAX_(con_nitems(*container), 1)) = str_split_by_container_do ((str), (str_len), (ConstContainerP)(container), (prefix), (prefix_len), name##s, name##_lens, (enforce_msg))
 
-extern rom str_split_by_tab_do (STRp(str), uint32_t *n_flds, rom *flds, uint32_t *fld_lens, bool *has_13, bool exactly, bool enforce);
-#define str_split_by_tab(str,max_len,max_flds,has_13,exactly,enforce) \
+extern rom str_split_by_tab_do (STRp(str), uint32_t *n_flds, rom *flds, uint32_t *fld_lens, bool *has_13, bool exactly, bool ignore_excess, bool enforce);
+#define str_split_by_tab(str,max_len,max_flds,has_13,exactly,ignore_excess,enforce) \
     STR_ARRAY (fld, (max_flds)) = (max_flds);   \
-    str = str_split_by_tab_do ((str), (max_len), &n_flds, flds, fld_lens, (has_13), (exactly), (enforce))
+    str = str_split_by_tab_do ((str), (max_len), &n_flds, flds, fld_lens, (has_13), (exactly), (ignore_excess), (enforce))
 #define STRfld(i) STRi(fld,(i))
 
 extern uint32_t str_split_by_lines_do (STRp(str), uint32_t max_lines, rom *lines, uint32_t *line_lens);

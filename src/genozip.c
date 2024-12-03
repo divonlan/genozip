@@ -38,6 +38,7 @@
 #include "chrom.h"
 #include "dispatcher.h"
 #include "biopsy.h"
+#include "regions.h"
 
 // globals - set in main() and immutable thereafter
 char global_cmd[256]; 
@@ -56,7 +57,7 @@ static Buffer input_files_buf = { .name = "input_files" };
 #define MAIN(format, ...) ({ if (!flag.explicit_quiet && (flag.echo || flag.test_i)) { progress_newline(); fprintf (stderr, "%s[%u]: ",     command_name(), getpid()); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } })
 #define MAIN0(string)     ({ if (!flag.explicit_quiet && (flag.echo || flag.test_i)) { progress_newline(); fprintf (stderr, "%s[%u]: %s\n", command_name(), getpid(), string); } })
 
-rom report_support (void) { return "Please report this to support@genozip.com. "; }
+rom report_support (void) { return "Please report this to " EMAIL_SUPPORT ". "; }
 rom report_support_if_unexpected (void) { return "\nIf this is unexpected, please contact "EMAIL_SUPPORT".\n"; }
 
 rom command_name (void) // see CommandType
@@ -96,7 +97,7 @@ void noreturn main_exit (bool show_stack, bool is_error)
             threads_print_call_stack(); // this works ok on mac, but does not print function names on Linux (even when compiled with -g)
 
         // this is normally blocked, it runs only with certain flags (see code)
-        buflist_test_overflows_all_vbs (is_error ? "exit_on_error" : "on_exit");
+        buflist_test_overflows_all_vbs (is_error ? "exit_on_error" : "on_exit", true);
 
         if (flag.log_filename) {
             iprintf ("%s - execution ended %s\n", str_time().s, is_error ? "with an error" : "normally");
@@ -247,20 +248,20 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
     RESTORE_FLAG(genocat_no_reconstruct);
 
     // case: reference not loaded yet bc --reference wasn't specified, and we got the ref name from zfile_read_genozip_header()   
-    if (IS_REF_EXTERNAL && !flag.dont_load_ref_file && !ref_is_external_loaded(gref)) {
+    if (IS_REF_EXTERNAL && !flag.dont_load_ref_file && !ref_is_external_loaded()) {
         ASSINP0 (!IS_REF_EXTERNAL || !flag.show_ref_seq, "--show-ref-seq cannot be used on a file that requires a reference file: use genocat --show-ref-seq on the reference file itself instead");
 
         if (!flag.genocat_no_reconstruct || 
             (flag.collect_coverage && Z_DT(FASTQ))) { // in collect_coverage with FASTQ we read the non-data sections of the reference
             RESET_VALUE (z_file); // actually, read the reference first
-            ref_load_external_reference (gref, NULL);
+            ref_load_external_reference (NULL);
             RESTORE_VALUE (z_file);
         }
     }
 
     // test for matching digest between loaded external reference and reference specified in SectionHeaderGenozipHeader
     if (REF_EXTERNAL) 
-        digest_verify_ref_is_equal (gref);
+        digest_verify_ref_is_equal();
 
     flags_update_piz_one_z_file (z_file_i); // must be before piz_z_file_initialize
    
@@ -268,34 +269,35 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
             "%s is a reference file. Did you intend to use \"--reference %s\" ?", z_name, z_name);
 
     Dispatcher dispatcher = piz_z_file_initialize();  
-    if (dispatcher)
-    // generate txt_file(s)
-    piz_set_main_dispatcher (dispatcher);
-    
-    if (flag.interleaved && Z_DT(FASTQ))
-        piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, FQ_COMP_R1, FQ_COMP_R2, true);
-    
-    else if (!flag.unbind)  // single txt_file
-        piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, COMP_NONE, COMP_NONE, true);
+    if (dispatcher) {
+        // generate txt_file(s)
+        piz_set_main_dispatcher (dispatcher);
+        
+        if (flag.interleaved && Z_DT(FASTQ))
+            piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, FQ_COMP_R1, FQ_COMP_R2, true);
+        
+        else if (!flag.unbind)  // single txt_file
+            piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, COMP_NONE, COMP_NONE, true);
 
-    else if (Z_DT(FASTQ)) { // paired FASTQ
-        piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, FQ_COMP_R1, FQ_COMP_R1, false);
-        piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, FQ_COMP_R2, FQ_COMP_R2, true);
+        else if (Z_DT(FASTQ)) { // paired FASTQ
+            piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, FQ_COMP_R1, FQ_COMP_R1, false);
+            piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, FQ_COMP_R2, FQ_COMP_R2, true);
+        }
+
+        else if (Z_DT(SAM) && flag.deep) {   // Deep: one SAM/BAM and one or more FASTQ
+            piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, SAM_COMP_MAIN, SAM_COMP_DEPN, false);
+
+            flag.out_dt = DT_FASTQ;
+            for (CompIType comp_i=SAM_COMP_FQ00; comp_i < z_file->num_txt_files + 2; comp_i++) 
+                piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, comp_i, comp_i, comp_i == z_file->num_txt_files + 1);
+        }
+
+        else
+            ABORT0 ("Invalid unbinding mode");
+
+        tip_dt_encountered (z_file->data_type);
     }
-
-    else if (Z_DT(SAM) && flag.deep) {   // Deep: one SAM/BAM and one or more FASTQ
-        piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, SAM_COMP_MAIN, SAM_COMP_DEPN, false);
-
-        flag.out_dt = DT_FASTQ;
-        for (CompIType comp_i=SAM_COMP_FQ00; comp_i < z_file->num_txt_files + 2; comp_i++) 
-            piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, comp_i, comp_i, comp_i == z_file->num_txt_files + 1);
-    }
-
-    else
-        ABORT0 ("Invalid unbinding mode");
-
-    tip_dt_encountered (z_file->data_type);
-
+    
     // no need to waste time freeing memory of the last file, the process termination will do that
     flag.let_OS_cleanup_on_exit = is_last_z_file && !arch_is_valgrind(); 
 
@@ -361,7 +363,7 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
                                       password           ? password           : SKIP_ARG,
                                       flag.show_digest   ? "--show-digest"    : SKIP_ARG,
                                       flag.log_digest    ? "--log-digest"     : SKIP_ARG,
-                                      flag.show_memory   ? "--show-memory"    : SKIP_ARG,
+                                      flag_show_memory   ? "--show-memory"    : SKIP_ARG,
                                       flag.show_time     ? "--show-time"      : SKIP_ARG,
                                       flag.threads_str   ? "--threads"        : SKIP_ARG,
                                       flag.threads_str   ? flag.threads_str   : SKIP_ARG,
@@ -385,14 +387,14 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
                                       flag.no_tip        ? "--no-tip"         : SKIP_ARG,
                                       flag.best          ? "--best"           : SKIP_ARG, // used only for displaying tip
                                       flag.debug_latest  ? "--debug-latest"   : SKIP_ARG,
-                                      flag.show_deep     ? "--show-deep"      : SKIP_ARG,
+                                      flag.show_deep     ? "--show-deep"      : SKIP_ARG, // note: --show-bamass is an alias to --show-deep
                                       flag.no_cache      ? "--no-cache"       : SKIP_ARG,
                                       flag.sendto        ? "--sendto"         : SKIP_ARG,
                                       flag.sendto        ? sendto_str         : SKIP_ARG,
                                       flag.license_filename ? "--licfile"     : SKIP_ARG,
                                       flag.license_filename ? flag.license_filename : SKIP_ARG,
                                       IS_REF_EXTERNAL    ? "--reference"      : SKIP_ARG, 
-                                      IS_REF_EXTERNAL    ? ref_get_filename(gref)   : SKIP_ARG, 
+                                      IS_REF_EXTERNAL    ? ref_get_filename()   : SKIP_ARG, 
                                       // note: no need for --check-latest as this call returns, and we check-latest and print the tip it in ZIP
                                       NULL);
                                       // ↓↓↓ Don't forget to add below too ↓↓↓
@@ -419,7 +421,7 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
         if (password)         { argv[argc++] = "--password"; 
                                 argv[argc++] = password; }
         if (flag.show_digest)   argv[argc++] = "--show-digest";
-        if (flag.show_memory)   argv[argc++] = "--show-memory";
+        if (flag_show_memory)   argv[argc++] = "--show-memory";
         if (flag.show_time)     argv[argc++] = "--show-time";
         if (flag.threads_str) { argv[argc++] = "--threads"; argv[argc++] = flag.threads_str; }
         if (flag.xthreads)      argv[argc++] = "--xthreads";
@@ -436,7 +438,7 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
         if (flag.no_tip)        argv[argc++] = "--no-tip";
         if (flag.best)          argv[argc++] = "--best";
         if (flag.debug_latest)  argv[argc++] = "--debug-latest";
-        if (flag.show_deep)     argv[argc++] = "--show-deep";
+        if (flag_show_deep)     argv[argc++] = "--show-deep";
         if (flag.no_cache)      argv[argc++] = "--no-cache";
         if (!flag.debug)        argv[argc++] = "--check-latest"; // we're not coming, so PIZ will check-latest and print tip
 
@@ -448,7 +450,7 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
                                 argv[argc++] = flag.license_filename; }
 
         if (IS_REF_EXTERNAL) {  argv[argc++] = "--reference"; 
-                                argv[argc++] = ref_get_filename(gref); }
+                                argv[argc++] = ref_get_filename(); }
         argv[argc] = NULL;
                                 // ↑↑↑ Don't forget to add above too ↑↑↑
 
@@ -717,9 +719,9 @@ static void main_load_reference (rom filename, bool is_first_file, bool is_last_
 
     RESET_VALUE (txt_file); // save and reset - for use by reference loader
 
-    if (!ref_is_external_loaded (gref)) {
-        MAIN ("Loading external reference: %s", ref_get_filename(gref));
-        ref_load_external_reference (gref, NULL); // also loads refhash if needed
+    if (!ref_is_external_loaded()) {
+        MAIN ("Loading external reference: %s", ref_get_filename());
+        ref_load_external_reference (NULL); // also loads refhash if needed
     }
 
     // Read the refhash and calculate the reverse compliment genome for the aligner algorithm - it was not used before and now it is
@@ -746,14 +748,14 @@ else                                   exe_type = EXE_GENOZIP; // default
 // command line contains no files - special actions
 static void main_no_files (int argc)
 {
-    // case: --register
-    if (flag.do_register) {
-        license_register();
+    // case: --activate
+    if (flag.do_activate) {
+        license_activate();
         threads_finalize();
     }
 
     else if (flag.no_cache) {
-        if (IS_REF_LOADED_ZIP) ref_cache_remove (gref); // remove a specific cache
+        if (IS_REF_LOADED_ZIP) ref_cache_remove(); // remove a specific cache
         else                   ref_cache_remove_all();
     }
 
@@ -768,12 +770,12 @@ static void main_no_files (int argc)
     // case: requesting to display the reference: genocat --reference <ref-file> and optionally --regions
     else if (is_genocat && IS_REF_LOADED_ZIP) {
         flags_update (0, NULL);
-        ref_display_ref (gref);
+        ref_display_ref();
     }
 
     // genozip with no parameters and not registered yet - register now
-    else if (is_genozip && argc == 1 && isatty(0) && !license_is_registered())
-        license_register();
+    else if (is_genozip && argc == 1 && isatty(0) && !license_is_activated())
+        license_activate();
         
     // otherwise: show help
     else
@@ -783,6 +785,8 @@ static void main_no_files (int argc)
 int main (int argc, char **argv)
 {      
     flag.test_i = getenv ("GENOZIP_TEST");
+    if (flag.test_i && !flag.test_i[0]) flag.test_i = NULL; // empty GENOZIP_TEST is the same as no GENOZIP_TEST
+
     flag.debug_or_test = flag.debug || flag.test_i;
     buf_initialize(); 
     set_exe_type (argv[0]);
@@ -792,7 +796,7 @@ int main (int argc, char **argv)
 
     filename_base (argv[0], true, "(executable)", global_cmd, sizeof(global_cmd)); // global var
 
-    info_stream = stdout; // may be changed during intialization
+    info_stream = stdout; // may be changed during initialization
     profiler_initialize();
     arch_initialize (argv[0]);
     evb = vb_initialize_nonpool_vb (VB_ID_EVB, DT_NONE, "main_thread");
@@ -823,7 +827,7 @@ int main (int argc, char **argv)
     // genozip with no input filename, no output filename, and no input redirection 
     // note: in docker stdin is a pipe even if going to a terminal. so we show the help even if
     // coming from a pipe. the user must use "-" to redirect from stdin
-    if (optind == argc && !flag.out_filename && !flag.files_from && (isatty(0) || arch_is_docker())) {
+    if (optind == argc && !flag.out_filename && !flag.files_from && (isatty(0) || arch_is_docker()) && !IS_REF_EXTERNAL) {
         main_no_files (argc);
         return 0;
     }
@@ -845,13 +849,14 @@ int main (int argc, char **argv)
                                         ? ((float)MAX_(arch_get_num_cores() * 0.75, arch_get_num_cores()-3))  // under-subscribe on Windows / Mac to maintain UI interactivity
                                         : ((float)arch_get_num_cores() * 1.1 ))); // over-subscribe to keep all cores busy even when some threads are waiting on mutex or join
 
-    ASSINP (input_files_len || !isatty(0) || command != ZIP, "missing input file. Example: %s myfile.bam", global_cmd);
-    ASSINP (input_files_len || !isatty(0) || command != PIZ, "missing input file. Example: %s myfile.bam.genozip", global_cmd);
+    ASSINP (input_files_len || !isatty(0) || IS_REF_EXTERNAL || command != ZIP, "missing input file. Example: %s myfile.bam", global_cmd);
+    ASSINP (input_files_len || !isatty(0) || IS_REF_EXTERNAL || command != PIZ, "missing input file. Example: %s myfile.bam.genozip", global_cmd);
 
     primary_command = command; 
 
     // we test for a newer version if its a single file compression (if --test is used, we test after PIZ - check_for_newer is set)
-    if (!flag.quiet && !flag.no_upgrade && isatty(0) && isatty(1) && 
+    if (!flag.is_sanitize_thread && // sanitize_thread will complain about a leaked thread
+        !flag.quiet && !flag.no_upgrade && isatty(0) && isatty(1) && 
         ((IS_ZIP && !flag.test) || (IS_PIZ && flag.check_latest/*PIZ - test after compress of last file*/)))
         version_background_test_for_newer();
 
@@ -883,7 +888,8 @@ int main (int argc, char **argv)
         // // the fread here, and not by the subsequent read - losing it. Likely a bug in the mingw libc.
         // ASSINP0 (!flag.is_windows || next_input_file, "genozip on Windows does not support piping in data");
 
-        ASSINP0 (next_input_file || command != PIZ, "filename(s) required (redirecting from stdin is not possible)");
+        ASSINP0 (next_input_file || command != PIZ || (flag.show_ref_iupacs && is_genocat), 
+                 "filename(s) required (redirecting from stdin is not possible)");
 
         ASSERTW (next_input_file || !flag.replace, "%s: ignoring %s option", global_cmd, OT("replace", "^")); 
 
@@ -894,31 +900,33 @@ int main (int argc, char **argv)
         if (!z_file)
             main_load_reference (next_input_file, !file_i, is_last_z_file);
 
-        switch (command) {
-            case ZIP  : main_genozip (next_input_file, 
-                                      (next_input_file && file_i < input_files_len-1) ? input_files[file_i+1] : NULL, // file name of next file, if there is one
-                                      file_i, !next_input_file || is_last_txt_file); 
-                        break;
+        if (next_input_file || !isatty (0)) { // either the user specified a file, or we are receiving input redirection
+            switch (command) {
+                case ZIP  : main_genozip (next_input_file, 
+                                        (next_input_file && file_i < input_files_len-1) ? input_files[file_i+1] : NULL, // file name of next file, if there is one
+                                        file_i, !next_input_file || is_last_txt_file); 
+                            break;
 
-            case PIZ  : main_genounzip (next_input_file, flag.out_filename, file_i, is_last_z_file); 
-                        break;           
+                case PIZ  : main_genounzip (next_input_file, flag.out_filename, file_i, is_last_z_file); 
+                            break;           
 
-            case SHOW_HEADERS : genocat_show_headers (next_input_file); break;
-                        
-            case LIST : genols (next_input_file, false, NULL, false); break;
+                case SHOW_HEADERS : genocat_show_headers (next_input_file); break;
+                            
+                case LIST : genols (next_input_file, false, NULL, false); break;
 
-            default   : ABORTINP ("unrecognized command %c", command);
-        }
+                default   : ABORTINP ("unrecognized command %c", command);
+            }
 
-        if (!z_file) {
-            z_file_i++; // z_file was closed, meaning we're done with it
+            if (!z_file) {
+                z_file_i++; // z_file was closed, meaning we're done with it
 
-            if (file_i < n_files-1) {
-                // if we're short on memory, free up some
-                if (arch_get_max_resident_set() > arch_get_physical_mem_size() GB / 4)
-                    vb_dehoard_memory (false);
+                if (file_i < n_files-1) {
+                    // if we're short on memory, free up some
+                    if (arch_get_max_resident_set() > arch_get_physical_mem_size() GB / 4)
+                        vb_dehoard_memory (false);
 
-                buf_low_level_release_memory_back_to_kernel();
+                    buf_low_level_release_memory_back_to_kernel();
+                }
             }
         }
     }
@@ -934,10 +942,12 @@ int main (int argc, char **argv)
 
     if (flag.biopsy) biopsy_finalize();
 
-    ASSINP0 (flag.no_biopsy_line, "biopsy line not found, try a lower number");
+    ASSINP0 (flag_no_biopsy_line, "biopsy line not found, try a lower number");
 
-    if (arch_is_valgrind())  // when testing with valgrind, release memory we normally intentionally leak, to expose true leaks
+    if (arch_is_valgrind()) { // when testing with valgrind, release memory we normally intentionally leak, to expose true leaks
         main_destroy_filename_list();
+        regions_destroy();
+    }
 
     exit_ok;
 }

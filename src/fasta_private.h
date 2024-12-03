@@ -25,7 +25,6 @@ typedef struct VBlockFASTA {
     // --make-reference
     bool has_contig_metadata;       // used by make-reference
     ContigMetadata contig_metadata; 
-} VBlockFASTA;
+} VBlockFASTA, *VBlockFASTAP;
 
-typedef VBlockFASTA *VBlockFASTAP;
 #define VB_FASTA ((VBlockFASTAP)vb)

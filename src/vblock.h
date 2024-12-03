@@ -168,10 +168,7 @@ typedef struct {
     ContextArray contexts;    \
     DictIdtoDidMap d2d_map;       /* map for quick look up of did_i from dict_id : 64K for key_map, 64K for alt_map */\
     \
-    Buffer ctx_index;             /* PIZ VB: sorted index into contexts for binary-search lookup if d2d_map fails */\
-    \
-    /* reference stuff */ \
-    Reference ref;                /* used by VBs created by dispatchers for uncompressing / compressing internal or external references. NOT used by VBs of the data type itself. */ \
+    Buffer ctx_index;             /* PIZ: sorted index into contexts for binary-search lookup if d2d_map fails */\
     \
     /* reference range lookup caching */ \
     RangeP prev_range;            /* previous range returned by ref_seg_get_range */ \
@@ -201,7 +198,8 @@ typedef struct {
     uint32_t num_sequences;       /* ZIP only: FASTA: num DESC lines encountered in this VB */ \
     uint32_t num_perfect_matches; /* ZIP only: SAM/BAM/FASTQ: number of perfect matches found by aligner */ \
     }; \
-    uint32_t num_aligned;         /* ZIP only: number of lines successfully aligned by the aligner. for stats */ \
+    uint32_t num_aligned;         /* ZIP only: SAM/BAM/FASTQ: number of lines successfully aligned by the aligner. for stats */ \
+    uint32_t num_verbatim;        /* ZIP only: SAM/BAM/FASTQ number of lines with SEQ stored verbatim. for stats */ \
     \
     /* copies of the values in flag, for flags that may change during the execution */\
     bool preprocessing;           /* PIZ: this VB is preprocessing, not reconstructing (SAM: loading SA Groups FASTA/FASTQ: grepping) */ \

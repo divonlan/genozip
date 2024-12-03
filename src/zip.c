@@ -131,6 +131,8 @@ void zip_set_no_stons_if_callback (VBlockP vb)
 
 // after segging - if any context appears to contain only singleton snips (eg a unique ID),
 // we move it to local instead of needlessly cluttering the global dictionary
+// note: normally individual singletons are moved to local in ctx_commit_node, but if that
+// was not possible because ltype!=LT_SINGLETON, and ALL words in VB are singletons, we do it now.
 static void zip_handle_unique_words_ctxs (VBlockP vb)
 {
     START_TIMER;
@@ -213,8 +215,7 @@ static bool zip_generate_local (VBlockP vb, ContextP ctx)
         default           : break;        
     }
 
-    // transpose if needed AND local is rectangular
-    if (ctx->dyn_transposed)
+    if (ctx->dyn_transposed) // transpose if needed 
         dyn_int_transpose (vb, ctx);            
 
     COPY_TIMER (zip_generate_local); // codec_assign measures its own time
@@ -243,7 +244,7 @@ static bool zip_generate_local (VBlockP vb, ContextP ctx)
 
 // generate & write b250 data for all contexts - do them in random order, to reduce the chance of multiple doing codec_assign_best_codec for the same context at the same time
 // VBs doing codec_assign_best_codec at the same, so that they can benefit from pre-assiged codecs
-void zip_compress_all_contexts_b250 (VBlockP vb)
+static void zip_compress_all_contexts_b250 (VBlockP vb)
 {
     START_TIMER;
     threads_log_by_vb (vb, "zip", "START COMPRESSING B250", 0);
@@ -275,8 +276,10 @@ void zip_compress_all_contexts_b250 (VBlockP vb)
                      VB_NAME, ctx->tag_name, ctx->b250.len, ctx->b250.count, ctx->nodes.len);
 
         START_TIMER; 
-        zfile_compress_b250_data (vb, ctx);
+        uint32_t comp_len = zfile_compress_b250_data (vb, ctx);
         COPY_TIMER(fields[ctx->did_i]);    
+
+        if (DTPT(zip_comp_cb)) DTPT(zip_comp_cb)(vb, ctx, SEC_B250, comp_len); // data-type specific callback
 
         ctx->b250_compressed = true;
     }
@@ -324,8 +327,10 @@ static void zip_compress_all_contexts_local (VBlockP vb)
                          VB_NAME, dep_level, ctx->tag_name, lt_name (ctx->ltype), ctx->local.len, ctx->local.len * lt_width(ctx), ctx->local.param);
 
             START_TIMER; 
-            zfile_compress_local_data (vb, ctx, 0);
+            uint32_t comp_len = zfile_compress_local_data (vb, ctx, 0);
             COPY_TIMER(fields[ctx->did_i]);    
+
+            if (DTPT(zip_comp_cb)) DTPT(zip_comp_cb)(vb, ctx, SEC_LOCAL, comp_len); // data-type specific callback
 
             if (!ctx->dict_merged) // note: if dict_merged, we are in the second call to this function, and local consists of singletons
                 ctx->no_stons = true; // since we had data in local, we don't allow ctx_commit_node to move singletons to local
@@ -386,16 +391,17 @@ static void zip_free_undeeded_zctx_bufs_after_seg (void)
         buf_destroy (zctx->global_hash);
     }
 
-    buf_destroy (z_file->sag_grps);
-    buf_destroy (z_file->sag_grps_index);
-    buf_destroy (z_file->sag_alns);
-    buf_destroy (z_file->sag_qnames);
-    buf_destroy (z_file->sag_depn_index);
-    buf_destroy (z_file->sag_cigars);
-    buf_destroy (z_file->sag_seq);
-    buf_destroy (z_file->sag_qual);
-    buf_destroy (z_file->vb_start_deep_line);
-
+    if (z_has_gencomp) {
+        buf_destroy (z_file->sag_grps);
+        buf_destroy (z_file->sag_grps_index);
+        buf_destroy (z_file->sag_alns);
+        buf_destroy (z_file->sag_qnames);
+        buf_destroy (z_file->sag_depn_index);
+        buf_destroy (z_file->sag_cigars);
+        buf_destroy (z_file->sag_seq);
+        buf_destroy (z_file->sag_qual);
+    }
+    
     buf_low_level_release_memory_back_to_kernel();
 
     COPY_TIMER_EVB (zip_free_undeeded_zctx_bufs_after_seg);
@@ -408,7 +414,7 @@ static void zip_write_global_area (void)
 
     #define THREAD_DEBUG(x) threads_log_by_vb (evb, "main_thread:global_area", #x, 0);
 
-    if (!flag.show_memory) // in show-mem, keep these, so we can report them.
+    if (!flag_show_memory) // in show-mem, keep these, so we can report them.
         zip_free_undeeded_zctx_bufs_after_seg();
 
     codec_qual_show_stats();
@@ -421,12 +427,17 @@ static void zip_write_global_area (void)
     dict_io_compress_dictionaries(); 
 
     if (z_sam_gencomp || flag.deep) {
-        huffman_compress_section (SAM_QNAME);  // always exists if gencomp or deep
-        huffman_compress_section (SAM_QUAL);   // sometimes exists if deep
-        huffman_compress_section (SAM_CIGAR);  // exists if SAG_BY_CIGAR
+        huffman_compress_section (SAM_QNAME);  // exists if gencomp or deep
+        huffman_compress_section (SAM_QUAL);   // exists if gencomp or deep
+
+        nico_produce_compressor (SAM_CIGAR, true);  // exists if deep
+        huffman_compress_section (SAM_CIGAR);   
+
+        nico_produce_compressor (OPTION_SA_CIGAR, false); // exists if IS_SAG_SA
+        huffman_compress_section (OPTION_SA_CIGAR); 
+
         sam_compress_solo_huffman_sections();  // exist if SAG_BY_SOLO
     }
-
     THREAD_DEBUG (compress_counts);
     ctx_compress_counts();
 
@@ -441,7 +452,7 @@ static void zip_write_global_area (void)
     // note: not needed in REF_EXT_STORE, as we convert the stored ref_contigs to use chrom_index of the file's CHROM
     if (IS_REF_EXTERNAL && DTFZ(chrom) != DID_NONE) {
         THREAD_DEBUG (compress_chrom_2ref);
-        chrom_2ref_compress(gref);
+        chrom_2ref_compress();
     }
 
     // output reference, if needed
@@ -469,7 +480,7 @@ static void zip_write_global_area (void)
         Codec codec = random_access_compress (&z_file->ra_buf, SEC_RANDOM_ACCESS, CODEC_UNKNOWN, flag.show_index ? RA_MSG_PRIM : NULL);
     
         if (store_ref) 
-            random_access_compress (ref_get_stored_ra (gref), SEC_REF_RAND_ACC, codec, flag.show_ref_index ? RA_MSG_REF : NULL);
+            random_access_compress (ref_get_stored_ra(), SEC_REF_RAND_ACC, codec, flag.show_ref_index ? RA_MSG_REF : NULL);
     }
 
     THREAD_DEBUG (user_message);
@@ -571,7 +582,7 @@ static void zip_compress_one_vb (VBlockP vb)
         random_access_merge_in_vb (vb);
     
 after_compress:
-    // examples: compress data-type specific sections ; absorb gencomp lines
+    // examples: compress data-type specific sections ; absorb gencomp lines ; determine bamass_trims
     DT_FUNC (vb, zip_after_compress)(vb);
 
     // tell dispatcher this thread is done and can be joined.
@@ -640,7 +651,6 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
 
 dispatch:
     vb->dispatch = READY_TO_COMPUTE;
-    txt_file->num_vbs_dispatched++;
 
     if (vb->comp_i == COMP_MAIN) // note: we only update the MAIN comp from here, gen comps are updated
         gencomp_a_main_vb_has_been_dispatched();
@@ -830,7 +840,7 @@ finish:
     prev_file_first_vb_i = first_vb_i;
     dispatcher_finish (&dispatcher, &prev_file_last_vb_i, 
                        z_file->z_closes_after_me && !is_last_user_txt_file,
-                       flag.show_memory && z_file->z_closes_after_me && is_last_user_txt_file); // show memory
+                       flag_show_memory && z_file->z_closes_after_me && is_last_user_txt_file); // show memory
     
     if (!z_file->z_closes_after_me) 
         ctx_reset_codec_commits(); 
@@ -838,7 +848,9 @@ finish:
     // no need to waste time freeing memory of the last file, the process termination will do that
     flag.let_OS_cleanup_on_exit = is_last_user_txt_file && z_file->z_closes_after_me && !arch_is_valgrind(); 
 
+    { START_TIMER;
     DT_FUNC (txt_file, zip_finalize)(is_last_user_txt_file);
+    COPY_TIMER_EVB (zip_finalize); };
 
     segconf_free();
     

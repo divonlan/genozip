@@ -360,7 +360,7 @@ int stream_close (StreamP *stream, StreamCloseMode close_mode)
         exit_code = stream_wait_for_exit (*stream, close_mode == STREAM_KILL_PROCESS);
 
     StreamP stream_copy = *stream, stream_copy2 = *stream;
-    __atomic_store_n (stream, (StreamP)NULL, __ATOMIC_RELEASE); // prevent other threads from trying to close the stream
+    store_release (*stream, (StreamP)NULL); // prevent other threads from trying to close the stream
 
     FREE (stream_copy2);
     

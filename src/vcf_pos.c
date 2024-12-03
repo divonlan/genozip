@@ -14,7 +14,7 @@ void vcf_seg_pos (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(pos_str))
     PosType64 pos;
 
     if (segconf.vcf_is_gvcf) {
-        // note: using a multiplexor for distinguising END and POS, while keeping them as an alias
+        // note: using a multiplexer for distinguising END and POS, while keeping them as an alias
         // has the advantage the that delta=1 snip common in GVCF will be the same self-delta snip
         // regardless if previous line has an END or not (i.e. delta might be against the END or the POS, but these will result in the same snip)
         ContextP subctx = seg_mux_get_channel_ctx (VB, VCF_POS, (MultiplexerP)&vb->mux_POS, 0); // goes into channel_i=0: "this is POS"

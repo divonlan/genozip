@@ -31,7 +31,7 @@ static bool vcf_seg_INFO_AC_item (VBlockP vb_, ContextP arr_ctx, STRp(ac_item), 
             seg_by_ctx (VB, STRa(snip), arr_ctx, ac_item_len); 
         }
         else
-            seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_INFO_AC, is_mle ? 'M' : 'D' }), 3, arr_ctx, ac_item_len);
+            seg_special1 (VB, VCF_SPECIAL_INFO_AC, is_mle ? 'M' : 'D', arr_ctx, ac_item_len);
     }
 
     else
@@ -48,7 +48,7 @@ void vcf_seg_INFO_AC (VBlockVCFP vb, ContextP ctx, STRp(ac_str))
 
     // case: expecting AC ≅ AN * AF for each alt allele (might not be exact due to rounding errors, esp if AF is a very small fraction)
     if (has(AN) && has(AF) && str_get_int (STRa(BII(AN)->value), &CTX(INFO_AN)->last_value.i)) 
-        seg_array_by_callback (VB, ctx, STRa(ac_str), ',', vcf_seg_INFO_AC_item, VCF_SPECIAL_N_ALTS, vb->n_alts, ac_str_len); // since 15.0.36, we seg AC items as an array
+        seg_array_by_callback (VB, ctx, STRa(ac_str), ',', vcf_seg_INFO_AC_item, VCF_SPECIAL_N_ALTS, N_ALTS, ac_str_len); // since 15.0.36, we seg AC items as an array
 
     // GIAB: AC = AC_Hom + AC_Het + AC_Hemo
     else if (has(AC_Hom) && has(AC_Het) && has(AC_Hemi) &&
@@ -58,7 +58,7 @@ void vcf_seg_INFO_AC (VBlockVCFP vb, ContextP ctx, STRp(ac_str))
              str_get_int (STRa(BII(AC_Hemi)->value), &ac_hemi) &&
              ac == ac_hom + ac_het + ac_hemi) { 
              
-        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_INFO_AC, '1' }), 3, ctx, ac_str_len);
+        seg_special1 (VB, VCF_SPECIAL_INFO_AC, '1', ctx, ac_str_len);
     }
 
     // fallback
@@ -72,7 +72,7 @@ void vcf_seg_INFO_MLEAC (VBlockVCFP vb, ContextP ctx, STRp(mleac))
 
     // case: expecting MLEAC ≅ AN * MLEAF for each alt allele (might not be exact due to rounding errors, esp if AF is a very small fraction)
     if (has(AN) && has(MLEAF) && str_get_int (STRa(BII(AN)->value), &CTX(INFO_AN)->last_value.i)) 
-        seg_array_by_callback (VB, ctx, STRa(mleac), ',', vcf_seg_INFO_AC_item, VCF_SPECIAL_N_ALTS, vb->n_alts, mleac_len); 
+        seg_array_by_callback (VB, ctx, STRa(mleac), ',', vcf_seg_INFO_AC_item, VCF_SPECIAL_N_ALTS, N_ALTS, mleac_len); 
 
     // fallback
     else 
@@ -127,7 +127,7 @@ static bool vcf_seg_INFO_MLEAF_item (VBlockP vb_, ContextP arr_ctx, STRp(mleaf_i
     str_item_i (STRa(BII(AF)->value), ',', alt_i, pSTRa(af_item));
 
     if (str_issame (af_item, mleaf_item))
-        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_INFO_MLEAF }), 2, arr_ctx, mleaf_item_len);
+        seg_special0 (VB, VCF_SPECIAL_INFO_MLEAF, arr_ctx, mleaf_item_len);
 
     else
         seg_by_ctx (VB, STRa(mleaf_item), arr_ctx, mleaf_item_len);
@@ -139,7 +139,7 @@ void vcf_seg_INFO_MLEAF (VBlockVCFP vb, ContextP ctx, STRp(mleaf))
 {
     // case: in many cases MLEAF == AF for any alt allele 
     if (has(AF)) 
-        seg_array_by_callback (VB, ctx, STRa(mleaf), ',', vcf_seg_INFO_MLEAF_item, VCF_SPECIAL_N_ALTS, vb->n_alts, mleaf_len); 
+        seg_array_by_callback (VB, ctx, STRa(mleaf), ',', vcf_seg_INFO_MLEAF_item, VCF_SPECIAL_N_ALTS, N_ALTS, mleaf_len); 
 
     // fallback
     else 

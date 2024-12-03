@@ -176,11 +176,10 @@ StrTextLong str_int_s_(rom label/*max 59 chars*/, int64_t n)
     return s;
 }
 
-StrTextLong str_str_s_(rom label, rom str)
+StrTextLong str_str_s_(rom label, STRp(str))
 {
     StrTextLong s = {};
     int label_len = strlen (label);
-    int str_len = strlen (str);
 
     bool truncated = (label_len + str_len > sizeof(s)-1);
 
@@ -301,6 +300,15 @@ str_get_int_range_type(8,uint8_t)   // unsigned
 str_get_int_range_type(16,uint16_t) // unsigned
 str_get_int_range_type(32,int32_t)  // signed
 str_get_int_range_type(64,int64_t)  // signed
+
+bool str_get_uint16 (STRp(str), uint16_t *value)
+{
+    int64_t v64;
+    if (!str_get_int_range64 (STRa(str), 0, 0xffffffff, &v64)) return false;
+
+    *value = v64;
+    return true;
+}
 
 bool str_get_uint32 (STRp(str), uint32_t *value)
 {
@@ -716,10 +724,11 @@ bool str_item_i_float (STRp(str), char sep, uint32_t requested_item_i, double *i
 // splits a string by tab, ending with the first \n or \r\n. 
 // Returns the address of the byte after the \n if successful, or NULL if not.
 rom str_split_by_tab_do (STRp(str), 
-                         uint32_t *n_flds, // in / out
+                         uint32_t *n_flds,  // in / out
                          rom *flds, uint32_t *fld_lens, // out - array of char* of length max_flds - one more than the number of separators
                          bool *has_13,      // optional out - true if line is terminated by \r\n instead of \n
-                         bool exactly,      // line should have exactly this number of flds
+                         bool exactly,      // line should have at_least this number of flds (or exactly if allow_more=false)
+                         bool ignore_excess,// if true, ignore fields beyond n_flds. if false, its an error if there are more the n_flds
                          bool enforce_msg)
 {
     ASSERTNOTNULL (str);
@@ -733,9 +742,10 @@ rom str_split_by_tab_do (STRp(str),
     for (str_i=0 ; str_i < str_len ; str_i++) {
         char c = str[str_i]; 
         if (c == '\t') {
-            ASSSPLIT (fld_i < *n_flds, "expecting up to %u fields but found more. str_len=%u str(first 1000)=\"%.*s\"", *n_flds, str_len, MIN_(1000, str_len), str);
-
-            flds[fld_i++] = &str[str_i+1];
+            if (fld_i >= *n_flds)  // excess
+                ASSSPLIT (ignore_excess, "expecting up to %u fields but found more. str_len=%u str(first 1000)=\"%.*s\"", *n_flds, str_len, MIN_(1000, str_len), str);
+            else
+                flds[fld_i++] = &str[str_i+1];
         }
 
         else if (c == '\r') {
@@ -1107,19 +1117,26 @@ bool str_query_user_yn (rom query, DefAnswerType def_answer)
              def_answer==QDEF_YES?"[":"",  def_answer==QDEF_YES?"]":"",  
              def_answer==QDEF_NO ?"[":"",  def_answer==QDEF_NO ?"]":"");
 
-    char y_n[32];
+    char y_n[32] = {};
     str_query_user (query_str, y_n, sizeof(y_n), def_answer != QDEF_NONE,
                     str_verify_y_n, def_answer==QDEF_YES ? "Y" : def_answer==QDEF_NO ? "N" : 0);
 
     return y_n[0] == 'Y';
 }
 
-void str_query_user (rom query, char *response, uint32_t response_size, bool allow_empty, 
+void str_query_user (rom query, 
+                     char *response, uint32_t response_size, // if response is not empty, it is used as the default
+                     bool allow_empty, 
                      ResponseVerifier verifier, rom verifier_param)
 {
     uint32_t len = 0;
+
+    char save_response[response_size];
+    memcpy (save_response, response, response_size);
+
     do {
         fprintf (stderr, "%s", query);
+        if (save_response[0]) fprintf (stderr, "[%s] ", save_response);
 
         // Linux: in case of non-Latin, fgets doesn't handle backspace well - not completely removing the multi-byte character from the string (bug 593)
         // Windows (MingW): the string is terminated before the first non-Latin character on bash terminal and only ???? on Powershell and Command (bug 594)
@@ -1128,7 +1145,12 @@ void str_query_user (rom query, char *response, uint32_t response_size, bool all
                 len = strlen (response);
                 str_trim (response, &len);
             }
-        } while (!len && !allow_empty);
+        } while (!len && !allow_empty && !save_response[0]);
+
+        if (!len && save_response[0]) {
+            memcpy (response, save_response, response_size);
+            len = strlen (response);
+        }
 
     } while (verifier && !verifier (response, len, verifier_param));
 }

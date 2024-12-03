@@ -70,7 +70,7 @@ void vcf_seg_manta_ID (VBlockVCFP vb, STRp(id))
         vcf_seg_BND_mate (vb, STRa(id), 0, 0, crc32 (0, id, id_len-2)); // last digit is 0 or 1 - the mate
 
     if (vcf_has_mate)
-        seg_by_did (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPY_MATE }, 2, VCF_ID, id_len + 1); // +1 for \t
+        seg_special0 (VB, VCF_SPECIAL_COPY_MATE, CTX(VCF_ID), id_len + 1); // +1 for \t
 
     else
         seg_struct (VB, CTX(VCF_ID), id_con, STRa(id), callbacks, id_len + 1, true);
@@ -78,15 +78,15 @@ void vcf_seg_manta_ID (VBlockVCFP vb, STRp(id))
 
 static void vcf_manta_predcited_CIGAR (VBlockVCFP vb, qSTRp (cigar))
 {
-    if (vb->n_alts == 1) {
-        if      (ALT0(DEL)) 
+    if (N_ALTS == 1) {
+        if      (VT0(DEL)) 
             *cigar_len = snprintf (cigar, *cigar_len, "1M%uD", vb->REF_len-1);
         
-        else if (ALT0(INS)) 
-            *cigar_len = snprintf (cigar, *cigar_len, "1M%uI", vb->alt_lens[0]-1);
+        else if (VT0(INS)) 
+            *cigar_len = snprintf (cigar, *cigar_len, "1M%uI", ALTi(0)->alt_len-1);
         
-        else if (ALT0(SUBST) || ALT0(SUBST_INS) || ALT0(SUBST_DEL)) 
-            *cigar_len = snprintf (cigar, *cigar_len, "1M%uI%uD", vb->alt_lens[0]-1, vb->REF_len-1);
+        else if (VT0(SUBST) || VT0(SUBST_INS) || VT0(SUBST_DEL)) 
+            *cigar_len = snprintf (cigar, *cigar_len, "1M%uI%uD", ALTi(0)->alt_len-1, vb->REF_len-1);
     }
     else
         *cigar_len = 0;
@@ -98,7 +98,7 @@ void vcf_seg_manta_CIGAR (VBlockVCFP vb, ContextP ctx, STRp(cigar))
     vcf_manta_predcited_CIGAR (vb, qSTRa(predicted_cigar));
 
     if (str_issame (cigar, predicted_cigar)) 
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_MANTA_CIGAR }, 2, ctx, cigar_len);
+        seg_special0 (VB, VCF_SPECIAL_MANTA_CIGAR, ctx, cigar_len);
     else
         seg_by_ctx (VB, STRa(cigar), ctx, cigar_len);
 }

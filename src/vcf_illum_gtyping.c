@@ -87,7 +87,7 @@ void vcf_seg_PROBE_A (VBlockVCFP vb, ContextP ctx, STRp(probe))
         PosType64 pos = vb->last_int(INFO_ILLUMINA_POS);
         decl_acgt_decode;
         
-        Range *range = ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos - probe_len, probe_len*2 + 1, 
+        Range *range = ref_seg_get_range (VB, vb->chrom_node_index, STRa(vb->chrom_name), pos - probe_len, probe_len*2 + 1, 
                                           WORD_INDEX_NONE, (IS_REF_EXT_STORE ? &lock : NULL));
         if (!range) goto fallback;
         
@@ -117,7 +117,7 @@ void vcf_seg_PROBE_A (VBlockVCFP vb, ContextP ctx, STRp(probe))
     else fallback: 
         seg_add_to_local_blob (VB, ctx, STRa(probe), probe_len);
 
-    ref_unlock (gref, &lock); // does nothing if REFLOCK_NONE
+    ref_unlock (&lock); // does nothing if REFLOCK_NONE
 
     seg_set_last_txt (VB, ctx, STRa(probe));
     ctx_set_encountered (VB, ctx);
@@ -129,7 +129,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_PROBE_A)
 {    
     if (!reconstruct) goto done;
 
-    ConstRangeP range = ref_piz_get_range (vb, gref, HARD_FAIL);
+    ConstRangeP range = ref_piz_get_range (vb, HARD_FAIL);
 
     WordIndex strand = CTX(INFO_ILLUMINA_STRAND)->last_value.i;
     PosType64 pos = vb->last_int(INFO_ILLUMINA_POS);
@@ -168,7 +168,7 @@ void vcf_seg_PROBE_B (VBlockVCFP vb, ContextP ctx, STRp(seq))
     if (seq_len > 1 && ctx_encountered_in_line (VB, INFO_PROBE_A) &&  
         str_issame_(STRa(seq)-1, STRtxt(CTX(INFO_PROBE_A)->last_txt)-1))
         
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_PROBE_B, seq[seq_len-1] }, 3, ctx, seq_len);
+        seg_special1 (VB, VCF_SPECIAL_PROBE_B, seq[seq_len-1], ctx, seq_len);
 
     // another real sequence - store verbatim
     else if (seq_len > 1)
@@ -196,14 +196,14 @@ void vcf_seg_ALLELE_A (VBlockVCFP vb, ContextP ctx, STRp(value))
     // short cut for common case of SNP - 'R'
     if ((value_len == 2 && vb->REF_len ==1 && value[0] == vb->REF[0] && value[1] == '*') || // short cut for common case of a SNP
         (value_len > 2 && value_len == vb->REF_len + 1 && str_issame_(STRa(vb->REF), STRa(value)-1) && value[value_len-1] == '*')) {
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_ALLELE_A, 'R' }, 3, ctx, value_len);
+        seg_special1 (VB, VCF_SPECIAL_ALLELE_A, 'R', ctx, value_len);
         ctx_set_last_value (VB, ctx, (int64_t)'R'); 
     }
 
     // short cut for common case of SNP - 'A'
     else if ((value_len == 1 && vb->ALT_len == 1 && value[0] == vb->ALT[0]) || // short cut for common case of a SNP
              (value_len > 1 && str_issame_(STRa(vb->ALT), STRa(value)))) {
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_ALLELE_A, 'A' }, 3, ctx, value_len);
+        seg_special1 (VB, VCF_SPECIAL_ALLELE_A, 'A', ctx, value_len);
         ctx_set_last_value (VB, ctx, (int64_t)'A'); 
     }
 
@@ -235,7 +235,7 @@ void vcf_seg_ALLELE_B (VBlockVCFP vb, ContextP ctx, STRp(value))
     if ((CTX(INFO_ALLELE_A)->last_value.i == 'R' && value_len == 1 && value[0] == vb->ALT[0]) ||
         (CTX(INFO_ALLELE_A)->last_value.i == 'A' && value_len == 2 && value[0] == vb->REF[0] && value[1] == '*'))
 
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_ALLELE_B }, 2, ctx, value_len);
+        seg_special0 (VB, VCF_SPECIAL_ALLELE_B, ctx, value_len);
 
     else fallback:
         seg_by_ctx (VB, STRa(value), ctx, value_len);

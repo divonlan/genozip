@@ -18,8 +18,7 @@ void fastq_seg_QNAME (VBlockFASTQP vb, STRp(qname), uint32_t line1_len, bool dee
     else
         qname_seg (VB, QNAME1, STRa(qname), 1); // account for the '@' (segged as a toplevel container prefix)
 
-    if (IS_R1) 
-        set_last_txt (FASTQ_QNAME, qname); // used to populate z_file->R1_last_qname in fastq_zip_after_compute
+    set_last_txt (FASTQ_QNAME, qname);
 }
 
 bool fastq_is_line3_copy_of_line1 (STRp(qname), STRp(line3), uint32_t desc_len)
@@ -40,7 +39,7 @@ void fastq_seg_LINE3 (VBlockFASTQP vb, STRp(qline3), STRp(qline1), STRp(desc))
         case L3_COPY_LINE1:
             ASSSEG (fastq_is_line3_copy_of_line1 (STRa(qline1), STRa(qline3), desc_len),
                     "Invalid FASTQ file format (#2): expecting middle line to be a \"+\" followed by a copy of the description line, but it is \"%.*s\"", STRf(qline3)); 
-            seg_by_did (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_copy_line1 }, 2, FASTQ_LINE3, 1 + qline3_len); // +1 - account for the '+' (segged as a toplevel container prefix)
+            seg_special0 (VB, FASTQ_SPECIAL_copy_line1, CTX(FASTQ_LINE3), 1 + qline3_len); // +1 - account for the '+' (segged as a toplevel container prefix)
             break;
 
         case L3_NCBI: 
@@ -65,7 +64,7 @@ static void fastq_seg_one_aux (VBlockFASTQP vb, STRp(tag_name), STRp(value))
     seg_integer_or_not (VB, ctx, STRa(value), value_len); // also sets last_value
 
     // seq_len_dict_id must be detected in the first line, and if it appears, it must appear in all lines
-    if (segconf.running && dict_id.num == _FASTQ_AUX_LENGTH && !vb->line_i && str_is_int (STRa(value))) 
+    if (segconf_running && dict_id.num == _FASTQ_AUX_LENGTH && !vb->line_i && str_is_int (STRa(value))) 
         segconf.seq_len_dict_id = ctx->dict_id; // possibly overriding the value set in qname_segconf_discover_flavor
 }
 
@@ -96,7 +95,7 @@ static void fastq_seg_aux_container (VBlockFASTQP vb, STRps(tag), uint32_t total
 // called for segconf line_i=0. DESC = QNAME2 + EXTRA + AUX <or> DESC = SAUX
 void fastq_segconf_analyze_DESC (VBlockFASTQP vb, STRp(desc))
 {
-    ASSERTNOTZERO (segconf.running);
+    ASSERTNOTZERO (segconf_running);
 
     str_split (desc, desc_len, MAX_DESC_FIELDS - 100, ' ', item, false);
     if (desc_len && !n_items) {
@@ -158,7 +157,7 @@ void fastq_seg_DESC (VBlockFASTQP vb, STRp(desc), bool deep_qname2, uint32_t unc
         
         // case: we expected to have aux - but we don't. delete the ' ' added by the toplevel container prefix
         else 
-            seg_by_did (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_backspace }, 2, FASTQ_AUX, 0);
+            seg_special0 (VB, FASTQ_SPECIAL_backspace, CTX(FASTQ_AUX), 0);
     
         n_items -= n_auxes;
     }
@@ -168,7 +167,7 @@ void fastq_seg_DESC (VBlockFASTQP vb, STRp(desc), bool deep_qname2, uint32_t unc
         // set has_extra, and seg a backspace for all previous lines
         vb->has_extra = true;
         for (int32_t line_i=0; line_i < (int32_t)vb->line_i - 1; line_i++) // signed, so it works with line_i==0 too
-            seg_by_did (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_backspace }, 2, FASTQ_EXTRA, 0);
+            seg_special0 (VB, FASTQ_SPECIAL_backspace, CTX(FASTQ_EXTRA), 0);
     }
     
     if (vb->has_extra) {
@@ -183,7 +182,7 @@ void fastq_seg_DESC (VBlockFASTQP vb, STRp(desc), bool deep_qname2, uint32_t unc
 
         // case: we are expected to have extra - but we don't. delete the ' ' added by the toplevel container prefix
         else 
-            seg_by_did (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_backspace }, 2, FASTQ_EXTRA, 0);
+            seg_special0 (VB, FASTQ_SPECIAL_backspace, CTX(FASTQ_EXTRA), 0);
 
         n_items = MIN_((int)segconf.has_qname2, n_items); // 0 or 1
     }
@@ -192,7 +191,7 @@ void fastq_seg_DESC (VBlockFASTQP vb, STRp(desc), bool deep_qname2, uint32_t unc
     if (segconf.has_qname2) {
         // case: we are expected to have qname2 - but we don't. delete the ' ' added by the toplevel container prefix
         if (n_items == 0)
-            seg_by_did (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_backspace }, 2, FASTQ_QNAME2, 0);
+            seg_special0 (VB, FASTQ_SPECIAL_backspace, CTX(FASTQ_QNAME2), 0);
 
         else if (n_items == 1 && deep_qname2) 
             fastq_deep_seg_QNAME (vb, FASTQ_QNAME2, STRi(item,0), uncanonical_suffix_len, item_lens[0] + 1); // +1 for the ' '

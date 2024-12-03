@@ -281,15 +281,15 @@ done:
 }
 
 // returns the -T (reference) option for CRAM, derived from the genozip reference name
-StrTextSuperLong cram_get_samtools_option_T (Reference ref)
+StrTextSuperLong cram_get_samtools_option_T (void)
 {
-    if (!ref_is_external_loaded (ref)) 
+    if (!ref_is_external_loaded()) 
         return (StrTextSuperLong){}; 
 
     StrTextSuperLong samtools_T_option;
     uint32_t samtools_T_option_len = 0;
-    rom ref_filename = ref_get_filename (ref);
-    rom ref_fasta_name = ref_get_fasta_name (ref);
+    rom ref_filename = ref_get_filename();
+    rom ref_fasta_name = ref_get_fasta_name();
 
     ASSINP0 (ref_filename, "when compressing a CRAM file, --reference or --REFERENCE must be specified");
 

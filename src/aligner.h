@@ -25,4 +25,6 @@
 typedef enum { MAPPING_NO_MAPPING, MAPPING_ALIGNED, MAPPING_PERFECT } MappingType;
 
 extern MappingType aligner_seg_seq (VBlockP vb, STRp(seq), bool is_pair_2, PosType64 pair_gpos, bool pair_is_forward);
+extern void aligner_seg_gpos_and_fwd (VBlockP vb, PosType64 gpos, bool is_forward, bool is_pair_2, PosType64 pair_gpos, bool pair_is_forward);
 extern void aligner_reconstruct_seq (VBlockP vb, uint32_t seq_len, bool is_pair_2, bool is_perfect_alignment, ReconType reconstruct, int mismatches_len, char *mismatch_base, uint32_t *mismatch_offset, uint32_t *num_mismatches);
+extern void aligner_recon_get_gpos_and_fwd (VBlockP vb, bool is_pair_2, PosType64 *gpos, bool *is_forward);

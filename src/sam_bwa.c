@@ -31,7 +31,7 @@ static void sam_seg_BWA_XA_initialize (VBlockSAMP vb)
  
     dyn_int_init_ctx (VB, pos_ctx, 0);
 
-    if (!segconf.running && segconf.is_sorted) {
+    if (!segconf_running && segconf.is_sorted) {
 
         // note: we need to allocate lookback even if reps_per_line=0, lest an XA shows up despite not being in segconf
         rname_ctx->no_stons         = true;  // as we store by index
@@ -220,7 +220,7 @@ void sam_seg_BWA_XA_Z (VBlockSAMP vb, STRp(xa), unsigned add_bytes)
 
     // case: for a collated (or otherwise unsorted) file, we can lookup against our mate, but if we have no
     // mate, we just seg without lookback, because XA:Z in near lines are not expected to be similar (also: in segconf.running)
-    bool use_lb = segconf.is_sorted && !segconf.running;
+    bool use_lb = segconf.is_sorted && !segconf_running;
 
     SegCallback callbacks_no_lb[6] = { sam_seg_SA_no_lookback_cb, chrom_seg_cb, 0, seg_integer_or_not_cb, sam_seg_0A_cigar_cb, 0 };
 
@@ -266,7 +266,7 @@ void sam_seg_BWA_XC_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t XC, unsigned a
     int64_t prediction = dl->SEQ.len - vb->soft_clip[!dl->FLAG.rev_comp || dl->FLAG.unmapped];
 
     if (XC == prediction) 
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_BWA_XC }, 2, ctx, add_bytes);
+        seg_special0 (VB, SAM_SPECIAL_BWA_XC, ctx, add_bytes);
 
     // case: prediction failed: cases: 1. not bwa 2. rev_comp != next_rev_comp
     else if (ABS(XC - prediction) < 1000) {  // if its not to big - seg a delta to avoid creating a local section for rare cases
@@ -305,7 +305,7 @@ void sam_seg_BWA_XT_A (VBlockSAMP vb, char XT, unsigned add_bytes)
                     :              'R'; // Repeat (i.e. not unique)
 
     if (prediction == XT)
-        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_BWA_XT }, 2, OPTION_XT_A, add_bytes);
+        seg_special0 (VB, SAM_SPECIAL_BWA_XT, CTX(OPTION_XT_A), add_bytes);
 
     else
         seg_by_did (VB, (char[]){ XT }, 1, OPTION_XT_A, add_bytes);
@@ -344,7 +344,7 @@ void sam_seg_BWA_X1_i (VBlockSAMP vb, int64_t X1, unsigned add_bytes)
     }
     
     if (prediction == X1)
-        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_BWA_X1 }, 2, OPTION_X1_i, add_bytes);
+        seg_special0 (VB, SAM_SPECIAL_BWA_X1, CTX(OPTION_X1_i), add_bytes);
 
     // note: rarely, X1 can be very large (tens of thousands)
     else 

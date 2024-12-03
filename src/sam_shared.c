@@ -63,7 +63,7 @@ void sam_reset_line (VBlockP vb_)
     
         if (flag.deep) {
             buf_free (CTX(SAM_NONREF)->deep_nonref);
-            buf_free (CTX(SAM_CIGAR)->deep_textual_cigar);
+            buf_free (CTX(SAM_CIGAR)->deep_cigar);
         }
     }
 

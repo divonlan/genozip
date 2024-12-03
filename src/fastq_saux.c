@@ -37,7 +37,7 @@ static inline DictId fastq_get_SAM_AUX_dict_id (STRp(f)) // DICT_ID_NONE if form
 // called for segconf line_i=0. check if DESC consists of SAM-style fields, separated by tabs (i.e. parseable by eg bwa mem -C)
 bool fastq_segconf_analyze_saux (VBlockFASTQP vb, STRp(saux)) 
 {
-    ASSERTNOTZERO (segconf.running);
+    ASSERTNOTZERO (segconf_running);
     
     str_split (saux, saux_len, 0, '\t', field, false);
 

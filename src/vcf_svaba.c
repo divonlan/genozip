@@ -40,21 +40,23 @@ void vcf_svaba_seg_initialize (VBlockVCFP vb)
 
 void vcf_seg_svaba_ID (VBlockVCFP vb, STRp(id))
 {
+    decl_ctx(VCF_ID);
+
     str_split_ints (id, id_len, 2, ':', id, true);
     if (n_ids != 2) {
-        seg_by_did (VB, STRa(id), VCF_ID, id_len);
+        seg_by_ctx (VB, STRa(id), ctx, id_len);
         return;
     }
 
     vcf_seg_BND_mate (vb, STRa(id), 0, 0, ids[0]);
 
     if (vcf_has_mate)
-        seg_by_did (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPY_MATE }, 2, VCF_ID, id_len + 1); // +1 for \t
+        seg_special0 (VB, VCF_SPECIAL_COPY_MATE, ctx, id_len + 1); // +1 for \t
 
     else {
         seg_integer (VB, ctx_get_ctx (vb, id_con.items[0].dict_id), ids[0], false, id_len - 2); // account without the eg :1
         seg_integer (VB, ctx_get_ctx (vb, id_con.items[1].dict_id), ids[1], false, 1); // account for 1 or 2
-        seg_by_did (VB, STRa(con_id_snip), VCF_ID, 2); // account for the colon and \t
+        seg_by_ctx (VB, STRa(con_id_snip), ctx, 2); // account for the colon and \t
     }
 }
 
@@ -65,7 +67,7 @@ void vcf_seg_svaba_MATEID (VBlockVCFP vb, ContextP ctx, STRp(mate_id))
     if (id_len == mate_id_len && str_issame_(id, id_len-1, mate_id, mate_id_len-1) &&
         ((id[id_len-1]=='1' && mate_id[id_len-1]=='2') || (id[id_len-1]=='2' && mate_id[id_len-1]=='1')))
 
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_SVABA_MATEID }, 2, ctx, mate_id_len);
+        seg_special0 (VB, VCF_SPECIAL_SVABA_MATEID, ctx, mate_id_len);
     else
         seg_by_ctx (VB, STRa(mate_id), ctx, mate_id_len);
 }
@@ -95,7 +97,7 @@ void vcf_seg_svaba_MAPQ (VBlockVCFP vb, ContextP ctx, STRp(mapq))
         if ((has_disc && str_issame_(STRa(mapq), STRlst(INFO_DISC_MAPQ))) ||
             (!has_disc && str_issame_(STRa(mapq), "60", 2)))
 
-            seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_MAPQ }, 2, channel_ctx, mapq_len);
+            seg_special0 (VB, VCF_SPECIAL_MAPQ, channel_ctx, mapq_len);
         else
             seg_by_ctx (VB, STRa(mapq), channel_ctx, mapq_len);
     }
@@ -121,7 +123,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_MAPQ)
 void vcf_seg_svaba_SPAN (VBlockVCFP vb, ContextP ctx, STRp(span_str))
 {
     int64_t span;
-    bool is_bnd = vb->var_types[0] == VT_BND; 
+    bool is_bnd = VT0(BND); 
     bool same_chrom = is_bnd && str_issame (vb->chrom_name, vb->mate_chrom_name);
     PosType32 pos = DATA_LINE(vb->line_i)->pos;
 
@@ -129,7 +131,7 @@ void vcf_seg_svaba_SPAN (VBlockVCFP vb, ContextP ctx, STRp(span_str))
          ( (same_chrom  && span == ABS (pos - vb->mate_pos)) || // predicted SPAN:
            (!same_chrom && span == -1)))
 
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_SPAN }, 2, ctx, span_str_len);
+        seg_special0 (VB, VCF_SPECIAL_SPAN, ctx, span_str_len);
     else
         seg_by_ctx (VB, STRa(span_str), ctx, span_str_len);
 }

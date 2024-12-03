@@ -420,6 +420,8 @@ void qname_segconf_finalize (VBlockP vb)
 
 QnameTestResult qname_test_flavor (STRp(qname), QType q, QnameFlavor qfs, bool quiet) // out
 {
+    ASSERTNOTNULL (qfs);
+
     // return embedded qname2, eg "82a6ce63-eb2d-4812-ad19-136092a95f3d" in "@ERR3278978.1 82a6ce63-eb2d-4812-ad19-136092a95f3d/1"
     if (q != QANY && qfs->only_q != QANY && qfs->only_q != q
         && !(qfs->only_q == Q1or3   && (q == QNAME1 || q == QLINE3))
@@ -475,7 +477,7 @@ QnameTestResult qname_test_flavor (STRp(qname), QType q, QnameFlavor qfs, bool q
     return QTR_SUCCESS; // yes, qname is of this flavor
 }
 
-// called for the first line in segconf.running or from txtfile_discover_analyze_txt
+// called for the first line in segconf.running 
 void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
 {
     static rom reasons[] = QTR_NAME;
@@ -556,9 +558,9 @@ void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
 }
 
 // attempts to modify flavor to accommodate both qname of line_i==0 and current qname. return true if flavor has been modified.
-static bool qname_segconf_rediscover_flavor (VBlockP vb, QType q, STRp(qname))
+bool qname_segconf_rediscover_flavor (VBlockP vb, QType q, STRp(qname))
 {
-    ASSERTNOTZERO (segconf.running); // one of the reasons this cannot run outside of segconf is that segconf_seq_len_dict_id must be the same for all lines
+    ASSERTNOTZERO (segconf_running); // one of the reasons this cannot run outside of segconf is that segconf_seq_len_dict_id must be the same for all lines
 
     if (segconf.qname_flavor_rediscovered[q]) return false; // we already rediscovered once, not going to do it again
 
@@ -618,7 +620,7 @@ static bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additio
 
         // if not integer/numeric as expected, send to rediscovery. 
         // However, if we can no longer rediscover, try to accommodate rather than failing
-        if (segconf.running && !segconf.qname_flavor_rediscovered[q]) {
+        if (segconf_running && !segconf.qname_flavor_rediscovered[q]) {
             if (qfs->is_integer[item_i] && !str_is_int (STRa(str))) return false;
             if (qfs->is_numeric[item_i] && !str_is_numeric (STRa(str))) return false;
         }
@@ -702,7 +704,7 @@ bool qname_seg (VBlockP vb, QType q, STRp (qname), unsigned add_additional_bytes
 
     // if we're in segconf - check if there is another flavor that matches both this qname and 
     // the qname of line_i=0 on which flavor is based. Eg MGI-varlen can change to MGI-R7 if this qname has a leading 0 in Q4NAME.
-    if (!success && segconf.running && qname_segconf_rediscover_flavor (vb, q, STRa(qname)))
+    if (!success && segconf_running && qname_segconf_rediscover_flavor (vb, q, STRa(qname)))
         success = qname_seg_qf (vb, q, STRa(qname), add_additional_bytes); // now with new flavor
 
     // in SAM/BAM, we allow two flavours - try the second one (eg the second could be a consensus read name)
@@ -718,7 +720,7 @@ bool qname_seg (VBlockP vb, QType q, STRp (qname), unsigned add_additional_bytes
                        VB_DT(FASTQ) ? sep_with_space : sep_without_space, 
                        add_additional_bytes);
 
-        if (segconf.running) {
+        if (segconf_running) {
             // case SAM/BAM: reset to QNAME1 to avoid a confusing stats display - as we failed to seg by QNAME1 and QNAME2 flavors - but this is the one and only QNAME field
             if (VB_DT(SAM) || VB_DT(BAM)) q = QNAME1; 
 

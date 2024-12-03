@@ -20,6 +20,7 @@
 #include "tip.h"
 #include "zfile.h"
 #include "zip_dyn_int.h"
+#include "sorter.h"
 
 SegConf segconf = {}; // system-wide global
 static VBlockP segconf_vb = NULL;
@@ -108,7 +109,7 @@ void segconf_mark_as_used (VBlockP vb, unsigned num_ctxs, ...)
     va_end (args);
 }
 
-static void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
+void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
 {
     #define VBLOCK_MEMORY_MIN_DYN   (16  MB) // VB memory - min/max when set in segconf_calculate
     #define VBLOCK_MEMORY_MAX_DYN   (512 MB) 
@@ -165,7 +166,7 @@ static void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
             for_ctx_that (ctx->b250.len32 || ctx->local.len32)
                 num_used_contexts++;
 
-        uint32_t vcf_samples = TXT_DT(VCF) ? vcf_header_get_num_samples() : 0;
+        uint64_t vcf_samples = TXT_DT(VCF) ? vcf_header_get_num_samples() : 0;
         
         // formula - 1MB for each contexts, 128K for each VCF sample
         uint64_t bytes = ((uint64_t)num_used_contexts MB) + (vcf_samples << 17);
@@ -208,17 +209,16 @@ static void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
 
             uint64_t new_vb_size = MAX_(VBLOCK_MEMORY_MIN_SMALL, est_seggable_size * 1.2 / MIN_(est_max_threads, global_max_threads));
 
-            // in case of drastic reduction of large-sample VCF file, provide tip
-            if (vcf_samples > 10 && new_vb_size < segconf.vb_size / 2) 
-                TIP0 ("Using --best can significantly improve compression for this particular file");
-
-            segconf.vb_size = MIN_(segconf.vb_size, new_vb_size);
+            // set to new size considering available threads, except if it cauess drastic reduction of large-sample VCF file
+            if (!(vcf_samples > 10 && new_vb_size < segconf.vb_size / 2)) 
+                segconf.vb_size = MIN_(segconf.vb_size, new_vb_size);
         } 
         
         // on Windows (inc. WSL) and Mac - which tend to have less memory in typical configurations, warn if we need a lot
         // (note: if user sets --vblock, we won't get here)
         if (flag.is_windows || flag.is_mac || flag.is_wsl) {
-            segconf.vb_size = MIN_(segconf.vb_size, 32 MB); // limit to 32MB per VB unless users says otherwise to protect OS UI interactivity 
+            uint64_t/*must*/ per_thread_physical_ram = (arch_get_physical_mem_size() GB) / global_max_threads;
+            segconf.vb_size = MIN_(segconf.vb_size, per_thread_physical_ram / 3); // limit to 32MB per VB unless users says otherwise to protect OS UI interactivity 
 
             int concurrent_vbs = 1 + (est_seggable_size ? MIN_(1+ est_seggable_size / segconf.vb_size, global_max_threads) : global_max_threads);
 
@@ -238,7 +238,7 @@ static void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
     if (flag.low_memory && !flag.vblock)
         segconf.vb_size = MIN_(segconf.vb_size, VBLOCK_MEMORY_LOW_MEM);
 
-    if (flag.show_memory) 
+    if (flag_show_memory) 
         iprintf ("\nvblock size set to %u MB %s%s\n", 
                  (unsigned)(segconf.vb_size >> 20), 
                  cond_int (num_used_contexts, "num_used_contexts=", num_used_contexts),
@@ -246,11 +246,18 @@ static void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
 }
 
 // this function is called to set is_long_reads, and may be also called while running segconf before is_long_reads is set
-bool segconf_is_long_reads(void) 
+bool segconf_is_long_reads (void) 
 { 
     return TECH(PACBIO) || TECH(NANOPORE) || MP(BIONANO) ||
-           segconf.longest_seq_len > MAX_SHORT_READ_LEN ||
+           segconf.std_seq_len > MAX_SHORT_READ_LEN ||
            flag.debug_LONG;
+}
+
+void segconf_set_use_insertion_ctxs (void)
+{
+    // sequencing technologies that results in lots of insertion errors - will benefit from the use_insertion_ctxs method
+    if (TECH(PACBIO) || TECH(NANOPORE) || TECH(ULTIMA))
+        segconf.use_insertion_ctxs = true;
 }
 
 static bool segconf_get_zip_txt_modified (bool provisional)
@@ -274,11 +281,12 @@ static bool segconf_get_zip_txt_modified (bool provisional)
         || (flag.add_line_numbers && Z_DT(VCF))
         || (flag.add_seq && Z_DT(SAM))
         || flag_has_head  // --head diagnostic option to compress only a few lines of VB=1
-        || flag.has_biopsy_line;    
+        || flag_has_biopsy_line;    
 }
 
 static bool segconf_skip_segconf (void)
 {
+    // no need to re-run segconf for 2nd+ FASTQ in the *same* z_file
     return (Z_DT(FASTQ) && flag.pair == PAIR_R2) || // FASTQ: no recalculating for 2nd pair 
            ((Z_DT(SAM) || Z_DT(BAM)) && flag.deep && flag.zip_comp_i >= SAM_COMP_FQ01); // --deep: no recalculating for second (or more) FASTQ file
 }
@@ -287,6 +295,8 @@ static bool segconf_skip_segconf (void)
 void segconf_zip_initialize (void)
 {
     if (segconf_skip_segconf()) return;
+
+    SegConf old_segconf = segconf;
 
     // case: everything but first FASTQ in Deep
     if (!((Z_DT(SAM) || Z_DT(BAM)) && flag.deep && flag.zip_comp_i == SAM_COMP_FQ00))
@@ -328,6 +338,14 @@ void segconf_zip_initialize (void)
     
     if (Z_DT(VCF))
         mutex_initialize (segconf.PL_mux_by_DP_mutex);
+
+    // bamass FASTQ files: carry over some fields from bamass_segconf
+    if (flag.bam_assist && file_i > 0) { // for file_i=0, bamass_segconf will executed next
+        segconf.deep_paired_qname  = old_segconf.deep_paired_qname;
+        segconf.sam_qname_line0    = old_segconf.sam_qname_line0;
+        segconf.sam_is_unmapped    = old_segconf.sam_is_unmapped;
+        segconf.use_insertion_ctxs = old_segconf.use_insertion_ctxs;
+    }
 }
 
 // PIZ only
@@ -381,8 +399,11 @@ void segconf_calculate (void)
         if (txt_file->discover_during_segconf)
             segconf_discover_fastq_gz();
 
-        if (segconf.deep_paired_qname) // Deep with exactly 2 FASTQs, and since skipped, this is the 2nd FASTQ
+        if (segconf.deep_paired_qname) // Deep/bamass with exactly 2 FASTQs, and since skipped, this is the 2nd FASTQ
             segconf.deep_is_last = !segconf.deep_is_last;
+        
+        if (Z_DT(FASTQ) && IS_R1)
+            fastq_zip_after_segconf_alloc_r1_z_bufs();
 
         goto finalize;
     }

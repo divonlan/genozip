@@ -82,7 +82,7 @@ void recon_stack_pop (VBlockP vb, ContextP ctx, bool is_done_peek)
         memcpy (reconstruct_state_start(ice[stack_pointer].ctx), ice[stack_pointer].state, RECON_STATE_SIZE);
     }
 
-    if (flag.debug_peek) 
+    if (flag_debug_peek) 
         iprintf ("%s: stack_pointer=%d level=%u %s %s\n", 
                  LN_NAME, stack_pointer, vb->peek_stack_level, is_done_peek ? "DONE" : "POP ", ctx->tag_name);
 }
@@ -99,7 +99,7 @@ void recon_stack_push (VBlockP vb, ContextP ctx)
 
     stack_pointer++;
 
-    if (flag.debug_peek)
+    if (flag_debug_peek)
         iprintf ("%s: stack_pointer=%d level=%u PUSH %s\n", LN_NAME, stack_pointer, ice->level, ctx->tag_name);
 
     increment_level (vb, ctx);
@@ -117,7 +117,7 @@ ValueType reconstruct_peek (VBlockP vb, ContextP ctx,
         return ctx->last_value; // may or may not be set
     }
 
-    if (flag.debug_peek) 
+    if (flag_debug_peek) 
         iprintf ("%s: stack_pointer=%d level=%u PEEK %s\n", LN_NAME, stack_pointer, vb->peek_stack_level, ctx->tag_name);
 
     // we "freeze" the reconstruction state of all contexts involved in this peek reconstruction (there could be more than

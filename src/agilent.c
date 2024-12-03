@@ -44,7 +44,7 @@ void agilent_seg_RX (VBlockP vb_, ContextP ctx, STRp(rx), unsigned add_bytes)
 
 do_seg:
     if (use_special)
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VB_DT(FASTQ) ? FASTQ_SPECIAL_AGENT_RX : SAM_SPECIAL_AGENT_RX }, 2, ctx, add_bytes);
+        seg_special0 (VB, VB_DT(FASTQ) ? FASTQ_SPECIAL_AGENT_RX : SAM_SPECIAL_AGENT_RX, ctx, add_bytes);
     else
         seg_by_ctx (VB, STRa(rx), ctx, add_bytes);
 }
@@ -73,7 +73,7 @@ void agilent_seg_QX (VBlockP vb, ContextP ctx, STRp(qx), unsigned add_bytes)
     if (qx_len == 7 && qx[3] == ' ') {
         seg_add_to_local_fixed (VB, ctx, &qx[0], 3, LOOKUP_NONE, 0);
         seg_add_to_local_fixed (VB, ctx, &qx[4], 3, LOOKUP_NONE, 0);
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VB_DT(FASTQ) ? FASTQ_SPECIAL_AGENT_QX : SAM_SPECIAL_AGENT_QX }, 2, ctx, add_bytes);
+        seg_special0 (VB, VB_DT(FASTQ) ? FASTQ_SPECIAL_AGENT_QX : SAM_SPECIAL_AGENT_QX, ctx, add_bytes);
     }
 
     else 

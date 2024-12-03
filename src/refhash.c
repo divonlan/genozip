@@ -313,14 +313,12 @@ ConstBitsP refhash_get_emoneg (void)
 }
 
 // private variables used for generating emoneg
-static Reference ref_reverse_compliment_genome_ref = 0; // ref_generate_reverse_complement_genome is called from the main thread so no thread safety issues
 static ConstBitsP genome;
 static PosType64 genome_nbases;
 #define REV_CODEC_GENOME_BASES_PER_THREAD (1ULL << 27) // 128Mbp
 
 static void refhash_revcomp_genome_prepare (VBlockP vb)
 {
-    vb->ref = ref_reverse_compliment_genome_ref;
     if ((uint64_t)(vb->vblock_i-1) * REV_CODEC_GENOME_BASES_PER_THREAD < genome_nbases)
         vb->dispatch = READY_TO_COMPUTE;
     else
@@ -338,18 +336,17 @@ static void refhash_revcomp_genome_do (VBlockP vb)
 
 
 // Generate an in-memory revcomp copy of genome. Only needed for aligner in ZIP.
-static void refhash_generate_emoneg (Reference ref)
+static void refhash_generate_emoneg (void)
 {
     START_TIMER;
     if (buf_is_alloc (&emoneg_buf)) return; // already generated
 
     SAVE_FLAGS_AUX((rom)0); // silence some flags if --xthreads
 
-    ref_get_genome (ref, &genome, NULL, &genome_nbases);
+    ref_get_genome (&genome, NULL, &genome_nbases);
     emoneg_buf.can_be_big = true; 
-    buf_alloc_bits (evb, &emoneg_buf, genome_nbases * 2, NOINIT, 0, "emoneg_buf");
+    buf_alloc_bits_exact (evb, &emoneg_buf, genome_nbases * 2, NOINIT, 0, "emoneg_buf");
 
-    ref_reverse_compliment_genome_ref = ref;
     dispatcher_fan_out_task ("generate_rev_comp_genome", NULL, 0, 0, true, false, false, 0, 10, true,
                              refhash_revcomp_genome_prepare, 
                              refhash_revcomp_genome_do, 
@@ -357,7 +354,6 @@ static void refhash_generate_emoneg (Reference ref)
 
     
     // cleanup 
-    ref_reverse_compliment_genome_ref = 0;
     genome = 0;
     genome_nbases = 0;
     
@@ -432,14 +428,14 @@ static void refhash_read_one_vb (VBlockP vb)
 }
 
 // ZIP: needed before using aligner
-void refhash_load (Reference ref)
+void refhash_load (void)
 {
     START_TIMER;
     if (refhash_buf.count) return; // already loaded
 
     // emoneg is needed iff aligner is used (in ZIP)
     if (flag.aligner_available)
-        refhash_generate_emoneg (ref);
+        refhash_generate_emoneg ();
 
     Section sec = sections_last_sec (SEC_REF_HASH, HARD_FAIL);
     SectionHeaderRefHash header = zfile_read_section_header (evb, sec, SEC_REF_HASH).ref_hash;
@@ -448,9 +444,9 @@ void refhash_load (Reference ref)
     uint32_t base_layer_bits = header.layer_bits + header.layer_i; // layer_i=0 is the base layer, layer_i=1 has 1 bit less etc
     refhash_initialize_layers (base_layer_bits);
 
-    if (!ref_cache_is_cached (ref)) { // no cache, or loading to cache, but not already cached
-        dispatcher_fan_out_task ("load_refhash", ref_get_filename (ref),
-                                0, (ref_cache_is_populating(ref) ? "Caching reference file" : "Reading reference file"), // same message as in ref_load_stored_reference
+    if (!ref_cache_is_cached ()) { // no cache, or loading to cache, but not already cached
+        dispatcher_fan_out_task ("load_refhash", ref_get_filename (),
+                                0, (ref_cache_is_populating() ? "Caching reference file" : "Reading reference file"), // same message as in ref_load_stored_reference
                                 true, flag.test, false, 0, 100, true,
                                 refhash_read_one_vb, 
                                 refhash_uncompress_one_vb, 
@@ -463,15 +459,15 @@ void refhash_load (Reference ref)
     // --make-reference, stored in GENOZIP_HEADER.refhash_digest
     // This is slow: for a human genome, digest takes about 0.7 seconds (adler) or 7 seconds (md5), so we test the digest sparingly. 
     // This is low risk: if refhash is corrupted, it will affect compression, but not data integrity (see bug 825)
-    if (ref_get_genozip_version(ref) >= 15 &&              // GENOZIP_HEADER.refhash_digest is available since v15
-        (!ref_cache_is_cached (ref) || flag.show_cache) && // test only on loading from disk or on show-cache
+    if (ref_get_genozip_version() >= 15 &&              // GENOZIP_HEADER.refhash_digest is available since v15
+        (!ref_cache_is_cached() || flag.show_cache) && // test only on loading from disk or on show-cache
         !flag.fast) {                                      // skip if --fast. 
 
         START_TIMER;
 
-        if (flag.show_cache) iprintf ("show-cache: calculating refhash digest %s\n", ref_cache_is_cached (ref) ? "(done only due to --show-cache)" : "");
+        if (flag.show_cache) iprintf ("show-cache: calculating refhash digest %s\n", ref_cache_is_cached() ? "(done only due to --show-cache)" : "");
 
-        bool is_adler = ref_is_digest_adler (ref);
+        bool is_adler = ref_is_digest_adler();
         Digest digest = digest_do (STRb(refhash_buf), is_adler, "refhash"); 
 
         ASSERT (digest_is_equal (digest, refhash_digest), "Bad reference file: In-memory digest of refhash is %s, different than calculated by make-reference: %s",
@@ -482,7 +478,7 @@ void refhash_load (Reference ref)
         COPY_TIMER_EVB (refhash_load_digest);
     }
     else
-        if (flag.show_cache) iprintf ("show-cache: loaded refhash without verifying digest (version %u)\n", ref_get_genozip_version(ref));
+        if (flag.show_cache) iprintf ("show-cache: loaded refhash without verifying digest (version %u)\n", ref_get_genozip_version());
 
     refhash_buf.count = true; // loaded
 
@@ -491,21 +487,21 @@ void refhash_load (Reference ref)
 
 void refhash_load_standalone (void)
 {
-    if (ref_cache_is_cached (gref))  // already loaded 
-        refhash_generate_emoneg (gref);
+    if (ref_cache_is_cached())  // already loaded 
+        refhash_generate_emoneg();
 
-    flag.reading_reference = gref; // tell file.c and fasta.c that this is a reference
+    flag.reading_reference = true; // tell file.c and fasta.c that this is a reference
 
     TEMP_VALUE (command, PIZ);
     TEMP_VALUE (z_file, NULL);   // save z_file and txt_file in case we are called from sam_seg_finalize_segconf
     TEMP_VALUE (txt_file, NULL);
     CLEAR_FLAG (test);
 
-    z_file = file_open_z_read (ref_get_filename (gref));    
+    z_file = file_open_z_read (ref_get_filename());    
 
     zfile_read_genozip_header (0, HARD_FAIL);
 
-    refhash_load (gref);
+    refhash_load();
 
     file_close (&z_file);
     file_close (&txt_file); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open_z called from txtheader_piz_read_and_reconstruct.
@@ -515,7 +511,7 @@ void refhash_load_standalone (void)
     RESTORE_VALUE (z_file);
     RESTORE_VALUE (txt_file);
     
-    flag.reading_reference = NULL;
+    flag.reading_reference = false;
 }
 
 void refhash_destroy (void)

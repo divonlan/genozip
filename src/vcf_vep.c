@@ -31,10 +31,10 @@ static bool vcf_vep_af_item (VBlockP vb_, ContextP ctx, STRp(af_item), uint32_t 
 
     str_split (af_item, af_item_len, 2, ':', item, true);
     
-    bool is_snp = vb->REF_len == 1 && vb->alt_lens[repeat] == 1;
+    bool is_snp = vb->REF_len == 1 && ALTi(repeat)->alt_len == 1;
     
     if (n_items == 2 && item_lens[0] == 1 &&
-          ((is_snp  && *af_item == *vb->alts[repeat]) || 
+          ((is_snp  && *af_item == *ALTi(repeat)->alt) || 
            (!is_snp && *af_item == '-' ))) {
 
         seg_by_dict_id (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_next_ALT }, 2, maf_dict_id[0], 0);
@@ -52,7 +52,7 @@ static bool vcf_vep_af_item (VBlockP vb_, ContextP ctx, STRp(af_item), uint32_t 
 
 static bool vcf_vep_af_field (VBlockP vb, ContextP ctx, STRp(af_arr), uint32_t repeat)
 {
-    seg_array_by_callback (VB, ctx, STRa(af_arr), '&', vcf_vep_af_item, VCF_SPECIAL_N_ALTS, VB_VCF->n_alts, af_arr_len);
+    seg_array_by_callback (VB, ctx, STRa(af_arr), '&', vcf_vep_af_item, VCF_SPECIAL_N_ALTS, N_ALTS, af_arr_len);
     return true;
 }
 
@@ -63,8 +63,8 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_next_ALT)
     int8_t alt_i = vb->con_stack[vb->con_stack_len-2].repeat;
 
     if (reconstruct) {
-        if (vb->REF_len == 1 && vb->alt_lens[alt_i] == 1) // SNP
-            RECONSTRUCT1 (*vb->alts[alt_i]);
+        if (vb->REF_len == 1 && ALTi(alt_i)->alt_len == 1) // SNP
+            RECONSTRUCT1 (*ALTi(alt_i)->alt);
         else
             RECONSTRUCT1('-');
     }

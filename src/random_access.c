@@ -182,8 +182,7 @@ void random_access_merge_in_vb (VBlockP vb)
 
     buf_alloc (evb, &z_file->ra_buf, 0, z_file->ra_buf.len + src_ra_len, RAEntry, 2, "z_file->ra_buf"); 
 
-    ContextP chrom_ctx = CTX(DTF(chrom));
-    ASSERT0 (chrom_ctx, "cannot find chrom_ctx");
+    ContextP chrom_ctx = CTX(CHROM);
 
     ASSERT (chrom_ctx->nodes_converted, "expecting nodes of %s to be converted", chrom_ctx->tag_name); // still index/len
 

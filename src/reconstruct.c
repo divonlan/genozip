@@ -331,6 +331,8 @@ ContextP recon_multi_dict_id_get_ctx_first_time (VBlockP vb, ContextP ctx, STRp(
     DictId item_dict_id;
     base64_decode (qSTRa(dict_b64), item_dict_id.id, sizeof (DictId));
 
+    ASSPIZ (ctx_i < ctx->ctx_cache.len, "ctx=%s: ctx_i=%u is out of range: ctx_cache.len=%u", ctx->tag_name, ctx_i, ctx->ctx_cache.len32);
+
     return (*B(ContextP, ctx->ctx_cache, ctx_i) = ECTX (item_dict_id)); // NULL if no data was segged to this channel    
 }
 
@@ -443,7 +445,7 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
     StoreType store_type = snip_ctx->flags.store;
     bool store_delta = VER(12) && snip_ctx->flags.store_delta; // note: the flag was used for something else in v8
     
-    if (flag.show_snips)
+    if (flag_show_snips)
         iprintf ("%s %s[%u] %s%s%s%s%s%s\n", LN_NAME, snip_ctx->tag_name, snip_ctx->did_i, str_snip,
                  cond_int (word_index!=WORD_INDEX_NONE, " wi=", word_index), 
                  cond_str (word_index==WORD_INDEX_NONE, " ", func), 
@@ -460,13 +462,13 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
         goto done;
     }
 
-    switch (snip[0]) {
+    switch (snip[0]) { /* BRKPOINT snip_ctx->did_i== */
 
     // display the rest of the snip first, and then the lookup up text.
     case SNIP_LOOKUP:
     case SNIP_OTHER_LOOKUP: {
         if (snip[0] == SNIP_LOOKUP) 
-            { snip++; snip_len--; }
+            STRinc (snip, 1);
         else 
             // we are request to reconstruct from another ctx
             base_ctx = reconstruct_get_other_ctx_from_snip (vb, snip_ctx, pSTRa(snip)); // also updates snip and snip_len
@@ -588,8 +590,7 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
         break;
 
     case NUM_SNIP_CODES ... 31:
-        ABORT ("%s: File %s requires a SNIP code=%u for %s. %s",
-               LN_NAME, z_name, snip[0], base_ctx->tag_name, genozip_update_msg());
+        ABORT ("%s: Invalid SNIP code=%u for %s", LN_NAME, snip[0], base_ctx->tag_name);
 
     case SNIP_DONT_STORE:
         store_type  = STORE_NONE; // override store and fall through

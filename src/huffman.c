@@ -14,6 +14,7 @@
 #include "compressor.h"
 #include "file.h"
 #include "zfile.h"
+#include "sam_friend.h"
 
 #define ALPHABET 256
 
@@ -37,14 +38,19 @@ typedef struct HuffmanCodes { // 9548 bytes
     Did did_i; 
     uint8_t longest_code_n_bits;
     uint8_t ununsed;
-    uint32_t unused1[2];            
+    uint32_t num_chewed;           // ZIP only
+    uint32_t unused1;            
     uint8_t max_prefix_len;        // subset of master for which we reasonably expect identical prefixes
     uint8_t master_len;
     char master[HUFFMAN_MAX_MASTER_LEN]; // used for finding an identical prefix, and XORing the rest
 } HuffmanCodes;
 
+#define MAX_CHEWED 10000 // maximum number of samples after which we stop chewing
+
 // ZIP: used for calculating codes (=huffman representation of values) 
-typedef struct HuffmanChewer { 
+typedef struct HuffmanChewer { // 1348 bytes
+    uint32_t num_chewed;
+    #define CHEW_UNIT 256 /*larger than adding the frequencies of all non-encountered values (which have freq=1)*/
     uint32_t freq_table[ALPHABET]; // number of occurances of each chewed value
     uint8_t max_prefix_len;
     uint8_t master_len;
@@ -54,29 +60,108 @@ typedef struct HuffmanChewer {
     char prev_sample[HUFFMAN_MAX_PREV_LEN];
 } HuffmanChewer;
 
-void huffman_start_chewing (Did did_i, STRp(master), uint8_t max_prefix_len)
+typedef packed_enum { 
+    NC_N_CIGAR_OP, NC_N_MEX, NC_N_SH, NC_N_ID, NC_N_NP, // channels containing a uint8_t
+    NC_OP_FLANK, NC_OP_AFTER_SHNP, NC_OP_AFTER_ME, NC_OP_AFTER_X, NC_OP_AFTER_D, NC_OP_AFTER_I, // channels containing a BamCigarOpType
+    NUM_NICO_CHANNELS } NicoChannels;
+
+#define NICO_CHAN_NAMES { "N_CIGAR_OP", "N_MEX", "N_SH", "N_ID", "N_NP", "OP_FLANK", "OP_AFTER_SHNP", "OP_AFTER_ME", "OP_AFTER_X", "OP_AFTER_D", "OP_AFTER_I" }
+
+#define ASSHUFFEXISTS ASSERT (huffman_exists(did_i), "%s.huffman doesn't exist", zctx->tag_name)
+// -------------------------------------------------------------------------------------
+// private - for use by huffman_compress and nico functions
+// -------------------------------------------------------------------------------------
+
+static inline int huffman_compress_init_bits (STR8c(comp), BitsP bits, uint64_t *next_bit)
 {
+    // shift back so Bits starts from full word
+    int shift = (uint64_t)comp & 0b111; // bytes shift 
+
+    *next_bit = shift * 8;
+
+    *bits = (Bits){ .nbits  = (comp_len + shift) * 8,    // note: possibly only partially covering last word
+                    .nwords = ROUNDUP8(comp_len + shift) / 8,
+                    .words  = (uint64_t *)(comp - shift), // shift to bring address to word boundary
+                    .type   = BITS_STANDALONE };
+
+    return shift;
+}
+
+static inline void huffman_compress_finalize_bits (ContextP zctx, BitsP bits, uint64_t next_bit, int shift, qSTR8p(comp))
+{
+    ASSERT (next_bit <= bits->nbits, "bits overflow: expecting next_bit=%"PRIu64" <= nbits=%"PRIu64" for %s",
+            next_bit, bits->nbits, zctx->tag_name);
+
+    bits_truncate (bits, next_bit);
+
+    uint32_t updated_comp_len = roundup_bits2bytes(next_bit) - shift; // number of bytes
+    ASSERT (updated_comp_len <= *comp_len, "compression overflow: available %u bytes but generated %u bytes", *comp_len, updated_comp_len);
+
+    *comp_len = updated_comp_len;
+
+    // clear unused bits in last byte
+    int bits_in_last_byte = next_bit % 8;
+    if (bits_in_last_byte) 
+        comp[*comp_len-1] &= bitmask8(bits_in_last_byte);
+}
+
+#define huffman_compress_add_int(word,n_bits,avail_comp_len) \
+    ({ ASSERT (next_bit + (n_bits) <= bits.nbits, "%s: comp_len=%d too short when compressing %s", LN_NAME, (avail_comp_len), zctx->tag_name); \
+       bits_set_wordn (&bits, next_bit, (word), (n_bits)); \
+       next_bit += (n_bits); })
+
+#define huffman_compress_add_one(x_,avail_comp_len) \
+    ({ uint8_t x = (x_); /* evaluate x_ just once */\
+       ASSERT (h->code_n_bits[x], "%s: value %u in not in the huffman alphabet of %s channel_i=%u", LN_NAME, x, zctx->tag_name,(int)(h - B1ST(HuffmanCodes, zctx->huffman))); \
+       huffman_compress_add_int (h->codes[x], h->code_n_bits[x], (avail_comp_len)); })
+
+#define huffman_uncompress_init_bits                                        \
+    Bits bits = { .nbits  = 64000000000ULL, /* some very large number */    \
+                  .nwords = 1000000000ULL,                                  \
+                  .type   = BITS_STANDALONE,                                \
+                  .words  = (uint64_t *)ROUNDDOWN8 ((uint64_t)comp) }; /* shift back to align with a 64b word boundary (counting on pointers being up to 64 bit) */ \
+    uint64_t bit_i = (comp - (bytes)bits.words) * 8; /* note: if we shifted .words back, the initial value of bit_i will point to were the data actually starts */
+
+#define huffman_uncompress_comp_len (roundup_bits2bytes(bit_i) - (comp - (bytes)bits.words))
+
+#define huffman_uncompress_get_c ({                                         \
+    int node_i = h->roots[0];                                               \
+    while (h->nodes[node_i].left)  /* has children */                       \
+        node_i = bits_get (&bits, bit_i++) ? h->nodes[node_i].right : h->nodes[node_i].left; \
+    h->nodes[node_i].c; })
+
+//-----------------------------------------
+// plain vanilla Huffman
+//-----------------------------------------
+
+// main thread
+void huffman_start_chewing (Did did_i, STRp(master), uint8_t max_prefix_len, int n_channels)
+{
+    decl_zctx(did_i);
+
     ASSERTINRANGX (max_prefix_len, 0, HUFFMAN_MAX_MAX_PREFIX_LEN);
     if (master) ASSERTNOTZERO (max_prefix_len);
 
-    buf_alloc_exact_zero (evb, ZCTX(did_i)->huffman, MAX_(sizeof (HuffmanChewer), sizeof(HuffmanCodes)), char, "huffman"); // alloc enough for HuffmanCodes so we don't need to realloc later
+    buf_alloc_exact_zero (evb, zctx->huffman, n_channels, HuffmanCodes, "contexts->huffman"); // used for both HuffmanChewer and HuffmanCodes - the latter is much bigger
     
-    HuffmanChewer *chewer = B1ST (HuffmanChewer, ZCTX(did_i)->huffman);
-    
-    if (master_len) {
-        chewer->master_len = MIN_(master_len, HUFFMAN_MAX_MASTER_LEN); 
-        memcpy (chewer->master, master, chewer->master_len);
+    for_buf2 (HuffmanChewer, chewer, i, zctx->huffman) {
+        if (i==0 && master_len) {
+            chewer->master_len = MIN_(master_len, HUFFMAN_MAX_MASTER_LEN); 
+            memcpy (chewer->master, master, chewer->master_len);
 
-        chewer->max_prefix_len = MIN_(max_prefix_len, master_len);
+            chewer->max_prefix_len = MIN_(max_prefix_len, master_len);
+        }
+
+        for (int i=0; i < ALPHABET; i++)
+            chewer->freq_table[i] = 1; // frequency cannot be 0, as the algorithm won't work - adding two roots 0 + 0 is not greater than 0
     }
-
-    for (int i=0; i < ALPHABET; i++)
-        chewer->freq_table[i] = 1; // frequency cannot be 0, as the algorithm won't work - adding two roots 0 + 0 is not greater than 0
 }
 
 void huffman_chew_one_sample (Did did_i, STRp(sample), bool skip_if_same_as_prev)
 {
-    HuffmanChewer *chewer = B1ST (HuffmanChewer, ZCTX(did_i)->huffman);
+    HuffmanChewerP chewer = B1ST (HuffmanChewer, ZCTX(did_i)->huffman);
+
+    if (chewer->num_chewed >= MAX_CHEWED) return;
 
     if (skip_if_same_as_prev && str_issame(sample, chewer->prev_sample))
         return;
@@ -88,28 +173,43 @@ void huffman_chew_one_sample (Did did_i, STRp(sample), bool skip_if_same_as_prev
         i++;
        
     for (; i < sample_len; i++) 
-        chewer->freq_table[(uint8_t)sample[i]] += 10; // much larger than the "1" default value
+        chewer->freq_table[(uint8_t)sample[i]] += CHEW_UNIT; // much larger than the "1" default value
 
     if (skip_if_same_as_prev && sample_len <= HUFFMAN_MAX_PREV_LEN) {
         chewer->prev_sample_len = sample_len;
         memcpy (chewer->prev_sample, sample, sample_len);
     }
+
+    chewer->num_chewed++;
 }
+
+uint32_t huffman_get_num_chewed (Did did_i)
+{
+    decl_zctx (did_i);
+
+    return zctx->huffman.param ? B1ST (HuffmanCodes,  zctx->huffman)->num_chewed
+                               : B1ST (HuffmanChewer, zctx->huffman)->num_chewed;
+}
+
+#define channel_i BNUM(zctx->huffman, h)
+#define channel_str cond_str (zctx->huffman.len > 1, " channel=", ((rom[])NICO_CHAN_NAMES)[channel_i])
 
 static void huffman_print_tree (HuffmanCodesP h, int node_i, int level)
 {
+    decl_zctx (h->did_i);
     rom space = "                                                                                                                                ";
     HuffmanNode *n = &h->nodes[node_i];
     
-    if (!level) iprintf ("%s: Huffman binary tree:\n", ZCTX(h->did_i)->tag_name);
+    if (!level) 
+        iprintf ("%s%s: Huffman binary tree:\n", zctx->tag_name, channel_str);
 
     if (!n->left) // leaf
         iprintf ("%s: %.*s level=%u node_i=%u freq=%u P=%u c=%u \n", 
-                 ZCTX(h->did_i)->tag_name, level*2, space, level, node_i, n->freq, n->parent, n->c);
+                 zctx->tag_name, level*2, space, level, node_i, n->freq, n->parent, n->c);
 
     else {
         iprintf ("%s: %.*s level=%u node_i=%u freq=%u P=%u L=%u R=%u\n", 
-                 ZCTX(h->did_i)->tag_name, level*2, space, level, node_i, n->freq, n->parent, n->left, n->right);
+                 zctx->tag_name, level*2, space, level, node_i, n->freq, n->parent, n->left, n->right);
 
         huffman_print_tree (h, n->left,  level+1);
         huffman_print_tree (h, n->right, level+1);
@@ -117,7 +217,7 @@ static void huffman_print_tree (HuffmanCodesP h, int node_i, int level)
 }
 
 // convert nodes to a binary tree by successively linking two tree roots, to replace the two trees with one new tree.
-static uint32_t huffman_generate_binary_tree (HuffmanChewerP chewer, HuffmanCodesP h, const bool mask[ALPHABET])
+static uint32_t huffman_generate_binary_tree (ContextP zctx, HuffmanChewerP chewer, HuffmanCodesP h, const bool mask[ALPHABET])
 {
     // initialize
     uint32_t num_nodes=1; // we skip node 0, bc "0" means "NIL" 
@@ -165,7 +265,7 @@ static uint32_t huffman_generate_binary_tree (HuffmanChewerP chewer, HuffmanCode
         // remove old roots from root array
         if (min2_i < min1_i) SWAP (min1_i, min2_i); // min1_i is now the smaller
 
-        memmove (&h->roots[min1_i],   &h->roots[min1_i+1], (min2_i - min1_i - 1) * sizeof (h->roots[0]));      // move roots between min1 and min2 one back, overwriting min1
+        memmove (&h->roots[min1_i],   &h->roots[min1_i+1], (min2_i - min1_i - 1) * sizeof (h->roots[0]));    // move roots between min1 and min2 one back, overwriting min1
         memmove (&h->roots[min2_i-1], &h->roots[min2_i+1], (num_roots - min2_i - 1) * sizeof (h->roots[0])); // move roots after min2 two back - overwriting the empty space caused by the first move + min2
         num_roots -= 2;
 
@@ -173,32 +273,46 @@ static uint32_t huffman_generate_binary_tree (HuffmanChewerP chewer, HuffmanCode
         h->roots[num_roots++] = num_nodes - 1;
     }
 
-    if (flag.debug_huffman)
+    if (flag.debug_huffman_dict_id.num && flag.debug_huffman_dict_id.num == dict_id_typeless (zctx->dict_id).num)
         huffman_print_tree (h, h->roots[0], 0);
 
     return num_leaves;
 }
 
-static void huffman_show_one (HuffmanCodesP h, int c)
-{
-    if (IN_RANGX(c,' ', '~')) iprintf ("%s: code of '%c'", ZCTX(h->did_i)->tag_name, c);
-    else                      iprintf ("%s: code of %-3d", ZCTX(h->did_i)->tag_name, c);
-
-    Bits bits = { .nwords = 1, .nbits = h->code_n_bits[c], .words = &h->codes[c], .type = BUF_REGULAR };
-    bits_print (&bits);    
-}
-
 static void huffman_show (HuffmanCodesP h)
 {
-    iprintf ("\n%s Huffman codes: %s\n", ZCTX(h->did_i)->tag_name,
+    decl_zctx(h->did_i);
+
+    iprintf ("\n%s %s Huffman codes:%s%s%s\n", IS_ZIP ? "ZIP" : "PIZ", zctx->tag_name, channel_str,
+             cond_int (IS_ZIP, " num_chewed=", h->num_chewed), 
              cond_int (VER2(15,58), " longest_code_n_bits=", h->longest_code_n_bits));
 
+    bool is_nico = zctx->huffman.len > 1; 
+
     for (int c=0; c < ALPHABET; c++) 
-        if (h->code_n_bits[c]) 
-            huffman_show_one (h, c);
+        if (h->code_n_bits[c]) {
+            if (is_nico && channel_i >= NC_OP_FLANK) 
+                iprintf ("%s: code of '%c'", zctx->tag_name, cigar_op_to_char[c]); // nico
+            
+            else if (!is_nico && IN_RANGX(c,' ', '~')) 
+                iprintf ("%s: code of '%c'", zctx->tag_name, c);
+            
+            else                           
+                iprintf ("%s: code of %-3d", zctx->tag_name, c);
+
+            Bits bits = { .nwords = 1, .nbits = h->code_n_bits[c], .words = &h->codes[c], .type = BUF_REGULAR };
+            bits_print (&bits);    
+        }
 }
 
-static void huffman_generate_codes (HuffmanCodesP h, uint32_t num_leaves)
+static void huffman_set_longest_code_n_bits (HuffmanCodesP h)
+{
+    h->longest_code_n_bits = 0;
+    for (int c=0; c < ALPHABET; c++)
+        MAXIMIZE (h->longest_code_n_bits, h->code_n_bits[c]);
+}
+
+static void huffman_generate_codes (ContextP zctx, HuffmanCodesP h, uint32_t num_leaves)
 {
     // initialize
     memset (h->codes, 0, sizeof (h->codes));
@@ -223,7 +337,7 @@ static void huffman_generate_codes (HuffmanCodesP h, uint32_t num_leaves)
             // edge case - code is more than 64 bits. TO DO: except for the highest 32 frequncies, set all others to equal frequency "1", and recalculate.
             if (h->code_n_bits[c] == 64 && parent) {
                 huffman_print_tree (h, h->roots[0], 0); 
-                ABORT ("While generating huffman codes of %s: code for c=%u exceeded 64 bits", ZCTX(h->did_i)->tag_name, c);
+                ABORT ("While generating huffman codes of %s: code for c=%u exceeded 64 bits", zctx->tag_name, c);
             }
         }
 
@@ -232,19 +346,13 @@ static void huffman_generate_codes (HuffmanCodesP h, uint32_t num_leaves)
         bits_reverse (&bits);
     }
 
-    if (flag.debug_huffman || flag.show_huffman) 
+    huffman_set_longest_code_n_bits (h);
+
+    if (flag.show_huffman_dict_id.num && flag.show_huffman_dict_id.num == dict_id_typeless (zctx->dict_id).num) 
         huffman_show (h);
 }
 
-static void huffman_set_longest_code_n_bits (HuffmanCodesP h)
-{
-    h->longest_code_n_bits = 0;
-    for (int c=0; c < ALPHABET; c++)
-        MAXIMIZE (h->longest_code_n_bits, h->code_n_bits[c]);
-}
-
-void huffman_produce_compressor (Did did_i, 
-                                 const bool mask[ALPHABET]) // caller guarantees that all chewed and future data is in this range - huffman does not test this
+void huffman_produce_compressor (Did did_i, const HuffmanMask *mask) // caller guarantees that all chewed and future data is in this range - huffman does not test this
 {
     decl_zctx(did_i);
 
@@ -252,63 +360,82 @@ void huffman_produce_compressor (Did did_i,
     if (!buf_is_alloc (huff)) return; // context not encountered in segconf (possibly header-only file)
 
     // we're going to convert huff from HuffmanChewer to HuffmanCodes - save chewer data
-    HuffmanChewer chewer = *B1ST (HuffmanChewer, *huff); // make a copy
+    HuffmanChewer chewer[huff->len];
+    memcpy (chewer, B1ST (HuffmanChewer, *huff), huff->len * sizeof (HuffmanChewer));
 
     buf_zero (huff);
-    HuffmanCodesP h = B1ST(HuffmanCodes, *huff);
-    h->did_i          = did_i;
-    h->max_prefix_len = chewer.max_prefix_len;
-    h->master_len     = chewer.master_len;
-    memcpy (h->master, chewer.master, chewer.master_len);
 
-    uint32_t num_leaves = huffman_generate_binary_tree (&chewer, h, mask);
-    
-    huffman_generate_codes (h, num_leaves);
+    // we store the "longest_code_n_bits" across all channels in channel 0 
+    uint8_t *longest_code_n_bits = &B1ST(HuffmanCodes, *huff)->longest_code_n_bits;
 
-    huff->len = 1; // indicate that huffman exists and is produced
+    for_buf2 (HuffmanCodes, h, i, *huff) {
+        h->did_i = did_i;
+        
+        if (i == 0) { // only first chewer can have master (since it is only used for QNAME)
+            h->max_prefix_len = chewer[i].max_prefix_len;
+            h->master_len     = chewer[i].master_len;
+            memcpy (h->master, chewer[i].master, chewer[i].master_len);
+        }
 
-    // zero entries not needed any more, to reduce the size of the SEC_HUFFMAN section
-    memset (&h->roots[1], 0, (ALPHABET-1) * sizeof (h->roots[0]));
-    for (int i=0; i < ARRAY_LEN(h->nodes); i++) {
-        h->nodes[i].freq   = 0;
-        h->nodes[i].parent = 0;
+        uint32_t num_leaves = huffman_generate_binary_tree (zctx, &chewer[i], h, mask[i]);
+
+        h->num_chewed = chewer->num_chewed; // for show-huffman
+
+        huffman_generate_codes (zctx, h, num_leaves);
+
+        // zero entries not needed any more, to reduce the size of the SEC_HUFFMAN section
+        memset (&h->roots[1], 0, (ALPHABET-1) * sizeof (h->roots[0]));
+        for (int i=0; i < ARRAY_LEN(h->nodes); i++) {
+            h->nodes[i].freq   = 0;
+            h->nodes[i].parent = 0;
+        }
+
+        uint8_t this_longest = h->longest_code_n_bits;
+        h->longest_code_n_bits = 0; // 0 to all channels but first, to improve section compression 
+        h->num_chewed = 0;
+
+        MAXIMIZE (*longest_code_n_bits, this_longest);
     }
 
-    huffman_set_longest_code_n_bits (h);
+    __atomic_thread_fence (__ATOMIC_ACQ_REL); // make sure codes are visible to all threads before setting param
+
+    store_release (huff->param, IS_ZIP ? HUFF_PRODUCED_BY_ZIP : HUFF_PRODUCED_BY_PIZ); // indicate that huffman exists and is produced
 }
 
 void huffman_get_master (Did did_i, pSTRp(master))
 {
-    ASSERT (huffman_exists(did_i), "%s.huffman doesn't exist", ZCTX(did_i)->tag_name);
+    decl_zctx (did_i);
+    ASSHUFFEXISTS;
 
-    HuffmanCodesP h = B1ST(HuffmanCodes, ZCTX(did_i)->huffman);
+    HuffmanCodesP h = B1ST(HuffmanCodes, zctx->huffman);
     STRset (*master, h->master);
 } 
 
+// maximum comp_len for first (or only) channel
 uint32_t huffman_get_theoretical_max_comp_len (Did did_i, uint32_t uncomp_len) 
 {
-    return roundup_bits2bytes64 (uncomp_len * B1ST(HuffmanCodes, ZCTX(did_i)->huffman)->longest_code_n_bits);
+    decl_zctx (did_i);
+    ASSHUFFEXISTS;
+    
+    return roundup_bits2bytes64 (uncomp_len * B1ST(HuffmanCodes, zctx->huffman)->longest_code_n_bits);
 }
 
 // note: sag_load expects compressed length in piz to be identical to zip, so changing anything
 // in this compression will require supporting the old one as well in sag_load for back comp
-void huffman_compress (Did did_i, STRp(uncomp), 
-                       qSTR8p(comp)) // must be allocated by caller to (at least) maximum theoretical length 
+uint32_t huffman_compress (VBlockP vb, Did did_i, STRp(uncomp), 
+                           qSTR8p(comp)) // must be allocated by caller to (at least) maximum theoretical length 
 {
-    HuffmanCodesP h = B1ST(HuffmanCodes, ZCTX(did_i)->huffman);
+    decl_zctx (did_i);
+    ASSHUFFEXISTS;
 
-    // shift back so Bits starts from full word
-    int shift = (uint64_t)comp & 0b111; // bytes shift 
+    ARRAY (HuffmanCodes, h, zctx->huffman);
 
-    Bits bits = { .nbits  = (*comp_len + shift) * 8,    // note: possibly only partially covering last word
-                  .nwords = ROUNDUP8(*comp_len + shift) / 8,
-                  .words  = (uint64_t *)(comp - shift), // shift to bring address to word boundary
-                  .type   = BITS_STANDALONE };
-
-    uint64_t next_bit = shift * 8;
+    Bits bits;
+    uint64_t next_bit;
+    int shift = huffman_compress_init_bits (comp, *comp_len, &bits, &next_bit);
 
     // ignore any master of sample that is the same chewer->master - just store its length (up to max_prefix_len, which is not more than 31)
-    if (h->max_prefix_len) {
+    if (h->max_prefix_len) { // this implies single channel
         uint32_t actual_max_prefix_len = MIN_(uncomp_len, h->max_prefix_len);
         uint32_t i=0;
         while (i < actual_max_prefix_len && uncomp[i] == h->master[i]) 
@@ -317,74 +444,36 @@ void huffman_compress (Did did_i, STRp(uncomp),
         bits_set_wordn (&bits, next_bit, i, HUFFMAN_PREFIX_LEN_BITS); // i is prefix_len
         next_bit += HUFFMAN_PREFIX_LEN_BITS;
 
-        bool new_codec = VER2(15,68);
-        
-        for (;i < uncomp_len; i++) {
-            int c = new_codec           ? (uint8_t)uncomp[i]
-                // backcomp for QNAME 15.0.65-15.0.67
-                : (i < h->master_len)   ? ((uint8_t)uncomp[i] ^ (uint8_t)h->master[i])
-                : h->master_len         ? ((uint8_t)uncomp[i] ^ (uint8_t)h->master[h->master_len-1]) // xor with last master char as to hopefully bring the range of the uncomp characters beyond the master to the similar range as the characters xored with the master
-                :                         (uint8_t)uncomp[i];
+        if (VER2(15,68))
+            for (;i < uncomp_len; i++) 
+                huffman_compress_add_one ((uint8_t)uncomp[i], *comp_len);
 
-            ASSERT (next_bit + h->code_n_bits[c] <= bits.nbits, "%s: comp_len=%u too short for compressing \"%.*s\"", 
-                    ZCTX(did_i)->tag_name, *comp_len, STRf(uncomp));
+        else // backcomp for QNAME 15.0.65-15.0.67
+            for (;i < uncomp_len; i++) {
+                uint8_t c = (i < h->master_len) ? ((uint8_t)uncomp[i] ^ (uint8_t)h->master[i])
+                          : h->master_len       ? ((uint8_t)uncomp[i] ^ (uint8_t)h->master[h->master_len-1]) // xor with last master char as to hopefully bring the range of the uncomp characters beyond the master to the similar range as the characters xored with the master
+                          :                       (uint8_t)uncomp[i];
 
-            bits_set_wordn (&bits, next_bit, h->codes[c], h->code_n_bits[c]);
-            next_bit += h->code_n_bits[c];
-        }
+                huffman_compress_add_one (c, *comp_len);
+            }
     }
 
     // shortcut if no master
     else 
-        for (uint32_t i=0 ;i < uncomp_len; i++) {
-            int c = (uint8_t)uncomp[i];
+        for (uint32_t i=0 ;i < uncomp_len; i++) 
+            huffman_compress_add_one ((uint8_t)uncomp[i], *comp_len);
 
-            ASSERT (next_bit + h->code_n_bits[c] <= bits.nbits, "%s: comp_len=%d too short for compressing \"%.*s\"", 
-                    ZCTX(did_i)->tag_name, *comp_len, STRf(uncomp));
+    huffman_compress_finalize_bits (zctx, &bits, next_bit, shift, STRa(comp));
 
-            bits_set_wordn (&bits, next_bit, h->codes[c], h->code_n_bits[c]);
+    if (flag.debug_huffman_dict_id.num && flag.debug_huffman_dict_id.num == dict_id_typeless (zctx->dict_id).num)
+        iprintf ("%s: uncomp_len=%u comp_len=%u ratio=%.1f\n", zctx->tag_name, uncomp_len, *comp_len, (double)uncomp_len / (double)*comp_len);
 
-            next_bit += h->code_n_bits[c];
-        }
-
-    ASSERT (next_bit <= bits.nbits, "bits overflow: expecting next_bit=%"PRIu64" <= nbits=%"PRIu64" for %s",
-            next_bit, bits.nbits, ZCTX(did_i)->tag_name);
-
-    bits_truncate (&bits, next_bit);
-
-    *comp_len = roundup_bits2bytes(next_bit) - shift; // number of bytes
-
-    // clear unused bits in last byte
-    int bits_in_last_byte = next_bit % 8;
-    if (bits_in_last_byte) 
-        comp[*comp_len-1] &= bitmask8(bits_in_last_byte);
-
-    if (flag.debug_huffman)
-        iprintf ("%s: uncomp_len=%u comp_len=%u ratio=%.1f\n", ZCTX(did_i)->tag_name, uncomp_len, *comp_len, (double)uncomp_len / (double)*comp_len);
-}
-
-uint32_t huffman_compress_or_copy (Did did_i, STRp(uncomp), 
-                                   STR8c(comp)) // must be allocated by caller to (at least) maximum theoretical length 
-{
-    if (huffman_exists (did_i)) { 
-        huffman_compress (SAM_CIGAR, STRa(uncomp), comp, &comp_len);
-        return comp_len;
-    }
-    else {
-        memcpy (comp, uncomp, uncomp_len);
-        return uncomp_len;
-    }
-
-    return comp_len;
+    return *comp_len;
 }
 
 // get length (in bytes) of compressed data, without generating the compressed data itself
-uint32_t huffman_compress_len (Did did_i, STRp(uncomp))
+static uint32_t huffman_compressed_len_(HuffmanCodesP h, STRp(uncomp))
 {
-    if (!uncomp_len) return 0; // quick short cut
-    
-    HuffmanCodesP h = B1ST(HuffmanCodes, ZCTX(did_i)->huffman);
-
     uint32_t i=0;
     uint64_t count_bits = 0;
 
@@ -409,7 +498,7 @@ uint32_t huffman_compress_len (Did did_i, STRp(uncomp))
         }
     }
 
-    // shortcut if no master
+    // shortcut if single-channel no master
     else 
         for (;i < uncomp_len; i++) 
             count_bits += h->code_n_bits[(uint8_t)uncomp[i]];
@@ -417,20 +506,27 @@ uint32_t huffman_compress_len (Did did_i, STRp(uncomp))
     return roundup_bits2bytes (count_bits); // number of bytes
 }
 
+uint32_t huffman_compressed_len (Did did_i, STRp(uncomp))
+{
+    decl_zctx (did_i);
+    ASSHUFFEXISTS;
+
+    if (!uncomp_len) return 0; // quick short cut
+    
+    ASSERT0 (zctx->huffman.len == 1, "multi channel not supported yet");
+
+    return huffman_compressed_len_(B1ST(HuffmanCodes, zctx->huffman), STRa(uncomp));
+}
+
 // returns comp_len
 int huffman_uncompress (Did did_i, bytes comp, STRc(uncomp))
 {
-    ASSERT (huffman_exists(did_i), "%s.huffman doesn't exist", ZCTX(did_i)->tag_name);
+    decl_zctx (did_i);
+    ASSHUFFEXISTS;
 
-    HuffmanCodesP h = B1ST(HuffmanCodes, ZCTX(did_i)->huffman);
+    HuffmanCodesP h = B1ST(HuffmanCodes, zctx->huffman);
 
-    Bits bits = { .nbits  = 64000000000ULL, // some very large number
-                  .nwords = 1000000000ULL,
-                  .type   = BITS_STANDALONE,
-                  .words  = (uint64_t *)ROUNDDOWN8 ((uint64_t)comp) }; // shift back to align with a 64b word boundary (counting on pointers being up to 64 bit)
-
-    // note: if we shifted .words back, the initial value of bit_i will point to were the data actually starts
-    uint64_t bit_i = (comp - (bytes)bits.words) * 8;
+    huffman_uncompress_init_bits;
 
     // if we use master, then first 5 bits indicate the subset of master used
     uint32_t prefix_len = 0;
@@ -442,38 +538,25 @@ int huffman_uncompress (Did did_i, bytes comp, STRc(uncomp))
         bit_i += 5;
     }
 
-    bool new_codec = VER2(15,68);
+    // new codec starting 15.0.68. Files up to 15.0.64 didn't have SEC_HUFFMAN and a trival new codec huffman was produced in huffman_piz_read_all
+    bool new_codec = VER2(15,68) || !VER2(15,65); 
 
     for (int i=prefix_len; i < uncomp_len; i++) {
-        int node_i = h->roots[0];
-        while (h->nodes[node_i].left)  // has children
-            node_i = bits_get (&bits, bit_i++) ? h->nodes[node_i].right : h->nodes[node_i].left;
+        uint8_t c = huffman_uncompress_get_c;
                     
-        uncomp[i] = new_codec           ? h->nodes[node_i].c
+        uncomp[i] = new_codec           ? c
                   // backcomp for QNAME 15.0.65-15.0.67
-                  : (!h->master_len)    ? h->nodes[node_i].c
-                  : (i < h->master_len) ? (h->nodes[node_i].c ^ (uint8_t)h->master[i])
-                  :                       (h->nodes[node_i].c ^ (uint8_t)h->master[h->master_len-1]); // xor with last master char as to hopefully bring the range of the uncomp characters beyond the master to the similar range as the characters xored with the master                        
+                  : (!h->master_len)    ? c
+                  : (i < h->master_len) ? (c ^ (uint8_t)h->master[i])
+                  :                       (c ^ (uint8_t)h->master[h->master_len-1]); // xor with last master char as to hopefully bring the range of the uncomp characters beyond the master to the similar range as the characters xored with the master                        
     }
 
-    return roundup_bits2bytes(bit_i) - (comp - (bytes)bits.words);
+    return huffman_uncompress_comp_len;
 }
 
-// uncompress from huffman compression, also supporting pre-15.0.65 files where data is not compressed
-int huffman_uncompress_or_copy (Did did_i, bytes comp, STRc(uncomp)) 
+int RECONSTRUCT_huffman (VBlockP vb, Did did_i, uint32_t uncomp_len, bytes comp) 
 {
-    if (huffman_exists (did_i)) 
-        return huffman_uncompress (did_i, comp, STRa(uncomp));
-
-    else { 
-        memcpy (uncomp, comp, uncomp_len);
-        return uncomp_len;
-    }
-}
-
-int RECONSTRUCT_huffman_or_copy (VBlockP vb, Did did_i, uint32_t uncomp_len, bytes comp) 
-{
-    int comp_len = huffman_uncompress_or_copy (did_i, comp, BAFTtxt, uncomp_len);
+    int comp_len = huffman_uncompress (did_i, comp, BAFTtxt, uncomp_len);
     Ltxt += uncomp_len;
 
     return comp_len;
@@ -482,9 +565,10 @@ int RECONSTRUCT_huffman_or_copy (VBlockP vb, Did did_i, uint32_t uncomp_len, byt
 // get length (in bytes) of compressed data, without generating the uncompressed data itself
 int huffman_uncompress_len (Did did_i, bytes comp, uint32_t uncomp_len)
 {
-    ASSERT (huffman_exists(did_i), "%s.huffman doesn't exist", ZCTX(did_i)->tag_name);
+    decl_zctx(did_i);
+    ASSHUFFEXISTS;
 
-    HuffmanCodesP h = B1ST(HuffmanCodes, ZCTX(did_i)->huffman);
+    HuffmanCodesP h = B1ST(HuffmanCodes, zctx->huffman);
 
     Bits bits = { .nbits  = 64000000000ULL, // some very large number
                   .nwords = 1000000000ULL,
@@ -524,20 +608,20 @@ bool huffman_issame (Did did_i, bytes comp, uint32_t uncomp_len, STRp(uncomp_com
 
 static void bgen_huffman_codes (ContextP zctx)
 {
-    HuffmanCodes *h = B1ST (HuffmanCodes, zctx->huffman);
+    for_buf (HuffmanCodes, h, zctx->huffman) {
+        for (int i=0; i < ARRAY_LEN(h->codes); i++)
+            h->codes[i] = BGEN64 (h->codes[i]);
 
-    for (int i=0; i < ARRAY_LEN(h->codes); i++)
-        h->codes[i] = BGEN64 (h->codes[i]);
+        h->did_i = IS_ZIP ? 0 : zctx->did_i; // recalculated in piz, as might be different than in ZIP
+                          
+        // LTEN due to back comp: in 15.0.65-67 left, right and roots[0] were not modified (not BGENed).
+        for (int i=0; i < ARRAY_LEN(h->nodes); i++) { 
+            h->nodes[i].left  = LTEN16 (h->nodes[i].left);
+            h->nodes[i].right = LTEN16 (h->nodes[i].right);
+        }
 
-    h->did_i = 0; // recalculated in piz, as might be different than in ZIP
-
-    // LTEN due to back comp: in 15.0.65-67 left, right and roots[0] were not modified (not BGENed).
-    for (int i=0; i < ARRAY_LEN(h->nodes); i++) { 
-        h->nodes[i].left  = LTEN16 (h->nodes[i].left);
-        h->nodes[i].right = LTEN16 (h->nodes[i].right);
+        h->roots[0] = LTEN32 (h->roots[0]);
     }
-
-    h->roots[0] = LTEN32 (h->roots[0]);
 }
 
 // prepare and output the SEC_HUFFMAN section
@@ -545,17 +629,17 @@ void huffman_compress_section (Did did_i)
 {
     if (!huffman_exists (did_i)) return;
 
-    ContextP zctx = ZCTX(did_i);
-
-    zctx->huffman.len = sizeof (HuffmanCodes);
-    Codec codec = codec_assign_best_codec (evb, NULL, &zctx->huffman, SEC_HUFFMAN);
+    decl_zctx(did_i);
 
     bgen_huffman_codes (zctx);
+
+    zctx->huffman.len *= sizeof (HuffmanCodes);
+    Codec codec = codec_assign_best_codec (evb, NULL, &zctx->huffman, SEC_HUFFMAN);
 
     SectionHeaderHuffman header = (SectionHeaderHuffman){ 
         .magic                 = BGEN32 (GENOZIP_MAGIC),
         .section_type          = SEC_HUFFMAN,
-        .data_uncompressed_len = BGEN32 (sizeof (HuffmanCodes)),
+        .data_uncompressed_len = BGEN32 (zctx->huffman.len32),
         .codec                 = codec,
         .dict_id               = zctx->dict_id,   
         .vblock_i              = 0,
@@ -563,7 +647,23 @@ void huffman_compress_section (Did did_i)
 
     comp_compress (evb, zctx, &evb->z_data, &header, zctx->huffman.data, NO_CALLBACK, "SEC_HUFFMAN");
 
-    zctx->huffman.len = 1; // restore
+    zctx->huffman.len /= sizeof (HuffmanCodes); // restore
+}
+
+static Mutex backcomp_huffman_qual_mutex = {};
+
+// in case SEC_HUFFMAN of QUAL is missing, generate it based on first qual string reconstructed
+void huffman_piz_backcomp_produce_qual (STRp(qual))
+{
+    mutex_lock (backcomp_huffman_qual_mutex);
+    if (huffman_exists (SAM_QUAL)) goto done; // another thread beat up to producing - all good
+
+    huffman_start_chewing (SAM_QUAL, 0, 0, 0, 1);
+    huffman_chew_one_sample (SAM_QUAL, STRa(qual), false);
+    huffman_produce_compressor (SAM_QUAL, (HuffmanMask[1]){ {[33 ... 126] = true} });   
+
+    done:
+    mutex_unlock (backcomp_huffman_qual_mutex);
 }
 
 // PIZ: called by the main thread from piz_read_global_area
@@ -579,28 +679,324 @@ void huffman_piz_read_all (void)
             zfile_get_global_section (SectionHeaderHuffman, sec, &zctx->huffman, "huffman");
             if (flag.only_headers || !zctx->huffman.len) continue; // only show headers, or section skipped
 
+            zctx->huffman.len /= sizeof (HuffmanCodes);
+            zctx->huffman.param = HUFF_PRODUCED_BY_ZIP; 
+
             bgen_huffman_codes (zctx);
-            zctx->huffman.len = 1;
 
             HuffmanCodes *h = B1ST(HuffmanCodes, zctx->huffman);
-
-            h->did_i = zctx->did_i; // might be different did_i than during zip
 
             if (!VER2(15,68))  // in files compressed since 15.0.68, ZIP calculates this 
                 huffman_set_longest_code_n_bits (h); 
 
-            if (flag.show_huffman) 
+            if (flag.show_huffman_dict_id.num == dict_id_typeless (sec->dict_id).num) {
                 huffman_show (h);
+                if (is_genocat) exit_ok;
+            }
         }
     }
 
-    if (is_genocat && flag.show_huffman) exit_ok;
+    // generate trivial huffmans for solo fields for which they are missing 
+    if (IS_SAG_SOLO) // note: Solo huffmans start to be available in 15.0.68
+        sam_piz_produce_trivial_solo_huffmans();
+
+    if ((z_sam_gencomp || flag.deep) && !huffman_exists (SAM_QNAME)) { // QNAME huffman available since 15.0.65
+        huffman_start_chewing (SAM_QNAME, 0, 0, 0, 1);
+        huffman_produce_compressor (SAM_QNAME, (HuffmanMask[1]){ {[32 ... 126] = true} });     
+    }
+
+    if (flag.deep && !VER2(15,69)) {
+        buf_free (ZCTX(SAM_CIGAR)->huffman); // note: in 15.0.68 CIGAR huffman was a now-obsolete single-channel huffman
+        nico_start_chewing (SAM_CIGAR);
+        nico_produce_compressor (SAM_CIGAR, true);
+    }
+
+    if (IS_SAG_SA && !huffman_exists(OPTION_SA_CIGAR)) { 
+        nico_start_chewing (OPTION_SA_CIGAR);
+        nico_produce_compressor (OPTION_SA_CIGAR, false);        
+    }
+
+    if ((z_sam_gencomp || flag.deep) && !huffman_exists (SAM_QUAL)) {
+        // we will generate the qual in huffman_piz_backcomp_produce_qual based on the first QUAL string reconstructed
+        mutex_initialize (backcomp_huffman_qual_mutex);
+
+        buf_set_promiscuous (&ZCTX(SAM_QUAL)->huffman, "contexts->huffman");
+    }
 }
+
+//--------------------------------------------------------------------
+// Nico - multi-channel huffman for in-memory CIGAR compression
+//--------------------------------------------------------------------
+
+static uint8_t op_channel_by_prev_op[16] = { 
+    [BC_NONE]=NC_OP_FLANK, 
+    [BC_S]=NC_OP_AFTER_SHNP, [BC_H]=NC_OP_AFTER_SHNP, [BC_N]=NC_OP_AFTER_SHNP, [BC_P]=NC_OP_AFTER_SHNP,
+    [BC_M]=NC_OP_AFTER_ME,   [BC_E]=NC_OP_AFTER_ME,
+    [BC_X]=NC_OP_AFTER_X,    [BC_D]=NC_OP_AFTER_D,    [BC_I]=NC_OP_AFTER_I };
+
+static uint8_t n_channel_by_op[9] = { 
+    [BC_M]=NC_N_MEX, [BC_E]=NC_N_MEX, [BC_X]=NC_N_MEX, 
+    [BC_S]=NC_N_SH,  [BC_H]=NC_N_SH,
+    [BC_D]=NC_N_ID,  [BC_I]=NC_N_ID,
+    [BC_N]=NC_N_NP,  [BC_P]=NC_N_NP };
+
+// main thread
+void nico_start_chewing (Did did_i)
+{
+    huffman_start_chewing (did_i, 0, 0, 0, NUM_NICO_CHANNELS);
+}
+
+// any thread - but only one designated thread as there is no thread-saftey 
+void nico_chew_one_cigar (Did did_i, BamCigarOpP cigar, uint32_t n_cigar_op)
+{
+    HuffmanChewerP chewer = B1ST (HuffmanChewer, ZCTX(did_i)->huffman);
+
+    if (chewer->num_chewed >= MAX_CHEWED) return;
+
+    chewer[NC_N_CIGAR_OP].freq_table[MIN_(n_cigar_op, 255)] += CHEW_UNIT; 
+    BamCigarOpType prev_op = BC_NONE;
+
+    for (uint32_t i=0; i < n_cigar_op; i++) {
+        BamCigarOpType op = cigar[i].op;
+
+        int op_channel = (i==n_cigar_op-1) ? NC_OP_FLANK : op_channel_by_prev_op[prev_op]; 
+        chewer[op_channel].freq_table[op] += 10; // much larger than the "1" default value        
+        chewer[n_channel_by_op[op]].freq_table[MIN_((uint32_t)cigar[i].n, 255)] += CHEW_UNIT;
+        
+        prev_op = op;
+    }
+    
+    chewer[0].num_chewed++; // num_chewed is counted on the [0] 
+}
+
+void nico_chew_one_textual_cigar (VBlockP vb, Did did_i, STRp(textual_cigar))
+{
+    if (huffman_get_num_chewed (did_i) >= MAX_CHEWED) return; // we don't need more samples
+
+    ASSERTNOTINUSE (vb->scratch);
+    sam_cigar_textual_to_binary (vb, STRa(textual_cigar), &vb->scratch, "scratch");
+
+    nico_chew_one_cigar (did_i, CIG(vb->scratch));
+
+    buf_free (vb->scratch);
+}
+
+// main thread
+void nico_produce_compressor (Did did_i, bool is_deep_cigar)
+{
+    if (is_deep_cigar)
+        huffman_produce_compressor (did_i, (HuffmanMask[NUM_NICO_CHANNELS]){ [NC_OP_FLANK ... NC_OP_AFTER_I]      = { [BC_M ... BC_D]=1, [BC_S]=1 }, // we only need S for bamass with insert contexts 
+                                                                             [NC_N_CIGAR_OP]                      = { [1    ... 255 ]=1 }, 
+                                                                             [NC_N_MEX ... NC_N_ID]               = { [0    ... 255 ]=1 },
+                                                                             [NC_N_NP]                            = { [0    ... 1   ]=1 } }); // N,P not use in deep cigars - trivial channel
+    else
+        huffman_produce_compressor (did_i, (HuffmanMask[NUM_NICO_CHANNELS]){ [NC_OP_FLANK]                        = { [BC_M ... BC_X]=1 }, // the first or last op can be any op 
+                                                                             [NC_OP_AFTER_SHNP ... NC_OP_AFTER_I] = { [BC_M ... BC_S]=1, [BC_P ... BC_X]=1 }, // the non-first/last cannot be H (but can be S!) 
+                                                                             [NC_N_CIGAR_OP]                      = { [1    ... 255 ]=1 }, 
+                                                                             [NC_N_MEX ... NC_N_NP]               = { [0    ... 255 ]=1 } });
+}
+
+#define INLINE_N_CIGAR_OP_BITS 20 // our limit
+#define INLINE_OP_N_BITS       28 // 28 bits is the size of n per BAM spec 
+
+// any thread: compress one cigar with big numbers inline
+uint32_t nico_compress_cigar (VBlockP vb, Did did_i, BamCigarOpP cigar, uint32_t n_cigar_op, STR8c(comp)) 
+{
+    decl_zctx (did_i);
+    ASSHUFFEXISTS;
+
+    ARRAY (HuffmanCodes, channels, zctx->huffman);
+
+    ASSERT (n_cigar_op < 1 MB, "cannot inline-compress a CIGAR with n_cigar_op=%u >= %u", n_cigar_op, (uint32_t)(1 MB));
+
+    Bits bits;
+    uint64_t next_bit;
+    int shift = huffman_compress_init_bits (STRa(comp), &bits, &next_bit);
+
+    HuffmanCodesP h = &channels[NC_N_CIGAR_OP];
+    huffman_compress_add_one(MIN_(n_cigar_op, 255), comp_len);
+    if (n_cigar_op >= 255)
+        huffman_compress_add_int (n_cigar_op, INLINE_N_CIGAR_OP_BITS, comp_len); 
+
+    BamCigarOpType prev_op = BC_NONE;
+
+    for (uint32_t i=0; i < n_cigar_op; i++) {
+        BamCigarOpType op = cigar[i].op;
+        uint32_t n = cigar[i].n;
+
+        h = &channels[(i==n_cigar_op-1) ? NC_OP_FLANK : op_channel_by_prev_op[prev_op]];
+        huffman_compress_add_one (op, comp_len);
+        prev_op = op;
+
+        h = &channels[n_channel_by_op[op]]; 
+        huffman_compress_add_one (MIN_(n,255), comp_len);        
+
+        if (n >= 255)
+            huffman_compress_add_int (n, INLINE_OP_N_BITS, comp_len); 
+    }
+
+    huffman_compress_finalize_bits (zctx, &bits, next_bit, shift, qSTRa(comp));
+
+    if (flag.debug_huffman_dict_id.num && flag.debug_huffman_dict_id.num == dict_id_typeless (zctx->dict_id).num)
+        iprintf ("%s: n_cigar_op=%u comp_len=%u ratio=%.1f\n", 
+                 zctx->tag_name, n_cigar_op, comp_len, ((double)(n_cigar_op*4)+2) / (double)comp_len);
+
+    return comp_len;
+}
+
+uint32_t nico_compress_textual_cigar (VBlockP vb, Did did_i, STRp(textual_cigar), STR8c(comp)) 
+{
+    BufferP binary_cigar = &vb->codec_bufs[6]; 
+    ASSERTNOTINUSE (*binary_cigar);
+
+    sam_cigar_textual_to_binary (vb, STRa(textual_cigar), binary_cigar, "scratch");
+
+    comp_len = nico_compress_cigar (vb, did_i, B1ST(BamCigarOp, *binary_cigar), binary_cigar->len32, comp, comp_len);
+
+    buf_free (*binary_cigar);
+
+    return comp_len;
+}
+
+static uint32_t nico_compressed_len (Did did_i, BamCigarOpP cigar, uint32_t n_cigar_op)
+{
+    decl_zctx(did_i);
+    ASSHUFFEXISTS;
+
+    ARRAY (HuffmanCodes, channels, zctx->huffman);
+
+    ASSERT (n_cigar_op < 1 MB, "cannot inline-compress a CIGAR with n_cigar_op=%u >= %u", n_cigar_op, (uint32_t)(1 MB));
+
+    // bits due to n_cigar_op
+    HuffmanCodesP h = &channels[NC_N_CIGAR_OP];
+    uint32_t n_bits = h->code_n_bits[MIN_(n_cigar_op, 255)];
+    if (n_cigar_op >= 255) n_bits += INLINE_N_CIGAR_OP_BITS;
+
+    BamCigarOpType prev_op = BC_NONE;
+
+    for (uint32_t i=0; i < n_cigar_op; i++) {
+        BamCigarOpType op = cigar[i].op;
+        uint32_t n = cigar[i].n;
+
+        // bits due to OP
+        h = &channels[(i==n_cigar_op-1) ? NC_OP_FLANK : op_channel_by_prev_op[prev_op]];
+        n_bits += h->code_n_bits[op];
+        prev_op = op;
+
+        // bits due to N
+        h = &channels[n_channel_by_op[op]]; 
+        n_bits += h->code_n_bits[MIN_(n, 255)];
+        if (n >= 255) n_bits += INLINE_N_CIGAR_OP_BITS;
+    }
+
+    return roundup_bits2bytes (n_bits);
+}
+
+uint32_t nico_compressed_len_textual_cigar (VBlockP vb, Did did_i, STRp(textual_cigar)) 
+{
+    ASSERTNOTINUSE (vb->scratch);
+    sam_cigar_textual_to_binary (vb, STRa(textual_cigar), &vb->scratch, "scratch");
+
+    uint32_t comp_len = nico_compressed_len (did_i, CIG(vb->scratch));
+
+    buf_free (vb->scratch);
+
+    return comp_len;
+}
+
+#define nico_uncompress_cigar_get_int(x, big_num_bits)      \
+    x = huffman_uncompress_get_c;                           \
+    if (x == 255) {                                         \
+        x = bits_get_wordn (&bits, bit_i, (big_num_bits));  \
+        bit_i += (big_num_bits);                            \
+    }
+
+// loose upper bound on compression size of a cigar with this many ops
+uint32_t nico_max_comp_len (Did did_i, uint32_t n_cigar_op)
+{
+    return huffman_get_theoretical_max_comp_len (did_i, 1 + 2 * n_cigar_op);
+} 
+
+uint32_t nico_uncompress_cigar (VBlockP vb, Did did_i, bytes comp, BufferP cigar, rom buf_name)
+{
+    decl_zctx(did_i);
+    ASSHUFFEXISTS;
+
+    ARRAY (HuffmanCodes, channels, zctx->huffman);
+
+    huffman_uncompress_init_bits;
+
+    HuffmanCodesP h = &channels[NC_N_CIGAR_OP]; 
+    nico_uncompress_cigar_get_int (cigar->len32, INLINE_N_CIGAR_OP_BITS);
+
+    buf_alloc_exact (vb, *cigar, cigar->len, BamCigarOp, buf_name);
+    BamCigarOpType prev_op = BC_NONE;
+
+    for_buf2 (BamCigarOp, op, i, *cigar) {        
+        h = &channels[(i == cigar->len32-1) ? NC_OP_FLANK : op_channel_by_prev_op[prev_op]];
+        op->op = huffman_uncompress_get_c;
+        prev_op = op->op;
+
+        h = &channels[n_channel_by_op[op->op]]; 
+        nico_uncompress_cigar_get_int (op->n, INLINE_OP_N_BITS);
+    }        
+
+    return huffman_uncompress_comp_len;
+}
+
+uint32_t nico_uncompress_textual_cigar (Did did_i, bytes comp, BufferP textual_cigar, 
+                                        uint32_t textual_len, bool do_htos)
+{
+    decl_zctx(did_i);
+    ASSHUFFEXISTS;
+
+    ASSERT (huffman_exists(did_i), "%s.huffman doesn't exist", zctx->tag_name);
+
+    ARRAY (HuffmanCodes, channels, zctx->huffman);
+
+    huffman_uncompress_init_bits;
+
+    HuffmanCodesP h = &channels[NC_N_CIGAR_OP]; 
+    uint32_t n_cigar_op;
+    nico_uncompress_cigar_get_int (n_cigar_op, INLINE_N_CIGAR_OP_BITS);
+
+    char *next = BAFTc(*textual_cigar); // appends textual cigar to this buffer 
+
+    BamCigarOpType prev_op = BC_NONE;
+
+    for (int i=0; i < n_cigar_op; i++) {
+        h = &channels[(i == n_cigar_op-1) ? NC_OP_FLANK : op_channel_by_prev_op[prev_op]];
+        BamCigarOpType op = huffman_uncompress_get_c;
+        
+        if (do_htos && op == BC_S) op = BC_H;
+
+        prev_op = op;
+
+        h = &channels[n_channel_by_op[op]]; 
+        uint32_t n;
+        nico_uncompress_cigar_get_int (n, INLINE_OP_N_BITS);
+
+        next += str_int (n, next);
+        *next++ = cigar_op_to_char[op];
+    }        
+
+    // sanity check. note: this is our only use for cigar.piz.len in the code 
+    uint32_t uncomp_len = next - BAFTc(*textual_cigar);
+    ASSERT (uncomp_len == textual_len, "unexpected uncomp_len=%u, expected textual_len=%u", uncomp_len, textual_len);
+
+    textual_cigar->len32 += uncomp_len;
+
+    return huffman_uncompress_comp_len;
+}
+
+//--------------------------------------------------
+// Unit test
+//--------------------------------------------------
 
 #ifdef DEBUG
 void huffman_unit_test (void)
 {
-    flag.debug_huffman = true;
+    flag.debug_huffman_dict_id.num = _SAM_QNAME;
 
     rom training_set[] = {
         "A00925:74:H25J5DSXY:1:1645:20383:5603",
@@ -625,18 +1021,18 @@ void huffman_unit_test (void)
 
     if (!z_file) z_file = CALLOC (sizeof(File)); // huffman  functions assign to z_file->contexts
 
-    huffman_start_chewing (SAM_QNAME, training_set[0], strlen(training_set[0]), 31);
+    huffman_start_chewing (SAM_QNAME, training_set[0], strlen(training_set[0]), 31, 1);
 
     for (int i=0; i < ARRAY_LEN(training_set); i++)
         huffman_chew_one_sample (SAM_QNAME, training_set[i], strlen (training_set[i]), true);
 
-    huffman_produce_compressor (SAM_QNAME, (bool[256]){[32 ... 126] = true});
+    huffman_produce_compressor (SAM_QNAME, (HuffmanMask[1]){ {[32 ... 126] = true} });
 
     for (int i=0; i < ARRAY_LEN(validation_set); i++) {
         int uncomp_len = strlen(validation_set[i]);
         STRli(comp, huffman_get_theoretical_max_comp_len (SAM_QNAME, uncomp_len)); 
 
-        huffman_compress (SAM_QNAME, validation_set[i], uncomp_len, (uint8_t *)comp, &comp_len);
+        huffman_compress (evb, SAM_QNAME, validation_set[i], uncomp_len, (uint8_t *)comp, &comp_len);
     
         char uncomp[uncomp_len];
         huffman_uncompress (SAM_QNAME, (bytes)comp, STRa(uncomp));

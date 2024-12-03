@@ -35,13 +35,13 @@ void vcf_seg_playpus_INFO_SC (VBlockVCFP vb, ContextP ctx, STRp(seq))
     decl_acgt_decode;
     RefLock lock = REFLOCK_NONE;
 
-    if (seq_len != 21 || !flag.reference || segconf.running ||
+    if (seq_len != 21 || !flag.reference || segconf_running ||
         !str_is_ACGT (STRa(seq), NULL))  // reference doesn't support N or IUPACs
         goto fallback;
 
     PosType64 pos = DATA_LINE(vb->line_i)->pos - 10; // 10 before to 10 after
 
-    RangeP range = ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, seq_len, WORD_INDEX_NONE, 
+    RangeP range = ref_seg_get_range (VB, vb->chrom_node_index, STRa(vb->chrom_name), pos, seq_len, WORD_INDEX_NONE, 
                                       (IS_REF_EXT_STORE ? &lock : NULL));
     
     if (!range || pos < range->first_pos || pos + 20 > range->last_pos)
@@ -52,16 +52,16 @@ void vcf_seg_playpus_INFO_SC (VBlockVCFP vb, ContextP ctx, STRp(seq))
         if (seq[i] != REFp (pos + i)) 
             goto fallback;
     
-    seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_PLATYPUS_SC }, 2, ctx, seq_len);
+    seg_special0 (VB, VCF_SPECIAL_PLATYPUS_SC, ctx, seq_len);
 
     if (IS_REF_EXT_STORE)
         bits_set_region (&range->is_set, pos - range->first_pos, seq_len);
 
-    ref_unlock (gref, &lock); 
+    ref_unlock (&lock); 
     return;
 
 fallback: 
-    ref_unlock (gref, &lock); // does nothing if REFLOCK_NONE
+    ref_unlock (&lock); // does nothing if REFLOCK_NONE
     seg_by_ctx (VB, STRa(seq), ctx, seq_len);
 }
 
@@ -69,7 +69,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_PLATYPUS_SC)
 {    
     if (!reconstruct) return NO_NEW_VALUE;
 
-    ConstRangeP range = ref_piz_get_range (vb, gref, HARD_FAIL);
+    ConstRangeP range = ref_piz_get_range (vb, HARD_FAIL);
 
     PosType64 pos = CTX(VCF_POS)->last_value.i - 10;
     
@@ -116,18 +116,18 @@ void vcf_seg_playpus_INFO_HP (VBlockVCFP vb, ContextP ctx, STRp(hp_str))
         return;
     }
 
-    if (!flag.reference || segconf.running) goto fallback;
+    if (!flag.reference || segconf_running) goto fallback;
 
     PosType64 pos = DATA_LINE(vb->line_i)->pos; 
 
-    RangeP range = ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos - HP_MAX_SPAN, 2*HP_MAX_SPAN+1, WORD_INDEX_NONE, 
+    RangeP range = ref_seg_get_range (VB, vb->chrom_node_index, STRa(vb->chrom_name), pos - HP_MAX_SPAN, 2*HP_MAX_SPAN+1, WORD_INDEX_NONE, 
                                       (IS_REF_EXT_STORE ? &lock : NULL));
     
     if (!range || pos - HP_MAX_SPAN < range->first_pos || pos + HP_MAX_SPAN > range->last_pos)
         goto fallback;
 
     if (hp == HP_prediction (range, pos)) {
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_PLATYPUS_HP }, 2, ctx, hp_str_len);
+        seg_special0 (VB, VCF_SPECIAL_PLATYPUS_HP, ctx, hp_str_len);
 
         if (IS_REF_EXT_STORE)
             bits_set_region (&range->is_set, pos - HP_MAX_SPAN, HP_MAX_SPAN * 2 + 1);
@@ -136,12 +136,12 @@ void vcf_seg_playpus_INFO_HP (VBlockVCFP vb, ContextP ctx, STRp(hp_str))
     else fallback:
         seg_integer (VB, ctx, hp, true, hp_str_len);
 
-    ref_unlock (gref, &lock); 
+    ref_unlock (&lock); 
 }
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_PLATYPUS_HP)
 {    
-    ConstRangeP range = ref_piz_get_range (vb, gref, HARD_FAIL);
+    ConstRangeP range = ref_piz_get_range (vb, HARD_FAIL);
 
     new_value->i = HP_prediction (range, CTX(VCF_POS)->last_value.i);
 

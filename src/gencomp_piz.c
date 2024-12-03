@@ -295,6 +295,7 @@ static void gencomp_piz_add_one_gc_vb_to_rl (VBIType gc_vb_i, bool *initialized)
     if (!v->encountered) { // first encounter with this VB - add it to the reading list
         if (! *initialized) { // defer initialization until we know that we actually need to change the reading list
             // save yet-read suffix of readling list - we will append them back when we're done expanding the placeholder
+            ASSERTNOTINUSE (evb->scratch);
             buf_copy (evb, &evb->scratch, &z_file->piz_reading_list, SectionEnt, z_file->piz_reading_list.next, 0, "scratch");
             z_file->piz_reading_list.len = 0; // discard all sections that were already read
             *initialized = true;

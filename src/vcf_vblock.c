@@ -20,10 +20,11 @@ void vcf_reset_line (VBlockP vb_)
     VBlockVCFP vb = (VBlockVCFP)vb_;
 
     vb->sample_i = 0;
-    vb->n_alts = 0; // = ALT not parsed yet
     vb->deferred_q_len = 0;
     vb->mate_line_i = NO_LINE;
+    ii_buf.len32 = 0; 
 
+    N_ALTS = 0; // = ALT not parsed yet
     CTX(FORMAT_GT_HT)->use_HT_matrix = false; 
     CTX(FORMAT_RGQ)->line_has_RGQ = unknown;
 
@@ -34,12 +35,8 @@ void vcf_reset_line (VBlockP vb_)
         CTX(reset_ctx_specific[i])->ctx_specific = 0;
     
     if (IS_ZIP) {
-        for (Did did_i=0; did_i < NUM_VCF_FIELDS; did_i++)
-            CTX(did_i)->sf_i = -1; // initialize
-
+        memset (B1ST16(CTX(VCF_FORMAT)->sf_i), 0xff, MAX_DICTS * sizeof (uint16_t));  // set all sf_i to NO_SF_I
         memset (&vb->first_idx, 0xff, (char*)&vb->after_idx - (char*)&vb->first_idx); // set all idx's to -1
-
-        ii_buf.len32 = 0; 
     }
 
     else {

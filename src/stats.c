@@ -23,6 +23,7 @@
 #include "contigs.h"
 #include "mgzip.h"
 #include "huffman.h"
+#include "sorter.h"
 
 #define SHORT_HEADER "NAME                   GENOZIP      %       TXT      %   RATIO\n"
 
@@ -250,9 +251,9 @@ static void stats_output_file_metadata (void)
     
     else if (IS_REF_EXTERNAL || IS_REF_EXT_STORE) 
         bufprintf (evb, &stats, "Reference: %s %s=%s ref_genozip_version=%u\n", 
-                   ref_get_filename (gref),  ref_get_digest_name (gref), 
-                   digest_display_(ref_get_genome_digest (gref), ref_is_digest_adler (gref)).s, 
-                   ref_get_genozip_version (gref));
+                   ref_get_filename(),  ref_get_digest_name(), 
+                   digest_display_(ref_get_genome_digest(), ref_is_digest_adler()).s, 
+                   ref_get_genozip_version());
 
     uint32_t num_used_ctxs=0;
     for_zctx_that (zctx->nodes.len || zctx->txt_len) num_used_ctxs++;
@@ -269,11 +270,14 @@ static void stats_output_file_metadata (void)
                  segconf_qf_name (0), cond_str(segconf.qname_flavor[1], "+", segconf_qf_name(1))) // no space surrounding the '+' as expected by batch_qname_flavors
 
     switch (z_file->data_type) {
-
         case DT_SAM:
         case DT_BAM: {
             uint64_t num_alignments = z_file->comp_num_lines[SAM_COMP_MAIN] + z_file->comp_num_lines[SAM_COMP_PRIM] + z_file->comp_num_lines[SAM_COMP_DEPN]; // excluding Deep FQ components
             unsigned num_fq_files = MAX_(0, (int)z_file->num_components - SAM_COMP_FQ00); 
+            uint64_t num_fq_reads = 0;
+            for (CompIType comp_i=SAM_COMP_FQ00; comp_i < z_file->num_components; comp_i++)
+                num_fq_reads += z_file->comp_num_lines[comp_i];
+
             double deep_pc = z_file->deep_stats[NDP_FQ_READS] ? (double)100.0 * (double)(z_file->deep_stats[NDP_DEEPABLE] + z_file->deep_stats[NDP_DEEPABLE_TRIM]) / (double)z_file->deep_stats[NDP_FQ_READS] : 0;
 
             if (z_has_gencomp) 
@@ -312,16 +316,20 @@ static void stats_output_file_metadata (void)
                 REPORT_VBs;
 
             if (sam_num_header_contigs()) bufprintf (evb, &features, "hdr_contigs=%u (%"PRIu64");", sam_num_header_contigs(), contigs_get_nbases (sam_hdr_contigs));
-            if (IS_REF_LOADED_ZIP) bufprintf (evb, &features, "ref_contigs=%u (%"PRIu64");", ref_get_ctgs (gref)->contigs.len32, contigs_get_nbases (ref_get_ctgs (gref)));
-            if (flag.deep) bufprintf (evb, &features, "deep=%.1f%%;", deep_pc);
-            if (flag.deep && segconf.sam_cropped_at) bufprintf (evb, &features, "deep_crop=%ubp;", segconf.sam_cropped_at);
-            if (flag.deep) bufprintf (evb, &features, "deep_qtype=%s;", qtype_name (segconf.deep_qtype));
-            if (flag.deep) bufprintf (evb, &features, "deep_trimming=%s;", segconf_deep_trimming_name());
-            if (flag.deep) bufprintf (evb, &features, "deep_qual=%s;", TF (!segconf.deep_no_qual));
-            if (segconf.deep_N_sam_score && segconf.deep_N_fq_score) 
-                bufprintf (evb, &features, "deep_N_qual=%s%c→%c;", 
-                           segconf.deep_N_fq_score == '\'' ? "'" : "", // escape a ' at the beginning of a cell
-                           segconf.deep_N_fq_score, segconf.deep_N_sam_score);
+            if (IS_REF_LOADED_ZIP) bufprintf (evb, &features, "ref_contigs=%u (%"PRIu64");", ref_get_ctgs()->contigs.len32, contigs_get_nbases (ref_get_ctgs()));
+            if (flag.deep) {
+                bufprintf (evb, &features, "deep=%.1f%%;", deep_pc);                
+                bufprintf (evb, &features, "deep_qtype=%s;", qtype_name (segconf.deep_qtype));
+                bufprintf (evb, &features, "deep_trim=%s;", segconf_deep_trimming_name());
+                bufprintf (evb, &features, "deep_qual=%s;", TF (!segconf.deep_no_qual));
+                
+                if (segconf.deep_N_sam_score && segconf.deep_N_fq_score) 
+                    bufprintf (evb, &features, "deep_N_qual=%s%c→%c;", 
+                            segconf.deep_N_fq_score == '\'' ? "'" : "", // escape a ' at the beginning of a cell
+                            segconf.deep_N_fq_score, segconf.deep_N_sam_score);
+
+                if (segconf.is_interleaved) bufprint0 (evb, &features, "interleaved=True;"); // fastq is interleaved
+            }
 
             if (num_alignments) {
                 FEATURE0 (segconf.is_sorted && !segconf.sam_is_unmapped, "Sorting: Sorted by POS", "Sorted_by=POS");        
@@ -330,9 +338,9 @@ static void stats_output_file_metadata (void)
                 FEATURE0 (!segconf.is_sorted && !segconf.is_collated, "Sorting: Not sorted or collated", "Sorted_by=NONE");
                 FEATURE0 (segconf.multiseq, "Multiseq", "multiseq=True");
 
-                if (segconf.is_minimap2 || segconf.CIGAR_has_eqx)        bufprintf (evb, &features, "CIGAR_has_eqx=%s;",    TF(segconf.CIGAR_has_eqx));
-                if (segconf.is_minimap2 || segconf.SA_NM_by_CIGAR_X)     bufprintf (evb, &features, "SA_NM_by_CIGAR_X=%s;", TF(segconf.SA_NM_by_CIGAR_X));
-                if (segconf.is_minimap2 || segconf.SA_CIGAR_abbreviated) bufprintf (evb, &features, "SA_CIGAR_abbrev=%s;",  TF(segconf.SA_CIGAR_abbreviated));
+                if (segconf.is_minimap2 || segconf.CIGAR_has_eqx)    bufprintf (evb, &features, "CIGAR_has_eqx=%s;",    TF(segconf.CIGAR_has_eqx));
+                if (segconf.is_minimap2 || segconf.SA_NM_by_CIGAR_X) bufprintf (evb, &features, "SA_NM_by_CIGAR_X=%s;", TF(segconf.SA_NM_by_CIGAR_X));
+                if (segconf.is_minimap2 || segconf.SA_CIGAR_abbreviated==yes) bufprintf (evb, &features, "SA_CIGAR_abbrev=%s;",  YN(segconf.SA_CIGAR_abbreviated));
             }
                         
             FEATURE (true, "Aligner: %s", "Mapper=%s", segconf_sam_mapper_name()); 
@@ -382,23 +390,45 @@ static void stats_output_file_metadata (void)
                         PREC(far_of_depn_pc), far_of_depn_pc, PREC(secondary_pc), secondary_pc, PREC(supp_pc), supp_pc);
 
                 if (flag.deep)
-                    bufprintf (evb, &stats, "Deep: fq_reads_deeped=%.1f%%%s qtype=%s no_qual=%s trimming=%s%s%s\n", 
-                               deep_pc, cond_int(segconf.sam_cropped_at, " crop=", segconf.sam_cropped_at), 
-                               qtype_name (segconf.deep_qtype), TF(segconf.deep_no_qual), segconf_deep_trimming_name(),
+                    bufprintf (evb, &stats, "Deep: fq_reads_deeped=%.1f%% qtype=%s no_qual=%s trim=%s%s%s\n", 
+                               deep_pc, 
+                               qtype_name (segconf.deep_qtype), TF(segconf.deep_no_qual), 
+                               segconf_deep_trimming_name(),
                                cond_str (segconf.deep_N_sam_score && segconf.deep_N_fq_score, " N_qual=", char_to_printable (segconf.deep_N_fq_score).s),
                                cond_str (segconf.deep_N_sam_score && segconf.deep_N_fq_score, "→", char_to_printable (segconf.deep_N_sam_score).s));
-
-                if (z_file->num_aligned) {
-                    bufprintf (evb, &features, "aligner_ok=%.1f%%;", 100.0 * (double)z_file->num_aligned / (double)z_file->num_lines);
-                    bufprintf (evb, &features, "aligner_perfect=%.1f%%;", 100.0 * (double)z_file->num_perfect_matches / (double)z_file->num_lines);
-                }
 
                 if (flag.deep)
                     FEATURE (z_file->num_lines, "SAM qname: %s%s", "SAM_Qname=%s%s", 
                              segconf_qf_name (QSAM), cond_str(segconf.deep_sam_qname_flavor[1], "+", segconf_qf_name(QSAM2)))
 
                 REPORT_QNAME;
-            }            
+
+                if (z_file->sam_num_seq_by_aln) 
+                    bufprintf (evb, &features, "sam_seq_by_aln=%.1f%%;", 100.0 * (double)z_file->sam_num_seq_by_aln / (double)num_alignments);
+
+                if (z_file->sam_num_vs_prim) // vs PRIM VB or vs saggy line
+                    bufprintf (evb, &features, "sam_vs_prim=%.1f%%;", 100.0 * (double)z_file->sam_num_vs_prim / (double)num_alignments); 
+
+                if (z_file->sam_num_aligned) 
+                    bufprintf (evb, &features, "sam_aligner_ok (perfect)=%.1f%% (%.1f%%);", 100.0 * (double)z_file->sam_num_aligned / (double)num_alignments, 100.0 * (double)z_file->sam_num_perfect_matches / (double)num_alignments); // report even if num_aligned=0 (i.e. wrong reference)           
+
+                if (z_file->sam_num_verbatim)
+                    bufprintf (evb, &features, "sam_verbatim=%.1f%%;", 100.0 * (double)z_file->sam_num_verbatim / (double)num_alignments);
+
+                if (flag.deep && (z_file->deep_stats[NDP_SAM_DUP] || z_file->deep_stats[NDP_SAM_DUP_TRIM]))
+                    bufprintf (evb, &features, "sam_alns_deep_hash_contn=%"PRIu64";", z_file->deep_stats[NDP_SAM_DUP] + z_file->deep_stats[NDP_SAM_DUP_TRIM]);
+            }
+
+            if (num_fq_reads) {
+                if (flag.deep) 
+                    bufprintf (evb, &features, "fq_deep=%.1f%%;", 100.0 * (double)(z_file->deep_stats[NDP_DEEPABLE] + z_file->deep_stats[NDP_DEEPABLE_TRIM]) / (double)num_fq_reads);
+
+                if (z_file->fq_num_aligned)
+                    bufprintf (evb, &features, "fq_aligner_ok (perfect)=%.1f%% (%.1f%%);", 100.0 * (double)z_file->fq_num_aligned / (double)num_fq_reads, 100.0 * (double)z_file->fq_num_perfect_matches / (double)num_fq_reads); // report even if num_aligned=0 (i.e. wrong reference)           
+
+                if (z_file->fq_num_verbatim)
+                    bufprintf (evb, &features, "fq_verbatim=%.1f%%;", 100.0 * (double)z_file->fq_num_verbatim / (double)num_fq_reads);
+            }
 
             bufprintf (evb, &features, "tech=%s;", tech_name (segconf.tech));
             if (segconf.tech != segconf.tech_by_RG) {
@@ -411,21 +441,78 @@ static void stats_output_file_metadata (void)
             break;
         }
 
+        case DT_FASTQ:
+            REPORT_VBs;
+            REPORT_QNAME;
+            FEATURE (segconf.optimize[FASTQ_QNAME] && z_file->num_lines, "Sequencer: %s", "Sequencer=%s", tech_name(segconf.tech));\
+            FEATURE0 (FAF, "FASTA-as-FASTQ", "FASTA-as-FASTQ=True");
+            FEATURE0 (segconf.multiseq, "Multiseq", "multiseq=True");
+            FEATURE0 (segconf.is_interleaved, "Interleaved", "interleaved=True");
+
+            double bamass_pc = z_file->deep_stats[NDP_FQ_READS] ? (double)100.0 * (double)(z_file->deep_stats[NDP_DEEPABLE] + z_file->deep_stats[NDP_DEEPABLE_TRIM]) / (double)z_file->deep_stats[NDP_FQ_READS] : 0;
+
+            if (flag.bam_assist) {
+                bufprintf (evb, &stats, "Bamass: fq_reads_deeped=%.1f%% qtype=%s trim=%s\n", 
+                           bamass_pc, qtype_name (segconf.deep_qtype),
+                           segconf_deep_trimming_name());
+
+                bufprintf (evb, &features, "bamass_qtype=%s;", qtype_name (segconf.deep_qtype));
+                bufprintf (evb, &features, "bamass_trim=%s;", segconf_deep_trimming_name());
+                bufprintf (evb, &features, "bamass_cigar_trims=%s;", (rom[])TRIM_IS_NAMES[segconf.bamass_trims]);
+            }
+
+            if (IS_REF_LOADED_ZIP) {
+                bufprintf (evb, &features, "ref_ncontigs=%u;", ref_get_ctgs()->contigs.len32);
+                bufprintf (evb, &features, "ref_nbases=%"PRIu64";", contigs_get_nbases (ref_get_ctgs()));
+            }
+
+            if (bamass_pc) 
+                bufprintf (evb, &features, "bamass=%.1f%%;", bamass_pc);
+
+            if (z_file->fq_num_aligned) 
+                bufprintf (evb, &features, "aligner_ok (perfect)=%.1f%% (%.1f%%);", 100.0 * (double)z_file->fq_num_aligned / (double)z_file->num_lines, 100.0 * (double)z_file->fq_num_perfect_matches / (double)z_file->num_lines); // report even if num_aligned=0 (i.e. wrong reference)           
+
+            if (z_file->fq_num_monochar) 
+                bufprintf (evb, &features, "monochar=%.1f%%;", 100.0 * (double)z_file->fq_num_monochar / (double)z_file->num_lines);
+
+            if (z_file->fq_num_verbatim)
+                bufprintf (evb, &features, "verbatim=%.1f%%;", 100.0 * (double)z_file->fq_num_verbatim / (double)z_file->num_lines);
+
+            if (!FAF) {
+                bufprintf (evb, &features, "Qual=%s;", !segconf.nontrivial_qual ? "Trivial" : ZCTX(SAM_QUAL)->qual_codec != CODEC_UNKNOWN ? codec_name (ZCTX(SAM_QUAL)->qual_codec) : codec_name (ZCTX(SAM_QUAL)->lcodec));
+                bufprintf (evb, &features, "Qual_histo=%s;", segconf_get_qual_histo(QHT_QUAL).s);
+
+                bufprintf (evb, &features, "smux_max_stdv=%2.1f%% '%s';",
+                        segconf.smux_max_stdv * 100.0, 
+                        segconf.smux_max_stdv_q=='='?"≐" : segconf.smux_max_stdv_q==';'?"；" : char_to_printable (segconf.smux_max_stdv_q).s); // Unicode ；and ≐ (in UTF-8) to avoid breaking spreadsheet
+
+                if (segconf.r1_or_r2 && !flag.pair) 
+                    bufprintf (evb, &features, "R1_or_R2=R%d;", (segconf.r1_or_r2 == PAIR_R1) ? 1 : 2);
+            }
+            break;
+
         case DT_VCF:
         case DT_BCF:
             bufprintf (evb, &stats, "Samples: %u   ", vcf_header_get_num_samples()); //  no newline
             bufprintf (evb, &features, "num_samples=%u;", vcf_header_get_num_samples());
             if (vcf_header_get_num_contigs()) bufprintf (evb, &features, "hdr_contigs=%u (%"PRIu64");", vcf_header_get_num_contigs(), vcf_header_get_nbases());
-            if (IS_REF_LOADED_ZIP) bufprintf (evb, &features, "ref_contigs=%u (%"PRIu64");", ref_get_ctgs (gref)->contigs.len32, contigs_get_nbases (ref_get_ctgs (gref)));
-
-            if (z_file->mate_line_count) {
-                double mate_line_pc = 100.0 * (double)z_file->mate_line_count  / (double)z_file->num_lines;
-                bufprintf (evb, &stats, "Mated: %.*f%%   ", PREC(mate_line_pc), mate_line_pc); //  no newline
-                bufprintf (evb, &features, "mated=%.*f%%;", PREC(mate_line_pc), mate_line_pc);
-            }
+            if (IS_REF_LOADED_ZIP) bufprintf (evb, &features, "ref_contigs=%u (%"PRIu64");", ref_get_ctgs()->contigs.len32, contigs_get_nbases (ref_get_ctgs()));
 
             if (z_file->max_ploidy != 2) 
                 bufprintf (evb, &features, "ploidy=%u;", z_file->max_ploidy);
+
+            if (z_file->mate_line_count) {
+                double pc = 100.0 * (double)z_file->mate_line_count  / (double)z_file->num_lines;
+                bufprintf (evb, &stats, "Mated: %.*f%%   ", PREC(pc), pc); //  no newline
+                bufprintf (evb, &features, "mated=%.*f%%;", PREC(pc), pc);
+            }
+
+            if (z_file->vcf_num_samples_copied) {
+                double pc = 100.0 * (double)z_file->vcf_num_samples_copied  / (double)(z_file->num_lines * vcf_header_get_num_samples());
+                bufprintf (evb, &features, "samples_copied=%.*f%%;", PREC(pc), pc);
+            }
+            else
+                bufprintf (evb, &features, "samples_copied=%s;", segconf.vcf_sample_copy ? "None" : "Disabled");
 
             bufprintf (evb, &features, "QUAL_method=%s;", VCF_QUAL_method_name (segconf.vcf_QUAL_method));
 
@@ -453,32 +540,6 @@ static void stats_output_file_metadata (void)
 
             break;
         
-        case DT_FASTQ:
-            REPORT_VBs;
-            REPORT_QNAME;
-            FEATURE (segconf.optimize[FASTQ_QNAME] && z_file->num_lines, "Sequencer: %s", "Sequencer=%s", tech_name(segconf.tech));\
-            FEATURE0 (FAF, "FASTA-as-FASTQ", "FASTA-as-FASTQ=True");
-            FEATURE0 (segconf.multiseq, "Multiseq", "multiseq=True");
-            FEATURE0 (segconf.is_interleaved, "Interleaved", "interleaved=True");
-            if (IS_REF_LOADED_ZIP) {
-                bufprintf (evb, &features, "ref_ncontigs=%u;", ref_get_ctgs (gref)->contigs.len32);
-                bufprintf (evb, &features, "ref_nbases=%"PRIu64";", contigs_get_nbases (ref_get_ctgs (gref)));
-                bufprintf (evb, &features, "aligner_ok=%.1f%%;", 100.0 * (double)z_file->num_aligned / (double)z_file->num_lines); // report even if num_aligned=0 (i.e. wrong reference)           
-                bufprintf (evb, &features, "aligner_perfect=%.1f%%;", 100.0 * (double)z_file->num_perfect_matches / (double)z_file->num_lines);
-            }
-
-            if (!FAF) {
-                bufprintf (evb, &features, "Qual=%s;", !segconf.nontrivial_qual ? "Trivial" : ZCTX(SAM_QUAL)->qual_codec != CODEC_UNKNOWN ? codec_name (ZCTX(SAM_QUAL)->qual_codec) : codec_name (ZCTX(SAM_QUAL)->lcodec));
-                bufprintf (evb, &features, "Qual_histo=%s;", segconf_get_qual_histo(QHT_QUAL).s);
-
-                bufprintf (evb, &features, "smux_max_stdv=%2.1f%% '%s';",
-                        segconf.smux_max_stdv * 100.0, 
-                        segconf.smux_max_stdv_q=='='?"≐" : segconf.smux_max_stdv_q==';'?"；" : char_to_printable (segconf.smux_max_stdv_q).s); // Unicode ；and ≐ (in UTF-8) to avoid breaking spreadsheet
-
-                if (segconf.r1_or_r2) bufprintf (evb, &features, "R1_or_R2=R%d;", (segconf.r1_or_r2 == PAIR_R1) ? 1 : 2);
-            }
-            break;
-
         case DT_FASTA:
             FEATURE0 (segconf.seq_type==SQT_AMINO, "Sequence type: Amino acids",      "Amino_acids");
             FEATURE0 (segconf.seq_type==SQT_NUKE, "Sequence type: Nucleotide bases", "Nucleotide_bases");
@@ -503,7 +564,7 @@ static void stats_output_file_metadata (void)
             
         case DT_REF: 
             bufprintf (evb, &stats, "%s of genome (in-memory): %s\n", digest_name(), digest_display (z_file->digest).s); 
-            FEATURE (true, "Contigs: %u (%"PRIu64")", "ref_contigs=%u (%"PRIu64")", ref_contigs_get_num_contigs(gref), ref_contigs_get_genome_nbases(gref));
+            FEATURE (true, "Contigs: %u (%"PRIu64")", "ref_contigs=%u (%"PRIu64")", ref_contigs_get_num_contigs(), ref_contigs_get_genome_nbases());
             break;
 
         case DT_GNRIC:
@@ -520,7 +581,7 @@ static void stats_output_file_metadata (void)
     
     if (!flag.make_reference && z_file->num_lines) {
         bufprintf (evb, &features, "segconf.line_len=%u;", segconf.line_len); 
-        if (segconf.longest_seq_len) bufprintf (evb, &features, "segconf.longest_seq_len=%u;", segconf.longest_seq_len); 
+        if (segconf.std_seq_len) bufprintf (evb, &features, "segconf.std_seq_len=%u;", segconf.std_seq_len); 
     }
 
     if (stats_programs.len) {
@@ -742,7 +803,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
 
         if (ST(DICT) || ST(B250) || ST(LOCAL) || ST(COUNTS)) continue; // these are covered by individual contexts
 
-        s->txt_len    = ST(TXT_HEADER) ? z_file->header_size : 0; // note: excluding generated headers for DVCF
+        s->txt_len    = ST(TXT_HEADER) ? z_file->header_size : 0; 
         s->type       = (ST(REFERENCE) || ST(REF_IS_SET) || ST(REF_CONTIGS) || ST(CHROM2REF_MAP) || ST(REF_IUPACS)) ? "SEQUENCE" 
                       : (ST(RANDOM_ACCESS) || ST(REF_RAND_ACC))                                                     ? "RandomAccessIndex"
                       :                                                                                               "Other"; // note: some contexts appear as "Other" in --stats, but in --STATS their parent is themself, not "Other"
@@ -845,9 +906,9 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
                                ST_NAME (SEC_REF_CONTIGS), ST_NAME (SEC_CHROM2REF_MAP),
                                ST_NAME (SEC_REF_IUPACS));
 
-    stats_consolidate_non_ctx (sbl, sbl_buf.len32, "Other", 17 + (DTPZ(txt_header_required) == HDR_NONE), "E1L", "E2L", "EOL", 
-                               "SAMPLES", "AUX", TOPLEVEL, "TOP2BAM", "TOP2NONE", "TOP2VCF", "LINEMETA", "CONTIG", "SAG", "SAALN",
-                               ST_NAME (SEC_DICT_ID_ALIASES), ST_NAME (SEC_RECON_PLAN),
+    stats_consolidate_non_ctx (sbl, sbl_buf.len32, "Other", 19 + (DTPZ(txt_header_required) == HDR_NONE), "E1L", "E2L", "EOL", 
+                               "SAMPLES", "AUX", TOPLEVEL, "TOP2BAM", "TOP2NONE", "TOP2VCF", "BAM_BIN", "LINEMETA", "CONTIG", "SAG", "SAALN",
+                               ST_NAME (SEC_DICT_ID_ALIASES), ST_NAME (SEC_RECON_PLAN), ST_NAME (SEC_GENCOMP),
                                ST_NAME (SEC_VB_HEADER), ST_NAME (SEC_MGZIP), ST_NAME(SEC_TXT_HEADER)/*must be last*/);
         
     stats_consolidate_non_ctx (sbl, sbl_buf.len32, "RandomAccessIndex", 2, ST_NAME (SEC_RANDOM_ACCESS), ST_NAME (SEC_REF_RAND_ACC));

@@ -11,6 +11,7 @@
 #include "threads.h"
 #include "gencomp.h"
 #include "arch.h"
+#include "sorter.h"
 
 // We mark a buffer list entry as removed, by setting its LSb. This keeps the buffer list sorted, in case it is sorted.
 // Normally the LSb is 0 as buffers are word-aligned (verified in buflist_add_buf)
@@ -113,7 +114,7 @@ static void buflist_foreach_buffer_in_each_vbs (bool (*callback)(ConstBufferP, V
     }
 
     // non-pool VBs 
-    if (threads_am_i_main_thread() || flag.debug || flag.show_memory) 
+    if (threads_am_i_main_thread() || flag.debug || flag_show_memory) 
         for (VBID vb_id=-1; vb_id >= -NUM_NONPOOL_VBs; vb_id--) {
             VBlockP vb = vb_get_nonpool_vb (vb_id);
             if (vb) buflist_foreach_buffer (vb, callback, -1, arg);
@@ -141,7 +142,7 @@ void buflist_who_is_locked (void)
     }
 
     // non-pool VBs 
-    if (threads_am_i_main_thread() || flag.debug || flag.show_memory) 
+    if (threads_am_i_main_thread() || flag.debug || flag_show_memory) 
         for (VBID vb_id=-1; vb_id >= -NUM_NONPOOL_VBs; vb_id--) {
             VBlockP vb = vb_get_nonpool_vb (vb_id);
             if (vb && vb->buffer_list.spinlock && vb->buffer_list.spinlock->lock)
@@ -328,7 +329,7 @@ bool buflist_locate (ConstBufferP buf, rom prefix /*NULL if silent*/)
 
     OBJECT_TEST(file_buf_locate, z_file);
     OBJECT_TEST(file_buf_locate, txt_file);
-    OBJECT_TEST(ref_buf_locate, gref);
+    OBJECT_TEST(ref_buf_locate, NULL);
 
     void *depn=0, *componentsP=0, *queueP=0; // dummies
     OBJECT_TEST(gencomp_buf_locate_depn, depn);
@@ -393,12 +394,16 @@ void buflist_free_vb (VBlockP vb)
             // erase the space between the end of the previous buffer and the beginning of this one
             if (is_p_in_range (save_buf, vb, sizeof_vb)) {
                 ASSERT (save_buf >= start_erase, "expecting save_buf=%p > start_erase=%p (vb_i=%d buf_i=%u/%u)", save_buf, start_erase, vb_i, buf_i, vb->buffer_list.len32);
+                ASSERT (is_p_in_range (save_buf+sizeof(Buffer)-1, vb, sizeof_vb), "buffer @ %p not fully in VB: %s", save_buf, buf_desc ((BufferP)save_buf).s);
+                
                 memset (start_erase, 0, (rom)save_buf - start_erase);
                 start_erase = save_buf + sizeof(Buffer);
             }
         }
 
     // erase space after the last Buffer in the VB
+    int64_t erase_len = (rom)vb + sizeof_vb - start_erase;
+    ASSERT (erase_len >= 0, "Invalid erase_len=%"PRId64, erase_len); // sanity
     memset (start_erase, 0, (rom)vb + sizeof_vb - start_erase);
 
     buf_unlock;
@@ -479,7 +484,11 @@ void buflist_destroy_private_and_context_vb_bufs (VBlockP vb)
             is_p_in_range (ent->buf, vb, sizeof_alloced_vb) &&      // is in VB struct, but:
               (!is_p_in_range (ent->buf, vb, sizeof_common_area) || // either: not in common area
                is_p_in_range (ent->buf, vb->contexts, sizeof (ContextArray)) || // or: context data
-               ent->buf == &vb->lines))                             // or: vb->lines
+               ent->buf == &vb->lines         ||                    // or: some specific buffers
+               ent->buf == &vb->z_data        || 
+               ent->buf == &vb->comp_txt_data ||
+               ent->buf == &vb->scratch       ||
+               ent->buf == &vb->gencomp_lines))
             buf_destroy_do_do (ent, __FUNCLINE);
 
     buf_unlock;
@@ -685,7 +694,7 @@ static bool buflist_test_overflows_do (VBlockP vb, bool primary, rom msg)
             buflist_find_underflow_culprit (vb, buf->memory, msg);
             buf_lock (&vb->buffer_list); // relock
 
-            if (primary) buflist_test_overflows_all_other_vb (vb, msg, false);
+            if (primary) buflist_test_overflows_all_other_vb (vb, msg, false, false);
             primary = false;
 
             corruption = "underflow";
@@ -697,7 +706,7 @@ static bool buflist_test_overflows_do (VBlockP vb, bool primary, rom msg)
                      nl[primary], msg, vb ? vb->id : VB_ID_NONE, vb->vblock_i, buf_type_name(buf), buf, func, code_line, buf->memory, buf->memory+buf_mem_size(buf)-1, 
                      buf_desc (buf).s, buf->vb->vblock_i, buf_i, of[0], of[1], of[2], of[3], of[4], of[5], of[6], of[7]);
             
-            if (primary) buflist_test_overflows_all_other_vb (vb, msg, false);
+            if (primary) buflist_test_overflows_all_other_vb (vb, msg, false, false);
             primary = false;
 
             corruption = "overflow";
@@ -716,7 +725,7 @@ static bool buflist_test_overflows_do (VBlockP vb, bool primary, rom msg)
     return corruption > 0;
 }
 
-void buflist_test_overflows_all_other_vb (VBlockP caller_vb, rom msg, bool force)
+void buflist_test_overflows_all_other_vb (VBlockP caller_vb, rom msg, bool force, bool on_exit)
 {
     // IMPORTANT: this function is not thread safe - while buflist_test_overflows_do
     // locks the buffer_list of each VB, the individual buffers are not locked
@@ -725,7 +734,9 @@ void buflist_test_overflows_all_other_vb (VBlockP caller_vb, rom msg, bool force
     if (!force && !flag.debug_memory && !flag.xthreads) 
         return; 
 
-    fprintf (stderr, "\nTesting all other VBs (WARNING: NOT thread safe - might segfault; activated by certain flags (see code)):\n");
+    if (!on_exit)
+        fprintf (stderr, "\nTesting all other VBs (WARNING: NOT thread safe - might segfault; activated by certain flags (see code)):\n");
+
     bool corruption_detected = false;
     for (VBlockPoolType type=POOL_MAIN; type <= POOL_BGZF; type++) {
         VBlockPoolP vb_pool = vb_get_pool (type, SOFT_FAIL);
@@ -742,9 +753,9 @@ void buflist_test_overflows_all_other_vb (VBlockP caller_vb, rom msg, bool force
 }
 
 // this function cannot contain ASSERT or ABORT as exit_on_error calls it
-void buflist_test_overflows_all_vbs (rom msg)
+void buflist_test_overflows_all_vbs (rom msg, bool on_exit)
 {
-    buflist_test_overflows_all_other_vb (NULL, msg, false);
+    buflist_test_overflows_all_other_vb (NULL, msg, false, on_exit);
 }
 
 // this function cannot contain ASSERT or ABORT as exit_on_error calls it

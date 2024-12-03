@@ -48,7 +48,7 @@ PosType32 sam_seg_POS (VBlockSAMP vb, ZipDataLineSAMP dl, WordIndex prev_line_ch
 
     // case: seg against POS in the predicted alignment in prim line SA:Z 
     else if (sam_has_prim && sam_seg_is_item_predicted_by_prim_SA (vb, SA_POS, pos)) 
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_COPY_PRIM, '0'+SA_POS }, 3, channel_ctx, add_bytes); 
+        seg_special1 (VB, SAM_SPECIAL_COPY_PRIM, '0'+SA_POS, channel_ctx, add_bytes); 
 
     else if (!segconf.is_sorted) 
         seg_integer (VB, channel_ctx, pos, true, add_bytes);
@@ -63,7 +63,7 @@ PosType32 sam_seg_POS (VBlockSAMP vb, ZipDataLineSAMP dl, WordIndex prev_line_ch
 
     random_access_update_pos (VB, SAM_POS);
 
-    if (segconf.running) segconf_test_sorted (VB, prev_line_chrom, pos, prev_line_pos);
+    if (segconf_running) segconf_test_sorted (VB, prev_line_chrom, pos, prev_line_pos);
 
     return pos;
 }
@@ -79,7 +79,7 @@ void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(pnext_str)/* option 
         ASSSEG (str_get_int_range32 (STRa(pnext_str), 0, MAX_POS_SAM, &pnext),
                 "PNEXT=\"%.*s\" ∉ [0,%d] (pnext_str=%p)", pnext_str_len, pnext_str, (int)MAX_POS_SAM, pnext_str);
 
-    if (pnext && segconf.running) 
+    if (pnext && segconf_running) 
         segconf.has[SAM_PNEXT]++; // "has" means we found evidence of non-zero PNEXT
 
     if (segconf.has[SAM_PNEXT]) {

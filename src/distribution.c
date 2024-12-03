@@ -13,3 +13,7 @@ rom get_distribution (void)
 {
     return version_is_devel() ? "devel" : DISTRIBUTION;
 }
+
+bool dist_is_conda        (void) { return !strcmp (get_distribution(), "conda"        ); }
+bool dist_is_github       (void) { return !strcmp (get_distribution(), "github"       ); }
+bool dist_is_installforge (void) { return !strcmp (get_distribution(), "InstallForge" ); }

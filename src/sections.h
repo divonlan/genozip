@@ -203,7 +203,7 @@ typedef struct {
         struct {
             // copied from their respective values in segconf, and copied back to segconf in PIZ
             DictId segconf_seq_len_dict_id;   // SAM: dict_id of one of the Q?NAME contexts (the "length=" item), which is expected to hold the seq_len for this read. 0 if there is no such item. v14.
-            uint32_t segconf_seq_len;         // SAM: "standard" seq_len (only applicable to some short-read files). v14.
+            uint32_t segconf_std_seq_len;     // SAM: longest (up to 15.0.68: average) seq_len in segconf data. v14. (called sam_seq_len up to 15.0.68)
             SagType segconf_sag_type;         // SAM: v14
             uint8_t segconf_seq_len_cm;       // SAM: v14   
             uint8_t segconf_ms_type      : 3; // SAM: v14 
@@ -222,15 +222,15 @@ typedef struct {
             uint8_t segconf_deep_qname2  : 1; // SAM: v15
             uint8_t segconf_deep_no_qual : 1; // SAM: v15
             uint8_t segconf_use_ins_ctxs : 1; // 15.0.30
-            uint8_t segconf_MAPQ_use_xq  : 1; // 15.0.61
+            uint8_t segconf_MAPQ_use_xq  : 1; // 15.0.61 true if DRAGEN and has xq:i, since 15.0.69 also XQ:i
             uint8_t segconf_has_MQ       : 1; // 15.0.61
             uint8_t segconf_SA_CIGAR_abb : 1; // 15.0.66
             uint8_t segconf_SA_NM_by_X   : 1; // 15.0.66
             uint8_t segconf_CIGAR_has_eqx: 1; // 15.0.68
-            uint8_t unused_bits          : 1;
+            uint8_t segconf_is_ileaved   : 1; // 15.0.69: Deep: FASTQ component is interleaved
             uint8_t segconf_sam_factor;       // 15.0.28: BAM only: 64X estimated blow-up factor of SAM txt_data vs BAM 
             uint8_t segconf_deep_N_fq_score;  // 15.0.39: Deep: when copying QUAL from SAM, update scores of 'N' bases to this value
-            uint8_t unused0;
+            uint8_t unused_bits          : 8;
             uint16_t conc_writing_vbs;        // 15.0.64: max number of handed-over the VBs the writer will need to have open concurrent. Up to 15.0.63 this was in SectionHeaderReconPlan
             char unused[245];
         } sam;
@@ -239,8 +239,11 @@ typedef struct {
             DictId segconf_seq_len_dict_id;   // FASTQ: dict_id of one of the Q?NAME contexts, which is expected to hold the seq_len for this read. 0 if there is no such item. copied from segconf.seq_len_dict_id. added v14.
             uint8_t segconf_fa_as_fq     : 1; // FASTQ: 15.0.58
             uint8_t segconf_is_ileaved   : 1; // FASTQ: 15.0.58
-            uint8_t unused_bits          : 6;
-            char unused[258];
+            uint8_t segconf_use_ins_ctxs : 1; // 15.0.30
+            uint8_t unused_bits          : 5;
+            uint8_t unused8[3];
+            uint32_t segconf_std_seq_len;     // FASTQ: 15.0.69
+            char unused[251];
         } fastq;
 
         struct {
@@ -248,7 +251,7 @@ typedef struct {
             uint32_t segconf_GQ_method    : 3; // VCF: 15.0.37
             uint32_t segconf_FMT_DP_method: 2; // VCF: 15.0.37
             uint32_t segconf_del_svlen_is_neg : 1; // VCF: 15.0.48
-            uint32_t unused2              : 1;
+            uint32_t segconf_sample_copy  : 1; // VCF: 15.0.69
             uint32_t max_ploidy_for_mux   : 8; // VCF: 15.0.36
             uint32_t segconf_MATEID_method: 3; // VCF: 15.0.48
             uint32_t segconf_INF_DP_method: 3; // VCF: 15.0.52
@@ -273,7 +276,7 @@ typedef struct {
 
     // ⇧ New non-data-type-specific fields grow upwards at the expense of unused[] ⇧ 
     uint32_t segconf_vb_size;          // in bytes (replaced old_vb_size). 15.0.65
-    uint8_t lic_type;                  // license type used to create this file. 15.0.59.
+    uint8_t lic_type;                  // LicenseType: license type used to create this file. 15.0.59.
 } SectionHeaderGenozipHeader, *SectionHeaderGenozipHeaderP;
 typedef const SectionHeaderGenozipHeader *ConstSectionHeaderGenozipHeaderP;
 
@@ -334,7 +337,7 @@ typedef struct {
     struct { // SAM PRIM - 16 bytes
     uint32_t sam_prim_first_grp_i;     // SAM PRIM: the index of first group of this PRIM VB, in z_file->sag_grps (v14)
     uint32_t sam_prim_comp_qual_len;   // SAM PRIM: total size of SA Group's QUAL, as compressed in-memory in ZIP (v14)
-    uint32_t sam_prim_comp_qname_len;  // SAM PRIM: total length of QNAME in this VB (v14). since 15.0.65: huffman-compressed length ; v14-15.0.64: uncompress length
+    uint32_t sam_prim_comp_qname_len;  // SAM PRIM: total length of QNAME in this VB (v14). since 15.0.65: huffman-compressed length ; v14-15.0.64: uncompressed length
     union {
     uint32_t sam_prim_comp_cigars_len; // SAM PRIM SAG_BY_SA: total size of sag's CIGARs, as compressed in-memory in ZIP (i.e. excluding CIGARs stored in OPTION_SA_CIGAR.dict) (v14)
     uint32_t sam_prim_solo_data_len;   // SAM PRIM SAG_BY_SOLO: size of solo_data: the huffman-compressed length since 15.0.68, and the uncompressed length before
@@ -645,6 +648,7 @@ extern StrText comp_name_(CompIType comp_i);
 
 #define IS_TXT_HEADER(sec) ((sec)->st == SEC_TXT_HEADER)
 #define IS_VB_HEADER(sec)  ((sec)->st == SEC_VB_HEADER)
+#define IS_DICT(sec)       ((sec)->st == SEC_DICT)
 #define IS_LOCAL(sec)      ((sec)->st == SEC_LOCAL)
 #define IS_B250(sec)       ((sec)->st == SEC_B250)
 

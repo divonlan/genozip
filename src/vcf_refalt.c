@@ -98,7 +98,7 @@ static inline void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char ref, char alt
 
         RefLock lock = REFLOCK_NONE;
 
-        Range *range = ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, 1, WORD_INDEX_NONE, 
+        Range *range = ref_seg_get_range (VB, vb->chrom_node_index, STRa(vb->chrom_name), pos, 1, WORD_INDEX_NONE, 
                                           (IS_REF_EXT_STORE ? &lock : NULL));
         if (range) { // this chrom is in the reference
             uint32_t index_within_range = pos - range->first_pos;
@@ -112,7 +112,7 @@ static inline void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char ref, char alt
             if (IS_REF_EXT_STORE)
                 bits_set (&range->is_set, index_within_range);
 
-            ref_unlock (gref, &lock); // does nothing if REFLOCK_NONE
+            ref_unlock (&lock); // does nothing if REFLOCK_NONE
         }
     }
 
@@ -128,7 +128,7 @@ static inline void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char ref, char alt
 
     // if anything was done, we create a "special" snip
     if (new_ref || new_alt) {
-        char refalt_special[4] = { SNIP_SPECIAL, VCF_SPECIAL_main_REFALT };
+        char refalt_special[4] = { SNIP_SPECIAL, VCF_SPECIAL_REFALT };
         refalt_special[2] = new_ref ? new_ref : ref;
         refalt_special[3] = new_alt ? new_alt : alt;
 
@@ -156,7 +156,7 @@ static inline bool vcf_refalt_seg_DEL_against_reference (VBlockVCFP vb, STRp(ref
 
     RefLock lock = REFLOCK_NONE;
 
-    Range *range = ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, ref_len, WORD_INDEX_NONE, 
+    Range *range = ref_seg_get_range (VB, vb->chrom_node_index, STRa(vb->chrom_name), pos, ref_len, WORD_INDEX_NONE, 
                                         (IS_REF_EXT_STORE ? &lock : NULL));
     
     if (!range || pos < range->first_pos || pos + ref_len - 1 > range->last_pos)
@@ -166,17 +166,17 @@ static inline bool vcf_refalt_seg_DEL_against_reference (VBlockVCFP vb, STRp(ref
 
     for (int i=0; i < ref_len; i++)
         if (ref[i] != REF (index_within_range + i)) {
-            ref_unlock (gref, &lock); // does nothing if REFLOCK_NONE
+            ref_unlock (&lock); // does nothing if REFLOCK_NONE
             return false; // REF doesn't match reference
         }
 
-    SNIPi2 (SNIP_SPECIAL, VCF_SPECIAL_main_REFALT_DEL, ref_len);
+    SNIPi2 (SNIP_SPECIAL, VCF_SPECIAL_REFALT_DEL, ref_len);
     seg_by_did (VB, STRa(snip), VCF_REFALT, 0);
 
     if (IS_REF_EXT_STORE)
         bits_set_region (&range->is_set, index_within_range, ref_len);
 
-    ref_unlock (gref, &lock); // does nothing if REFLOCK_NONE
+    ref_unlock (&lock); // does nothing if REFLOCK_NONE
 
     return true;
 }
@@ -203,13 +203,13 @@ void vcf_refalt_seg_REF_ALT (VBlockVCFP vb, STRp(ref), STRp(alt))
     bool do_account = true;
 
     // optimize ref/alt in the common case of single-character
-    if (vb->n_alts == 1 && (ALT0(SNP) || (vb->REF_len == 1 && ALT0(NO_ALT)))) 
+    if (N_ALTS == 1 && (VT0(SNP) || (vb->REF_len == 1 && VT0(NO_ALT)))) 
         vcf_refalt_seg_ref_alt_snp (vb, *ref, *alt);
 
-    else if (vb->n_alts == 1 && ALT0(DEL) && vcf_refalt_seg_DEL_against_reference (vb, STRa(ref), alt[0]))
+    else if (N_ALTS == 1 && VT0(DEL) && vcf_refalt_seg_DEL_against_reference (vb, STRa(ref), alt[0]))
         {}
 
-    else if (vb->n_alts == 1 && ALT0(BND)) {
+    else if (N_ALTS == 1 && VT0(BND)) {
         vcf_refalt_seg_BND (vb);
         do_account = false;
     }
@@ -234,130 +234,128 @@ void vcf_refalt_seg_REF_ALT (VBlockVCFP vb, STRp(ref), STRp(alt))
 // ZIP + PIZ
 void vb_parse_ALT (VBlockVCFP vb)
 {
-    if (vb->n_alts != 0) return; // already parsed
+    if (N_ALTS != 0) return; // already parsed
 
-    vb->n_alts = str_split_do (STRa(vb->ALT), ARRAY_LEN(vb->alts), ',', vb->alts, vb->alt_lens, false, NULL);
+    str_split (vb->ALT, vb->ALT_len, 0, ',', alt_str, false);
+    
+    ARRAY_alloc (AltType, alts, MAX_(1, n_alt_strs), false, CTX(VCF_REFALT)->alts, vb, "alts");
 
-    if (vb->n_alts == 0) {
-        vb->n_alts = -1; // failed
-        vb->var_types[0] = VT_UNKNOWN;
+    if (n_alt_strs == 0) goto vt_unknown;
+
+    STR0(a);
+
+    for (int32_t alt_i=0; alt_i < n_alt_strs; alt_i++) {  
+        a     = alts[alt_i].alt     = alt_strs[alt_i];
+        a_len = alts[alt_i].alt_len = alt_str_lens[alt_i];
+
+        // missing due upstream deletion
+        if (str_is_1char (a, '*'))
+            alts[alt_i].var_type = VT_UPSTRM_DEL;
+
+        else if (str_is_1char (a, '.'))
+            alts[alt_i].var_type = VT_NO_ALT;
+
+        // symbolic alts e.g. "<DEL>"
+        else if (a[0] == '<' && a[a_len-1] == '>') {
+            #define SET_SYM(vt, str) if (a_len >= 5 && a[1]==str[0] && a[2]==str[1] && a[3]==str[2]) alts[alt_i].var_type = VT_##vt; else
+            
+            SET_SYM(SYM_DEL,"DEL")
+            SET_SYM(SYM_INS,"INS")
+            SET_SYM(SYM_DUP,"DUP")
+            SET_SYM(SYM_CNV,"CNV")
+            SET_SYM(SYM_INV,"INV")
+            SET_SYM(SYM_CPX,"CPX")
+            SET_SYM(SYM_CTX,"CTX")
+            // IMPORTANT: when adding types, also update SVTYPE_BY_VT
+            goto unknown;
+        }
+
+        // e.g. ]11:69541170]T or G[11:69485520[
+        else if (str_count_char (STRa(a), ']') == 2 || str_count_char (STRa(a), '[') == 2)
+            alts[alt_i].var_type = VT_BND;
+
+        // e.g. A C
+        else if (vb->REF_len == 1 && a_len == 1) 
+            alts[alt_i].var_type = VT_SNP;
+
+        // e.g. ACG A
+        else if (vb->REF_len > 1 && a_len == 1 && *vb->REF == *a)
+            alts[alt_i].var_type = VT_DEL;
+
+        // e.g. A ACG
+        else if (vb->REF_len == 1 && a_len > 1)
+            alts[alt_i].var_type = VT_INS;
+
+        // e.g. ACGCG ACG
+        else if (vb->REF_len > a_len && !memcmp (vb->REF, a, a_len))
+            alts[alt_i].var_type = VT_DEL_LONG;
+            
+        // e.g. ACG ACGCG
+        else if (vb->REF_len < a_len && !memcmp (vb->REF, a, vb->REF_len))
+            alts[alt_i].var_type = VT_INS_LONG;
+
+        // e.g. ACG TCG
+        else if (vb->REF_len == a_len && !memcmp (vb->REF+1, a+1, vb->REF_len-1))
+            alts[alt_i].var_type = VT_SNP_LONG;
+        
+        // e.g. ATATGTG ATG - left anchored, part of remaining bases after deletion are substituted 
+        else if (vb->REF_len > a_len && *vb->REF == *a)
+            alts[alt_i].var_type = VT_SUBST_DEL;
+
+        // e.g. ATG ATATGTG - left anchored, part of ref is substituted, and then insertion 
+        else if (vb->REF_len < a_len && *vb->REF == *a)
+            alts[alt_i].var_type = VT_SUBST_INS;
+
+        // e.g. ATG ACG - left anchored
+        else if (vb->REF_len == a_len && *vb->REF == *a)
+            alts[alt_i].var_type = VT_SUBST;
+
+        else unknown:
+            alts[alt_i].var_type = VT_UNKNOWN; // need to reset as could be set by previous line
     }
 
-    else {
-        STR0(a);
+    // note: it is possible to BND alleles on other alts too, not just alt[0], but we analyze only for [0] for now
+    if (VT0(BND)) {
+        if (vb->REF_len != 1) goto vt_unknown; // expecting REF to be a single base
 
-        for (int alt_i=0; alt_i < vb->n_alts; alt_i++) {  
-            a     = vb->alts[alt_i];
-            a_len = vb->alt_lens[alt_i];
+        vb->mate_chrom_name = strpbrk (a, "[]") + 1; // [ or ] definitely exists - we tested earlier
+        char *colon = memchr (vb->mate_chrom_name, ':', &a[a_len] - vb->mate_chrom_name); // at least one character for pos
+        if (!colon) goto vt_unknown; // syntax error - no colon
+        
+        vb->mate_chrom_name_len = colon - vb->mate_chrom_name;
 
-            // missing due upstream deletion
-            if (str_is_1char (a, '*'))
-                vb->var_types[alt_i] = VT_UPSTRM_DEL;
+        char *after_pos;
+        vb->mate_pos = strtoul (colon + 1, &after_pos, 10); 
 
-            else if (str_is_1char (a, '.'))
-                vb->var_types[alt_i] = VT_NO_ALT;
+        if (!vb->mate_pos || *after_pos != vb->mate_chrom_name[-1]) // second bracket needs to be the same as first one
+            goto vt_unknown; // syntax error - brackets mismatch
 
-            // symbolic alts e.g. "<DEL>"
-            else if (a[0] == '<' && a[a_len-1] == '>') {
-                #define SET_SYM(vt, str) if (a_len >= 5 && a[1]==str[0] && a[2]==str[1] && a[3]==str[2]) vb->var_types[alt_i] = VT_##vt; else
-                
-                SET_SYM(SYM_DEL,"DEL")
-                SET_SYM(SYM_INS,"INS")
-                SET_SYM(SYM_DUP,"DUP")
-                SET_SYM(SYM_CNV,"CNV")
-                SET_SYM(SYM_INV,"INV")
-                SET_SYM(SYM_CPX,"CPX")
-                SET_SYM(SYM_CTX,"CTX")
-                // IMPORTANT: when adding types, also update SVTYPE_BY_VT
-                goto unknown;
-            }
-
-            // e.g. ]11:69541170]T or G[11:69485520[
-            else if (str_count_char (STRa(a), ']') == 2 || str_count_char (STRa(a), '[') == 2)
-                vb->var_types[alt_i] = VT_BND;
-
-            // e.g. A C
-            else if (vb->REF_len == 1 && a_len == 1) 
-                vb->var_types[alt_i] = VT_SNP;
-
-            // e.g. ACG A
-            else if (vb->REF_len > 1 && a_len == 1 && *vb->REF == *a)
-                vb->var_types[alt_i] = VT_DEL;
-
-            // e.g. A ACG
-            else if (vb->REF_len == 1 && a_len > 1)
-                vb->var_types[alt_i] = VT_INS;
-
-            // e.g. ACGCG ACG
-            else if (vb->REF_len > a_len && !memcmp (vb->REF, a, a_len))
-                vb->var_types[alt_i] = VT_DEL_LONG;
-                
-            // e.g. ACG ACGCG
-            else if (vb->REF_len < a_len && !memcmp (vb->REF, a, vb->REF_len))
-                vb->var_types[alt_i] = VT_INS_LONG;
-
-            // e.g. ACG TCG
-            else if (vb->REF_len == a_len && !memcmp (vb->REF+1, a+1, vb->REF_len-1))
-                vb->var_types[alt_i] = VT_SNP_LONG;
-            
-            // e.g. ATATGTG ATG - left anchored, part of remaining bases after deletion are substituted 
-            else if (vb->REF_len > a_len && *vb->REF == *a)
-                vb->var_types[alt_i] = VT_SUBST_DEL;
-
-            // e.g. ATG ATATGTG - left anchored, part of ref is substituted, and then insertion 
-            else if (vb->REF_len < a_len && *vb->REF == *a)
-                vb->var_types[alt_i] = VT_SUBST_INS;
-
-            // e.g. ATG ACG - left anchored
-            else if (vb->REF_len == a_len && *vb->REF == *a)
-                vb->var_types[alt_i] = VT_SUBST;
-
-            else unknown:
-                vb->var_types[alt_i] = VT_UNKNOWN; // need to reset as could be set by previous line
+        // BND type 0, eg: REF=A ALT="AAACTCCT[hs37d5:33588521["
+        // BND type 1: eg: REF=A ALT="AAACTCCT]hs37d5:33588521]"
+        if (a[a_len-1] == '[' || a[a_len-1] == ']') {
+            if (*a != *vb->REF) goto vt_unknown;
+            vb->BND_type = (a[a_len-1] == '[') ? 0 : 1;
+            vb->BND_INS.index = BNUMtxt(&a[1]);
+            vb->BND_INS.len = vb->mate_chrom_name - a - 2;
         }
 
-        // note: it is possible to BND alleles on other alts too, not just alt[0], but we analyze only for [0] for now
-        if (ALT0(BND)) {
-            if (vb->REF_len != 1) goto vt_unknown; // expecting REF to be a single base
-
-            vb->mate_chrom_name = strpbrk (a, "[]") + 1; // [ or ] definitely exists - we tested earlier
-            char *colon = memchr (vb->mate_chrom_name, ':', &a[a_len] - vb->mate_chrom_name); // at least one character for pos
-            if (!colon) goto vt_unknown; // syntax error - no colon
-            
-            vb->mate_chrom_name_len = colon - vb->mate_chrom_name;
-
-            char *after_pos;
-            vb->mate_pos = strtoul (colon + 1, &after_pos, 10); 
-
-            if (!vb->mate_pos || *after_pos != vb->mate_chrom_name[-1]) // second bracket needs to be the same as first one
-                goto vt_unknown; // syntax error - brackets mismatch
-
-            // BND type 0, eg: REF=A ALT="AAACTCCT[hs37d5:33588521["
-            // BND type 1: eg: REF=A ALT="AAACTCCT]hs37d5:33588521]"
-            if (a[a_len-1] == '[' || a[a_len-1] == ']') {
-                if (*a != *vb->REF) goto vt_unknown;
-                vb->BND_type = (a[a_len-1] == '[') ? 0 : 1;
-                vb->BND_INS.index = BNUMtxt(&a[1]);
-                vb->BND_INS.len = vb->mate_chrom_name - a - 2;
-            }
-
-            // BND type 2: REF=G ALT="[hs37d5:35428323[TAAGAGCCGCTGGCTGGCTGTCCGGGCAGGCCTCCTGGCTGCACCTGCCACAGTGCACAGGCTGACTGAGGTGCACG"
-            // BND type 3: REF=G ALT="]hs37d5:35428323]TAAGAGCCGCTGGCTGGCTGTCCGGGCAGGCCTCCTGGCTGCACCTGCCACAGTGCACAGGCTGACTGAGGTGCACG"
-            else if (a[0] == '[' || a[0] == ']') {
-                if (a[a_len-1] != *vb->REF) goto vt_unknown;
-                vb->BND_type = (a[0] == '[') ? 2 : 3;
-                vb->BND_INS.index = BNUMtxt (&after_pos[1]); 
-                vb->BND_INS.len = &a[a_len-1] - &after_pos[1]; // length of terminating sequence, but excluding reference base
-            }
-
-            else goto vt_unknown;
+        // BND type 2: REF=G ALT="[hs37d5:35428323[TAAGAGCCGCTGGCTGGCTGTCCGGGCAGGCCTCCTGGCTGCACCTGCCACAGTGCACAGGCTGACTGAGGTGCACG"
+        // BND type 3: REF=G ALT="]hs37d5:35428323]TAAGAGCCGCTGGCTGGCTGTCCGGGCAGGCCTCCTGGCTGCACCTGCCACAGTGCACAGGCTGACTGAGGTGCACG"
+        else if (a[0] == '[' || a[0] == ']') {
+            if (a[a_len-1] != *vb->REF) goto vt_unknown;
+            vb->BND_type = (a[0] == '[') ? 2 : 3;
+            vb->BND_INS.index = BNUMtxt (&after_pos[1]); 
+            vb->BND_INS.len = &a[a_len-1] - &after_pos[1]; // length of terminating sequence, but excluding reference base
         }
+
+        else goto vt_unknown;
     }
 
     return;
 
-vt_unknown:
-    vb->var_types[0] = VT_UNKNOWN;
+vt_unknown: // syntax error in ALT field
+    buf_append (vb, CTX(VCF_REFALT)->alts, AltType, &(AltType){ .var_type = VT_UNKNOWN }, 1, "alts"); // so VT0 works (is this needed?)
+    N_ALTS = 0; 
 }
 
 // item callback of REFALT in TOPLEVEL, called with files compressed starting 14.0.12
@@ -386,7 +384,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_obsolete_dvcf)
 // Sometimes called to reconstruct the "main" refalt (main AT THE TIME OF SEGGING), to reconstruct SNPs that were stored relative to a reference.
 // This SPECIAL is only used for lines that are bi-allelic SNPs, and either REF or ALT match reference and user compressed with --reference. 
 // Not used if compressed with --chain.
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_main_REFALT)
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_REFALT)
 {
     if (!reconstruct) goto done;
 
@@ -399,7 +397,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_main_REFALT)
     if (snip[0] == '-' || snip[1] == '-') { 
         PosType32 pos = CTX (VCF_POS)->last_value.i;
 
-        ConstRangeP range = ref_piz_get_range (vb, gref, HARD_FAIL);
+        ConstRangeP range = ref_piz_get_range (vb, HARD_FAIL);
         
         uint32_t idx = pos - range->first_pos;
 
@@ -439,7 +437,7 @@ done:
 
 // Sometimes called to reconstruct the "main" refalt (main AT THE TIME OF SEGGING), 
 // to reconstruct deletions that were stored relative to a reference.
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_main_REFALT_DEL)
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_REFALT_DEL)
 {
     if (!reconstruct) goto done;
 
@@ -447,7 +445,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_main_REFALT_DEL)
      
     PosType32 pos = CTX (VCF_POS)->last_value.i;
 
-    ConstRangeP range = ref_piz_get_range (vb, gref, HARD_FAIL);
+    ConstRangeP range = ref_piz_get_range (vb, HARD_FAIL);
         
     uint32_t idx = pos - range->first_pos;
 
@@ -465,7 +463,7 @@ done:
     return NO_NEW_VALUE;
 }   
 
-// used by FORMAT/PS - reconstructs REF or ALT depending on the parameter - '0' REF or '1'..MAX_ALLELES-1 - ALT
+// used by FORMAT/PS - reconstructs REF or ALT depending on the parameter - '0' REF or >='1' - ALT
 SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_COPY_REForALT)
 {
     VBlockVCFP vb = (VBlockVCFP)vb_;
@@ -476,10 +474,10 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_COPY_REForALT)
         RECONSTRUCT_str (vb->REF);
 
     else {
-        int allele = (snip_len == 1) ? (*snip - '0')
-                                     : (snip[0] - '0') * 10 + (snip[1] - '0');
+        long allele = (snip_len == 1) ? (*snip - '0') // short cut for common case. note: it seems from the seg code that allele is either '0' or '1'
+                                      : strtol (snip, NULL, 10);
         
-        RECONSTRUCT (vb->alts[allele-1], vb->alt_lens[allele-1]);
+        RECONSTRUCT_str (ALTi(allele-1)->alt);
     }
 
     return NO_NEW_VALUE;
@@ -489,8 +487,8 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_COPY_REForALT)
 bool vcf_refalt_piz_is_variant_snp (VBlockVCFP vb)
 {
     // true if ALL alts are SNPs
-    for (int alt_i=0; alt_i < vb->n_alts; alt_i++)
-        if (vb->var_types[alt_i] != VT_SNP) return false;
+    for_alt
+        if (alt->var_type != VT_SNP) return false;
 
     return true;
 }
@@ -498,13 +496,14 @@ bool vcf_refalt_piz_is_variant_snp (VBlockVCFP vb)
 // --indels-only implementation (called from vcf_piz_container_cb)
 bool vcf_refalt_piz_is_variant_indel (VBlockVCFP vb)
 {
-    #define VT(x) (vb->var_types[alt_i] == VT_##x)
+    #define VT(x) (alt->var_type == VT_##x)
 
     // true is ANY alt is an indel
-    for (int alt_i=0; alt_i < vb->n_alts; alt_i++)
+    for_alt
         if (VT(DEL) || VT(DEL_LONG) || VT(SYM_DEL) || VT(SUBST_DEL) ||  
             VT(INS) || VT(INS_LONG) || VT(SYM_INS) || VT(SUBST_INS))
             return true;
 
     return false;
+    #undef VT
 }

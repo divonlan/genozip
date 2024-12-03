@@ -18,10 +18,9 @@ void sam_seg_bsbolt_YS_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(ys), unsigned 
     ASSSEG (ys_len == 5 && (ys[0]=='W' || ys[0]=='C') && (!memcmp (ys+1, "_C2T", 4) || !memcmp (ys+1, "_G2A", 4)),
             "Invalid YS:Z=%.*s value: expecting one of: W_C2T ; W_G2A ; C_C2T ; C_G2A", STRf(ys));
 
-    seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_BSBOLT_YS, 
-                              vb->bisulfite_strand?'*' : ((ys[0] == 'C') == dl->FLAG.rev_comp)?'^' : ys[0],
-                              ys[2] }, 
-                4, OPTION_YS_Z, add_bytes);
+    seg_special2 (VB, SAM_SPECIAL_BSBOLT_YS, 
+                  vb->bisulfite_strand?'*' : ((ys[0] == 'C') == dl->FLAG.rev_comp)?'^' : ys[0], ys[2], 
+                  CTX(OPTION_YS_Z), add_bytes);
 }
 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_BSBOLT_YS)
@@ -61,8 +60,8 @@ void sam_seg_bsbolt_XB_Z_analyze (VBlockSAMP vb, ZipDataLineSAMP dl)
                               xb_i += after - &xb[xb_i];                \
                           }; number; })                                            
 
-    for_buf (BamCigarOp, op, vb->binary_cigar) 
-        if (op->op==BC_M || op->op==BC_E || op->op==BC_X) 
+    for_cigar (vb->binary_cigar) {
+        case BC_M: case BC_E: case BC_X: 
             for (uint32_t i=0; i < op->n; i++) {
                 if (!number && IS_DIGIT(xb[xb_i])) set_number; 
 
@@ -78,32 +77,36 @@ void sam_seg_bsbolt_XB_Z_analyze (VBlockSAMP vb, ZipDataLineSAMP dl)
                 pos++;
                 ref_consumed--;
             }
+            break;
 
-        else if (op->op == BC_D || op->op == BC_N) {
+        case BC_D: case BC_N:
             pos += op->n;
             ref_consumed -= op->n;
-        }
+            break;
         
         // note: soft-clip (BC_S) bases are not represented in the XB:Z string
-        else if (op->op == BC_I) {
+        case BC_I:
             set_number;
             ASSSEG (number >= op->n, "expecting number=%u >= op->n=%u (XB:Z=\"%.*s\" CIGAR=\"%s\")", 
                     number, op->n, STRf(xb),
-                    dis_binary_cigar (vb, B1ST(BamCigarOp, vb->binary_cigar), vb->binary_cigar.len32, &vb->scratch).s);
+                    dis_binary_cigar (VB, B1ST(BamCigarOp, vb->binary_cigar), vb->binary_cigar.len32, &vb->scratch).s);
 
             number -= op->n;
-        }
+            break;
+
+        default: {}
+    }
 
     ASSSEG (xb_i == xb_len, "Mismatch between XB:Z=\"%.*s\" and CIGAR=\"%s\" (xb_i=%u xb_len=%u)", STRf(xb), 
-            dis_binary_cigar (vb, B1ST(BamCigarOp, vb->binary_cigar), vb->binary_cigar.len32, &vb->scratch).s, xb_i, xb_len);
+            dis_binary_cigar (VB, B1ST(BamCigarOp, vb->binary_cigar), vb->binary_cigar.len32, &vb->scratch).s, xb_i, xb_len);
 
-    if (range) ref_unlock (gref, &lock);
+    if (range) ref_unlock (&lock);
 }
 
 static void show_wrong_xb (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(XB), rom extra)
 {
     iprintf ("%s: QNAME=\"%.*s\" bisulfite_strand=%c XB=\"%.*s\" CIGAR=\"%.*s\" %s\n", 
-             LN_NAME, STRfw(dl->QNAME), vb->bisulfite_strand, STRf(XB), STRfw(dl->CIGAR), extra);
+             LN_NAME, dl->QNAME_len, dl_qname(dl), vb->bisulfite_strand, STRf(XB), STRfw(dl->CIGAR), extra);
     if (vb->scratch.len32)   printf ("XM: %.*s\n", STRfb(vb->scratch));
     if (vb->meth_call.len32) printf ("SQ: %.*s\n\n", STRfb(vb->meth_call));
 }
@@ -156,7 +159,7 @@ void sam_seg_bsbolt_XB (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(XB), unsigned ad
 
     if (xb_i < XB_len || bis_i < after_bis) goto fallback;
 
-    if (flag.show_wrong_xb && !segconf.running && vb->scratch.len32 && vb->meth_call.len32 && !str_issame_(STRb(vb->scratch),STRb(vb->meth_call))) 
+    if (flag.show_wrong_xb && !segconf_running && vb->scratch.len32 && vb->meth_call.len32 && !str_issame_(STRb(vb->scratch),STRb(vb->meth_call))) 
         show_wrong_xb (vb, dl, STRa(XB), vb->meth_call.len ? "" : "(no meth_call)");
 
     COPY_TIMER (sam_seg_bsbolt_XB); // note: sam_seg_bismark_XM_Z accounts for itself
@@ -167,7 +170,7 @@ void sam_seg_bsbolt_XB (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(XB), unsigned ad
     return;
  
 fallback:
-    if (flag.show_wrong_xb && !segconf.running) 
+    if (flag.show_wrong_xb && !segconf_running) 
         show_wrong_xb (vb, dl, STRa(XB), "(fallback)");
 
     buf_free (vb->scratch);

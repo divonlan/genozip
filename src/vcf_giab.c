@@ -21,7 +21,7 @@ void vcf_giab_zip_initialize (void)
 
 void vcf_giab_seg_initialize (VBlockVCFP vb)
 {
-    seg_mux_init (vb, FORMAT_IGT, VCF_SPECIAL_MUX_BY_SAMPLE_I,  false, IGT);
+    seg_mux_init (vb, FORMAT_IGT, VCF_SPECIAL_MUX_BY_IS_SAMPLE_0,  false, IGT);
     seg_mux_init (vb, FORMAT_IPS, VCF_SPECIAL_MUX_BY_IGT_PHASE, false, IPS);
 }
 
@@ -75,24 +75,25 @@ void vcf_seg_FORMAT_IGT (VBlockVCFP vb, ContextP ctx, STRp(igt))
         seg_mux_get_channel_ctx (VB, FORMAT_IGT, (MultiplexerP)&vb->mux_IGT, (vb->sample_i > 0));
 
     if (vb->sample_i == 0) {
-        Allele *gt = this_sample_GT (vb);
+        Allele ht0 = CTX(FORMAT_GT)->gt.ht[0];
+        Allele ht1 = CTX(FORMAT_GT)->gt.ht[1];
         
         // case monoploid: predicting GT=IGT
-        if (str_is_1char (igt, *gt))
-            seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_IGT }, 2, channel_ctx, igt_len);     
+        if (str_is_1char (igt, ht0))
+            seg_special0 (VB, VCF_SPECIAL_IGT, channel_ctx, igt_len);     
 
         // case: unphased diploid IGT: predicting GT=IGT, possibly flipping the order so that the smaller allele appears first
-        else if (igt[1] == '/' && (   (gt[0] <= gt[1] && igt[0] == gt[0] && igt[2] == gt[1])
-                                   || (gt[0] >  gt[1] && igt[0] == gt[1] && igt[2] == gt[0])))
-            seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_IGT, '/' }, 3, channel_ctx, igt_len);     
+        else if (igt[1] == '/' && (   (ht0 <= ht1 && igt[0] == ht0 && igt[2] == ht1)
+                                   || (ht0 >  ht1 && igt[0] == ht1 && igt[2] == ht0)))
+            seg_special1 (VB, VCF_SPECIAL_IGT, '/', channel_ctx, igt_len);     
 
         // case phased diploid IGT: predicting IGT alleles = GT alleles
-        else if (igt[1] == '|' && igt[0] == gt[0] && igt[2] == gt[1])
-            seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_IGT, '|' }, 3, channel_ctx, igt_len);     
+        else if (igt[1] == '|' && igt[0] == ht0 && igt[2] == ht1)
+            seg_special1 (VB, VCF_SPECIAL_IGT, '|', channel_ctx, igt_len);     
 
         // case phased diploid IGT: predicting IGT alleles = GT alleles, but in reverse order
-        else if (igt[1] == '|' && igt[0] == gt[1] && igt[2] == gt[0])
-            seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_IGT, ':' }, 3, channel_ctx, igt_len);     
+        else if (igt[1] == '|' && igt[0] == ht1 && igt[2] == ht0)
+            seg_special1 (VB, VCF_SPECIAL_IGT, ':', channel_ctx, igt_len);     
 
         else
             goto fallback;
@@ -104,7 +105,7 @@ void vcf_seg_FORMAT_IGT (VBlockVCFP vb, ContextP ctx, STRp(igt))
     seg_by_ctx (VB, STRa(vb->mux_IGT.snip), ctx, 0);
 }
 
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_SAMPLE_I)
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_IS_SAMPLE_0)
 {    
     int channel_i = (vb->sample_i > 0);
 

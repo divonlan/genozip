@@ -89,15 +89,15 @@ ifdef linux_x86
 	x86_64 := 1
 	ASFLAGS := -f elf64 -DINTEL_CET_ENABLED -DAS_FEATURE_LEVEL=10 -DHAVE_AS_KNOWS_AVX512
 	# DEBUGFLAGS += -fsanitize=undefined
-	# DEBUGFLAGS += -fsanitize=thread -Dsantize_thread
-	DEBUGFLAGS += -fsanitize=address -Dsanitize_address # not compatable with valgrind - comment out if using valgrind
+	DEBUGFLAGS += -fsanitize=thread -Dsanitize_thread=1
+	# DEBUGFLAGS += -fsanitize=address -Dsanitize_address=1 # not compatable with valgrind - comment out if using valgrind
 endif
 
 ifdef osx_x86
 	AS := nasm
 	x86_64 := 1
 	ASFLAGS := -f macho64 --prefix=_ -DAS_FEATURE_LEVEL=10 -DHAVE_AS_KNOWS_AVX512
-	DEBUGFLAGS += -fsanitize=address -Dsanitize_address
+	DEBUGFLAGS += -fsanitize=address -Dsanitize_address=1
 endif	
 
 ifdef osx_arm64
@@ -150,18 +150,19 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c crc64.c stats.c arc
 		  vcf_refalt.c vcf_format.c vcf_illum_gtyping.c vcf_gwas.c vcf_vagrent.c vcf_svaba.c vcf_pbsv.c			\
 		  vcf_icgc.c vcf_snpeff.c vcf_cosmic.c vcf_mastermind.c vcf_isaac.c	vcf_manta.c vcf_pos.c vcf_ultima.c	\
 		  vcf_platypus.c vcf_info_AC_AF_AN.c vcf_format_GQ.c vcf_gatk.c vcf_sv.c vcf_gnomad.c vcf_freebayes.c	\
+		  vcf_local_alleles.c vcf_copy_sample.c	vcf_info_DP.c   												\
 		  sam_seg.c sam_piz.c sam_shared.c sam_header.c sam_md.c sam_nm.c sam_tlen.c sam_cigar.c sam_fields.c  	\
 		  sam_sa.c bam_seg.c bam_seq.c bam_show.c sam_pacbio.c sam_ultima.c sam_xcons.c cram.c agilent.c   		\
 		  sam_seq.c sam_qual.c sam_sag_zip.c sam_sag_piz.c sam_sag_load.c sam_sag_ingest.c sam_sag_scan.c    	\
 		  sam_bwa.c sam_bowtie2.c sam_bsseeker2.c sam_bsbolt.c sam_bismark.c sam_gem3.c sam_tmap.c sam_hisat2.c \
-		  sam_blasr.c sam_dragen.c sam_minimap2.c sam_10xGenomics.c sam_biobambam.c sam_pos.c sam_deep.c 		\
-		  sam_star.c sam_abra2.c sam_cpu.c sam_modify.c sam_recon_plan_piz.c gencomp_zip.c gencomp_piz.c		\
-		  fastq.c fastq_desc.c fastq_seq.c fastq_qual.c fastq_deep.c fastq_saux.c deep.c						\
+		  sam_blasr.c sam_dragen.c sam_10xGenomics.c sam_biobambam.c sam_pos.c sam_deep.c sam_cpu.c   			\
+		  sam_star.c sam_abra2.c sam_minimap2.c sam_modify.c sam_recon_plan_piz.c gencomp_zip.c gencomp_piz.c	\
+		  fastq.c fastq_desc.c fastq_seq.c fastq_qual.c fastq_deep.c fastq_saux.c fastq_bamass.c deep.c			\
 		  fasta.c gff.c bed.c me23.c locs.c generic.c lookback.c compressor.c 									\
 		  buffer.c buf_struct.c buf_list.c random_access.c sections.c base64.c mgzip.c coverage.c txtheader.c  	\
 		  codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_bsc.c codec_pacb.c					\
 		  codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c codec_normq.c codec_homp.c codec_t0.c		\
-		  codec_smux.c codec_oq.c																				\
+		  codec_smux.c codec_oq.c																	\
 	      txtfile.c profiler.c file.c filename.c dispatcher.c crypt.c aes.c md5.c segconf.c biopsy.c 			\
 		  vblock.c regions.c dict_id.c aliases.c hash.c stream.c url.c bases_filter.c dict_io.c					\
 		  version.c huffman.c user_message.c b250.c qname_filter.c
@@ -193,11 +194,11 @@ INCLUDES += dict_id_gen.h aes.h dispatcher.h profiler.h dict_id.h aliases.h txtf
             endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h huffman.h 					\
             buffer.h buf_struct.h buf_list.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h 		\
             crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h qname.h qname_flavors.h codec.h  		\
-		 	lookback.h tokenizer.h codec_longr_alg.c gencomp.h dict_io.h tip.h deep.h filename.h stats.h multiplexer.h \
-		 	reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h mgzip.h coverage.h threads.h local_type.h					\
+		 	lookback.h tokenizer.h codec_longr_alg.c gencomp.h dict_io.h tip.h deep.h filename.h stats.h multiplexer.h 						\
+		 	reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h mgzip.h coverage.h threads.h local_type.h sorter.h			\
 			arch.h license.h file_types.h data_types.h base64.h txtheader.h writer.h writer_private.h zriter.h bases_filter.h genols.h 		\
-			contigs.h chrom.h vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h gff.h bed.h locs.h generic.h 			\
-			fastq.h fastq_private.h user_message.h mac_compat.h b250.h zip_dyn_int.h qname_filter.h 										\
+			contigs.h chrom.h vcf.h vcf_private.h sam.h sam_private.h sam_friend.h me23.h fasta.h fasta_private.h gff.h bed.h locs.h		\
+			generic.h fastq.h fastq_private.h user_message.h mac_compat.h b250.h zip_dyn_int.h qname_filter.h 								\
 			\
 			zlib/gzguts.h zlib/zconf.h zlib/deflate.h zlib/trees.h zlib/zlib.h zlib/zutil.h													\
 			\
@@ -452,7 +453,8 @@ GENDICT_OBJS := $(addprefix $(OBJDIR)/,$(GENDICT_SRCS:.c=.o))
 # Step 2: dict_id_gen.sh compiles dict_id_gen.c and generate dict_id_gen[.exe]
 # Step 3. dict_id_gen.sh generates dict_id_gen.h: it uses dict_id_gen[.exe]to generate the field constant, and then adds the fields enum and mapping
 ifdef Windows
-dict_id_gen.h : $(shell egrep -w "GENDICT|SPECIAL" *.h | cut -d: -f1 | uniq) dict_id_gen.sh
+OB := \( # an escaped open-bracket sent as-is to egrep
+dict_id_gen.h : $(shell egrep -w "GENDICT|SPECIAL $(OB)" *.h | cut -d: -f1 | uniq) dict_id_gen.sh
 	@echo Generating $@
 	@./dict_id_gen.sh $(CC)
 

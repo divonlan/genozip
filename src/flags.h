@@ -41,8 +41,8 @@ typedef packed_enum { NOT_PAIRED,       // ZIP and PIZ
                       PAIRED,           // PIZ: z_file is paired ; ZIP: --pair or --deep with paired FASTQ
                     } PairType; 
 #define PAIR_TYPE_NAMES { "NOT_PAIRED", "PAIR_R1", "PAIR_R2", "PAIRED" }
-#define IS_R1 (flag.pair == PAIR_R1)
-#define IS_R2 (flag.pair == PAIR_R2)
+#define IS_R1 (flag.pair == PAIR_R1 && !flag.preprocessing)
+#define IS_R2 (flag.pair == PAIR_R2 && !flag.preprocessing)
 
 // make a single-byte flag padded to 4 bytes, so we can easily assign to it in flags_init_from_command_line
 #ifdef __LITTLE_ENDIAN__
@@ -56,7 +56,7 @@ typedef struct {
     // genozip options that affect the compressed file
     int fast, best, low_memory, make_reference, multiseq, md5, secure_DP, not_paired,
         deep; // deep is set with --deep in ZIP and from SectionHeaderGenozipHeader.flags.genozip_header.dts2_deep in PIZ
-    rom vblock;
+    rom vblock, bam_assist;
     int64_t sendto;
     
     // ZIP: data modifying options
@@ -117,7 +117,7 @@ typedef struct {
         no_eval,     // don't allow features on eval basis (used for testing permissions)
         from_url;    // used for stats
     rom test_i;      // test of test.sh currently running (undocumented)
-    rom threads_str, out_filename, out_dirname, files_from, do_register;
+    rom threads_str, out_filename, out_dirname, files_from, do_activate;
     rom lic_param;   // format: width,type - invoked by Makefile
     FileType stdin_type; // set by the --input command line option
     bool explicitly_generic; // user explicitly set the type to generic
@@ -132,7 +132,7 @@ typedef struct {
     CompIType show_stats_comp_i;
 
     // analysis
-    int list_chroms, idxstats;
+    int show_contigs, idxstats;
     enum { CNT_NONE, CNT_TOTAL, CNT_VBs } count; 
     enum { COV_NONE, COV_ALL, COV_CHROM, COV_ONE } show_coverage;
     
@@ -145,7 +145,7 @@ typedef struct {
         show_threads, show_uncompress, biopsy, skip_segconf, show_data_type,
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
         debug_LONG, show_qual, debug_qname, debug_read_ctxs, debug_sag, debug_gencomp, debug_lines, debug_latest,
-        debug_peek, stats_submit, debug_submit, show_segconf_has, debug_huffman, show_huffman, debug_split, debug_upgrade,
+        debug_peek, stats_submit, debug_submit, show_segconf_has, debug_split, debug_upgrade,
         debug_debug,  // a flag with no functionality - used for ad-hoc debugging  
         debug_valgrind, debug_tar, // ad-hoc debug printing in prod
         show_compress, show_sec_gencomp, show_scan,
@@ -162,20 +162,35 @@ typedef struct {
     int32_t dump_section_i, show_header_section_i;
     enum { SHOW_DEEP_SUMMARY=1, SHOW_DEEP_ONE_HASH=2, SHOW_DEEP_ALL=3 } show_deep;
 
+    // use __builtin_expect for show/debug flags that are tested throughout execution (i.e. not just during initialization or finalization)
+    #define flag_show_deep       __builtin_expect (flag.show_deep > 0,   false)
+    #define flag_show_threads    __builtin_expect (flag.show_threads,    false)
+    #define flag_show_bgzf       __builtin_expect (flag.show_bgzf,       false)
+    #define flag_show_snips      __builtin_expect (flag.show_snips,      false)
+    #define flag_show_stack      __builtin_expect (flag.show_stack,      false)
+    #define flag_show_containers __builtin_expect (flag.show_containers, false)
+    #define flag_show_memory     __builtin_expect (flag.show_memory,     false)
+    #define flag_debug_peek      __builtin_expect (flag.debug_peek,      false)
+    #define flag_debug_gencomp   __builtin_expect (flag.debug_gencomp,   false)
+    #define flag_has_biopsy_line __builtin_expect (flag.biopsy_line.line_i != NO_LINE, false) // ZIP: --biopsy-line is used
+    #define flag_no_biopsy_line  __builtin_expect (flag.biopsy_line.line_i == NO_LINE, true)  // ZIP: --biopsy-line is not used
+
     CompIType show_time_comp_i;   // comp_i for which to show time (possibly COMP_NONE or COMP_ALL)
     
-    #define has_biopsy_line biopsy_line.line_i != NO_LINE // ZIP: --biopsy-line is used
-    #define no_biopsy_line  biopsy_line.line_i == NO_LINE // ZIP: --biopsy-line is not used
     #define flag_has_head   (flag.lines_last != NO_LINE)  // ZIP: --head PIZ: --head or --lines is used
     #define flag_has_tail   (flag.lines_last != NO_LINE || flag.tail)  // PIZ: --tail or --lines is used    
-    #define zip_is_biopsy   (flag.biopsy || flag.has_biopsy_line) // ZIP: either --biopsy or --biopsy-line is used
+    #define zip_is_biopsy   __builtin_expect (flag.biopsy || flag_has_biopsy_line, false) // ZIP: either --biopsy or --biopsy-line is used
     
+    #define deep_or_bamass (flag.deep ? "deep" : "bamass")
+
     struct biopsy_line { VBIType vb_i; int32_t line_i/*within vb*/; } biopsy_line; // argument of --biopsy-line (line_i=-1 means: not used)
     DeepHash debug_deep_hash; // qname, seq, qual hashes
     int deep_num_fastqs;
     
     DictId dict_id_show_one_b250,   // argument of --show-b250-one
            show_one_counts,
+           show_huffman_dict_id,
+           debug_huffman_dict_id,
            show_singletons_dict_id, // argument of --show-singletons
            dump_one_b250_dict_id,   // argument of --dump-b250-one
            dump_one_local_dict_id,  // argument of --dump-local-one
@@ -188,7 +203,8 @@ typedef struct {
     // internal flags set by the system, not the command line
     CompIType zip_comp_i;    // ZIP only: currently zipping component (copied into VBlock.comp_i, FlagsTxtHeader.comp_i, SectionEntFileFormat.comp_i)
     bool is_windows, is_mac, is_linux, is_wsl, // set according to OS
-         is_lten,            // set according to endianness   
+         is_lten,            // set according to endianness  
+         is_sanitize_thread, // build includes -fsanitize=thread 
          explicit_out_dt,    // genocat - out txt file data type set explicitly from command line
          aligner_available,  // ZIP: compression requires using the aligner
          dont_load_ref_file, // PIZ (genocat): we don't need to load the reference data
@@ -198,7 +214,6 @@ typedef struct {
          no_writer,          // PIZ: User requested to genocat with only metadata to be shown, not file contents (but we still might do reconstruction without output)
          no_writer_thread,   // PIZ: Don't use a Writer thread. Sometimes when no_writer, we still need a writer thread (eg to calculate digest with SAM generated components)
          zip_no_z_file,      // ZIP: a mode where no z_file is created (eg biopsy)
-         preprocessing,      // PIZ: we're currently dispatching compute threads for preprocessing (= loading SA Groups)
          multiple_files,     // Command line includes multiple files
          reconstruct_as_src, // the reconstructed data type is the same as the source data type
          maybe_lines_dropped_by_reconstructor,
@@ -216,11 +231,11 @@ typedef struct {
          deep_sam_only,      // PIZ: only SAM data is needed, no need to create deep_ents
          deep_no_qual,       // ZIP: don't deep QUAL data
          removing_cache,     // genocat: running --no-cache with only -e <ref-file> to remove cache
-         let_OS_cleanup_on_exit; // don't release resources as we are about to exit - the OS does it faster
+         let_OS_cleanup_on_exit, // don't release resources as we are about to exit - the OS does it faster
+         reading_reference;  // system is currently reading a reference
     int only_headers,        // genocat --show_headers (not genounzip) show only headers (value is section_type+1 or SHOW_ALL_HEADERS)
         check_latest;        // PIZ: run with "genozip --decompress --test": ZIP passes this to PIZ upon testing of the last file
-
-    Reference reading_reference;  // system is currently reading a reference
+    enum { NO_PREPROC, PREPROC_RUNNING, PREPROC_FINALIZING } preprocessing; // we're currently dispatching compute threads for preprocessing (PIZ: loading SA Groups, ZIP: loading bamass ents)
 
 #define flag_loading_auxiliary (flag.reading_reference) // PIZ: currently reading auxiliary file (reference etc)
 
@@ -236,7 +251,8 @@ typedef struct {
 extern Flags flag;
 
 #define SAVE_FLAGS Flags save_flag = flag
-#define RESTORE_FLAGS flag = save_flag
+#define RESTORE_FLAGS flags_restore (&save_flag)
+extern void flags_restore (Flags *save_flag);
 
 // save and reset flags that are intended to operate on the compressed file rather than the reference file
 #define SAVE_FLAGS_AUX(aux_name) Flags save_flag = flag;                                                                        \
@@ -248,7 +264,7 @@ extern Flags flag;
     }                                                                                                                           \
     flag.test = flag.md5 = flag.show_memory = flag.show_stats = flag.no_header = flag.show_bgzf = flag.show_gz =                               \
     flag.header_one = flag.header_only = flag.regions = flag.show_index = flag.show_dict =                                      \
-    flag.show_b250 = flag.show_ref_contigs = flag.list_chroms = flag.count =                                                   \
+    flag.show_b250 = flag.show_ref_contigs = flag.show_contigs = flag.count =                                                   \
     flag.downsample = flag.shard = flag.one_vb = flag.one_component = flag.xthreads =                                           \
     flag.show_coverage = flag.idxstats = flag.collect_coverage = 0; /* int */                                   \
     flag.bases = IUP_NONE;                                                                                                      \
@@ -264,7 +280,7 @@ extern Flags flag;
 
 // check for incompatabilities between flags
 extern bool option_is_short[];
-#define OT(l,s) option_is_short[(int)s[0]] ? "-"s : "--"l
+#define OT(l,s) (option_is_short[(int)s[0]] ? "-"s : "--"l)
 
 extern void flags_init_from_command_line (int argc, char **argv);
 extern void flags_finalize (void);

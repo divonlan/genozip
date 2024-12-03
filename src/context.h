@@ -16,6 +16,8 @@
 #include "segconf.h"
 #include "strings.h"
 #include "dict_io.h"
+#include "file.h"
+#include "sorter.h"
 
 #define MAX_WORDS_IN_CTX (1<<29) // limit on nodes.len, word_list.len - limited by VARL_MAX_4B
 
@@ -158,6 +160,7 @@ extern void ctx_update_zctx_txt_len (VBlockP vb, ContextP vctx, int64_t incremen
 extern void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vctx, bool is_lcodec, bool is_lcodec_inherited);
 extern void ctx_reset_codec_commits (void);
 extern void ctx_segconf_set_hard_coded_lcodec (Did did_i, Codec codec);
+extern void ctx_get_z_codecs (ContextP zctx, Codec *lcodec, Codec *bcodec, uint8_t *lcodec_count, uint8_t *bcodec_count, bool *lcodec_hard_coded);
 
 extern ContextP ctx_get_unmapped_ctx (ContextArray contexts, DataType dt, DictIdtoDidMap d2d_map, Did *num_contexts, DictId dict_id, STRp(tag_name));
 
@@ -200,12 +203,15 @@ static inline Did ctx_get_existing_did_i_do (DictId dict_id, const ContextArray 
 #define ctx_get_existing_did_i(vb,dict_id) ctx_get_existing_did_i_do ((dict_id), (vb)->contexts, (vb)->d2d_map, ((vb)->ctx_index.len ? &(vb)->ctx_index : NULL), (vb)->num_contexts)
 #define zctx_get_existing_did_i(dict_id) ctx_get_existing_did_i_do ((dict_id), z_file->contexts, z_file->d2d_map, NULL, z_file->num_contexts)
 
-static inline ContextP ctx_get_existing_ctx_do (VBlockP vb, DictId dict_id)  // returns NULL if context doesn't exist
+static inline ContextP ctx_get_existing_ctx_do (VBlockP vb, DictId dict_id, FUNCLINE)  // returns NULL if context doesn't exist
 {
     Did did_i = ctx_get_existing_did_i (vb, dict_id); 
-    return (did_i == DID_NONE) ? NULL : CTX(did_i); 
+    ASSERT (IN_RANGE((int16_t)did_i, -1, vb->num_contexts), "%s:%u: ECTX: did_i=%d ∉ [-1,%d). dict_id=%s", 
+            func, code_line, did_i, vb->num_contexts, dis_dict_id (dict_id).s); 
+
+    return (did_i == DID_NONE) ? NULL : &vb->contexts[did_i]; 
 }
-#define ECTX(dict_id) ctx_get_existing_ctx_do ((VBlockP)(vb), (DictId)(dict_id))
+#define ECTX(dict_id) ctx_get_existing_ctx_do ((VBlockP)(vb), (DictId)(dict_id), __FUNCTION__, __LINE__)
 
 extern ContextP ctx_get_existing_zctx (DictId dict_id);
 
@@ -248,7 +254,7 @@ extern void ctx_compress_counts (void);
 extern void ctx_read_all_subdicts (void);
 extern void ctx_compress_subdicts (void);
 extern rom ctx_get_snip_with_largest_count (Did did_i, int64_t *count);
-extern void ctx_populate_zf_ctx_from_contigs (Reference ref, Did dst_did_i, ConstContigPkgP ctgs);
+extern void ctx_populate_zf_ctx_from_contigs (Did dst_did_i, ConstContigPkgP ctgs);
 extern WordIndex ctx_populate_zf_ctx (Did dst_did_i, STRp (snip), WordIndex ref_index);
 
 extern void ctx_dump_binary (VBlockP vb, ContextP ctx, bool local);
@@ -283,11 +289,13 @@ static inline void ctx_set_last_value (VBlockP vb, ContextP ctx, ValueType last_
     ctx->last_sample_i = vb->sample_i; // used for VCF/FORMAT. otherwise meaningless but harmless.
 }
 
+#define ENCOUNTERED(line_i) (-(int32_t)(line_i) - 2) 
+
 // set encountered if not already ctx_set_last_value (encounted = seen, but without setting last_value)
 static inline void ctx_set_encountered (VBlockP vb, ContextP ctx)
 {
     if (ctx->last_line_i != vb->line_i || ctx->last_sample_i != vb->sample_i) // not already ctx_set_last_value in this line/sample
-        ctx->last_line_i = -(int64_t)vb->line_i - 1; 
+        ctx->last_line_i = ENCOUNTERED (vb->line_i); 
 
     ctx->last_sample_i = vb->sample_i; 
 }
@@ -302,13 +310,13 @@ static inline void ctx_unset_encountered (VBlockP vb, ContextP ctx)
 static inline bool ctx_encountered_in_line (VBlockP vb, Did did_i) 
 { 
     decl_ctx (did_i); 
-    return ((ctx->last_line_i == vb->line_i) || (ctx->last_line_i == -(int64_t)vb->line_i - 1)); 
+    return ((ctx->last_line_i == vb->line_i) || (ctx->last_line_i == ENCOUNTERED (vb->line_i))); 
 }
 
 static inline bool ctx_encountered_in_prev_line (VBlockP vb, Did did_i) 
 { 
     decl_ctx (did_i); 
-    return ((ctx->last_line_i == vb->line_i-1) || (ctx->last_line_i == -(int64_t)(vb->line_i-1) - 1)); 
+    return vb->line_i && ((ctx->last_line_i == vb->line_i-1) || (ctx->last_line_i == ENCOUNTERED (vb->line_i-1))); 
 }
 
 static inline bool ctx_encountered_in_line_by_dict_id (VBlockP vb, DictId dict_id, ContextP *p_ctx /* optional out */) 

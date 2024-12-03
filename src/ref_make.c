@@ -41,7 +41,7 @@ void ref_make_seg_initialize (VBlockP vb)
     CTX(FASTA_CONTIG)->no_stons = true; // needs b250 node_index for reference
     DC = '>';
     
-    if (segconf.running) segconf.fasta_has_contigs = true; // initialize optimistically
+    if (segconf_running) segconf.fasta_has_contigs = true; // initialize optimistically
 
     COPY_TIMER (seg_initialize);
 }
@@ -52,11 +52,11 @@ static Range *ref_make_ref_get_range (VBIType vblock_i)
 {
     // access ranges.len under the protection of the mutex
     spin_lock (make_ref_spin);
-    gref->ranges.len32 = MAX_(gref->ranges.len32, vblock_i); // note that this function might be called out order (called from ref_make_create_range - FASTA ZIP compute thread)
-    ASSERT (gref->ranges.len <= MAKE_REF_NUM_RANGES, "reference file too big - number of ranges exceeds %u", MAKE_REF_NUM_RANGES);
+    gref.ranges.len32 = MAX_(gref.ranges.len32, vblock_i); // note that this function might be called out order (called from ref_make_create_range - FASTA ZIP compute thread)
+    ASSERT (gref.ranges.len <= MAKE_REF_NUM_RANGES, "reference file too big - number of ranges exceeds %u", MAKE_REF_NUM_RANGES);
     spin_unlock (make_ref_spin);
 
-    return B(Range, gref->ranges, vblock_i-1);
+    return B(Range, gref.ranges, vblock_i-1);
 }
 
 // called during REF ZIP compute thread, from zip_compress_one_vb (as "zip_after_compress" defined in data_types.h)
@@ -80,7 +80,7 @@ void ref_make_create_range (VBlockP vb)
         bytes line_seq = B8 (vb->txt_data, seq_data_start);
         for (uint64_t base_i=0; base_i < seq_len; base_i++, bit_i += 2) {
             char base = line_seq[base_i];
-            bits_assign2 (&r->ref, bit_i, acgt_encode[(int)base]); 
+            bits_assign2 (&r->ref, bit_i, acgt_encode[(int)base]); // note: upper and lower case bases, and IUPACs, are accepted
 
             // store very rare IUPAC bases (GRCh38 has 94 of them)
             ref_iupacs_add (vb, bit_i/2, base);
@@ -96,10 +96,10 @@ void ref_make_ref_init (void)
 {
     ASSERT0 (flag.make_reference, "Expecting flag.make_reference=true");
 
-    buf_alloc (evb, &gref->ranges, 0, MAKE_REF_NUM_RANGES, Range, 1, "ranges"); // must be allocated by main thread as its evb
-    gref->ranges.rtype = RT_MAKE_REF;
+    buf_alloc (evb, &gref.ranges, 0, MAKE_REF_NUM_RANGES, Range, 1, "ranges"); // must be allocated by main thread as its evb
+    gref.ranges.rtype = RT_MAKE_REF;
     
-    buf_zero (&gref->ranges);
+    buf_zero (&gref.ranges);
 
     refhash_initialize_for_make();
 
@@ -110,7 +110,7 @@ void ref_make_ref_init (void)
 
 void ref_make_prepare_ranges_for_compress (void)
 {
-    for_buf2 (Range, r, i, gref->ranges) { 
+    for_buf2 (Range, r, i, gref.ranges) { 
         // we have exactly one contig for each VB (but possibly multiple VBs with the same contig), one one RAEntry for that contig
         // during seg we didn't know the chrom,first,last_pos, so we add them now, from the RA
         random_access_get_ra_info (i+1, &r->chrom, &r->first_pos, &r->last_pos);
@@ -122,7 +122,7 @@ void ref_make_prepare_ranges_for_compress (void)
                 :                              (r-1)->gpos + ref_size (r-1);             // 2nd+ range of contig
     }
 
-    PosType64 max_gpos = BLST(Range, gref->ranges)->gpos;
+    PosType64 max_gpos = BLST(Range, gref.ranges)->gpos;
 
     // since our refhash entries are 32 bit, we cannot use the reference data beyond the first 4Gbp for creating the refhash
     // TO DO: make the hash entries 40bit (or 64 bit?) if genome size > 4Gbp (bug 150)
@@ -137,9 +137,9 @@ void ref_make_prepare_ranges_for_compress (void)
 // the "read" part of reference-compressing dispatcher, called from ref_compress_ref
 void ref_make_prepare_one_range_for_compress (VBlockP vb)
 {
-    if (vb->vblock_i-1 == gref->ranges.len32) return; // we're done
+    if (vb->vblock_i-1 == gref.ranges.len32) return; // we're done
 
-    RangeP r = B(Range, gref->ranges, vb->vblock_i-1); // vb_i=1 goes to ranges[0] etc
+    RangeP r = B(Range, gref.ranges, vb->vblock_i-1); // vb_i=1 goes to ranges[0] etc
 
     vb->range          = r; // range to compress
     vb->range->num_set = r->ref.nbits / 2;
@@ -152,18 +152,18 @@ void ref_make_calculate_digest (void)
     START_TIMER;
 
     // mirrors the logic in ref_initialize_ranges
-    Range *last_r = BLST(Range, gref->ranges);
-    gref->genome_nbases = ROUNDUP64 (last_r->gpos + ref_size (last_r)) + 64;
+    Range *last_r = BLST(Range, gref.ranges);
+    gref.genome_nbases = ROUNDUP64 (last_r->gpos + ref_size (last_r)) + 64;
 
-    gref->genome_buf.can_be_big = true; // supress warning in case of an extra large genome (eg plant genomes)
-    gref->genome = buf_alloc_bits (evb, &gref->genome_buf, gref->genome_nbases * 2, CLEAR, 0, "ref->genome_buf");
+    gref.genome_buf.can_be_big = true; // supress warning in case of an extra large genome (eg plant genomes)
+    gref.genome = buf_alloc_bits_exact (evb, &gref.genome_buf, gref.genome_nbases * 2, CLEAR, 0, "ref->genome_buf");
 
-    for_buf (Range, r, gref->ranges) 
-        bits_copy (gref->genome, r->gpos * 2, &r->ref, 0, ref_size(r) * 2);
+    for_buf (Range, r, gref.ranges) 
+        bits_copy (gref.genome, r->gpos * 2, &r->ref, 0, ref_size(r) * 2);
 
-    z_file->digest = digest_do (STRb(gref->genome_buf), !flag.md5, "genome");
+    z_file->digest = digest_do (STRb(gref.genome_buf), !flag.md5, "genome");
     
-    buf_free (gref->genome_buf);
+    buf_free (gref.genome_buf);
 
     COPY_TIMER_EVB (ref_make_calculate_digest);
 }
@@ -226,12 +226,10 @@ rom ref_fasta_to_ref (FileP file)
     FREE (file->name);
     file->name = (char *)ref_filename;
 
-    Reference ref = flag.reading_reference ? flag.reading_reference : gref;
-
-    REALLOC ((char **)&ref->filename, strlen (ref_filename) + 1, "ref->filename");
-    strcpy ((char*)ref->filename, ref_filename);
+    REALLOC ((char **)&gref.filename, strlen (ref_filename) + 1, "gref.filename");
+    strcpy ((char*)gref.filename, ref_filename);
 
     file->disk_size = file_get_size (ref_filename);
 
-    return ref->filename;
+    return gref.filename;
 }

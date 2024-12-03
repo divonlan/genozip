@@ -70,7 +70,7 @@ void sam_seg_STAR_jI (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(raw), bool is_bam)
     unsigned add_bytes = is_bam ? (4/*count*/ + 1/*type*/ + n_vals * sizeof (uint32_t)) 
                                 : (2/*type - eg "i,"*/ + 1/*\t or \n*/ + raw_len);
 
-    seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_jI }, 2, ctx, add_bytes);
+    seg_special0 (VB, SAM_SPECIAL_jI, ctx, add_bytes);
 
     return;
 
@@ -96,8 +96,8 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_jI)
         next = BAFTtxt + 4;
     }
 
-    for_buf (BamCigarOp, op, vb->binary_cigar) {
-        if (op->op == BC_N) {
+    for_cigar (vb->binary_cigar) {
+        case BC_N:
             if (is_bam) {
                 PUT_UINT32 (next, pos);
                 next += sizeof (uint32_t);
@@ -113,10 +113,12 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_jI)
             }
 
             count_N++;
-        }
-        
-        if (op->op == BC_M || op->op == BC_N || op->op == BC_D || op->op == BC_E || op->op == BC_X)
+            // fallthrough
+
+        case BC_M: case BC_D: case BC_E: case BC_X:
             pos += op->n;
+
+        default: {} // BC_I, BC_S, BC_H, BC_P
     }
 
     if (!count_N) { // no intron

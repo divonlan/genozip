@@ -14,22 +14,42 @@
 
 // fields used by STARsolo and 10xGenomics cellranger. Some are SAM-standard and some not.
 
+bool sam_is_solo_loaded (VBlockSAMP vb)
+{
+    for (int tag_i = 0; tag_i < NUM_SOLO_TAGS; tag_i++) 
+        if (CTX(solo_props[tag_i].did_i)->is_loaded) return true;
+
+    return false;
+}
+
 // ZIP w/ IS_SAG_SOLO: called after segconf to produce Huffman for Solo fields 
 void sam_produce_solo_huffmans (VBlockSAMP vb)
 {
     for (int tag_i = 0; tag_i < NUM_SOLO_TAGS; tag_i++) 
-        huffman_start_chewing (solo_props[tag_i].did_i, 0, 0, 0);
+        huffman_start_chewing (solo_props[tag_i].did_i, 0, 0, 0, 1);
 
     // note: outer-loop on lines and inner of tags for better cpu caching of txt_data and vb->lines
     for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) 
         for (int tag_i = 0; tag_i < NUM_SOLO_TAGS; tag_i++) {
-            TxtWord w = DATA_LINE(line_i)->solo_z_fields[tag_i];
-            if (w.len)
-                huffman_chew_one_sample (solo_props[tag_i].did_i, STRtxt(w), false);
+            ZipDataLineSAMP dl = DATA_LINE(line_i);
+            if (dl->solo_z_fields[tag_i].len)
+                huffman_chew_one_sample (solo_props[tag_i].did_i, STRline(dl, solo_z_fields[tag_i]), false);
         }        
 
     for (int tag_i = 0; tag_i < NUM_SOLO_TAGS; tag_i++) 
-        huffman_produce_compressor (solo_props[tag_i].did_i, (bool[256]){[32 ... 126] = true});
+        huffman_produce_compressor (solo_props[tag_i].did_i, (HuffmanMask[1]){ {[32 ... 126] = true} });
+}
+
+// PIZ: generate solo huffmans that are missing in genozip file 
+void sam_piz_produce_trivial_solo_huffmans (void)
+{
+    for (int tag_i = 0; tag_i < NUM_SOLO_TAGS; tag_i++) {
+        ContextP zctx = ZCTX(solo_props[tag_i].did_i); 
+        if (zctx->z_data_exists && zctx->huffman.param == HUFF_NOT_PRODUCED) {
+            huffman_start_chewing (solo_props[tag_i].did_i, 0, 0, 0, 1);
+            huffman_produce_compressor (solo_props[tag_i].did_i, (HuffmanMask[1]){ {[32 ... 126] = true} });
+        }
+    }
 }
 
 // ZIP main thread: writing SEC_HUFFMAN global sections
@@ -59,13 +79,16 @@ void sam_10xGen_seg_initialize (VBlockSAMP vb)
     sam_seg_TX_AN_initialize (vb, OPTION_TX_Z);
     sam_seg_TX_AN_initialize (vb, OPTION_AN_Z);    
 
+    ctx_set_store (VB, STORE_INT, OPTION_xf_i, OPTION_mm_i, OPTION_MM_i, OPTION_pa_i, OPTION_ts_i, DID_EOL);
+
+    seg_mux_init (vb, OPTION_xf_i, SAM_SPECIAL_DEMUX_by_DUPLICATE, true, xf);
+
     if (MP(CRDNA)) {
         ctx_set_store (VB, STORE_INT, OPTION_GP_i, OPTION_MP_i, DID_EOL);
         ctx_set_store_per_line (VB, OPTION_GP_i, OPTION_MP_i, DID_EOL);
-        seg_mux_init (vb, OPTION_GP_i, SAM_SPECIAL_DEMUX_BY_REVCOMP_MATE, true, GP);
-        seg_mux_init (vb, OPTION_MP_i, SAM_SPECIAL_DEMUX_BY_REVCOMP_MATE, true, MP);
+        seg_mux_init (vb, OPTION_GP_i, SAM_SPECIAL_DEMUX_by_REVCOMP_MATE, true, GP);
+        seg_mux_init (vb, OPTION_MP_i, SAM_SPECIAL_DEMUX_by_REVCOMP_MATE, true, MP);
     }
-
 }
 
 //------------------------------------------------------------------------------------------------------------------------
@@ -107,14 +130,14 @@ static void sam_seg_CB_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(cb), un
         seg_add_to_local_string (VB, channel_ctx, STRa(cb), LOOKUP_SIMPLE, add_bytes); // requires no_stons
 }
 
-bytes sam_solo_sag_data (VBlockSAMP vb, SoloTags solo)
+bytes sam_solo_sag_data (VBlockSAMP vb, const SoloAln *solo_aln, SoloTags solo)
 {
     // index of compressed data of field is aln index + comp_len of all previous fields of this alignment
-    uint64_t index = ((uint64_t)vb->solo_aln->index_lo) | (((uint64_t)vb->solo_aln->index_hi) << 32);
+    uint64_t index = U40to64(solo_aln->index);
     for (SoloTags i=0; i < solo; i++)
-        index += vb->solo_aln->field_comp_len[i];
+        index += solo_aln->field_comp_len[i];
     
-    return B8(z_file->solo_data, index);
+    return B8(z_file->sag_solo_data, index);
 }
 
 bool sam_can_seg_depn_solo_against_sag (VBlockSAMP vb, Did did_i, SoloTags solo, STRp(str))
@@ -123,7 +146,7 @@ bool sam_can_seg_depn_solo_against_sag (VBlockSAMP vb, Did did_i, SoloTags solo,
         vb->solo_aln->field_uncomp_len[solo] != str_len) return false;
 
     char uncomp[str_len];
-    huffman_uncompress (did_i, sam_solo_sag_data (vb, solo), uncomp, str_len);
+    huffman_uncompress (did_i, sam_solo_sag_data (vb, vb->solo_aln, solo), uncomp, str_len);
 
     return !memcmp (str, uncomp, str_len);
 }
@@ -132,9 +155,9 @@ void sam_seg_CB_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(cb), unsigned add_byt
 {
     START_TIMER;
 
-    dl->solo_z_fields[SOLO_CB] = TXTWORD(cb);
+    set_LineWord_str (dl, solo_z_fields[SOLO_CB], cb);
 
-    if (segconf.running && !segconf.CB_con.repeats) 
+    if (segconf_running && !segconf.CB_con.repeats) 
         sam_seg_CB_Z_segconf (vb, STRa(cb));
 
     if (sam_can_seg_depn_solo_against_sag (vb, OPTION_CB_Z, SOLO_CB, STRa(cb)))
@@ -174,7 +197,7 @@ void sam_seg_CR_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(cr), unsigned add_byt
 {
     START_TIMER;
 
-    dl->solo_z_fields[SOLO_CR] = TXTWORD(cr);
+    set_LineWord_str (dl, solo_z_fields[SOLO_CR], cr);
 
     if (sam_can_seg_depn_solo_against_sag (vb, OPTION_CR_Z, SOLO_CR, STRa(cr)))
         sam_seg_against_sa_group (vb, CTX(OPTION_CR_Z), add_bytes);
@@ -202,9 +225,9 @@ bool sam_seg_barcode_qual (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, SoloTag
     Did array_did_i = did_i + 1; // must be one after
     bool dont_compress = false;
 
-    dl->solo_z_fields[solo] = TXTWORD(qual);
+    set_LineWord_str (dl, solo_z_fields[solo], qual);
 
-    if (segconf.running && !con_snip[0]) {
+    if (segconf_running && !con_snip[0]) {
         char sep = 0;
         if      (str_count_char (STRa(qual), ' ') == n_seps) sep = ' '; // as recommended by the SAM spec (not valid QUAL phred score)
         // note: '_' might be a valid phred score - hence the additional check of verifying n_seps
@@ -286,7 +309,7 @@ void sam_seg_RX_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(rx), unsigned add_byt
     START_TIMER;
 
     // In Novoalign, AGeNT Trimmer (and maybe others) RX can consist of multiple barcodes eg: "GTCCCT-TTTCTA"
-    if (segconf.running && !segconf.n_RX_seps) {    
+    if (segconf_running && !segconf.n_RX_seps) {    
         if      (memchr (rx, '_', rx_len)) segconf.RX_sep = '_'; 
         else if (memchr (rx, '-', rx_len)) segconf.RX_sep = '-'; // as recommended by the SAM spec
 
@@ -294,7 +317,7 @@ void sam_seg_RX_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(rx), unsigned add_byt
             segconf.n_RX_seps = str_count_char (STRa(rx), segconf.RX_sep);
     }
 
-    dl->solo_z_fields[SOLO_RX] = TXTWORD(rx);
+    set_LineWord_str (dl, solo_z_fields[SOLO_RX], rx);
 
     if (sam_can_seg_depn_solo_against_sag (vb, OPTION_RX_Z, SOLO_RX, STRa(rx)))
         sam_seg_against_sa_group (vb, CTX(OPTION_RX_Z), add_bytes);
@@ -320,7 +343,7 @@ void sam_seg_BX_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(bx), unsigned add_byt
 {
     START_TIMER;
 
-    dl->solo_z_fields[SOLO_BX] = TXTWORD(bx);
+    set_LineWord_str (dl, solo_z_fields[SOLO_BX], bx);
 
     if (sam_can_seg_depn_solo_against_sag (vb, OPTION_BX_Z, SOLO_BX, STRa(bx)))
         sam_seg_against_sa_group (vb, CTX(OPTION_BX_Z), add_bytes);
@@ -339,7 +362,7 @@ void sam_seg_QX_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qx), unsigned add_byt
 {
     START_TIMER;
 
-    dl->solo_z_fields[SOLO_QX] = TXTWORD(qx);
+    set_LineWord_str (dl, solo_z_fields[SOLO_QX], qx);
 
     if (sam_can_seg_depn_solo_against_sag (vb, OPTION_QX_Z, SOLO_QX, STRa(qx))) {
         sam_seg_against_sa_group (vb, CTX(OPTION_QX_Z), add_bytes);
@@ -371,7 +394,7 @@ void sam_seg_BC_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(bc), unsigned add_byt
 {
     START_TIMER;
 
-    if (segconf.running && !segconf.n_BC_QT_seps) {    
+    if (segconf_running && !segconf.n_BC_QT_seps) {    
         if      (memchr (bc, '_', bc_len)) segconf.BC_sep = '_'; 
         else if (memchr (bc, '-', bc_len)) segconf.BC_sep = '-'; // as recommended by the SAM spec
 
@@ -379,7 +402,7 @@ void sam_seg_BC_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(bc), unsigned add_byt
             segconf.n_BC_QT_seps = str_count_char (STRa(bc), segconf.BC_sep);
     }
 
-    dl->solo_z_fields[SOLO_BC] = TXTWORD(bc);
+    set_LineWord_str (dl, solo_z_fields[SOLO_BC], bc);
 
     if (sam_can_seg_depn_solo_against_sag (vb, OPTION_BC_Z, SOLO_BC, STRa(bc)))
         sam_seg_against_sa_group (vb, CTX(OPTION_BC_Z), add_bytes);
@@ -500,7 +523,7 @@ void sam_seg_GY_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(gy), unsigned add_byt
     }
     
     else fallback: {
-        // add "exception" (i.e. undiffable) cy to CY_X
+        // add "exception" (i.e. undiffable) gy to GY_X
         seg_add_to_local_blob (VB, CTX(OPTION_GY_Z_X), STRa(gy), add_bytes);
 
         // add redirection GY -> GY_X
@@ -717,7 +740,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_TX_AN_POS)
 static bool sam_seg_TX_AN_cigar (VBlockP vb, ContextP cigar_ctx, STRp(cigar), uint32_t rep)
 {
     if (str_issame_(STRa(cigar), STRb(VB_SAM->textual_cigar)))
-        seg_by_ctx (vb, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_COPY_TEXTUAL_CIGAR }, 2, cigar_ctx, cigar_len);
+        seg_special0 (vb, SAM_SPECIAL_COPY_TEXTUAL_CIGAR, cigar_ctx, cigar_len);
     
     else
         sam_seg_other_CIGAR (VB_SAM, cigar_ctx, STRa(cigar), false, cigar_len);
@@ -765,7 +788,7 @@ void sam_seg_TX_AN_Z (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, STRp(value),
                                { .dict_id = { _OPTION_AN_SAM_POS   }, .separator = { CI0_INVISIBLE, CI1_LOOKBACK   } } }
     };
 
-    bool use_lb = segconf.is_sorted && !segconf.running;
+    bool use_lb = segconf.is_sorted && !segconf_running;
 
     SegCallback callbacks_lb[]    = { seg_do_nothing_cb, seg_do_nothing_cb, sam_seg_TX_AN_gene, 0, sam_seg_TX_AN_pos,          sam_seg_TX_AN_cigar, sam_seg_TX_AN_sam_pos };
     SegCallback callbacks_no_lb[] = { seg_do_nothing_cb, seg_do_nothing_cb, 0,                  0, sam_seg_TX_AN_pos_unsorted, sam_seg_TX_AN_cigar, sam_seg_TX_AN_sam_pos };
@@ -794,7 +817,7 @@ void sam_seg_GP_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t value, unsigned ad
         seg_by_ctx (VB, STRa(copy_mate_MP_snip), channel_ctx, add_bytes);
 
     else if (channel_i==1 && value == (dl->POS + vb->ref_consumed + vb->soft_clip[1] - 1)) 
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_crdna_GP, '0'/*ffu*/ }, 3, channel_ctx, add_bytes);
+        seg_special1 (VB, SAM_SPECIAL_crdna_GP, '0'/*ffu*/, channel_ctx, add_bytes);
 
     else if (channel_i==0)
         seg_delta_vs_other_localN (VB, channel_ctx, CTX(SAM_POS), value, -1, add_bytes);
@@ -831,9 +854,23 @@ void sam_seg_MP_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t value, unsigned ad
     seg_by_did (VB, STRa(vb->mux_MP.snip), OPTION_MP_i, 0);
 }
 
-SPECIAL_RECONSTRUCTOR (sam_piz_special_DEMUX_BY_REVCOMP_MATE)
+SPECIAL_RECONSTRUCTOR (sam_piz_special_DEMUX_by_REVCOMP_MATE)
 {
     int channel_i = sam_has_mate?2 : last_flags.rev_comp?1 : 0;
     return reconstruct_demultiplex (vb, ctx, STRa(snip), channel_i, new_value, reconstruct);
 }
 
+void sam_seg_xf_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t value, unsigned add_bytes)
+{
+    int channel_i = dl->FLAG.duplicate;
+    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_xf_i, (MultiplexerP)&vb->mux_xf, channel_i);
+
+    seg_integer (VB, channel_ctx, value, false, add_bytes);
+    seg_by_did (VB, STRa(vb->mux_xf.snip), OPTION_xf_i, 0);
+}
+
+SPECIAL_RECONSTRUCTOR (sam_piz_special_DEMUX_by_DUPLICATE)
+{
+    int channel_i = last_flags.duplicate; // 0 or 1
+    return reconstruct_demultiplex (vb, ctx, STRa(snip), channel_i, new_value, reconstruct);
+}

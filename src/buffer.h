@@ -40,6 +40,7 @@
 #define B1ST8(buf)          ((uint8_t  *)(buf).data)
 #define B1ST16(buf)         ((uint16_t *)(buf).data)
 #define B1ST32(buf)         ((uint32_t *)(buf).data)
+#define B1ST40(buf)         ((uint40_t *)(buf).data)
 #define B1ST64(buf)         ((uint64_t *)(buf).data)
 #define B1STtxt             (vb->txt_data.data)
 
@@ -62,31 +63,31 @@
 #define BAFTtxt             (&vb->txt_data.data[Ltxt])
 
 #define for_buf(element_type, iterator, buf)  \
-    for (element_type *iterator=B1ST(element_type, (buf)), *fb_after=BAFT(element_type, (buf)); iterator && iterator < fb_after; iterator++)
+    for (element_type *iterator=B1ST(element_type, (buf)), *after_##iterator=BAFT(element_type, (buf)); iterator && iterator < after_##iterator; iterator++)
 
 #define for_buf_back(element_type, iterator, buf)  \
-    for (element_type *iterator=BLST(element_type, (buf)), *fb_first=B1ST(element_type, (buf)); iterator && iterator >= fb_first; iterator--)
+    for (element_type *iterator=BLST(element_type, (buf)), *first_##iterator=B1ST(element_type, (buf)); iterator && iterator >= first_##iterator; iterator--)
 
 // loop with two concurrent iterators "iter_p" (pointer to element_type) and "iter_i" (32bit) 
 #define for_buf2(element_type, iter_p, iter_i, buf) \
-    for (uint32_t iter_i=0, iter_i_after=(buf).len32; iter_i < iter_i_after;)  \
-        for (element_type *iter_p=B1ST(element_type, (buf)), *fb_after=BAFT(element_type, (buf)); iter_p && iter_p < fb_after; iter_p++, iter_i++)
+    for (uint32_t iter_i=0, after_##iter_i=(buf).len32; iter_i < after_##iter_i;)  \
+        for (element_type *iter_p=B1ST(element_type, (buf)), *after_##iter_p=BAFT(element_type, (buf)); iter_p && iter_p < after_##iter_p; iter_p++, iter_i++)
 
 #define for_buf2_back(element_type, iter_p, iter_i, buf) \
     for (int32_t iter_i=(buf).len32-1; iter_i >= 0;)  \
-        for (element_type *iter_p=BLST(element_type, (buf)), *fb_first=B1ST(element_type, (buf)); iter_p && iter_p >= fb_first; iter_p--, iter_i--)
+        for (element_type *iter_p=BLST(element_type, (buf)), *first_##iterator=B1ST(element_type, (buf)); iter_p && iter_p >= first_##iterator; iter_p--, iter_i--)
 
 #define for_buf_tandem(element_type1, iterator1, buf1, element_type2, iterator2, buf2)  \
     ASSERT ((buf1).len32 == (buf2).len32, "expecting %s.len=%u == %s.len=%u", (buf1).name, (buf1).len32, (buf2).name, (buf2).len32);\
-    element_type1 *iterator1=B1ST(element_type1, (buf1)), *fb_after=BAFT(element_type1, (buf1)); \
+    element_type1 *iterator1=B1ST(element_type1, (buf1)), *after_##iterator1=BAFT(element_type1, (buf1)); \
     element_type2 *iterator2=B1ST(element_type2, (buf2)); \
-    for (; iterator1 && iterator1 < fb_after; iterator1++, iterator2++)
+    for (; iterator1 && iterator1 < after_##iterator1; iterator1++, iterator2++)
 
 #define for_buf_tandem_back(element_type1, iterator1, buf1, element_type2, iterator2, buf2)  \
     ASSERT ((buf1).len32 == (buf2).len32, "expecting %s.len=%u == %s.len=%u", (buf1).name, (buf1).len32, (buf2).name, (buf2).len32);\
-    element_type1 *iterator1=BLST(element_type1, (buf1)), *fb_first=B1ST(element_type1, (buf1)); \
+    element_type1 *iterator1=BLST(element_type1, (buf1)), *first_##iterator1=B1ST(element_type1, (buf1)); \
     element_type2 *iterator2=BLST(element_type2, (buf2)); \
-    for (; iterator1 && iterator1 >= fb_first; iterator1--, iterator2--)
+    for (; iterator1 && iterator1 >= first_##iterator1; iterator1--, iterator2--)
 
 // remove entries from buffer that fail to meet the condition
 #define buf_remove_items_except_(type, buf, keep_predicate) \
@@ -122,7 +123,7 @@ static inline uint64_t BNXT_get_index (BufferP buf, size_t size, FUNCLINE)
 #define BNUM64(buf, ent)    ((int64_t)((((char*)(ent)) - ((buf).data)) / (int64_t)sizeof (*(ent)))) // signed integer
 #define BNUMtxt(ent)        BNUM(vb->txt_data, (ent))
 #define BREMAINS(buf, ent)  ((buf).len - BNUM ((buf),(ent)))
-#define BFREE8(buf)         ((buf).size - (buf.len)) // free space, for char or uint8_t buffers
+#define BFREE8(buf)         ((buf).size - (buf).len) // free space, for char or uint8_t buffers
 #define BIS1ST(buf,ent)     (BNUM((buf),(ent)) == 0)
 #define BISLST(buf,ent)     (BNUM((buf),(ent)) == (buf).len - 1)
 #define BISBEFORE(buf,ent)  (BNUM((buf),(ent)) <= -1)
@@ -243,9 +244,13 @@ extern bool buf_dump_to_file (rom filename, ConstBufferP buf, unsigned buf_word_
 
 // allocate bit array and set nbits
 typedef enum { CLEAR=0, SET=1, NOINIT=2 } BitsInitType;
-extern BitsP buf_alloc_bits_do (VBlockP vb, BufferP buf, uint64_t nbits, BitsInitType init_to, float grow_at_least_factor, rom name, FUNCLINE);
-#define buf_alloc_bits(vb, buf, nbits, init_to, grow_at_least_factor, name) \
-    buf_alloc_bits_do((VBlockP)(vb), (buf), (nbits), (init_to), (grow_at_least_factor), (name), __FUNCLINE)
+extern BitsP buf_alloc_bits_exact_do (VBlockP vb, BufferP buf, uint64_t exact_bits, BitsInitType init_to, float grow_at_least_factor, rom name, FUNCLINE);
+#define buf_alloc_bits_exact(vb, buf, exact_nbits, init_to, grow_at_least_factor, name) \
+    buf_alloc_bits_exact_do ((VBlockP)(vb), (buf), (exact_nbits), (init_to), (grow_at_least_factor), (name), __FUNCLINE)
+
+extern BitsP buf_alloc_bits_do (VBlockP vb, BufferP buf, uint64_t nbits, uint64_t at_east_bits, BitsInitType init_to, float grow_at_least_factor, rom name, FUNCLINE);
+#define buf_alloc_bits(vb, buf, more_bits, at_least_bits, init_to, grow_at_least_factor, name) \
+    buf_alloc_bits_do ((VBlockP)(vb), (buf), (more_bits), (at_least_bits), (init_to), (grow_at_least_factor), (name), __FUNCLINE)
 
 extern BitsP buf_overlay_bits_do (VBlockP vb, BufferP overlaid_buf, BufferP regular_buf, uint64_t start_byte_in_regular_buf, uint64_t nbits, FUNCLINE, rom name);
 #define buf_overlay_bits(vb, overlaid_buf, regular_buf, start_byte_in_regular_buf, nbits, name) \
@@ -267,6 +272,7 @@ typedef BgEnBufFunc (*BgEnBuf);
 
 extern BgEnBufFunc BGEN_u8_buf, BGEN_u16_buf, BGEN_u32_buf, BGEN_u64_buf, 
                    BGEN_transpose_u8_buf, BGEN_transpose_u16_buf, BGEN_transpose_u32_buf,
+                   BGEN_ptranspose_u8_buf, BGEN_ptranspose_u16_buf, BGEN_ptranspose_u32_buf,
                    BGEN_deinterlace_d8_buf, BGEN_deinterlace_d16_buf, BGEN_deinterlace_d32_buf, BGEN_deinterlace_d64_buf,
                    interlace_d8_buf, BGEN_interlace_d16_buf, BGEN_interlace_d32_buf, BGEN_interlace_d64_buf,
                    LTEN_u16_buf, LTEN_u32_buf, LTEN_u64_buf, LTEN_interlace_d16_buf, LTEN_interlace_d32_buf, LTEN_interlace_d64_buf;

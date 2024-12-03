@@ -13,29 +13,32 @@
 #include "container.h"
 #include "context.h"
 
-
 static inline uint32_t vcf_get_n_repeats_genotypes (VBlockVCFP vb)
 {
+    uint32_t n_alts = N_ALTS;
+
     // common cases of G. note: we can extend to more cases, but never reduce, to not break back comp
-    return vb->ploidy==2 && vb->n_alts==1 ? 3 
-         : vb->ploidy==2 && vb->n_alts==2 ? 6 
-         : vb->ploidy==2 && vb->n_alts==3 ? 10 
-         : vb->ploidy==2 && vb->n_alts==4 ? 15 
-         : vb->ploidy==2 && vb->n_alts==5 ? 21 
-         : vb->ploidy==2 && vb->n_alts==6 ? 28 // note on ploidy=2 values: 28-21=7, which is one more than 21-15=6 etc. 
-         : vb->ploidy==1                  ? (vb->n_alts + 1) 
-         :                                  0;
+    return vb->ploidy==2 && n_alts==1 ? 3 
+         : vb->ploidy==2 && n_alts==2 ? 6 
+         : vb->ploidy==2 && n_alts==3 ? 10 
+         : vb->ploidy==2 && n_alts==4 ? 15 
+         : vb->ploidy==2 && n_alts==5 ? 21 
+         : vb->ploidy==2 && n_alts==6 ? 28 // note on ploidy=2 values: 28-21=7, which is one more than 21-15=6 etc. 
+         : vb->ploidy==1              ? (n_alts + 1) 
+         :                              0;
 }
 
 // get number of comma-separated repeats expected in an INFO/FORMAT field
 static inline uint32_t vcf_get_n_repeats (VBlockVCFP vb, ContextP ctx)
 {
-    return (ctx->header_info.vcf.Number >= 1)                      ? ctx->header_info.vcf.Number // note: VCF_QUAL.header_info is set vcf_zip_initialize
-         : (ctx->header_info.vcf.Number == NUMBER_A)               ? vb->n_alts // 0 if n_alts is not set yet
-         : (ctx->header_info.vcf.Number == NUMBER_R && vb->n_alts) ? (vb->n_alts + 1)
+    uint32_t n_alts = N_ALTS;
+
+    return (ctx->header_info.vcf.Number >= 1)                  ? ctx->header_info.vcf.Number // note: VCF_QUAL.header_info is set vcf_zip_initialize
+         : (ctx->header_info.vcf.Number == NUMBER_A)           ? n_alts // 0 if n_alts is not set yet
+         : (ctx->header_info.vcf.Number == NUMBER_R && n_alts) ? (n_alts + 1)
          : (ctx->header_info.vcf.Number == NUMBER_G && 
-            dict_id_is_vcf_format_sf (ctx->dict_id))               ? vcf_get_n_repeats_genotypes (vb) // note: for INFO fields, we don't know the ploidy yet
-         : /* fallback */                                            0; 
+            dict_id_is_vcf_format_sf (ctx->dict_id))           ? vcf_get_n_repeats_genotypes (vb) // note: for INFO fields, we don't know the ploidy yet
+         : /* fallback */                                        0; 
 }
 
 void vcf_segconf_finalize_optimizations (VBlockVCFP vb)
@@ -522,7 +525,7 @@ rom vcf_zip_modify (VBlockP vb_, rom line_start, uint32_t remaining)
     GET_NEXT_ITEM (VCF_REF);
     GET_NEXT_ITEM (VCF_ALT);
     next = mempcpy (next, ref, next_field - ref); // including \t
-    vb->n_alts = str_count_char (field_start, field_len, ',') + 1;
+    N_ALTS = str_count_char (field_start, field_len, ',') + 1;
 
     GET_NEXT_ITEM (VCF_QUAL);
 
@@ -575,7 +578,7 @@ rom vcf_zip_modify (VBlockP vb_, rom line_start, uint32_t remaining)
 
     vb->optimized_line.len32 = BNUM(vb->optimized_line, next);
     
-    vb->ploidy = vb->n_alts = 0; // reset
+    vb->ploidy = N_ALTS = 0; // reset
 
     COPY_TIMER (vcf_zip_modify);
     return after;

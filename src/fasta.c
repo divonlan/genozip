@@ -203,7 +203,7 @@ int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i)
 
 out_of_data:
     // case: an entire FASTA VB without newlines (i.e. a very long sequential SEQ) - we accept a VB without newlines and deal with it in Seg
-    if (is_entire_vb && !segconf.running) {
+    if (is_entire_vb && !segconf_running) {
         ((VBlockFASTAP)vb)->vb_has_no_newline = true;
         return 0;
     }
@@ -316,7 +316,7 @@ void fasta_seg_initialize (VBlockP vb)
     START_TIMER;
 
     // NSBI FASTA download files might have "@" instead of ">"
-    if (segconf.running) {
+    if (segconf_running) {
         DC = *B1STtxt; // note: common: '>', very old FASTA: ';', downloaded from NCBI: '@'
         
         ASSINP (is_fasta (STRb(vb->txt_data), NULL), "Error: %s is not a valid FASTA file. Solution: use --input generic", txt_name);
@@ -337,7 +337,7 @@ void fasta_seg_initialize (VBlockP vb)
         CTX(FASTA_DESC)->ltype = LT_STRING;
 
     // if this neocleotide FASTA of unrelated contigs, we're better off with ACGT        
-    if (!segconf.running && !segconf.multiseq && segconf.seq_type == SQT_NUKE)
+    if (!segconf_running && !segconf.multiseq && segconf.seq_type == SQT_NUKE)
         codec_acgt_seg_initialize (VB, FASTA_NONREF, true);
 
     else 
@@ -445,15 +445,15 @@ static void fasta_seg_desc_line (VBlockFASTAP vb, rom line, uint32_t line_len, b
     }
 
     // add contig to CONTIG dictionary (but not b250) and verify that its unique
-    if (segconf.fasta_has_contigs || flag.make_reference || segconf.running) {
+    if (segconf.fasta_has_contigs || flag.make_reference || segconf_running) {
         
-        if (segconf.running)
+        if (segconf_running)
             seg_create_rollback_point (VB, NULL, 1, FASTA_CONTIG);
             
         bool is_new;
         chrom_seg_no_b250 (VB, STRa(chrom_name), &is_new);
 
-        if (!is_new && segconf.running) {
+        if (!is_new && segconf_running) {
             // error if user explicitly requested to index but we can't
             ASSSEG (!flag.index_txt, "Cannot index this file, because it contains duplicate contig names, for example: %.*s", STRf(chrom_name));
 
@@ -462,7 +462,7 @@ static void fasta_seg_desc_line (VBlockFASTAP vb, rom line, uint32_t line_len, b
         }
 
         else {
-            ASSINP (is_new || segconf.running, "Error: bad FASTA file - sequence \"%.*s\" appears more than once", STRf(chrom_name));
+            ASSINP (is_new || segconf_running, "Error: bad FASTA file - sequence \"%.*s\" appears more than once", STRf(chrom_name));
          
             vb->ra_initialized = true;
         }
@@ -576,7 +576,7 @@ static void fasta_seg_seq_line (VBlockFASTAP vb, STRp(line),
         vb->lines_this_contig = 0;
     }
 
-    if (segconf.running && (segconf.seq_type == SQT_UNKNOWN || segconf.seq_type == SQT_NUKE_OR_AMINO))
+    if (segconf_running && (segconf.seq_type == SQT_UNKNOWN || segconf.seq_type == SQT_NUKE_OR_AMINO))
         segconf.seq_type = fasta_get_seq_type (STRa(line));
 
     vb->last_line = FASTA_LINE_SEQ;

@@ -10,7 +10,7 @@
 
 #include "genozip.h"
 
-extern void regions_add (char *reg_str);
+extern void regions_add (rom reg_str);
 extern void regions_add_by_file (rom regions_filename);
 extern void regions_make_chregs (ContextP chrom_ctx);
 extern void regions_transform_negative_to_positive_complement(void);
@@ -24,3 +24,5 @@ extern void regions_display(rom title);
 extern bool regions_is_site_included (VBlockP vb);
 extern bool regions_is_range_included (WordIndex chrom, PosType64 start_pos, PosType64 end_pos, bool completely_included);
 #define regions_is_ra_included(ra) regions_is_range_included(ra->chrom_index, ra->min_pos, ra->max_pos, false)
+
+extern void regions_destroy (void);

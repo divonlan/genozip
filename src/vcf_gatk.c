@@ -74,7 +74,7 @@ void vcf_seg_INFO_RAW_MQandDP (VBlockVCFP vb, ContextP ctx, STRp(value))
     }
     
     // segconf: calculate max_MAPQ. MQ=Σ{DP}(MAPQ²)
-    if (segconf.running) 
+    if (segconf_running) 
         segconf.vcf_max_MAPQ = MIN_(223, MAX_((double)segconf.vcf_max_MAPQ, ceil (sqrt ((double)mq / (double)dp)))); // 223 bc in SPECIAL we send it 32+
 
     int mq_str_len = (rom)memchr (value, ',', value_len) - value;
@@ -110,7 +110,7 @@ void vcf_seg_INFO_RAW_MQandDP (VBlockVCFP vb, ContextP ctx, STRp(value))
 
     // 2nd container item: MQ - use special for common case that all alignments had maximal MAPQ
     if (mq == dp * segconf.vcf_max_MAPQ * segconf.vcf_max_MAPQ)
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_RAW_MQandDP_MQ, 32 + segconf.vcf_max_MAPQ }, 3, mq_ctx, mq_str_len);
+        seg_special1 (VB, VCF_SPECIAL_RAW_MQandDP_MQ, 32 + segconf.vcf_max_MAPQ, mq_ctx, mq_str_len);
 
     else
         seg_integer (VB, mq_ctx, mq, true, mq_str_len);
@@ -163,10 +163,10 @@ static void predict_RU (VBlockVCFP vb)
     int seq_len = vb->REF_len - 1;
 
     // set seq to longest allele (REF or one of the ALTs)
-    for (int alt_i=0; alt_i < vb->n_alts; alt_i++)
-        if (vb->alt_lens[alt_i] > seq_len + 1) {
-            seq     = vb->alts[alt_i]     + 1; // payload only (without anchor base)
-            seq_len = vb->alt_lens[alt_i] - 1; 
+    for_alt
+        if (alt->alt_len > seq_len + 1) {
+            seq     = alt->alt     + 1; // payload only (without anchor base)
+            seq_len = alt->alt_len - 1; 
         }
 
     // shortcut common cases. note: seq_len=0 happens for SNPs - these are not expected to have RU/RPA fields, but we support for completeness
@@ -199,7 +199,7 @@ void vcf_seg_INFO_RU (VBlockVCFP vb, ContextP ctx, STRp(ru))
     txtSTR (predicted_RU, ctx->predicted_RU);
 
     if (str_issame (ru, predicted_RU))
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_RU, '1'/*version*/ }, 3, ctx, ru_len);
+        seg_special1 (VB, VCF_SPECIAL_RU, '1'/*version*/, ctx, ru_len);
 
     else
         seg_by_ctx (VB, STRa(ru), ctx, ru_len); 
@@ -247,7 +247,7 @@ void vcf_seg_INFO_RPA (VBlockVCFP vb, ContextP ctx, STRp(rpa_str))
     predict_RU (vb);
     txtSTR (ru, CTX(INFO_RU)->predicted_RU);
 
-    str_split_ints (rpa_str, rpa_str_len, vb->n_alts + 1, ',', rpa, true);
+    str_split_ints (rpa_str, rpa_str_len, N_ALTS + 1, ',', rpa, true);
     if (!n_rpas) goto fallback;
 
     int visible_reps = get_n_repeats (STRa(vb->REF), STRa(ru));
@@ -255,12 +255,12 @@ void vcf_seg_INFO_RPA (VBlockVCFP vb, ContextP ctx, STRp(rpa_str))
 
     int delta = rpas[0] - visible_reps;
 
-    for (int alt_i=0; alt_i < vb->n_alts; alt_i++)
-        if (get_n_repeats (STRi(vb->alt, alt_i), STRa(ru)) + delta != rpas[alt_i + 1])
+    for_alt2
+        if (get_n_repeats (STRa(alt->alt), STRa(ru)) + delta != rpas[alt_i + 1])
             goto fallback;
 
     seg_integer (VB, ctx, delta, false, 0); // add delta to local
-    seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_RPA }, 2, ctx, rpa_str_len);
+    seg_special0 (VB, VCF_SPECIAL_RPA, ctx, rpa_str_len);
     return;
 
 fallback:
@@ -279,9 +279,9 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_RPA)
     if (reconstruct) {
         RECONSTRUCT_INT (get_n_repeats (STRa(vb->REF), STRa(ru)) + delta);
 
-        for (int alt_i=0; alt_i < vb->n_alts; alt_i++) {
+        for_alt {
             RECONSTRUCT1 (',');
-            RECONSTRUCT_INT (get_n_repeats (STRi(vb->alt, alt_i), STRa(ru)) + delta);
+            RECONSTRUCT_INT (get_n_repeats (STRa(alt->alt), STRa(ru)) + delta);
         }
     }
 
@@ -303,18 +303,19 @@ void vcf_seg_INFO_BaseCounts (VBlockP vb_) // returns true if caller still needs
     SEGCONF_RECORD_WIDTH (INFO_BaseCounts, bc_len);
 
     // up to 3 ALTS, and all ALTs must be unique SNPs
-    if (vb->n_alts < 1 || vb->n_alts > 3) fallback: {
+    if (!IN_RANGX (N_ALTS, 1, 3)) fallback: {
         seg_by_ctx (VB, STRa(bc), ctx, bc_len); 
         return;
     }
-    for (int8_t alt_i=0; alt_i < vb->n_alts; alt_i++) {
-        if (vb->var_types[alt_i] != VT_SNP) goto fallback;
+
+    for_alt {
+        if (alt->var_type != VT_SNP) goto fallback;
 
         // alleles must be unique
-        if (*vb->alts[alt_i] == *vb->REF) goto fallback;
+        if (*alt->alt == *vb->REF) goto fallback;
 
-        for (int alt_j=0; alt_j < alt_i; alt_j++)
-            if (*vb->alts[alt_i] == *vb->alts[alt_j]) goto fallback;
+        for (AltType *alt_b=B1ST(AltType, CTX(VCF_REFALT)->alts); alt_b < alt; alt_b++)
+            if (*alt->alt == *alt_b->alt) goto fallback;
     }
 
     str_split_ints (bc, bc_len, 4, ',', count, true); // counts[] corresponds to A,C,G,T
@@ -323,7 +324,7 @@ void vcf_seg_INFO_BaseCounts (VBlockP vb_) // returns true if caller still needs
 
     ctx_set_last_value (VB, ctx, counts[0] + counts[1] + counts[2] + counts[3]);
     
-    int32_t sorted_counts[4] = {}; // sorted_counts[] corresponds to REF,ALT0,ALT1,ALT2
+    int32_t sorted_counts[4] = {}; // sorted_counts[] corresponds to REF,VT0,ALT1,ALT2
     
     STRlast (ad, FORMAT_AD);
     bool use_ad = vcf_num_samples == 1 && ctx_encountered_in_line (VB, FORMAT_AD) &&
@@ -340,11 +341,11 @@ void vcf_seg_INFO_BaseCounts (VBlockP vb_) // returns true if caller still needs
 
     // set sorted_counts: first values are the BaseCount values corresponding to alleles (REF and ALTs)    
     SET_SORTED_COUNTS(0, *vb->REF); 
-    for (int8_t alt_i=0; alt_i < vb->n_alts; alt_i++)
-        SET_SORTED_COUNTS (alt_i + 1, *vb->alts[alt_i]); 
+    for_alt2 
+        SET_SORTED_COUNTS (alt_i + 1, *alt->alt); 
         
     // the remaining sorted_counts of the non-allele bases - in the order of the basess
-    for (unsigned sc_i=vb->n_alts + 1; sc_i <= 3; sc_i++)
+    for (unsigned sc_i=N_ALTS + 1; sc_i <= 3; sc_i++)
         for (unsigned c_i=0; c_i <= 3; c_i++) // search for first base that is not yet consumed
             if (counts[c_i] != -1) { // not consumed yet
                 SET_SORTED_COUNTS (sc_i, "ACGT"[c_i]);
@@ -362,13 +363,13 @@ void vcf_seg_INFO_BaseCounts (VBlockP vb_) // returns true if caller still needs
 
 static int64_t vcf_piz_calculate_BaseCounts (VBlockVCFP vb, STRp(snip), qSTRp(out))
 {
-    str_split_ints (snip, snip_len, 4, ',', sorted_count, true); // sorted_counts correspond to REF,ALT0,ALT1,ALT2
+    str_split_ints (snip, snip_len, 4, ',', sorted_count, true); // sorted_counts correspond to REF,VT0,ALT1,ALT2
     ASSPIZ (n_sorted_counts == 4, "invalid snip: \"%.*s\"", snip_len, snip);
 
     // copy values from AD if needed
     if (sorted_counts[0] == -9 || sorted_counts[1] == -9 || sorted_counts[2] == -9 || sorted_counts[3] == -9) {
         STRlast (ad_str, FORMAT_AD);
-        str_split_ints (ad_str, ad_str_len, vb->n_alts + 1, ',', ad, false); // exactly=false bc we don't enforce this in seg
+        str_split_ints (ad_str, ad_str_len, N_ALTS + 1, ',', ad, false); // exactly=false bc we don't enforce this in seg
         ASSPIZ (ctx_encountered_in_line (VB, FORMAT_AD) && n_ads, "cannot find AD needed for reconstructing BaseCounts. snip=\"%.*s\"", STRf(snip));
 
         for (int sc_i=0; sc_i < 4; sc_i++)
@@ -383,11 +384,11 @@ static int64_t vcf_piz_calculate_BaseCounts (VBlockVCFP vb, STRp(snip), qSTRp(ou
 
         // set counts corresponding to REF and ALT alleles    
         SET_COUNTS (*vb->REF, 0);
-        for (int8_t alt_i=0; alt_i < vb->n_alts; alt_i++)
-            SET_COUNTS (*vb->alts[alt_i], alt_i + 1);
+        for_alt2
+            SET_COUNTS (*alt->alt, alt_i + 1);
 
         // set counts corresponding to the remaining bases that are not alleles
-        unsigned sc_i = vb->n_alts + 1;
+        unsigned sc_i = N_ALTS + 1;
         for (unsigned c_i=0; c_i <= 3; c_i++) 
             if (counts[c_i] == -1/*not set yet*/) 
                 SET_COUNTS("ACGT"[c_i], sc_i++);
@@ -486,6 +487,7 @@ bool vcf_seg_INFO_SF_init (VBlockVCFP vb, ContextP ctx, STRp(sf))
 
         default:
             ABOSEG ("invalid sf.SF_by_GT=%d", ctx->sf.SF_by_GT);
+            return false; // neversilence compiler warning
     }
 }
 
@@ -543,15 +545,16 @@ static void vcf_seg_INFO_SF_seg (VBlockP vb_)
     STRlast (sf, INFO_SF);
 
     // case: SF data remains after all samples - copy it
-    int32_t remaining_len = (int32_t)ctx->last_txt.len - (int32_t)ctx->sf.next; // -1 if all done, because we skipped a non-existing comma
-    if (remaining_len > 0) {
-        buf_add_more (VB, &ctx->deferred_snip, &sf[ctx->sf.next], remaining_len, "contexts->deferred_snip");
-        BNXTc (ctx->deferred_snip) = ','; // buf_add_more allocates one character extra
+    if (CTX(INFO_SF)->sf.SF_by_GT == yes) {
+        int32_t remaining_len = (int32_t)ctx->last_txt.len - (int32_t)ctx->sf.next; // -1 if all done, because we skipped a non-existing comma
+        if (remaining_len > 0) {
+            buf_add_more (VB, &ctx->deferred_snip, &sf[ctx->sf.next], remaining_len, "contexts->deferred_snip");
+            BNXTc (ctx->deferred_snip) = ','; // buf_add_more allocates one character extra
+        }
+
+        seg_by_ctx (VB, STRb(ctx->deferred_snip), ctx, sf_len);
     }
 
-    if (CTX(INFO_SF)->sf.SF_by_GT == yes) 
-        seg_by_ctx (VB, STRb(ctx->deferred_snip), ctx, sf_len);
-    
     else if (CTX(INFO_SF)->sf.SF_by_GT == no)
         seg_by_ctx (VB, STRa(sf), ctx, sf_len);
 
@@ -571,7 +574,7 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_INFO_SF)
             adjustment = sample_i = snip_i = 0;
 
             // temporary place for SF
-            buf_alloc (vb, &ctx->insertion, 0, 5 * vcf_header_get_num_samples(), char, 1, "contexts->insertion"); // initial estimate, we may further grow it later
+            buf_alloc (vb, &ctx->insertion, 0, 5 * vcf_num_samples, char, 1, "contexts->insertion"); // initial estimate, we may further grow it later
             ctx->insertion.len = 0;
 
             // save snip for later (note: the SNIP_SPECIAL+code are already removed)
@@ -587,11 +590,11 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_INFO_SF)
 }
 
 // While reconstructing the GT fields of the samples - calculate the INFO/SF field
-void vcf_piz_GT_cb_calc_INFO_SF (VBlockVCFP vb, unsigned rep, char *recon, int32_t recon_len)
+void vcf_piz_GT_cb_calc_INFO_SF (VBlockVCFP vb, rom recon)
 {
     decl_ctx (INFO_SF);
 
-    if (rep != 0 || !IS_RECON_INSERTION(ctx)) return; // we only look at the first ht in a sample, and only if its not '.'/'%'
+    if (!IS_RECON_INSERTION(ctx)) return; // we only look at the first ht in a sample, and only if its not '.'/'%'
 
     if (*recon == '.' || *recon == '%') { // . can be written as % in vcf_seg_FORMAT_GT
         sample_i++;
@@ -769,7 +772,7 @@ void vcf_seg_INFO_QD (VBlockP vb)
         seg_add_to_local_string (vb, ctx, STRa(qd), LOOKUP_SIMPLE, qd_len);
 
     else
-        seg_by_ctx (vb, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_QD, '0' + pd }, 3, ctx, qd_len);
+        seg_special1 (vb, VCF_SPECIAL_QD, '0' + pd, ctx, qd_len);
 }
 
 // called from toplevel callback
@@ -858,7 +861,7 @@ void vcf_seg_INFO_AS_SB_TABLE (VBlockP vb)
     STRlast (as_sb_table, INFO_AS_SB_TABLE);
     SAFE_NULT (as_sb_table);
 
-    if (VB_VCF->n_alts != 1) goto fallback;
+    if (N_ALTS != 1) goto fallback;
 
     SEGCONF_RECORD_WIDTH (INFO_AS_SB_TABLE, as_sb_table_len);
 
@@ -877,7 +880,7 @@ void vcf_seg_INFO_AS_SB_TABLE (VBlockP vb)
 
     if (next-1 != as_sb_table + as_sb_table_len) goto fallback; // verify that entire string was consumed
 
-    seg_by_ctx (vb, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_DEFER }, 2, ctx, as_sb_table_len);
+    seg_special0 (vb, VCF_SPECIAL_DEFER, ctx, as_sb_table_len);
     goto done;
 
 fallback:
@@ -887,7 +890,7 @@ done:
     SAFE_RESTORE;
 }
 
-void vcf_piz_sum_SB_for_AS_SB_TABLE (VBlockVCFP vb, STRp(recon))
+void vcf_sum_SB_for_AS_SB_TABLE (VBlockVCFP vb, STRp(recon))
 {
     str_split_ints (recon, recon_len, 4, ',', sb, true);
     

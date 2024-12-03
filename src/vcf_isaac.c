@@ -23,11 +23,11 @@ void vcf_isaac_seg_initialize (VBlockVCFP vb)
 
 void vcf_seg_FORMAT_GQX (VBlockVCFP vb, ContextP ctx, STRp(gqx))
 {        
-    Allele *ht_data = this_sample_GT (vb);
+    bool no_ht = !ctx_encountered (VB, FORMAT_GT) || CTX(FORMAT_GT)->gt.ht[0] == '.'; 
     
-    int channel_i = (!ctx_encountered (VB, FORMAT_GT) || *ht_data == '.') ? 0
-                  : !ctx_encountered (VB, FORMAT_GQ)                      ? 1
-                  :                                                         2;
+    int channel_i = no_ht                            ? 0
+                  : !ctx_encountered (VB, FORMAT_GQ) ? 1
+                  :                                    2;
 
     ContextP chan_ctx = seg_mux_get_channel_ctx (VB, FORMAT_GQX, (MultiplexerP)&vb->mux_GQX, channel_i);
     
@@ -94,13 +94,13 @@ static bool vcf_seg_GMAF_allele_cb (VBlockP vb_, ContextP ctx, STRp(value), uint
 {
     VBlockVCFP vb = (VBlockVCFP)vb_;
     bool is_ref = str_is_1char (vb->REF, value[0]);
-    bool is_alt = vb->alts[0][0] == value[0] && vb->alt_lens[0] == 1;
+    bool is_alt = str_is_1char (ALTi(0)->alt, value[0]);
 
     if ((has(RefMinor) && is_ref) || (!has(RefMinor) && is_alt)) // usually case
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_GMAF_allele, '0' }, 3, ctx, value_len);
+        seg_special1 (VB, VCF_SPECIAL_GMAF_allele, '0', ctx, value_len);
     
     else if ((!has(RefMinor) && is_ref) || (has(RefMinor) && is_alt)) // reverse case
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_GMAF_allele, '1' }, 3, ctx, value_len);
+        seg_special1 (VB, VCF_SPECIAL_GMAF_allele, '1', ctx, value_len);
 
     else // can happen, for example, if ALT='.'
         seg_by_ctx (VB, STRa(value), ctx, value_len);
@@ -126,7 +126,7 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_GMAF_allele)
 
     // case: ALT
     else
-        RECONSTRUCT1 (*vb->alts[0]);
+        RECONSTRUCT1 (*ALTi(0)->alt);
 
     return NO_NEW_VALUE;
 
@@ -153,7 +153,7 @@ static bool vcf_seg_GMAF_AF_cb (VBlockP vb_, ContextP ctx, STRp(value), uint32_t
         vcf_GMAF_AF_prediction (STRa(BII(AF1000G)->value), pred_i, qSTRa(prediction));
 
         if (str_issame (value, prediction)) {
-            seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_GMAF_AF, '0' + pred_i }, 3, ctx, value_len);
+            seg_special1 (VB, VCF_SPECIAL_GMAF_AF, '0' + pred_i, ctx, value_len);
             return true;
         }
     }
@@ -204,6 +204,6 @@ void vcf_seg_INFO_EVS (VBlockVCFP vb, ContextP ctx, STRp(evs))
 
     seg_array_of_struct_ (VB, ctx, con, 0, 0, STRa(evs), 
                           (SegCallback[]){ seg_add_to_local_string_cb, seg_integer_or_not_cb, seg_integer_or_not_cb },
-                          VCF_SPECIAL_N_ALTS, vb->n_alts, 0, evs_len);
+                          VCF_SPECIAL_N_ALTS, N_ALTS, 0, evs_len);
 }
 

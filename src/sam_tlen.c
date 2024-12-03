@@ -30,7 +30,7 @@ static inline bool sam_seg_predict_TLEN (VBlockSAMP vb, ZipDataLineSAMP dl, bool
         
         uint32_t approx_mate_ref_consumed;
 
-        if (!segconf.running && segconf.has[OPTION_MC_Z]) {
+        if (!segconf_running && segconf.has[OPTION_MC_Z]) {
             if (!ctx_encountered_in_line(VB, OPTION_MC_Z)) return false; // in a has[OPTION_MC_Z] file, if we use this formula referring to MC, we need to assure PIZ that MC exists on this line, as it cannot easily check 
             
             approx_mate_ref_consumed = CTX(OPTION_MC_Z)->last_value.i;
@@ -76,7 +76,7 @@ void sam_seg_TLEN (VBlockSAMP vb, ZipDataLineSAMP dl,
         ASSSEG (is_int, "expecting TLEN to be an integer [%d,%d], but found \"%.*s\"", MIN_TLEN, MAX_TLEN, STRf(tlen));
     }
 
-    if (segconf.running && tlen_value) segconf.has_TLEN_non_zero = true;
+    if (segconf_running && tlen_value) segconf.has_TLEN_non_zero = true;
 
     SamTlenType predicted_tlen;
     if (segconf.has_TLEN_non_zero && sam_seg_predict_TLEN (vb, dl, is_rname_rnext_same, &predicted_tlen)
@@ -92,7 +92,7 @@ void sam_seg_TLEN (VBlockSAMP vb, ZipDataLineSAMP dl,
         seg_by_ctx (VB, STRa(snip), ctx, add_bytes);
     }
 
-    else if (segconf.has_TLEN_non_zero && !segconf.running) // note: only in these cases ltype=LT_DYN_INT is set in sam_seg_initialize
+    else if (segconf.has_TLEN_non_zero && !segconf_running) // note: only in these cases ltype=LT_DYN_INT is set in sam_seg_initialize
         seg_integer (VB, ctx, tlen_value, true, add_bytes);
 
     else

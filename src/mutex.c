@@ -11,6 +11,7 @@
 #include "flags.h"
 #include "buffer.h"
 #include "profiler.h"
+#include "sorter.h"
 
 typedef struct { 
     rom mutex_name;  
@@ -56,7 +57,7 @@ bool mutex_lock_do (Mutex *mutex, bool blocking, rom func, uint32_t code_line)
         START_TIMER;
         ret = pthread_mutex_lock (&mutex->mutex);
 
-        if (flag.show_time_comp_i != COMP_NONE) { // test same condition as START_TIMER 
+        if (__builtin_expect (flag.show_time_comp_i != COMP_NONE, false)) { // test same condition as START_TIMER 
             if (!lp[code_line].mutex_name) { // first lock at this lockpoint
                 ASSERT (code_line <= MAX_CODE_LINE, "mutex_lock at %s:%u: cannot lock a mutex in a code_line > %u", func, code_line, MAX_CODE_LINE);
                 lp[code_line] = (LockPoint){ .mutex_name = mutex->name, .func = func, .code_line = code_line };
@@ -76,7 +77,7 @@ bool mutex_lock_do (Mutex *mutex, bool blocking, rom func, uint32_t code_line)
         if (ret == EBUSY) return false;
     }
 
-    __atomic_add_fetch (&lp[code_line].lock_count, (uint32_t)1, __ATOMIC_RELAXED);
+    increment_relaxed (lp[code_line].lock_count);
 
     ASSERT (!ret, "called from %s by thread=%"PRIu64": pthread_mutex_lock failed on mutex->name=%s: %s", 
             func, (uint64_t)pthread_self(), mutex && mutex->name ? mutex->name : "(null)", strerror (ret)); 
@@ -96,7 +97,7 @@ void mutex_unlock_do (Mutex *mutex, FUNCLINE)
 
     mutex->lock_func = NULL; // mutex->lock_func is protected by the mutex
 
-    __atomic_sub_fetch (&lp[code_line].lock_count, (uint32_t)1, __ATOMIC_RELAXED);
+    decrement_relaxed (lp[code_line].lock_count);
 
     int ret = pthread_mutex_unlock (&mutex->mutex); 
     ASSERT (!ret, "called from %s:%u: pthread_mutex_unlock failed for %s: %s", func, code_line, mutex->name, strerror (ret)); 

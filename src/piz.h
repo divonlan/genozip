@@ -20,7 +20,7 @@ extern bool piz_default_skip_section (SectionType st, DictId dict_id);
 #define piz_is_skip_undicted_section(st) (z_file->data_type != DT_NONE && DTPZ(is_skip_section) && DTPZ(is_skip_section)((st), COMP_NONE, DICT_ID_NONE, 0, false))
 
 extern Dispatcher piz_z_file_initialize (void);
-extern DataType piz_read_global_area (Reference ref);
+extern DataType piz_read_global_area (void);
 extern void piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last_z_file, CompIType first_comp_i, CompIType last_comp_i, bool allow_skip_cleaning);
 extern void piz_read_all_ctxs (VBlockP vb, Section *sec, bool is_pair_data);
 typedef enum { PUR_RECON, PUR_FASTA_WRITER_INIT, PUR_FASTQ_READ_R1, PUR_SAM_LOAD_SAG } PizUncompressReason;

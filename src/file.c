@@ -509,7 +509,7 @@ FileP file_open_txt_read (rom filename)
                 if (file->src_codec == CODEC_GZ || file->src_codec == CODEC_NONE) goto gz; // actually, this is a GZ file (possibly BAM)
             }
             
-            StrTextSuperLong samtools_T_option = cram_get_samtools_option_T (gref);
+            StrTextSuperLong samtools_T_option = cram_get_samtools_option_T();
 
             file_open_ext_decompessor (file, "samtools", "view", CODEC_BGZF, true, (rom[7]){  
                                        "--bam", "--uncompressed",           // BAM with BGZF blocks in which the payload is not compressed
@@ -614,7 +614,7 @@ FileP file_open_txt_write (rom filename, DataType data_type, MgzipLevel bgzf_lev
         case CODEC_NONE : file->file = file->redirected ? fdopen (STDOUT_FILENO, "wb") : fopen (file->name, WRITE); break;
 
         case CODEC_CRAM : {
-            StrTextSuperLong samtools_T_option = cram_get_samtools_option_T (gref);
+            StrTextSuperLong samtools_T_option = cram_get_samtools_option_T();
             file_redirect_output_to_stream (file, "samtools", "view", "-OCRAM", 
                                             file_samtools_no_PG(), 
                                             samtools_T_option.s[0] ? samtools_T_option.s : NULL); 
@@ -624,7 +624,7 @@ FileP file_open_txt_write (rom filename, DataType data_type, MgzipLevel bgzf_lev
         case CODEC_BCF  : {
             char comp_level[4] = { '-', 'l', '0' + MIN_(bgzf_level, 9), 0 };
 
-            if (flag.show_bgzf)
+            if (flag_show_bgzf)
                 iprintf ("%s: launching external compressor \"bcftools\" with bgzf_level=%d\n", file->basename, bgzf_level);
             
             file_redirect_output_to_stream (file, "bcftools", "view", "-Ob", comp_level, NULL); 
@@ -683,7 +683,7 @@ static void file_initialize_z_file_data (FileP file)
         Z_INIT (sag_cigars); // union with solo_data
     }
 
-    if (flag.no_biopsy_line) // no need to initialize in --biopsy-line (as destroying it later will error)
+    if (flag_no_biopsy_line) // no need to initialize in --biopsy-line (as destroying it later will error)
         serializer_initialize (file->digest_serializer); 
 
     clock_gettime (CLOCK_REALTIME, &file->start_time);
@@ -957,7 +957,7 @@ void file_close (FileP *file_p)
         flag.show_time_comp_i == COMP_ALL && !flag.show_time[0]) // show-time without the optional parameter 
         profiler_add_evb_and_print_report();
 
-    __atomic_store_n (file_p, (FileP)NULL, __ATOMIC_RELAXED); 
+    store_relaxed (*file_p, (FileP)NULL); 
 
     if (!file) return; // nothing to do
 

@@ -133,7 +133,7 @@ static inline void vcf_seg_QUAL_by_GP (VBlockVCFP vb, ContextP ctx, STRp(qual))
         rom prediction = str_round (STRa(gp1_str), true, segconf.vcf_QUAL_decimals, segconf.vcf_QUAL_truncate_trailing_zeros, &prediction_len).s;
 
         if (str_issame (qual, prediction)) {
-            seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_QUAL_BY_GP, 'D', '0' + segconf.vcf_QUAL_decimals, '0' + segconf.vcf_QUAL_truncate_trailing_zeros }, 5, ctx, qual_len+1);
+            seg_special3 (VB, VCF_SPECIAL_QUAL_BY_GP, 'D', '0' + segconf.vcf_QUAL_decimals, '0' + segconf.vcf_QUAL_truncate_trailing_zeros, ctx, qual_len+1);
             return;
         }
 
@@ -141,7 +141,7 @@ static inline void vcf_seg_QUAL_by_GP (VBlockVCFP vb, ContextP ctx, STRp(qual))
         prediction = str_round (STRa(gp1_str), false, segconf.vcf_QUAL_decimals, segconf.vcf_QUAL_truncate_trailing_zeros, &prediction_len).s;
 
         if (str_issame (qual, prediction)) {
-            seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_QUAL_BY_GP, 'U', '0' + segconf.vcf_QUAL_decimals, '0' + segconf.vcf_QUAL_truncate_trailing_zeros }, 5, ctx, qual_len+1);
+            seg_special3 (VB, VCF_SPECIAL_QUAL_BY_GP, 'U', '0' + segconf.vcf_QUAL_decimals, '0' + segconf.vcf_QUAL_truncate_trailing_zeros, ctx, qual_len+1);
             return;
         }
     }
@@ -150,7 +150,7 @@ static inline void vcf_seg_QUAL_by_GP (VBlockVCFP vb, ContextP ctx, STRp(qual))
     else {
         if (str_is_1char (qual, '.')) {
             // note: decimals set as usual. They are not used for reconstructing '.' - just set in hope of "all the same"
-            seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_QUAL_BY_GP, 'D', '0' + segconf.vcf_QUAL_decimals, '0' + segconf.vcf_QUAL_truncate_trailing_zeros }, 5, ctx, qual_len+1);
+            seg_special3 (VB, VCF_SPECIAL_QUAL_BY_GP, 'D', '0' + segconf.vcf_QUAL_decimals, '0' + segconf.vcf_QUAL_truncate_trailing_zeros, ctx, qual_len+1);
             return;
         }
     }
@@ -216,7 +216,7 @@ void vcf_seg_QUAL (VBlockVCFP vb, STRp(qual))
 
     decl_ctx (VCF_QUAL);
 
-    if (segconf.running) {
+    if (segconf_running) {
         SEGCONF_RECORD_WIDTH (VCF_QUAL, qual_len);
 
         if (!str_is_1char (qual, '.')) {

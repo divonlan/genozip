@@ -56,6 +56,7 @@ static bool start_time_initialized = false;
 static Dispatcher main_dispatcher = 0; // dispatcher that updates percentage progress
 
 // called from main and also compute threads
+
 void dispatcher_increment_progress (rom where, int64_t increment)
 {
     DispatcherData *d = (DispatcherData *)main_dispatcher;
@@ -74,7 +75,7 @@ void dispatcher_increment_progress (rom where, int64_t increment)
     // in unbind mode - dispatcher is not done if there's another component after this one
     bool done = dispatcher_is_done (main_dispatcher);
 
-    progress_update (d->task_name, __atomic_load_n (&d->progress, __ATOMIC_RELAXED), d->target_progress, done);
+    progress_update (d->task_name, load_relaxed (d->progress), d->target_progress, done);
 }
 
 void dispatcher_start_wallclock (void)
@@ -128,7 +129,7 @@ Dispatcher dispatcher_init (rom task_name,
 // allow out of order joining of VBs (normally set in dispatcher_init)
 void dispatcher_allow_out_of_order (Dispatcher d)
 {
-    d->out_of_order = (d->max_threads > 1);  // max_threads=1 implies processing in order
+    store_relaxed (d->out_of_order, (bool)(d->max_threads > 1)); // max_threads=1 implies processing in order
 }
 
 void dispatcher_pause (Dispatcher d)
@@ -189,7 +190,7 @@ void dispatcher_finish (Dispatcher *dd_p, uint32_t *last_vb_i, bool cleanup_afte
     if (cleanup_after_me) {
         if ((IS_ZIP && (IS_REF_INTERNAL || IS_REF_EXT_STORE)) ||
             (IS_PIZ && IS_REF_STORED_PIZ))
-            ref_unload_reference (gref);
+            ref_unload_reference();
 
         vb_release_vb (&evb, d->task_name); // reset memory 
     }
@@ -265,7 +266,7 @@ static int32_t get_joinable (DispatcherData *d, bool next_if_none)
 {
     // search for a thread to join - start after last_joined
     for (uint32_t i=0, nj=RR(d->last_joined + 1); 
-         i < (d->out_of_order ? d->max_threads : 1); 
+         i < (load_relaxed (d->out_of_order) ? d->max_threads : 1); 
          i++, nj = RR(nj + 1)) 
 
         if (d->vbs[nj] && vb_is_processed (d->vbs[nj])) 
@@ -291,7 +292,7 @@ bool dispatcher_has_processed_vb (Dispatcher d, bool *is_final)
 // returns the next processed VB, or NULL if non-blocking the VBlock is not ready yet, or no running compute threads
 VBlockP dispatcher_get_processed_vb (Dispatcher d, bool *is_final, bool blocking)
 {
-    ASSERT0 (!blocking || !d->out_of_order, "out_of_order requires non blocking");
+    ASSERT0 (!blocking || !load_relaxed (d->out_of_order), "out_of_order requires non blocking");
 
     if (!d->num_running_compute_threads) {
         if (is_final) *is_final = d->input_exhausted && d->next_dispatched == -1;
@@ -411,15 +412,15 @@ Dispatcher dispatcher_fan_out_task (rom task_name,
         bool has_free_vb_slot = dispatcher_has_free_vb_slot (d);
 
         // PRIORITY 1: is there a block available and a compute thread available? in that case dispatch it
-        if (has_vb_ready_to_compute && has_free_thread)
+        if (has_vb_ready_to_compute && has_free_thread) 
             dispatcher_compute (d, compute);
-        
+
         // PRIORITY 2: output completed vbs, so they can be released and re-used
         else if (dispatcher_has_processed_vb (d, NULL)         ||  // case 1: there is a VB who's compute processing is completed
                  (has_vb_ready_to_compute && !has_free_thread) ||  // case 2: a VB ready to dispatch but all compute threads are occupied. wait here for one to complete
                  (can_generate && !has_free_vb_slot)) {            // case 3: we can read another VB but we have no slot for it
 
-            VBlockP processed_vb = dispatcher_get_processed_vb (d, NULL, !d->out_of_order); // this will block until one is available
+            VBlockP processed_vb = dispatcher_get_processed_vb (d, NULL, !load_relaxed (d->out_of_order)); // this will block until one is available
             if (!processed_vb) continue; // no running compute threads 
 
             if (output) output (processed_vb);
@@ -433,6 +434,7 @@ Dispatcher dispatcher_fan_out_task (rom task_name,
             next_vb = dispatcher_generate_next_vb (d, 0, COMP_NONE);
 
             prepare (next_vb);
+            __atomic_thread_fence (__ATOMIC_RELEASE);
 
             if (next_vb->dispatch != READY_TO_COMPUTE) 
                 dispatcher_set_no_data_available (d, true, next_vb->dispatch);

@@ -17,15 +17,19 @@
 typedef rom FileMode;
 extern FileMode READ, WRITE, WRITEREAD;// this are pointers to static strings - so they can be compared eg "if (mode==READ)"
 
-//                             number of sam alignments that are non-deepable for each of these reasons               | number of fastq reads that are deepable or non-deepable for each of these reasons
-typedef enum {                 RSN_DEEPABLE, RSN_SECONDARY, RSN_SUPPLEMENTARY, RSN_NO_SEQ, RSN_MONOCHAR, RSN_CONSENSUS, NDP_FQ_READS, NDP_DEEPABLE, NDP_DEEPABLE_TRIM, NDP_NO_ENTS, NDP_MONOSEQ, NDP_BAD_N_QUAL, NDP_SAM_DUP, NDP_SAM_DUP_TRIM, NDP_NO_MATCH, NUM_DEEP_STATS_ZIP } DeepStatsZip; 
-#define DEEP_STATS_NAMES_ZIP { "Deepable",   "Secondary",   "Supplementary",   "No_SEQ",   "Monochar",   "Consensus",   "FQ_reads",   "Deepable",   "Dpable_trim",     "No_ents",   "Monoseq",   "Bad_N_qual",   "SAM_dup",   "SAM_dup_trm",    "No_match"  }
+//                             number of sam alignments that are non-deepable for each of these reasons                             | number of fastq reads that are deepable or non-deepable for each of these reasons
+typedef enum {                 RSN_DEEPABLE, RSN_SECONDARY, RSN_SUPPLEMENTARY, RSN_NO_SEQ, RSN_CONSENSUS, RSN_OVERFLOW, NDP_FQ_READS=16,           NDP_DEEPABLE, NDP_DEEPABLE_TRIM, NDP_NO_ENTS, NDP_BAD_N_QUAL, NDP_SAM_DUP, NDP_SAM_DUP_TRIM, NDP_NO_MATCH, NUM_DEEP_STATS_ZIP } DeepStatsZip; 
+#define DEEP_STATS_NAMES_ZIP { "Deepable",   "Secondary",   "Supplementary",   "No_SEQ",   "Consensus",   "Overflow",   [NDP_FQ_READS]="FQ_reads", "Deepable",   "Dpable_trim",     "No_ents",   "Bad_N_qual",   "SAM_dup",   "SAM_dup_trm",    "No_match"  }
 
 // bytes consumed by QNAME/SEQ/QUAL in z_file->deep_ents (SEQ_* in same order as PizZDeepSeqEncoding)                                                  | reasons why SEQ is stored explicitly in z_file->deep_ents and not vs the reference
-typedef enum {                 QNAME_BYTES, SEQ_PACKED_BYTES, SEQ_BY_REF_BYTES, SEQ_ARITH_BYTES, QUAL_MONOCHAR_BYTES, QUAL_HUFF_BYTES, QUAL_ARITH_BYTES, EXPL_DEEPABLE,    EXPL_SEQ_AS_REF, EXPL_TOO_MANY_MISMATCHES, EXPL_SEQ_NONREF_NON_ACGT, EXPL_SEQ_END_OF_CONTIG, EXPL_SEQ_COPY_VERBATIM, NUM_DEEP_STATS_PIZ } DeepStatsPiz;
-#define DEEP_STATS_NAMES_PIZ { "QNAME",     "SEQ_packed",     "SEQ_by_ref",     "SEQ_arith",     "QUAL_monochar",     "QUAL_huff",     "QUAL_arith",     "Total_deepable", "stored_as_ref", "too_many_mismatches",    "nonref_has_non-ACGT",    "end_of_contig",        "copy_verbatim", }
+typedef enum {                 QNAME_BYTES, SEQ_PACKED_BYTES, SEQ_BY_REF_BYTES, SEQ_ARITH_BYTES, QUAL_MONOCHAR_BYTES, QUAL_BYTES,  EXPL_DEEPABLE,    EXPL_SEQ_AS_REF, EXPL_TOO_MANY_MISMATCHES, EXPL_SEQ_NONREF_NON_ACGT, EXPL_SEQ_END_OF_CONTIG, EXPL_SEQ_COPY_VERBATIM, EXPL_BISULFITE, NUM_DEEP_STATS_PIZ } DeepStatsPiz;
+#define DEEP_STATS_NAMES_PIZ { "QNAME",     "SEQ_packed",     "SEQ_by_ref",     "SEQ_arith",     "QUAL_monochar",     "QUAL_huff", "Total_deepable", "Stored_as_ref", "Too_many_mismatches",    "nonref_has_non-ACGT",    "End_of_contig",        "Copy_verbatim",        "Bisulfite"}
 
 #define NUM_DEEP_STATS ((int)NUM_DEEP_STATS_ZIP > (int)NUM_DEEP_STATS_PIZ ? (int)NUM_DEEP_STATS_ZIP : (int)NUM_DEEP_STATS_PIZ)
+
+//                             stats regarding sam alignments                                                                               
+typedef enum {                 BA_TOTAL,     BA_USABLE, BA_UNMAPPED, BA_NO_SEQ, BA_NOT_PRIMARY, BA_NOT_IN_REF, BA_OVERFLOW, BA_AFTER } BamassStats; 
+#define BAMASS_STATS_NAMES   { "Alignments", "Usable",  "Unmapped",  "No_SEQ",  "Not_primary",  "Not_in_ref",  "Overflow",  ""       }     
 
 #define LIBDEFLATE_MAX_LEVEL 12
 #define ZLIB_MAX_LEVEL 9
@@ -42,7 +46,6 @@ typedef struct File {
     bool redirected;                   // TXT_FILE: true if this file is redirected from stdin/stdout or a pipe
     bool no_more_blocks;               // ZIP TXT_FILE: txtfile_read_block has completed returning all the file's data (note: it is possible that we read all the data on the disk file so feof(fp)=true, but no_more_blocks=false, because some of it is waiting in buffers: gz_data or state->avail_in)
     bool is_in_tar;                    // z_file: file is embedded in tar file
-    bool is_scanned;                   // TXT_FILE: sam_sag_by_flag_scan_for_depn has been performed for this file
     DataType data_type;
     Codec src_codec;                   // TXT_FILE ZIP/PIZ: internal or external codec of txt file (eg CRAM, BAM, XZ, ZIP, BGZF, MGZF, NONE...). Passed in SectionHeaderTxtHeader.src_codec.
                                        // Z_FILE PIZ: set to CODEC_BCF or CODEC_CRAM iff GenozipHeader.data_type is DT_BCF/DT_CRAM
@@ -163,16 +166,17 @@ typedef struct File {
     Buffer read_count;
     Buffer unmapped_read_count;
     
-    // Z_FILE: SAM/BAM SA stuff
+    // Z_FILE: SAM/BAM SAG stuff
     Buffer sag_grps;                   // Z_FILE ZIP/PIZ: an SA group is a group of alignments, including the primary aligngment
-    Buffer sag_grps_index;             // Z_FILE ZIP: index z_file->sag_grps by adler32(qname)
+    Buffer sag_grps_index;             // Z_FILE ZIP: index z_file->sag_grps by qname hash
     Buffer sag_alns;                   // Z_FILE ZIP/PIZ: array of {RNAME, STRAND, POS, CIGAR, NM, MAPQ} of the alignment
     Buffer sag_qnames;                 // Z_FILE ZIP/PIZ: compressed qnames
     Buffer sag_depn_index;             // Z_FILE ZIP: SAG_BY_FLAG: uniq-sorted hash(QNAME) of all depn alignments in the file
-    
+    uint32_t SA_CIGAR_chewing_vb_i;    // Z_FILE ZIP: vb_i of the PRIM VB that will be chewing cigars (the first prim vb)
+
     union {
     Buffer sag_cigars;                 // Z_FILE ZIP: SAG_BY_SA: compressed CIGARs
-    Buffer solo_data;                  // Z_FILE ZIP/PIZ: SAG_BY_SOLO: solo data
+    Buffer sag_solo_data;              // Z_FILE ZIP/PIZ: SAG_BY_SOLO: compressed solo data
     };
     Buffer sag_seq;                    // Z_FILE ZIP/PIZ: bitmap of seqs in ACGT 2bit format
     Buffer sag_qual;                   // Z_FILE ZIP/PIZ: compressed QUAL
@@ -180,12 +184,14 @@ typedef struct File {
     // Z_FILE: Deep
     Buffer vb_start_deep_line;         // Z_FILE: ZIP/PIZ: for each SAM VB, the first deepable_line_i of that VB (0-based, uint64_t)
     Buffer vb_num_deep_lines;          // Z_FILE: ZIP: for each SAM VB, the number of deepable lines
+    union {
     Buffer deep_ents;                  // Z_FILE: ZIP: entries of type ZipZDeep
                                        // Z_FILE: PIZ: an array of Buffers, one for each SAM VB, containing QNAME,SEQ,QUAL of all reconstructed lines
-    
-    Buffer deep_index;                 // Z_FILE: ZIP: hash table  - indices into deep ents, indexed by a subset of the hash.qname bits 
+    };
+    union {
+    Buffer deep_index;                 // Z_FILE: ZIP: hash table  - indices into deep_ents, indexed by a subset of the hash.qname bits 
                                        // Z_FILE: PIZ: an array of Buffers, one for each SAM VB, each containing an array of uint32_t - one for each primary line - index into deep_ents[vb_i] of PizZDeep of that line
-    
+    };
     // Reconstruction plan, for reconstructing in sorted order if --sort: [0] is primary coords, [1] is luft coords
     Buffer vb_info[3];                 // Z_FILE   ZIP: SAM: array of SamMainVbInfo for MAIN and SamGcVbInfo for PRIM, DEPN
                                        // Z_FILE   PIZ: [0]: used by writer [1]: used to load SAM SA Groups - array of PlsgVbInfo - entry per PRIM vb 
@@ -209,18 +215,25 @@ typedef struct File {
     // Information content stats 
     CompIType num_components;          // ZIP/PIZ z_file: number of components in this file (inc. generated components)
     uint32_t num_vbs;                  // ZIP: z_file/txt_file PIZ: txt_file: number of VBs processed z_file: total VBs in file
-    uint32_t num_vbs_dispatched;       // ZIP: txt_file
     uint32_t num_preproc_vbs_joined;   // Z_FILE: PIZ
     uint32_t max_conc_writing_vbs;     // Z_FILE: PIZ: SAM: the maximal number of hand-over VBs writer might have in memory. Passed through SectionHeaderGenozipHeader since 15.0.64, and through SectionHeaderReconPlan before that.
-    uint64_t deep_stats[NUM_DEEP_STATS]; // Z_FILE: ZIP/PIZ: SAM: stats collection on Deep performance
+    uint64_t deep_stats[NUM_DEEP_STATS];  // Z_FILE: ZIP/PIZ: SAM: stats collection on Deep performance
     uint64_t secondary_count, supplementary_count, saggy_near_count, mate_line_count, depn_far_count; // Z_FILE ZIP: SAM: for stats
     union {
     uint64_t num_sequences;            // Z_FILE: ZIP: FASTA: num "DESC" lines in this file. for stats
-    uint64_t num_perfect_matches;      // Z_FILE: ZIP: SAM/BAM/FASTQ: number of perfect matches found by aligner. for stats 
     Ploidy max_ploidy;                 // Z_FILE: ZIP: VCF 
     Ploidy max_ploidy_for_mux;         // Z_FILE: PIZ: VCF: copied from SectionHeaderGenozipHeader.max_ploidy_for_mux
     };
-    uint64_t num_aligned;              // Z_FILE: ZIP: SAM/BAM/FASTQ: number of alignments successfully found by aligner. for stats 
+    uint64_t sam_num_seq_by_aln;       // Z_FILE: ZIP: SAM/BAM: number of alignments segged vs reference by rname/pos/cigar (i.e. not aligner, not copy from prim/saggy, not verbatim)
+    uint64_t sam_num_perfect_matches;  // Z_FILE: ZIP: SAM/BAM/FASTQ: number of perfect matches found by aligner. for stats 
+    uint64_t sam_num_aligned;          // Z_FILE: ZIP: SAM/BAM: number of alignments successfully found by aligner. for stats 
+    uint64_t sam_num_verbatim;         // Z_FILE: ZIP: SAM/BAM: number of alignments segged verbatim
+    uint64_t sam_num_vs_prim;          // Z_FILE: ZIP: SAM/BAM: number of alignments segged against prim / saggy
+    uint64_t fq_num_aligned;           // Z_FILE: ZIP: FASTQ: number of alignments successfully found by aligner. for stats 
+    uint64_t fq_num_perfect_matches;   // Z_FILE: ZIP: SAM/BAM/FASTQ: number of perfect matches found by aligner. for stats 
+    uint64_t fq_num_verbatim;          // Z_FILE: ZIP: FASTQ: number of lines segged verbatim
+    uint64_t fq_num_monochar;          // Z_FILE: ZIP: FASTQ: number of lines segged monochar
+    uint64_t vcf_num_samples_copied;   // Z_FILE: ZIP: VCF: number of samples copied
     uint64_t domq_lines[MAX_NUM_COMPS];// Z_FILE: ZIP: number of lines per components of the various QUAL codecs (show in codec_qual_show_stats)
     uint64_t divr_lines[MAX_NUM_COMPS];
     uint64_t homp_lines[MAX_NUM_COMPS];

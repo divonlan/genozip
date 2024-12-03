@@ -31,6 +31,13 @@ static inline WordIndex seg_by_ctx (VBlockP vb, STRp(snip), ContextP ctx, unsign
 static inline WordIndex seg_by_dict_id (VBlockP vb, STRp(snip), DictId dict_id, unsigned add_bytes)           { return seg_by_ctx_ex (vb, STRa(snip), ctx_get_ctx (vb, dict_id), add_bytes, NULL); }
 static inline WordIndex seg_by_did_i_ex (VBlockP vb, STRp(snip), Did did_i, unsigned add_bytes, bool *is_new) { return seg_by_ctx_ex (vb, STRa(snip), CTX(did_i), add_bytes, is_new); }
 static inline WordIndex seg_by_did (VBlockP vb, STRp(snip), Did did_i, unsigned add_bytes)                    { return seg_by_ctx_ex (vb, STRa(snip), CTX(did_i), add_bytes, NULL); }
+static inline void seg_special0 (VBlockP vb, char special, ContextP ctx, unsigned add_bytes)                  { seg_by_ctx (vb, (char[]){ SNIP_SPECIAL, special }, 2, ctx, add_bytes); }
+static inline void seg_special1 (VBlockP vb, char special, char c1, ContextP ctx, unsigned add_bytes)         { seg_by_ctx (vb, (char[]){ SNIP_SPECIAL, special, c1 }, 3, ctx, add_bytes); }
+static inline void seg_special2 (VBlockP vb, char special, char c1, char c2, ContextP ctx, unsigned add_bytes){ seg_by_ctx (vb, (char[]){ SNIP_SPECIAL, special, c1, c2 }, 4, ctx, add_bytes); }
+static inline void seg_special3 (VBlockP vb, char special, char c1, char c2, char c3, ContextP ctx, unsigned add_bytes){ seg_by_ctx (vb, (char[]){ SNIP_SPECIAL, special, c1, c2, c3 }, 5, ctx, add_bytes); }
+static inline void seg_special4 (VBlockP vb, char special, char c1, char c2, char c3, char c4, ContextP ctx, unsigned add_bytes){ seg_by_ctx (vb, (char[]){ SNIP_SPECIAL, special, c1, c2, c3, c4 }, 6, ctx, add_bytes); }
+static inline void seg_init_all_the_same (VBlockP vb, Did did_i, STRp(snip)) /*use in seg_initialize*/        { seg_by_ctx_ex (vb, STRa(snip), CTX(did_i), 0, NULL); }
+static inline void seg_all_the_same (VBlockP vb, ContextP ctx, uint32_t add_bytes)                            { ctx_increment_count (vb, ctx, 0); ctx->txt_len += add_bytes; }
 
 extern WordIndex seg_known_node_index (VBlockP vb, ContextP ctx, WordIndex node_index, unsigned add_bytes);
 extern WordIndex seg_duplicate_last (VBlockP vb, ContextP ctx, unsigned add_bytes);
@@ -72,7 +79,7 @@ extern bool seg_add_to_local_fixed_len_cb (VBlockP vb, ContextP ctx, STRp(str), 
 static inline void seg_add_to_local_blob (VBlockP vb, ContextP ctx, STRp(blob), unsigned add_bytes) 
 { 
 #ifdef DEBUG
-    ASSERT (segconf.running || ctx->ltype == LT_BLOB, "%s: Expecting %s.ltype=LT_BLOB but found %s", LN_NAME, ctx->tag_name, lt_name (ctx->ltype));
+    ASSERT (segconf_running || ctx->ltype == LT_BLOB, "%s: Expecting %s.ltype=LT_BLOB but found %s", LN_NAME, ctx->tag_name, lt_name (ctx->ltype));
 #endif
     seg_add_to_local_fixed_do (vb, ctx, STRa(blob), false, LOOKUP_WITH_LENGTH, false, add_bytes); 
 }

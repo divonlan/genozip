@@ -75,7 +75,7 @@ extern rom digest_name (void);
 extern rom digest_name_(bool is_adler);
 
 #define digest_is_equal(digest1,digest2) ((digest1).w128 == (digest2).w128)
-extern void digest_verify_ref_is_equal (const Reference ref);
+extern void digest_verify_ref_is_equal (void);
 
 #define digest_is_zero(digest) (!(digest).w128)
 

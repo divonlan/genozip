@@ -64,7 +64,7 @@ void vcf_seg_FORMAT_QR_QA (VBlockVCFP vb, ContextP ctx, STRp(value_str))
     if (str_is_1char (value_str, '.') && 
         other_ctx->last_txt.len==1 && *last_txtx (vb, other_ctx) == '.') {
         
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_QR_QA }, 2, ctx, value_str_len); 
+        seg_special0 (VB, VCF_SPECIAL_QR_QA, ctx, value_str_len); 
         return;
     }
 
@@ -72,7 +72,7 @@ void vcf_seg_FORMAT_QR_QA (VBlockVCFP vb, ContextP ctx, STRp(value_str))
         seg_by_ctx (VB, STRa(value_str), ctx, value_str_len);
 
     else {
-        if (segconf.running) {
+        if (segconf_running) {
             if (ctx_has_value (VB, other_ctx->did_i) && other_ctx->last_value.i) {
                 segconf.Q_to_O += (float)value / (float)other_ctx->last_value.i;
                 segconf.n_Q_to_O++;
@@ -85,7 +85,7 @@ void vcf_seg_FORMAT_QR_QA (VBlockVCFP vb, ContextP ctx, STRp(value_str))
         int64_t prediction = round ((float)other_ctx->last_value.i * (float)segconf.Q_to_O);
         int64_t delta = value - prediction;
 
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_QR_QA }, 2, ctx, value_str_len);
+        seg_special0 (VB, VCF_SPECIAL_QR_QA, ctx, value_str_len);
         dyn_int_append (VB, ctx, delta, 0);
     }
 }

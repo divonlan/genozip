@@ -8,6 +8,7 @@
 
 #include "contigs.h"
 #include "context.h"
+#include "sorter.h"
 
 //------------------------------------------------------
 // Calculating Accession Numbers 
@@ -142,17 +143,21 @@ static SORTER (contigs_ref_index_sorter)
     return ASCENDING_RAW (contig_a->ref_index, contig_b->ref_index);
 }
 
+static SORTER (contigs_LN_sorter)
+{
+    DEF_SORTER_CONTIGS;
+    return ASCENDING_RAW (contig_a->max_pos, contig_b->max_pos); // min_pos is always 1, so sorting by max_pos effectively sorts by length
+}
+
 // not thread safe: can only run from the main thread
 static void contigs_sort (ConstBufferP contigs, ConstBufferP contigs_dict, BufferP index_buf, SortBy sort_by)
 {
-    if (!contigs->len) return; // nothing to do
-    
+    if (!contigs->len || index_buf->len) return; // no contigs or already sorted
+
     sorter_contigs = contigs;
     sorter_contigs_dicts = contigs_dict;    
 
-    buf_alloc (evb, index_buf, 0, contigs->len, uint32_t, 1, contigs->name);
-    index_buf->len = contigs->len;
-    ARRAY (uint32_t, index, *index_buf);
+    ARRAY_alloc (uint32_t, index, contigs->len, false, *index_buf, evb, contigs->name);
 
     for (uint32_t i=0; i < index_len; i++)
         index[i] = i;
@@ -161,6 +166,7 @@ static void contigs_sort (ConstBufferP contigs, ConstBufferP contigs_dict, Buffe
         case SORT_BY_NAME      : qsort (index, index_len, sizeof(uint32_t), contigs_alphabetical_sorter);     break;
         case SORT_BY_REF_INDEX : qsort (index, index_len, sizeof(uint32_t), contigs_ref_index_sorter);        break;
         case SORT_BY_AC        : qsort (index, index_len, sizeof(uint32_t), contigs_accession_number_sorter); break;
+        case SORT_BY_LN        : qsort (index, index_len, sizeof(uint32_t), contigs_LN_sorter);               break;
         default: ABORT ("Invalid sort_by=%u", sort_by);
     }
 }
@@ -198,6 +204,8 @@ WordIndex contigs_get_by_name (ConstContigPkgP ctgs, STRp(contig_name))
 {
     ASSERT (ctgs->contigs.len == ctgs->by_name.len, "%s: expecting contigs.len=%"PRIu64" == by_name.len=%"PRIu64, ctgs->name, ctgs->contigs.len, ctgs->by_name.len);
 
+    if (!ctgs->contigs.len) return WORD_INDEX_NONE;
+    
 #if defined(__linux__) || defined(_WIN32)  // Note: this is a small performance enhancement - you can safely change this to "#if 0" if your system doesn't support thread local storage
     // cache result (thread-local storage)
     static __thread uint64_t cache_unique_id = (uint64_t)-1;
@@ -390,7 +398,7 @@ WordIndex contigs_get_matching (ConstContigPkgP ctgs, STRp(name), PosType64 LN, 
         ctg_i = contigs_get_by_name (ctgs, "chrM",  4); CHECK_IF_DONE; 
         ctg_i = contigs_get_by_name (ctgs, "MT",    2); CHECK_IF_DONE; 
         ctg_i = contigs_get_by_name (ctgs, "M",     1); CHECK_IF_DONE; 
-        ctg_i = contigs_get_by_accession_number_no_version (ctgs, &NC[25]); CHECK_IF_DONE; 
+        // ctg_i = contigs_get_by_accession_number_no_version (ctgs, &NC[25]); CHECK_IF_DONE; 
     }
 
     // for contigs eg "GL000192.1", "chrUn_JTFH01001867v2_decoy", "chr4_gl383528_alt". 
@@ -409,7 +417,7 @@ finalize:
 
 rom contigs_get_name (ConstContigPkgP ctgs, WordIndex index, unsigned *contig_name_len /* optional */)
 {
-    ASSERT (index >= 0 && index < ctgs->contigs.len, "expecting 0 <= index=%d < %s.len=%"PRIu64, index, ctgs->name, ctgs->contigs.len);
+    ASSERTINRANGE (index, 0, ctgs->contigs.len32);
 
     Contig *ctg = B(Contig, ctgs->contigs, index);
 
@@ -461,6 +469,9 @@ void contigs_create_index (ContigPkg *ctgs, SortBy sort_by)
     if (sort_by & SORT_BY_REF_INDEX) 
         contigs_sort (&ctgs->contigs, &ctgs->dict, &ctgs->by_ref_index, SORT_BY_REF_INDEX);
 
+    if (sort_by & SORT_BY_LN) 
+        contigs_sort (&ctgs->contigs, &ctgs->dict, &ctgs->by_LN, SORT_BY_LN);
+
     if (sort_by & SORT_BY_AC) {
         contigs_calculate_accession_numbers (&ctgs->contigs, &ctgs->dict);
         contigs_sort (&ctgs->contigs, &ctgs->dict, &ctgs->by_AC, SORT_BY_AC);
@@ -470,42 +481,6 @@ void contigs_create_index (ContigPkg *ctgs, SortBy sort_by)
 
     COPY_TIMER_EVB (contigs_create_index);
 }
-
-void contigs_build_contig_pkg_from_zctx (ContigPkg *ctgs, ConstContextP zctx, SortBy sort_by)
-{
-    ASSERTNOTNULL (ctgs);
-
-    buf_copy (evb, &ctgs->dict, &zctx->dict, char, 0, 0, "ContigPkg->dict");
-    
-    // note: we take num_contigs from nodes (ZIP) or word_list (PIZ), but in the case of nodes, we can't rely
-    // on chrom_ctx->nodes for the correct order as vb_i=1 resorted. so we generate directly from dict
-    uint32_t num_contigs = MAX_(zctx->nodes.len32, zctx->word_list.len32);
-    uint32_t num_counts  = zctx->counts.len32;
-
-    ASSERT (!num_counts || zctx->counts.len == num_contigs, "expecting zctx=%s to have num_contigs=%u == num_counts=%u", zctx->tag_name, num_contigs, num_counts);
-
-    ctgs->contigs.len = ctgs->dict.count = num_contigs;
-    ctgs->has_counts = (num_counts > 0);
-
-    buf_alloc_zero (evb, &ctgs->contigs, 0, num_contigs, Contig, 1, "ContigPkg->contigs");
-
-    // similar logic to ctx_dict_build_word_lists
-    rom next_name = B1STc (ctgs->dict);
-    for_buf2 (Contig, contig, i, ctgs->contigs) {
-        if (num_counts)
-            contig->metadata.parsed.count = *B64(zctx->counts, i);
-
-        contig->snip_len   = strlen (next_name);
-        contig->char_index = BNUM (ctgs->dict, next_name);
-
-        rom contig_name = Bc (ctgs->dict, contig->char_index);
-        contig_name_to_acc_num (contig_name, contig->snip_len, &contig->metadata.parsed.ac);
-
-        next_name += contig->snip_len + 1; // +1 to skip the \0 too
-    }
-
-    contigs_create_index (ctgs, sort_by);    
-} 
 
 void contigs_free (ContigPkg *ctgs)
 {

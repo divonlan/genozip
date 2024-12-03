@@ -257,7 +257,7 @@ static void noreturn threads_bug_signal_handler (int signum)
     
     threads_print_call_stack(); // this works ok on mac (in debug only), but seems to not print function names on Linux
 
-    buflist_test_overflows_all_vbs ("threads_bug_signal_handler");
+    buflist_test_overflows_all_vbs ("threads_bug_signal_handler", false);
 
     exit (128 + signum); // convention for exit code due to signal - both Linux and MacOS
 }
@@ -383,7 +383,7 @@ static void threads_log_by_thread_id (ThreadId thread_id, const ThreadEnt *ent, 
 {
     bool has_vb = ent->vb_i != (uint32_t)-1;
 
-    if (flag.show_threads)  {
+    if (flag_show_threads)  {
         if (has_vb) iprintf ("%s: vb_i=%u vb_id=%d %s thread_id=%d pthread=%"PRIu64"\n", ent->task_name, ent->vb_i, ent->vb_id, event, thread_id, (uint64_t)ent->pthread);
         else        iprintf ("%s: %s: thread_id=%d pthread=%"PRIu64"\n", ent->task_name, event, thread_id, (uint64_t)ent->pthread);
     }
@@ -402,7 +402,7 @@ static void threads_log_by_thread_id (ThreadId thread_id, const ThreadEnt *ent, 
 void threads_log_by_vb (ConstVBlockP vb, rom task_name, rom event, 
                         int time_usec /* optional */)
 {
-    if (flag.show_threads) {
+    if (flag_show_threads) {
         unsigned pthread = (unsigned)(((uint64_t)pthread_self()) % 100000); // 5 digits
 
         #define COMP (vb->comp_i != COMP_NONE ? " comp=" : ""), \

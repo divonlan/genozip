@@ -507,7 +507,7 @@ void txtfile_zip_finalize_codecs (void)
 
     memcpy (z_file->comp_gz_header[flag.zip_comp_i], txt_file->gz_header, GZ_HEADER_LEN);
 
-    if (flag.show_gz || flag.show_bgzf) {
+    if (flag.show_gz || flag_show_bgzf) {
         iprintf ("%s: src_codec=%s effective_codec=%s gz_header=%s", txt_file->basename, // same format as in txtfile_zip_finalize_codecs
                  codec_name (txt_file->src_codec), codec_name (txt_file->effective_codec),
                  display_gz_header (z_file->comp_gz_header[flag.zip_comp_i], GZ_HEADER_LEN, false).s);
@@ -555,7 +555,7 @@ static uint32_t txtfile_read_block_igzip (VBlockP vb, uint32_t max_bytes, bool *
     if (state->block_state == ISAL_BLOCK_FINISH) 
         isal_inflate_reset (state);
 
-    if (state->block_state == ISAL_BLOCK_NEW_HDR && flag.show_bgzf) {
+    if (state->block_state == ISAL_BLOCK_NEW_HDR && flag_show_bgzf) {
         last_gz_header_len = MIN_(GZ_HEADER_LEN, state->avail_in);
         memcpy (last_gz_header, state->next_in, last_gz_header_len);
     }
@@ -585,7 +585,7 @@ static uint32_t txtfile_read_block_igzip (VBlockP vb, uint32_t max_bytes, bool *
 
         uint64_t decompressed_so_far = txt_file->disk_so_far - txt_file->gz_data.len + BNUM (txt_file->gz_data, state->next_in);
 
-        if (flag.show_bgzf) {
+        if (flag_show_bgzf) {
             uint64_t bsize = decompressed_so_far - txt_file->start_gz_block;
             iprintf ("UNCOMPRESS GZ   thread=MAIN vb=%s block_i=%"PRIu64" bsize=%"PRIu64" isize=%u%s gz_header=%s\n", 
                      VB_NAME, txt_file->gz_blocks_so_far, bsize, 
@@ -670,7 +670,7 @@ static inline uint32_t txtfile_read_block_mgzip (VBlockP vb,
     int32_t max_block_size = mgzip_get_max_block_size();
 
     // comp_txt_data contains gz-compressed data; we use .uncomp_len to track its uncompress length
-    buf_alloc (vb, &vb->comp_txt_data, 0, requested_bytes/2, char, 0, "scratch");
+    buf_alloc (vb, &vb->comp_txt_data, 0, requested_bytes / 4/*typical gz ratio is 4.5-6*/, char, 0, "comp_txt_data");
 
     while ( (   (requested_bytes && vb->comp_txt_data.uncomp_len - start_uncomp_len <= requested_bytes - max_block_size) 
              || (!requested_bytes && !vb->comp_txt_data.uncomp_len)
@@ -703,7 +703,7 @@ static inline uint32_t txtfile_read_block_mgzip (VBlockP vb,
 
             *is_data_read = true;
 
-            if (flag.show_bgzf) {
+            if (flag_show_bgzf) {
                 GzBlockZip *bb = BLST (GzBlockZip, vb->gz_blocks);
                 iprintf ("READ       %s thread=MAIN%s block_i=%"PRIu64" bb_i=%u comp_index=%u comp_len=%u txt_index=%u txt_len=%u eof=%s%s disk_so_far=%"PRIu64"\n",
                          codec_name (txt_file->effective_codec), 
@@ -934,7 +934,7 @@ static bool txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb, bool *R2_vb_t
     else if (final_unconsumed_len == -1) {
         
         // case: segconf - segconf will try again, increasing the vb_size
-        if (segconf.running && !txt_file->no_more_blocks)
+        if (segconf_running && !txt_file->no_more_blocks)
             {}
 
         // case: R2 doesn't have enough data to sync with R1 (confirmed by counting lines) get more data
@@ -1057,7 +1057,7 @@ static void txtfile_set_seggable_size (void)
         
     txt_file->est_seggable_size = MAX_(0.0, (double)disk_size * source_comp_ratio - (double)txt_file->header_size);
 
-    if (segconf.running)
+    if (segconf_running)
         txt_file->txt_data_so_far_single = txt_file->header_size; // roll back as we will re-account for this data in VB=1
 }
 
@@ -1110,7 +1110,7 @@ void txtfile_read_vblock (VBlockP vb)
 
     ASSERTNOTNULL (txt_file);
     ASSERT_DT_FUNC (txt_file, unconsumed);
-    ASSERT (vb == evb || IN_RANGX (segconf.vb_size, ABSOLUTE_MIN_VBLOCK_MEMORY, ABSOLUTE_MAX_VBLOCK_MEMORY) || segconf.running,
+    ASSERT (vb == evb || IN_RANGX (segconf.vb_size, ABSOLUTE_MIN_VBLOCK_MEMORY, ABSOLUTE_MAX_VBLOCK_MEMORY) || segconf_running,
             "Invalid vb_size=%"PRIu64" comp_i(0-based)=%u", segconf.vb_size, z_file->num_txts_so_far-1);
 
     if (txt_file->no_more_blocks && !txt_file->unconsumed_txt.len) return; // we're done
@@ -1118,7 +1118,7 @@ void txtfile_read_vblock (VBlockP vb)
     bool is_mgzip = TXT_IS_MGZIP;
 
     bool always_uncompress = flag.zip_uncompress_source_during_read || // segconf tells us to uncompress the data 
-                             segconf.running || // segconf doesn't have a compute thread, and doesn't attempt to uncompress txt_data
+                             segconf_running || // segconf doesn't have a compute thread, and doesn't attempt to uncompress txt_data
                              !is_mgzip; // GZ, BZ2 and NONE always return uncompressed data anyway (note: segconf is always one of these too)
 
     vb->comp_i = flag.zip_comp_i;  // needed for VB_NAME
@@ -1143,7 +1143,7 @@ void txtfile_read_vblock (VBlockP vb)
 
     ASSERT (my_vb_size >= max_block_size, "vblock=%s < max_block_size=%u bytes, in codec=%s. This is not supported.%s", 
             str_size(my_vb_size).s, max_block_size, codec_name(txt_file->effective_codec),
-            segconf.running ? "" : " Use --no-bgzf to switch codec or use --vblock set specificy a larger size");
+            segconf_running ? "" : " Use --no-bgzf to switch codec or use --vblock set specificy a larger size");
 
     while (1) {     
         uint32_t bytes_requested = IS_R2 ? ((double)my_vb_size * 1.03 + (max_block_size - 1)) // add 3% vs R1 (VB might be slightly bigger if reads on average are a bit longer) and round up to the next full block
@@ -1237,7 +1237,7 @@ void txtfile_read_vblock (VBlockP vb)
     if (!txt_file->est_seggable_size || seggable_size_is_modifiable())
         txtfile_set_seggable_size();
 
-    if (!segconf.running) {
+    if (!segconf_running) {
         // case: R1, and codec might or might not have mgzip blocks in sync with R2: store the info R2 will need for deciding this
         if (IS_R1 && Ltxt) 
             buf_append_one (z_file->R1_txt_data_lens, vb->txt_data.len32);

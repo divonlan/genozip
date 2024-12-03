@@ -23,7 +23,7 @@ void vcf_seg_INFO_SO_TERM (VBlockVCFP vb, ContextP ctx, STRp(st))
     if ((vb->REF_len == 1 && vb->ALT_len == 1 && str_issame_(st, st_len, "SNV"      , 3)) ||
         (vb->REF_len == 1 && vb->ALT_len >  1 && str_issame_(st, st_len, "insertion", 9)) ||
         (vb->REF_len >  1 && vb->ALT_len == 1 && str_issame_(st, st_len, "deletion" , 8)))
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_SO_TERM }, 2, ctx, st_len);
+        seg_special0 (VB, VCF_SPECIAL_SO_TERM, ctx, st_len);
 
     else
         seg_by_ctx (VB, STRa(st), ctx, st_len);
@@ -31,8 +31,8 @@ void vcf_seg_INFO_SO_TERM (VBlockVCFP vb, ContextP ctx, STRp(st))
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_SO_TERM)
 {
-    if (ALT0(SNP))      RECONSTRUCT ("SNV"      , 3);
-    else if (ALT0(INS)) RECONSTRUCT ("insertion", 9);
+    if (VT0(SNP))      RECONSTRUCT ("SNV"      , 3);
+    else if (VT0(INS)) RECONSTRUCT ("insertion", 9);
     else                RECONSTRUCT ("deletion" , 8);
     
     return NO_NEW_VALUE;

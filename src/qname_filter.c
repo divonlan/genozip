@@ -11,6 +11,7 @@
 #include "segconf.h"
 #include "qname.h"
 #include "file.h"
+#include "sorter.h"
 
 typedef struct {
     uint32_t hash; // hash of qname

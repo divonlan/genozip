@@ -32,7 +32,6 @@ void profiler_set_avg_compute_vbs (float avg_compute_vbs)
     profile.avg_compute_vbs[profile.num_txt_files++] = avg_compute_vbs;
 }
 
-
 StrTextSuperLong profiler_get_avg_compute_vbs (char sep)
 {
     StrTextSuperLong s = {};
@@ -123,7 +122,8 @@ void profiler_add_evb_and_print_report (void)
         PRINT (refhash_uncompress_one_vb, 2);
         PRINT (cram_inspect_file, 1);
         PRINT (txtfile_discover_specific_gz, 1);
-        PRINT (txtheader_zip_read_and_compress, 1);
+        PRINT (fastq_bamass_populate, 1);
+        if (!flag.bam_assist) PRINT (txtheader_zip_read_and_compress, 1);
         PRINT (txtfile_read_header, 2);
         PRINT (sam_header_inspect, 2);
         PRINT (sam_header_zip_inspect_SQ_lines, 3); 
@@ -133,6 +133,14 @@ void profiler_add_evb_and_print_report (void)
         PRINT (sam_header_zip_inspect_RG_lines, 3); 
         PRINT (sam_header_zip_inspect_HD_line, 3);
         PRINT (ref_initialize_ranges, 2);
+        PRINT (bamass_segconf, 2);
+        PRINT (bamass_generate, 2);
+        PRINT (bamass_read_one_vb, 3);
+        PRINT (bamass_append_z_ents, 3);
+        PRINT (bamass_link, 2);
+        PRINT (bamass_after_link_entries, 3);
+        if (flag.bam_assist) PRINT (buf_trim_do, 2);
+        if (flag.bam_assist) PRINT (txtheader_zip_read_and_compress, 1); 
         PRINT (txtheader_compress, 2);
         PRINT (txtheader_compress_one_fragment, 3); 
         PRINT (digest_txt_header, 2);
@@ -162,6 +170,8 @@ void profiler_add_evb_and_print_report (void)
         PRINT (write_bg, 2);
         PRINT (bgzf_io_thread, 1);
         PRINT (sam_sa_prim_finalize_ingest, 1);
+        PRINT (sam_gencomp_trim_memory, 2);
+        if (z_has_gencomp) PRINT (buf_trim_do, 3);
         PRINT (zip_main_loop_idle, 1);
         PRINT (zip_free_undeeded_zctx_bufs_after_seg, 1);
         PRINT (sam_zip_calculate_max_conc_writing_vbs, 3);
@@ -182,10 +192,21 @@ void profiler_add_evb_and_print_report (void)
         PRINT (random_access_compress, 2);
         PRINT (ctx_compress_counts, 2);
         PRINT (zfile_compress_genozip_header, 2);
+        PRINT (zip_finalize, 1);
+
+        if (profile.nanosecs.bamass_generate_bamass_ents) {
+            iprintf ("GENOZIP bamass populate compute threads: %s\n", str_int_commas (ms(profile.nanosecs.bamass_generate_bamass_ents + profile.nanosecs.bamass_link_entries)).s);
+            PRINT (bamass_generate_bamass_ents, 1);
+            PRINT (bamass_get_one_bam_aln, 2);
+            if (flag.bam_assist) PRINT (bam_seq_to_sam, 3);
+            PRINT (bamass_get_one_sam_aln, 2);
+            PRINT (bamass_prepare_cigar, 2);
+            PRINT (bamass_generate_bamass_ents_hash, 2);
+            PRINT (bamass_link_entries, 1);
+        }
 
         iprintf ("GENOZIP compute threads %s\n", str_int_commas (ms(profile.nanosecs.compute)).s);
         PRINT (mgzip_uncompress_vb, 1);
-        PRINT (ctx_clone, 1);
         PRINT (scan_index_qnames_preprocessing, 1);
         PRINT (zip_modify, 1);
         PRINT (vcf_zip_modify, 2);
@@ -196,19 +217,26 @@ void profiler_add_evb_and_print_report (void)
         PRINT (vcf_convert_likelihoods_to_phred, 4); 
         PRINT (vcf_phred_optimize, 4);
         PRINT (optimize_float_3_sig_dig, 4);
+        PRINT (ctx_clone, 1);
         PRINT (seg_all_data_lines, 1);
         PRINT (seg_initialize, 2);
         PRINT (piz_uncompress_all_ctxs__fastq_read_r1, 3);
         PRINT (qname_seg, 2);
         PRINT (sam_cigar_seg, 2);
-        PRINT (squank_seg, 3);
+        if (!flag.bam_assist) PRINT (squank_seg, 3); // sub of either sam_cigar_seg or fastq_bamass_seg_CIGAR
         PRINT (fastq_seg_get_lines, 2);
         PRINT (seg_get_next_line, 3);
         PRINT (seg_get_next_item, 3);
         PRINT (fastq_seg_deep, 2);
-        PRINT (fastq_deep_seg_find_subseq, 3);
+        PRINT (fastq_seg_find_bamass, 3);
+        PRINT (fastq_bamass_retrieve_ent, 4);
+        PRINT (fastq_seg_find_deep, 3);
+        PRINT (fastq_deep_seg_find_subseq, 4); // called by both fastq_seg_find_deep and fastq_seg_find_bamass
         PRINT (fastq_seg_deep_consume_unique_matching_ent, 3);
         PRINT (fastq_seg_SEQ, 2);
+        PRINT (fastq_bamass_seg_CIGAR, 3);        
+        if (flag.bam_assist) PRINT (squank_seg, 4); // sub of either sam_cigar_seg or fastq_bamass_seg_CIGAR
+        PRINT (fastq_bamass_seg_SEQ, 3);
         PRINT (sam_seg_SEQ, 2);
         PRINT (sam_seg_SEQ_vs_ref, 3);
         PRINT (sam_seg_bisulfite_M, 4);
@@ -223,7 +251,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (aligner_seq_to_bitmap, 5);
         PRINT (fastq_seg_DESC, 2);
         PRINT (fastq_seg_saux, 2);
-        PRINT (bam_seq_to_sam, 2);
+        if (!flag.bam_assist) PRINT (bam_seq_to_sam, 2);
         PRINT (fastq_seg_QUAL, 2);
         PRINT (sam_seg_QUAL, 2);
         PRINT (sam_seg_is_gc_line, 2);
@@ -253,9 +281,15 @@ void profiler_add_evb_and_print_report (void)
         PRINT (sam_seg_other_seq, 3);
         PRINT (sam_seg_GR_Z, 3);
         PRINT (sam_seg_GY_Z, 3);
-        PRINT (vcf_seg_QUAL, 3)
         PRINT (sam_seg_ULTIMA_tp, 3);
-        PRINT (vcf_seg_PROBE_A, 3);
+        PRINT (vcf_seg_QUAL, 3)
+        PRINT (vcf_seg_samples, 3);
+        PRINT (vcf_seg_copy_one_sample, 4);
+        PRINT (vcf_seg_analyze_copied_GT, 5);
+        PRINT (vcf_seg_one_sample, 4);
+        PRINT (vcf_seg_info_subfields, 3);
+        PRINT (vcf_seg_PROBE_A, 4);
+        PRINT (vcf_seg_finalize_INFO_fields, 3);
         PRINT (random_access_merge_in_vb, 1); 
         PRINT (gencomp_absorb_vb_gencomp_lines, 1);
         PRINT (gencomp_flush, 2);
@@ -327,28 +361,30 @@ void profiler_add_evb_and_print_report (void)
         PRINT (write, 1);
         PRINT (sam_piz_deep_grab_deep_ents, 1);
         PRINT (sam_piz_deep_finalize_ents, 2);
+        PRINT (sam_gencomp_trim_memory, 1);
+        if (z_has_gencomp) PRINT (buf_trim_do, 2);
         PRINT (piz_main_loop_idle, 1);
-        
-        iprint0 ("GENOUNZIP writer thread\n");
-        PRINT (writer_main_loop, 1);
-        PRINT (gencomp_piz_vb_to_plan, 2);
 
         if (profile.nanosecs.sam_load_groups_add_one_prim_vb) {
             iprintf ("GENOUNZIP load SAGs compute threads: %s\n", str_int_commas (ms(profile.nanosecs.sam_load_groups_add_one_prim_vb)).s);
             PRINT (sam_load_groups_add_one_prim_vb, 1);
             PRINT (piz_uncompress_all_ctxs__sam_load_sag, 2);
-            PRINT (sam_load_groups_add_SA_alns, 2);
-            PRINT (sam_load_groups_add_solo_data, 2);
-            PRINT (sam_load_groups_add_qname, 2);
-            PRINT (sam_load_groups_add_flags, 2);
             PRINT (sam_load_groups_add_grps, 2);
+            PRINT (sam_load_groups_add_flags, 3);
+            PRINT (sam_load_groups_add_qnames, 3);
+            PRINT (sam_load_groups_add_cigars, 3);
             PRINT (sam_load_groups_add_seq, 3);
             PRINT (sam_load_groups_add_seq_pack, 4);
             PRINT (sam_load_groups_add_qual, 3);
-            PRINT (sam_load_groups_add_grp_cigars, 3);
+            PRINT (sam_load_groups_add_SA_alns, 3);
+            PRINT (sam_load_groups_add_solo_data, 3);
             PRINT (sam_load_groups_move_comp_to_zfile, 2);
             PRINT (sam_load_groups_move_comp_to_zfile_idle, 3);
         }
+
+        iprint0 ("GENOUNZIP writer thread\n");
+        PRINT (writer_main_loop, 1);
+        PRINT (gencomp_piz_vb_to_plan, 2);
 
         iprintf ("GENOUNZIP compute threads: %s\n", str_int_commas (ms(profile.nanosecs.compute)).s);
 
@@ -358,11 +394,16 @@ void profiler_add_evb_and_print_report (void)
         for (Did did_i=0; did_i < z_file->num_contexts; did_i++) 
             PRINT_(fields[did_i], ZCTX(did_i)->tag_name, 2);
 
-        PRINT (sam_reconstruct_SEQ_vs_ref, 2);
+        PRINT (sam_piz_special_SEQ, 2);
+        PRINT (sam_reconstruct_SEQ_vs_ref, 3);
+        PRINT (sam_reconstruct_SEQ_get_textual_ref, 4);
+        PRINT (sam_bismark_piz_update_meth_call, 4);
         PRINT (reconstruct_SEQ_copy_sag_prim, 3);
-        PRINT (sam_analyze_copied_SEQ, 3);
-        PRINT (sam_bismark_piz_update_meth_call, 3);
+        PRINT (reconstruct_SEQ_copy_saggy, 3);
+        PRINT (sam_analyze_copied_SEQ, 4); // called from both reconstruct_SEQ_copy_sag_prim and reconstruct_SEQ_copy_saggy
+        PRINT (fastq_special_SEQ_by_bamass, 2);
         PRINT (aligner_reconstruct_seq, 2);
+        PRINT (sam_piz_sam2bam_SEQ, 2);
         PRINT (sam_piz_special_QUAL, 2);
         if (Z_DT(SAM) || Z_DT(BAM)) {
             PRINT (codec_longr_reconstruct,3);
@@ -378,6 +419,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (sam_piz_sam2fastq_QUAL, 2); 
         PRINT (sam_piz_sam2bam_QUAL, 2);        
         PRINT (sam_cigar_special_CIGAR, 2);
+        PRINT (sam_piz_special_MD, 2);
 
         PRINT (sam_piz_con_item_cb, 2); 
         PRINT (sam_piz_deep_add_qname, 3); 
@@ -388,6 +430,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (fastq_special_set_deep, 2); 
         PRINT (fastq_special_deep_copy_QNAME, 2);
         PRINT (fastq_special_deep_copy_SEQ, 2);
+        PRINT (fastq_special_deep_copy_SEQ_by_ref, 3);
         PRINT (fastq_special_deep_copy_QUAL, 2);
          
         PRINT (sam_zip_prim_ingest_vb, 1);

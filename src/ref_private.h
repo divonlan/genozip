@@ -96,22 +96,24 @@ typedef struct RefStruct {
 
 } RefStruct;
 
+extern RefStruct gref;
+
 extern void ref_make_prepare_ranges_for_compress (void);
 extern void ref_make_prepare_one_range_for_compress (VBlockP vb);
 
 // lock stuff
-extern void ref_lock_initialize (Reference ref);
-extern void ref_lock_free (Reference ref);
+extern void ref_lock_initialize (void);
+extern void ref_lock_free (void);
 
 // contigs stuff
-extern rom ref_contigs_get_name_by_ref_index (Reference ref, WordIndex chrom_index, pSTRp(snip), PosType64 *gpos);
-extern const Contig *ref_contigs_get_contig_by_ref_index (Reference ref, WordIndex chrom_index, FailType soft_fail);
+extern rom ref_contigs_get_name_by_ref_index (WordIndex chrom_index, pSTRp(snip), PosType64 *gpos);
+extern const Contig *ref_contigs_get_contig_by_ref_index (WordIndex chrom_index, FailType soft_fail);
 extern WordIndex ref_seg_get_alt_chrom (VBlockP vb);
-extern void ref_contigs_compress_ref_make (Reference ref);
-extern void ref_contigs_compress_stored (Reference ref);
+extern void ref_contigs_compress_ref_make (void);
+extern void ref_contigs_compress_stored (void);
 extern void ref_make_calculate_digest (void);
 
 // cache stuff
-extern bool ref_cache_initialize_genome (Reference ref);
-extern void ref_cache_done_populating (Reference ref);
-extern void ref_cache_remove_do (Reference ref, bool cache_exists, bool verbose);
+extern bool ref_cache_initialize_genome (void);
+extern void ref_cache_done_populating (void);
+extern void ref_cache_remove_do (bool cache_exists, bool verbose);

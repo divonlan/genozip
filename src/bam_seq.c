@@ -55,11 +55,12 @@ void sam_seq_to_bam (STRp (seq_sam), BufferP seq_bam_buf)
 }
 
 // re-writes BAM format SEQ into textual SEQ
-void bam_seq_to_sam (VBlockSAMP vb, bytes bam_seq, 
+void bam_seq_to_sam (VBlockP vb, bytes bam_seq, 
                      uint32_t seq_len,       // bases, not bytes
                      bool start_mid_byte,    // ignore first nibble of bam_seq (seq_len doesn't include the ignored nibble)
                      bool test_final_nibble, // if true, we test that the final nibble, if unused, is 0, and warn if not
-                     BufferP out)            // appends to end of buffer - caller should allocate seq_len+1 (+1 for last half-byte) 
+                     BufferP out,            // appends to end of buffer - caller should allocate seq_len+1 (+1 for last half-byte) 
+                     bool is_from_zip_cb)    // don't account for time when codec-compressing, as the codecs account for their own time
 {
     START_TIMER;
         
@@ -101,6 +102,8 @@ void bam_seq_to_sam (VBlockSAMP vb, bytes bam_seq,
 
     *BAFTc(*out) = 0; // nul-terminate after end of seq
     
+    if (!is_from_zip_cb) COPY_TIMER(bam_seq_to_sam);
+
 /* TO DO - not working yet
     uint64_t *next64 = BAFT (uint64_t, *out);
 

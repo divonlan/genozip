@@ -10,6 +10,7 @@
 #include "txtfile.h"
 #include "contigs.h"
 #include "sam_private.h"
+#include "sorter.h"
 
 void coverage_initialize (VBlockP vb)
 {
@@ -36,7 +37,7 @@ void coverage_add_one_vb (VBlockP vb)
 
 static ConstContigPkgP coverage_get_contigs (rom option_name)
 {
-    ConstContigPkgP contigs = ((Z_DT(SAM) || Z_DT(BAM)) && sam_hdr_contigs) ? sam_hdr_contigs : ref_get_ctgs (gref);
+    ConstContigPkgP contigs = ((Z_DT(SAM) || Z_DT(BAM)) && sam_hdr_contigs) ? sam_hdr_contigs : ref_get_ctgs();
 
     ASSINP (!Z_DT(FASTQ) || contigs->contigs.len, "%s: %s for FASTQ only works on files compressed with a reference", z_name, option_name);
 

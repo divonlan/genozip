@@ -52,16 +52,31 @@ StrText code_version (void)
     return s;
 }
 
+StrText file_version (void)
+{
+    StrText s={};
+
+    if (!z_file) 
+        strcpy (s.s, "(no z_file)");
+
+    else if (!VER2(15,28))
+        snprintf (s.s, sizeof (s.s), "%u", z_file->genozip_version);
+    
+    else        
+        snprintf (s.s, sizeof (s.s), "%u.0.%u", z_file->genozip_version, z_file->genozip_minor_ver);
+
+    return s;
+}
+
 StrText version_str (void)
 {
     StrText s={};
 
     if (IS_ZIP || !z_file)  
         snprintf (s.s, sizeof (s.s), "version=%.16s", code_version().s);
-    else if (!VER2(15,28))
-        snprintf (s.s, sizeof (s.s), "code_version=%.16s file_version=%u", code_version().s, z_file->genozip_version);
-    else        
-        snprintf (s.s, sizeof (s.s), "code_version=%.16s file_version=%u.0.%u", code_version().s, z_file->genozip_version, z_file->genozip_minor_ver);
+    
+    else 
+        snprintf (s.s, sizeof (s.s), "code_version=%.16s file_version=%.16s", code_version().s, file_version().s);
 
     return s;
 }
@@ -74,7 +89,7 @@ rom genozip_update_msg (void)
 // thread entry
 static void *version_background_test_for_newer_do (void *unused)
 {
-    __atomic_store_n (&thread_running, (bool)true, __ATOMIC_RELEASE); // stamp our merge_num as the ones that set the word_index
+    store_release (thread_running, (bool)true); // stamp our merge_num as the ones that set the word_index
 
     pthread_setcanceltype (PTHREAD_CANCEL_ASYNCHRONOUS, NULL); // thread can be canceled at any time
 
@@ -106,7 +121,7 @@ static void *version_background_test_for_newer_do (void *unused)
             iprintf ("debug-upgrade: failed to get redirect url=\"%s\"\n", redirect_url);
     }
 
-    __atomic_store_n (&thread_running, (bool)false, __ATOMIC_RELEASE); 
+    store_release (thread_running, (bool)false); 
     return NULL;
 }
 
@@ -250,7 +265,7 @@ static void udpate_do (void)
 void version_print_notice_if_has_newer (void)
 {
     // case: Genozip finished its work while thread is still running - kill it
-    if (__atomic_load_n (&thread_running, __ATOMIC_ACQUIRE)) {
+    if (load_acquire (thread_running)) {
         pthread_cancel (thread_id);
         PTHREAD_JOIN (thread_id, "version_background_test_for_newer_do"); // wait for cancelation to complete
 
@@ -273,15 +288,15 @@ void version_print_notice_if_has_newer (void)
 
         if (is_info_stream_terminal) {
 #ifdef _WIN32
-            if (!strcmp (get_distribution(), "InstallForge")) 
+            if (dist_is_installforge()) 
                 iprintf ("You can install the latest version from here: %s\n", GITHUB_WINDOWS_INSTALLER);
             
 #else
-            if (!strcmp (get_distribution(), "conda") &&
+            if (dist_is_conda() &&
                 str_query_user_yn ("Do you want to update Genozip now?", QDEF_YES))
                 my_system ("conda update genozip");
 
-            else if (strcmp (get_distribution(), "conda") && // anything but conda. note: distribution names are defined in the Makefile
+            else if (!dist_is_conda() && // anything but conda. note: distribution names are defined in the Makefile
                 is_updatable() &&                      
                 str_query_user_yn ("Do you want to update Genozip now?", QDEF_YES)) 
                 udpate_do();

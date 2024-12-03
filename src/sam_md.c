@@ -151,7 +151,7 @@ void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, rom md_orig, uint3
 {
     START_TIMER;
 
-    if (segconf.running || dl->FLAG.unmapped) return; // sometimes unmapped reads have a bogus CIGAR and MD:Z, however, if we try to verify sam_seg_SEQ_vs_ref (which we no longer do), verification fails.
+    if (segconf_running || dl->FLAG.unmapped) return; // sometimes unmapped reads have a bogus CIGAR and MD:Z, however, if we try to verify sam_seg_SEQ_vs_ref (which we no longer do), verification fails.
 
     rom reason=NULL;
     #define not_verified(s) { reason=s ; goto not_verified; }
@@ -179,7 +179,7 @@ void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, rom md_orig, uint3
     if (!md_len || !IS_DIGIT(md[0]) || !IS_DIGIT(md[md_len-1])) not_verified ("Malformed MD:Z field");
 
     // start by marking all as matching, and clear the SNPs later
-    buf_alloc_bits (vb, &vb->md_M_is_ref, vb->ref_and_seq_consumed, SET, CTX_GROWTH, "md_M_is_ref"); 
+    buf_alloc_bits_exact (vb, &vb->md_M_is_ref, vb->ref_and_seq_consumed, SET, CTX_GROWTH, "md_M_is_ref"); 
     BitsP M_is_ref = (BitsP)&vb->md_M_is_ref;
     
     uint64_t M_is_ref_i=0;
@@ -187,27 +187,28 @@ void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, rom md_orig, uint3
     uint32_t M_D_bases = vb->ref_consumed; // M/=/X and D
     
     bool critical_error=false;
-    for_buf (BamCigarOp, op, vb->binary_cigar) {
-
-        rom error=NULL;
-        if (op->op==BC_M || op->op==BC_E || op->op==BC_X) { 
+    rom error=NULL;
+    for_cigar (vb->binary_cigar) {
+        case BC_M: case BC_E: case BC_X:
             if ((error = sam_md_consume_M (vb, is_depn, &md, &M_D_bases, &pos, op->n, M_is_ref, &M_is_ref_i, &range, &lock, &critical_error))
                 && critical_error) // break loop now if critical error, else continue to count mismatch_bases_by_MD despite error
                 not_verified (error);
-        }
+            if (!reason) reason = error; // non-critical error - continue
+            break;
 
-        else if (op->op==BC_D) {
+        case BC_D: 
             if ((error = sam_md_consume_D (vb, is_depn, &md, &M_D_bases, &pos, op->n, &range, &lock, &critical_error)) 
                 && critical_error)
                 not_verified (error);
-        }
+            if (!reason) reason = error; // non-critical error - continue
+            break;
 
-        else if (op->op==BC_N) { 
+        case BC_N: 
             pos += op->n;
             M_D_bases -= op->n;
-        }
+            break;
 
-        if (!reason) reason = error;
+        default: {}
     }
 
     // case: we didn't consume the entire MD (except an allowed trailing '0')
@@ -215,7 +216,7 @@ void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, rom md_orig, uint3
 
     if (reason) goto not_verified_buf_mismatch_count_ok; // now we can handle the non-critical error raised in sam_md_consume_M
 
-    if (range) ref_unlock (gref, &lock);
+    if (range) ref_unlock (&lock);
 
     vb->md_verified = true;    
     goto done; // verified
@@ -224,7 +225,7 @@ not_verified:
     vb->mismatch_bases_by_MD = -1; // fallthrough
 
 not_verified_buf_mismatch_count_ok:    
-    if (range) ref_unlock (gref, &lock);
+    if (range) ref_unlock (&lock);
 
     vb->md_verified = false;
 
@@ -242,21 +243,22 @@ done:
 // if MD value can be derived from the seq_len, we don't need to store - store just an empty string
 void sam_seg_MD_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(md), unsigned add_bytes)
 {
+    decl_ctx (OPTION_MD_Z);
     uint32_t md_value;
 
     ctx_set_encountered (VB, CTX(OPTION_MD_Z));
     
     if (vb->md_verified && !vb->cigar_missing && !vb->seq_missing) // note: md_verified might have been reset in sam_seg_SEQ 
-        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_MD }, 2, OPTION_MD_Z, add_bytes);
+        seg_special0 (VB, SAM_SPECIAL_MD, ctx, add_bytes);
 
     // in case not verified (eg bc it is depn) but (common case) it is equal to (seq_len - soft_clips)
     else if (!vb->md_verified && !vb->seq_missing && str_get_uint32 (STRa(md), &md_value) && 
              md_value == dl->SEQ.len - vb->soft_clip[0] - vb->soft_clip[1]) 
-        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_SEQ_LEN, '+', '0', '-', '-' }, 6, OPTION_MD_Z, add_bytes); // also used in sam_seg_SEQ_END
+        seg_special4 (VB, SAM_SPECIAL_SEQ_LEN, '+', '0', '-', '-', ctx, add_bytes); // also used in sam_seg_SEQ_END
 
     // store in local. note: this is tested to be much better than splitting by length and storing short ones in dict
     else  
-        seg_add_to_local_string (VB, CTX(OPTION_MD_Z), STRa(md), LOOKUP_SIMPLE, add_bytes);
+        seg_add_to_local_string (VB, ctx, STRa(md), LOOKUP_SIMPLE, add_bytes);
 }
 
 //---------
@@ -265,13 +267,14 @@ void sam_seg_MD_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(md), unsigned add_byt
 
 SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_MD)
 {
+    START_TIMER;
+
     VBlockSAMP vb = (VBlockSAMP)vb_;
     bool perfect_match = VER(14) && !vb->mismatch_bases_by_SEQ; // "perfect" encoding introduced v14
 
     PosType32 pos = LOADED_CTX(SAM_POS)->last_value.i;
 
     ASSERTNOTEMPTY (vb->binary_cigar);
-    ARRAY (BamCigarOp, cigar, vb->binary_cigar);
 
     ContextP sqbitmap_ctx = LOADED_CTX(SAM_SQBITMAP);
     
@@ -287,67 +290,66 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_MD)
     uint32_t count_match=0;
     decl_acgt_decode;
     
-    for (uint32_t op_i=0; op_i < cigar_len; op_i++) { 
-        uint32_t n = cigar[op_i].n;
+    for_cigar (vb->binary_cigar) {
+        case BC_M : case BC_E : case BC_X : {
+            uint32_t n = op->n;      
 
-        switch (cigar[op_i].op) {
-            case BC_M : case BC_E : case BC_X :               
-                if (perfect_match) {
-                    count_match += n;
-                    pos += n;
-                }
-                
-                // reconstruct a series of <number><base> where number can be 0 and the base of the last pair can be missing. eg: 0T12A4
-                else while (n) {
-
-                    if (!is_depn)
-                        while (n && NEXTLOCALBIT (sqbitmap_ctx)) 
-                            { count_match++; n--; pos++; }
-                    else 
-                        while (n && bits_get (line_sqbitmap, line_sqbitmap_next++))
-                            { count_match++; n--; pos++; }
-
-                    if (n) {
-                        // usually vb->range set in sam_reconstruct_SEQ_vs_ref, except if no base in SEQ matched the reference. In that case, we set it here
-                        if (!vb->range) 
-                            // note: if this throws an error, it is possibly related to private/defects/SAM-MD-external-ref-contig-with-no-ref.txt
-                            vb->range = (RangeP)ref_piz_get_range (VB, gref, HARD_FAIL);
-
-                        if (reconstruct) RECONSTRUCT_INT (count_match); // flush matches before reconstructing mismatch
-                        count_match=0;
-                        
-                        if (reconstruct) RECONSTRUCT1 (ref_base_by_pos (vb->range, pos)); 
-                        n--;
-                        pos++;
-                    }
-                }
-                break;
-
-            case BC_D :
-                // flush matches before reconstructing deletion (but not if deletion is first)
-                if (op_i) { 
-                    if (reconstruct) RECONSTRUCT_INT (count_match);
-                    count_match=0;
-                }
-
-                if (reconstruct) RECONSTRUCT1 ('^');
-
-                if (!vb->range) 
-                    vb->range = (RangeP)ref_piz_get_range (VB, gref, HARD_FAIL);
-
-                while (n) { 
-                    if (reconstruct) RECONSTRUCT1 (ref_base_by_pos (vb->range, pos)); 
-                    pos++;
-                    n--;
-                }
-                break;
-
-            case BC_N :  // skipping without deletion in MD
+            if (perfect_match) {
+                count_match += n;
                 pos += n;
-                break;
+            }
+            
+            // reconstruct a series of <number><base> where number can be 0 and the base of the last pair can be missing. eg: 0T12A4
+            else while (n) {
+                uint32_t run = is_depn ? bits_get_run (line_sqbitmap, line_sqbitmap_next, n)
+                                       : bits_get_run ((BitsP)&sqbitmap_ctx->local, sqbitmap_ctx->next_local, n);
+                count_match += run;
+                n           -= run;
+                pos         += run;
 
-            default : {}
+                if (is_depn) line_sqbitmap_next       += run + (n > 0);
+                else         sqbitmap_ctx->next_local += run + (n > 0);
+
+                if (n) {
+                    // usually vb->range set in sam_reconstruct_SEQ_vs_ref, except if no base in SEQ matched the reference. In that case, we set it here
+                    if (!vb->range) 
+                        // note: if this throws an error, it is possibly related to private/defects/SAM-MD-external-ref-contig-with-no-ref.txt
+                        vb->range = (RangeP)ref_piz_get_range (VB, HARD_FAIL);
+
+                    if (reconstruct) RECONSTRUCT_INT (count_match); // flush matches before reconstructing mismatch
+                    count_match=0;
+                    
+                    if (reconstruct) RECONSTRUCT1 (ref_base_by_pos (vb->range, pos)); 
+                    n--;
+                    pos++;
+                }
+            }
+            break;
         }
+
+        case BC_D :
+            // flush matches before reconstructing deletion (but not if deletion is first)
+            if (BNUM(vb->binary_cigar, op)) { // not first op
+                if (reconstruct) RECONSTRUCT_INT (count_match);
+                count_match=0;
+            }
+
+            if (reconstruct) RECONSTRUCT1 ('^');
+
+            if (!vb->range) 
+                vb->range = (RangeP)ref_piz_get_range (VB, HARD_FAIL);
+
+            for (uint32_t i=0; i < op->n; i++) { 
+                if (reconstruct) RECONSTRUCT1 (ref_base_by_pos (vb->range, pos)); 
+                pos++;
+            }
+            break;
+
+        case BC_N :  // skipping without deletion in MD
+            pos += op->n;
+            break;
+
+        default : {}
     }
 
     if (count_match || !IS_DIGIT (*BLSTtxt)) 
@@ -356,6 +358,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_MD)
     ASSPIZ (perfect_match || save_next_local == sqbitmap_ctx->next_local, "expecting save_next_local=%u == sqbitmap_ctx->next_local=%u (RNAME=%s POS=%"PRId64" CIGAR=%s)", 
             save_next_local, sqbitmap_ctx->next_local, vb->chrom_name, CTX(SAM_POS)->last_value.i, VB_SAM->textual_cigar.data);
 
+    COPY_TIMER (sam_piz_special_MD);
     return NO_NEW_VALUE;
 }
 

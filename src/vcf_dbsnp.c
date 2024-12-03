@@ -85,7 +85,7 @@ static VarType get_vartype (VBlockVCFP vb)
 // Possible values include: SNV, INS, INDEL...
 void vcf_seg_INFO_VC (VBlockVCFP vb, ContextP ctx, STRp(vc))
 {
-    if (!segconf.running) {
+    if (!segconf_running) {
         VarType vartype = get_vartype (vb);
         ContextP channel_ctx = seg_mux_get_channel_ctx (VB, INFO_VC, (MultiplexerP)&vb->mux_VC, vartype);
 

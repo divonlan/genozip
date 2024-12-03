@@ -14,10 +14,8 @@ static rom sam_add_seq (VBlockSAMP vb, rom line_start, uint32_t remaining)
 
     bool has_13;
     rom next_line = line_start;
-    str_split_by_tab (next_line, remaining, MAX_FIELDS + AUX, &has_13, false, true); // also advances next_line to next line
+    str_split_by_tab (next_line, remaining, SEQ + 1, &has_13, true, true, true); // also advances next_line to next line
     
-    ASSSEG (n_flds >= 10, "%s: Bad SAM file: alignment expected to have at least 10 fields (lacking SEQ), but found only %u", LN_NAME, n_flds);
-
     buf_alloc (vb, &vb->optimized_line, 0, (next_line - line_start) + (fld_lens[SEQ] + 1), char, 0, "optimized_line"); // x2+1000 is plenty for types of modifications we have so far.
     
     // the start of the line: until TLEN inc. the following \t
@@ -177,7 +175,7 @@ rom sam_zip_modify (VBlockP vb_, rom line_start, uint32_t remaining)
 
     bool has_13;
     rom next_line = line_start;
-    str_split_by_tab (next_line, remaining, MAX_FIELDS + AUX, &has_13, false, true); // also advances next_line to next line
+    str_split_by_tab (next_line, remaining, MAX_FIELDS + AUX, &has_13, false, false, true); // also advances next_line to next line
     
     ASSSEG (n_flds >= 11, "%s: (sam_zip_modify) Bad SAM file: alignment expected to have at least 11 fields, but found only %u", LN_NAME, n_flds);
 

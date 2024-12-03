@@ -60,7 +60,7 @@ void vcf_zip_finalize (bool is_last_user_txt_file)
 
     if (!flag.let_OS_cleanup_on_exit) {
         if (IS_REF_EXT_STORE)
-            ref_destroy_reference (gref);
+            ref_destroy_reference();
     }
 }
 
@@ -97,6 +97,7 @@ void vcf_zip_genozip_header (SectionHeaderGenozipHeaderP header)
     header->vcf.max_ploidy_for_mux       = ZIP_MAX_PLOIDY_FOR_MUX;        // since 15.0.36
     header->vcf.segconf_MATEID_method    = segconf.MATEID_method;         // since 15.0.48
     header->vcf.segconf_del_svlen_is_neg = segconf.vcf_del_svlen_is_neg;  // since 15.0.48
+    header->vcf.segconf_sample_copy      = segconf.vcf_sample_copy;       // since 15.0.69
     header->vcf.segconf_Q_to_O           = BGEN32F (segconf.Q_to_O);      // since 15.0.61
     header->vcf.width.MLEAC              = segconf.wid[INFO_MLEAC].width; // since 15.0.37
     header->vcf.width.AC                 = segconf.wid[INFO_AC].width;    // since 15.0.37
@@ -129,6 +130,8 @@ void vcf_zip_init_vb (VBlockP vb_)
 void vcf_zip_after_compute (VBlockP vb)
 {
     z_file->max_ploidy = MAX_(z_file->max_ploidy, VB_VCF->ploidy);
+
+    z_file->vcf_num_samples_copied += CTX(VCF_COPY_SAMPLE)->num_samples_copied;
 }   
 
 
@@ -150,16 +153,18 @@ void vcf_seg_initialize (VBlockP vb_)
     VBlockVCFP vb = (VBlockVCFP)vb_;
 
     ctx_consolidate_stats (VB, VCF_ID, VCF_MATE, DID_EOL);
+    ctx_consolidate_stats (VB, FORMAT_GT, FORMAT_GT_HT, FORMAT_GT_HT_BIG, FORMAT_PBWT_RUNS, FORMAT_PBWT_FGRC, DID_EOL);
 
     ctx_set_no_stons (VB, VCF_CHROM, VCF_FORMAT, VCF_INFO, VCF_TOPLEVEL, 
                       VCF_POS, VCF_LINE_NUM, INFO_HGVS_del_start_pos, INFO_HGVS_ins_start_pos, INFO_HGVS_ins_start_pos, // as required by seg_pos_field
                       DID_EOL);
 
-    ctx_set_store (VB, STORE_INDEX, VCF_CHROM, FORMAT_GT/*=stores ploidy*/, DID_EOL);
+    ctx_set_store (VB, STORE_INDEX, VCF_CHROM, VCF_FORMAT, FORMAT_GT/*=stores ploidy*/, DID_EOL);
 
     ctx_set_store (VB, STORE_INT, VCF_POS, VCF_LINE_NUM, 
                    T(!segconf.vcf_is_sv, VCF_ID),    // svaba/manta needs to store history as text and segs ID differently
                    T(segconf.vcf_is_sv, VCF_QUAL),
+                   T(segconf.vcf_sample_copy, VCF_COPY_SAMPLE),
                    FORMAT_DP, FORMAT_MIN_DP, 
                    INFO_DP,
                    DID_EOL); 
@@ -182,12 +187,19 @@ void vcf_seg_initialize (VBlockP vb_)
     // counts sections
     CTX(VCF_CHROM)-> counts_section = true;
 
+    buf_alloc_exact (vb, CTX(VCF_FORMAT)->sf_i, MAX_DICTS, uint16_t, "contexts->sf_i");
+    
     // room for already existing FORMATs from previous VBs
     ContextP samples_ctx = CTX(VCF_SAMPLES);
-    samples_ctx->format_mapper_buf.len = samples_ctx->format_contexts.len = CTX(VCF_FORMAT)->ol_nodes.len;
-    buf_alloc_zero (vb, &samples_ctx->format_mapper_buf, 0, samples_ctx->format_mapper_buf.len, Container, CTX_GROWTH, "contexts->format_mapper_buf");
-    buf_alloc_zero (vb, &samples_ctx->format_contexts, 0, samples_ctx->format_contexts.len, ContextPBlock, CTX_GROWTH, "contexts->format_contexts");
-            
+    uint32_t n_fmts = CTX(VCF_FORMAT)->ol_nodes.len;
+    buf_alloc_exact_zero (vb, samples_ctx->format_mapper_buf, n_fmts, Container, "contexts->format_mapper_buf");
+    buf_alloc_exact_zero (vb, samples_ctx->format_contexts, n_fmts, ContextPBlock, "contexts->format_contexts");
+
+    if (segconf.vcf_sample_copy) {
+        buf_alloc_exact_zero (vb, samples_ctx->last_samples,  n_fmts * vcf_num_samples, TxtWord, "contexts->last_samples");
+        buf_alloc_exact_zero (vb, CTX(VCF_COPY_SAMPLE)->sample_copied, n_fmts * vcf_num_samples, bool, "contexts->sample_copied");
+    }
+
     if (segconf.vcf_QUAL_method == VCF_QUAL_by_RGQ) {
         seg_mux_init (vb, VCF_QUAL, VCF_SPECIAL_MUX_BY_HAS_RGQ, false, QUAL);
 
@@ -211,6 +223,7 @@ void vcf_seg_initialize (VBlockP vb_)
     vcf_gnomad_seg_initialize (vb);
     vcf_me_seg_initialize (vb);
     vcf_1000G_seg_initialize (vb);
+    vcf_copy_sample_seg_initialize (vb);
     if (flag.add_line_numbers)      vcf_add_line_numbers_seg_initialize (vb);
     if (segconf.vcf_illum_gtyping)  vcf_illum_gtyping_seg_initialize (vb);
     if (segconf.vcf_is_gwas)        vcf_gwas_seg_initialize (vb);
@@ -234,13 +247,14 @@ void vcf_segconf_finalize (VBlockP vb_)
     VBlockVCFP vb = (VBlockVCFP)vb_;
 
     vcf_segconf_finalize_QUAL (vb);
+    vcf_copy_samples_segconf_finalize (vb);
 
     if (segconf.has[FORMAT_RGQ] || segconf.vcf_is_gatk_gvcf)
         segconf.vcf_INFO_method = VCF_INFO_by_RGQ;
 
     else if (segconf.vcf_is_isaac) 
         segconf.vcf_INFO_method = VCF_INFO_by_FILTER;
-
+    
     // identify DRAGEN and Isaac GVCF. GATK's is identified in vcf_inspect_txt_header_zip()
     if ((segconf.has[FORMAT_ICNT] && segconf.has[FORMAT_SPL]) || // DRAGEN GVCF
          segconf.vcf_is_isaac) // Isaac is always GVCF
@@ -295,11 +309,14 @@ void vcf_segconf_finalize (VBlockP vb_)
     if (segconf.has[INFO_X_HIL] && segconf.has[INFO_X_HIN]) 
         segconf.vcf_is_ultima = true; // another way to identify Ultima
 
+    if (segconf.has[FORMAT_LAA] && segconf.has[FORMAT_LAD] && !segconf.has[FORMAT_AD] && !segconf.has[FORMAT_PL])
+        segconf.vcf_local_alleles = true;
+
     // in gnomAD, we have a huge number of INFO fields in various permutations - generating a huge INFO dictionary, but which compresses very very well
     if (segconf.vcf_is_gnomad)
         ZCTX(VCF_INFO)->dict_len_excessive = true; // don't warn if excessive
         
-    if (!flag.reference && segconf.vcf_is_gvcf && !flag.seg_only)
+    if (!flag.reference && segconf.vcf_is_gvcf && !flag.seg_only && vcf_num_samples < 5)
         TIP ("Compressing a GVCF file using a reference file can reduce the compressed file's size by 10%%-30%%.\n"
              "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
              arch_get_argv0(), txt_file->name);
@@ -372,7 +389,7 @@ void vcf_seg_finalize (VBlockP vb_)
                           { .dict_id = { _VCF_REFALT },  .separator = { '\t', CI1_ITEM_CB } }, // piz calls vcf_piz_refalt_parse
                           { .dict_id = { _VCF_QUAL },    .separator = "\t" },
                           { .dict_id = { _VCF_FILTER },  .separator = "\t" },
-                          { .dict_id = { _VCF_INFO },    .separator = "\t" }, // in dual-coordinates, contains INFO/LIFTOVER or INFO/REJTOVER that reconstructs oCHROM, oPOS, oREF, oXSTRAND
+                          { .dict_id = { _VCF_INFO },    .separator = "\t" }, 
                           { .dict_id = { _VCF_FORMAT },  .separator = "\t" },
                           { .dict_id = { _VCF_SAMPLES }, .separator = ""   },
                           { .dict_id = { _VCF_EOL },     .separator = ""   } },
@@ -384,6 +401,8 @@ void vcf_seg_finalize (VBlockP vb_)
     
     vcf_samples_seg_finalize (vb);
 
+    if (segconf.vcf_sample_copy) vcf_copy_sample_seg_finalize (vb);
+    
     __atomic_add_fetch (&z_file->mate_line_count, (uint64_t)vb->mate_line_count,  __ATOMIC_RELAXED);
 }
 
@@ -397,7 +416,7 @@ void vcf_zip_after_compress (VBlockP vb)
 // called after all VBs are compressed - before Global sections are compressed
 void vcf_zip_after_vbs (void)
 {
-    vcf_FORMAT_PL_after_vbs ();
+    vcf_FORMAT_PL_after_vbs (segconf.vcf_local_alleles ? FORMAT_LPL : FORMAT_PL);
 }
 
 bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id)
@@ -446,7 +465,7 @@ bool vcf_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id/*dict_id
 
 void vcf_seg_array_of_N_ALTS_numbers (VBlockVCFP vb, ContextP ctx, STRp(value), StoreType type)
 {
-    str_split (value, value_len, vb->n_alts, ',', number, true);
+    str_split (value, value_len, N_ALTS, ',', number, true);
 
     if (!n_numbers) {
         seg_by_ctx (VB, STRa(value), ctx, value_len); // fallback
@@ -480,14 +499,14 @@ void vcf_seg_array_of_N_ALTS_numbers (VBlockVCFP vb, ContextP ctx, STRp(value), 
 // used by container_reconstruct to retrieve the number of repeats
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_N_ALTS)
 {
-    new_value->i = VB_VCF->n_alts;
+    new_value->i = N_ALTS;
     return HAS_NEW_VALUE;
 }
 
 // used by container_reconstruct to retrieve the number of repeats
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_N_ALLELES)
 {
-    new_value->i = VB_VCF->n_alts + 1;
+    new_value->i = N_ALTS + 1;
     return HAS_NEW_VALUE;
 }
 
@@ -547,7 +566,7 @@ static inline void vcf_seg_ID (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(id))
 {
     decl_ctx(VCF_ID);
     
-    if (segconf.running && !flag.add_line_numbers) {
+    if (segconf_running && !flag.add_line_numbers) {
         // segconf: set vcf_ID_is_variant in first line
         if (vb->line_i == 0 && !segconf.vcf_is_pbsv) {
             if (!({ segconf.vcf_ID_is_variant = '_' ; vcf_seg_ID_is_variant (vb, dl, STRa(id)); }) &&
@@ -574,7 +593,7 @@ static inline void vcf_seg_ID (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(id))
 
     else if (segconf.vcf_ID_is_variant && vcf_seg_ID_is_variant (vb, dl, STRa(id)))
         // defer reconstruction of ID to after reconstruction of REF/ALT - called from vcf_piz_refalt_parse
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_DEFER, segconf.vcf_ID_is_variant/*'_' or ':'*/ }, 3, ctx, id_len+1);  // often - all the same
+        seg_special1 (VB, VCF_SPECIAL_DEFER, segconf.vcf_ID_is_variant/*'_' or ':'*/, ctx, id_len+1);  // often - all the same
 
     else if (IS_PERIOD(id))
         seg_by_ctx (VB, STRa(id), ctx, id_len+1); // often - all the same
@@ -624,7 +643,7 @@ rom vcf_seg_txt_line (VBlockP vb_, rom line_start, uint32_t remaining_txt_len, b
     // ID: seg after REFALT is parsed as in PBSV is predicted based on ALT
     vcf_seg_ID (vb, dl, STRd(VCF_ID));
 
-    CTX(FORMAT_RGQ)->line_has_RGQ = !segconf.running && segconf.has[FORMAT_RGQ] && vcf_refalt_seg_ref_alt_line_has_RGQ (VCF_ALT_str);
+    CTX(FORMAT_RGQ)->line_has_RGQ = !segconf_running && segconf.has[FORMAT_RGQ] && vcf_refalt_seg_ref_alt_line_has_RGQ (VCF_ALT_str);
 
     // note: we treat REF+\t+ALT as a single field because REF and ALT are highly corrected, in the case of SNPs:
     // e.g. GG has a probability of 0 and GC has a higher probability than GA.

@@ -12,6 +12,15 @@
 #include "refhash.h"
 #include "htscodecs/arith_dynamic.h"
 
+#define PUT_NUMBER_1B_or_5B(n) ({                   \
+    if (__builtin_expect ((n) <= 254, true))        \
+        *next++ = (n);                              \
+    else {                                          \
+        *next++ = 255;                              \
+        PUT_UINT32 (next, (n));                     \
+        next += 4;                                  \
+    } })
+
 // --------
 // ZIP side
 // --------
@@ -33,10 +42,13 @@ static void sam_deep_zip_show_index_stats (void)
 
     uint64_t total_ents_traversed = 0; // total ents traversed on linked lists when segging FASTQ reads
 
-    for (uint64_t hash=0; hash < index_len; hash++) {
-        uint64_t this_len=0;
-        for (uint32_t ent_i = index[hash]; ent_i != NO_NEXT; ent_i = deep_ents[ent_i].next) 
+    for (uint32_t hash=0; hash < index_len; hash++) {
+        uint32_t this_len=0;
+        for (uint32_t ent_i = index[hash]; ent_i != NO_NEXT; ent_i = deep_ents[ent_i].next) {
+            ASSERT (ent_i < z_file->deep_ents.len, "ent_i=%u >= deep_ents.len=%u in element %u linked list of hash=%u", 
+                    ent_i, z_file->deep_ents.len32, this_len, hash);
             this_len++;
+        }
         
         if (this_len) used++;
 
@@ -94,7 +106,7 @@ static void sam_deep_zip_display_reasons (void)
             iprintf ("%-13.13s: %"PRIu64" (%.1f%%)\n", (rom[])DEEP_STATS_NAMES_ZIP[i], z_file->deep_stats[i], 100.0 * (double)z_file->deep_stats[i] / (double)total);
 }
 
-// Called during zip_finalize of the SAM component for a Deep compression
+// main thread: Called during zip_finalize of the SAM component for a Deep compression
 void sam_deep_zip_finalize (void)
 {
     threads_log_by_vb (evb, "main_thread", "sam_deep_zip_finalize", 0);
@@ -104,7 +116,7 @@ void sam_deep_zip_finalize (void)
     // return unused memory to libc
     buf_trim (z_file->deep_ents, ZipZDeep);
     
-    // Build vb_start_deep_line: first deep_line (0-based SAM-wide line_i, but not counting SUPP/SEC lines, monochar reads, SEQ.len=0) of each SAM VB
+    // Build vb_start_deep_line: first deep_line (0-based SAM-wide line_i, but not counting SUPP/SEC lines, (up 15.0.68: monochar reads), SEQ.len=0) of each SAM VB
     buf_alloc_exact_zero (evb, z_file->vb_start_deep_line, z_file->num_vbs + 1, uint64_t, "z_file->vb_start_deep_line");
 
     uint64_t count=0;
@@ -114,20 +126,19 @@ void sam_deep_zip_finalize (void)
         count += *B32(z_file->vb_num_deep_lines, vb_i);
     }
 
-    if (flag.show_deep) {
+    if (flag_show_deep) {
         sam_deep_zip_display_reasons();
         sam_deep_zip_show_index_stats();
     }
-
+        
     memset (z_file->deep_stats, 0, sizeof (z_file->deep_stats)); // we will reuse this field to gather stats while segging the FASTQ files
 
     // return a bunch of memory to the kernel before moving on to FASTQ
+    buf_destroy (z_file->vb_num_deep_lines);
     vb_dehoard_memory (true);
 }
 
 // SAM seg: calculate hash values into dl->deep_*
-
-#define MAX_ENTRIES 0xfffffffe // our current implementation is limited to 4G reads
 
 // ZIP compute thread while segging SEQ
 void sam_deep_set_QNAME_hash (VBlockSAMP vb, ZipDataLineSAMP dl, QType q, STRp(qname))
@@ -135,7 +146,7 @@ void sam_deep_set_QNAME_hash (VBlockSAMP vb, ZipDataLineSAMP dl, QType q, STRp(q
     // note: we must drop consensus reads, because Deep has an assumption, used to prove uniqueness by hash,
     // that there are no BAM alignments except those in the FASTQ files provided
     if (!dl->FLAG.secondary && !dl->FLAG.supplementary && !segconf.flav_prop[q].is_consensus) {
-        dl->deep_hash.qname = deep_qname_hash (q, STRa(qname), segconf.deep_paired_qname ? dl->FLAG.is_last : unknown, NULL);
+        dl->deep_hash.qname = deep_qname_hash (VB, q, STRa(qname), segconf.deep_paired_qname ? dl->FLAG.is_last : unknown, NULL);
         dl->is_deepable = true; // note: we haven't tested SEQ yet, so this might still change
 
         vb->lines.count++;      // counts deepable lines
@@ -152,14 +163,13 @@ void sam_deep_set_SEQ_hash (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(textual_seq)
 {
     if (!dl->is_deepable) return; 
     
-    // case: sam_deep_set_QNAME_hash happened, but now we discover that SEQ is missing or mono-char
-    if (IS_ASTERISK(textual_seq) ||     // note: we don't test SEQ.len, bc SEQ.len=0 for unmapped reads, but they are still deepable
-        str_is_monochar (STRa(textual_seq))) { // note: not deepable bc mono-char an elevated chance of hash contention
-     
+    // case: sam_deep_set_QNAME_hash happened, but now we discover that SEQ is missing 
+    // (up tp 15.0.68 this was: or mono-char seq)
+    if (IS_ASTERISK(textual_seq)) {     // note: we don't test SEQ.len, bc SEQ.len=0 for unmapped reads, but they are still deepable   
         dl->is_deepable = false;
         vb->lines.count--;
 
-        vb->deep_stats[IS_ASTERISK(textual_seq) ? RSN_NO_SEQ : RSN_MONOCHAR]++; // counting non-deepability reasons        
+        vb->deep_stats[RSN_NO_SEQ]++; // counting non-deepability reasons        
     }
 
     else {
@@ -178,8 +188,23 @@ void sam_deep_set_QUAL_hash (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qual))
 
     if (flag.show_deep == SHOW_DEEP_ALL || 
         (flag.show_deep == SHOW_DEEP_ONE_HASH && deephash_issame (dl->deep_hash, flag.debug_deep_hash)))
-        iprintf ("%s Recording deep_hash=%016"PRIx64",%08x,%08x\nQNAME=\"%.*s\"\nSEQ=\"%.*s\"\nQUAL=\"%.*s\"\n\n",
-                 LN_NAME, DEEPHASHf(dl->deep_hash), STRfw(dl->QNAME), dl->SEQ.len, vb->textual_seq_str, STRfw(dl->QUAL));
+        iprintf ("\n%s Recording SAM alignment: deep_hash=%016"PRIx64",%08x,%08x\nQNAME=\"%.*s\"\nSEQ=\"%.*s\"\nQUAL=\"%.*s\"\n",
+                 LN_NAME, DEEPHASHf(dl->deep_hash), dl->QNAME_len, dl_qname(dl), dl->SEQ.len, vb->textual_seq_str, STRfw(dl->QUAL));
+}
+
+// deep and bamass
+uint64_t sam_deep_calc_hash_bits (void)
+{
+    uint64_t est_num_lines = segconf.line_len ? (txt_file->est_seggable_size / segconf.line_len) : 10000;
+
+    // number of bits of hash table size (10-31) (note: minimum cannot be less than 10 due to BamAssEnt.z_qname_hash_hi)
+    int clzll = (int)__builtin_clzll (est_num_lines * 2); 
+        num_hash_bits = MAX_(10, MIN_(31, 63 - clzll));
+    
+    if (flag.low_memory)
+        num_hash_bits = MAX_(10, num_hash_bits - 3); // 8x smaller index at the expense of longer linked lists
+
+    return est_num_lines;
 }
 
 // ZIP compute thread: mutex-protected callback from ctx_merge_in_vb_ctx during merge: add VB's deep_hash to z_file->deep_index/deep_ents
@@ -192,25 +217,20 @@ void sam_deep_zip_merge (VBlockP vb_)
 
     // initialize - first VB merging
     if (!z_file->deep_index.len) {
-        double est_num_vbs = MAX_(1, (double)txt_file->est_seggable_size / (double)Ltxt * 1.05/* additonal PRIM VBs */);
-        uint64_t est_num_lines = MIN_(MAX_ENTRIES, (uint64_t)(est_num_vbs * (double)(vb->lines.len32 + vb->num_gc_lines) * 1.15)); // inflate the estimate by 15% - to reduce hash contention, and to reduce realloc chances for z_file->deep_ents
-
-        // number of bits of hash table size (maximum 31)
-        int clzll = (int)__builtin_clzll (est_num_lines * 2); 
-        num_hash_bits = MIN_(31, 64 - clzll); // num hash bits
-
-        z_file->deep_index.can_be_big = true;
+        // pointers into deep_ents - initialize to NO_NEXT
+        uint64_t est_num_lines = sam_deep_calc_hash_bits();
 
         // pointers into deep_ents - initialize to NO_NEXT
+        z_file->deep_index.can_be_big = true;
         buf_alloc_exact_255 (evb, z_file->deep_index, ((uint64_t)1 << num_hash_bits), uint32_t, "z_file->deep_index"); 
 
         // note: no initialization of deep_ents - not needed and it takes too long (many seconds to get pages from kernel) while all threads are waiting for vb=1
         z_file->deep_ents.can_be_big = true;
-        buf_alloc_exact (evb, z_file->deep_ents, MAX_(est_num_lines, vb->lines.count), ZipZDeep, "z_file->deep_ents");
+        buf_alloc_exact (evb, z_file->deep_ents, MAX_(1.1 * est_num_lines, vb->lines.count), ZipZDeep, "z_file->deep_ents");
 
-        if (flag.show_deep) 
-            printf ("num_hash_bits=%u est_num_lines*1.15=%"PRIu64" clzll=%d deep_index.len=%"PRIu64" deep_ents.len=%"PRIu64"\n", 
-                    num_hash_bits, est_num_lines, clzll, z_file->deep_index.len, z_file->deep_ents.len);
+        if (flag_show_deep) 
+            printf ("num_hash_bits=%u est_num_lines=%"PRIu64" deep_index.len=%"PRIu64" deep_ents.len=%"PRIu64"\n", 
+                    num_hash_bits, est_num_lines, z_file->deep_index.len, z_file->deep_ents.len);
 
         z_file->deep_ents.len = 0;
     }
@@ -221,40 +241,47 @@ void sam_deep_zip_merge (VBlockP vb_)
         MAXIMIZE (z_file->vb_num_deep_lines.len32, vb->vblock_i+1);
     }
 
-    buf_alloc (evb, &z_file->deep_ents, vb->lines.count/*num deepable lines in VB*/, 0, ZipZDeep, CTX_GROWTH, "z_file->deep_ents"); 
+    uint32_t ent_i = z_file->deep_ents.len;
 
-    uint32_t ent_i = z_file->deep_ents.len32;
+    // we can only handle 4G entries, because hash entry and "next" fields are 32 bit.
+    int64_t excess = (uint64_t)ent_i + vb->deep_stats[RSN_DEEPABLE] - MAX_DEEP_ENTS;  
+    if (excess > 0) {
+        WARN_ONCE ("The number of deepable alignments in %s exceeds %u - the maximum supported for Deep compression. The excess alignments will be compressed normally without Deep. %s", 
+                   txt_name, MAX_DEEP_ENTS, report_support());
+
+        vb->deep_stats[RSN_DEEPABLE] -= excess;
+        vb->deep_stats[RSN_OVERFLOW] += excess;
+
+        if (!vb->deep_stats[RSN_DEEPABLE]) goto done; // cannot add *any* alignment from this VB
+    }
+
+    buf_alloc (evb, &z_file->deep_ents, vb->lines.count/*num deepable lines in VB*/, 0, ZipZDeep, CTX_GROWTH, "z_file->deep_ents"); 
 
     uint32_t *deep_index = B1ST32 (z_file->deep_index);
     ARRAY (ZipZDeep, deep_ents, z_file->deep_ents);
 
     uint64_t mask = bitmask64 (num_hash_bits); // num_hash_bits is calculated upon first merge
     uint32_t deep_line_i = 0; // line_i within the VB, but counting only deepable lines that have SEQ.len > 0 and are not monochar
-    for_buf2 (ZipDataLineSAM, dl, line_i, vb->lines) {
-        if (!dl->is_deepable) continue; // case: non-deepable: secondary or supplementary line, no sequence or mono-base
+    for_buf (ZipDataLineSAM, dl, vb->lines) {
+        if (!dl->is_deepable) continue; // case: non-deepable: secondary or supplementary line, no sequence etc
 
-        // we can only handle 4G entries, because hash entry and "next" fields are 32 bit.
-        if (ent_i == 0xffffffff) {
-            WARN_ONCE ("The number of non-secondary non-supplementary alignments in %s exceeds %u - the maximum supported for Deep compression. The excess alignments will be compressed normally without Deep. %s", 
-                       txt_name, 0xffffffff, report_support());
-            break;
-        }
-
-        // add to indices (by SEQ and by QNAME)
         uint32_t hash = dl->deep_hash.qname & mask;                                 
-        uint32_t prev_head = deep_index[hash];
-        deep_index[hash] = ent_i; // new head of linked list 
         
         // create new entry - which is now the head of linked list
-        deep_ents[ent_i++] = (ZipZDeep){ .next    = prev_head, // this will now be the 2nd element
-                                         .seq_len = dl->SEQ.len, 
-                                         .hash    = dl->deep_hash,
-                                         .vb_i    = vb->vblock_i, 
-                                         .line_i  = deep_line_i++ };
+        deep_ents[ent_i] = (ZipZDeep){ .next    = deep_index[hash], // previous head of linked list is is now the 2nd element on the list
+                                       .seq_len = dl->SEQ.len, 
+                                       .hash    = dl->deep_hash,
+                                       .vb_i    = vb->vblock_i, 
+                                       .line_i  = deep_line_i++ };
+
+        deep_index[hash] = (uint32_t)ent_i; // this is entry is now head of linked list 
+
+        if (++ent_i > MAX_DEEP_ENTS) break;
     }
 
-    z_file->deep_ents.len32 = ent_i;
+    z_file->deep_ents.len = ent_i;
 
+done:
     for (int i=0; i < NUM_DEEP_STATS_ZIP; i++)
         z_file->deep_stats[i] += vb->deep_stats[i];
 
@@ -265,18 +292,10 @@ void sam_deep_zip_merge (VBlockP vb_)
 // SAM PIZ: step 1: output QNAME,SEQ,QUAL into vb->deep_ents / vb->deep_index
 //-----------------------------------------------------------------------------
 
-#define PUT_NUMBER_1B_or_5B(n) ({ \
-    if ((n) <= 254)               \
-        *next++ = (n);            \
-    else {                        \
-        *next++ = 255;            \
-        PUT_UINT32 (next, (n));   \
-        next += 4;                \
-    } })
-
 // main thread: called for after reading global area
 void sam_piz_deep_initialize (void)
 {
+    store_release (z_file->vb_start_deep_line.param, DEEP_PIZ_ENTS_RECONSTRUCTING);  
 }
 
 // called during reconstruction of SEQ to determine if SEQ can be stored vs reference 
@@ -292,6 +311,9 @@ void sam_piz_set_deep_seq (VBlockSAMP vb,
 
     if (gpos == NO_GPOS64) 
         NOT_BY_REF(EXPL_SEQ_COPY_VERBATIM);
+
+    if (vb->bisulfite_strand)
+        NOT_BY_REF(EXPL_BISULFITE);
 
     ARRAY32 (char, deep_nonref, CTX(SAM_NONREF)->deep_nonref);
 
@@ -346,12 +368,9 @@ void sam_piz_set_deep_seq (VBlockSAMP vb,
     vb->piz_deep_flags.seq_encoding = ZDEEP_SEQ_BY_REF; // note: if we didn't reach here, encoding remains the default ZDEEP_SEQ_PACKED
     vb->deep_gpos = gpos;
 
-    if (vb->piz_deep_flags.has_cigar) {
-        sam_cigar_binary_to_textual (vb, STRbt(BamCigarOp, vb->binary_cigar), last_flags.rev_comp, &CTX(SAM_CIGAR)->deep_textual_cigar);
-
-        if (segconf.CIGAR_has_eqx) // collapse X and = operators to M
-            sam_cigar_collapse_eqx_to_M (&CTX(SAM_CIGAR)->deep_textual_cigar); 
-    }
+    // collapse X,= to M ; replace N with D ; I with S ; remove H,P ; reverse if rev_comp 
+    if (vb->piz_deep_flags.has_cigar) 
+        sam_prepare_deep_cigar (VB, CIG(vb->binary_cigar), last_flags.rev_comp); 
 
     vb->deep_stats[EXPL_SEQ_AS_REF]++;
 }
@@ -399,7 +418,7 @@ static void sam_piz_deep_add_qname (VBlockSAMP vb)
     if (huffman_exists (SAM_QNAME)) {
         uint32_t comp_len = huffman_get_theoretical_max_comp_len (SAM_QNAME, qname_len);
         uint8_t comp[comp_len];
-        huffman_compress (SAM_QNAME, STRa(qname), qSTRa(comp)); // using huffman sent via SEC_HUFFMAN
+        huffman_compress (VB, SAM_QNAME, STRa(qname), qSTRa(comp)); // using huffman sent via SEC_HUFFMAN
 
         buf_add (&vb->deep_ents, (rom)comp, comp_len);
 
@@ -435,15 +454,14 @@ static uint32_t sam_piz_deep_compress (VBlockSAMP vb, uint8_t *next, STRp(data),
         data = B1STc(vb->scratch);
     }
 
-    uint32_t comp_len = (is_seq || !huffman_exists (SAM_QUAL)) 
-        ? arith_compress_bound (data_len, X_NOSZ)
-        : CTX(SAM_QUAL)->qual_longest_theoretical_comp_len;
+    uint32_t comp_len = is_seq ? arith_compress_bound (data_len, X_NOSZ) :
+                                 huffman_get_theoretical_max_comp_len (SAM_QUAL, data_len);
     
     bool len_is_1_byte = (data_len < (is_seq ? 1024 : 512)); // just a guess for now
     uint8_t *guess_addr = next + (len_is_1_byte ? 1 : 5);   // we don't know comp_len yet, so just a guess
     
-    if (!is_seq && huffman_exists (SAM_QUAL))
-        huffman_compress (SAM_QUAL, STRa(data), guess_addr, &comp_len);
+    if (!is_seq)
+        huffman_compress (VB, SAM_QUAL, STRa(data), guess_addr, &comp_len);
     else
         ASSPIZ (arith_compress_to (evb, (uint8_t *)STRa(data), guess_addr, &comp_len, X_NOSZ) && comp_len,
                 "%s: Failed to arith-compress data: is_seq=%s comp_len=%u data_len=%u data=\"%.*s\"", 
@@ -468,24 +486,18 @@ static uint32_t sam_piz_deep_compress (VBlockSAMP vb, uint8_t *next, STRp(data),
 
 static uint8_t *sam_piz_deep_add_seq_by_ref (VBlockSAMP vb, uint8_t *next, PizDeepSeqFlags *deep_flags)
 {
-    // set GPOS and .is_long_gpos (4 or 8 bytes)
-    if (vb->deep_gpos <= 0xffffffffULL) {
-        PUT_UINT32 (next, (PosType32)vb->deep_gpos);
-        next += sizeof (PosType32);
-    }
-    else {
-        PUT_UINT32 (next, vb->deep_gpos);
-        next += sizeof (PosType64);
+    // set GPOS and .is_long_gpos (4 or 5 bytes little endian)
+    PUT_UINT32 (next, (uint32_t)vb->deep_gpos);
+    next += sizeof (PosType32);
+
+    if (vb->deep_gpos > 0xffffffffULL) {
+        *next++ = (vb->deep_gpos >> 32);
         deep_flags->is_long_gpos = true;
     }
 
     // set cigar and nonref
     if (deep_flags->has_cigar) {
-        BufferP textual_cigar = &CTX(SAM_CIGAR)->deep_textual_cigar; // possibly reversed
-            
-        PUT_NUMBER_1B_or_5B (textual_cigar->len32);
-        
-        next += huffman_compress_or_copy (SAM_CIGAR, STRb(*textual_cigar), next, vb->deep_ents.size - BNUM64 (vb->deep_ents, next));
+        next += nico_compress_cigar (VB, SAM_CIGAR, CIG(CTX(SAM_CIGAR)->deep_cigar), next, vb->deep_ents.size - BNUM64 (vb->deep_ents, next));
 
         BufferP deep_nonref = &CTX(SAM_NONREF)->deep_nonref;
         PUT_NUMBER_1B_or_5B (deep_nonref->len32); // always output if has_cigar, even if 0
@@ -549,7 +561,7 @@ static void sam_piz_deep_add_qual (VBlockSAMP vb, STRp(qual))
 {
     START_TIMER;
 
-    // case: monochar 
+    // case: monochar qual
     if (str_is_monochar (STRa(qual))) {
         ((PizDeepSeqFlags *)B8(vb->deep_ents, vb->piz_deep_flags_index))->qual_is_monochar = true;
         BNXT8(vb->deep_ents) = qual[0];
@@ -557,12 +569,16 @@ static void sam_piz_deep_add_qual (VBlockSAMP vb, STRp(qual))
         vb->deep_stats[QUAL_MONOCHAR_BYTES]++;
     }
 
-    // case: not monochar
+    // case: not monochar qual
     else {
+        // back comp: old file with no SEC_HUFFMAN section for SAM_QUAL - create it based on first QUAL reconstructed
+        if (!huffman_exists (SAM_QUAL)) // note: non-atomic: if it says it exists, then it exists. If it says it doesn't, it might or might not exist.
+            huffman_piz_backcomp_produce_qual (STRa(qual)); // also handles thread-safety
+
         uint32_t comp_len = sam_piz_deep_compress (vb, BAFT8(vb->deep_ents), STRa(qual), false);
         vb->deep_ents.len32 += comp_len;
 
-        vb->deep_stats[huffman_exists(SAM_QUAL) ? QUAL_HUFF_BYTES : QUAL_ARITH_BYTES] += comp_len;
+        vb->deep_stats[QUAL_BYTES] += comp_len;
     }
 
 
@@ -580,12 +596,12 @@ CONTAINER_ITEM_CALLBACK (sam_piz_con_item_cb)
 
     switch (con_item->dict_id.num) {
         case _SAM_SQBITMAP:
-            // backcomp note: these are the same deepability conditions as in ZIP
+            // backcomp note: these must be precisely the same deepability conditions as in ZIP
             if (flag.deep_sam_only                               || // Deep file (otherwise this callback will not be set), but SAM/BAM-only reconstruction
                 last_flags.secondary || last_flags.supplementary || // SECONDARY or SUPPLEMENTARY alignment
                 IS_ASTERISK(recon)                               || // Missing SEQ
                 (z_file->flav_prop[vb->comp_i][QNAME2].is_consensus && ctx_encountered_in_line (VB, SAM_QNAME2)) || // consensus alignment 
-                str_is_monochar (STRa(recon)))                      // mono-char SEQ
+                (!VER2(15,69) && str_is_monochar (STRa(recon))))    // mono-char SEQ is excluded in files generated up to 15.0.68
                 
                 vb->line_not_deepable = true;
             
@@ -593,7 +609,7 @@ CONTAINER_ITEM_CALLBACK (sam_piz_con_item_cb)
                 // note: we do QNAME during the SQBITMAP callback, because we need last_flags to be set 
                 // (in SAM QNAME reconstructs before flags). On the other hand, SQBITMAP and QUAL must be 
                 // handled right after reconstruction, because in BAM, immediately after they get converted to binary format.
-                sam_piz_alloc_deep_ents (vb, 4 KB + 8 * recon_len + vb->textual_cigar.len); // more than enough for compresssed QNAME, SEQ and QUAL
+                sam_piz_alloc_deep_ents (vb, 4 KB + 8 * recon_len + (1 + vb->binary_cigar.len32) * 6/*6=theo. max. of nico op(1)+N(5)*/); // more than enough for compresssed QNAME, SEQ and QUAL
 
                 sam_piz_deep_add_qname (vb);
                 if (!flag.header_only_fast) sam_piz_deep_add_seq (vb, STRa(recon));
@@ -635,7 +651,7 @@ static void sam_piz_deep_finalize_ents (void)
 
     for (uint32_t vb_idx=0; vb_idx < z_file->deep_index.len32; vb_idx++) {
         BufferP deep_index = B(Buffer, z_file->deep_index, vb_idx);
-        BufferP deep_ents = B(Buffer, z_file->deep_ents, vb_idx); 
+        BufferP deep_ents  = B(Buffer, z_file->deep_ents , vb_idx); 
 
         if (flag.show_deep == SHOW_DEEP_ALL) {
             iprintf ("vb_idx=%u vb=%s/%u start_deepable_line=%"PRIu64" num_deepable_lines=%u ents=(%p, %u)\n", 
@@ -648,19 +664,22 @@ static void sam_piz_deep_finalize_ents (void)
         next_deepable_line += deep_index->len;
     }
 
-    if (flag.show_deep) {
-        uint64_t total = 0;
-        for (DeepStatsPiz i=QNAME_BYTES; i <= QUAL_ARITH_BYTES; i++) total += z_file->deep_stats[i];
+    // flush (REL) z_file->vb_start_deep_line before setting DEEP_PIZ_ENTS_READY, and prevent hoisting (ACQ) of setting to vb_start_deep_line.param
+    __atomic_thread_fence (__ATOMIC_ACQ_REL); 
 
-        iprintf ("\ndeep_ents (actual_size=%s) RAM consumption breakdown by field:\n", str_size (actual_size).s);
+    if (flag_show_deep) {
+        uint64_t total = 0;
+        for (DeepStatsPiz i=QNAME_BYTES; i <= QUAL_BYTES; i++) total += z_file->deep_stats[i];
+
+        iprintf ("\nPIZ deep_ents (actual_size=%s) RAM consumption breakdown by field:\n", str_size (actual_size).s);
         iprintf ("Total: %s\n", str_size (total).s); // expected to be the same as actual_size
         
-        for (DeepStatsPiz i=QNAME_BYTES; i <= QUAL_ARITH_BYTES; i++)
+        for (DeepStatsPiz i=QNAME_BYTES; i <= QUAL_BYTES; i++)
             if (z_file->deep_stats[i])
                 iprintf ("%-14.14s: %s (%.1f%%)\n", (rom[])DEEP_STATS_NAMES_PIZ[i], str_size (z_file->deep_stats[i]).s, 100.0 * (double)z_file->deep_stats[i] / (double)total);
 
         if (z_file->deep_stats[SEQ_PACKED_BYTES] || z_file->deep_stats[SEQ_ARITH_BYTES]) {
-            iprint0 ("\nReasons for storing explicit SEQ in deep_ents rather than a reference:\n");
+            iprint0 ("\nPIZ: Reasons for storing packed SEQ in deep_ents rather than a reference:\n");
             for (DeepStatsPiz i=EXPL_DEEPABLE; i < NUM_DEEP_STATS_PIZ; i++)
                 if (z_file->deep_stats[i])
                     iprintf ("%-24.24s: %s (%.1f%%)\n", (rom[])DEEP_STATS_NAMES_PIZ[i], str_int_commas (z_file->deep_stats[i]).s, 100.0 * (double)z_file->deep_stats[i] / (double)z_file->deep_stats[EXPL_DEEPABLE]);
@@ -668,8 +687,8 @@ static void sam_piz_deep_finalize_ents (void)
     }
 
     // We need to set param only after deep_ents/index is finalized.
-    // sam_deep_piz_wait_for_deep_data will unlock when vb_start_deep_line.param = true
-    __atomic_store_n (&z_file->vb_start_deep_line.param, 2/*done!*/, __ATOMIC_RELEASE); 
+    // sam_deep_piz_wait_for_deep_data will unlock when vb_start_deep_line.param = DEEP_PIZ_ENTS_READY
+    store_release (z_file->vb_start_deep_line.param, DEEP_PIZ_ENTS_READY); 
 
     COPY_TIMER_EVB (sam_piz_deep_finalize_ents);
 }

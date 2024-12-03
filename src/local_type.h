@@ -13,35 +13,38 @@
 // LT_* values are consistent with BAM optional 'B' types (and extend them)
 typedef packed_enum { // 1 byte
     // LT values that are part of the file format - values can be added but not changed
-    LT_SINGLETON = 0,   // nul-terminated singleton snips (note: ltype=0 was called LT_TEXT until 15.0.26 and included both SINGLETONs and STRINGs)
-    LT_INT8      = 1,    
-    LT_UINT8     = 2,
-    LT_INT16     = 3,
-    LT_UINT16    = 4,
-    LT_INT32     = 5,
-    LT_UINT32    = 6,
-    LT_INT64     = 7,   
-    LT_UINT64    = 8,   
-    LT_FLOAT32   = 9,   
-    LT_FLOAT64   = 10,  
-    LT_BLOB      = 11,  // length of data extracted is determined by vb->seq_len or provided in the LOOKUP snip (until 15.0.26 called LT_SEQUENCE)
-    LT_BITMAP    = 12,  // a bitmap
-    LT_CODEC     = 13,  // codec specific type with its codec specific reconstructor
-    LT_UINT8_TR  = 14,  // transposed array - number of columns in original array is in param (up to 255 columns)
-    LT_UINT16_TR = 15,  // "
-    LT_UINT32_TR = 16,  // "
-    LT_UINT64_TR = 17,  // "
-    LT_hex8      = 18,  // lower-case UINT8  hex
-    LT_HEX8      = 19,  // upper-case UINT8  hex
-    LT_hex16     = 20,  // lower-case UINT16 hex
-    LT_HEX16     = 21,  // upper-case UINT16 hex
-    LT_hex32     = 22,  // lower-case UINT32 hex
-    LT_HEX32     = 23,  // upper-case UINT32 hex
-    LT_hex64     = 24,  // lower-case UINT64 hex
-    LT_HEX64     = 25,  // upper-case UINT64 hex
-    LT_STRING    = 26,  // nul-terminated strings
-    LT_SUPP      = 27,  // supplementary data used in reconstruction of another context. Data is not BGENed etc, and context is never reconstructed directly (15.0.40)
-    NUM_LTYPES,         // counts LocalTypes that can appear in the Genozip file format
+    LT_SINGLETON  = 0,   // nul-terminated singleton snips (note: ltype=0 was called LT_TEXT until 15.0.26 and included both SINGLETONs and STRINGs)
+    LT_INT8       = 1,    
+    LT_UINT8      = 2,
+    LT_INT16      = 3,
+    LT_UINT16     = 4,
+    LT_INT32      = 5,
+    LT_UINT32     = 6,
+    LT_INT64      = 7,   
+    LT_UINT64     = 8,   
+    LT_FLOAT32    = 9,   
+    LT_FLOAT64    = 10,  
+    LT_BLOB       = 11,  // length of data extracted is determined by vb->seq_len or provided in the LOOKUP snip (until 15.0.26 called LT_SEQUENCE)
+    LT_BITMAP     = 12,  // a bitmap
+    LT_CODEC      = 13,  // codec specific type with its codec specific reconstructor
+    LT_UINT8_TR   = 14,  // transposed array - number of columns in original array is in param (up to 255 columns)
+    LT_UINT16_TR  = 15,  // "
+    LT_UINT32_TR  = 16,  // "
+    LT_UINT64_TR  = 17,  // "
+    LT_hex8       = 18,  // lower-case UINT8  hex
+    LT_HEX8       = 19,  // upper-case UINT8  hex
+    LT_hex16      = 20,  // lower-case UINT16 hex
+    LT_HEX16      = 21,  // upper-case UINT16 hex
+    LT_hex32      = 22,  // lower-case UINT32 hex
+    LT_HEX32      = 23,  // upper-case UINT32 hex
+    LT_hex64      = 24,  // lower-case UINT64 hex
+    LT_HEX64      = 25,  // upper-case UINT64 hex
+    LT_STRING     = 26,  // nul-terminated strings
+    LT_SUPP       = 27,  // supplementary data used in reconstruction of another context. Data is not BGENed etc, and context is never reconstructed directly (15.0.40)
+    LT_UINT8_PTR  = 28,  // partial transposed array - only items not-copied by VCF_COPY_SAMPLE are included
+    LT_UINT16_PTR = 29,  // "
+    LT_UINT32_PTR = 30,  // "
+    NUM_LTYPES,          // counts LocalTypes that can appear in the Genozip file format
 
     // LT_DYN* - LT values that are NOT part of the file format, just used during seg 
     LT_DYN_INT,         // dynamic size local 
@@ -97,6 +100,9 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
    { "H64", 0,   8,  0,     0,         INT64_MAX,  BGEN_u64_buf             }, \
    { "STR", 0,   1,  0,     0,         0,          0                        }, \
    { "SUP", 0,   1,  0,     0,         0,          0                        }, \
+   { "t8 ", 0,   1,  0,     0,         UINT8_MAX,  BGEN_ptranspose_u8_buf   }, \
+   { "t16", 0,   2,  0,     0,         UINT16_MAX, BGEN_ptranspose_u16_buf  }, \
+   { "t32", 0,   4,  0,     0,         UINT32_MAX, BGEN_ptranspose_u32_buf  }, \
    { /* NUM_LTYPES */                                                       }, \
    /* from here - not part of the file format, just used during seg */         \
    { "DYN", 0,   8,  0,     INT64_MIN, INT64_MAX,  0                        }, \

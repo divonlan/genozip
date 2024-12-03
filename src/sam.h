@@ -184,7 +184,7 @@
 #pragma GENDICT OPTION_U2_Z=DTYPE_2=U2:Z     // Phred probability of the 2nd call being wrong conditional on the best being wrong
 #pragma GENDICT OPTION_U2_DOMQRUNS=DTYPE_2=DOMQRUNS // these 3 must be right after SAM_QUAL. DOMQRUNS is also used by LONGR. For backwards compatability, we can never change its name.
 #pragma GENDICT OPTION_U2_QUALMPLX=DTYPE_2=QUALMPLX // v14.0.0. DOMQUAL alg: dom multiplexer 
-#pragma GENDICT OPTION_U2_DIVRQUAL=DTYPE_2=DIVRQUAL // v14.0.0. DOMQUAL alg: lines that don't have enough dom. NORMQ codec: lines that are of length other than segconf.sam_seq_len 
+#pragma GENDICT OPTION_U2_DIVRQUAL=DTYPE_2=DIVRQUAL // v14.0.0. DOMQUAL alg: lines that don't have enough dom.
 
 #pragma GENDICT OPTION_E2_Z=DTYPE_2=E2:Z     // The 2nd most likely base calls
 #pragma GENDICT OPTION_2NONREF=DTYPE_2=N2ONREF // these 4 fields must be in this order, right after OPTION_E2_Z
@@ -230,11 +230,16 @@
 #pragma GENDICT OPTION_CY_QUALMPLX=DTYPE_FIELD=C1Y_MPLX 
 #pragma GENDICT OPTION_CY_DIVRQUAL=DTYPE_FIELD=C2Y_DEVQ // these 3 are supposed to be DTYPE_2, they are DTYPE_FIELD by error. we keep it this way for back comp
 
+#pragma GENDICT OPTION_CQ_Z=DTYPE_2=CQ:Z     // Standard: Color read base qualities ; CellRanger 1.1.3: Phred quality of the cellular barcode sequence in the CR tag
+#pragma GENDICT OPTION_CQ_DOMQRUNS=DTYPE_FIELD=C0Q_DOMQ // these 3 must be right after OPTION_CQ_Z (similar to SAM_QUAL).
+#pragma GENDICT OPTION_CQ_QUALMPLX=DTYPE_FIELD=C1Q_MPLX 
+#pragma GENDICT OPTION_CQ_DIVRQUAL=DTYPE_FIELD=C2Q_DEVQ // these 3 are supposed to be DTYPE_2, they are DTYPE_FIELD by error. we keep it this way for back comp
+
 #pragma GENDICT OPTION_BZ_Z=DTYPE_2=BZ:Z     // Phred quality of the cellular barcode sequence in the CR tag
 #pragma GENDICT OPTION_BZ_ARR=DTYPE_2=BZ_ARR // array items (must be one after)
-#pragma GENDICT OPTION_BZ_DOMQRUNS=DTYPE_FIELD=C0Y_DOMQ // these 3 must be right after OPTION_BZ_Z (similar to SAM_QUAL).
-#pragma GENDICT OPTION_BZ_QUALMPLX=DTYPE_FIELD=C1Y_MPLX 
-#pragma GENDICT OPTION_BZ_DIVRQUAL=DTYPE_FIELD=C2Y_DEVQ // these 3 are supposed to be DTYPE_2, they are DTYPE_FIELD by error. we keep it this way for back comp
+#pragma GENDICT OPTION_BZ_DOMQRUNS=DTYPE_FIELD=B0Z_DOMQ // these 3 must be right after OPTION_BZ_Z (similar to SAM_QUAL).
+#pragma GENDICT OPTION_BZ_QUALMPLX=DTYPE_FIELD=B1Z_MPLX // note: buggy up to 15.0.68: subfields appeared as C0Y_DOMQ / C1Q_MPLX / C2Q_DEVQ
+#pragma GENDICT OPTION_BZ_DIVRQUAL=DTYPE_FIELD=B2Z_DEVQ 
 
 #pragma GENDICT OPTION_OX_Z=DTYPE_2=OX:Z     // Original unique molecular barcode bases
 #pragma GENDICT OPTION_MI_Z=DTYPE_2=MI:Z     // Molecular identifier; a string that uniquely identifies the molecule from which the record was derived
@@ -340,6 +345,7 @@
 // scRNA-seq fields:
 // STARsolo: https://github.com/alexdobin/STAR/blob/master/docs/STARsolo.md
 // 10xgenomics cellranger: https://support.10xgenomics.com/single-cell-gene-expression/software/pipelines/latest/output/bam
+// 10xgenomics cellranger-arc: https://www.10xgenomics.com/support/software/cell-ranger-arc/latest/analysis/outputs/atac-barcoded-bam
 // also outputs: CB:Z, CR:Z, CY:Z standard fields
 #pragma GENDICT OPTION_UR_Z=DTYPE_2=UR:Z     // (alias of RX:Z) Chromium molecular barcode sequence as reported by the sequencer.
 #pragma GENDICT OPTION_UB_Z=DTYPE_2=UB:Z     // (alias of BX:Z) Chromium molecular barcode sequence that is error-corrected among other molecular barcodes with the same cellular barcode and gene alignment.
@@ -376,7 +382,7 @@
 #pragma GENDICT OPTION_GY_Z=DTYPE_2=GY:Z     // CellRanger
 #pragma GENDICT OPTION_GY_Z_X=DTYPE_2=G0Y_X  
 
-#pragma GENDICT OPTION_2R_Z=DTYPE_2=2R:Z     // Sequence (undocumented)
+#pragma GENDICT OPTION_2R_Z=DTYPE_2=2R:Z     // Sequence (undocumented- looks like 2nd barcode in a multiplexed sample???)
 #pragma GENDICT OPTION_2Y_Z=DTYPE_2=2Y:Z     // Quality related to the sequence 2R 
 #pragma GENDICT OPTION_2Y_DOMQRUNS=DTYPE_FIELD=20Y_DOMQ // these 3 must be right after OPTION_2Y_Z (similar to SAM_QUAL).
 #pragma GENDICT OPTION_2Y_QUALMPLX=DTYPE_FIELD=21Y_MPLX 
@@ -385,7 +391,13 @@
 #pragma GENDICT OPTION_fb_Z=DTYPE_2=fb:Z     // Chromium Feature Barcode sequence that is error-corrected and confirmed against known Feature Barcode sequences from the feature reference.
 #pragma GENDICT OPTION_fr_Z=DTYPE_2=fr:Z     // Chromium Feature Barcode sequence as reported by the sequencer.
 #pragma GENDICT OPTION_fq_Z=DTYPE_2=fq:Z     // Chromium Feature Barcode read quality. Phred scores as reported by sequencer.
+
 #pragma GENDICT OPTION_fx_Z=DTYPE_2=fx:Z     // Feature identifier matched to this Feature Barcode read. Specified in the id column of the feature reference.
+#pragma GENDICT OPTION_xf_i=DTYPE_2=xf:i     // xtra alignment flags. The bits of this tag: https://support.10xgenomics.com/single-cell-gene-expression/software/pipelines/latest/output/bam
+#pragma GENDICT OPTION_mm_i=DTYPE_2=mm:i     // Set to 1 if the genome-aligner (STAR) originally gave a MAPQ < 255 (it multi-mapped to the genome) and Cell Ranger changed it to 255 because the read overlapped exactly one gene.
+#pragma GENDICT OPTION_MM_i=DTYPE_2=MM:i     // same as mm:i
+#pragma GENDICT OPTION_pa_i=DTYPE_2=pa:i     // The number of poly-A nucleotides trimmed from the 3' end of read 2.
+#pragma GENDICT OPTION_ts_i=DTYPE_2=ts:i     // The number of template switch oligo (TSO) nucleotides trimmed from the 5' end of read 2.
 
 // cellragner-DNA fields: https://support.10xgenomics.com/single-cell-dna/software/pipelines/latest/output/bam
 #pragma GENDICT OPTION_GP_i=DTYPE_2=GP:i     // Genome position
@@ -550,6 +562,7 @@
 // DRAGEN
 #pragma GENDICT OPTION_sd_f=DTYPE_2=sd:f     // possibly the output of the option "--rna-quantification-fld-sd", not sure
 #pragma GENDICT OPTION_xq_i=DTYPE_2=xq:i     // Extended MAPQ, output of --generate-xq-tags
+//#pragma GENDICT OPTION_xq_i=DTYPE_2=XQ:i   // (dup) same as xq:i
 
 // added by GATK's BQSR (Base Quality Score Recalibration)
 #pragma GENDICT OPTION_BD_Z=DTYPE_2=BD:Z     // Deletion base quality  (not used in newer versions of GATK)
@@ -677,6 +690,7 @@ COMPRESSOR_CALLBACK(sam_zip_2Y);
 COMPRESSOR_CALLBACK(sam_zip_U2);
 COMPRESSOR_CALLBACK(sam_zip_t0);
 COMPRESSOR_CALLBACK(sam_zip_BQ);
+COMPRESSOR_CALLBACK(sam_zip_CQ);
 COMPRESSOR_CALLBACK(sam_zip_iq_sq_dq);
 COMPRESSOR_CALLBACK(sam_zip_BD_BI);
 extern void sam_zip_initialize (void);
@@ -691,7 +705,7 @@ extern void sam_sa_prim_finalize_ingest (void);
 
 // CRAM stuff
 extern void cram_inspect_file (FileP file);
-extern StrTextSuperLong cram_get_samtools_option_T (const Reference ref);
+extern StrTextSuperLong cram_get_samtools_option_T (void);
 
 // HEADER stuff
 extern bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags);
@@ -736,7 +750,7 @@ extern bool sam_piz_initialize (CompIType comp_i);
 extern void sam_piz_finalize (bool is_last_z_file);
 extern IS_SKIP (sam_piz_is_skip_section);
 extern bool sam_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header);
-extern void sam_piz_recon_init (VBlockP vb);
+extern void sam_piz_vb_recon_init (VBlockP vb);
 extern void sam_piz_after_recon (VBlockP vb);
 extern void sam_piz_process_recon (VBlockP vb);
 extern CONTAINER_FILTER_FUNC (sam_piz_filter);
@@ -747,7 +761,8 @@ extern void sam_piz_load_sags (void);
 extern bool sam_piz_dispatch_one_load_sag_vb (Dispatcher dispatcher);
 extern void sam_reconstruct_missing_quality (VBlockP vb, ReconType reconstruct);
 extern void sam_piz_xtra_line_data (VBlockP vb);
-extern void sam_piz_after_preproc (VBlockP vb);
+extern void sam_piz_after_preproc_vb (VBlockP vb);
+extern void sam_piz_preproc_finalize (Dispatcher dispatcher);
 extern CONTAINER_ITEM_CALLBACK (sam_piz_con_item_cb);
 extern void seq_filter_initialize (rom filename);
 extern rom sam_piz_get_textual_seq (VBlockP vb);
@@ -805,7 +820,7 @@ SPECIAL (SAM, 16, QUAL,                  sam_piz_special_QUAL);                 
 SPECIAL (SAM, 17, pull_from_sag,         sam_piz_special_pull_from_sag);         // introduced 14.0.0
 SPECIAL (SAM, 18, SEQ,                   sam_piz_special_SEQ);                   // introduced 14.0.0
 SPECIAL (SAM, 19, PRIM_QNAME,            sam_piz_special_PRIM_QNAME);            // introduced 14.0.0
-SPECIAL (SAM, 20, SQUANK,                sam_piz_special_SQUANK);                // introduced 14.0.0
+SPECIAL (SAM, 20, SQUANK,                cigar_special_SQUANK);                  // introduced 14.0.0
 SPECIAL (SAM, 21, BSSEEKER2_XO,          sam_piz_special_BSSEEKER2_XO);          // introduced 14.0.0
 SPECIAL (SAM, 22, BSSEEKER2_XG,          sam_piz_special_BSSEEKER2_XG);          // introduced 14.0.0
 SPECIAL (SAM, 23, BSSEEKER2_XM,          sam_piz_special_BSSEEKER2_XM);          // introduced 14.0.0
@@ -823,7 +838,7 @@ SPECIAL (SAM, 34, DEMUX_BY_MATE_PRIM,    sam_piz_special_DEMUX_BY_MATE_PRIM);   
 SPECIAL (SAM, 35, DEMUX_BY_BUDDY,        sam_piz_special_DEMUX_BY_BUDDY);        // introduced 14.0.0
 SPECIAL (SAM, 36, GEM3_XB,               sam_piz_special_GEM3_XB);               // introduced 14.0.0
 SPECIAL (SAM, 37, BSBOLT_YS,             sam_piz_special_BSBOLT_YS);             // introduced 14.0.0
-SPECIAL (SAM, 38, 0A_RNAME,              sam_piz_special_0A_RNAME);              // introduced 14.0.0
+SPECIAL (SAM, 38, COPY_RNAME,            sam_piz_special_COPY_RNAME);            // introduced 14.0.0
 SPECIAL (SAM, 39, BISMARK_XG,            sam_piz_special_BISMARK_XG);            // introduced 14.0.0
 SPECIAL (SAM, 40, HI,                    sam_piz_special_HI);                    // introduced 14.0.0
 SPECIAL (SAM, 41, DEMUX_BY_BUDDY_MAP,    sam_piz_special_DEMUX_BY_BUDDY_MAP);    // introduced 14.0.0
@@ -856,12 +871,13 @@ SPECIAL (SAM, 67, jI,                    sam_piz_special_jI);                   
 SPECIAL (SAM, 68, jM_length,             sam_piz_special_jM_length);             // introduced 15.0.42
 SPECIAL (SAM, 69, RG_by_QNAME,           sam_piz_special_RG_by_QNAME);           // introduced 15.0.51
 SPECIAL (SAM, 70, PACBIO_we,             sam_piz_special_PACBIO_we);             // introduced 15.0.58
-SPECIAL (SAM, 71, DEMUX_BY_REVCOMP_MATE, sam_piz_special_DEMUX_BY_REVCOMP_MATE); // introduced 15.0.60
+SPECIAL (SAM, 71, DEMUX_by_REVCOMP_MATE, sam_piz_special_DEMUX_by_REVCOMP_MATE); // introduced 15.0.60
 SPECIAL (SAM, 72, crdna_GP,              sam_piz_special_crdna_GP);              // introduced 15.0.60
 SPECIAL (SAM, 73, DEMUX_MAPQ,            sam_piz_special_DEMUX_MAPQ);            // introduced 15.0.61
 SPECIAL (SAM, 74, CPU_XL,                sam_piz_special_CPU_XL);                // introduced 15.0.65
 SPECIAL (SAM, 75, ML_REPEATS,            sam_piz_special_ML_REPEATS);            // introduced 15.0.67
 SPECIAL (SAM, 76, TMAP_XT,               sam_piz_special_TMAP_XT);               // introduced 15.0.68
+SPECIAL (SAM, 77, DEMUX_by_DUPLICATE,    sam_piz_special_DEMUX_by_DUPLICATE);    // introduced 15.0.69
 
 #define SAM_LOCAL_GET_LINE_CALLBACKS(dt)        \
     { dt, _OPTION_BD_BI,    sam_zip_BD_BI    }, \
@@ -872,6 +888,7 @@ SPECIAL (SAM, 76, TMAP_XT,               sam_piz_special_TMAP_XT);              
     { dt, _OPTION_TQ_Z,     sam_zip_TQ       }, \
     { dt, _OPTION_QX_Z,     sam_zip_QX       }, \
     { dt, _OPTION_2Y_Z,     sam_zip_2Y       }, \
+    { dt, _OPTION_CQ_Z,     sam_zip_CQ       }, \
     { dt, _OPTION_BQ_Z,     sam_zip_BQ       }, \
     { dt, _OPTION_iq_sq_dq, sam_zip_iq_sq_dq }, \
     { dt, _OPTION_t0_Z,     sam_zip_t0       }, 

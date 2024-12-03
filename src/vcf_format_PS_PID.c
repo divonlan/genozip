@@ -32,8 +32,8 @@ void vcf_samples_zip_initialize_PS_PID (void)
             .repeats   = 1,
             .nitems_lo = 3,
             .items     = { { .dict_id.num = _FORMAT_PSpos, .separator = "_"},
-                        { .dict_id.num = _FORMAT_PSref, .separator = "_"},
-                        { .dict_id.num = _FORMAT_PSalt                  } } };                       
+                           { .dict_id.num = _FORMAT_PSref, .separator = "_"},
+                           { .dict_id.num = _FORMAT_PSalt                  } } };                       
 
         ps_pra_snip_len = sizeof (ps_pra_snip);
         container_prepare_snip ((ContainerP)&con_PS_pos_ref_alt, 0, 0, ps_pra_snip, &ps_pra_snip_len); 
@@ -134,7 +134,7 @@ void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STR
     // case: this is PS and we also have PID on this line - they are usually the same POS (so no need to lookback)
     else if (ctx->did_i == FORMAT_PS && CTX(FORMAT_PID)->ps_type == PS_POS_REF_ALT && 
              ctx_encountered (VB, FORMAT_PID) && vcf_seg_FORMAT_PS_PID_ps_matches_pid (vb, STRa(value)))
-        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_PS_BY_PID }), 2, ctx, value_len);
+        seg_special0 (VB, VCF_SPECIAL_PS_BY_PID, ctx, value_len);
 
     // case: this line is in the same Phase Set as the previous line
     else if ((lookback = (uint32_t)CTX(VCF_SAMPLES)->last_value.i/*last_line_num_samples*/) 
@@ -156,7 +156,7 @@ void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STR
             if (n_items && 
                 str_issame_(STRi(item,0), last_txt(VB, VCF_POS), vb->last_txt_len(VCF_POS)) &&
                 str_issame_(STRi(item,1), STRa(vb->REF)) &&
-                str_issame_(STRi(item,2), STRi(vb->alt,0))) {
+                str_issame_(STRi(item,2), STRa(ALTi(0)->alt))) {
 
                 // replace PS with COPY_POS, COPY_REF, COPY_ALT container 
                 seg_by_ctx (VB, STRa(ps_pra_snip), ctx, value_len); 
@@ -191,10 +191,29 @@ void vcf_seg_FORMAT_PS_PID_missing_value (VBlockVCFP vb, ContextP ctx, rom end_o
         (CTX(FORMAT_PID)->ps_type == PS_POS_REF_ALT || CTX(FORMAT_PID)->ps_type == PS_UNKNOWN) &&    
         vb->last_txt_len(FORMAT_PID)==1 && *last_txt(VB, FORMAT_PID)=='.') {
 
-        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_PS_BY_PID }), 2, ctx, 0); 
+        seg_special0 (VB, VCF_SPECIAL_PS_BY_PID, ctx, 0); 
     }
     else
         seg_by_ctx (VB, NULL, 0, ctx, 0); // generates WORD_INDEX_MISSING
+}
+
+// returns true is the sample has a non-'.' PS value
+bool vcf_seg_sample_has_PS (VBlockVCFP vb, ContextP *ctxs, STRps(sf))
+{
+    ContextP ps_ctx = CTX(FORMAT_PS);
+    uint16_t sf_i = SF_I(FORMAT_PS);
+
+    if (sf_i == NO_SF_I ||                       // no SF in this line's FORMAT
+        sf_i >= n_sfs   ||                       // SF field is missing in this sample despite being in FORMAT
+        !sf_lens[sf_i]  ||                       // SF is "" (i.e. empty)
+        (sf_lens[sf_i]==1 && sfs[sf_i][0]=='.')) // SF is "."
+        return false;
+
+    // first sample in the VB is a proper PS - get its type 
+    if (!ps_ctx->ps_type)
+        vcf_samples_seg_initialize_PS_PID (vb, ps_ctx, STRi(sf, sf_i));
+
+    return true;
 }
 
 //---------

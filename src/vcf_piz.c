@@ -28,6 +28,7 @@ void vcf_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
         segconf.INFO_DP_method        = header->vcf.segconf_INF_DP_method;
         segconf.MATEID_method         = header->vcf.segconf_MATEID_method;
         segconf.vcf_del_svlen_is_neg  = header->vcf.segconf_del_svlen_is_neg;
+        segconf.vcf_sample_copy          = header->vcf.segconf_sample_copy;
         segconf.Q_to_O                = BGEN32F (header->vcf.segconf_Q_to_O);
         segconf.wid[INFO_AC].width    = header->vcf.width.AC;
         segconf.wid[INFO_AF].width    = header->vcf.width.AF;
@@ -72,12 +73,26 @@ bool vcf_piz_init_vb (VBlockP vb_, ConstSectionHeaderVbHeaderP header)
             ctx->HT_n_lines = vb->lines.len32; 
     }
 
+    if (segconf.vcf_sample_copy) {
+        // hoist VCF_COPY_SAMPLE.local as it needs to be prepared (untranposed etc) before other transposed sections (AaD, DP...) are untransposed
+        for_buf (uint32_t, header_offset, vb->z_section_headers) {
+            SectionHeaderCtxP ctx_header = (SectionHeaderCtxP)Bc(vb->z_data, *header_offset);
+            if (ctx_header->section_type == SEC_LOCAL && ctx_header->dict_id.num == _VCF_COPY_SAMPLE) {
+                SWAP (*header_offset, *B1ST32(vb->z_section_headers));
+                break;
+            }
+        }
+
+        buf_alloc_exact_zero (vb, CTX(VCF_SAMPLES)->last_samples,      vcf_num_samples * ZCTX(VCF_FORMAT)->word_list.len, TxtWord, "contexts->last_samples");
+        buf_alloc_exact_zero (vb, CTX(VCF_COPY_SAMPLE)->sample_copied, vcf_num_samples * ZCTX(VCF_FORMAT)->word_list.len, bool, "contexts->sample_copied");
+    }
+
     CTX(INFO_END)->last_end_line_i = LAST_LINE_I_INIT;
 
     return true; // all good*
 }
 
-void vcf_piz_recon_init (VBlockP vb)
+void vcf_piz_vb_recon_init (VBlockP vb)
 {
 }
 
@@ -86,7 +101,7 @@ IS_SKIP (vcf_piz_is_skip_section)
 {
     if (flag.drop_genotypes && // note: if all samples are filtered out with --samples then flag.drop_genotypes=true (set in vcf_samples_analyze_field_name_line)
         (dict_id.num == _VCF_FORMAT || 
-         (dict_id.num == _VCF_SAMPLES && !segconf.has[FORMAT_RGQ]) || // note: if has[RGQ], vcf_piz_special_main_REFALT peeks SAMPLES so we need it 
+         (dict_id.num == _VCF_SAMPLES && !segconf.has[FORMAT_RGQ]) || // note: if has[RGQ], vcf_piz_special_REFALT peeks SAMPLES so we need it 
          dict_id_is_vcf_format_sf (dict_id)))
         return true;
 
@@ -94,7 +109,8 @@ IS_SKIP (vcf_piz_is_skip_section)
         && dict_id.num != _FORMAT_GT
         && dict_id.num != _FORMAT_GT_HT
         && dict_id.num != _FORMAT_PBWT_RUNS
-        && dict_id.num != _FORMAT_PBWT_FGRC)
+        && dict_id.num != _FORMAT_PBWT_FGRC
+        && dict_id.num != _FORMAT_GT_HT_BIG)
         return true;
 
     // if --count, we only need TOPLEVEL and the fields needed for the available filters (--regions)
@@ -111,7 +127,7 @@ IS_SKIP (vcf_piz_is_skip_section)
 void vcf_piz_insert_field (VBlockVCFP vb, ContextP ctx, STRp(value))
 {
 #ifdef DEBUG
-    DO_ONCE WARN_IF (segconf.wid[ctx->did_i].width==0, "segconf.wid[%s].width=0. This can legimitately happen if this field is not encounted in segconf, but more likely the width is not recorded and transferred due a bug", ctx->tag_name);
+    DO_ONCE WARN_IF (segconf.wid[ctx->did_i].width==0, "segconf.wid[%s].width=0. This can legimately happen if this field is not encountered in segconf, or all segconf occurances are longer than %u, or this field didn't exist in version %s, or possibly a bug", ctx->tag_name, SEGCONF_MAX_WIDTH, file_version().s);
 #endif
 
     if (!IS_RECON_INSERTION(ctx)) return;
@@ -144,6 +160,15 @@ void vcf_piz_insert_field (VBlockVCFP vb, ContextP ctx, STRp(value))
             }
 
             ASSPIZ (found_me, "Missing ctx=%s in dids[]", ctx->tag_name);   
+
+            // move entries of vb->last_samples set in this line (i.e. for this line's FORMAT)
+            if (segconf.vcf_sample_copy) {
+                ARRAY (TxtWord, tw, CTX(VCF_SAMPLES)->last_samples);
+                uint32_t start = CTX(VCF_FORMAT)->last_value.i * vcf_num_samples;
+
+                for (uint32_t i=start; i < start + vcf_num_samples; i++)
+                    tw[i].index += move_by;
+            }
         }
 
         // ID: adjust REF ALT
@@ -152,8 +177,8 @@ void vcf_piz_insert_field (VBlockVCFP vb, ContextP ctx, STRp(value))
             vb->ALT += move_by;
             CTX(VCF_REFALT)->last_txt.index += move_by;
 
-            for (int alt_i=0; alt_i < vb->n_alts; alt_i++)
-                vb->alts[alt_i] += move_by;
+            for_alt
+                alt->alt += move_by;
         }
         
         // adjust lookback addresses that might be affected by this insertion
@@ -204,7 +229,7 @@ CONTAINER_FILTER_FUNC (vcf_piz_filter)
                 if (flag.drop_genotypes) Ltxt -= 2;
             }
 
-            // --drop-genotypes: drop SAMPLES (might be loaded if has[RGQ], as needed for vcf_piz_special_main_REFALT)
+            // --drop-genotypes: drop SAMPLES (might be loaded if has[RGQ], as needed for vcf_piz_special_REFALT)
             else if (dnum == _VCF_SAMPLES) {
                 if (flag.drop_genotypes) return false;
             }
@@ -218,8 +243,16 @@ CONTAINER_FILTER_FUNC (vcf_piz_filter)
         case _VCF_SAMPLES:
         case _VCF_SAMPLES_0: // "no mate" channel of SAMPLES multiplexor
             // Set sample_i before reconstructing each sample
-            if (item == -1) 
+            if (item == -1) {
                 vb->sample_i = rep;
+                
+                if (segconf.vcf_sample_copy)  
+                    CTX(VCF_COPY_SAMPLE)->last_value.i = 0;
+            }
+
+            // case: sample as copied from previous line - filter out all items following the VCF_COPY_SAMPLE
+            else if (CTX(VCF_COPY_SAMPLE)->last_value.i)
+                return false;
 
             // --GT-only - don't reconstruct non-GT sample subfields
             else if (flag.gt_only && dnum != _FORMAT_GT) 
@@ -285,11 +318,16 @@ CONTAINER_ITEM_CALLBACK (vcf_piz_con_item_cb)
     switch (con_item->dict_id.num) {
         // IMPORTANT: when adding a "case", also update set CI1_ITEM_CB in vcf_seg_FORMAT
         
+        // occurs if GT was segged as a snip (see vcf_seg_FORMAT) (if pbwt, it is done in vcf_piz_container_cb)
+        case _FORMAT_GT:
+            vcf_piz_GT_update_other_fields (vb, recon);
+            break;
+
         case _FORMAT_DP:
             if (ctx_has_value (VB, FORMAT_DP)) { // not '.' or missing
                 if (segconf.INFO_DP_method == BY_FORMAT_DP) 
                     CTX(INFO_DP)->dp.sum_format_dp += CTX(FORMAT_DP)->last_value.i;
-            
+
                 // add up DP's of samples with GT!=0/0, for consumption by INFO/QD predictor
                 QdPredType pd = CTX(INFO_QD)->qd.pred_type;
                 if (pd == QD_PRED_SUM_DP || pd == QD_PRED_SUM_DP_P001 || pd == QD_PRED_SUM_DP_M001)
@@ -298,7 +336,7 @@ CONTAINER_ITEM_CALLBACK (vcf_piz_con_item_cb)
             break;
             
         case _FORMAT_SB:
-            vcf_piz_sum_SB_for_AS_SB_TABLE (vb, STRa(recon));
+            vcf_sum_SB_for_AS_SB_TABLE (vb, STRa(recon));
             break;
             
         case _FORMAT_PS: // since v13: PS has item_cb
@@ -308,10 +346,8 @@ CONTAINER_ITEM_CALLBACK (vcf_piz_con_item_cb)
         case _FORMAT_PID: // since v13: PID has item_cb
             vcf_piz_ps_pid_lookback_insert (vb, FORMAT_PID, STRa(recon));
             break;
-
-        // note: for _FORMAT_IPS we insert in vcf_piz_special_MUX_BY_IGT_PHASE
         
-        case _VCF_REFALT: // files compress starting v14.0.12
+        case _VCF_REFALT: // files compressed starting v14.0.12
             vcf_piz_refalt_parse (vb);
             break;
 
@@ -354,12 +390,10 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_DEFER)
 
 CONTAINER_CALLBACK (vcf_piz_container_cb)
 {
-    #define have_INFO_SF (CTX(INFO_SF)->deferred_snip.len > 0)
+    VBlockVCFP vb = (VBlockVCFP)vb_;
 
-    // case: we have an INFO/SF field and we reconstructed and we reconstructed a repeat (i.e. one ht) GT field of a sample 
+    // note: occurs if GT is a container, not if it is segged as a snip (in which case it happens in vcf_piz_con_item_cb)
     if (dict_id.num == _FORMAT_GT) {
-        CTX(INFO_AN)->an.count_ht += (*recon != '.'); // used for reconstructing INFO/AN
-
         // after first HT is reconstructed, re-write the predictable phase (note: predictable phases are only used for ploidy=2)
         if (rep==0 && con->repsep[0] == '&') 
             vcf_piz_FORMAT_GT_rewrite_predicted_phase (vb, STRa (recon));
@@ -368,31 +402,37 @@ CONTAINER_CALLBACK (vcf_piz_container_cb)
             con->items[0].separator[1] != CI1_ITEM_PRIVATE/*override flag*/) 
             vcf_piz_GT_cb_null_GT_if_null_DP (vb, recon);
 
-        if (have_INFO_SF) 
-            vcf_piz_GT_cb_calc_INFO_SF (VB_VCF, rep, STRa(recon));
+        if (rep==0/*first HT*/) 
+            vcf_piz_GT_update_other_fields (vb, recon);
     }
 
     else if (is_top_level) {
         // insert fields whose value is determined by the sample fields that we just finished reconstructing    
-        if (is_deferred(VCF_QUAL))         vcf_piz_insert_QUAL_by_GP (VB_VCF); 
-        if (is_deferred(INFO_BaseCounts))  vcf_piz_insert_INFO_BaseCounts_by_AD (VB_VCF); 
-        if (is_deferred(INFO_DP))          vcf_piz_insert_INFO_DP (VB_VCF);    // constraint: must be after BaseCounts (might depends on BaseCounts.last_value)
-        if (is_deferred(INFO_DPB))         vcf_piz_insert_by_snip (VB_VCF, CTX(INFO_DPB)); // constraint: must be after DP (depends on DP.last_value)
-        if (is_deferred(INFO_SF))          vcf_piz_insert_INFO_SF (VB_VCF);    
-        if (is_deferred(INFO_QD))          vcf_piz_insert_INFO_QD (VB_VCF);    // constraint: must be inserted after QUAL (it might depend on it)
-        if (is_deferred(INFO_AS_SB_TABLE)) vcf_piz_insert_INFO_AS_SB_TABLE (VB_VCF);
+        if (is_deferred(VCF_QUAL))         vcf_piz_insert_QUAL_by_GP (vb); 
+        if (is_deferred(INFO_BaseCounts))  vcf_piz_insert_INFO_BaseCounts_by_AD (vb); 
+        if (is_deferred(INFO_DP))          vcf_piz_insert_INFO_DP (vb);    // constraint: must be after BaseCounts (might depends on BaseCounts.last_value)
+        if (is_deferred(INFO_DPB))         vcf_piz_insert_by_snip (vb, CTX(INFO_DPB)); // constraint: must be after DP (depends on DP.last_value)
+        if (is_deferred(INFO_SF))          vcf_piz_insert_INFO_SF (vb);    
+        if (is_deferred(INFO_QD))          vcf_piz_insert_INFO_QD (vb);    // constraint: must be inserted after QUAL (it might depend on it)
+        if (is_deferred(INFO_AS_SB_TABLE)) vcf_piz_insert_INFO_AS_SB_TABLE (vb);
 
-        if (flag.snps_only && !vcf_refalt_piz_is_variant_snp (VB_VCF))
+        if (flag.snps_only && !vcf_refalt_piz_is_variant_snp (vb))
             vb->drop_curr_line = "snps_only";
 
-        if (flag.indels_only && !vcf_refalt_piz_is_variant_indel (VB_VCF))
+        if (flag.indels_only && !vcf_refalt_piz_is_variant_indel (vb))
             vb->drop_curr_line = "indels_only";
     }
 
+    // store reference to sample, in case the same sample in the next line needs to copy it
     else if (dict_id.num == _VCF_SAMPLES) {
-        ctx_set_last_value (vb, CTX(VCF_LOOKBACK), (ValueType){ .i = con->repeats });
+        ctx_set_last_value (VB, CTX(VCF_LOOKBACK), (ValueType){ .i = con->repeats });
+
+        if (segconf.vcf_sample_copy) { // since 15.0.69
+            LAST_SAMPLE_SAME_FMT_PIZ   = TXTWORD(recon);
+            SAMPLE_COPIED_SAME_FMT_PIZ = CTX(VCF_COPY_SAMPLE)->last_value.i;
+        }
 
         if (flag.samples) 
-            vcf_piz_SAMPLES_subset_samples (VB_VCF, rep, con->repeats, recon_len);
+            vcf_piz_SAMPLES_subset_samples (vb, rep, con->repeats, recon_len);
     }
 }

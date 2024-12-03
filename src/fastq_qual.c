@@ -31,7 +31,7 @@ void fastq_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qual))
         fastq_deep_seg_QUAL (vb, dl, ctx, qual_len);
 
     else if (str_is_monochar (STRa(qual))) {
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_monochar_QUAL, qual[0] }, 3, ctx, qual_len);
+        seg_special1 (VB, FASTQ_SPECIAL_monochar_QUAL, qual[0], ctx, qual_len);
         dl->dont_compress_QUAL = true;
     }
 
@@ -39,10 +39,10 @@ void fastq_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qual))
         seg_simple_lookup (VB, ctx, qual_len);
         ctx->local.len32 += qual_len;
 
-        if (segconf.running) segconf.nontrivial_qual = true; // not monochar
+        if (segconf_running) segconf.nontrivial_qual = true; // not monochar
     }
 
-    if (segconf.running)
+    if (segconf_running)
         fastq_seg_QUAL_segconf (vb, STRa(qual));
 
     COPY_TIMER (fastq_seg_QUAL);

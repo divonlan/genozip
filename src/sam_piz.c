@@ -32,14 +32,14 @@ void sam_piz_xtra_line_data (VBlockP vb_)
         if (IS_SAG_SA) iprintf (" aln_i=%"PRIu64" (%d within group)", ZALN_I(vb->sa_aln), (int)(ZALN_I(vb->sa_aln) - vb->sag->first_aln_i));
         iprint0 ("\n");
         
-        sam_show_sag_one_grp (ZGRP_I(VB_SAM->sag));
+        sam_show_sag_one_grp (VB, ZGRP_I(VB_SAM->sag));
     }
 }
 
 void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
 {
     if (VER(14)) {
-        segconf.sam_seq_len           = BGEN32 (header->sam.segconf_seq_len); 
+        segconf.std_seq_len           = BGEN32 (header->sam.segconf_std_seq_len); // note: for files up to 15.0.68, this was the segconf-average seq len, and since 15.0.69 the segconf-longest seq len
         segconf.seq_len_to_cm         = header->sam.segconf_seq_len_cm;
         segconf.sam_ms_type           = header->sam.segconf_ms_type;
         segconf.has_MD_or_NM          = header->sam.segconf_has_MD_or_NM;
@@ -70,7 +70,8 @@ void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
         segconf.SA_NM_by_CIGAR_X      = header->sam.segconf_SA_NM_by_X;
         segconf.CIGAR_has_eqx         = header->sam.segconf_CIGAR_has_eqx;
         segconf.has[OPTION_MQ_i]      = header->sam.segconf_has_MQ;
-
+        segconf.is_interleaved        = header->sam.segconf_is_ileaved;
+        
         flag.deep = header->flags.genozip_header.dts2_deep; 
 
         z_file->max_conc_writing_vbs  = MAX_(1, BGEN16 (header->sam.conc_writing_vbs)); // since 15.0.64. For earlier v14,15 versions, this will be 0 in the file and set to 1 here, and might be further updated when uncompressing SectionHeaderReconPlan.
@@ -100,17 +101,11 @@ bool sam_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header)
     if (IS_PRIM(vb))
         VB_SAM->plsg_i = sam_piz_get_plsg_i (vb->vblock_i);
 
-    // calculate maximum theoretical compressed length of a QUAL string in this VB (for in-memory storage of QUAL in gencomp and deep)
-    if (flag.deep || z_has_gencomp) 
-        CTX(SAM_QUAL)->qual_longest_theoretical_comp_len = huffman_exists (SAM_QUAL)
-            ? huffman_get_theoretical_max_comp_len (SAM_QUAL, vb->longest_seq_len)
-            : arith_compress_bound (vb->longest_seq_len, X_NOSZ); 
-
     return true; // all good
 }
 
 // PIZ compute thread: called after uncompressing contexts and before reconstructing
-void sam_piz_recon_init (VBlockP vb)
+void sam_piz_vb_recon_init (VBlockP vb)
 {
     // we can proceed with reconstructing a PRIM or DEPN vb, only after SA Groups is loaded - busy-wait for it
     while ((IS_PRIM(vb) || IS_DEPN(vb)) && !sam_is_sag_loaded())
@@ -118,11 +113,8 @@ void sam_piz_recon_init (VBlockP vb)
 
     buf_alloc_zero (vb, &CTX(SAM_CIGAR)->cigar_anal_history, 0, vb->lines.len, CigarAnalItem, 0, "cigar_anal_history"); // initialize to exactly one per line.
 
-    if (flag.deep) {
-        __atomic_store_n (&z_file->vb_start_deep_line.param, 1/*recon of deep_ents in progress*/, __ATOMIC_RELEASE);  
-        
-        CTX(SAM_CIGAR)->deep_textual_cigar.name = "contexts->deep_textual_cigar"; // so sam_cigar_binary_to_textual uses the right buffer name
-    }
+    if (flag.deep) 
+        CTX(SAM_CIGAR)->deep_cigar.name = "contexts->deep_cigar"; // so sam_cigar_binary_to_textual uses the right buffer name
 }
 
 // PIZ main thread: after reading and uncompressing VB_HEADER
@@ -163,7 +155,6 @@ void sam_piz_finalize (bool is_last_z_file)
     // if next, we're going to reconstruct deep FASTQ components we can free some memory now
     if (flag.deep) {
         buf_destroy (z_file->sag_grps);
-        buf_destroy (z_file->sag_grps_index);
         buf_destroy (z_file->sag_alns);
         buf_destroy (z_file->sag_qnames);
         buf_destroy (z_file->sag_depn_index);
@@ -235,7 +226,7 @@ IS_SKIP (sam_piz_is_skip_section)
     #define is_aux dict_id_is_aux_sf(dict_id) // #define so calculated only when (rarely) needed
 
     switch (dict_id.num) {
-        case _SAM_SQBITMAP : 
+        case _SAM_SQBITMAP :
             SKIPIFF ((cov || cnt) && !flag.bases && 
                      !has_sa); // if this file has SA:Z: needed by MD:Z which is needed by NM:i which is needed by SA:Z
             
@@ -462,7 +453,7 @@ void sam_set_MAPQ_filter (rom optarg)
     ASSERT (str_get_int_range8 (optarg, 0, 0, 255, &flag.MAPQ), MAPQ_ERR, optarg);
 }
 
-static inline void sam_piz_update_coverage (VBlockP vb, const uint16_t sam_flag, uint32_t soft_clip)
+static inline void sam_piz_update_coverage (VBlockSAMP vb, const uint16_t sam_flag, uint32_t soft_clip)
 {
     ARRAY (uint64_t, read_count, vb->read_count);
     ARRAY (uint64_t, coverage, vb->coverage);
@@ -687,6 +678,8 @@ TXTHEADER_TRANSLATOR (txtheader_sam2fq)
 // filtering during reconstruction: called by container_reconstruct for each sam alignment (repeat)
 CONTAINER_CALLBACK (sam_piz_container_cb)
 {    
+    VBlockSAMP vb = (VBlockSAMP)vb_;
+    
     if (is_top_level) {
         #define DROP_LINE(reason) ({ vb->drop_curr_line = (reason); goto dropped; })
 
@@ -725,12 +718,12 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
 
         // --bases
         if (flag.bases && 
-            !(TXT_DT(BAM) ? iupac_is_included_bam (last_txt (vb, SAM_SQBITMAP), ((BAMAlignmentFixedP)recon)->l_seq)
+            !(TXT_DT(BAM) ? iupac_is_included_bam (last_txt (VB, SAM_SQBITMAP), ((BAMAlignmentFixedP)recon)->l_seq)
                           : iupac_is_included_ascii (STRlst (SAM_SQBITMAP))))
             DROP_LINE ("bases");
         
         // --qnames and --qnames-file
-        if (flag.qname_filter && !qname_filter_does_line_survive (vb, STRlst (IS_PRIM(vb) ? SAM_QNAMESA : SAM_QNAME))) // works also for FASTQ as SAM_QNAME==FASTQ_QNAME
+        if (flag.qname_filter && !qname_filter_does_line_survive (VB, STRlst (IS_PRIM(vb) ? SAM_QNAMESA : SAM_QNAME))) // works also for FASTQ as SAM_QNAME==FASTQ_QNAME
             DROP_LINE ("qname_filter");
 
         // --seqs-file
@@ -739,7 +732,7 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
 
         // count coverage, if needed    
         if (flag.show_coverage)
-            sam_piz_update_coverage (vb, vb->last_int(SAM_FLAG), VB_SAM->soft_clip[0] + VB_SAM->soft_clip[1]);
+            sam_piz_update_coverage (vb, vb->last_int(SAM_FLAG), vb->soft_clip[0] + vb->soft_clip[1]);
 
         if (flag.idxstats) {
             if (vb->last_int(SAM_FLAG) & SAM_FLAG_UNMAPPED)   

@@ -12,6 +12,17 @@
 // Seg
 // -----------
 
+// true if the only FORMAT that appears in this vb is GT (or none at all)
+bool vcf_is_GT_only (VBlockVCFP vb)
+{
+    BufferP fm_buf = &CTX(VCF_SAMPLES)->format_mapper_buf;
+
+    return fm_buf->len == 0 ||
+              (fm_buf->len == 1 && 
+               con_nitems (*B(Container, *fm_buf, 0)) == 1 + segconf.vcf_sample_copy &&   
+               B(Container, *fm_buf, 0)->items[0 + segconf.vcf_sample_copy].dict_id.num == _FORMAT_GT);
+}
+
 // converts a FORMAT field name to a dict_id
 static DictId vcf_seg_get_format_sf_dict_id (STRp (sf_name)) 
 {
@@ -32,8 +43,9 @@ static DictId vcf_seg_get_format_sf_dict_id (STRp (sf_name))
 
 void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt))
 {
-    ContextP format_ctx  = CTX(VCF_FORMAT);
-    ContextP samples_ctx = CTX(VCF_SAMPLES);
+    ContextP format_ctx      = CTX(VCF_FORMAT);
+    ContextP samples_ctx     = CTX(VCF_SAMPLES);
+    ContextP copy_sample_ctx = CTX(VCF_COPY_SAMPLE);
 
     ASSVCF0 (fmt_len >= 1, "missing or invalid FORMAT field");
 
@@ -68,23 +80,30 @@ void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt))
         .repsep              = "\t"
     };
 
-    ASSVCF (n_sf_names < MAX_FIELDS,
-            "FORMAT field has too many subfields, the maximum allowed is %u: \"%.*s\"", MAX_FIELDS, STRf(fmt));
+    ASSVCF (n_sf_names + segconf.vcf_sample_copy <= CONTAINER_MAX_DICTS, // tests only for fitting in the container, contexts overflow tested elsewhere
+            "FORMAT field has %u subfields, the maximum allowed is %u: \"%.*s\"", n_sf_names, CONTAINER_MAX_DICTS - segconf.vcf_sample_copy, STRf(fmt));
 
-    con_set_nitems (format_mapper, n_sf_names);
+    con_set_nitems (format_mapper, n_sf_names + segconf.vcf_sample_copy);
 
     ContextPBlock ctxs;
 
-    for (unsigned i=0; i < n_sf_names; i++) {
+    // case vcf_sample_copy: add a invisible field, that will be used to determine if sample should be copied from previous line
+    if (segconf.vcf_sample_copy) 
+        format_mapper.items[0] = (ContainerItem){ .dict_id.num = _VCF_COPY_SAMPLE };
 
+    for (unsigned i=0; i < n_sf_names; i++) {
         DictId dict_id = vcf_seg_get_format_sf_dict_id (sf_names[i], sf_name_lens[i]);
         ctxs[i] = ctx_get_ctx_tag (vb, dict_id, sf_names[i], sf_name_lens[i]);
 
-        format_mapper.items[i] = (ContainerItem){ .dict_id = dict_id, .separator = {':'} };
+        format_mapper.items[i + segconf.vcf_sample_copy] = (ContainerItem){ .dict_id = dict_id, .separator = {':'} };
 
-        if (dict_id.num == _FORMAT_PS || dict_id.num == _FORMAT_PID || dict_id.num == _FORMAT_DP ||
-            (dict_id.num == _FORMAT_SB && segconf.AS_SB_TABLE_by_SB))
-            format_mapper.items[i].separator[1] = CI1_ITEM_CB;
+        // define fields for which piz calls vcf_piz_con_item_cb
+        if ( dict_id.num == _FORMAT_PS  || 
+             dict_id.num == _FORMAT_PID || 
+             dict_id.num == _FORMAT_DP  ||
+            (dict_id.num == _FORMAT_SB && segconf.AS_SB_TABLE_by_SB) ||
+            (dict_id.num == _FORMAT_GT && !GT_USES_PBWT))
+            format_mapper.items[i + segconf.vcf_sample_copy].separator[1] = CI1_ITEM_CB;
     } 
     
     // note: fmt_len needs to be int64_t to avoid -Wstringop-overflow warning in gcc 10
@@ -104,9 +123,20 @@ void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt))
         ASSVCF (node_index == samples_ctx->format_mapper_buf.len32, 
                 "node_index=%d different than format_mapper_buf.len=%u", node_index, samples_ctx->format_mapper_buf.len32);
 
-        buf_alloc (vb, &samples_ctx->format_mapper_buf, 1, 0, Container, CTX_GROWTH, "format_mapper_buf");
-        buf_alloc (vb, &samples_ctx->format_contexts, 1, 0, ContextPBlock, CTX_GROWTH, "format_contexts");
-        samples_ctx->format_contexts.len = samples_ctx->format_mapper_buf.len = samples_ctx->format_mapper_buf.len + 1;
+        buf_alloc (vb, &samples_ctx->format_mapper_buf, 1, 0, Container, CTX_GROWTH, "contexts->format_mapper_buf");
+        samples_ctx->format_mapper_buf.len++;
+
+        buf_alloc (vb, &samples_ctx->format_contexts, 1, 0, ContextPBlock, CTX_GROWTH, "contexts->format_contexts");
+        samples_ctx->format_contexts.len++;
+
+        // one set of vcf_num_samples TxtWords for each FORMAT
+        if (segconf.vcf_sample_copy) {
+            buf_alloc_zero (vb, &samples_ctx->last_samples, vcf_num_samples, 0, TxtWord, CTX_GROWTH, "contexts->last_samples");
+            samples_ctx->last_samples.len += vcf_num_samples;
+
+            buf_alloc_zero (vb, &copy_sample_ctx->sample_copied, vcf_num_samples, 0, bool, CTX_GROWTH, "contexts->sample_copied");
+            copy_sample_ctx->sample_copied.len += vcf_num_samples;
+        }
     }    
 
     ContainerP con = B(Container, samples_ctx->format_mapper_buf, node_index);
@@ -134,5 +164,6 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT)
             RECONSTRUCT_snip;
     }
 
-    return NO_NEW_VALUE;
+    new_value->i = ctx->last_wi;
+    return HAS_NEW_VALUE;
 }

@@ -111,32 +111,33 @@ static void inline codec_pbwt_calculate_permutation (PbwtState *state, const All
 {
     // populate permutation index - by re-ordering according to previous line's alleles
     if (!is_first_line) {
-
-        // all valid allele values - in the order we want them in the permutation
-        #define NUM_VALIDS 104
-        static const Allele valids[NUM_VALIDS] = { 
-            48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,
-            75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,
-            106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,
-            129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,
-            '.', '*', '%', '-'
-        };
-        
         // mark which allele values exist in prev line
         bool has_allele[256] = {};
         for (uint32_t ht_i=0; ht_i < line_len; ht_i++) 
             has_allele[state->perm[ht_i].allele] = true;
 
+        // list of allele values existing in prev line
+        Allele my_alleles[256];
+        int n_my_alleles=0;
+        for (Allele allele='0'; allele != (Allele)('0' + NUM_SMALL_ALLELES); allele++)  // round robin using uint8_t arithmetic
+            if (has_allele[allele]) 
+                my_alleles[n_my_alleles++] = allele;
+
+        // pseudo alleles - we need to keep them in this order (which is not ASCII order) for back comp
+        static const Allele pseudo_alleles[] = { '.', '*', '%', '-', '&' };
+        for (int i=0; i < ARRAY_LEN(pseudo_alleles); i++) // note: not i is not uint8_t bc would round-robin 
+            if (has_allele[pseudo_alleles[i]]) 
+                my_alleles[n_my_alleles++] = pseudo_alleles[i];
+
         // re-order permutation - first taking the indices of the '0' alleles, then '1', '2' etc - but keeping
         // the order within each allele as it was 
         uint32_t temp_i=0;        
-        for (Allele i=0; i < NUM_VALIDS; i++) {
-            Allele bg = valids[i];
+        for (int i=0; i < n_my_alleles; i++) {
+            Allele bg = my_alleles[i];
         
-            if (has_allele[bg]) 
-                for (uint32_t ht_i=0; ht_i < line_len; ht_i++) 
-                    if (state->perm[ht_i].allele == bg) 
-                        state->temp[temp_i++].index = state->perm[ht_i].index;
+            for (uint32_t ht_i=0; ht_i < line_len; ht_i++) 
+                if (state->perm[ht_i].allele == bg) 
+                    state->temp[temp_i++].index = state->perm[ht_i].index;
         }
 
         SWAP (state->perm, state->temp);
@@ -173,8 +174,6 @@ void codec_pbwt_seg_init (VBlockP vb)
     fgrc_ctx->ltype         = LT_UINT32;
     fgrc_ctx->lsubcodec_piz = CODEC_PBWT;
     fgrc_ctx->local_dep     = DEP_L2; // FGRC.local is generated when PBWT_HT_MATRIX.local is compressed, and *must* be after RUNS in z_file
-
-    ctx_consolidate_stats (VB, FORMAT_GT, FORMAT_PBWT_RUNS, FORMAT_PBWT_FGRC, DID_EOL);
 }
 
 // updates FGRC - our list of foreground run alleles. Each entry represents "count" consecutive runs of this same "fg_allele"
@@ -416,24 +415,35 @@ CODEC_RECONSTRUCT (codec_pbwt_reconstruct)
 
     if (vb->drop_curr_line) return;
 
-    if (IS_DIGIT(ht) || ht == '.') 
-        RECONSTRUCT1 (ht);
-    
-    else if (ht == '-') 
-        Ltxt--; // ploidy padding (starting 10.0.2) - appears as the 2nd+ HT - counted in GT.repeats: don't reconstruct anything, just remove previous phase character
+    switch (ht) {
+        case '0' ... '9': case '.':
+            RECONSTRUCT1 (ht);
+            break;
 
-    // % means "replace the previous phase and insert .". this is meant to reduce entroy for the GT.b250
-    // in the case we have phased data, but missing samples appear as "./.". With this, we seg ".|%" instead of "./."
-    // and hence the repsep and hence the entire GT container are the same beteen "./." and eg "1|0" samples.
-    else if (ht == '%') {
-        if (*BLSTtxt == '|' || *BLSTtxt == '/') { // second % in "%|%" 
-            Ltxt -= 1;  // remove | or /
-            RECONSTRUCT ("/.", 2);
+        // ploidy padding (starting 10.0.2) - appears as the 2nd+ HT - counted in GT.repeats: don't reconstruct anything, just remove previous phase character        
+        case '-':
+            Ltxt--; 
+            break;
+
+        // % means "replace the previous phase and insert .". this is meant to reduce entroy for the GT.b250
+        // in the case we have phased data, but missing samples appear as "./.". With this, we seg ".|%" instead of "./."
+        // and hence the repsep and hence the entire GT container are the same beteen "./." and eg "1|0" samples.
+        case '%':
+            if (*BLSTtxt == '|' || *BLSTtxt == '/') { // second % in "%|%" 
+                Ltxt -= 1;  // remove | or /
+                RECONSTRUCT ("/.", 2);
+            }
+            else
+                RECONSTRUCT1 ('.'); // first % in "%|%" 
+            break;
+
+        case '&': { // big allele beyond NUM_SMALL_ALLELES (since 15.0.69)
+            int64_t allele = reconstruct_from_local_int (vb, CTX(FORMAT_GT_HT_BIG), 0, false) + NUM_SMALL_ALLELES;
+            RECONSTRUCT_INT (allele);
+            break;
         }
-        else
-            RECONSTRUCT1 ('.'); // first % in "%|%" 
+        
+        default:  // allele 10 to NUM_SMALL_ALLELES-1 (ascii 58-255,0-36)
+            RECONSTRUCT_INT ((uint8_t)(ht - '0')); // note: for values 0-37 will round-robin to 208-245 per uint8_t arithmetic 
     }
-
-    else  // allele 10 to 99 (ascii 58 to 147)
-        RECONSTRUCT_INT (ht - '0');
 }

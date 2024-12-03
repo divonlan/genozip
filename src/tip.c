@@ -56,7 +56,7 @@ void tip_print (void)
     if (!(E(SAM) || E(BAM) || E(VCF) || E(BCF)))
         valid_tips[n++] = "Please take a moment now to make a note to not forget to cite Genozip:\n" PAPER2_CITATION "\n";
 
-    if (!strcmp (get_distribution(), "github"))  
+    if (dist_is_github())  
         valid_tips[n++] = "Do you like Genozip? Please support it by starring it on github: " GITHUB_REPO;
 
     if (E(SAM) || E(BAM) || E(FASTQ)) 

@@ -390,10 +390,14 @@ static inline WordIndex hash_global_add_node (ContextP zctx, uint32_t hash, uint
     uint32_t *prevs_next = (last_ent_on_linked_list == ENT_HEAD) 
         ? B32(zctx->global_hash, hash) : &B(CtxNode, zctx->nodes, last_ent_on_linked_list)->next;
 
-    // thread safetey: no need for an atomic operation: when this write finally propagate to other 
-    // threads, it will  make no difference: changing from NO_NEXT to a value that is still beyond 
+    // thread safetey: no need for an atomic operation: when this write finally propagates to other 
+    // threads, will make no difference: changing from NO_NEXT to a value that is still beyond 
     // ol_nodes.len at clone time and doing so in a single CPU op as CtxNode is pack(4) (i.e. 32bit-aligned)
+    #ifndef sanitize_thread
     *prevs_next = zctx->nodes.len32 - 1;
+    #else
+    store_relaxed (prevs_next, zctx->nodes.len32 - 1); // just so sanitize-threads doesn't complain
+    #endif
 
     return zctx->nodes.len32 - 1; // word_index
 }
@@ -452,7 +456,11 @@ WordIndex hash_find_snip_in_ol_nodes (VBlockP vb, ContextP vctx, STRp(snip),
     // note: no need for atomic operation to load from global hash: if its value < ol_nodes.len then
     // it is immutable, and if >= ol_nodes.len - it remains to so indefinitely - it might only ever 
     // change once, from NO_NEXT to a value >= ol_nodes.len (in single CPU op since global_hash.data is word aligned).
+    #ifndef sanitize_thread
     CtxNode dummy = { .next = *B32(vctx->global_hash, hash) }, *node = &dummy;
+    #else // just so sanitize-threads doesn't shout
+    CtxNode dummy = { .next = __atomic_load_n (B32(vctx->global_hash, hash), __ATOMIC_RELAXED) }, *node = &dummy;
+    #endif
 
     while (1) {
         // three cases for "next":

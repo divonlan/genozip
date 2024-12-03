@@ -65,7 +65,7 @@ void bed_seg_initialize (VBlockP vb)
 
     ctx_set_ltype (vb, LT_STRING, BED_NAME, DID_EOL);
 
-    if (!segconf.is_sorted || segconf.running) 
+    if (!segconf.is_sorted || segconf_running) 
         ctx_set_ltype (vb, LT_UINT32, BED_START, DID_EOL);
 
     ctx_set_dyn_int (vb, BED_SCORE, DID_EOL);
@@ -121,7 +121,7 @@ static void bed_seg_START (VBlockP vb, STRp(start), WordIndex prev_line_chrom)
     PosType32 start_val;
     decl_ctx (BED_START);
 
-    if (segconf.is_sorted && !segconf.running)
+    if (segconf.is_sorted && !segconf_running)
         start_val = seg_pos_field (VB, BED_START, BED_END, 0, 0, STRa(start), 0, start_len+1);
     
     else {
@@ -130,7 +130,7 @@ static void bed_seg_START (VBlockP vb, STRp(start), WordIndex prev_line_chrom)
         seg_integer_fixed (vb, ctx, &start_val, false, start_len+1);
     }
 
-    if (segconf.running) 
+    if (segconf_running) 
         segconf_test_sorted (vb, prev_line_chrom, start_val, ctx->last_value.i);
 
     ctx_set_last_value (vb, ctx, (int64_t)start_val);
@@ -165,10 +165,10 @@ rom bed_seg_txt_line (VBlockP vb, rom line, uint32_t remaining_txt_len, bool *ha
     #define MAYBE_END_HERE(f) if (segconf.bed_num_flds == (f)+1) goto eol;
 
     str_split_by_tab (line, remaining_txt_len, segconf.bed_num_flds ? segconf.bed_num_flds : 12, 
-                      has_13, !!segconf.bed_num_flds, true); // also advances line to next line
+                      has_13, !!segconf.bed_num_flds, false, true); // also advances line to next line
 
     // per BED specification, all lines must have the same number of columns
-    if (segconf.running && vb->line_i == 0) {
+    if (segconf_running && vb->line_i == 0) {
         if (n_flds==3 || n_flds==4 || n_flds==5 || n_flds==6 || n_flds==8 || n_flds==9 || n_flds==12)
             segconf.bed_num_flds = n_flds;
         else
@@ -214,11 +214,11 @@ rom bed_seg_txt_line (VBlockP vb, rom line, uint32_t remaining_txt_len, bool *ha
     int64_t bcount;
 
     if (!str_get_int(STRfld(BCOUNT), &bcount) || bcount != predicted_bcount) {
-        if (segconf.running) return fallback_to_generic (vb);
+        if (segconf_running) return fallback_to_generic (vb);
         ABOSEG ("Encountered BCOUNT=\"%.*s\" - but expecting it to be the number of items in BSIZES which is %u", STRfi(fld,BCOUNT), (unsigned)predicted_bcount);
     }
 
-    seg_by_did (vb, (char[]){ SNIP_SPECIAL, BED_SPECIAL_BCOUNT }, 2, BED_BCOUNT, fld_lens[BED_BCOUNT] + 1);
+    seg_special0 (vb, BED_SPECIAL_BCOUNT, CTX(BED_BCOUNT), fld_lens[BED_BCOUNT] + 1);
 
     // BSIZES + BSTARTS
     seg_array (vb, CTX(BED_BSIZES),  BED_BSIZES,  STRfld(BSIZES),  ',', 0, false, true, DICT_ID_NONE, fld_lens[BSIZES]  + 1);

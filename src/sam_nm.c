@@ -47,7 +47,7 @@ void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAMP dl, SamNMType nm, unsigned add
     // make a copy, so it remains consistent throughout the if statements below, even if segconf.NM_is_integer is set by another thread in their midst
     bool NM_is_integer = segconf.NM_is_integer; 
 
-    if (segconf.running) {
+    if (segconf_running) {
         if (has_MD && vb->idx_MD_Z > vb->idx_NM_i) segconf.NM_after_MD = false; // we found evidence that sometimes NM is before MD
         goto no_special;
     }
@@ -64,7 +64,7 @@ void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAMP dl, SamNMType nm, unsigned add
 
     // method 0: if we use 'X' in CIGAR, NM:i can be derived from the sum of 'X' bases
     else if (segconf.CIGAR_has_eqx && nm == vb->mismatch_bases_by_CIGAR + vb->deletions + vb->insertions) // observed in pbmm2
-        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'x'}, 3, OPTION_NM_i, add_bytes); // 15.0.66 
+        seg_special1 (VB, SAM_SPECIAL_NM, 'x', ctx, add_bytes); // 15.0.66 
 
     // method 1: if we have MD:Z, we use prediction of number of mismatches derived by analyzing it. This is almost always correct, 
     // but the downside is that reconstruction takes longer due to the need to peek MD:Z. Therefore, we limit it to certain cases.
@@ -73,7 +73,7 @@ void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAMP dl, SamNMType nm, unsigned add
                 IS_REF_INTERNAL                || // case 2: prediction against SEQ performs poorly
                 predicted_by_SEQ != nm         || // case 3: rare cases in which prediction by SEQ is wrong with an external reference.
                 flag.best))                       // case 4: the user request the best method
-        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'm'}, 3, OPTION_NM_i, add_bytes);  // 'm' type since v14
+        seg_special1 (VB, SAM_SPECIAL_NM, 'm', ctx, add_bytes);  // 'm' type since v14
 
     // method 2: copy from SA Group. DEPN or PRIM line. Note: in DEPN, nm already verified in sam_sa_seg_depn_find_sagroup to be as in SA alignment
     // note: if SA_NM_by_CIGAR_X=true then NM(=mismatches+insertions+deletions) != SA_NM(=mismatches) 
@@ -83,11 +83,11 @@ void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAMP dl, SamNMType nm, unsigned add
     // method 3: use prediction of the number of mismatches derived by comparing SEQ to a reference.
     // this is usually, but surprisingly not always, correct for an external reference, and often correct for an internal one.
     else if (NM_is_integer && nm == predicted_by_SEQ)
-        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'i'}, 3, OPTION_NM_i, add_bytes); 
+        seg_special1 (VB, SAM_SPECIAL_NM, 'i', ctx, add_bytes); 
 
     // case nm is a binary 0/1 rather than an integer. We use prediction against SEQ. TO DO: Support prediction against MD:Z too.
     else if (!NM_is_integer && predicted_by_SEQ != -1 && (nm > 0) == (predicted_by_SEQ > 0)) 
-        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'b'}, 3, OPTION_NM_i, add_bytes); 
+        seg_special1 (VB, SAM_SPECIAL_NM, 'b', ctx, add_bytes); 
 
     else no_special: 
         seg_integer (VB, ctx, nm, true, add_bytes);
@@ -110,6 +110,7 @@ void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAMP dl, SamNMType nm, unsigned add
 
 void sam_seg_XM_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t xm, int16_t idx, unsigned add_bytes)
 {
+    decl_ctx (OPTION_XM_i);
     int32_t predicted_by_SEQ, predicted_by_MD;
     sam_seg_NM_get_prediction (vb, dl, false, &predicted_by_SEQ, &predicted_by_MD);
 
@@ -120,15 +121,15 @@ void sam_seg_XM_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t xm, int16_t idx, u
             IS_REF_INTERNAL                            || // case 2: prediction against SEQ performs poorly
             predicted_by_SEQ != xm                     || // case 3: rare cases in which prediction by SEQ is wrong with an external reference.
             flag.best))                                   // case 4: the user request the best method
-        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'M'}, 3, OPTION_XM_i, add_bytes);  // 'm' type since v14
+        seg_special1 (VB, SAM_SPECIAL_NM, 'M', ctx, add_bytes);  // 'm' type since v14
 
     // method 2: use prediction of the number of mismatches derived by comparing SEQ to a reference.
     // this is usually, but surprisingly not always, correct for an external reference, and often correct for an internal one.
     else if (xm == predicted_by_SEQ)
-        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'I'}, 3, OPTION_XM_i, add_bytes); 
+        seg_special1 (VB, SAM_SPECIAL_NM, 'I', ctx, add_bytes); 
 
     else 
-        seg_integer (VB, CTX(OPTION_XM_i), xm, true, add_bytes);
+        seg_integer (VB, ctx, xm, true, add_bytes);
 }
 
 // --------------------------------------------------------------------------------------------------------------
@@ -145,7 +146,7 @@ void sam_seg_STAR_nM (VBlockSAMP vb, ZipDataLineSAMP dl, SamNMType nm, unsigned 
 
     // else: in non-paired files, we use the same method as NM:i
     else {
-        if (segconf.running) {
+        if (segconf_running) {
             if (has_MD && !ctx_encountered_in_line (VB, OPTION_MD_Z)) segconf.nM_after_MD = false; // we found evidence that sometimes nM is before MD
             goto fallback;
         }
@@ -162,12 +163,12 @@ void sam_seg_STAR_nM (VBlockSAMP vb, ZipDataLineSAMP dl, SamNMType nm, unsigned 
                      IS_REF_INTERNAL                || // case 2: prediction against SEQ performs poorly
                      predicted_by_SEQ != nm         || // case 3: rare cases in which prediction by SEQ is wrong with an external reference.
                      flag.best))                       // case 4: the user request the best method
-            seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'm'}, 3, ctx, add_bytes);  // 'm' type since v14
+            seg_special1 (VB, SAM_SPECIAL_NM, 'm', ctx, add_bytes);  // 'm' type since v14
 
         // method 3: use prediction of the number of mismatches derived by comparing SEQ to a reference.
         // this is usually, but surprisingly not always, correct for an external reference, and often correct for an internal one.
         else if (nm == predicted_by_SEQ)
-            seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'i'}, 3, ctx, add_bytes); 
+            seg_special1 (VB, SAM_SPECIAL_NM, 'i', ctx, add_bytes); 
 
         else fallback: 
             seg_integer (VB, ctx, nm, true, add_bytes);

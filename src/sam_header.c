@@ -24,6 +24,8 @@ HdSoType sam_hd_so = HD_SO_UNKNOWN;
 HdGoType sam_hd_go = HD_GO_UNKNOWN;
 static Buffer sam_deep_tip = {};
 
+static rom map_sigs[] = SAM_MAPPER_SIGNATURE;
+
 uint32_t sam_num_header_contigs (void)
 {
     return sam_hdr_contigs ? sam_hdr_contigs->contigs.len32 : 0;
@@ -45,7 +47,7 @@ static void sam_header_add_contig (STRp (contig_name), PosType64 LN, void *out_r
 
     // case: we have a reference, we use the reference chrom_index    
     if (flag.reference & REF_ZIP_LOADED) 
-        ref_index = ref_contigs_ref_chrom_from_header_chrom (gref, STRa(contig_name), &LN); // also verifies LN
+        ref_index = ref_contigs_ref_chrom_from_header_chrom (STRa(contig_name), &LN); // also verifies LN
 
     else // internal
         ref_index = sam_hdr_contigs->contigs.len32;
@@ -205,6 +207,9 @@ static void sam_header_zip_inspect_HD_line (BufferP txt_header)
         } 
     }
 
+    if (strstr (hdr, map_sigs[MP_CRATAC]))
+        segconf.sam_mapper = MP_CRATAC;
+
     SAFE_RESTORE;
 
     COPY_TIMER_EVB (sam_header_zip_inspect_HD_line);
@@ -215,7 +220,7 @@ static void sam_header_zip_build_stats_programs (rom hdr, rom after)
     #define EQ3(s1,s2) (s1[0]==s2[0] && s1[1]==s2[1] && s1[2]==s2[2])
 
     while (hdr < after) {
-        str_split_by_tab (hdr, after - hdr, 10, NULL, false, false); // also advances hdr to after the newline
+        str_split_by_tab (hdr, after - hdr, 10, NULL, false, true, false); // also advances hdr to after the newline
         if (!hdr || n_flds < 2 || fld_lens[0] != 3 || !EQ3(flds[0], "@PG")) break;
 
         int ID_i=-1, PN_i=-1;
@@ -279,7 +284,7 @@ static void sam_header_create_deep_tip (rom hdr, rom after)
         if (!sam_deep_tip.len || !strstr (B1STc(sam_deep_tip), fq)) { // avoid dups
             if (!sam_deep_tip.len) 
                 bufprintf (evb, &sam_deep_tip, "Tip: Use --deep to losslessly co-compress BAM and FASTQ, saving about 40%%, compared to compressing FASTQ and BAM separately. E.g.:\n"
-                           "%s --reference %s --deep %s", arch_get_argv0(), ref_get_filename (gref) ? ref_get_filename (gref) : "reference-genome.fa.gz", txt_name);
+                           "%s --reference %s --deep %s", arch_get_argv0(), ref_get_filename() ? ref_get_filename() : "reference-genome.fa.gz", txt_name);
 
             buf_add_moreC (evb, &sam_deep_tip, " ", NULL);
             buf_append_string (evb, &sam_deep_tip, fq);
@@ -309,7 +314,7 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
     SAFE_NULT(hdr);
 
     // advance to point to first @PG line
-    #define IS_PG(s) (s[1] == 'P' && s[2] == 'G' && s[3] == '\t')
+    #define IS_PG(s) ((s)[1] == 'P' && (s)[2] == 'G' && s[3] == '\t')
 
     rom s = hdr - 1;
     while ((s = strchr (s+1, '@'))) 
@@ -319,18 +324,20 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
     rom first_PG = s;
 
     rom after_PGs = NULL;
-    while ((s = strchr (s+1, '@'))) 
-        if (!after_PGs && !IS_PG(s)) 
+    while ((s = strchr (s, '@'))) {
+        if (!after_PGs && s[-1]=='\n' && !IS_PG(s)) 
             after_PGs = s;
 
-        else if (after_PGs && IS_PG(s)) // oops, found another PG after bunch of non-PGs... cancel previous "after_PGs"
+        else if (after_PGs && s[-1]=='\n' && IS_PG(s)) // oops, found another PG after bunch of non-PGs... cancel previous "after_PGs"
             after_PGs = NULL;
+
+        s++;
+    }
 
     if (!after_PGs) after_PGs = after;
 
     RESAFE_NUL (after_PGs); // move the NUL up to after all PG lines (even if PG lines are non-sequential)
 
-    static rom map_sigs[] = SAM_MAPPER_SIGNATURE;
     ASSERT0 (ARRAY_LEN(map_sigs) == NUM_MAPPERS, "Invalid SAM_MAPPER_SIGNATURE array length - perhaps missing commas between strings?");
 
     for (int i=1; i < ARRAY_LEN(map_sigs); i++) // skip 0=unknown
@@ -349,16 +356,14 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
     if (MP(DRAGEN) && flag.deep) {
         rom fastq_n_quality = strstr (first_PG, "fastq-n-quality: "); // minimum Phread quality of 'N' bases, default 2. see: https://support.illumina.com/content/dam/illumina-support/help/Illumina_DRAGEN_Bio_IT_Platform_v3_7_1000000141465/Content/SW/Informatics/Dragen/SoftwareInpNBase_fDG.htm
         rom fastq_offset    = strstr (first_PG, "fastq-offset: ");    // offset of byte value vs phred. default 33.
-        int fastq_n_quality_value = atoi (fastq_n_quality + STRLEN("fastq-n-quality: "));
-        int fastq_offset_value    = atoi (fastq_offset + STRLEN("fastq-offset: "));
+        int fastq_n_quality_value = fastq_n_quality ? atoi (fastq_n_quality + STRLEN("fastq-n-quality: ")) : 0;
+        int fastq_offset_value    = fastq_offset    ? atoi (fastq_offset + STRLEN("fastq-offset: ")) : 0;
         if (fastq_n_quality_value && fastq_offset_value) {
             segconf.deep_N_sam_score = fastq_n_quality_value + fastq_offset_value;
 
-            if (flag.show_deep) iprintf ("deep_N_sam_score='%c'(%u)\n", segconf.deep_N_sam_score, segconf.deep_N_sam_score);
+            if (flag_show_deep) iprintf ("deep_N_sam_score='%c'(%u)\n", segconf.deep_N_sam_score, segconf.deep_N_sam_score);
         }
     }
-
-    if (MP(CRDNA) || MP(LONGRANGER)) segconf.has_10xGen = true;
 
     if (strstr (first_PG, "ABRA2")) segconf.sam_has_abra2 = true;
 
@@ -396,7 +401,7 @@ static void sam_header_zip_inspect_RG_lines (BufferP txt_header)
 
     while ((hdr = strchr (hdr, '@'))) 
         if (IS_RG(hdr)) {
-            str_split_by_tab (hdr, after - hdr, 32, NULL, false, false); // also advances hdr to after the newline
+            str_split_by_tab (hdr, after - hdr, 32, NULL, false, true, false); // also advances hdr to after the newline
         
             for (int i=1; i < n_flds; i++)
                 if (IS_ID (flds[i])) 
@@ -479,7 +484,7 @@ static void sam_header_alloc_contigs (BufferP txt_header)
     ContigsCbParam *winner = delta >= 0 ? &txt_ctg_count : &bin_ctg_count;
 
     if (winner->n_contigs) {
-        sam_hdr_contigs = IS_REF_INTERNAL ? ref_get_ctgs (gref) : CALLOC (sizeof (ContigPkg));
+        sam_hdr_contigs = IS_REF_INTERNAL ? ref_get_ctgs() : CALLOC (sizeof (ContigPkg));
         sam_hdr_contigs->name = "sam_hdr_contigs";        
         sam_hdr_contigs->contigs.param = (delta > 0); // 1 if contigs come from the textual header, 0 if binary
         
@@ -514,7 +519,7 @@ static void sam_header_zip_inspect_SQ_lines (VBlockP txt_header_vb, BufferP txt_
 // because otherwise samtools will hang 
 static void sam_header_verify_same_contig_as_ref (STRp (contig_name), PosType64 LN, void *cram_filename)
 {
-    ref_contigs_verify_same_contig_as_ref (gref, cram_filename, STRa(contig_name), LN); 
+    ref_contigs_verify_same_contig_as_ref (cram_filename, STRa(contig_name), LN); 
 }
 
 void sam_header_zip_inspect_SQ_lines_in_cram (rom cram_filename)
@@ -529,7 +534,7 @@ void sam_header_finalize (void)
         FREE (sam_hdr_contigs);
     }
     else
-        sam_hdr_contigs = NULL; // memory will be freed when we destroy gref
+        sam_hdr_contigs = NULL; // memory will be freed when we destroy the reference
 
     sam_hd_so = HD_SO_UNKNOWN;
     sam_hd_go = HD_GO_UNKNOWN;
@@ -573,7 +578,7 @@ bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
     if (IS_ZIP || flag.collect_coverage)  // note: up to v13, contigs were carried by SEC_REF_CONTIG for REF_INTERNAL too 
         sam_header_zip_inspect_SQ_lines (txt_header_vb, txt_header);
 
-    if (IS_ZIP) {
+    if (IS_ZIP && !flag.bam_assist) {
 
         if (!IS_BAM_ZIP) *BAFTc (*txt_header) = 0; // nul-terminate as required by foreach_textual_SQ_line
 
@@ -583,13 +588,13 @@ bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
 
         // in case of internal reference, we need to initialize. in case of --reference, it was initialized by ref_load_external_reference()
         if (IS_REF_INTERNAL && sam_hdr_contigs) 
-            ref_initialize_ranges (gref, RT_DENOVO); 
+            ref_initialize_ranges (RT_DENOVO); 
 
         // evb buffers must be alloced by the main thread, since other threads cannot modify evb's buf_list
         random_access_alloc_ra_buf (evb, SAM_RNAME);
     }
 
-    else { // PIZ
+    else if (IS_PIZ) {
         // deep tip - create in case tip is displayed in "--test after ZIP"
         uint32_t hdr_len = IS_SRC_BAM_PIZ ? *B32(*txt_header, 1)     : txt_header->len32;
         rom hdr          = IS_SRC_BAM_PIZ ? (rom)B32(*txt_header, 2) : txt_header->data;
@@ -741,7 +746,7 @@ TXTHEADER_TRANSLATOR (sam_header_sam2bam)
 
     // if no SQ lines - get lines from loaded contig (will be available only if file was compressed with --reference or --REFERENCE)
     bool from_SQ = !!n_ref;
-    if (!from_SQ) n_ref = ref_num_contigs (gref);
+    if (!from_SQ) n_ref = ref_num_contigs();
 
     // grow buffer to accommodate estimated reference size (we will more in sam_header_sam2bam_ref_info if not enough)
     buf_alloc (comp_vb, txtheader_buf, n_ref * 100 + (50 + strlen (flags_command_line())), 0, char, 1, 0);
@@ -765,6 +770,6 @@ TXTHEADER_TRANSLATOR (sam_header_sam2bam)
         foreach_textual_SQ_line (STRb(*txtheader_buf), sam_header_sam2bam_ref_info, txtheader_buf);
 
     // option 2: copy reference information from ref_contigs if available - i.e. if pizzed with external or stored reference
-    else if (ref_num_contigs (gref)) 
-        foreach_contig (ref_get_ctgs (gref), sam_header_sam2bam_ref_info, txtheader_buf);
+    else if (ref_num_contigs()) 
+        foreach_contig (ref_get_ctgs(), sam_header_sam2bam_ref_info, txtheader_buf);
 }

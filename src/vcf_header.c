@@ -170,7 +170,7 @@ static void vcf_header_consume_contig (STRp (contig_name), PosType64 *LN)
 
     // case: we have a reference - verify length
     if (flag.reference & REF_ZIP_LOADED)
-        ref_index = ref_contigs_ref_chrom_from_header_chrom (gref, STRa(contig_name), LN);
+        ref_index = ref_contigs_ref_chrom_from_header_chrom (STRa(contig_name), LN);
 
     // also populates chrom2ref_map if external reference is loaded
     ctx_populate_zf_ctx (VCF_CHROM, STRa(contig_name), ref_index); 
@@ -332,10 +332,11 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
     IF_IN_SOURCE ("Gencove", vcf_is_gencove);
     IF_IN_SOURCE ("freeBayes", vcf_is_freebayes);
     IF_IN_HEADER ("GenotypeGVCFs", vcf_is_gatk_gvcf, "GenotypeGVCFs");
-    IF_IN_HEADER ("CombineGVCFs", vcf_is_gatk_gvcf, "CombineGVCFs");
-    IF_IN_HEADER ("EMIT_ALL_SITES", vcf_is_gvcf, ""); // GATK UnifiedGenotyper GVCF (obsolete tool, no RGQ, so set as vcf_is_gvcf, not vcf_is_gatk_gvcf)
+    if (!segconf.vcf_is_gatk_gvcf) IF_IN_HEADER ("CombineGVCFs", vcf_is_gatk_gvcf, "CombineGVCFs");
     if (segconf.vcf_is_gatk_gvcf) segconf.vcf_is_gvcf = true;
-    if (segconf.vcf_is_isaac) IF_IN_HEADER ("gvcf", vcf_is_gvcf, "");
+    if (!segconf.vcf_is_gvcf) IF_IN_HEADER ("gvcf", vcf_is_gvcf, ""); // for example, as part of ##DRAGENCommandLine=
+    if (!segconf.vcf_is_gvcf) IF_IN_HEADER ("gVCF", vcf_is_gvcf, ""); // for example, in annotation descriptions
+    if (!segconf.vcf_is_gvcf) IF_IN_HEADER ("EMIT_ALL_SITES", vcf_is_gvcf, ""); // GATK UnifiedGenotyper GVCF (obsolete tool, no RGQ, so set as vcf_is_gvcf, not vcf_is_gatk_gvcf)
     IF_IN_HEADER ("beagle", vcf_is_beagle, "beagle");
     IF_IN_HEADER ("Pindel", vcf_is_pindel, "Pindel");
     IF_IN_HEADER ("caveman", vcf_is_caveman, "CaVEMan");
@@ -345,9 +346,9 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
     IF_IN_HEADER ("VcfAnnotate.pl", vcf_is_vagrent, "VAGrENT");
     IF_IN_HEADER ("ICGC", vcf_is_icgc, "ICGC");
     IF_IN_HEADER ("Illumina GenCall", vcf_illum_gtyping, "Illumina GenCall");
-    IF_IN_HEADER ("Log R Ratio", vcf_illum_gtyping, "Illumina Genotyping");
+    if (!segconf.vcf_illum_gtyping) IF_IN_HEADER ("Log R Ratio", vcf_illum_gtyping, "Illumina Genotyping");
     IF_IN_HEADER ("Number of cases used to estimate genetic effect", vcf_is_gwas, "GWAS_1.0"); // v1.0
-    IF_IN_HEADER ("##trait", vcf_is_gwas, "GWAS_1.2"); /*v1.2*/
+    if (!segconf.vcf_is_gwas)  IF_IN_HEADER ("##trait", vcf_is_gwas, "GWAS_1.2"); /*v1.2*/
     IF_IN_HEADER ("DRAGEN", vcf_is_dragen, "DRAGEN");
     IF_IN_HEADER ("DeepVariant", vcf_is_deep_variant, "DeepVariant");
     IF_IN_HEADER ("##hailversion", vcf_is_hail, "Hail");

@@ -166,7 +166,7 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
     buf_append_string (comp_vb, txtheader_buf, flags_command_line());
     bufprint0 (comp_vb, txtheader_buf, "\"\n");
 
-    bufprintf (comp_vb, txtheader_buf, VCF_HEAD_1, ref_get_filename (gref));
+    bufprintf (comp_vb, txtheader_buf, VCF_HEAD_1, ref_get_filename());
     
     // add contigs used in this file
     for (uint32_t chrom_i=0; chrom_i < num_chroms; chrom_i++) {
@@ -174,7 +174,7 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
         // get contig length from loaded reference
         STR(chrom_name);
         ctx_get_snip_by_word_index (ctx, chrom_i, chrom_name);
-        PosType64 contig_len = ref_contigs_get_contig_length (gref, WORD_INDEX_NONE, chrom_name, chrom_name_len, true);
+        PosType64 contig_len = ref_contigs_get_contig_length (WORD_INDEX_NONE, chrom_name, chrom_name_len, true);
 
         bufprintf (comp_vb, txtheader_buf, VCF_HEAD_2, chrom_name, contig_len);
     }
@@ -221,10 +221,10 @@ TRANSLATOR_FUNC (sam_piz_m232vcf_GENOTYPE)
 
     // chroms don't have the same index in the ME23 z_file and in the reference file - we need to translate chrom_index
     WordIndex save_chrom_node_index = vb->chrom_node_index;
-    vb->chrom_node_index = ref_contigs_get_by_name (gref, vb->chrom_name, vb->chrom_name_len, true, false);
+    vb->chrom_node_index = ref_contigs_get_by_name (vb->chrom_name, vb->chrom_name_len, true, false);
 
     // get the value of the loaded reference at this position    
-    ConstRangeP range = ref_piz_get_range (vb, gref, HARD_FAIL);
+    ConstRangeP range = ref_piz_get_range (vb, HARD_FAIL);
     vb->chrom_node_index = save_chrom_node_index; // restore
 
     uint32_t idx = pos - range->first_pos;

@@ -13,6 +13,7 @@
 #include "qname.h"
 #include "zfile.h"
 #include "huffman.h"
+#include "sorter.h"
 
 typedef struct {
     VBIType vb_i;              // MAIN VB vblock_i
@@ -45,7 +46,7 @@ void sam_sag_zip_init_vb (VBlockSAMP vb)
 
     buf_append_one (z_file->vb_info[vb->comp_i], new_info);
 
-    if (flag.debug_gencomp)
+    if (flag_debug_gencomp)
         iprintf ("SetVbInfo %s: first_line=%"PRIu64" num_lines=%u\n", VB_NAME, new_info.first_line, new_info.num_lines);
 }
 
@@ -66,7 +67,7 @@ void sam_add_main_vb_info (VBlockP vb,
     // therefore prim_first_line and depn_first_line are each in order (i.e. monotonically increasing)
     buf_append_one (z_file->vb_info[SAM_COMP_MAIN], new_info);
 
-    if (flag.debug_gencomp)
+    if (flag_debug_gencomp)
         iprintf ("SetVbInfo %s: prim_lines={first=%"PRIu64" n=%u} depn_lines={first=%"PRIu64" n=%u}\n", 
                  VB_NAME, new_info.first_gc_line[0], new_info.num_gc_lines[0], new_info.first_gc_line[1], new_info.num_gc_lines[1]);
 }                           
@@ -88,15 +89,17 @@ void sam_set_sag_type (void)
     else if (MP(NOVOALIGN))
         segconf.sag_type = SAG_BY_NH; // NovoAlign may have both NH and SA, we go by NH
 
+    // SAG_BY_NH: STAR and other aligners with NH:i/HI:i for secondary alignments.
+    // Note that STAR uses NH:i for secondary and SA:Z for supplamentary. We choose to gencomp for
+    // secondaries as they are usually more numerous that supplamentaries (bug 1148).
+    // we identify a PRIM as a line that is (1) not supp/secondary (2) has NH >= 2
+    else if (segconf.HI_has_two_plus && segconf.has[OPTION_NH_i])
+        segconf.sag_type = segconf.has_barcodes ? SAG_BY_SOLO : SAG_BY_NH; 
+
     // SAG_BY_SA: the preferd Sag method - by SA:Z
     // we identify a PRIM line - if it (1) has SA:Z and (2) supp/secondary flags are clear
     else if (segconf.sam_has_SA_Z || segconf.has[OPTION_SA_Z]) 
         segconf.sag_type = SAG_BY_SA;
-
-    // SAG_BY_NH: STAR and other aligners with NH:i/HI:i instead of SA:Z
-    // we identify a PRIM as a line that is (1) not supp/secondary (2) has NH >= 2
-    else if ((MP(STAR) || (segconf.has[OPTION_NH_i] && segconf.has[OPTION_HI_i])) && !segconf.has[OPTION_SA_Z])
-        segconf.sag_type = segconf.has_barcodes ? SAG_BY_SOLO : SAG_BY_NH; 
 
     // SAG_BY_CC: cases where there is NH, but no HI or SA, and all lines in a SAG have NH>=2, and, 
     // except the last line in the SAG, also have CC and CP.
@@ -171,7 +174,7 @@ bool sam_seg_prim_add_sag (VBlockSAMP vb, ZipDataLineSAMP dl, uint16_t num_alns/
     // MAIN: check that values are within limits defined in Sag (no need to check in PRIM as we already checked in MAIN)
     if (IS_MAIN(vb)) {
         FAILIF (!sam_might_have_saggies_in_other_VBs (vb, dl, num_alns), "all sag alignments are contained in this VB%s", "");
-        FAILIF (dl->QNAME.len > SAM_MAX_QNAME_LEN, "dl->QNAME.len=%u > %u", dl->QNAME.len, SAM_MAX_QNAME_LEN);
+        FAILIF (dl->QNAME_len > SAM_MAX_QNAME_LEN, "dl->QNAME_len=%u > %u", dl->QNAME_len, SAM_MAX_QNAME_LEN);
         FAILIF (seq_len==1 && *seq == '*', "SEQ=\"*\"%s", ""); // we haven't segged seq yet, so vb->seq_missing is not yet set
         FAILIF (seq_len > MAX_SA_SEQ_LEN, "seq_len=%u > %u", seq_len, MAX_SA_SEQ_LEN);
         FAILIF (!dl->POS, "POS=0%s", ""); // unaligned
@@ -192,8 +195,8 @@ bool sam_seg_prim_add_sag (VBlockSAMP vb, ZipDataLineSAMP dl, uint16_t num_alns/
         BNXT (Sag, vb->sag_grps) = (Sag){
             .first_aln_i = vb->sag_alns.len,
             .num_alns    = num_alns,
-            .qname       = dl->QNAME.index,
-            .qname_len   = dl->QNAME.len,
+            .qname       = BNUMtxt (dl_qname(dl)),
+            .qname_len   = dl->QNAME_len,
             .qual        = dl->QUAL.index,
             .no_qual     = vb->qual_missing,
             .revcomp     = dl->FLAG.rev_comp,
@@ -246,6 +249,10 @@ int32_t sam_seg_prim_add_sag_SA (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(sa), in
             .nm              = this_nm
         };
 
+        // chew non-dict cigar if this is the first prim vb (for use in piz - only non-dict cigars get nico-compressed)
+        if (textual_cigar_len > MAX_CIGAR_LEN_IN_DICT && z_file->SA_CIGAR_chewing_vb_i == vb->vblock_i)
+            nico_chew_one_cigar (OPTION_SA_CIGAR, CIG(vb->binary_cigar));
+
         vb->sag_alns.count += n_alns;
     }
 
@@ -290,6 +297,9 @@ int32_t sam_seg_prim_add_sag_SA (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(sa), in
                 .mapq            = mapq,
                 .nm              = nm
             };
+
+            if (z_file->SA_CIGAR_chewing_vb_i == vb->vblock_i)
+                nico_chew_one_textual_cigar (VB, OPTION_SA_CIGAR, STRi(item,SA_CIGAR));
         }
     }
 
@@ -668,7 +678,7 @@ static void sam_sa_seg_depn_find_sagroup_SAtag (VBlockSAMP vb, ZipDataLineSAMP d
 
     int64_t grp_index_i=-1;
     uint32_t qname_hash;
-    const Sag *g = sam_sa_get_first_group_by_qname_hash (vb, STRtxt(dl->QNAME), dl->FLAG.is_last, &grp_index_i, &qname_hash);
+    const Sag *g = sam_sa_get_first_group_by_qname_hash (vb, STRqname(dl), dl->FLAG.is_last, &grp_index_i, &qname_hash);
     if (!g) return; // no PRIM with this qname
 
     // temporarily replace H with S if needed
@@ -698,12 +708,12 @@ static void sam_sa_seg_depn_find_sagroup_SAtag (VBlockSAMP vb, ZipDataLineSAMP d
         uint16_t my_aln_i=0; // relative to group
 
         // case: get alignment where SA and my alignment perfectly match the group 
-        if (dl->FLAG.is_first   == g->is_first                                        && // note: order tests in the condition is optimized to fail fast with minimal effort
-            g->seq_len          == vb->hard_clip[0] + seq_len + vb->hard_clip[1]      &&
-            dl->FLAG.is_last    == g->is_last                                         &&
-            dl->FLAG.multi_segs == g->multi_segs                                      &&
-            n_my_alns           == g->num_alns                                        && 
-            huffman_issame (SAM_QNAME, GRP_QNAME(g), g->qname_len, STRtxt(dl->QNAME)) &&
+        if (dl->FLAG.is_first   == g->is_first                                   && // note: order tests in the condition is optimized to fail fast with minimal effort
+            g->seq_len          == vb->hard_clip[0] + seq_len + vb->hard_clip[1] &&
+            dl->FLAG.is_last    == g->is_last                                    &&
+            dl->FLAG.multi_segs == g->multi_segs                                 &&
+            n_my_alns           == g->num_alns                                   && 
+            huffman_issame (SAM_QNAME, GRP_QNAME(g), g->qname_len, STRqname(dl)) &&
             sam_seg_depn_find_SA_aln (vb, g, n_my_alns, my_alns, &my_aln_i, &vb->prim_aln_index_in_SA_Z)     &&
             sam_seg_depn_is_subseq_of_prim (vb, (uint8_t*)textual_seq, dl->SEQ.len, (revcomp != g->revcomp), g, is_bam)) { // this will fail if SEQ has non-ACGT or if DEPN sequence invalidly does not match the PRIM sequence (observed in the wild)
 
@@ -716,7 +726,7 @@ static void sam_sa_seg_depn_find_sagroup_SAtag (VBlockSAMP vb, ZipDataLineSAMP d
             vb->depn_far_count++; // for stats
 
             if (flag.show_depn || flag.show_buddy)
-                 iprintf ("%s: %.*s grp=%u aln=%s qname_hash=%08x\n", LN_NAME, STRfw(dl->QNAME), ZGRP_I(g), sam_show_sag_one_aln (vb->sag, vb->sa_aln).s, qname_hash);                
+                 iprintf ("%s: %.*s grp=%u aln=%s qname_hash=%08x\n", LN_NAME, dl->QNAME_len, dl_qname(dl), ZGRP_I(g), sam_show_sag_one_SA_aln (VB, vb->sag, vb->sa_aln).s, qname_hash);                
                         
             break;
         }
@@ -740,7 +750,7 @@ static void sam_sa_seg_depn_find_sagroup_noSA (VBlockSAMP vb, ZipDataLineSAMP dl
 
     int64_t grp_index_i=-1;
     uint32_t qname_hash;
-    const Sag *g = sam_sa_get_first_group_by_qname_hash (vb, STRtxt(dl->QNAME), dl->FLAG.is_last, &grp_index_i, &qname_hash);
+    const Sag *g = sam_sa_get_first_group_by_qname_hash (vb, STRqname(dl), dl->FLAG.is_last, &grp_index_i, &qname_hash);
 
     PosType32 cp = -1;
     STR0(cc); cc="";
@@ -752,31 +762,31 @@ static void sam_sa_seg_depn_find_sagroup_noSA (VBlockSAMP vb, ZipDataLineSAMP dl
     }
 
     if (!g) {
-        if (flag.show_depn) iprintf ("vb=%u FAIL:NO_QNAME_MATCH QNAME=\"%.*s\"(%08x) HI=%d CC=\"%.*s\" CP=%d\n", vb->vblock_i, STRfw(dl->QNAME), qname_hash, hi, STRf(cc), cp);
+        if (flag.show_depn) iprintf ("vb=%u FAIL:NO_QNAME_MATCH QNAME=\"%.*s\"(%08x) HI=%d CC=\"%.*s\" CP=%d\n", vb->vblock_i, dl->QNAME_len, dl_qname(dl), qname_hash, hi, STRf(cc), cp);
         return; // no PRIM with this qname
     }
 
     // if this is BAM, and we have an odd number of bases, the final seq value in the BAM file of the "missing" base
     // we can't encode last "base" other than 0 (see also bug 531)
     if (is_bam && (seq_len&1) && (*B8 (vb->txt_data, dl->SEQ.index + seq_len/2) & 0xf)) {
-        if (flag.show_depn) iprintf ("vb=%u FAIL:ODD_BASE_NON0 QNAME=\"%.*s\"(%08x) HI=%d CC=\"%.*s\" CP=%d\n", vb->vblock_i, STRfw(dl->QNAME), qname_hash, hi, STRf(cc), cp);
+        if (flag.show_depn) iprintf ("vb=%u FAIL:ODD_BASE_NON0 QNAME=\"%.*s\"(%08x) HI=%d CC=\"%.*s\" CP=%d\n", vb->vblock_i, dl->QNAME_len, dl_qname(dl), qname_hash, hi, STRf(cc), cp);
         return;
     }
     
     int32_t nh;
     if ((IS_SAG_NH || IS_SAG_SOLO || IS_SAG_CC) && !sam_seg_get_aux_int (vb, vb->idx_NH_i, &nh, is_bam, 1, 0x7fffffff, SOFT_FAIL)) {
-        if (flag.show_depn) iprintf ("vb=%u FAIL:NO_VALID_NH QNAME=\"%.*s\"(%08x) HI=%d CC=\"%.*s\" CP=%d\n", vb->vblock_i, STRfw(dl->QNAME), qname_hash, hi, STRf(cc), cp);
+        if (flag.show_depn) iprintf ("vb=%u FAIL:NO_VALID_NH QNAME=\"%.*s\"(%08x) HI=%d CC=\"%.*s\" CP=%d\n", vb->vblock_i, dl->QNAME_len, dl_qname(dl), qname_hash, hi, STRf(cc), cp);
         return; // missing or invalid NH:i in depn line
     }
 
     // iterate on all groups with matching QNAME hash
     do {
-        if ((IS_SAG_FLAG ||  nh == g->num_alns)                                       && // note: order tests in the condition is optimized to fail fast with minimal effort
-            dl->FLAG.is_first   == g->is_first                                        && 
-            g->seq_len          == vb->hard_clip[0] + seq_len + vb->hard_clip[1]      &&
-            dl->FLAG.is_last    == g->is_last                                         &&
-            dl->FLAG.multi_segs == g->multi_segs                                      &&
-            huffman_issame (SAM_QNAME, GRP_QNAME(g), g->qname_len, STRtxt(dl->QNAME)) &&
+        if ((IS_SAG_FLAG ||  nh == g->num_alns)                                  && // note: order tests in the condition is optimized to fail fast with minimal effort
+            dl->FLAG.is_first   == g->is_first                                   && 
+            g->seq_len          == vb->hard_clip[0] + seq_len + vb->hard_clip[1] &&
+            dl->FLAG.is_last    == g->is_last                                    &&
+            dl->FLAG.multi_segs == g->multi_segs                                 &&
+            huffman_issame (SAM_QNAME, GRP_QNAME(g), g->qname_len, STRqname(dl)) &&
             sam_seg_depn_is_subseq_of_prim (vb, (uint8_t*)textual_seq, dl->SEQ.len, (revcomp != g->revcomp), g, is_bam)) {
 
             // found - seg into local
@@ -791,7 +801,7 @@ static void sam_sa_seg_depn_find_sagroup_noSA (VBlockSAMP vb, ZipDataLineSAMP dl
                 vb->solo_aln = B(SoloAln, z_file->sag_alns, ZGRP_I(g));
 
             if (flag.show_depn || flag.show_buddy) {
-                iprintf ("%s: %.*s grp=%u qname_hash=%08x", LN_NAME, STRfw(dl->QNAME), ZGRP_I(g), qname_hash);
+                iprintf ("%s: %.*s grp=%u qname_hash=%08x", LN_NAME, dl->QNAME_len, dl_qname(dl), ZGRP_I(g), qname_hash);
                 if (has(HI_i)) iprintf (" HI=%d\n", hi);
                 else if (has(CC_Z) && has(CP_i)) iprintf (" CC=\"%.*s\" CP=%d\n", STRf(cc), cp);
                 else iprint0 ("\n");
@@ -802,7 +812,7 @@ static void sam_sa_seg_depn_find_sagroup_noSA (VBlockSAMP vb, ZipDataLineSAMP dl
     } while ((g = sam_sa_get_next_group_by_qname_hash (vb, &grp_index_i)));
 
     if (flag.show_depn) iprintf ("vb=%u FAIL:ALN_MISMATCH QNAME=\"%.*s\"(%08x) HI=%d CC=\"%.*s\" CP=%d\n", 
-                                 vb->vblock_i, STRfw(dl->QNAME), qname_hash, hi, STRf(cc), cp);
+                                 vb->vblock_i, dl->QNAME_len, dl_qname(dl), qname_hash, hi, STRf(cc), cp);
 }
 
 // Seg compute VB: called when segging PRIM/DEPN VBs
@@ -826,7 +836,7 @@ void sam_seg_sag_stuff (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(textual_cigar), 
 
 void sam_seg_against_sa_group (VBlockSAMP vb, ContextP ctx, uint32_t add_bytes)
 {
-    seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_pull_from_sag }, 2, ctx, add_bytes);
+    seg_special0 (VB, SAM_SPECIAL_pull_from_sag, ctx, add_bytes);
 }
 
 // seg a DEPN line against the SA data in z_file
@@ -855,7 +865,10 @@ void sam_zip_set_vb_header_specific (VBlockP vb_, SectionHeaderVbHeaderP vb_head
         vb_header->sam_prim_comp_qname_len  = BGEN32 (CTX(SAM_QNAME)->huffman.comp_len);
         vb_header->sam_prim_num_sag_alns    = BGEN32 ((uint32_t)VB_SAM->sag_alns.count); 
         vb_header->sam_prim_first_grp_i     = BGEN32 (vb->first_grp_i);
-        vb_header->sam_prim_comp_cigars_len = BGEN32 (vb->comp_cigars_len); 
+        if (IS_SAG_SA)
+            vb_header->sam_prim_comp_cigars_len = BGEN32 (vb->comp_cigars_len); 
+        else if (IS_SAG_SOLO)
+            vb_header->sam_prim_solo_data_len   = BGEN32 (vb->comp_solo_data_len); 
     }
 
     // In MAIN VBs with gencomp lines, we compress their vb_plan (=dt_specific_vb_header_payload) as the payload of the VB_HEADER section
@@ -923,11 +936,11 @@ uint32_t sam_zip_calculate_max_conc_writing_vbs (void)
 
     buf_free (evb->scratch);
 
-    if (flag.show_memory || flag.debug_gencomp) 
+    if (flag_show_memory || flag_debug_gencomp) 
         iprintf ("\nconc_writing_vbs=%d (consumes memory in piz, not threads)\n\n", conc_vbs_high_watermark);
 
     // catch values that are non-sensical. work-around: use --no-gencomp
-    ASSERT (IN_RANGX (conc_vbs_high_watermark, 0, MAX_CONC_WRITING_VBS), "conc_vbs_high_watermark=%d ∉ [0,%d]. Please report this to support@genozip.com", conc_vbs_high_watermark, MAX_CONC_WRITING_VBS);
+    ASSERTINRANGX (conc_vbs_high_watermark, 0, MAX_CONC_WRITING_VBS);
     
     COPY_TIMER_EVB (sam_zip_calculate_max_conc_writing_vbs);
     return conc_vbs_high_watermark; // note: this may change slightly between executions, because MAIN VBs are absorbed at non-deterministic order, and as a result the order of PRIM and DEPN lines is different between executions

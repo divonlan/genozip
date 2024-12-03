@@ -18,6 +18,7 @@
 #include "qname.h"
 #include "progress.h"
 #include "mgzip.h"
+#include "sorter.h"
 
 static VBlockP real_evb;
 static VBlockP scan_vb;
@@ -100,7 +101,6 @@ static void scan_read_one_vb (VBlockP vb)
     if (Ltxt) {
         vb->preprocessing = true;
         vb->dispatch = READY_TO_COMPUTE;
-        txt_file->num_vbs_dispatched++;
     }
 
     else 
@@ -248,7 +248,7 @@ void sam_sag_by_flag_scan_for_depn (void)
 
     buf_alloc (evb, &z_file->sag_depn_index, 0, 100, uint32_t, 0, "z_file->sag_depn_index");
 
-    scan_vb = vb_initialize_nonpool_vb (VB_ID_DEPN_SCAN, DT_BAM, task_name);
+    scan_vb = vb_initialize_nonpool_vb (VB_ID_SCAN_VB, DT_BAM, task_name);
     VBlockP real_evb = evb;
     evb = scan_vb;
 
@@ -257,9 +257,9 @@ void sam_sag_by_flag_scan_for_depn (void)
     ASSERTNOTNULL (txt_file);
     
     TEMP_FLAG(biopsy, false);
+    SAVE_FLAG(biopsy_line); flag.biopsy_line.line_i = NO_LINE;
     txtfile_read_header (true); // reads into evb->txt_data and evb->lines.len
     buf_free (evb->txt_data);   // discard the header
-    RESTORE_FLAG (biopsy);
     
     dispatcher_fan_out_task (task_name, 
                              save_txt_file->basename, // not txt_file-> bc it will be closed in a sec, while the progress component will continue to the main zip fan_out 
@@ -268,6 +268,9 @@ void sam_sag_by_flag_scan_for_depn (void)
                              scan_read_one_vb, 
                              scan_index_qnames_preprocessing, 
                              scan_append_index);
+
+    RESTORE_FLAG (biopsy);
+    RESTORE_FLAG (biopsy_line);
 
     progress_erase(); // erase "Preprocessing..."
     
@@ -290,7 +293,6 @@ void sam_sag_by_flag_scan_for_depn (void)
     vb_destroy_vb (&scan_vb);
     
     txt_file = save_txt_file;
-    txt_file->is_scanned = true;
 
     COPY_TIMER_EVB (sam_sag_by_flag_scan_for_depn);
 }
@@ -351,7 +353,7 @@ bool sam_might_have_saggies_in_other_VBs (VBlockSAMP vb, ZipDataLineSAMP dl, int
 {
     if (!vb->qname_count.len32) return true; // we didn't count qnames, so we don't have proof that there aren't any saggies in other VBs
 
-    uint32_t qname_hash = qname_calc_hash (QNAME1, COMP_NONE, Btxt (dl->QNAME.index), dl->QNAME.len, dl->FLAG.is_last, false, CRC32, NULL);
+    uint32_t qname_hash = qname_calc_hash (QNAME1, COMP_NONE, STRqname(dl), dl->FLAG.is_last, false, CRC32, NULL);
 
     if (IS_SAG_CC) 
         return true;   // we don't do qname accounting for SAG_BY_CC
