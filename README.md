@@ -27,7 +27,7 @@ Building from source: make -j (required for building: gcc 8.5 or above ; nasm).<
 
 ![v15 deep benchmark](https://github.com/divonlan/genozip/assets/56345591/39c7e9c5-135d-49c9-9213-89d4b830842a)
 
-<b>Genozip</b> Genozip is a commercial product, but we make it free for certain academic research use. See <a href="https://genozip.com/get-genozip">eligibility and other licensing options</a> or contact <a href="mailto://sales@genozip.com">sales@genozip.com</a> <br>
+<b>Genozip</b> Genozip is a commercial product, but it is free for students. See <a href="https://genozip.com/academic">eligibility</a> and <a href="https://genozip.com/get-genozip">other licensing options</a> or contact <a href="mailto://sales@genozip.com">sales@genozip.com</a> <br>
 <br>
 <b>IMPORTANT</b>: Genozip is a commercial product, <b>NOT AN OPEN SOURCE</b> product - we provide our source code to assure users that they will always have access to the code needed to decompress their files. <b>HOWEVER</b>, reverse engineering, code modifications, derivative works or inclusion of the code or parts thereof into other software packages is strictly forbidden by the <a href="https://genozip.com/license">license</a>.<br>
 <br>
