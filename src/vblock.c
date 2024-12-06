@@ -147,6 +147,7 @@ void vb_create_pool (VBlockPoolType type, rom name)
                                              (IS_PIZ ? (1 + !flag.no_writer_thread) : 0) + // txt header VB and wvb (for PIZ)
                                              (IS_PIZ && !flag.no_writer_thread ? z_file->max_conc_writing_vbs : 0) // SAM: max number of thread-less VBs handed over to the writer thread which the writer must load concurrently 
                        /*   POOL_BGZF   */ : writer_get_max_bgzf_threads();
+    
     if (flag_is_show_vblocks (NULL)) 
         iprintf ("CREATING_VB_POOL: type=%s global_max_threads=%u max_conc_writing_vbs=%u num_vbs=%u\n", 
                  name, global_max_threads, z_file->max_conc_writing_vbs, num_vbs); 

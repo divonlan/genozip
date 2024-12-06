@@ -89,8 +89,8 @@ ifdef linux_x86
 	x86_64 := 1
 	ASFLAGS := -f elf64 -DINTEL_CET_ENABLED -DAS_FEATURE_LEVEL=10 -DHAVE_AS_KNOWS_AVX512
 	# DEBUGFLAGS += -fsanitize=undefined
-	DEBUGFLAGS += -fsanitize=thread -Dsanitize_thread=1
-	# DEBUGFLAGS += -fsanitize=address -Dsanitize_address=1 # not compatable with valgrind - comment out if using valgrind
+	# DEBUGFLAGS += -fsanitize=thread -Dsanitize_thread=1
+	DEBUGFLAGS += -fsanitize=address -Dsanitize_address=1 # not compatable with valgrind - comment out if using valgrind
 endif
 
 ifdef osx_x86

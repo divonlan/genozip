@@ -340,6 +340,21 @@ static void seg_qname_mgi_new_cb (VBlockP vb, ContextP ctx, STRp(copy))
         seg_numeric_or_not (vb, ctx, STRa(copy), copy_len);
 }
 
+// example: SOME:2:PREFIX:L01:R001C012:0000:8199
+static SmallContainer con_mgi_sap8 = {
+    .repeats   = 1,
+    .nitems_lo = 7,
+    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = ":L"                   },  
+                   { .dict_id = { _SAM_Q1NAME }, .separator = { CI0_FIXED_0_PAD, 2 } },
+                   { .dict_id = { _SAM_Q2NAME }, .separator = { CI0_FIXED_0_PAD, 3 } },
+                   { .dict_id = { _SAM_Q3NAME }, .separator = { CI0_FIXED_0_PAD, 3 } },
+                   { .dict_id = { _SAM_Q4NAME }, .separator = { CI0_FIXED_0_PAD, 4 } },
+                   { .dict_id = { _SAM_Q5NAME }, .separator = { CI0_FIXED_0_PAD, 4 } },
+                   { .dict_id = { _SAM_QmNAME }, I_AM_MATE                           } } 
+};
+
+#define PX_mgi_sap8 { "", "", ":R", "C", ":", ":", PX_MATE_FIXED_0_PAD }
+
 //--------------------------------------------------------------------------------------------------------------
 // MGI_E format: 27 characters: E, FlowCellSerialNumber[various], L, Lane[1], C, Column[3], R, Row[3] Tile[6-8]
 // Example: E100020409L1C001R0030000234
@@ -1083,7 +1098,7 @@ typedef struct QnameFlavorStruct {
     int in_local[MAX_QNAME_ITEMS+1];      // int or numeric items that should be stored in local. if not set, item is segged to dict. if also in order_item, then if sorted by qname - will created a delta snip, otherwise store as local. 
     int hex_items[MAX_QNAME_ITEMS+1];     // array of item_i (0-based) that are expected to be lower case hexademical (+1 for termiantor; terminated by -1). a hex item must also be either integer or numeric.
     bool sam_qname_sorted;                // qnames are expected to be sorted, even if BAM if sorted by coordinates. This happens when SAM QNAMES have be replaced with a sorted flavor.
-    int ordered_item1, ordered_item2;     // an item that may be delta'd in non-sorted files. this should be the fast-moving item which consecutive values are close
+    int ordered_item1, ordered_item2;     // an item that may be delta'd in non-POS-sorted files. this should be the fast-moving item which consecutive values are close
     int range_end_item1,range_end_item2;  // an item containing end of range - delta vs preceding item in container
     int seq_len_item;                     // item containing the seq_len of this read
     int barcode_item;                     // item contains barcode. if also in_local, then data is compressed with CODEC_ACGT
@@ -1129,6 +1144,8 @@ static QnameFlavorStruct qf[] = {
                                                                                           TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_new7,       val_mgi_new,    0,   6,  {-1},               {1,3,4,5,6,7,-1},{4,5,6,-1},        {-1},           0,  5,6,   -1,-1, -1, -1, 7,  8,  0,  PX_mgi_new        }, // 15.0.51 
     {},  { QF_MGI_NEW8,    "MGI-NEW8",      { "MGI2000:001:V300053419:2:003:00100001039:00100001039" },          
                                                                                           TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_new8,       val_mgi_new,    0,   6,  {-1},               {1,3,4,5,6,7,-1},{4,5,6,-1},        {-1},           0,  5,6,   -1,-1, -1, -1, 7,  8,  0,  PX_mgi_new        }, // 15.0.51 
+    {},  { QF_MGI_SAP8,    "MGI-SAP8",      { "SOME:2:PREFIX:L01:R001C012:0000:8199" },          
+                                                                                          TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_sap8,       no_validate,    0,   7,  {-1},               {1,2,3,4,5,-1}, {4,5,-1},           {-1},           0,  4,5,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_sap8       }, // 15.0.70
     {},  { QF_MGI_varlen,  "MGI-varlen",    { "8A_V100004684L3C001R029311637", "V300022116L2C001R0012002968", "V300046476L1C001R00110001719" },          
                                                                                           TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_varlen,     no_validate,    0,   3,  {4,-1},             {1,2,3,-1},     {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_varlen     },
     {},  { QF_MGI_r6,      "MGI-R6",        { "8A_V100004684L3C001R029011637", "V300014293BL2C001R027005967", "V300003413L4C001R016000000" },          

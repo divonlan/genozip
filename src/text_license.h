@@ -62,7 +62,7 @@ static rom license[] = {
     
     "   a. At registration time: registration information provided by you and details about your hardware, operating system and IP address as displayed at end of the registration process.",
     
-    "   b. When a file is compressed: a log record containing aggregate statistical information about the performance of the compression algorithm and associated metadata. This logging occurs when using a free license. When using a Research, Standard, Enterprise or Premium (i.e. paid) License, YOU WILL BE ASKED TO CHOOSE WHETHER OR NOT YOU ALLOW THIS LOGGING. Details can be found here: " WEBSITE_LOGS". ",
+    "   b. When a file is compressed: a log record containing aggregate statistical information about the performance of the compression algorithm and associated metadata. This logging occurs when using a free license. When using a Research, Standard, Enterprise or Premium (i.e. paid) License, YOU WILL BE ASKED TO CHOOSE WHETHER OR NOT YOU ALLOW THIS LOGGING. Details can be found here: " WEBSITE_TELEMETRY". ",
  
     "6. Mailing list. You consent to receiving low-frequency product announcement and other marketing emails related to Genozip.",
     

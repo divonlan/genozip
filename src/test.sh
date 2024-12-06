@@ -2293,6 +2293,10 @@ batch_gencomp_depn_methods() # note: use --debug-gencomp for detailed tracking
     $genozip -fB1 -@3 -t $TESTDIR/special.sag-by-sa.sam --force-gencomp -o$output || exit 1
     verify_depn_far_to_num_depn 100
 
+    test_header "SAG by SA - piz single thread"
+    $genounzip -t -@1 $output
+    $genounzip -o$recon -@1 $output
+    
     test_header "SAG by SA with SA_CIGAR_abbreviated and SA_NM_by_CIGAR_X (PacBio with pbmm2)"
     $genozip -fB1 -@3 -t $TESTDIR/test.pbmm2-CIGAR-XE.bam --force-gencomp -o$output || exit 1
     verify_depn_far_to_num_depn 98
@@ -2361,6 +2365,10 @@ batch_deep() # note: use --debug-deep for detailed tracking
     local T=$TESTDIR/deep.human2-38
     $genozip $T.sam $T.R1.fq.gz $T.R2.fq.gz -fe $GRCh38 -o $output -3t --best --not-paired || exit 1
     $genozip $T.sam $T.R1.fq.gz $T.R2.fq.gz -fe $GRCh38 -o $output -3t --no-gencomp --not-paired || exit 1
+
+    test_header "deep: deep.human2-38 - piz single thread"
+    $genounzip -t -@1 $output
+    $genounzip -fo $OUTDIR/ -@1 $output
 
     test_header "deep: deep.gem3.multi-fastq: gem3 (bisulfite), multiple (>2) FASTQ"
     local T=$TESTDIR/deep.gem3.multi-fastq

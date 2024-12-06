@@ -956,6 +956,10 @@ void sam_piz_load_sags (void)
 {
     next_plsg_i = num_prim_vbs_loaded = 0; // reset for new z_file
 
+    // piz of a file with gencomp needs at least 2 threads
+    if (z_has_gencomp)
+        MAXIMIZE (global_max_threads, 2); 
+
     // cases in which there is no need to load sags
     if (!VER(14) || flag.genocat_no_reconstruct || flag.header_only
         || (flag.one_vb && IS_MAIN (sections_vb_header (flag.one_vb)))) // --one-vb of a MAIN VB - no need for PRIM/DEPN

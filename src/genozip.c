@@ -820,9 +820,9 @@ int main (int argc, char **argv)
     flags_store_command_line (argc, argv); // can only be called after --password is processed
 
     // handle all commands except for ZIP, PIZ or LIST
-    if (command == VERSION) { main_print_version();   return 0; }
-    if (command == LICENSE) { license_display();      return 0; }
-    if (command == HELP)    { main_print_help (true); return 0; }
+    if (command == VERSION) { main_print_version();    return 0; }
+    if (command == LICENSE) { license_display (false); return 0; }
+    if (command == HELP)    { main_print_help (true);  return 0; }
 
     // genozip with no input filename, no output filename, and no input redirection 
     // note: in docker stdin is a pipe even if going to a terminal. so we show the help even if
