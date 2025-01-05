@@ -34,7 +34,9 @@
 #define WEBSITE_INSTITUTIONS GENOZIP_URL "/institutions"
 #define WEBSITE_PREMIUM      GENOZIP_URL "/premium"
 #define WEBSITE_STUDENT      GENOZIP_URL "/student"
+#define WEBSITE_EVAL         GENOZIP_URL "/eval"
 #define WEBSITE_COMPARE      GENOZIP_URL "/compare"
+#define WEBSITE_OFFLINE      GENOZIP_URL "/offline"
 
 #define EMAIL_SUPPORT  "support@genozip.com"
 #define EMAIL_SALES    "sales@genozip.com"

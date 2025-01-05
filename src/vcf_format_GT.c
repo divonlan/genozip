@@ -46,7 +46,7 @@ static uint32_t str_split_gt_do (VBlockVCFP vb, STRp(gt),
             break; // fail - not integer
     }
 
-    ASSVCF (c == after, "Invalid GT value \"%*.s\"", STRf(gt));
+    ASSSEG (c == after, "Invalid GT value \"%*.s\"", STRf(gt));
 
     SAFE_RESTORE;
     return item_i;

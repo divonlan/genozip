@@ -472,6 +472,7 @@ typedef int ThreadId;
 #define STRw0(x) char *x=NULL; uint32_t x##_len=0  // writeable, initialized
 #define sSTRl(name,len) static char name[len]; static uint32_t name##_len = (len)
 #define STRl(name,len) char name[len]; uint32_t name##_len
+#define mSTR(name,multi) rom name##s[multi]; uint32_t name##_len##s[multi]
 #define mSTRl(name,multi,len) char name##s[multi][len]; uint32_t name##_len##s[multi]
 #define STRli(name,len) uint32_t name##_len = (len) ; char name[name##_len] // avoid evaluating len twice
 #define STRlic(name,len) uint32_t name##_len = len ; char name[len]         // integer constant len

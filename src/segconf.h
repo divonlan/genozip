@@ -45,7 +45,7 @@ typedef packed_enum { L3_UNKNOWN, L3_EMPTY, L3_COPY_LINE1, L3_NCBI, NUM_L3s } Fa
 
 typedef packed_enum { INFO_VT_UNKNOWN, INFO_VT_VAGrENT, INFO_VT_1KG, INFO_VT_CALLMOM } InfoVTType; // part of the file format: values go into the snip of VCF_SPECIAL_VT
 
-typedef packed_enum { RG_DEFAULT, RG_CELLRANGER } RGMethod; // part of the file format: values go into the snip of SAM_SPECIAL_RG_by_QNAME
+typedef packed_enum { RG_DEFAULT, RG_BY_ILLUM_QNAME } RGMethod; // part of the file format: values go into the snip of SAM_SPECIAL_RG_by_QNAME
 
 // SamMapperType is part of the file format and values should not be changed (new ones can be added)
 typedef enum  {                       MP_UNKNOWN,       MP_BSBOLT,             MP_bwa,   MP_BWA,   MP_MINIMAP2,   MP_STAR,   MP_BOWTIE2,   MP_DRAGEN,    MP_GEM3,         MP_GEM2SAM,     MP_BISMARK,   MP_BSSEEKER2,     MP_WINNOWMAP,   MP_BAZ2BAM,    MP_BBMAP,   MP_TMAP,   MP_HISAT2,   MP_BOWTIE,   MP_NOVOALIGN,   MP_RAZER3,    MP_BLASR,   MP_NGMLR,           MP_DELVE,   MP_TOPHAT,   MP_CPU,   MP_LONGRANGER,          MP_CLC,              MP_PBMM2,   MP_CCS,  MP_SNAP,   MP_BWA_MEM2,   MP_PARABRICKS,     MP_ISAAC,   MP_ULTIMA, MP_TORRENT_BC,   MP_BIONANO,       MP_CRDNA,        MP_VG,   MP_CRATAC,            MP_CELLRANGER, NUM_MAPPERS } SamMapperType;
@@ -230,6 +230,7 @@ typedef struct {
     bool vcf_is_varscan;        // this VCF file was produced by VarScan
     bool vcf_is_gvcf;
     bool vcf_is_gatk_gvcf;
+    bool vcf_evidence_not_gvcf; // used during segconf
     bool vcf_is_beagle;
     bool vcf_is_dragen;
     bool vcf_is_hail;
@@ -275,6 +276,7 @@ typedef struct {
     InfoDPMethod INFO_DP_method;
     thool PL_mux_by_DP;
     Mutex PL_mux_by_DP_mutex;
+    bool FI_by_DP;
     bool AS_SB_TABLE_by_SB;
     InfoVTType INFO_VT_type;
     uint64_t count_GQ_by_PL, count_GQ_by_GP; // used tp calculate GQ_by_PL, GQ_by_GP

@@ -38,7 +38,7 @@ typedef struct {
     PosType32 pos;          // 
     TxtWord BND_id;         // BND variants: a number as close as possible to unique of a BND event
     TxtWord tw[NUM_TWs];    // used by vcf_seg_sv_copy_mate 
-} ZipDataLineVCF;
+} ZipDataLineVCF, *ZipDataLineVCFP;
 
 #define DATA_LINE(i) B(ZipDataLineVCF, vb->lines, i)
 
@@ -184,7 +184,7 @@ typedef struct VBlockVCF {
     Multiplexer3 mux_VC;            // multiplex dbSNP's INFO/VC by VARTYPE
     Multiplexer3 mux_GQX;           // multiplex Isaac's FORMAT/GQX
     Multiplexer3 mux_BAF, mux_X, mux_Y; // Illumina genotyping: by adjusted dosage 
-
+    Multiplexer2 mux_FI;            // multiplex by DP cut-off
     Multiplexer2 mux_GT;            // local alleles: mux by whether *previous* sample (of same sample_i) was copied
 
     thool PL_mux_by_DP;
@@ -213,7 +213,7 @@ extern void vcf_segconf_finalize_optimizations (VBlockVCFP vb);
 extern DictId make_array_item_dict_id (uint64_t dict_id_num, unsigned item_i);
 
 // POS stuff
-extern void vcf_seg_pos (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(pos_str));
+extern void vcf_seg_pos (VBlockVCFP vb, ZipDataLineVCFP dl, STRp(pos_str));
 extern void vcf_seg_INFO_END (VBlockVCFP vb, ContextP end_ctx, STRp(end_str));
 
 // QUAL stuff
@@ -239,20 +239,20 @@ extern void vcf_seg_INFO_MAF (VBlockVCFP vb, ContextP ctx, STRp(maf));
 extern void vcf_seg_INFO_NS (VBlockVCFP vb, ContextP ctx, STRp(ns_str));
 
 // Samples stuff
-extern void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt));
+extern void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCFP dl, STRp(fmt));
 extern void vcf_samples_zip_initialize (void);
 extern void vcf_samples_seg_initialize (VBlockVCFP vb);
 extern void vcf_samples_seg_finalize (VBlockVCFP vb);
 extern bool vcf_seg_sample_has_null_value (Did did_i, ContextP *ctxs, STRps(sf));
 
-extern rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t len, char *next_field, bool *has_13);
+extern rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCFP dl, int32_t len, char *next_field, bool *has_13);
 extern int vcf_seg_get_mux_channel_i (VBlockVCFP vb);
 extern int vcf_piz_get_mux_channel_i (VBlockVCFP vb);
 extern ContextP vcf_seg_FORMAT_mux_by_dosage (VBlockVCFP vb, ContextP ctx, STRp(cell), const DosageMultiplexer *mux);
 extern void vcf_seg_FORMAT_mux_by_dosagexDP (VBlockVCFP vb, ContextP ctx, STRp(cell), void *mux_p);
 
 // FORMAT/GT stuff
-extern void vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, STRp(cell), ContextP *ctxs, STRps(sf));
+extern void vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCFP dl, STRp(cell), ContextP *ctxs, STRps(sf));
 extern void vcf_seg_FORMAT_GT_finalize_line (VBlockVCFP vb, uint32_t line_n_samples);
 extern void vcf_seg_analyze_copied_GT (VBlockVCFP vb, STRp(gt));
 extern void vcf_piz_FORMAT_GT_rewrite_predicted_phase (VBlockVCFP vb, char *recon, uint32_t recon_len);
@@ -262,18 +262,15 @@ extern void vcf_piz_GT_update_other_fields (VBlockVCFP vb, rom recon);
 extern bool vcf_is_GT_only (VBlockVCFP vb);
 #define GT_USES_PBWT (!segconf.vcf_sample_copy)
 
-// copy stuff
-#define LAST_SAMPLE_SAME_FMT_ZIP *B(TxtWord, CTX(VCF_SAMPLES)->last_samples, dl->format_node_i * vcf_num_samples + vb->sample_i)
-#define LAST_SAMPLE_SAME_FMT_PIZ *B(TxtWord, CTX(VCF_SAMPLES)->last_samples, CTX(VCF_FORMAT)->last_value.i * vcf_num_samples + VB_VCF->sample_i)
-
-#define SAMPLE_COPIED_SAME_FMT_ZIP *B(bool, CTX(VCF_COPY_SAMPLE)->sample_copied, dl->format_node_i * vcf_num_samples + vb->sample_i)
-#define SAMPLE_COPIED_SAME_FMT_PIZ *B(bool, CTX(VCF_COPY_SAMPLE)->sample_copied, CTX(VCF_FORMAT)->last_value.i * vcf_num_samples + VB_VCF->sample_i)
-
+// copy_sample stuff (COPY_SMP)
 extern void vcf_copy_sample_seg_initialize (VBlockVCFP vb);
 extern void vcf_copy_samples_segconf_finalize (VBlockVCFP vb);
 extern void vcf_copy_sample_seg_finalize (VBlockVCFP vb);
-extern unsigned vcf_seg_copy_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP *ctxs, ContainerP format, STRp(sample));
-extern void seg_mux_by_is_prev_sample_copied (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, Multiplexer2P mux, STRp(value));
+extern unsigned vcf_seg_copy_one_sample (VBlockVCFP vb, ZipDataLineVCFP dl, ContextP *ctxs, ContainerP format, STRp(sample));
+extern void vcf_copy_sample_seg_set_copied (VBlockVCFP vb, ZipDataLineVCFP dl, bool is_copied);
+extern void seg_mux_by_is_prev_sample_copied (VBlockVCFP vb, ZipDataLineVCFP dl, ContextP ctx, Multiplexer2P mux, STRp(value));
+extern void vcf_sample_copy_piz_init_vb (VBlockVCFP vb);
+extern void vcf_copy_sample_piz_store (VBlockVCFP vb, STRp(recon_sample));
 
 // Local alleles
 extern void vcf_seg_FORMAT_LAA (VBlockVCFP vb, ContextP ctx, STRp(laa));
@@ -282,7 +279,7 @@ extern void vcf_seg_FORMAT_LAA (VBlockVCFP vb, ContextP ctx, STRp(laa));
 extern void vcf_giab_zip_initialize (void);
 extern void vcf_giab_seg_initialize (VBlockVCFP vb);
 extern void vcf_seg_FORMAT_IGT (VBlockVCFP vb, ContextP ctx, STRp(igt));
-extern void vcf_seg_FORMAT_IPS (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STRp(ips));
+extern void vcf_seg_FORMAT_IPS (VBlockVCFP vb, ZipDataLineVCFP dl, ContextP ctx, STRp(ips));
 extern void vcf_seg_ADALL_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP *item_ctxs, const int64_t *values);
 eSTRl(datasets_snip); eSTRl(callsets_snip); eSTRl(platforms_snip);
 
@@ -294,7 +291,7 @@ extern void vcf_FORMAT_PL_after_vbs (Did did_i);
 extern void vcf_samples_zip_initialize_PS_PID (void);
 extern void vcf_samples_seg_initialize_LOOKBACK (VBlockVCFP vb);
 extern void vcf_samples_seg_finalize_PS_PID (VBlockVCFP vb);
-extern void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STRp(value));
+extern void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCFP dl, ContextP ctx, STRp(value));
 extern void vcf_seg_FORMAT_PS_PID_missing_value (VBlockVCFP vb, ContextP ctx, rom end_of_sample);
 extern bool vcf_seg_sample_has_PS (VBlockVCFP vb, ContextP *ctxs, STRps(sf));
 extern void vcf_samples_seg_initialize_PS_PID (VBlockVCFP vb, ContextP ctx, STRp(value));
@@ -443,6 +440,7 @@ extern void vcf_seg_FORMAT_GQX (VBlockVCFP vb, ContextP ctx, STRp(gqx));
 extern void vcf_seg_INFO_GMAF (VBlockVCFP vb, ContextP ctx, STRp(gmaf));
 extern void vcf_seg_INFO_EVS (VBlockVCFP vb, ContextP ctx, STRp(evs));
 extern void vcf_seg_INFO_IDREP (VBlockVCFP vb, ContextP ctx, STRp(idrep));
+extern void vcf_seg_INFO_SNVHPOL (VBlockVCFP vb, ContextP ctx, STRp(snvhpol_str));
 extern int vcf_isaac_info_channel_i (VBlockP vb);
 
 // freebayes stuff

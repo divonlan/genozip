@@ -50,7 +50,7 @@
     (a) = (((a) << (s)) | (((a) & 0xffffffff) >> (32 - (s))));  \
     (a) += (b);
 
-void md5_display_ctx (const Md5Context *x) // for debugging
+void md5_display_state (const Md5State *x) // for debugging
 {
     static unsigned iteration=1;
 
@@ -61,14 +61,14 @@ void md5_display_ctx (const Md5Context *x) // for debugging
     iteration++;
 }
 
-static const void *md5_transform (Md5Context *ctx, const void *data, uintmax_t size)
+static const void *md5_transform (Md5StateP state, const void *data, uintmax_t size)
 {
     const uint32_t *ptr = (uint32_t *)data;
 
-    uint32_t a = ctx->a;
-    uint32_t b = ctx->b;
-    uint32_t c = ctx->c;
-    uint32_t d = ctx->d;
+    uint32_t a = state->a;
+    uint32_t b = state->b;
+    uint32_t c = state->c;
+    uint32_t d = state->d;
 
     do {
         uint32_t saved_a = a;
@@ -164,33 +164,33 @@ static const void *md5_transform (Md5Context *ctx, const void *data, uintmax_t s
         ptr += 16;
     } while (size -= 64);
 
-    ctx->a = a;
-    ctx->b = b;
-    ctx->c = c;
-    ctx->d = d;
+    state->a = a;
+    state->b = b;
+    state->c = c;
+    state->d = d;
 
     return ptr;
 }
 
-void md5_initialize (Md5Context *ctx)
+void md5_initialize (Md5StateP state)
 {
-    // sanity
-    for (unsigned i=0; i < sizeof(Md5Context); i++)
-        ASSERT0 (!((char *)ctx)[i], "md5_initialize expects ctx to be zeros, but its not");
+#ifdef DEBUG // note: ASSERT not supported when compiled from script 
+    ASSERT0 (is_zero_struct (*state), "md5_initialize expects state to be zeros, but its not");
+#endif
 
-    ctx->a = 0x67452301;
-    ctx->b = 0xefcdab89;
-    ctx->c = 0x98badcfe;
-    ctx->d = 0x10325476;
+    state->a = 0x67452301;
+    state->b = 0xefcdab89;
+    state->c = 0x98badcfe;
+    state->d = 0x10325476;
 
-    ctx->lo = 0;
-    ctx->hi = 0;
+    state->lo = 0;
+    state->hi = 0;
 
-    ctx->initialized = true;
+    state->initialized = true;
 }
 
 // data must be aligned on 32-bit boundary
-void md5_update (Md5Context *ctx, const void *data, uint32_t len)
+void md5_update (Md5StateP state, const void *data, uint32_t len)
 {
     if (!len) return; // nothing to do
 
@@ -198,11 +198,11 @@ void md5_update (Md5Context *ctx, const void *data, uint32_t len)
     uint32_t    used;
     uint32_t    free;
 
-    saved_lo = ctx->lo;
-    if ((ctx->lo = (saved_lo + len) & 0x1fffffff) < saved_lo) 
-        ctx->hi++;
+    saved_lo = state->lo;
+    if ((state->lo = (saved_lo + len) & 0x1fffffff) < saved_lo) 
+        state->hi++;
     
-    ctx->hi += (uint32_t)(len >> 29);
+    state->hi += (uint32_t)(len >> 29);
 
     used = saved_lo & 0x3f;
 
@@ -210,57 +210,57 @@ void md5_update (Md5Context *ctx, const void *data, uint32_t len)
         free = 64 - used;
 
         if (len < free) {
-            memcpy (&ctx->buffer.bytes[used], data, len);
+            memcpy (&state->buffer.bytes[used], data, len);
             goto finish;
         }
 
-        memcpy (&ctx->buffer.bytes[used], data, free);
+        memcpy (&state->buffer.bytes[used], data, free);
         data += free;
         len -= free;
-        md5_transform (ctx, ctx->buffer.bytes, 64);
+        md5_transform (state, state->buffer.bytes, 64);
     }
 
     if (len >= 64) {
-        data = md5_transform (ctx, data, len & ~(unsigned long)0x3f);
+        data = md5_transform (state, data, len & ~(unsigned long)0x3f);
         len &= 0x3f;
     }
 
-    memcpy (ctx->buffer.bytes, data, len);
+    memcpy (state->buffer.bytes, data, len);
 
 finish:
-    //fprintf (stderr, "%s md5_update snapshot: %s\n", primary_command == ZIP ? "ZIP" : "PIZ", digest_display (digest_snapshot (ctx)));
-    //md5_display_ctx (ctx);
+    //fprintf (stderr, "%s md5_update snapshot: %s\n", primary_command == ZIP ? "ZIP" : "PIZ", digest_display (digest_snapshot (state)));
+    //md5_display_state (state);
     return;
 }
 
-Digest md5_finalize (Md5Context *ctx)
+Digest md5_finalize (Md5StateP state)
 {
     uint32_t    used;
     uint32_t    free;
 
-    used = ctx->lo & 0x3f;
+    used = state->lo & 0x3f;
 
-    ctx->buffer.bytes[used++] = 0x80;
+    state->buffer.bytes[used++] = 0x80;
 
     free = 64 - used;
 
     if (free < 8) {
-        memset (&ctx->buffer.bytes[used], 0, free);
-        md5_transform (ctx, ctx->buffer.bytes, 64);
+        memset (&state->buffer.bytes[used], 0, free);
+        md5_transform (state, state->buffer.bytes, 64);
         used = 0;
         free = 64;
     }
 
-    memset (&ctx->buffer.bytes[used], 0, free - 8);
+    memset (&state->buffer.bytes[used], 0, free - 8);
 
-    ctx->lo <<= 3;
-    ctx->buffer.words[14] = LTEN32 (ctx->lo);
-    ctx->buffer.words[15] = LTEN32 (ctx->hi);
+    state->lo <<= 3;
+    state->buffer.words[14] = LTEN32 (state->lo);
+    state->buffer.words[15] = LTEN32 (state->hi);
 
-    md5_transform (ctx, ctx->buffer.bytes, 64);
-    Digest digest = { .words = { LTEN32 (ctx->a), LTEN32 (ctx->b), LTEN32 (ctx->c), LTEN32 (ctx->d) } };
+    md5_transform (state, state->buffer.bytes, 64);
+    Digest digest = { .words = { LTEN32 (state->a), LTEN32 (state->b), LTEN32 (state->c), LTEN32 (state->d) } };
 
-    memset (ctx, 0, sizeof (Md5Context)); // return to its pre-initialized state, should it be used again
+    memset (state, 0, sizeof (Md5State)); // return to its pre-initialized state, should it be used again
 
     return digest;
 }
@@ -268,13 +268,22 @@ Digest md5_finalize (Md5Context *ctx)
 // note: data must be aligned to the 32bit boundary (its accessed as uint32_t*)
 Digest md5_do (const void *data, uint32_t len)
 {
-    Md5Context ctx;
-    memset (&ctx, 0, sizeof(Md5Context));
+    Md5State state;
+    memset (&state, 0, sizeof(Md5State));
 
-    md5_initialize (&ctx);
+    md5_initialize (&state);
     
-    md5_update (&ctx, data, len);
+    md5_update (&state, data, len);
 
-    return md5_finalize (&ctx);
+    return md5_finalize (&state);
 }
 
+Digest md5_read (const char str[32])
+{
+    Digest out;
+
+    for (int i=0; i < 16; i++)
+        out.bytes[i] = (HEXDIGIT2NUM(str[i*2]) << 4) | HEXDIGIT2NUM(str[i*2+1]);
+
+    return out;
+}

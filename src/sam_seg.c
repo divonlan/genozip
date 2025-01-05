@@ -893,7 +893,7 @@ void sam_segconf_finalize (VBlockP vb_)
 
     // RG method - QNAME - if successful, we expect all RGs to have been added to dict in sam_header_zip_inspect_RG_lines, and on the SPECIAL segged in this VB 
     if (segconf.sam_multi_RG && CTX(OPTION_RG_Z)->nodes.len32 == 1 && *Bc(CTX(OPTION_RG_Z)->dict, 1) == SAM_SPECIAL_RG_by_QNAME)
-        segconf.RG_method = RG_CELLRANGER; // set if all segconf lines agree
+        segconf.RG_method = RG_BY_ILLUM_QNAME; // set if all segconf lines agree
 
     // note: we calculate the smux stdv to be reported in stats, even if SMUX is not used
     codec_smux_calc_stats (VB);

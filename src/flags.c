@@ -483,14 +483,14 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _PG {"no-PG",            no_argument,       &flag.no_pg,            1 }
         #define _pg {"no-pg",            no_argument,       &flag.no_pg,            1 }
         #define _fs {"sequential",       no_argument,       &flag.sequential,       1 }  
-        #define _rG {"activate",         optional_argument, 0, 28                     }
+        #define _rG {"activate",         no_argument,       &flag.do_activate,      1 }
         #define _rg {"register",         optional_argument, 0, 28                     }  // legacy option
         #define _sL {"show-lines",       no_argument,       &flag.show_lines,       1 } 
         #define _ss {"stats",            optional_argument, 0, 'w',                   } 
         #define _SS {"STATS",            optional_argument, 0, 'W'                    } 
-        #define _lc {"list-chroms",      no_argument,       &flag.show_contigs,      1 } // identical to --show-dict=CHROM 
-        #define _lh {"chroms",           no_argument,       &flag.show_contigs,      1 } // identical to --show-dict=CHROM 
-        #define _lH {"contigs",          no_argument,       &flag.show_contigs,      1 } 
+        #define _lc {"list-chroms",      no_argument,       &flag.show_contigs,     1 } // identical to --show-dict=CHROM 
+        #define _lh {"chroms",           no_argument,       &flag.show_contigs,     1 } // identical to --show-dict=CHROM 
+        #define _lH {"contigs",          no_argument,       &flag.show_contigs,     1 } 
         #define _s2 {"show-b250",        optional_argument, 0, 2,                     }
         #define _sd {"show-dict",        optional_argument, 0, 3                      }
         #define _s7 {"dump-b250",        required_argument, 0, 5                      }
@@ -736,7 +736,6 @@ verify_command:
             case 24  : iupac_set (optarg)           ; break;
             case 26  : license_set_filename (optarg); break;
             case 27  : tar_set_tar_name (optarg)    ; break;
-            case 28  : flag.do_activate = optarg ? optarg : ""; break;
             case 29  : flag_set_interleaved (optarg); break;
             case 132 : flag_set_show_containers (optarg); break; 
             case 133 : flag.debug_seg=1;

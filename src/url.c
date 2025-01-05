@@ -271,7 +271,7 @@ static void url_read_string_do (rom url, qSTRp(data), qSTRp(error), bool blockin
         int ret = fread (data, 1, *data_len - 1, data_stream); // -1 to leave room for \0
         if (ret == 0) {
             if (errno == EAGAIN && i < RETRIES-1) { // doesn't happen on Windows
-                usleep (100000); // 100ms
+                usleep (300000); // 300ms
                 continue;
             }
 

@@ -195,11 +195,6 @@ void vcf_seg_initialize (VBlockP vb_)
     buf_alloc_exact_zero (vb, samples_ctx->format_mapper_buf, n_fmts, Container, "contexts->format_mapper_buf");
     buf_alloc_exact_zero (vb, samples_ctx->format_contexts, n_fmts, ContextPBlock, "contexts->format_contexts");
 
-    if (segconf.vcf_sample_copy) {
-        buf_alloc_exact_zero (vb, samples_ctx->last_samples,  n_fmts * vcf_num_samples, TxtWord, "contexts->last_samples");
-        buf_alloc_exact_zero (vb, CTX(VCF_COPY_SAMPLE)->sample_copied, n_fmts * vcf_num_samples, bool, "contexts->sample_copied");
-    }
-
     if (segconf.vcf_QUAL_method == VCF_QUAL_by_RGQ) {
         seg_mux_init (vb, VCF_QUAL, VCF_SPECIAL_MUX_BY_HAS_RGQ, false, QUAL);
 
@@ -246,6 +241,10 @@ void vcf_segconf_finalize (VBlockP vb_)
 {
     VBlockVCFP vb = (VBlockVCFP)vb_;
 
+    if (!segconf.vcf_evidence_not_gvcf || // all POS values in segconf are consecutive
+        (segconf.has[FORMAT_ICNT] && segconf.has[FORMAT_SPL])) // DRAGEN GVCF - variants are consolidated using INFO/END so POS are not consecutive
+        segconf.vcf_is_gvcf = true;
+
     vcf_segconf_finalize_QUAL (vb);
     vcf_copy_samples_segconf_finalize (vb);
 
@@ -254,12 +253,7 @@ void vcf_segconf_finalize (VBlockP vb_)
 
     else if (segconf.vcf_is_isaac) 
         segconf.vcf_INFO_method = VCF_INFO_by_FILTER;
-    
-    // identify DRAGEN and Isaac GVCF. GATK's is identified in vcf_inspect_txt_header_zip()
-    if ((segconf.has[FORMAT_ICNT] && segconf.has[FORMAT_SPL]) || // DRAGEN GVCF
-         segconf.vcf_is_isaac) // Isaac is always GVCF
-        segconf.vcf_is_gvcf = true;
-
+            
     // GATK GVCF: set fields as if they were encountered, as often they are encountered starting deep in the file
     if (segconf.vcf_is_gatk_gvcf) {
         Did gvcf_dids[] = { FORMAT_DP, FORMAT_RGQ, FORMAT_GT, FORMAT_PL, FORMAT_AD, FORMAT_GQ };
@@ -275,6 +269,9 @@ void vcf_segconf_finalize (VBlockP vb_)
     if (segconf.has[INFO_AS_SB_TABLE] && segconf.has[FORMAT_SB]) 
         segconf.AS_SB_TABLE_by_SB = true;
     
+    if (segconf.has[INFO_SNVHPOL] || (segconf.has[FORMAT_DPF] && segconf.has[FORMAT_GQX]))
+        segconf.vcf_is_isaac = true; // other Illumina tools that generate isaac-like annotations
+        
     if (segconf.has[INFO_DP]) {
         if (segconf.has[INFO_BaseCounts] && !flag.secure_DP)
             segconf.INFO_DP_method = BY_BaseCounts;
@@ -285,6 +282,9 @@ void vcf_segconf_finalize (VBlockP vb_)
         else 
             segconf.INFO_DP_method = INFO_DP_DEFAULT; // note: INFO_DP_DEFAULT≠0, so set explicitly 
     }
+
+    if (segconf.has[FORMAT_DP] && segconf.has[FORMAT_FI])
+        segconf.FI_by_DP = true;
 
     if (segconf.has[FORMAT_IGT] && segconf.has[FORMAT_IPS] && segconf.has[FORMAT_ADALL])
         segconf.vcf_is_giab_trio = true;
@@ -321,15 +321,18 @@ void vcf_segconf_finalize (VBlockP vb_)
              "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
              arch_get_argv0(), txt_file->name);
 
-    if (!flag.reference && segconf.vcf_is_platypus && (segconf.has[INFO_SC] || segconf.has[INFO_HP]) && !flag.seg_only)
+    else if (!flag.reference && segconf.vcf_is_platypus && (segconf.has[INFO_SC] || segconf.has[INFO_HP]) && !flag.seg_only)
         TIP ("Compressing a Platypus %s file using a reference file can reduce the compressed file's size by 30%%.\n"
              "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
              z_dt_name(), arch_get_argv0(), txt_file->name);
 
-    if (!flag.reference && segconf.vcf_is_sv && !flag.seg_only)
+    else if (!flag.reference && segconf.vcf_is_sv && !flag.seg_only)
         TIP ("Compressing a structrual variants %s file using a reference file can reduce the compressed file's size by 20%%-60%%.\n"
             "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n", 
             z_dt_name(), arch_get_argv0(), txt_file->name);
+
+    else if (segconf.has[INFO_SNVHPOL]) // isaac field
+        TIP ("Compressing this particular %s using --reference could result in better compression", z_dt_name());
 
     // In case of dependency DAG: DP->(sum)AD->(mux)GT we can't have GT->(null)DP
     if (segconf.FMT_DP_method == BY_AD) segconf.use_null_DP_method = false;

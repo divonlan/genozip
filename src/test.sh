@@ -1927,8 +1927,24 @@ batch_reference_vcf()
     test_standard "-me$GRCh38" " " test.g.vcf.gz
     cleanup_cache
 
+    # testing INFO/SNVHPOL with reference
+    echo "Isaac with --reference"
+    test_standard "-e$hg19" " " test.starling.vcf 
+    cleanup_cache
+
+    # testing INFO/SC, INFO/HP with reference
+    echo "Isaac with --reference"
+    test_standard "-e$hs37d5" " " test.platypus.vcf 
+
+    # testing structural variants with HOMSEQ with reference (SvABA and DRAGEN)
+    echo "SvABA with --reference"
+    test_standard "-e$hs37d5" " " test.svaba.somatic.sv.vcf
+
+    echo "DRAGEN structural variants with --reference"
+    test_standard "-e$hs37d5" " " test.human2.sv.vcf.gz 
+
     echo "multiple VCF with --REFERENCE using hs37d5, password" 
-    test_standard "-mE$hs37d5 -p123" "--password 123" test.1KG-37.vcf test.human2.filtered.snp.vcf
+    test_standard "-mE$hs37d5 -p123" "--password 123" test.1KG-37.vcf test.human2.sv.vcf.gz
 
     cleanup
 }

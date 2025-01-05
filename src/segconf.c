@@ -655,9 +655,9 @@ rom INFO_DP_method_name (InfoDPMethod method)
 rom RG_method_name (RGMethod method)
 {
     switch (method) {
-        case RG_CELLRANGER : return "CELLRANGER";
-        case RG_DEFAULT    : return "DEFAULT";
-        default            : return "INVALID";
+        case RG_BY_ILLUM_QNAME : return "BY_ILLUM_QNAME";
+        case RG_DEFAULT        : return "DEFAULT";
+        default                : return "INVALID";
     }
 }
 

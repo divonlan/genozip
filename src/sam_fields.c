@@ -1087,7 +1087,7 @@ static void sam_seg_RG_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(rg), unsigned 
     decl_ctx (OPTION_RG_Z);
     
     // this pattern was observed in CellRanger files, but we don't limit it to only CellRanger 
-    if (segconf.RG_method == RG_CELLRANGER ||
+    if (segconf.RG_method == RG_BY_ILLUM_QNAME ||
         (segconf_running && segconf.tech == TECH_ILLUM && segconf.sam_multi_RG)) {
         STRlast (qname, SAM_QNAME);
         int64_t wi_plus_1;
@@ -1119,11 +1119,11 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_RG_by_QNAME)
 {
     if (reconstruct) {
         switch (snip[0] - '0') { // RG_method
-            case RG_CELLRANGER: {
+            case RG_BY_ILLUM_QNAME: {
                 STRlast (qname, SAM_QNAME);
 
                 int64_t wi_plus_1;
-                str_item_i_int (qname, qname_len, ':', 3, &wi_plus_1); // note: we use str_item_i and not Q3NAME.last_value because QNAME might be segged by copy buddy, and different Illumina flavors have the RG in different items
+                str_item_i_int (STRa(qname), ':', 3, &wi_plus_1); // note: we use str_item_i and not Q3NAME.last_value because QNAME might be segged by copy buddy, and different Illumina flavors have the RG in different items
 
                 STR0(snip);
 

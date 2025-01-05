@@ -33,7 +33,7 @@ typedef struct {
         uint8_t  bytes[64];
         uint32_t words[16];
     } buffer;
-} Md5Context;
+} Md5State, *Md5StateP;
 
 typedef struct {
     bool is_adler; // always true
@@ -50,7 +50,7 @@ typedef union {
         bool log;
         uint64_t bytes_digested; 
     };
-    Md5Context md5_ctx;
+    Md5State md5_ctx;
     AdlerContext adler_ctx;
 } DigestContext;
 

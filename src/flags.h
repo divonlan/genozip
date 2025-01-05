@@ -115,9 +115,10 @@ typedef struct {
         no_cache,    // don't load cache, or delete cache
         no_upgrade,  // disable upgrade checks
         no_eval,     // don't allow features on eval basis (used for testing permissions)
-        from_url;    // used for stats
+        from_url,    // used for stats
+        do_activate; // activate license
     rom test_i;      // test of test.sh currently running (undocumented)
-    rom threads_str, out_filename, out_dirname, files_from, do_activate;
+    rom threads_str, out_filename, out_dirname, files_from;
     rom lic_param;   // format: width,type - invoked by Makefile
     FileType stdin_type; // set by the --input command line option
     bool explicitly_generic; // user explicitly set the type to generic

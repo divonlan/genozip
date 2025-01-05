@@ -567,8 +567,8 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
                 
         uint8_t special = snip[1] - 32; // +32 was added by SPECIAL macro
 
-        ASSPIZ (special < DTP (num_special), "Reconstructing %s requires special %s handler %u which doesn't exist in this version of genozip. %s", 
-                base_ctx->tag_name, dt_name (vb->data_type), special, genozip_update_msg());
+        ASSPIZ (special < DTP(num_special), "Reconstructing %s requires non-existant special %s handler %u which doesn't exist", 
+                base_ctx->tag_name, dt_name (vb->data_type), special); // this happens when compiling a new special without generating dict_id_gen.h
         ASSERT_DT_FUNC (vb, special);
 
         snip_ctx->special_res = SPEC_RES_OK;

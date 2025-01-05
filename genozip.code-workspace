@@ -38,6 +38,8 @@
 			"*.bat": "bat",
 			"*.yaml": "yaml",
 			"*.sh": "shellscript",
+			"typeinfo": "c",
+			"compare": "c"
 		},
 		"makefile.configureOnOpen": false
 	}

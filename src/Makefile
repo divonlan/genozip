@@ -564,7 +564,7 @@ clean-dev: clean-installers clean-test # use only in dev - deletes license.o
 		distribution finalize-distribution dict_id_gen$(EXE) \
 		objdir.linux objdir.windows objdir.mac  \
 		push-build increment-version $(INSTALLERS)/LICENSE.html \
-		genozip-latest  
+		genozip-latest genozip-latest.exe
 
 # builds latest for local OS
 
@@ -574,7 +574,7 @@ ifdef Windows
 genozip-latest.exe: 
 	@echo "Building latest for Windows"
 	@(cd $(LATEST_SRC); (mkdir $(OBJDIR) >& /dev/null || exit 0) ; cd $(OBJDIR) ; (mkdir $(SRC_DIRS) >& /dev/null || exit 0) )
-	@(cd $(LATEST_SRC); if [[ `pwd` = *genozip-latest* ]]; then git reset --hard ; git pull ; cd src/secure; git pull; cd -; $(MAKE) -j clean ; touch dict_id_gen.h ; $(MAKE) -j; cp $(LATEST_SRC)/genozip.exe ../../genozip/private/releases/genozip-$(version).exe ; ln -sf $(LATEST_SRC)/genozip.exe $@ ; fi )
+	@(cd $(LATEST_SRC); if [[ `pwd` = *genozip-latest* ]]; then git reset --hard ; git pull ; cd secure; git pull; cd -; $(MAKE) -j clean ; touch dict_id_gen.h ; $(MAKE) -j; cp $(LATEST_SRC)/genozip.exe ../../genozip/private/releases/genozip-$(version).exe ; ln -sf $(LATEST_SRC)/genozip.exe $@ ; fi )
 
 genozip-latest:
 	@$(SCRIPTS)/run-on-wsl.sh GCC=$(WSL_GCC_DEFAULT) make genozip-latest  # make -j doesn't work well on WSL - filesystem clock issues (try: hwclock -s)

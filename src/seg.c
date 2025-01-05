@@ -569,7 +569,7 @@ void seg_numeric_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_byt
                     : (ctx->ltype == LT_DYN_INT_H) ? (str_get_int_hex (STRa(value), false, true, (uint64_t*)&n)) // number with leading 0 is segged as a snip
                     :                                 str_get_int_dec (STRa(value), (uint64_t*)&n);
 
-    // case: its an integer
+    // case: its an integer (possibly with leading 0s)
     if (is_numeric) { 
         seg_integer (vb, ctx, n, false, add_bytes);
         seg_by_ctx (vb, (char[]){ SNIP_NUMERIC, '0'+ (ctx->ltype - LT_DYN_INT), '0' + value_len, 'x' }, 3 + has_zero_x, ctx, 0);

@@ -82,6 +82,8 @@
 
 #pragma GENDICT FORMAT_RNC=DTYPE_2=RNC              // <ID=RNC,Number=2,Type=Character,Description="Reason for No Call in GT: . = n/a, M = Missing data, P = Partial data, I = gVCF input site is non-called, D = insufficient Depth of coverage, - = unrepresentable overlapping deletion, L = Lost/unrepresentable allele (other than deletion), U = multiple Unphased variants present, O = multiple Overlapping variants present, 1 = site is Monoallelic, no assertion about presence of REF or ALT allele">
 
+#pragma GENDICT FORMAT_FI=DTYPE_2=FI                // <ID=FI,Number=1,Type=Integer,Description="High confidence (1) or low confidence (0) based on soft filtering values">
+
 // PBWT fields 
 #pragma GENDICT FORMAT_GT_HT=DTYPE_2=@HT    
 #pragma GENDICT FORMAT_PBWT_RUNS=DTYPE_2=@1BWTRUN   // PBWT runs - MUST have a did_i higher that FORMAT_GT_HT's
@@ -893,6 +895,9 @@ SPECIAL (VCF, 91, GMAF_AF,             vcf_piz_special_GMAF_AF);                
 SPECIAL (VCF, 92, COPY_SAMPLE,         vcf_piz_special_COPY_SAMPLE);              // added v15.0.69
 SPECIAL (VCF, 93, LAA,                 vcf_piz_special_LAA);                      // added v15.0.69
 SPECIAL (VCF, 94, MUX_BY_PREV_COPIED,  vcf_piz_special_MUX_BY_PREV_COPIED);       // added v15.0.69
+SPECIAL (VCF, 95, SNVHPOL,             vcf_piz_special_SNVHPOL)                   // added v15.0.71
+SPECIAL (VCF, 96, TEXTUAL_FLOAT,       piz_special_TEXTUAL_FLOAT)                 // added v15.0.71
+SPECIAL (VCF, 97, DEMUX_BY_DP_CUTOFF,  vcf_piz_special_DEMUX_BY_DP_CUTOFF)        // added v15.0.71
 
 #define VCF_DICT_ID_ALIASES                                                 \
     /*        type        alias                   maps to               */  \

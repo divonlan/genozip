@@ -207,3 +207,48 @@ void vcf_seg_INFO_EVS (VBlockVCFP vb, ContextP ctx, STRp(evs))
                           VCF_SPECIAL_N_ALTS, N_ALTS, 0, evs_len);
 }
 
+static int vcf_SNVHPOL_prediction (VBlockVCFP vb, ConstRangeP range, PosType64 pos)
+{
+    #define MAX_PER_SIDE 64
+    char data[MAX_PER_SIDE*2 + 1 + 6]; // MAX_PER_SIDE flanking on each side of ref + 3 extra bytes on each side    
+    rom ref = data + 3 + MAX_PER_SIDE;
+
+    PosType64 gpos = range->gpos + (pos - range->first_pos);
+    ref_get_textual_seq (gpos - MAX_PER_SIDE, data+3, MAX_PER_SIDE*2 + 1, false);
+
+    int left_hp=0, right_hp=0;
+    for (int i=1; i <= MAX_PER_SIDE && ref[i]  == ref[1] ; i++) left_hp++;
+    for (int i=1; i <= MAX_PER_SIDE && ref[-i] == ref[-1]; i++) right_hp++;
+
+    return 1 + (ref[1] == ref[-1] ? (left_hp + right_hp) : MAX_(left_hp, right_hp));
+}
+
+void vcf_seg_INFO_SNVHPOL (VBlockVCFP vb, ContextP ctx, STRp(snvhpol_str))
+{
+    int64_t snvhpol;
+    if (!IS_REF_EXTERNAL || // note: not EXT_STORE, because we don't want to store the flanking area - that would make compression worse...
+        !VT0(SNP) || !str_get_int (STRa(snvhpol_str), &snvhpol)) goto fallback;
+        
+    PosType64 pos = vb->last_int(VCF_POS);
+
+    ConstRangeP range = ref_seg_get_range (VB, vb->chrom_node_index, STRa(vb->chrom_name), pos - 64, 129, WORD_INDEX_NONE, NULL);
+    if (!range) goto fallback;
+
+    if (vcf_SNVHPOL_prediction (vb, range, pos) == snvhpol) {
+        seg_special0 (VB, VCF_SPECIAL_SNVHPOL, ctx, snvhpol_str_len);
+        return;
+    }
+
+fallback:
+    seg_integer_or_not (VB, ctx, STRa(snvhpol_str), snvhpol_str_len);
+}
+
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_SNVHPOL)
+{
+    ConstRangeP range = ref_piz_get_range (vb, HARD_FAIL);
+
+    new_value->i = vcf_SNVHPOL_prediction (VB_VCF, range, vb->last_int(VCF_POS));
+    if (reconstruct) RECONSTRUCT_INT (new_value->i);
+    
+    return HAS_NEW_VALUE;
+}

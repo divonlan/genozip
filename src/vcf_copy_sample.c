@@ -10,6 +10,18 @@
 #include "zip_dyn_int.h"
 #include "lookback.h"
 
+// TxtWord of last sample copied for this sample_i and FORMAT
+#define LAST_SAMPLE_SAME_FMT_ZIP *B(TxtWord, CTX(VCF_SAMPLES)->last_samples, dl->format_node_i * vcf_num_samples + vb->sample_i)
+#define LAST_SAMPLE_SAME_FMT_PIZ *B(TxtWord, CTX(VCF_SAMPLES)->last_samples, CTX(VCF_FORMAT)->last_value.i * vcf_num_samples + VB_VCF->sample_i)
+
+// true if previous sample of this sample_i and FORMAT was copied
+#define SAMPLE_COPIED_SAME_FMT_ZIP *B(bool, CTX(VCF_COPY_SAMPLE)->sample_copied, dl->format_node_i * vcf_num_samples + vb->sample_i)
+#define SAMPLE_COPIED_SAME_FMT_PIZ *B(bool, CTX(VCF_COPY_SAMPLE)->sample_copied, CTX(VCF_FORMAT)->last_value.i * vcf_num_samples + VB_VCF->sample_i)
+
+//------------
+// ZIP
+//------------
+
 void vcf_copy_sample_seg_initialize (VBlockVCFP vb)
 {
     decl_ctx (VCF_COPY_SAMPLE);
@@ -20,6 +32,10 @@ void vcf_copy_sample_seg_initialize (VBlockVCFP vb)
     }
 
     if (segconf.vcf_sample_copy) {
+        uint32_t n_fmts = CTX(VCF_FORMAT)->ol_nodes.len;
+        buf_alloc_exact_zero (vb, CTX(VCF_SAMPLES)->last_samples,  n_fmts * vcf_num_samples, TxtWord, "contexts->last_samples");
+        buf_alloc_exact_zero (vb, CTX(VCF_COPY_SAMPLE)->sample_copied, n_fmts * vcf_num_samples, bool, "contexts->sample_copied");
+   
         seg_mux_init (vb, FORMAT_GT, VCF_SPECIAL_MUX_BY_PREV_COPIED, false, GT);
 
         seg_init_all_the_same (VB, VCF_COPY_SAMPLE, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPY_SAMPLE }, 2);
@@ -99,7 +115,7 @@ unsigned vcf_seg_copy_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP *c
                     lookback_insert (VB, VCF_LOOKBACK, ctxs[i]->did_i, false, TXTWORDi(sf,i));
                     break;
 
-                // note: FORMAT_GT for vcf_seg_INFO_SF_seg is handled in vcf_seg_FORMAT_GT
+                // note: vcf_seg_analyze_GT takes care of analyzing GT for vcf_seg_INFO_SF_seg
                 default : {}
             }
         }
@@ -117,6 +133,36 @@ unsigned vcf_seg_copy_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP *c
 
     COPY_TIMER (vcf_seg_copy_one_sample);
     return success;
+}
+
+void vcf_copy_sample_seg_set_copied (VBlockVCFP vb, ZipDataLineVCFP dl, bool is_copied)
+{
+    SAMPLE_COPIED_SAME_FMT_ZIP = is_copied;
+}
+
+//------------
+// PIZ
+//------------
+
+void vcf_sample_copy_piz_init_vb (VBlockVCFP vb)
+{
+    // hoist VCF_COPY_SAMPLE.local as it needs to be prepared (untranposed etc) before other transposed sections (AaD, DP...) are untransposed
+    for_buf (uint32_t, header_offset, vb->z_section_headers) {
+        SectionHeaderCtxP ctx_header = (SectionHeaderCtxP)Bc(vb->z_data, *header_offset);
+        if (ctx_header->section_type == SEC_LOCAL && ctx_header->dict_id.num == _VCF_COPY_SAMPLE) {
+            SWAP (*header_offset, *B1ST32(vb->z_section_headers));
+            break;
+        }
+    }
+
+    buf_alloc_exact_zero (vb, CTX(VCF_SAMPLES)->last_samples,      vcf_num_samples * ZCTX(VCF_FORMAT)->word_list.len, TxtWord, "contexts->last_samples");
+    buf_alloc_exact_zero (vb, CTX(VCF_COPY_SAMPLE)->sample_copied, vcf_num_samples * ZCTX(VCF_FORMAT)->word_list.len, bool, "contexts->sample_copied");
+}
+
+void vcf_copy_sample_piz_store (VBlockVCFP vb, STRp(recon_sample))
+{
+    LAST_SAMPLE_SAME_FMT_PIZ   = TXTWORD(recon_sample);
+    SAMPLE_COPIED_SAME_FMT_PIZ = CTX(VCF_COPY_SAMPLE)->last_value.i;
 }
 
 SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_COPY_SAMPLE)

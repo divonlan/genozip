@@ -294,7 +294,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_MMQ:             CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, STORE_INT, DICT_ID_NONE, value_len));
         case _INFO_VDB:
         case _INFO_HaplotypeScore:
-        case _INFO_R2_5P_bias:
+        case _INFO_R2_5P_bias:      
         case _INFO_BaseQRankSum:
         case _INFO_ReadPosRankSum:
         case _INFO_MQRankSum:
@@ -305,8 +305,10 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_InbreedingCoeff:
         case _INFO_NALOD:
         case _INFO_NLOD:
-        case _INFO_VQSLOD:          
         case _INFO_TLOD:            CALL (vcf_seg_string (vb, ctx, STRa(value)));
+        
+        case _INFO_VQSLOD:          CALL_IF0 (segconf.vcf_is_dragen, seg_textual_float (VB, ctx, STRa(value), value_len))
+                                    CALL (vcf_seg_string (vb, ctx, STRa(value)));
         case _INFO_GERMQ:
         case _INFO_CONTQ:
         case _INFO_SEQQ:
@@ -315,7 +317,6 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_ECNT:            CALL (seg_integer_or_not (VB, ctx, STRa(value), value_len));
         case _INFO_AS_SB_TABLE:     CALL_IF (segconf.AS_SB_TABLE_by_SB, DEFER(AS_SB_TABLE, DID_NONE)); // depends on FORMAT_SB
         
-
         // ---------------------------------------
         // VEP fields
         // ---------------------------------------
@@ -447,9 +448,9 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_CSQT:            CALL_IF (segconf.vcf_is_isaac, seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
         case _INFO_cosmic:          CALL_IF (segconf.vcf_is_isaac, seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
         case _INFO_phyloP:          CALL_IF (segconf.vcf_is_isaac, vcf_seg_string (vb, ctx, STRa(value)));
-        case _INFO_SNVHPOL:         CALL_IF (segconf.vcf_is_isaac, seg_integer_or_not (VB, ctx, STRa(value), value_len));
         case _INFO_GMAF:            CALL_IF (segconf.vcf_is_isaac, vcf_seg_INFO_GMAF (vb, ctx, STRa(value)));
         case _INFO_EVS:             CALL_IF (segconf.vcf_is_isaac, vcf_seg_INFO_EVS (vb, ctx, STRa(value)));
+        case _INFO_SNVHPOL:         CALL_IF (segconf.vcf_is_isaac, vcf_seg_INFO_SNVHPOL (vb, ctx, STRa(value)));
 
         // ---------------------------------------
         // Illumina DRAGEN fields

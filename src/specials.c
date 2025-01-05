@@ -6,6 +6,7 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
+#include <math.h>
 #include "seg.h"
 #include "piz.h"
 #include "zip_dyn_int.h"
@@ -171,4 +172,107 @@ SPECIAL_RECONSTRUCTOR (piz_special_DIVIDE_BY)
         RECONSTRUCT_INT (new_value->i); 
 
     return HAS_NEW_VALUE; 
+}
+
+//-------------------------------------------------------------------
+// TEXTUAL_FLOAT - field is a textual base-10 float (e.g. VCF, SAM) 
+//-------------------------------------------------------------------
+
+// seg using a separate contexts for mantissa, n_fraction_digits and sign
+// note that 0 (m=0,f=0,s=+), 0.0 (m=0,f=1,s=+), 0.000 (m=0,f=3,s=+) and -0.000 (m=0,f=3,s=-) are all destinct legal values
+// scientific notation is not supported
+// NOTE: only rarely (depending on the field), this is better than segging as a string - with floats that are unique, non-scietific and contain many digits (e.g. 6 significant digits)
+void seg_textual_float (VBlockP vb, ContextP ctx, STRp(f), unsigned add_bytes)
+{    
+    bool negative = (f[0] == '-');
+    if (negative) STRinc (f, 1);
+
+    // format check: cannot have eg 00.13 or 012
+    if (f[0] == '0' && f_len > 1 && f[1] != '.') goto bad_format; 
+
+    // find decimal point and verify max one point and everything else is a digit
+    int frac_digits = 0; 
+    int64_t mantissa=0;
+    for (int i=0; i < f_len; i++)
+        if (IS_DIGIT(f[i]))
+            mantissa = (mantissa * 10) + (f[i] - '0');
+        
+        else if (f[i] == '.') {
+            if (frac_digits || i == f_len-1) goto bad_format; // bad format if more than one decimal point, or decimal point is last character
+            frac_digits = f_len - i - 1;
+        }
+
+        else goto bad_format; // not digit or decimal point
+
+    if (frac_digits > 255) goto bad_format;
+    uint8_t frac_digits8 = frac_digits;
+
+    ContextP frac_ctx = ctx_get_ctx (vb, sub_dict_id (ctx->dict_id, '0'));
+    ContextP sign_ctx = ctx_get_ctx (vb, sub_dict_id (ctx->dict_id, '1'));
+    
+    if (!ctx->is_initialized) {
+        ctx_set_ltype (VB, LT_UINT8, frac_ctx->did_i, sign_ctx->did_i, DID_EOL);
+
+        int num_per_line = (ctx->did_i < MAX_NUM_PREDEFINED) ? segconf.local_per_line[ctx->did_i] : 1;        
+        buf_alloc (vb, &frac_ctx->local, 0, vb->lines.len32 * num_per_line, uint8_t, 0, CTX_TAG_LOCAL); // initial allocation
+        buf_alloc (vb, &sign_ctx->local, 0, vb->lines.len32 * num_per_line, uint8_t, 0, CTX_TAG_LOCAL);
+        
+        ctx_consolidate_stats (VB, ctx->did_i, frac_ctx->did_i, sign_ctx->did_i, DID_EOL);
+        ctx->is_initialized = true;
+    }
+
+    seg_special0 (VB, VCF_SPECIAL_TEXTUAL_FLOAT, ctx, add_bytes);
+
+    dyn_int_append (vb, ctx, mantissa, 0);
+
+    seg_add_to_local_fixed (VB, frac_ctx, &frac_digits8, 1, LOOKUP_NONE, 0);
+    seg_add_to_local_fixed (VB, sign_ctx, &negative, 1, LOOKUP_NONE, 0);
+
+    return;
+
+bad_format:
+    if (negative) STRdec (f, 1); // restore
+    seg_by_ctx (vb, STRa(f), ctx, add_bytes);
+}
+
+SPECIAL_RECONSTRUCTOR (piz_special_TEXTUAL_FLOAT)
+{
+    ContextP frac_ctx = ECTX (sub_dict_id (ctx->dict_id, '0'));
+    ContextP sign_ctx = ECTX (sub_dict_id (ctx->dict_id, '1'));
+
+    bool negative = NEXTLOCAL(uint8_t, sign_ctx);
+
+
+    int64_t mantissa = reconstruct_from_local_int (vb, ctx, 0, RECON_OFF);
+    uint8_t mant_digits = str_int_len (mantissa); 
+    uint8_t frac_digits = NEXTLOCAL(uint8_t, frac_ctx);
+    uint8_t int_digits  = mant_digits - frac_digits;
+    
+    if (reconstruct) {    
+        if (negative) RECONSTRUCT1 ('-');
+
+        // number starts with 0.[0]*
+        if (frac_digits >= mant_digits) {    
+            RECONSTRUCT ("0.", 2);
+            
+            for (int i=0; i < frac_digits - mant_digits; i++)
+                RECONSTRUCT1 ('0');
+        
+            RECONSTRUCT_INT (mantissa);
+        }
+         
+        else {
+            char *int_start = BAFTtxt;
+            RECONSTRUCT_INT (mantissa);
+
+            if (frac_digits) {
+                memmove (int_start + int_digits + 1, int_start + int_digits, frac_digits); // move fraction digits one up
+                Ltxt++;
+
+                *(int_start + int_digits) = '.';
+            }
+        }
+    }
+
+    return NO_NEW_VALUE;
 }

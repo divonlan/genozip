@@ -83,12 +83,13 @@ typedef struct Context {
     Buffer local;              // ZIP/PIZ vctx: Data private to this VB that is not in the dictionary
                                // ZIP zctx - only .len - number of fields of this type segged in the file (for stats)
     
-    // ZIP/PIZ: context specific buffer #0
+    // ZIP/PIZ: context-specific buffer #0
     union {
     Buffer b250R1;             // ZIP/PIZ: FASTQ/SAM used by PAIR_R2 FASTQ VBs (inc. in Deep SAM), for paired contexts: PAIR_R1 b250 data from corresponding VB (in PIZ: only if CTX_PAIR_LOAD)    
     Buffer alts;               // ZIP/PIZ: VCF: VCF_REFALT
     Buffer last_samples;       // ZIP/PIZ: VCF: VCF_SAMPLES: array of length samples_ctx->format_mapper_buf.len x vcf_num_samples, entry [format_node_i,sample_i] is TxtWord of last sample sample_i (could be this line or previous line with FORMAT type format_node_i)
     Buffer sample_copied;      // ZIP/PIZ: VCF: VCF_COPY_SAMPLE: array of length samples_ctx->format_mapper_buf.len x vcf_num_samples of bool, true if last sample_i was copied
+    Buffer lookback;           // ZIP/ZIP: VCF/SAM: vctx: lookback for contexts that use lookback
     };
 
     Buffer counts;             // ZIP/PIZ: counts of snips (VB:uint32_t, z_file:uint64_t)
@@ -226,6 +227,9 @@ typedef struct Context {
             uint32_t sum_dp_with_dosage; // sum of FORMAT/DP of samples in this line and dosage >= 1
             uint32_t pred_type;     // predictor type
         } qd;
+        struct {                    // ZIP/PIZ: INFO_FREQ:
+            uint64_t db_did:11, S_did:11, M_did:11, L_did:11; // 11 since MAX_DICTS==2048
+        } freq; 
         struct {                    // PIZ: VCF_QUAL
             bool by_GP;             // QUAL_BY_GP used for this line 
             uint8_t decimals;
@@ -298,7 +302,6 @@ typedef struct Context {
     Buffer ol_nodes;           // ZIP vctx: array of CtxNode - overlayed all previous VB dictionaries. char/word indices are into ol_dict.
     Buffer local_hash;         // ZIP: vctx: hash table for entries added by this VB that are not yet in the global (until merge_number)
                                // obtained by hash function hash(snip) and contains indices into vctx->nodes
-    Buffer zip_lookback_buf;   // ZIP vctx: lookback_buf for contexts that use lookback
 
     // rollback point - used for rolling back during Seg (64b fields first and 32b fields after)
     int64_t rback_id;          // ZIP: rollback data valid only if ctx->rback_id == vb->rback_id
@@ -359,7 +362,6 @@ typedef struct Context {
         Buffer cigar_anal_history; // PIZ: used in SAM_CIGAR - items of type CigarAnalItem
         Buffer line_sqbitmap;      // PIZ: used in SAM_SQBITMAP
         Buffer domq_denorm;        // PIZ SAM/BAM/FASTQ: DomQual codec denormalization table for contexts with QUAL data 
-        Buffer piz_lookback_buf;   // PIZ: SAM: used by contexts with lookback 
         Buffer channel_data;       // PIZ: SAM: QUAL/OPTION_iq_Z/OPTION_dq_Z/OPTION_sq_Z : used by PACB codec
         Buffer homopolymer;        // PIZ: SAM: OPTION_tp_B_c
     };

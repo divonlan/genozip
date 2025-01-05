@@ -6,6 +6,7 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
+#include <math.h>
 #include "vcf_private.h"
 
 sSTRl(delta_ID_snip, 32);
@@ -23,7 +24,7 @@ void vcf_dbsnp_seg_initialize (VBlockVCFP vb)
 {
     seg_mux_init (vb, INFO_VC, VCF_SPECIAL_MUX_BY_VARTYPE, true, VC);
 
-    ctx_set_no_stons (VB, VCF_QUAL, INFO_FREQ, DID_EOL);
+    ctx_set_no_stons (VB, VCF_QUAL, DID_EOL);
 }
 
 // ##INFO=<ID=RS,Number=1,Type=Integer,Description="dbSNP ID (i.e. rs number)">

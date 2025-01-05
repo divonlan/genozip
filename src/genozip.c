@@ -827,7 +827,7 @@ int main (int argc, char **argv)
     // genozip with no input filename, no output filename, and no input redirection 
     // note: in docker stdin is a pipe even if going to a terminal. so we show the help even if
     // coming from a pipe. the user must use "-" to redirect from stdin
-    if (optind == argc && !flag.out_filename && !flag.files_from && (isatty(0) || arch_is_docker()) && !IS_REF_EXTERNAL) {
+    if (optind == argc && !flag.out_filename && !flag.files_from && (isatty(0) || arch_is_docker())/* && !IS_REF_EXTERNAL*/) {
         main_no_files (argc);
         return 0;
     }

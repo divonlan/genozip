@@ -98,7 +98,7 @@ static inline void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char ref, char alt
 
         RefLock lock = REFLOCK_NONE;
 
-        Range *range = ref_seg_get_range (VB, vb->chrom_node_index, STRa(vb->chrom_name), pos, 1, WORD_INDEX_NONE, 
+        RangeP range = ref_seg_get_range (VB, vb->chrom_node_index, STRa(vb->chrom_name), pos, 1, WORD_INDEX_NONE, 
                                           (IS_REF_EXT_STORE ? &lock : NULL));
         if (range) { // this chrom is in the reference
             uint32_t index_within_range = pos - range->first_pos;

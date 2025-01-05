@@ -138,6 +138,7 @@ extern bool seg_by_container (VBlockP vb, ContextP ctx, ContainerP con, STRp(val
 // common SPECIAL methods
 extern void seg_LEN_OF (VBlockP vb, ContextP ctx, STRp(len_str), uint32_t other_str_len, STRp(special_snip));
 extern void seg_by_ARRAY_LEN_OF (VBlockP vb, ContextP ctx, STRp(value), STRp(other_array), STRp(snip));
+extern void seg_textual_float (VBlockP vb, ContextP ctx, STRp(f), unsigned add_bytes);
 
 extern void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, bool has_parameter, int64_t int_param, char char_param, qSTRp(snip));
 #define seg_prepare_snip_other(snip_code, other_dict_id, has_parameter, parameter, snip) \

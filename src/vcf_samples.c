@@ -160,7 +160,10 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
     init_mux_by_dosage(FT);
 
     seg_mux_init (vb, FORMAT_PLy, VCF_SPECIAL_MUX_BY_DOSAGExDP, false, PLy);
-    
+
+    if (segconf.FI_by_DP) 
+        seg_mux_init (vb, FORMAT_FI, VCF_SPECIAL_DEMUX_BY_DP_CUTOFF, false, FI);
+
     if (segconf.has[FORMAT_DP]) 
         seg_mux_init (vb, FORMAT_RGQ, VCF_SPECIAL_RGQ, false, RGQ);
     
@@ -1264,6 +1267,39 @@ static inline void vcf_seg_FORMAT_BX (VBlockVCFP vb, ContextP ctx, STRp(BX))
     seg_array_of_array_of_struct (VB, CTX(FORMAT_BX), ',', con, STRa(BX), NULL);
 }
 
+static void vcf_seg_by_DP_cutoff (VBlockVCFP vb, ContextP ctx, STRp(value), Multiplexer2P mux, int cutoff)
+{
+    if (!ctx_encountered (VB, FORMAT_DP)) fallback: { // no DP in the FORMAT of this line
+        vcf_seg_field_fallback (vb, ctx, STRa(value));
+        return;
+    }
+
+    int64_t DP;
+    STRlast (DP_str, FORMAT_DP);
+    if (!str_get_int (STRa(DP_str), &DP)) { // in some files, DP may be '.'
+        if (!IS_PERIOD (DP_str)) goto fallback;
+        DP=0;
+    }
+
+    int channel_i = (DP > cutoff);
+    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, ctx->did_i, (MultiplexerP)mux, channel_i);
+    
+    seg_integer_or_not (VB, channel_ctx, STRa(value), value_len);
+    char snip[mux->snip_len + 1];
+    memcpy (snip, mux->snip, mux->snip_len);
+    snip[mux->snip_len] = 32 + cutoff;
+
+    seg_by_ctx (VB, snip, mux->snip_len + 1, ctx, 0);
+}
+
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_DEMUX_BY_DP_CUTOFF)
+{
+    int cutoff = snip[snip_len-1] - 32;
+    int channel_i = (ctx_has_value (VB, FORMAT_DP) && CTX(FORMAT_DP)->last_value.i > cutoff);
+    
+    return reconstruct_demultiplex (vb, ctx, STRa(snip), channel_i, new_value, reconstruct);
+}
+
 static rom error_format_field (unsigned n_items, ContextP *ctxs)
 {
     static char format[256];
@@ -1336,6 +1372,8 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
         // <ID=PRI,Number=G,Type=Float,Description="Phred-scaled prior probabilities for genotypes">
         case _FORMAT_PRI  : vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_PRI); break;
         
+        case _FORMAT_FI   : COND (segconf.FI_by_DP, vcf_seg_by_DP_cutoff (vb, ctx, STRi (sf, i), &vb->mux_FI, 20)); 
+
         case _FORMAT_CN   : seg_integer_or_not (VB, ctx, STRi(sf, i), sf_lens[i]); break;
 
         // <ID=DS,Number=1,Type=Float,Description="Genotype dosage from MaCH/Thunder"> (1000 Genome Project phase1 data)
@@ -1549,7 +1587,7 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
 // All samples
 //------------
 
-rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t len, char *next_field, bool *has_13)
+rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCFP dl, int32_t len, char *next_field, bool *has_13)
 {
     START_TIMER;
 
@@ -1599,17 +1637,15 @@ rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t len, char *next_
         if (segconf.vcf_sample_copy && 
             !(segconf.FMT_DP_method == BY_INFO_DP && con_nitems(format)==3 && format.items[1].dict_id.num == _FORMAT_GT && format.items[2].dict_id.num == _FORMAT_DP) && // exclude special case seen in some gGVCF: most lines have FORMAT GT:DP, and DP is segged perfectly by INFO_DP
             vcf_seg_copy_one_sample (vb, dl, ctxs, &format, (char *)sample, sample_len)) {
-START_TIMER;
             num_colons += str_count_char (STRa(sample), ':');            
-COPY_TIMER(tmp1);            
-            SAMPLE_COPIED_SAME_FMT_ZIP = true; // indeed copied
+            vcf_copy_sample_seg_set_copied (vb, dl, true); // indeed copied
         }
 
         else { 
             num_colons += vcf_seg_one_sample (vb, dl, ctxs, &format, (char *)sample, sample_len);
             
             if (segconf.vcf_sample_copy) 
-                SAMPLE_COPIED_SAME_FMT_ZIP = false; // note: assignment must be *after* segging the sample
+                vcf_copy_sample_seg_set_copied (vb, dl, false); // note: must be *after* segging the sample
         }
 
         ASSVCF (vb->sample_i < vcf_num_samples || separator == '\n',

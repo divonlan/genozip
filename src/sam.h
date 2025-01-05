@@ -562,7 +562,7 @@
 // DRAGEN
 #pragma GENDICT OPTION_sd_f=DTYPE_2=sd:f     // possibly the output of the option "--rna-quantification-fld-sd", not sure
 #pragma GENDICT OPTION_xq_i=DTYPE_2=xq:i     // Extended MAPQ, output of --generate-xq-tags
-//#pragma GENDICT OPTION_xq_i=DTYPE_2=XQ:i   // (dup) same as xq:i
+//#pragma GENDICT OPTION_XQ_i=DTYPE_2=XQ:i   // (dup) same as xq:i
 
 // added by GATK's BQSR (Base Quality Score Recalibration)
 #pragma GENDICT OPTION_BD_Z=DTYPE_2=BD:Z     // Deletion base quality  (not used in newer versions of GATK)

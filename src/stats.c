@@ -383,7 +383,7 @@ static void stats_output_file_metadata (void)
                 double secondary_pc   = 100.0 * (double)z_file->secondary_count     / (double)num_alignments;
                 double supp_pc        = 100.0 * (double)z_file->supplementary_count / (double)num_alignments;
                 double far_of_depn_pc = z_file->comp_num_lines[SAM_COMP_DEPN] ? (100.0 * (double)z_file->depn_far_count / (double)z_file->comp_num_lines[SAM_COMP_DEPN]) : 0;
-                #define PREC(f) ((f && f<10) ? (1 + ((f)<1)) : 0)
+                #define PREC(f) (((f) && ((f)<10 || (f)>95)) ? (1 + ((f)<1 || (f)>99.5)) : 0)
                 FEATURE(true, "Buddying: sag_type=%s mate=%.*f%% saggy_near=%.*f%% depn_far=%.*f%% depn_far/num_DEPN=%.*f%% sec=%.*f%% supp=%.*f%%",
                         "sag_type=%s;mate=%.*f%%;saggy_near=%.*f%%;depn_far=%.*f%%;depn_far/num_DEPN=%.*f%%;secondary=%.*f%%;suppl=%.*f%%",
                         sag_type_name (segconf.sag_type), PREC(mate_line_pc), mate_line_pc, PREC(saggy_near_pc), saggy_near_pc, PREC(depn_far_pc), depn_far_pc, 
@@ -513,6 +513,9 @@ static void stats_output_file_metadata (void)
             }
             else
                 bufprintf (evb, &features, "samples_copied=%s;", segconf.vcf_sample_copy ? "None" : "Disabled");
+
+            if (segconf.vcf_is_gvcf) 
+                bufprint0 (evb, &features, "gvcf=true;");
 
             bufprintf (evb, &features, "QUAL_method=%s;", VCF_QUAL_method_name (segconf.vcf_QUAL_method));
 

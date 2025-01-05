@@ -73,19 +73,8 @@ bool vcf_piz_init_vb (VBlockP vb_, ConstSectionHeaderVbHeaderP header)
             ctx->HT_n_lines = vb->lines.len32; 
     }
 
-    if (segconf.vcf_sample_copy) {
-        // hoist VCF_COPY_SAMPLE.local as it needs to be prepared (untranposed etc) before other transposed sections (AaD, DP...) are untransposed
-        for_buf (uint32_t, header_offset, vb->z_section_headers) {
-            SectionHeaderCtxP ctx_header = (SectionHeaderCtxP)Bc(vb->z_data, *header_offset);
-            if (ctx_header->section_type == SEC_LOCAL && ctx_header->dict_id.num == _VCF_COPY_SAMPLE) {
-                SWAP (*header_offset, *B1ST32(vb->z_section_headers));
-                break;
-            }
-        }
-
-        buf_alloc_exact_zero (vb, CTX(VCF_SAMPLES)->last_samples,      vcf_num_samples * ZCTX(VCF_FORMAT)->word_list.len, TxtWord, "contexts->last_samples");
-        buf_alloc_exact_zero (vb, CTX(VCF_COPY_SAMPLE)->sample_copied, vcf_num_samples * ZCTX(VCF_FORMAT)->word_list.len, bool, "contexts->sample_copied");
-    }
+    if (segconf.vcf_sample_copy) 
+        vcf_sample_copy_piz_init_vb (vb);
 
     CTX(INFO_END)->last_end_line_i = LAST_LINE_I_INIT;
 
@@ -149,7 +138,7 @@ void vcf_piz_insert_field (VBlockVCFP vb, ContextP ctx, STRp(value))
         // adjust last_txt of other INFO contexts that might need insertion (and hence last_txt)
         if (ctx->did_i != VCF_ID) { // no need to adjust after inserting ID, as it is inserted during REFALT reconstruction (not at end of TOPLEVEL like the rest)
             Did dids[] = { VCF_QUAL, INFO_QD, INFO_SF, INFO_DP, INFO_AN, INFO_AS_SB_TABLE, INFO_BaseCounts, INFO_DPB };
-            uint32_t last_txt_index = ctx->last_txt.index;
+            uint32_t last_txt_index = ctx->last_txt.index; // note: smaller than index of samples
 
             bool found_me = false;
             for (int i=0; i < ARRAY_LEN(dids); i++) {
@@ -167,7 +156,8 @@ void vcf_piz_insert_field (VBlockVCFP vb, ContextP ctx, STRp(value))
                 uint32_t start = CTX(VCF_FORMAT)->last_value.i * vcf_num_samples;
 
                 for (uint32_t i=start; i < start + vcf_num_samples; i++)
-                    tw[i].index += move_by;
+                    if (tw[i].index > last_txt_index)
+                        tw[i].index += move_by;
             }
         }
 
@@ -427,10 +417,8 @@ CONTAINER_CALLBACK (vcf_piz_container_cb)
     else if (dict_id.num == _VCF_SAMPLES) {
         ctx_set_last_value (VB, CTX(VCF_LOOKBACK), (ValueType){ .i = con->repeats });
 
-        if (segconf.vcf_sample_copy) { // since 15.0.69
-            LAST_SAMPLE_SAME_FMT_PIZ   = TXTWORD(recon);
-            SAMPLE_COPIED_SAME_FMT_PIZ = CTX(VCF_COPY_SAMPLE)->last_value.i;
-        }
+        if (segconf.vcf_sample_copy)  // since 15.0.69
+            vcf_copy_sample_piz_store (vb, STRa(recon));
 
         if (flag.samples) 
             vcf_piz_SAMPLES_subset_samples (vb, rep, con->repeats, recon_len);

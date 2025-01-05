@@ -12,7 +12,7 @@
 
 #define IS_DIGIT(c)        ((c)>='0' && (c)<='9')
 #define NUM2HEXDIGIT(n)    ((n)<=9 ? '0' + (n) : 'a'+((n)-10))      
-#define HEXDIGIT2NUM(c)    (IS_DIGIT(c) ? ((c)-'0') : ((c)-'A'+10)) // converts an uppercase hex digit to a number [0,15]
+#define HEXDIGIT2NUM(c)    (IS_DIGIT(c) ? ((c)-'0') : ((c)-'a'+10)) // converts an lowercase hex digit to a number [0,15]
 #define IS_HEXDIGIT(c)     (IS_DIGIT(c) || ((c)>='A' && (c)<='F') || ((c)>='a' && (c)<='f'))
 #define IS_HEXDIGITlo(c)   (IS_DIGIT(c) || ((c)>='a' && (c)<='f'))
 #define IS_HEXDIGITUP(c)   (IS_DIGIT(c) || ((c)>='A' && (c)<='F'))
@@ -183,6 +183,8 @@ static inline bool str_is_monochar_(STRp(str), char mono)
     
     return true;
 }
+
+#define is_zero_struct(_struct) str_is_monochar_((rom)&(_struct), sizeof (_struct), 0)
 
 static inline unsigned homopolymer_len (STRp(seq), unsigned start)
 {
