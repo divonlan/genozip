@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   vcf_private.h
-//   Copyright (C) 2020-2024 Genozip Limited. Patent Pending.
+//   Copyright (C) 2020-2025 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -160,7 +160,8 @@ typedef struct VBlockVCF {
     int16_t idx_AN, idx_AC, idx_AF, idx_MLEAC, idx_MLEAF, idx_AC_Hom, idx_AC_Het, idx_AC_Hemi, idx_QD, idx_DP, idx_SF, 
             idx_AS_SB_TABLE, idx_END, idx_SVLEN, idx_CIPOS, idx_BaseCounts, idx_DPB,
             idx_SVTYPE, idx_HOMSEQ, idx_DUPHOMSEQ, idx_SVINSSEQ, idx_DUPSVINSSEQ, idx_LEFT_SVINSSEQ,
-            idx_platformnames, idx_datasetnames, idx_callsetnames, idx_AF1000G, idx_RefMinor; 
+            idx_platformnames, idx_datasetnames, idx_callsetnames, idx_AF1000G, idx_RefMinor,
+            idx_COMMON; 
 
     #define has(f)   (vb->idx_##f != -1)
     #define after_idx mux_PLn
@@ -186,6 +187,7 @@ typedef struct VBlockVCF {
     Multiplexer3 mux_BAF, mux_X, mux_Y; // Illumina genotyping: by adjusted dosage 
     Multiplexer2 mux_FI;            // multiplex by DP cut-off
     Multiplexer2 mux_GT;            // local alleles: mux by whether *previous* sample (of same sample_i) was copied
+    Multiplexer2 mux_CAF;           // dbSNP: mux CAF by COMMON
 
     thool PL_mux_by_DP;
 } VBlockVCF, *VBlockVCFP;
@@ -379,6 +381,7 @@ extern void vcf_dbsnp_seg_initialize (VBlockVCFP vb);
 extern void vcf_seg_INFO_RS (VBlockVCFP vb, ContextP ctx, STRp(rs));
 extern void vcf_seg_INFO_RSPOS (VBlockVCFP vb, ContextP ctx, STRp(rspos));
 extern void vcf_seg_INFO_VC (VBlockVCFP vb, ContextP ctx, STRp(vc));
+extern void vcf_seg_INFO_CAF (VBlockVCFP vb, ContextP ctx, STRp(caf));
 
 // GWAS-VCF stuff
 extern void vcf_gwas_zip_initialize (void);

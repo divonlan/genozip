@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   file.h
-//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -228,7 +228,7 @@ typedef struct File {
     uint64_t sam_num_perfect_matches;  // Z_FILE: ZIP: SAM/BAM/FASTQ: number of perfect matches found by aligner. for stats 
     uint64_t sam_num_aligned;          // Z_FILE: ZIP: SAM/BAM: number of alignments successfully found by aligner. for stats 
     uint64_t sam_num_verbatim;         // Z_FILE: ZIP: SAM/BAM: number of alignments segged verbatim
-    uint64_t sam_num_vs_prim;          // Z_FILE: ZIP: SAM/BAM: number of alignments segged against prim / saggy
+    uint64_t sam_num_by_prim;          // Z_FILE: ZIP: SAM/BAM: number of alignments segged against prim / saggy
     uint64_t fq_num_aligned;           // Z_FILE: ZIP: FASTQ: number of alignments successfully found by aligner. for stats 
     uint64_t fq_num_perfect_matches;   // Z_FILE: ZIP: SAM/BAM/FASTQ: number of perfect matches found by aligner. for stats 
     uint64_t fq_num_verbatim;          // Z_FILE: ZIP: FASTQ: number of lines segged verbatim

@@ -3,7 +3,7 @@
  
 # ------------------------------------------------------------------
 #   autocomplete_gen.sh
-#   Copyright (C) 2024-2024 Genozip Limited. Patent Pending.
+#   Copyright (C) 2024-2025 Genozip Limited. Patent Pending.
 #   Please see terms and conditions in the file LICENSE.txt
 
 # Tutorial: https://www.gnu.org/software/gnuastro/manual/html_node/Bash-TAB-completion-tutorial.html
@@ -44,7 +44,7 @@ rm -f $out
 
 echo "# bash autocompletion script for Genozip commands" >> $out
 echo "# " >> $out
-echo "# Copyright (C) 2024-2024 Genozip Limited." >> $out
+echo "# Copyright (C) 2024-2025 Genozip Limited." >> $out
 echo >> $out
 echo "# For this to work, bash autocomplete must be already installed on your computer (it usually already is): " >> $out
 echo "#    Ubuntu: https://www.cyberciti.biz/faq/add-bash-auto-completion-in-ubuntu-linux/" >> $out

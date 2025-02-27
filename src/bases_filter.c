@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   bases_filter.c
-//   Copyright (C) 2021-2024 Genozip Limited. Patent pending.
+//   Copyright (C) 2021-2025 Genozip Limited. Patent pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,

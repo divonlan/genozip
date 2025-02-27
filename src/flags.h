@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   flags.h
-//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -146,7 +146,7 @@ typedef struct {
         show_threads, show_uncompress, biopsy, skip_segconf, show_data_type,
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
         debug_LONG, show_qual, debug_qname, debug_read_ctxs, debug_sag, debug_gencomp, debug_lines, debug_latest,
-        debug_peek, stats_submit, debug_submit, show_segconf_has, debug_split, debug_upgrade,
+        debug_peek, stats_submit, debug_submit, show_segconf_has, debug_split, debug_upgrade, debug_expiration,
         debug_debug,  // a flag with no functionality - used for ad-hoc debugging  
         debug_valgrind, debug_tar, // ad-hoc debug printing in prod
         show_compress, show_sec_gencomp, show_scan,

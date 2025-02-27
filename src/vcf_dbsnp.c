@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   vcf_dbsnp.c
-//   Copyright (C) 2022-2024 Genozip Limited. Patent Pending.
+//   Copyright (C) 2022-2025 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -23,6 +23,7 @@ void vcf_dbsnp_zip_initialize (void)
 void vcf_dbsnp_seg_initialize (VBlockVCFP vb)
 {
     seg_mux_init (vb, INFO_VC, VCF_SPECIAL_MUX_BY_VARTYPE, true, VC);
+    seg_mux_init (vb, INFO_CAF, VCF_SPECIAL_DEMUX_BY_COMMON, false, CAF);
 
     ctx_set_no_stons (VB, VCF_QUAL, DID_EOL);
 }
@@ -103,4 +104,29 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_VARTYPE)
     VarType vartype = get_vartype (VB_VCF);
 
     return reconstruct_demultiplex (vb, ctx, STRa(snip), vartype, new_value, reconstruct);
+}
+
+// <ID=CAF,Number=.,Type=String,Description="An ordered, comma delimited list of allele frequencies based on 1000Genomes, starting with the reference allele followed by alternate alleles as ordered in the ALT column. Where a 1000Genomes alternate allele is not in the dbSNPs alternate allele set, the allele is added to the ALT column.  The minor allele is the second largest value in the list, and was previuosly reported in VCF as the GMAF.  This is the GMAF reported on the RefSNP and EntrezSNP pages and VariationReporter">
+// Two formats: "CAF=[0.9995,0.0004591]" and "CAF=0.9995,0.0004591"
+void vcf_seg_INFO_CAF (VBlockVCFP vb, ContextP ctx, STRp(caf))
+{
+    if (!segconf_running && has(COMMON) && 
+        BII(COMMON)->value_len == 1 && (*BII(COMMON)->value == '0' || *BII(COMMON)->value == '1')) {
+        
+        bool common = (*BII(COMMON)->value == '1');
+        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, INFO_CAF, (MultiplexerP)&vb->mux_CAF, common);
+
+        seg_by_ctx (VB, STRa(caf), channel_ctx, caf_len);
+        seg_by_ctx (VB, STRa(vb->mux_CAF.snip), ctx, 0);
+    }
+
+    else
+        seg_by_ctx (VB, STRa(caf), ctx, caf_len);
+}
+
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_DEMUX_BY_COMMON)
+{
+    bool common = reconstruct_peek (vb, CTX(INFO_COMMON), 0, 0).i;
+
+    return reconstruct_demultiplex (vb, ctx, STRa(snip), common, new_value, reconstruct);
 }

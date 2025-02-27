@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_fields.c
-//   Copyright (C) 2020-2024 Genozip Limited. Patent Pending.
+//   Copyright (C) 2020-2025 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -296,7 +296,7 @@ COMPRESSOR_CALLBACK (sam_zip_BQ)
 {
     ZipDataLineSAMP dl = DATA_LINE (vb_line_i);
     
-    *line_data_len = dl->BQ.len;
+    *line_data_len = MIN_(maximum_size, dl->BQ.len);
     *line_data = Btxt (dl->BQ.index);
 }
 

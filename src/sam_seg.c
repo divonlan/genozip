@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_seg.c
-//   Copyright (C) 2020-2024 Genozip Limited. Patent Pending.
+//   Copyright (C) 2020-2025 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -240,7 +240,7 @@ void sam_zip_after_compute (VBlockP vb_)
     z_file->sam_num_aligned         += vb->num_aligned;
     z_file->sam_num_seq_by_aln      += vb->num_seq_by_aln;
     z_file->sam_num_verbatim        += vb->num_verbatim;
-    z_file->sam_num_vs_prim         += vb->num_vs_prim;
+    z_file->sam_num_by_prim         += vb->num_vs_prim;
     z_file->secondary_count         += vb->secondary_count;
     z_file->supplementary_count     += vb->supplementary_count;
     z_file->mate_line_count         += vb->mate_line_count;

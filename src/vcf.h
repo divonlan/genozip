@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   vcf.h
-//   Copyright (C) 2020-2024 Genozip Limited. Patent Pending.
+//   Copyright (C) 2020-2025 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -898,6 +898,7 @@ SPECIAL (VCF, 94, MUX_BY_PREV_COPIED,  vcf_piz_special_MUX_BY_PREV_COPIED);     
 SPECIAL (VCF, 95, SNVHPOL,             vcf_piz_special_SNVHPOL)                   // added v15.0.71
 SPECIAL (VCF, 96, TEXTUAL_FLOAT,       piz_special_TEXTUAL_FLOAT)                 // added v15.0.71
 SPECIAL (VCF, 97, DEMUX_BY_DP_CUTOFF,  vcf_piz_special_DEMUX_BY_DP_CUTOFF)        // added v15.0.71
+SPECIAL (VCF, 98, DEMUX_BY_COMMON,     vcf_piz_special_DEMUX_BY_COMMON);          // added v15.0.72
 
 #define VCF_DICT_ID_ALIASES                                                 \
     /*        type        alias                   maps to               */  \

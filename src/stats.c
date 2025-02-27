@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   stats.c
-//   Copyright (C) 2019-2024 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -403,17 +403,17 @@ static void stats_output_file_metadata (void)
 
                 REPORT_QNAME;
 
-                if (z_file->sam_num_seq_by_aln) 
-                    bufprintf (evb, &features, "sam_seq_by_aln=%.1f%%;", 100.0 * (double)z_file->sam_num_seq_by_aln / (double)num_alignments);
+                if (z_file->sam_num_seq_by_aln) // seg SEQ vs internal or external reference according to SAM alignment 
+                    bufprintf (evb, &features, "seq_by_sam_aln=%.1f%%;", 100.0 * (double)z_file->sam_num_seq_by_aln / (double)num_alignments);
 
-                if (z_file->sam_num_vs_prim) // vs PRIM VB or vs saggy line
-                    bufprintf (evb, &features, "sam_vs_prim=%.1f%%;", 100.0 * (double)z_file->sam_num_vs_prim / (double)num_alignments); 
+                if (z_file->sam_num_by_prim)    // seg SEQ vs PRIM VB or vs saggy line
+                    bufprintf (evb, &features, "seq_by_prim=%.1f%%;", 100.0 * (double)z_file->sam_num_by_prim / (double)num_alignments); 
 
-                if (z_file->sam_num_aligned) 
-                    bufprintf (evb, &features, "sam_aligner_ok (perfect)=%.1f%% (%.1f%%);", 100.0 * (double)z_file->sam_num_aligned / (double)num_alignments, 100.0 * (double)z_file->sam_num_perfect_matches / (double)num_alignments); // report even if num_aligned=0 (i.e. wrong reference)           
+                if (z_file->sam_num_aligned)    // seg SEQ vs external reference using our aligner
+                    bufprintf (evb, &features, "seq_by_aligner (perfect)=%.1f%% (%.1f%%);", 100.0 * (double)z_file->sam_num_aligned / (double)num_alignments, 100.0 * (double)z_file->sam_num_perfect_matches / (double)num_alignments); // report even if num_aligned=0 (i.e. wrong reference)           
 
-                if (z_file->sam_num_verbatim)
-                    bufprintf (evb, &features, "sam_verbatim=%.1f%%;", 100.0 * (double)z_file->sam_num_verbatim / (double)num_alignments);
+                if (z_file->sam_num_verbatim)   // seg SEQ by storing verbatim
+                    bufprintf (evb, &features, "seq_by_verbatim=%.1f%%;", 100.0 * (double)z_file->sam_num_verbatim / (double)num_alignments);
 
                 if (flag.deep && (z_file->deep_stats[NDP_SAM_DUP] || z_file->deep_stats[NDP_SAM_DUP_TRIM]))
                     bufprintf (evb, &features, "sam_alns_deep_hash_contn=%"PRIu64";", z_file->deep_stats[NDP_SAM_DUP] + z_file->deep_stats[NDP_SAM_DUP_TRIM]);
