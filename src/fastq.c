@@ -29,7 +29,7 @@
 #define dict_id_is_fastq_aux      dict_id_is_type_2
 #define dict_id_fastq_qname_sf dict_id_type_1
 
-sSTRl (copy_qname_snip, 30);
+STRl (copy_qname_snip, 30);
 
 unsigned fastq_vb_size (DataType dt) { return sizeof (VBlockFASTQ); }
 unsigned fastq_vb_zip_dl_size (void) { return sizeof (ZipDataLineFASTQ); }
@@ -649,6 +649,9 @@ void fastq_seg_initialize (VBlockP vb_)
     if (segconf.has_agent_trimmer) 
         agilent_seg_initialize (VB);
     
+    if (TECH(NANOPORE)) 
+        ctx_set_ltype (VB, LT_UINT8, FASTQ_AUX_start_time, DID_EOL);
+
     // consolidate stats for --stats
     ctx_consolidate_stats (VB, FASTQ_SQBITMAP, FASTQ_NONREF, FASTQ_NONREF_X, 
                            FASTQ_GPOS, FASTQ_GPOS_R2, FASTQ_GPOS_DELTA, 

@@ -462,9 +462,9 @@ bool vcf_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id/*dict_id
     }
 }
 
-// --------------------------------------------------------
-// Seg array of integers, expected to be of length n_alt
-// --------------------------------------------------------
+// ---------------------------------------------------------------
+// Seg array of integers or floats, expected to be of length n_alt
+// ---------------------------------------------------------------
 
 void vcf_seg_array_of_N_ALTS_numbers (VBlockVCFP vb, ContextP ctx, STRp(value), StoreType type)
 {

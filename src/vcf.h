@@ -737,6 +737,10 @@
 #pragma GENDICT FORMAT_LAF=DTYPE_2=LAF              // <ID=LAF,Number=A,Type=Float,Description="Local allele fractions for alt alleles in the order listed">
 #pragma GENDICT FORMAT_QL=DTYPE_2=QL                // <ID=QL,Number=1,Type=Float,Description="Phred-scaled probability that the site has no variant in this sample (original gVCF QUAL)">
 
+// not clear which software generates these (see https://ngdc.cncb.ac.cn/gvm/download)
+#pragma GENDICT INFO_MA=DTYPE_1=MA                  // <ID=MA,Number=A,Type=String,Description="Minor Allele">
+// (dup) #pragma GENDICT INFO_MAF=DTYPE_1=MAF       // <ID=MAF,Number=1,Type=Float,Description="Minor Allele Frequency">
+
 #define VCF_MAX_PLOIDY 100  // set to a reasonable 100 to avoid memory allocation explosion in case of an error in the VCF file
 #if VCF_MAX_PLOIDY > 255
 #error "VCF_MAX_PLOIDY cannot go beyond 255 because Ploidy is uint8_t"

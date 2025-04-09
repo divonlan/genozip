@@ -444,6 +444,7 @@ static void stats_output_file_metadata (void)
         case DT_FASTQ:
             REPORT_VBs;
             REPORT_QNAME;
+            bufprintf (evb, &features, "tech=%s;", tech_name (segconf.tech));
             FEATURE (segconf.optimize[FASTQ_QNAME] && z_file->num_lines, "Sequencer: %s", "Sequencer=%s", tech_name(segconf.tech));\
             FEATURE0 (FAF, "FASTA-as-FASTQ", "FASTA-as-FASTQ=True");
             FEATURE0 (segconf.multiseq, "Multiseq", "multiseq=True");

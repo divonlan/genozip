@@ -119,7 +119,12 @@
 #pragma GENDICT FASTQ_TEHIRD=DTYPE_1=tENAME 
 #pragma GENDICT FASTQ_TmHIRD=DTYPE_1=tmNAME 
 
-#pragma GENDICT FASTQ_AUX_LENGTH=DTYPE_2=length 
+// FASTQ AUX fields (e.g. length=100)
+#pragma GENDICT FASTQ_AUX_length=DTYPE_2=length 
+
+// -> Nanopore
+#pragma GENDICT FASTQ_AUX_parent_read_id=DTYPE_2=parent_read_id 
+#pragma GENDICT FASTQ_AUX_start_time=DTYPE_2=start_time 
 
 // -----------------------------------------------------------------------------------------------------------
 // End of common contexts of FASTQ and SAM

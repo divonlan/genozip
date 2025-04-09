@@ -1308,13 +1308,15 @@ void seg_diff (VBlockP vb, ContextP ctx,
                unsigned add_bytes)
 {
 #ifdef DEBUG
-    ASSERT (ctx->ltype == LT_UINT8, "expecting %s to have ltype=LT_UINT8 but found %s", ctx->tag_name, lt_name(ctx->ltype));
+    ASSERT (segconf.running || ctx->ltype == LT_UINT8, "expecting %s to have ltype=LT_UINT8 but found %s", ctx->tag_name, lt_name(ctx->ltype));
 
     // entire_snip_if_same is for self-diffing - we might be better off just segging the snip again without a diff than
     // an empty diff (lower b250 entropy)
     ASSERT (ctx == base_ctx || !entire_snip_if_same, "unexpected entire_snip_if_same in %s", ctx->tag_name);
 #endif
 
+    if (!base_ctx) base_ctx = ctx;
+    
     if (base_ctx->last_txt.len < value_len || !value_len) goto fallback;
     
     bytes last = (bytes)last_txtx (vb, base_ctx); // caller's responsibility to make sure there's a correct value in here, consistent with flags.same_line

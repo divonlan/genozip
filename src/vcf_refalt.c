@@ -463,24 +463,25 @@ done:
     return NO_NEW_VALUE;
 }   
 
-// used by FORMAT/PS - reconstructs REF or ALT depending on the parameter - '0' REF or >='1' - ALT
+// used by FORMAT/PS, INFO/MA - reconstructs REF or ALT depending on the parameter - '0' REF or >='1' - ALT
 SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_COPY_REForALT)
 {
     VBlockVCFP vb = (VBlockVCFP)vb_;
     
     if (!reconstruct) return false;
 
+    new_value->i = (snip_len == 1) ? (*snip - '0') // short cut for common case. note: it seems from the seg code that allele is either '0' or '1'
+                 : strtol (snip, NULL, 10);
+
     if (*snip=='0') // REF
         RECONSTRUCT_str (vb->REF);
 
     else {
-        long allele = (snip_len == 1) ? (*snip - '0') // short cut for common case. note: it seems from the seg code that allele is either '0' or '1'
-                                      : strtol (snip, NULL, 10);
         
-        RECONSTRUCT_str (ALTi(allele-1)->alt);
+        RECONSTRUCT_str (ALTi(new_value->i - 1)->alt);
     }
 
-    return NO_NEW_VALUE;
+    return HAS_NEW_VALUE;
 }
 
 // --snps-only implementation (called from vcf_piz_container_cb)

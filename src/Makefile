@@ -157,12 +157,13 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c crc64.c stats.c arc
 		  sam_bwa.c sam_bowtie2.c sam_bsseeker2.c sam_bsbolt.c sam_bismark.c sam_gem3.c sam_tmap.c sam_hisat2.c \
 		  sam_blasr.c sam_dragen.c sam_10xGenomics.c sam_biobambam.c sam_pos.c sam_deep.c sam_cpu.c   			\
 		  sam_star.c sam_abra2.c sam_minimap2.c sam_modify.c sam_recon_plan_piz.c gencomp_zip.c gencomp_piz.c	\
-		  fastq.c fastq_desc.c fastq_seq.c fastq_qual.c fastq_deep.c fastq_saux.c fastq_bamass.c deep.c			\
+		  fastq.c fastq_desc.c fastq_seq.c fastq_qual.c fastq_deep.c fastq_saux.c fastq_bamass.c fastq_aux.c    \
+		  deep.c																								\
 		  fasta.c gff.c bed.c me23.c locs.c generic.c lookback.c compressor.c 									\
 		  buffer.c buf_struct.c buf_list.c random_access.c sections.c base64.c mgzip.c coverage.c txtheader.c  	\
 		  codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_bsc.c codec_pacb.c					\
 		  codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c codec_normq.c codec_homp.c codec_t0.c		\
-		  codec_smux.c codec_oq.c																	\
+		  codec_smux.c codec_oq.c																				\
 	      txtfile.c profiler.c file.c filename.c dispatcher.c crypt.c aes.c md5.c segconf.c biopsy.c 			\
 		  vblock.c regions.c dict_id.c aliases.c hash.c stream.c url.c bases_filter.c dict_io.c					\
 		  version.c huffman.c user_message.c b250.c qname_filter.c

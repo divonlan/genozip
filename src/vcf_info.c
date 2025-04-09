@@ -37,6 +37,7 @@ void vcf_info_seg_initialize (VBlockVCFP vb)
     ctx_set_store (VB, STORE_INT, INFO_AN, INFO_AC, INFO_ADP, INFO_DP, INFO_MLEAC, 
                    INFO_DP4_RF, INFO_DP4_RR, INFO_DP4_AF, INFO_DP4_AR, 
                    INFO_AC_Hom, INFO_AC_Het, INFO_AC_Hemi,
+                   INFO_MA,
                    DID_EOL);
 
     ctx_set_store (VB, STORE_FLOAT, INFO_AF, DID_EOL);
@@ -219,6 +220,29 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_VT)
 done:
     return NO_NEW_VALUE;
 }    
+
+// Minor Allele - expected to be identical to REF or one of the ALTs
+bool vcf_seg_INFO_MA (VBlockVCFP vb, ContextP ctx, STRp(ma))
+{
+    for_alt2
+        if (str_issame(ma, alt->alt)) {
+            char snip[12] = { SNIP_SPECIAL, VCF_SPECIAL_COPY_REForALT };
+            int snip_len = 2 + str_int (alt_i + 1, &snip[2]);
+            seg_by_ctx (VB, STRa(snip), ctx, ma_len);
+
+            ctx_set_last_value (VB, ctx, (int64_t)(alt_i + 1)); // to be used by for segging AF against MAF
+            return false;
+        }
+
+    if (str_issame(ma, vb->REF)) {
+        seg_special1 (VB, VCF_SPECIAL_COPY_REForALT, '0', ctx, ma_len);
+
+        ctx_set_last_value (VB, ctx, (int64_t)0);
+        return false;
+    }
+
+    return true; // caller should seg
+}
 
 void vcf_seg_string (VBlockVCFP vb, ContextP ctx, STRp(value))
 {
@@ -478,7 +502,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         // ---------------------------------------
         // freebayes
         // ---------------------------------------
-        case _INFO_DPB:            CALL_IF (segconf.vcf_is_freebayes, DEFER(DPB, DID_NONE)); // depends on INFO_DP (that may depend on FORMAT_DP)
+        case _INFO_DPB:             CALL_IF (segconf.vcf_is_freebayes, DEFER(DPB, DID_NONE)); // depends on INFO_DP (that may depend on FORMAT_DP)
 
         // ---------------------------------------
         // Platypus
@@ -551,6 +575,11 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_ASSESS:          CALL_IF (segconf.vcf_is_melt, seg_integer_or_not (VB, ctx, STRa(value), value_len));
 
         case _INFO_VT:              CALL (vcf_seg_INFO_VT (vb, ctx, STRa(value)));
+
+        // ---------------------------------------
+        // cncb
+        // ---------------------------------------
+        case _INFO_MA:              CALL_WITH_FALLBACK (vcf_seg_INFO_MA);
 
         default: standard_seg:
             vcf_seg_field_fallback (vb, ctx, STRa(value));

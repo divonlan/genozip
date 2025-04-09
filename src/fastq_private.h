@@ -120,6 +120,9 @@ extern bool fastq_is_line3_copy_of_line1 (STRp(qname), STRp(line3), uint32_t des
 extern bool fastq_segconf_analyze_saux (VBlockFASTQP vb, STRp(saux));
 extern void fastq_seg_saux (VBlockFASTQP vb, STRp(saux));
 
+// AUX
+extern int fastq_seg_aux (VBlockFASTQP vb, STRps(item));
+
 // Agilent stuff
 extern void agilent_seg_initialize (VBlockP vb);
 extern void agilent_seg_RX (VBlockP vb, ContextP ctx, STRp(rx), unsigned add_bytes); // RX and QX are also in sam_private.h.
@@ -163,3 +166,4 @@ extern StrTextLong bamass_dis_ent (VBlockP vb, const BamAssEnt *e, uint64_t qnam
 extern void fastq_bamass_consider_stopping_aligner (VBlockFASTQP vb);
 
 extern Buffer bamass_ents, bamass_heads;
+eSTRl(copy_qname_snip);

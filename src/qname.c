@@ -735,7 +735,7 @@ bool qname_seg (VBlockP vb, QType q, STRp (qname), unsigned add_additional_bytes
     }
 
 done:
-    seg_set_last_txt (vb, qname_ctx, STRa(qname)); // needed also bi:Z 
+    seg_set_last_txt (vb, qname_ctx, STRa(qname)); // needed for bi:Z, parent_read_id...
     COPY_TIMER (qname_seg);
 
     return false;

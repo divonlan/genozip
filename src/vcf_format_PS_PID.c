@@ -63,8 +63,8 @@ void vcf_samples_seg_initialize_LOOKBACK (VBlockVCFP vb)
 void vcf_samples_seg_initialize_PS_PID (VBlockVCFP vb, ContextP ctx, STRp(value))
 {
     // initialize all-the-same contexts for the REF and ALT container items of PS_POS_REF_ALT
-    ctx_create_node (VB, FORMAT_PSref, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPY_REForALT, '0' }), 3);
-    ctx_create_node (VB, FORMAT_PSalt, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPY_REForALT, '1' }), 3);
+    ctx_create_node (VB, FORMAT_PSref, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPY_REForALT, '0' }), 3); // REF
+    ctx_create_node (VB, FORMAT_PSalt, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPY_REForALT, '1' }), 3); // first ALT
     ctx_create_node (VB, FORMAT_PSpos, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPYPOS,       '0' }), 3);
 
     // analyze PS or PID and determine its type
