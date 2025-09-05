@@ -141,7 +141,7 @@ typedef struct {
     int debug, debug_or_test, show_sag, show_depn, show_dict, show_b250, show_aliases, show_digest, log_digest, show_recon_plan,
         show_index, show_gheader, show_reading_list, show_ref_contigs, show_ref_seq,
         show_reference, show_ref_hash, show_ref_index, show_chrom2ref, show_ref_iupacs, show_ranges,
-        show_codec, show_cache, show_memory, show_snips,
+        show_codec, show_cache, show_memory, show_snips, show_regions,
         show_alleles, show_bgzf, show_gz, show_txt_contigs, show_lines, show_gz_uncomp,
         show_threads, show_uncompress, biopsy, skip_segconf, show_data_type,
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,

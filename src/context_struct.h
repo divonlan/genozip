@@ -177,6 +177,7 @@ typedef struct Context {
         uint32_t segconf_max;      // maximum value during segconf
         bool last_is_alt;          // CHROM (all DTs): ZIP: last CHROM was has an alternative name
         IdType id_type;            // ZIP: type of ID in fields segged with seg_id_field        
+        TxtWord prev_last_txt;     // ZIP/PIZ: used by CB:Z
 
         // SAM / BAM
         bool last_is_new;          // SAM_QNAME: ZIP: used in segconf.running

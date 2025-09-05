@@ -264,14 +264,26 @@ static bool fastq_zip_is_interleaved (STRp(r1), STRp(r2))
             if (r1[i] != r2[i]) 
                 diff_i[count_diff++] = i;
 
-        if (count_diff <= 2 && !segconf.interleaved_r1) { // segconf: first pair of lines
+        if (count_diff > 2) return false;
+
+        // allowed diffs: 0/1 or 1/2
+        if (count_diff && 
+            !(r1[diff_i[0]] == '0' && r2[diff_i[0]] == '1') &&
+            !(r1[diff_i[0]] == '1' && r2[diff_i[0]] == '2')) return false; 
+
+        // if there are two diffs, both need to be the same
+        if (count_diff == 2 &&
+            (r1[diff_i[0]] != r1[diff_i[1]] || r2[diff_i[0]] != r2[diff_i[1]]))
+            return false;
+
+        if (!segconf.interleaved_r1) { // segconf: first pair of lines
             segconf.interleaved_r1 = r1[diff_i[0]];
             segconf.interleaved_r2 = r2[diff_i[0]];
         }
 
-        return count_diff <= 2 && 
-            (count_diff < 1 || (segconf.interleaved_r1 == r1[diff_i[0]] && segconf.interleaved_r2 == r2[diff_i[0]])) &&
-            (count_diff < 2 || (segconf.interleaved_r1 == r1[diff_i[1]] && segconf.interleaved_r2 == r2[diff_i[1]]));
+        // interleaved if diffs are identical to segconf.interleaved_r*
+        return (count_diff < 1 || (segconf.interleaved_r1 == r1[diff_i[0]] && segconf.interleaved_r2 == r2[diff_i[0]])) &&
+               (count_diff < 2 || (segconf.interleaved_r1 == r1[diff_i[1]] && segconf.interleaved_r2 == r2[diff_i[1]]));
     }
 }
 

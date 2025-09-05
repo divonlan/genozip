@@ -546,6 +546,7 @@ extern void sam_seg_buddied_Z_fields (VBlockSAMP vb, ZipDataLineSAMP dl, MatedZF
 extern void sam_seg_buddied_i_fields (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, int64_t my_value, int32_t *mate_value, MultiplexerP mux, STRp(copy_snip), unsigned add_bytes);
 
 #define STRauxZ(name,is_bam) (vb->auxs[vb->idx_##name]+((is_bam) ? 3 : 5)), (vb->aux_lens[vb->idx_##name]-((is_bam) ? 4 : 5))
+#define TXTWORDauxZ(name,is_bam) ((TxtWord){ .index = BNUMtxt (vb->auxs[vb->idx_##name]+((is_bam) ? 3 : 5)), .len = vb->aux_lens[vb->idx_##name]-((is_bam) ? 4 : 5) }) 
 
 // POS / PNEXT stuff
 extern PosType32 sam_seg_POS (VBlockSAMP vb, ZipDataLineSAMP dl, WordIndex prev_line_chrom, unsigned add_bytes);

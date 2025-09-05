@@ -274,7 +274,8 @@ void regions_make_chregs (ContextP chrom_ctx)
         }
     }
 
-    //regions_display("After regions_make_chregs");
+    if (flag.show_regions)
+        regions_display ("After regions_make_chregs");
 }
 
 // a user can specify negative region eg ^13:100-200. We convert the set of negative regions
@@ -400,9 +401,9 @@ bool regions_is_site_included (VBlockP vb)
     Did pos_did_i   = DTF(pos);
 
     WordIndex chrom = vb->last_index (CHROM);
-    PosType64 pos = (pos_did_i == DID_NONE)          ? 1 
-                : CTX(pos_did_i)->pos_last_value ? CTX(pos_did_i)->pos_last_value // use saved value if one exists (used in VCF, bc VCF_POS.last_value might be modified by a INFO/END)
-                :                                  CTX(pos_did_i)->last_value.i;
+    PosType64 pos = (pos_did_i == DID_NONE)        ? 1 
+                  : CTX(pos_did_i)->pos_last_value ? CTX(pos_did_i)->pos_last_value // use saved value if one exists (used in VCF, bc VCF_POS.last_value might be modified by a INFO/END)
+                  :                                  CTX(pos_did_i)->last_value.i;
     
     ASSPIZ (IN_RANGE(chrom, 0, num_chroms), "chrom=%d ∉ [0,%u)", chrom, num_chroms);
 
@@ -469,7 +470,7 @@ void regions_display(rom title)
 
     if (buf_is_alloc (&regions_buf)) {
 
-        iprintf ("Showing %u %s regions:\n", regions_buf.len32, is_negative_regions ? "NEGATIVE" : "POSITIVE");
+        iprintf ("Showing %u %s region:\n", regions_buf.len32, (is_negative_regions ? "NEGATIVE" : "POSITIVE"));
 
         for (unsigned reg_i = 0; reg_i < regions_buf.len32; reg_i++) {
             Region *reg = &((Region *)regions_buf.data)[reg_i];

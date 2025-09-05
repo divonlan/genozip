@@ -1045,6 +1045,11 @@ batch_bam_subsetting()
     # testing --qname, qnames-file, and seqs_file is in batch_genocat_tests
 
     # TO DO: combinations of subsetting flags
+
+    # regression tests
+  
+    # -r 6 causes entire PRIM VB to be dropped (previously causing bug in writer)
+    ass_eq_num "`$genocat $TESTDIR/special/regression.defect-2025-08-14.PRIM-removed-when--regions-6.bam.genozip -r 6 --no-header | wc -l`" 2786 
 }
 
 batch_backward_compatability()

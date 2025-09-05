@@ -592,7 +592,8 @@ static void writer_downsample_plan (void)
 static void writer_filter_regions (void)
 {
     for (VBIType vb_i=1; vb_i <= z_file->num_vbs; vb_i++) 
-        VBINFO(vb_i)->needs_recon &= random_access_is_vb_included (vb_i); // --regions: this VB is excluded
+        if (!random_access_is_vb_included (vb_i))
+            VBINFO(vb_i)->needs_recon = VBINFO(vb_i)->needs_write = false; // --regions: this VB is excluded
 }
 
 // PIZ main thread
@@ -612,7 +613,6 @@ static void writer_cleanup_recon_plan_after_genocat_filtering (void)
     // remove PLAN_REMOVE_ME items or !need_recon from the recon_plan
     ARRAY (ReconPlanItem, plan, z_file->recon_plan);
     uint64_t new_i = 0;
-
 
     for (uint64_t old_i=0; old_i < plan_len; old_i++) {
         ReconPlanItemP old_p = &plan[old_i];
@@ -894,7 +894,7 @@ void writer_create_plan (CompIType comp_i)
     // actual number of buffers - the maximum of reported by ZIP, but not less than 3 or more than num_vbs
     z_file->max_conc_writing_vbs = MIN_(z_file->num_vbs, MAX_(3, z_file->max_conc_writing_vbs));
 
-    // show recon plan, except if genocat with gencomp and no head/tail/lines (in which case we've already shown it in )
+    // show recon plan, except if genocat with gencomp and no head/tail/lines (in which case we've already shown it in gencomp_piz_genocat_show_plan)
     // to do: in case of SAM gencomp with --head/--tail/--lines: we show the plan here - with the one VB from which we cut lines expanded, and others still in VB_PLAN_VB format. Ideally we should expand them too.
     if (flag.show_recon_plan) {
         recon_plan_show_all(); // recon_plan for entire file    

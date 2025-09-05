@@ -8,7 +8,6 @@
 
 #include <math.h>
 #include "sam_private.h"
-#include "regions.h"
 #include "aligner.h"
 #include "coverage.h"
 #include "bases_filter.h"

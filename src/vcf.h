@@ -183,6 +183,7 @@
 #pragma GENDICT INFO_AS_QD=DTYPE_1=AS_QD            // Allele-specific call confidence normalized by depth of sample reads supporting the allele : https://gatk.broadinstitute.org/hc/en-us/articles/360036485832-AS-QualByDepth
 #pragma GENDICT INFO_AS_SOR=DTYPE_1=AS_SOR          // <ID=AS_SOR,Number=A,Type=Float,Description="Allele-specific strand bias estimated by the symmetric odds ratio test">
 #pragma GENDICT INFO_AS_MQ=DTYPE_1=AS_MQ            // <ID=AS_MQ,Number=A,Type=Float,Description="Allele-specific root mean square of the mapping quality of reads across all samples">
+#pragma GENDICT INFO_AS_RAW_MQ=DTYPE_1=AS_RAW_MQ    // <ID=AS_RAW_MQ,Number=1,Type=String,Description="Allele-specfic raw data for RMS Mapping Quality">
 #pragma GENDICT INFO_AS_MQRankSum=DTYPE_1=AS_MQRankSum    // <ID=AS_MQRankSum,Number=A,Type=Float,Description="Allele-specific z-score from Wilcoxon rank sum test of alternate vs. reference read mapping qualities">
 #pragma GENDICT INFO_AS_FS=DTYPE_1=AS_FS            // <ID=AS_FS,Number=A,Type=Float,Description="Allele-specific phred-scaled p-value of Fisher's exact test for strand bias">
 #pragma GENDICT INFO_AS_QUALapprox=DTYPE_1=AS_QUALapprox  // <ID=AS_QUALapprox,Number=A,Type=Integer,Description="Allele-specific sum of PL[0] values; used to approximate the QUAL score">

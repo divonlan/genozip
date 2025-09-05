@@ -154,6 +154,7 @@ bool sam_can_seg_depn_solo_against_sag (VBlockSAMP vb, Did did_i, SoloTags solo,
 void sam_seg_CB_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(cb), unsigned add_bytes)
 {
     START_TIMER;
+    ContextP cb_ctx = CTX(OPTION_CB_Z); 
 
     set_LineWord_str (dl, solo_z_fields[SOLO_CB], cb);
 
@@ -161,12 +162,14 @@ void sam_seg_CB_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(cb), unsigned add_byt
         sam_seg_CB_Z_segconf (vb, STRa(cb));
 
     if (sam_can_seg_depn_solo_against_sag (vb, OPTION_CB_Z, SOLO_CB, STRa(cb)))
-        sam_seg_against_sa_group (vb, CTX(OPTION_CB_Z), add_bytes);
+        sam_seg_against_sa_group (vb, cb_ctx, add_bytes);
 
     else
         sam_seg_buddied_Z_fields (vb, dl, MATED_CB, STRa(cb),  
                                   segconf.CB_con.repeats ? sam_seg_CB_do_seg : (SegBuddiedCallback)0, // careful in case container is not initialized
                                   add_bytes);
+
+    seg_set_last_txt (VB, cb_ctx, STRa(cb));
 
     COPY_TIMER(sam_seg_CB_Z);
 }
@@ -175,13 +178,20 @@ static void sam_seg_CR_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(cr), un
 {
     // diff against CB if possible
     if (has(CB_Z)) {
+        ContextP cb_ctx = CTX(OPTION_CB_Z); 
         STR(cb);
+
         sam_seg_get_aux_Z (vb, vb->idx_CB_Z, pSTRa(cb), IS_BAM_ZIP); // base field can be before or after
-        seg_set_last_txt (VB, CTX(OPTION_CB_Z), STRa(cb));
+        
+        TxtWord save_last_txt = cb_ctx->last_txt;
+        seg_set_last_txt (VB, cb_ctx, STRa(cb)); // needed for seg_diff
+
+        if (cb_len >= cr_len)
+            seg_diff (VB, channel_ctx, cb_ctx, STRa(cr), false, add_bytes); 
+
+        cb_ctx->last_txt = save_last_txt; // restore
 
         if (cb_len < cr_len) goto fallback; // can't diff
-
-        seg_diff (VB, channel_ctx, CTX(OPTION_CB_Z), STRa(cr), false, add_bytes); 
     }
     
     else fallback: {
@@ -279,15 +289,22 @@ bool sam_seg_barcode_qual (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, SoloTag
 
 static void sam_seg_RX_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(rx), unsigned add_bytes)
 {
-    // diff against UB, but not if length is 1 (in STARsolo, UB is always "-" in this case while UR is a single base)
+    // diff against UB(=BX), but not if length is 1 (in STARsolo, UB is always "-" in this case while UR is a single base)
     if (rx_len > 1 && (has(UB_Z) || has(BX_Z))) {
+        ContextP bx_ctx = CTX(OPTION_BX_Z);
         STR(bx);
+
         sam_seg_get_aux_Z (vb, has(BX_Z) ? vb->idx_BX_Z : vb->idx_UB_Z, pSTRa(bx), IS_BAM_ZIP); // base field can be before or after
-        seg_set_last_txt (VB, CTX(OPTION_BX_Z), STRa(bx));
 
-        if (bx_len < rx_len) goto fallback; // can't diff
+        TxtWord save_last_txt = bx_ctx->last_txt;
+        seg_set_last_txt (VB, bx_ctx, STRa(bx));
 
-        seg_diff (VB, channel_ctx, CTX(OPTION_BX_Z), STRa(rx), false, add_bytes); 
+        if (bx_len >= rx_len)
+            seg_diff (VB, channel_ctx, bx_ctx, STRa(rx), false, add_bytes); 
+
+        bx_ctx->last_txt = save_last_txt; // restore
+    
+        if (bx_len < rx_len) goto fallback; // can't diff 
     }
     
     else fallback: {
@@ -334,9 +351,56 @@ void sam_seg_RX_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(rx), unsigned add_byt
     COPY_TIMER (sam_seg_RX_Z);
 }
 
-static void seg_add_to_local_blob_cb (VBlockSAMP vb, ContextP ctx, STRp(blob), uint32_t add_bytes)
+static void sam_seg_BX_Z_do (VBlockSAMP vb, ContextP ctx, STRp(bx), uint32_t add_bytes)
 {
-    seg_add_to_local_blob (VB, ctx, STRa(blob), add_bytes);
+    // in consecutive alignments, if CB is the same a previous alignment, we expect BX (alias: UB) to be the same as well
+    if (IS_MAIN(vb) && // TODO: needs a bit more work to support PRIM VBs: the issue is that in piz prim preproc, solo fields are reconstructed to solo_aln, not txt_data, so cb_ctx->prev_last_txt doesn't work
+        has(CB_Z)) {
+        ContextP bx_ctx = CTX(OPTION_BX_Z);
+        ContextP cb_ctx = CTX(OPTION_CB_Z);
+
+        TxtWord cb_tw = TXTWORDauxZ(CB_Z, IS_BAM_ZIP);
+        bool same_CB = str_issame_(STRtxt(cb_tw), STRtxt(cb_ctx->prev_last_txt));
+        
+        // false only in the rare case of same_CB and yet BX is different
+        bool as_predicted = same_CB ? str_issame_(STRtxt(bx_ctx->last_txt), STRa(bx)) : true;
+
+        if (!same_CB || !as_predicted) 
+            seg_add_to_local_fixed (VB, ctx, STRa(bx), LOOKUP_NONE, 0);
+
+        seg_special2 (VB, SAM_SPECIAL_BX, "01"[as_predicted], (bx_len + '0'), ctx, add_bytes);
+
+        cb_ctx->prev_last_txt = cb_tw;
+    }
+    else
+        seg_add_to_local_blob (VB, ctx, STRa(bx), add_bytes);
+}
+
+SPECIAL_RECONSTRUCTOR (sam_piz_special_BX)
+{
+    ContextP bx_ctx = CTX(OPTION_BX_Z);
+    ContextP cb_ctx = CTX(OPTION_CB_Z);
+
+    STR(cb); 
+    reconstruct_peek (vb, cb_ctx, pSTRa(cb));
+
+    bool same_CB = str_issame_(STRa(cb), STRtxt(cb_ctx->prev_last_txt));
+
+    bool as_predicted = (snip[0] != '0');
+
+    if (same_CB && as_predicted) {
+        if (reconstruct) RECONSTRUCT_LAST_TXT (bx_ctx);
+    }
+
+    else {
+        uint8_t bx_len = snip[1] - '0';
+        reconstruct_from_local_sequence (vb, ctx, bx_len, reconstruct); // consume data even if reconstruct==false
+    }
+
+    if (!vb->peek_stack_level) // set only if really reconstructing, not merely peeking
+        cb_ctx->prev_last_txt = cb_ctx->last_txt;
+
+    return NO_NEW_VALUE;
 }
 
 void sam_seg_BX_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(bx), unsigned add_bytes)
@@ -349,7 +413,10 @@ void sam_seg_BX_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(bx), unsigned add_byt
         sam_seg_against_sa_group (vb, CTX(OPTION_BX_Z), add_bytes);
 
     else
-        sam_seg_buddied_Z_fields (vb, dl, MATED_BX, STRa(bx), seg_add_to_local_blob_cb, add_bytes);
+        // note: we're better off storing BX in a blob that in a dictionary
+        sam_seg_buddied_Z_fields (vb, dl, MATED_BX, STRa(bx), sam_seg_BX_Z_do, add_bytes);
+
+    seg_set_last_txt (VB, CTX(OPTION_BX_Z), STRa(bx));
 
     COPY_TIMER (sam_seg_BX_Z);
 }

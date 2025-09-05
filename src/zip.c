@@ -474,7 +474,7 @@ static void zip_write_global_area (void)
     THREAD_DEBUG (compress_aliases);
     aliases_compress();
 
-    if (!segconf.disable_random_acccess) {
+    if (!segconf.disable_random_access) {
         THREAD_DEBUG (compress_random_access);
         // if this data has random access (i.e. it has chrom and pos), compress all random access records into evb->z_data
         Codec codec = random_access_compress (&z_file->ra_buf, SEC_RANDOM_ACCESS, CODEC_UNKNOWN, flag.show_index ? RA_MSG_PRIM : NULL);
@@ -578,7 +578,7 @@ static void zip_compress_one_vb (VBlockP vb)
     dispatcher_increment_progress ("compress2", PROGRESS_UNIT-(PROGRESS_UNIT/2)); // 1/2 compression done
 
     // merge in random access - IF it is used
-    if (!segconf.disable_random_acccess) 
+    if (!segconf.disable_random_access) 
         random_access_merge_in_vb (vb);
     
 after_compress:

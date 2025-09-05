@@ -98,7 +98,7 @@ typedef struct {
     uint32_t line_len;           // approx line len
     float b250_per_line[MAX_NUM_PREDEFINED];    // b250.len / num_lines
     float local_per_line[MAX_NUM_PREDEFINED];   // local.len / num_lines
-    bool disable_random_acccess; // random_access section is not to be outputted
+    bool disable_random_access;  // random_access section is not to be outputted
 
     // qname characteristics (SAM/BAM and FASTQ)
     QnameFlavor qname_flavor[NUM_QTYPES+1];     // 0-QNAME 1-QNAME2(FASTQ) 1=secondary flavor(SAM) 2=NCBI LINE3 (FASTQ)

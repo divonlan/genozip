@@ -964,6 +964,16 @@ static SmallContainer con_ncbi_sra = {
 // used SRA-sra, example: "SRR001666.sra.1"
 #define PX_sra_sra { "", "", "sra." }
 
+// example: ERR811170.1_mylabel
+static SmallContainer con_ncbi_sra_label = {
+    .repeats             = 1,
+    .nitems_lo           = 4,
+    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_FIXED_0_PAD, 3 } },  // three uppercase letters (usually SRR, ERR or DRR) - usually all-the-same context. See: https://www.biostars.org/p/381527/ and https://www.ncbi.nlm.nih.gov/books/NBK569234/#search.what_do_the_different_sra_accessi
+                             { .dict_id = { _SAM_Q1NAME }, .separator = "."                    },  // SRA number - sometimes all-the-same but not always - seg as snip and not numeric
+                             { .dict_id = { _SAM_Q2NAME }, .separator = "_"                    },  // usually sequential number in FASTQ
+                             { .dict_id = { _SAM_Q3NAME }                                      } } // an arbitrary label
+};
+
 // example: ERR2708427.1.1
 static SmallContainer con_ncbi_sra2 = {
     .repeats             = 1,
@@ -1186,6 +1196,7 @@ static QnameFlavorStruct qf[] = {
          { QF_SRA_L,       "NCBI_SRA_L",    { "SRR11215720.1_1_length=120" },             TECH_NCBI,    TECH_NONE,    Q1or3,  &con_ncbi_sra_L,     val_sra,        0,   10, {2,3,4,-1},         {-1},           {2,3,4,-1},         {-1},           0,  3,-1,  -1,-1,  4, -1, -1, -1, 0,  PX_sra_len        },
          { QF_SRA2,        "NCBI-SRA2",     { "ERR2708427.1.1" },                         TECH_NCBI,    TECH_NONE,    Q1or3,  &con_ncbi_sra2,      val_sra,        0,   2,  {2,3,-1},           {-1},           {2,3,-1},           {-1},           0,  2,-1,  -1,-1, -1, -1, -1, -1,     .is_mated=true    },
          { QF_SRA,         "NCBI-SRA",      { "SRR001666.1" },                            TECH_NCBI,    TECH_NONE,    Q1or3,  &con_ncbi_sra,       val_sra,        0,   1,  {2,-1},             {-1},           {2,-1},             {-1},           0,  2,-1,  -1,-1, -1, -1, -1, -1,                       },
+         { QF_SRA_label,   "NCBI-SRA-label",{ "SRR001666.1_mylabel" },                    TECH_NCBI,    TECH_NONE,    Q1or3,  &con_ncbi_sra_label, val_sra,        0,   2,  {2,-1},             {-1},           {2,-1},             {-1},           0,  2,-1,  -1,-1, -1, -1, -1, -1,                       }, // 15.0.74
          { QF_SRA_sra,     "NCBI-SRA-sra",  { "SRR001666.sra.1" },                        TECH_NCBI,    TECH_NONE,    Q1or3,  &con_ncbi_sra,       val_sra,        0,   5,  {2,-1},             {-1},           {2,-1},             {-1},           0,  2,-1,  -1,-1, -1, -1, -1, -1, 0,  PX_sra_sra        }, // 15.0.67
 
     // QNAME2 - Illumina, Singular, Element... - no mate, as mate is part of QNAME in this case

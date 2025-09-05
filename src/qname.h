@@ -33,7 +33,7 @@ typedef packed_enum {
     // Other sequencer flavors
     QF_ION_TORR_3, QF_ROCHE_454, QF_HELICOS, QF_SINGULAR, QF_ELEMENT, QF_ELEMENT_bc, 
     // NCBI flavors
-    QF_SRA_L, QF_SRA2, QF_SRA, QF_SRA_sra,
+    QF_SRA_L, QF_SRA2, QF_SRA, QF_SRA_sra, QF_SRA_label,
     // Consensus alignments flavors
     QF_CONSENSUS, QF_CONS, 
     // Other syntheic (i.e. non-sequencer) flavors

@@ -356,13 +356,13 @@
 #pragma GENDICT OPTION_UB_Z=DTYPE_2=UB:Z     // (alias of BX:Z) Chromium molecular barcode sequence that is error-corrected among other molecular barcodes with the same cellular barcode and gene alignment.
 #pragma GENDICT OPTION_UY_Z=DTYPE_2=UY:Z     // (alias of QX:Z) Chromium molecular barcode read quality. Phred scores as reported by sequencer.
 
+#pragma GENDICT OPTION_sS_Z=DTYPE_2=sS:Z     // STARsolo: Sequence of the entire barcode (CB,UMI,adapter...) (see bug 1200)
+#pragma GENDICT OPTION_sQ_Z=DTYPE_2=sQ:Z     // STARsolo: Quality of the entire barcode (see bug 1200)
+#pragma GENDICT OPTION_sM_Z=DTYPE_2=sM:Z     // STARsolo: Assessment of CB and UMI
 #pragma GENDICT OPTION_GN_Z=DTYPE_2=GN:Z     // STARsolo: Gene name for unique-gene reads. CellRanger: (;-seperated list) 
 #pragma GENDICT OPTION_GX_Z=DTYPE_2=GX:Z     // STARsolo: Gene ID for for unique-gene reads. CellRanger: (;-seperated list)
 #pragma GENDICT OPTION_gn_Z=DTYPE_2=gn:Z     // Gene names for unique- and multi-gene reads (;-seperated list)
 #pragma GENDICT OPTION_gx_Z=DTYPE_2=gx:Z     // Gene IDs for unique- and multi-gene reads (;-seperated list)
-#pragma GENDICT OPTION_sS_Z=DTYPE_2=sS:Z     // Sequence of the entire barcode (CB,UMI,adapter...)
-#pragma GENDICT OPTION_sQ_Z=DTYPE_2=sQ:Z     // Quality of the entire barcode
-#pragma GENDICT OPTION_sM_Z=DTYPE_2=sM:Z     // Assessment of CB and UMI
 #pragma GENDICT OPTION_TX_Z=DTYPE_2=TX:Z     // Transcript list
 #pragma GENDICT OPTION_TX_LOOKBACK=DTYPE_2=T^X_LOOKBACK
 #pragma GENDICT OPTION_TX_NEGATIVE=DTYPE_2=T1X_NEG 
@@ -883,6 +883,7 @@ SPECIAL (SAM, 74, CPU_XL,                sam_piz_special_CPU_XL);               
 SPECIAL (SAM, 75, ML_REPEATS,            sam_piz_special_ML_REPEATS);            // introduced 15.0.67
 SPECIAL (SAM, 76, TMAP_XT,               sam_piz_special_TMAP_XT);               // introduced 15.0.68
 SPECIAL (SAM, 77, DEMUX_by_DUPLICATE,    sam_piz_special_DEMUX_by_DUPLICATE);    // introduced 15.0.69
+SPECIAL (SAM, 78, BX,                    sam_piz_special_BX);                    // introduced 15.0.74
 
 #define SAM_LOCAL_GET_LINE_CALLBACKS(dt)        \
     { dt, _OPTION_BD_BI,    sam_zip_BD_BI    }, \

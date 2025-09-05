@@ -46,7 +46,7 @@ typedef struct ContainerItem {
 
     // special values of separator[1]
     #define CI1_NONE         ((uint8_t)0x00) // no seperator 
-    #define CI1_ITEM_CB      ((uint8_t)0x01) // item callback
+    #define CI1_ITEM_CB      ((uint8_t)0x01) // item callback - called after item reconstruction
     #define CI1_ITEM_PRIVATE ((uint8_t)0x02) // flag interpreted by the context logic, ignored by container code
     #define CI1_LOOKBACK     ((uint8_t)0x03) // item requires lookback initialize / insertion
     

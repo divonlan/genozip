@@ -86,7 +86,7 @@ void random_access_update_chrom (VBlockP vb, WordIndex chrom_node_index, STRp (c
     ASSERT (chrom_node_index >= -1, "chrom_node_index=%d in vb_i=%u", chrom_node_index, vb->vblock_i);
 
     // if this is an "unavailable" chrom ("*" in SAM, "." in VCF) we don't store it and signal not to store POS either
-    if (segconf.disable_random_acccess || IS_ASTERISK (chrom_name) || IS_PERIOD (chrom_name)) {
+    if (segconf.disable_random_access || IS_ASTERISK (chrom_name) || IS_PERIOD (chrom_name)) {
         vb->ra_buf.param = RA_UNKNOWN_CHROM_SKIP_POS;
         vb->chrom_name       = chrom_name;
         vb->chrom_name_len   = chrom_name_len;

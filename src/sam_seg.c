@@ -803,7 +803,7 @@ void sam_segconf_finalize (VBlockP vb_)
             segconf.is_collated = true;
     }
 
-    segconf.disable_random_acccess = !segconf.is_sorted;
+    segconf.disable_random_access = !segconf.is_sorted;
 
     segconf.has_barcodes = segconf.has[OPTION_CB_Z] || segconf.has[OPTION_CR_Z] || segconf.has[OPTION_CY_Z] || segconf.has[OPTION_BX_Z] || 
                            segconf.has[OPTION_RX_Z] || segconf.has[OPTION_QX_Z] || segconf.has[OPTION_BC_Z] || segconf.has[OPTION_QT_Z];
@@ -1470,9 +1470,9 @@ static inline BuddyType sam_seg_saggy (VBlockSAMP vb, SamFlags f, STRp (qname), 
 
         vb->saggy_is_prim = !sam_is_depn (*saggy_f);
 
-        // case: two alignments with the same QNAME, FLAG.is_first, and both are primary: usually a signof defective BAM 
+        // case: two alignments with the same QNAME, FLAG.is_first, and both are primary: usually a sign of defective BAM 
         if (vb->saggy_is_prim && !sam_is_depn (f)) {
-            WARN_ONCE ("WARNING: Non-compliant %s file: Found two alignments with the same QNAME, FLAG.IS_FIRST, and both are non-secondary, non-supplementary: QNAME=\"%.*s\"",
+            WARN_ONCE ("FYI: %s file violates the SAM specification: Found two alignments with the same QNAME, FLAG.IS_FIRST, and both are non-secondary, non-supplementary: QNAME=\"%.*s\". No worries, Genozip will still compress this file correctly.",
                        dt_name (vb->data_type), STRf(qname));
             goto no_saggy;
         }
