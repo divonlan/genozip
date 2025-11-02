@@ -359,9 +359,9 @@ static inline unsigned container_reconstruct_item_seperator (VBlockP vb, const C
         return 1;
     }
 
-    else if (item->separator[0] == CI0_FIXED_0_PAD) {
+    else if (item->separator[0] == CI0_FIXED_0_PAD || item->separator[0] == CI0_VAR_0_PAD) {
         int recon_len = BAFTtxt - reconstruction_start;
-        int pad = (int)item->separator[1] - recon_len;
+        int pad = (int)item->separator[1] - recon_len; // may be negative if CI0_VAR_0_PAD 
         if (pad > 0) {
             memmove (reconstruction_start + pad, reconstruction_start, recon_len);
             memset (reconstruction_start, '0', pad);
@@ -619,7 +619,10 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
             // display 10 first reconstructed characters, but all characters if just this ctx was requested 
             if (show_item) {
                 int len = flag.dict_id_show_containers.num ? (int)(BAFTtxt-reconstruction_start) : MIN_(64,(int)(BAFTtxt-reconstruction_start));
-                iprintf ("%s\"%.*s\"\n", len==32 ? "[64]" : "", len, reconstruction_start);  
+                if (len >= 0)
+                    iprintf ("%s\"%.*s\"\n", len==32 ? "[64]" : "", len, reconstruction_start);  
+                else
+                    iprint0 ("\"\"\n");
             }
         } // items loop
 
@@ -821,6 +824,7 @@ static StrText item_sep_name0 (uint8_t sep)
         case CI0_NONE         : strcpy (s.s, "NONE");         break;
         case CI0_INVISIBLE    : strcpy (s.s, "INVISIBLE");    break;
         case CI0_FIXED_0_PAD  : strcpy (s.s, "FIXED_0_PAD");  break;
+        case CI0_VAR_0_PAD    : strcpy (s.s, "VAR_0_PAD");    break;
         case CI0_SKIP         : strcpy (s.s, "SKIP");         break;
         case CI0_DIGIT        : strcpy (s.s, "DIGIT");        break;
         default               : snprintf (s.s, sizeof (s.s), "'%.5s'", char_to_printable (sep).s); 
@@ -887,7 +891,7 @@ StrTextMegaLong container_to_json (ConstContainerP con, STRp (prefixes))
     if (prefixes_len) {
         SNPRINTF0 (s, " ], prefixes=[ ");
     
-        str_split (prefixes+1, prefixes_len-3, 0, CON_PX_SEP, pr, false); // skip container initial (ZIP only, in PIZ is was already removed in container_retrieve), final CON_PX_SEP and terminator of final item (as it would cause a redundant item in str_split)
+        str_split (prefixes+1, prefixes_len-2, 0, CON_PX_SEP, pr, false); // skip container initial (ZIP only, in PIZ is was already removed in container_retrieve), final CON_PX_SEP and terminator of final item (as it would cause a redundant item in str_split)
 
         SNPRINTF (s, "[con_wide]=\"%s\", ", str_to_printable_(prs[0], MIN_(pr_lens[0], sizeof(StrTextSuperLong)/2-1)).s);
 

@@ -31,7 +31,7 @@ typedef packed_enum {
     QF_ULTIMA_a, QF_ULTIMA_b6_bc, QF_ULTIMA_a_bc, QF_ULTIMA_c, QF_ULTIMA_c_bc, QF_ULTIMA_b6, QF_ULTIMA_d, QF_ULTIMA_d_bc, 
     QF_ULTIMA_b9, QF_ULTIMA_b9_bc, QF_ULTIMA_n, QF_ULTIMA_Z9,
     // Other sequencer flavors
-    QF_ION_TORR_3, QF_ROCHE_454, QF_HELICOS, QF_SINGULAR, QF_ELEMENT, QF_ELEMENT_bc, 
+    QF_ION_TORR_3, QF_ROCHE_454, QF_HELICOS, QF_SINGULAR, QF_ELEMENT, QF_ELEMENT_AV, QF_ELEMENT_bc, 
     // NCBI flavors
     QF_SRA_L, QF_SRA2, QF_SRA, QF_SRA_sra, QF_SRA_label,
     // Consensus alignments flavors

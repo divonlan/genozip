@@ -228,7 +228,7 @@ typedef struct { unaligned_uint16_t index/*in line*/; uint8_t len; } LineWord;  
 typedef struct { uint32_t index : LONG_READ_LINE_INDEX_BITS; uint32_t len : 8; } LineWordL; // short fields in long-read data (line length is possibly > 64K) 
 typedef struct { uint16_t index/*in line*/, len; } LineWordS;                   // long fields in short-read data
 #define set_LineWord(dl, fld, str/*in vb*/, str_len) ({ if (IN_RANGE((int32_t)BNUMtxt(str) - (int32_t)(dl)->line_start, 0, 64 KB) && (str_len) < 256) \
-                                                        (dl)->fld = (LineWord){ BNUMtxt(str) - (dl)->line_start, (str_len) }; })
+                                                           (dl)->fld = (LineWord){ BNUMtxt(str) - (dl)->line_start, (str_len) }; })
 #define set_LineWord_str(dl, fld, str/*in vb*/) set_LineWord((dl), fld, str, str##_len) 
 #define LINEWORD(dl,snip)  ((LineWord) { .index = BNUMtxt (snip) - dl->line_start, .len = snip##_len }) // get coordinates in txt_data
 #define LINEWORDL(dl,snip) ((LineWordL){ .index = BNUMtxt (snip) - dl->line_start, .len = snip##_len }) // get coordinates in txt_data

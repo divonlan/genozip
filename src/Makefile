@@ -631,8 +631,9 @@ conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld
 	@echo "CONDA: Using a browser:"
 # 'into conda-forge:master from divonlan:genozip'"
 	@echo "  (1) Go to https://github.com/divonlan/genozip-feedstock/tree/genozip "
-	@echo "  (2) Click 'Contribute' -> 'Open pull request' OR 'Create pull request'"
-	@echo "  (3) Click 'Resolve conflicts' -> select the top option in each of the 2 conflicts, then commit"
+	@echo "  (2) Log in to Github"
+	@echo "  (3) Click 'Contribute' -> 'Open pull request' OR 'Create pull request'"
+	@echo "  (4) Click 'Resolve conflicts' -> select the top option in each of the 2 conflicts, then commit"
 
 windows/genozip.exe: CFLAGS += $(OPTFLAGS)
 windows/genozip.exe: $(OBJS) $(OBJDIR)/distribution.InstallForge.o 

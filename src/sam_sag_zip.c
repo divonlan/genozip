@@ -328,7 +328,7 @@ void sam_seg_prim_add_sag_CC (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t nh)
     vb->sag_alns.count += nh;
 }
 
-// PRIM: called to ingested a segged VB data into solo "alignments" 
+// PRIM: called to ingest a segged VB data into solo "alignments" 
 void sam_seg_prim_add_sag_SOLO (VBlockSAMP vb, ZipDataLineSAMP dl)
 {
     sam_seg_prim_add_sag (vb, dl, dl->NH, IS_BAM_ZIP);

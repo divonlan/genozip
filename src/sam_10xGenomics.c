@@ -142,7 +142,8 @@ bytes sam_solo_sag_data (VBlockSAMP vb, const SoloAln *solo_aln, SoloTags solo)
 
 bool sam_can_seg_depn_solo_against_sag (VBlockSAMP vb, Did did_i, SoloTags solo, STRp(str))
 {
-    if (!vb->solo_aln || // non-NULL only if vb is DEPN and IS_SAG_SOLO and vb->sag is set
+    if (!IS_SAG_SOLO  ||
+        !vb->solo_aln || // non-NULL only if vb is DEPN and vb->sag is set
         vb->solo_aln->field_uncomp_len[solo] != str_len) return false;
 
     char uncomp[str_len];

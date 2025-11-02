@@ -14,7 +14,7 @@
 #include "aliases.h"
 #include "qname.h" // for editor
 
-#define PX_MATE_FIXED_0_PAD (char[]){ CI0_SKIP, 0 } // add to prefix for mate item IFF preceeding item has CI0_FIXED_0_PAD
+#define PX_MATE_FIXED_0_PAD (char[]){ CI0_SKIP, 0 } // flavor prefix should include this (for mate) item IFF preceeding item has CI0_FIXED_0_PAD
 #define I_AM_MATE .separator = { CI0_SKIP }
 
 //-----------------------------------------------------------------------------------------
@@ -705,6 +705,27 @@ static SmallContainer con_element_bc = {
 
 #define PX_ELEMENT_BC { "", "", "", "", "", "", ":", ":", "" }  
 
+// Element Biosciences AV
+// examples: 
+// AV250505:Q6177-5-8pool:1324334413:1:22105:0068:2686
+// AV250505:Q6177-5-8pool:1324334413:1:10405:7443:1600
+// AV250505:Q6177-5-8pool:1324334413:1:11605:10282:5025
+
+static SmallContainer con_element_av = {
+    .repeats   = 1,
+    .nitems_lo = 8,
+    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = ":"                    }, // typically constant for file
+                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"                    }, // typically constant for file
+                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"                    }, // a number, but typically constant for the whole file
+                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"                    }, // constant 1 ?
+                   { .dict_id = { _SAM_Q4NAME }, .separator = ":"                    }, // a number, from a limited set (~200) 
+                   { .dict_id = { _SAM_Q5NAME }, .separator = { CI0_VAR_0_PAD, 4 }   }, // zero-padded to four digits but can be more than 10000 
+                   { .dict_id = { _SAM_Q6NAME }, .separator = { CI0_VAR_0_PAD, 4 }   }, // zero-padded to four digits. Accept numbers beyond 10000 but not observed yet
+                   { .dict_id = { _SAM_QmNAME }, I_AM_MATE                           } } 
+};
+
+#define PX_ELEMENT_AV { "AV", "", "", "", "", "", ":", PX_MATE_FIXED_0_PAD }  
+
 //--------------------------------------------------------------------------------------------------------------
 // ION_TORRENT_3 format: 17 characters: RunID[5] : Row[5] : Column[5]
 // Example: ZEWTM:10130:07001
@@ -1126,6 +1147,8 @@ static QnameFlavorStruct qf[] = {
     {},  { QF_ILLUM_7_bc,  "Illumina-bc",   { "A00488:61:HMLGNDSXX:4:1101:4345:1000:CAGACGCGCACATACTTTTCTCACG" }, 
                                                                                           TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_7bc,   no_validate,    ':', 7,  {1,3,4,5,6,-1},     {-1},           {1,3,5,6,-1},       {-1},           0,  5,6,   -1,-1, -1, 7,  -1, -1,                       },
     {},  { QF_SINGULAR,    "Singular",      { "B05:000:FC2:4:1:272670:483" },             TECH_SINGLR,  TECH_NCBI,    QANY,   &con_singular,       no_validate,    0,   6,  {3,4,5,6,-1},       {1,-1},         {5,6,-1},           {-1},           0,  6,-1,  -1,-1, -1, -1, -1, -1, 0,  PX_SINGULAR       },
+    {},  { QF_ELEMENT_AV,  "Element-AV",    { "AV250505:Q6177-5-8pool:1324334413:1:22105:0068:2686", "AV250505:Q6177-5-8pool:1324334413:1:22105:23413:0686" },     
+                                                                                          TECH_ELEMENT, TECH_NCBI,    QANY,   &con_element_av,     no_validate,    0,   6,  {3,4,-1},           {5,6,-1},       {5,6,-1},           {-1},           0,  5,6,   -1,-1, -1, -1, -1, -1, 0,  PX_ELEMENT        }, // 15.0.75 - must be before QF_ELEMENT                                                                                         
     {},  { QF_ELEMENT,     "Element",       { "PLT-03:BBS-0174:2140948523:1:10102:0293:0058", "PLT-16:APP-0316:UNKNOWN_FLOWCELL:1:10102:0582:0027" },     
                                                                                           TECH_ELEMENT, TECH_NCBI,    QANY,   &con_element,        no_validate,    0,   6,  {3,4,-1},           {5,6,-1},       {5,6,-1},           {-1},           0,  5,6,   -1,-1, -1, -1, -1, -1, 0,  PX_ELEMENT        },
     {},  { QF_ELEMENT_bc,  "Element-bc",    { "SDF-02:GFH-0166::1:13435:2311:1233:GTAGCCAATCA", "SDF-02:GFH-0166:2140948523:1:13435:2311:1233:GTAGCCAATCA"  }, 

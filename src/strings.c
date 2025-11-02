@@ -78,13 +78,13 @@ uint32_t str_to_printable (STRp(in), char *out, int out_len)
     for (uint32_t i=0; i < in_len && out_len > 5; i++) // 5 = 4 characters + nul
         switch (in[i]) {
             case 32 ... '\\'-1: case '\\'+1 ... 126:
-                           *out++ = in[i];             ; out_len -= 1; break;
-            case '\t'    : *out++ = '\\'; *out++ = 't' ; out_len -= 2; break;
-            case '\n'    : *out++ = '\\'; *out++ = 'n' ; out_len -= 2; break;
-            case '\r'    : *out++ = '\\'; *out++ = 'r' ; out_len -= 2; break;
-            case '\b'    : *out++ = '\\'; *out++ = 'b' ; out_len -= 2; break;
-            case '\\'    : *out++ = '\\'; *out++ = '\\'; out_len -= 2; break;
-            case 0 ... 7 : *out++ = '\\'; *out++ = '0' + in[i]; out_len -= 2; break;
+                           *out++ = in[i];                     ; out_len -= 1; break;
+            case '\t'    : *out++ = '\\'; *out++ = 't'         ; out_len -= 2; break;
+            case '\n'    : *out++ = '\\'; *out++ = 'n'         ; out_len -= 2; break;
+            case '\r'    : *out++ = '\\'; *out++ = 'r'         ; out_len -= 2; break;
+            case '\b'    : *out++ = '\\'; *out++ = 'b'         ; out_len -= 2; break;
+            case '\\'    : *out++ = '\\'; *out++ = '\\'        ; out_len -= 2; break;
+            case 0 ... 7 : *out++ = '\\'; *out++ = '0' + in[i] ; out_len -= 2; break;
             default      : *out++ = '\\'; *out++ = 'x' ; 
                            *out++ = NUM2HEXDIGIT((uint8_t)in[i] >> 4); 
                            *out++ = NUM2HEXDIGIT((uint8_t)in[i] & 0xf); 
@@ -855,6 +855,11 @@ uint32_t str_split_by_container_do (STRp(str), ConstContainerP con, STRp(con_pre
                 *items = str; // zero-length item - next item will start from the same str_i
                 break;
 
+            case CI0_VAR_0_PAD:
+                // case: e.g. 4-pad but item is 10342 (5 digits)
+                if (after_str - str > con->items[item_i].separator[1]) goto long_var_0_pad;
+                // fallthrough
+
             case CI0_FIXED_0_PAD: 
                 *item_lens = con->items[item_i].separator[1];
                 *items = str; // zero-length item - next item will start from the same str_i
@@ -870,7 +875,7 @@ uint32_t str_split_by_container_do (STRp(str), ConstContainerP con, STRp(con_pre
                 *item_lens = str - *items;
                 break;
 
-            case 0: 
+            case 0: long_var_0_pad:
                 // case: no separator and next item has no prefix - goes to end of string
                 if (!(px < after_px && IS_PRINTABLE(*px))) { // make sure we don't have an implicit separator - the prefix of the next item
                     *item_lens = after_str - str;

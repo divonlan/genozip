@@ -82,7 +82,7 @@ static void qname_generate_qfs_with_mate (QnameFlavorStruct *qfs)
     uint8_t *prev_sep = qfs->con.items[mate_item_i-1].separator; 
     uint8_t *mate_sep = qfs->con.items[mate_item_i  ].separator; 
     
-    if (prev_sep[0] != CI0_FIXED_0_PAD) {
+    if (prev_sep[0] != CI0_FIXED_0_PAD && prev_sep[0] != CI0_VAR_0_PAD) {
         mate_sep[0] = prev_sep[0]; // 0 or ' '
         mate_sep[1] = 0;
         prev_sep[0] = '/';
@@ -98,7 +98,7 @@ static void qname_generate_qfs_with_mate (QnameFlavorStruct *qfs)
     }
 
     // add new item as numeric item (at beginning of array - easier, and the order doesn't matter)
-    if (mate_sep[0] == CI0_FIXED_0_PAD) {
+    if (mate_sep[0] == CI0_FIXED_0_PAD || mate_sep[0] == CI0_VAR_0_PAD) {
         memmove (&qfs->numeric_items[1], qfs->numeric_items, sizeof(qfs->numeric_items) - sizeof(qfs->numeric_items[0])); // make room
         qfs->numeric_items[0] = mate_item_i;
     }
@@ -127,9 +127,10 @@ void qname_zip_initialize (void)
                 ASSERT (item_sep == CI0_SKIP, "In flavor=\"%s\", expecting separator of %s to be I_AM_MATE since it is mated, but it is '%c'(%u)", 
                         qfs->name, dis_dict_id (qfs->con.items[qfs->con.nitems_lo-1].dict_id).s, item_sep, item_sep);
 
-                ASSERT (qfs->con.nitems_lo < 2 || qfs->con.items[qfs->con.nitems_lo-2].separator[0] != CI0_FIXED_0_PAD || 
+                ASSERT (qfs->con.nitems_lo < 2 || 
+                        (qfs->con.items[qfs->con.nitems_lo-2].separator[0] != CI0_FIXED_0_PAD && qfs->con.items[qfs->con.nitems_lo-2].separator[0] != CI0_VAR_0_PAD) || 
                         (qfs->px_strs[qfs->con.nitems_lo-1] && qfs->px_strs[qfs->con.nitems_lo-1][0] == CI0_SKIP), 
-                        "In flavor=\"%s\", since %s has separator CI0_FIXED_0_PAD, prefix[%u] must be PX_MATE_FIXED_0_PAD, but it is \"%s\"", 
+                        "In flavor=\"%s\", since %s has separator CI0_FIXED_0_PAD or CI0_VAR_0_PAD, prefix[%u] must be PX_MATE_FIXED_0_PAD, but it is \"%s\"", 
                         qfs->name, dis_dict_id (qfs->con.items[qfs->con.nitems_lo-2].dict_id).s, qfs->con.nitems_lo-1,
                         qfs->px_strs[qfs->con.nitems_lo-1] ? qfs->px_strs[qfs->con.nitems_lo-1] : "(NULL)");
 
@@ -210,8 +211,9 @@ void qname_zip_initialize (void)
             // in qname_flavors.h, we keep lists in the form of index lists, for maintenanbility. now
             // we convert them to a bitmap for ease of segging.
             for (unsigned i=0; qfs->integer_items[i] != -1; i++) {
-                ASSERT (qfs->con.items[qfs->integer_items[i]].separator[0] != CI0_FIXED_0_PAD,
-                        "since qfs=%s item=%u has seperator[0] == CI0_FIXED_0_PAD, expecting it to be numeric, not int", qfs->name, qfs->integer_items[i]);
+                ASSERT (qfs->con.items[qfs->integer_items[i]].separator[0] != CI0_FIXED_0_PAD && 
+                        qfs->con.items[qfs->integer_items[i]].separator[0] != CI0_VAR_0_PAD,
+                        "since qfs=%s item=%u has seperator[0] ∈ { CI0_FIXED_0_PAD, CI0_VAR_0_PAD }, expecting it to be numeric, not int", qfs->name, qfs->integer_items[i]);
                 qfs->is_integer[qfs->integer_items[i]] = true;
 
                 ASSERT (qfs->barcode_item != qfs->integer_items[i], "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both an integer_item and barcode_item",
@@ -222,8 +224,9 @@ void qname_zip_initialize (void)
             }
 
             for (unsigned i=0; qfs->numeric_items[i] != -1; i++) {
-                ASSERT (qfs->con.items[qfs->numeric_items[i]].separator[0] == CI0_FIXED_0_PAD,
-                        "since qfs=%s item=%u has seperator[0] != CI0_FIXED_0_PAD, expecting it to be int, not numeric", qfs->name, qfs->numeric_items[i]);
+                ASSERT (qfs->con.items[qfs->numeric_items[i]].separator[0] == CI0_FIXED_0_PAD || 
+                        qfs->con.items[qfs->numeric_items[i]].separator[0] == CI0_VAR_0_PAD,
+                        "since qfs=%s item=%u has seperator[0] ∉ { CI0_FIXED_0_PAD, CI0_VAR_0_PAD }, expecting it to be int, not numeric", qfs->name, qfs->numeric_items[i]);
                 qfs->is_numeric[qfs->numeric_items[i]] = true;
 
                 ASSERT (!qfs->is_integer[qfs->numeric_items[i]], "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both an integer_item and numeric_item",

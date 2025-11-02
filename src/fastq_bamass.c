@@ -236,7 +236,7 @@ static void bamass_generate_bamass_ents (VBlockP vb_)
     bool attempted_rediscover = false;
 
     while (next < after) {
-        STR0(qname); STR(seq); // all textual
+        STR0(qname); STR0(seq); // all textual
         bool usable=true/*optimistic*/;
         SamFlags sam_flags;
         PosType32 pos;

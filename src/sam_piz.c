@@ -255,7 +255,7 @@ IS_SKIP (sam_piz_is_skip_section)
         case _SAM_QUALSA  :
             SKIPIFF (preproc || cov || (cnt && !(flag.bases && (OUT_DT(BAM) || OUT_DT(CRAM)))));
 
-        case _SAM_Q1NAME : case _SAM_QNAMESA :
+        case _SAM_Q1NAME : case _SAM_QNAMESA : case _SAM_QNAME2 :
             KEEPIF (preproc || dict_needed_for_preproc || (cnt && flag.bases && (OUT_DT(BAM) || OUT_DT(CRAM)))); // if output is BAM we need the entire BAM record to correctly analyze the SEQ for IUPAC, as it is a structure.
             SKIPIFF (is_prim);                                         
 
