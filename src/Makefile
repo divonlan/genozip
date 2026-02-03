@@ -270,8 +270,7 @@ endif
 
 ifneq ($(wildcard secure/.*),) # "secure" directory exists
 	MY_SRCS += secure/license.c
-	CONDA_LIC_OBJS := $(OBJDIR_LINUX)/secure/license.o $(OBJDIR_WINDOWS)/secure/license.o \
-	                  $(OBJDIR_OSX_X86)/secure/license.o $(OBJDIR_OSX_ARM)/secure/license.o
+	CONDA_LIC_OBJS := $(OBJDIR_LINUX)/secure/license.o $(OBJDIR_WINDOWS)/secure/license.o $(OBJDIR_OSX_ARM)/secure/license.o
 else
 	LDFLAGS += $(OBJDIR)/secure/license.o
 endif
